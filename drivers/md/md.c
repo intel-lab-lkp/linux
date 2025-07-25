@@ -96,8 +96,6 @@ static struct workqueue_struct *md_wq;
 static struct workqueue_struct *md_misc_wq;
 struct workqueue_struct *md_bitmap_wq;
 
-static int remove_and_add_spares(struct mddev *mddev,
-				 struct md_rdev *this);
 static void remove_spare(struct md_rdev *rdev, bool recovery);
 static void mddev_detach(struct mddev *mddev);
 static void export_rdev(struct md_rdev *rdev, struct mddev *mddev);
@@ -9490,36 +9488,44 @@ static void remove_spares(struct mddev *mddev)
 		remove_spare(rdev, true);
 }
 
-static int remove_and_add_spares(struct mddev *mddev,
-				 struct md_rdev *this)
+static bool add_spare(struct md_rdev *rdev, bool recovery)
+{
+	struct mddev *mddev = rdev->mddev;
+	bool spare;
+
+	/* Mustn't add devices when resync thread is running */
+	if (!recovery && test_bit(MD_RECOVERY_RUNNING, &mddev->recovery))
+		return false;
+
+	spare = rdev_is_spare(rdev);
+	if (!rdev_addable(rdev))
+		return spare;
+
+	if (!test_bit(Journal, &rdev->flags))
+		rdev->recovery_offset = 0;
+
+	if (mddev->pers->hot_add_disk(mddev, rdev) != 0)
+		return spare;
+
+	/* failure here is OK */
+	sysfs_link_rdev(mddev, rdev);
+	if (!test_bit(Journal, &rdev->flags))
+		spare = true;
+
+	md_new_event();
+	set_bit(MD_SB_CHANGE_DEVS, &mddev->sb_flags);
+	return spare;
+}
+
+static int remove_and_add_spares(struct mddev *mddev)
 {
 	struct md_rdev *rdev;
 	int spares = 0;
 
-	if (this && test_bit(MD_RECOVERY_RUNNING, &mddev->recovery))
-		/* Mustn't remove devices when resync thread is running */
-		return 0;
-
 	remove_spares(mddev);
-
-	rdev_for_each(rdev, mddev) {
-		if (this && this != rdev)
-			continue;
-		if (rdev_is_spare(rdev))
+	rdev_for_each(rdev, mddev)
+		if (add_spare(rdev, true))
 			spares++;
-		if (!rdev_addable(rdev))
-			continue;
-		if (!test_bit(Journal, &rdev->flags))
-			rdev->recovery_offset = 0;
-		if (mddev->pers->hot_add_disk(mddev, rdev) == 0) {
-			/* failure here is OK */
-			sysfs_link_rdev(mddev, rdev);
-			if (!test_bit(Journal, &rdev->flags))
-				spares++;
-			md_new_event();
-			set_bit(MD_SB_CHANGE_DEVS, &mddev->sb_flags);
-		}
-	}
 
 	return spares;
 }
@@ -9550,7 +9556,7 @@ static bool md_choose_sync_action(struct mddev *mddev, int *spares)
 	 * also removed and re-added, to allow the personality to fail the
 	 * re-add.
 	 */
-	*spares = remove_and_add_spares(mddev, NULL);
+	*spares = remove_and_add_spares(mddev);
 	if (*spares) {
 		clear_bit(MD_RECOVERY_SYNC, &mddev->recovery);
 		clear_bit(MD_RECOVERY_CHECK, &mddev->recovery);
@@ -9595,7 +9601,7 @@ static void md_start_sync(struct work_struct *ws)
 		 * As we only add devices that are already in-sync, we can
 		 * activate the spares immediately.
 		 */
-		remove_and_add_spares(mddev, NULL);
+		remove_and_add_spares(mddev);
 		goto not_running;
 	}
 
@@ -10118,7 +10124,7 @@ static void check_sb_changes(struct mddev *mddev, struct md_rdev *rdev)
 					rdev2->saved_raid_disk = -1;
 				else
 					rdev2->saved_raid_disk = role;
-				ret = remove_and_add_spares(mddev, rdev2);
+				ret = add_spare(rdev2, false);
 				pr_info("Activated spare: %pg\n",
 					rdev2->bdev);
 				/* wakeup mddev->thread here, so array could
