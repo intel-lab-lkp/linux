@@ -563,6 +563,7 @@ static const struct pcf85063_config config_rv8263 = {
 	.force_cap_7000 = 1,
 };
 
+#if IS_ENABLED(CONFIG_SPI_MASTER)
 static const struct pcf85063_config config_rv8063 = {
 	.regmap = {
 		.reg_bits = 8,
@@ -574,6 +575,7 @@ static const struct pcf85063_config config_rv8063 = {
 	.has_alarms = 1,
 	.force_cap_7000 = 1,
 };
+#endif
 
 static int pcf85063_probe(struct device *dev, struct regmap *regmap, int irq,
 			  const struct pcf85063_config *config)
