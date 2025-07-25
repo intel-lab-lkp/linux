@@ -244,6 +244,60 @@ static int intel_writeback_atomic_check(struct drm_connector *connector,
 	return 0;
 }
 
+static void intel_writeback_capture(struct intel_atomic_state *state,
+				    struct intel_connector *connector)
+{
+	struct intel_display *display = to_intel_display(connector);
+	struct intel_writeback_connector *wb_conn =
+		conn_to_intel_writeback_connector(connector);
+	enum transcoder trans = wb_conn->trans;
+	u32 val = 0;
+
+	val |= START_TRIGGER_FRAME | WD_FRAME_NUMBER(wb_conn->frame_num);
+	intel_de_rmw(display, WD_TRANS_FUNC_CTL(trans),
+		     START_TRIGGER_FRAME | WD_FRAME_NUMBER_MASK,
+		     val);
+
+	if (intel_de_wait_for_set(display, WD_FRAME_STATUS(trans), WD_FRAME_COMPLETE,
+				  50)) {
+		drm_dbg_kms(display->drm,
+			    "Frame was not captured after triggering a capture\n");
+		intel_de_rmw(display, WD_TRANS_FUNC_CTL(trans),
+			     STOP_TRIGGER_FRAME,
+			     STOP_TRIGGER_FRAME);
+	} else {
+		drm_writeback_signal_completion(&wb_conn->base, 0);
+		intel_de_write(display, WD_FRAME_STATUS(trans), WD_FRAME_COMPLETE);
+		wb_conn->frame_num++;
+		if (wb_conn->frame_num > 7)
+			wb_conn->frame_num = 1;
+		wb_conn->job = NULL;
+	}
+}
+
+void intel_writeback_atomic_commit(struct intel_atomic_state *state)
+{
+	struct drm_connector *connector;
+	struct drm_connector_state *conn_state;
+	int i;
+
+	for_each_new_connector_in_state(&state->base, connector, conn_state, i) {
+		struct intel_writeback_job *job;
+		struct intel_connector *intel_connector = to_intel_connector(connector);
+
+		if (!conn_state)
+			return;
+
+		if (conn_state->writeback_job && conn_state->writeback_job->fb) {
+			WARN_ON(connector->connector_type != DRM_MODE_CONNECTOR_WRITEBACK);
+			job = conn_state->writeback_job->priv;
+
+			drm_writeback_queue_job(job->wb_connector, conn_state);
+			intel_writeback_capture(state, intel_connector);
+		}
+	}
+}
+
 static void intel_writeback_enable_encoder(struct intel_atomic_state *state,
 					   struct intel_encoder *encoder,
 					   const struct intel_crtc_state *crtc_state,

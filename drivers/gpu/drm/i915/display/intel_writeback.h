@@ -8,10 +8,14 @@
 
 #include <linux/types.h>
 
+#include "intel_display_types.h"
+
+struct intel_atomic_state;
 struct intel_display;
 struct intel_writeback_connector;
 
 int intel_writeback_init(struct intel_display *display);
+void intel_writeback_atomic_commit(struct intel_atomic_state *state);
 
 #endif /* __INTEL_WRITEBACK_H__ */
 
