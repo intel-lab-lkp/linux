@@ -31,6 +31,7 @@
 
 #include <drm/drm_crtc.h>
 #include <drm/drm_encoder.h>
+#include <drm/drm_writeback.h>
 
 /**
  * DOC: overview
@@ -1179,6 +1180,25 @@ struct drm_connector_helper_funcs {
 	 *
 	 */
 	void (*disable_hpd)(struct drm_connector *connector);
+
+	/**
+	 * @get_writeback_connector:
+	 *
+	 * This callback is used by drivers to get the writeback connector in
+	 * case the init is done via drm_writeback_init_with_conn. Which means
+	 * the drivers don't have drm_connector embedded in drm_writeback_connector
+	 * so they need to send the associated writeback connector with this
+	 * function.
+	 *
+	 * This operation is optional.
+	 *
+	 * This is mainly called from drm_writeback_set_gb.
+	 *
+	 * RETURNS:
+	 *
+	 * drm_writeback_connector assoiciated with the drm connector.
+	 */
+	struct drm_writeback_connector *(*get_writeback_connector)(struct drm_connector *connector);
 };
 
 /**
@@ -1190,6 +1210,45 @@ static inline void drm_connector_helper_add(struct drm_connector *connector,
 					    const struct drm_connector_helper_funcs *funcs)
 {
 	connector->helper_private = funcs;
+}
+
+/**
+ * struct drm_writeback_connector_helper_funcs - helper operations for writeback
+ * connectors.
+ *
+ * These functions are used by the atomic and legacy modeset helpers and by the
+ * probe helpers.
+ */
+struct drm_writeback_connector_helper_funcs {
+	/**
+	 * @get_connector_from_writeback:
+	 *
+	 * This callback is used by drivers to get the drm_connector in
+	 * case the init is done via drm_writeback_init_with_conn. Which means
+	 * the drivers don't have drm_connector embedded in drm_writeback_connector
+	 * so they need to send the associated drm_connector with this
+	 * function.
+	 *
+	 * This operation is optional.
+	 *
+	 * RETURNS:
+	 *
+	 * drm_connector assoiciated with the drm_writeback_connector.
+	 */
+	struct drm_connector
+	*(*get_connector_from_writeback)(struct drm_writeback_connector *wbconnector);
+};
+
+/**
+ * drm_writeback_connector_helper_add - sets the helper vtable for a connector
+ * @wb_connector: DRM writeback connector
+ * @funcs: helper vtable to set for @wb_connector
+ */
+static inline void
+drm_writeback_connector_helper_add(struct drm_writeback_connector *wb_connector,
+				   const struct drm_writeback_connector_helper_funcs *funcs)
+{
+	wb_connector->helper_private = funcs;
 }
 
 /**

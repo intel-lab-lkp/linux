@@ -84,6 +84,13 @@ struct drm_writeback_connector {
 	 * The name of the connector's fence timeline.
 	 */
 	char timeline_name[32];
+
+	/**
+	 * @helper_private:
+	 *
+	 * helper private funcs for writeback_connector
+	 */
+	const struct drm_writeback_connector_helper_funcs *helper_private;
 };
 
 /**
@@ -142,11 +149,7 @@ struct drm_writeback_job {
 	void *priv;
 };
 
-static inline struct drm_writeback_connector *
-drm_connector_to_writeback(struct drm_connector *connector)
-{
-	return container_of(connector, struct drm_writeback_connector, base);
-}
+struct drm_writeback_connector *drm_connector_to_writeback(struct drm_connector *connector);
 
 int drm_writeback_connector_init(struct drm_device *dev,
 				 struct drm_writeback_connector *wb_connector,
@@ -172,6 +175,7 @@ drm_writeback_connector_init_with_conn(struct drm_device *dev, struct drm_connec
 				       struct drm_writeback_connector *wb_connector,
 				       struct drm_encoder *enc,
 				       const struct drm_connector_funcs *con_funcs,
+				       const struct drm_writeback_connector_helper_funcs *wb_funcs,
 				       const u32 *formats, int n_formats);
 
 int drm_writeback_set_fb(struct drm_connector_state *conn_state,

@@ -107,6 +107,19 @@ static const struct dma_fence_ops drm_writeback_fence_ops = {
 	.get_timeline_name = drm_writeback_fence_get_timeline_name,
 };
 
+struct drm_writeback_connector *
+drm_connector_to_writeback(struct drm_connector *connector)
+{
+	const struct drm_connector_helper_funcs *funcs =
+		connector->helper_private;
+
+	if (funcs->get_writeback_connector)
+		return funcs->get_writeback_connector(connector);
+
+	return container_of(connector, struct drm_writeback_connector, base);
+}
+EXPORT_SYMBOL(drm_connector_to_writeback);
+
 static int create_writeback_properties(struct drm_device *dev)
 {
 	struct drm_property *prop;
@@ -442,6 +455,7 @@ drm_writeback_connector_init_with_conn(struct drm_device *dev, struct drm_connec
 				       struct drm_writeback_connector *wb_connector,
 				       struct drm_encoder *enc,
 				       const struct drm_connector_funcs *con_funcs,
+				       const struct drm_writeback_connector_helper_funcs *wb_funcs,
 				       const u32 *formats, int n_formats)
 {
 	struct drm_property_blob *blob;
