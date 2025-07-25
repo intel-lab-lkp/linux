@@ -461,6 +461,7 @@ static inline void req_set_nomerge(struct request_queue *q, struct request *req)
  */
 struct io_cq *ioc_find_get_icq(struct request_queue *q);
 struct io_cq *ioc_lookup_icq(struct request_queue *q);
+struct io_cq *ioc_lookup_icq_rcu(struct request_queue *q);
 #ifdef CONFIG_BLK_ICQ
 void ioc_clear_queue(struct request_queue *q);
 #else

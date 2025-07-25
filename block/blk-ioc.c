@@ -344,6 +344,40 @@ out:
 EXPORT_SYMBOL(ioc_lookup_icq);
 
 /**
+ * ioc_lookup_icq_rcu - lookup io_cq from ioc in io path
+ * @q: the associated request_queue
+ *
+ * Look up io_cq associated with @ioc - @q pair from @ioc. Must be called from
+ * io issue path, either return NULL if current issue io to @q for the first
+ * time, or return a valid icq.
+ */
+struct io_cq *ioc_lookup_icq_rcu(struct request_queue *q)
+{
+	struct io_context *ioc = current->io_context;
+	struct io_cq *icq;
+
+	WARN_ON_ONCE(percpu_ref_is_zero(&q->q_usage_counter));
+
+	if (!ioc)
+		return NULL;
+
+	icq = rcu_dereference(ioc->icq_hint);
+	if (icq && icq->q == q)
+		return icq;
+
+	icq = radix_tree_lookup(&ioc->icq_tree, q->id);
+	if (!icq)
+		return NULL;
+
+	if (WARN_ON_ONCE(icq->q != q))
+		return NULL;
+
+	rcu_assign_pointer(ioc->icq_hint, icq);
+	return icq;
+}
+EXPORT_SYMBOL(ioc_lookup_icq_rcu);
+
+/**
  * ioc_create_icq - create and link io_cq
  * @q: request_queue of interest
  *
