@@ -27,7 +27,7 @@ struct panthor_heap_pool;
 struct panthor_job;
 struct panthor_mmu;
 struct panthor_fw;
-struct panthor_perfcnt;
+struct panthor_perf;
 struct panthor_vm;
 struct panthor_vm_pool;
 
@@ -137,6 +137,9 @@ struct panthor_device {
 
 	/** @devfreq: Device frequency scaling management data. */
 	struct panthor_devfreq *devfreq;
+
+	/** @perf: Performance counter management data. */
+	struct panthor_perf *perf;
 
 	/** @unplug: Device unplug related fields. */
 	struct {
