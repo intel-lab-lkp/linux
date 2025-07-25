@@ -36,6 +36,13 @@ static const u32 writeback_formats[] = {
 	DRM_FORMAT_XBGR2101010,
 };
 
+static struct intel_writeback_connector
+*conn_to_intel_writeback_connector(struct intel_connector *connector)
+{
+	return container_of(connector, struct intel_writeback_connector,
+			    connector);
+}
+
 static int intel_writeback_connector_init(struct intel_connector *connector)
 {
 	struct intel_digital_connector_state *conn_state;
@@ -60,6 +67,16 @@ intel_writeback_connector_alloc(struct intel_connector *connector)
 	return 0;
 }
 
+static struct drm_writeback_connector *
+intel_get_writeback_connector(struct drm_connector *connector)
+{
+	struct intel_connector *conn = to_intel_connector(connector);
+	struct intel_writeback_connector *wb_conn =
+		conn_to_intel_writeback_connector(conn);
+
+	return &wb_conn->base;
+}
+
 static const struct drm_encoder_funcs drm_writeback_encoder_funcs = {
 	.destroy = drm_encoder_cleanup,
 };
@@ -71,6 +88,7 @@ const struct drm_connector_funcs conn_funcs = {
 };
 
 static const struct drm_connector_helper_funcs conn_helper_funcs = {
+	.get_writeback_connector = intel_get_writeback_connector,
 };
 
 static const struct drm_writeback_connector_helper_funcs writeback_conn_helper_funcs = {
