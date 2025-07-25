@@ -1388,10 +1388,12 @@ struct find_var_data {
 #define DWARF_OP_DIRECT_REGS  32
 
 static bool match_var_offset(Dwarf_Die *die_mem, struct find_var_data *data,
-			     u64 addr_offset, u64 addr_type, bool is_pointer)
+			     u64 addr_offset_, u64 addr_type_, bool is_pointer)
 {
 	Dwarf_Die type_die;
 	Dwarf_Word size;
+	s64 addr_offset = (s64)addr_offset_;
+	s64 addr_type = (s64)addr_type_;
 
 	if (addr_offset == addr_type) {
 		/* Update offset relative to the start of the variable */
@@ -1414,7 +1416,7 @@ static bool match_var_offset(Dwarf_Die *die_mem, struct find_var_data *data,
 	if (dwarf_aggregate_size(&type_die, &size) < 0)
 		return false;
 
-	if (addr_offset >= addr_type + size)
+	if (addr_offset_ - addr_type_ >= size)
 		return false;
 
 	/* Update offset relative to the start of the variable */
