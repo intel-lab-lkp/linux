@@ -289,8 +289,8 @@ ss_hub_descriptor(struct usb_hub_descriptor *desc)
 	memset(desc, 0, sizeof *desc);
 	desc->bDescriptorType = USB_DT_SS_HUB;
 	desc->bDescLength = 12;
-	desc->wHubCharacteristics = cpu_to_le16(
-		HUB_CHAR_INDV_PORT_LPSM | HUB_CHAR_COMMON_OCPM);
+	desc->wHubCharacteristics = cpu_to_le16(HUB_CHAR_INDV_PORT_LPSM |
+						HUB_CHAR_COMMON_OCPM);
 	desc->bNbrPorts = VHCI_HC_PORTS;
 	desc->u.ss.bHubHdrDecLat = 0x04; /* Worst case: 0.4 micro sec*/
 	desc->u.ss.DeviceRemovable = 0xffff;
@@ -302,9 +302,8 @@ static inline void hub_descriptor(struct usb_hub_descriptor *desc)
 
 	memset(desc, 0, sizeof(*desc));
 	desc->bDescriptorType = USB_DT_HUB;
-	desc->wHubCharacteristics = cpu_to_le16(
-		HUB_CHAR_INDV_PORT_LPSM | HUB_CHAR_COMMON_OCPM);
-
+	desc->wHubCharacteristics = cpu_to_le16(HUB_CHAR_INDV_PORT_LPSM |
+						HUB_CHAR_COMMON_OCPM);
 	desc->bNbrPorts = VHCI_HC_PORTS;
 	BUILD_BUG_ON(VHCI_HC_PORTS > USB_MAXCHILDREN);
 	width = desc->bNbrPorts / 8 + 1;
@@ -378,8 +377,8 @@ static int vhci_hub_control(struct usb_hcd *hcd, u16 typeReq, u16 wValue,
 				       "supported for USB 3.0 roothub\n");
 				goto error;
 			}
-			usbip_dbg_vhci_rh(
-				" ClearPortFeature: USB_PORT_FEAT_SUSPEND\n");
+
+			usbip_dbg_vhci_rh("ClearPortFeature: USB_PORT_FEAT_SUSPEND\n");
 			if (vhci_hcd->port_status[rhport] & USB_PORT_STAT_SUSPEND) {
 				/* 20msec signaling */
 				vhci_hcd->resuming = 1;
@@ -387,8 +386,7 @@ static int vhci_hub_control(struct usb_hcd *hcd, u16 typeReq, u16 wValue,
 			}
 			break;
 		case USB_PORT_FEAT_POWER:
-			usbip_dbg_vhci_rh(
-				" ClearPortFeature: USB_PORT_FEAT_POWER\n");
+			usbip_dbg_vhci_rh("ClearPortFeature: USB_PORT_FEAT_POWER\n");
 			if (hcd->speed >= HCD_USB3)
 				vhci_hcd->port_status[rhport] &= ~USB_SS_PORT_STAT_POWER;
 			else
@@ -464,10 +462,9 @@ static int vhci_hub_control(struct usb_hcd *hcd, u16 typeReq, u16 wValue,
 				VDEV_ST_NOTASSIGNED ||
 			    vhci_hcd->vdev[rhport].ud.status ==
 				VDEV_ST_USED) {
-				usbip_dbg_vhci_rh(
-					" enable rhport %d (status %u)\n",
-					rhport,
-					vhci_hcd->vdev[rhport].ud.status);
+				usbip_dbg_vhci_rh("enable rhport %d (status %u)\n",
+						  rhport,
+						  vhci_hcd->vdev[rhport].ud.status);
 				vhci_hcd->port_status[rhport] |=
 					USB_PORT_STAT_ENABLE;
 			}
@@ -502,8 +499,7 @@ static int vhci_hub_control(struct usb_hcd *hcd, u16 typeReq, u16 wValue,
 	case SetPortFeature:
 		switch (wValue) {
 		case USB_PORT_FEAT_LINK_STATE:
-			usbip_dbg_vhci_rh(
-				" SetPortFeature: USB_PORT_FEAT_LINK_STATE\n");
+			usbip_dbg_vhci_rh("SetPortFeature: USB_PORT_FEAT_LINK_STATE\n");
 			if (hcd->speed < HCD_USB3) {
 				pr_err("USB_PORT_FEAT_LINK_STATE req not "
 				       "supported for USB 2.0 roothub\n");
@@ -515,12 +511,10 @@ static int vhci_hub_control(struct usb_hcd *hcd, u16 typeReq, u16 wValue,
 			 */
 			break;
 		case USB_PORT_FEAT_U1_TIMEOUT:
-			usbip_dbg_vhci_rh(
-				" SetPortFeature: USB_PORT_FEAT_U1_TIMEOUT\n");
+			usbip_dbg_vhci_rh("SetPortFeature: USB_PORT_FEAT_U1_TIMEOUT\n");
 			fallthrough;
 		case USB_PORT_FEAT_U2_TIMEOUT:
-			usbip_dbg_vhci_rh(
-				" SetPortFeature: USB_PORT_FEAT_U2_TIMEOUT\n");
+			usbip_dbg_vhci_rh("SetPortFeature: USB_PORT_FEAT_U2_TIMEOUT\n");
 			/* TODO: add suspend/resume support! */
 			if (hcd->speed < HCD_USB3) {
 				pr_err("USB_PORT_FEAT_U1/2_TIMEOUT req not "
@@ -529,8 +523,7 @@ static int vhci_hub_control(struct usb_hcd *hcd, u16 typeReq, u16 wValue,
 			}
 			break;
 		case USB_PORT_FEAT_SUSPEND:
-			usbip_dbg_vhci_rh(
-				" SetPortFeature: USB_PORT_FEAT_SUSPEND\n");
+			usbip_dbg_vhci_rh("SetPortFeature: USB_PORT_FEAT_SUSPEND\n");
 			/* Applicable only for USB2.0 hub */
 			if (hcd->speed >= HCD_USB3) {
 				pr_err("USB_PORT_FEAT_SUSPEND req not "
@@ -546,8 +539,7 @@ static int vhci_hub_control(struct usb_hcd *hcd, u16 typeReq, u16 wValue,
 			vhci_hcd->port_status[rhport] |= USB_PORT_STAT_SUSPEND;
 			break;
 		case USB_PORT_FEAT_POWER:
-			usbip_dbg_vhci_rh(
-				" SetPortFeature: USB_PORT_FEAT_POWER\n");
+			usbip_dbg_vhci_rh("SetPortFeature: USB_PORT_FEAT_POWER\n");
 			if (invalid_rhport) {
 				pr_err("invalid port number %d\n", wIndex);
 				goto error;
@@ -558,8 +550,7 @@ static int vhci_hub_control(struct usb_hcd *hcd, u16 typeReq, u16 wValue,
 				vhci_hcd->port_status[rhport] |= USB_PORT_STAT_POWER;
 			break;
 		case USB_PORT_FEAT_BH_PORT_RESET:
-			usbip_dbg_vhci_rh(
-				" SetPortFeature: USB_PORT_FEAT_BH_PORT_RESET\n");
+			usbip_dbg_vhci_rh("SetPortFeature: USB_PORT_FEAT_BH_PORT_RESET\n");
 			if (invalid_rhport) {
 				pr_err("invalid port number %d\n", wIndex);
 				goto error;
@@ -572,8 +563,7 @@ static int vhci_hub_control(struct usb_hcd *hcd, u16 typeReq, u16 wValue,
 			}
 			fallthrough;
 		case USB_PORT_FEAT_RESET:
-			usbip_dbg_vhci_rh(
-				" SetPortFeature: USB_PORT_FEAT_RESET\n");
+			usbip_dbg_vhci_rh("SetPortFeature: USB_PORT_FEAT_RESET\n");
 			if (invalid_rhport) {
 				pr_err("invalid port number %d\n", wIndex);
 				goto error;
@@ -792,7 +782,7 @@ static int vhci_urb_enqueue(struct usb_hcd *hcd, struct urb *urb, gfp_t mem_flag
 
 		case USB_REQ_GET_DESCRIPTOR:
 			if (ctrlreq->wValue == cpu_to_le16(USB_DT_DEVICE << 8))
-				usbip_dbg_vhci_hc(
+				usbip_dbg_vhci_hc(/**/
 					"Not yet?:Get_Descriptor to device 0 (get max pipe size)\n");
 
 			vdev->udev = usb_get_dev(urb->dev);
