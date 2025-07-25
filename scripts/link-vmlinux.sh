@@ -211,6 +211,10 @@ kallsymso=
 strip_debug=
 generate_map=
 
+if is_enabled CONFIG_TRACEPOINT_WARN_ON_UNUSED; then
+	${objtree}/scripts/tracepoint-update vmlinux.o
+fi
+
 if is_enabled CONFIG_KALLSYMS; then
 	true > .tmp_vmlinux0.syms
 	kallsyms .tmp_vmlinux0.syms .tmp_vmlinux0.kallsyms
