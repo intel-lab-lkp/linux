@@ -286,6 +286,9 @@ static void intel_writeback_capture(struct intel_atomic_state *state,
 	val = DIV_ROUND_UP((adjusted_mode->hdisplay * bpp), 64);
 	intel_de_write(display, WD_STRIDE(trans), WD_STRIDE_VAL(val));
 
+	val = i915_ggtt_offset(wb_job->vma);
+	intel_de_write(display, WD_SURF(trans), val);
+
 	val = 0;
 	val |= START_TRIGGER_FRAME | WD_FRAME_NUMBER(wb_conn->frame_num);
 	intel_de_rmw(display, WD_TRANS_FUNC_CTL(trans),

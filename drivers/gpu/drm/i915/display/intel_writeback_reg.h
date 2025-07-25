@@ -81,6 +81,8 @@
 #define WD_SURF(tc)			_MMIO_WD(tc,\
 					_WD_SURF_0,\
 					_WD_SURF_1)
+#define  WD_SURF_ADDR_MASK		REG_GENMASK(31, 12)
+#define  WD_SURF_ADDR(val)		REG_FIELD_PREP(WD_SURF_ADDR_MASK, val)
 
 #define _WD_IMR_0			0x6e560
 #define _WD_IMR_1			0x6ed60
