@@ -160,8 +160,6 @@ void rh_port_connect(struct vhci_device *vdev, enum usb_device_speed speed)
 	u32		status;
 	unsigned long	flags;
 
-	usbip_dbg_vhci_rh("rh_port_connect %d\n", rhport);
-
 	spin_lock_irqsave(&vhci->lock, flags);
 
 	status = vhci_hcd->port_status[rhport];
@@ -183,6 +181,8 @@ void rh_port_connect(struct vhci_device *vdev, enum usb_device_speed speed)
 
 	spin_unlock_irqrestore(&vhci->lock, flags);
 
+	usbip_dbg_vhci_rh("rhport: %d status: %u\n", rhport, status);
+
 	usb_hcd_poll_rh_status(vhci_hcd_to_hcd(vhci_hcd));
 }
 
@@ -194,8 +194,6 @@ static void rh_port_disconnect(struct vhci_device *vdev)
 	u32		status;
 	unsigned long	flags;
 
-	usbip_dbg_vhci_rh("rh_port_disconnect %d\n", rhport);
-
 	spin_lock_irqsave(&vhci->lock, flags);
 
 	status = vhci_hcd->port_status[rhport];
@@ -206,6 +204,9 @@ static void rh_port_disconnect(struct vhci_device *vdev)
 	vhci_hcd->port_status[rhport] = status;
 
 	spin_unlock_irqrestore(&vhci->lock, flags);
+
+	usbip_dbg_vhci_rh("rhport: %d status: %u\n", rhport, status);
+
 	usb_hcd_poll_rh_status(vhci_hcd_to_hcd(vhci_hcd));
 }
 
@@ -1195,8 +1196,6 @@ static int vhci_start(struct usb_hcd *hcd)
 	int id, rhport;
 	int err;
 
-	usbip_dbg_vhci_hc("enter vhci_start\n");
-
 	if (usb_hcd_is_primary_hcd(hcd))
 		spin_lock_init(&vhci_hcd->vhci->lock);
 
@@ -1318,7 +1317,7 @@ static int vhci_alloc_streams(struct usb_hcd *hcd, struct usb_device *udev,
 			      struct usb_host_endpoint **eps, unsigned int num_eps,
 			      unsigned int num_streams, gfp_t mem_flags)
 {
-	dev_dbg(&hcd->self.root_hub->dev, "vhci_alloc_streams not implemented\n");
+	dev_dbg(&hcd->self.root_hub->dev, "%s not implemented\n", __func__);
 	return 0;
 }
 
@@ -1327,7 +1326,7 @@ static int vhci_free_streams(struct usb_hcd *hcd, struct usb_device *udev,
 			     struct usb_host_endpoint **eps, unsigned int num_eps,
 			     gfp_t mem_flags)
 {
-	dev_dbg(&hcd->self.root_hub->dev, "vhci_free_streams not implemented\n");
+	dev_dbg(&hcd->self.root_hub->dev, "%s not implemented\n", __func__);
 	return 0;
 }
 
