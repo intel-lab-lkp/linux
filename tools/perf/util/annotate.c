@@ -2729,6 +2729,11 @@ __hist_entry__get_data_type(struct hist_entry *he, struct arch *arch,
 		return &stackop_type;
 	}
 
+	if (!strncmp(dl->ins.name, "lea", 3)) {
+		istat->bad++;
+		return NULL;
+	}
+
 	for_each_insn_op_loc(&loc, i, op_loc) {
 		struct data_loc_info dloc = {
 			.arch = arch,
