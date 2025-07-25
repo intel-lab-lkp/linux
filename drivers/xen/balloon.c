@@ -407,7 +407,7 @@ static enum bp_state increase_reservation(unsigned long nr_pages)
 		page = balloon_next_page(page);
 	}
 
-	rc = xenmem_reservation_increase(nr_pages, frame_list);
+	rc = xenmem_populate_physmap(nr_pages, frame_list);
 	if (rc <= 0)
 		return BP_EAGAIN;
 

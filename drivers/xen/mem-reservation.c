@@ -83,7 +83,7 @@ EXPORT_SYMBOL_GPL(__xenmem_reservation_va_mapping_reset);
 #endif /* CONFIG_XEN_HAVE_PVMMU */
 
 /* @frames is an array of PFNs */
-int xenmem_reservation_increase(int count, xen_pfn_t *frames)
+int xenmem_populate_physmap(int count, xen_pfn_t *frames)
 {
 	struct xen_memory_reservation reservation = {
 		.address_bits = 0,
@@ -96,7 +96,7 @@ int xenmem_reservation_increase(int count, xen_pfn_t *frames)
 	reservation.nr_extents = count;
 	return HYPERVISOR_memory_op(XENMEM_populate_physmap, &reservation);
 }
-EXPORT_SYMBOL_GPL(xenmem_reservation_increase);
+EXPORT_SYMBOL_GPL(xenmem_populate_physmap);
 
 /* @frames is an array of GFNs */
 int xenmem_reservation_decrease(int count, xen_pfn_t *frames)

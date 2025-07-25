@@ -53,7 +53,7 @@ static inline void xenmem_reservation_va_mapping_reset(unsigned long count,
 #endif
 }
 
-int xenmem_reservation_increase(int count, xen_pfn_t *frames);
+int xenmem_populate_physmap(int count, xen_pfn_t *frames);
 
 int xenmem_reservation_decrease(int count, xen_pfn_t *frames);
 

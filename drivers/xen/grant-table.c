@@ -1125,7 +1125,7 @@ int gnttab_dma_free_pages(struct gnttab_dma_alloc_args *args)
 	for (i = 0; i < args->nr_pages; i++)
 		args->frames[i] = page_to_xen_pfn(args->pages[i]);
 
-	ret = xenmem_reservation_increase(args->nr_pages, args->frames);
+	ret = xenmem_populate_physmap(args->nr_pages, args->frames);
 	if (ret != args->nr_pages) {
 		pr_debug("Failed to increase reservation for DMA buffer\n");
 		ret = -EFAULT;
