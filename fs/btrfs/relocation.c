@@ -602,6 +602,23 @@ static struct btrfs_root *create_reloc_root(struct btrfs_trans_handle *trans,
 	if (btrfs_root_id(root) == objectid) {
 		u64 commit_root_gen;
 
+		/*
+		 * Relocation will wait for cleaner thread, and any half-dropped
+		 * subvolume will be fully cleaned up at mount time.
+		 * So here we shouldn't hit a subvolume with non-zero drop_progress.
+		 *
+		 * If this happened, it means the subvolume has experienced some bug
+		 * which didn't insert the correct orphan item for it.
+		 * Error out early, as btrfs_copy_root() can increase refs on already
+		 * dropped nodes/leaves and cause problems later at delayed ref runtime.
+		 */
+		if (unlikely(btrfs_disk_key_objectid(&root->root_item.drop_progress))) {
+			btrfs_err(fs_info,
+		"subvolume %llu is not properly cleaned up before relocation",
+				  objectid);
+			return ERR_PTR(-EUCLEAN);
+		}
+
 		/* called by btrfs_init_reloc_root */
 		ret = btrfs_copy_root(trans, root, root->commit_root, &eb,
 				      BTRFS_TREE_RELOC_OBJECTID);
