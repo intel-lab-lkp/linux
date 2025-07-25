@@ -1326,7 +1326,7 @@ static void drbd_send_and_submit(struct drbd_device *device, struct drbd_request
 	spin_lock_irq(&resource->req_lock);
 	if (rw == WRITE) {
 		/* This may temporarily give up the req_lock,
-		 * but will re-aquire it before it returns here.
+		 * but will re-acquire it before it returns here.
 		 * Needs to be before the check on drbd_suspended() */
 		complete_conflicting_writes(req);
 		/* no more giving up req_lock from now on! */
