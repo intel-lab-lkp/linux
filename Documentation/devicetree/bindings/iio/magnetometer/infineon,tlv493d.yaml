@@ -1,0 +1,57 @@
+# SPDX-License-Identifier: GPL-2.0-only OR BSD-2-Clause
+%YAML 1.2
+---
+$id: http://devicetree.org/schemas/iio/magnetometer/infineon,tlv493d.yaml#
+$schema: http://devicetree.org/meta-schemas/core.yaml#
+
+title: Infineon Technologies TLV493D Low-Power 3D Magnetic Sensor
+
+maintainers:
+  - Dixit Parmar <dixitparmar19@gmail.com>
+
+properties:
+  $nodename:
+    pattern: '^magnetometer@[0-9a-f]+$'
+
+  compatible:
+    const: infineon,tlv493d-a1b6
+
+  reg:
+    maxItems: 1
+
+  vdd-supply:
+    description: 2.8V to 3.5V supply
+
+  mode:
+    description: Sensor operating mode. Must be one of the defined enum values.
+    $ref: /schemas/types.yaml#/definitions/uint32
+    enum:
+      - 0 # Power Down Mode. No measurement.
+      - 1 # Fast Mode
+      - 2 # Low-Power Mode
+      - 3 # Ultra Low-Power Mode
+      - 4 # Master Controlled Mode
+    default: 4
+
+  temp-offset:
+    description: Raw temperature offset at 25°C to apply before applying scale and correction.
+    $ref: /schemas/types.yaml#/definitions/uint32
+    default: 340
+
+required:
+  - compatible
+  - reg
+
+additionalProperties: false
+
+example:
+  - |
+    i2c {
+      #address-cells = <1>;
+      #size-cells = <0>;
+      magnetometer@5e {
+        compatible = "infineon,tlv493d-a1b6";
+        reg = <0x5e>;
+        vdd = <&hall_vcc>;
+      };
+    };
