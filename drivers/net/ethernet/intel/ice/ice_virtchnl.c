@@ -1427,7 +1427,7 @@ static bool ice_vc_validate_vqs_bitmaps(struct virtchnl_queue_select *vqs)
  * @vsi: VSI of the VF to configure
  * @q_idx: VF queue index used to determine the queue in the PF's space
  */
-static void ice_vf_ena_txq_interrupt(struct ice_vsi *vsi, u32 q_idx)
+void ice_vf_ena_txq_interrupt(struct ice_vsi *vsi, u32 q_idx)
 {
 	struct ice_hw *hw = &vsi->back->hw;
 	u32 pfq = vsi->txq_map[q_idx];
@@ -1450,7 +1450,7 @@ static void ice_vf_ena_txq_interrupt(struct ice_vsi *vsi, u32 q_idx)
  * @vsi: VSI of the VF to configure
  * @q_idx: VF queue index used to determine the queue in the PF's space
  */
-static void ice_vf_ena_rxq_interrupt(struct ice_vsi *vsi, u32 q_idx)
+void ice_vf_ena_rxq_interrupt(struct ice_vsi *vsi, u32 q_idx)
 {
 	struct ice_hw *hw = &vsi->back->hw;
 	u32 pfq = vsi->rxq_map[q_idx];
@@ -1566,8 +1566,7 @@ error_param:
  * disabled then clear q_id bit in the enabled queues bitmap and return
  * success. Otherwise return error.
  */
-static int
-ice_vf_vsi_dis_single_txq(struct ice_vf *vf, struct ice_vsi *vsi, u16 q_id)
+int ice_vf_vsi_dis_single_txq(struct ice_vf *vf, struct ice_vsi *vsi, u16 q_id)
 {
 	struct ice_txq_meta txq_meta = { 0 };
 	struct ice_tx_ring *ring;
@@ -1997,24 +1996,13 @@ static int ice_vc_cfg_qs_msg(struct ice_vf *vf, u8 *msg)
 	    (struct virtchnl_vsi_queue_config_info *)msg;
 	struct virtchnl_queue_pair_info *qpi;
 	struct ice_pf *pf = vf->pf;
-	struct ice_lag *lag;
 	struct ice_vsi *vsi;
-	u8 act_prt, pri_prt;
 	int i = -1, q_idx;
 	bool ena_ts;
+	u8 act_prt;
 
-	lag = pf->lag;
 	mutex_lock(&pf->lag_mutex);
-	act_prt = ICE_LAG_INVALID_PORT;
-	pri_prt = pf->hw.port_info->lport;
-	if (lag && lag->bonded && lag->primary) {
-		act_prt = lag->active_port;
-		if (act_prt != pri_prt && act_prt != ICE_LAG_INVALID_PORT &&
-		    lag->upper_netdev)
-			ice_lag_move_vf_nodes_cfg(lag, act_prt, pri_prt);
-		else
-			act_prt = ICE_LAG_INVALID_PORT;
-	}
+	act_prt = ice_lag_prepare_vf_reset(pf->lag);
 
 	if (!test_bit(ICE_VF_STATE_ACTIVE, vf->vf_states))
 		goto error_param;
@@ -2142,9 +2130,7 @@ static int ice_vc_cfg_qs_msg(struct ice_vf *vf, u8 *msg)
 		}
 	}
 
-	if (lag && lag->bonded && lag->primary &&
-	    act_prt != ICE_LAG_INVALID_PORT)
-		ice_lag_move_vf_nodes_cfg(lag, pri_prt, act_prt);
+	ice_lag_complete_vf_reset(pf->lag, act_prt);
 	mutex_unlock(&pf->lag_mutex);
 
 	/* send the response to the VF */
@@ -2161,9 +2147,7 @@ error_param:
 				vf->vf_id, i);
 	}
 
-	if (lag && lag->bonded && lag->primary &&
-	    act_prt != ICE_LAG_INVALID_PORT)
-		ice_lag_move_vf_nodes_cfg(lag, pri_prt, act_prt);
+	ice_lag_complete_vf_reset(pf->lag, act_prt);
 	mutex_unlock(&pf->lag_mutex);
 
 	ice_lag_move_new_vf_nodes(vf);
@@ -2621,7 +2605,7 @@ static bool ice_vf_vlan_offload_ena(u32 caps)
  * ice_is_vlan_promisc_allowed - check if VLAN promiscuous config is allowed
  * @vf: VF used to determine if VLAN promiscuous config is allowed
  */
-static bool ice_is_vlan_promisc_allowed(struct ice_vf *vf)
+bool ice_is_vlan_promisc_allowed(struct ice_vf *vf)
 {
 	if ((test_bit(ICE_VF_STATE_UC_PROMISC, vf->vf_states) ||
 	     test_bit(ICE_VF_STATE_MC_PROMISC, vf->vf_states)) &&
@@ -2640,8 +2624,8 @@ static bool ice_is_vlan_promisc_allowed(struct ice_vf *vf)
  * This function should only be called if VLAN promiscuous mode is allowed,
  * which can be determined via ice_is_vlan_promisc_allowed().
  */
-static int ice_vf_ena_vlan_promisc(struct ice_vf *vf, struct ice_vsi *vsi,
-				   struct ice_vlan *vlan)
+int ice_vf_ena_vlan_promisc(struct ice_vf *vf, struct ice_vsi *vsi,
+			    struct ice_vlan *vlan)
 {
 	u8 promisc_m = 0;
 	int status;
@@ -3093,6 +3077,10 @@ static int ice_vc_set_rss_hashcfg(struct ice_vf *vf, u8 *msg)
 		status = ice_add_avf_rss_cfg(&pf->hw, vsi, vrh->hashcfg);
 		v_ret = ice_err_to_virt_err(status);
 	}
+
+	/* save the requested VF configuration */
+	if (!v_ret)
+		vf->rss_hashcfg = vrh->hashcfg;
 
 	/* send the response to the VF */
 err:
@@ -3854,48 +3842,6 @@ ice_vc_ena_vlan_offload(struct ice_vsi *vsi,
 		return err;
 
 	return 0;
-}
-
-#define ICE_L2TSEL_QRX_CONTEXT_REG_IDX	3
-#define ICE_L2TSEL_BIT_OFFSET		23
-enum ice_l2tsel {
-	ICE_L2TSEL_EXTRACT_FIRST_TAG_L2TAG2_2ND,
-	ICE_L2TSEL_EXTRACT_FIRST_TAG_L2TAG1,
-};
-
-/**
- * ice_vsi_update_l2tsel - update l2tsel field for all Rx rings on this VSI
- * @vsi: VSI used to update l2tsel on
- * @l2tsel: l2tsel setting requested
- *
- * Use the l2tsel setting to update all of the Rx queue context bits for l2tsel.
- * This will modify which descriptor field the first offloaded VLAN will be
- * stripped into.
- */
-static void ice_vsi_update_l2tsel(struct ice_vsi *vsi, enum ice_l2tsel l2tsel)
-{
-	struct ice_hw *hw = &vsi->back->hw;
-	u32 l2tsel_bit;
-	int i;
-
-	if (l2tsel == ICE_L2TSEL_EXTRACT_FIRST_TAG_L2TAG2_2ND)
-		l2tsel_bit = 0;
-	else
-		l2tsel_bit = BIT(ICE_L2TSEL_BIT_OFFSET);
-
-	for (i = 0; i < vsi->alloc_rxq; i++) {
-		u16 pfq = vsi->rxq_map[i];
-		u32 qrx_context_offset;
-		u32 regval;
-
-		qrx_context_offset =
-			QRX_CONTEXT(ICE_L2TSEL_QRX_CONTEXT_REG_IDX, pfq);
-
-		regval = rd32(hw, qrx_context_offset);
-		regval &= ~BIT(ICE_L2TSEL_BIT_OFFSET);
-		regval |= l2tsel_bit;
-		wr32(hw, qrx_context_offset, regval);
-	}
 }
 
 /**

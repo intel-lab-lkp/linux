@@ -1353,7 +1353,7 @@ static int esw_qos_switch_tc_arbiter_node_to_vports(
 					     &node->ix);
 	if (err) {
 		NL_SET_ERR_MSG_MOD(extack,
-				   "Failed to create scheduling element for vports node when disabliing vports TC QoS");
+				   "Failed to create scheduling element for vports node when disabling vports TC QoS");
 		return err;
 	}
 
@@ -1405,9 +1405,10 @@ esw_qos_move_node(struct mlx5_esw_sched_node *curr_node)
 
 	new_node = __esw_qos_alloc_node(curr_node->esw, curr_node->ix,
 					curr_node->type, NULL);
-	if (!IS_ERR(new_node))
-		esw_qos_nodes_set_parent(&curr_node->children, new_node);
+	if (!new_node)
+		return ERR_PTR(-ENOMEM);
 
+	esw_qos_nodes_set_parent(&curr_node->children, new_node);
 	return new_node;
 }
 
@@ -2043,6 +2044,7 @@ static int esw_qos_vports_node_update_parent(struct mlx5_esw_sched_node *node,
 		return err;
 	}
 	esw_qos_node_set_parent(node, parent);
+	node->bw_share = 0;
 
 	return 0;
 }

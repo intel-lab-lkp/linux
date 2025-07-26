@@ -30,6 +30,10 @@
 #include <linux/splice.h>
 
 #include <net/sock.h>
+#include <net/inet_common.h>
+#if IS_ENABLED(CONFIG_IPV6)
+#include <net/ipv6.h>
+#endif
 #include <net/tcp.h>
 #include <net/smc.h>
 #include <asm/ioctls.h>
@@ -360,6 +364,16 @@ static void smc_destruct(struct sock *sk)
 		return;
 	if (!sock_flag(sk, SOCK_DEAD))
 		return;
+	switch (sk->sk_family) {
+	case AF_INET:
+		inet_sock_destruct(sk);
+		break;
+#if IS_ENABLED(CONFIG_IPV6)
+	case AF_INET6:
+		inet6_sock_destruct(sk);
+		break;
+#endif
+	}
 }
 
 static struct lock_class_key smc_key;
@@ -2735,8 +2749,7 @@ int smc_accept(struct socket *sock, struct socket *new_sock,
 
 	if (lsmc->sockopt_defer_accept && !(arg->flags & O_NONBLOCK)) {
 		/* wait till data arrives on the socket */
-		timeo = msecs_to_jiffies(lsmc->sockopt_defer_accept *
-								MSEC_PER_SEC);
+		timeo = secs_to_jiffies(lsmc->sockopt_defer_accept);
 		if (smc_sk(nsk)->use_fallback) {
 			struct sock *clcsk = smc_sk(nsk)->clcsock->sk;
 

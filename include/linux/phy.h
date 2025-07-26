@@ -106,6 +106,7 @@ extern const int phy_basic_ports_array[3];
  * @PHY_INTERFACE_MODE_50GBASER: 50GBase-R - with Clause 134 FEC
  * @PHY_INTERFACE_MODE_LAUI: 50 Gigabit Attachment Unit Interface
  * @PHY_INTERFACE_MODE_100GBASEP: 100GBase-P - with Clause 134 FEC
+ * @PHY_INTERFACE_MODE_MIILITE: MII-Lite - MII without RXER TXER CRS COL
  * @PHY_INTERFACE_MODE_MAX: Book keeping
  *
  * Describes the interface between the MAC and PHY.
@@ -150,6 +151,7 @@ typedef enum {
 	PHY_INTERFACE_MODE_50GBASER,
 	PHY_INTERFACE_MODE_LAUI,
 	PHY_INTERFACE_MODE_100GBASEP,
+	PHY_INTERFACE_MODE_MIILITE,
 	PHY_INTERFACE_MODE_MAX,
 } phy_interface_t;
 
@@ -272,6 +274,8 @@ static inline const char *phy_modes(phy_interface_t interface)
 		return "laui";
 	case PHY_INTERFACE_MODE_100GBASEP:
 		return "100gbase-p";
+	case PHY_INTERFACE_MODE_MIILITE:
+		return "mii-lite";
 	default:
 		return "unknown";
 	}
@@ -409,8 +413,10 @@ struct mii_bus {
 	/** @shared_lock: protect access to the shared element */
 	struct mutex shared_lock;
 
+#if IS_ENABLED(CONFIG_PHY_PACKAGE)
 	/** @shared: shared state across different PHYs */
 	struct phy_package_shared *shared[PHY_MAX_ADDR];
+#endif
 };
 #define to_mii_bus(d) container_of(d, struct mii_bus, dev)
 
@@ -718,9 +724,11 @@ struct phy_device {
 	/* For use by PHYs to maintain extra state */
 	void *priv;
 
+#if IS_ENABLED(CONFIG_PHY_PACKAGE)
 	/* shared data pointer */
 	/* For use by PHYs inside the same package that need a shared state. */
 	struct phy_package_shared *shared;
+#endif
 
 	/* Reporting cable test results */
 	struct sk_buff *skb;
