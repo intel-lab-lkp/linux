@@ -1820,8 +1820,8 @@ static bool edid_block_is_zero(const void *edid)
 	return mem_is_zero(edid, EDID_LENGTH);
 }
 
-static bool drm_edid_eq(const struct drm_edid *drm_edid,
-			const void *raw_edid, size_t raw_edid_size)
+static bool drm_edid_eq_buf(const struct drm_edid *drm_edid,
+			    const void *raw_edid, size_t raw_edid_size)
 {
 	bool edid1_present = drm_edid && drm_edid->edid && drm_edid->size;
 	bool edid2_present = raw_edid && raw_edid_size;
@@ -6979,7 +6979,7 @@ static int _drm_edid_connector_property_update(struct drm_connector *connector,
 		const void *old_edid = connector->edid_blob_ptr->data;
 		size_t old_edid_size = connector->edid_blob_ptr->length;
 
-		if (old_edid && !drm_edid_eq(drm_edid, old_edid, old_edid_size)) {
+		if (old_edid && !drm_edid_eq_buf(drm_edid, old_edid, old_edid_size)) {
 			connector->epoch_counter++;
 			drm_dbg_kms(dev, "[CONNECTOR:%d:%s] EDID changed, epoch counter %llu\n",
 				    connector->base.id, connector->name,
@@ -7578,3 +7578,21 @@ bool drm_edid_is_digital(const struct drm_edid *drm_edid)
 		drm_edid->edid->input & DRM_EDID_INPUT_DIGITAL;
 }
 EXPORT_SYMBOL(drm_edid_is_digital);
+
+/**
+ * drm_edid_eq - Check if EDIDs are equal
+ *
+ * @drm_edid_1: first drm_edid to compare edid
+ * @drm_edid_2: second drm_edid to compare edid
+ *
+ * Return true if EDIDs are equal.
+ */
+bool drm_edid_eq(const struct drm_edid *drm_edid_1,
+		 const struct drm_edid *drm_edid_2)
+{
+	const void *edid_1 = drm_edid_1 ? drm_edid_1->edid : NULL;
+	size_t edid_1_size = drm_edid_1 ? drm_edid_1->size : 0;
+
+	return drm_edid_eq_buf(drm_edid_2, edid_1, edid_1_size);
+}
+EXPORT_SYMBOL(drm_edid_eq);
