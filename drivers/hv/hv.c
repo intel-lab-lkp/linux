@@ -310,6 +310,7 @@ void hv_synic_enable_regs(unsigned int cpu)
 	if (vmbus_irq != -1)
 		enable_percpu_irq(vmbus_irq, 0);
 	shared_sint.as_uint64 = hv_get_msr(HV_MSR_SINT0 + VMBUS_MESSAGE_SINT);
+	hv_enable_coco_interrupt(cpu, vmbus_interrupt, true);
 
 	shared_sint.vector = vmbus_interrupt;
 	shared_sint.masked = false;
@@ -342,6 +343,7 @@ void hv_synic_disable_regs(unsigned int cpu)
 	union hv_synic_scontrol sctrl;
 
 	shared_sint.as_uint64 = hv_get_msr(HV_MSR_SINT0 + VMBUS_MESSAGE_SINT);
+	hv_enable_coco_interrupt(cpu, vmbus_interrupt, false);
 
 	shared_sint.masked = 1;
 
