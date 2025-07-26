@@ -40,7 +40,7 @@ int dialog_inputbox(const char *title, const char *prompt, int height, int width
 	if (!init)
 		instr[0] = '\0';
 	else
-		strcpy(instr, init);
+		strlcpy(instr, init, MAX_LEN + 1);
 
 do_resize:
 	if (getmaxy(stdscr) <= (height - INPUTBOX_HEIGHT_MIN))
