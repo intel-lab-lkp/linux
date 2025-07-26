@@ -777,7 +777,7 @@ bool sym_set_string_value(struct symbol *sym, const char *newval)
 	else
 		return true;
 
-	strcpy(val, newval);
+	strlcpy(val, newval, size);
 	free((void *)oldval);
 	sym_clear_all_valid();
 
