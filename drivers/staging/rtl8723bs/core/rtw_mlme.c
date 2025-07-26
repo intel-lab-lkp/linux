@@ -1449,6 +1449,7 @@ void rtw_stadel_event_callback(struct adapter *adapter, u8 *pbuf)
 		if (adapter->stapriv.asoc_sta_count == 1) {
 			/* a sta + bc/mc_stainfo (not Ibss_stainfo) */
 			u8 ret = _SUCCESS;
+
 			spin_lock_bh(&pmlmepriv->scanned_queue.lock);
 			/* free old ibss network */
 			pwlan = rtw_find_network(&pmlmepriv->scanned_queue,
