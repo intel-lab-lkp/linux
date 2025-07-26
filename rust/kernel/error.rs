@@ -157,7 +157,7 @@ impl Error {
     }
 
     /// Returns a string representing the error, if one exists.
-    #[cfg(not(any(test, testlib)))]
+    #[cfg(not(testlib))]
     pub fn name(&self) -> Option<&'static CStr> {
         // SAFETY: Just an FFI call, there are no extra safety requirements.
         let ptr = unsafe { bindings::errname(-self.0.get()) };
@@ -174,7 +174,7 @@ impl Error {
     /// When `testlib` is configured, this always returns `None` to avoid the dependency on a
     /// kernel function so that tests that use this (e.g., by calling [`Result::unwrap`]) can still
     /// run in userspace.
-    #[cfg(any(test, testlib))]
+    #[cfg(testlib)]
     pub fn name(&self) -> Option<&'static CStr> {
         None
     }
