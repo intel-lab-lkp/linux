@@ -103,7 +103,7 @@ static int codel_change(struct Qdisc *sch, struct nlattr *opt,
 {
 	struct codel_sched_data *q = qdisc_priv(sch);
 	struct nlattr *tb[TCA_CODEL_MAX + 1];
-	unsigned int qlen, dropped = 0;
+	unsigned int prev_qlen, prev_backlog;
 	int err;
 
 	err = nla_parse_nested_deprecated(tb, TCA_CODEL_MAX, opt,
@@ -142,15 +142,15 @@ static int codel_change(struct Qdisc *sch, struct nlattr *opt,
 		WRITE_ONCE(q->params.ecn,
 			   !!nla_get_u32(tb[TCA_CODEL_ECN]));
 
-	qlen = sch->q.qlen;
+	prev_qlen = sch->q.qlen;
+	prev_backlog = sch->qstats.backlog;
 	while (sch->q.qlen > sch->limit) {
 		struct sk_buff *skb = qdisc_dequeue_internal(sch, true);
 
-		dropped += qdisc_pkt_len(skb);
-		qdisc_qstats_backlog_dec(sch, skb);
 		rtnl_qdisc_drop(skb, sch);
 	}
-	qdisc_tree_reduce_backlog(sch, qlen - sch->q.qlen, dropped);
+	qdisc_tree_reduce_backlog(sch, prev_qlen - sch->q.qlen,
+				  prev_backlog - sch->qstats.backlog);
 
 	sch_tree_unlock(sch);
 	return 0;

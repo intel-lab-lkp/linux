@@ -142,8 +142,8 @@ static int pie_change(struct Qdisc *sch, struct nlattr *opt,
 		      struct netlink_ext_ack *extack)
 {
 	struct pie_sched_data *q = qdisc_priv(sch);
+	unsigned int prev_qlen, prev_backlog;
 	struct nlattr *tb[TCA_PIE_MAX + 1];
-	unsigned int qlen, dropped = 0;
 	int err;
 
 	err = nla_parse_nested_deprecated(tb, TCA_PIE_MAX, opt, pie_policy,
@@ -193,15 +193,15 @@ static int pie_change(struct Qdisc *sch, struct nlattr *opt,
 			   nla_get_u32(tb[TCA_PIE_DQ_RATE_ESTIMATOR]));
 
 	/* Drop excess packets if new limit is lower */
-	qlen = sch->q.qlen;
+	prev_qlen = sch->q.qlen;
+	prev_backlog = sch->qstats.backlog;
 	while (sch->q.qlen > sch->limit) {
 		struct sk_buff *skb = qdisc_dequeue_internal(sch, true);
 
-		dropped += qdisc_pkt_len(skb);
-		qdisc_qstats_backlog_dec(sch, skb);
 		rtnl_qdisc_drop(skb, sch);
 	}
-	qdisc_tree_reduce_backlog(sch, qlen - sch->q.qlen, dropped);
+	qdisc_tree_reduce_backlog(sch, prev_qlen - sch->q.qlen,
+				  prev_backlog - sch->qstats.backlog);
 
 	sch_tree_unlock(sch);
 	return 0;
