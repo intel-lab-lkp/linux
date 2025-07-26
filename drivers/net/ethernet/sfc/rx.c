@@ -308,14 +308,20 @@ static bool efx_do_xdp(struct efx_nic *efx, struct efx_channel *channel,
 	case XDP_TX:
 		/* Buffer ownership passes to tx on success. */
 		xdpf = xdp_convert_buff_to_frame(&xdp);
-		err = efx_xdp_tx_buffers(efx, 1, &xdpf, true);
+		if (unlikely(!xdpf))
+			err = -ENOBUFS;
+		else
+			err = efx_xdp_tx_buffers(efx, 1, &xdpf, true);
+
 		if (unlikely(err != 1)) {
 			efx_free_rx_buffers(rx_queue, rx_buf, 1);
 			if (net_ratelimit())
 				netif_err(efx, rx_err, efx->net_dev,
-					  "XDP TX failed (%d)\n", err);
+					  "XDP TX failed (%d)%s\n", err,
+					  err == -ENOBUFS ? " [frame conversion]" : "");
 			channel->n_rx_xdp_bad_drops++;
-			trace_xdp_exception(efx->net_dev, xdp_prog, xdp_act);
+			if (err != -ENOBUFS)
+				trace_xdp_exception(efx->net_dev, xdp_prog, xdp_act);
 		} else {
 			channel->n_rx_xdp_tx++;
 		}
