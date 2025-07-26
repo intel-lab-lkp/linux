@@ -7,5 +7,7 @@
 
 bool dc_edid_is_same_edid(struct dc_sink *prev_sink,
 			  struct dc_sink *current_sink);
+void dc_edid_copy_edid_to_dc(struct dc_sink *dc_sink,
+			     const void *edid, int len);
 
 #endif /* __DC_EDID_H__ */
