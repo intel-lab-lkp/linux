@@ -106,9 +106,9 @@ impl<T> Revocable<T> {
     pub fn try_access(&self) -> Option<RevocableGuard<'_, T>> {
         let guard = rcu::read_lock();
         if self.is_available.load(Ordering::Relaxed) {
-            // Since `self.is_available` is true, data is initialised and has to remain valid
-            // because the RCU read side lock prevents it from being dropped.
-            Some(RevocableGuard::new(self.data.get(), guard))
+            // SAFETY: `self.data` is valid for reads because of `Self`'s type invariants:
+            // `self.is_available` is true and the RCU read-side lock is held by `guard`.
+            Some(unsafe { RevocableGuard::new(self.data.get(), guard) })
         } else {
             None
         }
@@ -233,7 +233,7 @@ impl<T> PinnedDrop for Revocable<T> {
 ///
 /// # Invariants
 ///
-/// The RCU read-side lock is held while the guard is alive.
+/// - `data_ref` is a valid pointer for as long as the RCU read-side lock is held.
 pub struct RevocableGuard<'a, T> {
     // This can't use the `&'a T` type because references that appear in function arguments must
     // not become dangling during the execution of the function, which can happen if the
@@ -245,7 +245,13 @@ pub struct RevocableGuard<'a, T> {
 }
 
 impl<T> RevocableGuard<'_, T> {
-    fn new(data_ref: *const T, rcu_guard: rcu::Guard) -> Self {
+    /// Creates a new `RevocableGuard`.
+    ///
+    /// # Safety
+    ///
+    /// Callers must ensure that `data_ref` is a valid pointer to a `T` object,
+    /// and that it remains valid for as long as the returned `RevocableGuard` is alive.
+    unsafe fn new(data_ref: *const T, rcu_guard: rcu::Guard) -> Self {
         Self {
             data_ref,
             _rcu_guard: rcu_guard,
@@ -258,8 +264,8 @@ impl<T> Deref for RevocableGuard<'_, T> {
     type Target = T;
 
     fn deref(&self) -> &Self::Target {
-        // SAFETY: By the type invariants, we hold the rcu read-side lock, so the object is
-        // guaranteed to remain valid.
+        // SAFETY: `self.data_ref` is valid because of `Self`'s type invariants,
+        // and the active RCU read-side lock held via `_rcu_guard`, ensuring the data's accessibility.
         unsafe { &*self.data_ref }
     }
 }
