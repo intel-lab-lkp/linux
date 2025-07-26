@@ -35,4 +35,6 @@ obj-$(CONFIG_SI7210)			+= si7210.o
 
 obj-$(CONFIG_TI_TMAG5273)		+= tmag5273.o
 
+obj-$(CONFIG_TLV493D)	+= tlv493d.o
+
 obj-$(CONFIG_YAMAHA_YAS530)		+= yamaha-yas530.o
