@@ -1481,7 +1481,6 @@ static noinline int copy_to_sk(struct btrfs_path *path,
 	unsigned long item_off;
 	unsigned long item_len;
 	int nritems;
-	int i;
 	int slot;
 	int ret = 0;
 
@@ -1489,13 +1488,12 @@ static noinline int copy_to_sk(struct btrfs_path *path,
 	slot = path->slots[0];
 	nritems = btrfs_header_nritems(leaf);
 
-	if (btrfs_header_generation(leaf) > sk->max_transid) {
-		i = nritems;
+	if (btrfs_header_generation(leaf) > sk->max_transid)
 		goto advance_key;
-	}
+
 	found_transid = btrfs_header_generation(leaf);
 
-	for (i = slot; i < nritems; i++) {
+	for (int i = slot; i < nritems; i++) {
 		item_off = btrfs_item_ptr_offset(leaf, i);
 		item_len = btrfs_item_size(leaf, i);
 
