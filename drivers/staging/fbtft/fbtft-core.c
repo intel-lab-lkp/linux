@@ -170,6 +170,18 @@ void fbtft_register_backlight(struct fbtft_par *par)
 	struct backlight_device *bd;
 	struct backlight_properties bl_props = { 0, };
 
+	bd = devm_of_find_backlight(par->info->device);
+	if (IS_ERR(bd)) {
+		dev_warn(par->info->device,
+			"cannot find of backlight device (%ld), trying legacy\n",
+			PTR_ERR(bd));
+	}
+
+	if (bd) {
+		par->info->bl_dev = bd;
+		return;
+	}
+
 	if (!par->gpio.led[0]) {
 		fbtft_par_dbg(DEBUG_BACKLIGHT, par,
 			      "%s(): led pin not set, exiting.\n", __func__);
