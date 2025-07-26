@@ -15,6 +15,7 @@
 #include <dt-bindings/pinctrl/rzn1-pinctrl.h>
 
 #include "r9a06g032.dtsi"
+#include "r9a06g032-rzn1d400-db-switches.h"
 
 / {
 	model = "RZN1D-DB Board";
@@ -185,6 +186,14 @@
 	};
 };
 
+#if SW2_2 == SW_OFF
+&gpio1 {
+	pinctrl-0 = <&pins_gpio1>;
+	pinctrl-names = "default";
+	status = "okay";
+};
+#endif
+
 &i2c2 {
 	pinctrl-0 = <&pins_i2c2>;
 	pinctrl-names = "default";
@@ -255,6 +264,27 @@
 			 <RZN1_PINMUX(121, RZN1_FUNC_USB)>,
 			 <RZN1_PINMUX(122, RZN1_FUNC_USB)>;
 	};
+
+#if SW2_2 == SW_OFF
+	pins_gpio1: pins-gpio1 {
+		pinmux = <RZN1_PINMUX(80, RZN1_FUNC_GPIO)>,
+			 <RZN1_PINMUX(81, RZN1_FUNC_GPIO)>,
+			 <RZN1_PINMUX(82, RZN1_FUNC_GPIO)>,
+			 <RZN1_PINMUX(83, RZN1_FUNC_GPIO)>,
+			 <RZN1_PINMUX(84, RZN1_FUNC_GPIO)>,
+			 <RZN1_PINMUX(85, RZN1_FUNC_GPIO)>,
+			 <RZN1_PINMUX(86, RZN1_FUNC_GPIO)>,
+			 <RZN1_PINMUX(87, RZN1_FUNC_GPIO)>,
+			 <RZN1_PINMUX(88, RZN1_FUNC_GPIO)>,
+			 <RZN1_PINMUX(89, RZN1_FUNC_GPIO)>,
+			 <RZN1_PINMUX(90, RZN1_FUNC_GPIO)>,
+			 <RZN1_PINMUX(91, RZN1_FUNC_GPIO)>,
+			 <RZN1_PINMUX(92, RZN1_FUNC_GPIO)>,
+			 <RZN1_PINMUX(93, RZN1_FUNC_GPIO)>;
+		drive-strength = <12>;
+		bias-disable;
+	};
+#endif
 
 	pins_eth3: pins_eth3 {
 		pinmux = <RZN1_PINMUX(36, RZN1_FUNC_CLK_ETH_MII_RGMII_RMII)>,
