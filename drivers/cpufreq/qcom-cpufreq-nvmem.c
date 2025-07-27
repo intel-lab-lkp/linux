@@ -605,7 +605,7 @@ MODULE_DEVICE_TABLE(of, qcom_cpufreq_match_list);
 /*
  * Since the driver depends on smem and nvmem drivers, which may
  * return EPROBE_DEFER, all the real activity is done in the probe,
- * which may be defered as well. The init here is only registering
+ * which may be deferred as well. The init here is only registering
  * the driver and the platform device.
  */
 static int __init qcom_cpufreq_init(void)
