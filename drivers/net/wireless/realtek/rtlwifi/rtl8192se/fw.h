@@ -195,7 +195,7 @@ struct rt_firmware {
 	u32 fw_emem_len;
 	u8 sz_fw_tmpbuffer[RTL8190_MAX_RAW_FIRMWARE_CODE_SIZE];
 	u32 sz_fw_tmpbufferlen;
-	u16 cmdpacket_fragthresold;
+	u16 cmdpacket_fragthreshold;
 };
 
 struct h2c_set_pwrmode_parm {
