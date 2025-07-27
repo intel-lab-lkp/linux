@@ -92,14 +92,6 @@ static struct perf_event_attr wd_hw_attr = {
 	.disabled	= 1,
 };
 
-static struct perf_event_attr fallback_wd_hw_attr = {
-	.type		= PERF_TYPE_HARDWARE,
-	.config		= PERF_COUNT_HW_CPU_CYCLES,
-	.size		= sizeof(struct perf_event_attr),
-	.pinned		= 1,
-	.disabled	= 1,
-};
-
 /* Callback function for perf event subsystem */
 static void watchdog_overflow_callback(struct perf_event *event,
 				       struct perf_sample_data *data,
@@ -112,6 +104,12 @@ static void watchdog_overflow_callback(struct perf_event *event,
 		return;
 
 	watchdog_hardlockup_check(smp_processor_id(), regs);
+}
+
+static void fallback_wd_hw_attr(void)
+{
+	wd_hw_attr.type = PERF_TYPE_HARDWARE;
+	wd_hw_attr.config = PERF_COUNT_HW_CPU_CYCLES;
 }
 
 static int hardlockup_detector_event_create(void)
@@ -133,8 +131,7 @@ static int hardlockup_detector_event_create(void)
 	evt = perf_event_create_kernel_counter(wd_attr, cpu, NULL,
 					       watchdog_overflow_callback, NULL);
 	if (IS_ERR(evt)) {
-		wd_attr = &fallback_wd_hw_attr;
-		wd_attr->sample_period = hw_nmi_get_sample_period(watchdog_thresh);
+		fallback_wd_hw_attr();
 		evt = perf_event_create_kernel_counter(wd_attr, cpu, NULL,
 						       watchdog_overflow_callback, NULL);
 	}
