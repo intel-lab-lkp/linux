@@ -277,7 +277,7 @@ static void pty_set_termios(struct tty_struct *tty,
  *	@ws: window size being set.
  *
  *	Update the termios variables and send the necessary signals to
- *	peform a terminal resize correctly
+ *	perform a terminal resize correctly
  */
 
 static int pty_resize(struct tty_struct *tty,  struct winsize *ws)
