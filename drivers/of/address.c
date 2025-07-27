@@ -969,6 +969,7 @@ phys_addr_t __init of_dma_get_max_cpu_address(struct device_node *np)
 {
 	phys_addr_t max_cpu_addr = PHYS_ADDR_MAX;
 	struct of_range_parser parser;
+	phys_addr_t max_subtree_max_addr = PHYS_ADDR_MAX;
 	phys_addr_t subtree_max_addr;
 	struct device_node *child;
 	struct of_range range;
@@ -992,9 +993,16 @@ phys_addr_t __init of_dma_get_max_cpu_address(struct device_node *np)
 
 	for_each_available_child_of_node(np, child) {
 		subtree_max_addr = of_dma_get_max_cpu_address(child);
-		if (max_cpu_addr > subtree_max_addr)
-			max_cpu_addr = subtree_max_addr;
+		if (subtree_max_addr == PHYS_ADDR_MAX)
+			continue;
+
+		if (max_subtree_max_addr == PHYS_ADDR_MAX)
+			max_subtree_max_addr = subtree_max_addr;
+		else
+			max_subtree_max_addr = max(max_subtree_max_addr, subtree_max_addr);
 	}
+
+	max_cpu_addr = min(max_cpu_addr, max_subtree_max_addr);
 
 	return max_cpu_addr;
 }
