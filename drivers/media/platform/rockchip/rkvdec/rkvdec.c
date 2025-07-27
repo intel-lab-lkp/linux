@@ -1169,15 +1169,17 @@ static int rkvdec_probe(struct platform_device *pdev)
 	vb2_dma_contig_set_max_seg_size(&pdev->dev, DMA_BIT_MASK(32));
 
 	irq = platform_get_irq(pdev, 0);
-	if (irq <= 0)
-		return -ENXIO;
+	if (irq <= 0) {
+		ret = -ENXIO;
+		goto err_free_domain;
+	}
 
 	ret = devm_request_threaded_irq(&pdev->dev, irq, NULL,
 					rkvdec_irq_handler, IRQF_ONESHOT,
 					dev_name(&pdev->dev), rkvdec);
 	if (ret) {
 		dev_err(&pdev->dev, "Could not request vdec IRQ\n");
-		return ret;
+		goto err_free_domain;
 	}
 
 	pm_runtime_set_autosuspend_delay(&pdev->dev, 100);
@@ -1193,6 +1195,9 @@ static int rkvdec_probe(struct platform_device *pdev)
 err_disable_runtime_pm:
 	pm_runtime_dont_use_autosuspend(&pdev->dev);
 	pm_runtime_disable(&pdev->dev);
+err_free_domain:
+	if (rkvdec->empty_domain)
+		iommu_domain_free(rkvdec->empty_domain);
 	return ret;
 }
 
