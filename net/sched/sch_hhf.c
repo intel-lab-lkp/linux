@@ -509,8 +509,8 @@ static int hhf_change(struct Qdisc *sch, struct nlattr *opt,
 		      struct netlink_ext_ack *extack)
 {
 	struct hhf_sched_data *q = qdisc_priv(sch);
+	unsigned int prev_qlen, prev_backlog;
 	struct nlattr *tb[TCA_HHF_MAX + 1];
-	unsigned int qlen, prev_backlog;
 	int err;
 	u64 non_hh_quantum;
 	u32 new_quantum = q->quantum;
@@ -561,14 +561,14 @@ static int hhf_change(struct Qdisc *sch, struct nlattr *opt,
 			   usecs_to_jiffies(us));
 	}
 
-	qlen = sch->q.qlen;
+	prev_qlen = sch->q.qlen;
 	prev_backlog = sch->qstats.backlog;
 	while (sch->q.qlen > sch->limit) {
 		struct sk_buff *skb = qdisc_dequeue_internal(sch, false);
 
 		rtnl_kfree_skbs(skb, skb);
 	}
-	qdisc_tree_reduce_backlog(sch, qlen - sch->q.qlen,
+	qdisc_tree_reduce_backlog(sch, prev_qlen - sch->q.qlen,
 				  prev_backlog - sch->qstats.backlog);
 
 	sch_tree_unlock(sch);
