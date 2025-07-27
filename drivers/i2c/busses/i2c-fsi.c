@@ -489,7 +489,7 @@ static int fsi_i2c_abort(struct fsi_i2c_port *port, u32 status)
 	if (rc)
 		return rc;
 
-	/* if sda is low, peform full bus reset */
+	/* if sda is low, perform full bus reset */
 	if (!(stat & I2C_STAT_SDA_IN)) {
 		rc = fsi_i2c_reset_bus(i2c, port);
 		if (rc)
