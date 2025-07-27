@@ -893,6 +893,7 @@ impl TryFrom<BiosImageBase> for PciAtBiosImage {
 ///
 /// See the [`PmuLookupTable`] description for more information.
 #[expect(dead_code)]
+#[repr(C)]
 struct PmuLookupTableHeader {
     version: u8,
     header_len: u8,
@@ -901,16 +902,17 @@ struct PmuLookupTableHeader {
 }
 
 impl PmuLookupTableHeader {
+    // TODO[TRSM]: use FromBytes::from_bytes when it becomes available.
     fn new(data: &[u8]) -> Result<Self> {
         if data.len() < core::mem::size_of::<Self>() {
             return Err(EINVAL);
         }
 
         Ok(PmuLookupTableHeader {
-            version: data[0],
-            header_len: data[1],
-            entry_len: data[2],
-            entry_count: data[3],
+            version: data[const { core::mem::offset_of!(PmuLookupTableHeader, version) }],
+            header_len: data[const { core::mem::offset_of!(PmuLookupTableHeader, header_len) }],
+            entry_len: data[const { core::mem::offset_of!(PmuLookupTableHeader, entry_len) }],
+            entry_count: data[const { core::mem::offset_of!(PmuLookupTableHeader, entry_count) }],
         })
     }
 }
