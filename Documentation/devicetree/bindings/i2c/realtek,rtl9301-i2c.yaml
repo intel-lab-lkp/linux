@@ -10,9 +10,11 @@ maintainers:
   - Chris Packham <chris.packham@alliedtelesis.co.nz>
 
 description:
-  The RTL9300 SoC has two I2C controllers. Each of these has an SCL line (which
-  if not-used for SCL can be a GPIO). There are 8 common SDA lines that can be
-  assigned to either I2C controller.
+  The RTL9300 SoCs have two I2C controllers. Each of these has an SCL line
+  (which if not-used for SCL can be a GPIO). There are 8 common SDA lines
+  that can be assigned to either I2C controller.
+  The RTL9310 SoCs have equal capabilities but support 12 common SDA lines
+  which can be assigned to either I2C controller.
 
 properties:
   compatible:
@@ -23,7 +25,15 @@ properties:
               - realtek,rtl9302c-i2c
               - realtek,rtl9303-i2c
           - const: realtek,rtl9301-i2c
-      - const: realtek,rtl9301-i2c
+      - items:
+          - enum:
+              - realtek,rtl9311-i2c
+              - realtek,rtl9312-i2c
+              - realtek,rtl9313-i2c
+          - const: realtek,rtl9310-i2c
+      - enum:
+          - realtek,rtl9301-i2c
+          - realtek,rtl9310-i2c
 
   reg:
     items:
@@ -35,8 +45,15 @@ properties:
   "#size-cells":
     const: 0
 
+  realtek,mst-id:
+    $ref: /schemas/types.yaml#/definitions/uint32
+    description:
+      Realtek-internal ID of the I2C controller/master.
+    minimum: 1
+    maximum: 2
+
 patternProperties:
-  '^i2c@[0-7]$':
+  '^i2c@([0-9]|1[0-1])$':
     $ref: /schemas/i2c/i2c-controller.yaml
     unevaluatedProperties: false
 
@@ -47,6 +64,25 @@ patternProperties:
 
     required:
       - reg
+
+
+allOf:
+  - if:
+      properties:
+        compatible:
+          contains:
+            const: realtek,rtl9310-i2c
+    then:
+      required:
+        - realtek,mst-id
+  - if:
+      properties:
+        compatible:
+          contains:
+            const: realtek,rtl9301-i2c
+    then:
+      patternProperties:
+        '^i2c@([8-9]|1[0-1])$': false
 
 required:
   - compatible
@@ -66,5 +102,17 @@ examples:
         reg = <2>;
         #address-cells = <1>;
         #size-cells = <0>;
+      };
+    };
+  - |
+    i2c@100c {
+      compatible = "realtek,rtl9310-i2c";
+      reg = <0x100c 0x18>;
+      #address-cells = <1>;
+      #size-cells = <0>;
+      realtek,mst-id = <1>;
+
+      i2c@0 {
+        reg = <0>;
       };
     };
