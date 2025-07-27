@@ -1156,7 +1156,7 @@ struct radeon_wb {
  * @needed_bandwidth:   current bandwidth needs
  *
  * It keeps track of various data needed to take powermanagement decision.
- * Bandwidth need is used to determine minimun clock of the GPU and memory.
+ * Bandwidth need is used to determine minimum clock of the GPU and memory.
  * Equation between gpu/memory clock and available bandwidth is hw dependent
  * (type of memory, bus size, efficiency, ...)
  */
