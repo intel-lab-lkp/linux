@@ -4318,7 +4318,7 @@ static int reserve_flowkey_alg_idx(struct rvu *rvu, int blkaddr, u32 flow_cfg)
 			    NIX_AF_RX_FLOW_KEY_ALGX_FIELDX(hw->flowkey.in_use,
 							   fid), field[fid]);
 
-	/* Store the flow_cfg for futher lookup */
+	/* Store the flow_cfg for further lookup */
 	rc = hw->flowkey.in_use;
 	hw->flowkey.flowkey[rc] = flow_cfg;
 	hw->flowkey.in_use++;
