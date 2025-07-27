@@ -405,6 +405,47 @@ static int uncore_read(struct uncore_data *data, unsigned int *value, enum uncor
 	return -EOPNOTSUPP;
 }
 
+#define MAX_PARTITIONS	2
+
+/* IO domain ID start index for a partition */
+static u8 io_die_start[MAX_PARTITIONS];
+
+/* Next IO domain ID index after the current partition IO die IDs */
+static u8 io_die_index_next;
+
+/* Lock to protect io_die_start, io_die_index_next */
+static DEFINE_MUTEX(domain_lock);
+
+static void update_domain_id(struct tpmi_uncore_cluster_info *cluster_info,
+			     struct oobmsm_plat_info *plat_info, int num_resource)
+{
+	u8 max_dies = topology_max_dies_per_package();
+	u8 cdie_cnt;
+
+	/* For non partitioned system or invalid partition number, return */
+	if (!plat_info->cdie_mask || max_dies <= 1 || plat_info->partition >= MAX_PARTITIONS)
+		return;
+
+	if (cluster_info->uncore_data.agent_type_mask & AGENT_TYPE_CORE) {
+		cluster_info->uncore_data.domain_id = cluster_info->cdie_id;
+		return;
+	}
+
+	cdie_cnt = fls(plat_info->cdie_mask) - ffs(plat_info->cdie_mask) + 1;
+
+	guard(mutex)(&domain_lock);
+
+	if (!io_die_index_next)
+		io_die_index_next = max_dies;
+
+	if (!io_die_start[plat_info->partition]) {
+		io_die_start[plat_info->partition] = io_die_index_next;
+		io_die_index_next += (num_resource - cdie_cnt);
+	}
+
+	cluster_info->uncore_data.domain_id += (io_die_start[plat_info->partition] - cdie_cnt);
+}
+
 /* Callback for sysfs write for TPMI uncore data. Called under mutex locks. */
 static int uncore_write(struct uncore_data *data, unsigned int value, enum uncore_index index)
 {
@@ -608,6 +649,7 @@ static int uncore_probe(struct auxiliary_device *auxdev, const struct auxiliary_
 			cluster_info->uncore_data.cluster_id = j;
 
 			set_cdie_id(i, cluster_info, plat_info);
+			update_domain_id(cluster_info, plat_info, num_resources);
 
 			cluster_info->uncore_root = tpmi_uncore;
 
