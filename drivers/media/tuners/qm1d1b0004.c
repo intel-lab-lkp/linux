@@ -123,7 +123,7 @@ static int qm1d1b0004_set_params(struct dvb_frontend *fe)
 	/* step.1: set frequency with BG:2, TM:0(4MHZ), LPF:4MHz */
 	buf[0] = 0x40 | word >> 8;
 	buf[1] = word;
-	/* inconsisnten with the above I/F doc. maybe the doc is wrong */
+	/* inconsisn'ten with the above I/F doc. maybe the doc is wrong */
 	buf[2] = 0xe0 | state->cfg.half_step;
 	buf[3] = cb;
 	ret = i2c_master_send(state->i2c, buf, 4);
