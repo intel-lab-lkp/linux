@@ -671,7 +671,7 @@ static int mlxsw_i2c_probe(struct i2c_client *client)
 	 * For this purpose QUERY_FW is to be issued with opcode modifier equal
 	 * 0x01. For such command the output parameter is an immediate value.
 	 * Here QUERY_FW command is invoked for ASIC probing and for getting
-	 * local mailboxes addresses from immedate output parameters.
+	 * local mailboxes addresses from immediate output parameters.
 	 */
 
 	/* Prepare and write out Command Interface Register for transaction */
