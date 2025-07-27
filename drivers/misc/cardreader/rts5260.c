@@ -269,7 +269,7 @@ static int rts5260_card_power_off(struct rtsx_pcr *pcr, int card)
 	rts5260_card_before_power_off(pcr);
 	err = rtsx_pci_write_register(pcr, LDO_VCC_CFG1,
 			 LDO_POW_SDVDD1_MASK, LDO_POW_SDVDD1_OFF);
-	err = rtsx_pci_write_register(pcr, LDO_CONFIG2,
+	err |= rtsx_pci_write_register(pcr, LDO_CONFIG2,
 			 DV331812_POWERON, DV331812_POWEROFF);
 	if (pcr->option.ocp_en)
 		rtsx_pci_disable_ocp(pcr);
