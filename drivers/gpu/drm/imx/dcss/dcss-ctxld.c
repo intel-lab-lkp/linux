@@ -82,7 +82,7 @@ struct dcss_ctxld {
 	bool in_use;
 	bool armed;
 
-	spinlock_t lock; /* protects concurent access to private data */
+	spinlock_t lock; /* protects concurrent access to private data */
 };
 
 static irqreturn_t dcss_ctxld_irq_handler(int irq, void *data)
