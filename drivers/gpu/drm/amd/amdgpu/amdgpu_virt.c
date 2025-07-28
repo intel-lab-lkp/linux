@@ -460,7 +460,7 @@ static int amdgpu_virt_read_pf2vf_data(struct amdgpu_device *adev)
 		return -EINVAL;
 
 	if (pf2vf_info->size > 1024) {
-		dev_err(adev->dev, "invalid pf2vf message size: 0x%x\n", pf2vf_info->size);
+		drm_err(adev_to_drm(adev), "invalid pf2vf message size: 0x%x\n", pf2vf_info->size);
 		return -EINVAL;
 	}
 
@@ -471,7 +471,7 @@ static int amdgpu_virt_read_pf2vf_data(struct amdgpu_device *adev)
 			adev->virt.fw_reserve.p_pf2vf, pf2vf_info->size,
 			adev->virt.fw_reserve.checksum_key, checksum);
 		if (checksum != checkval) {
-			dev_err(adev->dev,
+			drm_err(adev_to_drm(adev),
 				"invalid pf2vf message: header checksum=0x%x calculated checksum=0x%x\n",
 				checksum, checkval);
 			return -EINVAL;
