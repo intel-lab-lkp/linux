@@ -112,11 +112,19 @@ static ssize_t lockdown_read(struct file *filp, char __user *buf, size_t count,
 
 		if (lockdown_reasons[level]) {
 			const char *label = lockdown_reasons[level];
+			int ret = 0;
+			int write_len = 80-offset;
+
 
 			if (test_bit(level, kernel_locked_down))
-				offset += sprintf(temp+offset, "[%s] ", label);
+				ret = snprintf(temp+offset, write_len, "[%s] ", label);
 			else
-				offset += sprintf(temp+offset, "%s ", label);
+				ret = snprintf(temp+offset, write_len, "%s ", label);
+
+			if (ret < 0 || ret >= write_len)
+				return -ENOMEM;
+
+			offset += ret;
 		}
 	}
 
