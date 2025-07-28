@@ -4123,6 +4123,8 @@ ssize_t generic_perform_write(struct kiocb *iocb, struct iov_iter *i)
 	struct address_space *mapping = file->f_mapping;
 	const struct address_space_operations *a_ops = mapping->a_ops;
 	size_t chunk = mapping_max_folio_size(mapping);
+	struct inode *inode = mapping->host;
+	struct backing_dev_info *bdi = inode_to_bdi(inode);
 	long status = 0;
 	ssize_t written = 0;
 
@@ -4137,6 +4139,12 @@ ssize_t generic_perform_write(struct kiocb *iocb, struct iov_iter *i)
 retry:
 		offset = pos & (chunk - 1);
 		bytes = min(chunk - offset, bytes);
+		if (bdi->capabilities & BDI_CAP_WRITEBACK) {
+			if (bdi->dev == NULL) {
+				status = -ENODEV;
+				break;
+			}
+		}
 		balance_dirty_pages_ratelimited(mapping);
 
 		if (fatal_signal_pending(current)) {
