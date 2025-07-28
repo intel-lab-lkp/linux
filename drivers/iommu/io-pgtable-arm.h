@@ -230,4 +230,12 @@ void __arm_lpae_sync_pte(arm_lpae_iopte *ptep, int num_entries,
 void __arm_lpae_free_pgtable(struct arm_lpae_io_pgtable *data, int lvl,
 			     arm_lpae_iopte *ptep);
 void arm_lpae_split_blk(void);
+int arm_lpae_init_pgtable(struct io_pgtable_cfg *cfg,
+			  struct arm_lpae_io_pgtable *data);
+int arm_lpae_init_pgtable_s1(struct io_pgtable_cfg *cfg,
+			     struct arm_lpae_io_pgtable *data,
+			     void *cookie);
+int arm_lpae_init_pgtable_s2(struct io_pgtable_cfg *cfg,
+			     struct arm_lpae_io_pgtable *data,
+			     void *cookie);
 #endif /* IO_PGTABLE_H_ */
