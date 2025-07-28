@@ -28,4 +28,5 @@ Linux Kernel中的文件系统
    tmpfs
    ubifs
    ubifs-authentication
+   gfs2
 
