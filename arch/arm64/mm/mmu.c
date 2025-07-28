@@ -46,6 +46,8 @@
 #define NO_CONT_MAPPINGS	BIT(1)
 #define NO_EXEC_MAPPINGS	BIT(2)	/* assumes FEAT_HPDS is not used */
 
+DEFINE_STATIC_KEY_FALSE(arm64_ptdump_key);
+
 enum pgtable_type {
 	TABLE_PTE,
 	TABLE_PMD,
@@ -1002,6 +1004,61 @@ static void unmap_hotplug_range(unsigned long addr, unsigned long end,
 	} while (addr = next, addr < end);
 }
 
+/*
+ * Our objective is to prevent ptdump from reading a pagetable which has
+ * been freed.  Assume that ptdump_walk_pgd() (call this thread T1)
+ * executes completely on CPU1 and free_hotplug_pgtable_page() (call this
+ * thread T2) executes completely on CPU2. Let the region sandwiched by the
+ * mmap_write_lock/unlock in T1 be called CS (the critical section).
+ *
+ * Claim: The CS of T1 will never operate on a freed pagetable.
+ *
+ * Proof:
+ *
+ * Case 1: The static branch is visible to T2.
+ *
+ * Case 1 (a): T1 acquires the lock before T2 can.
+ * T2 will block until T1 drops the lock, so free_hotplug_pgtable_page() will
+ * only be executed after T1 exits CS.
+ *
+ * Case 1 (b): T2 acquires the lock before T1 can.
+ * The acquire semantics of mmap_read_lock() ensure that an empty pagetable
+ * entry (via pxd_clear()) is visible to T1 before T1 can enter CS, therefore
+ * it is impossible for the CS to get hold of the isolated level + 1 pagetable.
+ *
+ * Case 2: The static branch is not visible to T2.
+ *
+ * Since static_branch_enable() and mmap_write_lock() (via smp_mb()) have
+ * acquire semantics, it implies that the static branch will be visible to
+ * all CPUs before T1 can enter CS. The static branch not being visible to
+ * T2 therefore implies that T1 has not yet entered CS .... (i)
+ *
+ * The sequence of barriers via __flush_tlb_kernel_pgtable() in T2
+ * implies that if the invisibility of the static branch has been
+ * observed by T2 (i.e static_branch_unlikely() is observed as false),
+ * then all CPUs will have observed an empty pagetable entry via
+ * pxd_clear() ... (ii)
+ *
+ * Combining (i) and (ii), we conclude that T1 observes an empty pagetable
+ * entry before entering CS => it is impossible for the CS to get hold of
+ * the isolated level + 1 pagetable. Q.E.D
+ *
+ * We have proven that the claim is true on the assumption that
+ * there is no context switch for T1 and T2. Note that the reasoning
+ * of the proof uses barriers operating on the inner shareable domain,
+ * which means that they will affect all CPUs, and also a context switch
+ * will insert extra barriers into the code paths => the claim will
+ * stand true even if we drop the assumption.
+ */
+static void synchronize_with_ptdump(void)
+{
+	if (!static_branch_unlikely(&arm64_ptdump_key))
+		return;
+
+	mmap_read_lock(&init_mm);
+	mmap_read_unlock(&init_mm);
+}
+
 static void free_empty_pte_table(pmd_t *pmdp, unsigned long addr,
 				 unsigned long end, unsigned long floor,
 				 unsigned long ceiling)
@@ -1036,6 +1093,7 @@ static void free_empty_pte_table(pmd_t *pmdp, unsigned long addr,
 
 	pmd_clear(pmdp);
 	__flush_tlb_kernel_pgtable(start);
+	synchronize_with_ptdump();
 	free_hotplug_pgtable_page(virt_to_page(ptep));
 }
 
@@ -1076,6 +1134,7 @@ static void free_empty_pmd_table(pud_t *pudp, unsigned long addr,
 
 	pud_clear(pudp);
 	__flush_tlb_kernel_pgtable(start);
+	synchronize_with_ptdump();
 	free_hotplug_pgtable_page(virt_to_page(pmdp));
 }
 
@@ -1116,6 +1175,7 @@ static void free_empty_pud_table(p4d_t *p4dp, unsigned long addr,
 
 	p4d_clear(p4dp);
 	__flush_tlb_kernel_pgtable(start);
+	synchronize_with_ptdump();
 	free_hotplug_pgtable_page(virt_to_page(pudp));
 }
 
@@ -1156,6 +1216,7 @@ static void free_empty_p4d_table(pgd_t *pgdp, unsigned long addr,
 
 	pgd_clear(pgdp);
 	__flush_tlb_kernel_pgtable(start);
+	synchronize_with_ptdump();
 	free_hotplug_pgtable_page(virt_to_page(p4dp));
 }
 
