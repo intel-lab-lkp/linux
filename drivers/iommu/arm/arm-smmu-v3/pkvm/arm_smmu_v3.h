@@ -11,12 +11,16 @@
  * @mmio_addr		base address of the SMMU registers
  * @mmio_size		size of the registers resource
  * @base		Virtual address of SMMU registers
+ * @features		SMMUv3 features as defined in arm-smmu-v3-common.h
+ * @cmdq		CMDQ queue struct
  * Other members are filled and used at runtime by the SMMU driver.
  */
 struct hyp_arm_smmu_v3_device {
 	phys_addr_t		mmio_addr;
 	size_t			mmio_size;
 	void __iomem		*base;
+	unsigned long		features;
+	struct arm_smmu_queue	cmdq;
 };
 
 extern size_t kvm_nvhe_sym(kvm_hyp_arm_smmu_v3_count);
