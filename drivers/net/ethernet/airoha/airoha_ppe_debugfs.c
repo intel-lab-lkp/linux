@@ -67,7 +67,7 @@ static int airoha_ppe_debugfs_foe_show(struct seq_file *m, void *private,
 		u32 type, state, ib2, data;
 		bool ipv6 = false;
 
-		hwe = airoha_ppe_foe_get_entry(ppe, i);
+		hwe = airoha_ppe_foe_get_entry_locked(ppe, i);
 		if (!hwe)
 			continue;
 
