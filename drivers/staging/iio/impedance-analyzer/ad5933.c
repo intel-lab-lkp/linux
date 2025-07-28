@@ -533,9 +533,10 @@ static int ad5933_read_raw(struct iio_dev *indio_dev,
 		*val = 1000;
 		*val2 = 5;
 		return IIO_VAL_FRACTIONAL_LOG2;
+	default:
+		return -EINVAL;
 	}
 
-	return -EINVAL;
 out:
 	iio_device_release_direct(indio_dev);
 	return ret;
