@@ -372,6 +372,7 @@ SECTIONS
 		. = ALIGN(PAGE_SIZE);
 		*(BSS_MAIN)
 		BSS_DECRYPTED
+		BSS_SANCOV_GUARDS
 		. = ALIGN(PAGE_SIZE);
 		__bss_stop = .;
 	}

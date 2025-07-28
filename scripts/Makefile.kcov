@@ -1,5 +1,12 @@
 # SPDX-License-Identifier: GPL-2.0-only
+ifeq ($(CONFIG_KCOV_UNIQUE),y)
+kcov-flags-y					+= -fsanitize-coverage=trace-pc-guard
+# Drop per-file constructors that -fsanitize-coverage=trace-pc-guard inserts by default.
+# Kernel does not need them, and they may produce unknown relocations.
+kcov-flags-y					+= -mllvm -sanitizer-coverage-drop-ctors
+else
 kcov-flags-y					+= -fsanitize-coverage=trace-pc
+endif
 kcov-flags-$(CONFIG_KCOV_ENABLE_COMPARISONS)	+= -fsanitize-coverage=trace-cmp
 
 kcov-rflags-y					+= -Cpasses=sancov-module

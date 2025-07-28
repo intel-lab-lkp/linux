@@ -2153,6 +2153,12 @@ config ARCH_HAS_KCOV
 	  build and run with CONFIG_KCOV. This typically requires
 	  disabling instrumentation for some early boot code.
 
+config CC_HAS_SANCOV_TRACE_PC
+	def_bool $(cc-option,-fsanitize-coverage=trace-pc)
+
+config CC_HAS_SANCOV_TRACE_PC_GUARD
+	def_bool $(cc-option,-fsanitize-coverage=trace-pc-guard)
+
 config KCOV
 	bool "Code coverage for fuzzing"
 	depends on ARCH_HAS_KCOV
@@ -2165,6 +2171,26 @@ config KCOV
 	  for coverage-guided fuzzing (randomized testing).
 
 	  For more details, see Documentation/dev-tools/kcov.rst.
+
+config ARCH_HAS_KCOV_UNIQUE
+	bool
+	help
+	  An architecture should select this when it can successfully
+	  build and run with CONFIG_KCOV_UNIQUE.
+
+config KCOV_UNIQUE
+	depends on KCOV
+	depends on CC_HAS_SANCOV_TRACE_PC_GUARD && ARCH_HAS_KCOV_UNIQUE
+	bool "Enable unique program counter collection mode for KCOV"
+	help
+	  This option enables KCOV's unique program counter (PC) collection mode,
+	  which deduplicates PCs on the fly when the KCOV_UNIQUE_ENABLE ioctl is
+	  used.
+
+	  This significantly reduces the memory footprint for coverage data
+	  collection compared to trace mode, as it prevents the kernel from
+	  storing the same PC multiple times.
+	  Enabling this mode incurs a slight increase in kernel binary size.
 
 config KCOV_ENABLE_COMPARISONS
 	bool "Enable comparison operands collection by KCOV"

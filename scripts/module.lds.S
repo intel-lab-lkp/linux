@@ -47,6 +47,7 @@ SECTIONS {
 	.bss : {
 		*(.bss .bss.[0-9a-zA-Z_]*)
 		*(.bss..L*)
+		*(__sancov_guards)
 	}
 
 	.data : {
@@ -64,6 +65,40 @@ SECTIONS {
 		MOD_CODETAG_SECTIONS()
 	}
 #endif
+
+#ifdef CONFIG_KCOV_UNIQUE
+	/*
+	 * CONFIG_KCOV_UNIQUE creates COMDAT groups for instrumented functions,
+	 * which has the following consequences in the presence of
+	 * -ffunction-sections:
+	 *  - Separate .init.text and .exit.text sections in the modules are not
+	 *    merged together, which results in errors trying to create
+	 *    duplicate entries in /sys/module/MODNAME/sections/ at module load
+	 *    time.
+	 *  - Each function is placed in a separate .text.funcname section, so
+	 *    there is no .text section anymore. Collecting them together here
+	 *    has mostly aesthetic purpose, although some tools may be expecting
+	 *    it to be present.
+	 */
+	.text : {
+		*(.text .text.[0-9a-zA-Z_]*)
+		*(.text..L*)
+	}
+	.init.text : {
+		*(.init.text .init.text.[0-9a-zA-Z_]*)
+		*(.init.text..L*)
+	}
+	.exit.text : {
+		*(.exit.text .exit.text.[0-9a-zA-Z_]*)
+		*(.exit.text..L*)
+	}
+	.bss : {
+		*(.bss .bss.[0-9a-zA-Z_]*)
+		*(.bss..L*)
+		*(__sancov_guards)
+	}
+#endif
+
 	MOD_SEPARATE_CODETAG_SECTIONS()
 }
 
