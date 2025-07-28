@@ -113,3 +113,17 @@ void kvm_iommu_reclaim_pages(void *ptr)
 {
 	hyp_put_page(&iommu_pages_pool, ptr);
 }
+
+int kvm_iommu_enable_dev(pkvm_handle_t iommu, pkvm_handle_t dev)
+{
+	if (kvm_iommu_ops && kvm_iommu_ops->enable_dev)
+		return kvm_iommu_ops->enable_dev(iommu, dev);
+	return -ENODEV;
+}
+
+int kvm_iommu_disable_dev(pkvm_handle_t iommu, pkvm_handle_t dev)
+{
+	if (kvm_iommu_ops && kvm_iommu_ops->disable_dev)
+		return kvm_iommu_ops->disable_dev(iommu, dev);
+	return -ENODEV;
+}
