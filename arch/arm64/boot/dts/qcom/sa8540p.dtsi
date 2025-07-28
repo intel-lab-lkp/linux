@@ -168,8 +168,12 @@
 };
 
 &gpucc {
+	compatible = "qcom,sa8540p-gpucc", "qcom,sc8280xp-gpucc";
+
 	/* SA8295P and SA8540P doesn't provide gfx.lvl */
-	/delete-property/ power-domains;
+	power-domains = <&rpmhpd SC8280XP_CX>,
+			<&rpmhpd SC8280XP_MX>,
+			<&rpmhpd SC8280XP_MXC>;
 
 	status = "disabled";
 };
