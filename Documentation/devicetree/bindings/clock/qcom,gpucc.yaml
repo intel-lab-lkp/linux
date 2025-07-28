@@ -72,7 +72,10 @@ properties:
       - const: gcc_gpu_gpll0_div_clk_src
 
   power-domains:
-    maxItems: 1
+    description:
+      Power domains required for the clock controller to operate
+    minItems: 2
+    maxItems: 4
 
   vdd-gfx-supply:
     description: Regulator supply for the VDD_GFX pads
@@ -80,6 +83,7 @@ properties:
 required:
   - compatible
   - clocks
+  - power-domains
   - '#power-domain-cells'
 
 # Require that power-domains and vdd-gfx-supply are not both present
@@ -90,6 +94,62 @@ not:
 
 allOf:
   - $ref: qcom,gcc.yaml#
+
+  - if:
+      properties:
+        compatible:
+          enum:
+            - qcom,qcs8300-gpucc
+            - qcom,sa8775p-gpucc
+            - qcom,sar2130p-gpucc
+            - qcom,sc8280xp-gpucc
+            - qcom,sm8350-gpucc
+            - qcom,sm8450-gpucc
+            - qcom,sm8475-gpucc
+            - qcom,sm8550-gpucc
+            - qcom,sm8650-gpucc
+            - qcom,x1e80100-gpucc
+            - qcom,x1p42100-gpucc
+    then:
+      properties:
+        power-domains:
+          items:
+            - description: CX power domain
+            - description: MX power domain
+            - description: GFX power domain
+            - description: MX_COLLAPSIBLE power domain
+
+  - if:
+      properties:
+        compatible:
+          enum:
+            - qcom,milos-gpucc
+            - qcom,sc7180-gpucc
+            - qcom,sc7280-gpucc
+            - qcom,sc8180x-gpucc
+            - qcom,sdm845-gpucc
+            - qcom,sm8150-gpucc
+            - qcom,sm8250-gpucc
+    then:
+      properties:
+        power-domains:
+          items:
+            - description: CX power domain
+            - description: MX power domain
+            - description: GFX power domain
+
+  - if:
+      properties:
+        compatible:
+          enum:
+            - qcom,sm4450-gpucc
+            - qcom,sm6350-gpucc
+    then:
+      properties:
+        power-domains:
+          items:
+            - description: CX power domain
+            - description: MX power domain
 
   - if:
       properties:
@@ -116,6 +176,8 @@ examples:
   - |
     #include <dt-bindings/clock/qcom,gcc-sdm845.h>
     #include <dt-bindings/clock/qcom,rpmh.h>
+    #include <dt-bindings/power/qcom-rpmpd.h>
+
     clock-controller@5090000 {
       compatible = "qcom,sdm845-gpucc";
       reg = <0x05090000 0x9000>;
@@ -128,5 +190,9 @@ examples:
       #clock-cells = <1>;
       #reset-cells = <1>;
       #power-domain-cells = <1>;
+
+      power-domains = <&rpmhpd SDM845_CX>,
+                      <&rpmhpd SDM845_MX>,
+                      <&rpmhpd SDM845_GFX>;
     };
 ...
