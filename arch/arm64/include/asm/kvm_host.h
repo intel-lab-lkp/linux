@@ -1664,5 +1664,5 @@ struct kvm_iommu_ops;
 int kvm_iommu_register_driver(struct kvm_iommu_driver *kern_ops, struct kvm_iommu_ops *hyp_ops);
 int kvm_iommu_init_driver(void);
 void kvm_iommu_remove_driver(void);
-
+size_t kvm_iommu_pages(void);
 #endif /* __ARM64_KVM_HOST_H__ */
