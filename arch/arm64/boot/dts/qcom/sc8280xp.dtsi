@@ -3106,7 +3106,11 @@
 				      "gcc_gpu_gpll0_clk_src",
 				      "gcc_gpu_gpll0_div_clk_src";
 
-			power-domains = <&rpmhpd SC8280XP_GFX>;
+			power-domains = <&rpmhpd SC8280XP_CX>,
+					<&rpmhpd SC8280XP_MX>,
+					<&rpmhpd SC8280XP_GFX>,
+					<&rpmhpd SC8280XP_MXC>;
+
 			#clock-cells = <1>;
 			#reset-cells = <1>;
 			#power-domain-cells = <1>;
