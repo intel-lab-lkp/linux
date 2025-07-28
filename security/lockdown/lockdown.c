@@ -10,12 +10,13 @@
  * 2 of the Licence, or (at your option) any later version.
  */
 
+#include <linux/bitmap.h>
 #include <linux/security.h>
 #include <linux/export.h>
 #include <linux/lsm_hooks.h>
 #include <uapi/linux/lsm.h>
 
-static enum lockdown_reason kernel_locked_down;
+static DECLARE_BITMAP(kernel_locked_down, LOCKDOWN_CONFIDENTIALITY_MAX);
 
 static const enum lockdown_reason lockdown_levels[] = {LOCKDOWN_NONE,
 						 LOCKDOWN_INTEGRITY_MAX,
@@ -26,10 +27,15 @@ static const enum lockdown_reason lockdown_levels[] = {LOCKDOWN_NONE,
  */
 static int lock_kernel_down(const char *where, enum lockdown_reason level)
 {
-	if (kernel_locked_down >= level)
-		return -EPERM;
 
-	kernel_locked_down = level;
+	if (level > LOCKDOWN_CONFIDENTIALITY_MAX)
+		return -EINVAL;
+
+	if (level == LOCKDOWN_INTEGRITY_MAX || level == LOCKDOWN_CONFIDENTIALITY_MAX)
+		bitmap_set(kernel_locked_down, 1, level);
+	else
+		bitmap_set(kernel_locked_down, level, 1);
+
 	pr_notice("Kernel is locked down from %s; see man kernel_lockdown.7\n",
 		  where);
 	return 0;
@@ -62,13 +68,12 @@ static int lockdown_is_locked_down(enum lockdown_reason what)
 		 "Invalid lockdown reason"))
 		return -EPERM;
 
-	if (kernel_locked_down >= what) {
+	if (test_bit(what, kernel_locked_down)) {
 		if (lockdown_reasons[what])
 			pr_notice_ratelimited("Lockdown: %s: %s is restricted; see man kernel_lockdown.7\n",
 				  current->comm, lockdown_reasons[what]);
 		return -EPERM;
 	}
-
 	return 0;
 }
 
@@ -105,7 +110,7 @@ static ssize_t lockdown_read(struct file *filp, char __user *buf, size_t count,
 		if (lockdown_reasons[level]) {
 			const char *label = lockdown_reasons[level];
 
-			if (kernel_locked_down == level)
+			if (test_bit(level, kernel_locked_down))
 				offset += sprintf(temp+offset, "[%s] ", label);
 			else
 				offset += sprintf(temp+offset, "%s ", label);
