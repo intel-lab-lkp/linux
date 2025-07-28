@@ -1126,6 +1126,23 @@ config SCSI_QLOGIC_1280
 	  To compile this driver as a module, choose M here: the
 	  module will be called qla1280.
 
+config SCSI_QLOGIC_1280_DMA_64BIT_ADDRESSING
+        bool "Enable 64-bit DMA addressing mode"
+        depends on SCSI_QLOGIC_1280
+        default y
+        help
+	  This options enables full 64-bit addressing for Qlogic ISP
+	  chips. 64-bit addressing works on most platforms and is hence
+	  the default. Some platforms like for example the SGI Octace2,
+	  require full 64-bit addressing in order to work and must have
+	  this option enabled.
+
+	  On some systems, like tsunami based Alpha systems, 32-bit
+	  PCI Qlogic SCSI controllers will not work propberly on systems
+	  with more than 2GB RAM installed. If you are on a tsunami
+	  based alpha (like the ES40, DS20) and want to use cards with
+	  the ISP1040/1020 chip, you should say no here.
+
 config SCSI_QLOGICPTI
 	tristate "PTI Qlogic, ISP Driver"
 	depends on SBUS && SCSI

@@ -371,7 +371,9 @@
 #include "qla1280.h"
 
 #ifdef CONFIG_ARCH_DMA_ADDR_T_64BIT
+#ifdef CONFIG_SCSI_QLOGIC_1280_DMA_64BIT_ADDRESSING
 #define QLA_64BIT_PTR	1
+#endif
 #endif
 
 #define NVRAM_DELAY()			udelay(500)	/* 2 microseconds */
