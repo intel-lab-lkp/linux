@@ -14,6 +14,9 @@
  * @features		SMMUv3 features as defined in arm-smmu-v3-common.h
  * @cmdq		CMDQ queue struct
  * @strtab_cfg		stream table config, strtab_cfg.l2.l2ptrs is not used
+ * @ias			IAS of the SMMUv3
+ * @oas			OAS of the SMMUv3
+ * @pgsize_bitmap	Pages sizes supported by the SMMUv3
  * Other members are filled and used at runtime by the SMMU driver.
  */
 struct hyp_arm_smmu_v3_device {
@@ -23,6 +26,9 @@ struct hyp_arm_smmu_v3_device {
 	unsigned long		features;
 	struct arm_smmu_queue	cmdq;
 	struct arm_smmu_strtab_cfg strtab_cfg;
+	unsigned int            ias;
+	unsigned int            oas;
+	size_t                  pgsize_bitmap;
 };
 
 extern size_t kvm_nvhe_sym(kvm_hyp_arm_smmu_v3_count);
