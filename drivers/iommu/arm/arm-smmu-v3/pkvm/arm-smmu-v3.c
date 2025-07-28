@@ -143,10 +143,15 @@ static int smmu_tlb_inv_range_smmu(struct hyp_arm_smmu_v3_device *smmu,
 				   struct arm_smmu_cmdq_ent *cmd,
 				   unsigned long iova, size_t size, size_t granule)
 {
+	int ret;
+
+	hyp_spin_lock(&smmu->lock);
 	arm_smmu_tlb_inv_build(cmd, iova, size, granule,
 			       idmap_pgtable->cfg.pgsize_bitmap, smmu,
 			       __smmu_add_cmd, NULL);
-	return smmu_sync_cmd(smmu);
+	ret = smmu_sync_cmd(smmu);
+	hyp_spin_unlock(&smmu->lock);
+	return ret;
 }
 
 static void smmu_tlb_inv_range(unsigned long iova, size_t size, size_t granule,
@@ -183,7 +188,6 @@ static const struct iommu_flush_ops smmu_tlb_ops = {
 	.tlb_add_page	= smmu_tlb_add_page,
 };
 
-__maybe_unused
 static int smmu_sync_ste(struct hyp_arm_smmu_v3_device *smmu, u32 sid, unsigned long ste)
 {
 	struct arm_smmu_cmdq_ent cmd = {
@@ -409,6 +413,9 @@ static int smmu_init_device(struct hyp_arm_smmu_v3_device *smmu)
 	}
 	smmu->base = hyp_phys_to_virt(smmu->mmio_addr);
 
+	hyp_spin_lock_init(&smmu->lock);
+	BUILD_BUG_ON(sizeof(smmu->lock) != sizeof(hyp_spinlock_t));
+
 	ret = smmu_init_registers(smmu);
 	if (ret)
 		goto out_err;
@@ -427,6 +434,102 @@ static int smmu_init_device(struct hyp_arm_smmu_v3_device *smmu)
 
 out_err:
 	smmu_deinit_device(smmu);
+	return ret;
+}
+
+static struct hyp_arm_smmu_v3_device *smmu_id_to_ptr(pkvm_handle_t smmu_id)
+{
+	if (smmu_id >= kvm_hyp_arm_smmu_v3_count)
+		return NULL;
+	smmu_id = array_index_nospec(smmu_id, kvm_hyp_arm_smmu_v3_count);
+
+	return &kvm_hyp_arm_smmu_v3_smmus[smmu_id];
+}
+
+static void smmu_init_s2_ste(struct arm_smmu_ste *ste)
+{
+	struct io_pgtable_cfg *cfg;
+	u64 ts, sl, ic, oc, sh, tg, ps;
+
+	cfg = &idmap_pgtable->cfg;
+	ps = cfg->arm_lpae_s2_cfg.vtcr.ps;
+	tg = cfg->arm_lpae_s2_cfg.vtcr.tg;
+	sh = cfg->arm_lpae_s2_cfg.vtcr.sh;
+	oc = cfg->arm_lpae_s2_cfg.vtcr.orgn;
+	ic = cfg->arm_lpae_s2_cfg.vtcr.irgn;
+	sl = cfg->arm_lpae_s2_cfg.vtcr.sl;
+	ts = cfg->arm_lpae_s2_cfg.vtcr.tsz;
+
+	ste->data[0] = STRTAB_STE_0_V |
+		FIELD_PREP(STRTAB_STE_0_CFG, STRTAB_STE_0_CFG_S2_TRANS);
+	ste->data[1] = FIELD_PREP(STRTAB_STE_1_SHCFG, STRTAB_STE_1_SHCFG_INCOMING);
+	ste->data[2] = FIELD_PREP(STRTAB_STE_2_VTCR,
+				  FIELD_PREP(STRTAB_STE_2_VTCR_S2PS, ps) |
+				  FIELD_PREP(STRTAB_STE_2_VTCR_S2TG, tg) |
+				  FIELD_PREP(STRTAB_STE_2_VTCR_S2SH0, sh) |
+				  FIELD_PREP(STRTAB_STE_2_VTCR_S2OR0, oc) |
+				  FIELD_PREP(STRTAB_STE_2_VTCR_S2IR0, ic) |
+				  FIELD_PREP(STRTAB_STE_2_VTCR_S2SL0, sl) |
+				  FIELD_PREP(STRTAB_STE_2_VTCR_S2T0SZ, ts)) |
+		 FIELD_PREP(STRTAB_STE_2_S2VMID, 0) |
+		 STRTAB_STE_2_S2AA64 | STRTAB_STE_2_S2R;
+	ste->data[3] = cfg->arm_lpae_s2_cfg.vttbr & STRTAB_STE_3_S2TTB_MASK;
+}
+
+static int smmu_enable_dev(pkvm_handle_t iommu, pkvm_handle_t dev)
+{
+	static struct arm_smmu_ste *ste, target;
+	struct hyp_arm_smmu_v3_device *smmu = smmu_id_to_ptr(iommu);
+	int ret;
+
+	if (!smmu)
+		return -ENODEV;
+
+	hyp_spin_lock(&smmu->lock);
+	ste = smmu_get_alloc_ste_ptr(smmu, dev);
+	if (!ste) {
+		ret = - EINVAL;
+		goto out_ret;
+	}
+
+	smmu_init_s2_ste(&target);
+	WRITE_ONCE(ste->data[1], target.data[1]);
+	WRITE_ONCE(ste->data[2], target.data[2]);
+	WRITE_ONCE(ste->data[3], target.data[3]);
+	smmu_sync_ste(smmu, dev, (unsigned long)ste);
+	WRITE_ONCE(ste->data[0], target.data[0]);
+	ret = smmu_sync_ste(smmu, dev, (unsigned long)ste);
+
+out_ret:
+	hyp_spin_unlock(&smmu->lock);
+	return ret;
+}
+
+static int smmu_disable_dev(pkvm_handle_t iommu, pkvm_handle_t dev)
+{
+	static struct arm_smmu_ste *ste;
+	struct hyp_arm_smmu_v3_device *smmu = smmu_id_to_ptr(iommu);
+	int ret;
+
+	if (!smmu)
+		return -ENODEV;
+
+	hyp_spin_lock(&smmu->lock);
+	ste = smmu_get_alloc_ste_ptr(smmu, dev);
+	if (!ste) {
+		ret = -EINVAL;
+		goto out_ret;
+	}
+
+	WRITE_ONCE(ste->data[0], 0);
+	smmu_sync_ste(smmu, dev, (unsigned long)ste);
+	WRITE_ONCE(ste->data[1], 0);
+	WRITE_ONCE(ste->data[2], 0);
+	WRITE_ONCE(ste->data[3], 0);
+	ret = smmu_sync_ste(smmu, dev, (unsigned long)ste);
+
+out_ret:
+	hyp_spin_unlock(&smmu->lock);
 	return ret;
 }
 
@@ -568,4 +671,6 @@ static void smmu_host_stage2_idmap(phys_addr_t start, phys_addr_t end, int prot)
 struct kvm_iommu_ops smmu_ops = {
 	.init				= smmu_init,
 	.host_stage2_idmap		= smmu_host_stage2_idmap,
+	.enable_dev			= smmu_enable_dev,
+	.disable_dev			= smmu_disable_dev,
 };

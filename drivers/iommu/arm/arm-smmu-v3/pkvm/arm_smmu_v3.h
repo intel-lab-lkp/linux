@@ -4,6 +4,10 @@
 
 #include <asm/kvm_asm.h>
 
+#ifdef __KVM_NVHE_HYPERVISOR__
+#include <nvhe/spinlock.h>
+#endif
+
 #include "../arm-smmu-v3-common.h"
 
 /*
@@ -18,6 +22,7 @@
  * @oas			OAS of the SMMUv3
  * @pgsize_bitmap	Pages sizes supported by the SMMUv3
  * Other members are filled and used at runtime by the SMMU driver.
+ * @lock		Lock to protect the SMMU resources (STE/CMDQ)
  */
 struct hyp_arm_smmu_v3_device {
 	phys_addr_t		mmio_addr;
@@ -29,6 +34,12 @@ struct hyp_arm_smmu_v3_device {
 	unsigned int            ias;
 	unsigned int            oas;
 	size_t                  pgsize_bitmap;
+	/* nvhe/spinlock.h not exposed to EL1. */
+#ifdef __KVM_NVHE_HYPERVISOR__
+	hyp_spinlock_t		lock;
+#else
+	u32			lock;
+#endif
 };
 
 extern size_t kvm_nvhe_sym(kvm_hyp_arm_smmu_v3_count);
