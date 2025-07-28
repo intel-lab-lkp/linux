@@ -468,6 +468,29 @@ struct skbuf_dma_descriptor {
 };
 
 /**
+ * struct axienet_common - axienet private common data
+ * @pdev: Pointer to common platform device structure
+ * @axi_clk: AXI4-Lite bus clock
+ * @reset_lock: Lock held while resetting the device to prevent register access
+ * @mii_bus: Pointer to MII bus structure
+ * @mii_clk_div: MII bus clock divider value
+ * @regs_start: Resource start for axienet device addresses
+ * @regs: Base address for the axienet_local device address space
+ */
+struct axienet_common {
+	struct platform_device *pdev;
+
+	struct clk *axi_clk;
+
+	struct mutex reset_lock;
+	struct mii_bus *mii_bus;
+	u8 mii_clk_div;
+
+	void __iomem *regs;
+	resource_size_t regs_start;
+};
+
+/**
  * struct axienet_local - axienet private per device data
  * @ndev:	Pointer for net_device to which it will be attached.
  * @dev:	Pointer to device structure
@@ -549,6 +572,7 @@ struct skbuf_dma_descriptor {
 struct axienet_local {
 	struct net_device *ndev;
 	struct device *dev;
+	struct axienet_common *cp;
 
 	struct phylink *phylink;
 	struct phylink_config phylink_config;
@@ -558,13 +582,11 @@ struct axienet_local {
 
 	bool switch_x_sgmii;
 
-	struct clk *axi_clk;
 	struct clk_bulk_data misc_clks[XAE_NUM_MISC_CLOCKS];
 
 	struct mii_bus *mii_bus;
 	u8 mii_clk_div;
 
-	resource_size_t regs_start;
 	void __iomem *regs;
 	void __iomem *dma_regs;
 
@@ -654,21 +676,14 @@ static inline u32 axienet_ior(struct axienet_local *lp, off_t offset)
 	return ioread32(lp->regs + offset);
 }
 
-static inline u32 axinet_ior_read_mcr(struct axienet_local *lp)
-{
-	return axienet_ior(lp, XAE_MDIO_MCR_OFFSET);
-}
-
 static inline void axienet_lock_mii(struct axienet_local *lp)
 {
-	if (lp->mii_bus)
-		mutex_lock(&lp->mii_bus->mdio_lock);
+	mutex_lock(&lp->cp->reset_lock);
 }
 
 static inline void axienet_unlock_mii(struct axienet_local *lp)
 {
-	if (lp->mii_bus)
-		mutex_unlock(&lp->mii_bus->mdio_lock);
+	mutex_unlock(&lp->cp->reset_lock);
 }
 
 /**
@@ -738,7 +753,7 @@ static inline void axienet_dma_out_addr(struct axienet_local *lp, off_t reg,
 #endif /* CONFIG_64BIT */
 
 /* Function prototypes visible in xilinx_axienet_mdio.c for other files */
-int axienet_mdio_setup(struct axienet_local *lp);
-void axienet_mdio_teardown(struct axienet_local *lp);
+int axienet_mdio_setup(struct axienet_common *lp);
+void axienet_mdio_teardown(struct axienet_common *lp);
 
 #endif /* XILINX_AXI_ENET_H */
