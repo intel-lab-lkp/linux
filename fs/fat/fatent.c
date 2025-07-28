@@ -19,6 +19,8 @@ struct fatent_operations {
 };
 
 static DEFINE_SPINLOCK(fat12_entry_lock);
+static DEFINE_SPINLOCK(fat16_entry_lock);
+static DEFINE_SPINLOCK(fat32_entry_lock);
 
 static void fat12_ent_blocknr(struct super_block *sb, int entry,
 			      int *offset, sector_t *blocknr)
@@ -137,8 +139,13 @@ static int fat12_ent_get(struct fat_entry *fatent)
 
 static int fat16_ent_get(struct fat_entry *fatent)
 {
-	int next = le16_to_cpu(*fatent->u.ent16_p);
+	int next;
+
+	spin_lock(&fat16_entry_lock);
+	next = le16_to_cpu(*fatent->u.ent16_p);
 	WARN_ON((unsigned long)fatent->u.ent16_p & (2 - 1));
+	spin_unlock(&fat16_entry_lock);
+
 	if (next >= BAD_FAT16)
 		next = FAT_ENT_EOF;
 	return next;
@@ -146,8 +153,13 @@ static int fat16_ent_get(struct fat_entry *fatent)
 
 static int fat32_ent_get(struct fat_entry *fatent)
 {
-	int next = le32_to_cpu(*fatent->u.ent32_p) & 0x0fffffff;
+	int next;
+
+	spin_lock(&fat32_entry_lock);
+	next = le32_to_cpu(*fatent->u.ent32_p) & 0x0fffffff;
 	WARN_ON((unsigned long)fatent->u.ent32_p & (4 - 1));
+	spin_unlock(&fat32_entry_lock);
+
 	if (next >= BAD_FAT32)
 		next = FAT_ENT_EOF;
 	return next;
@@ -180,15 +192,21 @@ static void fat16_ent_put(struct fat_entry *fatent, int new)
 	if (new == FAT_ENT_EOF)
 		new = EOF_FAT16;
 
+	spin_lock(&fat16_entry_lock);
 	*fatent->u.ent16_p = cpu_to_le16(new);
+	spin_unlock(&fat16_entry_lock);
+
 	mark_buffer_dirty_inode(fatent->bhs[0], fatent->fat_inode);
 }
 
 static void fat32_ent_put(struct fat_entry *fatent, int new)
 {
 	WARN_ON(new & 0xf0000000);
+	spin_lock(&fat32_entry_lock);
 	new |= le32_to_cpu(*fatent->u.ent32_p) & ~0x0fffffff;
 	*fatent->u.ent32_p = cpu_to_le32(new);
+	spin_unlock(&fat32_entry_lock);
+
 	mark_buffer_dirty_inode(fatent->bhs[0], fatent->fat_inode);
 }
 
