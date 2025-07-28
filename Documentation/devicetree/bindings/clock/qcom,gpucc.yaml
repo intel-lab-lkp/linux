@@ -37,27 +37,31 @@ description: |
 
 properties:
   compatible:
-    enum:
-      - qcom,milos-gpucc
-      - qcom,qcs8300-gpucc
-      - qcom,sa8775p-gpucc
-      - qcom,sar2130p-gpucc
-      - qcom,sc7180-gpucc
-      - qcom,sc7280-gpucc
-      - qcom,sc8180x-gpucc
-      - qcom,sc8280xp-gpucc
-      - qcom,sdm845-gpucc
-      - qcom,sm4450-gpucc
-      - qcom,sm6350-gpucc
-      - qcom,sm8150-gpucc
-      - qcom,sm8250-gpucc
-      - qcom,sm8350-gpucc
-      - qcom,sm8450-gpucc
-      - qcom,sm8475-gpucc
-      - qcom,sm8550-gpucc
-      - qcom,sm8650-gpucc
-      - qcom,x1e80100-gpucc
-      - qcom,x1p42100-gpucc
+    oneOf:
+      - enum:
+          - qcom,milos-gpucc
+          - qcom,qcs8300-gpucc
+          - qcom,sa8775p-gpucc
+          - qcom,sar2130p-gpucc
+          - qcom,sc7180-gpucc
+          - qcom,sc7280-gpucc
+          - qcom,sc8180x-gpucc
+          - qcom,sc8280xp-gpucc
+          - qcom,sdm845-gpucc
+          - qcom,sm4450-gpucc
+          - qcom,sm6350-gpucc
+          - qcom,sm8150-gpucc
+          - qcom,sm8250-gpucc
+          - qcom,sm8350-gpucc
+          - qcom,sm8450-gpucc
+          - qcom,sm8475-gpucc
+          - qcom,sm8550-gpucc
+          - qcom,sm8650-gpucc
+          - qcom,x1e80100-gpucc
+          - qcom,x1p42100-gpucc
+      - items:
+          - const: qcom,sa8540p-gpucc
+          - const: qcom,sc8280xp-gpucc
 
   clocks:
     items:
@@ -85,12 +89,6 @@ required:
   - clocks
   - power-domains
   - '#power-domain-cells'
-
-# Require that power-domains and vdd-gfx-supply are not both present
-not:
-  required:
-    - power-domains
-    - vdd-gfx-supply
 
 allOf:
   - $ref: qcom,gcc.yaml#
@@ -150,6 +148,19 @@ allOf:
           items:
             - description: CX power domain
             - description: MX power domain
+
+  - if:
+      properties:
+        compatible:
+          enum:
+            - qcom,sa8540p-gpucc
+    then:
+      properties:
+        power-domains:
+          items:
+            - description: CX power domain
+            - description: MX power domain
+            - description: MX_COLLAPSIBLE power domain
 
   - if:
       properties:
