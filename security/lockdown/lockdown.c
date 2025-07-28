@@ -25,7 +25,10 @@ static const enum lockdown_reason lockdown_levels[] = {LOCKDOWN_NONE,
 /*
  * Put the kernel into lock-down mode.
  */
-static int lock_kernel_down(const char *where, enum lockdown_reason level)
+#if !IS_ENABLED(CONFIG_KUNIT)
+static
+#endif
+int lock_kernel_down(const char *where, enum lockdown_reason level)
 {
 
 	if (level > LOCKDOWN_CONFIDENTIALITY_MAX)

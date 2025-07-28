@@ -6,6 +6,11 @@ config SECURITY_LOCKDOWN_LSM
 	  Build support for an LSM that enforces a coarse kernel lockdown
 	  behaviour.
 
+config SECURITY_LOCKDOWN_LSM_TEST
+	tristate "Test lockdown functionality" if !KUNIT_ALL_TESTS
+	depends on SECURITY_LOCKDOWN_LSM && KUNIT
+	default KUNIT_ALL_TESTS
+
 config SECURITY_LOCKDOWN_LSM_EARLY
 	bool "Enable lockdown LSM early in init"
 	depends on SECURITY_LOCKDOWN_LSM
