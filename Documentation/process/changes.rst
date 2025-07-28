@@ -61,7 +61,7 @@ Sphinx\ [#f1]_         3.4.3            sphinx-build --version
 GNU tar                1.28             tar --version
 gtags (optional)       6.6.5            gtags --version
 mkimage (optional)     2017.01          mkimage --version
-Python (optional)      3.9.x            python3 --version
+Python                 3.9.x            python3 --version
 GNU AWK (optional)     5.1.0            gawk --version
 ====================== ===============  ========================================
 
@@ -153,6 +153,17 @@ Perl
 
 You will need perl 5 and the following modules: ``Getopt::Long``,
 ``Getopt::Std``, ``File::Basename``, and ``File::Find`` to build the kernel.
+
+Python
+------
+
+CONFIG_LTO_CLANG requires python 2.7 or 3.0+; some DRM config options like
+CONFIG_DRM_I915_WERROR require at least Python 2.7 or 3.4+.
+
+The kernel-doc tool and docs build require at least 3.6, but they depend on
+dict changes that happened on 3.7 to produce valid results.
+
+Other tools within the Kernel tree require newer versions.
 
 BC
 --
