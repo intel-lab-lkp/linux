@@ -1257,12 +1257,12 @@ static __always_inline void kcsan_atomic_builtin_memorder(int memorder)
 #define DEFINE_TSAN_ATOMIC_OPS(bits)                                                               \
 	DEFINE_TSAN_ATOMIC_LOAD_STORE(bits);                                                       \
 	DEFINE_TSAN_ATOMIC_RMW(exchange, bits, _n);                                                \
-	DEFINE_TSAN_ATOMIC_RMW(fetch_add, bits, );                                                 \
-	DEFINE_TSAN_ATOMIC_RMW(fetch_sub, bits, );                                                 \
-	DEFINE_TSAN_ATOMIC_RMW(fetch_and, bits, );                                                 \
-	DEFINE_TSAN_ATOMIC_RMW(fetch_or, bits, );                                                  \
-	DEFINE_TSAN_ATOMIC_RMW(fetch_xor, bits, );                                                 \
-	DEFINE_TSAN_ATOMIC_RMW(fetch_nand, bits, );                                                \
+	DEFINE_TSAN_ATOMIC_RMW(fetch_add, bits);                                                 \
+	DEFINE_TSAN_ATOMIC_RMW(fetch_sub, bits);                                                 \
+	DEFINE_TSAN_ATOMIC_RMW(fetch_and, bits);                                                 \
+	DEFINE_TSAN_ATOMIC_RMW(fetch_or, bits);                                                  \
+	DEFINE_TSAN_ATOMIC_RMW(fetch_xor, bits);                                                 \
+	DEFINE_TSAN_ATOMIC_RMW(fetch_nand, bits);                                                \
 	DEFINE_TSAN_ATOMIC_CMPXCHG(bits, strong, 0);                                               \
 	DEFINE_TSAN_ATOMIC_CMPXCHG(bits, weak, 1);                                                 \
 	DEFINE_TSAN_ATOMIC_CMPXCHG_VAL(bits)
