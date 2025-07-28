@@ -74,6 +74,11 @@ struct vmw_cotable_info {
 			    bool);
 };
 
+/*
+ * Due to a quirk of SVGA device we can't actually allocate SVGA_COTABLE_MAX_IDS
+ * for all resource types. This new limit will work regardless of type.
+ */
+#define SVGA_COTABLE_EFFECTIVE_MAX_IDS (SVGA_COTABLE_MAX_IDS - 510)
 
 /*
  * Getting the initial size right is difficult because it all depends
@@ -545,6 +550,7 @@ static int vmw_cotable_create(struct vmw_resource *res)
 {
 	struct vmw_cotable *vcotbl = vmw_cotable(res);
 	size_t new_size = res->guest_memory_size;
+	size_t max_size = co_info[vcotbl->type].size * SVGA_COTABLE_EFFECTIVE_MAX_IDS;
 	size_t needed_size;
 	int ret;
 
@@ -552,6 +558,8 @@ static int vmw_cotable_create(struct vmw_resource *res)
 	needed_size = (vcotbl->seen_entries + 1) * co_info[vcotbl->type].size;
 	while (needed_size > new_size)
 		new_size *= 2;
+
+	new_size = MIN(new_size, max_size);
 
 	if (likely(new_size <= res->guest_memory_size)) {
 		if (vcotbl->scrubbed && vmw_resource_mob_attached(res)) {
@@ -650,7 +658,7 @@ int vmw_cotable_notify(struct vmw_resource *res, int id)
 {
 	struct vmw_cotable *vcotbl = vmw_cotable(res);
 
-	if (id < 0 || id >= SVGA_COTABLE_MAX_IDS) {
+	if (id < 0 || id >= SVGA_COTABLE_EFFECTIVE_MAX_IDS) {
 		DRM_ERROR("Illegal COTable id. Type is %u. Id is %d\n",
 			  (unsigned) vcotbl->type, id);
 		return -EINVAL;
