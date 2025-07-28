@@ -433,7 +433,7 @@ int kvm_vgic_v4_set_forwarding(struct kvm *kvm, int virq,
 	unsigned long flags;
 	int ret = 0;
 
-	if (!vgic_supports_direct_msis(kvm))
+	if (!vgic_supports_direct_irqs(kvm))
 		return 0;
 
 	/*
@@ -533,7 +533,7 @@ int kvm_vgic_v4_unset_forwarding(struct kvm *kvm, int host_irq)
 	unsigned long flags;
 	int ret = 0;
 
-	if (!vgic_supports_direct_msis(kvm))
+	if (!vgic_supports_direct_irqs(kvm))
 		return 0;
 
 	irq = __vgic_host_irq_get_vlpi(kvm, host_irq);
