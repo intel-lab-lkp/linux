@@ -264,6 +264,8 @@ static const struct bus_type auxiliary_bus_type = {
 	.pm = &auxiliary_dev_pm_ops,
 };
 
+static DEFINE_IDA(auxiliary_id);
+
 /**
  * auxiliary_device_init - check auxiliary_device and initialize
  * @auxdev: auxiliary device struct
@@ -331,19 +333,36 @@ int __auxiliary_device_add(struct auxiliary_device *auxdev, const char *modname)
 		return -EINVAL;
 	}
 
+	ret = ida_alloc(&auxiliary_id, GFP_KERNEL);
+	if (ret < 0) {
+		dev_err(dev, "auxiliary device id_alloc fauiled: %d\n", ret);
+		return ret;
+	}
+	auxdev->id = ret;
+
 	ret = dev_set_name(dev, "%s.%s.%d", modname, auxdev->name, auxdev->id);
 	if (ret) {
 		dev_err(dev, "auxiliary device dev_set_name failed: %d\n", ret);
+		ida_free(&auxiliary_id, auxdev->id);
 		return ret;
 	}
 
 	ret = device_add(dev);
-	if (ret)
+	if (ret) {
 		dev_err(dev, "adding auxiliary device failed!: %d\n", ret);
+		ida_free(&auxiliary_id, auxdev->id);
+	}
 
 	return ret;
 }
 EXPORT_SYMBOL_GPL(__auxiliary_device_add);
+
+void auxiliary_device_delete(struct auxiliary_device *auxdev)
+{
+	ida_free(&auxiliary_id, auxdev->id);
+	device_del(&auxdev->dev);
+}
+EXPORT_SYMBOL_GPL(auxiliary_device_delete);
 
 /**
  * __auxiliary_driver_register - register a driver for auxiliary bus devices
@@ -409,7 +428,6 @@ static void auxiliary_device_release(struct device *dev)
  * @modname: module name used to create the auxiliary driver name.
  * @devname: auxiliary bus device name
  * @platform_data: auxiliary bus device platform data
- * @id: auxiliary bus device id
  *
  * Helper to create an auxiliary bus device.
  * The device created matches driver 'modname.devname' on the auxiliary bus.
@@ -417,8 +435,7 @@ static void auxiliary_device_release(struct device *dev)
 struct auxiliary_device *auxiliary_device_create(struct device *dev,
 						 const char *modname,
 						 const char *devname,
-						 void *platform_data,
-						 int id)
+						 void *platform_data)
 {
 	struct auxiliary_device *auxdev;
 	int ret;
@@ -427,7 +444,6 @@ struct auxiliary_device *auxiliary_device_create(struct device *dev,
 	if (!auxdev)
 		return NULL;
 
-	auxdev->id = id;
 	auxdev->name = devname;
 	auxdev->dev.parent = dev;
 	auxdev->dev.platform_data = platform_data;
@@ -478,7 +494,6 @@ EXPORT_SYMBOL_GPL(auxiliary_device_destroy);
  * @modname: module name used to create the auxiliary driver name.
  * @devname: auxiliary bus device name
  * @platform_data: auxiliary bus device platform data
- * @id: auxiliary bus device id
  *
  * Device managed helper to create an auxiliary bus device.
  * The device created matches driver 'modname.devname' on the auxiliary bus.
@@ -486,13 +501,12 @@ EXPORT_SYMBOL_GPL(auxiliary_device_destroy);
 struct auxiliary_device *__devm_auxiliary_device_create(struct device *dev,
 							const char *modname,
 							const char *devname,
-							void *platform_data,
-							int id)
+							void *platform_data)
 {
 	struct auxiliary_device *auxdev;
 	int ret;
 
-	auxdev = auxiliary_device_create(dev, modname, devname, platform_data, id);
+	auxdev = auxiliary_device_create(dev, modname, devname, platform_data);
 	if (!auxdev)
 		return NULL;
 

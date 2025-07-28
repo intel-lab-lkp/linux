@@ -57,7 +57,7 @@
  *       The release and parent fields of the device structure must be filled
  *       in
  * @name: Match name found by the auxiliary device driver,
- * @id: unique identitier if multiple devices of the same name are exported,
+ * @id: automatically-generated unique identitier,
  * @sysfs: embedded struct which hold all sysfs related fields,
  * @sysfs.irqs: irqs xarray contains irq indices which are used by the device,
  * @sysfs.lock: Synchronize irq sysfs creation,
@@ -74,15 +74,11 @@
  * Registering an auxiliary_device is a three-step process.
  *
  * First, a 'struct auxiliary_device' needs to be defined or allocated for each
- * sub-device desired.  The name, id, dev.release, and dev.parent fields of
- * this structure must be filled in as follows.
+ * sub-device desired.  The name, dev.release, and dev.parent fields of this
+ * structure must be filled in as follows.
  *
  * The 'name' field is to be given a name that is recognized by the auxiliary
- * driver.  If two auxiliary_devices with the same match_name, eg
- * "foo_mod.foo_dev", are registered onto the bus, they must have unique id
- * values (e.g. "x" and "y") so that the registered devices names are
- * "foo_mod.foo_dev.x" and "foo_mod.foo_dev.y".  If match_name + id are not
- * unique, then the device_add fails and generates an error message.
+ * driver.
  *
  * The auxiliary_device.dev.type.release or auxiliary_device.dev.release must
  * be populated with a non-NULL pointer to successfully register the
@@ -113,7 +109,6 @@
  *
  *	// Step 1:
  *	my_aux_dev->name = MY_DEVICE_NAME;
- *	my_aux_dev->id = my_unique_id_alloc(xxx);
  *	my_aux_dev->dev.release = my_aux_dev_release;
  *	my_aux_dev->dev.parent = my_dev;
  *
@@ -242,10 +237,7 @@ static inline void auxiliary_device_uninit(struct auxiliary_device *auxdev)
 	put_device(&auxdev->dev);
 }
 
-static inline void auxiliary_device_delete(struct auxiliary_device *auxdev)
-{
-	device_del(&auxdev->dev);
-}
+void auxiliary_device_delete(struct auxiliary_device *auxdev);
 
 int __auxiliary_driver_register(struct auxiliary_driver *auxdrv, struct module *owner,
 				const char *modname);
@@ -257,19 +249,17 @@ void auxiliary_driver_unregister(struct auxiliary_driver *auxdrv);
 struct auxiliary_device *auxiliary_device_create(struct device *dev,
 						 const char *modname,
 						 const char *devname,
-						 void *platform_data,
-						 int id);
+						 void *platform_data);
 void auxiliary_device_destroy(void *auxdev);
 
 struct auxiliary_device *__devm_auxiliary_device_create(struct device *dev,
 							const char *modname,
 							const char *devname,
-							void *platform_data,
-							int id);
+							void *platform_data);
 
 #define devm_auxiliary_device_create(dev, devname, platform_data)     \
 	__devm_auxiliary_device_create(dev, KBUILD_MODNAME, devname,  \
-				       platform_data, 0)
+				       platform_data)
 
 /**
  * module_auxiliary_driver() - Helper macro for registering an auxiliary driver
