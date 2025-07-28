@@ -1045,6 +1045,169 @@ static int pyrf_evsel__setup_types(void)
 	return PyType_Ready(&pyrf_evsel__type);
 }
 
+struct pyrf_target {
+	PyObject_HEAD
+
+	struct target target;
+};
+
+static int pyrf_target__init(struct pyrf_target *target,
+				PyObject *args, PyObject *kwargs)
+{
+	static char *kwlist[] = { "pid", "tid", "cpu_list", "bpf_str", "system_wide", "uses_mmap",
+				"default_per_cpu", "per_thread", "use_bpf", "inherit",
+				"initial_delay", "attr_map", NULL };
+
+	if (!PyArg_ParseTupleAndKeywords(args, kwargs, "|ssssppppppis",
+					 kwlist, &(target->target.pid), &(target->target.tid),
+					 &(target->target.cpu_list), &(target->target.bpf_str),
+					 &(target->target.system_wide),
+					 &(target->target.uses_mmap),
+					 &(target->target.default_per_cpu),
+					 &(target->target.per_thread), &(target->target.use_bpf),
+					 &(target->target.inherit), &(target->target.initial_delay),
+					 &(target->target.attr_map)))
+		return -1;
+
+	return 0;
+}
+
+static void pyrf_target__delete(struct pyrf_target *target)
+{
+	Py_TYPE(target)->tp_free((PyObject *)target);
+}
+
+static const char pyrf_target__doc[] = PyDoc_STR("target object.");
+
+static PyTypeObject pyrf_target__type = {
+	PyVarObject_HEAD_INIT(NULL, 0)
+	.tp_name	= "perf.target",
+	.tp_basicsize	= sizeof(struct pyrf_target),
+	.tp_dealloc	= (destructor)pyrf_target__delete,
+	.tp_flags	= Py_TPFLAGS_DEFAULT|Py_TPFLAGS_BASETYPE,
+	.tp_doc		= pyrf_target__doc,
+	.tp_init	= (initproc)pyrf_target__init,
+};
+
+static int pyrf_target__setup_types(void)
+{
+	pyrf_target__type.tp_new = PyType_GenericNew;
+	return PyType_Ready(&pyrf_target__type);
+}
+
+struct pyrf_record_opts {
+	PyObject_HEAD
+
+	struct record_opts opts;
+};
+
+static int pyrf_record_opts__init(struct pyrf_record_opts *popts,
+				 PyObject *args, PyObject *kwargs)
+{
+	static char *kwlist[] = { "target", "inherit_stat", "no_buffering", "no_inherit",
+				"no_inherit_set", "no_samples", "raw_samples",
+				"sample_address", "sample_phys_addr", "sample_data_page_size",
+				"sample_code_page_size", "sample_weight", "sample_time",
+				"sample_time_set", "sample_cpu", "sample_identifier",
+				"sample_data_src", "period", "period_set", "running_time",
+				"full_auxtrace", "auxtrace_snapshot_mode",
+				"auxtrace_snapshot_on_exit", "auxtrace_sample_mode",
+				"record_namespaces", "record_cgroup", "record_switch_events",
+				"record_switch_events_set", "all_kernel", "all_user",
+				"kernel_callchains", "user_callchains", "tail_synthesize",
+				"overwrite", "ignore_missing_thread", "strict_freq", "sample_id",
+				"no_bpf_event", "kcore", "text_poke", "build_id", "freq",
+				"mmap_pages", "auxtrace_mmap_pages", "user_freq", "branch_stack",
+				"sample_intr_regs", "sample_user_regs", "default_interval",
+				"user_interval", "auxtrace_snapshot_size", "auxtrace_snapshot_opts",
+				"auxtrace_sample_opts", "sample_transaction", "use_clockid",
+				"clockid", "clockid_res_ns", "nr_cblocks", "affinity", "mmap_flush",
+				"comp_level", "nr_threads_synthesize", "ctl_fd", "ctl_fd_ack",
+				"ctl_fd_close", "synth", "threads_spec", "threads_user_spec",
+				"off_cpu_thresh_ns",  NULL };
+
+	if (!PyArg_ParseTupleAndKeywords(args, kwargs,
+					"|OppppppppppppppppppppppppppppppppppppppppIIIIIIIIIIssppiIiiiIIiipiisI",
+					 kwlist, &(popts->opts.target), &(popts->opts.inherit_stat),
+					 &(popts->opts.no_buffering), &(popts->opts.no_inherit),
+					 &(popts->opts.no_inherit_set), &(popts->opts.no_samples),
+					 &(popts->opts.raw_samples), &(popts->opts.sample_address),
+					 &(popts->opts.sample_phys_addr),
+					 &(popts->opts.sample_data_page_size),
+					 &(popts->opts.sample_code_page_size),
+					 &(popts->opts.sample_weight),
+					 &(popts->opts.sample_time), &(popts->opts.sample_time_set),
+					 &(popts->opts.sample_cpu),
+					 &(popts->opts.sample_identifier),
+					 &(popts->opts.sample_data_src), &(popts->opts.period),
+					 &(popts->opts.period_set), &(popts->opts.running_time),
+					 &(popts->opts.full_auxtrace),
+					 &(popts->opts.auxtrace_snapshot_mode),
+					 &(popts->opts.auxtrace_snapshot_on_exit),
+					 &(popts->opts.auxtrace_sample_mode),
+					 &(popts->opts.record_namespaces),
+					 &(popts->opts.record_cgroup),
+					 &(popts->opts.record_switch_events),
+					 &(popts->opts.record_switch_events_set),
+					 &(popts->opts.all_kernel), &(popts->opts.all_user),
+					 &(popts->opts.kernel_callchains),
+					 &(popts->opts.user_callchains),
+					 &(popts->opts.tail_synthesize),
+					 &(popts->opts.overwrite),
+					 &(popts->opts.ignore_missing_thread),
+					 &(popts->opts.strict_freq), &(popts->opts.sample_id),
+					 &(popts->opts.no_bpf_event), &(popts->opts.kcore),
+					 &(popts->opts.text_poke), &(popts->opts.build_id),
+					 &(popts->opts.freq), &(popts->opts.mmap_pages),
+					 &(popts->opts.auxtrace_mmap_pages),
+					 &(popts->opts.user_freq),
+					 &(popts->opts.branch_stack),
+					 &(popts->opts.sample_intr_regs),
+					 &(popts->opts.sample_user_regs),
+					 &(popts->opts.default_interval),
+					 &(popts->opts.user_interval),
+					 &(popts->opts.auxtrace_snapshot_size),
+					 &(popts->opts.auxtrace_snapshot_opts),
+					 &(popts->opts.auxtrace_sample_opts),
+					 &(popts->opts.sample_transaction),
+					 &(popts->opts.use_clockid),
+					 &(popts->opts.clockid), &(popts->opts.clockid_res_ns),
+					 &(popts->opts.nr_cblocks), &(popts->opts.affinity),
+					 &(popts->opts.mmap_flush), &(popts->opts.comp_level),
+					 &(popts->opts.nr_threads_synthesize),
+					 &(popts->opts.ctl_fd),
+					 &(popts->opts.ctl_fd_ack), &(popts->opts.ctl_fd_close),
+					 &(popts->opts.synth), &(popts->opts.threads_spec),
+					 &(popts->opts.threads_user_spec),
+					 &(popts->opts.off_cpu_thresh_ns)))
+		return -1;
+
+	return 0;
+}
+
+static const char pyrf_record_opts__doc[] = PyDoc_STR("perf record_opts object.");
+
+static void pyrf_record_opts__delete(struct pyrf_record_opts *perf_record_opts)
+{
+	Py_TYPE(perf_record_opts)->tp_free((PyObject *)perf_record_opts);
+}
+
+static PyTypeObject pyrf_record_opts__type = {
+	PyVarObject_HEAD_INIT(NULL, 0)
+	.tp_name	= "perf.record_opts",
+	.tp_basicsize	= sizeof(struct pyrf_record_opts),
+	.tp_dealloc	= (destructor)pyrf_record_opts__delete,
+	.tp_flags	= Py_TPFLAGS_DEFAULT|Py_TPFLAGS_BASETYPE,
+	.tp_doc		= pyrf_record_opts__doc,
+	.tp_init	= (initproc)pyrf_record_opts__init,
+};
+
+static int pyrf_record_opts__setup_types(void)
+{
+	pyrf_record_opts__type.tp_new = PyType_GenericNew;
+	return PyType_Ready(&pyrf_record_opts__type);
+}
+
 struct pyrf_evlist {
 	PyObject_HEAD
 
@@ -1263,7 +1426,7 @@ static PyObject *pyrf_evlist__close(struct pyrf_evlist *pevlist)
 	return Py_None;
 }
 
-static PyObject *pyrf_evlist__config(struct pyrf_evlist *pevlist)
+static PyObject *pyrf_evlist__config(struct pyrf_evlist *pevlist, PyObject *args, PyObject *kwargs)
 {
 	struct record_opts opts = {
 		.sample_time	     = true,
@@ -1281,7 +1444,16 @@ static PyObject *pyrf_evlist__config(struct pyrf_evlist *pevlist)
 		.no_buffering        = true,
 		.no_inherit          = true,
 	};
+	PyObject *popts = NULL;
+	static char *kwlist[] = { "record_opts", NULL };
 	struct evlist *evlist = &pevlist->evlist;
+
+	if (!PyArg_ParseTupleAndKeywords(args, kwargs, "|O", kwlist,
+					 &popts))
+		return NULL;
+
+	if (popts)
+		opts = ((struct pyrf_record_opts *) popts)->opts;
 
 	evlist__config(evlist, &opts, &callchain_param);
 	Py_INCREF(Py_None);
@@ -1354,7 +1526,7 @@ static PyMethodDef pyrf_evlist__methods[] = {
 	{
 		.ml_name  = "config",
 		.ml_meth  = (PyCFunction)pyrf_evlist__config,
-		.ml_flags = METH_NOARGS,
+		.ml_flags = METH_VARARGS | METH_KEYWORDS,
 		.ml_doc	  = PyDoc_STR("Apply default record options to the evlist.")
 	},
 	{
@@ -1718,7 +1890,9 @@ PyMODINIT_FUNC PyInit_perf(void)
 	    pyrf_evsel__setup_types() < 0 ||
 	    pyrf_thread_map__setup_types() < 0 ||
 	    pyrf_cpu_map__setup_types() < 0 ||
-	    pyrf_counts_values__setup_types() < 0)
+	    pyrf_counts_values__setup_types() < 0 ||
+	    pyrf_target__setup_types() < 0 ||
+	    pyrf_record_opts__setup_types() < 0)
 		return module;
 
 	/* The page_size is placed in util object. */
@@ -1765,6 +1939,12 @@ PyMODINIT_FUNC PyInit_perf(void)
 
 	Py_INCREF(&pyrf_counts_values__type);
 	PyModule_AddObject(module, "counts_values", (PyObject *)&pyrf_counts_values__type);
+
+	Py_INCREF(&pyrf_target__type);
+	PyModule_AddObject(module, "target", (PyObject *)&pyrf_target__type);
+
+	Py_INCREF(&pyrf_record_opts__type);
+	PyModule_AddObject(module, "record_opts", (PyObject *)&pyrf_record_opts__type);
 
 	dict = PyModule_GetDict(module);
 	if (dict == NULL)
