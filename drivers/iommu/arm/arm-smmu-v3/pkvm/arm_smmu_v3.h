@@ -13,6 +13,7 @@
  * @base		Virtual address of SMMU registers
  * @features		SMMUv3 features as defined in arm-smmu-v3-common.h
  * @cmdq		CMDQ queue struct
+ * @strtab_cfg		stream table config, strtab_cfg.l2.l2ptrs is not used
  * Other members are filled and used at runtime by the SMMU driver.
  */
 struct hyp_arm_smmu_v3_device {
@@ -21,6 +22,7 @@ struct hyp_arm_smmu_v3_device {
 	void __iomem		*base;
 	unsigned long		features;
 	struct arm_smmu_queue	cmdq;
+	struct arm_smmu_strtab_cfg strtab_cfg;
 };
 
 extern size_t kvm_nvhe_sym(kvm_hyp_arm_smmu_v3_count);
