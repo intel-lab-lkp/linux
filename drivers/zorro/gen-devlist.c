@@ -44,7 +44,8 @@ main(void)
 
 	while (fgets(line, sizeof(line)-1, stdin)) {
 		lino++;
-		if ((c = strchr(line, '\n')))
+		c = strchr(line, '\n')
+		if (c)
 			*c = 0;
 		if (!line[0] || line[0] == '#')
 			continue;
@@ -68,7 +69,8 @@ main(void)
 					fprintf(devf, "\tPRODUCT(%s,%s,\"", manuf, line+1);
 					pq(devf, c);
 					fputs("\")\n", devf);
-				} else goto err;
+				} else
+					goto err;
 				break;
 			default:
 				goto err;
