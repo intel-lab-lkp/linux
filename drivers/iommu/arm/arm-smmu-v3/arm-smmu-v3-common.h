@@ -2,6 +2,7 @@
 #ifndef _ARM_SMMU_V3_COMMON_H
 #define _ARM_SMMU_V3_COMMON_H
 
+#include <linux/bits.h>
 #include <linux/bitfield.h>
 
 /* MMIO registers */
@@ -459,4 +460,15 @@ struct arm_smmu_cmdq_ent {
 #define ARM_SMMU_FEAT_HD		(1 << 22)
 #define ARM_SMMU_FEAT_S2FWB		(1 << 23)
 
+static inline void arm_smmu_write_strtab_l1_desc(struct arm_smmu_strtab_l1 *dst,
+						 dma_addr_t l2ptr_dma)
+{
+	u64 val = 0;
+
+	val |= FIELD_PREP(STRTAB_L1_DESC_SPAN, STRTAB_SPLIT + 1);
+	val |= l2ptr_dma & STRTAB_L1_DESC_L2PTR_MASK;
+
+	/* The HW has 64 bit atomicity with stores to the L2 STE table */
+	WRITE_ONCE(dst->l2ptr, cpu_to_le64(val));
+}
 #endif /* _ARM_SMMU_V3_COMMON_H */
