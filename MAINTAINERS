@@ -714,7 +714,7 @@ S:	Maintained
 F:	drivers/scsi/aic7xxx/
 
 AIMSLAB FM RADIO RECEIVER DRIVER
-M:	Hans Verkuil <hverkuil@xs4all.nl>
+M:	Hans Verkuil <hverkuil@kernel.org>
 L:	linux-media@vger.kernel.org
 S:	Maintained
 W:	https://linuxtv.org
@@ -1662,20 +1662,20 @@ F:	Documentation/devicetree/bindings/media/i2c/adi,adv748x.yaml
 F:	drivers/media/i2c/adv748x/*
 
 ANALOG DEVICES INC ADV7511 DRIVER
-M:	Hans Verkuil <hverkuil-cisco@xs4all.nl>
+M:	Hans Verkuil <hverkuil@kernel.org>
 L:	linux-media@vger.kernel.org
 S:	Maintained
 F:	drivers/media/i2c/adv7511*
 
 ANALOG DEVICES INC ADV7604 DRIVER
-M:	Hans Verkuil <hverkuil-cisco@xs4all.nl>
+M:	Hans Verkuil <hverkuil@kernel.org>
 L:	linux-media@vger.kernel.org
 S:	Maintained
 F:	Documentation/devicetree/bindings/media/i2c/adi,adv7604.yaml
 F:	drivers/media/i2c/adv7604*
 
 ANALOG DEVICES INC ADV7842 DRIVER
-M:	Hans Verkuil <hverkuil-cisco@xs4all.nl>
+M:	Hans Verkuil <hverkuil@kernel.org>
 L:	linux-media@vger.kernel.org
 S:	Maintained
 F:	drivers/media/i2c/adv7842*
@@ -3362,7 +3362,7 @@ F:	arch/arm/mach-berlin/
 F:	arch/arm64/boot/dts/synaptics/
 
 ARM/TEGRA HDMI CEC SUBSYSTEM SUPPORT
-M:	Hans Verkuil <hverkuil-cisco@xs4all.nl>
+M:	Hans Verkuil <hverkuil@kernel.org>
 L:	linux-tegra@vger.kernel.org
 L:	linux-media@vger.kernel.org
 S:	Maintained
@@ -4045,7 +4045,7 @@ T:	git git://linuxtv.org/media.git
 F:	drivers/media/usb/dvb-usb-v2/az6007.c
 
 AZTECH FM RADIO RECEIVER DRIVER
-M:	Hans Verkuil <hverkuil@xs4all.nl>
+M:	Hans Verkuil <hverkuil@kernel.org>
 L:	linux-media@vger.kernel.org
 S:	Maintained
 W:	https://linuxtv.org
@@ -5285,7 +5285,7 @@ F:	drivers/usb/cdns3/
 X:	drivers/usb/cdns3/cdns3*
 
 CADET FM/AM RADIO RECEIVER DRIVER
-M:	Hans Verkuil <hverkuil@xs4all.nl>
+M:	Hans Verkuil <hverkuil@kernel.org>
 L:	linux-media@vger.kernel.org
 S:	Maintained
 W:	https://linuxtv.org
@@ -5478,7 +5478,7 @@ F:	drivers/char/hw_random/cctrng.c
 F:	drivers/char/hw_random/cctrng.h
 
 CEC FRAMEWORK
-M:	Hans Verkuil <hverkuil-cisco@xs4all.nl>
+M:	Hans Verkuil <hverkuil@kernel.org>
 L:	linux-media@vger.kernel.org
 S:	Supported
 W:	http://linuxtv.org
@@ -5495,7 +5495,7 @@ F:	include/uapi/linux/cec-funcs.h
 F:	include/uapi/linux/cec.h
 
 CEC GPIO DRIVER
-M:	Hans Verkuil <hverkuil-cisco@xs4all.nl>
+M:	Hans Verkuil <hverkuil@kernel.org>
 L:	linux-media@vger.kernel.org
 S:	Supported
 W:	http://linuxtv.org
@@ -5909,7 +5909,7 @@ S:	Supported
 F:	drivers/platform/x86/classmate-laptop.c
 
 COBALT MEDIA DRIVER
-M:	Hans Verkuil <hverkuil-cisco@xs4all.nl>
+M:	Hans Verkuil <hverkuil@kernel.org>
 L:	linux-media@vger.kernel.org
 S:	Supported
 W:	https://linuxtv.org
@@ -6428,7 +6428,7 @@ F:	crypto/ansi_cprng.c
 F:	crypto/rng.c
 
 CS3308 MEDIA DRIVER
-M:	Hans Verkuil <hverkuil@xs4all.nl>
+M:	Hans Verkuil <hverkuil@kernel.org>
 L:	linux-media@vger.kernel.org
 S:	Odd Fixes
 W:	http://linuxtv.org
@@ -6469,7 +6469,7 @@ F:	drivers/media/pci/cx18/
 F:	include/uapi/linux/ivtv*
 
 CX2341X MPEG ENCODER HELPER MODULE
-M:	Hans Verkuil <hverkuil@xs4all.nl>
+M:	Hans Verkuil <hverkuil@kernel.org>
 L:	linux-media@vger.kernel.org
 S:	Maintained
 W:	https://linuxtv.org
@@ -8353,7 +8353,7 @@ T:	git git://linuxtv.org/media.git
 F:	drivers/media/radio/dsbr100.c
 
 DT3155 MEDIA DRIVER
-M:	Hans Verkuil <hverkuil@xs4all.nl>
+M:	Hans Verkuil <hverkuil@kernel.org>
 L:	linux-media@vger.kernel.org
 S:	Odd Fixes
 W:	https://linuxtv.org
@@ -9093,7 +9093,7 @@ F:	tools/bootconfig/*
 F:	tools/bootconfig/scripts/*
 
 EXTRON DA HD 4K PLUS CEC DRIVER
-M:	Hans Verkuil <hverkuil@xs4all.nl>
+M:	Hans Verkuil <hverkuil@kernel.org>
 L:	linux-media@vger.kernel.org
 S:	Maintained
 T:	git git://linuxtv.org/media.git
@@ -10023,7 +10023,7 @@ S:	Maintained
 F:	drivers/crypto/gemini/
 
 GEMTEK FM RADIO RECEIVER DRIVER
-M:	Hans Verkuil <hverkuil@xs4all.nl>
+M:	Hans Verkuil <hverkuil@kernel.org>
 L:	linux-media@vger.kernel.org
 S:	Maintained
 W:	https://linuxtv.org
@@ -10211,7 +10211,7 @@ F:	drivers/gnss/
 F:	include/linux/gnss.h
 
 GO7007 MPEG CODEC
-M:	Hans Verkuil <hverkuil-cisco@xs4all.nl>
+M:	Hans Verkuil <hverkuil@kernel.org>
 L:	linux-media@vger.kernel.org
 S:	Maintained
 F:	drivers/media/usb/go7007/
@@ -10463,7 +10463,7 @@ T:	git git://linuxtv.org/media.git
 F:	drivers/media/usb/gspca/m5602/
 
 GSPCA PAC207 SONIXB SUBDRIVER
-M:	Hans Verkuil <hverkuil@xs4all.nl>
+M:	Hans Verkuil <hverkuil@kernel.org>
 L:	linux-media@vger.kernel.org
 S:	Odd Fixes
 T:	git git://linuxtv.org/media.git
@@ -10484,7 +10484,7 @@ T:	git git://linuxtv.org/media.git
 F:	drivers/media/usb/gspca/t613.c
 
 GSPCA USB WEBCAM DRIVER
-M:	Hans Verkuil <hverkuil@xs4all.nl>
+M:	Hans Verkuil <hverkuil@kernel.org>
 L:	linux-media@vger.kernel.org
 S:	Odd Fixes
 T:	git git://linuxtv.org/media.git
@@ -10601,7 +10601,7 @@ S:	Maintained
 F:	sound/parisc/harmony.*
 
 HDPVR USB VIDEO ENCODER DRIVER
-M:	Hans Verkuil <hverkuil@xs4all.nl>
+M:	Hans Verkuil <hverkuil@kernel.org>
 L:	linux-media@vger.kernel.org
 S:	Odd Fixes
 W:	https://linuxtv.org
@@ -12767,7 +12767,7 @@ F:	drivers/base/isa.c
 F:	include/linux/isa.h
 
 ISA RADIO MODULE
-M:	Hans Verkuil <hverkuil@xs4all.nl>
+M:	Hans Verkuil <hverkuil@kernel.org>
 L:	linux-media@vger.kernel.org
 S:	Maintained
 W:	https://linuxtv.org
@@ -13041,7 +13041,7 @@ F:	include/uapi/linux/vmcore.h
 F:	kernel/crash_*.c
 
 KEENE FM RADIO TRANSMITTER DRIVER
-M:	Hans Verkuil <hverkuil@xs4all.nl>
+M:	Hans Verkuil <hverkuil@kernel.org>
 L:	linux-media@vger.kernel.org
 S:	Maintained
 W:	https://linuxtv.org
@@ -14886,7 +14886,7 @@ F:	include/linux/mfd/max77693*.h
 F:	include/linux/mfd/max77705*.h
 
 MAXIRADIO FM RADIO RECEIVER DRIVER
-M:	Hans Verkuil <hverkuil@xs4all.nl>
+M:	Hans Verkuil <hverkuil@kernel.org>
 L:	linux-media@vger.kernel.org
 S:	Maintained
 W:	https://linuxtv.org
@@ -16709,7 +16709,7 @@ F:	drivers/irqchip/irq-loongson*
 F:	drivers/platform/mips/cpu_hwmon.c
 
 MIROSOUND PCM20 FM RADIO RECEIVER DRIVER
-M:	Hans Verkuil <hverkuil@xs4all.nl>
+M:	Hans Verkuil <hverkuil@kernel.org>
 L:	linux-media@vger.kernel.org
 S:	Odd Fixes
 W:	https://linuxtv.org
@@ -20017,7 +20017,7 @@ F:	include/uapi/linux/ptrace.h
 F:	kernel/ptrace.c
 
 PULSE8-CEC DRIVER
-M:	Hans Verkuil <hverkuil@xs4all.nl>
+M:	Hans Verkuil <hverkuil@kernel.org>
 L:	linux-media@vger.kernel.org
 S:	Maintained
 T:	git git://linuxtv.org/media.git
@@ -20040,7 +20040,7 @@ F:	Documentation/driver-api/media/drivers/pvrusb2*
 F:	drivers/media/usb/pvrusb2/
 
 PWC WEBCAM DRIVER
-M:	Hans Verkuil <hverkuil@xs4all.nl>
+M:	Hans Verkuil <hverkuil@kernel.org>
 L:	linux-media@vger.kernel.org
 S:	Odd Fixes
 T:	git git://linuxtv.org/media.git
@@ -20618,14 +20618,14 @@ F:	drivers/video/fbdev/aty/radeon*
 F:	include/uapi/linux/radeonfb.h
 
 RADIOSHARK RADIO DRIVER
-M:	Hans Verkuil <hverkuil@xs4all.nl>
+M:	Hans Verkuil <hverkuil@kernel.org>
 L:	linux-media@vger.kernel.org
 S:	Maintained
 T:	git git://linuxtv.org/media.git
 F:	drivers/media/radio/radio-shark.c
 
 RADIOSHARK2 RADIO DRIVER
-M:	Hans Verkuil <hverkuil@xs4all.nl>
+M:	Hans Verkuil <hverkuil@kernel.org>
 L:	linux-media@vger.kernel.org
 S:	Maintained
 T:	git git://linuxtv.org/media.git
@@ -20649,7 +20649,7 @@ S:	Orphan
 F:	drivers/video/fbdev/aty/aty128fb.c
 
 RAINSHADOW-CEC DRIVER
-M:	Hans Verkuil <hverkuil@xs4all.nl>
+M:	Hans Verkuil <hverkuil@kernel.org>
 L:	linux-media@vger.kernel.org
 S:	Maintained
 T:	git git://linuxtv.org/media.git
@@ -21903,7 +21903,7 @@ S:	Supported
 F:	drivers/s390/scsi/zfcp_*
 
 SAA6588 RDS RECEIVER DRIVER
-M:	Hans Verkuil <hverkuil@xs4all.nl>
+M:	Hans Verkuil <hverkuil@kernel.org>
 L:	linux-media@vger.kernel.org
 S:	Odd Fixes
 W:	https://linuxtv.org
@@ -21920,7 +21920,7 @@ F:	Documentation/driver-api/media/drivers/saa7134*
 F:	drivers/media/pci/saa7134/
 
 SAA7146 VIDEO4LINUX-2 DRIVER
-M:	Hans Verkuil <hverkuil@xs4all.nl>
+M:	Hans Verkuil <hverkuil@kernel.org>
 L:	linux-media@vger.kernel.org
 S:	Maintained
 T:	git git://linuxtv.org/media.git
@@ -22619,7 +22619,7 @@ Q:	http://patchwork.linuxtv.org/project/linux-media/list/
 F:	drivers/media/dvb-frontends/si2168*
 
 SI470X FM RADIO RECEIVER I2C DRIVER
-M:	Hans Verkuil <hverkuil@xs4all.nl>
+M:	Hans Verkuil <hverkuil@kernel.org>
 L:	linux-media@vger.kernel.org
 S:	Odd Fixes
 W:	https://linuxtv.org
@@ -22628,7 +22628,7 @@ F:	Documentation/devicetree/bindings/media/silabs,si470x.yaml
 F:	drivers/media/radio/si470x/radio-si470x-i2c.c
 
 SI470X FM RADIO RECEIVER USB DRIVER
-M:	Hans Verkuil <hverkuil@xs4all.nl>
+M:	Hans Verkuil <hverkuil@kernel.org>
 L:	linux-media@vger.kernel.org
 S:	Maintained
 W:	https://linuxtv.org
@@ -22654,7 +22654,7 @@ T:	git git://linuxtv.org/media.git
 F:	drivers/media/radio/si4713/radio-platform-si4713.c
 
 SI4713 FM RADIO TRANSMITTER USB DRIVER
-M:	Hans Verkuil <hverkuil@xs4all.nl>
+M:	Hans Verkuil <hverkuil@kernel.org>
 L:	linux-media@vger.kernel.org
 S:	Maintained
 W:	https://linuxtv.org
@@ -24260,7 +24260,7 @@ T:	git git://linuxtv.org/mkrufky/tuners.git
 F:	drivers/media/tuners/tda8290.*
 
 TDA9840 MEDIA DRIVER
-M:	Hans Verkuil <hverkuil@xs4all.nl>
+M:	Hans Verkuil <hverkuil@kernel.org>
 L:	linux-media@vger.kernel.org
 S:	Maintained
 W:	https://linuxtv.org
@@ -24284,7 +24284,7 @@ T:	git git://linuxtv.org/media.git
 F:	drivers/media/tuners/tea5767.*
 
 TEA6415C MEDIA DRIVER
-M:	Hans Verkuil <hverkuil@xs4all.nl>
+M:	Hans Verkuil <hverkuil@kernel.org>
 L:	linux-media@vger.kernel.org
 S:	Maintained
 W:	https://linuxtv.org
@@ -24292,7 +24292,7 @@ T:	git git://linuxtv.org/media.git
 F:	drivers/media/i2c/tea6415c*
 
 TEA6420 MEDIA DRIVER
-M:	Hans Verkuil <hverkuil@xs4all.nl>
+M:	Hans Verkuil <hverkuil@kernel.org>
 L:	linux-media@vger.kernel.org
 S:	Maintained
 W:	https://linuxtv.org
@@ -24601,7 +24601,7 @@ F:	Documentation/devicetree/bindings/iio/temperature/ti,tmp117.yaml
 F:	drivers/iio/temperature/tmp117.c
 
 THANKO'S RAREMONO AM/FM/SW RADIO RECEIVER USB DRIVER
-M:	Hans Verkuil <hverkuil@xs4all.nl>
+M:	Hans Verkuil <hverkuil@kernel.org>
 L:	linux-media@vger.kernel.org
 S:	Maintained
 W:	https://linuxtv.org
@@ -25095,7 +25095,7 @@ F:	include/linux/toshiba.h
 F:	include/uapi/linux/toshiba.h
 
 TOSHIBA TC358743 DRIVER
-M:	Hans Verkuil <hverkuil-cisco@xs4all.nl>
+M:	Hans Verkuil <hverkuil@kernel.org>
 L:	linux-media@vger.kernel.org
 S:	Maintained
 F:	Documentation/devicetree/bindings/media/i2c/toshiba,tc358743.txt
@@ -25297,7 +25297,7 @@ S:	Supported
 F:	drivers/media/pci/tw5864/
 
 TW68 VIDEO4LINUX DRIVER
-M:	Hans Verkuil <hverkuil@xs4all.nl>
+M:	Hans Verkuil <hverkuil@kernel.org>
 L:	linux-media@vger.kernel.org
 S:	Odd Fixes
 W:	https://linuxtv.org
@@ -26090,7 +26090,7 @@ S:	Maintained
 F:	drivers/net/ethernet/via/via-velocity.*
 
 VICODEC VIRTUAL CODEC DRIVER
-M:	Hans Verkuil <hverkuil-cisco@xs4all.nl>
+M:	Hans Verkuil <hverkuil@kernel.org>
 L:	linux-media@vger.kernel.org
 S:	Maintained
 W:	https://linuxtv.org
@@ -26395,7 +26395,7 @@ S:	Supported
 F:	drivers/media/test-drivers/visl
 
 VIVID VIRTUAL VIDEO DRIVER
-M:	Hans Verkuil <hverkuil@xs4all.nl>
+M:	Hans Verkuil <hverkuil@kernel.org>
 L:	linux-media@vger.kernel.org
 S:	Maintained
 W:	https://linuxtv.org
