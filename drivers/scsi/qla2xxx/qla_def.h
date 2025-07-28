@@ -4883,16 +4883,16 @@ struct active_regions {
  * is variable) starting at "iocb".
  */
 struct purex_item {
-	void *purls_context;
-	struct list_head list;
-	struct scsi_qla_host *vha;
-	void (*process_item)(struct scsi_qla_host *vha,
-			     struct purex_item *pkt);
-	atomic_t in_use;
-	uint16_t size;
-	struct {
-		uint8_t iocb[64];
-	} iocb;
+	struct_group_tagged(purex_item_hdr, __hdr,
+		void *purls_context;
+		struct list_head list;
+		struct scsi_qla_host *vha;
+		void (*process_item)(struct scsi_qla_host *vha,
+				     struct purex_item *pkt);
+		atomic_t in_use;
+		uint16_t size;
+	);
+	uint8_t iocb[] __counted_by(size);
 };
 
 #include "qla_edif.h"
@@ -5101,7 +5101,8 @@ typedef struct scsi_qla_host {
 		struct list_head head;
 		spinlock_t lock;
 	} purex_list;
-	struct purex_item default_item;
+	struct purex_item_hdr default_item;
+	uint8_t __default_item_iocb[QLA_DEFAULT_PAYLOAD_SIZE];
 
 	struct name_list_extended gnl;
 	/* Count of active session/fcport */

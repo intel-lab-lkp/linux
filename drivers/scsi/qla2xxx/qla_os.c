@@ -3971,7 +3971,7 @@ qla2x00_remove_one(struct pci_dev *pdev)
 static inline void
 qla24xx_free_purex_list(struct purex_list *list)
 {
-	struct purex_item *item, *next;
+	struct purex_item_hdr *item, *next;
 	ulong flags;
 
 	spin_lock_irqsave(&list->lock, flags);
@@ -6459,9 +6459,10 @@ dealloc:
 void
 qla24xx_free_purex_item(struct purex_item *item)
 {
-	if (item == &item->vha->default_item)
-		memset(&item->vha->default_item, 0, sizeof(struct purex_item));
-	else
+	if (item == (struct purex_item *)&item->vha->default_item) {
+		memset(&item->vha->default_item, 0, sizeof(struct purex_item_hdr));
+		memset(&item->vha->__default_item_iocb, 0, QLA_DEFAULT_PAYLOAD_SIZE);
+	} else
 		kfree(item);
 }
 
