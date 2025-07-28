@@ -19,14 +19,6 @@ struct arm_smmu_device;
 
 #include "arm-smmu-v3-common.h"
 
-#define Q_IDX(llq, p)			((p) & ((1 << (llq)->max_n_shift) - 1))
-#define Q_WRP(llq, p)			((p) & (1 << (llq)->max_n_shift))
-#define Q_OVERFLOW_FLAG			(1U << 31)
-#define Q_OVF(p)			((p) & Q_OVERFLOW_FLAG)
-#define Q_ENT(q, p)			((q)->base +			\
-					 Q_IDX(&((q)->llq), p) *	\
-					 (q)->ent_dwords)
-
 /* Ensure DMA allocations are naturally aligned */
 #ifdef CONFIG_CMA_ALIGNMENT
 #define Q_MAX_SZ_SHIFT			(PAGE_SHIFT + CONFIG_CMA_ALIGNMENT)
@@ -161,36 +153,6 @@ static inline unsigned int arm_smmu_cdtab_l2_idx(unsigned int ssid)
 
 #define MSI_IOVA_BASE			0x8000000
 #define MSI_IOVA_LENGTH			0x100000
-
-struct arm_smmu_ll_queue {
-	union {
-		u64			val;
-		struct {
-			u32		prod;
-			u32		cons;
-		};
-		struct {
-			atomic_t	prod;
-			atomic_t	cons;
-		} atomic;
-		u8			__pad[SMP_CACHE_BYTES];
-	} ____cacheline_aligned_in_smp;
-	u32				max_n_shift;
-};
-
-struct arm_smmu_queue {
-	struct arm_smmu_ll_queue	llq;
-	int				irq; /* Wired interrupt */
-
-	__le64				*base;
-	dma_addr_t			base_dma;
-	u64				q_base;
-
-	size_t				ent_dwords;
-
-	u32 __iomem			*prod_reg;
-	u32 __iomem			*cons_reg;
-};
 
 struct arm_smmu_queue_poll {
 	ktime_t				timeout;
