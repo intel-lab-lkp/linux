@@ -15,3 +15,12 @@ nf_log_all_netns - BOOLEAN
 	with LOG target; this aims to prevent containers from flooding host
 	kernel log. If enabled, this target also works in other network
 	namespaces. This variable is only accessible from init_net.
+
+nf_max_table_jumps_netns - INTEGER (count)
+	default 65536
+
+	The maximum numbers of jumps a netns can have across its tables.
+	This only applies to non-init_net namespaces, and is read only for
+	non-init_user_ns namespaces.  Meeting or exceeding this value will
+	cause additional rules to not be added, with EMLINK being return to
+	the user.
