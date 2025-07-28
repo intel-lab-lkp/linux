@@ -9,37 +9,55 @@ title: Qualcomm Graphics Clock & Reset Controller
 maintainers:
   - Taniya Das <quic_tdas@quicinc.com>
   - Imran Shaik <quic_imrashai@quicinc.com>
+  - Konrad Dybcio <konradybcio@kernel.org>
 
 description: |
   Qualcomm graphics clock control module provides the clocks, resets and power
   domains on Qualcomm SoCs.
 
   See also::
-    include/dt-bindings/clock/qcom,gpucc-sdm845.h
+      include/dt-bindings/clock/qcom,milos-gpucc.h
     include/dt-bindings/clock/qcom,gpucc-sa8775p.h
     include/dt-bindings/clock/qcom,gpucc-sc7180.h
     include/dt-bindings/clock/qcom,gpucc-sc7280.h
     include/dt-bindings/clock/qcom,gpucc-sc8280xp.h
+    include/dt-bindings/clock/qcom,gpucc-sdm845.h
     include/dt-bindings/clock/qcom,gpucc-sm6350.h
     include/dt-bindings/clock/qcom,gpucc-sm8150.h
     include/dt-bindings/clock/qcom,gpucc-sm8250.h
     include/dt-bindings/clock/qcom,gpucc-sm8350.h
     include/dt-bindings/clock/qcom,qcs8300-gpucc.h
+    include/dt-bindings/clock/qcom,sar2130p-gpucc.h
+    include/dt-bindings/clock/qcom,sm4450-gpucc.h
+    include/dt-bindings/clock/qcom,sm8450-gpucc.h
+    include/dt-bindings/clock/qcom,sm8550-gpucc.h
+    include/dt-bindings/reset/qcom,sm8450-gpucc.h
+    include/dt-bindings/reset/qcom,sm8650-gpucc.h
+    include/dt-bindings/reset/qcom,x1e80100-gpucc.h
 
 properties:
   compatible:
     enum:
+      - qcom,milos-gpucc
       - qcom,qcs8300-gpucc
-      - qcom,sdm845-gpucc
       - qcom,sa8775p-gpucc
+      - qcom,sar2130p-gpucc
       - qcom,sc7180-gpucc
       - qcom,sc7280-gpucc
       - qcom,sc8180x-gpucc
       - qcom,sc8280xp-gpucc
+      - qcom,sdm845-gpucc
+      - qcom,sm4450-gpucc
       - qcom,sm6350-gpucc
       - qcom,sm8150-gpucc
       - qcom,sm8250-gpucc
       - qcom,sm8350-gpucc
+      - qcom,sm8450-gpucc
+      - qcom,sm8475-gpucc
+      - qcom,sm8550-gpucc
+      - qcom,sm8650-gpucc
+      - qcom,x1e80100-gpucc
+      - qcom,x1p42100-gpucc
 
   clocks:
     items:
@@ -62,7 +80,6 @@ properties:
 required:
   - compatible
   - clocks
-  - clock-names
   - '#power-domain-cells'
 
 # Require that power-domains and vdd-gfx-supply are not both present
@@ -73,6 +90,25 @@ not:
 
 allOf:
   - $ref: qcom,gcc.yaml#
+
+  - if:
+      properties:
+        compatible:
+          enum:
+            - qcom,qcs8300-gpucc
+            - qcom,sdm845-gpucc
+            - qcom,sa8775p-gpucc
+            - qcom,sc7180-gpucc
+            - qcom,sc7280-gpucc
+            - qcom,sc8180x-gpucc
+            - qcom,sc8280xp-gpucc
+            - qcom,sm6350-gpucc
+            - qcom,sm8150-gpucc
+            - qcom,sm8250-gpucc
+            - qcom,sm8350-gpucc
+    then:
+      required:
+        - clock-names
 
 unevaluatedProperties: false
 
