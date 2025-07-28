@@ -121,9 +121,9 @@ Supported chips:
 
          https://www.ti.com/product/TMP1075
 
-  * NXP LM75B, P3T1755, PCT2075
+  * NXP LM75B, P3T1755, PCT2075, 'P3T1750'
 
-    Prefix: 'lm75b', 'p3t1755', 'pct2075'
+    Prefix: 'lm75b', 'p3t1755', 'pct2075', 'p3t1750'
 
     Addresses scanned: none
 
@@ -134,6 +134,8 @@ Supported chips:
                https://www.nxp.com/docs/en/data-sheet/P3T1755.pdf
 
                https://www.nxp.com/docs/en/data-sheet/PCT2075.pdf
+
+               https://www.nxp.com/docs/en/data-sheet/P3T1750DP.pdf
 
   * AMS OSRAM AS6200
 
