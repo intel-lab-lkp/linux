@@ -30,4 +30,5 @@ Linux Kernel中的文件系统
    ubifs-authentication
    gfs2
    gfs2-uevents
+   gfs2-glocks
 
