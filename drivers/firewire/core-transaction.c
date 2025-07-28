@@ -956,13 +956,14 @@ static void handle_fcp_region_request(struct fw_card *card,
 				      unsigned long long offset)
 {
 	struct fw_address_handler *handler;
+	DEFINE_XARRAY_ALLOC(handlers);
 	int tcode, destination, source;
+	unsigned long id;
 
 	if ((offset != (CSR_REGISTER_BASE | CSR_FCP_COMMAND) &&
 	     offset != (CSR_REGISTER_BASE | CSR_FCP_RESPONSE)) ||
 	    request->length > 0x200) {
 		fw_send_response(card, request, RCODE_ADDRESS_ERROR);
-
 		return;
 	}
 
@@ -973,22 +974,39 @@ static void handle_fcp_region_request(struct fw_card *card,
 	if (tcode != TCODE_WRITE_QUADLET_REQUEST &&
 	    tcode != TCODE_WRITE_BLOCK_REQUEST) {
 		fw_send_response(card, request, RCODE_TYPE_ERROR);
+		return;
+	}
 
+	// Reserve an entry outside the RCU read-side critical section to cover most cases.
+	id = 0;
+	if (xa_reserve(&handlers, id, GFP_KERNEL) < 0) {
+		fw_send_response(card, request, RCODE_CONFLICT_ERROR);
 		return;
 	}
 
 	scoped_guard(rcu) {
 		list_for_each_entry_rcu(handler, &address_handler_list, link) {
 			if (is_enclosing_handler(handler, offset, request->length)) {
-				get_address_handler(handler);
-				handler->address_callback(card, request, tcode, destination, source,
-							  p->generation, offset, request->data,
-							  request->length, handler->callback_data);
-				put_address_handler(handler);
+				// FCP is used for purposes unrelated to significant system
+				// resources (e.g. storage or networking), so allocation
+				// failures are not considered so critical.
+				void *ptr = xa_store(&handlers, id, handler, GFP_ATOMIC);
+				if (!xa_is_err(ptr)) {
+					++id;
+					get_address_handler(handler);
+				}
 			}
 		}
 	}
 
+	xa_for_each(&handlers, id, handler) {
+		// Outside the RCU read-side critical section. Without spinlock. With reference count.
+		handler->address_callback(card, request, tcode, destination, source, p->generation,
+					  offset, request->data, request->length, handler->callback_data);
+		put_address_handler(handler);
+	}
+
+	xa_destroy(&handlers);
 	fw_send_response(card, request, RCODE_COMPLETE);
 }
 
