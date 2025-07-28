@@ -223,7 +223,7 @@ static inline dma_addr_t cpu2qe_addr(void *addr, struct uart_qe_port *qe_port)
 
 	/* something nasty happened */
 	printk(KERN_ERR "%s: addr=%p\n", __func__, addr);
-	BUG();
+	WARN_ON(1);
 	return 0;
 }
 
@@ -242,7 +242,7 @@ static inline void *qe2cpu_addr(dma_addr_t addr, struct uart_qe_port *qe_port)
 
 	/* something nasty happened */
 	printk(KERN_ERR "%s: addr=%llx\n", __func__, (u64)addr);
-	BUG();
+	WARN_ON(1);
 	return NULL;
 }
 
