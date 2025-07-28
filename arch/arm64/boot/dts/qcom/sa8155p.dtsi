@@ -17,6 +17,12 @@
 	power-domains = <&rpmhpd SA8155P_CX>;
 };
 
+&gpucc {
+	power-domains = <&rpmhpd SA8155P_CX>,
+			<&rpmhpd SA8155P_MX>,
+			<&rpmhpd SA8155P_GFX>;
+};
+
 &mdss_dsi0 {
 	power-domains = <&rpmhpd SA8155P_CX>;
 };

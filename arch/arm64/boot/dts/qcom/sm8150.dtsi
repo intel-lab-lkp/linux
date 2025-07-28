@@ -2351,6 +2351,10 @@
 			#clock-cells = <1>;
 			#reset-cells = <1>;
 			#power-domain-cells = <1>;
+
+			power-domains = <&rpmhpd SM8150_CX>,
+					<&rpmhpd SM8150_MX>,
+					<&rpmhpd SM8150_GFX>;
 		};
 
 		adreno_smmu: iommu@2ca0000 {
