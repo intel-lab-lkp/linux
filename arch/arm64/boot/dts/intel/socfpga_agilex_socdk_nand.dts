@@ -78,6 +78,10 @@
 	};
 };
 
+&clkmgr {
+	clocks = <&osc1>;
+};
+
 &nand {
 	status = "okay";
 

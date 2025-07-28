@@ -44,6 +44,10 @@
 	};
 };
 
+&clkmgr {
+	clocks = <&osc1>;
+};
+
 &gpio1 {
 	status = "okay";
 };

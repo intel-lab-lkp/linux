@@ -45,6 +45,10 @@
 	};
 };
 
+&clkmgr {
+	clocks = <&osc1>;
+};
+
 &osc1 {
 	clock-frequency = <25000000>;
 };
