@@ -56,6 +56,19 @@ pub unsafe trait AsBytes {
         // SAFETY: `data` is non-null and valid for reads over `len * sizeof::<u8>()` bytes.
         unsafe { core::slice::from_raw_parts(data, len) }
     }
+
+    /// Returns `self` as a mutable slice of bytes.
+    fn as_bytes_mut(&mut self) -> &mut [u8]
+    where
+        Self: FromBytes,
+    {
+        let data = core::ptr::from_mut(self).cast::<u8>();
+        let len = size_of_val(self);
+
+        // SAFETY: `data` is non-null and valid for read and writes over `len * sizeof::<u8>()`
+        // bytes. Since `Self` implements `FromBytes` it can be represented by any value.
+        unsafe { core::slice::from_raw_parts_mut(data, len) }
+    }
 }
 
 macro_rules! impl_asbytes {
