@@ -37,6 +37,7 @@ the Linux kernel.
    kprobetrace
    fprobetrace
    fprobe
+   eprobes
    ring-buffer-design
 
 Event Tracing and Analysis
