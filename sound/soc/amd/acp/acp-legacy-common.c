@@ -173,7 +173,8 @@ static void set_acp_pdm_clk(struct snd_pcm_substream *substream,
 	/* Enable default ACP PDM clk */
 	writel(PDM_CLK_FREQ_MASK, chip->base + ACP_WOV_CLK_CTRL);
 	pdm_ctrl = readl(chip->base + ACP_WOV_MISC_CTRL);
-	pdm_ctrl |= PDM_MISC_CTRL_MASK;
+	pdm_ctrl &= ~ACP_WOV_GAIN_CONTROL;
+	pdm_ctrl |= FIELD_PREP(ACP_WOV_GAIN_CONTROL, clamp(pdm_gain, 0, 3));
 	writel(pdm_ctrl, chip->base + ACP_WOV_MISC_CTRL);
 	set_acp_pdm_ring_buffer(substream, dai);
 }

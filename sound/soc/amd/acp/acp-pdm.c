@@ -38,7 +38,8 @@ static int acp_dmic_prepare(struct snd_pcm_substream *substream,
 	/* Enable default DMIC clk */
 	writel(PDM_CLK_FREQ_MASK, chip->base + ACP_WOV_CLK_CTRL);
 	dmic_ctrl = readl(chip->base + ACP_WOV_MISC_CTRL);
-	dmic_ctrl |= PDM_MISC_CTRL_MASK;
+	dmic_ctrl &= ~ACP_WOV_GAIN_CONTROL;
+	dmic_ctrl |= FIELD_PREP(ACP_WOV_GAIN_CONTROL, clamp(pdm_gain, 0, 3));
 	writel(dmic_ctrl, chip->base + ACP_WOV_MISC_CTRL);
 
 	period_bytes = frames_to_bytes(substream->runtime,
