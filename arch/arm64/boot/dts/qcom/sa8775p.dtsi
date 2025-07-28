@@ -4089,6 +4089,11 @@
 			clock-names = "bi_tcxo",
 				      "gcc_gpu_gpll0_clk_src",
 				      "gcc_gpu_gpll0_div_clk_src";
+
+			power-domains = <&rpmhpd SA8775P_CX>,
+					<&rpmhpd SA8775P_MX>,
+					<&rpmhpd SA8775P_GFX>,
+					<&rpmhpd SA8775P_MXC>;
 			#clock-cells = <1>;
 			#reset-cells = <1>;
 			#power-domain-cells = <1>;
