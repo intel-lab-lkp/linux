@@ -18,6 +18,14 @@ struct kcov_state {
 	/* Buffer for coverage collection, shared with the userspace. */
 	unsigned long *trace;
 
+	/* Size of the bitmap (in bits). */
+	unsigned int bitmap_size;
+	/*
+	 * Bitmap for coverage deduplication, shared with the
+	 * userspace.
+	 */
+	unsigned long *bitmap;
+
 	/*
 	 * KCOV sequence number: incremented each time kcov is reenabled, used
 	 * by kcov_remote_stop(), see the comment there.
