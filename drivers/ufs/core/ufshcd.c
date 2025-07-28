@@ -7151,8 +7151,7 @@ static irqreturn_t ufshcd_intr(int irq, void *__hba)
 		return IRQ_WAKE_THREAD;
 
 	/* Directly handle interrupts since MCQ ESI handlers does the hard job */
-	return ufshcd_sl_intr(hba, ufshcd_readl(hba, REG_INTERRUPT_STATUS) &
-				   ufshcd_readl(hba, REG_INTERRUPT_ENABLE));
+	return ufshcd_threaded_intr(irq, hba);
 }
 
 static int ufshcd_clear_tm_cmd(struct ufs_hba *hba, int tag)
