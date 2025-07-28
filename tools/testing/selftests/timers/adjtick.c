@@ -128,18 +128,18 @@ int check_tick_adj(long tickval)
 	sleep(1);
 
 	ppm = ((long long)tickval * MILLION)/systick - MILLION;
-	printf("Estimating tick (act: %ld usec, %lld ppm): ", tickval, ppm);
+	printf(" | %-16ld | %-14lld |", tickval, ppm);
 
 	eppm = get_ppm_drift();
-	printf("%lld usec, %lld ppm", systick + (systick * eppm / MILLION), eppm);
+	printf(" %-14lld |", eppm);
 	fflush(stdout);
 
 	tx1.modes = 0;
 	adjtimex(&tx1);
 
 	if (tx1.offset || tx1.freq || tx1.tick != tickval) {
-		printf("	[ERROR]\n");
-		printf("\tUnexpected adjtimex return values, make sure ntpd is not running.\n");
+		printf(" [ERROR]  |\n");
+		printf("   Unexpected adjtimex return values, make sure ntpd is not running.\n");
 		return -1;
 	}
 
@@ -153,10 +153,10 @@ int check_tick_adj(long tickval)
 	 * room for interruptions during the measurement.
 	 */
 	if (llabs(eppm - ppm) > 100) {
-		printf("	[FAILED]\n");
+		printf(" [FAILED]\n");
 		return -1;
 	}
-	printf("	[OK]\n");
+	printf(" [ OK ]  |\n");
 
 	return  0;
 }
@@ -175,7 +175,10 @@ int main(int argc, char **argv)
 		return -1;
 	}
 
-	printf("Each iteration takes about 15 seconds\n");
+	printf("\n Each iteration takes about 15 seconds\n");
+	printf(" ---------------------------------------------------------------\n");
+	printf(" | Requested (usec) | Expected (ppm) | Measured (ppm) | Result  |\n");
+	printf(" |------------------|----------------|----------------|---------|\n");
 
 	systick = sysconf(_SC_CLK_TCK);
 	systick = USEC_PER_SEC/sysconf(_SC_CLK_TCK);
@@ -188,6 +191,7 @@ int main(int argc, char **argv)
 			break;
 		}
 	}
+	printf(" ---------------------------------------------------------------\n");
 
 	/* Reset things to zero */
 	tx1.modes	 = ADJ_TICK;
