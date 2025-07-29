@@ -36,4 +36,7 @@ void atomic_long_set(atomic_long_t *v, long i);
 #define cmpxchg_release		cmpxchg
 #endif
 
+#define atomic_cond_read_acquire(v, c) smp_cond_load_acquire(&(v)->counter, (c))
+#define atomic_cond_read_relaxed(v, c) smp_cond_load_relaxed(&(v)->counter, (c))
+
 #endif /* __TOOLS_LINUX_ATOMIC_H */
