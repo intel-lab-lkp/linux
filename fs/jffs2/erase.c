@@ -252,7 +252,7 @@ static inline void jffs2_remove_node_refs_from_ino_list(struct jffs2_sb_info *c,
 	D2({
 		int i=0;
 		struct jffs2_raw_node_ref *this;
-		printk(KERN_DEBUG "After remove_node_refs_from_ino_list: \n");
+		printk(KERN_DEBUG "After remove_node_refs_from_ino_list:\n");
 
 		this = ic->nodes;
 

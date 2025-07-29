@@ -615,7 +615,7 @@ int jffs2_sum_scan_sumnode(struct jffs2_sb_info *c, struct jffs2_eraseblock *jeb
 
 	if ( je32_to_cpu(summary->cln_mkr) ) {
 
-		dbg_summary("Summary : CLEANMARKER node \n");
+		dbg_summary("Summary : CLEANMARKER node\n");
 
 		ret = jffs2_prealloc_raw_node_refs(c, jeb, 1);
 		if (ret)
