@@ -4776,11 +4776,18 @@ static struct spi_device *of_find_spi_device_by_node(struct device_node *node)
 /* The spi controllers are not using spi_bus, so we find it with another way */
 static struct spi_controller *of_find_spi_controller_by_node(struct device_node *node)
 {
+	struct device_node *ctlr_node = node;
 	struct device *dev;
 
-	dev = class_find_device_by_of_node(&spi_controller_class, node);
+	while (of_property_present(ctlr_node, "spi-parent")) {
+		ctlr_node = of_parse_phandle(ctlr_node, "spi-parent", 0);
+		if (!ctlr_node)
+			return NULL;
+	}
+
+	dev = class_find_device_by_of_node(&spi_controller_class, ctlr_node);
 	if (!dev && IS_ENABLED(CONFIG_SPI_SLAVE))
-		dev = class_find_device_by_of_node(&spi_target_class, node);
+		dev = class_find_device_by_of_node(&spi_target_class, ctlr_node);
 	if (!dev)
 		return NULL;
 
