@@ -236,6 +236,9 @@ static bool is_rust_noreturn(const struct symbol *func)
 		str_ends_with(func->name, "_fail"));
 }
 
+static bool dead_end_function(struct objtool_file *file, struct symbol *func,
+			      int recursion);
+
 /*
  * This checks to see if the given function is a "noreturn" function.
  *
@@ -313,16 +316,27 @@ static bool __dead_end_function(struct objtool_file *file, struct symbol *func,
 				return false;
 			}
 
-			return __dead_end_function(file, insn_func(dest), recursion+1);
+			return dead_end_function(file, insn_func(dest),
+						 recursion + 1);
 		}
 	}
 
 	return true;
 }
 
-static bool dead_end_function(struct objtool_file *file, struct symbol *func)
+static bool dead_end_function(struct objtool_file *file, struct symbol *func,
+			      int recursion)
 {
-	return __dead_end_function(file, func, 0);
+	/*
+	 * Some functions (e.g. comes from the sanitizer runtimes, like
+	 * __sanitizer_cov_trace_pc() or __asan_report_loadN_noabort(),
+	 * may be examined a lot of times, so it's reasonable to record
+	 * the result.
+	 */
+	if (func->functype == UNKNOWN)
+		func->functype = (__dead_end_function(file, func, recursion)
+				  ? NORETURN : REGULAR);
+	return func->functype == NORETURN;
 }
 
 static void init_cfi_state(struct cfi_state *cfi)
@@ -1359,7 +1373,7 @@ static int annotate_call_site(struct objtool_file *file,
 	    !insn->_call_dest->embedded_insn)
 		list_add_tail(&insn->call_node, &file->call_list);
 
-	if (!sibling && dead_end_function(file, sym))
+	if (!sibling && dead_end_function(file, sym, 0))
 		insn->dead_end = true;
 
 	return 0;
