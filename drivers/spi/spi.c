@@ -2524,6 +2524,25 @@ err_out:
 	return ERR_PTR(rc);
 }
 
+static void of_register_spi_children(struct spi_controller *ctlr,
+				     struct device_node *node)
+{
+	struct spi_device *spi;
+	struct device_node *nc;
+
+	for_each_available_child_of_node(node, nc) {
+		if (of_node_test_and_set_flag(nc, OF_POPULATED))
+			continue;
+
+		spi = of_register_spi_device(ctlr, nc);
+		if (IS_ERR(spi)) {
+			dev_warn(&ctlr->dev,
+				 "Failed to create SPI device for %pOF\n", nc);
+			of_node_clear_flag(nc, OF_POPULATED);
+		}
+	}
+}
+
 /**
  * of_register_spi_devices() - Register child devices onto the SPI bus
  * @ctlr:	Pointer to spi_controller device
@@ -2533,19 +2552,7 @@ err_out:
  */
 static void of_register_spi_devices(struct spi_controller *ctlr)
 {
-	struct spi_device *spi;
-	struct device_node *nc;
-
-	for_each_available_child_of_node(ctlr->dev.of_node, nc) {
-		if (of_node_test_and_set_flag(nc, OF_POPULATED))
-			continue;
-		spi = of_register_spi_device(ctlr, nc);
-		if (IS_ERR(spi)) {
-			dev_warn(&ctlr->dev,
-				 "Failed to create SPI device for %pOF\n", nc);
-			of_node_clear_flag(nc, OF_POPULATED);
-		}
-	}
+	of_register_spi_children(ctlr, ctlr->dev.of_node);
 }
 #else
 static void of_register_spi_devices(struct spi_controller *ctlr) { }
