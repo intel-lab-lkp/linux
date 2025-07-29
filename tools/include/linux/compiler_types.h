@@ -31,6 +31,9 @@
 # define __cond_lock(x,c) (c)
 #endif /* __CHECKER__ */
 
+/* Per-cpu checker flag does not use address space attribute in userspace */
+#define __percpu
+
 /*
  * __unqual_scalar_typeof(x) - Declare an unqualified scalar type, leaving
  *			       non-scalar types unchanged.
