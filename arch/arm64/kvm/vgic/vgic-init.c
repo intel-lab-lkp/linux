@@ -612,7 +612,7 @@ out:
 	mutex_unlock(&kvm->arch.config_lock);
 out_slots:
 	if (ret)
-		kvm_vm_dead(kvm);
+		kvm_vm_bugged(kvm);
 
 	mutex_unlock(&kvm->slots_lock);
 

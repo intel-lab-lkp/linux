@@ -854,7 +854,6 @@ struct kvm {
 	u32 dirty_ring_size;
 	bool dirty_ring_with_bitmap;
 	bool vm_bugged;
-	bool vm_dead;
 
 #ifdef CONFIG_HAVE_KVM_PM_NOTIFIER
 	struct notifier_block pm_notifier;
@@ -894,7 +893,6 @@ struct kvm {
 
 static inline void kvm_vm_dead(struct kvm *kvm)
 {
-	kvm->vm_dead = true;
 	kvm_make_all_cpus_request(kvm, KVM_REQ_VM_DEAD);
 }
 
