@@ -55,7 +55,7 @@ static int ufs_block_to_path(struct inode *inode, sector_t i_block, unsigned off
 	int n = 0;
 
 
-	UFSD("ptrs=uspi->s_apb = %d,double_blocks=%ld \n",ptrs,double_blocks);
+	UFSD("ptrs=uspi->s_apb = %d,double_blocks=%ld\n", ptrs, double_blocks);
 	if (i_block < direct_blocks) {
 		offsets[n++] = i_block;
 	} else if ((i_block -= direct_blocks) < indirect_blocks) {
