@@ -61,7 +61,7 @@ static DEFINE_SPINLOCK(pause_on_oops_lock);
 bool crash_kexec_post_notifiers;
 int panic_on_warn __read_mostly;
 unsigned long panic_on_taint;
-bool panic_on_taint_nousertaint = false;
+bool panic_on_taint_nousertaint;
 static unsigned int warn_limit __read_mostly;
 
 bool panic_triggering_all_cpu_backtrace;
@@ -569,7 +569,7 @@ void panic(const char *fmt, ...)
 EXPORT_SYMBOL(panic);
 
 #define TAINT_FLAG(taint, _c_true, _c_false, _module)			\
-	[ TAINT_##taint ] = {						\
+	[TAINT_##taint] = {						\
 		.c_true = _c_true, .c_false = _c_false,			\
 		.module = _module,					\
 		.desc = #taint,						\
