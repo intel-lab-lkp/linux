@@ -616,10 +616,8 @@ static int init_binder_features(struct super_block *sb)
 	dentry = binderfs_create_file(dir, "freeze_notification",
 				      &binder_features_fops,
 				      &binder_features.freeze_notification);
-	if (IS_ERR(dentry))
-		return PTR_ERR(dentry);
 
-	return 0;
+	return PTR_ERR_OR_ZERO(dentry);
 }
 
 static int init_binder_logs(struct super_block *sb)
