@@ -146,8 +146,8 @@ static int fat16_ent_get(struct fat_entry *fatent)
 
 static int fat32_ent_get(struct fat_entry *fatent)
 {
-	int next = le32_to_cpu(*fatent->u.ent32_p) & 0x0fffffff;
-	WARN_ON((unsigned long)fatent->u.ent32_p & (4 - 1));
+	int next = le32_to_cpu(READ_ONCE(*fatent->u.ent32_p)) & 0x0fffffff;
+	WARN_ON((unsigned long)READ_ONCE(fatent->u.ent32_p) & (4 - 1));
 	if (next >= BAD_FAT32)
 		next = FAT_ENT_EOF;
 	return next;
@@ -187,8 +187,8 @@ static void fat16_ent_put(struct fat_entry *fatent, int new)
 static void fat32_ent_put(struct fat_entry *fatent, int new)
 {
 	WARN_ON(new & 0xf0000000);
-	new |= le32_to_cpu(*fatent->u.ent32_p) & ~0x0fffffff;
-	*fatent->u.ent32_p = cpu_to_le32(new);
+	new |= le32_to_cpu(READ_ONCE(*fatent->u.ent32_p)) & ~0x0fffffff;
+	WRITE_ONCE(*fatent->u.ent32_p, cpu_to_le32(new));
 	mark_buffer_dirty_inode(fatent->bhs[0], fatent->fat_inode);
 }
 
