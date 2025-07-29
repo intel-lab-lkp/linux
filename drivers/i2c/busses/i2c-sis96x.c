@@ -11,7 +11,7 @@
 
     This module relies on quirk_sis_96x_smbus (drivers/pci/quirks.c)
     for just about every machine for which users have reported.
-    If this module isn't detecting your 96x south bridge, have a 
+    If this module isn't detecting your 96x south bridge, have a
     look there.
 
     We assume there can only be one SiS96x with one SMBus interface.
@@ -65,12 +65,12 @@ static u16 sis96x_smbus_base;
 
 static inline u8 sis96x_read(u8 reg)
 {
-	return inb(sis96x_smbus_base + reg) ;
+	return inb(sis96x_smbus_base + reg);
 }
 
 static inline void sis96x_write(u8 reg, u8 data)
 {
-	outb(data, sis96x_smbus_base + reg) ;
+	outb(data, sis96x_smbus_base + reg);
 }
 
 /* Execute a SMBus transaction.
@@ -85,16 +85,18 @@ static int sis96x_transaction(int size)
 	dev_dbg(&sis96x_adapter.dev, "SMBus transaction %d\n", size);
 
 	/* Make sure the SMBus host is ready to start transmitting */
-	if (((temp = sis96x_read(SMB_CNT)) & 0x03) != 0x00) {
+	temp = sis96x_read(SMB_CNT);
 
-		dev_dbg(&sis96x_adapter.dev, "SMBus busy (0x%02x). "
-			"Resetting...\n", temp);
+	if ((temp & 0x03) != 0x00) {
+		dev_dbg(&sis96x_adapter.dev, "SMBus busy (0x%02x). Resetting...\n", temp);
 
 		/* kill the transaction */
 		sis96x_write(SMB_HOST_CNT, 0x20);
 
 		/* check it again */
-		if (((temp = sis96x_read(SMB_CNT)) & 0x03) != 0x00) {
+		temp = sis96x_read(SMB_CNT);
+
+		if ((temp & 0x03) != 0x00) {
 			dev_dbg(&sis96x_adapter.dev, "Failed (0x%02x)\n", temp);
 			return -EBUSY;
 		} else {
@@ -138,7 +140,9 @@ static int sis96x_transaction(int size)
 
 	/* Finish up by resetting the bus */
 	sis96x_write(SMB_STS, temp);
-	if ((temp = sis96x_read(SMB_STS))) {
+
+	temp = sis96x_read(SMB_STS);
+	if (temp) {
 		dev_dbg(&sis96x_adapter.dev, "Failed reset at "
 			"end of transaction! (0x%02x)\n", temp);
 	}
@@ -147,9 +151,9 @@ static int sis96x_transaction(int size)
 }
 
 /* Return negative errno on error. */
-static s32 sis96x_access(struct i2c_adapter * adap, u16 addr,
+static s32 sis96x_access(struct i2c_adapter *adap, u16 addr,
 			 unsigned short flags, char read_write,
-			 u8 command, int size, union i2c_smbus_data * data)
+			 u8 command, int size, union i2c_smbus_data *data)
 {
 	int status;
 
@@ -182,7 +186,7 @@ static s32 sis96x_access(struct i2c_adapter * adap, u16 addr,
 			sis96x_write(SMB_BYTE, data->word & 0xff);
 			sis96x_write(SMB_BYTE + 1, (data->word & 0xff00) >> 8);
 		}
-		size = (size == I2C_SMBUS_PROC_CALL ? 
+		size = (size == I2C_SMBUS_PROC_CALL ?
 			SIS96x_PROC_CALL : SIS96x_WORD_DATA);
 		break;
 
@@ -196,7 +200,7 @@ static s32 sis96x_access(struct i2c_adapter * adap, u16 addr,
 		return status;
 
 	if ((size != SIS96x_PROC_CALL) &&
-		((read_write == I2C_SMBUS_WRITE) || (size == SIS96x_QUICK)))
+	   ((read_write == I2C_SMBUS_WRITE) || (size == SIS96x_QUICK)))
 		return 0;
 
 	switch (size) {
@@ -240,7 +244,7 @@ static const struct pci_device_id sis96x_ids[] = {
 MODULE_DEVICE_TABLE (pci, sis96x_ids);
 
 static int sis96x_probe(struct pci_dev *dev,
-				const struct pci_device_id *id)
+			const struct pci_device_id *id)
 {
 	u16 ww = 0;
 	int retval;
@@ -263,7 +267,7 @@ static int sis96x_probe(struct pci_dev *dev,
 		return -EINVAL;
 	}
 	dev_info(&dev->dev, "SiS96x SMBus base address: 0x%04x\n",
-			sis96x_smbus_base);
+		 sis96x_smbus_base);
 
 	retval = acpi_check_resource_conflict(&dev->resource[SIS96x_BAR]);
 	if (retval)
@@ -286,7 +290,8 @@ static int sis96x_probe(struct pci_dev *dev,
 	snprintf(sis96x_adapter.name, sizeof(sis96x_adapter.name),
 		"SiS96x SMBus adapter at 0x%04x", sis96x_smbus_base);
 
-	if ((retval = i2c_add_adapter(&sis96x_adapter))) {
+	retval = i2c_add_adapter(&sis96x_adapter);
+	if (retval) {
 		dev_err(&dev->dev, "Couldn't register adapter!\n");
 		release_region(sis96x_smbus_base, SMB_IOSIZE);
 		sis96x_smbus_base = 0;
