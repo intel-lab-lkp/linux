@@ -14,7 +14,7 @@
 #include "kselftest.h"
 
 #define NR_MIGRATE_TEST_VCPUS 4
-#define NR_MIGRATE_TEST_VMS 3
+#define NR_MIGRATE_TEST_VMS 4
 #define NR_LOCK_TESTING_THREADS 3
 #define NR_LOCK_TESTING_ITERATIONS 10000
 
@@ -72,26 +72,23 @@ static void sev_migrate_from(struct kvm_vm *dst, struct kvm_vm *src)
 
 static void test_sev_migrate_from(bool es)
 {
-	struct kvm_vm *src_vm;
-	struct kvm_vm *dst_vms[NR_MIGRATE_TEST_VMS];
-	int i, ret;
+	struct kvm_vm *vms[NR_MIGRATE_TEST_VMS];
+	int i;
 
-	src_vm = sev_vm_create(es);
+	vms[0] = sev_vm_create(es);
+	for (i = 1; i < NR_MIGRATE_TEST_VMS; ++i)
+		vms[i] = aux_vm_create(true);
+
+	/*
+	 * Migrate in N times, in a chain from the initial SEV VM to each "aux"
+	 * VM, and finally back to the original SEV VM.  KVM disallows KVM_RUN
+	 * on the source after migration, but all other ioctls should succeed.
+	 */
+	for (i = 0; i < NR_MIGRATE_TEST_VMS; i++)
+		sev_migrate_from(vms[(i + 1) % NR_MIGRATE_TEST_VMS], vms[i]);
+
 	for (i = 0; i < NR_MIGRATE_TEST_VMS; ++i)
-		dst_vms[i] = aux_vm_create(true);
-
-	/* Initial migration from the src to the first dst. */
-	sev_migrate_from(dst_vms[0], src_vm);
-
-	for (i = 1; i < NR_MIGRATE_TEST_VMS; i++)
-		sev_migrate_from(dst_vms[i], dst_vms[i - 1]);
-
-	/* Migrate the guest back to the original VM. */
-	sev_migrate_from(src_vm, dst_vms[NR_MIGRATE_TEST_VMS - 1]);
-
-	kvm_vm_free(src_vm);
-	for (i = 0; i < NR_MIGRATE_TEST_VMS; ++i)
-		kvm_vm_free(dst_vms[i]);
+		kvm_vm_free(vms[i]);
 }
 
 struct locking_thread_input {
