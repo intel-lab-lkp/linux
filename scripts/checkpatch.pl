@@ -3424,6 +3424,24 @@ sub process {
 			     "Use lore.kernel.org archive links when possible - see https://lore.kernel.org/lists.html\n" . $herecurr);
 		}
 
+# Check for novice phrases in commit messages
+		if ($in_commit_log && !$non_utf8_charset) {
+			my $novice_phrases = qr{(?:^|\s)(?i)(
+				I\s+think|
+				I\s+believe|
+				I\s+suppose|
+				probably|
+				maybe|
+				perhaps|
+				possibly|
+				hopefully
+			)(?:\s|$)}x;
+			if ($line =~ /$novice_phrases/) {
+				WARN("NOVICE_PHRASE",
+				     "Avoid uncertainty phrases like '$1' in commit messages\n" . $herecurr);
+			}
+		}
+
 # Check for added, moved or deleted files
 		if (!$reported_maintainer_file && !$in_commit_log &&
 		    ($line =~ /^(?:new|deleted) file mode\s*\d+\s*$/ ||
