@@ -602,7 +602,7 @@ static u64 __report_allowed;
 static void perf_duration_warn(struct irq_work *w)
 {
 	printk_ratelimited(KERN_INFO
-		"perf: interrupt took too long (%lld > %lld), lowering "
+		"perf: interrupt took too long (%llu > %llu), lowering "
 		"kernel.perf_event_max_sample_rate to %d\n",
 		__report_avg, __report_allowed,
 		sysctl_perf_event_sample_rate);
@@ -655,7 +655,7 @@ void perf_sample_event_took(u64 sample_len_ns)
 	perf_sample_period_ns = NSEC_PER_SEC / sysctl_perf_event_sample_rate;
 
 	if (!irq_work_queue(&perf_duration_work)) {
-		early_printk("perf: interrupt took too long (%lld > %lld), lowering "
+		early_printk("perf: interrupt took too long (%llu > %llu), lowering "
 			     "kernel.perf_event_max_sample_rate to %d\n",
 			     __report_avg, __report_allowed,
 			     sysctl_perf_event_sample_rate);
