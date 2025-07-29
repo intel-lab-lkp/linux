@@ -7,6 +7,7 @@
 #ifndef BTRFS_DELAYED_INODE_H
 #define BTRFS_DELAYED_INODE_H
 
+#include <linux/ref_tracker.h>
 #include <linux/types.h>
 #include <linux/rbtree.h>
 #include <linux/spinlock.h>
@@ -63,8 +64,19 @@ struct btrfs_delayed_node {
 	struct rb_root_cached del_root;
 	struct mutex mutex;
 	struct btrfs_inode_item inode_item;
-	refcount_t refs;
+
 	int count;
+	refcount_t refs;
+
+#ifdef CONFIG_BTRFS_DEBUG
+	/* Used to track all references to this delayed node. */
+	struct ref_tracker_dir ref_dir;
+	/* Used to track delayed node reference stored in node list. */
+	struct ref_tracker *node_list_tracker;
+	/* Used to track delayed node reference stored in inode cache. */
+	struct ref_tracker *inode_cache_tracker;
+#endif
+
 	u64 index_cnt;
 	unsigned long flags;
 	/*
@@ -105,6 +117,53 @@ struct btrfs_delayed_item {
 	u16 data_len;
 	char data[] __counted_by(data_len);
 };
+
+#ifdef CONFIG_BTRFS_DEBUG
+static inline void btrfs_delayed_node_ref_tracker_dir_init(struct btrfs_delayed_node *node, 
+						       unsigned int quarantine_count,
+						       const char *name)
+{
+	ref_tracker_dir_init(&node->ref_dir, quarantine_count, name);
+}
+
+static inline void btrfs_delayed_node_ref_tracker_dir_exit(struct btrfs_delayed_node *node)
+{
+	ref_tracker_dir_exit(&node->ref_dir);
+}
+
+static inline int btrfs_delayed_node_ref_tracker_alloc(struct btrfs_delayed_node *node,
+						    struct ref_tracker **tracker,
+						    gfp_t gfp)
+{
+	return ref_tracker_alloc(&node->ref_dir, tracker, gfp);
+}
+
+static inline int btrfs_delayed_node_ref_tracker_free(struct btrfs_delayed_node *node,
+						   struct ref_tracker **tracker)
+{
+	return ref_tracker_free(&node->ref_dir, tracker);
+}
+#else
+static inline void btrfs_delayed_node_ref_tracker_dir_init(struct btrfs_delayed_node *node, 
+						       unsigned int quarantine_count,
+						       const char *name) {}
+
+static inline void btrfs_delayed_node_ref_tracker_dir_exit(struct btrfs_delayed_node *node) {}
+
+static inline int btrfs_delayed_node_ref_tracker_alloc(struct btrfs_delayed_node *node,
+						    struct ref_tracker **tracker,
+						    gfp_t gfp)
+{
+	return 0;
+}
+
+static inline int btrfs_delayed_node_ref_tracker_free(struct btrfs_delayed_node *node,
+						   struct ref_tracker **tracker)
+{
+	return 0;
+}
+#endif
+
 
 void btrfs_init_delayed_root(struct btrfs_delayed_root *delayed_root);
 int btrfs_insert_delayed_dir_index(struct btrfs_trans_handle *trans,
