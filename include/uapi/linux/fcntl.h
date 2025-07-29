@@ -65,6 +65,8 @@
  *  Query available write streams
  */
 #define F_GET_MAX_WRITE_STREAMS (F_LINUX_SPECIFIC_BASE + 15)
+#define F_GET_WRITE_STREAM	(F_LINUX_SPECIFIC_BASE + 16)
+#define F_SET_WRITE_STREAM	(F_LINUX_SPECIFIC_BASE + 17)
 
 /*
  * Valid hint values for F_{GET,SET}_RW_HINT. 0 is "not set", or can be

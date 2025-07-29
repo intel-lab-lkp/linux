@@ -422,6 +422,33 @@ static long fcntl_get_max_write_streams(struct file *file)
 	return vfs_user_write_streams(inode);
 }
 
+static long fcntl_get_write_stream(struct file *file)
+{
+	struct inode *inode = file_inode(file);
+
+	if (S_ISBLK(inode->i_mode))
+		inode = file->f_mapping->host;
+
+	return inode->i_write_stream;
+}
+
+static long fcntl_set_write_stream(struct file *file, unsigned long arg)
+{
+	struct inode *inode = file_inode(file);
+
+	if (!inode_owner_or_capable(file_mnt_idmap(file), inode))
+		return -EPERM;
+
+	if (S_ISBLK(inode->i_mode))
+		inode = file->f_mapping->host;
+
+	if (arg > vfs_user_write_streams(inode))
+		return -EINVAL;
+
+	WRITE_ONCE(inode->i_write_stream, arg);
+	return 0;
+}
+
 /* Is the file descriptor a dup of the file? */
 static long f_dupfd_query(int fd, struct file *filp)
 {
@@ -582,6 +609,12 @@ static long do_fcntl(int fd, unsigned int cmd, unsigned long arg,
 		break;
 	case F_GET_MAX_WRITE_STREAMS:
 		err = fcntl_get_max_write_streams(filp);
+		break;
+	case F_GET_WRITE_STREAM:
+		err = fcntl_get_write_stream(filp);
+		break;
+	case F_SET_WRITE_STREAM:
+		err = fcntl_set_write_stream(filp, arg);
 		break;
 	default:
 		break;
