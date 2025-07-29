@@ -1788,8 +1788,15 @@ static void __checkpoint_and_complete_reqs(struct f2fs_sb_info *sbi)
 
 	spin_lock(&cprc->stat_lock);
 	cprc->cur_time = (unsigned int)div64_u64(sum_diff, count);
-	if (cprc->peak_time < cprc->cur_time)
+	if (cprc->peak_time < cprc->cur_time) {
 		cprc->peak_time = cprc->cur_time;
+
+		if (unlikely(cprc->peak_time >= CP_LONG_LATENCY_THRESHOLD)) {
+			f2fs_warn_ratelimited(sbi, "checkpoint was blocked for %u ms, affecting %llu tasks",
+					cprc->peak_time, count);
+			dump_stack();
+		}
+	}
 	spin_unlock(&cprc->stat_lock);
 }
 
