@@ -3342,13 +3342,26 @@ int btrfs_free_log_root_tree(struct btrfs_trans_handle *trans,
  * Returns 1 if the inode was logged before in the transaction, 0 if it was not,
  * and < 0 on error.
  */
-static int inode_logged(const struct btrfs_trans_handle *trans,
-			struct btrfs_inode *inode,
-			struct btrfs_path *path_in)
+static int inode_logged_locked(const struct btrfs_trans_handle *trans,
+			       struct btrfs_inode *inode,
+			       struct btrfs_path *path_in)
 {
 	struct btrfs_path *path = path_in;
 	struct btrfs_key key;
 	int ret;
+
+	/*
+	 * The log_mutex must be taken to prevent races with concurrent logging
+	 * as we may see the inode not logged when we are called but it gets
+	 * logged right after we did not find it in the log tree and we end up
+	 * setting inode->logged_trans to a value less than trans->transid after
+	 * the concurrent logging task has set it to trans->transid. As a
+	 * consequence, subsequent rename, unlink and link operations may end up
+	 * not logging new names and removing old names from the log.
+	 * The same type of race also happens if out inode is a directory when
+	 * we update inode->last_dir_index_offset below.
+	 */
+	lockdep_assert_held(&inode->log_mutex);
 
 	if (inode->logged_trans == trans->transid)
 		return 1;
@@ -3449,6 +3462,19 @@ static int inode_logged(const struct btrfs_trans_handle *trans,
 		inode->last_dir_index_offset = (u64)-1;
 
 	return 1;
+}
+
+static inline int inode_logged(const struct btrfs_trans_handle *trans,
+			       struct btrfs_inode *inode,
+			       struct btrfs_path *path)
+{
+	int ret;
+
+	mutex_lock(&inode->log_mutex);
+	ret = inode_logged_locked(trans, inode, path);
+	mutex_unlock(&inode->log_mutex);
+
+	return ret;
 }
 
 /*
@@ -6535,7 +6561,7 @@ static int btrfs_log_inode(struct btrfs_trans_handle *trans,
 	 * inode_logged(), because after that we have the need to figure out if
 	 * the inode was previously logged in this transaction.
 	 */
-	ret = inode_logged(trans, inode, path);
+	ret = inode_logged_locked(trans, inode, path);
 	if (ret < 0)
 		goto out_unlock;
 	ctx->logged_before = (ret == 1);
