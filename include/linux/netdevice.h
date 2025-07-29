@@ -23,6 +23,7 @@
 
 #include <linux/timer.h>
 #include <linux/bug.h>
+#include <linux/clk.h>
 #include <linux/delay.h>
 #include <linux/atomic.h>
 #include <linux/prefetch.h>
@@ -2552,6 +2553,11 @@ struct net_device {
 
 	struct hwtstamp_provider __rcu	*hwprov;
 
+#if IS_ENABLED(CONFIG_NET_TX_CLK)
+	struct list_head	tx_clk_list;
+	struct kobject		*tx_clk_dir;
+
+#endif
 	u8			priv[] ____cacheline_aligned
 				       __counted_by(priv_len);
 } ____cacheline_aligned;

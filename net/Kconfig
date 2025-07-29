@@ -541,4 +541,25 @@ config NET_TEST
 
 	  If unsure, say N.
 
+config NET_TX_CLK
+	bool "Control over source of TX clock per network device"
+	depends on COMMON_CLK && NET
+	default n
+	help
+	  This feature enables per-device control over TX clock sources in
+	  networking hardware. Network devices may support multiple transmit
+	  clock sources such as different oscillators, OCXOs, PLLs, or
+	  external clock signals provided via onboard pins.
+
+	  When enabled, supported network devices will create a tx_clk
+	  directory under their sysfs entry (/sys/class/net/<device>/tx_clk/).
+	  Users can select an available clock source by writing '1' to the
+	  corresponding file in this directory. The status of each clock
+	  source can be checked by reading the file (0 = disabled, 1 = enabled).
+
+	  This is useful for applications requiring precise timing control,
+	  such as time-sensitive networking (TSN) or synchronization protocols.
+
+	  If unsure, say N.
+
 endif   # if NET

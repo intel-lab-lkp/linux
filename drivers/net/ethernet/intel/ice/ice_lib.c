@@ -3943,6 +3943,12 @@ void ice_init_feature_support(struct ice_pf *pf)
 		if (ice_gnss_is_module_present(&pf->hw))
 			ice_set_feature_support(pf, ICE_F_GNSS);
 		break;
+	case ICE_DEV_ID_E825C_BACKPLANE:
+	case ICE_DEV_ID_E825C_QSFP:
+	case ICE_DEV_ID_E825C_SFP:
+	case ICE_DEV_ID_E825C_SGMII:
+		ice_set_feature_support(pf, ICE_F_TX_CLK);
+		break;
 	default:
 		break;
 	}

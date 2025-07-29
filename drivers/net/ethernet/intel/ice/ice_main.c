@@ -27,6 +27,7 @@
 #include "ice_tc_lib.h"
 #include "ice_vsi_vlan_ops.h"
 #include <net/xdp_sock_drv.h>
+#include "ice_tx_clk.h"
 
 #define DRV_SUMMARY	"Intel(R) Ethernet Connection E800 Series Linux Driver"
 static const char ice_driver_string[] = DRV_SUMMARY;
@@ -4854,6 +4855,9 @@ static void ice_init_features(struct ice_pf *pf)
 	if (ice_init_lag(pf))
 		dev_warn(dev, "Failed to init link aggregation support\n");
 
+	if (ice_is_feature_supported(pf, ICE_F_TX_CLK))
+		ice_tx_clk_init(pf);
+
 	ice_hwmon_init(pf);
 }
 
@@ -4874,6 +4878,8 @@ static void ice_deinit_features(struct ice_pf *pf)
 		ice_dpll_deinit(pf);
 	if (pf->eswitch_mode == DEVLINK_ESWITCH_MODE_SWITCHDEV)
 		xa_destroy(&pf->eswitch.reprs);
+	if (ice_is_feature_supported(pf, ICE_F_TX_CLK))
+		ice_tx_clk_deinit(pf);
 }
 
 static void ice_init_wakeup(struct ice_pf *pf)

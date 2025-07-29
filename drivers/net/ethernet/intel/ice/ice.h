@@ -204,6 +204,7 @@ enum ice_feature {
 	ICE_F_ROCE_LAG,
 	ICE_F_SRIOV_LAG,
 	ICE_F_MBX_LIMIT,
+	ICE_F_TX_CLK,
 	ICE_F_MAX
 };
 
@@ -661,6 +662,10 @@ struct ice_pf {
 	struct device *hwmon_dev;
 	struct ice_health health_reporters;
 	struct iidc_rdma_core_dev_info *cdev_info;
+#ifdef CONFIG_NET_TX_CLK
+	void *tx_clk_data;  /* Private clock data */
+	u8 tx_clk_active;   /* Currently active TX clock ID */
+#endif
 
 	u8 num_quanta_prof_used;
 };
