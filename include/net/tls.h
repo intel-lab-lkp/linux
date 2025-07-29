@@ -241,6 +241,7 @@ struct tls_context {
 
 	struct scatterlist *partially_sent_record;
 	u16 partially_sent_offset;
+	u32 tls_record_size_limit;
 
 	bool splicing_pages;
 	bool pending_open_record_frags;
