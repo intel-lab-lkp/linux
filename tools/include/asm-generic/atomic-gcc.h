@@ -62,12 +62,59 @@ static inline int atomic_dec_and_test(atomic_t *v)
 	return __sync_sub_and_fetch(&v->counter, 1) == 0;
 }
 
+#define xchg(ptr, v) \
+	__atomic_exchange_n(ptr, v, __ATOMIC_SEQ_CST)
+
+#define xchg_relaxed(ptr, v) \
+	__atomic_exchange_n(ptr, v, __ATOMIC_RELAXED)
+
 #define cmpxchg(ptr, oldval, newval) \
 	__sync_val_compare_and_swap(ptr, oldval, newval)
 
 static inline int atomic_cmpxchg(atomic_t *v, int oldval, int newval)
 {
 	return cmpxchg(&(v)->counter, oldval, newval);
+}
+
+/**
+ * atomic_try_cmpxchg() - atomic compare and exchange with full ordering
+ * @v: pointer to atomic_t
+ * @old: pointer to int value to compare with
+ * @new: int value to assign
+ *
+ * If (@v == @old), atomically updates @v to @new with full ordering.
+ * Otherwise, @v is not modified, @old is updated to the current value of @v,
+ * and relaxed ordering is provided.
+ *
+ * Unsafe to use in noinstr code; use raw_atomic_try_cmpxchg() there.
+ *
+ * Return: @true if the exchange occured, @false otherwise.
+ */
+static __always_inline bool
+atomic_try_cmpxchg(atomic_t *v, int *old, int new)
+{
+	int r, o = *old;
+	r = atomic_cmpxchg(v, o, new);
+	if (unlikely(r != o))
+		*old = r;
+	return likely(r == o);
+}
+
+/**
+ * atomic_fetch_or() - atomic bitwise OR with full ordering
+ * @i: int value
+ * @v: pointer to atomic_t
+ *
+ * Atomically updates @v to (@v | @i) with full ordering.
+ *
+ * Unsafe to use in noinstr code; use raw_atomic_fetch_or() there.
+ *
+ * Return: The original value of @v.
+ */
+static __always_inline int
+atomic_fetch_or(int i, atomic_t *v)
+{
+	return __sync_fetch_and_or(&v->counter, i);
 }
 
 static inline int test_and_set_bit(long nr, unsigned long *addr)
