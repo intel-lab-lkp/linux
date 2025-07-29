@@ -25,6 +25,13 @@ properties:
   "#size-cells":
     const: 0
 
+  spi-parent:
+    $ref: /schemas/types.yaml#/definitions/phandle
+    description:
+      In case of an SPI bus extension, reference to the SPI bus controller
+      this extension is connected to. In other word, reference the SPI bus
+      controller on the fixed side that drives the bus extension.
+
   cs-gpios:
     description: |
       GPIOs used as chip selects.
@@ -111,7 +118,26 @@ properties:
       - compatible
 
 patternProperties:
-  "^.*@[0-9a-f]+$":
+  'spi-bus-extension@[0-9a-f]+$':
+    type: object
+    description:
+      An SPI bus extension connected to an SPI bus. Those extensions allow to
+      decouple SPI busses when they are wired to connectors.
+
+    properties:
+      reg:
+        maxItems: 1
+
+      spi-bus:
+        $ref: /schemas/types.yaml#/definitions/phandle
+        description:
+          Reference to the extension bus.
+
+    required:
+      - reg
+      - spi-bus
+
+  "^(?!spi-bus-extension@).*@[0-9a-f]+$":
     type: object
     $ref: spi-peripheral-props.yaml
     additionalProperties: true
@@ -212,5 +238,43 @@ examples:
             spi-max-frequency = <1000000>;
             reg = <0>;
             spi-cs-high;
+        };
+    };
+
+  # SPI bus extension example involving an SPI bus controller and a connector.
+  #
+  #  +--------------+     +-------------+     +-------------+
+  #  | spi@abcd0000 |     |  Connector  |     | Addon board |
+  #  |    (spi1)    +-----+ (spi-addon) +-----+ (device@10) |
+  #  |              |     |             |     |             |
+  #  +--------------+     +-------------+     +-------------+
+  #
+  # The spi1 SPI bus is wired from a SPI controller to a connector. It is
+  # identified at connector level as spi-addon bus.
+  # An addon board can be connected to this connector and connects a device
+  # (device@10) to this spi-addon extension bus.
+  - |
+    spi1: spi@abcd0000 {
+        compatible = "brcm,bcm2835-spi";
+        reg = <0xabcd0000 0x100>;
+        #address-cells = <1>;
+        #size-cells = <0>;
+
+        spi-bus-extension@0 {
+            reg = <0>;
+            spi-bus = <&spi_addon>;
+        };
+    };
+
+    connector {
+        spi_addon: spi-addon {
+            spi-parent = <&spi1>;
+            #address-cells = <1>;
+            #size-cells = <0>;
+
+            device@2 {
+                compatible = "xyz,foo";
+                reg = <0x02>;
+            };
         };
     };
