@@ -52,6 +52,12 @@ static struct bench sched_benchmarks[] = {
 	{ NULL,		NULL,						NULL			}
 };
 
+static struct bench sync_benchmarks[] = {
+	{ "qspinlock",	"Benchmark for queued spinlock",		bench_sync_qspinlock	},
+	{ "all",	"Run all synchronization benchmarks",		NULL			},
+	{ NULL,		NULL,						NULL			}
+};
+
 static struct bench syscall_benchmarks[] = {
 	{ "basic",	"Benchmark for basic getppid(2) calls",		bench_syscall_basic	},
 	{ "getpgid",	"Benchmark for getpgid(2) calls",		bench_syscall_getpgid	},
@@ -122,6 +128,7 @@ struct collection {
 
 static struct collection collections[] = {
 	{ "sched",	"Scheduler and IPC benchmarks",			sched_benchmarks	},
+	{ "sync",	"Synchronization benchmarks",			sync_benchmarks		},
 	{ "syscall",	"System call benchmarks",			syscall_benchmarks	},
 	{ "mem",	"Memory access benchmarks",			mem_benchmarks		},
 #ifdef HAVE_LIBNUMA_SUPPORT
