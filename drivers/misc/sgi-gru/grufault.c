@@ -304,7 +304,7 @@ static void gru_flush_cache_cbe(struct gru_control_block_extended *cbe)
 /*
  * Preload the TLB with entries that may be required. Currently, preloading
  * is implemented only for BCOPY. Preload  <tlb_preload_count> pages OR to
- * the end of the bcopy tranfer, whichever is smaller.
+ * the end of the bcopy transfer, whichever is smaller.
  */
 static void gru_preload_tlb(struct gru_state *gru,
 			struct gru_thread_state *gts, int atomic,
