@@ -31,6 +31,7 @@ struct mvebu_gicp_spi_range {
 
 struct mvebu_gicp {
 	struct mvebu_gicp_spi_range *spi_ranges;
+	void __iomem *base;
 	unsigned int spi_ranges_cnt;
 	unsigned int spi_cnt;
 	unsigned long *spi_bitmap;
@@ -234,6 +235,14 @@ static int mvebu_gicp_probe(struct platform_device *pdev)
 	if (!info.parent) {
 		dev_err(&pdev->dev, "failed to find parent IRQ domain\n");
 		return -ENODEV;
+	}
+
+	gicp->base = devm_platform_ioremap_resource(pdev, 0);
+	if (IS_ERR(gicp->base))
+		dev_err(&pdev->dev, "gicp - Cannot ioremap !\n");
+	else {
+		for (i = 0; i < 64; i++)
+			writel(i, gicp->base + GICP_CLRSPI_NSR_OFFSET);
 	}
 
 	return msi_create_parent_irq_domain(&info, &gicp_msi_parent_ops) ? 0 : -ENOMEM;
