@@ -1105,7 +1105,11 @@ static void object_err(struct kmem_cache *s, struct slab *slab,
 		return;
 
 	slab_bug(s, reason);
-	print_trailer(s, slab, object);
+	if (!check_valid_pointer(s, slab, object)) {
+		print_slab_info(slab);
+		pr_err("invalid object 0x%p\n", object);
+	} else
+		print_trailer(s, slab, object);
 	add_taint(TAINT_BAD_PAGE, LOCKDEP_NOW_UNRELIABLE);
 
 	WARN_ON(1);
@@ -1588,7 +1592,7 @@ static inline int alloc_consistency_checks(struct kmem_cache *s,
 		return 0;
 
 	if (!check_valid_pointer(s, slab, object)) {
-		object_err(s, slab, object, "Freelist Pointer check fails");
+		slab_err(s, slab, "Freelist Pointer(0x%p) check fails", object);
 		return 0;
 	}
 
