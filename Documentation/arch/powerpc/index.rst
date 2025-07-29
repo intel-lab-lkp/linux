@@ -6,7 +6,7 @@ powerpc
 
 .. toctree::
     :maxdepth: 1
-
+    
     associativity
     booting
     bootwrapper
@@ -20,6 +20,7 @@ powerpc
     elfnote
     firmware-assisted-dump
     hvcs
+    htm 
     imc
     isa-versions
     kaslr-booke32
