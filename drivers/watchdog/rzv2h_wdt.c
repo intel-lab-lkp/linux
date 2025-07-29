@@ -36,7 +36,6 @@
 #define WDTRCR_RSTIRQS		BIT(7)
 
 #define MAX_TIMEOUT_CYCLES	16384
-#define CLOCK_DIV_BY_256	256
 
 #define WDT_DEFAULT_TIMEOUT	60U
 
@@ -48,6 +47,7 @@ MODULE_PARM_DESC(nowayout, "Watchdog cannot be stopped once started (default="
 struct rzv2h_of_data {
 	u8 cks_min;
 	u8 cks_max;
+	u16 cks_div;
 };
 
 struct rzv2h_wdt_priv {
@@ -238,7 +238,7 @@ static int rzv2h_wdt_probe(struct platform_device *pdev)
 		return dev_err_probe(dev, PTR_ERR(priv->rstc),
 				     "failed to get cpg reset");
 
-	priv->wdev.max_hw_heartbeat_ms = (MILLI * MAX_TIMEOUT_CYCLES * CLOCK_DIV_BY_256) /
+	priv->wdev.max_hw_heartbeat_ms = (MILLI * MAX_TIMEOUT_CYCLES * priv->of_data->cks_div) /
 					 clk_get_rate(priv->oscclk);
 	dev_dbg(dev, "max hw timeout of %dms\n", priv->wdev.max_hw_heartbeat_ms);
 
@@ -265,6 +265,7 @@ static int rzv2h_wdt_probe(struct platform_device *pdev)
 static const struct rzv2h_of_data rzv2h_wdt_of_data = {
 	.cks_min = WDTCR_CKS_CLK_1,
 	.cks_max = WDTCR_CKS_CLK_256,
+	.cks_div = 256,
 };
 
 static const struct of_device_id rzv2h_wdt_ids[] = {
