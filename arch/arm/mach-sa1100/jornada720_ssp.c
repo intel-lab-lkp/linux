@@ -144,7 +144,7 @@ static int jornada_ssp_probe(struct platform_device *dev)
 		return ret;
 	}
 
-	printk(KERN_WARNING "SSP: initialization failed, trying non-irq solution \n");
+	printk(KERN_WARNING "SSP: initialization failed, trying non-irq solution\n");
 
 	/* init of Serial 4 port */
 	Ser4MCCR0 = 0;
