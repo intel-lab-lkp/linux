@@ -27,10 +27,10 @@
 #define KVM_PMU_EVENT_FILTER_MAX_EVENTS 300
 
 struct x86_pmu_capability __read_mostly kvm_pmu_cap;
-EXPORT_SYMBOL_GPL(kvm_pmu_cap);
+EXPORT_SYMBOL_GPL_FOR_KVM_INTERNAL(kvm_pmu_cap);
 
 struct kvm_pmu_emulated_event_selectors __read_mostly kvm_pmu_eventsel;
-EXPORT_SYMBOL_GPL(kvm_pmu_eventsel);
+EXPORT_SYMBOL_GPL_FOR_KVM_INTERNAL(kvm_pmu_eventsel);
 
 /* Precise Distribution of Instructions Retired (PDIR) */
 static const struct x86_cpu_id vmx_pebs_pdir_cpu[] = {
@@ -318,7 +318,7 @@ void pmc_write_counter(struct kvm_pmc *pmc, u64 val)
 	pmc->counter &= pmc_bitmask(pmc);
 	pmc_update_sample_period(pmc);
 }
-EXPORT_SYMBOL_GPL(pmc_write_counter);
+EXPORT_SYMBOL_GPL_FOR_KVM_INTERNAL(pmc_write_counter);
 
 static int filter_cmp(const void *pa, const void *pb, u64 mask)
 {
@@ -897,7 +897,7 @@ void kvm_pmu_trigger_event(struct kvm_vcpu *vcpu, u64 eventsel)
 		kvm_pmu_incr_counter(pmc);
 	}
 }
-EXPORT_SYMBOL_GPL(kvm_pmu_trigger_event);
+EXPORT_SYMBOL_GPL_FOR_KVM_INTERNAL(kvm_pmu_trigger_event);
 
 static bool is_masked_filter_valid(const struct kvm_x86_pmu_event_filter *filter)
 {
