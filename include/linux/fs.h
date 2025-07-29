@@ -2376,6 +2376,11 @@ struct super_operations {
 	 */
 	int (*remove_bdev)(struct super_block *sb, struct block_device *bdev);
 	void (*shutdown)(struct super_block *sb);
+	/*
+	 * Implement this callback if filesystem wants to control the
+	 * number of streams that are available to user space.
+	 */
+	u8 (*user_write_streams)(struct super_block *sb);
 };
 
 /*
