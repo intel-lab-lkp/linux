@@ -378,6 +378,13 @@ struct ftrace_likely_data {
 # define __signed_wrap
 #endif
 
+/* GCC does not like splitting sanitizer coverage across section inlines */
+#ifdef CC_IS_CLANG
+#define __no_kstack_erase	__no_sanitize_coverage
+#else
+#define __no_kstack_erase
+#endif
+
 /* Section for code which can't be instrumented at all */
 #define __noinstr_section(section)					\
 	noinline notrace __attribute((__section__(section)))		\
