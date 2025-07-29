@@ -15,14 +15,19 @@
 #include <sys/cdefs.h>
 
 #include "bench.h"
+#include "../util/tsc.h"
 
 #include "include/qspinlock.h"
 
 #define NS 1000000000ull
 #define CACHELINE_SIZE 64
 
+#define DEFAULT_HIST_INTERVAL 1000
+
 static unsigned int nthreads;
 static unsigned long nspins = 10000ul;
+static bool do_hist;
+static u64 hist_interval = DEFAULT_HIST_INTERVAL;
 
 struct barrier_t;
 
@@ -45,6 +50,7 @@ struct worker {
 	struct lock_ops *ops;
 	struct barrier_t *barrier;
 	u64 runtime;		// in nanoseconds
+	u64 *lock_latency;	// in TSCs
 };
 
 static const struct option options[] = {
@@ -52,6 +58,10 @@ static const struct option options[] = {
 		"Specify number of threads (default: number of CPUs)."),
 	OPT_ULONG('n',		"spins",	&nspins,
 		"Number of lock acquire operations per thread (default: 10,000 times)."),
+	OPT_BOOLEAN(0,		"hist",		&do_hist,
+		"Print a histogram of lock acquire TSCs."),
+	OPT_U64(0,	"hist-interval",	&hist_interval,
+		"Histogram bucket size (default 1,000 TSCs)."),
 	OPT_END()
 };
 
@@ -110,6 +120,25 @@ static void lock_loop(const struct lock_ops *ops, unsigned long n)
 }
 
 /*
+ * A busy loop to acquire and release the given lock N times, and also collect
+ * all acquire latencies, for histogram use.  Note that the TSC operations
+ * latency itself is also included.
+ */
+static void lock_loop_timing(const struct lock_ops *ops, unsigned long n, u64 *sample_buffer)
+{
+	unsigned long i;
+	u64 t1, t2;
+
+	for (i = 0; i < n; ++i) {
+		t1 = rdtsc();
+		ops->lock(ops->data);
+		t2 = rdtsc();
+		ops->unlock(ops->data);
+		sample_buffer[i] = t2 - t1;
+	}
+}
+
+/*
  * Thread worker function.  Runs lock loop for N/5 times before and after
  * the main timed loop.
  */
@@ -127,7 +156,10 @@ static void *sync_workerfn(void *args)
 	lock_loop(worker->ops, nspins / 5);
 
 	clock_gettime(CLOCK_THREAD_CPUTIME_ID, &starttime);
-	lock_loop(worker->ops, nspins);
+	if (worker->lock_latency)
+		lock_loop_timing(worker->ops, nspins, worker->lock_latency);
+	else
+		lock_loop(worker->ops, nspins);
 	clock_gettime(CLOCK_THREAD_CPUTIME_ID, &endtime);
 
 	/* Tail loop (not counted) to keep the above loop contended. */
@@ -137,6 +169,57 @@ static void *sync_workerfn(void *args)
 		+ endtime.tv_nsec - starttime.tv_nsec;
 
 	return NULL;
+}
+
+/*
+ * Calculate and print a histogram.
+ */
+static void print_histogram(struct worker *workers)
+{
+	u64 tsc_max = 0;
+	u64 *buckets;
+	unsigned long nbuckets;
+
+	if (hist_interval == 0)
+		hist_interval = DEFAULT_HIST_INTERVAL;
+
+	printf("Lock acquire histogram:\n");
+
+	/* Calculate the max TSC value to get the number of buckets needed. */
+	for (unsigned int i = 0; i < nthreads; ++i) {
+		struct worker *w = workers + i;
+
+		for (unsigned long j = 0; j < nspins; ++j)
+			tsc_max = max(w->lock_latency[j], tsc_max);
+	}
+	nbuckets = (tsc_max + hist_interval - 1) / hist_interval;
+
+	/* Allocate the actual bucket.  The bucket definition may be optimized
+	 * if it is sparse.
+	 */
+	buckets = calloc(nbuckets, sizeof(*buckets));
+	if (!buckets)
+		err(EXIT_FAILURE, "calloc");
+
+	/* Iterate through all latencies again to fill the buckets. */
+	for (unsigned int i = 0; i < nthreads; ++i) {
+		struct worker *w = workers + i;
+
+		for (unsigned long j = 0; j < nspins; ++j) {
+			u64 latency = w->lock_latency[j];
+			++buckets[latency / hist_interval];
+		}
+	}
+
+	/* Print the histogram as a table. */
+	printf("Bucket, Count\n");
+	for (unsigned long i = 0; i < nbuckets; ++i) {
+		if (buckets[i] == 0)
+			continue;
+		printf("%"PRIu64", %"PRIu64"\n", hist_interval * (i + 1), buckets[i]);
+	}
+
+	free(buckets);
 }
 
 /*
@@ -191,6 +274,12 @@ static int bench_sync_lock_generic(struct lock_ops *ops, int argc, const char **
 		workers[i].barrier = &barrier;
 		workers[i].ops = ops;
 
+		if (do_hist) {
+			workers[i].lock_latency = calloc(nspins, sizeof(*workers[i].lock_latency));
+			if (!workers[i].lock_latency)
+				err(EXIT_FAILURE, "calloc");
+		}
+
 		/* Set CPU affinity */
 		pthread_attr_init(&thread_attr);
 		CPU_ZERO_S(cpuset_size, cpuset);
@@ -228,6 +317,12 @@ static int bench_sync_lock_generic(struct lock_ops *ops, int argc, const char **
 	printf("Lock-unlock latency of %u threads: %"PRIu64".%"PRIu64" ns.\n",
 			nthreads, avg_ns, avg_ns_dot);
 
+	/* Print histogram if requested. */
+	if (do_hist)
+		print_histogram(workers);
+
+	for (unsigned int i = 0; i < nthreads; ++i)
+		free(workers[i].lock_latency);
 	free(workers);
 
 	return 0;
