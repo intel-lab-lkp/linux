@@ -932,6 +932,24 @@ static const struct pci_device_id mhi_pci_id_table[] = {
 	/* Foxconn T99W696.00, Foxconn SKU */
 	{ PCI_DEVICE_SUB(PCI_VENDOR_ID_QCOM, 0x0308, PCI_VENDOR_ID_FOXCONN, 0xe146),
 		.driver_data = (kernel_ulong_t) &mhi_foxconn_t99w696_info },
+	/* Foxconn T99W696.05, Lenovo T14 */
+	{ PCI_DEVICE_SUB(PCI_VENDOR_ID_QCOM, 0x0308, PCI_VENDOR_ID_FOXCONN, 0xe150),
+		.driver_data = (kernel_ulong_t) &mhi_foxconn_t99w696_info },
+	/* Foxconn T99W696.06, Lenovo T15 */
+	{ PCI_DEVICE_SUB(PCI_VENDOR_ID_QCOM, 0x0308, PCI_VENDOR_ID_FOXCONN, 0xe151),
+		.driver_data = (kernel_ulong_t) &mhi_foxconn_t99w696_info },
+	/* Foxconn T99W696.07, Lenovo T16 */
+	{ PCI_DEVICE_SUB(PCI_VENDOR_ID_QCOM, 0x0308, PCI_VENDOR_ID_FOXCONN, 0xe152),
+		.driver_data = (kernel_ulong_t) &mhi_foxconn_t99w696_info },
+	/* Foxconn T99W696.08, Lenovo P14s */
+	{ PCI_DEVICE_SUB(PCI_VENDOR_ID_QCOM, 0x0308, PCI_VENDOR_ID_FOXCONN, 0xe153),
+		.driver_data = (kernel_ulong_t) &mhi_foxconn_t99w696_info },
+	/* Foxconn T99W696.09, Lenovo P16s */
+	{ PCI_DEVICE_SUB(PCI_VENDOR_ID_QCOM, 0x0308, PCI_VENDOR_ID_FOXCONN, 0xe154),
+		.driver_data = (kernel_ulong_t) &mhi_foxconn_t99w696_info },
+	/* Foxconn T99W696.10, Lenovo P1 */
+	{ PCI_DEVICE_SUB(PCI_VENDOR_ID_QCOM, 0x0308, PCI_VENDOR_ID_FOXCONN, 0xe155),
+		.driver_data = (kernel_ulong_t) &mhi_foxconn_t99w696_info },
 	{ PCI_DEVICE(PCI_VENDOR_ID_QCOM, 0x0308),
 		.driver_data = (kernel_ulong_t) &mhi_qcom_sdx65_info },
 	/* Telit FN990B40 (sdx72) */
