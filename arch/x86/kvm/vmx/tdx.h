@@ -45,6 +45,7 @@ struct kvm_tdx {
 	 * Set/unset is protected with kvm->mmu_lock.
 	 */
 	bool wait_for_sept_zap;
+	bool vm_terminated;
 };
 
 /* TDX module vCPU states */
