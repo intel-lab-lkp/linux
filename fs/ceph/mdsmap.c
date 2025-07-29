@@ -356,7 +356,15 @@ struct ceph_mdsmap *ceph_mdsmap_decode(struct ceph_mds_client *mdsc, void **p,
 		/* enabled */
 		ceph_decode_8_safe(p, end, m->m_enabled, bad_ext);
 		/* fs_name */
-		ceph_decode_skip_string(p, end, bad_ext);
+	        m->fs_name = ceph_extract_encoded_string(p, end, NULL, GFP_NOFS);
+	        if (IS_ERR(m->fs_name)) {
+			err = PTR_ERR(m->fs_name);
+			m->fs_name = NULL;
+			if (err == -ENOMEM)
+				goto out_err;
+			else
+				goto bad;
+	        }
 	}
 	/* damaged */
 	if (mdsmap_ev >= 9) {
@@ -418,6 +426,7 @@ void ceph_mdsmap_destroy(struct ceph_mdsmap *m)
 		kfree(m->m_info);
 	}
 	kfree(m->m_data_pg_pools);
+	kfree(m->fs_name);
 	kfree(m);
 }
 
