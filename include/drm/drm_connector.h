@@ -2146,6 +2146,9 @@ struct drm_connector {
 	/** @force: a DRM_FORCE_<foo> state for forced mode sets */
 	enum drm_connector_force force;
 
+	/** @status_changed: if the old status doesn't match current connection status */
+	bool status_changed;
+
 	/**
 	 * @edid_override: Override EDID set via debugfs.
 	 *
