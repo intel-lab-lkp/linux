@@ -92,6 +92,8 @@ struct kunit_attributes {
  * @name:     the name of the test case.
  * @generate_params: the generator function for parameterized tests.
  * @attr:     the attributes associated with the test
+ * @param_init: The init function to run before parameterized tests.
+ * @param_exit: The exit function to run after parameterized tests.
  *
  * A test case is a function with the signature,
  * ``void (*)(struct kunit *)``
@@ -128,6 +130,13 @@ struct kunit_case {
 	const char *name;
 	const void* (*generate_params)(const void *prev, char *desc);
 	struct kunit_attributes attr;
+
+	/*
+	 * Optional user-defined functions: one to register shared resources once
+	 * before the parameterized test series, and another to release them after.
+	 */
+	int (*param_init)(struct kunit *test);
+	void (*param_exit)(struct kunit *test);
 
 	/* private: internal use only. */
 	enum kunit_status status;
@@ -219,6 +228,27 @@ static inline char *kunit_status_to_ok_not_ok(enum kunit_status status)
 		  .attr = attributes, .module_name = KBUILD_MODNAME}
 
 /**
+ * KUNIT_CASE_PARAM_WITH_INIT() - Define a parameterized KUnit test case with custom
+ * init and exit functions.
+ * @test_name: The function implementing the test case.
+ * @gen_params: The function to generate parameters for the test case.
+ * @init: The init function to run before parameterized tests.
+ * @exit: The exit function to run after parameterized tests.
+ *
+ * Provides the option to register init and exit functions that take in the
+ * parent of the parameterized tests and run once before and once after the
+ * parameterized test series. The init function can be used to add any resources
+ * to share between the parameterized tests or to pass parameter arrays. The
+ * exit function can be used to clean up any resources that are not managed by
+ * the test.
+ */
+#define KUNIT_CASE_PARAM_WITH_INIT(test_name, gen_params, init, exit)		\
+		{ .run_case = test_name, .name = #test_name,			\
+		  .generate_params = gen_params,				\
+		  .param_init = init, .param_exit = exit,			\
+		  .module_name = KBUILD_MODNAME}
+
+/**
  * struct kunit_suite - describes a related collection of &struct kunit_case
  *
  * @name:	the name of the test. Purely informational.
@@ -269,7 +299,8 @@ struct kunit_suite_set {
  * @priv: for user to store arbitrary data. Commonly used to pass data
  *	  created in the init function (see &struct kunit_suite).
  * @parent: for user to store data that they want to shared across
- *	    parameterized tests.
+ *	    parameterized tests. Typically, the data is provided in
+ *	    the param_init function (see &struct kunit_case).
  *
  * Used to store information about the current context under which the test
  * is running. Most of this data is private and should only be accessed
