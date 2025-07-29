@@ -1165,7 +1165,7 @@ parse_probe_arg(char *arg, const struct fetch_type *type,
 
 	case '+':	/* deref memory */
 	case '-':
-		if (arg[1] == 'u') {
+		if (arg[1] == 'u' && isdigit(arg[2])) {
 			deref = FETCH_OP_UDEREF;
 			arg[1] = arg[0];
 			arg++;
@@ -1178,7 +1178,10 @@ parse_probe_arg(char *arg, const struct fetch_type *type,
 			return -EINVAL;
 		}
 		*tmp = '\0';
-		ret = kstrtol(arg, 0, &offset);
+		if (arg[0] != '-' && !isdigit(*arg))
+			ret = btf_find_offset(arg, &offset);
+		else
+			ret = kstrtol(arg, 0, &offset);
 		if (ret) {
 			trace_probe_log_err(ctx->offset, BAD_DEREF_OFFS);
 			break;
