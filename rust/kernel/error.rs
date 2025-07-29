@@ -2,7 +2,7 @@
 
 //! Kernel errors.
 //!
-//! C header: [`include/uapi/asm-generic/errno-base.h`](srctree/include/uapi/asm-generic/errno-base.h)
+//! Provides Rust representations of kernel error codes derived from `bindgen` bindings.
 
 use crate::{
     alloc::{layout::LayoutError, AllocError},
