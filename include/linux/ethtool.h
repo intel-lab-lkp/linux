@@ -492,6 +492,17 @@ struct ethtool_pause_stats {
 };
 
 #define ETHTOOL_MAX_LANES	8
+#define ETHTOOL_FEC_HIST_MAX	18
+/**
+ * struct ethtool_fec_hist_range - byte range for FEC bins histogram statistics
+ * sentinel value of { -1, -1 } is used as marker for end of bins array
+ * @low: low bound of the bin (inclusive)
+ * @high: high bound of the bin (inclusive)
+ */
+struct ethtool_fec_hist_range {
+	s16 low;
+	s16 high;
+};
 
 /**
  * struct ethtool_fec_stats - statistics for IEEE 802.3 FEC
@@ -524,6 +535,7 @@ struct ethtool_fec_stats {
 		u64 total;
 		u64 lanes[ETHTOOL_MAX_LANES];
 	} corrected_blocks, uncorrectable_blocks, corrected_bits;
+	u64 hist[ETHTOOL_FEC_HIST_MAX];
 };
 
 /**
@@ -1212,7 +1224,8 @@ struct ethtool_ops {
 	int	(*set_link_ksettings)(struct net_device *,
 				      const struct ethtool_link_ksettings *);
 	void	(*get_fec_stats)(struct net_device *dev,
-				 struct ethtool_fec_stats *fec_stats);
+				 struct ethtool_fec_stats *fec_stats,
+				 const struct ethtool_fec_hist_range **ranges);
 	int	(*get_fecparam)(struct net_device *,
 				      struct ethtool_fecparam *);
 	int	(*set_fecparam)(struct net_device *,
