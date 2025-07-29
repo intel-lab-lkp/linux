@@ -2078,7 +2078,9 @@ static __init void apic_set_fixmap(bool read_apic)
 void __init register_lapic_address(unsigned long address)
 {
 	/* This should only happen once */
-	WARN_ON_ONCE(mp_lapic_addr);
+	if (address != APIC_DEFAULT_PHYS_BASE)
+		WARN_ON_ONCE(mp_lapic_addr);
+
 	mp_lapic_addr = address;
 
 	if (!x2apic_mode)
