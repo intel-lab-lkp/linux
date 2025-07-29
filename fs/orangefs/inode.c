@@ -246,7 +246,7 @@ static void orangefs_readahead(struct readahead_control *rac)
 			&offset, &iter, readahead_length(rac),
 			inode->i_size, NULL, NULL, rac->file)) < 0)
 		gossip_debug(GOSSIP_FILE_DEBUG,
-			"%s: wait_for_direct_io failed. \n", __func__);
+			"%s: wait_for_direct_io failed.\n", __func__);
 	else
 		ret = 0;
 

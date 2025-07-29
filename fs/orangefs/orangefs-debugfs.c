@@ -985,7 +985,7 @@ int orangefs_debugfs_new_client_string(void __user *arg)
 		/* Build a proper debug help string. */
 		ret = orangefs_prepare_debugfs_help_string(0);
 		if (ret) {
-			gossip_err("%s: no debug help string \n",
+			gossip_err("%s: no debug help string\n",
 				   __func__);
 			return ret;
 		}
