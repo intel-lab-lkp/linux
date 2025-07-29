@@ -1784,6 +1784,7 @@ static void nvmet_tcp_tls_handshake_done(void *data, int status,
 					size_t tls_record_size_limit)
 {
 	struct nvmet_tcp_queue *queue = data;
+	struct tls_context *tls_ctx = tls_get_ctx(queue->sock->sk);
 
 	pr_debug("queue %d: TLS handshake done, key %x, status %d\n",
 		 queue->idx, peerid, status);
@@ -1795,6 +1796,17 @@ static void nvmet_tcp_tls_handshake_done(void *data, int status,
 	if (!status) {
 		queue->tls_pskid = peerid;
 		queue->state = NVMET_TCP_Q_CONNECTING;
+
+		/* Endpoint has specified a maximum tls record size limit */
+		if (tls_record_size_limit > TLS_MAX_PAYLOAD_SIZE) {
+			pr_err("queue %d: invalid tls max record size limit: %zu\n",
+			       queue->idx, tls_record_size_limit);
+			queue->state = NVMET_TCP_Q_FAILED;
+		} else if (tls_record_size_limit > 0) {
+			tls_ctx->tls_record_size_limit = (u32)tls_record_size_limit;
+			pr_debug("queue %d: host specified tls max record size %u\n",
+				 queue->idx, tls_ctx->tls_record_size_limit);
+		}
 	} else
 		queue->state = NVMET_TCP_Q_FAILED;
 	spin_unlock_bh(&queue->state_lock);
@@ -1808,6 +1820,7 @@ static void nvmet_tcp_tls_handshake_done(void *data, int status,
 		nvmet_tcp_schedule_release_queue(queue);
 	else
 		nvmet_tcp_set_queue_sock(queue);
+
 	kref_put(&queue->kref, nvmet_tcp_release_queue);
 }
 
