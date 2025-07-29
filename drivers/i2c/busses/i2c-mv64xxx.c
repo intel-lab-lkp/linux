@@ -390,14 +390,18 @@ mv64xxx_i2c_do_action(struct mv64xxx_i2c_data *drv_data)
 		break;
 
 	case MV64XXX_I2C_ACTION_SEND_DATA:
-		writel(drv_data->msg->buf[drv_data->byte_posn++],
-			drv_data->reg_base + drv_data->reg_offsets.data);
+		if (drv_data->msg && drv_data->msg->buf)
+			writel(drv_data->msg->buf[drv_data->byte_posn++],
+				drv_data->reg_base + drv_data->reg_offsets.data);
 		writel(drv_data->cntl_bits,
 			drv_data->reg_base + drv_data->reg_offsets.control);
 		break;
 
 	case MV64XXX_I2C_ACTION_RCV_DATA:
-		drv_data->msg->buf[drv_data->byte_posn++] =
+		if (drv_data->msg && drv_data->msg->buf)
+			drv_data->msg->buf[drv_data->byte_posn++] =
+				readl(drv_data->reg_base + drv_data->reg_offsets.data);
+		else
 			readl(drv_data->reg_base + drv_data->reg_offsets.data);
 		writel(drv_data->cntl_bits,
 			drv_data->reg_base + drv_data->reg_offsets.control);
