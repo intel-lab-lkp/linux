@@ -337,6 +337,13 @@ void __kunit_do_failed_assertion(struct kunit *test,
 }
 EXPORT_SYMBOL_GPL(__kunit_do_failed_assertion);
 
+static void __kunit_init_params(struct kunit *test)
+{
+	test->params_data.params = NULL;
+	test->params_data.num_params = 0;
+	test->params_data.elem_size = 0;
+}
+
 void kunit_init_test(struct kunit *test, const char *name, struct string_stream *log)
 {
 	spin_lock_init(&test->lock);
@@ -347,6 +354,7 @@ void kunit_init_test(struct kunit *test, const char *name, struct string_stream 
 		string_stream_clear(log);
 	test->status = KUNIT_SUCCESS;
 	test->status_comment[0] = '\0';
+	__kunit_init_params(test);
 }
 EXPORT_SYMBOL_GPL(kunit_init_test);
 
@@ -641,6 +649,22 @@ static void kunit_accumulate_stats(struct kunit_result_stats *total,
 	total->total += add.total;
 }
 
+const void *kunit_get_next_param_and_desc(struct kunit *test, const void *prev, char *desc)
+{
+	struct kunit_params *params_arr = &test->params_data;
+	const void *param;
+
+	if (test->param_index < params_arr->num_params) {
+		param = (char *)params_arr->params
+			+ test->param_index * params_arr->elem_size;
+
+		if (params_arr->get_description)
+			params_arr->get_description(param, desc);
+		return param;
+	}
+	return NULL;
+}
+
 static void __kunit_init_parent_test(struct kunit_case *test_case, struct kunit *test)
 {
 	if (test_case->param_init) {
@@ -687,7 +711,7 @@ int kunit_run_tests(struct kunit_suite *suite)
 			/* Test marked as skip */
 			test.status = KUNIT_SKIPPED;
 			kunit_update_stats(&param_stats, test.status);
-		} else if (!test_case->generate_params) {
+		} else if (!test_case->generate_params && !test.params_data.params) {
 			/* Non-parameterised test. */
 			test_case->status = KUNIT_SKIPPED;
 			kunit_run_case_catch_errors(suite, test_case, &test);

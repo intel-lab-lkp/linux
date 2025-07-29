@@ -245,7 +245,8 @@ static inline char *kunit_status_to_ok_not_ok(enum kunit_status status)
  */
 #define KUNIT_CASE_PARAM_WITH_INIT(test_name, gen_params, init, exit)		\
 		{ .run_case = test_name, .name = #test_name,			\
-		  .generate_params = gen_params,				\
+		  .generate_params = (gen_params)				\
+		   ?: kunit_get_next_param_and_desc,				\
 		  .param_init = init, .param_exit = exit,			\
 		  .module_name = KBUILD_MODNAME}
 
@@ -294,6 +295,21 @@ struct kunit_suite_set {
 	struct kunit_suite * const *end;
 };
 
+/* Stores the pointer to the parameter array and its metadata. */
+struct kunit_params {
+	/*
+	 * Reference to the parameter array for the parameterized tests. This
+	 * is NULL if a parameter array wasn't directly passed to the
+	 * parent kunit struct via the kunit_register_params_array macro.
+	 */
+	const void *params;
+	/* Reference to a function that gets the description of a parameter. */
+	void (*get_description)(const void *param, char *desc);
+
+	int num_params;
+	size_t elem_size;
+};
+
 /**
  * struct kunit - represents a running instance of a test.
  *
@@ -302,12 +318,14 @@ struct kunit_suite_set {
  * @parent: for user to store data that they want to shared across
  *	    parameterized tests. Typically, the data is provided in
  *	    the param_init function (see &struct kunit_case).
+ * @params_data: for users to directly store the parameter array.
  *
  * Used to store information about the current context under which the test
  * is running. Most of this data is private and should only be accessed
- * indirectly via public functions; the two exceptions are @priv and @parent
- * which can be used by the test writer to store arbitrary data or data that is
- * available to all parameter test executions, respectively.
+ * indirectly via public functions. There are three exceptions to this: @priv,
+ * @parent, and @params_data. These members can be used by the test writer to
+ * store arbitrary data, data available to all parameter test executions, and
+ * the parameter array, respectively.
  */
 struct kunit {
 	void *priv;
@@ -316,6 +334,8 @@ struct kunit {
 	 * during parameterized testing.
 	 */
 	struct kunit *parent;
+	/* Stores the params array and all data related to it. */
+	struct kunit_params params_data;
 
 	/* private: internal use only. */
 	const char *name; /* Read only after initialization! */
@@ -385,6 +405,8 @@ void kunit_exec_list_tests(struct kunit_suite_set *suite_set, bool include_attr)
 
 struct kunit_suite_set kunit_merge_suite_sets(struct kunit_suite_set init_suite_set,
 		struct kunit_suite_set suite_set);
+
+const void *kunit_get_next_param_and_desc(struct kunit *test, const void *prev, char *desc);
 
 #if IS_BUILTIN(CONFIG_KUNIT)
 int kunit_run_all_tests(void);
@@ -1734,6 +1756,30 @@ do {									       \
 		}										\
 		return NULL;									\
 	}
+
+/**
+ * kunit_register_params_array() - Register parameters for a KUnit test.
+ * @test: The KUnit test structure to which parameters will be added.
+ * @params_arr: An array of test parameters.
+ * @param_cnt: Number of parameters.
+ * @get_desc: A pointer to a function that generates a string description for
+ * a given parameter element.
+ *
+ * This macro initializes the @test's parameter array data, storing information
+ * including the parameter array, its count, the element size, and the parameter
+ * description function within `test->params_data`. KUnit's built-in
+ * `kunit_get_next_param_and_desc` function will automatically read this
+ * data when a custom `generate_params` function isn't provided.
+ */
+#define kunit_register_params_array(test, params_arr, param_cnt, get_desc)			\
+	do {											\
+		struct kunit *_test = (test);						\
+		const typeof((params_arr)[0]) * _params_ptr = &(params_arr)[0];			\
+		_test->params_data.params = _params_ptr;					\
+		_test->params_data.num_params = (param_cnt);					\
+		_test->params_data.elem_size = sizeof(*_params_ptr);				\
+		_test->params_data.get_description = (get_desc);				\
+	} while (0)
 
 // TODO(dlatypov@google.com): consider eventually migrating users to explicitly
 // include resource.h themselves if they need it.
