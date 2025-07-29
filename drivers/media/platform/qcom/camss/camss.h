@@ -44,6 +44,7 @@
 
 struct camss_subdev_resources {
 	char *regulators[CAMSS_RES_MAX];
+	int  regulators_current[CAMSS_RES_MAX];
 	char *clock[CAMSS_RES_MAX];
 	char *clock_for_reset[CAMSS_RES_MAX];
 	u32 clock_rate[CAMSS_RES_MAX][CAMSS_RES_MAX];

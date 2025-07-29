@@ -707,8 +707,10 @@ int msm_csiphy_subdev_init(struct camss *camss,
 			return -ENOMEM;
 	}
 
-	for (i = 0; i < csiphy->num_supplies; i++)
+	for (i = 0; i < csiphy->num_supplies; i++) {
 		csiphy->supplies[i].supply = res->regulators[i];
+		csiphy->supplies[i].init_load_uA = res->regulators_current[i];
+	}
 
 	ret = devm_regulator_bulk_get(camss->dev, csiphy->num_supplies,
 				      csiphy->supplies);
