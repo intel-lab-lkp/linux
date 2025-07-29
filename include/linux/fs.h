@@ -725,7 +725,8 @@ struct inode {
 
 	/* Misc */
 	u32			i_state;
-	/* 32-bit hole */
+	u8			i_write_stream;
+	/* 24-bit hole */
 	struct rw_semaphore	i_rwsem;
 
 	unsigned long		dirtied_when;	/* jiffies of first dirtying */
