@@ -2528,9 +2528,17 @@ static void of_register_spi_children(struct spi_controller *ctlr,
 				     struct device_node *node)
 {
 	struct spi_device *spi;
-	struct device_node *nc;
+	struct device_node *nc, *extension;
 
+	/*
+	 * Register device directly described in this bus node before looking
+	 * at extensions.
+	 */
 	for_each_available_child_of_node(node, nc) {
+		/* Filter out extension node */
+		if (of_node_name_eq(nc, "spi-bus-extension"))
+			continue;
+
 		if (of_node_test_and_set_flag(nc, OF_POPULATED))
 			continue;
 
@@ -2540,6 +2548,23 @@ static void of_register_spi_children(struct spi_controller *ctlr,
 				 "Failed to create SPI device for %pOF\n", nc);
 			of_node_clear_flag(nc, OF_POPULATED);
 		}
+	}
+
+	/* Look at extensions */
+	for_each_available_child_of_node(node, nc) {
+		if (!of_node_name_eq(nc, "spi-bus-extension"))
+			continue;
+
+		extension = of_parse_phandle(nc, "spi-bus", 0);
+		if (!extension)
+			continue;
+
+		/*
+		 * Register children available at this extension possibly
+		 * walking other chained extensions.
+		 */
+		of_register_spi_children(ctlr, extension);
+		of_node_put(extension);
 	}
 }
 
