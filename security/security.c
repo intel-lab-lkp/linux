@@ -2774,13 +2774,7 @@ EXPORT_SYMBOL(security_inode_copy_up);
  */
 int security_inode_copy_up_xattr(struct dentry *src, const char *name)
 {
-	int rc;
-
-	rc = call_int_hook(inode_copy_up_xattr, src, name);
-	if (rc != LSM_RET_DEFAULT(inode_copy_up_xattr))
-		return rc;
-
-	return LSM_RET_DEFAULT(inode_copy_up_xattr);
+	return call_int_hook(inode_copy_up_xattr, src, name);
 }
 EXPORT_SYMBOL(security_inode_copy_up_xattr);
 
