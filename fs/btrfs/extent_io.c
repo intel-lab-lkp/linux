@@ -666,6 +666,7 @@ static void alloc_new_bio(struct btrfs_inode *inode,
 			       bio_ctrl->end_io_func, NULL);
 	bbio->bio.bi_iter.bi_sector = disk_bytenr >> SECTOR_SHIFT;
 	bbio->bio.bi_write_hint = inode->vfs_inode.i_write_hint;
+	bbio->bio.bi_write_stream = inode->vfs_inode.i_write_stream;
 	bbio->inode = inode;
 	bbio->file_offset = file_offset;
 	bio_ctrl->bbio = bbio;

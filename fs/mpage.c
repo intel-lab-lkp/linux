@@ -595,6 +595,7 @@ alloc_new:
 		bio->bi_iter.bi_sector = first_block << (blkbits - 9);
 		wbc_init_bio(wbc, bio);
 		bio->bi_write_hint = inode->i_write_hint;
+		bio->bi_write_stream = inode->i_write_stream;
 	}
 
 	/*

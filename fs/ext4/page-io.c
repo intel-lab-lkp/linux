@@ -447,6 +447,7 @@ submit_and_retry:
 	if (io->io_bio == NULL) {
 		io_submit_init_bio(io, bh);
 		io->io_bio->bi_write_hint = inode->i_write_hint;
+		io->io_bio->bi_write_stream = inode->i_write_stream;
 	}
 	if (!bio_add_folio(io->io_bio, io_folio, bh->b_size, bh_offset(bh)))
 		goto submit_and_retry;
