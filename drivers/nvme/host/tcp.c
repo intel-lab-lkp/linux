@@ -1677,6 +1677,7 @@ static void nvme_tcp_tls_done(void *data, int status, key_serial_t pskid,
 			      size_t tls_record_size_limit)
 {
 	struct nvme_tcp_queue *queue = data;
+	struct tls_context *tls_ctx = tls_get_ctx(queue->sock->sk);
 	struct nvme_tcp_ctrl *ctrl = queue->ctrl;
 	int qid = nvme_tcp_queue_id(queue);
 	struct key *tls_key;
@@ -1700,6 +1701,20 @@ static void nvme_tcp_tls_done(void *data, int status, key_serial_t pskid,
 			ctrl->ctrl.tls_pskid = key_serial(tls_key);
 		key_put(tls_key);
 		queue->tls_err = 0;
+
+		/* Endpoint has specified a maximum tls record size limit */
+		if (tls_record_size_limit > TLS_MAX_PAYLOAD_SIZE) {
+			dev_err(ctrl->ctrl.device,
+				"queue %d: invalid tls max record size limit: %zd\n",
+				nvme_tcp_queue_id(queue), tls_record_size_limit);
+			queue->tls_err = -EINVAL;
+			goto out_complete;
+		} else if (tls_record_size_limit > 0) {
+			tls_ctx->tls_record_size_limit = (u32)tls_record_size_limit;
+			dev_dbg(ctrl->ctrl.device,
+				"queue %d: target specified tls_record_size_limit %u\n",
+				nvme_tcp_queue_id(queue), tls_ctx->tls_record_size_limit);
+		}
 	}
 
 out_complete:
