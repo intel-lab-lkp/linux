@@ -102,12 +102,12 @@ static int aq_fw2x_init(struct aq_hw_s *self)
 					self->mbox_addr != 0U,
 					1000U, 10000U);
 
-	err = readx_poll_timeout_atomic(aq_fw2x_rpc_get,
+	err |= readx_poll_timeout_atomic(aq_fw2x_rpc_get,
 					self, self->rpc_addr,
 					self->rpc_addr != 0U,
 					1000U, 100000U);
 
-	err = aq_fw2x_settings_get(self, &self->settings_addr);
+	err |= aq_fw2x_settings_get(self, &self->settings_addr);
 
 	return err;
 }
