@@ -517,6 +517,8 @@ static unsigned long get_unmapped_area_zero(struct file *file,
 				unsigned long pgoff, unsigned long flags)
 {
 #ifdef CONFIG_MMU
+	unsigned long ret;
+
 	if (flags & MAP_SHARED) {
 		/*
 		 * mmap_zero() will call shmem_zero_setup() to create a file,
@@ -528,6 +530,9 @@ static unsigned long get_unmapped_area_zero(struct file *file,
 	}
 
 	/* Otherwise flags & MAP_PRIVATE: with no shmem object beneath it */
+	ret = thp_get_unmapped_area(file, addr, len, pgoff, flags);
+	if (ret)
+		return ret;
 	return mm_get_unmapped_area(current->mm, file, addr, len, pgoff, flags);
 #else
 	return -ENOSYS;
