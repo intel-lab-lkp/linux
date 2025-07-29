@@ -2579,7 +2579,6 @@ static void btintel_pcie_coredump(struct device *dev)
 }
 #endif
 
-#ifdef CONFIG_PM_SLEEP
 static int btintel_pcie_suspend_late(struct device *dev, pm_message_t mesg)
 {
 	struct pci_dev *pdev = to_pci_dev(dev);
@@ -2667,7 +2666,6 @@ static const struct dev_pm_ops btintel_pcie_pm_ops = {
 	.poweroff = btintel_pcie_hibernate,
 	.restore = btintel_pcie_resume,
 };
-#endif
 
 static struct pci_driver btintel_pcie_driver = {
 	.name = KBUILD_MODNAME,
