@@ -118,6 +118,25 @@ check_2 () {
   fi
 }
 
+check_2_sed () {
+  tools_file=$1
+  orig_file=$2
+  sed_cmd="$3"
+
+  shift
+  shift
+  shift
+
+  cmd="diff $* <(sed '$sed_cmd' $tools_file) $orig_file > /dev/null"
+
+  if [ -f "$orig_file" ] && ! eval "$cmd"
+  then
+    FAILURES+=(
+      "$tools_file $orig_file"
+    )
+  fi
+}
+
 check () {
   file=$1
 
@@ -206,6 +225,19 @@ check_2 tools/perf/arch/alpha/entry/syscalls/syscall.tbl arch/alpha/entry/syscal
 check_2 tools/perf/arch/parisc/entry/syscalls/syscall.tbl arch/parisc/entry/syscalls/syscall.tbl
 check_2 tools/perf/arch/arm64/entry/syscalls/syscall_32.tbl arch/arm64/entry/syscalls/syscall_32.tbl
 check_2 tools/perf/arch/arm64/entry/syscalls/syscall_64.tbl arch/arm64/entry/syscalls/syscall_64.tbl
+
+# diff qspinlock files
+qsl_sed='s/ __maybe_unused//'
+qsl_common='-I "^#include" -I __percpu -I this_cpu_ -I per_cpu_ -I decode_tail \
+	-I DECLARE_PER_CPU_ALIGNED -I DEFINE_PER_CPU_ALIGNED -I CONFIG_NR_CPUS -B'
+check_2_sed tools/perf/bench/include/qspinlock.h	include/asm-generic/qspinlock.h "$qsl_sed" "$qsl_common"
+check_2 tools/perf/bench/include/qspinlock_types.h	include/asm-generic/qspinlock_types.h "$qsl_common"
+check_2 tools/perf/bench/include/mcs_spinlock.h		include/asm-generic/mcs_spinlock.h
+check_2 tools/perf/bench/include/qspinlock-private.h	kernel/locking/qspinlock.h	"$qsl_common"
+check_2 tools/perf/bench/include/mcs_spinlock-private.h	kernel/locking/mcs_spinlock.h	"$qsl_common"
+check_2_sed tools/perf/bench/qspinlock.c		kernel/locking/qspinlock.c	"$qsl_sed" \
+	"$qsl_common"' -I EXPORT_SYMBOL -I "^#define lockevent_" -I "^#define trace_" \
+        -I smp_processor_id -I atomic_try_cmpxchg_relaxed'
 
 for i in "${BEAUTY_FILES[@]}"
 do
