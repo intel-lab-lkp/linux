@@ -84,6 +84,8 @@ struct hisi_clock_data *hisi_clk_init(struct device_node *np,
 err_data:
 	kfree(clk_data);
 err:
+	if (base)
+		iounmap(base);
 	return NULL;
 }
 EXPORT_SYMBOL_GPL(hisi_clk_init);
