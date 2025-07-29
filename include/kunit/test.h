@@ -268,14 +268,22 @@ struct kunit_suite_set {
  *
  * @priv: for user to store arbitrary data. Commonly used to pass data
  *	  created in the init function (see &struct kunit_suite).
+ * @parent: for user to store data that they want to shared across
+ *	    parameterized tests.
  *
  * Used to store information about the current context under which the test
  * is running. Most of this data is private and should only be accessed
- * indirectly via public functions; the one exception is @priv which can be
- * used by the test writer to store arbitrary data.
+ * indirectly via public functions; the two exceptions are @priv and @parent
+ * which can be used by the test writer to store arbitrary data or data that is
+ * available to all parameter test executions, respectively.
  */
 struct kunit {
 	void *priv;
+	/*
+	 * Reference to the parent struct kunit for storing shared resources
+	 * during parameterized testing.
+	 */
+	struct kunit *parent;
 
 	/* private: internal use only. */
 	const char *name; /* Read only after initialization! */
