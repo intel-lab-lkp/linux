@@ -83,7 +83,6 @@ void bacct_add_tsk(struct user_namespace *user_ns,
 #ifdef CONFIG_TASK_XACCT
 
 #define KB 1024
-#define MB (1024*KB)
 #define KB_MASK (~(KB-1))
 /*
  * fill in extended accounting fields
@@ -119,7 +118,6 @@ void xacct_add_tsk(struct taskstats *stats, struct task_struct *p)
 #endif
 }
 #undef KB
-#undef MB
 
 static void __acct_update_integrals(struct task_struct *tsk,
 				    u64 utime, u64 stime)
