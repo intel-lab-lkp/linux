@@ -705,6 +705,15 @@ static bool fixup_iopl_exception(struct pt_regs *regs)
 	}
 
 	regs->ip += 1;
+
+	/* If the instruction was emulated successfully, emulate trap flag */
+	if (regs->flags & X86_EFLAGS_TF) {
+		t->cr2 = regs->ip;
+		t->trap_nr = X86_TRAP_DB;
+		t->error_code = 0;
+		force_sig_fault(SIGTRAP, TRAP_TRACE, (void __user *)regs->ip);
+	}
+
 	return true;
 }
 

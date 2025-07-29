@@ -342,6 +342,7 @@ bool fixup_umip_exception(struct pt_regs *regs)
 	unsigned long *reg_addr;
 	void __user *uaddr;
 	struct insn insn;
+	struct task_struct *tsk = current;
 
 	if (!regs)
 		return false;
@@ -407,5 +408,14 @@ bool fixup_umip_exception(struct pt_regs *regs)
 
 	/* increase IP to let the program keep going */
 	regs->ip += insn.length;
+
+	/* If the instruction was emulated successfully, emulate trap flag */
+	if (regs->flags & X86_EFLAGS_TF) {
+		tsk->thread.cr2 = regs->ip;
+		tsk->thread.trap_nr = X86_TRAP_DB;
+		tsk->thread.error_code = 0;
+		force_sig_fault(SIGTRAP, TRAP_TRACE, (void __user *)regs->ip);
+	}
+
 	return true;
 }
