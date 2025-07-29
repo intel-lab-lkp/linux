@@ -2110,7 +2110,7 @@ static int ocfs2_initialize_super(struct super_block *sb,
 		if (strlen(osb->osb_cluster_stack) != OCFS2_STACK_LABEL_LEN) {
 			mlog(ML_ERROR,
 			     "couldn't mount because of an invalid "
-			     "cluster stack label (%s) \n",
+			     "cluster stack label (%s)\n",
 			     osb->osb_cluster_stack);
 			status = -EINVAL;
 			goto out_orphan_wipes;
