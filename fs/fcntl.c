@@ -27,6 +27,7 @@
 #include <linux/compat.h>
 #include <linux/mount.h>
 #include <linux/rw_hint.h>
+#include <linux/blkdev.h>
 
 #include <linux/poll.h>
 #include <asm/siginfo.h>
@@ -394,6 +395,33 @@ static long fcntl_set_rw_hint(struct file *file, unsigned int cmd,
 	return 0;
 }
 
+static u8 vfs_user_write_streams(struct inode *inode)
+{
+	struct super_block *sb;
+
+	if (S_ISBLK(inode->i_mode))
+		return bdev_max_write_streams(I_BDEV(inode));
+
+	sb = inode->i_sb;
+	/* If available, use per-mount/fs policy */
+	if (sb->s_op && sb->s_op->user_write_streams)
+		return sb->s_op->user_write_streams(sb);
+	/* otherwise, fallback to queue limit */
+	if (sb->s_bdev)
+		return bdev_max_write_streams(sb->s_bdev);
+	return 0;
+}
+
+static long fcntl_get_max_write_streams(struct file *file)
+{
+	struct inode *inode = file_inode(file);
+
+	if (S_ISBLK(inode->i_mode))
+		inode = file->f_mapping->host;
+
+	return vfs_user_write_streams(inode);
+}
+
 /* Is the file descriptor a dup of the file? */
 static long f_dupfd_query(int fd, struct file *filp)
 {
@@ -551,6 +579,9 @@ static long do_fcntl(int fd, unsigned int cmd, unsigned long arg,
 		break;
 	case F_SET_RW_HINT:
 		err = fcntl_set_rw_hint(filp, cmd, arg);
+		break;
+	case F_GET_MAX_WRITE_STREAMS:
+		err = fcntl_get_max_write_streams(filp);
 		break;
 	default:
 		break;
