@@ -1506,7 +1506,7 @@ static int taprio_enable_offload(struct net_device *dev,
 	struct tc_taprio_caps caps;
 	int tc, err = 0;
 
-	if (!ops->ndo_setup_tc) {
+	if (!ops->ndo_setup_tc || !(dev->hw_features & NETIF_F_HW_TC)) {
 		NL_SET_ERR_MSG(extack,
 			       "Device does not support taprio offload");
 		return -EOPNOTSUPP;
