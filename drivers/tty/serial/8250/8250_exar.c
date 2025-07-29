@@ -500,12 +500,13 @@ static int default_setup(struct exar8250 *priv, struct pci_dev *pcidev,
 			 struct uart_8250_port *port)
 {
 	const struct exar8250_board *board = priv->board;
+	unsigned int bar = 0;
 	unsigned char status;
-	int err;
 
-	err = serial8250_pci_setup_port(pcidev, port, 0, offset, board->reg_shift);
-	if (err)
-		return err;
+	port->port.iotype = UPIO_MEM;
+	port->port.mapbase = pci_resource_start(pcidev, bar) + offset;
+	port->port.membase = priv->virt + offset;
+	port->port.regshift = board->reg_shift;
 
 	/*
 	 * XR17V35x UARTs have an extra divisor register, DLD that gets enabled
