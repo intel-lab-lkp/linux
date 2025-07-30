@@ -1,0 +1,108 @@
+#!/usr/bin/env python3
+# SPDX-License-Identifier: GPL-2.0
+
+"""
+Test napi threaded states.
+"""
+
+from lib.py import ksft_run, ksft_exit
+from lib.py import ksft_eq, ksft_ne
+from lib.py import NetDrvEnv, NetdevFamily
+from lib.py import cmd, defer, ip
+
+
+def _assert_napi_threaded_enabled(nl, napi_id) -> None:
+    napi = nl.napi_get({'id': napi_id})
+    ksft_eq(napi['threaded'], 'enabled')
+    ksft_ne(napi.get('pid'), None)
+
+
+def _assert_napi_threaded_disabled(nl, napi_id) -> None:
+    napi = nl.napi_get({'id': napi_id})
+    ksft_eq(napi['threaded'], 'disabled')
+    ksft_eq(napi.get('pid'), None)
+
+
+def _set_threaded_state(cfg, threaded) -> None:
+    cmd(f"echo {threaded} > /sys/class/net/{cfg.ifname}/threaded")
+
+
+def enable_dev_threaded_disable_napi_threaded(cfg, nl) -> None:
+    """
+    Test that when napi threaded is enabled at device level and
+    then disabled at napi level for one napi, the threaded state
+    of all napis is preserved after a change in number of queues.
+    """
+
+    ip(f"link set dev {cfg.ifname} up")
+
+    napis = nl.napi_get({'ifindex': cfg.ifindex}, dump=True)
+    ksft_eq(len(napis), 2)
+
+    napi0_id = napis[0]['id']
+    napi1_id = napis[1]['id']
+
+    threaded = cmd(f"cat /sys/class/net/{cfg.ifname}/threaded").stdout
+    defer(_set_threaded_state, cfg, threaded)
+
+    # set threaded
+    _set_threaded_state(cfg, 1)
+
+    # check napi threaded is set for both napis
+    _assert_napi_threaded_enabled(nl, napi0_id)
+    _assert_napi_threaded_enabled(nl, napi1_id)
+
+    # disable threaded for napi1
+    nl.napi_set({'id': napi1_id, 'threaded': 'disabled'})
+
+    cmd(f"ethtool -L {cfg.ifname} combined 1")
+    cmd(f"ethtool -L {cfg.ifname} combined 2")
+    _assert_napi_threaded_enabled(nl, napi0_id)
+    _assert_napi_threaded_disabled(nl, napi1_id)
+
+
+def change_num_queues(cfg, nl) -> None:
+    """
+    Test that when napi threaded is enabled at device level,
+    the napi threaded state is preserved after a change in
+    number of queues.
+    """
+
+    ip(f"link set dev {cfg.ifname} up")
+
+    napis = nl.napi_get({'ifindex': cfg.ifindex}, dump=True)
+    ksft_eq(len(napis), 2)
+
+    napi0_id = napis[0]['id']
+    napi1_id = napis[1]['id']
+
+    threaded = cmd(f"cat /sys/class/net/{cfg.ifname}/threaded").stdout
+    defer(_set_threaded_state, cfg, threaded)
+
+    # set threaded
+    _set_threaded_state(cfg, 1)
+
+    # check napi threaded is set for both napis
+    _assert_napi_threaded_enabled(nl, napi0_id)
+    _assert_napi_threaded_enabled(nl, napi1_id)
+
+    cmd(f"ethtool -L {cfg.ifname} combined 1")
+    cmd(f"ethtool -L {cfg.ifname} combined 2")
+
+    # check napi threaded is set for both napis
+    _assert_napi_threaded_enabled(nl, napi0_id)
+    _assert_napi_threaded_enabled(nl, napi1_id)
+
+
+def main() -> None:
+    """ Ksft boiler plate main """
+
+    with NetDrvEnv(__file__, queue_count=2) as cfg:
+        ksft_run([change_num_queues,
+                  enable_dev_threaded_disable_napi_threaded],
+                 args=(cfg, NetdevFamily()))
+    ksft_exit()
+
+
+if __name__ == "__main__":
+    main()

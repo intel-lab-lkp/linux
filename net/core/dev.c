@@ -7023,6 +7023,9 @@ int netif_set_threaded(struct net_device *dev,
 	 * This should not cause hiccups/stalls to the live traffic.
 	 */
 	list_for_each_entry(napi, &dev->napi_list, dev_list) {
+		if (napi->config)
+			napi->config->threaded = threaded;
+
 		if (!threaded && napi->thread)
 			napi_stop_kthread(napi);
 		else
