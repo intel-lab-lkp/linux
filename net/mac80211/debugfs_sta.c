@@ -85,7 +85,6 @@ static ssize_t sta_flags_read(struct file *file, char __user *userbuf,
 			      size_t count, loff_t *ppos)
 {
 	char buf[16 * NUM_WLAN_STA_FLAGS], *pos = buf;
-	char *end = buf + sizeof(buf) - 1;
 	struct sta_info *sta = file->private_data;
 	unsigned int flg;
 
@@ -93,7 +92,7 @@ static ssize_t sta_flags_read(struct file *file, char __user *userbuf,
 
 	for (flg = 0; flg < NUM_WLAN_STA_FLAGS; flg++) {
 		if (test_sta_flag(sta, flg))
-			pos += scnprintf(pos, end - pos, "%s\n",
+			pos += sysfs_emit(pos, "%s\n",
 					 sta_flag_names[flg]);
 	}
 
@@ -110,7 +109,7 @@ static ssize_t sta_num_ps_buf_frames_read(struct file *file,
 	int ac;
 
 	for (ac = 0; ac < IEEE80211_NUM_ACS; ac++)
-		p += scnprintf(p, sizeof(buf)+buf-p, "AC%d: %d\n", ac,
+		p += sysfs_emit(p, "AC%d: %d\n", ac,
 			       skb_queue_len(&sta->ps_tx_buf[ac]) +
 			       skb_queue_len(&sta->tx_filtered[ac]));
 	return simple_read_from_buffer(userbuf, count, ppos, buf, p - buf);
@@ -124,9 +123,9 @@ static ssize_t sta_last_seq_ctrl_read(struct file *file, char __user *userbuf,
 	int i;
 	struct sta_info *sta = file->private_data;
 	for (i = 0; i < IEEE80211_NUM_TIDS; i++)
-		p += scnprintf(p, sizeof(buf)+buf-p, "%x ",
+		p += sysfs_emit(p, "%x ",
 			       le16_to_cpu(sta->last_seq_ctrl[i]));
-	p += scnprintf(p, sizeof(buf)+buf-p, "\n");
+	p += sysfs_emit(p, "\n");
 	return simple_read_from_buffer(userbuf, count, ppos, buf, p - buf);
 }
 STA_OPS(last_seq_ctrl);
@@ -139,7 +138,8 @@ static ssize_t sta_aqm_read(struct file *file, char __user *userbuf,
 	struct sta_info *sta = file->private_data;
 	struct ieee80211_local *local = sta->local;
 	size_t bufsz = AQM_TXQ_ENTRY_LEN * (IEEE80211_NUM_TIDS + 2);
-	char *buf = kzalloc(bufsz, GFP_KERNEL), *p = buf;
+	char *buf = kzalloc(bufsz, GFP_KERNEL);
+	int len;
 	struct txq_info *txqi;
 	ssize_t rv;
 	int i;
@@ -150,15 +150,14 @@ static ssize_t sta_aqm_read(struct file *file, char __user *userbuf,
 	spin_lock_bh(&local->fq.lock);
 	rcu_read_lock();
 
-	p += scnprintf(p,
-		       bufsz + buf - p,
-		       "tid ac backlog-bytes backlog-packets new-flows drops marks overlimit collisions tx-bytes tx-packets flags\n");
+	len = sysfs_emit(buf,
+			 "tid ac backlog-bytes backlog-packets new-flows drops marks overlimit collisions tx-bytes tx-packets flags\n");
 
 	for (i = 0; i < ARRAY_SIZE(sta->sta.txq); i++) {
 		if (!sta->sta.txq[i])
 			continue;
 		txqi = to_txq_info(sta->sta.txq[i]);
-		p += scnprintf(p, bufsz + buf - p,
+		len += sysfs_emit_at(buf, len,
 			       "%d %d %u %u %u %u %u %u %u %u %u 0x%lx(%s%s%s%s)\n",
 			       txqi->txq.tid,
 			       txqi->txq.ac,
@@ -181,7 +180,7 @@ static ssize_t sta_aqm_read(struct file *file, char __user *userbuf,
 	rcu_read_unlock();
 	spin_unlock_bh(&local->fq.lock);
 
-	rv = simple_read_from_buffer(userbuf, count, ppos, buf, p - buf);
+	rv = simple_read_from_buffer(userbuf, count, ppos, buf, len);
 	kfree(buf);
 	return rv;
 }
@@ -193,7 +192,8 @@ static ssize_t sta_airtime_read(struct file *file, char __user *userbuf,
 	struct sta_info *sta = file->private_data;
 	struct ieee80211_local *local = sta->sdata->local;
 	size_t bufsz = 400;
-	char *buf = kzalloc(bufsz, GFP_KERNEL), *p = buf;
+	char *buf = kzalloc(bufsz, GFP_KERNEL);
+	int len;
 	u64 rx_airtime = 0, tx_airtime = 0;
 	s32 deficit[IEEE80211_NUM_ACS];
 	ssize_t rv;
@@ -210,13 +210,13 @@ static ssize_t sta_airtime_read(struct file *file, char __user *userbuf,
 		spin_unlock_bh(&local->active_txq_lock[ac]);
 	}
 
-	p += scnprintf(p, bufsz + buf - p,
-		"RX: %llu us\nTX: %llu us\nWeight: %u\n"
-		"Deficit: VO: %d us VI: %d us BE: %d us BK: %d us\n",
-		rx_airtime, tx_airtime, sta->airtime_weight,
-		deficit[0], deficit[1], deficit[2], deficit[3]);
+	len = sysfs_emit(buf,
+			 "RX: %llu us\nTX: %llu us\nWeight: %u\n"
+			 "Deficit: VO: %d us VI: %d us BE: %d us BK: %d us\n",
+			 rx_airtime, tx_airtime, sta->airtime_weight,
+			 deficit[0], deficit[1], deficit[2], deficit[3]);
 
-	rv = simple_read_from_buffer(userbuf, count, ppos, buf, p - buf);
+	rv = simple_read_from_buffer(userbuf, count, ppos, buf, len);
 	kfree(buf);
 	return rv;
 }
@@ -246,7 +246,8 @@ static ssize_t sta_aql_read(struct file *file, char __user *userbuf,
 	struct sta_info *sta = file->private_data;
 	struct ieee80211_local *local = sta->sdata->local;
 	size_t bufsz = 400;
-	char *buf = kzalloc(bufsz, GFP_KERNEL), *p = buf;
+	char *buf = kzalloc(bufsz, GFP_KERNEL);
+	int len;
 	u32 q_depth[IEEE80211_NUM_ACS];
 	u32 q_limit_l[IEEE80211_NUM_ACS], q_limit_h[IEEE80211_NUM_ACS];
 	ssize_t rv;
@@ -263,14 +264,14 @@ static ssize_t sta_aql_read(struct file *file, char __user *userbuf,
 		q_depth[ac] = atomic_read(&sta->airtime[ac].aql_tx_pending);
 	}
 
-	p += scnprintf(p, bufsz + buf - p,
-		"Q depth: VO: %u us VI: %u us BE: %u us BK: %u us\n"
-		"Q limit[low/high]: VO: %u/%u VI: %u/%u BE: %u/%u BK: %u/%u\n",
-		q_depth[0], q_depth[1], q_depth[2], q_depth[3],
-		q_limit_l[0], q_limit_h[0], q_limit_l[1], q_limit_h[1],
-		q_limit_l[2], q_limit_h[2], q_limit_l[3], q_limit_h[3]);
+	len = sysfs_emit(buf,
+			 "Q depth: VO: %u us VI: %u us BE: %u us BK: %u us\n"
+			 "Q limit[low/high]: VO: %u/%u VI: %u/%u BE: %u/%u BK: %u/%u\n",
+			 q_depth[0], q_depth[1], q_depth[2], q_depth[3],
+			 q_limit_l[0], q_limit_h[0], q_limit_l[1], q_limit_h[1],
+			 q_limit_l[2], q_limit_h[2], q_limit_l[3], q_limit_h[3]);
 
-	rv = simple_read_from_buffer(userbuf, count, ppos, buf, p - buf);
+	rv = simple_read_from_buffer(userbuf, count, ppos, buf, len);
 	kfree(buf);
 	return rv;
 }
@@ -308,14 +309,14 @@ static ssize_t sta_agg_status_do_read(struct wiphy *wiphy, struct file *file,
 				      char *buf, size_t bufsz, void *data)
 {
 	struct sta_info *sta = data;
-	char *p = buf;
+	int len;
 	int i;
 	struct tid_ampdu_rx *tid_rx;
 	struct tid_ampdu_tx *tid_tx;
 
-	p += scnprintf(p, bufsz + buf - p, "next dialog_token: %#02x\n",
-			sta->ampdu_mlme.dialog_token_allocator + 1);
-	p += scnprintf(p, bufsz + buf - p,
+	len = sysfs_emit(buf, "next dialog_token: %#02x\n",
+			 sta->ampdu_mlme.dialog_token_allocator + 1);
+	len += sysfs_emit_at(buf, len,
 		       "TID\t\tRX\tDTKN\tSSN\t\tTX\tDTKN\tpending\n");
 
 	for (i = 0; i < IEEE80211_NUM_TIDS; i++) {
@@ -325,24 +326,24 @@ static ssize_t sta_agg_status_do_read(struct wiphy *wiphy, struct file *file,
 		tid_tx = wiphy_dereference(wiphy, sta->ampdu_mlme.tid_tx[i]);
 		tid_rx_valid = test_bit(i, sta->ampdu_mlme.agg_session_valid);
 
-		p += scnprintf(p, bufsz + buf - p, "%02d", i);
-		p += scnprintf(p, bufsz + buf - p, "\t\t%x",
+		len += sysfs_emit_at(buf, len, "%02d", i);
+		len += sysfs_emit_at(buf, len, "\t\t%x",
 			       tid_rx_valid);
-		p += scnprintf(p, bufsz + buf - p, "\t%#.2x",
+		len += sysfs_emit_at(buf, len, "\t%#.2x",
 			       tid_rx_valid ?
 					sta->ampdu_mlme.tid_rx_token[i] : 0);
-		p += scnprintf(p, bufsz + buf - p, "\t%#.3x",
+		len += sysfs_emit_at(buf, len, "\t%#.3x",
 				tid_rx ? tid_rx->ssn : 0);
 
-		p += scnprintf(p, bufsz + buf - p, "\t\t%x", !!tid_tx);
-		p += scnprintf(p, bufsz + buf - p, "\t%#.2x",
+		len += sysfs_emit_at(buf, len, "\t\t%x", !!tid_tx);
+		len += sysfs_emit_at(buf, len, "\t%#.2x",
 				tid_tx ? tid_tx->dialog_token : 0);
-		p += scnprintf(p, bufsz + buf - p, "\t%03d",
+		len += sysfs_emit_at(buf, len, "\t%03d",
 				tid_tx ? skb_queue_len(&tid_tx->pending) : 0);
-		p += scnprintf(p, bufsz + buf - p, "\n");
+		len += sysfs_emit_at(buf, len, "\n");
 	}
 
-	return p - buf;
+	return len;
 }
 
 static ssize_t sta_agg_status_read(struct file *file, char __user *userbuf,
@@ -467,10 +468,11 @@ static ssize_t link_sta_ht_capa_read(struct file *file, char __user *userbuf,
 #define PRINT_HT_CAP(_cond, _str) \
 	do { \
 	if (_cond) \
-			p += scnprintf(p, bufsz + buf - p, "\t" _str "\n"); \
+		len += sysfs_emit_at(buf, len, "\t" _str "\n"); \
 	} while (0)
-	char *buf, *p;
+	char *buf;
 	int i;
+	int len;
 	ssize_t bufsz = 512;
 	struct link_sta_info *link_sta = file->private_data;
 	struct ieee80211_sta_ht_cap *htc = &link_sta->pub->ht_cap;
@@ -479,12 +481,11 @@ static ssize_t link_sta_ht_capa_read(struct file *file, char __user *userbuf,
 	buf = kzalloc(bufsz, GFP_KERNEL);
 	if (!buf)
 		return -ENOMEM;
-	p = buf;
 
-	p += scnprintf(p, bufsz + buf - p, "ht %ssupported\n",
-			htc->ht_supported ? "" : "not ");
+	len = sysfs_emit(buf, "ht %ssupported\n",
+			 htc->ht_supported ? "" : "not ");
 	if (htc->ht_supported) {
-		p += scnprintf(p, bufsz + buf - p, "cap: %#.4x\n", htc->cap);
+		len += sysfs_emit_at(buf, len, "cap: %#.4x\n", htc->cap);
 
 		PRINT_HT_CAP((htc->cap & BIT(0)), "RX LDPC");
 		PRINT_HT_CAP((htc->cap & BIT(1)), "HT20/HT40");
@@ -526,27 +527,27 @@ static ssize_t link_sta_ht_capa_read(struct file *file, char __user *userbuf,
 
 		PRINT_HT_CAP((htc->cap & BIT(15)), "L-SIG TXOP protection");
 
-		p += scnprintf(p, bufsz + buf - p, "ampdu factor/density: %d/%d\n",
+		len += sysfs_emit_at(buf, len, "ampdu factor/density: %d/%d\n",
 				htc->ampdu_factor, htc->ampdu_density);
-		p += scnprintf(p, bufsz + buf - p, "MCS mask:");
+		len += sysfs_emit_at(buf, len, "MCS mask:");
 
 		for (i = 0; i < IEEE80211_HT_MCS_MASK_LEN; i++)
-			p += scnprintf(p, bufsz + buf - p, " %.2x",
+			len += sysfs_emit_at(buf, len, " %.2x",
 					htc->mcs.rx_mask[i]);
-		p += scnprintf(p, bufsz + buf - p, "\n");
+		len += sysfs_emit_at(buf, len, "\n");
 
 		/* If not set this is meaningless */
 		if (le16_to_cpu(htc->mcs.rx_highest)) {
-			p += scnprintf(p, bufsz + buf - p,
+			len += sysfs_emit_at(buf, len,
 				       "MCS rx highest: %d Mbps\n",
 				       le16_to_cpu(htc->mcs.rx_highest));
 		}
 
-		p += scnprintf(p, bufsz + buf - p, "MCS tx params: %x\n",
+		len += sysfs_emit_at(buf, len, "MCS tx params: %x\n",
 				htc->mcs.tx_params);
 	}
 
-	ret = simple_read_from_buffer(userbuf, count, ppos, buf, p - buf);
+	ret = simple_read_from_buffer(userbuf, count, ppos, buf, len);
 	kfree(buf);
 	return ret;
 }
@@ -555,61 +556,61 @@ LINK_STA_OPS(ht_capa);
 static ssize_t link_sta_vht_capa_read(struct file *file, char __user *userbuf,
 				      size_t count, loff_t *ppos)
 {
-	char *buf, *p;
+	char *buf;
 	struct link_sta_info *link_sta = file->private_data;
 	struct ieee80211_sta_vht_cap *vhtc = &link_sta->pub->vht_cap;
 	ssize_t ret;
 	ssize_t bufsz = 512;
+	int len;
 
 	buf = kzalloc(bufsz, GFP_KERNEL);
 	if (!buf)
 		return -ENOMEM;
-	p = buf;
 
-	p += scnprintf(p, bufsz + buf - p, "VHT %ssupported\n",
-			vhtc->vht_supported ? "" : "not ");
+	len = sysfs_emit(buf, "VHT %ssupported\n",
+			 vhtc->vht_supported ? "" : "not ");
 	if (vhtc->vht_supported) {
-		p += scnprintf(p, bufsz + buf - p, "cap: %#.8x\n",
+		len += sysfs_emit_at(buf, len, "cap: %#.8x\n",
 			       vhtc->cap);
 #define PFLAG(a, b)							\
 		do {							\
 			if (vhtc->cap & IEEE80211_VHT_CAP_ ## a)	\
-				p += scnprintf(p, bufsz + buf - p, \
+				len += sysfs_emit_at(buf, len,		\
 					       "\t\t%s\n", b);		\
 		} while (0)
 
 		switch (vhtc->cap & 0x3) {
 		case IEEE80211_VHT_CAP_MAX_MPDU_LENGTH_3895:
-			p += scnprintf(p, bufsz + buf - p,
+			len += sysfs_emit_at(buf, len,
 				       "\t\tMAX-MPDU-3895\n");
 			break;
 		case IEEE80211_VHT_CAP_MAX_MPDU_LENGTH_7991:
-			p += scnprintf(p, bufsz + buf - p,
+			len += sysfs_emit_at(buf, len,
 				       "\t\tMAX-MPDU-7991\n");
 			break;
 		case IEEE80211_VHT_CAP_MAX_MPDU_LENGTH_11454:
-			p += scnprintf(p, bufsz + buf - p,
+			len += sysfs_emit_at(buf, len,
 				       "\t\tMAX-MPDU-11454\n");
 			break;
 		default:
-			p += scnprintf(p, bufsz + buf - p,
+			len += sysfs_emit_at(buf, len,
 				       "\t\tMAX-MPDU-UNKNOWN\n");
 		}
 		switch (vhtc->cap & IEEE80211_VHT_CAP_SUPP_CHAN_WIDTH_MASK) {
 		case 0:
-			p += scnprintf(p, bufsz + buf - p,
+			len += sysfs_emit_at(buf, len,
 				       "\t\t80Mhz\n");
 			break;
 		case IEEE80211_VHT_CAP_SUPP_CHAN_WIDTH_160MHZ:
-			p += scnprintf(p, bufsz + buf - p,
+			len += sysfs_emit_at(buf, len,
 				       "\t\t160Mhz\n");
 			break;
 		case IEEE80211_VHT_CAP_SUPP_CHAN_WIDTH_160_80PLUS80MHZ:
-			p += scnprintf(p, bufsz + buf - p,
+			len += sysfs_emit_at(buf, len,
 				       "\t\t80+80Mhz\n");
 			break;
 		default:
-			p += scnprintf(p, bufsz + buf - p,
+			len += sysfs_emit_at(buf, len,
 				       "\t\tUNKNOWN-MHZ: 0x%x\n",
 				       (vhtc->cap >> 2) & 0x3);
 		}
@@ -617,15 +618,15 @@ static ssize_t link_sta_vht_capa_read(struct file *file, char __user *userbuf,
 		PFLAG(SHORT_GI_80, "SHORT-GI-80");
 		PFLAG(SHORT_GI_160, "SHORT-GI-160");
 		PFLAG(TXSTBC, "TXSTBC");
-		p += scnprintf(p, bufsz + buf - p,
+		len += sysfs_emit_at(buf, len,
 			       "\t\tRXSTBC_%d\n", (vhtc->cap >> 8) & 0x7);
 		PFLAG(SU_BEAMFORMER_CAPABLE, "SU-BEAMFORMER-CAPABLE");
 		PFLAG(SU_BEAMFORMEE_CAPABLE, "SU-BEAMFORMEE-CAPABLE");
-		p += scnprintf(p, bufsz + buf - p,
+		len += sysfs_emit_at(buf, len,
 			"\t\tBEAMFORMEE-STS: 0x%x\n",
 			(vhtc->cap & IEEE80211_VHT_CAP_BEAMFORMEE_STS_MASK) >>
 			IEEE80211_VHT_CAP_BEAMFORMEE_STS_SHIFT);
-		p += scnprintf(p, bufsz + buf - p,
+		len += sysfs_emit_at(buf, len,
 			"\t\tSOUNDING-DIMENSIONS: 0x%x\n",
 			(vhtc->cap & IEEE80211_VHT_CAP_SOUNDING_DIMENSIONS_MASK)
 			>> IEEE80211_VHT_CAP_SOUNDING_DIMENSIONS_SHIFT);
@@ -633,34 +634,34 @@ static ssize_t link_sta_vht_capa_read(struct file *file, char __user *userbuf,
 		PFLAG(MU_BEAMFORMEE_CAPABLE, "MU-BEAMFORMEE-CAPABLE");
 		PFLAG(VHT_TXOP_PS, "TXOP-PS");
 		PFLAG(HTC_VHT, "HTC-VHT");
-		p += scnprintf(p, bufsz + buf - p,
+		len += sysfs_emit_at(buf, len,
 			"\t\tMPDU-LENGTH-EXPONENT: 0x%x\n",
 			(vhtc->cap & IEEE80211_VHT_CAP_MAX_A_MPDU_LENGTH_EXPONENT_MASK) >>
 			IEEE80211_VHT_CAP_MAX_A_MPDU_LENGTH_EXPONENT_SHIFT);
 		PFLAG(VHT_LINK_ADAPTATION_VHT_UNSOL_MFB,
 		      "LINK-ADAPTATION-VHT-UNSOL-MFB");
-		p += scnprintf(p, bufsz + buf - p,
+		len += sysfs_emit_at(buf, len,
 			"\t\tLINK-ADAPTATION-VHT-MRQ-MFB: 0x%x\n",
 			(vhtc->cap & IEEE80211_VHT_CAP_VHT_LINK_ADAPTATION_VHT_MRQ_MFB) >> 26);
 		PFLAG(RX_ANTENNA_PATTERN, "RX-ANTENNA-PATTERN");
 		PFLAG(TX_ANTENNA_PATTERN, "TX-ANTENNA-PATTERN");
 
-		p += scnprintf(p, bufsz + buf - p, "RX MCS: %.4x\n",
+		len += sysfs_emit_at(buf, len, "RX MCS: %.4x\n",
 			       le16_to_cpu(vhtc->vht_mcs.rx_mcs_map));
 		if (vhtc->vht_mcs.rx_highest)
-			p += scnprintf(p, bufsz + buf - p,
+			len += sysfs_emit_at(buf, len,
 				       "MCS RX highest: %d Mbps\n",
 				       le16_to_cpu(vhtc->vht_mcs.rx_highest));
-		p += scnprintf(p, bufsz + buf - p, "TX MCS: %.4x\n",
+		len += sysfs_emit_at(buf, len, "TX MCS: %.4x\n",
 			       le16_to_cpu(vhtc->vht_mcs.tx_mcs_map));
 		if (vhtc->vht_mcs.tx_highest)
-			p += scnprintf(p, bufsz + buf - p,
+			len += sysfs_emit_at(buf, len,
 				       "MCS TX highest: %d Mbps\n",
 				       le16_to_cpu(vhtc->vht_mcs.tx_highest));
 #undef PFLAG
 	}
 
-	ret = simple_read_from_buffer(userbuf, count, ppos, buf, p - buf);
+	ret = simple_read_from_buffer(userbuf, count, ppos, buf, len);
 	kfree(buf);
 	return ret;
 }
@@ -669,7 +670,7 @@ LINK_STA_OPS(vht_capa);
 static ssize_t link_sta_he_capa_read(struct file *file, char __user *userbuf,
 				     size_t count, loff_t *ppos)
 {
-	char *buf, *p;
+	char *buf;
 	size_t buf_sz = PAGE_SIZE;
 	struct link_sta_info *link_sta = file->private_data;
 	struct ieee80211_sta_he_cap *hec = &link_sta->pub->he_cap;
@@ -677,25 +678,25 @@ static ssize_t link_sta_he_capa_read(struct file *file, char __user *userbuf,
 	u8 ppe_size;
 	u8 *cap;
 	int i;
+	int len;
 	ssize_t ret;
 
 	buf = kmalloc(buf_sz, GFP_KERNEL);
 	if (!buf)
 		return -ENOMEM;
-	p = buf;
 
-	p += scnprintf(p, buf_sz + buf - p, "HE %ssupported\n",
-		       hec->has_he ? "" : "not ");
+	len = sysfs_emit(buf, "HE %ssupported\n",
+			 hec->has_he ? "" : "not ");
 	if (!hec->has_he)
 		goto out;
 
 	cap = hec->he_cap_elem.mac_cap_info;
-	p += scnprintf(p, buf_sz + buf - p,
+	len += sysfs_emit_at(buf, len,
 		       "MAC-CAP: %#.2x %#.2x %#.2x %#.2x %#.2x %#.2x\n",
 		       cap[0], cap[1], cap[2], cap[3], cap[4], cap[5]);
 
 #define PRINT(fmt, ...)							\
-	p += scnprintf(p, buf_sz + buf - p, "\t\t" fmt "\n",		\
+	len += sysfs_emit_at(buf, len, "\t\t" fmt "\n",		\
 		       ##__VA_ARGS__)
 
 #define PFLAG(t, n, a, b)						\
@@ -801,7 +802,7 @@ static ssize_t link_sta_he_capa_read(struct file *file, char __user *userbuf,
 	PFLAG(MAC, 5, HT_VHT_TRIG_FRAME_RX, "HT-VHT-TRIG-FRAME-RX");
 
 	cap = hec->he_cap_elem.phy_cap_info;
-	p += scnprintf(p, buf_sz + buf - p,
+	len += sysfs_emit_at(buf, len,
 		       "PHY CAP: %#.2x %#.2x %#.2x %#.2x %#.2x %#.2x %#.2x %#.2x %#.2x %#.2x %#.2x\n",
 		       cap[0], cap[1], cap[2], cap[3], cap[4], cap[5], cap[6],
 		       cap[7], cap[8], cap[9], cap[10]);
@@ -983,7 +984,7 @@ static ssize_t link_sta_he_capa_read(struct file *file, char __user *userbuf,
 	do {								\
 		int _i;							\
 		u16 v = le16_to_cpu(nss->f);				\
-		p += scnprintf(p, buf_sz + buf - p, n ": %#.4x\n", v);	\
+		len += sysfs_emit_at(buf, len, n ": %#.4x\n", v);	\
 		for (_i = 0; _i < 8; _i += 2) {				\
 			switch ((v >> _i) & 0x3) {			\
 			case 0:						\
@@ -1022,18 +1023,18 @@ static ssize_t link_sta_he_capa_read(struct file *file, char __user *userbuf,
 	if (!(cap[6] & IEEE80211_HE_PHY_CAP6_PPE_THRESHOLD_PRESENT))
 		goto out;
 
-	p += scnprintf(p, buf_sz + buf - p, "PPE-THRESHOLDS: %#.2x",
-		       hec->ppe_thres[0]);
+	len += sysfs_emit_at(buf, len, "PPE-THRESHOLDS: %#.2x",
+			     hec->ppe_thres[0]);
 
 	ppe_size = ieee80211_he_ppe_size(hec->ppe_thres[0], cap);
 	for (i = 1; i < ppe_size; i++) {
-		p += scnprintf(p, buf_sz + buf - p, " %#.2x",
+		len += sysfs_emit_at(buf, len, " %#.2x",
 			       hec->ppe_thres[i]);
 	}
-	p += scnprintf(p, buf_sz + buf - p, "\n");
+	len += sysfs_emit_at(buf, len, "\n");
 
 out:
-	ret = simple_read_from_buffer(userbuf, count, ppos, buf, p - buf);
+	ret = simple_read_from_buffer(userbuf, count, ppos, buf, len);
 	kfree(buf);
 	return ret;
 }
@@ -1042,7 +1043,7 @@ LINK_STA_OPS(he_capa);
 static ssize_t link_sta_eht_capa_read(struct file *file, char __user *userbuf,
 				      size_t count, loff_t *ppos)
 {
-	char *buf, *p;
+	char *buf;
 	size_t buf_sz = PAGE_SIZE;
 	struct link_sta_info *link_sta = file->private_data;
 	struct ieee80211_sta_eht_cap *bec = &link_sta->pub->eht_cap;
@@ -1051,22 +1052,22 @@ static ssize_t link_sta_eht_capa_read(struct file *file, char __user *userbuf,
 	u8 *cap;
 	int i;
 	ssize_t ret;
+	int len;
 	static const char *mcs_desc[] = { "0-7", "8-9", "10-11", "12-13"};
 
 	buf = kmalloc(buf_sz, GFP_KERNEL);
 	if (!buf)
 		return -ENOMEM;
-	p = buf;
 
-	p += scnprintf(p, buf_sz + buf - p, "EHT %ssupported\n",
-		       bec->has_eht ? "" : "not ");
+	len = sysfs_emit(buf, "EHT %ssupported\n",
+			 bec->has_eht ? "" : "not ");
 	if (!bec->has_eht)
 		goto out;
 
-	p += scnprintf(p, buf_sz + buf - p,
+	len += sysfs_emit_at(buf, len,
 		       "MAC-CAP: %#.2x %#.2x\n",
 		       fixed->mac_cap_info[0], fixed->mac_cap_info[1]);
-	p += scnprintf(p, buf_sz + buf - p,
+	len += sysfs_emit_at(buf, len,
 		       "PHY-CAP: %#.2x %#.2x %#.2x %#.2x %#.2x %#.2x %#.2x %#.2x %#.2x\n",
 		       fixed->phy_cap_info[0], fixed->phy_cap_info[1],
 		       fixed->phy_cap_info[2], fixed->phy_cap_info[3],
@@ -1075,7 +1076,7 @@ static ssize_t link_sta_eht_capa_read(struct file *file, char __user *userbuf,
 		       fixed->phy_cap_info[8]);
 
 #define PRINT(fmt, ...)							\
-	p += scnprintf(p, buf_sz + buf - p, "\t\t" fmt "\n",		\
+	len += sysfs_emit_at(buf, len, "\t\t" fmt "\n",		\
 		       ##__VA_ARGS__)
 
 #define PFLAG(t, n, a, b)						\
@@ -1209,15 +1210,15 @@ static ssize_t link_sta_eht_capa_read(struct file *file, char __user *userbuf,
 	if (cap[5] & IEEE80211_EHT_PHY_CAP5_PPE_THRESHOLD_PRESENT) {
 		u8 ppe_size = ieee80211_eht_ppe_size(bec->eht_ppe_thres[0], cap);
 
-		p += scnprintf(p, buf_sz + buf - p, "EHT PPE Thresholds: ");
+		len += sysfs_emit_at(buf, len, "EHT PPE Thresholds: ");
 		for (i = 0; i < ppe_size; i++)
-			p += scnprintf(p, buf_sz + buf - p, "0x%02x ",
+			len += sysfs_emit_at(buf, len, "0x%02x ",
 				       bec->eht_ppe_thres[i]);
 		PRINT(""); /* newline */
 	}
 
 out:
-	ret = simple_read_from_buffer(userbuf, count, ppos, buf, p - buf);
+	ret = simple_read_from_buffer(userbuf, count, ppos, buf, len);
 	kfree(buf);
 	return ret;
 }

@@ -84,8 +84,8 @@ static ssize_t aqm_read(struct file *file,
 	spin_lock_bh(&local->fq.lock);
 	rcu_read_lock();
 
-	len = scnprintf(buf, sizeof(buf),
-			"access name value\n"
+	len = sysfs_emit(buf,
+			 "access name value\n"
 			"R fq_flows_cnt %u\n"
 			"R fq_backlog %u\n"
 			"R fq_overlimit %u\n"
@@ -152,16 +152,15 @@ static ssize_t airtime_flags_read(struct file *file,
 				  size_t count, loff_t *ppos)
 {
 	struct ieee80211_local *local = file->private_data;
-	char buf[128] = {}, *pos, *end;
+	char buf[128] = {}, *pos;
 
 	pos = buf;
-	end = pos + sizeof(buf) - 1;
 
 	if (local->airtime_flags & AIRTIME_USE_TX)
-		pos += scnprintf(pos, end - pos, "AIRTIME_TX\t(%lx)\n",
+		pos += sysfs_emit(pos, "AIRTIME_TX\t(%lx)\n",
 				 AIRTIME_USE_TX);
 	if (local->airtime_flags & AIRTIME_USE_RX)
-		pos += scnprintf(pos, end - pos, "AIRTIME_RX\t(%lx)\n",
+		pos += sysfs_emit(pos, "AIRTIME_RX\t(%lx)\n",
 				 AIRTIME_USE_RX);
 
 	return simple_read_from_buffer(user_buf, count, ppos, buf,
@@ -206,18 +205,18 @@ static ssize_t aql_pending_read(struct file *file,
 	char buf[400];
 	int len = 0;
 
-	len = scnprintf(buf, sizeof(buf),
-			"AC     AQL pending\n"
-			"VO     %u us\n"
-			"VI     %u us\n"
-			"BE     %u us\n"
-			"BK     %u us\n"
-			"total  %u us\n",
-			atomic_read(&local->aql_ac_pending_airtime[IEEE80211_AC_VO]),
-			atomic_read(&local->aql_ac_pending_airtime[IEEE80211_AC_VI]),
-			atomic_read(&local->aql_ac_pending_airtime[IEEE80211_AC_BE]),
-			atomic_read(&local->aql_ac_pending_airtime[IEEE80211_AC_BK]),
-			atomic_read(&local->aql_total_pending_airtime));
+	len = sysfs_emit(buf,
+			 "AC     AQL pending\n"
+			 "VO     %u us\n"
+			 "VI     %u us\n"
+			 "BE     %u us\n"
+			 "BK     %u us\n"
+			 "total  %u us\n",
+			 atomic_read(&local->aql_ac_pending_airtime[IEEE80211_AC_VO]),
+			 atomic_read(&local->aql_ac_pending_airtime[IEEE80211_AC_VI]),
+			 atomic_read(&local->aql_ac_pending_airtime[IEEE80211_AC_BE]),
+			 atomic_read(&local->aql_ac_pending_airtime[IEEE80211_AC_BK]),
+			 atomic_read(&local->aql_total_pending_airtime));
 	return simple_read_from_buffer(user_buf, count, ppos,
 				       buf, len);
 }
@@ -236,20 +235,20 @@ static ssize_t aql_txq_limit_read(struct file *file,
 	char buf[400];
 	int len = 0;
 
-	len = scnprintf(buf, sizeof(buf),
-			"AC	AQL limit low	AQL limit high\n"
-			"VO	%u		%u\n"
-			"VI	%u		%u\n"
-			"BE	%u		%u\n"
-			"BK	%u		%u\n",
-			local->aql_txq_limit_low[IEEE80211_AC_VO],
-			local->aql_txq_limit_high[IEEE80211_AC_VO],
-			local->aql_txq_limit_low[IEEE80211_AC_VI],
-			local->aql_txq_limit_high[IEEE80211_AC_VI],
-			local->aql_txq_limit_low[IEEE80211_AC_BE],
-			local->aql_txq_limit_high[IEEE80211_AC_BE],
-			local->aql_txq_limit_low[IEEE80211_AC_BK],
-			local->aql_txq_limit_high[IEEE80211_AC_BK]);
+	len = sysfs_emit(buf,
+			 "AC	AQL limit low	AQL limit high\n"
+			 "VO	%u		%u\n"
+			 "VI	%u		%u\n"
+			 "BE	%u		%u\n"
+			 "BK	%u		%u\n",
+			 local->aql_txq_limit_low[IEEE80211_AC_VO],
+			 local->aql_txq_limit_high[IEEE80211_AC_VO],
+			 local->aql_txq_limit_low[IEEE80211_AC_VI],
+			 local->aql_txq_limit_high[IEEE80211_AC_VI],
+			 local->aql_txq_limit_low[IEEE80211_AC_BE],
+			 local->aql_txq_limit_high[IEEE80211_AC_BE],
+			 local->aql_txq_limit_low[IEEE80211_AC_BK],
+			 local->aql_txq_limit_high[IEEE80211_AC_BK]);
 	return simple_read_from_buffer(user_buf, count, ppos,
 				       buf, len);
 }
@@ -313,8 +312,8 @@ static ssize_t aql_enable_read(struct file *file, char __user *user_buf,
 	char buf[3];
 	int len;
 
-	len = scnprintf(buf, sizeof(buf), "%d\n",
-			!static_key_false(&aql_disable.key));
+	len = sysfs_emit(buf, "%d\n",
+			 !static_key_false(&aql_disable.key));
 
 	return simple_read_from_buffer(user_buf, count, ppos, buf, len);
 }
@@ -365,7 +364,7 @@ static ssize_t force_tx_status_read(struct file *file,
 	char buf[3];
 	int len = 0;
 
-	len = scnprintf(buf, sizeof(buf), "%d\n", (int)local->force_tx_status);
+	len = sysfs_emit(buf, "%d\n", (int)local->force_tx_status);
 
 	return simple_read_from_buffer(user_buf, count, ppos,
 				       buf, len);
@@ -501,7 +500,7 @@ static ssize_t hwflags_read(struct file *file, char __user *user_buf,
 	struct ieee80211_local *local = file->private_data;
 	size_t bufsz = 30 * NUM_IEEE80211_HW_FLAGS;
 	char *buf = kzalloc(bufsz, GFP_KERNEL);
-	char *pos = buf, *end = buf + bufsz - 1;
+	char *pos = buf;
 	ssize_t rv;
 	int i;
 
@@ -515,7 +514,7 @@ static ssize_t hwflags_read(struct file *file, char __user *user_buf,
 
 	for (i = 0; i < NUM_IEEE80211_HW_FLAGS; i++) {
 		if (test_bit(i, local->hw.flags))
-			pos += scnprintf(pos, end - pos, "%s\n",
+			pos += sysfs_emit(pos, "%s\n",
 					 hw_flag_names[i]);
 	}
 
@@ -571,7 +570,7 @@ static ssize_t misc_read(struct file *file, char __user *user_buf,
 	/* Max len of each line is 16 characters, plus 9 for 'pending:\n' */
 	size_t bufsz = IEEE80211_MAX_QUEUES * 16 + 9;
 	char *buf;
-	char *pos, *end;
+	int len;
 	ssize_t rv;
 	int i;
 	int ln;
@@ -580,14 +579,11 @@ static ssize_t misc_read(struct file *file, char __user *user_buf,
 	if (!buf)
 		return -ENOMEM;
 
-	pos = buf;
-	end = buf + bufsz - 1;
-
-	pos += scnprintf(pos, end - pos, "pending:\n");
+	len = sysfs_emit(buf, "pending:\n");
 
 	for (i = 0; i < IEEE80211_MAX_QUEUES; i++) {
 		ln = skb_queue_len(&local->pending[i]);
-		pos += scnprintf(pos, end - pos, "[%i] %d\n",
+		len += sysfs_emit_at(buf, len, "[%i] %d\n",
 				 i, ln);
 	}
 
@@ -642,7 +638,7 @@ static ssize_t format_devstat_counter(struct ieee80211_local *local,
 static int print_devstats_##name(struct ieee80211_low_level_stats *stats,\
 				 char *buf, int buflen)			\
 {									\
-	return scnprintf(buf, buflen, "%u\n", stats->name);		\
+	return sysfs_emit(buf, "%u\n", stats->name);		\
 }									\
 static ssize_t stats_ ##name## _read(struct file *file,			\
 				     char __user *userbuf,		\

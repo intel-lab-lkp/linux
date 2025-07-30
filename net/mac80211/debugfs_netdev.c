@@ -171,7 +171,7 @@ static ssize_t ieee80211_if_fmt_##name(					\
 	const type *data, char *buf,					\
 	int buflen)							\
 {									\
-	return scnprintf(buf, buflen, format_string, data->field);	\
+	return sysfs_emit(buf, format_string, data->field);		\
 }
 #define IEEE80211_IF_FMT_DEC(name, type, field)				\
 		IEEE80211_IF_FMT(name, type, field, "%d\n")
@@ -188,10 +188,9 @@ static ssize_t ieee80211_if_fmt_##name(					\
 	char *p = buf;							\
 	int i;								\
 	for (i = 0; i < sizeof(data->field); i++) {			\
-		p += scnprintf(p, buflen + buf - p, "%.2x ",		\
-				 data->field[i]);			\
+		p += sysfs_emit(p, "%.2x ", data->field[i]);		\
 	}								\
-	p += scnprintf(p, buflen + buf - p, "\n");			\
+	p += sysfs_emit(p, "\n");					\
 	return p - buf;							\
 }
 
@@ -200,7 +199,7 @@ static ssize_t ieee80211_if_fmt_##name(					\
 	const type *data,						\
 	char *buf, int buflen)						\
 {									\
-	return scnprintf(buf, buflen, "%d\n", atomic_read(&data->field));\
+	return sysfs_emit(buf, "%d\n", atomic_read(&data->field));\
 }
 
 #define IEEE80211_IF_FMT_MAC(name, type, field)				\
@@ -208,7 +207,7 @@ static ssize_t ieee80211_if_fmt_##name(					\
 	const type *data, char *buf,					\
 	int buflen)							\
 {									\
-	return scnprintf(buf, buflen, "%pM\n", data->field);		\
+	return sysfs_emit(buf, "%pM\n", data->field);			\
 }
 
 #define IEEE80211_IF_FMT_JIFFIES_TO_MS(name, type, field)		\
@@ -216,7 +215,7 @@ static ssize_t ieee80211_if_fmt_##name(					\
 	const type *data,						\
 	char *buf, int buflen)						\
 {									\
-	return scnprintf(buf, buflen, "%d\n",				\
+	return sysfs_emit(buf, "%d\n",					\
 			 jiffies_to_msecs(data->field));		\
 }
 
@@ -320,9 +319,10 @@ static ssize_t ieee80211_if_fmt_rc_rateidx_vht_mcs_mask_2ghz(
 	int i, len = 0;
 	const u16 *mask = sdata->rc_rateidx_vht_mcs_mask[NL80211_BAND_2GHZ];
 
-	for (i = 0; i < NL80211_VHT_NSS_MAX; i++)
-		len += scnprintf(buf + len, buflen - len, "%04x ", mask[i]);
-	len += scnprintf(buf + len, buflen - len, "\n");
+	len = sysfs_emit(buf, "%04x ", mask[0]);
+	for (i = 1; i < NL80211_VHT_NSS_MAX; i++)
+		len += sysfs_emit_at(buf, len, "%04x ", mask[i]);
+	len += sysfs_emit_at(buf, len, "\n");
 
 	return len;
 }
@@ -336,9 +336,10 @@ static ssize_t ieee80211_if_fmt_rc_rateidx_vht_mcs_mask_5ghz(
 	int i, len = 0;
 	const u16 *mask = sdata->rc_rateidx_vht_mcs_mask[NL80211_BAND_5GHZ];
 
-	for (i = 0; i < NL80211_VHT_NSS_MAX; i++)
-		len += scnprintf(buf + len, buflen - len, "%04x ", mask[i]);
-	len += scnprintf(buf + len, buflen - len, "\n");
+	len = sysfs_emit(buf, "%04x ", mask[0]);
+	for (i = 1; i < NL80211_VHT_NSS_MAX; i++)
+		len += sysfs_emit_at(buf, len, "%04x ", mask[i]);
+	len += sysfs_emit_at(buf, len, "\n");
 
 	return len;
 }
@@ -357,14 +358,14 @@ ieee80211_if_fmt_hw_queues(const struct ieee80211_sub_if_data *sdata,
 {
 	int len;
 
-	len = scnprintf(buf, buflen, "AC queues: VO:%d VI:%d BE:%d BK:%d\n",
-			sdata->vif.hw_queue[IEEE80211_AC_VO],
-			sdata->vif.hw_queue[IEEE80211_AC_VI],
-			sdata->vif.hw_queue[IEEE80211_AC_BE],
-			sdata->vif.hw_queue[IEEE80211_AC_BK]);
+	len = sysfs_emit(buf, "AC queues: VO:%d VI:%d BE:%d BK:%d\n",
+			 sdata->vif.hw_queue[IEEE80211_AC_VO],
+			 sdata->vif.hw_queue[IEEE80211_AC_VI],
+			 sdata->vif.hw_queue[IEEE80211_AC_BE],
+			 sdata->vif.hw_queue[IEEE80211_AC_BK]);
 
 	if (sdata->vif.type == NL80211_IFTYPE_AP)
-		len += scnprintf(buf + len, buflen - len, "cab queue: %d\n",
+		len += sysfs_emit_at(buf, len, "cab queue: %d\n",
 				 sdata->vif.cab_queue);
 
 	return len;
@@ -607,7 +608,7 @@ IEEE80211_IF_FILE(num_mcast_sta_vlan, u.vlan.num_mcast_sta, ATOMIC);
 static ssize_t ieee80211_if_fmt_num_buffered_multicast(
 	const struct ieee80211_sub_if_data *sdata, char *buf, int buflen)
 {
-	return scnprintf(buf, buflen, "%u\n",
+	return sysfs_emit(buf, "%u\n",
 			 skb_queue_len(&sdata->u.ap.ps.bc_buf));
 }
 IEEE80211_IF_FILE_R(num_buffered_multicast);
@@ -627,20 +628,19 @@ static ssize_t ieee80211_if_fmt_aqm(
 	spin_lock_bh(&local->fq.lock);
 	rcu_read_lock();
 
-	len = scnprintf(buf,
-			buflen,
-			"ac backlog-bytes backlog-packets new-flows drops marks overlimit collisions tx-bytes tx-packets\n"
-			"%u %u %u %u %u %u %u %u %u %u\n",
-			txqi->txq.ac,
-			txqi->tin.backlog_bytes,
-			txqi->tin.backlog_packets,
-			txqi->tin.flows,
-			txqi->cstats.drop_count,
-			txqi->cstats.ecn_mark,
-			txqi->tin.overlimit,
-			txqi->tin.collisions,
-			txqi->tin.tx_bytes,
-			txqi->tin.tx_packets);
+	len = sysfs_emit(buf,
+			 "ac backlog-bytes backlog-packets new-flows drops marks overlimit collisions tx-bytes tx-packets\n"
+			 "%u %u %u %u %u %u %u %u %u %u\n",
+			 txqi->txq.ac,
+			 txqi->tin.backlog_bytes,
+			 txqi->tin.backlog_packets,
+			 txqi->tin.flows,
+			 txqi->cstats.drop_count,
+			 txqi->cstats.ecn_mark,
+			 txqi->tin.overlimit,
+			 txqi->tin.collisions,
+			 txqi->tin.tx_bytes,
+			 txqi->tin.tx_packets);
 
 	rcu_read_unlock();
 	spin_unlock_bh(&local->fq.lock);
@@ -660,7 +660,7 @@ static ssize_t ieee80211_if_fmt_tsf(
 
 	tsf = drv_get_tsf(local, (struct ieee80211_sub_if_data *)sdata);
 
-	return scnprintf(buf, buflen, "0x%016llx\n", (unsigned long long) tsf);
+	return sysfs_emit(buf, "0x%016llx\n", (unsigned long long)tsf);
 }
 
 static ssize_t ieee80211_if_parse_tsf(
