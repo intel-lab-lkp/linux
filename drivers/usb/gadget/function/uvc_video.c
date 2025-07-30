@@ -777,18 +777,21 @@ int uvcg_video_enable(struct uvc_video *video)
 	 */
 	video->is_enabled = true;
 
-	if ((ret = uvcg_queue_enable(&video->queue, 1)) < 0)
+	ret = uvcg_queue_enable(&video->queue, 1);
+	if (ret < 0)
 		return ret;
 
-	if ((ret = uvc_video_alloc_requests(video)) < 0)
+	ret = uvc_video_alloc_requests(video);
+	if (ret < 0)
 		return ret;
 
 	if (video->max_payload_size) {
 		video->encode = uvc_video_encode_bulk;
 		video->payload_size = 0;
-	} else
+	} else {
 		video->encode = video->queue.use_sg ?
 			uvc_video_encode_isoc_sg : uvc_video_encode_isoc;
+	}
 
 	video->req_int_count = 0;
 
