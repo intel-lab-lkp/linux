@@ -52,6 +52,7 @@ static int u_boot_env_probe(struct platform_device *pdev)
 	struct device *dev = &pdev->dev;
 	struct device_node *np = dev->of_node;
 	struct u_boot_env *priv;
+	u32 env_size;
 
 	priv = devm_kzalloc(dev, sizeof(*priv), GFP_KERNEL);
 	if (!priv)
@@ -68,7 +69,12 @@ static int u_boot_env_probe(struct platform_device *pdev)
 
 	config.dev = dev;
 	config.priv = priv;
-	config.size = priv->mtd->size;
+
+	if (!of_property_read_u32(np, "env-size", &env_size) &&
+	    env_size <= priv->mtd->size)
+		config.size = env_size;
+	else
+		config.size = priv->mtd->size;
 
 	priv->nvmem = devm_nvmem_register(dev, &config);
 	if (IS_ERR(priv->nvmem))
