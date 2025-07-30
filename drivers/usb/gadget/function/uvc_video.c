@@ -27,7 +27,7 @@
 
 static int
 uvc_video_encode_header(struct uvc_video *video, struct uvc_buffer *buf,
-		u8 *data, int len)
+			u8 *data, int len)
 {
 	struct uvc_device *uvc = container_of(video, struct uvc_device, video);
 	struct usb_composite_dev *cdev = uvc->func.config->cdev;
@@ -57,7 +57,7 @@ uvc_video_encode_header(struct uvc_video *video, struct uvc_buffer *buf,
 
 		data[1] |= UVC_STREAM_SCR;
 		put_unaligned_le32(stc, &data[pos]);
-		put_unaligned_le16(sof, &data[pos+4]);
+		put_unaligned_le16(sof, &data[pos + 4]);
 		pos += 6;
 	}
 
@@ -71,7 +71,7 @@ uvc_video_encode_header(struct uvc_video *video, struct uvc_buffer *buf,
 
 static int
 uvc_video_encode_data(struct uvc_video *video, struct uvc_buffer *buf,
-		u8 *data, int len)
+		      u8 *data, int len)
 {
 	struct uvc_video_queue *queue = &video->queue;
 	unsigned int nbytes;
@@ -89,7 +89,7 @@ uvc_video_encode_data(struct uvc_video *video, struct uvc_buffer *buf,
 
 static void
 uvc_video_encode_bulk(struct usb_request *req, struct uvc_video *video,
-		struct uvc_buffer *buf)
+		      struct uvc_buffer *buf)
 {
 	void *mem = req->buf;
 	struct uvc_request *ureq = req->context;
@@ -132,7 +132,7 @@ uvc_video_encode_bulk(struct usb_request *req, struct uvc_video *video,
 
 static void
 uvc_video_encode_isoc_sg(struct usb_request *req, struct uvc_video *video,
-		struct uvc_buffer *buf)
+			 struct uvc_buffer *buf)
 {
 	unsigned int pending = buf->bytesused - video->queue.buf_used;
 	struct uvc_request *ureq = req->context;
@@ -187,7 +187,7 @@ uvc_video_encode_isoc_sg(struct usb_request *req, struct uvc_video *video,
 	video->queue.buf_used += req->length - header_len;
 
 	if (buf->bytesused == video->queue.buf_used || !buf->sg ||
-			video->queue.flags & UVC_QUEUE_DROP_INCOMPLETE) {
+	    video->queue.flags & UVC_QUEUE_DROP_INCOMPLETE) {
 		video->queue.buf_used = 0;
 		buf->state = UVC_BUF_STATE_DONE;
 		buf->offset = 0;
@@ -199,7 +199,7 @@ uvc_video_encode_isoc_sg(struct usb_request *req, struct uvc_video *video,
 
 static void
 uvc_video_encode_isoc(struct usb_request *req, struct uvc_video *video,
-		struct uvc_buffer *buf)
+		      struct uvc_buffer *buf)
 {
 	void *mem = req->buf;
 	struct uvc_request *ureq = req->context;
@@ -218,7 +218,7 @@ uvc_video_encode_isoc(struct usb_request *req, struct uvc_video *video,
 	req->length = buf->req_payload_size - len;
 
 	if (buf->bytesused == video->queue.buf_used ||
-			video->queue.flags & UVC_QUEUE_DROP_INCOMPLETE) {
+	    video->queue.flags & UVC_QUEUE_DROP_INCOMPLETE) {
 		video->queue.buf_used = 0;
 		buf->state = UVC_BUF_STATE_DONE;
 		list_del(&buf->queue);
@@ -473,7 +473,6 @@ static void uvcg_video_hw_submit(struct kthread_work *work)
 			 * There is a new free request - wake up the pump.
 			 */
 			queue_work(video->async_wq, &video->pump);
-
 		}
 
 		spin_unlock_irqrestore(&video->req_lock, flags);
@@ -777,18 +776,21 @@ int uvcg_video_enable(struct uvc_video *video)
 	 */
 	video->is_enabled = true;
 
-	if ((ret = uvcg_queue_enable(&video->queue, 1)) < 0)
+	ret = uvcg_queue_enable(&video->queue, 1);
+	if (ret < 0)
 		return ret;
 
-	if ((ret = uvc_video_alloc_requests(video)) < 0)
+	ret = uvc_video_alloc_requests(video);
+	if (ret < 0)
 		return ret;
 
 	if (video->max_payload_size) {
 		video->encode = uvc_video_encode_bulk;
 		video->payload_size = 0;
-	} else
+	} else {
 		video->encode = video->queue.use_sg ?
 			uvc_video_encode_isoc_sg : uvc_video_encode_isoc;
+	}
 
 	video->req_int_count = 0;
 
