@@ -2955,9 +2955,16 @@ int split_device_private_folio(struct folio *folio)
 	VM_WARN_ON(ret);
 	for (new_folio = folio_next(folio); new_folio != end_folio;
 					new_folio = folio_next(new_folio)) {
+		zone_device_private_split_cb(folio, new_folio);
 		folio_ref_unfreeze(new_folio, 1 + folio_expected_ref_count(
 								new_folio));
 	}
+
+	/*
+	 * Mark the end of the folio split for device private THP
+	 * split
+	 */
+	zone_device_private_split_cb(folio, NULL);
 	folio_ref_unfreeze(folio, 1 + folio_expected_ref_count(folio));
 	return ret;
 }
@@ -3979,7 +3986,6 @@ static int __folio_split(struct folio *folio, unsigned int new_order,
 
 		ret = __split_unmapped_folio(folio, new_order, split_at, &xas,
 					     mapping, uniform_split);
-
 		/*
 		 * Unfreeze after-split folios and put them back to the right
 		 * list. @folio should be kept frozon until page cache
@@ -4030,6 +4036,7 @@ static int __folio_split(struct folio *folio, unsigned int new_order,
 			__filemap_remove_folio(new_folio, NULL);
 			folio_put_refs(new_folio, nr_pages);
 		}
+
 		/*
 		 * Unfreeze @folio only after all page cache entries, which
 		 * used to point to it, have been updated with new folios.
