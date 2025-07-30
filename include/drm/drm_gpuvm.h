@@ -810,6 +810,12 @@ enum drm_gpuva_op_type {
 	DRM_GPUVA_OP_DRIVER,
 };
 
+/** DOC: flags for struct drm_gpuva_op_map
+ *  %DRM_GPUVM_SM_MAP_OPS_FLAG_NONE DEFAULT split and merge,
+ *  It cannot be combined with other flags.
+ */
+#define DRM_GPUVM_SM_MAP_OPS_FLAG_NONE 0
+
 /**
  * struct drm_gpuva_op_map - GPU VA map operation
  *
@@ -847,6 +853,13 @@ struct drm_gpuva_op_map {
 		 */
 		struct drm_gem_object *obj;
 	} gem;
+
+	/**
+	 * @flags: Bitmask of DRM_GPUVM_SM_MAP_* flags.
+	 * Use DRM_GPUVM_SM_MAP_OPS_FLAG_NONE (0) for default split merge.
+	 * It cannot be combined with other flags.
+	 */
+	u32 flags;
 };
 
 /**
