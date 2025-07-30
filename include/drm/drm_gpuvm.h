@@ -811,10 +811,19 @@ enum drm_gpuva_op_type {
 };
 
 /** DOC: flags for struct drm_gpuva_op_map
- *  %DRM_GPUVM_SM_MAP_OPS_FLAG_NONE DEFAULT split and merge,
+ *  %DRM_GPUVM_SM_MAP_OPS_FLAG_NONE: DEFAULT split and merge,
  *  It cannot be combined with other flags.
+ *
+ *  %DRM_GPUVM_SM_MAP_OPS_FLAG_SPLIT_MADVISE: This flag is used by
+ *  drm_gpuvm_sm_map_ops_create to iterate over GPUVMA's in the user-provided
+ *  range and split the existing non-GEM object VMA if the start or end of
+ *  the input range lies within it. The operations can create up to 2 REMAPS
+ *  and 2 MAPs. Unlike DRM_GPUVM_SM_MAP_OPS_FLAG_NONE flag, the operation with
+ *  this flag will never have UNMAPs and merges, and can be without any final
+ *  operations.
  */
 #define DRM_GPUVM_SM_MAP_OPS_FLAG_NONE 0
+#define DRM_GPUVM_SM_MAP_OPS_FLAG_SPLIT_MADVISE BIT(0)
 
 /**
  * struct drm_gpuva_op_map - GPU VA map operation
