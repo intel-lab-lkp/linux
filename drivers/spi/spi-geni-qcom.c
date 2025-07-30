@@ -623,14 +623,14 @@ static int spi_geni_grab_gpi_chan(struct spi_geni_master *mas)
 {
 	int ret;
 
-	mas->tx = dma_request_chan(mas->dev, "tx");
+	mas->tx = dma_request_chan_w_data(mas->dev, "tx", (void *)GENI_SE_SPI);
 	if (IS_ERR(mas->tx)) {
 		ret = dev_err_probe(mas->dev, PTR_ERR(mas->tx),
 				    "Failed to get tx DMA ch\n");
 		goto err_tx;
 	}
 
-	mas->rx = dma_request_chan(mas->dev, "rx");
+	mas->rx = dma_request_chan_w_data(mas->dev, "rx", (void *)GENI_SE_SPI);
 	if (IS_ERR(mas->rx)) {
 		ret = dev_err_probe(mas->dev, PTR_ERR(mas->rx),
 				    "Failed to get rx DMA ch\n");
