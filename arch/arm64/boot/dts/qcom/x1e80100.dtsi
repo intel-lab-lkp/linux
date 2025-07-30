@@ -844,7 +844,7 @@
 
 			dma-channels = <12>;
 			dma-channel-mask = <0x3e>;
-			#dma-cells = <3>;
+			#dma-cells = <2>;
 
 			iommus = <&apps_smmu 0x436 0x0>;
 
@@ -890,8 +890,8 @@
 				power-domains = <&rpmhpd RPMHPD_CX>;
 				required-opps = <&rpmhpd_opp_low_svs>;
 
-				dmas = <&gpi_dma2 0 0 QCOM_GPI_I2C>,
-				       <&gpi_dma2 1 0 QCOM_GPI_I2C>;
+				dmas = <&gpi_dma2 0 0>,
+				       <&gpi_dma2 1 0>;
 				dma-names = "tx",
 					    "rx";
 
@@ -926,8 +926,8 @@
 				power-domains = <&rpmhpd RPMHPD_CX>;
 				operating-points-v2 = <&qup_opp_table_120mhz>;
 
-				dmas = <&gpi_dma2 0 0 QCOM_GPI_SPI>,
-				       <&gpi_dma2 1 0 QCOM_GPI_SPI>;
+				dmas = <&gpi_dma2 0 0>,
+				       <&gpi_dma2 1 0>;
 				dma-names = "tx",
 					    "rx";
 
@@ -962,8 +962,8 @@
 				power-domains = <&rpmhpd RPMHPD_CX>;
 				required-opps = <&rpmhpd_opp_low_svs>;
 
-				dmas = <&gpi_dma2 0 1 QCOM_GPI_I2C>,
-				       <&gpi_dma2 1 1 QCOM_GPI_I2C>;
+				dmas = <&gpi_dma2 0 1>,
+				       <&gpi_dma2 1 1>;
 				dma-names = "tx",
 					    "rx";
 
@@ -998,8 +998,8 @@
 				power-domains = <&rpmhpd RPMHPD_CX>;
 				operating-points-v2 = <&qup_opp_table_120mhz>;
 
-				dmas = <&gpi_dma2 0 1 QCOM_GPI_SPI>,
-				       <&gpi_dma2 1 1 QCOM_GPI_SPI>;
+				dmas = <&gpi_dma2 0 1>,
+				       <&gpi_dma2 1 1>;
 				dma-names = "tx",
 					    "rx";
 
@@ -1034,8 +1034,8 @@
 				power-domains = <&rpmhpd RPMHPD_CX>;
 				required-opps = <&rpmhpd_opp_low_svs>;
 
-				dmas = <&gpi_dma2 0 2 QCOM_GPI_I2C>,
-				       <&gpi_dma2 1 2 QCOM_GPI_I2C>;
+				dmas = <&gpi_dma2 0 2>,
+				       <&gpi_dma2 1 2>;
 				dma-names = "tx",
 					    "rx";
 
@@ -1070,8 +1070,8 @@
 				power-domains = <&rpmhpd RPMHPD_CX>;
 				operating-points-v2 = <&qup_opp_table_100mhz>;
 
-				dmas = <&gpi_dma2 0 2 QCOM_GPI_SPI>,
-				       <&gpi_dma2 1 2 QCOM_GPI_SPI>;
+				dmas = <&gpi_dma2 0 2>,
+				       <&gpi_dma2 1 2>;
 				dma-names = "tx",
 					    "rx";
 
@@ -1106,8 +1106,8 @@
 				power-domains = <&rpmhpd RPMHPD_CX>;
 				required-opps = <&rpmhpd_opp_low_svs>;
 
-				dmas = <&gpi_dma2 0 3 QCOM_GPI_I2C>,
-				       <&gpi_dma2 1 3 QCOM_GPI_I2C>;
+				dmas = <&gpi_dma2 0 3>,
+				       <&gpi_dma2 1 3>;
 				dma-names = "tx",
 					    "rx";
 
@@ -1142,8 +1142,8 @@
 				power-domains = <&rpmhpd RPMHPD_CX>;
 				operating-points-v2 = <&qup_opp_table_100mhz>;
 
-				dmas = <&gpi_dma2 0 3 QCOM_GPI_SPI>,
-				       <&gpi_dma2 1 3 QCOM_GPI_SPI>;
+				dmas = <&gpi_dma2 0 3>,
+				       <&gpi_dma2 1 3>;
 				dma-names = "tx",
 					    "rx";
 
@@ -1178,8 +1178,8 @@
 				power-domains = <&rpmhpd RPMHPD_CX>;
 				required-opps = <&rpmhpd_opp_low_svs>;
 
-				dmas = <&gpi_dma2 0 4 QCOM_GPI_I2C>,
-				       <&gpi_dma2 1 4 QCOM_GPI_I2C>;
+				dmas = <&gpi_dma2 0 4>,
+				       <&gpi_dma2 1 4>;
 				dma-names = "tx",
 					    "rx";
 
@@ -1214,8 +1214,8 @@
 				power-domains = <&rpmhpd RPMHPD_CX>;
 				operating-points-v2 = <&qup_opp_table_100mhz>;
 
-				dmas = <&gpi_dma2 0 4 QCOM_GPI_SPI>,
-				       <&gpi_dma2 1 4 QCOM_GPI_SPI>;
+				dmas = <&gpi_dma2 0 4>,
+				       <&gpi_dma2 1 4>;
 				dma-names = "tx",
 					    "rx";
 
@@ -1250,8 +1250,8 @@
 				power-domains = <&rpmhpd RPMHPD_CX>;
 				required-opps = <&rpmhpd_opp_low_svs>;
 
-				dmas = <&gpi_dma2 0 5 QCOM_GPI_I2C>,
-				       <&gpi_dma2 1 5 QCOM_GPI_I2C>;
+				dmas = <&gpi_dma2 0 5>,
+				       <&gpi_dma2 1 5>;
 				dma-names = "tx",
 					    "rx";
 
@@ -1286,8 +1286,8 @@
 				power-domains = <&rpmhpd RPMHPD_CX>;
 				operating-points-v2 = <&qup_opp_table_100mhz>;
 
-				dmas = <&gpi_dma2 0 5 QCOM_GPI_SPI>,
-				       <&gpi_dma2 1 5 QCOM_GPI_SPI>;
+				dmas = <&gpi_dma2 0 5>,
+				       <&gpi_dma2 1 5>;
 				dma-names = "tx",
 					    "rx";
 
@@ -1347,8 +1347,8 @@
 				power-domains = <&rpmhpd RPMHPD_CX>;
 				required-opps = <&rpmhpd_opp_low_svs>;
 
-				dmas = <&gpi_dma2 0 6 QCOM_GPI_I2C>,
-				       <&gpi_dma2 1 6 QCOM_GPI_I2C>;
+				dmas = <&gpi_dma2 0 6>,
+				       <&gpi_dma2 1 6>;
 				dma-names = "tx",
 					    "rx";
 
@@ -1383,8 +1383,8 @@
 				power-domains = <&rpmhpd RPMHPD_CX>;
 				operating-points-v2 = <&qup_opp_table_100mhz>;
 
-				dmas = <&gpi_dma2 0 6 QCOM_GPI_SPI>,
-				       <&gpi_dma2 1 6 QCOM_GPI_SPI>;
+				dmas = <&gpi_dma2 0 6>,
+				       <&gpi_dma2 1 6>;
 				dma-names = "tx",
 					    "rx";
 
@@ -1419,8 +1419,8 @@
 				power-domains = <&rpmhpd RPMHPD_CX>;
 				required-opps = <&rpmhpd_opp_low_svs>;
 
-				dmas = <&gpi_dma2 0 7 QCOM_GPI_I2C>,
-				       <&gpi_dma2 1 7 QCOM_GPI_I2C>;
+				dmas = <&gpi_dma2 0 7>,
+				       <&gpi_dma2 1 7>;
 				dma-names = "tx",
 					    "rx";
 
@@ -1455,8 +1455,8 @@
 				power-domains = <&rpmhpd RPMHPD_CX>;
 				operating-points-v2 = <&qup_opp_table_100mhz>;
 
-				dmas = <&gpi_dma2 0 7 QCOM_GPI_SPI>,
-				       <&gpi_dma2 1 7 QCOM_GPI_SPI>;
+				dmas = <&gpi_dma2 0 7>,
+				       <&gpi_dma2 1 7>;
 				dma-names = "tx",
 					    "rx";
 
@@ -1489,7 +1489,7 @@
 
 			dma-channels = <12>;
 			dma-channel-mask = <0x3e>;
-			#dma-cells = <3>;
+			#dma-cells = <2>;
 
 			iommus = <&apps_smmu 0x136 0x0>;
 
@@ -1535,8 +1535,8 @@
 				power-domains = <&rpmhpd RPMHPD_CX>;
 				required-opps = <&rpmhpd_opp_low_svs>;
 
-				dmas = <&gpi_dma1 0 0 QCOM_GPI_I2C>,
-				       <&gpi_dma1 1 0 QCOM_GPI_I2C>;
+				dmas = <&gpi_dma1 0 0>,
+				       <&gpi_dma1 1 0>;
 				dma-names = "tx",
 					    "rx";
 
@@ -1571,8 +1571,8 @@
 				power-domains = <&rpmhpd RPMHPD_CX>;
 				operating-points-v2 = <&qup_opp_table_120mhz>;
 
-				dmas = <&gpi_dma1 0 0 QCOM_GPI_SPI>,
-				       <&gpi_dma1 1 0 QCOM_GPI_SPI>;
+				dmas = <&gpi_dma1 0 0>,
+				       <&gpi_dma1 1 0>;
 				dma-names = "tx",
 					    "rx";
 
@@ -1607,8 +1607,8 @@
 				power-domains = <&rpmhpd RPMHPD_CX>;
 				required-opps = <&rpmhpd_opp_low_svs>;
 
-				dmas = <&gpi_dma1 0 1 QCOM_GPI_I2C>,
-				       <&gpi_dma1 1 1 QCOM_GPI_I2C>;
+				dmas = <&gpi_dma1 0 1>,
+				       <&gpi_dma1 1 1>;
 				dma-names = "tx",
 					    "rx";
 
@@ -1643,8 +1643,8 @@
 				power-domains = <&rpmhpd RPMHPD_CX>;
 				operating-points-v2 = <&qup_opp_table_120mhz>;
 
-				dmas = <&gpi_dma1 0 1 QCOM_GPI_SPI>,
-				       <&gpi_dma1 1 1 QCOM_GPI_SPI>;
+				dmas = <&gpi_dma1 0 1>,
+				       <&gpi_dma1 1 1>;
 				dma-names = "tx",
 					    "rx";
 
@@ -1679,8 +1679,8 @@
 				power-domains = <&rpmhpd RPMHPD_CX>;
 				required-opps = <&rpmhpd_opp_low_svs>;
 
-				dmas = <&gpi_dma1 0 2 QCOM_GPI_I2C>,
-				       <&gpi_dma1 1 2 QCOM_GPI_I2C>;
+				dmas = <&gpi_dma1 0 2>,
+				       <&gpi_dma1 1 2>;
 				dma-names = "tx",
 					    "rx";
 
@@ -1715,8 +1715,8 @@
 				power-domains = <&rpmhpd RPMHPD_CX>;
 				operating-points-v2 = <&qup_opp_table_100mhz>;
 
-				dmas = <&gpi_dma1 0 2 QCOM_GPI_SPI>,
-				       <&gpi_dma1 1 2 QCOM_GPI_SPI>;
+				dmas = <&gpi_dma1 0 2>,
+				       <&gpi_dma1 1 2>;
 				dma-names = "tx",
 					    "rx";
 
@@ -1751,8 +1751,8 @@
 				power-domains = <&rpmhpd RPMHPD_CX>;
 				required-opps = <&rpmhpd_opp_low_svs>;
 
-				dmas = <&gpi_dma1 0 3 QCOM_GPI_I2C>,
-				       <&gpi_dma1 1 3 QCOM_GPI_I2C>;
+				dmas = <&gpi_dma1 0 3>,
+				       <&gpi_dma1 1 3>;
 				dma-names = "tx",
 					    "rx";
 
@@ -1787,8 +1787,8 @@
 				power-domains = <&rpmhpd RPMHPD_CX>;
 				operating-points-v2 = <&qup_opp_table_100mhz>;
 
-				dmas = <&gpi_dma1 0 3 QCOM_GPI_SPI>,
-				       <&gpi_dma1 1 3 QCOM_GPI_SPI>;
+				dmas = <&gpi_dma1 0 3>,
+				       <&gpi_dma1 1 3>;
 				dma-names = "tx",
 					    "rx";
 
@@ -1823,8 +1823,8 @@
 				power-domains = <&rpmhpd RPMHPD_CX>;
 				required-opps = <&rpmhpd_opp_low_svs>;
 
-				dmas = <&gpi_dma1 0 4 QCOM_GPI_I2C>,
-				       <&gpi_dma1 1 4 QCOM_GPI_I2C>;
+				dmas = <&gpi_dma1 0 4>,
+				       <&gpi_dma1 1 4>;
 				dma-names = "tx",
 					    "rx";
 
@@ -1859,8 +1859,8 @@
 				power-domains = <&rpmhpd RPMHPD_CX>;
 				operating-points-v2 = <&qup_opp_table_100mhz>;
 
-				dmas = <&gpi_dma1 0 4 QCOM_GPI_SPI>,
-				       <&gpi_dma1 1 4 QCOM_GPI_SPI>;
+				dmas = <&gpi_dma1 0 4>,
+				       <&gpi_dma1 1 4>;
 				dma-names = "tx",
 					    "rx";
 
@@ -1895,8 +1895,8 @@
 				power-domains = <&rpmhpd RPMHPD_CX>;
 				required-opps = <&rpmhpd_opp_low_svs>;
 
-				dmas = <&gpi_dma1 0 5 QCOM_GPI_I2C>,
-				       <&gpi_dma1 1 5 QCOM_GPI_I2C>;
+				dmas = <&gpi_dma1 0 5>,
+				       <&gpi_dma1 1 5>;
 				dma-names = "tx",
 					    "rx";
 
@@ -1931,8 +1931,8 @@
 				power-domains = <&rpmhpd RPMHPD_CX>;
 				operating-points-v2 = <&qup_opp_table_100mhz>;
 
-				dmas = <&gpi_dma1 0 5 QCOM_GPI_SPI>,
-				       <&gpi_dma1 1 5 QCOM_GPI_SPI>;
+				dmas = <&gpi_dma1 0 5>,
+				       <&gpi_dma1 1 5>;
 				dma-names = "tx",
 					    "rx";
 
@@ -1967,8 +1967,8 @@
 				power-domains = <&rpmhpd RPMHPD_CX>;
 				required-opps = <&rpmhpd_opp_low_svs>;
 
-				dmas = <&gpi_dma1 0 6 QCOM_GPI_I2C>,
-				       <&gpi_dma1 1 6 QCOM_GPI_I2C>;
+				dmas = <&gpi_dma1 0 6>,
+				       <&gpi_dma1 1 6>;
 				dma-names = "tx",
 					    "rx";
 
@@ -2003,8 +2003,8 @@
 				power-domains = <&rpmhpd RPMHPD_CX>;
 				operating-points-v2 = <&qup_opp_table_100mhz>;
 
-				dmas = <&gpi_dma1 0 6 QCOM_GPI_SPI>,
-				       <&gpi_dma1 1 6 QCOM_GPI_SPI>;
+				dmas = <&gpi_dma1 0 6>,
+				       <&gpi_dma1 1 6>;
 				dma-names = "tx",
 					    "rx";
 
@@ -2064,8 +2064,8 @@
 				power-domains = <&rpmhpd RPMHPD_CX>;
 				required-opps = <&rpmhpd_opp_low_svs>;
 
-				dmas = <&gpi_dma1 0 7 QCOM_GPI_I2C>,
-				       <&gpi_dma1 1 7 QCOM_GPI_I2C>;
+				dmas = <&gpi_dma1 0 7>,
+				       <&gpi_dma1 1 7>;
 				dma-names = "tx",
 					    "rx";
 
@@ -2100,8 +2100,8 @@
 				power-domains = <&rpmhpd RPMHPD_CX>;
 				operating-points-v2 = <&qup_opp_table_100mhz>;
 
-				dmas = <&gpi_dma1 0 7 QCOM_GPI_SPI>,
-				       <&gpi_dma1 1 7 QCOM_GPI_SPI>;
+				dmas = <&gpi_dma1 0 7>,
+				       <&gpi_dma1 1 7>;
 				dma-names = "tx",
 					    "rx";
 
@@ -2134,7 +2134,7 @@
 
 			dma-channels = <12>;
 			dma-channel-mask = <0x3e>;
-			#dma-cells = <3>;
+			#dma-cells = <2>;
 
 			iommus = <&apps_smmu 0x456 0x0>;
 
@@ -2179,8 +2179,8 @@
 				power-domains = <&rpmhpd RPMHPD_CX>;
 				required-opps = <&rpmhpd_opp_low_svs>;
 
-				dmas = <&gpi_dma0 0 0 QCOM_GPI_I2C>,
-				       <&gpi_dma0 1 0 QCOM_GPI_I2C>;
+				dmas = <&gpi_dma0 0 0>,
+				       <&gpi_dma0 1 0>;
 				dma-names = "tx",
 					    "rx";
 
@@ -2215,8 +2215,8 @@
 				power-domains = <&rpmhpd RPMHPD_CX>;
 				operating-points-v2 = <&qup_opp_table_120mhz>;
 
-				dmas = <&gpi_dma0 0 0 QCOM_GPI_SPI>,
-				       <&gpi_dma0 1 0 QCOM_GPI_SPI>;
+				dmas = <&gpi_dma0 0 0>,
+				       <&gpi_dma0 1 0>;
 				dma-names = "tx",
 					    "rx";
 
@@ -2251,8 +2251,8 @@
 				power-domains = <&rpmhpd RPMHPD_CX>;
 				required-opps = <&rpmhpd_opp_low_svs>;
 
-				dmas = <&gpi_dma0 0 1 QCOM_GPI_I2C>,
-				       <&gpi_dma0 1 1 QCOM_GPI_I2C>;
+				dmas = <&gpi_dma0 0 1>,
+				       <&gpi_dma0 1 1>;
 				dma-names = "tx",
 					    "rx";
 
@@ -2287,8 +2287,8 @@
 				power-domains = <&rpmhpd RPMHPD_CX>;
 				operating-points-v2 = <&qup_opp_table_120mhz>;
 
-				dmas = <&gpi_dma0 0 1 QCOM_GPI_SPI>,
-				       <&gpi_dma0 1 1 QCOM_GPI_SPI>;
+				dmas = <&gpi_dma0 0 1>,
+				       <&gpi_dma0 1 1>;
 				dma-names = "tx",
 					    "rx";
 
@@ -2323,8 +2323,8 @@
 				power-domains = <&rpmhpd RPMHPD_CX>;
 				required-opps = <&rpmhpd_opp_low_svs>;
 
-				dmas = <&gpi_dma0 0 2 QCOM_GPI_I2C>,
-				       <&gpi_dma0 1 2 QCOM_GPI_I2C>;
+				dmas = <&gpi_dma0 0 2>,
+				       <&gpi_dma0 1 2>;
 				dma-names = "tx",
 					    "rx";
 
@@ -2384,8 +2384,8 @@
 				power-domains = <&rpmhpd RPMHPD_CX>;
 				operating-points-v2 = <&qup_opp_table_100mhz>;
 
-				dmas = <&gpi_dma0 0 2 QCOM_GPI_SPI>,
-				       <&gpi_dma0 1 2 QCOM_GPI_SPI>;
+				dmas = <&gpi_dma0 0 2>,
+				       <&gpi_dma0 1 2>;
 				dma-names = "tx",
 					    "rx";
 
@@ -2420,8 +2420,8 @@
 				power-domains = <&rpmhpd RPMHPD_CX>;
 				required-opps = <&rpmhpd_opp_low_svs>;
 
-				dmas = <&gpi_dma0 0 3 QCOM_GPI_I2C>,
-				       <&gpi_dma0 1 3 QCOM_GPI_I2C>;
+				dmas = <&gpi_dma0 0 3>,
+				       <&gpi_dma0 1 3>;
 				dma-names = "tx",
 					    "rx";
 
@@ -2456,8 +2456,8 @@
 				power-domains = <&rpmhpd RPMHPD_CX>;
 				operating-points-v2 = <&qup_opp_table_100mhz>;
 
-				dmas = <&gpi_dma0 0 3 QCOM_GPI_SPI>,
-				       <&gpi_dma0 1 3 QCOM_GPI_SPI>;
+				dmas = <&gpi_dma0 0 3>,
+				       <&gpi_dma0 1 3>;
 				dma-names = "tx",
 					    "rx";
 
@@ -2492,8 +2492,8 @@
 				power-domains = <&rpmhpd RPMHPD_CX>;
 				required-opps = <&rpmhpd_opp_low_svs>;
 
-				dmas = <&gpi_dma0 0 4 QCOM_GPI_I2C>,
-				       <&gpi_dma0 1 4 QCOM_GPI_I2C>;
+				dmas = <&gpi_dma0 0 4>,
+				       <&gpi_dma0 1 4>;
 				dma-names = "tx",
 					    "rx";
 
@@ -2528,8 +2528,8 @@
 				power-domains = <&rpmhpd RPMHPD_CX>;
 				operating-points-v2 = <&qup_opp_table_100mhz>;
 
-				dmas = <&gpi_dma0 0 4 QCOM_GPI_SPI>,
-				       <&gpi_dma0 1 4 QCOM_GPI_SPI>;
+				dmas = <&gpi_dma0 0 4>,
+				       <&gpi_dma0 1 4>;
 				dma-names = "tx",
 					    "rx";
 
@@ -2564,8 +2564,8 @@
 				power-domains = <&rpmhpd RPMHPD_CX>;
 				required-opps = <&rpmhpd_opp_low_svs>;
 
-				dmas = <&gpi_dma0 0 5 QCOM_GPI_I2C>,
-				       <&gpi_dma0 1 5 QCOM_GPI_I2C>;
+				dmas = <&gpi_dma0 0 5>,
+				       <&gpi_dma0 1 5>;
 				dma-names = "tx",
 					    "rx";
 
@@ -2600,8 +2600,8 @@
 				power-domains = <&rpmhpd RPMHPD_CX>;
 				operating-points-v2 = <&qup_opp_table_100mhz>;
 
-				dmas = <&gpi_dma0 0 5 QCOM_GPI_SPI>,
-				       <&gpi_dma0 1 5 QCOM_GPI_SPI>;
+				dmas = <&gpi_dma0 0 5>,
+				       <&gpi_dma0 1 5>;
 				dma-names = "tx",
 					    "rx";
 
@@ -2636,8 +2636,8 @@
 				power-domains = <&rpmhpd RPMHPD_CX>;
 				required-opps = <&rpmhpd_opp_low_svs>;
 
-				dmas = <&gpi_dma0 0 6 QCOM_GPI_I2C>,
-				       <&gpi_dma0 1 6 QCOM_GPI_I2C>;
+				dmas = <&gpi_dma0 0 6>,
+				       <&gpi_dma0 1 6>;
 				dma-names = "tx",
 					    "rx";
 
@@ -2672,8 +2672,8 @@
 				power-domains = <&rpmhpd RPMHPD_CX>;
 				operating-points-v2 = <&qup_opp_table_100mhz>;
 
-				dmas = <&gpi_dma0 0 6 QCOM_GPI_SPI>,
-				       <&gpi_dma0 1 6 QCOM_GPI_SPI>;
+				dmas = <&gpi_dma0 0 6>,
+				       <&gpi_dma0 1 6>;
 				dma-names = "tx",
 					    "rx";
 
@@ -2708,8 +2708,8 @@
 				power-domains = <&rpmhpd RPMHPD_CX>;
 				required-opps = <&rpmhpd_opp_low_svs>;
 
-				dmas = <&gpi_dma0 0 7 QCOM_GPI_I2C>,
-				       <&gpi_dma0 1 7 QCOM_GPI_I2C>;
+				dmas = <&gpi_dma0 0 7>,
+				       <&gpi_dma0 1 7>;
 				dma-names = "tx",
 					    "rx";
 
@@ -2744,8 +2744,8 @@
 				power-domains = <&rpmhpd RPMHPD_CX>;
 				operating-points-v2 = <&qup_opp_table_100mhz>;
 
-				dmas = <&gpi_dma0 0 7 QCOM_GPI_SPI>,
-				       <&gpi_dma0 1 7 QCOM_GPI_SPI>;
+				dmas = <&gpi_dma0 0 7>,
+				       <&gpi_dma0 1 7>;
 				dma-names = "tx",
 					    "rx";
 
