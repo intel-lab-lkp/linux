@@ -46,6 +46,12 @@ properties:
     type: object
     description: Command to use for automatic booting
 
+  env-size:
+    $ref: /schemas/types.yaml#/definitions/uint32
+    description:
+      Size of the environment storage area in bytes. If this property
+      is not defined, the default size is the partition size.
+
   ethaddr:
     type: object
     description: Ethernet interfaces base MAC address.
@@ -85,6 +91,7 @@ examples:
         env: partition@40000 {
             compatible = "u-boot,env";
             reg = <0x40000 0x10000>;
+            env-size = <0x1000>;
 
             mac: ethaddr {
                 #nvmem-cell-cells = <1>;
