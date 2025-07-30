@@ -688,7 +688,8 @@ static int vivid_vid_cap_s_ctrl(struct v4l2_ctrl *ctrl)
 		spin_unlock(&hdmi_output_skip_mask_lock);
 		vivid_update_power_present(dev);
 		vivid_update_hdcp(dev);
-		__v4l2_ctrl_s_ctrl(dev->ctrl_dv_rx_hdcp_detected, dev->rx_hdcp_detected);
+		if (dev->ctrl_dv_rx_hdcp_detected)
+			__v4l2_ctrl_s_ctrl(dev->ctrl_dv_rx_hdcp_detected, dev->rx_hdcp_detected);
 		vivid_update_quality(dev);
 		vivid_send_input_source_change(dev, dev->hdmi_index_to_input_index[hdmi_index]);
 		if (ctrl->val < FIXED_MENU_ITEMS && ctrl->cur.val < FIXED_MENU_ITEMS)

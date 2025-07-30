@@ -1183,7 +1183,8 @@ int vidioc_s_input(struct file *file, void *priv, unsigned i)
 	dev->meta_cap_dev.tvnorms = dev->vid_cap_dev.tvnorms;
 	vivid_update_format_cap(dev, false);
 	vivid_update_hdcp(dev);
-	v4l2_ctrl_s_ctrl(dev->ctrl_dv_rx_hdcp_detected, dev->rx_hdcp_detected);
+	if (dev->ctrl_dv_rx_hdcp_detected)
+		v4l2_ctrl_s_ctrl(dev->ctrl_dv_rx_hdcp_detected, dev->rx_hdcp_detected);
 
 	if (dev->colorspace) {
 		switch (dev->input_type[i]) {
