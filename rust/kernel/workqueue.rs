@@ -331,6 +331,33 @@ impl Queue {
     /// Tries to spawn the given function or closure as a work item.
     ///
     /// This method can fail because it allocates memory to store the work item.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use kernel::{alloc::flags, sync::{Arc, Completion, new_spinlock}, workqueue};
+    ///
+    /// let work_done = Arc::pin_init(Completion::new(), flags::GFP_KERNEL)?;
+    /// let data = Arc::pin_init(new_spinlock!(0), flags::GFP_KERNEL)?;
+    ///
+    /// workqueue::system().try_spawn(
+    ///     flags::GFP_KERNEL,
+    ///     {
+    ///         let work_done = work_done.clone();
+    ///         let data = data.clone();
+    ///         move || {
+    ///             *data.lock() = 42;
+    ///             work_done.complete_all();
+    ///         }
+    ///     }
+    /// )?;
+    ///
+    /// work_done.wait_for_completion();
+    ///
+    /// // `work_done` being completed implies the observation of the write of `data` in the work.
+    /// assert_eq!(*data.lock(), 42);
+    /// # Ok::<(), Error>(())
+    /// ```
     pub fn try_spawn<T: 'static + Send + FnOnce()>(
         &self,
         flags: Flags,
