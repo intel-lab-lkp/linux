@@ -399,6 +399,7 @@ void panic(const char *fmt, ...)
 	 */
 	local_irq_disable();
 	preempt_disable_notrace();
+	hardlockup_detector_perf_stop();
 
 	/*
 	 * It's possible to come here directly from a panic-assertion and
