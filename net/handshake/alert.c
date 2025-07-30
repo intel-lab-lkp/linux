@@ -94,13 +94,13 @@ EXPORT_SYMBOL(tls_get_record_type);
  * @description: OUT - TLS AlertDescription value
  *
  */
-void tls_alert_recv(const struct sock *sk, const struct msghdr *msg,
+void tls_alert_recv(const struct sock *sk, const struct kvec *iov,
 		    u8 *level, u8 *description)
 {
-	const struct kvec *iov;
 	u8 *data;
 
-	iov = msg->msg_iter.kvec;
+	if (!iov)
+		return;
 	data = iov->iov_base;
 	*level = data[0];
 	*description = data[1];
