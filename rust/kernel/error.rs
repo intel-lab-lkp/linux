@@ -2,6 +2,8 @@
 
 //! Kernel errors.
 //!
+//! C header: [`arch/mips/include/uapi/asm/errno.h`](srctree/arch/mips/include/uapi/asm/errno.h)
+//! C header: [`include/linux/errno.h`](srctree/include/linux/errno.h)
 //! C header: [`include/uapi/asm-generic/errno-base.h`](srctree/include/uapi/asm-generic/errno-base.h)
 
 use crate::{
