@@ -183,6 +183,16 @@ struct nd_namespace_label {
 	};
 };
 
+/*
+ * LSA 2.1 format introduces region label, which can also reside
+ * into LSA along with only namespace label as per v1.1 and v1.2
+ */
+struct nd_lsa_label {
+	union {
+		struct nd_namespace_label ns_label;
+	};
+};
+
 #define NVDIMM_BTT_GUID "8aed63a2-29a2-4c66-8b12-f05d15d3922a"
 #define NVDIMM_BTT2_GUID "18633bfc-1735-4217-8ac9-17239282d3f8"
 #define NVDIMM_PFN_GUID "266400ba-fb9f-4677-bcb0-968f11d0d225"
@@ -215,7 +225,7 @@ struct nvdimm_drvdata;
 int nd_label_data_init(struct nvdimm_drvdata *ndd);
 size_t sizeof_namespace_index(struct nvdimm_drvdata *ndd);
 int nd_label_active_count(struct nvdimm_drvdata *ndd);
-struct nd_namespace_label *nd_label_active(struct nvdimm_drvdata *ndd, int n);
+struct nd_lsa_label *nd_label_active(struct nvdimm_drvdata *ndd, int n);
 u32 nd_label_alloc_slot(struct nvdimm_drvdata *ndd);
 bool nd_label_free_slot(struct nvdimm_drvdata *ndd, u32 slot);
 u32 nd_label_nfree(struct nvdimm_drvdata *ndd);

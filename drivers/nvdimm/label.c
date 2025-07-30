@@ -271,7 +271,7 @@ static void nd_label_copy(struct nvdimm_drvdata *ndd,
 	memcpy(dst, src, sizeof_namespace_index(ndd));
 }
 
-static struct nd_namespace_label *nd_label_base(struct nvdimm_drvdata *ndd)
+static struct nd_lsa_label *nd_label_base(struct nvdimm_drvdata *ndd)
 {
 	void *base = to_namespace_index(ndd, 0);
 
@@ -279,7 +279,7 @@ static struct nd_namespace_label *nd_label_base(struct nvdimm_drvdata *ndd)
 }
 
 static int to_slot(struct nvdimm_drvdata *ndd,
-		struct nd_namespace_label *nd_label)
+		struct nd_lsa_label *nd_label)
 {
 	unsigned long label, base;
 
@@ -289,14 +289,14 @@ static int to_slot(struct nvdimm_drvdata *ndd,
 	return (label - base) / sizeof_namespace_label(ndd);
 }
 
-static struct nd_namespace_label *to_label(struct nvdimm_drvdata *ndd, int slot)
+static struct nd_lsa_label *to_label(struct nvdimm_drvdata *ndd, int slot)
 {
 	unsigned long label, base;
 
 	base = (unsigned long) nd_label_base(ndd);
 	label = base + sizeof_namespace_label(ndd) * slot;
 
-	return (struct nd_namespace_label *) label;
+	return (struct nd_lsa_label *) label;
 }
 
 #define for_each_clear_bit_le(bit, addr, size) \
@@ -382,9 +382,10 @@ static void nsl_calculate_checksum(struct nvdimm_drvdata *ndd,
 }
 
 static bool slot_valid(struct nvdimm_drvdata *ndd,
-		struct nd_namespace_label *nd_label, u32 slot)
+		struct nd_lsa_label *lsa_label, u32 slot)
 {
 	bool valid;
+	struct nd_namespace_label *nd_label = &lsa_label->ns_label;
 
 	/* check that we are written where we expect to be written */
 	if (slot != nsl_get_slot(ndd, nd_label))
@@ -405,6 +406,7 @@ int nd_label_reserve_dpa(struct nvdimm_drvdata *ndd)
 		return 0; /* no label, nothing to reserve */
 
 	for_each_clear_bit_le(slot, free, nslot) {
+		struct nd_lsa_label *lsa_label;
 		struct nd_namespace_label *nd_label;
 		struct nd_region *nd_region = NULL;
 		struct nd_label_id label_id;
@@ -412,9 +414,10 @@ int nd_label_reserve_dpa(struct nvdimm_drvdata *ndd)
 		uuid_t label_uuid;
 		u32 flags;
 
-		nd_label = to_label(ndd, slot);
+		lsa_label = to_label(ndd, slot);
+		nd_label = &lsa_label->ns_label;
 
-		if (!slot_valid(ndd, nd_label, slot))
+		if (!slot_valid(ndd, lsa_label, slot))
 			continue;
 
 		nsl_get_uuid(ndd, nd_label, &label_uuid);
@@ -565,11 +568,13 @@ int nd_label_active_count(struct nvdimm_drvdata *ndd)
 		return 0;
 
 	for_each_clear_bit_le(slot, free, nslot) {
+		struct nd_lsa_label *lsa_label;
 		struct nd_namespace_label *nd_label;
 
-		nd_label = to_label(ndd, slot);
+		lsa_label = to_label(ndd, slot);
+		nd_label = &lsa_label->ns_label;
 
-		if (!slot_valid(ndd, nd_label, slot)) {
+		if (!slot_valid(ndd, lsa_label, slot)) {
 			u32 label_slot = nsl_get_slot(ndd, nd_label);
 			u64 size = nsl_get_rawsize(ndd, nd_label);
 			u64 dpa = nsl_get_dpa(ndd, nd_label);
@@ -584,7 +589,7 @@ int nd_label_active_count(struct nvdimm_drvdata *ndd)
 	return count;
 }
 
-struct nd_namespace_label *nd_label_active(struct nvdimm_drvdata *ndd, int n)
+struct nd_lsa_label *nd_label_active(struct nvdimm_drvdata *ndd, int n)
 {
 	struct nd_namespace_index *nsindex;
 	unsigned long *free;
@@ -594,10 +599,10 @@ struct nd_namespace_label *nd_label_active(struct nvdimm_drvdata *ndd, int n)
 		return NULL;
 
 	for_each_clear_bit_le(slot, free, nslot) {
-		struct nd_namespace_label *nd_label;
+		struct nd_lsa_label *lsa_label;
 
-		nd_label = to_label(ndd, slot);
-		if (!slot_valid(ndd, nd_label, slot))
+		lsa_label = to_label(ndd, slot);
+		if (!slot_valid(ndd, lsa_label, slot))
 			continue;
 
 		if (n-- == 0)
@@ -738,7 +743,7 @@ static int nd_label_write_index(struct nvdimm_drvdata *ndd, int index, u32 seq,
 }
 
 static unsigned long nd_label_offset(struct nvdimm_drvdata *ndd,
-		struct nd_namespace_label *nd_label)
+		struct nd_lsa_label *nd_label)
 {
 	return (unsigned long) nd_label
 		- (unsigned long) to_namespace_index(ndd, 0);
@@ -892,6 +897,7 @@ static int __pmem_label_update(struct nd_region *nd_region,
 	struct nd_namespace_common *ndns = &nspm->nsio.common;
 	struct nd_interleave_set *nd_set = nd_region->nd_set;
 	struct nvdimm_drvdata *ndd = to_ndd(nd_mapping);
+	struct nd_lsa_label *lsa_label;
 	struct nd_namespace_label *nd_label;
 	struct nd_namespace_index *nsindex;
 	struct nd_label_ent *label_ent;
@@ -923,8 +929,10 @@ static int __pmem_label_update(struct nd_region *nd_region,
 		return -ENXIO;
 	dev_dbg(ndd->dev, "allocated: %d\n", slot);
 
-	nd_label = to_label(ndd, slot);
-	memset(nd_label, 0, sizeof_namespace_label(ndd));
+	lsa_label = to_label(ndd, slot);
+	memset(lsa_label, 0, sizeof_namespace_label(ndd));
+
+	nd_label = &lsa_label->ns_label;
 	nsl_set_uuid(ndd, nd_label, nspm->uuid);
 	nsl_set_name(ndd, nd_label, nspm->alt_name);
 	nsl_set_flags(ndd, nd_label, flags);
@@ -942,7 +950,7 @@ static int __pmem_label_update(struct nd_region *nd_region,
 	nd_dbg_dpa(nd_region, ndd, res, "\n");
 
 	/* update label */
-	offset = nd_label_offset(ndd, nd_label);
+	offset = nd_label_offset(ndd, lsa_label);
 	rc = nvdimm_set_config_data(ndd, offset, nd_label,
 			sizeof_namespace_label(ndd));
 	if (rc < 0)
@@ -954,7 +962,7 @@ static int __pmem_label_update(struct nd_region *nd_region,
 		if (!label_ent->label)
 			continue;
 		if (test_and_clear_bit(ND_LABEL_REAP, &label_ent->flags) ||
-		    nsl_uuid_equal(ndd, label_ent->label, nspm->uuid))
+		    nsl_uuid_equal(ndd, &label_ent->label->ns_label, nspm->uuid))
 			reap_victim(nd_mapping, label_ent);
 	}
 
@@ -964,14 +972,14 @@ static int __pmem_label_update(struct nd_region *nd_region,
 	if (rc == 0) {
 		list_for_each_entry(label_ent, &nd_mapping->labels, list)
 			if (!label_ent->label) {
-				label_ent->label = nd_label;
-				nd_label = NULL;
+				label_ent->label = lsa_label;
+				lsa_label = NULL;
 				break;
 			}
-		dev_WARN_ONCE(&nspm->nsio.common.dev, nd_label,
+		dev_WARN_ONCE(&nspm->nsio.common.dev, lsa_label,
 				"failed to track label: %d\n",
-				to_slot(ndd, nd_label));
-		if (nd_label)
+				to_slot(ndd, lsa_label));
+		if (lsa_label)
 			rc = -ENXIO;
 	}
 	mutex_unlock(&nd_mapping->lock);
@@ -1042,12 +1050,12 @@ static int del_labels(struct nd_mapping *nd_mapping, uuid_t *uuid)
 
 	mutex_lock(&nd_mapping->lock);
 	list_for_each_entry_safe(label_ent, e, &nd_mapping->labels, list) {
-		struct nd_namespace_label *nd_label = label_ent->label;
+		struct nd_lsa_label *nd_label = label_ent->label;
 
 		if (!nd_label)
 			continue;
 		active++;
-		if (!nsl_uuid_equal(ndd, nd_label, uuid))
+		if (!nsl_uuid_equal(ndd, &nd_label->ns_label, uuid))
 			continue;
 		active--;
 		slot = to_slot(ndd, nd_label);

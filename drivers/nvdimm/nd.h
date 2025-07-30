@@ -376,7 +376,7 @@ enum nd_label_flags {
 struct nd_label_ent {
 	struct list_head list;
 	unsigned long flags;
-	struct nd_namespace_label *label;
+	struct nd_lsa_label *label;
 };
 
 enum nd_mapping_lock_class {

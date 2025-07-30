@@ -1009,10 +1009,11 @@ static int namespace_update_uuid(struct nd_region *nd_region,
 
 		mutex_lock(&nd_mapping->lock);
 		list_for_each_entry(label_ent, &nd_mapping->labels, list) {
-			struct nd_namespace_label *nd_label = label_ent->label;
+			struct nd_namespace_label *nd_label;
 			struct nd_label_id label_id;
 			uuid_t uuid;
 
+			nd_label = &label_ent->label->ns_label;
 			if (!nd_label)
 				continue;
 			nsl_get_uuid(ndd, nd_label, &uuid);
@@ -1573,11 +1574,14 @@ static bool has_uuid_at_pos(struct nd_region *nd_region, const uuid_t *uuid,
 		bool found_uuid = false;
 
 		list_for_each_entry(label_ent, &nd_mapping->labels, list) {
-			struct nd_namespace_label *nd_label = label_ent->label;
+			struct nd_lsa_label *lsa_label = label_ent->label;
+			struct nd_namespace_label *nd_label;
 			u16 position;
 
-			if (!nd_label)
+			if (!lsa_label)
 				continue;
+
+			nd_label = &lsa_label->ns_label;
 			position = nsl_get_position(ndd, nd_label);
 
 			if (!nsl_validate_isetcookie(ndd, nd_label, cookie))
@@ -1615,17 +1619,21 @@ static int select_pmem_id(struct nd_region *nd_region, const uuid_t *pmem_id)
 	for (i = 0; i < nd_region->ndr_mappings; i++) {
 		struct nd_mapping *nd_mapping = &nd_region->mapping[i];
 		struct nvdimm_drvdata *ndd = to_ndd(nd_mapping);
+		struct nd_lsa_label *lsa_label = NULL;
 		struct nd_namespace_label *nd_label = NULL;
 		u64 hw_start, hw_end, pmem_start, pmem_end;
 		struct nd_label_ent *label_ent;
 
 		lockdep_assert_held(&nd_mapping->lock);
 		list_for_each_entry(label_ent, &nd_mapping->labels, list) {
-			nd_label = label_ent->label;
-			if (!nd_label)
+			lsa_label = label_ent->label;
+			if (!lsa_label)
 				continue;
+
+			nd_label = &lsa_label->ns_label;
 			if (nsl_uuid_equal(ndd, nd_label, pmem_id))
 				break;
+			lsa_label = NULL;
 			nd_label = NULL;
 		}
 
@@ -1746,19 +1754,21 @@ static struct device *create_namespace_pmem(struct nd_region *nd_region,
 
 	/* Calculate total size and populate namespace properties from label0 */
 	for (i = 0; i < nd_region->ndr_mappings; i++) {
+		struct nd_lsa_label *lsa_label;
 		struct nd_namespace_label *label0;
 		struct nvdimm_drvdata *ndd;
 
 		nd_mapping = &nd_region->mapping[i];
 		label_ent = list_first_entry_or_null(&nd_mapping->labels,
 				typeof(*label_ent), list);
-		label0 = label_ent ? label_ent->label : NULL;
+		lsa_label = label_ent ? label_ent->label : NULL;
 
-		if (!label0) {
+		if (!lsa_label) {
 			WARN_ON(1);
 			continue;
 		}
 
+		label0 = &lsa_label->ns_label;
 		ndd = to_ndd(nd_mapping);
 		size += nsl_get_rawsize(ndd, label0);
 		if (nsl_get_position(ndd, label0) != 0)
@@ -1943,11 +1953,14 @@ static struct device **scan_labels(struct nd_region *nd_region)
 
 	/* "safe" because create_namespace_pmem() might list_move() label_ent */
 	list_for_each_entry_safe(label_ent, e, &nd_mapping->labels, list) {
-		struct nd_namespace_label *nd_label = label_ent->label;
+		struct nd_lsa_label *lsa_label = label_ent->label;
+		struct nd_namespace_label *nd_label;
 		struct device **__devs;
 
-		if (!nd_label)
+		if (!lsa_label)
 			continue;
+
+		nd_label = &lsa_label->ns_label;
 
 		/* skip labels that describe extents outside of the region */
 		if (nsl_get_dpa(ndd, nd_label) < nd_mapping->start ||
@@ -2122,7 +2135,7 @@ static int init_active_labels(struct nd_region *nd_region)
 		if (!count)
 			continue;
 		for (j = 0; j < count; j++) {
-			struct nd_namespace_label *label;
+			struct nd_lsa_label *label;
 
 			label_ent = kzalloc(sizeof(*label_ent), GFP_KERNEL);
 			if (!label_ent)
