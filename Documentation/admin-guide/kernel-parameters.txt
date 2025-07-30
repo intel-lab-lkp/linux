@@ -1,3 +1,4 @@
+# vim: noet:sw=8:sts=8:
 	accept_memory=  [MM]
 			Format: { eager | lazy }
 			default: lazy
@@ -5513,6 +5514,12 @@
 			test until boot completes in order to avoid
 			interference.
 
+	rcuscale.kfree_cpu_offset= [KNL]
+			Set the starting CPU affinity index of kfree threads.
+			CPU affinity is assigned sequentially from
+			kfree_cpu_offset to kfree_cpu_offset+kfree_nthreads,
+			modded by number of CPUs.  Negative value is reset to 0.
+
 	rcuscale.kfree_by_call_rcu= [KNL]
 			In kernels built with CONFIG_RCU_LAZY=y, test
 			call_rcu() instead of kfree_rcu().
@@ -5567,6 +5574,12 @@
 			the same as for rcuscale.nreaders.
 			N, where N is the number of CPUs
 
+	rcuscale.reader_cpu_offset= [KNL]
+			Set the starting CPU affinity index of reader threads.
+			CPU affinity is assigned sequentially from
+			reader_cpu_offset to reader_cpu_offset+nreaders, modded
+			by number of CPUs.  Negative value is reset to 0.
+
 	rcuscale.scale_type= [KNL]
 			Specify the RCU implementation to test.
 
@@ -5577,6 +5590,12 @@
 
 	rcuscale.verbose= [KNL]
 			Enable additional printk() statements.
+
+	rcuscale.writer_cpu_offset= [KNL]
+			Set the starting CPU affinity index of writer threads.
+			CPU affinity is assigned sequentially from
+			writer_cpu_offset to writer_cpu_offset+nwriters, modded
+			by number of CPUs.  Negative value is reset to 0.
 
 	rcuscale.writer_holdoff= [KNL]
 			Write-side holdoff between grace periods,

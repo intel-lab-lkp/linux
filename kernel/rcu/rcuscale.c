@@ -95,12 +95,15 @@ torture_param(int, holdoff, 10, "Holdoff time before test start (s)");
 torture_param(int, minruntime, 0, "Minimum run time (s)");
 torture_param(int, nreaders, -1, "Number of RCU reader threads");
 torture_param(int, nwriters, -1, "Number of RCU updater threads");
+torture_param(int, reader_cpu_offset, 0, "Offset of reader CPU affinity")
 torture_param(bool, shutdown, RCUSCALE_SHUTDOWN,
 	      "Shutdown at end of scalability tests.");
 torture_param(int, verbose, 1, "Enable verbose debugging printk()s");
+torture_param(int, writer_cpu_offset, 0, "Offset of writer CPU affinity")
 torture_param(int, writer_holdoff, 0, "Holdoff (us) between GPs, zero to disable");
 torture_param(int, writer_holdoff_jiffies, 0, "Holdoff (jiffies) between GPs, zero to disable");
 torture_param(bool, writer_no_print, false, "Do not print writer durations to ring buffer");
+torture_param(int, kfree_cpu_offset, 0, "Offset of kfree CPU affinity")
 torture_param(int, kfree_rcu_test, 0, "Do we run a kfree_rcu() scale test?");
 torture_param(int, kfree_mult, 1, "Multiple of kfree_obj size to allocate.");
 torture_param(int, kfree_by_call_rcu, 0, "Use call_rcu() to emulate kfree_rcu()?");
@@ -495,7 +498,7 @@ rcu_scale_reader(void *arg)
 	long me = (long)arg;
 
 	VERBOSE_SCALEOUT_STRING("rcu_scale_reader task started");
-	set_cpus_allowed_ptr(current, cpumask_of(me % nr_cpu_ids));
+	set_cpus_allowed_ptr(current, cpumask_of((reader_cpu_offset + me) % nr_cpu_ids));
 	set_user_nice(current, MAX_NICE);
 	atomic_inc(&n_rcu_scale_reader_started);
 
@@ -585,7 +588,7 @@ rcu_scale_writer(void *arg)
 
 	VERBOSE_SCALEOUT_STRING("rcu_scale_writer task started");
 	WARN_ON(!wdpp);
-	set_cpus_allowed_ptr(current, cpumask_of(me % nr_cpu_ids));
+	set_cpus_allowed_ptr(current, cpumask_of((writer_cpu_offset + me) % nr_cpu_ids));
 	current->flags |= PF_NO_SETAFFINITY;
 	sched_set_fifo_low(current);
 
@@ -719,8 +722,8 @@ static void
 rcu_scale_print_module_parms(struct rcu_scale_ops *cur_ops, const char *tag)
 {
 	pr_alert("%s" SCALE_FLAG
-		 "--- %s: gp_async=%d gp_async_max=%d gp_exp=%d holdoff=%d minruntime=%d nreaders=%d nwriters=%d writer_holdoff=%d writer_holdoff_jiffies=%d verbose=%d shutdown=%d\n",
-		 scale_type, tag, gp_async, gp_async_max, gp_exp, holdoff, minruntime, nrealreaders, nrealwriters, writer_holdoff, writer_holdoff_jiffies, verbose, shutdown);
+		 "--- %s: gp_async=%d gp_async_max=%d gp_exp=%d holdoff=%d minruntime=%d nreaders=%d nwriters=%d reader_cpu_offset=%d writer_cpu_offset=%d writer_holdoff=%d writer_holdoff_jiffies=%d kfree_cpu_offset=%d verbose=%d shutdown=%d\n",
+		 scale_type, tag, gp_async, gp_async_max, gp_exp, holdoff, minruntime, nrealreaders, nrealwriters, reader_cpu_offset, writer_cpu_offset, writer_holdoff, writer_holdoff_jiffies, kfree_cpu_offset, verbose, shutdown);
 }
 
 /*
@@ -785,7 +788,7 @@ kfree_scale_thread(void *arg)
 	DEFINE_TORTURE_RANDOM(tr);
 
 	VERBOSE_SCALEOUT_STRING("kfree_scale_thread task started");
-	set_cpus_allowed_ptr(current, cpumask_of(me % nr_cpu_ids));
+	set_cpus_allowed_ptr(current, cpumask_of((kfree_cpu_offset + me) % nr_cpu_ids));
 	set_user_nice(current, MAX_NICE);
 	kfree_rcu_test_both = (kfree_rcu_test_single == kfree_rcu_test_double);
 
@@ -1446,6 +1449,9 @@ rcu_scale_init(void)
 	atomic_set(&n_rcu_scale_reader_started, 0);
 	atomic_set(&n_rcu_scale_writer_started, 0);
 	atomic_set(&n_rcu_scale_writer_finished, 0);
+	reader_cpu_offset = max(reader_cpu_offset, 0);
+	writer_cpu_offset = max(writer_cpu_offset, 0);
+	kfree_cpu_offset = max(kfree_cpu_offset, 0);
 	rcu_scale_print_module_parms(cur_ops, "Start of test");
 
 	if (!block_start)
