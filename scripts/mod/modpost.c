@@ -2070,12 +2070,12 @@ static void write_vmlinux_export_c_file(struct module *mod)
 	struct module_alias *alias, *next;
 
 	buf_printf(&buf,
-		   "#include <linux/export-internal.h>\n"
-		   "#include <linux/module.h>\n");
+		   "#include <linux/export-internal.h>\n");
 
 	add_exported_symbols(&buf, mod);
 
 	buf_printf(&buf,
+		   "#include <linux/module.h>\n"
 		   "#undef __MODULE_INFO_PREFIX\n"
 		   "#define __MODULE_INFO_PREFIX\n");
 
