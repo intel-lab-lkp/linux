@@ -1418,7 +1418,7 @@ static ssize_t fuse_dev_do_read(struct fuse_dev *fud, struct file *file,
 
 		if (file->f_flags & O_NONBLOCK)
 			return -EAGAIN;
-		err = wait_event_interruptible_exclusive(fiq->waitq,
+		err = wait_event_freezable_exclusive(fiq->waitq,
 				!fiq->connected || request_pending(fiq));
 		if (err)
 			return err;
