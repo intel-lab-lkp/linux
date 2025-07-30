@@ -24,26 +24,16 @@
 #include "../virt-dma.h"
 #include "lgm-dma.h"
 
-static inline void
-ldma_update_bits(struct ldma_dev *d, u32 mask, u32 val, u32 ofs)
-{
-	u32 old_val, new_val;
-
-	old_val = readl(d->base +  ofs);
-	new_val = (old_val & ~mask) | (val & mask);
-
-	if (new_val != old_val)
-		writel(new_val, d->base + ofs);
-}
+enum {
+	DMA_ARG_CHAN_ID,
+	DMA_ARG_DESC_CNT,
+	DMA_ARG_PORT_ID,
+	DMA_ARG_BURST_SZ,
+};
 
 static inline bool ldma_chan_tx(struct ldma_chan *c)
 {
 	return !!(c->flags & DMA_TX_CH);
-}
-
-static inline bool ldma_chan_is_hw_desc(struct ldma_chan *c)
-{
-	return !!(c->flags & DMA_HW_DESC);
 }
 
 static void ldma_dev_reset(struct ldma_dev *d)
@@ -251,7 +241,7 @@ static int ldma_dev_cfg(struct ldma_dev *d)
 
 static int ldma_chan_cctrl_cfg(struct ldma_chan *c, u32 val)
 {
-	struct ldma_dev *d = to_ldma_dev(c->vchan.chan.device);
+	struct ldma_dev *d = chan_to_ldma_dev(c);
 	u32 class_low, class_high;
 	unsigned long flags;
 	u32 reg;
@@ -280,7 +270,7 @@ static int ldma_chan_cctrl_cfg(struct ldma_chan *c, u32 val)
 
 static void ldma_chan_irq_init(struct ldma_chan *c)
 {
-	struct ldma_dev *d = to_ldma_dev(c->vchan.chan.device);
+	struct ldma_dev *d = chan_to_ldma_dev(c);
 	unsigned long flags;
 	u32 enofs, crofs;
 	u32 cn_bit;
@@ -306,9 +296,36 @@ static void ldma_chan_irq_init(struct ldma_chan *c)
 	spin_unlock_irqrestore(&d->dev_lock, flags);
 }
 
+static void ldma_chan_irq_en(struct ldma_chan *c, bool en)
+{
+	struct ldma_dev *d = chan_to_ldma_dev(c);
+	u32 enofs, crofs;
+	u32 cn_bit, val;
+
+	if (ldma_chan_is_hw_desc(c))
+		return;
+
+	if (c->nr < MAX_LOWER_CHANS) {
+		enofs = DMA_IRNEN;
+		crofs = DMA_IRNCR;
+		cn_bit = BIT(c->nr);
+	} else {
+		enofs = DMA_IRNEN1;
+		crofs = DMA_IRNCR1;
+		cn_bit = BIT(c->nr - MAX_LOWER_CHANS);
+	}
+
+	writel(cn_bit, d->base + crofs);
+	val = en ? cn_bit : 0;
+	ldma_update_bits(d, cn_bit, val, enofs);
+	val = en ? DMA_CI_EOP : 0;
+	ldma_update_bits(d, DMA_CI_EOP, val, DMA_CIE);
+	dev_dbg(d->dev, "irq: %d, CIE: 0x%x\n", en, readl(d->base + DMA_CIE));
+}
+
 static void ldma_chan_set_class(struct ldma_chan *c, u32 val)
 {
-	struct ldma_dev *d = to_ldma_dev(c->vchan.chan.device);
+	struct ldma_dev *d = chan_to_ldma_dev(c);
 	u32 class_val;
 
 	if (d->type == DMA_TYPE_MCPY || val > DMA_MAX_CLASS)
@@ -326,8 +343,11 @@ static void ldma_chan_set_class(struct ldma_chan *c, u32 val)
 
 int ldma_chan_on(struct ldma_chan *c)
 {
-	struct ldma_dev *d = to_ldma_dev(c->vchan.chan.device);
+	struct ldma_dev *d = chan_to_ldma_dev(c);
 	unsigned long flags;
+
+	if (c->onoff == DMA_CH_ON)
+		return 0;
 
 	/* If descriptors not configured, not allow to turn on channel */
 	if (WARN_ON(!c->desc_init))
@@ -336,6 +356,7 @@ int ldma_chan_on(struct ldma_chan *c)
 	spin_lock_irqsave(&d->dev_lock, flags);
 	ldma_update_bits(d, DMA_CS_MASK, c->nr, DMA_CS);
 	ldma_update_bits(d, DMA_CCTRL_ON, DMA_CCTRL_ON, DMA_CCTRL);
+	ldma_chan_irq_en(c, true);
 	spin_unlock_irqrestore(&d->dev_lock, flags);
 
 	c->onoff = DMA_CH_ON;
@@ -345,7 +366,7 @@ int ldma_chan_on(struct ldma_chan *c)
 
 static int ldma_chan_off(struct ldma_chan *c)
 {
-	struct ldma_dev *d = to_ldma_dev(c->vchan.chan.device);
+	struct ldma_dev *d = chan_to_ldma_dev(c);
 	unsigned long flags;
 	u32 val;
 	int ret;
@@ -353,6 +374,7 @@ static int ldma_chan_off(struct ldma_chan *c)
 	spin_lock_irqsave(&d->dev_lock, flags);
 	ldma_update_bits(d, DMA_CS_MASK, c->nr, DMA_CS);
 	ldma_update_bits(d, DMA_CCTRL_ON, 0, DMA_CCTRL);
+	ldma_chan_irq_en(c, false);
 	spin_unlock_irqrestore(&d->dev_lock, flags);
 
 	ret = readl_poll_timeout_atomic(d->base + DMA_CCTRL, val,
@@ -368,7 +390,7 @@ static int ldma_chan_off(struct ldma_chan *c)
 void ldma_chan_desc_hw_cfg(struct ldma_chan *c, dma_addr_t desc_base,
 			   int desc_num)
 {
-	struct ldma_dev *d = to_ldma_dev(c->vchan.chan.device);
+	struct ldma_dev *d = chan_to_ldma_dev(c);
 	unsigned long flags;
 
 	spin_lock_irqsave(&d->dev_lock, flags);
@@ -390,7 +412,7 @@ void ldma_chan_desc_hw_cfg(struct ldma_chan *c, dma_addr_t desc_base,
 
 int ldma_chan_reset(struct ldma_chan *c)
 {
-	struct ldma_dev *d = to_ldma_dev(c->vchan.chan.device);
+	struct ldma_dev *d = chan_to_ldma_dev(c);
 	unsigned long flags;
 	u32 val;
 	int ret;
@@ -417,7 +439,7 @@ int ldma_chan_reset(struct ldma_chan *c)
 
 static void ldma_chan_byte_offset_cfg(struct ldma_chan *c, u32 boff_len)
 {
-	struct ldma_dev *d = to_ldma_dev(c->vchan.chan.device);
+	struct ldma_dev *d = chan_to_ldma_dev(c);
 	u32 mask = DMA_C_BOFF_EN | DMA_C_BOFF_BOF_LEN;
 	u32 val;
 
@@ -433,7 +455,7 @@ static void ldma_chan_byte_offset_cfg(struct ldma_chan *c, u32 boff_len)
 static void ldma_chan_data_endian_cfg(struct ldma_chan *c, bool enable,
 				      u32 endian_type)
 {
-	struct ldma_dev *d = to_ldma_dev(c->vchan.chan.device);
+	struct ldma_dev *d = chan_to_ldma_dev(c);
 	u32 mask = DMA_C_END_DE_EN | DMA_C_END_DATAENDI;
 	u32 val;
 
@@ -449,7 +471,7 @@ static void ldma_chan_data_endian_cfg(struct ldma_chan *c, bool enable,
 static void ldma_chan_desc_endian_cfg(struct ldma_chan *c, bool enable,
 				      u32 endian_type)
 {
-	struct ldma_dev *d = to_ldma_dev(c->vchan.chan.device);
+	struct ldma_dev *d = chan_to_ldma_dev(c);
 	u32 mask = DMA_C_END_DES_EN | DMA_C_END_DESENDI;
 	u32 val;
 
@@ -464,7 +486,7 @@ static void ldma_chan_desc_endian_cfg(struct ldma_chan *c, bool enable,
 
 static void ldma_chan_hdr_mode_cfg(struct ldma_chan *c, u32 hdr_len, bool csum)
 {
-	struct ldma_dev *d = to_ldma_dev(c->vchan.chan.device);
+	struct ldma_dev *d = chan_to_ldma_dev(c);
 	u32 mask, val;
 
 	/* NB, csum disabled, hdr length must be provided */
@@ -483,7 +505,7 @@ static void ldma_chan_hdr_mode_cfg(struct ldma_chan *c, u32 hdr_len, bool csum)
 
 static void ldma_chan_rxwr_np_cfg(struct ldma_chan *c, bool enable)
 {
-	struct ldma_dev *d = to_ldma_dev(c->vchan.chan.device);
+	struct ldma_dev *d = chan_to_ldma_dev(c);
 	u32 mask, val;
 
 	/* Only valid for RX channel */
@@ -499,7 +521,7 @@ static void ldma_chan_rxwr_np_cfg(struct ldma_chan *c, bool enable)
 
 static void ldma_chan_abc_cfg(struct ldma_chan *c, bool enable)
 {
-	struct ldma_dev *d = to_ldma_dev(c->vchan.chan.device);
+	struct ldma_dev *d = chan_to_ldma_dev(c);
 	u32 mask, val;
 
 	if (d->ver < DMA_VER32 || ldma_chan_tx(c))
@@ -556,7 +578,7 @@ static int ldma_port_cfg(struct ldma_port *p)
 
 static int ldma_chan_cfg(struct ldma_chan *c)
 {
-	struct ldma_dev *d = to_ldma_dev(c->vchan.chan.device);
+	struct ldma_dev *d = chan_to_ldma_dev(c);
 	unsigned long flags;
 	u32 reg;
 
@@ -636,6 +658,9 @@ static int ldma_parse_dt(struct ldma_dev *d)
 	if (fwnode_property_read_bool(fwnode, "intel,dma-desc-fack"))
 		d->flags |= DMA_VALID_DESC_FETCH_ACK;
 
+	if (fwnode_property_read_bool(fwnode, "intel,dma-hw-desc"))
+		d->flags |= DMA_CHAN_HW_DESC;
+
 	if (fwnode_property_read_u32(fwnode, "intel,dma-poll-cnt",
 				     &d->pollcnt))
 		d->pollcnt = DMA_DFT_POLL_CNT;
@@ -664,34 +689,23 @@ static int ldma_parse_dt(struct ldma_dev *d)
 	return 0;
 }
 
-int ldma_terminate_all(struct dma_chan *chan)
+int ldma_terminate_all(struct dma_chan *dma_chan)
 {
-	struct ldma_chan *c = to_ldma_chan(chan);
-	unsigned long flags;
-	LIST_HEAD(head);
+	struct ldma_chan *c = to_ldma_chan(dma_chan);
 
-	spin_lock_irqsave(&c->vchan.lock, flags);
-	vchan_get_all_descriptors(&c->vchan, &head);
-	spin_unlock_irqrestore(&c->vchan.lock, flags);
-	vchan_dma_desc_free_list(&c->vchan, &head);
+	vchan_free_chan_resources(&c->vchan);
 
 	return ldma_chan_reset(c);
 }
 
-int ldma_resume_chan(struct dma_chan *chan)
+int ldma_resume_chan(struct dma_chan *dma_chan)
 {
-	struct ldma_chan *c = to_ldma_chan(chan);
-
-	ldma_chan_on(c);
-
-	return 0;
+	return ldma_chan_on(to_ldma_chan(dma_chan));
 }
 
-int ldma_pause_chan(struct dma_chan *chan)
+int ldma_pause_chan(struct dma_chan *dma_chan)
 {
-	struct ldma_chan *c = to_ldma_chan(chan);
-
-	return ldma_chan_off(c);
+	return ldma_chan_off(to_ldma_chan(dma_chan));
 }
 
 static u32
@@ -718,42 +732,81 @@ static int
 update_client_configs(struct of_dma *ofdma, struct of_phandle_args *spec)
 {
 	struct ldma_dev *d = ofdma->of_dma_data;
-	u32 chan_id =  spec->args[0];
-	u32 port_id =  spec->args[1];
-	u32 burst = spec->args[2];
-	struct ldma_port *p;
+	int i, chan_id, port_id, desc_cnt, burst;
 	struct ldma_chan *c;
+	struct ldma_port *p;
 
-	if (chan_id >= d->chan_nrs || port_id >= d->port_nrs)
-		return 0;
+	port_id  = -1;
+	desc_cnt = -1;
+	burst    = -1;
+
+	for (i = spec->args_count - 1; i >= 0; i--) {
+		switch (i) {
+		case DMA_ARG_BURST_SZ:
+			burst = spec->args[i];
+			break;
+
+		case DMA_ARG_PORT_ID:
+			port_id = spec->args[i];
+			break;
+
+		case DMA_ARG_DESC_CNT:
+			desc_cnt = spec->args[i];
+			break;
+
+		case DMA_ARG_CHAN_ID:
+			chan_id = spec->args[i];
+			break;
+		}
+	}
+
+	if (chan_id >= d->chan_nrs || chan_id < 0)
+		return -1;
+
+	c = &d->chans[chan_id];
+	if (!ldma_chan_is_hw_desc(c) && desc_cnt > 0)
+		c->desc_cnt = desc_cnt;
+
+	if (port_id < 0 || burst < 0 || port_id > d->port_nrs)
+		return chan_id;
 
 	p = &d->ports[port_id];
-	c = &d->chans[chan_id];
 	c->port = p;
 
 	update_burst_len(c, p, burst);
 
 	ldma_port_cfg(p);
 
-	return 1;
+	return chan_id;
 }
 
+/**
+ * args 0: channel ID
+ * args 1: channel length
+ * args 2: port ID
+ * args 3: burst size setting
+ */
 static struct dma_chan *ldma_xlate(struct of_phandle_args *spec,
 				   struct of_dma *ofdma)
 {
 	struct ldma_dev *d = ofdma->of_dma_data;
-	u32 chan_id =  spec->args[0];
-	int ret;
+	int chan_id;
+
+	dev_dbg(d->dev, "DMA channel args count: %d\n", spec->args_count);
+	dev_dbg(d->dev, "DMA chan no: %u, desc num: %u\n",
+		spec->args[0], spec->args[1]);
 
 	if (!spec->args_count)
 		return NULL;
 
-	/* if args_count is 1 driver use default settings */
-	if (spec->args_count > 1) {
-		ret = update_client_configs(ofdma, spec);
-		if (!ret)
-			return NULL;
+	if (!(d->flags & DMA_CHAN_HW_DESC) && spec->args_count < 2) {
+		dev_err(d->dev, "DMA channel parameter format error!\n");
+		return NULL;
 	}
+
+	chan_id = update_client_configs(ofdma, spec);
+	if (chan_id < 0)
+		return NULL;
 
 	return dma_get_slave_channel(&d->chans[chan_id].vchan.chan);
 }
@@ -885,10 +938,6 @@ static int intel_ldma_probe(struct platform_device *pdev)
 	if (ret)
 		return ret;
 
-	ret = ldma_init(d);
-	if (ret)
-		return ret;
-
 	ret = ldma_irq_init(d, pdev);
 	if (ret)
 		return ret;
@@ -903,7 +952,11 @@ static int intel_ldma_probe(struct platform_device *pdev)
 	INIT_LIST_HEAD(&dma_dev->channels);
 
 	/* init dma callback functions */
-	d->ops->dma_func_init(dma_dev);
+	d->ops->dma_func_init(d, dma_dev);
+
+	ret = ldma_init(d);
+	if (ret)
+		return ret;
 
 	platform_set_drvdata(pdev, d);
 

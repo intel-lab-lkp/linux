@@ -118,6 +118,11 @@ properties:
     description:
       Name of the DMA.
 
+  intel,dma-hw-desc:
+    type: boolean
+    description:
+      DMA descriptor manupulated by Hardware.
+
 required:
   - compatible
   - reg
@@ -157,4 +162,5 @@ examples:
       intel,dma-desc-in-sram;
       intel,dma-name = "dma3";
       intel,dma-orrc = <16>;
+      intel,dma-hw-desc;
     };

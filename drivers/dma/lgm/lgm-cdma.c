@@ -22,6 +22,8 @@
 #include "../virt-dma.h"
 #include "lgm-dma.h"
 
+#define DESC_DATA_LEN		GENMASK(15, 0)
+
 struct dw2_desc {
 	u32 field;
 	u32 addr;
@@ -44,19 +46,14 @@ struct cdma_chan {
 	struct dma_slave_config config;
 };
 
-struct cdma_dev {
-	struct ldma_dev		*ldev;
-	struct workqueue_struct	*wq;
-};
-
 static int cdma_ctrl_init(struct ldma_dev *d);
 static int cdma_port_init(struct ldma_dev *d, struct ldma_port *p);
 static int cdma_chan_init(struct ldma_dev *d, struct ldma_chan *c);
 static int cdma_irq_init(struct ldma_dev *d, struct platform_device *pdev);
-static void cdma_func_init(struct dma_device *dma_dev);
+static void cdma_func_init(struct ldma_dev *d, struct dma_device *dma_dev);
 static irqreturn_t cdma_interrupt(int irq, void *dev_id);
 
-static struct cdma_dev *g_cdma_dev;
+static struct workqueue_struct	*wq_work;
 
 struct ldma_ops cdma_ops = {
 	.dma_ctrl_init = cdma_ctrl_init,
@@ -119,19 +116,9 @@ static void cdma_work(struct work_struct *work)
 
 static int cdma_ctrl_init(struct ldma_dev *d)
 {
-	struct cdma_dev *cdma;
-
-	cdma = devm_kzalloc(d->dev, sizeof(*cdma), GFP_KERNEL);
-	if (!cdma)
+	wq_work = alloc_ordered_workqueue("dma_wq", WQ_MEM_RECLAIM | WQ_HIGHPRI);
+	if (!wq_work)
 		return -ENOMEM;
-
-	cdma->ldev = d;
-	cdma->wq = alloc_ordered_workqueue("dma_wq",
-					   WQ_MEM_RECLAIM | WQ_HIGHPRI);
-	if (!cdma->wq)
-		return -ENOMEM;
-
-	g_cdma_dev = cdma;
 
 	return 0;
 }
@@ -174,7 +161,7 @@ static int cdma_irq_init(struct ldma_dev *d, struct platform_device *pdev)
 static void cdma_chan_irq(int irq, void *data)
 {
 	struct ldma_chan *c = data;
-	struct ldma_dev *d = g_cdma_dev->ldev;
+	struct ldma_dev *d = chan_to_ldma_dev(c);
 	struct cdma_chan *chan;
 	u32 stat;
 
@@ -187,7 +174,7 @@ static void cdma_chan_irq(int irq, void *data)
 	writel(readl(d->base + DMA_CIE) & ~DMA_CI_ALL, d->base + DMA_CIE);
 	writel(stat, d->base + DMA_CIS);
 	chan = (struct cdma_chan *)c->priv;
-	queue_work(g_cdma_dev->wq, &chan->work);
+	queue_work(wq_work, &chan->work);
 }
 
 static irqreturn_t cdma_interrupt(int irq, void *dev_id)
@@ -219,7 +206,7 @@ static irqreturn_t cdma_interrupt(int irq, void *dev_id)
 static int cdma_alloc_chan_resources(struct dma_chan *dma_chan)
 {
 	struct ldma_chan *c = to_ldma_chan(dma_chan);
-	struct ldma_dev *d = to_ldma_dev(c->vchan.chan.device);
+	struct ldma_dev *d = chan_to_ldma_dev(c);
 	struct cdma_chan *chan = (struct cdma_chan *)c->priv;
 	struct device *dev = d->dev;
 	size_t desc_sz;
@@ -279,7 +266,7 @@ cdma_slave_config(struct dma_chan *dma_chan, struct dma_slave_config *cfg)
 
 static void cdma_chan_irq_en(struct ldma_chan *c)
 {
-	struct ldma_dev *d = to_ldma_dev(c->vchan.chan.device);
+	struct ldma_dev *d = chan_to_ldma_dev(c);
 	unsigned long flags;
 
 	spin_lock_irqsave(&d->dev_lock, flags);
@@ -293,7 +280,6 @@ static void cdma_issue_pending(struct dma_chan *dma_chan)
 {
 	struct ldma_chan *c = to_ldma_chan(dma_chan);
 	struct cdma_chan *chan = (struct cdma_chan *)c->priv;
-	//struct ldma_dev *d = to_ldma_dev(c->vchan.chan.device);
 	unsigned long flags;
 
 	spin_lock_irqsave(&c->vchan.lock, flags);
@@ -332,12 +318,12 @@ cdma_tx_status(struct dma_chan *dma_chan, dma_cookie_t cookie,
 static struct dw2_desc_sw *
 cdma_alloc_desc_resource(int num, struct ldma_chan *c)
 {
-	struct device *dev = g_cdma_dev->ldev->dev;
+	struct ldma_dev *d = chan_to_ldma_dev(c);
 	struct cdma_chan *chan = (struct cdma_chan *)c->priv;
 	struct dw2_desc_sw *ds;
 
 	if (num > c->desc_cnt) {
-		dev_err(dev, "sg num %d exceed max %d\n", num, c->desc_cnt);
+		dev_err(d->dev, "sg num %d exceed max %d\n", num, c->desc_cnt);
 		return NULL;
 	}
 
@@ -349,7 +335,7 @@ cdma_alloc_desc_resource(int num, struct ldma_chan *c)
 	ds->desc_hw = dma_pool_zalloc(chan->desc_pool, GFP_ATOMIC,
 				      &ds->desc_phys);
 	if (!ds->desc_hw) {
-		dev_dbg(dev, "out of memory for link descriptor\n");
+		dev_dbg(d->dev, "out of memory for link descriptor\n");
 		kfree(ds);
 		return NULL;
 	}
@@ -472,7 +458,7 @@ cdma_prep_slave_sg(struct dma_chan *dma_chan, struct scatterlist *sgl,
 	return vchan_tx_prep(&c->vchan, &ds->vdesc, DMA_CTRL_ACK);
 }
 
-static void cdma_func_init(struct dma_device *dma_dev)
+static void cdma_func_init(struct ldma_dev *d, struct dma_device *dma_dev)
 {
 	dma_dev->device_alloc_chan_resources = cdma_alloc_chan_resources;
 	dma_dev->device_free_chan_resources = cdma_free_chan_resources;

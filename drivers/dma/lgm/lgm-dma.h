@@ -39,7 +39,7 @@ struct ldma_ops {
 	/* DMA interrupt init */
 	int (*dma_irq_init)(struct ldma_dev *d, struct platform_device *pdev);
 	/* DMA callback API init */
-	void (*dma_func_init)(struct dma_device *dma_dev);
+	void (*dma_func_init)(struct ldma_dev *d, struct dma_device *dma_dev);
 };
 
 struct ldma_chan {
@@ -218,6 +218,7 @@ extern struct ldma_ops hdma_ops;
 #define DMA_DBURST_WR			BIT(6)
 #define DMA_VALID_DESC_FETCH_ACK	BIT(7)
 #define DMA_DFT_DRB			BIT(8)
+#define DMA_CHAN_HW_DESC		BIT(9)
 
 #define DMA_ORRC_MAX_CNT		16
 #define DMA_DFT_POLL_CNT		SZ_4
@@ -236,12 +237,10 @@ extern struct ldma_ops hdma_ops;
 /* DMA flags */
 #define DMA_TX_CH			BIT(0)
 #define DMA_RX_CH			BIT(1)
-#define DEVICE_ALLOC_DESC		BIT(2)
-#define CHAN_IN_USE			BIT(3)
-#define DMA_HW_DESC			BIT(4)
+#define CHAN_IN_USE			BIT(2)
+#define DMA_HW_DESC			BIT(3)
 
 /* Descriptor fields */
-#define DESC_DATA_LEN			GENMASK(15, 0)
 #define DESC_BYTE_OFF			GENMASK(25, 23)
 #define DESC_EOP			BIT(28)
 #define DESC_SOP			BIT(29)
@@ -265,6 +264,28 @@ static inline struct ldma_chan *to_ldma_chan(struct dma_chan *chan)
 static inline struct ldma_dev *to_ldma_dev(struct dma_device *dma_dev)
 {
 	return container_of(dma_dev, struct ldma_dev, dma_dev);
+}
+
+static inline bool ldma_chan_is_hw_desc(struct ldma_chan *c)
+{
+	return !!(c->flags & DMA_HW_DESC);
+}
+
+static inline struct ldma_dev *chan_to_ldma_dev(struct ldma_chan *c)
+{
+	return to_ldma_dev(c->vchan.chan.device);
+}
+
+static inline void
+ldma_update_bits(struct ldma_dev *d, u32 mask, u32 val, u32 ofs)
+{
+	u32 old_val, new_val;
+
+	old_val = readl(d->base +  ofs);
+	new_val = (old_val & ~mask) | (val & mask);
+
+	if (new_val != old_val)
+		writel(new_val, d->base + ofs);
 }
 
 void ldma_chan_desc_hw_cfg(struct ldma_chan *c, dma_addr_t desc_base,
