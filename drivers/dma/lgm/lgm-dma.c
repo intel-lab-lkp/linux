@@ -140,8 +140,7 @@
 #define DMA_VALID_DESC_FETCH_ACK	BIT(7)
 #define DMA_DFT_DRB			BIT(8)
 
-#define DMA_DFT_ORRC_CNT		16
-#define DMA_ORRC_MAX_CNT		(SZ_32 - 1)
+#define DMA_ORRC_MAX_CNT		16
 #define DMA_DFT_POLL_CNT		SZ_4
 #define DMA_DFT_BURST_V22		SZ_2
 #define DMA_BURSTL_8DW			SZ_8
@@ -406,12 +405,11 @@ static void ldma_dev_orrc_cfg(struct ldma_dev *d)
 	u32 val = 0;
 	u32 mask;
 
-	if (d->type == DMA_TYPE_RX)
+	if (d->type == DMA_TYPE_RX || !d->orrc)
 		return;
 
 	mask = DMA_ORRC_EN | DMA_ORRC_ORRCNT;
-	if (d->orrc > 0 && d->orrc <= DMA_ORRC_MAX_CNT)
-		val = DMA_ORRC_EN | FIELD_PREP(DMA_ORRC_ORRCNT, d->orrc);
+	val = DMA_ORRC_EN | FIELD_PREP(DMA_ORRC_ORRCNT, d->orrc);
 
 	spin_lock_irqsave(&d->dev_lock, flags);
 	ldma_update_bits(d, mask, val, DMA_ORRC);
@@ -946,8 +944,11 @@ static int ldma_parse_dt(struct ldma_dev *d)
 		d->pollcnt = DMA_DFT_POLL_CNT;
 
 	if (fwnode_property_read_u32(fwnode, "intel,dma-orrc",
-				     &d->orrc))
-		d->orrc = DMA_DFT_ORRC_CNT;
+				     &d->orrc)) {
+		d->orrc = 0;
+	} else if (d->orrc > DMA_ORRC_MAX_CNT) {
+		d->orrc = DMA_ORRC_MAX_CNT;
+	}
 
 	if (fwnode_property_read_u32(fwnode, "intel,dma-type",
 				     &d->type))
