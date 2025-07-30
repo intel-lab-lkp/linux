@@ -2089,17 +2089,12 @@ static noinline int run_delalloc_nocow(struct btrfs_inode *inode,
 		check_prev = false;
 next_slot:
 		/* Go to next leaf if we have exhausted the current one */
+		ret = btrfs_get_next_valid_item(root, &found_key, path);
+		if (ret < 0)
+			goto error;
+		if (ret > 0)
+			break;
 		leaf = path->nodes[0];
-		if (path->slots[0] >= btrfs_header_nritems(leaf)) {
-			ret = btrfs_next_leaf(root, path);
-			if (ret < 0)
-				goto error;
-			if (ret > 0)
-				break;
-			leaf = path->nodes[0];
-		}
-
-		btrfs_item_key_to_cpu(leaf, &found_key, path->slots[0]);
 
 		/* Didn't find anything for our INO */
 		if (found_key.objectid > ino)
@@ -7074,16 +7069,14 @@ struct extent_map *btrfs_get_extent(struct btrfs_inode *inode,
 next:
 	if (start >= extent_end) {
 		path->slots[0]++;
-		if (path->slots[0] >= btrfs_header_nritems(leaf)) {
-			ret = btrfs_next_leaf(root, path);
-			if (ret < 0)
-				goto out;
-			else if (ret > 0)
-				goto not_found;
+		ret = btrfs_get_next_valid_item(root, &found_key, path);
+		if (ret < 0)
+			goto out;
+		if (ret > 0)
+			goto not_found;
 
-			leaf = path->nodes[0];
-		}
-		btrfs_item_key_to_cpu(leaf, &found_key, path->slots[0]);
+		leaf = path->nodes[0];
+
 		if (found_key.objectid != objectid ||
 		    found_key.type != BTRFS_EXTENT_DATA_KEY)
 			goto not_found;

@@ -2134,17 +2134,14 @@ static int load_global_roots_objectid(struct btrfs_root *tree_root,
 		if (ret < 0)
 			break;
 
-		if (path->slots[0] >= btrfs_header_nritems(path->nodes[0])) {
-			ret = btrfs_next_leaf(tree_root, path);
-			if (ret) {
-				if (ret > 0)
-					ret = 0;
-				break;
-			}
+		ret = btrfs_get_next_valid_item(root, &key, path);
+		if (ret > 0) {
+			ret = 0;
+			break;
 		}
-		ret = 0;
+		if (ret < 0)
+			break;
 
-		btrfs_item_key_to_cpu(path->nodes[0], &key, path->slots[0]);
 		if (key.objectid != objectid)
 			break;
 		btrfs_release_path(path);

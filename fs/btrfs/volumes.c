@@ -1723,18 +1723,13 @@ again:
 		goto out;
 
 	while (search_start < search_end) {
+		ret = btrfs_get_next_valid_item(root, &key, path);
+		if (ret < 0)
+			goto out;
+		if (ret > 0)
+			break;
 		l = path->nodes[0];
 		slot = path->slots[0];
-		if (slot >= btrfs_header_nritems(l)) {
-			ret = btrfs_next_leaf(root, path);
-			if (ret == 0)
-				continue;
-			if (ret < 0)
-				goto out;
-
-			break;
-		}
-		btrfs_item_key_to_cpu(l, &key, slot);
 
 		if (key.objectid < device->devid)
 			goto next;

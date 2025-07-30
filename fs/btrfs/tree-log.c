@@ -2077,7 +2077,6 @@ static noinline int find_dir_range(struct btrfs_root *root,
 	u64 found_end;
 	struct btrfs_dir_log_item *item;
 	int ret;
-	int nritems;
 
 	if (*start_ret == (u64)-1)
 		return 1;
@@ -2114,15 +2113,10 @@ static noinline int find_dir_range(struct btrfs_root *root,
 	ret = 1;
 next:
 	/* check the next slot in the tree to see if it is a valid item */
-	nritems = btrfs_header_nritems(path->nodes[0]);
 	path->slots[0]++;
-	if (path->slots[0] >= nritems) {
-		ret = btrfs_next_leaf(root, path);
-		if (ret)
-			goto out;
-	}
-
-	btrfs_item_key_to_cpu(path->nodes[0], &key, path->slots[0]);
+	ret = btrfs_get_next_valid_item(root, &key, path);
+	if (ret)
+		goto out;
 
 	if (key.type != BTRFS_DIR_LOG_INDEX_KEY || key.objectid != dirid) {
 		ret = 1;
@@ -2378,22 +2372,17 @@ static noinline int replay_dir_deletes(struct btrfs_trans_handle *trans,
 
 		dir_key.offset = range_start;
 		while (1) {
-			int nritems;
 			ret = btrfs_search_slot(NULL, root, &dir_key, path,
 						0, 0);
 			if (ret < 0)
 				goto out;
 
-			nritems = btrfs_header_nritems(path->nodes[0]);
-			if (path->slots[0] >= nritems) {
-				ret = btrfs_next_leaf(root, path);
-				if (ret == 1)
-					break;
-				else if (ret < 0)
-					goto out;
-			}
-			btrfs_item_key_to_cpu(path->nodes[0], &found_key,
-					      path->slots[0]);
+			ret = btrfs_get_next_valid_item(root, &found_key, path);
+			if (ret > 0)
+				break;
+			if (ret < 0)
+				goto out;
+
 			if (found_key.objectid != dirid ||
 			    found_key.type != dir_key.type) {
 				ret = 0;
@@ -5197,20 +5186,14 @@ static int btrfs_log_holes(struct btrfs_trans_handle *trans,
 		return ret;
 
 	while (true) {
-		struct extent_buffer *leaf = path->nodes[0];
-
-		if (path->slots[0] >= btrfs_header_nritems(path->nodes[0])) {
-			ret = btrfs_next_leaf(root, path);
-			if (ret < 0)
-				return ret;
-			if (ret > 0) {
-				ret = 0;
-				break;
-			}
-			leaf = path->nodes[0];
+		ret = btrfs_get_next_valid_item(root, &key, path);
+		if (ret < 0)
+			return ret;
+		if (ret > 0) {
+			ret = 0;
+			break;
 		}
 
-		btrfs_item_key_to_cpu(leaf, &key, path->slots[0]);
 		if (key.objectid != ino || key.type != BTRFS_EXTENT_DATA_KEY)
 			break;
 
@@ -5242,7 +5225,6 @@ static int btrfs_log_holes(struct btrfs_trans_handle *trans,
 				return ret;
 			if (WARN_ON(ret > 0))
 				return -ENOENT;
-			leaf = path->nodes[0];
 		}
 
 		prev_extent_end = btrfs_file_extent_end(path);
@@ -6800,22 +6782,21 @@ static int btrfs_log_all_parents(struct btrfs_trans_handle *trans,
 		goto out;
 
 	while (true) {
-		struct extent_buffer *leaf = path->nodes[0];
-		int slot = path->slots[0];
+		struct extent_buffer *leaf;
+		int slot;
 		u32 cur_offset = 0;
 		u32 item_size;
 		unsigned long ptr;
 
-		if (slot >= btrfs_header_nritems(leaf)) {
-			ret = btrfs_next_leaf(root, path);
-			if (ret < 0)
-				goto out;
-			else if (ret > 0)
-				break;
-			continue;
-		}
+		ret = btrfs_get_next_valid_item(root, &key, path);
+		if (ret < 0)
+			goto out;
+		if (ret > 0)
+			break;
 
-		btrfs_item_key_to_cpu(leaf, &key, slot);
+		leaf = path->nodes[0];
+		slot = path->slots[0];
+
 		/* BTRFS_INODE_EXTREF_KEY is BTRFS_INODE_REF_KEY + 1 */
 		if (key.objectid != ino || key.type > BTRFS_INODE_EXTREF_KEY)
 			break;
@@ -6904,8 +6885,6 @@ static int log_new_ancestors(struct btrfs_trans_handle *trans,
 	btrfs_item_key_to_cpu(path->nodes[0], &found_key, path->slots[0]);
 
 	while (true) {
-		struct extent_buffer *leaf;
-		int slot;
 		struct btrfs_key search_key;
 		struct btrfs_inode *inode;
 		u64 ino;
@@ -6937,19 +6916,12 @@ static int log_new_ancestors(struct btrfs_trans_handle *trans,
 		if (ret < 0)
 			return ret;
 
-		leaf = path->nodes[0];
-		slot = path->slots[0];
-		if (slot >= btrfs_header_nritems(leaf)) {
-			ret = btrfs_next_leaf(root, path);
-			if (ret < 0)
-				return ret;
-			else if (ret > 0)
-				return -ENOENT;
-			leaf = path->nodes[0];
-			slot = path->slots[0];
-		}
+		ret = btrfs_get_next_valid_item(root, &found_key, path);
+		if (ret < 0)
+			return ret;
+		if (ret > 0)
+			return -ENOENT;
 
-		btrfs_item_key_to_cpu(leaf, &found_key, slot);
 		if (found_key.objectid != search_key.objectid ||
 		    found_key.type != BTRFS_INODE_REF_KEY)
 			return -ENOENT;
@@ -7028,20 +7000,15 @@ again:
 		path->slots[0]++;
 
 	while (true) {
-		struct extent_buffer *leaf = path->nodes[0];
-		int slot = path->slots[0];
 		struct btrfs_key found_key;
 
-		if (slot >= btrfs_header_nritems(leaf)) {
-			ret = btrfs_next_leaf(root, path);
-			if (ret < 0)
-				goto out;
-			else if (ret > 0)
-				break;
-			continue;
-		}
+		ret = btrfs_get_next_valid_item(root, &found_key, path);
+		if (ret < 0)
+			goto out;
+		if (ret > 0)
+			break;
 
-		btrfs_item_key_to_cpu(leaf, &found_key, slot);
+
 		if (found_key.objectid != ino ||
 		    found_key.type > BTRFS_INODE_EXTREF_KEY)
 			break;

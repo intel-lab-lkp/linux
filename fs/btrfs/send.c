@@ -5887,8 +5887,8 @@ static int clone_range(struct send_ctx *sctx, struct btrfs_path *dst_path,
 	}
 
 	while (true) {
-		struct extent_buffer *leaf = path->nodes[0];
-		int slot = path->slots[0];
+		struct extent_buffer *leaf;
+		int slot;
 		struct btrfs_file_extent_item *ei;
 		u8 type;
 		u64 ext_len;
@@ -5896,16 +5896,14 @@ static int clone_range(struct send_ctx *sctx, struct btrfs_path *dst_path,
 		u64 clone_data_offset;
 		bool crossed_src_i_size = false;
 
-		if (slot >= btrfs_header_nritems(leaf)) {
-			ret = btrfs_next_leaf(clone_root->root, path);
-			if (ret < 0)
-				goto out;
-			else if (ret > 0)
-				break;
-			continue;
-		}
+		ret = btrfs_get_next_valid_item(clone_root->root, &key, path);
+		if (ret < 0)
+			goto out;
+		if (ret > 0)
+			break;
 
-		btrfs_item_key_to_cpu(leaf, &key, slot);
+		leaf = path->nodes[0];
+		slot = path->slots[0];
 
 		/*
 		 * We might have an implicit trailing hole (NO_HOLES feature
@@ -6400,21 +6398,19 @@ static int range_is_hole_in_parent(struct send_ctx *sctx,
 		path->slots[0]--;
 
 	while (search_start < end) {
-		struct extent_buffer *leaf = path->nodes[0];
-		int slot = path->slots[0];
+		struct extent_buffer *leaf;
+		int slot;
 		struct btrfs_file_extent_item *fi;
 		u64 extent_end;
 
-		if (slot >= btrfs_header_nritems(leaf)) {
-			ret = btrfs_next_leaf(root, path);
-			if (ret < 0)
-				goto out;
-			else if (ret > 0)
-				break;
-			continue;
-		}
+		ret = btrfs_get_next_valid_item(root, &key, path);
+		if (ret < 0)
+			goto out;
+		if (ret > 0)
+			break;
 
-		btrfs_item_key_to_cpu(leaf, &key, slot);
+		leaf = path->nodes[0];
+		slot = path->slots[0];
 		if (key.objectid < sctx->cur_ino ||
 		    key.type < BTRFS_EXTENT_DATA_KEY)
 			goto next;

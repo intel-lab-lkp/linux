@@ -332,8 +332,14 @@ static int read_key_bytes(struct btrfs_inode *inode, u8 key_type, u64 offset,
 	}
 
 	while (len > 0) {
+		ret = btrfs_get_next_valid_item(root, &key, path);
+		if (ret < 0)
+			break;
+		if (ret > 0) {
+			ret = 0;
+			break;
+		}
 		leaf = path->nodes[0];
-		btrfs_item_key_to_cpu(leaf, &key, path->slots[0]);
 
 		if (key.objectid != btrfs_ino(inode) || key.type != key_type)
 			break;
@@ -389,19 +395,6 @@ static int read_key_bytes(struct btrfs_inode *inode, u8 key_type, u64 offset,
 		copied += copy_bytes;
 
 		path->slots[0]++;
-		if (path->slots[0] >= btrfs_header_nritems(path->nodes[0])) {
-			/*
-			 * We've reached the last slot in this leaf and we need
-			 * to go to the next leaf.
-			 */
-			ret = btrfs_next_leaf(root, path);
-			if (ret < 0) {
-				break;
-			} else if (ret > 0) {
-				ret = 0;
-				break;
-			}
-		}
 	}
 out:
 	btrfs_free_path(path);

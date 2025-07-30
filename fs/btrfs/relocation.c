@@ -3342,7 +3342,6 @@ int find_next_extent(struct reloc_control *rc, struct btrfs_path *path,
 {
 	struct btrfs_fs_info *fs_info = rc->extent_root->fs_info;
 	struct btrfs_key key;
-	struct extent_buffer *leaf;
 	u64 start, end, last;
 	int ret;
 
@@ -3367,15 +3366,10 @@ int find_next_extent(struct reloc_control *rc, struct btrfs_path *path,
 		if (ret < 0)
 			break;
 next:
-		leaf = path->nodes[0];
-		if (path->slots[0] >= btrfs_header_nritems(leaf)) {
-			ret = btrfs_next_leaf(rc->extent_root, path);
-			if (ret != 0)
-				break;
-			leaf = path->nodes[0];
-		}
+		ret = btrfs_get_next_valid_item(rc->extent_root, &key, path);
+		if (ret != 0)
+			break;
 
-		btrfs_item_key_to_cpu(leaf, &key, path->slots[0]);
 		if (key.objectid >= last) {
 			ret = 1;
 			break;

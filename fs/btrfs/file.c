@@ -3622,22 +3622,18 @@ static loff_t find_desired_extent(struct file *file, loff_t offset, int whence)
 	}
 
 	while (start < i_size) {
-		struct extent_buffer *leaf = path->nodes[0];
+		struct extent_buffer *leaf;
 		struct btrfs_file_extent_item *extent;
 		u64 extent_end;
 		u8 type;
 
-		if (path->slots[0] >= btrfs_header_nritems(leaf)) {
-			ret = btrfs_next_leaf(root, path);
-			if (ret < 0)
-				goto out;
-			else if (ret > 0)
-				break;
+		ret = btrfs_get_next_valid_item(root, &key, path);
+		if (ret < 0)
+			goto out;
+		if (ret > 0)
+			break;
+		leaf = path->nodes[0];
 
-			leaf = path->nodes[0];
-		}
-
-		btrfs_item_key_to_cpu(leaf, &key, path->slots[0]);
 		if (key.objectid != ino || key.type != BTRFS_EXTENT_DATA_KEY)
 			break;
 

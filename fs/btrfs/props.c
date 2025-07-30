@@ -166,19 +166,14 @@ static int iterate_object_props(struct btrfs_root *root,
 		int slot;
 		const struct hlist_head *handlers;
 
+		ret = btrfs_get_next_valid_item(root, &key, path);
+		if (ret < 0)
+			goto out;
+		else if (ret > 0)
+			break;
 		slot = path->slots[0];
 		leaf = path->nodes[0];
 
-		if (slot >= btrfs_header_nritems(leaf)) {
-			ret = btrfs_next_leaf(root, path);
-			if (ret < 0)
-				goto out;
-			else if (ret > 0)
-				break;
-			continue;
-		}
-
-		btrfs_item_key_to_cpu(leaf, &key, slot);
 		if (key.objectid != objectid)
 			break;
 		if (key.type != BTRFS_XATTR_ITEM_KEY)

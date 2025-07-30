@@ -2126,22 +2126,20 @@ static int btrfs_ioctl_get_subvol_info(struct inode *inode, void __user *argp)
 		key.type = BTRFS_ROOT_BACKREF_KEY;
 		key.offset = 0;
 		ret = btrfs_search_slot(NULL, fs_info->tree_root, &key, path, 0, 0);
-		if (ret < 0) {
+		if (ret < 0)
 			goto out;
-		} else if (path->slots[0] >=
-			   btrfs_header_nritems(path->nodes[0])) {
-			ret = btrfs_next_leaf(fs_info->tree_root, path);
-			if (ret < 0) {
-				goto out;
-			} else if (ret > 0) {
-				ret = -EUCLEAN;
-				goto out;
-			}
+
+		ret = btrfs_get_next_valid_item(fs_info->tree_root, &key, path);
+		if (ret < 0)
+			goto out;
+		if (ret > 0) {
+			ret = -EUCLEAN;
+			goto out;
 		}
 
 		leaf = path->nodes[0];
 		slot = path->slots[0];
-		btrfs_item_key_to_cpu(leaf, &key, slot);
+
 		if (key.objectid == subvol_info->treeid &&
 		    key.type == BTRFS_ROOT_BACKREF_KEY) {
 			subvol_info->parent_id = key.offset;
@@ -2209,23 +2207,20 @@ static int btrfs_ioctl_get_subvol_rootref(struct btrfs_root *root,
 
 	root = root->fs_info->tree_root;
 	ret = btrfs_search_slot(NULL, root, &key, path, 0, 0);
-	if (ret < 0) {
+	if (ret < 0)
 		goto out;
-	} else if (path->slots[0] >=
-		   btrfs_header_nritems(path->nodes[0])) {
-		ret = btrfs_next_leaf(root, path);
-		if (ret < 0) {
-			goto out;
-		} else if (ret > 0) {
-			ret = -EUCLEAN;
-			goto out;
-		}
-	}
-	while (1) {
-		leaf = path->nodes[0];
-		slot = path->slots[0];
 
-		btrfs_item_key_to_cpu(leaf, &key, slot);
+	ret = btrfs_get_next_valid_item(root, &key, path);
+	if (ret < 0)
+		goto out;
+	if (ret > 0) {
+		ret = -EUCLEAN;
+		goto out;
+	}
+	leaf = path->nodes[0];
+	slot = path->slots[0];
+
+	while (1) {
 		if (key.objectid != objectid || key.type != BTRFS_ROOT_REF_KEY) {
 			ret = 0;
 			goto out;
@@ -2249,6 +2244,10 @@ static int btrfs_ioctl_get_subvol_rootref(struct btrfs_root *root,
 			ret = -EUCLEAN;
 			goto out;
 		}
+		leaf = path->nodes[0];
+		slot = path->slots[0];
+
+		btrfs_item_key_to_cpu(leaf, &key, slot);
 	}
 
 out:

@@ -306,14 +306,13 @@ static int calculate_emulated_zone_size(struct btrfs_fs_info *fs_info)
 	if (ret < 0)
 		return ret;
 
-	if (path->slots[0] >= btrfs_header_nritems(path->nodes[0])) {
-		ret = btrfs_next_leaf(root, path);
-		if (ret < 0)
-			return ret;
-		/* No dev extents at all? Not good */
-		if (ret > 0)
-			return -EUCLEAN;
-	}
+	ret = btrfs_get_next_valid_item(root, &key, path);
+	if (ret < 0)
+		return ret;
+	/* No dev extents at all? Not good */
+	if (ret > 0)
+		return -EUCLEAN;
+
 
 	leaf = path->nodes[0];
 	dext = btrfs_item_ptr(leaf, path->slots[0], struct btrfs_dev_extent);

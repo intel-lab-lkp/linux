@@ -546,17 +546,13 @@ int btrfs_lookup_csums_list(struct btrfs_root *root, u64 start, u64 end,
 	while (start <= end) {
 		u64 csum_end;
 
+		ret = btrfs_get_next_valid_item(root, &key, path);
+		if (ret < 0)
+			goto out;
+		if (ret > 0)
+			break;
 		leaf = path->nodes[0];
-		if (path->slots[0] >= btrfs_header_nritems(leaf)) {
-			ret = btrfs_next_leaf(root, path);
-			if (ret < 0)
-				goto out;
-			if (ret > 0)
-				break;
-			leaf = path->nodes[0];
-		}
 
-		btrfs_item_key_to_cpu(leaf, &key, path->slots[0]);
 		if (key.objectid != BTRFS_EXTENT_CSUM_OBJECTID ||
 		    key.type != BTRFS_EXTENT_CSUM_KEY ||
 		    key.offset > end)
@@ -703,17 +699,13 @@ search_forward:
 	while (start <= end) {
 		u64 csum_end;
 
+		ret = btrfs_get_next_valid_item(root, &key, path);
+		if (ret < 0)
+			goto fail;
+		if (ret > 0)
+			break;
 		leaf = path->nodes[0];
-		if (path->slots[0] >= btrfs_header_nritems(leaf)) {
-			ret = btrfs_next_leaf(root, path);
-			if (ret < 0)
-				goto fail;
-			if (ret > 0)
-				break;
-			leaf = path->nodes[0];
-		}
 
-		btrfs_item_key_to_cpu(leaf, &key, path->slots[0]);
 		if (key.objectid != BTRFS_EXTENT_CSUM_OBJECTID ||
 		    key.type != BTRFS_EXTENT_CSUM_KEY ||
 		    key.offset > end)

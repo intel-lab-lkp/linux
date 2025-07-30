@@ -345,7 +345,6 @@ static int btrfs_clone(struct inode *src, struct inode *inode,
 	struct btrfs_trans_handle *trans;
 	char *buf = NULL;
 	struct btrfs_key key;
-	u32 nritems;
 	int slot;
 	int ret;
 	const u64 len = olen_aligned;
@@ -397,20 +396,15 @@ static int btrfs_clone(struct inode *src, struct inode *inode,
 				path->slots[0]--;
 		}
 
-		nritems = btrfs_header_nritems(path->nodes[0]);
 process_slot:
-		if (path->slots[0] >= nritems) {
-			ret = btrfs_next_leaf(BTRFS_I(src)->root, path);
-			if (ret < 0)
-				goto out;
-			if (ret > 0)
-				break;
-			nritems = btrfs_header_nritems(path->nodes[0]);
-		}
+		ret = btrfs_get_next_valid_item(BTRFS_I(src)->root, &key, path);
+		if (ret < 0)
+			goto out;
+		if (ret > 0)
+			break;
 		leaf = path->nodes[0];
 		slot = path->slots[0];
 
-		btrfs_item_key_to_cpu(leaf, &key, slot);
 		if (key.type > BTRFS_EXTENT_DATA_KEY ||
 		    key.objectid != btrfs_ino(BTRFS_I(src)))
 			break;
