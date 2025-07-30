@@ -703,6 +703,23 @@ static int free_hpa(struct cxl_region *cxlr)
 	return 0;
 }
 
+static ssize_t resize_or_free_region_hpa(struct cxl_region *cxlr, u64 size)
+{
+	int rc;
+
+	ACQUIRE(rwsem_write_kill, rwsem)(&cxl_rwsem.region);
+	rc = ACQUIRE_ERR(rwsem_write_kill, &rwsem);
+	if (rc)
+		return rc;
+
+	if (size)
+		rc = alloc_hpa(cxlr, size);
+	else
+		rc = free_hpa(cxlr);
+
+	return rc;
+}
+
 static ssize_t size_store(struct device *dev, struct device_attribute *attr,
 			  const char *buf, size_t len)
 {
@@ -714,15 +731,7 @@ static ssize_t size_store(struct device *dev, struct device_attribute *attr,
 	if (rc)
 		return rc;
 
-	ACQUIRE(rwsem_write_kill, rwsem)(&cxl_rwsem.region);
-	if ((rc = ACQUIRE_ERR(rwsem_write_kill, &rwsem)))
-		return rc;
-
-	if (val)
-		rc = alloc_hpa(cxlr, val);
-	else
-		rc = free_hpa(cxlr);
-
+	rc = resize_or_free_region_hpa(cxlr, val);
 	if (rc)
 		return rc;
 
@@ -2569,6 +2578,76 @@ err:
 	return ERR_PTR(rc);
 }
 
+static struct cxl_region *
+devm_cxl_pmem_add_region(struct cxl_root_decoder *cxlrd,
+			 int id,
+			 enum cxl_partition_mode mode,
+			 enum cxl_decoder_type type,
+			 struct cxl_pmem_region_params *params,
+			 struct cxl_decoder *cxld)
+{
+	struct cxl_port *root_port;
+	struct cxl_region *cxlr;
+	struct cxl_endpoint_decoder *cxled;
+	struct cxl_region_params *p;
+	struct device *dev;
+	int rc;
+
+	cxlr = cxl_region_alloc(cxlrd, id);
+	if (IS_ERR(cxlr))
+		return cxlr;
+	cxlr->mode = mode;
+	cxlr->type = type;
+
+	dev = &cxlr->dev;
+	rc = dev_set_name(dev, "region%d", id);
+	if (rc)
+		goto err;
+
+	p = &cxlr->params;
+	p->uuid = params->uuid;
+	p->interleave_ways = params->nlabel;
+	p->interleave_granularity = params->ig;
+
+	if (resize_or_free_region_hpa(cxlr, params->rawsize))
+		goto err;
+
+	cxled = to_cxl_endpoint_decoder(&cxld->dev);
+	if (resize_or_free_dpa(cxled, 0))
+		goto err;
+
+	if (cxl_dpa_set_part(cxled, CXL_PARTMODE_PMEM))
+		goto err;
+
+	if (resize_or_free_dpa(cxled, params->rawsize))
+		goto err;
+
+	/* Attaching only one target due to interleave_way == 1 */
+	if (attach_target(cxlr, cxled, params->position, TASK_INTERRUPTIBLE))
+		goto err;
+
+	if (__commit(cxlr))
+		goto err;
+
+	rc = device_add(dev);
+	if (rc)
+		goto err;
+
+	root_port = to_cxl_port(cxlrd->cxlsd.cxld.dev.parent);
+	rc = devm_add_action_or_reset(root_port->uport_dev,
+			unregister_region, cxlr);
+	if (rc)
+		return ERR_PTR(rc);
+
+	dev_dbg(root_port->uport_dev, "%s: created %s\n",
+		dev_name(&cxlrd->cxlsd.cxld.dev), dev_name(dev));
+	return cxlr;
+
+err:
+	put_device(dev);
+	return ERR_PTR(rc);
+}
+
 static ssize_t __create_region_show(struct cxl_root_decoder *cxlrd, char *buf)
 {
 	return sysfs_emit(buf, "region%u\n", atomic_read(&cxlrd->region_id));
@@ -2586,8 +2665,10 @@ static ssize_t create_ram_region_show(struct device *dev,
 	return __create_region_show(to_cxl_root_decoder(dev), buf);
 }
 
-static struct cxl_region *__create_region(struct cxl_root_decoder *cxlrd,
-					  enum cxl_partition_mode mode, int id)
+struct cxl_region *cxl_create_region(struct cxl_root_decoder *cxlrd,
+				     enum cxl_partition_mode mode, int id,
+				     struct cxl_pmem_region_params *params,
+				     struct cxl_decoder *cxld)
 {
 	int rc;
 
@@ -2609,8 +2690,14 @@ static struct cxl_region *__create_region(struct cxl_root_decoder *cxlrd,
 		return ERR_PTR(-EBUSY);
 	}
 
-	return devm_cxl_add_region(cxlrd, id, mode, CXL_DECODER_HOSTONLYMEM);
+	if (params)
+		return devm_cxl_pmem_add_region(cxlrd, id, mode,
+				CXL_DECODER_HOSTONLYMEM, params, cxld);
+	else
+		return devm_cxl_add_region(cxlrd, id, mode,
+				CXL_DECODER_HOSTONLYMEM);
 }
+EXPORT_SYMBOL_NS_GPL(cxl_create_region, "CXL");
 
 static ssize_t create_region_store(struct device *dev, const char *buf,
 				   size_t len, enum cxl_partition_mode mode)
@@ -2623,7 +2710,7 @@ static ssize_t create_region_store(struct device *dev, const char *buf,
 	if (rc != 1)
 		return -EINVAL;
 
-	cxlr = __create_region(cxlrd, mode, id);
+	cxlr = cxl_create_region(cxlrd, mode, id, NULL, NULL);
 	if (IS_ERR(cxlr))
 		return PTR_ERR(cxlr);
 
@@ -3414,8 +3501,9 @@ static struct cxl_region *construct_region(struct cxl_root_decoder *cxlrd,
 	struct cxl_region *cxlr;
 
 	do {
-		cxlr = __create_region(cxlrd, cxlds->part[part].mode,
-				       atomic_read(&cxlrd->region_id));
+		cxlr = cxl_create_region(cxlrd, cxlds->part[part].mode,
+					 atomic_read(&cxlrd->region_id),
+					 NULL, NULL);
 	} while (IS_ERR(cxlr) && PTR_ERR(cxlr) == -EBUSY);
 
 	if (IS_ERR(cxlr)) {

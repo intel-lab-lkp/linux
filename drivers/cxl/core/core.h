@@ -94,6 +94,7 @@ int cxl_dpa_free(struct cxl_endpoint_decoder *cxled);
 resource_size_t cxl_dpa_size(struct cxl_endpoint_decoder *cxled);
 resource_size_t cxl_dpa_resource_start(struct cxl_endpoint_decoder *cxled);
 bool cxl_resource_contains_addr(const struct resource *res, const resource_size_t addr);
+ssize_t resize_or_free_dpa(struct cxl_endpoint_decoder *cxled, u64 size);
 
 enum cxl_rcrb {
 	CXL_RCRB_DOWNSTREAM,

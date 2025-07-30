@@ -243,6 +243,23 @@ static ssize_t dpa_size_show(struct device *dev, struct device_attribute *attr,
 	return sysfs_emit(buf, "%pa\n", &size);
 }
 
+ssize_t resize_or_free_dpa(struct cxl_endpoint_decoder *cxled, u64 size)
+{
+	int rc;
+
+	if (!IS_ALIGNED(size, SZ_256M))
+		return -EINVAL;
+
+	rc = cxl_dpa_free(cxled);
+	if (rc)
+		return rc;
+
+	if (size == 0)
+		return 0;
+
+	return cxl_dpa_alloc(cxled, size);
+}
+
 static ssize_t dpa_size_store(struct device *dev, struct device_attribute *attr,
 			      const char *buf, size_t len)
 {
@@ -254,17 +271,7 @@ static ssize_t dpa_size_store(struct device *dev, struct device_attribute *attr,
 	if (rc)
 		return rc;
 
-	if (!IS_ALIGNED(size, SZ_256M))
-		return -EINVAL;
-
-	rc = cxl_dpa_free(cxled);
-	if (rc)
-		return rc;
-
-	if (size == 0)
-		return len;
-
-	rc = cxl_dpa_alloc(cxled, size);
+	rc = resize_or_free_dpa(cxled, size);
 	if (rc)
 		return rc;
 
