@@ -341,10 +341,8 @@ static void kmb_plane_set_alpha(struct kmb_drm_private *kmb,
 static void kmb_plane_atomic_update(struct drm_plane *plane,
 				    struct drm_atomic_state *state)
 {
-	struct drm_plane_state *old_plane_state = drm_atomic_get_old_plane_state(state,
-										 plane);
-	struct drm_plane_state *new_plane_state = drm_atomic_get_new_plane_state(state,
-										 plane);
+	struct drm_plane_state *old_plane_state;
+	struct drm_plane_state *new_plane_state;
 	struct drm_framebuffer *fb;
 	struct kmb_drm_private *kmb;
 	unsigned int width;
@@ -359,7 +357,12 @@ static void kmb_plane_atomic_update(struct drm_plane *plane,
 	static dma_addr_t addr[MAX_SUB_PLANES];
 	struct disp_cfg *init_disp_cfg;
 
-	if (!plane || !new_plane_state || !old_plane_state)
+	if (!plane)
+		return;
+
+	old_plane_state = drm_atomic_get_old_plane_state(state, plane);
+	new_plane_state = drm_atomic_get_new_plane_state(state, plane);
+	if (!old_plane_state || !new_plane_state)
 		return;
 
 	fb = new_plane_state->fb;
