@@ -265,6 +265,7 @@ const struct vb2_ops vivid_vid_cap_qops = {
 /* Update the HDCP status */
 void vivid_update_hdcp(struct vivid_dev *dev)
 {
+	struct vivid_dev *dev_tx;
 	unsigned int menu_idx;
 
 	dev->rx_hdcp_detected = false;
@@ -274,12 +275,13 @@ void vivid_update_hdcp(struct vivid_dev *dev)
 
 	menu_idx = dev->input_is_connected_to_output[dev->input];
 
-	if (menu_idx >= FIXED_MENU_ITEMS) {
-		struct vivid_dev *dev_tx = vivid_ctrl_hdmi_to_output_instance[menu_idx];
+	if (menu_idx < FIXED_MENU_ITEMS)
+		return;
 
-		if (dev_tx->tx_hdcp_mode)
-			dev->rx_hdcp_detected = true;
-	}
+	dev_tx = vivid_ctrl_hdmi_to_output_instance[menu_idx];
+
+	if (dev_tx->tx_hdcp_mode)
+		dev->rx_hdcp_detected = true;
 }
 
 /*
@@ -1584,6 +1586,37 @@ void vivid_update_outputs(struct vivid_dev *dev)
 		if (dev_rx && dev_rx->edid_blocks)
 			edid_present |= 1 << j;
 		j++;
+
+		if (i != dev->output)
+			continue;
+
+		memset(dev->tx_hdcp_bksv_scratch, 0,
+		       sizeof(dev->tx_hdcp_bksv_scratch));
+
+		if (dev_rx && dev_rx->rx_hdcp_enabled &&
+		    dev_rx->input_hdcp >= HDCP1_REP && dev->tx_hdcp_mode) {
+			bool tx_is_hdcp1 = dev->tx_hdcp_mode == HDCP1;
+			int tx_max_dev_cnt = tx_is_hdcp1 ? 127 : 31;
+			bool rx_is_hdcp1 = dev_rx->input_hdcp == HDCP1_REP;
+			int rx_max_dev_cnt = rx_is_hdcp1 ? 127 : 31;
+			int max_dev_cnt = min(rx_max_dev_cnt, tx_max_dev_cnt);
+
+			memcpy(dev->tx_hdcp_bksv_scratch,
+			       dev_rx->rx_hdcp_bksv, V4L2_HDCP_KSV_SIZE);
+			v4l2_ctrl_lock(dev_rx->ctrl_dv_rx_hdcp_rep_ksv_fifo);
+			memcpy(dev->tx_hdcp_bksv_scratch + 1,
+			       dev_rx->ctrl_dv_rx_hdcp_rep_ksv_fifo->p_cur.p_u8,
+			       (max_dev_cnt - 1) * V4L2_HDCP_KSV_SIZE);
+			v4l2_ctrl_unlock(dev_rx->ctrl_dv_rx_hdcp_rep_ksv_fifo);
+
+			v4l2_ctrl_s_ctrl_compound(dev->ctrl_dv_tx_hdcp_rep_ksv_fifo,
+						  V4L2_CTRL_TYPE_U8,
+						  dev->tx_hdcp_bksv_scratch);
+		} else {
+			v4l2_ctrl_s_ctrl_compound(dev->ctrl_dv_tx_hdcp_rep_ksv_fifo,
+						  V4L2_CTRL_TYPE_U8,
+						  dev->tx_hdcp_bksv_scratch);
+		}
 	}
 	v4l2_ctrl_s_ctrl(dev->ctrl_tx_edid_present, edid_present);
 	v4l2_ctrl_s_ctrl(dev->ctrl_tx_hotplug, edid_present);

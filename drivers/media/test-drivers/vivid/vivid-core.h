@@ -496,6 +496,7 @@ struct vivid_dev {
 	bool				dvi_d_out;
 	u8				tx_hdcp_mode;
 	u8				tx_hdcp_bksv[V4L2_HDCP_KSV_SIZE];
+	u8				tx_hdcp_bksv_scratch[127][V4L2_HDCP_KSV_SIZE];
 	u8				*scaled_line;
 	u8				*blended_line;
 	unsigned			cur_scaled_line;
