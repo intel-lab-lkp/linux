@@ -718,7 +718,7 @@ static int cppc_get_perf_ctrs_sample(int cpu,
 	if (ret)
 		return ret;
 
-	udelay(2); /* 2usec delay between sampling */
+	udelay(200); /* 200usec delay between sampling */
 
 	return cppc_get_perf_ctrs(cpu, fb_ctrs_t1);
 }
