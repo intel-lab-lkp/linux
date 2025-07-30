@@ -243,6 +243,25 @@ impl<'a, T: ?Sized, B: Backend> Guard<'a, T, B> {
 
         cb()
     }
+
+    /// Returns a pinned mutable reference to the protected data.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    ///     # use kernel::sync::{Mutex, MutexGuard};
+    ///     # use core::pin::Pin;
+    ///     struct Data;
+    ///
+    ///     fn example(mutex: &Mutex<Data>) {
+    ///         let mut data: MutexGuard<'_, Data> = mutex.lock();
+    ///         let mut data: Pin<&mut Data> = data.as_mut();
+    ///     }
+    /// ```
+    pub fn as_mut(&mut self) -> Pin<&mut T> {
+        // SAFETY: `self.lock.data` is structurally pinned.
+        unsafe { Pin::new_unchecked(&mut *self.lock.data.get()) }
+    }
 }
 
 impl<T: ?Sized, B: Backend> core::ops::Deref for Guard<'_, T, B> {
