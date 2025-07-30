@@ -759,6 +759,8 @@ static ssize_t tap_do_read(struct tap_queue *q,
 {
 	DEFINE_WAIT(wait);
 	ssize_t ret = 0;
+	struct tap_dev *tap;
+	enum skb_drop_reason drop_reason = SKB_DROP_REASON_NOT_SPECIFIED;
 
 	if (!iov_iter_count(to)) {
 		kfree_skb(skb);
@@ -794,10 +796,16 @@ static ssize_t tap_do_read(struct tap_queue *q,
 put:
 	if (skb) {
 		ret = tap_put_user(q, skb, to);
-		if (unlikely(ret < 0))
-			kfree_skb(skb);
-		else
+		if (unlikely(ret < 0)) {
+			kfree_skb_reason(skb, drop_reason);
+			rcu_read_lock();
+			tap = rcu_dereference(q->tap);
+			if (tap && tap->count_rx_dropped)
+				tap->count_rx_dropped(tap);
+			rcu_read_unlock();
+		} else {
 			consume_skb(skb);
+		}
 	}
 	return ret;
 }

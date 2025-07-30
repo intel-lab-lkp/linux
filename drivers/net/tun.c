@@ -2137,6 +2137,7 @@ static ssize_t tun_do_read(struct tun_struct *tun, struct tun_file *tfile,
 {
 	ssize_t ret;
 	int err;
+	enum skb_drop_reason drop_reason = SKB_DROP_REASON_NOT_SPECIFIED;
 
 	if (!iov_iter_count(to)) {
 		tun_ptr_free(ptr);
@@ -2159,10 +2160,12 @@ static ssize_t tun_do_read(struct tun_struct *tun, struct tun_file *tfile,
 		struct sk_buff *skb = ptr;
 
 		ret = tun_put_user(tun, tfile, skb, to);
-		if (unlikely(ret < 0))
-			kfree_skb(skb);
-		else
+		if (unlikely(ret < 0)) {
+			dev_core_stats_tx_dropped_inc(tun->dev);
+			kfree_skb_reason(skb, drop_reason);
+		} else {
 			consume_skb(skb);
+		}
 	}
 
 	return ret;
