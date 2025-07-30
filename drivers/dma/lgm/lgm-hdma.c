@@ -31,6 +31,12 @@
 #define DESC_C			BIT(30)
 #define DESC_OWN		BIT(31)
 
+/* RX sideband information from DMA */
+struct dma_rx_data {
+	unsigned int	data_len;
+	unsigned int	chno;
+};
+
 struct dw4_desc_hw {
 	u32 dw0;
 	u32 dw1;
@@ -68,7 +74,7 @@ static int hdma_chan_init(struct ldma_dev *d, struct ldma_chan *c);
 static int hdma_irq_init(struct ldma_dev *d, struct platform_device *pdev);
 static void hdma_func_init(struct ldma_dev *d, struct dma_device *dma_dev);
 static void hdma_free_chan_resources(struct dma_chan *dma_chan);
-static void dma_tx_chan_complete(struct tasklet_struct *t);
+static void dma_chan_complete(struct tasklet_struct *t);
 
 static inline
 struct dw4_desc_sw *to_lgm_dma_dw4_desc(struct virt_dma_desc *vd)
@@ -140,8 +146,7 @@ static int hdma_chan_init(struct ldma_dev *d, struct ldma_chan *c)
 
 	c->priv = chan;
 	chan->c = c;
-	if (is_dma_chan_tx(d))
-		tasklet_setup(&chan->task, dma_tx_chan_complete);
+	tasklet_setup(&chan->task, dma_chan_complete);
 
 	return 0;
 }
@@ -177,7 +182,7 @@ void hdma_chan_int_enable(struct ldma_dev *d, struct ldma_chan *c)
 	spin_unlock_irqrestore(&d->dev_lock, flags);
 }
 
-static void dma_tx_chan_complete(struct tasklet_struct *t)
+static void dma_chan_complete(struct tasklet_struct *t)
 {
 	struct hdma_chan *chan = from_tasklet(chan, t, task);
 	struct ldma_chan *c = chan->c;
@@ -185,6 +190,7 @@ static void dma_tx_chan_complete(struct tasklet_struct *t)
 
 	/* check how many valid descriptor from DMA */
 	while (chan->prep_desc_cnt > 0) {
+		struct dma_rx_data *data;
 		struct dmaengine_desc_callback cb;
 		struct dma_async_tx_descriptor *tx;
 		struct dw4_desc_sw *desc_sw;
@@ -201,6 +207,12 @@ static void dma_tx_chan_complete(struct tasklet_struct *t)
 
 		tx = &desc_sw->vd.tx;
 		dmaengine_desc_get_callback(tx, &cb);
+
+		if (is_dma_chan_rx(d)) {
+			data = (struct dma_rx_data *)cb.callback_param;
+			data->data_len = FIELD_GET(DESC_DATA_LEN, desc_hw->dw3);
+			data->chno = c->nr;
+		}
 
 		dma_cookie_complete(tx);
 		chan->comp_idx = (chan->comp_idx + 1) % c->desc_cnt;
