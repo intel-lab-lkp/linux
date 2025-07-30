@@ -585,13 +585,18 @@ static int tsensor_group_thermtrip_get(struct tegra_soctherm *ts, int id)
 static int tegra_thermctl_set_trip_temp(struct thermal_zone_device *tz,
 					const struct thermal_trip *trip, int temp)
 {
-	struct tegra_thermctl_zone *zone = thermal_zone_device_priv(tz);
-	struct tegra_soctherm *ts = zone->ts;
-	const struct tegra_tsensor_group *sg = zone->sg;
-	struct device *dev = zone->dev;
+	struct tegra_thermctl_zone *zone;
+	struct tegra_soctherm *ts;
+	const struct tegra_tsensor_group *sg;
+	struct device *dev;
 
 	if (!tz)
 		return -EINVAL;
+
+	zone = thermal_zone_device_priv(tz);
+	ts = zone->ts;
+	sg = zone->sg;
+	dev = zone->dev;
 
 	if (trip->type == THERMAL_TRIP_CRITICAL) {
 		/*
