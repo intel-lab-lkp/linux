@@ -3,6 +3,7 @@
  * Lightning Mountain centralized DMA controller driver
  *
  * Copyright (c) 2016 - 2020 Intel Corporation.
+ * Copyright (c) 2020 - 2025 Maxlinear Inc.
  */
 
 #include <linux/bitfield.h>
@@ -139,6 +140,7 @@
 #define DMA_VALID_DESC_FETCH_ACK	BIT(7)
 #define DMA_DFT_DRB			BIT(8)
 
+#define DMA_DFT_ORRC_CNT		16
 #define DMA_ORRC_MAX_CNT		(SZ_32 - 1)
 #define DMA_DFT_POLL_CNT		SZ_4
 #define DMA_DFT_BURST_V22		SZ_2
@@ -183,9 +185,15 @@ enum ldma_chan_on_off {
 };
 
 enum {
+	DMA_TYPE_INVD = -1, /* Legacy DMA does not have type */
 	DMA_TYPE_TX = 0,
 	DMA_TYPE_RX,
 	DMA_TYPE_MCPY,
+};
+
+enum {
+	DMA_IN_HW_MODE,
+	DMA_IN_SW_MODE,
 };
 
 struct ldma_dev;
@@ -218,6 +226,7 @@ struct ldma_chan {
 	struct dw2_desc_sw	*ds;
 	struct work_struct	work;
 	struct dma_slave_config config;
+	int			mode;
 };
 
 struct ldma_port {
@@ -228,17 +237,6 @@ struct ldma_port {
 	u32			rxendi;
 	u32			txendi;
 	u32			pkt_drop;
-};
-
-/* Instance specific data */
-struct ldma_inst_data {
-	bool			desc_in_sram;
-	bool			chan_fc;
-	bool			desc_fod; /* Fetch On Demand */
-	bool			valid_desc_fetch_ack;
-	u32			orrc; /* Outstanding read count */
-	const char		*name;
-	u32			type;
 };
 
 struct ldma_dev {
@@ -257,7 +255,9 @@ struct ldma_dev {
 	u32			channels_mask;
 	u32			flags;
 	u32			pollcnt;
-	const struct ldma_inst_data *inst;
+	u32			orrc; /* Outstanding read count */
+	int			type;
+	const char		*name;
 	struct workqueue_struct	*wq;
 };
 
@@ -349,7 +349,7 @@ static void ldma_dev_chan_flow_ctl_cfg(struct ldma_dev *d, bool enable)
 	unsigned long flags;
 	u32 mask, val;
 
-	if (d->inst->type != DMA_TYPE_TX)
+	if (d->type != DMA_TYPE_TX)
 		return;
 
 	mask = DMA_CTRL_CH_FL;
@@ -378,7 +378,7 @@ static void ldma_dev_desc_fetch_on_demand_cfg(struct ldma_dev *d, bool enable)
 	unsigned long flags;
 	u32 mask, val;
 
-	if (d->inst->type == DMA_TYPE_MCPY)
+	if (d->type == DMA_TYPE_MCPY)
 		return;
 
 	mask = DMA_CTRL_DS_FOD;
@@ -406,12 +406,12 @@ static void ldma_dev_orrc_cfg(struct ldma_dev *d)
 	u32 val = 0;
 	u32 mask;
 
-	if (d->inst->type == DMA_TYPE_RX)
+	if (d->type == DMA_TYPE_RX)
 		return;
 
 	mask = DMA_ORRC_EN | DMA_ORRC_ORRCNT;
-	if (d->inst->orrc > 0 && d->inst->orrc <= DMA_ORRC_MAX_CNT)
-		val = DMA_ORRC_EN | FIELD_PREP(DMA_ORRC_ORRCNT, d->inst->orrc);
+	if (d->orrc > 0 && d->orrc <= DMA_ORRC_MAX_CNT)
+		val = DMA_ORRC_EN | FIELD_PREP(DMA_ORRC_ORRCNT, d->orrc);
 
 	spin_lock_irqsave(&d->dev_lock, flags);
 	ldma_update_bits(d, mask, val, DMA_ORRC);
@@ -439,7 +439,7 @@ static void ldma_dev_dburst_wr_cfg(struct ldma_dev *d, bool enable)
 	unsigned long flags;
 	u32 mask, val;
 
-	if (d->inst->type != DMA_TYPE_RX && d->inst->type != DMA_TYPE_MCPY)
+	if (d->type != DMA_TYPE_RX && d->type != DMA_TYPE_MCPY)
 		return;
 
 	mask = DMA_CTRL_DBURST_WR;
@@ -455,7 +455,7 @@ static void ldma_dev_vld_fetch_ack_cfg(struct ldma_dev *d, bool enable)
 	unsigned long flags;
 	u32 mask, val;
 
-	if (d->inst->type != DMA_TYPE_TX)
+	if (d->type != DMA_TYPE_TX)
 		return;
 
 	mask = DMA_CTRL_VLD_DF_ACK;
@@ -511,7 +511,7 @@ static int ldma_dev_cfg(struct ldma_dev *d)
 	}
 
 	dev_dbg(d->dev, "%s Controller 0x%08x configuration done\n",
-		d->inst->name, readl(d->base + DMA_CTRL));
+		d->name, readl(d->base + DMA_CTRL));
 
 	return 0;
 }
@@ -578,7 +578,7 @@ static void ldma_chan_set_class(struct ldma_chan *c, u32 val)
 	struct ldma_dev *d = to_ldma_dev(c->vchan.chan.device);
 	u32 class_val;
 
-	if (d->inst->type == DMA_TYPE_MCPY || val > DMA_MAX_CLASS)
+	if (d->type == DMA_TYPE_MCPY || val > DMA_MAX_CLASS)
 		return;
 
 	/* 3 bits low */
@@ -929,26 +929,41 @@ static int ldma_parse_dt(struct ldma_dev *d)
 	if (fwnode_property_read_bool(fwnode, "intel,dma-drb"))
 		d->flags |= DMA_DFT_DRB;
 
+	if (fwnode_property_read_bool(fwnode, "intel,dma-flowctrl"))
+		d->flags |= DMA_CHAN_FLOW_CTL;
+
+	if (fwnode_property_read_bool(fwnode, "intel,dma-fod"))
+		d->flags |= DMA_DESC_FOD;
+
+	if (fwnode_property_read_bool(fwnode, "intel,dma-desc-in-sram"))
+		d->flags |= DMA_DESC_IN_SRAM;
+
+	if (fwnode_property_read_bool(fwnode, "intel,dma-desc-fack"))
+		d->flags |= DMA_VALID_DESC_FETCH_ACK;
+
 	if (fwnode_property_read_u32(fwnode, "intel,dma-poll-cnt",
 				     &d->pollcnt))
 		d->pollcnt = DMA_DFT_POLL_CNT;
 
-	if (d->inst->chan_fc)
-		d->flags |= DMA_CHAN_FLOW_CTL;
+	if (fwnode_property_read_u32(fwnode, "intel,dma-orrc",
+				     &d->orrc))
+		d->orrc = DMA_DFT_ORRC_CNT;
 
-	if (d->inst->desc_fod)
-		d->flags |= DMA_DESC_FOD;
+	if (fwnode_property_read_u32(fwnode, "intel,dma-type",
+				     &d->type))
+		d->type = DMA_TYPE_INVD;
 
-	if (d->inst->desc_in_sram)
-		d->flags |= DMA_DESC_IN_SRAM;
+	if (fwnode_property_read_u32(fwnode, "dma-channel-mask",
+				     &d->channels_mask))
+		d->channels_mask = GENMASK(d->chan_nrs - 1, 0);
 
-	if (d->inst->valid_desc_fetch_ack)
-		d->flags |= DMA_VALID_DESC_FETCH_ACK;
+	if (fwnode_property_read_string(fwnode, "intel,dma-name",
+					&d->name)) {
+		dev_err(d->dev, "DMA name not available!\n");
+		return -EINVAL;
+	}
 
 	if (d->ver > DMA_VER22) {
-		if (!d->port_nrs)
-			return -EINVAL;
-
 		for (i = 0; i < d->port_nrs; i++) {
 			p = &d->ports[i];
 			p->rxendi = DMA_DFT_ENDIAN;
@@ -1471,93 +1486,48 @@ static void ldma_clk_disable(void *data)
 	reset_control_assert(d->rst);
 }
 
-static const struct ldma_inst_data dma0 = {
-	.name = "dma0",
-	.chan_fc = false,
-	.desc_fod = false,
-	.desc_in_sram = false,
-	.valid_desc_fetch_ack = false,
-};
+static int intel_ldma_port_channel_init(struct ldma_dev *d)
+{
+	struct ldma_chan *c;
+	struct ldma_port *p;
+	unsigned long ch_mask;
+	int i,j;
 
-static const struct ldma_inst_data dma2tx = {
-	.name = "dma2tx",
-	.type = DMA_TYPE_TX,
-	.orrc = 16,
-	.chan_fc = true,
-	.desc_fod = true,
-	.desc_in_sram = true,
-	.valid_desc_fetch_ack = true,
-};
+	/* Port Initializations */
+	d->ports = devm_kcalloc(d->dev, d->port_nrs, sizeof(*p), GFP_KERNEL);
+	if (!d->ports)
+		return -ENOMEM;
 
-static const struct ldma_inst_data dma1rx = {
-	.name = "dma1rx",
-	.type = DMA_TYPE_RX,
-	.orrc = 16,
-	.chan_fc = false,
-	.desc_fod = true,
-	.desc_in_sram = true,
-	.valid_desc_fetch_ack = false,
-};
+	/* Channels Initializations */
+	d->chans = devm_kcalloc(d->dev, d->chan_nrs, sizeof(*c), GFP_KERNEL);
+	if (!d->chans)
+		return -ENOMEM;
 
-static const struct ldma_inst_data dma1tx = {
-	.name = "dma1tx",
-	.type = DMA_TYPE_TX,
-	.orrc = 16,
-	.chan_fc = true,
-	.desc_fod = true,
-	.desc_in_sram = true,
-	.valid_desc_fetch_ack = true,
-};
+	for (i = 0; i < d->port_nrs; i++) {
+		p = &d->ports[i];
+		p->portid = i;
+		p->ldev = d;
 
-static const struct ldma_inst_data dma0tx = {
-	.name = "dma0tx",
-	.type = DMA_TYPE_TX,
-	.orrc = 16,
-	.chan_fc = true,
-	.desc_fod = true,
-	.desc_in_sram = true,
-	.valid_desc_fetch_ack = true,
-};
+		p->rxendi = DMA_DFT_ENDIAN;
+		p->txendi = DMA_DFT_ENDIAN;
+		p->rxbl = DMA_DFT_BURST;
+		p->txbl = DMA_DFT_BURST;
+		p->pkt_drop = DMA_PKT_DROP_DIS;
+	}
 
-static const struct ldma_inst_data dma3 = {
-	.name = "dma3",
-	.type = DMA_TYPE_MCPY,
-	.orrc = 16,
-	.chan_fc = false,
-	.desc_fod = false,
-	.desc_in_sram = true,
-	.valid_desc_fetch_ack = false,
-};
+	ch_mask = (unsigned long)d->channels_mask;
+	for_each_set_bit(j, &ch_mask, d->chan_nrs) {
+		if (d->ver == DMA_VER22)
+			ldma_dma_init_v22(j, d);
+		else
+			ldma_dma_init_v3X(j, d);
+	}
 
-static const struct ldma_inst_data toe_dma30 = {
-	.name = "toe_dma30",
-	.type = DMA_TYPE_MCPY,
-	.orrc = 16,
-	.chan_fc = false,
-	.desc_fod = false,
-	.desc_in_sram = true,
-	.valid_desc_fetch_ack = true,
-};
-
-static const struct ldma_inst_data toe_dma31 = {
-	.name = "toe_dma31",
-	.type = DMA_TYPE_MCPY,
-	.orrc = 16,
-	.chan_fc = false,
-	.desc_fod = false,
-	.desc_in_sram = true,
-	.valid_desc_fetch_ack = true,
-};
+	return 0;
+}
 
 static const struct of_device_id intel_ldma_match[] = {
-	{ .compatible = "intel,lgm-cdma", .data = &dma0},
-	{ .compatible = "intel,lgm-dma2tx", .data = &dma2tx},
-	{ .compatible = "intel,lgm-dma1rx", .data = &dma1rx},
-	{ .compatible = "intel,lgm-dma1tx", .data = &dma1tx},
-	{ .compatible = "intel,lgm-dma0tx", .data = &dma0tx},
-	{ .compatible = "intel,lgm-dma3", .data = &dma3},
-	{ .compatible = "intel,lgm-toe-dma30", .data = &toe_dma30},
-	{ .compatible = "intel,lgm-toe-dma31", .data = &toe_dma31},
+	{ .compatible = "intel,lgm-ldma" },
 	{}
 };
 
@@ -1565,12 +1535,9 @@ static int intel_ldma_probe(struct platform_device *pdev)
 {
 	struct device *dev = &pdev->dev;
 	struct dma_device *dma_dev;
-	unsigned long ch_mask;
-	struct ldma_chan *c;
-	struct ldma_port *p;
 	struct ldma_dev *d;
-	u32 id, bitn = 32, j;
-	int i, ret;
+	u32 id, bitn = 32;
+	int ret;
 
 	d = devm_kzalloc(dev, sizeof(*d), GFP_KERNEL);
 	if (!d)
@@ -1578,12 +1545,6 @@ static int intel_ldma_probe(struct platform_device *pdev)
 
 	/* Link controller to platform device */
 	d->dev = &pdev->dev;
-
-	d->inst = device_get_match_data(dev);
-	if (!d->inst) {
-		dev_err(dev, "No device match found\n");
-		return -ENODEV;
-	}
 
 	d->base = devm_platform_ioremap_resource(pdev, 0);
 	if (IS_ERR(d->base))
@@ -1627,17 +1588,18 @@ static int intel_ldma_probe(struct platform_device *pdev)
 		return ret;
 	}
 
+	ret = ldma_parse_dt(d);
+	if (ret)
+		return ret;
+
 	if (d->ver == DMA_VER22) {
 		ret = ldma_init_v22(d, pdev);
 		if (ret)
 			return ret;
 	}
 
-	ret = device_property_read_u32(dev, "dma-channel-mask", &d->channels_mask);
-	if (ret < 0)
-		d->channels_mask = GENMASK(d->chan_nrs - 1, 0);
-
 	dma_dev = &d->dma_dev;
+	dma_dev->dev = &pdev->dev;
 
 	dma_cap_zero(dma_dev->cap_mask);
 	dma_cap_set(DMA_SLAVE, dma_dev->cap_mask);
@@ -1645,33 +1607,7 @@ static int intel_ldma_probe(struct platform_device *pdev)
 	/* Channel initializations */
 	INIT_LIST_HEAD(&dma_dev->channels);
 
-	/* Port Initializations */
-	d->ports = devm_kcalloc(dev, d->port_nrs, sizeof(*p), GFP_KERNEL);
-	if (!d->ports)
-		return -ENOMEM;
-
-	/* Channels Initializations */
-	d->chans = devm_kcalloc(d->dev, d->chan_nrs, sizeof(*c), GFP_KERNEL);
-	if (!d->chans)
-		return -ENOMEM;
-
-	for (i = 0; i < d->port_nrs; i++) {
-		p = &d->ports[i];
-		p->portid = i;
-		p->ldev = d;
-	}
-
-	dma_dev->dev = &pdev->dev;
-
-	ch_mask = (unsigned long)d->channels_mask;
-	for_each_set_bit(j, &ch_mask, d->chan_nrs) {
-		if (d->ver == DMA_VER22)
-			ldma_dma_init_v22(j, d);
-		else
-			ldma_dma_init_v3X(j, d);
-	}
-
-	ret = ldma_parse_dt(d);
+	ret = intel_ldma_port_channel_init(d);
 	if (ret)
 		return ret;
 
