@@ -452,6 +452,10 @@ int nd_label_reserve_dpa(struct nvdimm_drvdata *ndd)
 		lsa_label = to_label(ndd, slot);
 		nd_label = &lsa_label->ns_label;
 
+		/* skip region label, dpa reservation for ns label only */
+		if (is_region_label(ndd, lsa_label))
+			continue;
+
 		if (!slot_valid(ndd, lsa_label, slot))
 			continue;
 
