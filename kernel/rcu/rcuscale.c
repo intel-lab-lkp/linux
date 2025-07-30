@@ -87,6 +87,7 @@ MODULE_AUTHOR("Paul E. McKenney <paulmck@linux.ibm.com>");
 # define RCUSCALE_SHUTDOWN 1
 #endif
 
+torture_param(bool, block_start, false, "Block all threads after creation and wait for should_start");
 torture_param(bool, gp_async, false, "Use asynchronous GP wait primitives");
 torture_param(int, gp_async_max, 1000, "Max # outstanding waits per writer");
 torture_param(bool, gp_exp, false, "Use expedited GP wait primitives");
@@ -146,6 +147,12 @@ static struct dentry *debugfs_writer_durations;
 static struct dentry *debugfs_reader_tasks;
 static struct dentry *debugfs_writer_tasks;
 static struct dentry *debugfs_kfree_tasks;
+static struct dentry *debugfs_should_start;
+static struct dentry *debugfs_test_complete;
+
+static DECLARE_COMPLETION(start_barrier);
+static bool should_start;
+static bool test_complete;
 
 #define MAX_MEAS 10000
 #define MIN_MEAS 100
@@ -458,6 +465,23 @@ static void rcu_scale_wait_shutdown(void)
 }
 
 /*
+ * Wait start_barrier if block_start is enabled.  Exit early if shutdown
+ * is requested.
+ *
+ * Return: true if caller should exit; false if caller should continue.
+ */
+static bool wait_start_barrier(void)
+{
+	if (!block_start)
+		return false;
+	while (wait_for_completion_interruptible(&start_barrier)) {
+		if (torture_must_stop())
+			return true;
+	}
+	return false;
+}
+
+/*
  * RCU scalability reader kthread.  Repeatedly does empty RCU read-side
  * critical section, minimizing update-side interference.  However, the
  * point of this test is not to evaluate reader scalability, but instead
@@ -474,6 +498,11 @@ rcu_scale_reader(void *arg)
 	set_cpus_allowed_ptr(current, cpumask_of(me % nr_cpu_ids));
 	set_user_nice(current, MAX_NICE);
 	atomic_inc(&n_rcu_scale_reader_started);
+
+	if (wait_start_barrier()) {
+		torture_kthread_stopping("rcu_scale_reader");
+		return 0;
+	}
 
 	do {
 		local_irq_save(flags);
@@ -559,6 +588,11 @@ rcu_scale_writer(void *arg)
 	set_cpus_allowed_ptr(current, cpumask_of(me % nr_cpu_ids));
 	current->flags |= PF_NO_SETAFFINITY;
 	sched_set_fifo_low(current);
+
+	if (wait_start_barrier()) {
+		torture_kthread_stopping("rcu_scale_writer");
+		return 0;
+	}
 
 	if (holdoff)
 		schedule_timeout_idle(holdoff * HZ);
@@ -754,6 +788,11 @@ kfree_scale_thread(void *arg)
 	set_cpus_allowed_ptr(current, cpumask_of(me % nr_cpu_ids));
 	set_user_nice(current, MAX_NICE);
 	kfree_rcu_test_both = (kfree_rcu_test_single == kfree_rcu_test_double);
+
+	if (wait_start_barrier()) {
+		torture_kthread_stopping("kfree_scale_thread");
+		return 0;
+	}
 
 	start_time = ktime_get_mono_fast_ns();
 
@@ -1119,6 +1158,32 @@ static const struct file_operations kfrees_fops = {
 };
 
 /*
+ * For the "should_start" writable file, reuse debugfs integer parsing, but
+ * override write function to also send complete_all if should_start is
+ * changed to 1.
+ *
+ * Any non-zero value written to this file is converted to 1.
+ */
+static int should_start_set(void *data, u64 val)
+{
+	*(bool *)data = !!val;
+
+	if (block_start && !!val)
+		complete_all(&start_barrier);
+
+	return 0;
+}
+
+static int bool_get(void *data, u64 *val)
+{
+	*val = *(bool *)data;
+	return 0;
+}
+
+DEFINE_DEBUGFS_ATTRIBUTE(should_start_fops, bool_get, should_start_set, "%llu");
+DEFINE_DEBUGFS_ATTRIBUTE(test_complete_fops, bool_get, NULL, "%llu");
+
+/*
  * Create an rcuscale directory exposing run states and results.
  */
 static int register_debugfs(void)
@@ -1153,6 +1218,15 @@ static int register_debugfs(void)
 			debugfs_dir, NULL, &kfrees_fops))
 		goto fail;
 
+	if (try_create_file(debugfs_should_start, "should_start", 0644,
+			debugfs_dir, &should_start, &should_start_fops))
+		goto fail;
+
+	/* Future: add notification method for readers waiting on file change. */
+	if (try_create_file(debugfs_test_complete, "test_complete", 0444,
+			debugfs_dir, &test_complete, &test_complete_fops))
+		goto fail;
+
 	return 0;
 fail:
 	pr_err("rcu-scale: Failed to create debugfs file.");
@@ -1176,6 +1250,8 @@ do {						\
 	try_remove(debugfs_reader_tasks);
 	try_remove(debugfs_writer_tasks);
 	try_remove(debugfs_kfree_tasks);
+	try_remove(debugfs_should_start);
+	try_remove(debugfs_test_complete);
 
 	/* Remove directory after files. */
 	try_remove(debugfs_dir);
@@ -1371,6 +1447,9 @@ rcu_scale_init(void)
 	atomic_set(&n_rcu_scale_writer_started, 0);
 	atomic_set(&n_rcu_scale_writer_finished, 0);
 	rcu_scale_print_module_parms(cur_ops, "Start of test");
+
+	if (!block_start)
+		should_start = true;
 
 	/* Start up the kthreads. */
 
