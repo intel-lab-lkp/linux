@@ -253,9 +253,55 @@ static int __xe_svm_garbage_collector(struct xe_vm *vm,
 	return 0;
 }
 
+static int xe_svm_range_set_default_attr(struct xe_vm *vm, u64 range_start, u64 range_end)
+{
+	struct xe_vma *vma;
+	struct xe_vma_mem_attr default_attr = {
+		.preferred_loc = {
+			.devmem_fd = DRM_XE_PREFERRED_LOC_DEFAULT_DEVICE,
+			.migration_policy = DRM_XE_MIGRATE_ALL_PAGES,
+		},
+		.atomic_access = DRM_XE_ATOMIC_UNDEFINED,
+	};
+	int err = 0;
+
+	vma = xe_vm_find_vma_by_addr(vm, range_start);
+	if (!vma)
+		return -EINVAL;
+
+	if (xe_vma_has_default_mem_attrs(vma))
+		return 0;
+
+	vm_dbg(&vm->xe->drm, "Existing VMA start=0x%016llx, vma_end=0x%016llx",
+	       xe_vma_start(vma), xe_vma_end(vma));
+
+	if (xe_vma_start(vma) == range_start && xe_vma_end(vma) == range_end) {
+		default_attr.pat_index = vma->attr.default_pat_index;
+		default_attr.default_pat_index  = vma->attr.default_pat_index;
+		vma->attr = default_attr;
+	} else {
+		vm_dbg(&vm->xe->drm, "Split VMA start=0x%016llx, vma_end=0x%016llx",
+		       range_start, range_end);
+		err = xe_vm_alloc_cpu_addr_mirror_vma(vm, range_start, range_end - range_start);
+		if (err) {
+			drm_warn(&vm->xe->drm, "VMA SPLIT failed: %pe\n", ERR_PTR(err));
+			xe_vm_kill(vm, true);
+			return err;
+		}
+	}
+
+	/*
+	 * On call from xe_svm_handle_pagefault original VMA might be changed
+	 * signal this to lookup for VMA again.
+	 */
+	return -EAGAIN;
+}
+
 static int xe_svm_garbage_collector(struct xe_vm *vm)
 {
 	struct xe_svm_range *range;
+	u64 range_start;
+	u64 range_end;
 	int err;
 
 	lockdep_assert_held_write(&vm->lock);
@@ -271,6 +317,9 @@ static int xe_svm_garbage_collector(struct xe_vm *vm)
 		if (!range)
 			break;
 
+		range_start = xe_svm_range_start(range);
+		range_end = xe_svm_range_end(range);
+
 		list_del(&range->garbage_collector_link);
 		spin_unlock(&vm->svm.garbage_collector.lock);
 
@@ -282,6 +331,10 @@ static int xe_svm_garbage_collector(struct xe_vm *vm)
 			xe_vm_kill(vm, true);
 			return err;
 		}
+
+		err = xe_svm_range_set_default_attr(vm, range_start, range_end);
+		if (err)
+			return err;
 
 		spin_lock(&vm->svm.garbage_collector.lock);
 	}
@@ -793,40 +846,59 @@ int xe_svm_handle_pagefault(struct xe_vm *vm, struct xe_vma *vma,
 			    struct xe_gt *gt, u64 fault_addr,
 			    bool atomic)
 {
-	int need_vram = xe_vma_need_vram_for_atomic(vm->xe, vma, atomic);
-
-	if (need_vram < 0)
-		return need_vram;
-
-	struct drm_gpusvm_ctx ctx = {
-		.read_only = xe_vma_read_only(vma),
-		.devmem_possible = IS_DGFX(vm->xe) &&
-			IS_ENABLED(CONFIG_DRM_XE_PAGEMAP),
-		.check_pages_threshold = IS_DGFX(vm->xe) &&
-			IS_ENABLED(CONFIG_DRM_XE_PAGEMAP) ? SZ_64K : 0,
-		.devmem_only = need_vram && IS_ENABLED(CONFIG_DRM_XE_PAGEMAP),
-		.timeslice_ms = atomic && IS_DGFX(vm->xe) &&
-			IS_ENABLED(CONFIG_DRM_XE_PAGEMAP) ?
-			vm->xe->atomic_svm_timeslice_ms : 0,
-	};
+	struct drm_gpusvm_ctx ctx = { };
+	struct drm_pagemap *dpagemap;
 	struct xe_svm_range *range;
 	struct dma_fence *fence;
-	struct drm_pagemap *dpagemap;
 	struct xe_tile *tile = gt_to_tile(gt);
-	int migrate_try_count = ctx.devmem_only ? 3 : 1;
+	bool vma_updated = false;
+	int need_vram;
+	int migrate_try_count;
 	ktime_t end = 0;
 	int err;
 
-	lockdep_assert_held_write(&vm->lock);
-	xe_assert(vm->xe, xe_vma_is_cpu_addr_mirror(vma));
+find_vma:
+	if (vma_updated) {
+		vma = xe_vm_find_vma_by_addr(vm, fault_addr);
+		if (!vma)
+			return -EINVAL;
+	}
 
+	xe_assert(vm->xe, xe_vma_is_cpu_addr_mirror(vma));
+	vma_updated = false;
+
+	need_vram = xe_vma_need_vram_for_atomic(vm->xe, vma, atomic);
+	if (need_vram < 0)
+		return need_vram;
+
+	ctx.read_only = xe_vma_read_only(vma);
+	ctx.devmem_possible = IS_DGFX(vm->xe) && IS_ENABLED(CONFIG_DRM_XE_PAGEMAP);
+	ctx.check_pages_threshold = IS_DGFX(vm->xe) && IS_ENABLED(CONFIG_DRM_XE_PAGEMAP) ?
+				    SZ_64K : 0;
+	ctx.devmem_only = need_vram && IS_ENABLED(CONFIG_DRM_XE_PAGEMAP);
+	ctx.timeslice_ms = atomic && IS_DGFX(vm->xe) && IS_ENABLED(CONFIG_DRM_XE_PAGEMAP) ?
+			   vm->xe->atomic_svm_timeslice_ms : 0;
+
+	migrate_try_count = ctx.devmem_only ? 3 : 1;
+
+	lockdep_assert_held_write(&vm->lock);
 	xe_gt_stats_incr(gt, XE_GT_STATS_ID_SVM_PAGEFAULT_COUNT, 1);
 
 retry:
 	/* Always process UNMAPs first so view SVM ranges is current */
 	err = xe_svm_garbage_collector(vm);
-	if (err)
-		return err;
+	if (err) {
+		if (err == -EAGAIN) {
+			/*
+			 * VMA might have changed due to garbage
+			 * collection; retry lookup
+			 */
+			vma_updated = true;
+			goto find_vma;
+		} else {
+			return err;
+		}
+	}
 
 	range = xe_svm_range_find_or_insert(vm, fault_addr, vma, &ctx);
 
