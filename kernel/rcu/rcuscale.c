@@ -143,6 +143,9 @@ static unsigned long b_rcu_gp_test_finished;
 
 static struct dentry *debugfs_dir;
 static struct dentry *debugfs_writer_durations;
+static struct dentry *debugfs_reader_tasks;
+static struct dentry *debugfs_writer_tasks;
+static struct dentry *debugfs_kfree_tasks;
 
 #define MAX_MEAS 10000
 #define MIN_MEAS 100
@@ -1010,6 +1013,112 @@ static const struct file_operations writer_durations_fops = {
 };
 
 /*
+ * Generic seq_file private data for tasks walkthrough.
+ */
+struct debugfs_pid_info {
+	int ntasks;
+	struct task_struct **tasks;
+};
+
+/*
+ * Generic seq_file pos to pointer conversion function, using private data
+ * of type debugfs_pid_info, and ensure it is within bound.
+ */
+static void *debugfs_pid_start(struct seq_file *m, loff_t *pos)
+{
+	loff_t worker = *pos;
+	struct debugfs_pid_info *info = m->private;
+
+	if (worker < 0 || worker >= info->ntasks)
+		return NULL;
+
+	return info->tasks[worker];
+}
+
+static void *debugfs_pid_next(struct seq_file *m, void *v, loff_t *pos)
+{
+	(*pos)++;
+	return debugfs_pid_start(m, pos);
+}
+
+/*
+ * Each line of the file contains one PID from the selected kernel threads.
+ */
+static int debugfs_pid_show(struct seq_file *m, void *v)
+{
+	seq_printf(m, "%d\n", ((struct task_struct *)v)->pid);
+	return 0;
+}
+
+static void debugfs_pid_stop(struct seq_file *m, void *v)
+{
+}
+
+static const struct seq_operations debugfs_pid_fops = {
+	.start	= debugfs_pid_start,
+	.next	= debugfs_pid_next,
+	.stop	= debugfs_pid_stop,
+	.show	= debugfs_pid_show
+};
+
+/*
+ * Generic seq_file creation function that sets private data of type
+ * debugfs_pid_info.
+ */
+static int debugfs_pid_open_info(struct inode *inode, struct file *file,
+		int ntasks, struct task_struct **tasks)
+{
+	struct debugfs_pid_info *info =
+		__seq_open_private(file, &debugfs_pid_fops, sizeof(*info));
+	if (!info)
+		return -ENOMEM;
+
+	info->ntasks = ntasks;
+	info->tasks = tasks;
+
+	return 0;
+}
+
+static int debugfs_pid_open_reader(struct inode *inode, struct file *file)
+{
+	return debugfs_pid_open_info(inode, file, nrealreaders, reader_tasks);
+}
+
+static int debugfs_pid_open_writer(struct inode *inode, struct file *file)
+{
+	return debugfs_pid_open_info(inode, file, nrealwriters, writer_tasks);
+}
+
+static int debugfs_pid_open_kfree(struct inode *inode, struct file *file)
+{
+	return debugfs_pid_open_info(inode, file, kfree_nrealthreads, kfree_reader_tasks);
+}
+
+static const struct file_operations readers_fops = {
+	.owner = THIS_MODULE,
+	.open = debugfs_pid_open_reader,
+	.read = seq_read,
+	.llseek = seq_lseek,
+	.release = seq_release,
+};
+
+static const struct file_operations writers_fops = {
+	.owner = THIS_MODULE,
+	.open = debugfs_pid_open_writer,
+	.read = seq_read,
+	.llseek = seq_lseek,
+	.release = seq_release,
+};
+
+static const struct file_operations kfrees_fops = {
+	.owner = THIS_MODULE,
+	.open = debugfs_pid_open_kfree,
+	.read = seq_read,
+	.llseek = seq_lseek,
+	.release = seq_release,
+};
+
+/*
  * Create an rcuscale directory exposing run states and results.
  */
 static int register_debugfs(void)
@@ -1032,6 +1141,18 @@ static int register_debugfs(void)
 			debugfs_dir, NULL, &writer_durations_fops))
 		goto fail;
 
+	if (try_create_file(debugfs_reader_tasks, "reader_tasks", 0444,
+			debugfs_dir, NULL, &readers_fops))
+		goto fail;
+
+	if (try_create_file(debugfs_writer_tasks, "writer_tasks", 0444,
+			debugfs_dir, NULL, &writers_fops))
+		goto fail;
+
+	if (try_create_file(debugfs_kfree_tasks, "kfree_tasks", 0444,
+			debugfs_dir, NULL, &kfrees_fops))
+		goto fail;
+
 	return 0;
 fail:
 	pr_err("rcu-scale: Failed to create debugfs file.");
@@ -1052,6 +1173,9 @@ do {						\
 } while (0)
 
 	try_remove(debugfs_writer_durations);
+	try_remove(debugfs_reader_tasks);
+	try_remove(debugfs_writer_tasks);
+	try_remove(debugfs_kfree_tasks);
 
 	/* Remove directory after files. */
 	try_remove(debugfs_dir);
