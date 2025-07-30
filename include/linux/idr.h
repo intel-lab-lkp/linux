@@ -172,7 +172,9 @@ static inline void idr_init(struct idr *idr)
  * idr_is_empty() - Are there any IDs allocated?
  * @idr: IDR handle.
  *
- * Return: %true if any IDs have been allocated from this IDR.
+ * Return:
+ * * %true if this IDR is empty, or
+ * * %false if any IDs have been allocated from this IDR.
  */
 static inline bool idr_is_empty(const struct idr *idr)
 {
