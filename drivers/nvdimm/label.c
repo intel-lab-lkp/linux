@@ -473,6 +473,47 @@ int nd_label_reserve_dpa(struct nvdimm_drvdata *ndd)
 	return 0;
 }
 
+int nvdimm_cxl_region_preserve(struct nvdimm_drvdata *ndd)
+{
+	struct nvdimm *nvdimm = to_nvdimm(ndd->dev);
+	struct cxl_pmem_region_params *params = &nvdimm->cxl_region_params;
+	struct nd_namespace_index *nsindex;
+	unsigned long *free;
+	u32 nslot, slot;
+
+	if (!preamble_current(ndd, &nsindex, &free, &nslot))
+		return 0; /* no label, nothing to preserve */
+
+	for_each_clear_bit_le(slot, free, nslot) {
+		struct nd_lsa_label *nd_label;
+		struct cxl_region_label *rg_label;
+		uuid_t rg_type, region_type;
+
+		nd_label = to_label(ndd, slot);
+		rg_label = &nd_label->rg_label;
+		uuid_parse(CXL_REGION_UUID, &region_type);
+		import_uuid(&rg_type, nd_label->rg_label.type);
+
+		/* REVISIT: Currently preserving only one region */
+		if (uuid_equal(&region_type, &rg_type)) {
+			nvdimm->is_region_label = true;
+			import_uuid(&params->uuid, rg_label->uuid);
+			params->flags = __le32_to_cpu(rg_label->flags);
+			params->nlabel = __le16_to_cpu(rg_label->nlabel);
+			params->position = __le16_to_cpu(rg_label->position);
+			params->dpa = __le64_to_cpu(rg_label->dpa);
+			params->rawsize = __le64_to_cpu(rg_label->rawsize);
+			params->hpa = __le64_to_cpu(rg_label->hpa);
+			params->slot = __le32_to_cpu(rg_label->slot);
+			params->ig = __le32_to_cpu(rg_label->ig);
+			params->align = __le32_to_cpu(rg_label->align);
+			break;
+		}
+	}
+
+	return 0;
+}
+
 int nd_label_data_init(struct nvdimm_drvdata *ndd)
 {
 	size_t config_size, read_size, max_xfer, offset;
