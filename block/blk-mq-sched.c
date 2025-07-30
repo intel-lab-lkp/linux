@@ -115,10 +115,10 @@ static int __blk_mq_do_dispatch_sched(struct blk_mq_hw_ctx *hctx)
 			break;
 
 		if (sq_sched)
-			spin_lock(&e->lock);
+			spin_lock_irq(&e->lock);
 		rq = e->type->ops.dispatch_request(hctx);
 		if (sq_sched)
-			spin_unlock(&e->lock);
+			spin_unlock_irq(&e->lock);
 
 		if (!rq) {
 			blk_mq_put_dispatch_budget(q, budget_token);
