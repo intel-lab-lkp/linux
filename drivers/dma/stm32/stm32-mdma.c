@@ -1539,7 +1539,8 @@ static bool stm32_mdma_filter_fn(struct dma_chan *c, void *fn_param)
 }
 
 static struct dma_chan *stm32_mdma_of_xlate(struct of_phandle_args *dma_spec,
-					    struct of_dma *ofdma)
+					    struct of_dma *ofdma,
+					    void *data)
 {
 	struct stm32_mdma_device *dmadev = ofdma->of_dma_data;
 	dma_cap_mask_t mask = dmadev->ddev.cap_mask;

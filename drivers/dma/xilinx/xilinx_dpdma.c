@@ -1689,7 +1689,8 @@ static void xilinx_dpdma_chan_remove(struct xilinx_dpdma_chan *chan)
 }
 
 static struct dma_chan *of_dma_xilinx_xlate(struct of_phandle_args *dma_spec,
-					    struct of_dma *ofdma)
+					    struct of_dma *ofdma,
+					    void *data)
 {
 	struct xilinx_dpdma_device *xdev = ofdma->of_dma_data;
 	u32 chan_id = dma_spec->args[0];

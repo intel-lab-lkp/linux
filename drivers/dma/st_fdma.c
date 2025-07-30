@@ -165,7 +165,8 @@ static irqreturn_t st_fdma_irq_handler(int irq, void *dev_id)
 }
 
 static struct dma_chan *st_fdma_of_xlate(struct of_phandle_args *dma_spec,
-					 struct of_dma *ofdma)
+					 struct of_dma *ofdma,
+					 void *data)
 {
 	struct st_fdma_dev *fdev = ofdma->of_dma_data;
 	struct dma_chan *chan;

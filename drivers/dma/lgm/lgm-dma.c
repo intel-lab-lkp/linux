@@ -1382,7 +1382,8 @@ update_client_configs(struct of_dma *ofdma, struct of_phandle_args *spec)
 }
 
 static struct dma_chan *ldma_xlate(struct of_phandle_args *spec,
-				   struct of_dma *ofdma)
+				   struct of_dma *ofdma,
+				   void *data)
 {
 	struct ldma_dev *d = ofdma->of_dma_data;
 	u32 chan_id =  spec->args[0];

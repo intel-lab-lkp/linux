@@ -646,7 +646,8 @@ static bool usb_dmac_chan_filter(struct dma_chan *chan, void *arg)
 }
 
 static struct dma_chan *usb_dmac_of_xlate(struct of_phandle_args *dma_spec,
-					  struct of_dma *ofdma)
+					  struct of_dma *ofdma,
+					  void *data)
 {
 	struct dma_chan *chan;
 	dma_cap_mask_t mask;

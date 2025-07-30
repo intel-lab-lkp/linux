@@ -722,7 +722,8 @@ static bool mxs_dma_filter_fn(struct dma_chan *chan, void *fn_param)
 }
 
 static struct dma_chan *mxs_dma_xlate(struct of_phandle_args *dma_spec,
-			       struct of_dma *ofdma)
+				      struct of_dma *ofdma,
+				      void *data)
 {
 	struct mxs_dma_engine *mxs_dma = ofdma->of_dma_data;
 	dma_cap_mask_t mask = mxs_dma->dma_device.cap_mask;

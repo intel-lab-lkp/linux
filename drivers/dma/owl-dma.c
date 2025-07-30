@@ -1060,7 +1060,8 @@ static inline void owl_dma_free(struct owl_dma *od)
 }
 
 static struct dma_chan *owl_dma_of_xlate(struct of_phandle_args *dma_spec,
-					 struct of_dma *ofdma)
+					 struct of_dma *ofdma,
+					 void *data)
 {
 	struct owl_dma *od = ofdma->of_dma_data;
 	struct owl_dma_vchan *vchan;

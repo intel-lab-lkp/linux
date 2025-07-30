@@ -1018,7 +1018,8 @@ static int sun4i_dma_config(struct dma_chan *chan,
 }
 
 static struct dma_chan *sun4i_dma_of_xlate(struct of_phandle_args *dma_spec,
-					   struct of_dma *ofdma)
+					   struct of_dma *ofdma,
+					   void *data)
 {
 	struct sun4i_dma_dev *priv = ofdma->of_dma_data;
 	struct sun4i_dma_vchan *vchan;

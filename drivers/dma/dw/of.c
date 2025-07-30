@@ -14,7 +14,8 @@
 #include "internal.h"
 
 static struct dma_chan *dw_dma_of_xlate(struct of_phandle_args *dma_spec,
-					struct of_dma *ofdma)
+					struct of_dma *ofdma,
+					void *data)
 {
 	struct dw_dma *dw = ofdma->of_dma_data;
 	struct dw_dma_slave slave = {

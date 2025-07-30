@@ -249,7 +249,8 @@ static bool fsl_edma_srcid_in_use(struct fsl_edma_engine *fsl_edma, u32 srcid)
 }
 
 static struct dma_chan *fsl_edma_xlate(struct of_phandle_args *dma_spec,
-		struct of_dma *ofdma)
+				       struct of_dma *ofdma,
+				       void *data)
 {
 	struct fsl_edma_engine *fsl_edma = ofdma->of_dma_data;
 	struct dma_chan *chan, *_chan;
@@ -292,7 +293,8 @@ static struct dma_chan *fsl_edma_xlate(struct of_phandle_args *dma_spec,
 }
 
 static struct dma_chan *fsl_edma3_xlate(struct of_phandle_args *dma_spec,
-					struct of_dma *ofdma)
+					struct of_dma *ofdma,
+					void *data)
 {
 	struct fsl_edma_engine *fsl_edma = ofdma->of_dma_data;
 	struct dma_chan *chan, *_chan;

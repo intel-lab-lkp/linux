@@ -204,7 +204,7 @@ struct dma_chan *rsnd_dma_request_channel(struct device_node *of_node, char *nam
 		}
 
 		if (i == rsnd_mod_id_raw(mod) && (!chan))
-			chan = of_dma_request_slave_channel(np, x);
+			chan = of_dma_request_slave_channel(np, x, NULL);
 		i++;
 	}
 

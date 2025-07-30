@@ -633,7 +633,8 @@ static inline void at_xdmac_increment_block_count(struct dma_chan *chan,
 }
 
 static struct dma_chan *at_xdmac_xlate(struct of_phandle_args *dma_spec,
-				       struct of_dma *of_dma)
+				       struct of_dma *of_dma,
+				       void *data)
 {
 	struct at_xdmac		*atxdmac = of_dma->of_dma_data;
 	struct at_xdmac_chan	*atchan;

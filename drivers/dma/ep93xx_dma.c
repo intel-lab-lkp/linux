@@ -1443,7 +1443,8 @@ static bool ep93xx_m2p_dma_filter(struct dma_chan *chan, void *filter_param)
 }
 
 static struct dma_chan *ep93xx_m2p_dma_of_xlate(struct of_phandle_args *dma_spec,
-					    struct of_dma *ofdma)
+						struct of_dma *ofdma,
+						void *data)
 {
 	struct ep93xx_dma_engine *edma = ofdma->of_dma_data;
 	dma_cap_mask_t mask = edma->dma_dev.cap_mask;
@@ -1474,7 +1475,8 @@ static bool ep93xx_m2m_dma_filter(struct dma_chan *chan, void *filter_param)
 }
 
 static struct dma_chan *ep93xx_m2m_dma_of_xlate(struct of_phandle_args *dma_spec,
-					    struct of_dma *ofdma)
+						struct of_dma *ofdma,
+						void *data)
 {
 	struct ep93xx_dma_engine *edma = ofdma->of_dma_data;
 	dma_cap_mask_t mask = edma->dma_dev.cap_mask;

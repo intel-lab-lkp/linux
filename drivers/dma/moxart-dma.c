@@ -321,7 +321,8 @@ static struct dma_async_tx_descriptor *moxart_prep_slave_sg(
 }
 
 static struct dma_chan *moxart_of_xlate(struct of_phandle_args *dma_spec,
-					struct of_dma *ofdma)
+					struct of_dma *ofdma,
+					void *data)
 {
 	struct moxart_dmadev *mdc = ofdma->of_dma_data;
 	struct dma_chan *chan;

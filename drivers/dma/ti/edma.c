@@ -2275,7 +2275,8 @@ static struct edma_soc_info *edma_setup_info_from_dt(struct device *dev,
 }
 
 static struct dma_chan *of_edma_xlate(struct of_phandle_args *dma_spec,
-				      struct of_dma *ofdma)
+				      struct of_dma *ofdma,
+				      void *data)
 {
 	return NULL;
 }

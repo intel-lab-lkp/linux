@@ -1519,7 +1519,8 @@ static void stm32_dma_set_config(struct stm32_dma_chan *chan,
 }
 
 static struct dma_chan *stm32_dma_of_xlate(struct of_phandle_args *dma_spec,
-					   struct of_dma *ofdma)
+					   struct of_dma *ofdma,
+					   void *data)
 {
 	struct stm32_dma_device *dmadev = ofdma->of_dma_data;
 	struct device *dev = dmadev->ddev.dev;

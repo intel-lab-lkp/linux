@@ -2108,7 +2108,8 @@ static int gpi_find_avail_gpii(struct gpi_dev *gpi_dev, u32 seid)
 
 /* gpi_of_dma_xlate: open client requested channel */
 static struct dma_chan *gpi_of_dma_xlate(struct of_phandle_args *args,
-					 struct of_dma *of_dma)
+					 struct of_dma *of_dma,
+					 void *data)
 {
 	struct gpi_dev *gpi_dev = (struct gpi_dev *)of_dma->of_dma_data;
 	u32 seid, chid;

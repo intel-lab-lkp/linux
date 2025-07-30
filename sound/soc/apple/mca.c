@@ -926,7 +926,7 @@ static struct dma_chan *mca_request_dma_channel(struct mca_cluster *cl, unsigned
 	char *name = devm_kasprintf(cl->host->dev, GFP_KERNEL,
 				    is_tx ? "tx%da" : "rx%db", cl->no);
 #endif
-	return of_dma_request_slave_channel(cl->host->dev->of_node, name);
+	return of_dma_request_slave_channel(cl->host->dev->of_node, name, NULL);
 
 }
 

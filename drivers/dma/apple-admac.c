@@ -579,7 +579,8 @@ static void admac_free_chan_resources(struct dma_chan *chan)
 }
 
 static struct dma_chan *admac_dma_of_xlate(struct of_phandle_args *dma_spec,
-					   struct of_dma *ofdma)
+					   struct of_dma *ofdma,
+					   void *data)
 {
 	struct admac_data *ad = (struct admac_data *) ofdma->of_dma_data;
 	unsigned int index;

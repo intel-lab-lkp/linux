@@ -1582,7 +1582,9 @@ static bool stm32_dma3_filter_fn(struct dma_chan *c, void *fn_param)
 	return true;
 }
 
-static struct dma_chan *stm32_dma3_of_xlate(struct of_phandle_args *dma_spec, struct of_dma *ofdma)
+static struct dma_chan *stm32_dma3_of_xlate(struct of_phandle_args *dma_spec,
+					    struct of_dma *ofdma,
+					    void *data)
 {
 	struct stm32_dma3_ddata *ddata = ofdma->of_dma_data;
 	dma_cap_mask_t mask = ddata->dma_dev.cap_mask;

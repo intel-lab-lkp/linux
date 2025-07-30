@@ -400,7 +400,9 @@ static void milbeaut_hdmac_desc_free(struct virt_dma_desc *vd)
 }
 
 static struct dma_chan *
-milbeaut_hdmac_xlate(struct of_phandle_args *dma_spec, struct of_dma *of_dma)
+milbeaut_hdmac_xlate(struct of_phandle_args *dma_spec,
+		     struct of_dma *of_dma,
+		     void *data)
 {
 	struct milbeaut_hdmac_device *mdev = of_dma->of_dma_data;
 	struct milbeaut_hdmac_chan *mc;

@@ -2529,7 +2529,8 @@ static struct dma_chan *pl08x_find_chan_id(struct pl08x_driver_data *pl08x,
 }
 
 static struct dma_chan *pl08x_of_xlate(struct of_phandle_args *dma_spec,
-				       struct of_dma *ofdma)
+				       struct of_dma *ofdma,
+				       void *data)
 {
 	struct pl08x_driver_data *pl08x = ofdma->of_dma_data;
 	struct dma_chan *dma_chan;

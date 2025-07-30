@@ -981,7 +981,8 @@ static struct of_dma_filter_info cpp41_dma_info = {
 };
 
 static struct dma_chan *cppi41_dma_xlate(struct of_phandle_args *dma_spec,
-		struct of_dma *ofdma)
+					 struct of_dma *ofdma,
+					 void *data)
 {
 	int count = dma_spec->args_count;
 	struct of_dma_filter_info *info = ofdma->of_dma_data;

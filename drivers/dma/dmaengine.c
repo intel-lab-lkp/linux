@@ -806,20 +806,21 @@ static const struct dma_slave_map *dma_filter_match(struct dma_device *device,
 }
 
 /**
- * dma_request_chan - try to allocate an exclusive slave channel
+ * dma_request_chan_w_data - try to allocate an exclusive slave channel, with extra data
  * @dev:	pointer to client device structure
  * @name:	slave channel name
+ * @data:	pointer to producer-consumer specific data
  *
  * Returns pointer to appropriate DMA channel on success or an error pointer.
  */
-struct dma_chan *dma_request_chan(struct device *dev, const char *name)
+struct dma_chan *dma_request_chan_w_data(struct device *dev, const char *name, void *data)
 {
 	struct fwnode_handle *fwnode = dev_fwnode(dev);
 	struct dma_device *d, *_d;
 	struct dma_chan *chan = NULL;
 
 	if (is_of_node(fwnode))
-		chan = of_dma_request_slave_channel(to_of_node(fwnode), name);
+		chan = of_dma_request_slave_channel(to_of_node(fwnode), name, data);
 	else if (is_acpi_device_node(fwnode))
 		chan = acpi_dma_request_slave_chan_by_name(dev, name);
 
@@ -870,6 +871,19 @@ found:
 		dev_warn(dev, "Cannot create DMA %s symlink\n", chan->name);
 
 	return chan;
+}
+EXPORT_SYMBOL_GPL(dma_request_chan_w_data);
+
+/**
+ * dma_request_chan - try to allocate an exclusive slave channel
+ * @dev:	pointer to client device structure
+ * @name:	slave channel name
+ *
+ * Returns pointer to appropriate DMA channel on success or an error pointer.
+ */
+struct dma_chan *dma_request_chan(struct device *dev, const char *name)
+{
+	return dma_request_chan_w_data(dev, name, NULL);
 }
 EXPORT_SYMBOL_GPL(dma_request_chan);
 

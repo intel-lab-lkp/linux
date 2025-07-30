@@ -1358,7 +1358,8 @@ static int __maybe_unused axi_dma_runtime_resume(struct device *dev)
 }
 
 static struct dma_chan *dw_axi_dma_of_xlate(struct of_phandle_args *dma_spec,
-					    struct of_dma *ofdma)
+					    struct of_dma *ofdma,
+					    void *data)
 {
 	struct dw_axi_dma *dw = ofdma->of_dma_data;
 	struct axi_dma_chan *chan;

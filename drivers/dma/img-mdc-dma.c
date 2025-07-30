@@ -805,7 +805,8 @@ out:
 }
 
 static struct dma_chan *mdc_of_xlate(struct of_phandle_args *dma_spec,
-				     struct of_dma *ofdma)
+				     struct of_dma *ofdma,
+				     void *data)
 {
 	struct mdc_dma *mdma = ofdma->of_dma_data;
 	struct dma_chan *chan;

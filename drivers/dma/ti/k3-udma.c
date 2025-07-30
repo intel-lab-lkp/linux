@@ -4250,7 +4250,8 @@ triggered_bchan:
 }
 
 static struct dma_chan *udma_of_xlate(struct of_phandle_args *dma_spec,
-				      struct of_dma *ofdma)
+				      struct of_dma *ofdma,
+				      void *data)
 {
 	struct udma_dev *ud = ofdma->of_dma_data;
 	struct udma_filter_param filter_param;

@@ -1281,7 +1281,8 @@ static const struct of_device_id pxad_dt_ids[] = {
 MODULE_DEVICE_TABLE(of, pxad_dt_ids);
 
 static struct dma_chan *pxad_dma_xlate(struct of_phandle_args *dma_spec,
-					   struct of_dma *ofdma)
+				       struct of_dma *ofdma,
+				       void *data)
 {
 	struct pxad_device *d = ofdma->of_dma_data;
 	struct dma_chan *chan;

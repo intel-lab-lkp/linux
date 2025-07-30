@@ -1794,7 +1794,8 @@ static bool at_dma_filter(struct dma_chan *chan, void *slave)
 }
 
 static struct dma_chan *at_dma_xlate(struct of_phandle_args *dma_spec,
-				     struct of_dma *of_dma)
+				     struct of_dma *of_dma,
+				     void *data)
 {
 	struct dma_chan *chan;
 	struct at_dma_chan *atchan;
@@ -1861,7 +1862,8 @@ static struct dma_chan *at_dma_xlate(struct of_phandle_args *dma_spec,
 }
 #else
 static struct dma_chan *at_dma_xlate(struct of_phandle_args *dma_spec,
-				     struct of_dma *of_dma)
+				     struct of_dma *of_dma,
+				     void *data)
 {
 	return NULL;
 }

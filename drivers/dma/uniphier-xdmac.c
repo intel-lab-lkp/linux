@@ -464,7 +464,8 @@ static void uniphier_xdmac_chan_init(struct uniphier_xdmac_device *xdev,
 }
 
 static struct dma_chan *of_dma_uniphier_xlate(struct of_phandle_args *dma_spec,
-					      struct of_dma *ofdma)
+					      struct of_dma *ofdma,
+					      void *data)
 {
 	struct uniphier_xdmac_device *xdev = ofdma->of_dma_data;
 	int chan_id = dma_spec->args[0];

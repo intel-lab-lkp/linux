@@ -802,7 +802,8 @@ static void tegra_adma_free_chan_resources(struct dma_chan *dc)
 }
 
 static struct dma_chan *tegra_dma_of_xlate(struct of_phandle_args *dma_spec,
-					   struct of_dma *ofdma)
+					   struct of_dma *ofdma,
+					   void *data)
 {
 	struct tegra_adma *tdma = ofdma->of_dma_data;
 	struct tegra_adma_chan *tdc;

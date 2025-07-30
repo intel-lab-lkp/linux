@@ -767,7 +767,8 @@ static bool rz_dmac_chan_filter(struct dma_chan *chan, void *arg)
 }
 
 static struct dma_chan *rz_dmac_of_xlate(struct of_phandle_args *dma_spec,
-					 struct of_dma *ofdma)
+					 struct of_dma *ofdma,
+					 void *data)
 {
 	dma_cap_mask_t mask;
 

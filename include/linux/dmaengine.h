@@ -1522,6 +1522,7 @@ struct dma_chan *__dma_request_channel(const dma_cap_mask_t *mask,
 				       dma_filter_fn fn, void *fn_param,
 				       struct device_node *np);
 
+struct dma_chan *dma_request_chan_w_data(struct device *dev, const char *name, void *data);
 struct dma_chan *dma_request_chan(struct device *dev, const char *name);
 struct dma_chan *dma_request_chan_by_mask(const dma_cap_mask_t *mask);
 struct dma_chan *devm_dma_request_chan(struct device *dev, const char *name);
@@ -1550,6 +1551,12 @@ static inline struct dma_chan *__dma_request_channel(const dma_cap_mask_t *mask,
 						     struct device_node *np)
 {
 	return NULL;
+}
+struct dma_chan *dma_request_chan_w_data(struct device *dev,
+					 const char *name,
+					 void *data)
+{
+	return ERR_PTR(-ENODEV);
 }
 static inline struct dma_chan *dma_request_chan(struct device *dev,
 						const char *name)
