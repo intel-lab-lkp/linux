@@ -1912,6 +1912,7 @@ static int fill_readdir_cache(struct inode *dir, struct dentry *dn,
 int ceph_readdir_prepopulate(struct ceph_mds_request *req,
 			     struct ceph_mds_session *session)
 {
+	struct ceph_mds_client *mdsc = session->s_mdsc;
 	struct dentry *parent = req->r_dentry;
 	struct inode *inode = d_inode(parent);
 	struct ceph_inode_info *ci = ceph_inode(inode);
@@ -2041,7 +2042,10 @@ retry_lookup:
 		if (d_really_is_positive(dn)) {
 			in = d_inode(dn);
 		} else {
+			/* Release mdsc->snap_rwsem in advance to avoid deadlock */
+			up_read(&mdsc->snap_rwsem);
 			in = ceph_get_inode(parent->d_sb, tvino, NULL);
+			down_read(&mdsc->snap_rwsem);
 			if (IS_ERR(in)) {
 				doutc(cl, "new_inode badness\n");
 				d_drop(dn);
