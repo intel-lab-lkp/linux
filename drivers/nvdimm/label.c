@@ -381,6 +381,16 @@ static void nsl_calculate_checksum(struct nvdimm_drvdata *ndd,
 	nsl_set_checksum(ndd, nd_label, sum);
 }
 
+static void rgl_calculate_checksum(struct nvdimm_drvdata *ndd,
+				   struct cxl_region_label *rg_label)
+{
+	u64 sum;
+
+	rgl_set_checksum(rg_label, 0);
+	sum = nd_fletcher64(rg_label, sizeof_namespace_label(ndd), 1);
+	rgl_set_checksum(rg_label, sum);
+}
+
 static bool slot_valid(struct nvdimm_drvdata *ndd,
 		struct nd_lsa_label *lsa_label, u32 slot)
 {
@@ -960,7 +970,7 @@ static int __pmem_label_update(struct nd_region *nd_region,
 		return rc;
 
 	/* Garbage collect the previous label */
-	mutex_lock(&nd_mapping->lock);
+	guard(mutex)(&nd_mapping->lock);
 	list_for_each_entry(label_ent, &nd_mapping->labels, list) {
 		if (!label_ent->label)
 			continue;
@@ -972,20 +982,20 @@ static int __pmem_label_update(struct nd_region *nd_region,
 	/* update index */
 	rc = nd_label_write_index(ndd, ndd->ns_next,
 			nd_inc_seq(__le32_to_cpu(nsindex->seq)), 0);
-	if (rc == 0) {
-		list_for_each_entry(label_ent, &nd_mapping->labels, list)
-			if (!label_ent->label) {
-				label_ent->label = lsa_label;
-				lsa_label = NULL;
-				break;
-			}
-		dev_WARN_ONCE(&nspm->nsio.common.dev, lsa_label,
-				"failed to track label: %d\n",
-				to_slot(ndd, lsa_label));
-		if (lsa_label)
-			rc = -ENXIO;
-	}
-	mutex_unlock(&nd_mapping->lock);
+	if (rc)
+		return rc;
+
+	list_for_each_entry(label_ent, &nd_mapping->labels, list)
+		if (!label_ent->label) {
+			label_ent->label = lsa_label;
+			lsa_label = NULL;
+			break;
+		}
+	dev_WARN_ONCE(&nspm->nsio.common.dev, lsa_label,
+			"failed to track label: %d\n",
+			to_slot(ndd, lsa_label));
+	if (lsa_label)
+		rc = -ENXIO;
 
 	return rc;
 }
@@ -1120,6 +1130,137 @@ int nd_pmem_namespace_label_update(struct nd_region *nd_region,
 		struct nd_mapping *nd_mapping = &nd_region->mapping[i];
 
 		rc = __pmem_label_update(nd_region, nd_mapping, nspm, i, 0);
+		if (rc)
+			return rc;
+	}
+
+	return 0;
+}
+
+static int __pmem_region_label_update(struct nd_region *nd_region,
+		struct nd_mapping *nd_mapping, int pos, unsigned long flags)
+{
+	struct nd_interleave_set *nd_set = nd_region->nd_set;
+	struct nvdimm_drvdata *ndd = to_ndd(nd_mapping);
+	struct nd_lsa_label *nd_label;
+	struct cxl_region_label *rg_label;
+	struct nd_namespace_index *nsindex;
+	struct nd_label_ent *label_ent;
+	unsigned long *free;
+	u32 nslot, slot;
+	size_t offset;
+	int rc;
+	uuid_t tmp;
+
+	if (!preamble_next(ndd, &nsindex, &free, &nslot))
+		return -ENXIO;
+
+	/* allocate and write the label to the staging (next) index */
+	slot = nd_label_alloc_slot(ndd);
+	if (slot == UINT_MAX)
+		return -ENXIO;
+	dev_dbg(ndd->dev, "allocated: %d\n", slot);
+
+	nd_label = to_label(ndd, slot);
+
+	memset(nd_label, 0, sizeof_namespace_label(ndd));
+	rg_label = &nd_label->rg_label;
+
+	/* Set Region Label Format identification UUID */
+	uuid_parse(CXL_REGION_UUID, &tmp);
+	export_uuid(nd_label->rg_label.type, &tmp);
+
+	/* Set Current Region Label UUID */
+	export_uuid(nd_label->rg_label.uuid, &nd_set->uuid);
+
+	rg_label->flags = __cpu_to_le32(flags);
+	rg_label->nlabel = __cpu_to_le16(nd_region->ndr_mappings);
+	rg_label->position = __cpu_to_le16(pos);
+	rg_label->dpa = __cpu_to_le64(nd_mapping->start);
+	rg_label->rawsize = __cpu_to_le64(nd_mapping->size);
+	rg_label->hpa = __cpu_to_le64(nd_set->res->start);
+	rg_label->slot = __cpu_to_le32(slot);
+	rg_label->ig = __cpu_to_le32(nd_set->interleave_granularity);
+	rg_label->align = __cpu_to_le16(0);
+
+	/* Update fletcher64 Checksum */
+	rgl_calculate_checksum(ndd, rg_label);
+
+	/* update label */
+	offset = nd_label_offset(ndd, nd_label);
+	rc = nvdimm_set_config_data(ndd, offset, nd_label,
+			sizeof_namespace_label(ndd));
+	if (rc < 0) {
+		nd_label_free_slot(ndd, slot);
+		return rc;
+	}
+
+	/* Garbage collect the previous label */
+	guard(mutex)(&nd_mapping->lock);
+	list_for_each_entry(label_ent, &nd_mapping->labels, list) {
+		if (!label_ent->label)
+			continue;
+		if (rgl_uuid_equal(&label_ent->label->rg_label, &nd_set->uuid))
+			reap_victim(nd_mapping, label_ent);
+	}
+
+	/* update index */
+	rc = nd_label_write_index(ndd, ndd->ns_next,
+			nd_inc_seq(__le32_to_cpu(nsindex->seq)), 0);
+	if (rc)
+		return rc;
+
+	list_for_each_entry(label_ent, &nd_mapping->labels, list)
+		if (!label_ent->label) {
+			label_ent->label = nd_label;
+			nd_label = NULL;
+			break;
+		}
+	dev_WARN_ONCE(&nd_region->dev, nd_label,
+			"failed to track label: %d\n",
+			to_slot(ndd, nd_label));
+	if (nd_label)
+		rc = -ENXIO;
+
+	return rc;
+}
+
+int nd_pmem_region_label_update(struct nd_region *nd_region)
+{
+	int i, rc;
+
+	for (i = 0; i < nd_region->ndr_mappings; i++) {
+		struct nd_mapping *nd_mapping = &nd_region->mapping[i];
+		struct nvdimm_drvdata *ndd = to_ndd(nd_mapping);
+
+		/* No need to update region label for non cxl format */
+		if (!ndd->cxl)
+			continue;
+
+		/* Init labels to include region label */
+		rc = init_labels(nd_mapping, 1);
+
+		if (rc < 0)
+			return rc;
+
+		rc = __pmem_region_label_update(nd_region, nd_mapping, i,
+					NSLABEL_FLAG_UPDATING);
+
+		if (rc)
+			return rc;
+	}
+
+	/* Clear the UPDATING flag per UEFI 2.7 expectations */
+	for (i = 0; i < nd_region->ndr_mappings; i++) {
+		struct nd_mapping *nd_mapping = &nd_region->mapping[i];
+		struct nvdimm_drvdata *ndd = to_ndd(nd_mapping);
+
+		/* No need to update region label for non cxl format */
+		if (!ndd->cxl)
+			continue;
+
+		rc = __pmem_region_label_update(nd_region, nd_mapping, i, 0);
+
 		if (rc)
 			return rc;
 	}

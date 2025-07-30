@@ -322,6 +322,26 @@ static inline void nsl_set_region_uuid(struct nvdimm_drvdata *ndd,
 		export_uuid(ns_label->cxl.region_uuid, uuid);
 }
 
+static inline bool rgl_uuid_equal(struct cxl_region_label *rg_label,
+				  const uuid_t *uuid)
+{
+	uuid_t tmp;
+
+	import_uuid(&tmp, rg_label->uuid);
+	return uuid_equal(&tmp, uuid);
+}
+
+static inline u64 rgl_get_checksum(struct cxl_region_label *rg_label)
+{
+	return __le64_to_cpu(rg_label->checksum);
+}
+
+static inline void rgl_set_checksum(struct cxl_region_label *rg_label,
+				    u64 checksum)
+{
+	rg_label->checksum = __cpu_to_le64(checksum);
+}
+
 bool nsl_validate_type_guid(struct nvdimm_drvdata *ndd,
 			    struct nd_namespace_label *nd_label, guid_t *guid);
 enum nvdimm_claim_class nsl_get_claim_class(struct nvdimm_drvdata *ndd,

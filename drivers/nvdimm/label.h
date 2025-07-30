@@ -190,6 +190,7 @@ struct nd_namespace_label {
 struct nd_lsa_label {
 	union {
 		struct nd_namespace_label ns_label;
+		struct cxl_region_label rg_label;
 	};
 };
 
@@ -233,4 +234,5 @@ struct nd_region;
 struct nd_namespace_pmem;
 int nd_pmem_namespace_label_update(struct nd_region *nd_region,
 		struct nd_namespace_pmem *nspm, resource_size_t size);
+int nd_pmem_region_label_update(struct nd_region *nd_region);
 #endif /* __LABEL_H__ */
