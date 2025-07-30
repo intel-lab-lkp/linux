@@ -25,6 +25,7 @@ properties:
   compatible:
     oneOf:
       - items:
+          - const: mediatek,mt8196-efuse
           - const: mediatek,mt8188-efuse
           - const: mediatek,mt8186-efuse
       - const: mediatek,mt8186-efuse
