@@ -359,7 +359,7 @@ static bool nsl_validate_checksum(struct nvdimm_drvdata *ndd,
 {
 	u64 sum, sum_save;
 
-	if (!ndd->cxl && !efi_namespace_label_has(ndd, checksum))
+	if (!efi_namespace_label_has(ndd, checksum))
 		return true;
 
 	sum_save = nsl_get_checksum(ndd, nd_label);
@@ -374,11 +374,23 @@ static void nsl_calculate_checksum(struct nvdimm_drvdata *ndd,
 {
 	u64 sum;
 
-	if (!ndd->cxl && !efi_namespace_label_has(ndd, checksum))
+	if (!efi_namespace_label_has(ndd, checksum))
 		return;
 	nsl_set_checksum(ndd, nd_label, 0);
 	sum = nd_fletcher64(nd_label, sizeof_namespace_label(ndd), 1);
 	nsl_set_checksum(ndd, nd_label, sum);
+}
+
+static bool rgl_validate_checksum(struct nvdimm_drvdata *ndd,
+				  struct cxl_region_label *rg_label)
+{
+	u64 sum, sum_save;
+
+	sum_save = rgl_get_checksum(rg_label);
+	rgl_set_checksum(rg_label, 0);
+	sum = nd_fletcher64(rg_label, sizeof_namespace_label(ndd), 1);
+	rgl_set_checksum(rg_label, sum_save);
+	return sum == sum_save;
 }
 
 static void rgl_calculate_checksum(struct nvdimm_drvdata *ndd,
@@ -395,14 +407,27 @@ static bool slot_valid(struct nvdimm_drvdata *ndd,
 		struct nd_lsa_label *lsa_label, u32 slot)
 {
 	bool valid;
+	char *label_name;
 	struct nd_namespace_label *nd_label = &lsa_label->ns_label;
+	struct cxl_region_label *rg_label = &lsa_label->rg_label;
 
 	/* check that we are written where we expect to be written */
-	if (slot != nsl_get_slot(ndd, nd_label))
-		return false;
-	valid = nsl_validate_checksum(ndd, nd_label);
+	if (is_region_label(ndd, lsa_label)) {
+		label_name = "rg";
+		if (slot != rgl_get_slot(rg_label))
+			return false;
+		valid = rgl_validate_checksum(ndd, rg_label);
+	} else {
+		label_name = "ns";
+		if (slot != nsl_get_slot(ndd, nd_label))
+			return false;
+		valid = nsl_validate_checksum(ndd, nd_label);
+	}
+
 	if (!valid)
-		dev_dbg(ndd->dev, "fail checksum. slot: %d\n", slot);
+		dev_dbg(ndd->dev, "%s label checksum fail. slot: %d\n",
+			label_name, slot);
+
 	return valid;
 }
 
@@ -580,18 +605,28 @@ int nd_label_active_count(struct nvdimm_drvdata *ndd)
 	for_each_clear_bit_le(slot, free, nslot) {
 		struct nd_lsa_label *lsa_label;
 		struct nd_namespace_label *nd_label;
+		struct cxl_region_label *rg_label;
+		u32 lslot;
+		u64 size, dpa;
 
 		lsa_label = to_label(ndd, slot);
 		nd_label = &lsa_label->ns_label;
+		rg_label = &lsa_label->rg_label;
 
 		if (!slot_valid(ndd, lsa_label, slot)) {
-			u32 label_slot = nsl_get_slot(ndd, nd_label);
-			u64 size = nsl_get_rawsize(ndd, nd_label);
-			u64 dpa = nsl_get_dpa(ndd, nd_label);
+			if (is_region_label(ndd, lsa_label)) {
+				lslot = __le32_to_cpu(rg_label->slot);
+				size = __le64_to_cpu(rg_label->rawsize);
+				dpa = __cpu_to_le64(rg_label->dpa);
+			} else {
+				lslot = nsl_get_slot(ndd, nd_label);
+				size = nsl_get_rawsize(ndd, nd_label);
+				dpa = nsl_get_dpa(ndd, nd_label);
+			}
 
 			dev_dbg(ndd->dev,
 				"slot%d invalid slot: %d dpa: %llx size: %llx\n",
-					slot, label_slot, dpa, size);
+					slot, lslot, dpa, size);
 			continue;
 		}
 		count++;

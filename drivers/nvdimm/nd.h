@@ -331,6 +331,20 @@ static inline bool nsl_region_uuid_equal(struct nd_namespace_label *ns_label,
 	return uuid_equal(&tmp, uuid);
 }
 
+static inline bool is_region_label(struct nvdimm_drvdata *ndd,
+				   struct nd_lsa_label *nd_label)
+{
+	uuid_t ns_type, region_type;
+
+	if (!ndd->cxl)
+		return false;
+
+	uuid_parse(CXL_REGION_UUID, &region_type);
+	import_uuid(&ns_type, nd_label->ns_label.cxl.type);
+	return uuid_equal(&region_type, &ns_type);
+
+}
+
 static inline bool rgl_uuid_equal(struct cxl_region_label *rg_label,
 				  const uuid_t *uuid)
 {
@@ -338,6 +352,11 @@ static inline bool rgl_uuid_equal(struct cxl_region_label *rg_label,
 
 	import_uuid(&tmp, rg_label->uuid);
 	return uuid_equal(&tmp, uuid);
+}
+
+static inline u32 rgl_get_slot(struct cxl_region_label *rg_label)
+{
+	return __le32_to_cpu(rg_label->slot);
 }
 
 static inline u64 rgl_get_checksum(struct cxl_region_label *rg_label)
