@@ -957,7 +957,7 @@ static int __pmem_label_update(struct nd_region *nd_region,
 	nsl_set_slot(ndd, nd_label, slot);
 	nsl_set_alignment(ndd, nd_label, 0);
 	nsl_set_type_guid(ndd, nd_label, &nd_set->type_guid);
-	nsl_set_region_uuid(ndd, nd_label, NULL);
+	nsl_set_region_uuid(ndd, nd_label, &nd_set->uuid);
 	nsl_set_claim_class(ndd, nd_label, ndns->claim_class);
 	nsl_calculate_checksum(ndd, nd_label);
 	nd_dbg_dpa(nd_region, ndd, res, "\n");
@@ -1129,7 +1129,8 @@ int nd_pmem_namespace_label_update(struct nd_region *nd_region,
 				count++;
 		WARN_ON_ONCE(!count);
 
-		rc = init_labels(nd_mapping, count);
+		/* Adding 1 to pre include the already added region label */
+		rc = init_labels(nd_mapping, count + 1);
 		if (rc < 0)
 			return rc;
 
