@@ -5583,6 +5583,11 @@
 			periods, but in jiffies.  The default of zero
 			says no holdoff.
 
+	rcuscale.writer_no_print= [KNL]
+			Do not print writer durations to kernel ring buffer.
+			Instead, users can read them from the
+			rcuscale/writer_durations file in debugfs.
+
 	rcutorture.fqs_duration= [KNL]
 			Set duration of force_quiescent_state bursts
 			in microseconds.

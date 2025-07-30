@@ -40,6 +40,8 @@
 #include <linux/vmalloc.h>
 #include <linux/rcupdate_trace.h>
 #include <linux/sched/debug.h>
+#include <linux/debugfs.h>
+#include <linux/seq_file.h>
 
 #include "rcu.h"
 
@@ -97,6 +99,7 @@ torture_param(bool, shutdown, RCUSCALE_SHUTDOWN,
 torture_param(int, verbose, 1, "Enable verbose debugging printk()s");
 torture_param(int, writer_holdoff, 0, "Holdoff (us) between GPs, zero to disable");
 torture_param(int, writer_holdoff_jiffies, 0, "Holdoff (jiffies) between GPs, zero to disable");
+torture_param(bool, writer_no_print, false, "Do not print writer durations to ring buffer");
 torture_param(int, kfree_rcu_test, 0, "Do we run a kfree_rcu() scale test?");
 torture_param(int, kfree_mult, 1, "Multiple of kfree_obj size to allocate.");
 torture_param(int, kfree_by_call_rcu, 0, "Use call_rcu() to emulate kfree_rcu()?");
@@ -137,6 +140,9 @@ static u64 t_rcu_scale_writer_started;
 static u64 t_rcu_scale_writer_finished;
 static unsigned long b_rcu_gp_test_started;
 static unsigned long b_rcu_gp_test_finished;
+
+static struct dentry *debugfs_dir;
+static struct dentry *debugfs_writer_durations;
 
 #define MAX_MEAS 10000
 #define MIN_MEAS 100
@@ -607,6 +613,7 @@ rcu_scale_writer(void *arg)
 		t = ktime_get_mono_fast_ns();
 		*wdp = t - *wdp;
 		i_max = i;
+		writer_n_durations[me] = i_max + 1;
 		if (!started &&
 		    atomic_read(&n_rcu_scale_writer_started) >= nrealwriters)
 			started = true;
@@ -620,6 +627,7 @@ rcu_scale_writer(void *arg)
 			    nrealwriters) {
 				schedule_timeout_interruptible(10);
 				rcu_ftrace_dump(DUMP_ALL);
+				WRITE_ONCE(test_complete, true);
 				SCALEOUT_STRING("Test complete");
 				t_rcu_scale_writer_finished = t;
 				if (gp_exp) {
@@ -666,7 +674,6 @@ rcu_scale_writer(void *arg)
 		rcu_scale_free(wmbp);
 		cur_ops->gp_barrier();
 	}
-	writer_n_durations[me] = i_max + 1;
 	torture_kthread_stopping("rcu_scale_writer");
 	return 0;
 }
@@ -941,6 +948,117 @@ unwind:
 	return firsterr;
 }
 
+/*
+ * A seq_file for writer_durations.  Content is only visible when all writers
+ * finish.  Element i of the sequence is writer_durations + i.
+ */
+static void *writer_durations_start(struct seq_file *m, loff_t *pos)
+{
+	loff_t writer_id = *pos;
+
+	if (!test_complete || writer_id < 0 || writer_id >= nrealwriters)
+		return NULL;
+
+	return writer_durations + writer_id;
+}
+
+static void *writer_durations_next(struct seq_file *m, void *v, loff_t *pos)
+{
+	(*pos)++;
+	return writer_durations_start(m, pos);
+}
+
+static void writer_durations_stop(struct seq_file *m, void *v)
+{
+}
+
+/*
+ * Each element in the seq_file is an array of one writer's durations.
+ * Each element prints writer_n_durations[writer_id] lines, and each line
+ * contains one duration record, in CSV format:
+ * writer_id,duration
+ */
+static int writer_durations_show(struct seq_file *m, void *v)
+{
+	u64 **durations = v;
+	loff_t writer_id = durations - writer_durations;
+
+	for (int i = 0; i < writer_n_durations[writer_id]; ++i)
+		seq_printf(m, "%lld,%lld\n", writer_id, durations[0][i]);
+
+	return 0;
+}
+
+static const struct seq_operations writer_durations_op = {
+	.start	= writer_durations_start,
+	.next	= writer_durations_next,
+	.stop	= writer_durations_stop,
+	.show	= writer_durations_show
+};
+
+static int writer_durations_open(struct inode *inode, struct file *file)
+{
+	return seq_open(file, &writer_durations_op);
+}
+
+static const struct file_operations writer_durations_fops = {
+	.owner = THIS_MODULE,
+	.open = writer_durations_open,
+	.read = seq_read,
+	.llseek = seq_lseek,
+	.release = seq_release,
+};
+
+/*
+ * Create an rcuscale directory exposing run states and results.
+ */
+static int register_debugfs(void)
+{
+#define try_create_file(variable, name, mode, parent, data, fops)		\
+({										\
+	variable = debugfs_create_file((name), (mode), (parent), (data), (fops)); \
+	err = PTR_ERR_OR_ZERO(variable);					\
+	err;									\
+})
+
+	int err;
+
+	debugfs_dir = debugfs_create_dir("rcuscale", NULL);
+	err = PTR_ERR_OR_ZERO(debugfs_dir);
+	if (err)
+		goto fail;
+
+	if (try_create_file(debugfs_writer_durations, "writer_durations", 0444,
+			debugfs_dir, NULL, &writer_durations_fops))
+		goto fail;
+
+	return 0;
+fail:
+	pr_err("rcu-scale: Failed to create debugfs file.");
+	/* unregister_debugfs is called by rcu_scale_cleanup, avoid
+	 * calling it twice.
+	 */
+	return err;
+#undef try_create_file
+}
+
+static void unregister_debugfs(void)
+{
+#define try_remove(variable)			\
+do {						\
+	if (!IS_ERR_OR_NULL(variable))		\
+		debugfs_remove(variable);	\
+	variable = NULL;			\
+} while (0)
+
+	try_remove(debugfs_writer_durations);
+
+	/* Remove directory after files. */
+	try_remove(debugfs_dir);
+
+#undef try_remove
+}
+
 static void
 rcu_scale_cleanup(void)
 {
@@ -960,6 +1078,8 @@ rcu_scale_cleanup(void)
 		SCALEOUT_ERRSTRING("All grace periods normal, no expedited ones to measure!");
 	if (gp_exp && gp_async)
 		SCALEOUT_ERRSTRING("No expedited async GPs, so went with async!");
+
+	unregister_debugfs();
 
 	// If built-in, just report all of the GP kthread's CPU time.
 	if (IS_BUILTIN(CONFIG_RCU_SCALE_TEST) && !kthread_tp && cur_ops->rso_gp_kthread)
@@ -1020,13 +1140,15 @@ rcu_scale_cleanup(void)
 			wdpp = writer_durations[i];
 			if (!wdpp)
 				continue;
-			for (j = 0; j < writer_n_durations[i]; j++) {
-				wdp = &wdpp[j];
-				pr_alert("%s%s %4d writer-duration: %5d %llu\n",
-					scale_type, SCALE_FLAG,
-					i, j, *wdp);
-				if (j % 100 == 0)
-					schedule_timeout_uninterruptible(1);
+			if (!writer_no_print) {
+				for (j = 0; j < writer_n_durations[i]; j++) {
+					wdp = &wdpp[j];
+					pr_alert("%s%s %4d writer-duration: %5d %llu\n",
+						scale_type, SCALE_FLAG,
+						i, j, *wdp);
+					if (j % 100 == 0)
+						schedule_timeout_uninterruptible(1);
+				}
 			}
 			kfree(writer_durations[i]);
 			if (writer_freelists) {
@@ -1202,6 +1324,10 @@ rcu_scale_init(void)
 		if (torture_init_error(firsterr))
 			goto unwind;
 	}
+
+	if (register_debugfs())
+		goto unwind;
+
 	torture_init_end();
 	return 0;
 
