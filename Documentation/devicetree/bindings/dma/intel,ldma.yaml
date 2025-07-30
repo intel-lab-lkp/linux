@@ -15,7 +15,8 @@ allOf:
 properties:
   compatible:
     enum:
-      - intel,lgm-ldma
+      - intel,lgm-cdma
+      - intel,lgm-hdma
 
   reg:
     maxItems: 1
@@ -127,7 +128,7 @@ additionalProperties: false
 examples:
   - |
     dma0: dma-controller@e0e00000 {
-      compatible = "intel,lgm-ldma";
+      compatible = "intel,lgm-cdma";
       reg = <0xe0e00000 0x1000>;
       #dma-cells = <3>;
       dma-channels = <16>;
@@ -144,7 +145,7 @@ examples:
     };
   - |
     dma3: dma-controller@ec800000 {
-      compatible = "intel,lgm-ldma";
+      compatible = "intel,lgm-hdma";
       reg = <0xec800000 0x1000>;
       clocks = <&cgu0 71>;
       resets = <&rcu0 0x10 9>;
