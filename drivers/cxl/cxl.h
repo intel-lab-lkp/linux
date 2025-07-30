@@ -870,6 +870,7 @@ struct cxl_region *cxl_create_region(struct cxl_root_decoder *cxlrd,
 				     enum cxl_partition_mode mode, int id,
 				     struct cxl_pmem_region_params *params,
 				     struct cxl_decoder *cxld);
+void create_pmem_region(struct nvdimm *nvdimm);
 #else
 static inline bool is_cxl_pmem_region(struct device *dev)
 {
@@ -902,6 +903,9 @@ cxl_create_region(struct cxl_root_decoder *cxlrd,
 		  struct cxl_decoder *cxld)
 {
 	return NULL;
+}
+static inline void create_pmem_region(struct nvdimm *nvdimm)
+{
 }
 #endif
 
