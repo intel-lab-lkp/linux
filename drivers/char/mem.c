@@ -527,8 +527,16 @@ static unsigned long get_unmapped_area_zero(struct file *file,
 		return shmem_get_unmapped_area(NULL, addr, len, pgoff, flags);
 	}
 
+#ifdef CONFIG_TRANSPARENT_HUGEPAGE
+	/*
+	 * Attempt to map aligned to huge page size if possible, otherwise we
+	 * fall back to system page size mappings in thp_get_unmapped_area.
+	 */
+	return thp_get_unmapped_area(file, addr, len, pgoff, flags);
+#else
 	/* Otherwise flags & MAP_PRIVATE: with no shmem object beneath it */
 	return mm_get_unmapped_area(current->mm, file, addr, len, pgoff, flags);
+#endif
 #else
 	return -ENOSYS;
 #endif
