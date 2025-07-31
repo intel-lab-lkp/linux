@@ -196,13 +196,13 @@ static void cxacru_poll_status(struct work_struct *work);
 
 /* Card info exported through sysfs */
 #define CXACRU__ATTR_INIT(_name) \
-static DEVICE_ATTR_RO(_name)
+(static DEVICE_ATTR_RO(_name))
 
 #define CXACRU_CMD_INIT(_name) \
-static DEVICE_ATTR_RW(_name)
+(static DEVICE_ATTR_RW(_name))
 
 #define CXACRU_SET_INIT(_name) \
-static DEVICE_ATTR_WO(_name)
+(static DEVICE_ATTR_WO(_name))
 
 #define CXACRU_ATTR_INIT(_value, _type, _name) \
 static ssize_t _name##_show(struct device *dev, \
@@ -513,7 +513,7 @@ CXACRU_ATTR_##_action(CXINF_DOWNSTREAM_RATE,           u32,  downstream_rate); \
 CXACRU_ATTR_##_action(CXINF_UPSTREAM_RATE,             u32,  upstream_rate); \
 CXACRU_ATTR_##_action(CXINF_LINK_STATUS,               LINK, link_status); \
 CXACRU_ATTR_##_action(CXINF_LINE_STATUS,               LINE, line_status); \
-CXACRU__ATTR_##_action(                                      mac_address); \
+CXACRU__ATTR_##_action(mac_address); \
 CXACRU_ATTR_##_action(CXINF_UPSTREAM_SNR_MARGIN,       dB,   upstream_snr_margin); \
 CXACRU_ATTR_##_action(CXINF_DOWNSTREAM_SNR_MARGIN,     dB,   downstream_snr_margin); \
 CXACRU_ATTR_##_action(CXINF_UPSTREAM_ATTENUATION,      dB,   upstream_attenuation); \
@@ -533,8 +533,8 @@ CXACRU_ATTR_##_action(CXINF_MODULATION,                MODU, modulation); \
 CXACRU_ATTR_##_action(CXINF_ADSL_HEADEND,              u32,  adsl_headend); \
 CXACRU_ATTR_##_action(CXINF_ADSL_HEADEND_ENVIRONMENT,  u32,  adsl_headend_environment); \
 CXACRU_ATTR_##_action(CXINF_CONTROLLER_VERSION,        u32,  adsl_controller_version); \
-CXACRU_CMD_##_action(                                        adsl_state); \
-CXACRU_SET_##_action(                                        adsl_config);
+CXACRU_CMD_##_action(adsl_state); \
+CXACRU_SET_##_action(adsl_config);
 
 CXACRU_ALL_FILES(INIT);
 
