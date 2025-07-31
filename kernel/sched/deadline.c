@@ -1308,6 +1308,7 @@ static enum hrtimer_restart dl_server_timer(struct hrtimer *timer, struct sched_
 {
 	struct rq *rq = rq_of_dl_se(dl_se);
 	u64 fw;
+	bool has_tasks;
 
 	scoped_guard (rq_lock, rq) {
 		struct rq_flags *rf = &scope.rf;
@@ -1321,7 +1322,10 @@ static enum hrtimer_restart dl_server_timer(struct hrtimer *timer, struct sched_
 		if (!dl_se->dl_runtime)
 			return HRTIMER_NORESTART;
 
-		if (!dl_se->server_has_tasks(dl_se)) {
+		rq_unpin_lock(rq, rf);
+		has_tasks = dl_se->server_has_tasks(dl_se);
+		rq_repin_lock(rq, rf);
+		if (!has_tasks) {
 			replenish_dl_entity(dl_se);
 			dl_server_stopped(dl_se);
 			return HRTIMER_NORESTART;
