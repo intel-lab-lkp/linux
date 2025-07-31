@@ -107,7 +107,8 @@ void free_rt_sched_group(struct task_group *tg)
 			 * Fix this issue by changing the group runtime
 			 * to 0 immediately before freeing it.
 			 */
-			dl_init_tg(tg->dl_se[i], 0, tg->dl_se[i]->dl_period);
+			if (tg->dl_se[i]->dl_runtime)
+				dl_init_tg(tg, i, 0, tg->dl_se[i]->dl_period);
 			raw_spin_rq_lock_irqsave(cpu_rq(i), flags);
 			BUG_ON(tg->rt_rq[i]->rt_nr_running);
 			raw_spin_rq_unlock_irqrestore(cpu_rq(i), flags);
@@ -2122,6 +2123,14 @@ static int tg_set_rt_bandwidth(struct task_group *tg,
 	static DEFINE_MUTEX(rt_constraints_mutex);
 	int i, err = 0;
 
+	/*
+	 * Do not allow to set a RT runtime > 0 if the parent has RT tasks
+	 * (and is not the root group)
+	 */
+	if (rt_runtime && (tg != &root_task_group) && (tg->parent != &root_task_group) && tg_has_rt_tasks(tg->parent)) {
+		return -EINVAL;
+	}
+
 	/* No period doesn't make any sense. */
 	if (rt_period == 0)
 		return -EINVAL;
@@ -2145,7 +2154,7 @@ static int tg_set_rt_bandwidth(struct task_group *tg,
 		return 0;
 
 	for_each_possible_cpu(i) {
-		dl_init_tg(tg->dl_se[i], rt_runtime, rt_period);
+		dl_init_tg(tg, i, rt_runtime, rt_period);
 	}
 
 	return 0;
@@ -2208,6 +2217,9 @@ static int sched_rt_global_constraints(void)
 
 int sched_rt_can_attach(struct task_group *tg, struct task_struct *tsk)
 {
+	struct task_group *child;
+	int can_attach = 1;
+
 	/* Allow executing in the root cgroup regardless of allowed bandwidth */
 	if (tg == &root_task_group)
 		return 1;
@@ -2216,7 +2228,14 @@ int sched_rt_can_attach(struct task_group *tg, struct task_struct *tsk)
 	if (rt_group_sched_enabled() && tg->dl_bandwidth.dl_runtime == 0)
 		return 0;
 
-	return 1;
+	/* If one of the children has runtime > 0, cannot attach RT tasks! */
+	list_for_each_entry_rcu(child, &tg->children, siblings) {
+		if (child->dl_bandwidth.dl_runtime) {
+			can_attach = 0;
+		}
+	}
+
+	return can_attach;
 }
 
 #else /* !CONFIG_RT_GROUP_SCHED: */
