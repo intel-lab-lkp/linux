@@ -93,8 +93,39 @@ void unregister_rt_sched_group(struct task_group *tg)
 
 void free_rt_sched_group(struct task_group *tg)
 {
+	int i;
+
 	if (!rt_group_sched_enabled())
 		return;
+
+	for_each_possible_cpu(i) {
+		if (tg->dl_se) {
+			unsigned long flags;
+
+			/*
+			 * Since the dl timer is going to be cancelled,
+			 * we risk to never decrease the running bw...
+			 * Fix this issue by changing the group runtime
+			 * to 0 immediately before freeing it.
+			 */
+			dl_init_tg(tg->dl_se[i], 0, tg->dl_se[i]->dl_period);
+			raw_spin_rq_lock_irqsave(cpu_rq(i), flags);
+			BUG_ON(tg->rt_rq[i]->rt_nr_running);
+			raw_spin_rq_unlock_irqrestore(cpu_rq(i), flags);
+
+			hrtimer_cancel(&tg->dl_se[i]->dl_timer);
+			kfree(tg->dl_se[i]);
+		}
+		if (tg->rt_rq) {
+			struct rq *served_rq;
+
+			served_rq = container_of(tg->rt_rq[i], struct rq, rt);
+			kfree(served_rq);
+		}
+	}
+
+	kfree(tg->rt_rq);
+	kfree(tg->dl_se);
 }
 
 void init_tg_rt_entry(struct task_group *tg, struct rq *served_rq,
@@ -109,12 +140,77 @@ void init_tg_rt_entry(struct task_group *tg, struct rq *served_rq,
 	tg->dl_se[cpu] = dl_se;
 }
 
+static bool rt_server_has_tasks(struct sched_dl_entity *dl_se)
+{
+	return !!dl_se->my_q->rt.rt_nr_running;
+}
+
+static struct task_struct *_pick_next_task_rt(struct rt_rq *rt_rq);
+static inline void set_next_task_rt(struct rq *rq, struct task_struct *p, bool first);
+static struct task_struct *rt_server_pick(struct sched_dl_entity *dl_se)
+{
+	struct rt_rq *rt_rq = &dl_se->my_q->rt;
+	struct rq *rq = rq_of_rt_rq(rt_rq);
+	struct task_struct *p;
+
+	if (dl_se->my_q->rt.rt_nr_running == 0)
+		return NULL;
+
+	p = _pick_next_task_rt(rt_rq);
+	set_next_task_rt(rq, p, true);
+
+	return p;
+}
+
 int alloc_rt_sched_group(struct task_group *tg, struct task_group *parent)
 {
+	struct rq *s_rq;
+	struct sched_dl_entity *dl_se;
+	int i;
+
 	if (!rt_group_sched_enabled())
 		return 1;
 
+	tg->rt_rq = kcalloc(nr_cpu_ids, sizeof(struct rt_rq *), GFP_KERNEL);
+	if (!tg->rt_rq)
+		goto err;
+	tg->dl_se = kcalloc(nr_cpu_ids, sizeof(dl_se), GFP_KERNEL);
+	if (!tg->dl_se)
+		goto err;
+
+	init_dl_bandwidth(&tg->dl_bandwidth, 0, 0);
+
+	for_each_possible_cpu(i) {
+		s_rq = kzalloc_node(sizeof(struct rq),
+				     GFP_KERNEL, cpu_to_node(i));
+		if (!s_rq)
+			goto err;
+
+		dl_se = kzalloc_node(sizeof(struct sched_dl_entity),
+				     GFP_KERNEL, cpu_to_node(i));
+		if (!dl_se)
+			goto err_free_rq;
+
+		init_rt_rq(&s_rq->rt);
+		init_dl_entity(dl_se);
+		dl_se->dl_runtime = tg->dl_bandwidth.dl_runtime;
+		dl_se->dl_period = tg->dl_bandwidth.dl_period;
+		dl_se->dl_deadline = dl_se->dl_period;
+		dl_se->dl_bw = to_ratio(dl_se->dl_period, dl_se->dl_runtime);
+		dl_se->dl_density = to_ratio(dl_se->dl_period, dl_se->dl_runtime);
+		dl_se->dl_server = 1;
+
+		dl_server_init(dl_se, &cpu_rq(i)->dl, s_rq, rt_server_has_tasks, rt_server_pick);
+
+		init_tg_rt_entry(tg, s_rq, dl_se, i, parent->dl_se[i]);
+	}
+
 	return 1;
+
+err_free_rq:
+	kfree(s_rq);
+err:
+	return 0;
 }
 
 #else /* !CONFIG_RT_GROUP_SCHED: */
@@ -860,9 +956,14 @@ static struct sched_rt_entity *pick_next_rt_entity(struct rt_rq *rt_rq)
 	return next;
 }
 
-static struct task_struct *_pick_next_task_rt(struct rq *rq)
+static struct task_struct *_pick_next_task_rt(struct rt_rq *rt_rq)
 {
-	return NULL;
+	struct sched_rt_entity *rt_se;
+
+	rt_se = pick_next_rt_entity(rt_rq);
+	BUG_ON(!rt_se);
+
+	return rt_task_of(rt_se);
 }
 
 static struct task_struct *pick_task_rt(struct rq *rq)
@@ -872,7 +973,7 @@ static struct task_struct *pick_task_rt(struct rq *rq)
 	if (!sched_rt_runnable(rq))
 		return NULL;
 
-	p = _pick_next_task_rt(rq);
+	p = _pick_next_task_rt(&rq->rt);
 
 	return p;
 }
