@@ -2961,6 +2961,7 @@ static const unsigned int no_wake_ioctl_list[] = {
 	DRM_IOCTL_MODE_LIST_LESSEES,
 	DRM_IOCTL_MODE_GET_LEASE,
 	DRM_IOCTL_MODE_REVOKE_LEASE,
+	DRM_IOCTL_AMDGPU_INFO,
 };
 
 long amdgpu_drm_ioctl(struct file *filp,

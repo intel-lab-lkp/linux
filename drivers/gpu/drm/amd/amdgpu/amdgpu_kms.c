@@ -732,7 +732,17 @@ int amdgpu_info_ioctl(struct drm_device *dev, void *data, struct drm_file *filp)
 		return copy_to_user(out, &count, min(size, 4u)) ? -EFAULT : 0;
 	}
 	case AMDGPU_INFO_TIMESTAMP:
+		ret = pm_runtime_get_sync(dev->dev);
+		if (ret < 0) {
+			pm_runtime_put_autosuspend(dev->dev);
+			return ret;
+		}
+
 		ui64 = amdgpu_gfx_get_gpu_clock_counter(adev);
+
+		pm_runtime_mark_last_busy(dev->dev);
+		pm_runtime_put_autosuspend(dev->dev);
+
 		return copy_to_user(out, &ui64, min(size, 8u)) ? -EFAULT : 0;
 	case AMDGPU_INFO_FW_VERSION: {
 		struct drm_amdgpu_info_firmware fw_info;
@@ -873,6 +883,12 @@ int amdgpu_info_ioctl(struct drm_device *dev, void *data, struct drm_file *filp)
 
 		alloc_size = info->read_mmr_reg.count * sizeof(*regs);
 
+		ret = pm_runtime_get_sync(dev->dev);
+		if (ret < 0) {
+			pm_runtime_put_autosuspend(dev->dev);
+			goto out;
+		}
+
 		amdgpu_gfx_off_ctrl(adev, false);
 		for (i = 0; i < info->read_mmr_reg.count; i++) {
 			if (amdgpu_asic_read_register(adev, se_num, sh_num,
@@ -882,11 +898,16 @@ int amdgpu_info_ioctl(struct drm_device *dev, void *data, struct drm_file *filp)
 					      info->read_mmr_reg.dword_offset + i);
 				kfree(regs);
 				amdgpu_gfx_off_ctrl(adev, true);
+				pm_runtime_mark_last_busy(dev->dev);
+				pm_runtime_put_autosuspend(dev->dev);
 				ret = -EFAULT;
 				goto out;
 			}
 		}
 		amdgpu_gfx_off_ctrl(adev, true);
+		pm_runtime_mark_last_busy(dev->dev);
+		pm_runtime_put_autosuspend(dev->dev);
+
 		n = copy_to_user(out, regs, min(size, alloc_size));
 		kfree(regs);
 		ret = (n ? -EFAULT : 0);
@@ -912,7 +933,8 @@ out:
 		dev_info->num_shader_arrays_per_engine = adev->gfx.config.max_sh_per_se;
 		/* return all clocks in KHz */
 		dev_info->gpu_counter_freq = adev->clock.xclk * 10;
-		if (adev->pm.dpm_enabled) {
+		ret = pm_runtime_get_if_active(dev->dev);
+		if (ret == 1 && adev->pm.dpm_enabled) {
 			dev_info->max_engine_clock = amdgpu_dpm_get_sclk(adev, false) * 10;
 			dev_info->max_memory_clock = amdgpu_dpm_get_mclk(adev, false) * 10;
 			dev_info->min_engine_clock = amdgpu_dpm_get_sclk(adev, true) * 10;
@@ -924,6 +946,10 @@ out:
 			dev_info->max_memory_clock =
 				dev_info->min_memory_clock =
 					adev->clock.default_mclk * 10;
+		}
+		if (ret == 1) {
+			pm_runtime_mark_last_busy(dev->dev);
+			pm_runtime_put_autosuspend(dev->dev);
 		}
 		dev_info->enabled_rb_pipes_mask = adev->gfx.config.backend_enable_mask;
 		dev_info->num_rb_pipes = adev->gfx.config.max_backends_per_se *
@@ -1125,13 +1151,19 @@ out:
 		if (!adev->pm.dpm_enabled)
 			return -ENOENT;
 
+		ret = pm_runtime_get_sync(dev->dev);
+		if (ret < 0) {
+			pm_runtime_put_autosuspend(dev->dev);
+			return ret;
+		}
+
 		switch (info->sensor_info.type) {
 		case AMDGPU_INFO_SENSOR_GFX_SCLK:
 			/* get sclk in Mhz */
 			if (amdgpu_dpm_read_sensor(adev,
 						   AMDGPU_PP_SENSOR_GFX_SCLK,
 						   (void *)&ui32, &ui32_size)) {
-				return -EINVAL;
+				ret = -EINVAL;
 			}
 			ui32 /= 100;
 			break;
@@ -1140,7 +1172,7 @@ out:
 			if (amdgpu_dpm_read_sensor(adev,
 						   AMDGPU_PP_SENSOR_GFX_MCLK,
 						   (void *)&ui32, &ui32_size)) {
-				return -EINVAL;
+				ret = -EINVAL;
 			}
 			ui32 /= 100;
 			break;
@@ -1149,7 +1181,7 @@ out:
 			if (amdgpu_dpm_read_sensor(adev,
 						   AMDGPU_PP_SENSOR_GPU_TEMP,
 						   (void *)&ui32, &ui32_size)) {
-				return -EINVAL;
+				ret = -EINVAL;
 			}
 			break;
 		case AMDGPU_INFO_SENSOR_GPU_LOAD:
@@ -1157,7 +1189,7 @@ out:
 			if (amdgpu_dpm_read_sensor(adev,
 						   AMDGPU_PP_SENSOR_GPU_LOAD,
 						   (void *)&ui32, &ui32_size)) {
-				return -EINVAL;
+				ret = -EINVAL;
 			}
 			break;
 		case AMDGPU_INFO_SENSOR_GPU_AVG_POWER:
@@ -1169,7 +1201,7 @@ out:
 				if (amdgpu_dpm_read_sensor(adev,
 							   AMDGPU_PP_SENSOR_GPU_INPUT_POWER,
 							   (void *)&ui32, &ui32_size)) {
-					return -EINVAL;
+					ret = -EINVAL;
 				}
 			}
 			ui32 >>= 8;
@@ -1188,7 +1220,7 @@ out:
 			if (amdgpu_dpm_read_sensor(adev,
 						   AMDGPU_PP_SENSOR_VDDNB,
 						   (void *)&ui32, &ui32_size)) {
-				return -EINVAL;
+				ret = -EINVAL;
 			}
 			break;
 		case AMDGPU_INFO_SENSOR_VDDGFX:
@@ -1196,7 +1228,7 @@ out:
 			if (amdgpu_dpm_read_sensor(adev,
 						   AMDGPU_PP_SENSOR_VDDGFX,
 						   (void *)&ui32, &ui32_size)) {
-				return -EINVAL;
+				ret = -EINVAL;
 			}
 			break;
 		case AMDGPU_INFO_SENSOR_STABLE_PSTATE_GFX_SCLK:
@@ -1204,7 +1236,7 @@ out:
 			if (amdgpu_dpm_read_sensor(adev,
 						   AMDGPU_PP_SENSOR_STABLE_PSTATE_SCLK,
 						   (void *)&ui32, &ui32_size)) {
-				return -EINVAL;
+				ret = -EINVAL;
 			}
 			ui32 /= 100;
 			break;
@@ -1213,7 +1245,7 @@ out:
 			if (amdgpu_dpm_read_sensor(adev,
 						   AMDGPU_PP_SENSOR_STABLE_PSTATE_MCLK,
 						   (void *)&ui32, &ui32_size)) {
-				return -EINVAL;
+				ret = -EINVAL;
 			}
 			ui32 /= 100;
 			break;
@@ -1238,8 +1270,13 @@ out:
 		default:
 			DRM_DEBUG_KMS("Invalid request %d\n",
 				      info->sensor_info.type);
-			return -EINVAL;
+			ret = -EINVAL;
+			break;
 		}
+		pm_runtime_mark_last_busy(dev->dev);
+		pm_runtime_put_autosuspend(dev->dev);
+		if (ret < 0)
+			return ret;
 		return copy_to_user(out, &ui32, min(size, 4u)) ? -EFAULT : 0;
 	}
 	case AMDGPU_INFO_VRAM_LOST_COUNTER:
