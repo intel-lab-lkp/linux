@@ -431,6 +431,7 @@ struct amdgpu_clock {
 	struct amdgpu_pll spll;
 	struct amdgpu_pll mpll;
 	/* 10 Khz units */
+	u32 xclk;
 	uint32_t default_mclk;
 	uint32_t default_sclk;
 	uint32_t default_dispclk;

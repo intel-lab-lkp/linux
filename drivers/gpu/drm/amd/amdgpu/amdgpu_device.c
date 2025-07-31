@@ -4818,6 +4818,8 @@ fence_driver_init:
 	if (r)
 		goto failed;
 
+	adev->clock.xclk = amdgpu_asic_get_xclk(adev);
+
 	return 0;
 
 release_ras_con:
