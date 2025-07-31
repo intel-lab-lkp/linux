@@ -2,6 +2,7 @@
 
 config TRACE_GPU_MEM
 	bool "Enable GPU memory usage tracepoints"
+	depends on DRM || COMPILE_TEST
 	default n
 	help
 	  Choose this option to enable tracepoints for tracking
