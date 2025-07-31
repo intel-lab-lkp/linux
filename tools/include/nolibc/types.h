@@ -115,6 +115,43 @@
 #define EXIT_SUCCESS 0
 #define EXIT_FAILURE 1
 
+#define __NOLIBC_BITMASK_CLEAR(num, set) do {				     \
+		__typeof__(set) *__set = &(set);			     \
+		int __num = (num);					     \
+		__typeof__(**__set) __bit = 1;				     \
+		if (__num >= 0 && __num < 8 * (ssize_t)sizeof(*__set))	     \
+			(*__set)[__num / (8 * sizeof(**__set))] &=	     \
+				~(__bit << (__num % (8 * sizeof(**__set)))); \
+	} while (0)
+
+#define __NOLIBC_BITMASK_SET(num, set) do {				  \
+		__typeof__(set) *__set = &(set);			  \
+		int __num = (num);					  \
+		__typeof__(**__set) __bit = 1;				  \
+		if (__num >= 0 && __num < 8 * (ssize_t)sizeof(*__set))	  \
+			(*__set)[__num / (8 * sizeof(**__set))] |=	  \
+				__bit << (__num % (8 * sizeof(**__set))); \
+	} while (0)
+
+#define __NOLIBC_BITMASK_TEST(num, set) ({				  \
+		__typeof__(set) *__set = &(set);			  \
+		int __num = (num);					  \
+		__typeof__(**__set) __r = 0;				  \
+		__typeof__(**__set) __bit = 1;				  \
+		if (__num >= 0 && __num < 8 * (ssize_t)sizeof(*__set))	  \
+			__r = (*__set)[__num / (8 * sizeof(**__set))] &	  \
+			      (__bit << (__num % (8 * sizeof(**__set)))); \
+		!!__r;							  \
+	})
+
+#define __NOLIBC_BITMASK_ZERO(set) do {					\
+		__typeof__(set) *__set = &(set);			\
+		int __idx;						\
+		int __size = sizeof(*__set) / sizeof(**__set);		\
+		for (__idx = 0; __idx < __size; __idx++)		\
+			(*__set)[__idx] = 0;				\
+	} while (0)
+
 #define FD_SETIDXMASK (8 * sizeof(unsigned long))
 #define FD_SETBITMASK (8 * sizeof(unsigned long)-1)
 
@@ -123,39 +160,10 @@ typedef struct {
 	unsigned long fds[(FD_SETSIZE + FD_SETBITMASK) / FD_SETIDXMASK];
 } fd_set;
 
-#define FD_CLR(fd, set) do {						\
-		fd_set *__set = (set);					\
-		int __fd = (fd);					\
-		if (__fd >= 0)						\
-			__set->fds[__fd / FD_SETIDXMASK] &=		\
-				~(1U << (__fd & FD_SETBITMASK));	\
-	} while (0)
-
-#define FD_SET(fd, set) do {						\
-		fd_set *__set = (set);					\
-		int __fd = (fd);					\
-		if (__fd >= 0)						\
-			__set->fds[__fd / FD_SETIDXMASK] |=		\
-				1 << (__fd & FD_SETBITMASK);		\
-	} while (0)
-
-#define FD_ISSET(fd, set) ({						\
-			fd_set *__set = (set);				\
-			int __fd = (fd);				\
-		int __r = 0;						\
-		if (__fd >= 0)						\
-			__r = !!(__set->fds[__fd / FD_SETIDXMASK] &	\
-1U << (__fd & FD_SETBITMASK));						\
-		__r;							\
-	})
-
-#define FD_ZERO(set) do {						\
-		fd_set *__set = (set);					\
-		int __idx;						\
-		int __size = (FD_SETSIZE+FD_SETBITMASK) / FD_SETIDXMASK;\
-		for (__idx = 0; __idx < __size; __idx++)		\
-			__set->fds[__idx] = 0;				\
-	} while (0)
+#define FD_CLR(fd, set) __NOLIBC_BITMASK_CLEAR(fd, (set)->fds)
+#define FD_SET(fd, set) __NOLIBC_BITMASK_SET(fd, (set)->fds)
+#define FD_ISSET(fd, set) __NOLIBC_BITMASK_TEST(fd, (set)->fds)
+#define FD_ZERO(set) __NOLIBC_BITMASK_ZERO((set)->fds)
 
 /* for getdents64() */
 struct linux_dirent64 {
