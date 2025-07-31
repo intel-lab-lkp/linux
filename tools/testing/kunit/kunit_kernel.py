@@ -230,6 +230,11 @@ def _get_qemu_ops(config_path: str,
 	assert isinstance(spec.loader, importlib.abc.Loader)
 	spec.loader.exec_module(config)
 
+	# Check for any per-architecture dependencies
+	if hasattr(config, 'check_dependencies'):
+		if not config.check_dependencies():
+			raise ValueError('Missing dependencies for ' + config_path)
+
 	if not hasattr(config, 'QEMU_ARCH'):
 		raise ValueError('qemu_config module missing "QEMU_ARCH": ' + config_path)
 	params: qemu_config.QemuArchParams = config.QEMU_ARCH
