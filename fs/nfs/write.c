@@ -635,6 +635,7 @@ static int nfs_do_writepage(struct folio *folio, struct writeback_control *wbc,
 	if (IS_ERR(req))
 		return PTR_ERR(req);
 
+	trace_nfs_do_writepage(req);
 	nfs_folio_set_writeback(folio);
 	WARN_ON_ONCE(test_bit(PG_CLEAN, &req->wb_flags));
 
@@ -1139,6 +1140,7 @@ static int nfs_writepage_setup(struct nfs_open_context *ctx,
 	req = nfs_setup_write_request(ctx, folio, offset, count);
 	if (IS_ERR(req))
 		return PTR_ERR(req);
+	trace_nfs_writepage_setup(req);
 	/* Update file length */
 	nfs_grow_file(folio, offset, count);
 	nfs_mark_uptodate(req);
