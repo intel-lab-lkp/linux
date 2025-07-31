@@ -26,9 +26,9 @@
 #include "msm_iommu.h"
 
 #define MRC(reg, processor, op1, crn, crm, op2)				\
-__asm__ __volatile__ (							\
+(__asm__ __volatile__ (							\
 "   mrc   "   #processor "," #op1 ", %0,"  #crn "," #crm "," #op2 "\n"  \
-: "=r" (reg))
+: "=r" (reg)))
 
 /* bitmap of the page sizes currently supported */
 #define MSM_IOMMU_PGSIZES	(SZ_4K | SZ_64K | SZ_1M | SZ_16M)
