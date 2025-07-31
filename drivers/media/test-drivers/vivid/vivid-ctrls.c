@@ -574,6 +574,11 @@ static int vivid_vid_cap_s_ctrl(struct v4l2_ctrl *ctrl)
 		pr_info("rx_hdcp_enabled %d\n", dev->rx_hdcp_enabled);
 		vivid_update_hdcp(dev);
 		__v4l2_ctrl_s_ctrl(dev->ctrl_dv_rx_hdcp_detected, dev->rx_hdcp_detected);
+		spin_lock(&hdmi_output_skip_mask_lock);
+		hdmi_input_update_outputs_mask |= 1 << dev->inst;
+		spin_unlock(&hdmi_output_skip_mask_lock);
+		if (update_hdmi_ctrls_workqueue)
+			queue_work(update_hdmi_ctrls_workqueue, &dev->update_hdmi_ctrl_work);
 		break;
 	case VIVID_CID_LIMITED_RGB_RANGE:
 		tpg_s_real_rgb_range(&dev->tpg, ctrl->val ?
@@ -697,7 +702,9 @@ static int vivid_vid_cap_s_ctrl(struct v4l2_ctrl *ctrl)
 		spin_lock(&hdmi_output_skip_mask_lock);
 		hdmi_input_update_outputs_mask |= 1 << dev->inst;
 		spin_unlock(&hdmi_output_skip_mask_lock);
-		queue_work(update_hdmi_ctrls_workqueue, &dev->update_hdmi_ctrl_work);
+		if (update_hdmi_ctrls_workqueue)
+			queue_work(update_hdmi_ctrls_workqueue,
+				   &dev->update_hdmi_ctrl_work);
 		break;
 	case VIVID_CID_SVID_IS_CONNECTED_TO_OUTPUT(0) ... VIVID_CID_SVID_IS_CONNECTED_TO_OUTPUT(15):
 		svid_index = ctrl->id - VIVID_CID_SVID_IS_CONNECTED_TO_OUTPUT(0);
@@ -1182,6 +1189,12 @@ static int vivid_vid_out_s_ctrl(struct v4l2_ctrl *ctrl)
 			pr_info("tx_hdcp_mode %d\n", dev->tx_hdcp_mode);
 			vivid_update_hdcp(dev_rx);
 			v4l2_ctrl_s_ctrl(dev_rx->ctrl_dv_rx_hdcp_detected, dev_rx->rx_hdcp_detected);
+			spin_lock(&hdmi_output_skip_mask_lock);
+			hdmi_input_update_outputs_mask |= 1 << dev_rx->inst;
+			spin_unlock(&hdmi_output_skip_mask_lock);
+			if (update_hdmi_ctrls_workqueue)
+				queue_work(update_hdmi_ctrls_workqueue,
+					   &dev_rx->update_hdmi_ctrl_work);
 		}
 		break;
 	}

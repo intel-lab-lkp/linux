@@ -1187,6 +1187,12 @@ int vidioc_s_input(struct file *file, void *priv, unsigned i)
 	vivid_update_hdcp(dev);
 	if (dev->ctrl_dv_rx_hdcp_detected)
 		v4l2_ctrl_s_ctrl(dev->ctrl_dv_rx_hdcp_detected, dev->rx_hdcp_detected);
+	spin_lock(&hdmi_output_skip_mask_lock);
+	hdmi_input_update_outputs_mask |= 1 << dev->inst;
+	spin_unlock(&hdmi_output_skip_mask_lock);
+	if (update_hdmi_ctrls_workqueue)
+		queue_work(update_hdmi_ctrls_workqueue,
+			   &dev->update_hdmi_ctrl_work);
 
 	if (dev->colorspace) {
 		switch (dev->input_type[i]) {
