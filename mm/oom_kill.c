@@ -692,15 +692,18 @@ static void wake_oom_reaper(struct timer_list *timer)
  * before the exit path is able to wake the futex waiters.
  */
 #define OOM_REAPER_DELAY (2*HZ)
-static void queue_oom_reaper(struct task_struct *tsk)
+static void queue_oom_reaper(struct task_struct *tsk, bool may_access_user)
 {
+	unsigned long reaper_delay = 0;
+
 	/* mm is already queued? */
 	if (test_and_set_bit(MMF_OOM_REAP_QUEUED, &tsk->signal->oom_mm->flags))
 		return;
-
+	if (may_access_user)
+		reaper_delay = OOM_REAPER_DELAY;
 	get_task_struct(tsk);
 	timer_setup(&tsk->oom_reaper_timer, wake_oom_reaper, 0);
-	tsk->oom_reaper_timer.expires = jiffies + OOM_REAPER_DELAY;
+	tsk->oom_reaper_timer.expires = jiffies + reaper_delay;
 	add_timer(&tsk->oom_reaper_timer);
 }
 
@@ -742,7 +745,7 @@ static int __init oom_init(void)
 }
 subsys_initcall(oom_init)
 #else
-static inline void queue_oom_reaper(struct task_struct *tsk)
+static inline void queue_oom_reaper(struct task_struct *tsk, bool may_access_user)
 {
 }
 #endif /* CONFIG_MMU */
@@ -864,6 +867,11 @@ static inline bool __task_will_free_mem(struct task_struct *task)
 	return false;
 }
 
+static inline bool exit_may_access_user(struct task_struct *task)
+{
+	return task->robust_list || task->compat_robust_list;
+}
+
 /*
  * Checks whether the given task is dying or exiting and likely to
  * release its address space. This means that all threads and processes
@@ -871,11 +879,12 @@ static inline bool __task_will_free_mem(struct task_struct *task)
  * Caller has to make sure that task->mm is stable (hold task_lock or
  * it operates on the current).
  */
-static bool task_will_free_mem(struct task_struct *task)
+static bool task_will_free_mem(struct task_struct *task, bool *may_access_user)
 {
 	struct mm_struct *mm = task->mm;
 	struct task_struct *p;
 	bool ret = true;
+	bool access = false;
 
 	/*
 	 * Skip tasks without mm because it might have passed its exit_mm and
@@ -887,6 +896,8 @@ static bool task_will_free_mem(struct task_struct *task)
 
 	if (!__task_will_free_mem(task))
 		return false;
+
+	access |= exit_may_access_user(task);
 
 	/*
 	 * This task has already been drained by the oom reaper so there are
@@ -912,8 +923,11 @@ static bool task_will_free_mem(struct task_struct *task)
 		ret = __task_will_free_mem(p);
 		if (!ret)
 			break;
+		access |= exit_may_access_user(p);
 	}
 	rcu_read_unlock();
+	if (may_access_user)
+		*may_access_user = access;
 
 	return ret;
 }
@@ -923,6 +937,7 @@ static void __oom_kill_process(struct task_struct *victim, const char *message)
 	struct task_struct *p;
 	struct mm_struct *mm;
 	bool can_oom_reap = true;
+	bool may_access_user = false;
 
 	p = find_lock_task_mm(victim);
 	if (!p) {
@@ -950,6 +965,7 @@ static void __oom_kill_process(struct task_struct *victim, const char *message)
 	 * reserves from the user space under its control.
 	 */
 	do_send_sig_info(SIGKILL, SEND_SIG_PRIV, victim, PIDTYPE_TGID);
+	may_access_user |= exit_may_access_user(victim);
 	mark_oom_victim(victim);
 	pr_err("%s: Killed process %d (%s) total-vm:%lukB, anon-rss:%lukB, file-rss:%lukB, shmem-rss:%lukB, UID:%u pgtables:%lukB oom_score_adj:%hd\n",
 		message, task_pid_nr(victim), victim->comm, K(mm->total_vm),
@@ -990,11 +1006,12 @@ static void __oom_kill_process(struct task_struct *victim, const char *message)
 		if (unlikely(p->flags & PF_KTHREAD))
 			continue;
 		do_send_sig_info(SIGKILL, SEND_SIG_PRIV, p, PIDTYPE_TGID);
+		may_access_user |= exit_may_access_user(p);
 	}
 	rcu_read_unlock();
 
 	if (can_oom_reap)
-		queue_oom_reaper(victim);
+		queue_oom_reaper(victim, may_access_user);
 
 	mmdrop(mm);
 	put_task_struct(victim);
@@ -1020,6 +1037,7 @@ static void oom_kill_process(struct oom_control *oc, const char *message)
 	struct mem_cgroup *oom_group;
 	static DEFINE_RATELIMIT_STATE(oom_rs, DEFAULT_RATELIMIT_INTERVAL,
 					      DEFAULT_RATELIMIT_BURST);
+	bool may_access_user = false;
 
 	/*
 	 * If the task is already exiting, don't alarm the sysadmin or kill
@@ -1027,9 +1045,9 @@ static void oom_kill_process(struct oom_control *oc, const char *message)
 	 * so it can die quickly
 	 */
 	task_lock(victim);
-	if (task_will_free_mem(victim)) {
+	if (task_will_free_mem(victim, &may_access_user)) {
 		mark_oom_victim(victim);
-		queue_oom_reaper(victim);
+		queue_oom_reaper(victim, may_access_user);
 		task_unlock(victim);
 		put_task_struct(victim);
 		return;
@@ -1112,6 +1130,7 @@ EXPORT_SYMBOL_GPL(unregister_oom_notifier);
 bool out_of_memory(struct oom_control *oc)
 {
 	unsigned long freed = 0;
+	bool may_access_user = false;
 
 	if (oom_killer_disabled)
 		return false;
@@ -1128,9 +1147,9 @@ bool out_of_memory(struct oom_control *oc)
 	 * select it.  The goal is to allow it to allocate so that it may
 	 * quickly exit and free its memory.
 	 */
-	if (task_will_free_mem(current)) {
+	if (task_will_free_mem(current, &may_access_user)) {
 		mark_oom_victim(current);
-		queue_oom_reaper(current);
+		queue_oom_reaper(current, may_access_user);
 		return true;
 	}
 
@@ -1231,7 +1250,7 @@ SYSCALL_DEFINE2(process_mrelease, int, pidfd, unsigned int, flags)
 	mm = p->mm;
 	mmgrab(mm);
 
-	if (task_will_free_mem(p))
+	if (task_will_free_mem(p, NULL))
 		reap = true;
 	else {
 		/* Error only if the work has not been done already */
