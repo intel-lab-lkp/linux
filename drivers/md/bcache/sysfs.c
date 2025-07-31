@@ -28,6 +28,18 @@ static const char * const bch_cache_modes[] = {
 	NULL
 };
 
+/*
+ * Default is 0 ("off")
+ * off: Do nothing
+ * on: Use FLUSH when writing back dirty data.
+ */
+static const char * const bch_writeback_flush[] = {
+	"off",
+	"on",
+	NULL
+};
+
+
 static const char * const bch_reada_cache_policies[] = {
 	"all",
 	"meta-only",
@@ -151,6 +163,19 @@ rw_attribute(copy_gc_enabled);
 rw_attribute(idle_max_writeback_rate);
 rw_attribute(gc_after_writeback);
 rw_attribute(size);
+/*
+ * The "writeback_flush" has two options: "off" and "on". "off" is
+ * the default value.
+ * off: Do nothing
+ * on: Use FLUSH when writing back dirty data.
+ */
+rw_attribute(writeback_flush);
+/*
+ * "flush_interval" is used to specify that a PROFLUSH operation will
+ * be issued once a certain number of dirty bkeys have been written
+ * each time.
+ */
+rw_attribute(flush_interval);
 
 static ssize_t bch_snprint_string_list(char *buf,
 				       size_t size,
@@ -213,6 +238,7 @@ SHOW(__bch_cached_dev)
 	var_print(writeback_rate_fp_term_mid);
 	var_print(writeback_rate_fp_term_high);
 	var_print(writeback_rate_minimum);
+	var_print(flush_interval);
 
 	if (attr == &sysfs_writeback_rate_debug) {
 		char rate[20];
@@ -282,6 +308,11 @@ SHOW(__bch_cached_dev)
 		strcat(buf, "\n");
 		return strlen(buf);
 	}
+
+	if (attr == &sysfs_writeback_flush)
+		return bch_snprint_string_list(buf, PAGE_SIZE,
+					       bch_writeback_flush,
+					       BDEV_WRITEBACK_FLUSH(&dc->sb));
 
 #undef var
 	return 0;
@@ -353,6 +384,9 @@ STORE(__cached_dev)
 			    1, UINT_MAX);
 
 	sysfs_strtoul_clamp(io_error_limit, dc->error_limit, 0, INT_MAX);
+
+	sysfs_strtoul_clamp(flush_interval, dc->flush_interval,
+			    WRITEBACK_FLUSH_INTERVAL_MIN, WRITEBACK_FLUSH_INTERVAL_MAX);
 
 	if (attr == &sysfs_io_disable) {
 		int v = strtoul_or_return(buf);
@@ -451,6 +485,17 @@ STORE(__cached_dev)
 	if (attr == &sysfs_stop)
 		bcache_device_stop(&dc->disk);
 
+	if (attr == &sysfs_writeback_flush) {
+		v = __sysfs_match_string(bch_writeback_flush, -1, buf);
+		if (v < 0)
+			return v;
+
+		if ((unsigned int) v != BDEV_WRITEBACK_FLUSH(&dc->sb)) {
+			SET_BDEV_WRITEBACK_FLUSH(&dc->sb, v);
+			bch_write_bdev_super(dc, NULL);
+		}
+	}
+
 	return size;
 }
 
@@ -541,6 +586,8 @@ static struct attribute *bch_cached_dev_attrs[] = {
 #endif
 	&sysfs_backing_dev_name,
 	&sysfs_backing_dev_uuid,
+	&sysfs_writeback_flush,
+	&sysfs_flush_interval,
 	NULL
 };
 ATTRIBUTE_GROUPS(bch_cached_dev);
