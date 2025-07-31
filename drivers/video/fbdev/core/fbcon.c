@@ -1145,7 +1145,7 @@ static void fbcon_init(struct vc_data *vc, bool init)
 		vc->vc_cols = new_cols;
 		vc->vc_rows = new_rows;
 	} else
-		vc_resize(vc, new_cols, new_rows);
+		BUG_ON(vc_resize(vc, new_cols, new_rows));
 
 	if (logo)
 		fbcon_prepare_logo(vc, info, cols, rows, new_cols, new_rows);
@@ -1413,7 +1413,7 @@ static void fbcon_set_disp(struct fb_info *info, struct fb_var_screeninfo *var,
 	rows = FBCON_SWAP(ops->rotate, info->var.yres, info->var.xres);
 	cols /= vc->vc_font.width;
 	rows /= vc->vc_font.height;
-	vc_resize(vc, cols, rows);
+	BUG_ON(vc_resize(vc, cols, rows));
 
 	if (con_is_visible(vc)) {
 		update_screen(vc);
@@ -2683,7 +2683,7 @@ static void fbcon_modechanged(struct fb_info *info)
 		rows = FBCON_SWAP(ops->rotate, info->var.yres, info->var.xres);
 		cols /= vc->vc_font.width;
 		rows /= vc->vc_font.height;
-		vc_resize(vc, cols, rows);
+		BUG_ON(vc_resize(vc, cols, rows));
 		updatescrollmode(p, info, vc);
 		scrollback_max = 0;
 		scrollback_current = 0;
@@ -2726,7 +2726,7 @@ static void fbcon_set_all_vcs(struct fb_info *info)
 		rows = FBCON_SWAP(ops->rotate, info->var.yres, info->var.xres);
 		cols /= vc->vc_font.width;
 		rows /= vc->vc_font.height;
-		vc_resize(vc, cols, rows);
+		BUG_ON(vc_resize(vc, cols, rows));
 	}
 
 	if (fg != -1)
