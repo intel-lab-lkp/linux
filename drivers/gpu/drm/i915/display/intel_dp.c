@@ -4271,6 +4271,33 @@ static void intel_edp_mso_init(struct intel_dp *intel_dp)
 }
 
 static void
+intel_edp_set_data_override_rates(struct intel_dp *intel_dp)
+{
+	struct intel_encoder *encoder = &dp_to_dig_port(intel_dp)->base;
+	int *sink_rates = intel_dp->sink_rates;
+	int i, j = 0;
+
+	if (!encoder->devdata || encoder->devdata->display->vbt.version < 263)
+		return;
+
+	/*
+	 * This means the VBT ends up asking us to override every possible rate
+	 * indicating the VBT is broken so skip this
+	 */
+	if (hweight32(devdata->child.edp_data_rate_override) >= 11)
+		return;
+
+	for (i = 0; i < intel_dp->num_sink_rates; i++) {
+		if (intel_bios_encoder_supports_edp_rate(encoder->devdata,
+							 intel_dp->sink_rates[i]))
+			continue;
+
+		sink_rates[j++] = intel_dp->sink_rates[i];
+	}
+	intel_dp->num_sink_rates = j;
+}
+
+static void
 intel_edp_set_sink_rates(struct intel_dp *intel_dp)
 {
 	struct intel_display *display = to_intel_display(intel_dp);
@@ -4324,6 +4351,8 @@ intel_edp_set_sink_rates(struct intel_dp *intel_dp)
 		intel_dp->use_rate_select = true;
 	else
 		intel_dp_set_sink_rates(intel_dp);
+
+	intel_edp_set_data_override_rates(intel_dp);
 }
 
 static bool
