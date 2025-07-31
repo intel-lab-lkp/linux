@@ -12,7 +12,7 @@
 #include "pmi8998.dtsi"
 
 / {
-	qcom,msm-id = <321 0x20001>; /* SDM845 v2.1 */
+	qcom,msm-id = <QCOM_ID_SDM845 0x20001>; /* SDM845 v2.1 */
 	qcom,board-id = <8 0>;
 
 	aliases {

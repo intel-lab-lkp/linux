@@ -32,7 +32,7 @@
 
 	/* required for bootloader to select correct board */
 	qcom,board-id = <69 0>;
-	qcom,msm-id = <321 0x20001>;
+	qcom,msm-id = <QCOM_ID_SDM845 0x20001>;
 
 	aliases {
 		serial1 = &uart6;

@@ -18,7 +18,7 @@
 / {
 	model = "Thundercomm Dragonboard 845c";
 	compatible = "thundercomm,db845c", "qcom,sdm845";
-	qcom,msm-id = <341 0x20001>;
+	qcom,msm-id = <QCOM_ID_SDA845 0x20001>;
 	qcom,board-id = <8 0>;
 
 	aliases {
