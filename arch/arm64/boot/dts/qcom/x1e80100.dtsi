@@ -5779,6 +5779,11 @@
 			gpio-ranges = <&tlmm 0 0 239>;
 			wakeup-parent = <&pdc>;
 
+			edp_hpd_active: edp-hpd-active-state {
+				pins = "gpio119";
+				function = "edp0_hot";
+			};
+
 			qup_i2c0_data_clk: qup-i2c0-data-clk-state {
 				/* SDA, SCL */
 				pins = "gpio0", "gpio1";
