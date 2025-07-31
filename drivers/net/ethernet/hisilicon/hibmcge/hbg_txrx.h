@@ -29,6 +29,9 @@ static inline bool hbg_fifo_is_full(struct hbg_priv *priv, enum hbg_dir dir)
 
 static inline u32 hbg_get_queue_used_num(struct hbg_ring *ring)
 {
+	if (!ring->len)
+		return 0;
+
 	return (ring->ntu + ring->len - ring->ntc) % ring->len;
 }
 
