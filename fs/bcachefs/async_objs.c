@@ -45,7 +45,7 @@ static int bch2_async_obj_list_open(struct inode *inode, struct file *file)
 	struct async_obj_list *list = inode->i_private;
 	struct dump_iter *i;
 
-	i = kzalloc(sizeof(struct dump_iter), GFP_KERNEL);
+	i = kzalloc(sizeof(*i), GFP_KERNEL);
 	if (!i)
 		return -ENOMEM;
 

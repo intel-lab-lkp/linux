@@ -335,7 +335,7 @@ static int bch2_dump_open(struct inode *inode, struct file *file)
 	struct btree_debug *bd = inode->i_private;
 	struct dump_iter *i;
 
-	i = kzalloc(sizeof(struct dump_iter), GFP_KERNEL);
+	i = kzalloc(sizeof(*i), GFP_KERNEL);
 	if (!i)
 		return -ENOMEM;
 
@@ -721,7 +721,7 @@ static int btree_transaction_stats_open(struct inode *inode, struct file *file)
 	struct bch_fs *c = inode->i_private;
 	struct dump_iter *i;
 
-	i = kzalloc(sizeof(struct dump_iter), GFP_KERNEL);
+	i = kzalloc(sizeof(*i), GFP_KERNEL);
 	if (!i)
 		return -ENOMEM;
 

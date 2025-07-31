@@ -173,7 +173,7 @@ static struct btree *__btree_node_mem_alloc(struct bch_fs *c, gfp_t gfp)
 {
 	struct btree *b;
 
-	b = kzalloc(sizeof(struct btree), gfp);
+	b = kzalloc(sizeof(*b), gfp);
 	if (!b)
 		return NULL;
 
