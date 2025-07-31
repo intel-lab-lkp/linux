@@ -747,7 +747,7 @@ class KUnitMainTest(unittest.TestCase):
 		self.mock_linux_init.assert_called_once_with('.kunit',
 						kunitconfig_paths=['mykunitconfig'],
 						kconfig_add=None,
-						arch='um',
+						arch=None,
 						cross_compile=None,
 						qemu_config_path=None,
 						extra_qemu_args=[])
@@ -758,7 +758,7 @@ class KUnitMainTest(unittest.TestCase):
 		self.mock_linux_init.assert_called_once_with('.kunit',
 						kunitconfig_paths=['mykunitconfig'],
 						kconfig_add=None,
-						arch='um',
+						arch=None,
 						cross_compile=None,
 						qemu_config_path=None,
 						extra_qemu_args=[])
@@ -769,7 +769,7 @@ class KUnitMainTest(unittest.TestCase):
 		self.mock_linux_init.assert_called_once_with('.kunit',
 						kunitconfig_paths=[kunit_kernel.ALL_TESTS_CONFIG_PATH, 'mykunitconfig'],
 						kconfig_add=None,
-						arch='um',
+						arch=None,
 						cross_compile=None,
 						qemu_config_path=None,
 						extra_qemu_args=[])
@@ -783,7 +783,7 @@ class KUnitMainTest(unittest.TestCase):
 		mock_linux_init.assert_called_once_with('.kunit',
 							kunitconfig_paths=['mykunitconfig', 'other'],
 							kconfig_add=None,
-							arch='um',
+							arch=None,
 							cross_compile=None,
 							qemu_config_path=None,
 							extra_qemu_args=[])
@@ -794,7 +794,7 @@ class KUnitMainTest(unittest.TestCase):
 		self.mock_linux_init.assert_called_once_with('.kunit',
 						kunitconfig_paths=[],
 						kconfig_add=['CONFIG_KASAN=y', 'CONFIG_KCSAN=y'],
-						arch='um',
+						arch=None,
 						cross_compile=None,
 						qemu_config_path=None,
 						extra_qemu_args=[])

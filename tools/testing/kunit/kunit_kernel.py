@@ -211,6 +211,31 @@ def _default_qemu_config_path(arch: str) -> str:
 
 	raise ConfigError(arch + ' is not a valid arch, options are ' + str(sorted(options)))
 
+def _detect_default_architecture() -> str:
+	uname_arch = os.uname().machine
+
+	options = [f[:-3] for f in os.listdir(QEMU_CONFIGS_DIR) if f.endswith('.py')]
+
+	if uname_arch == 'x86_64' or uname_arch == 'i486' or uname_arch == 'i586' or uname_arch == 'i686':
+		return 'um'
+
+	for option in options:
+		config_path = os.path.join(QEMU_CONFIGS_DIR, option + '.py')
+		module_path = '.' + os.path.join(os.path.basename(QEMU_CONFIGS_DIR), os.path.basename(config_path))
+		spec = importlib.util.spec_from_file_location(module_path, config_path)
+		assert spec is not None
+		config = importlib.util.module_from_spec(spec)
+		# See https://github.com/python/typeshed/pull/2626 for context.
+		assert isinstance(spec.loader, importlib.abc.Loader)
+		spec.loader.exec_module(config)
+
+		if config.QEMU_ARCH.linux_arch == uname_arch:
+			return option
+		if config.QEMU_ARCH.qemu_arch == uname_arch:
+			return option
+
+	raise ConfigError('Could not find a valid config for ' + uname_arch + ', options are ' + str(sorted(options)))
+
 def _get_qemu_ops(config_path: str,
 		  extra_qemu_args: Optional[List[str]],
 		  cross_compile: Optional[str]) -> Tuple[str, LinuxSourceTreeOperations]:
@@ -247,19 +272,19 @@ class LinuxSourceTree:
 	"""Represents a Linux kernel source tree with KUnit tests."""
 
 	def __init__(
-	      self,
-	      build_dir: str,
-	      kunitconfig_paths: Optional[List[str]]=None,
-	      kconfig_add: Optional[List[str]]=None,
-	      arch: Optional[str]=None,
-	      cross_compile: Optional[str]=None,
-	      qemu_config_path: Optional[str]=None,
-	      extra_qemu_args: Optional[List[str]]=None) -> None:
+		  self,
+		  build_dir: str,
+		  kunitconfig_paths: Optional[List[str]]=None,
+		  kconfig_add: Optional[List[str]]=None,
+		  arch: Optional[str]=None,
+		  cross_compile: Optional[str]=None,
+		  qemu_config_path: Optional[str]=None,
+		  extra_qemu_args: Optional[List[str]]=None) -> None:
 		signal.signal(signal.SIGINT, self.signal_handler)
 		if qemu_config_path:
 			self._arch, self._ops = _get_qemu_ops(qemu_config_path, extra_qemu_args, cross_compile)
 		else:
-			self._arch = 'um' if arch is None else arch
+			self._arch = _detect_default_architecture() if arch is None else arch
 			if self._arch == 'um':
 				self._ops = LinuxSourceTreeOperationsUml(cross_compile=cross_compile)
 			else:
