@@ -319,6 +319,13 @@ struct rt_bandwidth {
 	unsigned int		rt_period_active;
 };
 
+struct dl_bandwidth {
+	raw_spinlock_t          dl_runtime_lock;
+	u64                     dl_runtime;
+	u64                     dl_period;
+};
+
+
 static inline int dl_bandwidth_enabled(void)
 {
 	return sysctl_sched_rt_runtime >= 0;
@@ -467,9 +474,15 @@ struct task_group {
 
 #ifdef CONFIG_RT_GROUP_SCHED
 	struct sched_rt_entity	**rt_se;
+	/*
+	 * The scheduling entities for the task group are managed as a single
+	 * sched_dl_entity, each of them sharing the same dl_bandwidth.
+	 */
+	struct sched_dl_entity	**dl_se;
 	struct rt_rq		**rt_rq;
 
 	struct rt_bandwidth	rt_bandwidth;
+	struct dl_bandwidth	dl_bandwidth;
 #endif
 
 #ifdef CONFIG_EXT_GROUP_SCHED
@@ -819,12 +832,12 @@ struct rt_rq {
 	raw_spinlock_t		rt_runtime_lock;
 
 	unsigned int		rt_nr_boosted;
-
-	struct rq		*rq; /* this is always top-level rq, cache? */
 #endif
 #ifdef CONFIG_CGROUP_SCHED
 	struct task_group	*tg; /* this tg has "this" rt_rq on given CPU for runnable entities */
 #endif
+
+	struct rq		*rq; /* cgroup's runqueue if the rt_rq entity belongs to a cgroup, otherwise top-level rq */
 };
 
 static inline bool rt_rq_is_runnable(struct rt_rq *rt_rq)
