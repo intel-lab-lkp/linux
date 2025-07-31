@@ -260,7 +260,8 @@ int drm_atomic_set_property(struct drm_atomic_state *state,
 			    struct drm_file *file_priv,
 			    struct drm_mode_object *obj,
 			    struct drm_property *prop,
-			    u64 prop_value, bool async_flip);
+			    u64 prop_value, bool async_flip,
+			    bool *needs_async_plane_check);
 int drm_atomic_get_property(struct drm_mode_object *obj,
 			    struct drm_property *property, uint64_t *val);
 

@@ -1012,7 +1012,8 @@ int drm_atomic_set_property(struct drm_atomic_state *state,
 			    struct drm_mode_object *obj,
 			    struct drm_property *prop,
 			    u64 prop_value,
-			    bool async_flip)
+			    bool async_flip,
+			    bool *needs_async_plane_check)
 {
 	struct drm_mode_object *ref;
 	u64 old_val;
@@ -1069,7 +1070,6 @@ int drm_atomic_set_property(struct drm_atomic_state *state,
 		struct drm_plane *plane = obj_to_plane(obj);
 		struct drm_plane_state *plane_state;
 		struct drm_mode_config *config = &plane->dev->mode_config;
-		const struct drm_plane_helper_funcs *plane_funcs = plane->helper_private;
 
 		plane_state = drm_atomic_get_plane_state(state, plane);
 		if (IS_ERR(plane_state)) {
@@ -1085,22 +1085,14 @@ int drm_atomic_set_property(struct drm_atomic_state *state,
 				ret = drm_atomic_plane_get_property(plane, plane_state,
 								    prop, &old_val);
 				ret = drm_atomic_check_prop_changes(ret, old_val, prop_value, prop);
+				if (ret)
+				    break;
 			}
 
-			/* ask the driver if this non-primary plane is supported */
-			if (plane->type != DRM_PLANE_TYPE_PRIMARY) {
-				ret = -EINVAL;
-
-				if (plane_funcs && plane_funcs->atomic_async_check)
-					ret = plane_funcs->atomic_async_check(plane, state, true);
-
-				if (ret) {
-					drm_dbg_atomic(prop->dev,
-						       "[PLANE:%d:%s] does not support async flips\n",
-						       obj->id, plane->name);
-					break;
-				}
-			}
+			/* Need to ask the driver if this non-primary plane is supported.
+			 * Note that this can't happen here, as the full state of the plane
+			 * is not known yet */
+			*needs_async_plane_check |= plane->type != DRM_PLANE_TYPE_PRIMARY;
 		}
 
 		ret = drm_atomic_plane_set_property(plane,
@@ -1395,6 +1387,10 @@ int drm_mode_atomic_ioctl(struct drm_device *dev,
 	int ret = 0;
 	unsigned int i, j, num_fences;
 	bool async_flip = false;
+	bool needs_async_plane_check = false;
+	struct drm_plane *plane;
+	struct drm_plane_state *old_plane_state;
+	struct drm_plane_state *new_plane_state;
 
 	/* disallow for drivers not supporting atomic: */
 	if (!drm_core_check_feature(dev, DRIVER_ATOMIC))
@@ -1451,6 +1447,7 @@ retry:
 	copied_props = 0;
 	fence_state = NULL;
 	num_fences = 0;
+	needs_async_plane_check = false;
 
 	for (i = 0; i < arg->count_objs; i++) {
 		uint32_t obj_id, count_props;
@@ -1513,13 +1510,33 @@ retry:
 			}
 
 			ret = drm_atomic_set_property(state, file_priv, obj,
-						      prop, prop_value, async_flip);
+						      prop, prop_value, async_flip,
+						      &needs_async_plane_check);
 			if (ret) {
 				drm_mode_object_put(obj);
 				goto out;
 			}
 
 			copied_props++;
+		}
+
+		if (needs_async_plane_check) {
+			plane = obj_to_plane(obj);
+			old_plane_state = drm_atomic_get_old_plane_state(state, plane);
+			new_plane_state = drm_atomic_get_new_plane_state(state, plane);
+			/* only do the check if the plane was or is enabled */
+			if (old_plane_state->visible || new_plane_state->visible)
+			    ret = -EINVAL;
+			if (ret &&
+			    plane->helper_private &&
+			    plane->helper_private->atomic_async_check) {
+				ret = plane->helper_private->atomic_async_check(plane, state, true);
+			}
+			if (ret) {
+				drm_dbg_atomic(dev, "[PLANE:%d:%s] does not support async flips\n",
+						obj->id, plane->name);
+				break;
+			}
 		}
 
 		drm_mode_object_put(obj);

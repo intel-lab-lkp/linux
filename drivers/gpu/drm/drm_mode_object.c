@@ -540,7 +540,8 @@ retry:
 						       obj_to_connector(obj),
 						       prop_value);
 	} else {
-		ret = drm_atomic_set_property(state, file_priv, obj, prop, prop_value, false);
+		ret = drm_atomic_set_property(state, file_priv, obj, prop, prop_value,
+					      false, NULL);
 		if (ret)
 			goto out;
 		ret = drm_atomic_commit(state);
