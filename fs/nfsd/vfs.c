@@ -323,6 +323,9 @@ nfsd_lookup(struct svc_rqst *rqstp, struct svc_fh *fhp, const char *name,
 	err = nfsd_lookup_dentry(rqstp, fhp, name, len, &exp, &dentry);
 	if (err)
 		return err;
+	err = check_xprtsec_policy(exp, rqstp);
+	if (err)
+		goto out;
 	err = check_nfsd_access(exp, rqstp, false);
 	if (err)
 		goto out;

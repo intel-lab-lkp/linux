@@ -1084,6 +1084,59 @@ static struct svc_export *exp_find(struct cache_detail *cd,
 }
 
 /**
+ * check_xprtsec_policy - check if access to export is permitted by the
+ * 			  xprtsec policy
+ * @exp: svc_export that is being accessed.
+ * @rqstp: svc_rqst attempting to access @exp (will be NULL for LOCALIO).
+ *
+ * This logic should not be combined with check_nfsd_access, as the rules
+ * for bypassing GSS are not the same as for bypassing the xprtsec policy
+ * check:
+ * 	- NFSv3 FSINFO and GETATTR can bypass the GSS for the root dentry,
+ * 	  but that doesn't mean they can bypass the xprtsec poolicy check
+ * 	- NLM can bypass the GSS check on exports exported with the
+ * 	  NFSEXP_NOAUTHNLM flag
+ * 	- NLM can always bypass the xprtsec policy check since TLS isn't
+ * 	  implemented for the sidecar protocols
+ *
+ * Return values:
+ *   %nfs_ok if access is granted, or
+ *   %nfserr_acces or %nfserr_wrongsec if access is denied
+ */
+__be32 check_xprtsec_policy(struct svc_export *exp, struct svc_rqst *rqstp)
+{
+	struct svc_xprt *xprt;
+
+	/*
+	 * If rqstp is NULL, this is a LOCALIO request which will only
+	 * ever use a filehandle/credential pair for which access has
+	 * been affirmed (by ACCESS or OPEN NFS requests) over the
+	 * wire. So there is no need for further checks here.
+	 */
+	if (!rqstp)
+		return nfs_ok;
+
+	xprt = rqstp->rq_xprt;
+
+	if (exp->ex_xprtsec_modes & NFSEXP_XPRTSEC_NONE) {
+		if (!test_bit(XPT_TLS_SESSION, &xprt->xpt_flags))
+			return nfs_ok;
+	}
+	if (exp->ex_xprtsec_modes & NFSEXP_XPRTSEC_TLS) {
+		if (test_bit(XPT_TLS_SESSION, &xprt->xpt_flags) &&
+		    !test_bit(XPT_PEER_AUTH, &xprt->xpt_flags))
+			return nfs_ok;
+	}
+	if (exp->ex_xprtsec_modes & NFSEXP_XPRTSEC_MTLS) {
+		if (test_bit(XPT_TLS_SESSION, &xprt->xpt_flags) &&
+		    test_bit(XPT_PEER_AUTH, &xprt->xpt_flags))
+			return nfs_ok;
+	}
+
+	return rqstp->rq_vers < 4 ? nfserr_acces : nfserr_wrongsec;
+}
+
+/**
  * check_nfsd_access - check if access to export is allowed.
  * @exp: svc_export that is being accessed.
  * @rqstp: svc_rqst attempting to access @exp (will be NULL for LOCALIO).
@@ -1110,24 +1163,6 @@ __be32 check_nfsd_access(struct svc_export *exp, struct svc_rqst *rqstp,
 
 	xprt = rqstp->rq_xprt;
 
-	if (exp->ex_xprtsec_modes & NFSEXP_XPRTSEC_NONE) {
-		if (!test_bit(XPT_TLS_SESSION, &xprt->xpt_flags))
-			goto ok;
-	}
-	if (exp->ex_xprtsec_modes & NFSEXP_XPRTSEC_TLS) {
-		if (test_bit(XPT_TLS_SESSION, &xprt->xpt_flags) &&
-		    !test_bit(XPT_PEER_AUTH, &xprt->xpt_flags))
-			goto ok;
-	}
-	if (exp->ex_xprtsec_modes & NFSEXP_XPRTSEC_MTLS) {
-		if (test_bit(XPT_TLS_SESSION, &xprt->xpt_flags) &&
-		    test_bit(XPT_PEER_AUTH, &xprt->xpt_flags))
-			goto ok;
-	}
-	if (!may_bypass_gss)
-		goto denied;
-
-ok:
 	/* legacy gss-only clients are always OK: */
 	if (exp->ex_client == rqstp->rq_gssclient)
 		return nfs_ok;
@@ -1169,7 +1204,6 @@ ok:
 		}
 	}
 
-denied:
 	return nfserr_wrongsec;
 }
 

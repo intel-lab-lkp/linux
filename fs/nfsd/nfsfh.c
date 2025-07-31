@@ -362,6 +362,14 @@ __fh_verify(struct svc_rqst *rqstp,
 	if (error)
 		goto out;
 
+	if (access & NFSD_MAY_NLM)
+		/* NLM is allowed to bypass the xprtssec policy check */
+		goto out;
+
+	error = check_xprtsec_policy(exp, rqstp);
+	if (error)
+		goto out;
+
 	if ((access & NFSD_MAY_NLM) && (exp->ex_flags & NFSEXP_NOAUTHNLM))
 		/* NLM is allowed to fully bypass authentication */
 		goto out;
