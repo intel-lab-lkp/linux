@@ -1183,6 +1183,8 @@ static int i2c_hid_core_register_panel_follower(struct i2c_hid *ihid)
 	int ret;
 
 	ihid->panel_follower.funcs = &i2c_hid_core_panel_follower_funcs;
+	if (ihid->hid->initial_quirks | HID_QUIRK_POWER_ON_AFTER_BACKLIGHT)
+		ihid->panel_follower.after_panel_enabled = true;
 
 	/*
 	 * If we're not in control of our own power up/power down then we can't
