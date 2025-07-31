@@ -239,7 +239,7 @@ static int kho_test_restore_data(const void *fdt, int node)
 	return 0;
 }
 
-static int kho_test_restore(phys_addr_t fdt_phys)
+static int __init kho_test_restore(phys_addr_t fdt_phys)
 {
 	void *fdt = phys_to_virt(fdt_phys);
 	const unsigned int *magic;
