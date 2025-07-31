@@ -8719,7 +8719,7 @@ void __init sched_init(void)
 
 #ifdef CONFIG_RT_GROUP_SCHED
 	init_dl_bandwidth(&root_task_group.dl_bandwidth,
-			global_rt_period(), global_rt_runtime());
+			global_rt_period(), 0);
 #endif /* CONFIG_RT_GROUP_SCHED */
 
 #ifdef CONFIG_CGROUP_SCHED
@@ -9348,7 +9348,7 @@ static int cpu_cgroup_can_attach(struct cgroup_taskset *tset)
 		goto scx_check;
 
 	cgroup_taskset_for_each(task, css, tset) {
-		if (!sched_rt_can_attach(css_tg(css), task))
+		if (rt_task(task) && !sched_rt_can_attach(css_tg(css), task))
 			return -EINVAL;
 	}
 scx_check:
