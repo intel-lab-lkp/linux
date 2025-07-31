@@ -210,6 +210,8 @@ static void wbt_rqw_done(struct rq_wb *rwb, struct rq_wait *rqw,
 	else if (blk_queue_write_cache(rwb->rqos.disk->queue) &&
 		 !wb_recent_wait(rwb))
 		limit = 0;
+	else if (wb_recent_wait(rwb))
+		limit = rwb->rq_depth.max_depth;
 	else
 		limit = rwb->wb_normal;
 
