@@ -4966,7 +4966,7 @@ EXPORT_SYMBOL_GPL(of_clk_hw_simple_get);
 struct clk *of_clk_src_onecell_get(struct of_phandle_args *clkspec, void *data)
 {
 	struct clk_onecell_data *clk_data = data;
-	unsigned int idx = clkspec->args[0];
+	unsigned int idx = clkspec->args_count ? clkspec->args[0] : 0;
 
 	if (idx >= clk_data->clk_num) {
 		pr_err("%s: invalid clock index %u\n", __func__, idx);
@@ -4981,7 +4981,7 @@ struct clk_hw *
 of_clk_hw_onecell_get(struct of_phandle_args *clkspec, void *data)
 {
 	struct clk_hw_onecell_data *hw_data = data;
-	unsigned int idx = clkspec->args[0];
+	unsigned int idx = clkspec->args_count ? clkspec->args[0] : 0;
 
 	if (idx >= hw_data->num) {
 		pr_err("%s: invalid index %u\n", __func__, idx);
