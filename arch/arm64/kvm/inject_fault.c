@@ -102,11 +102,11 @@ static bool effective_sctlr2_nmea(struct kvm_vcpu *vcpu)
 	return __effective_sctlr2_bit(vcpu, SCTLR2_EL1_NMEA_SHIFT);
 }
 
-static void inject_abt64(struct kvm_vcpu *vcpu, bool is_iabt, unsigned long addr)
+static void inject_abt64(struct kvm_vcpu *vcpu, bool is_iabt,
+			 unsigned long addr, u64 esr)
 {
 	unsigned long cpsr = *vcpu_cpsr(vcpu);
 	bool is_aarch32 = vcpu_mode_is_32bit(vcpu);
-	u64 esr = 0;
 
 	/* This delight is brought to you by FEAT_DoubleFault2. */
 	if (effective_sctlr2_ease(vcpu))
@@ -199,12 +199,12 @@ static void inject_abt32(struct kvm_vcpu *vcpu, bool is_pabt, u32 addr)
 	vcpu_write_sys_reg(vcpu, far, FAR_EL1);
 }
 
-static void __kvm_inject_sea(struct kvm_vcpu *vcpu, bool iabt, u64 addr)
+static void __kvm_inject_sea(struct kvm_vcpu *vcpu, bool iabt, u64 addr, u64 esr)
 {
 	if (vcpu_el1_is_32bit(vcpu))
 		inject_abt32(vcpu, iabt, addr);
 	else
-		inject_abt64(vcpu, iabt, addr);
+		inject_abt64(vcpu, iabt, addr, esr);
 }
 
 static bool kvm_sea_target_is_el2(struct kvm_vcpu *vcpu)
@@ -219,14 +219,14 @@ static bool kvm_sea_target_is_el2(struct kvm_vcpu *vcpu)
 	       (__vcpu_sys_reg(vcpu, HCRX_EL2) & HCRX_EL2_TMEA);
 }
 
-int kvm_inject_sea(struct kvm_vcpu *vcpu, bool iabt, u64 addr)
+int kvm_inject_sea_esr(struct kvm_vcpu *vcpu, bool iabt, u64 addr, u64 esr)
 {
 	lockdep_assert_held(&vcpu->mutex);
 
 	if (is_nested_ctxt(vcpu) && kvm_sea_target_is_el2(vcpu))
-		return kvm_inject_nested_sea(vcpu, iabt, addr);
+		return kvm_inject_nested_sea(vcpu, iabt, addr, esr);
 
-	__kvm_inject_sea(vcpu, iabt, addr);
+	__kvm_inject_sea(vcpu, iabt, addr, esr);
 	return 1;
 }
 
@@ -237,7 +237,7 @@ void kvm_inject_size_fault(struct kvm_vcpu *vcpu)
 	addr  = kvm_vcpu_get_fault_ipa(vcpu);
 	addr |= kvm_vcpu_get_hfar(vcpu) & GENMASK(11, 0);
 
-	__kvm_inject_sea(vcpu, kvm_vcpu_trap_is_iabt(vcpu), addr);
+	__kvm_inject_sea(vcpu, kvm_vcpu_trap_is_iabt(vcpu), addr, 0);
 
 	/*
 	 * If AArch64 or LPAE, set FSC to 0 to indicate an Address

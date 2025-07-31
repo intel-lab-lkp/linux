@@ -847,27 +847,40 @@ static void commit_pending_events(struct kvm_vcpu *vcpu)
 	kvm_call_hyp(__kvm_adjust_pc, vcpu);
 }
 
+#define ESR_EXCLUDE_ISS(name) ((name##_has_esr) && ((name##_esr) & ~ESR_ELx_ISS_MASK))
+
 int __kvm_arm_vcpu_set_events(struct kvm_vcpu *vcpu,
 			      struct kvm_vcpu_events *events)
 {
 	bool serror_pending = events->exception.serror_pending;
-	bool has_esr = events->exception.serror_has_esr;
+	bool serror_has_esr = events->exception.serror_has_esr;
 	bool ext_dabt_pending = events->exception.ext_dabt_pending;
 	bool ext_iabt_pending = events->exception.ext_iabt_pending;
-	u64 esr = events->exception.serror_esr;
+	bool ext_abt_has_esr = events->exception.ext_abt_has_esr;
+	u64 serror_esr = events->exception.serror_esr;
+	u64 ext_abt_esr = events->exception.ext_abt_esr;
 	int ret = 0;
+
+	if (!cpus_have_final_cap(ARM64_HAS_RAS_EXTN) &&
+	    (serror_has_esr || ext_abt_has_esr))
+		return -EINVAL;
+
+	if (ESR_EXCLUDE_ISS(serror) || ESR_EXCLUDE_ISS(ext_abt))
+		return -EINVAL;
 
 	/* DABT and IABT cannot happen at the same time. */
 	if (ext_dabt_pending && ext_iabt_pending)
 		return -EINVAL;
+
 	/*
 	 * Immediately commit the pending SEA to the vCPU's architectural
 	 * state which is necessary since we do not return a pending SEA
 	 * to userspace via KVM_GET_VCPU_EVENTS.
 	 */
 	if (ext_dabt_pending || ext_iabt_pending) {
-		ret = kvm_inject_sea(vcpu, ext_iabt_pending,
-				     kvm_vcpu_get_hfar(vcpu));
+		ret = kvm_inject_sea_esr(vcpu, ext_iabt_pending,
+					 kvm_vcpu_get_hfar(vcpu),
+					 ext_abt_has_esr ? ext_abt_esr : 0);
 		commit_pending_events(vcpu);
 	}
 
@@ -877,14 +890,8 @@ int __kvm_arm_vcpu_set_events(struct kvm_vcpu *vcpu,
 	if (!serror_pending)
 		return 0;
 
-	if (!cpus_have_final_cap(ARM64_HAS_RAS_EXTN) && has_esr)
-		return -EINVAL;
-
-	if (has_esr && (esr & ~ESR_ELx_ISS_MASK))
-		return -EINVAL;
-
-	if (has_esr)
-		ret = kvm_inject_serror_esr(vcpu, esr);
+	if (serror_has_esr)
+		ret = kvm_inject_serror_esr(vcpu, serror_esr);
 	else
 		ret = kvm_inject_serror(vcpu);
 
