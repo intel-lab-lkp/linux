@@ -332,7 +332,8 @@ static inline void unix_release_addr(struct unix_address *addr)
  *		- if started by zero, it is abstract name.
  */
 
-static int unix_validate_addr(struct sockaddr_un *sunaddr, int addr_len)
+static int unix_validate_addr(struct sockaddr_un *sunaddr, int addr_len,
+			      bool bind)
 {
 	if (addr_len <= offsetof(struct sockaddr_un, sun_path) ||
 	    addr_len > sizeof(*sunaddr))
@@ -340,6 +341,9 @@ static int unix_validate_addr(struct sockaddr_un *sunaddr, int addr_len)
 
 	if (sunaddr->sun_family != AF_UNIX)
 		return -EINVAL;
+
+	if (!bind && !IS_ENABLED(CONFIG_UNIX_ABSTRACT) && !sunaddr->sun_path[0])
+		return -ECONNREFUSED; /* pretend nobody is listening */
 
 	return 0;
 }
@@ -1253,6 +1257,8 @@ static struct sock *unix_find_other(struct net *net,
 
 	if (sunaddr->sun_path[0])
 		sk = unix_find_bsd(sunaddr, addr_len, type, flags);
+	else if (!IS_ENABLED(CONFIG_UNIX_ABSTRACT))
+		sk = ERR_PTR(-EPERM);
 	else
 		sk = unix_find_abstract(net, sunaddr, addr_len, type);
 
@@ -1444,7 +1450,7 @@ static int unix_bind(struct socket *sock, struct sockaddr *uaddr, int addr_len)
 	    sunaddr->sun_family == AF_UNIX)
 		return unix_autobind(sk);
 
-	err = unix_validate_addr(sunaddr, addr_len);
+	err = unix_validate_addr(sunaddr, addr_len, true);
 	if (err)
 		return err;
 
@@ -1493,7 +1499,7 @@ static int unix_dgram_connect(struct socket *sock, struct sockaddr *addr,
 		goto out;
 
 	if (addr->sa_family != AF_UNSPEC) {
-		err = unix_validate_addr(sunaddr, alen);
+		err = unix_validate_addr(sunaddr, alen, false);
 		if (err)
 			goto out;
 
@@ -1612,7 +1618,7 @@ static int unix_stream_connect(struct socket *sock, struct sockaddr *uaddr,
 	long timeo;
 	int err;
 
-	err = unix_validate_addr(sunaddr, addr_len);
+	err = unix_validate_addr(sunaddr, addr_len, false);
 	if (err)
 		goto out;
 
@@ -2048,7 +2054,9 @@ static int unix_dgram_sendmsg(struct socket *sock, struct msghdr *msg,
 	}
 
 	if (msg->msg_namelen) {
-		err = unix_validate_addr(msg->msg_name, msg->msg_namelen);
+		err = unix_validate_addr(msg->msg_name,
+					 msg->msg_namelen,
+					 false);
 		if (err)
 			goto out;
 

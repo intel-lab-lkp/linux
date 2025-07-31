@@ -16,6 +16,18 @@ config UNIX
 
 	  Say Y unless you know what you are doing.
 
+config UNIX_ABSTRACT
+	bool "UNIX: abstract sockets"
+	depends on UNIX
+	default y
+	help
+	  Support for "abstract" sockets (those not bound to a path).
+	  These have been used in the past, but they can also represent
+	  a security risk because anyone can bind to any abstract
+	  socket.  If you disable this option, programs can still bind
+	  to abstract sockets, but any attempt to connect to one fails
+	  with -ECONNREFUSED.
+
 config	AF_UNIX_OOB
 	bool "UNIX: out-of-bound messages"
 	depends on UNIX
