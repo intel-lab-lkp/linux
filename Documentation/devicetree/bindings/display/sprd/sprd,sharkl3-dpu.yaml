@@ -33,9 +33,14 @@ properties:
     maxItems: 2
 
   clock-names:
-    items:
-      - const: clk_src_128m
-      - const: clk_src_384m
+    oneOf:
+      - deprecated: true
+        items:
+          - const: clk_src_128m
+          - const: clk_src_384m
+      - items:
+          - const: core
+          - const: dpi
 
   power-domains:
     maxItems: 1
@@ -69,10 +74,10 @@ examples:
         compatible = "sprd,sharkl3-dpu";
         reg = <0x63000000 0x1000>;
         interrupts = <GIC_SPI 46 IRQ_TYPE_LEVEL_HIGH>;
-        clock-names = "clk_src_128m", "clk_src_384m";
 
-        clocks = <&pll CLK_TWPLL_128M>,
-          <&pll CLK_TWPLL_384M>;
+        clocks = <&pll CLK_TWPLL_384M>,
+                 <&pll CLK_TWPLL_128M>;
+        clock-names = "core", "dpi";
 
         dpu_port: port {
             dpu_out: endpoint {

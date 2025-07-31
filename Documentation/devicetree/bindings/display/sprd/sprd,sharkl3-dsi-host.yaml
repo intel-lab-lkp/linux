@@ -25,8 +25,12 @@ properties:
     maxItems: 1
 
   clock-names:
-    items:
-      - const: clk_src_96m
+    oneOf:
+      - deprecated: true
+        items:
+          - const: clk_src_96m
+      - items:
+          - const: pclk
 
   power-domains:
     maxItems: 1
@@ -75,8 +79,9 @@ examples:
         reg = <0x63100000 0x1000>;
         interrupts = <GIC_SPI 48 IRQ_TYPE_LEVEL_HIGH>,
           <GIC_SPI 49 IRQ_TYPE_LEVEL_HIGH>;
-        clock-names = "clk_src_96m";
         clocks = <&pll CLK_TWPLL_96M>;
+        clock-names = "pclk";
+
         ports {
             #address-cells = <1>;
             #size-cells = <0>;
