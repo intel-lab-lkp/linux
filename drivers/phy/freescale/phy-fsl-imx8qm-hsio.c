@@ -590,6 +590,8 @@ static int imx_hsio_probe(struct platform_device *pdev)
 		phy_set_drvdata(phy, lane);
 	}
 
+	mutex_init(&priv->lock);
+
 	dev_set_drvdata(dev, priv);
 	dev_set_drvdata(&pdev->dev, priv);
 
