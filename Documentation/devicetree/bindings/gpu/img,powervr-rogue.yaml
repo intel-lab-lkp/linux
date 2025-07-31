@@ -57,10 +57,8 @@ properties:
     maxItems: 2
 
   power-domain-names:
-    items:
-      - const: a
-      - const: b
     minItems: 1
+    maxItems: 2
 
   dma-coherent: true
 
@@ -77,18 +75,6 @@ required:
 additionalProperties: false
 
 allOf:
-  # Constraints added alongside the new compatible strings that would otherwise
-  # create an ABI break.
-  - if:
-      properties:
-        compatible:
-          contains:
-            const: img,img-rogue
-    then:
-      required:
-        - power-domains
-        - power-domain-names
-
   - if:
       properties:
         compatible:
@@ -97,9 +83,14 @@ allOf:
     then:
       properties:
         power-domains:
-          maxItems: 1
+          items:
+            - description: Power domain A
         power-domain-names:
-          maxItems: 1
+          items:
+            - const: a
+      required:
+        - power-domains
+        - power-domain-names
 
   - if:
       properties:
@@ -109,9 +100,16 @@ allOf:
     then:
       properties:
         power-domains:
-          minItems: 2
+          items:
+            - description: Power domain A
+            - description: Power domain B
         power-domain-names:
-          minItems: 2
+          items:
+            - const: a
+            - const: b
+      required:
+        - power-domains
+        - power-domain-names
 
   - if:
       properties:
