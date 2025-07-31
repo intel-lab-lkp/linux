@@ -2926,23 +2926,73 @@ static int amdgpu_drm_release(struct inode *inode, struct file *filp)
 	return drm_release(inode, filp);
 }
 
+static const unsigned int no_wake_ioctl_list[] = {
+	DRM_IOCTL_VERSION,
+	DRM_IOCTL_GET_UNIQUE,
+	DRM_IOCTL_GET_MAGIC,
+	DRM_IOCTL_GET_CLIENT,
+	DRM_IOCTL_GET_STATS,
+	DRM_IOCTL_GET_CAP,
+	DRM_IOCTL_SET_CLIENT_CAP,
+	DRM_IOCTL_SET_VERSION,
+	DRM_IOCTL_SET_UNIQUE,
+	DRM_IOCTL_BLOCK,
+	DRM_IOCTL_UNBLOCK,
+	DRM_IOCTL_AUTH_MAGIC,
+	DRM_IOCTL_SET_MASTER,
+	DRM_IOCTL_ADD_DRAW,
+	DRM_IOCTL_RM_DRAW,
+	DRM_IOCTL_FINISH,
+	DRM_IOCTL_UPDATE_DRAW,
+	DRM_IOCTL_MODE_GETRESOURCES,
+	DRM_IOCTL_MODE_GETPLANERESOURCES,
+	DRM_IOCTL_MODE_GETCRTC,
+	DRM_IOCTL_MODE_GETPLANE,
+	DRM_IOCTL_MODE_GETGAMMA,
+	DRM_IOCTL_MODE_GETENCODER,
+	DRM_IOCTL_MODE_ATTACHMODE,
+	DRM_IOCTL_MODE_DETACHMODE,
+	DRM_IOCTL_MODE_GETPROPERTY,
+	DRM_IOCTL_MODE_GETPROPBLOB,
+	DRM_IOCTL_MODE_OBJ_GETPROPERTIES,
+	DRM_IOCTL_MODE_CREATEPROPBLOB,
+	DRM_IOCTL_MODE_DESTROYPROPBLOB,
+	DRM_IOCTL_MODE_CREATE_LEASE,
+	DRM_IOCTL_MODE_LIST_LESSEES,
+	DRM_IOCTL_MODE_GET_LEASE,
+	DRM_IOCTL_MODE_REVOKE_LEASE,
+};
+
 long amdgpu_drm_ioctl(struct file *filp,
 		      unsigned int cmd, unsigned long arg)
 {
 	struct drm_file *file_priv = filp->private_data;
 	struct drm_device *dev;
 	long ret;
+	bool wake = true;
+	int i;
+
+	for (i = 0; i < ARRAY_SIZE(no_wake_ioctl_list); i++) {
+		if (cmd == no_wake_ioctl_list[i]) {
+			wake = false;
+			break;
+		}
+	}
 
 	dev = file_priv->minor->dev;
-	ret = pm_runtime_get_sync(dev->dev);
-	if (ret < 0)
-		goto out;
+	if (wake) {
+		ret = pm_runtime_get_sync(dev->dev);
+		if (ret < 0)
+			goto out;
+	}
 
 	ret = drm_ioctl(filp, cmd, arg);
 
-	pm_runtime_mark_last_busy(dev->dev);
+	if (wake)
+		pm_runtime_mark_last_busy(dev->dev);
 out:
-	pm_runtime_put_autosuspend(dev->dev);
+	if (wake)
+		pm_runtime_put_autosuspend(dev->dev);
 	return ret;
 }
 
