@@ -315,7 +315,7 @@ void thread_group_cputime(struct task_struct *tsk, struct task_cputime *times)
 	struct signal_struct *sig = tsk->signal;
 	u64 utime, stime;
 	struct task_struct *t;
-	unsigned int seq, nextseq;
+	unsigned int seq = 1;
 	unsigned long flags;
 
 	/*
@@ -330,10 +330,8 @@ void thread_group_cputime(struct task_struct *tsk, struct task_cputime *times)
 		(void) task_sched_runtime(current);
 
 	rcu_read_lock();
-	/* Attempt a lockless read on the first round. */
-	nextseq = 0;
 	do {
-		seq = nextseq;
+		seq++; /* 2 on the 1st/lockless path, otherwise odd */
 		flags = read_seqbegin_or_lock_irqsave(&sig->stats_lock, &seq);
 		times->utime = sig->utime;
 		times->stime = sig->stime;
@@ -345,8 +343,6 @@ void thread_group_cputime(struct task_struct *tsk, struct task_cputime *times)
 			times->stime += stime;
 			times->sum_exec_runtime += read_sum_exec_runtime(t);
 		}
-		/* If lockless access failed, take the lock. */
-		nextseq = 1;
 	} while (need_seqretry(&sig->stats_lock, seq));
 	done_seqretry_irqrestore(&sig->stats_lock, seq, flags);
 	rcu_read_unlock();
