@@ -577,9 +577,9 @@ extern void start_cfs_bandwidth(struct cfs_bandwidth *cfs_b);
 extern void unthrottle_cfs_rq(struct cfs_rq *cfs_rq);
 extern bool cfs_task_bw_constrained(struct task_struct *p);
 
-extern void init_tg_rt_entry(struct task_group *tg, struct rt_rq *rt_rq,
-		struct sched_rt_entity *rt_se, int cpu,
-		struct sched_rt_entity *parent);
+extern void init_tg_rt_entry(struct task_group *tg, struct rq *s_rq,
+		struct sched_dl_entity *rt_se, int cpu,
+		struct sched_dl_entity *parent);
 extern int sched_group_set_rt_runtime(struct task_group *tg, long rt_runtime_us);
 extern int sched_group_set_rt_period(struct task_group *tg, u64 rt_period_us);
 extern long sched_group_rt_runtime(struct task_group *tg);
@@ -2669,6 +2669,7 @@ extern void resched_curr(struct rq *rq);
 extern void resched_curr_lazy(struct rq *rq);
 extern void resched_cpu(int cpu);
 
+void init_dl_bandwidth(struct dl_bandwidth *dl_b, u64 period, u64 runtime);
 extern void init_dl_entity(struct sched_dl_entity *dl_se);
 
 #define BW_SHIFT		20
@@ -3077,6 +3078,21 @@ static inline struct rq *rq_of_rt_se(struct sched_rt_entity *rt_se)
 
 	return rt_rq->rq;
 }
+
+static inline int is_dl_group(struct rt_rq *rt_rq)
+{
+	return rt_rq->tg != &root_task_group;
+}
+
+/*
+ * Return the scheduling entity of this group of tasks.
+ */
+static inline struct sched_dl_entity *dl_group_of(struct rt_rq *rt_rq)
+{
+	BUG_ON(!is_dl_group(rt_rq));
+
+	return rt_rq->tg->dl_se[cpu_of(rt_rq->rq)];
+}
 #else
 static inline struct task_struct *rt_task_of(struct sched_rt_entity *rt_se)
 {
@@ -3100,6 +3116,16 @@ static inline struct rt_rq *rt_rq_of_se(struct sched_rt_entity *rt_se)
 	struct rq *rq = rq_of_rt_se(rt_se);
 
 	return &rq->rt;
+}
+
+static inline int is_dl_group(struct rt_rq *rt_rq)
+{
+	return 0;
+}
+
+static inline struct sched_dl_entity *dl_group_of(struct rt_rq *rt_rq)
+{
+	return NULL;
 }
 #endif
 
