@@ -26,7 +26,7 @@
 
 static sigjmp_buf sigjmp_buf_env;
 
-static void signal_handler(int sig)
+static void signal_handler(int __unused sig)
 {
 	siglongjmp(sigjmp_buf_env, -EFAULT);
 }
