@@ -48,10 +48,10 @@ ifneq (,$(wildcard $(KDIR)/Module.symvers))
 ifneq (,$(wildcard $(KDIR)/include/linux/page_frag_cache.h))
 TEST_GEN_MODS_DIR := page_frag
 else
-PAGE_FRAG_WARNING = "missing page_frag_cache.h, please use a newer kernel"
+PAGE_FRAG_WARNING = "Missing page_frag_cache.h, Please use a newer kernel"
 endif
 else
-PAGE_FRAG_WARNING = "missing Module.symvers, please have the kernel built first"
+PAGE_FRAG_WARNING = "Missing Module.symvers, Please build the kernel first"
 endif
 
 TEST_GEN_FILES = cow
@@ -203,8 +203,8 @@ ifeq ($(CAN_BUILD_I386)$(CAN_BUILD_X86_64),01)
 all: warn_32bit_failure
 
 warn_32bit_failure:
-	@echo "Warning: you seem to have a broken 32-bit build" 2>&1;		\
-	echo  "environment. This will reduce test coverage of 64-bit" 2>&1;	\
+	@echo "Warning: you seem to have a broken 32-bit build environment." 2>&1;		\
+	echo  "This will reduce test coverage of 64-bit" 2>&1;	\
 	echo  "kernels. If you are using a Debian-like distribution," 2>&1;	\
 	echo  "try:"; 2>&1;							\
 	echo  "";								\
