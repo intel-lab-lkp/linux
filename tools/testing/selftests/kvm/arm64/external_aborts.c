@@ -9,10 +9,14 @@
 
 #define MMIO_ADDR		0x8000000ULL
 #define EXPECTED_SERROR_ISS	(ESR_ELx_ISV | 0x1d1ed)
+#define FAKE_DABT_ISS		(ESR_ELx_ISV | ESR_ELx_SAS | ESR_ELx_SF | \
+				 ESR_ELx_AR | ESR_ELx_CM | ESR_ELx_FnV | \
+				 ESR_ELx_EA)
+#define FAKE_IABT_ISS		(ESR_ELx_ISV | ESR_ELx_FnV | ESR_ELx_EA)
 
 static u64 expected_abort_pc;
 
-static void expect_sea_handler(struct ex_regs *regs)
+static void expect_dabt_handler(struct ex_regs *regs)
 {
 	u64 esr = read_sysreg(esr_el1);
 
@@ -23,19 +27,60 @@ static void expect_sea_handler(struct ex_regs *regs)
 	GUEST_DONE();
 }
 
+static void expect_dabt_esr_handler(struct ex_regs *regs)
+{
+	u64 esr = read_sysreg(esr_el1);
+
+	GUEST_PRINTF("Handling guest instruction abort\n");
+	GUEST_PRINTF("  ESR_EL1=%#lx\n", esr);
+
+	GUEST_ASSERT_EQ(ESR_ELx_EC(esr), ESR_ELx_EC_DABT_CUR);
+	GUEST_ASSERT_EQ(esr & ESR_ELx_FSC_TYPE, ESR_ELx_FSC_EXTABT);
+	GUEST_ASSERT_EQ(esr & FAKE_DABT_ISS, FAKE_DABT_ISS);
+
+	GUEST_DONE();
+}
+
+static void expect_iabt_esr_handler(struct ex_regs *regs)
+{
+	u64 esr = read_sysreg(esr_el1);
+
+	GUEST_PRINTF("Handling guest instruction abort\n");
+	GUEST_PRINTF("  ESR_EL1=%#lx\n", esr);
+
+	GUEST_ASSERT_EQ(ESR_ELx_EC(esr), ESR_ELx_EC_IABT_CUR);
+	GUEST_ASSERT_EQ(esr & ESR_ELx_FSC_TYPE, ESR_ELx_FSC_EXTABT);
+	GUEST_ASSERT_EQ(esr & FAKE_IABT_ISS, FAKE_IABT_ISS);
+
+	GUEST_DONE();
+}
+
 static void unexpected_dabt_handler(struct ex_regs *regs)
 {
 	GUEST_FAIL("Unexpected data abort at PC: %lx\n", regs->pc);
 }
 
-static struct kvm_vm *vm_create_with_dabt_handler(struct kvm_vcpu **vcpu, void *guest_code,
-						  handler_fn dabt_handler)
+static void unexpected_iabt_handler(struct ex_regs *regs)
+{
+	GUEST_FAIL("Unexpected instruction abort at PC: %lx\n", regs->pc);
+}
+
+static struct kvm_vm *vm_create_with_extabt_handler(struct kvm_vcpu **vcpu,
+						    void *guest_code,
+						    handler_fn dabt_handler,
+						    handler_fn iabt_handler)
 {
 	struct kvm_vm *vm = vm_create_with_one_vcpu(vcpu, guest_code);
 
 	vm_init_descriptor_tables(vm);
 	vcpu_init_descriptor_tables(*vcpu);
-	vm_install_sync_handler(vm, VECTOR_SYNC_CURRENT, ESR_ELx_EC_DABT_CUR, dabt_handler);
+
+	if (dabt_handler)
+		vm_install_sync_handler(vm, VECTOR_SYNC_CURRENT,
+					ESR_ELx_EC_DABT_CUR, dabt_handler);
+	if (iabt_handler)
+		vm_install_sync_handler(vm, VECTOR_SYNC_CURRENT,
+					ESR_ELx_EC_IABT_CUR, iabt_handler);
 
 	virt_map(vm, MMIO_ADDR, MMIO_ADDR, 1);
 
@@ -47,6 +92,26 @@ static void vcpu_inject_sea(struct kvm_vcpu *vcpu)
 	struct kvm_vcpu_events events = {};
 
 	events.exception.ext_dabt_pending = true;
+	vcpu_events_set(vcpu, &events);
+}
+
+static void vcpu_inject_dabt_esr(struct kvm_vcpu *vcpu)
+{
+	struct kvm_vcpu_events events = {};
+
+	events.exception.ext_dabt_pending = true;
+	events.exception.ext_abt_has_esr = true;
+	events.exception.ext_abt_esr = FAKE_DABT_ISS;
+	vcpu_events_set(vcpu, &events);
+}
+
+static void vcpu_inject_iabt_esr(struct kvm_vcpu *vcpu)
+{
+	struct kvm_vcpu_events events = {};
+
+	events.exception.ext_iabt_pending = true;
+	events.exception.ext_abt_has_esr = true;
+	events.exception.ext_abt_esr = FAKE_IABT_ISS;
 	vcpu_events_set(vcpu, &events);
 }
 
@@ -79,17 +144,24 @@ static void __vcpu_run_expect(struct kvm_vcpu *vcpu, unsigned int cmd)
 {
 	struct ucall uc;
 
-	vcpu_run(vcpu);
-	switch (get_ucall(vcpu, &uc)) {
-	case UCALL_ABORT:
-		REPORT_GUEST_ASSERT(uc);
-		break;
-	default:
-		if (uc.cmd == cmd)
-			return;
+	do {
+		vcpu_run(vcpu);
+		switch (get_ucall(vcpu, &uc)) {
+		case UCALL_ABORT:
+			REPORT_GUEST_ASSERT(uc);
+			break;
+		case UCALL_PRINTF:
+			ksft_print_msg("From guest: %s", uc.buffer);
+			break;
+		default:
+			if (uc.cmd == cmd) {
+				ksft_print_msg("Expect ucall: %lu\n", uc.cmd);
+				return;
+			}
 
-		TEST_FAIL("Unexpected ucall: %lu", uc.cmd);
-	}
+			TEST_FAIL("Unexpected ucall: %lu", uc.cmd);
+		}
+	} while (true);
 }
 
 static void vcpu_run_expect_done(struct kvm_vcpu *vcpu)
@@ -122,8 +194,10 @@ static noinline void test_mmio_abort_guest(void)
 static void test_mmio_abort(void)
 {
 	struct kvm_vcpu *vcpu;
-	struct kvm_vm *vm = vm_create_with_dabt_handler(&vcpu, test_mmio_abort_guest,
-							expect_sea_handler);
+	struct kvm_vm *vm = vm_create_with_extabt_handler(&vcpu,
+							  test_mmio_abort_guest,
+							  expect_dabt_handler,
+							  unexpected_iabt_handler);
 	struct kvm_run *run = vcpu->run;
 
 	vcpu_run(vcpu);
@@ -157,8 +231,10 @@ static void test_mmio_nisv_guest(void)
 static void test_mmio_nisv(void)
 {
 	struct kvm_vcpu *vcpu;
-	struct kvm_vm *vm = vm_create_with_dabt_handler(&vcpu, test_mmio_nisv_guest,
-							unexpected_dabt_handler);
+	struct kvm_vm *vm = vm_create_with_extabt_handler(&vcpu,
+							  test_mmio_nisv_guest,
+							  unexpected_dabt_handler,
+							  unexpected_iabt_handler);
 
 	TEST_ASSERT(_vcpu_run(vcpu), "Expected nonzero return code from KVM_RUN");
 	TEST_ASSERT_EQ(errno, ENOSYS);
@@ -173,8 +249,10 @@ static void test_mmio_nisv(void)
 static void test_mmio_nisv_abort(void)
 {
 	struct kvm_vcpu *vcpu;
-	struct kvm_vm *vm = vm_create_with_dabt_handler(&vcpu, test_mmio_nisv_guest,
-							expect_sea_handler);
+	struct kvm_vm *vm = vm_create_with_extabt_handler(&vcpu,
+							  test_mmio_nisv_guest,
+							  expect_dabt_handler,
+							  unexpected_iabt_handler);
 	struct kvm_run *run = vcpu->run;
 
 	vm_enable_cap(vm, KVM_CAP_ARM_NISV_TO_USER, 1);
@@ -205,8 +283,10 @@ static void test_serror_masked_guest(void)
 static void test_serror_masked(void)
 {
 	struct kvm_vcpu *vcpu;
-	struct kvm_vm *vm = vm_create_with_dabt_handler(&vcpu, test_serror_masked_guest,
-							unexpected_dabt_handler);
+	struct kvm_vm *vm = vm_create_with_extabt_handler(&vcpu,
+							  test_serror_masked_guest,
+							  unexpected_dabt_handler,
+							  unexpected_iabt_handler);
 
 	vm_install_exception_handler(vm, VECTOR_ERROR_CURRENT, unexpected_serror_handler);
 
@@ -240,8 +320,10 @@ static void test_serror_guest(void)
 static void test_serror(void)
 {
 	struct kvm_vcpu *vcpu;
-	struct kvm_vm *vm = vm_create_with_dabt_handler(&vcpu, test_serror_guest,
-							unexpected_dabt_handler);
+	struct kvm_vm *vm = vm_create_with_extabt_handler(&vcpu,
+							  test_serror_guest,
+							  unexpected_dabt_handler,
+							  unexpected_iabt_handler);
 
 	vm_install_exception_handler(vm, VECTOR_ERROR_CURRENT, expect_serror_handler);
 
@@ -264,8 +346,10 @@ static void test_serror_emulated_guest(void)
 static void test_serror_emulated(void)
 {
 	struct kvm_vcpu *vcpu;
-	struct kvm_vm *vm = vm_create_with_dabt_handler(&vcpu, test_serror_emulated_guest,
-							unexpected_dabt_handler);
+	struct kvm_vm *vm = vm_create_with_extabt_handler(&vcpu,
+							  test_serror_emulated_guest,
+							  unexpected_dabt_handler,
+							  unexpected_iabt_handler);
 
 	vm_install_exception_handler(vm, VECTOR_ERROR_CURRENT, expect_serror_handler);
 
@@ -290,8 +374,10 @@ static void test_mmio_ease_guest(void)
 static void test_mmio_ease(void)
 {
 	struct kvm_vcpu *vcpu;
-	struct kvm_vm *vm = vm_create_with_dabt_handler(&vcpu, test_mmio_ease_guest,
-							unexpected_dabt_handler);
+	struct kvm_vm *vm = vm_create_with_extabt_handler(&vcpu,
+							  test_mmio_ease_guest,
+							  unexpected_dabt_handler,
+							  unexpected_iabt_handler);
 	struct kvm_run *run = vcpu->run;
 	u64 pfr1;
 
@@ -305,7 +391,7 @@ static void test_mmio_ease(void)
 	 * SCTLR2_ELx.EASE changes the exception vector to the SError vector but
 	 * doesn't further modify the exception context (e.g. ESR_ELx, FAR_ELx).
 	 */
-	vm_install_exception_handler(vm, VECTOR_ERROR_CURRENT, expect_sea_handler);
+	vm_install_exception_handler(vm, VECTOR_ERROR_CURRENT, expect_dabt_handler);
 
 	vcpu_run(vcpu);
 	TEST_ASSERT_KVM_EXIT_REASON(vcpu, KVM_EXIT_MMIO);
@@ -314,6 +400,49 @@ static void test_mmio_ease(void)
 	TEST_ASSERT(!run->mmio.is_write, "Expected MMIO read");
 
 	vcpu_inject_sea(vcpu);
+	vcpu_run_expect_done(vcpu);
+	kvm_vm_free(vm);
+}
+
+static void test_ext_abt_guest(void)
+{
+	GUEST_FAIL("Guest should only run (I|D)ABT handler");
+}
+
+static void test_inject_data_abort(void)
+{
+	struct kvm_vcpu *vcpu;
+	struct kvm_vm *vm = vm_create_with_extabt_handler(&vcpu,
+							  test_ext_abt_guest,
+							  expect_dabt_esr_handler,
+							  unexpected_iabt_handler);
+	vcpu_inject_dabt_esr(vcpu);
+	vcpu_run_expect_done(vcpu);
+	kvm_vm_free(vm);
+}
+
+static void vcpu_inject_invalid_abt(struct kvm_vcpu *vcpu)
+{
+	struct kvm_vcpu_events events = {};
+	int r;
+
+	events.exception.ext_iabt_pending = true;
+	events.exception.ext_dabt_pending = true;
+
+	r = __vcpu_ioctl(vcpu, KVM_SET_VCPU_EVENTS, &events);
+	TEST_ASSERT(r && errno == EINVAL,
+		    KVM_IOCTL_ERROR(KVM_SET_VCPU_EVENTS, r));
+}
+
+static void test_inject_instruction_abort(void)
+{
+	struct kvm_vcpu *vcpu;
+	struct kvm_vm *vm = vm_create_with_extabt_handler(&vcpu,
+							  test_ext_abt_guest,
+							  unexpected_dabt_handler,
+							  expect_iabt_esr_handler);
+	vcpu_inject_invalid_abt(vcpu);
+	vcpu_inject_iabt_esr(vcpu);
 	vcpu_run_expect_done(vcpu);
 	kvm_vm_free(vm);
 }
@@ -327,4 +456,6 @@ int main(void)
 	test_serror_masked();
 	test_serror_emulated();
 	test_mmio_ease();
+	test_inject_instruction_abort();
+	test_inject_data_abort();
 }
