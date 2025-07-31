@@ -183,6 +183,14 @@ struct drm_panel_follower {
 	 * The panel we're dependent on; set by drm_panel_add_follower().
 	 */
 	struct drm_panel *panel;
+
+	/**
+	 * @after_panel_enabled
+	 *
+	 * If true then this panel follower should be powered after the panel
+	 * and the backlight are enabled, instead of after panel is prepared.
+	 */
+	bool after_panel_enabled;
 };
 
 /**
