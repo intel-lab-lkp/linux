@@ -84,7 +84,7 @@ void switch_mm_irqs_off(struct mm_struct *prev, struct mm_struct *next,
 	switch_mm_pgdir(tsk, next);
 
 	/* Nothing else to do if we aren't actually switching */
-	if (prev == next)
+	if ((prev == next) && (tsk->thread.load_slb != U8_MAX))
 		return;
 
 	/*
