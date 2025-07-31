@@ -11,6 +11,7 @@ struct blk_map_iter {
 	struct bio_vec                  *bvec;
 	struct bvec_iter		iter;
 	struct bio			*bio;
+	bool				is_integrity;
 };
 
 struct blk_dma_iter {
