@@ -1239,6 +1239,30 @@ attribute-sets:
         name: corr-bits
         type: binary
         sub-type: u64
+      -
+        name: hist
+        type: nest
+        multi-attr: True
+        nested-attributes: fec-hist
+      -
+        name: fec-hist-bin-low
+        type: uint
+      -
+        name: fec-hist-bin-high
+        type: uint
+      -
+        name: fec-hist-bin-val
+        type: uint
+  -
+    name: fec-hist
+    subset-of: fec-stat
+    attributes:
+      -
+        name: fec-hist-bin-low
+      -
+        name: fec-hist-bin-high
+      -
+        name: fec-hist-bin-val
   -
     name: fec
     attr-cnt-name: __ethtool-a-fec-cnt

@@ -17,6 +17,8 @@ struct fec_reply_data {
 		u64 stats[1 + ETHTOOL_MAX_LANES];
 		u8 cnt;
 	} corr, uncorr, corr_bits;
+	u64 hist[ETHTOOL_FEC_HIST_MAX];
+	const struct ethtool_fec_hist_range *fec_ranges;
 };
 
 #define FEC_REPDATA(__reply_base) \
@@ -113,11 +115,13 @@ static int fec_prepare_data(const struct ethnl_req_info *req_base,
 		struct ethtool_fec_stats stats;
 
 		ethtool_stats_init((u64 *)&stats, sizeof(stats) / 8);
-		dev->ethtool_ops->get_fec_stats(dev, &stats);
+		dev->ethtool_ops->get_fec_stats(dev, &stats, &data->fec_ranges);
 
 		fec_stats_recalc(&data->corr, &stats.corrected_blocks);
 		fec_stats_recalc(&data->uncorr, &stats.uncorrectable_blocks);
 		fec_stats_recalc(&data->corr_bits, &stats.corrected_bits);
+		if (data->fec_ranges)
+			memcpy(data->hist, stats.hist, sizeof(stats.hist));
 	}
 
 	WARN_ON_ONCE(fec.reserved);
@@ -157,11 +161,53 @@ static int fec_reply_size(const struct ethnl_req_info *req_base,
 	len += nla_total_size(sizeof(u8)) +	/* _FEC_AUTO */
 	       nla_total_size(sizeof(u32));	/* _FEC_ACTIVE */
 
-	if (req_base->flags & ETHTOOL_FLAG_STATS)
+	if (req_base->flags & ETHTOOL_FLAG_STATS) {
 		len += 3 * nla_total_size_64bit(sizeof(u64) *
 						(1 + ETHTOOL_MAX_LANES));
+		/* add FEC bins information */
+		len += (nla_total_size(0) +  /* _A_FEC_HIST */
+			nla_total_size(4) +  /* _A_FEC_HIST_BIN_LOW */
+			nla_total_size(4) +  /* _A_FEC_HIST_BIN_HI */
+			nla_total_size(8)) * /* _A_FEC_HIST_BIN_VAL */
+			ETHTOOL_FEC_HIST_MAX;
+	}
 
 	return len;
+}
+
+static int fec_put_hist(struct sk_buff *skb, const u64 *hist,
+			const struct ethtool_fec_hist_range *ranges)
+{
+	struct nlattr *nest;
+	int i;
+
+	if (!ranges)
+		return 0;
+
+	for (i = 0; i < ETHTOOL_FEC_HIST_MAX; i++) {
+		if (ranges[i].low == -1 && ranges[i].high == -1)
+			break;
+
+		nest = nla_nest_start(skb, ETHTOOL_A_FEC_STAT_HIST);
+		if (!nest)
+			return -EMSGSIZE;
+
+		if (nla_put_uint(skb, ETHTOOL_A_FEC_STAT_FEC_HIST_BIN_LOW,
+				 ranges[i].low) ||
+		    nla_put_uint(skb, ETHTOOL_A_FEC_STAT_FEC_HIST_BIN_HIGH,
+				 ranges[i].high) ||
+		    nla_put_uint(skb, ETHTOOL_A_FEC_STAT_FEC_HIST_BIN_VAL,
+			         hist[i]))
+			goto err_cancel_hist;
+
+		nla_nest_end(skb, nest);
+	}
+
+	return 0;
+
+err_cancel_hist:
+	nla_nest_cancel(skb, nest);
+	return -EMSGSIZE;
 }
 
 static int fec_put_stats(struct sk_buff *skb, const struct fec_reply_data *data)
@@ -181,6 +227,9 @@ static int fec_put_stats(struct sk_buff *skb, const struct fec_reply_data *data)
 	    nla_put_64bit(skb, ETHTOOL_A_FEC_STAT_CORR_BITS,
 			  sizeof(u64) * data->corr_bits.cnt,
 			  data->corr_bits.stats, ETHTOOL_A_FEC_STAT_PAD))
+		goto err_cancel;
+
+	if (fec_put_hist(skb, data->hist, data->fec_ranges))
 		goto err_cancel;
 
 	nla_nest_end(skb, nest);
