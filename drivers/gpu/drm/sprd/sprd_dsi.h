@@ -18,8 +18,8 @@
 #include <drm/drm_print.h>
 #include <drm/drm_panel.h>
 
-#define encoder_to_dsi(encoder) \
-	container_of(encoder, struct sprd_dsi, encoder)
+#define bridge_to_dsi(x)	container_of(x, struct sprd_dsi, bridge)
+#define encoder_to_dsi(x)	container_of(x, struct sprd_dsi, encoder)
 
 enum dsi_work_mode {
 	DSI_MODE_CMD = 0,
@@ -88,7 +88,6 @@ struct dsi_context {
 	struct regmap *regmap;
 	struct dphy_pll pll;
 	struct videomode vm;
-	bool enabled;
 
 	u8 work_mode;
 	u8 burst_mode;
@@ -116,7 +115,9 @@ struct sprd_dsi {
 	struct mipi_dsi_host host;
 	struct mipi_dsi_device *slave;
 	struct drm_encoder encoder;
+	struct drm_bridge bridge;
 	struct drm_bridge *panel_bridge;
+	struct drm_connector *connector;
 	struct dsi_context ctx;
 };
 

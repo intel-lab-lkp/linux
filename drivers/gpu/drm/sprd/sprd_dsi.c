@@ -11,6 +11,7 @@
 
 #include <drm/drm_atomic_helper.h>
 #include <drm/drm_bridge.h>
+#include <drm/drm_bridge_connector.h>
 #include <drm/drm_of.h>
 #include <drm/drm_probe_helper.h>
 
@@ -778,76 +779,6 @@ static void sprd_dphy_fini(struct dsi_context *ctx)
 	dsi_reg_up(ctx, PHY_INTERFACE_CTRL, RF_PHY_RESET_N, RF_PHY_RESET_N);
 }
 
-static void sprd_dsi_encoder_mode_set(struct drm_encoder *encoder,
-				      struct drm_display_mode *mode,
-				 struct drm_display_mode *adj_mode)
-{
-	struct sprd_dsi *dsi = encoder_to_dsi(encoder);
-
-	drm_display_mode_to_videomode(adj_mode, &dsi->ctx.vm);
-}
-
-static void sprd_dsi_encoder_enable(struct drm_encoder *encoder)
-{
-	struct sprd_dsi *dsi = encoder_to_dsi(encoder);
-	struct sprd_dpu *dpu = to_sprd_crtc(encoder->crtc);
-	struct dsi_context *ctx = &dsi->ctx;
-
-	if (ctx->enabled) {
-		drm_warn(dsi->drm, "dsi is initialized\n");
-		return;
-	}
-
-	sprd_dsi_init(ctx);
-	if (ctx->work_mode == DSI_MODE_VIDEO)
-		sprd_dsi_dpi_video(ctx);
-	else
-		sprd_dsi_edpi_video(ctx);
-
-	sprd_dphy_init(ctx);
-
-	sprd_dsi_set_work_mode(ctx, ctx->work_mode);
-	sprd_dsi_state_reset(ctx);
-
-	if (dsi->slave->mode_flags & MIPI_DSI_CLOCK_NON_CONTINUOUS) {
-		dsi_reg_up(ctx, PHY_CLK_LANE_LP_CTRL, AUTO_CLKLANE_CTRL_EN,
-			   AUTO_CLKLANE_CTRL_EN);
-	} else {
-		dsi_reg_up(ctx, PHY_CLK_LANE_LP_CTRL, RF_PHY_CLK_EN, RF_PHY_CLK_EN);
-		dsi_reg_up(ctx, PHY_CLK_LANE_LP_CTRL, PHY_CLKLANE_TX_REQ_HS,
-			   PHY_CLKLANE_TX_REQ_HS);
-		dphy_wait_pll_locked(ctx);
-	}
-
-	sprd_dpu_run(dpu);
-
-	ctx->enabled = true;
-}
-
-static void sprd_dsi_encoder_disable(struct drm_encoder *encoder)
-{
-	struct sprd_dsi *dsi = encoder_to_dsi(encoder);
-	struct sprd_dpu *dpu = to_sprd_crtc(encoder->crtc);
-	struct dsi_context *ctx = &dsi->ctx;
-
-	if (!ctx->enabled) {
-		drm_warn(dsi->drm, "dsi isn't initialized\n");
-		return;
-	}
-
-	sprd_dpu_stop(dpu);
-	sprd_dphy_fini(ctx);
-	sprd_dsi_fini(ctx);
-
-	ctx->enabled = false;
-}
-
-static const struct drm_encoder_helper_funcs sprd_encoder_helper_funcs = {
-	.mode_set	= sprd_dsi_encoder_mode_set,
-	.enable		= sprd_dsi_encoder_enable,
-	.disable	= sprd_dsi_encoder_disable
-};
-
 static const struct drm_encoder_funcs sprd_encoder_funcs = {
 	.destroy = drm_encoder_cleanup,
 };
@@ -875,10 +806,97 @@ static int sprd_dsi_encoder_init(struct sprd_dsi *dsi,
 		return ret;
 	}
 
-	drm_encoder_helper_add(encoder, &sprd_encoder_helper_funcs);
-
 	return 0;
 }
+
+static int sprd_dsi_bridge_attach(struct drm_bridge *bridge,
+				  struct drm_encoder *encoder,
+				  enum drm_bridge_attach_flags flags)
+{
+	struct sprd_dsi *dsi = bridge_to_dsi(bridge);
+
+	return drm_bridge_attach(&dsi->encoder, dsi->panel_bridge,
+				 bridge, flags);
+}
+
+static void sprd_dsi_bridge_mode_set(struct drm_bridge *bridge,
+				     const struct drm_display_mode *mode,
+				     const struct drm_display_mode *adj_mode)
+{
+	struct sprd_dsi *dsi = bridge_to_dsi(bridge);
+
+	drm_display_mode_to_videomode(adj_mode, &dsi->ctx.vm);
+}
+
+static void sprd_dsi_bridge_pre_enable(struct drm_bridge *bridge)
+{
+	struct sprd_dsi *dsi = bridge_to_dsi(bridge);
+	struct dsi_context *ctx = &dsi->ctx;
+
+	sprd_dsi_init(ctx);
+	if (ctx->work_mode == DSI_MODE_VIDEO)
+		sprd_dsi_dpi_video(ctx);
+	else
+		sprd_dsi_edpi_video(ctx);
+
+	sprd_dphy_init(ctx);
+
+	/*
+	 * Initialize in command mode to allow panels to prepare by sending
+	 * DSI commands before the DPU is started.
+	 */
+	sprd_dsi_set_work_mode(ctx, DSI_MODE_CMD);
+}
+
+static void sprd_dsi_bridge_enable(struct drm_bridge *bridge)
+{
+	struct sprd_dsi *dsi = bridge_to_dsi(bridge);
+	struct dsi_context *ctx = &dsi->ctx;
+
+	sprd_dsi_set_work_mode(ctx, ctx->work_mode);
+	sprd_dsi_state_reset(ctx);
+
+	if (dsi->slave->mode_flags & MIPI_DSI_CLOCK_NON_CONTINUOUS) {
+		dsi_reg_up(ctx, PHY_CLK_LANE_LP_CTRL, AUTO_CLKLANE_CTRL_EN,
+			   AUTO_CLKLANE_CTRL_EN);
+	} else {
+		dsi_reg_up(ctx, PHY_CLK_LANE_LP_CTRL, RF_PHY_CLK_EN, RF_PHY_CLK_EN);
+		dsi_reg_up(ctx, PHY_CLK_LANE_LP_CTRL, PHY_CLKLANE_TX_REQ_HS,
+			   PHY_CLKLANE_TX_REQ_HS);
+		dphy_wait_pll_locked(ctx);
+	}
+
+	sprd_dpu_run(to_sprd_crtc(dsi->encoder.crtc));
+}
+
+static void sprd_dsi_bridge_disable(struct drm_bridge *bridge)
+{
+	struct sprd_dsi *dsi = bridge_to_dsi(bridge);
+	struct dsi_context *ctx = &dsi->ctx;
+
+	sprd_dpu_stop(to_sprd_crtc(dsi->encoder.crtc));
+
+	/* Switch to command mode to allow panels to unprepare */
+	sprd_dsi_set_work_mode(ctx, DSI_MODE_CMD);
+}
+
+static void sprd_dsi_bridge_post_disable(struct drm_bridge *bridge)
+{
+	struct sprd_dsi *dsi = bridge_to_dsi(bridge);
+	struct dsi_context *ctx = &dsi->ctx;
+
+	sprd_dphy_fini(ctx);
+	sprd_dsi_fini(ctx);
+}
+
+static const struct drm_bridge_funcs sprd_dsi_bridge_funcs = {
+	.attach		= sprd_dsi_bridge_attach,
+	.mode_set	= sprd_dsi_bridge_mode_set,
+	.pre_enable	= sprd_dsi_bridge_pre_enable,
+	.enable		= sprd_dsi_bridge_enable,
+	.disable	= sprd_dsi_bridge_disable,
+	.post_disable	= sprd_dsi_bridge_post_disable,
+};
 
 static int sprd_dsi_bridge_init(struct sprd_dsi *dsi,
 				struct device *dev)
@@ -889,11 +907,34 @@ static int sprd_dsi_bridge_init(struct sprd_dsi *dsi,
 	if (IS_ERR(dsi->panel_bridge))
 		return PTR_ERR(dsi->panel_bridge);
 
-	ret = drm_bridge_attach(&dsi->encoder, dsi->panel_bridge, NULL, 0);
+	dsi->bridge.of_node = dev->of_node;
+	dsi->bridge.type = DRM_MODE_CONNECTOR_DSI;
+
+	drm_bridge_add(&dsi->bridge);
+
+	ret = drm_bridge_attach(&dsi->encoder, &dsi->bridge, NULL,
+				DRM_BRIDGE_ATTACH_NO_CONNECTOR);
 	if (ret)
-		return ret;
+		goto err_cleanup;
+
+	dsi->connector = drm_bridge_connector_init(dsi->drm, &dsi->encoder);
+	if (IS_ERR(dsi->connector)) {
+		drm_err(dsi->drm, "Unable to create bridge connector\n");
+		ret = PTR_ERR(dsi->connector);
+		goto err_cleanup;
+	}
+
+	ret = drm_connector_attach_encoder(dsi->connector, &dsi->encoder);
+	if (ret < 0)
+		goto err_cleanup;
 
 	return 0;
+
+err_cleanup:
+	drm_bridge_remove(&dsi->bridge);
+	drm_of_panel_bridge_remove(dev->of_node, 1, 0);
+
+	return ret;
 }
 
 static int sprd_dsi_context_init(struct sprd_dsi *dsi,
@@ -921,7 +962,6 @@ static int sprd_dsi_context_init(struct sprd_dsi *dsi,
 	ctx->max_rd_time = 6000;
 	ctx->int0_mask = 0xffffffff;
 	ctx->int1_mask = 0xffffffff;
-	ctx->enabled = true;
 
 	return 0;
 }
@@ -940,13 +980,21 @@ static int sprd_dsi_bind(struct device *dev, struct device *master, void *data)
 
 	ret = sprd_dsi_bridge_init(dsi, dev);
 	if (ret)
-		return ret;
+		goto err_cleanup_encoder;
 
 	ret = sprd_dsi_context_init(dsi, dev);
 	if (ret)
-		return ret;
+		goto err_cleanup_bridge;
 
 	return 0;
+
+err_cleanup_encoder:
+	drm_encoder_cleanup(&dsi->encoder);
+err_cleanup_bridge:
+	drm_bridge_remove(&dsi->bridge);
+	drm_of_panel_bridge_remove(dev->of_node, 1, 0);
+
+	return ret;
 }
 
 static void sprd_dsi_unbind(struct device *dev,
@@ -954,6 +1002,7 @@ static void sprd_dsi_unbind(struct device *dev,
 {
 	struct sprd_dsi *dsi = dev_get_drvdata(dev);
 
+	drm_bridge_remove(&dsi->bridge);
 	drm_of_panel_bridge_remove(dev->of_node, 1, 0);
 
 	drm_encoder_cleanup(&dsi->encoder);
@@ -1032,9 +1081,10 @@ static int sprd_dsi_probe(struct platform_device *pdev)
 	struct device *dev = &pdev->dev;
 	struct sprd_dsi *dsi;
 
-	dsi = devm_kzalloc(dev, sizeof(*dsi), GFP_KERNEL);
-	if (!dsi)
-		return -ENOMEM;
+	dsi = devm_drm_bridge_alloc(dev, struct sprd_dsi, bridge,
+				    &sprd_dsi_bridge_funcs);
+	if (IS_ERR(dsi))
+		return PTR_ERR(dsi);
 
 	dev_set_drvdata(dev, dsi);
 
