@@ -49,6 +49,8 @@ properties:
   reg:
     maxItems: 1
 
+  "#power-domain-cells": true
+
   "#fsl,rcpm-wakeup-cells":
     description: |
       The number of IPPDEXPCR register cells in the
