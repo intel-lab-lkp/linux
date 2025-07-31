@@ -3,6 +3,7 @@
  * Copyright (C) 2020 Unisoc Inc.
  */
 
+#include <linux/clk.h>
 #include <linux/component.h>
 #include <linux/delay.h>
 #include <linux/dma-buf.h>
@@ -793,6 +794,12 @@ static int sprd_dpu_context_init(struct sprd_dpu *dpu,
 	ctx->irq = platform_get_irq(pdev, 0);
 	if (ctx->irq < 0)
 		return ctx->irq;
+
+	ctx->clk = devm_clk_get_optional_enabled(dev, "core");
+	if (IS_ERR(ctx->clk)) {
+		dev_err(dev, "failed to get DPU core clock\n");
+		return PTR_ERR(ctx->clk);
+	}
 
 	/* disable and clear interrupts before register dpu IRQ. */
 	writel(0x00, ctx->base + REG_DPU_INT_EN);
