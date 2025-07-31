@@ -362,6 +362,13 @@ struct vsc85xx_hw_stat {
 	u16 mask;
 };
 
+struct vsc8531_skb {
+	struct list_head list;
+
+	struct sk_buff *skb;
+	u32 ns;
+};
+
 struct vsc8531_private {
 	int rate_magic;
 	u16 supp_led_modes;
@@ -410,6 +417,10 @@ struct vsc8531_private {
 	 */
 	struct mutex ts_lock;
 	struct mutex phc_lock;
+
+	/* rx_skbs_lock: used for accessing rx_skbs_list */
+	spinlock_t rx_skbs_lock;
+	struct list_head rx_skbs_list;
 };
 
 /* Shared structure between the PHYs of the same package.
