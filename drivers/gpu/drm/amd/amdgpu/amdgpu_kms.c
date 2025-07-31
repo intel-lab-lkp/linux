@@ -883,6 +883,16 @@ int amdgpu_info_ioctl(struct drm_device *dev, void *data, struct drm_file *filp)
 
 		alloc_size = info->read_mmr_reg.count * sizeof(*regs);
 
+		if (info->read_mmr_reg.dword_offset == 0x263e &&
+		    info->read_mmr_reg.count == 1) {
+			/* Return cached value of mmGB_ADDR_CONFIG */
+			regs[0] = adev->gfx.config.gb_addr_config;
+
+			n = copy_to_user(out, regs, min(size, alloc_size));
+			kfree(regs);
+			return n ? -EFAULT : 0;
+		}
+
 		ret = pm_runtime_get_sync(dev->dev);
 		if (ret < 0) {
 			pm_runtime_put_autosuspend(dev->dev);
