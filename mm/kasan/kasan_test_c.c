@@ -1613,6 +1613,12 @@ static void kasan_strings(struct kunit *test)
 	 */
 	KASAN_TEST_NEEDS_CONFIG_OFF(test, CONFIG_AMD_MEM_ENCRYPT);
 
+	/*
+	 * Harden common str/mem functions kills the kunit-try-catch thread
+	 * before checking the fault.
+	 */
+	KASAN_TEST_NEEDS_CONFIG_OFF(test, CONFIG_FORTIFY_SOURCE);
+
 	ptr = kmalloc(size, GFP_KERNEL | __GFP_ZERO);
 	KUNIT_ASSERT_NOT_ERR_OR_NULL(test, ptr);
 
