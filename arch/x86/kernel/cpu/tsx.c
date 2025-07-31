@@ -156,11 +156,11 @@ static void tsx_dev_mode_disable(void)
 	}
 }
 
+static char *tsx_cmdline_param __initdata;
+core_param(tsx, tsx_cmdline_param, charp, 0);
+
 void __init tsx_init(void)
 {
-	char arg[5] = {};
-	int ret;
-
 	tsx_dev_mode_disable();
 
 	/*
@@ -194,13 +194,12 @@ void __init tsx_init(void)
 		return;
 	}
 
-	ret = cmdline_find_option(boot_command_line, "tsx", arg, sizeof(arg));
-	if (ret >= 0) {
-		if (!strcmp(arg, "on")) {
+	if (tsx_cmdline_param) {
+		if (!strcmp(tsx_cmdline_param, "on")) {
 			tsx_ctrl_state = TSX_CTRL_ENABLE;
-		} else if (!strcmp(arg, "off")) {
+		} else if (!strcmp(tsx_cmdline_param, "off")) {
 			tsx_ctrl_state = TSX_CTRL_DISABLE;
-		} else if (!strcmp(arg, "auto")) {
+		} else if (!strcmp(tsx_cmdline_param, "auto")) {
 			tsx_ctrl_state = x86_get_tsx_auto_mode();
 		} else {
 			tsx_ctrl_state = TSX_CTRL_DISABLE;
