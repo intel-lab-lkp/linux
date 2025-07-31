@@ -1282,6 +1282,11 @@ struct rq {
 	call_single_data_t	cfsb_csd;
 	struct list_head	cfsb_csd_list;
 #endif
+
+#ifdef CONFIG_RT_GROUP_SCHED
+	struct rq		*rq_to_push_from;
+	struct rq		*rq_to_pull_to;
+#endif
 };
 
 #ifdef CONFIG_FAIR_GROUP_SCHED
