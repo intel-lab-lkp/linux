@@ -2981,6 +2981,14 @@ long amdgpu_drm_ioctl(struct file *filp,
 		}
 	}
 
+	if (wake && unlikely(!fpriv->initialized)) {
+		/* Allow syncobj feature detection before GPU wakeup */
+		if (cmd == DRM_IOCTL_SYNCOBJ_CREATE ||
+		    cmd == DRM_IOCTL_SYNCOBJ_DESTROY ||
+		    cmd == DRM_IOCTL_SYNCOBJ_WAIT)
+			wake = false;
+	}
+
 	dev = file_priv->minor->dev;
 	if (wake) {
 		ret = pm_runtime_get_sync(dev->dev);
