@@ -412,6 +412,13 @@ static void sco_recv_frame(struct sco_conn *conn, struct sk_buff *skb)
 	if (sk->sk_state != BT_CONNECTED)
 		goto drop;
 
+	/* Copy pid information since the skb was not allocated using the sk as
+	 * source, otherwise tools cannot decode the process that is receiving
+	 * the packet.
+	 */
+	hci_sock_copy_creds(sk, skb);
+	hci_send_host(conn->hcon->hdev, skb);
+
 	if (!sock_queue_rcv_skb(sk, skb))
 		return;
 

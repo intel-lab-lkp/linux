@@ -1526,6 +1526,13 @@ static int l2cap_sock_recv_cb(struct l2cap_chan *chan, struct sk_buff *skb)
 			goto done;
 	}
 
+	/* Copy pid information since the skb was not allocated using the sk as
+	 * source, otherwise tools cannot decode the process that is receiving
+	 * the packet.
+	 */
+	hci_sock_copy_creds(sk, skb);
+	hci_send_host(chan->conn->hcon->hdev, skb);
+
 	err = __sock_queue_rcv_skb(sk, skb);
 
 	l2cap_publish_rx_avail(chan);

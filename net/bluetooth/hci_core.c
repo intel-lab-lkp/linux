@@ -3269,11 +3269,25 @@ static void hci_queue_acl(struct hci_chan *chan, struct sk_buff_head *queue,
 	}
 }
 
+void hci_send_host(struct hci_dev *hdev, struct sk_buff *skb)
+{
+	/* Mark as socket packet */
+	hci_skb_pkt_type(skb) = HCI_HOST_PKT;
+
+	/* Time stamp */
+	__net_timestamp(skb);
+
+	/* Send copy to monitor */
+	hci_send_to_monitor(hdev, skb);
+}
+
 void hci_send_acl(struct hci_chan *chan, struct sk_buff *skb, __u16 flags)
 {
 	struct hci_dev *hdev = chan->conn->hdev;
 
 	BT_DBG("%s chan %p flags 0x%4.4x", hdev->name, chan, flags);
+
+	hci_send_host(hdev, skb);
 
 	hci_queue_acl(chan, &chan->data_q, skb, flags);
 
@@ -3287,6 +3301,8 @@ void hci_send_sco(struct hci_conn *conn, struct sk_buff *skb)
 	struct hci_sco_hdr hdr;
 
 	BT_DBG("%s len %d", hdev->name, skb->len);
+
+	hci_send_host(hdev, skb);
 
 	hdr.handle = cpu_to_le16(conn->handle);
 	hdr.dlen   = skb->len;
@@ -3364,6 +3380,8 @@ void hci_send_iso(struct hci_conn *conn, struct sk_buff *skb)
 	struct hci_dev *hdev = conn->hdev;
 
 	BT_DBG("%s len %d", hdev->name, skb->len);
+
+	hci_send_host(hdev, skb);
 
 	hci_queue_iso(conn, &conn->data_q, skb);
 

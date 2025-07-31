@@ -7440,6 +7440,8 @@ static int l2cap_recv_frag(struct l2cap_conn *conn, struct sk_buff *skb,
 			return -ENOMEM;
 		/* Init rx_len */
 		conn->rx_len = len;
+		/* Set rx_skb as incoming so it can be properly decoded */
+		bt_cb(conn->rx_skb)->incoming = 1;
 
 		skb_set_delivery_time(conn->rx_skb, skb->tstamp,
 				      skb->tstamp_type);

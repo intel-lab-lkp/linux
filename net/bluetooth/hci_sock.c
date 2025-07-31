@@ -265,7 +265,7 @@ void hci_send_to_sock(struct hci_dev *hdev, struct sk_buff *skb)
 	kfree_skb(skb_copy);
 }
 
-static void hci_sock_copy_creds(struct sock *sk, struct sk_buff *skb)
+void hci_sock_copy_creds(struct sock *sk, struct sk_buff *skb)
 {
 	struct scm_creds *creds;
 
@@ -397,6 +397,12 @@ void hci_send_to_monitor(struct hci_dev *hdev, struct sk_buff *skb)
 			opcode = cpu_to_le16(HCI_MON_DRV_RX_PKT);
 		else
 			opcode = cpu_to_le16(HCI_MON_DRV_TX_PKT);
+		break;
+	case HCI_HOST_PKT:
+		if (bt_cb(skb)->incoming)
+			opcode = cpu_to_le16(HCI_MON_SOCK_RX_PKT);
+		else
+			opcode = cpu_to_le16(HCI_MON_SOCK_TX_PKT);
 		break;
 	case HCI_DIAG_PKT:
 		opcode = cpu_to_le16(HCI_MON_VENDOR_DIAG);
