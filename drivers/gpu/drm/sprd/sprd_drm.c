@@ -5,6 +5,7 @@
 
 #include <linux/component.h>
 #include <linux/dma-mapping.h>
+#include <linux/iommu.h>
 #include <linux/mod_devicetable.h>
 #include <linux/module.h>
 #include <linux/mutex.h>
@@ -20,6 +21,7 @@
 #include <drm/drm_vblank.h>
 
 #include "sprd_drm.h"
+#include "sprd_gem.h"
 
 #define DRIVER_NAME	"sprd"
 #define DRIVER_DESC	"Spreadtrum SoCs' DRM Driver"
@@ -54,13 +56,57 @@ static struct drm_driver sprd_drm_drv = {
 	.fops			= &sprd_drm_fops,
 
 	/* GEM Operations */
-	DRM_GEM_DMA_DRIVER_OPS,
+	.dumb_create		= sprd_gem_dumb_create,
+	.gem_prime_import_sg_table = sprd_gem_prime_import_sg_table,
 
 	.name			= DRIVER_NAME,
 	.desc			= DRIVER_DESC,
 	.major			= DRIVER_MAJOR,
 	.minor			= DRIVER_MINOR,
 };
+
+int sprd_drm_iommu_attach(struct drm_device *drm, struct device *dpu_dev)
+{
+	struct sprd_drm *sprd = to_sprd_drm(drm);
+	struct iommu_domain_geometry *geometry;
+	int ret;
+
+	if (!sprd->iommu_domain) {
+		sprd->iommu_domain = iommu_paging_domain_alloc(dpu_dev);
+		if (IS_ERR(sprd->iommu_domain)) {
+			ret = PTR_ERR(sprd->iommu_domain);
+			sprd->iommu_domain = NULL;
+			return ret;
+		}
+
+		geometry = &sprd->iommu_domain->geometry;
+
+		drm_mm_init(&sprd->mm, geometry->aperture_start,
+			    geometry->aperture_end -
+			    geometry->aperture_start + 1);
+		mutex_init(&sprd->mm_lock);
+	}
+
+	return iommu_attach_device(sprd->iommu_domain, dpu_dev);
+}
+
+void sprd_drm_iommu_detach(struct drm_device *drm, struct device *dpu_dev)
+{
+	struct sprd_drm *sprd = to_sprd_drm(drm);
+
+	if (sprd->iommu_domain)
+		iommu_detach_device(sprd->iommu_domain, dpu_dev);
+}
+
+static void sprd_drm_iommu_cleanup(struct sprd_drm *sprd)
+{
+	if (!sprd->iommu_domain)
+		return;
+
+	mutex_destroy(&sprd->mm_lock);
+	drm_mm_takedown(&sprd->mm);
+	iommu_domain_free(sprd->iommu_domain);
+}
 
 static int sprd_drm_bind(struct device *dev)
 {
@@ -112,6 +158,7 @@ err_kms_helper_poll_fini:
 	drm_kms_helper_poll_fini(drm);
 err_unbind_all:
 	component_unbind_all(drm->dev, drm);
+	sprd_drm_iommu_cleanup(sprd);
 	return ret;
 }
 
@@ -124,6 +171,8 @@ static void sprd_drm_unbind(struct device *dev)
 	drm_kms_helper_poll_fini(drm);
 
 	component_unbind_all(drm->dev, drm);
+
+	sprd_drm_iommu_cleanup(to_sprd_drm(drm));
 }
 
 static const struct component_master_ops drm_component_ops = {

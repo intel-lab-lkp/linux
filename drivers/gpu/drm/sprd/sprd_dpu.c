@@ -17,14 +17,12 @@
 
 #include <drm/drm_atomic_helper.h>
 #include <drm/drm_blend.h>
-#include <drm/drm_fb_dma_helper.h>
 #include <drm/drm_framebuffer.h>
-#include <drm/drm_gem_dma_helper.h>
-#include <drm/drm_gem_framebuffer_helper.h>
 
 #include "sprd_drm.h"
 #include "sprd_dpu.h"
 #include "sprd_dsi.h"
+#include "sprd_gem.h"
 
 /* Global control registers */
 #define REG_DPU_VERSION	0x00
@@ -314,7 +312,7 @@ static u32 drm_blend_to_dpu(struct drm_plane_state *state)
 static void sprd_dpu_layer(struct sprd_dpu *dpu, struct drm_plane_state *state)
 {
 	struct dpu_context *ctx = &dpu->ctx;
-	struct drm_gem_dma_object *dma_obj;
+	struct sprd_gem_obj *sprd_gem;
 	struct drm_framebuffer *fb = state->fb;
 	u32 addr, size, offset, pitch, blend, format, rotation;
 	u32 src_x = state->src_x >> 16;
@@ -331,8 +329,8 @@ static void sprd_dpu_layer(struct sprd_dpu *dpu, struct drm_plane_state *state)
 	size = (src_w & 0xffff) | (src_h << 16);
 
 	for (i = 0; i < fb->format->num_planes; i++) {
-		dma_obj = drm_fb_dma_get_gem_obj(fb, i);
-		addr = dma_obj->dma_addr + fb->offsets[i];
+		sprd_gem = to_sprd_gem_obj(fb->obj[i]);
+		addr = sprd_gem->dma_addr + fb->offsets[i];
 
 		if (i == 0)
 			layer_reg_wr(ctx, REG_LAY_BASE_ADDR0, addr, index);
@@ -841,11 +839,26 @@ static int sprd_dpu_bind(struct device *dev, struct device *master, void *data)
 	if (ret)
 		return ret;
 
+	if (device_iommu_mapped(dev)) {
+		ret = sprd_drm_iommu_attach(drm, dev);
+		if (ret)
+			return ret;
+	}
+
 	return 0;
+}
+
+static void sprd_dpu_unbind(struct device *dev,
+			    struct device *master, void *data)
+{
+	struct drm_device *drm = data;
+
+	sprd_drm_iommu_detach(drm, dev);
 }
 
 static const struct component_ops dpu_component_ops = {
 	.bind = sprd_dpu_bind,
+	.unbind = sprd_dpu_unbind,
 };
 
 static const struct of_device_id dpu_match_table[] = {
