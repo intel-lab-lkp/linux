@@ -5,12 +5,14 @@
 
 #ifndef _NOLIBC_ARCH_S390_H
 #define _NOLIBC_ARCH_S390_H
-#include <linux/signal.h>
 #include <linux/unistd.h>
 
 #include "compiler.h"
 #include "crt.h"
 #include "std.h"
+
+/* For SIGCHLD */
+#include "asm-signal.h"
 
 /* Syscalls for s390:
  *   - registers are 64-bit

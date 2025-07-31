@@ -14,7 +14,6 @@
 
 /* system includes */
 #include <linux/unistd.h>
-#include <linux/signal.h>  /* for SIGCHLD */
 #include <linux/termios.h>
 #include <linux/mman.h>
 #include <linux/fs.h>
@@ -28,6 +27,7 @@
 #include "errno.h"
 #include "stdarg.h"
 #include "types.h"
+#include "asm-signal.h" /* for SIGCHLD */
 
 
 /* Syscall return helper: takes the syscall value in argument and checks for an

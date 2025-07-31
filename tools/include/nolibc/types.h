@@ -152,6 +152,15 @@
 			(*__set)[__idx] = 0;				\
 	} while (0)
 
+#define __NOLIBC_BITMASK_FILL(set) do {					\
+		__typeof__(set) *__set = &(set);			\
+		int __idx;						\
+		int __size = sizeof(*__set) / sizeof(**__set);		\
+		__typeof__(**__set) __zero = 0;				\
+		for (__idx = 0; __idx < __size; __idx++)		\
+			(*__set)[__idx] = ~__zero;			\
+	} while (0)
+
 #define FD_SETIDXMASK (8 * sizeof(unsigned long))
 #define FD_SETBITMASK (8 * sizeof(unsigned long)-1)
 

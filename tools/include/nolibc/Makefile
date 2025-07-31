@@ -25,6 +25,7 @@ endif
 
 arch_file := arch-$(ARCH).h
 all_files := \
+		asm-signal.h \
 		compiler.h \
 		crt.h \
 		ctype.h \

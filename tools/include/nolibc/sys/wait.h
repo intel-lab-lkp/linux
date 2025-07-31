@@ -10,6 +10,7 @@
 #ifndef _NOLIBC_SYS_WAIT_H
 #define _NOLIBC_SYS_WAIT_H
 
+#include <asm/siginfo.h>
 #include "../arch.h"
 #include "../std.h"
 #include "../types.h"

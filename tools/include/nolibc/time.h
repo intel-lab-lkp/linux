@@ -15,7 +15,7 @@
 #include "types.h"
 #include "sys.h"
 
-#include <linux/signal.h>
+#include <asm/siginfo.h>
 #include <linux/time.h>
 
 static __inline__

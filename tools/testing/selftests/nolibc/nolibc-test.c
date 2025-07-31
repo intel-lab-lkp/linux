@@ -1269,6 +1269,138 @@ out:
 	return ret;
 }
 
+int test_sigset_t(int test_idx)
+{
+	int llen;
+	int ret = 0;
+
+#ifdef NOLIBC
+	if (is_nolibc) {
+		sigset_t sigset;
+
+		sigfillset(&sigset);
+		llen = printf("    sigset.sig[0] (full): ");
+		EXPECT_EQ(1, sigset.sig[0],
+			~(__typeof__(sigset.sig[0]))0);
+		llen = printf("    sigset.sig[%d] (full): ", (int)_NSIG_WORDS - 1);
+		EXPECT_EQ(1, sigset.sig[_NSIG_WORDS - 1],
+			~(__typeof__(sigset.sig[0]))0);
+
+		sigemptyset(&sigset);
+		llen = printf("    sigset.sig[0] (empty): ");
+		EXPECT_EQ(1, sigset.sig[0], 0);
+		llen = printf("    sigset.sig[%d] (empty): ", (int)_NSIG_WORDS - 1);
+		EXPECT_EQ(1, sigset.sig[_NSIG_WORDS - 1], 0);
+
+		/* SIGUSR2 is always in the first word */
+		sigaddset(&sigset, SIGUSR2);
+		llen = printf("    sigset.sig[0] (SIGUSR2 set): ");
+		EXPECT_EQ(1, sigset.sig[0], 1 << (SIGUSR2 - 1));
+
+		llen = printf("    sigset.sig[0] (test SIGUSR2): ");
+		EXPECT_NZ(1, sigismember(&sigset, SIGUSR2));
+
+		sigdelset(&sigset, SIGUSR2);
+		llen = printf("    sigset.sig[0] (SIGUSR2 unset): ");
+		EXPECT_ZR(1, sigismember(&sigset, SIGUSR2));
+
+		/* _NSIG is the highest valid number and may not be in the first word */
+		sigaddset(&sigset, _NSIG);
+		llen = printf("    sigset.sig[%d] (_NSIG set): ", (int)_NSIG_WORDS - 1);
+		EXPECT_EQ(1, sigset.sig[_NSIG_WORDS - 1],
+			1UL << (_NSIG - (_NSIG_WORDS - 1) * _NSIG_BPW - 1));
+
+		llen = printf("    sigset.sig[%d] (test _NSIG): ", (int)_NSIG_WORDS - 1);
+		EXPECT_NZ(1, sigismember(&sigset, _NSIG));
+
+		sigdelset(&sigset, _NSIG);
+		llen = printf("    sigset.sig[%d] (_NSIG unset): ", (int)_NSIG_WORDS - 1);
+		EXPECT_ZR(1, sigismember(&sigset, _NSIG));
+
+		llen = printf("%d %s", test_idx, "sigset_t");
+		EXPECT_EQ(1, ret, 0);
+	} else
+#endif
+	{
+		llen = printf("%d %s", test_idx, "sigset_t");
+		result(llen, SKIPPED);
+	}
+
+	return ret;
+}
+
+static int signal_check;
+
+static void sighandler(int signum)
+{
+	if (signum == SIGUSR1) {
+		kill(getpid(), SIGUSR2);
+		/* The second step has not run because SIGUSR2 is masked */
+		signal_check = 0x1;
+	} else {
+		signal_check |= 0x2;
+	}
+}
+
+int test_signals(int test_idx)
+{
+	struct sigaction sa = {
+		.sa_flags = 0,
+		.sa_handler = sighandler,
+	};
+	struct sigaction sa_old = {
+		/* Anything other than SIG_DFL */
+		.sa_handler = sighandler,
+	};
+	int llen; /* line length */
+	int ret = 0;
+	int res;
+
+	signal_check = 0;
+
+	/* sa_mask is empty at this point, set SIGUSR2 to verify masking */
+	sigaddset(&sa.sa_mask, SIGUSR2);
+
+	res = sigaction(SIGUSR1, &sa, &sa_old);
+	llen = printf("    register SIGUSR1:");
+	EXPECT_SYSZR(1, res);
+	if (res)
+		goto out;
+
+	llen = printf("    sa_old.sa_handler: SIG_DFL (%p)", SIG_DFL);
+	EXPECT_PTREQ(1, SIG_DFL, sa_old.sa_handler);
+	if (res)
+		goto out;
+
+	res = sigaction(SIGUSR2, &sa, NULL);
+	llen = printf("    register SIGUSR2");
+	EXPECT_SYSZR(1, res);
+	if (res)
+		goto out;
+
+	/* Trigger the first signal. */
+	kill(getpid(), SIGUSR1);
+
+	/* Check the two signal handlers ran in the expected order */
+	llen = printf("    signal emission: ");
+	EXPECT_EQ(1, signal_check, 0x3);
+
+out:
+	sa.sa_handler = SIG_DFL;
+	res = sigaction(SIGUSR1, &sa, NULL);
+	llen = printf("    restore SIGUSR1");
+	EXPECT_SYSZR(1, res);
+
+	res = sigaction(SIGUSR2, &sa, NULL);
+	llen = printf("    restore SIGUSR2");
+	EXPECT_SYSZR(1, res);
+
+	llen = printf("%d %s", test_idx, "sigaction");
+	EXPECT_EQ(1, ret, 0);
+
+	return ret;
+}
+
 /* Run syscall tests between IDs <min> and <max>.
  * Return 0 on success, non-zero on failure.
  */
@@ -1397,6 +1529,8 @@ int run_syscall(int min, int max)
 		CASE_TEST(syscall_noargs);    EXPECT_SYSEQ(1, syscall(__NR_getpid), getpid()); break;
 		CASE_TEST(syscall_args);      EXPECT_SYSER(1, syscall(__NR_statx, 0, NULL, 0, 0, NULL), -1, EFAULT); break;
 		CASE_TEST(namespace);         EXPECT_SYSZR(euid0 && proc, test_namespace()); break;
+		case __LINE__:                ret += test_sigset_t(test); break;
+		case __LINE__:                ret += test_signals(test); break;
 		case __LINE__:
 			return ret; /* must be last */
 		/* note: do not set any defaults so as to permit holes above */
