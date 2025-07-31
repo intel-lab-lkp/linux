@@ -6666,8 +6666,18 @@ static int ext4_block_page_mkwrite(struct inode *inode, struct folio *folio,
 		goto out_error;
 
 	if (!ext4_should_journal_data(inode)) {
+		loff_t disksize = folio_pos(folio) + len;
 		block_commit_write(folio, 0, len);
 		folio_mark_dirty(folio);
+		if (disksize > READ_ONCE(EXT4_I(inode)->i_disksize)) {
+			down_write(&EXT4_I(inode)->i_data_sem);
+			if (disksize > EXT4_I(inode)->i_disksize)
+				EXT4_I(inode)->i_disksize = disksize;
+			up_write(&EXT4_I(inode)->i_data_sem);
+			ret = ext4_mark_inode_dirty(handle, inode);
+			if (ret)
+				goto out_error;
+		}
 	} else {
 		ret = ext4_journal_folio_buffers(handle, folio, len);
 		if (ret)
