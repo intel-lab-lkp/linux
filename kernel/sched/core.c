@@ -2196,6 +2196,9 @@ void wakeup_preempt(struct rq *rq, struct task_struct *p, int flags)
 {
 	struct task_struct *donor = rq->donor;
 
+	if (is_dl_group(rt_rq_of_se(&p->rt)) && task_has_rt_policy(p))
+		resched_curr(rq);
+
 	if (p->sched_class == donor->sched_class)
 		donor->sched_class->wakeup_preempt(rq, p, flags);
 	else if (sched_class_above(p->sched_class, donor->sched_class))
