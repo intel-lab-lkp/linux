@@ -89,15 +89,24 @@ int pci_bus_read_config(void *priv, unsigned int devfn, int where, u32 size,
 			u32 *val)
 {
 	struct pci_bus *bus = priv;
+	int rc;
 
-	if (size == 1)
-		return pci_bus_read_config_byte(bus, devfn, where, (u8 *)val);
-	else if (size == 2)
-		return pci_bus_read_config_word(bus, devfn, where, (u16 *)val);
-	else if (size == 4)
-		return pci_bus_read_config_dword(bus, devfn, where, val);
-	else
-		return PCIBIOS_BAD_REGISTER_NUMBER;
+	if (size == 1) {
+		rc = pci_bus_read_config_byte(bus, devfn, where, (u8 *)val);
+#if (IS_ENABLED(CONFIG_CPU_BIG_ENDIAN))
+		*val = ((*val >> 24) & 0xff);
+#endif
+	} else if (size == 2) {
+		rc = pci_bus_read_config_word(bus, devfn, where, (u16 *)val);
+#if (IS_ENABLED(CONFIG_CPU_BIG_ENDIAN))
+		*val = ((*val >> 16) & 0xffff);
+#endif
+	} else if (size == 4) {
+		rc = pci_bus_read_config_dword(bus, devfn, where, val);
+	} else {
+		rc =  PCIBIOS_BAD_REGISTER_NUMBER;
+	}
+	return rc;
 }
 
 int pci_generic_config_read(struct pci_bus *bus, unsigned int devfn,
