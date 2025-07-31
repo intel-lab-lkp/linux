@@ -1784,6 +1784,9 @@ static int amdgpu_debugfs_vm_info_show(struct seq_file *m, void *unused)
 		struct amdgpu_vm *vm = &fpriv->vm;
 		struct amdgpu_task_info *ti;
 
+		if (!fpriv->initialized)
+			continue;
+
 		ti = amdgpu_vm_get_task_info_vm(vm);
 		if (ti) {
 			seq_printf(m, "pid:%d\tProcess:%s ----------\n", ti->task.pid, ti->process_name);

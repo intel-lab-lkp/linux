@@ -2967,6 +2967,7 @@ long amdgpu_drm_ioctl(struct file *filp,
 		      unsigned int cmd, unsigned long arg)
 {
 	struct drm_file *file_priv = filp->private_data;
+	struct amdgpu_fpriv *fpriv = file_priv->driver_priv;
 	struct drm_device *dev;
 	long ret;
 	bool wake = true;
@@ -2984,10 +2985,17 @@ long amdgpu_drm_ioctl(struct file *filp,
 		ret = pm_runtime_get_sync(dev->dev);
 		if (ret < 0)
 			goto out;
+
+		if (unlikely(!fpriv->initialized)) {
+			ret = amdgpu_driver_init_fpriv(dev, file_priv, fpriv);
+			if (ret < 0)
+				goto out_suspend;
+		}
 	}
 
 	ret = drm_ioctl(filp, cmd, arg);
 
+out_suspend:
 	if (wake)
 		pm_runtime_mark_last_busy(dev->dev);
 out:
@@ -3016,6 +3024,9 @@ static int amdgpu_flush(struct file *f, fl_owner_t id)
 	struct drm_file *file_priv = f->private_data;
 	struct amdgpu_fpriv *fpriv = file_priv->driver_priv;
 	long timeout = MAX_WAIT_SCHED_ENTITY_Q_EMPTY;
+
+	if (!fpriv->initialized)
+		return 0;
 
 	timeout = amdgpu_ctx_mgr_entity_flush(&fpriv->ctx_mgr, timeout);
 	timeout = amdgpu_vm_wait_idle(&fpriv->vm, timeout);

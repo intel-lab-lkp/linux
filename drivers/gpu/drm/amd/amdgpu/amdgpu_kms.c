@@ -1382,7 +1382,7 @@ int amdgpu_driver_open_kms(struct drm_device *dev, struct drm_file *file_priv)
 {
 	struct amdgpu_device *adev = drm_to_adev(dev);
 	struct amdgpu_fpriv *fpriv;
-	int r, pasid;
+	int r;
 
 	/* Ensure IB tests are run on ring */
 	flush_delayed_work(&adev->delayed_init_work);
@@ -1395,15 +1395,44 @@ int amdgpu_driver_open_kms(struct drm_device *dev, struct drm_file *file_priv)
 
 	file_priv->driver_priv = NULL;
 
-	r = pm_runtime_get_sync(dev->dev);
-	if (r < 0)
-		goto pm_put;
-
 	fpriv = kzalloc(sizeof(*fpriv), GFP_KERNEL);
-	if (unlikely(!fpriv)) {
-		r = -ENOMEM;
-		goto out_suspend;
+	if (unlikely(!fpriv))
+		return -ENOMEM;
+
+	mutex_init(&fpriv->init_lock);
+
+	r = pm_runtime_get_if_active(dev->dev);
+	if (r < 0)
+		goto error_free;
+
+	if (r == 1) {
+		r = amdgpu_driver_init_fpriv(dev, file_priv, fpriv);
+
+		pm_runtime_mark_last_busy(dev->dev);
+		pm_runtime_put_autosuspend(dev->dev);
+
+		if (r < 0)
+			goto error_free;
 	}
+
+	file_priv->driver_priv = fpriv;
+	return 0;
+
+error_free:
+	kfree(fpriv);
+
+	return r;
+}
+
+int amdgpu_driver_init_fpriv(struct drm_device *dev, struct drm_file *file_priv,
+			     struct amdgpu_fpriv *fpriv)
+{
+	struct amdgpu_device *adev = drm_to_adev(dev);
+	int r, pasid;
+
+	mutex_lock(&fpriv->init_lock);
+	if (fpriv->initialized)
+		goto out_unlock;
 
 	pasid = amdgpu_pasid_alloc(16);
 	if (pasid < 0) {
@@ -1457,8 +1486,8 @@ int amdgpu_driver_open_kms(struct drm_device *dev, struct drm_file *file_priv)
 
 	amdgpu_ctx_mgr_init(&fpriv->ctx_mgr, adev);
 
-	file_priv->driver_priv = fpriv;
-	goto out_suspend;
+	fpriv->initialized = true;
+	goto out_unlock;
 
 error_vm:
 	amdgpu_vm_fini(adev, &fpriv->vm);
@@ -1469,13 +1498,8 @@ error_pasid:
 		amdgpu_vm_set_pasid(adev, &fpriv->vm, 0);
 	}
 
-	kfree(fpriv);
-
-out_suspend:
-	pm_runtime_mark_last_busy(dev->dev);
-pm_put:
-	pm_runtime_put_autosuspend(dev->dev);
-
+out_unlock:
+	mutex_unlock(&fpriv->init_lock);
 	return r;
 }
 
@@ -1499,6 +1523,9 @@ void amdgpu_driver_postclose_kms(struct drm_device *dev,
 
 	if (!fpriv)
 		return;
+
+	if (!fpriv->initialized)
+		goto out_free;
 
 	pm_runtime_get_sync(dev->dev);
 
@@ -1537,11 +1564,12 @@ void amdgpu_driver_postclose_kms(struct drm_device *dev,
 	idr_destroy(&fpriv->bo_list_handles);
 	mutex_destroy(&fpriv->bo_list_lock);
 
-	kfree(fpriv);
-	file_priv->driver_priv = NULL;
-
 	pm_runtime_mark_last_busy(dev->dev);
 	pm_runtime_put_autosuspend(dev->dev);
+
+out_free:
+	kfree(fpriv);
+	file_priv->driver_priv = NULL;
 }
 
 

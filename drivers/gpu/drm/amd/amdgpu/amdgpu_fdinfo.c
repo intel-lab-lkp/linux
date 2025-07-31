@@ -73,6 +73,9 @@ void amdgpu_show_fdinfo(struct drm_printer *p, struct drm_file *file)
 	};
 	unsigned int hw_ip, i;
 
+	if (!fpriv->initialized)
+		return;
+
 	amdgpu_vm_get_memory(vm, stats);
 	amdgpu_ctx_mgr_usage(&fpriv->ctx_mgr, usage);
 
