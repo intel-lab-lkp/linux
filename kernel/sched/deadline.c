@@ -3098,10 +3098,16 @@ int sched_dl_global_validate(void)
 	u64 period = global_rt_period();
 	u64 new_bw = to_ratio(period, runtime);
 	u64 cookie = ++dl_cookie;
+	u64 dl_groups_root = 0;
 	u64 fair_bw;
 	struct dl_bw *dl_b;
 	int cpu, ret = 0;
 	unsigned long cap, flags;
+
+#ifdef CONFIG_RT_GROUP_SCHED
+	dl_groups_root = to_ratio(root_task_group.dl_bandwidth.dl_period,
+				  root_task_group.dl_bandwidth.dl_runtime);
+#endif
 
 	/*
 	 * Here we want to check the bandwidth not being set to some
@@ -3119,7 +3125,7 @@ int sched_dl_global_validate(void)
 		fair_bw = dl_bw_fair(cpu);
 
 		raw_spin_lock_irqsave(&dl_b->lock, flags);
-		if (cap_scale(new_bw, cap) < dl_b->total_bw)
+		if (cap_scale(new_bw, cap) < dl_b->total_bw + cap_scale(dl_groups_root, cap))
 			ret = -EBUSY;
 		if (cap_scale(new_bw, cap) + fair_bw > cap_scale(BW_UNIT, cap))
 			ret = -EBUSY;
