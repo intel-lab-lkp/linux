@@ -1042,17 +1042,15 @@ static int vrf_rtable_create(struct net_device *dev)
 static void cycle_netdev(struct net_device *dev,
 			 struct netlink_ext_ack *extack)
 {
-	unsigned int flags = dev->flags;
 	int ret;
 
 	if (!netif_running(dev))
 		return;
 
-	ret = dev_change_flags(dev, flags & ~IFF_UP, extack);
-	if (ret >= 0)
-		ret = dev_change_flags(dev, flags, extack);
+	ret = call_netdevice_notifiers(NETDEV_CHANGEADDR, dev);
+	ret = notifier_to_errno(ret);
 
-	if (ret < 0) {
+	if (ret) {
 		netdev_err(dev,
 			   "Failed to cycle device %s; route tables might be wrong!\n",
 			   dev->name);
