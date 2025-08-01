@@ -167,10 +167,8 @@ static int video_buf_init(struct vb2_buffer *vb)
 	struct stfcamss_video *video = vb2_get_drv_priv(vb->vb2_queue);
 	struct stfcamss_buffer *buffer = to_stfcamss_buffer(vbuf);
 	const struct v4l2_pix_format *fmt = &video->active_fmt.fmt.pix;
-	dma_addr_t *paddr;
 
-	paddr = vb2_plane_cookie(vb, 0);
-	buffer->addr[0] = *paddr;
+	buffer->addr[0] = vb2_dma_contig_plane_dma_addr(vb, 0);
 
 	if (fmt->pixelformat == V4L2_PIX_FMT_NV12)
 		buffer->addr[1] =
