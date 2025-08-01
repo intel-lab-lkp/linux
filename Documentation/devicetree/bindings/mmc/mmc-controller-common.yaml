@@ -93,6 +93,16 @@ properties:
     minimum: 400000
     maximum: 384000000
 
+  max-sd-hs-frequency:
+    $ref: /schemas/types.yaml#/definitions/uint32
+    description: |
+      Maximum frequency (in Hz) to be used for SD cards operating in
+      High-Speed (HS) mode. This is useful for board-specific limitations,
+      such as level shifters or others where the card cannot reliably
+      operate at the default 50 MHz HS frequency.
+    minimum: 400000
+    maximum: 50000000
+
   disable-wp:
     $ref: /schemas/types.yaml#/definitions/flag
     description:
