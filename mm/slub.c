@@ -934,7 +934,7 @@ static noinline depot_stack_handle_t set_track_prepare(void)
 	unsigned int nr_entries;
 
 	nr_entries = stack_trace_save(entries, ARRAY_SIZE(entries), 3);
-	handle = stack_depot_save(entries, nr_entries, GFP_NOWAIT);
+	handle = stack_depot_save(entries, nr_entries, __GFP_NOWARN);
 
 	return handle;
 }
