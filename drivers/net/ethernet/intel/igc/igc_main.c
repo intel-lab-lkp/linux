@@ -3874,6 +3874,22 @@ static void igc_del_flex_filter(struct igc_adapter *adapter,
 	wr32(IGC_WUFC, wufc);
 }
 
+static void igc_set_default_queue_filter(struct igc_adapter *adapter, u32 queue)
+{
+	struct igc_hw *hw = &adapter->hw;
+	u32 mrqc = rd32(IGC_MRQC);
+
+	mrqc &= ~IGC_MRQC_DEFAULT_QUEUE_MASK;
+	mrqc |= FIELD_PREP(IGC_MRQC_DEFAULT_QUEUE_MASK, queue);
+	wr32(IGC_MRQC, mrqc);
+}
+
+static void igc_reset_default_queue_filter(struct igc_adapter *adapter)
+{
+	/* Reset the default queue to its default value which is Queue 0 */
+	igc_set_default_queue_filter(adapter, 0);
+}
+
 static int igc_enable_nfc_rule(struct igc_adapter *adapter,
 			       struct igc_nfc_rule *rule)
 {
@@ -3912,6 +3928,9 @@ static int igc_enable_nfc_rule(struct igc_adapter *adapter,
 			return err;
 	}
 
+	if (rule->filter.match_flags & IGC_FILTER_FLAG_DEFAULT_QUEUE)
+		igc_set_default_queue_filter(adapter, rule->action);
+
 	return 0;
 }
 
@@ -3939,6 +3958,9 @@ static void igc_disable_nfc_rule(struct igc_adapter *adapter,
 	if (rule->filter.match_flags & IGC_FILTER_FLAG_DST_MAC_ADDR)
 		igc_del_mac_filter(adapter, IGC_MAC_FILTER_TYPE_DST,
 				   rule->filter.dst_addr);
+
+	if (rule->filter.match_flags & IGC_FILTER_FLAG_DEFAULT_QUEUE)
+		igc_reset_default_queue_filter(adapter);
 }
 
 /**
@@ -6303,24 +6325,6 @@ int igc_close(struct net_device *netdev)
 	return 0;
 }
 
-/**
- * igc_ioctl - Access the hwtstamp interface
- * @netdev: network interface device structure
- * @ifr: interface request data
- * @cmd: ioctl command
- **/
-static int igc_ioctl(struct net_device *netdev, struct ifreq *ifr, int cmd)
-{
-	switch (cmd) {
-	case SIOCGHWTSTAMP:
-		return igc_ptp_get_ts_config(netdev, ifr);
-	case SIOCSHWTSTAMP:
-		return igc_ptp_set_ts_config(netdev, ifr);
-	default:
-		return -EOPNOTSUPP;
-	}
-}
-
 static int igc_save_launchtime_params(struct igc_adapter *adapter, int queue,
 				      bool enable)
 {
@@ -6971,12 +6975,13 @@ static const struct net_device_ops igc_netdev_ops = {
 	.ndo_fix_features	= igc_fix_features,
 	.ndo_set_features	= igc_set_features,
 	.ndo_features_check	= igc_features_check,
-	.ndo_eth_ioctl		= igc_ioctl,
 	.ndo_setup_tc		= igc_setup_tc,
 	.ndo_bpf		= igc_bpf,
 	.ndo_xdp_xmit		= igc_xdp_xmit,
 	.ndo_xsk_wakeup		= igc_xsk_wakeup,
 	.ndo_get_tstamp		= igc_get_tstamp,
+	.ndo_hwtstamp_get	= igc_ptp_hwtstamp_get,
+	.ndo_hwtstamp_set	= igc_ptp_hwtstamp_set,
 };
 
 u32 igc_rd32(struct igc_hw *hw, u32 reg)

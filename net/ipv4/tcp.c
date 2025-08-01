@@ -1174,7 +1174,7 @@ restart:
 		goto do_error;
 
 	while (msg_data_left(msg)) {
-		ssize_t copy = 0;
+		int copy = 0;
 
 		skb = tcp_write_queue_tail(sk);
 		if (skb)
@@ -1295,8 +1295,7 @@ new_segment:
 			if (!copy)
 				goto wait_for_space;
 
-			err = skb_splice_from_iter(skb, &msg->msg_iter, copy,
-						   sk->sk_allocation);
+			err = skb_splice_from_iter(skb, &msg->msg_iter, copy);
 			if (err < 0) {
 				if (err == -EMSGSIZE) {
 					tcp_mark_push(tp, skb);
@@ -3752,6 +3751,19 @@ int tcp_set_window_clamp(struct sock *sk, int val)
 	return 0;
 }
 
+int tcp_sock_set_maxseg(struct sock *sk, int val)
+{
+	/* Values greater than interface MTU won't take effect. However
+	 * at the point when this call is done we typically don't yet
+	 * know which interface is going to be used
+	 */
+	if (val && (val < TCP_MIN_MSS || val > MAX_TCP_WINDOW))
+		return -EINVAL;
+
+	tcp_sk(sk)->rx_opt.user_mss = val;
+	return 0;
+}
+
 /*
  *	Socket option code for TCP.
  */
@@ -3884,15 +3896,7 @@ int do_tcp_setsockopt(struct sock *sk, int level, int optname,
 
 	switch (optname) {
 	case TCP_MAXSEG:
-		/* Values greater than interface MTU won't take effect. However
-		 * at the point when this call is done we typically don't yet
-		 * know which interface is going to be used
-		 */
-		if (val && (val < TCP_MIN_MSS || val > MAX_TCP_WINDOW)) {
-			err = -EINVAL;
-			break;
-		}
-		tp->rx_opt.user_mss = val;
+		err = tcp_sock_set_maxseg(sk, val);
 		break;
 
 	case TCP_NODELAY:

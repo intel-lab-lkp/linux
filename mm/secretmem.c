@@ -201,7 +201,7 @@ static struct file *secretmem_file_create(unsigned long flags)
 		return ERR_CAST(inode);
 
 	file = alloc_file_pseudo(inode, secretmem_mnt, "secretmem",
-				 O_RDWR, &secretmem_fops);
+				 O_RDWR | O_LARGEFILE, &secretmem_fops);
 	if (IS_ERR(file))
 		goto err_free_inode;
 
@@ -214,6 +214,8 @@ static struct file *secretmem_file_create(unsigned long flags)
 	/* pretend we are a normal file with zero size */
 	inode->i_mode |= S_IFREG;
 	inode->i_size = 0;
+
+	atomic_inc(&secretmem_users);
 
 	return file;
 
@@ -248,9 +250,6 @@ SYSCALL_DEFINE1(memfd_secret, unsigned int, flags)
 		goto err_put_fd;
 	}
 
-	file->f_flags |= O_LARGEFILE;
-
-	atomic_inc(&secretmem_users);
 	fd_install(fd, file);
 	return fd;
 
@@ -261,7 +260,15 @@ err_put_fd:
 
 static int secretmem_init_fs_context(struct fs_context *fc)
 {
-	return init_pseudo(fc, SECRETMEM_MAGIC) ? 0 : -ENOMEM;
+	struct pseudo_fs_context *ctx;
+
+	ctx = init_pseudo(fc, SECRETMEM_MAGIC);
+	if (!ctx)
+		return -ENOMEM;
+
+	fc->s_iflags |= SB_I_NOEXEC;
+	fc->s_iflags |= SB_I_NODEV;
+	return 0;
 }
 
 static struct file_system_type secretmem_fs = {
@@ -278,9 +285,6 @@ static int __init secretmem_init(void)
 	secretmem_mnt = kern_mount(&secretmem_fs);
 	if (IS_ERR(secretmem_mnt))
 		return PTR_ERR(secretmem_mnt);
-
-	/* prevent secretmem mappings from ever getting PROT_EXEC */
-	secretmem_mnt->mnt_flags |= MNT_NOEXEC;
 
 	return 0;
 }

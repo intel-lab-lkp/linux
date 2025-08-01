@@ -511,7 +511,8 @@ int ip6_forward(struct sk_buff *skb)
 	u32 mtu;
 
 	idev = __in6_dev_get_safely(dev_get_by_index_rcu(net, IP6CB(skb)->iif));
-	if (READ_ONCE(net->ipv6.devconf_all->forwarding) == 0)
+	if (!READ_ONCE(net->ipv6.devconf_all->forwarding) &&
+	    (!idev || !READ_ONCE(idev->cnf.force_forwarding)))
 		goto error;
 
 	if (skb->pkt_type != PACKET_HOST)
@@ -563,7 +564,7 @@ int ip6_forward(struct sk_buff *skb)
 
 	/* XXX: idev->cnf.proxy_ndp? */
 	if (READ_ONCE(net->ipv6.devconf_all->proxy_ndp) &&
-	    pneigh_lookup(&nd_tbl, net, &hdr->daddr, skb->dev, 0)) {
+	    pneigh_lookup(&nd_tbl, net, &hdr->daddr, skb->dev)) {
 		int proxied = ip6_forward_proxy_check(skb);
 		if (proxied > 0) {
 			/* It's tempting to decrease the hop limit
@@ -1762,8 +1763,7 @@ alloc_new_skb:
 			if (WARN_ON_ONCE(copy > msg->msg_iter.count))
 				goto error;
 
-			err = skb_splice_from_iter(skb, &msg->msg_iter, copy,
-						   sk->sk_allocation);
+			err = skb_splice_from_iter(skb, &msg->msg_iter, copy);
 			if (err < 0)
 				goto error;
 			copy = err;

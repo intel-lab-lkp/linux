@@ -279,13 +279,15 @@ MODULE_PARM_DESC(macaddr, "FEC Ethernet MAC address");
 #define FEC_ECR_BYTESWP         BIT(8)
 /* FEC RCR bits definition */
 #define FEC_RCR_LOOP            BIT(0)
-#define FEC_RCR_HALFDPX         BIT(1)
+#define FEC_RCR_DRT		BIT(1)
 #define FEC_RCR_MII             BIT(2)
 #define FEC_RCR_PROMISC         BIT(3)
 #define FEC_RCR_BC_REJ          BIT(4)
 #define FEC_RCR_FLOWCTL         BIT(5)
+#define FEC_RCR_RGMII		BIT(6)
 #define FEC_RCR_RMII            BIT(8)
 #define FEC_RCR_10BASET         BIT(9)
+#define FEC_RCR_NLC		BIT(30)
 /* TX WMARK bits */
 #define FEC_TXWMRK_STRFWD       BIT(8)
 
@@ -1043,7 +1045,9 @@ static void fec_enet_bd_init(struct net_device *dev)
 				struct page *page = txq->tx_buf[i].buf_p;
 
 				if (page)
-					page_pool_put_page(page->pp, page, 0, false);
+					page_pool_put_page(pp_page_to_nmdesc(page)->pp,
+							   page, 0,
+							   false);
 			}
 
 			txq->tx_buf[i].buf_p = NULL;
@@ -1121,6 +1125,17 @@ static void fec_ctrl_reset(struct fec_enet_private *fep, bool allow_wol)
 	}
 }
 
+static void fec_set_hw_mac_addr(struct net_device *ndev)
+{
+	struct fec_enet_private *fep = netdev_priv(ndev);
+
+	writel(ndev->dev_addr[3] | (ndev->dev_addr[2] << 8) |
+	       (ndev->dev_addr[1] << 16) | (ndev->dev_addr[0] << 24),
+	       fep->hwp + FEC_ADDR_LOW);
+	writel((ndev->dev_addr[5] << 16) | (ndev->dev_addr[4] << 24),
+	       fep->hwp + FEC_ADDR_HIGH);
+}
+
 /*
  * This function is called to start or restart the FEC during a link
  * change, transmit timeout, or to reconfigure the FEC.  The network
@@ -1130,8 +1145,7 @@ static void
 fec_restart(struct net_device *ndev)
 {
 	struct fec_enet_private *fep = netdev_priv(ndev);
-	u32 temp_mac[2];
-	u32 rcntl = OPT_FRAME_SIZE | 0x04;
+	u32 rcntl = OPT_FRAME_SIZE | FEC_RCR_MII;
 	u32 ecntl = FEC_ECR_ETHEREN;
 
 	if (fep->bufdesc_ex)
@@ -1143,11 +1157,7 @@ fec_restart(struct net_device *ndev)
 	 * enet-mac reset will reset mac address registers too,
 	 * so need to reconfigure it.
 	 */
-	memcpy(&temp_mac, ndev->dev_addr, ETH_ALEN);
-	writel((__force u32)cpu_to_be32(temp_mac[0]),
-	       fep->hwp + FEC_ADDR_LOW);
-	writel((__force u32)cpu_to_be32(temp_mac[1]),
-	       fep->hwp + FEC_ADDR_HIGH);
+	fec_set_hw_mac_addr(ndev);
 
 	/* Clear any outstanding interrupt, except MDIO. */
 	writel((0xffffffff & ~FEC_ENET_MII), fep->hwp + FEC_IEVENT);
@@ -1162,7 +1172,7 @@ fec_restart(struct net_device *ndev)
 		writel(0x04, fep->hwp + FEC_X_CNTRL);
 	} else {
 		/* No Rcv on Xmit */
-		rcntl |= 0x02;
+		rcntl |= FEC_RCR_DRT;
 		writel(0x0, fep->hwp + FEC_X_CNTRL);
 	}
 
@@ -1191,14 +1201,11 @@ fec_restart(struct net_device *ndev)
 	 */
 	if (fep->quirks & FEC_QUIRK_ENET_MAC) {
 		/* Enable flow control and length check */
-		rcntl |= 0x40000000 | 0x00000020;
+		rcntl |= FEC_RCR_NLC | FEC_RCR_FLOWCTL;
 
 		/* RGMII, RMII or MII */
-		if (fep->phy_interface == PHY_INTERFACE_MODE_RGMII ||
-		    fep->phy_interface == PHY_INTERFACE_MODE_RGMII_ID ||
-		    fep->phy_interface == PHY_INTERFACE_MODE_RGMII_RXID ||
-		    fep->phy_interface == PHY_INTERFACE_MODE_RGMII_TXID)
-			rcntl |= (1 << 6);
+		if (phy_interface_mode_is_rgmii(fep->phy_interface))
+			rcntl |= FEC_RCR_RGMII;
 		else if (fep->phy_interface == PHY_INTERFACE_MODE_RMII)
 			rcntl |= FEC_RCR_RMII;
 		else
@@ -1581,7 +1588,8 @@ fec_enet_tx_queue(struct net_device *ndev, u16 queue_id, int budget)
 			xdp_return_frame_rx_napi(xdpf);
 		} else { /* recycle pages of XDP_TX frames */
 			/* The dma_sync_size = 0 as XDP_TX has already synced DMA for_device */
-			page_pool_put_page(page->pp, page, 0, true);
+			page_pool_put_page(pp_page_to_nmdesc(page)->pp, page,
+					   0, true);
 		}
 
 		txq->tx_buf[index].buf_p = NULL;
@@ -3343,7 +3351,8 @@ static void fec_enet_free_buffers(struct net_device *ndev)
 			} else {
 				struct page *page = txq->tx_buf[i].buf_p;
 
-				page_pool_put_page(page->pp, page, 0, false);
+				page_pool_put_page(pp_page_to_nmdesc(page)->pp,
+						   page, 0, false);
 			}
 
 			txq->tx_buf[i].buf_p = NULL;
@@ -3694,7 +3703,6 @@ static void set_multicast_list(struct net_device *ndev)
 static int
 fec_set_mac_address(struct net_device *ndev, void *p)
 {
-	struct fec_enet_private *fep = netdev_priv(ndev);
 	struct sockaddr *addr = p;
 
 	if (addr) {
@@ -3711,11 +3719,8 @@ fec_set_mac_address(struct net_device *ndev, void *p)
 	if (!netif_running(ndev))
 		return 0;
 
-	writel(ndev->dev_addr[3] | (ndev->dev_addr[2] << 8) |
-		(ndev->dev_addr[1] << 16) | (ndev->dev_addr[0] << 24),
-		fep->hwp + FEC_ADDR_LOW);
-	writel((ndev->dev_addr[5] << 16) | (ndev->dev_addr[4] << 24),
-		fep->hwp + FEC_ADDR_HIGH);
+	fec_set_hw_mac_addr(ndev);
+
 	return 0;
 }
 

@@ -373,7 +373,8 @@ TRACE_EVENT(rdev_return_int,
 );
 
 TRACE_EVENT(rdev_scan,
-	TP_PROTO(struct wiphy *wiphy, struct cfg80211_scan_request *request),
+	TP_PROTO(struct wiphy *wiphy,
+		 struct cfg80211_scan_request_int *request),
 	TP_ARGS(wiphy, request),
 	TP_STRUCT__entry(
 		WIPHY_ENTRY
@@ -3569,27 +3570,30 @@ TRACE_EVENT(cfg80211_cac_event,
 );
 
 DECLARE_EVENT_CLASS(cfg80211_rx_evt,
-	TP_PROTO(struct net_device *netdev, const u8 *addr),
-	TP_ARGS(netdev, addr),
+	TP_PROTO(struct net_device *netdev, const u8 *addr, int link_id),
+	TP_ARGS(netdev, addr, link_id),
 	TP_STRUCT__entry(
 		NETDEV_ENTRY
 		MAC_ENTRY(addr)
+		__field(int, link_id)
 	),
 	TP_fast_assign(
 		NETDEV_ASSIGN;
 		MAC_ASSIGN(addr, addr);
+		__entry->link_id = link_id;
 	),
-	TP_printk(NETDEV_PR_FMT ", %pM", NETDEV_PR_ARG, __entry->addr)
+	TP_printk(NETDEV_PR_FMT ", %pM, link_id:%d", NETDEV_PR_ARG,
+		  __entry->addr, __entry->link_id)
 );
 
 DEFINE_EVENT(cfg80211_rx_evt, cfg80211_rx_spurious_frame,
-	TP_PROTO(struct net_device *netdev, const u8 *addr),
-	TP_ARGS(netdev, addr)
+	TP_PROTO(struct net_device *netdev, const u8 *addr, int link_id),
+	TP_ARGS(netdev, addr, link_id)
 );
 
 DEFINE_EVENT(cfg80211_rx_evt, cfg80211_rx_unexpected_4addr_frame,
-	TP_PROTO(struct net_device *netdev, const u8 *addr),
-	TP_ARGS(netdev, addr)
+	TP_PROTO(struct net_device *netdev, const u8 *addr, int link_id),
+	TP_ARGS(netdev, addr, link_id)
 );
 
 TRACE_EVENT(cfg80211_ibss_joined,
@@ -3716,12 +3720,12 @@ TRACE_EVENT(cfg80211_tdls_oper_request,
 	);
 
 TRACE_EVENT(cfg80211_scan_done,
-	TP_PROTO(struct cfg80211_scan_request *request,
+	TP_PROTO(struct cfg80211_scan_request_int *request,
 		 struct cfg80211_scan_info *info),
 	TP_ARGS(request, info),
 	TP_STRUCT__entry(
 		__field(u32, n_channels)
-		__dynamic_array(u8, ie, request ? request->ie_len : 0)
+		__dynamic_array(u8, ie, request ? request->req.ie_len : 0)
 		__array(u32, rates, NUM_NL80211_BANDS)
 		__field(u32, wdev_id)
 		MAC_ENTRY(wiphy_mac)
@@ -3732,16 +3736,16 @@ TRACE_EVENT(cfg80211_scan_done,
 	),
 	TP_fast_assign(
 		if (request) {
-			memcpy(__get_dynamic_array(ie), request->ie,
-			       request->ie_len);
-			memcpy(__entry->rates, request->rates,
+			memcpy(__get_dynamic_array(ie), request->req.ie,
+			       request->req.ie_len);
+			memcpy(__entry->rates, request->req.rates,
 			       NUM_NL80211_BANDS);
-			__entry->wdev_id = request->wdev ?
-					request->wdev->identifier : 0;
-			if (request->wiphy)
+			__entry->wdev_id = request->req.wdev ?
+					request->req.wdev->identifier : 0;
+			if (request->req.wiphy)
 				MAC_ASSIGN(wiphy_mac,
-					   request->wiphy->perm_addr);
-			__entry->no_cck = request->no_cck;
+					   request->req.wiphy->perm_addr);
+			__entry->no_cck = request->req.no_cck;
 		}
 		if (info) {
 			__entry->aborted = info->aborted;

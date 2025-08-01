@@ -538,10 +538,6 @@ iwl_trans_pcie_get_trans(struct iwl_trans_pcie *trans_pcie)
  * Convention: trans API functions: iwl_trans_pcie_XXX
  *	Other functions: iwl_pcie_XXX
  */
-struct iwl_trans
-*iwl_trans_pcie_alloc(struct pci_dev *pdev,
-		      const struct iwl_mac_cfg *mac_cfg,
-		      struct iwl_trans_info *info);
 void iwl_trans_pcie_free(struct iwl_trans *trans);
 void iwl_trans_pcie_free_pnvm_dram_regions(struct iwl_dram_regions *dram_regions,
 					   struct device *dev);
@@ -1081,6 +1077,10 @@ bool iwl_trans_pcie_grab_nic_access(struct iwl_trans *trans);
 void __releases(nic_access_nobh)
 iwl_trans_pcie_release_nic_access(struct iwl_trans *trans);
 void iwl_pcie_alloc_fw_monitor(struct iwl_trans *trans, u8 max_power);
+int iwl_pci_gen1_2_probe(struct pci_dev *pdev,
+			 const struct pci_device_id *ent,
+			 const struct iwl_mac_cfg *mac_cfg,
+			 u8 __iomem *hw_base, u32 hw_rev);
 
 /* transport gen 1 exported functions */
 void iwl_trans_pcie_fw_alive(struct iwl_trans *trans);
@@ -1091,6 +1091,7 @@ int iwl_trans_pcie_start_fw(struct iwl_trans *trans,
 void iwl_trans_pcie_stop_device(struct iwl_trans *trans);
 
 /* common functions that are used by gen2 transport */
+void iwl_trans_pcie_gen2_op_mode_leave(struct iwl_trans *trans);
 int iwl_pcie_gen2_apm_init(struct iwl_trans *trans);
 void iwl_pcie_apm_config(struct iwl_trans *trans);
 int iwl_pcie_prepare_card_hw(struct iwl_trans *trans);

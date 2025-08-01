@@ -5,6 +5,7 @@
  * Copyright (C) 2016-2017 Intel Deutschland GmbH
  */
 #include <linux/kernel.h>
+#include <linux/fips.h>
 #include <linux/slab.h>
 #include <linux/skbuff.h>
 #include <linux/netdevice.h>
@@ -164,12 +165,6 @@ struct ieee80211_regdomain *iwl_mvm_get_regdomain(struct wiphy *wiphy,
 		      regd->alpha2, regd->alpha2[0], regd->alpha2[1], src_id);
 	mvm->lar_regdom_set = true;
 	mvm->mcc_src = src_id;
-
-	if (!iwl_puncturing_is_allowed_in_bios(mvm->bios_enable_puncturing,
-					       le16_to_cpu(resp->mcc)))
-		ieee80211_hw_set(mvm->hw, DISALLOW_PUNCTURING);
-	else
-		__clear_bit(IEEE80211_HW_DISALLOW_PUNCTURING, mvm->hw->flags);
 
 	iwl_mei_set_country_code(__le16_to_cpu(resp->mcc));
 
@@ -467,7 +462,9 @@ int iwl_mvm_mac_setup_register(struct iwl_mvm *mvm)
 		IWL_ERR(mvm,
 			"iwlmvm doesn't allow to disable BT Coex, check bt_coex_active module parameter\n");
 
-	ieee80211_hw_set(hw, MFP_CAPABLE);
+	if (!fips_enabled)
+		ieee80211_hw_set(hw, MFP_CAPABLE);
+
 	mvm->ciphers[hw->wiphy->n_cipher_suites] = WLAN_CIPHER_SUITE_AES_CMAC;
 	hw->wiphy->n_cipher_suites++;
 	if (iwl_mvm_has_new_rx_api(mvm)) {
@@ -491,12 +488,17 @@ int iwl_mvm_mac_setup_register(struct iwl_mvm *mvm)
 		hw->wiphy->pmsr_capa = &iwl_mvm_pmsr_capa;
 	}
 
-	if (sec_key_ver &&
+	/*
+	 * beacon protection must be handled by firmware,
+	 * so cannot be done with fips_enabled
+	 */
+	if (!fips_enabled && sec_key_ver &&
 	    fw_has_capa(&mvm->fw->ucode_capa,
 			IWL_UCODE_TLV_CAPA_BIGTK_TX_SUPPORT))
 		wiphy_ext_feature_set(hw->wiphy,
 				      NL80211_EXT_FEATURE_BEACON_PROTECTION);
-	else if (fw_has_capa(&mvm->fw->ucode_capa,
+	else if (!fips_enabled &&
+		 fw_has_capa(&mvm->fw->ucode_capa,
 			     IWL_UCODE_TLV_CAPA_BIGTK_SUPPORT))
 		wiphy_ext_feature_set(hw->wiphy,
 				      NL80211_EXT_FEATURE_BEACON_PROTECTION_CLIENT);
@@ -736,7 +738,7 @@ int iwl_mvm_mac_setup_register(struct iwl_mvm *mvm)
 
 #ifdef CONFIG_PM_SLEEP
 	if ((unified || mvm->fw->img[IWL_UCODE_WOWLAN].num_sec) &&
-	    device_can_wakeup(mvm->trans->dev)) {
+	    device_can_wakeup(mvm->trans->dev) && !fips_enabled) {
 		mvm->wowlan.flags |= WIPHY_WOWLAN_MAGIC_PKT |
 				     WIPHY_WOWLAN_DISCONNECT |
 				     WIPHY_WOWLAN_EAP_IDENTITY_REQ |
@@ -1521,10 +1523,6 @@ int iwl_mvm_set_tx_power(struct iwl_mvm *mvm,
 		len = sizeof(cmd_v9_v10.v9);
 	else if (cmd_ver == 8)
 		len = sizeof(cmd.v8);
-	else if (cmd_ver == 7)
-		len = sizeof(cmd.v7);
-	else if (cmd_ver == 6)
-		len = sizeof(cmd.v6);
 	else if (fw_has_api(&mvm->fw->ucode_capa,
 			    IWL_UCODE_TLV_API_REDUCE_TX_POWER))
 		len = sizeof(cmd.v5);
@@ -1775,6 +1773,8 @@ void iwl_mvm_mac_init_mvmvif(struct iwl_mvm *mvm, struct iwl_mvm_vif *mvmvif)
 	if (test_bit(IWL_MVM_STATUS_IN_HW_RESTART, &mvm->status))
 		return;
 
+	mvmvif->deflink.average_beacon_energy = 0;
+
 	INIT_DELAYED_WORK(&mvmvif->csa_work,
 			  iwl_mvm_channel_switch_disconnect_wk);
 
@@ -1812,9 +1812,7 @@ static int iwl_mvm_mac_add_interface(struct ieee80211_hw *hw,
 
 	vif->driver_flags = IEEE80211_VIF_REMOVE_AP_AFTER_DISASSOC;
 
-	ret = iwl_mvm_set_link_mapping(mvm, vif, &vif->bss_conf);
-	if (ret)
-		goto out;
+	iwl_mvm_set_link_fw_id(mvm, vif, &vif->bss_conf);
 
 	/*
 	 * Not much to do here. The stack will not allow interface
@@ -1834,12 +1832,6 @@ static int iwl_mvm_mac_add_interface(struct ieee80211_hw *hw,
 		goto out;
 
 	rcu_assign_pointer(mvm->vif_id_to_mac[mvmvif->id], vif);
-
-	/* Currently not much to do for NAN */
-	if (vif->type == NL80211_IFTYPE_NAN) {
-		ret = 0;
-		goto out;
-	}
 
 	/*
 	 * The AP binding flow can be done only after the beacon
@@ -2015,7 +2007,6 @@ static void iwl_mvm_mac_remove_interface(struct ieee80211_hw *hw,
 		mvm->monitor_on = false;
 
 out:
-	iwl_mvm_unset_link_mapping(mvm, vif, &vif->bss_conf);
 	if (vif->type == NL80211_IFTYPE_AP ||
 	    vif->type == NL80211_IFTYPE_ADHOC) {
 		iwl_mvm_dealloc_int_sta(mvm, &mvmvif->deflink.mcast_sta);
@@ -3341,7 +3332,7 @@ void iwl_mvm_mac_cancel_hw_scan(struct ieee80211_hw *hw,
 	 * us to stop a hw_scan when it's already stopped.  This can
 	 * happen, for instance, if we stopped the scan ourselves,
 	 * called ieee80211_scan_completed() and the userspace called
-	 * cancel scan scan before ieee80211_scan_work() could run.
+	 * cancel scan before ieee80211_scan_work() could run.
 	 * To handle that, simply return if the scan is not running.
 	*/
 	if (mvm->scan_status & IWL_MVM_SCAN_REGULAR)
@@ -4354,7 +4345,7 @@ int iwl_mvm_mac_sched_scan_stop(struct ieee80211_hw *hw,
 	 * us to stop a sched_scan when it's already stopped.  This
 	 * can happen, for instance, if we stopped the scan ourselves,
 	 * called ieee80211_sched_scan_stopped() and the userspace called
-	 * stop sched scan scan before ieee80211_sched_scan_stopped_work()
+	 * stop sched scan before ieee80211_sched_scan_stopped_work()
 	 * could run.  To handle this, simply return if the scan is
 	 * not running.
 	*/
@@ -4617,6 +4608,10 @@ int iwl_mvm_mac_set_key(struct ieee80211_hw *hw, enum set_key_cmd cmd,
 			struct ieee80211_key_conf *key)
 {
 	struct iwl_mvm *mvm = IWL_MAC80211_GET_MVM(hw);
+
+	/* When resuming from wowlan, FW already knows about the newest keys */
+	if (test_bit(IWL_MVM_STATUS_IN_D3, &mvm->status))
+		return 0;
 
 	guard(mvm)(mvm);
 	return __iwl_mvm_mac_set_key(hw, cmd, vif, sta, key);
