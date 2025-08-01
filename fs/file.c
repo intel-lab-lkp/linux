@@ -1387,7 +1387,7 @@ int receive_fd_replace(int new_fd, struct file *file, unsigned int o_flags)
 	if (error)
 		return error;
 	error = replace_fd(new_fd, file, o_flags);
-	if (error)
+	if (error < 0)
 		return error;
 	__receive_sock(file);
 	return new_fd;
