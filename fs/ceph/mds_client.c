@@ -5640,10 +5640,20 @@ static int ceph_mds_auth_match(struct ceph_mds_client *mdsc,
 	u32 caller_uid = from_kuid(&init_user_ns, cred->fsuid);
 	u32 caller_gid = from_kgid(&init_user_ns, cred->fsgid);
 	struct ceph_client *cl = mdsc->fsc->client;
+	const char *fs_name = mdsc->mdsmap->fs_name;
 	const char *spath = mdsc->fsc->mount_options->server_path;
 	bool gid_matched = false;
 	u32 gid, tlen, len;
 	int i, j;
+
+	if (auth->match.fs_name && strcmp(auth->match.fs_name, fs_name)) {
+		doutc(cl, "fsname check failed fs_name=%s  match.fs_name=%s\n",
+		      fs_name, auth->match.fs_name);
+		return 0;
+	} else {
+		doutc(cl, "fsname check passed fs_name=%s  match.fs_name=%s\n",
+		      fs_name, auth->match.fs_name ? auth->match.fs_name : "");
+	}
 
 	doutc(cl, "match.uid %lld\n", auth->match.uid);
 	if (auth->match.uid != MDS_AUTH_UID_ANY) {
