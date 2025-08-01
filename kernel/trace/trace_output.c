@@ -690,6 +690,12 @@ int trace_print_lat_context(struct trace_iterator *iter)
 }
 
 #ifdef CONFIG_FUNCTION_TRACE_ARGS
+
+static u32 btf_type_int(const struct btf_type *t)
+{
+	return *(u32 *)(t + 1);
+}
+
 void print_function_args(struct trace_seq *s, unsigned long *args,
 			 unsigned long func)
 {
@@ -701,6 +707,8 @@ void print_function_args(struct trace_seq *s, unsigned long *args,
 	struct btf *btf;
 	s32 tid, nr = 0;
 	int a, p, x;
+	int int_data;
+	u16 encode;
 
 	trace_seq_printf(s, "(");
 
@@ -744,7 +752,14 @@ void print_function_args(struct trace_seq *s, unsigned long *args,
 			trace_seq_printf(s, "0x%lx", arg);
 			break;
 		case BTF_KIND_INT:
-			trace_seq_printf(s, "%ld", arg);
+			/* Get the INT encodoing */
+			int_data = btf_type_int(t);
+			encode = BTF_INT_ENCODING(int_data);
+			/* Print unsigned ints as hex */
+			if (encode & BTF_INT_SIGNED)
+				trace_seq_printf(s, "%ld", arg);
+			else
+				trace_seq_printf(s, "0x%lx", arg);
 			break;
 		case BTF_KIND_ENUM:
 			trace_seq_printf(s, "%ld", arg);
