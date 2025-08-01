@@ -516,7 +516,19 @@ static int vsc_identify_ace_image(struct vsc_fw_loader *fw_loader)
 		frag->type = ace_image_map[i].image_type;
 
 		if (!frag->location) {
+			if (frag_index == 0) {
+				dev_err(fw_loader->dev,
+					"Cannot auto-allocate address for first fragment\n");
+				ret = -EINVAL;
+				goto err_release_image;
+			}
 			last_frag = &fw_loader->frags[frag_index - 1];
+			if (!last_frag->location || !last_frag->size) {
+				dev_err(fw_loader->dev,
+					"Previous fragment not properly initialized for auto-allocation\n");
+				ret = -EINVAL;
+				goto err_release_image;
+			}
 			frag->location =
 				ALIGN(last_frag->location + last_frag->size, SZ_4K);
 		}
