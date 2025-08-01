@@ -22,9 +22,13 @@ properties:
             Value           Device
             ----------      -----
             0x01900102      T1040
-    enum:
-      - fsl,qoriq-tmu
-      - fsl,imx8mq-tmu
+    oneOf:
+      - enum:
+          - fsl,qoriq-tmu
+          - fsl,imx8mq-tmu
+      - items:
+          - const: fsl,imx93-tmu
+          - const: fsl,qoriq-tmu
 
   reg:
     maxItems: 1
