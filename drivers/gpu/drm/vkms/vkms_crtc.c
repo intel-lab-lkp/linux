@@ -200,14 +200,28 @@ static int vkms_crtc_atomic_check(struct drm_crtc *crtc,
 	vkms_state->num_active_planes = i;
 
 	i = 0;
-	drm_for_each_plane_mask(plane, crtc->dev, crtc_state->plane_mask) {
-		plane_state = drm_atomic_get_existing_plane_state(crtc_state->state, plane);
 
-		if (!plane_state->visible)
-			continue;
+	unsigned int current_zpos = 0;
 
-		vkms_state->active_planes[i++] =
-			to_vkms_plane_state(plane_state);
+	while (i < vkms_state->num_active_planes) {
+		unsigned int next_zpos = UINT_MAX;
+
+		drm_for_each_plane_mask(plane, crtc->dev, crtc_state->plane_mask) {
+			plane_state = drm_atomic_get_existing_plane_state(crtc_state->state, plane);
+
+			if (!plane_state->visible)
+				continue;
+
+			if (plane_state->normalized_zpos == current_zpos)
+				vkms_state->active_planes[i++] = to_vkms_plane_state(plane_state);
+
+			if (plane_state->normalized_zpos > current_zpos &&
+			    plane_state->normalized_zpos < next_zpos)
+				next_zpos = plane_state->normalized_zpos;
+		}
+
+		current_zpos = next_zpos;
+
 	}
 
 	return 0;
