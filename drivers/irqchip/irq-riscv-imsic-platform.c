@@ -307,11 +307,6 @@ static const struct msi_parent_ops imsic_msi_parent_ops = {
 
 int imsic_irqdomain_init(void)
 {
-	struct irq_domain_info info = {
-		.fwnode		= imsic->fwnode,
-		.ops		= &imsic_base_domain_ops,
-		.host_data	= imsic,
-	};
 	struct imsic_global_config *global;
 
 	if (!imsic || !imsic->fwnode) {
@@ -323,6 +318,12 @@ int imsic_irqdomain_init(void)
 		pr_err("%pfwP: irq domain already created\n", imsic->fwnode);
 		return -ENODEV;
 	}
+
+	struct irq_domain_info info = {
+		.fwnode		= imsic->fwnode,
+		.ops		= &imsic_base_domain_ops,
+		.host_data	= imsic,
+	};
 
 	/* Create Base IRQ domain */
 	imsic->base_domain = msi_create_parent_irq_domain(&info, &imsic_msi_parent_ops);
