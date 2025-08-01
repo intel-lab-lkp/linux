@@ -1639,8 +1639,7 @@ static int qedi_alloc_global_queues(struct qedi_ctx *qedi)
 	 * addresses of our queues
 	 */
 	if (!qedi->p_cpuq) {
-		status = -EINVAL;
-		goto mem_alloc_failure;
+		return -EINVAL;
 	}
 
 	qedi->global_queues = kzalloc((sizeof(struct global_queue *) *
