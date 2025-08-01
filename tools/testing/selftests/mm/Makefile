@@ -157,14 +157,19 @@ TEST_FILES += write_hugetlb_memory.sh
 
 include ../lib.mk
 
-$(TEST_GEN_PROGS): vm_util.c thp_settings.c
-$(TEST_GEN_FILES): vm_util.c thp_settings.c
+$(TEST_GEN_PROGS): vm_util.c
+$(TEST_GEN_FILES): vm_util.c
 
 $(OUTPUT)/uffd-stress: uffd-common.c
 $(OUTPUT)/uffd-unit-tests: uffd-common.c
-$(OUTPUT)/uffd-wp-mremap: uffd-common.c
+$(OUTPUT)/uffd-wp-mremap: uffd-common.c thp_settings.c
 $(OUTPUT)/protection_keys: pkey_util.c
 $(OUTPUT)/pkey_sighandler_tests: pkey_util.c
+$(OUTPUT)/cow: thp_settings.c
+$(OUTPUT)/migration: thp_settings.c
+$(OUTPUT)/khugepaged: thp_settings.c
+$(OUTPUT)/ksm_tests: thp_settings.c
+$(OUTPUT)/soft-dirty: thp_settings.c
 
 ifeq ($(ARCH),x86_64)
 BINARIES_32 := $(patsubst %,$(OUTPUT)/%,$(BINARIES_32))
