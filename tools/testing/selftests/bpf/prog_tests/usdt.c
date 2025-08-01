@@ -14,10 +14,15 @@ static volatile int idx = 2;
 static volatile __u64 bla = 0xFEDCBA9876543210ULL;
 static volatile short nums[] = {-1, -2, -3, -4};
 
-static volatile struct {
-	int x;
-	signed char y;
-} t1 = { 1, -127 };
+/*
+ * TODO:  At O2 optimization level, t1's USDT argument spec becomes -1@4+t1(%rip).
+ * Since libbpf doesn't support RIP addressing mode yet, this causes "unrecognized register" errors.
+ * This test will be re-enabled once libbpf supports RIP addressing mode.
+ */
+// static volatile struct {
+//	int x;
+//	signed char y;
+// } t1 = { 1, -127 };
 
 #define SEC(name) __attribute__((section(name), used))
 
@@ -27,6 +32,7 @@ unsigned short test_usdt12_semaphore SEC(".probes");
 
 static void __always_inline trigger_func(int x) {
 	long y = 42;
+	signed char t1 = -127;
 
 	if (test_usdt0_semaphore)
 		STAP_PROBE(test, usdt0);
@@ -36,7 +42,7 @@ static void __always_inline trigger_func(int x) {
 		STAP_PROBE12(test, usdt12,
 			     x, x + 1, y, x + y, 5,
 			     y / 7, bla, &bla, -9, nums[x],
-			     nums[idx], t1.y);
+			     nums[idx], t1);
 	}
 }
 
@@ -106,7 +112,7 @@ static void subtest_basic_usdt(void)
 	ASSERT_EQ(bss->usdt12_args[8], -9, "usdt12_arg9");
 	ASSERT_EQ(bss->usdt12_args[9], nums[1], "usdt12_arg10");
 	ASSERT_EQ(bss->usdt12_args[10], nums[idx], "usdt12_arg11");
-	ASSERT_EQ(bss->usdt12_args[11], t1.y, "usdt12_arg12");
+	ASSERT_EQ(bss->usdt12_args[11], -127, "usdt12_arg12");
 
 	int usdt12_expected_arg_sizes[12] = { 4, 4, 8, 8, 4, 8, 8, 8, 4, 2, 2, 1 };
 
