@@ -20,9 +20,11 @@
 #include <linux/module.h>
 #include <linux/of.h>
 #include <linux/of_device.h>
+#include <linux/pinctrl/consumer.h>
 #include <linux/pm.h>
 #include <linux/pm_runtime.h>
 #include <linux/mbus.h>
+#include <linux/units.h>
 
 #include "sdhci.h"
 #include "sdhci-pltfm.h"
@@ -313,8 +315,23 @@ static void pxav3_set_power(struct sdhci_host *host, unsigned char mode,
 		mmc_regulator_set_ocr(mmc, mmc->supply.vmmc, vdd);
 }
 
+static void pxav3_set_clock(struct sdhci_host *host, unsigned int clock)
+{
+	struct platform_device *pdev = to_platform_device(mmc_dev(host->mmc));
+	struct sdhci_pxa_platdata *pdata = pdev->dev.platform_data;
+
+	if (!(IS_ERR(pdata->pinctrl) || IS_ERR(pdata->pins_default) || !IS_ERR(pdata->pins_uhs))) {
+		if (clock < 100 * HZ_PER_MHZ)
+			pinctrl_select_state(pdata->pinctrl, pdata->pins_default);
+		else
+			pinctrl_select_state(pdata->pinctrl, pdata->pins_uhs);
+	}
+
+	sdhci_set_clock(host, clock);
+}
+
 static const struct sdhci_ops pxav3_sdhci_ops = {
-	.set_clock = sdhci_set_clock,
+	.set_clock = pxav3_set_clock,
 	.set_power = pxav3_set_power,
 	.platform_send_init_74_clocks = pxav3_gen_init_74_clocks,
 	.get_max_clock = sdhci_pltfm_clk_get_max_clock,
@@ -440,6 +457,18 @@ static int sdhci_pxav3_probe(struct platform_device *pdev)
 		if (pdata->pm_caps)
 			host->mmc->pm_caps |= pdata->pm_caps;
 	}
+
+	pdata->pinctrl = devm_pinctrl_get(dev);
+	if (!IS_ERR(pdata->pinctrl)) {
+		pdata->pins_default = pinctrl_lookup_state(pdata->pinctrl, "default");
+		if (IS_ERR(pdata->pins_default))
+			dev_dbg(dev, "could not get default state: %ld\n",
+					PTR_ERR(pdata->pins_default));
+		pdata->pins_uhs = pinctrl_lookup_state(pdata->pinctrl, "state_uhs");
+		if (IS_ERR(pdata->pins_uhs))
+			dev_dbg(dev, "could not get uhs state: %ld\n", PTR_ERR(pdata->pins_uhs));
+	} else
+		dev_dbg(dev, "could not get pinctrl handle: %ld\n", PTR_ERR(pdata->pinctrl));
 
 	pm_runtime_get_noresume(&pdev->dev);
 	pm_runtime_set_active(&pdev->dev);
