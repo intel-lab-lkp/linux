@@ -2079,6 +2079,14 @@ struct drm_connector {
 	 */
 	struct drm_property *max_bpc_property;
 
+	/**
+	 * @link_bpc_property: Current connector link bpc set by the driver
+	 *
+	 * This property can be used to retrieve the current link bpc from
+	 * connector_state::hdmi:output_bpc
+	 */
+	struct drm_property *link_bpc_property;
+
 	/** @privacy_screen: drm_privacy_screen for this connector, or NULL. */
 	struct drm_privacy_screen *privacy_screen;
 
