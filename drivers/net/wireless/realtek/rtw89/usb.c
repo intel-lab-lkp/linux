@@ -167,24 +167,52 @@ rtw89_usb_ops_check_and_reclaim_tx_resource(struct rtw89_dev *rtwdev,
 	return 42; /* TODO some kind of calculation? */
 }
 
-static u8 rtw89_usb_get_bulkout_id(u8 ch_dma)
+static u8 rtw89_usb_get_bulkout_id(struct rtw89_dev *rtwdev, u8 ch_dma)
 {
-	switch (ch_dma) {
-	case RTW89_DMA_ACH0:
-		return 3;
-	case RTW89_DMA_ACH1:
-		return 4;
-	case RTW89_DMA_ACH2:
-		return 5;
-	case RTW89_DMA_ACH3:
-		return 6;
-	default:
-	case RTW89_DMA_B0MG:
-		return 0;
-	case RTW89_DMA_B0HI:
-		return 1;
-	case RTW89_DMA_H2C:
-		return 2;
+	if (rtwdev->chip->chip_id == RTL8852C) {
+		switch (ch_dma) {
+		case RTW89_DMA_ACH0:
+			return 3;
+		case RTW89_DMA_ACH2:
+			return 5;
+		case RTW89_DMA_ACH4:
+			return 4;
+		case RTW89_DMA_ACH6:
+			return 6;
+		default:
+			rtw89_warn(rtwdev, "unexpected TX channel %d\n",
+				   ch_dma);
+			fallthrough;
+		case RTW89_DMA_B0MG:
+		case RTW89_DMA_B0HI:
+			return 0;
+		case RTW89_DMA_B1MG:
+		case RTW89_DMA_B1HI:
+			return 1;
+		case RTW89_DMA_H2C:
+			return 2;
+		}
+	} else {
+		switch (ch_dma) {
+		case RTW89_DMA_ACH0:
+			return 3;
+		case RTW89_DMA_ACH1:
+			return 4;
+		case RTW89_DMA_ACH2:
+			return 5;
+		case RTW89_DMA_ACH3:
+			return 6;
+		default:
+			rtw89_warn(rtwdev, "unexpected TX channel %d\n",
+				   ch_dma);
+			fallthrough;
+		case RTW89_DMA_B0MG:
+			return 0;
+		case RTW89_DMA_B0HI:
+			return 1;
+		case RTW89_DMA_H2C:
+			return 2;
+		}
 	}
 }
 
@@ -251,7 +279,7 @@ static int rtw89_usb_write_port(struct rtw89_dev *rtwdev, u8 ch_dma,
 	struct rtw89_usb *rtwusb = rtw89_usb_priv(rtwdev);
 	struct usb_device *usbd = rtwusb->udev;
 	struct urb *urb;
-	u8 bulkout_id = rtw89_usb_get_bulkout_id(ch_dma);
+	u8 bulkout_id = rtw89_usb_get_bulkout_id(rtwdev, ch_dma);
 	unsigned int pipe;
 	int ret;
 
