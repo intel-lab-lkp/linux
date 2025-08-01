@@ -334,6 +334,26 @@ static inline int compute_score(struct sock *sk, const struct net *net,
 	return score;
 }
 
+static inline int compute_reuseport_score(struct sock *sk)
+{
+	int score = 0;
+
+	if (sk->sk_bound_dev_if)
+		score += 2;
+
+	if (sk->sk_family == PF_INET)
+		score += 10;
+
+	/* the priority of sk_incoming_cpu should be lower than sk_bound_dev_if,
+	 * as it's optional in compute_score(). Thank God, this is the only
+	 * variable condition, which we can't judge now.
+	 */
+	if (READ_ONCE(sk->sk_incoming_cpu))
+		score++;
+
+	return score;
+}
+
 /**
  * inet_lookup_reuseport() - execute reuseport logic on AF_INET socket if necessary.
  * @net: network namespace.
@@ -739,6 +759,27 @@ static int inet_reuseport_add_sock(struct sock *sk,
 	return reuseport_alloc(sk, inet_rcv_saddr_any(sk));
 }
 
+static void inet_hash_reuseport(struct sock *sk, struct hlist_nulls_head *head)
+{
+	const struct hlist_nulls_node *node;
+	int score, curscore;
+	struct sock *sk2;
+
+	curscore = compute_reuseport_score(sk);
+	/* lookup the socket to insert before */
+	sk_nulls_for_each_rcu(sk2, node, head) {
+		if (!sk2->sk_reuseport)
+			continue;
+		score = compute_reuseport_score(sk2);
+		if (score <= curscore) {
+			__sk_nulls_add_node_before_rcu(sk, sk2);
+			return;
+		}
+	}
+
+	__sk_nulls_add_node_tail_rcu(sk, head);
+}
+
 int __inet_hash(struct sock *sk, struct sock *osk)
 {
 	struct inet_hashinfo *hashinfo = tcp_get_hashinfo(sk);
@@ -761,11 +802,11 @@ int __inet_hash(struct sock *sk, struct sock *osk)
 			goto unlock;
 	}
 	sock_set_flag(sk, SOCK_RCU_FREE);
-	if (IS_ENABLED(CONFIG_IPV6) && sk->sk_reuseport &&
-		sk->sk_family == AF_INET6)
-		__sk_nulls_add_node_tail_rcu(sk, &ilb2->nulls_head);
-	else
+	if (!sk->sk_reuseport)
 		__sk_nulls_add_node_rcu(sk, &ilb2->nulls_head);
+	else
+		inet_hash_reuseport(sk, &ilb2->nulls_head);
+
 	sock_prot_inuse_add(sock_net(sk), sk->sk_prot, 1);
 unlock:
 	spin_unlock(&ilb2->lock);

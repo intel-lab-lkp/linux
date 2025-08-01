@@ -885,6 +885,11 @@ static inline void __sk_nulls_add_node_tail_rcu(struct sock *sk, struct hlist_nu
 	hlist_nulls_add_tail_rcu(&sk->sk_nulls_node, list);
 }
 
+static inline void __sk_nulls_add_node_before_rcu(struct sock *sk, struct sock *next)
+{
+	hlist_nulls_add_before_rcu(&sk->sk_nulls_node, &next->sk_nulls_node);
+}
+
 static inline void sk_nulls_add_node_rcu(struct sock *sk, struct hlist_nulls_head *list)
 {
 	sock_hold(sk);
