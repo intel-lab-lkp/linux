@@ -83,8 +83,11 @@ void switch_mm_irqs_off(struct mm_struct *prev, struct mm_struct *next,
 	/* Some subarchs need to track the PGD elsewhere */
 	switch_mm_pgdir(tsk, next);
 
-	/* Nothing else to do if we aren't actually switching */
-	if (prev == next)
+	/*
+	 * Nothing else to do if we aren't actually switching and
+	 * the preload slb cache has not aged
+	 */
+	if ((prev == next) && (tsk->thread.load_slb != U8_MAX))
 		return;
 
 	/*

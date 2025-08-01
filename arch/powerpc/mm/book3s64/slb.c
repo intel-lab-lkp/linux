@@ -509,7 +509,7 @@ void switch_slb(struct task_struct *tsk, struct mm_struct *mm)
 	 * SLB preload cache.
 	 */
 	tsk->thread.load_slb++;
-	if (!tsk->thread.load_slb) {
+	if (tsk->thread.load_slb == U8_MAX) {
 		unsigned long pc = KSTK_EIP(tsk);
 
 		preload_age(ti);
