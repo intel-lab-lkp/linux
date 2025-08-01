@@ -232,5 +232,17 @@ struct vkms_plane *vkms_plane_init(struct vkms_device *vkmsdev,
 					  DRM_COLOR_YCBCR_BT601,
 					  DRM_COLOR_YCBCR_FULL_RANGE);
 
+	switch (type) {
+	case DRM_PLANE_TYPE_PRIMARY:
+		drm_plane_create_zpos_immutable_property(&plane->base, 0);
+		break;
+	case DRM_PLANE_TYPE_OVERLAY:
+		drm_plane_create_zpos_immutable_property(&plane->base, 1);
+		break;
+	case DRM_PLANE_TYPE_CURSOR:
+		drm_plane_create_zpos_immutable_property(&plane->base, 2);
+		break;
+	}
+
 	return plane;
 }
