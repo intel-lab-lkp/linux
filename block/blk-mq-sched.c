@@ -393,7 +393,7 @@ static int blk_mq_sched_alloc_map_and_rqs(struct request_queue *q,
 
 static void blk_mq_exit_sched_shared_tags(struct request_queue *queue)
 {
-	blk_mq_free_rq_map(queue->sched_shared_tags);
+	blk_mq_free_rq_map(queue->tag_set, queue->sched_shared_tags);
 	queue->sched_shared_tags = NULL;
 }
 
@@ -406,7 +406,7 @@ static void blk_mq_sched_tags_teardown(struct request_queue *q, unsigned int fla
 	queue_for_each_hw_ctx(q, hctx, i) {
 		if (hctx->sched_tags) {
 			if (!blk_mq_is_shared_tags(flags))
-				blk_mq_free_rq_map(hctx->sched_tags);
+				blk_mq_free_rq_map(q->tag_set, hctx->sched_tags);
 			hctx->sched_tags = NULL;
 		}
 	}
