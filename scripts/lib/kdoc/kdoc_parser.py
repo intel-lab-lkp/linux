@@ -46,7 +46,7 @@ doc_decl = doc_com + KernRe(r'(\w+)', cache=False)
 known_section_names = 'description|context|returns?|notes?|examples?'
 known_sections = KernRe(known_section_names, flags = re.I)
 doc_sect = doc_com + \
-    KernRe(r'\s*(\@[.\w]+|\@\.\.\.|' + known_section_names + r')\s*:([^:].*)?$',
+    KernRe(r'\s*(@[.\w]+|@\.\.\.|' + known_section_names + r')\s*:([^:].*)?$',
            flags=re.I, cache=False)
 
 doc_content = doc_com_body + KernRe(r'(.*)', cache=False)
@@ -60,7 +60,7 @@ attribute = KernRe(r"__attribute__\s*\(\([a-z0-9,_\*\s\(\)]*\)\)",
 export_symbol = KernRe(r'^\s*EXPORT_SYMBOL(_GPL)?\s*\(\s*(\w+)\s*\)\s*', cache=False)
 export_symbol_ns = KernRe(r'^\s*EXPORT_SYMBOL_NS(_GPL)?\s*\(\s*(\w+)\s*,\s*"\S+"\)\s*', cache=False)
 
-type_param = KernRe(r"\@(\w*((\.\w+)|(->\w+))*(\.\.\.)?)", cache=False)
+type_param = KernRe(r"@(\w*((\.\w+)|(->\w+))*(\.\.\.)?)", cache=False)
 
 #
 # Tests for the beginning of a kerneldoc block in its various forms.
@@ -331,7 +331,7 @@ class KernelDoc:
 
         self.entry.anon_struct_union = False
 
-        param = KernRe(r'[\[\)].*').sub('', param, count=1)
+        param = KernRe(r'[)[].*').sub('', param, count=1)
 
         if dtype == "" and param.endswith("..."):
             if KernRe(r'\w\.\.\.$').search(param):
@@ -405,7 +405,7 @@ class KernelDoc:
 
         for arg in args.split(splitter):
             # Strip comments
-            arg = KernRe(r'\/\*.*\*\/').sub('', arg)
+            arg = KernRe(r'/\*.*\*/').sub('', arg)
 
             # Ignore argument attributes
             arg = KernRe(r'\sPOS0?\s').sub(' ', arg)
@@ -428,14 +428,14 @@ class KernelDoc:
 
                 arg = arg.replace('#', ',')
 
-                r = KernRe(r'[^\(]+\(\*?\s*([\w\[\]\.]*)\s*\)')
+                r = KernRe(r'[^(]+\(\*?\s*([\w[\].]*)\s*\)')
                 if r.match(arg):
                     param = r.group(1)
                 else:
                     self.emit_msg(ln, f"Invalid param: {arg}")
                     param = arg
 
-                dtype = KernRe(r'([^\(]+\(\*?)\s*' + re.escape(param)).sub(r'\1', arg)
+                dtype = KernRe(r'([^(]+\(\*?)\s*' + re.escape(param)).sub(r'\1', arg)
                 self.push_parameter(ln, decl_type, param, dtype,
                                     arg, declaration_name)
 
@@ -443,14 +443,14 @@ class KernelDoc:
                 # Array-of-pointers
 
                 arg = arg.replace('#', ',')
-                r = KernRe(r'[^\(]+\(\s*\*\s*([\w\[\]\.]*?)\s*(\s*\[\s*[\w]+\s*\]\s*)*\)')
+                r = KernRe(r'[^(]+\(\s*\*\s*([\w[\].]*?)\s*(\s*\[\s*[\w]+\s*\]\s*)*\)')
                 if r.match(arg):
                     param = r.group(1)
                 else:
                     self.emit_msg(ln, f"Invalid param: {arg}")
                     param = arg
 
-                dtype = KernRe(r'([^\(]+\(\*?)\s*' + re.escape(param)).sub(r'\1', arg)
+                dtype = KernRe(r'([^(]+\(\*?)\s*' + re.escape(param)).sub(r'\1', arg)
 
                 self.push_parameter(ln, decl_type, param, dtype,
                                     arg, declaration_name)
@@ -637,8 +637,8 @@ class KernelDoc:
             # it is better to also move those to the NestedMatch logic,
             # to ensure that parenthesis will be properly matched.
 
-            (KernRe(r'__ETHTOOL_DECLARE_LINK_MODE_MASK\s*\(([^\)]+)\)', re.S), r'DECLARE_BITMAP(\1, __ETHTOOL_LINK_MODE_MASK_NBITS)'),
-            (KernRe(r'DECLARE_PHY_INTERFACE_MASK\s*\(([^\)]+)\)', re.S), r'DECLARE_BITMAP(\1, PHY_INTERFACE_MODE_MAX)'),
+            (KernRe(r'__ETHTOOL_DECLARE_LINK_MODE_MASK\s*\(([^)]+)\)', re.S), r'DECLARE_BITMAP(\1, __ETHTOOL_LINK_MODE_MASK_NBITS)'),
+            (KernRe(r'DECLARE_PHY_INTERFACE_MASK\s*\(([^)]+)\)', re.S), r'DECLARE_BITMAP(\1, PHY_INTERFACE_MODE_MAX)'),
             (KernRe(r'DECLARE_BITMAP\s*\(' + args_pattern + r',\s*' + args_pattern + r'\)', re.S), r'unsigned long \1[BITS_TO_LONGS(\2)]'),
             (KernRe(r'DECLARE_HASHTABLE\s*\(' + args_pattern + r',\s*' + args_pattern + r'\)', re.S), r'unsigned long \1[1 << ((\2) - 1)]'),
             (KernRe(r'DECLARE_KFIFO\s*\(' + args_pattern + r',\s*' + args_pattern + r',\s*' + args_pattern + r'\)', re.S), r'\2 *\1'),
@@ -700,7 +700,7 @@ class KernelDoc:
                     s_id = s_id.strip()
 
                     newmember += f"{maintype} {s_id}; "
-                    s_id = KernRe(r'[:\[].*').sub('', s_id)
+                    s_id = KernRe(r'[:[].*').sub('', s_id)
                     s_id = KernRe(r'^\s*\**(\S+)\s*').sub(r'\1', s_id)
 
                     for arg in content.split(';'):
@@ -709,7 +709,7 @@ class KernelDoc:
                         if not arg:
                             continue
 
-                        r = KernRe(r'^([^\(]+\(\*?\s*)([\w\.]*)(\s*\).*)')
+                        r = KernRe(r'^([^(]+\(\*?\s*)([\w.]*)(\s*\).*)')
                         if r.match(arg):
                             # Pointer-to-function
                             dtype = r.group(1)
@@ -767,12 +767,12 @@ class KernelDoc:
         self.check_sections(ln, declaration_name, decl_type)
 
         # Adjust declaration for better display
-        declaration = KernRe(r'([\{;])').sub(r'\1\n', declaration)
+        declaration = KernRe(r'([{;])').sub(r'\1\n', declaration)
         declaration = KernRe(r'\}\s+;').sub('};', declaration)
 
         # Better handle inlined enums
         while True:
-            r = KernRe(r'(enum\s+\{[^\}]+),([^\n])')
+            r = KernRe(r'(enum\s+\{[^}]+),([^\n])')
             if not r.search(declaration):
                 break
 
@@ -969,8 +969,8 @@ class KernelDoc:
         # - pci_match_device, __copy_to_user (long return type)
 
         name = r'[a-zA-Z0-9_~:]+'
-        prototype_end1 = r'[^\(]*'
-        prototype_end2 = r'[^\{]*'
+        prototype_end1 = r'[^(]*'
+        prototype_end2 = r'[^{]*'
         prototype_end = fr'\(({prototype_end1}|{prototype_end2})\)'
 
         # Besides compiling, Perl qr{[\w\s]+} works as a non-capturing group.
@@ -1044,7 +1044,7 @@ class KernelDoc:
         Stores a typedef inside self.entries array.
         """
 
-        typedef_type = r'((?:\s+[\w\*]+\b){0,7}\s+(?:\w+\b|\*+))\s*'
+        typedef_type = r'((?:\s+[\w*]+\b){0,7}\s+(?:\w+\b|\*+))\s*'
         typedef_ident = r'\*?\s*(\w\S+)\s*'
         typedef_args = r'\s*\((.*)\);'
 
@@ -1265,7 +1265,7 @@ class KernelDoc:
             self.dump_section()
 
             # Look for doc_com + <text> + doc_end:
-            r = KernRe(r'\s*\*\s*[a-zA-Z_0-9:\.]+\*/')
+            r = KernRe(r'\s*\*\s*[a-zA-Z_0-9:.]+\*/')
             if r.match(line):
                 self.emit_msg(ln, f"suspicious ending line: {line}")
 
@@ -1476,14 +1476,14 @@ class KernelDoc:
         """Ancillary routine to process a function prototype"""
 
         # strip C99-style comments to end of line
-        line = KernRe(r"\/\/.*$", re.S).sub('', line)
+        line = KernRe(r"//.*$", re.S).sub('', line)
         #
         # Soak up the line's worth of prototype text, stopping at { or ; if present.
         #
         if KernRe(r'\s*#\s*define').match(line):
             self.entry.prototype = line
         elif not line.startswith('#'):   # skip other preprocessor stuff
-            r = KernRe(r'([^\{]*)')
+            r = KernRe(r'([^{]*)')
             if r.match(line):
                 self.entry.prototype += r.group(1) + " "
         #
