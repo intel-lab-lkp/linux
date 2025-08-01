@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: GPL-2.0-only
-/* 
+/*
  * Cryptographic API.
  *
  * Support for VIA PadLock hardware crypto engine.
@@ -77,8 +77,8 @@ static inline int
 aes_hw_extkey_available(uint8_t key_len)
 {
 	/* TODO: We should check the actual CPU model/stepping
-	         as it's possible that the capability will be
-	         added in the next CPU revisions. */
+		 as it's possible that the capability will be
+		 added in the next CPU revisions. */
 	if (key_len == 16)
 		return 1;
 	return 0;
@@ -223,7 +223,7 @@ static void ecb_crypt_copy(const u8 *in, u8 *out, u32 *key,
 }
 
 static u8 *cbc_crypt_copy(const u8 *in, u8 *out, u32 *key,
-			   u8 *iv, struct cword *cword, int count)
+			  u8 *iv, struct cword *cword, int count)
 {
 	/*
 	 * Padlock prefetches extra data so we must provide mapped input buffers.
@@ -493,13 +493,16 @@ static int __init padlock_init(void)
 		return -ENODEV;
 	}
 
-	if ((ret = crypto_register_alg(&aes_alg)) != 0)
+	ret = crypto_register_alg(&aes_alg);
+	if (ret != 0)
 		goto aes_err;
 
-	if ((ret = crypto_register_skcipher(&ecb_aes_alg)) != 0)
+	ret = crypto_register_skcipher(&ecb_aes_alg);
+	if (ret != 0)
 		goto ecb_aes_err;
 
-	if ((ret = crypto_register_skcipher(&cbc_aes_alg)) != 0)
+	ret = crypto_register_skcipher(&cbc_aes_alg);
+	if (ret != 0)
 		goto cbc_aes_err;
 
 	printk(KERN_NOTICE PFX "Using VIA PadLock ACE for AES algorithm.\n");
