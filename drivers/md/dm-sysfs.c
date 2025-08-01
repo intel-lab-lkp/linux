@@ -68,35 +68,33 @@ static ssize_t dm_attr_store(struct kobject *kobj, struct attribute *attr,
 
 static ssize_t dm_attr_name_show(struct mapped_device *md, char *buf)
 {
-	if (dm_copy_name_and_uuid(md, buf, NULL))
+	char name[DM_NAME_LEN];
+
+	if (dm_copy_name_and_uuid(md, name, NULL))
 		return -EIO;
 
-	strcat(buf, "\n");
-	return strlen(buf);
+	return sysfs_emit(buf, "%s\n", name);
 }
 
 static ssize_t dm_attr_uuid_show(struct mapped_device *md, char *buf)
 {
-	if (dm_copy_name_and_uuid(md, NULL, buf))
+	char uuid[DM_UUID_LEN];
+
+	if (dm_copy_name_and_uuid(md, NULL, uuid))
 		return -EIO;
 
-	strcat(buf, "\n");
-	return strlen(buf);
+	return sysfs_emit(buf, "%s\n", uuid);
 }
 
 static ssize_t dm_attr_suspended_show(struct mapped_device *md, char *buf)
 {
-	sprintf(buf, "%d\n", dm_suspended_md(md));
-
-	return strlen(buf);
+	return sysfs_emit(buf, "%d\n", dm_suspended_md(md));
 }
 
 static ssize_t dm_attr_use_blk_mq_show(struct mapped_device *md, char *buf)
 {
 	/* Purely for userspace compatibility */
-	sprintf(buf, "%d\n", true);
-
-	return strlen(buf);
+	return sysfs_emit(buf, "%d\n", true);
 }
 
 static DM_ATTR_RO(name);
