@@ -1095,9 +1095,6 @@ static int f2fs_submit_page_read(struct inode *inode, struct folio *folio,
 
 	bio = f2fs_grab_read_bio(inode, blkaddr, 1, op_flags,
 					folio->index, for_write);
-	if (IS_ERR(bio))
-		return PTR_ERR(bio);
-
 	/* wait for GCed page writeback via META_MAPPING */
 	f2fs_wait_on_block_writeback(inode, blkaddr);
 
@@ -2148,11 +2145,6 @@ submit_and_realloc:
 		bio = f2fs_grab_read_bio(inode, block_nr, nr_pages,
 				f2fs_ra_op_flags(rac), index,
 				false);
-		if (IS_ERR(bio)) {
-			ret = PTR_ERR(bio);
-			bio = NULL;
-			goto out;
-		}
 	}
 
 	/*
@@ -2306,13 +2298,6 @@ submit_and_realloc:
 			bio = f2fs_grab_read_bio(inode, blkaddr, nr_pages,
 					f2fs_ra_op_flags(rac),
 					folio->index, for_write);
-			if (IS_ERR(bio)) {
-				ret = PTR_ERR(bio);
-				f2fs_decompress_end_io(dic, ret, true);
-				f2fs_put_dnode(&dn);
-				*bio_ret = NULL;
-				return ret;
-			}
 		}
 
 		if (!bio_add_folio(bio, folio, blocksize, 0))
