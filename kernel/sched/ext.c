@@ -7421,7 +7421,7 @@ __bpf_kfunc s32 scx_bpf_task_cpu(const struct task_struct *p)
 }
 
 /**
- * scx_bpf_cpu_rq - Fetch the rq of a CPU
+ * scx_bpf_cpu_rq - Fetch the rq of a CPU if its rq lock is currently held
  * @cpu: CPU of the rq
  */
 __bpf_kfunc struct rq *scx_bpf_cpu_rq(s32 cpu)
@@ -7429,7 +7429,7 @@ __bpf_kfunc struct rq *scx_bpf_cpu_rq(s32 cpu)
 	if (!kf_cpu_valid(cpu, NULL))
 		return NULL;
 
-	return cpu_rq(cpu);
+	return this_cpu_read(locked_rq) == cpu_rq(cpu) ? cpu_rq(cpu) : NULL;
 }
 
 /**
