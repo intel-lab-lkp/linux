@@ -248,6 +248,10 @@ static int dwc3_imx8mp_probe(struct platform_device *pdev)
 	}
 
 	device_set_wakeup_capable(dev, true);
+
+	if (device_is_compatible(dev, "fsl,imx95-dwc3"))
+		device_set_out_band_wakeup(dev, true);
+
 	pm_runtime_put(dev);
 
 	return 0;
