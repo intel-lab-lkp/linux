@@ -25,6 +25,27 @@ struct iaa_req {
 	void *drv_data; /* for driver internal use */
 };
 
+/*
+ * These next two data structures should exactly mirror the definitions of
+ * @struct swap_batch_comp_data and @struct swap_batch_decomp_data in mm/swap.h.
+ */
+struct iaa_batch_comp_data {
+	struct page **pages;
+	u8 **dsts;
+	unsigned int *dlens;
+	int *errors;
+	u8 nr_comps;
+};
+
+struct iaa_batch_decomp_data {
+	u8 **srcs;
+	struct page **pages;
+	unsigned int *slens;
+	unsigned int *dlens;
+	int *errors;
+	u8 nr_decomps;
+};
+
 extern bool iaa_comp_enabled(void);
 
 extern enum iaa_mode iaa_comp_get_compressor_mode(const char *compressor_name);
@@ -35,9 +56,30 @@ extern u8 iaa_comp_get_modes(char **iaa_mode_names, enum iaa_mode *iaa_modes);
 
 extern void iaa_comp_put_modes(char **iaa_mode_names, enum iaa_mode *iaa_modes, u8 nr_modes);
 
+extern unsigned int iaa_comp_get_max_batch_size(void);
+
 extern int iaa_comp_compress(enum iaa_mode mode, struct iaa_req *req);
 
 extern int iaa_comp_decompress(enum iaa_mode mode, struct iaa_req *req);
+
+extern int iaa_comp_compress_batch(
+	enum iaa_mode mode,
+	struct iaa_req *reqs[],
+	struct page *pages[],
+	u8 *dsts[],
+	unsigned int dlens[],
+	int errors[],
+	int nr_reqs);
+
+extern int iaa_comp_decompress_batch(
+	enum iaa_mode mode,
+	struct iaa_req *reqs[],
+	u8 *srcs[],
+	struct page *pages[],
+	unsigned int slens[],
+	unsigned int dlens[],
+	int errors[],
+	int nr_reqs);
 
 #else /* CONFIG_CRYPTO_DEV_IAA_CRYPTO */
 
@@ -71,6 +113,11 @@ static inline void iaa_comp_put_modes(char **iaa_mode_names, enum iaa_mode *iaa_
 {
 }
 
+static inline unsigned int iaa_comp_get_max_batch_size(void)
+{
+	return 0;
+}
+
 static inline int iaa_comp_compress(enum iaa_mode mode, struct iaa_req *req)
 {
 	return -EINVAL;
@@ -79,6 +126,31 @@ static inline int iaa_comp_compress(enum iaa_mode mode, struct iaa_req *req)
 static inline int iaa_comp_decompress(enum iaa_mode mode, struct iaa_req *req)
 {
 	return -EINVAL;
+}
+
+static inline int iaa_comp_compress_batch(
+	enum iaa_mode mode,
+	struct iaa_req *reqs[],
+	struct page *pages[],
+	u8 *dsts[],
+	unsigned int dlens[],
+	int errors[],
+	int nr_reqs)
+{
+	return false;
+}
+
+static inline int iaa_comp_decompress_batch(
+	enum iaa_mode mode,
+	struct iaa_req *reqs[],
+	u8 *srcs[],
+	struct page *pages[],
+	unsigned int slens[],
+	unsigned int dlens[],
+	int errors[],
+	int nr_reqs)
+{
+	return false;
 }
 
 #endif /* CONFIG_CRYPTO_DEV_IAA_CRYPTO */
