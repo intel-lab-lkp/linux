@@ -79,6 +79,7 @@ struct acomp_req_chain {
  * @dvirt:	Destination virtual address
  * @slen:	Size of the input buffer
  * @dlen:	Size of the output buffer and number of bytes produced
+ * @kernel_data:  Private API kernel code data for kernel users
  * @chain:	Private API code data, do not use
  * @__ctx:	Start of private context data
  */
@@ -95,6 +96,7 @@ struct acomp_req {
 	unsigned int slen;
 	unsigned int dlen;
 
+	void *kernel_data;
 	struct acomp_req_chain chain;
 
 	void *__ctx[] CRYPTO_MINALIGN_ATTR;
@@ -354,6 +356,7 @@ static inline void acomp_request_set_params(struct acomp_req *req,
 	req->dst = dst;
 	req->slen = slen;
 	req->dlen = dlen;
+	req->kernel_data = NULL;
 
 	req->base.flags &= ~(CRYPTO_ACOMP_REQ_SRC_VIRT |
 			     CRYPTO_ACOMP_REQ_SRC_NONDMA |
