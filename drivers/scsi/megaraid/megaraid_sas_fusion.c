@@ -3426,7 +3426,8 @@ megasas_build_and_issue_cmd_fusion(struct megasas_instance *instance,
 	if (cmd->r1_alt_dev_handle != MR_DEVHANDLE_INVALID) {
 		r1_cmd = megasas_get_cmd_fusion(instance,
 				scsi_cmd_to_rq(scmd)->tag + instance->max_fw_cmds);
-		megasas_prepare_secondRaid1_IO(instance, cmd, r1_cmd);
+		if (r1_cmd)
+			megasas_prepare_secondRaid1_IO(instance, cmd, r1_cmd);
 	}
 
 
