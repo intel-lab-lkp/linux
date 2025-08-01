@@ -16,6 +16,7 @@
 #include <linux/cdev.h>
 #include <uapi/linux/vfio.h>
 #include <linux/iova_bitmap.h>
+#include <linux/seq_file.h>
 
 struct kvm;
 struct iommufd_ctx;
@@ -135,6 +136,7 @@ struct vfio_device_ops {
 	void	(*dma_unmap)(struct vfio_device *vdev, u64 iova, u64 length);
 	int	(*device_feature)(struct vfio_device *device, u32 flags,
 				  void __user *arg, size_t argsz);
+	void	(*show_fdinfo)(struct vfio_device *device, struct seq_file *m);
 };
 
 #if IS_ENABLED(CONFIG_IOMMUFD)
