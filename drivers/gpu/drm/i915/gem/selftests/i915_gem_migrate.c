@@ -142,8 +142,7 @@ static int lmem_pages_migrate_one(struct i915_gem_ww_ctx *ww,
 		if (err) {
 			if (!silent_migrate)
 				pr_err("Object failed migration to smem\n");
-			if (err)
-				return err;
+			return err;
 		}
 
 		if (i915_gem_object_is_lmem(obj)) {
@@ -161,8 +160,7 @@ static int lmem_pages_migrate_one(struct i915_gem_ww_ctx *ww,
 		if (err) {
 			if (!silent_migrate)
 				pr_err("Object failed migration to lmem\n");
-			if (err)
-				return err;
+			return err;
 		}
 
 		if (i915_gem_object_has_struct_page(obj)) {
