@@ -143,3 +143,13 @@ config USB_DEFAULT_AUTHORIZATION_MODE
 	  ACPI selecting value 2 is analogous to selecting value 0.
 
 	  If unsure, keep the default value.
+
+config USB_OFFLOAD
+	bool "Enable USB offload feature"
+	depends on USB
+	depends on USB_XHCI_SIDEBAND_SUSPEND
+	help
+	  Offload denotes that there is another co-processor accessing the
+	  USB device via the same USB host controller, creating the
+	  "offloaded USB transfers". Say Y to allow offloaded USB
+	  transfers during system sleep (Suspend-to-RAM).
