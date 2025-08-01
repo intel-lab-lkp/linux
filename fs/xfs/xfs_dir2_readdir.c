@@ -465,7 +465,7 @@ xfs_dir2_leaf_getdents(
 		length = xfs_dir2_data_entsize(mp, dep->namelen);
 		filetype = xfs_dir2_data_get_ftype(mp, dep);
 
-		ctx->pos = xfs_dir2_byte_to_dataptr(curoff) & 0x7fffffff;
+		ctx->pos = xfs_dir2_byte_to_dataptr(curoff) & XFS_DIR2_MAX_DATAPTR;
 		if (XFS_IS_CORRUPT(dp->i_mount,
 				   !xfs_dir2_namecheck(dep->name,
 						       dep->namelen))) {
@@ -491,9 +491,9 @@ xfs_dir2_leaf_getdents(
 	 * All done.  Set output offset value to current offset.
 	 */
 	if (curoff > xfs_dir2_dataptr_to_byte(XFS_DIR2_MAX_DATAPTR))
-		ctx->pos = XFS_DIR2_MAX_DATAPTR & 0x7fffffff;
+		ctx->pos = XFS_DIR2_MAX_DATAPTR;
 	else
-		ctx->pos = xfs_dir2_byte_to_dataptr(curoff) & 0x7fffffff;
+		ctx->pos = xfs_dir2_byte_to_dataptr(curoff) & XFS_DIR2_MAX_DATAPTR;
 	if (bp)
 		xfs_trans_brelse(args->trans, bp);
 	return error;
