@@ -716,6 +716,7 @@
 	pinctrl-names = "default", "sleep";
 	vmmc-supply = <&pm8550_l9>;
 	vqmmc-supply = <&pm8550_l8>;
+	max-sd-hs-frequency = <37500000>;
 	no-sdio;
 	no-mmc;
 	status = "okay";

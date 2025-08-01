@@ -1168,6 +1168,7 @@
 	vmmc-supply = <&vreg_l9b_2p9>;
 	vqmmc-supply = <&vreg_l8b_1p8>;
 
+	max-sd-hs-frequency = <37500000>;
 	bus-width = <4>;
 	no-sdio;
 	no-mmc;
