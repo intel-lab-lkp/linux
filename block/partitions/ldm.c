@@ -765,7 +765,7 @@ static bool ldm_parse_cmp3 (const u8 *buffer, int buflen, struct vblk *vb)
  * Return:  'true'   @vb contains a Disk Group VBLK
  *          'false'  @vb contents are not defined
  */
-static int ldm_parse_dgr3 (const u8 *buffer, int buflen, struct vblk *vb)
+static bool ldm_parse_dgr3 (const u8 *buffer, int buflen, struct vblk *vb)
 {
 	int r_objid, r_name, r_diskid, r_id1, r_id2, len;
 	struct vblk_dgrp *dgrp;
