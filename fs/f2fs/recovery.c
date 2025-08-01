@@ -95,6 +95,7 @@ static struct fsync_inode_entry *add_fsync_inode(struct f2fs_sb_info *sbi,
 	entry = f2fs_kmem_cache_alloc(fsync_entry_slab,
 					GFP_F2FS_ZERO, true, NULL);
 	entry->inode = inode;
+	entry->old_max_size = i_size_read(inode);
 	list_add_tail(&entry->list, head);
 
 	return entry;
@@ -828,6 +829,8 @@ static int recover_data(struct f2fs_sb_info *sbi, struct list_head *inode_list,
 				break;
 			}
 			recovered_inode++;
+			if (entry->old_max_size < i_size_read(entry->inode))
+				entry->old_max_size = i_size_read(entry->inode);
 		}
 		if (entry->last_dentry == blkaddr) {
 			err = recover_dentry(entry->inode, folio, dir_list);
@@ -844,8 +847,18 @@ static int recover_data(struct f2fs_sb_info *sbi, struct list_head *inode_list,
 		}
 		recovered_dnode++;
 
-		if (entry->blkaddr == blkaddr)
+		if (entry->blkaddr == blkaddr) {
+			if (entry->old_max_size > i_size_read(entry->inode)) {
+				err = f2fs_truncate_blocks(entry->inode,
+					i_size_read(entry->inode), false);
+				if (err) {
+					f2fs_folio_put(folio, true);
+					break;
+				}
+				f2fs_mark_inode_dirty_sync(entry->inode, true);
+			}
 			list_move_tail(&entry->list, tmp_inode_list);
+		}
 next:
 		ra_blocks = adjust_por_ra_blocks(sbi, ra_blocks, blkaddr,
 					next_blkaddr_of_node(folio));
