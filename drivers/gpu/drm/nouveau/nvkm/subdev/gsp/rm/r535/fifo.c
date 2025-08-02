@@ -188,32 +188,28 @@ r535_chan_ramfc_write(struct nvkm_chan *chan, u64 offset, u64 length, u32 devm, 
 	if (ret)
 		return ret;
 
-	if (1) {
-		NVA06F_CTRL_GPFIFO_SCHEDULE_PARAMS *ctrl;
+	NVA06F_CTRL_GPFIFO_SCHEDULE_PARAMS *ctrl;
 
-		if (1) {
-			NVA06F_CTRL_BIND_PARAMS *ctrl;
+	NVA06F_CTRL_BIND_PARAMS *ctrl;
 
-			ctrl = nvkm_gsp_rm_ctrl_get(&chan->rm.object,
-						    NVA06F_CTRL_CMD_BIND, sizeof(*ctrl));
-			if (WARN_ON(IS_ERR(ctrl)))
-				return PTR_ERR(ctrl);
+	ctrl = nvkm_gsp_rm_ctrl_get(&chan->rm.object,
+						NVA06F_CTRL_CMD_BIND, sizeof(*ctrl));
+	if (WARN_ON(IS_ERR(ctrl)))
+		return PTR_ERR(ctrl);
 
-			ctrl->engineType = eT;
+	ctrl->engineType = eT;
 
-			ret = nvkm_gsp_rm_ctrl_wr(&chan->rm.object, ctrl);
-			if (ret)
-				return ret;
-		}
+	ret = nvkm_gsp_rm_ctrl_wr(&chan->rm.object, ctrl);
+	if (ret)
+		return ret;
 
-		ctrl = nvkm_gsp_rm_ctrl_get(&chan->rm.object,
-					    NVA06F_CTRL_CMD_GPFIFO_SCHEDULE, sizeof(*ctrl));
-		if (WARN_ON(IS_ERR(ctrl)))
-			return PTR_ERR(ctrl);
+	ctrl = nvkm_gsp_rm_ctrl_get(&chan->rm.object,
+					NVA06F_CTRL_CMD_GPFIFO_SCHEDULE, sizeof(*ctrl));
+	if (WARN_ON(IS_ERR(ctrl)))
+		return PTR_ERR(ctrl);
 
-		ctrl->bEnable = 1;
-		ret = nvkm_gsp_rm_ctrl_wr(&chan->rm.object, ctrl);
-	}
+	ctrl->bEnable = 1;
+	ret = nvkm_gsp_rm_ctrl_wr(&chan->rm.object, ctrl);
 
 	return ret;
 }
