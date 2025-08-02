@@ -498,6 +498,11 @@ struct fimc_ctx {
 
 #define fh_to_ctx(__fh) container_of(__fh, struct fimc_ctx, fh)
 
+static inline struct fimc_ctx *file_to_ctx(struct file *filp)
+{
+	return container_of(file_to_v4l2_fh(filp), struct fimc_ctx, fh);
+}
+
 static inline void set_frame_bounds(struct fimc_frame *f, u32 width, u32 height)
 {
 	f->o_width  = width;
