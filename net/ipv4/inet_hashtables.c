@@ -389,17 +389,18 @@ static struct sock *inet_lhash2_lookup(const struct net *net,
 	sk_nulls_for_each_rcu(sk, node, &ilb2->nulls_head) {
 		score = compute_score(sk, net, hnum, daddr, dif, sdif);
 		if (score > hiscore) {
-			result = inet_lookup_reuseport(net, sk, skb, doff,
-						       saddr, sport, daddr, hnum, inet_ehashfn);
-			if (result)
-				return result;
-
 			result = sk;
 			hiscore = score;
 		}
 	}
 
-	return result;
+	if (!result)
+		return NULL;
+
+	sk = inet_lookup_reuseport(net, result, skb, doff,
+				   saddr, sport, daddr, hnum, inet_ehashfn);
+
+	return sk ? sk : result;
 }
 
 struct sock *inet_lookup_run_sk_lookup(const struct net *net,
