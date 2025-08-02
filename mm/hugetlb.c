@@ -1949,29 +1949,26 @@ static struct folio *alloc_buddy_hugetlb_folio(struct hstate *h,
 		nid = numa_mem_id();
 
 	folio = (struct folio *)__alloc_frozen_pages(gfp_mask, order, nid, nmask);
-
-	/*
-	 * If we did not specify __GFP_RETRY_MAYFAIL, but still got a
-	 * folio this indicates an overall state change.  Clear bit so
-	 * that we resume normal 'try hard' allocations.
-	 */
-	if (node_alloc_noretry && folio && !alloc_try_hard)
-		node_clear(nid, *node_alloc_noretry);
-
-	/*
-	 * If we tried hard to get a folio but failed, set bit so that
-	 * subsequent attempts will not try as hard until there is an
-	 * overall state change.
-	 */
-	if (node_alloc_noretry && !folio && alloc_try_hard)
-		node_set(nid, *node_alloc_noretry);
-
-	if (!folio) {
+	if (folio) {
+		/*
+		 * If we did not specify __GFP_RETRY_MAYFAIL, but still got a
+		 * folio this indicates an overall state change.  Clear bit so
+		 * that we resume normal 'try hard' allocations.
+		 */
+		if (node_alloc_noretry && !alloc_try_hard)
+			node_clear(nid, *node_alloc_noretry);
+		__count_vm_event(HTLB_BUDDY_PGALLOC);
+	} else {
+		/*
+		 * If we tried hard to get a folio but failed, set bit so that
+		 * subsequent attempts will not try as hard until there is an
+		 * overall state change.
+		 */
+		if (node_alloc_noretry && alloc_try_hard)
+			node_set(nid, *node_alloc_noretry);
 		__count_vm_event(HTLB_BUDDY_PGALLOC_FAIL);
-		return NULL;
 	}
 
-	__count_vm_event(HTLB_BUDDY_PGALLOC);
 	return folio;
 }
 
