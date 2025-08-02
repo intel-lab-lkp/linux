@@ -2202,10 +2202,8 @@ static int handle_fastpath_set_tscdeadline(struct kvm_vcpu *vcpu, u64 data)
 	return 0;
 }
 
-fastpath_t handle_fastpath_set_msr_irqoff(struct kvm_vcpu *vcpu)
+static fastpath_t __handle_fastpath_wrmsr(struct kvm_vcpu *vcpu, u32 msr, u64 data)
 {
-	u32 msr = kvm_rcx_read(vcpu);
-	u64 data;
 	fastpath_t ret;
 	bool handled;
 
@@ -2213,11 +2211,9 @@ fastpath_t handle_fastpath_set_msr_irqoff(struct kvm_vcpu *vcpu)
 
 	switch (msr) {
 	case APIC_BASE_MSR + (APIC_ICR >> 4):
-		data = kvm_read_edx_eax(vcpu);
 		handled = !handle_fastpath_set_x2apic_icr_irqoff(vcpu, data);
 		break;
 	case MSR_IA32_TSC_DEADLINE:
-		data = kvm_read_edx_eax(vcpu);
 		handled = !handle_fastpath_set_tscdeadline(vcpu, data);
 		break;
 	default:
@@ -2239,7 +2235,18 @@ fastpath_t handle_fastpath_set_msr_irqoff(struct kvm_vcpu *vcpu)
 
 	return ret;
 }
-EXPORT_SYMBOL_GPL(handle_fastpath_set_msr_irqoff);
+
+fastpath_t handle_fastpath_wrmsr(struct kvm_vcpu *vcpu)
+{
+	return __handle_fastpath_wrmsr(vcpu, kvm_rcx_read(vcpu), kvm_read_edx_eax(vcpu));
+}
+EXPORT_SYMBOL_GPL(handle_fastpath_wrmsr);
+
+fastpath_t handle_fastpath_wrmsr_imm(struct kvm_vcpu *vcpu, u32 msr, int reg)
+{
+	return __handle_fastpath_wrmsr(vcpu, msr, kvm_register_read(vcpu, reg));
+}
+EXPORT_SYMBOL_GPL(handle_fastpath_wrmsr_imm);
 
 /*
  * Adapt set_msr() to msr_io()'s calling convention
