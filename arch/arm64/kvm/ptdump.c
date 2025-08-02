@@ -44,8 +44,8 @@ static const struct ptdump_prot_bits stage2_pte_bits[] = {
 	}, {
 		.mask	= KVM_PTE_LEAF_ATTR_HI_S2_XN | PTE_VALID,
 		.val	= PTE_VALID,
-		.set	= " ",
-		.clear	= "X",
+		.set	= "X",
+		.clear	= " ",
 	}, {
 		.mask	= KVM_PTE_LEAF_ATTR_LO_S2_AF | PTE_VALID,
 		.val	= KVM_PTE_LEAF_ATTR_LO_S2_AF | PTE_VALID,
