@@ -78,8 +78,10 @@ KBUILD_CFLAGS += $(call cc-option, -Wcast-function-type)
 KBUILD_CFLAGS-$(CONFIG_CC_NO_STRINGOP_OVERFLOW) += $(call cc-option, -Wno-stringop-overflow)
 KBUILD_CFLAGS-$(CONFIG_CC_STRINGOP_OVERFLOW) += $(call cc-option, -Wstringop-overflow)
 
+ifdef CONFIG_CC_IS_CLANG
 # Currently, disable -Wunterminated-string-initialization as broken
 KBUILD_CFLAGS += $(call cc-option, -Wno-unterminated-string-initialization)
+endif
 
 # The allocators already balk at large sizes, so silence the compiler
 # warnings for bounds checks involving those possible values. While
