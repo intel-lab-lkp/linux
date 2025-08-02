@@ -672,7 +672,7 @@ static ssize_t trigger_cntr_show(struct device *dev,
 	struct etb_drvdata *drvdata = dev_get_drvdata(dev->parent);
 	unsigned long val = drvdata->trigger_cntr;
 
-	return sprintf(buf, "%#lx\n", val);
+	return sysfs_emit(buf, "%#lx\n", val);
 }
 
 static ssize_t trigger_cntr_store(struct device *dev,
