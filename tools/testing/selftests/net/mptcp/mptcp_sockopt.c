@@ -762,6 +762,79 @@ static void test_ip_tos_sockopt(int fd)
 		xerror("expect socklen_t == -1");
 }
 
+static void test_so_max_pacing_rate(int fd)
+{
+	/* SO_MAX_PACING_RATE is a unsigned long value in bytes/sec. Validate basic
+	 * set/get semantics and a few edge cases for getsockopt() lengths.
+	 */
+	unsigned long in, out;
+	socklen_t s;
+	int r;
+
+	/* Try a few representative values, including 0 (unlimited),
+	 * small, medium and a large one.
+	 */
+	unsigned long tests[] = {
+	    0U,
+	    1U,
+	    10U * 1000U * 1000U, /* 10 MB/s */
+	    5U * 1024 * 1024 * 1024 /* 5 GB/s - tests that 64-bit unsigned long correctly works */
+	};
+
+	for (size_t i = 0; i < sizeof(tests) / sizeof(unsigned long); i++) {
+		in = tests[i];
+
+		r = setsockopt(fd, SOL_SOCKET, SO_MAX_PACING_RATE, &in, sizeof(in));
+		if (r != 0) {
+			char *msg;
+			(void)asprintf(&msg, "setsockopt SO_MAX_PACING_RATE to %lu", in);
+			die_perror(msg);
+		}
+
+		out = ~in; /* poison */
+		s = sizeof(out);
+		r = getsockopt(fd, SOL_SOCKET, SO_MAX_PACING_RATE, &out, &s);
+		if (r != 0) {
+			char *msg;
+			(void)asprintf(&msg, "getsockopt SO_MAX_PACING_RATE expected %lu", in);
+			die_perror(msg);
+		}
+
+		if (s != sizeof(out))
+			xerror("SO_MAX_PACING_RATE length %d != %zu", s, sizeof(out));
+
+		if (out != in)
+			xerror("SO_MAX_PACING_RATE %u != %u", out, in);
+
+		/* Query with zero-length buffer. Kernel should succeed and not write. */
+		s = 0;
+		r = getsockopt(fd, SOL_SOCKET, SO_MAX_PACING_RATE, &out, &s);
+		if (r != 0)
+			die_perror("getsockopt SO_MAX_PACING_RATE len=0");
+		if (s != 0)
+			xerror("expect socklen_t == 0 for SO_MAX_PACING_RATE");
+
+		/* Query with negative length should fail with -EINVAL and leave s unchanged. */
+		s = -1;
+		r = getsockopt(fd, SOL_SOCKET, SO_MAX_PACING_RATE, &out, &s);
+		if (r != -1 && errno != EINVAL)
+			die_perror("getsockopt SO_MAX_PACING_RATE did not indicate -EINVAL");
+		if (s != -1)
+			xerror("expect socklen_t == -1 for SO_MAX_PACING_RATE");
+	}
+
+	/* Invalid set: zero length should fail. */
+	in = 1234U;
+	r = setsockopt(fd, SOL_SOCKET, SO_MAX_PACING_RATE, &in, 0);
+	if (r != -1 && errno != EINVAL)
+		die_perror("setsockopt SO_MAX_PACING_RATE len=0 did not indicate -EINVAL");
+
+	/* Invalid set: too short length should fail. */
+	r = setsockopt(fd, SOL_SOCKET, SO_MAX_PACING_RATE, &in, 1);
+	if (r != -1 && errno != EINVAL)
+		die_perror("setsockopt SO_MAX_PACING_RATE short len did not indicate -EINVAL");
+}
+
 static int client(int pipefd)
 {
 	int fd = -1;
@@ -780,6 +853,7 @@ static int client(int pipefd)
 	}
 
 	test_ip_tos_sockopt(fd);
+	test_so_max_pacing_rate(fd);
 
 	connect_one_server(fd, pipefd);
 
