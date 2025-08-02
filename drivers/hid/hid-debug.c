@@ -3344,7 +3344,7 @@ static const char *keys[KEY_MAX + 1] = {
 	[KEY_FN_1] = "Fn+1",			[KEY_FN_2] = "Fn+2",
 	[KEY_FN_B] = "Fn+B",			[KEY_FN_D] = "Fn+D",
 	[KEY_FN_E] = "Fn+E",			[KEY_FN_F] = "Fn+F",
-	[KEY_FN_S] = "Fn+S",
+	[KEY_FN_S] = "Fn+S",			[KEY_FN_P] = "Fn+P",
 	[KEY_FN_F1] = "Fn+F1",			[KEY_FN_F2] = "Fn+F2",
 	[KEY_FN_F3] = "Fn+F3",			[KEY_FN_F4] = "Fn+F4",
 	[KEY_FN_F5] = "Fn+F5",			[KEY_FN_F6] = "Fn+F6",
