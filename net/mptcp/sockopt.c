@@ -308,6 +308,7 @@ static int mptcp_setsockopt_sol_socket(struct mptcp_sock *msk, int optname,
 
 		ret = sk_setsockopt(ssk, SOL_SOCKET, optname, optval, optlen);
 		if (ret == 0) {
+			/* Record the option at the msk for subsequent subflows */
 			if (optname == SO_REUSEPORT)
 				sk->sk_reuseport = ssk->sk_reuseport;
 			else if (optname == SO_REUSEADDR)
@@ -340,6 +341,25 @@ static int mptcp_setsockopt_sol_socket(struct mptcp_sock *msk, int optname,
 								optval, optlen);
 	case SO_LINGER:
 		return mptcp_setsockopt_sol_socket_linger(msk, optval, optlen);
+	case SO_MAX_PACING_RATE: {
+		struct mptcp_subflow_context *subflow;
+
+		ret = sock_setsockopt(sk->sk_socket, SOL_SOCKET, optname, optval, optlen);
+		if (ret < 0)
+			return ret;
+
+		lock_sock(sk);
+		sockopt_seq_inc(msk);
+
+		mptcp_for_each_subflow(msk, subflow) {
+			struct sock *ssk = mptcp_subflow_tcp_sock(subflow);
+
+			sk_setsockopt(ssk, SOL_SOCKET, optname, optval, optlen);
+		}
+
+		release_sock(sk);
+		break;
+	}
 	case SO_RCVLOWAT:
 	case SO_RCVTIMEO_OLD:
 	case SO_RCVTIMEO_NEW:
@@ -373,7 +393,6 @@ static int mptcp_setsockopt_sol_socket(struct mptcp_sock *msk, int optname,
 	 * explicitly the sk_protocol field
 	 *
 	 * SO_PEEK_OFF is unsupported, as it is for plain TCP
-	 * SO_MAX_PACING_RATE is unsupported, we must be careful with subflows
 	 * SO_CNX_ADVICE is currently unsupported, could possibly be relevant,
 	 * but likely needs careful design
 	 *
@@ -1532,6 +1551,7 @@ static void sync_socket_options(struct mptcp_sock *msk, struct sock *ssk)
 {
 	static const unsigned int tx_rx_locks = SOCK_RCVBUF_LOCK | SOCK_SNDBUF_LOCK;
 	struct sock *sk = (struct sock *)msk;
+	unsigned long max_pacing_rate;
 
 	if (ssk->sk_prot->keepalive) {
 		if (sock_flag(sk, SOCK_KEEPOPEN))
@@ -1578,6 +1598,15 @@ static void sync_socket_options(struct mptcp_sock *msk, struct sock *ssk)
 	tcp_sock_set_keepintvl(ssk, msk->keepalive_intvl);
 	tcp_sock_set_keepcnt(ssk, msk->keepalive_cnt);
 	tcp_sock_set_maxseg(ssk, msk->maxseg);
+
+	/* Keep pacing settings in sync as well. */
+	max_pacing_rate = READ_ONCE(sk->sk_max_pacing_rate);
+
+	WRITE_ONCE(ssk->sk_max_pacing_rate, max_pacing_rate);
+	if (max_pacing_rate != ~0UL)
+		cmpxchg(&ssk->sk_pacing_status, SK_PACING_NONE, SK_PACING_NEEDED);
+	if (READ_ONCE(ssk->sk_pacing_rate) > max_pacing_rate)
+		WRITE_ONCE(ssk->sk_pacing_rate, max_pacing_rate);
 
 	inet_assign_bit(TRANSPARENT, ssk, inet_test_bit(TRANSPARENT, sk));
 	inet_assign_bit(FREEBIND, ssk, inet_test_bit(FREEBIND, sk));
