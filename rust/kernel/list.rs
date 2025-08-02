@@ -761,19 +761,6 @@ impl<'a, T: ?Sized + ListItem<ID>, const ID: u64> Iterator for Iter<'a, T, ID> {
 ///     out
 /// }
 ///
-/// // Use a cursor to insert a value at a specific index. Returns an error if the index is out of
-/// // bounds.
-/// fn insert_at(list: &mut List<ListItem>, new: ListArc<ListItem>, idx: usize) -> Result {
-///     let mut cursor = list.cursor_front();
-///     for _ in 0..idx {
-///         if !cursor.move_next() {
-///             return Err(EINVAL);
-///         }
-///     }
-///     cursor.insert_next(new);
-///     Ok(())
-/// }
-///
 /// // Merge two sorted lists into a single sorted list.
 /// fn merge_sorted(list: &mut List<ListItem>, merge: List<ListItem>) {
 ///     let mut cursor = list.cursor_front();
@@ -799,8 +786,6 @@ impl<'a, T: ?Sized + ListItem<ID>, const ID: u64> Iterator for Iter<'a, T, ID> {
 /// // [14, 10, 15, 14]
 /// assert!(remove_first(&mut list, 14).is_some());
 /// // [10, 15, 14]
-/// insert_at(&mut list, ListItem::new(12)?, 2)?;
-/// // [10, 15, 12, 14]
 /// assert!(remove_last(&mut list, 15).is_some());
 /// // [10, 12, 14]
 ///
