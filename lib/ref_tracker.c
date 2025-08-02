@@ -224,6 +224,7 @@ int ref_tracker_free(struct ref_tracker_dir *dir,
 	struct ref_tracker *tracker;
 	unsigned int nr_entries;
 	unsigned long flags;
+	struct ref_tracker *iter;
 
 	WARN_ON_ONCE(dir->dead);
 
@@ -241,6 +242,31 @@ int ref_tracker_free(struct ref_tracker_dir *dir,
 					GFP_NOWAIT | __GFP_NOWARN);
 
 	spin_lock_irqsave(&dir->lock, flags);
+
+	list_for_each_entry(iter, &dir->quarantine, head) {
+		if (iter == tracker) {
+			pr_err("ref_tracker already in quarantine - double free detected.\n");
+			stack_depot_print(stack_handle);
+			spin_unlock_irqrestore(&dir->lock, flags);
+			WARN_ON_ONCE(1);
+			return -EINVAL;
+		}
+        }
+
+	list_for_each_entry(iter, &dir->list, head) {
+		if (iter == tracker) {
+			break;
+		}
+	}
+
+	if (iter != tracker) {
+		pr_err("ref_tracker not in active list - already freed or corrupted.\n");
+		stack_depot_print(stack_handle);
+		spin_unlock_irqrestore(&dir->lock, flags);
+		WARN_ON_ONCE(1);
+		return -EINVAL;
+	}
+
 	if (tracker->dead) {
 		pr_err("reference already released.\n");
 		if (tracker->alloc_stack_handle) {
