@@ -36,7 +36,12 @@
 
 static void ksz_cfg(struct ksz_device *dev, u32 addr, u8 bits, bool set)
 {
-	regmap_update_bits(ksz_regmap_8(dev), addr, bits, set ? bits : 0);
+	int ret;
+
+	ret = regmap_update_bits(ksz_regmap_8(dev), addr, bits, set ? bits : 0);
+	if (ret)
+		dev_err(dev->dev, "can't update reg 0x%x: %pe\n", addr,
+			ERR_PTR(ret));
 }
 
 static void ksz_port_cfg(struct ksz_device *dev, int port, int offset, u8 bits,
