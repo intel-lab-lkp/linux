@@ -6822,6 +6822,8 @@ static int __alloc_contig_verify_gfp_mask(gfp_t gfp_mask, gfp_t *gfp_cc_mask)
  * @gfp_mask:	GFP mask. Node/zone/placement hints are ignored; only some
  *		action and reclaim modifiers are supported. Reclaim modifiers
  *		control allocation behavior during compaction/migration/reclaim.
+ *		If gfp_mask contains __GFP_COMP, the refcount of compound page
+ *		will be not increased.
  *
  * The PFN range does not have to be pageblock aligned. The PFN range must
  * belong to a single zone.
@@ -6955,7 +6957,6 @@ int alloc_contig_range_noprof(unsigned long start, unsigned long end,
 
 		check_new_pages(head, order);
 		prep_new_page(head, order, gfp_mask, 0);
-		set_page_refcounted(head);
 	} else {
 		ret = -EINVAL;
 		WARN(true, "PFN range: requested [%lu, %lu), allocated [%lu, %lu)\n",
@@ -7074,10 +7075,11 @@ void free_contig_range(unsigned long pfn, unsigned long nr_pages)
 	struct folio *folio = pfn_folio(pfn);
 
 	if (folio_test_large(folio)) {
-		int expected = folio_nr_pages(folio);
+		int order = folio_order(folio);
+		int expected = 1 << order;
 
 		if (nr_pages == expected)
-			folio_put(folio);
+			free_frozen_pages(&folio->page, order);
 		else
 			WARN(true, "PFN %lu: nr_pages %lu != expected %d\n",
 			     pfn, nr_pages, expected);

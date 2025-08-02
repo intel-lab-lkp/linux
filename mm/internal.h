@@ -933,6 +933,9 @@ struct cma;
 #ifdef CONFIG_CMA
 void *cma_reserve_early(struct cma *cma, unsigned long size);
 void init_cma_pageblock(struct page *page);
+struct folio *cma_alloc_frozen_folio(struct cma *cma, int order, gfp_t gfp);
+bool cma_free_frozen_folio(struct cma *cma, const struct folio *folio);
+bool cma_validate_zones(struct cma *cma);
 #else
 static inline void *cma_reserve_early(struct cma *cma, unsigned long size)
 {
@@ -941,8 +944,42 @@ static inline void *cma_reserve_early(struct cma *cma, unsigned long size)
 static inline void init_cma_pageblock(struct page *page)
 {
 }
+static inline struct folio *cma_alloc_frozen_folio(struct cma *cma, int order, gfp_t gfp)
+{
+	return NULL;
+}
+static inline bool cma_free_frozen_folio(struct cma *cma, const struct folio *folio)
+{
+	return false;
+}
+static inline bool cma_validate_zones(struct cma *cma)
+{
+	return false;
+}
 #endif
 
+#ifdef CONFIG_CONTIG_ALLOC
+static inline struct folio *folio_alloc_frozen_gigantic_noprof(int order,
+		gfp_t gfp, int nid, nodemask_t *node)
+{
+	struct page *page;
+
+	if (WARN_ON(!order || !(gfp & __GFP_COMP)))
+		return NULL;
+
+	page = alloc_contig_pages_noprof(1 << order, gfp, nid, node);
+
+	return page ? page_folio(page) : NULL;
+}
+#else
+static inline struct folio *folio_alloc_frozen_gigantic_noprof(int order,
+		gfp_t gfp, int nid, nodemask_t *node)
+{
+	return NULL;
+}
+#endif
+/* This should be paired with free_frozen_pages() rather than free_contig_range(). */
+#define folio_alloc_frozen_gigantic(...) alloc_hooks(folio_alloc_frozen_gigantic_noprof(__VA_ARGS__))
 
 int find_suitable_fallback(struct free_area *area, unsigned int order,
 			   int migratetype, bool claimable);
