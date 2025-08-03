@@ -278,7 +278,7 @@ void nvme_delete_ctrl_sync(struct nvme_ctrl *ctrl)
 	nvme_put_ctrl(ctrl);
 }
 
-static blk_status_t nvme_error_status(u16 status)
+blk_status_t nvme_error_status(u16 status)
 {
 	switch (status & NVME_SCT_SC_MASK) {
 	case NVME_SC_SUCCESS:
@@ -318,6 +318,7 @@ static blk_status_t nvme_error_status(u16 status)
 		return BLK_STS_IOERR;
 	}
 }
+EXPORT_SYMBOL_GPL(nvme_error_status);
 
 static void nvme_retry_req(struct request *req)
 {

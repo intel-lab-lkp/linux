@@ -1218,4 +1218,9 @@ static inline bool nvme_multi_css(struct nvme_ctrl *ctrl)
 	return (ctrl->ctrl_config & NVME_CC_CSS_MASK) == NVME_CC_CSS_CSI;
 }
 
+blk_status_t nvme_error_status(u16 status);
+int nvme_submit_vf_cmd(struct pci_dev *dev, struct nvme_command *cmd,
+		       size_t *result, void *buffer, unsigned int bufflen);
+u16 nvme_get_ctrl_id(struct pci_dev *dev);
+
 #endif /* _NVME_H */
