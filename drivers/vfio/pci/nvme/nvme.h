@@ -33,4 +33,7 @@ struct nvmevf_pci_core_device {
 	struct nvmevf_migration_file *saving_migf;
 };
 
+extern int nvme_submit_vf_cmd(struct pci_dev *dev, struct nvme_command *cmd,
+			size_t *result, void *buffer, unsigned int bufflen);
+extern u16 nvme_get_ctrl_id(struct pci_dev *dev);
 #endif /* NVME_VFIO_PCI_H */
