@@ -1,5 +1,7 @@
 # SPDX-License-Identifier: GPL-2.0-only
 
+ccflags-$(CONFIG_DYNAMIC_DEBUG_CORE) += -DDYNAMIC_DEBUG_MODULE
+
 amdxdna-y := \
 	aie2_ctx.o \
 	aie2_error.o \
