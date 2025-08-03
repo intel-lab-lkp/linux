@@ -1,0 +1,10 @@
+# SPDX-License-Identifier: GPL-2.0-only
+config NVME_VFIO_PCI
+	tristate "VFIO support for NVMe PCI devices"
+	depends on NVME_CORE
+	depends on VFIO_PCI_CORE
+	help
+	  This provides migration support for NVMe devices using the
+	  VFIO framework.
+
+	  If you don't know what to do here, say N.
