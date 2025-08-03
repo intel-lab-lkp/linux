@@ -305,6 +305,8 @@ struct mpcc_state {
 
 /**
  * struct mpc_funcs - funcs
+ * @mcm: Set of function pointers for programming MPC memory color module (3D LUTs, bias, bit depth, etc.)
+ * @rmcm: Extended set of function pointers for redundant MPC memory color module (includes power and fast-load)
  */
 struct mpc_funcs {
 	/**
