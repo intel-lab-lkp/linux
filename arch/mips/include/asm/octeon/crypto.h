@@ -5,7 +5,7 @@
  *
  * Copyright (C) 2012-2013 Cavium Inc., All Rights Reserved.
  *
- * MD5/SHA1/SHA256/SHA512 instruction definitions added by
+ * SHA1, SHA256, and SHA512 instruction definitions added by
  * Aaro Koskinen <aaro.koskinen@iki.fi>.
  *
  */
@@ -15,18 +15,16 @@
 #include <linux/sched.h>
 #include <asm/mipsregs.h>
 
-#define OCTEON_CR_OPCODE_PRIORITY 300
-
 extern unsigned long octeon_crypto_enable(struct octeon_cop2_state *state);
 extern void octeon_crypto_disable(struct octeon_cop2_state *state,
 				  unsigned long flags);
 
 /*
- * Macros needed to implement MD5/SHA1/SHA256:
+ * Macros needed to implement SHA1 and SHA256:
  */
 
 /*
- * The index can be 0-1 (MD5) or 0-2 (SHA1), 0-3 (SHA256).
+ * The index can be 0-2 (SHA1) or 0-3 (SHA256).
  */
 #define write_octeon_64bit_hash_dword(value, index)	\
 do {							\
@@ -37,7 +35,7 @@ do {							\
 } while (0)
 
 /*
- * The index can be 0-1 (MD5) or 0-2 (SHA1), 0-3 (SHA256).
+ * The index can be 0-2 (SHA1) or 0-3 (SHA256).
  */
 #define read_octeon_64bit_hash_dword(index)		\
 ({							\
@@ -58,17 +56,6 @@ do {							\
 do {							\
 	__asm__ __volatile__ (				\
 	"dmtc2 %[rt],0x0040+" STR(index)		\
-	:						\
-	: [rt] "d" (cpu_to_be64(value)));		\
-} while (0)
-
-/*
- * The value is the final block dword (64-bit).
- */
-#define octeon_md5_start(value)				\
-do {							\
-	__asm__ __volatile__ (				\
-	"dmtc2 %[rt],0x4047"				\
 	:						\
 	: [rt] "d" (cpu_to_be64(value)));		\
 } while (0)
