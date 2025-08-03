@@ -696,6 +696,7 @@ static void __del_gendisk(struct gendisk *disk)
 	struct block_device *part;
 	unsigned long idx;
 	bool start_drain;
+	struct blk_mq_tag_set *set = q->tag_set;
 
 	might_sleep();
 
@@ -740,7 +741,9 @@ static void __del_gendisk(struct gendisk *disk)
 		bdi_unregister(disk->bdi);
 	}
 
+	down_read(&set->update_nr_hwq_lock);
 	blk_unregister_queue(disk);
+	up_read(&set->update_nr_hwq_lock);
 
 	kobject_put(disk->part0->bd_holder_dir);
 	kobject_put(disk->slave_dir);
@@ -808,20 +811,15 @@ static void disable_elv_switch(struct request_queue *q)
  */
 void del_gendisk(struct gendisk *disk)
 {
-	struct blk_mq_tag_set *set;
 	unsigned int memflags;
 
 	if (!queue_is_mq(disk->queue)) {
 		__del_gendisk(disk);
 	} else {
-		set = disk->queue->tag_set;
-
 		disable_elv_switch(disk->queue);
 
 		memflags = memalloc_noio_save();
-		down_read(&set->update_nr_hwq_lock);
 		__del_gendisk(disk);
-		up_read(&set->update_nr_hwq_lock);
 		memalloc_noio_restore(memflags);
 	}
 }
