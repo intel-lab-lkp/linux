@@ -534,6 +534,7 @@ static struct phy *imx_hsio_xlate(struct device *dev,
 static int imx_hsio_probe(struct platform_device *pdev)
 {
 	int i;
+	int ret;
 	void __iomem *off;
 	struct device *dev = &pdev->dev;
 	struct device_node *np = dev->of_node;
@@ -589,6 +590,10 @@ static int imx_hsio_probe(struct platform_device *pdev)
 		lane->idx = i;
 		phy_set_drvdata(phy, lane);
 	}
+
+	ret = devm_mutex_init(dev, &priv->lock);
+	if (ret)
+		return dev_err_probe(dev, ret, "Failed to initialize lock\n");
 
 	dev_set_drvdata(dev, priv);
 	dev_set_drvdata(&pdev->dev, priv);
