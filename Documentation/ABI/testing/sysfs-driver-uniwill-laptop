@@ -1,0 +1,53 @@
+What:		/sys/bus/wmi/devices/ABBC0F6F-8EA1-11D1-00A0-C90629100000[-X]/fn_lock
+Date:		June 2025
+KernelVersion:	6.17
+Contact:	Armin Wolf <W_Armin@gmx.de>
+Description:
+		Allows userspace applications to enable/disable the FN lock feature
+		of the integrated keyboard by writing "enable"/"disable" into this file.
+
+		Reading this file returns the current enable status of the FN lock functionality.
+
+What:		/sys/bus/wmi/devices/ABBC0F6F-8EA1-11D1-00A0-C90629100000[-X]/super_key_lock
+Date:		June 2025
+KernelVersion:	6.17
+Contact:	Armin Wolf <W_Armin@gmx.de>
+Description:
+                Allows userspace applications to enable/disable the super key functionality
+                of the integrated keyboard by writing "enable"/"disable" into this file.
+
+		Reading this file returns the current enable status of the super key functionality.
+
+What:		/sys/bus/wmi/devices/ABBC0F6F-8EA1-11D1-00A0-C90629100000[-X]/touchpad_toggle
+Date:		June 2025
+KernelVersion:	6.17
+Contact:	Armin Wolf <W_Armin@gmx.de>
+Description:
+		Allows userspace applications to enable/disable the touchpad toggle functionality
+		of the integrated touchpad by writing "enable"/"disable" into this file.
+
+		Reading this file returns the current enable status of the touchpad toggle
+		functionality.
+
+What:		/sys/bus/wmi/devices/ABBC0F6F-8EA1-11D1-00A0-C90629100000[-X]/rainbow_animation
+Date:		June 2025
+KernelVersion:	6.17
+Contact:	Armin Wolf <W_Armin@gmx.de>
+Description:
+		Forces the integrated lightbar to display a rainbow animation when the machine
+		is not suspended. Writing "enable"/"disable" into this file enables/disables
+		this functionality.
+
+		Reading this file returns the current status of the rainbow animation functionality.
+
+What:		/sys/bus/wmi/devices/ABBC0F6F-8EA1-11D1-00A0-C90629100000[-X]/breathing_in_suspend
+Date:		June 2025
+KernelVersion:	6.17
+Contact:	Armin Wolf <W_Armin@gmx.de>
+Description:
+		Causes the integrated lightbar to display a breathing animation when the machine
+		has been suspended and is running on AC power. Writing "enable"/"disable" into
+		this file enables/disables this functionality.
+
+		Reading this file returns the current status of the breathing animation
+		functionality.

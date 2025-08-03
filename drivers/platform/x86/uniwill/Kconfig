@@ -16,6 +16,23 @@ menuconfig X86_PLATFORM_DRIVERS_UNIWILL
 
 if X86_PLATFORM_DRIVERS_UNIWILL
 
+config UNIWILL_LAPTOP
+	tristate "Uniwill Laptop Extras"
+	default m
+	depends on ACPI_WMI
+	depends on ACPI_BATTERY
+	depends on UNIWILL_WMI
+	depends on HWMON
+	depends on LEDS_CLASS_MULTICOLOR
+	depends on DMI
+	select REGMAP
+	help
+	  This driver adds support for various extra features found on Uniwill laptops,
+	  like the lightbar and hwmon sensors. It also supports many OEM laptops
+	  originally manufactured by Uniwill.
+
+	  If you have such a laptop, say Y or M here.
+
 config UNIWILL_WMI
 	tristate "Uniwill WMI Event Driver"
 	default m
