@@ -113,15 +113,9 @@ static struct kcov_remote *kcov_remote_find(u64 handle)
 }
 
 /* Must be called with kcov_remote_lock locked. */
-static struct kcov_remote *kcov_remote_add(struct kcov *kcov, u64 handle)
+static struct kcov_remote *kcov_remote_add(struct kcov *kcov, u64 handle,
+					   struct kcov_remote *remote)
 {
-	struct kcov_remote *remote;
-
-	if (kcov_remote_find(handle))
-		return ERR_PTR(-EEXIST);
-	remote = kmalloc(sizeof(*remote), GFP_ATOMIC);
-	if (!remote)
-		return ERR_PTR(-ENOMEM);
 	remote->handle = handle;
 	remote->kcov = kcov;
 	hash_add(kcov_remote_map, &remote->hnode, handle);
@@ -580,13 +574,14 @@ static inline bool kcov_check_handle(u64 handle, bool common_valid,
 }
 
 static int kcov_ioctl_locked_remote_enabled(struct kcov *kcov,
-			     unsigned int cmd, unsigned long arg)
+			     unsigned int cmd, unsigned long arg,
+			     struct kcov_remote *remote_handles,
+			     struct kcov_remote *remote_common_handle)
 {
 	struct task_struct *t;
 	unsigned long flags;
-	int mode, i;
+	int mode, i, ret;
 	struct kcov_remote_arg *remote_arg;
-	struct kcov_remote *remote;
 
 	if (kcov->mode != KCOV_MODE_INIT || !kcov->area)
 		return -EINVAL;
@@ -610,41 +605,43 @@ static int kcov_ioctl_locked_remote_enabled(struct kcov *kcov,
 	for (i = 0; i < remote_arg->num_handles; i++) {
 		if (!kcov_check_handle(remote_arg->handles[i],
 					false, true, false)) {
-			raw_spin_unlock_irqrestore(&kcov_remote_lock,
-						flags);
-			kcov_disable(t, kcov);
-			return -EINVAL;
+			ret = -EINVAL;
+			goto err;
 		}
-		remote = kcov_remote_add(kcov, remote_arg->handles[i]);
-		if (IS_ERR(remote)) {
-			raw_spin_unlock_irqrestore(&kcov_remote_lock,
-						flags);
-			kcov_disable(t, kcov);
-			return PTR_ERR(remote);
+		if (kcov_remote_find(remote_arg->handles[i])) {
+			ret = -EEXIST;
+			goto err;
 		}
+		kcov_remote_add(kcov, remote_arg->handles[i],
+			&remote_handles[i]);
 	}
 	if (remote_arg->common_handle) {
 		if (!kcov_check_handle(remote_arg->common_handle,
 					true, false, false)) {
-			raw_spin_unlock_irqrestore(&kcov_remote_lock,
-						flags);
-			kcov_disable(t, kcov);
-			return -EINVAL;
+			ret = -EINVAL;
+			goto err;
 		}
-		remote = kcov_remote_add(kcov,
-				remote_arg->common_handle);
-		if (IS_ERR(remote)) {
-			raw_spin_unlock_irqrestore(&kcov_remote_lock,
-						flags);
-			kcov_disable(t, kcov);
-			return PTR_ERR(remote);
+		if (kcov_remote_find(remote_arg->common_handle)) {
+			ret = -EEXIST;
+			goto err;
 		}
+		kcov_remote_add(kcov,
+			remote_arg->common_handle, remote_common_handle);
 		t->kcov_handle = remote_arg->common_handle;
 	}
 	raw_spin_unlock_irqrestore(&kcov_remote_lock, flags);
+
 	/* Put either in kcov_task_exit() or in KCOV_DISABLE. */
 	kcov_get(kcov);
 	return 0;
+
+err:
+	raw_spin_unlock_irqrestore(&kcov_remote_lock, flags);
+	kcov_disable(t, kcov);
+	kfree(remote_common_handle);
+	kfree(remote_handles);
+
+	return ret;
 }
 
 static int kcov_ioctl_locked(struct kcov *kcov, unsigned int cmd,
@@ -702,6 +699,7 @@ static long kcov_ioctl(struct file *filep, unsigned int cmd, unsigned long arg)
 	struct kcov_remote_arg *remote_arg = NULL;
 	unsigned int remote_num_handles;
 	unsigned long remote_arg_size;
+	struct kcov_remote *remote_handles, *remote_common_handle;
 	unsigned long size, flags;
 	void *area;
 
@@ -748,11 +746,22 @@ static long kcov_ioctl(struct file *filep, unsigned int cmd, unsigned long arg)
 			return -EINVAL;
 		}
 		arg = (unsigned long)remote_arg;
+		remote_handles = kmalloc_array(remote_arg->num_handles,
+					sizeof(struct kcov_remote), GFP_KERNEL);
+		if (!remote_handles)
+			return -ENOMEM;
+		remote_common_handle = kmalloc(sizeof(struct kcov_remote), GFP_KERNEL);
+		if (!remote_common_handle) {
+			kfree(remote_handles);
+			return -ENOMEM;
+		}
+
 		raw_spin_lock_irqsave(&kcov->lock, flags);
-		res = kcov_ioctl_locked_remote_enabled(kcov, cmd, arg);
+		res = kcov_ioctl_locked_remote_enabled(kcov, cmd, arg,
+				remote_handles, remote_common_handle);
 		raw_spin_unlock_irqrestore(&kcov->lock, flags);
 		kfree(remote_arg);
-		return res;
+		break;
 	default:
 		/*
 		 * KCOV_ENABLE and KCOV_DISABLE commands can be normally executed under
@@ -762,8 +771,10 @@ static long kcov_ioctl(struct file *filep, unsigned int cmd, unsigned long arg)
 		raw_spin_lock_irqsave(&kcov->lock, flags);
 		res = kcov_ioctl_locked(kcov, cmd, arg);
 		raw_spin_unlock_irqrestore(&kcov->lock, flags);
-		return res;
+		break;
 	}
+
+	return res;
 }
 
 static const struct file_operations kcov_fops = {
