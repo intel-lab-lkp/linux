@@ -4,6 +4,12 @@ use proc_macro::{token_stream, Delimiter, Ident, Span, TokenStream, TokenTree};
 use std::iter::Peekable;
 
 #[derive(Debug)]
+enum DeriveTarget {
+    TryFrom,
+    Into,
+}
+
+#[derive(Debug)]
 struct TypeArgs {
     helper: Vec<Ident>,
     repr: Option<Ident>,
@@ -13,13 +19,20 @@ const VALID_TYPES: [&str; 12] = [
     "u8", "u16", "u32", "u64", "u128", "usize", "i8", "i16", "i32", "i64", "i128", "isize",
 ];
 
-pub(crate) fn derive_try_from(input: TokenStream) -> TokenStream {
-    derive(input)
+pub(crate) fn derive_into(input: TokenStream) -> TokenStream {
+    derive(input, DeriveTarget::Into)
 }
 
-fn derive(input: TokenStream) -> TokenStream {
-    let derive_target = "TryFrom";
-    let derive_helper = "try_from";
+pub(crate) fn derive_try_from(input: TokenStream) -> TokenStream {
+    derive(input, DeriveTarget::TryFrom)
+}
+
+fn derive(input: TokenStream, target: DeriveTarget) -> TokenStream {
+    type ImplFn = fn(&Ident, &Ident, &[Ident]) -> TokenStream;
+    let (derive_target, derive_helper, impl_trait) = match target {
+        DeriveTarget::TryFrom => ("TryFrom", "try_from", impl_try_from as ImplFn),
+        DeriveTarget::Into => ("Into", "into", impl_into as ImplFn),
+    };
 
     let mut tokens = input.into_iter().peekable();
 
@@ -85,12 +98,12 @@ fn derive(input: TokenStream) -> TokenStream {
         let ty = type_args
             .repr
             .unwrap_or_else(|| Ident::new("isize", Span::mixed_site()));
-        impl_try_from(&ty, &enum_ident, &variants)
+        impl_trait(&ty, &enum_ident, &variants)
     } else {
         let impls = type_args
             .helper
             .iter()
-            .map(|ty| impl_try_from(ty, &enum_ident, &variants));
+            .map(|ty| impl_trait(ty, &enum_ident, &variants));
         quote! { #(#impls)* }
     }
 }
@@ -331,6 +344,17 @@ fn impl_try_from(ty: &Ident, enum_ident: &Ident, variants: &[Ident]) -> TokenStr
                 #(#clauses)* {
                     ::core::result::Result::Err(::kernel::prelude::EINVAL)
                 }
+            }
+        }
+    }
+}
+
+fn impl_into(ty: &Ident, enum_ident: &Ident, _: &[Ident]) -> TokenStream {
+    quote! {
+        #[automatically_derived]
+        impl ::core::convert::From<#enum_ident> for #ty {
+            fn from(value: #enum_ident) -> #ty {
+                value as #ty
             }
         }
     }
