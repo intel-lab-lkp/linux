@@ -95,7 +95,7 @@ ssize_t zcomp_available_show(const char *comp, char *buf, ssize_t at)
 	int i;
 
 	for (i = 0; i < ARRAY_SIZE(backends) - 1; i++) {
-		if (!strcmp(comp, backends[i]->name)) {
+		if (comp && !strcmp(comp, backends[i]->name)) {
 			at += sysfs_emit_at(buf, at, "[%s] ",
 					    backends[i]->name);
 		} else {
