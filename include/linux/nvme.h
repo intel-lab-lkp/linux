@@ -362,7 +362,19 @@ struct nvme_id_ctrl {
 	__u8			anacap;
 	__le32			anagrpmax;
 	__le32			nanagrpid;
-	__u8			rsvd352[160];
+	/* --- Live Migration support (TP4159 additions) --- */
+	__le16			cmmrtd;
+	__le16			nmmrtd;
+	__u8			minmrtg;
+	__u8			maxmrtg;
+	__u8			trattr;
+	__u8			rsvd577;
+	__le16			mcudmq;
+	__le16			mnsudmq;
+	__le16			mcmr;
+	__le16			nmcmr;
+	__le16			mcdqpc;
+	__u8			rsvd352[160 - 20]; /* pad to offset 512 */
 	__u8			sqes;
 	__u8			cqes;
 	__le16			maxcmd;
@@ -394,6 +406,14 @@ struct nvme_id_ctrl {
 	__u8			vs[1024];
 };
 
+/* Tracking Attributes (TRATTR) Bit Definitions */
+/* Track Host Memory Changes Support */
+#define NVME_TRATTR_THMCS         (1 << 0)
+/* Track User Data Changes Support */
+#define NVME_TRATTR_TUDCS         (1 << 1)
+ /* Memory Range Tracking Length Limit */
+#define NVME_TRATTR_MRTLL         (1 << 2)
+
 enum {
 	NVME_CTRL_CMIC_MULTI_PORT		= 1 << 0,
 	NVME_CTRL_CMIC_MULTI_CTRL		= 1 << 1,
@@ -409,6 +429,7 @@ enum {
 	NVME_CTRL_OACS_NS_MNGT_SUPP		= 1 << 3,
 	NVME_CTRL_OACS_DIRECTIVES		= 1 << 5,
 	NVME_CTRL_OACS_DBBUF_SUPP		= 1 << 8,
+	NVME_CTRL_OACS_HMLMS			= 1 << 11,
 	NVME_CTRL_LPA_CMD_EFFECTS_LOG		= 1 << 1,
 	NVME_CTRL_CTRATT_128_ID			= 1 << 0,
 	NVME_CTRL_CTRATT_NON_OP_PSP		= 1 << 1,
@@ -567,6 +588,7 @@ enum {
 	NVME_ID_CNS_NS_GRANULARITY	= 0x16,
 	NVME_ID_CNS_UUID_LIST		= 0x17,
 	NVME_ID_CNS_ENDGRP_LIST		= 0x19,
+	NVME_ID_CNS_LM_CTRL_STATE_FMT	= 0x20,
 };
 
 enum {
@@ -1290,6 +1312,300 @@ enum {
 	NVME_ENABLE_LBAFEE	= 1,
 };
 
+/* Figure SCSF-FIG1: Supported Controller State Formats Data Structure */
+/**
+ * Supported Controller State Formats (SCSF-FIG1)
+ *
+ * This describes the Identify CNS=0x20 response layout, which contains:
+ *  - NV    : Number of NVMe-defined controller state format versions
+ *  - NUUID : Number of vendor-specific format UUIDs
+ *  - VERS[NV]  : Array of 2-byte version IDs
+ *  - UUID[NUUID] : Array of 16-byte UUIDs
+ *
+ * Memory layout (variable-sized structure):
+ *
+ *  +------------------+-------------------------------+
+ *  | Offset (Bytes)   | Field                         |
+ *  +------------------+-------------------------------+
+ *  | 0                | NV (Number of Versions)       |
+ *  | 1                | NUUID (Number of UUIDs)       |
+ *  +------------------+-------------------------------+
+ *  | 2                | VERS[0] (2 bytes)             |
+ *  | 4                | VERS[1] (2 bytes)             |
+ *  | ..               | ...                           |
+ *  | 2 + NV*2 - 2     | VERS[NV-1] (2 bytes)          |
+ *  +------------------+-------------------------------+
+ *  | ...              | UUID[0] (16 bytes)            |
+ *  | ...              | UUID[1] (16 bytes)            |
+ *  | ..               | ...                           |
+ *  | ...              | UUID[NUUID-1] (16 bytes)      |
+ *  +------------------+-------------------------------+
+ *
+ * Total size = 2 + NV * 2 + NUUID * 16 bytes.
+ */
+
+#define NVME_LM_CTRL_STATE_HDR_SIZE	2
+#define NVME_LM_VERSION_ENTRY_SIZE	2
+#define NVME_LM_UUID_ENTRY_SIZE		16
+
+struct nvme_lm_supported_ctrl_state_fmts {
+	__u8		nv;
+	__u8		nuuid;
+	__le16		vers[]; /* Followed by uuid[NUUID][16] */
+} __packed;
+
+struct nvme_lm_ctrl_state_fmts_info {
+	__u8		nv;
+	__u8		nuuid;
+	const __le16	*vers;
+	const __u8	(*uuids)[16];
+	void		*ctrl_state_raw_buf;
+	size_t		raw_len;
+};
+
+/**
+ * Controller State Buffer (SCS-FIG5)
+ *
+ * This describes the Migration Receive (Opcode = 0x42, Select = 0h)
+ * response layout, which contains:
+ *
+ *  - version : Structure version (e.g. 0x0000)
+ *  - csattr  : Controller state attributes
+ *  - nvmecss : Length of NVMECS block (in DWORDs)
+ *  - vss     : Length of VSD block (in DWORDs)
+ *  - data[]  : Contiguous NVMECS + VSD blocks
+ *
+ * Memory layout (variable-sized structure):
+ *
+ *  +------------------+-------------------------------------------+
+ *  | Offset (Bytes)   | Field                                     |
+ *  +------------------+-------------------------------------------+
+ *  | 0x00             | version (2 bytes)                         |
+ *  | 0x02             | csattr (1 byte)                           |
+ *  | 0x03             | rsvd[13] (13 bytes)                       |
+ *  | 0x10             | nvmecss (2 bytes)                         |
+ *  | 0x12             | vss (2 bytes)                             |
+ *  +------------------+-------------------------------------------+
+ *  | 0x14             | NVMECS[0] (nvmecss * 4 bytes)             |
+ *  | ...              |                                           |
+ *  | 0x14 + NVMECS    | VSD[0] (vss * 4 bytes)                    |
+ *  +------------------+-------------------------------------------+
+ *
+ * Total size = 0x14 + (nvmecss + vss) * 4 bytes.
+ */
+
+struct nvme_lm_ctrl_state {
+	__le16	version;
+	__u8	csattr;
+	__u8	rsvd[13];
+	__le16	nvmecss;
+	__le16	vss;
+	__u8	data[]; /* NVMECS + VSD */
+} __packed;
+
+struct nvme_lm_ctrl_state_info {
+	struct nvme_lm_ctrl_state *raw;
+	size_t total_len;
+
+	const __u8 *nvme_cs;
+	const __u8 *vsd;
+
+	__le16 version;
+	__u8   csattr;
+	__le16 nvmecss;
+	__le16 vss;
+};
+
+/**
+ * struct nvme_lm_iosq_state - I/O Submission Queue State (SCS-FIG7)
+ */
+struct nvme_lm_iosq_state {
+	__le64 prp1;
+	__le16 qsize;
+	__le16 qid;
+	__le16 cqid;
+	__le16 attr;
+	__le16 head;
+	__le16 tail;
+	__u8   rsvd[4];
+} __packed;
+
+/**
+ * struct nvme_lm_iocq_state - I/O Completion Queue State (SCS-FIG8)
+ */
+struct nvme_lm_iocq_state {
+	__le64 prp1;
+	__le16 qsize;
+	__le16 qid;
+	__le16 head;
+	__le16 tail;
+	__le16 attr;
+	__u8   rsvd[4];
+} __packed;
+
+/**
+ * struct nvme_lm_nvme_cs_v0_state - NVMe Controller State v0 (SCS-FIG6)
+ *
+ * Memory layout:
+ *
+ *  +---------+--------+-----------------------------------------+
+ *  | Offset  | Size   | Field                                   |
+ *  +---------+--------+-----------------------------------------+
+ *  | 0x00    | 2 B    | VER - version of NVMECS block           |
+ *  | 0x02    | 2 B    | NIOSQ - number of I/O submission queues |
+ *  | 0x04    | 2 B    | NIOCQ - number of I/O completion queues |
+ *  | 0x06    | 2 B    | Reserved                                |
+ *  | 0x08    | ...    | IOSQ[NIOSQ] (24 bytes each)             |
+ *  | ...     | ...    | IOCQ[NIOCQ] (24 bytes each)             |
+ *  +---------+--------+-----------------------------------------+
+ */
+struct nvme_lm_nvme_cs_v0_state {
+	__le16 ver;
+	__le16 niosq;
+	__le16 niocq;
+	__u8   rsvd[2];
+	struct nvme_lm_iosq_state iosq[]; /* Followed by IOCQ */
+} __packed;
+
+
+/* Suspend Type field (cdw11[17:16]) per SUSPEND-FIG1 */
+enum nvme_lm_suspend_type {
+	NVME_LM_SUSPEND_TYPE_NOTIFY	= 0x00,
+	NVME_LM_SUSPEND_TYPE_SUSPEND	= 0x01,
+};
+
+/* Migration Send Select field values (cdw10[7:0]) */
+enum nvme_lm_send_select {
+	NVME_LM_SEND_SEL_SUSPEND	= 0x00,
+	NVME_LM_SEND_SEL_RESUME		= 0x02,
+	NVME_LM_SEND_SEL_SET_CTRL_STATE	= 0x03,
+};
+
+/* Migration Send Sequence Indicator (SEQIND) field values (cdw11[17:16]) */
+enum nvme_lm_send_seqind {
+	NVME_LM_SEQIND_MIDDLE = 0x00,
+	NVME_LM_SEQIND_FIRST  = 0x01,
+	NVME_LM_SEQIND_LAST   = 0x02,
+	NVME_LM_SEQIND_ONLY   = 0x03,
+};
+
+/**
+ * struct nvme_lm_send_cmd - Migration Send Command (Opcode 0x43)
+ *
+ * Command fields correspond to:
+ * - MSC-FIG1: Command Dword 10
+ * - SUSPEND-FIG1: Command Dword 11
+ * - MSC-FIG2: Command Dword 14 and 15
+ *
+ * Layout:
+ * @opcode:     Opcode = 0x43 (Migration Send)
+ * @flags:      Command flags
+ * @command_id: Unique command identifier
+ * @nsid:       Namespace ID (typically 0)
+ * @cdw2:       Reserved (CDW2–CDW3)
+ * @metadata:   Metadata pointer (unused)
+ * @dptr:       PRP/SGL pointer to controller state buffer
+ * @cdw10:      CDW10:
+ *              - [07:00] Select (SEL): migration operation (e.g., 0x01 = Suspend)
+ *              - [15:08] Reserved
+ *              - [31:16] Management Operation Specific (MOS)
+ * @cdw11:      CDW11:
+ *              - [15:00] Controller Identifier (CNTLID)
+ *              - [17:16] Sequence Indicator (SEQIND):
+ *                  01b = First, 00b = Middle, 10b = Last, 11b = Only
+ *              - [31:18] Reserved
+ * @cdw12:      Reserved or vendor-specific
+ * @cdw13:      CDW13:
+ *              - [07:00] UUID Index
+ *              - [15:08] UUID Parameter
+ *              - [31:16] Reserved
+ * @cdw14:      Offset Lower (used with Send Controller State)
+ * @cdw15:      Offset Upper
+ */
+struct nvme_lm_send_cmd {
+	__u8			opcode;
+	__u8			flags;
+	__u16			command_id;
+	__le32			nsid;
+	__le32			cdw2[2];
+	__le64			metadata;
+	union nvme_data_ptr	dptr;
+	__le32			cdw10;
+	__le32			cdw11;
+	__le32			cdw12;
+	__le32			cdw13;
+	__le32			cdw14;
+	__le32			cdw15;
+} __packed;
+
+
+enum nvme_lm_recv_sel {
+	NVME_LM_RECV_GET_CTRL_STATE	= 0x00,
+};
+
+enum nvme_lm_recv_mos {
+	/* NVMe-defined Controller State Format v1 */
+	 NVME_LM_RECV_CSVI_NVME_V1	= 0x0000,
+	/* Additional indices may be defined by future specs or vendors */
+};
+
+#define NVME_LM_CTRL_STATE_VER   0x0000  /** Expected version value */
+
+/**
+ * struct nvme_lm_recv_cmd - NVMe Migration Receive Command
+ *
+ * This structure defines the NVMe admin command used to receive
+ * controller state or resume a controller as part of a live migration
+ * operation (Opcode 0x42), as described in TP4159.
+ *
+ * Fields:
+ * @opcode:     Opcode for Migration Receive command (0x42).
+ * @flags:      Command flags (e.g., fused operations, SGLs).
+ * @command_id: Unique identifier for this command issued by the host.
+ * @nsid:       Namespace ID (typically 0 for admin commands).
+ * @cdw2:       Reserved (Command Dwords 2–3).
+ * @metadata:   Metadata pointer (typically unused for this command).
+ * @dptr:       PRP/SGL pointer to the host buffer receiving the controller
+ *              state.
+ * @cdw10:      Command Dword 10:
+ *              - [07:00] Select (operation: e.g., Get Controller State,
+ *                Resume Controller).
+ *              - [31:08] Management Operation Specific (MOS) —
+ *                defined per Select operation.
+ * @cdw11:      Command Dword 11:
+ *              - [15:00] Controller Identifier (CNTLID) — identifies the
+ *                target controller.
+ *              - [17:16] Sequence Indicator (SEQIND) — position in
+ *                multi-part transfer sequence:
+ *                01b = First, 00b = Middle, 10b = Last, 11b = Only.
+ * @cdw12:       Offset into the controller state data (in dwords).
+ * @cdw13:       Number of dwords to transfer (0-based).
+ * @cdw14:       Reserved or vendor-specific.
+ * @cdw15:       Optional UUID Index (if vendor-specific controller state
+ *               format is used), or reserved.
+ */
+struct nvme_lm_recv_cmd {
+	__u8			opcode;
+	__u8			flags;
+	__u16			command_id;
+	__le32			nsid;
+	__le32			rsvd2[2];
+	__le64			metadata;
+	union nvme_data_ptr	dptr;
+	__u8			sel;
+	__u8			rsvd10_1;
+	__le16			mos;
+	__le16			cntlid;
+	__u8			csuuidi;
+	__u8			csuidxp;
+	__le32			offset_lower;
+	__le32			offset_upper;
+	__u8			uuid_index;
+	__u8			rsvd14[3];
+	__le32			numd;
+};
+
+
 /* Admin commands */
 
 enum nvme_admin_opcode {
@@ -1314,6 +1630,8 @@ enum nvme_admin_opcode {
 	nvme_admin_virtual_mgmt		= 0x1c,
 	nvme_admin_nvme_mi_send		= 0x1d,
 	nvme_admin_nvme_mi_recv		= 0x1e,
+	nvme_admin_lm_send		= 0x41,
+	nvme_admin_lm_recv		= 0x42,
 	nvme_admin_dbbuf		= 0x7C,
 	nvme_admin_format_nvm		= 0x80,
 	nvme_admin_security_send	= 0x81,
@@ -1347,6 +1665,8 @@ enum nvme_admin_opcode {
 		nvme_admin_opcode_name(nvme_admin_virtual_mgmt),	\
 		nvme_admin_opcode_name(nvme_admin_nvme_mi_send),	\
 		nvme_admin_opcode_name(nvme_admin_nvme_mi_recv),	\
+		nvme_admin_opcode_name(nvme_admin_lm_send),	\
+		nvme_admin_opcode_name(nvme_admin_lm_recv),	\
 		nvme_admin_opcode_name(nvme_admin_dbbuf),		\
 		nvme_admin_opcode_name(nvme_admin_format_nvm),		\
 		nvme_admin_opcode_name(nvme_admin_security_send),	\
@@ -1973,6 +2293,13 @@ struct streams_directive_params {
 	__u8	rsvd2[6];
 };
 
+struct nvme_lm_command {
+	union {
+		struct nvme_lm_recv_cmd		recv;
+		struct nvme_lm_send_cmd		send;
+	};
+};
+
 struct nvme_command {
 	union {
 		struct nvme_common_command common;
@@ -1999,6 +2326,7 @@ struct nvme_command {
 		struct nvmf_auth_receive_command auth_receive;
 		struct nvme_dbbuf dbbuf;
 		struct nvme_directive_cmd directive;
+		struct nvme_lm_command lm;
 		struct nvme_io_mgmt_recv_cmd imr;
 	};
 };
@@ -2116,6 +2444,10 @@ enum {
 	NVME_SC_TRANSIENT_TR_ERR	= 0x22,
 	NVME_SC_ADMIN_COMMAND_MEDIA_NOT_READY = 0x24,
 	NVME_SC_INVALID_IO_CMD_SET	= 0x2C,
+	NVME_SC_NOT_ENOUGH_RESOURCE	= 0x38,
+	NVME_SC_CTRL_SUSPENDED		= 0x39,
+	NVME_SC_CTRL_NOT_SUSPENDED	= 0x3A,
+	NVME_SC_CTRL_DATA_QUEUE_FAIL	= 0x3B,
 
 	NVME_SC_LBA_RANGE		= 0x80,
 	NVME_SC_CAP_EXCEEDED		= 0x81,
