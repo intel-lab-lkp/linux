@@ -2432,6 +2432,8 @@ static const struct drm_gpuvm_ops lock_ops = {
  *
  * The expected usage is:
  *
+ * .. code-block:: c
+ *
  *    vm_bind {
  *        struct drm_exec exec;
  *
@@ -2473,7 +2475,7 @@ static const struct drm_gpuvm_ops lock_ops = {
  *    required without the earlier DRIVER_OP_MAP.  This is safe because we've
  *    already locked the GEM object in the earlier DRIVER_OP_MAP step.
  *
- * Returns: 0 on success or a negative error codec
+ * Returns: 0 on success or a negative error code
  */
 int
 drm_gpuvm_sm_map_exec_lock(struct drm_gpuvm *gpuvm,
