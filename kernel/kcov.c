@@ -579,14 +579,80 @@ static inline bool kcov_check_handle(u64 handle, bool common_valid,
 	return false;
 }
 
+static int kcov_ioctl_locked_remote_enabled(struct kcov *kcov,
+			     unsigned int cmd, unsigned long arg)
+{
+	struct task_struct *t;
+	unsigned long flags;
+	int mode, i;
+	struct kcov_remote_arg *remote_arg;
+	struct kcov_remote *remote;
+
+	if (kcov->mode != KCOV_MODE_INIT || !kcov->area)
+		return -EINVAL;
+	t = current;
+	if (kcov->t != NULL || t->kcov != NULL)
+		return -EBUSY;
+	remote_arg = (struct kcov_remote_arg *)arg;
+	mode = kcov_get_mode(remote_arg->trace_mode);
+	if (mode < 0)
+		return mode;
+	if ((unsigned long)remote_arg->area_size >
+		LONG_MAX / sizeof(unsigned long))
+		return -EINVAL;
+	kcov->mode = mode;
+	t->kcov = kcov;
+	t->kcov_mode = KCOV_MODE_REMOTE;
+	kcov->t = t;
+	kcov->remote = true;
+	kcov->remote_size = remote_arg->area_size;
+	raw_spin_lock_irqsave(&kcov_remote_lock, flags);
+	for (i = 0; i < remote_arg->num_handles; i++) {
+		if (!kcov_check_handle(remote_arg->handles[i],
+					false, true, false)) {
+			raw_spin_unlock_irqrestore(&kcov_remote_lock,
+						flags);
+			kcov_disable(t, kcov);
+			return -EINVAL;
+		}
+		remote = kcov_remote_add(kcov, remote_arg->handles[i]);
+		if (IS_ERR(remote)) {
+			raw_spin_unlock_irqrestore(&kcov_remote_lock,
+						flags);
+			kcov_disable(t, kcov);
+			return PTR_ERR(remote);
+		}
+	}
+	if (remote_arg->common_handle) {
+		if (!kcov_check_handle(remote_arg->common_handle,
+					true, false, false)) {
+			raw_spin_unlock_irqrestore(&kcov_remote_lock,
+						flags);
+			kcov_disable(t, kcov);
+			return -EINVAL;
+		}
+		remote = kcov_remote_add(kcov,
+				remote_arg->common_handle);
+		if (IS_ERR(remote)) {
+			raw_spin_unlock_irqrestore(&kcov_remote_lock,
+						flags);
+			kcov_disable(t, kcov);
+			return PTR_ERR(remote);
+		}
+		t->kcov_handle = remote_arg->common_handle;
+	}
+	raw_spin_unlock_irqrestore(&kcov_remote_lock, flags);
+	/* Put either in kcov_task_exit() or in KCOV_DISABLE. */
+	kcov_get(kcov);
+	return 0;
+}
+
 static int kcov_ioctl_locked(struct kcov *kcov, unsigned int cmd,
 			     unsigned long arg)
 {
 	struct task_struct *t;
-	unsigned long flags, unused;
-	int mode, i;
-	struct kcov_remote_arg *remote_arg;
-	struct kcov_remote *remote;
+	unsigned long unused;
+	int mode;
 
 	switch (cmd) {
 	case KCOV_ENABLE:
@@ -623,64 +689,6 @@ static int kcov_ioctl_locked(struct kcov *kcov, unsigned int cmd,
 			return -EINVAL;
 		kcov_disable(t, kcov);
 		kcov_put(kcov);
-		return 0;
-	case KCOV_REMOTE_ENABLE:
-		if (kcov->mode != KCOV_MODE_INIT || !kcov->area)
-			return -EINVAL;
-		t = current;
-		if (kcov->t != NULL || t->kcov != NULL)
-			return -EBUSY;
-		remote_arg = (struct kcov_remote_arg *)arg;
-		mode = kcov_get_mode(remote_arg->trace_mode);
-		if (mode < 0)
-			return mode;
-		if ((unsigned long)remote_arg->area_size >
-		    LONG_MAX / sizeof(unsigned long))
-			return -EINVAL;
-		kcov->mode = mode;
-		t->kcov = kcov;
-	        t->kcov_mode = KCOV_MODE_REMOTE;
-		kcov->t = t;
-		kcov->remote = true;
-		kcov->remote_size = remote_arg->area_size;
-		raw_spin_lock_irqsave(&kcov_remote_lock, flags);
-		for (i = 0; i < remote_arg->num_handles; i++) {
-			if (!kcov_check_handle(remote_arg->handles[i],
-						false, true, false)) {
-				raw_spin_unlock_irqrestore(&kcov_remote_lock,
-							flags);
-				kcov_disable(t, kcov);
-				return -EINVAL;
-			}
-			remote = kcov_remote_add(kcov, remote_arg->handles[i]);
-			if (IS_ERR(remote)) {
-				raw_spin_unlock_irqrestore(&kcov_remote_lock,
-							flags);
-				kcov_disable(t, kcov);
-				return PTR_ERR(remote);
-			}
-		}
-		if (remote_arg->common_handle) {
-			if (!kcov_check_handle(remote_arg->common_handle,
-						true, false, false)) {
-				raw_spin_unlock_irqrestore(&kcov_remote_lock,
-							flags);
-				kcov_disable(t, kcov);
-				return -EINVAL;
-			}
-			remote = kcov_remote_add(kcov,
-					remote_arg->common_handle);
-			if (IS_ERR(remote)) {
-				raw_spin_unlock_irqrestore(&kcov_remote_lock,
-							flags);
-				kcov_disable(t, kcov);
-				return PTR_ERR(remote);
-			}
-			t->kcov_handle = remote_arg->common_handle;
-		}
-		raw_spin_unlock_irqrestore(&kcov_remote_lock, flags);
-		/* Put either in kcov_task_exit() or in KCOV_DISABLE. */
-		kcov_get(kcov);
 		return 0;
 	default:
 		return -ENOTTY;
@@ -740,16 +748,20 @@ static long kcov_ioctl(struct file *filep, unsigned int cmd, unsigned long arg)
 			return -EINVAL;
 		}
 		arg = (unsigned long)remote_arg;
-		fallthrough;
+		raw_spin_lock_irqsave(&kcov->lock, flags);
+		res = kcov_ioctl_locked_remote_enabled(kcov, cmd, arg);
+		raw_spin_unlock_irqrestore(&kcov->lock, flags);
+		kfree(remote_arg);
+		return res;
 	default:
 		/*
-		 * All other commands can be normally executed under a spin lock, so we
-		 * obtain and release it here in order to simplify kcov_ioctl_locked().
+		 * KCOV_ENABLE and KCOV_DISABLE commands can be normally executed under
+		 * a raw spin lock, so we obtain and release it here in order to
+		 * simplify kcov_ioctl_locked().
 		 */
 		raw_spin_lock_irqsave(&kcov->lock, flags);
 		res = kcov_ioctl_locked(kcov, cmd, arg);
 		raw_spin_unlock_irqrestore(&kcov->lock, flags);
-		kfree(remote_arg);
 		return res;
 	}
 }
