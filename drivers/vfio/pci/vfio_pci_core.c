@@ -1198,6 +1198,30 @@ static int vfio_pci_ioctl_get_region_info2(struct vfio_pci_core_device *vdev,
 	return _vfio_pci_ioctl_get_region_info(vdev, mmap_mt, arg);
 }
 
+static int vfio_pci_ioctl_set_mmap_attrs(struct vfio_pci_core_device *vdev,
+					 struct maple_tree *mmap_mt,
+					 struct vfio_irq_info __user *arg)
+{
+	struct vfio_mmap_attrs vmmap_attrs;
+	struct vfio_pci_mmap *vmmap;
+
+	if (copy_from_user(&vmmap_attrs, arg, sizeof(vmmap_attrs)))
+		return -EFAULT;
+
+	if (vmmap_attrs.attrs & ~VFIO_MMAP_ATTR_WRITE_COMBINE)
+		return -EINVAL;
+
+	vmmap = mtree_load(mmap_mt, vmmap_attrs.offset);
+	if (!vmmap)
+		return -EINVAL;
+
+	if (!(vmmap->core.region_flags & VFIO_REGION_INFO_FLAG_MMAP))
+		return -EINVAL;
+
+	vmmap->core.attrs = vmmap_attrs.attrs;
+	return 0;
+}
+
 static int vfio_pci_ioctl_get_irq_info(struct vfio_pci_core_device *vdev,
 				       struct vfio_irq_info __user *arg)
 {
@@ -1549,6 +1573,8 @@ long vfio_pci_core_ioctl2(struct vfio_device *core_vdev, unsigned int cmd,
 	switch (cmd) {
 	case VFIO_DEVICE_GET_REGION_INFO:
 		return vfio_pci_ioctl_get_region_info2(vdev, mmap_mt, uarg);
+	case VFIO_DEVICE_SET_MMAP_ATTRS:
+		return vfio_pci_ioctl_set_mmap_attrs(vdev, mmap_mt, uarg);
 	default:
 		return vfio_pci_core_ioctl(core_vdev, cmd, arg);
 	}
@@ -1855,7 +1881,10 @@ static int _vfio_pci_core_mmap(struct vfio_device *core_vdev,
 	}
 
 	vma->vm_private_data = vdev;
-	vma->vm_page_prot = pgprot_noncached(vma->vm_page_prot);
+	if (vmmap && vmmap->core.attrs & VFIO_MMAP_ATTR_WRITE_COMBINE)
+		vma->vm_page_prot = pgprot_writecombine(vma->vm_page_prot);
+	else
+		vma->vm_page_prot = pgprot_noncached(vma->vm_page_prot);
 	vma->vm_page_prot = pgprot_decrypted(vma->vm_page_prot);
 
 	/*
