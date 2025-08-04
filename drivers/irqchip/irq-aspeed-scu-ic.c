@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 /*
- * Aspeed AST24XX, AST25XX, and AST26XX SCU Interrupt Controller
+ * Aspeed AST24XX, AST25XX, AST26XX, AST27XX SCU Interrupt Controller
  * Copyright 2019 IBM Corporation
  *
  * Eddie James <eajames@linux.ibm.com>
@@ -34,11 +34,42 @@
 	GENMASK(5, ASPEED_AST2600_SCU_IC1_SHIFT)
 #define ASPEED_AST2600_SCU_IC1_NUM_IRQS	2
 
+#define ASPEED_AST2700_SCU_IC0_EN_REG	0x1d0
+#define ASPEED_AST2700_SCU_IC0_STS_REG	0x1d4
+#define ASPEED_AST2700_SCU_IC0_SHIFT	0
+#define ASPEED_AST2700_SCU_IC0_ENABLE	\
+	GENMASK(3, ASPEED_AST2700_SCU_IC0_SHIFT)
+#define ASPEED_AST2700_SCU_IC0_NUM_IRQS	4
+
+#define ASPEED_AST2700_SCU_IC1_EN_REG	0x1e0
+#define ASPEED_AST2700_SCU_IC1_STS_REG	0x1e4
+#define ASPEED_AST2700_SCU_IC1_SHIFT	0
+#define ASPEED_AST2700_SCU_IC1_ENABLE	\
+	GENMASK(3, ASPEED_AST2700_SCU_IC1_SHIFT)
+#define ASPEED_AST2700_SCU_IC1_NUM_IRQS	4
+
+#define ASPEED_AST2700_SCU_IC2_EN_REG	0x104
+#define ASPEED_AST2700_SCU_IC2_STS_REG	0x100
+#define ASPEED_AST2700_SCU_IC2_SHIFT	0
+#define ASPEED_AST2700_SCU_IC2_ENABLE	\
+	GENMASK(3, ASPEED_AST2700_SCU_IC2_SHIFT)
+#define ASPEED_AST2700_SCU_IC2_NUM_IRQS	4
+
+#define ASPEED_AST2700_SCU_IC3_EN_REG	0x10c
+#define ASPEED_AST2700_SCU_IC3_STS_REG	0x108
+#define ASPEED_AST2700_SCU_IC3_SHIFT	0
+#define ASPEED_AST2700_SCU_IC3_ENABLE	\
+	GENMASK(1, ASPEED_AST2700_SCU_IC3_SHIFT)
+#define ASPEED_AST2700_SCU_IC3_NUM_IRQS	2
+
 struct aspeed_scu_ic {
 	unsigned long irq_enable;
 	unsigned long irq_shift;
 	unsigned int num_irqs;
 	unsigned int reg;
+	unsigned int en_reg;
+	unsigned int sts_reg;
+	bool split_ier_isr;
 	struct regmap *scu;
 	struct irq_domain *irq_domain;
 };
@@ -52,33 +83,51 @@ static void aspeed_scu_ic_irq_handler(struct irq_desc *desc)
 	unsigned long status;
 	struct aspeed_scu_ic *scu_ic = irq_desc_get_handler_data(desc);
 	struct irq_chip *chip = irq_desc_get_chip(desc);
-	unsigned int mask = scu_ic->irq_enable << ASPEED_SCU_IC_STATUS_SHIFT;
+	unsigned int mask;
 
 	chained_irq_enter(chip, desc);
 
-	/*
-	 * The SCU IC has just one register to control its operation and read
-	 * status. The interrupt enable bits occupy the lower 16 bits of the
-	 * register, while the interrupt status bits occupy the upper 16 bits.
-	 * The status bit for a given interrupt is always 16 bits shifted from
-	 * the enable bit for the same interrupt.
-	 * Therefore, perform the IRQ operations in the enable bit space by
-	 * shifting the status down to get the mapping and then back up to
-	 * clear the bit.
-	 */
-	regmap_read(scu_ic->scu, scu_ic->reg, &sts);
-	enabled = sts & scu_ic->irq_enable;
-	status = (sts >> ASPEED_SCU_IC_STATUS_SHIFT) & enabled;
+	if (scu_ic->split_ier_isr) {
+		mask = scu_ic->irq_enable;
+		regmap_read(scu_ic->scu, scu_ic->en_reg, &sts);
+		enabled = sts & scu_ic->irq_enable;
+		regmap_read(scu_ic->scu, scu_ic->sts_reg, &sts);
+		status = sts & enabled;
 
-	bit = scu_ic->irq_shift;
-	max = scu_ic->num_irqs + bit;
+		bit = scu_ic->irq_shift;
+		max = scu_ic->num_irqs + bit;
 
-	for_each_set_bit_from(bit, &status, max) {
-		generic_handle_domain_irq(scu_ic->irq_domain,
-					  bit - scu_ic->irq_shift);
+		for_each_set_bit_from(bit, &status, max) {
+			generic_handle_domain_irq(scu_ic->irq_domain, bit - scu_ic->irq_shift);
 
-		regmap_write_bits(scu_ic->scu, scu_ic->reg, mask,
-				  BIT(bit + ASPEED_SCU_IC_STATUS_SHIFT));
+			regmap_write_bits(scu_ic->scu, scu_ic->sts_reg, mask, BIT(bit));
+		}
+	} else {
+		mask = scu_ic->irq_enable << ASPEED_SCU_IC_STATUS_SHIFT;
+		/*
+		 * The SCU IC has just one register to control its operation and read
+		 * status. The interrupt enable bits occupy the lower 16 bits of the
+		 * register, while the interrupt status bits occupy the upper 16 bits.
+		 * The status bit for a given interrupt is always 16 bits shifted from
+		 * the enable bit for the same interrupt.
+		 * Therefore, perform the IRQ operations in the enable bit space by
+		 * shifting the status down to get the mapping and then back up to
+		 * clear the bit.
+		 */
+		regmap_read(scu_ic->scu, scu_ic->reg, &sts);
+		enabled = sts & scu_ic->irq_enable;
+		status = (sts >> ASPEED_SCU_IC_STATUS_SHIFT) & enabled;
+
+		bit = scu_ic->irq_shift;
+		max = scu_ic->num_irqs + bit;
+
+		for_each_set_bit_from(bit, &status, max) {
+			generic_handle_domain_irq(scu_ic->irq_domain,
+						  bit - scu_ic->irq_shift);
+
+			regmap_write_bits(scu_ic->scu, scu_ic->reg, mask,
+					  BIT(bit + ASPEED_SCU_IC_STATUS_SHIFT));
+		}
 	}
 
 	chained_irq_exit(chip, desc);
@@ -87,30 +136,42 @@ static void aspeed_scu_ic_irq_handler(struct irq_desc *desc)
 static void aspeed_scu_ic_irq_mask(struct irq_data *data)
 {
 	struct aspeed_scu_ic *scu_ic = irq_data_get_irq_chip_data(data);
-	unsigned int mask = BIT(data->hwirq + scu_ic->irq_shift) |
-		(scu_ic->irq_enable << ASPEED_SCU_IC_STATUS_SHIFT);
+	unsigned int mask;
 
-	/*
-	 * Status bits are cleared by writing 1. In order to prevent the mask
-	 * operation from clearing the status bits, they should be under the
-	 * mask and written with 0.
-	 */
-	regmap_update_bits(scu_ic->scu, scu_ic->reg, mask, 0);
+	if (scu_ic->split_ier_isr) {
+		mask = BIT(data->hwirq + scu_ic->irq_shift);
+		regmap_update_bits(scu_ic->scu, scu_ic->en_reg, mask, 0);
+	} else {
+		mask = BIT(data->hwirq + scu_ic->irq_shift) |
+		       (scu_ic->irq_enable << ASPEED_SCU_IC_STATUS_SHIFT);
+		/*
+		 * Status bits are cleared by writing 1. In order to prevent the mask
+		 * operation from clearing the status bits, they should be under the
+		 * mask and written with 0.
+		 */
+		regmap_update_bits(scu_ic->scu, scu_ic->reg, mask, 0);
+	}
 }
 
 static void aspeed_scu_ic_irq_unmask(struct irq_data *data)
 {
 	struct aspeed_scu_ic *scu_ic = irq_data_get_irq_chip_data(data);
 	unsigned int bit = BIT(data->hwirq + scu_ic->irq_shift);
-	unsigned int mask = bit |
-		(scu_ic->irq_enable << ASPEED_SCU_IC_STATUS_SHIFT);
+	unsigned int mask;
 
-	/*
-	 * Status bits are cleared by writing 1. In order to prevent the unmask
-	 * operation from clearing the status bits, they should be under the
-	 * mask and written with 0.
-	 */
-	regmap_update_bits(scu_ic->scu, scu_ic->reg, mask, bit);
+	if (scu_ic->split_ier_isr) {
+		mask = bit;
+		regmap_update_bits(scu_ic->scu, scu_ic->en_reg, mask, bit);
+	} else {
+		mask = bit | (scu_ic->irq_enable << ASPEED_SCU_IC_STATUS_SHIFT);
+
+		/*
+		 * Status bits are cleared by writing 1. In order to prevent the unmask
+		 * operation from clearing the status bits, they should be under the
+		 * mask and written with 0.
+		 */
+		regmap_update_bits(scu_ic->scu, scu_ic->reg, mask, bit);
+	}
 }
 
 static int aspeed_scu_ic_irq_set_affinity(struct irq_data *data,
@@ -156,8 +217,17 @@ static int aspeed_scu_ic_of_init_common(struct aspeed_scu_ic *scu_ic,
 		rc = PTR_ERR(scu_ic->scu);
 		goto err;
 	}
-	regmap_write_bits(scu_ic->scu, scu_ic->reg, ASPEED_SCU_IC_STATUS, ASPEED_SCU_IC_STATUS);
-	regmap_write_bits(scu_ic->scu, scu_ic->reg, ASPEED_SCU_IC_ENABLE, 0);
+
+	if (scu_ic->split_ier_isr) {
+		regmap_write_bits(scu_ic->scu, scu_ic->sts_reg,
+				  scu_ic->irq_enable, scu_ic->irq_enable);
+		regmap_write_bits(scu_ic->scu, scu_ic->en_reg, scu_ic->irq_enable, 0);
+
+	} else {
+		regmap_write_bits(scu_ic->scu, scu_ic->reg,
+				  ASPEED_SCU_IC_STATUS, ASPEED_SCU_IC_STATUS);
+		regmap_write_bits(scu_ic->scu, scu_ic->reg, ASPEED_SCU_IC_ENABLE, 0);
+	}
 
 	irq = irq_of_parse_and_map(node, 0);
 	if (!irq) {
@@ -232,9 +302,89 @@ static int __init aspeed_ast2600_scu_ic1_of_init(struct device_node *node,
 	return aspeed_scu_ic_of_init_common(scu_ic, node);
 }
 
+static int __init aspeed_ast2700_scu_ic0_of_init(struct device_node *node,
+						 struct device_node *parent)
+{
+	struct aspeed_scu_ic *scu_ic = kzalloc(sizeof(*scu_ic), GFP_KERNEL);
+
+	if (!scu_ic)
+		return -ENOMEM;
+
+	scu_ic->irq_enable = ASPEED_AST2700_SCU_IC0_ENABLE;
+	scu_ic->irq_shift = ASPEED_AST2700_SCU_IC0_SHIFT;
+	scu_ic->num_irqs = ASPEED_AST2700_SCU_IC0_NUM_IRQS;
+	scu_ic->split_ier_isr = true;
+	scu_ic->en_reg = ASPEED_AST2700_SCU_IC0_EN_REG;
+	scu_ic->sts_reg = ASPEED_AST2700_SCU_IC0_STS_REG;
+
+	return aspeed_scu_ic_of_init_common(scu_ic, node);
+}
+
+static int __init aspeed_ast2700_scu_ic1_of_init(struct device_node *node,
+						 struct device_node *parent)
+{
+	struct aspeed_scu_ic *scu_ic = kzalloc(sizeof(*scu_ic), GFP_KERNEL);
+
+	if (!scu_ic)
+		return -ENOMEM;
+
+	scu_ic->irq_enable = ASPEED_AST2700_SCU_IC1_ENABLE;
+	scu_ic->irq_shift = ASPEED_AST2700_SCU_IC1_SHIFT;
+	scu_ic->num_irqs = ASPEED_AST2700_SCU_IC1_NUM_IRQS;
+	scu_ic->split_ier_isr = true;
+	scu_ic->en_reg = ASPEED_AST2700_SCU_IC1_EN_REG;
+	scu_ic->sts_reg = ASPEED_AST2700_SCU_IC1_STS_REG;
+
+	return aspeed_scu_ic_of_init_common(scu_ic, node);
+}
+
+static int __init aspeed_ast2700_scu_ic2_of_init(struct device_node *node,
+						 struct device_node *parent)
+{
+	struct aspeed_scu_ic *scu_ic = kzalloc(sizeof(*scu_ic), GFP_KERNEL);
+
+	if (!scu_ic)
+		return -ENOMEM;
+
+	scu_ic->irq_enable = ASPEED_AST2700_SCU_IC2_ENABLE;
+	scu_ic->irq_shift = ASPEED_AST2700_SCU_IC2_SHIFT;
+	scu_ic->num_irqs = ASPEED_AST2700_SCU_IC2_NUM_IRQS;
+	scu_ic->split_ier_isr = true;
+	scu_ic->en_reg = ASPEED_AST2700_SCU_IC2_EN_REG;
+	scu_ic->sts_reg = ASPEED_AST2700_SCU_IC2_STS_REG;
+
+	return aspeed_scu_ic_of_init_common(scu_ic, node);
+}
+
+static int __init aspeed_ast2700_scu_ic3_of_init(struct device_node *node,
+						 struct device_node *parent)
+{
+	struct aspeed_scu_ic *scu_ic = kzalloc(sizeof(*scu_ic), GFP_KERNEL);
+
+	if (!scu_ic)
+		return -ENOMEM;
+
+	scu_ic->irq_enable = ASPEED_AST2700_SCU_IC3_ENABLE;
+	scu_ic->irq_shift = ASPEED_AST2700_SCU_IC3_SHIFT;
+	scu_ic->num_irqs = ASPEED_AST2700_SCU_IC3_NUM_IRQS;
+	scu_ic->split_ier_isr = true;
+	scu_ic->en_reg = ASPEED_AST2700_SCU_IC3_EN_REG;
+	scu_ic->sts_reg = ASPEED_AST2700_SCU_IC3_STS_REG;
+
+	return aspeed_scu_ic_of_init_common(scu_ic, node);
+}
+
 IRQCHIP_DECLARE(ast2400_scu_ic, "aspeed,ast2400-scu-ic", aspeed_scu_ic_of_init);
 IRQCHIP_DECLARE(ast2500_scu_ic, "aspeed,ast2500-scu-ic", aspeed_scu_ic_of_init);
 IRQCHIP_DECLARE(ast2600_scu_ic0, "aspeed,ast2600-scu-ic0",
 		aspeed_ast2600_scu_ic0_of_init);
 IRQCHIP_DECLARE(ast2600_scu_ic1, "aspeed,ast2600-scu-ic1",
 		aspeed_ast2600_scu_ic1_of_init);
+IRQCHIP_DECLARE(ast2700_scu_ic0, "aspeed,ast2700-scu-ic0",
+		aspeed_ast2700_scu_ic0_of_init);
+IRQCHIP_DECLARE(ast2700_scu_ic1, "aspeed,ast2700-scu-ic1",
+		aspeed_ast2700_scu_ic1_of_init);
+IRQCHIP_DECLARE(ast2700_scu_ic2, "aspeed,ast2700-scu-ic2",
+		aspeed_ast2700_scu_ic2_of_init);
+IRQCHIP_DECLARE(ast2700_scu_ic3, "aspeed,ast2700-scu-ic3",
+		aspeed_ast2700_scu_ic3_of_init);
