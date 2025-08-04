@@ -41,6 +41,14 @@
 
 };
 
+&adc {
+	vddana-supply = <&vddout25>;
+	vref-supply = <&vddout25>;
+	pinctrl-names = "default";
+	pinctrl-0 = <&pinctrl_adc_default &pinctrl_adtrg_default>;
+	status = "okay";
+};
+
 &dma0 {
 	status = "okay";
 };
@@ -278,6 +286,16 @@
 };
 
 &pioa {
+	pinctrl_adc_default: adc_default {
+		pinmux = <PIN_PC5__GPIO>;
+		bias-disable;
+	};
+
+	pinctrl_adtrg_default: adtrg-default {
+		pinmux = <PIN_PB7__ADTRG>;
+		bias-pull-up;
+	};
+
 	pinctrl_gmac0_default: gmac0-default {
 		pinmux = <PIN_PA26__G0_TX0>,
 			 <PIN_PA27__G0_TX1>,
@@ -368,4 +386,9 @@
 
 &slow_xtal {
 	clock-frequency = <32768>;
+};
+
+&vddout25 {
+	vin-supply = <&vdd_3v3>;
+	status = "okay";
 };
