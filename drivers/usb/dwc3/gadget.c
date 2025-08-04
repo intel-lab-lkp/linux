@@ -3896,7 +3896,8 @@ static void dwc3_endpoint_interrupt(struct dwc3 *dwc,
 		dwc3_gadget_endpoint_transfer_in_progress(dep, event);
 		break;
 	case DWC3_DEPEVT_XFERNOTREADY:
-		dwc3_gadget_endpoint_transfer_not_ready(dep, event);
+		if (dwc->connected)
+			dwc3_gadget_endpoint_transfer_not_ready(dep, event);
 		break;
 	case DWC3_DEPEVT_EPCMDCMPLT:
 		dwc3_gadget_endpoint_command_complete(dep, event);
