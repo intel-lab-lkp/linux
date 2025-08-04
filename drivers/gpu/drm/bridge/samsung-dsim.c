@@ -1679,7 +1679,6 @@ static int samsung_dsim_register_te_irq(struct samsung_dsim *dsi, struct device 
 				   IRQF_TRIGGER_RISING | IRQF_NO_AUTOEN, "TE", dsi);
 	if (ret) {
 		dev_err(dsi->dev, "request interrupt failed with %d\n", ret);
-		gpiod_put(dsi->te_gpio);
 		return ret;
 	}
 
@@ -1778,10 +1777,8 @@ of_find_panel_or_bridge:
 
 static void samsung_dsim_unregister_te_irq(struct samsung_dsim *dsi)
 {
-	if (dsi->te_gpio) {
+	if (dsi->te_gpio)
 		free_irq(gpiod_to_irq(dsi->te_gpio), dsi);
-		gpiod_put(dsi->te_gpio);
-	}
 }
 
 static int samsung_dsim_host_detach(struct mipi_dsi_host *host,
