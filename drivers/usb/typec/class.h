@@ -5,6 +5,8 @@
 
 #include <linux/device.h>
 #include <linux/usb/typec.h>
+#include <linux/usb/typec_altmode.h>
+#include <linux/kfifo.h>
 
 struct typec_mux;
 struct typec_switch;
@@ -26,6 +28,8 @@ struct typec_cable {
 	enum usb_pd_svdm_ver		svdm_version;
 };
 
+struct mode_selection_state;
+
 struct typec_partner {
 	struct device			dev;
 	unsigned int			usb_pd:1;
@@ -39,6 +43,12 @@ struct typec_partner {
 	u8				usb_capability;
 
 	struct usb_power_delivery	*pd;
+
+	struct delayed_work mode_selection_work;
+	DECLARE_KFIFO(mode_sequence, struct mode_selection_state *,
+			roundup_pow_of_two(TYPEC_MODE_MAX));
+	struct mutex mode_sequence_lock;
+	struct mode_selection_state *active_mode;
 
 	void (*attach)(struct typec_partner *partner, struct device *dev);
 	void (*deattach)(struct typec_partner *partner, struct device *dev);
@@ -111,5 +121,7 @@ void typec_unlink_ports(struct typec_port *connector);
 static inline int typec_link_ports(struct typec_port *connector) { return 0; }
 static inline void typec_unlink_ports(struct typec_port *connector) { }
 #endif
+
+#define ALTERNATE_MODE_DEVICE_TYPE_NAME "typec_alternate_mode"
 
 #endif /* __USB_TYPEC_CLASS__ */

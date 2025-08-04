@@ -280,6 +280,45 @@ Description:	The USB Modes that the partner device supports. The active mode
 		- usb3 (USB 3.2)
 		- usb4 (USB4)
 
+What:		/sys/class/typec/<port>-partner/mode_selection
+Date:		July 2025
+Contact:	Andrei Kuchynski <akuchynski@chromium.org>
+Description:	Displays a prioritized list of modes that both the port and the
+		partner support with the currently entered mode bracketed. Parentheses
+		indicates a mode currently in progress. Modes listed before the active
+		or in-progress mode have failed.
+		Automated mode selection is activated by writing boolean 1 to the
+		file. Conversely, writing boolean 0 will cancel any ongoing selection
+		process and exit the currently active mode, if any.
+		This attribute is only present if the kernel supports AP driven mode
+		entry, where the Application Processor manages USB Type-C alt-modes.
+
+		Example values:
+		- "USB4 (TBT) DP": USB4 mode entry failed, Thunderbolt alt-mode is in
+			progress, DisplayPort alt-mode is next.
+		- "[USB4] TBT DP": USB4 mode is currently active.
+
+What:		/sys/class/typec/<port>-partner/<alt-mode>/entry_result
+Date:		July 2025
+Contact:	Andrei Kuchynski <akuchynski@chromium.org>
+Description:	This read-only file represents the status for a specific
+		alt-mode after the last mode selection process.
+		This attribute is visible only if the kernel supports mode selection.
+
+		Example values:
+		- "none": No mode selection attempt has occurred for this alt-mode.
+		- "in progress": The mode entry process is currently underway.
+		- "active": The alt-mode is currently active.
+		- "cable failed": The connected cable doesn't support the mode.
+		- "timeout": Mode entry failed due to a timeout.
+		- "failed": The attempt to activate the mode failed.
+
+What:		/sys/class/typec/<port>-partner/usb4_entry_result
+Date:		July 2025
+Contact:	Andrei Kuchynski <akuchynski@chromium.org>
+Description:	Represents a status for USB4 mode. Its values are identical to
+		the general <alt-mode>/entry_result attributes.
+
 USB Type-C cable devices (eg. /sys/class/typec/port0-cable/)
 
 Note: Electronically Marked Cables will have a device also for one cable plug
