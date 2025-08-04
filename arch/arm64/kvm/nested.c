@@ -1704,6 +1704,19 @@ int kvm_init_nv_sysregs(struct kvm_vcpu *vcpu)
 			 TCR2_EL2_AMEC1 | TCR2_EL2_DisCH0 | TCR2_EL2_DisCH1);
 	set_sysreg_masks(kvm, TCR2_EL2, res0, res1);
 
+	/*
+	 * SCTLR2_EL2 - until explicit support for each feature, set all as RES0.
+	 */
+	res0 = SCTLR2_EL2_RES0 | SCTLR2_EL2_EMEC;
+	res0 |= SCTLR2_EL2_EASE;
+	res0 |= SCTLR2_EL2_NMEA;
+	res0 |= (SCTLR2_EL2_EnADERR | SCTLR2_EL2_EnANERR);
+	res0 |= SCTLR2_EL2_EnIDCP128;
+	res0 |= (SCTLR2_EL2_CPTA | SCTLR2_EL2_CPTA0 |
+		 SCTLR2_EL2_CPTM | SCTLR2_EL2_CPTM0);
+	res1 = SCTLR2_EL2_RES1;
+	set_sysreg_masks(kvm, SCTLR2_EL2, res0, res1);
+
 	/* SCTLR_EL1 */
 	res0 = SCTLR_EL1_RES0;
 	res1 = SCTLR_EL1_RES1;
