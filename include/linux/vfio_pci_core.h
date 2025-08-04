@@ -49,6 +49,11 @@ struct vfio_pci_region {
 	u32				flags;
 };
 
+struct vfio_pci_mmap {
+	struct vfio_mmap	core;
+	unsigned int		bar_index;
+};
+
 struct vfio_pci_core_device {
 	struct vfio_device	vdev;
 	struct pci_dev		*pdev;
@@ -137,6 +142,11 @@ bool vfio_pci_core_range_intersect_range(loff_t buf_start, size_t buf_cnt,
 					 loff_t *buf_offset,
 					 size_t *intersect_count,
 					 size_t *register_offset);
+int vfio_pci_mmap_alloc(struct vfio_pci_core_device *vdev,
+			struct maple_tree *mmap_mt, u32 region_flags,
+			size_t bar_size, unsigned int bar_index,
+			unsigned long *offset);
+
 #define VFIO_IOWRITE_DECLARATION(size) \
 int vfio_pci_core_iowrite##size(struct vfio_pci_core_device *vdev,	\
 			bool test_mem, u##size val, void __iomem *io);

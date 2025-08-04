@@ -882,6 +882,50 @@ static int msix_mmappable_cap(struct vfio_pci_core_device *vdev,
 	return vfio_info_add_capability(caps, &header, sizeof(header));
 }
 
+static void vfio_pci_mmap_free(struct vfio_mmap *core_vmmap)
+{
+	struct vfio_pci_mmap *vmmap = container_of(core_vmmap,
+						   struct vfio_pci_mmap,
+						   core);
+	kfree(vmmap);
+}
+
+static struct vfio_mmap_ops vfio_pci_mmap_ops = {
+	.free = vfio_pci_mmap_free,
+};
+
+int vfio_pci_mmap_alloc(struct vfio_pci_core_device *vdev,
+			struct maple_tree *mmap_mt, u32 region_flags,
+			size_t bar_size, unsigned int bar_index,
+			unsigned long *offset)
+{
+	struct vfio_pci_mmap *vmmap;
+	int ret;
+	unsigned long alloc_size;
+	vmmap = kzalloc(sizeof(*vmmap), GFP_KERNEL);
+	if (!vmmap)
+		return -ENOMEM;
+
+	alloc_size = PAGE_ALIGN(bar_size);
+	/* keep the offset aligned to the current usage for now, so we
+	 * don't break VFIO_PCI_OFFSET_TO_INDEX */
+	*offset = VFIO_PCI_INDEX_TO_OFFSET(bar_index);
+	vmmap->bar_index = bar_index;
+	vfio_mmap_init(&vdev->vdev, &vmmap->core, region_flags,
+		       *offset, alloc_size, &vfio_pci_mmap_ops);
+	ret = mtree_insert_range(mmap_mt, *offset,
+				 *offset + alloc_size - 1,
+				 &vmmap->core, GFP_KERNEL);
+	if (ret) {
+		vfio_mmap_free(&vmmap->core);
+		/* for now if it exists reuse it */
+		if (ret != -EEXIST)
+			return ret;
+	}
+	return 0;
+}
+EXPORT_SYMBOL(vfio_pci_mmap_alloc);
+
 int vfio_pci_core_register_dev_region(struct vfio_pci_core_device *vdev,
 				      unsigned int type, unsigned int subtype,
 				      const struct vfio_pci_regops *ops,
