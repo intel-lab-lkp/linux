@@ -445,6 +445,14 @@ static const struct at91_adc_reg_layout sama7g5_layout = {
 #define at91_adc_writel(st, reg, val)					\
 	writel_relaxed(val, (st)->base + (st)->soc_info.platform->layout->reg)
 
+/*
+ * The calibration data has a TAG to recognize the packet
+ * The tag has a constant value "ACST" with the ASCII
+ * equivalent 0x41435354. This is used to validate the
+ * calibration data obtained from the OTP.
+ */
+#define AT91_TEMP_CALIB_TAG	0x41435354
+
 /**
  * struct at91_adc_platform - at91-sama5d2 platform information struct
  * @layout:		pointer to the reg layout struct
@@ -504,10 +512,10 @@ struct at91_adc_temp_sensor_clb {
  * @AT91_ADC_TS_CLB_IDX_MAX: max index for temperature calibration packet in OTP
  */
 enum at91_adc_ts_clb_idx {
-	AT91_ADC_TS_CLB_IDX_P1 = 2,
-	AT91_ADC_TS_CLB_IDX_P4 = 5,
-	AT91_ADC_TS_CLB_IDX_P6 = 7,
-	AT91_ADC_TS_CLB_IDX_MAX = 19,
+	AT91_ADC_TS_CLB_IDX_P1 = 1,
+	AT91_ADC_TS_CLB_IDX_P4 = 4,
+	AT91_ADC_TS_CLB_IDX_P6 = 6,
+	AT91_ADC_TS_CLB_IDX_MAX = 18,
 };
 
 /* Temperature sensor calibration - Vtemp voltage sensitivity to temperature. */
@@ -2281,7 +2289,7 @@ static int at91_adc_temp_sensor_init(struct at91_adc_state *st,
 		dev_err(dev, "Failed to read calibration data!\n");
 		return PTR_ERR(buf);
 	}
-	if (len < AT91_ADC_TS_CLB_IDX_MAX * 4) {
+	if (len < AT91_ADC_TS_CLB_IDX_MAX * 4  || buf[0] != AT91_TEMP_CALIB_TAG) {
 		dev_err(dev, "Invalid calibration data!\n");
 		ret = -EINVAL;
 		goto free_buf;
