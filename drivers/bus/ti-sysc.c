@@ -362,7 +362,6 @@ static int sysc_add_named_clock_from_child(struct sysc *ddata,
 	cl->clk = clock;
 	clkdev_add(cl);
 
-	clk_put(clock);
 
 	return 0;
 }
