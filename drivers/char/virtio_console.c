@@ -27,6 +27,7 @@
 #include <linux/module.h>
 #include <linux/dma-mapping.h>
 #include <linux/string_choices.h>
+#include <linux/cleanup.h>
 #include "../tty/hvc/hvc_console.h"
 
 #define is_rproc_enabled IS_ENABLED(CONFIG_REMOTEPROC)
@@ -404,7 +405,7 @@ static void reclaim_dma_bufs(void)
 static struct port_buffer *alloc_buf(struct virtio_device *vdev, size_t buf_size,
 				     int pages)
 {
-	struct port_buffer *buf;
+	struct port_buffer *buf __free(kfree) = NULL;
 
 	reclaim_dma_bufs();
 
@@ -414,7 +415,7 @@ static struct port_buffer *alloc_buf(struct virtio_device *vdev, size_t buf_size
 	 */
 	buf = kmalloc(struct_size(buf, sg, pages), GFP_KERNEL);
 	if (!buf)
-		goto fail;
+		return NULL;
 
 	buf->sgpages = pages;
 	if (pages > 0) {
@@ -432,7 +433,7 @@ static struct port_buffer *alloc_buf(struct virtio_device *vdev, size_t buf_size
 		 */
 		buf->dev = vdev->dev.parent;
 		if (!buf->dev)
-			goto free_buf;
+			return NULL;
 
 		/* Increase device refcnt to avoid freeing it */
 		get_device(buf->dev);
@@ -444,16 +445,11 @@ static struct port_buffer *alloc_buf(struct virtio_device *vdev, size_t buf_size
 	}
 
 	if (!buf->buf)
-		goto free_buf;
+		return NULL;
 	buf->len = 0;
 	buf->offset = 0;
 	buf->size = buf_size;
 	return buf;
-
-free_buf:
-	kfree(buf);
-fail:
-	return NULL;
 }
 
 /* Callers should take appropriate locks */
