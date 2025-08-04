@@ -532,6 +532,7 @@ enum vcpu_sysreg {
 	VNCR(SCTLR_EL1),/* System Control Register */
 	VNCR(ACTLR_EL1),/* Auxiliary Control Register */
 	VNCR(CPACR_EL1),/* Coprocessor Access Control */
+	VNCR(SCTLR2_EL1),/* Extended System Control Register */
 	VNCR(ZCR_EL1),	/* SVE Control */
 	VNCR(TTBR0_EL1),/* Translation Table Base Register 0 */
 	VNCR(TTBR1_EL1),/* Translation Table Base Register 1 */
@@ -1658,6 +1659,9 @@ void kvm_set_vm_id_reg(struct kvm *kvm, u32 reg, u64 val);
 
 #define kvm_has_tcr2(k)				\
 	(kvm_has_feat((k), ID_AA64MMFR3_EL1, TCRX, IMP))
+
+#define kvm_has_sctlr2(k)				\
+	(kvm_has_feat((k), ID_AA64MMFR3_EL1, SCTLRX, IMP))
 
 #define kvm_has_s1pie(k)				\
 	(kvm_has_feat((k), ID_AA64MMFR3_EL1, S1PIE, IMP))

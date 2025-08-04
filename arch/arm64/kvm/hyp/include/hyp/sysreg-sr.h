@@ -98,6 +98,17 @@ static inline bool ctxt_has_tcrx(struct kvm_cpu_context *ctxt)
 	return kvm_has_tcr2(kern_hyp_va(vcpu->kvm));
 }
 
+static inline bool ctxt_has_sctlrx(struct kvm_cpu_context *ctxt)
+{
+	struct kvm_vcpu *vcpu;
+
+	if (!cpus_have_final_cap(ARM64_HAS_SCTLR2))
+		return false;
+
+	vcpu = ctxt_to_vcpu(ctxt);
+	return kvm_has_sctlr2(kern_hyp_va(vcpu->kvm));
+}
+
 static inline bool ctxt_has_s1poe(struct kvm_cpu_context *ctxt)
 {
 	struct kvm_vcpu *vcpu;
@@ -112,6 +123,8 @@ static inline bool ctxt_has_s1poe(struct kvm_cpu_context *ctxt)
 static inline void __sysreg_save_el1_state(struct kvm_cpu_context *ctxt)
 {
 	ctxt_sys_reg(ctxt, SCTLR_EL1)	= read_sysreg_el1(SYS_SCTLR);
+	if (ctxt_has_sctlrx(ctxt))
+		ctxt_sys_reg(ctxt, SCTLR2_EL1)	= read_sysreg_el1(SYS_SCTLR2);
 	ctxt_sys_reg(ctxt, CPACR_EL1)	= read_sysreg_el1(SYS_CPACR);
 	ctxt_sys_reg(ctxt, TTBR0_EL1)	= read_sysreg_el1(SYS_TTBR0);
 	ctxt_sys_reg(ctxt, TTBR1_EL1)	= read_sysreg_el1(SYS_TTBR1);
@@ -199,6 +212,9 @@ static inline void __sysreg_restore_el1_state(struct kvm_cpu_context *ctxt,
 				 SYS_TCR);
 		isb();
 	}
+
+	if (ctxt_has_sctlrx(ctxt))
+		write_sysreg_el1(ctxt_sys_reg(ctxt, SCTLR2_EL1), SYS_SCTLR2);
 
 	write_sysreg_el1(ctxt_sys_reg(ctxt, CPACR_EL1),	SYS_CPACR);
 	write_sysreg_el1(ctxt_sys_reg(ctxt, TTBR0_EL1),	SYS_TTBR0);
