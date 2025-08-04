@@ -1014,13 +1014,11 @@ static int vfio_pci_ioctl_get_region_info(struct vfio_pci_core_device *vdev,
 
 	switch (info.index) {
 	case VFIO_PCI_CONFIG_REGION_INDEX:
-		info.offset = VFIO_PCI_INDEX_TO_OFFSET(info.index);
 		info.size = pdev->cfg_size;
 		info.flags = VFIO_REGION_INFO_FLAG_READ |
 			     VFIO_REGION_INFO_FLAG_WRITE;
 		break;
 	case VFIO_PCI_BAR0_REGION_INDEX ... VFIO_PCI_BAR5_REGION_INDEX:
-		info.offset = VFIO_PCI_INDEX_TO_OFFSET(info.index);
 		info.size = pci_resource_len(pdev, info.index);
 		if (!info.size) {
 			info.flags = 0;
@@ -1044,7 +1042,6 @@ static int vfio_pci_ioctl_get_region_info(struct vfio_pci_core_device *vdev,
 		size_t size;
 		u16 cmd;
 
-		info.offset = VFIO_PCI_INDEX_TO_OFFSET(info.index);
 		info.flags = 0;
 		info.size = 0;
 
@@ -1074,7 +1071,6 @@ static int vfio_pci_ioctl_get_region_info(struct vfio_pci_core_device *vdev,
 		if (!vdev->has_vga)
 			return -EINVAL;
 
-		info.offset = VFIO_PCI_INDEX_TO_OFFSET(info.index);
 		info.size = 0xc0000;
 		info.flags = VFIO_REGION_INFO_FLAG_READ |
 			     VFIO_REGION_INFO_FLAG_WRITE;
@@ -1093,7 +1089,6 @@ static int vfio_pci_ioctl_get_region_info(struct vfio_pci_core_device *vdev,
 
 		i = info.index - VFIO_PCI_NUM_REGIONS;
 
-		info.offset = VFIO_PCI_INDEX_TO_OFFSET(info.index);
 		info.size = vdev->region[i].size;
 		info.flags = vdev->region[i].flags;
 
@@ -1131,6 +1126,7 @@ static int vfio_pci_ioctl_get_region_info(struct vfio_pci_core_device *vdev,
 		kfree(caps.buf);
 	}
 
+	info.offset = VFIO_PCI_INDEX_TO_OFFSET(info.index);
 	return copy_to_user(arg, &info, minsz) ? -EFAULT : 0;
 }
 
