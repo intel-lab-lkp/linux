@@ -145,6 +145,13 @@ enum {
 
 #define TYPEC_MODAL_STATE(_state_)	((_state_) + TYPEC_STATE_MODAL)
 
+enum typec_mode_type {
+	TYPEC_DP_ALTMODE = 0,
+	TYPEC_TBT_ALTMODE,
+	TYPEC_USB4_MODE,
+	TYPEC_MODE_MAX,
+};
+
 struct typec_altmode *typec_altmode_get_plug(struct typec_altmode *altmode,
 					     enum typec_plug_index index);
 void typec_altmode_put_plug(struct typec_altmode *plug);
