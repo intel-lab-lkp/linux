@@ -1041,8 +1041,10 @@ static int vfio_pci_ioctl_get_info(struct vfio_pci_core_device *vdev,
 	return copy_to_user(arg, &info, minsz) ? -EFAULT : 0;
 }
 
-static int vfio_pci_ioctl_get_region_info(struct vfio_pci_core_device *vdev,
-					  struct vfio_region_info __user *arg)
+
+static int _vfio_pci_ioctl_get_region_info(struct vfio_pci_core_device *vdev,
+					   struct maple_tree *mmap_mt,
+					   struct vfio_region_info __user *arg)
 {
 	unsigned long minsz = offsetofend(struct vfio_region_info, offset);
 	struct pci_dev *pdev = vdev->pdev;
@@ -1170,8 +1172,30 @@ static int vfio_pci_ioctl_get_region_info(struct vfio_pci_core_device *vdev,
 		kfree(caps.buf);
 	}
 
-	info.offset = VFIO_PCI_INDEX_TO_OFFSET(info.index);
+	if (mmap_mt) {
+		ret = vfio_pci_mmap_alloc(vdev, mmap_mt,
+					  info.flags, info.size, info.index,
+					  (unsigned long *) &info.offset);
+		if (ret)
+			return ret;
+	} else {
+		info.offset = VFIO_PCI_INDEX_TO_OFFSET(info.index);
+	}
+
 	return copy_to_user(arg, &info, minsz) ? -EFAULT : 0;
+}
+
+static int vfio_pci_ioctl_get_region_info(struct vfio_pci_core_device *vdev,
+					   struct vfio_region_info __user *arg)
+{
+	return _vfio_pci_ioctl_get_region_info(vdev, NULL, arg);
+}
+
+static int vfio_pci_ioctl_get_region_info2(struct vfio_pci_core_device *vdev,
+					   struct maple_tree *mmap_mt,
+					   struct vfio_region_info __user *arg)
+{
+	return _vfio_pci_ioctl_get_region_info(vdev, mmap_mt, arg);
 }
 
 static int vfio_pci_ioctl_get_irq_info(struct vfio_pci_core_device *vdev,
@@ -1514,6 +1538,23 @@ long vfio_pci_core_ioctl(struct vfio_device *core_vdev, unsigned int cmd,
 }
 EXPORT_SYMBOL_GPL(vfio_pci_core_ioctl);
 
+
+long vfio_pci_core_ioctl2(struct vfio_device *core_vdev, unsigned int cmd,
+			  unsigned long arg, struct maple_tree *mmap_mt)
+{
+	struct vfio_pci_core_device *vdev =
+		container_of(core_vdev, struct vfio_pci_core_device, vdev);
+	void __user *uarg = (void __user *)arg;
+
+	switch (cmd) {
+	case VFIO_DEVICE_GET_REGION_INFO:
+		return vfio_pci_ioctl_get_region_info2(vdev, mmap_mt, uarg);
+	default:
+		return vfio_pci_core_ioctl(core_vdev, cmd, arg);
+	}
+}
+EXPORT_SYMBOL_GPL(vfio_pci_core_ioctl2);
+
 static int vfio_pci_core_feature_token(struct vfio_device *device, u32 flags,
 				       uuid_t __user *arg, size_t argsz)
 {
@@ -1748,16 +1789,24 @@ static const struct vm_operations_struct vfio_pci_vm_ops = {
 #endif
 };
 
-int vfio_pci_core_mmap(struct vfio_device *core_vdev, struct vm_area_struct *vma)
+static int _vfio_pci_core_mmap(struct vfio_device *core_vdev,
+			       struct vm_area_struct *vma,
+			       struct vfio_mmap *core_vmmap)
 {
 	struct vfio_pci_core_device *vdev =
 		container_of(core_vdev, struct vfio_pci_core_device, vdev);
+	struct vfio_pci_mmap *vmmap = NULL;
 	struct pci_dev *pdev = vdev->pdev;
 	unsigned int index;
 	u64 phys_len, req_len, pgoff, req_start;
 	int ret;
 
-	index = vma->vm_pgoff >> (VFIO_PCI_OFFSET_SHIFT - PAGE_SHIFT);
+	if (core_vmmap) {
+		vmmap = container_of(core_vmmap, struct vfio_pci_mmap, core);
+		index = vmmap->bar_index;
+	} else {
+		index = vma->vm_pgoff >> (VFIO_PCI_OFFSET_SHIFT - PAGE_SHIFT);
+	}
 
 	if (index >= VFIO_PCI_NUM_REGIONS + vdev->num_regions)
 		return -EINVAL;
@@ -1836,7 +1885,20 @@ int vfio_pci_core_mmap(struct vfio_device *core_vdev, struct vm_area_struct *vma
 
 	return 0;
 }
+
+int vfio_pci_core_mmap(struct vfio_device *core_vdev, struct vm_area_struct *vma)
+{
+	return _vfio_pci_core_mmap(core_vdev, vma, NULL);
+}
 EXPORT_SYMBOL_GPL(vfio_pci_core_mmap);
+
+int vfio_pci_core_mmap2(struct vfio_device *core_vdev,
+			struct vm_area_struct *vma,
+			struct vfio_mmap *core_vmmap)
+{
+	return _vfio_pci_core_mmap(core_vdev, vma, core_vmmap);
+}
+EXPORT_SYMBOL_GPL(vfio_pci_core_mmap2);
 
 void vfio_pci_core_request(struct vfio_device *core_vdev, unsigned int count)
 {
