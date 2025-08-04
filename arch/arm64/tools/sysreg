@@ -2469,6 +2469,23 @@ Sysreg	SCTLR2ALIAS_EL1 3	0	1	4	7
 Mapping	SCTLR2_EL1
 EndSysreg
 
+Sysreg SCTLR2_EL2       3	4	1	0	3
+Res0    63:13
+Field   12      CPTM0
+Field   11      CPTM
+Field   10      CPTA0
+Field   9       CPTA
+Field   8       EnPACM0
+Field   7       EnPACM
+Field   6       EnIDCP128
+Field   5       EASE
+Field   4       EnANERR
+Field   3       EnADERR
+Field   2       NMEA
+Field   1       EMEC
+Res0    0
+EndSysreg
+
 Sysreg	SCTLR2MASK_EL1	3	0	1	4	3
 Res0	63:13
 Field	12	CPTM0
