@@ -456,6 +456,8 @@ static const struct at91_adc_reg_layout sama7g5_layout = {
 struct at91_adc_state;
 static int at91_adc_temp_sensor_init(struct at91_adc_state *st,
 				     struct device *dev);
+static int at91_sama7d65_adc_temp_sensor_init(struct at91_adc_state *st,
+					      struct device *dev);
 
 /**
  * struct at91_adc_platform - at91-sama5d2 platform information struct
@@ -523,6 +525,20 @@ enum at91_adc_ts_clb_idx {
 	AT91_ADC_TS_CLB_IDX_P4 = 4,
 	AT91_ADC_TS_CLB_IDX_P6 = 6,
 	AT91_ADC_TS_CLB_IDX_MAX = 18,
+};
+
+/**
+ * enum at91_sama7d65_adc_ts_clb_idx - calibration indexes in sama7d65 NVMEM buffer
+ * @AT91_SAMA7D65_ADC_TS_CLB_IDX_P1: index for FT1_TEMP equivalent to P1 * (10 ^ 6)
+ * @AT91_SAMA7D65_ADC_TS_CLB_IDX_P4: index for FT1_VPAT equivalent to P4
+ * @AT91_SAMA7D65_ADC_TS_CLB_IDX_P6: index for FT2_VBG equivalent to P6
+ * @AT91_SAMA7D65_ADC_TS_CLB_IDX_MAX: max index for temperature calibration packet in OTP
+ */
+enum at91_sama7d65_adc_ts_clb_idx {
+	AT91_SAMA7D65_ADC_TS_CLB_IDX_P1 = 2,
+	AT91_SAMA7D65_ADC_TS_CLB_IDX_P4 = 1,
+	AT91_SAMA7D65_ADC_TS_CLB_IDX_P6 = 4,
+	AT91_SAMA7D65_ADC_TS_CLB_IDX_MAX = 10,
 };
 
 /* Temperature sensor calibration - Vtemp voltage sensitivity to temperature. */
@@ -762,6 +778,31 @@ static const struct at91_adc_platform sama7g5_platform = {
 	.temp_sensor = true,
 	.temp_chan = AT91_SAMA7G5_ADC_TEMP_CHANNEL,
 	.temp_init = at91_adc_temp_sensor_init,
+};
+
+static const struct at91_adc_platform sama7d65_platform = {
+	.layout = &sama7g5_layout,
+	.adc_channels = &at91_sama7g5_adc_channels,
+#define AT91_SAMA7D65_SINGLE_CHAN_CNT	16
+#define AT91_SAMA7D65_DIFF_CHAN_CNT	8
+#define AT91_SAMA7D65_TEMP_CHAN_CNT	1
+	.nr_channels = AT91_SAMA7D65_SINGLE_CHAN_CNT +
+		       AT91_SAMA7D65_DIFF_CHAN_CNT +
+		       AT91_SAMA7D65_TEMP_CHAN_CNT,
+#define AT91_SAMA7D65_MAX_CHAN_IDX	(AT91_SAMA7D65_SINGLE_CHAN_CNT + \
+					AT91_SAMA7D65_DIFF_CHAN_CNT + \
+					AT91_SAMA7D65_TEMP_CHAN_CNT)
+	.max_channels = ARRAY_SIZE(at91_sama7g5_adc_channels),
+	.max_index = AT91_SAMA7D65_MAX_CHAN_IDX,
+#define AT91_SAMA7G5_HW_TRIG_CNT	3
+	.hw_trig_cnt = AT91_SAMA7G5_HW_TRIG_CNT,
+	.osr_mask = GENMASK(18, 16),
+	.oversampling_avail = { 1, 4, 16, 64, 256, },
+	.oversampling_avail_no = 5,
+	.chan_realbits = 16,
+	.temp_sensor = true,
+	.temp_chan = AT91_SAMA7G5_ADC_TEMP_CHANNEL,
+	.temp_init = at91_sama7d65_adc_temp_sensor_init,
 };
 
 static int at91_adc_chan_xlate(struct iio_dev *indio_dev, int chan)
@@ -2319,6 +2360,56 @@ free_buf:
 	return ret;
 }
 
+static int at91_sama7d65_adc_temp_sensor_init(struct at91_adc_state *st,
+					      struct device *dev)
+{
+	struct at91_adc_temp_sensor_clb *clb = &st->soc_info.temp_sensor_clb;
+	struct nvmem_cell *temp_calib;
+	u32 *buf = NULL;
+	size_t len;
+	int ret = 0;
+
+	if (!st->soc_info.platform->temp_sensor)
+		return 0;
+
+	/* Get the calibration data from NVMEM. */
+	temp_calib = devm_nvmem_cell_get(dev, "temperature_calib");
+	if (IS_ERR(temp_calib)) {
+		ret = PTR_ERR(temp_calib);
+		if (ret != -ENOENT)
+			dev_err(dev, "Failed to get temperature_calib cell!\n");
+		return ret;
+	}
+
+	buf = nvmem_cell_read(temp_calib, &len);
+	if (IS_ERR(buf)) {
+		dev_err(dev, "Failed to read calibration data!\n");
+		return PTR_ERR(buf);
+	}
+
+	if (len < AT91_SAMA7D65_ADC_TS_CLB_IDX_MAX * sizeof(u32) ||
+	    buf[0] != AT91_TEMP_CALIB_TAG) {
+		dev_err(dev, "Invalid calibration data!\n");
+		ret = -EINVAL;
+		goto free_buf;
+	}
+
+	/* Store calibration data for later use. */
+	clb->p1 = buf[AT91_SAMA7D65_ADC_TS_CLB_IDX_P1];
+	clb->p4 = buf[AT91_SAMA7D65_ADC_TS_CLB_IDX_P4];
+	clb->p6 = buf[AT91_SAMA7D65_ADC_TS_CLB_IDX_P6];
+
+	/*
+	 * We prepare here the conversion to milli from micro to avoid
+	 * doing it on hotpath.
+	 */
+	clb->p1 = clb->p1 / 1000;
+
+free_buf:
+	kfree(buf);
+	return ret;
+}
+
 static int at91_adc_probe(struct platform_device *pdev)
 {
 	struct device *dev = &pdev->dev;
@@ -2633,6 +2724,9 @@ static const struct of_device_id at91_adc_dt_match[] = {
 	}, {
 		.compatible = "microchip,sama7g5-adc",
 		.data = (const void *)&sama7g5_platform,
+	}, {
+		.compatible = "microchip,sama7d65-adc",
+		.data = (const void *)&sama7d65_platform,
 	}, {
 		/* sentinel */
 	}
