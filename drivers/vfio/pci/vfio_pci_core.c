@@ -1641,7 +1641,7 @@ static unsigned long vma_to_pfn(struct vm_area_struct *vma)
 	return (pci_resource_start(vdev->pdev, index) >> PAGE_SHIFT) + pgoff;
 }
 
-static vm_fault_t vfio_pci_mmap_huge_fault(struct vm_fault *vmf,
+static vm_fault_t vfio_pci_vm_huge_fault(struct vm_fault *vmf,
 					   unsigned int order)
 {
 	struct vm_area_struct *vma = vmf->vma;
@@ -1696,15 +1696,15 @@ out:
 	return ret;
 }
 
-static vm_fault_t vfio_pci_mmap_page_fault(struct vm_fault *vmf)
+static vm_fault_t vfio_pci_vm_page_fault(struct vm_fault *vmf)
 {
-	return vfio_pci_mmap_huge_fault(vmf, 0);
+	return vfio_pci_vm_huge_fault(vmf, 0);
 }
 
-static const struct vm_operations_struct vfio_pci_mmap_ops = {
-	.fault = vfio_pci_mmap_page_fault,
+static const struct vm_operations_struct vfio_pci_vm_ops = {
+	.fault = vfio_pci_vm_page_fault,
 #ifdef CONFIG_ARCH_SUPPORTS_HUGE_PFNMAP
-	.huge_fault = vfio_pci_mmap_huge_fault,
+	.huge_fault = vfio_pci_vm_huge_fault,
 #endif
 };
 
@@ -1792,7 +1792,7 @@ int vfio_pci_core_mmap(struct vfio_device *core_vdev, struct vm_area_struct *vma
 	 */
 	vm_flags_set(vma, VM_ALLOW_ANY_UNCACHED | VM_IO | VM_PFNMAP |
 			VM_DONTEXPAND | VM_DONTDUMP);
-	vma->vm_ops = &vfio_pci_mmap_ops;
+	vma->vm_ops = &vfio_pci_vm_ops;
 
 	return 0;
 }
