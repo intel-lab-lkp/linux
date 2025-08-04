@@ -145,8 +145,5 @@ int imx_scu_soc_init(struct device *dev)
 		return -ENOMEM;
 
 	soc_dev = soc_device_register(soc_dev_attr);
-	if (IS_ERR(soc_dev))
-		return PTR_ERR(soc_dev);
-
-	return 0;
+	return PTR_ERR_OR_ZERO(soc_dev);
 }

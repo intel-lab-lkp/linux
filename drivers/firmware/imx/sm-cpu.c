@@ -61,10 +61,7 @@ static int scmi_imx_cpu_probe(struct scmi_device *sdev)
 	}
 
 	imx_cpu_ops = handle->devm_protocol_get(sdev, SCMI_PROTOCOL_IMX_CPU, &ph);
-	if (IS_ERR(imx_cpu_ops))
-		return PTR_ERR(imx_cpu_ops);
-
-	return 0;
+	return PTR_ERR_OR_ZERO(imx_cpu_ops);
 }
 
 static const struct scmi_device_id scmi_id_table[] = {

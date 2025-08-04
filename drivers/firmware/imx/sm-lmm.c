@@ -67,10 +67,7 @@ static int scmi_imx_lmm_probe(struct scmi_device *sdev)
 	}
 
 	imx_lmm_ops = handle->devm_protocol_get(sdev, SCMI_PROTOCOL_IMX_LMM, &ph);
-	if (IS_ERR(imx_lmm_ops))
-		return PTR_ERR(imx_lmm_ops);
-
-	return 0;
+	return PTR_ERR_OR_ZERO(imx_lmm_ops);
 }
 
 static const struct scmi_device_id scmi_id_table[] = {
