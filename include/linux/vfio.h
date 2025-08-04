@@ -85,6 +85,7 @@ struct vfio_mmap {
 	u64 offset;
 	u64 size;
 	u32 region_flags;
+	u32 attrs;
 	struct vfio_mmap_ops *ops;
 };
 

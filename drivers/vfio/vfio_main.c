@@ -633,6 +633,7 @@ void vfio_mmap_init(struct vfio_device *vdev, struct vfio_mmap *vmmap,
 	vmmap->ops = ops;
 	vmmap->size = size;
 	vmmap->region_flags = region_flags;
+	vmmap->attrs = 0;
 }
 EXPORT_SYMBOL_GPL(vfio_mmap_init);
 

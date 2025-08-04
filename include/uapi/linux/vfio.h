@@ -1831,6 +1831,25 @@ struct vfio_iommu_spapr_tce_remove {
 };
 #define VFIO_IOMMU_SPAPR_TCE_REMOVE	_IO(VFIO_TYPE, VFIO_BASE + 20)
 
+/**
+ * VFIO_DEVICE_SET_MMAP_ATTRS  - _IOW(VFIO_TYPE, VFIO_BASE + 21, struct vfio_mmap_attrs)
+ *
+ * Set memory mapping attributes for a specified region offset before
+ * calling mmap, it expects that the offset used was fetched by
+ * calling VFIO_DEVICE_GET_REGION_INFO.
+ *
+ * Attributes supported:
+ * - VFIO_MMAP_ATTR_WRITE_COMBINE: use write-combine when requested to mmap this offset.
+ *
+ * Return: 0 on success, -errno on failure.
+ */
+struct vfio_mmap_attrs {
+	__u64	offset;	/* Region offset */
+	__u32	attrs;
+#define VFIO_MMAP_ATTR_WRITE_COMBINE	(1 << 0)
+};
+#define VFIO_DEVICE_SET_MMAP_ATTRS	_IO(VFIO_TYPE, VFIO_BASE + 21)
+
 /* ***************************************************************** */
 
 #endif /* _UAPIVFIO_H */
