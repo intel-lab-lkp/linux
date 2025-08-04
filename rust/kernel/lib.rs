@@ -100,6 +100,7 @@ pub mod pid_namespace;
 pub mod platform;
 pub mod prelude;
 pub mod print;
+pub mod ptr;
 pub mod rbtree;
 pub mod revocable;
 pub mod security;
