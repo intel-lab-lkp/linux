@@ -997,16 +997,21 @@ static int alc_suspend(struct hda_codec *codec)
 static int alc_resume(struct hda_codec *codec)
 {
 	struct alc_spec *spec = codec->spec;
+	int vref_delay = 0;
 
 	if (!spec->no_depop_delay)
 		msleep(150); /* to avoid pop noise */
 	codec->patch_ops.init(codec);
 
-	if (codec->core.subsystem_id == 0x10ec1304) {
+	if (codec->core.subsystem_id == 0x10ec1304)
+		vref_delay = 2000;
+	else if (codec->core.subsystem_id == 0x1b505809)
+		vref_delay = 1000;
+	if (vref_delay > 0) {
 		snd_hda_codec_write(codec, 0x19, 0, AC_VERB_SET_PIN_WIDGET_CONTROL, 0x04);
 		msleep(50);
 		snd_hda_codec_write(codec, 0x19, 0, AC_VERB_SET_PIN_WIDGET_CONTROL, 0x44);
-		msleep(2000);
+		msleep(vref_delay);
 		snd_hda_codec_write(codec, 0x19, 0, AC_VERB_SET_PIN_WIDGET_CONTROL, PIN_VREF80);
 	}
 	snd_hda_regmap_sync(codec);
