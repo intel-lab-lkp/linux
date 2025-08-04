@@ -453,6 +453,10 @@ static const struct at91_adc_reg_layout sama7g5_layout = {
  */
 #define AT91_TEMP_CALIB_TAG	0x41435354
 
+struct at91_adc_state;
+static int at91_adc_temp_sensor_init(struct at91_adc_state *st,
+				     struct device *dev);
+
 /**
  * struct at91_adc_platform - at91-sama5d2 platform information struct
  * @layout:		pointer to the reg layout struct
@@ -472,6 +476,8 @@ static const struct at91_adc_reg_layout sama7g5_layout = {
  * @chan_realbits:	realbits for registered channels
  * @temp_chan:		temperature channel index
  * @temp_sensor:	temperature sensor supported
+ * @temp_init:		callback function to initialize the temperature sensor
+ *			with its calibration data
  */
 struct at91_adc_platform {
 	const struct at91_adc_reg_layout	*layout;
@@ -489,6 +495,7 @@ struct at91_adc_platform {
 	unsigned int				chan_realbits;
 	unsigned int				temp_chan;
 	bool					temp_sensor;
+	int (*temp_init)(struct at91_adc_state *st, struct device *dev);
 };
 
 /**
@@ -729,6 +736,7 @@ static const struct at91_adc_platform sama5d2_platform = {
 	.oversampling_avail = { 1, 4, 16, },
 	.oversampling_avail_no = 3,
 	.chan_realbits = 14,
+	.temp_init = at91_adc_temp_sensor_init,
 };
 
 static const struct at91_adc_platform sama7g5_platform = {
@@ -753,6 +761,7 @@ static const struct at91_adc_platform sama7g5_platform = {
 	.chan_realbits = 16,
 	.temp_sensor = true,
 	.temp_chan = AT91_SAMA7G5_ADC_TEMP_CHANNEL,
+	.temp_init = at91_adc_temp_sensor_init,
 };
 
 static int at91_adc_chan_xlate(struct iio_dev *indio_dev, int chan)
@@ -2328,7 +2337,7 @@ static int at91_adc_probe(struct platform_device *pdev)
 
 	st->soc_info.platform = device_get_match_data(dev);
 
-	ret = at91_adc_temp_sensor_init(st, &pdev->dev);
+	ret = st->soc_info.platform->temp_init(st, &pdev->dev);
 	/* Don't register temperature channel if initialization failed. */
 	if (ret)
 		num_channels = st->soc_info.platform->max_channels - 1;
