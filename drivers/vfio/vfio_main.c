@@ -1324,6 +1324,10 @@ static long vfio_device_fops_unl_ioctl(struct file *filep,
 		break;
 
 	default:
+		if (device->ops->ioctl2) {
+			ret = device->ops->ioctl2(device, cmd, arg, &df->mmap_mt);
+			break;
+		}
 		if (unlikely(!device->ops->ioctl))
 			ret = -EINVAL;
 		else
@@ -1372,10 +1376,18 @@ static int vfio_device_fops_mmap(struct file *filep, struct vm_area_struct *vma)
 {
 	struct vfio_device_file *df = filep->private_data;
 	struct vfio_device *device = df->device;
+	struct vfio_mmap *vmmap;
 
 	/* Paired with smp_store_release() following vfio_df_open() */
 	if (!smp_load_acquire(&df->access_granted))
 		return -EINVAL;
+
+	if (device->ops->mmap2) {
+		vmmap = mtree_load(&df->mmap_mt, (vma->vm_pgoff << PAGE_SHIFT));
+		if (!vmmap)
+			return -EINVAL;
+		return device->ops->mmap2(device, vma, vmmap);
+	}
 
 	if (unlikely(!device->ops->mmap))
 		return -EINVAL;

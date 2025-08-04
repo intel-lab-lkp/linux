@@ -142,7 +142,11 @@ struct vfio_device_ops {
 			 size_t count, loff_t *size);
 	long	(*ioctl)(struct vfio_device *vdev, unsigned int cmd,
 			 unsigned long arg);
+	long	(*ioctl2)(struct vfio_device *vdev, unsigned int cmd,
+			 unsigned long arg, struct maple_tree *mmap_mt);
 	int	(*mmap)(struct vfio_device *vdev, struct vm_area_struct *vma);
+	int	(*mmap2)(struct vfio_device *vdev, struct vm_area_struct *vma,
+			 struct vfio_mmap *vmmap);
 	void	(*request)(struct vfio_device *vdev, unsigned int count);
 	int	(*match)(struct vfio_device *vdev, char *buf);
 	void	(*dma_unmap)(struct vfio_device *vdev, u64 iova, u64 length);
