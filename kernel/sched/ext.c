@@ -7426,10 +7426,18 @@ __bpf_kfunc s32 scx_bpf_task_cpu(const struct task_struct *p)
  */
 __bpf_kfunc struct rq *scx_bpf_cpu_rq(s32 cpu)
 {
+	struct rq *rq;
+
 	if (!kf_cpu_valid(cpu, NULL))
 		return NULL;
 
-	return cpu_rq(cpu);
+	rq = cpu_rq(cpu);
+	if (rq != scx_locked_rq_state) {
+		scx_kf_error("Accessing not locked rq %d", cpu);
+		return NULL;
+	}
+
+	return rq;
 }
 
 struct task_struct *bpf_task_acquire(struct task_struct *p);
