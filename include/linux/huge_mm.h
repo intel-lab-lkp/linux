@@ -476,6 +476,7 @@ vm_fault_t do_huge_pmd_numa_page(struct vm_fault *vmf);
 
 extern struct folio *huge_zero_folio;
 extern unsigned long huge_zero_pfn;
+extern atomic_t huge_zero_folio_is_static;
 
 static inline bool is_huge_zero_folio(const struct folio *folio)
 {
@@ -494,6 +495,18 @@ static inline bool is_huge_zero_pmd(pmd_t pmd)
 
 struct folio *mm_get_huge_zero_folio(struct mm_struct *mm);
 void mm_put_huge_zero_folio(struct mm_struct *mm);
+struct folio *__get_static_huge_zero_folio(void);
+
+static inline struct folio *get_static_huge_zero_folio(void)
+{
+	if (!IS_ENABLED(CONFIG_STATIC_HUGE_ZERO_FOLIO))
+		return NULL;
+
+	if (likely(atomic_read(&huge_zero_folio_is_static)))
+		return huge_zero_folio;
+
+	return __get_static_huge_zero_folio();
+}
 
 static inline bool thp_migration_supported(void)
 {
@@ -684,6 +697,11 @@ static inline int change_huge_pud(struct mmu_gather *tlb,
 				  unsigned long cp_flags)
 {
 	return 0;
+}
+
+static inline struct folio *get_static_huge_zero_folio(void)
+{
+	return NULL;
 }
 #endif /* CONFIG_TRANSPARENT_HUGEPAGE */
 
