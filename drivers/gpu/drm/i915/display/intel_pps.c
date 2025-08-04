@@ -4,6 +4,7 @@
  */
 
 #include <linux/debugfs.h>
+#include <linux/iopoll.h>
 
 #include <drm/drm_print.h>
 
@@ -608,6 +609,8 @@ static void wait_panel_status(struct intel_dp *intel_dp,
 	struct intel_display *display = to_intel_display(intel_dp);
 	struct intel_digital_port *dig_port = dp_to_dig_port(intel_dp);
 	i915_reg_t pp_stat_reg, pp_ctrl_reg;
+	int ret;
+	u32 val;
 
 	lockdep_assert_held(&display->pps.mutex);
 
@@ -624,7 +627,18 @@ static void wait_panel_status(struct intel_dp *intel_dp,
 		    intel_de_read(display, pp_stat_reg),
 		    intel_de_read(display, pp_ctrl_reg));
 
-	if (intel_de_wait(display, pp_stat_reg, mask, value, 5000))
+	ret = read_poll_timeout(intel_de_read, val,
+				(val & mask) == value,
+				10 * 1000, 5000 * 1000, true,
+				display, pp_stat_reg);
+
+	if (ret)
+		goto panel_wait_err;
+
+	drm_dbg_kms(display->drm, "Wait complete\n");
+	return;
+
+panel_wait_err:
 		drm_err(display->drm,
 			"[ENCODER:%d:%s] %s panel status timeout: PP_STATUS: 0x%08x PP_CONTROL: 0x%08x\n",
 			dig_port->base.base.base.id, dig_port->base.base.name,
@@ -632,7 +646,6 @@ static void wait_panel_status(struct intel_dp *intel_dp,
 			intel_de_read(display, pp_stat_reg),
 			intel_de_read(display, pp_ctrl_reg));
 
-	drm_dbg_kms(display->drm, "Wait complete\n");
 }
 
 static void wait_panel_on(struct intel_dp *intel_dp)
