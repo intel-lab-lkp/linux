@@ -16,6 +16,16 @@ struct cxl_cxims_data {
 	u64 xormaps[] __counted_by(nr_maps);
 };
 
+/*
+ * There is one CXIMS, therefore one set of XOR maps, that all CXL Windows with
+ * the same host bridge granularity share. The number of maps to apply at address
+ * translation is based on the Host Bridge interleave ways of the CXL Window.
+ * CXL Specification 3.2 Section 9.18.1.4 and Table 9-22.
+ */
+static const int hbiw_to_nr_maps[] = {
+	[1] = 0, [2] = 1, [3] = 0, [4] = 2, [6] = 1, [8] = 3, [12] = 2, [16] = 4
+};
+
 static const guid_t acpi_cxl_qtg_id_guid =
 	GUID_INIT(0xF365F9A6, 0xA7DE, 0x4071,
 		  0xA6, 0x6A, 0xB4, 0x0C, 0x0B, 0x4F, 0x8E, 0x52);
@@ -23,13 +33,13 @@ static const guid_t acpi_cxl_qtg_id_guid =
 
 static u64 cxl_xor_hpa_to_spa(struct cxl_root_decoder *cxlrd, u64 hpa)
 {
+	int nr_maps_to_apply = hbiw_to_nr_maps[cxlrd->cxlsd.nr_targets];
 	struct cxl_cxims_data *cximsd = cxlrd->platform_data;
-	int hbiw = cxlrd->cxlsd.nr_targets;
 	u64 val;
 	int pos;
 
 	/* No xormaps for host bridge interleave ways of 1 or 3 */
-	if (hbiw == 1 || hbiw == 3)
+	if (!nr_maps_to_apply)
 		return hpa;
 
 	/*
@@ -47,7 +57,7 @@ static u64 cxl_xor_hpa_to_spa(struct cxl_root_decoder *cxlrd, u64 hpa)
 	 * bits results in val==0, if odd the XOR result is val==1.
 	 */
 
-	for (int i = 0; i < cximsd->nr_maps; i++) {
+	for (int i = 0; i < nr_maps_to_apply; i++) {
 		if (!cximsd->xormaps[i])
 			continue;
 		pos = __ffs(cximsd->xormaps[i]);
