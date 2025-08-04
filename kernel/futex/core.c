@@ -1512,6 +1512,31 @@ void futex_exit_release(struct task_struct *tsk)
 	futex_cleanup_end(tsk, FUTEX_STATE_DEAD);
 }
 
+bool check_robust_futex(struct task_struct *p)
+{
+	struct task_struct *t;
+
+	for_each_thread(p, t) {
+		if (unlikely(t->robust_list))
+			return true;
+#ifdef CONFIG_COMPAT
+		if (unlikely(t->compat_robust_list))
+			return true;
+#endif
+	}
+	return false;
+}
+
+bool check_robust_futex_rcu(struct task_struct *p)
+{
+	bool has_robust;
+
+	rcu_read_lock();
+	has_robust = check_robust_futex(p);
+	rcu_read_unlock();
+	return has_robust;
+}
+
 static void futex_hash_bucket_init(struct futex_hash_bucket *fhb,
 				   struct futex_private_hash *fph)
 {
