@@ -298,7 +298,7 @@ int afs_merge_fs_addr4(struct afs_net *net, struct afs_addr_list *alist,
 	srx.transport.sin.sin_addr.s_addr = xdr;
 
 	peer = rxrpc_kernel_lookup_peer(net->socket, &srx, GFP_KERNEL);
-	if (!peer)
+	if (IS_ERR_OR_NULL(peer))
 		return -ENOMEM;
 
 	for (i = 0; i < alist->nr_ipv4; i++) {
@@ -342,7 +342,7 @@ int afs_merge_fs_addr6(struct afs_net *net, struct afs_addr_list *alist,
 	memcpy(&srx.transport.sin6.sin6_addr, xdr, 16);
 
 	peer = rxrpc_kernel_lookup_peer(net->socket, &srx, GFP_KERNEL);
-	if (!peer)
+	if (IS_ERR_OR_NULL(peer))
 		return -ENOMEM;
 
 	for (i = alist->nr_ipv4; i < alist->nr_addrs; i++) {
