@@ -716,4 +716,21 @@ static inline int split_folio_to_order(struct folio *folio, int new_order)
 	return split_folio_to_list_to_order(folio, NULL, new_order);
 }
 
+/*
+ * largest_zero_folio - Get the largest zero size folio available
+ *
+ * This function will return huge_zero_folio if CONFIG_STATIC_HUGE_ZERO_FOLIO
+ * is enabled. Otherwise, a ZERO_PAGE folio is returned.
+ *
+ * Deduce the size of the folio with folio_size instead of assuming the
+ * folio size.
+ */
+static inline struct folio *largest_zero_folio(void)
+{
+	struct folio *folio = get_static_huge_zero_folio();
+
+	if (folio)
+		return folio;
+	return page_folio(ZERO_PAGE(0));
+}
 #endif /* _LINUX_HUGE_MM_H */
