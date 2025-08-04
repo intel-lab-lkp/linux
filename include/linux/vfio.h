@@ -80,6 +80,19 @@ struct vfio_device {
 #endif
 };
 
+struct vfio_mmap {
+	struct vfio_device *owner;
+	u64 offset;
+	u64 size;
+	u32 region_flags;
+	struct vfio_mmap_ops *ops;
+};
+
+struct vfio_mmap_ops {
+	void	(*free)(struct vfio_mmap *vmmap);
+};
+
+
 /**
  * struct vfio_device_ops - VFIO bus driver device callbacks
  *
@@ -338,6 +351,10 @@ int vfio_pin_pages(struct vfio_device *device, dma_addr_t iova,
 void vfio_unpin_pages(struct vfio_device *device, dma_addr_t iova, int npage);
 int vfio_dma_rw(struct vfio_device *device, dma_addr_t iova,
 		void *data, size_t len, bool write);
+void vfio_mmap_init(struct vfio_device *vdev, struct vfio_mmap *vmmap,
+		    u32 region_flags, u64 offset, u64 size,
+		    struct vfio_mmap_ops *ops);
+void vfio_mmap_free(struct vfio_mmap *vmmap);
 
 /*
  * Sub-module helpers

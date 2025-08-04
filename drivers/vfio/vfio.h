@@ -19,6 +19,7 @@ struct vfio_container;
 struct vfio_device_file {
 	struct vfio_device *device;
 	struct vfio_group *group;
+	struct maple_tree mmap_mt;
 
 	u8 access_granted;
 	u32 devid; /* only valid when iommufd is valid */

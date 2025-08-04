@@ -39,6 +39,7 @@
 #include <linux/interval_tree.h>
 #include <linux/iova_bitmap.h>
 #include <linux/iommufd.h>
+#include <linux/maple_tree.h>
 #include "vfio.h"
 
 #define DRIVER_VERSION	"0.3"
@@ -498,6 +499,7 @@ vfio_allocate_device_file(struct vfio_device *device)
 
 	df->device = device;
 	spin_lock_init(&df->kvm_ref_lock);
+	mt_init_flags(&df->mmap_mt, MT_FLAGS_ALLOC_RANGE);
 
 	return df;
 }
@@ -622,6 +624,25 @@ static inline void vfio_device_pm_runtime_put(struct vfio_device *device)
 		pm_runtime_put(dev);
 }
 
+void vfio_mmap_init(struct vfio_device *vdev, struct vfio_mmap *vmmap,
+		    u32 region_flags, u64 offset, u64 size,
+		    struct vfio_mmap_ops *ops)
+{
+	vmmap->owner = vdev;
+	vmmap->offset = offset;
+	vmmap->ops = ops;
+	vmmap->size = size;
+	vmmap->region_flags = region_flags;
+}
+EXPORT_SYMBOL_GPL(vfio_mmap_init);
+
+void vfio_mmap_free(struct vfio_mmap *vmmap)
+{
+	if (vmmap->ops && vmmap->ops->free)
+		vmmap->ops->free(vmmap);
+}
+EXPORT_SYMBOL_GPL(vfio_mmap_free);
+
 /*
  * VFIO Device fd
  */
@@ -629,14 +650,22 @@ static int vfio_device_fops_release(struct inode *inode, struct file *filep)
 {
 	struct vfio_device_file *df = filep->private_data;
 	struct vfio_device *device = df->device;
+	struct vfio_mmap *vmmap;
+	unsigned long index = 0;
 
 	if (df->group)
 		vfio_df_group_close(df);
 	else
 		vfio_df_unbind_iommufd(df);
 
+	mt_for_each(&df->mmap_mt, vmmap, index, ULONG_MAX) {
+		mtree_erase(&df->mmap_mt, index);
+		vfio_mmap_free(vmmap);
+	}
+
 	vfio_device_put_registration(device);
 
+	mtree_destroy(&df->mmap_mt);
 	kfree(df);
 
 	return 0;
