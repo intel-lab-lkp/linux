@@ -16,6 +16,7 @@ use core::ops::Deref;
 
 use kernel::device::{self, Device};
 use kernel::prelude::*;
+use kernel::ptr::Alignment;
 use kernel::transmute::FromBytes;
 
 use crate::dma::DmaObject;
@@ -203,7 +204,7 @@ pub(crate) struct FwsecFirmware {
 }
 
 // We need to load full DMEM pages.
-const DMEM_LOAD_SIZE_ALIGN: u32 = 256;
+const DMEM_LOAD_SIZE_ALIGN: usize = 256;
 
 impl FalconLoadParams for FwsecFirmware {
     fn imem_load_params(&self) -> FalconLoadTarget {
@@ -218,11 +219,9 @@ impl FalconLoadParams for FwsecFirmware {
         FalconLoadTarget {
             src_start: self.desc.imem_load_size,
             dst_start: self.desc.dmem_phys_base,
-            // TODO[NUMM]: replace with `align_up` once it lands.
-            len: self
-                .desc
-                .dmem_load_size
-                .next_multiple_of(DMEM_LOAD_SIZE_ALIGN),
+            len: Alignment::new(DMEM_LOAD_SIZE_ALIGN)
+                .align_up(self.desc.dmem_load_size)
+                .unwrap_or(u32::MAX),
         }
     }
 
