@@ -141,20 +141,6 @@ Features desired before this happens:
 | Complexity: Advanced
 | Contact: Alexandre Courbot
 
-Numerical operations [NUMM]
----------------------------
-
-Nova uses integer operations that are not part of the standard library (or not
-implemented in an optimized way for the kernel). These include:
-
-- The "Find Last Set Bit" (`fls` function of the C part of the kernel)
-  operation.
-
-A `num` core kernel module is being designed to provide these operations.
-
-| Complexity: Intermediate
-| Contact: Alexandre Courbot
-
 Delay / Sleep abstractions [DLAY]
 ---------------------------------
 
