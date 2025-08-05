@@ -2042,6 +2042,9 @@ enqueue_dl_entity(struct sched_dl_entity *dl_se, int flags)
 	}
 
 	__enqueue_dl_entity(dl_se);
+
+	if (dl_server(dl_se))
+		printk_deferred_once("sched: dl_server activated\n");
 }
 
 static void dequeue_dl_entity(struct sched_dl_entity *dl_se, int flags)
