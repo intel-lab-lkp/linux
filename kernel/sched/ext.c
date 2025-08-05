@@ -7433,6 +7433,29 @@ __bpf_kfunc struct rq *scx_bpf_cpu_rq(s32 cpu)
 }
 
 /**
+ * scx_bpf_task_acquire_remote_curr - Fetch the curr task of a rq without
+ * acquiring its rq lock
+ * @cpu: CPU of the rq
+ *
+ * Increments the refcount of the task_struct which needs to be released using
+ * bpf_task_release().
+ */
+__bpf_kfunc struct task_struct *scx_bpf_task_acquire_remote_curr(s32 cpu)
+{
+	struct task_struct *p;
+
+	if (!kf_cpu_valid(cpu, NULL))
+		return NULL;
+
+	rcu_read_lock();
+	p = cpu_rq(cpu)->curr;
+	if (p)
+		p = refcount_inc_not_zero(&p->rcu_users) ? p : NULL;
+	rcu_read_unlock();
+	return p;
+}
+
+/**
  * scx_bpf_task_cgroup - Return the sched cgroup of a task
  * @p: task of interest
  *
@@ -7596,6 +7619,7 @@ BTF_ID_FLAGS(func, scx_bpf_put_cpumask, KF_RELEASE)
 BTF_ID_FLAGS(func, scx_bpf_task_running, KF_RCU)
 BTF_ID_FLAGS(func, scx_bpf_task_cpu, KF_RCU)
 BTF_ID_FLAGS(func, scx_bpf_cpu_rq, KF_RET_NULL)
+BTF_ID_FLAGS(func, scx_bpf_task_acquire_remote_curr, KF_RET_NULL | KF_ACQUIRE)
 #ifdef CONFIG_CGROUP_SCHED
 BTF_ID_FLAGS(func, scx_bpf_task_cgroup, KF_RCU | KF_ACQUIRE)
 #endif
