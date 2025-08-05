@@ -10,6 +10,7 @@
 
 #include <linux/kernel.h>
 #include <linux/workqueue.h>
+#include <net/netns/vsock.h>
 #include <net/sock.h>
 #include <uapi/linux/vm_sockets.h>
 
@@ -255,5 +256,46 @@ static inline void __init vsock_bpf_build_proto(void)
 static inline bool vsock_msgzerocopy_allow(const struct vsock_transport *t)
 {
 	return t->msgzerocopy_allow && t->msgzerocopy_allow();
+}
+
+static inline u8 vsock_net_mode(struct net *net)
+{
+	u8 ret;
+
+	spin_lock_bh(&net->vsock.lock);
+	ret = net->vsock.ns_mode;
+	spin_unlock_bh(&net->vsock.lock);
+	return ret;
+}
+
+static inline void vsock_net_set_mode(struct net *net, u8 mode)
+{
+	spin_lock_bh(&net->vsock.lock);
+	net->vsock.ns_mode = mode;
+	net->vsock.written = true;
+	spin_unlock_bh(&net->vsock.lock);
+}
+
+/* Return true if mode has already been written once. Otherwise, return false. */
+static inline bool vsock_net_mode_can_set(struct net *net)
+{
+	bool ret;
+
+	spin_lock_bh(&net->vsock.lock);
+	ret = !net->vsock.written;
+	spin_unlock_bh(&net->vsock.lock);
+
+	return ret;
+}
+
+/* Return true if vsock net mode check passes. Otherwise, return false.
+ *
+ * Read more about modes in comment header of net/vmw_vsock/af_vsock.c.
+ */
+static inline bool vsock_net_check_mode(struct net *n1, struct net *n2)
+{
+	return net_eq(n1, n2) ||
+	       (vsock_net_mode(n1) == VSOCK_NET_MODE_GLOBAL &&
+		vsock_net_mode(n2) == VSOCK_NET_MODE_GLOBAL);
 }
 #endif /* __AF_VSOCK_H__ */
