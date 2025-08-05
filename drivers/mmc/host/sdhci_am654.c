@@ -156,6 +156,7 @@ struct sdhci_am654_data {
 
 #define SDHCI_AM654_QUIRK_FORCE_CDTEST BIT(0)
 #define SDHCI_AM654_QUIRK_SUPPRESS_V1P8_ENA BIT(1)
+#define SDHCI_AM654_QUIRK_DISABLE_HS400 BIT(2)
 };
 
 struct window {
@@ -820,6 +821,9 @@ static int sdhci_am654_init(struct sdhci_host *host)
 	if (ret)
 		goto err_cleanup_host;
 
+	if (sdhci_am654->quirks & SDHCI_AM654_QUIRK_DISABLE_HS400)
+		host->mmc->caps2 &= ~(MMC_CAP2_HS400 | MMC_CAP2_HS400_ES);
+
 	ret = __sdhci_add_host(host);
 	if (ret)
 		goto err_cleanup_host;
@@ -882,6 +886,12 @@ static int sdhci_am654_get_of_property(struct platform_device *pdev,
 
 	return 0;
 }
+
+static const struct soc_device_attribute sdhci_am654_descope_hs400[] = {
+	{ .family = "AM62PX", .revision = "SR1.0" },
+	{ .family = "AM62PX", .revision = "SR1.1" },
+	{ /* sentinel */ }
+};
 
 static const struct of_device_id sdhci_am654_of_match[] = {
 	{
@@ -969,6 +979,12 @@ static int sdhci_am654_probe(struct platform_device *pdev)
 	ret = mmc_of_parse(host->mmc);
 	if (ret)
 		return dev_err_probe(dev, ret, "parsing dt failed\n");
+
+	soc = soc_device_match(sdhci_am654_descope_hs400);
+	if (soc) {
+		dev_err(dev, "Disable descoped HS400 mode for this silicon revision\n");
+		sdhci_am654->quirks |= SDHCI_AM654_QUIRK_DISABLE_HS400;
+	}
 
 	host->mmc_host_ops.start_signal_voltage_switch = sdhci_am654_start_signal_voltage_switch;
 	host->mmc_host_ops.execute_tuning = sdhci_am654_execute_tuning;
