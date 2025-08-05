@@ -310,6 +310,8 @@ static int visconti_pcie_probe(struct platform_device *pdev)
 
 	platform_set_drvdata(pdev, pcie);
 
+	pci->use_parent_dt_ranges = true;
+
 	return visconti_add_pcie_port(pcie, pdev);
 }
 
