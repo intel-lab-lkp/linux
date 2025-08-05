@@ -2576,10 +2576,9 @@ void damos_sysfs_update_effective_quotas(
 	}
 }
 
-static int damos_sysfs_add_migrate_dest(struct damos *scheme,
+static int damos_sysfs_add_migrate_dest(struct damos_migrate_dests *dests,
 		struct damos_sysfs_dests *sysfs_dests)
 {
-	struct damos_migrate_dests *dests = &scheme->migrate_dests;
 	int i;
 
 	dests->node_id_arr = kmalloc_array(sysfs_dests->nr,
@@ -2596,6 +2595,35 @@ static int damos_sysfs_add_migrate_dest(struct damos *scheme,
 		dests->weight_arr[i] = sysfs_dests->dests_arr[i]->weight;
 	}
 	dests->nr_dests = sysfs_dests->nr;
+	return 0;
+}
+
+int damos_sysfs_set_schemes_dests(struct damon_sysfs_schemes *sysfs_schemes,
+		struct damon_ctx *ctx)
+{
+	struct damos *scheme;
+	int i = 0;
+
+	damon_for_each_scheme(scheme, ctx) {
+		struct damos_sysfs_dests *sysfs_dests;
+		struct damos_migrate_dests dests = {};
+		int err;
+
+		/* user could have removed the scheme sysfs dir */
+		if (i >= sysfs_schemes->nr)
+			break;
+
+		sysfs_dests = sysfs_schemes->schemes_arr[i]->dests;
+		err = damos_sysfs_add_migrate_dest(&dests, sysfs_dests);
+		if (err) {
+			damos_destroy_dests(&dests);
+			return err;
+		}
+
+		damos_destroy_dests(&scheme->migrate_dests);
+		scheme->migrate_dests = dests;
+	}
+
 	return 0;
 }
 
@@ -2661,7 +2689,8 @@ static struct damos *damon_sysfs_mk_scheme(
 		damon_destroy_scheme(scheme);
 		return NULL;
 	}
-	err = damos_sysfs_add_migrate_dest(scheme, sysfs_scheme->dests);
+	err = damos_sysfs_add_migrate_dest(&scheme->migrate_dests,
+		sysfs_scheme->dests);
 	if (err) {
 		damon_destroy_scheme(scheme);
 		return NULL;

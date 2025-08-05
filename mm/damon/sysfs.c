@@ -1206,6 +1206,11 @@ enum damon_sysfs_cmd {
 	 */
 	DAMON_SYSFS_CMD_COMMIT_SCHEMES_QUOTA_GOALS,
 	/*
+	 * @DAMON_SYSFS_CMD_COMMIT_SCHEMES_DESTS: Commit the scheme dests to
+	 * DAMON.
+	 */
+	DAMON_SYSFS_CMD_COMMIT_SCHEMES_DESTS,
+	/*
 	 * @DAMON_SYSFS_CMD_UPDATE_SCHEMES_STATS: Update scheme stats sysfs
 	 * files.
 	 */
@@ -1247,6 +1252,7 @@ static const char * const damon_sysfs_cmd_strs[] = {
 	"off",
 	"commit",
 	"commit_schemes_quota_goals",
+	"commit_schemes_dests",
 	"update_schemes_stats",
 	"update_schemes_tried_bytes",
 	"update_schemes_tried_regions",
@@ -1459,6 +1465,23 @@ static int damon_sysfs_commit_schemes_quota_goals(void *data)
 	return damos_sysfs_set_quota_scores(sysfs_ctx->schemes, ctx);
 }
 
+static int damon_sysfs_commit_schemes_dests(void *data)
+{
+	struct damon_sysfs_kdamond *sysfs_kdamond = data;
+	struct damon_ctx *ctx;
+	struct damon_sysfs_context *sysfs_ctx;
+
+	if (!damon_sysfs_kdamond_running(sysfs_kdamond))
+		return -EINVAL;
+	/* TODO: Support multiple contexts per kdamond */
+	if (sysfs_kdamond->contexts->nr != 1)
+		return -EINVAL;
+
+	ctx = sysfs_kdamond->damon_ctx;
+	sysfs_ctx = sysfs_kdamond->contexts->contexts_arr[0];
+	return damos_sysfs_set_schemes_dests(sysfs_ctx->schemes, ctx);
+}
+
 /*
  * damon_sysfs_upd_schemes_effective_quotas() - Update schemes effective quotas
  * sysfs files.
@@ -1652,6 +1675,10 @@ static int damon_sysfs_handle_cmd(enum damon_sysfs_cmd cmd,
 	case DAMON_SYSFS_CMD_COMMIT_SCHEMES_QUOTA_GOALS:
 		return damon_sysfs_damon_call(
 				damon_sysfs_commit_schemes_quota_goals,
+				kdamond);
+	case DAMON_SYSFS_CMD_COMMIT_SCHEMES_DESTS:
+		return damon_sysfs_damon_call(
+				damon_sysfs_commit_schemes_dests,
 				kdamond);
 	case DAMON_SYSFS_CMD_UPDATE_SCHEMES_STATS:
 		return damon_sysfs_damon_call(
