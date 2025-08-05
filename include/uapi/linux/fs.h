@@ -435,7 +435,11 @@ typedef int __bitwise __kernel_rwf_t;
 			 RWF_APPEND | RWF_NOAPPEND | RWF_ATOMIC |\
 			 RWF_DONTCACHE)
 
+/* This matches XSDFEC_MAGIC, so we need to allocate subvalues carefully. */
 #define PROCFS_IOCTL_MAGIC 'f'
+
+/* procfs root ioctls */
+#define PROCFS_GET_PID_NAMESPACE	_IO(PROCFS_IOCTL_MAGIC, 32)
 
 /* Pagemap ioctl */
 #define PAGEMAP_SCAN	_IOWR(PROCFS_IOCTL_MAGIC, 16, struct pm_scan_arg)

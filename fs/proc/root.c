@@ -23,8 +23,10 @@
 #include <linux/cred.h>
 #include <linux/magic.h>
 #include <linux/slab.h>
+#include <linux/ptrace.h>
 
 #include "internal.h"
+#include "../internal.h"
 
 struct proc_fs_context {
 	struct pid_namespace	*pid_ns;
@@ -426,15 +428,77 @@ static int proc_root_readdir(struct file *file, struct dir_context *ctx)
 	return proc_pid_readdir(file, ctx);
 }
 
+static long int proc_root_ioctl(struct file *filp, unsigned int cmd, unsigned long arg)
+{
+	switch (cmd) {
+	case PROCFS_GET_PID_NAMESPACE: {
+#ifdef CONFIG_PID_NS
+		struct pid_namespace *active = task_active_pid_ns(current);
+		struct pid_namespace *ns = proc_pid_ns(file_inode(filp)->i_sb);
+		bool can_access_pidns = false;
+
+		/*
+		 * Having a handle to a pidns is not sufficient to do anything
+		 * particularly harmful, as setns(2) has its own separate
+		 * privilege checks. So, we can loosen the privilege
+		 * requirements here a little to make this more ergonomic.
+		 *
+		 * If we are in an ancestor pidns of the pidns, then we can
+		 * already address any process in the pidns. From a setns(2)
+		 * privileges perspective, we can create a pidfd which setns(2)
+		 * would also accept (pending any privilege checks).
+		 *
+		 * If we are not in an ancestor pidns, because this operation
+		 * is being done on the root of the /proc instance, the caller
+		 * can try to access /proc/1/ns/pid which is equivalent to this
+		 * ioctl and so we should copy the PTRACE_MODE_READ_FSCREDS
+		 * permission model use by proc_ns_get_link(). Ideally we would
+		 * check for ptrace-read access against all processes in the
+		 * pidns (which is very likely to be true for at least one
+		 * process, as SUID_DUMP_DISABLE is cleared on exec(2) and is
+		 * rarely set by most programs), but this would obviously not
+		 * scale.
+		 *
+		 * If there is no root process, then there is no real downside
+		 * to unprivileged users to open a handle to it.
+		 */
+		can_access_pidns = pidns_is_ancestor(ns, active);
+		if (!can_access_pidns) {
+			bool cannot_ptrace_pid1 = false;
+
+			read_lock(&tasklist_lock);
+			if (ns->child_reaper)
+				cannot_ptrace_pid1 = ptrace_may_access(ns->child_reaper,
+								       PTRACE_MODE_READ_FSCREDS);
+			read_unlock(&tasklist_lock);
+			can_access_pidns = !cannot_ptrace_pid1;
+		}
+		if (!can_access_pidns)
+			return -EPERM;
+
+		/* open_namespace() unconditionally consumes the reference. */
+		get_pid_ns(ns);
+		return open_namespace(to_ns_common(ns));
+#else
+		return -EOPNOTSUPP;
+#endif
+	}
+	default:
+		return -ENOIOCTLCMD;
+	}
+}
+
 /*
  * The root /proc directory is special, as it has the
  * <pid> directories. Thus we don't use the generic
  * directory handling functions for that..
  */
 static const struct file_operations proc_root_operations = {
-	.read		 = generic_read_dir,
-	.iterate_shared	 = proc_root_readdir,
+	.read		= generic_read_dir,
+	.iterate_shared	= proc_root_readdir,
 	.llseek		= generic_file_llseek,
+	.unlocked_ioctl = proc_root_ioctl,
+	.compat_ioctl   = compat_ptr_ioctl,
 };
 
 /*
