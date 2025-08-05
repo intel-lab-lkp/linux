@@ -4,6 +4,10 @@
 #include "i40e.h"
 #include "i40e_lan_hmc.h"
 #include "i40e_virtchnl_pf.h"
+#include <linux/moduleparam.h>
+
+bool __read_mostly limit_mac_per_vf = 1;
+module_param_named(limit_mac_per_vf, limit_mac_per_vf, bool, 0444);
 
 /*********************notification routines***********************/
 
@@ -2950,7 +2954,7 @@ static inline int i40e_check_vf_permission(struct i40e_vf *vf,
 	 * all VFs.
 	 */
 	} else {
-		if (new_count > max_macvlan) {
+		if (new_count > max_macvlan && limit_mac_per_vf) {
 			dev_err(&pf->pdev->dev,
 				"Cannot add more MAC addresses, trusted VF %d uses (%d/%d) MAC addresses\n",
 				vf->vf_id, new_count, max_macvlan);
