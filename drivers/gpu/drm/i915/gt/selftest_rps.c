@@ -152,7 +152,7 @@ static u8 wait_for_freq(struct intel_rps *rps, u8 freq, int timeout_ms)
 {
 	u8 history[64], i;
 	unsigned long end;
-	int sleep;
+	unsigned int sleep;
 
 	i = 0;
 	memset(history, freq, sizeof(history));
@@ -180,7 +180,7 @@ static u8 wait_for_freq(struct intel_rps *rps, u8 freq, int timeout_ms)
 
 		usleep_range(sleep, 2 * sleep);
 		sleep *= 2;
-		if (sleep > timeout_ms * 20)
+		if (sleep > timeout_ms * 20 && timeout_ms > 0)
 			sleep = timeout_ms * 20;
 	} while (1);
 }
