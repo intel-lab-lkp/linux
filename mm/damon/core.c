@@ -359,6 +359,12 @@ void damos_destroy_quota_goal(struct damos_quota_goal *g)
 	damos_free_quota_goal(g);
 }
 
+void damos_destroy_dests(struct damos_migrate_dests *dests)
+{
+	kfree(dests->node_id_arr);
+	kfree(dests->weight_arr);
+}
+
 /* initialize fields of @quota that normally API users wouldn't set */
 static struct damos_quota *damos_quota_init(struct damos_quota *quota)
 {
@@ -451,8 +457,7 @@ void damon_destroy_scheme(struct damos *s)
 	damos_for_each_filter_safe(f, next, s)
 		damos_destroy_filter(f);
 
-	kfree(s->migrate_dests.node_id_arr);
-	kfree(s->migrate_dests.weight_arr);
+	damos_destroy_dests(&s->migrate_dests);
 	damon_del_scheme(s);
 	damon_free_scheme(s);
 }
