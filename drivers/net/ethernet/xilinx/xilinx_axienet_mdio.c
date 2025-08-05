@@ -12,6 +12,7 @@
 #include <linux/clk.h>
 #include <linux/of_address.h>
 #include <linux/of_mdio.h>
+#include <linux/platform_device.h>
 #include <linux/jiffies.h>
 #include <linux/iopoll.h>
 
@@ -22,13 +23,13 @@
 
 /**
  * axienet_mdio_wait_until_ready - MDIO wait function
- * @lp:	Pointer to axienet local data structure.
+ * @lp:	Pointer to axienet common data structure.
  *
  * Return :	0 on success, Negative value on errors
  *
  * Wait till MDIO interface is ready to accept a new transaction.
  */
-static int axienet_mdio_wait_until_ready(struct axienet_local *lp)
+static int axienet_mdio_wait_until_ready(struct axienet_common *lp)
 {
 	u32 val;
 
@@ -39,11 +40,11 @@ static int axienet_mdio_wait_until_ready(struct axienet_local *lp)
 
 /**
  * axienet_mdio_mdc_enable - MDIO MDC enable function
- * @lp:	Pointer to axienet local data structure.
+ * @lp:	Pointer to axienet common data structure.
  *
  * Enable the MDIO MDC. Called prior to a read/write operation
  */
-static void axienet_mdio_mdc_enable(struct axienet_local *lp)
+static void axienet_mdio_mdc_enable(struct axienet_common *lp)
 {
 	iowrite32((u32)lp->mii_clk_div | XAE_MDIO_MC_MDIOEN_MASK,
 		  lp->regs + XAE_MDIO_MC_OFFSET);
@@ -51,11 +52,11 @@ static void axienet_mdio_mdc_enable(struct axienet_local *lp)
 
 /**
  * axienet_mdio_mdc_disable - MDIO MDC disable function
- * @lp:	Pointer to axienet local data structure.
+ * @lp:	Pointer to axienet common data structure.
  *
  * Disable the MDIO MDC. Called after a read/write operation
  */
-static void axienet_mdio_mdc_disable(struct axienet_local *lp)
+static void axienet_mdio_mdc_disable(struct axienet_common *lp)
 {
 	u32 mc_reg;
 
@@ -80,8 +81,9 @@ static int axienet_mdio_read(struct mii_bus *bus, int phy_id, int reg)
 {
 	u32 rc;
 	int ret;
-	struct axienet_local *lp = bus->priv;
+	struct axienet_common *lp = bus->priv;
 
+	guard(mutex)(&lp->reset_lock);
 	axienet_mdio_mdc_enable(lp);
 
 	ret = axienet_mdio_wait_until_ready(lp);
@@ -127,13 +129,14 @@ static int axienet_mdio_read(struct mii_bus *bus, int phy_id, int reg)
 static int axienet_mdio_write(struct mii_bus *bus, int phy_id, int reg,
 			      u16 val)
 {
-	struct axienet_local *lp = bus->priv;
+	struct axienet_common *lp = bus->priv;
 	int ret;
 	u32 mcr;
 
 	dev_dbg(&bus->dev, "%s(phy_id=%i, reg=%x, val=%x)\n", __func__,
 		phy_id, reg, val);
 
+	guard(mutex)(&lp->reset_lock);
 	axienet_mdio_mdc_enable(lp);
 
 	ret = axienet_mdio_wait_until_ready(lp);
@@ -171,7 +174,7 @@ static int axienet_mdio_write(struct mii_bus *bus, int phy_id, int reg,
  **/
 static int axienet_mdio_enable(struct mii_bus *bus, struct device_node *np)
 {
-	struct axienet_local *lp = bus->priv;
+	struct axienet_common *lp = bus->priv;
 	u32 mdio_freq = DEFAULT_MDIO_FREQ;
 	u32 host_clock;
 	u32 clk_div;
@@ -187,7 +190,7 @@ static int axienet_mdio_enable(struct mii_bus *bus, struct device_node *np)
 		/* Legacy fallback: detect CPU clock frequency and use as AXI
 		 * bus clock frequency. This only works on certain platforms.
 		 */
-		np1 = of_find_node_by_name(NULL, "lpu");
+		np1 = of_find_node_by_name(NULL, "cpu");
 		if (!np1) {
 			dev_warn(&bus->dev,
 				 "Could not find CPU device node.\n");
@@ -258,6 +261,7 @@ static int axienet_mdio_enable(struct mii_bus *bus, struct device_node *np)
 		"Setting MDIO clock divisor to %u/%u Hz host clock.\n",
 		lp->mii_clk_div, host_clock);
 
+	guard(mutex)(&lp->reset_lock);
 	axienet_mdio_mdc_enable(lp);
 
 	ret = axienet_mdio_wait_until_ready(lp);
@@ -269,7 +273,7 @@ static int axienet_mdio_enable(struct mii_bus *bus, struct device_node *np)
 
 /**
  * axienet_mdio_setup - MDIO setup function
- * @lp:		Pointer to axienet local data structure.
+ * @lp:		Pointer to axienet common data structure.
  *
  * Return:	0 on success, -ETIMEDOUT on a timeout, -EOVERFLOW on a clock
  *		divisor overflow, -ENOMEM when mdiobus_alloc (to allocate
@@ -278,7 +282,7 @@ static int axienet_mdio_enable(struct mii_bus *bus, struct device_node *np)
  * Sets up the MDIO interface by initializing the MDIO clock.
  * Register the MDIO interface.
  **/
-int axienet_mdio_setup(struct axienet_local *lp)
+int axienet_mdio_setup(struct axienet_common *lp)
 {
 	struct device_node *mdio_node;
 	struct mii_bus *bus;
@@ -295,18 +299,21 @@ int axienet_mdio_setup(struct axienet_local *lp)
 	bus->name = "Xilinx Axi Ethernet MDIO";
 	bus->read = axienet_mdio_read;
 	bus->write = axienet_mdio_write;
-	bus->parent = lp->dev;
+	bus->parent = &lp->pdev->dev;
 	lp->mii_bus = bus;
 
-	mdio_node = of_get_child_by_name(lp->dev->of_node, "mdio");
-	ret = axienet_mdio_enable(bus, mdio_node);
+	mdio_node = of_get_child_by_name(lp->pdev->dev.of_node, "mdio");
+	scoped_guard(mutex, &lp->reset_lock)
+		ret = axienet_mdio_enable(bus, mdio_node);
 	if (ret < 0)
 		goto unregister;
 
 	ret = of_mdiobus_register(bus, mdio_node);
 	of_node_put(mdio_node);
-	axienet_mdio_mdc_disable(lp);
+	scoped_guard(mutex, &lp->reset_lock)
+		axienet_mdio_mdc_disable(lp);
 	if (ret) {
+unregister:
 		mdiobus_free(bus);
 		lp->mii_bus = NULL;
 	}
@@ -315,11 +322,11 @@ int axienet_mdio_setup(struct axienet_local *lp)
 
 /**
  * axienet_mdio_teardown - MDIO remove function
- * @lp:		Pointer to axienet local data structure.
+ * @lp:		Pointer to axienet common data structure.
  *
  * Unregisters the MDIO and frees any associate memory for mii bus.
  */
-void axienet_mdio_teardown(struct axienet_local *lp)
+void axienet_mdio_teardown(struct axienet_common *lp)
 {
 	mdiobus_unregister(lp->mii_bus);
 	mdiobus_free(lp->mii_bus);

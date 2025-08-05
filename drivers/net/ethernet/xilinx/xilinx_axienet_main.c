@@ -225,8 +225,8 @@ static void axienet_dma_bd_release(struct net_device *ndev)
 
 static u64 axienet_dma_rate(struct axienet_local *lp)
 {
-	if (lp->axi_clk)
-		return clk_get_rate(lp->axi_clk);
+	if (lp->cp->axi_clk)
+		return clk_get_rate(lp->cp->axi_clk);
 	return 125000000; /* arbitrary guess if no clock rate set */
 }
 
@@ -2749,29 +2749,17 @@ static void axienet_disable_misc(void *clocks)
 	clk_bulk_disable_unprepare(XAE_NUM_MISC_CLOCKS, clocks);
 }
 
-/**
- * axienet_probe - Axi Ethernet probe function.
- * @pdev:	Pointer to platform device structure.
- *
- * Return: 0, on success
- *	    Non-zero error value on failure.
- *
- * This is the probe routine for Axi Ethernet driver. This is called before
- * any other driver routines are invoked. It allocates and sets up the Ethernet
- * device. Parses through device tree and populates fields of
- * axienet_local. It registers the Ethernet device.
- */
-static int axienet_probe(struct platform_device *pdev)
+static int axienet_mac_probe(struct axienet_common *cp)
 {
-	int ret;
+	struct platform_device *pdev = cp->pdev;
 	struct device *dev = &pdev->dev;
-	struct device_node *np;
 	struct axienet_local *lp;
 	struct net_device *ndev;
-	struct resource *ethres;
+	struct device_node *np;
 	u8 mac_addr[ETH_ALEN];
 	int addr_width = 32;
 	u32 value;
+	int ret;
 
 	ndev = devm_alloc_etherdev(dev, sizeof(*lp));
 	if (!ndev)
@@ -2790,6 +2778,8 @@ static int axienet_probe(struct platform_device *pdev)
 	lp = netdev_priv(ndev);
 	lp->ndev = ndev;
 	lp->dev = dev;
+	lp->cp = cp;
+	lp->regs = cp->regs;
 	lp->options = XAE_OPTION_DEFAULTS;
 	lp->rx_bd_num = RX_BD_NUM_DEFAULT;
 	lp->tx_bd_num = TX_BD_NUM_DEFAULT;
@@ -2800,17 +2790,6 @@ static int axienet_probe(struct platform_device *pdev)
 	mutex_init(&lp->stats_lock);
 	seqcount_mutex_init(&lp->hw_stats_seqcount, &lp->stats_lock);
 	INIT_DEFERRABLE_WORK(&lp->stats_work, axienet_refresh_stats);
-
-	lp->axi_clk = devm_clk_get_optional_enabled(dev, "s_axi_lite_clk");
-	if (!lp->axi_clk) {
-		/* For backward compatibility, if named AXI clock is not present,
-		 * treat the first clock specified as the AXI clock.
-		 */
-		lp->axi_clk = devm_clk_get_optional_enabled(dev, NULL);
-	}
-	if (IS_ERR(lp->axi_clk))
-		return dev_err_probe(dev, PTR_ERR(lp->axi_clk),
-				     "could not get AXI clock\n");
 
 	lp->misc_clks[0].id = "axis_clk";
 	lp->misc_clks[1].id = "ref_clk";
@@ -2830,12 +2809,6 @@ static int axienet_probe(struct platform_device *pdev)
 				       lp->misc_clks);
 	if (ret)
 		return ret;
-
-	/* Map device registers */
-	lp->regs = devm_platform_get_and_ioremap_resource(pdev, 0, &ethres);
-	if (IS_ERR(lp->regs))
-		return PTR_ERR(lp->regs);
-	lp->regs_start = ethres->start;
 
 	/* Setup checksum offload, but default to off if not specified */
 	lp->features = 0;
@@ -3045,11 +3018,6 @@ static int axienet_probe(struct platform_device *pdev)
 	lp->tx_dma_cr = axienet_calc_cr(lp, XAXIDMA_DFT_TX_THRESHOLD,
 					XAXIDMA_DFT_TX_USEC);
 
-	ret = axienet_mdio_setup(lp);
-	if (ret)
-		dev_warn(dev,
-			 "error registering MDIO bus: %d\n", ret);
-
 	if (lp->phy_mode == PHY_INTERFACE_MODE_SGMII ||
 	    lp->phy_mode == PHY_INTERFACE_MODE_1000BASEX) {
 		np = of_parse_phandle(dev->of_node, "pcs-handle", 0);
@@ -3061,17 +3029,14 @@ static int axienet_probe(struct platform_device *pdev)
 			np = of_parse_phandle(dev->of_node, "phy-handle", 0);
 		}
 		if (!np) {
-			dev_err(dev, "pcs-handle (preferred) or phy-handle required for 1000BaseX/SGMII\n");
-			ret = -EINVAL;
-			goto cleanup_mdio;
+			dev_err(dev,
+				"pcs-handle (preferred) or phy-handle required for 1000BaseX/SGMII\n");
+			return -EINVAL;
 		}
 		lp->pcs_phy = of_mdio_find_device(np);
-		if (!lp->pcs_phy) {
-			ret = -EPROBE_DEFER;
-			of_node_put(np);
-			goto cleanup_mdio;
-		}
 		of_node_put(np);
+		if (!lp->pcs_phy)
+			return -EPROBE_DEFER;
 		lp->pcs.ops = &axienet_pcs_ops;
 		lp->pcs.poll = true;
 	}
@@ -3096,7 +3061,7 @@ static int axienet_probe(struct platform_device *pdev)
 	if (IS_ERR(lp->phylink)) {
 		ret = PTR_ERR(lp->phylink);
 		dev_err(dev, "phylink_create error (%i)\n", ret);
-		goto cleanup_mdio;
+		goto cleanup_pcs;
 	}
 
 	ret = register_netdev(lp->ndev);
@@ -3109,32 +3074,24 @@ static int axienet_probe(struct platform_device *pdev)
 
 cleanup_phylink:
 	phylink_destroy(lp->phylink);
-
-cleanup_mdio:
+cleanup_pcs:
 	if (lp->pcs_phy)
 		put_device(&lp->pcs_phy->dev);
-	if (lp->mii_bus)
-		axienet_mdio_teardown(lp);
 	return ret;
 }
 
-static void axienet_remove(struct platform_device *pdev)
+static void axienet_mac_remove(struct platform_device *pdev)
 {
 	struct net_device *ndev = platform_get_drvdata(pdev);
 	struct axienet_local *lp = netdev_priv(ndev);
 
 	unregister_netdev(ndev);
-
-	if (lp->phylink)
-		phylink_destroy(lp->phylink);
-
+	phylink_destroy(lp->phylink);
 	if (lp->pcs_phy)
 		put_device(&lp->pcs_phy->dev);
-
-	axienet_mdio_teardown(lp);
 }
 
-static void axienet_shutdown(struct platform_device *pdev)
+static void axienet_mac_shutdown(struct platform_device *pdev)
 {
 	struct net_device *ndev = platform_get_drvdata(pdev);
 
@@ -3182,10 +3139,64 @@ static int axienet_resume(struct device *dev)
 static DEFINE_SIMPLE_DEV_PM_OPS(axienet_pm_ops,
 				axienet_suspend, axienet_resume);
 
+static int axienet_probe(struct platform_device *pdev)
+{
+	struct device *dev = &pdev->dev;
+	struct axienet_common *cp;
+	struct resource *ethres;
+	int ret;
+
+	cp = devm_kzalloc(dev, sizeof(*cp), GFP_KERNEL);
+	if (!cp)
+		return -ENOMEM;
+
+	cp->pdev = pdev;
+	mutex_init(&cp->reset_lock);
+
+	cp->axi_clk = devm_clk_get_optional_enabled(dev, "s_axi_lite_clk");
+	if (!cp->axi_clk) {
+		/* For backward compatibility, if named AXI clock is not present,
+		 * treat the first clock specified as the AXI clock.
+		 */
+		cp->axi_clk = devm_clk_get_optional_enabled(dev, NULL);
+	}
+	if (IS_ERR(cp->axi_clk))
+		return dev_err_probe(dev, PTR_ERR(cp->axi_clk),
+				     "could not get AXI clock\n");
+
+	/* Map device registers */
+	cp->regs = devm_platform_get_and_ioremap_resource(pdev, 0, &ethres);
+	if (IS_ERR(cp->regs))
+		return PTR_ERR(cp->regs);
+	cp->regs_start = ethres->start;
+
+	ret = axienet_mdio_setup(cp);
+	if (ret)
+		dev_warn(dev, "error registering MDIO bus: %d\n", ret);
+
+	ret = axienet_mac_probe(cp);
+	if (!ret)
+		return 0;
+
+	if (cp->mii_bus)
+		axienet_mdio_teardown(cp);
+	return ret;
+}
+
+static void axienet_remove(struct platform_device *pdev)
+{
+	struct net_device *ndev = platform_get_drvdata(pdev);
+	struct axienet_local *lp = netdev_priv(ndev);
+
+	axienet_mac_remove(pdev);
+	if (lp->mii_bus)
+		axienet_mdio_teardown(lp->cp);
+}
+
 static struct platform_driver axienet_driver = {
 	.probe = axienet_probe,
 	.remove = axienet_remove,
-	.shutdown = axienet_shutdown,
+	.shutdown = axienet_mac_shutdown,
 	.driver = {
 		 .name = "xilinx_axienet",
 		 .pm = &axienet_pm_ops,
