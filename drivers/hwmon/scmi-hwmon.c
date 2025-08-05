@@ -275,6 +275,10 @@ static int scmi_hwmon_probe(struct scmi_device *sdev)
 			nr_count[type]++;
 			break;
 		}
+		default:
+			dev_dbg(dev, "Skipping unsupported sensor ID:%d Type:%d (%s)\n",
+				i, sensor->type, sensor->name ? sensor->name : "unnamed");
+			continue;
 	}
 
 	if (nr_count[hwmon_temp])
@@ -323,6 +327,10 @@ static int scmi_hwmon_probe(struct scmi_device *sdev)
 			idx = --nr_count[type];
 			*(scmi_sensors->info[type] + idx) = sensor;
 			break;
+		default:
+			dev_dbg(dev, "Skipping unsupported sensor ID:%d Type:%d (%s)\n",
+				i, sensor->type, sensor->name ? sensor->name : "unnamed");
+			continue;
 		}
 	}
 
