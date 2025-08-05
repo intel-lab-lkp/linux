@@ -7,8 +7,8 @@
 
 #include <drm/intel/i915_drm.h>
 
-#include "display/intel_display.h"
 #include "display/intel_display_rps.h"
+#include "display/vlv_clock.h"
 #include "i915_drv.h"
 #include "i915_irq.h"
 #include "i915_reg.h"
