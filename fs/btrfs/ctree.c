@@ -941,9 +941,6 @@ static noinline int balance_level(struct btrfs_trans_handle *trans,
 		}
 		return 0;
 	}
-	if (btrfs_header_nritems(mid) >
-	    BTRFS_NODEPTRS_PER_BLOCK(fs_info) / 4)
-		return 0;
 
 	if (pslot) {
 		left = btrfs_read_node_slot(parent, pslot - 1);
