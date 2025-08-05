@@ -1241,6 +1241,11 @@ enum damon_sysfs_cmd {
 	 */
 	DAMON_SYSFS_CMD_UPDATE_TUNED_INTERVALS,
 	/*
+	 * @DAMON_SYSFS_CMD_WAIT_FOR_SCHEMES_APPLY: Wait for all schemes to be
+	 * applied.
+	 */
+	DAMON_SYSFS_CMD_WAIT_FOR_SCHEMES_APPLY,
+	/*
 	 * @NR_DAMON_SYSFS_CMDS: Total number of DAMON sysfs commands.
 	 */
 	NR_DAMON_SYSFS_CMDS,
@@ -1259,6 +1264,7 @@ static const char * const damon_sysfs_cmd_strs[] = {
 	"clear_schemes_tried_regions",
 	"update_schemes_effective_quotas",
 	"update_tuned_intervals",
+	"wait_for_schemes_apply",
 };
 
 static ssize_t state_show(struct kobject *kobj, struct kobj_attribute *attr,
@@ -1652,6 +1658,25 @@ static int damon_sysfs_update_schemes_tried_regions(
 	return damos_walk(ctx, &control);
 }
 
+static int damon_sysfs_wait_for_schemes_apply(
+		struct damon_sysfs_kdamond *sysfs_kdamond)
+{
+	/*
+	 * damos_walk returns after the next time all of the schemes have been
+	 * applied. We don't need to do any actual work, so walk_fn is NULL.
+	 */
+	struct damos_walk_control control = {
+		.walk_fn = NULL,
+		.data = NULL,
+	};
+	struct damon_ctx *ctx = sysfs_kdamond->damon_ctx;
+
+	if (!ctx)
+		return -EINVAL;
+
+	return damos_walk(ctx, &control);
+}
+
 /*
  * damon_sysfs_handle_cmd() - Handle a command for a specific kdamond.
  * @cmd:	The command to handle.
@@ -1697,6 +1722,8 @@ static int damon_sysfs_handle_cmd(enum damon_sysfs_cmd cmd,
 	case DAMON_SYSFS_CMD_UPDATE_TUNED_INTERVALS:
 		return damon_sysfs_damon_call(
 				damon_sysfs_upd_tuned_intervals, kdamond);
+	case DAMON_SYSFS_CMD_WAIT_FOR_SCHEMES_APPLY:
+		return damon_sysfs_wait_for_schemes_apply(kdamond);
 	default:
 		return -EINVAL;
 	}

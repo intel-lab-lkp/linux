@@ -1750,7 +1750,8 @@ static void damos_walk_call_walk(struct damon_ctx *ctx, struct damon_target *t,
 	if (!control)
 		return;
 
-	control->walk_fn(control->data, ctx, t, r, s, sz_filter_passed);
+	if (control->walk_fn)
+		control->walk_fn(control->data, ctx, t, r, s, sz_filter_passed);
 }
 
 /*
