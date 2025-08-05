@@ -4062,6 +4062,11 @@ static inline bool cfs_rq_is_decayed(struct cfs_rq *cfs_rq)
 	if (child_cfs_rq_on_list(cfs_rq))
 		return false;
 
+	long delta = cfs_rq->avg.load_avg - cfs_rq->tg_load_avg_contrib;
+
+	if (abs(delta) > cfs_rq->tg_load_avg_contrib / 64)
+		return false;
+
 	return true;
 }
 
