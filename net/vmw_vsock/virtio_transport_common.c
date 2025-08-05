@@ -1072,14 +1072,14 @@ EXPORT_SYMBOL_GPL(virtio_transport_connect);
 
 int virtio_transport_shutdown(struct vsock_sock *vsk, int mode)
 {
-	struct virtio_vsock_pkt_info info = {
-		.op = VIRTIO_VSOCK_OP_SHUTDOWN,
-		.flags = (mode & RCV_SHUTDOWN ?
-			  VIRTIO_VSOCK_SHUTDOWN_RCV : 0) |
-			 (mode & SEND_SHUTDOWN ?
-			  VIRTIO_VSOCK_SHUTDOWN_SEND : 0),
-		.vsk = vsk,
-	};
+	struct virtio_vsock_pkt_info info = {0};
+
+	info.op = VIRTIO_VSOCK_OP_SHUTDOWN;
+	info.flags = (mode & RCV_SHUTDOWN ?
+			VIRTIO_VSOCK_SHUTDOWN_RCV : 0) |
+			(mode & SEND_SHUTDOWN ?
+			VIRTIO_VSOCK_SHUTDOWN_SEND : 0);
+	info.vsk = vsk;
 
 	return virtio_transport_send_pkt_info(vsk, &info);
 }
