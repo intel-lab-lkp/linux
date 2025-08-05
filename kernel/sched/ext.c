@@ -7426,10 +7426,20 @@ __bpf_kfunc s32 scx_bpf_task_cpu(const struct task_struct *p)
  */
 __bpf_kfunc struct rq *scx_bpf_cpu_rq(s32 cpu)
 {
+	struct rq *rq;
+
 	if (!kf_cpu_valid(cpu, NULL))
 		return NULL;
 
-	return cpu_rq(cpu);
+	preempt_disable();
+	rq = cpu_rq(cpu);
+	if (rq != scx_locked_rq()) {
+		scx_kf_error("Accessing not locked rq %d", cpu);
+		rq = NULL;
+	}
+	preempt_enable();
+
+	return rq;
 }
 
 /**
