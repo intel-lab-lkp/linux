@@ -1133,17 +1133,23 @@ static void xpadone_process_packet(struct usb_xpad *xpad, u16 cmd, unsigned char
 		input_report_key(dev, BTN_THUMBR, data[5] & BIT(7));
 
 		if (!(xpad->mapping & MAP_STICKS_TO_NULL)) {
-			/* left stick */
-			input_report_abs(dev, ABS_X,
-					(__s16) le16_to_cpup((__le16 *)(data + 10)));
-			input_report_abs(dev, ABS_Y,
-					~(__s16) le16_to_cpup((__le16 *)(data + 12)));
+			if (xpad->mapping & MAP_FERRARI_458_CUSTOM_AXES) {
+				/* steering wheel */
+				input_report_abs(dev, ABS_X,
+				((__u16) le16_to_cpup((__le16 *)(data + 6))) - S16_MAX);
+			} else {
+				/* left stick */
+				input_report_abs(dev, ABS_X,
+						(__s16) le16_to_cpup((__le16 *)(data + 10)));
+				input_report_abs(dev, ABS_Y,
+						~(__s16) le16_to_cpup((__le16 *)(data + 12)));
 
-			/* right stick */
-			input_report_abs(dev, ABS_RX,
-					(__s16) le16_to_cpup((__le16 *)(data + 14)));
-			input_report_abs(dev, ABS_RY,
-					~(__s16) le16_to_cpup((__le16 *)(data + 16)));
+				/* right stick */
+				input_report_abs(dev, ABS_RX,
+						(__s16) le16_to_cpup((__le16 *)(data + 14)));
+				input_report_abs(dev, ABS_RY,
+						~(__s16) le16_to_cpup((__le16 *)(data + 16)));
+			}
 		}
 
 		/* triggers left/right */
@@ -1151,6 +1157,11 @@ static void xpadone_process_packet(struct usb_xpad *xpad, u16 cmd, unsigned char
 			input_report_key(dev, BTN_TL2,
 					(__u16) le16_to_cpup((__le16 *)(data + 6)));
 			input_report_key(dev, BTN_TR2,
+					(__u16) le16_to_cpup((__le16 *)(data + 8)));
+		} else if (xpad->mapping & MAP_FERRARI_458_CUSTOM_AXES) {
+			input_report_abs(dev, ABS_Z,
+					(__u16) le16_to_cpup((__le16 *)(data + 10)));
+			input_report_abs(dev, ABS_RZ,
 					(__u16) le16_to_cpup((__le16 *)(data + 8)));
 		} else {
 			input_report_abs(dev, ABS_Z,
