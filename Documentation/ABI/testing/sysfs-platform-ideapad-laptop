@@ -50,3 +50,15 @@ Description:
 		Controls whether the "always on USB charging" feature is
 		enabled or not. This feature enables charging USB devices
 		even if the computer is not turned on.
+
+What:		/sys/class/leds/platform::kbd_backlight/als_enabled
+Date:		July 2025
+KernelVersion:	6.17
+Contact:	platform-driver-x86@vger.kernel.org
+Description:
+		This file allows to control the automatic keyboard
+		illumination mode on some systems that have an ambient
+		light sensor. Write 1 to this file to enable the auto
+		mode, 0 to disable it. In this mode, the actual
+		brightness level is not available and reading the
+		"brightness" file always returns 0.

@@ -1712,6 +1712,57 @@ static void ideapad_kbd_bl_notify(struct ideapad_private *priv)
 	ideapad_kbd_bl_notify_known(priv, brightness);
 }
 
+static ssize_t als_enabled_show(struct device *dev,
+				struct device_attribute *attr,
+				char *buf)
+{
+	struct led_classdev *led_cdev = dev_get_drvdata(dev);
+	struct ideapad_private *priv = container_of(led_cdev, struct ideapad_private, kbd_bl.led);
+	int hw_brightness;
+
+	hw_brightness = ideapad_kbd_bl_hw_brightness_get(priv);
+	if (hw_brightness < 0)
+		return hw_brightness;
+
+	return sysfs_emit(buf, "%d\n", hw_brightness == KBD_BL_AUTO_MODE_HW_BRIGHTNESS);
+}
+
+static ssize_t als_enabled_store(struct device *dev,
+				 struct device_attribute *attr,
+				 const char *buf, size_t count)
+{
+	struct led_classdev *led_cdev = dev_get_drvdata(dev);
+	struct ideapad_private *priv = container_of(led_cdev, struct ideapad_private, kbd_bl.led);
+	bool state;
+	int err;
+
+	err = kstrtobool(buf, &state);
+	if (err)
+		return err;
+
+	/*
+	 * Auto (ALS) mode uses a predefined HW brightness value. It is
+	 * impossible to disable it without setting another brightness value.
+	 * Set the brightness to 0 when disabling is requested.
+	 */
+	err = ideapad_kbd_bl_hw_brightness_set(priv, state ? KBD_BL_AUTO_MODE_HW_BRIGHTNESS : 0);
+	if (err)
+		return err;
+
+	/* Both HW brightness values map to 0 in the LED classdev. */
+	ideapad_kbd_bl_notify_known(priv, 0);
+
+	return count;
+}
+
+static DEVICE_ATTR_RW(als_enabled);
+
+static struct attribute *ideapad_kbd_bl_als_attrs[] = {
+	&dev_attr_als_enabled.attr,
+	NULL,
+};
+ATTRIBUTE_GROUPS(ideapad_kbd_bl_als);
+
 static int ideapad_kbd_bl_init(struct ideapad_private *priv)
 {
 	int brightness, err;
@@ -1722,10 +1773,20 @@ static int ideapad_kbd_bl_init(struct ideapad_private *priv)
 	if (WARN_ON(priv->kbd_bl.initialized))
 		return -EEXIST;
 
-	if (ideapad_kbd_bl_check_tristate(priv->kbd_bl.type)) {
+	switch (priv->kbd_bl.type) {
+	case KBD_BL_TRISTATE_AUTO:
+		/* The sysfs node will be /sys/class/leds/platform::kbd_backlight/als_enabled */
+		priv->kbd_bl.led.groups = ideapad_kbd_bl_als_groups;
+		fallthrough;
+	case KBD_BL_TRISTATE:
 		priv->kbd_bl.led.max_brightness = 2;
-	} else {
+		break;
+	case KBD_BL_STANDARD:
 		priv->kbd_bl.led.max_brightness = 1;
+		break;
+	default:
+		/* This has already been validated by ideapad_check_features(). */
+		unreachable();
 	}
 
 	brightness = ideapad_kbd_bl_brightness_get(priv);
