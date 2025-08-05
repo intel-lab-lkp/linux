@@ -322,6 +322,8 @@ int ksmbd_conn_handler_loop(void *p)
 	if (t->ops->prepare && t->ops->prepare(t))
 		goto out;
 
+	kcov_remote_start_common(ksmbd_conn_get_kcov_handle(conn));
+
 	max_req = server_conf.max_inflight_req;
 	conn->last_active = jiffies;
 	set_freezable();
@@ -412,7 +414,7 @@ recheck:
 			break;
 		}
 	}
-
+	kcov_remote_stop();
 out:
 	ksmbd_conn_set_releasing(conn);
 	/* Wait till all reference dropped to the Server object*/
