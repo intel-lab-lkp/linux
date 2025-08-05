@@ -142,20 +142,20 @@ static void bdw_set_pipe_misc(struct intel_dsb *dsb,
 /* returns HPLL frequency in kHz */
 int vlv_clock_get_hpll_vco(struct drm_device *drm)
 {
-	struct drm_i915_private *i915 = to_i915(drm);
+	struct intel_display *display = to_intel_display(drm);
 	int hpll_freq, vco_freq[] = { 800, 1600, 2000, 2400 };
 
-	if (!i915->hpll_freq) {
+	if (!display->vlv_clock.hpll_freq) {
 		/* Obtain SKU information */
 		hpll_freq = vlv_cck_read(drm, CCK_FUSE_REG) &
 			CCK_FUSE_HPLL_FREQ_MASK;
 
-		i915->hpll_freq = vco_freq[hpll_freq] * 1000;
+		display->vlv_clock.hpll_freq = vco_freq[hpll_freq] * 1000;
 
-		drm_dbg_kms(drm, "HPLL frequency: %d kHz\n", i915->hpll_freq);
+		drm_dbg_kms(drm, "HPLL frequency: %d kHz\n", display->vlv_clock.hpll_freq);
 	}
 
-	return i915->hpll_freq;
+	return display->vlv_clock.hpll_freq;
 }
 
 static int vlv_get_cck_clock(struct drm_device *drm,
@@ -196,15 +196,15 @@ int vlv_clock_get_hrawclk(struct drm_device *drm)
 
 int vlv_clock_get_czclk(struct drm_device *drm)
 {
-	struct drm_i915_private *i915 = to_i915(drm);
+	struct intel_display *display = to_intel_display(drm);
 
-	if (!i915->czclk_freq) {
-		i915->czclk_freq = vlv_get_cck_clock_hpll(drm, "czclk",
-							  CCK_CZ_CLOCK_CONTROL);
-		drm_dbg_kms(drm, "CZ clock rate: %d kHz\n", i915->czclk_freq);
+	if (!display->vlv_clock.czclk_freq) {
+		display->vlv_clock.czclk_freq = vlv_get_cck_clock_hpll(drm, "czclk",
+								       CCK_CZ_CLOCK_CONTROL);
+		drm_dbg_kms(drm, "CZ clock rate: %d kHz\n", display->vlv_clock.czclk_freq);
 	}
 
-	return i915->czclk_freq;
+	return display->vlv_clock.czclk_freq;
 }
 
 int vlv_clock_get_cdclk(struct drm_device *drm)

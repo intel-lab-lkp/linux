@@ -607,8 +607,6 @@ struct xe_device {
 
 	/* only to allow build, not used functionally */
 	struct {
-		unsigned int hpll_freq;
-		unsigned int czclk_freq;
 		unsigned int fsb_freq, mem_freq, is_ddr3;
 	};
 #endif

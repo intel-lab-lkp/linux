@@ -562,6 +562,11 @@ struct intel_display {
 	} state;
 
 	struct {
+		unsigned int hpll_freq;
+		unsigned int czclk_freq;
+	} vlv_clock;
+
+	struct {
 		/* ordered wq for modesets */
 		struct workqueue_struct *modeset;
 
