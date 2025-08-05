@@ -109,11 +109,17 @@ enum msg_type {
 struct cluster_msg {
 	__le32 type;
 	__le32 slot;
-	/* TODO: Unionize this for smaller footprint */
-	__le64 low;
-	__le64 high;
-	char uuid[16];
-	__le32 raid_slot;
+	union {
+		__le64 size;			/* BITMAP_RESIZE */
+		struct {
+			__le64 low;
+			__le64 high;
+		} resync;			/* RESYNCING */
+		struct {
+			char uuid[16];          /* NEWDISK */
+			__le32 raid_slot;
+		} other;			/* others */
+	} u;
 };
 
 static void sync_ast(void *arg)
@@ -522,8 +528,8 @@ static int process_add_new_disk(struct mddev *mddev, struct cluster_msg *cmsg)
 	int res = 0;
 
 	len = snprintf(disk_uuid, 64, "DEVICE_UUID=");
-	sprintf(disk_uuid + len, "%pU", cmsg->uuid);
-	snprintf(raid_slot, 16, "RAID_DISK=%d", le32_to_cpu(cmsg->raid_slot));
+	sprintf(disk_uuid + len, "%pU", cmsg->u.other.uuid);
+	snprintf(raid_slot, 16, "RAID_DISK=%d", le32_to_cpu(cmsg->u.other.raid_slot));
 	pr_info("%s:%d Sending kobject change with %s and %s\n", __func__, __LINE__, disk_uuid, raid_slot);
 	init_completion(&cinfo->newdisk_completion);
 	set_bit(MD_CLUSTER_WAITING_FOR_NEWDISK, &cinfo->state);
@@ -545,7 +551,7 @@ static void process_metadata_update(struct mddev *mddev, struct cluster_msg *msg
 	int got_lock = 0;
 	struct md_thread *thread;
 	struct md_cluster_info *cinfo = mddev->cluster_info;
-	mddev->good_device_nr = le32_to_cpu(msg->raid_slot);
+	mddev->good_device_nr = le32_to_cpu(msg->u.other.raid_slot);
 
 	dlm_lock_sync(cinfo->no_new_dev_lockres, DLM_LOCK_CR);
 
@@ -564,7 +570,7 @@ static void process_remove_disk(struct mddev *mddev, struct cluster_msg *msg)
 	struct md_rdev *rdev;
 
 	rcu_read_lock();
-	rdev = md_find_rdev_nr_rcu(mddev, le32_to_cpu(msg->raid_slot));
+	rdev = md_find_rdev_nr_rcu(mddev, le32_to_cpu(msg->u.other.raid_slot));
 	if (rdev) {
 		set_bit(ClusterRemove, &rdev->flags);
 		set_bit(MD_RECOVERY_NEEDED, &mddev->recovery);
@@ -572,7 +578,7 @@ static void process_remove_disk(struct mddev *mddev, struct cluster_msg *msg)
 	}
 	else
 		pr_warn("%s: %d Could not find disk(%d) to REMOVE\n",
-			__func__, __LINE__, le32_to_cpu(msg->raid_slot));
+			__func__, __LINE__, le32_to_cpu(msg->u.other.raid_slot));
 	rcu_read_unlock();
 }
 
@@ -581,12 +587,12 @@ static void process_readd_disk(struct mddev *mddev, struct cluster_msg *msg)
 	struct md_rdev *rdev;
 
 	rcu_read_lock();
-	rdev = md_find_rdev_nr_rcu(mddev, le32_to_cpu(msg->raid_slot));
+	rdev = md_find_rdev_nr_rcu(mddev, le32_to_cpu(msg->u.other.raid_slot));
 	if (rdev && test_bit(Faulty, &rdev->flags))
 		clear_bit(Faulty, &rdev->flags);
 	else
 		pr_warn("%s: %d Could not find disk(%d) which is faulty",
-			__func__, __LINE__, le32_to_cpu(msg->raid_slot));
+			__func__, __LINE__, le32_to_cpu(msg->u.other.raid_slot));
 	rcu_read_unlock();
 }
 
@@ -610,8 +616,8 @@ static int process_recvd_msg(struct mddev *mddev, struct cluster_msg *msg)
 	case RESYNCING:
 		set_bit(MD_RESYNCING_REMOTE, &mddev->recovery);
 		process_suspend_info(mddev, le32_to_cpu(msg->slot),
-				     le64_to_cpu(msg->low),
-				     le64_to_cpu(msg->high));
+				     le64_to_cpu(msg->u.resync.low),
+				     le64_to_cpu(msg->u.resync.high));
 		break;
 	case NEWDISK:
 		if (process_add_new_disk(mddev, msg))
@@ -627,9 +633,9 @@ static int process_recvd_msg(struct mddev *mddev, struct cluster_msg *msg)
 		__recover_slot(mddev, le32_to_cpu(msg->slot));
 		break;
 	case BITMAP_RESIZE:
-		if (le64_to_cpu(msg->high) != mddev->pers->size(mddev, 0, 0))
+		if (le64_to_cpu(msg->u.size) != mddev->pers->size(mddev, 0, 0))
 			ret = mddev->bitmap_ops->resize(mddev,
-							le64_to_cpu(msg->high),
+							le64_to_cpu(msg->u.size),
 							0, false);
 		break;
 	default:
@@ -1111,7 +1117,7 @@ static int metadata_update_finish(struct mddev *mddev)
 			break;
 		}
 	if (raid_slot >= 0) {
-		cmsg.raid_slot = cpu_to_le32(raid_slot);
+		cmsg.u.other.raid_slot = cpu_to_le32(raid_slot);
 		ret = __sendmsg(cinfo, &cmsg);
 	} else
 		pr_warn("md-cluster: No good device id found to send\n");
@@ -1134,7 +1140,7 @@ static int update_bitmap_size(struct mddev *mddev, sector_t size)
 	int ret;
 
 	cmsg.type = cpu_to_le32(BITMAP_RESIZE);
-	cmsg.high = cpu_to_le64(size);
+	cmsg.u.size = cpu_to_le64(size);
 	ret = sendmsg(cinfo, &cmsg, 0);
 	if (ret)
 		pr_err("%s:%d: failed to send BITMAP_RESIZE message (%d)\n",
@@ -1309,7 +1315,7 @@ static void update_size(struct mddev *mddev, sector_t old_dev_sectors)
 			break;
 		}
 	if (raid_slot >= 0) {
-		cmsg.raid_slot = cpu_to_le32(raid_slot);
+		cmsg.u.other.raid_slot = cpu_to_le32(raid_slot);
 		/*
 		 * We can only change capiticy after all the nodes can do it,
 		 * so need to wait after other nodes already received the msg
@@ -1402,8 +1408,8 @@ static int resync_info_update(struct mddev *mddev, sector_t lo, sector_t hi)
 	/* Re-acquire the lock to refresh LVB */
 	dlm_lock_sync(cinfo->bitmap_lockres, DLM_LOCK_PW);
 	cmsg.type = cpu_to_le32(RESYNCING);
-	cmsg.low = cpu_to_le64(lo);
-	cmsg.high = cpu_to_le64(hi);
+	cmsg.u.resync.low = cpu_to_le64(lo);
+	cmsg.u.resync.high = cpu_to_le64(hi);
 
 	/*
 	 * mddev_lock is held if resync_info_update is called from
@@ -1463,8 +1469,8 @@ static int add_new_disk(struct mddev *mddev, struct md_rdev *rdev)
 
 	memset(&cmsg, 0, sizeof(cmsg));
 	cmsg.type = cpu_to_le32(NEWDISK);
-	memcpy(cmsg.uuid, uuid, 16);
-	cmsg.raid_slot = cpu_to_le32(rdev->desc_nr);
+	memcpy(cmsg.u.other.uuid, uuid, 16);
+	cmsg.u.other.raid_slot = cpu_to_le32(rdev->desc_nr);
 	if (lock_comm(cinfo, 1))
 		return -EAGAIN;
 	ret = __sendmsg(cinfo, &cmsg);
@@ -1527,7 +1533,7 @@ static int remove_disk(struct mddev *mddev, struct md_rdev *rdev)
 	struct cluster_msg cmsg = {0};
 	struct md_cluster_info *cinfo = mddev->cluster_info;
 	cmsg.type = cpu_to_le32(REMOVE);
-	cmsg.raid_slot = cpu_to_le32(rdev->desc_nr);
+	cmsg.u.other.raid_slot = cpu_to_le32(rdev->desc_nr);
 	return sendmsg(cinfo, &cmsg, 1);
 }
 
@@ -1592,7 +1598,7 @@ static int gather_bitmaps(struct md_rdev *rdev)
 	struct md_cluster_info *cinfo = mddev->cluster_info;
 
 	cmsg.type = cpu_to_le32(RE_ADD);
-	cmsg.raid_slot = cpu_to_le32(rdev->desc_nr);
+	cmsg.u.other.raid_slot = cpu_to_le32(rdev->desc_nr);
 	err = sendmsg(cinfo, &cmsg, 1);
 	if (err)
 		goto out;
