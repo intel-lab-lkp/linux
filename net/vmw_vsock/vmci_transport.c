@@ -630,6 +630,10 @@ static int vmci_transport_recv_dgram_cb(void *data, struct vmci_datagram *dg)
 	if (!vmci_transport_allow_dgram(vsk, dg->src.context))
 		return VMCI_ERROR_NO_ACCESS;
 
+	/* Validate payload size to prevent integer overflow */
+	if (dg->payload_size > SIZE_MAX - offsetof(struct vmci_datagram, payload))
+		return VMCI_ERROR_INVALID_ARGS;
+
 	size = VMCI_DG_SIZE(dg);
 
 	/* Attach the packet to the socket's receive queue as an sk_buff. */
