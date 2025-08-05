@@ -150,6 +150,14 @@ related to allocation:
 			"not supported":
 			      Support not available for this resource.
 
+		The feature can be modified by writing to the interface, for example:
+
+		To enable:
+			# echo 1 > /sys/fs/resctrl/info/L3/io_alloc
+
+		To disable:
+			# echo 0 > /sys/fs/resctrl/info/L3/io_alloc
+
 		The underlying implementation may reduce resources available to
 		general (CPU) cache allocation. See architecture specific notes
 		below. Depending on usage requirements the feature can be enabled
