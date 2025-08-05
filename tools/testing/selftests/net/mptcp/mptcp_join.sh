@@ -889,6 +889,23 @@ check_cestab()
 	fi
 }
 
+chk_dssfb_nr()
+{
+	local ns=$1
+	local expected=$2
+	local count
+
+	print_check "check dss fallback:"
+	count=$(mptcp_lib_get_counter ${ns} "MPTcpExtDssFallback")
+	if [ -z "$count" ]; then
+		print_skip
+	elif [ "$count" != "$expected" ]; then
+		fail_test "got $count dss fallback expected $expected"
+	else
+		print_ok
+	fi
+}
+
 cond_start_capture()
 {
 	local ns="$1"
@@ -3338,6 +3355,7 @@ fail_tests()
 			join_fail_nr=1 join_rst_nr=0 join_infi_nr=1 \
 			join_corrupted_pkts="$(pedit_action_pkts)" \
 			chk_join_nr 0 0 0
+		chk_dssfb_nr $ns1 1
 		chk_fail_nr 1 -1 invert
 	fi
 
