@@ -3778,6 +3778,10 @@ static netdev_features_t gso_features_check(const struct sk_buff *skb,
 		if (!(iph->frag_off & htons(IP_DF)))
 			features &= ~NETIF_F_TSO_MANGLEID;
 	}
+	if (vlan_get_protocol(skb) == htons(ETH_P_IPV6) &&
+		skb_network_header_len(skb) != sizeof(struct ipv6hdr) &&
+		!ipv6_has_hopopt_jumbo(skb))
+		features &= ~NETIF_F_IPV6_CSUM;
 
 	return features;
 }
