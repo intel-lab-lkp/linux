@@ -15,7 +15,7 @@
 #include <linux/moduleparam.h>
 #include <linux/once.h>
 #include <linux/platform_device.h>
-
+#include <linux/cleanup.h>
 #include <linux/serial_8250.h>
 
 #ifdef CONFIG_SPARC
@@ -110,9 +110,14 @@ void __init serial8250_isa_init_ports(void)
 static int serial8250_probe_acpi(struct platform_device *pdev)
 {
 	struct device *dev = &pdev->dev;
-	struct uart_8250_port uart = { };
+	struct uart_8250_port *uart __free(kfree) = NULL;
 	struct resource *regs;
 	int ret, line;
+
+	uart = kmalloc(sizeof(*uart), GFP_KERNEL);
+	if (!uart)
+		return -ENOMEM;
+	memset(uart, 0, sizeof(*uart));
 
 	regs = platform_get_mem_or_io(pdev, 0);
 	if (!regs)
@@ -120,31 +125,31 @@ static int serial8250_probe_acpi(struct platform_device *pdev)
 
 	switch (resource_type(regs)) {
 	case IORESOURCE_IO:
-		uart.port.iobase = regs->start;
+		uart->port.iobase = regs->start;
 		break;
 	case IORESOURCE_MEM:
-		uart.port.mapbase = regs->start;
-		uart.port.mapsize = resource_size(regs);
-		uart.port.flags = UPF_IOREMAP;
+		uart->port.mapbase = regs->start;
+		uart->port.mapsize = resource_size(regs);
+		uart->port.flags = UPF_IOREMAP;
 		break;
 	default:
 		return -EINVAL;
 	}
 
 	/* default clock frequency */
-	uart.port.uartclk = 1843200;
-	uart.port.type = PORT_16550A;
-	uart.port.dev = &pdev->dev;
-	uart.port.flags |= UPF_SKIP_TEST | UPF_BOOT_AUTOCONF;
+	uart->port.uartclk = 1843200;
+	uart->port.type = PORT_16550A;
+	uart->port.dev = &pdev->dev;
+	uart->port.flags |= UPF_SKIP_TEST | UPF_BOOT_AUTOCONF;
 
-	ret = uart_read_and_validate_port_properties(&uart.port);
+	ret = uart_read_and_validate_port_properties(&uart->port);
 	/* no interrupt -> fall back to polling */
 	if (ret == -ENXIO)
 		ret = 0;
 	if (ret)
 		return ret;
 
-	line = serial8250_register_8250_port(&uart);
+	line = serial8250_register_8250_port(uart);
 	if (line < 0)
 		return line;
 
