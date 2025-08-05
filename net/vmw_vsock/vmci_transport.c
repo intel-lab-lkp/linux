@@ -1749,6 +1749,11 @@ static int vmci_transport_dgram_dequeue(struct vsock_sock *vsk,
 	if (!skb)
 		return err;
 
+	if (skb->len < sizeof(struct vmci_datagram)) {
+		err = -EINVAL;
+		goto out;
+	}
+
 	dg = (struct vmci_datagram *)skb->data;
 	if (!dg)
 		/* err is 0, meaning we read zero bytes. */
