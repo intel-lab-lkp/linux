@@ -2932,13 +2932,14 @@ static inline int i40e_check_vf_permission(struct i40e_vf *vf,
 			++mac2add_cnt;
 	}
 
+	int new_count = i40e_count_filters(vsi) + mac2add_cnt;
+	int max_macvlan = I40E_VC_MAX_MACVLAN_PER_TRUSTED_VF(pf->num_alloc_vfs, hw->num_ports);
 	/* If this VF is not privileged, then we can't add more than a limited
 	 * number of addresses. Check to make sure that the additions do not
 	 * push us over the limit.
 	 */
 	if (!test_bit(I40E_VIRTCHNL_VF_CAP_PRIVILEGE, &vf->vf_caps)) {
-		if ((i40e_count_filters(vsi) + mac2add_cnt) >
-		    I40E_VC_MAX_MAC_ADDR_PER_VF) {
+		if ( new_count > I40E_VC_MAX_MAC_ADDR_PER_VF) {
 			dev_err(&pf->pdev->dev,
 				"Cannot add more MAC addresses, VF is not trusted, switch the VF to trusted to add more functionality\n");
 			return -EPERM;
@@ -2949,11 +2950,10 @@ static inline int i40e_check_vf_permission(struct i40e_vf *vf,
 	 * all VFs.
 	 */
 	} else {
-		if ((i40e_count_filters(vsi) + mac2add_cnt) >
-		    I40E_VC_MAX_MACVLAN_PER_TRUSTED_VF(pf->num_alloc_vfs,
-						       hw->num_ports)) {
+		if (new_count > max_macvlan) {
 			dev_err(&pf->pdev->dev,
-				"Cannot add more MAC addresses, trusted VF exhausted it's resources\n");
+				"Cannot add more MAC addresses, trusted VF %d uses (%d/%d) MAC addresses\n",
+				vf->vf_id, new_count, max_macvlan);
 			return -EPERM;
 		}
 	}
