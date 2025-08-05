@@ -690,6 +690,13 @@ out:
 		sbi->blkzone_alloc_policy = t;
 		return count;
 	}
+
+	if (!strcmp(a->attr.name, "bggc_block_io")) {
+		if (t < BGGC_PRIOR || t > ALL_IO_PRIOR)
+			return -EINVAL;
+		sbi->bggc_block_io = t;
+		return count;
+	}
 #endif
 
 #ifdef CONFIG_F2FS_FS_COMPRESSION
@@ -1195,6 +1202,7 @@ F2FS_SBI_GENERAL_RW_ATTR(max_read_extent_count);
 #ifdef CONFIG_BLK_DEV_ZONED
 F2FS_SBI_GENERAL_RO_ATTR(unusable_blocks_per_sec);
 F2FS_SBI_GENERAL_RW_ATTR(blkzone_alloc_policy);
+F2FS_SBI_GENERAL_RW_ATTR(bggc_block_io);
 #endif
 F2FS_SBI_GENERAL_RW_ATTR(carve_out);
 F2FS_SBI_GENERAL_RW_ATTR(reserved_pin_section);
@@ -1368,6 +1376,7 @@ static struct attribute *f2fs_attrs[] = {
 #ifdef CONFIG_BLK_DEV_ZONED
 	ATTR_LIST(unusable_blocks_per_sec),
 	ATTR_LIST(blkzone_alloc_policy),
+	ATTR_LIST(bggc_block_io),
 #endif
 #ifdef CONFIG_F2FS_FS_COMPRESSION
 	ATTR_LIST(compr_written_block),
