@@ -939,7 +939,7 @@ config CRYPTO_MD5
 	tristate "MD5"
 	select CRYPTO_HASH
 	help
-	  MD5 message digest algorithm (RFC1321)
+	  MD5 message digest algorithm (RFC1321), including HMAC support.
 
 config CRYPTO_MICHAEL_MIC
 	tristate "Michael MIC"
