@@ -826,7 +826,8 @@ static int ad799x_probe(struct i2c_client *client)
 		 * Use external reference voltage if supported by hardware.
 		 * This is optional if voltage / regulator present, use VCC otherwise.
 		 */
-		if ((st->id == ad7991) || (st->id == ad7995) || (st->id == ad7999)) {
+		if ((st->id == ad7991) || (st->id == ad7995) || (st->id == ad7999)
+			(st->id == ad7994)) {
 			dev_info(&client->dev, "Using external reference voltage\n");
 			extra_config |= AD7991_REF_SEL;
 			ret = regulator_enable(st->vref);
