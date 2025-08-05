@@ -44,7 +44,8 @@ enum phy_mode {
 	PHY_MODE_SATA,
 	PHY_MODE_LVDS,
 	PHY_MODE_DP,
-	PHY_MODE_HDMI,
+	PHY_MODE_HDMI_TMDS,
+	PHY_MODE_HDMI_FRL,
 };
 
 enum phy_media {
