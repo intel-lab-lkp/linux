@@ -117,6 +117,7 @@ static int pisosr_gpio_probe(struct spi_device *spi)
 {
 	struct device *dev = &spi->dev;
 	struct pisosr_gpio *gpio;
+	unsigned int ngpio;
 	int ret;
 
 	gpio = devm_kzalloc(dev, sizeof(*gpio), GFP_KERNEL);
@@ -125,8 +126,11 @@ static int pisosr_gpio_probe(struct spi_device *spi)
 
 	gpio->chip = template_chip;
 	gpio->chip.parent = dev;
-	of_property_read_u16(dev->of_node, "ngpios", &gpio->chip.ngpio);
 
+	if (of_property_read_u32(dev->of_node, "ngpios", &ngpio))
+		ngpio = DEFAULT_NGPIO;
+
+	gpio->chip.ngpio = ngpio;
 	gpio->spi = spi;
 
 	gpio->buffer_size = DIV_ROUND_UP(gpio->chip.ngpio, 8);
