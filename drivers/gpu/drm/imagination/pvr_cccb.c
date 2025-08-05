@@ -69,18 +69,14 @@ pvr_cccb_init(struct pvr_device *pvr_dev, struct pvr_cccb *pvr_cccb,
 						      NULL, NULL, &pvr_cccb->cccb_obj);
 	if (IS_ERR(pvr_cccb->cccb)) {
 		err = PTR_ERR(pvr_cccb->cccb);
-		goto err_free_ctrl;
+		pvr_fw_object_unmap_and_destroy(pvr_cccb->ctrl_obj);
+		return err;
 	}
 
 	pvr_fw_object_get_fw_addr(pvr_cccb->ctrl_obj, &pvr_cccb->ctrl_fw_addr);
 	pvr_fw_object_get_fw_addr(pvr_cccb->cccb_obj, &pvr_cccb->cccb_fw_addr);
 
 	return 0;
-
-err_free_ctrl:
-	pvr_fw_object_unmap_and_destroy(pvr_cccb->ctrl_obj);
-
-	return err;
 }
 
 /**

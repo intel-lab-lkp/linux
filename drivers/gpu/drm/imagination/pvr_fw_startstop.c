@@ -155,8 +155,11 @@ pvr_fw_start(struct pvr_device *pvr_dev)
 		(void)pvr_cr_read64(pvr_dev, ROGUE_CR_SOFT_RESET2);
 
 	err = rogue_slc_init(pvr_dev);
-	if (err)
-		goto err_reset;
+	if (err) {
+		/* Put everything back into soft-reset. */
+		pvr_cr_write64(pvr_dev, ROGUE_CR_SOFT_RESET, soft_reset_mask);
+		return err;
+	}
 
 	/* Initialise Firmware wrapper. */
 	pvr_dev->fw_dev.defs->wrapper_init(pvr_dev);
@@ -185,12 +188,6 @@ pvr_fw_start(struct pvr_device *pvr_dev)
 	}
 
 	return 0;
-
-err_reset:
-	/* Put everything back into soft-reset. */
-	pvr_cr_write64(pvr_dev, ROGUE_CR_SOFT_RESET, soft_reset_mask);
-
-	return err;
 }
 
 /**
