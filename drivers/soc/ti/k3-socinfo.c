@@ -15,6 +15,7 @@
 #include <linux/sys_soc.h>
 
 #define CTRLMMR_WKUP_JTAGID_REG		0
+#define CTRLMMR_WKUP_GP_SW1_REG		4
 /*
  * Bits:
  *  31-28 VARIANT	Device variant
@@ -62,9 +63,62 @@ static const struct k3_soc_id {
 	{ JTAG_ID_PARTNO_AM62LX, "AM62LX" },
 };
 
+static const struct regmap_config k3_chipinfo_regmap_cfg = {
+	.reg_bits = 32,
+	.val_bits = 32,
+	.reg_stride = 4,
+};
+
 static const char * const j721e_rev_string_map[] = {
 	"1.0", "1.1", "2.0",
 };
+
+static const char * const am62p_gpsw_rev_string_map[] = {
+	"1.0", "1.1", "1.2",
+};
+
+static int
+k3_chipinfo_get_variant_alternate(struct platform_device *pdev, unsigned int partno, u32 *variant)
+{
+	struct device *dev = &pdev->dev;
+	struct regmap *regmap;
+	void __iomem *base;
+	u32 offset;
+	int ret;
+
+	base = devm_platform_ioremap_resource(pdev, 1);
+	if (IS_ERR(base))
+		return PTR_ERR(base);
+
+	regmap = regmap_init_mmio(dev, base, &k3_chipinfo_regmap_cfg);
+	if (IS_ERR(regmap))
+		return PTR_ERR(regmap);
+
+	switch (partno) {
+	case JTAG_ID_PARTNO_AM62PX:
+		offset = CTRLMMR_WKUP_GP_SW1_REG;
+		break;
+	default:
+		offset = CTRLMMR_WKUP_GP_SW1_REG;
+	}
+
+	ret = regmap_read(regmap, offset, variant);
+
+	if (ret < 0)
+		return ret;
+
+	return 0;
+}
+
+static bool k3_chipinfo_variant_in_gp_sw(unsigned int partno)
+{
+	switch (partno) {
+	case JTAG_ID_PARTNO_AM62PX:
+		return true;
+	default:
+		return false;
+	}
+}
 
 static int
 k3_chipinfo_partno_to_names(unsigned int partno,
@@ -83,14 +137,23 @@ k3_chipinfo_partno_to_names(unsigned int partno,
 
 static int
 k3_chipinfo_variant_to_sr(unsigned int partno, unsigned int variant,
-			  struct soc_device_attribute *soc_dev_attr)
+			  struct soc_device_attribute *soc_dev_attr, u32 gp_sw1)
 {
+	u32 gpsw_variant = gp_sw1 % 16;
+
 	switch (partno) {
 	case JTAG_ID_PARTNO_J721E:
 		if (variant >= ARRAY_SIZE(j721e_rev_string_map))
 			goto err_unknown_variant;
 		soc_dev_attr->revision = kasprintf(GFP_KERNEL, "SR%s",
 						   j721e_rev_string_map[variant]);
+		break;
+	case JTAG_ID_PARTNO_AM62PX:
+		/* Always parse AM62P variant from GP_SW1 */
+		if (gpsw_variant >= ARRAY_SIZE(am62p_gpsw_rev_string_map))
+			goto err_unknown_variant;
+		soc_dev_attr->revision = kasprintf(GFP_KERNEL, "SR%s",
+						   am62p_gpsw_rev_string_map[gpsw_variant]);
 		break;
 	default:
 		variant++;
@@ -107,12 +170,6 @@ err_unknown_variant:
 	return -ENODEV;
 }
 
-static const struct regmap_config k3_chipinfo_regmap_cfg = {
-	.reg_bits = 32,
-	.val_bits = 32,
-	.reg_stride = 4,
-};
-
 static int k3_chipinfo_probe(struct platform_device *pdev)
 {
 	struct device_node *node = pdev->dev.of_node;
@@ -121,6 +178,7 @@ static int k3_chipinfo_probe(struct platform_device *pdev)
 	struct soc_device *soc_dev;
 	struct regmap *regmap;
 	void __iomem *base;
+	u32 gp_sw1_val = 0;
 	u32 partno_id;
 	u32 variant;
 	u32 jtag_id;
@@ -163,7 +221,15 @@ static int k3_chipinfo_probe(struct platform_device *pdev)
 		goto err;
 	}
 
-	ret = k3_chipinfo_variant_to_sr(partno_id, variant, soc_dev_attr);
+	if (k3_chipinfo_variant_in_gp_sw(partno_id)) {
+		ret = k3_chipinfo_get_variant_alternate(pdev, partno_id, &gp_sw1_val);
+		if (ret < 0) {
+			dev_err(dev, "Failed to read GP_SW1: %d\n", ret);
+			goto err;
+		}
+	}
+
+	ret = k3_chipinfo_variant_to_sr(partno_id, variant, soc_dev_attr, gp_sw1_val);
 	if (ret) {
 		dev_err(dev, "Unknown SoC SR[0x%08X]: %d\n", jtag_id, ret);
 		goto err;
