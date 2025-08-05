@@ -125,7 +125,7 @@ const char *get_syscall_name(int syscall)
 	return entry->name;
 }
 
-/* Added to user strings when max limit is reached */
+/* Added to user strings or arrays when max limit is reached */
 #define EXTRA "..."
 
 static enum print_line_t
@@ -137,7 +137,7 @@ print_syscall_enter(struct trace_iterator *iter, int flags,
 	struct trace_entry *ent = iter->ent;
 	struct syscall_trace_enter *trace;
 	struct syscall_metadata *entry;
-	int i, syscall, val;
+	int i, syscall, val, len;
 	unsigned char *ptr;
 
 	trace = (typeof(trace))ent;
@@ -183,7 +183,25 @@ print_syscall_enter(struct trace_iterator *iter, int flags,
 
 		ptr = (void *)ent + (val & 0xffff);
 
-		trace_seq_printf(s, " \"%s\"", ptr);
+		if (entry->user_arg_size < 0) {
+			trace_seq_printf(s, " \"%s\"", ptr);
+			continue;
+		}
+
+		len = val >> 16;
+
+		val = trace->args[entry->user_arg_size];
+
+		trace_seq_puts(s, " (");
+		for (int x = 0; x < len; x++, ptr++) {
+			if (x)
+				trace_seq_putc(s, ':');
+			trace_seq_printf(s, "%02x", *ptr);
+		}
+		if (len < val)
+			trace_seq_printf(s, ", %s", EXTRA);
+
+		trace_seq_putc(s, ')');
 	}
 
 	trace_seq_putc(s, ')');
@@ -248,8 +266,11 @@ __set_enter_print_fmt(struct syscall_metadata *entry, char *buf, int len)
 		if (!(BIT(i) & entry->user_mask))
 			continue;
 
-		/* Add the format for the user space string */
-		pos += snprintf(buf + pos, LEN_OR_ZERO, " \\\"%%s\\\"");
+		/* Add the format for the user space string or array */
+		if (entry->user_arg_size < 0)
+			pos += snprintf(buf + pos, LEN_OR_ZERO, " \\\"%%s\\\"");
+		else
+			pos += snprintf(buf + pos, LEN_OR_ZERO, " (%%s)");
 	}
 	pos += snprintf(buf + pos, LEN_OR_ZERO, "\"");
 
@@ -258,9 +279,14 @@ __set_enter_print_fmt(struct syscall_metadata *entry, char *buf, int len)
 				", ((unsigned long)(REC->%s))", entry->args[i]);
 		if (!(BIT(i) & entry->user_mask))
 			continue;
-		/* The user space string for arg has name __<arg>_val */
-		pos += snprintf(buf + pos, LEN_OR_ZERO, ", __get_str(__%s_val)",
-				entry->args[i]);
+		/* The user space data for arg has name __<arg>_val */
+		if (entry->user_arg_size < 0) {
+			pos += snprintf(buf + pos, LEN_OR_ZERO, ", __get_str(__%s_val)",
+					entry->args[i]);
+		} else {
+			pos += snprintf(buf + pos, LEN_OR_ZERO, ", __print_dynamic_array(__%s_val, 1)",
+					entry->args[i]);
+		}
 	}
 
 #undef LEN_OR_ZERO
@@ -331,9 +357,9 @@ static int __init syscall_enter_define_fields(struct trace_event_call *call)
 	idx = ffs(mask) - 1;
 
 	/*
-	 * User space strings are faulted into a temporary buffer and then
-	 * added as a dynamic string to the end of the event.
-	 * The user space string name for the arg pointer is "__<arg>_val".
+	 * User space data is faulted into a temporary buffer and then
+	 * added as a dynamic string or array to the end of the event.
+	 * The user space data name for the arg pointer is "__<arg>_val".
 	 */
 	len = strlen(meta->args[idx]) + sizeof("___val");
 	arg = kmalloc(len, GFP_KERNEL);
@@ -480,6 +506,7 @@ static char *sys_fault_user(struct syscall_metadata *sys_data, struct syscall_bu
 	unsigned long mask = sys_data->user_mask;
 	unsigned int cnt;
 	int idx = ffs(mask) - 1;
+	bool array = false;
 	char *ptr;
 	int trys = 0;
 	int ret;
@@ -512,6 +539,18 @@ static char *sys_fault_user(struct syscall_metadata *sys_data, struct syscall_bu
 	cnt = this_cpu_read(sched_switch_cnt);
 
 	/*
+	 * If this system call event has a size argument, use
+	 * it to define how much of user space memory to read,
+	 * and read it as an array and not a string.
+	 */
+	if (sys_data->user_arg_size >= 0) {
+		array = true;
+		size = args[sys_data->user_arg_size];
+		if (size > SYSCALL_FAULT_BUF_SZ - 1)
+			size = SYSCALL_FAULT_BUF_SZ - 1;
+	}
+
+	/*
 	 * Preemption is going to be enabled, but this task must
 	 * remain on this CPU.
 	 */
@@ -523,7 +562,12 @@ static char *sys_fault_user(struct syscall_metadata *sys_data, struct syscall_bu
 	 */
 	preempt_enable_notrace();
 
-	ret = strncpy_from_user(buf, ptr, size);
+	if (array) {
+		ret = __copy_from_user(buf, ptr, size);
+		ret = ret ? -1 : size;
+	} else {
+		ret = strncpy_from_user(buf, ptr, size);
+	}
 
 	preempt_disable_notrace();
 	migrate_enable();
@@ -548,22 +592,24 @@ static char *sys_fault_user(struct syscall_metadata *sys_data, struct syscall_bu
 	if (this_cpu_read(sched_switch_cnt) > cnt + 1)
 		goto again;
 
-	/* Replace any non-printable characters with '.' */
-	for (int i = 0; i < ret; i++) {
-		if (!isprint(buf[i]))
-			buf[i] = '.';
-	}
+	/* For strings, replace any non-printable characters with '.' */
+	if (!array) {
+		for (int i = 0; i < ret; i++) {
+			if (!isprint(buf[i]))
+				buf[i] = '.';
+		}
 
-	/*
-	 * If the text was truncated due to our max limit, add "..." to
-	 * the string.
-	 */
-	if (ret > SYSCALL_FAULT_BUF_SZ - sizeof(EXTRA)) {
-		strscpy(buf + SYSCALL_FAULT_BUF_SZ - sizeof(EXTRA),
-			EXTRA, sizeof(EXTRA));
-		ret = SYSCALL_FAULT_BUF_SZ;
-	} else {
-		buf[ret++] = '\0';
+		/*
+		 * If the text was truncated due to our max limit, add "..." to
+		 * the string.
+		 */
+		if (ret > SYSCALL_FAULT_BUF_SZ - sizeof(EXTRA)) {
+			strscpy(buf + SYSCALL_FAULT_BUF_SZ - sizeof(EXTRA),
+				EXTRA, sizeof(EXTRA));
+			ret = SYSCALL_FAULT_BUF_SZ;
+		} else {
+			buf[ret++] = '\0';
+		}
 	}
 
 	*data_size = ret;
@@ -659,6 +705,9 @@ static void ftrace_syscall_enter(void *data, struct pt_regs *regs, long id)
 
 		/* Store the offset and the size into the meta data */
 		*(int *)ptr = val | (user_size << 16);
+
+		if (WARN_ON_ONCE((ptr - (void *)entry + user_size) > size))
+			user_size = 0;
 
 		/* Nothing to do if the user space was empty or faulted */
 		if (user_size) {
@@ -813,7 +862,16 @@ static void check_faultable_syscall(struct trace_event_call *call, int nr)
 	if (sys_data->enter_event != call)
 		return;
 
+	sys_data->user_arg_size = -1;
+
 	switch (nr) {
+	/* user arg 1 with size arg at 2 */
+	case __NR_write:
+	case __NR_mq_timedsend:
+	case __NR_pwrite64:
+		sys_data->user_mask = BIT(1);
+		sys_data->user_arg_size = 2;
+		break;
 	/* user arg at position 0 */
 	case __NR_access:
 	case __NR_acct:
