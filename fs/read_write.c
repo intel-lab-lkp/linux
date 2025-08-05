@@ -1576,6 +1576,10 @@ ssize_t vfs_copy_file_range(struct file *file_in, loff_t pos_in,
 	if (len == 0)
 		return 0;
 
+	/* Make sure return value doesn't overflow in 32bit compat mode */
+	if (in_compat_syscall() && len > MAX_RW_COUNT)
+		len = MAX_RW_COUNT;
+
 	file_start_write(file_out);
 
 	/*
