@@ -305,4 +305,8 @@ static inline bool vsock_net_check_mode(struct net *n1, struct net *n2)
 	       (vsock_net_mode(n1) == VSOCK_NET_MODE_GLOBAL &&
 		vsock_net_mode(n2) == VSOCK_NET_MODE_GLOBAL);
 }
+
+int vsock_loopback_init_net(struct net *net);
+void vsock_loopback_exit_net(struct net *net);
+
 #endif /* __AF_VSOCK_H__ */

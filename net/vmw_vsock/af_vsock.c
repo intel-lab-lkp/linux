@@ -2778,8 +2778,11 @@ static __net_init int vsock_sysctl_init_net(struct net *net)
 {
 	vsock_net_init(net);
 
-	if (vsock_sysctl_register(net))
+	if (vsock_loopback_init_net(net))
 		return -ENOMEM;
+
+	if (vsock_sysctl_register(net))
+		goto err_loopback;
 
 #ifdef CONFIG_PROC_FS
 	if (!proc_create_net_single_write("vsock_ns_mode", 0644, net->proc_net,
@@ -2793,12 +2796,15 @@ static __net_init int vsock_sysctl_init_net(struct net *net)
 
 err_sysctl:
 	vsock_sysctl_unregister(net);
+err_loopback:
+	vsock_loopback_exit_net(net);
 	return -ENOMEM;
 }
 
 static __net_exit void vsock_sysctl_exit_net(struct net *net)
 {
 	vsock_sysctl_unregister(net);
+	vsock_loopback_exit_net(net);
 }
 
 static struct pernet_operations vsock_sysctl_ops __net_initdata = {
