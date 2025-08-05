@@ -739,8 +739,7 @@ static int zforce_probe(struct i2c_client *client)
 
 	error = devm_add_action_or_reset(&client->dev, zforce_reset, ts);
 	if (error)
-		return dev_err_probe(&client->dev, error,
-				     "failed to register reset action\n");
+		return error;
 
 	snprintf(ts->phys, sizeof(ts->phys),
 		 "%s/input0", dev_name(&client->dev));
