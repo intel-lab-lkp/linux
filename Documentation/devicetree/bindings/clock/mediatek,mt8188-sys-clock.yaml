@@ -36,6 +36,9 @@ properties:
   reg:
     maxItems: 1
 
+  '#access-controller-cells':
+    const: 0
+
   '#clock-cells':
     const: 1
 
@@ -48,6 +51,18 @@ required:
   - '#clock-cells'
 
 additionalProperties: false
+
+if:
+  properties:
+    compatible:
+      contains:
+        const: mediatek,mt8188-infracfg_ao
+then:
+  properties:
+    '#access-controller-cells': true
+else:
+  properties:
+    '#access-controller-cells': false
 
 examples:
   - |
