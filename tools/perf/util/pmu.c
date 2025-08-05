@@ -1176,7 +1176,7 @@ int perf_pmu__init(struct perf_pmu *pmu, __u32 type, const char *name)
 		return -ENOMEM;
 
 	pmu->aliases = hashmap__new(aliases__hash, aliases__equal, /*ctx=*/ NULL);
-	if (!pmu->aliases)
+	if (IS_ERR(pmu->aliases))
 		return -ENOMEM;
 
 	return 0;
