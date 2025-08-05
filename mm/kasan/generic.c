@@ -165,6 +165,9 @@ static __always_inline bool check_region_inline(const void *addr,
 						size_t size, bool write,
 						unsigned long ret_ip)
 {
+	if (!kasan_enabled())
+		return true;
+
 	if (!kasan_arch_is_ready())
 		return true;
 
@@ -203,12 +206,13 @@ bool kasan_byte_accessible(const void *addr)
 
 void kasan_cache_shrink(struct kmem_cache *cache)
 {
-	kasan_quarantine_remove_cache(cache);
+	if (kasan_enabled())
+		kasan_quarantine_remove_cache(cache);
 }
 
 void kasan_cache_shutdown(struct kmem_cache *cache)
 {
-	if (!__kmem_cache_empty(cache))
+	if (kasan_enabled() && !__kmem_cache_empty(cache))
 		kasan_quarantine_remove_cache(cache);
 }
 
@@ -227,6 +231,9 @@ void __asan_register_globals(void *ptr, ssize_t size)
 {
 	int i;
 	struct kasan_global *globals = ptr;
+
+	if (!kasan_enabled())
+		return;
 
 	for (i = 0; i < size; i++)
 		register_global(&globals[i]);
@@ -357,6 +364,9 @@ void kasan_cache_create(struct kmem_cache *cache, unsigned int *size,
 	unsigned int optimal_size;
 	unsigned int rem_free_meta_size;
 	unsigned int orig_alloc_meta_offset;
+
+	if (!kasan_enabled())
+		return;
 
 	if (!kasan_requires_meta())
 		return;
@@ -510,6 +520,9 @@ size_t kasan_metadata_size(struct kmem_cache *cache, bool in_object)
 {
 	struct kasan_cache *info = &cache->kasan_info;
 
+	if (!kasan_enabled())
+		return 0;
+
 	if (!kasan_requires_meta())
 		return 0;
 
@@ -534,6 +547,9 @@ void kasan_record_aux_stack(void *addr)
 	struct kmem_cache *cache;
 	struct kasan_alloc_meta *alloc_meta;
 	void *object;
+
+	if (!kasan_enabled())
+		return;
 
 	if (is_kfence_address(addr) || !slab)
 		return;
