@@ -104,7 +104,7 @@ static int axienet_mdio_read(struct mii_bus *bus, int phy_id, int reg)
 
 	rc = ioread32(lp->regs + XAE_MDIO_MRD_OFFSET) & 0x0000FFFF;
 
-	dev_dbg(lp->dev, "axienet_mdio_read(phy_id=%i, reg=%x) == %x\n",
+	dev_dbg(&bus->dev, "%s(phy_id=%i, reg=%x) == %x\n", __func__,
 		phy_id, reg, rc);
 
 	axienet_mdio_mdc_disable(lp);
@@ -131,7 +131,7 @@ static int axienet_mdio_write(struct mii_bus *bus, int phy_id, int reg,
 	int ret;
 	u32 mcr;
 
-	dev_dbg(lp->dev, "axienet_mdio_write(phy_id=%i, reg=%x, val=%x)\n",
+	dev_dbg(&bus->dev, "%s(phy_id=%i, reg=%x, val=%x)\n", __func__,
 		phy_id, reg, val);
 
 	axienet_mdio_mdc_enable(lp);
@@ -160,7 +160,7 @@ static int axienet_mdio_write(struct mii_bus *bus, int phy_id, int reg,
 
 /**
  * axienet_mdio_enable - MDIO hardware setup function
- * @lp:		Pointer to axienet local data structure.
+ * @bus:	MDIO bus
  * @np:		Pointer to mdio device tree node.
  *
  * Return:	0 on success, -ETIMEDOUT on a timeout, -EOVERFLOW on a clock
@@ -169,8 +169,9 @@ static int axienet_mdio_write(struct mii_bus *bus, int phy_id, int reg,
  * Sets up the MDIO interface by initializing the MDIO clock and enabling the
  * MDIO interface in hardware.
  **/
-static int axienet_mdio_enable(struct axienet_local *lp, struct device_node *np)
+static int axienet_mdio_enable(struct mii_bus *bus, struct device_node *np)
 {
+	struct axienet_local *lp = bus->priv;
 	u32 mdio_freq = DEFAULT_MDIO_FREQ;
 	u32 host_clock;
 	u32 clk_div;
@@ -186,28 +187,31 @@ static int axienet_mdio_enable(struct axienet_local *lp, struct device_node *np)
 		/* Legacy fallback: detect CPU clock frequency and use as AXI
 		 * bus clock frequency. This only works on certain platforms.
 		 */
-		np1 = of_find_node_by_name(NULL, "cpu");
+		np1 = of_find_node_by_name(NULL, "lpu");
 		if (!np1) {
-			netdev_warn(lp->ndev, "Could not find CPU device node.\n");
+			dev_warn(&bus->dev,
+				 "Could not find CPU device node.\n");
 			host_clock = DEFAULT_HOST_CLOCK;
 		} else {
 			int ret = of_property_read_u32(np1, "clock-frequency",
 						       &host_clock);
 			if (ret) {
-				netdev_warn(lp->ndev, "CPU clock-frequency property not found.\n");
+				dev_warn(&bus->dev,
+					 "CPU clock-frequency property not found.\n");
 				host_clock = DEFAULT_HOST_CLOCK;
 			}
 			of_node_put(np1);
 		}
-		netdev_info(lp->ndev, "Setting assumed host clock to %u\n",
-			    host_clock);
+		dev_info(&bus->dev,
+			 "Setting assumed host clock to %u\n", host_clock);
 	}
 
 	if (np)
 		of_property_read_u32(np, "clock-frequency", &mdio_freq);
 	if (mdio_freq != DEFAULT_MDIO_FREQ)
-		netdev_info(lp->ndev, "Setting non-standard mdio bus frequency to %u Hz\n",
-			    mdio_freq);
+		dev_info(&bus->dev,
+			 "Setting non-standard mdio bus frequency to %u Hz\n",
+			 mdio_freq);
 
 	/* clk_div can be calculated by deriving it from the equation:
 	 * fMDIO = fHOST / ((1 + clk_div) * 2)
@@ -245,14 +249,14 @@ static int axienet_mdio_enable(struct axienet_local *lp, struct device_node *np)
 
 	/* Check for overflow of mii_clk_div */
 	if (clk_div & ~XAE_MDIO_MC_CLOCK_DIVIDE_MAX) {
-		netdev_warn(lp->ndev, "MDIO clock divisor overflow\n");
+		dev_warn(&bus->dev, "MDIO clock divisor overflow\n");
 		return -EOVERFLOW;
 	}
 	lp->mii_clk_div = (u8)clk_div;
 
-	netdev_dbg(lp->ndev,
-		   "Setting MDIO clock divisor to %u/%u Hz host clock.\n",
-		   lp->mii_clk_div, host_clock);
+	dev_dbg(&bus->dev,
+		"Setting MDIO clock divisor to %u/%u Hz host clock.\n",
+		lp->mii_clk_div, host_clock);
 
 	axienet_mdio_mdc_enable(lp);
 
@@ -295,7 +299,7 @@ int axienet_mdio_setup(struct axienet_local *lp)
 	lp->mii_bus = bus;
 
 	mdio_node = of_get_child_by_name(lp->dev->of_node, "mdio");
-	ret = axienet_mdio_enable(lp, mdio_node);
+	ret = axienet_mdio_enable(bus, mdio_node);
 	if (ret < 0)
 		goto unregister;
 	ret = of_mdiobus_register(bus, mdio_node);
