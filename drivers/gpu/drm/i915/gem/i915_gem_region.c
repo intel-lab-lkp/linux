@@ -92,15 +92,13 @@ __i915_gem_object_create_region(struct intel_memory_region *mem,
 		flags |= I915_BO_ALLOC_PM_EARLY;
 
 	err = mem->ops->init_object(mem, obj, offset, size, page_size, flags);
-	if (err)
-		goto err_object_free;
+	if (err) {
+		i915_gem_object_free(obj);
+		return ERR_PTR(err);
+	}
 
 	trace_i915_gem_object_create(obj);
 	return obj;
-
-err_object_free:
-	i915_gem_object_free(obj);
-	return ERR_PTR(err);
 }
 
 struct drm_i915_gem_object *
