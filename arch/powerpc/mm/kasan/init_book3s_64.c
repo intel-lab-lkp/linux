@@ -56,6 +56,9 @@ void __init kasan_init(void)
 	u64 i;
 	pte_t zero_pte = pfn_pte(virt_to_pfn(kasan_early_shadow_page), PAGE_KERNEL);
 
+	if (kasan_arg_disabled)
+		return;
+
 	if (!early_radix_enabled()) {
 		pr_warn("KASAN not enabled as it requires radix!");
 		return;
@@ -93,6 +96,9 @@ void __init kasan_init(void)
 	memset(kasan_early_shadow_page, 0, PAGE_SIZE);
 
 	static_branch_inc(&powerpc_kasan_enabled_key);
+
+	/* KASAN is now initialized, enable it. */
+	static_branch_enable(&kasan_flag_enabled);
 
 	/* Enable error messages */
 	init_task.kasan_depth = 0;
