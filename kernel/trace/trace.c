@@ -1776,7 +1776,7 @@ int trace_parser_get_init(struct trace_parser *parser, int size)
 {
 	memset(parser, 0, sizeof(*parser));
 
-	parser->buffer = kmalloc(size, GFP_KERNEL);
+	parser->buffer = kzalloc(size, GFP_KERNEL);
 	if (!parser->buffer)
 		return 1;
 
@@ -1860,13 +1860,10 @@ int trace_get_user(struct trace_parser *parser, const char __user *ubuf,
 
 	/* We either got finished input or we have to wait for another call. */
 	if (isspace(ch) || !ch) {
-		parser->buffer[parser->idx] = 0;
 		parser->cont = false;
 	} else if (parser->idx < parser->size - 1) {
 		parser->cont = true;
 		parser->buffer[parser->idx++] = ch;
-		/* Make sure the parsed string always terminates with '\0'. */
-		parser->buffer[parser->idx] = 0;
 	} else {
 		return -EINVAL;
 	}
