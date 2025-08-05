@@ -240,26 +240,36 @@ static int scmi_hwmon_probe(struct scmi_device *sdev)
 	struct scmi_protocol_handle *ph;
 
 	if (!handle)
-		return -ENODEV;
+		return dev_err_probe(dev, -ENODEV, "SCMI device handle is NULL\n");
 
 	sensor_ops = handle->devm_protocol_get(sdev, SCMI_PROTOCOL_SENSOR, &ph);
-	if (IS_ERR(sensor_ops))
-		return PTR_ERR(sensor_ops);
+	if (IS_ERR_OR_NULL(sensor_ops)) {
+		if (IS_ERR(sensor_ops))
+			return dev_err_probe(dev, PTR_ERR(sensor_ops),
+					     "SCMI sensor protocol acquisition failed\n");
+		return dev_err_probe(dev, -EPROTO,
+				     "SCMI sensor protocol ops structure unexpectedly NULL\n");
+	}
+
+	if (!sensor_ops->info_get || !sensor_ops->count_get)
+		return dev_err_probe(dev, -ENOENT,
+				     "SCMI sensor protocol operations are not initialized\n");
 
 	nr_sensors = sensor_ops->count_get(ph);
 	if (!nr_sensors)
-		return -EIO;
+		return dev_err_probe(dev, -EIO, "No sensors found\n");
 
 	scmi_sensors = devm_kzalloc(dev, sizeof(*scmi_sensors), GFP_KERNEL);
 	if (!scmi_sensors)
-		return -ENOMEM;
+		return dev_err_probe(dev, -ENOMEM, "Failed to allocate scmi_sensors structure\n");
 
 	scmi_sensors->ph = ph;
 
 	for (i = 0; i < nr_sensors; i++) {
 		sensor = sensor_ops->info_get(ph, i);
 		if (!sensor)
-			return -EINVAL;
+			return dev_err_probe(dev, -EINVAL,
+					     "Failed to get sensor info for sensor %d\n", i);
 
 		switch (sensor->type) {
 		case TEMPERATURE_C:
@@ -285,12 +295,12 @@ static int scmi_hwmon_probe(struct scmi_device *sdev)
 	scmi_hwmon_chan = devm_kcalloc(dev, nr_types, sizeof(*scmi_hwmon_chan),
 				       GFP_KERNEL);
 	if (!scmi_hwmon_chan)
-		return -ENOMEM;
+		return dev_err_probe(dev, -ENOMEM, "Failed to allocate channel info array\n");
 
 	ptr_scmi_ci = devm_kcalloc(dev, nr_types + 1, sizeof(*ptr_scmi_ci),
 				   GFP_KERNEL);
 	if (!ptr_scmi_ci)
-		return -ENOMEM;
+		return dev_err_probe(dev, -ENOMEM, "Failed to allocate channel info pointers\n");
 
 	scmi_chip_info.info = ptr_scmi_ci;
 	chip_info = &scmi_chip_info;
@@ -307,7 +317,8 @@ static int scmi_hwmon_probe(struct scmi_device *sdev)
 			devm_kcalloc(dev, nr_count[type],
 				     sizeof(*scmi_sensors->info), GFP_KERNEL);
 		if (!scmi_sensors->info[type])
-			return -ENOMEM;
+			return dev_err_probe(dev, -ENOMEM,
+					     "Failed to allocate sensor info for type %d\n", type);
 	}
 
 	for (i = nr_sensors - 1; i >= 0 ; i--) {
@@ -336,7 +347,7 @@ static int scmi_hwmon_probe(struct scmi_device *sdev)
 						     scmi_sensors, chip_info,
 						     NULL);
 	if (IS_ERR(hwdev))
-		return PTR_ERR(hwdev);
+		return dev_err_probe(dev, PTR_ERR(hwdev), "Failed to register hwmon device\n");
 
 	for (i = 0; i < nr_count_temp; i++) {
 		int ret;
@@ -352,7 +363,9 @@ static int scmi_hwmon_probe(struct scmi_device *sdev)
 		ret = scmi_thermal_sensor_register(dev, ph, sensor);
 		if (ret) {
 			if (ret == -ENOMEM)
-				return ret;
+				return dev_err_probe(dev, ret,
+						     "Failed to allocate memory for thermal zone\n");
+
 			dev_warn(dev,
 				 "Thermal zone misconfigured for %s. err=%d\n",
 				 sensor->name, ret);
