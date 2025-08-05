@@ -151,6 +151,8 @@ int vlv_clock_get_hpll_vco(struct drm_device *drm)
 			CCK_FUSE_HPLL_FREQ_MASK;
 
 		i915->hpll_freq = vco_freq[hpll_freq] * 1000;
+
+		drm_dbg_kms(drm, "HPLL frequency: %d kHz\n", i915->hpll_freq);
 	}
 
 	return i915->hpll_freq;
