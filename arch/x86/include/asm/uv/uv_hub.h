@@ -26,6 +26,7 @@
 #include <asm/irq_vectors.h>
 #include <asm/io_apic.h>
 
+#ifdef CONFIG_X86_UV
 
 /*
  * Addressing Terminology
@@ -785,5 +786,12 @@ static inline int uv_get_min_hub_revision_id(void)
 	return uv_hub_info->hub_revision;
 }
 
+#else /* !X86_UV */
+
+static inline int is_uvx_hub(void) { return 0; }
+static inline int is_uvy_hub(void) { return 0; }
+static inline int is_uv_hub(void) { return 0; }
+
+#endif /* X86_UV */
 #endif /* CONFIG_X86_64 */
 #endif /* _ASM_X86_UV_UV_HUB_H */
