@@ -1884,6 +1884,13 @@ The following nested keys are defined.
 	Shows pressure stall information for memory. See
 	:ref:`Documentation/accounting/psi.rst <psi>` for details.
 
+  memory.net.socket_pressure
+	A read-only single value file showing how many microseconds
+	all sockets within that cgroup spent under pressure.
+
+	Note that when the sockets are under pressure, the networking
+	throughput can be significantly degraded.
+
 
 Usage Guidelines
 ~~~~~~~~~~~~~~~~

@@ -252,6 +252,8 @@ struct mem_cgroup {
 	 * where socket memory is accounted/charged separately.
 	 */
 	unsigned long		socket_pressure;
+	/* exported statistic for memory.net.socket_pressure */
+	unsigned long		socket_pressure_duration;
 
 	int kmemcg_id;
 	/*
