@@ -572,7 +572,7 @@ static void vlv_get_cdclk(struct intel_display *display,
 
 	vlv_iosf_sb_get(display->drm, BIT(VLV_IOSF_SB_CCK) | BIT(VLV_IOSF_SB_PUNIT));
 
-	cdclk_config->vco = vlv_get_hpll_vco(display->drm);
+	cdclk_config->vco = vlv_clock_get_hpll_vco(display->drm);
 	cdclk_config->cdclk = vlv_clock_get_cdclk(display->drm);
 
 	val = vlv_punit_read(display->drm, PUNIT_REG_DSPSSPM);
