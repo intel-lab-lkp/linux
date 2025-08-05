@@ -5500,11 +5500,11 @@ set_next_entity(struct cfs_rq *cfs_rq, struct sched_entity *se)
 static int dequeue_entities(struct rq *rq, struct sched_entity *se, int flags);
 
 /*
- * Pick the next process, keeping these things in mind, in this order:
- * 1) keep things fair between processes/task groups
- * 2) pick the "next" process, since someone really wants that to run
- * 3) pick the "last" process, for cache locality
- * 4) do not run the "skip" process, if something else is available
+ * Pick the next sched_entity to run from cfs_rq.
+ *
+ * Prefer ->next buddy if sched_feat(PICK_BUDDY) is enabled and it's eligible,
+ * to improve cache locality.
+ * Otherwise, pick the entity via EEVDF for fairness and latency control.
  */
 static struct sched_entity *
 pick_next_entity(struct rq *rq, struct cfs_rq *cfs_rq)
@@ -8673,9 +8673,9 @@ static void check_preempt_wakeup_fair(struct rq *rq, struct task_struct *p, int 
 	 *
 	 * Note: this also catches the edge-case of curr being in a throttled
 	 * group (e.g. via set_curr_task), since update_curr() (in the
-	 * enqueue of curr) will have resulted in resched being set.  This
-	 * prevents us from potentially nominating it as a false LAST_BUDDY
-	 * below.
+	 * enqueue of curr) will have resulted in resched being set. This
+	 * prevents further preemption handling, including checks and potential
+	 * reschedule triggering.
 	 */
 	if (test_tsk_need_resched(rq->curr))
 		return;
