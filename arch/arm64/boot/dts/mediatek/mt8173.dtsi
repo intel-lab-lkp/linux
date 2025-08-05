@@ -355,6 +355,7 @@
 		infracfg: clock-controller@10001000 {
 			compatible = "mediatek,mt8173-infracfg", "syscon";
 			reg = <0 0x10001000 0 0x1000>;
+			#access-controller-cells = <0>;
 			#clock-cells = <1>;
 			#reset-cells = <1>;
 		};
@@ -452,6 +453,7 @@
 				#address-cells = <1>;
 				#size-cells = <0>;
 				#power-domain-cells = <1>;
+				access-controllers = <&infracfg>;
 
 				/* power domains of the SoC */
 				power-domain@MT8173_POWER_DOMAIN_VDEC {
@@ -478,7 +480,6 @@
 					clocks = <&topckgen CLK_TOP_MM_SEL>;
 					clock-names = "mm";
 					#power-domain-cells = <0>;
-					mediatek,infracfg = <&infracfg>;
 				};
 				power-domain@MT8173_POWER_DOMAIN_VENC_LT {
 					reg = <MT8173_POWER_DOMAIN_VENC_LT>;
@@ -512,7 +513,6 @@
 						power-domain@MT8173_POWER_DOMAIN_MFG {
 							reg = <MT8173_POWER_DOMAIN_MFG>;
 							#power-domain-cells = <0>;
-							mediatek,infracfg = <&infracfg>;
 						};
 					};
 				};
