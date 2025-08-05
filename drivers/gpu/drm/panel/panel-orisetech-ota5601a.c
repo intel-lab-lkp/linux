@@ -130,16 +130,13 @@ static int ota5601a_prepare(struct drm_panel *drm_panel)
 				     ARRAY_SIZE(ota5601a_panel_regs));
 	if (err) {
 		dev_err(drm_panel->dev, "Failed to init registers: %d\n", err);
-		goto err_disable_regulator;
+		regulator_disable(panel->supply);
+		return err;
 	}
 
 	msleep(120);
 
 	return 0;
-
-err_disable_regulator:
-	regulator_disable(panel->supply);
-	return err;
 }
 
 static int ota5601a_unprepare(struct drm_panel *drm_panel)

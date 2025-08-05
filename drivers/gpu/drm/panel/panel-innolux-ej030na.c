@@ -105,14 +105,11 @@ static int ej030na_prepare(struct drm_panel *panel)
 				     ARRAY_SIZE(ej030na_init_sequence));
 	if (err) {
 		dev_err(dev, "Failed to init registers: %d\n", err);
-		goto err_disable_regulator;
+		regulator_disable(priv->supply);
+		return err;
 	}
 
 	return 0;
-
-err_disable_regulator:
-	regulator_disable(priv->supply);
-	return err;
 }
 
 static int ej030na_unprepare(struct drm_panel *panel)
