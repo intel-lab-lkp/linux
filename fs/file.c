@@ -1330,7 +1330,8 @@ int replace_fd(unsigned fd, struct file *file, unsigned flags)
 	err = expand_files(files, fd);
 	if (unlikely(err < 0))
 		goto out_unlock;
-	return do_dup2(files, file, fd, flags);
+	err = do_dup2(files, file, fd, flags);
+	return err < 0 ? err : 0;
 
 out_unlock:
 	spin_unlock(&files->file_lock);
