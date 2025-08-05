@@ -302,19 +302,14 @@ int axienet_mdio_setup(struct axienet_local *lp)
 	ret = axienet_mdio_enable(bus, mdio_node);
 	if (ret < 0)
 		goto unregister;
-	ret = of_mdiobus_register(bus, mdio_node);
-	if (ret)
-		goto unregister_mdio_enabled;
-	of_node_put(mdio_node);
-	axienet_mdio_mdc_disable(lp);
-	return 0;
 
-unregister_mdio_enabled:
-	axienet_mdio_mdc_disable(lp);
-unregister:
+	ret = of_mdiobus_register(bus, mdio_node);
 	of_node_put(mdio_node);
-	mdiobus_free(bus);
-	lp->mii_bus = NULL;
+	axienet_mdio_mdc_disable(lp);
+	if (ret) {
+		mdiobus_free(bus);
+		lp->mii_bus = NULL;
+	}
 	return ret;
 }
 
