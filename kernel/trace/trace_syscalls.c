@@ -407,17 +407,16 @@ struct syscall_buf_info {
  * SYSCALL_FAULT_USER_MAX is the amount to copy into the ring buffer.
  *  It's slightly smaller than SYSCALL_FAULT_ARG_SZ to know if it
  *  needs to append the EXTRA or not.
+ *  (defined in kernel/trace/trace.h)
  *
  * This only allows up to 3 args from system calls.
  */
 #define SYSCALL_FAULT_BUF_SZ 512
 #define SYSCALL_FAULT_ARG_SZ 168
-#define SYSCALL_FAULT_USER_MAX 128
 #define SYSCALL_FAULT_MAX_CNT 3
 
 static struct syscall_buf_info *syscall_buffer;
 static DEFINE_PER_CPU(unsigned long, sched_switch_cnt);
-
 static int syscall_fault_buffer_cnt;
 
 static void syscall_fault_buffer_free(struct syscall_buf_info *sinfo)
@@ -524,7 +523,7 @@ static void syscall_fault_buffer_disable(void)
 	call_rcu_tasks_trace(&sinfo->rcu, rcu_free_syscall_buffer);
 }
 
-static char *sys_fault_user(struct syscall_metadata *sys_data,
+static char *sys_fault_user(struct trace_array *tr, struct syscall_metadata *sys_data,
 			    struct syscall_buf_info *sinfo,
 			    unsigned long *args,
 			    unsigned int data_size[SYSCALL_FAULT_MAX_CNT])
@@ -575,6 +574,10 @@ static char *sys_fault_user(struct syscall_metadata *sys_data,
 	for (; i < SYSCALL_FAULT_MAX_CNT; i++) {
 		data_size[i] = -1; /* Denotes no pointer */
 	}
+
+	/* A zero size means do not even try */
+	if (!tr->syscall_buf_sz)
+		return buffer;
 
  again:
 	/*
@@ -659,19 +662,20 @@ static char *sys_fault_user(struct syscall_metadata *sys_data,
 					buf[x] = '.';
 			}
 
+			size = min(tr->syscall_buf_sz, SYSCALL_FAULT_USER_MAX);
+
 			/*
 			 * If the text was truncated due to our max limit,
 			 * add "..." to the string.
 			 */
-			if (ret > SYSCALL_FAULT_USER_MAX) {
-				strscpy(buf + SYSCALL_FAULT_USER_MAX, EXTRA,
-					sizeof(EXTRA));
-				ret = SYSCALL_FAULT_USER_MAX + sizeof(EXTRA);
+			if (ret > size) {
+				strscpy(buf + size, EXTRA, sizeof(EXTRA));
+				ret = size + sizeof(EXTRA);
 			} else {
 				buf[ret++] = '\0';
 			}
 		} else {
-			ret = min(ret, SYSCALL_FAULT_USER_MAX);
+			ret = min((unsigned int)ret, tr->syscall_buf_sz);
 		}
 		data_size[i] = ret;
 	}
@@ -731,7 +735,7 @@ static void ftrace_syscall_enter(void *data, struct pt_regs *regs, long id)
 		if (!sinfo)
 			return;
 
-		user_ptr = sys_fault_user(sys_data, sinfo, args, user_sizes);
+		user_ptr = sys_fault_user(tr, sys_data, sinfo, args, user_sizes);
 		/*
 		 * user_size is the amount of data to append.
 		 * Need to add 4 for the meta field that points to
