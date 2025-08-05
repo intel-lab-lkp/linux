@@ -1732,6 +1732,7 @@ struct mid_q_entry {
 	int mid_rc;		/* rc for MID_RC */
 	__le16 command;		/* smb command code */
 	unsigned int optype;	/* operation type */
+	spinlock_t mid_lock;
 	bool wait_cancelled:1;  /* Cancelled while waiting for response */
 	bool deleted_from_q:1;  /* Whether Mid has been dequeued frem pending_mid_q */
 	bool large_buf:1;	/* if valid response, is pointer to large buf */
@@ -2036,6 +2037,9 @@ require use of the stronger protocol */
  * cifsFileInfo->file_info_lock	cifsFileInfo->count		cifs_new_fileinfo
  *				->invalidHandle			initiate_cifs_search
  *				->oplock_break_cancelled
+ * mid_q_entry->mid_lock	mid_q_entry->mid_state		alloc_mid
+ *				mid_q_entry->callback		smb2_mid_entry_alloc
+ *				(Ensure that mid->callback is executed atomically)
  ****************************************************************************/
 
 #ifdef DECLARE_GLOBALS_HERE

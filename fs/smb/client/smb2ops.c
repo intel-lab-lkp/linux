@@ -4805,23 +4805,29 @@ static void smb2_decrypt_offload(struct work_struct *work)
 				dw->server->ops->is_network_name_deleted(dw->buf,
 									 dw->server);
 
-			mid->callback(mid);
+			spin_lock(&mid->mid_lock);
+			if (mid->callback)
+				mid->callback(mid);
+			spin_unlock(&mid->mid_lock);
 		} else {
 			spin_lock(&dw->server->srv_lock);
 			if (dw->server->tcpStatus == CifsNeedReconnect) {
-				spin_lock(&dw->server->mid_queue_lock);
-				mid->mid_state = MID_RETRY_NEEDED;
-				spin_unlock(&dw->server->mid_queue_lock);
 				spin_unlock(&dw->server->srv_lock);
-				mid->callback(mid);
+				spin_lock(&mid->mid_lock);
+				mid->mid_state = MID_RETRY_NEEDED;
+				if (mid->callback)
+					mid->callback(mid);
+				spin_unlock(&mid->mid_lock);
 			} else {
+				spin_unlock(&dw->server->srv_lock);
 				spin_lock(&dw->server->mid_queue_lock);
+				spin_lock(&mid->mid_lock);
 				mid->mid_state = MID_REQUEST_SUBMITTED;
+				spin_unlock(&mid->mid_lock);
 				mid->deleted_from_q = false;
 				list_add_tail(&mid->qhead,
 					&dw->server->pending_mid_q);
 				spin_unlock(&dw->server->mid_queue_lock);
-				spin_unlock(&dw->server->srv_lock);
 			}
 		}
 		release_mid(mid);

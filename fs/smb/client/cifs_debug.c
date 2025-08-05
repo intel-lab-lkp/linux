@@ -62,6 +62,7 @@ void cifs_dump_mids(struct TCP_Server_Info *server)
 	cifs_dbg(VFS, "Dump pending requests:\n");
 	spin_lock(&server->mid_queue_lock);
 	list_for_each_entry(mid_entry, &server->pending_mid_q, qhead) {
+		spin_lock(&mid_entry->mid_lock);
 		cifs_dbg(VFS, "State: %d Cmd: %d Pid: %d Cbdata: %p Mid %llu\n",
 			 mid_entry->mid_state,
 			 le16_to_cpu(mid_entry->command),
@@ -82,6 +83,7 @@ void cifs_dump_mids(struct TCP_Server_Info *server)
 			cifs_dump_mem("existing buf: ",
 				mid_entry->resp_buf, 62);
 		}
+		spin_unlock(&mid_entry->mid_lock);
 	}
 	spin_unlock(&server->mid_queue_lock);
 #endif /* CONFIG_CIFS_DEBUG2 */
@@ -674,12 +676,14 @@ skip_rdma:
 					   chan_server->conn_id);
 				spin_lock(&chan_server->mid_queue_lock);
 				list_for_each_entry(mid_entry, &chan_server->pending_mid_q, qhead) {
+					spin_lock(&mid_entry->mid_lock);
 					seq_printf(m, "\n\t\tState: %d com: %d pid: %d cbdata: %p mid %llu",
 						   mid_entry->mid_state,
 						   le16_to_cpu(mid_entry->command),
 						   mid_entry->pid,
 						   mid_entry->callback_data,
 						   mid_entry->mid);
+					spin_unlock(&mid_entry->mid_lock);
 				}
 				spin_unlock(&chan_server->mid_queue_lock);
 			}
