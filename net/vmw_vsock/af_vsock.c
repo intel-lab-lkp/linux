@@ -83,6 +83,24 @@
  *   TCP_ESTABLISHED - connected
  *   TCP_CLOSING - disconnecting
  *   TCP_LISTEN - listening
+ *
+ * - Namespaces in vsock support two different modes configured
+ *   through /proc/net/vsock_ns_mode. The modes are "local" and "global".
+ *   Each mode defines how the namespace interacts with CIDs.
+ *   /proc/net/vsock_ns_mode is write-once, so that it may be configured
+ *   by a namespace manager. The default is "global". The mode is set
+ *   per-namespace.
+ *
+ *   The modes affect the allocation and accessibility of CIDs as follows:
+ *   - global - aka fully public
+ *      - CID allocation draws from the public pool
+ *      - AF_VSOCK sockets may reach any CID allocated from the public pool
+ *      - AF_VSOCK sockets may not reach CIDs allocated from private pools
+ *
+ *   - local - aka fully private
+ *     - CID allocation draws only from the private pool, does not affect public pool
+ *     - AF_VSOCK sockets may only reach CIDs from the private pool
+ *     - AF_VSOCK sockets may not reach CIDs allocated from outside the pool
  */
 
 #include <linux/compat.h>
@@ -100,6 +118,7 @@
 #include <linux/module.h>
 #include <linux/mutex.h>
 #include <linux/net.h>
+#include <linux/proc_fs.h>
 #include <linux/poll.h>
 #include <linux/random.h>
 #include <linux/skbuff.h>
@@ -111,6 +130,7 @@
 #include <linux/workqueue.h>
 #include <net/sock.h>
 #include <net/af_vsock.h>
+#include <net/netns/vsock.h>
 #include <uapi/linux/vm_sockets.h>
 #include <uapi/asm-generic/ioctls.h>
 
@@ -148,6 +168,9 @@ static const struct vsock_transport *transport_dgram;
 /* Transport used for local communication */
 static const struct vsock_transport *transport_local;
 static DEFINE_MUTEX(vsock_register_mutex);
+
+struct net __vsock_global_net;
+EXPORT_SYMBOL_GPL(__vsock_global_net);
 
 /**** UTILS ****/
 
@@ -235,33 +258,42 @@ static void __vsock_remove_connected(struct vsock_sock *vsk)
 	sock_put(&vsk->sk);
 }
 
-static struct sock *__vsock_find_bound_socket(struct sockaddr_vm *addr)
+static struct sock *__vsock_find_bound_socket(struct sockaddr_vm *addr,
+					      struct net *net)
 {
 	struct vsock_sock *vsk;
 
 	list_for_each_entry(vsk, vsock_bound_sockets(addr), bound_table) {
+		struct sock *sk = sk_vsock(vsk);
+
 		if (vsock_addr_equals_addr(addr, &vsk->local_addr))
-			return sk_vsock(vsk);
+			if (vsock_net_check_mode(net, sock_net(sk)))
+				return sk;
 
 		if (addr->svm_port == vsk->local_addr.svm_port &&
 		    (vsk->local_addr.svm_cid == VMADDR_CID_ANY ||
-		     addr->svm_cid == VMADDR_CID_ANY))
-			return sk_vsock(vsk);
+		     addr->svm_cid == VMADDR_CID_ANY) &&
+		    vsock_net_check_mode(net, sock_net(sk)))
+				return sk;
 	}
 
 	return NULL;
 }
 
 static struct sock *__vsock_find_connected_socket(struct sockaddr_vm *src,
-						  struct sockaddr_vm *dst)
+						  struct sockaddr_vm *dst,
+						  struct net *net)
 {
 	struct vsock_sock *vsk;
 
 	list_for_each_entry(vsk, vsock_connected_sockets(src, dst),
 			    connected_table) {
+		struct sock *sk = sk_vsock(vsk);
+
 		if (vsock_addr_equals_addr(src, &vsk->remote_addr) &&
-		    dst->svm_port == vsk->local_addr.svm_port) {
-			return sk_vsock(vsk);
+		    dst->svm_port == vsk->local_addr.svm_port &&
+		    vsock_net_check_mode(net, sock_net(sk))) {
+			return sk;
 		}
 	}
 
@@ -304,12 +336,12 @@ void vsock_remove_connected(struct vsock_sock *vsk)
 }
 EXPORT_SYMBOL_GPL(vsock_remove_connected);
 
-struct sock *vsock_find_bound_socket(struct sockaddr_vm *addr)
+struct sock *vsock_find_bound_socket(struct sockaddr_vm *addr, struct net *net)
 {
 	struct sock *sk;
 
 	spin_lock_bh(&vsock_table_lock);
-	sk = __vsock_find_bound_socket(addr);
+	sk = __vsock_find_bound_socket(addr, net);
 	if (sk)
 		sock_hold(sk);
 
@@ -320,12 +352,13 @@ struct sock *vsock_find_bound_socket(struct sockaddr_vm *addr)
 EXPORT_SYMBOL_GPL(vsock_find_bound_socket);
 
 struct sock *vsock_find_connected_socket(struct sockaddr_vm *src,
-					 struct sockaddr_vm *dst)
+					 struct sockaddr_vm *dst,
+					 struct net *net)
 {
 	struct sock *sk;
 
 	spin_lock_bh(&vsock_table_lock);
-	sk = __vsock_find_connected_socket(src, dst);
+	sk = __vsock_find_connected_socket(src, dst, net);
 	if (sk)
 		sock_hold(sk);
 
@@ -528,7 +561,7 @@ int vsock_assign_transport(struct vsock_sock *vsk, struct vsock_sock *psk)
 
 	if (sk->sk_type == SOCK_SEQPACKET) {
 		if (!new_transport->seqpacket_allow ||
-		    !new_transport->seqpacket_allow(remote_cid)) {
+		    !new_transport->seqpacket_allow(vsk, remote_cid)) {
 			module_put(new_transport->module);
 			return -ESOCKTNOSUPPORT;
 		}
@@ -678,6 +711,7 @@ static int __vsock_bind_connectible(struct vsock_sock *vsk,
 {
 	static u32 port;
 	struct sockaddr_vm new_addr;
+	struct net *net = sock_net(sk_vsock(vsk));
 
 	if (!port)
 		port = get_random_u32_above(LAST_RESERVED_PORT);
@@ -694,7 +728,7 @@ static int __vsock_bind_connectible(struct vsock_sock *vsk,
 
 			new_addr.svm_port = port++;
 
-			if (!__vsock_find_bound_socket(&new_addr)) {
+			if (!__vsock_find_bound_socket(&new_addr, net)) {
 				found = true;
 				break;
 			}
@@ -711,7 +745,7 @@ static int __vsock_bind_connectible(struct vsock_sock *vsk,
 			return -EACCES;
 		}
 
-		if (__vsock_find_bound_socket(&new_addr))
+		if (__vsock_find_bound_socket(&new_addr, net))
 			return -EADDRINUSE;
 	}
 
@@ -2645,6 +2679,133 @@ static struct miscdevice vsock_device = {
 	.fops		= &vsock_device_ops,
 };
 
+#define VSOCK_NS_MODE_NAME_MAX 8
+
+static struct ctl_table vsock_table[] = {
+	{
+		.procname	= "vsock_ns_mode",
+		.data		= &init_net.vsock.ns_mode,
+		.maxlen		= sizeof(u8),
+		.mode		= 0644,
+		.proc_handler	= proc_dostring
+	},
+};
+
+static int __net_init vsock_sysctl_register(struct net *net)
+{
+	struct ctl_table *table;
+
+	if (net_eq(net, &init_net)) {
+		table = vsock_table;
+	} else {
+		table = kmemdup(vsock_table, sizeof(vsock_table), GFP_KERNEL);
+		if (!table)
+			goto err_alloc;
+
+		table[0].data = &net->vsock.ns_mode;
+	}
+
+	net->vsock.vsock_hdr = register_net_sysctl_sz(net, "net/vsock", table,
+						      ARRAY_SIZE(vsock_table));
+	if (!net->vsock.vsock_hdr)
+		goto err_reg;
+
+	return 0;
+
+err_reg:
+	if (!net_eq(net, &init_net))
+		kfree(table);
+err_alloc:
+	return -ENOMEM;
+}
+
+static void vsock_sysctl_unregister(struct net *net)
+{
+	const struct ctl_table *table;
+
+	table = net->vsock.vsock_hdr->ctl_table_arg;
+	unregister_net_sysctl_table(net->vsock.vsock_hdr);
+	if (!net_eq(net, &init_net))
+		kfree(table);
+}
+
+#ifdef CONFIG_PROC_FS
+static int vsock_proc_ns_mode_show(struct seq_file *seq, void *v)
+{
+	struct net *net = seq_file_single_net(seq);
+	const char *p = "invalid";
+
+	spin_lock_bh(&net->vsock.lock);
+	if (net->vsock.ns_mode == VSOCK_NET_MODE_GLOBAL)
+		p = "global";
+	else if (net->vsock.ns_mode == VSOCK_NET_MODE_LOCAL)
+		p = "local";
+	else
+		WARN_ONCE(1, "invalid vsock_ns_mode");
+	spin_unlock_bh(&net->vsock.lock);
+	seq_printf(seq, "%s", p);
+	return 0;
+}
+
+static int vsock_proc_ns_mode_write(struct file *file, char *buf, size_t size)
+{
+	struct seq_file *m = file->private_data;
+	struct net *net = seq_file_single_net(m);
+	size_t len = size - 1;
+	int ret = 0;
+
+	if (!vsock_net_mode_can_set(net))
+		return -EPERM;
+
+	if (!strncmp(buf, "global", len))
+		vsock_net_set_mode(net, VSOCK_NET_MODE_GLOBAL);
+	else if (!strncmp(buf, "local", len))
+		vsock_net_set_mode(net, VSOCK_NET_MODE_LOCAL);
+	else
+		return -EINVAL;
+
+	return ret;
+}
+#endif /* CONFIG_PROC_FS */
+
+static void vsock_net_init(struct net *net)
+{
+	spin_lock_init(&net->vsock.lock);
+	net->vsock.ns_mode = VSOCK_NET_MODE_GLOBAL;
+}
+
+static __net_init int vsock_sysctl_init_net(struct net *net)
+{
+	vsock_net_init(net);
+
+	if (vsock_sysctl_register(net))
+		return -ENOMEM;
+
+#ifdef CONFIG_PROC_FS
+	if (!proc_create_net_single_write("vsock_ns_mode", 0644, net->proc_net,
+					  vsock_proc_ns_mode_show,
+					  vsock_proc_ns_mode_write,
+					  NULL))
+		goto err_sysctl;
+#endif
+
+	return 0;
+
+err_sysctl:
+	vsock_sysctl_unregister(net);
+	return -ENOMEM;
+}
+
+static __net_exit void vsock_sysctl_exit_net(struct net *net)
+{
+	vsock_sysctl_unregister(net);
+}
+
+static struct pernet_operations vsock_sysctl_ops __net_initdata = {
+	.init = vsock_sysctl_init_net,
+	.exit = vsock_sysctl_exit_net,
+};
+
 static int __init vsock_init(void)
 {
 	int err = 0;
@@ -2672,10 +2833,19 @@ static int __init vsock_init(void)
 		goto err_unregister_proto;
 	}
 
+	if (register_pernet_subsys(&vsock_sysctl_ops)) {
+		err = -ENOMEM;
+		goto err_unregister_sock;
+	}
+
+	vsock_net_init(&init_net);
+	vsock_net_init(vsock_global_net());
 	vsock_bpf_build_proto();
 
 	return 0;
 
+err_unregister_sock:
+	sock_unregister(AF_VSOCK);
 err_unregister_proto:
 	proto_unregister(&vsock_proto);
 err_deregister_misc:
