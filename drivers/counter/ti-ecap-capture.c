@@ -528,7 +528,7 @@ static int ecap_cnt_probe(struct platform_device *pdev)
 	/* Register a cleanup callback to care for disabling PM */
 	ret = devm_add_action_or_reset(dev, ecap_cnt_pm_disable, dev);
 	if (ret)
-		return dev_err_probe(dev, ret, "failed to add pm disable action\n");
+		return ret;
 
 	ret = devm_counter_add(dev, counter_dev);
 	if (ret)
