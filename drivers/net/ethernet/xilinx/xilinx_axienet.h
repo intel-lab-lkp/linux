@@ -470,6 +470,7 @@ struct skbuf_dma_descriptor {
 /**
  * struct axienet_common - axienet private common data
  * @pdev: Pointer to common platform device structure
+ * @mac: Pointer to MAC (netdev parent) device structure
  * @axi_clk: AXI4-Lite bus clock
  * @reset_lock: Lock held while resetting the device to prevent register access
  * @mii_bus: Pointer to MII bus structure
@@ -479,11 +480,12 @@ struct skbuf_dma_descriptor {
  */
 struct axienet_common {
 	struct platform_device *pdev;
+	struct auxiliary_device mac;
 
 	struct clk *axi_clk;
 
 	struct mutex reset_lock;
-	struct mii_bus *mii_bus;
+	struct auxiliary_device mii_bus;
 	u8 mii_clk_div;
 
 	void __iomem *regs;
@@ -493,7 +495,7 @@ struct axienet_common {
 /**
  * struct axienet_local - axienet private per device data
  * @ndev:	Pointer for net_device to which it will be attached.
- * @dev:	Pointer to device structure
+ * @dev:	Pointer to parent device structure for DMA access
  * @phylink:	Pointer to phylink instance
  * @phylink_config: phylink configuration settings
  * @pcs_phy:	Reference to PCS/PMA PHY if used
@@ -752,8 +754,6 @@ static inline void axienet_dma_out_addr(struct axienet_local *lp, off_t reg,
 
 #endif /* CONFIG_64BIT */
 
-/* Function prototypes visible in xilinx_axienet_mdio.c for other files */
-int axienet_mdio_setup(struct axienet_common *lp);
-void axienet_mdio_teardown(struct axienet_common *lp);
+extern struct auxiliary_driver xilinx_axienet_mdio;
 
 #endif /* XILINX_AXI_ENET_H */

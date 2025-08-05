@@ -9,10 +9,10 @@
  * Copyright (c) 2010 - 2012 Xilinx, Inc. All rights reserved.
  */
 
+#include <linux/auxiliary_bus.h>
 #include <linux/clk.h>
 #include <linux/of_address.h>
 #include <linux/of_mdio.h>
-#include <linux/platform_device.h>
 #include <linux/jiffies.h>
 #include <linux/iopoll.h>
 
@@ -271,19 +271,10 @@ static int axienet_mdio_enable(struct mii_bus *bus, struct device_node *np)
 	return ret;
 }
 
-/**
- * axienet_mdio_setup - MDIO setup function
- * @lp:		Pointer to axienet common data structure.
- *
- * Return:	0 on success, -ETIMEDOUT on a timeout, -EOVERFLOW on a clock
- *		divisor overflow, -ENOMEM when mdiobus_alloc (to allocate
- *		memory for mii bus structure) fails.
- *
- * Sets up the MDIO interface by initializing the MDIO clock.
- * Register the MDIO interface.
- **/
-int axienet_mdio_setup(struct axienet_common *lp)
+static int axienet_mdio_probe(struct auxiliary_device *auxdev,
+			      const struct auxiliary_device_id *id)
 {
+	struct axienet_common *lp = auxdev->dev.platform_data;
 	struct device_node *mdio_node;
 	struct mii_bus *bus;
 	int ret;
@@ -299,36 +290,40 @@ int axienet_mdio_setup(struct axienet_common *lp)
 	bus->name = "Xilinx Axi Ethernet MDIO";
 	bus->read = axienet_mdio_read;
 	bus->write = axienet_mdio_write;
-	bus->parent = &lp->pdev->dev;
-	lp->mii_bus = bus;
+	bus->parent = &auxdev->dev;
+	auxiliary_set_drvdata(auxdev, bus);
 
-	mdio_node = of_get_child_by_name(lp->pdev->dev.of_node, "mdio");
-	scoped_guard(mutex, &lp->reset_lock)
-		ret = axienet_mdio_enable(bus, mdio_node);
+	mdio_node = dev_of_node(&auxdev->dev);
+	ret = axienet_mdio_enable(bus, mdio_node);
 	if (ret < 0)
 		goto unregister;
 
 	ret = of_mdiobus_register(bus, mdio_node);
-	of_node_put(mdio_node);
 	scoped_guard(mutex, &lp->reset_lock)
 		axienet_mdio_mdc_disable(lp);
-	if (ret) {
+	if (ret)
 unregister:
 		mdiobus_free(bus);
-		lp->mii_bus = NULL;
-	}
 	return ret;
 }
 
-/**
- * axienet_mdio_teardown - MDIO remove function
- * @lp:		Pointer to axienet common data structure.
- *
- * Unregisters the MDIO and frees any associate memory for mii bus.
- */
-void axienet_mdio_teardown(struct axienet_common *lp)
+static void axienet_mdio_remove(struct auxiliary_device *auxdev)
 {
-	mdiobus_unregister(lp->mii_bus);
-	mdiobus_free(lp->mii_bus);
-	lp->mii_bus = NULL;
+	struct mii_bus *mii_bus = auxiliary_get_drvdata(auxdev);
+
+	mdiobus_unregister(mii_bus);
+	mdiobus_free(mii_bus);
 }
+
+static const struct auxiliary_device_id xilinx_axienet_mdio_id_table[] = {
+	{ .name = KBUILD_MODNAME ".mdio", },
+	{ },
+};
+MODULE_DEVICE_TABLE(auxiliary, xilinx_axienet_mdio_id_table);
+
+struct auxiliary_driver xilinx_axienet_mdio = {
+	.name = "mdio",
+	.id_table = xilinx_axienet_mdio_id_table,
+	.probe = axienet_mdio_probe,
+	.remove = axienet_mdio_remove,
+};

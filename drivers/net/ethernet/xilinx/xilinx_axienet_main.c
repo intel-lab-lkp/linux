@@ -22,6 +22,7 @@
  *  - Add support for extended VLAN support.
  */
 
+#include <linux/auxiliary_bus.h>
 #include <linux/clk.h>
 #include <linux/delay.h>
 #include <linux/etherdevice.h>
@@ -1907,8 +1908,11 @@ static const struct net_device_ops axienet_netdev_dmaengine_ops = {
 static void axienet_ethtools_get_drvinfo(struct net_device *ndev,
 					 struct ethtool_drvinfo *ed)
 {
+	struct axienet_local *lp = netdev_priv(ndev);
+
 	strscpy(ed->driver, DRIVER_NAME, sizeof(ed->driver));
 	strscpy(ed->version, DRIVER_VERSION, sizeof(ed->version));
+	strscpy(ed->bus_info, dev_name(lp->dev), sizeof(ed->bus_info));
 }
 
 /**
@@ -2749,10 +2753,12 @@ static void axienet_disable_misc(void *clocks)
 	clk_bulk_disable_unprepare(XAE_NUM_MISC_CLOCKS, clocks);
 }
 
-static int axienet_mac_probe(struct axienet_common *cp)
+static int axienet_mac_probe(struct auxiliary_device *auxdev,
+			     const struct auxiliary_device_id *id)
 {
+	struct axienet_common *cp = auxdev->dev.platform_data;
 	struct platform_device *pdev = cp->pdev;
-	struct device *dev = &pdev->dev;
+	struct device *dev = &auxdev->dev;
 	struct axienet_local *lp;
 	struct net_device *ndev;
 	struct device_node *np;
@@ -2765,7 +2771,7 @@ static int axienet_mac_probe(struct axienet_common *cp)
 	if (!ndev)
 		return -ENOMEM;
 
-	platform_set_drvdata(pdev, ndev);
+	auxiliary_set_drvdata(auxdev, ndev);
 
 	SET_NETDEV_DEV(ndev, dev);
 	ndev->features = NETIF_F_SG;
@@ -2777,7 +2783,7 @@ static int axienet_mac_probe(struct axienet_common *cp)
 
 	lp = netdev_priv(ndev);
 	lp->ndev = ndev;
-	lp->dev = dev;
+	lp->dev = &pdev->dev;
 	lp->cp = cp;
 	lp->regs = cp->regs;
 	lp->options = XAE_OPTION_DEFAULTS;
@@ -2909,8 +2915,11 @@ static int axienet_mac_probe(struct axienet_common *cp)
 			of_node_put(np);
 			lp->eth_irq = platform_get_irq_optional(pdev, 0);
 		} else {
+			struct resource *dmares;
+
 			/* Check for these resources directly on the Ethernet node. */
-			lp->dma_regs = devm_platform_get_and_ioremap_resource(pdev, 1, NULL);
+			dmares = platform_get_resource(pdev, IORESOURCE_MEM, 1);
+			lp->dma_regs = devm_ioremap_resource(dev, dmares);
 			lp->rx_irq = platform_get_irq(pdev, 1);
 			lp->tx_irq = platform_get_irq(pdev, 0);
 			lp->eth_irq = platform_get_irq_optional(pdev, 2);
@@ -2925,7 +2934,9 @@ static int axienet_mac_probe(struct axienet_common *cp)
 		}
 
 		/* Reset core now that clocks are enabled, prior to accessing MDIO */
+		axienet_lock_mii(lp);
 		ret = __axienet_device_reset(lp);
+		axienet_unlock_mii(lp);
 		if (ret)
 			return ret;
 
@@ -2957,7 +2968,8 @@ static int axienet_mac_probe(struct axienet_common *cp)
 			return -EINVAL;
 		}
 
-		ret = dma_set_mask_and_coherent(dev, DMA_BIT_MASK(addr_width));
+		ret = dma_set_mask_and_coherent(lp->dev,
+						DMA_BIT_MASK(addr_width));
 		if (ret) {
 			dev_err(dev, "No suitable DMA available\n");
 			return ret;
@@ -3055,7 +3067,7 @@ static int axienet_mac_probe(struct axienet_common *cp)
 			  lp->phylink_config.supported_interfaces);
 	}
 
-	lp->phylink = phylink_create(&lp->phylink_config, dev->fwnode,
+	lp->phylink = phylink_create(&lp->phylink_config, dev_fwnode(dev),
 				     lp->phy_mode,
 				     &axienet_phylink_ops);
 	if (IS_ERR(lp->phylink)) {
@@ -3080,9 +3092,9 @@ cleanup_pcs:
 	return ret;
 }
 
-static void axienet_mac_remove(struct platform_device *pdev)
+static void axienet_mac_remove(struct auxiliary_device *auxdev)
 {
-	struct net_device *ndev = platform_get_drvdata(pdev);
+	struct net_device *ndev = auxiliary_get_drvdata(auxdev);
 	struct axienet_local *lp = netdev_priv(ndev);
 
 	unregister_netdev(ndev);
@@ -3091,9 +3103,9 @@ static void axienet_mac_remove(struct platform_device *pdev)
 		put_device(&lp->pcs_phy->dev);
 }
 
-static void axienet_mac_shutdown(struct platform_device *pdev)
+static void axienet_mac_shutdown(struct auxiliary_device *auxdev)
 {
-	struct net_device *ndev = platform_get_drvdata(pdev);
+	struct net_device *ndev = auxiliary_get_drvdata(auxdev);
 
 	rtnl_lock();
 	netif_device_detach(ndev);
@@ -3139,12 +3151,78 @@ static int axienet_resume(struct device *dev)
 static DEFINE_SIMPLE_DEV_PM_OPS(axienet_pm_ops,
 				axienet_suspend, axienet_resume);
 
+static const struct auxiliary_device_id xilinx_axienet_mac_id_table[] = {
+	{ .name = KBUILD_MODNAME ".mac", },
+	{ },
+};
+MODULE_DEVICE_TABLE(auxiliary, xilinx_axienet_mac_id_table);
+
+static struct auxiliary_driver xilinx_axienet_mac = {
+	.name = "mac",
+	.id_table = xilinx_axienet_mac_id_table,
+	.probe = axienet_mac_probe,
+	.remove = axienet_mac_remove,
+	.shutdown = axienet_mac_shutdown,
+	.driver = {
+		.pm = &axienet_pm_ops,
+	},
+};
+
+static DEFINE_IDA(axienet_id);
+
+static void axienet_id_free(void *data)
+{
+	int id = (intptr_t)data;
+
+	ida_free(&axienet_id, id);
+}
+
+static void auxenet_aux_release(struct device *dev) { }
+
+static void axienet_aux_destroy(void *data)
+{
+	struct auxiliary_device *auxdev = data;
+
+	auxiliary_device_delete(auxdev);
+	auxiliary_device_uninit(auxdev);
+	fwnode_handle_put(auxdev->dev.fwnode);
+}
+
+static int axienet_aux_create(struct axienet_common *cp,
+			      struct auxiliary_device *auxdev, const char *name,
+			      int id, struct fwnode_handle *fwnode)
+{
+	struct device *dev = &cp->pdev->dev;
+	int ret;
+
+	auxdev->name = name;
+	auxdev->id = id;
+	auxdev->dev.parent = dev;
+	auxdev->dev.platform_data = cp;
+	auxdev->dev.release = auxenet_aux_release;
+	device_set_node(&auxdev->dev, fwnode);
+	ret = auxiliary_device_init(auxdev);
+	if (ret) {
+		fwnode_handle_put(fwnode);
+		return ret;
+	}
+
+	ret = auxiliary_device_add(auxdev);
+	if (ret) {
+		fwnode_handle_put(fwnode);
+		auxiliary_device_uninit(auxdev);
+		return ret;
+	}
+
+	return devm_add_action_or_reset(dev, axienet_aux_destroy, auxdev);
+}
+
 static int axienet_probe(struct platform_device *pdev)
 {
 	struct device *dev = &pdev->dev;
 	struct axienet_common *cp;
 	struct resource *ethres;
-	int ret;
+	int ret, id;
 
 	cp = devm_kzalloc(dev, sizeof(*cp), GFP_KERNEL);
 	if (!cp)
@@ -3170,33 +3248,31 @@ static int axienet_probe(struct platform_device *pdev)
 		return PTR_ERR(cp->regs);
 	cp->regs_start = ethres->start;
 
-	ret = axienet_mdio_setup(cp);
+	id = ida_alloc(&axienet_id, GFP_KERNEL);
+	if (id < 0)
+		return dev_err_probe(dev, id, "could not allocate id\n");
+
+	ret = devm_add_action_or_reset(dev, axienet_id_free,
+				       (void *)(intptr_t)id);
 	if (ret)
-		dev_warn(dev, "error registering MDIO bus: %d\n", ret);
+		return dev_err_probe(dev, ret,
+				     "could not register id free action\n");
 
-	ret = axienet_mac_probe(cp);
-	if (!ret)
-		return 0;
+	ret = axienet_aux_create(cp, &cp->mii_bus, "mdio", id,
+				 device_get_named_child_node(dev, "mdio"));
+	if (ret)
+		return dev_err_probe(dev, ret, "could not create mdio bus\n");
 
-	if (cp->mii_bus)
-		axienet_mdio_teardown(cp);
-	return ret;
-}
+	ret = axienet_aux_create(cp, &cp->mac, "mac", id,
+				 fwnode_handle_get(dev_fwnode(dev)));
+	if (ret)
+		return dev_err_probe(dev, ret, "could not create MAC\n");
 
-static void axienet_remove(struct platform_device *pdev)
-{
-	struct net_device *ndev = platform_get_drvdata(pdev);
-	struct axienet_local *lp = netdev_priv(ndev);
-
-	axienet_mac_remove(pdev);
-	if (lp->mii_bus)
-		axienet_mdio_teardown(lp->cp);
+	return 0;
 }
 
 static struct platform_driver axienet_driver = {
 	.probe = axienet_probe,
-	.remove = axienet_remove,
-	.shutdown = axienet_mac_shutdown,
 	.driver = {
 		 .name = "xilinx_axienet",
 		 .pm = &axienet_pm_ops,
@@ -3204,7 +3280,35 @@ static struct platform_driver axienet_driver = {
 	},
 };
 
-module_platform_driver(axienet_driver);
+static int __init axienet_init(void)
+{
+	int ret;
+
+	ret = auxiliary_driver_register(&xilinx_axienet_mdio);
+	if (ret)
+		return ret;
+
+	ret = auxiliary_driver_register(&xilinx_axienet_mac);
+	if (ret)
+		goto unregister_mdio;
+
+	ret = platform_driver_register(&axienet_driver);
+	if (ret) {
+		auxiliary_driver_unregister(&xilinx_axienet_mac);
+unregister_mdio:
+		auxiliary_driver_unregister(&xilinx_axienet_mdio);
+	}
+	return ret;
+}
+module_init(axienet_init);
+
+static void __exit axienet_exit(void)
+{
+	platform_driver_unregister(&axienet_driver);
+	auxiliary_driver_unregister(&xilinx_axienet_mac);
+	auxiliary_driver_unregister(&xilinx_axienet_mdio);
+}
+module_exit(axienet_exit);
 
 MODULE_DESCRIPTION("Xilinx Axi Ethernet driver");
 MODULE_AUTHOR("Xilinx");
