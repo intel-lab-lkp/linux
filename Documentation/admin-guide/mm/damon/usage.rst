@@ -142,6 +142,8 @@ Users can write below commands for the kdamond to the ``state`` file.
   for more details.
 - ``commit_schemes_quota_goals``: Read the DAMON-based operation schemes'
   :ref:`quota goals <sysfs_schemes_quota_goals>`.
+- ``commit_schemes_dests``: Read the DAMON-based operation schemes'
+  :ref:`migration dests <damon_sysfs_dests>`.
 - ``update_schemes_stats``: Update the contents of stats files for each
   DAMON-based operation scheme of the kdamond.  For details of the stats,
   please refer to :ref:`stats section <sysfs_schemes_stats>`.
@@ -158,6 +160,8 @@ Users can write below commands for the kdamond to the ``state`` file.
 - ``update_schemes_effective_quotas``: Update the contents of
   ``effective_bytes`` files for each DAMON-based operation scheme of the
   kdamond.  For more details, refer to :ref:`quotas directory <sysfs_quotas>`.
+- ``wait_for_schemes_apply``: Wait until the next time every scheme has been
+  applied.
 
 If the state is ``on``, reading ``pid`` shows the pid of the kdamond thread.
 
