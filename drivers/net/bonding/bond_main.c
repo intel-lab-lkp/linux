@@ -1003,8 +1003,6 @@ static void bond_hw_addr_swap(struct bonding *bond, struct slave *new_active,
 
 		if (bond->dev->flags & IFF_UP)
 			bond_hw_addr_flush(bond->dev, old_active->dev);
-
-		bond_slave_ns_maddrs_add(bond, old_active);
 	}
 
 	if (new_active) {
@@ -1021,8 +1019,6 @@ static void bond_hw_addr_swap(struct bonding *bond, struct slave *new_active,
 			dev_mc_sync(new_active->dev, bond->dev);
 			netif_addr_unlock_bh(bond->dev);
 		}
-
-		bond_slave_ns_maddrs_del(bond, new_active);
 	}
 }
 
@@ -2372,11 +2368,6 @@ skip_mac_set:
 	bond->slave_cnt++;
 	bond_compute_features(bond);
 	bond_set_carrier(bond);
-
-	/* Needs to be called before bond_select_active_slave(), which will
-	 * remove the maddrs if the slave is selected as active slave.
-	 */
-	bond_slave_ns_maddrs_add(bond, new_slave);
 
 	if (bond_uses_primary(bond)) {
 		block_netpoll_tx();

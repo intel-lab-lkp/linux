@@ -388,7 +388,24 @@ static inline void bond_set_slave_state(struct slave *slave,
 	if (slave->backup == slave_state)
 		return;
 
+	/*
+	 * The slave->backup assignment must occur between the two if blocks.
+	 * This is because bond_slave_ns_maddrs_{add,del} only operate on
+	 * backup slaves:
+	 *
+	 * - If the slave is transitioning to active, we must call
+	 *   bond_slave_ns_maddrs_del() *before* updating the backup flag.
+	 * - If transitioning to backup, we must call
+	 *   bond_slave_ns_maddrs_add() *after* setting the flag.
+	 */
+	if (slave_state == BOND_STATE_ACTIVE)
+		bond_slave_ns_maddrs_del(slave->bond, slave);
+
 	slave->backup = slave_state;
+
+	if (slave_state == BOND_STATE_BACKUP)
+		bond_slave_ns_maddrs_add(slave->bond, slave);
+
 	if (notify) {
 		bond_lower_state_changed(slave);
 		bond_queue_slave_event(slave);

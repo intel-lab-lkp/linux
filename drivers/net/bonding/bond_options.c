@@ -1264,6 +1264,7 @@ static int bond_option_arp_ip_targets_set(struct bonding *bond,
 static bool slave_can_set_ns_maddr(const struct bonding *bond, struct slave *slave)
 {
 	return BOND_MODE(bond) == BOND_MODE_ACTIVEBACKUP &&
+	       bond->params.arp_interval &&
 	       !bond_is_active_slave(slave) &&
 	       slave->dev->flags & IFF_MULTICAST;
 }
