@@ -416,7 +416,29 @@ alternative_else_nop_endif
 __idmap_kpti_secondary:
 	/* Uninstall swapper before surgery begins */
 	__idmap_cpu_set_reserved_ttbr1 x16, x17
+	b scondary_cpu_wait
 
+	.unreq	swapper_ttb
+	.unreq	flag_ptr
+SYM_FUNC_END(idmap_kpti_install_ng_mappings)
+	.popsection
+#endif
+
+	.pushsection	".data", "aw", %progbits
+SYM_DATA(repaint_done, .long 1)
+	.popsection
+
+	.pushsection ".idmap.text", "a"
+SYM_TYPED_FUNC_START(bbml2_wait_for_repainting)
+	/* Must be same registers as in idmap_kpti_install_ng_mappings */
+	swapper_ttb	.req	x3
+	flag_ptr	.req	x4
+
+	mrs     swapper_ttb, ttbr1_el1
+	adr_l   flag_ptr, repaint_done
+	__idmap_cpu_set_reserved_ttbr1 x16, x17
+
+scondary_cpu_wait:
 	/* Increment the flag to let the boot CPU we're ready */
 1:	ldxr	w16, [flag_ptr]
 	add	w16, w16, #1
@@ -436,9 +458,8 @@ __idmap_kpti_secondary:
 
 	.unreq	swapper_ttb
 	.unreq	flag_ptr
-SYM_FUNC_END(idmap_kpti_install_ng_mappings)
+SYM_FUNC_END(bbml2_wait_for_repainting)
 	.popsection
-#endif
 
 /*
  *	__cpu_setup

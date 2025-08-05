@@ -56,6 +56,8 @@ typedef struct {
  */
 #define ASID(mm)	(atomic64_read(&(mm)->context.id) & 0xffff)
 
+extern bool linear_map_requires_bbml2;
+
 static inline bool arm64_kernel_unmapped_at_el0(void)
 {
 	return alternative_has_cap_unlikely(ARM64_UNMAP_KERNEL_AT_EL0);
@@ -72,6 +74,7 @@ extern void create_pgd_mapping(struct mm_struct *mm, phys_addr_t phys,
 extern void *fixmap_remap_fdt(phys_addr_t dt_phys, int *size, pgprot_t prot);
 extern void mark_linear_text_alias_ro(void);
 extern int split_kernel_leaf_mapping(unsigned long addr);
+extern int linear_map_split_to_ptes(void *__unused);
 
 /*
  * This check is triggered during the early boot before the cpufeature
