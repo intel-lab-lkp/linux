@@ -276,46 +276,41 @@ static int submit_lock_objects(struct msm_gem_submit *submit)
 {
 	unsigned flags = DRM_EXEC_INTERRUPTIBLE_WAIT;
 	struct drm_exec *exec = &submit->exec;
-	int ret;
+	int ret = 0;
 
-	if (msm_context_is_vmbind(submit->queue->ctx)) {
+	if (msm_context_is_vmbind(submit->queue->ctx))
 		flags |= DRM_EXEC_IGNORE_DUPLICATES;
-
-		drm_exec_init(&submit->exec, flags, submit->nr_bos);
-
-		drm_exec_until_all_locked (&submit->exec) {
-			ret = drm_gpuvm_prepare_vm(submit->vm, exec, 1);
-			drm_exec_retry_on_contention(exec);
-			if (ret)
-				return ret;
-
-			ret = drm_gpuvm_prepare_objects(submit->vm, exec, 1);
-			drm_exec_retry_on_contention(exec);
-			if (ret)
-				return ret;
-		}
-
-		return 0;
-	}
 
 	drm_exec_init(&submit->exec, flags, submit->nr_bos);
 
 	drm_exec_until_all_locked (&submit->exec) {
-		ret = drm_exec_lock_obj(&submit->exec,
-					drm_gpuvm_resv_obj(submit->vm));
-		drm_exec_retry_on_contention(&submit->exec);
-		if (ret)
-			return ret;
-		for (unsigned i = 0; i < submit->nr_bos; i++) {
-			struct drm_gem_object *obj = submit->bos[i].obj;
-			ret = drm_exec_prepare_obj(&submit->exec, obj, 1);
+		if (msm_context_is_vmbind(submit->queue->ctx)) {
+			ret = drm_gpuvm_prepare_vm(submit->vm, exec, 1);
+			drm_exec_retry_on_contention(exec);
+			if (ret)
+				break;
+
+			ret = drm_gpuvm_prepare_objects(submit->vm, exec, 1);
+			drm_exec_retry_on_contention(exec);
+			if (ret)
+				break;
+		} else {
+			ret = drm_exec_lock_obj(&submit->exec,
+						drm_gpuvm_resv_obj(submit->vm));
 			drm_exec_retry_on_contention(&submit->exec);
 			if (ret)
-				return ret;
+				break;
+			for (unsigned i = 0; i < submit->nr_bos; i++) {
+				struct drm_gem_object *obj = submit->bos[i].obj;
+				ret = drm_exec_prepare_obj(&submit->exec, obj, 1);
+				drm_exec_retry_on_contention(&submit->exec);
+				if (ret)
+					break;
+			}
 		}
 	}
 
-	return 0;
+	return ret;
 }
 
 static int submit_fence_sync(struct msm_gem_submit *submit)
