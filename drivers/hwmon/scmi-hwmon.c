@@ -211,8 +211,6 @@ static int scmi_thermal_sensor_register(struct device *dev,
 	tzd = devm_thermal_of_zone_register(dev, th_sensor->info->id, th_sensor,
 					    &scmi_hwmon_thermal_ops);
 	if (IS_ERR(tzd)) {
-		devm_kfree(dev, th_sensor);
-
 		if (PTR_ERR(tzd) != -ENODEV)
 			return PTR_ERR(tzd);
 
