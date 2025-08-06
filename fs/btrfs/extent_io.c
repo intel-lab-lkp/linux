@@ -3187,8 +3187,8 @@ static int attach_eb_folio_to_filemap(struct extent_buffer *eb, int i,
 
 retry:
 	existing_folio = NULL;
-	ret = filemap_add_folio(mapping, eb->folios[i], index + i,
-				GFP_NOFS | __GFP_NOFAIL);
+	ret = filemap_add_folio_nocharge(mapping, eb->folios[i], index + i,
+					 GFP_NOFS | __GFP_NOFAIL);
 	if (!ret)
 		goto finish;
 
