@@ -322,7 +322,6 @@ void css_get_many(struct cgroup_subsys_state *css, unsigned int n);
 bool css_tryget(struct cgroup_subsys_state *css);
 bool css_tryget_online(struct cgroup_subsys_state *css);
 void css_put(struct cgroup_subsys_state *css);
-void css_put_many(struct cgroup_subsys_state *css, unsigned int n);
 #else
 #define CGROUP_REF_FN_ATTRS	static inline
 #define CGROUP_REF_EXPORT(fn)
