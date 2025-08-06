@@ -60,18 +60,6 @@ struct syscalls_sys_exit {
 	__uint(max_entries, 512);
 } syscalls_sys_exit SEC(".maps");
 
-struct syscall_enter_args {
-	unsigned long long common_tp_fields;
-	long		   syscall_nr;
-	unsigned long	   args[6];
-};
-
-struct syscall_exit_args {
-	unsigned long long common_tp_fields;
-	long		   syscall_nr;
-	long		   ret;
-};
-
 /*
  * Desired design of maximum size and alignment (see RFC2553)
  */
@@ -115,7 +103,7 @@ struct pids_filtered {
 } pids_filtered SEC(".maps");
 
 struct augmented_args_payload {
-	struct syscall_enter_args args;
+	struct trace_event_raw_sys_enter args;
 	struct augmented_arg arg, arg2; // We have to reserve space for two arguments (rename, etc)
 };
 
@@ -135,7 +123,7 @@ struct beauty_map_enter {
 } beauty_map_enter SEC(".maps");
 
 struct beauty_payload_enter {
-	struct syscall_enter_args args;
+	struct trace_event_raw_sys_enter args;
 	struct augmented_arg aug_args[6];
 };
 
@@ -192,7 +180,7 @@ unsigned int augmented_arg__read_str(struct augmented_arg *augmented_arg, const 
 }
 
 SEC("tp/raw_syscalls/sys_enter")
-int syscall_unaugmented(struct syscall_enter_args *args)
+int syscall_unaugmented(struct trace_event_raw_sys_enter *args)
 {
 	return 1;
 }
@@ -204,7 +192,7 @@ int syscall_unaugmented(struct syscall_enter_args *args)
  * filename.
  */
 SEC("tp/syscalls/sys_enter_connect")
-int sys_enter_connect(struct syscall_enter_args *args)
+int sys_enter_connect(struct trace_event_raw_sys_enter *args)
 {
 	struct augmented_args_payload *augmented_args = augmented_args_payload();
 	const void *sockaddr_arg = (const void *)args->args[1];
@@ -225,7 +213,7 @@ int sys_enter_connect(struct syscall_enter_args *args)
 }
 
 SEC("tp/syscalls/sys_enter_sendto")
-int sys_enter_sendto(struct syscall_enter_args *args)
+int sys_enter_sendto(struct trace_event_raw_sys_enter *args)
 {
 	struct augmented_args_payload *augmented_args = augmented_args_payload();
 	const void *sockaddr_arg = (const void *)args->args[4];
@@ -243,7 +231,7 @@ int sys_enter_sendto(struct syscall_enter_args *args)
 }
 
 SEC("tp/syscalls/sys_enter_open")
-int sys_enter_open(struct syscall_enter_args *args)
+int sys_enter_open(struct trace_event_raw_sys_enter *args)
 {
 	struct augmented_args_payload *augmented_args = augmented_args_payload();
 	const void *filename_arg = (const void *)args->args[0];
@@ -258,7 +246,7 @@ int sys_enter_open(struct syscall_enter_args *args)
 }
 
 SEC("tp/syscalls/sys_enter_openat")
-int sys_enter_openat(struct syscall_enter_args *args)
+int sys_enter_openat(struct trace_event_raw_sys_enter *args)
 {
 	struct augmented_args_payload *augmented_args = augmented_args_payload();
 	const void *filename_arg = (const void *)args->args[1];
@@ -273,7 +261,7 @@ int sys_enter_openat(struct syscall_enter_args *args)
 }
 
 SEC("tp/syscalls/sys_enter_rename")
-int sys_enter_rename(struct syscall_enter_args *args)
+int sys_enter_rename(struct trace_event_raw_sys_enter *args)
 {
 	struct augmented_args_payload *augmented_args = augmented_args_payload();
 	const void *oldpath_arg = (const void *)args->args[0],
@@ -304,7 +292,7 @@ int sys_enter_rename(struct syscall_enter_args *args)
 }
 
 SEC("tp/syscalls/sys_enter_renameat2")
-int sys_enter_renameat2(struct syscall_enter_args *args)
+int sys_enter_renameat2(struct trace_event_raw_sys_enter *args)
 {
 	struct augmented_args_payload *augmented_args = augmented_args_payload();
 	const void *oldpath_arg = (const void *)args->args[1],
@@ -346,7 +334,7 @@ struct perf_event_attr_size {
 };
 
 SEC("tp/syscalls/sys_enter_perf_event_open")
-int sys_enter_perf_event_open(struct syscall_enter_args *args)
+int sys_enter_perf_event_open(struct trace_event_raw_sys_enter *args)
 {
 	struct augmented_args_payload *augmented_args = augmented_args_payload();
 	const struct perf_event_attr_size *attr = (const struct perf_event_attr_size *)args->args[0], *attr_read;
@@ -378,7 +366,7 @@ failure:
 }
 
 SEC("tp/syscalls/sys_enter_clock_nanosleep")
-int sys_enter_clock_nanosleep(struct syscall_enter_args *args)
+int sys_enter_clock_nanosleep(struct trace_event_raw_sys_enter *args)
 {
 	struct augmented_args_payload *augmented_args = augmented_args_payload();
 	const void *rqtp_arg = (const void *)args->args[2];
@@ -399,7 +387,7 @@ failure:
 }
 
 SEC("tp/syscalls/sys_enter_nanosleep")
-int sys_enter_nanosleep(struct syscall_enter_args *args)
+int sys_enter_nanosleep(struct trace_event_raw_sys_enter *args)
 {
 	struct augmented_args_payload *augmented_args = augmented_args_payload();
 	const void *req_arg = (const void *)args->args[0];
@@ -429,7 +417,7 @@ static bool pid_filter__has(struct pids_filtered *pids, pid_t pid)
 	return bpf_map_lookup_elem(pids, &pid) != NULL;
 }
 
-static int augment_sys_enter(void *ctx, struct syscall_enter_args *args)
+static int augment_sys_enter(void *ctx, struct trace_event_raw_sys_enter *args)
 {
 	bool augmented, do_output = false;
 	int zero = 0, index, value_size = sizeof(struct augmented_arg) - offsetof(struct augmented_arg, value);
@@ -444,7 +432,7 @@ static int augment_sys_enter(void *ctx, struct syscall_enter_args *args)
 		return 1;
 
 	/* use syscall number to get beauty_map entry */
-	nr             = (__u32)args->syscall_nr;
+	nr             = (__u32)args->id;
 	beauty_map     = bpf_map_lookup_elem(&beauty_map_enter, &nr);
 
 	/* set up payload for output */
@@ -454,8 +442,8 @@ static int augment_sys_enter(void *ctx, struct syscall_enter_args *args)
 	if (beauty_map == NULL || payload == NULL)
 		return 1;
 
-	/* copy the sys_enter header, which has the syscall_nr */
-	__builtin_memcpy(&payload->args, args, sizeof(struct syscall_enter_args));
+	/* copy the sys_enter header, which has the id */
+	__builtin_memcpy(&payload->args, args, sizeof(struct trace_event_raw_sys_enter));
 
 	/*
 	 * Determine what type of argument and how many bytes to read from user space, using the
@@ -515,14 +503,14 @@ static int augment_sys_enter(void *ctx, struct syscall_enter_args *args)
 		}
 	}
 
-	if (!do_output || (sizeof(struct syscall_enter_args) + output) > sizeof(struct beauty_payload_enter))
+	if (!do_output || (sizeof(struct trace_event_raw_sys_enter) + output) > sizeof(struct beauty_payload_enter))
 		return 1;
 
-	return augmented__beauty_output(ctx, payload, sizeof(struct syscall_enter_args) + output);
+	return augmented__beauty_output(ctx, payload, sizeof(struct trace_event_raw_sys_enter) + output);
 }
 
 SEC("tp/raw_syscalls/sys_enter")
-int sys_enter(struct syscall_enter_args *args)
+int sys_enter(struct trace_event_raw_sys_enter *args)
 {
 	struct augmented_args_payload *augmented_args;
 	/*
@@ -550,16 +538,16 @@ int sys_enter(struct syscall_enter_args *args)
 	 * unaugmented tracepoint payload.
 	 */
 	if (augment_sys_enter(args, &augmented_args->args))
-		bpf_tail_call(args, &syscalls_sys_enter, augmented_args->args.syscall_nr);
+		bpf_tail_call(args, &syscalls_sys_enter, augmented_args->args.id);
 
 	// If not found on the PROG_ARRAY syscalls map, then we're filtering it:
 	return 0;
 }
 
 SEC("tp/raw_syscalls/sys_exit")
-int sys_exit(struct syscall_exit_args *args)
+int sys_exit(struct trace_event_raw_sys_exit *args)
 {
-	struct syscall_exit_args exit_args;
+	struct trace_event_raw_sys_exit exit_args;
 
 	if (pid_filter__has(&pids_filtered, getpid()))
 		return 0;
@@ -570,7 +558,7 @@ int sys_exit(struct syscall_exit_args *args)
 	 * "!raw_syscalls:unaugmented" that will just return 1 to return the
 	 * unaugmented tracepoint payload.
 	 */
-	bpf_tail_call(args, &syscalls_sys_exit, exit_args.syscall_nr);
+	bpf_tail_call(args, &syscalls_sys_exit, exit_args.id);
 	/*
 	 * If not found on the PROG_ARRAY syscalls map, then we're filtering it:
 	 */

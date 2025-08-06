@@ -212,4 +212,18 @@ struct pglist_data {
 	int nr_zones;
 } __attribute__((preserve_access_index));
 
+struct trace_event_raw_sys_enter {
+	struct trace_entry ent;
+	long int id;
+	long unsigned int args[6];
+	char __data[0];
+} __attribute__((preserve_access_index));
+
+struct trace_event_raw_sys_exit {
+	struct trace_entry ent;
+	long int id;
+	long int ret;
+	char __data[0];
+} __attribute__((preserve_access_index));
+
 #endif // __VMLINUX_H
