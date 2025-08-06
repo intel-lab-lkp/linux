@@ -5,6 +5,7 @@ config XFS_FS
 	select EXPORTFS
 	select CRC32
 	select FS_IOMAP
+	select XFS_RT if BLK_DEV_ZONED
 	help
 	  XFS is a high performance journaling filesystem which originated
 	  on the SGI IRIX platform.  It is completely multi-threaded, can
@@ -115,6 +116,15 @@ config XFS_RT
 	  separated.  Regular file I/Os are isolated to a separate device
 	  from all other requests, and this can be done quite transparently
 	  to applications via the inherit-realtime directory inode flag.
+
+	  This option is mandatory to support zoned block devices. For these
+	  devices, the realtime subvolume must be backed by a zoned block
+	  device and a regular block device used as the main device (for
+	  metadata). If the zoned block device is a host-managed SMR hard-disk
+	  containing conventional zones at the beginning of its address space,
+	  XFS will use the disk conventional zones as the main device and the
+	  remaining sequential write required zones as the backing storage for
+	  the realtime subvolume.
 
 	  See the xfs man page in section 5 for additional information.
 
