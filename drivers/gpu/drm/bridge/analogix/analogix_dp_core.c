@@ -1474,7 +1474,7 @@ analogix_dp_probe(struct device *dev, struct analogix_dp_plat_data *plat_data)
 
 	dp = devm_drm_bridge_alloc(dev, struct analogix_dp_device, bridge,
 				   &analogix_dp_bridge_funcs);
-	if (!dp)
+	if (IS_ERR(dp))
 		return ERR_PTR(-ENOMEM);
 
 	dp->dev = &pdev->dev;
