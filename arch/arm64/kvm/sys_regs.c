@@ -1801,6 +1801,18 @@ static u64 sanitise_id_aa64pfr0_el1(const struct kvm_vcpu *vcpu, u64 val)
 		val &= ~ID_AA64PFR0_EL1_SVE_MASK;
 
 	/*
+	 * Describe RASv1p1 in a canonical way -- ID_AA64PFR1_EL1.RAS_frac
+	 * is cleared separately. Note that by advertising RASv1p1 here, we
+	 * implicitly advertise FEAT_DoubleFault. However, since that last
+	 * feature is a pure EL3 feature, this is not relevant for the
+	 * guest, and we save on the complexity.
+	 */
+	if (cpus_have_final_cap(ARM64_HAS_RASV1P1_EXTN)) {
+		val &= ~ID_AA64PFR0_EL1_RAS;
+		val |= SYS_FIELD_PREP_ENUM(ID_AA64PFR0_EL1, RAS, V1P1);
+	}
+
+	/*
 	 * The default is to expose CSV2 == 1 if the HW isn't affected.
 	 * Although this is a per-CPU feature, we make it global because
 	 * asymmetric systems are just a nuisance.
