@@ -10,6 +10,7 @@
 #include <linux/debugfs.h>
 #include "lapic.h"
 #include "mmu.h"
+#include "mmu/fault_injection.h"
 #include "mmu/mmu_internal.h"
 
 static int vcpu_get_timer_advance_ns(void *data, u64 *val)
@@ -193,4 +194,9 @@ void kvm_arch_create_vm_debugfs(struct kvm *kvm)
 {
 	debugfs_create_file("mmu_rmaps_stat", 0644, kvm->debugfs_dentry, kvm,
 			    &mmu_rmaps_stat_fops);
+}
+
+void kvm_arch_create_debugfs(struct dentry *dentry)
+{
+	kvm_mmu_fault_injection_init(dentry);
 }

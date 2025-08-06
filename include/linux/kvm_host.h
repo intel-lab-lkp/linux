@@ -1629,6 +1629,7 @@ bool kvm_arch_dy_has_pending_interrupt(struct kvm_vcpu *vcpu);
 bool kvm_arch_vcpu_preempted_in_kernel(struct kvm_vcpu *vcpu);
 void kvm_arch_pre_destroy_vm(struct kvm *kvm);
 void kvm_arch_create_vm_debugfs(struct kvm *kvm);
+void kvm_arch_create_debugfs(struct dentry *dentry);
 
 #ifndef __KVM_HAVE_ARCH_VM_ALLOC
 /*
@@ -2084,6 +2085,15 @@ extern const struct _kvm_stats_desc kvm_vm_stats_desc[];
 extern const struct kvm_stats_header kvm_vcpu_stats_header;
 extern const struct _kvm_stats_desc kvm_vcpu_stats_desc[];
 
+#ifdef CONFIG_KVM_FAULT_INJECTION
+bool kvm_mmu_invalidate_retry_should_fail(void);
+#else
+static inline bool kvm_mmu_invalidate_retry_should_fail(void)
+{
+	return false;
+}
+#endif
+
 #ifdef CONFIG_KVM_GENERIC_MMU_NOTIFIER
 static inline int mmu_invalidate_retry(struct kvm *kvm, unsigned long mmu_seq)
 {
@@ -2102,7 +2112,8 @@ static inline int mmu_invalidate_retry(struct kvm *kvm, unsigned long mmu_seq)
 	 * kvm->mmu_lock to keep things ordered.
 	 */
 	smp_rmb();
-	if (kvm->mmu_invalidate_seq != mmu_seq)
+	if (kvm->mmu_invalidate_seq != mmu_seq ||
+	    kvm_mmu_invalidate_retry_should_fail())
 		return 1;
 	return 0;
 }
@@ -2132,7 +2143,8 @@ static inline int mmu_invalidate_retry_gfn(struct kvm *kvm,
 			return 1;
 	}
 
-	if (kvm->mmu_invalidate_seq != mmu_seq)
+	if (kvm->mmu_invalidate_seq != mmu_seq ||
+	    kvm_mmu_invalidate_retry_should_fail())
 		return 1;
 	return 0;
 }
@@ -2160,7 +2172,8 @@ static inline bool mmu_invalidate_retry_gfn_unsafe(struct kvm *kvm,
 	    gfn < kvm->mmu_invalidate_range_end)
 		return true;
 
-	return READ_ONCE(kvm->mmu_invalidate_seq) != mmu_seq;
+	return READ_ONCE(kvm->mmu_invalidate_seq) != mmu_seq ||
+	       kvm_mmu_invalidate_retry_should_fail();
 }
 #endif
 

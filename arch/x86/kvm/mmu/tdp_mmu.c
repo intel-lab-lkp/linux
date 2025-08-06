@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0
 #define pr_fmt(fmt) KBUILD_MODNAME ": " fmt
 
+#include "fault_injection.h"
 #include "mmu.h"
 #include "mmu_internal.h"
 #include "mmutrace.h"
@@ -530,7 +531,8 @@ static int __must_check set_external_spte_present(struct kvm *kvm, tdp_ptep_t sp
 	 * page table has been modified. Use FROZEN_SPTE similar to
 	 * the zapping case.
 	 */
-	if (!try_cmpxchg64(rcu_dereference(sptep), &old_spte, FROZEN_SPTE))
+	if (tdp_mmu_cmpxchg_should_fail() ||
+	    !try_cmpxchg64(rcu_dereference(sptep), &old_spte, FROZEN_SPTE))
 		return -EBUSY;
 
 	/*
@@ -689,7 +691,8 @@ static inline int __must_check __tdp_mmu_set_spte_atomic(struct kvm *kvm,
 		 * operates on fresh data, e.g. if it retries
 		 * tdp_mmu_set_spte_atomic()
 		 */
-		if (!try_cmpxchg64(sptep, &iter->old_spte, new_spte))
+		if (tdp_mmu_cmpxchg_should_fail() ||
+		    !try_cmpxchg64(sptep, &iter->old_spte, new_spte))
 			return -EBUSY;
 	}
 
@@ -796,7 +799,8 @@ static inline void tdp_mmu_iter_set_spte(struct kvm *kvm, struct tdp_iter *iter,
 static inline bool __must_check tdp_mmu_iter_need_resched(struct kvm *kvm,
 							  struct tdp_iter *iter)
 {
-	if (!need_resched() && !rwlock_needbreak(&kvm->mmu_lock))
+	if (!need_resched() && !rwlock_needbreak(&kvm->mmu_lock) &&
+	    !tdp_mmu_should_inject_resched())
 		return false;
 
 	/* Ensure forward progress has been made before yielding. */

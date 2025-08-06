@@ -28,6 +28,7 @@
 #include "page_track.h"
 #include "cpuid.h"
 #include "spte.h"
+#include "fault_injection.h"
 
 #include <linux/kvm_host.h>
 #include <linux/types.h>

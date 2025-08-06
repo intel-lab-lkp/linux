@@ -49,6 +49,7 @@
 #include <linux/lockdep.h>
 #include <linux/kthread.h>
 #include <linux/suspend.h>
+#include <linux/fault-inject.h>
 
 #include <asm/processor.h>
 #include <asm/ioctl.h>
@@ -1100,6 +1101,14 @@ void __weak kvm_arch_pre_destroy_vm(struct kvm *kvm)
  * a per-arch destroy interface is not needed.
  */
 void __weak kvm_arch_create_vm_debugfs(struct kvm *kvm)
+{
+}
+
+/*
+ * Called after kvm->debugfs_dentry is created to create KVM-global
+ * arch-specific debugfs entries. dentry might not be valid.
+ */
+void __weak kvm_arch_create_debugfs(struct dentry *dentry)
 {
 }
 
@@ -6301,6 +6310,16 @@ static void kvm_uevent_notify_change(unsigned int type, struct kvm *kvm)
 	kfree(env);
 }
 
+static DECLARE_FAULT_ATTR(fail_kvm_mmu_invalidate_retry);
+
+#ifdef CONFIG_KVM_FAULT_INJECTION
+bool kvm_mmu_invalidate_retry_should_fail(void)
+{
+	return should_fail(&fail_kvm_mmu_invalidate_retry, 1);
+}
+EXPORT_SYMBOL_GPL(kvm_mmu_invalidate_retry_should_fail);
+#endif
+
 static void kvm_init_debug(void)
 {
 	const struct file_operations *fops;
@@ -6330,6 +6349,12 @@ static void kvm_init_debug(void)
 				kvm_debugfs_dir,
 				(void *)(long)pdesc->desc.offset, fops);
 	}
+
+	fault_create_debugfs_attr("fail_kvm_mmu_invalidate_retry",
+				  kvm_debugfs_dir,
+				  &fail_kvm_mmu_invalidate_retry);
+
+	kvm_arch_create_debugfs(kvm_debugfs_dir);
 }
 
 static inline

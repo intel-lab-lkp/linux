@@ -2126,6 +2126,14 @@ config FAIL_SKB_REALLOC
 	  For more information, check
 	  Documentation/fault-injection/fault-injection.rst
 
+config KVM_FAULT_INJECTION
+	bool "Fault-injection capability for KVM"
+	depends on FAULT_INJECTION_DEBUG_FS && KVM_COMMON
+	help
+	  Provide fault-injection capability for KVM.
+	  This will cause rare MMU operations to occur more frequently (e.g.
+	  SPTE cmpxchg failure).
+
 config FAULT_INJECTION_CONFIGFS
 	bool "Configfs interface for fault-injection capabilities"
 	depends on FAULT_INJECTION
