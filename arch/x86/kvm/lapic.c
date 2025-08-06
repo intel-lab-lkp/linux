@@ -2329,6 +2329,10 @@ static int kvm_lapic_reg_write(struct kvm_lapic *apic, u32 reg, u32 val)
 			val |= APIC_LVT_MASKED;
 		val &= apic_lvt_mask[index];
 		kvm_lapic_set_reg(apic, reg, val);
+		if (irqchip_split(apic->vcpu->kvm) && (val & APIC_LVT_MASKED)) {
+			kvm_make_request(KVM_REQ_LAPIC_UPDATE, apic->vcpu);
+			kvm_vcpu_kick(apic->vcpu);
+		}
 		break;
 	}
 

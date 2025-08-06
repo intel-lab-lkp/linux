@@ -10779,6 +10779,11 @@ static int vcpu_enter_guest(struct kvm_vcpu *vcpu)
 			r = 0;
 			goto out;
 		}
+		if (kvm_check_request(KVM_REQ_LAPIC_UPDATE, vcpu)) {
+			vcpu->run->exit_reason = KVM_EXIT_APIC_SYNC;
+			r = 0;
+			goto out;
+		}
 
 		/*
 		 * KVM_REQ_HV_STIMER has to be processed after
