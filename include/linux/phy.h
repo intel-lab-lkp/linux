@@ -1632,12 +1632,14 @@ static inline bool phy_interrupt_is_valid(struct phy_device *phydev)
  */
 static inline bool phy_polling_mode(struct phy_device *phydev)
 {
-	if (phydev->state == PHY_CABLETEST)
-		if (phydev->drv->flags & PHY_POLL_CABLE_TEST)
-			return true;
+	if (phydev->drv) {
+		if (phydev->state == PHY_CABLETEST)
+			if (phydev->drv->flags & PHY_POLL_CABLE_TEST)
+				return true;
 
-	if (phydev->drv->update_stats)
-		return true;
+		if (phydev->drv->update_stats)
+			return true;
+	}
 
 	return phydev->irq == PHY_POLL;
 }
