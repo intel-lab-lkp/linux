@@ -3261,6 +3261,7 @@ static void finish_message(struct ceph_connection *con)
 
 static int populate_out_iter(struct ceph_connection *con)
 {
+	struct ceph_msg *msg;
 	int ret;
 
 	dout("%s con %p state %d out_state %d\n", __func__, con, con->state,
@@ -3306,8 +3307,7 @@ static int populate_out_iter(struct ceph_connection *con)
 			pr_err("prepare_keepalive2 failed: %d\n", ret);
 			return ret;
 		}
-	} else if (!list_empty(&con->out_queue)) {
-		struct ceph_msg *msg = ceph_con_get_out_msg(con);
+	} else if ((msg = ceph_con_get_out_msg(con)) != NULL) {
 		ret = prepare_message(con, msg);
 		if (ret) {
 			pr_err("prepare_message failed: %d\n", ret);
