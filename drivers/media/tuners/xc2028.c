@@ -117,6 +117,8 @@ struct xc2028_data {
 
 	struct firmware_properties cur_fw;
 
+	struct completion fwload;
+
 	struct mutex lock;
 };
 
@@ -1329,6 +1331,10 @@ static void xc2028_dvb_release(struct dvb_frontend *fe)
 
 	mutex_lock(&xc2028_list_mutex);
 
+	/* wait for request_firmware_nowait() if scheduled */
+	if (priv->state == XC2028_WAITING_FIRMWARE)
+		wait_for_completion(&priv->fwload);
+
 	/* only perform final cleanup if this is the last instance */
 	if (hybrid_tuner_report_instance_count(priv) == 1)
 		free_firmware(priv);
@@ -1362,22 +1368,22 @@ static void load_firmware_cb(const struct firmware *fw,
 {
 	struct dvb_frontend *fe = context;
 	struct xc2028_data *priv = fe->tuner_priv;
-	int rc;
+
+	WARN_ON(priv->state != XC2028_WAITING_FIRMWARE);
 
 	tuner_dbg("request_firmware_nowait(): %s\n", fw ? "OK" : "error");
 	if (!fw) {
 		tuner_err("Could not load firmware %s.\n", priv->fname);
 		priv->state = XC2028_NODEV;
-		return;
+	} else {
+		int rc = load_all_firmwares(fe, fw);
+
+		release_firmware(fw);
+		if (rc == 0)
+			priv->state = XC2028_ACTIVE;
 	}
 
-	rc = load_all_firmwares(fe, fw);
-
-	release_firmware(fw);
-
-	if (rc < 0)
-		return;
-	priv->state = XC2028_ACTIVE;
+	complete(&priv->fwload);
 }
 
 static int xc2028_set_config(struct dvb_frontend *fe, void *priv_cfg)
@@ -1426,8 +1432,10 @@ static int xc2028_set_config(struct dvb_frontend *fe, void *priv_cfg)
 			tuner_err("Failed to request firmware %s\n",
 				  priv->fname);
 			priv->state = XC2028_NODEV;
-		} else
+		} else {
+			init_completion(&priv->fwload);
 			priv->state = XC2028_WAITING_FIRMWARE;
+		}
 	}
 unlock:
 	mutex_unlock(&priv->lock);
