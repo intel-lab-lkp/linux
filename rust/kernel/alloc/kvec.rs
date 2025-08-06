@@ -21,6 +21,7 @@ use core::{
     slice,
     slice::SliceIndex,
 };
+use kernel::page;
 
 mod errors;
 pub use self::errors::{InsertError, PushError, RemoveError};
@@ -1014,6 +1015,45 @@ where
 
     fn into_iter(self) -> Self::IntoIter {
         self.iter_mut()
+    }
+}
+
+/// # Examples
+///
+/// ```
+/// # use kernel::{page, prelude::*};
+/// use kernel::page::PageOwner;
+///
+/// let mut vec = VVec::<u8>::new();
+/// vec.reserve(page::PAGE_SIZE, GFP_KERNEL)?;
+///
+/// let page = vec.page_iter().next().expect("At least one page should be available.\n");
+///
+/// // SAFETY: There is no concurrent read or write to the same page.
+/// unsafe { page.fill_zero_raw(0, page::PAGE_SIZE)? };
+/// # Ok::<(), Error>(())
+/// ```
+impl<T> page::PageOwner for VVec<T> {
+    fn page_iter<'a>(&'a mut self) -> impl Iterator<Item = page::BorrowedPage<'a>> {
+        (0..self.page_count()).map(|idx| {
+            let ptr = self.as_mut_ptr().cast::<u8>();
+
+            // SAFETY: `idx` is in the interval `[0, self.page_count())`, hence the resulting
+            // pointer is guaranteed to be within the same allocation.
+            let ptr = unsafe { ptr.add(idx * page::PAGE_SIZE) };
+
+            // SAFETY: `ptr` is guaranteed to be non-null given that it is derived from `self.0`.
+            let ptr = unsafe { NonNull::new_unchecked(ptr) };
+
+            // SAFETY:
+            // - `ptr` is a valid pointer to a `Vmalloc` allocation.
+            // - `ptr` is valid for the duration of `'a`.
+            unsafe { Vmalloc::to_page(ptr) }
+        })
+    }
+
+    fn page_count(&self) -> usize {
+        self.layout.size().div_ceil(page::PAGE_SIZE)
     }
 }
 
