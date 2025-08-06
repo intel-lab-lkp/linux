@@ -17,6 +17,12 @@
 #define STATUS_FILE_PATH "/proc/self/status"
 #define MAX_LINE_LENGTH 500
 
+#define PGMAP_PRESENT		(1UL << 63)
+#define KPF_COMPOUND_HEAD	(1UL << 15)
+#define KPF_COMPOUND_TAIL	(1UL << 16)
+#define KPF_THP			(1UL << 22)
+#define PFN_MASK     ((1UL<<55)-1)
+
 unsigned int __page_size;
 unsigned int __page_shift;
 
@@ -336,6 +342,139 @@ int detect_hugetlb_page_sizes(size_t sizes[], int max)
 	}
 	closedir(dir);
 	return count;
+}
+
+static int get_page_flags(uint64_t vpn, int pagemap_file, int kpageflags_file,
+			  uint64_t *flags)
+{
+	uint64_t pfn;
+	size_t count;
+
+	count = pread(pagemap_file, &pfn, sizeof(pfn),
+		      vpn * sizeof(pfn));
+
+	if (count != sizeof(pfn))
+		return -1;
+
+	/*
+	 * Treat non-present page as a page without any flag, so that
+	 * gather_folio_orders() just record the current folio order.
+	 */
+	if (!(pfn & PGMAP_PRESENT)) {
+		*flags = 0;
+		return 0;
+	}
+
+	count = pread(kpageflags_file, flags, sizeof(*flags),
+		      (pfn & PFN_MASK) * sizeof(*flags));
+
+	if (count != sizeof(*flags))
+		return -1;
+
+	return 0;
+}
+
+static int gather_folio_orders(uint64_t vpn_start, size_t nr_pages,
+			       int pagemap_file, int kpageflags_file,
+			       int orders[], int nr_orders)
+{
+	uint64_t page_flags = 0;
+	int cur_order = -1;
+	uint64_t vpn;
+
+	if (!pagemap_file || !kpageflags_file)
+		return -1;
+	if (nr_orders <= 0)
+		return -1;
+
+	for (vpn = vpn_start; vpn < vpn_start + nr_pages; ) {
+		uint64_t next_folio_vpn;
+		int status;
+
+		if (get_page_flags(vpn, pagemap_file, kpageflags_file, &page_flags))
+			return -1;
+
+		/* all order-0 pages with possible false postive (non folio) */
+		if (!(page_flags & (KPF_COMPOUND_HEAD | KPF_COMPOUND_TAIL))) {
+			orders[0]++;
+			vpn++;
+			continue;
+		}
+
+		/* skip non thp compound pages */
+		if (!(page_flags & KPF_THP)) {
+			vpn++;
+			continue;
+		}
+
+		/* vpn points to part of a THP at this point */
+		if (page_flags & KPF_COMPOUND_HEAD)
+			cur_order = 1;
+		else {
+			/* not a head nor a tail in a THP? */
+			if (!(page_flags & KPF_COMPOUND_TAIL))
+				return -1;
+			continue;
+		}
+
+		next_folio_vpn = vpn + (1 << cur_order);
+
+		if (next_folio_vpn >= vpn_start + nr_pages)
+			break;
+
+		while (!(status = get_page_flags(next_folio_vpn, pagemap_file,
+						 kpageflags_file,
+						 &page_flags))) {
+			/* next compound head page or order-0 page */
+			if ((page_flags & KPF_COMPOUND_HEAD) ||
+			    !(page_flags & (KPF_COMPOUND_HEAD |
+			      KPF_COMPOUND_TAIL))) {
+				if (cur_order < nr_orders) {
+					orders[cur_order]++;
+					cur_order = -1;
+					vpn = next_folio_vpn;
+				}
+				break;
+			}
+
+			/* not a head nor a tail in a THP? */
+			if (!(page_flags & KPF_COMPOUND_TAIL))
+				return -1;
+
+			cur_order++;
+			next_folio_vpn = vpn + (1 << cur_order);
+		}
+
+		if (status)
+			return status;
+	}
+	if (cur_order > 0 && cur_order < nr_orders)
+		orders[cur_order]++;
+	return 0;
+}
+
+int check_folio_orders(uint64_t vpn_start, size_t nr_pages, int pagemap_file,
+			int kpageflags_file, int orders[], int nr_orders)
+{
+	int vpn_orders[nr_orders];
+	int status;
+	int i;
+
+	memset(vpn_orders, 0, sizeof(int) * nr_orders);
+	status = gather_folio_orders(vpn_start, nr_pages, pagemap_file,
+				     kpageflags_file, vpn_orders, nr_orders);
+	if (status)
+		return status;
+
+	status = 0;
+	for (i = 0; i < nr_orders; i++)
+		if (vpn_orders[i] != orders[i]) {
+			ksft_print_msg("order %d: expected: %d got %d\n", i,
+				       orders[i], vpn_orders[i]);
+			status = -1;
+		}
+
+	return status;
 }
 
 /* If `ioctls' non-NULL, the allowed ioctls will be returned into the var */
