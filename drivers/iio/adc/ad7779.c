@@ -31,6 +31,8 @@
 #include <linux/iio/triggered_buffer.h>
 #include <linux/iio/trigger_consumer.h>
 
+#include <linux/iio/backend.h>
+
 #define AD7779_SPI_READ_CMD			BIT(7)
 
 #define AD7779_DISABLE_SD			BIT(7)
@@ -116,6 +118,12 @@
 #define AD7779_CRC8_POLY			0x07
 DECLARE_CRC8_TABLE(ad7779_crc8_table);
 
+enum ad7779_data_lines {
+	AD7779_4LINES = 4,
+	AD7779_2LINES = 2,
+	AD7779_1LINE = 1,
+};
+
 enum ad7779_filter {
 	AD7779_SINC3,
 	AD7779_SINC5,
@@ -157,6 +165,8 @@ struct ad7779_state {
 	u8			reg_rx_buf[3];
 	u8			reg_tx_buf[3];
 	u8			reset_buf[8];
+
+	struct iio_backend *back;
 };
 
 static const char * const ad7779_filter_type[] = {
@@ -630,10 +640,36 @@ static int ad7779_reset(struct iio_dev *indio_dev, struct gpio_desc *reset_gpio)
 	return ret;
 }
 
+static int ad7779_update_scan_mode(struct iio_dev *indio_dev,
+				   const unsigned long *scan_mask)
+{
+	struct ad7779_state *st = iio_priv(indio_dev);
+	unsigned int c;
+	int ret;
+
+	for (c = 0; c < AD7779_NUM_CHANNELS; c++) {
+		if (test_bit(c, scan_mask))
+			ret = iio_backend_chan_enable(st->back, c);
+		else
+			ret = iio_backend_chan_disable(st->back, c);
+		if (ret)
+			return ret;
+	}
+
+	return 0;
+}
+
 static const struct iio_info ad7779_info = {
 	.read_raw = ad7779_read_raw,
 	.write_raw = ad7779_write_raw,
 	.debugfs_reg_access = &ad7779_reg_access,
+};
+
+static const struct iio_info ad7779_info_data = {
+	.read_raw = ad7779_read_raw,
+	.write_raw = ad7779_write_raw,
+	.debugfs_reg_access = &ad7779_reg_access,
+	.update_scan_mode = &ad7779_update_scan_mode,
 };
 
 static const struct iio_enum ad7779_filter_enum = {
@@ -650,7 +686,7 @@ static const struct iio_chan_spec_ext_info ad7779_ext_filter[] = {
 	{ }
 };
 
-#define AD777x_CHAN_S(index, _ext_info)					\
+#define AD777X_CHAN_S(index, _ext_info)					\
 	{								\
 		.type = IIO_VOLTAGE,					\
 		.info_mask_separate = BIT(IIO_CHAN_INFO_CALIBSCALE)  |	\
@@ -669,32 +705,33 @@ static const struct iio_chan_spec_ext_info ad7779_ext_filter[] = {
 		},							\
 	}
 
-#define AD777x_CHAN_NO_FILTER_S(index)					\
-	AD777x_CHAN_S(index, NULL)
+#define AD777X_CHAN_NO_FILTER_S(index)					\
+	AD777X_CHAN_S(index, NULL)
 
-#define AD777x_CHAN_FILTER_S(index)					\
-	AD777x_CHAN_S(index, ad7779_ext_filter)
+#define AD777X_CHAN_FILTER_S(index)					\
+	AD777X_CHAN_S(index, ad7779_ext_filter)
+
 static const struct iio_chan_spec ad7779_channels[] = {
-	AD777x_CHAN_NO_FILTER_S(0),
-	AD777x_CHAN_NO_FILTER_S(1),
-	AD777x_CHAN_NO_FILTER_S(2),
-	AD777x_CHAN_NO_FILTER_S(3),
-	AD777x_CHAN_NO_FILTER_S(4),
-	AD777x_CHAN_NO_FILTER_S(5),
-	AD777x_CHAN_NO_FILTER_S(6),
-	AD777x_CHAN_NO_FILTER_S(7),
+	AD777X_CHAN_NO_FILTER_S(0),
+	AD777X_CHAN_NO_FILTER_S(1),
+	AD777X_CHAN_NO_FILTER_S(2),
+	AD777X_CHAN_NO_FILTER_S(3),
+	AD777X_CHAN_NO_FILTER_S(4),
+	AD777X_CHAN_NO_FILTER_S(5),
+	AD777X_CHAN_NO_FILTER_S(6),
+	AD777X_CHAN_NO_FILTER_S(7),
 	IIO_CHAN_SOFT_TIMESTAMP(8),
 };
 
 static const struct iio_chan_spec ad7779_channels_filter[] = {
-	AD777x_CHAN_FILTER_S(0),
-	AD777x_CHAN_FILTER_S(1),
-	AD777x_CHAN_FILTER_S(2),
-	AD777x_CHAN_FILTER_S(3),
-	AD777x_CHAN_FILTER_S(4),
-	AD777x_CHAN_FILTER_S(5),
-	AD777x_CHAN_FILTER_S(6),
-	AD777x_CHAN_FILTER_S(7),
+	AD777X_CHAN_FILTER_S(0),
+	AD777X_CHAN_FILTER_S(1),
+	AD777X_CHAN_FILTER_S(2),
+	AD777X_CHAN_FILTER_S(3),
+	AD777X_CHAN_FILTER_S(4),
+	AD777X_CHAN_FILTER_S(5),
+	AD777X_CHAN_FILTER_S(6),
+	AD777X_CHAN_FILTER_S(7),
 	IIO_CHAN_SOFT_TIMESTAMP(8),
 };
 
@@ -752,6 +789,126 @@ static int ad7779_conf(struct ad7779_state *st, struct gpio_desc *start_gpio)
 	return 0;
 }
 
+static int ad7779_set_data_lines(struct iio_dev *indio_dev,
+				 unsigned int num_lanes)
+{
+	struct ad7779_state *st = iio_priv(indio_dev);
+	int ret;
+
+	ret = ad7779_set_sampling_frequency(st, num_lanes * AD7779_DEFAULT_SAMPLING_1LINE);
+	if (ret)
+		return ret;
+
+	ret = iio_backend_num_lanes_set(st->back, num_lanes);
+	if (ret)
+		return ret;
+
+	return ad7779_spi_write_mask(st, AD7779_REG_DOUT_FORMAT,
+				    AD7779_DOUT_FORMAT_MSK,
+				    FIELD_PREP(AD7779_DOUT_FORMAT_MSK, 2 - ilog2(num_lanes)));
+}
+
+static int ad7779_conf_channels(struct iio_dev *indio_dev, const struct ad7779_state *st)
+{
+	struct iio_chan_spec *channels;
+	struct device *dev = &st->spi->dev;
+	int num_channels = ARRAY_SIZE(ad7779_channels);
+
+	channels = devm_kcalloc(dev, num_channels, sizeof(*channels), GFP_KERNEL);
+	if (!channels)
+		return -ENOMEM;
+
+	memcpy(channels, st->chip_info->channels, num_channels * sizeof(struct iio_chan_spec));
+
+	for (int i = 0; i < 8; i++)
+		channels[i].scan_type.endianness = IIO_CPU;
+
+	indio_dev->channels = channels;
+
+	return 0;
+}
+
+static int setup_irq(struct ad7779_state *st, struct iio_dev *indio_dev)
+{
+	int ret;
+	struct device *dev = &st->spi->dev;
+
+	indio_dev->info = &ad7779_info;
+	indio_dev->channels = st->chip_info->channels;
+
+	st->trig = devm_iio_trigger_alloc(dev, "%s-dev%d", indio_dev->name,
+					  iio_device_id(indio_dev));
+	if (!st->trig)
+		return -ENOMEM;
+
+	st->trig->ops = &ad7779_trigger_ops;
+
+	iio_trigger_set_drvdata(st->trig, st);
+
+	ret = devm_request_irq(dev, st->spi->irq, iio_trigger_generic_data_rdy_poll,
+			       IRQF_ONESHOT | IRQF_NO_AUTOEN, indio_dev->name,
+			       st->trig);
+	if (ret)
+		return dev_err_probe(dev, ret, "request IRQ %d failed\n",
+					st->spi->irq);
+
+	ret = devm_iio_trigger_register(dev, st->trig);
+	if (ret)
+		return ret;
+
+	indio_dev->trig = iio_trigger_get(st->trig);
+
+	init_completion(&st->completion);
+
+	ret = devm_iio_triggered_buffer_setup(dev, indio_dev,
+					      &iio_pollfunc_store_time,
+					      &ad7779_trigger_handler,
+					      &ad7779_buffer_setup_ops);
+	if (ret)
+		return ret;
+
+	ret = ad7779_spi_write_mask(st, AD7779_REG_DOUT_FORMAT,
+				    AD7779_DCLK_CLK_DIV_MSK,
+				    FIELD_PREP(AD7779_DCLK_CLK_DIV_MSK, 7));
+	if (ret)
+		return ret;
+
+	return 0;
+}
+
+static int setup_back(struct ad7779_state *st, struct iio_dev *indio_dev)
+{
+	struct device *dev = &st->spi->dev;
+	int ret = -EINVAL;
+	int num_lanes;
+
+	indio_dev->info = &ad7779_info_data;
+
+	ret = ad7779_conf_channels(indio_dev, st);
+	if (ret)
+		return ret;
+
+	st->back = devm_iio_backend_get(dev, NULL);
+	if (IS_ERR(st->back)) {
+		dev_err_probe(dev, ret, "failed to get iio backend");
+		return PTR_ERR(st->back);
+	}
+
+	ret = devm_iio_backend_request_buffer(dev, st->back, indio_dev);
+	if (ret)
+		return ret;
+
+	ret = devm_iio_backend_enable(dev, st->back);
+	if (ret)
+		return ret;
+
+	ret = device_property_read_u32(dev, "adi,num-lanes", &num_lanes);
+	if (ret < 0)
+		return ad7779_set_data_lines(indio_dev, 4);
+
+	return ad7779_set_data_lines(indio_dev, num_lanes);
+}
+
 static int ad7779_probe(struct spi_device *spi)
 {
 	struct iio_dev *indio_dev;
@@ -759,9 +916,6 @@ static int ad7779_probe(struct spi_device *spi)
 	struct gpio_desc *reset_gpio, *start_gpio;
 	struct device *dev = &spi->dev;
 	int ret = -EINVAL;
-
-	if (!spi->irq)
-		return dev_err_probe(dev, ret, "DRDY irq not present\n");
 
 	indio_dev = devm_iio_device_alloc(dev, sizeof(*st));
 	if (!indio_dev)
@@ -804,45 +958,14 @@ static int ad7779_probe(struct spi_device *spi)
 		return ret;
 
 	indio_dev->name = st->chip_info->name;
-	indio_dev->info = &ad7779_info;
 	indio_dev->modes = INDIO_DIRECT_MODE;
-	indio_dev->channels = st->chip_info->channels;
 	indio_dev->num_channels = ARRAY_SIZE(ad7779_channels);
 
-	st->trig = devm_iio_trigger_alloc(dev, "%s-dev%d", indio_dev->name,
-					  iio_device_id(indio_dev));
-	if (!st->trig)
-		return -ENOMEM;
+	if (device_property_present(dev, "io-backends"))
+		ret = setup_back(st, indio_dev);
+	else
+		ret = setup_irq(st, indio_dev);
 
-	st->trig->ops = &ad7779_trigger_ops;
-
-	iio_trigger_set_drvdata(st->trig, st);
-
-	ret = devm_request_irq(dev, spi->irq, iio_trigger_generic_data_rdy_poll,
-			       IRQF_ONESHOT | IRQF_NO_AUTOEN, indio_dev->name,
-			       st->trig);
-	if (ret)
-		return dev_err_probe(dev, ret, "request IRQ %d failed\n",
-				     st->spi->irq);
-
-	ret = devm_iio_trigger_register(dev, st->trig);
-	if (ret)
-		return ret;
-
-	indio_dev->trig = iio_trigger_get(st->trig);
-
-	init_completion(&st->completion);
-
-	ret = devm_iio_triggered_buffer_setup(dev, indio_dev,
-					      &iio_pollfunc_store_time,
-					      &ad7779_trigger_handler,
-					      &ad7779_buffer_setup_ops);
-	if (ret)
-		return ret;
-
-	ret = ad7779_spi_write_mask(st, AD7779_REG_DOUT_FORMAT,
-				    AD7779_DCLK_CLK_DIV_MSK,
-				    FIELD_PREP(AD7779_DCLK_CLK_DIV_MSK, 7));
 	if (ret)
 		return ret;
 
@@ -936,3 +1059,4 @@ module_spi_driver(ad7779_driver);
 MODULE_AUTHOR("Ramona Alexandra Nechita <ramona.nechita@analog.com>");
 MODULE_DESCRIPTION("Analog Devices AD7779 ADC");
 MODULE_LICENSE("GPL");
+MODULE_IMPORT_NS("IIO_BACKEND");
