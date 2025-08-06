@@ -87,6 +87,18 @@ Available fault injection capabilities
   inject init_hctx() errors by setting config items under
   /sys/kernel/config/nullb/<disk>/init_hctx_fault_inject.
 
+- fail_kvm_mmu_invalidate_retry
+
+  For KVM, injects fake MMU invalidations.
+
+- fail_tdp_mmu_cmpxchg
+
+  For KVM/x86, injects cmpxchg failures for TDP MMU SPTE updates.
+
+- fail_tdp_mmu_resched
+
+  For KVM/x86, injects fake MMU lock contention for TDP MMU SPTE iteration.
+
 Configure fault-injection capabilities behavior
 -----------------------------------------------
 
