@@ -18,6 +18,7 @@ use core::result::Result;
 
 use crate::ffi::c_void;
 use crate::init::InPlaceInit;
+use crate::page;
 use crate::types::ForeignOwnable;
 use pin_init::{InPlaceWrite, Init, PinInit, ZeroableOption};
 
@@ -596,5 +597,46 @@ where
         // - `self.0` was previously allocated with `A`.
         // - `layout` is equal to the `Layout´ `self.0` was allocated with.
         unsafe { A::free(self.0.cast(), layout) };
+    }
+}
+
+/// # Examples
+///
+/// ```
+/// # use kernel::{page, prelude::*};
+/// use kernel::page::PageOwner;
+///
+/// let mut vbox = VBox::<[u8; page::PAGE_SIZE]>::new_uninit(GFP_KERNEL)?;
+///
+/// let page = vbox.page_iter().next().expect("At least one page should be available.\n");
+///
+/// // SAFETY: There is no concurrent read or write to the same page.
+/// unsafe { page.fill_zero_raw(0, page::PAGE_SIZE)? };
+/// # Ok::<(), Error>(())
+/// ```
+impl<T> page::PageOwner for VBox<T> {
+    fn page_iter<'a>(&'a mut self) -> impl Iterator<Item = page::BorrowedPage<'a>> {
+        (0..self.page_count()).map(|idx| {
+            let ptr = self.0.as_ptr().cast::<u8>();
+
+            // TODO: Use `NonNull::add()` instead, once the minimum supported compiler version is
+            // bumped to 1.80 or later.
+            //
+            // SAFETY: `idx` is in the interval `[0, self.page_count())`, hence the resulting
+            // pointer is guaranteed to be within the same allocation.
+            let ptr = unsafe { ptr.add(idx * page::PAGE_SIZE) };
+
+            // SAFETY: `ptr` is guaranteed to be non-null given that it is derived from `self.0`.
+            let ptr = unsafe { NonNull::new_unchecked(ptr) };
+
+            // SAFETY:
+            // - `ptr` is a valid pointer to a `Vmalloc` allocation.
+            // - `ptr` is valid for the duration of `'a`.
+            unsafe { Vmalloc::to_page(ptr) }
+        })
+    }
+
+    fn page_count(&self) -> usize {
+        core::mem::size_of::<T>().div_ceil(page::PAGE_SIZE)
     }
 }
