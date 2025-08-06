@@ -32,6 +32,7 @@ struct ad7476_chip_info {
 	/* channels used when convst gpio is defined */
 	struct iio_chan_spec		convst_channel[2];
 	void (*reset)(struct ad7476_state *);
+	void (*conversion_pre_op)(struct ad7476_state *st);
 	bool				has_vref;
 	bool				has_vdrive;
 };
@@ -70,7 +71,8 @@ static irqreturn_t ad7476_trigger_handler(int irq, void  *p)
 	struct ad7476_state *st = iio_priv(indio_dev);
 	int b_sent;
 
-	ad7091_convst(st);
+	if (st->chip_info->conversion_pre_op)
+		st->chip_info->conversion_pre_op(st);
 
 	b_sent = spi_sync(st->spi, &st->msg);
 	if (b_sent < 0)
@@ -164,6 +166,7 @@ static const struct ad7476_chip_info ad7091_chip_info = {
 	.channel[1] = IIO_CHAN_SOFT_TIMESTAMP(1),
 	.convst_channel[0] = AD7091R_CONVST_CHAN(12),
 	.convst_channel[1] = IIO_CHAN_SOFT_TIMESTAMP(1),
+	.conversion_pre_op = ad7091_convst,
 	.reset = ad7091_reset,
 };
 
@@ -172,6 +175,7 @@ static const struct ad7476_chip_info ad7091r_chip_info = {
 	.channel[1] = IIO_CHAN_SOFT_TIMESTAMP(1),
 	.convst_channel[0] = AD7091R_CONVST_CHAN(12),
 	.convst_channel[1] = IIO_CHAN_SOFT_TIMESTAMP(1),
+	.conversion_pre_op = ad7091_convst,
 	.int_vref_mv = 2500,
 	.has_vref = true,
 	.reset = ad7091_reset,
