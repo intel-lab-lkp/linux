@@ -8135,6 +8135,20 @@ static void ath10k_flush(struct ieee80211_hw *hw, struct ieee80211_vif *vif,
 	mutex_unlock(&ar->conf_mutex);
 }
 
+static void ath10k_mac_op_flush_sta(struct ieee80211_hw *hw, struct ieee80211_vif *vif,
+			     struct ieee80211_sta *sta)
+{
+	struct ath10k_vif *arvif = (void *)vif->drv_priv;
+	struct ath10k *ar = hw->priv;
+	u32 bitmap = 0xFFFFFFFF;
+	int ret = 0;
+
+	ret = ath10k_wmi_peer_flush(ar, arvif->vdev_id, sta->addr, bitmap);
+	if (ret)
+		ath10k_warn(ar, "failed to flush sta (sta %pM)\n",
+			    sta->addr);
+}
+
 /* TODO: Implement this function properly
  * For now it is needed to reply to Probe Requests in IBSS mode.
  * Probably we need this information from FW.
@@ -9487,6 +9501,7 @@ static const struct ieee80211_ops ath10k_ops = {
 	.set_rts_threshold		= ath10k_set_rts_threshold,
 	.set_frag_threshold		= ath10k_mac_op_set_frag_threshold,
 	.flush				= ath10k_flush,
+	.flush_sta			= ath10k_mac_op_flush_sta,
 	.tx_last_beacon			= ath10k_tx_last_beacon,
 	.set_antenna			= ath10k_set_antenna,
 	.get_antenna			= ath10k_get_antenna,
@@ -10293,6 +10308,9 @@ int ath10k_mac_register(struct ath10k *ar)
 	/* Disable set_coverage_class for chipsets that do not support it. */
 	if (!ar->hw_params.hw_ops->set_coverage_class)
 		ar->ops->set_coverage_class = NULL;
+
+	if (ar->htt.disable_tx_comp)
+		ar->ops->flush_sta = NULL;
 
 	ret = ath_regd_init(&ar->ath_common.regulatory, ar->hw->wiphy,
 			    ath10k_reg_notifier);
