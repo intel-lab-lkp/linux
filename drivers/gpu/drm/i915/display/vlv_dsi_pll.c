@@ -140,10 +140,10 @@ static int vlv_dsi_pclk(struct intel_encoder *encoder,
 	pll_div &= DSI_PLL_M1_DIV_MASK;
 	pll_div = pll_div >> DSI_PLL_M1_DIV_SHIFT;
 
-	while (pll_ctl) {
+	do {
 		pll_ctl = pll_ctl >> 1;
 		p++;
-	}
+	} while (pll_ctl);
 	p--;
 
 	if (!p) {
