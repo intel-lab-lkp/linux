@@ -37,7 +37,6 @@ static int dcss_drv_platform_probe(struct platform_device *pdev)
 	struct device *dev = &pdev->dev;
 	struct device_node *remote;
 	struct dcss_drv *mdrv;
-	int err = 0;
 	bool hdmi_output = true;
 
 	if (!dev->of_node)
@@ -63,17 +62,11 @@ static int dcss_drv_platform_probe(struct platform_device *pdev)
 
 	mdrv->kms = dcss_kms_attach(mdrv->dcss);
 	if (IS_ERR(mdrv->kms)) {
-		err = PTR_ERR(mdrv->kms);
-		dev_err_probe(dev, err, "Failed to initialize KMS\n");
-		goto dcss_shutoff;
+		dcss_dev_destroy(mdrv->dcss);
+		return dev_err_probe(dev, PTR_ERR(mdrv->kms), "Failed to initialize KMS\n");
 	}
 
 	return 0;
-
-dcss_shutoff:
-	dcss_dev_destroy(mdrv->dcss);
-
-	return err;
 }
 
 static void dcss_drv_platform_remove(struct platform_device *pdev)
