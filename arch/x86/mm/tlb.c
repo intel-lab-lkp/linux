@@ -12,6 +12,7 @@
 #include <linux/task_work.h>
 #include <linux/mmu_notifier.h>
 #include <linux/mmu_context.h>
+#include <linux/iommu.h>
 
 #include <asm/tlbflush.h>
 #include <asm/mmu_context.h>
@@ -1478,6 +1479,8 @@ void flush_tlb_all(void)
 	else
 		/* Fall back to the IPI-based invalidation. */
 		on_each_cpu(do_flush_tlb_all, NULL, 1);
+
+	iommu_sva_invalidate_kva_range(0, TLB_FLUSH_ALL);
 }
 
 /* Flush an arbitrarily large range of memory with INVLPGB. */
@@ -1540,6 +1543,7 @@ void flush_tlb_kernel_range(unsigned long start, unsigned long end)
 		kernel_tlb_flush_range(info);
 
 	put_flush_tlb_info();
+	iommu_sva_invalidate_kva_range(start, end);
 }
 
 /*
