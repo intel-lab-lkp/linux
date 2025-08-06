@@ -932,7 +932,8 @@ static int ax88772_stop(struct usbnet *dev)
 {
 	struct asix_common_private *priv = dev->driver_priv;
 
-	phylink_stop(priv->phylink);
+	if (!dev->suspend_count)
+		phylink_stop(priv->phylink);
 
 	return 0;
 }
