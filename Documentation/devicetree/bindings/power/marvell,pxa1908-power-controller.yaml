@@ -1,0 +1,105 @@
+# SPDX-License-Identifier: (GPL-2.0-only OR BSD-2-Clause)
+%YAML 1.2
+---
+$id: http://devicetree.org/schemas/power/marvell,pxa1908-power-controller.yaml#
+$schema: http://devicetree.org/meta-schemas/core.yaml#
+
+title: Marvell PXA1908 Power Domain Controller
+
+maintainers:
+  - Duje Mihanović <duje@dujemihanovic.xyz>
+
+description: |
+  The Marvell PXA1908 SoC includes multiple power domains which can be powered
+  on/off to save power when different IP cores are not in use.
+
+properties:
+  $nodename:
+    pattern: '^power-controller$'
+
+  compatible:
+    const: marvell,pxa1908-power-controller
+
+  '#power-domain-cells':
+    const: 1
+
+  '#address-cells':
+    const: 1
+
+  '#size-cells':
+    const: 0
+
+patternProperties:
+  "^power-domain@[0-9a-f]+$":
+    type: object
+
+    description: |
+      Represents a power domain within the power controller node as documented
+      in Documentation/devicetree/bindings/power/power-domain.yaml.
+
+    properties:
+      reg:
+        description: |
+          Power domain index. Valid values are defined in:
+              "include/dt-bindings/power/marvell,pxa1908-power.h"
+        maxItems: 1
+
+      clocks:
+        description: |
+          A number of phandles to clocks that need to be enabled during domain
+          power up.
+
+      '#power-domain-cells':
+        const: 0
+
+    required:
+      - reg
+
+    unevaluatedProperties: false
+
+required:
+  - compatible
+
+additionalProperties: false
+
+examples:
+  - |
+    #include <dt-bindings/power/marvell,pxa1908-power.h>
+
+    clock-controller@d4282800 {
+      compatible = "marvell,pxa1908-apmu", "simple-mfd", "syscon";
+      reg = <0xd4282800 0x400>;
+      #clock-cells = <1>;
+
+      power-controller {
+        compatible = "marvell,pxa1908-power-controller";
+        #address-cells = <1>;
+        #size-cells = <0>;
+        #power-domain-cells = <1>;
+
+        power-domain@PXA1908_POWER_DOMAIN_VPU {
+          reg = <PXA1908_POWER_DOMAIN_VPU>;
+          #power-domain-cells = <0>;
+        };
+
+        power-domain@PXA1908_POWER_DOMAIN_GPU {
+          reg = <PXA1908_POWER_DOMAIN_GPU>;
+          #power-domain-cells = <0>;
+        };
+
+        power-domain@PXA1908_POWER_DOMAIN_GPU2D {
+          reg = <PXA1908_POWER_DOMAIN_GPU2D>;
+          #power-domain-cells = <0>;
+        };
+
+        power-domain@PXA1908_POWER_DOMAIN_DSI {
+          reg = <PXA1908_POWER_DOMAIN_DSI>;
+          #power-domain-cells = <0>;
+        };
+
+        power-domain@PXA1908_POWER_DOMAIN_ISP {
+          reg = <PXA1908_POWER_DOMAIN_ISP>;
+          #power-domain-cells = <0>;
+        };
+      };
+    };
