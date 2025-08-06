@@ -99,9 +99,7 @@ static void tsc_sync_check_timer_fn(struct timer_list *unused)
 	tsc_verify_tsc_adjust(false);
 
 	/* Run the check for all onlined CPUs in turn */
-	next_cpu = cpumask_next(raw_smp_processor_id(), cpu_online_mask);
-	if (next_cpu >= nr_cpu_ids)
-		next_cpu = cpumask_first(cpu_online_mask);
+	next_cpu = cpumask_next_wrap(raw_smp_processor_id(), cpu_online_mask);
 
 	tsc_sync_check_timer.expires += SYNC_CHECK_INTERVAL;
 	add_timer_on(&tsc_sync_check_timer, next_cpu);
