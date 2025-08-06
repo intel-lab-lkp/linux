@@ -1206,6 +1206,56 @@ static const struct file_operations i915_dsc_fractional_bpp_fops = {
 	.write = i915_dsc_fractional_bpp_write
 };
 
+static int i915_hdmi_req_bpc_show(struct seq_file *m, void *data)
+{
+	struct intel_connector *connector = m->private;
+
+	seq_printf(m, "request bpc: %u\n", connector->force_hdmi_bpc);
+
+	return 0;
+}
+
+static ssize_t i915_hdmi_req_bpc_write(struct file *file,
+					const char __user *ubuf,
+					size_t len, loff_t *offp)
+{
+	struct seq_file *m = file->private_data;
+	struct intel_connector *intel_connector = m->private;
+	struct intel_display *display = to_intel_display(intel_connector);
+	int new_bpc = 0, ret = 0;
+	char *kbuf;
+	const char *p;
+
+	kbuf = memdup_user_nul(ubuf, len);
+	if (IS_ERR(kbuf))
+		return PTR_ERR(kbuf);
+
+	p = strim(kbuf);
+
+	ret = kstrtoint(p, 0, &new_bpc);
+	if (ret < 0)
+		return -EINVAL;
+
+	switch (new_bpc) {
+	case 0:
+	case 8:
+	case 10:
+	case 12:
+		break;
+	default:
+		drm_dbg(display->drm,
+			"HDMI bpc (%u) may exceed the max value (12)\n", new_bpc);
+		return -EINVAL;
+	}
+
+	intel_connector->force_hdmi_bpc = new_bpc;
+
+	*offp += len;
+	kfree(kbuf);
+	return len;
+}
+DEFINE_SHOW_STORE_ATTRIBUTE(i915_hdmi_req_bpc);
+
 /*
  * Returns the Current CRTC's bpc.
  * Example usage: cat /sys/kernel/debug/dri/0/crtc-0/i915_current_bpc
@@ -1356,6 +1406,13 @@ void intel_connector_debugfs_add(struct intel_connector *connector)
 	    connector_type == DRM_MODE_CONNECTOR_HDMIB)
 		debugfs_create_file("i915_lpsp_capability", 0444, root,
 				    connector, &i915_lpsp_capability_fops);
+
+	if (connector_type == DRM_MODE_CONNECTOR_HDMIA ||
+	    connector_type == DRM_MODE_CONNECTOR_HDMIB) {
+		connector->force_hdmi_bpc = 0;
+		debugfs_create_file("i915_force_hdmi_bpc", 0644, root,
+				    connector, &i915_hdmi_req_bpc_fops);
+	}
 }
 
 /**

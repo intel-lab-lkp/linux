@@ -2115,6 +2115,7 @@ static int intel_hdmi_compute_bpc(struct intel_encoder *encoder,
 				  int clock, bool respect_downstream_limits)
 {
 	struct intel_hdmi *intel_hdmi = enc_to_intel_hdmi(encoder);
+	struct intel_connector *intel_connector = intel_hdmi->attached_connector;
 	int bpc;
 
 	/*
@@ -2130,6 +2131,12 @@ static int intel_hdmi_compute_bpc(struct intel_encoder *encoder,
 	 */
 	if (!respect_downstream_limits)
 		bpc = 8;
+
+	/*
+	 * overwrite bpc per user's request
+	 */
+	if (intel_connector->force_hdmi_bpc)
+		bpc = intel_connector->force_hdmi_bpc;
 
 	for (; bpc >= 8; bpc -= 2) {
 		int tmds_clock = intel_hdmi_tmds_clock(clock, bpc,

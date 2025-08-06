@@ -554,6 +554,8 @@ struct intel_connector {
 	struct work_struct modeset_retry_work;
 
 	struct intel_hdcp hdcp;
+
+	u8 force_hdmi_bpc;
 };
 
 struct intel_digital_connector_state {
