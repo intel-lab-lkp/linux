@@ -2077,6 +2077,8 @@ unsigned long get_wchan(struct task_struct *p)
 
 void enqueue_task(struct rq *rq, struct task_struct *p, int flags)
 {
+	trace_enqueue_task_tp(rq->cpu, p);
+
 	if (!(flags & ENQUEUE_NOCLOCK))
 		update_rq_clock(rq);
 
@@ -2119,7 +2121,11 @@ inline bool dequeue_task(struct rq *rq, struct task_struct *p, int flags)
 	 * and mark the task ->sched_delayed.
 	 */
 	uclamp_rq_dec(rq, p);
-	return p->sched_class->dequeue_task(rq, p, flags);
+	if (p->sched_class->dequeue_task(rq, p, flags)) {
+		trace_dequeue_task_tp(rq->cpu, p);
+		return true;
+	}
+	return false;
 }
 
 void activate_task(struct rq *rq, struct task_struct *p, int flags)
