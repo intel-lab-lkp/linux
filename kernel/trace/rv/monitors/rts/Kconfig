@@ -1,0 +1,17 @@
+# SPDX-License-Identifier: GPL-2.0-only
+#
+config RV_MON_RTS
+	depends on RV
+	select RV_LTL_MONITOR
+	depends on RV_MON_RTAPP
+	default y
+	select LTL_MON_EVENTS_CPU
+	bool "rts monitor"
+	help
+	  Add support for RTS (real-time scheduling) monitor which validates
+	  that real-time-priority tasks are scheduled before SCHED_OTHER tasks.
+
+	  This monitor may report an error if RT throttling or deadline server
+	  is enabled.
+
+	  Say Y if you are debugging or testing a real-time system.

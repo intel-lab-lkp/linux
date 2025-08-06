@@ -396,6 +396,25 @@ preemption is always disabled. On non- ``PREEMPT_RT`` kernels, the interrupts
 might invoke a softirq to set ``need_resched`` and wake up a task. This is
 another special case that is currently not supported by the monitor.
 
+Monitor rts
+-----------
+
+The real-time scheduling monitor validates that tasks with real-time scheduling
+policies (`SCHED_FIFO` and `SCHED_RR`) are always scheduled before tasks with
+normal and extensible scheduling policies (`SCHED_OTHER`, `SCHED_BATCH`,
+`SCHED_IDLE`, `SCHED_EXT`):
+
+.. literalinclude:: ../../../tools/verification/models/sched/rts.ltl
+
+Note that this monitor may report errors if real-time throttling or fair
+deadline server is enabled. These mechanisms prevent real-time tasks from
+monopolying the CPU by giving tasks with normal and extensible scheduling
+policies a chance to run. They give system administrators a chance to kill a
+misbehaved real-time task. However, they violate the scheduling priorities and
+may cause latency to well-behaved real-time tasks. Thus, if you see errors from
+this monitor, consider disabling real-time throttling and the fair deadline
+server.
+
 References
 ----------
 

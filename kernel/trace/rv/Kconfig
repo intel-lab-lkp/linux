@@ -67,6 +67,7 @@ source "kernel/trace/rv/monitors/opid/Kconfig"
 source "kernel/trace/rv/monitors/rtapp/Kconfig"
 source "kernel/trace/rv/monitors/pagefault/Kconfig"
 source "kernel/trace/rv/monitors/sleep/Kconfig"
+source "kernel/trace/rv/monitors/rts/Kconfig"
 # Add new rtapp monitors here
 
 # Add new monitors here
