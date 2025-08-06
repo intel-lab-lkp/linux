@@ -16,6 +16,29 @@
 /*
  * drivers/i2c/i2c-core-base.c
  */
+TRACE_EVENT(i2c_device_probe_debug,
+	    TP_PROTO(struct device *dev, const char *message),
+	    TP_ARGS(dev, message),
+	    TP_STRUCT__entry(__string(devname, dev_name(dev)) __string(message, message)),
+	    TP_fast_assign(__assign_str(devname); __assign_str(message);),
+	    TP_printk("device=%s: %s", __get_str(devname), __get_str(message))
+);
+
+TRACE_EVENT(i2c_device_probe_failed,
+	    TP_PROTO(struct device *dev, int status, const char *reason),
+	    TP_ARGS(dev, status, reason),
+	    TP_STRUCT__entry(__string(dev_name, dev_name(dev))
+			     __field(int, status)
+			     __string(reason, reason)),
+	    TP_fast_assign(__assign_str(dev_name);
+		__entry->status = status;
+		__assign_str(reason);),
+	    TP_printk("failed to probe %s: %d (%s)",
+		      __get_str(dev_name),
+		      __entry->status,
+		      __get_str(reason))
+);
+
 extern int i2c_transfer_trace_reg(void);
 extern void i2c_transfer_trace_unreg(void);
 
