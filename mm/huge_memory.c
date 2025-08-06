@@ -4341,6 +4341,7 @@ static int split_huge_pages_pid(int pid, unsigned long vaddr_start,
 		struct folio *folio;
 		struct address_space *mapping;
 		unsigned int target_order = new_order;
+		long nr_pages;
 
 		if (!vma)
 			break;
@@ -4357,6 +4358,8 @@ static int split_huge_pages_pid(int pid, unsigned long vaddr_start,
 
 		if (!is_transparent_hugepage(folio))
 			goto next;
+
+		nr_pages = folio_nr_pages(folio);
 
 		if (!folio_test_anon(folio)) {
 			mapping = folio->mapping;
@@ -4385,15 +4388,16 @@ static int split_huge_pages_pid(int pid, unsigned long vaddr_start,
 		if (!folio_test_anon(folio) && folio->mapping != mapping)
 			goto unlock;
 
-		if (in_folio_offset < 0 ||
-		    in_folio_offset >= folio_nr_pages(folio)) {
+		if (in_folio_offset < 0 || in_folio_offset >= nr_pages) {
 			if (!split_folio_to_order(folio, target_order))
 				split++;
 		} else {
-			struct page *split_at = folio_page(folio,
-							   in_folio_offset);
-			if (!folio_split(folio, target_order, split_at, NULL))
+			struct page *split_at =
+				folio_page(folio, in_folio_offset);
+			if (!folio_split(folio, target_order, split_at, NULL)) {
 				split++;
+				addr += PAGE_SIZE * nr_pages;
+			}
 		}
 
 unlock:
@@ -4438,8 +4442,8 @@ static int split_huge_pages_in_file(const char *file_path, pgoff_t off_start,
 	if (IS_ERR(candidate))
 		goto out;
 
-	pr_debug("split file-backed THPs in file: %s, page offset: [0x%lx - 0x%lx]\n",
-		 file_path, off_start, off_end);
+	pr_debug("split file-backed THPs in file: %s, page offset: [0x%lx - 0x%lx], new_order %u in_folio_offset %ld\n",
+		 file_path, off_start, off_end, new_order, in_folio_offset);
 
 	mapping = candidate->f_mapping;
 	min_order = mapping_min_folio_order(mapping);
