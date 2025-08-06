@@ -15,6 +15,7 @@
 #include <linux/kthread.h>
 #include <linux/nls.h>
 #include <linux/unicode.h>
+#include <linux/kcov.h>
 
 #include "smb_common.h"
 #include "ksmbd_work.h"
@@ -109,6 +110,9 @@ struct ksmbd_conn {
 	bool				binding;
 	atomic_t			refcnt;
 	bool				is_aapl;
+#ifdef CONFIG_KCOV
+	u64				kcov_handle;
+#endif
 };
 
 struct ksmbd_conn_ops {
@@ -246,4 +250,22 @@ static inline void ksmbd_conn_set_releasing(struct ksmbd_conn *conn)
 }
 
 void ksmbd_all_conn_set_status(u64 sess_id, u32 status);
+
+static inline void ksmbd_conn_set_kcov_handle(struct ksmbd_conn *conn,
+				       const u64 kcov_handle)
+{
+#ifdef CONFIG_KCOV
+	conn->kcov_handle = kcov_common_handle();
+#endif
+}
+
+static inline u64 ksmbd_conn_get_kcov_handle(struct ksmbd_conn *conn)
+{
+#ifdef CONFIG_KCOV
+	return conn->kcov_handle;
+#else
+	return 0;
+#endif
+}
+
 #endif /* __CONNECTION_H__ */

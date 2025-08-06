@@ -264,6 +264,8 @@ static void handle_ksmbd_work(struct work_struct *wk)
 	struct ksmbd_work *work = container_of(wk, struct ksmbd_work, work);
 	struct ksmbd_conn *conn = work->conn;
 
+	kcov_remote_start_common(ksmbd_conn_get_kcov_handle(conn));
+
 	atomic64_inc(&conn->stats.request_served);
 
 	__handle_ksmbd_work(work, conn);
@@ -271,6 +273,8 @@ static void handle_ksmbd_work(struct work_struct *wk)
 	ksmbd_conn_try_dequeue_request(work);
 	ksmbd_free_work_struct(work);
 	ksmbd_conn_r_count_dec(conn);
+
+	kcov_remote_stop();
 }
 
 /**
