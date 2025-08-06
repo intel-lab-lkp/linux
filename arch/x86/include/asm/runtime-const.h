@@ -2,7 +2,7 @@
 #ifndef _ASM_RUNTIME_CONST_H
 #define _ASM_RUNTIME_CONST_H
 
-#ifdef __ASSEMBLY__
+#ifdef __ASSEMBLER__
 
 .macro RUNTIME_CONST_PTR sym reg
 	movq	$0x0123456789abcdef, %\reg
@@ -12,7 +12,7 @@
 	.popsection
 .endm
 
-#else /* __ASSEMBLY__ */
+#else /* __ASSEMBLER__ */
 
 #define runtime_const_ptr(sym) ({				\
 	typeof(sym) __ret;					\
@@ -70,5 +70,5 @@ static inline void runtime_const_fixup(void (*fn)(void *, unsigned long),
 	}
 }
 
-#endif /* __ASSEMBLY__ */
+#endif /* __ASSEMBLER__ */
 #endif
