@@ -550,3 +550,9 @@ static inline u32 fanotify_get_response_errno(int res)
 {
 	return (res >> FAN_ERRNO_SHIFT) & FAN_ERRNO_MASK;
 }
+
+extern void fanotify_insert_event(struct fsnotify_group *group,
+	struct fsnotify_event *fsn_event);
+
+extern int fanotify_merge(struct fsnotify_group *group,
+	struct fsnotify_event *event);

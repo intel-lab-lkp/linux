@@ -179,7 +179,7 @@ static bool fanotify_should_merge(struct fanotify_event *old,
 #define FANOTIFY_MAX_MERGE_EVENTS 128
 
 /* and the list better be locked by something too! */
-static int fanotify_merge(struct fsnotify_group *group,
+int fanotify_merge(struct fsnotify_group *group,
 			  struct fsnotify_event *event)
 {
 	struct fanotify_event *old, *new = FANOTIFY_E(event);
@@ -904,7 +904,7 @@ static __kernel_fsid_t fanotify_get_fsid(struct fsnotify_iter_info *iter_info)
 /*
  * Add an event to hash table for faster merge.
  */
-static void fanotify_insert_event(struct fsnotify_group *group,
+void fanotify_insert_event(struct fsnotify_group *group,
 				  struct fsnotify_event *fsn_event)
 {
 	struct fanotify_event *event = FANOTIFY_E(fsn_event);

@@ -1000,6 +1000,51 @@ static ssize_t fanotify_write(struct file *file, const char __user *buf, size_t 
 	return count;
 }
 
+static void clear_queue(struct file *file, bool restart_events)
+{
+	struct fsnotify_group *group = file->private_data;
+	struct fsnotify_event *fsn_event;
+	int insert_ret;
+
+	/*
+	 * Clear all pending permission events from the access_list. If
+	 * restart is requested, move them back into the notification queue
+	 * for reprocessing, otherwise simulate a reply from userspace.
+	 */
+	spin_lock(&group->notification_lock);
+	while (!list_empty(&group->fanotify_data.access_list)) {
+		struct fanotify_perm_event *event;
+
+		event = list_first_entry(&group->fanotify_data.access_list,
+					 struct fanotify_perm_event,
+					 fae.fse.list);
+		list_del_init(&event->fae.fse.list);
+
+		if (restart_events) {
+			// requeue the event
+			spin_unlock(&group->notification_lock);
+			fsn_event = &event->fae.fse;
+
+			insert_ret = fsnotify_insert_event(
+				group, fsn_event, fanotify_merge,
+				fanotify_insert_event);
+			if (insert_ret) {
+				/*
+				 * insertion for permission events can fail if group itself
+				 * is being shutdown. In this case, simply reply ALLOW for
+				 * the event.
+				 */
+				spin_lock(&group->notification_lock);
+				finish_permission_event(group, event, FAN_ALLOW, NULL);
+			}
+		} else {
+			finish_permission_event(group, event, FAN_ALLOW, NULL);
+		}
+		spin_lock(&group->notification_lock);
+	}
+	spin_unlock(&group->notification_lock);
+}
+
 static int fanotify_release(struct inode *ignored, struct file *file)
 {
 	struct fsnotify_group *group = file->private_data;
@@ -1016,22 +1061,14 @@ static int fanotify_release(struct inode *ignored, struct file *file)
 	 * Process all permission events on access_list and notification queue
 	 * and simulate reply from userspace.
 	 */
-	spin_lock(&group->notification_lock);
-	while (!list_empty(&group->fanotify_data.access_list)) {
-		struct fanotify_perm_event *event;
-
-		event = list_first_entry(&group->fanotify_data.access_list,
-				struct fanotify_perm_event, fae.fse.list);
-		list_del_init(&event->fae.fse.list);
-		finish_permission_event(group, event, FAN_ALLOW, NULL);
-		spin_lock(&group->notification_lock);
-	}
+	clear_queue(file, false);
 
 	/*
 	 * Destroy all non-permission events. For permission events just
 	 * dequeue them and set the response. They will be freed once the
 	 * response is consumed and fanotify_get_response() returns.
 	 */
+	spin_lock(&group->notification_lock);
 	while ((fsn_event = fsnotify_remove_first_event(group))) {
 		struct fanotify_event *event = FANOTIFY_E(fsn_event);
 
