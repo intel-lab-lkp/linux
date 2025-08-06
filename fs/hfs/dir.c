@@ -25,6 +25,9 @@ static struct dentry *hfs_lookup(struct inode *dir, struct dentry *dentry,
 	struct inode *inode = NULL;
 	int res;
 
+	if (dentry->d_name.len > HFS_NAMELEN)
+		return ERR_PTR(-ENAMETOOLONG);
+
 	res = hfs_find_init(HFS_SB(dir->i_sb)->cat_tree, &fd);
 	if (res)
 		return ERR_PTR(res);
