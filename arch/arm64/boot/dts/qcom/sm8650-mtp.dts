@@ -845,8 +845,9 @@
 
 &ufs_mem_phy {
 	vdda-phy-supply = <&vreg_l1d_0p88>;
+	vdda-phy-max-microamp = <211000>;
 	vdda-pll-supply = <&vreg_l3i_1p2>;
-
+	vdda-pll-max-microamp = <18300>;
 	status = "okay";
 };
 
