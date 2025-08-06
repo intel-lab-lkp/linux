@@ -691,6 +691,12 @@ int damon_set_attrs(struct damon_ctx *ctx, struct damon_attrs *attrs)
 	unsigned long sample_interval = attrs->sample_interval ?
 		attrs->sample_interval : 1;
 	struct damos *s;
+	bool sample_interval_changed = ctx->attrs.sample_interval !=
+		attrs->sample_interval;
+	bool aggr_interval_changed = ctx->attrs.aggr_interval !=
+		attrs->aggr_interval;
+	bool ops_update_interval_changed = ctx->attrs.ops_update_interval !=
+		attrs->ops_update_interval;
 	bool aggregating = ctx->passed_sample_intervals <
 		ctx->next_aggregation_sis;
 
@@ -708,10 +714,12 @@ int damon_set_attrs(struct damon_ctx *ctx, struct damon_attrs *attrs)
 	if (!attrs->aggr_samples)
 		attrs->aggr_samples = attrs->aggr_interval / sample_interval;
 
-	ctx->next_aggregation_sis = ctx->passed_sample_intervals +
-		attrs->aggr_interval / sample_interval;
-	ctx->next_ops_update_sis = ctx->passed_sample_intervals +
-		attrs->ops_update_interval / sample_interval;
+	if (sample_interval_changed || aggr_interval_changed)
+		ctx->next_aggregation_sis = ctx->passed_sample_intervals +
+			attrs->aggr_interval / sample_interval;
+	if (sample_interval_changed || ops_update_interval_changed)
+		ctx->next_ops_update_sis = ctx->passed_sample_intervals +
+			attrs->ops_update_interval / sample_interval;
 
 	damon_update_monitoring_results(ctx, attrs, aggregating);
 	ctx->attrs = *attrs;
