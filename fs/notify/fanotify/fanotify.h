@@ -556,3 +556,7 @@ extern void fanotify_insert_event(struct fsnotify_group *group,
 
 extern int fanotify_merge(struct fsnotify_group *group,
 	struct fsnotify_event *event);
+
+extern const struct file_operations fanotify_fops;
+extern const struct file_operations fanotify_control_fops;
+extern const struct file_operations fanotify_queue_fops;

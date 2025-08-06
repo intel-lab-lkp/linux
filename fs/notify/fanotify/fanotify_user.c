@@ -1011,6 +1011,7 @@ static void clear_queue(struct file *file, bool restart_events)
 	 * restart is requested, move them back into the notification queue
 	 * for reprocessing, otherwise simulate a reply from userspace.
 	 */
+	mutex_lock(&group->queue_mutex);
 	spin_lock(&group->notification_lock);
 	while (!list_empty(&group->fanotify_data.access_list)) {
 		struct fanotify_perm_event *event;
@@ -1043,7 +1044,16 @@ static void clear_queue(struct file *file, bool restart_events)
 		spin_lock(&group->notification_lock);
 	}
 	spin_unlock(&group->notification_lock);
+	group->queue_opened = false;
+	mutex_unlock(&group->queue_mutex);
 }
+
+static int fanotify_queue_release(struct inode *ignored, struct file *file)
+{
+	clear_queue(file, true);
+	return 0;
+}
+
 
 static int fanotify_release(struct inode *ignored, struct file *file)
 {
@@ -1092,6 +1102,47 @@ static int fanotify_release(struct inode *ignored, struct file *file)
 	return 0;
 }
 
+static int fanotify_open_queue_fd(struct file *file)
+{
+	struct fsnotify_group *group = file->private_data;
+	int f_flags, fd;
+	struct file *queue_file;
+
+	if (!FAN_GROUP_FLAG(group, FAN_RESTARTABLE_EVENTS))
+		return -EINVAL;
+
+	mutex_lock(&group->queue_mutex);
+	if (group->queue_opened) {
+		fd = -EEXIST;
+		goto out_unlock;
+	}
+
+	f_flags = O_RDWR;
+	if (group->fanotify_data.flags & FAN_CLOEXEC)
+		f_flags |= O_CLOEXEC;
+	if (group->fanotify_data.flags & FAN_NONBLOCK)
+		f_flags |= O_NONBLOCK;
+
+	fd = get_unused_fd_flags(f_flags);
+	if (fd < 0)
+		goto out_unlock;
+
+	queue_file = anon_inode_getfile_fmode("[fanotify]",
+					      &fanotify_queue_fops, group,
+					      f_flags, FMODE_NONOTIFY);
+	if (IS_ERR(queue_file)) {
+		put_unused_fd(fd);
+		fd = PTR_ERR(queue_file);
+		goto out_unlock;
+	}
+	fd_install(fd, queue_file);
+	group->queue_opened = true;
+
+out_unlock:
+	mutex_unlock(&group->queue_mutex);
+	return fd;
+}
+
 static long fanotify_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
 {
 	struct fsnotify_group *group;
@@ -1112,12 +1163,15 @@ static long fanotify_ioctl(struct file *file, unsigned int cmd, unsigned long ar
 		spin_unlock(&group->notification_lock);
 		ret = put_user(send_len, (int __user *) p);
 		break;
+	case FAN_IOC_OPEN_QUEUE_FD:
+		ret = fanotify_open_queue_fd(file);
+		break;
 	}
 
 	return ret;
 }
 
-static const struct file_operations fanotify_fops = {
+const struct file_operations fanotify_fops = {
 	.show_fdinfo	= fanotify_show_fdinfo,
 	.poll		= fanotify_poll,
 	.read		= fanotify_read,
@@ -1125,6 +1179,30 @@ static const struct file_operations fanotify_fops = {
 	.fasync		= NULL,
 	.release	= fanotify_release,
 	.unlocked_ioctl	= fanotify_ioctl,
+	.compat_ioctl	= compat_ptr_ioctl,
+	.llseek		= noop_llseek,
+};
+
+const struct file_operations fanotify_control_fops = {
+	.show_fdinfo	= fanotify_show_fdinfo,
+	.poll		= NULL,
+	.read		= NULL,
+	.write		= NULL,
+	.fasync		= NULL,
+	.release	= fanotify_release,
+	.unlocked_ioctl	= fanotify_ioctl,
+	.compat_ioctl	= compat_ptr_ioctl,
+	.llseek		= noop_llseek,
+};
+
+const struct file_operations fanotify_queue_fops = {
+	.show_fdinfo	= fanotify_show_fdinfo,
+	.poll		= fanotify_poll,
+	.read		= fanotify_read,
+	.write		= fanotify_write,
+	.fasync		= NULL,
+	.release	= fanotify_queue_release,
+	.unlocked_ioctl	= NULL,
 	.compat_ioctl	= compat_ptr_ioctl,
 	.llseek		= noop_llseek,
 };
@@ -1541,6 +1619,7 @@ SYSCALL_DEFINE2(fanotify_init, unsigned int, flags, unsigned int, event_f_flags)
 	int f_flags, fd;
 	unsigned int fid_mode = flags & FANOTIFY_FID_BITS;
 	unsigned int class = flags & FANOTIFY_CLASS_BITS;
+	unsigned int restartable_events = flags & FAN_RESTARTABLE_EVENTS;
 	unsigned int internal_flags = 0;
 	struct file *file;
 
@@ -1620,10 +1699,17 @@ SYSCALL_DEFINE2(fanotify_init, unsigned int, flags, unsigned int, event_f_flags)
 	    (!(fid_mode & FAN_REPORT_NAME) || !(fid_mode & FAN_REPORT_FID)))
 		return -EINVAL;
 
-	f_flags = O_RDWR;
+	/*
+	 * FAN_RESTARTABLE_EVENTS requires FAN_CLASS_CONTENT or
+	 * FAN_CLASS_PRE_CONTENT
+	 */
+	if (restartable_events && class == FAN_CLASS_NOTIF)
+		return -EINVAL;
+
+	f_flags = restartable_events ? O_RDONLY : O_RDWR;
 	if (flags & FAN_CLOEXEC)
 		f_flags |= O_CLOEXEC;
-	if (flags & FAN_NONBLOCK)
+	if (!restartable_events && (flags & FAN_NONBLOCK))
 		f_flags |= O_NONBLOCK;
 
 	/* fsnotify_alloc_group takes a ref.  Dropped in fanotify_release */
@@ -1694,8 +1780,10 @@ SYSCALL_DEFINE2(fanotify_init, unsigned int, flags, unsigned int, event_f_flags)
 	if (fd < 0)
 		goto out_destroy_group;
 
-	file = anon_inode_getfile_fmode("[fanotify]", &fanotify_fops, group,
-					f_flags, FMODE_NONOTIFY);
+	file = anon_inode_getfile_fmode("[fanotify]",
+					(restartable_events ? &fanotify_control_fops :
+					&fanotify_fops),
+					group, f_flags, FMODE_NONOTIFY);
 	if (IS_ERR(file)) {
 		put_unused_fd(fd);
 		fd = PTR_ERR(file);
@@ -1920,7 +2008,8 @@ static int do_fanotify_mark(int fanotify_fd, unsigned int flags, __u64 mask,
 		return -EBADF;
 
 	/* verify that this is indeed an fanotify instance */
-	if (unlikely(fd_file(f)->f_op != &fanotify_fops))
+	if (unlikely(fd_file(f)->f_op != &fanotify_fops &&
+		fd_file(f)->f_op != &fanotify_control_fops))
 		return -EINVAL;
 	group = fd_file(f)->private_data;
 
@@ -1936,6 +2025,14 @@ static int do_fanotify_mark(int fanotify_fd, unsigned int flags, __u64 mask,
 		if (mark_type == FAN_MARK_MNTNS)
 			return -EINVAL;
 	}
+
+	/*
+	 * With FAN_RESTARTABLE_EVENTS, a user is only allowed to setup
+	 * permission events
+	 */
+	if (FAN_GROUP_FLAG(group, FAN_RESTARTABLE_EVENTS) &&
+		!fanotify_is_perm_event(mask))
+		return -EINVAL;
 
 	/*
 	 * A user is allowed to setup sb/mount/mntns marks only if it is
@@ -2142,7 +2239,7 @@ static int __init fanotify_user_setup(void)
 				     FANOTIFY_DEFAULT_MAX_USER_MARKS);
 
 	BUILD_BUG_ON(FANOTIFY_INIT_FLAGS & FANOTIFY_INTERNAL_GROUP_FLAGS);
-	BUILD_BUG_ON(HWEIGHT32(FANOTIFY_INIT_FLAGS) != 14);
+	BUILD_BUG_ON(HWEIGHT32(FANOTIFY_INIT_FLAGS) != 15);
 	BUILD_BUG_ON(HWEIGHT32(FANOTIFY_MARK_FLAGS) != 11);
 
 	fanotify_mark_cache = KMEM_CACHE(fanotify_mark,

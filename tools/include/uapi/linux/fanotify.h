@@ -67,6 +67,7 @@
 #define FAN_REPORT_TARGET_FID	0x00001000	/* Report dirent target id  */
 #define FAN_REPORT_FD_ERROR	0x00002000	/* event->fd can report error */
 #define FAN_REPORT_MNT		0x00004000	/* Report mount events */
+#define FAN_RESTARTABLE_EVENTS		0x00008000 /* enable control-fd/queue-api */
 
 /* Convenience macro - FAN_REPORT_NAME requires FAN_REPORT_DIR_FID */
 #define FAN_REPORT_DFID_NAME	(FAN_REPORT_DIR_FID | FAN_REPORT_NAME)
@@ -270,5 +271,10 @@ struct fanotify_response_info_audit_rule {
 #define FAN_EVENT_OK(meta, len)	((long)(len) >= (long)FAN_EVENT_METADATA_LEN && \
 				(long)(meta)->event_len >= (long)FAN_EVENT_METADATA_LEN && \
 				(long)(meta)->event_len <= (long)(len))
+
+/* fanotify ioctls */
+
+/* Issue a queue fd used in control-fd api to read and respond to events */
+#define FAN_IOC_OPEN_QUEUE_FD	_IO('F', 0xF0)
 
 #endif /* _UAPI_LINUX_FANOTIFY_H */

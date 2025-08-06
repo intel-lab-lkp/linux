@@ -25,6 +25,7 @@ static void fsnotify_final_destroy_group(struct fsnotify_group *group)
 		group->ops->free_group_priv(group);
 
 	mem_cgroup_put(group->memcg);
+	mutex_destroy(&group->queue_mutex);
 	mutex_destroy(&group->mark_mutex);
 
 	kfree(group);
@@ -130,6 +131,7 @@ static struct fsnotify_group *__fsnotify_alloc_group(
 	init_waitqueue_head(&group->notification_waitq);
 	group->max_events = UINT_MAX;
 
+	mutex_init(&group->queue_mutex);
 	mutex_init(&group->mark_mutex);
 	INIT_LIST_HEAD(&group->marks_list);
 
