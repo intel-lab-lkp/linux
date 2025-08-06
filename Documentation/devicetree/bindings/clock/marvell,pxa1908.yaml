@@ -19,11 +19,15 @@ description: |
 
 properties:
   compatible:
-    enum:
-      - marvell,pxa1908-apbc
-      - marvell,pxa1908-apbcp
-      - marvell,pxa1908-mpmu
-      - marvell,pxa1908-apmu
+    oneOf:
+      - enum:
+          - marvell,pxa1908-apbc
+          - marvell,pxa1908-apbcp
+          - marvell,pxa1908-mpmu
+      - items:
+          - const: marvell,pxa1908-apmu
+          - const: simple-mfd
+          - const: syscon
 
   reg:
     maxItems: 1
@@ -31,10 +35,30 @@ properties:
   '#clock-cells':
     const: 1
 
+  power-controller:
+    description: |
+      Optional power domain controller node.
+    type: object
+    additionalProperties: true
+    properties:
+      compatible:
+        const: marvell,pxa1908-power-controller
+
 required:
   - compatible
   - reg
   - '#clock-cells'
+
+allOf:
+  - if:
+      not:
+        properties:
+          compatible:
+            contains:
+              const: marvell,pxa1908-apmu
+    then:
+      properties:
+        power-controller: false
 
 additionalProperties: false
 
@@ -42,7 +66,7 @@ examples:
   # APMU block:
   - |
     clock-controller@d4282800 {
-      compatible = "marvell,pxa1908-apmu";
+      compatible = "marvell,pxa1908-apmu", "simple-mfd", "syscon";
       reg = <0xd4282800 0x400>;
       #clock-cells = <1>;
     };
