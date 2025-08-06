@@ -11,6 +11,8 @@
 
 #define MONITOR_NAME sleep
 
+#define LTL_MONITOR_TYPE RV_MON_PER_TASK
+
 enum ltl_atom {
 	LTL_ABORT_SLEEP,
 	LTL_BLOCK_ON_RT_MUTEX,

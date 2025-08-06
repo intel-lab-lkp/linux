@@ -11,6 +11,8 @@
 
 #define MONITOR_NAME pagefault
 
+#define LTL_MONITOR_TYPE RV_MON_PER_TASK
+
 enum ltl_atom {
 	LTL_PAGEFAULT,
 	LTL_RT,
