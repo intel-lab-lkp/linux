@@ -36,23 +36,25 @@ static ssize_t fscontext_read(struct file *file,
 	if (ret < 0)
 		return ret;
 
-	if (log->head == log->tail) {
-		mutex_unlock(&fc->uapi_mutex);
-		return -ENODATA;
-	}
+	ret = -ENODATA;
+	if (log->head == log->tail)
+		goto err_unlock_nomsg;
 
 	index = log->tail & (logsize - 1);
 	p = log->buffer[index];
+	n = strlen(p);
+
+	ret = -EMSGSIZE;
+	if (n > len)
+		goto err_unlock_nomsg;
+
+	/* Consume the message from the queue. */
 	need_free = log->need_free & (1 << index);
 	log->buffer[index] = NULL;
 	log->need_free &= ~(1 << index);
 	log->tail++;
 	mutex_unlock(&fc->uapi_mutex);
 
-	ret = -EMSGSIZE;
-	n = strlen(p);
-	if (n > len)
-		goto err_free;
 	ret = -EFAULT;
 	if (copy_to_user(_buf, p, n) != 0)
 		goto err_free;
@@ -61,6 +63,10 @@ static ssize_t fscontext_read(struct file *file,
 err_free:
 	if (need_free)
 		kfree(p);
+	return ret;
+
+err_unlock_nomsg:
+	mutex_unlock(&fc->uapi_mutex);
 	return ret;
 }
 
