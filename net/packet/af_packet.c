@@ -203,7 +203,11 @@ static void prb_retire_current_block(struct tpacket_kbdq_core *,
 static int prb_queue_frozen(struct tpacket_kbdq_core *);
 static void prb_open_block(struct tpacket_kbdq_core *,
 		struct tpacket_block_desc *);
+#ifdef CONFIG_PACKET_HRTIMER
+static enum hrtimer_restart prb_retire_rx_blk_timer_expired(struct hrtimer *);
+#else
 static void prb_retire_rx_blk_timer_expired(struct timer_list *);
+#endif
 static void _prb_refresh_rx_retire_blk_timer(struct tpacket_kbdq_core *);
 static void prb_fill_rxhash(struct tpacket_kbdq_core *, struct tpacket3_hdr *);
 static void prb_clear_rxhash(struct tpacket_kbdq_core *,
@@ -581,7 +585,11 @@ static __be16 vlan_get_protocol_dgram(const struct sk_buff *skb)
 
 static void prb_del_retire_blk_timer(struct tpacket_kbdq_core *pkc)
 {
+#ifdef CONFIG_PACKET_HRTIMER
+	hrtimer_cancel(&pkc->retire_blk_timer);
+#else
 	timer_delete_sync(&pkc->retire_blk_timer);
+#endif
 }
 
 static void prb_shutdown_retire_blk_timer(struct packet_sock *po,
@@ -603,9 +611,16 @@ static void prb_setup_retire_blk_timer(struct packet_sock *po)
 	struct tpacket_kbdq_core *pkc;
 
 	pkc = GET_PBDQC_FROM_RB(&po->rx_ring);
+#ifdef CONFIG_PACKET_HRTIMER
+	hrtimer_init(&pkc->retire_blk_timer, CLOCK_MONOTONIC, HRTIMER_MODE_REL_SOFT);
+	pkc->retire_blk_timer.function = prb_retire_rx_blk_timer_expired;
+	if (pkc->tov_in_msecs == 0)
+		pkc->tov_in_msecs = jiffies_to_msecs(1);
+#else
 	timer_setup(&pkc->retire_blk_timer, prb_retire_rx_blk_timer_expired,
 		    0);
 	pkc->retire_blk_timer.expires = jiffies;
+#endif
 }
 
 static int prb_calc_retire_blk_tmo(struct packet_sock *po,
@@ -676,7 +691,11 @@ static void init_prb_bdqc(struct packet_sock *po,
 	else
 		p1->retire_blk_tov = prb_calc_retire_blk_tmo(po,
 						req_u->req3.tp_block_size);
+#ifdef CONFIG_PACKET_HRTIMER
+	p1->tov_in_msecs = p1->retire_blk_tov;
+#else
 	p1->tov_in_jiffies = msecs_to_jiffies(p1->retire_blk_tov);
+#endif
 	p1->blk_sizeof_priv = req_u->req3.tp_sizeof_priv;
 	rwlock_init(&p1->blk_fill_in_prog_lock);
 
@@ -691,8 +710,15 @@ static void init_prb_bdqc(struct packet_sock *po,
  */
 static void _prb_refresh_rx_retire_blk_timer(struct tpacket_kbdq_core *pkc)
 {
+#ifdef CONFIG_PACKET_HRTIMER
+	hrtimer_start_range_ns(&pkc->retire_blk_timer,
+				ms_to_ktime(pkc->tov_in_msecs),
+				0,
+				HRTIMER_MODE_REL_SOFT);
+#else
 	mod_timer(&pkc->retire_blk_timer,
 			jiffies + pkc->tov_in_jiffies);
+#endif
 	pkc->last_kactive_blk_num = pkc->kactive_blk_num;
 }
 
@@ -719,8 +745,15 @@ static void _prb_refresh_rx_retire_blk_timer(struct tpacket_kbdq_core *pkc)
  * prb_calc_retire_blk_tmo() calculates the tmo.
  *
  */
+#ifdef CONFIG_PACKET_HRTIMER
+static enum hrtimer_restart prb_retire_rx_blk_timer_expired(struct hrtimer *t)
+#else
 static void prb_retire_rx_blk_timer_expired(struct timer_list *t)
+#endif
 {
+#ifdef CONFIG_PACKET_HRTIMER
+	enum hrtimer_restart ret = HRTIMER_RESTART;
+#endif
 	struct packet_sock *po =
 		timer_container_of(po, t, rx_ring.prb_bdqc.retire_blk_timer);
 	struct tpacket_kbdq_core *pkc = GET_PBDQC_FROM_RB(&po->rx_ring);
@@ -787,9 +820,15 @@ static void prb_retire_rx_blk_timer_expired(struct timer_list *t)
 
 refresh_timer:
 	_prb_refresh_rx_retire_blk_timer(pkc);
+#ifdef CONFIG_PACKET_HRTIMER
+	ret = HRTIMER_RESTART;
+#endif
 
 out:
 	spin_unlock(&po->sk.sk_receive_queue.lock);
+#ifdef CONFIG_PACKET_HRTIMER
+	return ret;
+#endif
 }
 
 static void prb_flush_block(struct tpacket_kbdq_core *pkc1,

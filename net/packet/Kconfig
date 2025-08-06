@@ -23,3 +23,13 @@ config PACKET_DIAG
 	help
 	  Support for PF_PACKET sockets monitoring interface used by the ss tool.
 	  If unsure, say Y.
+
+config PACKET_HRTIMER
+	tristate "Packet: use hrtimer instead of timer"
+	depends on PACKET
+	default n
+	help
+	  Support hrtimer mode for PF_PACKET sockets to improve real-time
+	  performance. The default timeout mechanism with jiffies granularity
+	  is insufficient to meet the demands for real-time performance.
+	  If unsure, say N.
