@@ -23,7 +23,7 @@
 #include "%%MODEL_NAME%%.h"
 #include <rv/ltl_monitor.h>
 
-static void ltl_atoms_fetch(struct task_struct *task, struct ltl_monitor *mon)
+static void ltl_atoms_fetch(%%TARGET_ARG%%, struct ltl_monitor *mon)
 {
 	/*
 	 * This is called everytime the Buchi automaton is triggered.
@@ -36,13 +36,14 @@ static void ltl_atoms_fetch(struct task_struct *task, struct ltl_monitor *mon)
 	 */
 }
 
-static void ltl_atoms_init(struct task_struct *task, struct ltl_monitor *mon, bool task_creation)
+static void ltl_atoms_init(%%TARGET_ARG%%, struct ltl_monitor *mon, bool target_creation)
 {
 	/*
 	 * This should initialize as many atomic propositions as possible.
 	 *
-	 * @task_creation indicates whether the task is being created. This is
-	 * false if the task is already running before the monitor is enabled.
+	 * @target_creation indicates whether the monitored target is being
+	 * created. This is false if the monitor target is already online before
+	 * the monitor is enabled.
 	 */
 %%ATOMS_INIT%%
 }
