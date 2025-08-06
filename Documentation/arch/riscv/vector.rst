@@ -134,7 +134,25 @@ processes in form of sysctl knob:
 3.  Vector Register State Across System Calls
 ---------------------------------------------
 
-As indicated by version 1.0 of the V extension [1], vector registers are
-clobbered by system calls.
+Linux adopts the syscall ABI proposed by version 1.0 of the V extension [1],
+where vector registers are clobbered by system calls. Specifically:
+
+    Executing a system call causes all caller-saved vector registers
+    (v0-v31, vl, vtype) and vstart to become unspecied.
+
+However, clobbering the vector registers can significantly increase system call
+latency for some implementations. To mitigate this performance impact, a sysctl
+knob is provided that controls whether vector state is always discarded in the
+syscall path:
+
+* /proc/sys/abi/riscv_v_vstate_discard
+
+    Valid values are:
+
+    * 0: Vector state is not always clobbered in all syscalls
+    * 1: Mandatory clobbering of vector state in all syscalls
+
+    Reading this file returns the current discard behavior. The initial state is
+    controlled by CONFIG_RISCV_ISA_V_VSTATE_DISCARD.
 
 1: https://github.com/riscv/riscv-v-spec/blob/master/calling-convention.adoc
