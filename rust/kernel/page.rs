@@ -103,6 +103,18 @@ impl<'a> Deref for BorrowedPage<'a> {
     }
 }
 
+/// Represents a potential owner of one or multiple [`Page`]s.
+///
+/// This trait may be implemented by types that potentially hold ownership of memory pages. It
+/// allows users to iterate over those pages and borrow them as [`BorrowedPage`].
+pub trait PageOwner {
+    /// Returns an [`Iterator`] of [`BorrowedPage`] items over all pages owned by `self`.
+    fn page_iter<'a>(&'a mut self) -> impl Iterator<Item = BorrowedPage<'a>>;
+
+    /// Returns the number of pages currently owned by `self`.
+    fn page_count(&self) -> usize;
+}
+
 /// A pointer to a page that owns the page allocation.
 ///
 /// # Invariants
