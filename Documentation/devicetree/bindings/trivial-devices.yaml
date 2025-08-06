@@ -201,6 +201,10 @@ properties:
           - maxim,max15303
             # Multiphase Master with PMBus Interface and Internal Buck Converter
           - maxim,max20751
+            # 6-Channel PWM fan controller
+          - maxim,max31785
+          - maxim,max31785a
+          - maxim,max31785b
             # mCube 3-axis 8-bit digital accelerometer
           - mcube,mc3230
             # mCube 3-axis 8-bit digital accelerometer
