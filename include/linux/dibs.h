@@ -135,6 +135,7 @@ struct dibs_dev_ops {
 
 struct dibs_dev {
 	struct list_head list;
+	struct device dev;
 	/* To be filled by device driver, before calling dibs_dev_add(): */
 	const struct dibs_dev_ops *ops;
 	/* priv pointer for device driver */
@@ -157,6 +158,21 @@ static inline void *dibs_get_priv(struct dibs_dev *dev,
 }
 
 /* ------- End of client-only functions ----------- */
+
+/* Functions to be called by dibs clients and dibs device drivers:
+ */
+/**
+ * dibs_get_dev()
+ * @dev: dibs device
+ * @token: dmb token of the remote dmb
+ *
+ * TODO: provide get and put functions
+ * Return: struct device* to be used for device refcounting
+ */
+static inline struct device *dibs_get_dev(struct dibs_dev *dibs)
+{
+	return &dibs->dev;
+}
 
 /* Functions to be called by dibs device drivers:
  */
