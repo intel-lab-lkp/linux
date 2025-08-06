@@ -1892,7 +1892,8 @@ static void br_multicast_send_query(struct net_bridge_mcast *brmctx,
 	time += own_query->startup_sent < brmctx->multicast_startup_query_count ?
 		brmctx->multicast_startup_query_interval :
 		brmctx->multicast_query_interval;
-	mod_timer(&own_query->timer, time);
+	if (time_is_after_jiffies(time))
+		mod_timer(&own_query->timer, time);
 }
 
 static void
