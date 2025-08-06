@@ -88,6 +88,7 @@ int rxe_cq_post(struct rxe_cq *cq, struct rxe_cqe *cqe, int solicited)
 	int full;
 	void *addr;
 	unsigned long flags;
+	u8 notify;
 
 	spin_lock_irqsave(&cq->cq_lock, flags);
 
@@ -110,13 +111,14 @@ int rxe_cq_post(struct rxe_cq *cq, struct rxe_cqe *cqe, int solicited)
 
 	queue_advance_producer(cq->queue, QUEUE_TYPE_TO_CLIENT);
 
-	if ((cq->notify & IB_CQ_NEXT_COMP) ||
-	    (cq->notify & IB_CQ_SOLICITED && solicited)) {
-		cq->notify = 0;
-		cq->ibcq.comp_handler(&cq->ibcq, cq->ibcq.cq_context);
-	}
+	notify = cq->notify;
+	cq->notify = 0;
 
 	spin_unlock_irqrestore(&cq->cq_lock, flags);
+
+	if ((notify & IB_CQ_NEXT_COMP) ||
+	    (notify & IB_CQ_SOLICITED && solicited))
+		cq->ibcq.comp_handler(&cq->ibcq, cq->ibcq.cq_context);
 
 	return 0;
 }
