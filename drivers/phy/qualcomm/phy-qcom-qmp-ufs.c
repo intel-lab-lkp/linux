@@ -39,6 +39,8 @@
 #define PHY_INIT_COMPLETE_TIMEOUT		10000
 
 #define NUM_OVERLAY				2
+#define QMP_VREG_UNUSED				-1
+#define MAX_PROP_NAME				32
 
 /* set of registers with offsets different per-PHY */
 enum qphy_reg_layout {
@@ -1894,15 +1896,29 @@ static int qmp_ufs_vreg_init(struct qmp_ufs *qmp)
 {
 	const struct qmp_phy_cfg *cfg = qmp->cfg;
 	struct device *dev = qmp->dev;
+	struct device_node *np = dev->of_node;
+	char prop_name[MAX_PROP_NAME];
 	int num = cfg->num_vregs;
-	int i;
+	const char *supply;
+	int i, ret;
 
 	qmp->vregs = devm_kcalloc(dev, num, sizeof(*qmp->vregs), GFP_KERNEL);
 	if (!qmp->vregs)
 		return -ENOMEM;
 
-	for (i = 0; i < num; i++)
-		qmp->vregs[i].supply = cfg->vreg_list[i];
+	for (i = 0; i < num; i++) {
+		supply = cfg->vreg_list[i];
+		qmp->vregs[i].supply = supply;
+
+		/* Defaults to unused */
+		qmp->vregs[i].init_load_uA = QMP_VREG_UNUSED;
+
+		snprintf(prop_name, sizeof(prop_name), "%s-max-microamp", supply);
+		ret = of_property_read_u32(np, prop_name, &qmp->vregs[i].init_load_uA);
+		if (ret)
+			dev_dbg(qmp->dev, "No max microamp for %s, using default %d\n",
+				supply, QMP_VREG_UNUSED);
+	}
 
 	return devm_regulator_bulk_get(dev, num, qmp->vregs);
 }
