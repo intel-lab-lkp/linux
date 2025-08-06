@@ -117,6 +117,7 @@ struct tls_strparser {
 	bool msg_ready;
 
 	struct strp_msg stm;
+	u32 copied_seq;
 
 	struct sk_buff *anchor;
 	struct work_struct work;
