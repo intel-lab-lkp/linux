@@ -2758,7 +2758,7 @@ static struct notifier_block smc_reboot_notifier = {
 	.notifier_call = smc_core_reboot_event,
 };
 
-int __init smc_core_init(void)
+int smc_core_init(void)
 {
 	return register_reboot_notifier(&smc_reboot_notifier);
 }
