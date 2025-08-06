@@ -41,6 +41,7 @@ properties:
               - adi,ad7910
               - adi,ad7920
               - adi,ad7940
+              - rohm,bd79105
               - ti,adc081s
               - ti,adc101s
               - ti,adc121s
@@ -115,6 +116,7 @@ allOf:
               - adi,ad7274
               - adi,ad7475
               - lltc,ltc2314-14
+              - rohm,bd79105
     then:
       properties:
         vref-supply: true
@@ -131,6 +133,7 @@ allOf:
               - adi,ad7274
               - adi,ad7475
               - lltc,ltc2314-14
+              - rohm,bd79105
     then:
       required:
         - vref-supply
@@ -141,6 +144,7 @@ allOf:
             enum:
               - adi,ad7475
               - adi,ad7495
+              - rohm,bd79105
     then:
       properties:
         vdrive-supply: true
@@ -154,12 +158,24 @@ allOf:
             enum:
               - adi,ad7091
               - adi,ad7091r
+              - rohm,bd79105
     then:
       properties:
         adi,conversion-start-gpios: true
     else:
       properties:
         adi,conversion-start-gpios: false
+
+  # Devices with a convstart GPIO where it is not optional
+  - if:
+      properties:
+        compatible:
+          contains:
+            enum:
+              - rohm,bd79105
+    then:
+      required:
+        - adi,conversion-start-gpios
 
 unevaluatedProperties: false
 
