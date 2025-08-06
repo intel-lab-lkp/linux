@@ -1238,6 +1238,7 @@ static void handle_rx(struct vhost_net *net)
 					 &fixup) != sizeof(hdr)) {
 				vq_err(vq, "Unable to write vnet_hdr "
 				       "at addr %p\n", vq->iov->iov_base);
+				vhost_discard_vq_desc(vq, headcount);
 				goto out;
 			}
 		} else {
