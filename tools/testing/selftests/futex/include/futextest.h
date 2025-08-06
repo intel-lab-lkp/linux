@@ -134,7 +134,9 @@ futex_unlock_pi(futex_t *uaddr, int opflags)
 }
 
 /**
- * futex_wake_op() - FIXME: COME UP WITH A GOOD ONE LINE DESCRIPTION
+ * futex_wake_op() - atomically modify uaddr2
+ * @nr_wake:	wake up to this many tasks on uaddr
+ * @nr_wake2:	wake up to this many tasks on uaddr2
  */
 static inline int
 futex_wake_op(futex_t *uaddr, futex_t *uaddr2, int nr_wake, int nr_wake2,
