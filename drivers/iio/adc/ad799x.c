@@ -114,11 +114,13 @@ struct ad799x_chip_config {
  * @num_channels:	number of channels
  * @noirq_config:	device configuration w/o IRQ
  * @irq_config:		device configuration w/IRQ
+ * @has_vref:		device supports external reference voltage
  */
 struct ad799x_chip_info {
 	int				num_channels;
 	const struct ad799x_chip_config	noirq_config;
 	const struct ad799x_chip_config	irq_config;
+	bool has_vref;
 };
 
 struct ad799x_state {
@@ -604,6 +606,7 @@ static const struct iio_event_spec ad799x_events[] = {
 static const struct ad799x_chip_info ad799x_chip_info_tbl[] = {
 	[ad7991] = {
 		.num_channels = 5,
+		.has_vref = true,
 		.noirq_config = {
 			.channel = {
 				AD799X_CHANNEL(0, 12),
@@ -617,6 +620,7 @@ static const struct ad799x_chip_info ad799x_chip_info_tbl[] = {
 	},
 	[ad7995] = {
 		.num_channels = 5,
+		.has_vref = true,
 		.noirq_config = {
 			.channel = {
 				AD799X_CHANNEL(0, 10),
@@ -630,6 +634,7 @@ static const struct ad799x_chip_info ad799x_chip_info_tbl[] = {
 	},
 	[ad7999] = {
 		.num_channels = 5,
+		.has_vref = true,
 		.noirq_config = {
 			.channel = {
 				AD799X_CHANNEL(0, 8),
@@ -643,6 +648,7 @@ static const struct ad799x_chip_info ad799x_chip_info_tbl[] = {
 	},
 	[ad7992] = {
 		.num_channels = 3,
+		.has_vref = false,
 		.noirq_config = {
 			.channel = {
 				AD799X_CHANNEL(0, 12),
@@ -663,6 +669,7 @@ static const struct ad799x_chip_info ad799x_chip_info_tbl[] = {
 	},
 	[ad7993] = {
 		.num_channels = 5,
+		.has_vref = false,
 		.noirq_config = {
 			.channel = {
 				AD799X_CHANNEL(0, 10),
@@ -687,6 +694,7 @@ static const struct ad799x_chip_info ad799x_chip_info_tbl[] = {
 	},
 	[ad7994] = {
 		.num_channels = 5,
+		.has_vref = false,
 		.noirq_config = {
 			.channel = {
 				AD799X_CHANNEL(0, 12),
@@ -711,6 +719,7 @@ static const struct ad799x_chip_info ad799x_chip_info_tbl[] = {
 	},
 	[ad7997] = {
 		.num_channels = 9,
+		.has_vref = false,
 		.noirq_config = {
 			.channel = {
 				AD799X_CHANNEL(0, 10),
@@ -743,6 +752,7 @@ static const struct ad799x_chip_info ad799x_chip_info_tbl[] = {
 	},
 	[ad7998] = {
 		.num_channels = 9,
+		.has_vref = false,
 		.noirq_config = {
 			.channel = {
 				AD799X_CHANNEL(0, 12),
@@ -809,33 +819,30 @@ static int ad799x_probe(struct i2c_client *client)
 		return ret;
 
 	/* check if an external reference is supplied */
-	st->vref = devm_regulator_get_optional(&client->dev, "vref");
+	if (chip_info->has_vref) {
+		st->vref = devm_regulator_get_optional(&client->dev, "vref");
 
-	if (IS_ERR(st->vref)) {
-		if (PTR_ERR(st->vref) == -ENODEV) {
-			st->vref = NULL;
-			dev_info(&client->dev, "Using VCC reference voltage\n");
-		} else {
-			ret = PTR_ERR(st->vref);
-			goto error_disable_reg;
+		if (IS_ERR(st->vref)) {
+			if (PTR_ERR(st->vref) == -ENODEV) {
+				st->vref = NULL;
+				dev_info(&client->dev, "Using VCC reference voltage\n");
+			} else {
+				ret = PTR_ERR(st->vref);
+				goto error_disable_reg;
+			}
 		}
-	}
 
-	if (st->vref) {
-		/*
-		 * Use external reference voltage if supported by hardware.
-		 * This is optional if voltage / regulator present, use VCC otherwise.
-		 */
-		if ((st->id == ad7991) || (st->id == ad7995) || (st->id == ad7999)) {
+		if (st->vref) {
 			dev_info(&client->dev, "Using external reference voltage\n");
 			extra_config |= AD7991_REF_SEL;
 			ret = regulator_enable(st->vref);
 			if (ret)
 				goto error_disable_reg;
-		} else {
-			st->vref = NULL;
-			dev_warn(&client->dev, "Supplied reference not supported\n");
 		}
+	}
+	else {
+		st->vref = NULL;
+		dev_dbg(&client->dev, "Supplied reference not supported\n");
 	}
 
 	st->client = client;
