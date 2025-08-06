@@ -38,6 +38,9 @@ static struct dentry *hfsplus_lookup(struct inode *dir, struct dentry *dentry,
 	u32 cnid, linkid = 0;
 	u16 type;
 
+	if (dentry->d_name.len > HFSPLUS_MAX_STRLEN)
+		return ERR_PTR(-ENAMETOOLONG);
+
 	sb = dir->i_sb;
 
 	dentry->d_fsdata = NULL;
