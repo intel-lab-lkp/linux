@@ -20,11 +20,11 @@ properties:
 
   clocks:
     minItems: 1
-    maxItems: 3
+    maxItems: 5
 
   clock-names:
     minItems: 1
-    maxItems: 3
+    maxItems: 5
 
   data-lanes:
     description: which lanes (by position) should be mapped to which
@@ -82,10 +82,15 @@ allOf:
     then:
       properties:
         clocks:
-          maxItems: 1
+          minItems: 1
+          maxItems: 5
         clock-names:
           items:
             - const: pclk
+            - const: phy0_ref_alt_p
+            - const: phy0_ref_alt_m
+            - const: phy1_ref_alt_p
+            - const: phy1_ref_alt_m
     else:
       properties:
         clocks:
