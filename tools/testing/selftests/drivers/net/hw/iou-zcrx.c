@@ -42,8 +42,8 @@ static long page_size;
 #define SEND_SIZE (512 * 4096)
 #define min(a, b) \
 	({ \
-		typeof(a) _a = (a); \
-		typeof(b) _b = (b); \
+		__auto_type _a = (a); \
+		__auto_type _b = (b); \
 		_a < _b ? _a : _b; \
 	})
 #define min_t(t, a, b) \
