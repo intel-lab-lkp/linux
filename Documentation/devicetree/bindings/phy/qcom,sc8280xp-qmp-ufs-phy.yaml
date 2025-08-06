@@ -71,6 +71,16 @@ properties:
 
   vdda-pll-supply: true
 
+  vdda-phy-max-microamp:
+    maxItems: 1
+    description:
+      Specifies max. load that can be drawn from phy supply.
+
+  vdda-pll-max-microamp:
+    maxItems: 1
+    description:
+      Specifies max. load that can be drawn from pll supply.
+
   "#clock-cells":
     const: 1
 
