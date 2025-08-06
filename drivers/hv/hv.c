@@ -312,9 +312,12 @@ void hv_synic_enable_regs(unsigned int cpu)
 	shared_sint.as_uint64 = hv_get_msr(HV_MSR_SINT0 + VMBUS_MESSAGE_SINT);
 
 	shared_sint.vector = vmbus_interrupt;
+
 	shared_sint.masked = false;
 	shared_sint.auto_eoi = hv_recommend_using_aeoi();
 	hv_set_msr(HV_MSR_SINT0 + VMBUS_MESSAGE_SINT, shared_sint.as_uint64);
+
+	hv_enable_coco_interrupt(cpu, vmbus_interrupt, true);
 
 	/* Enable the global synic bit */
 	sctrl.as_uint64 = hv_get_msr(HV_MSR_SCONTROL);
@@ -342,7 +345,6 @@ void hv_synic_disable_regs(unsigned int cpu)
 	union hv_synic_scontrol sctrl;
 
 	shared_sint.as_uint64 = hv_get_msr(HV_MSR_SINT0 + VMBUS_MESSAGE_SINT);
-
 	shared_sint.masked = 1;
 
 	/* Need to correctly cleanup in the case of SMP!!! */
@@ -350,6 +352,9 @@ void hv_synic_disable_regs(unsigned int cpu)
 	hv_set_msr(HV_MSR_SINT0 + VMBUS_MESSAGE_SINT, shared_sint.as_uint64);
 
 	simp.as_uint64 = hv_get_msr(HV_MSR_SIMP);
+
+	hv_enable_coco_interrupt(cpu, vmbus_interrupt, false);
+
 	/*
 	 * In Isolation VM, sim and sief pages are allocated by
 	 * paravisor. These pages also will be used by kdump
