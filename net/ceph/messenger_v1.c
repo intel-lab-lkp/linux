@@ -189,11 +189,17 @@ static void prepare_write_message_footer(struct ceph_connection *con, struct cep
 
 /*
  * Prepare headers for the next outgoing message.
+ *
+ * @return false if there are no outgoing messages
  */
-static void prepare_write_message(struct ceph_connection *con)
+static bool prepare_write_message(struct ceph_connection *con)
 {
 	struct ceph_msg *m;
 	u32 crc;
+
+	m = ceph_con_get_out_msg(con);
+	if (m == NULL)
+		return false;
 
 	con_out_kvec_reset(con);
 	con->v1.out_msg_done = false;
@@ -207,8 +213,6 @@ static void prepare_write_message(struct ceph_connection *con)
 		con_out_kvec_add(con, sizeof(con->v1.out_temp_ack),
 			&con->v1.out_temp_ack);
 	}
-
-	m = ceph_con_get_out_msg(con);
 
 	dout("prepare_write_message %p seq %lld type %d len %d+%d+%zd\n",
 	     m, con->out_seq, le16_to_cpu(m->hdr.type),
@@ -256,6 +260,8 @@ static void prepare_write_message(struct ceph_connection *con)
 	}
 
 	ceph_con_flag_set(con, CEPH_CON_F_WRITE_PENDING);
+
+	return true;
 }
 
 /*
@@ -1543,8 +1549,7 @@ do_next:
 			goto more;
 		}
 		/* is anything else pending? */
-		if (!list_empty(&con->out_queue)) {
-			prepare_write_message(con);
+		if (prepare_write_message(con)) {
 			goto more;
 		}
 		if (con->in_seq > con->in_seq_acked) {
