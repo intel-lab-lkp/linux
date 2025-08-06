@@ -33,6 +33,7 @@ struct ad7476_chip_info {
 	struct iio_chan_spec		convst_channel[2];
 	void (*reset)(struct ad7476_state *);
 	void (*conversion_pre_op)(struct ad7476_state *st);
+	void (*conversion_post_op)(struct ad7476_state *st);
 	bool				has_vref;
 	bool				has_vdrive;
 };
@@ -64,6 +65,23 @@ static void ad7091_convst(struct ad7476_state *st)
 	udelay(1); /* Conversion time: 650 ns max */
 }
 
+static void bd79105_convst_disable(struct ad7476_state *st)
+{
+	if (!st->convst_gpio)
+		return;
+
+	gpiod_set_value(st->convst_gpio, 0);
+}
+
+static void bd79105_convst_enable(struct ad7476_state *st)
+{
+	if (!st->convst_gpio)
+		return;
+
+	gpiod_set_value(st->convst_gpio, 1);
+	udelay(1); /* 10ns required for conversion */
+}
+
 static irqreturn_t ad7476_trigger_handler(int irq, void  *p)
 {
 	struct iio_poll_func *pf = p;
@@ -81,6 +99,8 @@ static irqreturn_t ad7476_trigger_handler(int irq, void  *p)
 	iio_push_to_buffers_with_ts(indio_dev, st->data, sizeof(st->data),
 				    iio_get_time_ns(indio_dev));
 done:
+	if (st->chip_info->conversion_post_op)
+		st->chip_info->conversion_post_op(st);
 	iio_trigger_notify_done(indio_dev->trig);
 
 	return IRQ_HANDLED;
@@ -278,6 +298,20 @@ static const struct ad7476_chip_info ltc2314_14_chip_info = {
 	.has_vref = true,
 };
 
+static const struct ad7476_chip_info bd79105_chip_info = {
+	.convst_channel[0] = AD7091R_CONVST_CHAN(16),
+	.convst_channel[1] = IIO_CHAN_SOFT_TIMESTAMP(1),
+	/*
+	 * The BD79105 starts ADC data conversion when thw CONVSTART is set
+	 * HIGH. The CONVSTART must be kept HIGH until the data has been
+	 * read from the ADC.
+	 */
+	.conversion_pre_op = bd79105_convst_enable,
+	.conversion_post_op = bd79105_convst_disable,
+	.has_vref = true,
+	.has_vdrive = true,
+};
+
 static const struct iio_info ad7476_info = {
 	.read_raw = &ad7476_read_raw,
 };
@@ -347,7 +381,6 @@ static int ad7476_probe(struct spi_device *spi)
 	if (st->convst_gpio)
 		indio_dev->channels = st->chip_info->convst_channel;
 	/* Setup default message */
-
 	st->xfer.rx_buf = &st->data;
 	st->xfer.len = indio_dev->channels[0].scan_type.storagebits / 8;
 
@@ -393,6 +426,7 @@ static const struct spi_device_id ad7476_id[] = {
 	{ "ads7866", (kernel_ulong_t)&ads7866_chip_info },
 	{ "ads7867", (kernel_ulong_t)&ads7867_chip_info },
 	{ "ads7868", (kernel_ulong_t)&ads7868_chip_info },
+	{ "bd79105", (kernel_ulong_t)&bd79105_chip_info },
 	/*
 	 * The ROHM BU79100G is identical to the TI's ADS7866 from the software
 	 * point of view. The binding document mandates the ADS7866 to be
