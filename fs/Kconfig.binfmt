@@ -184,4 +184,13 @@ config EXEC_KUNIT_TEST
 	  This builds the exec KUnit tests, which tests boundary conditions
 	  of various aspects of the exec internals.
 
+config CORE_DUMP_USE_PROCESS_EFLAGS
+	bool "Preserve ELF e_flags from executable in core dumps"
+	depends on BINFMT_ELF && ELF_CORE && RISCV
+	default n
+	help
+	  Save the ELF e_flags from the process executable at load time
+	  and use it in the core dump header. This ensures the dump reflects
+	  the original binary ABI.
+
 endmenu
