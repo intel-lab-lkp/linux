@@ -39,6 +39,8 @@ struct cpuinfo_32bit {
 
 struct cpuinfo_arm64 {
 	struct kobject	kobj;
+	unsigned int cpu;
+
 	u64		reg_ctr;
 	u64		reg_cntfrq;
 	u64		reg_dczid;

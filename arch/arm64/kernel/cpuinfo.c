@@ -339,7 +339,7 @@ static struct attribute *cpuregs_id_attrs[] = {
 	NULL
 };
 
-static const struct attribute_group cpuregs_attr_group = {
+static const struct attribute_group id_cpuregs_attr_group = {
 	.attrs = cpuregs_id_attrs,
 	.name = "identification"
 };
@@ -354,11 +354,190 @@ static const struct attribute_group sme_cpuregs_attr_group = {
 	.name = "identification"
 };
 
+/*
+ * sysfs has per-file locking, but each of the extended control register fields
+ * are in their own file.  So here we just have a single shared lock for all of
+ * them -- we could have per-CPU locking, but seems overkill.
+ */
+static DEFINE_MUTEX(extended_lock);
+struct cpuectrl_op {
+	unsigned long long before;
+	unsigned long long mask;
+	unsigned long long val;
+	unsigned long long after;
+};
+
+#define CPUREGS_ECTRL_ACCESS(_name, _reg)						\
+	static void access_##_name(void *op_uncast)					\
+	{										\
+		struct cpuectrl_op *op = op_uncast;					\
+											\
+		mutex_lock(&extended_lock);						\
+											\
+		op->before = read_cpuid(_reg);						\
+		if (op->mask) {								\
+			unsigned long long new = (op->before & ~op->mask) | op->val;	\
+			write_sysreg_s(new, SYS_##_reg);				\
+			op->after = read_cpuid(_reg);					\
+		}									\
+											\
+		mutex_unlock(&extended_lock);						\
+	}
+
+CPUREGS_ECTRL_ACCESS(cpuectrl_el1, CPUECTRL_EL1)
+CPUREGS_ECTRL_ACCESS(cpuectrl2_el1, CPUECTRL2_EL1)
+
+#define CPUREGS_ECTRL_ATTR__RW(_reg, _field, _bit_hi, _bit_lo)				\
+	static ssize_t _reg##_field##_show(struct kobject *kobj,			\
+			struct kobj_attribute *attr, char *buf)				\
+	{										\
+		struct cpuinfo_arm64 *info = kobj_to_cpuinfo(kobj); 			\
+		struct cpuectrl_op op;							\
+											\
+		op.mask = 0;								\
+		smp_call_function_single(info->cpu, access_##_reg, &op, 1);		\
+		op.val = op.before & GENMASK(_bit_hi, _bit_lo);				\
+		return sprintf(buf, "0x%llx\n", op.val >> _bit_lo);			\
+	}										\
+											\
+	static ssize_t _reg##_field##_store(struct kobject *kobj,			\
+			struct kobj_attribute *attr, const char *buf,			\
+			size_t bytes)							\
+	{										\
+		struct cpuinfo_arm64 *info = kobj_to_cpuinfo(kobj); 			\
+		struct cpuectrl_op op;							\
+											\
+		if (sscanf(buf, "0x%llx", &op.val) != 1)					\
+			return -EINVAL;							\
+		op.mask = GENMASK(_bit_hi, _bit_lo);					\
+		op.val <<= _bit_lo;						\
+		if ((op.val & op.mask) != op.val)					\
+			return -EINVAL;							\
+											\
+		smp_call_function_single(info->cpu, access_##_reg, &op, 1);		\
+											\
+		if ((op.after & op.mask) != op.val)					\
+			return -ENOTSUPP;						\
+		return strlen(buf);							\
+	}										\
+											\
+	static struct kobj_attribute cpuregs_attr_##_reg##_##_field = 			\
+		__ATTR(_field, S_IWUSR | S_IRUGO, _reg##_field##_show, _reg##_field##_store)
+
+
+/*
+ * The names for these match the names in the arm Arm ARM, which is a bit
+ * terse.  It seems somewhat reasonable to leave them as-is, though, as users
+ * probably shouldn't just be poking at them unless they know what they're
+ * doing and the fancy-looking names will hopefully hint at that.
+ */
+CPUREGS_ECTRL_ATTR__RW(cpuectrl_el1, cmc_min_ways, 63, 61);
+CPUREGS_ECTRL_ATTR__RW(cpuectrl_el1, l2_inst_part, 60, 58);
+CPUREGS_ECTRL_ATTR__RW(cpuectrl_el1, l2_data_part, 57, 55);
+CPUREGS_ECTRL_ATTR__RW(cpuectrl_el1, mm_vmid_thr, 54, 54);
+CPUREGS_ECTRL_ATTR__RW(cpuectrl_el1, mm_asp_en, 53, 53);
+CPUREGS_ECTRL_ATTR__RW(cpuectrl_el1, mm_ch_dis, 52, 52);
+CPUREGS_ECTRL_ATTR__RW(cpuectrl_el1, mm_tlbpf_dis, 51, 51);
+CPUREGS_ECTRL_ATTR__RW(cpuectrl_el1, mm_hpa_l1_dis, 47, 47);
+CPUREGS_ECTRL_ATTR__RW(cpuectrl_el1, mm_hpa_dis, 46, 46);
+CPUREGS_ECTRL_ATTR__RW(cpuectrl_el1, l2_flush, 43, 43);
+CPUREGS_ECTRL_ATTR__RW(cpuectrl_el1, pft_mm, 41, 40);
+CPUREGS_ECTRL_ATTR__RW(cpuectrl_el1, pft_ls, 39, 38);
+CPUREGS_ECTRL_ATTR__RW(cpuectrl_el1, pft_if, 37, 36);
+CPUREGS_ECTRL_ATTR__RW(cpuectrl_el1, ca_uclean_evict_en, 35, 35);
+CPUREGS_ECTRL_ATTR__RW(cpuectrl_el1, ca_evict_dis, 34, 34);
+CPUREGS_ECTRL_ATTR__RW(cpuectrl_el1, atomic_ld_force_near, 33, 33);
+CPUREGS_ECTRL_ATTR__RW(cpuectrl_el1, atomic_acq_near, 32, 32);
+CPUREGS_ECTRL_ATTR__RW(cpuectrl_el1, atomic_st_near, 31, 31);
+CPUREGS_ECTRL_ATTR__RW(cpuectrl_el1, atomic_rel_near, 30, 30);
+CPUREGS_ECTRL_ATTR__RW(cpuectrl_el1, atomic_ld_near, 29, 29);
+CPUREGS_ECTRL_ATTR__RW(cpuectrl_el1, tlb_pred_dis, 28, 28);
+CPUREGS_ECTRL_ATTR__RW(cpuectrl_el1, tlb_pred_aggr, 27, 27);
+CPUREGS_ECTRL_ATTR__RW(cpuectrl_el1, tlb_cabt_en, 26, 26);
+CPUREGS_ECTRL_ATTR__RW(cpuectrl_el1, ws_thr_l2, 25, 24);
+CPUREGS_ECTRL_ATTR__RW(cpuectrl_el1, ws_thr_l3, 23, 22);
+CPUREGS_ECTRL_ATTR__RW(cpuectrl_el1, ws_thr_l4, 21, 20);
+CPUREGS_ECTRL_ATTR__RW(cpuectrl_el1, ws_thr_dram, 19, 18);
+CPUREGS_ECTRL_ATTR__RW(cpuectrl_el1, pf_dis, 15, 15);
+CPUREGS_ECTRL_ATTR__RW(cpuectrl_el1, pf_ss_l2_dis, 13, 12);
+CPUREGS_ECTRL_ATTR__RW(cpuectrl_el1, pf_sts_dis, 9, 9);
+CPUREGS_ECTRL_ATTR__RW(cpuectrl_el1, pf_sti_dis, 8, 8);
+CPUREGS_ECTRL_ATTR__RW(cpuectrl_el1, pf_mode, 7, 6);
+CPUREGS_ECTRL_ATTR__RW(cpuectrl_el1, rpf_mode, 5, 4);
+CPUREGS_ECTRL_ATTR__RW(cpuectrl_el1, rpf_lo_conf, 3, 3);
+CPUREGS_ECTRL_ATTR__RW(cpuectrl_el1, ras_raz, 1, 1);
+CPUREGS_ECTRL_ATTR__RW(cpuectrl_el1, ext_llc, 0, 0);
+CPUREGS_ECTRL_ATTR__RW(cpuectrl2_el1, txreq_min, 16, 15);
+CPUREGS_ECTRL_ATTR__RW(cpuectrl2_el1, cbusy_filter_window, 10, 9);
+CPUREGS_ECTRL_ATTR__RW(cpuectrl2_el1, cbusy_filter_threshold, 8, 7);
+CPUREGS_ECTRL_ATTR__RW(cpuectrl2_el1, txreq_limit_dec, 6, 5);
+CPUREGS_ECTRL_ATTR__RW(cpuectrl2_el1, txreq_limit_inc, 4, 3);
+CPUREGS_ECTRL_ATTR__RW(cpuectrl2_el1, txreq_limit_dynamic, 2, 2);
+CPUREGS_ECTRL_ATTR__RW(cpuectrl2_el1, txreq_max, 1, 0);
+
+static struct attribute *cpuregs_cpuectrl_attrs[] = {
+	&cpuregs_attr_cpuectrl_el1_cmc_min_ways.attr,
+	&cpuregs_attr_cpuectrl_el1_l2_inst_part.attr,
+	&cpuregs_attr_cpuectrl_el1_l2_data_part.attr,
+	&cpuregs_attr_cpuectrl_el1_mm_vmid_thr.attr,
+	&cpuregs_attr_cpuectrl_el1_mm_asp_en.attr,
+	&cpuregs_attr_cpuectrl_el1_mm_ch_dis.attr,
+	&cpuregs_attr_cpuectrl_el1_mm_tlbpf_dis.attr,
+	&cpuregs_attr_cpuectrl_el1_mm_hpa_l1_dis.attr,
+	&cpuregs_attr_cpuectrl_el1_mm_hpa_dis.attr,
+	&cpuregs_attr_cpuectrl_el1_l2_flush.attr,
+	&cpuregs_attr_cpuectrl_el1_pft_mm.attr,
+	&cpuregs_attr_cpuectrl_el1_pft_ls.attr,
+	&cpuregs_attr_cpuectrl_el1_pft_if.attr,
+	&cpuregs_attr_cpuectrl_el1_ca_uclean_evict_en.attr,
+	&cpuregs_attr_cpuectrl_el1_ca_evict_dis.attr,
+	&cpuregs_attr_cpuectrl_el1_atomic_ld_force_near.attr,
+	&cpuregs_attr_cpuectrl_el1_atomic_acq_near.attr,
+	&cpuregs_attr_cpuectrl_el1_atomic_st_near.attr,
+	&cpuregs_attr_cpuectrl_el1_atomic_rel_near.attr,
+	&cpuregs_attr_cpuectrl_el1_atomic_ld_near.attr,
+	&cpuregs_attr_cpuectrl_el1_tlb_pred_dis.attr,
+	&cpuregs_attr_cpuectrl_el1_tlb_pred_aggr.attr,
+	&cpuregs_attr_cpuectrl_el1_tlb_cabt_en.attr,
+	&cpuregs_attr_cpuectrl_el1_ws_thr_l2.attr,
+	&cpuregs_attr_cpuectrl_el1_ws_thr_l3.attr,
+	&cpuregs_attr_cpuectrl_el1_ws_thr_l4.attr,
+	&cpuregs_attr_cpuectrl_el1_ws_thr_dram.attr,
+	&cpuregs_attr_cpuectrl_el1_pf_dis.attr,
+	&cpuregs_attr_cpuectrl_el1_pf_ss_l2_dis.attr,
+	&cpuregs_attr_cpuectrl_el1_pf_sts_dis.attr,
+	&cpuregs_attr_cpuectrl_el1_pf_sti_dis.attr,
+	&cpuregs_attr_cpuectrl_el1_pf_mode.attr,
+	&cpuregs_attr_cpuectrl_el1_rpf_mode.attr,
+	&cpuregs_attr_cpuectrl_el1_rpf_lo_conf.attr,
+	&cpuregs_attr_cpuectrl_el1_ras_raz.attr,
+	&cpuregs_attr_cpuectrl_el1_ext_llc.attr,
+	&cpuregs_attr_cpuectrl2_el1_txreq_min.attr,
+	&cpuregs_attr_cpuectrl2_el1_cbusy_filter_window.attr,
+	&cpuregs_attr_cpuectrl2_el1_cbusy_filter_threshold.attr,
+	&cpuregs_attr_cpuectrl2_el1_txreq_limit_dec.attr,
+	&cpuregs_attr_cpuectrl2_el1_txreq_limit_inc.attr,
+	&cpuregs_attr_cpuectrl2_el1_txreq_limit_dynamic.attr,
+	&cpuregs_attr_cpuectrl2_el1_txreq_max.attr,
+	NULL
+};
+
+static const struct attribute_group ectrl_cpuregs_attr_group = {
+	.attrs = cpuregs_cpuectrl_attrs,
+	.name = "extended_control"
+};
+
 static int cpuid_cpu_online(unsigned int cpu)
 {
 	int rc;
 	struct device *dev;
 	struct cpuinfo_arm64 *info = &per_cpu(cpu_data, cpu);
+
+	/*
+	 * FIXME: There must be some better way to go from a per_cpu pointer to
+	 * the CPU ID...
+	 */
+	info->cpu = cpu;
 
 	dev = get_cpu_device(cpu);
 	if (!dev) {
@@ -368,11 +547,17 @@ static int cpuid_cpu_online(unsigned int cpu)
 	rc = kobject_add(&info->kobj, &dev->kobj, "regs");
 	if (rc)
 		goto out;
-	rc = sysfs_create_group(&info->kobj, &cpuregs_attr_group);
+	rc = sysfs_create_group(&info->kobj, &id_cpuregs_attr_group);
 	if (rc)
 		kobject_del(&info->kobj);
 	if (system_supports_sme())
 		rc = sysfs_merge_group(&info->kobj, &sme_cpuregs_attr_group);
+
+	rc = sysfs_create_group(&info->kobj, &ectrl_cpuregs_attr_group);
+	if (rc) {
+		sysfs_remove_group(&info->kobj, &id_cpuregs_attr_group);
+		kobject_del(&info->kobj);
+	}
 out:
 	return rc;
 }
@@ -386,7 +571,8 @@ static int cpuid_cpu_offline(unsigned int cpu)
 	if (!dev)
 		return -ENODEV;
 	if (info->kobj.parent) {
-		sysfs_remove_group(&info->kobj, &cpuregs_attr_group);
+		sysfs_remove_group(&info->kobj, &id_cpuregs_attr_group);
+		sysfs_remove_group(&info->kobj, &ectrl_cpuregs_attr_group);
 		kobject_del(&info->kobj);
 	}
 

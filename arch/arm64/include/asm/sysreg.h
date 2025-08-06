@@ -408,6 +408,9 @@
 
 #define SYS_AIDR_EL1			sys_reg(3, 1, 0, 0, 7)
 
+#define SYS_CPUECTRL_EL1		sys_reg(3, 0, 15, 1, 4)
+#define SYS_CPUECTRL2_EL1		sys_reg(3, 0, 15, 1, 5)
+
 #define SYS_RNDR_EL0			sys_reg(3, 3, 2, 4, 0)
 #define SYS_RNDRRS_EL0			sys_reg(3, 3, 2, 4, 1)
 
