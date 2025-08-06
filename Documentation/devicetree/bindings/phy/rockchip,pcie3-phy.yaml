@@ -67,6 +67,16 @@ properties:
       minimum: 0
       maximum: 1
 
+  rockchip,phy-ref-use-pad:
+    description: which PHY should use the external pad as PCIe reference clock.
+      1 means use pad (default), 0 means use internal clock (PLL_PPLL).
+    $ref: /schemas/types.yaml#/definitions/uint32-array
+    minItems: 2
+    maxItems: 2
+    items:
+      minimum: 0
+      maximum: 1
+
 required:
   - compatible
   - reg
