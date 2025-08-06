@@ -955,20 +955,15 @@ error:
 }
 ALLOW_ERROR_INJECTION(__filemap_add_folio, ERRNO);
 
-int filemap_add_folio(struct address_space *mapping, struct folio *folio,
+int filemap_add_folio_nocharge(struct address_space *mapping, struct folio *folio,
 				pgoff_t index, gfp_t gfp)
 {
 	void *shadow = NULL;
 	int ret;
 
-	ret = mem_cgroup_charge(folio, NULL, gfp);
-	if (ret)
-		return ret;
-
 	__folio_set_locked(folio);
 	ret = __filemap_add_folio(mapping, folio, index, gfp, &shadow);
 	if (unlikely(ret)) {
-		mem_cgroup_uncharge(folio);
 		__folio_clear_locked(folio);
 	} else {
 		/*
@@ -984,6 +979,22 @@ int filemap_add_folio(struct address_space *mapping, struct folio *folio,
 			workingset_refault(folio, shadow);
 		folio_add_lru(folio);
 	}
+	return ret;
+}
+EXPORT_SYMBOL_GPL(filemap_add_folio_nocharge);
+
+int filemap_add_folio(struct address_space *mapping, struct folio *folio,
+				pgoff_t index, gfp_t gfp)
+{
+	int ret;
+
+	ret = mem_cgroup_charge(folio, NULL, gfp);
+	if (ret)
+		return ret;
+
+	ret = filemap_add_folio_nocharge(mapping, folio, index, gfp);
+	if (ret)
+		mem_cgroup_uncharge(folio);
 	return ret;
 }
 EXPORT_SYMBOL_GPL(filemap_add_folio);
