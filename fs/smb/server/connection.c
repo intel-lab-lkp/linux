@@ -93,6 +93,9 @@ struct ksmbd_conn *ksmbd_conn_alloc(void)
 	down_write(&conn_list_lock);
 	list_add(&conn->conns_list, &conn_list);
 	up_write(&conn_list_lock);
+
+	ksmbd_conn_set_kcov_handle(conn, kcov_common_handle());
+
 	return conn;
 }
 
@@ -322,6 +325,8 @@ int ksmbd_conn_handler_loop(void *p)
 	if (t->ops->prepare && t->ops->prepare(t))
 		goto out;
 
+	kcov_remote_start_common(ksmbd_conn_get_kcov_handle(conn));
+
 	max_req = server_conf.max_inflight_req;
 	conn->last_active = jiffies;
 	set_freezable();
@@ -412,7 +417,7 @@ recheck:
 			break;
 		}
 	}
-
+	kcov_remote_stop();
 out:
 	ksmbd_conn_set_releasing(conn);
 	/* Wait till all reference dropped to the Server object*/
