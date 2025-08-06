@@ -59,6 +59,8 @@ static int vfio_platform_probe(struct platform_device *pdev)
 	struct vfio_platform_device *vdev;
 	int ret;
 
+	dev_err_once(&pdev->dev, "DEPRECATION: vfio-platform is deprecated and will be removed in a future kernel release\n");
+
 	vdev = vfio_alloc_device(vfio_platform_device, vdev, &pdev->dev,
 				 &vfio_platform_ops);
 	if (IS_ERR(vdev))

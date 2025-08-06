@@ -26086,7 +26086,7 @@ F:	drivers/vfio/pci/pds/
 VFIO PLATFORM DRIVER
 M:	Eric Auger <eric.auger@redhat.com>
 L:	kvm@vger.kernel.org
-S:	Maintained
+S:	Obsolete
 F:	drivers/vfio/platform/
 
 VFIO QAT PCI DRIVER
