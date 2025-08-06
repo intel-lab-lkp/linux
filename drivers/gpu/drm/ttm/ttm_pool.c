@@ -38,7 +38,7 @@
 #include <linux/highmem.h>
 #include <linux/sched/mm.h>
 
-#ifdef CONFIG_X86
+#ifdef CONFIG_X86_32
 #include <asm/set_memory.h>
 #endif
 
@@ -46,6 +46,7 @@
 #include <drm/ttm/ttm_pool.h>
 #include <drm/ttm/ttm_tt.h>
 #include <drm/ttm/ttm_bo.h>
+#include <drm/drm_cache.h>
 
 #include "ttm_module.h"
 
@@ -192,7 +193,7 @@ static void ttm_pool_free_page(struct ttm_pool *pool, enum ttm_caching caching,
 	struct ttm_pool_dma *dma;
 	void *vaddr;
 
-#ifdef CONFIG_X86
+#ifdef CONFIG_X86_32
 	/* We don't care that set_pages_wb is inefficient here. This is only
 	 * used when we have to shrink and CPU overhead is irrelevant then.
 	 */
@@ -218,7 +219,7 @@ static void ttm_pool_free_page(struct ttm_pool *pool, enum ttm_caching caching,
 /* Apply any cpu-caching deferred during page allocation */
 static int ttm_pool_apply_caching(struct ttm_pool_alloc_state *alloc)
 {
-#ifdef CONFIG_X86
+#ifdef CONFIG_X86_32
 	unsigned int num_pages = alloc->pages - alloc->caching_divide;
 
 	if (!num_pages)
@@ -232,6 +233,11 @@ static int ttm_pool_apply_caching(struct ttm_pool_alloc_state *alloc)
 	case ttm_uncached:
 		return set_pages_array_uc(alloc->caching_divide, num_pages);
 	}
+
+#elif defined(CONFIG_X86_64)
+	unsigned int num_pages = alloc->pages - alloc->caching_divide;
+
+	drm_clflush_pages(alloc->caching_divide, num_pages);
 #endif
 	alloc->caching_divide = alloc->pages;
 	return 0;
@@ -342,7 +348,7 @@ static struct ttm_pool_type *ttm_pool_select_type(struct ttm_pool *pool,
 	if (pool->use_dma_alloc)
 		return &pool->caching[caching].orders[order];
 
-#ifdef CONFIG_X86
+#ifdef CONFIG_X86_32
 	switch (caching) {
 	case ttm_write_combined:
 		if (pool->nid != NUMA_NO_NODE)
@@ -980,7 +986,7 @@ long ttm_pool_backup(struct ttm_pool *pool, struct ttm_tt *tt,
 	    pool->use_dma_alloc || ttm_tt_is_backed_up(tt))
 		return -EBUSY;
 
-#ifdef CONFIG_X86
+#ifdef CONFIG_X86_32
 	/* Anything returned to the system needs to be cached. */
 	if (tt->caching != ttm_cached)
 		set_pages_array_wb(tt->pages, tt->num_pages);
