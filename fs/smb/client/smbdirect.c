@@ -286,8 +286,8 @@ static void send_done(struct ib_cq *cq, struct ib_wc *wc)
 	if (wc->status != IB_WC_SUCCESS || wc->opcode != IB_WC_SEND) {
 		log_rdma_send(ERR, "wc->status=%d wc->opcode=%d\n",
 			wc->status, wc->opcode);
-		mempool_free(request, request->info->request_mempool);
 		smbd_disconnect_rdma_connection(request->info);
+		mempool_free(request, request->info->request_mempool);
 		return;
 	}
 
