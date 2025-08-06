@@ -23,11 +23,20 @@
 
 typedef struct task_struct *monitor_target;
 
+#elif LTL_MONITOR_TYPE == RV_MON_PER_CPU
+
+#define TARGET_PRINT_FORMAT "%u"
+#define TARGET_PRINT_ARGS(cpu) cpu
+
+typedef unsigned int monitor_target;
+
 #endif
 
 #ifdef CONFIG_RV_REACTORS
 #define RV_MONITOR_NAME CONCATENATE(rv_, MONITOR_NAME)
 static struct rv_monitor RV_MONITOR_NAME;
+
+static struct ltl_monitor *ltl_get_monitor(monitor_target target);
 
 static void rv_cond_react(monitor_target target)
 {
@@ -53,6 +62,13 @@ static int ltl_monitor_slot = RV_PER_TASK_MONITOR_INIT;
 static struct ltl_monitor *ltl_get_monitor(monitor_target target)
 {
 	return &target->rv[ltl_monitor_slot].ltl_mon;
+}
+#elif LTL_MONITOR_TYPE == RV_MON_PER_CPU
+static struct ltl_monitor *ltl_get_monitor(unsigned int cpu)
+{
+	static DEFINE_PER_CPU(struct ltl_monitor, ltl_monitor);
+
+	return per_cpu_ptr(&ltl_monitor, cpu);
 }
 #endif
 
@@ -108,6 +124,22 @@ static void ltl_monitor_destroy(void)
 	rv_put_task_monitor_slot(ltl_monitor_slot);
 	ltl_monitor_slot = RV_PER_TASK_MONITOR_INIT;
 }
+
+#elif LTL_MONITOR_TYPE == RV_MON_PER_CPU
+
+static int ltl_monitor_init(void)
+{
+	unsigned int cpu;
+
+	for_each_possible_cpu(cpu)
+		ltl_target_init(cpu, false);
+	return 0;
+}
+
+static void ltl_monitor_destroy(void)
+{
+}
+
 #endif
 
 static void ltl_illegal_state(monitor_target target, struct ltl_monitor *mon)
