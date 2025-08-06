@@ -3026,9 +3026,6 @@ static ssize_t __fuse_copy_file_range(struct file *file_in, loff_t pos_in,
 	if (fc->no_copy_file_range)
 		return -EOPNOTSUPP;
 
-	if (file_inode(file_in)->i_sb != file_inode(file_out)->i_sb)
-		return -EXDEV;
-
 	inode_lock(inode_in);
 	err = fuse_writeback_range(inode_in, pos_in, pos_in + len - 1);
 	inode_unlock(inode_in);
@@ -3108,9 +3105,12 @@ static ssize_t fuse_copy_file_range(struct file *src_file, loff_t src_off,
 {
 	ssize_t ret;
 
+	if (file_inode(src_file)->i_sb != file_inode(dst_file)->i_sb)
+		return splice_copy_file_range(src_file, src_off, dst_file,
+					     dst_off, len);
+
 	ret = __fuse_copy_file_range(src_file, src_off, dst_file, dst_off,
 				     len, flags);
-
 	if (ret == -EOPNOTSUPP || ret == -EXDEV)
 		ret = splice_copy_file_range(src_file, src_off, dst_file,
 					     dst_off, len);
