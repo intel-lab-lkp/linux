@@ -464,8 +464,6 @@ int kvm_arch_vcpu_create(struct kvm_vcpu *vcpu)
 	/* Set up the timer */
 	kvm_timer_vcpu_init(vcpu);
 
-	kvm_pmu_vcpu_init(vcpu);
-
 	kvm_arm_pvtime_vcpu_init(&vcpu->arch);
 
 	vcpu->arch.hw_mmu = &vcpu->kvm->arch.mmu;
@@ -615,6 +613,7 @@ nommu:
 	if (has_vhe())
 		kvm_vcpu_load_vhe(vcpu);
 	kvm_arch_vcpu_load_fp(vcpu);
+	kvm_pmu_vcpu_load(vcpu);
 	kvm_vcpu_pmu_restore_guest(vcpu);
 	if (kvm_arm_is_pvtime_enabled(&vcpu->arch))
 		kvm_make_request(KVM_REQ_RECORD_STEAL, vcpu);
@@ -1498,7 +1497,7 @@ static int kvm_setup_vcpu(struct kvm_vcpu *vcpu)
 	 * When the vCPU has a PMU, but no PMU is set for the guest
 	 * yet, set the default one.
 	 */
-	if (kvm_vcpu_has_pmu(vcpu) && !kvm->arch.arm_pmu)
+	if (kvm_vcpu_has_pmu(vcpu) && !kvm->arch.arm_pmu && !kvm->arch.nr_composed_host_pmus)
 		ret = kvm_arm_set_default_pmu(kvm);
 
 	/* Prepare for nested if required */

@@ -979,7 +979,7 @@ static int set_pmu_evcntr(struct kvm_vcpu *vcpu, const struct sys_reg_desc *r,
 		/* PMEVCNTRn_EL0 */
 		idx = ((r->CRm & 3) << 3) | (r->Op2 & 7);
 
-	kvm_pmu_set_counter_value_user(vcpu, idx, val);
+	kvm_pmu_set_counter_value(vcpu, idx, val);
 	return 0;
 }
 

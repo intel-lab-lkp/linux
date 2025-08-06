@@ -161,6 +161,36 @@ explicitly selected, or the number of counters is out of range for the
 selected PMU. Selecting a new PMU cancels the effect of setting this
 attribute.
 
+1.6 ATTRIBUTE: KVM_ARM_VCPU_PMU_V3_COMPOSITION
+----------------------------------------------
+
+:Parameters: no additional parameter in kvm_device_attr.addr
+
+:Returns:
+
+	 =======  =====================================================
+	 -EBUSY   Attempted to set after initializing PMUv3 or running
+		  VCPU, or attempted to set for the first time after
+		  setting an event filter
+	 -ENXIO   PMUv3 composition not supported or attempted to get
+		  before setting
+	 -ENODEV  Attempted to set while PMUv3 not supported
+	 =======  =========================================================
+
+If set, PMUv3 will be emulated by composing all the physical PMUs. This
+attribute is particularly useful on heterogeneous systems where there are at
+least two CPU PMUs on the system. The composite PMU will work on any physical
+CPUs but it only exposes one cycle counter. All VCPUs in a VM share this
+attribute. It isn't possible to set it for the first time if a PMU event filter
+is already present.
+
+Note that KVM will not make any attempts to run the VCPU on the physical CPUs
+with PMUs. This is entirely left to userspace. However, attempting to run the
+VCPU on a physical CPU without a PMU will fail and KVM_RUN will return with
+exit_reason = KVM_EXIT_FAIL_ENTRY and populate the fail_entry struct by setting
+hardare_entry_failure_reason field to KVM_EXIT_FAIL_ENTRY_CPU_UNSUPPORTED and
+the cpu field to the processor id.
+
 2. GROUP: KVM_ARM_VCPU_TIMER_CTRL
 =================================
 

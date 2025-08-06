@@ -366,6 +366,8 @@ struct kvm_arch {
 
 	cpumask_var_t supported_cpus;
 
+	unsigned int nr_composed_host_pmus;
+
 	/* Maximum number of counters for the guest */
 	u8 nr_pmu_counters;
 
