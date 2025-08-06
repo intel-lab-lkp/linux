@@ -12,9 +12,142 @@
 #include <linux/of.h>
 #include <linux/of_irq.h>
 #include <linux/platform_device.h>
+#include <linux/pm_domain.h>
+#include <linux/pm_runtime.h>
 #include <linux/printk.h>
+#include <linux/syscore_ops.h>
 
 #include "irq-riscv-aplic-main.h"
+
+static LIST_HEAD(aplics);
+
+static void aplic_restore(struct aplic_priv *priv)
+{
+	int i;
+	u32 clrip;
+
+	writel(priv->saved_domaincfg, priv->regs + APLIC_DOMAINCFG);
+#ifdef CONFIG_RISCV_M_MODE
+	writel(priv->saved_msiaddr, priv->regs + APLIC_xMSICFGADDR);
+	writel(priv->saved_msiaddrh, priv->regs + APLIC_xMSICFGADDRH);
+#endif
+	for (i = 1; i <= priv->nr_irqs; i++) {
+		writel(priv->saved_sourcecfg[i - 1],
+		       priv->regs + APLIC_SOURCECFG_BASE +
+		       (i - 1) * sizeof(u32));
+		writel(priv->saved_target[i - 1],
+		       priv->regs + APLIC_TARGET_BASE +
+		       (i - 1) * sizeof(u32));
+	}
+
+	for (i = 0; i <= priv->nr_irqs; i += 32) {
+		writel(-1U, priv->regs + APLIC_CLRIE_BASE +
+			    (i / 32) * sizeof(u32));
+		writel(priv->saved_ie[i / 32],
+		       priv->regs + APLIC_SETIE_BASE +
+		       (i / 32) * sizeof(u32));
+	}
+
+	if (priv->nr_idcs) {
+		aplic_direct_restore(priv);
+	} else {
+		/* Re-trigger the interrupts */
+		for (i = 0; i <= priv->nr_irqs; i += 32) {
+			clrip = readl(priv->regs + APLIC_CLRIP_BASE +
+				      (i / 32) * sizeof(u32));
+			writel(clrip, priv->regs + APLIC_SETIP_BASE +
+				      (i / 32) * sizeof(u32));
+		}
+	}
+}
+
+static void aplic_save(struct aplic_priv *priv)
+{
+	int i;
+
+	for (i = 1; i <= priv->nr_irqs; i++) {
+		priv->saved_target[i - 1] = readl(priv->regs +
+						  APLIC_TARGET_BASE +
+						  (i - 1) * sizeof(u32));
+	}
+
+	for (i = 0; i <= priv->nr_irqs; i += 32) {
+		priv->saved_ie[i / 32] = readl(priv->regs +
+					       APLIC_SETIE_BASE +
+					       (i / 32) * sizeof(u32));
+	}
+}
+
+static int aplic_syscore_suspend(void)
+{
+	struct aplic_priv *priv;
+
+	list_for_each_entry(priv, &aplics, head) {
+		aplic_save(priv);
+	}
+
+	return 0;
+}
+
+static void aplic_syscore_resume(void)
+{
+	struct aplic_priv *priv;
+
+	list_for_each_entry(priv, &aplics, head) {
+		aplic_restore(priv);
+	}
+}
+
+static struct syscore_ops aplic_syscore_ops = {
+	.suspend = aplic_syscore_suspend,
+	.resume = aplic_syscore_resume,
+};
+
+static int aplic_pm_notifier(struct notifier_block *nb, unsigned long action, void *data)
+{
+	struct aplic_priv *priv = container_of(nb, struct aplic_priv, genpd_nb);
+
+	switch (action) {
+	case GENPD_NOTIFY_PRE_OFF:
+		aplic_save(priv);
+		break;
+	case GENPD_NOTIFY_ON:
+		aplic_restore(priv);
+		break;
+	default:
+		break;
+	}
+
+	return 0;
+}
+
+static void aplic_remove(void *data)
+{
+	struct aplic_priv *priv = data;
+
+	list_del(&priv->head);
+	dev_pm_genpd_remove_notifier(priv->dev);
+}
+
+static int aplic_add(struct device *dev, struct aplic_priv *priv)
+{
+	int ret;
+
+	list_add(&priv->head, &aplics);
+	/* Add genpd notifier */
+	priv->genpd_nb.notifier_call = aplic_pm_notifier;
+	ret = dev_pm_genpd_add_notifier(dev, &priv->genpd_nb);
+	if (ret && ret != -ENODEV && ret != -EOPNOTSUPP) {
+		list_del(&priv->head);
+		return ret;
+	}
+
+	ret = devm_add_action_or_reset(dev, aplic_remove, priv);
+	if (ret)
+		return ret;
+
+	return devm_pm_runtime_enable(dev);
+}
 
 void aplic_irq_unmask(struct irq_data *d)
 {
@@ -59,6 +192,7 @@ int aplic_irq_set_type(struct irq_data *d, unsigned int type)
 	sourcecfg = priv->regs + APLIC_SOURCECFG_BASE;
 	sourcecfg += (d->hwirq - 1) * sizeof(u32);
 	writel(val, sourcecfg);
+	priv->saved_sourcecfg[d->hwirq - 1] = val;
 
 	return 0;
 }
@@ -95,6 +229,8 @@ void aplic_init_hw_global(struct aplic_priv *priv, bool msi_mode)
 		valh |= FIELD_PREP(APLIC_xMSICFGADDRH_HHXS, priv->msicfg.hhxs);
 		writel(val, priv->regs + APLIC_xMSICFGADDR);
 		writel(valh, priv->regs + APLIC_xMSICFGADDRH);
+		priv->saved_msiaddr = val;
+		priv->saved_msiaddrh = valh;
 	}
 #endif
 
@@ -106,6 +242,7 @@ void aplic_init_hw_global(struct aplic_priv *priv, bool msi_mode)
 	writel(val, priv->regs + APLIC_DOMAINCFG);
 	if (readl(priv->regs + APLIC_DOMAINCFG) != val)
 		dev_warn(priv->dev, "unable to write 0x%x in domaincfg\n", val);
+	priv->saved_domaincfg = val;
 }
 
 static void aplic_init_hw_irqs(struct aplic_priv *priv)
@@ -176,7 +313,24 @@ int aplic_setup_priv(struct aplic_priv *priv, struct device *dev, void __iomem *
 	/* Setup initial state APLIC interrupts */
 	aplic_init_hw_irqs(priv);
 
-	return 0;
+	/* For power management */
+	priv->saved_target = devm_kzalloc(dev, priv->nr_irqs * sizeof(u32),
+					  GFP_KERNEL);
+	if (!priv->saved_target)
+		return -ENOMEM;
+
+	priv->saved_sourcecfg = devm_kzalloc(dev, priv->nr_irqs * sizeof(u32),
+					     GFP_KERNEL);
+	if (!priv->saved_sourcecfg)
+		return -ENOMEM;
+
+	priv->saved_ie = devm_kzalloc(dev,
+				      DIV_ROUND_UP(priv->nr_irqs, 32) * sizeof(u32),
+				      GFP_KERNEL);
+	if (!priv->saved_ie)
+		return -ENOMEM;
+
+	return aplic_add(dev, priv);
 }
 
 static int aplic_probe(struct platform_device *pdev)
@@ -209,6 +363,8 @@ static int aplic_probe(struct platform_device *pdev)
 	if (rc)
 		dev_err_probe(dev, rc, "failed to setup APLIC in %s mode\n",
 			      msi_mode ? "MSI" : "direct");
+	else
+		register_syscore_ops(&aplic_syscore_ops);
 
 #ifdef CONFIG_ACPI
 	if (!acpi_disabled)
