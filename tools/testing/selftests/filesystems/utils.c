@@ -34,7 +34,7 @@
 
 #define syserror_set(__ret__, format, ...)                    \
 	({                                                    \
-		typeof(__ret__) __internal_ret__ = (__ret__); \
+		__auto_type __internal_ret__ = (__ret__);       \
 		errno = labs(__ret__);                        \
 		fprintf(stderr, "%m - " format "\n", ##__VA_ARGS__);       \
 		__internal_ret__;                             \
