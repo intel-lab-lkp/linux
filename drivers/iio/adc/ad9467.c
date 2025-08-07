@@ -945,7 +945,7 @@ static int ad9467_reset(struct device *dev)
 
 	gpio = devm_gpiod_get_optional(dev, "reset", GPIOD_OUT_HIGH);
 	if (IS_ERR_OR_NULL(gpio))
-		return PTR_ERR_OR_ZERO(gpio);
+		return gpio ? PTR_ERR(gpio) : -ENODEV;
 
 	fsleep(1);
 	gpiod_set_value_cansleep(gpio, 0);
