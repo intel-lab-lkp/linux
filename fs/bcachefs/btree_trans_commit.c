@@ -340,7 +340,7 @@ static inline void btree_insert_entry_checks(struct btree_trans *trans,
 	BUG_ON(i->cached	!= path->cached);
 	BUG_ON(i->cached &&
 	       !i->key_cache_already_flushed  &&
-	       bkey_deleted(&i->k->k));;
+	       bkey_deleted(&i->k->k));
 	BUG_ON(i->level		!= path->level);
 	BUG_ON(i->btree_id	!= path->btree_id);
 	BUG_ON(i->bkey_type	!= __btree_node_type(path->level, path->btree_id));
