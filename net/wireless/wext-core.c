@@ -1075,7 +1075,7 @@ int wext_handle_ioctl(struct net *net, unsigned int cmd, void __user *arg)
 	ret = wext_ioctl_dispatch(net, &iwr, cmd, &info,
 				  ioctl_standard_call,
 				  ioctl_private_call);
-	if (ret >= 0 &&
+	if ((ret >= 0 || ret == -E2BIG) &&
 	    IW_IS_GET(cmd) &&
 	    copy_to_user(arg, &iwr, sizeof(struct iwreq)))
 		return -EFAULT;
@@ -1138,7 +1138,7 @@ int compat_wext_handle_ioctl(struct net *net, unsigned int cmd,
 				  compat_standard_call,
 				  compat_private_call);
 
-	if (ret >= 0 &&
+	if ((ret >= 0 || ret == -E2BIG) &&
 	    IW_IS_GET(cmd) &&
 	    copy_to_user(argp, &iwr, sizeof(struct iwreq)))
 		return -EFAULT;
