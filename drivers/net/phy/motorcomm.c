@@ -536,7 +536,7 @@ static void ytphy_get_wol(struct phy_device *phydev,
 static int ytphy_set_wol(struct phy_device *phydev, struct ethtool_wolinfo *wol)
 {
 	struct net_device *p_attached_dev;
-	const u16 mac_addr_reg[] = {
+	static const u16 mac_addr_reg[] = {
 		YTPHY_WOL_MACADDR2_REG,
 		YTPHY_WOL_MACADDR1_REG,
 		YTPHY_WOL_MACADDR0_REG,
@@ -608,7 +608,7 @@ err_restore_page:
 static int yt8531_set_wol(struct phy_device *phydev,
 			  struct ethtool_wolinfo *wol)
 {
-	const u16 mac_addr_reg[] = {
+	static const u16 mac_addr_reg[] = {
 		YTPHY_WOL_MACADDR2_REG,
 		YTPHY_WOL_MACADDR1_REG,
 		YTPHY_WOL_MACADDR0_REG,
