@@ -111,8 +111,10 @@ static int try_to_freeze_tasks(bool user_only)
 		if (!wakeup || pm_debug_messages_on) {
 			read_lock(&tasklist_lock);
 			for_each_process_thread(g, p) {
-				if (p != current && freezing(p) && !frozen(p))
+				if (p != current && freezing(p) && !frozen(p)) {
+					freeze_set_default_priority(p, FREEZE_PRIORITY_HIGH);
 					sched_show_task(p);
+				}
 			}
 			read_unlock(&tasklist_lock);
 		}
