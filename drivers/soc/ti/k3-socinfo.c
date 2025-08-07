@@ -15,6 +15,9 @@
 #include <linux/sys_soc.h>
 
 #define CTRLMMR_WKUP_JTAGID_REG		0
+#define CTRLMMR_WKUP_GP_SW1_OFFSET		544
+#define GP_SW1_MOD_OPR				16
+
 /*
  * Bits:
  *  31-28 VARIANT	Device variant
@@ -66,6 +69,10 @@ static const char * const j721e_rev_string_map[] = {
 	"1.0", "1.1", "2.0",
 };
 
+static const char * const am62p_gpsw_rev_string_map[] = {
+	"1.0", "1.1", "1.2",
+};
+
 static int
 k3_chipinfo_partno_to_names(unsigned int partno,
 			    struct soc_device_attribute *soc_dev_attr)
@@ -83,7 +90,7 @@ k3_chipinfo_partno_to_names(unsigned int partno,
 
 static int
 k3_chipinfo_variant_to_sr(unsigned int partno, unsigned int variant,
-			  struct soc_device_attribute *soc_dev_attr)
+			  struct soc_device_attribute *soc_dev_attr, u32 gp_sw1)
 {
 	switch (partno) {
 	case JTAG_ID_PARTNO_J721E:
@@ -91,6 +98,14 @@ k3_chipinfo_variant_to_sr(unsigned int partno, unsigned int variant,
 			goto err_unknown_variant;
 		soc_dev_attr->revision = kasprintf(GFP_KERNEL, "SR%s",
 						   j721e_rev_string_map[variant]);
+		break;
+	case JTAG_ID_PARTNO_AM62PX:
+		/* Always parse AM62P variant from GP_SW1 */
+		variant = gp_sw1 % GP_SW1_MOD_OPR;
+		if (variant >= ARRAY_SIZE(am62p_gpsw_rev_string_map))
+			goto err_unknown_variant;
+		soc_dev_attr->revision = kasprintf(GFP_KERNEL, "SR%s",
+						   am62p_gpsw_rev_string_map[variant]);
 		break;
 	default:
 		variant++;
@@ -121,6 +136,7 @@ static int k3_chipinfo_probe(struct platform_device *pdev)
 	struct soc_device *soc_dev;
 	struct regmap *regmap;
 	void __iomem *base;
+	u32 gp_sw1_val = 0;
 	u32 partno_id;
 	u32 variant;
 	u32 jtag_id;
@@ -163,7 +179,14 @@ static int k3_chipinfo_probe(struct platform_device *pdev)
 		goto err;
 	}
 
-	ret = k3_chipinfo_variant_to_sr(partno_id, variant, soc_dev_attr);
+	if (partno_id == JTAG_ID_PARTNO_AM62PX) {
+		ret = regmap_read(regmap, CTRLMMR_WKUP_JTAGID_REG +
+				  CTRLMMR_WKUP_GP_SW1_OFFSET, &gp_sw1_val);
+		if (ret < 0)
+			goto err;
+	}
+
+	ret = k3_chipinfo_variant_to_sr(partno_id, variant, soc_dev_attr, gp_sw1_val);
 	if (ret) {
 		dev_err(dev, "Unknown SoC SR[0x%08X]: %d\n", jtag_id, ret);
 		goto err;
