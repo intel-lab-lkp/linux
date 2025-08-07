@@ -29,6 +29,7 @@
 #include "extent-io-tree.h"
 #include "async-thread.h"
 #include "block-rsv.h"
+#include "messages.h"
 
 struct inode;
 struct super_block;
@@ -58,6 +59,8 @@ struct btrfs_space_info;
 #else
 #define BTRFS_MIN_BLOCKSIZE	(SZ_4K)
 #endif
+
+#define BTRFS_MAX_BLOCKSIZE	(SZ_64K)
 
 #define BTRFS_MAX_EXTENT_SIZE SZ_128M
 
@@ -899,6 +902,32 @@ struct btrfs_fs_info {
 
 #define inode_to_fs_info(_inode) (BTRFS_I(_Generic((_inode),			\
 					   struct inode *: (_inode)))->root->fs_info)
+
+/*
+ * We support the following block size for all systems:
+ * - 4K
+ *   This is the most common block size. For PAGE SIZE > 4K cases, btrfs
+ *   goes subpage routine to support it.
+ *
+ * - PAGE_SIZE
+ *   The easily block size to support.
+ *
+ * And extra support for the following block sizes based on the kernel config:
+ *
+ * - MIN_BLOCKSIZE
+ *   This is either 4K (regular builds) or 2K (debug builds)
+ *   This allows testing subpage routines on x86_64.
+ */
+static inline bool btrfs_blocksize_supported(u32 blocksize)
+{
+	/* @blocksize should be validated first. */
+	ASSERT(is_power_of_2(blocksize) && blocksize >= BTRFS_MIN_BLOCKSIZE &&
+	       blocksize <= BTRFS_MAX_BLOCKSIZE);
+
+	if (blocksize == PAGE_SIZE || blocksize == SZ_4K || blocksize == BTRFS_MIN_BLOCKSIZE)
+		return true;
+	return false;
+}
 
 static inline gfp_t btrfs_alloc_write_mask(struct address_space *mapping)
 {
