@@ -2425,6 +2425,7 @@ __latent_entropy struct task_struct *copy_process(
 
 	copy_oom_score_adj(clone_flags, p);
 
+	freeze_set_default_priority(p, FREEZE_PRIORITY_NORMAL);
 	return p;
 
 bad_fork_core_free:
