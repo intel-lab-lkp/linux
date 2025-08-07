@@ -317,6 +317,9 @@ int intel_crtc_init(struct intel_display *display, enum pipe pipe)
 	crtc->pipe = pipe;
 	crtc->num_scalers = DISPLAY_RUNTIME_INFO(display)->num_scalers[pipe];
 
+	if (drm_WARN_ON(display->drm, crtc->num_scalers > SKL_NUM_SCALERS))
+		crtc->num_scalers = SKL_NUM_SCALERS;
+
 	if (DISPLAY_VER(display) >= 9)
 		primary = skl_universal_plane_create(display, pipe, PLANE_1);
 	else
