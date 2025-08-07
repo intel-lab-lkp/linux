@@ -46,6 +46,18 @@ static inline bool freezing(struct task_struct *p)
 	return false;
 }
 
+static inline bool freeze_set_default_priority(struct task_struct *p, unsigned int prio)
+{
+	if ((p->flags & PF_KTHREAD) || prio > FREEZE_PRIORITY_NEVER)
+		return false;
+
+	p->freeze_priority = prio;
+
+	pr_debug("set default freeze priority for comm:%s pid:%d prio:%d\n",
+		 p->comm, p->pid, p->freeze_priority);
+	return true;
+}
+
 /* Takes and releases task alloc lock using task_lock() */
 extern void __thaw_task(struct task_struct *t);
 
@@ -80,6 +92,7 @@ static inline bool cgroup_freezing(struct task_struct *task)
 #else /* !CONFIG_FREEZER */
 static inline bool frozen(struct task_struct *p) { return false; }
 static inline bool freezing(struct task_struct *p) { return false; }
+static inline bool freeze_set_default_priority(struct task_struct *p, unsigned int prio) {}
 static inline void __thaw_task(struct task_struct *t) {}
 
 static inline bool __refrigerator(bool check_kthr_stop) { return false; }
