@@ -435,7 +435,7 @@
 		};
 
 		mfc: codec@13400000 {
-			compatible = "samsung,mfc-v5";
+			compatible = "samsung,exynos4-mfc";
 			reg = <0x13400000 0x10000>;
 			interrupts = <GIC_SPI 94 IRQ_TYPE_LEVEL_HIGH>;
 			power-domains = <&pd_mfc>;
