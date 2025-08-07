@@ -20,15 +20,15 @@ properties:
       - enum:
           - samsung,exynos5433-mfc        # Exynos5433
           - samsung,mfc-v5                # Exynos4
-          - samsung,mfc-v6                # Exynos5
-          - samsung,mfc-v7                # Exynos5420
-          - samsung,mfc-v8                # Exynos5800
-          - samsung,mfc-v10               # Exynos7880
+          - samsung,exynos5250-mfc        # Exynos5
+          - samsung,exynos5420-mfc        # Exynos5420
+          - samsung,exynos5800-mfc        # Exynos5800
+          - samsung,exynos7880-mfc        # Exynos7880
           - tesla,fsd-mfc                 # Tesla FSD
       - items:
           - enum:
               - samsung,exynos3250-mfc    # Exynos3250
-          - const: samsung,mfc-v7         # Fall back for Exynos3250
+          - const: samsung,exynos5420-mfc # Fall back for Exynos3250
 
   reg:
     maxItems: 1
@@ -133,8 +133,8 @@ allOf:
         compatible:
           contains:
             enum:
-              - samsung,mfc-v6
-              - samsung,mfc-v8
+              - samsung,exynos5250-mfc
+              - samsung,exynos5800-mfc
     then:
       properties:
         clocks:
@@ -152,7 +152,7 @@ allOf:
         compatible:
           contains:
             enum:
-              - samsung,mfc-v7
+              - samsung,exynos5420-mfc
     then:
       properties:
         clocks:
