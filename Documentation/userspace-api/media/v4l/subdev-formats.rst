@@ -3890,6 +3890,14 @@ affect the pattern is conveyed via the :ref:`V4L2_CID_CFA_PATTERN_FLIP
       - 12
     * - MEDIA_BUS_FMT_RAW_14
       - 14
+    * - MEDIA_BUS_FMT_RAW_16
+      - 16
+    * - MEDIA_BUS_FMT_RAW_20
+      - 20
+    * - MEDIA_BUS_FMT_RAW_24
+      - 24
+    * - MEDIA_BUS_FMT_RAW_28
+      - 28
 
 Packed YUV Formats
 ^^^^^^^^^^^^^^^^^^
