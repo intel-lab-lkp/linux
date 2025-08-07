@@ -128,3 +128,15 @@ config BTRFS_FS_REF_VERIFY
 	  reference problems or verifying they didn't break something.
 
 	  If unsure, say N.
+
+config BTRFS_FS_REF_TRACKER
+	bool "Btrfs with the reference tracking compiled in"
+	depends on BTRFS_FS && STACKTRACE_SUPPORT
+	select REF_TRACKER
+	default n
+	help
+	  Enable run-time reference tracking. This is meant to be used by
+	  btrfs developers for tracking down reference leaks or verifying
+	  they didn't break something.
+
+	  If unsure, say N.
