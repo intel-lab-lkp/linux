@@ -39,6 +39,7 @@
 #include <arpa/inet.h>
 #include <stdint.h>
 #include <string.h>
+#undef NDEBUG
 #include <assert.h>
 #include <net/if.h>
 #include <inttypes.h>
