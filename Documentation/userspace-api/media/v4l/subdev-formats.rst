@@ -3865,6 +3865,9 @@ Bayer and other Colour Filter Arrays (CFAs) on serial interfaces. The packing of
 the data on the bus is determined by the hardware, however the bit depth is
 still specific to the format.
 
+The native Colour Filter Array (CFA) pattern is determined by the
+:ref:`V4L2_CID_CFA_PATTERN <image-source-control-cfa-pattern>` control.
+
 .. tabularcolumns:: |p{2.0cm}|p{4.0cm}|p{11.3cm}|
 
 .. cssclass:: longtable
