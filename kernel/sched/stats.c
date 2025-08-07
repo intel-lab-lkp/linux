@@ -181,10 +181,7 @@ static void *schedstat_start(struct seq_file *file, loff_t *offset)
 
 	n--;
 
-	if (n > 0)
-		n = cpumask_next(n - 1, cpu_online_mask);
-	else
-		n = cpumask_first(cpu_online_mask);
+	n = cpumask_next(n - 1, cpu_online_mask);
 
 	*offset = n + 1;
 
