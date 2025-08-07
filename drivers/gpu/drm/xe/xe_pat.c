@@ -154,6 +154,16 @@ static const struct xe_pat_table_entry xe2_pat_table[] = {
 static const struct xe_pat_table_entry xe2_pat_ats = XE2_PAT( 0, 0, 0, 0, 3, 3 );
 static const struct xe_pat_table_entry xe2_pat_pta = XE2_PAT( 0, 0, 0, 0, 3, 0 );
 
+bool xe_pat_index_get_comp_mode(struct xe_device *xe, u16 pat_index)
+{
+	WARN_ON(pat_index >= xe->pat.n_entries);
+
+	if (xe->pat.table != xe2_pat_table)
+		return false;
+
+	return xe->pat.table[pat_index].value & XE2_COMP_EN;
+}
+
 u16 xe_pat_index_get_coh_mode(struct xe_device *xe, u16 pat_index)
 {
 	WARN_ON(pat_index >= xe->pat.n_entries);

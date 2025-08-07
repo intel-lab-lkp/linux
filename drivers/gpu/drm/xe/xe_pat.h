@@ -58,4 +58,14 @@ void xe_pat_dump(struct xe_gt *gt, struct drm_printer *p);
  */
 u16 xe_pat_index_get_coh_mode(struct xe_device *xe, u16 pat_index);
 
+/**
+ * xe_pat_index_get_comp_mode() = Extract the compression mode for the given
+ * pat_index.
+ * @xe: xe device
+ * @pat_index: The pat_index to query
+ *
+ * Return: True if pat_index is compressed, False otherwise
+ */
+bool xe_pat_index_get_comp_mode(struct xe_device *xe, u16 pat_index);
+
 #endif
