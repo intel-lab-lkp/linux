@@ -1419,7 +1419,9 @@ static void commit_checkpoint(struct f2fs_sb_info *sbi,
 	f2fs_folio_put(folio, false);
 
 	/* submit checkpoint (with barrier if NOBARRIER is not set) */
-	f2fs_submit_merged_write(sbi, META_FLUSH);
+	f2fs_submit_merged_write(sbi,
+		sbi->flush_policy & BIT(FLUSH_POLICY_CP_NO_FUA) ?
+		META : META_FLUSH);
 }
 
 static inline u64 get_sectors_written(struct block_device *bdev)
@@ -1593,6 +1595,13 @@ static int do_checkpoint(struct f2fs_sb_info *sbi, struct cp_control *cpc)
 	spin_unlock(&sbi->stat_lock);
 
 	__set_cp_next_pack(sbi);
+
+	/* flush device cache to make sure last cp pack can be persisted */
+	if (sbi->flush_policy & BIT(FLUSH_POLICY_CP_NO_FUA)) {
+		err = f2fs_submit_flush_wait(sbi, sbi->sb->s_bdev);
+		if (err)
+			return err;
+	}
 
 	/*
 	 * redirty superblock if metadata like node page or inode cache is

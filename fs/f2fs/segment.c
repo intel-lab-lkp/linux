@@ -544,7 +544,7 @@ do_sync:
 	f2fs_sync_fs(sbi->sb, 1);
 }
 
-static int __submit_flush_wait(struct f2fs_sb_info *sbi,
+int f2fs_submit_flush_wait(struct f2fs_sb_info *sbi,
 				struct block_device *bdev)
 {
 	int ret = blkdev_issue_flush(bdev);
@@ -562,12 +562,12 @@ static int submit_flush_wait(struct f2fs_sb_info *sbi, nid_t ino)
 	int i;
 
 	if (!f2fs_is_multi_device(sbi))
-		return __submit_flush_wait(sbi, sbi->sb->s_bdev);
+		return f2fs_submit_flush_wait(sbi, sbi->sb->s_bdev);
 
 	for (i = 0; i < sbi->s_ndevs; i++) {
 		if (!f2fs_is_dirty_device(sbi, ino, i, FLUSH_INO))
 			continue;
-		ret = __submit_flush_wait(sbi, FDEV(i).bdev);
+		ret = f2fs_submit_flush_wait(sbi, FDEV(i).bdev);
 		if (ret)
 			break;
 	}
@@ -748,7 +748,7 @@ int f2fs_flush_device_cache(struct f2fs_sb_info *sbi)
 			continue;
 
 		do {
-			ret = __submit_flush_wait(sbi, FDEV(i).bdev);
+			ret = f2fs_submit_flush_wait(sbi, FDEV(i).bdev);
 			if (ret)
 				f2fs_io_schedule_timeout(DEFAULT_IO_TIMEOUT);
 		} while (ret && --count);
