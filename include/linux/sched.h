@@ -910,6 +910,9 @@ struct task_struct {
 	unsigned int			btrace_seq;
 #endif
 
+#ifdef CONFIG_FREEZER
+	unsigned int			freeze_priority;
+#endif
 	unsigned int			policy;
 	unsigned long			max_allowed_capacity;
 	int				nr_cpus_allowed;

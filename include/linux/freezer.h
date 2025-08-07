@@ -16,6 +16,13 @@ DECLARE_STATIC_KEY_FALSE(freezer_active);
 extern bool pm_freezing;		/* PM freezing in effect */
 extern bool pm_nosig_freezing;		/* PM nosig freezing in effect */
 
+enum freeze_priority {
+	FREEZE_PRIORITY_HIGH		= 0,
+	FREEZE_PRIORITY_NORMAL		= 1,
+	FREEZE_PRIORITY_LOW		= 2,
+	FREEZE_PRIORITY_NEVER		= 4
+};
+
 /*
  * Timeout for stopping processes
  */
