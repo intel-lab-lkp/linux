@@ -153,13 +153,13 @@ static int mincore_pte_range(pmd_t *pmd, unsigned long addr, unsigned long end,
 		goto out;
 	}
 
-	ptep = pte_offset_map_lock(walk->mm, pmd, addr, &ptl);
+	ptep = pte_offset_map(pmd, addr);
 	if (!ptep) {
 		walk->action = ACTION_AGAIN;
 		return 0;
 	}
 	for (; addr != end; ptep += step, addr += step * PAGE_SIZE) {
-		pte_t pte = ptep_get(ptep);
+		pte_t pte = ptep_get_lockless(ptep);
 
 		step = 1;
 		/* We need to do cache lookup too for pte markers */
@@ -192,7 +192,7 @@ static int mincore_pte_range(pmd_t *pmd, unsigned long addr, unsigned long end,
 		}
 		vec += step;
 	}
-	pte_unmap_unlock(ptep - 1, ptl);
+	pte_unmap(ptep - 1);
 out:
 	walk->private += nr;
 	cond_resched();
