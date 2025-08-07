@@ -316,7 +316,7 @@
 		};
 
 		mfc: codec@11000000 {
-			compatible = "samsung,mfc-v6";
+			compatible = "samsung,exynos5250-mfc";
 			reg = <0x11000000 0x10000>;
 			interrupts = <GIC_SPI 96 IRQ_TYPE_LEVEL_HIGH>;
 			power-domains = <&pd_mfc>;
