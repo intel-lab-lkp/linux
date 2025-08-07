@@ -42,6 +42,7 @@
 #include <linux/context_tracking.h>
 #include <linux/cpuset.h>
 #include <linux/delayacct.h>
+#include <linux/freezer.h>
 #include <linux/init_task.h>
 #include <linux/interrupt.h>
 #include <linux/ioprio.h>
@@ -6980,6 +6981,7 @@ void __noreturn do_task_dead(void)
 	current->flags |= PF_NOFREEZE;
 
 	__schedule(SM_NONE);
+	freeze_set_default_priority(current, FREEZE_PRIORITY_NEVER);
 	BUG();
 
 	/* Avoid "noreturn function does return" - but don't continue if BUG() is a NOP: */
