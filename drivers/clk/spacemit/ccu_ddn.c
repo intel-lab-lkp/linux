@@ -22,21 +22,46 @@
 
 #include "ccu_ddn.h"
 
-static unsigned long ccu_ddn_calc_rate(unsigned long prate,
-				       unsigned long num, unsigned long den)
+static void ccu_gate_disable(struct clk_hw *hw)
 {
-	return prate * den / 2 / num;
+	struct ccu_ddn *ddn  = hw_to_ccu_ddn(hw);
+
+	ccu_update(&ddn->common, ctrl, ddn->gate.mask, 0);
+}
+
+static int ccu_gate_enable(struct clk_hw *hw)
+{
+	struct ccu_ddn *ddn = hw_to_ccu_ddn(hw);
+	struct ccu_gate_config *gate = &ddn->gate;
+
+	ccu_update(&ddn->common, ctrl, gate->mask, gate->mask);
+
+	return 0;
+}
+
+static int ccu_gate_is_enabled(struct clk_hw *hw)
+{
+	struct ccu_ddn *ddn = hw_to_ccu_ddn(hw);
+	struct ccu_gate_config *gate = &ddn->gate;
+
+	return (ccu_read(&ddn->common, ctrl) & gate->mask) == gate->mask;
+}
+
+static unsigned long ccu_ddn_calc_rate(unsigned long prate, unsigned long num,
+				       unsigned long den, unsigned int pre_div)
+{
+	return prate * den / pre_div / num;
 }
 
 static unsigned long ccu_ddn_calc_best_rate(struct ccu_ddn *ddn,
 					    unsigned long rate, unsigned long prate,
 					    unsigned long *num, unsigned long *den)
 {
-	rational_best_approximation(rate, prate / 2,
+	rational_best_approximation(rate, prate / ddn->pre_div,
 				    ddn->den_mask >> ddn->den_shift,
 				    ddn->num_mask >> ddn->num_shift,
 				    den, num);
-	return ccu_ddn_calc_rate(prate, *num, *den);
+	return ccu_ddn_calc_rate(prate, *num, *den, ddn->pre_div);
 }
 
 static long ccu_ddn_round_rate(struct clk_hw *hw, unsigned long rate,
@@ -58,7 +83,7 @@ static unsigned long ccu_ddn_recalc_rate(struct clk_hw *hw, unsigned long prate)
 	num = (val & ddn->num_mask) >> ddn->num_shift;
 	den = (val & ddn->den_mask) >> ddn->den_shift;
 
-	return ccu_ddn_calc_rate(prate, num, den);
+	return ccu_ddn_calc_rate(prate, num, den, ddn->pre_div);
 }
 
 static int ccu_ddn_set_rate(struct clk_hw *hw, unsigned long rate,
@@ -77,6 +102,16 @@ static int ccu_ddn_set_rate(struct clk_hw *hw, unsigned long rate,
 }
 
 const struct clk_ops spacemit_ccu_ddn_ops = {
+	.recalc_rate	= ccu_ddn_recalc_rate,
+	.round_rate	= ccu_ddn_round_rate,
+	.set_rate	= ccu_ddn_set_rate,
+};
+
+const struct clk_ops spacemit_ccu_ddn_gate_ops = {
+	.disable	= ccu_gate_disable,
+	.enable		= ccu_gate_enable,
+	.is_enabled	= ccu_gate_is_enabled,
+
 	.recalc_rate	= ccu_ddn_recalc_rate,
 	.round_rate	= ccu_ddn_round_rate,
 	.set_rate	= ccu_ddn_set_rate,

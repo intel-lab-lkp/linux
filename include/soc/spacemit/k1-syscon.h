@@ -29,10 +29,11 @@ to_spacemit_ccu_adev(struct auxiliary_device *adev)
 #define APBS_PLL3_SWCR3			0x12c
 
 /* MPMU register offset */
+#define MPMU_FCCR			0x0008
 #define MPMU_POSR			0x0010
-#define  POSR_PLL1_LOCK			BIT(27)
-#define  POSR_PLL2_LOCK			BIT(28)
-#define  POSR_PLL3_LOCK			BIT(29)
+#define POSR_PLL1_LOCK			BIT(27)
+#define POSR_PLL2_LOCK			BIT(28)
+#define POSR_PLL3_LOCK			BIT(29)
 #define MPMU_SUCCR			0x0014
 #define MPMU_ISCCR			0x0044
 #define MPMU_WDTPCR			0x0200

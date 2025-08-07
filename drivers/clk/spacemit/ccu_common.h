@@ -31,10 +31,23 @@ struct ccu_common {
 	struct clk_hw hw;
 };
 
+
+/**
+ * struct ccu_gate_config - Gate configuration
+ *
+ * @mask:	Mask to enable the gate. Some clocks may have more than one bit
+ *		set in this field.
+ */
+struct ccu_gate_config {
+	u32 mask;
+};
+
 static inline struct ccu_common *hw_to_ccu_common(struct clk_hw *hw)
 {
 	return container_of(hw, struct ccu_common, hw);
 }
+
+#define CCU_GATE_INIT(_mask)		{ .mask = _mask }
 
 #define ccu_read(c, reg)						\
 	({								\

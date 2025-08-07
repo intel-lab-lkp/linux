@@ -56,7 +56,7 @@ static unsigned long ccu_div_recalc_rate(struct clk_hw *hw,
 	val = ccu_read(&mix->common, ctrl) >> div->shift;
 	val &= (1 << div->width) - 1;
 
-	return divider_recalc_rate(hw, parent_rate, val, NULL, 0, div->width);
+	return divider_recalc_rate(hw, parent_rate, val, div->table, 0, div->width);
 }
 
 /*
@@ -92,6 +92,28 @@ static int ccu_factor_set_rate(struct clk_hw *hw, unsigned long rate,
 	return 0;
 }
 
+static void ccu_mix_try_update_best(unsigned long tmp_rate, unsigned long rate,
+				    unsigned long *best_rate, u32 tmp_val,
+				    u32 *div_val, struct clk_hw *parent,
+				    struct clk_hw **best_parent,
+				    unsigned long *best_parent_rate)
+{
+	if (abs(tmp_rate - rate) < abs(*best_rate - rate)) {
+		*best_rate = tmp_rate;
+
+		if (div_val)
+			*div_val = tmp_val;
+
+		if (!best_parent)
+			return;
+
+		*best_parent = parent;
+		if (best_parent_rate)
+			*best_parent_rate = clk_hw_get_rate(parent);
+	}
+}
+
+
 static unsigned long
 ccu_mix_calc_best_rate(struct clk_hw *hw, unsigned long rate,
 		       struct clk_hw **best_parent,
@@ -113,20 +135,21 @@ ccu_mix_calc_best_rate(struct clk_hw *hw, unsigned long rate,
 
 		parent_rate = clk_hw_get_rate(parent);
 
+		if (div->table) {
+			int tmp_val = divider_get_val(rate, parent_rate, div->table, div->width, 0);
+			unsigned long tmp_rate = divider_recalc_rate(hw, parent_rate, tmp_val,
+								     div->table, 0, div->width);
+
+			ccu_mix_try_update_best(tmp_rate, rate, &best_rate, tmp_val,
+						div_val, parent, best_parent, best_parent_rate);
+			continue;
+		}
+
 		for (int j = 1; j <= div_max; j++) {
 			unsigned long tmp = DIV_ROUND_CLOSEST_ULL(parent_rate, j);
 
-			if (abs(tmp - rate) < abs(best_rate - rate)) {
-				best_rate = tmp;
-
-				if (div_val)
-					*div_val = j - 1;
-
-				if (best_parent) {
-					*best_parent      = parent;
-					*best_parent_rate = parent_rate;
-				}
-			}
+			ccu_mix_try_update_best(tmp, rate, &best_rate, j - 1,
+						div_val, parent, best_parent, best_parent_rate);
 		}
 	}
 
