@@ -94,6 +94,8 @@ Image Source Control IDs
     is reported as being (say) 128, then a value of 192 would represent
     a gain of exactly 1.5.
 
+.. _image-source-control-cfa-pattern:
+
 ``V4L2_CID_CFA_PATTERN (integer)``
     This control determines the color components and native pixel order in the
     sensor's CFA (Color Filter Array) when used in conjunction with

@@ -13,7 +13,9 @@ Description
 
 These generic raw image data formats define the memory layout of the data without
 defining the order of the colour components or even the colour components
-themselves.
+themselves. These formats may only be used with a Media Controller pipeline where
+the more specific format is reported by the :ref:`V4L2_CID_CFA_PATTERN
+<image-source-control-cfa-pattern>` control on the source sub-device.
 
 .. _v4l2-pix-fmt-raw-8:
 
