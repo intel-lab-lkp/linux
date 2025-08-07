@@ -5,6 +5,8 @@
  * Copyright (C) 2024 Renesas Electronics Corp.
  */
 
+#include <dt-bindings/i3c/i3c.h>
+
 /*
  * Please set the below switch position on the SoM and the corresponding macro
  * on the board DTS:
@@ -120,6 +122,12 @@
 
 		interrupts-extended = <&pinctrl RZG3E_GPIO(S, 1) IRQ_TYPE_EDGE_FALLING>;
 	};
+};
+
+&i3c {
+	i2c-scl-hz = <100000>;
+	i3c-scl-hz = <12500000>;
+	status = "okay";
 };
 
 &mdio0 {
