@@ -847,7 +847,7 @@ static void blk_queue_release(struct kobject *kobj)
 	/* nothing to do here, all data is associated with the parent gendisk */
 }
 
-static const struct kobj_type blk_queue_ktype = {
+const struct kobj_type blk_queue_ktype = {
 	.default_groups = blk_queue_attr_groups,
 	.sysfs_ops	= &queue_sysfs_ops,
 	.release	= blk_queue_release,
@@ -875,7 +875,6 @@ int blk_register_queue(struct gendisk *disk)
 	struct request_queue *q = disk->queue;
 	int ret;
 
-	kobject_init(&disk->queue_kobj, &blk_queue_ktype);
 	ret = kobject_add(&disk->queue_kobj, &disk_to_dev(disk)->kobj, "queue");
 	if (ret < 0)
 		goto out_put_queue_kobj;
@@ -986,5 +985,4 @@ void blk_unregister_queue(struct gendisk *disk)
 		elevator_set_none(q);
 
 	blk_debugfs_remove(disk);
-	kobject_put(&disk->queue_kobj);
 }
