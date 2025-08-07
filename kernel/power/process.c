@@ -32,10 +32,12 @@ static int try_to_freeze_tasks(bool user_only)
 	struct task_struct *g, *p;
 	unsigned long end_time;
 	unsigned int todo;
+	unsigned int round = 0;
 	bool wq_busy = false;
 	ktime_t start, end, elapsed;
 	unsigned int elapsed_msecs;
 	bool wakeup = false;
+	bool has_freezable_task;
 	int sleep_usecs = USEC_PER_MSEC;
 
 	pr_info("Freezing %s\n", what);
@@ -47,13 +49,18 @@ static int try_to_freeze_tasks(bool user_only)
 	if (!user_only)
 		freeze_workqueues_begin();
 
-	while (true) {
+	while (round < FREEZE_PRIORITY_NEVER) {
 		todo = 0;
+		has_freezable_task = false;
 		read_lock(&tasklist_lock);
 		for_each_process_thread(g, p) {
+			if (user_only && !(p->flags & PF_KTHREAD) && round < p->freeze_priority)
+				continue;
+
 			if (p == current || !freeze_task(p))
 				continue;
 
+			has_freezable_task = true;
 			todo++;
 		}
 		read_unlock(&tasklist_lock);
@@ -62,6 +69,12 @@ static int try_to_freeze_tasks(bool user_only)
 			wq_busy = freeze_workqueues_busy();
 			todo += wq_busy;
 		}
+
+		round++;
+
+		/* sleep only if need to freeze tasks */
+		if (user_only && !has_freezable_task)
+			continue;
 
 		if (!todo || time_after(jiffies, end_time))
 			break;
