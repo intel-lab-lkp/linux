@@ -24,6 +24,7 @@
 #include <asm/scs.h>
 #include <asm/sections.h>
 #include <asm/text-patching.h>
+#include <asm-generic/set_memory.h>
 
 enum aarch64_reloc_op {
 	RELOC_OP_NONE,
@@ -477,6 +478,9 @@ int module_finalize(const Elf_Ehdr *hdr,
 	const Elf_Shdr *s;
 	int ret;
 
+	s = find_section(hdr, sechdrs, ".text.alternative_cb");
+	if (s && s->sh_size > PAGE_SIZE && PAGE_ALIGNED(s->sh_addr))
+		set_memory_x(s->sh_addr, s->sh_size >> PAGE_SHIFT);
 	s = find_section(hdr, sechdrs, ".altinstructions");
 	if (s)
 		apply_alternatives_module((void *)s->sh_addr, s->sh_size);
