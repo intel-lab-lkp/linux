@@ -23,6 +23,7 @@
 
 #include <linux/pci.h>
 
+#include <drm/drm_drv.h>
 #include <drm/drm_edid.h>
 #include <drm/drm_fourcc.h>
 #include <drm/drm_modeset_helper.h>
@@ -1459,8 +1460,10 @@ static void dce_v6_0_audio_fini(struct amdgpu_device *adev)
 	if (!adev->mode_info.audio.enabled)
 		return;
 
-	for (i = 0; i < adev->mode_info.audio.num_pins; i++)
-		dce_v6_0_audio_enable(adev, &adev->mode_info.audio.pin[i], false);
+	if (!drm_dev_is_unplugged(adev_to_drm(adev))) {
+		for (i = 0; i < adev->mode_info.audio.num_pins; i++)
+			dce_v6_0_audio_enable(adev, &adev->mode_info.audio.pin[i], false);
+	}
 
 	adev->mode_info.audio.enabled = false;
 }
