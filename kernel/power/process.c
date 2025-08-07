@@ -147,6 +147,7 @@ int freeze_processes(void)
 
 	pm_wakeup_clear(0);
 	pm_freezing = true;
+	freeze_set_default_priority(current, FREEZE_PRIORITY_NEVER);
 	error = try_to_freeze_tasks(true);
 	if (!error)
 		__usermodehelper_set_disable_depth(UMH_DISABLED);
@@ -218,6 +219,7 @@ void thaw_processes(void)
 	WARN_ON(!(curr->flags & PF_SUSPEND_TASK));
 	curr->flags &= ~PF_SUSPEND_TASK;
 
+	freeze_set_default_priority(current, FREEZE_PRIORITY_NORMAL);
 	usermodehelper_enable();
 
 	schedule();
