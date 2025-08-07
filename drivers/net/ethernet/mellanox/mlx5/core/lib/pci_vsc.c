@@ -73,14 +73,13 @@ int mlx5_vsc_gw_lock(struct mlx5_core_dev *dev)
 	u32 lock_val;
 	int ret;
 
+	if (pci_channel_offline(dev->pdev))
+		return -EACCES;
+
 	pci_cfg_access_lock(dev->pdev);
 	do {
 		if (retries > VSC_MAX_RETRIES) {
 			ret = -EBUSY;
-			goto pci_unlock;
-		}
-		if (pci_channel_offline(dev->pdev)) {
-			ret = -EACCES;
 			goto pci_unlock;
 		}
 
