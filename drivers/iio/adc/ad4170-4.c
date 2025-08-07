@@ -1253,11 +1253,11 @@ static int ad4170_read_sample(struct iio_dev *indio_dev,
 
 	ret = __ad4170_read_sample(indio_dev, chan, val);
 	if (ret) {
-		dev_err(dev, "failed to read sample: %d\n", ret);
+		dev_err(dev, "failed to read sample: %pe\n", ERR_PTR(ret));
 
 		ret2 = ad4170_set_channel_enable(st, chan->address, false);
 		if (ret2)
-			dev_err(dev, "failed to disable channel: %d\n", ret2);
+			dev_err(dev, "failed to disable channel: %pe\n", ERR_PTR(ret2));
 
 		return ret;
 	}
