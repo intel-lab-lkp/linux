@@ -128,12 +128,14 @@ static void dc21285_copy_to_16(struct map_info *map, unsigned long to, const voi
 
 static void dc21285_copy_to_8(struct map_info *map, unsigned long to, const void *from, ssize_t len)
 {
-	map_word d;
-	d.x[0] = *((uint8_t*)from);
-	dc21285_write8(map, d, to);
-	from++;
-	to++;
-	len--;
+	while (len > 0) {
+		map_word d;
+		d.x[0] = *((uint8_t*)from);
+		dc21285_write8(map, d, to);
+		from++;
+		to++;
+		len--;
+	}
 }
 
 static struct map_info dc21285_map = {
