@@ -99,6 +99,16 @@ following routes.
 Support for the embedded data stream is optional. Drivers supporting the
 embedded data stream may allow disabling and enabling the route.
 
+Starting and stopping streaming
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Starting and stopping streaming is controlled through the stream number 0; if
+there's a desire to capture additional streams, such streams need to be started
+before stream 0. All streams start and stop at the same moment.
+
+This is subject to change in the future through additional API elements while
+the default behaviour will be maintained.
+
 Sensor pixel array size, cropping and binning
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
