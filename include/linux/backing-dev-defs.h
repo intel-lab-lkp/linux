@@ -75,10 +75,11 @@ struct wb_completion {
  * can wait for the completion of all using wb_wait_for_completion().  Work
  * items which are waited upon aren't freed automatically on completion.
  */
-#define WB_COMPLETION_INIT(bdi)		__WB_COMPLETION_INIT(&(bdi)->wb_waitq)
+#define WB_COMPLETION_INIT(bdi_wb_ctx)	\
+	__WB_COMPLETION_INIT(&(bdi_wb_ctx)->wb_waitq)
 
-#define DEFINE_WB_COMPLETION(cmpl, bdi)	\
-	struct wb_completion cmpl = WB_COMPLETION_INIT(bdi)
+#define DEFINE_WB_COMPLETION(cmpl, bdi_wb_ctx)	\
+	struct wb_completion cmpl = WB_COMPLETION_INIT(bdi_wb_ctx)
 
 /*
  * Each wb (bdi_writeback) can perform writeback operations, is measured
@@ -104,6 +105,7 @@ struct wb_completion {
  */
 struct bdi_writeback {
 	struct backing_dev_info *bdi;	/* our parent bdi */
+	struct bdi_writeback_ctx *bdi_wb_ctx;
 
 	unsigned long state;		/* Always use atomic bitops on this */
 	unsigned long last_old_flush;	/* last old data flush */
@@ -160,6 +162,16 @@ struct bdi_writeback {
 #endif
 };
 
+struct bdi_writeback_ctx {
+	struct bdi_writeback wb;  /* the root writeback info for this bdi */
+	struct list_head wb_list; /* list of all wbs */
+#ifdef CONFIG_CGROUP_WRITEBACK
+	struct radix_tree_root cgwb_tree; /* radix tree of active cgroup wbs */
+	struct rw_semaphore wb_switch_rwsem; /* no cgwb switch while syncing */
+#endif
+	wait_queue_head_t wb_waitq;
+};
+
 struct backing_dev_info {
 	u64 id;
 	struct rb_node rb_node; /* keyed by ->id */
@@ -183,15 +195,11 @@ struct backing_dev_info {
 	 */
 	unsigned long last_bdp_sleep;
 
-	struct bdi_writeback wb;  /* the root writeback info for this bdi */
-	struct list_head wb_list; /* list of all wbs */
+	int nr_wb_ctx;
+	struct bdi_writeback_ctx **wb_ctx;
 #ifdef CONFIG_CGROUP_WRITEBACK
-	struct radix_tree_root cgwb_tree; /* radix tree of active cgroup wbs */
 	struct mutex cgwb_release_mutex;  /* protect shutdown of wb structs */
-	struct rw_semaphore wb_switch_rwsem; /* no cgwb switch while syncing */
 #endif
-	wait_queue_head_t wb_waitq;
-
 	struct device *dev;
 	char dev_name[64];
 	struct device *owner;
@@ -216,7 +224,7 @@ struct wb_lock_cookie {
  */
 static inline bool wb_tryget(struct bdi_writeback *wb)
 {
-	if (wb != &wb->bdi->wb)
+	if (wb != &wb->bdi_wb_ctx->wb)
 		return percpu_ref_tryget(&wb->refcnt);
 	return true;
 }
@@ -227,7 +235,7 @@ static inline bool wb_tryget(struct bdi_writeback *wb)
  */
 static inline void wb_get(struct bdi_writeback *wb)
 {
-	if (wb != &wb->bdi->wb)
+	if (wb != &wb->bdi_wb_ctx->wb)
 		percpu_ref_get(&wb->refcnt);
 }
 
@@ -246,7 +254,7 @@ static inline void wb_put_many(struct bdi_writeback *wb, unsigned long nr)
 		return;
 	}
 
-	if (wb != &wb->bdi->wb)
+	if (wb != &wb->bdi_wb_ctx->wb)
 		percpu_ref_put_many(&wb->refcnt, nr);
 }
 

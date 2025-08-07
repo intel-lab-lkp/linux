@@ -148,11 +148,20 @@ static inline bool mapping_can_writeback(struct address_space *mapping)
 	return inode_to_bdi(mapping->host)->capabilities & BDI_CAP_WRITEBACK;
 }
 
+static inline struct bdi_writeback_ctx *
+fetch_bdi_writeback_ctx(struct inode *inode)
+{
+	struct backing_dev_info *bdi = inode_to_bdi(inode);
+
+	return bdi->wb_ctx[0];
+}
+
 #ifdef CONFIG_CGROUP_WRITEBACK
 
-struct bdi_writeback *wb_get_lookup(struct backing_dev_info *bdi,
+struct bdi_writeback *wb_get_lookup(struct bdi_writeback_ctx *bdi_wb_ctx,
 				    struct cgroup_subsys_state *memcg_css);
 struct bdi_writeback *wb_get_create(struct backing_dev_info *bdi,
+				    struct bdi_writeback_ctx *bdi_wb_ctx,
 				    struct cgroup_subsys_state *memcg_css,
 				    gfp_t gfp);
 void wb_memcg_offline(struct mem_cgroup *memcg);
@@ -187,16 +196,18 @@ static inline bool inode_cgwb_enabled(struct inode *inode)
  * Must be called under rcu_read_lock() which protects the returend wb.
  * NULL if not found.
  */
-static inline struct bdi_writeback *wb_find_current(struct backing_dev_info *bdi)
+static inline struct bdi_writeback *
+wb_find_current(struct backing_dev_info *bdi,
+		struct bdi_writeback_ctx *bdi_wb_ctx)
 {
 	struct cgroup_subsys_state *memcg_css;
 	struct bdi_writeback *wb;
 
 	memcg_css = task_css(current, memory_cgrp_id);
 	if (!memcg_css->parent)
-		return &bdi->wb;
+		return &bdi_wb_ctx->wb;
 
-	wb = radix_tree_lookup(&bdi->cgwb_tree, memcg_css->id);
+	wb = radix_tree_lookup(&bdi_wb_ctx->cgwb_tree, memcg_css->id);
 
 	/*
 	 * %current's blkcg equals the effective blkcg of its memcg.  No
@@ -217,12 +228,13 @@ static inline struct bdi_writeback *wb_find_current(struct backing_dev_info *bdi
  * wb_find_current().
  */
 static inline struct bdi_writeback *
-wb_get_create_current(struct backing_dev_info *bdi, gfp_t gfp)
+wb_get_create_current(struct backing_dev_info *bdi,
+		      struct bdi_writeback_ctx *bdi_wb_ctx, gfp_t gfp)
 {
 	struct bdi_writeback *wb;
 
 	rcu_read_lock();
-	wb = wb_find_current(bdi);
+	wb = wb_find_current(bdi, bdi_wb_ctx);
 	if (wb && unlikely(!wb_tryget(wb)))
 		wb = NULL;
 	rcu_read_unlock();
@@ -231,7 +243,7 @@ wb_get_create_current(struct backing_dev_info *bdi, gfp_t gfp)
 		struct cgroup_subsys_state *memcg_css;
 
 		memcg_css = task_get_css(current, memory_cgrp_id);
-		wb = wb_get_create(bdi, memcg_css, gfp);
+		wb = wb_get_create(bdi, bdi_wb_ctx, memcg_css, gfp);
 		css_put(memcg_css);
 	}
 	return wb;
@@ -265,7 +277,7 @@ static inline struct bdi_writeback *inode_to_wb_wbc(
 	 * If wbc does not have inode attached, it means cgroup writeback was
 	 * disabled when wbc started. Just use the default wb in that case.
 	 */
-	return wbc->wb ? wbc->wb : &inode_to_bdi(inode)->wb;
+	return wbc->wb ? wbc->wb : &fetch_bdi_writeback_ctx(inode)->wb;
 }
 
 /**
@@ -325,20 +337,23 @@ static inline bool inode_cgwb_enabled(struct inode *inode)
 	return false;
 }
 
-static inline struct bdi_writeback *wb_find_current(struct backing_dev_info *bdi)
+static inline struct bdi_writeback *wb_find_current(
+		struct backing_dev_info *bdi,
+		struct bdi_writeback_ctx *bdi_wb_ctx)
 {
-	return &bdi->wb;
+	return &bdi_wb_ctx->wb;
 }
 
 static inline struct bdi_writeback *
-wb_get_create_current(struct backing_dev_info *bdi, gfp_t gfp)
+wb_get_create_current(struct backing_dev_info *bdi,
+		      struct bdi_writeback_ctx *bdi_wb_ctx, gfp_t gfp)
 {
-	return &bdi->wb;
+	return &bdi_wb_ctx->wb;
 }
 
 static inline struct bdi_writeback *inode_to_wb(struct inode *inode)
 {
-	return &inode_to_bdi(inode)->wb;
+	return &fetch_bdi_writeback_ctx(inode)->wb;
 }
 
 static inline struct bdi_writeback *inode_to_wb_wbc(
