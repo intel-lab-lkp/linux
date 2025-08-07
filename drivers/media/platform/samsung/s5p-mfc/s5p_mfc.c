@@ -1711,22 +1711,22 @@ static const struct of_device_id exynos_mfc_match[] = {
 		.compatible = "samsung,mfc-v5",
 		.data = &mfc_drvdata_v5,
 	}, {
-		.compatible = "samsung,mfc-v6",
+		.compatible = "samsung,exynos5250-mfc",
 		.data = &mfc_drvdata_v6,
 	}, {
-		.compatible = "samsung,mfc-v7",
+		.compatible = "samsung,exynos5420-mfc",
 		.data = &mfc_drvdata_v7,
 	}, {
 		.compatible = "samsung,exynos3250-mfc",
 		.data = &mfc_drvdata_v7_3250,
 	}, {
-		.compatible = "samsung,mfc-v8",
+		.compatible = "samsung,exynos5800-mfc",
 		.data = &mfc_drvdata_v8,
 	}, {
 		.compatible = "samsung,exynos5433-mfc",
 		.data = &mfc_drvdata_v8_5433,
 	}, {
-		.compatible = "samsung,mfc-v10",
+		.compatible = "samsung,exynos7880-mfc",
 		.data = &mfc_drvdata_v10,
 	}, {
 		.compatible = "tesla,fsd-mfc",
