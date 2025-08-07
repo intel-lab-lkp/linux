@@ -76,6 +76,8 @@ static int try_to_freeze_tasks(bool user_only)
 		if (user_only && !has_freezable_task)
 			continue;
 
+		pr_info("freeze round: %d, task to freeze: %d\n", round, todo);
+
 		if (!todo || time_after(jiffies, end_time))
 			break;
 
