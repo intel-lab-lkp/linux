@@ -142,6 +142,8 @@ Image Source Control IDs
       - Monochromatic sensor, no CFA pattern.
       - 0x00010000
 
+.. _image-source-control-cfa-pattern-flip:
+
 ``V4L2_CID_CFA_PATTERN_FLIP (bitmask)``
     This control determines whether the horizontal or vertical flipping controls
     (V4L2_CID_HFLIP and V4L2_CID_VFLIP) have an effect on the pixel order of the
