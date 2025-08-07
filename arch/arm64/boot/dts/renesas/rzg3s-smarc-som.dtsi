@@ -7,6 +7,7 @@
 
 #include <dt-bindings/clock/renesas,r9a08g045-vbattb.h>
 #include <dt-bindings/gpio/gpio.h>
+#include <dt-bindings/i3c/i3c.h>
 #include <dt-bindings/pinctrl/rzg2l-pinctrl.h>
 
 #include "rzg3s-smarc-switches.h"
@@ -170,6 +171,12 @@
 		  a0 80 30 30 9c
 		];
 	};
+};
+
+&i3c {
+	i2c-scl-hz = <100000>;
+	i3c-scl-hz = <12500000>;
+	status = "okay";
 };
 
 #if SW_CONFIG2 == SW_ON
