@@ -3159,6 +3159,7 @@ enum netdev_cmd {
 	NETDEV_OFFLOAD_XSTATS_REPORT_USED,
 	NETDEV_OFFLOAD_XSTATS_REPORT_DELTA,
 	NETDEV_XDP_FEAT_CHANGE,
+	NETDEV_VRF_MASTER,
 };
 const char *netdev_cmd_to_name(enum netdev_cmd cmd);
 

@@ -1328,6 +1328,7 @@ static int arp_netdev_event(struct notifier_block *this, unsigned long event,
 	bool evict_nocarrier;
 
 	switch (event) {
+	case NETDEV_VRF_MASTER:
 	case NETDEV_CHANGEADDR:
 		neigh_changeaddr(&arp_tbl, dev);
 		rt_cache_flush(dev_net(dev));

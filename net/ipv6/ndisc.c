@@ -1858,6 +1858,7 @@ static int ndisc_netdev_event(struct notifier_block *this, unsigned long event, 
 	bool evict_nocarrier;
 
 	switch (event) {
+	case NETDEV_VRF_MASTER:
 	case NETDEV_CHANGEADDR:
 		neigh_changeaddr(&nd_tbl, dev);
 		fib6_run_gc(0, net, false);

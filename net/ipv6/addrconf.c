@@ -3677,6 +3677,7 @@ static int addrconf_notify(struct notifier_block *this, unsigned long event,
 
 		run_pending = 1;
 		fallthrough;
+	case NETDEV_VRF_MASTER:
 	case NETDEV_UP:
 	case NETDEV_CHANGE:
 		if (idev && idev->cnf.disable_ipv6)
@@ -3689,7 +3690,10 @@ static int addrconf_notify(struct notifier_block *this, unsigned long event,
 			break;
 		}
 
-		if (event == NETDEV_UP) {
+		if (event == NETDEV_VRF_MASTER)
+			addrconf_ifdown(dev, false);
+
+		if (event == NETDEV_UP || event == NETDEV_VRF_MASTER) {
 			/* restore routes for permanent addresses */
 			addrconf_permanent_addr(net, dev);
 

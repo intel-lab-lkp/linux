@@ -1510,6 +1510,9 @@ static int fib_netdev_event(struct notifier_block *this, unsigned long event, vo
 		return NOTIFY_DONE;
 
 	switch (event) {
+	case NETDEV_VRF_MASTER:
+		fib_disable_ip(dev, event, false);
+		fallthrough;
 	case NETDEV_UP:
 		in_dev_for_each_ifa_rtnl(ifa, in_dev) {
 			fib_add_ifaddr(ifa);
