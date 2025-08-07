@@ -134,6 +134,9 @@ enum {
 #ifdef CONFIG_BTRFS_FS_REF_VERIFY
 	Opt_ref_verify,
 #endif
+#ifdef CONFIG_BTRFS_FS_REF_TRACKER
+	Opt_ref_tracker,
+#endif
 	Opt_err,
 };
 
@@ -257,6 +260,9 @@ static const struct fs_parameter_spec btrfs_fs_parameters[] = {
 #endif
 #ifdef CONFIG_BTRFS_FS_REF_VERIFY
 	fsparam_flag("ref_verify", Opt_ref_verify),
+#endif
+#ifdef CONFIG_BTRFS_FS_REF_TRACKER
+	fsparam_flag("ref_tracker", Opt_ref_tracker),
 #endif
 	{}
 };
@@ -633,6 +639,11 @@ static int btrfs_parse_param(struct fs_context *fc, struct fs_parameter *param)
 #ifdef CONFIG_BTRFS_FS_REF_VERIFY
 	case Opt_ref_verify:
 		btrfs_set_opt(ctx->mount_opt, REF_VERIFY);
+		break;
+#endif
+#ifdef CONFIG_BTRFS_FS_REF_TRACKER
+	case Opt_ref_tracker:
+		btrfs_set_opt(ctx->mount_opt, REF_TRACKER);
 		break;
 #endif
 	default:
@@ -1140,6 +1151,8 @@ static int btrfs_show_options(struct seq_file *seq, struct dentry *dentry)
 #endif
 	if (btrfs_test_opt(info, REF_VERIFY))
 		seq_puts(seq, ",ref_verify");
+	if (btrfs_test_opt(info, REF_TRACKER))
+		seq_puts(seq, ",ref_tracker");
 	seq_printf(seq, ",subvolid=%llu", btrfs_root_id(BTRFS_I(d_inode(dentry))->root));
 	subvol_name = btrfs_get_subvol_name_from_objectid(info,
 			btrfs_root_id(BTRFS_I(d_inode(dentry))->root));
