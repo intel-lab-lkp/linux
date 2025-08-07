@@ -18,10 +18,11 @@ properties:
   compatible:
     oneOf:
       - enum:
-          - samsung,exynos5433-mfc        # Exynos5433
-          - samsung,mfc-v5                # Exynos4
+          - samsung,s5pv210-mfc           # S5pv210
+          - samsung,exynos4-mfc           # Exynos4
           - samsung,exynos5250-mfc        # Exynos5
           - samsung,exynos5420-mfc        # Exynos5420
+          - samsung,exynos5433-mfc        # Exynos5433
           - samsung,exynos5800-mfc        # Exynos5800
           - samsung,exynos7880-mfc        # Exynos7880
           - tesla,fsd-mfc                 # Tesla FSD
@@ -114,7 +115,8 @@ allOf:
         compatible:
           contains:
             enum:
-              - samsung,mfc-v5
+              - samsung,s5pv210-mfc
+              - samsung,exynos4-mfc
     then:
       properties:
         clocks:
@@ -184,7 +186,7 @@ examples:
     #include <dt-bindings/interrupt-controller/irq.h>
 
     codec@13400000 {
-        compatible = "samsung,mfc-v5";
+        compatible = "samsung,exynos4-mfc";
         reg = <0x13400000 0x10000>;
         interrupts = <GIC_SPI 94 IRQ_TYPE_LEVEL_HIGH>;
         power-domains = <&pd_mfc>;
