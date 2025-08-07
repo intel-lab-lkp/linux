@@ -299,7 +299,7 @@
 		};
 
 		mfc: codec@11000000 {
-			compatible = "samsung,mfc-v7";
+			compatible = "samsung,exynos5420-mfc";
 			reg = <0x11000000 0x10000>;
 			interrupts = <GIC_SPI 96 IRQ_TYPE_LEVEL_HIGH>;
 			clocks = <&clock CLK_MFC>;
