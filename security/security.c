@@ -1861,6 +1861,7 @@ EXPORT_SYMBOL(security_inode_init_security);
 /**
  * security_inode_init_security_anon() - Initialize an anonymous inode
  * @inode: the inode
+ * @type: the type of anonymous inode
  * @name: the anonymous inode class
  * @context_inode: an optional related inode
  *
@@ -1871,10 +1872,11 @@ EXPORT_SYMBOL(security_inode_init_security);
  * creation of this inode, or another -errno upon other errors.
  */
 int security_inode_init_security_anon(struct inode *inode,
+				      enum lsm_anon_inode_id type,
 				      const struct qstr *name,
 				      const struct inode *context_inode)
 {
-	return call_int_hook(inode_init_security_anon, inode, name,
+	return call_int_hook(inode_init_security_anon, inode, type, name,
 			     context_inode);
 }
 

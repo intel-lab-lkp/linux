@@ -265,6 +265,12 @@ struct request_sock;
 #define LSM_UNSAFE_PTRACE	2
 #define LSM_UNSAFE_NO_NEW_PRIVS	4
 
+/* anon_inode types */
+enum lsm_anon_inode_id {
+	LSM_ANON_INODE_GENERIC,
+	LSM_ANON_INODE_MEMFD
+};
+
 #ifdef CONFIG_MMU
 extern int mmap_min_addr_handler(const struct ctl_table *table, int write,
 				 void *buffer, size_t *lenp, loff_t *ppos);
@@ -404,6 +410,7 @@ int security_inode_init_security(struct inode *inode, struct inode *dir,
 				 const struct qstr *qstr,
 				 initxattrs initxattrs, void *fs_data);
 int security_inode_init_security_anon(struct inode *inode,
+				      enum lsm_anon_inode_id type,
 				      const struct qstr *name,
 				      const struct inode *context_inode);
 int security_inode_create(struct inode *dir, struct dentry *dentry, umode_t mode);
@@ -887,6 +894,7 @@ static inline int security_inode_init_security(struct inode *inode,
 }
 
 static inline int security_inode_init_security_anon(struct inode *inode,
+						    enum lsm_anon_inode_id type,
 						    const struct qstr *name,
 						    const struct inode *context_inode)
 {

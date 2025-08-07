@@ -21,6 +21,7 @@
 #include <linux/magic.h>
 #include <linux/anon_inodes.h>
 #include <linux/pseudo_fs.h>
+#include <linux/security.h>
 
 #include <linux/uaccess.h>
 
@@ -110,8 +111,8 @@ static struct inode *anon_inode_make_secure_inode(
 		return inode;
 	inode->i_flags &= ~S_PRIVATE;
 	inode->i_op = &anon_inode_operations;
-	error =	security_inode_init_security_anon(inode, &QSTR(name),
-						  context_inode);
+	error = security_inode_init_security_anon(inode, LSM_ANON_INODE_GENERIC,
+						  &QSTR(name), context_inode);
 	if (error) {
 		iput(inode);
 		return ERR_PTR(error);
