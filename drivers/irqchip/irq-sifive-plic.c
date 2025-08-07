@@ -148,6 +148,7 @@ static void plic_irq_enable(struct irq_data *d)
 
 static void plic_irq_disable(struct irq_data *d)
 {
+	plic_irq_mask(d);
 	plic_irq_toggle(irq_data_get_effective_affinity_mask(d), d, 0);
 }
 
@@ -179,12 +180,14 @@ static int plic_set_affinity(struct irq_data *d,
 	if (cpu >= nr_cpu_ids)
 		return -EINVAL;
 
-	plic_irq_disable(d);
+	/* Invalidate the original routing entry */
+	plic_irq_toggle(irq_data_get_effective_affinity_mask(d), d, 0);
 
 	irq_data_update_effective_affinity(d, cpumask_of(cpu));
 
+	/* Setting the new routing entry if irq is enabled */
 	if (!irqd_irq_disabled(d))
-		plic_irq_enable(d);
+		plic_irq_toggle(irq_data_get_effective_affinity_mask(d), d, 1);
 
 	return IRQ_SET_MASK_OK_DONE;
 }
