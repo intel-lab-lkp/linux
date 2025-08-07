@@ -13,11 +13,13 @@
  * we need to use the kernel's siginfo.h file and trick glibc
  * into accepting it.
  */
+#if defined(__GLIBC__) && defined(__GLIBC_PREREQ)
 #if !__GLIBC_PREREQ(2, 26)
 # include <asm/siginfo.h>
 # define __have_siginfo_t 1
 # define __have_sigval_t 1
 # define __have_sigevent_t 1
+#endif
 #endif
 
 #include <errno.h>
@@ -300,6 +302,26 @@ int seccomp(unsigned int op, unsigned int flags, void *args)
 	return syscall(__NR_seccomp, op, flags, args);
 }
 #endif
+
+int seccomp_flag_supported(int flag)
+{
+	/*
+	 * Probes if a seccomp filter flag is supported by the kernel.
+	 *
+	 * When an unsupported flag is passed to seccomp(SECCOMP_SET_MODE_FILTER, ...),
+	 * the kernel returns EINVAL.
+	 *
+	 * When a supported flag is passed, the kernel proceeds to validate the
+	 * filter program pointer. By passing NULL for the filter program,
+	 * the kernel attempts to dereference a bad address, resulting in EFAULT.
+	 *
+	 * Therefore, checking for EFAULT indicates that the flag itself was
+	 * recognized and supported by the kernel.
+	 */
+	if (seccomp(SECCOMP_SET_MODE_FILTER, flag, NULL) == -1 && errno == EFAULT)
+		return 1;
+	return 0;
+}
 
 #if __BYTE_ORDER__ == __ORDER_LITTLE_ENDIAN__
 #define syscall_arg(_n) (offsetof(struct seccomp_data, args[_n]))
@@ -2437,13 +2459,12 @@ TEST(detect_seccomp_filter_flags)
 		ASSERT_NE(ENOSYS, errno) {
 			TH_LOG("Kernel does not support seccomp syscall!");
 		}
-		EXPECT_EQ(-1, ret);
-		EXPECT_EQ(EFAULT, errno) {
-			TH_LOG("Failed to detect that a known-good filter flag (0x%X) is supported!",
-			       flag);
-		}
 
-		all_flags |= flag;
+		if (seccomp_flag_supported(flag))
+			all_flags |= flag;
+		else
+			TH_LOG("Filter flag (0x%X) is not found to be supported!",
+			       flag);
 	}
 
 	/*
@@ -2871,6 +2892,12 @@ TEST_F(TSYNC, two_siblings_with_one_divergence)
 
 TEST_F(TSYNC, two_siblings_with_one_divergence_no_tid_in_err)
 {
+	/* Depends on 5189149 (seccomp: allow TSYNC and USER_NOTIF together) */
+	if (!seccomp_flag_supported(SECCOMP_FILTER_FLAG_TSYNC_ESRCH)) {
+		SKIP(return, "Kernel does not support SECCOMP_FILTER_FLAG_TSYNC_ESRCH");
+		return;
+	}
+
 	long ret, flags;
 	void *status;
 
@@ -3476,6 +3503,11 @@ TEST(user_notification_basic)
 
 TEST(user_notification_with_tsync)
 {
+	/* Depends on 5189149 (seccomp: allow TSYNC and USER_NOTIF together) */
+	if (!seccomp_flag_supported(SECCOMP_FILTER_FLAG_TSYNC_ESRCH)) {
+		SKIP(return, "Kernel does not support SECCOMP_FILTER_FLAG_TSYNC_ESRCH");
+		return;
+	}
 	int ret;
 	unsigned int flags;
 
@@ -3971,6 +4003,13 @@ TEST(user_notification_filter_empty)
 
 TEST(user_ioctl_notification_filter_empty)
 {
+	/* Depends on 95036a7 (seccomp: interrupt SECCOMP_IOCTL_NOTIF_RECV
+	 * when all users have exited) */
+	if (!ksft_min_kernel_version(6, 11)) {
+		SKIP(return, "Kernel version < 6.11");
+		return;
+	}
+
 	pid_t pid;
 	long ret;
 	int status, p[2];
@@ -4124,6 +4163,12 @@ int get_next_fd(int prev_fd)
 
 TEST(user_notification_addfd)
 {
+	/* Depends on 0ae71c7 (seccomp: Support atomic "addfd + send reply") */
+	if (!ksft_min_kernel_version(5, 14)) {
+		SKIP(return, "Kernel version < 5.14");
+		return;
+	}
+
 	pid_t pid;
 	long ret;
 	int status, listener, memfd, fd, nextfd;
@@ -4286,6 +4331,12 @@ TEST(user_notification_addfd)
 
 TEST(user_notification_addfd_rlimit)
 {
+	/* Depends on 7cf97b1 (seccomp: Introduce addfd ioctl to seccomp user notifier) */
+	if (!ksft_min_kernel_version(5, 9)) {
+		SKIP(return, "Kernel version < 5.9");
+		return;
+	}
+
 	pid_t pid;
 	long ret;
 	int status, listener, memfd;
@@ -4331,9 +4382,12 @@ TEST(user_notification_addfd_rlimit)
 	EXPECT_EQ(ioctl(listener, SECCOMP_IOCTL_NOTIF_ADDFD, &addfd), -1);
 	EXPECT_EQ(errno, EMFILE);
 
-	addfd.flags = SECCOMP_ADDFD_FLAG_SEND;
-	EXPECT_EQ(ioctl(listener, SECCOMP_IOCTL_NOTIF_ADDFD, &addfd), -1);
-	EXPECT_EQ(errno, EMFILE);
+	/* Depends on 0ae71c7 (seccomp: Support atomic "addfd + send reply") */
+	if (ksft_min_kernel_version(5, 14)) {
+		addfd.flags = SECCOMP_ADDFD_FLAG_SEND;
+		EXPECT_EQ(ioctl(listener, SECCOMP_IOCTL_NOTIF_ADDFD, &addfd), -1);
+		EXPECT_EQ(errno, EMFILE);
+	}
 
 	addfd.newfd = 100;
 	addfd.flags = SECCOMP_ADDFD_FLAG_SETFD;
@@ -4361,6 +4415,12 @@ TEST(user_notification_addfd_rlimit)
 
 TEST(user_notification_sync)
 {
+	/* Depends on 48a1084 (seccomp: add the synchronous mode for seccomp_unotify) */
+	if (!ksft_min_kernel_version(6, 6)) {
+		SKIP(return, "Kernel version < 6.6");
+		return;
+	}
+
 	struct seccomp_notif req = {};
 	struct seccomp_notif_resp resp = {};
 	int status, listener;
@@ -4525,6 +4585,12 @@ static char get_proc_stat(struct __test_metadata *_metadata, pid_t pid)
 
 TEST(user_notification_fifo)
 {
+	/* Depends on 4cbf6f6 (seccomp: Use FIFO semantics to order notifications) */
+	if (!ksft_min_kernel_version(5, 19)) {
+		SKIP(return, "Kernel version < 5.19");
+		return;
+	}
+
 	struct seccomp_notif_resp resp = {};
 	struct seccomp_notif req = {};
 	int i, status, listener;
@@ -4628,6 +4694,12 @@ static long get_proc_syscall(struct __test_metadata *_metadata, int pid)
 /* Ensure non-fatal signals prior to receive are unmodified */
 TEST(user_notification_wait_killable_pre_notification)
 {
+	/* Depends on c2aa2df (seccomp: Add wait_killable semantic to seccomp user notifier) */
+	if (!ksft_min_kernel_version(5, 19)) {
+		SKIP(return, "Kernel version < 5.19");
+		return;
+	}
+
 	struct sigaction new_action = {
 		.sa_handler = signal_handler,
 	};
@@ -4698,6 +4770,12 @@ TEST(user_notification_wait_killable_pre_notification)
 /* Ensure non-fatal signals after receive are blocked */
 TEST(user_notification_wait_killable)
 {
+	/* Depends on c2aa2df (seccomp: Add wait_killable semantic to seccomp user notifier) */
+	if (!ksft_min_kernel_version(5, 19)) {
+		SKIP(return, "Kernel version < 5.19");
+		return;
+	}
+
 	struct sigaction new_action = {
 		.sa_handler = signal_handler,
 	};
@@ -4777,6 +4855,12 @@ TEST(user_notification_wait_killable)
 /* Ensure fatal signals after receive are not blocked */
 TEST(user_notification_wait_killable_fatal)
 {
+	/* Depends on c2aa2df (seccomp: Add wait_killable semantic to seccomp user notifier) */
+	if (!ksft_min_kernel_version(5, 19)) {
+		SKIP(return, "Kernel version < 5.19");
+		return;
+	}
+
 	struct seccomp_notif req = {};
 	int listener, status;
 	pid_t pid;
@@ -4985,6 +5069,12 @@ static void *tsync_vs_dead_thread_leader_sibling(void *_args)
  */
 TEST(tsync_vs_dead_thread_leader)
 {
+	/* Depends on bfafe5e (seccomp: release task filters when the task exits) */
+	if (!ksft_min_kernel_version(6, 11)) {
+		SKIP(return, "Kernel version < 6.11");
+		return;
+	}
+
 	int status;
 	pid_t pid;
 	long ret;
