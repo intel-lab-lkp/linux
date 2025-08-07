@@ -275,7 +275,7 @@ static int __init acpi_init_fpdt(void)
 	struct acpi_table_header *header;
 	struct fpdt_subtable_entry *subtable;
 	u32 offset = sizeof(*header);
-	int result;
+	int result = 0;
 
 	status = acpi_get_table(ACPI_SIG_FPDT, 0, &header);
 
@@ -285,7 +285,7 @@ static int __init acpi_init_fpdt(void)
 	fpdt_kobj = kobject_create_and_add("fpdt", acpi_kobj);
 	if (!fpdt_kobj) {
 		result = -ENOMEM;
-		goto err_nomem;
+		goto put_table;
 	}
 
 	while (offset < header->length) {
@@ -295,8 +295,10 @@ static int __init acpi_init_fpdt(void)
 		case SUBTABLE_S3PT:
 			result = fpdt_process_subtable(subtable->address,
 					      subtable->type);
-			if (result)
-				goto err_subtable;
+			if (result) {
+				kobject_put(fpdt_kobj);
+				goto put_table;
+			}
 			break;
 		default:
 			/* Other types are reserved in ACPI 6.4 spec. */
@@ -304,11 +306,8 @@ static int __init acpi_init_fpdt(void)
 		}
 		offset += sizeof(*subtable);
 	}
-	return 0;
-err_subtable:
-	kobject_put(fpdt_kobj);
 
-err_nomem:
+put_table:
 	acpi_put_table(header);
 	return result;
 }
