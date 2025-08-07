@@ -321,10 +321,10 @@ static int get_key_avermedia_cardbus(struct IR_i2c *ir, enum rc_proto *protocol,
 
 static int ir_key_poll(struct IR_i2c *ir)
 {
-	enum rc_proto protocol;
-	u32 scancode;
-	u8 toggle;
-	int rc;
+	enum rc_proto protocol = 0;
+	u32 scancode = 0;
+	u8 toggle = 0;
+	int rc = 0;
 
 	dev_dbg(&ir->rc->dev, "%s\n", __func__);
 	rc = ir->get_key(ir, &protocol, &scancode, &toggle);
