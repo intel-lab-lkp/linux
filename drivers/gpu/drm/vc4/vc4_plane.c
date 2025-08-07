@@ -35,7 +35,7 @@ static const struct hvs_format {
 	u32 hvs; /* HVS_FORMAT_* */
 	u32 pixel_order;
 	u32 pixel_order_hvs5;
-	bool hvs5_only;
+	enum vc4_gen min_gen;
 } hvs_formats[] = {
 	{
 		.drm = DRM_FORMAT_XRGB8888,
@@ -161,31 +161,31 @@ static const struct hvs_format {
 		.drm = DRM_FORMAT_P030,
 		.hvs = HVS_PIXEL_FORMAT_YCBCR_10BIT,
 		.pixel_order_hvs5 = HVS_PIXEL_ORDER_XYCBCR,
-		.hvs5_only = true,
+		.min_gen = VC4_GEN_5,
 	},
 	{
 		.drm = DRM_FORMAT_XRGB2101010,
 		.hvs = HVS_PIXEL_FORMAT_RGBA1010102,
 		.pixel_order_hvs5 = HVS_PIXEL_ORDER_ARGB,
-		.hvs5_only = true,
+		.min_gen = VC4_GEN_5,
 	},
 	{
 		.drm = DRM_FORMAT_ARGB2101010,
 		.hvs = HVS_PIXEL_FORMAT_RGBA1010102,
 		.pixel_order_hvs5 = HVS_PIXEL_ORDER_ARGB,
-		.hvs5_only = true,
+		.min_gen = VC4_GEN_5,
 	},
 	{
 		.drm = DRM_FORMAT_ABGR2101010,
 		.hvs = HVS_PIXEL_FORMAT_RGBA1010102,
 		.pixel_order_hvs5 = HVS_PIXEL_ORDER_ABGR,
-		.hvs5_only = true,
+		.min_gen = VC4_GEN_5,
 	},
 	{
 		.drm = DRM_FORMAT_XBGR2101010,
 		.hvs = HVS_PIXEL_FORMAT_RGBA1010102,
 		.pixel_order_hvs5 = HVS_PIXEL_ORDER_ABGR,
-		.hvs5_only = true,
+		.min_gen = VC4_GEN_5,
 	},
 	{
 		.drm = DRM_FORMAT_RGB332,
@@ -2524,7 +2524,7 @@ struct drm_plane *vc4_plane_init(struct drm_device *dev,
 	};
 
 	for (i = 0; i < ARRAY_SIZE(hvs_formats); i++) {
-		if (!hvs_formats[i].hvs5_only || vc4->gen >= VC4_GEN_5) {
+		if (vc4->gen >= hvs_formats[i].min_gen) {
 			formats[num_formats] = hvs_formats[i].drm;
 			num_formats++;
 		}
