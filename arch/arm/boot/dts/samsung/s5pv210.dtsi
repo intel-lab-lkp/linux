@@ -450,7 +450,7 @@
 		};
 
 		mfc: codec@f1700000 {
-			compatible = "samsung,mfc-v5";
+			compatible = "samsung,s5pv210-mfc";
 			reg = <0xf1700000 0x10000>;
 			interrupt-parent = <&vic2>;
 			interrupts = <14>;
