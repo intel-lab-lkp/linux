@@ -990,7 +990,7 @@ static bool setup_einjv2_component_files(void)
 
 static int __init einj_probe(struct faux_device *fdev)
 {
-	int rc;
+	int rc = 0;
 	acpi_status status;
 	struct apei_exec_context ctx;
 
@@ -1015,7 +1015,6 @@ static int __init einj_probe(struct faux_device *fdev)
 	if (rc)
 		goto err_put_table;
 
-	rc = -ENOMEM;
 	einj_debug_dir = debugfs_create_dir("einj", apei_get_debugfs_dir());
 
 	debugfs_create_file("available_error_type", S_IRUSR, einj_debug_dir,
@@ -1078,7 +1077,7 @@ static int __init einj_probe(struct faux_device *fdev)
 
 	pr_info("Error INJection is initialized.\n");
 
-	return 0;
+	goto err_put_table;
 
 err_release:
 	apei_resources_release(&einj_resources);
