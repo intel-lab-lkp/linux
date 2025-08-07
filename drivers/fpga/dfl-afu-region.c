@@ -151,13 +151,20 @@ int afu_mmio_region_get_by_offset(struct dfl_feature_dev_data *fdata,
 {
 	struct dfl_afu_mmio_region *region;
 	struct dfl_afu *afu;
+	u64 sum = 0;
 	int ret = 0;
 
 	mutex_lock(&fdata->lock);
+
+	if (check_add_overflow(offset, size, &sum)) {
+		ret = -EINVAL;
+		goto exit;
+	}
+
 	afu = dfl_fpga_fdata_get_private(fdata);
 	for_each_region(region, afu)
 		if (region->offset <= offset &&
-		    region->offset + region->size >= offset + size) {
+		    region->offset + region->size >= sum) {
 			*pregion = *region;
 			goto exit;
 		}
