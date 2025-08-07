@@ -1708,7 +1708,10 @@ static struct s5p_mfc_variant mfc_drvdata_v12 = {
 
 static const struct of_device_id exynos_mfc_match[] = {
 	{
-		.compatible = "samsung,mfc-v5",
+		.compatible = "samsung,s5pv210-mfc",
+		.data = &mfc_drvdata_v5,
+	}, {
+		.compatible = "samsung,exynos4-mfc",
 		.data = &mfc_drvdata_v5,
 	}, {
 		.compatible = "samsung,exynos5250-mfc",
