@@ -24,6 +24,7 @@
 #include <asm/page.h>
 #include <asm/sections.h>
 #include <asm/trans_pgd.h>
+#include <linux/console.h>
 
 /**
  * kexec_image_info - For debugging output.
@@ -175,6 +176,9 @@ void machine_kexec(struct kimage *kimage)
 		"Some CPUs may be stale, kdump will be unreliable.\n");
 
 	pr_info("Bye!\n");
+
+	if (IS_ENABLED(CONFIG_PREEMPT_RT) && in_kexec_crash)
+		console_flush_on_panic(CONSOLE_FLUSH_PENDING);
 
 	local_daif_mask();
 

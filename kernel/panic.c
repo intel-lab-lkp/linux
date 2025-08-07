@@ -389,6 +389,8 @@ void panic(const char *fmt, ...)
 	 */
 	kgdb_panic(buf);
 
+	printk_legacy_allow_panic_sync();
+
 	/*
 	 * If we have crashed and we have a crash kernel loaded let it handle
 	 * everything else.
@@ -401,8 +403,6 @@ void panic(const char *fmt, ...)
 		__crash_kexec(NULL);
 
 	panic_other_cpus_shutdown(_crash_kexec_post_notifiers);
-
-	printk_legacy_allow_panic_sync();
 
 	/*
 	 * Run any panic handlers, including those that might need to
