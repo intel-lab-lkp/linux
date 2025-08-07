@@ -38,7 +38,6 @@ struct ad7476_chip_info {
 
 struct ad7476_state {
 	struct spi_device		*spi;
-	const struct ad7476_chip_info	*chip_info;
 	struct gpio_desc		*convst_gpio;
 	struct spi_transfer		xfer;
 	struct spi_message		msg;
@@ -280,6 +279,7 @@ static const struct iio_info ad7476_info = {
 
 static int ad7476_probe(struct spi_device *spi)
 {
+	const struct ad7476_chip_info *chip_info;
 	struct ad7476_state *st;
 	struct iio_dev *indio_dev;
 	int ret;
@@ -290,12 +290,12 @@ static int ad7476_probe(struct spi_device *spi)
 
 	st = iio_priv(indio_dev);
 
-	st->chip_info = spi_get_device_match_data(spi);
-	if (!st->chip_info)
+	chip_info = spi_get_device_match_data(spi);
+	if (!chip_info)
 		return -ENODEV;
 
 	/* Use VCC for reference voltage if vref / internal vref aren't used */
-	if (!st->chip_info->int_vref_mv && !st->chip_info->has_vref) {
+	if (!chip_info->int_vref_mv && !chip_info->has_vref) {
 		ret = devm_regulator_get_enable_read_voltage(&spi->dev, "vcc");
 		if (ret < 0)
 			return ret;
@@ -306,11 +306,11 @@ static int ad7476_probe(struct spi_device *spi)
 			return ret;
 	}
 
-	if (st->chip_info->has_vref) {
+	if (chip_info->has_vref) {
 		ret = devm_regulator_get_enable_read_voltage(&spi->dev, "vref");
 		if (ret < 0) {
 			/* Vref is optional if a device has an internal reference */
-			if (!st->chip_info->int_vref_mv || ret != -ENODEV)
+			if (!chip_info->int_vref_mv || ret != -ENODEV)
 				return ret;
 		} else {
 			st->scale_mv = ret / 1000;
@@ -318,9 +318,9 @@ static int ad7476_probe(struct spi_device *spi)
 	}
 
 	if (!st->scale_mv)
-		st->scale_mv = st->chip_info->int_vref_mv;
+		st->scale_mv = chip_info->int_vref_mv;
 
-	if (st->chip_info->has_vdrive) {
+	if (chip_info->has_vdrive) {
 		ret = devm_regulator_get_enable(&spi->dev, "vdrive");
 		if (ret)
 			return ret;
@@ -336,12 +336,12 @@ static int ad7476_probe(struct spi_device *spi)
 
 	indio_dev->name = spi_get_device_id(spi)->name;
 	indio_dev->modes = INDIO_DIRECT_MODE;
-	indio_dev->channels = st->chip_info->channel;
+	indio_dev->channels = chip_info->channel;
 	indio_dev->num_channels = 2;
 	indio_dev->info = &ad7476_info;
 
 	if (st->convst_gpio)
-		indio_dev->channels = st->chip_info->convst_channel;
+		indio_dev->channels = chip_info->convst_channel;
 	/* Setup default message */
 
 	st->xfer.rx_buf = &st->data;
@@ -355,8 +355,8 @@ static int ad7476_probe(struct spi_device *spi)
 	if (ret)
 		return ret;
 
-	if (st->chip_info->reset)
-		st->chip_info->reset(st);
+	if (chip_info->reset)
+		chip_info->reset(st);
 
 	return devm_iio_device_register(&spi->dev, indio_dev);
 }
