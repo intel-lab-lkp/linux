@@ -86,6 +86,7 @@
 #include <linux/user_namespace.h>
 #include <linux/fs_parser.h>
 #include <linux/fs_struct.h>
+#include <linux/freezer.h>
 #include <linux/slab.h>
 #include <linux/sched/autogroup.h>
 #include <linux/sched/mm.h>
@@ -3290,6 +3291,66 @@ static int proc_pid_ksm_stat(struct seq_file *m, struct pid_namespace *ns,
 }
 #endif /* CONFIG_KSM */
 
+#ifdef CONFIG_FREEZER
+static int freeze_priority_show(struct seq_file *m, void *v)
+{
+	struct inode *inode = m->private;
+	struct task_struct *p;
+
+	p = get_proc_task(inode);
+	if (!p)
+		return -ESRCH;
+
+	task_lock(p);
+	seq_printf(m, "%u\n", p->freeze_priority);
+	task_unlock(p);
+
+	put_task_struct(p);
+
+	return 0;
+}
+
+static ssize_t freeze_priority_write(struct file *file, const char __user *buf,
+				     size_t count, loff_t *ppos)
+{
+	struct inode *inode = file_inode(file);
+	struct task_struct *p;
+	u64 freeze_priority;
+	int err;
+
+	err = kstrtoull_from_user(buf, count, 10, &freeze_priority);
+	if (err < 0)
+		return err;
+
+	if (freeze_priority >= FREEZE_PRIORITY_NEVER)
+		return -EINVAL;
+
+	p = get_proc_task(inode);
+	if (!p)
+		return -ESRCH;
+
+	task_lock(p);
+	p->freeze_priority = freeze_priority;
+	task_unlock(p);
+
+	put_task_struct(p);
+	return count;
+}
+
+static int freeze_priority_open(struct inode *inode, struct file *filp)
+{
+	return single_open(filp, freeze_priority_show, inode);
+}
+
+static const struct file_operations proc_pid_freeze_priority = {
+	.open		= freeze_priority_open,
+	.read		= seq_read,
+	.write		= freeze_priority_write,
+	.llseek		= seq_lseek,
+	.release	= single_release,
+};
+#endif /* CONFIG_FREEZER */
+
 #ifdef CONFIG_KSTACK_ERASE_METRICS
 static int proc_stack_depth(struct seq_file *m, struct pid_namespace *ns,
 				struct pid *pid, struct task_struct *task)
@@ -3407,6 +3468,9 @@ static const struct pid_entry tgid_base_stuff[] = {
 	REG("timers",	  S_IRUGO, proc_timers_operations),
 #endif
 	REG("timerslack_ns", S_IRUGO|S_IWUGO, proc_pid_set_timerslack_ns_operations),
+#ifdef CONFIG_FREEZER
+	REG("freeze_priority",  S_IRUGO|S_IWUSR, proc_pid_freeze_priority),
+#endif
 #ifdef CONFIG_LIVEPATCH
 	ONE("patch_state",  S_IRUSR, proc_pid_patch_state),
 #endif

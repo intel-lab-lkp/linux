@@ -48,7 +48,8 @@ fixes/update part 1.1  Stefani Seibold <stefani@seibold.net>    June 9 2009
   3.11	/proc/<pid>/patch_state - Livepatch patch operation state
   3.12	/proc/<pid>/arch_status - Task architecture specific information
   3.13  /proc/<pid>/fd - List of symlinks to open files
-  3.14  /proc/<pid/ksm_stat - Information about the process's ksm status.
+  3.14  /proc/<pid>/ksm_stat - Information about the process's ksm status
+  3.15  /proc/<pid>/freeze_priority - Information about freeze_priority.
 
   4	Configuring procfs
   4.1	Mount options
@@ -2349,6 +2350,17 @@ applicable to KSM.
 More information about KSM can be found in
 Documentation/admin-guide/mm/ksm.rst.
 
+3.15	/proc/<pid>/freeze_priority - Information about freeze_priority
+-----------------------------------------------------------------------
+This file exposes the `freeze_priority` value of a given task.
+
+The freezer subsystem uses `freeze_priority` to determine the order
+in which tasks are frozen during suspend/hibernate. Tasks with
+lower values are frozen earlier. Higher values defer the task to
+later freeze rounds.
+
+Writing a value to this file allows user space to adjust the
+priority of the task in the freezer traversal.
 
 Chapter 4: Configuring procfs
 =============================
