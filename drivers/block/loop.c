@@ -137,12 +137,39 @@ static void loop_global_unlock(struct loop_device *lo, bool global)
 static int max_part;
 static int part_shift;
 
+/**
+ * get_size - calculate the effective size of a loop device
+ * @offset: offset into the backing file
+ * @sizelimit: user-specified size limit
+ * @file: the backing file
+ *
+ * Calculate the effective size of the loop device
+ *
+ * Returns: size in 512-byte sectors, or 0 if invalid
+ */
 static loff_t get_size(loff_t offset, loff_t sizelimit, struct file *file)
 {
+	struct kstat stat;
 	loff_t loopsize;
+	int ret;
 
-	/* Compute loopsize in bytes */
-	loopsize = i_size_read(file->f_mapping->host);
+	/*
+	 * Get file attributes for validation. We use vfs_getattr() to ensure
+	 * we have up-to-date file size information.
+	 */
+	ret = vfs_getattr_nosec(&file->f_path, &stat, STATX_SIZE, 
+			        AT_STATX_SYNC_AS_STAT);
+	if (ret) {
+		/*
+		 * If we can't get attributes, fall back to i_size_read()
+		 * which should work for most cases.
+		 */
+		loopsize = i_size_read(file->f_mapping->host);
+	} else {
+		/* Use the size from getattr for consistency */
+		loopsize = stat.size;
+	}
+
 	if (offset > 0)
 		loopsize -= offset;
 	/* offset is beyond i_size, weird but possible */
