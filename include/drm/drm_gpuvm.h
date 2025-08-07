@@ -1049,6 +1049,13 @@ struct drm_gpuva_ops {
  */
 #define drm_gpuva_next_op(op) list_next_entry(op, entry)
 
+enum drm_gpuvm_sm_map_ops_flags {
+	 /**
+	  * %DRM_GPUVM_SM_MAP_OPS_FLAG_NONE: DEFAULT sm_map ops
+	  */
+	DRM_GPUVM_SM_MAP_OPS_FLAG_NONE = 0,
+};
+
 /**
  * struct drm_gpuvm_map_req - arguments passed to drm_gpuvm_sm_map[_ops_create]()
  */
@@ -1057,6 +1064,11 @@ struct drm_gpuvm_map_req {
 	 * @op_map: struct drm_gpuva_op_map
 	 */
 	struct drm_gpuva_op_map op_map;
+
+	/**
+	 * @flags: drm_gpuvm_sm_map_ops_flags for this mapping request
+	 */
+	enum drm_gpuvm_sm_map_ops_flags flags;
 };
 
 struct drm_gpuva_ops *
