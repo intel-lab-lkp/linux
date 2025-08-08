@@ -169,10 +169,10 @@ static int cpuset_write_s64(struct cgroup_subsys_state *css, struct cftype *cft,
 	cpuset_filetype_t type = cft->private;
 	int retval = -ENODEV;
 
-	cpus_read_lock();
-	cpuset_lock();
+	guard_cpus_read_and_cpuset();
+
 	if (!is_cpuset_online(cs))
-		goto out_unlock;
+		return retval;
 
 	switch (type) {
 	case FILE_SCHED_RELAX_DOMAIN_LEVEL:
@@ -183,9 +183,6 @@ static int cpuset_write_s64(struct cgroup_subsys_state *css, struct cftype *cft,
 		retval = -EINVAL;
 		break;
 	}
-out_unlock:
-	cpuset_unlock();
-	cpus_read_unlock();
 	return retval;
 }
 
@@ -454,12 +451,9 @@ static int cpuset_write_u64(struct cgroup_subsys_state *css, struct cftype *cft,
 	cpuset_filetype_t type = cft->private;
 	int retval = 0;
 
-	cpus_read_lock();
-	cpuset_lock();
-	if (!is_cpuset_online(cs)) {
-		retval = -ENODEV;
-		goto out_unlock;
-	}
+	guard_cpus_read_and_cpuset();
+	if (!is_cpuset_online(cs))
+		return -ENODEV;
 
 	switch (type) {
 	case FILE_CPU_EXCLUSIVE:
@@ -497,9 +491,7 @@ static int cpuset_write_u64(struct cgroup_subsys_state *css, struct cftype *cft,
 		retval = -EINVAL;
 		break;
 	}
-out_unlock:
-	cpuset_unlock();
-	cpus_read_unlock();
+
 	return retval;
 }
 

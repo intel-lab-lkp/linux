@@ -3235,15 +3235,14 @@ ssize_t cpuset_write_resmask(struct kernfs_open_file *of,
 	int retval = -ENODEV;
 
 	buf = strstrip(buf);
-	cpus_read_lock();
-	mutex_lock(&cpuset_mutex);
+	guard_cpus_read_and_cpuset();
 	if (!is_cpuset_online(cs))
-		goto out_unlock;
+		goto out;
 
 	trialcs = alloc_trial_cpuset(cs);
 	if (!trialcs) {
 		retval = -ENOMEM;
-		goto out_unlock;
+		goto out;
 	}
 
 	switch (of_cft(of)->private) {
@@ -3264,9 +3263,7 @@ ssize_t cpuset_write_resmask(struct kernfs_open_file *of,
 	free_cpuset(trialcs);
 	if (force_sd_rebuild)
 		rebuild_sched_domains_locked();
-out_unlock:
-	mutex_unlock(&cpuset_mutex);
-	cpus_read_unlock();
+out:
 	flush_workqueue(cpuset_migrate_mm_wq);
 	return retval ?: nbytes;
 }
@@ -3370,12 +3367,9 @@ static ssize_t cpuset_partition_write(struct kernfs_open_file *of, char *buf,
 		return -EINVAL;
 
 	css_get(&cs->css);
-	cpus_read_lock();
-	mutex_lock(&cpuset_mutex);
+	guard_cpus_read_and_cpuset();
 	if (is_cpuset_online(cs))
 		retval = update_prstate(cs, val);
-	mutex_unlock(&cpuset_mutex);
-	cpus_read_unlock();
 	css_put(&cs->css);
 	return retval ?: nbytes;
 }
@@ -3506,8 +3500,7 @@ static int cpuset_css_online(struct cgroup_subsys_state *css)
 	if (!parent)
 		return 0;
 
-	cpus_read_lock();
-	mutex_lock(&cpuset_mutex);
+	guard_cpus_read_and_cpuset();
 
 	if (is_spread_page(parent))
 		set_bit(CS_SPREAD_PAGE, &cs->flags);
@@ -3529,7 +3522,7 @@ static int cpuset_css_online(struct cgroup_subsys_state *css)
 	spin_unlock_irq(&callback_lock);
 
 	if (!test_bit(CGRP_CPUSET_CLONE_CHILDREN, &css->cgroup->flags))
-		goto out_unlock;
+		return 0;
 
 	/*
 	 * Clone @parent's configuration if CGRP_CPUSET_CLONE_CHILDREN is
@@ -3548,7 +3541,7 @@ static int cpuset_css_online(struct cgroup_subsys_state *css)
 	cpuset_for_each_child(tmp_cs, pos_css, parent) {
 		if (is_mem_exclusive(tmp_cs) || is_cpu_exclusive(tmp_cs)) {
 			rcu_read_unlock();
-			goto out_unlock;
+			return 0;
 		}
 	}
 	rcu_read_unlock();
@@ -3559,9 +3552,6 @@ static int cpuset_css_online(struct cgroup_subsys_state *css)
 	cpumask_copy(cs->cpus_allowed, parent->cpus_allowed);
 	cpumask_copy(cs->effective_cpus, parent->cpus_allowed);
 	spin_unlock_irq(&callback_lock);
-out_unlock:
-	mutex_unlock(&cpuset_mutex);
-	cpus_read_unlock();
 	return 0;
 }
 
@@ -3576,16 +3566,12 @@ static void cpuset_css_offline(struct cgroup_subsys_state *css)
 {
 	struct cpuset *cs = css_cs(css);
 
-	cpus_read_lock();
-	mutex_lock(&cpuset_mutex);
+	guard_cpus_read_and_cpuset();
 
 	if (!cpuset_v2() && is_sched_load_balance(cs))
 		cpuset_update_flag(CS_SCHED_LOAD_BALANCE, cs, 0);
 
 	cpuset_dec();
-
-	mutex_unlock(&cpuset_mutex);
-	cpus_read_unlock();
 }
 
 /*
@@ -3597,16 +3583,11 @@ static void cpuset_css_killed(struct cgroup_subsys_state *css)
 {
 	struct cpuset *cs = css_cs(css);
 
-	cpus_read_lock();
-	mutex_lock(&cpuset_mutex);
+	guard_cpus_read_and_cpuset();
 
 	/* Reset valid partition back to member */
 	if (is_partition_valid(cs))
 		update_prstate(cs, PRS_MEMBER);
-
-	mutex_unlock(&cpuset_mutex);
-	cpus_read_unlock();
-
 }
 
 static void cpuset_css_free(struct cgroup_subsys_state *css)
