@@ -3,7 +3,7 @@
 //! Implementation of [`Box`].
 
 #[allow(unused_imports)] // Used in doc comments.
-use super::allocator::{KVmalloc, Kmalloc, Vmalloc};
+use super::allocator::{KVmalloc, Kmalloc, Vmalloc, VmallocPageIter};
 use super::{AllocError, Allocator, Flags};
 use core::alloc::Layout;
 use core::borrow::{Borrow, BorrowMut};
@@ -18,6 +18,7 @@ use core::result::Result;
 
 use crate::ffi::c_void;
 use crate::init::InPlaceInit;
+use crate::page::IntoPageIter;
 use crate::types::ForeignOwnable;
 use pin_init::{InPlaceWrite, Init, PinInit, ZeroableOption};
 
@@ -596,5 +597,39 @@ where
         // - `self.0` was previously allocated with `A`.
         // - `layout` is equal to the `Layout´ `self.0` was allocated with.
         unsafe { A::free(self.0.cast(), layout) };
+    }
+}
+
+/// # Examples
+///
+/// ```
+/// # use kernel::prelude::*;
+/// use kernel::alloc::allocator::VmallocPageIter;
+/// use kernel::page::{IntoPageIter, PAGE_SIZE};
+///
+/// let mut vbox = VBox::new((), GFP_KERNEL)?;
+///
+/// assert!(vbox.page_iter().next().is_none());
+///
+/// let mut vbox = VBox::<[u8; PAGE_SIZE]>::new_uninit(GFP_KERNEL)?;
+///
+/// let page = vbox.page_iter().next().expect("At least one page should be available.\n");
+///
+/// // SAFETY: There is no concurrent read or write to the same page.
+/// unsafe { page.fill_zero_raw(0, PAGE_SIZE)? };
+/// # Ok::<(), Error>(())
+/// ```
+impl<'a, T> IntoPageIter<'a> for VBox<T> {
+    type Iter = VmallocPageIter<'a>;
+
+    fn page_iter(&'a mut self) -> Self::Iter {
+        let ptr = self.0.cast();
+        let size = size_of::<T>();
+
+        // SAFETY:
+        // - `ptr` is a valid pointer to the beginning of a `Vmalloc` allocation.
+        // - `ptr` is guaranteed to be valid for the lifetime of `'a`.
+        // - `size` is the size of the `Vmalloc` allocation `ptr` points to.
+        unsafe { VmallocPageIter::new(ptr, size) }
     }
 }
