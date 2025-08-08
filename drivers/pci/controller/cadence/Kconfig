@@ -75,4 +75,16 @@ config PCI_J721E_EP
 	  Say Y here if you want to support the TI J721E PCIe platform
 	  controller in endpoint mode. TI J721E PCIe controller uses Cadence PCIe
 	  core.
+
+config PCI_SKY1_HOST
+	tristate "CIX SKY1 PCIe controller (host mode)"
+	depends on OF
+	select PCIE_CADENCE_HOST
+	help
+	  Say Y here if you want to support the CIX SKY1 PCIe platform
+	  controller in host mode. CIX SKY1 PCIe controller uses Cadence HPA(High
+	  Performance Architecture IP[Second generation of cadence PCIe IP])
+
+	  This driver requires Cadence PCIe core infrastructure (PCIE_CADENCE_HOST)
+	  and hardware platform adaptation layer to function.
 endmenu
