@@ -5,13 +5,7 @@
 #include <linux/blk-mq-dma.h>
 #include "blk.h"
 
-struct phys_vec {
-	phys_addr_t	paddr;
-	u32		len;
-};
-
-static bool blk_map_iter_next(struct request *req, struct req_iterator *iter,
-			      struct phys_vec *vec)
+static bool blk_map_iter_next(struct request *req, struct blk_map_iter *iter)
 {
 	unsigned int max_size;
 	struct bio_vec bv;
@@ -19,8 +13,8 @@ static bool blk_map_iter_next(struct request *req, struct req_iterator *iter,
 	if (req->rq_flags & RQF_SPECIAL_PAYLOAD) {
 		if (!iter->bio)
 			return false;
-		vec->paddr = bvec_phys(&req->special_vec);
-		vec->len = req->special_vec.bv_len;
+		iter->paddr = bvec_phys(&req->special_vec);
+		iter->len = req->special_vec.bv_len;
 		iter->bio = NULL;
 		return true;
 	}
@@ -29,8 +23,8 @@ static bool blk_map_iter_next(struct request *req, struct req_iterator *iter,
 		return false;
 
 	bv = mp_bvec_iter_bvec(iter->bio->bi_io_vec, iter->iter);
-	vec->paddr = bvec_phys(&bv);
-	max_size = get_max_segment_size(&req->q->limits, vec->paddr, UINT_MAX);
+	iter->paddr = bvec_phys(&bv);
+	max_size = get_max_segment_size(&req->q->limits, iter->paddr, UINT_MAX);
 	bv.bv_len = min(bv.bv_len, max_size);
 	bio_advance_iter_single(iter->bio, &iter->iter, bv.bv_len);
 
@@ -58,7 +52,7 @@ static bool blk_map_iter_next(struct request *req, struct req_iterator *iter,
 		bio_advance_iter_single(iter->bio, &iter->iter, next.bv_len);
 	}
 
-	vec->len = bv.bv_len;
+	iter->len = bv.bv_len;
 	return true;
 }
 
@@ -77,29 +71,29 @@ static inline bool blk_can_dma_map_iova(struct request *req,
 		dma_get_merge_boundary(dma_dev));
 }
 
-static bool blk_dma_map_bus(struct blk_dma_iter *iter, struct phys_vec *vec)
+static bool blk_dma_map_bus(struct blk_dma_iter *iter)
 {
-	iter->addr = pci_p2pdma_bus_addr_map(&iter->p2pdma, vec->paddr);
-	iter->len = vec->len;
+	iter->addr = pci_p2pdma_bus_addr_map(&iter->p2pdma, iter->iter.paddr);
+	iter->len = iter->iter.len;
 	return true;
 }
 
 static bool blk_dma_map_direct(struct request *req, struct device *dma_dev,
-		struct blk_dma_iter *iter, struct phys_vec *vec)
+		struct blk_dma_iter *iter)
 {
-	iter->addr = dma_map_page(dma_dev, phys_to_page(vec->paddr),
-			offset_in_page(vec->paddr), vec->len, rq_dma_dir(req));
+	iter->addr = dma_map_page(dma_dev, phys_to_page(iter->iter.paddr),
+			offset_in_page(iter->iter.paddr), iter->iter.len,
+			rq_dma_dir(req));
 	if (dma_mapping_error(dma_dev, iter->addr)) {
 		iter->status = BLK_STS_RESOURCE;
 		return false;
 	}
-	iter->len = vec->len;
+	iter->len = iter->iter.len;
 	return true;
 }
 
 static bool blk_rq_dma_map_iova(struct request *req, struct device *dma_dev,
-		struct dma_iova_state *state, struct blk_dma_iter *iter,
-		struct phys_vec *vec)
+		struct dma_iova_state *state, struct blk_dma_iter *iter)
 {
 	enum dma_data_direction dir = rq_dma_dir(req);
 	unsigned int mapped = 0;
@@ -109,12 +103,12 @@ static bool blk_rq_dma_map_iova(struct request *req, struct device *dma_dev,
 	iter->len = dma_iova_size(state);
 
 	do {
-		error = dma_iova_link(dma_dev, state, vec->paddr, mapped,
-				vec->len, dir, 0);
+		error = dma_iova_link(dma_dev, state, iter->iter.paddr, mapped,
+				iter->iter.len, dir, 0);
 		if (error)
 			break;
-		mapped += vec->len;
-	} while (blk_map_iter_next(req, &iter->iter, vec));
+		mapped += iter->iter.len;
+	} while (blk_map_iter_next(req, &iter->iter));
 
 	error = dma_iova_sync(dma_dev, state, 0, mapped);
 	if (error) {
@@ -151,7 +145,6 @@ bool blk_rq_dma_map_iter_start(struct request *req, struct device *dma_dev,
 		struct dma_iova_state *state, struct blk_dma_iter *iter)
 {
 	unsigned int total_len = blk_rq_payload_bytes(req);
-	struct phys_vec vec;
 
 	iter->iter.bio = req->bio;
 	iter->iter.iter = req->bio->bi_iter;
@@ -162,14 +155,14 @@ bool blk_rq_dma_map_iter_start(struct request *req, struct device *dma_dev,
 	 * Grab the first segment ASAP because we'll need it to check for P2P
 	 * transfers.
 	 */
-	if (!blk_map_iter_next(req, &iter->iter, &vec))
+	if (!blk_map_iter_next(req, &iter->iter))
 		return false;
 
 	if (IS_ENABLED(CONFIG_PCI_P2PDMA) && (req->cmd_flags & REQ_P2PDMA)) {
 		switch (pci_p2pdma_state(&iter->p2pdma, dma_dev,
-					 phys_to_page(vec.paddr))) {
+					 phys_to_page(iter->iter.paddr))) {
 		case PCI_P2PDMA_MAP_BUS_ADDR:
-			return blk_dma_map_bus(iter, &vec);
+			return blk_dma_map_bus(iter);
 		case PCI_P2PDMA_MAP_THRU_HOST_BRIDGE:
 			/*
 			 * P2P transfers through the host bridge are treated the
@@ -184,9 +177,9 @@ bool blk_rq_dma_map_iter_start(struct request *req, struct device *dma_dev,
 	}
 
 	if (blk_can_dma_map_iova(req, dma_dev) &&
-	    dma_iova_try_alloc(dma_dev, state, vec.paddr, total_len))
-		return blk_rq_dma_map_iova(req, dma_dev, state, iter, &vec);
-	return blk_dma_map_direct(req, dma_dev, iter, &vec);
+	    dma_iova_try_alloc(dma_dev, state, iter->iter.paddr, total_len))
+		return blk_rq_dma_map_iova(req, dma_dev, state, iter);
+	return blk_dma_map_direct(req, dma_dev, iter);
 }
 EXPORT_SYMBOL_GPL(blk_rq_dma_map_iter_start);
 
@@ -211,14 +204,12 @@ EXPORT_SYMBOL_GPL(blk_rq_dma_map_iter_start);
 bool blk_rq_dma_map_iter_next(struct request *req, struct device *dma_dev,
 		struct dma_iova_state *state, struct blk_dma_iter *iter)
 {
-	struct phys_vec vec;
-
-	if (!blk_map_iter_next(req, &iter->iter, &vec))
+	if (!blk_map_iter_next(req, &iter->iter))
 		return false;
 
 	if (iter->p2pdma.map == PCI_P2PDMA_MAP_BUS_ADDR)
-		return blk_dma_map_bus(iter, &vec);
-	return blk_dma_map_direct(req, dma_dev, iter, &vec);
+		return blk_dma_map_bus(iter);
+	return blk_dma_map_direct(req, dma_dev, iter);
 }
 EXPORT_SYMBOL_GPL(blk_rq_dma_map_iter_next);
 
@@ -246,20 +237,20 @@ blk_next_sg(struct scatterlist **sg, struct scatterlist *sglist)
 int __blk_rq_map_sg(struct request *rq, struct scatterlist *sglist,
 		    struct scatterlist **last_sg)
 {
-	struct req_iterator iter = {
-		.bio	= rq->bio,
+	struct bio *bio = rq->bio;
+	struct blk_map_iter iter = {
+		.bio	= bio,
 	};
-	struct phys_vec vec;
 	int nsegs = 0;
 
 	/* the internal flush request may not have bio attached */
-	if (iter.bio)
-		iter.iter = iter.bio->bi_iter;
+	if (bio)
+		iter.iter = bio->bi_iter;
 
-	while (blk_map_iter_next(rq, &iter, &vec)) {
+	while (blk_map_iter_next(rq, &iter)) {
 		*last_sg = blk_next_sg(last_sg, sglist);
-		sg_set_page(*last_sg, phys_to_page(vec.paddr), vec.len,
-				offset_in_page(vec.paddr));
+		sg_set_page(*last_sg, phys_to_page(iter.paddr), iter.len,
+				offset_in_page(iter.paddr));
 		nsegs++;
 	}
 
