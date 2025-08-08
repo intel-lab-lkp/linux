@@ -1225,6 +1225,47 @@ static const struct file_operations i915_dsc_fractional_bpp_fops = {
 	.write = i915_dsc_fractional_bpp_write
 };
 
+static int i915_force_bpc_show(struct seq_file *m, void *data)
+{
+	struct intel_connector *connector = m->private;
+	struct drm_connector *conn = &connector->base;
+
+	seq_printf(m, "%u\n", conn->state->max_requested_bpc);
+
+	return 0;
+}
+
+static ssize_t i915_force_bpc_write(struct file *file,
+				       const char __user *ubuf,
+				       size_t len, loff_t *offp)
+{
+	struct seq_file *m = file->private_data;
+	struct intel_connector *connector = m->private;
+	struct intel_display *display = to_intel_display(connector);
+	struct drm_connector *conn = &connector->base;
+	int new_bpc, ret;
+
+	ret = kstrtoint_from_user(ubuf, len, 0, &new_bpc);
+	if (ret < 0)
+		return ret;
+
+	switch (new_bpc) {
+	case 8:
+	case 10:
+	case 12:
+		break;
+	default:
+		drm_dbg_kms(display->drm, "Invalid bpc value (%u)\n", new_bpc);
+		return -EINVAL;
+	}
+
+	conn->state->max_requested_bpc = new_bpc;
+
+	*offp += len;
+	return len;
+}
+DEFINE_SHOW_STORE_ATTRIBUTE(i915_force_bpc);
+
 /*
  * Returns the Current CRTC's bpc.
  * Example usage: cat /sys/kernel/debug/dri/0/crtc-0/i915_current_bpc
@@ -1377,6 +1418,11 @@ void intel_connector_debugfs_add(struct intel_connector *connector)
 	    connector_type == DRM_MODE_CONNECTOR_HDMIB)
 		debugfs_create_file("i915_lpsp_capability", 0444, root,
 				    connector, &i915_lpsp_capability_fops);
+
+	if (connector_type == DRM_MODE_CONNECTOR_HDMIA ||
+	    connector_type == DRM_MODE_CONNECTOR_HDMIB)
+		debugfs_create_file("i915_force_bpc", 0644, root,
+				    connector, &i915_force_bpc_fops);
 }
 
 /**
