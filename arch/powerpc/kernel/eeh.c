@@ -139,6 +139,49 @@ struct eeh_stats {
 
 static struct eeh_stats eeh_stats;
 
+static const char * const aer_uncor_errors[] = {
+	"Undefined",
+	"Undefined",
+	"Undefined",
+	"Undefined",
+	"Data Link Protocol",
+	"Surprise Down",
+	"Poisoned TLP",
+	"Flow Control Protocol",
+	"Completion Timeout",
+	"Completer Abort",
+	"Unexpected Completion",
+	"Receiver Overflow",
+	"Malformed TLP",
+	"ECRC Error",
+	"Unsupported Request",
+	"ACS Violation",
+	"Uncorrectable Internal Error",
+	"MC Blocked TLP",
+	"AtomicOp Egress Blocked",
+	"TLPPrefix Blocked",
+	"Poisoned TLP Egress Blocked"
+};
+
+static const char * const aer_cor_errors[] = {
+	"Receiver Error",
+	"Undefined",
+	"Undefined",
+	"Undefined",
+	"Undefined",
+	"Undefined",
+	"Bad TLP",
+	"Bad DLLP",
+	"Replay Num Rollover",
+	"Undefined",
+	"Undefined",
+	"Undefined",
+	"Replay Timer Timeout",
+	"Advisory Non-Fatal Error",
+	"Corrected Internal Error",
+	"Header Log Overflow",
+};
+
 static int __init eeh_setup(char *str)
 {
 	if (!strcmp(str, "off"))
@@ -158,6 +201,40 @@ void eeh_show_enabled(void)
 		pr_info("EEH: Capable adapter found: recovery enabled.\n");
 	else
 		pr_info("EEH: No capable adapters found: recovery disabled.\n");
+}
+
+static void eeh_parse_aer_registers(struct eeh_dev *edev, int cap)
+{
+	int i;
+	const char *error_type;
+	u32 uncor_status, uncor_severity, cor_status;
+
+	eeh_ops->read_config(edev, cap + PCI_ERR_UNCOR_STATUS, 4, &uncor_status);
+	eeh_ops->read_config(edev, cap + PCI_ERR_UNCOR_SEVER, 4, &uncor_severity);
+	eeh_ops->read_config(edev, cap + PCI_ERR_COR_STATUS, 4, &cor_status);
+
+	if (uncor_status) {
+		for (i = 0; i < ARRAY_SIZE(aer_uncor_errors); i++) {
+			if (uncor_status & (1 << i)) {
+				error_type = (i < ARRAY_SIZE(aer_uncor_errors))
+					     ? aer_uncor_errors[i] : "Unknown";
+				pr_err("EEH:AER severity=Uncorrected (%s), Error type: %s\n",
+				       (uncor_severity & (1 << i)) ?
+				       "Fatal" : "Non-Fatal", error_type);
+			}
+		}
+	}
+
+	if (cor_status) {
+		for (i = 0; i < ARRAY_SIZE(aer_cor_errors); i++) {
+			if (cor_status & (1 << i)) {
+				error_type = (i < ARRAY_SIZE(aer_cor_errors))
+					      ? aer_cor_errors[i] : "Unknown";
+				pr_err("EEH:AER severity=Correctable, Error Type: %s\n",
+				       error_type);
+			}
+		}
+	}
 }
 
 /*
@@ -237,9 +314,11 @@ static size_t eeh_dump_dev_log(struct eeh_dev *edev, char *buf, size_t len)
 		pr_warn("%s\n", buffer);
 	}
 
-	/* If AER capable, dump it */
+	/* If AER capable, parse and dump it */
 	cap = edev->aer_cap;
 	if (cap) {
+		eeh_parse_aer_registers(edev, cap);
+
 		n += scnprintf(buf+n, len-n, "pci-e AER:\n");
 		pr_warn("EEH: PCI-E AER capability register set follows:\n");
 
