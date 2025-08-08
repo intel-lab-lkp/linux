@@ -1533,9 +1533,10 @@ static void requeue_task_rt(struct rq *rq, struct task_struct *p, int head)
 	}
 }
 
-static void yield_task_rt(struct rq *rq)
+static bool yield_task_rt(struct rq *rq)
 {
 	requeue_task_rt(rq, rq->curr, 0);
+	return true;
 }
 
 #ifdef CONFIG_SMP

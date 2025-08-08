@@ -9010,7 +9010,7 @@ static void put_prev_task_fair(struct rq *rq, struct task_struct *prev, struct t
 /*
  * sched_yield() is very simple
  */
-static void yield_task_fair(struct rq *rq)
+static bool yield_task_fair(struct rq *rq)
 {
 	struct task_struct *curr = rq->curr;
 	struct cfs_rq *cfs_rq = task_cfs_rq(curr);
@@ -9020,7 +9020,7 @@ static void yield_task_fair(struct rq *rq)
 	 * Are we the only task in the tree?
 	 */
 	if (unlikely(rq->nr_running == 1))
-		return;
+		return true;
 
 	clear_buddies(cfs_rq, se);
 
@@ -9037,6 +9037,8 @@ static void yield_task_fair(struct rq *rq)
 	rq_clock_skip_update(rq);
 
 	se->deadline += calc_delta_fair(se->slice, se);
+
+	return true;
 }
 
 static bool yield_to_task_fair(struct rq *rq, struct task_struct *p)

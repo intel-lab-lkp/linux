@@ -1354,11 +1354,18 @@ static void do_sched_yield(void)
 {
 	struct rq_flags rf;
 	struct rq *rq;
+	bool should_resched;
 
 	rq = this_rq_lock_irq(&rf);
 
+	should_resched = current->sched_class->yield_task(rq);
+
+	if (unlikely(!should_resched)) {
+		rq_unlock_irq(rq, &rf);
+		return;
+	}
+
 	schedstat_inc(rq->yld_count);
-	current->sched_class->yield_task(rq);
 
 	preempt_disable();
 	rq_unlock_irq(rq, &rf);

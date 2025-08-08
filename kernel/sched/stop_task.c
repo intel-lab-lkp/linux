@@ -54,7 +54,7 @@ dequeue_task_stop(struct rq *rq, struct task_struct *p, int flags)
 	return true;
 }
 
-static void yield_task_stop(struct rq *rq)
+static bool yield_task_stop(struct rq *rq)
 {
 	BUG(); /* the stop task should never yield, its pointless. */
 }

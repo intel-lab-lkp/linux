@@ -2194,7 +2194,7 @@ static bool dequeue_task_dl(struct rq *rq, struct task_struct *p, int flags)
  *   yield_task_dl will indicate that some spare budget
  *   is available for other task instances to use it.
  */
-static void yield_task_dl(struct rq *rq)
+static bool yield_task_dl(struct rq *rq)
 {
 	/*
 	 * We make the task go to sleep until its current deadline by
@@ -2212,6 +2212,8 @@ static void yield_task_dl(struct rq *rq)
 	 * and double the fastpath cost.
 	 */
 	rq_clock_skip_update(rq);
+
+	return true;
 }
 
 #ifdef CONFIG_SMP
