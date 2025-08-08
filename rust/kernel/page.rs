@@ -103,6 +103,16 @@ impl<'a> Deref for BorrowedPage<'a> {
     }
 }
 
+/// Trait to be implemented by types, which provide an [`Iterator`] implementation of
+/// [`BorrowedPage`] items, such as [`VmallocPageIter`](kernel::alloc::allocator::VmallocPageIter).
+pub trait IntoPageIter<'a> {
+    /// The [`Iterator`] type, e.g. [`VmallocPageIter`](kernel::alloc::allocator::VmallocPageIter).
+    type Iter: Iterator<Item = BorrowedPage<'a>>;
+
+    /// Returns an [`Iterator`] of [`BorrowedPage`] items over all pages owned by `self`.
+    fn page_iter(&'a mut self) -> Self::Iter;
+}
+
 /// A pointer to a page that owns the page allocation.
 ///
 /// # Invariants
