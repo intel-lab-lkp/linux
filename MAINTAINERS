@@ -12961,10 +12961,10 @@ F:	fs/jbd2/
 F:	include/linux/jbd2.h
 
 JPU V4L2 MEM2MEM DRIVER FOR RENESAS
-M:	Mikhail Ulyanov <mikhail.ulyanov@cogentembedded.com>
+M:	Laurent Pinchart <laurent.pinchart+renesas@ideasonboard.com>
 L:	linux-media@vger.kernel.org
 L:	linux-renesas-soc@vger.kernel.org
-S:	Maintained
+S:	Odd Fixes
 F:	drivers/media/platform/renesas/rcar_jpu.c
 
 JSM Neo PCI based serial card
