@@ -5,6 +5,7 @@
 
 #include <linux/debugfs.h>
 #include <linux/fault-inject.h>
+#include <linux/nospec.h>
 
 #include <drm/drm_debugfs.h>
 #include <drm/drm_file.h>
@@ -464,6 +465,7 @@ priority_bands_fops_write(struct file *file, const char __user *user_buf, size_t
 	if (band >= VPU_JOB_SCHEDULING_PRIORITY_BAND_COUNT)
 		return -EINVAL;
 
+	band = array_index_nospec(band, VPU_JOB_SCHEDULING_PRIORITY_BAND_COUNT);
 	vdev->hw->hws.grace_period[band] = grace_period;
 	vdev->hw->hws.process_grace_period[band] = process_grace_period;
 	vdev->hw->hws.process_quantum[band] = process_quantum;
