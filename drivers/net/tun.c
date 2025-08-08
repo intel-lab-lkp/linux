@@ -1023,6 +1023,13 @@ static netdev_tx_t tun_net_xmit(struct sk_buff *skb, struct net_device *dev)
 
 	netif_info(tun, tx_queued, tun->dev, "%s %d\n", __func__, skb->len);
 
+	if (unlikely(ptr_ring_full(&tfile->tx_ring))) {
+		queue = netdev_get_tx_queue(dev, txq);
+		netif_tx_stop_queue(queue);
+		rcu_read_unlock();
+		return NETDEV_TX_BUSY;
+	}
+
 	/* Drop if the filter does not like it.
 	 * This is a noop if the filter is disabled.
 	 * Filter can be enabled only for the TAP devices. */
@@ -1060,13 +1067,16 @@ static netdev_tx_t tun_net_xmit(struct sk_buff *skb, struct net_device *dev)
 
 	nf_reset_ct(skb);
 
-	if (ptr_ring_produce(&tfile->tx_ring, skb)) {
+	queue = netdev_get_tx_queue(dev, txq);
+	if (unlikely(ptr_ring_produce(&tfile->tx_ring, skb))) {
+		netif_tx_stop_queue(queue);
 		drop_reason = SKB_DROP_REASON_FULL_RING;
 		goto drop;
 	}
+	if (ptr_ring_full(&tfile->tx_ring))
+		netif_tx_stop_queue(queue);
 
 	/* dev->lltx requires to do our own update of trans_start */
-	queue = netdev_get_tx_queue(dev, txq);
 	txq_trans_cond_update(queue);
 
 	/* Notify and wake up reader process */
@@ -2110,15 +2120,21 @@ done:
 	return total;
 }
 
-static void *tun_ring_recv(struct tun_file *tfile, int noblock, int *err)
+static void *tun_ring_recv(struct tun_struct *tun, struct tun_file *tfile, int noblock, int *err)
 {
 	DECLARE_WAITQUEUE(wait, current);
+	struct netdev_queue *txq;
 	void *ptr = NULL;
 	int error = 0;
 
 	ptr = ptr_ring_consume(&tfile->tx_ring);
 	if (ptr)
 		goto out;
+
+	txq = netdev_get_tx_queue(tun->dev, tfile->queue_index);
+	if (unlikely(netif_tx_queue_stopped(txq)))
+		netif_tx_wake_queue(txq);
+
 	if (noblock) {
 		error = -EAGAIN;
 		goto out;
@@ -2131,6 +2147,10 @@ static void *tun_ring_recv(struct tun_file *tfile, int noblock, int *err)
 		ptr = ptr_ring_consume(&tfile->tx_ring);
 		if (ptr)
 			break;
+
+		if (unlikely(netif_tx_queue_stopped(txq)))
+			netif_tx_wake_queue(txq);
+
 		if (signal_pending(current)) {
 			error = -ERESTARTSYS;
 			break;
@@ -2147,6 +2167,10 @@ static void *tun_ring_recv(struct tun_file *tfile, int noblock, int *err)
 	remove_wait_queue(&tfile->socket.wq.wait, &wait);
 
 out:
+	if (ptr_ring_empty(&tfile->tx_ring)) {
+		txq = netdev_get_tx_queue(tun->dev, tfile->queue_index);
+		netif_tx_wake_queue(txq);
+	}
 	*err = error;
 	return ptr;
 }
@@ -2165,7 +2189,7 @@ static ssize_t tun_do_read(struct tun_struct *tun, struct tun_file *tfile,
 
 	if (!ptr) {
 		/* Read frames from ring */
-		ptr = tun_ring_recv(tfile, noblock, &err);
+		ptr = tun_ring_recv(tun, tfile, noblock, &err);
 		if (!ptr)
 			return err;
 	}
