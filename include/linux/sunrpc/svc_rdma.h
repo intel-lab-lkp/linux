@@ -73,6 +73,8 @@ extern struct percpu_counter svcrdma_stat_recv;
 extern struct percpu_counter svcrdma_stat_sq_starve;
 extern struct percpu_counter svcrdma_stat_write;
 
+struct rpcrdma_pool;
+
 struct svcxprt_rdma {
 	struct svc_xprt      sc_xprt;		/* SVC transport structure */
 	struct rdma_cm_id    *sc_cm_id;		/* RDMA connection id */
@@ -112,6 +114,7 @@ struct svcxprt_rdma {
 	unsigned long	     sc_flags;
 	struct work_struct   sc_work;
 
+	struct rpcrdma_pool  *sc_recv_pool;
 	struct llist_head    sc_recv_ctxts;
 
 	atomic_t	     sc_completion_ids;
