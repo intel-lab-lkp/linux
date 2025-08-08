@@ -81,6 +81,18 @@ static unsigned int normalized_sysctl_sched_base_slice	= 700000ULL;
 
 __read_mostly unsigned int sysctl_sched_migration_cost	= 500000UL;
 
+/*
+ * This interval controls how often a given CFS thread can yield.
+ * A given thread can only yield once within this interval.
+ * The throttling is accomplished by making calls to sched_yield() return
+ * without actually calling schedule().
+ * A value of 0 means yields are not throttled.
+ *
+ * (default: 0, units: nanoseconds)
+ */
+__read_mostly unsigned int sysctl_sched_yield_interval;
+
+
 static int __init setup_sched_thermal_decay_shift(char *str)
 {
 	pr_warn("Ignoring the deprecated sched_thermal_decay_shift= option\n");
@@ -9015,6 +9027,7 @@ static bool yield_task_fair(struct rq *rq)
 	struct task_struct *curr = rq->curr;
 	struct cfs_rq *cfs_rq = task_cfs_rq(curr);
 	struct sched_entity *se = &curr->se;
+	ktime_t now, throttle_end_time;
 
 	/*
 	 * Are we the only task in the tree?
@@ -9023,6 +9036,22 @@ static bool yield_task_fair(struct rq *rq)
 		return false;
 
 	clear_buddies(cfs_rq, se);
+
+	if (unlikely(sysctl_sched_yield_interval)) {
+		/*
+		 * Limit how often a given thread can call schedule() via
+		 * sched_yield() to once every sysctl_sched_yield_interval
+		 * nanoseconds.
+		 */
+		now = ktime_get();
+		throttle_end_time = ktime_add_ns(curr->last_yield,
+						 sysctl_sched_yield_interval);
+
+		if (unlikely(ktime_before(now, throttle_end_time)))
+			return false;
+
+		curr->last_yield = now;
+	}
 
 	update_rq_clock(rq);
 	/*

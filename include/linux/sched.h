@@ -946,6 +946,8 @@ struct task_struct {
 
 	struct sched_info		sched_info;
 
+	ktime_t last_yield;
+
 	struct list_head		tasks;
 #ifdef CONFIG_SMP
 	struct plist_node		pushable_tasks;
