@@ -2,8 +2,29 @@
 /*
  * Copyright (C) 2025 Christoph Hellwig
  */
+#include <linux/blk-integrity.h>
 #include <linux/blk-mq-dma.h>
 #include "blk.h"
+
+static bool __blk_map_iter_next(struct blk_map_iter *iter)
+{
+	if (iter->iter.bi_size)
+		return true;
+	if (!iter->bio || !iter->bio->bi_next)
+		return false;
+
+	iter->bio = iter->bio->bi_next;
+#ifdef CONFIG_BLK_DEV_INTEGRITY
+	if (iter->is_integrity) {
+		iter->iter = iter->bio->bi_integrity->bip_iter;
+		iter->bvec = iter->bio->bi_integrity->bip_vec;
+		return true;
+	}
+#endif
+	iter->iter = iter->bio->bi_iter;
+	iter->bvec = iter->bio->bi_io_vec;
+	return true;
+}
 
 static bool blk_map_iter_next(struct request *req, struct blk_map_iter *iter)
 {
@@ -27,13 +48,8 @@ static bool blk_map_iter_next(struct request *req, struct blk_map_iter *iter)
 	while (!iter->iter.bi_size || !iter->iter.bi_bvec_done) {
 		struct bio_vec next;
 
-		if (!iter->iter.bi_size) {
-			if (!iter->bio || !iter->bio->bi_next)
-				break;
-			iter->bio = iter->bio->bi_next;
-			iter->iter = iter->bio->bi_iter;
-			iter->bvec = iter->bio->bi_io_vec;
-		}
+		if (!__blk_map_iter_next(iter))
+			break;
 
 		next = mp_bvec_iter_bvec(iter->bvec, iter->iter);
 		if (bv.bv_len + next.bv_len > max_size ||
@@ -231,6 +247,38 @@ bool blk_rq_dma_map_iter_next(struct request *req, struct device *dma_dev,
 	return blk_dma_map_direct(req, dma_dev, iter);
 }
 EXPORT_SYMBOL_GPL(blk_rq_dma_map_iter_next);
+
+#ifdef CONFIG_BLK_DEV_INTEGRITY
+bool blk_rq_integrity_dma_map_iter_start(struct request *req,
+		struct device *dma_dev,  struct dma_iova_state *state,
+		struct blk_dma_iter *iter)
+{
+	unsigned len = bio_integrity_bytes(&req->q->limits.integrity,
+					   blk_rq_sectors(req));
+	struct bio *bio = req->bio;
+
+	iter->iter = (struct blk_map_iter) {
+		.bio = bio,
+		.iter = bio->bi_integrity->bip_iter,
+		.bvec = bio->bi_integrity->bip_vec,
+		.is_integrity = true,
+	};
+	return blk_dma_map_iter_start(req, dma_dev, state, iter, len);
+}
+EXPORT_SYMBOL_GPL(blk_rq_integrity_dma_map_iter_start);
+
+bool blk_rq_integrity_dma_map_iter_next(struct request *req,
+               struct device *dma_dev, struct blk_dma_iter *iter)
+{
+	if (!blk_map_iter_next(req, &iter->iter))
+		return false;
+
+	if (iter->p2pdma.map == PCI_P2PDMA_MAP_BUS_ADDR)
+		return blk_dma_map_bus(iter);
+	return blk_dma_map_direct(req, dma_dev, iter);
+}
+EXPORT_SYMBOL_GPL(blk_rq_integrity_dma_map_iter_next);
+#endif
 
 static inline struct scatterlist *
 blk_next_sg(struct scatterlist **sg, struct scatterlist *sglist)
