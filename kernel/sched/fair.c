@@ -9020,7 +9020,7 @@ static bool yield_task_fair(struct rq *rq)
 	 * Are we the only task in the tree?
 	 */
 	if (unlikely(rq->nr_running == 1))
-		return true;
+		return false;
 
 	clear_buddies(cfs_rq, se);
 
