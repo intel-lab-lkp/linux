@@ -690,6 +690,19 @@
 		};
 	};
 
+	gpu: gpu@fd80000 {
+		compatible = "ti,j721s2-gpu", "img,img-bxs-4-64", "img,img-rogue";
+		reg = <0x00 0x0fd80000 0x00 0x80000>;
+		clocks = <&k3_clks 237 1>;
+		clock-names = "core";
+		assigned-clocks = <&k3_clks 237 1>;
+		assigned-clock-rates = <800000000>;
+		interrupts = <GIC_SPI 241 IRQ_TYPE_LEVEL_HIGH>;
+		power-domains = <&k3_pds 237 TI_SCI_PD_EXCLUSIVE>,
+				<&k3_pds 242 TI_SCI_PD_EXCLUSIVE>;
+		power-domain-names = "a", "b";
+	};
+
 	cpsw3g: ethernet@8000000 {
 		compatible = "ti,am642-cpsw-nuss";
 		#address-cells = <2>;
