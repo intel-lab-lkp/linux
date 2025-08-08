@@ -554,6 +554,12 @@ struct intel_connector {
 	struct work_struct modeset_retry_work;
 
 	struct intel_hdcp hdcp;
+
+	/**
+	 * Indicates that the driver should prefer using YCbCr 4:2:0 output format
+	 * when the sink supports it. This flag can be toggled via debugfs.
+	 */
+	bool prefer_sink_yuv420;
 };
 
 struct intel_digital_connector_state {

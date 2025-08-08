@@ -1302,6 +1302,75 @@ static const struct file_operations i915_joiner_fops = {
 	.write = i915_joiner_write
 };
 
+static int i915_prefer_sink_yuv420_show(struct seq_file *m, void *data)
+{
+	struct intel_connector *connector = m->private;
+	struct intel_display *display = to_intel_display(connector);
+	struct intel_encoder *encoder = intel_attached_encoder(connector);
+	struct drm_crtc *crtc;
+	struct intel_crtc_state *crtc_state;
+	int ret;
+
+	if (!encoder)
+		return -ENODEV;
+
+	ret = drm_modeset_lock_single_interruptible(&display->drm->mode_config.connection_mutex);
+	if (ret)
+		return ret;
+
+	crtc = connector->base.state->crtc;
+	if (connector->base.status != connector_status_connected || !crtc) {
+		ret = -ENODEV;
+		goto out;
+	}
+
+	crtc_state = to_intel_crtc_state(crtc->state);
+	seq_printf(m, "prefer_sink_yuv420:%s sink_format: %x\n",
+		   str_yes_no(connector->prefer_sink_yuv420), crtc_state->sink_format);
+
+out:
+	drm_modeset_unlock(&display->drm->mode_config.connection_mutex);
+	return ret;
+}
+
+static ssize_t i915_prefer_sink_yuv420_write(struct file *file,
+					     const char __user *ubuf,
+					     size_t len, loff_t *offp)
+{
+	struct seq_file *m = file->private_data;
+	struct intel_connector *connector = m->private;
+	struct intel_encoder *encoder = intel_attached_encoder(connector);
+	int prefer_sink_yuv420 = 0;
+	int ret;
+
+	if (!encoder)
+		return -ENODEV;
+
+	ret = kstrtoint_from_user(ubuf, len, 0, &prefer_sink_yuv420);
+	if (ret < 0)
+		return ret;
+
+	connector->prefer_sink_yuv420 = !!prefer_sink_yuv420;
+	*offp += len;
+
+	return len;
+}
+
+static int i915_prefer_sink_yuv420_open(struct inode *inode,
+					struct file *file)
+{
+	return single_open(file, i915_prefer_sink_yuv420_show, inode->i_private);
+}
+
+static const struct file_operations i915_prefer_sink_yuv420_fops = {
+	.owner = THIS_MODULE,
+	.open = i915_prefer_sink_yuv420_open,
+	.read = seq_read,
+	.llseek = seq_lseek,
+	.release = single_release,
+	.write = i915_prefer_sink_yuv420_write
+};
+
 /**
  * intel_connector_debugfs_add - add i915 specific connector debugfs files
  * @connector: pointer to a registered intel_connector
@@ -1356,6 +1425,12 @@ void intel_connector_debugfs_add(struct intel_connector *connector)
 	    connector_type == DRM_MODE_CONNECTOR_HDMIB)
 		debugfs_create_file("i915_lpsp_capability", 0444, root,
 				    connector, &i915_lpsp_capability_fops);
+
+	if (connector_type == DRM_MODE_CONNECTOR_DisplayPort ||
+	    connector_type == DRM_MODE_CONNECTOR_HDMIA ||
+	    connector_type == DRM_MODE_CONNECTOR_HDMIB)
+		debugfs_create_file("i915_prefer_sink_yuv420", 0644, root,
+				    connector, &i915_prefer_sink_yuv420_fops);
 }
 
 /**
