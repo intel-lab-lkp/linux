@@ -260,6 +260,17 @@ void cpuset_unlock(void)
 	mutex_unlock(&cpuset_mutex);
 }
 
+void guard_cpuset(void)
+{
+	guard(mutex)(&cpuset_mutex);
+}
+
+void guard_cpus_read_and_cpuset(void)
+{
+	guard(cpus_read_lock)();
+	guard(mutex)(&cpuset_mutex);
+}
+
 static DEFINE_SPINLOCK(callback_lock);
 
 void cpuset_callback_lock_irq(void)

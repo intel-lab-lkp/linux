@@ -277,6 +277,8 @@ ssize_t cpuset_write_resmask(struct kernfs_open_file *of,
 				    char *buf, size_t nbytes, loff_t off);
 int cpuset_common_seq_show(struct seq_file *sf, void *v);
 
+void guard_cpus_read_and_cpuset(void);
+
 /*
  * cpuset-v1.c
  */
