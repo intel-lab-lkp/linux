@@ -2265,6 +2265,14 @@ static int intel_hdmi_compute_output_format(struct intel_encoder *encoder,
 		crtc_state->sink_format = INTEL_OUTPUT_FORMAT_RGB;
 	}
 
+	/* Check if prefer_sink_yuv420 is enabled and sink supports it, then override RGB */
+	else if (connector->prefer_sink_yuv420 &&
+		 drm_mode_is_420_also(info, adjusted_mode)) {
+		crtc_state->sink_format = intel_hdmi_sink_format(crtc_state, connector, true);
+		drm_dbg_kms(display->drm, "prefer_sink_yuv420 enabled, selected format %d\n",
+			    crtc_state->sink_format);
+	}
+
 	crtc_state->output_format = intel_hdmi_output_format(crtc_state);
 	ret = intel_hdmi_compute_clock(encoder, crtc_state, respect_downstream_limits);
 	if (ret) {
