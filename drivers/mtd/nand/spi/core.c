@@ -854,6 +854,19 @@ static void spinand_cont_read_init(struct spinand_device *spinand)
 	}
 }
 
+static int spinand_randomizer_init(struct spinand_device *spinand)
+{
+	int ret;
+
+	if (spinand->set_randomizer) {
+		ret = spinand->set_randomizer(spinand);
+		if (ret)
+			return ret;
+	}
+
+	return 0;
+}
+
 static bool spinand_use_cont_read(struct mtd_info *mtd, loff_t from,
 				  struct mtd_oob_ops *ops)
 {
@@ -1366,6 +1379,7 @@ int spinand_match_and_init(struct spinand_device *spinand,
 		spinand->user_otp = &table[i].user_otp;
 		spinand->read_retries = table[i].read_retries;
 		spinand->set_read_retry = table[i].set_read_retry;
+		spinand->set_randomizer = table[i].set_randomizer;
 
 		op = spinand_select_op_variant(spinand,
 					       info->op_variants.read_cache);
@@ -1542,6 +1556,10 @@ static int spinand_init(struct spinand_device *spinand)
 	 * ECC initialization must have happened previously.
 	 */
 	spinand_cont_read_init(spinand);
+
+	ret = spinand_randomizer_init(spinand);
+	if (ret)
+		goto err_cleanup_ecc_engine;
 
 	mtd->_read_oob = spinand_mtd_read;
 	mtd->_write_oob = spinand_mtd_write;
