@@ -3049,6 +3049,15 @@ intel_dp_compute_output_format(struct intel_encoder *encoder,
 		crtc_state->sink_format = intel_dp_sink_format(connector, adjusted_mode);
 	}
 
+	/* Check if prefer_sink_yuv420 is enabled and sink supports it, then override RGB */
+	if (connector->prefer_sink_yuv420 &&
+	    drm_mode_is_420_also(info, adjusted_mode) &&
+	    connector->base.ycbcr_420_allowed) {
+		crtc_state->sink_format = INTEL_OUTPUT_FORMAT_YCBCR420;
+		drm_dbg_kms(display->drm, "prefer_sink_yuv420 enabled, selected format %d\n",
+			    crtc_state->sink_format);
+	}
+
 	crtc_state->output_format = intel_dp_output_format(connector, crtc_state->sink_format);
 
 	ret = intel_dp_compute_link_config(encoder, crtc_state, conn_state,
