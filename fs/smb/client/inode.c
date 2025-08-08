@@ -2469,11 +2469,13 @@ cifs_rename2(struct mnt_idmap *idmap, struct inode *source_dir,
 	     struct dentry *source_dentry, struct inode *target_dir,
 	     struct dentry *target_dentry, unsigned int flags)
 {
+	struct inode *target_inode = d_inode(target_dentry);
 	const char *from_name, *to_name;
 	void *page1, *page2;
 	struct cifs_sb_info *cifs_sb;
 	struct tcon_link *tlink;
 	struct cifs_tcon *tcon;
+	bool rehash = false;
 	unsigned int xid;
 	int rc, tmprc;
 	int retry_count = 0;
@@ -2488,6 +2490,19 @@ cifs_rename2(struct mnt_idmap *idmap, struct inode *source_dir,
 	cifs_sb = CIFS_SB(source_dir->i_sb);
 	if (unlikely(cifs_forced_shutdown(cifs_sb)))
 		return -EIO;
+
+	/*
+	 * Prevent any concurrent opens on the target by unhashing the dentry.
+	 * VFS already unhashes the target when renaming directories.
+	 */
+	if (target_inode && !S_ISDIR(target_inode->i_mode)) {
+		spin_lock(&target_dentry->d_lock);
+		if (!d_unhashed(target_dentry)) {
+			__d_drop(target_dentry);
+			rehash = true;
+		}
+		spin_unlock(&target_dentry->d_lock);
+	}
 
 	tlink = cifs_sb_tlink(cifs_sb);
 	if (IS_ERR(tlink))
@@ -2599,6 +2614,8 @@ cifs_rename_exit:
 	free_dentry_path(page1);
 	free_xid(xid);
 	cifs_put_tlink(tlink);
+	if (rehash)
+		d_rehash(target_dentry);
 	return rc;
 }
 
