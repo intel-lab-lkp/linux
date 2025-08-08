@@ -250,6 +250,8 @@ struct tls_context {
 			       */
 	unsigned long flags;
 
+	u32 tls_record_size_limit;
+
 	/* cache cold stuff */
 	struct proto *sk_proto;
 	struct sock *sk;

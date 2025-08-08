@@ -19,6 +19,7 @@
 #include <net/handshake.h>
 #include <net/genetlink.h>
 #include <net/tls_prot.h>
+#include <net/tls.h>
 
 #include <uapi/linux/keyctl.h>
 #include <uapi/linux/handshake.h>
@@ -37,6 +38,8 @@ struct tls_handshake_req {
 	key_serial_t		th_certificate;
 	key_serial_t		th_privkey;
 
+	struct socket		*th_sock;
+
 	unsigned int		th_num_peerids;
 	key_serial_t		th_peerid[5];
 };
@@ -52,6 +55,7 @@ tls_handshake_req_init(struct handshake_req *req,
 	treq->th_consumer_data = args->ta_data;
 	treq->th_peername = args->ta_peername;
 	treq->th_keyring = args->ta_keyring;
+	treq->th_sock = args->ta_sock;
 	treq->th_num_peerids = 0;
 	treq->th_certificate = TLS_NO_CERT;
 	treq->th_privkey = TLS_NO_PRIVKEY;
@@ -85,6 +89,27 @@ static void tls_handshake_remote_peerids(struct tls_handshake_req *treq,
 	}
 }
 
+static void tls_handshake_record_size(struct tls_handshake_req *treq,
+				      struct genl_info *info)
+{
+	struct tls_context *tls_ctx;
+	struct nlattr *head = nlmsg_attrdata(info->nlhdr, GENL_HDRLEN);
+	struct nlattr *nla;
+	u32 record_size_limit;
+	int rem, len = nlmsg_attrlen(info->nlhdr, GENL_HDRLEN);
+
+	nla_for_each_attr(nla, head, len, rem) {
+		if (nla_type(nla) == HANDSHAKE_A_DONE_RECORD_SIZE_LIMIT) {
+			record_size_limit = nla_get_u32(nla);
+			if (treq->th_sock) {
+				tls_ctx = tls_get_ctx(treq->th_sock->sk);
+				tls_ctx->tls_record_size_limit = record_size_limit;
+			}
+			break;
+		}
+	}
+}
+
 /**
  * tls_handshake_done - callback to handle a CMD_DONE request
  * @req: socket on which the handshake was performed
@@ -98,8 +123,10 @@ static void tls_handshake_done(struct handshake_req *req,
 	struct tls_handshake_req *treq = handshake_req_private(req);
 
 	treq->th_peerid[0] = TLS_NO_PEERID;
-	if (info)
+	if (info) {
 		tls_handshake_remote_peerids(treq, info);
+		tls_handshake_record_size(treq, info);
+	}
 
 	if (!status)
 		set_bit(HANDSHAKE_F_REQ_SESSION, &req->hr_flags);
