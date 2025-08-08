@@ -577,8 +577,10 @@ recheck:
 	 * information.
 	 */
 	if (dl_policy(policy) || dl_policy(p->policy)) {
-		cpuset_locked = true;
-		cpuset_lock();
+		if (!cpuset_locked) {
+			guard_cpuset();
+			cpuset_locked = true;
+		}
 	}
 
 	/*
@@ -660,8 +662,6 @@ change:
 	if (unlikely(oldpolicy != -1 && oldpolicy != p->policy)) {
 		policy = oldpolicy = -1;
 		task_rq_unlock(rq, p, &rf);
-		if (cpuset_locked)
-			cpuset_unlock();
 		goto recheck;
 	}
 
@@ -733,11 +733,8 @@ change:
 	head = splice_balance_callbacks(rq);
 	task_rq_unlock(rq, p, &rf);
 
-	if (pi) {
-		if (cpuset_locked)
-			cpuset_unlock();
+	if (pi)
 		rt_mutex_adjust_pi(p);
-	}
 
 	/* Run balance callbacks after we've adjusted the PI chain: */
 	balance_callbacks(rq, head);
@@ -747,8 +744,6 @@ change:
 
 unlock:
 	task_rq_unlock(rq, p, &rf);
-	if (cpuset_locked)
-		cpuset_unlock();
 	return retval;
 }
 

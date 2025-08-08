@@ -250,16 +250,6 @@ static struct cpuset top_cpuset = {
 
 static DEFINE_MUTEX(cpuset_mutex);
 
-void cpuset_lock(void)
-{
-	mutex_lock(&cpuset_mutex);
-}
-
-void cpuset_unlock(void)
-{
-	mutex_unlock(&cpuset_mutex);
-}
-
 void guard_cpuset(void)
 {
 	guard(mutex)(&cpuset_mutex);
