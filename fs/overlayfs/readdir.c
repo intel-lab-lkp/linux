@@ -71,20 +71,58 @@ static struct ovl_cache_entry *ovl_cache_entry_from_node(struct rb_node *n)
 	return rb_entry(n, struct ovl_cache_entry, node);
 }
 
+static int ovl_casefold(struct unicode_map *map, const char *str, int len, char **dst)
+{
+#if IS_ENABLED(CONFIG_UNICODE)
+	const struct qstr qstr = { .name = str, .len = len };
+	int cf_len;
+
+	if (!map || is_dot_dotdot(str, len))
+		return -1;
+
+	*dst = kmalloc(OVL_NAME_LEN, GFP_KERNEL);
+
+	if (dst) {
+		cf_len = utf8_casefold(map, &qstr, *dst, OVL_NAME_LEN);
+
+		if (cf_len > 0)
+			return cf_len;
+	}
+#endif
+
+	return -1;
+}
+
 static bool ovl_cache_entry_find_link(const char *name, int len,
 				      struct rb_node ***link,
-				      struct rb_node **parent)
+				      struct rb_node **parent,
+				      struct unicode_map *map)
 {
+	int ret;
+	char *dst = NULL;
 	bool found = false;
+	const char *str = name;
 	struct rb_node **newp = *link;
+
+	ret = ovl_casefold(map, name, len, &dst);
+
+	if (ret > 0) {
+		str = dst;
+		len = ret;
+	}
 
 	while (!found && *newp) {
 		int cmp;
+		char *aux;
 		struct ovl_cache_entry *tmp;
 
 		*parent = *newp;
+
 		tmp = ovl_cache_entry_from_node(*newp);
-		cmp = strncmp(name, tmp->name, len);
+
+		aux = tmp->cf_name ? tmp->cf_name : tmp->name;
+
+		cmp = strncmp(str, aux, len);
 		if (cmp > 0)
 			newp = &tmp->node.rb_right;
 		else if (cmp < 0 || len < tmp->len)
@@ -94,26 +132,49 @@ static bool ovl_cache_entry_find_link(const char *name, int len,
 	}
 	*link = newp;
 
+	kfree(dst);
+
 	return found;
 }
 
 static struct ovl_cache_entry *ovl_cache_entry_find(struct rb_root *root,
-						    const char *name, int len)
+						    const char *name, int len,
+						    struct unicode_map *map)
 {
 	struct rb_node *node = root->rb_node;
-	int cmp;
+	struct ovl_cache_entry *p;
+	const char *str = name;
+	bool found = false;
+	char *dst = NULL;
+	int cmp, ret;
 
-	while (node) {
-		struct ovl_cache_entry *p = ovl_cache_entry_from_node(node);
+	ret = ovl_casefold(map, name, len, &dst);
 
-		cmp = strncmp(name, p->name, len);
+	if (ret > 0) {
+		str = dst;
+		len = ret;
+	}
+
+	while (!found && node) {
+		char *aux;
+
+		p = ovl_cache_entry_from_node(node);
+
+		aux = p->cf_name ? p->cf_name : p->name;
+
+		cmp = strncmp(str, aux, len);
 		if (cmp > 0)
 			node = p->node.rb_right;
 		else if (cmp < 0 || len < p->len)
 			node = p->node.rb_left;
 		else
-			return p;
+			found = true;
 	}
+
+	kfree(dst);
+
+	if (found)
+		return p;
 
 	return NULL;
 }
@@ -212,7 +273,7 @@ static bool ovl_cache_entry_add_rb(struct ovl_readdir_data *rdd,
 	struct rb_node *parent = NULL;
 	struct ovl_cache_entry *p;
 
-	if (ovl_cache_entry_find_link(name, len, &newp, &parent))
+	if (ovl_cache_entry_find_link(name, len, &newp, &parent, rdd->map))
 		return true;
 
 	p = ovl_cache_entry_new(rdd, name, len, ino, d_type);
@@ -234,7 +295,7 @@ static bool ovl_fill_lowest(struct ovl_readdir_data *rdd,
 {
 	struct ovl_cache_entry *p;
 
-	p = ovl_cache_entry_find(rdd->root, name, namelen);
+	p = ovl_cache_entry_find(rdd->root, name, namelen, rdd->map);
 	if (p) {
 		list_move_tail(&p->l_node, &rdd->middle);
 	} else {
@@ -640,7 +701,8 @@ static int ovl_dir_read_impure(const struct path *path,  struct list_head *list,
 			struct rb_node *parent = NULL;
 
 			if (WARN_ON(ovl_cache_entry_find_link(p->name, p->len,
-							      &newp, &parent)))
+							      &newp, &parent,
+							      rdd.map)))
 				return -EIO;
 
 			rb_link_node(&p->node, parent, newp);
@@ -701,6 +763,7 @@ struct ovl_readdir_translate {
 	struct dir_context *orig_ctx;
 	struct ovl_dir_cache *cache;
 	struct dir_context ctx;
+	struct unicode_map *map;
 	u64 parent_ino;
 	int fsid;
 	int xinobits;
@@ -721,7 +784,7 @@ static bool ovl_fill_real(struct dir_context *ctx, const char *name,
 	} else if (rdt->cache) {
 		struct ovl_cache_entry *p;
 
-		p = ovl_cache_entry_find(&rdt->cache->root, name, namelen);
+		p = ovl_cache_entry_find(&rdt->cache->root, name, namelen, rdt->map);
 		if (p)
 			ino = p->ino;
 	} else if (rdt->xinobits) {
@@ -763,10 +826,15 @@ static int ovl_iterate_real(struct file *file, struct dir_context *ctx)
 		.orig_ctx = ctx,
 		.xinobits = ovl_xino_bits(ofs),
 		.xinowarn = ovl_xino_warn(ofs),
+		.map      = NULL,
 	};
 
 	if (rdt.xinobits && lower_layer)
 		rdt.fsid = lower_layer->fsid;
+
+#if IS_ENABLED(CONFIG_UNICODE)
+	rdt.map = dir->d_sb->s_encoding;
+#endif
 
 	if (OVL_TYPE_MERGE(ovl_path_type(dir->d_parent))) {
 		struct kstat stat;
