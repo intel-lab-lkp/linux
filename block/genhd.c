@@ -147,8 +147,8 @@ static void bdev_count_inflight_rw(struct block_device *part,
 	 * traversed and complete on a CPU that has not yet been traversed,
 	 * causing the inflight number to be negative.
 	 */
-	inflight[READ] = read > 0 ? read : 0;
-	inflight[WRITE] = write > 0 ? write : 0;
+	inflight[READ] = max(read, 0);
+	inflight[WRITE] = max(write, 0);
 }
 
 /**
