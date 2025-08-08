@@ -2257,6 +2257,12 @@ static int unuse_mm(struct mm_struct *mm, unsigned int type)
 
 	mmap_read_lock(mm);
 	for_each_vma(vmi, vma) {
+		/*
+		 * zero entries in mm_struct->mm_mt is a marker to stop
+		 * looking for vma's. see comment in exit_mmap().
+		 */
+		if (xa_is_zero(vma))
+			break;
 		if (vma->anon_vma && !is_vm_hugetlb_page(vma)) {
 			ret = unuse_vma(vma, type);
 			if (ret)
