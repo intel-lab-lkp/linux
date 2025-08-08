@@ -1164,6 +1164,43 @@ static void * __init early_init_dt_alloc_memory_arch(u64 size, u64 align)
 	return memblock_alloc_or_panic(size, align);
 }
 
+#ifdef CONFIG_OF_EARLY_DUMP
+static int __init early_init_iterate_nodes(unsigned long node,
+					   const char *uname,
+					   int depth, void *data)
+{
+	void *blob = initial_boot_params;
+	int cur;
+
+	pr_info("node '%s', depth %d\n", uname, depth);
+
+	for (cur = fdt_first_property_offset(blob, node);
+	     cur >= 0;
+	     cur = fdt_next_property_offset(blob, cur)) {
+		const char *pname;
+		const __be32 *val;
+		u32 sz;
+
+		val = fdt_getprop_by_offset(blob, cur, &pname, &sz);
+		if (!val) {
+			pr_warn("Cannot locate property at 0x%x\n", cur);
+			continue;
+		}
+
+		pr_info("node %s: property %s\n", uname, pname ? pname : "unnamed");
+	}
+
+	return 0;
+}
+
+static inline void early_init_dump_dt(void)
+{
+	of_scan_flat_dt(early_init_iterate_nodes, NULL);
+}
+#else
+static inline void early_init_dump_dt(void) { }
+#endif /* CONFIG_OF_EARLY_DUMP */
+
 bool __init early_init_dt_verify(void *dt_virt, phys_addr_t dt_phys)
 {
 	if (!dt_virt)
@@ -1178,6 +1215,8 @@ bool __init early_init_dt_verify(void *dt_virt, phys_addr_t dt_phys)
 	initial_boot_params_pa = dt_phys;
 	of_fdt_crc32 = crc32_be(~0, initial_boot_params,
 				fdt_totalsize(initial_boot_params));
+	
+	early_init_dump_dt();
 
 	/* Initialize {size,address}-cells info */
 	early_init_dt_scan_root();

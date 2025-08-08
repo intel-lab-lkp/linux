@@ -126,4 +126,12 @@ config OF_OVERLAY_KUNIT_TEST
 config OF_NUMA
 	bool
 
+config OF_EARLY_DUMP
+	bool "Dump node list at startup"
+	help
+	  This debug feature runs through all the nodes/properties at startup
+	  to show if the dtb has been passed correctly from the boot stage.
+
+	  If unsure, say N here
+
 endif # OF
