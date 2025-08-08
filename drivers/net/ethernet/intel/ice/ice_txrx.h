@@ -5,6 +5,7 @@
 #define _ICE_TXRX_H_
 
 #include "ice_type.h"
+#include <net/libeth/types.h>
 
 #define ICE_DFLT_IRQ_WORK	256
 #define ICE_RXBUF_3072		3072
@@ -112,10 +113,6 @@ static inline int ice_skb_pad(void)
 	(u16)((((R)->next_to_clean > (R)->next_to_use) ? 0 : (R)->count) + \
 	      (R)->next_to_clean - (R)->next_to_use - 1)
 
-#define ICE_RX_DESC_UNUSED(R)	\
-	((((R)->first_desc > (R)->next_to_use) ? 0 : (R)->count) + \
-	      (R)->first_desc - (R)->next_to_use - 1)
-
 #define ICE_RING_QUARTER(R) ((R)->count >> 2)
 
 #define ICE_TX_FLAGS_TSO	BIT(0)
@@ -197,13 +194,6 @@ struct ice_tx_offload_params {
 	u8 header_len;
 };
 
-struct ice_rx_buf {
-	dma_addr_t dma;
-	struct page *page;
-	unsigned int page_offset;
-	unsigned int pgcnt;
-};
-
 struct ice_q_stats {
 	u64 pkts;
 	u64 bytes;
@@ -261,15 +251,6 @@ struct ice_pkt_ctx {
 	__be16 vlan_proto;
 };
 
-struct ice_xdp_buff {
-	struct xdp_buff xdp_buff;
-	const union ice_32b_rx_flex_desc *eop_desc;
-	const struct ice_pkt_ctx *pkt_ctx;
-};
-
-/* Required for compatibility with xdp_buffs from xsk_pool */
-static_assert(offsetof(struct ice_xdp_buff, xdp_buff) == 0);
-
 /* indices into GLINT_ITR registers */
 #define ICE_RX_ITR	ICE_IDX_ITR0
 #define ICE_TX_ITR	ICE_IDX_ITR1
@@ -312,7 +293,7 @@ enum ice_dynamic_itr {
 struct ice_rx_ring {
 	/* CL1 - 1st cacheline starts here */
 	void *desc;			/* Descriptor ring memory */
-	struct device *dev;		/* Used for DMA mapping */
+	struct page_pool *pp;
 	struct net_device *netdev;	/* netdev ring maps to */
 	struct ice_vsi *vsi;		/* Backreference to associated VSI */
 	struct ice_q_vector *q_vector;	/* Backreference to associated vector */
@@ -324,14 +305,16 @@ struct ice_rx_ring {
 	u16 next_to_alloc;
 
 	union {
-		struct ice_rx_buf *rx_buf;
+		struct libeth_fqe *rx_fqes;
 		struct xdp_buff **xdp_buf;
 	};
+
 	/* CL2 - 2nd cacheline starts here */
 	union {
-		struct ice_xdp_buff xdp_ext;
-		struct xdp_buff xdp;
+		struct libeth_xdp_buff_stash xdp;
+		struct libeth_xdp_buff *xsk;
 	};
+
 	/* CL3 - 3rd cacheline starts here */
 	union {
 		struct ice_pkt_ctx pkt_ctx;
@@ -346,7 +329,7 @@ struct ice_rx_ring {
 	/* used in interrupt processing */
 	u16 next_to_use;
 	u16 next_to_clean;
-	u16 first_desc;
+	u32 truesize;
 
 	/* stats structs */
 	struct ice_ring_stats *ring_stats;
