@@ -16,6 +16,8 @@
 #include <linux/overflow.h>
 #include "overlayfs.h"
 
+#define OVL_NAME_LEN 255
+
 struct ovl_cache_entry {
 	unsigned int len;
 	unsigned int type;
@@ -27,6 +29,8 @@ struct ovl_cache_entry {
 	bool is_upper;
 	bool is_whiteout;
 	bool check_xwhiteout;
+	char *cf_name;
+	int cf_len;
 	char name[];
 };
 
@@ -45,6 +49,7 @@ struct ovl_readdir_data {
 	struct list_head *list;
 	struct list_head middle;
 	struct ovl_cache_entry *first_maybe_whiteout;
+	struct unicode_map *map;
 	int count;
 	int err;
 	bool is_upper;
@@ -166,6 +171,31 @@ static struct ovl_cache_entry *ovl_cache_entry_new(struct ovl_readdir_data *rdd,
 	p->is_whiteout = false;
 	/* Defer check for overlay.whiteout to ovl_iterate() */
 	p->check_xwhiteout = rdd->in_xwhiteouts_dir && d_type == DT_REG;
+	p->cf_name = NULL;
+	p->cf_len = 0;
+
+#if IS_ENABLED(CONFIG_UNICODE)
+	if (rdd->map && !is_dot_dotdot(name, len)) {
+		const struct qstr str = { .name = name, .len = len };
+		int ret;
+
+		p->cf_name = kmalloc(OVL_NAME_LEN, GFP_KERNEL);
+
+		if (!p->cf_name) {
+			kfree(p);
+			return NULL;
+		}
+
+		ret = utf8_casefold(rdd->map, &str, p->cf_name, OVL_NAME_LEN);
+
+		if (ret < 0) {
+			kfree(p->cf_name);
+			p->cf_name = NULL;
+		} else {
+			p->cf_len = ret;
+		}
+	}
+#endif
 
 	if (d_type == DT_CHR) {
 		p->next_maybe_whiteout = rdd->first_maybe_whiteout;
@@ -223,8 +253,10 @@ void ovl_cache_free(struct list_head *list)
 	struct ovl_cache_entry *p;
 	struct ovl_cache_entry *n;
 
-	list_for_each_entry_safe(p, n, list, l_node)
+	list_for_each_entry_safe(p, n, list, l_node) {
+		kfree(p->cf_name);
 		kfree(p);
+	}
 
 	INIT_LIST_HEAD(list);
 }
@@ -357,12 +389,19 @@ static int ovl_dir_read_merged(struct dentry *dentry, struct list_head *list,
 		.list = list,
 		.root = root,
 		.is_lowest = false,
+		.map = NULL,
 	};
 	int idx, next;
 	const struct ovl_layer *layer;
 
 	for (idx = 0; idx != -1; idx = next) {
 		next = ovl_path_next(idx, dentry, &realpath, &layer);
+
+#if IS_ENABLED(CONFIG_UNICODE)
+		if (ovl_dentry_casefolded(realpath.dentry))
+			rdd.map = realpath.dentry->d_sb->s_encoding;
+#endif
+
 		rdd.is_upper = ovl_dentry_upper(dentry) == realpath.dentry;
 		rdd.in_xwhiteouts_dir = layer->has_xwhiteouts &&
 					ovl_dentry_has_xwhiteouts(dentry);
