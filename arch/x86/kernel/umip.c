@@ -194,6 +194,62 @@ static int identify_insn(struct insn *insn)
 	}
 }
 
+static __init int umip_identify_insn(const unsigned char *buf)
+{
+	struct insn insn = {
+		.addr_bytes = 8,
+		.opnd_bytes = 4,
+	};
+	int r;
+
+	insn_init(&insn, buf, MAX_INSN_SIZE, 1);
+
+	r = insn_get_length(&insn);
+	if (r) {
+		pr_warn("insn_get_length returned '%d'\n", r);
+		return r;
+	}
+
+	return identify_insn(&insn);
+}
+
+static __init int umip_insn_test(void)
+{
+	unsigned char vpalignr[MAX_INSN_SIZE] = { 0x62, 0x83, 0xc5, 0x05, 0x0f, 0x08, 0xff };
+	unsigned char insn_0f00[MAX_INSN_SIZE] = { 0x0f, 0x00 };
+	unsigned char insn_0f01[MAX_INSN_SIZE] = { 0x0f, 0x01 };
+	int r, i;
+
+	r = umip_identify_insn(vpalignr);
+	WARN_ON(r != -EINVAL);
+
+	for (i = 0; i <= 0xff; i++) {
+		insn_0f00[2] = i;
+		r = umip_identify_insn(insn_0f00);
+		if (X86_MODRM_REG(i) > 1)
+			WARN_ON(r != -EINVAL);
+		else if (X86_MODRM_REG(i) == 0)
+			WARN_ON(r != UMIP_INST_SLDT);
+		else
+			WARN_ON(r != UMIP_INST_STR);
+
+		insn_0f01[2] = i;
+		r = umip_identify_insn(insn_0f01);
+		if (X86_MODRM_REG(i) == 2 || X86_MODRM_REG(i) == 3 || X86_MODRM_REG(i) > 4)
+			WARN_ON(r != -EINVAL);
+		else if (X86_MODRM_REG(i) < 2 && i >= 0xc0)
+			WARN_ON(r != -EINVAL);
+		else if (X86_MODRM_REG(i) == 0)
+			WARN_ON(r != UMIP_INST_SGDT);
+		else if (X86_MODRM_REG(i) == 1)
+			WARN_ON(r != UMIP_INST_SIDT);
+		else
+			WARN_ON(r != UMIP_INST_SMSW);
+	}
+	return 0;
+}
+subsys_initcall(umip_insn_test);
+
 /**
  * emulate_umip_insn() - Emulate UMIP instructions and return dummy values
  * @insn:	Instruction structure with operands
