@@ -10,6 +10,7 @@
 #include <linux/spinlock.h>
 #include <linux/timerqueue.h>
 #include <trace/events/ipi.h>
+#include <linux/sched/isolation.h>
 
 #include "timer_migration.h"
 #include "tick-internal.h"
@@ -434,6 +435,23 @@ static cpumask_var_t tmigr_available_cpumask;
 static inline bool tmigr_is_not_available(struct tmigr_cpu *tmc)
 {
 	return !(tmc->tmgroup && tmc->available);
+}
+
+/*
+ * Returns true if @cpu should be excluded from the hierarchy as isolated.
+ * Domain isolated CPUs don't participate in timer migration, nohz_full CPUs
+ * are still part of the hierarchy but become idle (from a tick and timer
+ * migration perspective) when they stop their tick. This lets the timekeeping
+ * CPU handle their global timers. Marking also isolated CPUs as idle would be
+ * too costly, hence they are completely excluded from the hierarchy.
+ * This check is necessary, for instance, to prevent offline isolated CPUs from
+ * being incorrectly marked as available once getting back online.
+ */
+static inline bool tmigr_is_isolated(int cpu)
+{
+	return (!housekeeping_cpu(cpu, HK_TYPE_DOMAIN) ||
+		cpuset_cpu_is_isolated(cpu)) &&
+	       housekeeping_cpu(cpu, HK_TYPE_KERNEL_NOISE);
 }
 
 /*
@@ -1451,6 +1469,8 @@ static int tmigr_clear_cpu_available(unsigned int cpu)
 
 	cpumask_clear_cpu(cpu, tmigr_available_cpumask);
 	scoped_guard(raw_spinlock_irq, &tmc->lock) {
+		if (!tmc->available)
+			return 0;
 		tmc->available = false;
 		WRITE_ONCE(tmc->wakeup, KTIME_MAX);
 
@@ -1470,7 +1490,7 @@ static int tmigr_clear_cpu_available(unsigned int cpu)
 	return 0;
 }
 
-static int tmigr_set_cpu_available(unsigned int cpu)
+static inline int _tmigr_set_cpu_available(unsigned int cpu)
 {
 	struct tmigr_cpu *tmc = this_cpu_ptr(&tmigr_cpu);
 
@@ -1480,6 +1500,8 @@ static int tmigr_set_cpu_available(unsigned int cpu)
 
 	cpumask_set_cpu(cpu, tmigr_available_cpumask);
 	scoped_guard(raw_spinlock_irq, &tmc->lock) {
+		if (tmc->available)
+			return 0;
 		trace_tmigr_cpu_available(tmc);
 		tmc->idle = timer_base_is_idle();
 		if (!tmc->idle)
@@ -1489,14 +1511,89 @@ static int tmigr_set_cpu_available(unsigned int cpu)
 	return 0;
 }
 
+static int tmigr_set_cpu_available(unsigned int cpu)
+{
+	if (tmigr_is_isolated(cpu))
+		return 0;
+	return _tmigr_set_cpu_available(cpu);
+}
+
+static bool tmigr_should_isolate_cpu(int cpu, void *ignored)
+{
+	/*
+	 * The tick CPU can be marked as isolated by the cpuset code, however
+	 * we cannot mark it as unavailable to avoid having no global migrator
+	 * for the nohz_full CPUs.
+	 */
+	return tick_nohz_cpu_hotpluggable(cpu);
+}
+
+static void tmigr_cpu_isolate(void *ignored)
+{
+	tmigr_clear_cpu_available(smp_processor_id());
+}
+
+static void tmigr_cpu_unisolate(void *ignored)
+{
+	tmigr_set_cpu_available(smp_processor_id());
+}
+
+static void tmigr_cpu_unisolate_force(void *ignored)
+{
+	/*
+	 * Required at boot to restore the tick CPU if nohz_full is available.
+	 * Hotplug handlers don't check for tick CPUs during runtime.
+	 */
+	_tmigr_set_cpu_available(smp_processor_id());
+}
+
+int tmigr_isolated_exclude_cpumask(struct cpumask *exclude_cpumask)
+{
+	cpumask_var_t cpumask;
+
+	lockdep_assert_cpus_held();
+
+	if (!alloc_cpumask_var(&cpumask, GFP_KERNEL))
+		return -ENOMEM;
+
+	cpumask_and(cpumask, exclude_cpumask, tmigr_available_cpumask);
+	cpumask_and(cpumask, cpumask, housekeeping_cpumask(HK_TYPE_KERNEL_NOISE));
+	on_each_cpu_cond_mask(tmigr_should_isolate_cpu, tmigr_cpu_isolate, NULL,
+			      1, cpumask);
+
+	cpumask_andnot(cpumask, cpu_online_mask, exclude_cpumask);
+	cpumask_andnot(cpumask, cpumask, tmigr_available_cpumask);
+	on_each_cpu_mask(cpumask, tmigr_cpu_unisolate, NULL, 1);
+
+	free_cpumask_var(cpumask);
+	return 0;
+}
+
 /*
  * NOHZ can only be enabled after clocksource_done_booting(). Don't
  * bother trashing the cache in the tree before.
  */
 static int __init tmigr_late_init(void)
 {
-	return cpuhp_setup_state(CPUHP_AP_TMIGR_ONLINE, "tmigr:online",
-				 tmigr_set_cpu_available, tmigr_clear_cpu_available);
+	int cpu, ret;
+
+	ret = cpuhp_setup_state(CPUHP_AP_TMIGR_ONLINE, "tmigr:online",
+				tmigr_set_cpu_available, tmigr_clear_cpu_available);
+	if (ret)
+		return ret;
+	/*
+	 * The tick CPU may not be marked as available in the above call, this
+	 * can occur only at boot as hotplug handlers are not called on the
+	 * tick CPU. Force it enabled here.
+	 */
+	for_each_possible_cpu(cpu) {
+		if (!tick_nohz_cpu_hotpluggable(cpu)) {
+			ret = smp_call_function_single(
+				cpu, tmigr_cpu_unisolate_force, NULL, 1);
+			break;
+		}
+	}
+	return ret;
 }
 
 static void tmigr_init_group(struct tmigr_group *group, unsigned int lvl,
