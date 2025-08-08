@@ -822,7 +822,7 @@ struct inode *ovl_get_inode(struct super_block *sb,
 void ovl_copyattr(struct inode *to);
 
 /* vfs inode flags copied from real to ovl inode */
-#define OVL_COPY_I_FLAGS_MASK	(S_SYNC | S_NOATIME | S_APPEND | S_IMMUTABLE)
+#define OVL_COPY_I_FLAGS_MASK	(S_SYNC | S_NOATIME | S_APPEND | S_IMMUTABLE | S_CASEFOLD)
 /* vfs inode flags read from overlay.protattr xattr to ovl inode */
 #define OVL_PROT_I_FLAGS_MASK	(S_APPEND | S_IMMUTABLE)
 
