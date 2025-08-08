@@ -693,25 +693,34 @@ static void nvme_free_prps(struct request *req)
 	mempool_free(iod->dma_vecs, nvmeq->dev->dmavec_mempool);
 }
 
+
+static void __nvme_free_sgls(struct device *dma_dev, struct nvme_sgl_desc *sge,
+		struct nvme_sgl_desc *sg_list, enum dma_data_direction dir)
+{
+	unsigned int len = le32_to_cpu(sge->length);
+	unsigned int i, nr_entries;
+
+	if (sge->type == (NVME_SGL_FMT_DATA_DESC << 4)) {
+		dma_unmap_page(dma_dev, le64_to_cpu(sge->addr), len, dir);
+		return;
+	}
+
+	nr_entries = len / sizeof(*sg_list);
+	for (i = 0; i < nr_entries; i++)
+		dma_unmap_page(dma_dev, le64_to_cpu(sg_list[i].addr),
+			le32_to_cpu(sg_list[i].length), dir);
+}
+
 static void nvme_free_sgls(struct request *req)
 {
 	struct nvme_iod *iod = blk_mq_rq_to_pdu(req);
 	struct nvme_queue *nvmeq = req->mq_hctx->driver_data;
 	struct device *dma_dev = nvmeq->dev->dev;
-	dma_addr_t sqe_dma_addr = le64_to_cpu(iod->cmd.common.dptr.sgl.addr);
-	unsigned int sqe_dma_len = le32_to_cpu(iod->cmd.common.dptr.sgl.length);
 	struct nvme_sgl_desc *sg_list = iod->descriptors[0];
+	struct nvme_sgl_desc *sge = &iod->cmd.common.dptr.sgl;
 	enum dma_data_direction dir = rq_dma_dir(req);
 
-	if (iod->nr_descriptors) {
-		unsigned int nr_entries = sqe_dma_len / sizeof(*sg_list), i;
-
-		for (i = 0; i < nr_entries; i++)
-			dma_unmap_page(dma_dev, le64_to_cpu(sg_list[i].addr),
-				le32_to_cpu(sg_list[i].length), dir);
-	} else {
-		dma_unmap_page(dma_dev, sqe_dma_addr, sqe_dma_len, dir);
-	}
+	__nvme_free_sgls(dma_dev, sge, sg_list, dir);
 }
 
 static void nvme_unmap_data(struct request *req)
