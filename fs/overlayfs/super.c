@@ -998,6 +998,7 @@ static int ovl_get_layers(struct super_block *sb, struct ovl_fs *ofs,
 	int err;
 	unsigned int i;
 	size_t nr_merged_lower;
+	struct super_block *sb1 = NULL;
 
 	ofs->fs = kcalloc(ctx->nr + 2, sizeof(struct ovl_sb), GFP_KERNEL);
 	if (ofs->fs == NULL)
@@ -1024,6 +1025,8 @@ static int ovl_get_layers(struct super_block *sb, struct ovl_fs *ofs,
 	if (ovl_upper_mnt(ofs)) {
 		ofs->fs[0].sb = ovl_upper_mnt(ofs)->mnt_sb;
 		ofs->fs[0].is_lower = false;
+
+		sb1 = ofs->fs[0].sb;
 	}
 
 	nr_merged_lower = ctx->nr - ctx->nr_data;
@@ -1067,6 +1070,9 @@ static int ovl_get_layers(struct super_block *sb, struct ovl_fs *ofs,
 			return err;
 		}
 
+		if (!sb1)
+			sb1 = mnt->mnt_sb;
+
 		/*
 		 * Make lower layers R/O.  That way fchmod/fchown on lower file
 		 * will fail instead of modifying lower fs.
@@ -1083,6 +1089,11 @@ static int ovl_get_layers(struct super_block *sb, struct ovl_fs *ofs,
 		l->name = NULL;
 		ofs->numlayer++;
 		ofs->fs[fsid].is_lower = true;
+
+		if (!sb_same_encoding(sb1, mnt->mnt_sb)) {
+			pr_err("all layers must have the same encoding\n");
+			return -EINVAL;
+		}
 	}
 
 	/*
