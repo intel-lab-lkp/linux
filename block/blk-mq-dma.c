@@ -10,23 +10,14 @@ static bool blk_map_iter_next(struct request *req, struct blk_map_iter *iter)
 	unsigned int max_size;
 	struct bio_vec bv;
 
-	if (req->rq_flags & RQF_SPECIAL_PAYLOAD) {
-		if (!iter->bio)
-			return false;
-		iter->paddr = bvec_phys(&req->special_vec);
-		iter->len = req->special_vec.bv_len;
-		iter->bio = NULL;
-		return true;
-	}
-
 	if (!iter->iter.bi_size)
 		return false;
 
-	bv = mp_bvec_iter_bvec(iter->bio->bi_io_vec, iter->iter);
+	bv = mp_bvec_iter_bvec(iter->bvec, iter->iter);
 	iter->paddr = bvec_phys(&bv);
 	max_size = get_max_segment_size(&req->q->limits, iter->paddr, UINT_MAX);
 	bv.bv_len = min(bv.bv_len, max_size);
-	bio_advance_iter_single(iter->bio, &iter->iter, bv.bv_len);
+	bvec_iter_advance_single(iter->bvec, &iter->iter, bv.bv_len);
 
 	/*
 	 * If we are entirely done with this bi_io_vec entry, check if the next
@@ -37,19 +28,20 @@ static bool blk_map_iter_next(struct request *req, struct blk_map_iter *iter)
 		struct bio_vec next;
 
 		if (!iter->iter.bi_size) {
-			if (!iter->bio->bi_next)
+			if (!iter->bio || !iter->bio->bi_next)
 				break;
 			iter->bio = iter->bio->bi_next;
 			iter->iter = iter->bio->bi_iter;
+			iter->bvec = iter->bio->bi_io_vec;
 		}
 
-		next = mp_bvec_iter_bvec(iter->bio->bi_io_vec, iter->iter);
+		next = mp_bvec_iter_bvec(iter->bvec, iter->iter);
 		if (bv.bv_len + next.bv_len > max_size ||
 		    !biovec_phys_mergeable(req->q, &bv, &next))
 			break;
 
 		bv.bv_len += next.bv_len;
-		bio_advance_iter_single(iter->bio, &iter->iter, next.bv_len);
+		bvec_iter_advance_single(iter->bvec, &iter->iter, next.bv_len);
 	}
 
 	iter->len = bv.bv_len;
@@ -119,6 +111,30 @@ static bool blk_rq_dma_map_iova(struct request *req, struct device *dma_dev,
 	return true;
 }
 
+static struct blk_map_iter blk_rq_map_iter(struct request *rq)
+{
+	struct bio *bio = rq->bio;
+
+	if (rq->rq_flags & RQF_SPECIAL_PAYLOAD) {
+		return (struct blk_map_iter) {
+			.bvec = &rq->special_vec,
+			.iter = {
+				.bi_size = rq->special_vec.bv_len,
+			}
+		};
+       }
+
+	/* the internal flush request may not have bio attached */
+	if (!bio)
+	        return (struct blk_map_iter) {};
+
+	return (struct blk_map_iter) {
+		.bio = bio,
+		.bvec = bio->bi_io_vec,
+		.iter = bio->bi_iter,
+	};
+}
+
 /**
  * blk_rq_dma_map_iter_start - map the first DMA segment for a request
  * @req:	request to map
@@ -146,10 +162,9 @@ bool blk_rq_dma_map_iter_start(struct request *req, struct device *dma_dev,
 {
 	unsigned int total_len = blk_rq_payload_bytes(req);
 
-	iter->iter.bio = req->bio;
-	iter->iter.iter = req->bio->bi_iter;
 	memset(&iter->p2pdma, 0, sizeof(iter->p2pdma));
 	iter->status = BLK_STS_OK;
+	iter->iter = blk_rq_map_iter(req);
 
 	/*
 	 * Grab the first segment ASAP because we'll need it to check for P2P
@@ -237,15 +252,8 @@ blk_next_sg(struct scatterlist **sg, struct scatterlist *sglist)
 int __blk_rq_map_sg(struct request *rq, struct scatterlist *sglist,
 		    struct scatterlist **last_sg)
 {
-	struct bio *bio = rq->bio;
-	struct blk_map_iter iter = {
-		.bio	= bio,
-	};
+	struct blk_map_iter iter = blk_rq_map_iter(rq);
 	int nsegs = 0;
-
-	/* the internal flush request may not have bio attached */
-	if (bio)
-		iter.iter = bio->bi_iter;
 
 	while (blk_map_iter_next(rq, &iter)) {
 		*last_sg = blk_next_sg(last_sg, sglist);
