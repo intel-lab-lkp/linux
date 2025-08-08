@@ -12,8 +12,6 @@
 #include <linux/pm_runtime.h>
 #include "pcie-cadence.h"
 
-#define CDNS_PLAT_CPU_TO_BUS_ADDR	0x0FFFFFFF
-
 /**
  * struct cdns_plat_pcie - private data for this PCIe platform driver
  * @pcie: Cadence PCIe controller
@@ -24,13 +22,8 @@ struct cdns_plat_pcie {
 
 static const struct of_device_id cdns_plat_pcie_of_match[];
 
-static u64 cdns_plat_cpu_addr_fixup(struct cdns_pcie *pcie, u64 cpu_addr)
-{
-	return cpu_addr & CDNS_PLAT_CPU_TO_BUS_ADDR;
-}
-
 static const struct cdns_pcie_ops cdns_plat_ops = {
-	.cpu_addr_fixup = cdns_plat_cpu_addr_fixup,
+	.link_up = cdns_pcie_linkup,
 };
 
 static int cdns_plat_pcie_probe(struct platform_device *pdev)
@@ -68,6 +61,11 @@ static int cdns_plat_pcie_probe(struct platform_device *pdev)
 		rc = pci_host_bridge_priv(bridge);
 		rc->pcie.dev = dev;
 		rc->pcie.ops = &cdns_plat_ops;
+		rc->pcie.is_rc = data->is_rc;
+
+		/* Store the register bank offsets pointer */
+		rc->pcie.cdns_pcie_reg_offsets = data;
+
 		cdns_plat_pcie->pcie = &rc->pcie;
 
 		ret = cdns_pcie_init_phy(dev, cdns_plat_pcie->pcie);
@@ -95,6 +93,11 @@ static int cdns_plat_pcie_probe(struct platform_device *pdev)
 
 		ep->pcie.dev = dev;
 		ep->pcie.ops = &cdns_plat_ops;
+		ep->pcie.is_rc = data->is_rc;
+
+		/* Store the register bank offset pointer */
+		ep->pcie.cdns_pcie_reg_offsets = data;
+
 		cdns_plat_pcie->pcie = &ep->pcie;
 
 		ret = cdns_pcie_init_phy(dev, cdns_plat_pcie->pcie);

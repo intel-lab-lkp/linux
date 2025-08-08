@@ -29,6 +29,26 @@ struct cdns_pcie_rp_ib_bar {
 struct cdns_pcie;
 struct cdns_pcie_rc;
 
+enum cdns_pcie_msg_routing {
+	/* Route to Root Complex */
+	MSG_ROUTING_TO_RC,
+
+	/* Use Address Routing */
+	MSG_ROUTING_BY_ADDR,
+
+	/* Use ID Routing */
+	MSG_ROUTING_BY_ID,
+
+	/* Route as Broadcast Message from Root Complex */
+	MSG_ROUTING_BCAST,
+
+	/* Local message; terminate at receiver (INTx messages) */
+	MSG_ROUTING_LOCAL,
+
+	/* Gather & route to Root Complex (PME_TO_Ack message) */
+	MSG_ROUTING_GATHER,
+};
+
 enum cdns_pcie_reg_bank {
 	REG_BANK_RP,
 	REG_BANK_IP_REG,
@@ -43,9 +63,9 @@ enum cdns_pcie_reg_bank {
 };
 
 struct cdns_pcie_ops {
-	int	(*start_link)(struct cdns_pcie *pcie);
-	void	(*stop_link)(struct cdns_pcie *pcie);
-	bool	(*link_up)(struct cdns_pcie *pcie);
+	int     (*start_link)(struct cdns_pcie *pcie);
+	void    (*stop_link)(struct cdns_pcie *pcie);
+	bool    (*link_up)(struct cdns_pcie *pcie);
 	u64     (*cpu_addr_fixup)(struct cdns_pcie *pcie, u64 cpu_addr);
 };
 
@@ -77,6 +97,7 @@ struct cdns_plat_pcie_of_data {
  * struct cdns_pcie - private data for Cadence PCIe controller drivers
  * @reg_base: IO mapped register base
  * @mem_res: start/end offsets in the physical system memory to map PCI accesses
+ * @msg_res: Region for send message to map PCI accesses
  * @dev: PCIe controller
  * @is_rc: tell whether the PCIe controller mode is Root Complex or Endpoint.
  * @phy_count: number of supported PHY devices
@@ -89,6 +110,7 @@ struct cdns_plat_pcie_of_data {
 struct cdns_pcie {
 	void __iomem		             *reg_base;
 	struct resource		             *mem_res;
+	struct resource                      *msg_res;
 	struct device		             *dev;
 	bool			             is_rc;
 	int			             phy_count;
@@ -111,6 +133,7 @@ struct cdns_pcie {
  *                available
  * @quirk_retrain_flag: Retrain link as quirk for PCIe Gen2
  * @quirk_detect_quiet_flag: LTSSM Detect Quiet min delay set as quirk
+ * @ecam_support_flag: Whether the ECAM flag is supported
  */
 struct cdns_pcie_rc {
 	struct cdns_pcie	pcie;
@@ -121,6 +144,8 @@ struct cdns_pcie_rc {
 	bool			avail_ib_bar[CDNS_PCIE_RP_MAX_IB];
 	unsigned int		quirk_retrain_flag:1;
 	unsigned int		quirk_detect_quiet_flag:1;
+	unsigned int            ecam_support_flag:1;
+	unsigned int		no_inbound_flag:1;
 };
 
 /**
@@ -304,6 +329,29 @@ static inline u16 cdns_pcie_rp_readw(struct cdns_pcie *pcie, u32 reg)
 	return cdns_pcie_read_sz(addr, 0x2);
 }
 
+static inline void cdns_pcie_hpa_rp_writeb(struct cdns_pcie *pcie,
+					   u32 reg, u8 value)
+{
+	void __iomem *addr = pcie->reg_base + CDNS_PCIE_HPA_RP_BASE + reg;
+
+	cdns_pcie_write_sz(addr, 0x1, value);
+}
+
+static inline void cdns_pcie_hpa_rp_writew(struct cdns_pcie *pcie,
+					   u32 reg, u16 value)
+{
+	void __iomem *addr = pcie->reg_base + CDNS_PCIE_HPA_RP_BASE + reg;
+
+	cdns_pcie_write_sz(addr, 0x2, value);
+}
+
+static inline u16 cdns_pcie_hpa_rp_readw(struct cdns_pcie *pcie, u32 reg)
+{
+	void __iomem *addr = pcie->reg_base + CDNS_PCIE_HPA_RP_BASE + reg;
+
+	return cdns_pcie_read_sz(addr, 0x2);
+}
+
 /* Endpoint Function register access */
 static inline void cdns_pcie_ep_fn_writeb(struct cdns_pcie *pcie, u8 fn,
 					  u32 reg, u8 value)
@@ -368,6 +416,7 @@ int cdns_pcie_host_setup(struct cdns_pcie_rc *rc);
 void cdns_pcie_host_disable(struct cdns_pcie_rc *rc);
 void __iomem *cdns_pci_map_bus(struct pci_bus *bus, unsigned int devfn,
 			       int where);
+int cdns_pcie_hpa_host_setup(struct cdns_pcie_rc *rc);
 #else
 static inline int cdns_pcie_host_link_setup(struct cdns_pcie_rc *rc)
 {
@@ -380,6 +429,11 @@ static inline int cdns_pcie_host_init(struct cdns_pcie_rc *rc)
 }
 
 static inline int cdns_pcie_host_setup(struct cdns_pcie_rc *rc)
+{
+	return 0;
+}
+
+static inline int cdns_pcie_hpa_host_setup(struct cdns_pcie_rc *rc)
 {
 	return 0;
 }
@@ -398,8 +452,14 @@ static inline void __iomem *cdns_pci_map_bus(struct pci_bus *bus, unsigned int d
 #if IS_ENABLED(CONFIG_PCIE_CADENCE_EP)
 int cdns_pcie_ep_setup(struct cdns_pcie_ep *ep);
 void cdns_pcie_ep_disable(struct cdns_pcie_ep *ep);
+int cdns_pcie_hpa_ep_setup(struct cdns_pcie_ep *ep);
 #else
 static inline int cdns_pcie_ep_setup(struct cdns_pcie_ep *ep)
+{
+	return 0;
+}
+
+static inline int cdns_pcie_hpa_ep_setup(struct cdns_pcie_ep *ep)
 {
 	return 0;
 }
@@ -408,7 +468,9 @@ static inline void cdns_pcie_ep_disable(struct cdns_pcie_ep *ep)
 {
 }
 #endif
-
+bool cdns_pcie_linkup(struct cdns_pcie *pcie);
+int  cdns_pcie_host_wait_for_link(struct cdns_pcie *pcie);
+int  cdns_pcie_host_start_link(struct cdns_pcie_rc *rc);
 void cdns_pcie_detect_quiet_min_delay_set(struct cdns_pcie *pcie);
 void cdns_pcie_set_outbound_region(struct cdns_pcie *pcie, u8 busnr, u8 fn,
 				   u32 r, bool is_io,
@@ -420,6 +482,25 @@ void cdns_pcie_reset_outbound_region(struct cdns_pcie *pcie, u32 r);
 void cdns_pcie_disable_phy(struct cdns_pcie *pcie);
 int  cdns_pcie_enable_phy(struct cdns_pcie *pcie);
 int  cdns_pcie_init_phy(struct device *dev, struct cdns_pcie *pcie);
+
+void cdns_pcie_hpa_detect_quiet_min_delay_set(struct cdns_pcie *pcie);
+void cdns_pcie_hpa_set_outbound_region(struct cdns_pcie *pcie, u8 busnr, u8 fn,
+				       u32 r, bool is_io,
+				       u64 cpu_addr, u64 pci_addr, size_t size);
+void cdns_pcie_hpa_set_outbound_region_for_normal_msg(struct cdns_pcie *pcie,
+						      u8 busnr, u8 fn,
+						      u32 r, u64 cpu_addr);
+void cdns_pcie_hpa_reset_outbound_region(struct cdns_pcie *pcie, u32 r);
+int  cdns_pcie_hpa_host_link_setup(struct cdns_pcie_rc *rc);
+int  cdns_pcie_hpa_host_init(struct cdns_pcie_rc *rc);
+void __iomem *cdns_pci_hpa_map_bus(struct pci_bus *bus, unsigned int devfn,
+				   int where);
+int  cdns_pcie_hpa_host_wait_for_link(struct cdns_pcie *pcie);
+int  cdns_pcie_hpa_host_start_link(struct cdns_pcie_rc *rc);
+
+int  cdns_pcie_hpa_start_link(struct cdns_pcie *pcie);
+void cdns_pcie_hpa_stop_link(struct cdns_pcie *pcie);
+bool cdns_pcie_hpa_link_up(struct cdns_pcie *pcie);
 
 extern const struct dev_pm_ops cdns_pcie_pm_ops;
 
