@@ -161,6 +161,16 @@ static const struct dentry_operations ovl_dentry_operations = {
 	.d_weak_revalidate = ovl_dentry_weak_revalidate,
 };
 
+#if IS_ENABLED(CONFIG_UNICODE)
+static const struct dentry_operations ovl_dentry_ci_operations = {
+	.d_real = ovl_d_real,
+	.d_revalidate = ovl_dentry_revalidate,
+	.d_weak_revalidate = ovl_dentry_weak_revalidate,
+	.d_hash = generic_ci_d_hash,
+	.d_compare = generic_ci_d_compare,
+};
+#endif
+
 static struct kmem_cache *ovl_inode_cachep;
 
 static struct inode *ovl_alloc_inode(struct super_block *sb)
@@ -1318,6 +1328,21 @@ static struct dentry *ovl_get_root(struct super_block *sb,
 	return root;
 }
 
+/*
+ * Set the ovl sb encoding as the same one used by the first layer
+ */
+static void ovl_set_sb_ci_ops(struct super_block *ovl_sb, struct super_block *fs_sb)
+{
+#if IS_ENABLED(CONFIG_UNICODE)
+	if (sb_has_encoding(fs_sb)) {
+		ovl_sb->s_encoding = fs_sb->s_encoding;
+		ovl_sb->s_encoding_flags = fs_sb->s_encoding_flags;
+	}
+
+	set_default_d_op(ovl_sb, &ovl_dentry_ci_operations);
+#endif
+}
+
 int ovl_fill_super(struct super_block *sb, struct fs_context *fc)
 {
 	struct ovl_fs *ofs = sb->s_fs_info;
@@ -1423,11 +1448,14 @@ int ovl_fill_super(struct super_block *sb, struct fs_context *fc)
 
 		sb->s_stack_depth = upper_sb->s_stack_depth;
 		sb->s_time_gran = upper_sb->s_time_gran;
+
 	}
 	oe = ovl_get_lowerstack(sb, ctx, ofs, layers);
 	err = PTR_ERR(oe);
 	if (IS_ERR(oe))
 		goto out_err;
+
+	ovl_set_sb_ci_ops(sb, ofs->fs[0].sb);
 
 	/* If the upper fs is nonexistent, we mark overlayfs r/o too */
 	if (!ovl_upper_mnt(ofs))
