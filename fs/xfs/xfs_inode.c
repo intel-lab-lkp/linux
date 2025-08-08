@@ -1745,7 +1745,7 @@ xfs_ifree_cluster(
 		 * IO and it won't be unlocked until the cluster freeing has
 		 * been committed to the journal and the buffer unpinned. If it
 		 * is written, we want to know about it, and we want it to
-		 * fail. We can acheive this by adding a write verifier to the
+		 * fail. We can achieve this by adding a write verifier to the
 		 * buffer.
 		 */
 		bp->b_flags |= XBF_DONE;
