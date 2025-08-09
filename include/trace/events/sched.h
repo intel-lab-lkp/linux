@@ -10,6 +10,99 @@
 #include <linux/tracepoint.h>
 #include <linux/binfmts.h>
 
+TRACE_EVENT(sched_scan_cost,
+
+	TP_PROTO(struct task_struct *t, u64 cost, int nr,
+		 u64 old_running, u64 new_running),
+
+	TP_ARGS(t, cost, nr, old_running, new_running),
+
+	TP_STRUCT__entry(
+		__array(	char,	comm,	TASK_COMM_LEN	)
+		__field(	pid_t,	pid			)
+		__field(	u64,	cost			)
+		__field(	int,	nr			)
+		__field(	u64,	old_running		)
+		__field(	u64,	new_running		)
+	),
+
+	TP_fast_assign(
+		memcpy(__entry->comm, t->comm, TASK_COMM_LEN);
+		__entry->pid	= t->pid;
+		__entry->cost	= cost;
+		__entry->nr	= nr;
+		__entry->old_running	= old_running;
+		__entry->new_running	= new_running;
+	),
+
+	TP_printk("comm=%s pid=%d cost=%llu nr=%d old_r=%lld new_r=%lld",
+		  __entry->comm, __entry->pid,
+		  __entry->cost, __entry->nr,
+		  __entry->old_running, __entry->new_running)
+);
+
+TRACE_EVENT(sched_cache_work,
+
+	TP_PROTO(struct task_struct *t, int pref_cpu, int pref_llc,
+		 int new_cpu, int new_llc),
+
+	TP_ARGS(t, pref_cpu, pref_llc, new_cpu, new_llc),
+
+	TP_STRUCT__entry(
+		__array(	char,	comm,	TASK_COMM_LEN	)
+		__field(	pid_t,	pid			)
+		__field(	int,	pref_cpu		)
+		__field(	int,	pref_llc		)
+		__field(	int,	new_cpu			)
+		__field(	int,	new_llc			)
+	),
+
+	TP_fast_assign(
+		memcpy(__entry->comm, t->comm, TASK_COMM_LEN);
+		__entry->pid	= t->pid;
+		__entry->pref_cpu	= pref_cpu;
+		__entry->pref_llc	= pref_llc;
+		__entry->new_cpu	= new_cpu;
+		__entry->new_llc	= new_llc;
+	),
+
+	TP_printk("comm=%s pid=%d pref_cpu=%d pref_llc=%d attach_cpu=%d attach_llc=%d",
+		  __entry->comm, __entry->pid,
+		  __entry->pref_cpu, __entry->pref_llc,
+		  __entry->new_cpu, __entry->new_llc)
+);
+
+TRACE_EVENT(sched_attach_task,
+
+	TP_PROTO(struct task_struct *t, int pref_cpu, int pref_llc,
+		 int attach_cpu, int attach_llc),
+
+	TP_ARGS(t, pref_cpu, pref_llc, attach_cpu, attach_llc),
+
+	TP_STRUCT__entry(
+		__array(	char,	comm,	TASK_COMM_LEN	)
+		__field(	pid_t,	pid			)
+		__field(	int,	pref_cpu		)
+		__field(	int,	pref_llc		)
+		__field(	int,	attach_cpu		)
+		__field(	int,	attach_llc		)
+	),
+
+	TP_fast_assign(
+		memcpy(__entry->comm, t->comm, TASK_COMM_LEN);
+		__entry->pid	= t->pid;
+		__entry->pref_cpu	= pref_cpu;
+		__entry->pref_llc	= pref_llc;
+		__entry->attach_cpu	= attach_cpu;
+		__entry->attach_llc	= attach_llc;
+	),
+
+	TP_printk("comm=%s pid=%d pref_cpu=%d pref_llc=%d attach_cpu=%d attach_llc=%d",
+		  __entry->comm, __entry->pid,
+		  __entry->pref_cpu, __entry->pref_llc,
+		  __entry->attach_cpu, __entry->attach_llc)
+);
+
 /*
  * Tracepoint for calling kthread_stop, performed to end a kthread:
  */

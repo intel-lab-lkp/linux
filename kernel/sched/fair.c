@@ -1467,8 +1467,9 @@ static void __no_profile task_cache_work(struct callback_head *work)
 	unsigned long last_m_a_occ = 0;
 	int cpu, m_a_cpu = -1, cache_cpu,
 	    pref_nid = NUMA_NO_NODE, curr_cpu = smp_processor_id(),
-	    nr_running = 0;
+	    nr_running = 0, nr_scan = 0;
 	cpumask_var_t cpus;
+	u64 t0, scan_cost = 0;
 
 	WARN_ON_ONCE(work != &p->cache_work);
 
@@ -1499,6 +1500,7 @@ static void __no_profile task_cache_work(struct callback_head *work)
 		pref_nid = p->numa_preferred_nid;
 #endif
 
+	t0 = sched_clock_cpu(curr_cpu);
 	scoped_guard (cpus_read_lock) {
 		get_scan_cpumasks(cpus, cache_cpu,
 				  pref_nid, curr_cpu);
@@ -1521,6 +1523,7 @@ static void __no_profile task_cache_work(struct callback_head *work)
 					m_cpu = i;
 				}
 				nr++;
+				nr_scan++;
 
 				rcu_read_lock();
 				cur = rcu_dereference(cpu_rq(i)->curr);
@@ -1529,8 +1532,8 @@ static void __no_profile task_cache_work(struct callback_head *work)
 					nr_running++;
 				rcu_read_unlock();
 
-				trace_printk("(%d) occ: %ld m_occ: %ld m_cpu: %d nr: %d\n",
-					     per_cpu(sd_llc_id, i), occ, m_occ, m_cpu, nr);
+				//trace_printk("(%d) occ: %ld m_occ: %ld m_cpu: %d nr: %d\n",
+				//	     per_cpu(sd_llc_id, i), occ, m_occ, m_cpu, nr);
 			}
 
 			// a_occ /= nr;
@@ -1541,8 +1544,8 @@ static void __no_profile task_cache_work(struct callback_head *work)
 			if (llc_id(cpu) == llc_id(mm->mm_sched_cpu))
 				last_m_a_occ = a_occ;
 
-			trace_printk("(%d) a_occ: %ld m_a_occ: %ld\n",
-				     per_cpu(sd_llc_id, cpu), a_occ, m_a_occ);
+			//trace_printk("(%d) a_occ: %ld m_a_occ: %ld\n",
+			//	     per_cpu(sd_llc_id, cpu), a_occ, m_a_occ);
 
 			for_each_cpu(i, sched_domain_span(sd)) {
 				/* XXX threshold ? */
@@ -1553,12 +1556,17 @@ static void __no_profile task_cache_work(struct callback_head *work)
 		}
 	}
 
+	scan_cost = sched_clock_cpu(curr_cpu) - t0;
+
 	if (m_a_occ > (2 * last_m_a_occ)) {
 		/* avoid the bouncing of mm_sched_cpu */
+		trace_sched_cache_work(p, mm->mm_sched_cpu, llc_id(mm->mm_sched_cpu),
+					m_a_cpu, llc_id(m_a_cpu));
 		mm->mm_sched_cpu = m_a_cpu;
 	}
 
 	update_avg(&mm->nr_running_avg, nr_running);
+	trace_sched_scan_cost(p, scan_cost, nr_scan, mm->nr_running_avg, nr_running);
 	free_cpumask_var(cpus);
 }
 
@@ -10443,6 +10451,13 @@ static void attach_task(struct rq *rq, struct task_struct *p)
 {
 	lockdep_assert_rq_held(rq);
 
+#ifdef CONFIG_SCHED_CACHE
+	if (p->mm)
+		trace_sched_attach_task(p,
+					p->mm->mm_sched_cpu,
+					p->mm->mm_sched_cpu != -1 ? llc_id(p->mm->mm_sched_cpu) : -1,
+					cpu_of(rq), llc_id(cpu_of(rq)));
+#endif
 	WARN_ON_ONCE(task_rq(p) != rq);
 	activate_task(rq, p, ENQUEUE_NOCLOCK);
 	wakeup_preempt(rq, p, 0);
