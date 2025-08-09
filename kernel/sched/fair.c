@@ -12332,9 +12332,42 @@ imbalanced_active_balance(struct lb_env *env)
 	return 0;
 }
 
+#ifdef CONFIG_SCHED_CACHE
+static inline bool
+break_llc_locality(struct lb_env *env)
+{
+	if (!sched_feat(SCHED_CACHE))
+		return 0;
+
+	if (cpus_share_cache(env->src_cpu, env->dst_cpu))
+		return 0;
+	/*
+	 * All tasks want to stay put. Move only if LLC is
+	 * heavily loaded or don't pull a task from its
+	 * preferred CPU if it is the only one running.
+	 */
+	if (env->src_rq->nr_pref_llc_running == env->src_rq->cfs.h_nr_runnable &&
+	    (env->src_rq->nr_running <= 1 ||
+	    _get_migrate_hint(env->src_cpu, env->dst_cpu,
+			      0, false) == mig_forbid))
+		return 1;
+
+	return 0;
+}
+#else
+static inline bool
+break_llc_locality(struct lb_env *env)
+{
+	return 0;
+}
+#endif
+
 static int need_active_balance(struct lb_env *env)
 {
 	struct sched_domain *sd = env->sd;
+
+	if (break_llc_locality(env))
+		return 0;
 
 	if (asym_active_balance(env))
 		return 1;
@@ -12355,7 +12388,8 @@ static int need_active_balance(struct lb_env *env)
 			return 1;
 	}
 
-	if (env->migration_type == migrate_misfit)
+	if (env->migration_type == migrate_misfit ||
+	    env->migration_type == migrate_llc_task)
 		return 1;
 
 	return 0;
@@ -12800,9 +12834,20 @@ static int active_load_balance_cpu_stop(void *data)
 		goto out_unlock;
 
 	/* Is there any task to move? */
-	if (busiest_rq->nr_running <= 1)
-		goto out_unlock;
+	if (busiest_rq->nr_running <= 1) {
+#ifdef CONFIG_SCHED_CACHE
+		int llc = llc_idx(target_cpu);
 
+		if (!sched_feat(SCHED_CACHE))
+			goto out_unlock;
+
+		if (llc < 0)
+			goto out_unlock;
+		/* don't migrate if task does not prefer target */
+		if (busiest_rq->nr_pref_llc[llc] < 1)
+#endif
+			goto out_unlock;
+	}
 	/*
 	 * This condition is "impossible", if it occurs
 	 * we need to fix it. Originally reported by
