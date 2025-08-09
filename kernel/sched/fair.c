@@ -9063,7 +9063,7 @@ static int select_cache_cpu(struct task_struct *p, int prev_cpu)
 	struct mm_struct *mm = p->mm;
 	int cpu;
 
-	if (!sched_feat(SCHED_CACHE))
+	if (!sched_feat(SCHED_CACHE) || !sched_feat(SCHED_CACHE_WAKE))
 		return prev_cpu;
 
 	if (!mm || p->nr_cpus_allowed == 1)
@@ -9074,6 +9074,10 @@ static int select_cache_cpu(struct task_struct *p, int prev_cpu)
 		return prev_cpu;
 
 	if (cpus_share_cache(cpu, prev_cpu))
+		return prev_cpu;
+
+	if (_get_migrate_hint(prev_cpu, cpu,
+			      task_util(p), true) == mig_forbid)
 		return prev_cpu;
 
 	if (static_branch_likely(&sched_numa_balancing) &&
