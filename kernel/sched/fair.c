@@ -8828,6 +8828,22 @@ unlock:
 #ifdef CONFIG_SCHED_CACHE
 static long __migrate_degrades_locality(struct task_struct *p, int src_cpu, int dst_cpu, bool idle);
 
+/* expected to be protected by rcu_read_lock() */
+static bool get_llc_stats(int cpu, unsigned long *util,
+			  unsigned long *cap)
+{
+	struct sched_domain_shared *sd_share;
+
+	sd_share = rcu_dereference(per_cpu(sd_llc_shared, cpu));
+	if (!sd_share)
+		return false;
+
+	*util = READ_ONCE(sd_share->util_avg);
+	*cap = per_cpu(sd_llc_size, cpu) * SCHED_CAPACITY_SCALE;
+
+	return true;
+}
+
 static int select_cache_cpu(struct task_struct *p, int prev_cpu)
 {
 	struct mm_struct *mm = p->mm;
@@ -10670,6 +10686,42 @@ sched_reduced_capacity(struct rq *rq, struct sched_domain *sd)
 	return check_cpu_capacity(rq, sd);
 }
 
+#ifdef CONFIG_SCHED_CACHE
+/*
+ * Save this sched group's statistic for later use:
+ * The task wakeup and load balance can make better
+ * decision based on these statistics.
+ */
+static void update_sg_if_llc(struct lb_env *env, struct sg_lb_stats *sgs,
+			     struct sched_group *group)
+{
+	/* Find the sched domain that spans this group. */
+	struct sched_domain *sd = env->sd->child;
+	struct sched_domain_shared *sd_share;
+
+	if (!sched_feat(SCHED_CACHE) || env->idle == CPU_NEWLY_IDLE)
+		return;
+
+	/* only care the sched domain that spans 1 LLC */
+	if (!sd || !(sd->flags & SD_SHARE_LLC) ||
+	    !sd->parent || (sd->parent->flags & SD_SHARE_LLC))
+		return;
+
+	sd_share = rcu_dereference(per_cpu(sd_llc_shared,
+				  cpumask_first(sched_group_span(group))));
+	if (!sd_share)
+		return;
+
+	if (likely(READ_ONCE(sd_share->util_avg) != sgs->group_util))
+		WRITE_ONCE(sd_share->util_avg, sgs->group_util);
+}
+#else
+static inline void update_sg_if_llc(struct lb_env *env, struct sg_lb_stats *sgs,
+				    struct sched_group *group)
+{
+}
+#endif
+
 /**
  * update_sg_lb_stats - Update sched_group's statistics for load balancing.
  * @env: The load balancing environment.
@@ -10759,6 +10811,7 @@ static inline void update_sg_lb_stats(struct lb_env *env,
 
 	sgs->group_type = group_classify(env->sd->imbalance_pct, group, sgs);
 
+	update_sg_if_llc(env, sgs, group);
 	/* Computing avg_load makes sense only when group is overloaded */
 	if (sgs->group_type == group_overloaded)
 		sgs->avg_load = (sgs->group_load * SCHED_CAPACITY_SCALE) /
