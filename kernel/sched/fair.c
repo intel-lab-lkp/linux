@@ -9746,7 +9746,8 @@ enum migration_type {
 	migrate_load = 0,
 	migrate_util,
 	migrate_task,
-	migrate_misfit
+	migrate_misfit,
+	migrate_llc_task
 };
 
 #define LBF_ALL_PINNED	0x01
@@ -10178,6 +10179,15 @@ static int detach_tasks(struct lb_env *env)
 				goto next;
 
 			env->imbalance -= util;
+			break;
+
+		case migrate_llc_task:
+			/*
+			 * Since can_migrate_task() succeed, when we reach here, it means that p
+			 * can be migrated even if dst_cpu is not p's preferred_llc, because there
+			 * are no idle cores for p to do in-llc load balance.
+			 */
+			env->imbalance--;
 			break;
 
 		case migrate_task:
@@ -11817,6 +11827,15 @@ static inline void calculate_imbalance(struct lb_env *env, struct sd_lb_stats *s
 		return;
 	}
 
+#ifdef CONFIG_SCHED_CACHE
+	if (busiest->group_llc_balance) {
+		/* Move a task that prefer local LLC */
+		env->migration_type = migrate_llc_task;
+		env->imbalance = 1;
+		return;
+	}
+#endif
+
 	if (busiest->group_type == group_imbalanced) {
 		/*
 		 * In the group_imb case we cannot rely on group-wide averages
@@ -12125,6 +12144,10 @@ static struct rq *sched_balance_find_src_rq(struct lb_env *env,
 	struct rq *busiest = NULL, *rq;
 	unsigned long busiest_util = 0, busiest_load = 0, busiest_capacity = 1;
 	unsigned int busiest_nr = 0;
+#ifdef CONFIG_SCHED_CACHE
+	unsigned int busiest_pref_llc = 0;
+	int dst_llc;
+#endif
 	int i;
 
 	for_each_cpu_and(i, sched_group_span(group), env->cpus) {
@@ -12233,6 +12256,16 @@ static struct rq *sched_balance_find_src_rq(struct lb_env *env,
 			}
 			break;
 
+		case migrate_llc_task:
+#ifdef CONFIG_SCHED_CACHE
+			dst_llc = llc_idx(env->dst_cpu);
+			if (!cpus_share_cache(env->dst_cpu, rq->cpu) &&
+			    busiest_pref_llc < rq->nr_pref_llc[dst_llc]) {
+				busiest_pref_llc = rq->nr_pref_llc[dst_llc];
+				busiest = rq;
+			}
+#endif
+			break;
 		case migrate_task:
 			if (busiest_nr < nr_running) {
 				busiest_nr = nr_running;
@@ -12414,6 +12447,8 @@ static void update_lb_imbalance_stat(struct lb_env *env, struct sched_domain *sd
 		break;
 	case migrate_misfit:
 		__schedstat_add(sd->lb_imbalance_misfit[idle], env->imbalance);
+		break;
+	case migrate_llc_task:
 		break;
 	}
 }
