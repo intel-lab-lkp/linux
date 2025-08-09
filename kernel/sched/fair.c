@@ -1414,12 +1414,13 @@ static void get_scan_cpumasks(cpumask_var_t cpus, int cache_cpu,
 
 static void __no_profile task_cache_work(struct callback_head *work)
 {
-	struct task_struct *p = current;
+	struct task_struct *p = current, *cur;
 	struct mm_struct *mm = p->mm;
 	unsigned long m_a_occ = 0;
 	unsigned long last_m_a_occ = 0;
 	int cpu, m_a_cpu = -1, cache_cpu,
-	    pref_nid = NUMA_NO_NODE, curr_cpu = smp_processor_id();
+	    pref_nid = NUMA_NO_NODE, curr_cpu = smp_processor_id(),
+	    nr_running = 0;
 	cpumask_var_t cpus;
 
 	WARN_ON_ONCE(work != &p->cache_work);
@@ -1460,6 +1461,14 @@ static void __no_profile task_cache_work(struct callback_head *work)
 					m_cpu = i;
 				}
 				nr++;
+
+				rcu_read_lock();
+				cur = rcu_dereference(cpu_rq(i)->curr);
+				if (cur && !(cur->flags & (PF_EXITING | PF_KTHREAD)) &&
+				    cur->mm == mm)
+					nr_running++;
+				rcu_read_unlock();
+
 				trace_printk("(%d) occ: %ld m_occ: %ld m_cpu: %d nr: %d\n",
 					     per_cpu(sd_llc_id, i), occ, m_occ, m_cpu, nr);
 			}
@@ -1489,6 +1498,7 @@ static void __no_profile task_cache_work(struct callback_head *work)
 		mm->mm_sched_cpu = m_a_cpu;
 	}
 
+	update_avg(&mm->nr_running_avg, nr_running);
 	free_cpumask_var(cpus);
 }
 
