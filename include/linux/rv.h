@@ -15,7 +15,6 @@
 
 #ifdef CONFIG_RV
 #include <linux/bitops.h>
-#include <linux/types.h>
 #include <linux/array_size.h>
 
 /*
