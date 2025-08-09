@@ -788,8 +788,6 @@ static int gpio_virtuser_dbgfs_init_line_array_attrs(struct device *dev,
 		return -ENOMEM;
 
 	data->ad.dbgfs_dir = debugfs_create_dir(name, dbgfs_entry);
-	if (IS_ERR(data->ad.dbgfs_dir))
-		return PTR_ERR(data->ad.dbgfs_dir);
 
 	return gpio_virtuser_create_debugfs_attrs(
 			gpio_virtuser_line_array_dbgfs_attrs,
@@ -825,8 +823,6 @@ static int gpio_virtuser_dbgfs_init_line_attrs(struct device *dev,
 		return ret;
 
 	data->ad.dbgfs_dir = debugfs_create_dir(name, dbgfs_entry);
-	if (IS_ERR(data->ad.dbgfs_dir))
-		return PTR_ERR(data->ad.dbgfs_dir);
 
 	return gpio_virtuser_create_debugfs_attrs(
 				gpio_virtuser_line_dbgfs_attrs,
