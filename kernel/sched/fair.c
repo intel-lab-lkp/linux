@@ -10019,7 +10019,7 @@ int can_migrate_task(struct task_struct *p, struct lb_env *env)
 		return 1;
 
 #ifdef CONFIG_SCHED_CACHE
-	if (sched_feat(SCHED_CACHE) &&
+	if (sched_feat(SCHED_CACHE) && sched_feat(SCHED_CACHE_LB) &&
 	    get_migrate_hint(env->src_cpu, env->dst_cpu, p) == mig_forbid)
 		return 0;
 #endif
@@ -10105,7 +10105,7 @@ static struct list_head
 	LIST_HEAD(no_pref_llc);
 	LIST_HEAD(pref_other_llc);
 
-	if (!sched_feat(SCHED_CACHE))
+	if (!sched_feat(SCHED_CACHE) || !sched_feat(SCHED_CACHE_LB))
 		return tasks;
 
 	if (cpus_share_cache(env->dst_cpu, env->src_cpu))
@@ -10290,7 +10290,8 @@ static int detach_tasks(struct lb_env *env)
 		 * The tasks have already been sorted by order_tasks_by_llc(),
 		 * they are tasks that prefer the current LLC.
 		 */
-		if (sched_feat(SCHED_CACHE) && p->preferred_llc != -1 &&
+		if (sched_feat(SCHED_CACHE) && sched_feat(SCHED_CACHE_LB) &&
+		    p->preferred_llc != -1 &&
 		    llc_id(env->src_cpu) == p->preferred_llc)
 			break;
 #endif
@@ -10947,7 +10948,7 @@ static inline bool llc_balance(struct lb_env *env, struct sg_lb_stats *sgs,
 	struct sched_domain *child = env->sd->child;
 	int llc;
 
-	if (!sched_feat(SCHED_CACHE))
+	if (!sched_feat(SCHED_CACHE) || !sched_feat(SCHED_CACHE_LB))
 		return false;
 
 	if (env->sd->flags & SD_SHARE_LLC)
@@ -11058,7 +11059,8 @@ static void update_sg_if_llc(struct lb_env *env, struct sg_lb_stats *sgs,
 	struct sched_domain *sd = env->sd->child;
 	struct sched_domain_shared *sd_share;
 
-	if (!sched_feat(SCHED_CACHE) || env->idle == CPU_NEWLY_IDLE)
+	if (!sched_feat(SCHED_CACHE) || env->idle == CPU_NEWLY_IDLE ||
+	    !sched_feat(SCHED_CACHE_LB))
 		return;
 
 	/* only care the sched domain that spans 1 LLC */
@@ -11120,7 +11122,7 @@ static inline void update_sg_lb_stats(struct lb_env *env,
 			*sg_overutilized = 1;
 
 #ifdef CONFIG_SCHED_CACHE
-		if (sched_feat(SCHED_CACHE)) {
+		if (sched_feat(SCHED_CACHE) && sched_feat(SCHED_CACHE_LB)) {
 			int j;
 
 			for (j = 0; j < max_llcs; ++j)
@@ -12406,7 +12408,7 @@ imbalanced_active_balance(struct lb_env *env)
 static inline bool
 break_llc_locality(struct lb_env *env)
 {
-	if (!sched_feat(SCHED_CACHE))
+	if (!sched_feat(SCHED_CACHE) || !sched_feat(SCHED_CACHE_LB))
 		return 0;
 
 	if (cpus_share_cache(env->src_cpu, env->dst_cpu))
@@ -12908,7 +12910,7 @@ static int active_load_balance_cpu_stop(void *data)
 #ifdef CONFIG_SCHED_CACHE
 		int llc = llc_idx(target_cpu);
 
-		if (!sched_feat(SCHED_CACHE))
+		if (!sched_feat(SCHED_CACHE) || !sched_feat(SCHED_CACHE_LB))
 			goto out_unlock;
 
 		if (llc < 0)
