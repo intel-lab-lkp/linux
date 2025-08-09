@@ -278,6 +278,7 @@ struct gicv5_chip_data {
 	u8			cpuif_pri_bits;
 	u8			cpuif_id_bits;
 	u8			irs_pri_bits;
+	unsigned int		irs_count;
 	struct {
 		__le64 *l1ist_addr;
 		u32 l2_size;
@@ -294,6 +295,7 @@ struct gicv5_irs_chip_data {
 	void __iomem		*irs_base;
 	u32			flags;
 	u32			spi_min;
+	u32			spi_max;
 	u32			spi_range;
 	raw_spinlock_t		spi_config_lock;
 };

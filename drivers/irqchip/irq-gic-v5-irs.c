@@ -8,6 +8,7 @@
 #include <linux/log2.h>
 #include <linux/of.h>
 #include <linux/of_address.h>
+#include <linux/sort.h>
 
 #include <linux/irqchip.h>
 #include <linux/irqchip/arm-gic-v5.h>
@@ -22,7 +23,7 @@
 #define IRS_FLAGS_NON_COHERENT		BIT(0)
 
 static DEFINE_PER_CPU_READ_MOSTLY(struct gicv5_irs_chip_data *, per_cpu_irs_data);
-static LIST_HEAD(irs_nodes);
+static struct gicv5_irs_chip_data **irs_nodes;
 
 static u32 irs_readl_relaxed(struct gicv5_irs_chip_data *irs_data,
 			     const u32 reg_offset)
@@ -382,17 +383,18 @@ int gicv5_irs_cpu_to_iaffid(int cpuid, u16 *iaffid)
 
 struct gicv5_irs_chip_data *gicv5_irs_lookup_by_spi_id(u32 spi_id)
 {
-	struct gicv5_irs_chip_data *irs_data;
-	u32 min, max;
+	int l = 0, r = gicv5_global_data.irs_count - 1;
 
-	list_for_each_entry(irs_data, &irs_nodes, entry) {
-		if (!irs_data->spi_range)
-			continue;
+	while (l <= r) {
+		int m = (l + r) >> 1;
 
-		min = irs_data->spi_min;
-		max = irs_data->spi_min + irs_data->spi_range - 1;
-		if (spi_id >= min && spi_id <= max)
-			return irs_data;
+		if (irs_nodes[m]->spi_min <= spi_id &&
+		    spi_id <= irs_nodes[m]->spi_max)
+			return irs_nodes[m];
+		else if (spi_id < irs_nodes[m]->spi_min)
+			r = m - 1;
+		else
+			l = m + 1;
 	}
 
 	return NULL;
@@ -489,7 +491,7 @@ void gicv5_irs_syncr(void)
 	struct gicv5_irs_chip_data *irs_data;
 	u32 syncr;
 
-	irs_data = list_first_entry_or_null(&irs_nodes, struct gicv5_irs_chip_data, entry);
+	irs_data = irs_nodes[0];
 	if (WARN_ON_ONCE(!irs_data))
 		return;
 
@@ -673,7 +675,7 @@ static void irs_setup_pri_bits(u32 idr1)
 	}
 }
 
-static int __init gicv5_irs_init(struct device_node *node)
+static int __init gicv5_irs_init(struct device_node *node, unsigned int *num)
 {
 	struct gicv5_irs_chip_data *irs_data;
 	void __iomem *irs_base;
@@ -725,11 +727,11 @@ static int __init gicv5_irs_init(struct device_node *node)
 	irs_data->spi_range = FIELD_GET(GICV5_IRS_IDR6_SPI_IRS_RANGE, idr);
 
 	if (irs_data->spi_range) {
+		irs_data->spi_max = irs_data->spi_min + irs_data->spi_range - 1;
 		pr_info("%s detected SPI range [%u-%u]\n",
 						of_node_full_name(node),
 						irs_data->spi_min,
-						irs_data->spi_min +
-						irs_data->spi_range - 1);
+						irs_data->spi_max);
 	}
 
 	/*
@@ -737,8 +739,7 @@ static int __init gicv5_irs_init(struct device_node *node)
 	 * Global properties (iaffid_bits, global spi count) are guaranteed to
 	 * be consistent across IRSes by the architecture.
 	 */
-	if (list_empty(&irs_nodes)) {
-
+	if (*num == 0) {
 		idr = irs_readl_relaxed(irs_data, GICV5_IRS_IDR1);
 		irs_setup_pri_bits(idr);
 
@@ -752,7 +753,7 @@ static int __init gicv5_irs_init(struct device_node *node)
 		pr_debug("Detected %u SPIs globally\n", spi_count);
 	}
 
-	list_add_tail(&irs_data->entry, &irs_nodes);
+	irs_nodes[(*num)++] = irs_data;
 
 	return 0;
 
@@ -765,12 +766,14 @@ out_err:
 
 void __init gicv5_irs_remove(void)
 {
-	struct gicv5_irs_chip_data *irs_data, *tmp_data;
+	struct gicv5_irs_chip_data *irs_data;
+	int i;
 
 	gicv5_free_lpi_domain();
 	gicv5_deinit_lpis();
 
-	list_for_each_entry_safe(irs_data, tmp_data, &irs_nodes, entry) {
+	for (i = 0; i < gicv5_global_data.irs_count; i++) {
+		irs_data = irs_nodes[i];
 		iounmap(irs_data->irs_base);
 		list_del(&irs_data->entry);
 		kfree(irs_data);
@@ -782,8 +785,7 @@ int __init gicv5_irs_enable(void)
 	struct gicv5_irs_chip_data *irs_data;
 	int ret;
 
-	irs_data = list_first_entry_or_null(&irs_nodes,
-					    struct gicv5_irs_chip_data, entry);
+	irs_data = irs_nodes[0];
 	if (!irs_data)
 		return -ENODEV;
 
@@ -799,24 +801,57 @@ int __init gicv5_irs_enable(void)
 void __init gicv5_irs_its_probe(void)
 {
 	struct gicv5_irs_chip_data *irs_data;
+	int i;
 
-	list_for_each_entry(irs_data, &irs_nodes, entry)
+	for (i = 0; i < gicv5_global_data.irs_count; i++) {
+		irs_data = irs_nodes[i];
 		gicv5_its_of_probe(to_of_node(irs_data->fwnode));
+	}
+}
+
+static int spi_min_cmp(const void *a, const void *b)
+{
+	const struct gicv5_irs_chip_data *irs_data1 = a;
+	const struct gicv5_irs_chip_data *irs_data2 = b;
+
+	return irs_data1->spi_min - irs_data2->spi_min;
 }
 
 int __init gicv5_irs_of_probe(struct device_node *parent)
 {
+	unsigned int irs_count = 0, num = 0;
 	struct device_node *np;
 	int ret;
+
+	for_each_available_child_of_node(parent, np) {
+		if (of_device_is_compatible(np, "arm,gic-v5-irs"))
+			irs_count++;
+	}
+
+	if (irs_count == 0)
+		return -ENODEV;
+
+	irs_nodes = kcalloc(irs_count, sizeof(struct gicv5_irs_chip_data *),
+			    __GFP_ZERO);
+	if (!irs_nodes)
+		return -ENOMEM;
 
 	for_each_available_child_of_node(parent, np) {
 		if (!of_device_is_compatible(np, "arm,gic-v5-irs"))
 			continue;
 
-		ret = gicv5_irs_init(np);
+		ret = gicv5_irs_init(np, &num);
 		if (ret)
 			pr_err("Failed to init IRS %s\n", np->full_name);
 	}
 
-	return list_empty(&irs_nodes) ? -ENODEV : 0;
+	if (num == 0) {
+		kfree(irs_nodes);
+		return -ENODEV;
+	}
+
+	sort(irs_nodes, num, sizeof(struct gicv5_irs_chip_data *), spi_min_cmp, NULL);
+	gicv5_global_data.irs_count = num;
+
+	return 0;
 }
