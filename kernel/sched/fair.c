@@ -1175,6 +1175,14 @@ static s64 update_curr_se(struct rq *rq, struct sched_entity *curr)
 #define EPOCH_PERIOD	(HZ/100)	/* 10 ms */
 #define EPOCH_OLD	5		/* 50 ms */
 
+static int llc_id(int cpu)
+{
+	if (cpu < 0)
+		return -1;
+
+	return per_cpu(sd_llc_id, cpu);
+}
+
 void mm_init_sched(struct mm_struct *mm, struct mm_sched __percpu *_pcpu_sched)
 {
 	unsigned long epoch;
@@ -1307,6 +1315,7 @@ static void __no_profile task_cache_work(struct callback_head *work)
 	struct task_struct *p = current;
 	struct mm_struct *mm = p->mm;
 	unsigned long m_a_occ = 0;
+	unsigned long last_m_a_occ = 0;
 	int cpu, m_a_cpu = -1;
 	cpumask_var_t cpus;
 
@@ -1345,11 +1354,13 @@ static void __no_profile task_cache_work(struct callback_head *work)
 					     per_cpu(sd_llc_id, i), occ, m_occ, m_cpu, nr);
 			}
 
-			a_occ /= nr;
+			// a_occ /= nr;
 			if (a_occ > m_a_occ) {
 				m_a_occ = a_occ;
 				m_a_cpu = m_cpu;
 			}
+			if (llc_id(cpu) == llc_id(mm->mm_sched_cpu))
+				last_m_a_occ = a_occ;
 
 			trace_printk("(%d) a_occ: %ld m_a_occ: %ld\n",
 				     per_cpu(sd_llc_id, cpu), a_occ, m_a_occ);
@@ -1363,13 +1374,10 @@ static void __no_profile task_cache_work(struct callback_head *work)
 		}
 	}
 
-	/*
-	 * If the max average cache occupancy is 'small' we don't care.
-	 */
-	if (m_a_occ < (NICE_0_LOAD >> EPOCH_OLD))
-		m_a_cpu = -1;
-
-	mm->mm_sched_cpu = m_a_cpu;
+	if (m_a_occ > (2 * last_m_a_occ)) {
+		/* avoid the bouncing of mm_sched_cpu */
+		mm->mm_sched_cpu = m_a_cpu;
+	}
 
 	free_cpumask_var(cpus);
 }
