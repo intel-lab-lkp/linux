@@ -7940,8 +7940,6 @@ static int select_idle_cpu(struct task_struct *p, struct sched_domain *sd, bool 
 	int i, cpu, idle_cpu = -1, nr = INT_MAX;
 	struct sched_domain_shared *sd_share;
 
-	cpumask_and(cpus, sched_domain_span(sd), p->cpus_ptr);
-
 	if (sched_feat(SIS_UTIL)) {
 		sd_share = rcu_dereference(per_cpu(sd_llc_shared, target));
 		if (sd_share) {
@@ -7952,6 +7950,8 @@ static int select_idle_cpu(struct task_struct *p, struct sched_domain *sd, bool 
 				return -1;
 		}
 	}
+
+	cpumask_and(cpus, sched_domain_span(sd), p->cpus_ptr);
 
 	if (static_branch_unlikely(&sched_cluster_active)) {
 		struct sched_group *sg = sd->groups;
