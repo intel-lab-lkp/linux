@@ -7090,3 +7090,4 @@ device_initcall(binder_init);
 #include "binder_trace.h"
 
 MODULE_LICENSE("GPL v2");
+MODULE_DESCRIPTION("Android Binder IPC Driver");
