@@ -520,7 +520,9 @@ ga100_fifo_nonstall_block(struct nvkm_event *event, int type, int index)
 	struct nvkm_fifo *fifo = container_of(event, typeof(*fifo), nonstall.event);
 	struct nvkm_runl *runl = nvkm_runl_get(fifo, index, 0);
 
-	nvkm_inth_block(&runl->nonstall.inth);
+	WARN_ON(!runl);
+	if (runl)
+		nvkm_inth_block(&runl->nonstall.inth);
 }
 
 static void
@@ -529,7 +531,9 @@ ga100_fifo_nonstall_allow(struct nvkm_event *event, int type, int index)
 	struct nvkm_fifo *fifo = container_of(event, typeof(*fifo), nonstall.event);
 	struct nvkm_runl *runl = nvkm_runl_get(fifo, index, 0);
 
-	nvkm_inth_allow(&runl->nonstall.inth);
+	WARN_ON(!runl);
+	if (runl)
+		nvkm_inth_allow(&runl->nonstall.inth);
 }
 
 const struct nvkm_event_func
