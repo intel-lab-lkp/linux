@@ -1195,22 +1195,51 @@ static inline int llc_idx(int cpu)
 	return per_cpu(sd_llc_idx, cpu);
 }
 
+static inline int pref_llc_idx(struct task_struct *p)
+{
+	return llc_idx(p->preferred_llc);
+}
+
 static void account_llc_enqueue(struct rq *rq, struct task_struct *p)
 {
+	int pref_llc;
+
 	if (!sched_feat(SCHED_CACHE))
 		return;
 
 	rq->nr_llc_running += (p->preferred_llc != -1);
 	rq->nr_pref_llc_running += (p->preferred_llc == task_llc(p));
+
+	if (p->preferred_llc < 0)
+		return;
+
+	pref_llc = pref_llc_idx(p);
+	if (pref_llc < 0)
+		return;
+
+	++rq->nr_pref_llc[pref_llc];
 }
 
 static void account_llc_dequeue(struct rq *rq, struct task_struct *p)
 {
+	int pref_llc;
+
 	if (!sched_feat(SCHED_CACHE))
 		return;
 
 	rq->nr_llc_running -= (p->preferred_llc != -1);
 	rq->nr_pref_llc_running -= (p->preferred_llc == task_llc(p));
+
+	if (p->preferred_llc < 0)
+		return;
+
+	pref_llc = pref_llc_idx(p);
+	if (pref_llc < 0)
+		return;
+
+	/* avoid negative counter */
+	if (rq->nr_pref_llc[pref_llc] > 0)
+		--rq->nr_pref_llc[pref_llc];
 }
 
 void mm_init_sched(struct mm_struct *mm, struct mm_sched __percpu *_pcpu_sched)
@@ -1279,6 +1308,8 @@ static unsigned long __no_profile fraction_mm_sched(struct rq *rq, struct mm_sch
 	return div64_u64(NICE_0_LOAD * pcpu_sched->runtime, rq->cpu_runtime + 1);
 }
 
+static unsigned int task_running_on_cpu(int cpu, struct task_struct *p);
+
 static inline
 void account_mm_sched(struct rq *rq, struct task_struct *p, s64 delta_exec)
 {
@@ -1321,7 +1352,9 @@ void account_mm_sched(struct rq *rq, struct task_struct *p, s64 delta_exec)
 	if (mm->mm_sched_cpu != -1)
 		mm_sched_llc = per_cpu(sd_llc_id, mm->mm_sched_cpu);
 
-	if (p->preferred_llc != mm_sched_llc) {
+	/* task not on rq accounted later in account_entity_enqueue() */
+	if (task_running_on_cpu(rq->cpu, p) &&
+	    p->preferred_llc != mm_sched_llc) {
 		account_llc_dequeue(rq, p);
 		p->preferred_llc = mm_sched_llc;
 		account_llc_enqueue(rq, p);
@@ -1431,11 +1464,16 @@ void init_sched_mm(struct task_struct *p)
 
 void reset_llc_stats(struct rq *rq)
 {
+	int i;
+
 	if (!sched_feat(SCHED_CACHE))
 		return;
 
-	if (rq->nr_llc_running)
+	if (rq->nr_llc_running) {
+		for (i = 0; i < MAX_LLC; ++i)
+			rq->nr_pref_llc[i] = 0;
 		rq->nr_llc_running = 0;
+	}
 
 	rq->nr_pref_llc_running = 0;
 }

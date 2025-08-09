@@ -1109,6 +1109,7 @@ struct rq {
 #ifdef CONFIG_SCHED_CACHE
 	unsigned int		nr_pref_llc_running;
 	unsigned int		nr_llc_running;
+	unsigned int		nr_pref_llc[MAX_LLC];
 #endif
 #ifdef CONFIG_NO_HZ_COMMON
 #ifdef CONFIG_SMP
