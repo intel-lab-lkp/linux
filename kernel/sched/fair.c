@@ -10093,6 +10093,68 @@ static struct task_struct *detach_one_task(struct lb_env *env)
 	return NULL;
 }
 
+#ifdef CONFIG_SCHED_CACHE
+/*
+ * Prepare lists to detach tasks in the following order:
+ * 1. tasks that prefer dst cpu's LLC
+ * 2. tasks that have no preference in LLC
+ * 3. tasks that prefer LLC other than the ones they are on
+ * 4. tasks that prefer the LLC that they are currently on.
+ */
+static struct list_head
+*order_tasks_by_llc(struct lb_env *env, struct list_head *tasks)
+{
+	struct task_struct *p;
+	LIST_HEAD(pref_old_llc);
+	LIST_HEAD(pref_new_llc);
+	LIST_HEAD(no_pref_llc);
+	LIST_HEAD(pref_other_llc);
+
+	if (!sched_feat(SCHED_CACHE))
+		return tasks;
+
+	if (cpus_share_cache(env->dst_cpu, env->src_cpu))
+		return tasks;
+
+	while (!list_empty(tasks)) {
+		p = list_last_entry(tasks, struct task_struct, se.group_node);
+
+		if (p->preferred_llc == llc_id(env->dst_cpu)) {
+			list_move(&p->se.group_node, &pref_new_llc);
+			continue;
+		}
+
+		if (p->preferred_llc == llc_id(env->src_cpu)) {
+			list_move(&p->se.group_node, &pref_old_llc);
+			continue;
+		}
+
+		if (p->preferred_llc == -1) {
+			list_move(&p->se.group_node, &no_pref_llc);
+			continue;
+		}
+
+		list_move(&p->se.group_node, &pref_other_llc);
+	}
+
+	/*
+	 * We detach tasks from list tail in detach tasks.  Put tasks
+	 * to be chosen first at end of list.
+	 */
+	list_splice(&pref_new_llc, tasks);
+	list_splice(&no_pref_llc, tasks);
+	list_splice(&pref_other_llc, tasks);
+	list_splice(&pref_old_llc, tasks);
+	return tasks;
+}
+#else
+static inline struct list_head
+*order_tasks_by_llc(struct lb_env *env, struct list_head *tasks)
+{
+	return tasks;
+}
+#endif
+
 /*
  * detach_tasks() -- tries to detach up to imbalance load/util/tasks from
  * busiest_rq, as part of a balancing operation within domain "sd".
@@ -10101,7 +10163,7 @@ static struct task_struct *detach_one_task(struct lb_env *env)
  */
 static int detach_tasks(struct lb_env *env)
 {
-	struct list_head *tasks = &env->src_rq->cfs_tasks;
+	struct list_head *tasks;
 	unsigned long util, load;
 	struct task_struct *p;
 	int detached = 0;
@@ -10119,6 +10181,8 @@ static int detach_tasks(struct lb_env *env)
 
 	if (env->imbalance <= 0)
 		return 0;
+
+	tasks = order_tasks_by_llc(env, &env->src_rq->cfs_tasks);
 
 	while (!list_empty(tasks)) {
 		/*
