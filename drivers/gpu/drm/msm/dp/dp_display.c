@@ -1444,7 +1444,7 @@ void msm_dp_bridge_atomic_enable(struct drm_bridge *drm_bridge,
 	}
 
 	hpd_state = msm_dp_display->hpd_state;
-	if (hpd_state != ST_DISPLAY_OFF && hpd_state != ST_MAINLINK_READY)
+	if (msm_dp_display->link->sink_count == 0)
 		return;
 
 	rc = msm_dp_display_set_mode(dp, &msm_dp_display->msm_dp_mode);
