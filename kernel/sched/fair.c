@@ -6456,8 +6456,13 @@ void init_cfs_bandwidth(struct cfs_bandwidth *cfs_b, struct cfs_bandwidth *paren
 	cfs_b->hierarchical_quota = parent ? parent->hierarchical_quota : RUNTIME_INF;
 
 	INIT_LIST_HEAD(&cfs_b->throttled_cfs_rq);
+#ifdef CONFIG_PREEMPT_RT
+	hrtimer_setup(&cfs_b->period_timer, sched_cfs_period_timer, CLOCK_MONOTONIC,
+		      HRTIMER_MODE_ABS_PINNED_HARD);
+#else
 	hrtimer_setup(&cfs_b->period_timer, sched_cfs_period_timer, CLOCK_MONOTONIC,
 		      HRTIMER_MODE_ABS_PINNED);
+#endif
 
 	/* Add a random offset so that timers interleave */
 	hrtimer_set_expires(&cfs_b->period_timer,
@@ -6483,7 +6488,11 @@ void start_cfs_bandwidth(struct cfs_bandwidth *cfs_b)
 
 	cfs_b->period_active = 1;
 	hrtimer_forward_now(&cfs_b->period_timer, cfs_b->period);
+#ifdef CONFIG_PREEMPT_RT
+	hrtimer_start_expires(&cfs_b->period_timer, HRTIMER_MODE_ABS_PINNED_HARD);
+#else
 	hrtimer_start_expires(&cfs_b->period_timer, HRTIMER_MODE_ABS_PINNED);
+#endif
 }
 
 static void destroy_cfs_bandwidth(struct cfs_bandwidth *cfs_b)
