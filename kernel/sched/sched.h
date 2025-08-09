@@ -2858,6 +2858,8 @@ extern unsigned int sysctl_numa_balancing_hot_threshold;
 extern unsigned int sysctl_llc_aggr_cap;
 extern unsigned int sysctl_llc_aggr_imb;
 extern struct static_key_false sched_cache_present;
+extern unsigned int sysctl_llc_period;
+extern unsigned int sysctl_llc_old;
 #endif
 
 #ifdef CONFIG_SCHED_HRTICK

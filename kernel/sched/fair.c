@@ -1175,6 +1175,9 @@ static s64 update_curr_se(struct rq *rq, struct sched_entity *curr)
 #define EPOCH_PERIOD	(HZ/100)	/* 10 ms */
 #define EPOCH_OLD	5		/* 50 ms */
 
+__read_mostly unsigned int sysctl_llc_period    = EPOCH_PERIOD;
+__read_mostly unsigned int sysctl_llc_old       = EPOCH_OLD;
+
 DEFINE_STATIC_KEY_FALSE(sched_cache_present);
 
 static int llc_id(int cpu)
@@ -1283,9 +1286,9 @@ static inline void __update_mm_sched(struct rq *rq, struct mm_sched *pcpu_sched)
 	long delta = now - rq->cpu_epoch_next;
 
 	if (delta > 0) {
-		n = (delta + EPOCH_PERIOD - 1) / EPOCH_PERIOD;
+		n = (delta + sysctl_llc_period - 1) / sysctl_llc_period;
 		rq->cpu_epoch += n;
-		rq->cpu_epoch_next += n * EPOCH_PERIOD;
+		rq->cpu_epoch_next += n * sysctl_llc_period;
 		__shr_u64(&rq->cpu_runtime, n);
 	}
 
@@ -1346,7 +1349,7 @@ void account_mm_sched(struct rq *rq, struct task_struct *p, s64 delta_exec)
 	 * has only 1 thread, invalidate
 	 * it's preferred state.
 	 */
-	if (epoch - READ_ONCE(mm->mm_sched_epoch) > EPOCH_OLD ||
+	if (epoch - READ_ONCE(mm->mm_sched_epoch) > sysctl_llc_old ||
 	    get_nr_threads(p) <= 1) {
 		mm->mm_sched_cpu = -1;
 		pcpu_sched->occ = 0;

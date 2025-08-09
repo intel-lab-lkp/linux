@@ -535,6 +535,8 @@ static __init int sched_init_debug(void)
 #ifdef CONFIG_SCHED_CACHE
 	debugfs_create_u32("llc_aggr_cap", 0644, debugfs_sched, &sysctl_llc_aggr_cap);
 	debugfs_create_u32("llc_aggr_imb", 0644, debugfs_sched, &sysctl_llc_aggr_imb);
+	debugfs_create_u32("llc_period", 0644, debugfs_sched, &sysctl_llc_period);
+	debugfs_create_u32("llc_old", 0644, debugfs_sched, &sysctl_llc_old);
 #endif
 	debugfs_create_file("debug", 0444, debugfs_sched, NULL, &sched_debug_fops);
 
