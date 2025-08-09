@@ -809,6 +809,9 @@ struct kmap_ctrl {
 #endif
 };
 
+/* XXX need fix to not use magic number */
+#define MAX_LLC 64
+
 struct task_struct {
 #ifdef CONFIG_THREAD_INFO_IN_TASK
 	/*
