@@ -413,7 +413,7 @@ drm_gpusvm_notifier_invalidate_twopass(struct mmu_interval_notifier *mni,
  * drm_gpusvm_notifier_ops - MMU interval notifier operations for GPU SVM
  */
 static const struct mmu_interval_notifier_ops drm_gpusvm_notifier_ops = {
-	.invalidate_twopass = drm_gpusvm_notifier_invalidate_twopass,
+	.invalidate_multipass = drm_gpusvm_notifier_invalidate_twopass,
 };
 
 /**
