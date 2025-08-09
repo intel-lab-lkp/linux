@@ -82,43 +82,55 @@ static bool write_to_read_only(struct kvm_vcpu *vcpu,
 			"sys_reg write to read-only register");
 }
 
-#define PURE_EL2_SYSREG(el2)						\
-	case el2: {							\
-		*el1r = el2;						\
-		return true;						\
-	}
+enum sr_loc_attr {
+	SR_LOC_MEMORY	= 0,	  /* Register definitely in memory */
+	SR_LOC_LOADED	= BIT(0), /* Register on CPU, unless it cannot */
+	SR_LOC_MAPPED	= BIT(1), /* Register in a different CPU register */
+	SR_LOC_XLATED	= BIT(2), /* Register translated to fit another reg */
+	SR_LOC_SPECIAL	= BIT(3), /* Demanding register, implies loaded */
+};
 
-#define MAPPED_EL2_SYSREG(el2, el1, fn)					\
-	case el2: {							\
-		*xlate = fn;						\
-		*el1r = el1;						\
-		return true;						\
-	}
+struct sr_loc {
+	enum sr_loc_attr loc;
+	enum vcpu_sysreg map_reg;
+	u64		 (*xlate)(u64);
+};
 
-static bool get_el2_to_el1_mapping(unsigned int reg,
-				   unsigned int *el1r, u64 (**xlate)(u64))
+static void locate_mapped_el2_register(const struct kvm_vcpu *vcpu,
+				       enum vcpu_sysreg reg,
+				       enum vcpu_sysreg map_reg,
+				       u64 (*xlate)(u64),
+				       struct sr_loc *loc)
 {
+	if (!is_hyp_ctxt(vcpu)) {
+		loc->loc = SR_LOC_MEMORY;
+		return;
+	}
+
+	loc->loc = SR_LOC_LOADED | SR_LOC_MAPPED;
+	loc->map_reg = map_reg;
+
+	if (xlate != NULL && !vcpu_el2_e2h_is_set(vcpu)) {
+		loc->loc |= SR_LOC_XLATED;
+		loc->xlate = xlate;
+	}
+}
+
+#define MAPPED_EL2_SYSREG(r, m, t)					\
+	case r:	{							\
+		locate_mapped_el2_register(vcpu, r, m, t, loc);		\
+		break;							\
+	}
+
+static void locate_register(const struct kvm_vcpu *vcpu, enum vcpu_sysreg reg,
+			    struct sr_loc *loc)
+{
+	if (!vcpu_get_flag(vcpu, SYSREGS_ON_CPU)) {
+		loc->loc = SR_LOC_MEMORY;
+		return;
+	}
+
 	switch (reg) {
-		PURE_EL2_SYSREG(  VPIDR_EL2	);
-		PURE_EL2_SYSREG(  VMPIDR_EL2	);
-		PURE_EL2_SYSREG(  ACTLR_EL2	);
-		PURE_EL2_SYSREG(  HCR_EL2	);
-		PURE_EL2_SYSREG(  MDCR_EL2	);
-		PURE_EL2_SYSREG(  HSTR_EL2	);
-		PURE_EL2_SYSREG(  HACR_EL2	);
-		PURE_EL2_SYSREG(  VTTBR_EL2	);
-		PURE_EL2_SYSREG(  VTCR_EL2	);
-		PURE_EL2_SYSREG(  TPIDR_EL2	);
-		PURE_EL2_SYSREG(  HPFAR_EL2	);
-		PURE_EL2_SYSREG(  HCRX_EL2	);
-		PURE_EL2_SYSREG(  HFGRTR_EL2	);
-		PURE_EL2_SYSREG(  HFGWTR_EL2	);
-		PURE_EL2_SYSREG(  HFGITR_EL2	);
-		PURE_EL2_SYSREG(  HDFGRTR_EL2	);
-		PURE_EL2_SYSREG(  HDFGWTR_EL2	);
-		PURE_EL2_SYSREG(  HAFGRTR_EL2	);
-		PURE_EL2_SYSREG(  CNTVOFF_EL2	);
-		PURE_EL2_SYSREG(  CNTHCTL_EL2	);
 		MAPPED_EL2_SYSREG(SCTLR_EL2,   SCTLR_EL1,
 				  translate_sctlr_el2_to_sctlr_el1	     );
 		MAPPED_EL2_SYSREG(CPTR_EL2,    CPACR_EL1,
@@ -144,125 +156,120 @@ static bool get_el2_to_el1_mapping(unsigned int reg,
 		MAPPED_EL2_SYSREG(ZCR_EL2,     ZCR_EL1,     NULL	     );
 		MAPPED_EL2_SYSREG(CONTEXTIDR_EL2, CONTEXTIDR_EL1, NULL	     );
 		MAPPED_EL2_SYSREG(SCTLR2_EL2,  SCTLR2_EL1,  NULL	     );
+	case CNTHCTL_EL2:
+		/* CNTHCTL_EL2 is super special, until we support NV2.1 */
+		loc->loc = ((is_hyp_ctxt(vcpu) && vcpu_el2_e2h_is_set(vcpu)) ?
+			    SR_LOC_SPECIAL : SR_LOC_MEMORY);
+		break;
+	case TPIDR_EL0:
+	case TPIDRRO_EL0:
+	case TPIDR_EL1:
+	case PAR_EL1:
+		/* These registers are always loaded, no matter what */
+		loc->loc = SR_LOC_LOADED;
+		break;
 	default:
-		return false;
+		/*
+		 * Non-mapped EL2 registers are by definition in memory, but
+		 * we don't need to distinguish them here, as the CPU
+		 * register accessors will bail out and we'll end-up using
+		 * the backing store.
+		 *
+		 * EL1 registers are, however, only loaded if we're
+		 * not in hypervisor context.
+		 */
+		loc->loc = is_hyp_ctxt(vcpu) ? SR_LOC_MEMORY : SR_LOC_LOADED;
 	}
 }
 
-u64 vcpu_read_sys_reg(const struct kvm_vcpu *vcpu, int reg)
+u64 vcpu_read_sys_reg(const struct kvm_vcpu *vcpu, enum vcpu_sysreg reg)
 {
-	u64 val = 0x8badf00d8badf00d;
-	u64 (*xlate)(u64) = NULL;
-	unsigned int el1r;
+	struct sr_loc loc = {};
 
-	if (!vcpu_get_flag(vcpu, SYSREGS_ON_CPU))
-		goto memory_read;
+	locate_register(vcpu, reg, &loc);
 
-	if (unlikely(get_el2_to_el1_mapping(reg, &el1r, &xlate))) {
-		if (!is_hyp_ctxt(vcpu))
-			goto memory_read;
+	if (loc.loc & SR_LOC_SPECIAL) {
+		u64 val;
 
 		/*
-		 * CNTHCTL_EL2 requires some special treatment to
-		 * account for the bits that can be set via CNTKCTL_EL1.
+		 * CNTHCTL_EL2 requires some special treatment to account
+		 * for the bits that can be set via CNTKCTL_EL1 when E2H==1.
 		 */
 		switch (reg) {
 		case CNTHCTL_EL2:
-			if (vcpu_el2_e2h_is_set(vcpu)) {
-				val = read_sysreg_el1(SYS_CNTKCTL);
-				val &= CNTKCTL_VALID_BITS;
-				val |= __vcpu_sys_reg(vcpu, reg) & ~CNTKCTL_VALID_BITS;
-				return val;
-			}
-			break;
+			val = read_sysreg_el1(SYS_CNTKCTL);
+			val &= CNTKCTL_VALID_BITS;
+			val |= __vcpu_sys_reg(vcpu, reg) & ~CNTKCTL_VALID_BITS;
+			return val;
+		default:
+			WARN_ON_ONCE(1);
 		}
-
-		/*
-		 * If this register does not have an EL1 counterpart,
-		 * then read the stored EL2 version.
-		 */
-		if (reg == el1r)
-			goto memory_read;
-
-		/*
-		 * If we have a non-VHE guest and that the sysreg
-		 * requires translation to be used at EL1, use the
-		 * in-memory copy instead.
-		 */
-		if (!vcpu_el2_e2h_is_set(vcpu) && xlate)
-			goto memory_read;
-
-		/* Get the current version of the EL1 counterpart. */
-		WARN_ON(!__vcpu_read_sys_reg_from_cpu(el1r, &val));
-		if (reg >= __SANITISED_REG_START__)
-			val = kvm_vcpu_apply_reg_masks(vcpu, reg, val);
-
-		return val;
 	}
 
-	/* EL1 register can't be on the CPU if the guest is in vEL2. */
-	if (unlikely(is_hyp_ctxt(vcpu)))
-		goto memory_read;
+	if (loc.loc & SR_LOC_LOADED) {
+		enum vcpu_sysreg map_reg = reg;
+		u64 val = 0x8badf00d8badf00d;
 
-	if (__vcpu_read_sys_reg_from_cpu(reg, &val))
-		return val;
+		if (loc.loc & SR_LOC_MAPPED)
+			map_reg = loc.map_reg;
 
-memory_read:
+		if (!(loc.loc & SR_LOC_XLATED) &&
+		    __vcpu_read_sys_reg_from_cpu(map_reg, &val)) {
+			if (reg >= __SANITISED_REG_START__)
+				val = kvm_vcpu_apply_reg_masks(vcpu, reg, val);
+
+			return val;
+		}
+	}
+
 	return __vcpu_sys_reg(vcpu, reg);
 }
 
-void vcpu_write_sys_reg(struct kvm_vcpu *vcpu, u64 val, int reg)
+void vcpu_write_sys_reg(struct kvm_vcpu *vcpu, u64 val, enum vcpu_sysreg reg)
 {
-	u64 (*xlate)(u64) = NULL;
-	unsigned int el1r;
+	struct sr_loc loc = {};
 
-	if (!vcpu_get_flag(vcpu, SYSREGS_ON_CPU))
-		goto memory_write;
+	locate_register(vcpu, reg, &loc);
 
-	if (unlikely(get_el2_to_el1_mapping(reg, &el1r, &xlate))) {
-		if (!is_hyp_ctxt(vcpu))
-			goto memory_write;
-
-		/*
-		 * Always store a copy of the write to memory to avoid having
-		 * to reverse-translate virtual EL2 system registers for a
-		 * non-VHE guest hypervisor.
-		 */
-		__vcpu_assign_sys_reg(vcpu, reg, val);
-
+	if (loc.loc & SR_LOC_SPECIAL) {
 		switch (reg) {
 		case CNTHCTL_EL2:
 			/*
-			 * If E2H=0, CNHTCTL_EL2 is a pure shadow register.
-			 * Otherwise, some of the bits are backed by
+			 * If E2H=1, some of the bits are backed by
 			 * CNTKCTL_EL1, while the rest is kept in memory.
 			 * Yes, this is fun stuff.
 			 */
-			if (vcpu_el2_e2h_is_set(vcpu))
-				write_sysreg_el1(val, SYS_CNTKCTL);
-			return;
+			write_sysreg_el1(val, SYS_CNTKCTL);
+			break;
+		default:
+			WARN_ON_ONCE(1);
 		}
-
-		/* No EL1 counterpart? We're done here.? */
-		if (reg == el1r)
-			return;
-
-		if (!vcpu_el2_e2h_is_set(vcpu) && xlate)
-			val = xlate(val);
-
-		/* Redirect this to the EL1 version of the register. */
-		WARN_ON(!__vcpu_write_sys_reg_to_cpu(val, el1r));
-		return;
 	}
 
-	/* EL1 register can't be on the CPU if the guest is in vEL2. */
-	if (unlikely(is_hyp_ctxt(vcpu)))
-		goto memory_write;
+	if (loc.loc & SR_LOC_LOADED) {
+		enum vcpu_sysreg map_reg = reg;
+		u64 xlated_val;
 
-	if (__vcpu_write_sys_reg_to_cpu(val, reg))
-		return;
+		if (reg >= __SANITISED_REG_START__)
+			val = kvm_vcpu_apply_reg_masks(vcpu, reg, val);
 
-memory_write:
+		if (loc.loc & SR_LOC_MAPPED)
+			map_reg = loc.map_reg;
+
+		if (loc.loc & SR_LOC_XLATED)
+			xlated_val = loc.xlate(val);
+		else
+			xlated_val = val;
+
+		__vcpu_write_sys_reg_to_cpu(xlated_val, map_reg);
+
+		/*
+		 * Fall through to write the backing store anyway, which
+		 * allows translated registers to be directly read without a
+		 * reverse translation.
+		 */
+	}
+
 	__vcpu_assign_sys_reg(vcpu, reg, val);
 }
 
