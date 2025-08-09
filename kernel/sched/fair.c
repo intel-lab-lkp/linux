@@ -1205,6 +1205,18 @@ static inline int pref_llc_idx(struct task_struct *p)
 	return llc_idx(p->preferred_llc);
 }
 
+static bool exceed_llc_nr(struct mm_struct *mm, int cpu)
+{
+	int smt_nr = 1;
+
+#ifdef CONFIG_SCHED_SMT
+	if (sched_smt_active())
+		smt_nr = cpumask_weight(cpu_smt_mask(cpu));
+#endif
+
+	return ((mm->nr_running_avg * smt_nr) > per_cpu(sd_llc_size, cpu));
+}
+
 static void account_llc_enqueue(struct rq *rq, struct task_struct *p)
 {
 	int pref_llc;
@@ -1350,7 +1362,8 @@ void account_mm_sched(struct rq *rq, struct task_struct *p, s64 delta_exec)
 	 * it's preferred state.
 	 */
 	if (epoch - READ_ONCE(mm->mm_sched_epoch) > sysctl_llc_old ||
-	    get_nr_threads(p) <= 1) {
+	    get_nr_threads(p) <= 1 ||
+	    exceed_llc_nr(mm, cpu_of(rq))) {
 		mm->mm_sched_cpu = -1;
 		pcpu_sched->occ = 0;
 	}
@@ -1429,6 +1442,11 @@ static void __no_profile task_cache_work(struct callback_head *work)
 
 	if (p->flags & PF_EXITING)
 		return;
+
+	if (get_nr_threads(p) <= 1) {
+		mm->mm_sched_cpu = -1;
+		return;
+	}
 
 	if (!zalloc_cpumask_var(&cpus, GFP_KERNEL))
 		return;
@@ -9093,6 +9111,10 @@ static __maybe_unused enum llc_mig_hint get_migrate_hint(int src_cpu, int dst_cp
 
 	cpu = mm->mm_sched_cpu;
 	if (cpu < 0)
+		return mig_allow;
+
+	 /* skip cache aware load balance for single/too many threads */
+	if (get_nr_threads(p) <= 1 || exceed_llc_nr(mm, dst_cpu))
 		return mig_allow;
 
 	if (cpus_share_cache(dst_cpu, cpu))
