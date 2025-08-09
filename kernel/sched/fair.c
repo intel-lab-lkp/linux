@@ -9822,17 +9822,6 @@ static int task_hot(struct task_struct *p, struct lb_env *env)
 	if (sysctl_sched_migration_cost == 0)
 		return 0;
 
-#ifdef CONFIG_SCHED_CACHE
-	if (sched_feat(SCHED_CACHE) && p->mm && p->mm->pcpu_sched) {
-		/*
-		 * XXX things like Skylake have non-inclusive L3 and might not
-		 * like this L3 centric view. What to do about L2 stickyness ?
-		 */
-		return per_cpu_ptr(p->mm->pcpu_sched, env->src_cpu)->occ >
-		       per_cpu_ptr(p->mm->pcpu_sched, env->dst_cpu)->occ;
-	}
-#endif
-
 	delta = rq_clock_task(env->src_rq) - p->se.exec_start;
 
 	return delta < (s64)sysctl_sched_migration_cost;
@@ -10028,6 +10017,12 @@ int can_migrate_task(struct task_struct *p, struct lb_env *env)
 	 */
 	if (env->flags & LBF_ACTIVE_LB)
 		return 1;
+
+#ifdef CONFIG_SCHED_CACHE
+	if (sched_feat(SCHED_CACHE) &&
+	    get_migrate_hint(env->src_cpu, env->dst_cpu, p) == mig_forbid)
+		return 0;
+#endif
 
 	degrades = migrate_degrades_locality(p, env);
 	if (!degrades)
@@ -10288,6 +10283,17 @@ static int detach_tasks(struct lb_env *env)
 		 */
 		if (env->imbalance <= 0)
 			break;
+
+#ifdef CONFIG_SCHED_CACHE
+		/*
+		 * Don't detach more tasks if remaining tasks want to stay:
+		 * The tasks have already been sorted by order_tasks_by_llc(),
+		 * they are tasks that prefer the current LLC.
+		 */
+		if (sched_feat(SCHED_CACHE) && p->preferred_llc != -1 &&
+		    llc_id(env->src_cpu) == p->preferred_llc)
+			break;
+#endif
 
 		continue;
 next:
