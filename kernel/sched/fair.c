@@ -1175,6 +1175,8 @@ static s64 update_curr_se(struct rq *rq, struct sched_entity *curr)
 #define EPOCH_PERIOD	(HZ/100)	/* 10 ms */
 #define EPOCH_OLD	5		/* 50 ms */
 
+DEFINE_STATIC_KEY_FALSE(sched_cache_present);
+
 static int llc_id(int cpu)
 {
 	if (cpu < 0)
@@ -1318,7 +1320,8 @@ void account_mm_sched(struct rq *rq, struct task_struct *p, s64 delta_exec)
 	unsigned long epoch;
 	int mm_sched_llc = -1;
 
-	if (!sched_feat(SCHED_CACHE))
+	if (!sched_feat(SCHED_CACHE) ||
+	    !static_branch_likely(&sched_cache_present))
 		return;
 
 	if (p->sched_class != &fair_sched_class)
@@ -1366,7 +1369,8 @@ static void task_tick_cache(struct rq *rq, struct task_struct *p)
 	struct callback_head *work = &p->cache_work;
 	struct mm_struct *mm = p->mm;
 
-	if (!sched_feat(SCHED_CACHE))
+	if (!sched_feat(SCHED_CACHE) ||
+	    !static_branch_likely(&sched_cache_present))
 		return;
 
 	if (!mm || !mm->pcpu_sched)
@@ -9063,7 +9067,8 @@ static int select_cache_cpu(struct task_struct *p, int prev_cpu)
 	struct mm_struct *mm = p->mm;
 	int cpu;
 
-	if (!sched_feat(SCHED_CACHE) || !sched_feat(SCHED_CACHE_WAKE))
+	if (!sched_feat(SCHED_CACHE) || !sched_feat(SCHED_CACHE_WAKE) ||
+	    !static_branch_likely(&sched_cache_present))
 		return prev_cpu;
 
 	if (!mm || p->nr_cpus_allowed == 1)
@@ -10024,6 +10029,7 @@ int can_migrate_task(struct task_struct *p, struct lb_env *env)
 
 #ifdef CONFIG_SCHED_CACHE
 	if (sched_feat(SCHED_CACHE) && sched_feat(SCHED_CACHE_LB) &&
+	   static_branch_likely(&sched_cache_present) &&
 	    get_migrate_hint(env->src_cpu, env->dst_cpu, p) == mig_forbid)
 		return 0;
 #endif
@@ -10109,7 +10115,8 @@ static struct list_head
 	LIST_HEAD(no_pref_llc);
 	LIST_HEAD(pref_other_llc);
 
-	if (!sched_feat(SCHED_CACHE) || !sched_feat(SCHED_CACHE_LB))
+	if (!sched_feat(SCHED_CACHE) || !sched_feat(SCHED_CACHE_LB) ||
+	    !static_branch_likely(&sched_cache_present))
 		return tasks;
 
 	if (cpus_share_cache(env->dst_cpu, env->src_cpu))
@@ -10295,6 +10302,7 @@ static int detach_tasks(struct lb_env *env)
 		 * they are tasks that prefer the current LLC.
 		 */
 		if (sched_feat(SCHED_CACHE) && sched_feat(SCHED_CACHE_LB) &&
+		    static_branch_likely(&sched_cache_present) &&
 		    p->preferred_llc != -1 &&
 		    llc_id(env->src_cpu) == p->preferred_llc)
 			break;
@@ -10952,7 +10960,8 @@ static inline bool llc_balance(struct lb_env *env, struct sg_lb_stats *sgs,
 	struct sched_domain *child = env->sd->child;
 	int llc;
 
-	if (!sched_feat(SCHED_CACHE) || !sched_feat(SCHED_CACHE_LB))
+	if (!sched_feat(SCHED_CACHE) || !sched_feat(SCHED_CACHE_LB) ||
+	    !static_branch_likely(&sched_cache_present))
 		return false;
 
 	if (env->sd->flags & SD_SHARE_LLC)
@@ -11064,7 +11073,8 @@ static void update_sg_if_llc(struct lb_env *env, struct sg_lb_stats *sgs,
 	struct sched_domain_shared *sd_share;
 
 	if (!sched_feat(SCHED_CACHE) || env->idle == CPU_NEWLY_IDLE ||
-	    !sched_feat(SCHED_CACHE_LB))
+	    !sched_feat(SCHED_CACHE_LB) ||
+	    !static_branch_likely(&sched_cache_present))
 		return;
 
 	/* only care the sched domain that spans 1 LLC */
@@ -11126,7 +11136,8 @@ static inline void update_sg_lb_stats(struct lb_env *env,
 			*sg_overutilized = 1;
 
 #ifdef CONFIG_SCHED_CACHE
-		if (sched_feat(SCHED_CACHE) && sched_feat(SCHED_CACHE_LB)) {
+		if (sched_feat(SCHED_CACHE) && sched_feat(SCHED_CACHE_LB) &&
+		    static_branch_likely(&sched_cache_present)) {
 			int j;
 
 			for (j = 0; j < max_llcs; ++j)
@@ -12412,7 +12423,8 @@ imbalanced_active_balance(struct lb_env *env)
 static inline bool
 break_llc_locality(struct lb_env *env)
 {
-	if (!sched_feat(SCHED_CACHE) || !sched_feat(SCHED_CACHE_LB))
+	if (!sched_feat(SCHED_CACHE) || !sched_feat(SCHED_CACHE_LB) ||
+	    !static_branch_likely(&sched_cache_present))
 		return 0;
 
 	if (cpus_share_cache(env->src_cpu, env->dst_cpu))
@@ -12914,7 +12926,8 @@ static int active_load_balance_cpu_stop(void *data)
 #ifdef CONFIG_SCHED_CACHE
 		int llc = llc_idx(target_cpu);
 
-		if (!sched_feat(SCHED_CACHE) || !sched_feat(SCHED_CACHE_LB))
+		if (!sched_feat(SCHED_CACHE) || !sched_feat(SCHED_CACHE_LB) ||
+		    !static_branch_likely(&sched_cache_present))
 			goto out_unlock;
 
 		if (llc < 0)

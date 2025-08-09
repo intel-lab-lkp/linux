@@ -2476,6 +2476,8 @@ build_sched_domains(const struct cpumask *cpu_map, struct sched_domain_attr *att
 	int i, ret = -ENOMEM;
 	bool has_asym = false;
 	bool has_cluster = false;
+	bool llc_has_parent_sd = false;
+	unsigned int multi_llcs_node = 1;
 
 #ifdef CONFIG_SCHED_CACHE
 	if (max_llcs < 0) {
@@ -2545,6 +2547,8 @@ build_sched_domains(const struct cpumask *cpu_map, struct sched_domain_attr *att
 				struct sched_domain __rcu *top_p;
 				unsigned int nr_llcs;
 
+				if (!llc_has_parent_sd)
+					llc_has_parent_sd = true;
 				/*
 				 * For a single LLC per node, allow an
 				 * imbalance up to 12.5% of the node. This is
@@ -2566,10 +2570,19 @@ build_sched_domains(const struct cpumask *cpu_map, struct sched_domain_attr *att
 				 * between LLCs and memory channels.
 				 */
 				nr_llcs = sd->span_weight / child->span_weight;
-				if (nr_llcs == 1)
+				/*
+				 * iff all nodes have multiple LLCs, the
+				 * multi_llcs_node will be set to 1. If
+				 * there is at least 1 node having 1 single
+				 * LLC, the multi_llcs_node remains 0.
+				 */
+				if (nr_llcs == 1) {
 					imb = sd->span_weight >> 3;
-				else
+					multi_llcs_node = 0;
+				} else {
 					imb = nr_llcs;
+					multi_llcs_node &= 1;
+				}
 				imb = max(1U, imb);
 				sd->imb_numa_nr = imb;
 
@@ -2616,6 +2629,11 @@ build_sched_domains(const struct cpumask *cpu_map, struct sched_domain_attr *att
 
 	if (has_cluster)
 		static_branch_inc_cpuslocked(&sched_cluster_active);
+
+#ifdef CONFIG_SCHED_CACHE
+	if (llc_has_parent_sd && multi_llcs_node && !sched_asym_cpucap_active())
+		static_branch_inc_cpuslocked(&sched_cache_present);
+#endif
 
 	if (rq && sched_debug_verbose)
 		pr_info("root domain span: %*pbl\n", cpumask_pr_args(cpu_map));
