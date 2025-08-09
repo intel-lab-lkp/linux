@@ -1205,6 +1205,34 @@ static inline int pref_llc_idx(struct task_struct *p)
 	return llc_idx(p->preferred_llc);
 }
 
+static bool exceed_llc_capacity(struct mm_struct *mm, int cpu)
+{
+	struct cpu_cacheinfo *this_cpu_ci;
+	struct cacheinfo *l3_leaf;
+	unsigned long rss;
+	unsigned int llc;
+
+	/*
+	 * get_cpu_cacheinfo_level() can not be used
+	 * because it requires the cpu_hotplug_lock
+	 * to be held. Use get_cpu_cacheinfo()
+	 * directly because the 'cpu' can not be
+	 * offlined at the moment.
+	 */
+	this_cpu_ci = get_cpu_cacheinfo(cpu);
+	if (!this_cpu_ci->info_list ||
+	    this_cpu_ci->num_leaves < 3)
+		return true;
+
+	l3_leaf = this_cpu_ci->info_list + 3;
+	llc = l3_leaf->size;
+
+	rss = get_mm_counter(mm, MM_ANONPAGES) +
+		get_mm_counter(mm, MM_SHMEMPAGES);
+
+	return (llc <= (rss * PAGE_SIZE));
+}
+
 static bool exceed_llc_nr(struct mm_struct *mm, int cpu)
 {
 	int smt_nr = 1;
@@ -1363,7 +1391,8 @@ void account_mm_sched(struct rq *rq, struct task_struct *p, s64 delta_exec)
 	 */
 	if (epoch - READ_ONCE(mm->mm_sched_epoch) > sysctl_llc_old ||
 	    get_nr_threads(p) <= 1 ||
-	    exceed_llc_nr(mm, cpu_of(rq))) {
+	    exceed_llc_nr(mm, cpu_of(rq)) ||
+	    exceed_llc_capacity(mm, cpu_of(rq))) {
 		mm->mm_sched_cpu = -1;
 		pcpu_sched->occ = 0;
 	}
@@ -1447,6 +1476,14 @@ static void __no_profile task_cache_work(struct callback_head *work)
 		mm->mm_sched_cpu = -1;
 		return;
 	}
+
+	/*
+	 * Do not check exceed_llc_nr() because
+	 * the active number of threads needs to
+	 * been updated anyway.
+	 */
+	if (exceed_llc_capacity(mm, curr_cpu))
+		return;
 
 	if (!zalloc_cpumask_var(&cpus, GFP_KERNEL))
 		return;
@@ -9113,8 +9150,12 @@ static __maybe_unused enum llc_mig_hint get_migrate_hint(int src_cpu, int dst_cp
 	if (cpu < 0)
 		return mig_allow;
 
-	 /* skip cache aware load balance for single/too many threads */
-	if (get_nr_threads(p) <= 1 || exceed_llc_nr(mm, dst_cpu))
+	/*
+	 * skip cache aware load balance for single/too many threads
+	 * and large footprint.
+	 */
+	if (get_nr_threads(p) <= 1 || exceed_llc_nr(mm, dst_cpu) ||
+	    exceed_llc_capacity(mm, dst_cpu))
 		return mig_allow;
 
 	if (cpus_share_cache(dst_cpu, cpu))
