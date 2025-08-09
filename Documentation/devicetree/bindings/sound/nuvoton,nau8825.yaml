@@ -9,6 +9,18 @@ title: NAU8825 audio CODEC
 maintainers:
   - John Hsu <KCHSU0@nuvoton.com>
 
+description: |
+  NAU8825 audio CODEC
+
+  Valid routing names defined in the driver for this codec include:
+
+    Outputs:
+      * HPOL : Left Headphone Output
+      * HPOR : Right Headphone Output
+
+    Inputs:
+      * MIC : Microphone Input
+
 allOf:
   - $ref: dai-common.yaml#
 
