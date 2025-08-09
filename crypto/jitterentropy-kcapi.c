@@ -107,7 +107,7 @@ int jent_hash_time(void *hash_state, __u64 time, u8 *addtl,
 {
 	struct shash_desc *hash_state_desc = (struct shash_desc *)hash_state;
 	SHASH_DESC_ON_STACK(desc, hash_state_desc->tfm);
-	u8 intermediary[SHA3_256_DIGEST_SIZE];
+	u8 intermediary[SHA3_256_DIGEST_SIZE] = { 0 };
 	__u64 j = 0;
 	int ret;
 
