@@ -1175,7 +1175,7 @@ static s64 update_curr_se(struct rq *rq, struct sched_entity *curr)
 #define EPOCH_PERIOD	(HZ/100)	/* 10 ms */
 #define EPOCH_OLD	5		/* 50 ms */
 
-void mm_init_sched(struct mm_struct *mm, struct mm_sched *_pcpu_sched)
+void mm_init_sched(struct mm_struct *mm, struct mm_sched __percpu *_pcpu_sched)
 {
 	unsigned long epoch;
 	int i;
@@ -1186,7 +1186,7 @@ void mm_init_sched(struct mm_struct *mm, struct mm_sched *_pcpu_sched)
 
 		pcpu_sched->runtime = 0;
 		pcpu_sched->epoch = epoch = rq->cpu_epoch;
-		pcpu_sched->occ = -1;
+		pcpu_sched->occ = 0;
 	}
 
 	raw_spin_lock_init(&mm->mm_sched_lock);
@@ -1227,7 +1227,7 @@ static inline void __update_mm_sched(struct rq *rq, struct mm_sched *pcpu_sched)
 	}
 }
 
-static unsigned long fraction_mm_sched(struct rq *rq, struct mm_sched *pcpu_sched)
+static unsigned long __no_profile fraction_mm_sched(struct rq *rq, struct mm_sched *pcpu_sched)
 {
 	guard(raw_spinlock_irqsave)(&rq->cpu_epoch_lock);
 
@@ -1248,13 +1248,18 @@ void account_mm_sched(struct rq *rq, struct task_struct *p, s64 delta_exec)
 	struct mm_sched *pcpu_sched;
 	unsigned long epoch;
 
+	if (!sched_feat(SCHED_CACHE))
+		return;
+
+	if (p->sched_class != &fair_sched_class)
+		return;
 	/*
 	 * init_task and kthreads don't be having no mm
 	 */
 	if (!mm || !mm->pcpu_sched)
 		return;
 
-	pcpu_sched = this_cpu_ptr(p->mm->pcpu_sched);
+	pcpu_sched = per_cpu_ptr(p->mm->pcpu_sched, cpu_of(rq));
 
 	scoped_guard (raw_spinlock, &rq->cpu_epoch_lock) {
 		__update_mm_sched(rq, pcpu_sched);
@@ -1264,12 +1269,14 @@ void account_mm_sched(struct rq *rq, struct task_struct *p, s64 delta_exec)
 	}
 
 	/*
-	 * If this task hasn't hit task_cache_work() for a while, invalidate
+	 * If this task hasn't hit task_cache_work() for a while, or it
+	 * has only 1 thread, invalidate
 	 * it's preferred state.
 	 */
-	if (epoch - READ_ONCE(mm->mm_sched_epoch) > EPOCH_OLD) {
+	if (epoch - READ_ONCE(mm->mm_sched_epoch) > EPOCH_OLD ||
+	    get_nr_threads(p) <= 1) {
 		mm->mm_sched_cpu = -1;
-		pcpu_sched->occ = -1;
+		pcpu_sched->occ = 0;
 	}
 }
 
@@ -1277,6 +1284,9 @@ static void task_tick_cache(struct rq *rq, struct task_struct *p)
 {
 	struct callback_head *work = &p->cache_work;
 	struct mm_struct *mm = p->mm;
+
+	if (!sched_feat(SCHED_CACHE))
+		return;
 
 	if (!mm || !mm->pcpu_sched)
 		return;
@@ -1286,16 +1296,13 @@ static void task_tick_cache(struct rq *rq, struct task_struct *p)
 
 	guard(raw_spinlock)(&mm->mm_sched_lock);
 
-	if (mm->mm_sched_epoch == rq->cpu_epoch)
-		return;
-
 	if (work->next == work) {
 		task_work_add(p, work, TWA_RESUME);
 		WRITE_ONCE(mm->mm_sched_epoch, rq->cpu_epoch);
 	}
 }
 
-static void task_cache_work(struct callback_head *work)
+static void __no_profile task_cache_work(struct callback_head *work)
 {
 	struct task_struct *p = current;
 	struct mm_struct *mm = p->mm;
@@ -1321,6 +1328,9 @@ static void task_cache_work(struct callback_head *work)
 			struct sched_domain *sd = per_cpu(sd_llc, cpu);
 			unsigned long occ, m_occ = 0, a_occ = 0;
 			int m_cpu = -1, nr = 0, i;
+
+			if (!sd)
+				continue;
 
 			for_each_cpu(i, sched_domain_span(sd)) {
 				occ = fraction_mm_sched(cpu_rq(i),
@@ -8815,6 +8825,9 @@ static int select_cache_cpu(struct task_struct *p, int prev_cpu)
 	struct mm_struct *mm = p->mm;
 	int cpu;
 
+	if (!sched_feat(SCHED_CACHE))
+		return prev_cpu;
+
 	if (!mm || p->nr_cpus_allowed == 1)
 		return prev_cpu;
 
@@ -9569,7 +9582,7 @@ static int task_hot(struct task_struct *p, struct lb_env *env)
 		return 0;
 
 #ifdef CONFIG_SCHED_CACHE
-	if (p->mm && p->mm->pcpu_sched) {
+	if (sched_feat(SCHED_CACHE) && p->mm && p->mm->pcpu_sched) {
 		/*
 		 * XXX things like Skylake have non-inclusive L3 and might not
 		 * like this L3 centric view. What to do about L2 stickyness ?
@@ -9647,7 +9660,9 @@ static long migrate_degrades_locality(struct task_struct *p, struct lb_env *env)
 }
 
 #else
-static long __migrate_degrades_locality(struct task_struct *p, int src_cpu, int dst_cpu, bool idle)
+static __maybe_unused long __migrate_degrades_locality(struct task_struct *p,
+						       int src_cpu, int dst_cpu,
+						       bool idle)
 {
 	return 0;
 }

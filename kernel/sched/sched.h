@@ -1174,7 +1174,7 @@ struct rq {
 	u64			clock_idle_copy;
 #endif
 #ifdef CONFIG_SCHED_CACHE
-	raw_spinlock_t		cpu_epoch_lock;
+	raw_spinlock_t		cpu_epoch_lock ____cacheline_aligned;
 	u64			cpu_runtime;
 	unsigned long		cpu_epoch;
 	unsigned long		cpu_epoch_next;
