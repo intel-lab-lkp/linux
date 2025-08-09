@@ -98,7 +98,7 @@ void armada_drm_crtc_debugfs_init(struct armada_crtc *dcrtc)
 			    dcrtc, &armada_debugfs_crtc_reg_fops);
 }
 
-static struct drm_info_list armada_debugfs_list[] = {
+static const struct drm_info_list armada_debugfs_list[] = {
 	{ "gem_linear", armada_debugfs_gem_linear_show, 0 },
 };
 #define ARMADA_DEBUGFS_ENTRIES ARRAY_SIZE(armada_debugfs_list)
