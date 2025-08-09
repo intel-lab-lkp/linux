@@ -1641,6 +1641,7 @@ static inline void set_next_task_rt(struct rq *rq, struct task_struct *p, bool f
 	struct sched_rt_entity *rt_se = &p->rt;
 	struct rt_rq *rt_rq = &rq->rt;
 
+	p->se.prev_sum_exec_runtime = p->se.sum_exec_runtime;
 	p->se.exec_start = rq_clock_task(rq);
 	if (on_rt_rq(&p->rt))
 		update_stats_wait_end_rt(rt_rq, rt_se);
