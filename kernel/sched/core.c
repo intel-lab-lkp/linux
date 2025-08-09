@@ -499,6 +499,18 @@ void __trace_set_current_state(int state_value)
 }
 EXPORT_SYMBOL(__trace_set_current_state);
 
+#ifdef CONFIG_SMP
+int task_llc(const struct task_struct *p)
+{
+	return per_cpu(sd_llc_id, task_cpu(p));
+}
+#else
+int task_llc(const struct task_struct *p)
+{
+	return 0;
+}
+#endif
+
 /*
  * Serialization rules:
  *
