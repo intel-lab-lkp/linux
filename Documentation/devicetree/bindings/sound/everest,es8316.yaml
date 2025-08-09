@@ -12,6 +12,20 @@ maintainers:
   - Matteo Martelli <matteomartelli3@gmail.com>
   - Binbin Zhou <zhoubinbin@loongson.cn>
 
+description: |
+  Everest ES8311, ES8316 and ES8323 audio CODECs
+
+  Valid routing names defined in the driver for this codec include:
+
+    Outputs:
+      * HPOL: Left Headphone Output
+      * HPOR: Right Headphone Output
+
+    Inputs:
+      * DMIC: Digital Microphone Input
+      * MIC1: Analog Microphone Input 1
+      * MIC2: Analog Microphone Input 2
+
 allOf:
   - $ref: dai-common.yaml#
 
