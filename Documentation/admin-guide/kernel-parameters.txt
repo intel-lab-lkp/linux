@@ -3707,6 +3707,13 @@
 	microcode=      [X86] Control the behavior of the microcode loader.
 	                Available options, comma separated:
 
+			dbg - Format: <bool>
+			enable debugging mode when run in a guest
+
+			base_rev=X - with <X> with format: <u32>
+			Set the base microcode revision of each thread when in
+			debug mode.
+
 			force_minrev
 			Enable or disable the microcode minimal revision
  			enforcement for the runtime microcode loader.
