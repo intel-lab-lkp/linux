@@ -8835,6 +8835,8 @@ static int select_cache_cpu(struct task_struct *p, int prev_cpu)
 	if (cpu < 0)
 		return prev_cpu;
 
+	if (cpus_share_cache(cpu, prev_cpu))
+		return prev_cpu;
 
 	if (static_branch_likely(&sched_numa_balancing) &&
 	    __migrate_degrades_locality(p, prev_cpu, cpu, false) > 0) {
