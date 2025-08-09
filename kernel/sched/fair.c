@@ -1390,13 +1390,36 @@ static void task_tick_cache(struct rq *rq, struct task_struct *p)
 	}
 }
 
+static void get_scan_cpumasks(cpumask_var_t cpus, int cache_cpu,
+			      int pref_nid, int curr_cpu)
+{
+#ifdef CONFIG_NUMA_BALANCING
+	/* first honor the task's preferred node */
+	if (pref_nid != NUMA_NO_NODE)
+		cpumask_or(cpus, cpus, cpumask_of_node(pref_nid));
+#endif
+
+	/* secondly honor the task's cache CPU if it is not included */
+	if (cache_cpu != -1 && !cpumask_test_cpu(cache_cpu, cpus))
+		cpumask_or(cpus, cpus,
+			   cpumask_of_node(cpu_to_node(cache_cpu)));
+
+	/*
+	 * Thirdly honor the task's current running node
+	 * as the last resort.
+	 */
+	if (!cpumask_test_cpu(curr_cpu, cpus))
+		cpumask_or(cpus, cpus, cpumask_of_node(cpu_to_node(curr_cpu)));
+}
+
 static void __no_profile task_cache_work(struct callback_head *work)
 {
 	struct task_struct *p = current;
 	struct mm_struct *mm = p->mm;
 	unsigned long m_a_occ = 0;
 	unsigned long last_m_a_occ = 0;
-	int cpu, m_a_cpu = -1;
+	int cpu, m_a_cpu = -1, cache_cpu,
+	    pref_nid = NUMA_NO_NODE, curr_cpu = smp_processor_id();
 	cpumask_var_t cpus;
 
 	WARN_ON_ONCE(work != &p->cache_work);
@@ -1406,11 +1429,18 @@ static void __no_profile task_cache_work(struct callback_head *work)
 	if (p->flags & PF_EXITING)
 		return;
 
-	if (!alloc_cpumask_var(&cpus, GFP_KERNEL))
+	if (!zalloc_cpumask_var(&cpus, GFP_KERNEL))
 		return;
 
+	cache_cpu = mm->mm_sched_cpu;
+#ifdef CONFIG_NUMA_BALANCING
+	if (static_branch_likely(&sched_numa_balancing))
+		pref_nid = p->numa_preferred_nid;
+#endif
+
 	scoped_guard (cpus_read_lock) {
-		cpumask_copy(cpus, cpu_online_mask);
+		get_scan_cpumasks(cpus, cache_cpu,
+				  pref_nid, curr_cpu);
 
 		for_each_cpu(cpu, cpus) {
 			/* XXX sched_cluster_active */
