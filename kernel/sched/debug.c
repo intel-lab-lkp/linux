@@ -166,6 +166,83 @@ static const struct file_operations sched_feat_fops = {
 	.release	= single_release,
 };
 
+#ifdef CONFIG_SCHED_CACHE
+#define SCHED_CACHE_CREATE_CONTROL(name, val)			  \
+static int sysctl_sched_cache_##name = val;			  \
+static ssize_t sched_cache_write_##name(struct file *filp,	  \
+					const char __user *ubuf,  \
+					size_t cnt, loff_t *ppos) \
+{								  \
+	char buf[16];						  \
+	unsigned int percent;					  \
+	if (cnt > 15)						  \
+		cnt = 15;					  \
+	if (copy_from_user(&buf, ubuf, cnt))			  \
+		return -EFAULT;					  \
+	buf[cnt] = '\0';					  \
+	if (kstrtouint(buf, 10, &percent))			  \
+		return -EINVAL;					  \
+	if (percent > 100)					  \
+		return -EINVAL;					  \
+	sysctl_sched_cache_##name = percent;			  \
+	*ppos += cnt;						  \
+	return cnt;						  \
+}								  \
+static int sched_cache_show_##name(struct seq_file *m, void *v)	  \
+{								  \
+	seq_printf(m, "%d\n", sysctl_sched_cache_##name);	  \
+	return 0;						  \
+}								  \
+static int sched_cache_open_##name(struct inode *inode,		  \
+				   struct file *filp)		  \
+{								  \
+	return single_open(filp, sched_cache_show_##name, NULL);  \
+}								  \
+static const struct file_operations sched_cache_fops_##name = {	  \
+	.open		= sched_cache_open_##name,		  \
+	.write		= sched_cache_write_##name,		  \
+	.read		= seq_read,				  \
+	.llseek		= seq_lseek,				  \
+	.release	= single_release,			  \
+}
+
+SCHED_CACHE_CREATE_CONTROL(ignore_rss, 1);
+int get_sched_cache_rss_scale(void)
+{
+	if (!sysctl_sched_cache_ignore_rss)
+		return 0;
+
+	if (sysctl_sched_cache_ignore_rss >= 100)
+		return INT_MAX;
+	/*
+	 * Suppose the L3 size is 32MB. If the
+	 * sysctl_sched_cache_ignore_rss is 1:
+	 * When the RSS is larger than 32MB,
+	 * the process is regarded as exceeding
+	 * the LLC capacity. If the
+	 * sysctl_sched_cache_ignore_rss is 99:
+	 * When the RSS is larger than 784GB,
+	 * the process is regarded as exceeding
+	 * the LLC capacity:
+	 * 784GB = (1 + (99 - 1) * 256) * 32MB
+	 */
+	return (1 + (sysctl_sched_cache_ignore_rss - 1) * 256);
+}
+
+SCHED_CACHE_CREATE_CONTROL(aggr_cap, 50);
+int get_sched_cache_cap_scale(void)
+{
+	int smt_nr = 1;
+
+#ifdef CONFIG_SCHED_SMT
+	if (sched_smt_active())
+		smt_nr =
+			cpumask_weight(cpu_smt_mask(raw_smp_processor_id()));
+#endif
+	return (sysctl_sched_cache_aggr_cap / smt_nr);
+}
+#endif /* SCHED_CACHE */
+
 #ifdef CONFIG_SMP
 
 static ssize_t sched_scaling_write(struct file *filp, const char __user *ubuf,
@@ -533,10 +610,13 @@ static __init int sched_init_debug(void)
 #endif
 
 #ifdef CONFIG_SCHED_CACHE
-	debugfs_create_u32("llc_aggr_cap", 0644, debugfs_sched, &sysctl_llc_aggr_cap);
 	debugfs_create_u32("llc_aggr_imb", 0644, debugfs_sched, &sysctl_llc_aggr_imb);
 	debugfs_create_u32("llc_period", 0644, debugfs_sched, &sysctl_llc_period);
 	debugfs_create_u32("llc_old", 0644, debugfs_sched, &sysctl_llc_old);
+	debugfs_create_file("llc_aggr_cap", 0644, debugfs_sched, NULL,
+			    &sched_cache_fops_aggr_cap);
+	debugfs_create_file("llc_ignore_rss", 0644, debugfs_sched, NULL,
+			    &sched_cache_fops_ignore_rss);
 #endif
 	debugfs_create_file("debug", 0444, debugfs_sched, NULL, &sched_debug_fops);
 

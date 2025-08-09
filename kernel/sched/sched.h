@@ -2855,11 +2855,12 @@ extern unsigned int sysctl_numa_balancing_scan_size;
 extern unsigned int sysctl_numa_balancing_hot_threshold;
 
 #ifdef CONFIG_SCHED_CACHE
-extern unsigned int sysctl_llc_aggr_cap;
 extern unsigned int sysctl_llc_aggr_imb;
 extern struct static_key_false sched_cache_present;
 extern unsigned int sysctl_llc_period;
 extern unsigned int sysctl_llc_old;
+int get_sched_cache_rss_scale(void);
+int get_sched_cache_cap_scale(void);
 #endif
 
 #ifdef CONFIG_SCHED_HRTICK
