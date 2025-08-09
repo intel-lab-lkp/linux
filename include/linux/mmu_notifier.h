@@ -234,6 +234,32 @@ struct mmu_notifier {
 };
 
 /**
+ * struct mmu_interval_notifier_pass - mmu_interval_notifier multi-pass abstraction
+ * @link: List link for the notifiers pending pass list
+ *
+ * Allocate, typically using GFP_NOWAIT in the interval notifier's first pass.
+ * If allocation fails (which is not unlikely under memory pressure), fall back
+ * to single-pass operation.
+ */
+struct mmu_interval_notifier_pass {
+	struct list_head link;
+	/**
+	 * @pass: Driver callback for additionall pass.
+	 * @additional_pass: Pointer to the mmu_interval_notifier_pass structure.
+	 * @range: The mmu_notifier_range.
+	 * @cur_seq: The current sequence set by the first pass.
+	 *
+	 * Return: Either a pointer to a valid mmu_interval_notifier_pass for
+	 * another pass to be called, or %NULL if processing is complete for this
+	 * notifier. There is no error reporting mechanism for additional passes.
+	 */
+	struct mmu_interval_notifier_pass *
+	(*pass) (struct mmu_interval_notifier_pass *additional_pass,
+		 const struct mmu_notifier_range *range,
+		 unsigned long cur_seq);
+};
+
+/**
  * struct mmu_interval_notifier_ops
  * @invalidate: Upon return the caller must stop using any SPTEs within this
  *              range. This function can sleep. Return false only if sleeping
@@ -243,6 +269,10 @@ struct mmu_interval_notifier_ops {
 	bool (*invalidate)(struct mmu_interval_notifier *interval_sub,
 			   const struct mmu_notifier_range *range,
 			   unsigned long cur_seq);
+	bool (*invalidate_multipass)(struct mmu_interval_notifier *interval_sub,
+				     const struct mmu_notifier_range *range,
+				     unsigned long cur_seq,
+				     struct mmu_interval_notifier_pass **pass);
 };
 
 struct mmu_interval_notifier {

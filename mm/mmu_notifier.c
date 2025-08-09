@@ -260,6 +260,22 @@ mmu_interval_read_begin(struct mmu_interval_notifier *interval_sub)
 }
 EXPORT_SYMBOL_GPL(mmu_interval_read_begin);
 
+static void mn_itree_additional_passes(struct list_head *additional_passes,
+				       const struct mmu_notifier_range *range,
+				       unsigned long cur_seq)
+{
+	struct mmu_interval_notifier_pass *p, *next;
+
+	while (!list_empty(additional_passes)) {
+		list_for_each_entry_safe(p, next, additional_passes, link) {
+			list_del_init(&p->link);
+			p = p->pass(p, range, cur_seq);
+			if (p)
+				list_add_tail(&p->link, additional_passes);
+		}
+	}
+}
+
 static void mn_itree_release(struct mmu_notifier_subscriptions *subscriptions,
 			     struct mm_struct *mm)
 {
@@ -272,17 +288,32 @@ static void mn_itree_release(struct mmu_notifier_subscriptions *subscriptions,
 	};
 	struct mmu_interval_notifier *interval_sub;
 	unsigned long cur_seq;
+	LIST_HEAD(additional_passes);
 	bool ret;
 
 	for (interval_sub =
 		     mn_itree_inv_start_range(subscriptions, &range, &cur_seq);
 	     interval_sub;
 	     interval_sub = mn_itree_inv_next(interval_sub, &range)) {
-		ret = interval_sub->ops->invalidate(interval_sub, &range,
-						    cur_seq);
+		if (interval_sub->ops->invalidate_multipass) {
+			struct mmu_interval_notifier_pass *second = NULL;
+
+			ret = interval_sub->ops->invalidate_multipass(interval_sub,
+								      &range,
+								      cur_seq,
+								      &second);
+			if (ret && second)
+				list_add_tail(&second->link, &additional_passes);
+
+		} else {
+			ret = interval_sub->ops->invalidate(interval_sub,
+							    &range,
+							    cur_seq);
+		}
 		WARN_ON(!ret);
 	}
 
+	mn_itree_additional_passes(&additional_passes, &range, cur_seq);
 	mn_itree_inv_end(subscriptions);
 }
 
@@ -431,6 +462,8 @@ static int mn_itree_invalidate(struct mmu_notifier_subscriptions *subscriptions,
 {
 	struct mmu_interval_notifier *interval_sub;
 	unsigned long cur_seq;
+	LIST_HEAD(additional_passes);
+	int err = 0;
 
 	for (interval_sub =
 		     mn_itree_inv_start_range(subscriptions, range, &cur_seq);
@@ -438,23 +471,39 @@ static int mn_itree_invalidate(struct mmu_notifier_subscriptions *subscriptions,
 	     interval_sub = mn_itree_inv_next(interval_sub, range)) {
 		bool ret;
 
-		ret = interval_sub->ops->invalidate(interval_sub, range,
-						    cur_seq);
+		if (interval_sub->ops->invalidate_multipass) {
+			struct mmu_interval_notifier_pass *second = NULL;
+
+			ret = interval_sub->ops->invalidate_multipass(interval_sub,
+								      range,
+								      cur_seq,
+								      &second);
+			if (ret && second)
+				list_add_tail(&second->link, &additional_passes);
+
+		} else {
+			ret = interval_sub->ops->invalidate(interval_sub,
+							    range,
+							    cur_seq);
+		}
 		if (!ret) {
 			if (WARN_ON(mmu_notifier_range_blockable(range)))
 				continue;
-			goto out_would_block;
+			err = -EAGAIN;
+			break;
 		}
 	}
-	return 0;
 
-out_would_block:
+	mn_itree_additional_passes(&additional_passes, range, cur_seq);
+
 	/*
 	 * On -EAGAIN the non-blocking caller is not allowed to call
 	 * invalidate_range_end()
 	 */
-	mn_itree_inv_end(subscriptions);
-	return -EAGAIN;
+	if (err)
+		mn_itree_inv_end(subscriptions);
+
+	return err;
 }
 
 static int mn_hlist_invalidate_range_start(
