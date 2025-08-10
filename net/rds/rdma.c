@@ -39,7 +39,6 @@
 
 /*
  * XXX
- *  - build with sparse
  *  - should we detect duplicate keys on a socket?  hmm.
  *  - an rdma is an mlock, apply rlimit?
  */

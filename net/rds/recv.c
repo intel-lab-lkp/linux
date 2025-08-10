@@ -216,10 +216,10 @@ static void rds_recv_hs_exthdrs(struct rds_header *hdr,
 		switch (type) {
 		case RDS_EXTHDR_NPATHS:
 			conn->c_npaths = min_t(int, RDS_MPATH_WORKERS,
-					       be16_to_cpu(buffer.rds_npaths));
+					      (__force __u16)buffer.rds_npaths);
 			break;
 		case RDS_EXTHDR_GEN_NUM:
-			new_peer_gen_num = be32_to_cpu(buffer.rds_gen_num);
+			new_peer_gen_num = (__force __u32)buffer.rds_gen_num;
 			break;
 		default:
 			pr_warn_ratelimited("ignoring unknown exthdr type "
