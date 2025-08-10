@@ -39,12 +39,7 @@ impl DeviceId {
         // SAFETY: FFI type is valid to be zero-initialized.
         let mut of: bindings::of_device_id = unsafe { core::mem::zeroed() };
 
-        // TODO: Use `copy_from_slice` once stabilized for `const`.
-        let mut i = 0;
-        while i < src.len() {
-            of.compatible[i] = src[i];
-            i += 1;
-        }
+        of.compatible.copy_from_slice(src);
 
         Self(of)
     }
