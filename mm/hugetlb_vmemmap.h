@@ -11,6 +11,7 @@
 #include <linux/hugetlb.h>
 #include <linux/io.h>
 #include <linux/memblock.h>
+#include <linux/minmax.h>
 
 /*
  * Reserve one vmemmap page, all vmemmap addresses are mapped to it. See
@@ -44,11 +45,10 @@ static inline unsigned int hugetlb_vmemmap_size(const struct hstate *h)
  */
 static inline unsigned int hugetlb_vmemmap_optimizable_size(const struct hstate *h)
 {
-	int size = hugetlb_vmemmap_size(h) - HUGETLB_VMEMMAP_RESERVE_SIZE;
-
 	if (!is_power_of_2(sizeof(struct page)))
 		return 0;
-	return size > 0 ? size : 0;
+
+	return max(0, hugetlb_vmemmap_size(h) - HUGETLB_VMEMMAP_RESERVE_SIZE);
 }
 #else
 static inline int hugetlb_vmemmap_restore_folio(const struct hstate *h, struct folio *folio)
