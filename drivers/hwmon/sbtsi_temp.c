@@ -30,6 +30,14 @@
 #define SBTSI_REG_TEMP_LOW_DEC		0x14 /* RW */
 
 #define SBTSI_CONFIG_READ_ORDER_SHIFT	5
+/*
+ * Bit for temperature measurement range.
+ * Value=0: Use default temperature range (0C to 255.875C) for reporting temperature.
+ * Value=1: Use extended temperature range (-49C to +206.875C) for reporting temperature.
+ */
+#define SBTSI_CONFIG_EXT_RAGE_SHIFT	2
+
+#define SBTSI_TEMP_EXT_RAGE_ADJ	49000
 
 #define SBTSI_TEMP_MIN	0
 #define SBTSI_TEMP_MAX	255875
@@ -74,7 +82,12 @@ static int sbtsi_read(struct device *dev, enum hwmon_sensor_types type,
 {
 	struct sbtsi_data *data = dev_get_drvdata(dev);
 	s32 temp_int, temp_dec;
-	int err;
+	int err, cfg;
+
+	err = i2c_smbus_read_byte_data(data->client, SBTSI_REG_CONFIG);
+	if (err < 0)
+		return err;
+	cfg = err;
 
 	switch (attr) {
 	case hwmon_temp_input:
@@ -85,12 +98,8 @@ static int sbtsi_read(struct device *dev, enum hwmon_sensor_types type,
 		 * so integer part should be read first. If bit == 1, read
 		 * order should be reversed.
 		 */
-		err = i2c_smbus_read_byte_data(data->client, SBTSI_REG_CONFIG);
-		if (err < 0)
-			return err;
-
 		mutex_lock(&data->lock);
-		if (err & BIT(SBTSI_CONFIG_READ_ORDER_SHIFT)) {
+		if (cfg & BIT(SBTSI_CONFIG_READ_ORDER_SHIFT)) {
 			temp_dec = i2c_smbus_read_byte_data(data->client, SBTSI_REG_TEMP_DEC);
 			temp_int = i2c_smbus_read_byte_data(data->client, SBTSI_REG_TEMP_INT);
 		} else {
@@ -122,6 +131,8 @@ static int sbtsi_read(struct device *dev, enum hwmon_sensor_types type,
 		return temp_dec;
 
 	*val = sbtsi_reg_to_mc(temp_int, temp_dec);
+	if (cfg & BIT(SBTSI_CONFIG_EXT_RAGE_SHIFT))
+		*val -= SBTSI_TEMP_EXT_RAGE_ADJ;
 
 	return 0;
 }
@@ -130,8 +141,13 @@ static int sbtsi_write(struct device *dev, enum hwmon_sensor_types type,
 		       u32 attr, int channel, long val)
 {
 	struct sbtsi_data *data = dev_get_drvdata(dev);
-	int reg_int, reg_dec, err;
+	int reg_int, reg_dec, err, cfg;
 	u8 temp_int, temp_dec;
+
+	err = i2c_smbus_read_byte_data(data->client, SBTSI_REG_CONFIG);
+	if (err < 0)
+		return err;
+	cfg = err;
 
 	switch (attr) {
 	case hwmon_temp_max:
@@ -146,6 +162,8 @@ static int sbtsi_write(struct device *dev, enum hwmon_sensor_types type,
 		return -EINVAL;
 	}
 
+	if (cfg & BIT(SBTSI_CONFIG_EXT_RAGE_SHIFT))
+		val += SBTSI_TEMP_EXT_RAGE_ADJ;
 	val = clamp_val(val, SBTSI_TEMP_MIN, SBTSI_TEMP_MAX);
 	sbtsi_mc_to_reg(val, &temp_int, &temp_dec);
 
