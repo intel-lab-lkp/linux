@@ -2239,20 +2239,23 @@ void ksz_r_mib_stats64(struct ksz_device *dev, int port)
 	/* HW counters are counting bytes + FCS which is not acceptable
 	 * for rtnl_link_stats64 interface
 	 */
-	stats->rx_bytes = raw->rx_total - stats->rx_packets * ETH_FCS_LEN;
-	stats->tx_bytes = raw->tx_total - stats->tx_packets * ETH_FCS_LEN;
-
+	if (!ksz_is_ksz87xx(dev)) {
+		stats->rx_bytes = raw->rx_total - stats->rx_packets * ETH_FCS_LEN;
+		stats->tx_bytes = raw->tx_total - stats->tx_packets * ETH_FCS_LEN;
+	}
 	stats->rx_length_errors = raw->rx_undersize + raw->rx_fragments +
 		raw->rx_oversize;
 
 	stats->rx_crc_errors = raw->rx_crc_err;
 	stats->rx_frame_errors = raw->rx_align_err;
-	stats->rx_dropped = raw->rx_discards;
+	if (!ksz_is_ksz87xx(dev))
+		stats->rx_dropped = raw->rx_discards;
 	stats->rx_errors = stats->rx_length_errors + stats->rx_crc_errors +
 		stats->rx_frame_errors  + stats->rx_dropped;
 
 	stats->tx_window_errors = raw->tx_late_col;
-	stats->tx_fifo_errors = raw->tx_discards;
+	if (!ksz_is_ksz87xx(dev))
+		stats->tx_fifo_errors = raw->tx_discards;
 	stats->tx_aborted_errors = raw->tx_exc_col;
 	stats->tx_errors = stats->tx_window_errors + stats->tx_fifo_errors +
 		stats->tx_aborted_errors;
