@@ -175,8 +175,9 @@ void fill_window(WINDOW *win, const char *text)
 	for (i = 0; i < total_lines; i++) {
 		char tmp[x+10];
 		const char *line = get_line(text, i);
-		int len = get_line_length(line);
-		strncpy(tmp, line, min(len, x));
+		int len = min(get_line_length(line), x);
+
+		strncpy(tmp, line, len);
 		tmp[len] = '\0';
 		mvwprintw(win, i, 0, "%s", tmp);
 	}
