@@ -185,11 +185,12 @@ int copy_thread(struct task_struct * p, const struct kernel_clone_args *args)
 
 void initial_thread_cb(void (*proc)(void *), void *arg)
 {
-	int save_kmalloc_ok = kmalloc_ok;
+	int cpu = raw_smp_processor_id();
+	int save_kmalloc = kmalloc_disabled[cpu];
 
-	kmalloc_ok = 0;
+	kmalloc_disabled[cpu] = 1;
 	initial_thread_cb_skas(proc, arg);
-	kmalloc_ok = save_kmalloc_ok;
+	kmalloc_disabled[cpu] = save_kmalloc;
 }
 
 int arch_dup_task_struct(struct task_struct *dst,

@@ -253,9 +253,29 @@ int change_sig(int signal, int on)
 	return 0;
 }
 
+static inline void __block_signals(void)
+{
+	if (!signals_enabled)
+		return;
+
+	os_local_ipi_disable();
+	barrier();
+	signals_enabled = 0;
+}
+
+static inline void __unblock_signals(void)
+{
+	if (signals_enabled)
+		return;
+
+	signals_enabled = 1;
+	barrier();
+	os_local_ipi_enable();
+}
+
 void block_signals(void)
 {
-	signals_enabled = 0;
+	__block_signals();
 	/*
 	 * This must return with signals disabled, so this barrier
 	 * ensures that writes are flushed out before the return.
@@ -272,7 +292,8 @@ void unblock_signals(void)
 	if (signals_enabled == 1)
 		return;
 
-	signals_enabled = 1;
+	__unblock_signals();
+
 #if IS_ENABLED(CONFIG_UML_TIME_TRAVEL_SUPPORT)
 	deliver_time_travel_irqs();
 #endif
@@ -306,7 +327,7 @@ void unblock_signals(void)
 		 * tracing that happens inside the handlers we call for the
 		 * pending signals will mess up the tracing state.
 		 */
-		signals_enabled = 0;
+		__block_signals();
 		um_trace_signals_off();
 
 		/*
@@ -338,7 +359,7 @@ void unblock_signals(void)
 
 		/* Re-enable signals and trace that we're doing so. */
 		um_trace_signals_on();
-		signals_enabled = 1;
+		__unblock_signals();
 	}
 }
 

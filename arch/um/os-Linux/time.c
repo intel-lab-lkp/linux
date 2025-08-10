@@ -14,7 +14,9 @@
 #include <sys/time.h>
 #include <kern_util.h>
 #include <os.h>
+#include <smp.h>
 #include <string.h>
+#include "internal.h"
 
 static timer_t event_high_res_timer[CONFIG_NR_CPUS] = { 0 };
 
@@ -40,7 +42,8 @@ long long os_persistent_clock_emulation(void)
  */
 int os_timer_create(void)
 {
-	timer_t *t = &event_high_res_timer[0];
+	int cpu = uml_curr_cpu();
+	timer_t *t = &event_high_res_timer[cpu];
 	struct sigevent sev = {
 		.sigev_notify = SIGEV_THREAD_ID,
 		.sigev_signo = SIGALRM,
@@ -110,9 +113,13 @@ void os_idle_sleep(void)
 {
 	sigset_t set, old;
 
-	/* Block SIGALRM while performing the need_resched check. */
+	/*
+	 * Block SIGALRM and the IPI signal while performing
+	 * the need_resched check.
+	 */
 	sigemptyset(&set);
 	sigaddset(&set, SIGALRM);
+	sigaddset(&set, IPI_SIGNAL);
 	sigprocmask(SIG_BLOCK, &set, &old);
 
 	/* Sleep if no resched is pending. */

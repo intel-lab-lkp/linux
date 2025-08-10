@@ -16,6 +16,7 @@
 #include <init.h>
 #include <kern_util.h>
 #include <os.h>
+#include <smp.h>
 #include <um_malloc.h>
 #include "internal.h"
 
@@ -207,7 +208,7 @@ void *__wrap_malloc(int size)
 {
 	void *ret;
 
-	if (!kmalloc_ok)
+	if (!kmalloc_ok || kmalloc_disabled[uml_curr_cpu()])
 		return __real_malloc(size);
 	else if (size <= UM_KERN_PAGE_SIZE)
 		/* finding contiguous pages can be hard*/

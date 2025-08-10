@@ -53,6 +53,8 @@ pgd_t swapper_pg_dir[PTRS_PER_PGD];
 /* Initialized at boot time, and readonly after that */
 int kmalloc_ok = 0;
 
+int kmalloc_disabled[NR_CPUS];
+
 /* Used during early boot */
 static unsigned long brk_end;
 
