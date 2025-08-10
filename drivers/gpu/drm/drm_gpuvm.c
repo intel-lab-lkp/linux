@@ -2441,21 +2441,26 @@ static const struct drm_gpuvm_ops lock_ops = {
  *        drm_exec_until_all_locked (&exec) {
  *            for_each_vm_bind_operation {
  *                switch (op->op) {
- *                case DRIVER_OP_UNMAP:
- *                    ret = drm_gpuvm_sm_unmap_exec_lock(gpuvm, &exec, op->addr, op->range);
- *                    break;
- *                case DRIVER_OP_MAP:
- *                    ret = drm_gpuvm_sm_map_exec_lock(gpuvm, &exec, num_fences,
- *                                                     op->addr, op->range,
- *                                                     obj, op->obj_offset);
- *                    break;
+ *                    case DRIVER_OP_UNMAP:
+ *                        ret = drm_gpuvm_sm_unmap_exec_lock(gpuvm, &exec, op->addr, op->range);
+ *                        break;
+ * 
+ *                    case DRIVER_OP_MAP:
+ *                        ret = drm_gpuvm_sm_map_exec_lock(gpuvm, &exec, num_fences,
+ *                                                         op->addr, op->range,
+ *                                                         obj, op->obj_offset);
+ * 
+ *                        break;
+ * 
  *                }
  *
  *                drm_exec_retry_on_contention(&exec);
- *                if (ret)
- *                    return ret;
+ *                if (ret) return ret;
+ * 
  *            }
+ * 
  *        }
+ * 
  *    }
  *
  * This enables all locking to be performed before the driver begins modifying
