@@ -3005,6 +3005,8 @@ static int cgx_print_fwdata(struct seq_file *s, int lmac_id)
 		return -EAGAIN;
 
 	cgx_id = cgx_get_cgxid(cgxd);
+	if (cgx_id < 0)
+		return -EINVAL;
 
 	if (rvu->hw->lmac_per_cgx == CGX_LMACS_USX)
 		fwdata =  &rvu->fwdata->cgx_fw_data_usx[cgx_id][lmac_id];
