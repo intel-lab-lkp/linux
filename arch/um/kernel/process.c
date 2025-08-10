@@ -209,10 +209,13 @@ int arch_dup_task_struct(struct task_struct *dst,
 
 void um_idle_sleep(void)
 {
-	if (time_travel_mode != TT_MODE_OFF)
+	if (time_travel_mode != TT_MODE_OFF) {
 		time_travel_sleep();
-	else
+	} else {
+		raw_local_irq_enable();
 		os_idle_sleep();
+		raw_local_irq_disable();
+	}
 }
 
 void arch_cpu_idle(void)
@@ -223,6 +226,11 @@ void arch_cpu_idle(void)
 int __uml_cant_sleep(void) {
 	return in_atomic() || irqs_disabled() || in_interrupt();
 	/* Is in_interrupt() really needed? */
+}
+
+int uml_need_resched(void)
+{
+	return need_resched();
 }
 
 extern exitcall_t __uml_exitcall_begin, __uml_exitcall_end;
