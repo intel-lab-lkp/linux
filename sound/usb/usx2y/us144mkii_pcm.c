@@ -115,10 +115,11 @@ void process_capture_routing_us144mkii(struct tascam_card *tascam,
 int us144mkii_configure_device_for_rate(struct tascam_card *tascam, int rate)
 {
 	struct usb_device *dev = tascam->dev;
-	u8 *rate_payload_buf;
 	u16 rate_vendor_wValue;
 	int err = 0;
 	const u8 *current_payload_src;
+
+	u8 *rate_payload_buf __free(kfree);
 
 	static const u8 payload_44100[] = { 0x44, 0xac, 0x00 };
 	static const u8 payload_48000[] = { 0x80, 0xbb, 0x00 };
@@ -209,14 +210,12 @@ int us144mkii_configure_device_for_rate(struct tascam_card *tascam, int rate)
 	if (err < 0)
 		goto fail;
 
-	kfree(rate_payload_buf);
 	return 0;
 
 fail:
 	dev_err(&dev->dev,
 		"Device configuration failed at rate %d with error %d\n", rate,
 		err);
-	kfree(rate_payload_buf);
 	return err;
 }
 

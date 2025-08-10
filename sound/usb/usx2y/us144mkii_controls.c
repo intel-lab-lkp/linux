@@ -53,8 +53,11 @@ static int tascam_line_out_get(struct snd_kcontrol *kcontrol,
 			       struct snd_ctl_elem_value *ucontrol)
 {
 	struct tascam_card *tascam = snd_kcontrol_chip(kcontrol);
+	int val;
 
-	ucontrol->value.enumerated.item[0] = tascam->line_out_source;
+	guard(spinlock_irqsave)(&tascam->lock);
+	val = tascam->line_out_source;
+	ucontrol->value.enumerated.item[0] = val;
 	return 0;
 }
 
@@ -73,13 +76,17 @@ static int tascam_line_out_put(struct snd_kcontrol *kcontrol,
 			       struct snd_ctl_elem_value *ucontrol)
 {
 	struct tascam_card *tascam = snd_kcontrol_chip(kcontrol);
+	int changed = 0;
 
 	if (ucontrol->value.enumerated.item[0] > 1)
 		return -EINVAL;
-	if (tascam->line_out_source == ucontrol->value.enumerated.item[0])
-		return 0;
-	tascam->line_out_source = ucontrol->value.enumerated.item[0];
-	return 1;
+
+	guard(spinlock_irqsave)(&tascam->lock);
+	if (tascam->line_out_source != ucontrol->value.enumerated.item[0]) {
+		tascam->line_out_source = ucontrol->value.enumerated.item[0];
+		changed = 1;
+	}
+	return changed;
 }
 
 /**
@@ -115,8 +122,11 @@ static int tascam_digital_out_get(struct snd_kcontrol *kcontrol,
 				  struct snd_ctl_elem_value *ucontrol)
 {
 	struct tascam_card *tascam = snd_kcontrol_chip(kcontrol);
+	int val;
 
-	ucontrol->value.enumerated.item[0] = tascam->digital_out_source;
+	guard(spinlock_irqsave)(&tascam->lock);
+	val = tascam->digital_out_source;
+	ucontrol->value.enumerated.item[0] = val;
 	return 0;
 }
 
@@ -136,13 +146,17 @@ static int tascam_digital_out_put(struct snd_kcontrol *kcontrol,
 				  struct snd_ctl_elem_value *ucontrol)
 {
 	struct tascam_card *tascam = snd_kcontrol_chip(kcontrol);
+	int changed = 0;
 
 	if (ucontrol->value.enumerated.item[0] > 1)
 		return -EINVAL;
-	if (tascam->digital_out_source == ucontrol->value.enumerated.item[0])
-		return 0;
-	tascam->digital_out_source = ucontrol->value.enumerated.item[0];
-	return 1;
+
+	guard(spinlock_irqsave)(&tascam->lock);
+	if (tascam->digital_out_source != ucontrol->value.enumerated.item[0]) {
+		tascam->digital_out_source = ucontrol->value.enumerated.item[0];
+		changed = 1;
+	}
+	return changed;
 }
 
 /**
@@ -196,8 +210,11 @@ static int tascam_capture_12_get(struct snd_kcontrol *kcontrol,
 				 struct snd_ctl_elem_value *ucontrol)
 {
 	struct tascam_card *tascam = snd_kcontrol_chip(kcontrol);
+	int val;
 
-	ucontrol->value.enumerated.item[0] = tascam->capture_12_source;
+	guard(spinlock_irqsave)(&tascam->lock);
+	val = tascam->capture_12_source;
+	ucontrol->value.enumerated.item[0] = val;
 	return 0;
 }
 
@@ -217,13 +234,17 @@ static int tascam_capture_12_put(struct snd_kcontrol *kcontrol,
 				 struct snd_ctl_elem_value *ucontrol)
 {
 	struct tascam_card *tascam = snd_kcontrol_chip(kcontrol);
+	int changed = 0;
 
 	if (ucontrol->value.enumerated.item[0] > 1)
 		return -EINVAL;
-	if (tascam->capture_12_source == ucontrol->value.enumerated.item[0])
-		return 0;
-	tascam->capture_12_source = ucontrol->value.enumerated.item[0];
-	return 1;
+
+	guard(spinlock_irqsave)(&tascam->lock);
+	if (tascam->capture_12_source != ucontrol->value.enumerated.item[0]) {
+		tascam->capture_12_source = ucontrol->value.enumerated.item[0];
+		changed = 1;
+	}
+	return changed;
 }
 
 /**
@@ -260,8 +281,11 @@ static int tascam_capture_34_get(struct snd_kcontrol *kcontrol,
 				 struct snd_ctl_elem_value *ucontrol)
 {
 	struct tascam_card *tascam = snd_kcontrol_chip(kcontrol);
+	int val;
 
-	ucontrol->value.enumerated.item[0] = tascam->capture_34_source;
+	guard(spinlock_irqsave)(&tascam->lock);
+	val = tascam->capture_34_source;
+	ucontrol->value.enumerated.item[0] = val;
 	return 0;
 }
 
@@ -281,13 +305,17 @@ static int tascam_capture_34_put(struct snd_kcontrol *kcontrol,
 				 struct snd_ctl_elem_value *ucontrol)
 {
 	struct tascam_card *tascam = snd_kcontrol_chip(kcontrol);
+	int changed = 0;
 
 	if (ucontrol->value.enumerated.item[0] > 1)
 		return -EINVAL;
-	if (tascam->capture_34_source == ucontrol->value.enumerated.item[0])
-		return 0;
-	tascam->capture_34_source = ucontrol->value.enumerated.item[0];
-	return 1;
+
+	guard(spinlock_irqsave)(&tascam->lock);
+	if (tascam->capture_34_source != ucontrol->value.enumerated.item[0]) {
+		tascam->capture_34_source = ucontrol->value.enumerated.item[0];
+		changed = 1;
+	}
+	return changed;
 }
 
 /**
@@ -349,10 +377,12 @@ static int tascam_samplerate_get(struct snd_kcontrol *kcontrol,
 	int err;
 	u32 rate = 0;
 
+	guard(spinlock_irqsave)(&tascam->lock);
 	if (tascam->current_rate > 0) {
 		ucontrol->value.integer.value[0] = tascam->current_rate;
 		return 0;
 	}
+	// Lock is released here before kmalloc and usb_control_msg
 
 	buf = kmalloc(3, GFP_KERNEL);
 	if (!buf)
