@@ -17,7 +17,7 @@
 int __vdso_clock_gettime(clockid_t clock, struct __kernel_old_timespec *ts);
 int __vdso_gettimeofday(struct __kernel_old_timeval *tv, struct timezone *tz);
 __kernel_old_time_t __vdso_time(__kernel_old_time_t *t);
-long __vdso_getcpu(unsigned int *cpu, unsigned int *node, struct getcpu_cache *unused);
+long __vdso_getcpu(unsigned int *cpu, unsigned int *node, struct getcpu_cache *tcache);
 
 int __vdso_clock_gettime(clockid_t clock, struct __kernel_old_timespec *ts)
 {
@@ -60,18 +60,16 @@ __kernel_old_time_t __vdso_time(__kernel_old_time_t *t)
 __kernel_old_time_t time(__kernel_old_time_t *t) __attribute__((weak, alias("__vdso_time")));
 
 long
-__vdso_getcpu(unsigned int *cpu, unsigned int *node, struct getcpu_cache *unused)
+__vdso_getcpu(unsigned int *cpu, unsigned int *node, struct getcpu_cache *tcache)
 {
-	/*
-	 * UML does not support SMP, we can cheat here. :)
-	 */
+	long ret;
 
-	if (cpu)
-		*cpu = 0;
-	if (node)
-		*node = 0;
+	asm volatile("syscall"
+		: "=a" (ret)
+		: "0" (__NR_getcpu), "D" (cpu), "S" (node), "d" (tcache)
+		: "rcx", "r11", "memory");
 
-	return 0;
+	return ret;
 }
 
 long getcpu(unsigned int *cpu, unsigned int *node, struct getcpu_cache *tcache)
