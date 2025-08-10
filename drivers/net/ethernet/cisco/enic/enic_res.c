@@ -95,11 +95,11 @@ int enic_get_vnic_config(struct enic *enic)
 	dev_info(enic_get_dev(enic), "vNIC csum tx/rx %s/%s "
 		"tso/lro %s/%s rss %s intr mode %s type %s timer %d usec "
 		"loopback tag 0x%04x\n",
-		ENIC_SETTING(enic, TXCSUM) ? "yes" : "no",
-		ENIC_SETTING(enic, RXCSUM) ? "yes" : "no",
-		ENIC_SETTING(enic, TSO) ? "yes" : "no",
-		ENIC_SETTING(enic, LRO) ? "yes" : "no",
-		ENIC_SETTING(enic, RSS) ? "yes" : "no",
+		str_yes_no(ENIC_SETTING(enic, TXCSUM)),
+		str_yes_no(ENIC_SETTING(enic, RXCSUM)),
+		str_yes_no(ENIC_SETTING(enic, TSO)),
+		str_yes_no(ENIC_SETTING(enic, LRO)),
+		str_yes_no(ENIC_SETTING(enic, RSS)),
 		c->intr_mode == VENET_INTR_MODE_INTX ? "INTx" :
 		c->intr_mode == VENET_INTR_MODE_MSI ? "MSI" :
 		c->intr_mode == VENET_INTR_MODE_ANY ? "any" :
