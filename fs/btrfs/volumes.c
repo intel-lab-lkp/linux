@@ -934,6 +934,20 @@ static noinline struct btrfs_device *device_list_add(const char *path,
 				  path, found_transid, device->generation);
 			return ERR_PTR(-EEXIST);
 		}
+		if (fs_devices->holding) {
+			/*
+			 * The fs_devices are already hold by an ongoing mount.
+			 *
+			 * We can not update the device path, or a duplicated
+			 * fsid/dev-uuid can replace the original path, causing
+			 * another device to be mounted.
+			 */
+			btrfs_warn(NULL,
+				   "device %s is trying to update path for a device being mounted",
+				   path);
+			mutex_unlock(&fs_devices->device_list_mutex);
+			return ERR_PTR(-EEXIST);
+		}
 
 		/*
 		 * We are going to replace the device path for a given devid,
