@@ -108,9 +108,11 @@ tmon: FORCE
 	$(call descend,thermal/$@)
 
 thermometer: FORCE
+	$(call descend,thermal/lib)
 	$(call descend,thermal/$@)
 
 thermal-engine: FORCE thermal
+	$(call descend,thermal/lib)
 	$(call descend,thermal/$@)
 
 freefall: FORCE
@@ -150,9 +152,11 @@ tmon_install:
 	$(call descend,thermal/$(@:_install=),install)
 
 thermometer_install:
+	$(call descend,thermal/lib/,install)
 	$(call descend,thermal/$(@:_install=),install)
 
 thermal-engine_install: thermal_install
+	$(call descend,thermal/lib/,install)
 	$(call descend,thermal/$(@:_install=),install)
 
 freefall_install:
@@ -207,9 +211,11 @@ turbostat_clean x86_energy_perf_policy_clean intel-speed-select_clean:
 	$(call descend,power/x86/$(@:_clean=),clean)
 
 thermometer_clean:
+	$(call descend,thermal/lib,clean)
 	$(call descend,thermal/thermometer,clean)
 
 thermal-engine_clean: thermal_clean
+	$(call descend,thermal/lib,clean)
 	$(call descend,thermal/thermal-engine,clean)
 
 tmon_clean:
