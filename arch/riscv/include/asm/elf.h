@@ -20,6 +20,7 @@
  * These are used to set parameters in the core dumps.
  */
 #define ELF_ARCH	EM_RISCV
+#define ELF_CORE_USE_PROCESS_EFLAGS
 
 #ifndef ELF_CLASS
 #ifdef CONFIG_64BIT

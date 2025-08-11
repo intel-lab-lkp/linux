@@ -66,6 +66,14 @@
 #define elf_check_fdpic(ex) false
 #endif
 
+#ifdef ELF_CORE_USE_PROCESS_EFLAGS
+#define elf_coredump_get_process_eflags(dump_task, e_flags) \
+	(*(e_flags) = (dump_task)->mm->saved_e_flags)
+#else
+#define elf_coredump_get_process_eflags(dump_task, e_flags) \
+	do { (void)(dump_task); (void)(e_flags); } while (0)
+#endif
+
 static int load_elf_binary(struct linux_binprm *bprm);
 
 /*
@@ -1290,6 +1298,9 @@ out_free_interp:
 	mm->end_data = end_data;
 	mm->start_stack = bprm->p;
 
+	/* stash e_flags for use in core dumps */
+	mm->saved_e_flags = elf_ex->e_flags;
+
 	/**
 	 * DOC: "brk" handling
 	 *
@@ -1804,6 +1815,8 @@ static int fill_note_info(struct elfhdr *elf, int phdrs,
 	struct elf_thread_core_info *t;
 	struct elf_prpsinfo *psinfo;
 	struct core_thread *ct;
+	u16 machine;
+	u32 flags;
 
 	psinfo = kmalloc(sizeof(*psinfo), GFP_KERNEL);
 	if (!psinfo)
@@ -1831,16 +1844,25 @@ static int fill_note_info(struct elfhdr *elf, int phdrs,
 		return 0;
 	}
 
-	/*
-	 * Initialize the ELF file header.
-	 */
-	fill_elf_header(elf, phdrs,
-			view->e_machine, view->e_flags);
+	machine = view->e_machine;
+	flags = view->e_flags;
 #else
 	view = NULL;
 	info->thread_notes = 2;
-	fill_elf_header(elf, phdrs, ELF_ARCH, ELF_CORE_EFLAGS);
+	machine = ELF_ARCH;
+	flags = ELF_CORE_EFLAGS;
 #endif
+
+	/*
+	 * Override ELF e_flags with value taken from process,
+	 * if arch wants to.
+	 */
+	elf_coredump_get_process_eflags(dump_task, &flags);
+
+	/*
+	 * Initialize the ELF file header.
+	 */
+	fill_elf_header(elf, phdrs, machine, flags);
 
 	/*
 	 * Allocate a structure for each thread.
