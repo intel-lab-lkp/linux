@@ -202,21 +202,26 @@ int set_direct_map_default_noflush(struct page *page)
 				   PAGE_SIZE, change_page_range, &data);
 }
 
+/*
+ * Common function for setting memory encryption or decryption attributes.
+ *
+ * @addr:        Virtual start address of the memory region
+ * @start:       Corresponding physical start address
+ * @numpages:    Number of pages to update
+ * @encrypt:     If true, set memory as encrypted; if false, decrypt
+ */
 static int __set_memory_enc_dec(unsigned long addr,
+				phys_addr_t start,
 				int numpages,
 				bool encrypt)
 {
 	unsigned long set_prot = 0, clear_prot = 0;
-	phys_addr_t start, end;
+	phys_addr_t end;
 	int ret;
 
 	if (!is_realm_world())
 		return 0;
 
-	if (!__is_lm_address(addr))
-		return -EINVAL;
-
-	start = __virt_to_phys(addr);
 	end = start + numpages * PAGE_SIZE;
 
 	if (encrypt)
@@ -248,9 +253,45 @@ static int __set_memory_enc_dec(unsigned long addr,
 				      __pgprot(0));
 }
 
+/*
+ * Wrapper for __set_memory_enc_dec() that handles both linear-mapped
+ * and vmalloc/module memory regions.
+ *
+ * If the address is in the linear map, we can directly compute the
+ * physical address. If not (e.g. vmalloc memory), we walk each page
+ * and call the attribute update individually.
+ */
+static int realm_set_memory(unsigned long addr, int numpages, bool encrypt)
+{
+	phys_addr_t start;
+	struct page *page;
+	int ret, i;
+
+	if (__is_lm_address(addr)) {
+		start = __virt_to_phys(addr);
+		return __set_memory_enc_dec(addr, start, numpages, encrypt);
+	}
+
+	for (i = 0; i < numpages; i++) {
+		page = vmalloc_to_page((void *)addr);
+		if (!page)
+			return -EINVAL;
+
+		start = page_to_phys(page);
+		ret = __set_memory_enc_dec(addr, start, 1, encrypt);
+		if (ret)
+			return ret;
+
+		addr += PAGE_SIZE;
+	}
+
+	return 0;
+}
+
 static int realm_set_memory_encrypted(unsigned long addr, int numpages)
 {
-	int ret = __set_memory_enc_dec(addr, numpages, true);
+	int ret = realm_set_memory(addr, numpages, true);
+
 
 	/*
 	 * If the request to change state fails, then the only sensible cause
@@ -264,7 +305,7 @@ static int realm_set_memory_encrypted(unsigned long addr, int numpages)
 
 static int realm_set_memory_decrypted(unsigned long addr, int numpages)
 {
-	int ret = __set_memory_enc_dec(addr, numpages, false);
+	int ret = realm_set_memory(addr, numpages, false);
 
 	WARN(ret, "Failed to decrypt memory, %d pages will be leaked",
 	     numpages);
