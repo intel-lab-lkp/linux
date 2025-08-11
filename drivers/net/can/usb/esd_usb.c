@@ -3,7 +3,7 @@
  * CAN driver for esd electronics gmbh CAN-USB/2, CAN-USB/3 and CAN-USB/Micro
  *
  * Copyright (C) 2010-2012 esd electronic system design gmbh, Matthias Fuchs <socketcan@esd.eu>
- * Copyright (C) 2022-2024 esd electronics gmbh, Frank Jungclaus <frank.jungclaus@esd.eu>
+ * Copyright (C) 2022-2025 esd electronics gmbh, Frank Jungclaus <frank.jungclaus@esd.eu>
  */
 
 #include <linux/can.h>
@@ -746,21 +746,22 @@ static int esd_usb_start(struct esd_usb_net_priv *priv)
 
 	err = esd_usb_send_msg(dev, msg);
 	if (err)
-		goto out;
+		goto free_msg;
 
 	err = esd_usb_setup_rx_urbs(dev);
 	if (err)
-		goto out;
+		goto free_msg;
 
 	priv->can.state = CAN_STATE_ERROR_ACTIVE;
 
+free_msg:
+	kfree(msg);
 out:
 	if (err == -ENODEV)
 		netif_device_detach(netdev);
 	if (err)
 		netdev_err(netdev, "couldn't start device: %d\n", err);
 
-	kfree(msg);
 	return err;
 }
 
@@ -1279,7 +1280,7 @@ static int esd_usb_probe(struct usb_interface *intf,
 	dev = kzalloc(sizeof(*dev), GFP_KERNEL);
 	if (!dev) {
 		err = -ENOMEM;
-		goto done;
+		goto bail;
 	}
 
 	dev->udev = interface_to_usbdev(intf);
@@ -1291,7 +1292,7 @@ static int esd_usb_probe(struct usb_interface *intf,
 	msg = kmalloc(sizeof(*msg), GFP_KERNEL);
 	if (!msg) {
 		err = -ENOMEM;
-		goto free_msg;
+		goto free_dev;
 	}
 
 	/* query number of CAN interfaces (nets) */
@@ -1334,9 +1335,10 @@ static int esd_usb_probe(struct usb_interface *intf,
 
 free_msg:
 	kfree(msg);
+free_dev:
 	if (err)
 		kfree(dev);
-done:
+bail:
 	return err;
 }
 
