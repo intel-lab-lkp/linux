@@ -56,7 +56,10 @@ static unsigned long ccu_div_recalc_rate(struct clk_hw *hw,
 	val = ccu_read(&mix->common, ctrl) >> div->shift;
 	val &= (1 << div->width) - 1;
 
-	return divider_recalc_rate(hw, parent_rate, val, NULL, 0, div->width);
+	if (!div->factor)
+		return divider_recalc_rate(hw, parent_rate, val, NULL, 0, div->width);
+
+	return divider_recalc_rate(hw, parent_rate, val, NULL, 0, div->width) / div->factor;
 }
 
 /*
@@ -115,6 +118,8 @@ ccu_mix_calc_best_rate(struct clk_hw *hw, unsigned long rate,
 
 		for (int j = 1; j <= div_max; j++) {
 			unsigned long tmp = DIV_ROUND_CLOSEST_ULL(parent_rate, j);
+			if (mix->div.factor)
+				tmp /= mix->div.factor;
 
 			if (abs(tmp - rate) < abs(best_rate - rate)) {
 				best_rate = tmp;
