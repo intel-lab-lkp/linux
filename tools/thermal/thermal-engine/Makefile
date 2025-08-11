@@ -1,5 +1,8 @@
 # SPDX-License-Identifier: GPL-2.0
-# Makefile for thermal tools
+# Makefile for thermal engine
+include ../../build/Build.include
+
+VERSION = 0.0.1
 
 ifeq ($(srctree),)
 srctree := $(patsubst %/,%,$(dir $(CURDIR)))
@@ -8,21 +11,48 @@ srctree := $(patsubst %/,%,$(dir $(srctree)))
 # $(info Determined 'srctree' to be $(srctree))
 endif
 
-CFLAGS = -Wall -Wextra
-CFLAGS += -I$(srctree)/tools/thermal/lib
-CFLAGS += -I$(srctree)/tools/lib/thermal/include
+BINDIR=usr/bin
+WARNFLAGS=-Wall -Wshadow -W -Wformat -Wimplicit-function-declaration -Wimplicit-int
+override CFLAGS+= $(call cc-option,-O3,-O1) ${WARNFLAGS}
+# Add "-fstack-protector" only if toolchain supports it.
+override CFLAGS+= $(call cc-option,-fstack-protector-strong)
+CC?= $(CROSS_COMPILE)gcc
+PKG_CONFIG?= $(CROSS_COMPILE)pkg-config
 
-LDFLAGS = -L$(srctree)/tools/thermal/lib
-LDFLAGS += -L$(srctree)/tools/lib/thermal
-LDFLAGS += -lthermal_tools
-LDFLAGS += -lthermal
-LDFLAGS += -lconfig
-LDFLAGS += -lnl-genl-3 -lnl-3
+override CFLAGS+=-D VERSION=\"$(VERSION)\"
+TARGET=thermal-engine
 
-VERSION = 0.0.1
+override CFLAGS += -I$(srctree)/tools/thermal/lib
+override CFLAGS += -I$(srctree)/tools/lib/thermal/include
 
-all: thermal-engine
-%: %.c
-	$(CC) $(CFLAGS) -D VERSION=\"$(VERSION)\" -o $@ $^ $(LDFLAGS)
+override LDFLAGS += -L$(srctree)/tools/thermal/lib
+override LDFLAGS += -L$(srctree)/tools/lib/thermal
+
+INSTALL_PROGRAM=install -m 755 -p
+DEL_FILE=rm -f
+
+# Static builds might require -ltinfo, for instance
+ifneq ($(findstring -static, $(LDFLAGS)),)
+STATIC := --static
+endif
+
+THERMAL_ENGINE_LIBS=-lconfig -lnl-genl-3 -lnl-3 -lthermal -lthermal_tools
+
+OBJS = thermal-engine.o
+
+thermal-engine: $(OBJS) Makefile
+	$(CC) $(CFLAGS) $(LDFLAGS) $(OBJS)  -o $(TARGET) $(THERMAL_ENGINE_LIBS)
+
+install:
+	- $(INSTALL_PROGRAM) -D "$(TARGET)" "$(INSTALL_ROOT)/$(BINDIR)/$(TARGET)"
+
+uninstall:
+	$(DEL_FILE) "$(INSTALL_ROOT)/$(BINDIR)/$(TARGET)"
+
 clean:
-	$(RM) thermal-engine
+	rm -f $(TARGET) $(OBJS)
+
+dist:
+	git tag v$(VERSION)
+	git archive --format=tar --prefix="$(TARGET)-$(VERSION)/" v$(VERSION) | \
+		gzip > $(TARGET)-$(VERSION).tar.gz
