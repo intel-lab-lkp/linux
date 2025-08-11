@@ -119,6 +119,7 @@ pub struct Devres<T: Send> {
     // impls can be removed.
     #[pin]
     inner: Opaque<Inner<T>>,
+    _add_action: (),
 }
 
 impl<T: Send> Devres<T> {
@@ -140,7 +141,15 @@ impl<T: Send> Devres<T> {
             dev: dev.into(),
             callback,
             // INVARIANT: `inner` is properly initialized.
-            inner <- {
+            inner <- Opaque::pin_init(try_pin_init!(Inner {
+                    devm <- Completion::new(),
+                    revoke <- Completion::new(),
+                    data <- Revocable::new(data),
+            })),
+            // TODO: Replace with "initializer code blocks" [1] once available.
+            //
+            // [1] https://github.com/Rust-for-Linux/pin-init/pull/69
+            _add_action: {
                 // SAFETY: `this` is a valid pointer to uninitialized memory.
                 let inner = unsafe { &raw mut (*this.as_ptr()).inner };
 
@@ -153,12 +162,6 @@ impl<T: Send> Devres<T> {
                 to_result(unsafe {
                     bindings::devm_add_action(dev.as_raw(), Some(callback), inner.cast())
                 })?;
-
-                Opaque::pin_init(try_pin_init!(Inner {
-                    devm <- Completion::new(),
-                    revoke <- Completion::new(),
-                    data <- Revocable::new(data),
-                }))
             },
         })
     }
