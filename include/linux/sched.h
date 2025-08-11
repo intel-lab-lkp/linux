@@ -1960,11 +1960,43 @@ extern void wake_up_new_task(struct task_struct *tsk);
 
 extern void kick_process(struct task_struct *tsk);
 
+/*
+ * - Why not use task_lock()?
+ *   User space can randomly change their names anyway, so locking for readers
+ *   doesn't make sense. For writers, locking is probably necessary, as a race
+ *   condition could lead to long-term mixed results.
+ *   The logic inside __set_task_comm() should ensure that the task comm is
+ *   always NUL-terminated and zero-padded. Therefore the race condition between
+ *   reader and writer is not an issue.
+ */
+
 extern void __set_task_comm(struct task_struct *tsk, const char *from, bool exec);
 #define set_task_comm(tsk, from) ({			\
 	BUILD_BUG_ON(sizeof(from) < TASK_COMM_LEN);	\
 	__set_task_comm(tsk, from, false);		\
 })
+
+/*
+ * 'get_task_array' can be 'data-racy' in the destination and
+ * should not be used for cases where a 'stable NUL at the end'
+ * is needed. Its better to use strscpy and friends for such
+ * use-cases.
+ *
+ * It is suited mainly for a 'just copy comm to a constant-sized
+ * array' case - especially in performance sensitive use-cases,
+ * like tracing.
+ */
+
+static __always_inline void
+	__cstr_array_copy(char *dst, const char *src,
+			  __kernel_size_t size)
+{
+	memcpy(dst, src, size);
+	dst[size] = 0;
+}
+
+#define get_task_array(dst, src) \
+	__cstr_array_copy(dst, src, __must_be_array(dst))
 
 static __always_inline void scheduler_ipi(void)
 {

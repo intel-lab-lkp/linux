@@ -53,8 +53,7 @@ static void add_ref(struct hashmap *map, struct pid_iter_entry *e)
 		refs->refs = tmp;
 		ref = &refs->refs[refs->ref_cnt];
 		ref->pid = e->pid;
-		memcpy(ref->comm, e->comm, sizeof(ref->comm));
-		ref->comm[sizeof(ref->comm) - 1] = '\0';
+		get_task_array(ref->comm, e->comm);
 		refs->ref_cnt++;
 
 		return;
@@ -77,8 +76,7 @@ static void add_ref(struct hashmap *map, struct pid_iter_entry *e)
 	}
 	ref = &refs->refs[0];
 	ref->pid = e->pid;
-	memcpy(ref->comm, e->comm, sizeof(ref->comm));
-	ref->comm[sizeof(ref->comm) - 1] = '\0';
+	get_task_array(ref->comm, e->comm);
 	refs->ref_cnt = 1;
 	refs->has_bpf_cookie = e->has_bpf_cookie;
 	refs->bpf_cookie = e->bpf_cookie;
