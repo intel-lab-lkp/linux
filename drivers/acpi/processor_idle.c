@@ -51,15 +51,12 @@ module_param(latency_factor, uint, 0644);
 
 static DEFINE_PER_CPU(struct cpuidle_device *, acpi_cpuidle_device);
 
-struct cpuidle_driver acpi_idle_driver = {
-	.name =		"acpi_idle",
-	.owner =	THIS_MODULE,
-};
+DEFINE_PER_CPU(struct cpuidle_driver, acpi_idle_driver);
 
 #ifdef CONFIG_ACPI_PROCESSOR_CSTATE
 void acpi_idle_rescan_dead_smt_siblings(void)
 {
-	if (cpuidle_get_driver() == &acpi_idle_driver)
+	if (cpuidle_get_driver() == this_cpu_ptr(&acpi_idle_driver))
 		arch_cpu_rescan_dead_smt_siblings();
 }
 
@@ -738,12 +735,13 @@ static int acpi_processor_setup_cpuidle_cx(struct acpi_processor *pr,
 	int i, count = ACPI_IDLE_STATE_START;
 	struct acpi_processor_cx *cx;
 	struct cpuidle_state *state;
+	struct cpuidle_driver *drv = per_cpu_ptr(&acpi_idle_driver, pr->id);
 
 	if (max_cstate == 0)
 		max_cstate = 1;
 
 	for (i = 1; i < ACPI_PROCESSOR_MAX_POWER && i <= max_cstate; i++) {
-		state = &acpi_idle_driver.states[count];
+		state = &drv->states[count];
 		cx = &pr->power.states[i];
 
 		if (!cx->valid)
@@ -776,7 +774,7 @@ static int acpi_processor_setup_cstates(struct acpi_processor *pr)
 	int i, count;
 	struct acpi_processor_cx *cx;
 	struct cpuidle_state *state;
-	struct cpuidle_driver *drv = &acpi_idle_driver;
+	struct cpuidle_driver *drv = per_cpu_ptr(&acpi_idle_driver, pr->id);
 
 	if (max_cstate == 0)
 		max_cstate = 1;
@@ -1198,7 +1196,7 @@ static int acpi_processor_setup_lpi_states(struct acpi_processor *pr)
 	int i;
 	struct acpi_lpi_state *lpi;
 	struct cpuidle_state *state;
-	struct cpuidle_driver *drv = &acpi_idle_driver;
+	struct cpuidle_driver *drv = per_cpu_ptr(&acpi_idle_driver, pr->id);
 
 	if (!pr->flags.has_lpi)
 		return -EOPNOTSUPP;
@@ -1232,7 +1230,7 @@ static int acpi_processor_setup_lpi_states(struct acpi_processor *pr)
 static int acpi_processor_setup_cpuidle_states(struct acpi_processor *pr)
 {
 	int i;
-	struct cpuidle_driver *drv = &acpi_idle_driver;
+	struct cpuidle_driver *drv = per_cpu_ptr(&acpi_idle_driver, pr->id);
 
 	if (!pr->flags.power_setup_done || !pr->flags.power)
 		return -EINVAL;
@@ -1316,13 +1314,7 @@ int acpi_processor_power_state_has_changed(struct acpi_processor *pr)
 	if (!pr->flags.power_setup_done)
 		return -ENODEV;
 
-	/*
-	 * FIXME:  Design the ACPI notification to make it once per
-	 * system instead of once per-cpu.  This condition is a hack
-	 * to make the code that updates C-States be called once.
-	 */
-
-	if (pr->id == 0 && cpuidle_get_driver() == &acpi_idle_driver) {
+	if (cpuidle_get_cpu_driver_by_cpu(pr->id) == per_cpu_ptr(&acpi_idle_driver, pr->id)) {
 
 		/* Protect against cpu-hotplug */
 		cpus_read_lock();
@@ -1360,12 +1352,14 @@ int acpi_processor_power_state_has_changed(struct acpi_processor *pr)
 	return 0;
 }
 
-static int acpi_processor_registered;
 
 int acpi_processor_power_init(struct acpi_processor *pr)
 {
 	int retval;
+	struct cpumask *cpumask;
 	struct cpuidle_device *dev;
+	struct cpuidle_driver *drv = per_cpu_ptr(&acpi_idle_driver, pr->id);
+
 
 	if (disabled_by_idle_boot_param())
 		return 0;
@@ -1382,14 +1376,21 @@ int acpi_processor_power_init(struct acpi_processor *pr)
 	 */
 	if (pr->flags.power) {
 		/* Register acpi_idle_driver if not already registered */
-		if (!acpi_processor_registered) {
-			acpi_processor_setup_cpuidle_states(pr);
-			retval = cpuidle_register_driver(&acpi_idle_driver);
-			if (retval)
-				return retval;
-			pr_debug("%s registered with cpuidle\n",
-				 acpi_idle_driver.name);
+		acpi_processor_setup_cpuidle_states(pr);
+
+		drv->name = "acpi_idle";
+		drv->owner = THIS_MODULE;
+		cpumask = kzalloc(cpumask_size(), GFP_KERNEL);
+		cpumask_set_cpu(pr->id, cpumask);
+		drv->cpumask = cpumask;
+
+		retval = cpuidle_register_driver(drv);
+		if (retval) {
+			kfree(cpumask);
+			return retval;
 		}
+		pr_debug("cpu %d:%s registered with cpuidle\n", pr->id,
+			 drv->name);
 
 		dev = kzalloc(sizeof(*dev), GFP_KERNEL);
 		if (!dev)
@@ -1403,11 +1404,10 @@ int acpi_processor_power_init(struct acpi_processor *pr)
 		 */
 		retval = cpuidle_register_device(dev);
 		if (retval) {
-			if (acpi_processor_registered == 0)
-				cpuidle_unregister_driver(&acpi_idle_driver);
+			cpuidle_unregister_driver(drv);
+			kfree(cpumask);
 			return retval;
 		}
-		acpi_processor_registered++;
 	}
 	return 0;
 }
@@ -1415,17 +1415,17 @@ int acpi_processor_power_init(struct acpi_processor *pr)
 int acpi_processor_power_exit(struct acpi_processor *pr)
 {
 	struct cpuidle_device *dev = per_cpu(acpi_cpuidle_device, pr->id);
+	struct cpuidle_driver *drv = per_cpu_ptr(&acpi_idle_driver, pr->id);
 
 	if (disabled_by_idle_boot_param())
 		return 0;
 
 	if (pr->flags.power) {
 		cpuidle_unregister_device(dev);
-		acpi_processor_registered--;
-		if (acpi_processor_registered == 0)
-			cpuidle_unregister_driver(&acpi_idle_driver);
+		cpuidle_unregister_driver(drv);
 
 		kfree(dev);
+		kfree(drv->cpumask);
 	}
 
 	pr->flags.power_setup_done = 0;
