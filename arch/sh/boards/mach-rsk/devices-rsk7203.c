@@ -4,6 +4,7 @@
  *
  * Copyright (C) 2008 - 2010  Paul Mundt
  */
+#include <linux/err.h>
 #include <linux/init.h>
 #include <linux/types.h>
 #include <linux/platform_device.h>
@@ -11,7 +12,8 @@
 #include <linux/smsc911x.h>
 #include <linux/input.h>
 #include <linux/gpio.h>
-#include <linux/gpio_keys.h>
+#include <linux/gpio/machine.h>
+#include <linux/gpio/property.h>
 #include <linux/leds.h>
 #include <asm/machvec.h>
 #include <asm/io.h>
@@ -37,92 +39,165 @@ static struct resource smsc911x_resources[] = {
 	},
 };
 
-static struct platform_device smsc911x_device = {
-	.name		= "smsc911x",
-	.id		= -1,
-	.num_resources	= ARRAY_SIZE(smsc911x_resources),
-	.resource	= smsc911x_resources,
-	.dev		= {
-		.platform_data = &smsc911x_config,
-	},
+static const struct software_node rsk7203_gpiochip_node = {
+	.name = "pfc-sh7203",
 };
 
-static struct gpio_led rsk7203_gpio_leds[] = {
+static const struct software_node rsk7203_gpio_leds_node = {
+	.name = "rsk7203-gpio-leds",
+};
+
+static const struct property_entry rsk7203_green_led_props[] = {
+	PROPERTY_ENTRY_GPIO("gpios", &rsk7203_gpiochip_node,
+			    GPIO_PE10, GPIO_ACTIVE_LOW),
+	{ }
+};
+
+static const struct software_node rsk7203_green_led_node = {
+	.name = "green",
+	.parent = &rsk7203_gpio_leds_node,
+	.properties = rsk7203_green_led_props,
+};
+
+static const struct property_entry rsk7203_orange_led_props[] = {
+	PROPERTY_ENTRY_STRING("linux,default-trigger", "nand-disk"),
+	PROPERTY_ENTRY_GPIO("gpios", &rsk7203_gpiochip_node,
+			    GPIO_PE12, GPIO_ACTIVE_LOW),
+	{ }
+};
+
+static const struct software_node rsk7203_orange_led_node = {
+	.name = "orange",
+	.parent = &rsk7203_gpio_leds_node,
+	.properties = rsk7203_orange_led_props,
+};
+
+static const struct property_entry rsk7203_red1_led_props[] = {
+	PROPERTY_ENTRY_STRING("linux,default-trigger", "timer"),
+	PROPERTY_ENTRY_GPIO("gpios", &rsk7203_gpiochip_node,
+			    GPIO_PC14, GPIO_ACTIVE_LOW),
+	{ }
+};
+
+static const struct software_node rsk7203_red1_led_node = {
+	.name = "red:timer",
+	.parent = &rsk7203_gpio_leds_node,
+	.properties = rsk7203_red1_led_props,
+};
+
+static const struct property_entry rsk7203_red2_led_props[] = {
+	PROPERTY_ENTRY_STRING("linux,default-trigger", "heartbeat"),
+	PROPERTY_ENTRY_GPIO("gpios", &rsk7203_gpiochip_node,
+			    GPIO_PE11, GPIO_ACTIVE_LOW),
+	{ }
+};
+
+static const struct software_node rsk7203_red2_led_node = {
+	.name = "red:heartbeat",
+	.parent = &rsk7203_gpio_leds_node,
+	.properties = rsk7203_red2_led_props,
+};
+
+static const struct property_entry rsk7203_gpio_keys_props[] = {
+	PROPERTY_ENTRY_U32("poll-interval", 50),
+	{ }
+};
+
+static const struct software_node rsk7203_gpio_keys_node = {
+	.name = "rsk7203-gpio-keys",
+	.properties = rsk7203_gpio_keys_props,
+};
+
+static const struct property_entry rsk7203_sw1_key_props[] = {
+	PROPERTY_ENTRY_U32("linux,code", BTN_0),
+	PROPERTY_ENTRY_GPIO("gpios", &rsk7203_gpiochip_node,
+			    GPIO_PB0, GPIO_ACTIVE_LOW),
+	PROPERTY_ENTRY_STRING("label", "SW1"),
+	{ }
+};
+
+static const struct software_node rsk7203_sw1_key_node = {
+	.parent = &rsk7203_gpio_keys_node,
+	.properties = rsk7203_sw1_key_props,
+};
+
+static const struct property_entry rsk7203_sw2_key_props[] = {
+	PROPERTY_ENTRY_U32("linux,code", BTN_1),
+	PROPERTY_ENTRY_GPIO("gpios", &rsk7203_gpiochip_node,
+			    GPIO_PB1, GPIO_ACTIVE_LOW),
+	PROPERTY_ENTRY_STRING("label", "SW2"),
+	{ }
+};
+
+static const struct software_node rsk7203_sw2_key_node = {
+	.parent = &rsk7203_gpio_keys_node,
+	.properties = rsk7203_sw2_key_props,
+};
+
+static const struct property_entry rsk7203_sw3_key_props[] = {
+	PROPERTY_ENTRY_U32("linux,code", BTN_2),
+	PROPERTY_ENTRY_GPIO("gpios", &rsk7203_gpiochip_node,
+			    GPIO_PB2, GPIO_ACTIVE_LOW),
+	PROPERTY_ENTRY_STRING("label", "SW3"),
+	{ }
+};
+
+static const struct software_node rsk7203_sw3_key_node = {
+	.parent = &rsk7203_gpio_keys_node,
+	.properties = rsk7203_sw3_key_props,
+};
+
+static const struct software_node *rsk7203_swnodes[] __initdata = {
+	&rsk7203_gpiochip_node,
+	&rsk7203_gpio_leds_node,
+	&rsk7203_green_led_node,
+	&rsk7203_orange_led_node,
+	&rsk7203_red1_led_node,
+	&rsk7203_red2_led_node,
+	&rsk7203_gpio_keys_node,
+	&rsk7203_sw1_key_node,
+	&rsk7203_sw2_key_node,
+	&rsk7203_sw3_key_node,
+	NULL
+};
+
+struct rsk7203_device_info {
+	struct platform_device_info info;
+	const struct software_node *node;
+};
+
+static const struct rsk7203_device_info rsk7203_devices[] __initconst = {
 	{
-		.name			= "green",
-		.gpio			= GPIO_PE10,
-		.active_low		= 1,
-	}, {
-		.name			= "orange",
-		.default_trigger	= "nand-disk",
-		.gpio			= GPIO_PE12,
-		.active_low		= 1,
-	}, {
-		.name			= "red:timer",
-		.default_trigger	= "timer",
-		.gpio			= GPIO_PC14,
-		.active_low		= 1,
-	}, {
-		.name			= "red:heartbeat",
-		.default_trigger	= "heartbeat",
-		.gpio			= GPIO_PE11,
-		.active_low		= 1,
+		.info = {
+			.name		= "smsc911x",
+			.id		= PLATFORM_DEVID_NONE,
+			.res		= smsc911x_resources,
+			.num_res	= ARRAY_SIZE(smsc911x_resources),
+			.data		= &smsc911x_config,
+			.size_data	= sizeof(smsc911x_config),
+		},
 	},
-};
-
-static struct gpio_led_platform_data rsk7203_gpio_leds_info = {
-	.leds		= rsk7203_gpio_leds,
-	.num_leds	= ARRAY_SIZE(rsk7203_gpio_leds),
-};
-
-static struct platform_device led_device = {
-	.name		= "leds-gpio",
-	.id		= -1,
-	.dev		= {
-		.platform_data	= &rsk7203_gpio_leds_info,
-	},
-};
-
-static struct gpio_keys_button rsk7203_gpio_keys_table[] = {
 	{
-		.code		= BTN_0,
-		.gpio		= GPIO_PB0,
-		.active_low	= 1,
-		.desc		= "SW1",
-	}, {
-		.code		= BTN_1,
-		.gpio		= GPIO_PB1,
-		.active_low	= 1,
-		.desc		= "SW2",
-	}, {
-		.code		= BTN_2,
-		.gpio		= GPIO_PB2,
-		.active_low	= 1,
-		.desc		= "SW3",
+		.info = {
+			.name		= "leds-gpio",
+			.id		= PLATFORM_DEVID_NONE,
+		},
+		.node = &rsk7203_gpio_leds_node,
 	},
-};
-
-static struct gpio_keys_platform_data rsk7203_gpio_keys_info = {
-	.buttons	= rsk7203_gpio_keys_table,
-	.nbuttons	= ARRAY_SIZE(rsk7203_gpio_keys_table),
-	.poll_interval	= 50, /* default to 50ms */
-};
-
-static struct platform_device keys_device = {
-	.name		= "gpio-keys-polled",
-	.dev		= {
-		.platform_data	= &rsk7203_gpio_keys_info,
+	{
+		.info = {
+			.name		= "gpio-keys-polled",
+		},
+		.node = &rsk7203_gpio_keys_node,
 	},
-};
-
-static struct platform_device *rsk7203_devices[] __initdata = {
-	&smsc911x_device,
-	&led_device,
-	&keys_device,
 };
 
 static int __init rsk7203_devices_setup(void)
 {
+	struct platform_device *pd;
+	int error;
+	int i;
+
 	/* Select pins for SCIF0 */
 	gpio_request(GPIO_FN_TXD0, NULL);
 	gpio_request(GPIO_FN_RXD0, NULL);
@@ -131,7 +206,27 @@ static int __init rsk7203_devices_setup(void)
 	__raw_writel(0x36db0400, 0xfffc0008); /* CS1BCR */
 	gpio_request(GPIO_FN_IRQ0_PB, NULL);
 
-	return platform_add_devices(rsk7203_devices,
-				    ARRAY_SIZE(rsk7203_devices));
+	error = software_node_register_node_group(rsk7203_swnodes);
+	if (error) {
+		pr_err("failed to register software nodes: %d\n", error);
+		return error;
+	}
+
+	for (i = 0; i < ARRAY_SIZE(rsk7203_devices); i++) {
+		struct platform_device_info info = rsk7203_devices[i].info;
+
+		if (rsk7203_devices[i].node)
+			info.fwnode = software_node_fwnode(rsk7203_devices[i].node);
+
+		pd = platform_device_register_full(&info);
+		error = PTR_ERR_OR_ZERO(pd);
+		if (error) {
+			pr_err("failed to create platform device %s: %d\n",
+			       info.name, error);
+			return error;
+		}
+	}
+
+	return 0;
 }
 device_initcall(rsk7203_devices_setup);
