@@ -9,6 +9,8 @@
 #include "core.h"
 #include "devlink.h"
 #include "dpll.h"
+#include "flash.h"
+#include "fw.h"
 #include "regs.h"
 
 /**
@@ -141,11 +143,74 @@ void zl3073x_devlink_flash_notify(struct zl3073x_dev *zldev, const char *msg,
 					   total);
 }
 
+/**
+ * zl3073x_flash_update - Devlink flash update callback
+ * @devlink: devlink structure pointer
+ * @params: flashing parameters pointer
+ * @extack: netlink extack pointer to report errors
+ *
+ * Returns 0 in case of success or negative value otherwise
+ */
+static int
+zl3073x_devlink_flash_update(struct devlink *devlink,
+			     struct devlink_flash_update_params *params,
+			     struct netlink_ext_ack *extack)
+{
+	struct zl3073x_dev *zldev = devlink_priv(devlink);
+	struct zl3073x_fw_component *util;
+	struct zl3073x_fw *zlfw;
+	int rc = 0;
+
+	/* Load firmware */
+	zlfw = zl3073x_fw_load(zldev, params->fw->data, params->fw->size,
+			       extack);
+	if (IS_ERR(zlfw))
+		return PTR_ERR(zlfw);
+
+	util = zlfw->component[ZL_FW_COMPONENT_UTIL];
+	if (!util) {
+		zl3073x_devlink_flash_notify(zldev,
+					     "Utility is missing in firmware",
+					     NULL, 0, 0);
+		rc = -EOPNOTSUPP;
+		goto error;
+	}
+
+	/* Stop normal operation during flash */
+	zl3073x_dev_stop(zldev);
+
+	/* Enter flashing mode */
+	rc = zl3073x_flash_mode_enter(zldev, util->data, util->size, extack);
+	if (!rc) {
+		/* Flash the firmware */
+		rc = zl3073x_fw_flash(zldev, zlfw, extack);
+
+		/* Leave flashing mode */
+		zl3073x_flash_mode_leave(zldev, extack);
+	}
+
+	/* Restart normal operation */
+	rc = zl3073x_dev_start(zldev, true);
+	if (rc)
+		dev_warn(zldev->dev, "Failed to re-start normal operation\n");
+
+error:
+	/* Free flash context */
+	zl3073x_fw_free(zlfw);
+
+	zl3073x_devlink_flash_notify(zldev,
+				     rc ? "Flashing failed" : "Flashing done",
+				     NULL, 0, 0);
+
+	return rc;
+}
+
 static const struct devlink_ops zl3073x_devlink_ops = {
 	.info_get = zl3073x_devlink_info_get,
 	.reload_actions = BIT(DEVLINK_RELOAD_ACTION_DRIVER_REINIT),
 	.reload_down = zl3073x_devlink_reload_down,
 	.reload_up = zl3073x_devlink_reload_up,
+	.flash_update = zl3073x_devlink_flash_update,
 };
 
 static void
