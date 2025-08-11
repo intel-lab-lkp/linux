@@ -3471,6 +3471,12 @@ static int may_open(struct mnt_idmap *idmap, const struct path *path,
 			return -EACCES;
 		break;
 	default:
+		/* Special handling for ntfs_read_mft() case. */
+		if (inode->i_sb->s_magic == 0x7366746e) {
+			if ((acc_mode & MAY_EXEC) && path_noexec(path))
+				return -EACCES;
+			break;
+		}
 		VFS_BUG_ON_INODE(!IS_ANON_FILE(inode), inode);
 	}
 
