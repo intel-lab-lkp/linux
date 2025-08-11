@@ -128,8 +128,7 @@ static unsigned int __init _intc_prio_data(struct intc_desc *desc,
 			} else {
 				fn = REG_FN_MODIFY_BASE;
 				mode = MODE_PRIO_REG;
-				if (!pr->set_reg)
-					BUG();
+				BUG_ON(!pr->set_reg);
 				reg_e = pr->set_reg;
 				reg_d = pr->set_reg;
 			}
