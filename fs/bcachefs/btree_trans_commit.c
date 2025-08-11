@@ -396,7 +396,7 @@ btree_key_can_insert_cached_slowpath(struct btree_trans *trans, unsigned flags,
 	bch2_trans_unlock_updates_write(trans);
 	bch2_trans_unlock(trans);
 
-	new_k = kmalloc(new_u64s * sizeof(u64), GFP_KERNEL);
+	new_k = kmalloc_array(new_u64s, sizeof(u64), GFP_KERNEL);
 	if (!new_k) {
 		struct bch_fs *c = trans->c;
 		bch_err(c, "error allocating memory for key cache key, btree %s u64s %u",
