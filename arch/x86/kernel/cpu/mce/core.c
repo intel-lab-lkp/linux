@@ -1951,8 +1951,11 @@ static void apply_quirks_amd(struct cpuinfo_x86 *c)
 	if (c->x86 == 0x15 && c->x86_model <= 0xf)
 		mce_flags.overflow_recov = 1;
 
-	if (c->x86 >= 0x17 && c->x86 <= 0x1A)
-		mce_flags.zen_ifu_quirk = 1;
+	mce_flags.zen_ifu_quirk = cpu_feature_enabled(X86_FEATURE_ZEN1) ||
+				  cpu_feature_enabled(X86_FEATURE_ZEN2) ||
+				  cpu_feature_enabled(X86_FEATURE_ZEN3) ||
+				  cpu_feature_enabled(X86_FEATURE_ZEN4) ||
+				  cpu_feature_enabled(X86_FEATURE_ZEN5);
 }
 
 static void apply_quirks_intel(struct cpuinfo_x86 *c)
