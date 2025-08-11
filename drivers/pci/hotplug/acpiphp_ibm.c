@@ -140,11 +140,8 @@ static union apci_descriptor *ibm_slot_from_id(int id)
 		ret = des;
 
 ibm_slot_done:
-	if (ret) {
-		ret = kmalloc(sizeof(union apci_descriptor), GFP_KERNEL);
-		if (ret)
-			memcpy(ret, des, sizeof(union apci_descriptor));
-	}
+	if (ret)
+		ret = kmemdup(des, sizeof(union apci_descriptor), GFP_KERNEL);
 	kfree(table);
 	return ret;
 }
