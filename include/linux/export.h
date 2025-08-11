@@ -25,7 +25,7 @@
 #endif
 
 /*
- * LLVM integrated assembler cam merge adjacent string literals (like
+ * LLVM integrated assembler can merge adjacent string literals (like
  * C and GNU-as) passed to '.ascii', but not to '.asciz' and chokes on:
  *
  *   .asciz "MODULE_" "kvm" ;
