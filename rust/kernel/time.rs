@@ -28,6 +28,7 @@ use core::marker::PhantomData;
 
 pub mod delay;
 pub mod hrtimer;
+pub mod poll;
 
 /// The number of nanoseconds per microsecond.
 pub const NSEC_PER_USEC: i64 = bindings::NSEC_PER_USEC as i64;
