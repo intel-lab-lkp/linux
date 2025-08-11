@@ -158,6 +158,12 @@ static int loongarch_pch_pic_read(struct loongarch_pch_pic *s, gpa_t addr, int l
 	case PCH_PIC_POLARITY_START ... PCH_PIC_POLARITY_END:
 		data = s->polarity;
 		break;
+	case PCH_PIC_INT_IRR_START:
+		data = s->irr;
+		break;
+	case PCH_PIC_INT_ISR_START:
+		data = s->isr;
+		break;
 	default:
 		ret = -EINVAL;
 	}
