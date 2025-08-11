@@ -41,9 +41,16 @@ enum kasan_arg_vmalloc {
 	KASAN_ARG_VMALLOC_ON,
 };
 
+enum kasan_arg_stonly {
+	KASAN_ARG_STONLY_DEFAULT,
+	KASAN_ARG_STONLY_OFF,
+	KASAN_ARG_STONLY_ON,
+};
+
 static enum kasan_arg kasan_arg __ro_after_init;
 static enum kasan_arg_mode kasan_arg_mode __ro_after_init;
 static enum kasan_arg_vmalloc kasan_arg_vmalloc __initdata;
+static enum kasan_arg_stonly kasan_arg_stonly __ro_after_init;
 
 /*
  * Whether the selected mode is synchronous, asynchronous, or asymmetric.
@@ -59,6 +66,9 @@ DEFINE_STATIC_KEY_TRUE(kasan_flag_vmalloc);
 DEFINE_STATIC_KEY_FALSE(kasan_flag_vmalloc);
 #endif
 EXPORT_SYMBOL_GPL(kasan_flag_vmalloc);
+
+DEFINE_STATIC_KEY_FALSE(kasan_flag_stonly);
+EXPORT_SYMBOL_GPL(kasan_flag_stonly);
 
 #define PAGE_ALLOC_SAMPLE_DEFAULT	1
 #define PAGE_ALLOC_SAMPLE_ORDER_DEFAULT	3
@@ -133,6 +143,23 @@ static int __init early_kasan_flag_vmalloc(char *arg)
 	return 0;
 }
 early_param("kasan.vmalloc", early_kasan_flag_vmalloc);
+
+/* kasan.stonly=off/on */
+static int __init early_kasan_flag_stonly(char *arg)
+{
+	if (!arg)
+		return -EINVAL;
+
+	if (!strcmp(arg, "off"))
+		kasan_arg_stonly = KASAN_ARG_STONLY_OFF;
+	else if (!strcmp(arg, "on"))
+		kasan_arg_stonly = KASAN_ARG_STONLY_ON;
+	else
+		return -EINVAL;
+
+	return 0;
+}
+early_param("kasan.stonly", early_kasan_flag_stonly);
 
 static inline const char *kasan_mode_info(void)
 {
@@ -212,6 +239,20 @@ void kasan_init_hw_tags_cpu(void)
 	kasan_enable_hw_tags();
 }
 
+/*
+ * kasan_late_init_hw_tags_cpu_post() is called for each CPU after
+ * all cpus are bring-up at boot.
+ * Not marked as __init as a CPU can be hot-plugged after boot.
+ */
+void kasan_late_init_hw_tags_cpu(void)
+{
+	/*
+	 * Enable stonly mode only when explicitly requested through the command line.
+	 * If system doesn't support, kasan checks all operation.
+	 */
+	kasan_enable_stonly();
+}
+
 /* kasan_init_hw_tags() is called once on boot CPU. */
 void __init kasan_init_hw_tags(void)
 {
@@ -250,15 +291,28 @@ void __init kasan_init_hw_tags(void)
 		break;
 	}
 
+	switch (kasan_arg_stonly) {
+	case KASAN_ARG_STONLY_DEFAULT:
+		/* Default is specified by kasan_flag_stonly definition. */
+		break;
+	case KASAN_ARG_STONLY_OFF:
+		static_branch_disable(&kasan_flag_stonly);
+		break;
+	case KASAN_ARG_STONLY_ON:
+		static_branch_enable(&kasan_flag_stonly);
+		break;
+	}
+
 	kasan_init_tags();
 
 	/* KASAN is now initialized, enable it. */
 	kasan_enable();
 
-	pr_info("KernelAddressSanitizer initialized (hw-tags, mode=%s, vmalloc=%s, stacktrace=%s)\n",
+	pr_info("KernelAddressSanitizer initialized (hw-tags, mode=%s, vmalloc=%s, stacktrace=%s stonly=%s\n",
 		kasan_mode_info(),
 		str_on_off(kasan_vmalloc_enabled()),
-		str_on_off(kasan_stack_collection_enabled()));
+		str_on_off(kasan_stack_collection_enabled()),
+		str_on_off(kasan_stonly_enabled()));
 }
 
 #ifdef CONFIG_KASAN_VMALLOC
@@ -387,6 +441,22 @@ void kasan_enable_hw_tags(void)
 		hw_enable_tag_checks_sync();
 }
 
+void kasan_enable_stonly(void)
+{
+	if (kasan_arg_stonly == KASAN_ARG_STONLY_ON) {
+		if (hw_enable_tag_checks_stonly()) {
+			static_branch_disable(&kasan_flag_stonly);
+			kasan_arg_stonly = KASAN_ARG_STONLY_OFF;
+			pr_warn_once("KernelAddressSanitizer: store only mode isn't supported (hw-tags)\n");
+		}
+	}
+}
+
+bool kasan_stonly_enabled(void)
+{
+	return static_branch_unlikely(&kasan_flag_stonly);
+}
+
 #if IS_ENABLED(CONFIG_KASAN_KUNIT_TEST)
 
 EXPORT_SYMBOL_IF_KUNIT(kasan_enable_hw_tags);
@@ -396,5 +466,7 @@ VISIBLE_IF_KUNIT void kasan_force_async_fault(void)
 	hw_force_async_tag_fault();
 }
 EXPORT_SYMBOL_IF_KUNIT(kasan_force_async_fault);
+
+EXPORT_SYMBOL_IF_KUNIT(kasan_stonly_enabled);
 
 #endif
