@@ -141,8 +141,19 @@ __nlm4svc_proc_lock(struct svc_rqst *rqstp, struct nlm_res *resp)
 	resp->cookie = argp->cookie;
 
 	/* Obtain client and file */
-	if ((resp->status = nlm4svc_retrieve_args(rqstp, argp, &host, &file)))
-		return resp->status == nlm_drop_reply ? rpc_drop_reply :rpc_success;
+	resp->status = nlm4svc_retrieve_args(rqstp, argp, &host, &file);
+	switch (resp->status) {
+	case 0:
+		break;
+	case nlm_drop_reply:
+		if (locks_in_grace(SVC_NET(rqstp))) {
+			resp->status = nlm_lck_denied_grace_period;
+			return rpc_success;
+		}
+		return nlm_drop_reply;
+	default:
+		return rpc_success;
+	}
 
 	/* Now try to lock the file */
 	resp->status = nlmsvc_lock(rqstp, file, host, &argp->lock,
