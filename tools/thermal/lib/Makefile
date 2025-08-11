@@ -128,7 +128,7 @@ install_lib: libs
 
 install_headers:
 	$(call QUIET_INSTALL, headers) \
-		$(call do_install,include/thermal.h,$(prefix)/include/thermal,644); \
+		$(call do_install,thermal-tools.h,$(prefix)/include/thermal,644); \
 
 install_pkgconfig: $(LIBTHERMAL_TOOLS_PC)
 	$(call QUIET_INSTALL, $(LIBTHERMAL_TOOLS_PC)) \
