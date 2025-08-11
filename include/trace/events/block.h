@@ -41,7 +41,7 @@ DECLARE_EVENT_CLASS(block_buffer,
 
 	TP_printk("%d,%d sector=%llu size=%zu",
 		MAJOR(__entry->dev), MINOR(__entry->dev),
-		(unsigned long long)__entry->sector, __entry->size
+		__entry->sector, __entry->size
 	)
 );
 
@@ -108,7 +108,7 @@ TRACE_EVENT(block_rq_requeue,
 	TP_printk("%d,%d %s (%s) %llu + %u %s,%u,%u [%d]",
 		  MAJOR(__entry->dev), MINOR(__entry->dev),
 		  __entry->rwbs, __get_str(cmd),
-		  (unsigned long long)__entry->sector, __entry->nr_sector,
+		  __entry->sector, __entry->nr_sector,
 		  __print_symbolic(IOPRIO_PRIO_CLASS(__entry->ioprio),
 				   IOPRIO_CLASS_STRINGS),
 		  IOPRIO_PRIO_HINT(__entry->ioprio),
@@ -145,7 +145,7 @@ DECLARE_EVENT_CLASS(block_rq_completion,
 	TP_printk("%d,%d %s (%s) %llu + %u %s,%u,%u [%d]",
 		  MAJOR(__entry->dev), MINOR(__entry->dev),
 		  __entry->rwbs, __get_str(cmd),
-		  (unsigned long long)__entry->sector, __entry->nr_sector,
+		  __entry->sector, __entry->nr_sector,
 		  __print_symbolic(IOPRIO_PRIO_CLASS(__entry->ioprio),
 				   IOPRIO_CLASS_STRINGS),
 		  IOPRIO_PRIO_HINT(__entry->ioprio),
@@ -219,7 +219,7 @@ DECLARE_EVENT_CLASS(block_rq,
 	TP_printk("%d,%d %s %u (%s) %llu + %u %s,%u,%u [%s]",
 		  MAJOR(__entry->dev), MINOR(__entry->dev),
 		  __entry->rwbs, __entry->bytes, __get_str(cmd),
-		  (unsigned long long)__entry->sector, __entry->nr_sector,
+		  __entry->sector, __entry->nr_sector,
 		  __print_symbolic(IOPRIO_PRIO_CLASS(__entry->ioprio),
 				   IOPRIO_CLASS_STRINGS),
 		  IOPRIO_PRIO_HINT(__entry->ioprio),
@@ -328,8 +328,7 @@ TRACE_EVENT(block_bio_complete,
 
 	TP_printk("%d,%d %s %llu + %u [%d]",
 		  MAJOR(__entry->dev), MINOR(__entry->dev), __entry->rwbs,
-		  (unsigned long long)__entry->sector,
-		  __entry->nr_sector, __entry->error)
+		  __entry->sector, __entry->nr_sector, __entry->error)
 );
 
 DECLARE_EVENT_CLASS(block_bio,
@@ -356,8 +355,7 @@ DECLARE_EVENT_CLASS(block_bio,
 
 	TP_printk("%d,%d %s %llu + %u [%s]",
 		  MAJOR(__entry->dev), MINOR(__entry->dev), __entry->rwbs,
-		  (unsigned long long)__entry->sector,
-		  __entry->nr_sector, __entry->comm)
+		  __entry->sector, __entry->nr_sector, __entry->comm)
 );
 
 /**
@@ -509,9 +507,7 @@ TRACE_EVENT(block_split,
 
 	TP_printk("%d,%d %s %llu / %llu [%s]",
 		  MAJOR(__entry->dev), MINOR(__entry->dev), __entry->rwbs,
-		  (unsigned long long)__entry->sector,
-		  (unsigned long long)__entry->new_sector,
-		  __entry->comm)
+		  __entry->sector, __entry->new_sector, __entry->comm)
 );
 
 /**
@@ -549,10 +545,9 @@ TRACE_EVENT(block_bio_remap,
 
 	TP_printk("%d,%d %s %llu + %u <- (%d,%d) %llu",
 		  MAJOR(__entry->dev), MINOR(__entry->dev), __entry->rwbs,
-		  (unsigned long long)__entry->sector,
-		  __entry->nr_sector,
+		  __entry->sector, __entry->nr_sector,
 		  MAJOR(__entry->old_dev), MINOR(__entry->old_dev),
-		  (unsigned long long)__entry->old_sector)
+		  __entry->old_sector)
 );
 
 /**
@@ -593,10 +588,9 @@ TRACE_EVENT(block_rq_remap,
 
 	TP_printk("%d,%d %s %llu + %u <- (%d,%d) %llu %u",
 		  MAJOR(__entry->dev), MINOR(__entry->dev), __entry->rwbs,
-		  (unsigned long long)__entry->sector,
-		  __entry->nr_sector,
+		  __entry->sector, __entry->nr_sector,
 		  MAJOR(__entry->old_dev), MINOR(__entry->old_dev),
-		  (unsigned long long)__entry->old_sector, __entry->nr_bios)
+		  __entry->old_sector, __entry->nr_bios)
 );
 
 /**
@@ -630,8 +624,7 @@ TRACE_EVENT(blkdev_zone_mgmt,
 
 	TP_printk("%d,%d %s %llu + %llu",
 		  MAJOR(__entry->dev), MINOR(__entry->dev), __entry->rwbs,
-		  (unsigned long long)__entry->sector,
-		  __entry->nr_sectors)
+		  __entry->sector, __entry->nr_sectors)
 );
 
 DECLARE_EVENT_CLASS(block_zwplug,
@@ -657,8 +650,7 @@ DECLARE_EVENT_CLASS(block_zwplug,
 
 	TP_printk("%d,%d zone %u, BIO %llu + %u",
 		  MAJOR(__entry->dev), MINOR(__entry->dev), __entry->zno,
-		  (unsigned long long)__entry->sector,
-		  __entry->nr_sectors)
+		  __entry->sector, __entry->nr_sectors)
 );
 
 DEFINE_EVENT(block_zwplug, disk_zone_wplug_add_bio,
