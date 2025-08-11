@@ -141,6 +141,12 @@ static void savic_setup(void)
 	enum es_result res;
 	unsigned long gpa;
 
+	/*
+	 * Before Secure AVIC is enabled, APIC msr reads are intercepted.
+	 * APIC_ID msr read returns the value from the Hypervisor.
+	 */
+	apic_set_reg(ap, APIC_ID, native_apic_msr_read(APIC_ID));
+
 	gpa = __pa(ap);
 
 	/*
