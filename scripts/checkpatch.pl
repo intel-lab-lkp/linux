@@ -859,6 +859,7 @@ our %deprecated_apis = (
 	"kunmap_atomic"				=> "kunmap_local",
 	"srcu_read_lock_lite"			=> "srcu_read_lock_fast",
 	"srcu_read_unlock_lite"			=> "srcu_read_unlock_fast",
+	"container_of"				=> "container_of_const",
 );
 
 #Create a search pattern for all these strings to speed up a loop below
