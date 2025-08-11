@@ -73,8 +73,17 @@
 #define LOONGSON_NAND_READ_ID_TIMEOUT_US	5000
 
 #define LOONGSON_NAND_64BIT_DMA		BIT(0)
+#define LOONGSON_NAND_DMA_CONFIG	BIT(1)
 
 #define BITS_PER_WORD			(4 * BITS_PER_BYTE)
+
+/* Loongson-2K1000 NAND DMA routing register */
+#define LS2K1000_NAND_DMA_MASK         GENMASK(2, 0)
+#define LS2K1000_DMA0_CONF             0x0
+#define LS2K1000_DMA1_CONF             0x1
+#define LS2K1000_DMA2_CONF             0x2
+#define LS2K1000_DMA3_CONF             0x3
+#define LS2K1000_DMA4_CONF             0x4
 
 struct loongson_nand_host;
 
@@ -768,6 +777,23 @@ static void loongson_nand_controller_cleanup(struct loongson_nand_host *host)
 		dma_release_channel(host->dma_chan);
 }
 
+static int ls2k1000_nand_apbdma_config(struct device *dev)
+{
+	struct platform_device *pdev = to_platform_device(dev);
+	void __iomem *regs;
+	int val;
+
+	regs = devm_platform_ioremap_resource(pdev, 2);
+	if (IS_ERR(regs))
+		return PTR_ERR(regs);
+
+	val = readl(regs);
+	val |= FIELD_PREP(LS2K1000_NAND_DMA_MASK, LS2K1000_DMA0_CONF);
+	writel(val, regs);
+
+	return 0;
+}
+
 static int loongson_nand_controller_init(struct loongson_nand_host *host)
 {
 	struct device *dev = host->dev;
@@ -785,6 +811,12 @@ static int loongson_nand_controller_init(struct loongson_nand_host *host)
 
 	if (host->data->flags & LOONGSON_NAND_64BIT_DMA)
 		dma_set_mask_and_coherent(dev, DMA_BIT_MASK(64));
+
+	if (host->data->flags & LOONGSON_NAND_DMA_CONFIG) {
+		ret = ls2k1000_nand_apbdma_config(dev);
+		if (ret)
+			return ret;
+	}
 
 	chan = dma_request_chan(dev, "rxtx");
 	if (IS_ERR(chan))
@@ -950,6 +982,18 @@ static const struct loongson_nand_data ls2k0500_nand_data = {
 	.set_addr = ls1c_nand_set_addr,
 };
 
+static const struct loongson_nand_data ls2k1000_nand_data = {
+	.max_id_cycle = 6,
+	.id_cycle_field = GENMASK(14, 12),
+	.status_field = GENMASK(23, 16),
+	.op_scope_field = GENMASK(29, 16),
+	.hold_cycle = 0x4,
+	.wait_cycle = 0x12,
+	.nand_cs = 0x2,
+	.flags = LOONGSON_NAND_64BIT_DMA | LOONGSON_NAND_DMA_CONFIG,
+	.set_addr = ls1c_nand_set_addr,
+};
+
 static const struct of_device_id loongson_nand_match[] = {
 	{
 		.compatible = "loongson,ls1b-nand-controller",
@@ -962,6 +1006,10 @@ static const struct of_device_id loongson_nand_match[] = {
 	{
 		.compatible = "loongson,ls2k0500-nand-controller",
 		.data = &ls2k0500_nand_data,
+	},
+	{
+		.compatible = "loongson,ls2k1000-nand-controller",
+		.data = &ls2k1000_nand_data,
 	},
 	{ /* sentinel */ }
 };
