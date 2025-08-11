@@ -301,7 +301,7 @@ static void io_zcrx_sync_for_device(const struct page_pool *pool,
 	if (!dma_dev_need_sync(pool->p.dev))
 		return;
 
-	dma_addr = page_pool_get_dma_addr_netmem(net_iov_to_netmem(niov));
+	dma_addr = page_pool_get_dma_addr_nmdesc(&niov->desc);
 	__dma_sync_single_for_device(pool->p.dev, dma_addr + pool->p.offset,
 				     PAGE_SIZE, pool->p.dma_dir);
 #endif
@@ -752,7 +752,6 @@ static void io_zcrx_ring_refill(struct page_pool *pp,
 {
 	unsigned int mask = ifq->rq_entries - 1;
 	unsigned int entries;
-	netmem_ref netmem;
 
 	spin_lock_bh(&ifq->rq_lock);
 
@@ -784,8 +783,7 @@ static void io_zcrx_ring_refill(struct page_pool *pp,
 		if (!io_zcrx_put_niov_uref(niov))
 			continue;
 
-		netmem = net_iov_to_netmem(niov);
-		if (page_pool_unref_netmem(netmem, 1) != 0)
+		if (page_pool_unref_nmdesc(&niov->desc, 1) != 0)
 			continue;
 
 		if (unlikely(niov->pp != pp)) {
@@ -794,7 +792,7 @@ static void io_zcrx_ring_refill(struct page_pool *pp,
 		}
 
 		io_zcrx_sync_for_device(pp, niov);
-		net_mp_netmem_place_in_cache(pp, netmem);
+		net_mp_netmem_place_in_cache(pp, net_iov_to_netmem(niov));
 	} while (--entries);
 
 	smp_store_release(&ifq->rq_ring->head, ifq->cached_rq_head);
@@ -950,7 +948,7 @@ static struct net_iov *io_zcrx_alloc_fallback(struct io_zcrx_area *area)
 	spin_unlock_bh(&area->freelist_lock);
 
 	if (niov)
-		page_pool_fragment_netmem(net_iov_to_netmem(niov), 1);
+		page_pool_fragment_nmdesc(&niov->desc, 1);
 	return niov;
 }
 
@@ -1070,7 +1068,7 @@ static int io_zcrx_recv_frag(struct io_kiocb *req, struct io_zcrx_ifq *ifq,
 	 * Prevent it from being recycled while user is accessing it.
 	 * It has to be done before grabbing a user reference.
 	 */
-	page_pool_ref_netmem(net_iov_to_netmem(niov));
+	page_pool_ref_nmdesc(&niov->desc);
 	io_zcrx_get_niov_uref(niov);
 	return len;
 }
