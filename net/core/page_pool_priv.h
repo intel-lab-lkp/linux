@@ -18,17 +18,18 @@ void page_pool_unlist(struct page_pool *pool);
 static inline bool
 page_pool_set_dma_addr_netmem(netmem_ref netmem, dma_addr_t addr)
 {
+	struct netmem_desc *desc = netmem_to_nmdesc(netmem);
+
 	if (PAGE_POOL_32BIT_ARCH_WITH_64BIT_DMA) {
-		netmem_set_dma_addr(netmem, addr >> PAGE_SHIFT);
+		desc->dma_addr = addr >> PAGE_SHIFT;
 
 		/* We assume page alignment to shave off bottom bits,
 		 * if this "compression" doesn't work we need to drop.
 		 */
-		return addr != (dma_addr_t)netmem_get_dma_addr(netmem)
-				       << PAGE_SHIFT;
+		return addr != desc->dma_addr << PAGE_SHIFT;
 	}
 
-	netmem_set_dma_addr(netmem, addr);
+	desc->dma_addr = addr;
 	return false;
 }
 

@@ -425,14 +425,22 @@ static inline void page_pool_free_va(struct page_pool *pool, void *va,
 	page_pool_put_page(pool, virt_to_head_page(va), -1, allow_direct);
 }
 
-static inline dma_addr_t page_pool_get_dma_addr_netmem(netmem_ref netmem)
+static inline dma_addr_t
+page_pool_get_dma_addr_nmdesc(const struct netmem_desc *nmdesc)
 {
-	dma_addr_t ret = netmem_get_dma_addr(netmem);
+	dma_addr_t ret = nmdesc->dma_addr;
 
 	if (PAGE_POOL_32BIT_ARCH_WITH_64BIT_DMA)
 		ret <<= PAGE_SHIFT;
 
 	return ret;
+}
+
+static inline dma_addr_t page_pool_get_dma_addr_netmem(netmem_ref netmem)
+{
+	const struct netmem_desc *desc = netmem_to_nmdesc(netmem);
+
+	return page_pool_get_dma_addr_nmdesc(desc);
 }
 
 /**

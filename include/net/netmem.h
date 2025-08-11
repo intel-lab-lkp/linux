@@ -389,11 +389,6 @@ static inline bool netmem_is_pfmemalloc(netmem_ref netmem)
 	return page_is_pfmemalloc(netmem_to_page(netmem));
 }
 
-static inline unsigned long netmem_get_dma_addr(netmem_ref netmem)
-{
-	return netmem_to_nmdesc(netmem)->dma_addr;
-}
-
 void get_netmem(netmem_ref netmem);
 void put_netmem(netmem_ref netmem);
 

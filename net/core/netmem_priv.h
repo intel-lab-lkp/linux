@@ -30,12 +30,6 @@ static inline void netmem_set_pp(netmem_ref netmem, struct page_pool *pool)
 	netmem_to_nmdesc(netmem)->pp = pool;
 }
 
-static inline void netmem_set_dma_addr(netmem_ref netmem,
-				       unsigned long dma_addr)
-{
-	netmem_to_nmdesc(netmem)->dma_addr = dma_addr;
-}
-
 static inline unsigned long netmem_get_dma_index(netmem_ref netmem)
 {
 	unsigned long magic;
