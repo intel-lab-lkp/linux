@@ -89,6 +89,26 @@ static void cmdline_add_elfcorehdr(struct kimage *image, unsigned long *cmdline_
 	*cmdline_tmplen += elfcorehdr_strlen;
 }
 
+/*
+ * Adds the "mem=size@start" command line parameter to command line, indicating the
+ * memory region the new kernel can use to boot into.
+ */
+static void cmdline_add_mem(struct kimage *image, unsigned long *cmdline_tmplen,
+				char *modified_cmdline)
+{
+	int mem_strlen = 0;
+
+	mem_strlen = sprintf(modified_cmdline + (*cmdline_tmplen), "mem=0x%llx@0x%llx ",
+		crashk_res.end - crashk_res.start + 1, crashk_res.start);
+	*cmdline_tmplen += mem_strlen;
+
+	if (crashk_low_res.end) {
+		mem_strlen = sprintf(modified_cmdline + (*cmdline_tmplen), "mem=0x%llx@0x%llx ",
+			crashk_low_res.end - crashk_low_res.start + 1, crashk_low_res.start);
+		*cmdline_tmplen += mem_strlen;
+	}
+}
+
 #endif
 
 /* Adds the "initrd=start,size" command line parameter to command line. */
@@ -136,6 +156,7 @@ int load_other_segments(struct kimage *image,
 	/* load elf core header */
 	void *headers;
 	unsigned long headers_sz;
+
 	if (image->type == KEXEC_TYPE_CRASH) {
 		ret = prepare_elf_headers(&headers, &headers_sz);
 		if (ret) {
@@ -165,6 +186,9 @@ int load_other_segments(struct kimage *image,
 
 		/* Add the elfcorehdr=size@start parameter to the command line */
 		cmdline_add_elfcorehdr(image, &cmdline_tmplen, modified_cmdline, headers_sz);
+
+		/* Add the mem=size@start parameter to the command line */
+		cmdline_add_mem(image, &cmdline_tmplen, modified_cmdline);
 	}
 #endif
 
