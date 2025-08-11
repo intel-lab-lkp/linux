@@ -109,7 +109,7 @@ static void mask_module_irq(struct mtk_devapc_context *ctx, bool mask)
  *                       info to VIO_DBGs registers.
  *
  */
-static int devapc_sync_vio_dbg(struct mtk_devapc_context *ctx)
+static bool devapc_sync_vio_dbg(struct mtk_devapc_context *ctx)
 {
 	void __iomem *pd_vio_shift_sta_reg;
 	void __iomem *pd_vio_shift_sel_reg;
