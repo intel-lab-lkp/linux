@@ -316,10 +316,10 @@ static int vboxsf_write_end(const struct kiocb *iocb,
 	if (!folio_test_uptodate(folio) && copied < len)
 		folio_zero_range(folio, from + copied, len - copied);
 
-	buf = kmap(&folio->page);
+	buf = kmap_local_folio(folio, 0);
 	err = vboxsf_write(sf_handle->root, sf_handle->handle,
 			   pos, &nwritten, buf + from);
-	kunmap(&folio->page);
+	kunmap_local(buf);
 
 	if (err) {
 		nwritten = 0;
