@@ -248,7 +248,7 @@ acpi_ut_display_predefined_method(char *buffer,
 	printf("%4.4s    Requires %s%u argument%s",
 	       this_name->info.name,
 	       (this_name->info.argument_list & ARG_COUNT_IS_MINIMUM) ?
-	       "(at least) " : "", arg_count, arg_count != 1 ? "s" : "");
+	       "(at least) " : "", arg_count, str_plural(arg_count));
 
 	/* Display the types for any arguments */
 
