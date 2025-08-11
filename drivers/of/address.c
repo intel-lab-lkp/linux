@@ -515,8 +515,10 @@ static u64 __of_translate_address(struct device_node *node,
 	if (parent == NULL)
 		return OF_BAD_ADDR;
 	bus = of_match_bus(parent);
-	if (!bus)
+	if (!bus) {
+		pr_err("of_match_bus failed for device node(%pOF)\n", parent);
 		return OF_BAD_ADDR;
+	}
 
 	/* Count address cells & copy address locally */
 	bus->count_cells(dev, &na, &ns);
@@ -560,8 +562,10 @@ static u64 __of_translate_address(struct device_node *node,
 
 		/* Get new parent bus and counts */
 		pbus = of_match_bus(parent);
-		if (!pbus)
+		if (!pbus) {
+			pr_err("of_match_bus failed for device node(%pOF)\n", parent);
 			return OF_BAD_ADDR;
+		}
 		pbus->count_cells(dev, &pna, &pns);
 		if (!OF_CHECK_COUNTS(pna, pns)) {
 			pr_err("Bad cell count for %pOF\n", dev);
