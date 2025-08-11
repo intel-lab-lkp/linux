@@ -1811,7 +1811,7 @@ static int do_cpuid_func(struct kvm_cpuid_array *array, u32 func,
 	return __do_cpuid_func(array, func);
 }
 
-#define CENTAUR_CPUID_SIGNATURE 0xC0000000
+#define ZHAOXIN_CPUID_SIGNATURE 0xC0000000
 
 static int get_cpuid_func(struct kvm_cpuid_array *array, u32 func,
 			  unsigned int type)
@@ -1819,8 +1819,9 @@ static int get_cpuid_func(struct kvm_cpuid_array *array, u32 func,
 	u32 limit;
 	int r;
 
-	if (func == CENTAUR_CPUID_SIGNATURE &&
-	    boot_cpu_data.x86_vendor != X86_VENDOR_CENTAUR)
+	if (func == ZHAOXIN_CPUID_SIGNATURE &&
+		boot_cpu_data.x86_vendor != X86_VENDOR_CENTAUR &&
+		boot_cpu_data.x86_vendor != X86_VENDOR_ZHAOXIN)
 		return 0;
 
 	r = do_cpuid_func(array, func, type);
@@ -1869,7 +1870,7 @@ int kvm_dev_ioctl_get_cpuid(struct kvm_cpuid2 *cpuid,
 			    unsigned int type)
 {
 	static const u32 funcs[] = {
-		0, 0x80000000, CENTAUR_CPUID_SIGNATURE, KVM_CPUID_SIGNATURE,
+		0, 0x80000000, ZHAOXIN_CPUID_SIGNATURE, KVM_CPUID_SIGNATURE,
 	};
 
 	struct kvm_cpuid_array array = {
