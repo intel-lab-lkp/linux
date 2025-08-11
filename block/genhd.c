@@ -1074,19 +1074,19 @@ ssize_t part_stat_show(struct device *dev,
 	}
 	part_stat_read_all(bdev, &stat);
 	return sysfs_emit(buf,
-		"%8lu %8lu %8llu %8u "
-		"%8lu %8lu %8llu %8u "
+		"%8lu %8lu %8lu %8u "
+		"%8lu %8lu %8lu %8u "
 		"%8u %8u %8u "
-		"%8lu %8lu %8llu %8u "
+		"%8lu %8lu %8lu %8u "
 		"%8lu %8u"
 		"\n",
 		stat.ios[STAT_READ],
 		stat.merges[STAT_READ],
-		(unsigned long long)stat.sectors[STAT_READ],
+		stat.sectors[STAT_READ],
 		(unsigned int)div_u64(stat.nsecs[STAT_READ], NSEC_PER_MSEC),
 		stat.ios[STAT_WRITE],
 		stat.merges[STAT_WRITE],
-		(unsigned long long)stat.sectors[STAT_WRITE],
+		stat.sectors[STAT_WRITE],
 		(unsigned int)div_u64(stat.nsecs[STAT_WRITE], NSEC_PER_MSEC),
 		inflight,
 		jiffies_to_msecs(stat.io_ticks),
@@ -1097,7 +1097,7 @@ ssize_t part_stat_show(struct device *dev,
 						NSEC_PER_MSEC),
 		stat.ios[STAT_DISCARD],
 		stat.merges[STAT_DISCARD],
-		(unsigned long long)stat.sectors[STAT_DISCARD],
+		stat.sectors[STAT_DISCARD],
 		(unsigned int)div_u64(stat.nsecs[STAT_DISCARD], NSEC_PER_MSEC),
 		stat.ios[STAT_FLUSH],
 		(unsigned int)div_u64(stat.nsecs[STAT_FLUSH], NSEC_PER_MSEC));
