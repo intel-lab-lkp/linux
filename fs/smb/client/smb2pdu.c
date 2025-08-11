@@ -4094,9 +4094,10 @@ smb2_echo_callback(struct mid_q_entry *mid)
 	struct TCP_Server_Info *server = mid->callback_data;
 	struct smb2_echo_rsp *rsp = (struct smb2_echo_rsp *)mid->resp_buf;
 	struct cifs_credits credits = { .value = 0, .instance = 0 };
+	int mid_state = READ_ONCE(mid->mid_state);
 
-	if (mid->mid_state == MID_RESPONSE_RECEIVED
-	    || mid->mid_state == MID_RESPONSE_MALFORMED) {
+	if (mid_state == MID_RESPONSE_RECEIVED
+	    || mid_state == MID_RESPONSE_MALFORMED) {
 		credits.value = le16_to_cpu(rsp->hdr.CreditRequest);
 		credits.instance = server->reconnect_instance;
 	}
@@ -4533,6 +4534,7 @@ smb2_readv_callback(struct mid_q_entry *mid)
 	struct smb_rqst rqst = { .rq_iov = &rdata->iov[1], .rq_nvec = 1 };
 	unsigned int rreq_debug_id = rdata->rreq->debug_id;
 	unsigned int subreq_debug_index = rdata->subreq.debug_index;
+	int mid_state = READ_ONCE(mid->mid_state);
 
 	if (rdata->got_bytes) {
 		rqst.rq_iter	  = rdata->subreq.io_iter;
@@ -4543,10 +4545,10 @@ smb2_readv_callback(struct mid_q_entry *mid)
 		  rdata->server, mid->server);
 
 	cifs_dbg(FYI, "%s: mid=%llu state=%d result=%d bytes=%zu/%zu\n",
-		 __func__, mid->mid, mid->mid_state, rdata->result,
+		 __func__, mid->mid, mid_state, rdata->result,
 		 rdata->got_bytes, rdata->subreq.len - rdata->subreq.transferred);
 
-	switch (mid->mid_state) {
+	switch (mid_state) {
 	case MID_RESPONSE_RECEIVED:
 		credits.value = le16_to_cpu(shdr->CreditRequest);
 		credits.instance = server->reconnect_instance;

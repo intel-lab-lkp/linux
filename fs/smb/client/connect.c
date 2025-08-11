@@ -324,8 +324,8 @@ cifs_abort_connection(struct TCP_Server_Info *server)
 	spin_lock(&server->mid_queue_lock);
 	list_for_each_entry_safe(mid, nmid, &server->pending_mid_q, qhead) {
 		kref_get(&mid->refcount);
-		if (mid->mid_state == MID_REQUEST_SUBMITTED)
-			mid->mid_state = MID_RETRY_NEEDED;
+		if (READ_ONCE(mid->mid_state) == MID_REQUEST_SUBMITTED)
+			WRITE_ONCE(mid->mid_state, MID_RETRY_NEEDED);
 		list_move(&mid->qhead, &retry_list);
 		mid->deleted_from_q = true;
 	}
@@ -918,7 +918,7 @@ is_smb_response(struct TCP_Server_Info *server, unsigned char type)
 			list_for_each_entry_safe(mid, nmid, &dispose_list, qhead) {
 				list_del_init(&mid->qhead);
 				mid->mid_rc = mid_rc;
-				mid->mid_state = MID_RC;
+				WRITE_ONCE(mid->mid_state, MID_RC);
 				mid_execute_callback(mid);
 				release_mid(mid);
 			}
@@ -957,15 +957,14 @@ dequeue_mid(struct mid_q_entry *mid, bool malformed)
 #ifdef CONFIG_CIFS_STATS2
 	mid->when_received = jiffies;
 #endif
-	spin_lock(&mid->server->mid_queue_lock);
-	if (!malformed)
-		mid->mid_state = MID_RESPONSE_RECEIVED;
-	else
-		mid->mid_state = MID_RESPONSE_MALFORMED;
+	WRITE_ONCE(mid->mid_state, malformed ? MID_RESPONSE_MALFORMED :
+		   MID_RESPONSE_RECEIVED);
 	/*
 	 * Trying to handle/dequeue a mid after the send_recv()
 	 * function has finished processing it is a bug.
 	 */
+
+	spin_lock(&mid->server->mid_queue_lock);
 	if (mid->deleted_from_q == true) {
 		spin_unlock(&mid->server->mid_queue_lock);
 		pr_warn_once("trying to dequeue a deleted mid\n");
@@ -1106,7 +1105,7 @@ clean_demultiplex_info(struct TCP_Server_Info *server)
 			mid_entry = list_entry(tmp, struct mid_q_entry, qhead);
 			cifs_dbg(FYI, "Clearing mid %llu\n", mid_entry->mid);
 			kref_get(&mid_entry->refcount);
-			mid_entry->mid_state = MID_SHUTDOWN;
+			WRITE_ONCE(mid_entry->mid_state, MID_SHUTDOWN);
 			list_move(&mid_entry->qhead, &dispose_list);
 			mid_entry->deleted_from_q = true;
 		}

@@ -66,7 +66,7 @@ alloc_mid(const struct smb_hdr *smb_buffer, struct TCP_Server_Info *server)
 	temp->callback_data = current;
 
 	atomic_inc(&mid_count);
-	temp->mid_state = MID_REQUEST_ALLOCATED;
+	WRITE_ONCE(temp->mid_state, MID_REQUEST_ALLOCATED);
 	return temp;
 }
 
@@ -330,7 +330,7 @@ SendReceive(const unsigned int xid, struct cifs_ses *ses,
 		goto out;
 	}
 
-	midQ->mid_state = MID_REQUEST_SUBMITTED;
+	WRITE_ONCE(midQ->mid_state, MID_REQUEST_SUBMITTED);
 
 	rc = smb_send(server, in_buf, len);
 	cifs_save_when_sent(midQ);
@@ -364,7 +364,7 @@ SendReceive(const unsigned int xid, struct cifs_ses *ses,
 	}
 
 	if (!midQ->resp_buf || !out_buf ||
-	    midQ->mid_state != MID_RESPONSE_READY) {
+	    READ_ONCE(midQ->mid_state) != MID_RESPONSE_READY) {
 		rc = -EIO;
 		cifs_server_dbg(VFS, "Bad MID state?\n");
 		goto out;
@@ -403,6 +403,36 @@ send_lock_cancel(const unsigned int xid, struct cifs_tcon *tcon,
 
 	return SendReceive(xid, ses, in_buf, out_buf,
 			&bytes_returned, 0);
+}
+
+static inline bool cifs_blocking_lock_should_exit(struct mid_q_entry *midQ,
+					struct TCP_Server_Info *server)
+{
+	int mid_state = READ_ONCE(midQ->mid_state);
+	int tcp_status = READ_ONCE(server->tcpStatus);
+
+	if (mid_state != MID_REQUEST_SUBMITTED &&
+		mid_state != MID_RESPONSE_RECEIVED)
+		return true;
+
+	if (tcp_status != CifsGood && tcp_status != CifsNew)
+		return true;
+
+	return false;
+}
+
+static inline bool cifs_blocking_lock_can_cancel(struct mid_q_entry *midQ,
+					struct TCP_Server_Info *server)
+{
+	int mid_state = READ_ONCE(midQ->mid_state);
+	int tcp_status = READ_ONCE(server->tcpStatus);
+	/* Can only cancel if still pending */
+	bool still_pending = (mid_state == MID_REQUEST_SUBMITTED ||
+			mid_state == MID_RESPONSE_RECEIVED);
+	/* Can only cancel if server connection is good */
+	bool server_good = (tcp_status == CifsGood || tcp_status == CifsNew);
+
+	return still_pending && server_good;
 }
 
 int
@@ -472,7 +502,7 @@ SendReceiveBlockingLock(const unsigned int xid, struct cifs_tcon *tcon,
 		return rc;
 	}
 
-	midQ->mid_state = MID_REQUEST_SUBMITTED;
+	WRITE_ONCE(midQ->mid_state, MID_REQUEST_SUBMITTED);
 	rc = smb_send(server, in_buf, len);
 	cifs_save_when_sent(midQ);
 
@@ -488,18 +518,12 @@ SendReceiveBlockingLock(const unsigned int xid, struct cifs_tcon *tcon,
 
 	/* Wait for a reply - allow signals to interrupt. */
 	rc = wait_event_interruptible(server->response_q,
-		(!(midQ->mid_state == MID_REQUEST_SUBMITTED ||
-		   midQ->mid_state == MID_RESPONSE_RECEIVED)) ||
-		((server->tcpStatus != CifsGood) &&
-		 (server->tcpStatus != CifsNew)));
+		cifs_blocking_lock_should_exit(midQ, server));
 
 	/* Were we interrupted by a signal ? */
 	spin_lock(&server->srv_lock);
 	if ((rc == -ERESTARTSYS) &&
-		(midQ->mid_state == MID_REQUEST_SUBMITTED ||
-		 midQ->mid_state == MID_RESPONSE_RECEIVED) &&
-		((server->tcpStatus == CifsGood) ||
-		 (server->tcpStatus == CifsNew))) {
+	     cifs_blocking_lock_can_cancel(midQ, server)) {
 		spin_unlock(&server->srv_lock);
 
 		if (in_buf->Command == SMB_COM_TRANSACTION2) {
@@ -548,7 +572,7 @@ SendReceiveBlockingLock(const unsigned int xid, struct cifs_tcon *tcon,
 		return rc;
 
 	/* rcvd frame is ok */
-	if (out_buf == NULL || midQ->mid_state != MID_RESPONSE_READY) {
+	if (out_buf == NULL || READ_ONCE(midQ->mid_state) != MID_RESPONSE_READY) {
 		rc = -EIO;
 		cifs_tcon_dbg(VFS, "Bad MID state?\n");
 		goto out;

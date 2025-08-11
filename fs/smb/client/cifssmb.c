@@ -1311,12 +1311,13 @@ cifs_readv_callback(struct mid_q_entry *mid)
 		.rreq_debug_id = rdata->rreq->debug_id,
 		.rreq_debug_index = rdata->subreq.debug_index,
 	};
+	int mid_state = READ_ONCE(mid->mid_state);
 
 	cifs_dbg(FYI, "%s: mid=%llu state=%d result=%d bytes=%zu\n",
-		 __func__, mid->mid, mid->mid_state, rdata->result,
+		 __func__, mid->mid, mid_state, rdata->result,
 		 rdata->subreq.len);
 
-	switch (mid->mid_state) {
+	switch (mid_state) {
 	case MID_RESPONSE_RECEIVED:
 		/* result already set, check signature */
 		if (server->sign) {
@@ -1696,8 +1697,9 @@ cifs_writev_callback(struct mid_q_entry *mid)
 	};
 	ssize_t result;
 	size_t written;
+	int mid_state = READ_ONCE(mid->mid_state);
 
-	switch (mid->mid_state) {
+	switch (mid_state) {
 	case MID_RESPONSE_RECEIVED:
 		result = cifs_check_receive(mid, tcon->ses->server, 0);
 		if (result != 0)

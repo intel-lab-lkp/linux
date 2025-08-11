@@ -98,7 +98,7 @@ cifs_find_mid(struct TCP_Server_Info *server, char *buffer)
 	spin_lock(&server->mid_queue_lock);
 	list_for_each_entry(mid, &server->pending_mid_q, qhead) {
 		if (compare_mid(mid->mid, buf) &&
-		    mid->mid_state == MID_REQUEST_SUBMITTED &&
+		    READ_ONCE(mid->mid_state) == MID_REQUEST_SUBMITTED &&
 		    le16_to_cpu(mid->command) == buf->Command) {
 			kref_get(&mid->refcount);
 			spin_unlock(&server->mid_queue_lock);
@@ -201,7 +201,8 @@ cifs_get_next_mid(struct TCP_Server_Info *server)
 		list_for_each_entry(mid_entry, &server->pending_mid_q, qhead) {
 			++num_mids;
 			if (mid_entry->mid == cur_mid &&
-			    mid_entry->mid_state == MID_REQUEST_SUBMITTED) {
+			    READ_ONCE(mid_entry->mid_state) ==
+				      MID_REQUEST_SUBMITTED) {
 				/* This mid is in use, try a different one */
 				collision = true;
 				break;

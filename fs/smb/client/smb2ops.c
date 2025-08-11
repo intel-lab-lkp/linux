@@ -404,7 +404,7 @@ __smb2_find_mid(struct TCP_Server_Info *server, char *buf, bool dequeue)
 	spin_lock(&server->mid_queue_lock);
 	list_for_each_entry(mid, &server->pending_mid_q, qhead) {
 		if ((mid->mid == wire_mid) &&
-		    (mid->mid_state == MID_REQUEST_SUBMITTED) &&
+		    (READ_ONCE(mid->mid_state) == MID_REQUEST_SUBMITTED) &&
 		    (mid->command == shdr->Command)) {
 			kref_get(&mid->refcount);
 			if (dequeue) {
@@ -4663,7 +4663,7 @@ handle_read_data(struct TCP_Server_Info *server, struct mid_q_entry *mid,
 			 __func__, rdata->result);
 		/* normal error on read response */
 		if (is_offloaded)
-			mid->mid_state = MID_RESPONSE_RECEIVED;
+			WRITE_ONCE(mid->mid_state, MID_RESPONSE_RECEIVED);
 		else
 			dequeue_mid(mid, false);
 		return 0;
@@ -4690,7 +4690,7 @@ handle_read_data(struct TCP_Server_Info *server, struct mid_q_entry *mid,
 			 __func__, data_offset);
 		rdata->result = -EIO;
 		if (is_offloaded)
-			mid->mid_state = MID_RESPONSE_MALFORMED;
+			WRITE_ONCE(mid->mid_state, MID_RESPONSE_MALFORMED);
 		else
 			dequeue_mid(mid, rdata->result);
 		return 0;
@@ -4709,7 +4709,7 @@ handle_read_data(struct TCP_Server_Info *server, struct mid_q_entry *mid,
 				 __func__, data_offset);
 			rdata->result = -EIO;
 			if (is_offloaded)
-				mid->mid_state = MID_RESPONSE_MALFORMED;
+				WRITE_ONCE(mid->mid_state, MID_RESPONSE_MALFORMED);
 			else
 				dequeue_mid(mid, rdata->result);
 			return 0;
@@ -4719,7 +4719,7 @@ handle_read_data(struct TCP_Server_Info *server, struct mid_q_entry *mid,
 			/* data_len is corrupt -- discard frame */
 			rdata->result = -EIO;
 			if (is_offloaded)
-				mid->mid_state = MID_RESPONSE_MALFORMED;
+				WRITE_ONCE(mid->mid_state, MID_RESPONSE_MALFORMED);
 			else
 				dequeue_mid(mid, rdata->result);
 			return 0;
@@ -4730,7 +4730,7 @@ handle_read_data(struct TCP_Server_Info *server, struct mid_q_entry *mid,
 							 cur_off, &rdata->subreq.io_iter);
 		if (rdata->result != 0) {
 			if (is_offloaded)
-				mid->mid_state = MID_RESPONSE_MALFORMED;
+				WRITE_ONCE(mid->mid_state, MID_RESPONSE_MALFORMED);
 			else
 				dequeue_mid(mid, rdata->result);
 			return 0;
@@ -4749,14 +4749,14 @@ handle_read_data(struct TCP_Server_Info *server, struct mid_q_entry *mid,
 		WARN_ONCE(1, "buf can not contain only a part of read data");
 		rdata->result = -EIO;
 		if (is_offloaded)
-			mid->mid_state = MID_RESPONSE_MALFORMED;
+			WRITE_ONCE(mid->mid_state, MID_RESPONSE_MALFORMED);
 		else
 			dequeue_mid(mid, rdata->result);
 		return 0;
 	}
 
 	if (is_offloaded)
-		mid->mid_state = MID_RESPONSE_RECEIVED;
+		WRITE_ONCE(mid->mid_state, MID_RESPONSE_RECEIVED);
 	else
 		dequeue_mid(mid, false);
 	return 0;
@@ -4809,14 +4809,12 @@ static void smb2_decrypt_offload(struct work_struct *work)
 		} else {
 			spin_lock(&dw->server->srv_lock);
 			if (dw->server->tcpStatus == CifsNeedReconnect) {
-				spin_lock(&dw->server->mid_queue_lock);
-				mid->mid_state = MID_RETRY_NEEDED;
-				spin_unlock(&dw->server->mid_queue_lock);
 				spin_unlock(&dw->server->srv_lock);
+				WRITE_ONCE(mid->mid_state, MID_RETRY_NEEDED);
 				mid_execute_callback(mid);
 			} else {
 				spin_lock(&dw->server->mid_queue_lock);
-				mid->mid_state = MID_REQUEST_SUBMITTED;
+				WRITE_ONCE(mid->mid_state, MID_REQUEST_SUBMITTED);
 				mid->deleted_from_q = false;
 				list_add_tail(&mid->qhead,
 					&dw->server->pending_mid_q);

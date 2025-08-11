@@ -33,8 +33,8 @@
 void
 cifs_wake_up_task(struct mid_q_entry *mid)
 {
-	if (mid->mid_state == MID_RESPONSE_RECEIVED)
-		mid->mid_state = MID_RESPONSE_READY;
+	if (READ_ONCE(mid->mid_state) == MID_RESPONSE_RECEIVED)
+		WRITE_ONCE(mid->mid_state, MID_RESPONSE_READY);
 	wake_up_process(mid->callback_data);
 }
 
@@ -49,14 +49,15 @@ void __release_mid(struct kref *refcount)
 	unsigned long roundtrip_time;
 #endif
 	struct TCP_Server_Info *server = midEntry->server;
+	int mid_state = READ_ONCE(midEntry->mid_state);
 
 	if (midEntry->resp_buf && (midEntry->wait_cancelled) &&
-	    (midEntry->mid_state == MID_RESPONSE_RECEIVED ||
-	     midEntry->mid_state == MID_RESPONSE_READY) &&
+	    (mid_state == MID_RESPONSE_RECEIVED ||
+	     mid_state == MID_RESPONSE_READY) &&
 	    server->ops->handle_cancelled_mid)
 		server->ops->handle_cancelled_mid(midEntry, server);
 
-	midEntry->mid_state = MID_FREE;
+	WRITE_ONCE(midEntry->mid_state, MID_FREE);
 	atomic_dec(&mid_count);
 	if (midEntry->large_buf)
 		cifs_buf_release(midEntry->resp_buf);
@@ -633,13 +634,20 @@ cifs_wait_mtu_credits(struct TCP_Server_Info *server, size_t size,
 	return 0;
 }
 
+static inline bool cifs_mid_response_ready(struct mid_q_entry *mid)
+{
+	int mid_state = READ_ONCE(mid->mid_state);
+
+	return (mid_state != MID_REQUEST_SUBMITTED &&
+		mid_state != MID_RESPONSE_RECEIVED);
+}
+
 int wait_for_response(struct TCP_Server_Info *server, struct mid_q_entry *midQ)
 {
 	int error;
 
 	error = wait_event_state(server->response_q,
-				 midQ->mid_state != MID_REQUEST_SUBMITTED &&
-				 midQ->mid_state != MID_RESPONSE_RECEIVED,
+				 cifs_mid_response_ready(midQ),
 				 (TASK_KILLABLE|TASK_FREEZABLE_UNSAFE));
 	if (error < 0)
 		return -ERESTARTSYS;
@@ -698,7 +706,7 @@ cifs_call_async(struct TCP_Server_Info *server, struct smb_rqst *rqst,
 	mid->callback = callback;
 	mid->callback_data = cbdata;
 	mid->handle = handle;
-	mid->mid_state = MID_REQUEST_SUBMITTED;
+	WRITE_ONCE(mid->mid_state, MID_REQUEST_SUBMITTED);
 
 	/* put it on the pending_mid_q */
 	spin_lock(&server->mid_queue_lock);
@@ -730,14 +738,13 @@ cifs_call_async(struct TCP_Server_Info *server, struct smb_rqst *rqst,
 int cifs_sync_mid_result(struct mid_q_entry *mid, struct TCP_Server_Info *server)
 {
 	int rc = 0;
+	int state = READ_ONCE(mid->mid_state);
 
 	cifs_dbg(FYI, "%s: cmd=%d mid=%llu state=%d\n",
-		 __func__, le16_to_cpu(mid->command), mid->mid, mid->mid_state);
+		 __func__, le16_to_cpu(mid->command), mid->mid, state);
 
-	spin_lock(&server->mid_queue_lock);
-	switch (mid->mid_state) {
+	switch (state) {
 	case MID_RESPONSE_READY:
-		spin_unlock(&server->mid_queue_lock);
 		return rc;
 	case MID_RETRY_NEEDED:
 		rc = -EAGAIN;
@@ -752,17 +759,17 @@ int cifs_sync_mid_result(struct mid_q_entry *mid, struct TCP_Server_Info *server
 		rc = mid->mid_rc;
 		break;
 	default:
+		spin_lock(&server->mid_queue_lock);
 		if (mid->deleted_from_q == false) {
 			list_del_init(&mid->qhead);
 			mid->deleted_from_q = true;
 		}
 		spin_unlock(&server->mid_queue_lock);
 		cifs_server_dbg(VFS, "%s: invalid mid state mid=%llu state=%d\n",
-			 __func__, mid->mid, mid->mid_state);
+			 __func__, mid->mid, state);
 		rc = -EIO;
 		goto sync_mid_done;
 	}
-	spin_unlock(&server->mid_queue_lock);
 
 sync_mid_done:
 	release_mid(mid);
@@ -780,8 +787,8 @@ cifs_compound_callback(struct mid_q_entry *mid)
 
 	add_credits(server, &credits, mid->optype);
 
-	if (mid->mid_state == MID_RESPONSE_RECEIVED)
-		mid->mid_state = MID_RESPONSE_READY;
+	if (READ_ONCE(mid->mid_state) == MID_RESPONSE_RECEIVED)
+		WRITE_ONCE(mid->mid_state, MID_RESPONSE_READY);
 }
 
 static void
@@ -938,7 +945,7 @@ compound_send_recv(const unsigned int xid, struct cifs_ses *ses,
 			return PTR_ERR(midQ[i]);
 		}
 
-		midQ[i]->mid_state = MID_REQUEST_SUBMITTED;
+		WRITE_ONCE(midQ[i]->mid_state, MID_REQUEST_SUBMITTED);
 		midQ[i]->optype = optype;
 		/*
 		 * Invoke callback for every part of the compound chain
@@ -1028,7 +1035,7 @@ compound_send_recv(const unsigned int xid, struct cifs_ses *ses,
 		}
 
 		if (!midQ[i]->resp_buf ||
-		    midQ[i]->mid_state != MID_RESPONSE_READY) {
+		    READ_ONCE(midQ[i]->mid_state) != MID_RESPONSE_READY) {
 			rc = -EIO;
 			cifs_dbg(FYI, "Bad MID state?\n");
 			goto out;
