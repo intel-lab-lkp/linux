@@ -52,7 +52,7 @@ static void tegra_cpuidle_report_cpus_state(void)
 {
 	unsigned long cpu, lcpu, csr;
 
-	for_each_cpu(lcpu, cpu_possible_mask) {
+	for_each_possible_cpu(lcpu) {
 		cpu = cpu_logical_map(lcpu);
 		csr = flowctrl_read_cpu_csr(cpu);
 
@@ -98,7 +98,7 @@ static void tegra_cpuidle_unpark_secondary_cpus(void)
 {
 	unsigned int cpu, lcpu;
 
-	for_each_cpu(lcpu, cpu_online_mask) {
+	for_each_online_cpu(lcpu) {
 		cpu = cpu_logical_map(lcpu);
 
 		if (cpu > 0) {
