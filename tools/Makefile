@@ -152,7 +152,7 @@ tmon_install:
 thermometer_install:
 	$(call descend,thermal/$(@:_install=),install)
 
-thermal-engine_install:
+thermal-engine_install: thermal_install
 	$(call descend,thermal/$(@:_install=),install)
 
 freefall_install:
@@ -209,7 +209,7 @@ turbostat_clean x86_energy_perf_policy_clean intel-speed-select_clean:
 thermometer_clean:
 	$(call descend,thermal/thermometer,clean)
 
-thermal-engine_clean:
+thermal-engine_clean: thermal_clean
 	$(call descend,thermal/thermal-engine,clean)
 
 tmon_clean:
