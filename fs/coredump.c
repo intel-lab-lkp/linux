@@ -1076,13 +1076,8 @@ static void coredump_cleanup(struct core_name *cn, struct coredump_params *cprm)
 static inline bool coredump_skip(const struct coredump_params *cprm,
 				 const struct linux_binfmt *binfmt)
 {
-	if (!binfmt)
-		return true;
-	if (!binfmt->core_dump)
-		return true;
-	if (!__get_dumpable(cprm->mm_flags))
-		return true;
-	return false;
+	return (!binfmt || !binfmt->core_dump ||
+		!__get_dumpable(cprm->mm_flags));
 }
 
 void vfs_coredump(const kernel_siginfo_t *siginfo)
