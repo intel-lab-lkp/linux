@@ -47,13 +47,18 @@ else
 endif
 
 INCLUDES = \
--I/usr/include/libnl3 \
 -I$(srctree)/tools/lib/thermal/include \
 -I$(srctree)/tools/lib/ \
 -I$(srctree)/tools/include \
 -I$(srctree)/tools/arch/$(SRCARCH)/include/ \
 -I$(srctree)/tools/arch/$(SRCARCH)/include/uapi \
 -I$(srctree)/tools/include/uapi
+
+VAR_INCLUDES = $(shell pkg-config --cflags libnl-3.0 libnl-genl-3.0 2>/dev/null)
+ifeq ($(VAR_INCLUDES),)
+VAR_INCLUDES = -I/usr/include/libnl3
+endif
+override CFLAGS += $(VAR_INCLUDES)
 
 # Append required CFLAGS
 override CFLAGS += $(EXTRA_WARNINGS)
