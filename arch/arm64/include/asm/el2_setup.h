@@ -48,6 +48,11 @@
 	isb
 .endm
 
+.macro __init_el2_sctlr2
+	init_sctlr2_elx	2, x0
+	isb
+.endm
+
 .macro __init_el2_hcrx
 	mrs	x0, id_aa64mmfr1_el1
 	ubfx	x0, x0, #ID_AA64MMFR1_EL1_HCX_SHIFT, #4
@@ -411,6 +416,7 @@
  */
 .macro init_el2_state
 	__init_el2_sctlr
+	__init_el2_sctlr2
 	__init_el2_hcrx
 	__init_el2_timers
 	__init_el2_debug

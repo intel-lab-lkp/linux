@@ -868,6 +868,8 @@
 #define INIT_SCTLR_EL2_MMU_OFF \
 	(SCTLR_EL2_RES1 | ENDIAN_SET_EL2)
 
+#define INIT_SCTLR2_EL2			UL(0)
+
 /* SCTLR_EL1 specific flags. */
 #ifdef CONFIG_CPU_BIG_ENDIAN
 #define ENDIAN_SET_EL1		(SCTLR_EL1_E0E | SCTLR_ELx_EE)
@@ -887,6 +889,8 @@
 	 ENDIAN_SET_EL1   | SCTLR_EL1_UCI    | SCTLR_EL1_EPAN  | \
 	 SCTLR_EL1_LSMAOE | SCTLR_EL1_nTLSMD | SCTLR_EL1_EIS   | \
 	 SCTLR_EL1_TSCXT  | SCTLR_EL1_EOS)
+
+#define INIT_SCTLR2_EL1			UL(0)
 
 /* MAIR_ELx memory attributes (used by Linux) */
 #define MAIR_ATTR_DEVICE_nGnRnE		UL(0x00)
@@ -1163,6 +1167,24 @@
 #else
 	msr	hcr_el2, \reg
 #endif
+	.endm
+
+	.macro init_sctlr2_elx, el, tmp
+	mrs_s	\tmp, SYS_ID_AA64MMFR3_EL1
+	ubfx	\tmp, \tmp, #ID_AA64MMFR3_EL1_SCTLRX_SHIFT, #4
+	cbz	\tmp, .Lskip_sctlr2_\@
+	.if	\el == 2
+	mov_q	\tmp, INIT_SCTLR2_EL2
+	msr_s	SYS_SCTLR_EL2, \tmp
+	.else
+	mov_q	\tmp, INIT_SCTLR2_EL1
+	.if	\el == 12
+	msr_s	SYS_SCTLR_EL12, \tmp
+	.else
+	msr_s	SYS_SCTLR_EL1, \tmp
+	.endif
+	.endif
+.Lskip_sctlr2_\@:
 	.endm
 #else
 
