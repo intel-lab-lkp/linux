@@ -221,6 +221,7 @@ DECLARE_EVENT_CLASS(error_ltl_monitor_cpu,
 
 	TP_printk("cpu%u: violation detected", __entry->cpu)
 );
+#include <monitors/rts/rts_trace.h>
 // Add new monitors based on CONFIG_LTL_MON_EVENTS_CPU here
 
 #endif /* CONFIG_LTL_MON_EVENTS_CPU */

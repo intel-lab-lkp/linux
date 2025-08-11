@@ -131,3 +131,22 @@ special cases:
     real-time-safe because preemption is disabled for the duration.
   - `FUTEX_LOCK_PI` is included in the allowlist for the same reason as
     `BLOCK_ON_RT_MUTEX`.
+
+Monitor rts
++++++++++++
+
+The real-time scheduling monitor validates that tasks with real-time scheduling
+policies (`SCHED_FIFO` and `SCHED_RR`) are always scheduled before tasks with
+normal and extensible scheduling policies (`SCHED_OTHER`, `SCHED_BATCH`,
+`SCHED_IDLE`, `SCHED_EXT`):
+
+.. literalinclude:: ../../../tools/verification/models/rtapp/rts.ltl
+
+Note that this monitor may report errors if real-time throttling or fair
+deadline server is enabled. These mechanisms prevent real-time tasks from
+monopolying the CPU by giving tasks with normal and extensible scheduling
+policies a chance to run. They give system administrators a chance to kill a
+misbehaved real-time task. However, they violate the scheduling priorities and
+may cause latency to well-behaved real-time tasks. Thus, if you see errors from
+this monitor, consider disabling real-time throttling and the fair deadline
+server.
