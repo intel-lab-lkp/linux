@@ -7429,6 +7429,9 @@ __bpf_kfunc struct rq *scx_bpf_cpu_rq(s32 cpu)
 	if (!kf_cpu_valid(cpu, NULL))
 		return NULL;
 
+	pr_warn_once("%s() is deprecated in favor of scx_bpf_cpu_rq_locked() or "
+		     "scx_bpf_task_acquire_remote_curr() for unlocked remote curr\n",
+		     __func__);
 	return cpu_rq(cpu);
 }
 
