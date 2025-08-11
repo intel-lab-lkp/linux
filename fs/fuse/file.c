@@ -1167,9 +1167,10 @@ static ssize_t fuse_fill_write_pages(struct fuse_io_args *ia,
 		pgoff_t index = pos >> PAGE_SHIFT;
 		unsigned int bytes;
 		unsigned int folio_offset;
+		fgf_t fgp = FGP_WRITEBEGIN | fgf_set_order(num);
 
  again:
-		folio = __filemap_get_folio(mapping, index, FGP_WRITEBEGIN,
+		folio = __filemap_get_folio(mapping, index, fgp,
 					    mapping_gfp_mask(mapping));
 		if (IS_ERR(folio)) {
 			err = PTR_ERR(folio);
@@ -3155,11 +3156,24 @@ void fuse_init_file_inode(struct inode *inode, unsigned int flags)
 {
 	struct fuse_inode *fi = get_fuse_inode(inode);
 	struct fuse_conn *fc = get_fuse_conn(inode);
+	unsigned int max_pages, max_order;
 
 	inode->i_fop = &fuse_file_operations;
 	inode->i_data.a_ops = &fuse_file_aops;
-	if (fc->writeback_cache)
+	if (fc->writeback_cache) {
 		mapping_set_writeback_may_deadlock_on_reclaim(&inode->i_data);
+	} else {
+		/*
+		 * Large folios are only enabled if the writeback cache isn't on.
+		 * If the writeback cache is on, large folios should only be
+		 * enabled in conjunction with strictlimiting turned off, else
+		 * performance tanks.
+		 */
+		max_pages = min(min(fc->max_write, fc->max_read) >> PAGE_SHIFT,
+				fc->max_pages);
+		max_order = ilog2(max_pages);
+		mapping_set_folio_order_range(inode->i_mapping, 0, max_order);
+	}
 
 	INIT_LIST_HEAD(&fi->write_files);
 	INIT_LIST_HEAD(&fi->queued_writes);
