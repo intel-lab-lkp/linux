@@ -300,7 +300,7 @@ static int fsl_pamu_attach_device(struct iommu_domain *domain,
 static int fsl_pamu_platform_attach(struct iommu_domain *platform_domain,
 				    struct device *dev)
 {
-	struct iommu_domain *domain = iommu_get_domain_for_dev(dev);
+	struct iommu_domain *domain = iommu_get_domain_for_dev_locked(dev);
 	struct fsl_dma_domain *dma_domain;
 	const u32 *prop;
 	int len;

@@ -639,7 +639,7 @@ static int ipmmu_attach_device(struct iommu_domain *io_domain,
 static int ipmmu_iommu_identity_attach(struct iommu_domain *identity_domain,
 				       struct device *dev)
 {
-	struct iommu_domain *io_domain = iommu_get_domain_for_dev(dev);
+	struct iommu_domain *io_domain = iommu_get_domain_for_dev_locked(dev);
 	struct iommu_fwspec *fwspec = dev_iommu_fwspec_get(dev);
 	struct ipmmu_vmsa_domain *domain;
 	unsigned int i;

@@ -775,7 +775,7 @@ err_unlock:
 static int mtk_iommu_identity_attach(struct iommu_domain *identity_domain,
 				     struct device *dev)
 {
-	struct iommu_domain *domain = iommu_get_domain_for_dev(dev);
+	struct iommu_domain *domain = iommu_get_domain_for_dev_locked(dev);
 	struct mtk_iommu_data *data = dev_iommu_priv_get(dev);
 
 	if (domain == identity_domain || !domain)

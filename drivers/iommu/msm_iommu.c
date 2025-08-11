@@ -443,7 +443,7 @@ fail:
 static int msm_iommu_identity_attach(struct iommu_domain *identity_domain,
 				     struct device *dev)
 {
-	struct iommu_domain *domain = iommu_get_domain_for_dev(dev);
+	struct iommu_domain *domain = iommu_get_domain_for_dev_locked(dev);
 	struct msm_priv *priv;
 	unsigned long flags;
 	struct msm_iommu_dev *iommu;

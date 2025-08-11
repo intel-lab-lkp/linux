@@ -1538,7 +1538,7 @@ static void _omap_iommu_detach_dev(struct omap_iommu_domain *omap_domain,
 static int omap_iommu_identity_attach(struct iommu_domain *identity_domain,
 				      struct device *dev)
 {
-	struct iommu_domain *domain = iommu_get_domain_for_dev(dev);
+	struct iommu_domain *domain = iommu_get_domain_for_dev_locked(dev);
 	struct omap_iommu_domain *omap_domain;
 
 	if (domain == identity_domain || !domain)

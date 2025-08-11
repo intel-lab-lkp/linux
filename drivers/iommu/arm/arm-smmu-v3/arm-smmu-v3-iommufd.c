@@ -145,7 +145,7 @@ static int arm_smmu_attach_dev_nested(struct iommu_domain *domain,
 	struct arm_smmu_master *master = dev_iommu_priv_get(dev);
 	struct arm_smmu_attach_state state = {
 		.master = master,
-		.old_domain = iommu_get_domain_for_dev(dev),
+		.old_domain = iommu_get_domain_for_dev_locked(dev),
 		.ssid = IOMMU_NO_PASID,
 	};
 	struct arm_smmu_ste ste;
