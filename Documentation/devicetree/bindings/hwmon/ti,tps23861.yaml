@@ -24,11 +24,61 @@ properties:
   reg:
     maxItems: 1
 
+  '#address-cells':
+    const: 1
+
+  '#size-cells':
+    const: 0
+
   shunt-resistor-micro-ohms:
     description: The value of current sense resistor in microohms.
     default: 255000
     minimum: 250000
     maximum: 255000
+
+  reset-gpios:
+    description: Optional GPIO for the reset pin.
+    maxItems: 1
+
+  shutdown-gpios:
+    description: |
+      Optional GPIO for the shutdown pin. Used to prevent PoE activity before
+      the driver had a chance to configure the chip.
+    maxItems: 1
+
+  interrupts:
+    description: |
+      The interrupt specifier. Only required if PoE class is restricted to less
+      than class 4 in the device tree.
+    maxItems: 1
+
+patternProperties:
+  "^port@[0-3]$":
+    type: object
+    description: Port specific nodes.
+    unevaluatedProperties: false
+    required:
+      - reg
+
+    properties:
+      reg:
+        description: Port index.
+        items:
+          minimum: 0
+          maximum: 3
+
+      class:
+        description: The maximum power class a port should accept.
+        $ref: /schemas/types.yaml#/definitions/uint32
+        minimum: 0
+        maximum: 4
+
+      off-by-default:
+        description: Indicates the port is off by default.
+        type: boolean
+
+      label:
+        description: Optional port label
 
 required:
   - compatible
@@ -49,5 +99,41 @@ examples:
             compatible = "ti,tps23861";
             reg = <0x30>;
             shunt-resistor-micro-ohms = <255000>;
+        };
+    };
+  - |
+    #include <dt-bindings/gpio/gpio.h>
+    i2c {
+        #address-cells = <1>;
+        #size-cells = <0>;
+        tps23861@28 {
+            #address-cells = <1>;
+            #size-cells = <0>;
+            compatible = "ti,tps23861";
+            reg = <0x28>;
+            shunt-resistor-micro-ohms = <255000>;
+            reset-gpios = <&gpio1 13 GPIO_ACTIVE_LOW>;
+            shutdown-gpios = <&gpio1 12 GPIO_ACTIVE_LOW>;
+            interrupt-parent = <&gpio1>;
+            interrupts = <14 0>;
+            label = "my_poe_controller";
+            port@0 {
+                    reg = <0>;
+                    class = <2>; // Max PoE class allowed.
+                    off-by-default;
+                    label = "myport";
+            };
+            port@1 {
+                    reg = <1>;
+                    status = "disabled";
+            };
+            port@2 {
+                    reg = <2>;
+                    status = "disabled";
+            };
+            port@3 {
+                    reg = <3>;
+                    status = "disabled";
+            };
         };
     };
