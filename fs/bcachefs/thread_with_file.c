@@ -35,7 +35,7 @@ int bch2_run_thread_with_file(struct thread_with_file *thr,
 		fd_flags |= O_WRONLY;
 
 	char name[TASK_COMM_LEN];
-	get_task_comm(name, current);
+	strscpy_pad(name, current->comm);
 
 	thr->ret = 0;
 	thr->task = kthread_create(fn, thr, "%s", name);
