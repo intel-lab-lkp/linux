@@ -1330,6 +1330,12 @@ static void i2c_pxa_unprepare_recovery(struct i2c_adapter *adap)
 	i2c_pxa_enable(i2c);
 }
 
+static int i2c_pxa_init_recovery_cb(struct i2c_adapter *adap)
+{
+	/* We have initialized everything already, so nothing to do here. */
+	return 0;
+}
+
 static int i2c_pxa_init_recovery(struct pxa_i2c *i2c)
 {
 	struct i2c_bus_recovery_info *bri = &i2c->recovery;
@@ -1398,6 +1404,7 @@ static int i2c_pxa_init_recovery(struct pxa_i2c *i2c)
 		return 0;
 	}
 
+	bri->init_recovery = i2c_pxa_init_recovery_cb;
 	bri->prepare_recovery = i2c_pxa_prepare_recovery;
 	bri->unprepare_recovery = i2c_pxa_unprepare_recovery;
 	bri->recover_bus = i2c_generic_scl_recovery;
