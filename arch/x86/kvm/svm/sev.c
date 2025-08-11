@@ -3498,8 +3498,7 @@ int pre_sev_run(struct vcpu_svm *svm, int cpu)
 	 * have encrypted, dirty data in the cache, and flush caches only for
 	 * CPUs that have entered the guest.
 	 */
-	if (!cpumask_test_cpu(cpu, to_kvm_sev_info(kvm)->have_run_cpus))
-		cpumask_set_cpu(cpu, to_kvm_sev_info(kvm)->have_run_cpus);
+	__cpumask_set_cpu(cpu, to_kvm_sev_info(kvm)->have_run_cpus);
 
 	/* Assign the asid allocated with this SEV guest */
 	svm->asid = asid;
