@@ -1,0 +1,69 @@
+# SPDX-License-Identifier: (GPL-2.0-only OR BSD-2-Clause)
+%YAML 1.2
+---
+$id: http://devicetree.org/schemas/mfd/ti,twl4030-power.yaml#
+$schema: http://devicetree.org/meta-schemas/core.yaml#
+
+title: Texas Instruments TWL4030-family Power Management Module
+
+maintainers:
+  - Peter Ujfalusi <peter.ujfalusi@gmail.com>
+
+description: |
+  The power management module inside the TWL family provides several facilities
+  to control the power resources, including power scripts. For now, the
+  binding only supports the complete shutdown of the system after poweroff.
+
+properties:
+  compatible:
+    description: |
+      The compatible string determines the specific power configuration.
+        "ti,twl4030-power": Standard power control.
+        "ti,twl4030-power-reset": Recommended for OMAP3530 and similar SoCs
+          that require a special configuration for warm reset to work correctly.
+        "ti,twl4030-power-idle": Loads the TI-recommended configuration for
+          idle modes into the PMIC.
+        "ti,twl4030-power-idle-osc-off": Uses the recommended idle configuration
+          but also shuts down the external oscillator. This may not work on all
+          boards depending on the oscillator wiring.
+
+    enum:
+      - ti,twl4030-power
+      - ti,twl4030-power-reset
+      - ti,twl4030-power-idle
+      - ti,twl4030-power-idle-osc-off
+
+  ti,system-power-controller:
+    type: boolean
+    description:
+      Indicates that the TWL4030 is the power supply master of the system,
+      allowing it to initiate system power-off.
+
+  ti,use_poweroff:
+    type: boolean
+    description: Deprecated name for ti,system-power-controller.
+    deprecated: true
+
+required:
+  - compatible
+
+additionalProperties: false
+
+examples:
+  - |
+    i2c {
+      clock-frequency = <2600000>;
+      #address-cells = <1>;
+      #size-cells = <0>;
+
+      twl: twl@48 {
+        reg = <0x48>;
+        interrupts = <7>; /* SYS_NIRQ cascaded to intc */
+        interrupt-parent = <&intc>;
+
+        twl_power: power {
+          compatible = "ti,twl4030-power";
+          ti,use_poweroff;
+        };
+      };
+    };
