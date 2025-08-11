@@ -447,6 +447,15 @@ mode to allow application to tune the per-socket maximum iteration for
 better throughput and less frequency of send syscall.
 Allowed range is [32, xs->tx->nentries].
 
+XDP_GENERIC_XMIT_BATCH
+----------------------
+
+It provides an option that allows application to use batch xmit in the copy
+mode. Batch process minimizes the number of grabbing/releasing queue lock
+without redundant actions compared to before to gain the overall performance
+improvement whereas it might increase the latency of per packet. The maximum
+value shouldn't be larger than xs->max_tx_budget.
+
 XDP_STATISTICS getsockopt
 -------------------------
 

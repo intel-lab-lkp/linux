@@ -61,6 +61,7 @@ struct xdp_sock {
 		XSK_BOUND,
 		XSK_UNBOUND,
 	} state;
+	struct sk_buff **skb_batch;
 
 	struct xsk_queue *tx ____cacheline_aligned_in_smp;
 	struct list_head tx_list;
@@ -70,6 +71,7 @@ struct xdp_sock {
 	 * preventing other XSKs from being starved.
 	 */
 	u32 tx_budget_spent;
+	u32 generic_xmit_batch;
 
 	/* Statistics */
 	u64 rx_dropped;

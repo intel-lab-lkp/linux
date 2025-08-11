@@ -1122,6 +1122,7 @@ static int xsk_release(struct socket *sock)
 	xskq_destroy(xs->tx);
 	xskq_destroy(xs->fq_tmp);
 	xskq_destroy(xs->cq_tmp);
+	kfree(xs->skb_batch);
 
 	sock_orphan(sk);
 	sock->sk = NULL;
@@ -1454,6 +1455,37 @@ static int xsk_setsockopt(struct socket *sock, int level, int optname,
 			return -EACCES;
 
 		WRITE_ONCE(xs->max_tx_budget, budget);
+		return 0;
+	}
+	case XDP_GENERIC_XMIT_BATCH:
+	{
+		unsigned int batch, batch_alloc_len;
+		struct sk_buff **new;
+
+		if (optlen != sizeof(batch))
+			return -EINVAL;
+		if (copy_from_sockptr(&batch, optval, sizeof(batch)))
+			return -EFAULT;
+		if (batch > xs->max_tx_budget)
+			return -EACCES;
+
+		mutex_lock(&xs->mutex);
+		if (!batch) {
+			kfree(xs->skb_batch);
+			xs->generic_xmit_batch = 0;
+			goto out;
+		}
+		batch_alloc_len = sizeof(struct sk_buff *) * batch;
+		new = kmalloc(batch_alloc_len, GFP_KERNEL);
+		if (!new)
+			return -ENOMEM;
+		if (xs->skb_batch)
+			kfree(xs->skb_batch);
+
+		xs->skb_batch = new;
+		xs->generic_xmit_batch = batch;
+out:
+		mutex_unlock(&xs->mutex);
 		return 0;
 	}
 	default:
