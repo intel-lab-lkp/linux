@@ -780,9 +780,102 @@ free_err:
 	return ERR_PTR(err);
 }
 
-static int __xsk_generic_xmit(struct sock *sk)
+static int __xsk_generic_xmit_batch(struct xdp_sock *xs)
 {
-	struct xdp_sock *xs = xdp_sk(sk);
+	u32 max_batch = READ_ONCE(xs->generic_xmit_batch);
+	struct sk_buff **skb = xs->skb_batch;
+	struct net_device *dev = xs->dev;
+	struct netdev_queue *txq;
+	bool sent_frame = false;
+	struct xdp_desc desc;
+	u32 i = 0, j = 0;
+	u32 max_budget;
+	int err = 0;
+
+	mutex_lock(&xs->mutex);
+
+	/* Since we dropped the RCU read lock, the socket state might have changed. */
+	if (unlikely(!xsk_is_bound(xs))) {
+		err = -ENXIO;
+		goto out;
+	}
+
+	if (xs->queue_id >= dev->real_num_tx_queues)
+		goto out;
+
+	if (unlikely(!netif_running(dev) ||
+		     !netif_carrier_ok(dev)))
+		goto out;
+
+	max_budget = READ_ONCE(xs->max_tx_budget);
+	txq = netdev_get_tx_queue(dev, xs->queue_id);
+	do {
+		for (; i < max_batch && xskq_cons_peek_desc(xs->tx, &desc, xs->pool); i++) {
+			if (max_budget-- == 0) {
+				err = -EAGAIN;
+				break;
+			}
+			/* This is the backpressure mechanism for the Tx path.
+			 * Reserve space in the completion queue and only proceed
+			 * if there is space in it. This avoids having to implement
+			 * any buffering in the Tx path.
+			 */
+			err = xsk_cq_reserve_addr_locked(xs->pool, desc.addr);
+			if (err) {
+				err = -EAGAIN;
+				break;
+			}
+
+			skb[i] = xsk_build_skb(xs, &desc);
+			if (IS_ERR(skb[i])) {
+				err = PTR_ERR(skb[i]);
+				break;
+			}
+
+			xskq_cons_release(xs->tx);
+
+			if (xp_mb_desc(&desc))
+				xs->skb = skb[i];
+		}
+
+		if (i) {
+			err = xsk_direct_xmit_batch(skb, dev, txq, i, &j);
+			if  (err == NETDEV_TX_BUSY) {
+				err = -EAGAIN;
+			} else if (err == NET_XMIT_DROP) {
+				j++;
+				err = -EBUSY;
+			}
+
+			sent_frame = true;
+			xs->skb = NULL;
+		}
+
+		if (err)
+			goto out;
+		i = j = 0;
+	} while (xskq_cons_peek_desc(xs->tx, &desc, xs->pool));
+
+	if (xskq_has_descs(xs->tx)) {
+		if (xs->skb)
+			xsk_drop_skb(xs->skb);
+		xskq_cons_release(xs->tx);
+	}
+
+out:
+	for (; j < i; j++) {
+		xskq_cons_cancel_n(xs->tx, xsk_get_num_desc(skb[j]));
+		xsk_consume_skb(skb[j]);
+	}
+	if (sent_frame)
+		__xsk_tx_release(xs);
+
+	mutex_unlock(&xs->mutex);
+	return err;
+}
+
+static int __xsk_generic_xmit(struct xdp_sock *xs)
+{
 	bool sent_frame = false;
 	struct xdp_desc desc;
 	struct sk_buff *skb;
@@ -871,11 +964,15 @@ out:
 
 static int xsk_generic_xmit(struct sock *sk)
 {
+	struct xdp_sock *xs = xdp_sk(sk);
 	int ret;
 
 	/* Drop the RCU lock since the SKB path might sleep. */
 	rcu_read_unlock();
-	ret = __xsk_generic_xmit(sk);
+	if (READ_ONCE(xs->generic_xmit_batch))
+		ret = __xsk_generic_xmit_batch(xs);
+	else
+		ret = __xsk_generic_xmit(xs);
 	/* Reaquire RCU lock before going into common code. */
 	rcu_read_lock();
 
