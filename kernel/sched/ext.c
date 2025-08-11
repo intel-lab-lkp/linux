@@ -7433,6 +7433,27 @@ __bpf_kfunc struct rq *scx_bpf_cpu_rq(s32 cpu)
 }
 
 /**
+ * scx_bpf_cpu_rq_locked - Fetch the locked rq of a CPU
+ * @cpu: CPU of the rq
+ */
+__bpf_kfunc struct rq *scx_bpf_cpu_rq_locked(s32 cpu)
+{
+	struct rq *rq;
+
+	if (!kf_cpu_valid(cpu, NULL))
+		return NULL;
+
+	preempt_disable();
+	rq = cpu_rq(cpu);
+	if (rq != scx_locked_rq()) {
+		scx_kf_error("Accessing not locked rq %d", cpu);
+		rq = NULL;
+	}
+	preempt_enable();
+	return rq;
+}
+
+/**
  * scx_bpf_task_cgroup - Return the sched cgroup of a task
  * @p: task of interest
  *
@@ -7596,6 +7617,7 @@ BTF_ID_FLAGS(func, scx_bpf_put_cpumask, KF_RELEASE)
 BTF_ID_FLAGS(func, scx_bpf_task_running, KF_RCU)
 BTF_ID_FLAGS(func, scx_bpf_task_cpu, KF_RCU)
 BTF_ID_FLAGS(func, scx_bpf_cpu_rq)
+BTF_ID_FLAGS(func, scx_bpf_cpu_rq_locked, KF_RET_NULL)
 #ifdef CONFIG_CGROUP_SCHED
 BTF_ID_FLAGS(func, scx_bpf_task_cgroup, KF_RCU | KF_ACQUIRE)
 #endif
