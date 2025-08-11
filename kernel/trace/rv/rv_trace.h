@@ -177,7 +177,53 @@ DECLARE_EVENT_CLASS(error_ltl_monitor_id,
 #include <monitors/pagefault/pagefault_trace.h>
 #include <monitors/sleep/sleep_trace.h>
 // Add new monitors based on CONFIG_LTL_MON_EVENTS_ID here
+
 #endif /* CONFIG_LTL_MON_EVENTS_ID */
+
+#ifdef CONFIG_LTL_MON_EVENTS_CPU
+DECLARE_EVENT_CLASS(event_ltl_monitor_cpu,
+
+	TP_PROTO(unsigned int cpu, char *states, char *atoms, char *next),
+
+	TP_ARGS(cpu, states, atoms, next),
+
+	TP_STRUCT__entry(
+		__field(unsigned int, cpu)
+		__string(states, states)
+		__string(atoms, atoms)
+		__string(next, next)
+	),
+
+	TP_fast_assign(
+		__entry->cpu = cpu;
+		__assign_str(states);
+		__assign_str(atoms);
+		__assign_str(next);
+	),
+
+	TP_printk("cpu%u: (%s) x (%s) -> (%s)", __entry->cpu,
+		  __get_str(states), __get_str(atoms), __get_str(next))
+);
+
+DECLARE_EVENT_CLASS(error_ltl_monitor_cpu,
+
+	TP_PROTO(unsigned int cpu),
+
+	TP_ARGS(cpu),
+
+	TP_STRUCT__entry(
+		__field(unsigned int, cpu)
+	),
+
+	TP_fast_assign(
+		__entry->cpu = cpu;
+	),
+
+	TP_printk("cpu%u: violation detected", __entry->cpu)
+);
+// Add new monitors based on CONFIG_LTL_MON_EVENTS_CPU here
+
+#endif /* CONFIG_LTL_MON_EVENTS_CPU */
 
 #ifdef CONFIG_RV_MON_MAINTENANCE_EVENTS
 /* Tracepoint useful for monitors development, currenly only used in DA */

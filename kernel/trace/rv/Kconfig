@@ -16,6 +16,10 @@ config DA_MON_EVENTS_ID
 	select RV_MON_MAINTENANCE_EVENTS
 	bool
 
+config LTL_MON_EVENTS_CPU
+	select RV_MON_EVENTS
+	bool
+
 config LTL_MON_EVENTS_ID
 	select RV_MON_EVENTS
 	bool
