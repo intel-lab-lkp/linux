@@ -57,15 +57,29 @@ class ltl2k(generator.Monitor):
     template_dir = "ltl2k"
 
     def __init__(self, file_path, MonitorType, extra_params={}):
-        if MonitorType != "per_task":
-            raise NotImplementedError("Only per_task monitor is supported for LTL")
+        if MonitorType == "per_task":
+            self._target_arg = "struct task_struct *task"
+            self._target = "task"
+        elif MonitorType == "per_cpu":
+            self._target_arg = "unsigned int cpu"
+            self._target = "cpu"
+        else:
+            raise NotImplementedError(f"LTL does not support monitor type {MonitorType}")
         super().__init__(extra_params)
+        self.monitor_type = MonitorType
         with open(file_path) as f:
             self.atoms, self.ba, self.ltl = ltl2ba.create_graph(f.read())
         self.atoms_abbr = abbreviate_atoms(self.atoms)
         self.name = extra_params.get("model_name")
         if not self.name:
             self.name = Path(file_path).stem
+
+    def _fill_monitor_type(self) -> str:
+        if self.monitor_type == "per_task":
+            return "#define LTL_MONITOR_TYPE RV_MON_PER_TASK"
+        if self.monitor_type == "per_cpu":
+            return "#define LTL_MONITOR_TYPE RV_MON_PER_CPU"
+        assert False
 
     def _fill_states(self) -> str:
         buf = [
@@ -174,7 +188,7 @@ class ltl2k(generator.Monitor):
 
     def _fill_start(self):
         buf = [
-            "static void ltl_start(struct task_struct *task, struct ltl_monitor *mon)",
+            "static void ltl_start(%s, struct ltl_monitor *mon)" % self._target_arg,
             "{"
         ]
 
@@ -205,7 +219,7 @@ class ltl2k(generator.Monitor):
         buff = []
         buff.append("static void handle_example_event(void *data, /* XXX: fill header */)")
         buff.append("{")
-        buff.append("\tltl_atom_update(task, LTL_%s, true/false);" % self.atoms[0])
+        buff.append("\tltl_atom_update(%s, LTL_%s, true/false);" % (self._target, self.atoms[0]))
         buff.append("}")
         buff.append("")
         return '\n'.join(buff)
@@ -241,6 +255,9 @@ class ltl2k(generator.Monitor):
             ""
         ]
 
+        buf.append(self._fill_monitor_type())
+        buf.append('')
+
         buf.extend(self._fill_atoms())
         buf.append('')
 
@@ -259,13 +276,32 @@ class ltl2k(generator.Monitor):
         return '\n'.join(buf)
 
     def fill_monitor_class_type(self):
-        return "LTL_MON_EVENTS_ID"
+        if self.monitor_type == "per_task":
+            return "LTL_MON_EVENTS_ID"
+        if self.monitor_type == "per_cpu":
+            return "LTL_MON_EVENTS_CPU"
+        assert False
 
     def fill_monitor_class(self):
-        return "ltl_monitor_id"
+        if self.monitor_type == "per_task":
+            return "ltl_monitor_id"
+        if self.monitor_type == "per_cpu":
+            return "ltl_monitor_cpu"
+        assert False
+
+    def fill_tracepoint_args_skel(self, tp_type):
+        if tp_type == "event":
+            return \
+                ("\tTP_PROTO(%s, char *states, char *atoms, char *next),\n" % self._target_arg) + \
+                ("\tTP_ARGS(%s, states, atoms, next)" % self._target)
+        if tp_type == "error":
+            return \
+                ("\tTP_PROTO(%s),\n" % self._target_arg) + \
+                ("\tTP_ARGS(%s)" % self._target)
 
     def fill_main_c(self):
         main_c = super().fill_main_c()
         main_c = main_c.replace("%%ATOMS_INIT%%", self.fill_atoms_init())
+        main_c = main_c.replace("%%TARGET_ARG%%", self._target_arg)
 
         return main_c
