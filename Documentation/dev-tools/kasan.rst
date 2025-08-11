@@ -163,6 +163,9 @@ disabling KASAN altogether or controlling its features:
   This parameter is intended to allow sampling only large page_alloc
   allocations, which is the biggest source of the performance overhead.
 
+- ``kasan.stonly=off`` or ``kasan.stonly=on`` controls whether KASAN checks
+  store operation only or all operation.
+
 Error reports
 ~~~~~~~~~~~~~
 
