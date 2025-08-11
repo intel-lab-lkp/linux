@@ -304,7 +304,7 @@ static struct bkey_i *next_rebalance_entry(struct btree_trans *trans,
 		 * work entries in a darray
 		 */
 
-		BUG_ON(!buf->size);;
+		BUG_ON(!buf->size);
 
 		bch2_trans_begin(trans);
 
