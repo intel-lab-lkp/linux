@@ -150,7 +150,7 @@ static void __init check_unaligned_access_speed_all_cpus(void)
 	 * Allocate separate buffers for each CPU so there's no fighting over
 	 * cache lines.
 	 */
-	for_each_cpu(cpu, cpu_online_mask) {
+	for_each_online_cpu(cpu) {
 		bufs[cpu] = alloc_pages(GFP_KERNEL, MISALIGNED_BUFFER_ORDER);
 		if (!bufs[cpu]) {
 			pr_warn("Allocation failure, not measuring misaligned performance\n");
@@ -165,7 +165,7 @@ static void __init check_unaligned_access_speed_all_cpus(void)
 	smp_call_on_cpu(0, check_unaligned_access, bufs[0], true);
 
 out:
-	for_each_cpu(cpu, cpu_online_mask) {
+	for_each_online_cpu(cpu) {
 		if (bufs[cpu])
 			__free_pages(bufs[cpu], MISALIGNED_BUFFER_ORDER);
 	}
