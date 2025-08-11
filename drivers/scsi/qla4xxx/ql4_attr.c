@@ -156,13 +156,13 @@ qla4xxx_fw_version_show(struct device *dev,
 	struct scsi_qla_host *ha = to_qla_host(class_to_shost(dev));
 
 	if (is_qla80XX(ha))
-		return snprintf(buf, PAGE_SIZE, "%d.%02d.%02d (%x)\n",
-				ha->fw_info.fw_major, ha->fw_info.fw_minor,
-				ha->fw_info.fw_patch, ha->fw_info.fw_build);
+		return sysfs_emit(buf, "%d.%02d.%02d (%x)\n",
+				  ha->fw_info.fw_major, ha->fw_info.fw_minor,
+				  ha->fw_info.fw_patch, ha->fw_info.fw_build);
 	else
-		return snprintf(buf, PAGE_SIZE, "%d.%02d.%02d.%02d\n",
-				ha->fw_info.fw_major, ha->fw_info.fw_minor,
-				ha->fw_info.fw_patch, ha->fw_info.fw_build);
+		return sysfs_emit(buf, "%d.%02d.%02d.%02d\n",
+				  ha->fw_info.fw_major, ha->fw_info.fw_minor,
+				  ha->fw_info.fw_patch, ha->fw_info.fw_build);
 }
 
 static ssize_t
@@ -170,7 +170,7 @@ qla4xxx_serial_num_show(struct device *dev, struct device_attribute *attr,
 			char *buf)
 {
 	struct scsi_qla_host *ha = to_qla_host(class_to_shost(dev));
-	return snprintf(buf, PAGE_SIZE, "%s\n", ha->serial_number);
+	return sysfs_emit(buf, "%s\n", ha->serial_number);
 }
 
 static ssize_t
@@ -178,8 +178,8 @@ qla4xxx_iscsi_version_show(struct device *dev, struct device_attribute *attr,
 			   char *buf)
 {
 	struct scsi_qla_host *ha = to_qla_host(class_to_shost(dev));
-	return snprintf(buf, PAGE_SIZE, "%d.%02d\n", ha->fw_info.iscsi_major,
-			ha->fw_info.iscsi_minor);
+	return sysfs_emit(buf, "%d.%02d\n", ha->fw_info.iscsi_major,
+			  ha->fw_info.iscsi_minor);
 }
 
 static ssize_t
@@ -187,9 +187,9 @@ qla4xxx_optrom_version_show(struct device *dev, struct device_attribute *attr,
 			    char *buf)
 {
 	struct scsi_qla_host *ha = to_qla_host(class_to_shost(dev));
-	return snprintf(buf, PAGE_SIZE, "%d.%02d.%02d.%02d\n",
-			ha->fw_info.bootload_major, ha->fw_info.bootload_minor,
-			ha->fw_info.bootload_patch, ha->fw_info.bootload_build);
+	return sysfs_emit(buf, "%d.%02d.%02d.%02d\n",
+			  ha->fw_info.bootload_major, ha->fw_info.bootload_minor,
+			  ha->fw_info.bootload_patch, ha->fw_info.bootload_build);
 }
 
 static ssize_t
@@ -197,7 +197,7 @@ qla4xxx_board_id_show(struct device *dev, struct device_attribute *attr,
 		      char *buf)
 {
 	struct scsi_qla_host *ha = to_qla_host(class_to_shost(dev));
-	return snprintf(buf, PAGE_SIZE, "0x%08X\n", ha->board_id);
+	return sysfs_emit(buf, "0x%08X\n", ha->board_id);
 }
 
 static ssize_t
@@ -207,8 +207,8 @@ qla4xxx_fw_state_show(struct device *dev, struct device_attribute *attr,
 	struct scsi_qla_host *ha = to_qla_host(class_to_shost(dev));
 
 	qla4xxx_get_firmware_state(ha);
-	return snprintf(buf, PAGE_SIZE, "0x%08X%8X\n", ha->firmware_state,
-			ha->addl_fw_state);
+	return sysfs_emit(buf, "0x%08X%8X\n", ha->firmware_state,
+			  ha->addl_fw_state);
 }
 
 static ssize_t
@@ -220,7 +220,7 @@ qla4xxx_phy_port_cnt_show(struct device *dev, struct device_attribute *attr,
 	if (is_qla40XX(ha))
 		return -ENOSYS;
 
-	return snprintf(buf, PAGE_SIZE, "0x%04X\n", ha->phy_port_cnt);
+	return sysfs_emit(buf, "0x%04X\n", ha->phy_port_cnt);
 }
 
 static ssize_t
@@ -232,7 +232,7 @@ qla4xxx_phy_port_num_show(struct device *dev, struct device_attribute *attr,
 	if (is_qla40XX(ha))
 		return -ENOSYS;
 
-	return snprintf(buf, PAGE_SIZE, "0x%04X\n", ha->phy_port_num);
+	return sysfs_emit(buf, "0x%04X\n", ha->phy_port_num);
 }
 
 static ssize_t
@@ -244,7 +244,7 @@ qla4xxx_iscsi_func_cnt_show(struct device *dev, struct device_attribute *attr,
 	if (is_qla40XX(ha))
 		return -ENOSYS;
 
-	return snprintf(buf, PAGE_SIZE, "0x%04X\n", ha->iscsi_pci_func_cnt);
+	return sysfs_emit(buf, "0x%04X\n", ha->iscsi_pci_func_cnt);
 }
 
 static ssize_t
@@ -253,7 +253,7 @@ qla4xxx_hba_model_show(struct device *dev, struct device_attribute *attr,
 {
 	struct scsi_qla_host *ha = to_qla_host(class_to_shost(dev));
 
-	return snprintf(buf, PAGE_SIZE, "%s\n", ha->model_name);
+	return sysfs_emit(buf, "%s\n", ha->model_name);
 }
 
 static ssize_t
@@ -261,8 +261,8 @@ qla4xxx_fw_timestamp_show(struct device *dev, struct device_attribute *attr,
 			  char *buf)
 {
 	struct scsi_qla_host *ha = to_qla_host(class_to_shost(dev));
-	return snprintf(buf, PAGE_SIZE, "%s %s\n", ha->fw_info.fw_build_date,
-			ha->fw_info.fw_build_time);
+	return sysfs_emit(buf, "%s %s\n", ha->fw_info.fw_build_date,
+			  ha->fw_info.fw_build_time);
 }
 
 static ssize_t
@@ -270,7 +270,7 @@ qla4xxx_fw_build_user_show(struct device *dev, struct device_attribute *attr,
 			   char *buf)
 {
 	struct scsi_qla_host *ha = to_qla_host(class_to_shost(dev));
-	return snprintf(buf, PAGE_SIZE, "%s\n", ha->fw_info.fw_build_user);
+	return sysfs_emit(buf, "%s\n", ha->fw_info.fw_build_user);
 }
 
 static ssize_t
@@ -278,7 +278,7 @@ qla4xxx_fw_ext_timestamp_show(struct device *dev, struct device_attribute *attr,
 			      char *buf)
 {
 	struct scsi_qla_host *ha = to_qla_host(class_to_shost(dev));
-	return snprintf(buf, PAGE_SIZE, "%s\n", ha->fw_info.extended_timestamp);
+	return sysfs_emit(buf, "%s\n", ha->fw_info.extended_timestamp);
 }
 
 static ssize_t
@@ -300,7 +300,7 @@ qla4xxx_fw_load_src_show(struct device *dev, struct device_attribute *attr,
 		break;
 	}
 
-	return snprintf(buf, PAGE_SIZE, "%s\n", load_src);
+	return sysfs_emit(buf, "%s\n", load_src);
 }
 
 static ssize_t
@@ -309,8 +309,8 @@ qla4xxx_fw_uptime_show(struct device *dev, struct device_attribute *attr,
 {
 	struct scsi_qla_host *ha = to_qla_host(class_to_shost(dev));
 	qla4xxx_about_firmware(ha);
-	return snprintf(buf, PAGE_SIZE, "%u.%u secs\n", ha->fw_uptime_secs,
-			ha->fw_uptime_msecs);
+	return sysfs_emit(buf, "%u.%u secs\n", ha->fw_uptime_secs,
+			  ha->fw_uptime_msecs);
 }
 
 static DEVICE_ATTR(fw_version, S_IRUGO, qla4xxx_fw_version_show, NULL);
