@@ -57,6 +57,7 @@ nlm_fopen(struct svc_rqst *rqstp, struct nfs_fh *f, struct file **filp,
 	switch (nfserr) {
 	case nfs_ok:
 		return 0;
+	case nfserr_jukebox:
 	case nfserr_dropit:
 		return nlm_drop_reply;
 	case nfserr_stale:
