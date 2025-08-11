@@ -33,9 +33,9 @@ DECLARE_EVENT_CLASS(bcache_request,
 
 	TP_printk("%d,%d %s %llu + %u (from %d,%d @ %llu)",
 		  MAJOR(__entry->dev), MINOR(__entry->dev),
-		  __entry->rwbs, (unsigned long long)__entry->sector,
+		  __entry->rwbs, __entry->sector,
 		  __entry->nr_sector, __entry->orig_major, __entry->orig_minor,
-		  (unsigned long long)__entry->orig_sector)
+		  __entry->orig_sector)
 );
 
 DECLARE_EVENT_CLASS(bkey,
@@ -107,7 +107,7 @@ DECLARE_EVENT_CLASS(bcache_bio,
 
 	TP_printk("%d,%d  %s %llu + %u",
 		  MAJOR(__entry->dev), MINOR(__entry->dev), __entry->rwbs,
-		  (unsigned long long)__entry->sector, __entry->nr_sector)
+		  __entry->sector, __entry->nr_sector)
 );
 
 DEFINE_EVENT(bcache_bio, bcache_bypass_sequential,
@@ -144,7 +144,7 @@ TRACE_EVENT(bcache_read,
 
 	TP_printk("%d,%d  %s %llu + %u hit %u bypass %u",
 		  MAJOR(__entry->dev), MINOR(__entry->dev),
-		  __entry->rwbs, (unsigned long long)__entry->sector,
+		  __entry->rwbs, __entry->sector,
 		  __entry->nr_sector, __entry->cache_hit, __entry->bypass)
 );
 
@@ -175,7 +175,7 @@ TRACE_EVENT(bcache_write,
 
 	TP_printk("%pU inode %llu  %s %llu + %u hit %u bypass %u",
 		  __entry->uuid, __entry->inode,
-		  __entry->rwbs, (unsigned long long)__entry->sector,
+		  __entry->rwbs, __entry->sector,
 		  __entry->nr_sector, __entry->writeback, __entry->bypass)
 );
 
@@ -243,8 +243,7 @@ TRACE_EVENT(bcache_journal_write,
 
 	TP_printk("%d,%d  %s %llu + %u keys %u",
 		  MAJOR(__entry->dev), MINOR(__entry->dev), __entry->rwbs,
-		  (unsigned long long)__entry->sector, __entry->nr_sector,
-		  __entry->nr_keys)
+		  __entry->sector, __entry->nr_sector, __entry->nr_keys)
 );
 
 /* Btree */
