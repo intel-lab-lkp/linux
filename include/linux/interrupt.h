@@ -758,6 +758,17 @@ static inline void tasklet_schedule(struct tasklet_struct *t)
 		__tasklet_schedule(t);
 }
 
+extern void __tasklet_schedule_nowakeup(struct tasklet_struct *t);
+
+/*
+ * Trigger tasklet but do not do wakeup operation which is forbidden in sched code.
+ */
+static inline void tasklet_schedule_nowakeup(struct tasklet_struct *t)
+{
+	if (!test_and_set_bit(TASKLET_STATE_SCHED, &t->state))
+		__tasklet_schedule_nowakeup(t);
+}
+
 extern void __tasklet_hi_schedule(struct tasklet_struct *t);
 
 static inline void tasklet_hi_schedule(struct tasklet_struct *t)

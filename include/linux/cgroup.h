@@ -876,4 +876,9 @@ struct cgroup *task_get_cgroup1(struct task_struct *tsk, int hierarchy_id);
 
 struct cgroup_of_peak *of_peak(struct kernfs_open_file *of);
 
+#ifdef CONFIG_CGROUP_LOCK_OPTIMIZE
+extern void cgroup_boost_prio_pid_write(int pid);
+extern void cgroup_prio_boost_tasklet_schedule(void);
+#endif
+
 #endif /* _LINUX_CGROUP_H */

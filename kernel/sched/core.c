@@ -4520,6 +4520,12 @@ static void __sched_fork(unsigned long clone_flags, struct task_struct *p)
 	p->wake_entry.u_flags = CSD_TYPE_TTWU;
 	p->migration_pending = NULL;
 	init_sched_mm_cid(p);
+
+#ifdef CONFIG_CGROUP_LOCK_OPTIMIZE
+	// ORI_NICE_DEFAULT_INVALID smaller than -20 for RTMUTEX_NEST_DEL check
+	p->ori_nice = ORI_NICE_DEFAULT_INVALID;
+	p->nr_rtmutex_nest = 0;
+#endif
 }
 
 DEFINE_STATIC_KEY_FALSE(sched_numa_balancing);

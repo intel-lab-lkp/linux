@@ -786,6 +786,29 @@ void __tasklet_schedule(struct tasklet_struct *t)
 }
 EXPORT_SYMBOL(__tasklet_schedule);
 
+static void __tasklet_schedule_common_nowakeup(struct tasklet_struct *t,
+				      struct tasklet_head __percpu *headp,
+				      unsigned int softirq_nr)
+{
+	struct tasklet_head *head;
+	unsigned long flags;
+
+	local_irq_save(flags);
+	head = this_cpu_ptr(headp);
+	t->next = NULL;
+	*head->tail = t;
+	head->tail = &(t->next);
+	__raise_softirq_irqoff(softirq_nr);
+	local_irq_restore(flags);
+}
+
+void __tasklet_schedule_nowakeup(struct tasklet_struct *t)
+{
+	__tasklet_schedule_common_nowakeup(t, &tasklet_vec,
+				  TASKLET_SOFTIRQ);
+}
+EXPORT_SYMBOL(__tasklet_schedule_nowakeup);
+
 void __tasklet_hi_schedule(struct tasklet_struct *t)
 {
 	__tasklet_schedule_common(t, &tasklet_hi_vec,

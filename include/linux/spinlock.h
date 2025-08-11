@@ -65,6 +65,75 @@
 #include <asm/barrier.h>
 #include <asm/mmiowb.h>
 
+#ifdef CONFIG_CGROUP_LOCK_OPTIMIZE
+
+extern void cgroup_boost_prio_restore(struct task_struct *i_p);
+
+#define RTMUTEX_NEST_ADD	\
+	do {	\
+		current->nr_rtmutex_nest ++;	\
+	} while(0)
+#define RTMUTEX_NEST_DEL_WITHOUT_CHECK	\
+	do {	\
+		current->nr_rtmutex_nest --;	\
+	} while(0)
+
+#define RTMUTEX_NEST_DEL	\
+	do {	\
+		current->nr_rtmutex_nest --;	\
+		if (current->pid != 0	\
+			&& current->nr_rtmutex_nest == 0	\
+			&& unlikely(current->ori_nice >= -20)	\
+			&& current->ori_nice <= 19) {	\
+			cgroup_boost_prio_restore(current);	\
+		}	\
+	} while(0)
+
+#define RWBASE_NEST_ADD		\
+	do {	\
+		current->nr_rtmutex_nest ++;	\
+	} while(0)
+#define RWBASE_NEST_DEL_WITHOUT_CHECK	\
+	do {	\
+		current->nr_rtmutex_nest --;	\
+	} while(0)
+
+#define RWBASE_NEST_DEL		\
+	do {	\
+		current->nr_rtmutex_nest --;	\
+		if (current->pid != 0	\
+			&& current->nr_rtmutex_nest == 0	\
+			&& unlikely(current->ori_nice >= -20)	\
+			&& current->ori_nice <= 19) {	\
+			cgroup_boost_prio_restore(current);	\
+		}	\
+	} while(0)
+
+#else
+
+#define RTMUTEX_NEST_ADD	\
+	do {	\
+	} while(0)
+#define RTMUTEX_NEST_DEL_WITHOUT_CHECK	\
+	do {	\
+	} while(0)
+
+#define RTMUTEX_NEST_DEL	\
+	do {	\
+	} while(0)
+
+#define RWBASE_NEST_ADD		\
+	do {	\
+	} while(0)
+#define RWBASE_NEST_DEL_WITHOUT_CHECK	\
+	do {	\
+	} while(0)
+
+#define RWBASE_NEST_DEL		\
+	do {	\
+	} while(0)
+
+#endif
 
 /*
  * Must define these before including other files, inline functions need them

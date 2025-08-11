@@ -5546,6 +5546,20 @@ static void put_prev_entity(struct cfs_rq *cfs_rq, struct sched_entity *prev)
 	/* throttle cfs_rqs exceeding runtime */
 	check_cfs_rq_runtime(cfs_rq);
 
+#ifdef CONFIG_CGROUP_LOCK_OPTIMIZE
+	if (cfs_rq->throttled) {
+		struct sched_entity *se = prev;
+		if (entity_is_task(se)) {
+			struct task_struct *p;
+			p = task_of(se);
+			if (p->nr_rtmutex_nest) {
+				cgroup_boost_prio_pid_write(p->pid);
+				cgroup_prio_boost_tasklet_schedule();
+			}
+		}
+	}
+#endif
+
 	if (prev->on_rq) {
 		update_stats_wait_start_fair(cfs_rq, prev);
 		/* Put 'current' back into the tree. */
@@ -5781,6 +5795,10 @@ static int tg_throttle_down(struct task_group *tg, void *data)
 {
 	struct rq *rq = data;
 	struct cfs_rq *cfs_rq = tg->cfs_rq[cpu_of(rq)];
+#ifdef CONFIG_CGROUP_LOCK_OPTIMIZE
+	struct rb_node *node;
+	struct task_struct *p;
+#endif
 
 	/* group is entering throttled state, stop time */
 	if (!cfs_rq->throttle_count) {
@@ -5792,6 +5810,22 @@ static int tg_throttle_down(struct task_group *tg, void *data)
 			cfs_rq->throttled_clock_self = rq_clock(rq);
 	}
 	cfs_rq->throttle_count++;
+
+#ifdef CONFIG_CGROUP_LOCK_OPTIMIZE
+	node = rb_first(&cfs_rq->tasks_timeline.rb_root);
+	while (node) {
+		struct sched_entity *se = __node_2_se(node);
+		if (!entity_is_task(se))
+			goto next;
+		p = task_of(se);
+		if (p->nr_rtmutex_nest) {
+			cgroup_boost_prio_pid_write(p->pid);
+			cgroup_prio_boost_tasklet_schedule();
+		}
+next:
+		node = rb_next(node);
+	}
+#endif
 
 	return 0;
 }
@@ -6830,6 +6864,9 @@ enqueue_task_fair(struct rq *rq, struct task_struct *p, int flags)
 	int task_new = !(flags & ENQUEUE_WAKEUP);
 	int rq_h_nr_queued = rq->cfs.h_nr_queued;
 	u64 slice = 0;
+#ifdef CONFIG_CGROUP_LOCK_OPTIMIZE
+	bool needcheck = false;
+#endif
 
 	/*
 	 * The code below (indirectly) updates schedutil which looks at
@@ -6884,8 +6921,12 @@ enqueue_task_fair(struct rq *rq, struct task_struct *p, int flags)
 			h_nr_idle = 1;
 
 		/* end evaluation on encountering a throttled cfs_rq */
-		if (cfs_rq_throttled(cfs_rq))
+		if (cfs_rq_throttled(cfs_rq)) {
+#ifdef CONFIG_CGROUP_LOCK_OPTIMIZE
+			needcheck = true;
+#endif
 			goto enqueue_throttle;
+		}
 
 		flags = ENQUEUE_WAKEUP;
 	}
@@ -6910,8 +6951,12 @@ enqueue_task_fair(struct rq *rq, struct task_struct *p, int flags)
 			h_nr_idle = 1;
 
 		/* end evaluation on encountering a throttled cfs_rq */
-		if (cfs_rq_throttled(cfs_rq))
+		if (cfs_rq_throttled(cfs_rq)) {
+#ifdef CONFIG_CGROUP_LOCK_OPTIMIZE
+			needcheck = true;
+#endif
 			goto enqueue_throttle;
+		}
 	}
 
 	if (!rq_h_nr_queued && rq->cfs.h_nr_queued) {
@@ -6945,6 +6990,14 @@ enqueue_throttle:
 	assert_list_leaf_cfs_rq(rq);
 
 	hrtick_update(rq);
+#ifdef CONFIG_CGROUP_LOCK_OPTIMIZE
+	if (unlikely(needcheck)) {
+		if (p->nr_rtmutex_nest) {
+			cgroup_boost_prio_pid_write(p->pid);
+			cgroup_prio_boost_tasklet_schedule();
+		}
+	}
+#endif
 }
 
 static void set_next_buddy(struct sched_entity *se);
@@ -13630,3 +13683,33 @@ __init void init_sched_fair_class(void)
 	zalloc_cpumask_var(&nohz.idle_cpus_mask, GFP_NOWAIT);
 #endif
 }
+
+#ifdef CONFIG_CGROUP_LOCK_OPTIMIZE
+
+#include <uapi/linux/sched/types.h>
+
+extern void cgroup_prio_boost_tasklet_schedule(void);
+
+static __always_inline void cgroup_boost_prio(struct task_struct *p)
+{
+	struct sched_param sp = { .sched_priority = 1 };
+	if (sched_setscheduler_nocheck(p, SCHED_RR, &sp) != 0) {
+		printk(KERN_ERR "cgroup_boost_prio pid[%d][%s] fail!\n",
+			p->pid, p->comm);
+	}
+}
+
+void cgroup_boost_prio_restore(struct task_struct *p)
+{
+	if (p->sched_class == &fair_sched_class) {
+		return;
+	}
+	sched_set_normal(p, p->ori_nice);
+	if (p->policy != SCHED_NORMAL) {
+		// set it again for corner case when throttle boost just change prio
+		sched_set_normal(p, p->ori_nice);
+	}
+}
+EXPORT_SYMBOL(cgroup_boost_prio_restore);
+
+#endif

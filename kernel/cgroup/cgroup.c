@@ -6209,6 +6209,157 @@ int __init cgroup_init_early(void)
 	return 0;
 }
 
+#ifdef CONFIG_CGROUP_LOCK_OPTIMIZE
+
+#include <uapi/linux/sched/types.h>
+
+extern const struct sched_class fair_sched_class;
+
+struct cgroup_prio_boost_work {
+	struct work_struct work;
+	int boost_pid;
+};
+
+static struct workqueue_struct *cgroup_prio_boost_wq;
+static struct tasklet_struct cgroup_prio_boost_tasklet;
+#define CGROUP_PRIO_BOOST_PIDS_MAXCOUNT		8192
+static int cgroup_prio_boost_pids[CGROUP_PRIO_BOOST_PIDS_MAXCOUNT];
+static int cgroup_prio_boost_pids_writedone[CGROUP_PRIO_BOOST_PIDS_MAXCOUNT];
+static volatile u64 cgroup_prio_boost_wp = 0;
+static volatile u64 cgroup_prio_boost_rp = 0;
+static u64 cgroup_prio_boost_skipcount = 0;
+
+static int cgroup_boost_prio_get_index(void)
+{
+	u64 windex_raw, windex_raw_old;
+	u32 windex;
+	while (1) {
+		windex_raw = cgroup_prio_boost_wp;
+		if (windex_raw - cgroup_prio_boost_rp
+			>= (u64)(CGROUP_PRIO_BOOST_PIDS_MAXCOUNT)) {
+			cgroup_prio_boost_skipcount ++;
+			if (printk_ratelimit()) {
+				printk("cgroup_prio_boost_skipcount = %llu\n",
+					cgroup_prio_boost_skipcount);
+			}
+			return -1;
+		}
+		// atomic_cmpxchg return old value
+		windex_raw_old = atomic64_cmpxchg((atomic64_t*)&cgroup_prio_boost_wp,
+			windex_raw, windex_raw + 1);
+		if (windex_raw_old == windex_raw) {
+			break;
+		}
+	}
+	windex = (u32)(windex_raw & (u64)(CGROUP_PRIO_BOOST_PIDS_MAXCOUNT - 1));
+	return windex;
+}
+
+void cgroup_boost_prio_pid_write(int pid)
+{
+	int index = cgroup_boost_prio_get_index();
+	if (index >= 0) {
+		cgroup_prio_boost_pids[index] = pid;
+		smp_store_release(&cgroup_prio_boost_pids_writedone[index], 1);
+	}
+}
+EXPORT_SYMBOL(cgroup_boost_prio_pid_write);
+
+static __always_inline void cgroup_boost_prio(struct task_struct *p)
+{
+	struct sched_param sp = { .sched_priority = 1 };
+	if (sched_setscheduler_nocheck(p, SCHED_RR, &sp) != 0) {
+		printk(KERN_ERR "cgroup_boost_prio pid[%d][%s] fail!\n",
+			p->pid, p->comm);
+	}
+}
+
+static void cgroup_prio_boost_work_func(struct work_struct *work)
+{
+	struct cgroup_prio_boost_work *boost_work =
+		container_of(work, struct cgroup_prio_boost_work, work);
+	int boost_pid = boost_work->boost_pid;
+	struct pid* pid_struct;
+	struct task_struct *p;
+	struct sched_param param;
+	param.sched_priority = 1;
+	pid_struct = find_get_pid(boost_pid);
+	if (pid_struct) {
+		p = get_pid_task(pid_struct, PIDTYPE_PID);
+		if (likely(p)) {
+			if (p->sched_class == &fair_sched_class
+				&& p->nr_rtmutex_nest) {
+				int ori_nice = task_nice(p);
+				if (ori_nice >= -20 && ori_nice <= 19) {
+					p->ori_nice = ori_nice;
+					cgroup_boost_prio(p);
+					// corner case when set to RR just after unlock
+					if (p->nr_rtmutex_nest == 0) {
+						sched_set_normal(p, ori_nice);
+					}
+				}
+			}
+			put_task_struct(p);
+		}
+		put_pid(pid_struct);
+	}
+	kfree(boost_work);
+}
+
+static void cgroup_prio_boost_queue_work(int boost_pid)
+{
+	struct cgroup_prio_boost_work *work;
+	work = kmalloc(sizeof(struct cgroup_prio_boost_work), GFP_ATOMIC);
+	if (!work) {
+		printk(KERN_ERR "Failed to allocate memory for work\n");
+		return;
+	}
+	work->boost_pid = boost_pid;
+	INIT_WORK(&work->work, cgroup_prio_boost_work_func);
+	queue_work(cgroup_prio_boost_wq, &work->work);
+}
+
+#ifndef UNUSED
+#define UNUSED(x) (void)(x)
+#endif
+
+static void cgroup_prio_boost_tasklet_func(unsigned long data)
+{
+	UNUSED(data);
+	u32 index;
+	int boost_pid;
+	while (cgroup_prio_boost_wp != cgroup_prio_boost_rp) {
+		index = (cgroup_prio_boost_rp & (CGROUP_PRIO_BOOST_PIDS_MAXCOUNT - 1));
+		if (smp_load_acquire(&cgroup_prio_boost_pids_writedone[index]) != 1) {
+			break;
+		}
+		boost_pid = cgroup_prio_boost_pids[index];
+		cgroup_prio_boost_queue_work(boost_pid);
+		cgroup_prio_boost_pids_writedone[index] = 0;
+		cgroup_prio_boost_rp++;
+	}
+}
+
+static int cgroup_lock_optimize_init(void)
+{
+	cgroup_prio_boost_wq = create_workqueue("cgroup_prio_boost_wq");
+	if (!cgroup_prio_boost_wq) {
+		printk(KERN_ERR "Failed to create workqueue cgroup_prio_boost_wq\n");
+		return -ENOMEM;
+	}
+	tasklet_init(&cgroup_prio_boost_tasklet,
+		cgroup_prio_boost_tasklet_func, 0);
+	return 0;
+}
+
+void cgroup_prio_boost_tasklet_schedule(void)
+{
+	tasklet_schedule_nowakeup(&cgroup_prio_boost_tasklet);
+}
+EXPORT_SYMBOL(cgroup_prio_boost_tasklet_schedule);
+
+#endif
+
 /**
  * cgroup_init - cgroup initialization
  *
@@ -6310,6 +6461,10 @@ int __init cgroup_init(void)
 	WARN_ON(!proc_create_single("cgroups", 0, NULL, proc_cgroupstats_show));
 #ifdef CONFIG_CPUSETS_V1
 	WARN_ON(register_filesystem(&cpuset_fs_type));
+#endif
+
+#ifdef CONFIG_CGROUP_LOCK_OPTIMIZE
+	WARN_ON(cgroup_lock_optimize_init());
 #endif
 
 	return 0;

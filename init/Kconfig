@@ -1106,6 +1106,21 @@ config CFS_BANDWIDTH
 	  restriction.
 	  See Documentation/scheduler/sched-bwc.rst for more information.
 
+config CGROUP_LOCK_OPTIMIZE
+	bool "Lock optimize for cgroup cpu throttle"
+	depends on CFS_BANDWIDTH && PREEMPT_RT
+	default CFS_BANDWIDTH
+	help
+	  This option is designed to address performance issues caused by cgroup
+	  limits during lock contention, which have become increasingly severe
+	  after enabling PREEMPT_RT. Currently, this option can only be used when
+	  PREEMPT_RT is enabled. When PREEMPT_RT is enabled and CFS_BANDWIDTH is
+	  activated, this option will be enabled by default. Once this option is
+	  activated, if a fair scheduling class task is subject to cgroup limits
+	  during lock contention, the task will be temporarily adjusted to run at
+	  a priority of RR 1 until all locks are released, after which its
+	  priority will be restored to SCHED_NORMAL.
+
 config RT_GROUP_SCHED
 	bool "Group scheduling for SCHED_RR/FIFO"
 	depends on CGROUP_SCHED

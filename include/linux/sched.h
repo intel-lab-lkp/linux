@@ -815,6 +815,11 @@ struct kmap_ctrl {
 #endif
 };
 
+#ifdef CONFIG_CGROUP_LOCK_OPTIMIZE
+#define ORI_NICE_DEFAULT_INVALID	(-1024)
+#define ORI_NICE_SETONCE_INVALID	1024
+#endif
+
 struct task_struct {
 #ifdef CONFIG_THREAD_INFO_IN_TASK
 	/*
@@ -885,6 +890,10 @@ struct task_struct {
 	struct task_group		*sched_task_group;
 #endif
 
+#ifdef CONFIG_CGROUP_LOCK_OPTIMIZE
+	int				ori_nice;
+	int				nr_rtmutex_nest;
+#endif
 
 #ifdef CONFIG_UCLAMP_TASK
 	/*
