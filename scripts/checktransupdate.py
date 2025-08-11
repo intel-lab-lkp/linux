@@ -13,6 +13,8 @@ The usage is as follows:
 This will print all the files that need to be updated or translated in the zh_CN locale.
 - ./scripts/checktransupdate.py Documentation/translations/zh_CN/dev-tools/testing-overview.rst
 This will only print the status of the specified file.
+- ./scripts/checktransupdate.py Documentation/translations/zh_CN/dev-tools
+This will print all the files in the specified folder and its subfolders.
 
 The output is something like:
 Documentation/dev-tools/kfence.rst
@@ -21,6 +23,17 @@ No translation in the locale of zh_CN
 Documentation/translations/zh_CN/dev-tools/testing-overview.rst
 commit 42fb9cfd5b18 ("Documentation: dev-tools: Add link to RV docs")
 1 commits needs resolving in total
+
+Documentation/translations/zh_CN/dev-tools/index.rst
+commit d5af79c05e93 ("Documentation: move dev-tools debugging files to process/debugging/")
+commit d5dc95836147 ("kbuild: Add Propeller configuration for kernel build")
+commit 315ad8780a12 ("kbuild: Add AutoFDO support for Clang build")
+3 commits needs resolving in total
+
+Documentation/translations/zh_CN/dev-tools/kcsan.rst
+commit b37221cc861d ("Documentation: kcsan: fix "Plain Accesses and Data Races" URL in kcsan.rst")
+commit 72ffee678f6f ("docs: update dev-tools/kcsan.rst url about KTSAN")
+2 commits needs resolving in total
 """
 
 import os
@@ -293,6 +306,17 @@ def main():
                 if args.print_missing_translations:
                     logging.info(os.path.relpath(os.path.abspath(file), linux_path))
                     logging.info("No translation in the locale of %s\n", args.locale)
+    else:
+        # check if the files are directories or files
+        new_files = []
+        for file in files:
+            if os.path.isfile(file):
+                new_files.append(file)
+            elif os.path.isdir(file):
+                # for directories, list all files in the directory and its subfolders
+                new_files.extend(list_files_with_excluding_folders(
+                    file, [], "rst"))
+        files = new_files
 
     files = list(map(lambda x: os.path.relpath(os.path.abspath(x), linux_path), files))
 
