@@ -404,6 +404,7 @@ static void lan865x_remove(struct spi_device *spi)
 
 static const struct spi_device_id lan865x_ids[] = {
 	{ .name = "lan8650" },
+	{ .name = "lan8651" },
 	{},
 };
 MODULE_DEVICE_TABLE(spi, lan865x_ids);
