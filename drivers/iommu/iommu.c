@@ -112,7 +112,7 @@ enum {
 };
 
 static int __iommu_device_set_domain(struct iommu_group *group,
-				     struct device *dev,
+				     struct group_device *gdev,
 				     struct iommu_domain *new_domain,
 				     unsigned int flags);
 static int __iommu_group_set_domain_internal(struct iommu_group *group,
@@ -602,7 +602,7 @@ static int __iommu_probe_device(struct device *dev, struct list_head *group_list
 	if (group->default_domain)
 		iommu_create_device_direct_mappings(group->default_domain, dev);
 	if (group->domain) {
-		ret = __iommu_device_set_domain(group, dev, group->domain, 0);
+		ret = __iommu_device_set_domain(group, gdev, group->domain, 0);
 		if (ret)
 			goto err_remove_gdev;
 	} else if (!group->default_domain && !group_list) {
@@ -2263,10 +2263,11 @@ int iommu_attach_group(struct iommu_domain *domain, struct iommu_group *group)
 EXPORT_SYMBOL_GPL(iommu_attach_group);
 
 static int __iommu_device_set_domain(struct iommu_group *group,
-				     struct device *dev,
+				     struct group_device *gdev,
 				     struct iommu_domain *new_domain,
 				     unsigned int flags)
 {
+	struct device *dev = gdev->dev;
 	int ret;
 
 	/*
@@ -2346,8 +2347,7 @@ static int __iommu_group_set_domain_internal(struct iommu_group *group,
 	 */
 	result = 0;
 	for_each_group_device(group, gdev) {
-		ret = __iommu_device_set_domain(group, gdev->dev, new_domain,
-						flags);
+		ret = __iommu_device_set_domain(group, gdev, new_domain, flags);
 		if (ret) {
 			result = ret;
 			/*
@@ -2379,7 +2379,7 @@ err_revert:
 		 */
 		if (group->domain)
 			WARN_ON(__iommu_device_set_domain(
-				group, gdev->dev, group->domain,
+				group, gdev, group->domain,
 				IOMMU_SET_DOMAIN_MUST_SUCCEED));
 		if (gdev == last_gdev)
 			break;
