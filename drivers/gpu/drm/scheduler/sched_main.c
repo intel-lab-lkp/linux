@@ -795,6 +795,11 @@ int drm_sched_job_init(struct drm_sched_job *job,
 		return -ENOENT;
 	}
 
+	if (unlikely(entity->stopped)) {
+		pr_err("*ERROR* %s: entity is stopped!\n", __func__);
+		return -EINVAL;
+	}
+
 	if (unlikely(!credits)) {
 		pr_err("*ERROR* %s: credits cannot be 0!\n", __func__);
 		return -EINVAL;

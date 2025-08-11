@@ -570,6 +570,13 @@ void drm_sched_entity_push_job(struct drm_sched_job *sched_job)
 	bool first;
 	ktime_t submit_ts;
 
+	if (entity->stopped) {
+		DRM_ERROR("Trying to push job to a killed entity\n");
+		INIT_WORK(&sched_job->work, drm_sched_entity_kill_jobs_work);
+		schedule_work(&sched_job->work);
+		return;
+	}
+
 	trace_drm_sched_job(sched_job, entity);
 	atomic_inc(entity->rq->sched->score);
 	WRITE_ONCE(entity->last_user, current->group_leader);
@@ -589,12 +596,6 @@ void drm_sched_entity_push_job(struct drm_sched_job *sched_job)
 
 		/* Add the entity to the run queue */
 		spin_lock(&entity->lock);
-		if (entity->stopped) {
-			spin_unlock(&entity->lock);
-
-			DRM_ERROR("Trying to push to a killed entity\n");
-			return;
-		}
 
 		rq = entity->rq;
 		sched = rq->sched;
