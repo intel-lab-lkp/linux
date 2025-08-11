@@ -234,9 +234,14 @@ page_pool_get_dma_dir(const struct page_pool *pool)
 	return pool->p.dma_dir;
 }
 
+static inline void page_pool_fragment_nmdesc(struct netmem_desc *desc, long nr)
+{
+	atomic_long_set(&desc->pp_ref_count, nr);
+}
+
 static inline void page_pool_fragment_netmem(netmem_ref netmem, long nr)
 {
-	atomic_long_set(netmem_get_pp_ref_count_ref(netmem), nr);
+	page_pool_fragment_nmdesc(netmem_to_nmdesc(netmem), nr);
 }
 
 /**
@@ -259,12 +264,12 @@ static inline void page_pool_fragment_netmem(netmem_ref netmem, long nr)
  */
 static inline void page_pool_fragment_page(struct page *page, long nr)
 {
-	page_pool_fragment_netmem(page_to_netmem(page), nr);
+	page_pool_fragment_nmdesc(pp_page_to_nmdesc(page), nr);
 }
 
-static inline long page_pool_unref_netmem(netmem_ref netmem, long nr)
+static inline long page_pool_unref_nmdesc(struct netmem_desc *desc, long nr)
 {
-	atomic_long_t *pp_ref_count = netmem_get_pp_ref_count_ref(netmem);
+	atomic_long_t *pp_ref_count = &desc->pp_ref_count;
 	long ret;
 
 	/* If nr == pp_ref_count then we have cleared all remaining
@@ -307,19 +312,29 @@ static inline long page_pool_unref_netmem(netmem_ref netmem, long nr)
 	return ret;
 }
 
+static inline long page_pool_unref_netmem(netmem_ref netmem, long nr)
+{
+	return page_pool_unref_nmdesc(netmem_to_nmdesc(netmem), nr);
+}
+
 static inline long page_pool_unref_page(struct page *page, long nr)
 {
-	return page_pool_unref_netmem(page_to_netmem(page), nr);
+	return page_pool_unref_nmdesc(pp_page_to_nmdesc(page), nr);
+}
+
+static inline void page_pool_ref_nmdesc(struct netmem_desc *desc)
+{
+	atomic_long_inc(&desc->pp_ref_count);
 }
 
 static inline void page_pool_ref_netmem(netmem_ref netmem)
 {
-	atomic_long_inc(netmem_get_pp_ref_count_ref(netmem));
+	page_pool_ref_nmdesc(netmem_to_nmdesc(netmem));
 }
 
 static inline void page_pool_ref_page(struct page *page)
 {
-	page_pool_ref_netmem(page_to_netmem(page));
+	page_pool_ref_nmdesc(pp_page_to_nmdesc(page));
 }
 
 static inline bool page_pool_unref_and_test(netmem_ref netmem)

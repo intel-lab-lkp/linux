@@ -324,11 +324,6 @@ static inline struct page_pool *netmem_get_pp(netmem_ref netmem)
 	return netmem_to_nmdesc(netmem)->pp;
 }
 
-static inline atomic_long_t *netmem_get_pp_ref_count_ref(netmem_ref netmem)
-{
-	return &netmem_to_nmdesc(netmem)->pp_ref_count;
-}
-
 static inline bool netmem_is_pref_nid(netmem_ref netmem, int pref_nid)
 {
 	/* NUMA node preference only makes sense if we're allocating

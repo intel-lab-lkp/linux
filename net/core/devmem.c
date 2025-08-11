@@ -440,12 +440,7 @@ void mp_dmabuf_devmem_destroy(struct page_pool *pool)
 
 bool mp_dmabuf_devmem_release_page(struct page_pool *pool, netmem_ref netmem)
 {
-	long refcount = atomic_long_read(netmem_get_pp_ref_count_ref(netmem));
-
 	if (WARN_ON_ONCE(!netmem_is_net_iov(netmem)))
-		return false;
-
-	if (WARN_ON_ONCE(refcount != 1))
 		return false;
 
 	page_pool_clear_pp_info(netmem);
