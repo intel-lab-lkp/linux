@@ -882,7 +882,6 @@ static int esd_usb_open(struct net_device *netdev)
 	/* finally start device */
 	err = esd_usb_start(priv);
 	if (err) {
-		netdev_warn(netdev, "couldn't start device: %d\n", err);
 		close_candev(netdev);
 		return err;
 	}
@@ -1037,6 +1036,7 @@ static int esd_usb_close(struct net_device *netdev)
 {
 	struct esd_usb_net_priv *priv = netdev_priv(netdev);
 	union esd_usb_msg *msg;
+	int err;
 	int i;
 
 	msg = kmalloc(sizeof(*msg), GFP_KERNEL);
@@ -1050,8 +1050,9 @@ static int esd_usb_close(struct net_device *netdev)
 	msg->filter.option = ESD_USB_ID_ENABLE; /* start with segment 0 */
 	for (i = 0; i <= ESD_USB_MAX_ID_SEGMENT; i++)
 		msg->filter.mask[i] = 0;
-	if (esd_usb_send_msg(priv->usb, msg) < 0)
-		netdev_err(netdev, "sending idadd message failed\n");
+	err = esd_usb_send_msg(priv->usb, msg);
+	if (err < 0)
+		netdev_err(netdev, "sending idadd message failed: %d\n", err);
 
 	/* set CAN controller to reset mode */
 	msg->hdr.len = sizeof(struct esd_usb_set_baudrate_msg) / sizeof(u32); /* # of 32bit words */
@@ -1059,8 +1060,9 @@ static int esd_usb_close(struct net_device *netdev)
 	msg->setbaud.net = priv->index;
 	msg->setbaud.rsvd = 0;
 	msg->setbaud.baud = cpu_to_le32(ESD_USB_NO_BAUDRATE);
-	if (esd_usb_send_msg(priv->usb, msg) < 0)
-		netdev_err(netdev, "sending setbaud message failed\n");
+	err = esd_usb_send_msg(priv->usb, msg);
+	if (err < 0)
+		netdev_err(netdev, "sending setbaud message failed: %d\n", err);
 
 	priv->can.state = CAN_STATE_STOPPED;
 
@@ -1344,7 +1346,7 @@ static int esd_usb_probe_one_net(struct usb_interface *intf, int index)
 	}
 
 	dev->nets[index] = priv;
-	netdev_info(netdev, "device %s registered\n", netdev->name);
+	netdev_info(netdev, "registered\n");
 
 done:
 	return err;
@@ -1383,13 +1385,13 @@ static int esd_usb_probe(struct usb_interface *intf,
 	/* query number of CAN interfaces (nets) */
 	err = esd_usb_req_version(dev, buf);
 	if (err < 0) {
-		dev_err(&intf->dev, "sending version message failed\n");
+		dev_err(&intf->dev, "sending version message failed: %d\n", err);
 		goto free_buf;
 	}
 
 	err = esd_usb_recv_version(dev, buf);
 	if (err < 0) {
-		dev_err(&intf->dev, "no version message answer\n");
+		dev_err(&intf->dev, "no version message answer: %d\n", err);
 		goto free_buf;
 	}
 
@@ -1435,6 +1437,7 @@ static void esd_usb_disconnect(struct usb_interface *intf)
 		for (i = 0; i < dev->net_count; i++) {
 			if (dev->nets[i]) {
 				netdev = dev->nets[i]->netdev;
+				netdev_info(netdev, "unregister\n");
 				unregister_netdev(netdev);
 				free_candev(netdev);
 			}
