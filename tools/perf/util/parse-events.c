@@ -313,9 +313,13 @@ __add_event(struct list_head *list, int *idx,
 out_err:
 	perf_cpu_map__put(cpus);
 	perf_cpu_map__put(pmu_cpus);
-	zfree(&evsel->name);
-	zfree(&evsel->metric_id);
-	free(evsel);
+
+	if (evsel) {
+		zfree(&evsel->name);
+		zfree(&evsel->metric_id);
+		free(evsel);
+	}
+
 	return NULL;
 }
 
