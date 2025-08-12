@@ -70,12 +70,13 @@ static void arm_cspmu_set_ev_filter(struct arm_cspmu *cspmu,
 static void arm_cspmu_set_cc_filter(struct arm_cspmu *cspmu,
 				    const struct perf_event *event);
 
-static struct acpi_apmt_node *arm_cspmu_apmt_node(struct device *dev)
+struct acpi_apmt_node *arm_cspmu_apmt_node(struct device *dev)
 {
 	struct acpi_apmt_node **ptr = dev_get_platdata(dev);
 
 	return ptr ? *ptr : NULL;
 }
+EXPORT_SYMBOL_GPL(arm_cspmu_apmt_node);
 
 /*
  * In CoreSight PMU architecture, all of the MMIO registers are 32-bit except

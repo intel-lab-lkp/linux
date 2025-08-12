@@ -8,6 +8,7 @@
 #ifndef __ARM_CSPMU_H__
 #define __ARM_CSPMU_H__
 
+#include <linux/acpi.h>
 #include <linux/bitfield.h>
 #include <linux/cpumask.h>
 #include <linux/device.h>
@@ -221,5 +222,8 @@ int arm_cspmu_impl_register(const struct arm_cspmu_impl_match *impl_match);
 
 /* Unregister vendor backend. */
 void arm_cspmu_impl_unregister(const struct arm_cspmu_impl_match *impl_match);
+
+/* Get ACPI APMT node. */
+struct acpi_apmt_node *arm_cspmu_apmt_node(struct device *dev);
 
 #endif /* __ARM_CSPMU_H__ */
