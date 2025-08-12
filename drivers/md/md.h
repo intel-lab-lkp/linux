@@ -332,7 +332,7 @@ struct md_cluster_operations;
  *			       resync lock, need to release the lock.
  * @MD_FAILFAST_SUPPORTED: Using MD_FAILFAST on metadata writes is supported as
  *			    calls to md_error() will never cause the array to
- *			    become failed.
+ *			    become failed while fail_last_dev is not set.
  * @MD_HAS_PPL:  The raid array has PPL feature set.
  * @MD_HAS_MULTIPLE_PPLS: The raid array has multiple PPLs feature set.
  * @MD_NOT_READY: do_md_run() is active, so 'array_state', ust not report that
