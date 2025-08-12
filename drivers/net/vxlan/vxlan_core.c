@@ -3406,6 +3406,7 @@ static const struct nla_policy vxlan_policy[IFLA_VXLAN_MAX + 1] = {
 	[IFLA_VXLAN_LABEL_POLICY]       = NLA_POLICY_MAX(NLA_U32, VXLAN_LABEL_MAX),
 	[IFLA_VXLAN_RESERVED_BITS] = NLA_POLICY_EXACT_LEN(sizeof(struct vxlanhdr)),
 	[IFLA_VXLAN_MC_ROUTE]		= NLA_POLICY_MAX(NLA_U8, 1),
+	[IFLA_VXLAN_LOCALBIND]	= NLA_POLICY_MAX(NLA_U8, 1),
 };
 
 static int vxlan_validate(struct nlattr *tb[], struct nlattr *data[],
@@ -4044,15 +4045,37 @@ static int vxlan_nl2conf(struct nlattr *tb[], struct nlattr *data[],
 		conf->vni = vni;
 	}
 
+	if (data[IFLA_VXLAN_LOCALBIND]) {
+		if (changelink) {
+			NL_SET_ERR_MSG_ATTR(extack, tb[IFLA_VXLAN_LOCALBIND], "Cannot rebind locally");
+			return -EOPNOTSUPP;
+		}
+
+		err = vxlan_nl2flag(conf, data, IFLA_VXLAN_LOCALBIND,
+				    VXLAN_F_LOCALBIND, changelink,
+				    false, extack);
+		if (err)
+			return err;
+	}
+
 	if (data[IFLA_VXLAN_GROUP]) {
+		__be32 addr = nla_get_in_addr(data[IFLA_VXLAN_GROUP]);
+
 		if (changelink && (conf->remote_ip.sa.sa_family != AF_INET)) {
 			NL_SET_ERR_MSG_ATTR(extack, tb[IFLA_VXLAN_GROUP], "New group address family does not match old group");
 			return -EOPNOTSUPP;
 		}
 
-		conf->remote_ip.sin.sin_addr.s_addr = nla_get_in_addr(data[IFLA_VXLAN_GROUP]);
+		if ((conf->flags & VXLAN_F_LOCALBIND) && ipv4_is_multicast(addr)) {
+			NL_SET_ERR_MSG_ATTR(extack, tb[IFLA_VXLAN_GROUP], "Cannot add multicast group when bound locally");
+			return -EOPNOTSUPP;
+		}
+
+		conf->remote_ip.sin.sin_addr.s_addr = addr;
 		conf->remote_ip.sa.sa_family = AF_INET;
 	} else if (data[IFLA_VXLAN_GROUP6]) {
+		struct in6_addr addr = nla_get_in6_addr(data[IFLA_VXLAN_GROUP6]);
+
 		if (!IS_ENABLED(CONFIG_IPV6)) {
 			NL_SET_ERR_MSG_ATTR(extack, tb[IFLA_VXLAN_GROUP6], "IPv6 support not enabled in the kernel");
 			return -EPFNOSUPPORT;
@@ -4063,13 +4086,21 @@ static int vxlan_nl2conf(struct nlattr *tb[], struct nlattr *data[],
 			return -EOPNOTSUPP;
 		}
 
-		conf->remote_ip.sin6.sin6_addr = nla_get_in6_addr(data[IFLA_VXLAN_GROUP6]);
+		if ((conf->flags & VXLAN_F_LOCALBIND) && ipv6_addr_is_multicast(&addr)) {
+			NL_SET_ERR_MSG_ATTR(extack, tb[IFLA_VXLAN_GROUP6], "Cannot add multicast group when bound locally");
+			return -EOPNOTSUPP;
+		}
+
+		conf->remote_ip.sin6.sin6_addr = addr;
 		conf->remote_ip.sa.sa_family = AF_INET6;
 	}
 
 	if (data[IFLA_VXLAN_LOCAL]) {
 		if (changelink && (conf->saddr.sa.sa_family != AF_INET)) {
 			NL_SET_ERR_MSG_ATTR(extack, tb[IFLA_VXLAN_LOCAL], "New local address family does not match old");
+			return -EOPNOTSUPP;
+		} else if (changelink && (conf->flags & VXLAN_F_LOCALBIND)) {
+			NL_SET_ERR_MSG_ATTR(extack, tb[IFLA_VXLAN_LOCAL], "Cannot change local address when bound locally");
 			return -EOPNOTSUPP;
 		}
 
@@ -4083,6 +4114,9 @@ static int vxlan_nl2conf(struct nlattr *tb[], struct nlattr *data[],
 
 		if (changelink && (conf->saddr.sa.sa_family != AF_INET6)) {
 			NL_SET_ERR_MSG_ATTR(extack, tb[IFLA_VXLAN_LOCAL6], "New local address family does not match old");
+			return -EOPNOTSUPP;
+		} else if (changelink && (conf->flags & VXLAN_F_LOCALBIND)) {
+			NL_SET_ERR_MSG_ATTR(extack, tb[IFLA_VXLAN_LOCAL6], "Cannot change local address when bound locally");
 			return -EOPNOTSUPP;
 		}
 
@@ -4517,6 +4551,7 @@ static size_t vxlan_get_size(const struct net_device *dev)
 		nla_total_size(sizeof(__u8)) + /* IFLA_VXLAN_VNIFILTER */
 		/* IFLA_VXLAN_RESERVED_BITS */
 		nla_total_size(sizeof(struct vxlanhdr)) +
+		nla_total_size(sizeof(__u8)) + /* IFLA_VXLAN_LOCALBIND */
 		0;
 }
 
@@ -4596,7 +4631,9 @@ static int vxlan_fill_info(struct sk_buff *skb, const struct net_device *dev)
 	    nla_put_u8(skb, IFLA_VXLAN_REMCSUM_RX,
 		       !!(vxlan->cfg.flags & VXLAN_F_REMCSUM_RX)) ||
 	    nla_put_u8(skb, IFLA_VXLAN_LOCALBYPASS,
-		       !!(vxlan->cfg.flags & VXLAN_F_LOCALBYPASS)))
+		       !!(vxlan->cfg.flags & VXLAN_F_LOCALBYPASS)) ||
+	    nla_put_u8(skb, IFLA_VXLAN_LOCALBIND,
+		       !!(vxlan->cfg.flags & VXLAN_F_LOCALBIND)))
 		goto nla_put_failure;
 
 	if (nla_put(skb, IFLA_VXLAN_PORT_RANGE, sizeof(ports), &ports))
