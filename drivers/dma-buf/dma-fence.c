@@ -345,6 +345,42 @@ void __dma_fence_might_wait(void)
 }
 #endif
 
+/**
+ * dma_fence_signal_internal - internal signal completion of a fence
+ * @fence: the fence to signal
+ * @timestamp: fence signal timestamp in kernel's CLOCK_MONOTONIC time domain
+ *
+ * Internal signal the dma_fence without error checking. Should *NEVER* be used
+ * by drivers or external code directly.
+ *
+ * Returns 0 on success and a negative error value when @fence has been
+ * signalled already.
+ */
+int dma_fence_signal_internal(struct dma_fence *fence, ktime_t timestamp)
+{
+	struct dma_fence_cb *cur, *tmp;
+	struct list_head cb_list;
+
+	lockdep_assert_held(fence->lock);
+	if (unlikely(test_and_set_bit(DMA_FENCE_FLAG_SIGNALED_BIT,
+				      &fence->flags)))
+		return -EINVAL;
+
+	/* Stash the cb_list before replacing it with the timestamp */
+	list_replace(&fence->cb_list, &cb_list);
+
+	fence->timestamp = timestamp;
+	set_bit(DMA_FENCE_FLAG_TIMESTAMP_BIT, &fence->flags);
+	trace_dma_fence_signaled(fence);
+
+	list_for_each_entry_safe(cur, tmp, &cb_list, node) {
+		INIT_LIST_HEAD(&cur->node);
+		cur->func(fence, cur);
+	}
+
+	return 0;
+}
+EXPORT_SYMBOL(dma_fence_signal_internal);
 
 /**
  * dma_fence_signal_timestamp_locked - signal completion of a fence
@@ -367,30 +403,23 @@ void __dma_fence_might_wait(void)
 int dma_fence_signal_timestamp_locked(struct dma_fence *fence,
 				      ktime_t timestamp)
 {
-	struct dma_fence_cb *cur, *tmp;
-	struct list_head cb_list;
-
-	lockdep_assert_held(fence->lock);
-
-	if (unlikely(test_and_set_bit(DMA_FENCE_FLAG_SIGNALED_BIT,
-				      &fence->flags)))
-		return -EINVAL;
-
-	/* Stash the cb_list before replacing it with the timestamp */
-	list_replace(&fence->cb_list, &cb_list);
-
-	fence->timestamp = timestamp;
-	set_bit(DMA_FENCE_FLAG_TIMESTAMP_BIT, &fence->flags);
-	trace_dma_fence_signaled(fence);
-
-	list_for_each_entry_safe(cur, tmp, &cb_list, node) {
-		INIT_LIST_HEAD(&cur->node);
-		cur->func(fence, cur);
-	}
-
-	return 0;
+	/*
+	 * We have the re-occurring problem that people try to invent a
+	 * DMA-fences implementation which signals fences based on an userspace
+	 * IOCTL.
+	 *
+	 * This is well known as source of hard to track down crashes and is
+	 * documented to be an invalid approach. The problem is that it seems
+	 * to work during initial testing and only long term tests points out
+	 * why this can never work correctly.
+	 *
+	 * So give at least a warning when people try to signal a fence from
+	 * task context and not from interrupts or a work item. This check is
+	 * certainly not perfect but better than nothing.
+	 */
+	WARN_ON_ONCE(!in_interrupt() && !current_work());
+	return dma_fence_signal_internal(fence, timestamp);
 }
-EXPORT_SYMBOL(dma_fence_signal_timestamp_locked);
 
 /**
  * dma_fence_signal_timestamp - signal completion of a fence

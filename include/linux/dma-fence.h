@@ -369,6 +369,7 @@ int dma_fence_signal_locked(struct dma_fence *fence);
 int dma_fence_signal_timestamp(struct dma_fence *fence, ktime_t timestamp);
 int dma_fence_signal_timestamp_locked(struct dma_fence *fence,
 				      ktime_t timestamp);
+int dma_fence_signal_internal(struct dma_fence *fence, ktime_t timestamp);
 signed long dma_fence_default_wait(struct dma_fence *fence,
 				   bool intr, signed long timeout);
 int dma_fence_add_callback(struct dma_fence *fence,
@@ -422,7 +423,7 @@ dma_fence_is_signaled_locked(struct dma_fence *fence)
 		return true;
 
 	if (fence->ops->signaled && fence->ops->signaled(fence)) {
-		dma_fence_signal_locked(fence);
+		dma_fence_signal_internal(fence, ktime_get());
 		return true;
 	}
 
@@ -448,11 +449,15 @@ dma_fence_is_signaled_locked(struct dma_fence *fence)
 static inline bool
 dma_fence_is_signaled(struct dma_fence *fence)
 {
+	unsigned long flags;
+
 	if (test_bit(DMA_FENCE_FLAG_SIGNALED_BIT, &fence->flags))
 		return true;
 
 	if (fence->ops->signaled && fence->ops->signaled(fence)) {
-		dma_fence_signal(fence);
+		spin_lock_irqsave(fence->lock, flags);
+		dma_fence_signal_internal(fence, ktime_get());
+		spin_unlock_irqrestore(fence->lock, flags);
 		return true;
 	}
 
