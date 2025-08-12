@@ -1208,11 +1208,13 @@ nouveau_uvmm_bind_job_submit(struct nouveau_job *job,
 
 			dma_resv_lock(obj->resv, NULL);
 			op->vm_bo = drm_gpuvm_bo_obtain(&uvmm->base, obj);
-			dma_resv_unlock(obj->resv);
-			if (IS_ERR(op->vm_bo))
+			if (IS_ERR(op->vm_bo)) {
+				dma_resv_unlock(obj->resv);
 				return PTR_ERR(op->vm_bo);
+			}
 
 			drm_gpuvm_bo_extobj_add(op->vm_bo);
+			dma_resv_unlock(obj->resv);
 		}
 
 		ret = bind_validate_op(job, op);
@@ -1857,7 +1859,9 @@ nouveau_uvmm_ioctl_vm_init(struct drm_device *dev,
 	mt_init_flags(&uvmm->region_mt, MT_FLAGS_LOCK_EXTERN);
 	mt_set_external_lock(&uvmm->region_mt, &uvmm->mutex);
 
-	drm_gpuvm_init(&uvmm->base, cli->name, 0, drm, r_obj,
+	drm_gpuvm_init(&uvmm->base, cli->name,
+		       DRM_GPUVM_RESV_PROTECTED,
+		       drm, r_obj,
 		       NOUVEAU_VA_SPACE_START,
 		       NOUVEAU_VA_SPACE_END,
 		       init->kernel_managed_addr,
