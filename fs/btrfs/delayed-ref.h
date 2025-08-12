@@ -276,7 +276,7 @@ struct btrfs_ref {
 	 */
 	bool skip_qgroup;
 
-#ifdef CONFIG_BTRFS_FS_REF_VERIFY
+#ifdef CONFIG_BTRFS_DEBUG
 	/* Through which root is this modification. */
 	u64 real_root;
 #endif
