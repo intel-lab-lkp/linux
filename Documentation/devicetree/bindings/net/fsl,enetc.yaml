@@ -86,3 +86,18 @@ examples:
             };
         };
     };
+  - |
+    pcie {
+      #address-cells = <3>;
+      #size-cells = <2>;
+
+      ethernet@0,0 {
+          compatible = "pci1131,e101";
+          reg = <0x000000 0 0 0 0>;
+          clocks = <&scmi_clk 102>;
+          clock-names = "ref";
+          phy-handle = <&ethphy0>;
+          phy-mode = "rgmii-id";
+          ptp-timer = <&netc_timer>;
+      };
+    };
