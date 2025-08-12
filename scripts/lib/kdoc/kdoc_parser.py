@@ -511,22 +511,19 @@ class KernelDoc:
                 # Treat preprocessor directive as a typeless variable
                 self.push_parameter(ln, decl_type, arg, "",
                                     "", declaration_name)
-
+            #
+            # The pointer-to-function case.
+            #
             elif KernRe(r'\(.+\)\s*\(').search(arg):
-                # Pointer-to-function
-
                 arg = arg.replace('#', ',')
-
-                r = KernRe(r'[^\(]+\(\*?\s*([\w\[\].]*)\s*\)')
+                r = KernRe(r'[^\(]+\(\*?\s*' r'([\w\[\].]*)' r'\s*\)')
                 if r.match(arg):
                     param = r.group(1)
                 else:
                     self.emit_msg(ln, f"Invalid param: {arg}")
                     param = arg
-
-                dtype = KernRe(r'([^\(]+\(\*?)\s*' + re.escape(param)).sub(r'\1', arg)
-                self.push_parameter(ln, decl_type, param, dtype,
-                                    arg, declaration_name)
+                dtype = arg.replace(param, '')
+                self.push_parameter(ln, decl_type, param, dtype, arg, declaration_name)
             #
             # The array-of-pointers case.  Dig the parameter name out from the middle
             # of the declaration.
