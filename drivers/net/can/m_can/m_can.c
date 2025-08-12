@@ -1006,6 +1006,7 @@ static int m_can_rx_handler(struct net_device *dev, int quota, u32 irqstatus)
 	int rx_work_or_err;
 	int work_done = 0;
 
+	irqstatus &= cdev->active_interrupts;
 	if (!irqstatus)
 		goto end;
 
