@@ -1907,6 +1907,14 @@ attribute-sets:
         name: port-range
         type: binary
         struct: ifla-geneve-port-range
+      -
+        name: local
+        type: binary
+        display-hint: ipv4
+      -
+        name: local6
+        type: binary
+        display-hint: ipv6
   -
     name: linkinfo-iptun-attrs
     name-prefix: ifla-iptun-
