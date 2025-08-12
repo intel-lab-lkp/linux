@@ -130,6 +130,15 @@ allOf:
       properties:
         compatible:
           contains:
+            const: brcm,bcm2712-pcie
+    then:
+      properties:
+        rp1_nexus:
+          $ref: /schemas/misc/pci1de4,1.yaml
+  - if:
+      properties:
+        compatible:
+          contains:
             const: brcm,bcm4908-pcie
     then:
       properties:
