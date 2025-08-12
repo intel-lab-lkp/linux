@@ -338,7 +338,7 @@ int detect_hugetlb_page_sizes(size_t sizes[], int max)
 	return count;
 }
 
-static int get_pfn_flags(unsigned long pfn, int kpageflags_fd, uint64_t *flags)
+int get_pfn_flags(unsigned long pfn, int kpageflags_fd, uint64_t *flags)
 {
 	size_t count;
 

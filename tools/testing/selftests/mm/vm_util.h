@@ -92,6 +92,7 @@ unsigned long default_huge_page_size(void);
 int detect_hugetlb_page_sizes(size_t sizes[], int max);
 int check_folio_orders(char *vaddr_start, size_t len, int pagemap_file,
 			int kpageflags_file, int orders[], int nr_orders);
+int get_pfn_flags(unsigned long pfn, int kpageflags_fd, uint64_t *flags);
 
 int uffd_register(int uffd, void *addr, uint64_t len,
 		  bool miss, bool wp, bool minor);
