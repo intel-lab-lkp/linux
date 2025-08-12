@@ -191,6 +191,8 @@ static int execmem_cache_add_locked(void *ptr, size_t size, gfp_t gfp_mask)
 	unsigned long lower, upper;
 	void *area = NULL;
 
+	addr = arch_kasan_reset_tag(addr);
+
 	lower = addr;
 	upper = addr + size - 1;
 
@@ -216,7 +218,7 @@ static int execmem_cache_add(void *ptr, size_t size, gfp_t gfp_mask)
 static bool within_range(struct execmem_range *range, struct ma_state *mas,
 			 size_t size)
 {
-	unsigned long addr = mas->index;
+	unsigned long addr = arch_kasan_reset_tag(mas->index);
 
 	if (addr >= range->start && addr + size < range->end)
 		return true;

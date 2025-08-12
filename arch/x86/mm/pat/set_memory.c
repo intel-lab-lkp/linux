@@ -222,6 +222,7 @@ static inline void cpa_inc_lp_preserved(int level) { }
 static inline int
 within(unsigned long addr, unsigned long start, unsigned long end)
 {
+	addr = (unsigned long)kasan_reset_tag((void *)addr);
 	return addr >= start && addr < end;
 }
 

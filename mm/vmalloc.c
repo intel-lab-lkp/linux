@@ -3328,8 +3328,8 @@ static void vm_reset_perms(struct vm_struct *area)
 			unsigned long page_size;
 
 			page_size = PAGE_SIZE << page_order;
-			start = min(addr, start);
-			end = max(addr + page_size, end);
+			start = min((unsigned long)arch_kasan_reset_tag(addr), start);
+			end = max((unsigned long)arch_kasan_reset_tag(addr) + page_size, end);
 			flush_dmap = 1;
 		}
 	}
