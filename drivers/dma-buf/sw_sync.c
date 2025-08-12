@@ -80,6 +80,7 @@ struct sw_sync_get_deadline {
 
 #define SW_SYNC_HAS_DEADLINE_BIT	DMA_FENCE_FLAG_USER_BITS
 
+static void sync_timeline_signal(struct work_struct *work);
 static const struct dma_fence_ops timeline_fence_ops;
 
 static inline struct sync_pt *dma_fence_to_sync_pt(struct dma_fence *fence)
@@ -110,6 +111,7 @@ static struct sync_timeline *sync_timeline_create(const char *name)
 
 	obj->pt_tree = RB_ROOT;
 	INIT_LIST_HEAD(&obj->pt_list);
+	INIT_WORK(&obj->signal_work, sync_timeline_signal);
 	spin_lock_init(&obj->lock);
 
 	sync_timeline_debug_add(obj);
@@ -123,6 +125,7 @@ static void sync_timeline_free(struct kref *kref)
 		container_of(kref, struct sync_timeline, kref);
 
 	sync_timeline_debug_remove(obj);
+	flush_work(&obj->signal_work);
 
 	kfree(obj);
 }
@@ -199,23 +202,20 @@ static const struct dma_fence_ops timeline_fence_ops = {
 
 /**
  * sync_timeline_signal() - signal a status change on a sync_timeline
- * @obj:	sync_timeline to signal
- * @inc:	num to increment on timeline->value
+ * @work: the work item
  *
- * A sync implementation should call this any time one of it's fences
- * has signaled or has an error condition.
+ * Signal all fences where the sequence number indicate to do so.
  */
-static void sync_timeline_signal(struct sync_timeline *obj, unsigned int inc)
+static void sync_timeline_signal(struct work_struct *work)
 {
+	struct sync_timeline *obj = container_of(work, typeof(*obj),
+						 signal_work);
 	LIST_HEAD(signalled);
 	struct sync_pt *pt, *next;
 
 	trace_sync_timeline(obj);
 
 	spin_lock_irq(&obj->lock);
-
-	obj->value += inc;
-
 	list_for_each_entry_safe(pt, next, &obj->pt_list, link) {
 		if (!timeline_fence_signaled(&pt->base))
 			break;
@@ -227,7 +227,6 @@ static void sync_timeline_signal(struct sync_timeline *obj, unsigned int inc)
 
 		dma_fence_signal_locked(&pt->base);
 	}
-
 	spin_unlock_irq(&obj->lock);
 
 	list_for_each_entry_safe(pt, next, &signalled, link) {
@@ -394,11 +393,15 @@ static long sw_sync_ioctl_inc(struct sync_timeline *obj, unsigned long arg)
 		return -EFAULT;
 
 	while (value > INT_MAX)  {
-		sync_timeline_signal(obj, INT_MAX);
+		obj->value += INT_MAX;
+
+		schedule_work(&obj->signal_work);
+		flush_work(&obj->signal_work);
 		value -= INT_MAX;
 	}
 
-	sync_timeline_signal(obj, value);
+	obj->value += value;
+	schedule_work(&obj->signal_work);
 
 	return 0;
 }

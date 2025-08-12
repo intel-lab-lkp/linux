@@ -17,6 +17,7 @@
 #include <linux/rbtree.h>
 #include <linux/spinlock.h>
 #include <linux/dma-fence.h>
+#include <linux/workqueue.h>
 
 #include <linux/sync_file.h>
 #include <uapi/linux/sync_file.h>
@@ -40,6 +41,7 @@ struct sync_timeline {
 
 	struct rb_root		pt_tree;
 	struct list_head	pt_list;
+	struct work_struct	signal_work;
 	spinlock_t		lock;
 
 	struct list_head	sync_timeline_list;
