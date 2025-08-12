@@ -1,0 +1,63 @@
+# SPDX-License-Identifier: (GPL-2.0-only OR BSD-2-Clause)
+
+title: Freescale QUICC Engine I/O Ports Interrupt Controller
+
+maintainers:
+  - name: Christophe Leroy
+    email: christophe.leroy@csgroup.eu
+
+description: |
+  Interrupt controller for the QUICC Engine I/O ports found on some
+  Freescale/NXP PowerQUICC and QorIQ SoCs.
+
+properties:
+  compatible:
+    enum:
+      - fsl,mpc8323-qe-ports-ic
+      - fsl,mpc8360-qe-ports-ic
+      - fsl,mpc8568-qe-ports-ic
+
+  reg:
+    description: Base address and size of the QE I/O Ports Interrupt Controller registers.
+    minItems: 1
+    maxItems: 1
+
+  interrupt-controller:
+    type: boolean
+    description: Indicates this node is an interrupt controller.
+
+  '#address-cells':
+    const: 0
+    description: Must be 0.
+
+  '#interrupt-cells':
+    const: 1
+    description: Number of cells to encode an interrupt specifier.
+
+  interrupts:
+    minItems: 1
+    maxItems: 1
+    description: Interrupt line to which the QE I/O Ports controller is connected.
+
+  interrupt-parent:
+    description: Phandle to the parent interrupt controller.
+
+required:
+  - compatible
+  - reg
+  - interrupt-controller
+  - '#address-cells'
+  - '#interrupt-cells'
+  - interrupts
+  - interrupt-parent
+
+examples:
+  - |
+    interrupt-controller@c00 {
+      interrupt-controller;
+      compatible = "fsl,mpc8323-qe-ports-ic";
+      #address-cells = <0>;
+      #interrupt-cells = <1>;
+      reg = <0xc00 0x18>;
+      interrupts = <74 0x8>;
+      interrupt-parent = <&ipic>;
