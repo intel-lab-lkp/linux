@@ -8330,18 +8330,12 @@ static int find_energy_efficient_cpu(struct task_struct *p, int prev_cpu)
 		cpu_actual_cap = get_actual_cpu_capacity(cpu);
 
 		eenv.cpu_cap = cpu_actual_cap;
-		eenv.pd_cap = 0;
+		eenv.pd_cap = cpu_actual_cap * cpumask_weight(cpus);
 
-		for_each_cpu(cpu, cpus) {
+		cpumask_and(cpus, cpus, sched_domain_span(sd));
+
+		for_each_cpu_and(cpu, cpus, p->cpus_ptr) {
 			struct rq *rq = cpu_rq(cpu);
-
-			eenv.pd_cap += cpu_actual_cap;
-
-			if (!cpumask_test_cpu(cpu, sched_domain_span(sd)))
-				continue;
-
-			if (!cpumask_test_cpu(cpu, p->cpus_ptr))
-				continue;
 
 			util = cpu_util(cpu, p, cpu, 0);
 			cpu_cap = capacity_of(cpu);
