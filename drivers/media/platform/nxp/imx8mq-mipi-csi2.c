@@ -338,9 +338,7 @@ static int imx8mq_mipi_csi_sw_reset(struct csi_state *state)
 	int ret;
 
 	/*
-	 * these are most likely self-clearing reset bits. to make it
-	 * more clear, the reset-imx7 driver should implement the
-	 * .reset() operation.
+	 * Explicitly release reset to make sure reset bits are cleared.
 	 */
 	ret = reset_control_assert(state->rst);
 	if (ret < 0) {
@@ -348,7 +346,7 @@ static int imx8mq_mipi_csi_sw_reset(struct csi_state *state)
 		return ret;
 	}
 
-	return 0;
+	return reset_control_deassert(state->rst);
 }
 
 static void imx8mq_mipi_csi_set_params(struct csi_state *state)
