@@ -1357,17 +1357,17 @@ static int __devlink_port_attrs_set(struct devlink_port *devlink_port,
  *	@attrs: devlink port attrs
  */
 void devlink_port_attrs_set(struct devlink_port *devlink_port,
-			    struct devlink_port_attrs *attrs)
+			    const struct devlink_port_attrs *attrs)
 {
 	int ret;
 
 	ASSERT_DEVLINK_PORT_NOT_REGISTERED(devlink_port);
+	WARN_ON(attrs->splittable && attrs->split);
 
 	devlink_port->attrs = *attrs;
 	ret = __devlink_port_attrs_set(devlink_port, attrs->flavour);
 	if (ret)
 		return;
-	WARN_ON(attrs->splittable && attrs->split);
 }
 EXPORT_SYMBOL_GPL(devlink_port_attrs_set);
 
