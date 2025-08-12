@@ -613,7 +613,8 @@ static struct timerlat_params
 			params->print_stack = auto_thresh;
 
 			/* set trace */
-			trace_output = "timerlat_trace.txt";
+			if (!trace_output)
+				trace_output = "timerlat_trace.txt";
 
 			break;
 		case '5':
@@ -716,10 +717,11 @@ static struct timerlat_params
 					trace_output = &optarg[1];
 				else
 					trace_output = &optarg[0];
-			} else if (optind < argc && argv[optind][0] != '-')
+			} else if (optind < argc && argv[optind][0] != '-') {
 				trace_output = argv[optind];
-			else
+			} else {
 				trace_output = "timerlat_trace.txt";
+			}
 			break;
 		case 'u':
 			params->user_workload = true;
