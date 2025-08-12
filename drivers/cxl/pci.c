@@ -962,6 +962,11 @@ static int cxl_pci_probe(struct pci_dev *pdev, const struct pci_device_id *id)
 	if (rc)
 		dev_dbg(&pdev->dev, "Failed to map RAS capability.\n");
 
+	rc = cxl_map_component_regs(&cxlds->reg_map, &cxlds->regs.component,
+				    BIT(CXL_CM_CAP_CAP_ID_BI_DECODER));
+	if (rc)
+		dev_dbg(&pdev->dev, "Failed to map BI decoder capability.\n");
+
 	rc = cxl_pci_type3_init_mailbox(cxlds);
 	if (rc)
 		return rc;

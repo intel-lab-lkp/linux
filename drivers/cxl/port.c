@@ -57,6 +57,69 @@ static int discover_region(struct device *dev, void *unused)
 	return 0;
 }
 
+static int cxl_dport_init_bi(struct cxl_dport *dport)
+{
+	struct cxl_register_map *map = &dport->reg_map;
+	struct device *dev = dport->dport_dev;
+
+	if (!cxl_pci_flit_256(to_pci_dev(dev)))
+		return 0;
+
+	if (!map->component_map.bi.valid) {
+		dev_dbg(dev, "BI decoder registers not found\n");
+		return 0;
+	}
+
+	if (cxl_map_component_regs(map, &dport->regs.component,
+				   BIT(CXL_CM_CAP_CAP_ID_BI_DECODER))) {
+		dev_dbg(dev, "Failed to map BI decoder capability.\n");
+		return -EINVAL;
+	}
+
+	return 0;
+}
+
+static void cxl_uport_init_bi(struct cxl_port *port, struct device *host)
+{
+	struct cxl_register_map *map = &port->reg_map;
+
+	if (!map->component_map.bi.valid) {
+		dev_dbg(host, "BI RT registers not found\n");
+		return;
+	}
+
+	map->host = host;
+	if (cxl_map_component_regs(map, &port->uport_regs,
+				   BIT(CXL_CM_CAP_CAP_ID_BI_RT)))
+		dev_dbg(&port->dev, "Failed to map BI RT capability\n");
+}
+
+static void cxl_switch_port_init_bi(struct cxl_port *port)
+{
+	struct cxl_dport *parent_dport = port->parent_dport;
+
+	if (is_cxl_root(to_cxl_port(port->dev.parent)))
+		return;
+
+	if (dev_is_pci(&port->dev) && !cxl_pci_flit_256(to_pci_dev(&port->dev)))
+		return;
+
+	if (parent_dport && dev_is_pci(parent_dport->dport_dev)) {
+		struct pci_dev *pdev = to_pci_dev(parent_dport->dport_dev);
+
+		switch (pci_pcie_type(pdev)) {
+		case PCI_EXP_TYPE_ROOT_PORT:
+		case PCI_EXP_TYPE_DOWNSTREAM:
+			cxl_dport_init_bi(parent_dport);
+			break;
+		default:
+			break;
+		}
+	}
+
+	cxl_uport_init_bi(port, &port->dev);
+}
+
 static int cxl_switch_port_probe(struct cxl_port *port)
 {
 	struct cxl_hdm *cxlhdm;
@@ -70,6 +133,8 @@ static int cxl_switch_port_probe(struct cxl_port *port)
 		return rc;
 
 	cxl_switch_parse_cdat(port);
+
+	cxl_switch_port_init_bi(port);
 
 	cxlhdm = devm_cxl_setup_hdm(port, NULL);
 	if (!IS_ERR(cxlhdm))
@@ -111,6 +176,8 @@ static int cxl_endpoint_port_probe(struct cxl_port *port)
 	/* Cache the data early to ensure is_visible() works */
 	read_cdat_data(port);
 	cxl_endpoint_parse_cdat(port);
+
+	cxl_dport_init_bi(port->parent_dport);
 
 	get_device(&cxlmd->dev);
 	rc = devm_add_action_or_reset(&port->dev, schedule_detach, cxlmd);
