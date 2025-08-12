@@ -699,6 +699,9 @@ static noinstr void mce_read_aux(struct mce_hw_err *err, int i)
 		}
 
 		smca_extract_err_addr(m);
+
+		/* Mask out non-address bits, such as TDX KeyID */
+		m->addr &= GENMASK_ULL(boot_cpu_data.x86_phys_bits - 1, 0);
 	}
 
 	if (mce_flags.smca) {
