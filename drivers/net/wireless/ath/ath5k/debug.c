@@ -912,7 +912,7 @@ static int open_file_eeprom(struct inode *inode, struct file *file)
 
 	/* Create buffer and read in eeprom */
 
-	buf = vmalloc(array_size(eesize, 2));
+	buf = vmalloc_array(2, eesize);
 	if (!buf) {
 		ret = -ENOMEM;
 		goto err;
