@@ -2,11 +2,14 @@
 /* Copyright(c) 2018 Intel Corporation. */
 
 #include <linux/bpf_trace.h>
+#include <linux/unroll.h>
 #include <net/xdp_sock_drv.h>
 #include <net/xdp.h>
 
 #include "ixgbe.h"
 #include "ixgbe_txrx_common.h"
+
+#define PKTS_PER_BATCH 4
 
 struct xsk_buff_pool *ixgbe_xsk_pool(struct ixgbe_adapter *adapter,
 				     struct ixgbe_ring *ring)
@@ -388,58 +391,93 @@ void ixgbe_xsk_clean_rx_ring(struct ixgbe_ring *rx_ring)
 	}
 }
 
-static bool ixgbe_xmit_zc(struct ixgbe_ring *xdp_ring, unsigned int budget)
+static void ixgbe_set_rs_bit(struct ixgbe_ring *xdp_ring)
+{
+	u16 ntu = xdp_ring->next_to_use ? xdp_ring->next_to_use - 1 : xdp_ring->count - 1;
+	union ixgbe_adv_tx_desc *tx_desc;
+
+	tx_desc = IXGBE_TX_DESC(xdp_ring, ntu);
+	tx_desc->read.cmd_type_len |= cpu_to_le32(IXGBE_TXD_CMD_RS);
+}
+
+static void ixgbe_xmit_pkt(struct ixgbe_ring *xdp_ring, struct xdp_desc *desc,
+			   int i)
+
 {
 	struct xsk_buff_pool *pool = xdp_ring->xsk_pool;
 	union ixgbe_adv_tx_desc *tx_desc = NULL;
 	struct ixgbe_tx_buffer *tx_bi;
-	struct xdp_desc desc;
 	dma_addr_t dma;
 	u32 cmd_type;
 
-	if (!budget)
+	dma = xsk_buff_raw_get_dma(pool, desc[i].addr);
+	xsk_buff_raw_dma_sync_for_device(pool, dma, desc[i].len);
+
+	tx_bi = &xdp_ring->tx_buffer_info[xdp_ring->next_to_use];
+	tx_bi->bytecount = desc[i].len;
+	tx_bi->xdpf = NULL;
+	tx_bi->gso_segs = 1;
+
+	tx_desc = IXGBE_TX_DESC(xdp_ring, xdp_ring->next_to_use);
+	tx_desc->read.buffer_addr = cpu_to_le64(dma);
+
+	cmd_type = IXGBE_ADVTXD_DTYP_DATA |
+		   IXGBE_ADVTXD_DCMD_DEXT |
+		   IXGBE_ADVTXD_DCMD_IFCS;
+	cmd_type |= desc[i].len | IXGBE_TXD_CMD_EOP;
+	tx_desc->read.cmd_type_len = cpu_to_le32(cmd_type);
+	tx_desc->read.olinfo_status =
+		cpu_to_le32(desc[i].len << IXGBE_ADVTXD_PAYLEN_SHIFT);
+
+	xdp_ring->next_to_use++;
+}
+
+static void ixgbe_xmit_pkt_batch(struct ixgbe_ring *xdp_ring, struct xdp_desc *desc)
+{
+	u32 i;
+
+	unrolled_count(PKTS_PER_BATCH)
+	for (i = 0; i < PKTS_PER_BATCH; i++)
+		ixgbe_xmit_pkt(xdp_ring, desc, i);
+}
+
+static void ixgbe_fill_tx_hw_ring(struct ixgbe_ring *xdp_ring,
+				  struct xdp_desc *descs, u32 nb_pkts)
+{
+	u32 batched, leftover, i;
+
+	batched = nb_pkts & ~(PKTS_PER_BATCH - 1);
+	leftover = nb_pkts & (PKTS_PER_BATCH - 1);
+	for (i = 0; i < batched; i += PKTS_PER_BATCH)
+		ixgbe_xmit_pkt_batch(xdp_ring, &descs[i]);
+	for (i = batched; i < batched + leftover; i++)
+		ixgbe_xmit_pkt(xdp_ring, &descs[i], 0);
+}
+
+static bool ixgbe_xmit_zc(struct ixgbe_ring *xdp_ring, unsigned int budget)
+{
+	struct xdp_desc *descs = xdp_ring->xsk_pool->tx_descs;
+	u32 nb_pkts, nb_processed = 0;
+
+	if (!netif_carrier_ok(xdp_ring->netdev))
 		return true;
 
-	while (likely(budget)) {
-		if (!netif_carrier_ok(xdp_ring->netdev))
-			break;
+	nb_pkts = xsk_tx_peek_release_desc_batch(xdp_ring->xsk_pool, budget);
+	if (!nb_pkts)
+		return true;
 
-		if (!xsk_tx_peek_desc(pool, &desc))
-			break;
-
-		dma = xsk_buff_raw_get_dma(pool, desc.addr);
-		xsk_buff_raw_dma_sync_for_device(pool, dma, desc.len);
-
-		tx_bi = &xdp_ring->tx_buffer_info[xdp_ring->next_to_use];
-		tx_bi->bytecount = desc.len;
-		tx_bi->xdpf = NULL;
-		tx_bi->gso_segs = 1;
-
-		tx_desc = IXGBE_TX_DESC(xdp_ring, xdp_ring->next_to_use);
-		tx_desc->read.buffer_addr = cpu_to_le64(dma);
-
-		/* put descriptor type bits */
-		cmd_type = IXGBE_ADVTXD_DTYP_DATA |
-			   IXGBE_ADVTXD_DCMD_DEXT |
-			   IXGBE_ADVTXD_DCMD_IFCS;
-		cmd_type |= desc.len | IXGBE_TXD_CMD;
-		tx_desc->read.cmd_type_len = cpu_to_le32(cmd_type);
-		tx_desc->read.olinfo_status =
-			cpu_to_le32(desc.len << IXGBE_ADVTXD_PAYLEN_SHIFT);
-
-		xdp_ring->next_to_use++;
-		if (xdp_ring->next_to_use == xdp_ring->count)
-			xdp_ring->next_to_use = 0;
-
-		budget--;
+	if (xdp_ring->next_to_use + nb_pkts >= xdp_ring->count) {
+		nb_processed = xdp_ring->count - xdp_ring->next_to_use;
+		ixgbe_fill_tx_hw_ring(xdp_ring, descs, nb_processed);
+		xdp_ring->next_to_use = 0;
 	}
 
-	if (tx_desc) {
-		ixgbe_xdp_ring_update_tail(xdp_ring);
-		xsk_tx_release(pool);
-	}
+	ixgbe_fill_tx_hw_ring(xdp_ring, &descs[nb_processed], nb_pkts - nb_processed);
 
-	return !!budget;
+	ixgbe_set_rs_bit(xdp_ring);
+	ixgbe_xdp_ring_update_tail(xdp_ring);
+
+	return nb_pkts < budget;
 }
 
 static void ixgbe_clean_xdp_tx_buffer(struct ixgbe_ring *tx_ring,
