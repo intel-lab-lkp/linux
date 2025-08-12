@@ -927,6 +927,8 @@ struct page *make_device_exclusive(struct mm_struct *mm, unsigned long addr,
 #define PVMW_SYNC		(1 << 0)
 /* Look for migration entries rather than present PTEs */
 #define PVMW_MIGRATION		(1 << 1)
+/* Look for device private THP entries */
+#define PVMW_THP_DEVICE_PRIVATE	(1 << 2)
 
 struct page_vma_mapped_walk {
 	unsigned long pfn;

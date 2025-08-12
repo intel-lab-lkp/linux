@@ -136,6 +136,8 @@ again:
 			 * page table entry. Other special swap entries are not
 			 * migratable, and we ignore regular swapped page.
 			 */
+			struct folio *folio;
+
 			entry = pte_to_swp_entry(pte);
 			if (!is_device_private_entry(entry))
 				goto next;
@@ -146,6 +148,51 @@ again:
 				MIGRATE_VMA_SELECT_DEVICE_PRIVATE) ||
 			    pgmap->owner != migrate->pgmap_owner)
 				goto next;
+
+			folio = page_folio(page);
+			if (folio_test_large(folio)) {
+				struct folio *new_folio;
+				struct folio *new_fault_folio = NULL;
+
+				/*
+				 * The reason for finding pmd present with a
+				 * device private pte and a large folio for the
+				 * pte is partial unmaps. Split the folio now
+				 * for the migration to be handled correctly
+				 */
+				pte_unmap_unlock(ptep, ptl);
+
+				folio_get(folio);
+				if (folio != fault_folio)
+					folio_lock(folio);
+				if (split_folio(folio)) {
+					if (folio != fault_folio)
+						folio_unlock(folio);
+					ptep = pte_offset_map_lock(mm, pmdp, addr, &ptl);
+					goto next;
+				}
+
+				new_folio = page_folio(page);
+				if (fault_folio)
+					new_fault_folio = page_folio(migrate->fault_page);
+
+				/*
+				 * Ensure the lock is held on the correct
+				 * folio after the split
+				 */
+				if (!new_fault_folio) {
+					folio_unlock(folio);
+					folio_put(folio);
+				} else if (folio != new_fault_folio) {
+					folio_get(new_fault_folio);
+					folio_lock(new_fault_folio);
+					folio_unlock(folio);
+					folio_put(folio);
+				}
+
+				addr = start;
+				goto again;
+			}
 
 			mpfn = migrate_pfn(page_to_pfn(page)) |
 					MIGRATE_PFN_MIGRATE;
