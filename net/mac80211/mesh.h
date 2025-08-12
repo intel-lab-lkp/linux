@@ -327,6 +327,10 @@ int mesh_path_send_to_gates(struct mesh_path *mpath);
 int mesh_gate_num(struct ieee80211_sub_if_data *sdata);
 u32 airtime_link_metric_get(struct ieee80211_local *local,
 			    struct sta_info *sta);
+void mesh_last_beacon_seen_msec_ago(struct ieee80211_sub_if_data *sdata,
+				    struct ieee80211_mgmt *mgmt,
+				    struct ieee802_11_elems *ie,
+				    struct ieee80211_rx_status *rx_status);
 
 /* Mesh plinks */
 void mesh_neighbour_update(struct ieee80211_sub_if_data *sdata,

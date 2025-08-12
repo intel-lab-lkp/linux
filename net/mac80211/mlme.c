@@ -7567,6 +7567,8 @@ static void ieee80211_rx_mgmt_beacon(struct ieee80211_link_data *link,
 		goto free;
 	}
 
+	link_sta->last_beacon_seen_msec_ago = jiffies;
+
 	if (WARN_ON(!bss_conf->chanreq.oper.chan))
 		goto free;
 

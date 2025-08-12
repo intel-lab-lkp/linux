@@ -2954,6 +2954,15 @@ static void sta_set_link_sinfo(struct sta_info *sta,
 		link_sinfo->filled |=
 			BIT_ULL(NL80211_STA_INFO_ACK_SIGNAL_AVG);
 	}
+
+	if (!(link_sinfo->filled &
+	      BIT_ULL(NL80211_STA_INFO_BEACON_SEEN_MSEC_AGO))) {
+		link_sinfo->last_beacon_seen_msec_ago =
+			jiffies_to_msecs(jiffies -
+					 link_sta_info->last_beacon_seen_msec_ago);
+		link_sinfo->filled |=
+			BIT_ULL(NL80211_STA_INFO_BEACON_SEEN_MSEC_AGO);
+	}
 }
 
 void sta_set_sinfo(struct sta_info *sta, struct station_info *sinfo,
@@ -2961,7 +2970,7 @@ void sta_set_sinfo(struct sta_info *sta, struct station_info *sinfo,
 {
 	struct ieee80211_sub_if_data *sdata = sta->sdata;
 	struct ieee80211_local *local = sdata->local;
-	u32 thr = 0;
+	u32 thr = 0, last_beacon_seen_msec_ago = 0;
 	int i, ac, cpu, link_id;
 	struct ieee80211_sta_rx_stats *last_rxstats;
 
@@ -3204,6 +3213,7 @@ void sta_set_sinfo(struct sta_info *sta, struct station_info *sinfo,
 	if (sta->sta.valid_links) {
 		struct ieee80211_link_data *link;
 		struct link_sta_info *link_sta;
+		bool init = false;
 
 		ether_addr_copy(sinfo->mld_addr, sta->addr);
 		for_each_valid_link(sinfo, link_id) {
@@ -3218,7 +3228,26 @@ void sta_set_sinfo(struct sta_info *sta, struct station_info *sinfo,
 			sinfo->valid_links = sta->sta.valid_links;
 			sta_set_link_sinfo(sta, sinfo->links[link_id],
 					   link, tidstats);
+			if (!init ||
+			    link_sta->last_beacon_seen_msec_ago >
+			     last_beacon_seen_msec_ago)
+				last_beacon_seen_msec_ago =
+					link_sta->last_beacon_seen_msec_ago;
+			init = true;
 		}
+	} else {
+		last_beacon_seen_msec_ago =
+			sta->deflink.last_beacon_seen_msec_ago;
+	}
+
+	if (!(sinfo->filled &
+	      BIT_ULL(NL80211_STA_INFO_BEACON_SEEN_MSEC_AGO)) &&
+	    last_beacon_seen_msec_ago) {
+		sinfo->last_beacon_seen_msec_ago =
+			jiffies_to_msecs(jiffies -
+					 last_beacon_seen_msec_ago);
+		sinfo->filled |=
+			BIT_ULL(NL80211_STA_INFO_BEACON_SEEN_MSEC_AGO);
 	}
 }
 

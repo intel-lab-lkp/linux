@@ -510,6 +510,7 @@ struct ieee80211_fragment_cache {
  *	during finalize
  * @debugfs_dir: debug filesystem directory dentry
  * @pub: public (driver visible) link STA data
+ * @last_beacon_seen_msec_ago: timestamp of last received beacon in jiffies
  * TODO Move other link params from sta_info as required for MLD operation
  */
 struct link_sta_info {
@@ -564,6 +565,8 @@ struct link_sta_info {
 #ifdef CONFIG_MAC80211_DEBUGFS
 	struct dentry *debugfs_dir;
 #endif
+
+	unsigned long last_beacon_seen_msec_ago;
 
 	struct ieee80211_link_sta *pub;
 };

@@ -613,6 +613,24 @@ mesh_sta_info_get(struct ieee80211_sub_if_data *sdata,
 	return sta;
 }
 
+void mesh_last_beacon_seen_msec_ago(struct ieee80211_sub_if_data *sdata,
+				    struct ieee80211_mgmt *mgmt,
+				    struct ieee802_11_elems *elems,
+				    struct ieee80211_rx_status *rx_status)
+{
+	struct sta_info *sta;
+
+	/* mesh_sta_info_get api returns with rcu_read_lock */
+	sta = mesh_sta_info_get(sdata, mgmt->sa, elems, rx_status);
+	if (!sta)
+		goto unlock_rcu;
+
+	sta->deflink.last_beacon_seen_msec_ago = jiffies;
+
+unlock_rcu:
+	rcu_read_unlock();
+}
+
 /*
  * mesh_neighbour_update - update or initialize new mesh neighbor.
  *
