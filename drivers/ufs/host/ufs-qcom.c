@@ -38,6 +38,9 @@
 #define DEEMPHASIS_3_5_dB	0x04
 #define NO_DEEMPHASIS		0x0
 
+#define UFS_ICE_RESET_ASSERT_VALUE	0x18
+#define UFS_ICE_RESET_DEASSERT_VALUE	0x00
+
 enum {
 	TSTBUS_UAWM,
 	TSTBUS_UARM,
@@ -755,6 +758,17 @@ static int ufs_qcom_resume(struct ufs_hba *hba, enum ufs_pm_op pm_op)
 	err = ufs_qcom_enable_lane_clks(host);
 	if (err)
 		return err;
+
+	if ((!ufs_qcom_is_link_active(hba)) &&
+	    host->hw_ver.major == 5 &&
+	    host->hw_ver.minor == 0 &&
+	    host->hw_ver.step == 0) {
+		ufshcd_writel(hba, UFS_ICE_RESET_ASSERT_VALUE, UFS_MEM_ICE);
+		ufshcd_readl(hba, UFS_MEM_ICE);
+		usleep_range(50, 100);
+		ufshcd_writel(hba, UFS_ICE_RESET_DEASSERT_VALUE, UFS_MEM_ICE);
+		ufshcd_readl(hba, UFS_MEM_ICE);
+	}
 
 	return ufs_qcom_ice_resume(host);
 }
