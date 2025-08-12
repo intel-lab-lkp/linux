@@ -651,6 +651,17 @@ static int ath9k_of_init(struct ath_softc *sc)
 	if (ret == -EPROBE_DEFER)
 		return ret;
 
+	np = of_get_child_by_name(np, "led");
+	if (np && of_device_is_available(np)) {
+		u32 led_pin;
+
+		if (!of_property_read_u32(np, "reg", &led_pin))
+			ah->led_pin = led_pin;
+
+		ah->config.led_active_high = !of_property_read_bool(np, "led-active-low");
+		of_node_put(np);
+	}
+
 	return 0;
 }
 
