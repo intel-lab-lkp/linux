@@ -1203,8 +1203,10 @@ static __net_init int rdma_dev_init_net(struct net *net)
 		return ret;
 
 	/* No need to create any compat devices in default init_net. */
-	if (net_eq(net, &init_net))
+	if (net_eq(net, &init_net)) {
+		rdma_nl_net_exit(rnet);
 		return 0;
+	}
 
 	ret = xa_alloc(&rdma_nets, &rnet->id, rnet, xa_limit_32b, GFP_KERNEL);
 	if (ret) {
