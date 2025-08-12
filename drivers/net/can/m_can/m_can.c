@@ -1607,6 +1607,7 @@ static int m_can_chip_config(struct net_device *dev)
 static int m_can_start(struct net_device *dev)
 {
 	struct m_can_classdev *cdev = netdev_priv(dev);
+	u32 reg_psr;
 	int ret;
 
 	/* basic m_can configuration */
@@ -1617,7 +1618,8 @@ static int m_can_start(struct net_device *dev)
 	netdev_queue_set_dql_min_limit(netdev_get_tx_queue(cdev->net, 0),
 				       cdev->tx_max_coalesced_frames);
 
-	cdev->can.state = CAN_STATE_ERROR_ACTIVE;
+	reg_psr = m_can_read(cdev, M_CAN_PSR);
+	cdev->can.state = m_can_can_state_get_by_psr(reg_psr);
 
 	m_can_enable_all_interrupts(cdev);
 
