@@ -42,6 +42,14 @@ properties:
       Use defines in dt-bindings/iio/temperature/thermocouple.h.
       Supported types are B, E, J, K, N, R, S, T.
 
+  filter-level:
+    $ref: /schemas/types.yaml#/definitions/uint32
+    description:
+      Level of chip filtering to use. 0 means filtering is disabled.
+      See reference manual 5.2.2 - THERMOCOUPLE SENSOR CONFIGURATION
+      REGISTER, FIGURE 5-6 for Filter Step Response graph. Supported
+      values are in the range of 0-7.
+
   vdd-supply: true
 
 required:
@@ -65,6 +73,7 @@ examples:
             interrupts = <25 IRQ_TYPE_EDGE_RISING>;
             interrupt-names = "open-circuit";
             thermocouple-type = <THERMOCOUPLE_TYPE_K>;
+            filter-level = <1>;
             vdd-supply = <&vdd>;
         };
     };
