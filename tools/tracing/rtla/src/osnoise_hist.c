@@ -435,7 +435,7 @@ static void osnoise_hist_usage(char *usage)
 		"	  -T/--threshold us: the minimum delta to be considered a noise",
 		"	  -c/--cpus cpu-list: list of cpus to run osnoise threads",
 		"	  -H/--house-keeping cpus: run rtla control threads only on the given cpus",
-		"	  -C/--cgroup[=cgroup_name]: set cgroup, if no cgroup_name is passed, the rtla's cgroup will be inherited",
+		"	  -C/--cgroup [cgroup_name]: set cgroup, if no cgroup_name is passed, the rtla's cgroup will be inherited",
 		"	  -d/--duration time[s|m|h|d]: duration of the session",
 		"	  -D/--debug: print debug info",
 		"	  -t/--trace[file]: save the stopped trace to [file|osnoise_trace.txt]",
@@ -559,12 +559,17 @@ static struct osnoise_params
 			break;
 		case 'C':
 			params->cgroup = 1;
-			if (!optarg) {
-				/* will inherit this cgroup */
+			if (optarg) {
+				if (optarg[0] == '=') {
+					/* skip the = */
+					params->cgroup_name = &optarg[1];
+				} else {
+					params->cgroup_name = optarg;
+				}
+			} else if (optind < argc && argv[optind][0] != '-') {
+				params->cgroup_name = argv[optind];
+			} else {
 				params->cgroup_name = NULL;
-			} else if (*optarg == '=') {
-				/* skip the = */
-				params->cgroup_name = ++optarg;
 			}
 			break;
 		case 'D':
