@@ -2154,7 +2154,7 @@ static struct sk_buff *i40e_construct_skb(struct i40e_ring *rx_ring,
 		xdp_update_skb_shared_info(skb, skinfo->nr_frags + nr_frags,
 					   sinfo->xdp_frags_size,
 					   nr_frags * xdp->frame_sz,
-					   xdp_buff_is_frag_pfmemalloc(xdp));
+					   xdp_buff_get_skb_flags(xdp));
 
 		/* First buffer has already been processed, so bump ntc */
 		if (++rx_ring->next_to_clean == rx_ring->count)
@@ -2209,7 +2209,7 @@ static struct sk_buff *i40e_build_skb(struct i40e_ring *rx_ring,
 		xdp_update_skb_shared_info(skb, nr_frags,
 					   sinfo->xdp_frags_size,
 					   nr_frags * xdp->frame_sz,
-					   xdp_buff_is_frag_pfmemalloc(xdp));
+					   xdp_buff_get_skb_flags(xdp));
 
 		i40e_process_rx_buffs(rx_ring, I40E_XDP_PASS, xdp);
 	} else {

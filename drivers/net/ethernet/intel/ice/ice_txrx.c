@@ -1034,7 +1034,7 @@ ice_build_skb(struct ice_rx_ring *rx_ring, struct xdp_buff *xdp)
 		xdp_update_skb_shared_info(skb, nr_frags,
 					   sinfo->xdp_frags_size,
 					   nr_frags * xdp->frame_sz,
-					   xdp_buff_is_frag_pfmemalloc(xdp));
+					   xdp_buff_get_skb_flags(xdp));
 
 	return skb;
 }
@@ -1114,7 +1114,7 @@ ice_construct_skb(struct ice_rx_ring *rx_ring, struct xdp_buff *xdp)
 		xdp_update_skb_shared_info(skb, skinfo->nr_frags + nr_frags,
 					   sinfo->xdp_frags_size,
 					   nr_frags * xdp->frame_sz,
-					   xdp_buff_is_frag_pfmemalloc(xdp));
+					   xdp_buff_get_skb_flags(xdp));
 	}
 
 	return skb;
