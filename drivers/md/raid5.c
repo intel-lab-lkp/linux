@@ -1146,8 +1146,25 @@ static void ops_run_io(struct stripe_head *sh, struct stripe_head_state *s)
 
 	might_sleep();
 
-	if (log_stripe(sh, s) == 0)
+	if (log_stripe(sh, s) == 0) {
+		/* Successfully logged to journal */
 		return;
+	}
+
+	if (conf->log && r5l_log_disk_error(conf)) {
+		/*
+		 * Journal device failed. We must not proceed with writes
+		 * to prevent a write hole.
+		 * The RAID write hole occurs when parity is updated
+		 * without successfully updating all data blocks.
+		 * If the journal write fails, we must abort the entire
+		 * stripe operation to maintain consistency.
+		 */
+		if (s->to_write || s->written) {
+			set_bit(STRIPE_HANDLE, &sh->state);
+			return;
+		}
+	}
 
 	should_defer = conf->batch_bio_dispatch && conf->group_cnt;
 
@@ -3672,6 +3689,10 @@ handle_failed_stripe(struct r5conf *conf, struct stripe_head *sh,
 		 * still be locked - so just clear all R5_LOCKED flags
 		 */
 		clear_bit(R5_LOCKED, &sh->dev[i].flags);
+		clear_bit(R5_Wantwrite, &sh->dev[i].flags);
+		clear_bit(R5_Wantcompute, &sh->dev[i].flags);
+		clear_bit(R5_WantFUA, &sh->dev[i].flags);
+		clear_bit(R5_Wantdrain, &sh->dev[i].flags);
 	}
 	s->to_write = 0;
 	s->written = 0;
@@ -4966,12 +4987,9 @@ static void handle_stripe(struct stripe_head *sh)
 	/*
 	 * check if the array has lost more than max_degraded devices and,
 	 * if so, some requests might need to be failed.
-	 *
-	 * When journal device failed (log_failed), we will only process
-	 * the stripe if there is data need write to raid disks
 	 */
 	if (s.failed > conf->max_degraded ||
-	    (s.log_failed && s.injournal == 0)) {
+	    (s.log_failed && (s.to_write || s.written || s.syncing))) {
 		sh->check_state = 0;
 		sh->reconstruct_state = 0;
 		break_stripe_batch_list(sh, 0);
