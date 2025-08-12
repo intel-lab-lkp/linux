@@ -5,6 +5,17 @@
  * Copyright (C) 2025 Renesas Electronics Corp.
  */
 
+#define RZN2H_PINS_PER_PORT    8
+
+/*
+ * Create the pin index from its bank and position numbers and store in
+ * the upper 16 bits the alternate function identifier
+ */
+#define RZN2H_PORT_PINMUX(b, p, f)     ((b) * RZN2H_PINS_PER_PORT + (p) | ((f) << 16))
+
+/* Convert a port and pin label to its global pin index */
+#define RZN2H_GPIO(port, pin)  ((port) * RZN2H_PINS_PER_PORT + (pin))
+
 #include <dt-bindings/clock/renesas,r9a09g087-cpg-mssr.h>
 #include <dt-bindings/interrupt-controller/arm-gic.h>
 
@@ -214,6 +225,19 @@
 			#clock-cells = <2>;
 			#reset-cells = <1>;
 			#power-domain-cells = <0>;
+		};
+
+		pinctrl: pinctrl@802c0000 {
+			compatible = "renesas,r9a09g087-pinctrl";
+			reg = <0 0x802c0000 0 0x10000>,
+			      <0 0x812c0000 0 0x10000>,
+			      <0 0x802b0000 0 0x10000>;
+			reg-names = "nsr", "srs", "srn";
+			clocks = <&cpg CPG_CORE R9A09G087_CLK_PCLKM>;
+			gpio-controller;
+			#gpio-cells = <2>;
+			gpio-ranges = <&pinctrl 0 0 280>;
+			power-domains = <&cpg>;
 		};
 
 		gic: interrupt-controller@83000000 {
