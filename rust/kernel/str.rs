@@ -893,13 +893,6 @@ impl<'a> NullTerminatedFormatter<'a> {
         //  - If buffer was not at least length 1, `buffer.first_mut()` would return None.
         Some(Self { buffer })
     }
-
-    #[expect(dead_code)]
-    pub(crate) fn from_array<const N: usize>(
-        buffer: &'a mut [crate::ffi::c_char; N],
-    ) -> Option<NullTerminatedFormatter<'a>> {
-        Self::new(buffer)
-    }
 }
 
 impl Write for NullTerminatedFormatter<'_> {
