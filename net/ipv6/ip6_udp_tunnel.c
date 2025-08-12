@@ -40,6 +40,7 @@ int udp_sock_create6(struct net *net, struct udp_port_cfg *cfg,
 	memcpy(&udp6_addr.sin6_addr, &cfg->local_ip6,
 	       sizeof(udp6_addr.sin6_addr));
 	udp6_addr.sin6_port = cfg->local_udp_port;
+	inet_assign_bit(FREEBIND, sock->sk, cfg->freebind);
 	err = kernel_bind(sock, (struct sockaddr *)&udp6_addr,
 			  sizeof(udp6_addr));
 	if (err < 0)
