@@ -2086,6 +2086,17 @@ F:	Documentation/devicetree/bindings/gpu/arm,mali-valhall-csf.yaml
 F:	drivers/gpu/drm/panthor/
 F:	include/uapi/drm/panthor_drm.h
 
+ARM MALI TYR DRM DRIVER
+M:	Daniel Almeida <daniel.almeida@collabora.com>
+L:	dri-devel@lists.freedesktop.org
+S:	Supported
+W:	https://rust-for-linux.com/tyr-gpu-driver
+B:	https://gitlab.freedesktop.org/panfrost/linux/-/issues
+T:	git https://gitlab.freedesktop.org/panfrost/linux.git
+F:	Documentation/devicetree/bindings/gpu/arm,mali-valhall-csf.yaml
+F:	drivers/gpu/drm/tyr/
+F:	include/uapi/drm/panthor_drm.h
+
 ARM MALI-DP DRM DRIVER
 M:	Liviu Dudau <liviu.dudau@arm.com>
 S:	Supported
