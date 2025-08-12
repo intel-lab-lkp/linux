@@ -94,10 +94,7 @@ int io_getxattr_prep(struct io_kiocb *req, const struct io_uring_sqe *sqe)
 	path = u64_to_user_ptr(READ_ONCE(sqe->addr3));
 
 	ix->filename = getname(path);
-	if (IS_ERR(ix->filename))
-		return PTR_ERR(ix->filename);
-
-	return 0;
+	return PTR_ERR_OR_ZERO(ix->filename);
 }
 
 int io_fgetxattr(struct io_kiocb *req, unsigned int issue_flags)
@@ -170,10 +167,7 @@ int io_setxattr_prep(struct io_kiocb *req, const struct io_uring_sqe *sqe)
 	path = u64_to_user_ptr(READ_ONCE(sqe->addr3));
 
 	ix->filename = getname(path);
-	if (IS_ERR(ix->filename))
-		return PTR_ERR(ix->filename);
-
-	return 0;
+	return PTR_ERR_OR_ZERO(ix->filename);
 }
 
 int io_fsetxattr_prep(struct io_kiocb *req, const struct io_uring_sqe *sqe)
