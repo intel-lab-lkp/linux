@@ -479,5 +479,7 @@ struct etr_buf *tmc_etr_get_buffer(struct coresight_device *csdev,
 extern const struct attribute_group coresight_etr_group;
 void tmc_clean_etr_buf_list(struct tmc_drvdata *drvdata);
 int tmc_create_etr_buf_list(struct tmc_drvdata *drvdata, int num_nodes);
+int tmc_etr_enable_hw_after_switching(struct tmc_drvdata *drvdata);
+void tmc_etr_disable_hw_before_switching(struct tmc_drvdata *drvdata);
 
 #endif
