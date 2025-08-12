@@ -1997,8 +1997,11 @@ int nfsd_nl_listener_set_doit(struct sk_buff *skb, struct genl_info *info)
 	 * Since we can't delete an arbitrary llist entry, destroy the
 	 * remaining listeners and recreate the list.
 	 */
-	if (delete)
+	if (delete) {
 		svc_xprt_destroy_all(serv, net);
+		svc_rpcb_cleanup(serv, net);
+		svc_bind(serv, net);
+	}
 
 	/* walk list of addrs again, open any that still don't exist */
 	nlmsg_for_each_attr(attr, info->nlhdr, GENL_HDRLEN, rem) {
