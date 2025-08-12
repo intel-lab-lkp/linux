@@ -622,6 +622,8 @@ static int btintel_pcie_read_dram_buffers(struct btintel_pcie_data *data)
 	struct tm tm_now;
 	char fw_build[128];
 	char ts[128];
+	char vendor[64];
+	char driver[64];
 
 	if (!IS_ENABLED(CONFIG_DEV_COREDUMP))
 		return -EOPNOTSUPP;
@@ -641,6 +643,10 @@ static int btintel_pcie_read_dram_buffers(struct btintel_pcie_data *data)
 		data->dmp_hdr.write_ptr = prev_size + offset;
 	else
 		return -EINVAL;
+
+	snprintf(vendor, sizeof(vendor), "Vendor: Intel\n");
+	snprintf(driver, sizeof(driver), "Driver: %s\n",
+		 data->dmp_hdr.driver_name);
 
 	ktime_get_real_ts64(&now);
 	time64_to_tm(now.tv_sec, 0, &tm_now);
@@ -662,7 +668,9 @@ static int btintel_pcie_read_dram_buffers(struct btintel_pcie_data *data)
 		sizeof(*tlv) + sizeof(data->dmp_hdr.cnvr_top) +
 		sizeof(*tlv) + sizeof(data->dmp_hdr.cnvi_top) +
 		sizeof(*tlv) + strlen(ts) +
-		sizeof(*tlv) + strlen(fw_build);
+		sizeof(*tlv) + strlen(fw_build) +
+		sizeof(*tlv) + strlen(vendor) +
+		sizeof(*tlv) + strlen(driver);
 
 	/*
 	 * sizeof(u32) - signature
@@ -686,6 +694,9 @@ static int btintel_pcie_read_dram_buffers(struct btintel_pcie_data *data)
 	*(u32 *)p = data_len;
 	p += sizeof(u32);
 
+
+	p = btintel_pcie_copy_tlv(p, BTINTEL_VENDOR, vendor, strlen(vendor));
+	p = btintel_pcie_copy_tlv(p, BTINTEL_DRIVER, driver, strlen(driver));
 	p = btintel_pcie_copy_tlv(p, BTINTEL_DUMP_TIME, ts, strlen(ts));
 	p = btintel_pcie_copy_tlv(p, BTINTEL_FW_BUILD, fw_build,
 				  strlen(fw_build));
