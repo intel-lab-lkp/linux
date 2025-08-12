@@ -50,6 +50,7 @@ MODULE_DESCRIPTION("The NFSv4 file layout driver");
 
 #define FILELAYOUT_POLL_RETRY_MAX     (15*HZ)
 static const struct pnfs_commit_ops filelayout_commit_ops;
+bool filelayout_avoid_mds_io;
 
 static loff_t
 filelayout_get_dense_offset(struct nfs4_filelayout_segment *flseg,
@@ -185,16 +186,22 @@ static int filelayout_async_handle_error(struct rpc_task *task,
 	case -ENODEV:
 		dprintk("%s DS connection error %d\n", __func__,
 			task->tk_status);
-		nfs4_mark_deviceid_unavailable(devid);
-		pnfs_error_mark_layout_for_return(inode, lseg);
-		pnfs_set_lo_fail(lseg);
-		rpc_wake_up(&tbl->slot_tbl_waitq);
+		if (!filelayout_avoid_mds_io) {
+			nfs4_mark_deviceid_unavailable(devid);
+			pnfs_error_mark_layout_for_return(inode, lseg);
+			pnfs_set_lo_fail(lseg);
+			rpc_wake_up(&tbl->slot_tbl_waitq);
+		}
 		fallthrough;
 	default:
 reset:
-		dprintk("%s Retry through MDS. Error %d\n", __func__,
+		if (!filelayout_avoid_mds_io) {
+			dprintk("%s Retry through MDS. Error %d\n", __func__,
+				task->tk_status);
+			return -NFS4ERR_RESET_TO_MDS;
+		}
+		dprintk("%s Retry through DS. Error %d\n", __func__,
 			task->tk_status);
-		return -NFS4ERR_RESET_TO_MDS;
 	}
 	task->tk_status = 0;
 	return -EAGAIN;
@@ -257,7 +264,8 @@ filelayout_reset_to_mds(struct pnfs_layout_segment *lseg)
 {
 	struct nfs4_deviceid_node *node = FILELAYOUT_DEVID_NODE(lseg);
 
-	return filelayout_test_devid_unavailable(node);
+	return (!filelayout_avoid_mds_io &&
+		filelayout_test_devid_unavailable(node));
 }
 
 /*
@@ -465,11 +473,13 @@ filelayout_read_pagelist(struct nfs_pgio_header *hdr)
 	idx = nfs4_fl_calc_ds_index(lseg, j);
 	ds = nfs4_fl_prepare_ds(lseg, idx);
 	if (!ds)
-		return PNFS_NOT_ATTEMPTED;
+		return filelayout_avoid_mds_io ? PNFS_TRY_AGAIN :
+			PNFS_NOT_ATTEMPTED;
 
 	ds_clnt = nfs4_find_or_create_ds_client(ds->ds_clp, hdr->inode);
 	if (IS_ERR(ds_clnt))
-		return PNFS_NOT_ATTEMPTED;
+		return filelayout_avoid_mds_io ? PNFS_TRY_AGAIN :
+			PNFS_NOT_ATTEMPTED;
 
 	dprintk("%s USE DS: %s cl_count %d\n", __func__,
 		ds->ds_remotestr, refcount_read(&ds->ds_clp->cl_count));
@@ -508,11 +518,13 @@ filelayout_write_pagelist(struct nfs_pgio_header *hdr, int sync)
 	idx = nfs4_fl_calc_ds_index(lseg, j);
 	ds = nfs4_fl_prepare_ds(lseg, idx);
 	if (!ds)
-		return PNFS_NOT_ATTEMPTED;
+		return filelayout_avoid_mds_io ? PNFS_TRY_AGAIN :
+			PNFS_NOT_ATTEMPTED;
 
 	ds_clnt = nfs4_find_or_create_ds_client(ds->ds_clp, hdr->inode);
 	if (IS_ERR(ds_clnt))
-		return PNFS_NOT_ATTEMPTED;
+		return filelayout_avoid_mds_io ? PNFS_TRY_AGAIN :
+			PNFS_NOT_ATTEMPTED;
 
 	dprintk("%s ino %lu sync %d req %zu@%llu DS: %s cl_count %d\n",
 		__func__, hdr->inode->i_ino, sync, (size_t) hdr->args.count,
@@ -843,7 +855,8 @@ fl_pnfs_update_layout(struct inode *ino,
 				  gfp_flags);
 	if (IS_ERR(lseg)) {
 		/* Fall back to MDS on recoverable errors */
-		if (!nfs_error_is_fatal_on_server(PTR_ERR(lseg)))
+		if (!filelayout_avoid_mds_io &&
+		    !nfs_error_is_fatal_on_server(PTR_ERR(lseg)))
 			lseg = NULL;
 		goto out;
 	} else if (!lseg)
@@ -1148,6 +1161,9 @@ static void __exit nfs4filelayout_exit(void)
 }
 
 MODULE_ALIAS("nfs-layouttype4-1");
+
+module_param(filelayout_avoid_mds_io, bool, 0644);
+MODULE_PARM_DESC(filelayout_avoid_mds_io, "Disable IO from MDS");
 
 module_init(nfs4filelayout_init);
 module_exit(nfs4filelayout_exit);

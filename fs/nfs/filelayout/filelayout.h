@@ -98,6 +98,8 @@ filelayout_test_devid_invalid(struct nfs4_deviceid_node *node)
 	return test_bit(NFS_DEVICEID_INVALID, &node->flags);
 }
 
+extern bool filelayout_avoid_mds_io;
+
 extern bool
 filelayout_test_devid_unavailable(struct nfs4_deviceid_node *node);
 
