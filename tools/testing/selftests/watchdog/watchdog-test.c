@@ -209,8 +209,6 @@ int main(int argc, char *argv[])
 		exit(ret);
 	}
 
-	optind = 0;
-
 	while ((c = getopt_long(argc, argv, sopts, lopts, NULL)) != -1) {
 		switch (c) {
 		case 'b':
