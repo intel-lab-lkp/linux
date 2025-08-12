@@ -22,12 +22,6 @@
 	leds {
 		compatible = "gpio-leds";
 
-		led-wlan {
-			label = "dragino2:red:wlan";
-			gpios = <&gpio 0 GPIO_ACTIVE_HIGH>;
-			default-state = "off";
-		};
-
 		led-lan {
 			label = "dragino2:red:lan";
 			gpios = <&gpio 13 GPIO_ACTIVE_LOW>;
@@ -101,4 +95,8 @@
 
 &wifi {
 	status = "okay";
+
+	led {
+		reg = <0>;
+	};
 };

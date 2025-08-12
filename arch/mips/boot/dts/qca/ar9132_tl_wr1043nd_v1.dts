@@ -56,11 +56,6 @@
 			label = "tp-link:green:qss";
 			gpios = <&gpio 5 GPIO_ACTIVE_HIGH>;
 		};
-
-		led-3 {
-			label = "tp-link:green:wlan";
-			gpios = <&gpio 9 GPIO_ACTIVE_LOW>;
-		};
 	};
 };
 
@@ -111,4 +106,9 @@
 
 &wifi {
 	status = "okay";
+
+	led {
+		reg = <9>;
+		led-active-low;
+	};
 };
