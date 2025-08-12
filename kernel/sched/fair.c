@@ -6781,7 +6781,10 @@ static int sched_idle_rq(struct rq *rq)
 
 static int sched_idle_cpu(int cpu)
 {
-	return sched_idle_rq(cpu_rq(cpu));
+	if (sched_feat(WAKEUP_SELECT_IDLE))
+		return sched_idle_rq(cpu_rq(cpu));
+	else
+		return 0;
 }
 
 static void
