@@ -159,7 +159,19 @@ static DEFINE_MUTEX(irq_mapping_update_lock);
 
 static LIST_HEAD(xen_irq_list_head);
 
-/* IRQ <-> VIRQ mapping. */
+static bool is_per_vcpu_virq(int virq) {
+	switch (virq) {
+	case VIRQ_TIMER:
+	case VIRQ_DEBUG:
+	case VIRQ_XENOPROF:
+	case VIRQ_XENPMU:
+		return true;
+	default:
+		return false;
+	}
+}
+
+/* IRQ <-> VIRQ mapping.  Global/Domain virqs are tracked in cpu 0.  */
 static DEFINE_PER_CPU(int [NR_VIRQS], virq_to_irq) = {[0 ... NR_VIRQS-1] = -1};
 
 /* IRQ <-> IPI mapping */
@@ -974,6 +986,9 @@ static void __unbind_from_irq(struct irq_info *info, unsigned int irq)
 
 		switch (info->type) {
 		case IRQT_VIRQ:
+			if (!is_per_vcpu_virq(virq_from_irq(info)))
+				cpu = 0;
+
 			per_cpu(virq_to_irq, cpu)[virq_from_irq(info)] = -1;
 			break;
 		case IRQT_IPI:
