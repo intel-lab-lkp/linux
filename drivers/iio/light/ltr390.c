@@ -628,6 +628,24 @@ static irqreturn_t ltr390_interrupt_handler(int irq, void *private)
 	return IRQ_HANDLED;
 }
 
+static void ltr390_powerdown(void *client)
+{
+	struct i2c_client *i2c_clnt = client;
+	struct iio_dev *indio_dev = i2c_get_clientdata(i2c_clnt);
+	struct ltr390_data *data = iio_priv(indio_dev);
+
+	guard(mutex)(&data->lock);
+
+	/* Ensure that power off and interrupts are disabled */
+	if (regmap_clear_bits(data->regmap, LTR390_INT_CFG,
+				LTR390_LS_INT_EN) < 0)
+		dev_err(&i2c_clnt->dev, "failed to disable interrupts\n");
+
+	if (regmap_clear_bits(data->regmap, LTR390_MAIN_CTRL,
+			LTR390_SENSOR_ENABLE) < 0)
+		dev_err(&i2c_clnt->dev, "failed to disable sensor\n");
+}
+
 static int ltr390_probe(struct i2c_client *client)
 {
 	struct ltr390_data *data;
@@ -641,7 +659,7 @@ static int ltr390_probe(struct i2c_client *client)
 		return -ENOMEM;
 
 	data = iio_priv(indio_dev);
-
+	i2c_set_clientdata(client, indio_dev);
 	data->regmap = devm_regmap_init_i2c(client, &ltr390_regmap_config);
 	if (IS_ERR(data->regmap))
 		return dev_err_probe(dev, PTR_ERR(data->regmap),
@@ -680,6 +698,10 @@ static int ltr390_probe(struct i2c_client *client)
 	ret = regmap_set_bits(data->regmap, LTR390_MAIN_CTRL, LTR390_SENSOR_ENABLE);
 	if (ret)
 		return dev_err_probe(dev, ret, "failed to enable the sensor\n");
+
+	ret = devm_add_action_or_reset(dev, ltr390_powerdown, client);
+	if (ret)
+		return dev_err_probe(dev, ret, "failed to add action or reset\n");
 
 	if (client->irq) {
 		ret = devm_request_threaded_irq(dev, client->irq,
