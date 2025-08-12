@@ -24,7 +24,7 @@ static int cxl_handle_mce(struct notifier_block *nb, unsigned long val,
 	if (!endpoint)
 		return NOTIFY_DONE;
 
-	spa = mce->addr & MCI_ADDR_PHYSADDR;
+	spa = mce->addr;
 
 	pfn = spa >> PAGE_SHIFT;
 	if (!pfn_valid(pfn))

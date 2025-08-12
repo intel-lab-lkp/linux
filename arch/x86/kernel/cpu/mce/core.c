@@ -642,7 +642,7 @@ static int uc_decode_notifier(struct notifier_block *nb, unsigned long val,
 	    mce->severity != MCE_DEFERRED_SEVERITY)
 		return NOTIFY_DONE;
 
-	pfn = (mce->addr & MCI_ADDR_PHYSADDR) >> PAGE_SHIFT;
+	pfn = mce->addr >> PAGE_SHIFT;
 	if (!memory_failure(pfn, 0)) {
 		set_mce_nospec(pfn);
 		mce->kflags |= MCE_HANDLED_UC;
@@ -1415,7 +1415,7 @@ static void kill_me_maybe(struct callback_head *cb)
 	if (!p->mce_ripv)
 		flags |= MF_MUST_KILL;
 
-	pfn = (p->mce_addr & MCI_ADDR_PHYSADDR) >> PAGE_SHIFT;
+	pfn = p->mce_addr >> PAGE_SHIFT;
 	ret = memory_failure(pfn, flags);
 	if (!ret) {
 		set_mce_nospec(pfn);
@@ -1444,7 +1444,7 @@ static void kill_me_never(struct callback_head *cb)
 
 	p->mce_count = 0;
 	pr_err("Kernel accessed poison in user space at %llx\n", p->mce_addr);
-	pfn = (p->mce_addr & MCI_ADDR_PHYSADDR) >> PAGE_SHIFT;
+	pfn = p->mce_addr >> PAGE_SHIFT;
 	if (!memory_failure(pfn, 0))
 		set_mce_nospec(pfn);
 }
