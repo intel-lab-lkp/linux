@@ -331,6 +331,54 @@
 		regulator-boot-on;
 	};
 
+	vreg_pcie_12v: regulator-pcie-12v {
+		compatible = "regulator-fixed";
+
+		regulator-name = "vreg_pcie_12v";
+		regulator-min-microvolt = <12000000>;
+		regulator-max-microvolt = <12000000>;
+
+		gpio = <&pm8550ve_8_gpios 8 GPIO_ACTIVE_HIGH>;
+		enable-active-high;
+
+		pinctrl-0 = <&vreg_12v_x8_en>;
+		pinctrl-names = "default";
+
+		regulator-boot-on;
+	};
+
+	vreg_pcie_3v3_aux: regulator-pcie-3v3-aux {
+		compatible = "regulator-fixed";
+
+		regulator-name = "vreg_pcie_3v3_aux";
+		regulator-min-microvolt = <3300000>;
+		regulator-max-microvolt = <3300000>;
+
+		gpio = <&pmc8380_3_gpios 8 GPIO_ACTIVE_HIGH>;
+		enable-active-high;
+
+		pinctrl-0 = <&sde7_aux_reg_en>;
+		pinctrl-names = "default";
+
+		regulator-boot-on;
+	};
+
+	vreg_pcie_3v3_main: regulator-pcie-3v3-main {
+		compatible = "regulator-fixed";
+
+		regulator-name = "vreg_pcie_3v3_main";
+		regulator-min-microvolt = <3300000>;
+		regulator-max-microvolt = <3300000>;
+
+		gpio = <&pmc8380_3_gpios 6 GPIO_ACTIVE_HIGH>;
+		enable-active-high;
+
+		pinctrl-0 = <&sde7_main_reg_en>;
+		pinctrl-names = "default";
+
+		regulator-boot-on;
+	};
+
 	sound {
 		compatible = "qcom,x1e80100-sndcard";
 		model = "X1E80100-Romulus";
@@ -1022,6 +1070,12 @@
 	status = "okay";
 };
 
+&pcie3_port {
+	vpcie12v-supply = <&vreg_pcie_12v>;
+	vpcie3v3-supply = <&vreg_pcie_3v3_main>;
+	vpcie3v3aux-supply = <&vreg_pcie_3v3_aux>;
+};
+
 &pcie4 {
 	status = "okay";
 };
@@ -1066,6 +1120,13 @@
 	};
 };
 
+&pm8550ve_8_gpios {
+	vreg_12v_x8_en: 12v-x8-reg-en-state {
+		pins = "gpio8";
+		function = "normal";
+	};
+};
+
 &pm8550ve_9_gpios {
 	rtmr0_1p8_reg_en: rtmr0-1p8-reg-en-state {
 		pins = "gpio8";
@@ -1081,6 +1142,16 @@
 		power-source = <1>; /* 1.8V */
 		input-disable;
 		output-enable;
+	};
+
+	sde7_main_reg_en: sde7-main-reg-en-state {
+		pins = "gpio6";
+		function = "normal";
+	};
+
+	sde7_aux_reg_en: sde7-aux-reg-en-state {
+		pins = "gpio8";
+		function = "normal";
 	};
 };
 
