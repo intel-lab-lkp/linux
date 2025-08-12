@@ -12,6 +12,8 @@
 #include <linux/security.h>
 #include <linux/tracepoint.h>
 #include <linux/uaccess.h>
+#include <linux/string.h>
+#include <linux/slab.h>
 
 #include "trace_dynevent.h"
 #include "trace_probe.h"
@@ -762,8 +764,104 @@ static int __register_trace_fprobe(struct trace_fprobe *tf)
 		return __regsiter_tracepoint_fprobe(tf);
 	}
 
-	/* TODO: handle filter, nofilter or symbol list */
-	return register_fprobe(&tf->fp, tf->symbol, NULL);
+    /* Parse tf->symbol */
+    {
+        char *spec, *bang, *p;
+        int n = 0, w = 0, j, rc;
+        char **syms = NULL;
+
+        spec = kstrdup(tf->symbol, GFP_KERNEL);
+        if (!spec)
+            return -ENOMEM;
+
+        /* If a '!' exists, treat it as single symbol + filter */
+        bang = strchr(spec, '!');
+        if (bang) {
+            char *sym, *flt;
+
+            *bang = '\0';
+            sym = strim(spec);
+            flt = strim(bang + 1);
+
+            if (!*sym || !*flt) {
+                kfree(spec);
+                return -EINVAL; /* reject empty symbol/filter */
+            }
+
+            rc = register_fprobe(&tf->fp, sym, flt);
+            kfree(spec);
+            return rc;
+        }
+
+        /* Comma list (or single symbol without '!') */
+        /* First pass: count non-empty tokens */
+        p = spec;
+        while (p) {
+            char *tok = strsep(&p, ",");
+            if (tok && *strim(tok))
+                n++;
+        }
+
+        if (n == 0){
+            kfree(spec);
+            return -EINVAL;
+        }
+
+        /* Allocate array for pointers into spec (callee copies/consumes) */
+        syms = kcalloc(n, sizeof(*syms), GFP_KERNEL);
+        if (!syms) {
+            kfree(spec);
+            return -ENOMEM;
+        }
+
+        /* Second pass: fill, skipping empties */
+        p = spec;
+        while (p) {
+            char *tok = strsep(&p, ",");
+            char *s;
+
+            if (!tok)
+                break;
+            s = strim(tok);
+            if (!*s)
+                continue;
+            syms[w++] = s; 
+        }
+        
+        /* Dedup in-place */
+        for (i = 0; i < w; i++){
+            if (!syms[i])
+                continue;
+            for (j = i + 1; j < w; j++) {
+                if (syms[j] && !strcmp(syms[i], syms[j]))
+                    syms[j] = NULL;
+            }
+        }
+
+        /* Compact */
+        for (i = 0, j = 0; i < w; i++) {
+            if (syms[i])
+                syms[j++] = syms[i];
+        }
+        w = j;
+
+        /* After dedup, ensure we still have at least one symbol */
+        if (w == 0){
+            kfree(syms);
+            kfree(spec);
+            return -EINVAL;
+        }
+
+        /* Register list or single symbol, using the existing bulk API */
+        if (w == 1)
+            rc = register_fprobe(&tf->fp, syms[0], NULL);
+        else
+            rc = register_fprobe_syms(&tf->fp, (const char **)syms, w);
+
+        kfree(syms);
+        kfree(spec);
+        return rc;
+    }
 }
 
 /* Internal unregister function - just handle fprobe and flags */
