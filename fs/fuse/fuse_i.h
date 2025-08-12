@@ -969,6 +969,9 @@ struct fuse_conn {
 		/* Request timeout (in jiffies). 0 = no timeout */
 		unsigned int req_timeout;
 	} timeout;
+
+	/** This is a workaround until fuse uses iomap for reads */
+	unsigned inode_blkbits;
 };
 
 /*
