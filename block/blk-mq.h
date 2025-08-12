@@ -449,4 +449,30 @@ static inline bool blk_mq_can_poll(struct request_queue *q)
 		q->tag_set->map[HCTX_TYPE_POLL].nr_queues;
 }
 
+struct phys_vec {
+	phys_addr_t	paddr;
+	u32		len;
+};
+
+struct blk_map_iter;
+bool blk_map_iter_next(struct request *req, struct blk_map_iter *iter,
+			struct phys_vec *vec);
+
+static inline struct scatterlist *
+blk_next_sg(struct scatterlist **sg, struct scatterlist *sglist)
+{
+	if (!*sg)
+		return sglist;
+
+	/*
+	 * If the driver previously mapped a shorter list, we could see a
+	 * termination bit prematurely unless it fully inits the sg table
+	 * on each mapping. We KNOW that there must be more entries here
+	 * or the driver would be buggy, so force clear the termination bit
+	 * to avoid doing a full sg_init_table() in drivers for each command.
+	 */
+	sg_unmark_end(*sg);
+	return sg_next(*sg);
+}
+
 #endif

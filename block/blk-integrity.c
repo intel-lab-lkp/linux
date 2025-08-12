@@ -16,6 +16,7 @@
 #include <linux/t10-pi.h>
 
 #include "blk.h"
+#include "blk-mq.h"
 
 /**
  * blk_rq_count_integrity_sg - Count number of integrity scatterlist elements
@@ -134,37 +135,25 @@ out:
  */
 int blk_rq_map_integrity_sg(struct request *rq, struct scatterlist *sglist)
 {
-	struct bio_vec iv, ivprv = { NULL };
 	struct request_queue *q = rq->q;
 	struct scatterlist *sg = NULL;
 	struct bio *bio = rq->bio;
 	unsigned int segments = 0;
-	struct bvec_iter iter;
-	int prev = 0;
+	struct blk_map_iter iter;
+	struct phys_vec vec;
 
-	bio_for_each_integrity_vec(iv, bio, iter) {
-		if (prev) {
-			if (!biovec_phys_mergeable(q, &ivprv, &iv))
-				goto new_segment;
-			if (sg->length + iv.bv_len > queue_max_segment_size(q))
-				goto new_segment;
+	iter = (struct blk_map_iter) {
+		.bio = bio,
+		.iter = bio_integrity(bio)->bip_iter,
+		.bvecs = bio_integrity(bio)->bip_vec,
+		.is_integrity = true,
+	};
 
-			sg->length += iv.bv_len;
-		} else {
-new_segment:
-			if (!sg)
-				sg = sglist;
-			else {
-				sg_unmark_end(sg);
-				sg = sg_next(sg);
-			}
-
-			sg_set_page(sg, iv.bv_page, iv.bv_len, iv.bv_offset);
-			segments++;
-		}
-
-		prev = 1;
-		ivprv = iv;
+	while (blk_map_iter_next(rq, &iter, &vec)) {
+		sg = blk_next_sg(&sg, sglist);
+		sg_set_page(sg, phys_to_page(vec.paddr), vec.len,
+				offset_in_page(vec.paddr));
+		segments++;
 	}
 
 	if (sg)
