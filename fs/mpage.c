@@ -158,7 +158,6 @@ static struct bio *do_mpage_readpage(struct mpage_readpage_args *args)
 	struct buffer_head *map_bh = &args->map_bh;
 	sector_t block_in_file;
 	sector_t last_block;
-	sector_t last_block_in_file;
 	sector_t first_block;
 	unsigned page_block;
 	unsigned first_hole = blocks_per_folio;
@@ -180,9 +179,8 @@ static struct bio *do_mpage_readpage(struct mpage_readpage_args *args)
 
 	block_in_file = folio_pos(folio) >> blkbits;
 	last_block = block_in_file + ((args->nr_pages * PAGE_SIZE) >> blkbits);
-	last_block_in_file = (i_size_read(inode) + blocksize - 1) >> blkbits;
-	if (last_block > last_block_in_file)
-		last_block = last_block_in_file;
+	last_block = min_t(sector_t, last_block,
+			   (i_size_read(inode) + blocksize - 1) >> blkbits);
 	page_block = 0;
 
 	/*
@@ -193,19 +191,15 @@ static struct bio *do_mpage_readpage(struct mpage_readpage_args *args)
 			block_in_file > args->first_logical_block &&
 			block_in_file < (args->first_logical_block + nblocks)) {
 		unsigned map_offset = block_in_file - args->first_logical_block;
-		unsigned last = nblocks - map_offset;
 
 		first_block = map_bh->b_blocknr + map_offset;
-		for (relative_block = 0; ; relative_block++) {
-			if (relative_block == last) {
-				clear_buffer_mapped(map_bh);
-				break;
-			}
-			if (page_block == blocks_per_folio)
-				break;
-			page_block++;
-			block_in_file++;
-		}
+		nblocks -= map_offset;
+		if (nblocks > blocks_per_folio - page_block)
+			nblocks = blocks_per_folio - page_block;
+		else
+			clear_buffer_mapped(map_bh);
+		page_block += nblocks;
+		block_in_file += nblocks;
 		bdev = map_bh->b_bdev;
 	}
 
@@ -243,7 +237,7 @@ static struct bio *do_mpage_readpage(struct mpage_readpage_args *args)
 			map_buffer_to_folio(folio, map_bh, page_block);
 			goto confused;
 		}
-	
+
 		if (first_hole != blocks_per_folio)
 			goto confused;		/* hole -> non-hole */
 
@@ -252,16 +246,14 @@ static struct bio *do_mpage_readpage(struct mpage_readpage_args *args)
 			first_block = map_bh->b_blocknr;
 		else if (first_block + page_block != map_bh->b_blocknr)
 			goto confused;
+
 		nblocks = map_bh->b_size >> blkbits;
-		for (relative_block = 0; ; relative_block++) {
-			if (relative_block == nblocks) {
-				clear_buffer_mapped(map_bh);
-				break;
-			} else if (page_block == blocks_per_folio)
-				break;
-			page_block++;
-			block_in_file++;
-		}
+		if (nblocks > blocks_per_folio - page_block)
+			nblocks = blocks_per_folio - page_block;
+		else
+			clear_buffer_mapped(map_bh);
+		page_block += nblocks;
+		block_in_file += nblocks;
 		bdev = map_bh->b_bdev;
 	}
 
