@@ -1059,6 +1059,29 @@ xfs_fs_unfreeze(
 	return 0;
 }
 
+STATIC int
+xfs_validate_logbsize(
+	struct xfs_mount	*mp)
+{
+	int			logbsize = mp->m_logbsize;
+	uint32_t		logsunit = mp->m_sb.sb_logsunit;
+
+	if (logsunit > 1) {
+		if (logbsize < logsunit ||
+		    logbsize % logsunit) {
+			xfs_warn(mp,
+		"logbuf size must be a multiple of the log stripe unit");
+			return -EINVAL;
+		}
+	} else {
+		if (!is_power_of_2(logbsize)) {
+		    xfs_warn(mp,
+		     "invalid logbufsize: %d [not a power of 2]", logbsize);
+		    return -EINVAL;
+		}
+	}
+	return 0;
+}
 /*
  * This function fills in xfs_mount_t fields based on mount args.
  * Note: the superblock _has_ now been read in.
@@ -1067,16 +1090,13 @@ STATIC int
 xfs_finish_flags(
 	struct xfs_mount	*mp)
 {
-	/* Fail a mount where the logbuf is smaller than the log stripe */
 	if (xfs_has_logv2(mp)) {
-		if (mp->m_logbsize <= 0 &&
-		    mp->m_sb.sb_logsunit > XLOG_BIG_RECORD_BSIZE) {
-			mp->m_logbsize = mp->m_sb.sb_logsunit;
-		} else if (mp->m_logbsize > 0 &&
-			   mp->m_logbsize < mp->m_sb.sb_logsunit) {
-			xfs_warn(mp,
-		"logbuf size must be greater than or equal to log stripe size");
-			return -EINVAL;
+		if (mp->m_logbsize > 0) {
+			if (xfs_validate_logbsize(mp))
+				return -EINVAL;
+		} else {
+			if (mp->m_sb.sb_logsunit > XLOG_BIG_RECORD_BSIZE)
+				mp->m_logbsize = mp->m_sb.sb_logsunit;
 		}
 	} else {
 		/* Fail a mount if the logbuf is larger than 32K */
@@ -1628,8 +1648,7 @@ xfs_fs_validate_params(
 		return -EINVAL;
 	}
 
-	if (mp->m_logbufs != -1 &&
-	    mp->m_logbufs != 0 &&
+	if (mp->m_logbufs > 0 &&
 	    (mp->m_logbufs < XLOG_MIN_ICLOGS ||
 	     mp->m_logbufs > XLOG_MAX_ICLOGS)) {
 		xfs_warn(mp, "invalid logbufs value: %d [not %d-%d]",
@@ -1637,14 +1656,18 @@ xfs_fs_validate_params(
 		return -EINVAL;
 	}
 
-	if (mp->m_logbsize != -1 &&
-	    mp->m_logbsize !=  0 &&
+	/*
+	 * We have not yet read the superblock, so we can't check against
+	 * logsunit here.
+	 */
+	if (mp->m_logbsize > 0 &&
 	    (mp->m_logbsize < XLOG_MIN_RECORD_BSIZE ||
-	     mp->m_logbsize > XLOG_MAX_RECORD_BSIZE ||
-	     !is_power_of_2(mp->m_logbsize))) {
+	     mp->m_logbsize > XLOG_MAX_RECORD_BSIZE)) {
 		xfs_warn(mp,
-			"invalid logbufsize: %d [not 16k,32k,64k,128k or 256k]",
-			mp->m_logbsize);
+			"invalid logbufsize: %d [not in range %dk-%dk]",
+			mp->m_logbsize,
+			(XLOG_MIN_RECORD_BSIZE/1024),
+			(XLOG_MAX_RECORD_BSIZE/1024));
 		return -EINVAL;
 	}
 
