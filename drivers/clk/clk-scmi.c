@@ -12,6 +12,7 @@
 #include <linux/of.h>
 #include <linux/module.h>
 #include <linux/scmi_protocol.h>
+#include <linux/scmi_imx_protocol.h>
 #include <asm/div64.h>
 
 #define NOT_ATOMIC	false
@@ -23,6 +24,7 @@ enum scmi_clk_feats {
 	SCMI_CLK_RATE_CTRL_SUPPORTED,
 	SCMI_CLK_PARENT_CTRL_SUPPORTED,
 	SCMI_CLK_DUTY_CYCLE_SUPPORTED,
+	SCMI_CLK_IMX_SSC_SUPPORTED,
 	SCMI_CLK_FEATS_COUNT
 };
 
@@ -96,6 +98,35 @@ static int scmi_clk_set_parent(struct clk_hw *hw, u8 parent_index)
 	struct scmi_clk *clk = to_scmi_clk(hw);
 
 	return scmi_proto_clk_ops->parent_set(clk->ph, clk->id, parent_index);
+}
+
+static int scmi_clk_imx_set_spread_spectrum(struct clk_hw *hw,
+					    struct clk_spread_spectrum *clk_ss)
+{
+	struct scmi_clk *clk = to_scmi_clk(hw);
+	int ret;
+	u32 val;
+
+	/*
+	 * extConfigValue[7:0]   - spread percentage (%)
+	 * extConfigValue[23:8]  - Modulation Frequency
+	 * extConfigValue[24]    - Enable/Disable
+	 * extConfigValue[31:25] - Reserved
+	 */
+	val = FIELD_PREP(SCMI_CLOCK_IMX_SS_PERCENTAGE_MASK, clk_ss->spread_bp / 10000);
+	val |= FIELD_PREP(SCMI_CLOCK_IMX_SS_MOD_FREQ_MASK, clk_ss->modfreq_hz);
+	if (clk_ss->method != CLK_SSC_NO_SPREAD)
+		val |= SCMI_CLOCK_IMX_SS_ENABLE_MASK;
+	ret = scmi_proto_clk_ops->config_oem_set(clk->ph, clk->id,
+						 SCMI_CLOCK_CFG_IMX_SSC,
+						 val, false);
+	if (ret)
+		dev_warn(clk->dev,
+			 "Failed to set spread spectrum(%u,%u,%u) for clock ID %d\n",
+			 clk_ss->modfreq_hz, clk_ss->spread_bp, clk_ss->method,
+			 clk->id);
+
+	return ret;
 }
 
 static u8 scmi_clk_get_parent(struct clk_hw *hw)
@@ -316,11 +347,33 @@ scmi_clk_ops_alloc(struct device *dev, unsigned long feats_key)
 		ops->set_duty_cycle = scmi_clk_set_duty_cycle;
 	}
 
+	if (feats_key & BIT(SCMI_CLK_IMX_SSC_SUPPORTED))
+		ops->set_spread_spectrum = scmi_clk_imx_set_spread_spectrum;
+
 	return ops;
+}
+
+static void scmi_clk_imx_extended_config_oem(const struct scmi_handle *handle,
+					     struct scmi_clk *sclk,
+					     unsigned int *feats_key)
+{
+	int ret;
+	u32 val;
+
+	if (strcmp(handle->version->vendor_id, SCMI_IMX_VENDOR) ||
+	    strcmp(handle->version->sub_vendor_id, SCMI_IMX_SUBVENDOR))
+		return;
+
+	ret = scmi_proto_clk_ops->config_oem_get(sclk->ph, sclk->id,
+						 SCMI_CLOCK_CFG_IMX_SSC,
+						 &val, NULL, false);
+	if (!ret)
+		*feats_key |= BIT(SCMI_CLK_IMX_SSC_SUPPORTED);
 }
 
 /**
  * scmi_clk_ops_select() - Select a proper set of clock operations
+ * @handle: A reference to an SCMI entity
  * @sclk: A reference to an SCMI clock descriptor
  * @atomic_capable: A flag to indicate if atomic mode is supported by the
  *		    transport
@@ -345,8 +398,8 @@ scmi_clk_ops_alloc(struct device *dev, unsigned long feats_key)
  *	   NULL otherwise.
  */
 static const struct clk_ops *
-scmi_clk_ops_select(struct scmi_clk *sclk, bool atomic_capable,
-		    unsigned int atomic_threshold_us,
+scmi_clk_ops_select(const struct scmi_handle *handle, struct scmi_clk *sclk,
+		    bool atomic_capable, unsigned int atomic_threshold_us,
 		    const struct clk_ops **clk_ops_db, size_t db_size)
 {
 	const struct scmi_clock_info *ci = sclk->info;
@@ -370,8 +423,11 @@ scmi_clk_ops_select(struct scmi_clk *sclk, bool atomic_capable,
 	if (!ci->parent_ctrl_forbidden)
 		feats_key |= BIT(SCMI_CLK_PARENT_CTRL_SUPPORTED);
 
-	if (ci->extended_config)
+	if (ci->extended_config) {
 		feats_key |= BIT(SCMI_CLK_DUTY_CYCLE_SUPPORTED);
+
+		scmi_clk_imx_extended_config_oem(handle, sclk, &feats_key);
+	}
 
 	if (WARN_ON(feats_key >= db_size))
 		return NULL;
@@ -459,7 +515,7 @@ static int scmi_clocks_probe(struct scmi_device *sdev)
 		 * to avoid sharing the devm_ allocated clk_ops between multiple
 		 * SCMI clk driver instances.
 		 */
-		scmi_ops = scmi_clk_ops_select(sclk, transport_is_atomic,
+		scmi_ops = scmi_clk_ops_select(handle, sclk, transport_is_atomic,
 					       atomic_threshold_us,
 					       scmi_clk_ops_db,
 					       ARRAY_SIZE(scmi_clk_ops_db));
