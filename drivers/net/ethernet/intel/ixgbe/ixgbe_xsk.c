@@ -393,17 +393,14 @@ static bool ixgbe_xmit_zc(struct ixgbe_ring *xdp_ring, unsigned int budget)
 	struct xsk_buff_pool *pool = xdp_ring->xsk_pool;
 	union ixgbe_adv_tx_desc *tx_desc = NULL;
 	struct ixgbe_tx_buffer *tx_bi;
-	bool work_done = true;
 	struct xdp_desc desc;
 	dma_addr_t dma;
 	u32 cmd_type;
 
-	while (likely(budget)) {
-		if (unlikely(!ixgbe_desc_unused(xdp_ring))) {
-			work_done = false;
-			break;
-		}
+	if (!budget)
+		return true;
 
+	while (likely(budget)) {
 		if (!netif_carrier_ok(xdp_ring->netdev))
 			break;
 
@@ -442,7 +439,7 @@ static bool ixgbe_xmit_zc(struct ixgbe_ring *xdp_ring, unsigned int budget)
 		xsk_tx_release(pool);
 	}
 
-	return !!budget && work_done;
+	return !!budget;
 }
 
 static void ixgbe_clean_xdp_tx_buffer(struct ixgbe_ring *tx_ring,
@@ -505,7 +502,7 @@ bool ixgbe_clean_xdp_tx_irq(struct ixgbe_q_vector *q_vector,
 	if (xsk_uses_need_wakeup(pool))
 		xsk_set_tx_need_wakeup(pool);
 
-	return ixgbe_xmit_zc(tx_ring, q_vector->tx.work_limit);
+	return ixgbe_xmit_zc(tx_ring, ixgbe_desc_unused(tx_ring));
 }
 
 int ixgbe_xsk_wakeup(struct net_device *dev, u32 qid, u32 flags)
