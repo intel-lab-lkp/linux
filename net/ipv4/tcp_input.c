@@ -1375,7 +1375,7 @@ static int tcp_match_skb_to_sack(struct sock *sk, struct sk_buff *skb,
 			pkt_len = new_len;
 		}
 
-		if (pkt_len >= skb->len && !in_sack)
+		if (!in_sack && pkt_len >= skb->len)
 			return 0;
 
 		err = tcp_fragment(sk, TCP_FRAG_IN_RTX_QUEUE, skb,
