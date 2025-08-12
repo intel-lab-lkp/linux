@@ -12,6 +12,7 @@ subdir-y += arm
 subdir-y += bitmain
 subdir-y += blaize
 subdir-y += broadcom
+subdir-y += bst
 subdir-y += cavium
 subdir-y += exynos
 subdir-y += freescale
