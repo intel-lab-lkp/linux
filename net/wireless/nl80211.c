@@ -6963,6 +6963,8 @@ static int nl80211_fill_link_station(struct sk_buff *msg,
 	PUT_LINK_SINFO(TX_FAILED, tx_failed, u32);
 	PUT_LINK_SINFO(EXPECTED_THROUGHPUT, expected_throughput, u32);
 	PUT_LINK_SINFO(BEACON_LOSS, beacon_loss_count, u32);
+	PUT_LINK_SINFO(BEACON_SEEN_MSEC_AGO, last_beacon_seen_msec_ago,
+		       u32);
 
 	if (link_sinfo->filled & BIT_ULL(NL80211_STA_INFO_BSS_PARAM)) {
 		bss_param = nla_nest_start_noflag(msg,
@@ -7161,6 +7163,7 @@ static int nl80211_send_station(struct sk_buff *msg, u32 cmd, u32 portid,
 	PUT_SINFO(TX_FAILED, tx_failed, u32);
 	PUT_SINFO(EXPECTED_THROUGHPUT, expected_throughput, u32);
 	PUT_SINFO(BEACON_LOSS, beacon_loss_count, u32);
+	PUT_SINFO(BEACON_SEEN_MSEC_AGO, last_beacon_seen_msec_ago, u32);
 
 	PUT_SINFO(LLID, llid, u16);
 	PUT_SINFO(PLID, plid, u16);

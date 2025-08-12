@@ -2094,6 +2094,9 @@ struct cfg80211_tid_stats {
  *	an FCS error. This counter should be incremented only when TA of the
  *	received packet with an FCS error matches the peer MAC address.
  * @addr: For MLO STA connection, filled with address of the link of station.
+ * @last_beacon_seen_msec_ago: Time (in milliseconds) since the last beacon
+ *	was received from this link of station. This is useful for
+ *	monitoring beacon reception status per link in MLO scenario.
  */
 struct link_station_info {
 	u64 filled;
@@ -2137,6 +2140,8 @@ struct link_station_info {
 	u32 fcs_err_count;
 
 	u8 addr[ETH_ALEN] __aligned(2);
+
+	u32 last_beacon_seen_msec_ago;
 };
 
 /**
@@ -2228,6 +2233,8 @@ struct link_station_info {
  *	get_station() and dump_station() callbacks.
  * @links: reference to Link sta entries for MLO STA, all link specific
  *	information is accessed through links[link_id].
+ * @last_beacon_seen_msec_ago: Time since last beacon is received in
+ *	milliseconds.
  */
 struct station_info {
 	u64 filled;
@@ -2295,6 +2302,8 @@ struct station_info {
 
 	u16 valid_links;
 	struct link_station_info *links[IEEE80211_MLD_MAX_NUM_LINKS];
+
+	u32 last_beacon_seen_msec_ago;
 };
 
 /**
