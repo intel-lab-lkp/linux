@@ -12,6 +12,14 @@
 #include "r9a09g087m44.dtsi"
 #include "rzt2h-n2h-evk-common.dtsi"
 
+/*
+ * I2C0 and LED8/9 share the same pins use the below
+ * macro to choose (and set approopriate DIP switches).
+ */
+#define I2C0	1
+#define LED8	(!I2C0)
+#define LED9	(!I2C0)
+
 / {
 	model = "Renesas RZ/N2H EVK Board based on r9a09g087m44";
 	compatible = "renesas,rzn2h-evk", "renesas,r9a09g087m44", "renesas,r9a09g087";
@@ -47,15 +55,19 @@
 			gpios = <&pinctrl RZN2H_GPIO(14, 3) GPIO_ACTIVE_LOW>;
 		};
 
+#if LED8
 		led8 {
 			/* DSW15-8: OFF, DSW15-9: OFF, DSW15-10: ON */
 			gpios = <&pinctrl RZN2H_GPIO(14, 6) GPIO_ACTIVE_LOW>;
 		};
+#endif
 
+#if LED9
 		led9 {
 			/* DSW15-5: OFF, DSW16-6: ON */
 			gpios = <&pinctrl RZN2H_GPIO(14, 7) GPIO_ACTIVE_LOW>;
 		};
+#endif
 
 		led10 {
 			/* DSW17-3: OFF, DSW17-4: ON */
@@ -66,5 +78,49 @@
 			/* DSW17-1: OFF, DSW17-2: ON */
 			gpios = <&pinctrl RZN2H_GPIO(3, 0) GPIO_ACTIVE_LOW>;
 		};
+	};
+};
+
+#if I2C0
+&i2c0 {
+	pinctrl-0 = <&i2c0_pins>;
+	pinctrl-names = "default";
+	clock-frequency = <400000>;
+	status = "okay";
+};
+#endif
+
+&i2c1 {
+	pinctrl-0 = <&i2c1_pins>;
+	pinctrl-names = "default";
+	clock-frequency = <400000>;
+	status = "okay";
+};
+
+&pinctrl {
+	/*
+	 * I2C0 Pin Configuration:
+	 * ------------------------
+	 * Signal | Pin     | DSW15
+	 * -------|---------|--------------
+	 * SCL    | P14_6   | 8: OFF, 9: ON, 10: OFF
+	 * SDA    | P14_7   | 5: ON, 6: OFF
+	 */
+	i2c0_pins: i2c0-pins {
+		pinmux = <RZN2H_PORT_PINMUX(14, 6, 0x17)>,
+			 <RZN2H_PORT_PINMUX(14, 7, 0x17)>;
+	};
+
+	/*
+	 * I2C1 Pin Configuration:
+	 * ------------------------
+	 * Signal | Pin     | DSW7
+	 * -------|---------|--------------
+	 * SCL    | P03_3   | 3: ON, 4: OFF
+	 * SDA    | P03_4   | 1: ON, 2: OFF
+	 */
+	i2c1_pins: i2c1-pins {
+		pinmux = <RZN2H_PORT_PINMUX(3, 3, 0x17)>,
+			 <RZN2H_PORT_PINMUX(3, 4, 0x17)>;
 	};
 };
