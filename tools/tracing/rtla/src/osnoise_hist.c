@@ -543,7 +543,8 @@ static struct osnoise_params
 			params->threshold = 1;
 
 			/* set trace */
-			params->trace_output = "osnoise_trace.txt";
+			if (!params->trace_output)
+				params->trace_output = "osnoise_trace.txt";
 
 			break;
 		case 'b':
@@ -640,10 +641,11 @@ static struct osnoise_params
 					params->trace_output = &optarg[1];
 				else
 					params->trace_output = &optarg[0];
-			} else if (optind < argc && argv[optind][0] != '0')
+			} else if (optind < argc && argv[optind][0] != '0') {
 				params->trace_output = argv[optind];
-			else
+			} else {
 				params->trace_output = "osnoise_trace.txt";
+			}
 			break;
 		case '0': /* no header */
 			params->no_header = 1;

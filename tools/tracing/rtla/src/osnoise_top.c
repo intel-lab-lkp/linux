@@ -383,7 +383,8 @@ struct osnoise_params *osnoise_top_parse_args(int argc, char **argv)
 			params->threshold = 1;
 
 			/* set trace */
-			params->trace_output = "osnoise_trace.txt";
+			if (!params->trace_output)
+				params->trace_output = "osnoise_trace.txt";
 
 			break;
 		case 'c':
@@ -470,10 +471,11 @@ struct osnoise_params *osnoise_top_parse_args(int argc, char **argv)
 					params->trace_output = &optarg[1];
 				else
 					params->trace_output = &optarg[0];
-			} else if (optind < argc && argv[optind][0] != '-')
+			} else if (optind < argc && argv[optind][0] != '-') {
 				params->trace_output = argv[optind];
-			else
+			} else {
 				params->trace_output = "osnoise_trace.txt";
+			}
 			break;
 		case 'T':
 			params->threshold = get_llong_from_str(optarg);

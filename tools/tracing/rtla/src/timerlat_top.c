@@ -424,15 +424,6 @@ timerlat_top_print_sum(struct osnoise_tool *top, struct timerlat_top_cpu *summar
 }
 
 /*
- * clear_terminal - clears the output terminal
- */
-static void clear_terminal(struct trace_seq *seq)
-{
-	if (!config_debug)
-		trace_seq_printf(seq, "\033c");
-}
-
-/*
  * timerlat_print_stats - print data for all cpus
  */
 static void
@@ -448,9 +439,6 @@ timerlat_print_stats(struct timerlat_params *params, struct osnoise_tool *top)
 
 	if (nr_cpus == -1)
 		nr_cpus = sysconf(_SC_NPROCESSORS_CONF);
-
-	if (!params->quiet)
-		clear_terminal(trace->seq);
 
 	timerlat_top_reset_sum(&summary);
 
@@ -625,7 +613,8 @@ static struct timerlat_params
 			params->print_stack = auto_thresh;
 
 			/* set trace */
-			trace_output = "timerlat_trace.txt";
+			if (!trace_output)
+				trace_output = "timerlat_trace.txt";
 
 			break;
 		case '5':
@@ -729,10 +718,11 @@ static struct timerlat_params
 					trace_output = &optarg[1];
 				else
 					trace_output = &optarg[0];
-			} else if (optind < argc && argv[optind][0] != '-')
+			} else if (optind < argc && argv[optind][0] != '-') {
 				trace_output = argv[optind];
-			else
+			} else {
 				trace_output = "timerlat_trace.txt";
+			}
 			break;
 		case 'u':
 			params->user_workload = true;
