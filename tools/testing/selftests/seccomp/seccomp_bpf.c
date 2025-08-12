@@ -79,18 +79,6 @@
 #define PR_GET_NO_NEW_PRIVS 39
 #endif
 
-#ifndef PR_SECCOMP_EXT
-#define PR_SECCOMP_EXT 43
-#endif
-
-#ifndef SECCOMP_EXT_ACT
-#define SECCOMP_EXT_ACT 1
-#endif
-
-#ifndef SECCOMP_EXT_ACT_TSYNC
-#define SECCOMP_EXT_ACT_TSYNC 1
-#endif
-
 #ifndef SECCOMP_MODE_STRICT
 #define SECCOMP_MODE_STRICT 1
 #endif
