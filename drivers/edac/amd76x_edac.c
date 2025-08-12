@@ -324,7 +324,8 @@ static void amd76x_remove_one(struct pci_dev *pdev)
 	if (amd76x_pci)
 		edac_pci_release_generic_ctl(amd76x_pci);
 
-	if ((mci = edac_mc_del_mc(&pdev->dev)) == NULL)
+	mci = edac_mc_del_mc(&pdev->dev);
+	if (mci == NULL)
 		return;
 
 	edac_mc_free(mci);
