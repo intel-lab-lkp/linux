@@ -7,10 +7,64 @@
 
 /dts-v1/;
 
+#include <dt-bindings/gpio/gpio.h>
+
 #include "r9a09g087m44.dtsi"
 #include "rzt2h-n2h-evk-common.dtsi"
 
 / {
 	model = "Renesas RZ/N2H EVK Board based on r9a09g087m44";
 	compatible = "renesas,rzn2h-evk", "renesas,r9a09g087m44", "renesas,r9a09g087";
+
+	leds {
+		compatible = "gpio-leds";
+
+		led3 {
+			/* DSW18-7: ON, DSW18-8: OFF */
+			gpios = <&pinctrl RZN2H_GPIO(31, 6) GPIO_ACTIVE_LOW>;
+		};
+
+		led4 {
+			/* DSW18-9: ON, DSW18-10: OFF */
+			gpios = <&pinctrl RZN2H_GPIO(18, 1) GPIO_ACTIVE_LOW>;
+		};
+
+		led5 {
+			/* DSW18-1: ON, DSW18-2: OFF */
+			gpios = <&pinctrl RZN2H_GPIO(22, 7) GPIO_ACTIVE_LOW>;
+		};
+
+		led6 {
+			/* DSW18-3: ON, DSW18-4: OFF */
+			gpios = <&pinctrl RZN2H_GPIO(23, 0) GPIO_ACTIVE_LOW>;
+		};
+
+		led7 {
+			/*
+			 * DSW18-5: ON, DSW18-6: OFF
+			 * DSW19-3: ON, DSW19-4: OFF
+			 */
+			gpios = <&pinctrl RZN2H_GPIO(14, 3) GPIO_ACTIVE_LOW>;
+		};
+
+		led8 {
+			/* DSW15-8: OFF, DSW15-9: OFF, DSW15-10: ON */
+			gpios = <&pinctrl RZN2H_GPIO(14, 6) GPIO_ACTIVE_LOW>;
+		};
+
+		led9 {
+			/* DSW15-5: OFF, DSW16-6: ON */
+			gpios = <&pinctrl RZN2H_GPIO(14, 7) GPIO_ACTIVE_LOW>;
+		};
+
+		led10 {
+			/* DSW17-3: OFF, DSW17-4: ON */
+			gpios = <&pinctrl RZN2H_GPIO(2, 7) GPIO_ACTIVE_LOW>;
+		};
+
+		led11 {
+			/* DSW17-1: OFF, DSW17-2: ON */
+			gpios = <&pinctrl RZN2H_GPIO(3, 0) GPIO_ACTIVE_LOW>;
+		};
+	};
 };
