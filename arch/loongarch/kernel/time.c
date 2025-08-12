@@ -12,6 +12,7 @@
 #include <linux/kernel.h>
 #include <linux/sched_clock.h>
 #include <linux/spinlock.h>
+#include <linux/cpu.h>
 
 #include <asm/cpu-features.h>
 #include <asm/loongarch.h>
@@ -85,6 +86,9 @@ static int constant_set_state_shutdown(struct clock_event_device *evt)
 	timer_config = csr_read64(LOONGARCH_CSR_TCFG);
 	timer_config &= ~CSR_TCFG_EN;
 	csr_write64(timer_config, LOONGARCH_CSR_TCFG);
+
+	/* Clear Timer Interrupt */
+	write_csr_tintclear(CSR_TINTCLR_TI);
 
 	raw_spin_unlock(&state_lock);
 
@@ -208,8 +212,17 @@ int __init constant_clocksource_init(void)
 	return res;
 }
 
+static int arch_timer_dying_cpu(unsigned int cpu)
+{
+	constant_set_state_shutdown(NULL);
+
+	return 0;
+}
+
 void __init time_init(void)
 {
+	int err;
+
 	if (!cpu_has_cpucfg)
 		const_clock_freq = cpu_clock_freq;
 	else
@@ -220,4 +233,11 @@ void __init time_init(void)
 	constant_clockevent_init();
 	constant_clocksource_init();
 	pv_time_init();
+
+	err = cpuhp_setup_state_nocalls(CPUHP_AP_LOONGARCH_ARCH_TIMER_STARTING,
+					"loongarch/timer:starting",
+					NULL, arch_timer_dying_cpu);
+	if (err)
+		pr_info("cpu hotplug event register failed");
+
 }
