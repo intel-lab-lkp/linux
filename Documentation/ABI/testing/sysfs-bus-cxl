@@ -297,17 +297,18 @@ Description:
 		Each entry in the list is a dport id.
 
 
-What:		/sys/bus/cxl/devices/decoderX.Y/cap_{pmem,ram,type2,type3}
-Date:		June, 2021
-KernelVersion:	v5.14
+What:		/sys/bus/cxl/devices/decoderX.Y/cap_{pmem,ram,type2,type3,bi}
+Date:		June, 2021, August, 2025
+KernelVersion:	v5.14, v6.18 (bi)
 Contact:	linux-cxl@vger.kernel.org
 Description:
 		(RO) When a CXL decoder is of devtype "cxl_decoder_root", it
 		represents a fixed memory window identified by platform
 		firmware. A fixed window may only support a subset of memory
 		types. The 'cap_*' attributes indicate whether persistent
-		memory, volatile memory, accelerator memory, and / or expander
-		memory may be mapped behind this decoder's memory window.
+		memory, volatile memory, accelerator memory, back invalidation,
+		and / or expander memory may be mapped behind this decoder's
+		memory window.
 
 
 What:		/sys/bus/cxl/devices/decoderX.Y/target_type
@@ -350,6 +351,17 @@ Description:
 		'mode' can be written, when the decoder is in the 'disabled'
 		state, with either 'ram' or 'pmem' to set the boundaries for the
 		next allocation.
+
+
+What:		/sys/bus/cxl/devices/decoderX.Y/bi
+Date:		August, 2025
+KernelVersion:	v6.18
+Contact:	linux-cxl@vger.kernel.org
+Description:
+		(RW) Specify whether or not the memory range for this endpoint
+		decoder will use Back-Invalidation (HDM-DB) for device managed
+		coherence. It may only be written to when the decoder is in the
+		'disabled' state.
 
 
 What:		/sys/bus/cxl/devices/decoderX.Y/dpa_resource
@@ -410,15 +422,17 @@ Description:
 		interleave_granularity).
 
 
-What:		/sys/bus/cxl/devices/decoderX.Y/create_{pmem,ram}_region
-Date:		May, 2022, January, 2023
-KernelVersion:	v6.0 (pmem), v6.3 (ram)
+What:		/sys/bus/cxl/devices/decoderX.Y/create_{pmem,ram}_{bi}_region
+Date:		May, 2022, January, 2023, August, 2025
+KernelVersion:	v6.0 (pmem), v6.3 (ram) v6.18 (bi)
 Contact:	linux-cxl@vger.kernel.org
 Description:
 		(RW) Write a string in the form 'regionZ' to start the process
 		of defining a new persistent, or volatile memory region
 		(interleave-set) within the decode range bounded by root decoder
-		'decoderX.Y'. The value written must match the current value
+		'decoderX.Y'. Further, it is specified whether or not the region
+		also supports Back-Invalidate flows for device memory coherence
+		management. The value written must match the current value
 		returned from reading this attribute. An atomic compare exchange
 		operation is done on write to assign the requested id to a
 		region and allocate the region-id for the next creation attempt.
@@ -509,6 +523,15 @@ Description:
 		region. For more details on the possible modes see
 		/sys/bus/cxl/devices/decoderX.Y/mode
 
+What:		/sys/bus/cxl/devices/regionZ/bi
+Date:		August, 2025
+KernelVersion:	v6.18
+Contact:	linux-cxl@vger.kernel.org
+Description:
+		(RO) The coherence model of a region is established at region
+		creation time and dictates the type of the endpoint decoder that
+		comprise the region. See /sys/bus/cxl/devices/decoderX.Y/bi for
+		more details.
 
 What:		/sys/bus/cxl/devices/regionZ/resource
 Date:		May, 2022

@@ -624,6 +624,15 @@ static ssize_t mode_show(struct device *dev, struct device_attribute *attr,
 }
 static DEVICE_ATTR_RO(mode);
 
+static ssize_t bi_show(struct device *dev, struct device_attribute *attr,
+		       char *buf)
+{
+	struct cxl_region *cxlr = to_cxl_region(dev);
+
+	return sysfs_emit(buf, "%d\n", cxlr->type == CXL_DECODER_DEVMEM);
+}
+static DEVICE_ATTR_RO(bi);
+
 static int alloc_hpa(struct cxl_region *cxlr, resource_size_t size)
 {
 	struct cxl_root_decoder *cxlrd = to_cxl_root_decoder(cxlr->dev.parent);
@@ -754,6 +763,7 @@ static struct attribute *cxl_region_attrs[] = {
 	&dev_attr_resource.attr,
 	&dev_attr_size.attr,
 	&dev_attr_mode.attr,
+	&dev_attr_bi.attr,
 	NULL,
 };
 
@@ -2523,7 +2533,7 @@ static int cxl_region_calculate_adistance(struct notifier_block *nb,
  * @cxlrd: root decoder
  * @id: memregion id to create, or memregion_free() on failure
  * @mode: mode for the endpoint decoders of this region
- * @type: select whether this is an expander or accelerator (type-2 or type-3)
+ * @type: select whether this is HDM-H or HDM-D[B]
  *
  * This is the second step of region initialization. Regions exist within an
  * address space which is mapped by a @cxlrd.
@@ -2586,8 +2596,21 @@ static ssize_t create_ram_region_show(struct device *dev,
 	return __create_region_show(to_cxl_root_decoder(dev), buf);
 }
 
+static ssize_t create_pmem_bi_region_show(struct device *dev,
+				       struct device_attribute *attr, char *buf)
+{
+	return __create_region_show(to_cxl_root_decoder(dev), buf);
+}
+
+static ssize_t create_ram_bi_region_show(struct device *dev,
+				      struct device_attribute *attr, char *buf)
+{
+	return __create_region_show(to_cxl_root_decoder(dev), buf);
+}
+
 static struct cxl_region *__create_region(struct cxl_root_decoder *cxlrd,
-					  enum cxl_partition_mode mode, int id)
+					  enum cxl_partition_mode mode,
+					  bool bi, int id)
 {
 	int rc;
 
@@ -2609,11 +2632,13 @@ static struct cxl_region *__create_region(struct cxl_root_decoder *cxlrd,
 		return ERR_PTR(-EBUSY);
 	}
 
-	return devm_cxl_add_region(cxlrd, id, mode, CXL_DECODER_HOSTONLYMEM);
+	return devm_cxl_add_region(cxlrd, id, mode, bi ?
+				   CXL_DECODER_DEVMEM:CXL_DECODER_HOSTONLYMEM);
 }
 
 static ssize_t create_region_store(struct device *dev, const char *buf,
-				   size_t len, enum cxl_partition_mode mode)
+				   size_t len, enum cxl_partition_mode mode,
+				   bool bi)
 {
 	struct cxl_root_decoder *cxlrd = to_cxl_root_decoder(dev);
 	struct cxl_region *cxlr;
@@ -2623,7 +2648,7 @@ static ssize_t create_region_store(struct device *dev, const char *buf,
 	if (rc != 1)
 		return -EINVAL;
 
-	cxlr = __create_region(cxlrd, mode, id);
+	cxlr = __create_region(cxlrd, mode, bi, id);
 	if (IS_ERR(cxlr))
 		return PTR_ERR(cxlr);
 
@@ -2634,7 +2659,7 @@ static ssize_t create_pmem_region_store(struct device *dev,
 					struct device_attribute *attr,
 					const char *buf, size_t len)
 {
-	return create_region_store(dev, buf, len, CXL_PARTMODE_PMEM);
+	return create_region_store(dev, buf, len, CXL_PARTMODE_PMEM, false);
 }
 DEVICE_ATTR_RW(create_pmem_region);
 
@@ -2642,9 +2667,25 @@ static ssize_t create_ram_region_store(struct device *dev,
 				       struct device_attribute *attr,
 				       const char *buf, size_t len)
 {
-	return create_region_store(dev, buf, len, CXL_PARTMODE_RAM);
+	return create_region_store(dev, buf, len, CXL_PARTMODE_RAM, false);
 }
 DEVICE_ATTR_RW(create_ram_region);
+
+static ssize_t create_pmem_bi_region_store(struct device *dev,
+					   struct device_attribute *attr,
+					   const char *buf, size_t len)
+{
+	return create_region_store(dev, buf, len, CXL_PARTMODE_PMEM, true);
+}
+DEVICE_ATTR_RW(create_pmem_bi_region);
+
+static ssize_t create_ram_bi_region_store(struct device *dev,
+					  struct device_attribute *attr,
+					  const char *buf, size_t len)
+{
+	return create_region_store(dev, buf, len, CXL_PARTMODE_RAM, true);
+}
+DEVICE_ATTR_RW(create_ram_bi_region);
 
 static ssize_t region_show(struct device *dev, struct device_attribute *attr,
 			   char *buf)
@@ -3414,7 +3455,7 @@ static struct cxl_region *construct_region(struct cxl_root_decoder *cxlrd,
 	struct cxl_region *cxlr;
 
 	do {
-		cxlr = __create_region(cxlrd, cxlds->part[part].mode,
+		cxlr = __create_region(cxlrd, cxlds->part[part].mode, false,
 				       atomic_read(&cxlrd->region_id));
 	} while (IS_ERR(cxlr) && PTR_ERR(cxlr) == -EBUSY);
 
