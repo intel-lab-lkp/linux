@@ -424,15 +424,6 @@ timerlat_top_print_sum(struct osnoise_tool *top, struct timerlat_top_cpu *summar
 }
 
 /*
- * clear_terminal - clears the output terminal
- */
-static void clear_terminal(struct trace_seq *seq)
-{
-	if (!config_debug)
-		trace_seq_printf(seq, "\033c");
-}
-
-/*
  * timerlat_print_stats - print data for all cpus
  */
 static void
@@ -448,9 +439,6 @@ timerlat_print_stats(struct timerlat_params *params, struct osnoise_tool *top)
 
 	if (nr_cpus == -1)
 		nr_cpus = sysconf(_SC_NPROCESSORS_CONF);
-
-	if (!params->quiet)
-		clear_terminal(trace->seq);
 
 	timerlat_top_reset_sum(&summary);
 
@@ -492,7 +480,7 @@ static void timerlat_top_usage(char *usage)
 		"	  -s/--stack us: save the stack trace at the IRQ if a thread latency is higher than the argument in us",
 		"	  -c/--cpus cpus: run the tracer only on the given cpus",
 		"	  -H/--house-keeping cpus: run rtla control threads only on the given cpus",
-		"	  -C/--cgroup[=cgroup_name]: set cgroup, if no cgroup_name is passed, the rtla's cgroup will be inherited",
+		"	  -C/--cgroup [cgroup_name]: set cgroup, if no cgroup_name is passed, the rtla's cgroup will be inherited",
 		"	  -d/--duration time[s|m|h|d]: duration of the session",
 		"	  -D/--debug: print debug info",
 		"	     --dump-tasks: prints the task running on all CPUs if stop conditions are met (depends on !--no-aa)",
@@ -650,12 +638,16 @@ static struct timerlat_params
 			break;
 		case 'C':
 			params->cgroup = 1;
-			if (!optarg) {
-				/* will inherit this cgroup */
+			if (optarg) {
+				if (optarg[0] == '=')
+					/* skip the = */
+					params->cgroup_name = &optarg[1];
+				else
+					params->cgroup_name = optarg;
+			} else if (optind < argc && argv[optind][0] != '-') {
+				params->cgroup_name = argv[optind];
+			} else {
 				params->cgroup_name = NULL;
-			} else if (*optarg == '=') {
-				/* skip the = */
-				params->cgroup_name = ++optarg;
 			}
 			break;
 		case 'D':

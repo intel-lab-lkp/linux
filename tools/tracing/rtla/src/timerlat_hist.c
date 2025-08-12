@@ -726,7 +726,7 @@ static void timerlat_hist_usage(char *usage)
 		"	  -s/--stack us: save the stack trace at the IRQ if a thread latency is higher than the argument in us",
 		"	  -c/--cpus cpus: run the tracer only on the given cpus",
 		"	  -H/--house-keeping cpus: run rtla control threads only on the given cpus",
-		"	  -C/--cgroup[=cgroup_name]: set cgroup, if no cgroup_name is passed, the rtla's cgroup will be inherited",
+		"	  -C/--cgroup [cgroup_name]: set cgroup, if no cgroup_name is passed, the rtla's cgroup will be inherited",
 		"	  -d/--duration time[m|h|d]: duration of the session in seconds",
 		"	     --dump-tasks: prints the task running on all CPUs if stop conditions are met (depends on !--no-aa)",
 		"	  -D/--debug: print debug info",
@@ -885,12 +885,16 @@ static struct timerlat_params
 			break;
 		case 'C':
 			params->cgroup = 1;
-			if (!optarg) {
-				/* will inherit this cgroup */
+			if (optarg) {
+				if (optarg[0] == '=')
+					/* skip the = */
+					params->cgroup_name = &optarg[1];
+				else
+					params->cgroup_name = optarg;
+			} else if (optind < argc && argv[optind][0] != '-') {
+				params->cgroup_name = argv[optind];
+			} else {
 				params->cgroup_name = NULL;
-			} else if (*optarg == '=') {
-				/* skip the = */
-				params->cgroup_name = ++optarg;
 			}
 			break;
 		case 'b':
