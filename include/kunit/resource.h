@@ -216,7 +216,9 @@ static inline int kunit_add_named_resource(struct kunit *test,
  * kunit_alloc_and_get_resource() - Allocates and returns a *test managed resource*.
  * @test: The test context object.
  * @init: a user supplied function to initialize the resource.
- * @free: a user supplied function to free the resource (if needed).
+ * @free: a user supplied function to free the resource (if needed). Note that,
+ * if supplied, @free will run even if @init fails: Make sure it can handle any
+ * inconsistent state which may result.
  * @internal_gfp: gfp to use for internal allocations, if unsure, use GFP_KERNEL
  * @context: for the user to pass in arbitrary data to the init function.
  *
@@ -258,6 +260,7 @@ kunit_alloc_and_get_resource(struct kunit *test,
 		kunit_get_resource(res);
 		return res;
 	}
+	kunit_put_resource(res);
 	return NULL;
 }
 
@@ -265,7 +268,9 @@ kunit_alloc_and_get_resource(struct kunit *test,
  * kunit_alloc_resource() - Allocates a *test managed resource*.
  * @test: The test context object.
  * @init: a user supplied function to initialize the resource.
- * @free: a user supplied function to free the resource (if needed).
+ * @free: a user supplied function to free the resource (if needed). Note that,
+ * if supplied, @free will run even if @init fails: Make sure it can handle any
+ * inconsistent state which may result.
  * @internal_gfp: gfp to use for internal allocations, if unsure, use GFP_KERNEL
  * @context: for the user to pass in arbitrary data to the init function.
  *
@@ -293,6 +298,7 @@ static inline void *kunit_alloc_resource(struct kunit *test,
 	if (!__kunit_add_resource(test, init, free, res, context))
 		return res->data;
 
+	kunit_put_resource(res);
 	return NULL;
 }
 
