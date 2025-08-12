@@ -456,7 +456,7 @@ static void ixgbe_clean_xdp_tx_buffer(struct ixgbe_ring *tx_ring,
 }
 
 bool ixgbe_clean_xdp_tx_irq(struct ixgbe_q_vector *q_vector,
-			    struct ixgbe_ring *tx_ring, int napi_budget)
+			    struct ixgbe_ring *tx_ring)
 {
 	u16 ntc = tx_ring->next_to_clean, ntu = tx_ring->next_to_use;
 	unsigned int total_packets = 0, total_bytes = 0;

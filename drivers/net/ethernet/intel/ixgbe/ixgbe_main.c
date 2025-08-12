@@ -3585,7 +3585,7 @@ int ixgbe_poll(struct napi_struct *napi, int budget)
 
 	ixgbe_for_each_ring(ring, q_vector->tx) {
 		bool wd = ring->xsk_pool ?
-			  ixgbe_clean_xdp_tx_irq(q_vector, ring, budget) :
+			  ixgbe_clean_xdp_tx_irq(q_vector, ring) :
 			  ixgbe_clean_tx_irq(q_vector, ring, budget);
 
 		if (!wd)
