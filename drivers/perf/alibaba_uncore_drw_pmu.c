@@ -528,24 +528,7 @@ static int ali_drw_pmu_event_init(struct perf_event *event)
 	struct hw_perf_event *hwc = &event->hw;
 	struct device *dev = drw_pmu->pmu.dev;
 
-	if (event->attr.type != event->pmu->type)
-		return -ENOENT;
-
-	if (is_sampling_event(event)) {
-		dev_err(dev, "Sampling not supported!\n");
-		return -EOPNOTSUPP;
-	}
-
-	if (event->attach_state & PERF_ATTACH_TASK) {
-		dev_err(dev, "Per-task counter cannot allocate!\n");
-		return -EOPNOTSUPP;
-	}
-
 	event->cpu = drw_pmu->cpu;
-	if (event->cpu < 0) {
-		dev_err(dev, "Per-task mode not supported!\n");
-		return -EOPNOTSUPP;
-	}
 
 	if (in_hardware_group(event)) {
 		dev_err(dev, "driveway only allow one event!\n");

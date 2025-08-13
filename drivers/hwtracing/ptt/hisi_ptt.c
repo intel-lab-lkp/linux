@@ -998,14 +998,6 @@ static int hisi_ptt_pmu_event_init(struct perf_event *event)
 	int ret;
 	u32 val;
 
-	if (event->attr.type != hisi_ptt->hisi_ptt_pmu.type)
-		return -ENOENT;
-
-	if (event->cpu < 0) {
-		dev_dbg(event->pmu->dev, "Per-task mode not supported\n");
-		return -EOPNOTSUPP;
-	}
-
 	if (event->attach_state & PERF_ATTACH_TASK)
 		return -EOPNOTSUPP;
 

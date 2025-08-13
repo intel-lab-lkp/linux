@@ -626,19 +626,6 @@ static int i915_pmu_event_init(struct perf_event *event)
 	if (!pmu->registered)
 		return -ENODEV;
 
-	if (event->attr.type != event->pmu->type)
-		return -ENOENT;
-
-	/* unsupported modes and filters */
-	if (event->attr.sample_period) /* no sampling */
-		return -EINVAL;
-
-	if (has_branch_stack(event))
-		return -EOPNOTSUPP;
-
-	if (event->cpu < 0)
-		return -EINVAL;
-
 	if (is_engine_event(event))
 		ret = engine_event_init(event);
 	else

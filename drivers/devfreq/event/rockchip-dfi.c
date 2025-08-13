@@ -401,18 +401,6 @@ static const struct attribute_group *attr_groups[] = {
 
 static int rockchip_ddr_perf_event_init(struct perf_event *event)
 {
-	struct rockchip_dfi *dfi = container_of(event->pmu, struct rockchip_dfi, pmu);
-
-	if (event->attr.type != event->pmu->type)
-		return -ENOENT;
-
-	if (event->attach_state & PERF_ATTACH_TASK)
-		return -EINVAL;
-
-	if (event->cpu < 0) {
-		dev_warn(dfi->dev, "Can't provide per-task data!\n");
-		return -EINVAL;
-	}
 	/* Disallow groups since we can't start/stop/read multiple counters at once */
 	if (in_hardware_group(event))
 		return -EINVAL;

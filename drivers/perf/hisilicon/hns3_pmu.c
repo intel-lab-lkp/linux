@@ -1233,13 +1233,6 @@ static int hns3_pmu_event_init(struct perf_event *event)
 	int idx;
 	int ret;
 
-	if (event->attr.type != event->pmu->type)
-		return -ENOENT;
-
-	/* Sampling is not supported */
-	if (is_sampling_event(event) || event->attach_state & PERF_ATTACH_TASK)
-		return -EOPNOTSUPP;
-
 	event->cpu = hns3_pmu->on_cpu;
 
 	idx = hns3_pmu_get_event_idx(hns3_pmu);

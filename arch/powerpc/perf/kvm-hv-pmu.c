@@ -180,9 +180,6 @@ static int kvmppc_pmu_event_init(struct perf_event *event)
 		 __func__, event, event->id, event->cpu,
 		 event->oncpu, config);
 
-	if (event->attr.type != event->pmu->type)
-		return -ENOENT;
-
 	if (config >= KVMPPC_EVENT_MAX)
 		return -EINVAL;
 

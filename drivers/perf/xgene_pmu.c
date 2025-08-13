@@ -878,20 +878,6 @@ static int xgene_perf_event_init(struct perf_event *event)
 	struct xgene_pmu_dev *pmu_dev = to_pmu_dev(event->pmu);
 	struct hw_perf_event *hw = &event->hw;
 
-	/* Test the event attr type check for PMU enumeration */
-	if (event->attr.type != event->pmu->type)
-		return -ENOENT;
-
-	/*
-	 * SOC PMU counters are shared across all cores.
-	 * Therefore, it does not support per-process mode.
-	 * Also, it does not support event sampling mode.
-	 */
-	if (is_sampling_event(event) || event->attach_state & PERF_ATTACH_TASK)
-		return -EINVAL;
-
-	if (event->cpu < 0)
-		return -EINVAL;
 	/*
 	 * Many perf core operations (eg. events rotation) operate on a
 	 * single CPU context. This is obvious for CPU PMUs, where one

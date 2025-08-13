@@ -149,9 +149,6 @@ static int tad_pmu_event_init(struct perf_event *event)
 {
 	struct tad_pmu *tad_pmu = to_tad_pmu(event->pmu);
 
-	if (event->attr.type != event->pmu->type)
-		return -ENOENT;
-
 	/* Disallow groups since we can't start/stop/read multiple counters at once */
 	if (in_hardware_group(event))
 		return -EINVAL;

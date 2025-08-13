@@ -601,19 +601,6 @@ static int arm_cspmu_event_init(struct perf_event *event)
 
 	cspmu = to_arm_cspmu(event->pmu);
 
-	if (event->attr.type != event->pmu->type)
-		return -ENOENT;
-
-	/*
-	 * Following other "uncore" PMUs, we do not support sampling mode or
-	 * attach to a task (per-process mode).
-	 */
-	if (event->cpu < 0 || event->attach_state & PERF_ATTACH_TASK) {
-		dev_dbg(cspmu->pmu.dev,
-			"Can't support per-task counters\n");
-		return -EINVAL;
-	}
-
 	/*
 	 * Make sure the CPU assignment is on one of the CPUs associated with
 	 * this PMU.

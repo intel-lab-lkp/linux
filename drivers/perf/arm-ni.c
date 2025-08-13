@@ -309,12 +309,6 @@ static int arm_ni_event_init(struct perf_event *event)
 {
 	struct arm_ni_cd *cd = pmu_to_cd(event->pmu);
 
-	if (event->attr.type != event->pmu->type)
-		return -ENOENT;
-
-	if (is_sampling_event(event))
-		return -EINVAL;
-
 	event->cpu = cd_to_ni(cd)->cpu;
 	if (NI_EVENT_TYPE(event) == NI_PMU)
 		return arm_ni_validate_group(event);

@@ -199,24 +199,6 @@ int hisi_uncore_pmu_event_init(struct perf_event *event)
 	struct hw_perf_event *hwc = &event->hw;
 	struct hisi_pmu *hisi_pmu;
 
-	if (event->attr.type != event->pmu->type)
-		return -ENOENT;
-
-	/*
-	 * We do not support sampling as the counters are all
-	 * shared by all CPU cores in a CPU die(SCCL). Also we
-	 * do not support attach to a task(per-process mode)
-	 */
-	if (is_sampling_event(event) || event->attach_state & PERF_ATTACH_TASK)
-		return -EOPNOTSUPP;
-
-	/*
-	 *  The uncore counters not specific to any CPU, so cannot
-	 *  support per-task
-	 */
-	if (event->cpu < 0)
-		return -EINVAL;
-
 	/*
 	 * Validate if the events in group does not exceed the
 	 * available counters in hardware.

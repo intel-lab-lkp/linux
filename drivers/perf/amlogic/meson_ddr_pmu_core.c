@@ -121,15 +121,6 @@ static int meson_ddr_perf_event_init(struct perf_event *event)
 	u64 config1 = event->attr.config1;
 	u64 config2 = event->attr.config2;
 
-	if (event->attr.type != event->pmu->type)
-		return -ENOENT;
-
-	if (is_sampling_event(event) || event->attach_state & PERF_ATTACH_TASK)
-		return -EOPNOTSUPP;
-
-	if (event->cpu < 0)
-		return -EOPNOTSUPP;
-
 	/* check if the number of parameters is too much */
 	if (event->attr.config != ALL_CHAN_COUNTER_ID &&
 	    hweight64(config1) + hweight64(config2) > MAX_AXI_PORTS_OF_CHANNEL)

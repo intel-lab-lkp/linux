@@ -372,17 +372,6 @@ static int papr_scm_pmu_event_init(struct perf_event *event)
 	struct nvdimm_pmu *nd_pmu = to_nvdimm_pmu(event->pmu);
 	struct papr_scm_priv *p;
 
-	if (!nd_pmu)
-		return -EINVAL;
-
-	/* test the event attr type for PMU enumeration */
-	if (event->attr.type != event->pmu->type)
-		return -ENOENT;
-
-	/* no branch sampling */
-	if (has_branch_stack(event))
-		return -EOPNOTSUPP;
-
 	p = (struct papr_scm_priv *)nd_pmu->dev->driver_data;
 	if (!p)
 		return -EINVAL;

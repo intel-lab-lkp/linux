@@ -478,25 +478,6 @@ static int qcom_l3_cache__event_init(struct perf_event *event)
 	struct l3cache_pmu *l3pmu = to_l3cache_pmu(event->pmu);
 	struct hw_perf_event *hwc = &event->hw;
 
-	/*
-	 * Is the event for this PMU?
-	 */
-	if (event->attr.type != event->pmu->type)
-		return -ENOENT;
-
-	/*
-	 * Sampling not supported since these events are not core-attributable.
-	 */
-	if (hwc->sample_period)
-		return -EINVAL;
-
-	/*
-	 * Task mode not available, we run the counters as socket counters,
-	 * not attributable to any CPU and therefore cannot attribute per-task.
-	 */
-	if (event->cpu < 0)
-		return -EINVAL;
-
 	/* Validate the group */
 	if (!qcom_l3_cache__validate_event_group(event))
 		return -EINVAL;

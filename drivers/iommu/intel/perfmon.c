@@ -284,16 +284,6 @@ static int iommu_pmu_event_init(struct perf_event *event)
 {
 	struct hw_perf_event *hwc = &event->hw;
 
-	if (event->attr.type != event->pmu->type)
-		return -ENOENT;
-
-	/* sampling not supported */
-	if (event->attr.sample_period)
-		return -EINVAL;
-
-	if (event->cpu < 0)
-		return -EINVAL;
-
 	if (iommu_pmu_validate_event(event))
 		return -EINVAL;
 

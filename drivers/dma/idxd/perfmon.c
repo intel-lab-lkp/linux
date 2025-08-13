@@ -171,20 +171,6 @@ static int perfmon_pmu_event_init(struct perf_event *event)
 
 	idxd = event_to_idxd(event);
 	event->hw.idx = -1;
-
-	if (event->attr.type != event->pmu->type)
-		return -ENOENT;
-
-	/* sampling not supported */
-	if (event->attr.sample_period)
-		return -EINVAL;
-
-	if (event->cpu < 0)
-		return -EINVAL;
-
-	if (event->pmu != &idxd->idxd_pmu->pmu)
-		return -EINVAL;
-
 	event->hw.event_base = ioread64(PERFMON_TABLE_OFFSET(idxd));
 	event->hw.config = event->attr.config;
 

@@ -277,13 +277,6 @@ static int cstate_pmu_event_init(struct perf_event *event)
 {
 	u64 cfg = event->attr.config;
 
-	if (event->attr.type != event->pmu->type)
-		return -ENOENT;
-
-	/* unsupported modes and filters */
-	if (event->cpu < 0)
-		return -EINVAL;
-
 	if (event->pmu == &cstate_core_pmu) {
 		if (cfg >= PERF_CSTATE_CORE_EVENT_MAX)
 			return -EINVAL;

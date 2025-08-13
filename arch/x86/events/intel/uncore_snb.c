@@ -906,28 +906,10 @@ static int snb_uncore_imc_event_init(struct perf_event *event)
 	u64 cfg = event->attr.config & SNB_UNCORE_PCI_IMC_EVENT_MASK;
 	int idx, base;
 
-	if (event->attr.type != event->pmu->type)
-		return -ENOENT;
-
 	pmu = uncore_event_to_pmu(event);
 	/* no device found for this pmu */
 	if (!pmu->registered)
 		return -ENOENT;
-
-	/* Sampling not supported yet */
-	if (hwc->sample_period)
-		return -EINVAL;
-
-	/* unsupported modes and filters */
-	if (event->attr.sample_period) /* no sampling */
-		return -EINVAL;
-
-	/*
-	 * Place all uncore events for a particular physical package
-	 * onto a single cpu
-	 */
-	if (event->cpu < 0)
-		return -EINVAL;
 
 	/* check only supported bits are set */
 	if (event->attr.config & ~SNB_UNCORE_PCI_IMC_EVENT_MASK)

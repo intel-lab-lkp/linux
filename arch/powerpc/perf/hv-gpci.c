@@ -775,19 +775,11 @@ static int h_gpci_event_init(struct perf_event *event)
 	u8 length;
 	unsigned long ret;
 
-	/* Not our event */
-	if (event->attr.type != event->pmu->type)
-		return -ENOENT;
-
 	/* config2 is unused */
 	if (event->attr.config2) {
 		pr_devel("config2 set when reserved\n");
 		return -EINVAL;
 	}
-
-	/* no branch sampling */
-	if (has_branch_stack(event))
-		return -EOPNOTSUPP;
 
 	length = event_get_length(event);
 	if (length < 1 || length > 8) {

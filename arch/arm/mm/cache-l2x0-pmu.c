@@ -294,16 +294,6 @@ static int l2x0_pmu_event_init(struct perf_event *event)
 {
 	struct hw_perf_event *hw = &event->hw;
 
-	if (event->attr.type != l2x0_pmu->type)
-		return -ENOENT;
-
-	if (is_sampling_event(event) ||
-	    event->attach_state & PERF_ATTACH_TASK)
-		return -EINVAL;
-
-	if (event->cpu < 0)
-		return -EINVAL;
-
 	if (event->attr.config & ~L2X0_EVENT_CNT_CFG_SRC_MASK)
 		return -EINVAL;
 

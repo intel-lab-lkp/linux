@@ -517,16 +517,6 @@ static int nest_imc_event_init(struct perf_event *event)
 	struct imc_pmu_ref *ref;
 	bool flag = false;
 
-	if (event->attr.type != event->pmu->type)
-		return -ENOENT;
-
-	/* Sampling not supported */
-	if (event->hw.sample_period)
-		return -EINVAL;
-
-	if (event->cpu < 0)
-		return -EINVAL;
-
 	pmu = imc_event_to_pmu(event);
 
 	/* Sanity check for config (event offset) */
@@ -819,16 +809,6 @@ static int core_imc_event_init(struct perf_event *event)
 	struct imc_pmu *pmu;
 	struct imc_pmu_ref *ref;
 
-	if (event->attr.type != event->pmu->type)
-		return -ENOENT;
-
-	/* Sampling not supported */
-	if (event->hw.sample_period)
-		return -EINVAL;
-
-	if (event->cpu < 0)
-		return -EINVAL;
-
 	event->hw.idx = -1;
 	pmu = imc_event_to_pmu(event);
 
@@ -983,15 +963,8 @@ static int thread_imc_event_init(struct perf_event *event)
 	struct task_struct *target;
 	struct imc_pmu *pmu;
 
-	if (event->attr.type != event->pmu->type)
-		return -ENOENT;
-
 	if (!perfmon_capable())
 		return -EACCES;
-
-	/* Sampling not supported */
-	if (event->hw.sample_period)
-		return -EINVAL;
 
 	event->hw.idx = -1;
 	pmu = imc_event_to_pmu(event);
@@ -1436,9 +1409,6 @@ static void trace_imc_event_del(struct perf_event *event, int flags)
 
 static int trace_imc_event_init(struct perf_event *event)
 {
-	if (event->attr.type != event->pmu->type)
-		return -ENOENT;
-
 	if (!perfmon_capable())
 		return -EACCES;
 

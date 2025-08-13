@@ -731,24 +731,11 @@ static int uncore_pmu_event_init(struct perf_event *event)
 	struct hw_perf_event *hwc = &event->hw;
 	int ret;
 
-	if (event->attr.type != event->pmu->type)
-		return -ENOENT;
-
 	pmu = uncore_event_to_pmu(event);
 	/* no device found for this pmu */
 	if (!pmu->registered)
 		return -ENOENT;
 
-	/* Sampling not supported yet */
-	if (hwc->sample_period)
-		return -EINVAL;
-
-	/*
-	 * Place all uncore events for a particular physical package
-	 * onto a single cpu
-	 */
-	if (event->cpu < 0)
-		return -EINVAL;
 	box = uncore_pmu_to_box(pmu, event->cpu);
 	if (!box || box->cpu < 0)
 		return -EINVAL;

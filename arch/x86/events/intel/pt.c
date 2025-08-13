@@ -1795,9 +1795,6 @@ static void pt_event_destroy(struct perf_event *event)
 
 static int pt_event_init(struct perf_event *event)
 {
-	if (event->attr.type != pt_pmu.pmu.type)
-		return -ENOENT;
-
 	if (!pt_event_valid(event))
 		return -EINVAL;
 

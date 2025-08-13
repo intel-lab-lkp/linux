@@ -1791,15 +1791,8 @@ static int rapl_pmu_event_init(struct perf_event *event)
 	u64 cfg = event->attr.config & RAPL_EVENT_MASK;
 	int domain, idx;
 
-	/* Only look at RAPL events */
-	if (event->attr.type != event->pmu->type)
-		return -ENOENT;
-
 	/* Check for supported events only */
 	if (!cfg || cfg >= PERF_RAPL_MAX)
-		return -EINVAL;
-
-	if (event->cpu < 0)
 		return -EINVAL;
 
 	/* Find out which Package the event belongs to */

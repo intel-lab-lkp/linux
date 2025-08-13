@@ -718,10 +718,6 @@ static int arm_spe_pmu_event_init(struct perf_event *event)
 	struct perf_event_attr *attr = &event->attr;
 	struct arm_spe_pmu *spe_pmu = to_spe_pmu(event->pmu);
 
-	/* This is, of course, deeply driver-specific */
-	if (attr->type != event->pmu->type)
-		return -ENOENT;
-
 	if (event->cpu >= 0 &&
 	    !cpumask_test_cpu(event->cpu, &spe_pmu->supported_cpus))
 		return -ENOENT;

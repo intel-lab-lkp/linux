@@ -514,20 +514,6 @@ static int dmc620_pmu_event_init(struct perf_event *event)
 	struct dmc620_pmu *dmc620_pmu = to_dmc620_pmu(event->pmu);
 	struct hw_perf_event *hwc = &event->hw;
 
-	if (event->attr.type != event->pmu->type)
-		return -ENOENT;
-
-	/*
-	 * DMC 620 PMUs are shared across all cpus and cannot
-	 * support task bound and sampling events.
-	 */
-	if (is_sampling_event(event) ||
-		event->attach_state & PERF_ATTACH_TASK) {
-		dev_dbg(dmc620_pmu->pmu.dev,
-			"Can't support per-task counters\n");
-		return -EOPNOTSUPP;
-	}
-
 	/*
 	 * Many perf core operations (eg. events rotation) operate on a
 	 * single CPU context. This is obvious for CPU PMUs, where one
@@ -538,8 +524,6 @@ static int dmc620_pmu_event_init(struct perf_event *event)
 	 * processor.
 	 */
 	event->cpu = dmc620_pmu->irq->cpu;
-	if (event->cpu < 0)
-		return -EINVAL;
 
 	hwc->idx = -1;
 

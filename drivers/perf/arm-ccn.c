@@ -704,30 +704,12 @@ static void arm_ccn_pmu_event_release(struct perf_event *event)
 static int arm_ccn_pmu_event_init(struct perf_event *event)
 {
 	struct arm_ccn *ccn;
-	struct hw_perf_event *hw = &event->hw;
 	u32 node_xp, type, event_id;
 	int valid;
 	int i;
 
-	if (event->attr.type != event->pmu->type)
-		return -ENOENT;
-
 	ccn = pmu_to_arm_ccn(event->pmu);
 
-	if (hw->sample_period) {
-		dev_dbg(ccn->dev, "Sampling not supported!\n");
-		return -EOPNOTSUPP;
-	}
-
-	if (has_branch_stack(event)) {
-		dev_dbg(ccn->dev, "Can't exclude execution levels!\n");
-		return -EINVAL;
-	}
-
-	if (event->cpu < 0) {
-		dev_dbg(ccn->dev, "Can't provide per-task data!\n");
-		return -EOPNOTSUPP;
-	}
 	/*
 	 * Many perf core operations (eg. events rotation) operate on a
 	 * single CPU context. This is obvious for CPU PMUs, where one

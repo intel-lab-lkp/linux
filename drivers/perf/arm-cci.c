@@ -1283,13 +1283,6 @@ static int cci_pmu_event_init(struct perf_event *event)
 	atomic_t *active_events = &cci_pmu->active_events;
 	int err = 0;
 
-	if (event->attr.type != event->pmu->type)
-		return -ENOENT;
-
-	/* Shared by all CPUs, no meaningful state to sample */
-	if (is_sampling_event(event) || event->attach_state & PERF_ATTACH_TASK)
-		return -EOPNOTSUPP;
-
 	/*
 	 * Following the example set by other "uncore" PMUs, we accept any CPU
 	 * and rewrite its affinity dynamically rather than having perf core
@@ -1299,8 +1292,6 @@ static int cci_pmu_event_init(struct perf_event *event)
 	 * the event being installed into its context, so the PMU's CPU can't
 	 * change under our feet.
 	 */
-	if (event->cpu < 0)
-		return -EINVAL;
 	event->cpu = cci_pmu->cpu;
 
 	event->destroy = hw_perf_event_destroy;

@@ -191,19 +191,8 @@ static int pem_perf_event_init(struct perf_event *event)
 	struct pem_pmu *pmu = to_pem_pmu(event->pmu);
 	struct hw_perf_event *hwc = &event->hw;
 
-	if (event->attr.type != event->pmu->type)
-		return -ENOENT;
-
 	if (event->attr.config >= PEM_EVENTIDS_MAX)
 		return -EINVAL;
-
-	if (is_sampling_event(event) ||
-	    event->attach_state & PERF_ATTACH_TASK) {
-		return -EOPNOTSUPP;
-	}
-
-	if (event->cpu < 0)
-		return -EOPNOTSUPP;
 
 	/* Disallow groups since we can't start/stop/read multiple counters at once */
 	if (in_hardware_group(event))

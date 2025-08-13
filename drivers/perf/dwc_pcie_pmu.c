@@ -355,17 +355,6 @@ static int dwc_pcie_pmu_event_init(struct perf_event *event)
 	enum dwc_pcie_event_type type = DWC_PCIE_EVENT_TYPE(event);
 	u32 lane;
 
-	if (event->attr.type != event->pmu->type)
-		return -ENOENT;
-
-	/* We don't support sampling */
-	if (is_sampling_event(event))
-		return -EINVAL;
-
-	/* We cannot support task bound events */
-	if (event->cpu < 0 || event->attach_state & PERF_ATTACH_TASK)
-		return -EINVAL;
-
 	/* Disallow groups since we can't start/stop/read multiple counters at once */
 	if (in_hardware_group(event))
 		return -EINVAL;

@@ -206,9 +206,6 @@ static int msr_event_init(struct perf_event *event)
 {
 	u64 cfg = event->attr.config;
 
-	if (event->attr.type != event->pmu->type)
-		return -ENOENT;
-
 	/* unsupported modes and filters */
 	if (cfg >= PERF_MSR_EVENT_MAX)
 		return -EINVAL;

@@ -1379,10 +1379,6 @@ static int h_24x7_event_init(struct perf_event *event)
 	unsigned long hret;
 	u64 ct;
 
-	/* Not our event */
-	if (event->attr.type != event->pmu->type)
-		return -ENOENT;
-
 	/* Unused areas must be 0 */
 	if (event_get_reserved1(event) ||
 	    event_get_reserved2(event) ||
@@ -1396,10 +1392,6 @@ static int h_24x7_event_init(struct perf_event *event)
 				event_get_reserved3(event));
 		return -EINVAL;
 	}
-
-	/* no branch sampling */
-	if (has_branch_stack(event))
-		return -EOPNOTSUPP;
 
 	/* offset must be 8 byte aligned */
 	if (event_get_offset(event) % 8) {

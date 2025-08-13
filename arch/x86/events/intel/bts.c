@@ -565,9 +565,6 @@ static int bts_event_init(struct perf_event *event)
 {
 	int ret;
 
-	if (event->attr.type != bts_pmu.type)
-		return -ENOENT;
-
 	/*
 	 * BTS leaks kernel addresses even when CPL0 tracing is
 	 * disabled, so disallow intel_bts driver for unprivileged

@@ -238,23 +238,10 @@ static int xe_pmu_event_init(struct perf_event *event)
 	if (!pmu->registered)
 		return -ENODEV;
 
-	if (event->attr.type != event->pmu->type)
-		return -ENOENT;
-
-	/* unsupported modes and filters */
-	if (event->attr.sample_period) /* no sampling */
-		return -EINVAL;
-
-	if (event->cpu < 0)
-		return -EINVAL;
-
 	gt = config_to_gt_id(event->attr.config);
 	id = config_to_event_id(event->attr.config);
 	if (!event_supported(pmu, gt, id))
 		return -ENOENT;
-
-	if (has_branch_stack(event))
-		return -EOPNOTSUPP;
 
 	if (!event_param_valid(event))
 		return -ENOENT;

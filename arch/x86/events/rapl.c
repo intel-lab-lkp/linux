@@ -370,19 +370,8 @@ static int rapl_pmu_event_init(struct perf_event *event)
 	unsigned int rapl_pmu_idx;
 	struct rapl_pmus *rapl_pmus;
 
-	/* only look at RAPL events */
-	if (event->attr.type != event->pmu->type)
-		return -ENOENT;
-
-	/* unsupported modes and filters */
-	if (event->attr.sample_period) /* no sampling */
-		return -EINVAL;
-
 	/* check only supported bits are set */
 	if (event->attr.config & ~RAPL_EVENT_MASK)
-		return -EINVAL;
-
-	if (event->cpu < 0)
 		return -EINVAL;
 
 	rapl_pmus = container_of(event->pmu, struct rapl_pmus, pmu);

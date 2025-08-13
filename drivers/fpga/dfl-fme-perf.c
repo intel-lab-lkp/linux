@@ -799,20 +799,6 @@ static int fme_perf_event_init(struct perf_event *event)
 	struct fme_perf_event_ops *ops;
 	u32 eventid, evtype, portid;
 
-	/* test the event attr type check for PMU enumeration */
-	if (event->attr.type != event->pmu->type)
-		return -ENOENT;
-
-	/*
-	 * fme counters are shared across all cores.
-	 * Therefore, it does not support per-process mode.
-	 */
-	if (event->attach_state & PERF_ATTACH_TASK)
-		return -EINVAL;
-
-	if (event->cpu < 0)
-		return -EINVAL;
-
 	if (event->cpu != priv->cpu)
 		return -EINVAL;
 

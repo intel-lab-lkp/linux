@@ -1788,8 +1788,7 @@ static int cfdiag_event_init(struct perf_event *event)
 	struct perf_event_attr *attr = &event->attr;
 	int err = -ENOENT;
 
-	if (event->attr.config != PERF_EVENT_CPUM_CF_DIAG ||
-	    event->attr.type != event->pmu->type)
+	if (event->attr.config != PERF_EVENT_CPUM_CF_DIAG)
 		goto out;
 
 	/* Raw events are used to access counters directly,

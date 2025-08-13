@@ -72,13 +72,6 @@ static const struct attribute_group *vpa_pmu_attr_groups[] = {
 
 static int vpa_pmu_event_init(struct perf_event *event)
 {
-	if (event->attr.type != event->pmu->type)
-		return -ENOENT;
-
-	/* no branch sampling */
-	if (has_branch_stack(event))
-		return -EOPNOTSUPP;
-
 	/* Invalid event code */
 	if ((event->attr.config <= 0) || (event->attr.config > 3))
 		return -EINVAL;

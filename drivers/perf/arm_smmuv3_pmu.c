@@ -398,19 +398,6 @@ static int smmu_pmu_event_init(struct perf_event *event)
 	int group_num_events = 1;
 	u16 event_id;
 
-	if (event->attr.type != event->pmu->type)
-		return -ENOENT;
-
-	if (hwc->sample_period) {
-		dev_dbg(dev, "Sampling not supported\n");
-		return -EOPNOTSUPP;
-	}
-
-	if (event->cpu < 0) {
-		dev_dbg(dev, "Per-task mode not supported\n");
-		return -EOPNOTSUPP;
-	}
-
 	/* Verify specified event is supported on this PMU */
 	event_id = get_event(event);
 	if (event_id < SMMU_PMCG_ARCH_MAX_EVENTS &&

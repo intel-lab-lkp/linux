@@ -366,20 +366,6 @@ static int starlink_pmu_event_init(struct perf_event *event)
 	struct starlink_pmu *starlink_pmu = to_starlink_pmu(event->pmu);
 	struct hw_perf_event *hwc = &event->hw;
 
-	/*
-	 * Sampling is not supported, as counters are shared
-	 * by all CPU.
-	 */
-	if (hwc->sample_period)
-		return -EOPNOTSUPP;
-
-	/*
-	 * Per-task and attach to a task are not supported,
-	 * as uncore events are not specific to any CPU.
-	 */
-	if (event->cpu < 0 || event->attach_state & PERF_ATTACH_TASK)
-		return -EOPNOTSUPP;
-
 	if (!starlink_pmu_validate_event_group(event))
 		return -EINVAL;
 

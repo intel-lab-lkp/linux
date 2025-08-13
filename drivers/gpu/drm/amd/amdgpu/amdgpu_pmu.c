@@ -210,10 +210,6 @@ static int amdgpu_perf_event_init(struct perf_event *event)
 {
 	struct hw_perf_event *hwc = &event->hw;
 
-	/* test the event attr type check for PMU enumeration */
-	if (event->attr.type != event->pmu->type)
-		return -ENOENT;
-
 	/* update the hw_perf_event struct with config data */
 	hwc->config = event->attr.config;
 	hwc->config_base = AMDGPU_PMU_PERF_TYPE_NONE;

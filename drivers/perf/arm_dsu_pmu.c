@@ -524,26 +524,6 @@ static int dsu_pmu_event_init(struct perf_event *event)
 {
 	struct dsu_pmu *dsu_pmu = to_dsu_pmu(event->pmu);
 
-	if (event->attr.type != event->pmu->type)
-		return -ENOENT;
-
-	/* We don't support sampling */
-	if (is_sampling_event(event)) {
-		dev_dbg(dsu_pmu->pmu.dev, "Can't support sampling events\n");
-		return -EOPNOTSUPP;
-	}
-
-	/* We cannot support task bound events */
-	if (event->cpu < 0 || event->attach_state & PERF_ATTACH_TASK) {
-		dev_dbg(dsu_pmu->pmu.dev, "Can't support per-task counters\n");
-		return -EINVAL;
-	}
-
-	if (has_branch_stack(event)) {
-		dev_dbg(dsu_pmu->pmu.dev, "Can't support filtering\n");
-		return -EINVAL;
-	}
-
 	if (!cpumask_test_cpu(event->cpu, &dsu_pmu->associated_cpus)) {
 		dev_dbg(dsu_pmu->pmu.dev,
 			 "Requested cpu is not associated with the DSU\n");

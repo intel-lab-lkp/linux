@@ -270,12 +270,6 @@ static int amd_uncore_event_init(struct perf_event *event)
 	struct amd_uncore_ctx *ctx;
 	struct hw_perf_event *hwc = &event->hw;
 
-	if (event->attr.type != event->pmu->type)
-		return -ENOENT;
-
-	if (event->cpu < 0)
-		return -EINVAL;
-
 	pmu = event_to_amd_uncore_pmu(event);
 	ctx = *per_cpu_ptr(pmu->ctx, event->cpu);
 	if (!ctx)
