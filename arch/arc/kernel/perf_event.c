@@ -816,9 +816,7 @@ static int arc_pmu_device_probe(struct platform_device *pdev)
 
 	}
 
-	if (irq == -1)
-		arc_pmu->pmu.capabilities |= PERF_PMU_CAP_NO_INTERRUPT;
-	else
+	if (irq != -1)
 		arc_pmu->pmu.capabilities |= PERF_PMU_CAP_SAMPLING;
 
 	/*

@@ -379,10 +379,6 @@ static int papr_scm_pmu_event_init(struct perf_event *event)
 	if (event->attr.type != event->pmu->type)
 		return -ENOENT;
 
-	/* it does not support event sampling mode */
-	if (is_sampling_event(event))
-		return -EOPNOTSUPP;
-
 	/* no branch sampling */
 	if (has_branch_stack(event))
 		return -EOPNOTSUPP;
@@ -463,8 +459,7 @@ static void papr_scm_pmu_register(struct papr_scm_priv *p)
 	nd_pmu->pmu.add = papr_scm_pmu_add;
 	nd_pmu->pmu.del = papr_scm_pmu_del;
 
-	nd_pmu->pmu.capabilities = PERF_PMU_CAP_NO_INTERRUPT |
-				PERF_PMU_CAP_NO_EXCLUDE;
+	nd_pmu->pmu.capabilities = PERF_PMU_CAP_NO_EXCLUDE;
 
 	/*updating the cpumask variable */
 	nodeid = numa_map_to_online_node(dev_to_node(&p->pdev->dev));

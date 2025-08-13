@@ -2014,7 +2014,7 @@ static int rapl_pmu_update(struct rapl_package *rp)
 	rapl_pmu.pmu.stop = rapl_pmu_event_stop;
 	rapl_pmu.pmu.read = rapl_pmu_event_read;
 	rapl_pmu.pmu.module = THIS_MODULE;
-	rapl_pmu.pmu.capabilities = PERF_PMU_CAP_NO_EXCLUDE | PERF_PMU_CAP_NO_INTERRUPT;
+	rapl_pmu.pmu.capabilities = PERF_PMU_CAP_NO_EXCLUDE;
 	ret = perf_pmu_register(&rapl_pmu.pmu, "power", -1);
 	if (ret) {
 		pr_info("Failed to register PMU\n");

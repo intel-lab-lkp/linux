@@ -1316,7 +1316,6 @@ int csky_pmu_device_probe(struct platform_device *pdev,
 	ret = csky_pmu_request_irq(csky_pmu_handle_irq);
 	if (ret) {
 		csky_pmu.pmu.capabilities &= ~PERF_PMU_CAP_SAMPLING;
-		csky_pmu.pmu.capabilities |= PERF_PMU_CAP_NO_INTERRUPT;
 		pr_notice("[perf] PMU request irq fail!\n");
 	}
 

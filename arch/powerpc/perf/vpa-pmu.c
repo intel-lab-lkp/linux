@@ -75,10 +75,6 @@ static int vpa_pmu_event_init(struct perf_event *event)
 	if (event->attr.type != event->pmu->type)
 		return -ENOENT;
 
-	/* it does not support event sampling mode */
-	if (is_sampling_event(event))
-		return -EOPNOTSUPP;
-
 	/* no branch sampling */
 	if (has_branch_stack(event))
 		return -EOPNOTSUPP;
@@ -164,7 +160,7 @@ static struct pmu vpa_pmu = {
 	.del		= vpa_pmu_del,
 	.read		= vpa_pmu_read,
 	.attr_groups	= vpa_pmu_attr_groups,
-	.capabilities	= PERF_PMU_CAP_NO_EXCLUDE | PERF_PMU_CAP_NO_INTERRUPT,
+	.capabilities	= PERF_PMU_CAP_NO_EXCLUDE,
 };
 
 static int __init pseries_vpa_pmu_init(void)

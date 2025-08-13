@@ -391,7 +391,7 @@ static struct pmu kvmppc_pmu = {
 	.attr_groups = kvmppc_pmu_attr_groups,
 	.type = -1,
 	.scope = PERF_PMU_SCOPE_SYS_WIDE,
-	.capabilities = PERF_PMU_CAP_NO_EXCLUDE | PERF_PMU_CAP_NO_INTERRUPT,
+	.capabilities = PERF_PMU_CAP_NO_EXCLUDE,
 };
 
 static int __init kvmppc_register_pmu(void)

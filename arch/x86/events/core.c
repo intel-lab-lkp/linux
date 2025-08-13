@@ -1836,7 +1836,6 @@ static void __init pmu_check_apic(void)
 	 * events (user-space has to fall back and
 	 * sample via a hrtimer based software event):
 	 */
-	pmu.capabilities |= PERF_PMU_CAP_NO_INTERRUPT;
 	pmu.capabilities &= ~PERF_PMU_CAP_SAMPLING;
 }
 

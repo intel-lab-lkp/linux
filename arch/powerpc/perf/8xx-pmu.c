@@ -181,8 +181,7 @@ static struct pmu mpc8xx_pmu = {
 	.add		= mpc8xx_pmu_add,
 	.del		= mpc8xx_pmu_del,
 	.read		= mpc8xx_pmu_read,
-	.capabilities	= PERF_PMU_CAP_NO_INTERRUPT |
-			  PERF_PMU_CAP_NO_NMI,
+	.capabilities	= PERF_PMU_CAP_NO_NMI,
 };
 
 static int init_mpc8xx_pmu(void)

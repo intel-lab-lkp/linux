@@ -806,9 +806,8 @@ static int fme_perf_event_init(struct perf_event *event)
 	/*
 	 * fme counters are shared across all cores.
 	 * Therefore, it does not support per-process mode.
-	 * Also, it does not support event sampling mode.
 	 */
-	if (is_sampling_event(event) || event->attach_state & PERF_ATTACH_TASK)
+	if (event->attach_state & PERF_ATTACH_TASK)
 		return -EINVAL;
 
 	if (event->cpu < 0)
@@ -921,8 +920,7 @@ static int fme_perf_pmu_register(struct platform_device *pdev,
 	pmu->start =		fme_perf_event_start;
 	pmu->stop =		fme_perf_event_stop;
 	pmu->read =		fme_perf_event_read;
-	pmu->capabilities =	PERF_PMU_CAP_NO_INTERRUPT |
-				PERF_PMU_CAP_NO_EXCLUDE;
+	pmu->capabilities =	PERF_PMU_CAP_NO_EXCLUDE;
 
 	name = devm_kasprintf(priv->dev, GFP_KERNEL, "dfl_fme%d", pdev->id);
 

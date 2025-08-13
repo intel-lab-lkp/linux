@@ -110,7 +110,6 @@ static int pmu_parse_irqs(struct arm_pmu *pmu)
 	if (num_irqs == 0) {
 		dev_warn(dev, "no irqs for PMU, sampling events not supported\n");
 		pmu->pmu.capabilities &= ~PERF_PMU_CAP_SAMPLING;
-		pmu->pmu.capabilities |= PERF_PMU_CAP_NO_INTERRUPT;
 		cpumask_setall(&pmu->supported_cpus);
 		return 0;
 	}

@@ -608,12 +608,6 @@ static int arm_cspmu_event_init(struct perf_event *event)
 	 * Following other "uncore" PMUs, we do not support sampling mode or
 	 * attach to a task (per-process mode).
 	 */
-	if (is_sampling_event(event)) {
-		dev_dbg(cspmu->pmu.dev,
-			"Can't support sampling events\n");
-		return -EOPNOTSUPP;
-	}
-
 	if (event->cpu < 0 || event->attach_state & PERF_ATTACH_TASK) {
 		dev_dbg(cspmu->pmu.dev,
 			"Can't support per-task counters\n");
@@ -1128,7 +1122,7 @@ static int arm_cspmu_get_cpus(struct arm_cspmu *cspmu)
 
 static int arm_cspmu_register_pmu(struct arm_cspmu *cspmu)
 {
-	int ret, capabilities;
+	int ret;
 
 	ret = arm_cspmu_alloc_attr_groups(cspmu);
 	if (ret)
@@ -1138,10 +1132,6 @@ static int arm_cspmu_register_pmu(struct arm_cspmu *cspmu)
 				       &cspmu->cpuhp_node);
 	if (ret)
 		return ret;
-
-	capabilities = PERF_PMU_CAP_NO_EXCLUDE;
-	if (cspmu->irq == 0)
-		capabilities |= PERF_PMU_CAP_NO_INTERRUPT;
 
 	cspmu->pmu = (struct pmu){
 		.task_ctx_nr	= perf_invalid_context,
@@ -1156,7 +1146,7 @@ static int arm_cspmu_register_pmu(struct arm_cspmu *cspmu)
 		.stop		= arm_cspmu_stop,
 		.read		= arm_cspmu_read,
 		.attr_groups	= cspmu->attr_groups,
-		.capabilities	= capabilities,
+		.capabilities	= PERF_PMU_CAP_NO_EXCLUDE,
 	};
 
 	/* Hardware counter init */

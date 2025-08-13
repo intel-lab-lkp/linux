@@ -1726,9 +1726,6 @@ static int hv_24x7_init(void)
 	if (!hv_page_cache)
 		return -ENOMEM;
 
-	/* sampling not supported */
-	h_24x7_pmu.capabilities |= PERF_PMU_CAP_NO_INTERRUPT;
-
 	r = create_events_from_catalog(&event_group.attrs,
 				   &event_desc_group.attrs,
 				   &event_long_desc_group.attrs);
