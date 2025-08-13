@@ -13,6 +13,7 @@
 #include <linux/err.h>
 #include <linux/oid_registry.h>
 #include <crypto/public_key.h>
+#include <linux/kfuzztest.h>
 #include "pkcs7_parser.h"
 #include "pkcs7.asn1.h"
 
@@ -168,6 +169,20 @@ out_no_ctx:
 	return msg;
 }
 EXPORT_SYMBOL_GPL(pkcs7_parse_message);
+
+struct pkcs7_parse_message_arg {
+	const void *data;
+	size_t datalen;
+};
+
+FUZZ_TEST(test_pkcs7_parse_message, struct pkcs7_parse_message_arg)
+{
+	KFUZZTEST_EXPECT_NOT_NULL(pkcs7_parse_message_arg, data);
+	KFUZZTEST_ANNOTATE_LEN(pkcs7_parse_message_arg, datalen, data);
+	KFUZZTEST_EXPECT_LE(pkcs7_parse_message_arg, datalen, 16 * PAGE_SIZE);
+
+	pkcs7_parse_message(arg->data, arg->datalen);
+}
 
 /**
  * pkcs7_get_content_data - Get access to the PKCS#7 content
