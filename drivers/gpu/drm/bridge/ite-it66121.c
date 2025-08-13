@@ -289,9 +289,13 @@ enum chip_id {
 	ID_IT66121,
 };
 
+struct it66121_device_id {
+	u16 vid, pid;
+};
+
 struct it66121_chip_info {
 	enum chip_id id;
-	u16 vid, pid;
+	struct it66121_device_id device_id[]; /* NULL terminated List */
 };
 
 struct it66121_ctx {
@@ -1511,6 +1515,7 @@ static int it66121_probe(struct i2c_client *client)
 	int ret;
 	struct it66121_ctx *ctx;
 	struct device *dev = &client->dev;
+	const struct it66121_device_id *device_id;
 
 	if (!i2c_check_functionality(client->adapter, I2C_FUNC_I2C)) {
 		dev_err(dev, "I2C check functionality failed.\n");
@@ -1574,10 +1579,14 @@ static int it66121_probe(struct i2c_client *client)
 	revision_id = FIELD_GET(IT66121_REVISION_MASK, device_ids[1]);
 	device_ids[1] &= IT66121_DEVICE_ID1_MASK;
 
-	if ((vendor_ids[1] << 8 | vendor_ids[0]) != ctx->info->vid ||
-	    (device_ids[1] << 8 | device_ids[0]) != ctx->info->pid) {
-		return -ENODEV;
+	for (device_id = ctx->info->device_id; device_id->vid; device_id++) {
+		if ((vendor_ids[1] << 8 | vendor_ids[0]) == device_id->vid &&
+		    (device_ids[1] << 8 | device_ids[0]) == device_id->pid)
+			break;
 	}
+
+	if (!device_id->vid)
+		return -ENODEV;
 
 	ctx->bridge.of_node = dev->of_node;
 	ctx->bridge.type = DRM_MODE_CONNECTOR_HDMIA;
@@ -1614,14 +1623,18 @@ static void it66121_remove(struct i2c_client *client)
 
 static const struct it66121_chip_info it66121_chip_info = {
 	.id = ID_IT66121,
-	.vid = 0x4954,
-	.pid = 0x0612,
+	.device_id = {
+		{.vid = 0x4954, .pid = 0x0612 },
+		{ }
+	},
 };
 
 static const struct it66121_chip_info it6610_chip_info = {
 	.id = ID_IT6610,
-	.vid = 0xca00,
-	.pid = 0x0611,
+	.device_id = {
+		{ .vid = 0xca00, .pid = 0x0611},
+		{ }
+	},
 };
 
 static const struct of_device_id it66121_dt_match[] = {
