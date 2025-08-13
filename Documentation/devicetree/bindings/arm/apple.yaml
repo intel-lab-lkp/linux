@@ -93,6 +93,7 @@ description: |
 
   - MacBook Air (M2, 2022)
   - MacBook Pro (13-inch, M2, 2022)
+  - MacBook Pro (15-inch, M2, 2023)
   - Mac mini (M2, 2023)
 
   And devices based on the "M1 Pro", "M1 Max" and "M1 Ultra" SoCs:
@@ -279,6 +280,7 @@ properties:
         items:
           - enum:
               - apple,j413 # MacBook Air (M2, 2022)
+              - apple,j415 # MacBook Air (M2, 2023)
               - apple,j473 # Mac mini (M2, 2023)
               - apple,j493 # MacBook Pro (13-inch, M2, 2022)
           - const: apple,t8112
