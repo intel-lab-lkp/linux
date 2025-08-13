@@ -5696,7 +5696,14 @@ sub process {
 			my ($s, $c) = ($stat, $cond);
 			my $fixed_assign_in_if = 0;
 
-			if ($c =~ /\bif\s*\(.*[^<>!=]=[^=].*/s) {
+			if ($c =~ /\bif\s*\((.*[^<>!=]=[^=].*)\)/s) {
+				my $expr = $1;
+
+				# Allow ACQUIRE_ERR() macro syntax
+				if ($expr =~ /\w+\s*=\s*ACQUIRE_ERR\s*\(/) {
+					next;
+				}
+
 				if (ERROR("ASSIGN_IN_IF",
 					  "do not use assignment in if condition\n" . $herecurr) &&
 				    $fix && $perl_version_ok) {
