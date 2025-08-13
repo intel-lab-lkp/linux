@@ -212,6 +212,45 @@ static int vfio_pci_zdev_setup_err_region(struct vfio_pci_core_device *vdev)
 	return ret;
 }
 
+int vfio_pci_zdev_reset(struct vfio_pci_core_device *vdev)
+{
+	struct zpci_dev *zdev = to_zpci(vdev->pdev);
+	int rc = -EIO;
+
+	if (!zdev)
+		return -ENODEV;
+
+	/*
+	 * If we can't get the zdev->state_lock the device state is
+	 * currently undergoing a transition and we bail out - just
+	 * the same as if the device's state is not configured at all.
+	 */
+	if (!mutex_trylock(&zdev->state_lock))
+		return rc;
+
+	/* We can reset only if the function is configured */
+	if (zdev->state != ZPCI_FN_STATE_CONFIGURED)
+		goto out;
+
+	rc = zpci_hot_reset_device(zdev);
+	if (rc != 0)
+		goto out;
+
+	if (!vdev->pci_saved_state) {
+		pci_err(vdev->pdev, "No saved available for the device");
+		rc = -EIO;
+		goto out;
+	}
+
+	pci_dev_lock(vdev->pdev);
+	pci_load_saved_state(vdev->pdev, vdev->pci_saved_state);
+	pci_restore_state(vdev->pdev);
+	pci_dev_unlock(vdev->pdev);
+out:
+	mutex_unlock(&zdev->state_lock);
+	return rc;
+}
+
 int vfio_pci_zdev_open_device(struct vfio_pci_core_device *vdev)
 {
 	struct zpci_dev *zdev = to_zpci(vdev->pdev);

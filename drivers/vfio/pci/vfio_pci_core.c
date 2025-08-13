@@ -1228,6 +1228,10 @@ static int vfio_pci_ioctl_reset(struct vfio_pci_core_device *vdev,
 	 */
 	vfio_pci_set_power_state(vdev, PCI_D0);
 
+	ret = vfio_pci_zdev_reset(vdev);
+	if (ret && ret != -ENODEV)
+		return ret;
+
 	ret = pci_try_reset_function(vdev->pdev);
 	up_write(&vdev->memory_lock);
 

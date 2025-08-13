@@ -788,6 +788,7 @@ int zpci_hot_reset_device(struct zpci_dev *zdev)
 
 	return rc;
 }
+EXPORT_SYMBOL_GPL(zpci_hot_reset_device);
 
 /**
  * zpci_create_device() - Create a new zpci_dev and add it to the zbus
