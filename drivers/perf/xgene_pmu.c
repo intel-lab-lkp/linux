@@ -877,7 +877,6 @@ static int xgene_perf_event_init(struct perf_event *event)
 {
 	struct xgene_pmu_dev *pmu_dev = to_pmu_dev(event->pmu);
 	struct hw_perf_event *hw = &event->hw;
-	struct perf_event *sibling;
 
 	/* Test the event attr type check for PMU enumeration */
 	if (event->attr.type != event->pmu->type)
@@ -912,20 +911,6 @@ static int xgene_perf_event_init(struct perf_event *event)
 	 * By default, the event is counted for all agents.
 	 */
 	hw->config_base = event->attr.config1;
-
-	/*
-	 * We must NOT create groups containing mixed PMUs, although software
-	 * events are acceptable
-	 */
-	if (event->group_leader->pmu != event->pmu &&
-			!is_software_event(event->group_leader))
-		return -EINVAL;
-
-	for_each_sibling_event(sibling, event->group_leader) {
-		if (sibling->pmu != event->pmu &&
-				!is_software_event(sibling))
-			return -EINVAL;
-	}
 
 	return 0;
 }

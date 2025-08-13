@@ -708,7 +708,6 @@ static int arm_ccn_pmu_event_init(struct perf_event *event)
 	u32 node_xp, type, event_id;
 	int valid;
 	int i;
-	struct perf_event *sibling;
 
 	if (event->attr.type != event->pmu->type)
 		return -ENOENT;
@@ -812,21 +811,6 @@ static int arm_ccn_pmu_event_init(struct perf_event *event)
 
 		arm_ccn_pmu_config_set(&event->attr.config,
 				node_xp, type, port);
-	}
-
-	/*
-	 * We must NOT create groups containing mixed PMUs, although software
-	 * events are acceptable (for example to create a CCN group
-	 * periodically read when a hrtimer aka cpu-clock leader triggers).
-	 */
-	if (event->group_leader->pmu != event->pmu &&
-			!is_software_event(event->group_leader))
-		return -EINVAL;
-
-	for_each_sibling_event(sibling, event->group_leader) {
-		if (sibling->pmu != event->pmu &&
-				!is_software_event(sibling))
-			return -EINVAL;
 	}
 
 	return 0;
