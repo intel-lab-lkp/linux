@@ -248,6 +248,21 @@ int proc_thermal_soc_power_slider_add(struct pci_dev *pdev, struct proc_thermal_
 }
 EXPORT_SYMBOL_NS_GPL(proc_thermal_soc_power_slider_add, "INT340X_THERMAL");
 
+static u64 soc_slider_save;
+
+void proc_thermal_soc_power_slider_suspend(struct proc_thermal_device *proc_priv)
+{
+	soc_slider_save = readq(proc_priv->mmio_base + SOC_POWER_SLIDER_OFFSET);
+
+}
+EXPORT_SYMBOL_NS_GPL(proc_thermal_soc_power_slider_suspend, "INT340X_THERMAL");
+
+void proc_thermal_soc_power_slider_resume(struct proc_thermal_device *proc_priv)
+{
+	writeq(soc_slider_save, proc_priv->mmio_base + SOC_POWER_SLIDER_OFFSET);
+}
+EXPORT_SYMBOL_NS_GPL(proc_thermal_soc_power_slider_resume, "INT340X_THERMAL");
+
 MODULE_IMPORT_NS("INT340X_THERMAL");
 MODULE_LICENSE("GPL");
 MODULE_DESCRIPTION("Processor Thermal Power Slider Interface");

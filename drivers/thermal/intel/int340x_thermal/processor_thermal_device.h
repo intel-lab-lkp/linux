@@ -130,5 +130,7 @@ int proc_thermal_ptc_add(struct pci_dev *pdev, struct proc_thermal_device *proc_
 void proc_thermal_ptc_remove(struct pci_dev *pdev);
 
 int proc_thermal_soc_power_slider_add(struct pci_dev *pdev, struct proc_thermal_device *proc_priv);
+void proc_thermal_soc_power_slider_suspend(struct proc_thermal_device *proc_priv);
+void proc_thermal_soc_power_slider_resume(struct proc_thermal_device *proc_priv);
 
 #endif

@@ -338,9 +338,16 @@ static int tcc_offset_save = -1;
 
 int proc_thermal_suspend(struct device *dev)
 {
+	struct proc_thermal_device *proc_dev;
+
 	tcc_offset_save = intel_tcc_get_offset(-1);
 	if (tcc_offset_save < 0)
 		dev_warn(dev, "failed to save offset (%d)\n", tcc_offset_save);
+
+	proc_dev = dev_get_drvdata(dev);
+
+	if (proc_dev->mmio_feature_mask & PROC_THERMAL_FEATURE_SOC_POWER_SLIDER)
+		proc_thermal_soc_power_slider_suspend(proc_dev);
 
 	return 0;
 }
@@ -356,6 +363,9 @@ int proc_thermal_resume(struct device *dev)
 	/* Do not update if saving failed */
 	if (tcc_offset_save >= 0)
 		intel_tcc_set_offset(-1, tcc_offset_save);
+
+	if (proc_dev->mmio_feature_mask & PROC_THERMAL_FEATURE_SOC_POWER_SLIDER)
+		proc_thermal_soc_power_slider_resume(proc_dev);
 
 	return 0;
 }
