@@ -2274,7 +2274,7 @@ conn_set_state(struct drbd_connection *connection, union drbd_state mask, union 
 static enum drbd_state_rv
 _conn_rq_cond(struct drbd_connection *connection, union drbd_state mask, union drbd_state val)
 {
-	enum drbd_state_rv err, rv = SS_UNKNOWN_ERROR; /* continue waiting */;
+	enum drbd_state_rv err, rv = SS_UNKNOWN_ERROR; /* continue waiting */
 
 	if (test_and_clear_bit(CONN_WD_ST_CHG_OKAY, &connection->flags))
 		rv = SS_CW_SUCCESS;
