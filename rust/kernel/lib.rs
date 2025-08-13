@@ -294,6 +294,42 @@ macro_rules! asm {
     };
 }
 
+/// Conditionally compiles and executes code based on a `#[cfg]` condition.
+///
+/// Expands to `#[cfg(cond)] { ... }` and `#[cfg(not(cond))] { ... }`,
+/// allowing conditional compilation in both expression and statement positions.
+///
+/// This macro is useful when both branches must be valid Rust code and the
+/// selection between them is done at compile time via a config option.
+/// # Examples
+/// ```
+/// # use kernel::if_cfg;
+/// // Select a value depending on CONFIG_64BIT.
+/// let x = if_cfg!(if CONFIG_64BIT {
+///     64
+/// } else {
+///     32
+/// });
+///
+/// // `x` will be 64 if CONFIG_64BIT is enabled, otherwise 32.
+/// assert!(x == 64 || x == 32);
+/// ```
+#[macro_export]
+macro_rules! if_cfg {
+    (if $cond:tt { $($then:tt)* } else { $($else:tt)* }) => {{
+        #[cfg($cond)]
+        { $($then)* }
+        #[cfg(not($cond))]
+        { $($else)* }
+    }};
+    (if $cond:tt { $($then:tt)* }) => {{
+        #[cfg($cond)]
+        { $($then)* }
+        #[cfg(not($cond))]
+        { () }
+    }};
+}
+
 /// Gets the C string file name of a [`Location`].
 ///
 /// If `file_with_nul()` is not available, returns a string that warns about it.
@@ -337,3 +373,4 @@ pub fn file_from_location<'a>(loc: &'a core::panic::Location<'a>) -> &'a core::f
         c"<Location::file_with_nul() not supported>"
     }
 }
+
