@@ -158,7 +158,7 @@ enum mem_type {
 };
 
 struct nat_entry_set {
-	struct list_head set_list;	/* link with other nat sets */
+	struct list_head set_list;	/* link with nat sets which have same entry_cnt */
 	struct list_head entry_list;	/* link with dirty nat entries */
 	nid_t set;			/* set number*/
 	unsigned int entry_cnt;		/* the # of nat entries in set */

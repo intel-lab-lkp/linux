@@ -249,6 +249,12 @@ static void __del_from_nat_cache(struct f2fs_nm_info *nm_i, struct nat_entry *e)
 	__free_nat_entry(e);
 }
 
+static void __relocate_nat_entry_set(struct f2fs_nm_info *nm_i,
+							struct nat_entry_set *set)
+{
+	list_move_tail(&set->set_list, &nm_i->nat_dirty_set[set->entry_cnt]);
+}
+
 static struct nat_entry_set *__grab_nat_entry_set(struct f2fs_nm_info *nm_i,
 							struct nat_entry *ne)
 {
@@ -265,6 +271,7 @@ static struct nat_entry_set *__grab_nat_entry_set(struct f2fs_nm_info *nm_i,
 		head->set = set;
 		head->entry_cnt = 0;
 		f2fs_radix_tree_insert(&nm_i->nat_set_root, set, head);
+		__relocate_nat_entry_set(nm_i, head);
 	}
 	return head;
 }
@@ -284,8 +291,10 @@ static void __set_nat_cache_dirty(struct f2fs_nm_info *nm_i,
 	 * 2. update old block address to new one;
 	 */
 	if (!new_ne && (get_nat_flag(ne, IS_PREALLOC) ||
-				!get_nat_flag(ne, IS_DIRTY)))
+				!get_nat_flag(ne, IS_DIRTY))) {
 		head->entry_cnt++;
+		__relocate_nat_entry_set(nm_i, head);
+	}
 
 	set_nat_flag(ne, IS_PREALLOC, new_ne);
 
@@ -314,6 +323,7 @@ static void __clear_nat_cache_dirty(struct f2fs_nm_info *nm_i,
 
 	set_nat_flag(ne, IS_DIRTY, false);
 	set->entry_cnt--;
+	__relocate_nat_entry_set(nm_i, set);
 	nm_i->nat_cnt[DIRTY_NAT]--;
 	nm_i->nat_cnt[RECLAIMABLE_NAT]++;
 }
@@ -2991,24 +3001,6 @@ static void remove_nats_in_journal(struct f2fs_sb_info *sbi)
 	up_write(&curseg->journal_rwsem);
 }
 
-static void __adjust_nat_entry_set(struct nat_entry_set *nes,
-						struct list_head *head, int max)
-{
-	struct nat_entry_set *cur;
-
-	if (nes->entry_cnt >= max)
-		goto add_out;
-
-	list_for_each_entry(cur, head, set_list) {
-		if (cur->entry_cnt >= nes->entry_cnt) {
-			list_add(&nes->set_list, cur->set_list.prev);
-			return;
-		}
-	}
-add_out:
-	list_add_tail(&nes->set_list, head);
-}
-
 static void __update_nat_bits(struct f2fs_sb_info *sbi, nid_t start_nid,
 		const struct f2fs_nat_block *nat_blk)
 {
@@ -3110,6 +3102,7 @@ static int __flush_nat_entry_set(struct f2fs_sb_info *sbi,
 
 	/* Allow dirty nats by node block allocation in write_begin */
 	if (!set->entry_cnt) {
+		list_del(&set->set_list);
 		radix_tree_delete(&NM_I(sbi)->nat_set_root, set->set);
 		kmem_cache_free(nat_entry_set_slab, set);
 	}
@@ -3124,11 +3117,8 @@ int f2fs_flush_nat_entries(struct f2fs_sb_info *sbi, struct cp_control *cpc)
 	struct f2fs_nm_info *nm_i = NM_I(sbi);
 	struct curseg_info *curseg = CURSEG_I(sbi, CURSEG_HOT_DATA);
 	struct f2fs_journal *journal = curseg->journal;
-	struct nat_entry_set *setvec[NAT_VEC_SIZE];
 	struct nat_entry_set *set, *tmp;
-	unsigned int found;
-	nid_t set_idx = 0;
-	LIST_HEAD(sets);
+	int i;
 	int err = 0;
 
 	/*
@@ -3144,6 +3134,16 @@ int f2fs_flush_nat_entries(struct f2fs_sb_info *sbi, struct cp_control *cpc)
 	if (!nm_i->nat_cnt[DIRTY_NAT])
 		return 0;
 
+	/* readahead sets which cannot be moved to journal */
+	if (!__has_cursum_space(journal, nm_i->nat_cnt[DIRTY_NAT], NAT_JOURNAL)) {
+		for (i = MAX_NAT_JENTRIES(journal); i <= NAT_ENTRY_PER_BLOCK; i++) {
+			list_for_each_entry_safe(set, tmp, &nm_i->nat_dirty_set[i], set_list) {
+				f2fs_ra_meta_pages(sbi, set->set, 1,
+								META_NAT, true);
+			}
+		}
+	}
+
 	f2fs_down_write(&nm_i->nat_tree_lock);
 
 	/*
@@ -3156,21 +3156,13 @@ int f2fs_flush_nat_entries(struct f2fs_sb_info *sbi, struct cp_control *cpc)
 			nm_i->nat_cnt[DIRTY_NAT], NAT_JOURNAL))
 		remove_nats_in_journal(sbi);
 
-	while ((found = __gang_lookup_nat_set(nm_i,
-					set_idx, NAT_VEC_SIZE, setvec))) {
-		unsigned idx;
-
-		set_idx = setvec[found - 1]->set + 1;
-		for (idx = 0; idx < found; idx++)
-			__adjust_nat_entry_set(setvec[idx], &sets,
-						MAX_NAT_JENTRIES(journal));
-	}
-
 	/* flush dirty nats in nat entry set */
-	list_for_each_entry_safe(set, tmp, &sets, set_list) {
-		err = __flush_nat_entry_set(sbi, set, cpc);
-		if (err)
-			break;
+	for (i = 0; i <= NAT_ENTRY_PER_BLOCK; i++) {
+		list_for_each_entry_safe(set, tmp, &nm_i->nat_dirty_set[i], set_list) {
+			err = __flush_nat_entry_set(sbi, set, cpc);
+			if (err)
+				break;
+		}
 	}
 
 	f2fs_up_write(&nm_i->nat_tree_lock);
@@ -3264,6 +3256,7 @@ static int init_node_manager(struct f2fs_sb_info *sbi)
 	struct f2fs_nm_info *nm_i = NM_I(sbi);
 	unsigned char *version_bitmap;
 	unsigned int nat_segs;
+	int i;
 	int err;
 
 	nm_i->nat_blkaddr = le32_to_cpu(sb_raw->nat_blkaddr);
@@ -3289,6 +3282,9 @@ static int init_node_manager(struct f2fs_sb_info *sbi)
 	INIT_RADIX_TREE(&nm_i->nat_set_root, GFP_NOIO);
 	INIT_LIST_HEAD(&nm_i->nat_entries);
 	spin_lock_init(&nm_i->nat_list_lock);
+
+	for (i = 0; i <= NAT_ENTRY_PER_BLOCK; i++)
+		INIT_LIST_HEAD(&nm_i->nat_dirty_set[i]);
 
 	mutex_init(&nm_i->build_lock);
 	spin_lock_init(&nm_i->nid_list_lock);
