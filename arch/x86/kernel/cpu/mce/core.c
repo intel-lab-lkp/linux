@@ -456,9 +456,8 @@ static noinstr void mce_wrmsrq(u32 msr, u64 v)
  * check into our "mce" struct so that we can use it later to assess
  * the severity of the problem as we read per-bank specific details.
  */
-static noinstr void mce_gather_info(struct mce_hw_err *err, struct pt_regs *regs)
+static noinstr void mce_gather_info(struct mce_hw_err *err)
 {
-	struct mce *m;
 	/*
 	 * Enable instrumentation around mce_prep_record() which calls external
 	 * facilities.
@@ -467,29 +466,7 @@ static noinstr void mce_gather_info(struct mce_hw_err *err, struct pt_regs *regs
 	mce_prep_record(err);
 	instrumentation_end();
 
-	m = &err->m;
-	m->mcgstatus = mce_rdmsrq(MSR_IA32_MCG_STATUS);
-	if (regs) {
-		/*
-		 * Get the address of the instruction at the time of
-		 * the machine check error.
-		 */
-		if (m->mcgstatus & (MCG_STATUS_RIPV|MCG_STATUS_EIPV)) {
-			m->ip = regs->ip;
-			m->cs = regs->cs;
-
-			/*
-			 * When in VM86 mode make the cs look like ring 3
-			 * always. This is a lie, but it's better than passing
-			 * the additional vm86 bit around everywhere.
-			 */
-			if (v8086_mode(regs))
-				m->cs |= 3;
-		}
-		/* Use accurate RIP reporting if available. */
-		if (mca_cfg.rip_msr)
-			m->ip = mce_rdmsrq(mca_cfg.rip_msr);
-	}
+	err->m.mcgstatus = mce_rdmsrq(MSR_IA32_MCG_STATUS);
 }
 
 bool mce_available(struct cpuinfo_x86 *c)
@@ -738,7 +715,7 @@ void machine_check_poll(enum mcp_flags flags, mce_banks_t *b)
 
 	this_cpu_inc(mce_poll_count);
 
-	mce_gather_info(&err, NULL);
+	mce_gather_info(&err);
 	m = &err.m;
 
 	if (flags & MCP_TIMESTAMP)
@@ -842,35 +819,6 @@ clear_it:
 EXPORT_SYMBOL_GPL(machine_check_poll);
 
 /*
- * During IFU recovery Sandy Bridge -EP4S processors set the RIPV and
- * EIPV bits in MCG_STATUS to zero on the affected logical processor (SDM
- * Vol 3B Table 15-20). But this confuses both the code that determines
- * whether the machine check occurred in kernel or user mode, and also
- * the severity assessment code. Pretend that EIPV was set, and take the
- * ip/cs values from the pt_regs that mce_gather_info() ignored earlier.
- */
-static __always_inline void
-quirk_sandybridge_ifu(int bank, struct mce *m, struct pt_regs *regs)
-{
-	if (bank != 0)
-		return;
-	if ((m->mcgstatus & (MCG_STATUS_EIPV|MCG_STATUS_RIPV)) != 0)
-		return;
-	if ((m->status & (MCI_STATUS_OVER|MCI_STATUS_UC|
-		          MCI_STATUS_EN|MCI_STATUS_MISCV|MCI_STATUS_ADDRV|
-			  MCI_STATUS_PCC|MCI_STATUS_S|MCI_STATUS_AR|
-			  MCACOD)) !=
-			 (MCI_STATUS_UC|MCI_STATUS_EN|
-			  MCI_STATUS_MISCV|MCI_STATUS_ADDRV|MCI_STATUS_S|
-			  MCI_STATUS_AR|MCACOD_INSTR))
-		return;
-
-	m->mcgstatus |= MCG_STATUS_EIPV;
-	m->ip = regs->ip;
-	m->cs = regs->cs;
-}
-
-/*
  * Disable fast string copy and return from the MCE handler upon the first SRAR
  * MCE on bank 1 due to a CPU erratum on Intel Skylake/Cascade Lake/Cooper Lake
  * CPUs.
@@ -924,26 +872,6 @@ static noinstr bool quirk_skylake_repmov(void)
 }
 
 /*
- * Some Zen-based Instruction Fetch Units set EIPV=RIPV=0 on poison consumption
- * errors. This means mce_gather_info() will not save the "ip" and "cs" registers.
- *
- * However, the context is still valid, so save the "cs" register for later use.
- *
- * The "ip" register is truly unknown, so don't save it or fixup EIPV/RIPV.
- *
- * The Instruction Fetch Unit is at MCA bank 1 for all affected systems.
- */
-static __always_inline void quirk_zen_ifu(int bank, struct mce *m, struct pt_regs *regs)
-{
-	if (bank != 1)
-		return;
-	if (!(m->status & MCI_STATUS_POISON))
-		return;
-
-	m->cs = regs->cs;
-}
-
-/*
  * Do a quick check if any of the events requires a panic.
  * This decides if we keep the events around or clear them.
  */
@@ -960,11 +888,6 @@ static __always_inline int mce_no_way_out(struct mce_hw_err *err, char **msg, un
 			continue;
 
 		arch___set_bit(i, validp);
-		if (mce_flags.snb_ifu_quirk)
-			quirk_sandybridge_ifu(i, m, regs);
-
-		if (mce_flags.zen_ifu_quirk)
-			quirk_zen_ifu(i, m, regs);
 
 		m->bank = i;
 		if (mce_severity(m, regs, &tmp, true) >= MCE_PANIC_SEVERITY) {
@@ -1057,7 +980,7 @@ out:
  * All the spin loops have timeouts; when a timeout happens a CPU
  * typically elects itself to be Monarch.
  */
-static void mce_reign(void)
+static void mce_reign(struct pt_regs *regs)
 {
 	struct mce_hw_err *err = NULL;
 	struct mce *m = NULL;
@@ -1088,7 +1011,7 @@ static void mce_reign(void)
 	 */
 	if (m && global_worst >= MCE_PANIC_SEVERITY) {
 		/* call mce_severity() to get "msg" for panic */
-		mce_severity(m, NULL, &msg, true);
+		mce_severity(m, regs, &msg, true);
 		mce_panic("Fatal machine check", err, msg);
 	}
 
@@ -1197,7 +1120,7 @@ out:
  * Synchronize between CPUs after main scanning loop.
  * This invokes the bulk of the Monarch processing.
  */
-static noinstr int mce_end(int order)
+static noinstr int mce_end(int order, struct pt_regs *regs)
 {
 	u64 timeout = (u64)mca_cfg.monarch_timeout * NSEC_PER_USEC;
 	int ret = -1;
@@ -1227,7 +1150,7 @@ static noinstr int mce_end(int order)
 			ndelay(SPINUNIT);
 		}
 
-		mce_reign();
+		mce_reign(regs);
 		barrier();
 		ret = 0;
 	} else {
@@ -1557,7 +1480,7 @@ noinstr void do_machine_check(struct pt_regs *regs)
 
 	this_cpu_inc(mce_exception_count);
 
-	mce_gather_info(&err, regs);
+	mce_gather_info(&err);
 	m = &err.m;
 	m->tsc = rdtsc();
 
@@ -1607,7 +1530,7 @@ noinstr void do_machine_check(struct pt_regs *regs)
 	 * When there's any problem use only local no_way_out state.
 	 */
 	if (!lmce) {
-		if (mce_end(order) < 0) {
+		if (mce_end(order, regs) < 0) {
 			if (!no_way_out)
 				no_way_out = worst >= MCE_PANIC_SEVERITY;
 
@@ -1950,9 +1873,6 @@ static void apply_quirks_amd(struct cpuinfo_x86 *c)
 	 */
 	if (c->x86 == 0x15 && c->x86_model <= 0xf)
 		mce_flags.overflow_recov = 1;
-
-	if (c->x86 >= 0x17 && c->x86 <= 0x1A)
-		mce_flags.zen_ifu_quirk = 1;
 }
 
 static void apply_quirks_intel(struct cpuinfo_x86 *c)
@@ -1987,9 +1907,6 @@ static void apply_quirks_intel(struct cpuinfo_x86 *c)
 	 */
 	if (c->x86_vfm < INTEL_CORE_YONAH && mca_cfg.bootlog < 0)
 		mca_cfg.bootlog = 0;
-
-	if (c->x86_vfm == INTEL_SANDYBRIDGE_X)
-		mce_flags.snb_ifu_quirk = 1;
 
 	/*
 	 * Skylake, Cascacde Lake and Cooper Lake require a quirk on

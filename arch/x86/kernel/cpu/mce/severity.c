@@ -272,23 +272,23 @@ static bool is_copy_from_user(struct pt_regs *regs)
 	return true;
 }
 
-/*
- * If mcgstatus indicated that ip/cs on the stack were
- * no good, then "m->cs" will be zero and we will have
- * to assume the worst case (IN_KERNEL) as we actually
- * have no idea what we were executing when the machine
- * check hit.
- * If we do have a good "m->cs" (or a faked one in the
- * case we were executing in VM86 mode) we can use it to
- * distinguish an exception taken in user from from one
- * taken in the kernel.
- */
 static noinstr int error_context(struct mce *m, struct pt_regs *regs)
 {
 	int fixup_type;
 	bool copy_user;
 
-	if ((m->cs & 3) == 3)
+	/* Without register info, assume the worst. */
+	if (!regs)
+		return IN_KERNEL;
+
+	m->ip = regs->ip;
+	m->cs = regs->cs;
+
+	/* Use accurate RIP reporting if available. */
+	if (mca_cfg.rip_msr)
+		m->ip = mce_rdmsrq(mca_cfg.rip_msr);
+
+	if (user_mode(regs))
 		return IN_USER;
 
 	if (!mc_recoverable(m->mcgstatus))
