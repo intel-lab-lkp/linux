@@ -698,5 +698,6 @@ int ____kvm_emulate_hypercall(struct kvm_vcpu *vcpu, int cpl,
 })
 
 int kvm_emulate_hypercall(struct kvm_vcpu *vcpu);
+bool kvm_pv_async_pf_enabled(struct kvm_vcpu *vcpu);
 
 #endif
