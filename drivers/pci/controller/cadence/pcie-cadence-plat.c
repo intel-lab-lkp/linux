@@ -178,3 +178,7 @@ static struct platform_driver cdns_plat_pcie_driver = {
 	.shutdown = cdns_plat_pcie_shutdown,
 };
 builtin_platform_driver(cdns_plat_pcie_driver);
+
+MODULE_LICENSE("GPL");
+MODULE_DESCRIPTION("Cadence PCIe controller platform driver");
+MODULE_AUTHOR("Manikandan K Pillai <mpillai@cadence.com>");
