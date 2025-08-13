@@ -25,6 +25,9 @@
 #include <linux/if_vlan.h>
 #include <linux/of_net.h>
 #include <linux/phy_fixed.h>
+#include <linux/mfd/syscon.h>
+#include <linux/regmap.h>
+#include <linux/bitfield.h>
 #include <net/ip.h>
 #include <net/ncsi.h>
 
@@ -1812,6 +1815,86 @@ static bool ftgmac100_has_child_node(struct device_node *np, const char *name)
 	return ret;
 }
 
+static void ftgmac100_set_internal_delay(struct platform_device *pdev)
+{
+	struct device_node *np = pdev->dev.of_node;
+	struct regmap *scu;
+	u32 rgmii_tx_delay;
+	u32 rgmii_rx_delay;
+	int dly_mask;
+	int dly_reg;
+	int id;
+
+	if (!(of_device_is_compatible(np, "aspeed,ast2600-mac01") ||
+	      of_device_is_compatible(np, "aspeed,ast2600-mac23")))
+		return;
+
+	/* If lack one of them, do not configure anything */
+	if (of_property_read_u32(np, "tx-internal-delay-ps", &rgmii_tx_delay)) {
+		dev_warn(&pdev->dev, "failed to get tx-internal-delay-ps\n");
+		return;
+	}
+	if (of_property_read_u32(np, "rx-internal-delay-ps", &rgmii_rx_delay)) {
+		dev_warn(&pdev->dev, "failed to get tx-internal-delay-ps\n");
+		return;
+	}
+	id = of_alias_get_id(np, "ethernet");
+	if (id < 0 || id > 3) {
+		/* If lack alias or out of range, do not configure anything */
+		dev_warn(&pdev->dev, "get wrong alise id %d\n", id);
+		return;
+	}
+
+	if (of_device_is_compatible(np, "aspeed,ast2600-mac01")) {
+		dly_reg = AST2600_MAC01_CLK_DLY;
+		if (rgmii_tx_delay > AST2600_MAC01_CLK_DLY_MAX) {
+			dev_warn(&pdev->dev, "tx-internal-delay-ps %u is out of range\n",
+				 rgmii_tx_delay);
+			return;
+		}
+		if (rgmii_rx_delay > AST2600_MAC01_CLK_DLY_MAX) {
+			dev_warn(&pdev->dev, "rx-internal-delay-ps %u is out of range\n",
+				 rgmii_rx_delay);
+			return;
+		}
+		rgmii_tx_delay /= AST2600_MAC01_CLK_DLY_UNIT;
+		rgmii_rx_delay /= AST2600_MAC01_CLK_DLY_UNIT;
+	} else if (of_device_is_compatible(np, "aspeed,ast2600-mac23")) {
+		dly_reg = AST2600_MAC23_CLK_DLY;
+		if (rgmii_tx_delay > AST2600_MAC23_CLK_DLY_MAX) {
+			dev_warn(&pdev->dev, "tx-internal-delay-ps %u is out of range\n",
+				 rgmii_tx_delay);
+			return;
+		}
+		if (rgmii_rx_delay > AST2600_MAC23_CLK_DLY_MAX) {
+			dev_warn(&pdev->dev, "rx-internal-delay-ps %u is out of range\n",
+				 rgmii_rx_delay);
+			return;
+		}
+		rgmii_tx_delay /= AST2600_MAC23_CLK_DLY_UNIT;
+		/* The index of rx edge delay is started from 0x1a */
+		rgmii_rx_delay = (0x1a + (rgmii_rx_delay / AST2600_MAC23_CLK_DLY_UNIT)) & 0x1f;
+	}
+
+	if (id == 0 || id == 2) {
+		dly_mask = ASPEED_MAC0_2_TX_DLY | ASPEED_MAC0_2_RX_DLY;
+		rgmii_tx_delay = FIELD_PREP(ASPEED_MAC0_2_TX_DLY, rgmii_tx_delay);
+		rgmii_rx_delay = FIELD_PREP(ASPEED_MAC0_2_RX_DLY, rgmii_rx_delay);
+	} else {
+		dly_mask = ASPEED_MAC1_3_TX_DLY | ASPEED_MAC1_3_RX_DLY;
+		rgmii_tx_delay = FIELD_PREP(ASPEED_MAC1_3_TX_DLY, rgmii_tx_delay);
+		rgmii_rx_delay = FIELD_PREP(ASPEED_MAC1_3_RX_DLY, rgmii_rx_delay);
+	}
+
+	scu = syscon_regmap_lookup_by_phandle(np, "scu");
+	if (IS_ERR(scu)) {
+		dev_warn(&pdev->dev, "failed to map scu base");
+		return;
+	}
+
+	regmap_update_bits(scu, dly_reg, dly_mask, rgmii_tx_delay | rgmii_rx_delay);
+}
+
 static int ftgmac100_probe(struct platform_device *pdev)
 {
 	struct resource *res;
@@ -1977,6 +2060,9 @@ static int ftgmac100_probe(struct platform_device *pdev)
 		if (of_device_is_compatible(np, "aspeed,ast2600-mac"))
 			iowrite32(FTGMAC100_TM_DEFAULT,
 				  priv->base + FTGMAC100_OFFSET_TM);
+
+		/* Configure RGMII delay if there are the corresponding compatibles */
+		ftgmac100_set_internal_delay(pdev);
 	}
 
 	/* Default ring sizes */
