@@ -4211,20 +4211,19 @@ static const unsigned int equalizer_vals_lookup[] = {
 static int tuning_ctl_set(struct hda_codec *codec, hda_nid_t nid,
 			  const unsigned int *lookup, int idx)
 {
-	int i = 0;
+	int i;
 
-	for (i = 0; i < TUNING_CTLS_COUNT; i++)
-		if (nid == ca0132_tuning_ctls[i].nid)
-			goto found;
+	for (i = 0; i < TUNING_CTLS_COUNT; i++) {
+		if (nid == ca0132_tuning_ctls[i].nid) {
+			CLASS(snd_hda_power, pm)(codec);
+			dspio_set_param(codec, ca0132_tuning_ctls[i].mid, 0x20,
+					ca0132_tuning_ctls[i].req,
+					&(lookup[idx]), sizeof(unsigned int));
+			return 1;
+		}
+	}
 
 	return -EINVAL;
-found:
-	CLASS(snd_hda_power, pm)(codec);
-	dspio_set_param(codec, ca0132_tuning_ctls[i].mid, 0x20,
-			ca0132_tuning_ctls[i].req,
-			&(lookup[idx]), sizeof(unsigned int));
-
-	return 1;
 }
 
 static int tuning_ctl_get(struct snd_kcontrol *kcontrol,
