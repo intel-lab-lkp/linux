@@ -5,10 +5,10 @@
 # This script detects files with kernel-doc comments for exported functions
 # that are not included in documentation.
 #
-# usage: Run 'scripts/find-unused-docs.sh directory' from top level of kernel
+# usage: Run 'tools/doc/find-unused-docs.sh directory' from top level of kernel
 # 	 tree.
 #
-# example: $scripts/find-unused-docs.sh drivers/scsi
+# example: $tools/doc/find-unused-docs.sh drivers/scsi
 #
 # Licensed under the terms of the GNU GPL License
 
@@ -18,7 +18,7 @@ if ! [ -d "Documentation" ]; then
 fi
 
 if [ "$#" -ne 1 ]; then
-	echo "Usage: scripts/find-unused-docs.sh directory"
+	echo "Usage: tools/doc/find-unused-docs.sh directory"
 	exit 1
 fi
 
