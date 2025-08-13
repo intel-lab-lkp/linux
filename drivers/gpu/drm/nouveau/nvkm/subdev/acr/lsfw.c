@@ -71,7 +71,8 @@ nvkm_acr_lsfw_add(const struct nvkm_acr_lsf_func *func, struct nvkm_acr *acr,
 	}
 
 	if (!lsfw) {
-		if (!(lsfw = kzalloc(sizeof(*lsfw), GFP_KERNEL)))
+		lsfw = kzalloc(sizeof(*lsfw), GFP_KERNEL);
+		if (!lsfw)
 			return ERR_PTR(-ENOMEM);
 
 		lsfw->id = id;
@@ -95,7 +96,8 @@ nvkm_acr_lsfw_load_sig_image_desc_(struct nvkm_subdev *subdev,
 	struct nvkm_acr_lsfw *lsfw;
 	int ret;
 
-	if (IS_ERR((lsfw = nvkm_acr_lsfw_add(func, acr, falcon, id))))
+	lsfw = nvkm_acr_lsfw_add(func, acr, falcon, id);
+	if (IS_ERR(lsfw))
 		return lsfw;
 
 	ret = nvkm_firmware_load_name(subdev, path, "sig", ver, &lsfw->sig);
@@ -260,7 +262,8 @@ nvkm_acr_lsfw_load_bl_inst_data_sig(struct nvkm_subdev *subdev,
 	u32 *bldata;
 	int ret;
 
-	if (IS_ERR((lsfw = nvkm_acr_lsfw_add(func, acr, falcon, id))))
+	lsfw = nvkm_acr_lsfw_add(func, acr, falcon, id);
+	if (IS_ERR(lsfw))
 		return PTR_ERR(lsfw);
 
 	ret = nvkm_firmware_load_name(subdev, path, "bl", ver, &bl);
@@ -296,7 +299,8 @@ nvkm_acr_lsfw_load_bl_inst_data_sig(struct nvkm_subdev *subdev,
 			 lsfw->app_resident_data_size;
 
 	lsfw->img.size = lsfw->bootloader_size + lsfw->app_size;
-	if (!(lsfw->img.data = kzalloc(lsfw->img.size, GFP_KERNEL))) {
+	lsfw->img.data = kzalloc(lsfw->img.size, GFP_KERNEL);
+	if (!lsfw->img.data) {
 		ret = -ENOMEM;
 		goto done;
 	}
@@ -345,7 +349,8 @@ nvkm_acr_lsfw_load_bl_sig_net(struct nvkm_subdev *subdev,
 	u32 *bldata;
 	int ret;
 
-	if (IS_ERR((lsfw = nvkm_acr_lsfw_add(func, acr, falcon, id))))
+	lsfw = nvkm_acr_lsfw_add(func, acr, falcon, id);
+	if (IS_ERR(lsfw))
 		return PTR_ERR(lsfw);
 
 	ret = nvkm_firmware_load_name(subdev, path, "bl", ver, &bl);
@@ -373,7 +378,8 @@ nvkm_acr_lsfw_load_bl_sig_net(struct nvkm_subdev *subdev,
 	lsfw->app_size = lsfw->app_resident_code_size + lsfw->app_resident_data_size;
 
 	lsfw->img.size = lsfw->bootloader_size + lsfw->app_size;
-	if (!(lsfw->img.data = kzalloc(lsfw->img.size, GFP_KERNEL))) {
+	lsfw->img.data = kzalloc(lsfw->img.size, GFP_KERNEL);
+	if (!lsfw->img.data) {
 		ret = -ENOMEM;
 		goto done;
 	}
