@@ -47,10 +47,10 @@ struct tpacket_kbdq_core {
 
 	unsigned short  retire_blk_tov;
 	unsigned short  version;
-	unsigned long	tov_in_jiffies;
+	unsigned long	tov_in_msecs;
 
 	/* timer to retire an outstanding block */
-	struct timer_list retire_blk_timer;
+	struct hrtimer retire_blk_timer;
 };
 
 struct pgv {
