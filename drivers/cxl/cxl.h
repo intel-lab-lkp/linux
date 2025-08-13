@@ -132,6 +132,17 @@ static inline int ways_to_eiw(unsigned int ways, u8 *eiw)
 	return 0;
 }
 
+/* nr_targets must match a supported number of interleave ways */
+static inline bool is_nr_targets_valid(int nr_targets)
+{
+	u8 unused_eiw;
+
+	if (nr_targets <= 0)
+		return false;
+
+	return ways_to_eiw(nr_targets, &unused_eiw) == 0;
+}
+
 /* RAS Registers CXL 2.0 8.2.5.9 CXL RAS Capability Structure */
 #define CXL_RAS_UNCORRECTABLE_STATUS_OFFSET 0x0
 #define   CXL_RAS_UNCORRECTABLE_STATUS_MASK (GENMASK(16, 14) | GENMASK(11, 0))

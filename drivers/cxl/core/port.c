@@ -1773,17 +1773,6 @@ static int cxl_decoder_init(struct cxl_port *port, struct cxl_decoder *cxld)
 	return 0;
 }
 
-static int cxl_switch_decoder_init(struct cxl_port *port,
-				   struct cxl_switch_decoder *cxlsd,
-				   int nr_targets)
-{
-	if (nr_targets > CXL_DECODER_MAX_INTERLEAVE)
-		return -EINVAL;
-
-	cxlsd->nr_targets = nr_targets;
-	return cxl_decoder_init(port, &cxlsd->cxld);
-}
-
 /**
  * cxl_root_decoder_alloc - Allocate a root level decoder
  * @port: owning CXL root of this decoder
@@ -1805,13 +1794,17 @@ struct cxl_root_decoder *cxl_root_decoder_alloc(struct cxl_port *port,
 	if (!is_cxl_root(port))
 		return ERR_PTR(-EINVAL);
 
+	if (!is_nr_targets_valid(nr_targets))
+		return ERR_PTR(-EINVAL);
+
 	cxlrd = kzalloc(struct_size(cxlrd, cxlsd.target, nr_targets),
 			GFP_KERNEL);
 	if (!cxlrd)
 		return ERR_PTR(-ENOMEM);
 
 	cxlsd = &cxlrd->cxlsd;
-	rc = cxl_switch_decoder_init(port, cxlsd, nr_targets);
+	cxlsd->nr_targets = nr_targets;
+	rc = cxl_decoder_init(port, &cxlsd->cxld);
 	if (rc) {
 		kfree(cxlrd);
 		return ERR_PTR(rc);
@@ -1859,11 +1852,15 @@ struct cxl_switch_decoder *cxl_switch_decoder_alloc(struct cxl_port *port,
 	if (is_cxl_root(port) || is_cxl_endpoint(port))
 		return ERR_PTR(-EINVAL);
 
+	if (!is_nr_targets_valid(nr_targets))
+		return ERR_PTR(-EINVAL);
+
 	cxlsd = kzalloc(struct_size(cxlsd, target, nr_targets), GFP_KERNEL);
 	if (!cxlsd)
 		return ERR_PTR(-ENOMEM);
 
-	rc = cxl_switch_decoder_init(port, cxlsd, nr_targets);
+	cxlsd->nr_targets = nr_targets;
+	rc = cxl_decoder_init(port, &cxlsd->cxld);
 	if (rc) {
 		kfree(cxlsd);
 		return ERR_PTR(rc);
