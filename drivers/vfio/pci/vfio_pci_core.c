@@ -724,6 +724,20 @@ void vfio_pci_core_finish_enable(struct vfio_pci_core_device *vdev)
 }
 EXPORT_SYMBOL_GPL(vfio_pci_core_finish_enable);
 
+bool vfio_pci_device_can_recover(struct vfio_pci_core_device *vdev)
+{
+	struct pci_dev *pdev = vdev->pdev;
+
+	if (pci_is_pcie(pdev))
+		return true;
+
+	if (pdev->vendor == PCI_VENDOR_ID_IBM &&
+			pdev->device == PCI_DEVICE_ID_IBM_ISM)
+		return true;
+
+	return false;
+}
+
 static int vfio_pci_get_irq_count(struct vfio_pci_core_device *vdev, int irq_type)
 {
 	if (irq_type == VFIO_PCI_INTX_IRQ_INDEX) {
@@ -750,7 +764,7 @@ static int vfio_pci_get_irq_count(struct vfio_pci_core_device *vdev, int irq_typ
 			return (flags & PCI_MSIX_FLAGS_QSIZE) + 1;
 		}
 	} else if (irq_type == VFIO_PCI_ERR_IRQ_INDEX) {
-		if (pci_is_pcie(vdev->pdev))
+		if (vfio_pci_device_can_recover(vdev))
 			return 1;
 	} else if (irq_type == VFIO_PCI_REQ_IRQ_INDEX) {
 		return 1;
@@ -1151,7 +1165,7 @@ static int vfio_pci_ioctl_get_irq_info(struct vfio_pci_core_device *vdev,
 	case VFIO_PCI_REQ_IRQ_INDEX:
 		break;
 	case VFIO_PCI_ERR_IRQ_INDEX:
-		if (pci_is_pcie(vdev->pdev))
+		if (vfio_pci_device_can_recover(vdev))
 			break;
 		fallthrough;
 	default:
