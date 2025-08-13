@@ -1832,7 +1832,8 @@ static void *scmi_iterator_init(const struct scmi_protocol_handle *ph,
 	return i;
 }
 
-static int scmi_iterator_run(void *iter)
+static int __scmi_iterator_run(void *iter, unsigned int *start,
+			       unsigned int *end)
 {
 	int ret = -EINVAL;
 	struct scmi_iterator_ops *iops;
@@ -1846,6 +1847,9 @@ static int scmi_iterator_run(void *iter)
 	iops = i->ops;
 	ph = i->ph;
 	st = &i->state;
+
+	if (start)
+		st->desc_index = *start;
 
 	do {
 		iops->prepare_message(i->msg, st->desc_index, i->priv);
@@ -1879,7 +1883,8 @@ static int scmi_iterator_run(void *iter)
 		 * check for both returned and remaining to avoid infinite
 		 * loop due to buggy firmware
 		 */
-	} while (st->num_returned && st->num_remaining);
+	} while (st->num_returned && st->num_remaining &&
+		 (!end || (st->desc_index <= min(*end, st->max_resources - 1))));
 
 out:
 	/* Finalize and destroy iterator */
@@ -1887,6 +1892,17 @@ out:
 	devm_kfree(ph->dev, i);
 
 	return ret;
+}
+
+static int scmi_iterator_run(void *iter)
+{
+	return __scmi_iterator_run(iter, NULL, NULL);
+}
+
+static int scmi_iterator_run_bound(void *iter, unsigned int *start,
+				   unsigned int *end)
+{
+	return __scmi_iterator_run(iter, start, end);
 }
 
 struct scmi_msg_get_fc_info {
@@ -2075,6 +2091,7 @@ static const struct scmi_proto_helpers_ops helpers_ops = {
 	.get_max_msg_size = scmi_common_get_max_msg_size,
 	.iter_response_init = scmi_iterator_init,
 	.iter_response_run = scmi_iterator_run,
+	.iter_response_run_bound = scmi_iterator_run_bound,
 	.protocol_msg_check = scmi_protocol_msg_check,
 	.fastchannel_init = scmi_common_fastchannel_init,
 	.fastchannel_db_ring = scmi_common_fastchannel_db_ring,
