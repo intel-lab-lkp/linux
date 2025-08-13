@@ -719,7 +719,7 @@ static void task_group_path(struct task_group *tg, char *path, int plen)
 		char buf[128];						\
 		char *bufend = buf + sizeof(buf) - 3;			\
 		task_group_path(tg, buf, bufend - buf);			\
-		strcpy(bufend - 1, "...");				\
+		strscpy(bufend - 1, "...", 4);				\
 		SEQ_printf(m, fmt, buf);				\
 	}								\
 }
