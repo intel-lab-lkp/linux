@@ -190,7 +190,6 @@ static int pem_perf_event_init(struct perf_event *event)
 {
 	struct pem_pmu *pmu = to_pem_pmu(event->pmu);
 	struct hw_perf_event *hwc = &event->hw;
-	struct perf_event *sibling;
 
 	if (event->attr.type != event->pmu->type)
 		return -ENOENT;
@@ -206,16 +205,10 @@ static int pem_perf_event_init(struct perf_event *event)
 	if (event->cpu < 0)
 		return -EOPNOTSUPP;
 
-	/*  We must NOT create groups containing mixed PMUs */
-	if (event->group_leader->pmu != event->pmu &&
-	    !is_software_event(event->group_leader))
+	/* Disallow groups since we can't start/stop/read multiple counters at once */
+	if (in_hardware_group(event))
 		return -EINVAL;
 
-	for_each_sibling_event(sibling, event->group_leader) {
-		if (sibling->pmu != event->pmu &&
-		    !is_software_event(sibling))
-			return -EINVAL;
-	}
 	/*
 	 * Set ownership of event to one CPU, same event can not be observed
 	 * on multiple cpus at same time.

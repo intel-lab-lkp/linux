@@ -353,7 +353,6 @@ static int dwc_pcie_pmu_event_init(struct perf_event *event)
 {
 	struct dwc_pcie_pmu *pcie_pmu = to_dwc_pcie_pmu(event->pmu);
 	enum dwc_pcie_event_type type = DWC_PCIE_EVENT_TYPE(event);
-	struct perf_event *sibling;
 	u32 lane;
 
 	if (event->attr.type != event->pmu->type)
@@ -367,14 +366,9 @@ static int dwc_pcie_pmu_event_init(struct perf_event *event)
 	if (event->cpu < 0 || event->attach_state & PERF_ATTACH_TASK)
 		return -EINVAL;
 
-	if (event->group_leader != event &&
-	    !is_software_event(event->group_leader))
+	/* Disallow groups since we can't start/stop/read multiple counters at once */
+	if (in_hardware_group(event))
 		return -EINVAL;
-
-	for_each_sibling_event(sibling, event->group_leader) {
-		if (sibling->pmu != event->pmu && !is_software_event(sibling))
-			return -EINVAL;
-	}
 
 	if (type < 0 || type >= DWC_PCIE_EVENT_TYPE_MAX)
 		return -EINVAL;

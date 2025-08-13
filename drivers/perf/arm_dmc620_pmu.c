@@ -513,7 +513,6 @@ static int dmc620_pmu_event_init(struct perf_event *event)
 {
 	struct dmc620_pmu *dmc620_pmu = to_dmc620_pmu(event->pmu);
 	struct hw_perf_event *hwc = &event->hw;
-	struct perf_event *sibling;
 
 	if (event->attr.type != event->pmu->type)
 		return -ENOENT;
@@ -544,21 +543,12 @@ static int dmc620_pmu_event_init(struct perf_event *event)
 
 	hwc->idx = -1;
 
-	if (event->group_leader == event)
-		return 0;
-
 	/*
 	 * We can't atomically disable all HW counters so only one event allowed,
 	 * although software events are acceptable.
 	 */
-	if (!is_software_event(event->group_leader))
+	if (in_hardware_group(event))
 		return -EINVAL;
-
-	for_each_sibling_event(sibling, event->group_leader) {
-		if (sibling != event &&
-				!is_software_event(sibling))
-			return -EINVAL;
-	}
 
 	return 0;
 }

@@ -1556,6 +1556,13 @@ static inline int in_software_context(struct perf_event *event)
 	return event->pmu_ctx->pmu->task_ctx_nr == perf_sw_context;
 }
 
+/* True if the event has (or would have) any non-software siblings */
+static inline bool in_hardware_group(const struct perf_event *event)
+{
+	return event != event->group_leader &&
+	       !in_software_context(event->group_leader);
+}
+
 static inline int is_exclusive_pmu(struct pmu *pmu)
 {
 	return pmu->capabilities & PERF_PMU_CAP_EXCLUSIVE;

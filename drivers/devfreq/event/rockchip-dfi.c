@@ -413,6 +413,9 @@ static int rockchip_ddr_perf_event_init(struct perf_event *event)
 		dev_warn(dfi->dev, "Can't provide per-task data!\n");
 		return -EINVAL;
 	}
+	/* Disallow groups since we can't start/stop/read multiple counters at once */
+	if (in_hardware_group(event))
+		return -EINVAL;
 
 	return 0;
 }

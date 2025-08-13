@@ -248,27 +248,6 @@ int forward_event_to_ibs(struct perf_event *event)
 	return -ENOENT;
 }
 
-/*
- * Grouping of IBS events is not possible since IBS can have only
- * one event active at any point in time.
- */
-static int validate_group(struct perf_event *event)
-{
-	struct perf_event *sibling;
-
-	if (event->group_leader == event)
-		return 0;
-
-	if (event->group_leader->pmu == event->pmu)
-		return -EINVAL;
-
-	for_each_sibling_event(sibling, event->group_leader) {
-		if (sibling->pmu == event->pmu)
-			return -EINVAL;
-	}
-	return 0;
-}
-
 static bool perf_ibs_ldlat_event(struct perf_ibs *perf_ibs,
 				 struct perf_event *event)
 {
@@ -309,9 +288,12 @@ static int perf_ibs_init(struct perf_event *event)
 	     event->attr.exclude_hv))
 		return -EINVAL;
 
-	ret = validate_group(event);
-	if (ret)
-		return ret;
+	/*
+	 * Grouping of IBS events is not possible since IBS can have only
+	 * one event active at any point in time.
+	 */
+	if (in_hardware_group(event))
+		return -EINVAL;
 
 	if (hwc->sample_period) {
 		if (config & perf_ibs->cnt_mask)

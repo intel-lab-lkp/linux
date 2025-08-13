@@ -152,10 +152,8 @@ static int tad_pmu_event_init(struct perf_event *event)
 	if (event->attr.type != event->pmu->type)
 		return -ENOENT;
 
-	if (!event->attr.disabled)
-		return -EINVAL;
-
-	if (event->state != PERF_EVENT_STATE_OFF)
+	/* Disallow groups since we can't start/stop/read multiple counters at once */
+	if (in_hardware_group(event))
 		return -EINVAL;
 
 	event->cpu = tad_pmu->cpu;

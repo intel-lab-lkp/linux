@@ -526,7 +526,6 @@ static int ali_drw_pmu_event_init(struct perf_event *event)
 {
 	struct ali_drw_pmu *drw_pmu = to_ali_drw_pmu(event->pmu);
 	struct hw_perf_event *hwc = &event->hw;
-	struct perf_event *sibling;
 	struct device *dev = drw_pmu->pmu.dev;
 
 	if (event->attr.type != event->pmu->type)
@@ -548,17 +547,9 @@ static int ali_drw_pmu_event_init(struct perf_event *event)
 		return -EOPNOTSUPP;
 	}
 
-	if (event->group_leader != event &&
-	    !is_software_event(event->group_leader)) {
+	if (in_hardware_group(event)) {
 		dev_err(dev, "driveway only allow one event!\n");
 		return -EINVAL;
-	}
-
-	for_each_sibling_event(sibling, event->group_leader) {
-		if (sibling != event && !is_software_event(sibling)) {
-			dev_err(dev, "driveway event not allowed!\n");
-			return -EINVAL;
-		}
 	}
 
 	/* reset all the pmu counters */
