@@ -921,7 +921,13 @@
 	};
 };
 
+&lpass_rxmacro {
+	status = "okay";
+};
+
 &lpass_tlmm {
+	status = "okay";
+
 	spkr_01_sd_n_active: spkr-01-sd-n-active-state {
 		pins = "gpio12";
 		function = "gpio";
@@ -931,6 +937,10 @@
 	};
 };
 
+&lpass_txmacro {
+	status = "okay";
+};
+
 &lpass_vamacro {
 	qcom,dmic-sample-rate = <4800000>;
 
@@ -938,6 +948,12 @@
 
 	pinctrl-0 = <&dmic01_default>;
 	pinctrl-names = "default";
+
+	status = "okay";
+};
+
+&lpass_wsamacro {
+	status = "okay";
 };
 
 &mdss {
