@@ -1060,6 +1060,7 @@ struct ftrace_func_probe {
 static const struct hlist_head empty_buckets[1];
 static const struct ftrace_hash empty_hash = {
 	.buckets = (struct hlist_head *)empty_buckets,
+	.refcount = REFCOUNT_INIT(1),
 };
 #define EMPTY_HASH	((struct ftrace_hash *)&empty_hash)
 
@@ -1282,6 +1283,22 @@ static void free_ftrace_hash_rcu(struct ftrace_hash *hash)
 	call_rcu(&hash->rcu, __free_ftrace_hash_rcu);
 }
 
+static void get_ftrace_hash(struct ftrace_hash *hash)
+{
+	if (!hash || hash == EMPTY_HASH)
+		return;
+	if (!refcount_inc_not_zero(&hash->refcount))
+		WARN_ON(1);
+}
+
+static void put_ftrace_hash_rcu(struct ftrace_hash *hash)
+{
+	if (!hash || hash == EMPTY_HASH)
+		return;
+	if (refcount_dec_and_test(&hash->refcount))
+		call_rcu(&hash->rcu, __free_ftrace_hash_rcu);
+}
+
 /**
  * ftrace_free_filter - remove all filters for an ftrace_ops
  * @ops: the ops to remove the filters from
@@ -1316,6 +1333,7 @@ static struct ftrace_hash *alloc_ftrace_hash(int size_bits)
 	}
 
 	hash->size_bits = size_bits;
+	refcount_set(&hash->refcount, 1);
 
 	return hash;
 }
@@ -3362,7 +3380,7 @@ static int __ftrace_hash_move_and_update_ops(struct ftrace_ops *ops,
 	ret = ftrace_hash_move(ops, enable, orig_hash, hash);
 	if (!ret) {
 		ftrace_ops_update_code(ops, &old_hash_ops);
-		free_ftrace_hash_rcu(old_hash);
+		put_ftrace_hash_rcu(old_hash);
 	}
 	return ret;
 }
@@ -3714,7 +3732,7 @@ static int ftrace_hash_move_and_update_subops(struct ftrace_ops *subops,
 		*orig_subhash = save_hash;
 		free_ftrace_hash_rcu(new_hash);
 	} else {
-		free_ftrace_hash_rcu(save_hash);
+		put_ftrace_hash_rcu(save_hash);
 	}
 	return ret;
 }
@@ -4666,8 +4684,10 @@ ftrace_regex_open(struct ftrace_ops *ops, int flag,
 			trace_parser_put(&iter->parser);
 			goto out_unlock;
 		}
-	} else
+	} else {
 		iter->hash = hash;
+		get_ftrace_hash(iter->hash);
+	}
 
 	ret = 0;
 
@@ -6544,6 +6564,7 @@ int ftrace_regex_release(struct inode *inode, struct file *file)
 		mutex_unlock(&ftrace_lock);
 	} else {
 		/* For read only, the hash is the ops hash */
+		put_ftrace_hash_rcu(iter->hash);
 		iter->hash = NULL;
 	}
 

@@ -22,6 +22,7 @@
 #include <linux/ctype.h>
 #include <linux/once_lite.h>
 #include <linux/ftrace_regs.h>
+#include <linux/refcount.h>
 
 #include "pid_list.h"
 
@@ -905,6 +906,7 @@ struct ftrace_hash {
 	unsigned long		count;
 	unsigned long		flags;
 	struct rcu_head		rcu;
+	refcount_t		refcount;
 };
 
 struct ftrace_func_entry *
