@@ -468,62 +468,12 @@ static int l2_cache_event_init(struct perf_event *event)
 		return -EINVAL;
 	}
 
-	/* Don't allow groups with mixed PMUs, except for s/w events */
-	if (event->group_leader->pmu != event->pmu &&
-	    !is_software_event(event->group_leader)) {
-		dev_dbg_ratelimited(&l2cache_pmu->pdev->dev,
-			 "Can't create mixed PMU group\n");
-		return -EINVAL;
-	}
-
-	for_each_sibling_event(sibling, event->group_leader) {
-		if (sibling->pmu != event->pmu &&
-		    !is_software_event(sibling)) {
-			dev_dbg_ratelimited(&l2cache_pmu->pdev->dev,
-				 "Can't create mixed PMU group\n");
-			return -EINVAL;
-		}
-	}
-
 	cluster = get_cluster_pmu(l2cache_pmu, event->cpu);
 	if (!cluster) {
 		/* CPU has not been initialised */
 		dev_dbg_ratelimited(&l2cache_pmu->pdev->dev,
 			"CPU%d not associated with L2 cluster\n", event->cpu);
 		return -EINVAL;
-	}
-
-	/* Ensure all events in a group are on the same cpu */
-	if ((event->group_leader != event) &&
-	    (cluster->on_cpu != event->group_leader->cpu)) {
-		dev_dbg_ratelimited(&l2cache_pmu->pdev->dev,
-			 "Can't create group on CPUs %d and %d",
-			 event->cpu, event->group_leader->cpu);
-		return -EINVAL;
-	}
-
-	if ((event != event->group_leader) &&
-	    !is_software_event(event->group_leader) &&
-	    (L2_EVT_GROUP(event->group_leader->attr.config) ==
-	     L2_EVT_GROUP(event->attr.config))) {
-		dev_dbg_ratelimited(&l2cache_pmu->pdev->dev,
-			 "Column exclusion: conflicting events %llx %llx\n",
-		       event->group_leader->attr.config,
-		       event->attr.config);
-		return -EINVAL;
-	}
-
-	for_each_sibling_event(sibling, event->group_leader) {
-		if ((sibling != event) &&
-		    !is_software_event(sibling) &&
-		    (L2_EVT_GROUP(sibling->attr.config) ==
-		     L2_EVT_GROUP(event->attr.config))) {
-			dev_dbg_ratelimited(&l2cache_pmu->pdev->dev,
-			     "Column exclusion: conflicting events %llx %llx\n",
-					    sibling->attr.config,
-					    event->attr.config);
-			return -EINVAL;
-		}
 	}
 
 	hwc->idx = -1;
@@ -534,6 +484,37 @@ static int l2_cache_event_init(struct perf_event *event)
 	 * same cpu context, to avoid races on pmu_enable etc.
 	 */
 	event->cpu = cluster->on_cpu;
+	if (event->cpu != event->group_leader->cpu) {
+		dev_dbg_ratelimited(&l2cache_pmu->pdev->dev,
+			 "Can't create group on CPUs %d and %d",
+			 event->cpu, event->group_leader->cpu);
+		return -EINVAL;
+	}
+
+	if (event == event->group_leader)
+		return 0;
+
+	if ((event->group_leader->pmu == event->pmu) &&
+	    (L2_EVT_GROUP(event->group_leader->attr.config) ==
+	     L2_EVT_GROUP(event->attr.config))) {
+		dev_dbg_ratelimited(&l2cache_pmu->pdev->dev,
+			 "Column exclusion: conflicting events %llx %llx\n",
+		       event->group_leader->attr.config,
+		       event->attr.config);
+		return -EINVAL;
+	}
+
+	for_each_sibling_event(sibling, event->group_leader) {
+		if ((sibling->pmu == event->pmu) &&
+		    (L2_EVT_GROUP(sibling->attr.config) ==
+		     L2_EVT_GROUP(event->attr.config))) {
+			dev_dbg_ratelimited(&l2cache_pmu->pdev->dev,
+			     "Column exclusion: conflicting events %llx %llx\n",
+					    sibling->attr.config,
+					    event->attr.config);
+			return -EINVAL;
+		}
+	}
 
 	return 0;
 }

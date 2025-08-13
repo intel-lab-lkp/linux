@@ -454,18 +454,16 @@ static bool qcom_l3_cache__validate_event_group(struct perf_event *event)
 	struct perf_event *sibling;
 	int counters = 0;
 
-	if (leader->pmu != event->pmu && !is_software_event(leader))
-		return false;
+	if (leader == event)
+		return true;
 
 	counters = event_num_counters(event);
-	counters += event_num_counters(leader);
+	if (leader->pmu == event->pmu)
+		counters += event_num_counters(leader);
 
 	for_each_sibling_event(sibling, leader) {
-		if (is_software_event(sibling))
-			continue;
-		if (sibling->pmu != event->pmu)
-			return false;
-		counters += event_num_counters(sibling);
+		if (sibling->pmu == event->pmu)
+			counters += event_num_counters(sibling);
 	}
 
 	/*
