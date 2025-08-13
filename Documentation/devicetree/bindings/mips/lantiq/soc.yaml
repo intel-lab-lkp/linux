@@ -1,0 +1,60 @@
+# SPDX-License-Identifier: (GPL-2.0-only OR BSD-2-Clause)
+%YAML 1.2
+---
+$id: http://devicetree.org/schemas/mips/lantiq/soc.yaml#
+$schema: http://devicetree.org/meta-schemas/core.yaml#
+
+title: Lantiq SoC based Platform
+
+maintainers:
+  - Aleksander Jan Bajkowski <olek2@wp.pl>
+
+description:
+  Devices with a Lantiq CPU shall have the following properties.
+
+properties:
+  $nodename:
+    const: "/"
+  compatible:
+    oneOf:
+      - description: Boards with Lantiq Amazon-SE SoC
+        items:
+          - const: lantiq,ase
+
+      - description: Boards with Lantiq Danube SoC
+        items:
+          - const: lantiq,danube
+
+      - description: Boards with Lantiq Falcon SoC
+        items:
+          - const: lantiq,falcon
+
+      - description: Boards with Lantiq Twinpass SoC
+        items:
+          - const: lantiq,twinpass
+
+      - description: Boards with Lantiq ARX100 SoC
+        items:
+          - const: lantiq,ar9
+
+      - description: Boards with Lantiq GRX100 SoC
+        items:
+          - const: lantiq,gr9
+
+      - description: Boards with Lantiq xRX200 SoC
+        items:
+          - enum:
+              - bt,homehub-v5a
+          - const: lantiq,vr9
+
+      - description: Boards with Lantiq xRX300 SoC
+        items:
+          - const: lantiq,ar10
+
+      - description: Boards with Lantiq xRX330 SoC
+        items:
+          - const: lantiq,grx390
+
+additionalProperties: true
+
+...
