@@ -88,6 +88,7 @@ struct damon_region {
 /**
  * struct damon_target - Represents a monitoring target.
  * @pid:		The PID of the virtual address space to monitor.
+ * @min_region:		Minimum Region Size.
  * @nr_regions:		Number of monitoring target regions of this target.
  * @regions_list:	Head of the monitoring target regions of this target.
  * @list:		List head for siblings.
@@ -95,10 +96,12 @@ struct damon_region {
  * Each monitoring context could have multiple targets.  For example, a context
  * for virtual memory address spaces could have multiple target processes.  The
  * @pid should be set for appropriate &struct damon_operations including the
- * virtual address spaces monitoring operations.
+ * virtual address spaces monitoring operations. The @min_region Keeps consistent
+ * with the associated monitoring context.
  */
 struct damon_target {
 	struct pid *pid;
+	unsigned long min_region;
 	unsigned int nr_regions;
 	struct list_head regions_list;
 	struct list_head list;
@@ -747,6 +750,7 @@ struct damon_attrs {
  *
  * @ops:	Set of monitoring operations for given use cases.
  * @addr_unit:	Scale factor for core to ops address conversion.
+ * @min_region:		Minimum Region Size.
  * @adaptive_targets:	Head of monitoring targets (&damon_target) list.
  * @schemes:		Head of schemes (&damos) list.
  */
@@ -789,6 +793,7 @@ struct damon_ctx {
 
 	struct damon_operations ops;
 	unsigned long addr_unit;
+	unsigned long min_region;
 
 	struct list_head adaptive_targets;
 	struct list_head schemes;
