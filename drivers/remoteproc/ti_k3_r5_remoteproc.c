@@ -828,7 +828,7 @@ static int k3_r5_rproc_configure_mode(struct k3_rproc *kproc)
 	core0 = list_first_entry(&cluster->cores, struct k3_r5_core, elem);
 
 	ret = kproc->ti_sci->ops.dev_ops.is_on(kproc->ti_sci, kproc->ti_sci_id,
-					       &r_state, &c_state);
+					      &r_state, &c_state);
 	if (ret) {
 		dev_err(cdev, "failed to get initial state, mode cannot be determined, ret = %d\n",
 			ret);
