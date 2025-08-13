@@ -13459,9 +13459,14 @@ void kvm_arch_async_page_present(struct kvm_vcpu *vcpu,
 
 void kvm_arch_async_page_present_queued(struct kvm_vcpu *vcpu)
 {
-	kvm_make_request(KVM_REQ_APF_READY, vcpu);
-	if (!vcpu->arch.apf.pageready_pending)
+	/* Pairs with smp_store_release in vcpu_enter_guest. */
+	bool in_guest_mode = (smp_load_acquire(&vcpu->mode) == IN_GUEST_MODE);
+	bool page_ready_pending = READ_ONCE(vcpu->arch.apf.pageready_pending);
+
+	if (!in_guest_mode || !page_ready_pending) {
+		kvm_make_request(KVM_REQ_APF_READY, vcpu);
 		kvm_vcpu_kick(vcpu);
+	}
 }
 
 bool kvm_arch_can_dequeue_async_page_present(struct kvm_vcpu *vcpu)
