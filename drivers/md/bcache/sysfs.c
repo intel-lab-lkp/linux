@@ -151,6 +151,12 @@ rw_attribute(copy_gc_enabled);
 rw_attribute(idle_max_writeback_rate);
 rw_attribute(gc_after_writeback);
 rw_attribute(size);
+/*
+ * "flush_interval" is used to specify that a PROFLUSH operation will
+ * be issued once a certain number of dirty bkeys have been written
+ * each time.
+ */
+rw_attribute(flush_interval);
 
 static ssize_t bch_snprint_string_list(char *buf,
 				       size_t size,
@@ -213,6 +219,7 @@ SHOW(__bch_cached_dev)
 	var_print(writeback_rate_fp_term_mid);
 	var_print(writeback_rate_fp_term_high);
 	var_print(writeback_rate_minimum);
+	var_print(flush_interval);
 
 	if (attr == &sysfs_writeback_rate_debug) {
 		char rate[20];
@@ -353,6 +360,9 @@ STORE(__cached_dev)
 			    1, UINT_MAX);
 
 	sysfs_strtoul_clamp(io_error_limit, dc->error_limit, 0, INT_MAX);
+
+	sysfs_strtoul_clamp(flush_interval, dc->flush_interval,
+			    WRITEBACK_FLUSH_INTERVAL_MIN, WRITEBACK_FLUSH_INTERVAL_MAX);
 
 	if (attr == &sysfs_io_disable) {
 		int v = strtoul_or_return(buf);
@@ -541,6 +551,7 @@ static struct attribute *bch_cached_dev_attrs[] = {
 #endif
 	&sysfs_backing_dev_name,
 	&sysfs_backing_dev_uuid,
+	&sysfs_flush_interval,
 	NULL
 };
 ATTRIBUTE_GROUPS(bch_cached_dev);

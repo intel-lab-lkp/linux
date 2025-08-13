@@ -247,6 +247,23 @@ struct keybuf {
 	DECLARE_ARRAY_ALLOCATOR(struct keybuf_key, freelist, KEYBUF_NR);
 };
 
+struct preflush_bkey {
+	BKEY_PADDED(key);
+	struct list_head list;
+};
+
+#define WRITEBACK_FLUSH_INTERVAL_DEFAULT	20000 /* the number of bkey */
+#define WRITEBACK_FLUSH_INTERVAL_MIN	        500
+#define WRITEBACK_FLUSH_INTERVAL_MAX	        50000
+
+struct preflush_buf {
+	spinlock_t	lock;
+	u32 count;
+	struct list_head allocated_head;
+
+	DECLARE_ARRAY_ALLOCATOR(struct preflush_bkey, freelist, WRITEBACK_FLUSH_INTERVAL_MAX);
+};
+
 struct bcache_device {
 	struct closure		cl;
 
@@ -345,6 +362,18 @@ struct cached_dev {
 	struct workqueue_struct	*writeback_write_wq;
 
 	struct keybuf		writeback_keys;
+
+	/*
+	 * Before performing preflush to the backing device, temporarily
+	 * store the bkey waiting to clean up the dirty mark
+	 */
+	struct preflush_buf  preflush_keys;
+	/*
+	 * flush_interval is used to specify that a PROFLUSH operation will
+	 * be issued once a certain number of dirty bkeys have been written
+	 * each time.
+	 */
+	unsigned int flush_interval;
 
 	struct task_struct	*status_update_thread;
 	/*

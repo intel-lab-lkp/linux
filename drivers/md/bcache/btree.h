@@ -414,4 +414,8 @@ struct keybuf_key *bch_keybuf_next_rescan(struct cache_set *c,
 					  struct bkey *end,
 					  keybuf_pred_fn *pred);
 void bch_update_bucket_in_use(struct cache_set *c, struct gc_stat *stats);
+void bch_preflush_buf_init(struct preflush_buf *buf);
+void bch_preflush_buf_del(struct preflush_buf *buf, struct preflush_bkey *p);
+void bcache_add_preflush_buf(struct cached_dev *dc, struct bkey *key);
+void bcache_mark_preflush_keys_clean(struct cached_dev *dc);
 #endif

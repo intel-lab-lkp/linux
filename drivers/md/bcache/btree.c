@@ -1823,6 +1823,126 @@ static void bch_btree_gc_finish(struct cache_set *c)
 	mutex_unlock(&c->bucket_lock);
 }
 
+void bcache_add_preflush_buf(struct cached_dev *dc, struct bkey *key)
+{
+	struct preflush_bkey *p;
+
+	spin_lock(&dc->preflush_keys.lock);
+
+	p = array_alloc(&dc->preflush_keys.freelist);
+
+	if (!p) {
+		spin_unlock(&dc->preflush_keys.lock);
+		return;
+	}
+
+	bkey_copy(&p->key, key);
+	INIT_LIST_HEAD(&p->list);
+
+	list_add_tail(&p->list, &dc->preflush_keys.allocated_head);
+	dc->preflush_keys.count++;
+
+	spin_unlock(&dc->preflush_keys.lock);
+}
+
+void bcache_mark_preflush_keys_clean(struct cached_dev *dc)
+{
+	struct preflush_bkey *p;
+
+	spin_lock(&dc->preflush_keys.lock);
+
+	/*
+	 * Release the reference added to the bucket during the
+	 * "write_dirty_finish" period.
+	 */
+	list_for_each_entry(p, &dc->preflush_keys.allocated_head, list) {
+		bkey_put(dc->disk.c, &p->key);
+	}
+
+	dc->preflush_keys.count = 0;
+	array_allocator_init(&dc->preflush_keys.freelist);
+	INIT_LIST_HEAD(&dc->preflush_keys.allocated_head);
+
+	spin_unlock(&dc->preflush_keys.lock);
+}
+
+static void gc_preflush_keys_writeback(struct cache_set *c)
+{
+	unsigned int i, j;
+	struct preflush_bkey *p, *tmp;
+	struct keylist keys;
+	struct bio flush;
+	struct bkey_padded {
+		BKEY_PADDED(key);
+	} *copy;
+	unsigned int copied = 0;
+	int ret = 0;
+
+	for (i = 0; i < c->devices_max_used; i++) {
+		struct bcache_device *d = c->devices[i];
+		struct cached_dev *dc;
+
+		copied = 0;
+
+		if (!d || UUID_FLASH_ONLY(&c->uuids[i]))
+			continue;
+		dc = container_of(d, struct cached_dev, disk);
+
+		copy = kmalloc_array(WRITEBACK_FLUSH_INTERVAL_MAX,
+				sizeof(*copy), GFP_KERNEL);
+		if (!copy)
+			return;
+
+		spin_lock(&dc->preflush_keys.lock);
+
+		list_for_each_entry_safe(p, tmp, &dc->preflush_keys.allocated_head, list) {
+			bkey_copy(&copy[copied].key, &p->key);
+			copied++;
+
+			list_del(&p->list);
+			dc->preflush_keys.count--;
+			bch_preflush_buf_del(&dc->preflush_keys, p);
+		}
+
+		spin_unlock(&dc->preflush_keys.lock);
+
+		bio_init(&flush, dc->bdev, NULL, 0, REQ_OP_WRITE | REQ_PREFLUSH);
+		ret = submit_bio_wait(&flush);
+		if (ret) {
+			pr_err("flush backing device error %d.\n", ret);
+
+			/*
+			 * In the case of flush failure, do not update the status of bkey
+			 * in the btree, and wait until the next time to re-write the dirty
+			 * data.
+			 */
+			bcache_mark_preflush_keys_clean(dc);
+			kfree(copy);
+			return;
+		}
+
+		for (j = 0; j < copied; j++) {
+			memset(keys.inline_keys, 0, sizeof(keys.inline_keys));
+			bch_keylist_init(&keys);
+
+			bkey_copy(keys.top, &copy[j].key);
+			SET_KEY_DIRTY(keys.top, false);
+			bch_keylist_push(&keys);
+
+			ret = bch_btree_insert(dc->disk.c, &keys, NULL, &copy[j].key);
+
+			if (ret)
+				trace_bcache_writeback_collision(&copy[j].key);
+
+			atomic_long_inc(ret
+					? &dc->disk.c->writeback_keys_failed
+					: &dc->disk.c->writeback_keys_done);
+		}
+
+		kfree(copy);
+	}
+}
+
 static void bch_btree_gc(struct cache_set *c)
 {
 	int ret;
@@ -1836,6 +1956,8 @@ static void bch_btree_gc(struct cache_set *c)
 	memset(&stats, 0, sizeof(struct gc_stat));
 	closure_init_stack(&writes);
 	bch_btree_op_init(&op, SHRT_MAX);
+
+	gc_preflush_keys_writeback(c);
 
 	btree_gc_start(c);
 
@@ -2735,6 +2857,11 @@ void bch_keybuf_del(struct keybuf *buf, struct keybuf_key *w)
 	spin_unlock(&buf->lock);
 }
 
+void bch_preflush_buf_del(struct preflush_buf *buf, struct preflush_bkey *p)
+{
+	array_free(&buf->freelist, p);
+}
+
 bool bch_keybuf_check_overlapping(struct keybuf *buf, struct bkey *start,
 				  struct bkey *end)
 {
@@ -2812,6 +2939,15 @@ void bch_keybuf_init(struct keybuf *buf)
 
 	spin_lock_init(&buf->lock);
 	array_allocator_init(&buf->freelist);
+}
+
+void bch_preflush_buf_init(struct preflush_buf *buf)
+{
+	buf->count = 0;
+
+	spin_lock_init(&buf->lock);
+	array_allocator_init(&buf->freelist);
+	INIT_LIST_HEAD(&buf->allocated_head);
 }
 
 void bch_btree_exit(void)
