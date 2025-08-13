@@ -13,9 +13,10 @@
  * Allocate, set, and return a DAMON context for the physical address space.
  * @ctxp:	Pointer to save the point to the newly created context
  * @targetp:	Pointer to save the point to the newly created target
+ * @addr_unit:	Scale factor for modules to ops address conversion.
  */
 int damon_modules_new_paddr_ctx_target(struct damon_ctx **ctxp,
-		struct damon_target **targetp)
+		struct damon_target **targetp, unsigned long addr_unit)
 {
 	struct damon_ctx *ctx;
 	struct damon_target *target;
@@ -23,6 +24,8 @@ int damon_modules_new_paddr_ctx_target(struct damon_ctx **ctxp,
 	ctx = damon_new_ctx();
 	if (!ctx)
 		return -ENOMEM;
+
+	ctx->addr_unit = addr_unit;
 
 	if (damon_select_ops(ctx, DAMON_OPS_PADDR)) {
 		damon_destroy_ctx(ctx);

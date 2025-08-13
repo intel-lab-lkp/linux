@@ -46,4 +46,4 @@
 			0400);
 
 int damon_modules_new_paddr_ctx_target(struct damon_ctx **ctxp,
-		struct damon_target **targetp);
+		struct damon_target **targetp, unsigned long addr_unit);

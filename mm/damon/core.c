@@ -2714,6 +2714,7 @@ static bool damon_find_biggest_system_ram(unsigned long *start,
  * @t:		The monitoring target to set the region.
  * @start:	The pointer to the start address of the region.
  * @end:	The pointer to the end address of the region.
+ * @addr_unit:	Scale factor for core to ops address conversion.
  *
  * This function sets the region of @t as requested by @start and @end.  If the
  * values of @start and @end are zero, however, this function finds the biggest
@@ -2724,16 +2725,21 @@ static bool damon_find_biggest_system_ram(unsigned long *start,
  * Return: 0 on success, negative error code otherwise.
  */
 int damon_set_region_biggest_system_ram_default(struct damon_target *t,
-			unsigned long *start, unsigned long *end)
+						unsigned long *start,
+						unsigned long *end,
+						unsigned long addr_unit)
 {
 	struct damon_addr_range addr_range;
 
 	if (*start > *end)
 		return -EINVAL;
 
-	if (!*start && !*end &&
-		!damon_find_biggest_system_ram(start, end))
-		return -EINVAL;
+	if (!*start && !*end) {
+		if (!damon_find_biggest_system_ram(start, end) || !addr_unit)
+			return -EINVAL;
+		*start /= addr_unit;
+		*end /= addr_unit;
+	}
 
 	addr_range.start = *start;
 	addr_range.end = *end;
