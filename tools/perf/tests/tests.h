@@ -179,6 +179,7 @@ DECLARE_SUITE(event_groups);
 DECLARE_SUITE(symbols);
 DECLARE_SUITE(util);
 DECLARE_SUITE(subcmd_help);
+DECLARE_SUITE(event_group_throttle);
 
 /*
  * PowerPC and S390 do not support creation of instruction breakpoints using the
