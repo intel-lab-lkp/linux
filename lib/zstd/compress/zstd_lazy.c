@@ -1612,7 +1612,8 @@ size_t ZSTD_compressBlock_lazy_generic(
         }
 
         if (matchLength < 4) {
-            size_t const step = ((size_t)(ip-anchor) >> kSearchStrength) + 1;   /* jump faster over incompressible sections */;
+            /* jump faster over incompressible sections */
+            size_t const step = ((size_t)(ip-anchor) >> kSearchStrength) + 1;
             ip += step;
             /* Enter the lazy skipping mode once we are skipping more than 8 bytes at a time.
              * In this mode we stop inserting every position into our tables, and only insert
