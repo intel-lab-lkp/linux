@@ -1,10 +1,10 @@
 /* SPDX-License-Identifier: GPL-2.0 */
 // Copyright (c) 2017 Cadence
-// Cadence PCIe Endpoint controller driver.
+// Cadence PCIe Endpoint controller driver
 // Author: Manikandan K Pillai <mpillai@cadence.com>
 
-#ifndef _PCIE_CADENCE_EP_COMMON_H_
-#define _PCIE_CADENCE_EP_COMMON_H_
+#ifndef _PCIE_CADENCE_EP_COMMON_H
+#define _PCIE_CADENCE_EP_COMMON_H
 
 #include <linux/kernel.h>
 #include <linux/pci.h>
@@ -33,4 +33,4 @@ const struct pci_epc_features *cdns_pcie_ep_get_features(struct pci_epc *epc,
 							 u8 func_no,
 							 u8 vfunc_no);
 
-#endif /* _PCIE_CADENCE_EP_COMMON_H_ */
+#endif /* _PCIE_CADENCE_EP_COMMON_H */
