@@ -432,8 +432,18 @@ int proc_thermal_mmio_add(struct pci_dev *pdev,
 		}
 	}
 
+	if (feature_mask & PROC_THERMAL_FEATURE_SOC_POWER_SLIDER) {
+		ret = proc_thermal_soc_power_slider_add(pdev, proc_priv);
+		if (ret) {
+			dev_err(&pdev->dev, "failed to add soc power efficiency slider\n");
+			goto err_rem_wlt;
+		}
+	}
+
 	return 0;
 
+err_rem_wlt:
+	proc_thermal_wt_hint_remove(pdev);
 err_rem_rfim:
 	proc_thermal_rfim_remove(pdev);
 err_rem_ptc:
