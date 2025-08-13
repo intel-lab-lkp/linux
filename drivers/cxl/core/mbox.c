@@ -1426,7 +1426,9 @@ int cxl_mem_get_poison(struct cxl_memdev *cxlmd, u64 offset, u64 len,
 	int rc;
 
 	ACQUIRE(mutex_intr, lock)(&mds->poison.mutex);
-	if ((rc = ACQUIRE_ERR(mutex_intr, &lock)))
+
+	rc = ACQUIRE_ERR(mutex_intr, &lock);
+	if (rc)
 		return rc;
 
 	po = mds->poison.list_out;
