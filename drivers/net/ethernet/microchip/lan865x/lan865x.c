@@ -32,6 +32,14 @@
 /* MAC Specific Addr 1 Top Reg */
 #define LAN865X_REG_MAC_H_SADDR1	0x00010023
 
+/* LAN865x Rev.B0/B1 configuration parameters from AN1760
+ * As per the Configuration Application Note AN1760 published in the below link,
+ * https://www.microchip.com/en-us/application-notes/an1760
+ * Revision F (DS60001760G - June 2024)
+ */
+#define LAN865X_REG_FIXUP		0x00010077
+#define LAN865X_FIXUP_VALUE		0x0028
+
 struct lan865x_priv {
 	struct work_struct multicast_work;
 	struct net_device *netdev;
@@ -344,6 +352,14 @@ static int lan865x_probe(struct spi_device *spi)
 	if (!priv->tc6) {
 		ret = -ENODEV;
 		goto free_netdev;
+	}
+
+	/* LAN8650/1 configuration fixup from AN1760 */
+	ret = oa_tc6_write_register(priv->tc6, LAN865X_REG_FIXUP,
+				    LAN865X_FIXUP_VALUE);
+	if (ret) {
+		dev_err(&spi->dev, "Failed to configure fixup: %d\n", ret);
+		goto oa_tc6_exit;
 	}
 
 	/* As per the point s3 in the below errata, SPI receive Ethernet frame
