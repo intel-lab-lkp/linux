@@ -42,6 +42,7 @@
 
 /* MCP9600 device id value */
 #define MCP9600_DEVICE_ID_MCP9600	0x40
+#define MCP9600_DEVICE_ID_MCP9601	0x41
 
 #define MCP9600_ALERT_COUNT		4
 
@@ -418,14 +419,26 @@ static int mcp9600_probe(struct i2c_client *client)
 {
 	struct iio_dev *indio_dev;
 	struct mcp9600_data *data;
-	int ret, ch_sel;
+	int ret, ch_sel, dev_id;
 
-	ret = i2c_smbus_read_byte_data(client, MCP9600_DEVICE_ID);
-	if (ret < 0)
-		return dev_err_probe(&client->dev, ret, "Failed to read device ID\n");
-	if (ret != MCP9600_DEVICE_ID_MCP9600)
-		dev_warn(&client->dev, "Expected ID %x, got %x\n",
-				MCP9600_DEVICE_ID_MCP9600, ret);
+	dev_id = i2c_smbus_read_byte_data(client, MCP9600_DEVICE_ID);
+	if (dev_id < 0)
+		return dev_err_probe(&client->dev, dev_id,
+				     "Failed to read device ID\n");
+
+	switch (dev_id) {
+	case MCP9600_DEVICE_ID_MCP9600:
+	case MCP9600_DEVICE_ID_MCP9601:
+		if (dev_id != id->driver_data)
+			dev_warn(&client->dev,
+				 "Expected id %x but detected %x. Ensure dt is correct\n",
+				 (u8)id->driver_data, (u8)dev_id);
+		break;
+
+	default:
+		dev_warn(&client->dev, "Unknown id %x, using %x\n", (u8)dev_id,
+			(u8)id->driver_data);
+	}
 
 	indio_dev = devm_iio_device_alloc(&client->dev, sizeof(*data));
 	if (!indio_dev)
@@ -448,13 +461,15 @@ static int mcp9600_probe(struct i2c_client *client)
 }
 
 static const struct i2c_device_id mcp9600_id[] = {
-	{ "mcp9600" },
+	{ "mcp9600", MCP9600_DEVICE_ID_MCP9600 },
+	{ "mcp9601", MCP9600_DEVICE_ID_MCP9601 },
 	{ }
 };
 MODULE_DEVICE_TABLE(i2c, mcp9600_id);
 
 static const struct of_device_id mcp9600_of_match[] = {
 	{ .compatible = "microchip,mcp9600" },
+	{ .compatible = "microchip,mcp9601" },
 	{ }
 };
 MODULE_DEVICE_TABLE(of, mcp9600_of_match);
