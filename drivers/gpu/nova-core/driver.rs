@@ -31,6 +31,19 @@ impl pci::Driver for NovaCore {
     fn probe(pdev: &pci::Device<Core>, _info: &Self::IdInfo) -> Result<Pin<KBox<Self>>> {
         dev_dbg!(pdev.as_ref(), "Probe Nova Core GPU driver.\n");
 
+        let class_code = pdev.class();
+
+        if class_code != bindings::PCI_CLASS_DISPLAY_VGA
+            && class_code != bindings::PCI_CLASS_DISPLAY_3D
+        {
+            dev_dbg!(
+                pdev.as_ref(),
+                "Skipping non-display NVIDIA device with class 0x{:04x}\n",
+                class_code
+            );
+            return Err(kernel::error::code::ENODEV);
+        }
+
         pdev.enable_device_mem()?;
         pdev.set_master();
 

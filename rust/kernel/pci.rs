@@ -399,6 +399,12 @@ impl Device {
         unsafe { (*self.as_raw()).device }
     }
 
+    /// Returns the PCI class code (class and subclass).
+    pub fn class(&self) -> u32 {
+        // SAFETY: `self.as_raw` is a valid pointer to a `struct pci_dev`.
+        unsafe { (*self.as_raw()).class >> 8 }
+    }
+
     /// Returns the size of the given PCI bar resource.
     pub fn resource_len(&self, bar: u32) -> Result<bindings::resource_size_t> {
         if !Bar::index_is_valid(bar) {
