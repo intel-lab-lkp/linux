@@ -4800,6 +4800,8 @@ static int last_identity_remap_gone(struct btrfs_trans_handle *trans,
 	if (ret)
 		return ret;
 
+	btrfs_mark_bg_fully_remapped(bg, trans);
+
 	return 0;
 }
 

@@ -381,6 +381,7 @@ loop:
 	mutex_init(&cur_trans->cache_write_mutex);
 	spin_lock_init(&cur_trans->dirty_bgs_lock);
 	INIT_LIST_HEAD(&cur_trans->deleted_bgs);
+	INIT_LIST_HEAD(&cur_trans->fully_remapped_bgs);
 	spin_lock_init(&cur_trans->dropped_roots_lock);
 	list_add_tail(&cur_trans->list, &fs_info->trans_list);
 	btrfs_extent_io_tree_init(fs_info, &cur_trans->dirty_pages,

@@ -2853,7 +2853,7 @@ int btrfs_finish_extent_commit(struct btrfs_trans_handle *trans)
 {
 	struct btrfs_fs_info *fs_info = trans->fs_info;
 	struct btrfs_block_group *block_group, *tmp;
-	struct list_head *deleted_bgs;
+	struct list_head *deleted_bgs, *fully_remapped_bgs;
 	struct extent_io_tree *unpin = &trans->transaction->pinned_extents;
 	struct extent_state *cached_state = NULL;
 	u64 start;
@@ -2948,6 +2948,41 @@ int btrfs_finish_extent_commit(struct btrfs_trans_handle *trans)
 			btrfs_warn(fs_info,
 			   "discard failed while removing blockgroup: errno=%d %s",
 				   ret, errstr);
+		}
+	}
+
+	fully_remapped_bgs = &trans->transaction->fully_remapped_bgs;
+	list_for_each_entry_safe(block_group, tmp, fully_remapped_bgs, bg_list) {
+		struct btrfs_chunk_map *map;
+
+		if (!TRANS_ABORTED(trans))
+			ret = btrfs_discard_extent(fs_info, block_group->start,
+						   block_group->length, NULL,
+						   false);
+
+		map = btrfs_get_chunk_map(fs_info, block_group->start, 1);
+		if (IS_ERR(map))
+			return PTR_ERR(map);
+
+		/*
+		 * Set num_stripes to 0, so that btrfs_remove_dev_extents()
+		 * won't run a second time.
+		 */
+		map->num_stripes = 0;
+
+		btrfs_free_chunk_map(map);
+
+		if (block_group->used == 0 && block_group->remap_bytes == 0) {
+			spin_lock(&fs_info->unused_bgs_lock);
+			list_move_tail(&block_group->bg_list,
+				       &fs_info->unused_bgs);
+			spin_unlock(&fs_info->unused_bgs_lock);
+		} else {
+			spin_lock(&fs_info->unused_bgs_lock);
+			list_del_init(&block_group->bg_list);
+			spin_unlock(&fs_info->unused_bgs_lock);
+
+			btrfs_put_block_group(block_group);
 		}
 	}
 

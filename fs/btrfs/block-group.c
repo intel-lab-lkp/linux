@@ -1803,6 +1803,14 @@ void btrfs_mark_bg_unused(struct btrfs_block_group *bg)
 	struct btrfs_fs_info *fs_info = bg->fs_info;
 
 	spin_lock(&fs_info->unused_bgs_lock);
+
+	/* Leave fully remapped block groups on the fully_remapped_bgs list. */
+	if (bg->flags & BTRFS_BLOCK_GROUP_REMAPPED &&
+	    bg->identity_remap_count == 0) {
+		spin_unlock(&fs_info->unused_bgs_lock);
+		return;
+	}
+
 	if (list_empty(&bg->bg_list)) {
 		btrfs_get_block_group(bg);
 		trace_btrfs_add_unused_block_group(bg);
@@ -4791,4 +4799,22 @@ bool btrfs_block_group_should_use_size_class(const struct btrfs_block_group *bg)
 	if (!btrfs_is_block_group_data_only(bg))
 		return false;
 	return true;
+}
+
+void btrfs_mark_bg_fully_remapped(struct btrfs_block_group *bg,
+				  struct btrfs_trans_handle *trans)
+{
+	struct btrfs_fs_info *fs_info = trans->fs_info;
+
+	spin_lock(&fs_info->unused_bgs_lock);
+
+	if (!list_empty(&bg->bg_list))
+		list_del(&bg->bg_list);
+	else
+		btrfs_get_block_group(bg);
+
+	list_add_tail(&bg->bg_list, &trans->transaction->fully_remapped_bgs);
+
+	spin_unlock(&fs_info->unused_bgs_lock);
+
 }
