@@ -76,6 +76,14 @@ EXPORT_SYMBOL(empty_zero_page);
 static DEFINE_SPINLOCK(swapper_pgdir_lock);
 static DEFINE_MUTEX(fixmap_lock);
 
+#ifdef CONFIG_UNMAP_KERNEL_AT_EL0
+void create_kpti_ng_temp_pgd(pgd_t *pgdir, phys_addr_t phys,
+			     unsigned long virt, phys_addr_t size,
+			     pgprot_t prot,
+			     phys_addr_t (*pgtable_alloc)(enum pgtable_type),
+			     int flags);
+#endif
+
 void noinstr set_swapper_pgd(pgd_t *pgdp, pgd_t pgd)
 {
 	pgd_t *fixmap_pgdp;
@@ -541,11 +549,17 @@ static void ___create_pgd_mapping(pgd_t *pgdir, phys_addr_t phys,
 }
 
 #ifdef CONFIG_UNMAP_KERNEL_AT_EL0
-extern __alias(__create_pgd_mapping_locked)
 void create_kpti_ng_temp_pgd(pgd_t *pgdir, phys_addr_t phys, unsigned long virt,
 			     phys_addr_t size, pgprot_t prot,
 			     phys_addr_t (*pgtable_alloc)(enum pgtable_type),
-			     int flags);
+			     int flags)
+{
+	int ret = 0;
+
+	ret = __create_pgd_mapping_locked(pgdir, phys, virt, size, prot,
+					  pgtable_alloc, flags);
+	BUG_ON(ret);
+}
 #endif
 
 static phys_addr_t __pgd_pgtable_alloc(struct mm_struct *mm,
