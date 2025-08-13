@@ -331,6 +331,9 @@ static u32 ddr_perf_filter_val(struct perf_event *event)
 static bool ddr_perf_filters_compatible(struct perf_event *a,
 					struct perf_event *b)
 {
+	/* Ignore grouped events that aren't ours */
+	if (a->pmu != b->pmu)
+		return true;
 	if (!ddr_perf_is_filtered(a))
 		return true;
 	if (!ddr_perf_is_filtered(b))
@@ -409,28 +412,14 @@ static int ddr_perf_event_init(struct perf_event *event)
 		return -EOPNOTSUPP;
 	}
 
-	/*
-	 * We must NOT create groups containing mixed PMUs, although software
-	 * events are acceptable (for example to create a CCN group
-	 * periodically read when a hrtimer aka cpu-clock leader triggers).
-	 */
-	if (event->group_leader->pmu != event->pmu &&
-			!is_software_event(event->group_leader))
-		return -EINVAL;
-
-	if (pmu->devtype_data->quirks & DDR_CAP_AXI_ID_FILTER) {
+	if (event != event->group_leader &&
+	    pmu->devtype_data->quirks & DDR_CAP_AXI_ID_FILTER) {
 		if (!ddr_perf_filters_compatible(event, event->group_leader))
 			return -EINVAL;
 		for_each_sibling_event(sibling, event->group_leader) {
 			if (!ddr_perf_filters_compatible(event, sibling))
 				return -EINVAL;
 		}
-	}
-
-	for_each_sibling_event(sibling, event->group_leader) {
-		if (sibling->pmu != event->pmu &&
-				!is_software_event(sibling))
-			return -EINVAL;
 	}
 
 	event->cpu = pmu->cpu;
