@@ -4160,6 +4160,8 @@
 			clock-output-names = "wsa2-mclk";
 			#sound-dai-cells = <1>;
 			sound-name-prefix = "WSA2";
+
+			status = "disabled";
 		};
 
 		swr3: soundwire@6ab0000 {
@@ -4209,6 +4211,8 @@
 			#clock-cells = <0>;
 			clock-output-names = "mclk";
 			#sound-dai-cells = <1>;
+
+			status = "disabled";
 		};
 
 		swr1: soundwire@6ad0000 {
@@ -4258,6 +4262,8 @@
 			#clock-cells = <0>;
 			clock-output-names = "mclk";
 			#sound-dai-cells = <1>;
+
+			status = "disabled";
 		};
 
 		lpass_wsamacro: codec@6b00000 {
@@ -4276,6 +4282,8 @@
 			clock-output-names = "mclk";
 			#sound-dai-cells = <1>;
 			sound-name-prefix = "WSA";
+
+			status = "disabled";
 		};
 
 		swr0: soundwire@6b10000 {
@@ -4364,6 +4372,8 @@
 			#clock-cells = <0>;
 			clock-output-names = "fsgen";
 			#sound-dai-cells = <1>;
+
+			status = "disabled";
 		};
 
 		lpass_tlmm: pinctrl@6e80000 {
@@ -4378,6 +4388,8 @@
 			gpio-controller;
 			#gpio-cells = <2>;
 			gpio-ranges = <&lpass_tlmm 0 0 23>;
+
+			status = "disabled";
 
 			tx_swr_active: tx-swr-active-state {
 				clk-pins {
