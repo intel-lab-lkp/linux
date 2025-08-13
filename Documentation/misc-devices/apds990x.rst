@@ -26,7 +26,7 @@ using clear channel only. Lux value and the threshold level on the HW
 might vary quite much depending the spectrum of the light source.
 
 Driver makes necessary conversions to both directions so that user handles
-only lux values. Lux value is calculated using information from the both
+only lux values. Lux value is calculated using information from both
 channels. HW threshold level is calculated from the given lux value to match
 with current type of the lightning. Sometimes inaccuracy of the estimations
 lead to false interrupt, but that doesn't harm.

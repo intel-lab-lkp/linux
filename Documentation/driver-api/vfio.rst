@@ -124,7 +124,7 @@ Assume user wants to access PCI device 0000:06:0d.0::
 	../../../../kernel/iommu_groups/26
 
 This device is therefore in IOMMU group 26.  This device is on the
-pci bus, therefore the user will make use of vfio-pci to manage the
+PCI bus, therefore the user will make use of vfio-pci to manage the
 group::
 
 	# modprobe vfio-pci
