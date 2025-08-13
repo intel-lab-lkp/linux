@@ -492,11 +492,9 @@ static bool dsu_pmu_validate_event(struct pmu *pmu,
 				  struct dsu_hw_events *hw_events,
 				  struct perf_event *event)
 {
-	if (is_software_event(event))
-		return true;
-	/* Reject groups spanning multiple HW PMUs. */
+	/* Ignore grouped events that aren't ours */
 	if (event->pmu != pmu)
-		return false;
+		return true;
 	return dsu_pmu_get_event_idx(hw_events, event) >= 0;
 }
 

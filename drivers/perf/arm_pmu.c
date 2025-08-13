@@ -375,16 +375,9 @@ validate_event(struct pmu *pmu, struct pmu_hw_events *hw_events,
 {
 	struct arm_pmu *armpmu;
 
-	if (is_software_event(event))
-		return 1;
-
-	/*
-	 * Reject groups spanning multiple HW PMUs (e.g. CPU + CCI). The
-	 * core perf code won't check that the pmu->ctx == leader->ctx
-	 * until after pmu->event_init(event).
-	 */
+	/* Ignore grouped events that aren't ours */
 	if (event->pmu != pmu)
-		return 0;
+		return 1;
 
 	armpmu = to_arm_pmu(event->pmu);
 	return armpmu->get_event_idx(hw_events, event) >= 0;

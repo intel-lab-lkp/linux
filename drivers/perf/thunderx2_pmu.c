@@ -519,19 +519,6 @@ static enum tx2_uncore_type get_tx2_pmu_type(struct acpi_device *adev)
 	return (enum tx2_uncore_type)id->driver_data;
 }
 
-static bool tx2_uncore_validate_event(struct pmu *pmu,
-				  struct perf_event *event, int *counters)
-{
-	if (is_software_event(event))
-		return true;
-	/* Reject groups spanning multiple HW PMUs. */
-	if (event->pmu != pmu)
-		return false;
-
-	*counters = *counters + 1;
-	return true;
-}
-
 /*
  * Make sure the group of events can be scheduled at once
  * on the PMU.
@@ -539,22 +526,19 @@ static bool tx2_uncore_validate_event(struct pmu *pmu,
 static bool tx2_uncore_validate_event_group(struct perf_event *event,
 		int max_counters)
 {
-	struct perf_event *sibling, *leader = event->group_leader;
-	int counters = 0;
+	struct perf_event *sibling;
+	int counters = 1;
 
 	if (event->group_leader == event)
 		return true;
 
-	if (!tx2_uncore_validate_event(event->pmu, leader, &counters))
-		return false;
+	if (event->group_leader->pmu == event->pmu)
+		++counters;
 
-	for_each_sibling_event(sibling, leader) {
-		if (!tx2_uncore_validate_event(event->pmu, sibling, &counters))
-			return false;
+	for_each_sibling_event(sibling, event->group_leader) {
+		if (sibling->pmu == event->pmu)
+			++counters;
 	}
-
-	if (!tx2_uncore_validate_event(event->pmu, event, &counters))
-		return false;
 
 	/*
 	 * If the group requires more counters than the HW has,
