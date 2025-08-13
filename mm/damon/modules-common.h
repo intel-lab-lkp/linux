@@ -36,11 +36,11 @@
 #define DEFINE_DAMON_MODULES_DAMOS_STATS_PARAMS(stat, try_name,		\
 		succ_name, qt_exceed_name)				\
 	module_param_named(nr_##try_name, stat.nr_tried, ulong, 0400);	\
-	module_param_named(bytes_##try_name, stat.sz_tried, ulong,	\
+	module_param_named(bytes_##try_name, stat.sz_tried, ullong,	\
 			0400);						\
 	module_param_named(nr_##succ_name, stat.nr_applied, ulong,	\
 			0400);						\
-	module_param_named(bytes_##succ_name, stat.sz_applied, ulong,	\
+	module_param_named(bytes_##succ_name, stat.sz_applied, ullong,	\
 			0400);						\
 	module_param_named(nr_##qt_exceed_name, stat.qt_exceeds, ulong,	\
 			0400);
