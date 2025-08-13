@@ -6635,6 +6635,37 @@ int btrfs_map_block(struct btrfs_fs_info *fs_info, enum btrfs_map_op op,
 	if (IS_ERR(map))
 		return PTR_ERR(map);
 
+	if (map->type & BTRFS_BLOCK_GROUP_REMAPPED) {
+		u64 new_logical = logical;
+		bool nolock = !(map->type & BTRFS_BLOCK_GROUP_DATA);
+
+		/*
+		 * We use search_commit_root in btrfs_translate_remap for
+		 * metadata blocks, to avoid lockdep complaining about
+		 * recursive locking.
+		 * If we get -ENOENT this means this is a BG that has just had
+		 * its REMAPPED flag set, and so nothing has yet been actually
+		 * remapped.
+		 */
+		ret = btrfs_translate_remap(fs_info, &new_logical, length,
+					    nolock);
+		if (ret && (!nolock || ret != -ENOENT))
+			return ret;
+
+		if (ret != -ENOENT && new_logical != logical) {
+			btrfs_free_chunk_map(map);
+
+			map = btrfs_get_chunk_map(fs_info, new_logical,
+						  *length);
+			if (IS_ERR(map))
+				return PTR_ERR(map);
+
+			logical = new_logical;
+		}
+
+		ret = 0;
+	}
+
 	num_copies = btrfs_chunk_map_num_copies(map);
 	if (io_geom.mirror_num > num_copies)
 		return -EINVAL;
