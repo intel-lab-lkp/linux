@@ -13466,7 +13466,7 @@ void kvm_arch_async_page_present_queued(struct kvm_vcpu *vcpu)
 
 bool kvm_arch_can_dequeue_async_page_present(struct kvm_vcpu *vcpu)
 {
-	if (!kvm_pv_async_pf_enabled(vcpu))
+	if (WARN_ON_ONCE(!kvm_pv_async_pf_enabled(vcpu)))
 		return true;
 	else
 		return kvm_lapic_enabled(vcpu) && apf_pageready_slot_free(vcpu);
