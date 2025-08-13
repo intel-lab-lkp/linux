@@ -141,14 +141,90 @@ int vfio_pci_info_zdev_add_caps(struct vfio_pci_core_device *vdev,
 	return ret;
 }
 
+static ssize_t vfio_pci_zdev_read_err_region(struct vfio_pci_core_device *vdev,
+					    char __user *buf, size_t count,
+					    loff_t *ppos, bool iswrite)
+{
+	struct zpci_dev *zdev = to_zpci(vdev->pdev);
+	struct zpci_ccdf_err err;
+	struct vfio_device_zpci_err_region *region;
+	unsigned int i = VFIO_PCI_OFFSET_TO_INDEX(*ppos) - VFIO_PCI_NUM_REGIONS;
+	int head = 0;
+	loff_t pos = *ppos & VFIO_PCI_OFFSET_MASK;
+
+	region = vdev->region[i].data;
+
+	if (!zdev)
+		return -ENODEV;
+
+	if (pos + count > vdev->region[i].size || iswrite)
+		return -EINVAL;
+
+	mutex_lock(&zdev->pending_errs_lock);
+	if (zdev->pending_errs.count) {
+		head = zdev->pending_errs.head % ZPCI_ERR_PENDING_MAX;
+		err = zdev->pending_errs.err[head];
+		region->pec = err.pec;
+		zdev->pending_errs.head++;
+		zdev->pending_errs.count--;
+		region->pending_errors = zdev->pending_errs.count;
+	}
+	mutex_unlock(&zdev->pending_errs_lock);
+
+	if (copy_to_user(buf, (void *)region + pos, count))
+		count = -EFAULT;
+
+	return count;
+}
+
+static void vfio_pci_zdev_release_err_region(struct vfio_pci_core_device *vdev,
+					     struct vfio_pci_region *region)
+{
+	struct vfio_device_zpci_err_region *err_region = region->data;
+
+	kfree(err_region);
+}
+
+static const struct vfio_pci_regops vfio_pci_zdev_err_regops = {
+	.rw = vfio_pci_zdev_read_err_region,
+	.release = vfio_pci_zdev_release_err_region
+};
+
+static int vfio_pci_zdev_setup_err_region(struct vfio_pci_core_device *vdev)
+{
+	struct vfio_device_zpci_err_region *region;
+	int ret = 0;
+
+	region = kzalloc(sizeof(*region), GFP_KERNEL);
+	if (!region)
+		return -ENOMEM;
+
+	ret = vfio_pci_core_register_dev_region(vdev,
+		PCI_VENDOR_ID_IBM | VFIO_REGION_TYPE_PCI_VENDOR_TYPE,
+		VFIO_REGION_SUBTYPE_IBM_ZPCI_ERROR_REGION,
+		&vfio_pci_zdev_err_regops,
+		sizeof(*region), VFIO_REGION_INFO_FLAG_READ, region);
+
+	if (ret)
+		kfree(region);
+
+
+	return ret;
+}
+
 int vfio_pci_zdev_open_device(struct vfio_pci_core_device *vdev)
 {
 	struct zpci_dev *zdev = to_zpci(vdev->pdev);
+	int ret;
 
 	if (!zdev)
 		return -ENODEV;
 
 	zdev->mediated_recovery = true;
+
+	ret = vfio_pci_zdev_setup_err_region(vdev);
+	if (ret)
+		return ret;
 
 	if (!vdev->vdev.kvm)
 		return 0;
