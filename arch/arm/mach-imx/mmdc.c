@@ -238,11 +238,8 @@ static bool mmdc_pmu_group_event_is_valid(struct perf_event *event,
 {
 	int cfg = event->attr.config;
 
-	if (is_software_event(event))
-		return true;
-
 	if (event->pmu != pmu)
-		return false;
+		return true;
 
 	return !test_and_set_bit(cfg, used_counters);
 }
@@ -260,12 +257,12 @@ static bool mmdc_pmu_group_is_valid(struct perf_event *event)
 	struct perf_event *sibling;
 	unsigned long counter_mask = 0;
 
-	set_bit(leader->attr.config, &counter_mask);
+	if (event == leader)
+		return true;
 
-	if (event != leader) {
-		if (!mmdc_pmu_group_event_is_valid(event, pmu, &counter_mask))
-			return false;
-	}
+	set_bit(event->attr.config, &counter_mask);
+	if (!mmdc_pmu_group_event_is_valid(leader, pmu, &counter_mask))
+		return false;
 
 	for_each_sibling_event(sibling, leader) {
 		if (!mmdc_pmu_group_event_is_valid(sibling, pmu, &counter_mask))
