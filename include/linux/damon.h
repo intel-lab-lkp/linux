@@ -247,8 +247,8 @@ struct damos_quota {
 
 /* private: */
 	/* For throughput estimation */
-	unsigned long total_charged_sz;
-	unsigned long total_charged_ns;
+	unsigned long long total_charged_sz;
+	unsigned long long total_charged_ns;
 
 	/* For charging the quota */
 	unsigned long charged_sz;

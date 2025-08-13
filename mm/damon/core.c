@@ -15,6 +15,7 @@
 #include <linux/slab.h>
 #include <linux/string.h>
 #include <linux/string_choices.h>
+#include <linux/math64.h>
 
 #define CREATE_TRACE_POINTS
 #include <trace/events/damon.h>
@@ -2059,8 +2060,8 @@ static unsigned long damos_quota_score(struct damos_quota *quota)
  */
 static void damos_set_effective_quota(struct damos_quota *quota)
 {
-	unsigned long throughput;
-	unsigned long esz = ULONG_MAX;
+	unsigned long long throughput;
+	unsigned long long esz = ULLONG_MAX;
 
 	if (!quota->ms && list_empty(&quota->goals)) {
 		quota->esz = quota->sz;
@@ -2077,11 +2078,16 @@ static void damos_set_effective_quota(struct damos_quota *quota)
 	}
 
 	if (quota->ms) {
-		if (quota->total_charged_ns)
-			throughput = quota->total_charged_sz * 1000000 /
-				quota->total_charged_ns;
-		else
+		if (quota->total_charged_ns &&
+			likely(quota->total_charged_sz < ULLONG_MAX / 1000000)) {
+			throughput = div64_u64(quota->total_charged_sz * 1000000,
+					quota->total_charged_ns);
+		} else {
 			throughput = PAGE_SIZE * 1024;
+			/* Reset the variable when an overflow occurs */
+			quota->total_charged_ns = 0;
+			quota->total_charged_sz = 0;
+		}
 		esz = min(throughput * quota->ms, esz);
 	}
 
