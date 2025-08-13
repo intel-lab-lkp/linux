@@ -106,7 +106,7 @@ if [ "x$notocjkvffonts" != "x" ] ; then
 	echo 'Or, CJK pages can be skipped by uninstalling texlive-xecjk.'
 	echo
 	echo 'For more info on denylisting, other options, and variable font, see header'
-	echo 'comments of scripts/check-variable-fonts.sh.'
+	echo 'comments of tools/doc/check-variable-fonts.sh.'
 	echo '============================================================================='
 fi
 
