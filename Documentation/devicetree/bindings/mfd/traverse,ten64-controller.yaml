@@ -1,0 +1,44 @@
+# SPDX-License-Identifier: (GPL-2.0-only OR BSD-2-Clause)
+%YAML 1.2
+---
+$id: http://devicetree.org/schemas/mfd/traverse,ten64-controller.yaml#
+$schema: http://devicetree.org/meta-schemas/core.yaml#
+
+title: Traverse Ten64 board microontroller
+
+maintainers:
+  - Mathew McBride <matt@traverse.com.au>
+
+description: |
+  The board microcontroller on the Ten64 board family is
+  reponsible for management of power sources on the board,
+  as well as signalling the SoC to power on and reset.
+  It also implements useful auxiliary functions like bootcount,
+  serial/MAC address storage and scratch registers.
+
+properties:
+  compatible:
+    const: traverse,ten64-controller
+
+  reg:
+    description:
+      I2C device address.
+    maxItems: 1
+
+required:
+  - compatible
+  - reg
+
+additionalProperties: false
+
+examples:
+  - |
+    i2c {
+        #address-cells = <1>;
+        #size-cells = <0>;
+
+        board-controller@7e {
+          compatible = "traverse,ten64-controller";
+          reg = <0x7e>;
+        };
+    };
