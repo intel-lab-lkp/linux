@@ -197,6 +197,12 @@ struct exynos_tmu_data {
 	void (*tmu_clear_irqs)(struct exynos_tmu_data *data);
 };
 
+/* Map Rise and Falling edges for IRQ Clean */
+struct tmu_irq_map {
+	u32 fall[3];
+	u32 rise[3];
+};
+
 /*
  * TMU treats temperature as a mapped temperature code.
  * The temperature is converted differently depending on the calibration type.
@@ -765,8 +771,9 @@ static irqreturn_t exynos_tmu_threaded_irq(int irq, void *id)
 
 static void exynos4210_tmu_clear_irqs(struct exynos_tmu_data *data)
 {
-	unsigned int val_irq;
+	unsigned int val_irq, clear_irq = 0;
 	u32 tmu_intstat, tmu_intclear;
+	struct tmu_irq_map irq_map = {0};
 
 	if (data->soc == SOC_ARCH_EXYNOS5260) {
 		tmu_intstat = EXYNOS5260_TMU_REG_INTSTAT;
@@ -783,15 +790,58 @@ static void exynos4210_tmu_clear_irqs(struct exynos_tmu_data *data)
 	}
 
 	val_irq = readl(data->base + tmu_intstat);
-	/*
-	 * Clear the interrupts.  Please note that the documentation for
-	 * Exynos3250, Exynos4412, Exynos5250 and Exynos5260 incorrectly
-	 * states that INTCLEAR register has a different placing of bits
-	 * responsible for FALL IRQs than INTSTAT register.  Exynos5420
-	 * and Exynos5440 documentation is correct (Exynos4210 doesn't
-	 * support FALL IRQs at all).
-	 */
-	writel(val_irq, data->base + tmu_intclear);
+
+	/* Exynos4210 doesn't support FALL interrupts */
+	if (data->soc == SOC_ARCH_EXYNOS4210) {
+		writel(val_irq, data->base + tmu_intclear);
+		return;
+	}
+
+	/* Set SoC-specific interrupt bit mappings */
+	switch (data->soc) {
+	case SOC_ARCH_EXYNOS3250:
+	case SOC_ARCH_EXYNOS4412:
+	case SOC_ARCH_EXYNOS5250:
+	case SOC_ARCH_EXYNOS5260:
+		irq_map.fall[2] = BIT(20);
+		irq_map.fall[1] = BIT(16);
+		irq_map.fall[0] = BIT(12);
+		irq_map.rise[2] = BIT(8);
+		irq_map.rise[1] = BIT(4);
+		irq_map.rise[0] = BIT(0);
+		break;
+	case SOC_ARCH_EXYNOS5420:
+	case SOC_ARCH_EXYNOS5420_TRIMINFO:
+		irq_map.fall[2] = BIT(24);
+		irq_map.fall[1] = BIT(20);
+		irq_map.fall[0] = BIT(16);
+		irq_map.rise[2] = BIT(8);
+		irq_map.rise[1] = BIT(4);
+		irq_map.rise[0] = BIT(0);
+		break;
+	case SOC_ARCH_EXYNOS5433:
+	case SOC_ARCH_EXYNOS7:
+		irq_map.fall[2] = BIT(23);
+		irq_map.fall[1] = BIT(17);
+		irq_map.fall[0] = BIT(16);
+		irq_map.rise[2] = BIT(7);
+		irq_map.rise[1] = BIT(1);
+		irq_map.rise[0] = BIT(0);
+		break;
+	default:
+		pr_warn("exynos-tmu: Unknown SoC type %d, using fallback IRQ mapping\n", soc);
+		break;
+
+	/* Map active INTSTAT bits to INTCLEAR */
+	for (int i = 0; i < 3; i++) {
+		if (val_irq & irq_map.fall[i])
+			clear_irq |= irq_map.fall[i];
+		if (val_irq & irq_map.rise[i])
+			clear_irq |= irq_map.rise[i];
+	}
+
+	if (clear_irq)
+		writel(clear_irq, data->base + tmu_intclear);
 }
 
 static const struct of_device_id exynos_tmu_match[] = {
