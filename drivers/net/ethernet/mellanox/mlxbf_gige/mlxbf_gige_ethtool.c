@@ -159,6 +159,30 @@ static void mlxbf_gige_get_pause_stats(struct net_device *netdev,
 	}
 }
 
+static int mlxbf_gige_get_link_ksettings(struct net_device *ndev,
+					 struct ethtool_link_ksettings *cmd)
+{
+	struct phy_device *phydev;
+	int ret;
+
+	ret = phy_ethtool_get_link_ksettings(ndev, cmd);
+	if (ret)
+		return ret;
+
+	phydev = ndev->phydev;
+	if (!phydev)
+		return -ENODEV;
+
+	mutex_lock(&phydev->lock);
+	if (!phydev->link) {
+		cmd->base.speed = SPEED_UNKNOWN;
+		cmd->base.duplex = DUPLEX_UNKNOWN;
+	}
+	mutex_unlock(&phydev->lock);
+
+	return 0;
+}
+
 const struct ethtool_ops mlxbf_gige_ethtool_ops = {
 	.get_link		= ethtool_op_get_link,
 	.get_ringparam		= mlxbf_gige_get_ringparam,
@@ -170,6 +194,6 @@ const struct ethtool_ops mlxbf_gige_ethtool_ops = {
 	.nway_reset		= phy_ethtool_nway_reset,
 	.get_pauseparam		= mlxbf_gige_get_pauseparam,
 	.get_pause_stats	= mlxbf_gige_get_pause_stats,
-	.get_link_ksettings	= phy_ethtool_get_link_ksettings,
+	.get_link_ksettings	= mlxbf_gige_get_link_ksettings,
 	.set_link_ksettings	= phy_ethtool_set_link_ksettings,
 };
