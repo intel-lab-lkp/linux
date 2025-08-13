@@ -352,7 +352,7 @@ static int collect_events(struct perf_event *group, int max_count,
 		current_idx[n++] = PMC_NO_INDEX;
 	}
 	for_each_sibling_event(pe, group) {
-		if (!is_software_event(pe) && pe->state != PERF_EVENT_STATE_OFF) {
+		if (!is_software_event(pe)) {
 			if (n >= max_count)
 				return -1;
 			event[n] = pe;

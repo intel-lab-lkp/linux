@@ -75,8 +75,7 @@ static int perfmon_collect_events(struct idxd_pmu *idxd_pmu,
 		return n;
 
 	for_each_sibling_event(event, leader) {
-		if (!is_idxd_event(idxd_pmu, event) ||
-		    event->state <= PERF_EVENT_STATE_OFF)
+		if (!is_idxd_event(idxd_pmu, event))
 			continue;
 
 		if (n >= max_count)

@@ -1211,7 +1211,7 @@ static int collect_events(struct cpu_hw_events *cpuc, struct perf_event *leader,
 		return n;
 
 	for_each_sibling_event(event, leader) {
-		if (!is_x86_event(event) || event->state <= PERF_EVENT_STATE_OFF)
+		if (!is_x86_event(event))
 			continue;
 
 		if (collect_event(cpuc, event, max_count, n))

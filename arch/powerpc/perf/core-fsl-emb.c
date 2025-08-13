@@ -261,8 +261,7 @@ static int collect_events(struct perf_event *group, int max_count,
 		n++;
 	}
 	for_each_sibling_event(event, group) {
-		if (!is_software_event(event) &&
-		    event->state != PERF_EVENT_STATE_OFF) {
+		if (!is_software_event(event)) {
 			if (n >= max_count)
 				return -1;
 			ctrs[n] = event;

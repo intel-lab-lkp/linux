@@ -406,8 +406,7 @@ uncore_collect_events(struct intel_uncore_box *box, struct perf_event *leader,
 		return n;
 
 	for_each_sibling_event(event, leader) {
-		if (!is_box_event(box, event) ||
-		    event->state <= PERF_EVENT_STATE_OFF)
+		if (!is_box_event(box, event))
 			continue;
 
 		if (n >= max_count)

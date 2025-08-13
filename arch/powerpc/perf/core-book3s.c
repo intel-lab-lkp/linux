@@ -1602,8 +1602,7 @@ static int collect_events(struct perf_event *group, int max_count,
 		events[n++] = group->hw.config;
 	}
 	for_each_sibling_event(event, group) {
-		if (event->pmu->task_ctx_nr == perf_hw_context &&
-		    event->state != PERF_EVENT_STATE_OFF) {
+		if (event->pmu->task_ctx_nr == perf_hw_context) {
 			if (n >= max_count)
 				return -1;
 			ctrs[n] = event;
