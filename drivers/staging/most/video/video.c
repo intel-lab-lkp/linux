@@ -172,8 +172,8 @@ static ssize_t comp_vdev_read(struct file *filp, char __user *buf,
 
 	while (count > 0 && data_ready(mdev)) {
 		struct mbo *const mbo = get_top_mbo(mdev);
-		int const rem = mbo->processed_length - fh->offs;
-		int const cnt = rem < count ? rem : count;
+		unsigned long const rem = mbo->processed_length - fh->offs;
+		unsigned long const cnt = min(rem, count);
 
 		if (copy_to_user(buf, mbo->virt_address + fh->offs, cnt)) {
 			v4l2_err(&mdev->v4l2_dev, "read: copy_to_user failed\n");
