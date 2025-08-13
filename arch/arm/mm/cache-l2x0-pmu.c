@@ -274,18 +274,17 @@ static bool l2x0_pmu_group_is_valid(struct perf_event *event)
 	struct pmu *pmu = event->pmu;
 	struct perf_event *leader = event->group_leader;
 	struct perf_event *sibling;
-	int num_hw = 0;
+	int num_hw = 1;
+
+	if (leader == event)
+		return true;
 
 	if (leader->pmu == pmu)
 		num_hw++;
-	else if (!is_software_event(leader))
-		return false;
 
 	for_each_sibling_event(sibling, leader) {
 		if (sibling->pmu == pmu)
 			num_hw++;
-		else if (!is_software_event(sibling))
-			return false;
 	}
 
 	return num_hw <= PMU_NR_COUNTERS;
