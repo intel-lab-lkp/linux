@@ -3933,6 +3933,12 @@ struct cfg80211_nan_band_config {
  * @scan_period: period (in seconds) between NAN scans.
  * @scan_dwell_time: dwell time (in milliseconds) for NAN scans.
  * @discovery_beacon_interval: interval (in TUs) for discovery beacons.
+ * @enable_dw_notification: flag to enable/disable discovery window
+ *	notifications.
+ * @dw_lead_time: anticipated host processing time in TUs to process DW
+ *	notifications. This is an optional parameter, zero value means
+ *	'unknown'. The device may use this value to adjust DW notification
+ *	timing. Max allowed value is 496 TUs.
  * @band_cfgs: array of band specific configurations, indexed by
  *	&enum nl80211_band values.
  * @extra_nan_attrs: pointer to additional NAN attributes.
@@ -3947,6 +3953,8 @@ struct cfg80211_nan_conf {
 	u16 scan_period;
 	u16 scan_dwell_time;
 	u8 discovery_beacon_interval;
+	bool enable_dw_notification;
+	u16 dw_lead_time;
 	struct cfg80211_nan_band_config band_cfgs[NUM_NL80211_BANDS];
 	const u8 *extra_nan_attrs;
 	u16 extra_nan_attrs_len;
@@ -10029,6 +10037,15 @@ void cfg80211_schedule_channels_check(struct wireless_dev *wdev);
  * @enabled: set to true if EPCS was enabled, otherwise set to false.
  */
 void cfg80211_epcs_changed(struct net_device *netdev, bool enabled);
+
+/**
+ * cfg80211_next_nan_dw_notif - Notify about the next NAN Discovery Window (DW)
+ * @wdev: Pointer to the wireless device structure
+ * @chan: DW channel (6, 44 or 149)
+ * @gfp: Memory allocation flags
+ */
+void cfg80211_next_nan_dw_notif(struct wireless_dev *wdev,
+				struct ieee80211_channel *chan, gfp_t gfp);
 
 #ifdef CONFIG_CFG80211_DEBUGFS
 /**

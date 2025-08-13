@@ -1349,6 +1349,15 @@
  *	control EPCS configuration. Used to notify userland on the current state
  *	of EPCS.
  *
+ * @NL80211_CMD_NAN_NEXT_DW_NOTIFICATION: This command is used to notify
+ *	user space about the next NAN Discovery Window (DW). User space may use
+ *	it to prepare frames to be sent in the next DW.
+ *	%NL80211_ATTR_WIPHY_FREQ is used to indicate the frequency of the next
+ *	DW. SDF transmission should be requested with %NL80211_CMD_FRAME and
+ *	the device/driver shall take care of the actual transmission timing.
+ *	This notification is only sent to the NAN interface owning socket
+ *	(see %NL80211_ATTR_SOCKET_OWNER flag).
+ *
  * @NL80211_CMD_MAX: highest used command number
  * @__NL80211_CMD_AFTER_LAST: internal use
  */
@@ -1608,6 +1617,8 @@ enum nl80211_commands {
 
 	NL80211_CMD_ASSOC_MLO_RECONF,
 	NL80211_CMD_EPCS_CFG,
+
+	NL80211_CMD_NAN_NEXT_DW_NOTIFICATION,
 
 	/* add new commands above here */
 
@@ -7365,6 +7376,16 @@ enum nl80211_nan_band_conf_attributes {
  * @NL80211_NAN_CONF_DISCOVERY_BEACON_INTERVAL: Discovery beacon interval
  *	in TUs. Valid range is 50-200 TUs. If not configured the device default
  *	value is used. This is u8 (optional)
+ * @NL80211_NAN_CONF_NOTIFY_DW: If set, the driver will notify userspace about
+ *	the upcoming discovery window with
+ *	%NL80211_CMD_NAN_NEXT_DW_NOTIFICATION.
+ *	This is a flag attribute.
+ * @NL80211_NAN_CONF_DW_LEAD_TIME: Anticipated time in TUs it takes
+ *	the host to process %NL80211_CMD_NAN_NEXT_DW_NOTIFICATION.
+ *	The device may use this value to adjust the timing of the notification.
+ *	This is an optional u16 attribute. Maximum allowed value is 496 TUs.
+ *	If set to zero or the attriubute is not present, it means that such
+ *	information is not available.
  * @NUM_NL80211_NAN_CONF_ATTR: Internal.
  * @NL80211_NAN_CONF_ATTR_MAX: Highest NAN configuration attribute.
  *
@@ -7379,6 +7400,8 @@ enum nl80211_nan_conf_attributes {
 	NL80211_NAN_CONF_SCAN_PERIOD,
 	NL80211_NAN_CONF_SCAN_DWELL_TIME,
 	NL80211_NAN_CONF_DISCOVERY_BEACON_INTERVAL,
+	NL80211_NAN_CONF_NOTIFY_DW,
+	NL80211_NAN_CONF_DW_LEAD_TIME,
 
 	/* keep last */
 	NUM_NL80211_NAN_CONF_ATTR,
