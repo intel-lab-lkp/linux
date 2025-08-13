@@ -1081,17 +1081,11 @@ void __init hyp_mode_check(void)
 
 static void (*__arm_pm_restart)(enum reboot_mode reboot_mode, const char *cmd);
 
-static int arm_restart(struct notifier_block *nb, unsigned long action,
-		       void *data)
+static int arm_restart(struct sys_off_data *data)
 {
-	__arm_pm_restart(action, data);
+	__arm_pm_restart(data->mode, data->cmd);
 	return NOTIFY_DONE;
 }
-
-static struct notifier_block arm_restart_nb = {
-	.notifier_call = arm_restart,
-	.priority = 128,
-};
 
 void __init setup_arch(char **cmdline_p)
 {
@@ -1160,7 +1154,7 @@ void __init setup_arch(char **cmdline_p)
 
 	if (mdesc->restart) {
 		__arm_pm_restart = mdesc->restart;
-		register_restart_handler(&arm_restart_nb);
+		register_sys_off_handler(SYS_OFF_MODE_RESTART, 128, arm_restart, NULL);
 	}
 
 	unflatten_device_tree();
