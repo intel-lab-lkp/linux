@@ -64,7 +64,7 @@ Linux 发行版和简单地使用 Linux 命令行，那么可以迅速开始了�
 ::
 
 	cd linux
-	./scripts/sphinx-pre-install
+	./tools/doc/sphinx-pre-install
 
 以 Fedora 为例，它的输出是这样的::
 
