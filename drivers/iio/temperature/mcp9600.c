@@ -31,6 +31,7 @@
 #define MCP9600_STATUS_ALERT(x)		BIT(x)
 #define MCP9600_SENSOR_CFG		0x5
 #define MCP9600_SENSOR_TYPE_MASK	GENMASK(6, 4)
+#define MCP9600_FILTER_MASK		GENMASK(2, 0)
 #define MCP9600_ALERT_CFG1		0x8
 #define MCP9600_ALERT_CFG(x)		(MCP9600_ALERT_CFG1 + (x - 1))
 #define MCP9600_ALERT_CFG_ENABLE	BIT(0)
@@ -111,6 +112,7 @@ static const struct iio_event_spec mcp9600_events[] = {
 			.address = MCP9600_HOT_JUNCTION,		       \
 			.info_mask_separate = BIT(IIO_CHAN_INFO_RAW) |	       \
 					      BIT(IIO_CHAN_INFO_SCALE) |       \
+					      BIT(IIO_CHAN_INFO_LOW_PASS_FILTER_3DB_FREQUENCY) |  \
 					      BIT(IIO_CHAN_INFO_THERMOCOUPLE_TYPE), \
 			.event_spec = &mcp9600_events[hj_ev_spec_off],	       \
 			.num_event_specs = hj_num_ev,			       \
@@ -149,6 +151,7 @@ static const struct iio_chan_spec mcp9600_channels[][2] = {
 struct mcp9600_data {
 	struct i2c_client *client;
 	u32 thermocouple_type;
+	u32 filter_level;
 };
 
 static int mcp9600_read(struct mcp9600_data *data,
@@ -186,6 +189,9 @@ static int mcp9600_read_raw(struct iio_dev *indio_dev,
 	case IIO_CHAN_INFO_THERMOCOUPLE_TYPE:
 		*val = mcp9600_tc_types[data->thermocouple_type];
 		return IIO_VAL_CHAR;
+	case IIO_CHAN_INFO_LOW_PASS_FILTER_3DB_FREQUENCY:
+		*val = data->filter_level;
+		return IIO_VAL_INT;
 
 	default:
 		return -EINVAL;
@@ -199,6 +205,7 @@ static int mcp9600_config(struct mcp9600_data *data)
 
 	cfg  = FIELD_PREP(MCP9600_SENSOR_TYPE_MASK,
 			  mcp9600_type_map[data->thermocouple_type]);
+	cfg |= FIELD_PREP(MCP9600_FILTER_MASK, data->filter_level);
 
 	ret = i2c_smbus_write_byte_data(client, MCP9600_SENSOR_CFG, cfg);
 	if (ret < 0) {
@@ -207,6 +214,37 @@ static int mcp9600_config(struct mcp9600_data *data)
 	}
 
 	return 0;
+}
+
+static int mcp9600_write_raw_get_fmt(struct iio_dev *indio_dev,
+				     struct iio_chan_spec const *chan,
+				     long mask)
+{
+	switch (mask) {
+	case IIO_CHAN_INFO_LOW_PASS_FILTER_3DB_FREQUENCY:
+		return IIO_VAL_INT;
+	default:
+		return -EINVAL;
+	}
+}
+
+static int mcp9600_write_raw(struct iio_dev *indio_dev,
+			     struct iio_chan_spec const *chan,
+			     int val, int val2, long mask)
+{
+	struct mcp9600_data *data = iio_priv(indio_dev);
+
+	switch (mask) {
+	case IIO_CHAN_INFO_LOW_PASS_FILTER_3DB_FREQUENCY:
+		if (val < 0 || val > 7)
+			return -EINVAL;
+
+		data->filter_level = val;
+		return mcp9600_config(data);
+
+	default:
+		return -EINVAL;
+	}
 }
 
 static int mcp9600_get_alert_index(int channel2, enum iio_event_direction dir)
@@ -346,6 +384,8 @@ static int mcp9600_write_thresh(struct iio_dev *indio_dev,
 
 static const struct iio_info mcp9600_info = {
 	.read_raw = mcp9600_read_raw,
+	.write_raw = mcp9600_write_raw,
+	.write_raw_get_fmt = mcp9600_write_raw_get_fmt,
 	.read_event_config = mcp9600_read_event_config,
 	.write_event_config = mcp9600_write_event_config,
 	.read_event_value = mcp9600_read_thresh,
@@ -500,6 +540,9 @@ static int mcp9600_probe(struct i2c_client *client)
 		return dev_err_probe(&client->dev, -EINVAL,
 				     "Invalid thermocouple-type property %d.\n",
 				     data->thermocouple_type);
+
+	/* Default filter level of the chip is 0 (off) */
+	data->filter_level = 0;
 
 	/* Set initial config. */
 	ret = mcp9600_config(data);
