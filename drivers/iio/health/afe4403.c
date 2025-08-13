@@ -61,7 +61,6 @@ static const struct reg_field afe4403_reg_fields[] = {
  * @spi: SPI device handle
  * @regmap: Register map of the device
  * @fields: Register fields of the device
- * @regulator: Pointer to the regulator for the IC
  * @trig: IIO trigger for this device
  * @irq: ADC_RDY line interrupt number
  * @buffer: Used to construct data layout to push into IIO buffer.
@@ -70,7 +69,6 @@ struct afe4403_data {
 	struct spi_device *spi;
 	struct regmap *regmap;
 	struct regmap_field *fields[F_MAX_FIELDS];
-	struct regulator *regulator;
 	struct iio_trigger *trig;
 	int irq;
 	/* Ensure suitable alignment for timestamp */
@@ -343,13 +341,6 @@ err:
 	return IRQ_HANDLED;
 }
 
-static void afe4403_regulator_disable(void *data)
-{
-	struct regulator *regulator = data;
-
-	regulator_disable(regulator);
-}
-
 #define AFE4403_TIMING_PAIRS			\
 	{ AFE440X_LED2STC,	0x000050 },	\
 	{ AFE440X_LED2ENDC,	0x0003e7 },	\
@@ -424,12 +415,6 @@ static int afe4403_suspend(struct device *dev)
 	if (ret)
 		return ret;
 
-	ret = regulator_disable(afe->regulator);
-	if (ret) {
-		dev_err(dev, "Unable to disable regulator\n");
-		return ret;
-	}
-
 	return 0;
 }
 
@@ -438,12 +423,6 @@ static int afe4403_resume(struct device *dev)
 	struct iio_dev *indio_dev = spi_get_drvdata(to_spi_device(dev));
 	struct afe4403_data *afe = iio_priv(indio_dev);
 	int ret;
-
-	ret = regulator_enable(afe->regulator);
-	if (ret) {
-		dev_err(dev, "Unable to enable regulator\n");
-		return ret;
-	}
 
 	ret = regmap_clear_bits(afe->regmap, AFE440X_CONTROL2,
 				AFE440X_CONTROL2_PDN_AFE);
@@ -488,19 +467,9 @@ static int afe4403_probe(struct spi_device *spi)
 		}
 	}
 
-	afe->regulator = devm_regulator_get(dev, "tx_sup");
-	if (IS_ERR(afe->regulator))
-		return dev_err_probe(dev, PTR_ERR(afe->regulator),
-				     "Unable to get regulator\n");
-
-	ret = regulator_enable(afe->regulator);
+	ret = devm_regulator_get_enable(dev, "tx_sup");
 	if (ret) {
 		dev_err(dev, "Unable to enable regulator\n");
-		return ret;
-	}
-	ret = devm_add_action_or_reset(dev, afe4403_regulator_disable, afe->regulator);
-	if (ret) {
-		dev_err(dev, "Unable to add regulator disable action\n");
 		return ret;
 	}
 
