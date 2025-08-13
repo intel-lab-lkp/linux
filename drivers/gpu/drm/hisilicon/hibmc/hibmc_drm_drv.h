@@ -24,6 +24,8 @@
 
 #define HIBMC_MIN_VECTORS	1
 #define HIBMC_MAX_VECTORS	2
+#define HIBMC_DP_STATUS		BIT(0)
+#define HIBMC_VGA_STATUS	BIT(1)
 
 struct hibmc_vdac {
 	struct drm_device *dev;
@@ -31,6 +33,7 @@ struct hibmc_vdac {
 	struct drm_connector connector;
 	struct i2c_adapter adapter;
 	struct i2c_algo_bit_data bit_data;
+	int phys_status;
 };
 
 struct hibmc_drm_private {
@@ -43,6 +46,10 @@ struct hibmc_drm_private {
 	struct drm_crtc crtc;
 	struct hibmc_vdac vdac;
 	struct hibmc_dp dp;
+
+	/* VGA and DP phys connect status, BIT(0) is DP, BIT(1) is VGA */
+	u32 connect_status_map;
+	struct mutex connect_lock; /* protect connect_status_map value */
 };
 
 static inline struct hibmc_vdac *to_hibmc_vdac(struct drm_connector *connector)

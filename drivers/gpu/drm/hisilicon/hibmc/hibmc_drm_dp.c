@@ -35,12 +35,22 @@ static int hibmc_dp_connector_get_modes(struct drm_connector *connector)
 static int hibmc_dp_detect(struct drm_connector *connector,
 			   struct drm_modeset_acquire_ctx *ctx, bool force)
 {
-	struct hibmc_dp *dp = to_hibmc_dp(connector);
+	struct hibmc_drm_private *priv = to_hibmc_drm_private(connector->dev);
+	int ret;
 
-	if (dp->hpd_status)
-		return connector_status_connected;
-	else
-		return connector_status_disconnected;
+	mutex_lock(&priv->connect_lock);
+
+	if (priv->dp.hpd_status) {
+		priv->connect_status_map |= HIBMC_DP_STATUS;
+		ret = connector_status_connected;
+	} else {
+		priv->connect_status_map &= ~HIBMC_DP_STATUS;
+		ret = connector_status_disconnected;
+	}
+
+	mutex_unlock(&priv->connect_lock);
+
+	return ret;
 }
 
 static int hibmc_dp_mode_valid(struct drm_connector *connector,

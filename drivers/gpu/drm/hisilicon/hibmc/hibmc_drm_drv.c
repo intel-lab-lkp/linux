@@ -162,6 +162,8 @@ static int hibmc_kms_init(struct hibmc_drm_private *priv)
 	drm_for_each_encoder(encoder, dev)
 		encoder->possible_clones = clone_mask;
 
+	mutex_init(&priv->connect_lock);
+
 	return 0;
 }
 

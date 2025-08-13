@@ -25,26 +25,17 @@
 static int hibmc_connector_get_modes(struct drm_connector *connector)
 {
 	struct hibmc_vdac *vdac = to_hibmc_vdac(connector);
-	const struct drm_edid *drm_edid;
 	int count;
 
-	drm_edid = drm_edid_read_ddc(connector, &vdac->adapter);
-
-	drm_edid_connector_update(connector, drm_edid);
-
-	if (drm_edid) {
-		count = drm_edid_connector_add_modes(connector);
-		if (count)
-			goto out;
+	if (vdac->phys_status == connector_status_connected) {
+		count = drm_connector_helper_get_modes(connector);
+	} else {
+		drm_edid_connector_update(connector, NULL);
+		count = drm_add_modes_noedid(connector,
+					     connector->dev->mode_config.max_width,
+					     connector->dev->mode_config.max_height);
+		drm_set_preferred_mode(connector, 1024, 768);
 	}
-
-	count = drm_add_modes_noedid(connector,
-				     connector->dev->mode_config.max_width,
-				     connector->dev->mode_config.max_height);
-	drm_set_preferred_mode(connector, 1024, 768);
-
-out:
-	drm_edid_free(drm_edid);
 
 	return count;
 }
@@ -57,10 +48,45 @@ static void hibmc_connector_destroy(struct drm_connector *connector)
 	drm_connector_cleanup(connector);
 }
 
+static int hibmc_vdac_detect(struct drm_connector *connector,
+			     struct drm_modeset_acquire_ctx *ctx,
+			     bool force)
+{
+	struct hibmc_drm_private *priv = to_hibmc_drm_private(connector->dev);
+	struct hibmc_vdac *vdac = to_hibmc_vdac(connector);
+	int ret = connector_status_disconnected;
+	int status;
+
+	status = drm_connector_helper_detect_from_ddc(connector, ctx, force);
+
+	vdac->phys_status = status;
+
+	mutex_lock(&priv->connect_lock);
+
+	if (status == connector_status_connected) {
+		priv->connect_status_map |= HIBMC_VGA_STATUS;
+		ret = connector_status_connected;
+		goto exit;
+	}
+
+	priv->connect_status_map &= ~HIBMC_VGA_STATUS;
+
+	/* if all connectors are disconnected,
+	 * return connected to support BMC KVM display.
+	 */
+	if (!priv->connect_status_map)
+		ret = connector_status_connected;
+
+exit:
+	mutex_unlock(&priv->connect_lock);
+
+	return ret;
+}
+
 static const struct drm_connector_helper_funcs
 	hibmc_connector_helper_funcs = {
 	.get_modes = hibmc_connector_get_modes,
-	.detect_ctx = drm_connector_helper_detect_from_ddc,
+	.detect_ctx = hibmc_vdac_detect,
 };
 
 static const struct drm_connector_funcs hibmc_connector_funcs = {
