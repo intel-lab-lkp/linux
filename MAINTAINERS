@@ -7338,7 +7338,6 @@ DOCUMENTATION SCRIPTS
 M:	Mauro Carvalho Chehab <mchehab@kernel.org>
 L:	linux-doc@vger.kernel.org
 S:	Maintained
-F:	Documentation/sphinx/parse-headers.pl
 F:	tools/doc/
 
 DOCUMENTATION/ITALIAN

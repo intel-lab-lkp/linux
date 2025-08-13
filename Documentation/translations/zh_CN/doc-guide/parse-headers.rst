@@ -19,14 +19,14 @@ Sphinx将生成警告。这有助于保持用户空间API文档与内核更改�
 
 .. _parse_headers_zh:
 
-parse_headers.pl
+parse-headers.pl
 ----------------
 
 脚本名称
 ~~~~~~~~
 
 
-parse_headers.pl——解析一个C文件，识别函数、结构体、枚举、定义并对Sphinx文档
+parse-headers.pl——解析一个C文件，识别函数、结构体、枚举、定义并对Sphinx文档
 创建交叉引用。
 
 
@@ -34,7 +34,7 @@ parse_headers.pl——解析一个C文件，识别函数、结构体、枚举、
 ~~~~~~~~
 
 
-\ **parse_headers.pl**\  [<选项>] <C文件> <输出文件> [<例外文件>]
+\ **parse-headers.pl**\  [<选项>] <C文件> <输出文件> [<例外文件>]
 
 <选项> 可以是： --debug, --help 或 --usage 。
 

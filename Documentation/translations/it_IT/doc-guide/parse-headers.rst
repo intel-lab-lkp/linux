@@ -20,21 +20,21 @@ consultate ``Documentation/userspace-api/media/Makefile``.
 
 .. _it_parse_headers:
 
-parse_headers.pl
+parse-headers.pl
 ^^^^^^^^^^^^^^^^
 
 NOME
 ****
 
 
-parse_headers.pl - analizza i file C al fine di identificare funzioni,
+parse-headers.pl - analizza i file C al fine di identificare funzioni,
 strutture, enumerati e definizioni, e creare riferimenti per Sphinx
 
 SINTASSI
 ********
 
 
-\ **parse_headers.pl**\  [<options>] <C_FILE> <OUT_FILE> [<EXCEPTIONS_FILE>]
+\ **parse-headers.pl**\  [<options>] <C_FILE> <OUT_FILE> [<EXCEPTIONS_FILE>]
 
 Dove <options> può essere: --debug, --usage o --help.
 

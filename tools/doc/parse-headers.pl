@@ -340,12 +340,12 @@ __END__
 
 =head1 NAME
 
-parse_headers.pl - parse a C file, in order to identify functions, structs,
+parse-headers.pl - parse a C file, in order to identify functions, structs,
 enums and defines and create cross-references to a Sphinx book.
 
 =head1 SYNOPSIS
 
-B<parse_headers.pl> [<options>] <C_FILE> <OUT_FILE> [<EXCEPTIONS_FILE>]
+B<parse-headers.pl> [<options>] <C_FILE> <OUT_FILE> [<EXCEPTIONS_FILE>]
 
 Where <options> can be: --debug, --help or --usage.
 
