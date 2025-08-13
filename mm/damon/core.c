@@ -1889,7 +1889,9 @@ static void damos_apply_scheme(struct damon_ctx *c, struct damon_target *t,
 		r->age = 0;
 
 update_stat:
-	damos_update_stat(s, sz, sz_applied, sz_ops_filter_passed);
+	damos_update_stat(s,
+			sz * (c->ops.id == DAMON_OPS_PADDR ? c->addr_unit : 1),
+			sz_applied, sz_ops_filter_passed);
 }
 
 static void damon_do_apply_schemes(struct damon_ctx *c,
