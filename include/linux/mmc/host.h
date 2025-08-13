@@ -11,6 +11,7 @@
 #include <linux/device.h>
 #include <linux/fault-inject.h>
 #include <linux/debugfs.h>
+#include <linux/workqueue.h>
 
 #include <linux/mmc/core.h>
 #include <linux/mmc/card.h>
@@ -342,6 +343,9 @@ struct mmc_supply {
 	struct regulator *vmmc;		/* Card power supply */
 	struct regulator *vqmmc;	/* Optional Vccq supply */
 	struct regulator *vqmmc2;	/* Optional supply for phy */
+
+	struct notifier_block vmmc_nb;	/* Notifier for vmmc */
+	struct work_struct uv_work;	/* Undervoltage work */
 };
 
 struct mmc_ctx {
@@ -493,6 +497,13 @@ struct mmc_host {
 	unsigned int		retune_crc_disable:1; /* don't trigger retune upon crc */
 	unsigned int		can_dma_map_merge:1; /* merging can be used */
 	unsigned int		vqmmc_enabled:1; /* vqmmc regulator is enabled */
+
+	/*
+	 * Indicates if an undervoltage event has already been handled.
+	 * This prevents repeated regulator notifiers from triggering
+	 * multiple REGULATOR_EVENT_UNDER_VOLTAGE events.
+	 */
+	unsigned int		undervoltage:1;	 /* Undervoltage state */
 
 	int			rescan_disable;	/* disable card detection */
 	int			rescan_entered;	/* used with nonremovable devices */
@@ -659,6 +670,9 @@ static inline int mmc_regulator_set_vqmmc2(struct mmc_host *mmc,
 int mmc_regulator_get_supply(struct mmc_host *mmc);
 int mmc_regulator_enable_vqmmc(struct mmc_host *mmc);
 void mmc_regulator_disable_vqmmc(struct mmc_host *mmc);
+void mmc_regulator_register_undervoltage_notifier(struct mmc_host *host);
+void mmc_regulator_unregister_undervoltage_notifier(struct mmc_host *host);
+void mmc_undervoltage_workfn(struct work_struct *work);
 
 static inline int mmc_card_is_removable(struct mmc_host *host)
 {
