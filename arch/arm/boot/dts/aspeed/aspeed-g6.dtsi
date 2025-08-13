@@ -40,6 +40,10 @@
 		mdio1 = &mdio1;
 		mdio2 = &mdio2;
 		mdio3 = &mdio3;
+		ethernet0 = &mac0;
+		ethernet1 = &mac1;
+		ethernet2 = &mac2;
+		ethernet3 = &mac3;
 	};
 
 
@@ -232,34 +236,46 @@
 		};
 
 		mac0: ethernet@1e660000 {
-			compatible = "aspeed,ast2600-mac", "faraday,ftgmac100";
+			compatible = "aspeed,ast2600-mac01",
+				     "aspeed,ast2600-mac",
+				     "faraday,ftgmac100";
 			reg = <0x1e660000 0x180>;
 			interrupts = <GIC_SPI 2 IRQ_TYPE_LEVEL_HIGH>;
 			clocks = <&syscon ASPEED_CLK_GATE_MAC1CLK>;
+			scu = <&syscon>;
 			status = "disabled";
 		};
 
 		mac1: ethernet@1e680000 {
-			compatible = "aspeed,ast2600-mac", "faraday,ftgmac100";
+			compatible = "aspeed,ast2600-mac01",
+				     "aspeed,ast2600-mac",
+				     "faraday,ftgmac100";
 			reg = <0x1e680000 0x180>;
 			interrupts = <GIC_SPI 3 IRQ_TYPE_LEVEL_HIGH>;
 			clocks = <&syscon ASPEED_CLK_GATE_MAC2CLK>;
+			scu = <&syscon>;
 			status = "disabled";
 		};
 
 		mac2: ethernet@1e670000 {
-			compatible = "aspeed,ast2600-mac", "faraday,ftgmac100";
+			compatible = "aspeed,ast2600-mac23",
+				     "aspeed,ast2600-mac",
+				     "faraday,ftgmac100";
 			reg = <0x1e670000 0x180>;
 			interrupts = <GIC_SPI 32 IRQ_TYPE_LEVEL_HIGH>;
 			clocks = <&syscon ASPEED_CLK_GATE_MAC3CLK>;
+			scu = <&syscon>;
 			status = "disabled";
 		};
 
 		mac3: ethernet@1e690000 {
-			compatible = "aspeed,ast2600-mac", "faraday,ftgmac100";
+			compatible = "aspeed,ast2600-mac23",
+				     "aspeed,ast2600-mac",
+				     "faraday,ftgmac100";
 			reg = <0x1e690000 0x180>;
 			interrupts = <GIC_SPI 33 IRQ_TYPE_LEVEL_HIGH>;
 			clocks = <&syscon ASPEED_CLK_GATE_MAC4CLK>;
+			scu = <&syscon>;
 			status = "disabled";
 		};
 
