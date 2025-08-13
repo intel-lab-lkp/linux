@@ -46,6 +46,16 @@ config DT_EASY50712
 	bool "Easy50712"
 	depends on SOC_XWAY
 	select BUILTIN_DTB
+
+config DT_HH5A
+	bool "BT Home Hub 5A"
+	depends on SOC_XWAY
+	select BUILTIN_DTB
+	help
+	  The BT Home Hub 5A is a device based on the VRX268 SoC. It has 128MB
+	  of memory and 128MB of NAND flash. This kernel needs only an appended
+	  initramfs to boot. It can be loaded through tftp and booted from
+	  memory in the bootloader.
 endchoice
 
 config PCI_LANTIQ
