@@ -877,6 +877,7 @@ struct arm_pmu *armpmu_alloc(void)
 		 * specific PMU.
 		 */
 		.capabilities	= PERF_PMU_CAP_SAMPLING |
+				  PERF_PMU_CAP_RAW_EVENTS |
 				  PERF_PMU_CAP_EXTENDED_REGS |
 				  PERF_PMU_CAP_EXTENDED_HW_TYPE,
 	};

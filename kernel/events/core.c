@@ -12556,10 +12556,25 @@ static inline bool has_extended_regs(struct perf_event *event)
 	       (event->attr.sample_regs_intr & PERF_REG_EXTENDED_MASK);
 }
 
+static bool is_raw_pmu(const struct pmu *pmu)
+{
+	return pmu->type == PERF_TYPE_RAW ||
+	       pmu->capabilities & PERF_PMU_CAP_RAW_EVENTS;
+}
+
 static int perf_try_init_event(struct pmu *pmu, struct perf_event *event)
 {
 	struct perf_event_context *ctx = NULL;
 	int ret;
+
+	/*
+	 * Before touching anything, we can safely skip:
+	 * - any event for a specific PMU which is not this one
+	 * - any common event if this PMU doesn't support them
+	 */
+	if (event->attr.type != pmu->type &&
+	    (event->attr.type >= PERF_TYPE_MAX || is_raw_pmu(pmu)))
+		return -ENOENT;
 
 	if (!try_module_get(pmu->module))
 		return -ENODEV;

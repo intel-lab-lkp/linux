@@ -595,7 +595,7 @@ static const struct attribute_group *paiext_attr_groups[] = {
 /* Performance monitoring unit for mapped counters */
 static struct pmu paiext = {
 	.task_ctx_nr  = perf_hw_context,
-	.capabilities = PERF_PMU_CAP_SAMPLING,
+	.capabilities = PERF_PMU_CAP_SAMPLING | PERF_PMU_CAP_RAW_EVENTS,
 	.event_init   = paiext_event_init,
 	.add	      = paiext_add,
 	.del	      = paiext_del,
