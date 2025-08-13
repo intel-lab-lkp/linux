@@ -453,39 +453,31 @@ static int afe4403_probe(struct spi_device *spi)
 	afe->irq = spi->irq;
 
 	afe->regmap = devm_regmap_init_spi(spi, &afe4403_regmap_config);
-	if (IS_ERR(afe->regmap)) {
-		dev_err(dev, "Unable to allocate register map\n");
-		return PTR_ERR(afe->regmap);
-	}
+	if (IS_ERR(afe->regmap))
+		return dev_err_probe(dev, PTR_ERR(afe->regmap),
+				     "Unable to allocate register map\n");
 
 	for (i = 0; i < F_MAX_FIELDS; i++) {
 		afe->fields[i] = devm_regmap_field_alloc(dev, afe->regmap,
 							 afe4403_reg_fields[i]);
-		if (IS_ERR(afe->fields[i])) {
-			dev_err(dev, "Unable to allocate regmap fields\n");
-			return PTR_ERR(afe->fields[i]);
-		}
+		if (IS_ERR(afe->fields[i]))
+			return dev_err_probe(dev, PTR_ERR(afe->fields[i]),
+					     "Unable to allocate regmap fields\n");
 	}
 
 	ret = devm_regulator_get_enable(dev, "tx_sup");
-	if (ret) {
-		dev_err(dev, "Unable to enable regulator\n");
-		return ret;
-	}
+	if (ret)
+		return dev_err_probe(dev, ret, "Unable to enable regulator\n");
 
 	ret = regmap_write(afe->regmap, AFE440X_CONTROL0,
 			   AFE440X_CONTROL0_SW_RESET);
-	if (ret) {
-		dev_err(dev, "Unable to reset device\n");
-		return ret;
-	}
+	if (ret)
+		return dev_err_probe(dev, ret, "Unable to reset device\n");
 
 	ret = regmap_multi_reg_write(afe->regmap, afe4403_reg_sequences,
 				     ARRAY_SIZE(afe4403_reg_sequences));
-	if (ret) {
-		dev_err(dev, "Unable to set register defaults\n");
-		return ret;
-	}
+	if (ret)
+		return dev_err_probe(dev, ret, "Unable to set register defaults\n");
 
 	indio_dev->modes = INDIO_DIRECT_MODE;
 	indio_dev->channels = afe4403_channels;
@@ -498,43 +490,33 @@ static int afe4403_probe(struct spi_device *spi)
 						   "%s-dev%d",
 						   indio_dev->name,
 						   iio_device_id(indio_dev));
-		if (!afe->trig) {
-			dev_err(dev, "Unable to allocate IIO trigger\n");
-			return -ENOMEM;
-		}
+		if (!afe->trig)
+			return dev_err_probe(dev, -ENOMEM, "Unable to allocate IIO trigger\n");
 
 		iio_trigger_set_drvdata(afe->trig, indio_dev);
 
 		ret = devm_iio_trigger_register(dev, afe->trig);
-		if (ret) {
-			dev_err(dev, "Unable to register IIO trigger\n");
-			return ret;
-		}
+		if (ret)
+			return dev_err_probe(dev, ret, "Unable to register IIO trigger\n");
 
 		ret = devm_request_threaded_irq(dev, afe->irq,
 						iio_trigger_generic_data_rdy_poll,
 						NULL, IRQF_ONESHOT,
 						AFE4403_DRIVER_NAME,
 						afe->trig);
-		if (ret) {
-			dev_err(dev, "Unable to request IRQ\n");
-			return ret;
-		}
+		if (ret)
+			return dev_err_probe(dev, ret, "Unable to request IRQ\n");
 	}
 
 	ret = devm_iio_triggered_buffer_setup(dev, indio_dev,
 					      &iio_pollfunc_store_time,
 					      afe4403_trigger_handler, NULL);
-	if (ret) {
-		dev_err(dev, "Unable to setup buffer\n");
-		return ret;
-	}
+	if (ret)
+		return dev_err_probe(dev, ret, "Unable to setup buffer\n");
 
 	ret = devm_iio_device_register(dev, indio_dev);
-	if (ret) {
-		dev_err(dev, "Unable to register IIO device\n");
-		return ret;
-	}
+	if (ret)
+		return dev_err_probe(dev, ret, "Unable to register IIO device\n");
 
 	return 0;
 }
