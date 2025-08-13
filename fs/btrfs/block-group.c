@@ -1620,6 +1620,8 @@ void btrfs_delete_unused_bgs(struct btrfs_fs_info *fs_info)
 		if ((space_info->total_bytes - block_group->length < used &&
 		     block_group->zone_unusable < block_group->length) ||
 		    has_unwritten_metadata(block_group)) {
+			spin_unlock(&block_group->lock);
+
 			/*
 			 * Add a reference for the list, compensate for the ref
 			 * drop under the "next" label for the
@@ -1628,7 +1630,6 @@ void btrfs_delete_unused_bgs(struct btrfs_fs_info *fs_info)
 			btrfs_link_bg_list(block_group, &retry_list);
 
 			trace_btrfs_skip_unused_block_group(block_group);
-			spin_unlock(&block_group->lock);
 			spin_unlock(&space_info->lock);
 			up_write(&space_info->groups_sem);
 			goto next;
