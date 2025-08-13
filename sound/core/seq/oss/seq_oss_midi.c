@@ -130,7 +130,7 @@ int
 snd_seq_oss_midi_check_new_port(struct snd_seq_port_info *pinfo)
 {
 	int i;
-	struct seq_oss_midi *mdev __free(seq_oss_midi) = NULL;
+	struct seq_oss_midi *mdev;
 
 	/* the port must include generic midi */
 	if (! (pinfo->type & SNDRV_SEQ_PORT_TYPE_MIDI_GENERIC))
@@ -146,6 +146,7 @@ snd_seq_oss_midi_check_new_port(struct snd_seq_port_info *pinfo)
 	mdev = find_slot(pinfo->addr.client, pinfo->addr.port);
 	if (mdev) {
 		/* already exists */
+		snd_use_lock_free(&mdev->use_lock);
 		return 0;
 	}
 
@@ -170,7 +171,7 @@ snd_seq_oss_midi_check_new_port(struct snd_seq_port_info *pinfo)
 	/* create MIDI coder */
 	if (snd_midi_event_new(MAX_MIDI_EVENT_BUF, &mdev->coder) < 0) {
 		pr_err("ALSA: seq_oss: can't malloc midi coder\n");
-		kfree(no_free_ptr(mdev));
+		kfree(mdev);
 		return -ENOMEM;
 	}
 	/* OSS sequencer adds running status to all sequences */
@@ -187,13 +188,13 @@ snd_seq_oss_midi_check_new_port(struct snd_seq_port_info *pinfo)
 	if (i >= max_midi_devs) {
 		if (max_midi_devs >= SNDRV_SEQ_OSS_MAX_MIDI_DEVS) {
 			snd_midi_event_free(mdev->coder);
-			kfree(no_free_ptr(mdev));
+			kfree(mdev);
 			return -ENOMEM;
 		}
 		max_midi_devs++;
 	}
 	mdev->seq_device = i;
-	midi_devs[mdev->seq_device] = no_free_ptr(mdev);
+	midi_devs[mdev->seq_device] = mdev;
 
 	return 0;
 }
