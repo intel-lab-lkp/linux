@@ -130,6 +130,17 @@ static void pm80xx_get_tag_opcodes(struct sas_task *task, int *ata_op,
 	}
 }
 
+u32 pm80xx_get_local_phy_id(struct domain_device *dev)
+{
+	struct pm8001_device *pm8001_dev = dev->lldd_dev;
+	struct domain_device *parent_dev = dev->parent;
+
+	if (parent_dev && dev_is_expander(parent_dev->dev_type))
+		return parent_dev->ex_dev.ex_phy->phy_id;
+	else
+		return pm8001_dev->attached_phy;
+}
+
 void pm80xx_show_pending_commands(struct pm8001_hba_info *pm8001_ha,
 				  struct pm8001_device *target_pm8001_dev)
 {
