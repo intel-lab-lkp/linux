@@ -152,6 +152,7 @@ static int seg6_genl_sethmac(struct sk_buff *skb, struct genl_info *info)
 	struct net *net = genl_info_net(info);
 	struct seg6_pernet_data *sdata;
 	struct seg6_hmac_info *hinfo;
+	struct seg6_hmac_algo *algo;
 	u32 hmackeyid;
 	char *secret;
 	int err = 0;
@@ -173,6 +174,10 @@ static int seg6_genl_sethmac(struct sk_buff *skb, struct genl_info *info)
 		return -EINVAL;
 
 	if (slen > SEG6_HMAC_SECRET_LEN)
+		return -EINVAL;
+
+	algo = __hmac_get_algo(algid);
+	if (!algo)
 		return -EINVAL;
 
 	mutex_lock(&sdata->lock);

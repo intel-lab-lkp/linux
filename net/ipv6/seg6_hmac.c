@@ -107,7 +107,7 @@ static struct sr6_tlv_hmac *seg6_get_tlv_hmac(struct ipv6_sr_hdr *srh)
 	return tlv;
 }
 
-static struct seg6_hmac_algo *__hmac_get_algo(u8 alg_id)
+struct seg6_hmac_algo *__hmac_get_algo(u8 alg_id)
 {
 	struct seg6_hmac_algo *algo;
 	int i, alg_count;
