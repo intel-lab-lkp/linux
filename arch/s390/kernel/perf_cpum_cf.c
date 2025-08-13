@@ -1861,6 +1861,7 @@ static const struct attribute_group *cfdiag_attr_groups[] = {
  */
 static struct pmu cf_diag = {
 	.task_ctx_nr  = perf_sw_context,
+	.capabilities = PERF_PMU_CAP_SAMPLING,
 	.event_init   = cfdiag_event_init,
 	.pmu_enable   = cpumf_pmu_enable,
 	.pmu_disable  = cpumf_pmu_disable,

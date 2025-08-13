@@ -761,7 +761,8 @@ static struct pmu pmu = {
 	.start		= alpha_pmu_start,
 	.stop		= alpha_pmu_stop,
 	.read		= alpha_pmu_read,
-	.capabilities	= PERF_PMU_CAP_NO_EXCLUDE,
+	.capabilities	= PERF_PMU_CAP_SAMPLING |
+			  PERF_PMU_CAP_NO_EXCLUDE,
 };
 
 

@@ -2207,6 +2207,7 @@ ssize_t power_events_sysfs_show(struct device *dev,
 }
 
 static struct pmu power_pmu = {
+	.capabilities	= PERF_PMU_CAP_SAMPLING,
 	.pmu_enable	= power_pmu_enable,
 	.pmu_disable	= power_pmu_disable,
 	.event_init	= power_pmu_event_init,

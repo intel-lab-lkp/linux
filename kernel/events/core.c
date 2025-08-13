@@ -4359,7 +4359,7 @@ perf_adjust_freq_unthr_context(struct perf_event_context *ctx, bool unthrottle)
 			continue;
 		if (!perf_pmu_ctx_is_active(pmu_ctx))
 			continue;
-		if (pmu_ctx->pmu->capabilities & PERF_PMU_CAP_NO_INTERRUPT)
+		if (!(pmu_ctx->pmu->capabilities & PERF_PMU_CAP_SAMPLING))
 			continue;
 
 		perf_pmu_disable(pmu_ctx->pmu);
@@ -10819,7 +10819,7 @@ static int perf_swevent_init(struct perf_event *event)
 static struct pmu perf_swevent = {
 	.task_ctx_nr	= perf_sw_context,
 
-	.capabilities	= PERF_PMU_CAP_NO_NMI,
+	.capabilities	= PERF_PMU_CAP_SAMPLING | PERF_PMU_CAP_NO_NMI,
 
 	.event_init	= perf_swevent_init,
 	.add		= perf_swevent_add,
@@ -10861,6 +10861,7 @@ static int perf_tp_event_init(struct perf_event *event)
 static struct pmu perf_tracepoint = {
 	.task_ctx_nr	= perf_sw_context,
 
+	.capabilities	= PERF_PMU_CAP_SAMPLING,
 	.event_init	= perf_tp_event_init,
 	.add		= perf_trace_add,
 	.del		= perf_trace_del,
@@ -11066,6 +11067,7 @@ static struct pmu perf_kprobe = {
 	.stop		= perf_swevent_stop,
 	.read		= perf_swevent_read,
 	.attr_groups	= kprobe_attr_groups,
+	.capabilities	= PERF_PMU_CAP_SAMPLING,
 };
 
 static int perf_kprobe_event_init(struct perf_event *event)
@@ -11125,6 +11127,7 @@ static struct pmu perf_uprobe = {
 	.stop		= perf_swevent_stop,
 	.read		= perf_swevent_read,
 	.attr_groups	= uprobe_attr_groups,
+	.capabilities	= PERF_PMU_CAP_SAMPLING,
 };
 
 static int perf_uprobe_event_init(struct perf_event *event)
@@ -11899,7 +11902,7 @@ static int cpu_clock_event_init(struct perf_event *event)
 static struct pmu perf_cpu_clock = {
 	.task_ctx_nr	= perf_sw_context,
 
-	.capabilities	= PERF_PMU_CAP_NO_NMI,
+	.capabilities	= PERF_PMU_CAP_SAMPLING | PERF_PMU_CAP_NO_NMI,
 	.dev		= PMU_NULL_DEV,
 
 	.event_init	= cpu_clock_event_init,
@@ -11982,7 +11985,7 @@ static int task_clock_event_init(struct perf_event *event)
 static struct pmu perf_task_clock = {
 	.task_ctx_nr	= perf_sw_context,
 
-	.capabilities	= PERF_PMU_CAP_NO_NMI,
+	.capabilities	= PERF_PMU_CAP_SAMPLING | PERF_PMU_CAP_NO_NMI,
 	.dev		= PMU_NULL_DEV,
 
 	.event_init	= task_clock_event_init,
@@ -13476,11 +13479,10 @@ SYSCALL_DEFINE5(perf_event_open,
 		goto err_task;
 	}
 
-	if (is_sampling_event(event)) {
-		if (event->pmu->capabilities & PERF_PMU_CAP_NO_INTERRUPT) {
-			err = -EOPNOTSUPP;
-			goto err_alloc;
-		}
+	if (is_sampling_event(event) &&
+	    !(event->pmu->capabilities & PERF_PMU_CAP_SAMPLING)) {
+		err = -EOPNOTSUPP;
+		goto err_alloc;
 	}
 
 	/*

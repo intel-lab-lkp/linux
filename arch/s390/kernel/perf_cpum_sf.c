@@ -1892,6 +1892,8 @@ static const struct attribute_group *cpumsf_pmu_attr_groups[] = {
 };
 
 static struct pmu cpumf_sampling = {
+	.capabilities = PERF_PMU_CAP_SAMPLING,
+
 	.pmu_enable   = cpumsf_pmu_enable,
 	.pmu_disable  = cpumsf_pmu_disable,
 

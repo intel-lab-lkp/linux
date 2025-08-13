@@ -687,6 +687,7 @@ static int mipspmu_event_init(struct perf_event *event)
 }
 
 static struct pmu pmu = {
+	.capabilities	= PERF_PMU_CAP_SAMPLING,
 	.pmu_enable	= mipspmu_enable,
 	.pmu_disable	= mipspmu_disable,
 	.event_init	= mipspmu_event_init,

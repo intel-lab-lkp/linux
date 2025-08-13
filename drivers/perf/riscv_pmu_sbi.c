@@ -1361,6 +1361,8 @@ static int pmu_sbi_device_probe(struct platform_device *pdev)
 		pr_info("Perf sampling/filtering is not supported as sscof extension is not available\n");
 		pmu->pmu.capabilities |= PERF_PMU_CAP_NO_INTERRUPT;
 		pmu->pmu.capabilities |= PERF_PMU_CAP_NO_EXCLUDE;
+	} else {
+		pmu->pmu.capabilities |= PERF_PMU_CAP_SAMPLING;
 	}
 
 	pmu->pmu.attr_groups = riscv_pmu_attr_groups;

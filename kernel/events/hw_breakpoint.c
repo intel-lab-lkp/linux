@@ -996,6 +996,7 @@ static void hw_breakpoint_stop(struct perf_event *bp, int flags)
 static struct pmu perf_breakpoint = {
 	.task_ctx_nr	= perf_sw_context, /* could eventually get its own */
 
+	.capabilities	= PERF_PMU_CAP_SAMPLING,
 	.event_init	= hw_breakpoint_event_init,
 	.add		= hw_breakpoint_add,
 	.del		= hw_breakpoint_del,

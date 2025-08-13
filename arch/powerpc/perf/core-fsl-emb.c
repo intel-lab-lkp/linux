@@ -570,6 +570,7 @@ static int fsl_emb_pmu_event_init(struct perf_event *event)
 }
 
 static struct pmu fsl_emb_pmu = {
+	.capabilities	= PERF_PMU_CAP_SAMPLING,
 	.pmu_enable	= fsl_emb_pmu_enable,
 	.pmu_disable	= fsl_emb_pmu_disable,
 	.event_init	= fsl_emb_pmu_event_init,

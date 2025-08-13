@@ -569,6 +569,7 @@ static const struct attribute_group *paicrypt_attr_groups[] = {
 /* Performance monitoring unit for mapped counters */
 static struct pmu paicrypt = {
 	.task_ctx_nr  = perf_hw_context,
+	.capabilities = PERF_PMU_CAP_SAMPLING,
 	.event_init   = paicrypt_event_init,
 	.add	      = paicrypt_add,
 	.del	      = paicrypt_del,

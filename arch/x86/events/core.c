@@ -1837,7 +1837,7 @@ static void __init pmu_check_apic(void)
 	 * sample via a hrtimer based software event):
 	 */
 	pmu.capabilities |= PERF_PMU_CAP_NO_INTERRUPT;
-
+	pmu.capabilities &= ~PERF_PMU_CAP_SAMPLING;
 }
 
 static struct attribute_group x86_pmu_format_group __ro_after_init = {
@@ -2698,6 +2698,8 @@ static bool x86_pmu_filter(struct pmu *pmu, int cpu)
 }
 
 static struct pmu pmu = {
+	.capabilities		= PERF_PMU_CAP_SAMPLING,
+
 	.pmu_enable		= x86_pmu_enable,
 	.pmu_disable		= x86_pmu_disable,
 

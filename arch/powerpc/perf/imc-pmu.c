@@ -1507,6 +1507,7 @@ static int update_pmu_ops(struct imc_pmu *pmu)
 		pmu->pmu.commit_txn = thread_imc_pmu_commit_txn;
 		break;
 	case IMC_DOMAIN_TRACE:
+		pmu->pmu.capabilities |= PERF_PMU_CAP_SAMPLING;
 		pmu->pmu.event_init = trace_imc_event_init;
 		pmu->pmu.add = trace_imc_event_add;
 		pmu->pmu.del = trace_imc_event_del;

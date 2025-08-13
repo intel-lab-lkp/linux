@@ -1573,6 +1573,7 @@ static int sparc_pmu_commit_txn(struct pmu *pmu)
 }
 
 static struct pmu pmu = {
+	.capabilities	= PERF_PMU_CAP_SAMPLING,
 	.pmu_enable	= sparc_pmu_enable,
 	.pmu_disable	= sparc_pmu_disable,
 	.event_init	= sparc_pmu_event_init,

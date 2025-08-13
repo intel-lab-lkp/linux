@@ -768,6 +768,7 @@ static struct perf_ibs perf_ibs_fetch = {
 	.pmu = {
 		.task_ctx_nr	= perf_hw_context,
 
+		.capabilities	= PERF_PMU_CAP_SAMPLING,
 		.event_init	= perf_ibs_init,
 		.add		= perf_ibs_add,
 		.del		= perf_ibs_del,
@@ -793,6 +794,7 @@ static struct perf_ibs perf_ibs_op = {
 	.pmu = {
 		.task_ctx_nr	= perf_hw_context,
 
+		.capabilities	= PERF_PMU_CAP_SAMPLING,
 		.event_init	= perf_ibs_init,
 		.add		= perf_ibs_add,
 		.del		= perf_ibs_del,

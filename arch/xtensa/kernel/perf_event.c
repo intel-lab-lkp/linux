@@ -397,6 +397,7 @@ irqreturn_t xtensa_pmu_irq_handler(int irq, void *dev_id)
 }
 
 static struct pmu xtensa_pmu = {
+	.capabilities = PERF_PMU_CAP_SAMPLING,
 	.pmu_enable = xtensa_pmu_enable,
 	.pmu_disable = xtensa_pmu_disable,
 	.event_init = xtensa_pmu_event_init,

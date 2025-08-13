@@ -571,6 +571,7 @@ static int loongarch_pmu_event_init(struct perf_event *event)
 }
 
 static struct pmu pmu = {
+	.capabilities	= PERF_PMU_CAP_SAMPLING,
 	.pmu_enable	= loongarch_pmu_enable,
 	.pmu_disable	= loongarch_pmu_disable,
 	.event_init	= loongarch_pmu_event_init,
