@@ -4680,7 +4680,6 @@ ftrace_regex_open(struct ftrace_ops *ops, int flag,
 			m->private = iter;
 		} else {
 			/* Failed */
-			free_ftrace_hash(iter->hash);
 			trace_parser_put(&iter->parser);
 		}
 	} else
