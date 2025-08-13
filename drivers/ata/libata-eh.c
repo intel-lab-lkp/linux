@@ -2089,8 +2089,13 @@ static bool ata_eh_link_established(struct ata_link *link)
 	u32 sstatus;
 	u8 det, ipm;
 
+	/*
+	 * For old IDE/PATA adapters that do not have a valid scr_read method,
+	 * or if reading the SSTATUS register fails, assume that the device is
+	 * present. Device probe will determine if that is really the case.
+	 */
 	if (sata_scr_read(link, SCR_STATUS, &sstatus))
-		return false;
+		return true;
 
 	det = sstatus & 0x0f;
 	ipm = (sstatus >> 8) & 0x0f;
