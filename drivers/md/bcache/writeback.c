@@ -121,6 +121,13 @@ static void __update_writeback_rate(struct cached_dev *dc)
 		}
 		fps = div_s64(dirty, dirty_buckets) * fp_term;
 		if (fragment > 3 && fps > proportional_scaled) {
+			/*
+			 * When there is only a small amount of dirty data, complete the
+			 * write-back operation as quickly as possible.
+			 */
+			if (fps == 0)
+				fps = INT_MAX;
+
 			/* Only overrite the p when fragment > 3 */
 			proportional_scaled = fps;
 		}
