@@ -974,6 +974,19 @@
 	};
 };
 
+&lpass_rxmacro {
+	status = "okay";
+};
+
+&lpass_txmacro {
+	status = "okay";
+};
+
+&lpass_vamacro {
+	/* Not directly used yet, but needed for fsgen by all other macros */
+	status = "okay";
+};
+
 &mdss {
 	status = "okay";
 };
