@@ -1652,7 +1652,7 @@ static void arm_cmn_val_add_event(struct arm_cmn *cmn, struct arm_cmn_val *val,
 	enum cmn_node_type type;
 	int i;
 
-	if (is_software_event(event))
+	if (event->pmu != &cmn->pmu)
 		return;
 
 	type = CMN_EVENT_TYPE(event);
@@ -1692,9 +1692,6 @@ static int arm_cmn_validate_group(struct arm_cmn *cmn, struct perf_event *event)
 
 	if (leader == event)
 		return 0;
-
-	if (event->pmu != leader->pmu && !is_software_event(leader))
-		return -EINVAL;
 
 	val = kzalloc(sizeof(*val), GFP_KERNEL);
 	if (!val)
