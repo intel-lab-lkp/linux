@@ -567,6 +567,18 @@ static inline bool dsa_is_user_port(struct dsa_switch *ds, int p)
 	return dsa_to_port(ds, p)->type == DSA_PORT_TYPE_USER;
 }
 
+static inline bool dsa_is_hsr_port(struct dsa_switch *ds, struct net_device *hsr, int p)
+{
+	struct dsa_port *hsr_dp;
+
+	dsa_hsr_foreach_port(hsr_dp, ds, hsr) {
+		if (hsr_dp->index == p)
+			return true;
+	}
+
+	return false;
+}
+
 #define dsa_tree_for_each_user_port(_dp, _dst) \
 	list_for_each_entry((_dp), &(_dst)->ports, list) \
 		if (dsa_port_is_user((_dp)))

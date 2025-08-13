@@ -2396,6 +2396,17 @@ static void ksz_update_port_member(struct ksz_device *dev, int port)
 		return;
 
 	dp = dsa_to_port(ds, port);
+
+	/*
+	 * HSR ports might use forwarding configured during setup. Prevent any
+	 * modifications as long as the port is part of a HSR setup with
+	 * NETIF_F_HW_HSR_FWD enabled.
+	 */
+	if (dev->hsr_dev && dp->user &&
+	    (dp->user->features & NETIF_F_HW_HSR_FWD) &&
+	    dsa_is_hsr_port(ds, dev->hsr_dev, port))
+		return;
+
 	cpu_port = BIT(dsa_upstream_port(ds, port));
 
 	for (i = 0; i < ds->num_ports; i++) {
