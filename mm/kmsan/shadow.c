@@ -148,24 +148,36 @@ void *kmsan_get_metadata(void *address, bool is_origin)
 	return (is_origin ? origin_ptr_for(page) : shadow_ptr_for(page)) + off;
 }
 
-void kmsan_copy_page_meta(struct page *dst, struct page *src)
+
+void kmsan_copy_pages_meta(struct page *dst, struct page *src, int nr_pages)
 {
+	int i;
+
 	if (!kmsan_enabled || kmsan_in_runtime())
 		return;
-	if (!dst || !page_has_metadata(dst))
+
+	for (i = 0; i < nr_pages; i++) {
+		if (!dst || !page_has_metadata(dst))
+			break;
+		if (!src || !page_has_metadata(src))
+			break;
+	}
+
+	if (i == 0 && !dst) {
 		return;
-	if (!src || !page_has_metadata(src)) {
-		kmsan_internal_unpoison_memory(page_address(dst), PAGE_SIZE,
+	} else if (i < nr_pages) {
+		kmsan_internal_unpoison_memory(page_address(dst),
+					       nr_pages * PAGE_SIZE,
 					       /*checked*/ false);
 		return;
 	}
 
 	kmsan_enter_runtime();
-	__memcpy(shadow_ptr_for(dst), shadow_ptr_for(src), PAGE_SIZE);
-	__memcpy(origin_ptr_for(dst), origin_ptr_for(src), PAGE_SIZE);
+	__memcpy(shadow_ptr_for(dst), shadow_ptr_for(src), nr_pages * PAGE_SIZE);
+	__memcpy(origin_ptr_for(dst), origin_ptr_for(src), nr_pages * PAGE_SIZE);
 	kmsan_leave_runtime();
 }
-EXPORT_SYMBOL(kmsan_copy_page_meta);
+EXPORT_SYMBOL(kmsan_copy_pages_meta);
 
 void kmsan_alloc_page(struct page *page, unsigned int order, gfp_t flags)
 {

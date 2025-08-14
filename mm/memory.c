@@ -3700,7 +3700,7 @@ static vm_fault_t wp_page_copy(struct vm_fault *vmf)
 			delayacct_wpcopy_end();
 			return err == -EHWPOISON ? VM_FAULT_HWPOISON : 0;
 		}
-		kmsan_copy_page_meta(&new_folio->page, vmf->page);
+		kmsan_copy_pages_meta(&new_folio->page, vmf->page, 1);
 	}
 
 	__folio_mark_uptodate(new_folio);

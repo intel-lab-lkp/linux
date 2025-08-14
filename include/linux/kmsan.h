@@ -78,15 +78,16 @@ void kmsan_alloc_page(struct page *page, unsigned int order, gfp_t flags);
 void kmsan_free_page(struct page *page, unsigned int order);
 
 /**
- * kmsan_copy_page_meta() - Copy KMSAN metadata between two pages.
+ * kmsan_copy_pages_meta() - Copy KMSAN metadata between two pages.
  * @dst: destination page.
  * @src: source page.
+ * @nr_pages: copy number of page.
  *
  * KMSAN copies the contents of metadata pages for @src into the metadata pages
  * for @dst. If @dst has no associated metadata pages, nothing happens.
  * If @src has no associated metadata pages, @dst metadata pages are unpoisoned.
  */
-void kmsan_copy_page_meta(struct page *dst, struct page *src);
+void kmsan_copy_pages_meta(struct page *dst, struct page *src, int nr_pages);
 
 /**
  * kmsan_slab_alloc() - Notify KMSAN about a slab allocation.
@@ -324,7 +325,8 @@ static inline void kmsan_free_page(struct page *page, unsigned int order)
 {
 }
 
-static inline void kmsan_copy_page_meta(struct page *dst, struct page *src)
+static inline void kmsan_copy_pages_meta(struct page *dst, struct page *src,
+					int nr_pages)
 {
 }
 
@@ -406,5 +408,10 @@ static inline void *memset_no_sanitize_memory(void *s, int c, size_t n)
 #define KMSAN_WARN_ON WARN_ON
 
 #endif
+
+static inline void kmsan_copy_page_meta(struct page *dst, struct page *src)
+{
+	kmsan_copy_pages_meta(dst, src, 1);
+}
 
 #endif /* _LINUX_KMSAN_H */
