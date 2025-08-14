@@ -19,6 +19,7 @@
 #include <linux/delay.h>
 #include <linux/power_supply.h>
 #include <linux/slab.h>
+#include <linux/cleanup.h>
 
 #define I16_MSB(x)			((x >> 8) & 0xFF)
 #define I16_LSB(x)			(x & 0xFF)
@@ -443,7 +444,6 @@ static int ltc294x_i2c_probe(struct i2c_client *client)
 {
 	struct power_supply_config psy_cfg = {};
 	struct ltc294x_info *info;
-	struct device_node *np;
 	int ret;
 	u32 prescaler_exp;
 	s32 r_sense;
@@ -455,7 +455,7 @@ static int ltc294x_i2c_probe(struct i2c_client *client)
 
 	i2c_set_clientdata(client, info);
 
-	np = of_node_get(client->dev.of_node);
+	struct device_node *np = of_node_get(client->dev.of_node);
 
 	info->id = (enum ltc294x_id) (uintptr_t) of_device_get_match_data(
 							&client->dev);
