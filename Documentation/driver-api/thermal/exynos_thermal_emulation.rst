@@ -32,7 +32,7 @@ Exynos emulation mode requires synchronous of value changing and
 enabling. It means when you want to update the any value of delay or
 next temperature, then you have to enable emulation mode at the same
 time. (Or you have to keep the mode enabling.) If you don't, it fails to
-change the value to updated one and just use last succeessful value
+change the value to updated one and just use last successful value
 repeatedly. That's why this node gives users the right to change
 termerpature only. Just one interface makes it more simply to use.
 
