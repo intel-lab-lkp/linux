@@ -39,8 +39,6 @@ struct udmabuf {
 	pgoff_t nr_pinned;
 	struct folio **pinned_folios;
 
-	struct sg_table *sg;
-	struct miscdevice *device;
 	pgoff_t *offsets;
 	struct list_head attachments;
 	struct mutex lock; /* for attachments list */
@@ -272,10 +270,6 @@ static __always_inline void deinit_udmabuf(struct udmabuf *ubuf)
 static void release_udmabuf(struct dma_buf *buf)
 {
 	struct udmabuf *ubuf = buf->priv;
-	struct device *dev = ubuf->device->this_device;
-
-	if (ubuf->sg)
-		put_sg_table(dev, ubuf->sg, DMA_BIDIRECTIONAL);
 
 	deinit_udmabuf(ubuf);
 	kfree(ubuf);
@@ -285,32 +279,27 @@ static int begin_cpu_udmabuf(struct dma_buf *buf,
 			     enum dma_data_direction direction)
 {
 	struct udmabuf *ubuf = buf->priv;
-	struct device *dev = ubuf->device->this_device;
-	int ret = 0;
+	struct udmabuf_attachment *a;
 
-	if (!ubuf->sg) {
-		ubuf->sg = get_sg_table(dev, buf, direction);
-		if (IS_ERR(ubuf->sg)) {
-			ret = PTR_ERR(ubuf->sg);
-			ubuf->sg = NULL;
-		}
-	} else {
-		dma_sync_sgtable_for_cpu(dev, ubuf->sg, direction);
-	}
+	guard(mutex)(&ubuf->lock);
 
-	return ret;
+	list_for_each_entry(a, &ubuf->attachments, list)
+		dma_sync_sgtable_for_cpu(a->dev, a->table, direction);
+
+	return 0;
 }
 
 static int end_cpu_udmabuf(struct dma_buf *buf,
 			   enum dma_data_direction direction)
 {
 	struct udmabuf *ubuf = buf->priv;
-	struct device *dev = ubuf->device->this_device;
+	struct udmabuf_attachment *a;
 
-	if (!ubuf->sg)
-		return -EINVAL;
+	guard(mutex)(&ubuf->lock);
 
-	dma_sync_sgtable_for_device(dev, ubuf->sg, direction);
+	list_for_each_entry(a, &ubuf->attachments, list)
+		dma_sync_sgtable_for_device(a->dev, a->table, direction);
+
 	return 0;
 }
 
@@ -346,12 +335,10 @@ static int check_memfd_seals(struct file *memfd)
 	return 0;
 }
 
-static struct dma_buf *export_udmabuf(struct udmabuf *ubuf,
-				      struct miscdevice *device)
+static struct dma_buf *export_udmabuf(struct udmabuf *ubuf)
 {
 	DEFINE_DMA_BUF_EXPORT_INFO(exp_info);
 
-	ubuf->device = device;
 	exp_info.ops  = &udmabuf_ops;
 	exp_info.size = ubuf->pagecount << PAGE_SHIFT;
 	exp_info.priv = ubuf;
@@ -406,8 +393,7 @@ end:
 	return 0;
 }
 
-static long udmabuf_create(struct miscdevice *device,
-			   struct udmabuf_create_list *head,
+static long udmabuf_create(struct udmabuf_create_list *head,
 			   struct udmabuf_create_item *list)
 {
 	unsigned long max_nr_folios = 0;
@@ -482,7 +468,7 @@ out_unlock:
 	}
 
 	flags = head->flags & UDMABUF_FLAGS_CLOEXEC ? O_CLOEXEC : 0;
-	dmabuf = export_udmabuf(ubuf, device);
+	dmabuf = export_udmabuf(ubuf);
 	if (IS_ERR(dmabuf)) {
 		ret = PTR_ERR(dmabuf);
 		goto err;
@@ -508,7 +494,7 @@ err_noinit:
 	return ret;
 }
 
-static long udmabuf_ioctl_create(struct file *filp, unsigned long arg)
+static long udmabuf_ioctl_create(unsigned long arg)
 {
 	struct udmabuf_create create;
 	struct udmabuf_create_list head;
@@ -524,10 +510,10 @@ static long udmabuf_ioctl_create(struct file *filp, unsigned long arg)
 	list.offset = create.offset;
 	list.size   = create.size;
 
-	return udmabuf_create(filp->private_data, &head, &list);
+	return udmabuf_create(&head, &list);
 }
 
-static long udmabuf_ioctl_create_list(struct file *filp, unsigned long arg)
+static long udmabuf_ioctl_create_list(unsigned long arg)
 {
 	struct udmabuf_create_list head;
 	struct udmabuf_create_item *list;
@@ -543,7 +529,7 @@ static long udmabuf_ioctl_create_list(struct file *filp, unsigned long arg)
 	if (IS_ERR(list))
 		return PTR_ERR(list);
 
-	ret = udmabuf_create(filp->private_data, &head, list);
+	ret = udmabuf_create(&head, list);
 	kfree(list);
 	return ret;
 }
@@ -555,10 +541,10 @@ static long udmabuf_ioctl(struct file *filp, unsigned int ioctl,
 
 	switch (ioctl) {
 	case UDMABUF_CREATE:
-		ret = udmabuf_ioctl_create(filp, arg);
+		ret = udmabuf_ioctl_create(arg);
 		break;
 	case UDMABUF_CREATE_LIST:
-		ret = udmabuf_ioctl_create_list(filp, arg);
+		ret = udmabuf_ioctl_create_list(arg);
 		break;
 	default:
 		ret = -ENOTTY;
@@ -588,14 +574,6 @@ static int __init udmabuf_dev_init(void)
 	ret = misc_register(&udmabuf_misc);
 	if (ret < 0) {
 		pr_err("Could not initialize udmabuf device\n");
-		return ret;
-	}
-
-	ret = dma_coerce_mask_and_coherent(udmabuf_misc.this_device,
-					   DMA_BIT_MASK(64));
-	if (ret < 0) {
-		pr_err("Could not setup DMA mask for udmabuf device\n");
-		misc_deregister(&udmabuf_misc);
 		return ret;
 	}
 
