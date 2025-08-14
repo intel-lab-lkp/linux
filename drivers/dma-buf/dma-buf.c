@@ -1086,7 +1086,8 @@ EXPORT_SYMBOL_NS_GPL(dma_buf_unpin, "DMA_BUF");
  * @direction:	[in]	direction of DMA transfer
  *
  * Returns sg_table containing the scatterlist to be returned; returns ERR_PTR
- * on error. May return -EINTR if it is interrupted by a signal.
+ * on error. May return -EINTR if it is interrupted by a signal. Returns NULL
+ * on success iff direction is DMA_NONE.
  *
  * On success, the DMA addresses and lengths in the returned scatterlist are
  * PAGE_SIZE aligned.
@@ -1122,6 +1123,8 @@ struct sg_table *dma_buf_map_attachment(struct dma_buf_attachment *attach,
 		if (ret)
 			return ERR_PTR(ret);
 	}
+	if (!valid_dma_direction(direction))
+		return NULL; /* only pin; don't map */
 
 	sg_table = attach->dmabuf->ops->map_dma_buf(attach, direction);
 	if (!sg_table)
@@ -1216,14 +1219,21 @@ void dma_buf_unmap_attachment(struct dma_buf_attachment *attach,
 {
 	might_sleep();
 
-	if (WARN_ON(!attach || !attach->dmabuf || !sg_table))
+	if (WARN_ON(!attach || !attach->dmabuf))
 		return;
 
 	dma_resv_assert_held(attach->dmabuf->resv);
 
+	if (!valid_dma_direction(direction))
+		goto unpin;
+
+	if (WARN_ON(!sg_table))
+		return;
+
 	mangle_sg_table(sg_table);
 	attach->dmabuf->ops->unmap_dma_buf(attach, sg_table, direction);
 
+unpin:
 	if (dma_buf_pin_on_map(attach))
 		attach->dmabuf->ops->unpin(attach);
 }
@@ -1245,7 +1255,7 @@ void dma_buf_unmap_attachment_unlocked(struct dma_buf_attachment *attach,
 {
 	might_sleep();
 
-	if (WARN_ON(!attach || !attach->dmabuf || !sg_table))
+	if (WARN_ON(!attach || !attach->dmabuf))
 		return;
 
 	dma_resv_lock(attach->dmabuf->resv, NULL);

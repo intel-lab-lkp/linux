@@ -1107,6 +1107,8 @@ void drm_prime_gem_destroy(struct drm_gem_object *obj, struct sg_table *sg)
 	attach = obj->import_attach;
 	if (sg)
 		dma_buf_unmap_attachment_unlocked(attach, sg, DMA_BIDIRECTIONAL);
+	else
+		dma_buf_unmap_attachment_unlocked(attach, NULL, DMA_NONE);
 	dma_buf = attach->dmabuf;
 	dma_buf_detach(attach->dmabuf, attach);
 	/* remove the reference */

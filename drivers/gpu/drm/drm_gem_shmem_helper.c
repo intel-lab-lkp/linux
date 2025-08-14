@@ -817,6 +817,7 @@ struct drm_gem_object *drm_gem_shmem_prime_import_no_map(struct drm_device *dev,
 							 struct dma_buf *dma_buf)
 {
 	struct dma_buf_attachment *attach;
+	struct sg_table *sgt;
 	struct drm_gem_shmem_object *shmem;
 	struct drm_gem_object *obj;
 	size_t size;
@@ -838,12 +839,18 @@ struct drm_gem_object *drm_gem_shmem_prime_import_no_map(struct drm_device *dev,
 
 	get_dma_buf(dma_buf);
 
+	sgt = dma_buf_map_attachment_unlocked(attach, DMA_NONE);
+	if (IS_ERR(sgt)) {
+		ret = PTR_ERR(sgt);
+		goto fail_detach;
+	}
+
 	size = PAGE_ALIGN(attach->dmabuf->size);
 
 	shmem = __drm_gem_shmem_create(dev, size, true, NULL);
 	if (IS_ERR(shmem)) {
 		ret = PTR_ERR(shmem);
-		goto fail_detach;
+		goto fail_unmap;
 	}
 
 	drm_dbg_prime(dev, "size = %zu\n", size);
@@ -853,6 +860,8 @@ struct drm_gem_object *drm_gem_shmem_prime_import_no_map(struct drm_device *dev,
 
 	return &shmem->base;
 
+fail_unmap:
+	dma_buf_unmap_attachment_unlocked(attach, sgt, DMA_NONE);
 fail_detach:
 	dma_buf_detach(dma_buf, attach);
 	dma_buf_put(dma_buf);
