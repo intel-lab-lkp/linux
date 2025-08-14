@@ -116,7 +116,7 @@ struct mem_section;
 
 /*
  * Priorities for the hotplug memory callback routines (stored in decreasing
- * order in the callback chain)
+ * order in the callback chain). The callback ordering happens from high to low.
  */
 #define DEFAULT_CALLBACK_PRI	0
 #define SLAB_CALLBACK_PRI	1
