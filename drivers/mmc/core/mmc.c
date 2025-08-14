@@ -2370,6 +2370,7 @@ int mmc_attach_mmc(struct mmc_host *host)
 		goto remove_card;
 
 	mmc_claim_host(host);
+
 	return 0;
 
 remove_card:
