@@ -19,6 +19,7 @@ class Dot2c(Automata):
     enum_suffix = ""
     enum_states_def = "states"
     enum_events_def = "events"
+    enum_envs_def = "envs"
     struct_automaton_def = "automaton"
     var_automaton_def = "aut"
 
@@ -26,7 +27,7 @@ class Dot2c(Automata):
         super().__init__(file_path, model_name)
         self.line_length = 100
 
-    def __get_enum_states_content(self):
+    def __get_enum_states_content(self) -> list[str]:
         buff = []
         buff.append("\t%s%s = 0," % (self.initial_state, self.enum_suffix))
         for state in self.states:
@@ -36,7 +37,7 @@ class Dot2c(Automata):
 
         return buff
 
-    def format_states_enum(self):
+    def format_states_enum(self) -> list[str]:
         buff = []
         buff.append("enum %s {" % self.enum_states_def)
         buff += self.__get_enum_states_content()
@@ -58,7 +59,7 @@ class Dot2c(Automata):
 
         return buff
 
-    def format_events_enum(self):
+    def format_events_enum(self) -> list[str]:
         buff = []
         buff.append("enum %s {" % self.enum_events_def)
         buff += self.__get_enum_events_content()
@@ -66,7 +67,43 @@ class Dot2c(Automata):
 
         return buff
 
-    def get_minimun_type(self):
+    def __get_non_stored_envs(self) -> list[str]:
+        return [ e for e in self.envs if e not in self.env_stored ]
+
+    def __get_enum_envs_content(self) -> list[str]:
+        buff = []
+        first = True
+        # We first place env variables that have a u64 storage.
+        # Those are limited by MAX_HA_ENV_LEN, other variables
+        # are read only and don't require a storage.
+        unstored = self.__get_non_stored_envs()
+        for env in list(self.env_stored) + unstored:
+            if first:
+                buff.append("\t%s%s = 0," % (env, self.enum_suffix))
+                first = False
+            else:
+                buff.append("\t%s%s," % (env, self.enum_suffix))
+
+        buff.append("\tenv_max%s," % self.enum_suffix)
+        buff.append("\tenv_max_stored%s = %s%s" %
+                    (self.enum_suffix,
+                     unstored[0] if len(unstored) else "env_max",
+                     self.enum_suffix))
+
+        return buff
+
+    def format_envs_enum(self) -> list[str]:
+        buff = []
+        if self.is_hybrid_automata():
+            buff.append("enum %s {" % self.enum_envs_def)
+            buff += self.__get_enum_envs_content()
+            buff.append("};\n")
+            buff.append('_Static_assert(env_max_stored%s <= MAX_HA_ENV_LEN, "Not enough slots");\n' %
+                        (self.enum_suffix))
+
+        return buff
+
+    def get_minimun_type(self) -> str:
         min_type = "unsigned char"
 
         if self.states.__len__() > 255:
@@ -86,6 +123,8 @@ class Dot2c(Automata):
         buff.append("struct %s {" % self.struct_automaton_def)
         buff.append("\tchar *state_names[state_max%s];" % (self.enum_suffix))
         buff.append("\tchar *event_names[event_max%s];" % (self.enum_suffix))
+        if self.is_hybrid_automata():
+            buff.append("\tchar *env_names[env_max%s];" % (self.enum_suffix))
         buff.append("\t%s function[state_max%s][event_max%s];" % (min_type, self.enum_suffix, self.enum_suffix))
         buff.append("\t%s initial_state;" % min_type)
         buff.append("\tbool final_states[state_max%s];" % (self.enum_suffix))
@@ -110,7 +149,7 @@ class Dot2c(Automata):
 
         return string
 
-    def format_aut_init_events_string(self):
+    def format_aut_init_events_string(self) -> list[str]:
         buff = []
         buff.append("\t.event_names = {")
         buff.append(self.__get_string_vector_per_line_content(self.events))
@@ -125,7 +164,18 @@ class Dot2c(Automata):
 
         return buff
 
-    def __get_max_strlen_of_states(self):
+    def format_aut_init_envs_string(self) -> list[str]:
+        buff = []
+        if self.is_hybrid_automata():
+            buff.append("\t.env_names = {")
+            # maintain consistent order with the enum
+            ordered_envs = list(self.env_stored) + self.__get_non_stored_envs()
+            buff.append(self.__get_string_vector_per_line_content(ordered_envs))
+            buff.append("\t},")
+
+        return buff
+
+    def __get_max_strlen_of_states(self) -> int:
         max_state_name = max(self.states, key = len).__len__()
         return max(max_state_name, self.invalid_state_str.__len__())
 
@@ -217,10 +267,12 @@ class Dot2c(Automata):
         buff += self.format_states_enum()
         buff += self.format_invalid_state()
         buff += self.format_events_enum()
+        buff += self.format_envs_enum()
         buff += self.format_automaton_definition()
         buff += self.format_aut_init_header()
         buff += self.format_aut_init_states_string()
         buff += self.format_aut_init_events_string()
+        buff += self.format_aut_init_envs_string()
         buff += self.format_aut_init_function()
         buff += self.format_aut_init_initial_state()
         buff += self.format_aut_init_final_states()
