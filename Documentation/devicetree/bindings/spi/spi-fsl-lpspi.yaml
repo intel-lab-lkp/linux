@@ -70,6 +70,19 @@ properties:
   power-domains:
     maxItems: 1
 
+  nxp,pincfg:
+    description:
+      'Pin configuration value for CFGR1.PINCFG.
+        - "sin-in-sout-out": SIN is used for input data and SOUT is used for
+                             output data
+        - "sout-in-sin-out": SOUT is used for input data and SIN is used for
+                             output data
+      If no value is specified then the default is "sin-in-sout-out" for host
+      mode and "sout-in-sin-out" for target mode.'
+    enum:
+      - sin-in-sout-out
+      - sout-in-sin-out
+
 required:
   - compatible
   - reg
@@ -95,4 +108,5 @@ examples:
         spi-slave;
         fsl,spi-only-use-cs1-sel;
         num-cs = <2>;
+        nxp,pincfg = "sout-in-sin-out";
     };
