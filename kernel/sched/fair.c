@@ -6401,6 +6401,8 @@ static enum hrtimer_restart sched_cfs_period_timer(struct hrtimer *timer)
 	int count = 0;
 
 	raw_spin_lock_irqsave(&cfs_b->lock, flags);
+	int cpu = smp_processor_id();
+
 	for (;;) {
 		overrun = hrtimer_forward_now(timer, cfs_b->period);
 		if (!overrun)
@@ -6424,13 +6426,13 @@ static enum hrtimer_restart sched_cfs_period_timer(struct hrtimer *timer)
 
 				pr_warn_ratelimited(
 	"cfs_period_timer[cpu%d]: period too short, scaling up (new cfs_period_us = %lld, cfs_quota_us = %lld)\n",
-					smp_processor_id(),
+					cpu,
 					div_u64(new, NSEC_PER_USEC),
 					div_u64(cfs_b->quota, NSEC_PER_USEC));
 			} else {
 				pr_warn_ratelimited(
 	"cfs_period_timer[cpu%d]: period too short, but cannot scale up without losing precision (cfs_period_us = %lld, cfs_quota_us = %lld)\n",
-					smp_processor_id(),
+					cpu,
 					div_u64(old, NSEC_PER_USEC),
 					div_u64(cfs_b->quota, NSEC_PER_USEC));
 			}
@@ -12195,12 +12197,13 @@ static inline int find_new_ilb(void)
 {
 	const struct cpumask *hk_mask;
 	int ilb_cpu;
+	int this_cpu = smp_processor_id();
 
 	hk_mask = housekeeping_cpumask(HK_TYPE_KERNEL_NOISE);
 
 	for_each_cpu_and(ilb_cpu, nohz.idle_cpus_mask, hk_mask) {
 
-		if (ilb_cpu == smp_processor_id())
+		if (ilb_cpu == this_cpu)
 			continue;
 
 		if (idle_cpu(ilb_cpu))
