@@ -17,6 +17,7 @@
 #include <linux/regulator/consumer.h>
 #include <linux/types.h>
 
+#include "inv_icm45600_buffer.h"
 #include "inv_icm45600.h"
 
 static int inv_icm45600_ireg_read(struct regmap *map, unsigned int reg,
@@ -528,6 +529,95 @@ static int inv_icm45600_setup(struct inv_icm45600_state *st,
 	return inv_icm45600_set_conf(st, chip_info->conf);
 }
 
+static irqreturn_t inv_icm45600_irq_timestamp(int irq, void *_data)
+{
+	struct inv_icm45600_state *st = _data;
+
+	st->timestamp.gyro = iio_get_time_ns(st->indio_gyro);
+	st->timestamp.accel = iio_get_time_ns(st->indio_accel);
+
+	return IRQ_WAKE_THREAD;
+}
+
+static irqreturn_t inv_icm45600_irq_handler(int irq, void *_data)
+{
+	struct inv_icm45600_state *st = _data;
+	struct device *dev = regmap_get_device(st->map);
+	unsigned int mask, status;
+	int ret;
+
+	guard(mutex)(&st->lock);
+
+	ret = regmap_read(st->map, INV_ICM45600_REG_INT_STATUS, &status);
+	if (ret)
+		return IRQ_HANDLED;
+
+	/* Read the FIFO data. */
+	mask = INV_ICM45600_INT_STATUS_FIFO_THS | INV_ICM45600_INT_STATUS_FIFO_FULL;
+	if (status & mask) {
+		ret = inv_icm45600_buffer_fifo_read(st, 0);
+		if (ret) {
+			dev_err(dev, "FIFO read error %d\n", ret);
+			return IRQ_HANDLED;
+		}
+	}
+
+	/* FIFO full warning. */
+	if (status & INV_ICM45600_INT_STATUS_FIFO_FULL)
+		dev_warn(dev, "FIFO full possible data lost!\n");
+
+	return IRQ_HANDLED;
+}
+
+/**
+ * inv_icm45600_irq_init() - initialize int pin and interrupt handler
+ * @st:		driver internal state
+ * @irq:	irq number
+ * @irq_type:	irq trigger type
+ * @open_drain:	true if irq is open drain, false for push-pull
+ *
+ * Returns 0 on success, a negative error code otherwise.
+ */
+static int inv_icm45600_irq_init(struct inv_icm45600_state *st, int irq,
+				 int irq_type, bool open_drain)
+{
+	struct device *dev = regmap_get_device(st->map);
+	unsigned int val;
+	int ret;
+
+	/* Configure INT1 interrupt: default is active low on edge. */
+	switch (irq_type) {
+	case IRQF_TRIGGER_RISING:
+	case IRQF_TRIGGER_HIGH:
+		val = INV_ICM45600_INT1_CONFIG2_ACTIVE_HIGH;
+		break;
+	default:
+		val = INV_ICM45600_INT1_CONFIG2_ACTIVE_LOW;
+		break;
+	}
+
+	switch (irq_type) {
+	case IRQF_TRIGGER_LOW:
+	case IRQF_TRIGGER_HIGH:
+		val |= INV_ICM45600_INT1_CONFIG2_LATCHED;
+		break;
+	default:
+		break;
+	}
+
+	if (!open_drain)
+		val |= INV_ICM45600_INT1_CONFIG2_PUSH_PULL;
+
+	ret = regmap_write(st->map, INV_ICM45600_REG_INT1_CONFIG2, val);
+	if (ret)
+		return ret;
+
+	irq_type |= IRQF_ONESHOT;
+	return devm_request_threaded_irq(dev, irq, inv_icm45600_irq_timestamp,
+					 inv_icm45600_irq_handler, irq_type,
+					 "inv_icm45600", st);
+}
+
 static int inv_icm45600_timestamp_setup(struct inv_icm45600_state *st)
 {
 	/* Enable timestamps. */
@@ -556,12 +646,25 @@ int inv_icm45600_core_probe(struct regmap *regmap, const struct inv_icm45600_chi
 	struct fwnode_handle *fwnode;
 	struct inv_icm45600_state *st;
 	struct regmap *regmap_custom;
+	int irq, irq_type;
+	bool open_drain;
 	int ret;
 
 	/* Get INT1 only supported interrupt. */
 	fwnode = dev_fwnode(dev);
 	if (!fwnode)
 		return dev_err_probe(dev, -ENODEV, "Missing FW node\n");
+
+	irq = fwnode_irq_get_byname(fwnode, "INT1");
+	if (irq < 0) {
+		if (irq != -EPROBE_DEFER)
+			dev_err_probe(dev, irq, "Missing INT1 interrupt\n");
+		return irq;
+	}
+
+	irq_type = irq_get_trigger_type(irq);
+
+	open_drain = device_property_read_bool(dev, "drive-open-drain");
 
 	regmap_custom = devm_regmap_init(dev, &inv_icm45600_regmap_bus,
 					 regmap, &inv_icm45600_regmap_config);
@@ -573,6 +676,10 @@ int inv_icm45600_core_probe(struct regmap *regmap, const struct inv_icm45600_chi
 		return dev_err_probe(dev, -ENOMEM, "Cannot allocate memory\n");
 
 	dev_set_drvdata(dev, st);
+
+	st->fifo.data = devm_kzalloc(dev, 8192, GFP_KERNEL);
+	if (!st->fifo.data)
+		return dev_err_probe(dev, -ENOMEM, "Cannot allocate fifo memory\n");
 
 	ret = devm_mutex_init(dev, &st->lock);
 	if (ret)
@@ -611,6 +718,14 @@ int inv_icm45600_core_probe(struct regmap *regmap, const struct inv_icm45600_chi
 	if (ret)
 		return ret;
 
+	ret = inv_icm45600_buffer_init(st);
+	if (ret)
+		return ret;
+
+	ret = inv_icm45600_irq_init(st, irq, irq_type, open_drain);
+	if (ret)
+		return ret;
+
 	/* Suspend after 2 seconds. */
 	pm_runtime_set_autosuspend_delay(dev, 2000);
 	pm_runtime_use_autosuspend(dev);
@@ -633,6 +748,23 @@ static int inv_icm45600_suspend(struct device *dev)
 
 		st->suspended.gyro = st->conf.gyro.mode;
 		st->suspended.accel = st->conf.accel.mode;
+
+		/* Disable FIFO data streaming. */
+		if (st->fifo.on) {
+			unsigned int val;
+
+			ret = regmap_clear_bits(st->map, INV_ICM45600_REG_FIFO_CONFIG3,
+						INV_ICM45600_FIFO_CONFIG3_IF_EN);
+			if (ret)
+				return ret;
+			val = FIELD_PREP(INV_ICM45600_FIFO_CONFIG0_MODE_MASK,
+						INV_ICM45600_FIFO_CONFIG0_MODE_BYPASS);
+			ret = regmap_update_bits(st->map, INV_ICM45600_REG_FIFO_CONFIG0,
+						INV_ICM45600_FIFO_CONFIG0_MODE_MASK, val);
+			if (ret)
+				return ret;
+		}
+
 	}
 
 	return pm_runtime_force_suspend(dev);
@@ -653,10 +785,30 @@ static int inv_icm45600_resume(struct device *dev)
 	if (ret)
 		return ret;
 
-	scoped_guard(mutex, &st->lock)
+	scoped_guard(mutex, &st->lock) {
+
 		/* Restore sensors state. */
 		ret = inv_icm45600_set_pwr_mgmt0(st, st->suspended.gyro,
 						st->suspended.accel, NULL);
+		if (ret)
+			return ret;
+
+		/* Restore FIFO data streaming. */
+		if (st->fifo.on) {
+			unsigned int val;
+
+			inv_sensors_timestamp_reset(&gyro_st->ts);
+			inv_sensors_timestamp_reset(&accel_st->ts);
+			val = FIELD_PREP(INV_ICM45600_FIFO_CONFIG0_MODE_MASK,
+						INV_ICM45600_FIFO_CONFIG0_MODE_STREAM);
+			ret = regmap_update_bits(st->map, INV_ICM45600_REG_FIFO_CONFIG0,
+						INV_ICM45600_FIFO_CONFIG0_MODE_MASK, val);
+			if (ret)
+				return ret;
+			ret = regmap_set_bits(st->map, INV_ICM45600_REG_FIFO_CONFIG3,
+					INV_ICM45600_FIFO_CONFIG3_IF_EN);
+		}
+	}
 
 	return ret;
 }
