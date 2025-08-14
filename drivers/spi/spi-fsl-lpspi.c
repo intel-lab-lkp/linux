@@ -69,7 +69,11 @@
 #define DER_RDDE	BIT(1)
 #define DER_TDDE	BIT(0)
 #define CFGR1_PCSCFG	BIT(27)
-#define CFGR1_PINCFG	(BIT(24)|BIT(25))
+#define CFGR1_PINCFG_MASK		GENMASK(25, 24)
+#define CFGR1_PINCFG_SIN_IN_SOUT_OUT	0
+#define CFGR1_PINCFG_SIN_ONLY		1
+#define CFGR1_PINCFG_SOUT_ONLY		2
+#define CFGR1_PINCFG_SOUT_IN_SIN_OUT	3
 #define CFGR1_PCSPOL_MASK	GENMASK(11, 8)
 #define CFGR1_NOSTALL	BIT(3)
 #define CFGR1_HOST	BIT(0)
@@ -411,8 +415,9 @@ static int fsl_lpspi_dma_configure(struct spi_controller *controller)
 
 static int fsl_lpspi_config(struct fsl_lpspi_data *fsl_lpspi)
 {
-	u32 temp;
+	u32 temp = 0;
 	int ret;
+	u8 pincfg;
 
 	if (!fsl_lpspi->is_target) {
 		ret = fsl_lpspi_set_bitrate(fsl_lpspi);
@@ -422,10 +427,14 @@ static int fsl_lpspi_config(struct fsl_lpspi_data *fsl_lpspi)
 
 	fsl_lpspi_set_watermark(fsl_lpspi);
 
-	if (!fsl_lpspi->is_target)
-		temp = CFGR1_HOST;
-	else
-		temp = CFGR1_PINCFG;
+	if (!fsl_lpspi->is_target) {
+		temp |= CFGR1_HOST;
+		pincfg = CFGR1_PINCFG_SIN_IN_SOUT_OUT;
+	} else {
+		pincfg = CFGR1_PINCFG_SOUT_IN_SIN_OUT;
+	}
+	temp |= FIELD_PREP(CFGR1_PINCFG_MASK, pincfg);
+
 	if (fsl_lpspi->config.mode & SPI_CS_HIGH)
 		temp |= FIELD_PREP(CFGR1_PCSPOL_MASK,
 				   BIT(fsl_lpspi->config.chip_select));
