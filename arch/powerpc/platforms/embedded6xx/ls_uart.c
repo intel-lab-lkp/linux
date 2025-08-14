@@ -18,6 +18,7 @@
 #include <linux/of_address.h>
 #include <asm/io.h>
 #include <asm/termbits.h>
+#include <linux/cleanup.h>
 
 #include "mpc10x.h"
 
@@ -114,11 +115,11 @@ static void __init ls_uart_init(void)
 
 static int __init ls_uarts_init(void)
 {
-	struct device_node *avr;
 	struct resource res;
 	int len, ret;
 
-	avr = of_find_node_by_path("/soc10x/serial@80004500");
+	struct device_node *avr __free(device_node) =
+			of_find_node_by_path("/soc10x/serial@80004500");
 	if (!avr)
 		return -EINVAL;
 
