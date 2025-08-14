@@ -16,6 +16,7 @@
 #define RV_MON_GLOBAL   0
 #define RV_MON_PER_CPU  1
 #define RV_MON_PER_TASK 2
+#define RV_MON_PER_OBJ  3
 
 #ifdef CONFIG_RV
 #include <linux/bitops.h>
@@ -100,7 +101,6 @@ struct ha_monitor {
 	u64 env_store[MAX_HA_ENV_LEN];
 	struct hrtimer timer;
 };
-#define to_ha_monitor(da) container_of(da, struct ha_monitor, da_mon)
 
 #else
 

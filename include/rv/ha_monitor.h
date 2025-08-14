@@ -19,11 +19,12 @@
 #define _RV_HA_MONITOR_H
 
 #include <rv/automata.h>
+#include <rv/da_common.h>
 
 #if RV_MON_TYPE == RV_MON_GLOBAL || RV_MON_TYPE == RV_MON_PER_CPU
 static bool ha_monitor_handle_constraint(enum states curr_state, enum events event, enum states next_state);
-#elif RV_MON_TYPE == RV_MON_PER_TASK
-static bool ha_monitor_handle_constraint(struct task_struct *tsk, enum states curr_state, enum events event, enum states next_state);
+#elif RV_MON_TYPE == RV_MON_PER_TASK || RV_MON_TYPE == RV_MON_PER_OBJ
+static bool ha_monitor_handle_constraint(monitor_target target, enum states curr_state, enum events event, enum states next_state);
 #endif
 static inline void ha_monitor_init_env(struct da_monitor *da_mon);
 static inline void ha_monitor_reset_env(struct da_monitor *da_mon);
@@ -34,6 +35,11 @@ static inline bool ha_cancel_timer(struct ha_monitor *ha_mon);
 
 #include <rv/da_monitor.h>
 #include <linux/seq_buf.h>
+
+/* This simplifies things since da_mon and ha_mon coexist in the same union */
+_Static_assert(offsetof(struct ha_monitor, da_mon) == 0,
+	       "da_mon must be the first element in an ha_mon!");
+#define to_ha_monitor(da) ((struct ha_monitor *)da)
 
 #define ENV_MAX CONCATENATE(env_max_, MONITOR_NAME)
 #define ENV_MAX_STORED CONCATENATE(env_max_stored_, MONITOR_NAME)
@@ -230,14 +236,23 @@ static enum hrtimer_restart ha_monitor_timer_callback(struct hrtimer *timer)
 	return HRTIMER_NORESTART;
 }
 
-#elif RV_MON_TYPE == RV_MON_PER_TASK
+#elif RV_MON_TYPE == RV_MON_PER_TASK || RV_MON_TYPE == RV_MON_PER_OBJ
 
 /*
  * ha_get_monitor - return the per-task monitor address
  */
-static inline struct ha_monitor *ha_get_monitor(struct task_struct *tsk)
+static inline struct ha_monitor *ha_get_monitor(monitor_target target)
 {
-	return to_ha_monitor(da_get_monitor(tsk));
+	return to_ha_monitor(da_get_monitor(target));
+}
+
+/*
+ * ha_get_target - return the object associated to the monitor
+ */
+static inline monitor_target ha_get_target(struct ha_monitor *ha_mon)
+{
+	/* tasks have a union, the offset of da_mon and ha_mon are the same */
+	return da_get_target((struct da_monitor *)ha_mon);
 }
 
 /*
@@ -248,12 +263,12 @@ static inline struct ha_monitor *ha_get_monitor(struct task_struct *tsk)
  * This function is called from the hook in the DA event handle function and
  * triggers a failure in the monitor.
  */
-static bool ha_monitor_handle_constraint(struct task_struct *tsk,
+static bool ha_monitor_handle_constraint(monitor_target target,
 					 enum states curr_state,
 					 enum events event,
 					 enum states next_state)
 {
-	struct ha_monitor *ha_mon = ha_get_monitor(tsk);
+	struct ha_monitor *ha_mon = ha_get_monitor(target);
 	DECLARE_SEQ_BUF(env_string, 32);
 	bool env_was_valid;
 
@@ -273,7 +288,7 @@ static bool ha_monitor_handle_constraint(struct task_struct *tsk,
 
 	ha_get_env_string(&env_string, ha_mon);
 	ha_cond_react(curr_state, event, env_string.buffer);
-	CONCATENATE(trace_error_env_, MONITOR_NAME)(tsk->pid,
+	CONCATENATE(trace_error_env_, MONITOR_NAME)(da_get_id(target),
 			   model_get_state_name(curr_state),
 			   model_get_event_name(event),
 			   env_string.buffer);
@@ -285,12 +300,11 @@ static enum hrtimer_restart ha_monitor_timer_callback(struct hrtimer *timer)
 	struct ha_monitor *ha_mon = container_of(timer, struct ha_monitor, timer);
 	enum states curr_state = READ_ONCE(ha_mon->da_mon.curr_state);
 	DECLARE_SEQ_BUF(env_string, MAX_DA_NAME_LEN);
-	struct task_struct *tsk;
+	monitor_target target = ha_get_target(ha_mon);
 
-	tsk = container_of(ha_mon, struct task_struct, rv[task_mon_slot].ha_mon);
 	ha_get_env_string(&env_string, ha_mon);
 	ha_cond_react(curr_state, EVENT_NONE, env_string.buffer);
-	CONCATENATE(trace_error_env_, MONITOR_NAME)(tsk->pid,
+	CONCATENATE(trace_error_env_, MONITOR_NAME)(da_get_id(target),
 		    model_get_state_name(curr_state),
 		    EVENT_NONE_LBL,
 		    env_string.buffer);

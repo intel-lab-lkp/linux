@@ -14,11 +14,13 @@
 #ifndef _RV_DA_MONITOR_H
 #define _RV_DA_MONITOR_H
 
+#include <rv/da_common.h>
 #include <rv/automata.h>
 #include <linux/rv.h>
 #include <linux/stringify.h>
 #include <linux/bug.h>
-#include <linux/sched.h>
+#include <linux/slab.h>
+#include <linux/hashtable.h>
 
 #define RV_MONITOR_NAME CONCATENATE(rv_, MONITOR_NAME)
 #define RV_DA_MON_NAME CONCATENATE(da_mon_, MONITOR_NAME)
@@ -49,6 +51,38 @@ static struct rv_monitor RV_MONITOR_NAME;
  */
 #ifndef da_monitor_reset_hook
 #define da_monitor_reset_hook(da_mon)
+#endif
+
+/*
+ * Hook to allow the implementation of per-obj monitors: define it with a
+ * function that takes the object and a da_mon (can be NULL) and returns the
+ * (newly created) da_monitor for the objects.
+ * The monitor can run allocation manually if the start condition is in a
+ * context potentially problematic for allocation (e.g. while scheduling).
+ * In such case, if the storage was pre-allocated without a target, set it now.
+ */
+#if !defined(da_monitor_start_hook) && RV_MON_TYPE == RV_MON_PER_OBJ
+#ifdef DA_SKIP_AUTO_ALLOC
+static inline struct da_monitor *
+da_fill_empty_storage(monitor_target target, struct da_monitor *da_mon);
+#define da_monitor_start_hook da_fill_empty_storage
+#else
+#define da_monitor_start_hook da_create_storage
+static struct da_monitor *da_create_storage(monitor_target target, struct da_monitor *da_mon);
+#endif /* DA_SKIP_AUTO_ALLOC */
+#else
+#define da_monitor_start_hook(target,da_mon) (da_mon)
+#endif
+
+/*
+ * Define a guard (e.g. lock/RCU) for access to the da_monitor.
+ * This is used to synchronise readers (e.g. da_get_monitor) but also writers
+ * (da_create_storage and da_destroy_storage) against da_monitor_destroy.
+ */
+#if !defined(da_guard_monitor) && RV_MON_TYPE == RV_MON_PER_OBJ
+#define da_guard_monitor() guard(rcu)()
+#else
+#define da_guard_monitor()
 #endif
 
 #ifdef CONFIG_RV_REACTORS
@@ -178,16 +212,21 @@ static inline bool da_event(struct da_monitor *da_mon, enum events event)
 	return false;
 }
 
-#elif RV_MON_TYPE == RV_MON_PER_TASK
+#elif RV_MON_TYPE == RV_MON_PER_TASK || RV_MON_TYPE == RV_MON_PER_OBJ
 /*
- * Event handler for per_task monitors.
+ * Event handler for per_task/per_object monitors.
  *
  * Retry in case there is a race between getting and setting the next state,
  * warn and reset the monitor if it runs out of retries. The monitor should be
  * able to handle various orders.
  */
 
-static inline bool da_event(struct da_monitor *da_mon, struct task_struct *tsk,
+#ifndef da_id_type
+#define da_id_type int
+#endif
+static inline da_id_type da_get_id(monitor_target target);
+
+static inline bool da_event(struct da_monitor *da_mon, monitor_target target,
 			    enum events event)
 {
 	enum states curr_state, next_state;
@@ -197,16 +236,16 @@ static inline bool da_event(struct da_monitor *da_mon, struct task_struct *tsk,
 		next_state = model_get_next_state(curr_state, event);
 		if (next_state == INVALID_STATE) {
 			cond_react(curr_state, event);
-			CONCATENATE(trace_error_, MONITOR_NAME)(tsk->pid,
+			CONCATENATE(trace_error_, MONITOR_NAME)(da_get_id(target),
 				    model_get_state_name(curr_state),
 				    model_get_event_name(event));
 			return false;
 		}
 		if (likely(try_cmpxchg(&da_mon->curr_state, &curr_state, next_state))) {
-			if (!da_monitor_event_hook(tsk, curr_state, event, next_state))
+			if (!da_monitor_event_hook(target, curr_state, event, next_state))
 				return false;
 
-			CONCATENATE(trace_event_, MONITOR_NAME)(tsk->pid,
+			CONCATENATE(trace_event_, MONITOR_NAME)(da_get_id(target),
 				    model_get_state_name(curr_state),
 				    model_get_event_name(event),
 				    model_get_state_name(next_state),
@@ -333,6 +372,24 @@ static inline struct da_monitor *da_get_monitor(struct task_struct *tsk)
 	return &tsk->rv[task_mon_slot].da_mon;
 }
 
+/*
+ * da_get_target - return the object associated to the monitor
+ */
+static inline monitor_target da_get_target(struct da_monitor *da_mon)
+{
+	return container_of(da_mon, struct task_struct, rv[task_mon_slot].da_mon);
+}
+
+/*
+ * da_get_id - return the id associated to the target
+ *
+ * For per-task monitors, the id is the task's PID.
+ */
+static inline da_id_type da_get_id(monitor_target target)
+{
+	return target->pid;
+}
+
 static void da_monitor_reset_all(void)
 {
 	struct task_struct *g, *p;
@@ -379,6 +436,208 @@ static inline void da_monitor_destroy(void)
 	task_mon_slot = RV_PER_TASK_MONITOR_INIT;
 	return;
 }
+
+#elif RV_MON_TYPE == RV_MON_PER_OBJ
+/*
+ * Functions to define, init and get a per-object monitor.
+ */
+
+static struct kmem_cache *da_monitor_cache;
+
+struct da_monitor_storage {
+	da_id_type id;
+	monitor_target target;
+	union rv_task_monitor rv;
+	struct hlist_node node;
+	struct rcu_head rcu;
+};
+
+#ifndef DA_MONITOR_HT_BITS
+#define DA_MONITOR_HT_BITS 10
+#endif
+static DEFINE_HASHTABLE(da_monitor_ht, DA_MONITOR_HT_BITS);
+
+/*
+ * da_create_empty_storage - pre-allocate an empty storage
+ */
+static inline struct da_monitor_storage *da_create_empty_storage(da_id_type id)
+{
+	struct da_monitor_storage *mon_storage;
+
+	// TODO perhaps no need for the NOWAIT if not auto allocating
+	// NOT from tracepoints! Perhaps get it as an argument..
+	mon_storage = kmem_cache_zalloc(da_monitor_cache, GFP_NOWAIT);
+	if (!mon_storage)
+		return NULL;
+
+	hash_add_rcu(da_monitor_ht, &mon_storage->node, id);
+	mon_storage->id = id;
+	return mon_storage;
+}
+
+/*
+ * da_create_storage - create the per-object storage
+ *
+ * The caller is responsible to synchronise writers, either with locks or
+ * implicitly. For instance, if da_create_storage is only called from a single
+ * event for target (e.g. sched_switch), it's safe to call this without locks.
+ */
+static inline struct da_monitor *da_create_storage(monitor_target target, struct da_monitor *da_mon)
+{
+	struct da_monitor_storage *mon_storage;
+	da_id_type id = da_get_id(target);
+
+	if (da_mon)
+		return da_mon;
+
+	mon_storage = da_create_empty_storage(id);
+	if (!mon_storage)
+		return NULL;
+
+	mon_storage->target = target;
+	return &mon_storage->rv.da_mon;
+}
+
+/*
+ * __da_get_mon_storage - get the monitor storage from the hash table
+ */
+static inline struct da_monitor_storage *__da_get_mon_storage(da_id_type id)
+{
+	struct da_monitor_storage *mon_storage;
+
+	lockdep_assert_in_rcu_read_lock();
+	hash_for_each_possible_rcu(da_monitor_ht, mon_storage, node, id) {
+		if (mon_storage->id == id)
+			return mon_storage;
+	}
+
+	return NULL;
+}
+
+/*
+ * da_get_monitor - return the monitor for target
+ */
+static struct da_monitor *da_get_monitor(monitor_target target)
+{
+	struct da_monitor_storage *mon_storage;
+
+	mon_storage = __da_get_mon_storage(da_get_id(target));
+	return mon_storage ? &mon_storage->rv.da_mon : NULL;
+}
+
+/*
+ * da_get_target - return the object associated to the monitor
+ */
+static inline monitor_target da_get_target(struct da_monitor *da_mon)
+{
+	return container_of(da_mon, struct da_monitor_storage, rv.da_mon)->target;
+}
+
+/*
+ * da_create_conditional - create the per-object storage if not already there
+ *
+ * This needs a lookup so should be guarded by RCU, the condition is checked
+ * directly in da_create_storage()
+ */
+static inline void da_create_conditional(monitor_target target)
+{
+	da_guard_monitor();
+	da_create_storage(target, da_get_monitor(target));
+}
+
+/*
+ * da_fill_empty_storage - store the target in a pre-allocated storage
+ *
+ * Can be used as a substitute of da_create_storage when starting a monitor in
+ * an environment where allocation is unsafe.
+ */
+static inline struct da_monitor *
+da_fill_empty_storage(monitor_target target, struct da_monitor *da_mon)
+{
+	if (unlikely(da_mon && !da_get_target(da_mon)))
+		container_of(da_mon, struct da_monitor_storage, rv.da_mon)->target = target;
+	return da_mon;
+}
+
+/*
+ * da_get_target_by_id - return the object associated to the id
+ */
+static inline monitor_target da_get_target_by_id(da_id_type id)
+{
+	struct da_monitor_storage *mon_storage;
+
+	da_guard_monitor();
+	mon_storage = __da_get_mon_storage(id);
+
+	if (unlikely(!mon_storage))
+		return NULL;
+	return mon_storage->target;
+}
+
+/*
+ * da_destroy_storage - destroy the per-object storage
+ *
+ * The caller is responsible to synchronise writers, either with locks or
+ * implicitly. For instance, if da_destroy_storage is called at sched_exit and
+ * da_create_storage can never occur after that, it's safe to call this without
+ * locks.
+ * This function includes an RCU read-side critical section to synchronise
+ * against da_monitor_destroy().
+ */
+static inline void da_destroy_storage(monitor_target target)
+{
+	struct da_monitor_storage *mon_storage;
+
+	da_guard_monitor();
+	mon_storage = __da_get_mon_storage(da_get_id(target));
+
+	if (!mon_storage)
+		return;
+	hash_del_rcu(&mon_storage->node);
+	kfree_rcu(mon_storage, rcu);
+}
+
+static void da_monitor_reset_all(void)
+{
+	struct da_monitor_storage *mon_storage;
+	int bkt;
+
+	rcu_read_lock();
+	hash_for_each_rcu(da_monitor_ht, bkt, mon_storage, node)
+		da_monitor_reset(&mon_storage->rv.da_mon);
+	rcu_read_unlock();
+}
+
+static inline int da_monitor_init(void)
+{
+	hash_init(da_monitor_ht);
+	da_monitor_cache = kmem_cache_create(__stringify(MONITOR_NAME) "-cache",
+					     sizeof(struct da_monitor_storage),
+					     NULL, 0);
+	if (!da_monitor_cache)
+		return -ENOMEM;
+	return 0;
+}
+
+static inline void da_monitor_destroy(void)
+{
+	struct da_monitor_storage *mon_storage;
+	struct hlist_node *tmp;
+	int bkt;
+
+	/*
+	 * This function is called after all probes are disabled, we need only
+	 * worry about concurrency against old events.
+	 */
+	synchronize_rcu();
+	hash_for_each_safe(da_monitor_ht, bkt, tmp, mon_storage, node) {
+		hash_del_rcu(&mon_storage->node);
+		kfree(mon_storage);
+	}
+	rcu_barrier();
+	kmem_cache_destroy(da_monitor_cache);
+}
+
 #endif /* RV_MON_TYPE */
 
 #if RV_MON_TYPE == RV_MON_GLOBAL || RV_MON_TYPE == RV_MON_PER_CPU
@@ -464,17 +723,17 @@ static inline bool da_handle_start_run_event(enum events event)
 	return 1;
 }
 
-#elif RV_MON_TYPE == RV_MON_PER_TASK
+#elif RV_MON_TYPE == RV_MON_PER_TASK || RV_MON_TYPE == RV_MON_PER_OBJ
 /*
- * Handle event for per task.
+ * Handle event for per task/object.
  */
 
 static inline void __da_handle_event(struct da_monitor *da_mon,
-				     struct task_struct *tsk, enum events event)
+				     monitor_target target, enum events event)
 {
 	bool retval;
 
-	retval = da_event(da_mon, tsk, event);
+	retval = da_event(da_mon, target, event);
 	if (!retval)
 		da_monitor_reset(da_mon);
 }
@@ -482,16 +741,22 @@ static inline void __da_handle_event(struct da_monitor *da_mon,
 /*
  * da_handle_event - handle an event
  */
-static inline void da_handle_event(struct task_struct *tsk, enum events event)
+static inline void da_handle_event(monitor_target target, enum events event)
 {
-	struct da_monitor *da_mon = da_get_monitor(tsk);
+	struct da_monitor *da_mon;
 	bool retval;
+
+	da_guard_monitor();
+	da_mon = da_get_monitor(target);
+
+	if (unlikely(!da_mon))
+		return;
 
 	retval = da_monitor_handling_event(da_mon);
 	if (!retval)
 		return;
 
-	__da_handle_event(da_mon, tsk, event);
+	__da_handle_event(da_mon, target, event);
 }
 
 /*
@@ -504,7 +769,7 @@ static inline void da_handle_event(struct task_struct *tsk, enum events event)
  * If the monitor already started, handle the event.
  * If the monitor did not start yet, start the monitor but skip the event.
  */
-static inline bool da_handle_start_event(struct task_struct *tsk,
+static inline bool da_handle_start_event(monitor_target target,
 					 enum events event)
 {
 	struct da_monitor *da_mon;
@@ -512,14 +777,19 @@ static inline bool da_handle_start_event(struct task_struct *tsk,
 	if (!da_monitor_enabled())
 		return 0;
 
-	da_mon = da_get_monitor(tsk);
+	da_guard_monitor();
+	da_mon = da_get_monitor(target);
+	da_mon = da_monitor_start_hook(target, da_mon);
+
+	if (unlikely(!da_mon))
+		return 0;
 
 	if (unlikely(!da_monitoring(da_mon))) {
 		da_monitor_start(da_mon);
 		return 0;
 	}
 
-	__da_handle_event(da_mon, tsk, event);
+	__da_handle_event(da_mon, target, event);
 
 	return 1;
 }
@@ -530,7 +800,7 @@ static inline bool da_handle_start_event(struct task_struct *tsk,
  * This function is used to notify the monitor that the system is in the
  * initial state, so the monitor can start monitoring and handling event.
  */
-static inline bool da_handle_start_run_event(struct task_struct *tsk,
+static inline bool da_handle_start_run_event(monitor_target target,
 					     enum events event)
 {
 	struct da_monitor *da_mon;
@@ -538,14 +808,29 @@ static inline bool da_handle_start_run_event(struct task_struct *tsk,
 	if (!da_monitor_enabled())
 		return 0;
 
-	da_mon = da_get_monitor(tsk);
+	da_guard_monitor();
+	da_mon = da_get_monitor(target);
+	da_mon = da_monitor_start_hook(target, da_mon);
+
+	if (unlikely(!da_mon))
+		return 0;
 
 	if (unlikely(!da_monitoring(da_mon)))
 		da_monitor_start(da_mon);
 
-	__da_handle_event(da_mon, tsk, event);
+	__da_handle_event(da_mon, target, event);
 
 	return 1;
+}
+
+static inline void da_reset(monitor_target target)
+{
+	struct da_monitor *da_mon;
+
+	da_guard_monitor();
+	da_mon = da_get_monitor(target);
+	if (likely(da_mon))
+		da_monitor_reset(da_mon);
 }
 #endif /* RV_MON_TYPE */
 
