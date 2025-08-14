@@ -323,6 +323,7 @@ static DECLARE_DELAYED_WORK(deferred_probe_timeout_work, deferred_probe_timeout_
 
 void deferred_probe_extend_timeout(void)
 {
+	mutex_lock(&deferred_probe_mutex);
 	/*
 	 * If the work hasn't been queued yet or if the work expired, don't
 	 * start a new one.
@@ -333,6 +334,7 @@ void deferred_probe_extend_timeout(void)
 		pr_debug("Extended deferred probe timeout by %d secs\n",
 					driver_deferred_probe_timeout);
 	}
+	mutex_unlock(&deferred_probe_mutex);
 }
 
 /**
