@@ -119,46 +119,113 @@ static const char *dma_fence_chain_get_timeline_name(struct dma_fence *fence)
         return "unbound";
 }
 
-static void dma_fence_chain_irq_work(struct irq_work *work)
+static void signal_irq_work(struct irq_work *work)
 {
 	struct dma_fence_chain *chain;
 
 	chain = container_of(work, typeof(*chain), work);
 
-	/* Try to rearm the callback */
-	if (!dma_fence_chain_enable_signaling(&chain->base))
-		/* Ok, we are done. No more unsignaled fences left */
-		dma_fence_signal(&chain->base);
+	dma_fence_signal(&chain->base);
 	dma_fence_put(&chain->base);
 }
 
-static void dma_fence_chain_cb(struct dma_fence *f, struct dma_fence_cb *cb)
+static void signal_cb(struct dma_fence *f, struct dma_fence_cb *cb)
 {
 	struct dma_fence_chain *chain;
 
 	chain = container_of(cb, typeof(*chain), cb);
-	init_irq_work(&chain->work, dma_fence_chain_irq_work);
+	init_irq_work(&chain->work, signal_irq_work);
 	irq_work_queue(&chain->work);
-	dma_fence_put(f);
+}
+
+static void rearm_irq_work(struct irq_work *work)
+{
+	struct dma_fence_chain *chain;
+	struct dma_fence *prev;
+
+	chain = container_of(work, typeof(*chain), work);
+
+	rcu_read_lock();
+	prev = rcu_dereference(chain->prev);
+	if (prev && dma_fence_add_callback(prev, &chain->cb, signal_cb))
+		prev = NULL;
+	rcu_read_unlock();
+	if (prev)
+		return;
+
+	/* Ok, we are done. No more unsignaled fences left */
+	signal_irq_work(work);
+}
+
+static inline bool fence_is_signaled__nested(struct dma_fence *fence)
+{
+	if (test_bit(DMA_FENCE_FLAG_SIGNALED_BIT, &fence->flags))
+		return true;
+
+	if (fence->ops->signaled && fence->ops->signaled(fence)) {
+		unsigned long flags;
+
+		spin_lock_irqsave_nested(fence->lock, flags, SINGLE_DEPTH_NESTING);
+		dma_fence_signal_locked(fence);
+		spin_unlock_irqrestore(fence->lock, flags);
+
+		return true;
+	}
+
+	return false;
+}
+
+static bool prev_is_signaled(struct dma_fence_chain *chain)
+{
+	struct dma_fence *prev;
+	bool result;
+
+	rcu_read_lock();
+	prev = rcu_dereference(chain->prev);
+	result = !prev || fence_is_signaled__nested(prev);
+	rcu_read_unlock();
+
+	return result;
+}
+
+static void rearm_or_signal_cb(struct dma_fence *f, struct dma_fence_cb *cb)
+{
+	struct dma_fence_chain *chain;
+
+	chain = container_of(cb, typeof(*chain), cb);
+	if (prev_is_signaled(chain)) {
+		/* Ok, we are done. No more unsignaled fences left */
+		init_irq_work(&chain->work, signal_irq_work);
+	} else {
+		/* Try to rearm the callback */
+		init_irq_work(&chain->work, rearm_irq_work);
+	}
+
+	irq_work_queue(&chain->work);
 }
 
 static bool dma_fence_chain_enable_signaling(struct dma_fence *fence)
 {
 	struct dma_fence_chain *head = to_dma_fence_chain(fence);
+	int err = -ENOENT;
 
-	dma_fence_get(&head->base);
-	dma_fence_chain_for_each(fence, &head->base) {
-		struct dma_fence *f = dma_fence_chain_contained(fence);
+	if (WARN_ON(!head))
+		return false;
 
-		dma_fence_get(f);
-		if (!dma_fence_add_callback(f, &head->cb, dma_fence_chain_cb)) {
+	dma_fence_get(fence);
+	if (head->fence)
+		err = dma_fence_add_callback(head->fence, &head->cb, rearm_or_signal_cb);
+	if (err) {
+		if (prev_is_signaled(head)) {
 			dma_fence_put(fence);
-			return true;
+		} else {
+			init_irq_work(&head->work, rearm_irq_work);
+			irq_work_queue(&head->work);
+			err = 0;
 		}
-		dma_fence_put(f);
 	}
-	dma_fence_put(&head->base);
-	return false;
+
+	return !err;
 }
 
 static bool dma_fence_chain_signaled(struct dma_fence *fence)
