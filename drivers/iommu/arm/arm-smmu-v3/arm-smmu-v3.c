@@ -3411,6 +3411,16 @@ arm_smmu_iova_to_phys(struct iommu_domain *domain, dma_addr_t iova)
 	return ops->iova_to_phys(ops, iova);
 }
 
+#ifdef CONFIG_IO_PTDUMP
+static size_t
+arm_smmu_dump_iova_prot(struct seq_file *s, struct iommu_domain *domain, dma_addr_t iova)
+{
+	struct io_pgtable_ops *ops = to_smmu_domain(domain)->pgtbl_ops;
+
+	return ops->dump_iova_prot(s, ops, iova);
+}
+#endif
+
 static struct platform_driver arm_smmu_driver;
 
 static
@@ -3702,6 +3712,9 @@ static const struct iommu_ops arm_smmu_ops = {
 		.flush_iotlb_all	= arm_smmu_flush_iotlb_all,
 		.iotlb_sync		= arm_smmu_iotlb_sync,
 		.iova_to_phys		= arm_smmu_iova_to_phys,
+#ifdef CONFIG_IO_PTDUMP
+		.dump_iova_prot		= arm_smmu_dump_iova_prot,
+#endif
 		.free			= arm_smmu_domain_free_paging,
 	}
 };

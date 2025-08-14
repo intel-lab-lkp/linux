@@ -217,6 +217,10 @@ struct io_pgtable_ops {
 			      struct iommu_iotlb_gather *gather);
 	phys_addr_t (*iova_to_phys)(struct io_pgtable_ops *ops,
 				    unsigned long iova);
+#ifdef CONFIG_IO_PTDUMP
+	size_t (*dump_iova_prot)(struct seq_file *s, struct io_pgtable_ops *ops,
+			      unsigned long iova);
+#endif
 	int (*pgtable_walk)(struct io_pgtable_ops *ops, unsigned long iova, void *wd);
 	int (*read_and_clear_dirty)(struct io_pgtable_ops *ops,
 				    unsigned long iova, size_t size,

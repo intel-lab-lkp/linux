@@ -754,6 +754,172 @@ static phys_addr_t arm_lpae_iova_to_phys(struct io_pgtable_ops *ops,
 	return iopte_to_paddr(d.pte, data) | iova;
 }
 
+#ifdef CONFIG_IO_PTDUMP
+#include <linux/seq_file.h>
+
+struct io_ptdump_prot_bits {
+	uint64_t mask;
+	uint64_t val;
+	const char *set;
+	const char *clear;
+};
+
+static const struct io_ptdump_prot_bits prot_bits[] = {
+	{
+		.mask   = ARM_LPAE_PTE_VALID,
+		.val    = ARM_LPAE_PTE_VALID,
+		.set    = "V",
+		.clear  = " ",
+	},
+	{
+		.mask   = ARM_LPAE_PTE_XN,
+		.val    = ARM_LPAE_PTE_XN,
+		.set    = "XN",
+		.clear  = "  ",
+	},
+	{
+		.mask   = ARM_LPAE_PTE_DBM,
+		.val    = ARM_LPAE_PTE_DBM,
+		.set    = "DBM",
+		.clear  = "   ",
+	},
+	{
+		.mask   = ARM_LPAE_PTE_AF,
+		.val    = ARM_LPAE_PTE_AF,
+		.set    = "AF",
+		.clear  = "  ",
+	},
+	{
+		.mask   = ARM_LPAE_PTE_SH_NS,
+		.val    = ARM_LPAE_PTE_SH_NS,
+		.set    = "SH_NS",
+		.clear  = "     ",
+	},
+	{
+		.mask   = ARM_LPAE_PTE_SH_OS,
+		.val    = ARM_LPAE_PTE_SH_OS,
+		.set    = "SH_OS",
+		.clear  = "     ",
+	},
+	{
+		.mask   = ARM_LPAE_PTE_SH_IS,
+		.val    = ARM_LPAE_PTE_SH_IS,
+		.set    = "SH_IS",
+		.clear  = "     ",
+	},
+	{
+		.mask   = ARM_LPAE_PTE_NS,
+		.val    = ARM_LPAE_PTE_NS,
+		.set    = "NS",
+		.clear  = "  ",
+	},
+	{
+		.mask   = ARM_LPAE_PTE_NSTABLE,
+		.val    = ARM_LPAE_PTE_NSTABLE,
+		.set    = "NST",
+		.clear  = "   ",
+	},
+};
+
+const char *io_pgtable_fmt_names[] = {
+	"ARM_32_LPAE_S1",
+	"ARM_32_LPAE_S2",
+	"ARM_64_LPAE_S1",
+	"ARM_64_LPAE_S2",
+	"ARM_V7S",
+	"ARM_MALI_LPAE",
+	"AMD_IOMMU_V1",
+	"AMD_IOMMU_V2",
+	"APPLE_DART",
+	"APPLE_DART2",
+};
+
+struct io_ptdump_prot {
+	int lvl;
+	int stage;
+	char *attr;
+	size_t size;
+};
+
+static void dump_prot(struct seq_file *s, arm_lpae_iopte pte)
+{
+	int capacity = 64;
+	const char *attr;
+	int length = 0;
+
+	char *prot = kzalloc(capacity * sizeof(char), GFP_KERNEL);
+
+	if (!prot)
+		return;
+
+	/* Traverse all predefined permission bits */
+	for (size_t i = 0; i < ARRAY_SIZE(prot_bits); i++) {
+		if ((pte & prot_bits[i].mask) == prot_bits[i].val)
+			attr = prot_bits[i].set;
+		else
+			attr = prot_bits[i].clear;
+
+		size_t attr_len = strlen(attr);
+
+		/* Check and extend the buffer */
+		while (length + attr_len > capacity) {
+			capacity *= 2;
+
+			char *temp = krealloc(prot, capacity * sizeof(char), GFP_KERNEL);
+
+			if (!temp) {
+				kfree(prot);
+				return;
+			}
+
+			prot = temp;
+		}
+
+		length += snprintf(prot + length, capacity - length, "%s ", attr);
+
+		/* Security check: prevents abnormal buffer expansion */
+		if (length > PAGE_SIZE) {
+			pr_err("len = %zu, attr = %s, i =%d\n", length, attr, i);
+			kfree(prot);
+			return;
+		}
+	}
+
+	seq_printf(s, "%s", prot);
+	kfree(prot);
+}
+
+static size_t arm_lpae_dump_iova_prot(struct seq_file *s, struct io_pgtable_ops *ops,
+								   unsigned long iova)
+{
+	struct arm_lpae_io_pgtable *data = io_pgtable_ops_to_data(ops);
+	struct iova_to_phys_data d;
+	int ret;
+
+	struct io_pgtable_walk_data walk_data = {
+		.data = &d,
+		.visit = visit_iova_to_phys,
+		.addr = iova,
+		.end = iova + 1,
+	};
+
+	/* Only the mapped iova will be output */
+	ret = __arm_lpae_iopte_walk(data, &walk_data, data->pgd, data->start_level);
+	if (ret)
+		return ARM_LPAE_GRANULE(data);
+
+	seq_printf(s, "%lx - %lx    lvl %d  stage %s ",
+			   iova, iova + ARM_LPAE_BLOCK_SIZE(d.lvl, data),
+			   d.lvl, io_pgtable_fmt_names[data->iop.fmt]);
+
+	/* TODO: The dump prot is incomplete and will be supplemented later... */
+	dump_prot(s, d.pte);
+	seq_puts(s, "\n");
+
+	return ARM_LPAE_BLOCK_SIZE(d.lvl, data);
+}
+#endif
+
 static int visit_pgtable_walk(struct io_pgtable_walk_data *walk_data, int lvl,
 			      arm_lpae_iopte *ptep, size_t size)
 {
@@ -950,6 +1116,9 @@ arm_lpae_alloc_pgtable(struct io_pgtable_cfg *cfg)
 		.map_pages	= arm_lpae_map_pages,
 		.unmap_pages	= arm_lpae_unmap_pages,
 		.iova_to_phys	= arm_lpae_iova_to_phys,
+#ifdef CONFIG_IO_PTDUMP
+		.dump_iova_prot = arm_lpae_dump_iova_prot,
+#endif
 		.read_and_clear_dirty = arm_lpae_read_and_clear_dirty,
 		.pgtable_walk	= arm_lpae_pgtable_walk,
 	};
