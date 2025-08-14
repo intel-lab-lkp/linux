@@ -403,14 +403,21 @@ config I2C_ALTERA
 	  will be called i2c-altera.
 
 config I2C_ASPEED
-	tristate "Aspeed I2C Controller"
-	depends on ARCH_ASPEED || COMPILE_TEST
-	help
-	  If you say yes to this option, support will be included for the
-	  Aspeed I2C controller.
+    tristate "ASPEED I2C controller (legacy register layout)"
+    depends on I2C
+    help
+      Select this to build the legacy Aspeed I2C driver (i2c-aspeed.c)
+      which uses the original mixed controller/target register layout.
 
-	  This driver can also be built as a module.  If so, the module
-	  will be called i2c-aspeed.
+config I2C_AST2600
+    tristate "AST2600 I2C controller (new register layout)"
+    depends on I2C
+    depends on !I2C_ASPEED
+    help
+      Select this to build the new AST2600 I2C driver (i2c-ast2600.c)
+      supporting the separated controller/target registers and new
+      clock/divider/DMA features.  This is mutually exclusive with
+      CONFIG_I2C_ASPEED.
 
 config I2C_AT91
 	tristate "Atmel AT91 I2C Two-Wire interface (TWI)"
