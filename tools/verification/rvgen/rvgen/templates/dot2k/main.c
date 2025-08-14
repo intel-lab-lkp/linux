@@ -6,7 +6,6 @@
 #include <linux/init.h>
 #include <linux/rv.h>
 #include <rv/instrumentation.h>
-#include <rv/da_monitor.h>
 
 #define MODULE_NAME "%%MODEL_NAME%%"
 
@@ -20,15 +19,9 @@
  * This is the self-generated part of the monitor. Generally, there is no need
  * to touch this section.
  */
+#define RV_MON_TYPE RV_MON_%%MONITOR_TYPE%%
 #include "%%MODEL_NAME%%.h"
-
-/*
- * Declare the deterministic automata monitor.
- *
- * The rv monitor reference is needed for the monitor declaration.
- */
-static struct rv_monitor rv_%%MODEL_NAME%%;
-DECLARE_DA_MON_%%MONITOR_TYPE%%(%%MODEL_NAME%%, %%MIN_TYPE%%);
+#include <rv/da_monitor.h>
 
 /*
  * This is the instrumentation part of the monitor.
@@ -42,7 +35,7 @@ static int enable_%%MODEL_NAME%%(void)
 {
 	int retval;
 
-	retval = da_monitor_init_%%MODEL_NAME%%();
+	retval = da_monitor_init();
 	if (retval)
 		return retval;
 
@@ -57,7 +50,7 @@ static void disable_%%MODEL_NAME%%(void)
 
 %%TRACEPOINT_DETACH%%
 
-	da_monitor_destroy_%%MODEL_NAME%%();
+	da_monitor_destroy();
 }
 
 /*
@@ -68,7 +61,7 @@ static struct rv_monitor rv_%%MODEL_NAME%% = {
 	.description = "%%DESCRIPTION%%",
 	.enable = enable_%%MODEL_NAME%%,
 	.disable = disable_%%MODEL_NAME%%,
-	.reset = da_monitor_reset_all_%%MODEL_NAME%%,
+	.reset = da_monitor_reset_all,
 	.enabled = 0,
 };
 
