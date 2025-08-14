@@ -136,6 +136,7 @@ struct kscand_scanctrl {
 	struct kscand_nodeinfo *nodeinfo[MAX_NUMNODES];
 	unsigned long address;
 	unsigned long nr_to_scan;
+	nodemask_t nmask;
 };
 
 struct kscand_scanctrl kscand_scanctrl;
@@ -148,6 +149,8 @@ struct kmigrated_mm_slot {
 	spinlock_t migrate_lock;
 	/* Head of per mm migration list */
 	struct list_head migrate_head;
+	/* Indicates set of fallback nodes to migrate. */
+	nodemask_t migration_nmask;
 	/* Indicates weighted success, failure */
 	int msuccess, mfailed, fratio;
 };
@@ -522,6 +525,7 @@ static void reset_scanctrl(struct kscand_scanctrl *scanctrl)
 {
 	int node;
 
+	nodes_clear(scanctrl->nmask);
 	for_each_node_state(node, N_MEMORY)
 		reset_nodeinfo(scanctrl->nodeinfo[node]);
 
@@ -547,9 +551,11 @@ static int get_target_node(struct kscand_scanctrl *scanctrl)
 	int node, target_node = NUMA_NO_NODE;
 	unsigned long prev = 0;
 
+	nodes_clear(scanctrl->nmask);
 	for_each_node(node) {
 		if (node_is_toptier(node) && scanctrl->nodeinfo[node]) {
 			/* This creates a fallback migration node list */
+			node_set(node, scanctrl->nmask);
 			if (get_nodeinfo_nr_accessed(scanctrl->nodeinfo[node]) > prev) {
 				prev = get_nodeinfo_nr_accessed(scanctrl->nodeinfo[node]);
 				target_node = node;
@@ -1396,6 +1402,9 @@ static unsigned long kscand_scan_mm_slot(void)
 
 	total = get_slowtier_accesed(&kscand_scanctrl);
 	target_node = get_target_node(&kscand_scanctrl);
+	if (kmigrated_mm_slot)
+		nodes_copy(kmigrated_mm_slot->migration_nmask,
+						kscand_scanctrl.nmask);
 
 	mm_target_node = READ_ONCE(mm->target_node);
 
