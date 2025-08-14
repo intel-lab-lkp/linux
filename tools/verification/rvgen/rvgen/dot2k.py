@@ -23,10 +23,14 @@ class dot2k(Monitor, Dot2c):
         self.monitor_class = extra_params["monitor_class"]
 
     def fill_monitor_type(self) -> str:
+        if self.monitor_type == "per_obj":
+            return self.monitor_type.upper() + """
+typedef /* XXX: define the target type */ *monitor_target;"""
         return self.monitor_type.upper()
 
     def fill_tracepoint_handlers_skel(self) -> str:
         buff = []
+        buff += self.fill_per_obj_definitions()
         buff += self.fill_hybrid_definitions()
         for event in self.events:
             buff.append("static void handle_%s(void *data, /* XXX: fill header */)" % event)
@@ -41,6 +45,9 @@ class dot2k(Monitor, Dot2c):
             if self.monitor_type == "per_task":
                 buff.append("\tstruct task_struct *p = /* XXX: how do I get p? */;");
                 buff.append("\tda_%s(p, %s%s);" % (handle, event, self.enum_suffix));
+            elif self.monitor_type == "per_obj":
+                buff.append("\tmonitor_target t = /* XXX: how do I get t? */;");
+                buff.append("\tda_%s(t, %s%s);" % (handle, event, self.enum_suffix));
             else:
                 buff.append("\tda_%s(%s%s);" % (handle, event, self.enum_suffix));
             buff.append("}")
@@ -128,6 +135,19 @@ class dot2k(Monitor, Dot2c):
 
     def fill_hybrid_definitions(self) -> list:
         """Stub, not valid for deterministic automata"""
+        return []
+
+    def fill_per_obj_definitions(self) -> list:
+        if self.monitor_type == "per_obj":
+            return ["""
+/*
+ * da_get_id - Get the id from a target
+ */
+static inline da_id_type da_get_id(monitor_target target)
+{
+	return /* XXX: define how to get an id from the target */;
+}
+"""]
         return []
 
     def fill_main_c(self) -> str:
