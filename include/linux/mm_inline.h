@@ -616,4 +616,39 @@ static inline bool vma_has_recency(struct vm_area_struct *vma)
 	return true;
 }
 
+/**
+ * num_pages_contiguous() - determine the number of contiguous pages
+ *			    that represent contiguous PFNs
+ * @pages: an array of page pointers
+ * @nr_pages: length of the array, at least 1
+ *
+ * Determine the number of contiguous pages that represent contiguous PFNs
+ * in @pages, starting from the first page.
+ *
+ * In kernel configs where contiguous pages might not imply contiguous PFNs
+ * over memory section boundaries, this function will stop at the memory
+ * section boundary.
+ *
+ * Returns the number of contiguous pages.
+ */
+static inline size_t num_pages_contiguous(struct page **pages, size_t nr_pages)
+{
+	struct page *cur_page = pages[0];
+	unsigned long section = page_to_section(cur_page);
+	size_t i;
+
+	for (i = 1; i < nr_pages; i++) {
+		if (++cur_page != pages[i])
+			break;
+		/*
+		 * In unproblematic kernel configs, page_to_section() == 0 and
+		 * the whole check will get optimized out.
+		 */
+		if (page_to_section(cur_page) != section)
+			break;
+	}
+
+	return i;
+}
+
 #endif
