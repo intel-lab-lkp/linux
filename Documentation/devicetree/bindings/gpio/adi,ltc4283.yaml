@@ -1,0 +1,33 @@
+# SPDX-License-Identifier: (GPL-2.0 OR BSD-2-Clause)
+%YAML 1.2
+---
+$id: http://devicetree.org/schemas/gpio/adi,ltc4283.yaml#
+$schema: http://devicetree.org/meta-schemas/core.yaml#
+
+title: GPIO LTC4283 Negative Voltage Hot Swap Controller
+
+maintainers:
+  - Nuno Sá <nuno.sa@analog.com>
+
+description: |
+  This module is part of the LTC4283 MFD device.
+  See Documentation/devicetree/bindings/mfd/adi,ltc4283.yaml
+  This implements the GPIO bindings for the LTC4283 negative voltage hot swap
+  controller.
+
+properties:
+  compatible:
+    enum:
+      - adi,ltc4283-gpio
+
+  gpio-controller: true
+
+  '#gpio-cells':
+    const: 2
+
+required:
+  - compatible
+  - gpio-controller
+  - '#gpio-cells'
+
+additionalProperties: false
