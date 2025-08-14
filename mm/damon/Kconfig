@@ -105,7 +105,7 @@ config DAMON_STAT
 config DAMON_STAT_ENABLED_DEFAULT
 	bool "Enable DAMON_STAT by default"
 	depends on DAMON_PADDR
-	default DAMON_STAT
+	select DAMON_STAT
 	help
 	  Whether to enable DAMON_STAT by default.  Users can disable it in
 	  boot or runtime using its 'enabled' parameter.
