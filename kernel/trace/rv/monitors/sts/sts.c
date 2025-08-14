@@ -6,7 +6,6 @@
 #include <linux/init.h>
 #include <linux/rv.h>
 #include <rv/instrumentation.h>
-#include <rv/da_monitor.h>
 
 #define MODULE_NAME "sts"
 
@@ -16,17 +15,16 @@
 #include <rv_trace.h>
 #include <monitors/sched/sched.h>
 
+#define RV_MON_TYPE RV_MON_PER_CPU
 #include "sts.h"
-
-static struct rv_monitor rv_sts;
-DECLARE_DA_MON_PER_CPU(sts, unsigned char);
+#include <rv/da_monitor.h>
 
 #ifdef CONFIG_X86_LOCAL_APIC
 #include <asm/trace/irq_vectors.h>
 
 static void handle_vector_irq_entry(void *data, int vector)
 {
-	da_handle_event_sts(irq_entry_sts);
+	da_handle_event(irq_entry_sts);
 }
 
 static void attach_vector_irq(void)
@@ -61,17 +59,17 @@ static void detach_vector_irq(void) { }
 
 static void handle_irq_disable(void *data, unsigned long ip, unsigned long parent_ip)
 {
-	da_handle_event_sts(irq_disable_sts);
+	da_handle_event(irq_disable_sts);
 }
 
 static void handle_irq_enable(void *data, unsigned long ip, unsigned long parent_ip)
 {
-	da_handle_event_sts(irq_enable_sts);
+	da_handle_event(irq_enable_sts);
 }
 
 static void handle_irq_entry(void *data, int irq, struct irqaction *action)
 {
-	da_handle_event_sts(irq_entry_sts);
+	da_handle_event(irq_entry_sts);
 }
 
 static void handle_sched_switch(void *data, bool preempt,
@@ -79,24 +77,24 @@ static void handle_sched_switch(void *data, bool preempt,
 				struct task_struct *next,
 				unsigned int prev_state)
 {
-	da_handle_event_sts(sched_switch_sts);
+	da_handle_event(sched_switch_sts);
 }
 
 static void handle_schedule_entry(void *data, bool preempt)
 {
-	da_handle_event_sts(schedule_entry_sts);
+	da_handle_event(schedule_entry_sts);
 }
 
 static void handle_schedule_exit(void *data, bool is_switch)
 {
-	da_handle_start_event_sts(schedule_exit_sts);
+	da_handle_start_event(schedule_exit_sts);
 }
 
 static int enable_sts(void)
 {
 	int retval;
 
-	retval = da_monitor_init_sts();
+	retval = da_monitor_init();
 	if (retval)
 		return retval;
 
@@ -123,7 +121,7 @@ static void disable_sts(void)
 	rv_detach_trace_probe("sts", sched_exit_tp, handle_schedule_exit);
 	detach_vector_irq();
 
-	da_monitor_destroy_sts();
+	da_monitor_destroy();
 }
 
 /*
@@ -134,7 +132,7 @@ static struct rv_monitor rv_sts = {
 	.description = "schedule implies task switch.",
 	.enable = enable_sts,
 	.disable = disable_sts,
-	.reset = da_monitor_reset_all_sts,
+	.reset = da_monitor_reset_all,
 	.enabled = 0,
 };
 
