@@ -10,6 +10,7 @@
 #include <linux/platform_data/cros_ec_commands.h>
 #include <linux/platform_data/cros_ec_proto.h>
 #include <linux/platform_device.h>
+#include <linux/ref_proxy.h>
 #include <linux/slab.h>
 #include <linux/spi/spi.h>
 #include <uapi/linux/sched/types.h>
@@ -751,6 +752,9 @@ static int cros_ec_spi_probe(struct spi_device *spi)
 	ec_spi->spi = spi;
 	ec_dev = devm_kzalloc(dev, sizeof(*ec_dev), GFP_KERNEL);
 	if (!ec_dev)
+		return -ENOMEM;
+	ec_dev->ref_proxy_provider = devm_ref_proxy_provider_alloc(dev, ec_dev);
+	if (!ec_dev->ref_proxy_provider)
 		return -ENOMEM;
 
 	/* Check for any DT properties */

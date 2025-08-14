@@ -88,7 +88,7 @@ config CROS_EC
 config CROS_EC_I2C
 	tristate "ChromeOS Embedded Controller (I2C)"
 	depends on CROS_EC && I2C
-
+	select REF_PROXY
 	help
 	  If you say Y here, you get support for talking to the ChromeOS
 	  EC through an I2C bus. This uses a simple byte-level protocol with
@@ -98,6 +98,7 @@ config CROS_EC_I2C
 config CROS_EC_RPMSG
 	tristate "ChromeOS Embedded Controller (rpmsg)"
 	depends on CROS_EC && RPMSG && OF
+	select REF_PROXY
 	help
 	  If you say Y here, you get support for talking to the ChromeOS EC
 	  through rpmsg. This uses a simple byte-level protocol with a
@@ -111,6 +112,7 @@ config CROS_EC_ISHTP
 	tristate "ChromeOS Embedded Controller (ISHTP)"
 	depends on CROS_EC
 	depends on INTEL_ISH_HID
+	select REF_PROXY
 	help
 	  If you say Y here, you get support for talking to the ChromeOS EC
 	  firmware running on Intel Integrated Sensor Hub (ISH), using the
@@ -123,7 +125,7 @@ config CROS_EC_ISHTP
 config CROS_EC_SPI
 	tristate "ChromeOS Embedded Controller (SPI)"
 	depends on CROS_EC && SPI
-
+	select REF_PROXY
 	help
 	  If you say Y here, you get support for talking to the ChromeOS EC
 	  through a SPI bus, using a byte-level protocol. Since the EC's
@@ -133,6 +135,7 @@ config CROS_EC_SPI
 config CROS_EC_UART
 	tristate "ChromeOS Embedded Controller (UART)"
 	depends on CROS_EC && ACPI && SERIAL_DEV_BUS
+	select REF_PROXY
 	help
 	  If you say Y here, you get support for talking to the ChromeOS EC
 	  through a UART, using a byte-level protocol.
@@ -144,6 +147,7 @@ config CROS_EC_LPC
 	tristate "ChromeOS Embedded Controller (LPC)"
 	depends on CROS_EC && ACPI && (X86 || COMPILE_TEST)
 	depends on HAS_IOPORT
+	select REF_PROXY
 	help
 	  If you say Y here, you get support for talking to the ChromeOS EC
 	  over an LPC bus, including the LPC Microchip EC (MEC) variant.

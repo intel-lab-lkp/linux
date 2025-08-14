@@ -13,6 +13,7 @@
 #include <linux/module.h>
 #include <linux/of.h>
 #include <linux/platform_data/cros_ec_proto.h>
+#include <linux/ref_proxy.h>
 #include <linux/serdev.h>
 #include <linux/slab.h>
 #include <uapi/linux/sched/types.h>
@@ -261,6 +262,10 @@ static int cros_ec_uart_probe(struct serdev_device *serdev)
 
 	ec_dev = devm_kzalloc(dev, sizeof(*ec_dev), GFP_KERNEL);
 	if (!ec_dev)
+		return -ENOMEM;
+
+	ec_dev->ref_proxy_provider = devm_ref_proxy_provider_alloc(dev, ec_dev);
+	if (!ec_dev->ref_proxy_provider)
 		return -ENOMEM;
 
 	serdev_device_set_drvdata(serdev, ec_dev);
