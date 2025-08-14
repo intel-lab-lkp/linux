@@ -384,3 +384,59 @@ unsigned long phy_caps_from_interface(phy_interface_t interface)
 	return link_caps;
 }
 EXPORT_SYMBOL_GPL(phy_caps_from_interface);
+
+/**
+ * phy_caps_medium_get_supported() - Returns linkmodes supported on a given medium
+ * @supported: After this call, contains all possible linkmodes on a given medium,
+ *	       and with the given number of lanes, or less.
+ * @medium: The medium to get the support from
+ * @lanes: The number of lanes used on the given medium
+ *
+ * If no match exists, the supported field is left untouched.
+ */
+void phy_caps_medium_get_supported(unsigned long *supported,
+				   enum ethtool_link_medium medium,
+				   int lanes)
+{
+	int i;
+
+	for (i = 0; i < __ETHTOOL_LINK_MODE_MASK_NBITS; i++) {
+		/* Special bits such as Autoneg, Pause, Asym_pause, etc. are
+		 * set and will be masked away by the port parent.
+		 */
+		if (link_mode_params[i].mediums == BIT(ETHTOOL_LINK_MEDIUM_NONE)) {
+			linkmode_set_bit(i, supported);
+			continue;
+		}
+
+		/* For most cases, min_lanes == lanes, except for 10/100BaseT that work
+		 * on 2 lanes but are compatible with 4 lanes mediums
+		 */
+		if (link_mode_params[i].mediums & BIT(medium) &&
+		    link_mode_params[i].min_lanes <= lanes)
+			linkmode_set_bit(i, supported);
+	}
+}
+EXPORT_SYMBOL_GPL(phy_caps_medium_get_supported);
+
+/**
+ * phy_caps_mediums_from_linkmodes() - Get all mediums from a linkmodes list
+ * @linkmodes: A bitset of linkmodes to get the mediums from
+ *
+ * Returns: A bitset of ETHTOOL_MEDIUM_XXX values corresponding to all medium
+ *	    types in the linkmodes list
+ */
+u32 phy_caps_mediums_from_linkmodes(unsigned long *linkmodes)
+{
+	const struct link_mode_info *linkmode;
+	u32 mediums = 0;
+	int i;
+
+	for_each_set_bit(i, linkmodes, __ETHTOOL_LINK_MODE_MASK_NBITS) {
+		linkmode = &link_mode_params[i];
+		mediums |= linkmode->mediums;
+	}
+
+	return mediums;
+}
+EXPORT_SYMBOL_GPL(phy_caps_mediums_from_linkmodes);
