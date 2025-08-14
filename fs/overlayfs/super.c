@@ -161,6 +161,16 @@ static const struct dentry_operations ovl_dentry_operations = {
 	.d_weak_revalidate = ovl_dentry_weak_revalidate,
 };
 
+#if IS_ENABLED(CONFIG_UNICODE)
+static const struct dentry_operations ovl_dentry_ci_operations = {
+	.d_real = ovl_d_real,
+	.d_revalidate = ovl_dentry_revalidate,
+	.d_weak_revalidate = ovl_dentry_weak_revalidate,
+	.d_hash = generic_ci_d_hash,
+	.d_compare = generic_ci_d_compare,
+};
+#endif
+
 static struct kmem_cache *ovl_inode_cachep;
 
 static struct inode *ovl_alloc_inode(struct super_block *sb)
@@ -1332,6 +1342,19 @@ static struct dentry *ovl_get_root(struct super_block *sb,
 	return root;
 }
 
+static void ovl_set_d_op(struct super_block *sb)
+{
+	struct ovl_fs *ofs = sb->s_fs_info;
+
+#if IS_ENABLED(CONFIG_UNICODE)
+	if (ofs->casefold) {
+		set_default_d_op(sb, &ovl_dentry_ci_operations);
+		return;
+	}
+#endif
+	set_default_d_op(sb, &ovl_dentry_operations);
+}
+
 int ovl_fill_super(struct super_block *sb, struct fs_context *fc)
 {
 	struct ovl_fs *ofs = sb->s_fs_info;
@@ -1442,6 +1465,8 @@ int ovl_fill_super(struct super_block *sb, struct fs_context *fc)
 	err = PTR_ERR(oe);
 	if (IS_ERR(oe))
 		goto out_err;
+
+	ovl_set_d_op(sb);
 
 	/* If the upper fs is nonexistent, we mark overlayfs r/o too */
 	if (!ovl_upper_mnt(ofs))
