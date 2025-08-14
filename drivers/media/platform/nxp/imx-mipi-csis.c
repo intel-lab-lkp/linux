@@ -957,6 +957,43 @@ static struct mipi_csis_device *sd_to_mipi_csis_device(struct v4l2_subdev *sdev)
 	return container_of(sdev, struct mipi_csis_device, sd);
 }
 
+static int mipi_csis_get_active_lanes(struct v4l2_subdev *sd)
+{
+	struct mipi_csis_device *csis = sd_to_mipi_csis_device(sd);
+	struct v4l2_mbus_config mbus_config = { 0 };
+	int ret;
+
+	ret = v4l2_subdev_call(csis->source.sd, pad, get_mbus_config,
+			       0, &mbus_config);
+	if (ret == -ENOIOCTLCMD) {
+		dev_dbg(csis->dev, "No remote mbus configuration available\n");
+		return 0;
+	}
+
+	if (ret) {
+		dev_err(csis->dev, "Failed to get remote mbus configuration\n");
+		return ret;
+	}
+
+	if (mbus_config.type != V4L2_MBUS_CSI2_DPHY) {
+		dev_err(csis->dev, "Unsupported media bus type %u\n",
+			mbus_config.type);
+		return -EINVAL;
+	}
+
+	if (mbus_config.bus.mipi_csi2.num_data_lanes > csis->bus.num_data_lanes) {
+		dev_err(csis->dev,
+			"Unsupported mbus config: too many data lanes %u\n",
+			mbus_config.bus.mipi_csi2.num_data_lanes);
+		return -EINVAL;
+	}
+
+	csis->bus.num_data_lanes = mbus_config.bus.mipi_csi2.num_data_lanes;
+	dev_dbg(csis->dev, "Number of lanes: %d\n", csis->bus.num_data_lanes);
+
+	return 0;
+}
+
 static int mipi_csis_s_stream(struct v4l2_subdev *sd, int enable)
 {
 	struct mipi_csis_device *csis = sd_to_mipi_csis_device(sd);
@@ -982,6 +1019,10 @@ static int mipi_csis_s_stream(struct v4l2_subdev *sd, int enable)
 
 	format = v4l2_subdev_state_get_format(state, CSIS_PAD_SINK);
 	csis_fmt = find_csis_format(format->code);
+
+	ret = mipi_csis_get_active_lanes(sd);
+	if (ret < 0)
+		dev_dbg(csis->dev, "Failed to get active lanes: %d", ret);
 
 	ret = mipi_csis_calculate_params(csis, csis_fmt);
 	if (ret < 0)
