@@ -21,6 +21,7 @@
 #include <linux/delay.h>
 #include <linux/cleanup.h>
 #include <linux/minmax.h>
+#include <linux/prctl.h>
 #include <trace/events/kmem.h>
 
 #include <asm/pgalloc.h>
@@ -1158,6 +1159,26 @@ static int kscand_mstat_scan_period(unsigned int scan_period, int fratio)
 }
 
 /*
+ * Scanning aggression is further controlled by prctl. pte_scan_scale value
+ * further tunes the scan period by 20%.
+ * 0 => scanning disabled.
+ * 1 => current min max is retained.
+ * 2..10 => scale the scan period by 20% * scale factor.
+ */
+static unsigned long kscand_get_scaled_scan_period(unsigned int scan_period,
+								unsigned int scale)
+{
+	int delta = 0;
+
+	if (scale) {
+		delta = scan_period * (scale - 1);
+		delta /= (PR_PTE_A_SCAN_SCALE_MAX - 1);
+	}
+
+	return scan_period + delta;
+}
+
+/*
  * This is the normal change percentage when old and new delta remain same.
  * i.e., either both positive or both zero.
  */
@@ -1201,7 +1222,7 @@ static int kscand_mstat_scan_period(unsigned int scan_period, int fratio)
  *		Increase scan_size by (1 << SCAN_SIZE_CHANGE_SHIFT).
  */
 static inline void kscand_update_mmslot_info(struct kscand_mm_slot *mm_slot,
-				unsigned long total, int target_node)
+				unsigned long total, int target_node, unsigned int scale)
 {
 	int fratio;
 	unsigned int scan_period;
@@ -1243,6 +1264,7 @@ static inline void kscand_update_mmslot_info(struct kscand_mm_slot *mm_slot,
 	}
 
 	scan_period = clamp(scan_period, KSCAND_SCAN_PERIOD_MIN, KSCAND_SCAN_PERIOD_MAX);
+	scan_period = kscand_get_scaled_scan_period(scan_period, scale);
 	fratio = kmigrated_get_mstat_fratio((&mm_slot->slot)->mm);
 	scan_period = kscand_mstat_scan_period(scan_period, fratio);
 	scan_size = clamp(scan_size, KSCAND_SCAN_SIZE_MIN, KSCAND_SCAN_SIZE_MAX);
@@ -1384,7 +1406,8 @@ static unsigned long kscand_scan_mm_slot(void)
 
 	if (update_mmslot_info) {
 		mm_slot->address = address;
-		kscand_update_mmslot_info(mm_slot, total, target_node);
+		kscand_update_mmslot_info(mm_slot, total,
+					target_node, mm->pte_scan_scale);
 	}
 
 	trace_kmem_scan_mm_end(mm, address, total, mm_slot_scan_period,
