@@ -29,7 +29,7 @@ if TCG_TPM
 
 config TCG_TPM2_HMAC
 	bool "Use HMAC and encrypted transactions on the TPM bus"
-	default X86_64
+	default n
 	select CRYPTO_ECDH
 	select CRYPTO_LIB_AESCFB
 	select CRYPTO_LIB_SHA256
@@ -39,7 +39,10 @@ config TCG_TPM2_HMAC
 	  communicating with the TPM to prevent or detect bus snooping
 	  and interposer attacks (see tpm-security.rst).  Saying Y
 	  here adds some encryption overhead to all kernel to TPM
-	  transactions.
+	  transactions.  If the TPM does not implement a command or
+	  algorithm required by the feature, it will not be registered
+	  during initialization, and userspace will fail to open the
+	  TPM with ENODEV.
 
 config HW_RANDOM_TPM
 	bool "TPM HW Random Number Generator support"
