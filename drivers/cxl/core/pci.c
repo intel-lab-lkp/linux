@@ -25,14 +25,14 @@ module_param(media_ready_timeout, ushort, 0644);
 MODULE_PARM_DESC(media_ready_timeout, "seconds to wait for media ready");
 
 /**
- * devm_cxl_add_dport_by_dev - allocate a dport by dport device
+ * __devm_cxl_add_dport_by_dev - allocate a dport by dport device
  * @port: cxl_port that hosts the dport
  * @dport_dev: 'struct device' of the dport
  *
  * Returns the allocate dport on success or ERR_PTR() of -errno on error
  */
-struct cxl_dport *devm_cxl_add_dport_by_dev(struct cxl_port *port,
-					    struct device *dport_dev)
+struct cxl_dport *__devm_cxl_add_dport_by_dev(struct cxl_port *port,
+					      struct device *dport_dev)
 {
 	struct cxl_register_map map;
 	struct pci_dev *pdev;
@@ -61,6 +61,7 @@ struct cxl_dport *devm_cxl_add_dport_by_dev(struct cxl_port *port,
 	port_num = FIELD_GET(PCI_EXP_LNKCAP_PN, lnkcap);
 	return devm_cxl_add_dport(port, &pdev->dev, port_num, map.resource);
 }
+EXPORT_SYMBOL_NS_GPL(__devm_cxl_add_dport_by_dev, "CXL");
 
 struct cxl_walk_context {
 	struct pci_bus *bus;

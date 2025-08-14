@@ -1022,6 +1022,36 @@ static int mock_cxl_port_enumerate_dports(struct cxl_port *port)
 	return 0;
 }
 
+static struct cxl_dport *mock_cxl_add_dport_by_dev(struct cxl_port *port,
+						   struct device *dport_dev)
+{
+	struct platform_device **array;
+	int rc, i, array_size;
+
+	rc = get_port_array(port, &array, &array_size);
+	if (rc)
+		return ERR_PTR(rc);
+
+	for (i = 0; i < array_size; i++) {
+		struct platform_device *pdev = array[i];
+
+		if (pdev->dev.parent != port->uport_dev) {
+			dev_dbg(&port->dev, "%s: mismatch parent %s\n",
+				dev_name(port->uport_dev),
+				dev_name(pdev->dev.parent));
+			continue;
+		}
+
+		if (&pdev->dev != dport_dev)
+			continue;
+
+		return devm_cxl_add_dport(port, &pdev->dev, pdev->id,
+					  CXL_RESOURCE_NONE);
+	}
+
+	return ERR_PTR(-ENODEV);
+}
+
 /*
  * Faking the cxl_dpa_perf for the memdev when appropriate.
  */
@@ -1084,6 +1114,7 @@ static struct cxl_mock_ops cxl_mock_ops = {
 	.devm_cxl_add_passthrough_decoder = mock_cxl_add_passthrough_decoder,
 	.devm_cxl_enumerate_decoders = mock_cxl_enumerate_decoders,
 	.cxl_endpoint_parse_cdat = mock_cxl_endpoint_parse_cdat,
+	.devm_cxl_add_dport_by_dev = mock_cxl_add_dport_by_dev,
 	.list = LIST_HEAD_INIT(cxl_mock_ops.list),
 };
 
