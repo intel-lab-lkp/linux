@@ -235,8 +235,10 @@ enum clk_types {
  */
 struct rzv2h_mod_clk {
 	const char *name;
+	const char *child_name;
 	u32 mstop_data;
 	u16 parent;
+	u16 child;
 	bool critical;
 	bool no_pm;
 	u8 on_index;
@@ -247,11 +249,13 @@ struct rzv2h_mod_clk {
 };
 
 #define DEF_MOD_BASE(_name, _mstop, _parent, _critical, _no_pm, _onindex, \
-		     _onbit, _monindex, _monbit, _ext_clk_mux_index) \
+		     _onbit, _monindex, _monbit, _ext_clk_mux_index, _childname, _child) \
 	{ \
 		.name = (_name), \
+		.child_name = (_childname), \
 		.mstop_data = (_mstop), \
 		.parent = (_parent), \
+		.child = (_child), \
 		.critical = (_critical), \
 		.no_pm = (_no_pm), \
 		.on_index = (_onindex), \
@@ -262,18 +266,26 @@ struct rzv2h_mod_clk {
 	}
 
 #define DEF_MOD(_name, _parent, _onindex, _onbit, _monindex, _monbit, _mstop) \
-	DEF_MOD_BASE(_name, _mstop, _parent, false, false, _onindex, _onbit, _monindex, _monbit, -1)
+	DEF_MOD_BASE(_name, _mstop, _parent, false, false, _onindex, _onbit, _monindex, \
+		     _monbit, -1, NULL, 0)
 
 #define DEF_MOD_CRITICAL(_name, _parent, _onindex, _onbit, _monindex, _monbit, _mstop) \
-	DEF_MOD_BASE(_name, _mstop, _parent, true, false, _onindex, _onbit, _monindex, _monbit, -1)
+	DEF_MOD_BASE(_name, _mstop, _parent, true, false, _onindex, _onbit, _monindex, \
+		     _monbit, -1, NULL, 0)
 
 #define DEF_MOD_NO_PM(_name, _parent, _onindex, _onbit, _monindex, _monbit, _mstop) \
-	DEF_MOD_BASE(_name, _mstop, _parent, false, true, _onindex, _onbit, _monindex, _monbit, -1)
+	DEF_MOD_BASE(_name, _mstop, _parent, false, true, _onindex, _onbit, _monindex, \
+		     _monbit, -1, NULL, 0)
 
 #define DEF_MOD_MUX_EXTERNAL(_name, _parent, _onindex, _onbit, _monindex, _monbit, _mstop, \
 			     _ext_clk_mux_index) \
 	DEF_MOD_BASE(_name, _mstop, _parent, false, false, _onindex, _onbit, _monindex, _monbit, \
-		     _ext_clk_mux_index)
+		     _ext_clk_mux_index, NULL, 0)
+
+#define DEF_MOD_PARENT(_name, _parent, _onindex, _onbit, _monindex, _monbit, _mstop, \
+			     _child_name, _child) \
+	DEF_MOD_BASE(_name, _mstop, _parent, false, false, _onindex, _onbit, _monindex, _monbit, \
+		     -1, _child_name, _child)
 
 /**
  * struct rzv2h_reset - Reset definitions

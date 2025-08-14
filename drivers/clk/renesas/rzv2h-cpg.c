@@ -823,6 +823,17 @@ rzv2h_cpg_register_mod_clk(const struct rzv2h_mod_clk *mod,
 	}
 
 	priv->clks[id] = clock->hw.clk;
+	if (mod->child_name) {
+		WARN_DEBUG(mod->child >= priv->num_core_clks);
+		WARN_DEBUG(PTR_ERR(priv->clks[mod->child]) != -ENOENT);
+
+		clk = rzv2h_cpg_mod_status_clk_register(priv, mod->child_name, mod->name, 1, 1,
+							FIXED_MOD_CONF_PACK(mod->mon_index,
+									    mod->mon_bit));
+		if (IS_ERR_OR_NULL(clk))
+			goto fail;
+		priv->clks[mod->child] = clk;
+	}
 
 	/*
 	 * Ensure the module clocks and MSTOP bits are synchronized when they are
