@@ -24,6 +24,44 @@ static unsigned short media_ready_timeout = 60;
 module_param(media_ready_timeout, ushort, 0644);
 MODULE_PARM_DESC(media_ready_timeout, "seconds to wait for media ready");
 
+/**
+ * devm_cxl_add_dport_by_dev - allocate a dport by dport device
+ * @port: cxl_port that hosts the dport
+ * @dport_dev: 'struct device' of the dport
+ *
+ * Returns the allocate dport on success or ERR_PTR() of -errno on error
+ */
+struct cxl_dport *devm_cxl_add_dport_by_dev(struct cxl_port *port,
+					    struct device *dport_dev)
+{
+	struct cxl_register_map map;
+	struct pci_dev *pdev;
+	u32 lnkcap, port_num;
+	int type;
+	int rc;
+
+	if (!dev_is_pci(dport_dev))
+		return ERR_PTR(-EINVAL);
+
+	device_lock_assert(&port->dev);
+
+	pdev = to_pci_dev(dport_dev);
+	type = pci_pcie_type(pdev);
+	if (type != PCI_EXP_TYPE_DOWNSTREAM && type != PCI_EXP_TYPE_ROOT_PORT)
+		return ERR_PTR(-EINVAL);
+
+	if (pci_read_config_dword(pdev, pci_pcie_cap(pdev) + PCI_EXP_LNKCAP,
+				  &lnkcap))
+		return ERR_PTR(-ENXIO);
+
+	rc = cxl_find_regblock(pdev, CXL_REGLOC_RBI_COMPONENT, &map);
+	if (rc)
+		dev_dbg(&port->dev, "failed to find component registers\n");
+
+	port_num = FIELD_GET(PCI_EXP_LNKCAP_PN, lnkcap);
+	return devm_cxl_add_dport(port, &pdev->dev, port_num, map.resource);
+}
+
 struct cxl_walk_context {
 	struct pci_bus *bus;
 	struct cxl_port *port;
@@ -1169,3 +1207,46 @@ int cxl_gpf_port_setup(struct cxl_dport *dport)
 
 	return 0;
 }
+
+static int count_dports(struct pci_dev *pdev, void *data)
+{
+	struct cxl_walk_context *ctx = data;
+	int type = pci_pcie_type(pdev);
+
+	if (pdev->bus != ctx->bus)
+		return 0;
+	if (!pci_is_pcie(pdev))
+		return 0;
+	if (type != ctx->type)
+		return 0;
+
+	ctx->count++;
+	return 0;
+}
+
+int cxl_port_get_possible_dports(struct cxl_port *port)
+{
+	struct pci_bus *bus = cxl_port_to_pci_bus(port);
+	struct cxl_walk_context ctx;
+	int type;
+
+	if (!bus) {
+		dev_err(&port->dev, "No PCI bus found for port %s\n",
+			dev_name(&port->dev));
+		return -ENXIO;
+	}
+
+	if (pci_is_root_bus(bus))
+		type = PCI_EXP_TYPE_ROOT_PORT;
+	else
+		type = PCI_EXP_TYPE_DOWNSTREAM;
+
+	ctx = (struct cxl_walk_context) {
+		.bus = bus,
+		.type = type,
+	};
+	pci_walk_bus(bus, count_dports, &ctx);
+
+	return ctx.count;
+}
+EXPORT_SYMBOL_NS_GPL(cxl_port_get_possible_dports, "CXL");
