@@ -215,7 +215,7 @@ static struct dentry *dasd_debugfs_setup(const char *name,
 	if (!base_dentry)
 		return NULL;
 	pde = debugfs_create_dir(name, base_dentry);
-	if (!pde || IS_ERR(pde))
+	if (IS_ERR_OR_NULL(pde))
 		return NULL;
 	return pde;
 }
@@ -1089,11 +1089,11 @@ static void dasd_statistics_createroot(void)
 
 	dasd_debugfs_root_entry = NULL;
 	pde = debugfs_create_dir("dasd", NULL);
-	if (!pde || IS_ERR(pde))
+	if (IS_ERR_OR_NULL(pde))
 		goto error;
 	dasd_debugfs_root_entry = pde;
 	pde = debugfs_create_dir("global", dasd_debugfs_root_entry);
-	if (!pde || IS_ERR(pde))
+	if (IS_ERR_OR_NULL(pde))
 		goto error;
 	dasd_debugfs_global_entry = pde;
 	dasd_profile_init(&dasd_global_profile, dasd_debugfs_global_entry);
