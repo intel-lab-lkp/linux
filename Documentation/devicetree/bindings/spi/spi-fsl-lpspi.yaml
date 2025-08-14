@@ -64,7 +64,7 @@ properties:
     description:
       number of chip selects.
     minimum: 1
-    maximum: 2
+    maximum: 3
     default: 1
 
   power-domains:
