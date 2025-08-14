@@ -87,6 +87,7 @@ static ssize_t get_modalias(char *buffer, size_t buffer_size)
 		{ "br",  DMI_BIOS_RELEASE },
 		{ "efr", DMI_EC_FIRMWARE_RELEASE },
 		{ "svn", DMI_SYS_VENDOR },
+		{ "pf",  DMI_PRODUCT_FAMILY },
 		{ "pn",  DMI_PRODUCT_NAME },
 		{ "pvr", DMI_PRODUCT_VERSION },
 		{ "rvn", DMI_BOARD_VENDOR },
