@@ -25,6 +25,11 @@
 #include "coresight-syscfg.h"
 #include "coresight-trace-id.h"
 
+#if IS_ENABLED(CONFIG_CORESIGHT_SOURCE_ETM4X)
+#include <linux/perf/arm_pmu.h>
+#include "coresight-etm4x.h"
+#endif
+
 static struct pmu etm_pmu;
 static bool etm_perf_up;
 
@@ -69,7 +74,10 @@ PMU_FORMAT_ATTR(sinkid,		"config2:0-31");
 /* config ID - set if a system configuration is selected */
 PMU_FORMAT_ATTR(configid,	"config2:32-63");
 PMU_FORMAT_ATTR(cc_threshold,	"config3:0-11");
-
+#if IS_ENABLED(CONFIG_CORESIGHT_SOURCE_ETM4X)
+/* Interval = (2 ^ ts_level) */
+GEN_PMU_FORMAT_ATTR(ts_level);
+#endif
 
 /*
  * contextid always traces the "PID".  The PID is in CONTEXTIDR_EL1
@@ -103,6 +111,9 @@ static struct attribute *etm_config_formats_attr[] = {
 	&format_attr_configid.attr,
 	&format_attr_branch_broadcast.attr,
 	&format_attr_cc_threshold.attr,
+#if IS_ENABLED(CONFIG_CORESIGHT_SOURCE_ETM4X)
+	&format_attr_ts_level.attr,
+#endif
 	NULL,
 };
 
