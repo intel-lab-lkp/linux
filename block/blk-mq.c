@@ -520,6 +520,8 @@ retry:
 			data->rq_flags |= RQF_USE_SCHED;
 			if (ops->limit_depth)
 				ops->limit_depth(data->cmd_flags, data);
+			else if (!blk_mq_sched_sync_request(data->cmd_flags))
+				data->shallow_depth = q->async_depth;
 		}
 	} else {
 		blk_mq_tag_busy(data->hctx);
@@ -4606,6 +4608,7 @@ int blk_mq_init_allocated_queue(struct blk_mq_tag_set *set,
 	spin_lock_init(&q->requeue_lock);
 
 	q->nr_requests = set->queue_depth;
+	q->async_depth = set->queue_depth;
 
 	blk_mq_init_cpu_queues(q, set->nr_hw_queues);
 	blk_mq_map_swqueue(q);
@@ -4934,6 +4937,23 @@ static int blk_mq_sched_grow_tags(struct request_queue *q, unsigned int nr)
 	return 0;
 }
 
+static void __blk_mq_update_nr_requests(struct request_queue *q,
+					unsigned int nr)
+{
+	unsigned int old_nr = q->nr_requests;
+
+	q->nr_requests = nr;
+	if (!q->elevator) {
+		q->async_depth = nr;
+		return;
+	}
+
+	/* keep the percentage of async requests */
+	q->async_depth = max(q->async_depth * nr / old_nr, 1);
+	if (q->elevator->type->ops.depth_updated)
+		q->elevator->type->ops.depth_updated(q);
+}
+
 int blk_mq_update_nr_requests(struct request_queue *q, unsigned int nr)
 {
 	struct blk_mq_tag_set *set = q->tag_set;
@@ -4962,9 +4982,7 @@ int blk_mq_update_nr_requests(struct request_queue *q, unsigned int nr)
 			goto out;
 	}
 
-	q->nr_requests = nr;
-	if (q->elevator && q->elevator->type->ops.depth_updated)
-		q->elevator->type->ops.depth_updated(q);
+	__blk_mq_update_nr_requests(q, nr);
 
 out:
 	blk_mq_unquiesce_queue(q);
