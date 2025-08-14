@@ -14,7 +14,16 @@ description: |
 
 properties:
   compatible:
-    const: rohm,bd79104
+    oneOf:
+      - items:
+          - enum:
+              - rohm,bd79100
+              - rohm,bd79101
+              - rohm,bd79102
+              - rohm,bd79104
+      - items:
+          - const: rohm,bd79104
+          - const: rohm,bd79103
 
   reg:
     maxItems: 1
