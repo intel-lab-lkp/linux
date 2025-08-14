@@ -82,6 +82,7 @@ struct typec_port {
 	struct device			*usb3_dev;
 
 	bool				alt_mode_override;
+	struct list_head		mode_list;
 };
 
 #define to_typec_port(_dev_) container_of(_dev_, struct typec_port, dev)
