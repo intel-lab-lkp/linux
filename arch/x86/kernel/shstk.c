@@ -192,10 +192,19 @@ void reset_thread_features(struct task_struct *tsk)
 }
 
 unsigned long shstk_alloc_thread_stack(struct task_struct *tsk, unsigned long clone_flags,
-				       unsigned long stack_size)
+				       bool minimal, unsigned long stack_size)
 {
 	struct thread_shstk *shstk = &tsk->thread.shstk;
 	unsigned long addr, size;
+
+	/*
+	 * Kernel threads cloned from userspace thread never return to
+	 * usermode.
+	 */
+	if (minimal) {
+		reset_thread_features(tsk);
+		return 0;
+	}
 
 	/*
 	 * If shadow stack is not enabled on the new thread, skip any
