@@ -630,6 +630,16 @@ static const struct driver_info	zte_rndis_info = {
 	.tx_fixup =	rndis_tx_fixup,
 };
 
+static const struct driver_info	wwan_rndis_info = {
+	.description =	"Mobile Broadband RNDIS device",
+	.flags =	FLAG_WWAN | FLAG_POINTTOPOINT | FLAG_FRAMING_RN | FLAG_NO_SETINT,
+	.bind =		rndis_bind,
+	.unbind =	rndis_unbind,
+	.status =	rndis_status,
+	.rx_fixup =	rndis_rx_fixup,
+	.tx_fixup =	rndis_tx_fixup,
+};
+
 /*-------------------------------------------------------------------------*/
 
 static const struct usb_device_id	products [] = {
@@ -666,7 +676,15 @@ static const struct usb_device_id	products [] = {
 	USB_INTERFACE_INFO(USB_CLASS_WIRELESS_CONTROLLER, 1, 3),
 	.driver_info = (unsigned long) &rndis_info,
 }, {
-	/* Novatel Verizon USB730L */
+	/* Telit Mobile Broadband Modem, such as FN990A (RNDIS) */
+	USB_VENDOR_AND_INTERFACE_INFO(0x1bc7,
+				      USB_CLASS_MISC, 4, 1),
+	.driver_info = (unsigned long)&wwan_rndis_info,
+}, {
+	/* Novatel Verizon USB730L, USB tethering in various phones,
+	 * including Fairphone 4 5G, Xiaomi Redmi Note 12 and perhaps
+	 * others.
+	 */
 	USB_INTERFACE_INFO(USB_CLASS_MISC, 4, 1),
 	.driver_info = (unsigned long) &rndis_info,
 },
