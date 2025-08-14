@@ -13,7 +13,7 @@
 #include <linux/serial_reg.h>	/* For the various UART offsets */
 #include <linux/tty.h>
 #include <linux/pci.h>
-#include <asm/io.h>
+#include <linux/io.h>
 
 #include "jsm.h"		/* Driver main header file */
 
@@ -29,12 +29,13 @@ static u32 jsm_offset_table[8] = { 0x01, 0x02, 0x04, 0x08, 0x10, 0x20, 0x40, 0x8
  */
 static inline void neo_pci_posting_flush(struct jsm_board *bd)
 {
-      readb(bd->re_map_membase + 0x8D);
+	readb(bd->re_map_membase + 0x8D);
 }
 
 static void neo_set_cts_flow_control(struct jsm_channel *ch)
 {
 	u8 ier, efr;
+
 	ier = readb(&ch->ch_neo_uart->ier);
 	efr = readb(&ch->ch_neo_uart->efr);
 
@@ -66,6 +67,7 @@ static void neo_set_cts_flow_control(struct jsm_channel *ch)
 static void neo_set_rts_flow_control(struct jsm_channel *ch)
 {
 	u8 ier, efr;
+
 	ier = readb(&ch->ch_neo_uart->ier);
 	efr = readb(&ch->ch_neo_uart->efr);
 
@@ -106,6 +108,7 @@ static void neo_set_rts_flow_control(struct jsm_channel *ch)
 static void neo_set_ixon_flow_control(struct jsm_channel *ch)
 {
 	u8 ier, efr;
+
 	ier = readb(&ch->ch_neo_uart->ier);
 	efr = readb(&ch->ch_neo_uart->efr);
 
@@ -143,6 +146,7 @@ static void neo_set_ixon_flow_control(struct jsm_channel *ch)
 static void neo_set_ixoff_flow_control(struct jsm_channel *ch)
 {
 	u8 ier, efr;
+
 	ier = readb(&ch->ch_neo_uart->ier);
 	efr = readb(&ch->ch_neo_uart->efr);
 
@@ -181,6 +185,7 @@ static void neo_set_ixoff_flow_control(struct jsm_channel *ch)
 static void neo_set_no_input_flow_control(struct jsm_channel *ch)
 {
 	u8 ier, efr;
+
 	ier = readb(&ch->ch_neo_uart->ier);
 	efr = readb(&ch->ch_neo_uart->efr);
 
@@ -220,6 +225,7 @@ static void neo_set_no_input_flow_control(struct jsm_channel *ch)
 static void neo_set_no_output_flow_control(struct jsm_channel *ch)
 {
 	u8 ier, efr;
+
 	ier = readb(&ch->ch_neo_uart->ier);
 	efr = readb(&ch->ch_neo_uart->efr);
 
@@ -350,7 +356,7 @@ static void neo_copy_data_from_uart_to_queue(struct jsm_channel *ch)
 		 * IBM pSeries platform.
 		 * 15 bytes max appears to be the magic number.
 		 */
-		n = min((u32) n, (u32) 12);
+		n = min_t(u32, n, 12);
 
 		/*
 		 * Since we are grabbing the linestatus register, which
@@ -425,6 +431,7 @@ static void neo_copy_data_from_uart_to_queue(struct jsm_channel *ch)
 		 */
 		if (linestatus & error_mask) {
 			u8 discard;
+
 			linestatus = 0;
 			memcpy_fromio(&discard, &ch->ch_neo_uart->txrxburst, 1);
 			continue;
@@ -433,7 +440,7 @@ static void neo_copy_data_from_uart_to_queue(struct jsm_channel *ch)
 		/*
 		 * If our queue is full, we have no choice but to drop some data.
 		 * The assumption is that HWFLOW or SWFLOW should have stopped
-		 * things way way before we got to this point.
+		 * things way before we got to this point.
 		 *
 		 * I decided that I wanted to ditch the oldest data first,
 		 * I hope thats okay with everyone? Yes? Good.
@@ -548,7 +555,7 @@ static void neo_parse_modem(struct jsm_channel *ch, u8 signals)
 	u8 msignals = signals;
 
 	jsm_dbg(MSIGS, &ch->ch_bd->pci_dev,
-		"neo_parse_modem: port: %d msignals: %x\n",
+		"%s: port: %d msignals: %x\n", __func__,
 		ch->ch_portnum, msignals);
 
 	/* Scrub off lower bits. They signify delta's, which I don't care about */
@@ -580,7 +587,7 @@ static void neo_parse_modem(struct jsm_channel *ch, u8 signals)
 		ch->ch_mistat &= ~UART_MSR_CTS;
 
 	jsm_dbg(MSIGS, &ch->ch_bd->pci_dev,
-		"Port: %d DTR: %d RTS: %d CTS: %d DSR: %d " "RI: %d CD: %d\n",
+		"Port: %d DTR: %d RTS: %d CTS: %d DSR: %d RI: %d CD: %d\n",
 		ch->ch_portnum,
 		!!((ch->ch_mistat | ch->ch_mostat) & UART_MCR_DTR),
 		!!((ch->ch_mistat | ch->ch_mostat) & UART_MCR_RTS),
@@ -625,8 +632,7 @@ static void neo_flush_uart_write(struct jsm_channel *ch)
 			jsm_dbg(IOCTL, &ch->ch_bd->pci_dev,
 				"Still flushing TX UART... i: %d\n", i);
 			udelay(10);
-		}
-		else
+		} else
 			break;
 	}
 
@@ -657,8 +663,7 @@ static void neo_flush_uart_read(struct jsm_channel *ch)
 			jsm_dbg(IOCTL, &ch->ch_bd->pci_dev,
 				"Still flushing RX UART... i: %d\n", i);
 			udelay(10);
-		}
-		else
+		} else
 			break;
 	}
 }
@@ -675,6 +680,7 @@ static void neo_clear_break(struct jsm_channel *ch)
 	/* Turn break off, and unset some variables */
 	if (ch->ch_flags & CH_BREAK_SENDING) {
 		u8 temp = readb(&ch->ch_neo_uart->lcr);
+
 		writeb((temp & ~UART_LCR_SBC), &ch->ch_neo_uart->lcr);
 
 		ch->ch_flags &= ~(CH_BREAK_SENDING);
@@ -758,14 +764,12 @@ static void neo_parse_isr(struct jsm_board *brd, u32 port)
 			spin_lock_irqsave(&ch->ch_lock, lock_flags);
 			if (cause == UART_17158_XON_DETECT) {
 				/* Is output stopped right now, if so, resume it */
-				if (brd->channels[port]->ch_flags & CH_STOP) {
+				if (brd->channels[port]->ch_flags & CH_STOP)
 					ch->ch_flags &= ~(CH_STOP);
-				}
 				jsm_dbg(INTR, &ch->ch_bd->pci_dev,
 					"Port %d. XON detected in incoming data\n",
 					port);
-			}
-			else if (cause == UART_17158_XOFF_DETECT) {
+			} else if (cause == UART_17158_XOFF_DETECT) {
 				if (!(brd->channels[port]->ch_flags & CH_STOP)) {
 					ch->ch_flags |= CH_STOP;
 					jsm_dbg(INTR, &ch->ch_bd->pci_dev,
@@ -896,8 +900,7 @@ static inline void neo_parse_lsr(struct jsm_board *brd, u32 port)
 
 		/* Transfer data (if any) from Write Queue -> UART. */
 		neo_copy_data_from_queue_to_uart(ch);
-	}
-	else if (linestatus & UART_17158_TX_AND_FIFO_CLR) {
+	} else if (linestatus & UART_17158_TX_AND_FIFO_CLR) {
 		spin_lock_irqsave(&ch->ch_lock, lock_flags);
 		ch->ch_flags |= (CH_TX_FIFO_EMPTY | CH_TX_FIFO_LWM);
 		spin_unlock_irqrestore(&ch->ch_lock, lock_flags);
@@ -1026,8 +1029,7 @@ static void neo_param(struct jsm_channel *ch)
 			neo_set_no_output_flow_control(ch);
 		else
 			neo_set_ixon_flow_control(ch);
-	}
-	else
+	} else
 		neo_set_no_output_flow_control(ch);
 
 	if (ch->ch_c_cflag & CRTSCTS)
@@ -1038,8 +1040,7 @@ static void neo_param(struct jsm_channel *ch)
 			neo_set_no_input_flow_control(ch);
 		else
 			neo_set_ixoff_flow_control(ch);
-	}
-	else
+	} else
 		neo_set_no_input_flow_control(ch);
 	/*
 	 * Adjust the RX FIFO Trigger level if baud is less than 9600.
@@ -1055,7 +1056,6 @@ static void neo_param(struct jsm_channel *ch)
 
 	/* Get current status of the modem signals now */
 	neo_parse_modem(ch, readb(&ch->ch_neo_uart->msr));
-	return;
 }
 
 /*
@@ -1101,7 +1101,7 @@ static irqreturn_t neo_intr(int irq, void *voidbrd)
 	current_port = 0;
 
 	/* Loop on each port */
-	while (((uart_poll & 0xff) != 0) && (outofloop_count < 0xff)){
+	while (((uart_poll & 0xff) != 0) && (outofloop_count < 0xff)) {
 
 		tmp = uart_poll;
 		outofloop_count++;
@@ -1135,7 +1135,7 @@ static irqreturn_t neo_intr(int irq, void *voidbrd)
 		case UART_17158_RXRDY_TIMEOUT:
 			/*
 			 * RXRDY Time-out is cleared by reading data in the
-			* RX FIFO until it falls below the trigger level.
+			 * RX FIFO until it falls below the trigger level.
 			 */
 
 			/* Verify the port is in range. */
@@ -1213,6 +1213,7 @@ static irqreturn_t neo_intr(int irq, void *voidbrd)
 static void neo_disable_receiver(struct jsm_channel *ch)
 {
 	u8 tmp = readb(&ch->ch_neo_uart->ier);
+
 	tmp &= ~(UART_IER_RDI);
 	writeb(tmp, &ch->ch_neo_uart->ier);
 
@@ -1229,6 +1230,7 @@ static void neo_disable_receiver(struct jsm_channel *ch)
 static void neo_enable_receiver(struct jsm_channel *ch)
 {
 	u8 tmp = readb(&ch->ch_neo_uart->ier);
+
 	tmp |= (UART_IER_RDI);
 	writeb(tmp, &ch->ch_neo_uart->ier);
 
@@ -1309,6 +1311,7 @@ static void neo_send_break(struct jsm_channel *ch)
 	/* Tell the UART to start sending the break */
 	if (!(ch->ch_flags & CH_BREAK_SENDING)) {
 		u8 temp = readb(&ch->ch_neo_uart->lcr);
+
 		writeb((temp | UART_LCR_SBC), &ch->ch_neo_uart->lcr);
 		ch->ch_flags |= (CH_BREAK_SENDING);
 
