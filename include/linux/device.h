@@ -1201,6 +1201,7 @@ void device_link_remove(void *consumer, struct device *supplier);
 void device_links_supplier_sync_state_pause(void);
 void device_links_supplier_sync_state_resume(void);
 void device_link_wait_removal(void);
+void fw_devlink_relax_consumers(struct device *dev);
 
 static inline bool device_link_test(const struct device_link *link, u32 flags)
 {

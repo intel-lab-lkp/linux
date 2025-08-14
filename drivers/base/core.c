@@ -1754,6 +1754,28 @@ static void fw_devlink_relax_link(struct device_link *link)
 		dev_name(link->supplier));
 }
 
+/**
+ * fw_devlink_relax_consumers - Relax the devlinks with all its consumers
+ * @dev: Device whose consumer devlinks will be relaxed
+ *
+ * Some devices are added during its parent's probe and will never get bound
+ * to a driver. In this case its consumers will be deferred probe until
+ * deferred_probe_timeout.
+ *
+ * Use this function to relax the consumer devlinks so that the consumers
+ * device would be probed not that later.
+ */
+void fw_devlink_relax_consumers(struct device *dev)
+{
+	struct device_link *link;
+
+	device_links_write_lock();
+	list_for_each_entry(link, &dev->links.consumers, s_node)
+		fw_devlink_relax_link(link);
+	device_links_write_unlock();
+}
+EXPORT_SYMBOL_GPL(fw_devlink_relax_consumers);
+
 static int fw_devlink_no_driver(struct device *dev, void *data)
 {
 	struct device_link *link = to_devlink(dev);
