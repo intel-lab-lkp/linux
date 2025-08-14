@@ -2629,7 +2629,8 @@ static void read_capacity_error(struct scsi_disk *sdkp, struct scsi_device *sdp,
 #define READ_CAPACITY_RETRIES_ON_RESET	10
 
 static int read_capacity_16(struct scsi_disk *sdkp, struct scsi_device *sdp,
-		struct queue_limits *lim, unsigned char *buffer)
+			    struct queue_limits *lim, unsigned char *buffer,
+			    unsigned int buflen)
 {
 	unsigned char cmd[16];
 	struct scsi_sense_hdr sshdr;
@@ -2651,7 +2652,7 @@ static int read_capacity_16(struct scsi_disk *sdkp, struct scsi_device *sdp,
 		cmd[0] = SERVICE_ACTION_IN_16;
 		cmd[1] = SAI_READ_CAPACITY_16;
 		cmd[13] = RC16_LEN;
-		memset(buffer, 0, RC16_LEN);
+		memset(buffer, 0, buflen);
 
 		the_result = scsi_execute_cmd(sdp, cmd, REQ_OP_DRV_IN,
 					      buffer, RC16_LEN, SD_TIMEOUT,
@@ -2719,8 +2720,13 @@ static int read_capacity_16(struct scsi_disk *sdkp, struct scsi_device *sdp,
 	return sector_size;
 }
 
+#define RC10_LEN 8
+#if RC10_LEN > SD_BUF_SIZE
+#error RC10_LEN must not be more than SD_BUF_SIZE
+#endif
+
 static int read_capacity_10(struct scsi_disk *sdkp, struct scsi_device *sdp,
-						unsigned char *buffer)
+			    unsigned char *buffer, unsigned int buflen)
 {
 	static const u8 cmd[10] = { READ_CAPACITY };
 	struct scsi_sense_hdr sshdr;
@@ -2765,7 +2771,7 @@ static int read_capacity_10(struct scsi_disk *sdkp, struct scsi_device *sdp,
 	sector_t lba;
 	unsigned sector_size;
 
-	memset(buffer, 0, 8);
+	memset(buffer, 0, buflen);
 
 	the_result = scsi_execute_cmd(sdp, cmd, REQ_OP_DRV_IN, buffer,
 				      8, SD_TIMEOUT, sdkp->max_retries,
@@ -2819,23 +2825,24 @@ static int sd_try_rc16_first(struct scsi_device *sdp)
  */
 static void
 sd_read_capacity(struct scsi_disk *sdkp, struct queue_limits *lim,
-		unsigned char *buffer)
+		 unsigned char *buffer, unsigned int buflen)
 {
 	int sector_size;
 	struct scsi_device *sdp = sdkp->device;
 
 	if (sd_try_rc16_first(sdp)) {
-		sector_size = read_capacity_16(sdkp, sdp, lim, buffer);
+		sector_size = read_capacity_16(sdkp, sdp, lim, buffer, buflen);
 		if (sector_size == -EOVERFLOW)
 			goto got_data;
 		if (sector_size == -ENODEV)
 			return;
 		if (sector_size < 0)
-			sector_size = read_capacity_10(sdkp, sdp, buffer);
+			sector_size = read_capacity_10(sdkp, sdp, buffer,
+						       buflen);
 		if (sector_size < 0)
 			return;
 	} else {
-		sector_size = read_capacity_10(sdkp, sdp, buffer);
+		sector_size = read_capacity_10(sdkp, sdp, buffer, buflen);
 		if (sector_size == -EOVERFLOW)
 			goto got_data;
 		if (sector_size < 0)
@@ -2845,7 +2852,8 @@ sd_read_capacity(struct scsi_disk *sdkp, struct queue_limits *lim,
 			int old_sector_size = sector_size;
 			sd_printk(KERN_NOTICE, sdkp, "Very big device. "
 					"Trying to use READ CAPACITY(16).\n");
-			sector_size = read_capacity_16(sdkp, sdp, lim, buffer);
+			sector_size = read_capacity_16(sdkp, sdp, lim, buffer,
+						       buflen);
 			if (sector_size < 0) {
 				sd_printk(KERN_NOTICE, sdkp,
 					"Using 0xffffffff as device size\n");
@@ -3730,7 +3738,7 @@ static int sd_revalidate_disk(struct gendisk *disk)
 	 * react badly if we do.
 	 */
 	if (sdkp->media_present) {
-		sd_read_capacity(sdkp, &lim, buffer);
+		sd_read_capacity(sdkp, &lim, buffer, SD_BUF_SIZE);
 		/*
 		 * Some USB/UAS devices return generic values for mode pages
 		 * until the media has been accessed. Trigger a READ operation
