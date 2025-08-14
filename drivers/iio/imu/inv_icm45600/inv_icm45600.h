@@ -109,6 +109,8 @@ struct inv_icm45600_chip_info {
 	u8 whoami;
 	const char *name;
 	const struct inv_icm45600_conf *conf;
+	const int *gyro_scales;
+	const int gyro_scales_len;
 };
 
 extern const struct inv_icm45600_chip_info inv_icm45605_chip_info;
@@ -119,6 +121,9 @@ extern const struct inv_icm45600_chip_info inv_icm45686_chip_info;
 extern const struct inv_icm45600_chip_info inv_icm45687_chip_info;
 extern const struct inv_icm45600_chip_info inv_icm45688p_chip_info;
 extern const struct inv_icm45600_chip_info inv_icm45689_chip_info;
+
+extern const int inv_icm45600_gyro_scale[][2];
+extern const int inv_icm45686_gyro_scale[][2];
 
 /**
  *  struct inv_icm45600_state - driver state variables
