@@ -1,0 +1,85 @@
+# SPDX-License-Identifier: (GPL-2.0 OR BSD-2-Clause)
+%YAML 1.2
+---
+$id: http://devicetree.org/schemas/mfd/adi,ltc4283.yaml#
+$schema: http://devicetree.org/meta-schemas/core.yaml#
+
+title: LTC4283 I2C Negative Voltage Hot Swap Controller
+
+maintainers:
+  - Nuno Sá <nuno.sa@analog.com>
+
+description: |
+  The LTC4283 negative voltage hot swap controller drives an external N-channel
+  MOSFET to allow a board to be safely inserted and removed from a live
+  backplane.
+
+  https://www.analog.com/media/en/technical-documentation/data-sheets/ltc4283.pdf
+
+properties:
+  compatible:
+    enum:
+      - adi,ltc4283
+
+  reg:
+    maxItems: 1
+
+  gpio:
+    $ref: /schemas/gpio/adi,ltc4283.yaml
+  hwmon:
+    $ref: /schemas/hwmon/adi,ltc4283.yaml
+
+  adi,gpio-pins:
+    description:
+      The pins to use as GPIOs. The device has 4 ADIO and 4 PGIO
+      pins than can be used as GPIOs. The ADIO pins are numbered from 0 to 3
+      and the PGIO pins are numbered from 4 to 7.
+    $ref: /schemas/types.yaml#/definitions/uint32-array
+    minItems: 1
+    maxItems: 8
+    items:
+      minimum: 0
+      maximum: 7
+
+dependencies:
+  gpio:
+    - adi,gpio-pins
+
+required:
+  - compatible
+  - reg
+  - hwmon
+
+additionalProperties: false
+
+examples:
+  - |
+    i2c {
+        #address-cells = <1>;
+        #size-cells = <0>;
+
+        swap-controller@15 {
+            compatible = "adi,ltc4283";
+            reg = <0x15>;
+
+            /* pgio1 to pgio4 as gpios */
+            adi,gpio-pins = <0 1 2 3>;
+
+            gpio {
+                compatible = "adi,ltc4283-gpio";
+                gpio-controller;
+                #gpio-cells = <2>;
+            };
+
+            hwmon {
+                compatible = "adi,ltc4283-hwmon";
+
+                adi,rsense-nano-ohms = <500>;
+                adi,current-limit-sense-microvolt = <25000>;
+                adi,current-limit-foldback-factor = <10>;
+                adi,cooling-delay-ms = <8190>;
+                adi,fet-bad-timer-delay-ms = <512>;
+            };
+        };
+    };
+...
