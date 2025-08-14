@@ -3662,16 +3662,18 @@ static vm_fault_t wp_page_copy(struct vm_fault *vmf)
 	struct mm_struct *mm = vma->vm_mm;
 	struct folio *old_folio = NULL;
 	struct folio *new_folio = NULL;
+	struct page *old_page = vmf->page;
 	pte_t entry;
 	int page_copied = 0;
 	struct mmu_notifier_range range;
 	vm_fault_t ret;
 	bool pfn_is_zero;
+	unsigned long addr;
 
 	delayacct_wpcopy_start();
 
-	if (vmf->page)
-		old_folio = page_folio(vmf->page);
+	if (old_page)
+		old_folio = page_folio(old_page);
 	ret = vmf_anon_prepare(vmf);
 	if (unlikely(ret))
 		goto out;
@@ -3681,10 +3683,12 @@ static vm_fault_t wp_page_copy(struct vm_fault *vmf)
 	if (!new_folio)
 		goto oom;
 
+	addr = ALIGN_DOWN(vmf->address, PAGE_SIZE);
+
 	if (!pfn_is_zero) {
 		int err;
 
-		err = __wp_page_copy_user(&new_folio->page, vmf->page, vmf);
+		err = __wp_page_copy_user(&new_folio->page, old_page, vmf);
 		if (err) {
 			/*
 			 * COW failed, if the fault was solved by other,
@@ -3700,90 +3704,92 @@ static vm_fault_t wp_page_copy(struct vm_fault *vmf)
 			delayacct_wpcopy_end();
 			return err == -EHWPOISON ? VM_FAULT_HWPOISON : 0;
 		}
-		kmsan_copy_pages_meta(&new_folio->page, vmf->page, 1);
+		kmsan_copy_pages_meta(&new_folio->page, old_page, 1);
 	}
 
 	__folio_mark_uptodate(new_folio);
 
 	mmu_notifier_range_init(&range, MMU_NOTIFY_CLEAR, 0, mm,
-				vmf->address & PAGE_MASK,
-				(vmf->address & PAGE_MASK) + PAGE_SIZE);
+				addr, addr + PAGE_SIZE);
 	mmu_notifier_invalidate_range_start(&range);
 
 	/*
 	 * Re-check the pte - we dropped the lock
 	 */
-	vmf->pte = pte_offset_map_lock(mm, vmf->pmd, vmf->address, &vmf->ptl);
-	if (likely(vmf->pte && pte_same(ptep_get(vmf->pte), vmf->orig_pte))) {
-		if (old_folio) {
-			if (!folio_test_anon(old_folio)) {
-				sub_mm_counter(mm, mm_counter_file(old_folio), 1);
-				add_mm_counter(mm, MM_ANONPAGES, 1);
-			}
-		} else {
-			ksm_might_unmap_zero_page(mm, vmf->orig_pte);
-			inc_mm_counter(mm, MM_ANONPAGES);
-		}
-		flush_cache_range(vma, vmf->address, vmf->address + PAGE_SIZE);
-		entry = folio_mk_pte(new_folio, vma->vm_page_prot);
-		entry = pte_sw_mkyoung(entry);
-		if (unlikely(unshare)) {
-			if (pte_soft_dirty(vmf->orig_pte))
-				entry = pte_mksoft_dirty(entry);
-			if (pte_uffd_wp(vmf->orig_pte))
-				entry = pte_mkuffd_wp(entry);
-		} else {
-			entry = maybe_mkwrite(pte_mkdirty(entry), vma);
-		}
-
-		/*
-		 * Clear the pte entry and flush it first, before updating the
-		 * pte with the new entry, to keep TLBs on different CPUs in
-		 * sync. This code used to set the new PTE then flush TLBs, but
-		 * that left a window where the new PTE could be loaded into
-		 * some TLBs while the old PTE remains in others.
-		 */
-		ptep_clear_flush_range(vma, vmf->address, vmf->pte, 1);
-		folio_add_new_anon_rmap(new_folio, vma, vmf->address, RMAP_EXCLUSIVE);
-		folio_add_lru_vma(new_folio, vma);
-		BUG_ON(unshare && pte_write(entry));
-		set_ptes(mm, vmf->address, vmf->pte, entry, 1);
-		update_mmu_cache_range(vmf, vma, vmf->address, vmf->pte, 1);
-		if (old_folio) {
-			/*
-			 * Only after switching the pte to the new page may
-			 * we remove the mapcount here. Otherwise another
-			 * process may come and find the rmap count decremented
-			 * before the pte is switched to the new page, and
-			 * "reuse" the old page writing into it while our pte
-			 * here still points into it and can be read by other
-			 * threads.
-			 *
-			 * The critical issue is to order this
-			 * folio_remove_rmap_pte() with the ptp_clear_flush
-			 * above. Those stores are ordered by (if nothing else,)
-			 * the barrier present in the atomic_add_negative
-			 * in folio_remove_rmap_pte();
-			 *
-			 * Then the TLB flush in ptep_clear_flush ensures that
-			 * no process can access the old page before the
-			 * decremented mapcount is visible. And the old page
-			 * cannot be reused until after the decremented
-			 * mapcount is visible. So transitively, TLBs to
-			 * old page will be flushed before it can be reused.
-			 */
-			folio_remove_rmap_ptes(old_folio, vmf->page, 1, vma);
-		}
-
-		/* Free the old page.. */
-		new_folio = old_folio;
-		page_copied = 1;
+	vmf->pte = pte_offset_map_lock(mm, vmf->pmd, addr, &vmf->ptl);
+	if (unlikely(!vmf->pte))
+		goto release;
+	if (unlikely(vmf_pte_changed(vmf))) {
+		update_mmu_tlb(vma, addr, vmf->pte);
 		pte_unmap_unlock(vmf->pte, vmf->ptl);
-	} else if (vmf->pte) {
-		update_mmu_tlb(vma, vmf->address, vmf->pte);
-		pte_unmap_unlock(vmf->pte, vmf->ptl);
+		goto release;
 	}
 
+	if (old_folio) {
+		if (!folio_test_anon(old_folio)) {
+			sub_mm_counter(mm, mm_counter_file(old_folio), 1);
+			add_mm_counter(mm, MM_ANONPAGES, 1);
+		}
+	} else {
+		ksm_might_unmap_zero_page(mm, vmf->orig_pte);
+		inc_mm_counter(mm, MM_ANONPAGES);
+	}
+	flush_cache_range(vma, addr, addr + PAGE_SIZE);
+	entry = folio_mk_pte(new_folio, vma->vm_page_prot);
+	entry = pte_sw_mkyoung(entry);
+	if (unlikely(unshare)) {
+		if (pte_soft_dirty(vmf->orig_pte))
+			entry = pte_mksoft_dirty(entry);
+		if (pte_uffd_wp(vmf->orig_pte))
+			entry = pte_mkuffd_wp(entry);
+	} else {
+		entry = maybe_mkwrite(pte_mkdirty(entry), vma);
+	}
+
+	/*
+	 * Clear the pte entry and flush it first, before updating the
+	 * pte with the new entry, to keep TLBs on different CPUs in
+	 * sync. This code used to set the new PTE then flush TLBs, but
+	 * that left a window where the new PTE could be loaded into
+	 * some TLBs while the old PTE remains in others.
+	 */
+	ptep_clear_flush_range(vma, addr, vmf->pte, 1);
+	folio_add_new_anon_rmap(new_folio, vma, addr, RMAP_EXCLUSIVE);
+	folio_add_lru_vma(new_folio, vma);
+	BUG_ON(unshare && pte_write(entry));
+	set_ptes(mm, addr, vmf->pte, entry, 1);
+	update_mmu_cache_range(vmf, vma, addr, vmf->pte, 1);
+	if (old_folio) {
+		/*
+		 * Only after switching the pte to the new page may
+		 * we remove the mapcount here. Otherwise another
+		 * process may come and find the rmap count decremented
+		 * before the pte is switched to the new page, and
+		 * "reuse" the old page writing into it while our pte
+		 * here still points into it and can be read by other
+		 * threads.
+		 *
+		 * The critical issue is to order this
+		 * folio_remove_rmap_pte() with the ptp_clear_flush
+		 * above. Those stores are ordered by (if nothing else,)
+		 * the barrier present in the atomic_add_negative
+		 * in folio_remove_rmap_pte();
+		 *
+		 * Then the TLB flush in ptep_clear_flush ensures that
+		 * no process can access the old page before the
+		 * decremented mapcount is visible. And the old page
+		 * cannot be reused until after the decremented
+		 * mapcount is visible. So transitively, TLBs to
+		 * old page will be flushed before it can be reused.
+		 */
+		folio_remove_rmap_ptes(old_folio, old_page, 1, vma);
+	}
+
+	/* Free the old page.. */
+	new_folio = old_folio;
+	page_copied = 1;
+	pte_unmap_unlock(vmf->pte, vmf->ptl);
+release:
 	mmu_notifier_invalidate_range_end(&range);
 
 	if (new_folio)
