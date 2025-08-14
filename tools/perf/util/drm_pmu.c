@@ -403,7 +403,7 @@ static int for_each_drm_fdinfo_in_dir(int (*cb)(void *args, int fdinfo_dir_fd, c
 	DIR *fd_dir;
 	struct dirent *fd_entry;
 	int fd_dir_fd, fdinfo_dir_fd = -1;
-
+	int ret = 0;
 
 	scnprintf(buf, sizeof(buf), "%s/fd", pid_name);
 	fd_dir_fd = openat(proc_dir, buf, O_DIRECTORY);
@@ -418,7 +418,6 @@ static int for_each_drm_fdinfo_in_dir(int (*cb)(void *args, int fdinfo_dir_fd, c
 		struct stat stat;
 		unsigned int minor;
 		bool is_dup = false;
-		int ret;
 
 		if (fd_entry->d_type != DT_LNK)
 			continue;
@@ -458,12 +457,13 @@ static int for_each_drm_fdinfo_in_dir(int (*cb)(void *args, int fdinfo_dir_fd, c
 		}
 		ret = cb(args, fdinfo_dir_fd, fd_entry->d_name);
 		if (ret)
-			return ret;
+			goto out;
 	}
+out:
 	if (fdinfo_dir_fd != -1)
 		close(fdinfo_dir_fd);
 	closedir(fd_dir);
-	return 0;
+	return ret;
 }
 
 static int for_each_drm_fdinfo(bool skip_all_duplicates,
