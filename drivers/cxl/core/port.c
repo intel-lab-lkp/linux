@@ -1649,7 +1649,7 @@ static struct cxl_dport *cxl_port_get_or_add_dport(struct cxl_port *port,
 	if (IS_ERR(new_dport))
 		return new_dport;
 
-	cxl_switch_parse_cdat(port);
+	cxl_switch_parse_cdat(new_dport);
 
 	/*
 	 * First instance of dport appearing, need to setup the port, including
