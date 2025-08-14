@@ -3326,14 +3326,10 @@ atomisp_v4l2_framebuffer_to_css_frame(const struct v4l2_framebuffer *arg,
 		goto err;
 	}
 
-	tmp_buf = vmalloc(arg->fmt.sizeimage);
-	if (!tmp_buf) {
-		ret = -ENOMEM;
-		goto err;
-	}
-	if (copy_from_user(tmp_buf, (void __user __force *)arg->base,
-			   arg->fmt.sizeimage)) {
-		ret = -EFAULT;
+	tmp_buf = vmemdup_user((void __user __force *)arg->base,
+			       arg->fmt.sizeimage);
+	if (IS_ERR(tmp_buf)) {
+		ret = PTR_ERR(tmp_buf);
 		goto err;
 	}
 
@@ -3345,7 +3341,8 @@ atomisp_v4l2_framebuffer_to_css_frame(const struct v4l2_framebuffer *arg,
 err:
 	if (ret && res)
 		ia_css_frame_free(res);
-	vfree(tmp_buf);
+	if (!IS_ERR(tmp_buf))
+		kvfree(tmp_buf);
 	if (ret == 0)
 		*result = res;
 	return ret;
