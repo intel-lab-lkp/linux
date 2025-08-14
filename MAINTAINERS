@@ -14508,6 +14508,7 @@ S:	Supported
 F:	Documentation/devicetree/bindings/gpio/adi,ltc4283.yaml
 F:	Documentation/devicetree/bindings/hwmon/adi,ltc4283.yaml
 F:	Documentation/devicetree/bindings/mfd/adi,ltc4283.yaml
+F:	drivers/gpio/gpio-ltc4283.c
 F:	drivers/hwmon/ltc4283-hwmon.c
 F:	drivers/mfd/ltc4283.c
 F:	include/linux/mfd/ltc4283.h
