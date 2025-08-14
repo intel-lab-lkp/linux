@@ -3717,14 +3717,14 @@ static vm_fault_t wp_page_copy(struct vm_fault *vmf)
 	if (likely(vmf->pte && pte_same(ptep_get(vmf->pte), vmf->orig_pte))) {
 		if (old_folio) {
 			if (!folio_test_anon(old_folio)) {
-				dec_mm_counter(mm, mm_counter_file(old_folio));
-				inc_mm_counter(mm, MM_ANONPAGES);
+				sub_mm_counter(mm, mm_counter_file(old_folio), 1);
+				add_mm_counter(mm, MM_ANONPAGES, 1);
 			}
 		} else {
 			ksm_might_unmap_zero_page(mm, vmf->orig_pte);
 			inc_mm_counter(mm, MM_ANONPAGES);
 		}
-		flush_cache_page(vma, vmf->address, pte_pfn(vmf->orig_pte));
+		flush_cache_range(vma, vmf->address, vmf->address + PAGE_SIZE);
 		entry = folio_mk_pte(new_folio, vma->vm_page_prot);
 		entry = pte_sw_mkyoung(entry);
 		if (unlikely(unshare)) {
@@ -3747,7 +3747,7 @@ static vm_fault_t wp_page_copy(struct vm_fault *vmf)
 		folio_add_new_anon_rmap(new_folio, vma, vmf->address, RMAP_EXCLUSIVE);
 		folio_add_lru_vma(new_folio, vma);
 		BUG_ON(unshare && pte_write(entry));
-		set_pte_at(mm, vmf->address, vmf->pte, entry);
+		set_ptes(mm, vmf->address, vmf->pte, entry, 1);
 		update_mmu_cache_range(vmf, vma, vmf->address, vmf->pte, 1);
 		if (old_folio) {
 			/*
@@ -3772,7 +3772,7 @@ static vm_fault_t wp_page_copy(struct vm_fault *vmf)
 			 * mapcount is visible. So transitively, TLBs to
 			 * old page will be flushed before it can be reused.
 			 */
-			folio_remove_rmap_pte(old_folio, vmf->page, vma);
+			folio_remove_rmap_ptes(old_folio, vmf->page, 1, vma);
 		}
 
 		/* Free the old page.. */
@@ -3787,7 +3787,7 @@ static vm_fault_t wp_page_copy(struct vm_fault *vmf)
 	mmu_notifier_invalidate_range_end(&range);
 
 	if (new_folio)
-		folio_put(new_folio);
+		folio_put_refs(new_folio, 1);
 	if (old_folio) {
 		if (page_copied)
 			free_swap_cache(old_folio);
