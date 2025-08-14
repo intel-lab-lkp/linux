@@ -6931,14 +6931,6 @@ static int perf_mmap(struct file *file, struct vm_area_struct *vma)
 	int ret, flags = 0;
 	mapped_f mapped;
 
-	/*
-	 * Don't allow mmap() of inherited per-task counters. This would
-	 * create a performance issue due to all children writing to the
-	 * same rb.
-	 */
-	if (event->cpu == -1 && event->attr.inherit)
-		return -EINVAL;
-
 	if (!(vma->vm_flags & VM_SHARED))
 		return -EINVAL;
 
@@ -13371,6 +13363,18 @@ SYSCALL_DEFINE5(perf_event_open,
 		if (!perfmon_capable())
 			return -EACCES;
 	}
+
+	/*
+	 * Don't allow perf_event_open() of inherited per-task counters
+	 * with cpu == 1 when sampling. Otherwise, this would create a
+	 * performance issue due to all children writing to the same mmap()
+	 * created ring buffer.
+	 *
+	 * We recommend to call perf_event_open() for all cpus when sampling on
+	 * inherited per-task counters.
+	 */
+	if (attr.sample_freq && attr.inherit && cpu == -1)
+		return -EINVAL;
 
 	if (attr.freq) {
 		if (attr.sample_freq > sysctl_perf_event_sample_rate)
