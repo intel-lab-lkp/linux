@@ -14507,6 +14507,7 @@ L:	linux-gpio@vger.kernel.org
 S:	Supported
 F:	Documentation/devicetree/bindings/hwmon/adi,ltc4283.yaml
 F:	Documentation/devicetree/bindings/mfd/adi,ltc4283.yaml
+F:	drivers/hwmon/ltc4283-hwmon.c
 F:	drivers/mfd/ltc4283.c
 F:	include/linux/mfd/ltc4283.h
 
