@@ -233,8 +233,8 @@
 
 	aon: aon {
 		compatible = "thead,th1520-aon";
-		mboxes = <&mbox_910t 1>;
-		mbox-names = "aon";
+		mboxes = <&mbox_910t 1>, <&mbox_910r 1>;
+		mbox-names = "aon", "aon-for-sbi";
 		resets = <&rst TH1520_RESET_ID_GPU_CLKGEN>;
 		reset-names = "gpu-clkgen";
 		#power-domain-cells = <1>;
