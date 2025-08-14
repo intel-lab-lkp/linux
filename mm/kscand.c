@@ -146,6 +146,8 @@ struct kmigrated_mm_slot {
 	spinlock_t migrate_lock;
 	/* Head of per mm migration list */
 	struct list_head migrate_head;
+	/* Indicates weighted success, failure */
+	int msuccess, mfailed, fratio;
 };
 
 /* System wide list of mms that maintain migration list */
@@ -812,13 +814,45 @@ static void kscand_collect_mm_slot(struct kscand_mm_slot *mm_slot)
 	}
 }
 
+static int kmigrated_get_mstat_fratio(struct mm_struct *mm)
+{
+	int fratio = 0;
+	struct kmigrated_mm_slot *mm_slot = NULL;
+	struct mm_slot *slot;
+
+	guard(spinlock)(&kscand_migrate_lock);
+
+	slot = mm_slot_lookup(kmigrated_slots_hash, mm);
+	mm_slot = mm_slot_entry(slot, struct kmigrated_mm_slot, mm_slot);
+
+	if (mm_slot)
+		fratio =  mm_slot->fratio;
+
+	return fratio;
+}
+
+static void update_mstat_ratio(struct kmigrated_mm_slot *mm_slot,
+				int msuccess, int mfailed)
+{
+	mm_slot->msuccess = (mm_slot->msuccess >> 2) + msuccess;
+	mm_slot->mfailed = (mm_slot->mfailed >> 2) + mfailed;
+	mm_slot->fratio = mm_slot->mfailed * 100;
+	mm_slot->fratio /=  (mm_slot->msuccess + mm_slot->mfailed);
+}
+
+#define MSTAT_UPDATE_FREQ	1024
+
 static void kmigrated_migrate_mm(struct kmigrated_mm_slot *mm_slot)
 {
+	int mfailed = 0;
+	int msuccess = 0;
+	int mstat_counter;
 	int ret = 0, dest = -1;
 	struct mm_slot *slot;
 	struct mm_struct *mm;
 	struct kscand_migrate_info *info, *tmp;
 
+	mstat_counter = MSTAT_UPDATE_FREQ;
 	spin_lock(&mm_slot->migrate_lock);
 
 	slot = &mm_slot->mm_slot;
@@ -842,11 +876,23 @@ static void kmigrated_migrate_mm(struct kmigrated_mm_slot *mm_slot)
 			}
 
 			ret = kmigrated_promote_folio(info, mm, dest);
+			mstat_counter--;
+
+			/* TBD: encode migrated count here, currently assume folio_nr_pages */
+			if (!ret)
+				msuccess++;
+			else
+				mfailed++;
 
 			kfree(info);
 
 			cond_resched();
 			spin_lock(&mm_slot->migrate_lock);
+			if (!mstat_counter) {
+				update_mstat_ratio(mm_slot, msuccess, mfailed);
+				msuccess  = mfailed = 0;
+				mstat_counter = MSTAT_UPDATE_FREQ;
+			}
 		}
 	}
 clean_list_handled:
@@ -880,6 +926,12 @@ static void kmigrated_migrate_folio(void)
 		if (kmigrated_mm_slot)
 			kmigrated_migrate_mm(kmigrated_mm_slot);
 	}
+}
+
+/* Get scan_period based on migration failure statistics */
+static int kscand_mstat_scan_period(unsigned int scan_period, int fratio)
+{
+	return scan_period * (1 + fratio / 10);
 }
 
 /*
@@ -928,6 +980,7 @@ static void kmigrated_migrate_folio(void)
 static inline void kscand_update_mmslot_info(struct kscand_mm_slot *mm_slot,
 				unsigned long total, int target_node)
 {
+	int fratio;
 	unsigned int scan_period;
 	unsigned long now;
 	unsigned long scan_size;
@@ -967,6 +1020,8 @@ static inline void kscand_update_mmslot_info(struct kscand_mm_slot *mm_slot,
 	}
 
 	scan_period = clamp(scan_period, KSCAND_SCAN_PERIOD_MIN, KSCAND_SCAN_PERIOD_MAX);
+	fratio = kmigrated_get_mstat_fratio((&mm_slot->slot)->mm);
+	scan_period = kscand_mstat_scan_period(scan_period, fratio);
 	scan_size = clamp(scan_size, KSCAND_SCAN_SIZE_MIN, KSCAND_SCAN_SIZE_MAX);
 
 	now = jiffies;
