@@ -354,6 +354,22 @@ struct cpuidle_driver *cpuidle_get_cpu_driver(struct cpuidle_device *dev)
 EXPORT_SYMBOL_GPL(cpuidle_get_cpu_driver);
 
 /**
+ * cpuidle_get_cpu_driver_by_cpu - return the driver registered for a CPU.
+ * @cpu_num: a valid cpu num
+ *
+ * Returns a struct cpuidle_driver pointer, or NULL if no driver is registered
+ * for the CPU associated with @cpu.
+ */
+struct cpuidle_driver *cpuidle_get_cpu_driver_by_cpu(int cpu_num)
+{
+	if (cpu_num < 0 || cpu_num >= nr_cpu_ids)
+		return NULL;
+
+	return __cpuidle_get_cpu_driver(cpu_num);
+}
+EXPORT_SYMBOL_GPL(cpuidle_get_cpu_driver_by_cpu);
+
+/**
  * cpuidle_driver_state_disabled - Disable or enable an idle state
  * @drv: cpuidle driver owning the state
  * @idx: State index
