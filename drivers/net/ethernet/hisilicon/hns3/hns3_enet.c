@@ -3868,7 +3868,7 @@ static int hns3_gro_complete(struct sk_buff *skb, u32 l234info)
 		skb_shinfo(skb)->gso_type |= SKB_GSO_TCP_ECN;
 
 	if (l234info & BIT(HNS3_RXD_GRO_FIXID_B))
-		skb_shinfo(skb)->gso_type |= SKB_GSO_TCP_FIXEDID;
+		skb_shinfo(skb)->gso_type |= SKB_GSO_TCP_FIXEDID_OUTER;
 
 	skb->csum_start = (unsigned char *)th - skb->head;
 	skb->csum_offset = offsetof(struct tcphdr, check);

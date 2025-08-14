@@ -42,8 +42,8 @@ also point to the TCP header of the packet.
 
 For IPv4 segmentation we support one of two types in terms of the IP ID.
 The default behavior is to increment the IP ID with every segment.  If the
-GSO type SKB_GSO_TCP_FIXEDID is specified then we will not increment the IP
-ID and all segments will use the same IP ID.  If a device has
+GSO type SKB_GSO_TCP_FIXEDID_{OUTER,INNER} is specified then we will not
+increment the IP ID and all segments will use the same IP ID.  If a device has
 NETIF_F_TSO_MANGLEID set then the IP ID can be ignored when performing TSO
 and we will either increment the IP ID for all frames, or leave it at a
 static value based on driver preference.
