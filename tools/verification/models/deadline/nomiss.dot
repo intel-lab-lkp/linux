@@ -1,0 +1,23 @@
+digraph state_automaton {
+	center = true;
+	size = "7,11";
+	{node [shape = plaintext, style=invis, label=""] "__init_running"};
+	{node [shape = doublecircle] "running"};
+	{node [shape = circle] "running"};
+	{node [shape = circle] "sleeping"};
+	{node [shape = circle] "throttled"};
+	"__init_running" -> "running";
+	"running" [label = "running\nclk < DEADLINE_LEFT_NS()", color = green3];
+	"running" -> "running" [ label = "sched_switch_in\nsched_wakeup" ];
+	"running" -> "sleeping" [ label = "sched_switch_suspend" ];
+	"running" -> "throttled" [ label = "dl_throttle" ];
+	"sleeping" [label = "sleeping"];
+	"sleeping" -> "running" [ label = "sched_wakeup;reset(clk)" ];
+	"throttled" [label = "throttled"];
+	"throttled" -> "running" [ label = "sched_switch_in\nsched_wakeup;reset(clk)" ];
+	"throttled" -> "throttled" [ label = "sched_switch_suspend\ndl_throttle" ];
+	{ rank = min ;
+		"__init_running";
+		"running";
+	}
+}
