@@ -362,3 +362,5 @@ void pidfs_get_root(struct path *path);
 long do_name_to_handle_at(int dfd, const char __user *name,
 			  struct file_handle __user *handle,
 			  void __user *mnt_id, int flag, int lookup_flags);
+struct file *__do_handle_open(int mountdirfd, struct file_handle __user *ufh,
+			      int open_flag);

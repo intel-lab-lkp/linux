@@ -397,8 +397,8 @@ out_path:
 	return retval;
 }
 
-static long do_handle_open(int mountdirfd, struct file_handle __user *ufh,
-			   int open_flag)
+struct file *__do_handle_open(int mountdirfd, struct file_handle __user *ufh,
+			      int open_flag)
 {
 	long retval = 0;
 	struct path path __free(path_put) = {};
@@ -407,17 +407,27 @@ static long do_handle_open(int mountdirfd, struct file_handle __user *ufh,
 
 	retval = handle_to_path(mountdirfd, ufh, &path, open_flag);
 	if (retval)
-		return retval;
-
-	CLASS(get_unused_fd, fd)(open_flag);
-	if (fd < 0)
-		return fd;
+		return ERR_PTR(retval);
 
 	eops = path.mnt->mnt_sb->s_export_op;
 	if (eops->open)
 		file = eops->open(&path, open_flag);
 	else
 		file = file_open_root(&path, "", open_flag, 0);
+
+	return file;
+}
+
+static long do_handle_open(int mountdirfd, struct file_handle __user *ufh,
+			   int open_flag)
+{
+	struct file *file;
+
+	CLASS(get_unused_fd, fd)(open_flag);
+	if (fd < 0)
+		return fd;
+
+	file = __do_handle_open(mountdirfd, ufh, open_flag);
 	if (IS_ERR(file))
 		return PTR_ERR(file);
 
