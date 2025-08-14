@@ -356,6 +356,13 @@ static void keystone_rproc_mem_release(void *data)
 	of_reserved_mem_device_release(dev);
 }
 
+static void keystone_rproc_pm_runtime_put(void *data)
+{
+	struct device *dev = data;
+
+	pm_runtime_put_sync(dev);
+}
+
 static int keystone_rproc_probe(struct platform_device *pdev)
 {
 	struct device *dev = &pdev->dev;
@@ -408,30 +415,26 @@ static int keystone_rproc_probe(struct platform_device *pdev)
 	ret = pm_runtime_resume_and_get(dev);
 	if (ret < 0)
 		return dev_err_probe(dev, ret, "failed to enable clock\n");
+	ret = devm_add_action_or_reset(dev, keystone_rproc_pm_runtime_put, dev);
+	if (ret)
+		return dev_err_probe(dev, ret, "failed to add disable pm devm action\n");
 
 	ret = keystone_rproc_of_get_memories(pdev, ksproc);
 	if (ret)
-		goto disable_clk;
+		return ret;
 
 	ksproc->irq_ring = platform_get_irq_byname(pdev, "vring");
-	if (ksproc->irq_ring < 0) {
-		ret = ksproc->irq_ring;
-		goto disable_clk;
-	}
+	if (ksproc->irq_ring < 0)
+		return ksproc->irq_ring;
 
 	ksproc->irq_fault = platform_get_irq_byname(pdev, "exception");
-	if (ksproc->irq_fault < 0) {
-		ret = ksproc->irq_fault;
-		goto disable_clk;
-	}
+	if (ksproc->irq_fault < 0)
+		return ksproc->irq_fault;
 
 	ksproc->kick_gpio = gpiod_get(dev, "kick", GPIOD_ASIS);
 	ret = PTR_ERR_OR_ZERO(ksproc->kick_gpio);
-	if (ret) {
-		dev_err(dev, "failed to get gpio for virtio kicks, status = %d\n",
-			ret);
-		goto disable_clk;
-	}
+	if (ret)
+		return dev_err_probe(dev, ret, "failed to get gpio for virtio kicks\n");
 
 	ret = of_reserved_mem_device_init(dev);
 	if (ret) {
@@ -439,7 +442,7 @@ static int keystone_rproc_probe(struct platform_device *pdev)
 	} else {
 		ret = devm_add_action_or_reset(dev, keystone_rproc_mem_release, dev);
 		if (ret)
-			goto disable_clk;
+			return ret;
 	}
 
 	/* ensure the DSP is in reset before loading firmware */
@@ -465,8 +468,6 @@ static int keystone_rproc_probe(struct platform_device *pdev)
 
 release_mem:
 	gpiod_put(ksproc->kick_gpio);
-disable_clk:
-	pm_runtime_put_sync(dev);
 	return ret;
 }
 
@@ -476,7 +477,6 @@ static void keystone_rproc_remove(struct platform_device *pdev)
 
 	rproc_del(ksproc->rproc);
 	gpiod_put(ksproc->kick_gpio);
-	pm_runtime_put_sync(&pdev->dev);
 }
 
 static const struct of_device_id keystone_rproc_of_match[] = {
