@@ -11,6 +11,10 @@
 
 #include "ynl.h"
 
+#if defined(__cplusplus) && defined(YNL_CPP)
+namespace ynl_cpp {
+#endif
+
 #define ARRAY_SIZE(arr)		(sizeof(arr) / sizeof(*arr))
 
 #define __yerr_msg(yse, _msg...)					\
@@ -23,13 +27,13 @@
 		}							\
 	})
 
-#define __yerr_code(yse, _code...)		\
-	({					\
-		struct ynl_error *_yse = (yse);	\
-						\
-		if (_yse) {			\
-			_yse->code = _code;	\
-		}				\
+#define __yerr_code(yse, _code...)				 \
+	({                                                       \
+		struct ynl_error *_yse = (yse);                  \
+								 \
+		if (_yse) {                                      \
+			_yse->code = (enum ynl_error_code)_code; \
+		}                                                \
 	})
 
 #define __yerr(yse, _code, _msg...)		\
@@ -149,7 +153,7 @@ ynl_err_walk(struct ynl_sock *ys, void *start, void *end, unsigned int off,
 		return n;
 	}
 
-	data_len = end - start;
+	data_len = (char *)end - (char *)start;
 
 	ynl_attr_for_each_payload(start, data_len, attr) {
 		astart_off = (char *)attr - (char *)start;
@@ -192,7 +196,7 @@ ynl_err_walk(struct ynl_sock *ys, void *start, void *end, unsigned int off,
 
 	off -= sizeof(struct nlattr);
 	start =  ynl_attr_data(attr);
-	end = start + ynl_attr_data_len(attr);
+	end = (char *)start + ynl_attr_data_len(attr);
 
 	return n + ynl_err_walk(ys, start, end, off, next_pol,
 				&str[n], str_sz - n, nest_pol);
@@ -325,12 +329,12 @@ ynl_ext_ack_check(struct ynl_sock *ys, const struct nlmsghdr *nlh,
 static int
 ynl_cb_error(const struct nlmsghdr *nlh, struct ynl_parse_arg *yarg)
 {
-	const struct nlmsgerr *err = ynl_nlmsg_data(nlh);
+	const struct nlmsgerr *err = (struct nlmsgerr *)ynl_nlmsg_data(nlh);
 	unsigned int hlen;
 	int code;
 
 	code = err->error >= 0 ? err->error : -err->error;
-	yarg->ys->err.code = code;
+	yarg->ys->err.code = (enum ynl_error_code)code;
 	errno = code;
 
 	hlen = sizeof(*err);
@@ -348,7 +352,7 @@ static int ynl_cb_done(const struct nlmsghdr *nlh, struct ynl_parse_arg *yarg)
 
 	err = *(int *)NLMSG_DATA(nlh);
 	if (err < 0) {
-		yarg->ys->err.code = -err;
+		yarg->ys->err.code = (enum ynl_error_code)-err;
 		errno = -err;
 
 		ynl_ext_ack_check(yarg->ys, nlh, sizeof(int));
@@ -366,7 +370,7 @@ int ynl_attr_validate(struct ynl_parse_arg *yarg, const struct nlattr *attr)
 	unsigned int type, len;
 	unsigned char *data;
 
-	data = ynl_attr_data(attr);
+	data = (unsigned char *)ynl_attr_data(attr);
 	len = ynl_attr_data_len(attr);
 	type = ynl_attr_type(attr);
 	if (type > yarg->rsp_policy->max_attr) {
@@ -463,7 +467,7 @@ int ynl_submsg_failed(struct ynl_parse_arg *yarg, const char *field_name,
 
 static void ynl_err_reset(struct ynl_sock *ys)
 {
-	ys->err.code = 0;
+	ys->err.code = YNL_ERROR_NONE;
 	ys->err.attr_offs = 0;
 	ys->err.msg[0] = 0;
 }
@@ -643,8 +647,8 @@ ynl_get_family_info_mcast(struct ynl_sock *ys, const struct nlattr *mcasts)
 	if (!ys->n_mcast_groups)
 		return 0;
 
-	ys->mcast_groups = calloc(ys->n_mcast_groups,
-				  sizeof(*ys->mcast_groups));
+	ys->mcast_groups = (struct ynl_sock_mcast *)calloc(
+		ys->n_mcast_groups, sizeof(*ys->mcast_groups));
 	if (!ys->mcast_groups)
 		return YNL_PARSE_CB_ERROR;
 
@@ -741,7 +745,8 @@ ynl_sock_create(const struct ynl_family *yf, struct ynl_error *yse)
 	int sock_type;
 	int one = 1;
 
-	ys = malloc(sizeof(*ys) + 2 * YNL_SOCKET_BUFFER_SIZE);
+	ys = (struct ynl_sock *)malloc(sizeof(*ys) +
+				       2 * YNL_SOCKET_BUFFER_SIZE);
 	if (!ys)
 		return NULL;
 	memset(ys, 0, sizeof(*ys));
@@ -878,7 +883,7 @@ static int ynl_ntf_parse(struct ynl_sock *ys, const struct nlmsghdr *nlh)
 	} else {
 		struct genlmsghdr *gehdr;
 
-		gehdr = ynl_nlmsg_data(nlh);
+		gehdr = (struct genlmsghdr *)ynl_nlmsg_data(nlh);
 		cmd = gehdr->cmd;
 	}
 
@@ -888,7 +893,7 @@ static int ynl_ntf_parse(struct ynl_sock *ys, const struct nlmsghdr *nlh)
 	if (!info->cb)
 		return YNL_PARSE_CB_ERROR;
 
-	rsp = calloc(1, info->alloc_sz);
+	rsp = (struct ynl_ntf_base_type *)calloc(1, info->alloc_sz);
 	rsp->free = info->free;
 	yarg.data = rsp->data;
 	yarg.rsp_policy = info->policy;
@@ -933,7 +938,8 @@ int ynl_ntf_check(struct ynl_sock *ys)
 
 /* YNL specific helpers used by the auto-generated code */
 
-struct ynl_dump_list_type *YNL_LIST_END = (void *)(0xb4d123);
+struct ynl_dump_list_type *YNL_LIST_END =
+	(struct ynl_dump_list_type *)(void *)(0xb4d123);
 
 void ynl_error_unknown_notification(struct ynl_sock *ys, __u8 cmd)
 {
@@ -962,7 +968,7 @@ ynl_check_alien(struct ynl_sock *ys, const struct nlmsghdr *nlh, __u32 rsp_cmd)
 			return -1;
 		}
 
-		gehdr = ynl_nlmsg_data(nlh);
+		gehdr = (struct genlmsghdr *)ynl_nlmsg_data(nlh);
 		if (gehdr->cmd != rsp_cmd)
 			return ynl_ntf_parse(ys, nlh);
 	}
@@ -973,7 +979,7 @@ ynl_check_alien(struct ynl_sock *ys, const struct nlmsghdr *nlh, __u32 rsp_cmd)
 static
 int ynl_req_trampoline(const struct nlmsghdr *nlh, struct ynl_parse_arg *yarg)
 {
-	struct ynl_req_state *yrs = (void *)yarg;
+	struct ynl_req_state *yrs = (struct ynl_req_state *)yarg;
 	int ret;
 
 	ret = ynl_check_alien(yrs->yarg.ys, nlh, yrs->rsp_cmd);
@@ -1006,7 +1012,7 @@ int ynl_exec(struct ynl_sock *ys, struct nlmsghdr *req_nlh,
 static int
 ynl_dump_trampoline(const struct nlmsghdr *nlh, struct ynl_parse_arg *data)
 {
-	struct ynl_dump_state *ds = (void *)data;
+	struct ynl_dump_state *ds = (struct ynl_dump_state *)data;
 	struct ynl_dump_list_type *obj;
 	struct ynl_parse_arg yarg = {};
 	int ret;
@@ -1015,7 +1021,7 @@ ynl_dump_trampoline(const struct nlmsghdr *nlh, struct ynl_parse_arg *data)
 	if (ret)
 		return ret < 0 ? YNL_PARSE_CB_ERROR : YNL_PARSE_CB_OK;
 
-	obj = calloc(1, ds->alloc_sz);
+	obj = (struct ynl_dump_list_type *)calloc(1, ds->alloc_sz);
 	if (!obj)
 		return YNL_PARSE_CB_ERROR;
 
@@ -1066,3 +1072,7 @@ err_close_list:
 	yds->first = ynl_dump_end(yds);
 	return -1;
 }
+
+#if defined(__cplusplus) && defined(YNL_CPP)
+} // namespace ynl_cpp
+#endif

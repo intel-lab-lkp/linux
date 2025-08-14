@@ -11,7 +11,7 @@ OBJS=$(patsubst %.c,%.o,${SRCS})
 
 include $(wildcard *.d)
 
-all: ynl.a
+all: ynl.a test_cpp
 
 ynl.a: $(OBJS)
 	@echo -e "\tAR $@"
@@ -22,6 +22,9 @@ clean:
 
 distclean: clean
 	rm -f *.a
+
+test_cpp: ynl.c
+	$(COMPILE.cpp) -DYNL_CPP -o ynl.cc.o $<
 
 %.o: %.c
 	$(COMPILE.c) -MMD -c -o $@ $<

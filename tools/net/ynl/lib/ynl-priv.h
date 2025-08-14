@@ -6,6 +6,10 @@
 #include <stddef.h>
 #include <linux/types.h>
 
+#if defined(__cplusplus) && defined(YNL_CPP)
+namespace ynl_cpp {
+#endif
+
 struct ynl_parse_arg;
 
 /*
@@ -224,7 +228,7 @@ static inline void *ynl_attr_data_end(const struct nlattr *attr)
 
 #define ynl_attr_for_each_payload(start, len, attr)			\
 	for ((attr) = ynl_attr_first(start, len, 0); attr;		\
-	     (attr) = ynl_attr_next(start + len, attr))
+	     (attr) = ynl_attr_next((char *)start + len, attr))
 
 static inline struct nlattr *
 ynl_attr_if_good(const void *end, struct nlattr *attr)
@@ -467,4 +471,9 @@ ynl_attr_put_sint(struct nlmsghdr *nlh, __u16 type, __s64 data)
 	else
 		ynl_attr_put_s64(nlh, type, data);
 }
+
+#if defined(__cplusplus) && defined(YNL_CPP)
+} // namespace ynl_cpp
+#endif
+
 #endif

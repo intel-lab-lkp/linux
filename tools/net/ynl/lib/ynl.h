@@ -9,6 +9,10 @@
 
 #include "ynl-priv.h"
 
+#if defined(__cplusplus) && defined(YNL_CPP)
+namespace ynl_cpp {
+#endif
+
 enum ynl_error_code {
 	YNL_ERROR_NONE = 0,
 	__YNL_ERRNO_END = 4096,
@@ -56,6 +60,11 @@ struct ynl_family {
 	unsigned int ntf_info_size;
 };
 
+struct ynl_sock_mcast {
+	unsigned int id;
+	char name[GENL_NAMSIZ];
+};
+
 /**
  * struct ynl_sock - YNL wrapped netlink socket
  * @err: YNL error descriptor, cleared on every request.
@@ -71,10 +80,7 @@ struct ynl_sock {
 	__u16 family_id;
 
 	unsigned int n_mcast_groups;
-	struct {
-		unsigned int id;
-		char name[GENL_NAMSIZ];
-	} *mcast_groups;
+	struct ynl_sock_mcast *mcast_groups;
 
 	struct ynl_ntf_base_type *ntf_first;
 	struct ynl_ntf_base_type **ntf_last_next;
@@ -140,4 +146,9 @@ static inline bool ynl_has_ntf(struct ynl_sock *ys)
 struct ynl_ntf_base_type *ynl_ntf_dequeue(struct ynl_sock *ys);
 
 void ynl_ntf_free(struct ynl_ntf_base_type *ntf);
+
+#if defined(__cplusplus) && defined(YNL_CPP)
+} // namespace ynl_cpp
+#endif
+
 #endif
