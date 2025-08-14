@@ -448,10 +448,7 @@ static vm_fault_t gfs2_page_mkwrite(struct vm_fault *vmf)
 	file_update_time(vmf->vma->vm_file);
 
 	/* folio is wholly or partially inside EOF */
-	if (size - pos < folio_size(folio))
-		length = size - pos;
-	else
-		length = folio_size(folio);
+	length = min_t(size_t, size - pos, folio_size(folio));
 
 	gfs2_size_hint(vmf->vma->vm_file, pos, length);
 
