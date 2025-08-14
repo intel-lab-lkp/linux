@@ -565,6 +565,22 @@
 			status = "disabled";
 		};
 
+		mbox_910r: mbox@ffefc53000 {
+			compatible = "thead,th1520-mbox";
+			reg = <0xff 0xefc50000 0x0 0x6000>,
+			      <0xff 0xefc48000 0x0 0x6000>,
+			      <0xff 0xefc3e000 0x0 0x2000>,
+			      <0xff 0xefc46000 0x0 0x2000>;
+			reg-names = "local", "remote-icu0", "remote-icu1", "remote-icu2";
+			clocks = <&clk CLK_MBOX3>, <&clk CLK_MBOX2>, <&clk CLK_MBOX0>,
+				 <&clk CLK_MBOX1>;
+			clock-names = "clk-local", "clk-remote-icu0", "clk-remote-icu1",
+				      "clk-remote-icu2";
+			thead,mbox-id = <3>;
+			#mbox-cells = <1>;
+			status = "reserved";
+		};
+
 		uart4: serial@fff7f08000 {
 			compatible = "snps,dw-apb-uart";
 			reg = <0xff 0xf7f08000 0x0 0x4000>;
