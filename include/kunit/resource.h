@@ -148,12 +148,14 @@ static inline void kunit_put_resource(struct kunit_resource *res)
  *	  If an init function is supplied, @data is passed to it instead.
  * @free: a user-supplied function to free the resource (if needed).
  * @res: The resource.
+ * @name: name of the resource if there is one.
  * @data: value to pass to init function or set in resource data field.
  */
 int __kunit_add_resource(struct kunit *test,
 			 kunit_resource_init_t init,
 			 kunit_resource_free_t free,
 			 struct kunit_resource *res,
+			 const char *name,
 			 void *data);
 
 /**
@@ -173,7 +175,7 @@ static inline int kunit_add_resource(struct kunit *test,
 				     void *data)
 {
 	res->should_kfree = false;
-	return __kunit_add_resource(test, init, free, res, data);
+	return __kunit_add_resource(test, init, free, res, NULL, data);
 }
 
 static inline struct kunit_resource *
@@ -195,21 +197,14 @@ static inline int kunit_add_named_resource(struct kunit *test,
 					   const char *name,
 					   void *data)
 {
-	struct kunit_resource *existing;
 
 	if (!name)
 		return -EINVAL;
 
-	existing = kunit_find_named_resource(test, name);
-	if (existing) {
-		kunit_put_resource(existing);
-		return -EEXIST;
-	}
-
 	res->name = name;
 	res->should_kfree = false;
 
-	return __kunit_add_resource(test, init, free, res, data);
+	return __kunit_add_resource(test, init, free, res, name, data);
 }
 
 /**
@@ -249,7 +244,7 @@ kunit_alloc_and_get_resource(struct kunit *test,
 
 	res->should_kfree = true;
 
-	ret = __kunit_add_resource(test, init, free, res, context);
+	ret = __kunit_add_resource(test, init, free, res, NULL, context);
 	if (!ret) {
 		/*
 		 * bump refcount for get; kunit_resource_put() should be called
@@ -290,7 +285,7 @@ static inline void *kunit_alloc_resource(struct kunit *test,
 		return NULL;
 
 	res->should_kfree = true;
-	if (!__kunit_add_resource(test, init, free, res, context))
+	if (!__kunit_add_resource(test, init, free, res, NULL, context))
 		return res->data;
 
 	return NULL;
@@ -314,6 +309,39 @@ static inline bool kunit_resource_name_match(struct kunit *test,
 }
 
 /**
+ * kunit_find_resource_unlocked() - Find a resource using match function/data
+ * without locking.
+ * @test: Test case to which the resource belongs.
+ * @match: Match function to be applied to resources/match data.
+ * @match_data: Data to be used in matching.
+ *
+ * Finds a resource in @test->resources using @match, but does not acquire
+ * the test's lock.
+ *
+ * Note: This function is for specialized use only as it is **NOT thread-safe**
+ * regarding the test's resource list and test reference count. Callers must prevent
+ * potential race conditions, typically by providing external locking. The thread-safe
+ * alternative, kunit_find_resource(), should be used in most situations.
+ */
+static inline struct kunit_resource *
+kunit_find_resource_unlocked(struct kunit *test,
+			     kunit_resource_match_t match,
+			     void *match_data)
+{
+	struct kunit_resource *res, *found = NULL;
+
+	list_for_each_entry_reverse(res, &test->resources, node) {
+		if (match(test, res, match_data)) {
+			found = res;
+			kunit_get_resource(found);
+			break;
+		}
+	}
+
+	return found;
+}
+
+/**
  * kunit_find_resource() - Find a resource using match function/data.
  * @test: Test case to which the resource belongs.
  * @match: match function to be applied to resources/match data.
@@ -324,19 +352,11 @@ kunit_find_resource(struct kunit *test,
 		    kunit_resource_match_t match,
 		    void *match_data)
 {
-	struct kunit_resource *res, *found = NULL;
+	struct kunit_resource *found = NULL;
 	unsigned long flags;
 
 	spin_lock_irqsave(&test->lock, flags);
-
-	list_for_each_entry_reverse(res, &test->resources, node) {
-		if (match(test, res, (void *)match_data)) {
-			found = res;
-			kunit_get_resource(found);
-			break;
-		}
-	}
-
+	found = kunit_find_resource_unlocked(test, match, match_data);
 	spin_unlock_irqrestore(&test->lock, flags);
 
 	return found;
@@ -352,6 +372,28 @@ kunit_find_named_resource(struct kunit *test,
 			  const char *name)
 {
 	return kunit_find_resource(test, kunit_resource_name_match,
+				   (void *)name);
+}
+
+/**
+ * kunit_find_named_resource_unlocked() - Find a resource using match name
+ * without locking.
+ * @test: Test case to which the resource belongs.
+ * @name: Match name.
+ *
+ * Finds a resource in @test->resources using its name, but does not acquire
+ * the test's resource lock.
+ *
+ * Note: This function is for specialized use only as it is **NOT thread-safe**
+ * regarding the test's resource list and test reference count. Callers must prevent
+ * potential race conditions, typically by providing external locking. The thread-safe
+ * alternative, kunit_find_named_resource(), should be used in most situations.
+ */
+static inline struct kunit_resource *
+kunit_find_named_resource_unlocked(struct kunit *test,
+				   const char *name)
+{
+	return kunit_find_resource_unlocked(test, kunit_resource_name_match,
 				   (void *)name);
 }
 

@@ -20,10 +20,12 @@ int __kunit_add_resource(struct kunit *test,
 			 kunit_resource_init_t init,
 			 kunit_resource_free_t free,
 			 struct kunit_resource *res,
+			 const char *name,
 			 void *data)
 {
 	int ret = 0;
 	unsigned long flags;
+	struct kunit_resource *existing;
 
 	res->free = free;
 	kref_init(&res->refcount);
@@ -37,6 +39,14 @@ int __kunit_add_resource(struct kunit *test,
 	}
 
 	spin_lock_irqsave(&test->lock, flags);
+	if (name) {
+		existing = kunit_find_named_resource_unlocked(test, name);
+		if (existing) {
+			kunit_put_resource(existing);
+			spin_unlock_irqrestore(&test->lock, flags);
+			return -EEXIST;
+		}
+	}
 	list_add_tail(&res->node, &test->resources);
 	/* refcount for list is established by kref_init() */
 	spin_unlock_irqrestore(&test->lock, flags);
@@ -107,7 +117,7 @@ int kunit_add_action(struct kunit *test, void (*action)(void *), void *ctx)
 
 	action_ctx->res.should_kfree = true;
 	/* As init is NULL, this cannot fail. */
-	__kunit_add_resource(test, NULL, __kunit_action_free, &action_ctx->res, action_ctx);
+	__kunit_add_resource(test, NULL, __kunit_action_free, &action_ctx->res, NULL, action_ctx);
 
 	return 0;
 }
