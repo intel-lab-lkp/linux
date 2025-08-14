@@ -339,6 +339,47 @@ struct attribute_group kscand_attr_group = {
 };
 #endif
 
+void count_kscand_mm_scans(void)
+{
+	count_vm_numa_event(KSCAND_MM_SCANS);
+}
+void count_kscand_vma_scans(void)
+{
+	count_vm_numa_event(KSCAND_VMA_SCANS);
+}
+void count_kscand_migadded(void)
+{
+	count_vm_numa_event(KSCAND_MIGADDED);
+}
+void count_kscand_migrated(void)
+{
+	count_vm_numa_event(KSCAND_MIGRATED);
+}
+void count_kscand_migrate_failed(void)
+{
+	count_vm_numa_event(KSCAND_MIGRATE_FAILED);
+}
+void count_kscand_slowtier(void)
+{
+	count_vm_numa_event(KSCAND_SLOWTIER);
+}
+void count_kscand_toptier(void)
+{
+	count_vm_numa_event(KSCAND_TOPTIER);
+}
+void count_kscand_idlepage(void)
+{
+	count_vm_numa_event(KSCAND_IDLEPAGE);
+}
+void count_kscand_hotpage(void)
+{
+	count_vm_numa_event(KSCAND_HOTPAGE);
+}
+void count_kscand_coldpage(void)
+{
+	count_vm_numa_event(KSCAND_COLDPAGE);
+}
+
 static inline int kscand_has_work(void)
 {
 	return !list_empty(&kscand_scan.mm_head);
@@ -653,6 +694,8 @@ static int kmigrated_promote_folio(struct kscand_migrate_info *info,
 
 	if (!is_hot_page(folio))
 		return KSCAND_NOT_HOT_PAGE;
+	else
+		count_kscand_hotpage();
 
 	folio_get(folio);
 
@@ -803,12 +846,15 @@ static int hot_vma_idle_pte_entry(pte_t *pte,
 	}
 
 	if (!kscand_eligible_srcnid(srcnid)) {
+		count_kscand_toptier();
 		if (folio_test_young(folio) || folio_test_referenced(folio)
 				|| pte_young(pteval)) {
 			scanctrl->nodeinfo[srcnid]->nr_accessed++;
 		}
 		folio_put(folio);
 		return 0;
+	} else {
+		count_kscand_slowtier();
 	}
 	if (!folio_test_idle(folio) && !prev_idle &&
 		(folio_test_young(folio) || folio_test_referenced(folio))) {
@@ -820,7 +866,14 @@ static int hot_vma_idle_pte_entry(pte_t *pte,
 			info->pfn = folio_pfn(folio);
 			info->address = addr;
 			list_add_tail(&info->migrate_node, &scanctrl->scan_list);
+			count_kscand_migadded();
 		}
+		folio_put(folio);
+		return 0;
+	} else {
+		if (prev_idle)
+			count_kscand_coldpage();
+		count_kscand_idlepage();
 	}
 
 	folio_put(folio);
@@ -1045,10 +1098,13 @@ static void kmigrated_migrate_mm(struct kmigrated_mm_slot *mm_slot)
 			mstat_counter--;
 
 			/* TBD: encode migrated count here, currently assume folio_nr_pages */
-			if (!ret)
+			if (!ret) {
+				count_kscand_migrated();
 				msuccess++;
-			else
+			} else {
+				count_kscand_migrate_failed();
 				mfailed++;
+			}
 
 			kfree(info);
 
@@ -1269,6 +1325,7 @@ static unsigned long kscand_scan_mm_slot(void)
 
 	for_each_vma(vmi, vma) {
 		kscand_walk_page_vma(vma, &kscand_scanctrl);
+		count_kscand_vma_scans();
 		vma_scanned_size += vma->vm_end - vma->vm_start;
 
 		if (vma_scanned_size >= mm_slot_scan_size ||
@@ -1303,6 +1360,8 @@ static unsigned long kscand_scan_mm_slot(void)
 		address = kscand_scanctrl.address + PAGE_SIZE;
 
 	update_mmslot_info = true;
+
+	count_kscand_mm_scans();
 
 	total = get_slowtier_accesed(&kscand_scanctrl);
 	target_node = get_target_node(&kscand_scanctrl);

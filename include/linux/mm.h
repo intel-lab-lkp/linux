@@ -655,6 +655,19 @@ struct vm_operations_struct {
 					  unsigned long addr);
 };
 
+#ifdef CONFIG_KSCAND
+void count_kscand_mm_scans(void);
+void count_kscand_vma_scans(void);
+void count_kscand_migadded(void);
+void count_kscand_migrated(void);
+void count_kscand_migrate_failed(void);
+void count_kscand_slowtier(void);
+void count_kscand_toptier(void);
+void count_kscand_idlepage(void);
+void count_kscand_hotpage(void);
+void count_kscand_coldpage(void);
+#endif
+
 #ifdef CONFIG_NUMA_BALANCING
 static inline void vma_numab_state_init(struct vm_area_struct *vma)
 {
