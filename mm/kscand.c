@@ -1105,6 +1105,7 @@ static void kmigrated_migrate_mm(struct kmigrated_mm_slot *mm_slot)
 				count_kscand_migrate_failed();
 				mfailed++;
 			}
+			trace_kmem_scan_mm_migrate(mm, ret, dest, msuccess, mfailed);
 
 			kfree(info);
 
@@ -1308,6 +1309,9 @@ static unsigned long kscand_scan_mm_slot(void)
 	mm_target_node = READ_ONCE(mm->target_node);
 	if (mm_target_node != mm_slot_target_node)
 		WRITE_ONCE(mm->target_node, mm_slot_target_node);
+
+	trace_kmem_scan_mm_start(mm);
+
 	now = jiffies;
 
 	if (mm_slot_next_scan && time_before(now, mm_slot_next_scan))
@@ -1377,6 +1381,9 @@ static unsigned long kscand_scan_mm_slot(void)
 		mm_slot->address = address;
 		kscand_update_mmslot_info(mm_slot, total, target_node);
 	}
+
+	trace_kmem_scan_mm_end(mm, address, total, mm_slot_scan_period,
+			mm_slot_scan_size, target_node);
 
 outerloop:
 	/* exit_mmap will destroy ptes after this */
@@ -1530,6 +1537,7 @@ void __kscand_enter(struct mm_struct *mm)
 	spin_unlock(&kscand_mm_lock);
 
 	mmgrab(mm);
+	trace_kmem_mm_enter(mm);
 	if (wakeup)
 		wake_up_interruptible(&kscand_wait);
 }
@@ -1540,6 +1548,7 @@ void __kscand_exit(struct mm_struct *mm)
 	struct mm_slot *slot;
 	int free = 0, serialize = 1;
 
+	trace_kmem_mm_exit(mm);
 	spin_lock(&kscand_mm_lock);
 	slot = mm_slot_lookup(kscand_slots_hash, mm);
 	mm_slot = mm_slot_entry(slot, struct kscand_mm_slot, slot);
