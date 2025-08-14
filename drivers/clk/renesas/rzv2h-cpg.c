@@ -451,34 +451,35 @@ rzv2h_clk_ff_mod_status_is_enabled(struct clk_hw *hw)
 }
 
 static struct clk * __init
-rzv2h_cpg_fixed_mod_status_clk_register(const struct cpg_core_clk *core,
-					struct rzv2h_cpg_priv *priv)
+rzv2h_cpg_mod_status_clk_register(struct rzv2h_cpg_priv *priv, const char *name,
+				  const char *parent_clk_name, u16 mult,
+				  u16 div, struct fixed_mod_conf conf)
 {
 	struct rzv2h_ff_mod_status_clk *clk_hw_data;
 	struct clk_init_data init = { };
 	struct clk_fixed_factor *fix;
-	const struct clk *parent;
 	const char *parent_name;
 	int ret;
 
-	WARN_DEBUG(core->parent >= priv->num_core_clks);
-	parent = priv->clks[core->parent];
-	if (IS_ERR(parent))
-		return ERR_CAST(parent);
-
-	parent_name = __clk_get_name(parent);
-	parent = priv->clks[core->parent];
-	if (IS_ERR(parent))
-		return ERR_CAST(parent);
+	if (!priv->ff_mod_status_ops) {
+		priv->ff_mod_status_ops =
+			devm_kzalloc(priv->dev, sizeof(*priv->ff_mod_status_ops), GFP_KERNEL);
+		if (!priv->ff_mod_status_ops)
+			return ERR_PTR(-ENOMEM);
+		memcpy(priv->ff_mod_status_ops, &clk_fixed_factor_ops,
+		       sizeof(const struct clk_ops));
+		priv->ff_mod_status_ops->is_enabled = rzv2h_clk_ff_mod_status_is_enabled;
+	}
 
 	clk_hw_data = devm_kzalloc(priv->dev, sizeof(*clk_hw_data), GFP_KERNEL);
 	if (!clk_hw_data)
 		return ERR_PTR(-ENOMEM);
 
 	clk_hw_data->priv = priv;
-	clk_hw_data->conf = core->cfg.fixed_mod;
+	clk_hw_data->conf = conf;
+	parent_name = parent_clk_name;
 
-	init.name = core->name;
+	init.name = name;
 	init.ops = priv->ff_mod_status_ops;
 	init.flags = CLK_SET_RATE_PARENT;
 	init.parent_names = &parent_name;
@@ -486,14 +487,33 @@ rzv2h_cpg_fixed_mod_status_clk_register(const struct cpg_core_clk *core,
 
 	fix = &clk_hw_data->fix;
 	fix->hw.init = &init;
-	fix->mult = core->mult;
-	fix->div = core->div;
+	fix->mult = mult;
+	fix->div = div;
 
 	ret = devm_clk_hw_register(priv->dev, &clk_hw_data->fix.hw);
 	if (ret)
 		return ERR_PTR(ret);
 
 	return clk_hw_data->fix.hw.clk;
+}
+
+static struct clk * __init
+rzv2h_cpg_fixed_mod_status_clk_register(const struct cpg_core_clk *core,
+					struct rzv2h_cpg_priv *priv)
+{
+	const struct clk *parent;
+	const char *parent_name;
+
+	WARN_DEBUG(core->parent >= priv->num_core_clks);
+	parent = priv->clks[core->parent];
+	if (IS_ERR(parent))
+		return ERR_CAST(parent);
+
+	parent_name = __clk_get_name(parent);
+
+	return rzv2h_cpg_mod_status_clk_register(priv, core->name, parent_name,
+						 core->mult, core->div,
+						 core->cfg.fixed_mod);
 }
 
 static struct clk
@@ -575,17 +595,6 @@ rzv2h_cpg_register_core_clk(const struct cpg_core_clk *core,
 			clk = clk_hw->clk;
 		break;
 	case CLK_TYPE_FF_MOD_STATUS:
-		if (!priv->ff_mod_status_ops) {
-			priv->ff_mod_status_ops =
-				devm_kzalloc(dev, sizeof(*priv->ff_mod_status_ops), GFP_KERNEL);
-			if (!priv->ff_mod_status_ops) {
-				clk = ERR_PTR(-ENOMEM);
-				goto fail;
-			}
-			memcpy(priv->ff_mod_status_ops, &clk_fixed_factor_ops,
-			       sizeof(const struct clk_ops));
-			priv->ff_mod_status_ops->is_enabled = rzv2h_clk_ff_mod_status_is_enabled;
-		}
 		clk = rzv2h_cpg_fixed_mod_status_clk_register(core, priv);
 		break;
 	case CLK_TYPE_PLL:
