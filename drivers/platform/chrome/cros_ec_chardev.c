@@ -22,6 +22,7 @@
 #include <linux/platform_data/cros_ec_proto.h>
 #include <linux/platform_device.h>
 #include <linux/poll.h>
+#include <linux/ref_proxy.h>
 #include <linux/slab.h>
 #include <linux/types.h>
 #include <linux/uaccess.h>
@@ -32,7 +33,7 @@
 #define CROS_MAX_EVENT_LEN	PAGE_SIZE
 
 struct chardev_priv {
-	struct cros_ec_device *ec_dev;
+	struct ref_proxy *ec_dev_proxy;
 	struct notifier_block notifier;
 	wait_queue_head_t wait_event;
 	unsigned long event_mask;
@@ -55,6 +56,7 @@ static int ec_get_version(struct chardev_priv *priv, char *str, int maxlen)
 	};
 	struct ec_response_get_version *resp;
 	struct cros_ec_command *msg;
+	struct cros_ec_device __rcu *ec_dev;
 	int ret;
 
 	msg = kzalloc(sizeof(*msg) + sizeof(*resp), GFP_KERNEL);
@@ -64,12 +66,19 @@ static int ec_get_version(struct chardev_priv *priv, char *str, int maxlen)
 	msg->command = EC_CMD_GET_VERSION + priv->cmd_offset;
 	msg->insize = sizeof(*resp);
 
-	ret = cros_ec_cmd_xfer_status(priv->ec_dev, msg);
-	if (ret < 0) {
-		snprintf(str, maxlen,
-			 "Unknown EC version, returned error: %d\n",
-			 msg->result);
-		goto exit;
+	REF_PROXY_GET(priv->ec_dev_proxy, ec_dev) {
+		if (!ec_dev) {
+			ret = -ENODEV;
+			goto exit;
+		}
+
+		ret = cros_ec_cmd_xfer_status(ec_dev, msg);
+		if (ret < 0) {
+			snprintf(str, maxlen,
+				 "Unknown EC version, returned error: %d\n",
+				 msg->result);
+			goto exit;
+		}
 	}
 
 	resp = (struct ec_response_get_version *)msg->data;
@@ -92,22 +101,30 @@ static int cros_ec_chardev_mkbp_event(struct notifier_block *nb,
 {
 	struct chardev_priv *priv = container_of(nb, struct chardev_priv,
 						 notifier);
-	struct cros_ec_device *ec_dev = priv->ec_dev;
+	struct cros_ec_device __rcu *ec_dev;
 	struct ec_event *event;
-	unsigned long event_bit = 1 << ec_dev->event_data.event_type;
-	int total_size = sizeof(*event) + ec_dev->event_size;
+	unsigned long event_bit;
+	int total_size;
 
-	if (!(event_bit & priv->event_mask) ||
-	    (priv->event_len + total_size) > CROS_MAX_EVENT_LEN)
-		return NOTIFY_DONE;
+	REF_PROXY_GET(priv->ec_dev_proxy, ec_dev) {
+		if (!ec_dev)
+			return NOTIFY_DONE;
 
-	event = kzalloc(total_size, GFP_KERNEL);
-	if (!event)
-		return NOTIFY_DONE;
+		event_bit = 1 << ec_dev->event_data.event_type;
+		total_size = sizeof(*event) + ec_dev->event_size;
 
-	event->size = ec_dev->event_size;
-	event->event_type = ec_dev->event_data.event_type;
-	memcpy(event->data, &ec_dev->event_data.data, ec_dev->event_size);
+		if (!(event_bit & priv->event_mask) ||
+		    (priv->event_len + total_size) > CROS_MAX_EVENT_LEN)
+			return NOTIFY_DONE;
+
+		event = kzalloc(total_size, GFP_KERNEL);
+		if (!event)
+			return NOTIFY_DONE;
+
+		event->size = ec_dev->event_size;
+		event->event_type = ec_dev->event_data.event_type;
+		memcpy(event->data, &ec_dev->event_data.data, ec_dev->event_size);
+	}
 
 	spin_lock(&priv->wait_event.lock);
 	list_add_tail(&event->node, &priv->events);
@@ -166,7 +183,12 @@ static int cros_ec_chardev_open(struct inode *inode, struct file *filp)
 	if (!priv)
 		return -ENOMEM;
 
-	priv->ec_dev = ec_dev;
+	priv->ec_dev_proxy = ref_proxy_alloc(ec_dev->ref_proxy_provider);
+	if (!priv->ec_dev_proxy) {
+		ret = -ENOMEM;
+		goto err;
+	}
+
 	priv->cmd_offset = ec->cmd_offset;
 	filp->private_data = priv;
 	INIT_LIST_HEAD(&priv->events);
@@ -178,9 +200,14 @@ static int cros_ec_chardev_open(struct inode *inode, struct file *filp)
 					       &priv->notifier);
 	if (ret) {
 		dev_err(ec_dev->dev, "failed to register event notifier\n");
-		kfree(priv);
+		goto err;
 	}
 
+	return 0;
+err:
+	if (priv->ec_dev_proxy)
+		ref_proxy_free(priv->ec_dev_proxy);
+	kfree(priv);
 	return ret;
 }
 
@@ -251,11 +278,16 @@ static ssize_t cros_ec_chardev_read(struct file *filp, char __user *buffer,
 static int cros_ec_chardev_release(struct inode *inode, struct file *filp)
 {
 	struct chardev_priv *priv = filp->private_data;
-	struct cros_ec_device *ec_dev = priv->ec_dev;
+	struct cros_ec_device __rcu *ec_dev;
 	struct ec_event *event, *e;
 
-	blocking_notifier_chain_unregister(&ec_dev->event_notifier,
-					   &priv->notifier);
+	REF_PROXY_GET(priv->ec_dev_proxy, ec_dev) {
+		if (ec_dev)
+			blocking_notifier_chain_unregister(
+					&ec_dev->event_notifier,
+					&priv->notifier);
+	}
+	ref_proxy_free(priv->ec_dev_proxy);
 
 	list_for_each_entry_safe(event, e, &priv->events, node) {
 		list_del(&event->node);
@@ -273,6 +305,7 @@ static long cros_ec_chardev_ioctl_xcmd(struct chardev_priv *priv, void __user *a
 {
 	struct cros_ec_command *s_cmd;
 	struct cros_ec_command u_cmd;
+	struct cros_ec_device __rcu *ec_dev;
 	long ret;
 
 	if (copy_from_user(&u_cmd, arg, sizeof(u_cmd)))
@@ -299,10 +332,17 @@ static long cros_ec_chardev_ioctl_xcmd(struct chardev_priv *priv, void __user *a
 	}
 
 	s_cmd->command += priv->cmd_offset;
-	ret = cros_ec_cmd_xfer(priv->ec_dev, s_cmd);
-	/* Only copy data to userland if data was received. */
-	if (ret < 0)
-		goto exit;
+	REF_PROXY_GET(priv->ec_dev_proxy, ec_dev) {
+		if (!ec_dev) {
+			ret = -ENODEV;
+			goto exit;
+		}
+
+		ret = cros_ec_cmd_xfer(ec_dev, s_cmd);
+		/* Only copy data to userland if data was received. */
+		if (ret < 0)
+			goto exit;
+	}
 
 	if (copy_to_user(arg, s_cmd, sizeof(*s_cmd) + s_cmd->insize))
 		ret = -EFAULT;
@@ -313,24 +353,29 @@ exit:
 
 static long cros_ec_chardev_ioctl_readmem(struct chardev_priv *priv, void __user *arg)
 {
-	struct cros_ec_device *ec_dev = priv->ec_dev;
+	struct cros_ec_device __rcu *ec_dev;
 	struct cros_ec_readmem s_mem = { };
 	long num;
 
-	/* Not every platform supports direct reads */
-	if (!ec_dev->cmd_readmem)
-		return -ENOTTY;
+	REF_PROXY_GET(priv->ec_dev_proxy, ec_dev) {
+		if (!ec_dev)
+			return -ENODEV;
 
-	if (copy_from_user(&s_mem, arg, sizeof(s_mem)))
-		return -EFAULT;
+		/* Not every platform supports direct reads */
+		if (!ec_dev->cmd_readmem)
+			return -ENOTTY;
 
-	if (s_mem.bytes > sizeof(s_mem.buffer))
-		return -EINVAL;
+		if (copy_from_user(&s_mem, arg, sizeof(s_mem)))
+			return -EFAULT;
 
-	num = ec_dev->cmd_readmem(ec_dev, s_mem.offset, s_mem.bytes,
-				  s_mem.buffer);
-	if (num <= 0)
-		return num;
+		if (s_mem.bytes > sizeof(s_mem.buffer))
+			return -EINVAL;
+
+		num = ec_dev->cmd_readmem(ec_dev, s_mem.offset, s_mem.bytes,
+					  s_mem.buffer);
+		if (num <= 0)
+			return num;
+	}
 
 	if (copy_to_user((void __user *)arg, &s_mem, sizeof(s_mem)))
 		return -EFAULT;
