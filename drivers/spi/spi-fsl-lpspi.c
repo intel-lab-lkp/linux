@@ -88,6 +88,13 @@
 
 #define SR_CLEAR_MASK	GENMASK(13, 8)
 
+static const char * const pincfgs[] = {
+	[CFGR1_PINCFG_SIN_IN_SOUT_OUT] = "sin-in-sout-out",
+	[CFGR1_PINCFG_SIN_ONLY] = "sin-only",
+	[CFGR1_PINCFG_SOUT_ONLY] = "sout-only",
+	[CFGR1_PINCFG_SOUT_IN_SIN_OUT] = "sout-in-sin-out",
+};
+
 struct fsl_lpspi_devtype_data {
 	u8 prescale_max;
 };
@@ -417,18 +424,27 @@ static int fsl_lpspi_config(struct fsl_lpspi_data *fsl_lpspi)
 {
 	u32 temp = 0;
 	int ret;
+	const char *pincfg_str;
 	u8 pincfg;
 
 	if (!fsl_lpspi->is_target) {
 		ret = fsl_lpspi_set_bitrate(fsl_lpspi);
 		if (ret)
 			return ret;
+
+		temp |= CFGR1_HOST;
 	}
 
 	fsl_lpspi_set_watermark(fsl_lpspi);
 
-	if (!fsl_lpspi->is_target) {
-		temp |= CFGR1_HOST;
+	if (!of_property_read_string(fsl_lpspi->dev->of_node,
+				     "nxp,lpspi-pincfg", &pincfg_str)) {
+		pincfg = match_string(pincfgs, ARRAY_SIZE(pincfgs), pincfg_str);
+
+		if (pincfg < 0 || pincfg == CFGR1_PINCFG_SOUT_ONLY ||
+		    pincfg == CFGR1_PINCFG_SIN_ONLY)
+			return -EINVAL;
+	} else if (!fsl_lpspi->is_target) {
 		pincfg = CFGR1_PINCFG_SIN_IN_SOUT_OUT;
 	} else {
 		pincfg = CFGR1_PINCFG_SOUT_IN_SIN_OUT;
