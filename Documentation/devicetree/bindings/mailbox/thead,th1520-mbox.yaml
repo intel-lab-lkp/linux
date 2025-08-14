@@ -12,6 +12,17 @@ description:
   through mailbox channels. It also allows one core to signal another processor
   using interrupts via the Interrupt Controller Unit (ICU).
 
+  The SoC is divided to two worlds, REE and TEE, although it's currently unknown
+  how to enable the seperation between worlds so the seperation does not exist
+  yet. However each mailbox is assigned to a certain world, and register windows
+  for mailboxes are assigned to different worlds too. In a certain world's
+  register windows for mailboxes, only mailboxes assigned to this world will
+  have the local ICU part mapped (in addition to the remote ICU part of the
+  other same-world mailbox), and mailboxes assigned to the other world have
+  only the coressponding remote ICU part mapped to this world. Two mailboxes
+  (C910T and E902) are assigned to the TEE world and two mailboxes (C906 and
+  C910R) are assigned to the REE world.
+
 maintainers:
   - Michal Wilczynski <m.wilczynski@samsung.com>
 
@@ -22,9 +33,9 @@ properties:
   clocks:
     items:
       - description: Clock for the local mailbox
-      - description: Clock for remote ICU 0
-      - description: Clock for remote ICU 1
-      - description: Clock for remote ICU 2
+      - description: Clock for the other mailbox in the same world
+      - description: Clock for the first mailbox in the other world
+      - description: Clock for the second mailbox in the other world
 
   clock-names:
     items:
@@ -35,10 +46,14 @@ properties:
 
   reg:
     items:
-      - description: Mailbox local base address
-      - description: Remote ICU 0 base address
-      - description: Remote ICU 1 base address
-      - description: Remote ICU 2 base address
+      - description: Base address of this specific mailbox
+      - description: Base address of the other mailbox in the same world
+      - description:
+          Base address of the register window in this world corresponding to the
+          first other-world mailbox.
+      - description:
+          Base address of the register window in this world corresponding to the
+          second other-world mailbox.
 
   reg-names:
     items:
@@ -50,10 +65,17 @@ properties:
   interrupts:
     maxItems: 1
 
+  thead,mbox-id:
+    $ref: /schemas/types.yaml#/definitions/uint32
+    description:
+      The ID of this specific mailbox that this device tree node describes. For
+      compatibility with old device trees, if missing, the ID is default to 0,
+      the C910T mailbox.
+
   '#mbox-cells':
     const: 1
     description:
-      The one and only cell describes destination CPU ID.
+      The one and only cell describes destination mailbox ID.
 
 required:
   - compatible
@@ -72,12 +94,12 @@ examples:
     soc {
       #address-cells = <2>;
       #size-cells = <2>;
-      mailbox@ffffc38000 {
+      mbox_c910t: mailbox@ffffc38000 {
         compatible = "thead,th1520-mbox";
-        reg = <0xff 0xffc38000 0x0 0x4000>,
-              <0xff 0xffc44000 0x0 0x1000>,
-              <0xff 0xffc4c000 0x0 0x1000>,
-              <0xff 0xffc54000 0x0 0x1000>;
+        reg = <0xff 0xffc38000 0x0 0x6000>,
+              <0xff 0xffc44000 0x0 0x6000>,
+              <0xff 0xffc4c000 0x0 0x2000>,
+              <0xff 0xffc54000 0x0 0x2000>;
         reg-names = "local", "remote-icu0", "remote-icu1", "remote-icu2";
         clocks = <&clk CLK_MBOX0>, <&clk CLK_MBOX1>, <&clk CLK_MBOX2>,
                  <&clk CLK_MBOX3>;
@@ -85,5 +107,6 @@ examples:
                       "clk-remote-icu2";
         interrupts = <28>;
         #mbox-cells = <1>;
+        thead,mbox-id = <0>;
       };
     };
