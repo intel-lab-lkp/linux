@@ -230,6 +230,7 @@ struct tape_block {
 #define SDEBUG_OPT_NO_CDB_NOISE		0x4000
 #define SDEBUG_OPT_HOST_BUSY		0x8000
 #define SDEBUG_OPT_CMD_ABORT		0x10000
+#define SDEBUG_OPT_NO_DATA		0x20000
 #define SDEBUG_OPT_ALL_NOISE (SDEBUG_OPT_NOISE | SDEBUG_OPT_Q_NOISE | \
 			      SDEBUG_OPT_RESET_NOISE)
 #define SDEBUG_OPT_ALL_INJECTING (SDEBUG_OPT_RECOVERED_ERR | \
@@ -237,7 +238,8 @@ struct tape_block {
 				  SDEBUG_OPT_DIF_ERR | SDEBUG_OPT_DIX_ERR | \
 				  SDEBUG_OPT_SHORT_TRANSFER | \
 				  SDEBUG_OPT_HOST_BUSY | \
-				  SDEBUG_OPT_CMD_ABORT)
+				  SDEBUG_OPT_CMD_ABORT | \
+				  SDEBUG_OPT_NO_DATA)
 #define SDEBUG_OPT_RECOV_DIF_DIX (SDEBUG_OPT_RECOVERED_ERR | \
 				  SDEBUG_OPT_DIF_ERR | SDEBUG_OPT_DIX_ERR)
 
@@ -1633,7 +1635,7 @@ static int make_ua(struct scsi_cmnd *scp, struct sdebug_dev_info *devip)
 static int fill_from_dev_buffer(struct scsi_cmnd *scp, unsigned char *arr,
 				int arr_len)
 {
-	int act_len;
+	int act_len, resid;
 	struct scsi_data_buffer *sdb = &scp->sdb;
 
 	if (!sdb->length)
@@ -1641,9 +1643,18 @@ static int fill_from_dev_buffer(struct scsi_cmnd *scp, unsigned char *arr,
 	if (scp->sc_data_direction != DMA_FROM_DEVICE)
 		return DID_ERROR << 16;
 
-	act_len = sg_copy_from_buffer(sdb->table.sgl, sdb->table.nents,
-				      arr, arr_len);
-	scsi_set_resid(scp, scsi_bufflen(scp) - act_len);
+	/*
+	 * Conditionally suppress DATA IN transfer and leave resid set to bufflen.
+	 */
+	if (unlikely((sdebug_opts & SDEBUG_OPT_NO_DATA) &&
+		      atomic_read(&sdeb_inject_pending))) {
+		resid = scsi_bufflen(scp);
+	} else {
+		act_len = sg_copy_from_buffer(sdb->table.sgl, sdb->table.nents,
+					      arr, arr_len);
+		resid = scsi_bufflen(scp) - act_len;
+	}
+	scsi_set_resid(scp, resid);
 
 	return 0;
 }
@@ -1656,7 +1667,7 @@ static int fill_from_dev_buffer(struct scsi_cmnd *scp, unsigned char *arr,
 static int p_fill_from_dev_buffer(struct scsi_cmnd *scp, const void *arr,
 				  int arr_len, unsigned int off_dst)
 {
-	unsigned int act_len, n;
+	unsigned int act_len, n, resid;
 	struct scsi_data_buffer *sdb = &scp->sdb;
 	off_t skip = off_dst;
 
@@ -1665,13 +1676,23 @@ static int p_fill_from_dev_buffer(struct scsi_cmnd *scp, const void *arr,
 	if (scp->sc_data_direction != DMA_FROM_DEVICE)
 		return DID_ERROR << 16;
 
-	act_len = sg_pcopy_from_buffer(sdb->table.sgl, sdb->table.nents,
-				       arr, arr_len, skip);
-	pr_debug("%s: off_dst=%u, scsi_bufflen=%u, act_len=%u, resid=%d\n",
-		 __func__, off_dst, scsi_bufflen(scp), act_len,
-		 scsi_get_resid(scp));
-	n = scsi_bufflen(scp) - (off_dst + act_len);
-	scsi_set_resid(scp, min_t(u32, scsi_get_resid(scp), n));
+	/*
+	 * Conditionally suppress DATA IN transfer and leave resid set to bufflen.
+	 */
+	if (unlikely((sdebug_opts & SDEBUG_OPT_NO_DATA) &&
+		      atomic_read(&sdeb_inject_pending))) {
+		resid = scsi_bufflen(scp);
+	} else {
+		act_len = sg_pcopy_from_buffer(sdb->table.sgl, sdb->table.nents,
+					       arr, arr_len, skip);
+		pr_debug("%s: off_dst=%u, scsi_bufflen=%u, act_len=%u, resid=%d\n",
+			 __func__, off_dst, scsi_bufflen(scp), act_len,
+			 scsi_get_resid(scp));
+		n = scsi_bufflen(scp) - (off_dst + act_len);
+		resid = min_t(u32, scsi_get_resid(scp), n);
+	}
+	scsi_set_resid(scp, resid);
+
 	return 0;
 }
 
