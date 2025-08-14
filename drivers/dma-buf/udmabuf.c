@@ -42,6 +42,14 @@ struct udmabuf {
 	struct sg_table *sg;
 	struct miscdevice *device;
 	pgoff_t *offsets;
+	struct list_head attachments;
+	struct mutex lock; /* for attachments list */
+};
+
+struct udmabuf_attachment {
+	struct device *dev;
+	struct sg_table *table;
+	struct list_head list;
 };
 
 static vm_fault_t udmabuf_vm_fault(struct vm_fault *vmf)
@@ -185,14 +193,44 @@ static void put_sg_table(struct device *dev, struct sg_table *sg,
 static struct sg_table *map_udmabuf(struct dma_buf_attachment *at,
 				    enum dma_data_direction direction)
 {
-	return get_sg_table(at->dev, at->dmabuf, direction);
+	struct udmabuf *ubuf = at->dmabuf->priv;
+	struct udmabuf_attachment *a;
+	struct sg_table *table;
+
+	a = kzalloc(sizeof(*a), GFP_KERNEL);
+	if (!a)
+		return ERR_PTR(-ENOMEM);
+
+	table = get_sg_table(at->dev, at->dmabuf, direction);
+	if (IS_ERR(table)) {
+		kfree(a);
+		return table;
+	}
+
+	a->dev = at->dev;
+	a->table = table;
+
+	mutex_lock(&ubuf->lock);
+	list_add(&a->list, &ubuf->attachments);
+	mutex_unlock(&ubuf->lock);
+
+	return a->table;
 }
 
 static void unmap_udmabuf(struct dma_buf_attachment *at,
 			  struct sg_table *sg,
 			  enum dma_data_direction direction)
 {
-	return put_sg_table(at->dev, sg, direction);
+	struct udmabuf_attachment *a = at->priv;
+	struct udmabuf *ubuf = at->dmabuf->priv;
+
+	mutex_lock(&ubuf->lock);
+	list_del(&a->list);
+	mutex_unlock(&ubuf->lock);
+
+	put_sg_table(at->dev, sg, direction);
+
+	kfree(a);
 }
 
 static void unpin_all_folios(struct udmabuf *ubuf)
@@ -383,6 +421,9 @@ static long udmabuf_create(struct miscdevice *device,
 	ubuf = kzalloc(sizeof(*ubuf), GFP_KERNEL);
 	if (!ubuf)
 		return -ENOMEM;
+
+	INIT_LIST_HEAD(&ubuf->attachments);
+	mutex_init(&ubuf->lock);
 
 	pglimit = ((u64)size_limit_mb * 1024 * 1024) >> PAGE_SHIFT;
 	for (i = 0; i < head->count; i++) {
