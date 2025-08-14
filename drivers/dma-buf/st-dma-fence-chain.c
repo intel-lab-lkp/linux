@@ -572,6 +572,7 @@ static int wait_forward(void *arg)
 {
 	struct fence_chains fc;
 	struct task_struct *tsk;
+	ktime_t dt;
 	int err;
 	int i;
 
@@ -587,8 +588,12 @@ static int wait_forward(void *arg)
 	get_task_struct(tsk);
 	yield_to(tsk, true);
 
+	dt = -ktime_get();
 	for (i = 0; i < fc.chain_length; i++)
 		dma_fence_signal(fc.fences[i]);
+	dt += ktime_get();
+
+	pr_info("%s: %d signals in %llu ns\n", __func__, fc.chain_length, ktime_to_ns(dt));
 
 	err = kthread_stop_put(tsk);
 
@@ -601,6 +606,7 @@ static int wait_backward(void *arg)
 {
 	struct fence_chains fc;
 	struct task_struct *tsk;
+	ktime_t dt;
 	int err;
 	int i;
 
@@ -616,8 +622,12 @@ static int wait_backward(void *arg)
 	get_task_struct(tsk);
 	yield_to(tsk, true);
 
+	dt = -ktime_get();
 	for (i = fc.chain_length; i--; )
 		dma_fence_signal(fc.fences[i]);
+	dt += ktime_get();
+
+	pr_info("%s: %d signals in %llu ns\n", __func__, fc.chain_length, ktime_to_ns(dt));
 
 	err = kthread_stop_put(tsk);
 
@@ -646,6 +656,7 @@ static int wait_random(void *arg)
 {
 	struct fence_chains fc;
 	struct task_struct *tsk;
+	ktime_t dt;
 	int err;
 	int i;
 
@@ -663,8 +674,12 @@ static int wait_random(void *arg)
 	get_task_struct(tsk);
 	yield_to(tsk, true);
 
+	dt = -ktime_get();
 	for (i = 0; i < fc.chain_length; i++)
 		dma_fence_signal(fc.fences[i]);
+	dt += ktime_get();
+
+	pr_info("%s: %d signals in %llu ns\n", __func__, fc.chain_length, ktime_to_ns(dt));
 
 	err = kthread_stop_put(tsk);
 
