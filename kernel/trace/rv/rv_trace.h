@@ -65,6 +65,36 @@ DECLARE_EVENT_CLASS(error_da_monitor,
 #include <monitors/opid/opid_trace.h>
 // Add new monitors based on CONFIG_DA_MON_EVENTS_IMPLICIT here
 
+#ifdef CONFIG_HA_MON_EVENTS_IMPLICIT
+/* For simplicity this class is marked as DA although relevant only for HA */
+DECLARE_EVENT_CLASS(error_env_da_monitor,
+
+	TP_PROTO(char *state, char *event, char *env),
+
+	TP_ARGS(state, event, env),
+
+	TP_STRUCT__entry(
+		__array(	char,	state,		MAX_DA_NAME_LEN	)
+		__array(	char,	event,		MAX_DA_NAME_LEN	)
+		__array(	char,	env,		MAX_DA_NAME_LEN	)
+	),
+
+	TP_fast_assign(
+		memcpy(__entry->state,		state,		MAX_DA_NAME_LEN);
+		memcpy(__entry->event,		event,		MAX_DA_NAME_LEN);
+		memcpy(__entry->env,		env,		MAX_DA_NAME_LEN);
+	),
+
+	TP_printk("event %s not expected in the state %s with env %s\n",
+		__entry->event,
+		__entry->state,
+		__entry->env)
+);
+
+// Add new monitors based on CONFIG_HA_MON_EVENTS_IMPLICIT here
+
+#endif
+
 #endif /* CONFIG_DA_MON_EVENTS_IMPLICIT */
 
 #ifdef CONFIG_DA_MON_EVENTS_ID
@@ -127,6 +157,39 @@ DECLARE_EVENT_CLASS(error_da_monitor_id,
 #include <monitors/nrp/nrp_trace.h>
 #include <monitors/sssw/sssw_trace.h>
 // Add new monitors based on CONFIG_DA_MON_EVENTS_ID here
+
+#ifdef CONFIG_HA_MON_EVENTS_ID
+/* For simplicity this class is marked as DA although relevant only for HA */
+DECLARE_EVENT_CLASS(error_env_da_monitor_id,
+
+	TP_PROTO(int id, char *state, char *event, char *env),
+
+	TP_ARGS(id, state, event, env),
+
+	TP_STRUCT__entry(
+		__field(	int,	id				)
+		__array(	char,	state,		MAX_DA_NAME_LEN	)
+		__array(	char,	event,		MAX_DA_NAME_LEN	)
+		__array(	char,	env,		MAX_DA_NAME_LEN	)
+	),
+
+	TP_fast_assign(
+		memcpy(__entry->state,		state,		MAX_DA_NAME_LEN);
+		memcpy(__entry->event,		event,		MAX_DA_NAME_LEN);
+		memcpy(__entry->env,		env,		MAX_DA_NAME_LEN);
+		__entry->id			= id;
+	),
+
+	TP_printk("%d: event %s not expected in the state %s with env %s\n",
+		__entry->id,
+		__entry->event,
+		__entry->state,
+		__entry->env)
+);
+
+// Add new monitors based on CONFIG_HA_MON_EVENTS_ID here
+
+#endif
 
 #endif /* CONFIG_DA_MON_EVENTS_ID */
 #ifdef CONFIG_LTL_MON_EVENTS_ID

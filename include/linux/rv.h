@@ -83,11 +83,37 @@ struct ltl_monitor {};
 
 #endif /* CONFIG_RV_LTL_MONITOR */
 
+#ifdef CONFIG_RV_HA_MONITOR
+/*
+ * In the future, hybrid automata may rely on multiple
+ * environment variables, e.g. different clocks started at
+ * different times or running at different speed.
+ * For now we support only 1 variable.
+ */
+#define MAX_HA_ENV_LEN 1
+
+/*
+ * Hybrid automaton per-object variables.
+ */
+struct ha_monitor {
+	struct da_monitor da_mon;
+	u64 env_store[MAX_HA_ENV_LEN];
+	struct hrtimer timer;
+};
+#define to_ha_monitor(da) container_of(da, struct ha_monitor, da_mon)
+
+#else
+
+struct ha_monitor { };
+
+#endif /* CONFIG_RV_HA_MONITOR */
+
 #define RV_PER_TASK_MONITOR_INIT	(CONFIG_RV_PER_TASK_MONITORS)
 
 union rv_task_monitor {
 	struct da_monitor	da_mon;
 	struct ltl_monitor	ltl_mon;
+	struct ha_monitor	ha_mon;
 };
 
 #ifdef CONFIG_RV_REACTORS
