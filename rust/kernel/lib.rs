@@ -294,6 +294,57 @@ macro_rules! asm {
     };
 }
 
+/// Conditionally compiles and executes code based on a `#[cfg]` condition.
+///
+/// Expands to `#[cfg(cond)] { ... }` and `#[cfg(not(cond))] { ... }`,
+/// allowing conditional compilation in both expression and statement positions.
+///
+/// # Key difference from `cfg!()`
+/// - `cfg!()` evaluates a configuration flag at compile time, but both branches must be valid Rust code
+/// - `if_cfg!()` compiles only the active branch, so the inactive branch can reference
+///   functions, types, or constants that may not exist under certain configurations
+///
+/// # Examples
+///
+/// Demonstrates the difference between `if_cfg!()` and `cfg!()`:
+/// ```ignore
+/// # use kernel::if_cfg;
+/// // FOR CONFIG_64BIT
+/// // Only the active branch is compiled - inactive branch can be invalid
+/// let x = if_cfg!(if CONFIG_64BIT {
+///     42  // valid code
+/// } else {
+///     undefined_function()  // invalid, but completely ignored by compiler
+/// });
+/// assert_eq!(x, 42);
+/// ```
+///
+/// Using `cfg!()` instead would fail compilation:
+/// ```ignore
+/// // This fails because Rust must validate both branches
+/// let x = if cfg!(CONFIG_64BIT) {
+///     42
+/// } else {
+///     undefined_function()  // compilation error - function doesn't exist
+/// };
+/// assert_eq!(x, 42);
+/// ```
+#[macro_export]
+macro_rules! if_cfg {
+    (if $cond:tt { $($then:tt)* } else { $($else:tt)* }) => {{
+        #[cfg($cond)]
+        { $($then)* }
+        #[cfg(not($cond))]
+        { $($else)* }
+    }};
+    (if $cond:tt { $($then:tt)* }) => {{
+        #[cfg($cond)]
+        { $($then)* }
+        #[cfg(not($cond))]
+        { () }
+    }};
+}
+
 /// Gets the C string file name of a [`Location`].
 ///
 /// If `file_with_nul()` is not available, returns a string that warns about it.
