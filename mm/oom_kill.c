@@ -465,8 +465,10 @@ static void dump_header(struct oom_control *oc)
 		pr_warn("COMPACTION is disabled!!!\n");
 
 	dump_stack();
-	if (is_memcg_oom(oc))
+	if (is_memcg_oom(oc)) {
 		mem_cgroup_print_oom_meminfo(oc->memcg);
+		show_mem();
+	}
 	else {
 		__show_mem(SHOW_MEM_FILTER_NODES, oc->nodemask, gfp_zone(oc->gfp_mask));
 		if (should_dump_unreclaim_slab())
