@@ -22,6 +22,8 @@
 #include <linux/types.h>
 #include <linux/units.h>
 
+#include "../drivers/firmware/arm_scmi/quirks.h"
+
 struct scmi_data {
 	int domain_id;
 	int nr_opp;
@@ -34,6 +36,7 @@ struct scmi_data {
 static struct scmi_protocol_handle *ph;
 static const struct scmi_perf_proto_ops *perf_ops;
 static struct cpufreq_driver scmi_cpufreq_driver;
+static bool __maybe_unused scmi_cpufreq_dt_props_check_disable;
 
 static unsigned int scmi_cpufreq_get_rate(unsigned int cpu)
 {
@@ -400,6 +403,9 @@ static bool scmi_dev_used_by_cpus(struct device *scmi_dev)
 	struct device *cpu_dev;
 	int cpu, idx;
 
+	if (scmi_cpufreq_dt_props_check_disable)
+		return true;
+
 	if (!scmi_np)
 		return false;
 
@@ -427,11 +433,18 @@ static bool scmi_dev_used_by_cpus(struct device *scmi_dev)
 	return false;
 }
 
+#define QUIRK_SCMI_CPUFREQ_CHECK_DT_PROPS			\
+	({							\
+		scmi_cpufreq_dt_props_check_disable = true;	\
+	})
+
 static int scmi_cpufreq_probe(struct scmi_device *sdev)
 {
 	int ret;
 	struct device *dev = &sdev->dev;
 	const struct scmi_handle *handle;
+
+	SCMI_QUIRK(scmi_cpufreq_no_check_dt_props, QUIRK_SCMI_CPUFREQ_CHECK_DT_PROPS);
 
 	handle = sdev->handle;
 
