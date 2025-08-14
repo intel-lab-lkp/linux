@@ -26,11 +26,12 @@ properties:
     const: thead,th1520-aon
 
   mboxes:
-    maxItems: 1
+    maxItems: 2
 
   mbox-names:
     items:
       - const: aon
+      - const: aon-for-sbi
 
   resets:
     maxItems: 1
@@ -54,7 +55,7 @@ examples:
   - |
     aon: aon {
         compatible = "thead,th1520-aon";
-        mboxes = <&mbox_910t 1>;
-        mbox-names = "aon";
+        mboxes = <&mbox_910t 1>, <&mbox_910r 1>;
+        mbox-names = "aon", "aon-for-sbi";
         #power-domain-cells = <1>;
     };
