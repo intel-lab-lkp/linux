@@ -1,0 +1,51 @@
+# SPDX-License-Identifier: (GPL-2.0-only OR BSD-2-Clause)
+%YAML 1.2
+---
+$id: http://devicetree.org/schemas/mips/lantiq/lantiq,vmmc-xway.yaml#
+$schema: http://devicetree.org/meta-schemas/core.yaml#
+
+title: Lantiq VMMC (Voice MIPS Macro Core)
+
+maintainers:
+  - Aleksander Jan Bajkowski <olek2@wp.pl>
+
+description:
+  The Lantiq SoCs have a 2nd mips core called "Voice MIPS Macro Core (VMMC)"
+  which is used to run the voice firmware. The firmware handles analog
+  telephone lines.
+
+properties:
+  compatible:
+    items:
+      - enum:
+          - lantiq,vmmc-xway
+
+  reg:
+    maxItems: 1
+
+  interrupts:
+    minItems: 6
+    maxItems: 6
+
+  gpios: true
+
+required:
+  - compatible
+  - reg
+  - interrupts
+
+additionalProperties: false
+
+examples:
+  - |
+    #include <dt-bindings/gpio/gpio.h>
+    vmmc@107000 {
+        compatible = "lantiq,vmmc-xway";
+        reg = <0x107000 0x300>;
+        interrupt-parent = <&icu0>;
+        interrupts = <150>, <151>, <152>, <153>, <154>, <155>;
+        gpios = <&gpio 30 GPIO_ACTIVE_HIGH
+                 &gpio 31 GPIO_ACTIVE_HIGH
+                 &gpio 3  GPIO_ACTIVE_HIGH>;
+
+    };
