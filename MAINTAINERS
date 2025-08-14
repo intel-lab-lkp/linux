@@ -14506,6 +14506,8 @@ L:	linux-hwmon@vger.kernel.org
 L:	linux-gpio@vger.kernel.org
 S:	Supported
 F:	Documentation/devicetree/bindings/mfd/adi,ltc4283.yaml
+F:	drivers/mfd/ltc4283.c
+F:	include/linux/mfd/ltc4283.h
 
 LTC4286 HARDWARE MONITOR DRIVER
 M:	Delphine CC Chiu <Delphine_CC_Chiu@Wiwynn.com>
