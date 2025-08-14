@@ -101,6 +101,26 @@ pte_t ptep_clear_flush(struct vm_area_struct *vma, unsigned long address,
 		flush_tlb_page(vma, address);
 	return pte;
 }
+
+void ptep_clear_flush_range(struct vm_area_struct *vma, unsigned long address,
+			    pte_t *ptep, unsigned int nr)
+{
+	struct mm_struct *mm = (vma)->vm_mm;
+	bool accessible = false;
+	pte_t pte;
+	int i;
+
+	for (i = 0; i < nr; i++) {
+		pte = ptep_get_and_clear(mm, address + i * PAGE_SIZE, ptep + i);
+		if (!accessible && pte_accessible(mm, pte))
+			accessible = true;
+	}
+
+	if (accessible) {
+		flush_tlb_mm_range(vma->vm_mm, address, address + nr * PAGE_SIZE,
+				   PAGE_SHIFT, false);
+	}
+}
 #endif
 
 #ifdef CONFIG_TRANSPARENT_HUGEPAGE

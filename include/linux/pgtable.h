@@ -882,6 +882,9 @@ static inline void clear_not_present_full_ptes(struct mm_struct *mm,
 extern pte_t ptep_clear_flush(struct vm_area_struct *vma,
 			      unsigned long address,
 			      pte_t *ptep);
+extern void ptep_clear_flush_range(struct vm_area_struct *vma,
+				   unsigned long address,
+				   pte_t *ptep, unsigned int nr);
 #endif
 
 #ifndef __HAVE_ARCH_PMDP_HUGE_CLEAR_FLUSH
