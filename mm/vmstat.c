@@ -1505,6 +1505,23 @@ const char * const vmstat_text[] = {
 	"kpromoted_non_lru",
 	"kpromoted_cold_old",
 	"kpromoted_dropped",
+	"hwhint_nr_events",
+	"hwhint_kernel",
+	"hwhint_kthread",
+	"hwhint_non_load_stores",
+	"hwhint_dc_l2_hits",
+	"hwhint_local_l3l1l2",
+	"hwhint_local_peer_cache_near",
+	"hwhint_far_cache_hits",
+	"hwhint_dram_accesses",
+	"hwhint_cxl_accesses",
+	"hwhint_remote_node",
+	"hwhint_invalid_laddr",
+	"hwhint_kernel_addr",
+	"hwhint_invalid_paddr",
+	"hwhint_non_lru",
+	"hwhint_buffer_full",
+	"hwhint_useful_samples",
 };
 #endif /* CONFIG_PROC_FS || CONFIG_SYSFS || CONFIG_NUMA || CONFIG_MEMCG */
 
