@@ -1092,5 +1092,122 @@ void kcpustat_cpu_fetch(struct kernel_cpustat *dst, int cpu)
 	}
 }
 EXPORT_SYMBOL_GPL(kcpustat_cpu_fetch);
-
 #endif /* CONFIG_VIRT_CPU_ACCOUNTING_GEN */
+
+#ifdef CONFIG_NO_HZ_COMMON
+/*
+ * Split precisely tracked exec wall time using tick based buckets
+ *
+ * Use a similar technique to cputime_adjust to split the total exec wall time
+ * used by the CPU to its respective buckets by scaling these tick based values
+ * against the total wall time accounted. Similar to cputime_adjust, this
+ * function guarantees monotonicity for the various buckets and total time
+ * delta distributed does not exceed exec time passed.
+ *
+ * This is only useful when idle time can be accounted for accurately.
+ *
+ * Due to various imprecisions in tick accounting/other time accounting and
+ * rounding errors, this is a best effort at distributing time to their
+ * respective buckets.
+ *
+ */
+void split_cputime_using_ticks(u64 *cpustat, struct prev_kcpustat *prev_kcpustat, u64 now, int cpu)
+{
+	u64 exec_ticks, exec_time, prev_exec_time, deficit, idle = -1ULL, iowait = -1ULL;
+	u64 *prev_cpustat;
+	unsigned long flags;
+	int i;
+
+	raw_spin_lock_irqsave(&prev_kcpustat->lock, flags);
+	prev_cpustat = prev_kcpustat->cpustat;
+
+	if (cpu_online(cpu)) {
+		idle = get_cpu_idle_time_us(cpu, NULL);
+		iowait = get_cpu_iowait_time_us(cpu, NULL);
+	}
+
+	/*
+	 * If the cpu is offline, we still need to update prev_kcpustat as the
+	 * accounting changes between non-ticked vs tick based to ensure
+	 * monotonicity for future adjustments.
+	 */
+	if (idle == -1ULL || iowait == -1ULL)
+		goto update;
+
+	prev_exec_time = 0;
+	for_each_cpustat(i) {
+		if (!exec_cputime(i))
+			continue;
+		prev_exec_time += prev_cpustat[i];
+	}
+
+	exec_time = now - (idle + iowait) * NSEC_PER_USEC -
+		cpustat[CPUTIME_IRQ] - cpustat[CPUTIME_SOFTIRQ] -
+		cpustat[CPUTIME_STEAL];
+
+	if (prev_exec_time >= exec_time) {
+		for_each_cpustat(i) {
+			if (!exec_cputime(i))
+				continue;
+			cpustat[i] = prev_cpustat[i];
+		}
+		goto out;
+	}
+
+	exec_ticks = 0;
+	for_each_cpustat(i) {
+		if (!exec_cputime(i))
+			continue;
+		 exec_ticks += cpustat[i];
+	}
+
+	/*
+	 * To guarantee monotonicity for all buckets and to ensure we don't
+	 * over allocate time, we keep track of deficits in the first pass to
+	 * subtract from surpluses in the second.
+	 */
+	deficit = 0;
+	for_each_cpustat(i) {
+		if (!exec_cputime(i))
+			continue;
+
+		cpustat[i] = mul_u64_u64_div_u64(cpustat[i], exec_time, exec_ticks);
+		if (cpustat[i] < prev_cpustat[i]) {
+			deficit += prev_cpustat[i] - cpustat[i];
+			cpustat[i] = prev_cpustat[i];
+		}
+	}
+
+	/*
+	 * Subtract from the time buckets that have a surplus. The way this is
+	 * distributed isn't fair, but for simplicity's sake just go down the
+	 * list of buckets and take time away until we balance the deficit.
+	 */
+	for_each_cpustat(i) {
+		if (!exec_cputime(i))
+			continue;
+		if (!deficit)
+			break;
+		if (cpustat[i] > prev_cpustat[i]) {
+			u64 delta = min_t(u64, cpustat[i] - prev_cpustat[i], deficit);
+
+			cpustat[i] -= delta;
+			deficit -= delta;
+		}
+	}
+
+update:
+	for_each_cpustat(i) {
+		if (!exec_cputime(i))
+			continue;
+		prev_cpustat[i] = cpustat[i];
+	}
+out:
+	raw_spin_unlock_irqrestore(&prev_kcpustat->lock, flags);
+}
+#else
+void split_cputime_using_ticks(u64 *cpustat, struct prev_kcpustat *prev_kcpustat, u64 now, int cpu)
+{
+	/* Do nothing since accurate idle time accounting isn't available. */
+}
+#endif

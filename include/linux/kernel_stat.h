@@ -42,6 +42,11 @@ struct kernel_stat {
 	unsigned int softirqs[NR_SOFTIRQS];
 };
 
+struct prev_kcpustat {
+	u64 cpustat[NR_STATS];
+	raw_spinlock_t lock;
+};
+
 DECLARE_PER_CPU(struct kernel_stat, kstat);
 DECLARE_PER_CPU(struct kernel_cpustat, kernel_cpustat);
 
@@ -50,6 +55,9 @@ DECLARE_PER_CPU(struct kernel_cpustat, kernel_cpustat);
 #define kcpustat_this_cpu this_cpu_ptr(&kernel_cpustat)
 #define kstat_cpu(cpu) per_cpu(kstat, cpu)
 #define kcpustat_cpu(cpu) per_cpu(kernel_cpustat, cpu)
+
+#define for_each_cpustat(cpustat)	\
+	for ((cpustat) = 0; (cpustat) < NR_STATS; (cpustat)++)
 
 extern unsigned long long nr_context_switches_cpu(int cpu);
 extern unsigned long long nr_context_switches(void);
@@ -141,4 +149,30 @@ extern void account_idle_ticks(unsigned long ticks);
 extern void __account_forceidle_time(struct task_struct *tsk, u64 delta);
 #endif
 
+extern void split_cputime_using_ticks(u64 *cpustat, struct prev_kcpustat *prev_kcpustat,
+				      u64 now, int cpu);
+static inline void prev_kcpustat_init(struct prev_kcpustat *prev)
+{
+#ifdef CONFIG_NO_HZ_COMMON
+	int i;
+
+	for_each_cpustat(i)
+		prev->cpustat[i] = 0;
+	raw_spin_lock_init(&prev->lock);
+#endif
+}
+
+static inline bool exec_cputime(int idx)
+{
+	switch (idx) {
+	case CPUTIME_USER:
+	case CPUTIME_NICE:
+	case CPUTIME_SYSTEM:
+	case CPUTIME_GUEST:
+	case CPUTIME_GUEST_NICE:
+		return true;
+	default:
+		return false;
+	}
+}
 #endif /* _LINUX_KERNEL_STAT_H */

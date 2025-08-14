@@ -12,6 +12,7 @@
 #include <linux/time.h>
 #include <linux/time_namespace.h>
 #include <linux/irqnr.h>
+#include <linux/sched/clock.h>
 #include <linux/sched/cputime.h>
 #include <linux/tick.h>
 
@@ -20,6 +21,10 @@
 #endif
 #ifndef arch_irq_stat
 #define arch_irq_stat() 0
+#endif
+
+#ifdef CONFIG_NO_HZ_COMMON
+DEFINE_PER_CPU(struct prev_kcpustat, prev_cpustat);
 #endif
 
 u64 get_idle_time(struct kernel_cpustat *kcs, int cpu)
@@ -102,6 +107,10 @@ static int show_stat(struct seq_file *p, void *v)
 
 		kcpustat_cpu_fetch(&kcpustat, i);
 
+#ifdef CONFIG_NO_HZ_COMMON
+		split_cputime_using_ticks(cpustat, &per_cpu(prev_cpustat, i),
+					  sched_clock_cpu(i), i);
+#endif
 		user		+= cpustat[CPUTIME_USER];
 		nice		+= cpustat[CPUTIME_NICE];
 		system		+= cpustat[CPUTIME_SYSTEM];
@@ -142,6 +151,10 @@ static int show_stat(struct seq_file *p, void *v)
 
 		kcpustat_cpu_fetch(&kcpustat, i);
 
+#ifdef CONFIG_NO_HZ_COMMON
+		split_cputime_using_ticks(cpustat, &per_cpu(prev_cpustat, i),
+					  sched_clock_cpu(i), i);
+#endif
 		/* Copy values here to work around gcc-2.95.3, gcc-2.96 */
 		user		= cpustat[CPUTIME_USER];
 		nice		= cpustat[CPUTIME_NICE];
@@ -210,6 +223,12 @@ static const struct proc_ops stat_proc_ops = {
 
 static int __init proc_stat_init(void)
 {
+#ifdef CONFIG_NO_HZ_COMMON
+	int cpu;
+
+	for_each_possible_cpu(cpu)
+		prev_kcpustat_init(&per_cpu(prev_cpustat, cpu));
+#endif
 	proc_create("stat", 0, NULL, &stat_proc_ops);
 	return 0;
 }
