@@ -7186,6 +7186,7 @@ void folio_zero_user(struct folio *folio, unsigned long addr_hint)
 }
 
 static int copy_user_gigantic_page(struct folio *dst, struct folio *src,
+				   unsigned int offset,
 				   unsigned long addr_hint,
 				   struct vm_area_struct *vma,
 				   unsigned int nr_pages)
@@ -7197,7 +7198,7 @@ static int copy_user_gigantic_page(struct folio *dst, struct folio *src,
 
 	for (i = 0; i < nr_pages; i++) {
 		dst_page = folio_page(dst, i);
-		src_page = folio_page(src, i);
+		src_page = folio_page(src, offset + i);
 
 		cond_resched();
 		if (copy_mc_user_highpage(dst_page, src_page,
@@ -7210,6 +7211,7 @@ static int copy_user_gigantic_page(struct folio *dst, struct folio *src,
 struct copy_subpage_arg {
 	struct folio *dst;
 	struct folio *src;
+	unsigned int offset;
 	struct vm_area_struct *vma;
 };
 
@@ -7217,7 +7219,7 @@ static int copy_subpage(unsigned long addr, int idx, void *arg)
 {
 	struct copy_subpage_arg *copy_arg = arg;
 	struct page *dst = folio_page(copy_arg->dst, idx);
-	struct page *src = folio_page(copy_arg->src, idx);
+	struct page *src = folio_page(copy_arg->src, copy_arg->offset + idx);
 
 	if (copy_mc_user_highpage(dst, src, addr, copy_arg->vma))
 		return -EHWPOISON;
@@ -7225,17 +7227,20 @@ static int copy_subpage(unsigned long addr, int idx, void *arg)
 }
 
 int copy_user_large_folio(struct folio *dst, struct folio *src,
+			  unsigned int offset,
 			  unsigned long addr_hint, struct vm_area_struct *vma)
 {
 	unsigned int nr_pages = folio_nr_pages(dst);
 	struct copy_subpage_arg arg = {
 		.dst = dst,
 		.src = src,
+		.offset = offset,
 		.vma = vma,
 	};
 
 	if (unlikely(nr_pages > MAX_ORDER_NR_PAGES))
-		return copy_user_gigantic_page(dst, src, addr_hint, vma, nr_pages);
+		return copy_user_gigantic_page(dst, src, offset, addr_hint,
+					       vma, nr_pages);
 
 	return process_huge_page(addr_hint, nr_pages, copy_subpage, &arg);
 }
