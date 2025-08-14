@@ -96,7 +96,7 @@ static const char * const pincfgs[] = {
 };
 
 struct fsl_lpspi_devtype_data {
-	u8 prescale_max;
+	bool prescale_err : 1;
 };
 
 struct lpspi_config {
@@ -144,13 +144,16 @@ struct fsl_lpspi_data {
 /*
  * ERR051608 fixed or not:
  * https://www.nxp.com/docs/en/errata/i.MX93_1P87f.pdf
+ *
+ * Devices with ERR051608 have a max TCR_PRESCALE value of 1, otherwise the full
+ * 3 bits are available (0-7).
  */
 static const struct fsl_lpspi_devtype_data imx93_lpspi_devtype_data = {
-	.prescale_max = 1,
+	.prescale_err = true,
 };
 
 static const struct fsl_lpspi_devtype_data imx7ulp_lpspi_devtype_data = {
-	.prescale_max = 7,
+	.prescale_err = false,
 };
 
 static const struct of_device_id fsl_lpspi_dt_ids[] = {
@@ -329,12 +332,11 @@ static int fsl_lpspi_set_bitrate(struct fsl_lpspi_data *fsl_lpspi)
 {
 	struct lpspi_config config = fsl_lpspi->config;
 	unsigned int perclk_rate, div;
-	u8 prescale_max;
+	u8 prescale_max = fsl_lpspi->devtype_data->prescale_err ? 1 : 7;
 	u8 prescale;
 	int scldiv;
 
 	perclk_rate = clk_get_rate(fsl_lpspi->clk_per);
-	prescale_max = fsl_lpspi->devtype_data->prescale_max;
 
 	if (!config.speed_hz) {
 		dev_err(fsl_lpspi->dev,
