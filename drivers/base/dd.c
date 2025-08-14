@@ -323,6 +323,7 @@ static DECLARE_DELAYED_WORK(deferred_probe_timeout_work, deferred_probe_timeout_
 
 void deferred_probe_extend_timeout(void)
 {
+	guard(mutex)(&deferred_probe_mutex);
 	/*
 	 * If the work hasn't been queued yet or if the work expired, don't
 	 * start a new one.
