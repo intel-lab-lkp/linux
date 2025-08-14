@@ -196,6 +196,7 @@ static int hot_vma_idle_pte_entry(pte_t *pte,
 	struct kscand_migrate_info *info;
 	struct kscand_scanctrl *scanctrl = walk->private;
 	int srcnid;
+	bool prev_idle;
 
 	scanctrl->address = addr;
 	pte_t pteval = ptep_get(pte);
@@ -219,6 +220,7 @@ static int hot_vma_idle_pte_entry(pte_t *pte,
 		folio_put(folio);
 		return 0;
 	}
+	prev_idle = folio_test_idle(folio);
 	folio_set_idle(folio);
 	page_idle_clear_pte_refs(page, pte, walk);
 	srcnid = folio_nid(folio);
@@ -233,7 +235,7 @@ static int hot_vma_idle_pte_entry(pte_t *pte,
 		folio_put(folio);
 		return 0;
 	}
-	if (!folio_test_idle(folio) &&
+	if (!folio_test_idle(folio) && !prev_idle &&
 		(folio_test_young(folio) || folio_test_referenced(folio))) {
 
 		/* XXX: Leaking memory. TBD: consume info */
