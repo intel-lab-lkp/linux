@@ -107,6 +107,7 @@ static inline int migrate_huge_page_move_mapping(struct address_space *mapping,
 int migrate_misplaced_folio_prepare(struct folio *folio,
 		struct vm_area_struct *vma, int node);
 int migrate_misplaced_folio(struct folio *folio, int node);
+int migrate_misplaced_folios_batch(struct list_head *foliolist, int node);
 #else
 static inline int migrate_misplaced_folio_prepare(struct folio *folio,
 		struct vm_area_struct *vma, int node)
@@ -114,6 +115,11 @@ static inline int migrate_misplaced_folio_prepare(struct folio *folio,
 	return -EAGAIN; /* can't migrate now */
 }
 static inline int migrate_misplaced_folio(struct folio *folio, int node)
+{
+	return -EAGAIN; /* can't migrate now */
+}
+static inline int migrate_misplaced_folios_batch(struct list_head *foliolist,
+						 int node)
 {
 	return -EAGAIN; /* can't migrate now */
 }
