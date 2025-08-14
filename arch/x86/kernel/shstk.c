@@ -184,11 +184,11 @@ static int shstk_setup(void)
 	return 0;
 }
 
-void reset_thread_features(void)
+void reset_thread_features(struct task_struct *tsk)
 {
-	memset(&current->thread.shstk, 0, sizeof(struct thread_shstk));
-	current->thread.features = 0;
-	current->thread.features_locked = 0;
+	memset(&tsk->thread.shstk, 0, sizeof(struct thread_shstk));
+	tsk->thread.features = 0;
+	tsk->thread.features_locked = 0;
 }
 
 unsigned long shstk_alloc_thread_stack(struct task_struct *tsk, unsigned long clone_flags,
