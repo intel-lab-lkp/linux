@@ -1381,6 +1381,17 @@ config PT_RECLAIM
 
 	  Note: now only empty user PTE page table pages will be reclaimed.
 
+config PGHOT
+	bool "Hot page tracking and promotion"
+	def_bool y
+	depends on NUMA && MIGRATION && MMU
+	select MIN_HEAP
+	help
+	  A sub-system to track page accesses in lower tier memory and
+	  maintain hot page information. Promotes hot pages from lower
+	  tiers to top tier by using the memory access information provided
+	  by various sources. Asynchronous promotion is done by per-node
+	  kernel threads.
 
 source "mm/damon/Kconfig"
 

@@ -1349,6 +1349,10 @@ struct memory_failure_stats {
 };
 #endif
 
+#ifdef CONFIG_PGHOT
+#include <linux/pghot.h>
+#endif
+
 /*
  * On NUMA machines, each NUMA node would have a pg_data_t to describe
  * it's memory layout. On UMA machines there is a single pglist_data which
@@ -1496,6 +1500,13 @@ typedef struct pglist_data {
 #endif
 #ifdef CONFIG_MEMORY_FAILURE
 	struct memory_failure_stats mf_stats;
+#endif
+#ifdef CONFIG_PGHOT
+	struct task_struct *kpromoted;
+	wait_queue_head_t kpromoted_wait;
+	struct pghot_info **phi_buf;
+	struct max_heap heap;
+	spinlock_t heap_lock;
 #endif
 } pg_data_t;
 

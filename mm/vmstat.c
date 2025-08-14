@@ -1496,6 +1496,15 @@ const char * const vmstat_text[] = {
 #endif
 #undef I
 #endif /* CONFIG_VM_EVENT_COUNTERS */
+	"pghot_recorded_accesses",
+	"pghot_recorded_hwhints",
+	"pghot_recorded_pgtscans",
+	"pghot_records_hash",
+	"pghot_records_heap",
+	"kpromoted_right_node",
+	"kpromoted_non_lru",
+	"kpromoted_cold_old",
+	"kpromoted_dropped",
 };
 #endif /* CONFIG_PROC_FS || CONFIG_SYSFS || CONFIG_NUMA || CONFIG_MEMCG */
 
