@@ -252,6 +252,8 @@ static int mbigen_of_create_domain(struct platform_device *pdev,
 
 		if (!mbigen_create_device_domain(&child->dev, num_pins, mgn_chip))
 			return -ENOMEM;
+
+		fw_devlink_relax_consumers(&child->dev);
 	}
 
 	return 0;
