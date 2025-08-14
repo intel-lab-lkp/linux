@@ -660,11 +660,13 @@ static int scsi_probe_lun(struct scsi_device *sdev, unsigned char *inq_result,
 		{
 			.sense = UNIT_ATTENTION,
 			.asc = 0x28,
+			.ascq = 0x00,
 			.result = SAM_STAT_CHECK_CONDITION,
 		},
 		{
 			.sense = UNIT_ATTENTION,
 			.asc = 0x29,
+			.ascq = 0x00,
 			.result = SAM_STAT_CHECK_CONDITION,
 		},
 		{
