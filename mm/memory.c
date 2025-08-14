@@ -3455,6 +3455,21 @@ pte_unlock:
 	return ret;
 }
 
+static inline int __wp_folio_copy_user(struct folio *dst, struct folio *src,
+				       unsigned int offset,
+				       struct vm_fault *vmf)
+{
+	struct vm_area_struct *vma = vmf->vma;
+	void __user *uaddr;
+
+	if (likely(src))
+		return copy_user_large_folio(dst, src, offset, vmf->address, vma);
+
+	uaddr = (void __user *)ALIGN_DOWN(vmf->address, folio_size(dst));
+
+	return copy_folio_from_user(dst, uaddr, 0);
+}
+
 static gfp_t __get_fault_gfp_mask(struct vm_area_struct *vma)
 {
 	struct file *vm_file = vma->vm_file;
@@ -3638,6 +3653,119 @@ vm_fault_t __vmf_anon_prepare(struct vm_fault *vmf)
 	return ret;
 }
 
+static inline unsigned long thp_wp_suitable_orders(struct folio *old_folio,
+						   unsigned long orders)
+{
+	int order, max_order;
+
+	max_order = folio_order(old_folio);
+	order = highest_order(orders);
+
+	/*
+	 * Since need to copy content from the old folio to the new folio, the
+	 * maximum size of the new folio will not exceed the old folio size,
+	 * so filter the inappropriate order.
+	 */
+	while (orders) {
+		if (order <= max_order)
+			break;
+		order = next_order(&orders, order);
+	}
+
+	return orders;
+}
+
+static bool pte_range_readonly(pte_t *pte, int nr_pages)
+{
+	int i;
+
+	for (i = 0; i < nr_pages; i++) {
+		if (pte_write(ptep_get_lockless(pte + i)))
+			return false;
+	}
+
+	return true;
+}
+
+static struct folio *alloc_wp_folio(struct vm_fault *vmf, bool pfn_is_zero)
+{
+	struct vm_area_struct *vma = vmf->vma;
+#ifdef CONFIG_TRANSPARENT_HUGEPAGE
+	unsigned long orders;
+	struct folio *folio;
+	unsigned long addr;
+	pte_t *pte;
+	gfp_t gfp;
+	int order;
+
+	/*
+	 * If uffd is active for the vma we need per-page fault fidelity to
+	 * maintain the uffd semantics.
+	 */
+	if (unlikely(userfaultfd_armed(vma)))
+		goto fallback;
+
+	if (pfn_is_zero || !vmf->page)
+		goto fallback;
+
+	/*
+	 * Get a list of all the (large) orders below folio_order() that are enabled
+	 * for this vma. Then filter out the orders that can't be allocated over
+	 * the faulting address and still be fully contained in the vma.
+	 */
+	orders = thp_vma_allowable_orders(vma, vma->vm_flags,
+			TVA_IN_PF | TVA_ENFORCE_SYSFS, BIT(PMD_ORDER) - 1);
+	orders = thp_vma_suitable_orders(vma, vmf->address, orders);
+	orders = thp_wp_suitable_orders(page_folio(vmf->page), orders);
+
+	if (!orders)
+		goto fallback;
+
+	pte = pte_offset_map(vmf->pmd, vmf->address & PMD_MASK);
+	if (!pte)
+		return ERR_PTR(-EAGAIN);
+
+	/*
+	 * Find the highest order where the aligned range is completely readonly.
+	 * Note that all remaining orders will be completely readonly.
+	 */
+	order = highest_order(orders);
+	while (orders) {
+		addr = ALIGN_DOWN(vmf->address, PAGE_SIZE << order);
+		if (pte_range_readonly(pte + pte_index(addr), 1 << order))
+			break;
+		order = next_order(&orders, order);
+	}
+
+	pte_unmap(pte);
+
+	if (!orders)
+		goto fallback;
+
+	/* Try allocating the highest of the remaining orders. */
+	gfp = vma_thp_gfp_mask(vma);
+	while (orders) {
+		addr = ALIGN_DOWN(vmf->address, PAGE_SIZE << order);
+		folio = vma_alloc_folio(gfp, order, vma, addr);
+		if (folio) {
+			if (mem_cgroup_charge(folio, vma->vm_mm, gfp)) {
+				count_mthp_stat(order, MTHP_STAT_WP_FAULT_FALLBACK_CHARGE);
+				folio_put(folio);
+				goto next;
+			}
+			folio_throttle_swaprate(folio, gfp);
+			return folio;
+		}
+next:
+		count_mthp_stat(order, MTHP_STAT_WP_FAULT_FALLBACK);
+		order = next_order(&orders, order);
+	}
+
+fallback:
+#endif
+	return folio_prealloc(vma->vm_mm, vma, vmf->address, pfn_is_zero);
+}
+
 /*
  * Handle the case of a page which we actually need to copy to a new page,
  * either due to COW or unsharing.
@@ -3669,6 +3797,7 @@ static vm_fault_t wp_page_copy(struct vm_fault *vmf)
 	vm_fault_t ret;
 	bool pfn_is_zero;
 	unsigned long addr;
+	int nr_pages;
 
 	delayacct_wpcopy_start();
 
@@ -3679,16 +3808,26 @@ static vm_fault_t wp_page_copy(struct vm_fault *vmf)
 		goto out;
 
 	pfn_is_zero = is_zero_pfn(pte_pfn(vmf->orig_pte));
-	new_folio = folio_prealloc(mm, vma, vmf->address, pfn_is_zero);
+	/* Returns NULL on OOM or ERR_PTR(-EAGAIN) if we must retry the fault */
+	new_folio = alloc_wp_folio(vmf, pfn_is_zero);
+	if (IS_ERR(new_folio))
+		return 0;
 	if (!new_folio)
 		goto oom;
 
-	addr = ALIGN_DOWN(vmf->address, PAGE_SIZE);
+	nr_pages = folio_nr_pages(new_folio);
+	addr = ALIGN_DOWN(vmf->address, nr_pages * PAGE_SIZE);
+	old_page -= (vmf->address - addr) >> PAGE_SHIFT;
 
 	if (!pfn_is_zero) {
 		int err;
 
-		err = __wp_page_copy_user(&new_folio->page, old_page, vmf);
+		if (nr_pages == 1)
+			err = __wp_page_copy_user(&new_folio->page, old_page, vmf);
+		else
+			err = __wp_folio_copy_user(new_folio, old_folio,
+					folio_page_idx(old_folio, old_page), vmf);
+
 		if (err) {
 			/*
 			 * COW failed, if the fault was solved by other,
@@ -3704,13 +3843,13 @@ static vm_fault_t wp_page_copy(struct vm_fault *vmf)
 			delayacct_wpcopy_end();
 			return err == -EHWPOISON ? VM_FAULT_HWPOISON : 0;
 		}
-		kmsan_copy_pages_meta(&new_folio->page, old_page, 1);
+		kmsan_copy_pages_meta(&new_folio->page, old_page, nr_pages);
 	}
 
 	__folio_mark_uptodate(new_folio);
 
 	mmu_notifier_range_init(&range, MMU_NOTIFY_CLEAR, 0, mm,
-				addr, addr + PAGE_SIZE);
+				addr, addr + nr_pages * PAGE_SIZE);
 	mmu_notifier_invalidate_range_start(&range);
 
 	/*
@@ -3719,22 +3858,26 @@ static vm_fault_t wp_page_copy(struct vm_fault *vmf)
 	vmf->pte = pte_offset_map_lock(mm, vmf->pmd, addr, &vmf->ptl);
 	if (unlikely(!vmf->pte))
 		goto release;
-	if (unlikely(vmf_pte_changed(vmf))) {
+	if (unlikely(nr_pages == 1 && vmf_pte_changed(vmf))) {
 		update_mmu_tlb(vma, addr, vmf->pte);
+		pte_unmap_unlock(vmf->pte, vmf->ptl);
+		goto release;
+	} else if (nr_pages > 1 && !pte_range_readonly(vmf->pte, nr_pages)) {
+		update_mmu_tlb_range(vma, addr, vmf->pte, nr_pages);
 		pte_unmap_unlock(vmf->pte, vmf->ptl);
 		goto release;
 	}
 
 	if (old_folio) {
 		if (!folio_test_anon(old_folio)) {
-			sub_mm_counter(mm, mm_counter_file(old_folio), 1);
-			add_mm_counter(mm, MM_ANONPAGES, 1);
+			sub_mm_counter(mm, mm_counter_file(old_folio), nr_pages);
+			add_mm_counter(mm, MM_ANONPAGES, nr_pages);
 		}
 	} else {
 		ksm_might_unmap_zero_page(mm, vmf->orig_pte);
 		inc_mm_counter(mm, MM_ANONPAGES);
 	}
-	flush_cache_range(vma, addr, addr + PAGE_SIZE);
+	flush_cache_range(vma, addr, addr + nr_pages * PAGE_SIZE);
 	entry = folio_mk_pte(new_folio, vma->vm_page_prot);
 	entry = pte_sw_mkyoung(entry);
 	if (unlikely(unshare)) {
@@ -3753,12 +3896,14 @@ static vm_fault_t wp_page_copy(struct vm_fault *vmf)
 	 * that left a window where the new PTE could be loaded into
 	 * some TLBs while the old PTE remains in others.
 	 */
-	ptep_clear_flush_range(vma, addr, vmf->pte, 1);
+	ptep_clear_flush_range(vma, addr, vmf->pte, nr_pages);
+	folio_ref_add(new_folio, nr_pages - 1);
+	count_mthp_stat(folio_order(new_folio), MTHP_STAT_WP_FAULT_ALLOC);
 	folio_add_new_anon_rmap(new_folio, vma, addr, RMAP_EXCLUSIVE);
 	folio_add_lru_vma(new_folio, vma);
 	BUG_ON(unshare && pte_write(entry));
-	set_ptes(mm, addr, vmf->pte, entry, 1);
-	update_mmu_cache_range(vmf, vma, addr, vmf->pte, 1);
+	set_ptes(mm, addr, vmf->pte, entry, nr_pages);
+	update_mmu_cache_range(vmf, vma, addr, vmf->pte, nr_pages);
 	if (old_folio) {
 		/*
 		 * Only after switching the pte to the new page may
@@ -3782,7 +3927,7 @@ static vm_fault_t wp_page_copy(struct vm_fault *vmf)
 		 * mapcount is visible. So transitively, TLBs to
 		 * old page will be flushed before it can be reused.
 		 */
-		folio_remove_rmap_ptes(old_folio, old_page, 1, vma);
+		folio_remove_rmap_ptes(old_folio, old_page, nr_pages, vma);
 	}
 
 	/* Free the old page.. */
@@ -3793,7 +3938,8 @@ release:
 	mmu_notifier_invalidate_range_end(&range);
 
 	if (new_folio)
-		folio_put_refs(new_folio, 1);
+		folio_put_refs(new_folio, page_copied ? nr_pages : 1);
+
 	if (old_folio) {
 		if (page_copied)
 			free_swap_cache(old_folio);
