@@ -822,6 +822,7 @@ static int rtl_download_firmware(struct hci_dev *hdev,
 	int j = 0;
 	struct sk_buff *skb;
 	struct hci_rp_read_local_version *rp;
+	struct btrealtek_data *coredump_info = hci_get_priv(hdev);
 
 	dl_cmd = kmalloc(sizeof(*dl_cmd), GFP_KERNEL);
 	if (!dl_cmd)
@@ -873,6 +874,9 @@ static int rtl_download_firmware(struct hci_dev *hdev,
 	rp = (struct hci_rp_read_local_version *)skb->data;
 	rtl_dev_info(hdev, "fw version 0x%04x%04x",
 		     __le16_to_cpu(rp->hci_rev), __le16_to_cpu(rp->lmp_subver));
+	if (coredump_info->rtl_dump.fw_version == 0)
+		coredump_info->rtl_dump.fw_version =
+			__le16_to_cpu(rp->hci_rev) << 16 | __le16_to_cpu(rp->lmp_subver);
 	kfree_skb(skb);
 
 out:
