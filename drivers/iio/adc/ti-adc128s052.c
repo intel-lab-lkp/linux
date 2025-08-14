@@ -122,6 +122,10 @@ static const struct iio_chan_spec adc124s021_channels[] = {
 	ADC128_VOLTAGE_CHANNEL(3),
 };
 
+static const struct iio_chan_spec bd79100_channels[] = {
+	ADC128_VOLTAGE_CHANNEL(0),
+};
+
 static const char * const bd79104_regulators[] = { "iovdd" };
 
 static const struct adc128_configuration adc122s_config = {
@@ -140,6 +144,30 @@ static const struct adc128_configuration adc128s_config = {
 	.channels = adc128s052_channels,
 	.num_channels = ARRAY_SIZE(adc128s052_channels),
 	.refname = "vref",
+};
+
+static const struct adc128_configuration bd79100_config = {
+	.channels = bd79100_channels,
+	.num_channels = ARRAY_SIZE(bd79100_channels),
+	.refname = "vdd",
+	.other_regulators = &bd79104_regulators,
+	.num_other_regulators = 1,
+};
+
+static const struct adc128_configuration bd79101_config = {
+	.channels = adc122s021_channels,
+	.num_channels = ARRAY_SIZE(adc122s021_channels),
+	.refname = "vdd",
+	.other_regulators = &bd79104_regulators,
+	.num_other_regulators = 1,
+};
+
+static const struct adc128_configuration bd79102_config = {
+	.channels = adc124s021_channels,
+	.num_channels = ARRAY_SIZE(adc124s021_channels),
+	.refname = "vdd",
+	.other_regulators = &bd79104_regulators,
+	.num_other_regulators = 1,
 };
 
 static const struct adc128_configuration bd79104_config = {
@@ -210,6 +238,10 @@ static const struct of_device_id adc128_of_match[] = {
 	{ .compatible = "ti,adc124s021", .data = &adc124s_config },
 	{ .compatible = "ti,adc124s051", .data = &adc124s_config },
 	{ .compatible = "ti,adc124s101", .data = &adc124s_config },
+	{ .compatible = "rohm,bd79100", .data = &bd79100_config },
+	{ .compatible = "rohm,bd79101", .data = &bd79101_config },
+	{ .compatible = "rohm,bd79102", .data = &bd79102_config },
+	{ .compatible = "rohm,bd79103", .data = &bd79104_config },
 	{ .compatible = "rohm,bd79104", .data = &bd79104_config },
 	{ }
 };
@@ -223,6 +255,10 @@ static const struct spi_device_id adc128_id[] = {
 	{ "adc124s021", (kernel_ulong_t)&adc124s_config },
 	{ "adc124s051", (kernel_ulong_t)&adc124s_config },
 	{ "adc124s101", (kernel_ulong_t)&adc124s_config },
+	{ "bd79100", (kernel_ulong_t)&bd79100_config },
+	{ "bd79101", (kernel_ulong_t)&bd79101_config },
+	{ "bd79102", (kernel_ulong_t)&bd79102_config },
+	{ "bd79103", (kernel_ulong_t)&bd79104_config },
 	{ "bd79104", (kernel_ulong_t)&bd79104_config },
 	{ }
 };
