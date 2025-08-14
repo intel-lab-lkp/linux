@@ -145,8 +145,6 @@ static int fence_chains_init(struct fence_chains *fc, unsigned int count,
 		}
 
 		fc->tail = fc->chains[i];
-
-		dma_fence_enable_sw_signaling(fc->chains[i]);
 	}
 
 	fc->chain_length = i;
@@ -570,23 +568,34 @@ static int __wait_fence_chains(void *arg)
 
 static int wait_forward(void *arg)
 {
+	struct task_struct **tsk;
 	struct fence_chains fc;
-	struct task_struct *tsk;
 	ktime_t dt;
+	int i = 0;
 	int err;
-	int i;
 
 	err = fence_chains_init(&fc, CHAIN_SZ, seqno_inc);
 	if (err)
 		return err;
 
-	tsk = kthread_run(__wait_fence_chains, fc.tail, "dmabuf/wait");
-	if (IS_ERR(tsk)) {
-		err = PTR_ERR(tsk);
+	tsk = kmalloc_array(fc.chain_length, sizeof(*tsk), GFP_KERNEL);
+	if (!tsk) {
+		err = -ENOMEM;
 		goto err;
 	}
-	get_task_struct(tsk);
-	yield_to(tsk, true);
+
+	for (i = 0; i < fc.chain_length; i++) {
+		tsk[i] = kthread_run(__wait_fence_chains, fc.chains[i],
+				     "dmabuf/wait-%llu", fc.fences[i]->seqno);
+		if (IS_ERR(tsk[i])) {
+			err = PTR_ERR(tsk[i]);
+			pr_err("Reported %d for kthread_run(%llu)!\n",
+			       err, fc.fences[i]->seqno);
+			goto err;
+		}
+		get_task_struct(tsk[i]);
+		yield_to(tsk[i], true);
+	}
 
 	dt = -ktime_get();
 	for (i = 0; i < fc.chain_length; i++)
@@ -595,32 +604,53 @@ static int wait_forward(void *arg)
 
 	pr_info("%s: %d signals in %llu ns\n", __func__, fc.chain_length, ktime_to_ns(dt));
 
-	err = kthread_stop_put(tsk);
-
 err:
+	while (i--) {
+		int tsk_err = kthread_stop_put(tsk[i]);
+
+		if (tsk_err)
+			pr_err("Reported %d for kthread_stop_put(%llu)!\n",
+			       tsk_err, fc.fences[i]->seqno);
+
+		if (!err)
+			err = tsk_err;
+	}
+	kfree(tsk);
+
 	fence_chains_fini(&fc);
 	return err;
 }
 
 static int wait_backward(void *arg)
 {
+	struct task_struct **tsk;
 	struct fence_chains fc;
-	struct task_struct *tsk;
 	ktime_t dt;
+	int i = 0;
 	int err;
-	int i;
 
 	err = fence_chains_init(&fc, CHAIN_SZ, seqno_inc);
 	if (err)
 		return err;
 
-	tsk = kthread_run(__wait_fence_chains, fc.tail, "dmabuf/wait");
-	if (IS_ERR(tsk)) {
-		err = PTR_ERR(tsk);
+	tsk = kmalloc_array(fc.chain_length, sizeof(*tsk), GFP_KERNEL);
+	if (!tsk) {
+		err = -ENOMEM;
 		goto err;
 	}
-	get_task_struct(tsk);
-	yield_to(tsk, true);
+
+	for (i = 0; i < fc.chain_length; i++) {
+		tsk[i] = kthread_run(__wait_fence_chains, fc.chains[i],
+				     "dmabuf/wait-%llu", fc.fences[i]->seqno);
+		if (IS_ERR(tsk[i])) {
+			err = PTR_ERR(tsk[i]);
+			pr_err("Reported %d for kthread_run(%llu)!\n",
+			       err, fc.fences[i]->seqno);
+			goto err;
+		}
+		get_task_struct(tsk[i]);
+		yield_to(tsk[i], true);
+	}
 
 	dt = -ktime_get();
 	for (i = fc.chain_length; i--; )
@@ -629,9 +659,20 @@ static int wait_backward(void *arg)
 
 	pr_info("%s: %d signals in %llu ns\n", __func__, fc.chain_length, ktime_to_ns(dt));
 
-	err = kthread_stop_put(tsk);
-
+	i = fc.chain_length;
 err:
+	while (i--) {
+		int tsk_err = kthread_stop_put(tsk[i]);
+
+		if (tsk_err)
+			pr_err("Reported %d for kthread_stop_put(%llu)!\n",
+			       tsk_err, fc.fences[i]->seqno);
+
+		if (!err)
+			err = tsk_err;
+	}
+	kfree(tsk);
+
 	fence_chains_fini(&fc);
 	return err;
 }
@@ -654,11 +695,11 @@ static void randomise_fences(struct fence_chains *fc)
 
 static int wait_random(void *arg)
 {
+	struct task_struct **tsk;
 	struct fence_chains fc;
-	struct task_struct *tsk;
 	ktime_t dt;
+	int i = 0;
 	int err;
-	int i;
 
 	err = fence_chains_init(&fc, CHAIN_SZ, seqno_inc);
 	if (err)
@@ -666,13 +707,24 @@ static int wait_random(void *arg)
 
 	randomise_fences(&fc);
 
-	tsk = kthread_run(__wait_fence_chains, fc.tail, "dmabuf/wait");
-	if (IS_ERR(tsk)) {
-		err = PTR_ERR(tsk);
+	tsk = kmalloc_array(fc.chain_length, sizeof(*tsk), GFP_KERNEL);
+	if (!tsk) {
+		err = -ENOMEM;
 		goto err;
 	}
-	get_task_struct(tsk);
-	yield_to(tsk, true);
+
+	for (i = 0; i < fc.chain_length; i++) {
+		tsk[i] = kthread_run(__wait_fence_chains, fc.chains[i],
+				     "dmabuf/wait-%llu", fc.fences[i]->seqno);
+		if (IS_ERR(tsk[i])) {
+			err = PTR_ERR(tsk[i]);
+			pr_err("Reported %d for kthread_run(%llu)!\n",
+			       err, fc.fences[i]->seqno);
+			goto err;
+		}
+		get_task_struct(tsk[i]);
+		yield_to(tsk[i], true);
+	}
 
 	dt = -ktime_get();
 	for (i = 0; i < fc.chain_length; i++)
@@ -681,9 +733,19 @@ static int wait_random(void *arg)
 
 	pr_info("%s: %d signals in %llu ns\n", __func__, fc.chain_length, ktime_to_ns(dt));
 
-	err = kthread_stop_put(tsk);
-
 err:
+	while (i--) {
+		int tsk_err = kthread_stop_put(tsk[i]);
+
+		if (tsk_err)
+			pr_err("Reported %d for kthread_stop_put(%llu)!\n",
+			       tsk_err, fc.fences[i]->seqno);
+
+		if (!err)
+			err = tsk_err;
+	}
+	kfree(tsk);
+
 	fence_chains_fini(&fc);
 	return err;
 }
