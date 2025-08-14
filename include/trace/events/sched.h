@@ -609,6 +609,45 @@ TRACE_EVENT(sched_pi_setprio,
 			__entry->oldprio, __entry->newprio)
 );
 
+/*
+DECLARE_EVENT_CLASS(sched_dl_template,
+
+	TP_PROTO(struct sched_dl_entity *dl),
+
+	TP_ARGS(dl),
+
+	TP_STRUCT__entry(
+		__field(  struct task_struct *,	tsk		)
+		__string( comm,		dl->dl_server ? "server" : container_of(dl, struct task_struct, dl)->comm	)
+		__field(  pid_t,	pid		)
+		__field(  s64,		runtime		)
+		__field(  u64,		deadline	)
+		__field(  int,		dl_yielded	)
+	),
+
+	TP_fast_assign(
+		__assign_str(comm);
+		__entry->pid		= dl->dl_server ? -1 : container_of(dl, struct task_struct, dl)->pid;
+		__entry->runtime	= dl->runtime;
+		__entry->deadline	= dl->deadline;
+		__entry->dl_yielded	= dl->dl_yielded;
+	),
+
+	TP_printk("comm=%s pid=%d runtime=%lld deadline=%lld yielded=%d",
+			__get_str(comm), __entry->pid,
+			__entry->runtime, __entry->deadline,
+			__entry->dl_yielded)
+);
+
+DEFINE_EVENT(sched_dl_template, sched_dl_throttle,
+	TP_PROTO(struct sched_dl_entity *dl),
+	TP_ARGS(dl));
+
+DEFINE_EVENT(sched_dl_template, sched_dl_replenish,
+	TP_PROTO(struct sched_dl_entity *dl),
+	TP_ARGS(dl));
+*/
+
 #ifdef CONFIG_DETECT_HUNG_TASK
 TRACE_EVENT(sched_process_hang,
 	TP_PROTO(struct task_struct *tsk),
@@ -895,6 +934,22 @@ DECLARE_TRACE_CONDITION(sched_set_state,
 DECLARE_TRACE(sched_set_need_resched,
 	TP_PROTO(struct task_struct *tsk, int cpu, int tif),
 	TP_ARGS(tsk, cpu, tif));
+
+DECLARE_TRACE(sched_dl_throttle,
+	TP_PROTO(struct sched_dl_entity *dl),
+	TP_ARGS(dl));
+
+DECLARE_TRACE(sched_dl_replenish,
+	TP_PROTO(struct sched_dl_entity *dl),
+	TP_ARGS(dl));
+
+DECLARE_TRACE(sched_dl_server_start,
+	TP_PROTO(struct sched_dl_entity *dl),
+	TP_ARGS(dl));
+
+DECLARE_TRACE(sched_dl_server_stop,
+	TP_PROTO(struct sched_dl_entity *dl, bool hard),
+	TP_ARGS(dl, hard));
 
 #endif /* _TRACE_SCHED_H */
 
