@@ -415,7 +415,7 @@ void cpufreq_freq_transition_end(struct cpufreq_policy *policy,
 
 	cpufreq_notify_post_transition(policy, freqs, transition_failed);
 
-	arch_set_freq_scale(policy->related_cpus,
+	arch_set_freq_scale(policy->cpus,
 			    policy->cur,
 			    arch_scale_freq_ref(policy->cpu));
 
@@ -2220,7 +2220,7 @@ unsigned int cpufreq_driver_fast_switch(struct cpufreq_policy *policy,
 		return 0;
 
 	policy->cur = freq;
-	arch_set_freq_scale(policy->related_cpus, freq,
+	arch_set_freq_scale(policy->cpus, freq,
 			    arch_scale_freq_ref(policy->cpu));
 	cpufreq_stats_record_transition(policy, freq);
 
