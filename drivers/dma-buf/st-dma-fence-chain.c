@@ -560,9 +560,9 @@ err:
 
 static int __wait_fence_chains(void *arg)
 {
-	struct fence_chains *fc = arg;
+	struct dma_fence *f = arg;
 
-	if (dma_fence_wait(fc->tail, false))
+	if (dma_fence_wait(f, false))
 		return -EIO;
 
 	return 0;
@@ -580,7 +580,7 @@ static int wait_forward(void *arg)
 	if (err)
 		return err;
 
-	tsk = kthread_run(__wait_fence_chains, &fc, "dmabuf/wait");
+	tsk = kthread_run(__wait_fence_chains, fc.tail, "dmabuf/wait");
 	if (IS_ERR(tsk)) {
 		err = PTR_ERR(tsk);
 		goto err;
@@ -614,7 +614,7 @@ static int wait_backward(void *arg)
 	if (err)
 		return err;
 
-	tsk = kthread_run(__wait_fence_chains, &fc, "dmabuf/wait");
+	tsk = kthread_run(__wait_fence_chains, fc.tail, "dmabuf/wait");
 	if (IS_ERR(tsk)) {
 		err = PTR_ERR(tsk);
 		goto err;
@@ -666,7 +666,7 @@ static int wait_random(void *arg)
 
 	randomise_fences(&fc);
 
-	tsk = kthread_run(__wait_fence_chains, &fc, "dmabuf/wait");
+	tsk = kthread_run(__wait_fence_chains, fc.tail, "dmabuf/wait");
 	if (IS_ERR(tsk)) {
 		err = PTR_ERR(tsk);
 		goto err;
