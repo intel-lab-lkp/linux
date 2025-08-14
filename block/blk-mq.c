@@ -4917,6 +4917,23 @@ void blk_mq_free_tag_set(struct blk_mq_tag_set *set)
 }
 EXPORT_SYMBOL(blk_mq_free_tag_set);
 
+static int blk_mq_sched_grow_tags(struct request_queue *q, unsigned int nr)
+{
+	struct elevator_tags *et =
+		blk_mq_alloc_sched_tags(q->tag_set, q->nr_hw_queues, nr);
+	struct blk_mq_hw_ctx *hctx;
+	unsigned long i;
+
+	if (!et)
+		return -ENOMEM;
+
+	blk_mq_free_sched_tags(q->elevator->et, q->tag_set);
+	queue_for_each_hw_ctx(q, hctx, i)
+		hctx->sched_tags = et->tags[i];
+	q->elevator->et = et;
+	return 0;
+}
+
 int blk_mq_update_nr_requests(struct request_queue *q, unsigned int nr)
 {
 	struct blk_mq_tag_set *set = q->tag_set;
@@ -4940,17 +4957,9 @@ int blk_mq_update_nr_requests(struct request_queue *q, unsigned int nr)
 			sbitmap_queue_resize(&hctx->sched_tags->bitmap_tags,
 				nr - hctx->sched_tags->nr_reserved_tags);
 	} else {
-		queue_for_each_hw_ctx(q, hctx, i) {
-			/*
-			 * If we're using an MQ scheduler, just update the
-			 * scheduler queue depth. This is similar to what the
-			 * old code would do.
-			 */
-			ret = blk_mq_tag_update_depth(hctx,
-					&hctx->sched_tags, nr);
-			if (ret)
-				goto out;
-		}
+		ret = blk_mq_sched_grow_tags(q, nr);
+		if (ret)
+			goto out;
 	}
 
 	q->nr_requests = nr;
