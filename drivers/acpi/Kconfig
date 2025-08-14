@@ -276,6 +276,7 @@ config ACPI_PROCESSOR_CSTATE
 config ACPI_PROCESSOR_IDLE
 	bool
 	select CPU_IDLE
+	select CPU_IDLE_MULTIPLE_DRIVERS
 
 config ACPI_MCFG
 	bool
