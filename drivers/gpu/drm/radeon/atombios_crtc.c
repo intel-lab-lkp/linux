@@ -770,12 +770,12 @@ static void atombios_crtc_set_disp_eng_pll(struct radeon_device *rdev,
 	int index;
 	union set_pixel_clock args;
 
-	memset(&args, 0, sizeof(args));
-
 	index = GetIndexIntoMasterTable(COMMAND, SetPixelClock);
 	if (!atom_parse_cmd_header(rdev->mode_info.atom_context, index, &frev,
 				   &crev))
 		return;
+
+	memset(&args, 0, sizeof(args));
 
 	switch (frev) {
 	case 1:
@@ -832,11 +832,11 @@ static void atombios_crtc_program_pll(struct drm_crtc *crtc,
 	int index = GetIndexIntoMasterTable(COMMAND, SetPixelClock);
 	union set_pixel_clock args;
 
-	memset(&args, 0, sizeof(args));
-
 	if (!atom_parse_cmd_header(rdev->mode_info.atom_context, index, &frev,
 				   &crev))
 		return;
+
+	memset(&args, 0, sizeof(args));
 
 	switch (frev) {
 	case 1:

@@ -492,10 +492,10 @@ atombios_dvo_setup(struct drm_encoder *encoder, int action)
 	int index = GetIndexIntoMasterTable(COMMAND, DVOEncoderControl);
 	uint8_t frev, crev;
 
-	memset(&args, 0, sizeof(args));
-
 	if (!atom_parse_cmd_header(rdev->mode_info.atom_context, index, &frev, &crev))
 		return;
+
+	memset(&args, 0, sizeof(args));
 
 	/* some R4xx chips have the wrong frev */
 	if (rdev->family <= CHIP_RV410)
@@ -856,8 +856,6 @@ atombios_dig_encoder_setup2(struct drm_encoder *encoder, int action, int panel_m
 	if (dig->dig_encoder == -1)
 		return;
 
-	memset(&args, 0, sizeof(args));
-
 	if (ASIC_IS_DCE4(rdev))
 		index = GetIndexIntoMasterTable(COMMAND, DIGxEncoderControl);
 	else {
@@ -869,6 +867,8 @@ atombios_dig_encoder_setup2(struct drm_encoder *encoder, int action, int panel_m
 
 	if (!atom_parse_cmd_header(rdev->mode_info.atom_context, index, &frev, &crev))
 		return;
+
+	memset(&args, 0, sizeof(args));
 
 	switch (frev) {
 	case 1:
@@ -1453,10 +1453,10 @@ atombios_external_encoder_setup(struct drm_encoder *encoder,
 			(radeon_connector->connector_object_id & OBJECT_ID_MASK) >> OBJECT_ID_SHIFT;
 	}
 
-	memset(&args, 0, sizeof(args));
-
 	if (!atom_parse_cmd_header(rdev->mode_info.atom_context, index, &frev, &crev))
 		return;
+
+	memset(&args, 0, sizeof(args));
 
 	switch (frev) {
 	case 1:
@@ -1853,10 +1853,10 @@ atombios_set_encoder_crtc_source(struct drm_encoder *encoder)
 	uint8_t frev, crev;
 	struct radeon_encoder_atom_dig *dig;
 
-	memset(&args, 0, sizeof(args));
-
 	if (!atom_parse_cmd_header(rdev->mode_info.atom_context, index, &frev, &crev))
 		return;
+
+	memset(&args, 0, sizeof(args));
 
 	switch (frev) {
 	case 1:
@@ -2284,10 +2284,10 @@ atombios_dac_load_detect(struct drm_encoder *encoder, struct drm_connector *conn
 		int index = GetIndexIntoMasterTable(COMMAND, DAC_LoadDetection);
 		uint8_t frev, crev;
 
-		memset(&args, 0, sizeof(args));
-
 		if (!atom_parse_cmd_header(rdev->mode_info.atom_context, index, &frev, &crev))
 			return false;
+
+		memset(&args, 0, sizeof(args));
 
 		args.sDacload.ucMisc = 0;
 
