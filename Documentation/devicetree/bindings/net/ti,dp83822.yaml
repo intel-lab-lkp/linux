@@ -47,6 +47,9 @@ properties:
        is disabled.
        In fiber mode, auto-negotiation is disabled and the PHY can only work in
        100base-fx (full and half duplex) modes.
+       This property is deprecated, for details please refer to
+       Documentation/devicetree/bindings/net/ethernet-connector.yaml
+    deprecated: true
 
   rx-internal-delay-ps:
     description: |
@@ -143,5 +146,20 @@ examples:
         mac-termination-ohms = <43>;
       };
     };
+  - |
+    mdio1 {
+      #address-cells = <1>;
+      #size-cells = <0>;
+      fiberphy0: ethernet-phy@0 {
+        reg = <0>;
+        mdi {
+          connector-0 {
+            lanes = <1>;
+            media = "BaseF";
+          };
+        };
+      };
+    };
+
 
 ...
