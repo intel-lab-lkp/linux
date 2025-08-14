@@ -76,6 +76,38 @@ allOf:
           properties:
             compatible:
               const: ti,twl4030-wdt
+
+        audio:
+          type: object
+          $ref: /schemas/sound/ti,twl4030-audio.yaml#
+          unevaluatedProperties: false
+
+        keypad:
+          type: object
+          $ref: /schemas/input/ti,twl4030-keypad.yaml#
+          unevaluatedProperties: false
+
+        pwm:
+          type: object
+          $ref: /schemas/pwm/ti,twl-pwm.yaml#
+          unevaluatedProperties: false
+
+        pwmled:
+          type: object
+          $ref: /schemas/pwm/ti,twl-pwmled.yaml#
+          unevaluatedProperties: false
+
+        'twl4030-usb':
+          type: object
+          $ref: /schemas/usb/ti,twlxxxx-usb.yaml#
+          unevaluatedProperties: false
+
+        gpio:
+          type: object
+
+        power:
+          type: object
+
   - if:
       properties:
         compatible:
@@ -115,6 +147,22 @@ allOf:
           properties:
             compatible:
               const: ti,twl6030-gpadc
+
+        pwm:
+          type: object
+          $ref: /schemas/pwm/ti,twl-pwm.yaml#
+          unevaluatedProperties: false
+
+        pwmled:
+          type: object
+          $ref: /schemas/pwm/ti,twl-pwmled.yaml#
+          unevaluatedProperties: false
+
+        'twl6030-usb':
+          type: object
+          $ref: /schemas/usb/ti,twlxxxx-usb.yaml#
+          unevaluatedProperties: false
+
   - if:
       properties:
         compatible:
@@ -153,6 +201,21 @@ allOf:
           properties:
             compatible:
               const: ti,twl6032-gpadc
+
+        pwm:
+          type: object
+          $ref: /schemas/pwm/ti,twl-pwm.yaml#
+          unevaluatedProperties: false
+
+        pwmled:
+          type: object
+          $ref: /schemas/pwm/ti,twl-pwmled.yaml#
+          unevaluatedProperties: false
+
+        'twl6030-usb':
+          type: object
+          $ref: /schemas/usb/ti,twlxxxx-usb.yaml
+          unevaluatedProperties: false
 
 properties:
   compatible:
