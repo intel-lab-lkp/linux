@@ -8,6 +8,7 @@
 #define __MM_INTERNAL_H
 
 #include <linux/fs.h>
+#include <linux/kscand.h>
 #include <linux/khugepaged.h>
 #include <linux/mm.h>
 #include <linux/mm_inline.h>

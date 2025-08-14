@@ -128,6 +128,8 @@ int create_init_stack_vma(struct mm_struct *mm, struct vm_area_struct **vmap,
 	if (err)
 		goto err_ksm;
 
+	kscand_execve(mm);
+
 	/*
 	 * Place the stack at the largest stack address the architecture
 	 * supports. Later, we'll move this to an appropriate place. We don't
@@ -151,6 +153,7 @@ int create_init_stack_vma(struct mm_struct *mm, struct vm_area_struct **vmap,
 	return 0;
 
 err:
+	kscand_exit(mm);
 	ksm_exit(mm);
 err_ksm:
 	mmap_write_unlock(mm);

@@ -37,6 +37,7 @@
 #include <linux/perf_event.h>
 #include <linux/audit.h>
 #include <linux/khugepaged.h>
+#include <linux/kscand.h>
 #include <linux/uprobes.h>
 #include <linux/notifier.h>
 #include <linux/memory.h>
@@ -1849,6 +1850,7 @@ loop_out:
 	if (!retval) {
 		mt_set_in_rcu(vmi.mas.tree);
 		ksm_fork(mm, oldmm);
+		kscand_fork(mm, oldmm);
 		khugepaged_fork(mm, oldmm);
 	} else {
 
