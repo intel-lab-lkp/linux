@@ -2309,8 +2309,8 @@ static bool try_to_migrate_one(struct folio *folio, struct vm_area_struct *vma,
 	 * try_to_unmap() must hold a reference on the page.
 	 */
 	range.end = vma_address_end(&pvmw);
-	mmu_notifier_range_init(&range, MMU_NOTIFY_CLEAR, 0, vma->vm_mm,
-				address, range.end);
+	mmu_notifier_range_init_owner(&range, MMU_NOTIFY_CLEAR, 0, vma->vm_mm,
+				      address, range.end, current);
 	if (folio_test_hugetlb(folio)) {
 		/*
 		 * If sharing is possible, start and end will be adjusted

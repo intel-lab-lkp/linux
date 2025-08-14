@@ -269,6 +269,11 @@ static bool dmirror_interval_invalidate(struct mmu_interval_notifier *mni,
 	    range->owner == dmirror->mdevice)
 		return true;
 
+	if (range->event == MMU_NOTIFY_CLEAR &&
+	    range->owner == current) {
+		return true;
+	}
+
 	if (mmu_notifier_range_blockable(range))
 		mutex_lock(&dmirror->mutex);
 	else if (!mutex_trylock(&dmirror->mutex))

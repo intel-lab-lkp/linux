@@ -3061,9 +3061,9 @@ void __split_huge_pmd(struct vm_area_struct *vma, pmd_t *pmd,
 	spinlock_t *ptl;
 	struct mmu_notifier_range range;
 
-	mmu_notifier_range_init(&range, MMU_NOTIFY_CLEAR, 0, vma->vm_mm,
-				address & HPAGE_PMD_MASK,
-				(address & HPAGE_PMD_MASK) + HPAGE_PMD_SIZE);
+	mmu_notifier_range_init_owner(&range, MMU_NOTIFY_CLEAR, 0, vma->vm_mm,
+				      address & HPAGE_PMD_MASK,
+				      (address & HPAGE_PMD_MASK) + HPAGE_PMD_SIZE, current);
 	mmu_notifier_invalidate_range_start(&range);
 	ptl = pmd_lock(vma->vm_mm, pmd);
 	split_huge_pmd_locked(vma, range.start, pmd, freeze);
