@@ -578,6 +578,10 @@ const struct io_issue_def io_issue_defs[] = {
 		.prep			= io_name_to_handle_at_prep,
 		.issue			= io_name_to_handle_at,
 	},
+	[IORING_OP_OPEN_BY_HANDLE_AT] = {
+		.prep			= io_open_by_handle_at_prep,
+		.issue			= io_open_by_handle_at,
+	},
 };
 
 const struct io_cold_def io_cold_defs[] = {
@@ -831,6 +835,9 @@ const struct io_cold_def io_cold_defs[] = {
 	[IORING_OP_NAME_TO_HANDLE_AT] = {
 		.name			= "NAME_TO_HANDLE_AT",
 	},
+	[IORING_OP_OPEN_BY_HANDLE_AT] = {
+		.name			= "OPEN_BY_HANDLE_AT",
+	}
 };
 
 const char *io_uring_get_opcode(u8 opcode)
