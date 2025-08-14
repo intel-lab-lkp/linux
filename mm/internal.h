@@ -548,6 +548,10 @@ static inline int user_proactive_reclaim(char *buf,
 	return 0;
 }
 #endif
+void set_task_reclaim_state(struct task_struct *task,
+				   struct reclaim_state *rs);
+void lru_gen_scan_lruvec(struct lruvec *lruvec, unsigned long seq,
+			 int (*accessed_cb)(unsigned long), void (*flush_cb)(void));
 
 /*
  * in mm/rmap.c:
