@@ -979,6 +979,7 @@ static void collapse_fork_compound(struct collapse_context *c, struct mem_ops *o
 static void collapse_max_ptes_shared(struct collapse_context *c, struct mem_ops *ops)
 {
 	int max_ptes_shared = thp_read_num("khugepaged/max_ptes_shared");
+	int fault_nr_pages = is_anon(ops) ? 1 << anon_order : 1;
 	int wstatus;
 	void *p;
 
@@ -995,8 +996,8 @@ static void collapse_max_ptes_shared(struct collapse_context *c, struct mem_ops 
 			fail("Fail");
 
 		printf("Trigger CoW on page %d of %d...",
-				hpage_pmd_nr - max_ptes_shared - 1, hpage_pmd_nr);
-		ops->fault(p, 0, (hpage_pmd_nr - max_ptes_shared - 1) * page_size);
+				hpage_pmd_nr - max_ptes_shared - fault_nr_pages, hpage_pmd_nr);
+		ops->fault(p, 0, (hpage_pmd_nr - max_ptes_shared - fault_nr_pages) * page_size);
 		if (ops->check_huge(p, 0))
 			success("OK");
 		else
