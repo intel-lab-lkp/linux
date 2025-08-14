@@ -2168,6 +2168,9 @@ static const struct of_device_id qmp_ufs_of_match_table[] = {
 	}, {
 		.compatible = "qcom,sm8750-qmp-ufs-phy",
 		.data = &sm8750_ufsphy_cfg,
+	}, {
+		.compatible = "qcom,x1e80100-qmp-ufs-phy",
+		.data = &sm8550_ufsphy_cfg,
 	},
 
 	{ },
