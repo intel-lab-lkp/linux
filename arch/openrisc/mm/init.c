@@ -226,7 +226,15 @@ static int __init map_page(unsigned long va, phys_addr_t pa, pgprot_t prot)
 	return 0;
 }
 
-void __init __set_fixmap(enum fixed_addresses idx,
+/* Removing __init is necessary. Before supporting FIX_TEXT_POKE0,
+ *  __init here indicates that it is valid during the initialization phase
+ * and is used for FIX_EARLYCON_MEM_BASE. However, attempting to support
+ * FIX_TEXT_POKE0 would introduce a bug. FIX_TEXT_POKE0 is used after the
+ * initialization phase, so __init would cause the function to become invalid.
+ * At that point, using set_fixmap would lead to accessing dirty data,
+ * which is invalid.
+ */
+void __set_fixmap(enum fixed_addresses idx,
 			 phys_addr_t phys, pgprot_t prot)
 {
 	unsigned long address = __fix_to_virt(idx);
