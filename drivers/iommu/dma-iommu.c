@@ -448,6 +448,21 @@ void iommu_put_msi_cookie(struct iommu_domain *domain)
 	kfree(cookie);
 }
 
+#ifdef CONFIG_IO_PTDUMP
+/**
+ * iommu_domain_to_iovad - Retrieve the IOVA domain from an IOMMU domain
+ * @domain: IOMMU domain with an associated IOVA cookie
+ *
+ * This function returns the IOVA domain (iovad) structure associated with
+ * the given IOMMU domain. The domain must have been initialized with an
+ * IOVA cookie (typically through iommu_dma_init_domain()).
+ */
+struct iova_domain *iommu_domain_to_iovad(struct iommu_domain *domain)
+{
+	return &domain->iova_cookie->iovad;
+}
+#endif
+
 /**
  * iommu_dma_get_resv_regions - Reserved region driver helper
  * @dev: Device from iommu_get_resv_regions()

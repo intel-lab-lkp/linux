@@ -1061,6 +1061,181 @@ struct iommu_group *iommu_group_alloc(void)
 }
 EXPORT_SYMBOL_GPL(iommu_group_alloc);
 
+#ifdef CONFIG_IO_PTDUMP
+#include <linux/seq_file.h>
+#include <linux/iova.h>
+
+struct dump_domain {
+	struct iommu_domain *domain;
+	struct list_head groups;
+	struct list_head list;
+};
+
+struct dump_group {
+	struct iommu_group *group;
+	struct list_head list;
+};
+
+/**
+ * iova_info_dump - dump iova alloced
+ * @s - file structure used to generate serialized output
+ * @iovad: - iova domain in question.
+ */
+static int iommu_iova_info_dump(struct seq_file *s, struct iommu_domain *domain)
+{
+	struct iova_domain *iovad;
+	unsigned long long pfn;
+	unsigned long i_shift;
+	struct rb_node *node;
+	unsigned long flags;
+	size_t prot_size;
+
+	iovad = iommu_domain_to_iovad(domain);
+	if (!iovad)
+		return -ENOMEM;
+
+	i_shift = iova_shift(iovad);
+
+	/* Take the lock so that no other thread is manipulating the rbtree */
+	spin_lock_irqsave(&iovad->iova_rbtree_lock, flags);
+	assert_spin_locked(&iovad->iova_rbtree_lock);
+
+	for (node = rb_first(&iovad->rbroot); node; node = rb_next(node)) {
+		struct iova *iova = rb_entry(node, struct iova, node);
+
+		if (iova->pfn_hi <= iova->pfn_lo)
+			continue;
+
+		for (pfn = iova->pfn_lo; pfn <= iova->pfn_hi; ) {
+			prot_size = domain->ops->dump_iova_prot(s, domain, pfn << i_shift);
+			pfn = ((pfn << i_shift) + prot_size) >> i_shift;
+		}
+	}
+
+	spin_unlock_irqrestore(&iovad->iova_rbtree_lock, flags);
+	return 0;
+}
+
+/**
+ * iommu_group_and_iova_dump - Collect and dump IOMMU group and IOVA mapping information
+ * @s: seq_file target for output
+ *
+ * This function traverses all IOMMU groups in the system and dumps hierarchical information
+ * about domains, groups, devices, and IOVA mappings. Only groups with default domains using
+ * DMA_IOVA cookie type are processed.
+ *
+ * Key operations:
+ * 1. Iterates through all registered IOMMU groups
+ * 2. Filters groups with default domains of type IOMMU_COOKIE_DMA_IOVA
+ * 3. Organizes groups by domain to avoid duplicate domain output
+ * 4. Outputs hierarchical information including:
+ *    - Domain address
+ *    - Group IDs and their member devices
+ *    - IOVA mapping ranges via iommu_iova_info_dump()
+ *
+ * Data structure hierarchy:
+ *   domain_list (list_head)
+ *   ├── dump_domain
+ *   │   ├── domain: pointer to iommu_domain
+ *   │   └── groups (list_head)
+ *   │       └── dump_group
+ *   │           └── group: pointer to iommu_group
+ *
+ */
+int iommu_group_and_iova_dump(struct seq_file *s)
+{
+	struct dump_domain *domain_entry, *d_tmp;
+	struct dump_group *group_entry, *g_tmp;
+	struct list_head domain_list;
+	struct iommu_group *group;
+	struct group_device *gdev;
+	struct kobject *kobj;
+	int ret = 0;
+	bool found;
+
+	INIT_LIST_HEAD(&domain_list);
+
+	list_for_each_entry(kobj, &iommu_group_kset->list, entry) {
+		group = container_of(kobj, struct iommu_group, kobj);
+
+		/* Skip groups that do not meet the criteria */
+		if (!group->default_domain ||
+		    group->default_domain->cookie_type != IOMMU_COOKIE_DMA_IOVA)
+			continue;
+
+		/* Check whether the domain already exists. */
+		found = false;
+		list_for_each_entry(domain_entry, &domain_list, list) {
+			if (domain_entry->domain == group->default_domain) {
+				found = true;
+				break;
+			}
+		}
+
+		/* New domain, create entry */
+		if (!found) {
+			domain_entry = kzalloc(sizeof(*domain_entry), GFP_KERNEL);
+			if (!domain_entry) {
+				ret = -ENOMEM;
+				goto out;
+			}
+
+			domain_entry->domain = group->default_domain;
+			INIT_LIST_HEAD(&domain_entry->groups);
+			list_add_tail(&domain_entry->list, &domain_list);
+		}
+
+		/* Create group entries */
+		group_entry = kzalloc(sizeof(*group_entry), GFP_KERNEL);
+		if (!group_entry) {
+			ret = -ENOMEM;
+			goto out;
+		}
+
+		group_entry->group = group;
+		list_add_tail(&group_entry->list, &domain_entry->groups);
+	}
+
+	/* Output all domain information */
+	list_for_each_entry(domain_entry, &domain_list, list) {
+		seq_printf(s, "-- domain %p --\n", domain_entry->domain);
+
+		/* Output all groups in the current domain */
+		list_for_each_entry(group_entry, &domain_entry->groups, list) {
+			seq_printf(s, "- group %d\n", group_entry->group->id);
+
+			/* Output all devices in the group */
+			for_each_group_device(group_entry->group, gdev) {
+				seq_printf(s, "  - %s\n", dev_name(gdev->dev));
+			}
+		}
+
+		/* Output IOVA range */
+		seq_puts(s, "---[ RANGE START ]---\n");
+		ret = iommu_iova_info_dump(s, domain_entry->domain);
+		if (ret)
+			seq_puts(s, "IOVA INFO DUMP FAIL...\n");
+
+		seq_puts(s, "---[ RANGE END   ]---\n");
+	}
+
+out:
+	/* Release domain_list and group_list */
+	list_for_each_entry_safe(domain_entry, d_tmp, &domain_list, list) {
+		list_for_each_entry_safe(group_entry, g_tmp, &domain_entry->groups, list) {
+			list_del(&group_entry->list);
+			kfree(group_entry);
+		}
+
+		list_del(&domain_entry->list);
+		kfree(domain_entry);
+	}
+
+	return ret;
+}
+EXPORT_SYMBOL_GPL(iommu_group_and_iova_dump);
+#endif
+
 /**
  * iommu_group_get_iommudata - retrieve iommu_data registered for a group
  * @group: the group

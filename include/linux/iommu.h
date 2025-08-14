@@ -772,7 +772,10 @@ struct iommu_domain_ops {
 
 	phys_addr_t (*iova_to_phys)(struct iommu_domain *domain,
 				    dma_addr_t iova);
-
+#ifdef CONFIG_IO_PTDUMP
+	size_t (*dump_iova_prot)(struct seq_file *s, struct iommu_domain *domain,
+					dma_addr_t iova);
+#endif
 	bool (*enforce_cache_coherency)(struct iommu_domain *domain);
 	int (*set_pgtable_quirks)(struct iommu_domain *domain,
 				  unsigned long quirks);
@@ -1698,4 +1701,9 @@ static inline void iopf_group_response(struct iopf_group *group,
 {
 }
 #endif /* CONFIG_IOMMU_IOPF */
+
+#ifdef CONFIG_IO_PTDUMP
+int iommu_group_and_iova_dump(struct seq_file *s);
+#endif /* CONFIG_IO_PTDUMP */
+
 #endif /* __LINUX_IOMMU_H */

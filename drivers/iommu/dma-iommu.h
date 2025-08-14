@@ -24,6 +24,10 @@ int iommu_dma_sw_msi(struct iommu_domain *domain, struct msi_desc *desc,
 
 extern bool iommu_dma_forcedac;
 
+#ifdef CONFIG_IO_PTDUMP
+struct iova_domain *iommu_domain_to_iovad(struct iommu_domain *domain);
+#endif
+
 #else /* CONFIG_IOMMU_DMA */
 
 static inline void iommu_setup_dma_ops(struct device *dev)

@@ -147,3 +147,5 @@ obj-$(CONFIG_SHRINKER_DEBUG) += shrinker_debug.o
 obj-$(CONFIG_EXECMEM) += execmem.o
 obj-$(CONFIG_TMPFS_QUOTA) += shmem_quota.o
 obj-$(CONFIG_PT_RECLAIM) += pt_reclaim.o
+obj-$(CONFIG_IO_PTDUMP) += io_ptdump.o
+obj-$(CONFIG_IO_PTDUMP_DEBUGFS) += io_ptdump_debugfs.o
