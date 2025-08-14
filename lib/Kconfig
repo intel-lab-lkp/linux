@@ -583,6 +583,9 @@ config STACKDEPOT_MAX_FRAMES
 	default 64
 	depends on STACKDEPOT
 
+config REF_PROXY
+	bool
+
 config REF_TRACKER
 	bool
 	depends on STACKTRACE_SUPPORT
