@@ -13,6 +13,7 @@
 #include <net/sock.h>
 #include <net/genetlink.h>
 #include <net/netns/generic.h>
+#include <net/handshake.h>
 
 #include <uapi/linux/handshake.h>
 #include "handshake.h"
