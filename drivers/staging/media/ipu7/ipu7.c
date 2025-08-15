@@ -2644,6 +2644,9 @@ static void ipu7_pci_remove(struct pci_dev *pdev)
 	if (!IS_ERR_OR_NULL(isp->fw_code_region))
 		vfree(isp->fw_code_region);
 
+	ipu7_mmu_cleanup(isp->isys->mmu);
+	ipu7_mmu_cleanup(isp->psys->mmu);
+
 	ipu7_bus_del_devices(pdev);
 
 	pm_runtime_forbid(&pdev->dev);
@@ -2653,8 +2656,6 @@ static void ipu7_pci_remove(struct pci_dev *pdev)
 
 	release_firmware(isp->cpd_fw);
 
-	ipu7_mmu_cleanup(isp->psys->mmu);
-	ipu7_mmu_cleanup(isp->isys->mmu);
 }
 
 static void ipu7_pci_reset_prepare(struct pci_dev *pdev)
