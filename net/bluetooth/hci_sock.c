@@ -205,7 +205,7 @@ void hci_send_to_sock(struct hci_dev *hdev, struct sk_buff *skb)
 	struct sock *sk;
 	struct sk_buff *skb_copy = NULL;
 
-	BT_DBG("hdev %p len %d", hdev, skb->len);
+	bt_dev_dbg(hdev, "skb %p len %d", skb, skb->len);
 
 	read_lock(&hci_sk_list.lock);
 
@@ -365,7 +365,7 @@ void hci_send_to_monitor(struct hci_dev *hdev, struct sk_buff *skb)
 	if (!atomic_read(&monitor_promisc))
 		return;
 
-	BT_DBG("hdev %p len %d", hdev, skb->len);
+	bt_dev_dbg(hdev, "skb %p len %d", skb, skb->len);
 
 	switch (hci_skb_pkt_type(skb)) {
 	case HCI_COMMAND_PKT:
@@ -810,7 +810,7 @@ static void hci_si_event(struct hci_dev *hdev, int type, int dlen, void *data)
 
 void hci_sock_dev_event(struct hci_dev *hdev, int event)
 {
-	BT_DBG("hdev %s event %d", hdev->name, event);
+	bt_dev_dbg(hdev, "event %d", event);
 
 	if (atomic_read(&monitor_promisc)) {
 		struct sk_buff *skb;
@@ -1625,7 +1625,7 @@ static int hci_mgmt_cmd(struct hci_mgmt_chan *chan, struct sock *sk,
 	bool var_len, no_hdev;
 	int err;
 
-	BT_DBG("got %d bytes", skb->len);
+	BT_DBG("sk %p skb %p len %u", sk, skb, skb->len);
 
 	if (skb->len < sizeof(*hdr))
 		return -EINVAL;
@@ -1655,7 +1655,7 @@ static int hci_mgmt_cmd(struct hci_mgmt_chan *chan, struct sock *sk,
 
 	if (opcode >= chan->handler_count ||
 	    chan->handlers[opcode].func == NULL) {
-		BT_DBG("Unknown op %u", opcode);
+		bt_dev_dbg(hdev, "Unknown op %u", opcode);
 		err = mgmt_cmd_status(sk, index, opcode,
 				      MGMT_STATUS_UNKNOWN_COMMAND);
 		goto done;
@@ -2200,7 +2200,7 @@ static int hci_sock_create(struct net *net, struct socket *sock, int protocol,
 {
 	struct sock *sk;
 
-	BT_DBG("sock %p", sock);
+	BT_DBG("sock %p protocol %d kern %d", sock, protocol, kern);
 
 	if (sock->type != SOCK_RAW)
 		return -ESOCKTNOSUPPORT;
