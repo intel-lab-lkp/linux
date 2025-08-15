@@ -155,6 +155,12 @@ enum blkzone_allocation_policy {
 	BLKZONE_ALLOC_PRIOR_CONV,	/* Prioritize writing to conventional zones */
 };
 
+enum device_allocation_policy {
+	DEVICE_ALLOC_PRIOR_NORMAL,
+	DEVICE_ALLOC_PRIOR_FRONT,
+	DEVICE_ALLOC_PRIOR_BACK,
+};
+
 /*
  * An implementation of an rwsem that is explicitly unfair to readers. This
  * prevents priority inversion when a low-priority reader acquires the read lock
@@ -1804,6 +1810,8 @@ struct f2fs_sb_info {
 	spinlock_t dev_lock;			/* protect dirty_device */
 	bool aligned_blksize;			/* all devices has the same logical blksize */
 	unsigned int first_seq_zone_segno;	/* first segno in sequential zone */
+	unsigned int device_border_line;	/* the boundary position between devices */
+	unsigned int device_alloc_policy;	/* determine the device writing priority */
 
 	/* For write statistics */
 	u64 sectors_written_start;

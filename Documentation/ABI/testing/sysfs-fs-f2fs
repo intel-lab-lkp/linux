@@ -883,3 +883,25 @@ Date:		June 2025
 Contact:	"Daeho Jeong" <daehojeong@google.com>
 Description:	Control GC algorithm for boost GC. 0: cost benefit, 1: greedy
 		Default: 1
+
+What:		/sys/fs/f2fs/<disk>/device_border_line
+Date:		August 2025
+Contact:	"Liao Yuanhong" <liaoyuanhong@vivo.com>
+Description:	Indicates the border line between the first device and others in amulti-devices
+		setup. It defaults to the end of the first device in sections. For a single storage
+		device, it defaults to the total number of sections. It can be manually set to match
+		scenarios where multi-devices are mapped to the same dm device.
+
+What:		/sys/fs/f2fs/<disk>/device_alloc_policy
+Date:		August 2025
+Contact:	"Liao Yuanhong" <liaoyuanhong@vivo.com>
+Description:	Controls write priority in multi-device setups. A value of 0 means normal writing.
+		A value of 1 prioritizes writing to devices before the device_border_line. A value of 2
+		prioritizes writing to devices after the device_border_line. The default is 0.
+
+		=======================  ======================================================
+		value					 description
+		device_alloc_policy = 0  Normal writing
+		device_alloc_policy = 1  Prioritize writing to device before device_border_line
+		device_alloc_policy = 2  Prioritize writing to device after device_border_line
+		======================== ======================================================
