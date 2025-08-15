@@ -148,13 +148,14 @@ static efi_status_t mm_communicate(u8 *comm_buf, size_t payload_size)
  *			header data.
  *
  * @dptr:		pointer address to store allocated buffer
+ * @nr_pages:		pointer address to store number of allocated pages
  * @payload_size:	payload size
  * @func:		standAloneMM function number
  * @ret:		EFI return code
  * Return:		pointer to corresponding StandAloneMM function buffer or NULL
  */
-static void *setup_mm_hdr(u8 **dptr, size_t payload_size, size_t func,
-			  efi_status_t *ret)
+static void *setup_mm_hdr(u8 **dptr, size_t *nr_pages, size_t payload_size,
+			  size_t func, efi_status_t *ret)
 {
 	const efi_guid_t mm_var_guid = EFI_MM_VARIABLE_GUID;
 	struct efi_mm_communicate_header *mm_hdr;
@@ -173,9 +174,12 @@ static void *setup_mm_hdr(u8 **dptr, size_t payload_size, size_t func,
 		return NULL;
 	}
 
-	comm_buf = kzalloc(MM_COMMUNICATE_HEADER_SIZE +
-				   MM_VARIABLE_COMMUNICATE_SIZE + payload_size,
-			   GFP_KERNEL);
+	*nr_pages = roundup(MM_COMMUNICATE_HEADER_SIZE +
+			    MM_VARIABLE_COMMUNICATE_SIZE + payload_size,
+			    PAGE_SIZE) / PAGE_SIZE;
+
+	comm_buf = alloc_pages_exact(*nr_pages * PAGE_SIZE,
+				     GFP_KERNEL | __GFP_ZERO);
 	if (!comm_buf) {
 		*ret = EFI_OUT_OF_RESOURCES;
 		return NULL;
@@ -205,13 +209,14 @@ static efi_status_t get_max_payload(size_t *size)
 	struct smm_variable_payload_size *var_payload = NULL;
 	size_t payload_size;
 	u8 *comm_buf = NULL;
+	size_t nr_pages;
 	efi_status_t ret;
 
 	if (!size)
 		return EFI_INVALID_PARAMETER;
 
 	payload_size = sizeof(*var_payload);
-	var_payload = setup_mm_hdr(&comm_buf, payload_size,
+	var_payload = setup_mm_hdr(&comm_buf, &nr_pages, payload_size,
 				   SMM_VARIABLE_FUNCTION_GET_PAYLOAD_SIZE,
 				   &ret);
 	if (!var_payload)
@@ -239,7 +244,7 @@ static efi_status_t get_max_payload(size_t *size)
 	 */
 	*size -= 2;
 out:
-	kfree(comm_buf);
+	free_pages_exact(comm_buf, nr_pages * PAGE_SIZE);
 	return ret;
 }
 
@@ -250,6 +255,7 @@ static efi_status_t get_property_int(u16 *name, size_t name_size,
 	struct smm_variable_var_check_property *smm_property;
 	size_t payload_size;
 	u8 *comm_buf = NULL;
+	size_t nr_pages;
 	efi_status_t ret;
 
 	memset(var_property, 0, sizeof(*var_property));
@@ -258,7 +264,7 @@ static efi_status_t get_property_int(u16 *name, size_t name_size,
 		return EFI_INVALID_PARAMETER;
 
 	smm_property = setup_mm_hdr(
-		&comm_buf, payload_size,
+		&comm_buf, &nr_pages, payload_size,
 		SMM_VARIABLE_FUNCTION_VAR_CHECK_VARIABLE_PROPERTY_GET, &ret);
 	if (!smm_property)
 		return EFI_OUT_OF_RESOURCES;
@@ -282,7 +288,7 @@ static efi_status_t get_property_int(u16 *name, size_t name_size,
 	memcpy(var_property, &smm_property->property, sizeof(*var_property));
 
 out:
-	kfree(comm_buf);
+	free_pages_exact(comm_buf, nr_pages * PAGE_SIZE);
 	return ret;
 }
 
@@ -296,6 +302,7 @@ static efi_status_t tee_get_variable(u16 *name, efi_guid_t *vendor,
 	size_t name_size;
 	size_t tmp_dsize;
 	u8 *comm_buf = NULL;
+	size_t nr_pages;
 	efi_status_t ret;
 
 	if (!name || !vendor || !data_size)
@@ -314,7 +321,7 @@ static efi_status_t tee_get_variable(u16 *name, efi_guid_t *vendor,
 	}
 
 	payload_size = MM_VARIABLE_ACCESS_HEADER_SIZE + name_size + tmp_dsize;
-	var_acc = setup_mm_hdr(&comm_buf, payload_size,
+	var_acc = setup_mm_hdr(&comm_buf, &nr_pages, payload_size,
 			       SMM_VARIABLE_FUNCTION_GET_VARIABLE, &ret);
 	if (!var_acc)
 		return EFI_OUT_OF_RESOURCES;
@@ -347,7 +354,7 @@ static efi_status_t tee_get_variable(u16 *name, efi_guid_t *vendor,
 	memcpy(data, (u8 *)var_acc->name + var_acc->name_size,
 	       var_acc->data_size);
 out:
-	kfree(comm_buf);
+	free_pages_exact(comm_buf, nr_pages * PAGE_SIZE);
 	return ret;
 }
 
@@ -359,6 +366,7 @@ static efi_status_t tee_get_next_variable(unsigned long *name_size,
 	size_t out_name_size;
 	size_t in_name_size;
 	u8 *comm_buf = NULL;
+	size_t nr_pages;
 	efi_status_t ret;
 
 	if (!name_size || !name || !guid)
@@ -379,7 +387,7 @@ static efi_status_t tee_get_next_variable(unsigned long *name_size,
 			max_payload_size - MM_VARIABLE_GET_NEXT_HEADER_SIZE;
 
 	payload_size = MM_VARIABLE_GET_NEXT_HEADER_SIZE + out_name_size;
-	var_getnext = setup_mm_hdr(&comm_buf, payload_size,
+	var_getnext = setup_mm_hdr(&comm_buf, &nr_pages, payload_size,
 				   SMM_VARIABLE_FUNCTION_GET_NEXT_VARIABLE_NAME,
 				   &ret);
 	if (!var_getnext)
@@ -404,7 +412,7 @@ static efi_status_t tee_get_next_variable(unsigned long *name_size,
 	memcpy(name, var_getnext->name, var_getnext->name_size);
 
 out:
-	kfree(comm_buf);
+	free_pages_exact(comm_buf, nr_pages * PAGE_SIZE);
 	return ret;
 }
 
@@ -418,6 +426,7 @@ static efi_status_t tee_set_variable(efi_char16_t *name, efi_guid_t *vendor,
 	size_t payload_size;
 	size_t name_size;
 	u8 *comm_buf = NULL;
+	size_t nr_pages;
 
 	if (!name || name[0] == 0 || !vendor)
 		return EFI_INVALID_PARAMETER;
@@ -436,7 +445,7 @@ static efi_status_t tee_set_variable(efi_char16_t *name, efi_guid_t *vendor,
 	 * so we won't need to account for any failures in reading/setting
 	 * the properties, if the allocation fails
 	 */
-	var_acc = setup_mm_hdr(&comm_buf, payload_size,
+	var_acc = setup_mm_hdr(&comm_buf, &nr_pages, payload_size,
 			       SMM_VARIABLE_FUNCTION_SET_VARIABLE, &ret);
 	if (!var_acc)
 		return EFI_OUT_OF_RESOURCES;
@@ -467,7 +476,7 @@ static efi_status_t tee_set_variable(efi_char16_t *name, efi_guid_t *vendor,
 	ret = mm_communicate(comm_buf, payload_size);
 	dev_dbg(pvt_data.dev, "Set Variable %s %d %lx\n", __FILE__, __LINE__, ret);
 out:
-	kfree(comm_buf);
+	free_pages_exact(comm_buf, nr_pages * PAGE_SIZE);
 	return ret;
 }
 
@@ -489,9 +498,10 @@ static efi_status_t tee_query_variable_info(u32 attributes,
 	size_t payload_size;
 	efi_status_t ret;
 	u8 *comm_buf;
+	size_t nr_pages;
 
 	payload_size = sizeof(*mm_query_info);
-	mm_query_info = setup_mm_hdr(&comm_buf, payload_size,
+	mm_query_info = setup_mm_hdr(&comm_buf, &nr_pages, payload_size,
 				SMM_VARIABLE_FUNCTION_QUERY_VARIABLE_INFO,
 				&ret);
 	if (!mm_query_info)
@@ -507,7 +517,7 @@ static efi_status_t tee_query_variable_info(u32 attributes,
 	*max_variable_size = mm_query_info->max_variable_size;
 
 out:
-	kfree(comm_buf);
+	free_pages_exact(comm_buf, nr_pages * PAGE_SIZE);
 	return ret;
 }
 
