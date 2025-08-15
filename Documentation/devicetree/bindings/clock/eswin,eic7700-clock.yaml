@@ -1,0 +1,381 @@
+# SPDX-License-Identifier: (GPL-2.0-only OR BSD-2-Clause)
+%YAML 1.2
+---
+$id: http://devicetree.org/schemas/clock/eswin,eic7700-clock.yaml#
+$schema: http://devicetree.org/meta-schemas/core.yaml#
+
+title: Eswin EIC7700 SoC clock controller
+
+maintainers:
+  - Yifeng Huang <huangyifeng@eswincomputing.com>
+  - Xuyang Dong <dongxuyang@eswincomputing.com>
+
+description:
+  The clock controller generates and supplies clock to all the modules
+  for eic7700 SoC.
+
+properties:
+  compatible:
+    const: eswin,eic7700-clock
+
+  reg:
+    maxItems: 1
+
+  '#clock-cells':
+    const: 0
+
+  '#address-cells':
+    const: 1
+
+  '#size-cells':
+    const: 0
+
+required:
+  - compatible
+  - reg
+  - '#clock-cells'
+  - '#address-cells'
+  - '#size-cells'
+
+patternProperties:
+  "^fixed-rate.*":
+    type: object
+    $ref: /schemas/clock/fixed-clock.yaml#
+
+  ".*pll@[a-f0-9]+$":
+    type: object
+
+    properties:
+      compatible:
+        const: eswin,pll-clock
+
+      reg:
+        items:
+          - description: PLL's config 0 register
+          - description: PLL's config 1 register
+          - description: PLL's config 2 register
+          - description: PLL's status register
+
+      '#clock-cells':
+        const: 0
+
+      clock-output-names:
+        maxItems: 1
+
+      enable-shift:
+        description: Bit shift of the enable register.
+        $ref: /schemas/types.yaml#/definitions/uint32
+        minimum: 0
+        maximum: 31
+
+      enable-width:
+        description: Width of the enable register.
+        $ref: /schemas/types.yaml#/definitions/uint32
+        minimum: 0
+        maximum: 31
+
+      refdiv-shift:
+        description: Bit shift of the reference divider register.
+        $ref: /schemas/types.yaml#/definitions/uint32
+        minimum: 0
+        maximum: 31
+
+      refdiv-width:
+        description: Width of the reference divider register.
+        $ref: /schemas/types.yaml#/definitions/uint32
+        minimum: 0
+        maximum: 31
+
+      fbdiv-shift:
+        description: Bit shift of the feedback divider register.
+        $ref: /schemas/types.yaml#/definitions/uint32
+        minimum: 0
+        maximum: 31
+
+      fbdiv-width:
+        description: Width of the feedback divider register.
+        $ref: /schemas/types.yaml#/definitions/uint32
+        minimum: 0
+        maximum: 31
+
+      frac-shift:
+        description: Bit shift of the fractional divider register.
+        $ref: /schemas/types.yaml#/definitions/uint32
+        minimum: 0
+        maximum: 31
+
+      frac-width:
+        description: Width of the fractional divider register.
+        $ref: /schemas/types.yaml#/definitions/uint32
+        minimum: 0
+        maximum: 31
+
+      postdiv1-shift:
+        description: Bit shift of the post divider 1 register.
+        $ref: /schemas/types.yaml#/definitions/uint32
+        minimum: 0
+        maximum: 31
+
+      postdiv1-width:
+        description: Width of the post divider 1 register.
+        $ref: /schemas/types.yaml#/definitions/uint32
+        minimum: 0
+        maximum: 31
+
+      postdiv2-shift:
+        description: Bit shift of the post divider 2 register.
+        $ref: /schemas/types.yaml#/definitions/uint32
+        minimum: 0
+        maximum: 31
+
+      postdiv2-width:
+        description: Width of the post divider 2 register.
+        $ref: /schemas/types.yaml#/definitions/uint32
+        maximum: 31
+
+      lock-shift:
+        description: Bit shift of the lock register.
+        $ref: /schemas/types.yaml#/definitions/uint32
+        minimum: 0
+        maximum: 31
+
+      lock-width:
+        description: Width of the lock register.
+        $ref: /schemas/types.yaml#/definitions/uint32
+        minimum: 0
+        maximum: 31
+
+    required:
+      - compatible
+      - reg
+      - '#clock-cells'
+      - clock-output-names
+      - enable-shift
+      - enable-width
+      - refdiv-shift
+      - refdiv-width
+      - fbdiv-shift
+      - fbdiv-width
+      - frac-shift
+      - frac-width
+      - postdiv1-shift
+      - postdiv1-width
+      - postdiv2-shift
+      - postdiv2-width
+      - lock-shift
+      - lock-width
+
+    additionalProperties: false
+
+  ".*mux@[a-f0-9]+$":
+    type: object
+
+    properties:
+      compatible:
+        const: eswin,mux-clock
+
+      reg:
+        maxItems: 1
+
+      clocks:
+        minItems: 2
+        maxItems: 3
+
+      '#clock-cells':
+        const: 0
+
+      clock-output-names:
+        maxItems: 1
+
+      shift:
+        description: Bit shift of the select register.
+        $ref: /schemas/types.yaml#/definitions/uint32
+        minimum: 0
+        maximum: 31
+
+      width:
+        description: Width of the select register.
+        $ref: /schemas/types.yaml#/definitions/uint32
+        minimum: 0
+        maximum: 31
+
+
+    required:
+      - compatible
+      - reg
+      - clocks
+      - '#clock-cells'
+      - clock-output-names
+      - shift
+      - width
+
+    additionalProperties: false
+
+  "^fixed-factor.*":
+    type: object
+    $ref: /schemas/clock/fixed-factor-clock.yaml#
+
+  ".*div@[a-f0-9]+$":
+    type: object
+
+    properties:
+      compatible:
+        const: eswin,divider-clock
+
+      reg:
+        maxItems: 1
+
+      clocks:
+        maxItems: 1
+
+      '#clock-cells':
+        const: 0
+
+      clock-output-names:
+        maxItems: 1
+
+      shift:
+        description: Bit shift of the divider register.
+        $ref: /schemas/types.yaml#/definitions/uint32
+        minimum: 0
+        maximum: 31
+
+      width:
+        description: Width of the divider register.
+        $ref: /schemas/types.yaml#/definitions/uint32
+        minimum: 0
+        maximum: 31
+
+      div-flags:
+        description: Flags of the divider register.
+        $ref: /schemas/types.yaml#/definitions/uint32
+        minimum: 0
+        maximum: 31
+
+    required:
+      - compatible
+      - reg
+      - clocks
+      - '#clock-cells'
+      - clock-output-names
+      - shift
+      - width
+      - div-flags
+
+    additionalProperties: false
+
+  ".*gate@[a-f0-9]+$":
+    type: object
+
+    properties:
+      compatible:
+        const: eswin,gate-clock
+
+      reg:
+        maxItems: 1
+
+      clocks:
+        maxItems: 1
+
+      '#clock-cells':
+        const: 0
+
+      clock-output-names:
+        maxItems: 1
+
+      bit-index:
+        description: Bit shift of the gate enable register.
+        $ref: /schemas/types.yaml#/definitions/uint32
+        minimum: 0
+        maximum: 31
+
+    required:
+      - compatible
+      - reg
+      - clocks
+      - '#clock-cells'
+      - clock-output-names
+      - bit-index
+
+    additionalProperties: false
+
+additionalProperties: false
+
+examples:
+  - |
+    clock-controller@51828000 {
+        compatible = "eswin,eic7700-clock";
+        reg = <0x51828000 0x80000>;
+        #clock-cells = <0>;
+        #address-cells = <1>;
+        #size-cells = <0>;
+
+        fixed_rate_clk_xtal_24m: fixed-rate-clk-xtal-24m {
+          compatible = "fixed-clock";
+          #clock-cells = <0>;
+          clock-frequency = <24000000>;
+          clock-output-names = "fixed_rate_clk_xtal_24m";
+        };
+
+        clk_pll_cpu: clk-cpu-pll@64 {
+          compatible = "eswin,pll-clock";
+          reg = <0x64>, <0x68>, <0x6c>, <0xa4>;
+          #clock-cells = <0>;
+          enable-shift = <0>;
+          enable-width = <1>;
+          refdiv-shift = <12>;
+          refdiv-width = <6>;
+          fbdiv-shift = <20>;
+          fbdiv-width = <12>;
+          frac-shift = <4>;
+          frac-width = <24>;
+          postdiv1-shift = <1>;
+          postdiv1-width = <3>;
+          postdiv2-shift = <16>;
+          postdiv2-width = <3>;
+          lock-shift = <5>;
+          lock-width = <1>;
+          clock-output-names = "clk_pll_cpu";
+        };
+
+        mux_cpu_root_3mux1: cpu-root-3mux1-mux@208 {
+          compatible = "eswin,mux-clock";
+          reg = <0x208>;
+          #clock-cells = <0>;
+          clocks = <&clk_pll_cpu>,
+                   <&fixed_factor_u84_core_lp_div2>,
+                   <&fixed_rate_clk_xtal_24m>;
+          shift = <0>;
+          width = <2>;
+          clock-output-names = "mux_cpu_root_3mux1";
+        };
+
+        fixed_factor_cpu_div2: fixed-factor-cpu-div2 {
+          compatible = "fixed-factor-clock";
+          #clock-cells = <0>;
+          clocks = <&mux_cpu_root_3mux1>;
+          clock-div = <2>;
+          clock-mult = <1>;
+          clock-output-names = "fixed_factor_cpu_div2";
+        };
+
+        divider_u84_rtc_toggle: u84-rtc-toggle-div@1ec {
+          compatible = "eswin,divider-clock";
+          reg = <0x1ec>;
+          #clock-cells = <0>;
+          clocks = <&fixed_rate_clk_xtal_24m>;
+          shift = <16>;
+          width = <5>;
+          div-flags = <0x5>;
+          clock-output-names = "divider_u84_rtc_toggle";
+        };
+
+        gate_vi_phy_cfg: vi-phy-cfg-gate@1ac {
+          compatible = "eswin,gate-clock";
+          reg = <0x1ac>;
+          #clock-cells = <0>;
+          clocks = <&fixed_rate_clk_xtal_24m>;
+          bit-index = <1>;
+          clock-output-names = "gate_vi_phy_cfg";
+        };
+    };
