@@ -372,24 +372,18 @@ static int process_one_buffer(struct btrfs_root *log,
 	}
 
 	if (wc->pin) {
+		ASSERT(trans != NULL);
 		ret = btrfs_pin_extent_for_log_replay(trans, eb);
 		if (ret) {
-			if (trans)
-				btrfs_abort_transaction(trans, ret);
-			else
-				btrfs_handle_fs_error(fs_info, ret, NULL);
+			btrfs_abort_transaction(trans, ret);
 			return ret;
 		}
 
 		if (btrfs_buffer_uptodate(eb, gen, 0) &&
 		    btrfs_header_level(eb) == 0) {
 			ret = btrfs_exclude_logged_extents(eb);
-			if (ret) {
-				if (trans)
-					btrfs_abort_transaction(trans, ret);
-				else
-					btrfs_handle_fs_error(fs_info, ret, NULL);
-			}
+			if (ret)
+				btrfs_abort_transaction(trans, ret);
 		}
 	}
 	return ret;
