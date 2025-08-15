@@ -978,6 +978,16 @@ pub fn kstrtobool(string: &CStr) -> Result<bool> {
     kernel::error::to_result(ret).map(|()| result)
 }
 
+/// Convert `&[u8]` to `bool` by deferring to [`kernel::str::kstrtobool`].
+///
+/// Only considers at most the first two bytes of `bytes`.
+pub fn bytes_to_bool(bytes: &[u8]) -> Result<bool> {
+    // `ktostrbool` only considers the first two bytes of the input.
+    let nbuffer = [*bytes.first().unwrap_or(&0), *bytes.get(1).unwrap_or(&0), 0];
+    let c_str = CStr::from_bytes_with_nul(nbuffer.split_inclusive(|c| *c == 0).next().unwrap())?;
+    kstrtobool(c_str)
+}
+
 /// An owned string that is guaranteed to have exactly one `NUL` byte, which is at the end.
 ///
 /// Used for interoperability with kernel APIs that take C strings.
