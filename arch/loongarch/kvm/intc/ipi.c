@@ -134,7 +134,8 @@ static int send_ipi_data(struct kvm_vcpu *vcpu, gpa_t addr, uint64_t data)
 
 static int mail_send(struct kvm *kvm, uint64_t data)
 {
-	int cpu, mailbox, offset;
+	int i, cpu, mailbox, offset;
+	uint32_t val = 0, mask = 0;
 	struct kvm_vcpu *vcpu;
 
 	cpu = ((data & 0xffffffff) >> 16) & 0x3ff;
@@ -144,9 +145,18 @@ static int mail_send(struct kvm *kvm, uint64_t data)
 		return -EINVAL;
 	}
 	mailbox = ((data & 0xffffffff) >> 2) & 0x7;
-	offset = IOCSR_IPI_BASE + IOCSR_IPI_BUF_20 + mailbox * 4;
+	offset = IOCSR_IPI_BUF_20 + mailbox * 4;
+	if ((data >> 27) & 0xf) {
+		val = read_mailbox(vcpu, offset, 4);
+		for (i = 0; i < 4; i++)
+			if (data & (BIT(27 + i)))
+				mask |= (0xff << (i * 8));
+		val &= mask;
+	}
 
-	return send_ipi_data(vcpu, offset, data);
+	val |= ((uint32_t)(data >> 32) & ~mask);
+	write_mailbox(vcpu, offset, val, 4);
+	return 0;
 }
 
 static int any_send(struct kvm *kvm, uint64_t data)
