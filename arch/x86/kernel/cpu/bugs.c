@@ -1070,6 +1070,8 @@ static void __init gds_select_mitigation(void)
 			gds_mitigation = GDS_MITIGATION_FULL;
 		else {
 			gds_mitigation = GDS_MITIGATION_OFF;
+			if (!(x86_arch_cap_msr & ARCH_CAP_GDS_CTRL))
+				gds_mitigation = GDS_MITIGATION_UCODE_NEEDED;
 			return;
 		}
 	}
