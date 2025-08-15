@@ -87,19 +87,19 @@ static void raid6_avx21_xor_syndrome(int disks, int start, int stop,
 	int d, z, z0;
 
 	z0 = stop;		/* P/Q right side optimization */
-	p = dptr[disks-2];	/* XOR parity */
-	q = dptr[disks-1];	/* RS syndrome */
+	p = dptr[disks - 2];	/* XOR parity */
+	q = dptr[disks - 1];	/* RS syndrome */
 
 	kernel_fpu_begin();
 
 	asm volatile("vmovdqa %0,%%ymm0" : : "m" (raid6_avx2_constants.x1d[0]));
 
-	for (d = 0 ; d < bytes ; d += 32) {
+	for (d = 0; d < bytes; d += 32) {
 		asm volatile("vmovdqa %0,%%ymm4" :: "m" (dptr[z0][d]));
 		asm volatile("vmovdqa %0,%%ymm2" : : "m" (p[d]));
 		asm volatile("vpxor %ymm4,%ymm2,%ymm2");
 		/* P/Q data pages */
-		for (z = z0-1 ; z >= start ; z--) {
+		for (z = z0 - 1; z >= start; z--) {
 			asm volatile("vpxor %ymm5,%ymm5,%ymm5");
 			asm volatile("vpcmpgtb %ymm4,%ymm5,%ymm5");
 			asm volatile("vpaddb %ymm4,%ymm4,%ymm4");
@@ -145,8 +145,8 @@ static void raid6_avx22_gen_syndrome(int disks, size_t bytes, void **ptrs)
 	int d, z, z0;
 
 	z0 = disks - 3;		/* Highest data disk */
-	p = dptr[z0+1];		/* XOR parity */
-	q = dptr[z0+2];		/* RS syndrome */
+	p = dptr[z0 + 1];	/* XOR parity */
+	q = dptr[z0 + 2];	/* RS syndrome */
 
 	kernel_fpu_begin();
 
@@ -156,14 +156,14 @@ static void raid6_avx22_gen_syndrome(int disks, size_t bytes, void **ptrs)
 	/* We uniformly assume a single prefetch covers at least 32 bytes */
 	for (d = 0; d < bytes; d += 64) {
 		asm volatile("prefetchnta %0" : : "m" (dptr[z0][d]));
-		asm volatile("prefetchnta %0" : : "m" (dptr[z0][d+32]));
-		asm volatile("vmovdqa %0,%%ymm2" : : "m" (dptr[z0][d]));/* P[0] */
-		asm volatile("vmovdqa %0,%%ymm3" : : "m" (dptr[z0][d+32]));/* P[1] */
+		asm volatile("prefetchnta %0" : : "m" (dptr[z0][d + 32]));
+		asm volatile("vmovdqa %0,%%ymm2" : : "m" (dptr[z0][d]));	 /* P[0] */
+		asm volatile("vmovdqa %0,%%ymm3" : : "m" (dptr[z0][d + 32]));/* P[1] */
 		asm volatile("vmovdqa %ymm2,%ymm4"); /* Q[0] */
 		asm volatile("vmovdqa %ymm3,%ymm6"); /* Q[1] */
-		for (z = z0-1; z >= 0; z--) {
+		for (z = z0 - 1; z >= 0; z--) {
 			asm volatile("prefetchnta %0" : : "m" (dptr[z][d]));
-			asm volatile("prefetchnta %0" : : "m" (dptr[z][d+32]));
+			asm volatile("prefetchnta %0" : : "m" (dptr[z][d + 32]));
 			asm volatile("vpcmpgtb %ymm4,%ymm1,%ymm5");
 			asm volatile("vpcmpgtb %ymm6,%ymm1,%ymm7");
 			asm volatile("vpaddb %ymm4,%ymm4,%ymm4");
@@ -173,7 +173,7 @@ static void raid6_avx22_gen_syndrome(int disks, size_t bytes, void **ptrs)
 			asm volatile("vpxor %ymm5,%ymm4,%ymm4");
 			asm volatile("vpxor %ymm7,%ymm6,%ymm6");
 			asm volatile("vmovdqa %0,%%ymm5" : : "m" (dptr[z][d]));
-			asm volatile("vmovdqa %0,%%ymm7" : : "m" (dptr[z][d+32]));
+			asm volatile("vmovdqa %0,%%ymm7" : : "m" (dptr[z][d + 32]));
 			asm volatile("vpxor %ymm5,%ymm2,%ymm2");
 			asm volatile("vpxor %ymm7,%ymm3,%ymm3");
 			asm volatile("vpxor %ymm5,%ymm4,%ymm4");
@@ -197,22 +197,22 @@ static void raid6_avx22_xor_syndrome(int disks, int start, int stop,
 	int d, z, z0;
 
 	z0 = stop;		/* P/Q right side optimization */
-	p = dptr[disks-2];	/* XOR parity */
-	q = dptr[disks-1];	/* RS syndrome */
+	p = dptr[disks - 2];	/* XOR parity */
+	q = dptr[disks - 1];	/* RS syndrome */
 
 	kernel_fpu_begin();
 
 	asm volatile("vmovdqa %0,%%ymm0" : : "m" (raid6_avx2_constants.x1d[0]));
 
-	for (d = 0 ; d < bytes ; d += 64) {
+	for (d = 0; d < bytes; d += 64) {
 		asm volatile("vmovdqa %0,%%ymm4" :: "m" (dptr[z0][d]));
-		asm volatile("vmovdqa %0,%%ymm6" :: "m" (dptr[z0][d+32]));
+		asm volatile("vmovdqa %0,%%ymm6" :: "m" (dptr[z0][d + 32]));
 		asm volatile("vmovdqa %0,%%ymm2" : : "m" (p[d]));
-		asm volatile("vmovdqa %0,%%ymm3" : : "m" (p[d+32]));
+		asm volatile("vmovdqa %0,%%ymm3" : : "m" (p[d + 32]));
 		asm volatile("vpxor %ymm4,%ymm2,%ymm2");
 		asm volatile("vpxor %ymm6,%ymm3,%ymm3");
 		/* P/Q data pages */
-		for (z = z0-1 ; z >= start ; z--) {
+		for (z = z0 - 1; z >= start; z--) {
 			asm volatile("vpxor %ymm5,%ymm5,%ymm5");
 			asm volatile("vpxor %ymm7,%ymm7,%ymm7");
 			asm volatile("vpcmpgtb %ymm4,%ymm5,%ymm5");
@@ -225,14 +225,14 @@ static void raid6_avx22_xor_syndrome(int disks, int start, int stop,
 			asm volatile("vpxor %ymm7,%ymm6,%ymm6");
 			asm volatile("vmovdqa %0,%%ymm5" :: "m" (dptr[z][d]));
 			asm volatile("vmovdqa %0,%%ymm7"
-				     :: "m" (dptr[z][d+32]));
+				     :: "m" (dptr[z][d + 32]));
 			asm volatile("vpxor %ymm5,%ymm2,%ymm2");
 			asm volatile("vpxor %ymm7,%ymm3,%ymm3");
 			asm volatile("vpxor %ymm5,%ymm4,%ymm4");
 			asm volatile("vpxor %ymm7,%ymm6,%ymm6");
 		}
 		/* P/Q left side optimization */
-		for (z = start-1 ; z >= 0 ; z--) {
+		for (z = start - 1; z >= 0; z--) {
 			asm volatile("vpxor %ymm5,%ymm5,%ymm5");
 			asm volatile("vpxor %ymm7,%ymm7,%ymm7");
 			asm volatile("vpcmpgtb %ymm4,%ymm5,%ymm5");
@@ -245,12 +245,12 @@ static void raid6_avx22_xor_syndrome(int disks, int start, int stop,
 			asm volatile("vpxor %ymm7,%ymm6,%ymm6");
 		}
 		asm volatile("vpxor %0,%%ymm4,%%ymm4" : : "m" (q[d]));
-		asm volatile("vpxor %0,%%ymm6,%%ymm6" : : "m" (q[d+32]));
+		asm volatile("vpxor %0,%%ymm6,%%ymm6" : : "m" (q[d + 32]));
 		/* Don't use movntdq for r/w memory area < cache line */
 		asm volatile("vmovdqa %%ymm4,%0" : "=m" (q[d]));
-		asm volatile("vmovdqa %%ymm6,%0" : "=m" (q[d+32]));
+		asm volatile("vmovdqa %%ymm6,%0" : "=m" (q[d + 32]));
 		asm volatile("vmovdqa %%ymm2,%0" : "=m" (p[d]));
-		asm volatile("vmovdqa %%ymm3,%0" : "=m" (p[d+32]));
+		asm volatile("vmovdqa %%ymm3,%0" : "=m" (p[d + 32]));
 	}
 
 	asm volatile("sfence" : : : "memory");
@@ -277,8 +277,8 @@ static void raid6_avx24_gen_syndrome(int disks, size_t bytes, void **ptrs)
 	int d, z, z0;
 
 	z0 = disks - 3;		/* Highest data disk */
-	p = dptr[z0+1];		/* XOR parity */
-	q = dptr[z0+2];		/* RS syndrome */
+	p = dptr[z0 + 1];	/* XOR parity */
+	q = dptr[z0 + 2];	/* RS syndrome */
 
 	kernel_fpu_begin();
 
@@ -296,9 +296,9 @@ static void raid6_avx24_gen_syndrome(int disks, size_t bytes, void **ptrs)
 	for (d = 0; d < bytes; d += 128) {
 		for (z = z0; z >= 0; z--) {
 			asm volatile("prefetchnta %0" : : "m" (dptr[z][d]));
-			asm volatile("prefetchnta %0" : : "m" (dptr[z][d+32]));
-			asm volatile("prefetchnta %0" : : "m" (dptr[z][d+64]));
-			asm volatile("prefetchnta %0" : : "m" (dptr[z][d+96]));
+			asm volatile("prefetchnta %0" : : "m" (dptr[z][d + 32]));
+			asm volatile("prefetchnta %0" : : "m" (dptr[z][d + 64]));
+			asm volatile("prefetchnta %0" : : "m" (dptr[z][d + 96]));
 			asm volatile("vpcmpgtb %ymm4,%ymm1,%ymm5");
 			asm volatile("vpcmpgtb %ymm6,%ymm1,%ymm7");
 			asm volatile("vpcmpgtb %ymm12,%ymm1,%ymm13");
@@ -316,9 +316,9 @@ static void raid6_avx24_gen_syndrome(int disks, size_t bytes, void **ptrs)
 			asm volatile("vpxor %ymm13,%ymm12,%ymm12");
 			asm volatile("vpxor %ymm15,%ymm14,%ymm14");
 			asm volatile("vmovdqa %0,%%ymm5" : : "m" (dptr[z][d]));
-			asm volatile("vmovdqa %0,%%ymm7" : : "m" (dptr[z][d+32]));
-			asm volatile("vmovdqa %0,%%ymm13" : : "m" (dptr[z][d+64]));
-			asm volatile("vmovdqa %0,%%ymm15" : : "m" (dptr[z][d+96]));
+			asm volatile("vmovdqa %0,%%ymm7" : : "m" (dptr[z][d + 32]));
+			asm volatile("vmovdqa %0,%%ymm13" : : "m" (dptr[z][d + 64]));
+			asm volatile("vmovdqa %0,%%ymm15" : : "m" (dptr[z][d + 96]));
 			asm volatile("vpxor %ymm5,%ymm2,%ymm2");
 			asm volatile("vpxor %ymm7,%ymm3,%ymm3");
 			asm volatile("vpxor %ymm13,%ymm10,%ymm10");
@@ -330,19 +330,19 @@ static void raid6_avx24_gen_syndrome(int disks, size_t bytes, void **ptrs)
 		}
 		asm volatile("vmovntdq %%ymm2,%0" : "=m" (p[d]));
 		asm volatile("vpxor %ymm2,%ymm2,%ymm2");
-		asm volatile("vmovntdq %%ymm3,%0" : "=m" (p[d+32]));
+		asm volatile("vmovntdq %%ymm3,%0" : "=m" (p[d + 32]));
 		asm volatile("vpxor %ymm3,%ymm3,%ymm3");
-		asm volatile("vmovntdq %%ymm10,%0" : "=m" (p[d+64]));
+		asm volatile("vmovntdq %%ymm10,%0" : "=m" (p[d + 64]));
 		asm volatile("vpxor %ymm10,%ymm10,%ymm10");
-		asm volatile("vmovntdq %%ymm11,%0" : "=m" (p[d+96]));
+		asm volatile("vmovntdq %%ymm11,%0" : "=m" (p[d + 96]));
 		asm volatile("vpxor %ymm11,%ymm11,%ymm11");
 		asm volatile("vmovntdq %%ymm4,%0" : "=m" (q[d]));
 		asm volatile("vpxor %ymm4,%ymm4,%ymm4");
-		asm volatile("vmovntdq %%ymm6,%0" : "=m" (q[d+32]));
+		asm volatile("vmovntdq %%ymm6,%0" : "=m" (q[d + 32]));
 		asm volatile("vpxor %ymm6,%ymm6,%ymm6");
-		asm volatile("vmovntdq %%ymm12,%0" : "=m" (q[d+64]));
+		asm volatile("vmovntdq %%ymm12,%0" : "=m" (q[d + 64]));
 		asm volatile("vpxor %ymm12,%ymm12,%ymm12");
-		asm volatile("vmovntdq %%ymm14,%0" : "=m" (q[d+96]));
+		asm volatile("vmovntdq %%ymm14,%0" : "=m" (q[d + 96]));
 		asm volatile("vpxor %ymm14,%ymm14,%ymm14");
 	}
 
@@ -358,30 +358,30 @@ static void raid6_avx24_xor_syndrome(int disks, int start, int stop,
 	int d, z, z0;
 
 	z0 = stop;		/* P/Q right side optimization */
-	p = dptr[disks-2];	/* XOR parity */
-	q = dptr[disks-1];	/* RS syndrome */
+	p = dptr[disks - 2];	/* XOR parity */
+	q = dptr[disks - 1];	/* RS syndrome */
 
 	kernel_fpu_begin();
 
 	asm volatile("vmovdqa %0,%%ymm0" :: "m" (raid6_avx2_constants.x1d[0]));
 
-	for (d = 0 ; d < bytes ; d += 128) {
+	for (d = 0; d < bytes; d += 128) {
 		asm volatile("vmovdqa %0,%%ymm4" :: "m" (dptr[z0][d]));
-		asm volatile("vmovdqa %0,%%ymm6" :: "m" (dptr[z0][d+32]));
-		asm volatile("vmovdqa %0,%%ymm12" :: "m" (dptr[z0][d+64]));
-		asm volatile("vmovdqa %0,%%ymm14" :: "m" (dptr[z0][d+96]));
+		asm volatile("vmovdqa %0,%%ymm6" :: "m" (dptr[z0][d + 32]));
+		asm volatile("vmovdqa %0,%%ymm12" :: "m" (dptr[z0][d + 64]));
+		asm volatile("vmovdqa %0,%%ymm14" :: "m" (dptr[z0][d + 96]));
 		asm volatile("vmovdqa %0,%%ymm2" : : "m" (p[d]));
-		asm volatile("vmovdqa %0,%%ymm3" : : "m" (p[d+32]));
-		asm volatile("vmovdqa %0,%%ymm10" : : "m" (p[d+64]));
-		asm volatile("vmovdqa %0,%%ymm11" : : "m" (p[d+96]));
+		asm volatile("vmovdqa %0,%%ymm3" : : "m" (p[d + 32]));
+		asm volatile("vmovdqa %0,%%ymm10" : : "m" (p[d + 64]));
+		asm volatile("vmovdqa %0,%%ymm11" : : "m" (p[d + 96]));
 		asm volatile("vpxor %ymm4,%ymm2,%ymm2");
 		asm volatile("vpxor %ymm6,%ymm3,%ymm3");
 		asm volatile("vpxor %ymm12,%ymm10,%ymm10");
 		asm volatile("vpxor %ymm14,%ymm11,%ymm11");
 		/* P/Q data pages */
-		for (z = z0-1 ; z >= start ; z--) {
+		for (z = z0 - 1; z >= start; z--) {
 			asm volatile("prefetchnta %0" :: "m" (dptr[z][d]));
-			asm volatile("prefetchnta %0" :: "m" (dptr[z][d+64]));
+			asm volatile("prefetchnta %0" :: "m" (dptr[z][d + 64]));
 			asm volatile("vpxor %ymm5,%ymm5,%ymm5");
 			asm volatile("vpxor %ymm7,%ymm7,%ymm7");
 			asm volatile("vpxor %ymm13,%ymm13,%ymm13");
@@ -404,11 +404,11 @@ static void raid6_avx24_xor_syndrome(int disks, int start, int stop,
 			asm volatile("vpxor %ymm15,%ymm14,%ymm14");
 			asm volatile("vmovdqa %0,%%ymm5" :: "m" (dptr[z][d]));
 			asm volatile("vmovdqa %0,%%ymm7"
-				     :: "m" (dptr[z][d+32]));
+				     :: "m" (dptr[z][d + 32]));
 			asm volatile("vmovdqa %0,%%ymm13"
-				     :: "m" (dptr[z][d+64]));
+				     :: "m" (dptr[z][d + 64]));
 			asm volatile("vmovdqa %0,%%ymm15"
-				     :: "m" (dptr[z][d+96]));
+				     :: "m" (dptr[z][d + 96]));
 			asm volatile("vpxor %ymm5,%ymm2,%ymm2");
 			asm volatile("vpxor %ymm7,%ymm3,%ymm3");
 			asm volatile("vpxor %ymm13,%ymm10,%ymm10");
@@ -421,7 +421,7 @@ static void raid6_avx24_xor_syndrome(int disks, int start, int stop,
 		asm volatile("prefetchnta %0" :: "m" (q[d]));
 		asm volatile("prefetchnta %0" :: "m" (q[d+64]));
 		/* P/Q left side optimization */
-		for (z = start-1 ; z >= 0 ; z--) {
+		for (z = start - 1; z >= 0; z--) {
 			asm volatile("vpxor %ymm5,%ymm5,%ymm5");
 			asm volatile("vpxor %ymm7,%ymm7,%ymm7");
 			asm volatile("vpxor %ymm13,%ymm13,%ymm13");
@@ -444,17 +444,17 @@ static void raid6_avx24_xor_syndrome(int disks, int start, int stop,
 			asm volatile("vpxor %ymm15,%ymm14,%ymm14");
 		}
 		asm volatile("vmovntdq %%ymm2,%0" : "=m" (p[d]));
-		asm volatile("vmovntdq %%ymm3,%0" : "=m" (p[d+32]));
-		asm volatile("vmovntdq %%ymm10,%0" : "=m" (p[d+64]));
-		asm volatile("vmovntdq %%ymm11,%0" : "=m" (p[d+96]));
+		asm volatile("vmovntdq %%ymm3,%0" : "=m" (p[d + 32]));
+		asm volatile("vmovntdq %%ymm10,%0" : "=m" (p[d + 64]));
+		asm volatile("vmovntdq %%ymm11,%0" : "=m" (p[d + 96]));
 		asm volatile("vpxor %0,%%ymm4,%%ymm4" : : "m" (q[d]));
-		asm volatile("vpxor %0,%%ymm6,%%ymm6" : : "m" (q[d+32]));
-		asm volatile("vpxor %0,%%ymm12,%%ymm12" : : "m" (q[d+64]));
-		asm volatile("vpxor %0,%%ymm14,%%ymm14" : : "m" (q[d+96]));
+		asm volatile("vpxor %0,%%ymm6,%%ymm6" : : "m" (q[d + 32]));
+		asm volatile("vpxor %0,%%ymm12,%%ymm12" : : "m" (q[d + 64]));
+		asm volatile("vpxor %0,%%ymm14,%%ymm14" : : "m" (q[d + 96]));
 		asm volatile("vmovntdq %%ymm4,%0" : "=m" (q[d]));
-		asm volatile("vmovntdq %%ymm6,%0" : "=m" (q[d+32]));
-		asm volatile("vmovntdq %%ymm12,%0" : "=m" (q[d+64]));
-		asm volatile("vmovntdq %%ymm14,%0" : "=m" (q[d+96]));
+		asm volatile("vmovntdq %%ymm6,%0" : "=m" (q[d + 32]));
+		asm volatile("vmovntdq %%ymm12,%0" : "=m" (q[d + 64]));
+		asm volatile("vmovntdq %%ymm14,%0" : "=m" (q[d + 96]));
 	}
 	asm volatile("sfence" : : : "memory");
 	kernel_fpu_end();
