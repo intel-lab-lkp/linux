@@ -189,6 +189,12 @@ static int q6apm_lpass_dai_prepare(struct snd_pcm_substream *substream, struct s
 			return rc;
 		}
 		dai_data->graph[graph_id] = graph;
+	} else if (!dai_data->graph[dai->id]) {
+		/*
+		 * Loading source graph failed before, so abort loading the sink
+		 * as well.
+		 */
+		return -EINVAL;
 	}
 
 	cfg->direction = substream->stream;
