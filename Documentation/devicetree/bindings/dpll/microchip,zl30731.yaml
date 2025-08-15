@@ -44,9 +44,26 @@ examples:
       #size-cells = <0>;
 
       dpll@70 {
+        #address-cells = <0>;
+        #size-cells = <0>;
         compatible = "microchip,zl30732";
         reg = <0x70>;
-        dpll-types = "pps", "eec";
+
+        channels {
+          #address-cells = <1>;
+          #size-cells = <0>;
+
+          channel@0 {
+            reg = <0>;
+            dpll-type = "pps";
+          };
+
+          channel@1 {
+            reg = <1>;
+            dpll-type = "eec";
+            ethernet-handle = <&ethernet0>;
+          };
+        };
 
         input-pins {
           #address-cells = <1>;
@@ -84,7 +101,15 @@ examples:
         reg = <0x70>;
         spi-max-frequency = <12500000>;
 
-        dpll-types = "pps";
+        channels {
+          #address-cells = <1>;
+          #size-cells = <0>;
+
+          channel@0 {
+            reg = <0>;
+            dpll-type = "pps";
+          };
+        };
 
         input-pins {
           #address-cells = <1>;

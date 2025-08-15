@@ -27,11 +27,41 @@ properties:
   "#size-cells":
     const: 0
 
-  dpll-types:
-    description: List of DPLL channel types, one per DPLL instance.
-    $ref: /schemas/types.yaml#/definitions/non-unique-string-array
-    items:
-      enum: [pps, eec]
+  channels:
+    type: object
+    description: DPLL channels
+    unevaluatedProperties: false
+
+    properties:
+      "#address-cells":
+        const: 1
+      "#size-cells":
+        const: 0
+
+    patternProperties:
+      "^channel@[0-9a-f]+$":
+        type: object
+        description: DPLL channel
+        unevaluatedProperties: false
+
+        properties:
+          reg:
+            description: Hardware index of the DPLL channel
+            maxItems: 1
+
+          dpll-type:
+            description: DPLL channel type
+            $ref: /schemas/types.yaml#/definitions/string
+            enum: [pps, eec]
+
+          ethernet-handle:
+            description:
+              Specifies a reference to a node representing an Ethernet device
+              that uses this channel to synchronize its hardware clock.
+            $ref: /schemas/types.yaml#/definitions/phandle
+
+        required:
+          - reg
 
   input-pins:
     type: object
