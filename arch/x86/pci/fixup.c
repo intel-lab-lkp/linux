@@ -357,6 +357,7 @@ static void pci_fixup_video(struct pci_dev *pdev)
 	struct pci_bus *bus;
 	u16 config;
 	struct resource *res;
+	void __iomem *rom;
 
 	/* Is VGA routed to us? */
 	bus = pdev->bus;
@@ -378,9 +379,12 @@ static void pci_fixup_video(struct pci_dev *pdev)
 		}
 		bus = bus->parent;
 	}
-	if (!vga_default_device() || pdev == vga_default_device()) {
+
+	rom = ioremap(0xC0000, 0x20000);
+	if (rom && (!vga_default_device() || pdev == vga_default_device())) {
 		pci_read_config_word(pdev, PCI_COMMAND, &config);
-		if (config & (PCI_COMMAND_IO | PCI_COMMAND_MEMORY)) {
+		if ((config & (PCI_COMMAND_IO | PCI_COMMAND_MEMORY)) &&
+		    (readw(rom) == 0xAA55)) {
 			res = &pdev->resource[PCI_ROM_RESOURCE];
 
 			pci_disable_rom(pdev);
@@ -394,6 +398,7 @@ static void pci_fixup_video(struct pci_dev *pdev)
 			dev_info(&pdev->dev, "Video device with shadowed ROM at %pR\n",
 				 res);
 		}
+		iounmap(rom);
 	}
 }
 DECLARE_PCI_FIXUP_CLASS_HEADER(PCI_ANY_ID, PCI_ANY_ID,
