@@ -137,7 +137,7 @@ EXPORT_SYMBOL_GPL(rtc_lock);
 
 static u64 tb_to_ns_scale __read_mostly;
 static unsigned tb_to_ns_shift __read_mostly;
-static u64 boot_tb __read_mostly;
+static u64 boot_tb __ro_after_init;
 
 extern struct timezone sys_tz;
 static long timezone_offset;
@@ -639,6 +639,10 @@ notrace unsigned long long sched_clock(void)
 	return mulhdu(get_tb() - boot_tb, tb_to_ns_scale) << tb_to_ns_shift;
 }
 
+u64 get_boot_tb(void)
+{
+	return boot_tb;
+}
 
 #ifdef CONFIG_PPC_PSERIES
 
@@ -975,6 +979,7 @@ void __init time_init(void)
 	tb_to_ns_shift = shift;
 	/* Save the current timebase to pretty up CONFIG_PRINTK_TIME */
 	boot_tb = get_tb();
+	pr_debug("%s: timebase at boot: %llu\n", __func__, (unsigned long long)boot_tb);
 
 	/* If platform provided a timezone (pmac), we correct the time */
 	if (timezone_offset) {
