@@ -31,8 +31,8 @@ static void raid6_rvv1_gen_syndrome_real(int disks, unsigned long bytes, void **
 	int z, z0;
 
 	z0 = disks - 3;		/* Highest data disk */
-	p = dptr[z0 + 1];		/* XOR parity */
-	q = dptr[z0 + 2];		/* RS syndrome */
+	p = dptr[z0 + 1];	/* XOR parity */
+	q = dptr[z0 + 2];	/* RS syndrome */
 
 	asm volatile (".option	push\n"
 		      ".option	arch,+v\n"
@@ -53,7 +53,7 @@ static void raid6_rvv1_gen_syndrome_real(int disks, unsigned long bytes, void **
 			      [wp0]"r"(&dptr[z0][d + 0 * NSIZE])
 		);
 
-		for (z = z0 - 1 ; z >= 0 ; z--) {
+		for (z = z0 - 1; z >= 0; z--) {
 			/*
 			 * w2$$ = MASK(wq$$);
 			 * w1$$ = SHLBYTE(wq$$);
@@ -115,7 +115,7 @@ static void raid6_rvv1_xor_syndrome_real(int disks, int start, int stop,
 	);
 
 	/* v0:wp0, v1:wq0, v2:wd0/w20, v3:w10 */
-	for (d = 0 ; d < bytes ; d += NSIZE * 1) {
+	for (d = 0; d < bytes; d += NSIZE * 1) {
 		/* wq$$ = wp$$ = *(unative_t *)&dptr[z0][d+$$*NSIZE]; */
 		asm volatile (".option	push\n"
 			      ".option	arch,+v\n"
@@ -202,8 +202,8 @@ static void raid6_rvv2_gen_syndrome_real(int disks, unsigned long bytes, void **
 	int z, z0;
 
 	z0 = disks - 3;		/* Highest data disk */
-	p = dptr[z0 + 1];		/* XOR parity */
-	q = dptr[z0 + 2];		/* RS syndrome */
+	p = dptr[z0 + 1];	/* XOR parity */
+	q = dptr[z0 + 2];	/* RS syndrome */
 
 	asm volatile (".option	push\n"
 		      ".option	arch,+v\n"
@@ -421,7 +421,7 @@ static void raid6_rvv4_gen_syndrome_real(int disks, unsigned long bytes, void **
 	unsigned long vl, d;
 	int z, z0;
 
-	z0 = disks - 3;	/* Highest data disk */
+	z0 = disks - 3;		/* Highest data disk */
 	p = dptr[z0 + 1];	/* XOR parity */
 	q = dptr[z0 + 2];	/* RS syndrome */
 
@@ -731,7 +731,7 @@ static void raid6_rvv8_gen_syndrome_real(int disks, unsigned long bytes, void **
 	unsigned long vl, d;
 	int z, z0;
 
-	z0 = disks - 3;	/* Highest data disk */
+	z0 = disks - 3;		/* Highest data disk */
 	p = dptr[z0 + 1];	/* XOR parity */
 	q = dptr[z0 + 2];	/* RS syndrome */
 
