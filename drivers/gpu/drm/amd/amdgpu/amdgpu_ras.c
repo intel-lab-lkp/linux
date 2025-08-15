@@ -3693,11 +3693,16 @@ static bool amdgpu_ras_asic_supported(struct amdgpu_device *adev)
 		}
 	}
 
-	return adev->asic_type == CHIP_VEGA10 ||
-		adev->asic_type == CHIP_VEGA20 ||
-		adev->asic_type == CHIP_ARCTURUS ||
-		adev->asic_type == CHIP_ALDEBARAN ||
-		adev->asic_type == CHIP_SIENNA_CICHLID;
+	switch (adev->asic_type) {
+	case CHIP_VEGA10:
+	case CHIP_VEGA20:
+	case CHIP_ARCTURUS:
+	case CHIP_ALDEBARAN:
+	case CHIP_SIENNA_CICHLID:
+		return true;
+	default:
+		return false;
+	}
 }
 
 /*
