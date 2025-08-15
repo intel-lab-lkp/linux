@@ -426,6 +426,10 @@ static void x86_pmu_get_ext_regs(struct x86_perf_regs *perf_regs, u64 mask)
 
 	if (valid_mask & XFEATURE_MASK_YMM)
 		perf_regs->ymmh = get_xsave_addr(xsave, XFEATURE_YMM);
+	if (valid_mask & XFEATURE_MASK_ZMM_Hi256)
+		perf_regs->zmmh = get_xsave_addr(xsave, XFEATURE_ZMM_Hi256);
+	if (valid_mask & XFEATURE_MASK_Hi16_ZMM)
+		perf_regs->h16zmm = get_xsave_addr(xsave, XFEATURE_Hi16_ZMM);
 }
 
 static void release_ext_regs_buffers(void)
@@ -730,6 +734,13 @@ int x86_pmu_hw_config(struct perf_event *event)
 				return -EINVAL;
 			if (event->attr.sample_simd_vec_reg_qwords >= PERF_X86_YMM_QWORDS &&
 			    !(x86_pmu.ext_regs_mask & XFEATURE_MASK_YMM))
+				return -EINVAL;
+			if (event->attr.sample_simd_vec_reg_qwords >= PERF_X86_ZMM_QWORDS &&
+			    !(x86_pmu.ext_regs_mask & XFEATURE_MASK_ZMM_Hi256))
+				return -EINVAL;
+			if ((fls64(event->attr.sample_simd_vec_reg_intr) > PERF_X86_H16ZMM_BASE ||
+			     fls64(event->attr.sample_simd_vec_reg_user) > PERF_X86_H16ZMM_BASE) &&
+			    !(x86_pmu.ext_regs_mask & XFEATURE_MASK_Hi16_ZMM))
 				return -EINVAL;
 		}
 	}
@@ -1847,6 +1858,15 @@ void x86_pmu_setup_regs_data(struct perf_event *event,
 		if (attr->sample_simd_vec_reg_qwords >= PERF_X86_YMM_QWORDS) {
 			perf_regs->ymmh_regs = NULL;
 			mask |= XFEATURE_MASK_YMM;
+		}
+		if (attr->sample_simd_vec_reg_qwords >= PERF_X86_ZMM_QWORDS) {
+			perf_regs->zmmh_regs = NULL;
+			mask |= XFEATURE_MASK_ZMM_Hi256;
+		}
+		if (fls64(attr->sample_simd_vec_reg_intr) > PERF_X86_H16ZMM_BASE ||
+		    fls64(attr->sample_simd_vec_reg_user) > PERF_X86_H16ZMM_BASE) {
+			perf_regs->h16zmm_regs = NULL;
+			mask |= XFEATURE_MASK_Hi16_ZMM;
 		}
 	}
 
