@@ -1228,7 +1228,8 @@ void tick_nohz_idle_stop_tick(void)
 
 		ts->idle_sleeps++;
 		ts->idle_expires = expires;
-
+		WARN_ON_ONCE(was_stopped && !nohz_balance_idle_cpu(cpu) &&
+			idle_cpu(cpu) && tick_nohz_tick_stopped_cpu(cpu));
 		if (tick_sched_flag_test(ts, TS_FLAG_STOPPED)) {
 			if (!was_stopped)
 				ts->idle_jiffies = ts->last_jiffies;
