@@ -159,6 +159,18 @@ config ETHOC
 	help
 	  Say Y here if you want to use the OpenCores 10/100 Mbps Ethernet MAC.
 
+config JCORE_EMAC
+	tristate "J-Core Ethernet MAC support"
+	depends on CPU_J2 || COMPILE_TEST
+	depends on HAS_IOMEM
+	select REGMAP_MMIO
+	help
+	  This enables support for the Ethernet Media Access Controller found
+	  in the J-Core family of SoCs.
+
+	  To compile this driver as a module, choose M here: the module
+	  will be called jcore_emac.
+
 config OA_TC6
 	tristate "OPEN Alliance TC6 10BASE-T1x MAC-PHY support" if COMPILE_TEST
 	depends on SPI
