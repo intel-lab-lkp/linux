@@ -760,8 +760,7 @@ bfq_rq_pos_tree_lookup(struct bfq_data *bfqd, struct rb_root *root,
 	if (rb_link)
 		*rb_link = p;
 
-	bfq_log(bfqd, "rq_pos_tree_lookup %llu: returning %d",
-		(unsigned long long)sector,
+	bfq_log(bfqd, "rq_pos_tree_lookup %llu: returning %d", sector,
 		bfqq ? bfqq->pid : 0);
 
 	return bfqq;
