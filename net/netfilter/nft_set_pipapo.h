@@ -129,6 +129,7 @@ struct nft_pipapo_field {
  * @__map:	store partial matching results during lookup
  */
 struct nft_pipapo_scratch {
+	local_lock_t bh_lock;
 	u8 map_index;
 	unsigned long __map[];
 };

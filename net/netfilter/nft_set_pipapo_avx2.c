@@ -1170,19 +1170,17 @@ nft_pipapo_avx2_lookup(const struct net *net, const struct nft_set *set,
 	}
 
 	m = rcu_dereference(priv->match);
-
+	scratch = *raw_cpu_ptr(m->scratch);
+	if (unlikely(!scratch)) {
+		local_bh_enable();
+		return false;
+	}
+	__local_lock_nested_bh(&scratch->bh_lock);
 	/* Note that we don't need a valid MXCSR state for any of the
 	 * operations we use here, so pass 0 as mask and spare a LDMXCSR
 	 * instruction.
 	 */
 	kernel_fpu_begin_mask(0);
-
-	scratch = *raw_cpu_ptr(m->scratch);
-	if (unlikely(!scratch)) {
-		kernel_fpu_end();
-		local_bh_enable();
-		return NULL;
-	}
 
 	map_index = scratch->map_index;
 	map = NFT_PIPAPO_LT_ALIGN(&scratch->__map[0]);
@@ -1262,6 +1260,7 @@ out:
 	if (i % 2)
 		scratch->map_index = !map_index;
 	kernel_fpu_end();
+	__local_unlock_nested_bh(&scratch->bh_lock);
 	local_bh_enable();
 
 	return ext;
