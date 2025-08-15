@@ -3103,27 +3103,35 @@ static void rzg2l_pinctrl_pm_setup_pfc(struct rzg2l_pinctrl *pctrl)
 		pm = readw(pctrl->base + PM(off));
 		for_each_set_bit(pin, &pinmap, max_pin) {
 			struct rzg2l_pinctrl_reg_cache *cache = pctrl->cache;
+			u32 pfc_mask;
+			u32 pfc_val;
 
 			/* Nothing to do if PFC was not configured before. */
 			if (!(cache->pmc[port] & BIT(pin)))
 				continue;
 
-			/* Set pin to 'Non-use (Hi-Z input protection)' */
-			pm &= ~(PM_MASK << (pin * 2));
-			writew(pm, pctrl->base + PM(off));
+			pfc_val = readl(pctrl->base + PFC(off));
+			pfc_mask = PFC_MASK << (pin * 4);
 
-			/* Temporarily switch to GPIO mode with PMC register */
-			pmc &= ~BIT(pin);
-			writeb(pmc, pctrl->base + PMC(off));
+			/* Nothing to do if reset value of the pin is same as cached value */
+			if ((cache->pfc[port] & pfc_mask) != (pfc_val & pfc_mask)) {
+				/* Set pin to 'Non-use (Hi-Z input protection)' */
+				pm &= ~(PM_MASK << (pin * 2));
+				writew(pm, pctrl->base + PM(off));
 
-			/* Select Pin function mode. */
-			pfc &= ~(PFC_MASK << (pin * 4));
-			pfc |= (cache->pfc[port] & (PFC_MASK << (pin * 4)));
-			writel(pfc, pctrl->base + PFC(off));
+				/* Temporarily switch to GPIO mode with PMC register */
+				pmc &= ~BIT(pin);
+				writeb(pmc, pctrl->base + PMC(off));
 
-			/* Switch to Peripheral pin function. */
-			pmc |= BIT(pin);
-			writeb(pmc, pctrl->base + PMC(off));
+				/* Select Pin function mode. */
+				pfc &= ~pfc_mask;
+				pfc |= cache->pfc[port] & pfc_mask;
+				writel(pfc, pctrl->base + PFC(off));
+
+				/* Switch to Peripheral pin function. */
+				pmc |= BIT(pin);
+				writeb(pmc, pctrl->base + PMC(off));
+			}
 		}
 	}
 
