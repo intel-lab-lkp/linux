@@ -957,21 +957,49 @@ static bool tdx_map_gpa(phys_addr_t start, phys_addr_t end, bool enc)
 }
 
 /*
- * Inform the VMM of the guest's intent for this physical page: shared with
- * the VMM or private to the guest.  The VMM is expected to change its mapping
- * of the page in response.
+ * Helper that works on a paddr range for tdx_enc_status_changed
  */
-static bool tdx_enc_status_changed(unsigned long vaddr, int numpages, bool enc)
+static bool tdx_enc_status_changed_phys(phys_addr_t start, phys_addr_t end,
+					bool enc)
 {
-	phys_addr_t start = __pa(vaddr);
-	phys_addr_t end   = __pa(vaddr + numpages * PAGE_SIZE);
-
 	if (!tdx_map_gpa(start, end, enc))
 		return false;
 
 	/* shared->private conversion requires memory to be accepted before use */
 	if (enc)
 		return tdx_accept_memory(start, end);
+
+	return true;
+}
+
+/*
+ * Inform the VMM of the guest's intent for this vaddr range: shared with
+ * the VMM or private to the guest.  The VMM is expected to change its mapping
+ * of the page in response.
+ */
+static bool tdx_enc_status_changed(unsigned long vaddr, int numpages, bool enc)
+{
+	unsigned long va_iter;
+	unsigned long end_va = vaddr + numpages * PAGE_SIZE;
+	phys_addr_t start_pa, end_pa;
+
+	/* fast path when the entire range is within linear mapping */
+	if (virt_addr_valid((void *)vaddr) &&
+	    virt_addr_valid((void *)end_va)) {
+		start_pa = __pa(vaddr);
+		end_pa = __pa(end_va);
+
+		return tdx_enc_status_changed_phys(start_pa, end_pa, enc);
+	}
+
+	/* use page table walk for memory in VM area */
+	for (va_iter = vaddr; va_iter < end_va; va_iter += PAGE_SIZE) {
+		start_pa = slow_virt_to_phys((void *)va_iter);
+		end_pa = start_pa + PAGE_SIZE;
+
+		if (!tdx_enc_status_changed_phys(start_pa, end_pa, enc))
+			return false;
+	}
 
 	return true;
 }
