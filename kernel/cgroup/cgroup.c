@@ -1346,7 +1346,7 @@ static void cgroup_destroy_root(struct cgroup_root *root)
 
 	trace_cgroup_destroy_root(root);
 
-	cgroup_lock_and_drain_offline(&cgrp_dfl_root.cgrp);
+	cgroup_lock_and_drain_offline(&cgrp_dfl_root.cgrp, root->subsys_mask);
 
 	BUG_ON(atomic_read(&root->nr_cgrps));
 	BUG_ON(!list_empty(&cgrp->self.children));
@@ -1681,7 +1681,7 @@ struct cgroup *cgroup_kn_lock_live(struct kernfs_node *kn, bool drain_offline)
 	kernfs_break_active_protection(kn);
 
 	if (drain_offline)
-		cgroup_lock_and_drain_offline(cgrp);
+		cgroup_lock_and_drain_offline(cgrp, cgrp->subtree_ss_mask);
 	else
 		cgroup_lock();
 
@@ -3147,12 +3147,14 @@ out_finish:
 /**
  * cgroup_lock_and_drain_offline - lock cgroup_mutex and drain offlined csses
  * @cgrp: root of the target subtree
+ * @ss_mask: bitmask of subsystem to be drained
  *
  * Because css offlining is asynchronous, userland may try to re-enable a
  * controller while the previous css is still around.  This function grabs
  * cgroup_mutex and drains the previous css instances of @cgrp's subtree.
  */
-void cgroup_lock_and_drain_offline(struct cgroup *cgrp)
+
+void cgroup_lock_and_drain_offline(struct cgroup *cgrp, u16 ss_mask)
 	__acquires(&cgroup_mutex)
 {
 	struct cgroup *dsct;
@@ -3167,6 +3169,9 @@ restart:
 		for_each_subsys(ss, ssid) {
 			struct cgroup_subsys_state *css = cgroup_css(dsct, ss);
 			DEFINE_WAIT(wait);
+
+			if (!(ss_mask & 1U << ssid))
+				continue;
 
 			if (!css || !percpu_ref_is_dying(&css->refcnt))
 				continue;
