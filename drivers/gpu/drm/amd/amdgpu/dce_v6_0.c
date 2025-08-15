@@ -3253,17 +3253,22 @@ static void dce_v6_0_encoder_mode_set(struct drm_encoder *encoder,
 			  struct drm_display_mode *adjusted_mode)
 {
 	struct amdgpu_encoder *amdgpu_encoder = to_amdgpu_encoder(encoder);
-	int em = amdgpu_atombios_encoder_get_encoder_mode(encoder);
-
+	struct drm_connector *connector;
+	struct amdgpu_connector *amdgpu_connector = NULL;
 	amdgpu_encoder->pixel_clock = adjusted_mode->clock;
 
 	/* need to call this here rather than in prepare() since we need some crtc info */
 	amdgpu_atombios_encoder_dpms(encoder, DRM_MODE_DPMS_OFF);
+	connector = amdgpu_get_connector_for_encoder_init(encoder);
+	amdgpu_connector = to_amdgpu_connector(connector);
+	if (!amdgpu_connector) {
+		DRM_ERROR("Couldn't find encoder's connector\n");
+	}
 
 	/* set scaler clears this on some chips */
 	dce_v6_0_set_interleave(encoder->crtc, mode);
 
-	if (em == ATOM_ENCODER_MODE_HDMI || ENCODER_MODE_IS_DP(em)) {
+	if (drm_detect_monitor_audio(amdgpu_connector_edid(connector))) {
 		dce_v6_0_afmt_enable(encoder, true);
 		dce_v6_0_afmt_setmode(encoder, adjusted_mode);
 	}
@@ -3322,12 +3327,18 @@ static void dce_v6_0_encoder_disable(struct drm_encoder *encoder)
 {
 	struct amdgpu_encoder *amdgpu_encoder = to_amdgpu_encoder(encoder);
 	struct amdgpu_encoder_atom_dig *dig;
-	int em = amdgpu_atombios_encoder_get_encoder_mode(encoder);
+	struct drm_connector *connector;
+	struct amdgpu_connector *amdgpu_connector = NULL;
 
 	amdgpu_atombios_encoder_dpms(encoder, DRM_MODE_DPMS_OFF);
+	connector = amdgpu_get_connector_for_encoder_init(encoder);
+	amdgpu_connector = to_amdgpu_connector(connector);
+	if (!amdgpu_connector) {
+		DRM_ERROR("Couldn't find encoder's connector\n");
+	}
 
 	if (amdgpu_atombios_encoder_is_digital(encoder)) {
-		if (em == ATOM_ENCODER_MODE_HDMI || ENCODER_MODE_IS_DP(em))
+		if (drm_detect_monitor_audio(amdgpu_connector_edid(connector)))
 			dce_v6_0_afmt_enable(encoder, false);
 		dig = amdgpu_encoder->enc_priv;
 		dig->dig_encoder = -1;
