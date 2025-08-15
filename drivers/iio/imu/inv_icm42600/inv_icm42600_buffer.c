@@ -9,6 +9,7 @@
 #include <linux/pm_runtime.h>
 #include <linux/regmap.h>
 #include <linux/delay.h>
+#include <linux/minmax.h>
 
 #include <linux/iio/buffer.h>
 #include <linux/iio/common/inv_sensors_timestamp.h>
@@ -112,10 +113,7 @@ void inv_icm42600_buffer_update_fifo_period(struct inv_icm42600_state *st)
 	else
 		period_accel = U32_MAX;
 
-	if (period_gyro <= period_accel)
-		period = period_gyro;
-	else
-		period = period_accel;
+	period = min(period_gyro, period_accel);
 
 	st->fifo.period = period;
 }
@@ -238,10 +236,7 @@ int inv_icm42600_buffer_update_watermark(struct inv_icm42600_state *st)
 		else
 			latency = latency_accel - (latency_gyro % latency_accel);
 		/* use the shortest period */
-		if (period_gyro <= period_accel)
-			period = period_gyro;
-		else
-			period = period_accel;
+		period = min(period_gyro, period_accel);
 		/* all this works because periods are multiple of each others */
 		watermark = latency / period;
 		if (watermark < 1)
