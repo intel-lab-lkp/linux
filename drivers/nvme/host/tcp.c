@@ -171,6 +171,7 @@ struct nvme_tcp_queue {
 	bool			tls_enabled;
 	u32			rcv_crc;
 	u32			snd_crc;
+	key_serial_t		user_key_serial;
 	__le32			exp_ddgst;
 	__le32			recv_ddgst;
 	struct completion       tls_complete;
@@ -1313,6 +1314,7 @@ static int nvme_tcp_try_send(struct nvme_tcp_queue *queue)
 	struct nvme_tcp_request *req;
 	unsigned int noreclaim_flag;
 	int ret = 1;
+	enum nvme_ctrl_state state = nvme_ctrl_state(&(queue->ctrl->ctrl));
 
 	if (!queue->request) {
 		queue->request = nvme_tcp_fetch_request(queue);
@@ -1347,6 +1349,29 @@ static int nvme_tcp_try_send(struct nvme_tcp_queue *queue)
 done:
 	if (ret == -EAGAIN) {
 		ret = 0;
+	} else if (ret == -EKEYEXPIRED &&
+		state != NVME_CTRL_CONNECTING &&
+		state != NVME_CTRL_RESETTING) {
+		int qid = nvme_tcp_queue_id(queue);
+
+		dev_dbg(queue->ctrl->ctrl.device,
+			"updating key for queue %d\n", qid);
+
+		nvme_change_ctrl_state(&(queue->ctrl->ctrl), NVME_CTRL_RESETTING);
+		tls_clear_err(queue->sock->sk);
+		handshake_req_cancel(queue->sock->sk);
+		handshake_sk_destruct_req(queue->sock->sk);
+
+		ret = nvme_tcp_start_tls(&(queue->ctrl->ctrl),
+					 queue, queue->ctrl->ctrl.tls_pskid,
+					 HANDSHAKE_KEY_UPDATE_TYPE_RECEIVED);
+
+		if (ret < 0) {
+			dev_err(queue->ctrl->ctrl.device,
+				"failed to update the keys %d\n", ret);
+			nvme_tcp_fail_request(queue->request);
+			nvme_tcp_done_send_req(queue);
+		}
 	} else if (ret < 0) {
 		dev_err(queue->ctrl->ctrl.device,
 			"failed to send request %d\n", ret);
@@ -1383,6 +1408,7 @@ static void nvme_tcp_io_work(struct work_struct *w)
 	do {
 		bool pending = false;
 		int result;
+		enum nvme_ctrl_state state = nvme_ctrl_state(&(queue->ctrl->ctrl));
 
 		if (mutex_trylock(&queue->send_mutex)) {
 			result = nvme_tcp_try_send(queue);
@@ -1396,8 +1422,34 @@ static void nvme_tcp_io_work(struct work_struct *w)
 		result = nvme_tcp_try_recv(queue);
 		if (result > 0)
 			pending = true;
-		else if (unlikely(result < 0))
+		else if (unlikely(result < 0)) {
+			if (result == -EKEYEXPIRED &&
+				state != NVME_CTRL_CONNECTING &&
+				state != NVME_CTRL_RESETTING) {
+				int qid = nvme_tcp_queue_id(queue);
+
+				dev_dbg(queue->ctrl->ctrl.device,
+					"updating key for queue %d\n", qid);
+
+				nvme_change_ctrl_state(&(queue->ctrl->ctrl), NVME_CTRL_RESETTING);
+				tls_clear_err(queue->sock->sk);
+				handshake_req_cancel(queue->sock->sk);
+				handshake_sk_destruct_req(queue->sock->sk);
+
+				result = nvme_tcp_start_tls(&(queue->ctrl->ctrl),
+							queue, queue->ctrl->ctrl.tls_pskid,
+							HANDSHAKE_KEY_UPDATE_TYPE_RECEIVED);
+
+				if (result < 0) {
+					dev_err(queue->ctrl->ctrl.device,
+						"failed to update the keys %d\n", result);
+					nvme_tcp_fail_request(queue->request);
+					nvme_tcp_done_send_req(queue);
+				}
+			}
+
 			return;
+		}
 
 		/* did we get some space after spending time in recv? */
 		if (nvme_tcp_queue_has_pending(queue) &&
@@ -1705,6 +1757,7 @@ static void nvme_tcp_tls_done(void *data, int status, key_serial_t pskid,
 			ctrl->ctrl.tls_pskid = key_serial(tls_key);
 		key_put(tls_key);
 		queue->tls_err = 0;
+		queue->user_key_serial = user_key_serial;
 	}
 
 out_complete:
@@ -1734,6 +1787,7 @@ static int nvme_tcp_start_tls(struct nvme_ctrl *nctrl,
 		keyring = key_serial(nctrl->opts->keyring);
 	args.ta_keyring = keyring;
 	args.ta_timeout_ms = tls_handshake_timeout * 1000;
+	args.user_key_serial = queue->user_key_serial;
 	queue->tls_err = -EOPNOTSUPP;
 	init_completion(&queue->tls_complete);
 	ret = tls_client_hello_psk(&args, GFP_KERNEL, keyupdate);
@@ -1742,7 +1796,14 @@ static int nvme_tcp_start_tls(struct nvme_ctrl *nctrl,
 			qid, ret);
 		return ret;
 	}
+	if (keyupdate) {
+		dev_dbg(nctrl->device,
+			"queue %d: TLS keyupdate complete\n", qid);
+		return 0;
+	}
+
 	ret = wait_for_completion_interruptible_timeout(&queue->tls_complete, tmo);
+
 	if (ret <= 0) {
 		if (ret == 0)
 			ret = -ETIMEDOUT;
