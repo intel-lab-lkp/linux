@@ -37,8 +37,8 @@ static void raid6_lsx_gen_syndrome(int disks, size_t bytes, void **ptrs)
 	int d, z, z0;
 
 	z0 = disks - 3;		/* Highest data disk */
-	p = dptr[z0+1];		/* XOR parity */
-	q = dptr[z0+2];		/* RS syndrome */
+	p = dptr[z0 + 1];	/* XOR parity */
+	q = dptr[z0 + 2];	/* RS syndrome */
 
 	kernel_fpu_begin();
 
@@ -49,22 +49,22 @@ static void raid6_lsx_gen_syndrome(int disks, size_t bytes, void **ptrs)
 	 * $vr12, $vr13, $vr14, $vr15: w2
 	 * $vr16, $vr17, $vr18, $vr19: w1
 	 */
-	for (d = 0; d < bytes; d += NSIZE*4) {
+	for (d = 0; d < bytes; d += NSIZE * 4) {
 		/* wq$$ = wp$$ = *(unative_t *)&dptr[z0][d+$$*NSIZE]; */
-		asm volatile("vld $vr0, %0" : : "m"(dptr[z0][d+0*NSIZE]));
-		asm volatile("vld $vr1, %0" : : "m"(dptr[z0][d+1*NSIZE]));
-		asm volatile("vld $vr2, %0" : : "m"(dptr[z0][d+2*NSIZE]));
-		asm volatile("vld $vr3, %0" : : "m"(dptr[z0][d+3*NSIZE]));
+		asm volatile("vld $vr0, %0" : : "m"(dptr[z0][d + 0 * NSIZE]));
+		asm volatile("vld $vr1, %0" : : "m"(dptr[z0][d + 1 * NSIZE]));
+		asm volatile("vld $vr2, %0" : : "m"(dptr[z0][d + 2 * NSIZE]));
+		asm volatile("vld $vr3, %0" : : "m"(dptr[z0][d + 3 * NSIZE]));
 		asm volatile("vori.b $vr4, $vr0, 0");
 		asm volatile("vori.b $vr5, $vr1, 0");
 		asm volatile("vori.b $vr6, $vr2, 0");
 		asm volatile("vori.b $vr7, $vr3, 0");
-		for (z = z0-1; z >= 0; z--) {
+		for (z = z0 - 1; z >= 0; z--) {
 			/* wd$$ = *(unative_t *)&dptr[z][d+$$*NSIZE]; */
-			asm volatile("vld $vr8, %0" : : "m"(dptr[z][d+0*NSIZE]));
-			asm volatile("vld $vr9, %0" : : "m"(dptr[z][d+1*NSIZE]));
-			asm volatile("vld $vr10, %0" : : "m"(dptr[z][d+2*NSIZE]));
-			asm volatile("vld $vr11, %0" : : "m"(dptr[z][d+3*NSIZE]));
+			asm volatile("vld $vr8, %0" : : "m"(dptr[z][d + 0 * NSIZE]));
+			asm volatile("vld $vr9, %0" : : "m"(dptr[z][d + 1 * NSIZE]));
+			asm volatile("vld $vr10, %0" : : "m"(dptr[z][d + 2 * NSIZE]));
+			asm volatile("vld $vr11, %0" : : "m"(dptr[z][d + 3 * NSIZE]));
 			/* wp$$ ^= wd$$; */
 			asm volatile("vxor.v $vr0, $vr0, $vr8");
 			asm volatile("vxor.v $vr1, $vr1, $vr9");
@@ -97,15 +97,15 @@ static void raid6_lsx_gen_syndrome(int disks, size_t bytes, void **ptrs)
 			asm volatile("vxor.v $vr7, $vr19, $vr11");
 		}
 		/* *(unative_t *)&p[d+NSIZE*$$] = wp$$; */
-		asm volatile("vst $vr0, %0" : "=m"(p[d+NSIZE*0]));
-		asm volatile("vst $vr1, %0" : "=m"(p[d+NSIZE*1]));
-		asm volatile("vst $vr2, %0" : "=m"(p[d+NSIZE*2]));
-		asm volatile("vst $vr3, %0" : "=m"(p[d+NSIZE*3]));
+		asm volatile("vst $vr0, %0" : "=m"(p[d + NSIZE * 0]));
+		asm volatile("vst $vr1, %0" : "=m"(p[d + NSIZE * 1]));
+		asm volatile("vst $vr2, %0" : "=m"(p[d + NSIZE * 2]));
+		asm volatile("vst $vr3, %0" : "=m"(p[d + NSIZE * 3]));
 		/* *(unative_t *)&q[d+NSIZE*$$] = wq$$; */
-		asm volatile("vst $vr4, %0" : "=m"(q[d+NSIZE*0]));
-		asm volatile("vst $vr5, %0" : "=m"(q[d+NSIZE*1]));
-		asm volatile("vst $vr6, %0" : "=m"(q[d+NSIZE*2]));
-		asm volatile("vst $vr7, %0" : "=m"(q[d+NSIZE*3]));
+		asm volatile("vst $vr4, %0" : "=m"(q[d + NSIZE * 0]));
+		asm volatile("vst $vr5, %0" : "=m"(q[d + NSIZE * 1]));
+		asm volatile("vst $vr6, %0" : "=m"(q[d + NSIZE * 2]));
+		asm volatile("vst $vr7, %0" : "=m"(q[d + NSIZE * 3]));
 	}
 
 	kernel_fpu_end();
@@ -119,8 +119,8 @@ static void raid6_lsx_xor_syndrome(int disks, int start, int stop,
 	int d, z, z0;
 
 	z0 = stop;		/* P/Q right side optimization */
-	p = dptr[disks-2];	/* XOR parity */
-	q = dptr[disks-1];	/* RS syndrome */
+	p = dptr[disks - 2];	/* XOR parity */
+	q = dptr[disks - 1];	/* RS syndrome */
 
 	kernel_fpu_begin();
 
@@ -131,23 +131,23 @@ static void raid6_lsx_xor_syndrome(int disks, int start, int stop,
 	 * $vr12, $vr13, $vr14, $vr15: w2
 	 * $vr16, $vr17, $vr18, $vr19: w1
 	 */
-	for (d = 0; d < bytes; d += NSIZE*4) {
+	for (d = 0; d < bytes; d += NSIZE * 4) {
 		/* P/Q data pages */
 		/* wq$$ = wp$$ = *(unative_t *)&dptr[z0][d+$$*NSIZE]; */
-		asm volatile("vld $vr0, %0" : : "m"(dptr[z0][d+0*NSIZE]));
-		asm volatile("vld $vr1, %0" : : "m"(dptr[z0][d+1*NSIZE]));
-		asm volatile("vld $vr2, %0" : : "m"(dptr[z0][d+2*NSIZE]));
-		asm volatile("vld $vr3, %0" : : "m"(dptr[z0][d+3*NSIZE]));
+		asm volatile("vld $vr0, %0" : : "m"(dptr[z0][d + 0 * NSIZE]));
+		asm volatile("vld $vr1, %0" : : "m"(dptr[z0][d + 1 * NSIZE]));
+		asm volatile("vld $vr2, %0" : : "m"(dptr[z0][d + 2 * NSIZE]));
+		asm volatile("vld $vr3, %0" : : "m"(dptr[z0][d + 3 * NSIZE]));
 		asm volatile("vori.b $vr4, $vr0, 0");
 		asm volatile("vori.b $vr5, $vr1, 0");
 		asm volatile("vori.b $vr6, $vr2, 0");
 		asm volatile("vori.b $vr7, $vr3, 0");
-		for (z = z0-1; z >= start; z--) {
+		for (z = z0 - 1; z >= start; z--) {
 			/* wd$$ = *(unative_t *)&dptr[z][d+$$*NSIZE]; */
-			asm volatile("vld $vr8, %0" : : "m"(dptr[z][d+0*NSIZE]));
-			asm volatile("vld $vr9, %0" : : "m"(dptr[z][d+1*NSIZE]));
-			asm volatile("vld $vr10, %0" : : "m"(dptr[z][d+2*NSIZE]));
-			asm volatile("vld $vr11, %0" : : "m"(dptr[z][d+3*NSIZE]));
+			asm volatile("vld $vr8, %0" : : "m"(dptr[z][d + 0 * NSIZE]));
+			asm volatile("vld $vr9, %0" : : "m"(dptr[z][d + 1 * NSIZE]));
+			asm volatile("vld $vr10, %0" : : "m"(dptr[z][d + 2 * NSIZE]));
+			asm volatile("vld $vr11, %0" : : "m"(dptr[z][d + 3 * NSIZE]));
 			/* wp$$ ^= wd$$; */
 			asm volatile("vxor.v $vr0, $vr0, $vr8");
 			asm volatile("vxor.v $vr1, $vr1, $vr9");
@@ -181,7 +181,7 @@ static void raid6_lsx_xor_syndrome(int disks, int start, int stop,
 		}
 
 		/* P/Q left side optimization */
-		for (z = start-1; z >= 0; z--) {
+		for (z = start - 1; z >= 0; z--) {
 			/* w2$$ = MASK(wq$$); */
 			asm volatile("vslti.b $vr12, $vr4, 0");
 			asm volatile("vslti.b $vr13, $vr5, 0");
@@ -232,10 +232,10 @@ static void raid6_lsx_xor_syndrome(int disks, int start, int stop,
 			"vst $vr25, %5\n\t"
 			"vst $vr26, %6\n\t"
 			"vst $vr27, %7\n\t"
-			: "+m"(p[d+NSIZE*0]), "+m"(p[d+NSIZE*1]),
-			  "+m"(p[d+NSIZE*2]), "+m"(p[d+NSIZE*3]),
-			  "+m"(q[d+NSIZE*0]), "+m"(q[d+NSIZE*1]),
-			  "+m"(q[d+NSIZE*2]), "+m"(q[d+NSIZE*3])
+			: "+m"(p[d + NSIZE * 0]), "+m"(p[d + NSIZE * 1]),
+			  "+m"(p[d + NSIZE * 2]), "+m"(p[d + NSIZE * 3]),
+			  "+m"(q[d + NSIZE * 0]), "+m"(q[d + NSIZE * 1]),
+			  "+m"(q[d + NSIZE * 2]), "+m"(q[d + NSIZE * 3])
 		);
 	}
 
@@ -268,8 +268,8 @@ static void raid6_lasx_gen_syndrome(int disks, size_t bytes, void **ptrs)
 	int d, z, z0;
 
 	z0 = disks - 3;		/* Highest data disk */
-	p = dptr[z0+1];		/* XOR parity */
-	q = dptr[z0+2];		/* RS syndrome */
+	p = dptr[z0 + 1];	/* XOR parity */
+	q = dptr[z0 + 2];	/* RS syndrome */
 
 	kernel_fpu_begin();
 
@@ -282,14 +282,14 @@ static void raid6_lasx_gen_syndrome(int disks, size_t bytes, void **ptrs)
 	 */
 	for (d = 0; d < bytes; d += NSIZE*2) {
 		/* wq$$ = wp$$ = *(unative_t *)&dptr[z0][d+$$*NSIZE]; */
-		asm volatile("xvld $xr0, %0" : : "m"(dptr[z0][d+0*NSIZE]));
-		asm volatile("xvld $xr1, %0" : : "m"(dptr[z0][d+1*NSIZE]));
+		asm volatile("xvld $xr0, %0" : : "m"(dptr[z0][d + 0 * NSIZE]));
+		asm volatile("xvld $xr1, %0" : : "m"(dptr[z0][d + 1 * NSIZE]));
 		asm volatile("xvori.b $xr2, $xr0, 0");
 		asm volatile("xvori.b $xr3, $xr1, 0");
-		for (z = z0-1; z >= 0; z--) {
+		for (z = z0 - 1; z >= 0; z--) {
 			/* wd$$ = *(unative_t *)&dptr[z][d+$$*NSIZE]; */
-			asm volatile("xvld $xr4, %0" : : "m"(dptr[z][d+0*NSIZE]));
-			asm volatile("xvld $xr5, %0" : : "m"(dptr[z][d+1*NSIZE]));
+			asm volatile("xvld $xr4, %0" : : "m"(dptr[z][d + 0 * NSIZE]));
+			asm volatile("xvld $xr5, %0" : : "m"(dptr[z][d + 1 * NSIZE]));
 			/* wp$$ ^= wd$$; */
 			asm volatile("xvxor.v $xr0, $xr0, $xr4");
 			asm volatile("xvxor.v $xr1, $xr1, $xr5");
@@ -310,11 +310,11 @@ static void raid6_lasx_gen_syndrome(int disks, size_t bytes, void **ptrs)
 			asm volatile("xvxor.v $xr3, $xr9, $xr5");
 		}
 		/* *(unative_t *)&p[d+NSIZE*$$] = wp$$; */
-		asm volatile("xvst $xr0, %0" : "=m"(p[d+NSIZE*0]));
-		asm volatile("xvst $xr1, %0" : "=m"(p[d+NSIZE*1]));
+		asm volatile("xvst $xr0, %0" : "=m"(p[d + NSIZE * 0]));
+		asm volatile("xvst $xr1, %0" : "=m"(p[d + NSIZE * 1]));
 		/* *(unative_t *)&q[d+NSIZE*$$] = wq$$; */
-		asm volatile("xvst $xr2, %0" : "=m"(q[d+NSIZE*0]));
-		asm volatile("xvst $xr3, %0" : "=m"(q[d+NSIZE*1]));
+		asm volatile("xvst $xr2, %0" : "=m"(q[d + NSIZE * 0]));
+		asm volatile("xvst $xr3, %0" : "=m"(q[d + NSIZE * 1]));
 	}
 
 	kernel_fpu_end();
@@ -328,8 +328,8 @@ static void raid6_lasx_xor_syndrome(int disks, int start, int stop,
 	int d, z, z0;
 
 	z0 = stop;		/* P/Q right side optimization */
-	p = dptr[disks-2];	/* XOR parity */
-	q = dptr[disks-1];	/* RS syndrome */
+	p = dptr[disks - 2];	/* XOR parity */
+	q = dptr[disks - 1];	/* RS syndrome */
 
 	kernel_fpu_begin();
 
@@ -340,17 +340,17 @@ static void raid6_lasx_xor_syndrome(int disks, int start, int stop,
 	 * $xr6, $xr7: w2
 	 * $xr8, $xr9: w1
 	 */
-	for (d = 0; d < bytes; d += NSIZE*2) {
+	for (d = 0; d < bytes; d += NSIZE * 2) {
 		/* P/Q data pages */
 		/* wq$$ = wp$$ = *(unative_t *)&dptr[z0][d+$$*NSIZE]; */
-		asm volatile("xvld $xr0, %0" : : "m"(dptr[z0][d+0*NSIZE]));
-		asm volatile("xvld $xr1, %0" : : "m"(dptr[z0][d+1*NSIZE]));
+		asm volatile("xvld $xr0, %0" : : "m"(dptr[z0][d + 0 * NSIZE]));
+		asm volatile("xvld $xr1, %0" : : "m"(dptr[z0][d + 1 * NSIZE]));
 		asm volatile("xvori.b $xr2, $xr0, 0");
 		asm volatile("xvori.b $xr3, $xr1, 0");
 		for (z = z0-1; z >= start; z--) {
 			/* wd$$ = *(unative_t *)&dptr[z][d+$$*NSIZE]; */
-			asm volatile("xvld $xr4, %0" : : "m"(dptr[z][d+0*NSIZE]));
-			asm volatile("xvld $xr5, %0" : : "m"(dptr[z][d+1*NSIZE]));
+			asm volatile("xvld $xr4, %0" : : "m"(dptr[z][d + 0 * NSIZE]));
+			asm volatile("xvld $xr5, %0" : : "m"(dptr[z][d + 1 * NSIZE]));
 			/* wp$$ ^= wd$$; */
 			asm volatile("xvxor.v $xr0, $xr0, $xr4");
 			asm volatile("xvxor.v $xr1, $xr1, $xr5");
@@ -372,7 +372,7 @@ static void raid6_lasx_xor_syndrome(int disks, int start, int stop,
 		}
 
 		/* P/Q left side optimization */
-		for (z = start-1; z >= 0; z--) {
+		for (z = start - 1; z >= 0; z--) {
 			/* w2$$ = MASK(wq$$); */
 			asm volatile("xvslti.b $xr6, $xr2, 0");
 			asm volatile("xvslti.b $xr7, $xr3, 0");
@@ -403,8 +403,8 @@ static void raid6_lasx_xor_syndrome(int disks, int start, int stop,
 			"xvst $xr11, %1\n\t"
 			"xvst $xr12, %2\n\t"
 			"xvst $xr13, %3\n\t"
-			: "+m"(p[d+NSIZE*0]), "+m"(p[d+NSIZE*1]),
-			  "+m"(q[d+NSIZE*0]), "+m"(q[d+NSIZE*1])
+			: "+m"(p[d + NSIZE * 0]), "+m"(p[d + NSIZE * 1]),
+			  "+m"(q[d + NSIZE * 0]), "+m"(q[d + NSIZE * 1])
 		);
 	}
 
