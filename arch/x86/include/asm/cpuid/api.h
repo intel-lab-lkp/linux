@@ -289,4 +289,258 @@ static inline bool cpuid_amd_hygon_has_l3_cache(void)
 	return cpuid_edx(0x80000006);
 }
 
+/*
+ * 'struct cpuid_leaves' accessors:
+ *
+ * For internal-use by the CPUID parser.  These macros do not perform any
+ * sanity checks.
+ */
+
+/**
+ * __cpuid_leaves_subleaf_idx() - Get parsed CPUID output (without sanity checks)
+ * @_leaves:	&struct cpuid_leaves instance
+ * @_leaf:	CPUID leaf, in compile-time 0xN format
+ * @_subleaf:	CPUID subleaf, in compile-time decimal format
+ * @_idx:	@_leaf/@_subleaf CPUID output's storage array index.  Check
+ *		__CPUID_LEAF() for info on CPUID output storage arrays indexing.
+ *
+ * Returns the parsed CPUID output at @_leaves as a <cpuid/leaf_types.h> data
+ * type: 'struct leaf_0xN_M', where 0xN is the token provided at @_leaf, and M
+ * is token provided at @_subleaf.
+ */
+#define __cpuid_leaves_subleaf_idx(_leaves, _leaf, _subleaf, _idx)	\
+	((_leaves)->leaf_ ## _leaf ## _ ## _subleaf)[_idx]
+
+/**
+ * __cpuid_leaves_subleaf_0() - Get parsed CPUID output (without sanity checks)
+ * @_leaves:	&struct cpuid_leaves instance
+ * @_leaf:	CPUID leaf, in compile-time 0xN format
+ *
+ * Like __cpuid_leaves_subleaf_idx(), but with subleaf = 0 and index = 0.
+ */
+#define __cpuid_leaves_subleaf_0(_leaves, _leaf)			\
+	__cpuid_leaves_subleaf_idx(_leaves, _leaf, 0, 0)
+
+/**
+ * __cpuid_leaves_subleaf_info() - Get CPUID query info for @_leaf/@_subleaf
+ * @_leaves:	&struct cpuid_leaves instance
+ * @_leaf:	CPUID leaf, in compile-time 0xN format
+ * @_subleaf:	CPUID subleaf, in compile-time decimal format
+ *
+ * Returns a pointer to the &struct leaf_query_info instance associated with
+ * the given @_leaf/@_subleaf pair at the CPUID @_leaves data repository. See
+ * __CPUID_LEAF().
+ */
+#define __cpuid_leaves_subleaf_info(_leaves, _leaf, _subleaf)		\
+	((_leaves)->leaf_ ## _leaf ## _ ## _subleaf ## _ ## info)
+
+/*
+ * 'struct cpuid_table' accessors:
+ *
+ * For internal-use by the CPUID parser.  These macros perform the necessary
+ * sanity checks by default.
+ */
+
+/**
+ * __cpuid_table_subleaf_idx() - Get parsed CPUID output (with sanity checks)
+ * @_table:	&struct cpuid_table instance
+ * @_leaf:	CPUID leaf, in compile-time 0xN format
+ * @_subleaf:	CPUID subleaf, in compile-time decimal format
+ * @_idx:	@_leaf/@_subleaf CPUID query output's storage array index.
+ *		See __CPUID_LEAF().
+ *
+ * Return a pointer to the requested parsed CPUID output at @_table, as a
+ * <cpuid/leaf_types.h> data type: 'struct leaf_0xN_M', where 0xN is the token
+ * provided at @_leaf, and M is the token provided at @_subleaf; e.g. 'struct
+ * leaf_0x7_0'.
+ *
+ * Returns NULL if the requested CPUID @_leaf/@_subleaf/@_idx query output is
+ * not present at @_table.
+ */
+#define __cpuid_table_subleaf_idx(_table, _leaf, _subleaf, _idx)	\
+	(((_idx) >= __cpuid_leaves_subleaf_info(&((_table)->leaves), _leaf, _subleaf).nr_entries) ? \
+	 NULL : &__cpuid_leaves_subleaf_idx(&((_table)->leaves), _leaf, _subleaf, _idx))
+
+/**
+ * __cpuid_table_subleaf() - Get parsed CPUID output (with sanity checks)
+ * @_table:	&struct cpuid_table instance
+ * @_leaf:	CPUID leaf, in compile-time 0xN format
+ * @_subleaf:	CPUID subleaf, in compile-time decimal format
+ *
+ * Like __cpuid_table_subleaf_idx(), but with CPUID output storage index = 0.
+ */
+#define __cpuid_table_subleaf(_table, _leaf, _subleaf)			\
+	__cpuid_table_subleaf_idx(_table, _leaf, _subleaf, 0)
+
+/*
+ * External APIs for accessing parsed CPUID data:
+ *
+ * Call sites should use below APIs instead of invoking direct CPUID queries.
+ *
+ * Benefits include:
+ *
+ * - Return CPUID output as typed C structures that are auto-generated from a
+ *   centralized database (see <cpuid/leaf_types.h).  Such data types have a
+ *   full C99 bitfield layout per CPUID leaf/subleaf combination.  Call sites
+ *   can thus avoid doing ugly and cryptic bitwise operations on raw CPUID data.
+ *
+ * - Return cached, per-CPU, CPUID output.  Below APIs do not invoke any CPUID
+ *   queries, thus avoiding their side effects like serialization and VM exits.
+ *   Call-site-specific hard coded constants and macros for caching CPUID query
+ *   outputs can also be avoided.
+ *
+ * - Return sanitized CPUID data.  Below APIs return NULL if the given CPUID
+ *   leaf/subleaf input is not supported by hardware, or if the hardware CPUID
+ *   output was deemed invalid by the CPUID parser.  This centralizes all CPUID
+ *   data sanitization in one place (the kernel's CPUID parser.)
+ *
+ * - A centralized global view of system CPUID data.  Below APIs will reflect
+ *   any kernel-enforced feature masking or overrides, unlike ad hoc parsing of
+ *   raw CPUID output by drivers and individual call sites.
+ */
+
+/**
+ * cpuid_subleaf() - Access parsed CPUID data
+ * @_cpuinfo:	CPU capability structure reference ('struct cpuinfo_x86')
+ * @_leaf:	CPUID leaf, in compile-time 0xN format; e.g. 0x7, 0xf
+ * @_subleaf:	CPUID subleaf, in compile-time decimal format; e.g. 0, 1, 3
+ *
+ * Returns a pointer to parsed CPUID output, from the CPUID table inside
+ * @_cpuinfo, as a <cpuid/leaf_types.h> data type: 'struct leaf_0xN_M', where
+ * 0xN is the token provided at @_leaf, and M is the token provided at
+ * @_subleaf; e.g. struct leaf_0x7_0.
+ *
+ * Returns NULL if the requested CPUID @_leaf/@_subleaf query output is not
+ * present at the parsed CPUID table inside @_cpuinfo.  This can happen if:
+ *
+ * - The CPUID table inside @_cpuinfo has not yet been populated.
+ * - The CPUID table inside @_cpuinfo was populated, but the CPU does not
+ *   implement the requested CPUID @_leaf/@_subleaf combination.
+ * - The CPUID table inside @_cpuinfo was populated, but the kernel's CPUID
+ *   parser has predetermined that the requested CPUID @_leaf/@_subleaf
+ *   hardware output is invalid or unsupported.
+ *
+ * Example usage::
+ *
+ *	const struct leaf_0x7_0 *l7_0 = cpuid_subleaf(c, 0x7, 0);
+ *	if (!l7_0) {
+ *		// Handle error
+ *	}
+ *
+ *	const struct leaf_0x7_1 *l7_1 = cpuid_subleaf(c, 0x7, 1);
+ *	if (!l7_1) {
+ *		// Handle error
+ *	}
+ */
+#define cpuid_subleaf(_cpuinfo, _leaf, _subleaf)			\
+	__cpuid_table_subleaf(&(_cpuinfo)->cpuid, _leaf, _subleaf)
+
+/**
+ * cpuid_leaf() - Access parsed CPUID data
+ * @_cpuinfo:	CPU capability structure reference ('struct cpuinfo_x86')
+ * @_leaf:	CPUID leaf, in compile-time 0xN format; e.g. 0x0, 0x2, 0x80000000
+ *
+ * Similar to cpuid_subleaf(), but with a CPUID subleaf = 0.
+ *
+ * Example usage::
+ *
+ *	const struct leaf_0x0_0 *l0 = cpuid_leaf(c, 0x0);
+ *	if (!l0) {
+ *		// Handle error
+ *	}
+ *
+ *	const struct leaf_0x80000000_0 *el0 = cpuid_leaf(c, 0x80000000);
+ *	if (!el0) {
+ *		// Handle error
+ *	}
+ */
+#define cpuid_leaf(_cpuinfo, _leaf)					\
+	cpuid_subleaf(_cpuinfo, _leaf, 0)
+
+/**
+ * cpuid_leaf_regs() - Access parsed CPUID data in raw format
+ * @_cpuinfo:	CPU capability structure reference ('struct cpuinfo_x86')
+ * @_leaf:	CPUID leaf, in compile-time 0xN format
+ *
+ * Similar to cpuid_leaf(), but returns a raw 'struct cpuid_regs' pointer to
+ * the parsed CPUID data instead of a "typed" <cpuid/leaf_types.h> pointer.
+ */
+#define cpuid_leaf_regs(_cpuinfo, _leaf)				\
+	((struct cpuid_regs *)(cpuid_leaf(_cpuinfo, _leaf)))
+
+#define __cpuid_assert_leaf_has_dynamic_subleaves(_cpuinfo, _leaf)	\
+	static_assert(ARRAY_SIZE((_cpuinfo)->cpuid.leaves.leaf_ ## _leaf ## _0) > 1);
+
+/**
+ * cpuid_subleaf_index() - Access parsed CPUID data at runtime subleaf index
+ * @_cpuinfo:	CPU capability structure reference ('struct cpuinfo_x86')
+ * @_leaf:	CPUID leaf, in compile-time 0xN format; e.g. 0x4, 0x8000001d
+ * @_idx:	Index within CPUID(@_leaf) output storage array.  It must be
+ *		smaller than "cpuid_subleaf_count(@_cpuinfo, @_leaf)".  Unlike
+ *		@_leaf, this value can be provided dynamically.
+ *
+ * For a given leaf/subleaf combination, the CPUID table inside @_cpuinfo
+ * contains an array of CPUID output storage entries.  An array of storage
+ * entries is used to accommodate CPUID leaves which produce the same output
+ * format for a large subleaf range.  This is common for CPUID hierarchical
+ * objects enumeration; e.g., CPUID(0x4) and CPUID(0xd).  Check CPUID_LEAF().
+ *
+ * CPUID leaves that are to be accessed using this macro are specified at
+ * <cpuid/types.h>, 'struct cpuid_leaves', with a CPUID_LEAF() count field
+ * bigger than 1.  A build-time error will be generated otherwise.
+ *
+ * Example usage::
+ *
+ *	const struct leaf_0x4_0 *l4;
+ *
+ *	for (int i = 0; i < cpuid_subleaf_count(c, 0x4); i++) {
+ *		l4 = cpuid_subleaf_index(c, 0x4, i);
+ *		if (!l4) {
+ *			// Handle error
+ *		}
+ *
+ *		// Access CPUID(0x4, i) data; e.g. l4->cache_type
+ *	}
+ *
+ * Beside the standard error situations detailed at cpuid_subleaf(), this
+ * macro will return NULL if @_idx is out of range.
+ */
+#define cpuid_subleaf_index(_cpuinfo, _leaf, _idx)			\
+({									\
+	__cpuid_assert_leaf_has_dynamic_subleaves(_cpuinfo, _leaf);	\
+	__cpuid_table_subleaf_idx(&(_cpuinfo)->cpuid, _leaf, 0, _idx);	\
+})
+
+/**
+ * cpuid_subleaf_index_regs() - Access parsed CPUID data at runtime subleaf index
+ * @_cpuinfo:	CPU capability structure reference ('struct cpuinfo_x86')
+ * @_leaf:	CPUID leaf, in compile-time 0xN format; e.g. 0x4, 0x8000001d
+ * @_idx:	Index within CPUID(@_leaf) output storage array.  It must be
+ *		smaller than "cpuid_subleaf_count(@_cpuinfo, @_leaf)".
+ *
+ * Similar to cpuid_subleaf_index(), but returns a raw 'struct cpuid_regs'
+ * pointer to the parsed CPUID data, instead of a "typed" <cpuid/leaf_types.h>
+ * pointer.
+ */
+#define cpuid_subleaf_index_regs(_cpuinfo, _leaf, _idx)			\
+	((struct cpuid_regs *)cpuid_subleaf_index(_cpuinfo, _leaf, _idx))
+
+/**
+ * cpuid_subleaf_count() - Number of valid (filled) subleaves for @_leaf
+ * @_cpuinfo:	CPU capability structure reference ('struct cpuinfo_x86')
+ * @_leaf:	CPUID leaf, in compile-time 0xN format; e.g. 0x4, 0x8000001d
+ *
+ * Return the number of subleaves filled by the CPUID parser for @_leaf. Check
+ * cpuid_subleaf_index().
+ *
+ * CPUID leaves that are to be accessed using this macro are specified at
+ * <cpuid/types.h>, 'struct cpuid_leaves', with a CPUID_LEAF() count field
+ * bigger than 1.  A build-time error will be generated otherwise.
+ */
+#define cpuid_subleaf_count(_cpuinfo, _leaf)				\
+({									\
+	__cpuid_assert_leaf_has_dynamic_subleaves(_cpuinfo, _leaf);	\
+	__cpuid_leaves_subleaf_info(&(_cpuinfo)->cpuid.leaves, _leaf, 0).nr_entries; \
+})
+
 #endif /* _ASM_X86_CPUID_API_H */

@@ -5,6 +5,8 @@
 #include <linux/build_bug.h>
 #include <linux/types.h>
 
+#include <asm/cpuid/leaf_types.h>
+
 /*
  * Types for raw CPUID access:
  */
@@ -123,5 +125,107 @@ extern const struct leaf_0x2_table cpuid_0x2_table[256];
  * count for dTLB 1GB pages is already encoded at the cpuid_0x2_table[]'s mapping.
  */
 #define TLB_0x63_2M_4M_ENTRIES		32
+
+/*
+ * Types for centralized CPUID tables:
+ *
+ * For internal use by the CPUID parser.
+ */
+
+/**
+ * struct leaf_query_info - Parse info for a CPUID leaf/subleaf query
+ * @nr_entries:	Number of valid output storage entries filled by the CPUID parser
+ *
+ * In a CPUID table (struct cpuid_leaves), each CPUID leaf/subleaf query output
+ * storage entry from <cpuid/leaf_types.h> is paired with a unique instance of
+ * this type.
+ */
+struct leaf_query_info {
+	unsigned int		nr_entries;
+};
+
+/**
+ * __CPUID_LEAF() - Define CPUID output storage and query info entry
+ * @_name:	Struct type name of the CPUID leaf/subleaf (e.g. 'leaf_0x4_0').
+ *		Such types are defined at <cpuid/leaf_types.h>, and follow the
+ *		format 'struct leaf_0xN_M', where 0xN is the leaf and M is the
+ *		subleaf.
+ * @_count:	Number of storage entries to allocate for this leaf/subleaf
+ *
+ * For the given leaf/subleaf combination, define an array of CPUID output
+ * storage entries and an associated query info structure — both residing in a
+ * 'struct cpuid_leaves' instance.
+ *
+ * Use an array of storage entries to accommodate CPUID leaves which produce
+ * the same output format for a large subleaf range.  This is common for
+ * hierarchical objects enumeration; e.g., CPUID(0x4), CPUID(0xd), and
+ * CPUID(0x12).
+ *
+ * The example invocation for CPUID(0x7) storage, subleaves 0->1:
+ *
+ *	__CPUID_LEAF(leaf_0x7_0, 1);
+ *	__CPUID_LEAF(leaf_0x7_1, 1);
+ *
+ * generates 'struct cpuid_leaves' storage entries in the form::
+ *
+ *	struct leaf_0x7_0		leaf_0x7_0[1];
+ *	struct leaf_query_info		leaf_0x7_0_info;
+ *
+ *	struct leaf_0x7_1		leaf_0x7_1[1];
+ *	struct leaf_query_info		leaf_0x7_1_info;
+ *
+ * The example invocation for CPUID(0x4) storage::
+ *
+ *	__CPUID_LEAF(leaf_0x4_0, 8);
+ *
+ * generates storage entries in the form:
+ *
+ *	struct leaf_0x4_0		leaf_0x4_0[8];
+ *	struct leaf_query_info		leaf_0x4_0_info;
+ *
+ * where the 'leaf_0x4_0[8]' storage array can accommodate the output of
+ * CPUID(0x4) subleaves 0->7, since they all have the same output format.
+ */
+#define __CPUID_LEAF(_name, _count)				\
+	struct _name		_name[_count];			\
+	struct leaf_query_info	_name##_info
+
+/**
+ * CPUID_LEAF() - Define a CPUID storage entry in 'struct cpuid_leaves'
+ * @_leaf:	CPUID Leaf number in the 0xN format; e.g., 0x4.
+ * @_subleaf:	Subleaf number in decimal
+ * @_count:	Number of repeated storage entries for this @_leaf/@_subleaf
+ *
+ * Convenience wrapper around __CPUID_LEAF().
+ */
+#define CPUID_LEAF(_leaf, _subleaf, _count)			\
+	__CPUID_LEAF(leaf_ ## _leaf ## _ ## _subleaf, _count)
+
+/*
+ * struct cpuid_leaves - Structured CPUID data repository
+ */
+struct cpuid_leaves {
+	/*         leaf		subleaf		count */
+	CPUID_LEAF(0x0,		0,		1);
+	CPUID_LEAF(0x1,		0,		1);
+};
+
+/*
+ * Types for centralized CPUID tables:
+ *
+ * For external use.
+ */
+
+/**
+ * struct cpuid_table - Per-CPU CPUID data repository
+ * @leaves:	CPUID leaf/subleaf queries' output and metadata
+ *
+ * Embedded inside 'struct cpuinfo_x86' to provide access to stored, parsed,
+ * and sanitized CPUID output per-CPU.  Thus removing the need for any direct
+ * CPUID query by call sites.
+ */
+struct cpuid_table {
+	struct cpuid_leaves	leaves;
+};
 
 #endif /* _ASM_X86_CPUID_TYPES_H */
