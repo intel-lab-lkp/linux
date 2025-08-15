@@ -24,7 +24,6 @@ Quick feature summary
 * Pure *DAX path* I/O – no extra BIO round-trips
 * *Log-structured write-back* that preserves backend crash-consistency
 
--------------------------------------------------------------------------------
 Constructor
 ===========
 
@@ -57,7 +56,6 @@ Example
 The first time a pmem device is used, dm-pcache formats it automatically
 (super-block, cache_info, etc.).
 
--------------------------------------------------------------------------------
 Status line
 ===========
 
@@ -97,7 +95,6 @@ Field meanings
 ``key_tail``                     First key-set that may be reclaimed by GC.
 ===============================  =============================================
 
--------------------------------------------------------------------------------
 Messages
 ========
 
@@ -107,7 +104,6 @@ Messages
 
    dmsetup message <dev> 0 gc_percent <0-90>
 
--------------------------------------------------------------------------------
 Theory of operation
 ===================
 
@@ -151,7 +147,6 @@ If ``data_crc is enabled`` dm-pcache computes a CRC32 over every cached data
 range when it is inserted and stores it in the on-media key.  Reads
 validate the CRC before copying to the caller.
 
--------------------------------------------------------------------------------
 Failure handling
 ================
 
@@ -163,7 +158,6 @@ Failure handling
   rebuild the in-core trees; every segment’s generation guards against
   use-after-free keys.
 
--------------------------------------------------------------------------------
 Limitations & TODO
 ==================
 
@@ -172,7 +166,6 @@ Limitations & TODO
 * Table reload is not supported currently.
 * Discard planned.
 
--------------------------------------------------------------------------------
 Example workflow
 ================
 
@@ -196,6 +189,5 @@ Example workflow
    umount /mnt
    dmsetup remove pcache_sdb
 
--------------------------------------------------------------------------------
 ``dm-pcache`` is under active development; feedback, bug reports and patches
 are very welcome!
