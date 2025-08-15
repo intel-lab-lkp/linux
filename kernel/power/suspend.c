@@ -31,6 +31,7 @@
 #include <linux/compiler.h>
 #include <linux/moduleparam.h>
 #include <linux/fs.h>
+#include <linux/workqueue.h>
 
 #include "power.h"
 
@@ -73,6 +74,21 @@ bool pm_suspend_default_s2idle(void)
 	return mem_sleep_current == PM_SUSPEND_TO_IDLE;
 }
 EXPORT_SYMBOL_GPL(pm_suspend_default_s2idle);
+
+static bool suspend_fs_sync_queued;
+static DEFINE_SPINLOCK(suspend_fs_sync_lock);
+static DECLARE_COMPLETION(suspend_fs_sync_complete);
+
+/**
+ * Triggers the completion that aborts suspend. This completion will only have
+ * an effect if called during filesystems sync step of suspend.
+ */
+void suspend_abort_fs_sync(void)
+{
+	spin_lock(&suspend_fs_sync_lock);
+	complete(&suspend_fs_sync_complete);
+	spin_unlock(&suspend_fs_sync_lock);
+}
 
 void s2idle_set_ops(const struct platform_s2idle_ops *ops)
 {
@@ -403,6 +419,71 @@ void __weak arch_suspend_enable_irqs(void)
 	local_irq_enable();
 }
 
+static void sync_filesystems_fn(struct work_struct *work)
+{
+	ksys_sync_helper();
+
+	spin_lock(&suspend_fs_sync_lock);
+	suspend_fs_sync_queued = false;
+	complete(&suspend_fs_sync_complete);
+	spin_unlock(&suspend_fs_sync_lock);
+}
+static DECLARE_WORK(sync_filesystems, sync_filesystems_fn);
+
+/**
+ * suspend_fs_sync_with_abort- Start filesystem sync and handle potential aborts
+ *
+ * Starts filesystem sync in a workqueue, while the main thread uses a
+ * completion to wait for either the filesystem sync to finish or for a wakeup
+ * event. In the case of filesystem sync finishing and triggering the
+ * completion, the suspend path continues as normal. If the complete is due to a
+ * wakeup or abort signal, the code jumps to the suspend abort path while the
+ * filesystem sync finishes in the background.
+ *
+ * An aborted suspend that is followed by another suspend is a potential
+ * scenario that complicates the sequence. This patch handles this by
+ * serializing any filesystem sync; a subsequent suspend's filesystem sync
+ * operation will only start when the previous suspend's filesystem sync has
+ * finished. Even while waiting for the previous suspend's filesystem sync to
+ * finish, the subsequent suspend will still break early if a wakeup completion
+ * is triggered, solving the original issue of filesystem sync blocking abort.
+ */
+static int suspend_fs_sync_with_abort(void)
+{
+	bool need_suspend_fs_sync_requeue;
+
+	pm_wakeup_clear(0);
+Start_fs_sync:
+	spin_lock(&suspend_fs_sync_lock);
+	reinit_completion(&suspend_fs_sync_complete);
+	/*
+	 * Handle the case where a suspend immediately follows a previous
+	 * suspend that was aborted during fs_sync. In this case, serialize
+	 * fs_sync by only starting fs_sync of the subsequent suspend when the
+	 * fs_sync of the previous suspend has finished.
+	 */
+	if (suspend_fs_sync_queued) {
+		need_suspend_fs_sync_requeue = true;
+	} else {
+		need_suspend_fs_sync_requeue = false;
+		suspend_fs_sync_queued = true;
+		schedule_work(&sync_filesystems);
+	}
+	spin_unlock(&suspend_fs_sync_lock);
+
+	/*
+	 * Completion is triggered by fs_sync finishing or a suspend abort
+	 * signal, whichever comes first
+	 */
+	wait_for_completion(&suspend_fs_sync_complete);
+	if (pm_wakeup_pending())
+		return -EBUSY;
+	if (need_suspend_fs_sync_requeue)
+		goto Start_fs_sync;
+
+	return 0;
+}
+
 /**
  * suspend_enter - Make the system enter the given sleep state.
  * @state: System sleep state to enter.
@@ -590,8 +671,10 @@ static int enter_state(suspend_state_t state)
 
 	if (sync_on_suspend_enabled) {
 		trace_suspend_resume(TPS("sync_filesystems"), 0, true);
-		ksys_sync_helper();
+		error = suspend_fs_sync_with_abort();
 		trace_suspend_resume(TPS("sync_filesystems"), 0, false);
+		if (error)
+			goto Unlock;
 	}
 
 	pm_pr_dbg("Preparing system for sleep (%s)\n", mem_sleep_labels[state]);
