@@ -706,24 +706,30 @@ static int elevator_change(struct request_queue *q, struct elv_change_ctx *ctx)
  * reattachment when nr_hw_queues changes.
  */
 void elv_update_nr_hw_queues(struct request_queue *q, struct elevator_type *e,
-		struct elevator_tags *t)
+		struct elevator_tags *t, bool frozen)
 {
 	struct blk_mq_tag_set *set = q->tag_set;
 	struct elv_change_ctx ctx = {};
 	int ret = -ENODEV;
 
-	WARN_ON_ONCE(q->mq_freeze_depth == 0);
+	WARN_ON_ONCE(frozen == (q->mq_freeze_depth == 0));
 
 	if (e && !blk_queue_dying(q) && blk_queue_registered(q)) {
 		ctx.name = e->elevator_name;
 		ctx.et = t;
 
+		/* elevator switch requires queue to be frozen */
+		if (!frozen) {
+			blk_mq_freeze_queue_nomemsave(q);
+			frozen = true;
+		}
 		mutex_lock(&q->elevator_lock);
 		/* force to reattach elevator after nr_hw_queue is updated */
 		ret = elevator_switch(q, &ctx);
 		mutex_unlock(&q->elevator_lock);
 	}
-	blk_mq_unfreeze_queue_nomemrestore(q);
+	if (frozen)
+		blk_mq_unfreeze_queue_nomemrestore(q);
 	if (!ret)
 		WARN_ON_ONCE(elevator_change_done(q, &ctx));
 	/*
