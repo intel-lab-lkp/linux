@@ -1149,9 +1149,9 @@ static inline void pipapo_resmap_init_avx2(const struct nft_pipapo_match *m, uns
  *
  * Return: pointer to &struct nft_pipapo_elem on match, NULL otherwise.
  */
-static struct nft_pipapo_elem *pipapo_get_avx2(const struct nft_pipapo_match *m,
-					       const u8 *data, u8 genmask,
-					       u64 tstamp)
+struct nft_pipapo_elem *pipapo_get_avx2(const struct nft_pipapo_match *m,
+					const u8 *data, u8 genmask,
+					u64 tstamp)
 {
 	struct nft_pipapo_scratch *scratch;
 	const struct nft_pipapo_field *f;
