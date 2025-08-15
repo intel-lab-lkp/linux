@@ -1017,6 +1017,38 @@ const struct file_operations pmc_core_substate_req_regs_fops = {
 	.release	= single_release,
 };
 
+static int pmc_core_bdf_show(struct seq_file *s, void *unused)
+{
+	struct pmc_dev *pmcdev = s->private;
+	unsigned int pmcidx;
+
+	seq_printf(s, "%36s | %15s | %15s |\n", "Element", "Device Number", "Function Number");
+	for (pmcidx = 0; pmcidx < ARRAY_SIZE(pmcdev->pmcs); pmcidx++) {
+		const char *name = NULL;
+		struct list_head *cur;
+		struct bdf_entry *bdf;
+		struct pmc *pmc;
+
+		pmc = pmcdev->pmcs[pmcidx];
+		if (!pmc)
+			continue;
+
+		list_for_each(cur, pmc->bdf_list) {
+			bdf = list_entry(cur, struct bdf_entry, node);
+			if (bdf->name != name) {
+				seq_printf(s, "pmc%d: %30s | %15x | %15x |\n", pmcidx,
+					   bdf->name, bdf->dev_num, bdf->fun_num);
+				name = bdf->name;
+			} else {
+				seq_printf(s, "%54x | %15x |\n",
+					   bdf->dev_num, bdf->fun_num);
+			}
+		}
+	}
+	return 0;
+}
+DEFINE_SHOW_ATTRIBUTE(pmc_core_bdf);
+
 static unsigned int pmc_core_get_crystal_freq(void)
 {
 	unsigned int eax_denominator, ebx_numerator, ecx_hz, edx;
@@ -1418,6 +1450,10 @@ static void pmc_core_dbgfs_register(struct pmc_dev *pmcdev, struct pmc_dev_info 
 				    pmc_dev_info->sub_req_show);
 	}
 
+	if (primary_pmc->bdf_list) {
+		debugfs_create_file("bdf", 0444, pmcdev->dbgfs_dir, pmcdev, &pmc_core_bdf_fops);
+	}
+
 	if (primary_pmc->map->pson_residency_offset && pmc_core_is_pson_residency_enabled(pmcdev)) {
 		debugfs_create_file("pson_residency_usec", 0444,
 				    pmcdev->dbgfs_dir, primary_pmc, &pmc_core_pson_residency);
@@ -1521,7 +1557,7 @@ int pmc_core_pmt_get_lpm_req(struct pmc_dev *pmcdev, struct pmc *pmc, struct tel
 	return ret;
 }
 
-int pmc_core_pmt_get_blk_sub_req(struct pmc_dev *pmcdev, struct pmc *pmc,
+static int pmc_core_pmt_get_blk_sub_req(struct pmc_dev *pmcdev, struct pmc *pmc,
 				 struct telem_endpoint *ep)
 {
 	u32 num_blocker, sample_id;
@@ -1549,6 +1585,150 @@ int pmc_core_pmt_get_blk_sub_req(struct pmc_dev *pmcdev, struct pmc *pmc,
 		req_offset++;
 	}
 	return 0;
+}
+
+static const char *pmc_core_get_next_bdf_ip_name(struct pmc *pmc, unsigned int *r_idx,
+						 unsigned int *i_idx, u32 **lpm_req_regs)
+{
+	const struct pmc_bit_map **maps;
+	unsigned int arr_size;
+	bool reset = FALSE;
+
+	maps = pmc->map->s0ix_blocker_maps;
+	arr_size = pmc_core_lpm_get_arr_size(maps);
+
+	// Iteration reaches the end of the bitmap array
+	if (!maps[*r_idx][*i_idx].name)
+		(*r_idx)++;
+
+	// Iteration reaches the end of the maps
+	if (*r_idx >= arr_size)
+		return NULL;
+
+	for (; *r_idx < arr_size; (*r_idx)++) {
+		const char *ip_name;
+
+		if (reset)
+			*i_idx = 0;
+
+		for (; maps[*r_idx][*i_idx].name; reset = TRUE, (*i_idx)++) {
+			if (!maps[*r_idx][*i_idx].blk)
+				continue;
+
+			bool exist = **lpm_req_regs & BIT(BDF_EXIST_BIT);
+			(*lpm_req_regs)++;
+			if (exist) {
+				ip_name = maps[*r_idx][*i_idx].name;
+				(*i_idx)++;
+				return ip_name;
+			}
+		}
+	}
+	return NULL;
+}
+
+static int pmc_core_process_bdf(struct pmc_dev *pmcdev,  struct pmc *pmc, u32 data,
+				unsigned int *r_idx, unsigned int *i_idx, u32 **lpm_req_regs,
+				const char **name)
+{
+	unsigned int i;
+
+	if (!data)
+		return 0;
+
+	if (!*name)
+		return -EINVAL;
+
+	for (i = BDF_FUN_LOW_BIT; i <= BDF_FUN_HIGH_BIT; i++) {
+		struct bdf_entry *b_entry;
+		u32 function_data;
+
+		function_data = (data & BIT(i));
+		if (function_data) {
+			b_entry = devm_kzalloc(&pmcdev->pdev->dev, sizeof(*b_entry), GFP_KERNEL);
+			if (!b_entry)
+				return -ENOMEM;
+			b_entry->dev_num = data & GENMASK(BDF_DEV_HIGH_BIT, BDF_DEV_LOW_BIT);
+			b_entry->fun_num = i - BDF_FUN_LOW_BIT;
+			b_entry->name = *name;
+			list_add_tail(&b_entry->node, pmc->bdf_list);
+		}
+	}
+
+	if (!(data & BIT(BDF_REQ_BIT)))
+		*name = pmc_core_get_next_bdf_ip_name(pmc, r_idx, i_idx, lpm_req_regs);
+
+	return 0;
+}
+
+static int pmc_core_pmt_get_bdf(struct pmc_dev *pmcdev, struct pmc *pmc, struct telem_endpoint *ep)
+{
+	unsigned int sample_id, max_sample_id, header_id, size, r_idx, i_idx;
+	struct bdf_entry *entry;
+	u32 *lpm_reg_regs;
+	const char *name;
+	int ret;
+
+	header_id = pmc->map->bdf_offset;
+	sample_id = header_id;
+	max_sample_id = sample_id + pmc->map->bdf_table_size;
+	lpm_reg_regs = pmc->lpm_req_regs;
+	r_idx = 0;
+	i_idx = 0;
+
+	name = pmc_core_get_next_bdf_ip_name(pmc, &r_idx, &i_idx, &lpm_reg_regs);
+	if (!name)
+		return -EINVAL;
+
+	pmc->bdf_list = devm_kzalloc(&pmcdev->pdev->dev, sizeof(struct list_head), GFP_KERNEL);
+	if (!pmc->bdf_list)
+		return -ENOMEM;
+
+	INIT_LIST_HEAD(pmc->bdf_list);
+
+	for (; sample_id < max_sample_id; sample_id++) {
+		u32 data;
+
+		ret = pmt_telem_read32(ep, sample_id, &data, 1);
+		if (ret) {
+			dev_err(&pmcdev->pdev->dev,
+				"couldn't read bdf: %d\n", ret);
+			return ret;
+		}
+
+		if (sample_id == header_id) {
+			size = (data & GENMASK(BDF_SIZE_HIGH_BIT, BDF_SIZE_LOW_BIT))
+			       >> BDF_SIZE_LOW_BIT;
+			header_id += size + 1;
+			continue;
+		}
+
+		ret = pmc_core_process_bdf(pmcdev, pmc, data, &r_idx, &i_idx, &lpm_reg_regs, &name);
+		if (ret)
+			return ret;
+		data = data >> BDF_SIZE;
+		ret = pmc_core_process_bdf(pmcdev, pmc, data, &r_idx, &i_idx, &lpm_reg_regs, &name);
+		if (ret)
+			return ret;
+	}
+
+	list_for_each_entry(entry, pmc->bdf_list, node) {
+		dev_dbg(&pmcdev->pdev->dev, "bdf info: name %s, dev_num %x, fun_num %x",
+			entry->name, entry->dev_num, entry->fun_num);
+	}
+	return 0;
+}
+
+int pmc_core_pmt_get_sub_req_bdf(struct pmc_dev *pmcdev, struct pmc *pmc,
+				 struct telem_endpoint *ep)
+{
+	int ret;
+
+	ret = pmc_core_pmt_get_blk_sub_req(pmcdev, pmc, ep);
+	if (ret)
+		return ret;
+
+	return pmc_core_pmt_get_bdf(pmcdev, pmc, ep);
 }
 
 static int pmc_core_get_telem_info(struct pmc_dev *pmcdev, struct pmc_dev_info *pmc_dev_info)

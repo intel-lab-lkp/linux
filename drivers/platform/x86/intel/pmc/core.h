@@ -317,6 +317,24 @@ enum ppfear_regs {
 #define PMC_DEVID_MTL_IOEP	0x7ecf
 #define PMC_DEVID_MTL_IOEM	0x7ebf
 
+/* BDF offset */
+#define BDF_EXIST_BIT		3
+#define BDF_SIZE_HIGH_BIT	23
+#define BDF_SIZE_LOW_BIT	16
+#define BDF_DEV_HIGH_BIT	4
+#define BDF_DEV_LOW_BIT		0
+#define BDF_FUN_HIGH_BIT	12
+#define BDF_FUN_LOW_BIT		5
+#define BDF_REQ_BIT		15
+#define BDF_SIZE		16
+
+struct bdf_entry {
+	struct list_head node;
+	const char *name;
+	u32 dev_num;
+	u32 fun_num;
+};
+
 extern const char *pmc_lpm_modes[];
 
 struct pmc_bit_map {
@@ -373,6 +391,8 @@ struct pmc_reg_map {
 	const u32 s0ix_blocker_offset;
 	const u32 num_s0ix_blocker;
 	const u32 blocker_req_offset;
+	const u32 bdf_offset;
+	const u32 bdf_table_size;
 	/* Low Power Mode registers */
 	const int lpm_num_maps;
 	const int lpm_num_modes;
@@ -418,6 +438,7 @@ struct pmc {
 	const struct pmc_reg_map *map;
 	u32 *lpm_req_regs;
 	u32 ltr_ign;
+	struct list_head *bdf_list;
 };
 
 /**
@@ -540,7 +561,7 @@ extern struct pmc_dev_info ptl_pmc_dev;
 void cnl_suspend(struct pmc_dev *pmcdev);
 int cnl_resume(struct pmc_dev *pmcdev);
 int pmc_core_pmt_get_lpm_req(struct pmc_dev *pmcdev, struct pmc *pmc, struct telem_endpoint *ep);
-int pmc_core_pmt_get_blk_sub_req(struct pmc_dev *pmcdev, struct pmc *pmc,
+int pmc_core_pmt_get_sub_req_bdf(struct pmc_dev *pmcdev, struct pmc *pmc,
 				 struct telem_endpoint *ep);
 
 extern const struct file_operations pmc_core_substate_req_regs_fops;
