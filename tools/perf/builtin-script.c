@@ -66,6 +66,7 @@
 #include "util/cgroup.h"
 #include "util/annotate.h"
 #include "perf.h"
+#include "util/powerpc-vpadtl.h"
 
 #include <linux/ctype.h>
 #ifdef HAVE_LIBTRACEEVENT
@@ -2004,8 +2005,26 @@ static int perf_sample__fprintf_synth_iflag_chg(struct perf_sample *sample, FILE
 }
 
 static void arch_perf_sample__fprintf_synth_evt(struct perf_sample *data __maybe_unused,
-		 FILE *fp __maybe_unused, u64 config __maybe_unused)
+		 FILE *fp __maybe_unused, u64 config __maybe_unused, struct perf_env *env)
 {
+	const char *arch = perf_env__arch(env);
+
+	if (!strcmp("powerpc", arch)) {
+		struct dtl_entry *dtl = (struct dtl_entry *)data->raw_data;
+
+		if (config != PERF_SYNTH_POWERPC_VPA_DTL)
+			return;
+		fprintf(fp, "timebase: %" PRIu64 "dispatch_reason:%s, preempt_reason:%s, enqueue_to_dispatch_time:%d,\
+				ready_to_enqueue_time:%d, waiting_to_ready_time:%d, processor_id: %d",\
+				be64_to_cpu(dtl->timebase),
+				dispatch_reasons[dtl->dispatch_reason],
+				preempt_reasons[dtl->preempt_reason],
+				be32_to_cpu(dtl->enqueue_to_dispatch_time),
+				be32_to_cpu(dtl->ready_to_enqueue_time),
+				be32_to_cpu(dtl->waiting_to_ready_time),
+				be16_to_cpu(dtl->processor_id));
+	}
+
 	return;
 }
 
@@ -2032,7 +2051,7 @@ static int perf_sample__fprintf_synth(struct perf_sample *sample,
 	case PERF_SYNTH_INTEL_IFLAG_CHG:
 		return perf_sample__fprintf_synth_iflag_chg(sample, fp);
 	default:
-		arch_perf_sample__fprintf_synth_evt(sample, fp, evsel->core.attr.config);
+		arch_perf_sample__fprintf_synth_evt(sample, fp, evsel->core.attr.config, evsel__env(evsel));
 		break;
 	}
 
