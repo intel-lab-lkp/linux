@@ -128,7 +128,9 @@ struct cpuid_parse_entry {
 #define CPUID_COMMON_PARSE_ENTRIES							\
 	/*		  Leaf		Subleaf		Reader function */		\
 	CPUID_PARSE_ENTRY(0x2,		0,		0x2),				\
+	CPUID_PARSE_ENTRY(0x4,		0,		deterministic_cache),		\
 	CPUID_PARSE_ENTRY(0x80000000,	0,		0x80000000),			\
+	CPUID_PARSE_ENTRY(0x8000001d,	0,		deterministic_cache),		\
 
 /*
  * CPUID parser tables repository:
@@ -162,5 +164,7 @@ struct cpuid_vendor_entry {
 #define CPUID_VENDOR_ENTRIES								\
  	/*		   Leaf		Vendor list */					\
 	CPUID_VENDOR_ENTRY(0x2,		X86_VENDOR_INTEL, X86_VENDOR_CENTAUR, X86_VENDOR_ZHAOXIN),\
+	CPUID_VENDOR_ENTRY(0x4,		X86_VENDOR_INTEL, X86_VENDOR_CENTAUR, X86_VENDOR_ZHAOXIN),\
+	CPUID_VENDOR_ENTRY(0x8000001d,	X86_VENDOR_AMD, X86_VENDOR_HYGON),		\
 
 #endif /* _ARCH_X86_CPUID_PARSER_H */
