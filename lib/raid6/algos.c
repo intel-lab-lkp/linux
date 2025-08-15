@@ -188,7 +188,7 @@ static inline const struct raid6_calls *raid6_choose_gen(
 				best = *algo;
 			}
 			pr_info("raid6: %-8s gen() %5ld MB/s\n", (*algo)->name,
-				(perf * HZ * (disks-2)) >>
+				(perf * HZ * (disks - 2)) >>
 				(20 - PAGE_SHIFT + RAID6_TIME_JIFFIES_LG2));
 		}
 	}
