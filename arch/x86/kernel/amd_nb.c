@@ -16,6 +16,7 @@
 
 #include <asm/amd/nb.h>
 #include <asm/cpuid/api.h>
+#include <asm/processor.h>
 
 static u32 *flush_words;
 
@@ -58,7 +59,7 @@ struct amd_northbridge *node_to_amd_nb(int node)
 }
 EXPORT_SYMBOL_GPL(node_to_amd_nb);
 
-static int amd_cache_northbridges(void)
+static int amd_cache_northbridges(struct cpuinfo_x86 *c)
 {
 	struct amd_northbridge *nb;
 	u16 i;
@@ -315,11 +316,13 @@ static __init void fix_erratum_688(void)
 
 static __init int init_amd_nbs(void)
 {
+	struct cpuinfo_x86 *c = this_cpu_ptr(&cpu_info);
+
 	if (boot_cpu_data.x86_vendor != X86_VENDOR_AMD &&
 	    boot_cpu_data.x86_vendor != X86_VENDOR_HYGON)
 		return 0;
 
-	amd_cache_northbridges();
+	amd_cache_northbridges(c);
 	amd_cache_gart();
 
 	fix_erratum_688();
