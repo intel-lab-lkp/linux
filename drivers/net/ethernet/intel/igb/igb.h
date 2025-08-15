@@ -776,6 +776,7 @@ int igb_ptp_hwtstamp_get(struct net_device *netdev,
 int igb_ptp_hwtstamp_set(struct net_device *netdev,
 			 struct kernel_hwtstamp_config *config,
 			 struct netlink_ext_ack *extack);
+void igb_ptp_tx_tstamp_event(struct igb_adapter *adapter);
 void igb_set_flag_queue_pairs(struct igb_adapter *, const u32);
 unsigned int igb_get_max_rss_queues(struct igb_adapter *);
 #ifdef CONFIG_IGB_HWMON
