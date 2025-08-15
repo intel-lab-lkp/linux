@@ -903,6 +903,31 @@ static int netdev_nl_read_rxq_bitmap(struct genl_info *info,
 	return 0;
 }
 
+static struct device *netdev_nl_get_dma_dev(struct net_device *netdev,
+					    unsigned long *rxq_bitmap,
+					    struct netlink_ext_ack *extack)
+{
+	struct device *dma_dev = NULL;
+	u32 rxq_idx;
+
+	for_each_set_bit(rxq_idx, rxq_bitmap, netdev->num_rx_queues) {
+		struct device *rxq_dma_dev;
+
+		rxq_dma_dev = netdev_queue_get_dma_dev(netdev, rxq_idx);
+		/* Multi-PF netdev queues can belong to different DMA devoces.
+		 * Block this case.
+		 */
+		if (rxq_dma_dev && dma_dev && rxq_dma_dev != dma_dev) {
+			NL_SET_ERR_MSG(extack, "Can't bind to queues from different dma devices");
+			return NULL;
+		}
+
+		dma_dev = rxq_dma_dev;
+	}
+
+	return dma_dev;
+}
+
 int netdev_nl_bind_rx_doit(struct sk_buff *skb, struct genl_info *info)
 {
 	struct net_devmem_dmabuf_binding *binding;
@@ -962,7 +987,7 @@ int netdev_nl_bind_rx_doit(struct sk_buff *skb, struct genl_info *info)
 	}
 	netdev_nl_read_rxq_bitmap(info, rxq_bitmap);
 
-	dma_dev = netdev_queue_get_dma_dev(netdev, 0);
+	dma_dev = netdev_nl_get_dma_dev(netdev, rxq_bitmap, info->extack);
 	binding = net_devmem_bind_dmabuf(netdev, dma_dev, DMA_FROM_DEVICE,
 					 dmabuf_fd, priv, info->extack);
 	if (IS_ERR(binding)) {
