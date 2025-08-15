@@ -56,7 +56,6 @@ Both read and write accesses are supported; there is no prefetch support
 at this time.
 
 The functions are named readb(), readw(), readl(), readq(),
-readb_relaxed(), readw_relaxed(), readl_relaxed(), readq_relaxed(),
 writeb(), writew(), writel() and writeq().
 
 Some devices (such as framebuffers) would like to use larger transfers than
@@ -67,7 +66,7 @@ guaranteed to copy data in order.
 
 The read and write functions are defined to be ordered. That is the
 compiler is not permitted to reorder the I/O sequence. When the ordering
-can be compiler optimised, you can use __readb() and friends to
+can be compiler optimised, you can use readb_relaxed() and friends to
 indicate the relaxed ordering. Use this with care.
 
 While the basic functions are defined to be synchronous with respect to
