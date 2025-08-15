@@ -13,6 +13,49 @@
 #include "../../../util/pmu.h"
 #include "../../../util/pmus.h"
 
+static const struct sample_reg sample_reg_masks_ext[] = {
+	SMPL_REG(AX, PERF_REG_X86_AX),
+	SMPL_REG(BX, PERF_REG_X86_BX),
+	SMPL_REG(CX, PERF_REG_X86_CX),
+	SMPL_REG(DX, PERF_REG_X86_DX),
+	SMPL_REG(SI, PERF_REG_X86_SI),
+	SMPL_REG(DI, PERF_REG_X86_DI),
+	SMPL_REG(BP, PERF_REG_X86_BP),
+	SMPL_REG(SP, PERF_REG_X86_SP),
+	SMPL_REG(IP, PERF_REG_X86_IP),
+	SMPL_REG(FLAGS, PERF_REG_X86_FLAGS),
+	SMPL_REG(CS, PERF_REG_X86_CS),
+	SMPL_REG(SS, PERF_REG_X86_SS),
+#ifdef HAVE_ARCH_X86_64_SUPPORT
+	SMPL_REG(R8, PERF_REG_X86_R8),
+	SMPL_REG(R9, PERF_REG_X86_R9),
+	SMPL_REG(R10, PERF_REG_X86_R10),
+	SMPL_REG(R11, PERF_REG_X86_R11),
+	SMPL_REG(R12, PERF_REG_X86_R12),
+	SMPL_REG(R13, PERF_REG_X86_R13),
+	SMPL_REG(R14, PERF_REG_X86_R14),
+	SMPL_REG(R15, PERF_REG_X86_R15),
+	SMPL_REG(R16, PERF_REG_X86_R16),
+	SMPL_REG(R17, PERF_REG_X86_R17),
+	SMPL_REG(R18, PERF_REG_X86_R18),
+	SMPL_REG(R19, PERF_REG_X86_R19),
+	SMPL_REG(R20, PERF_REG_X86_R20),
+	SMPL_REG(R21, PERF_REG_X86_R21),
+	SMPL_REG(R22, PERF_REG_X86_R22),
+	SMPL_REG(R23, PERF_REG_X86_R23),
+	SMPL_REG(R24, PERF_REG_X86_R24),
+	SMPL_REG(R25, PERF_REG_X86_R25),
+	SMPL_REG(R26, PERF_REG_X86_R26),
+	SMPL_REG(R27, PERF_REG_X86_R27),
+	SMPL_REG(R28, PERF_REG_X86_R28),
+	SMPL_REG(R29, PERF_REG_X86_R29),
+	SMPL_REG(R30, PERF_REG_X86_R30),
+	SMPL_REG(R31, PERF_REG_X86_R31),
+	SMPL_REG(SSP, PERF_REG_X86_SSP),
+#endif
+	SMPL_REG_END
+};
+
 static const struct sample_reg sample_reg_masks[] = {
 	SMPL_REG(AX, PERF_REG_X86_AX),
 	SMPL_REG(BX, PERF_REG_X86_BX),
@@ -276,27 +319,33 @@ int arch_sdt_arg_parse_op(char *old_op, char **new_op)
 	return SDT_ARG_VALID;
 }
 
-const struct sample_reg *arch__sample_reg_masks(void)
-{
-	return sample_reg_masks;
-}
-
-uint64_t arch__intr_reg_mask(void)
+static bool support_simd_reg(u64 sample_type, u16 qwords, u64 mask, bool pred)
 {
 	struct perf_event_attr attr = {
-		.type			= PERF_TYPE_HARDWARE,
-		.config			= PERF_COUNT_HW_CPU_CYCLES,
-		.sample_type		= PERF_SAMPLE_REGS_INTR,
-		.sample_regs_intr	= PERF_REG_EXTENDED_MASK,
-		.precise_ip		= 1,
-		.disabled 		= 1,
-		.exclude_kernel		= 1,
+		.type				= PERF_TYPE_HARDWARE,
+		.config				= PERF_COUNT_HW_CPU_CYCLES,
+		.sample_type			= sample_type,
+		.disabled 			= 1,
+		.exclude_kernel			= 1,
+		.sample_simd_regs_enabled	= 1,
 	};
 	int fd;
-	/*
-	 * In an unnamed union, init it here to build on older gcc versions
-	 */
+
 	attr.sample_period = 1;
+
+	if (!pred) {
+		attr.sample_simd_vec_reg_qwords = qwords;
+		if (sample_type == PERF_SAMPLE_REGS_INTR)
+			attr.sample_simd_vec_reg_intr = mask;
+		else
+			attr.sample_simd_vec_reg_user = mask;
+	} else {
+		attr.sample_simd_pred_reg_qwords = PERF_X86_OPMASK_QWORDS;
+		if (sample_type == PERF_SAMPLE_REGS_INTR)
+			attr.sample_simd_pred_reg_intr = PERF_X86_SIMD_PRED_MASK;
+		else
+			attr.sample_simd_pred_reg_user = PERF_X86_SIMD_PRED_MASK;
+	}
 
 	if (perf_pmus__num_core_pmus() > 1) {
 		struct perf_pmu *pmu = NULL;
@@ -318,13 +367,199 @@ uint64_t arch__intr_reg_mask(void)
 	fd = sys_perf_event_open(&attr, 0, -1, -1, 0);
 	if (fd != -1) {
 		close(fd);
-		return (PERF_REG_EXTENDED_MASK | PERF_REGS_MASK);
+		return true;
 	}
 
-	return PERF_REGS_MASK;
+	return false;
+}
+
+static uint64_t intr_simd_mask, user_simd_mask, pred_mask;
+static u16	intr_simd_qwords, user_simd_qwords, pred_qwords;
+
+static bool get_simd_reg_mask(u64 sample_type)
+{
+	u64 mask = GENMASK_ULL(PERF_X86_H16ZMM_BASE - 1, 0);
+	u16 qwords = PERF_X86_ZMM_QWORDS;
+
+	if (support_simd_reg(sample_type, qwords, mask, false)) {
+		if (support_simd_reg(sample_type, qwords, PERF_X86_SIMD_VEC_MASK, false))
+			mask = PERF_X86_SIMD_VEC_MASK;
+	} else {
+		qwords = PERF_X86_YMM_QWORDS;
+		if (!support_simd_reg(sample_type, qwords, mask, false)) {
+			qwords = PERF_X86_XMM_QWORDS;
+			if (!support_simd_reg(sample_type, qwords, mask, false)) {
+				qwords = 0;
+				mask = 0;
+			}
+		}
+	}
+
+	if (sample_type == PERF_SAMPLE_REGS_INTR) {
+		intr_simd_mask = mask;
+		intr_simd_qwords = qwords;
+	} else {
+		user_simd_mask = mask;
+		user_simd_qwords = qwords;
+	}
+
+	if (support_simd_reg(sample_type, qwords, mask, true)) {
+		pred_mask = PERF_X86_SIMD_PRED_MASK;
+		pred_qwords = PERF_X86_OPMASK_QWORDS;
+	}
+
+	return true;
+}
+
+static bool has_cap_simd_regs(void)
+{
+	static bool has_cap_simd_regs;
+	static bool cached;
+
+	if (cached)
+		return has_cap_simd_regs;
+
+	cached = true;
+	has_cap_simd_regs = get_simd_reg_mask(PERF_SAMPLE_REGS_INTR);
+	has_cap_simd_regs |= get_simd_reg_mask(PERF_SAMPLE_REGS_USER);
+
+	return has_cap_simd_regs;
+}
+
+const struct sample_reg *arch__sample_reg_masks(void)
+{
+	if (has_cap_simd_regs())
+		return sample_reg_masks_ext;
+	return sample_reg_masks;
+}
+
+static const struct sample_reg sample_simd_reg_masks_empty[] = {
+	SMPL_REG_END
+};
+
+static const struct sample_reg sample_simd_reg_masks[] = {
+	SMPL_REG(XMM, 1),
+	SMPL_REG(YMM, 2),
+	SMPL_REG(ZMM, 3),
+	SMPL_REG(OPMASK, 32),
+	SMPL_REG_END
+};
+
+const struct sample_reg *arch__sample_simd_reg_masks(void)
+{
+	if (has_cap_simd_regs())
+		return sample_simd_reg_masks;
+	return sample_simd_reg_masks_empty;
+}
+
+static uint64_t __arch__reg_mask(u64 sample_type, u64 mask, bool has_simd_regs)
+{
+	struct perf_event_attr attr = {
+		.type				= PERF_TYPE_HARDWARE,
+		.config				= PERF_COUNT_HW_CPU_CYCLES,
+		.sample_type			= sample_type,
+		.precise_ip			= 1,
+		.disabled 			= 1,
+		.exclude_kernel			= 1,
+		.sample_simd_regs_enabled	= has_simd_regs,
+	};
+	int fd;
+	/*
+	 * In an unnamed union, init it here to build on older gcc versions
+	 */
+	attr.sample_period = 1;
+	if (sample_type == PERF_SAMPLE_REGS_INTR)
+		attr.sample_regs_intr = mask;
+	else
+		attr.sample_regs_user = mask;
+
+	if (perf_pmus__num_core_pmus() > 1) {
+		struct perf_pmu *pmu = NULL;
+		__u64 type = PERF_TYPE_RAW;
+
+		/*
+		 * The same register set is supported among different hybrid PMUs.
+		 * Only check the first available one.
+		 */
+		while ((pmu = perf_pmus__scan_core(pmu)) != NULL) {
+			type = pmu->type;
+			break;
+		}
+		attr.config |= type << PERF_PMU_TYPE_SHIFT;
+	}
+
+	event_attr_init(&attr);
+
+	fd = sys_perf_event_open(&attr, 0, -1, -1, 0);
+	if (fd != -1) {
+		close(fd);
+		return mask;
+	}
+
+	return 0;
+}
+
+uint64_t arch__intr_reg_mask(void)
+{
+	uint64_t mask = PERF_REGS_MASK;
+
+	if (has_cap_simd_regs()) {
+		mask |= __arch__reg_mask(PERF_SAMPLE_REGS_INTR,
+					 GENMASK_ULL(PERF_REG_X86_R31, PERF_REG_X86_R16),
+					 true);
+		mask |= __arch__reg_mask(PERF_SAMPLE_REGS_INTR,
+					 BIT_ULL(PERF_REG_X86_SSP),
+					 true);
+	} else
+		mask |= __arch__reg_mask(PERF_SAMPLE_REGS_INTR, PERF_REG_EXTENDED_MASK, false);
+
+	return mask;
 }
 
 uint64_t arch__user_reg_mask(void)
 {
-	return PERF_REGS_MASK;
+	uint64_t mask = PERF_REGS_MASK;
+
+	if (has_cap_simd_regs()) {
+		mask |= __arch__reg_mask(PERF_SAMPLE_REGS_USER,
+					 GENMASK_ULL(PERF_REG_X86_R31, PERF_REG_X86_R16),
+					 true);
+		mask |= __arch__reg_mask(PERF_SAMPLE_REGS_USER,
+					 BIT_ULL(PERF_REG_X86_SSP),
+					 true);
+	}
+
+	return mask;
+}
+
+uint64_t arch__intr_simd_reg_mask(u16 *qwords)
+{
+	if (!has_cap_simd_regs())
+		return 0;
+	*qwords = intr_simd_qwords;
+	return intr_simd_mask;
+}
+
+uint64_t arch__user_simd_reg_mask(u16 *qwords)
+{
+	if (!has_cap_simd_regs())
+		return 0;
+	*qwords = user_simd_qwords;
+	return user_simd_mask;
+}
+
+uint64_t arch__intr_pred_reg_mask(u16 *qwords)
+{
+	if (!has_cap_simd_regs())
+		return 0;
+	*qwords = pred_qwords;
+	return pred_mask;
+}
+
+uint64_t arch__user_pred_reg_mask(u16 *qwords)
+{
+	if (!has_cap_simd_regs())
+		return 0;
+	*qwords = pred_qwords;
+	return pred_mask;
 }

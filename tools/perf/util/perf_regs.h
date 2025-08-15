@@ -9,7 +9,13 @@ struct regs_dump;
 
 struct sample_reg {
 	const char *name;
-	uint64_t mask;
+	union {
+		struct {
+			uint32_t vec;
+			uint32_t pred;
+		} qwords;
+		uint64_t mask;
+	};
 };
 
 #define SMPL_REG_MASK(b) (1ULL << (b))
@@ -27,6 +33,11 @@ int arch_sdt_arg_parse_op(char *old_op, char **new_op);
 uint64_t arch__intr_reg_mask(void);
 uint64_t arch__user_reg_mask(void);
 const struct sample_reg *arch__sample_reg_masks(void);
+const struct sample_reg *arch__sample_simd_reg_masks(void);
+uint64_t arch__intr_simd_reg_mask(u16 *qwords);
+uint64_t arch__user_simd_reg_mask(u16 *qwords);
+uint64_t arch__intr_pred_reg_mask(u16 *qwords);
+uint64_t arch__user_pred_reg_mask(u16 *qwords);
 
 const char *perf_reg_name(int id, const char *arch);
 int perf_reg_value(u64 *valp, struct regs_dump *regs, int id);
