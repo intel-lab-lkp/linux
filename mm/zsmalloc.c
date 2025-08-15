@@ -2246,6 +2246,9 @@ EXPORT_SYMBOL_GPL(zs_destroy_pool);
 
 static int __init zs_init(void)
 {
+#ifdef CONFIG_MIGRATION
+	movable_ops[MOVABLE_ZSMALLOC] = &zsmalloc_mops;
+#endif
 #ifdef CONFIG_ZPOOL
 	zpool_register_driver(&zs_zpool_driver);
 #endif
@@ -2255,6 +2258,9 @@ static int __init zs_init(void)
 
 static void __exit zs_exit(void)
 {
+#ifdef CONFIG_MIGRATION
+	movable_ops[MOVABLE_ZSMALLOC] = NULL;
+#endif
 #ifdef CONFIG_ZPOOL
 	zpool_unregister_driver(&zs_zpool_driver);
 #endif

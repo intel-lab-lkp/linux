@@ -254,4 +254,11 @@ const struct movable_operations balloon_mops = {
 	.putback_page = balloon_page_putback,
 };
 
+static int __init balloon_init(void)
+{
+	movable_ops[MOVABLE_BALLOON] = &balloon_mops;
+	return 0;
+}
+core_initcall(balloon_init);
+
 #endif /* CONFIG_BALLOON_COMPACTION */
