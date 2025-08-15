@@ -1872,6 +1872,79 @@ attribute-sets:
         type: uint
         enum: pse-event
         doc: List of events reported by the PSE controller
+  -
+    name: mse-config
+    attr-cnt-name: __ethtool-a-mse-config-cnt
+    attributes:
+      -
+        name: unspec
+        type: unused
+        value: 0
+      -
+        name: max-average-mse
+        type: u32
+      -
+        name: max-peak-mse
+        type: u32
+      -
+        name: refresh-rate-ps
+        type: u64
+      -
+        name: num-symbols
+        type: u64
+      -
+        name: supported-caps
+        type: nest
+        nested-attributes: bitset
+      -
+        name: pad
+        type: pad
+  -
+    name: mse-snapshot
+    attr-cnt-name: __ethtool-a-mse-snapshot-cnt
+    attributes:
+      -
+        name: unspec
+        type: unused
+        value: 0
+      -
+        name: channel
+        type: u32
+        enum: phy-mse-channel
+      -
+        name: average-mse
+        type: u32
+      -
+        name: peak-mse
+        type: u32
+      -
+        name: worst-peak-mse
+        type: u32
+  -
+    name: mse
+    attr-cnt-name: __ethtool-a-mse-cnt
+    attributes:
+      -
+        name: unspec
+        type: unused
+        value: 0
+      -
+        name: header
+        type: nest
+        nested-attributes: header
+      -
+        name: channel
+        type: u32
+        enum: phy-mse-channel
+      -
+        name: config
+        type: nest
+        nested-attributes: mse-config
+      -
+        name: snapshot
+        type: nest
+        multi-attr: true
+        nested-attributes: mse-snapshot
 
 operations:
   enum-model: directional
@@ -2805,6 +2878,21 @@ operations:
         attributes:
           - header
           - context
+    -
+      name: mse-get
+      doc: Get PHY MSE measurement data and configuration.
+      attribute-set: mse
+      do: &mse-get-op
+        request:
+          attributes:
+            - header
+            - channel
+        reply:
+          attributes: &mse-reply
+            - header
+            - config
+            - snapshot
+      dump: *mse-get-op
 
 mcast-groups:
   list:
