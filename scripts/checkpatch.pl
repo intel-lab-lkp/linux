@@ -5696,7 +5696,18 @@ sub process {
 			my ($s, $c) = ($stat, $cond);
 			my $fixed_assign_in_if = 0;
 
-			if ($c =~ /\bif\s*\(.*[^<>!=]=[^=].*/s) {
+			if ($c =~ /\bif\s*\((.*[^<>!=]=[^=].*)\)/s) {
+			    my $condition = $1;
+			    my $allow_assignment = 1;
+
+			    # Allow single ACQUIRE_ERR assignment, reject everything else
+			    while ($condition =~ /\b($Lval)\s*=\s*([^,)&|]+)/g) {
+				 if ($2 !~ /^\s*ACQUIRE_ERR\s*\(/) {
+					$allow_assignment = 0;
+					last;
+				}
+			    }
+			    if (!$allow_assignment) {
 				if (ERROR("ASSIGN_IN_IF",
 					  "do not use assignment in if condition\n" . $herecurr) &&
 				    $fix && $perl_version_ok) {
@@ -5721,6 +5732,7 @@ sub process {
 						fix_insert_line($fixlinenr + 1, $newline);
 						$fixed_assign_in_if = 1;
 					}
+				    }
 				}
 			}
 
