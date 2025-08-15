@@ -585,6 +585,9 @@ int blk_mq_init_sched(struct request_queue *q, struct elevator_type *e,
 			}
 		}
 	}
+
+	if (e->ops.depth_updated)
+		e->ops.depth_updated(q);
 	return 0;
 
 out:
