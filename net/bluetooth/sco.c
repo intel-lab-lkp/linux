@@ -830,7 +830,7 @@ static void sco_conn_defer_accept(struct hci_conn *conn, u16 setting)
 
 	BT_DBG("conn %p", conn);
 
-	conn->state = BT_CONFIG;
+	hci_conn_set_state(conn, BT_CONFIG);
 
 	if (!lmp_esco_capable(hdev)) {
 		struct hci_cp_accept_conn_req cp;
