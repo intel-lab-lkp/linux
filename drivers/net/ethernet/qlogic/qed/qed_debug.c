@@ -2085,6 +2085,13 @@ static u32 qed_grc_dump_addr_range(struct qed_hwfn *p_hwfn,
 		dev_data->pretend.split_id = split_id;
 	}
 
+	/* Ensure we don't write past the end of the GRC buffer */
+	u32 buf_size_bytes = p_hwfn->cdev->dbg_features[DBG_FEATURE_GRC].buf_size;
+	u32 len_bytes = len * sizeof(u32);
+
+	if (len_bytes > buf_size_bytes)
+		len = buf_size_bytes / sizeof(u32);
+
 	/* Read registers using GRC */
 	qed_read_regs(p_hwfn, p_ptt, dump_buf, addr, len);
 
