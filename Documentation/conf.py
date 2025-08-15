@@ -9,6 +9,8 @@ import os
 import shutil
 import sys
 
+from  textwrap import dedent
+
 import sphinx
 
 # If extensions (or modules to document with autodoc) are in another directory,
@@ -454,19 +456,38 @@ htmlhelp_basename = "TheLinuxKerneldoc"
 latex_elements = {
     # The paper size ('letterpaper' or 'a4paper').
     "papersize": "a4paper",
+    "passoptionstopackages": dedent(r"""
+        \PassOptionsToPackage{svgnames}{xcolor}
+        % Avoid encoding troubles when creating indexes
+        \PassOptionsToPackage{xindy}{language=english,codepage=utf8,noautomatic}
+    """),
     # The font size ('10pt', '11pt' or '12pt').
     "pointsize": "11pt",
+    # Needed to generate a .ind file
+    'printindex': r'\footnotesize\raggedright\printindex',
     # Latex figure (float) alignment
     # 'figure_align': 'htbp',
     # Don't mangle with UTF-8 chars
+    "fontenc": "",
     "inputenc": "",
     "utf8extra": "",
+    'fontpkg': dedent(r'''
+        \usepackage{fontspec}
+        \setmainfont{DejaVu Serif}
+        \setsansfont{DejaVu Sans}
+        \setmonofont{DejaVu Sans Mono}
+        \newfontfamily\headingfont{DejaVu Serif}
+    '''),
     # Set document margins
-    "sphinxsetup": """
+    "sphinxsetup": dedent(r"""
         hmargin=0.5in, vmargin=1in,
         parsedliteralwraps=true,
         verbatimhintsturnover=false,
-    """,
+    """),
+    "preamble": dedent(r"""
+        % Load kerneldoc specific LaTeX settings
+        \input{kerneldoc-preamble.sty}
+    """),
     #
     # Some of our authors are fond of deep nesting; tell latex to
     # cope.
@@ -474,21 +495,7 @@ latex_elements = {
     "maxlistdepth": "10",
     # For CJK One-half spacing, need to be in front of hyperref
     "extrapackages": r"\usepackage{setspace}",
-    # Additional stuff for the LaTeX preamble.
-    "preamble": """
-        % Use some font with UTF-8 support with XeLaTeX
-        \\usepackage{fontspec}
-        \\setsansfont{DejaVu Sans}
-        \\setromanfont{DejaVu Serif}
-        \\setmonofont{DejaVu Sans Mono}
-    """,
 }
-
-# Load kerneldoc specific LaTeX settings
-latex_elements["preamble"] += """
-        % Load kerneldoc specific LaTeX settings
-        \\input{kerneldoc-preamble.sty}
-"""
 
 # This will be filled up by config-inited event
 latex_documents = []
