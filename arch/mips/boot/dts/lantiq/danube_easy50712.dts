@@ -91,7 +91,7 @@
 			mac-address = [ 00 11 22 33 44 55 ];
 		};
 
-		stp0: stp@e100bb0 {
+		stp0: gpio@e100bb0 {
 			#gpio-cells = <2>;
 			compatible = "lantiq,gpio-stp-xway";
 			gpio-controller;
