@@ -44,21 +44,21 @@ static void raid6_sse11_gen_syndrome(int disks, size_t bytes, void **ptrs)
 	int d, z, z0;
 
 	z0 = disks - 3;		/* Highest data disk */
-	p = dptr[z0+1];		/* XOR parity */
-	q = dptr[z0+2];		/* RS syndrome */
+	p = dptr[z0 + 1];	/* XOR parity */
+	q = dptr[z0 + 2];	/* RS syndrome */
 
 	kernel_fpu_begin();
 
 	asm volatile("movq %0,%%mm0" : : "m" (raid6_mmx_constants.x1d));
 	asm volatile("pxor %mm5,%mm5");	/* Zero temp */
 
-	for ( d = 0 ; d < bytes ; d += 8 ) {
+	for (d = 0; d < bytes; d += 8) {
 		asm volatile("prefetchnta %0" : : "m" (dptr[z0][d]));
 		asm volatile("movq %0,%%mm2" : : "m" (dptr[z0][d])); /* P[0] */
-		asm volatile("prefetchnta %0" : : "m" (dptr[z0-1][d]));
+		asm volatile("prefetchnta %0" : : "m" (dptr[z0 - 1][d]));
 		asm volatile("movq %mm2,%mm4");	/* Q[0] */
-		asm volatile("movq %0,%%mm6" : : "m" (dptr[z0-1][d]));
-		for ( z = z0-2 ; z >= 0 ; z-- ) {
+		asm volatile("movq %0,%%mm6" : : "m" (dptr[z0 - 1][d]));
+		for (z = z0 - 2; z >= 0; z--) {
 			asm volatile("prefetchnta %0" : : "m" (dptr[z][d]));
 			asm volatile("pcmpgtb %mm4,%mm5");
 			asm volatile("paddb %mm4,%mm4");
@@ -103,8 +103,8 @@ static void raid6_sse12_gen_syndrome(int disks, size_t bytes, void **ptrs)
 	int d, z, z0;
 
 	z0 = disks - 3;		/* Highest data disk */
-	p = dptr[z0+1];		/* XOR parity */
-	q = dptr[z0+2];		/* RS syndrome */
+	p = dptr[z0 + 1];	/* XOR parity */
+	q = dptr[z0 + 2];	/* RS syndrome */
 
 	kernel_fpu_begin();
 
@@ -113,13 +113,13 @@ static void raid6_sse12_gen_syndrome(int disks, size_t bytes, void **ptrs)
 	asm volatile("pxor %mm7,%mm7"); /* Zero temp */
 
 	/* We uniformly assume a single prefetch covers at least 16 bytes */
-	for ( d = 0 ; d < bytes ; d += 16 ) {
+	for (d = 0; d < bytes; d += 16) {
 		asm volatile("prefetchnta %0" : : "m" (dptr[z0][d]));
-		asm volatile("movq %0,%%mm2" : : "m" (dptr[z0][d])); /* P[0] */
-		asm volatile("movq %0,%%mm3" : : "m" (dptr[z0][d+8])); /* P[1] */
+		asm volatile("movq %0,%%mm2" : : "m" (dptr[z0][d]));	 /* P[0] */
+		asm volatile("movq %0,%%mm3" : : "m" (dptr[z0][d + 8])); /* P[1] */
 		asm volatile("movq %mm2,%mm4");	/* Q[0] */
 		asm volatile("movq %mm3,%mm6"); /* Q[1] */
-		for ( z = z0-1 ; z >= 0 ; z-- ) {
+		for (z = z0 - 1; z >= 0; z--) {
 			asm volatile("prefetchnta %0" : : "m" (dptr[z][d]));
 			asm volatile("pcmpgtb %mm4,%mm5");
 			asm volatile("pcmpgtb %mm6,%mm7");
@@ -130,7 +130,7 @@ static void raid6_sse12_gen_syndrome(int disks, size_t bytes, void **ptrs)
 			asm volatile("pxor %mm5,%mm4");
 			asm volatile("pxor %mm7,%mm6");
 			asm volatile("movq %0,%%mm5" : : "m" (dptr[z][d]));
-			asm volatile("movq %0,%%mm7" : : "m" (dptr[z][d+8]));
+			asm volatile("movq %0,%%mm7" : : "m" (dptr[z][d + 8]));
 			asm volatile("pxor %mm5,%mm2");
 			asm volatile("pxor %mm7,%mm3");
 			asm volatile("pxor %mm5,%mm4");
@@ -139,9 +139,9 @@ static void raid6_sse12_gen_syndrome(int disks, size_t bytes, void **ptrs)
 			asm volatile("pxor %mm7,%mm7");
 		}
 		asm volatile("movntq %%mm2,%0" : "=m" (p[d]));
-		asm volatile("movntq %%mm3,%0" : "=m" (p[d+8]));
+		asm volatile("movntq %%mm3,%0" : "=m" (p[d + 8]));
 		asm volatile("movntq %%mm4,%0" : "=m" (q[d]));
-		asm volatile("movntq %%mm6,%0" : "=m" (q[d+8]));
+		asm volatile("movntq %%mm6,%0" : "=m" (q[d + 8]));
 	}
 
 	asm volatile("sfence" : :: "memory");
