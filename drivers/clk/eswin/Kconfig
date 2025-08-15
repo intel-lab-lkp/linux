@@ -1,0 +1,10 @@
+# SPDX-License-Identifier: GPL-2.0
+
+config COMMON_CLK_EIC7700
+	bool "EIC7700 Clock Driver"
+	depends on ARCH_ESWIN
+	help
+	  Build the Eswin EIC7700 SoC clock driver based on the
+	  common clock framework. This driver provides support
+	  for the clock control on the Eswin EIC7700 SoC,
+	  which is essential for managing clock rates and power management.
