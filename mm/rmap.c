@@ -1757,9 +1757,9 @@ static __always_inline void __folio_remove_rmap(struct folio *folio,
 				/* An add of ENTIRELY_MAPPED raced ahead */
 				nr = 0;
 			}
-		}
 
-		partially_mapped = nr && nr < nr_pmdmapped;
+			partially_mapped = nr && nr < nr_pmdmapped;
+		}
 		break;
 	default:
 		BUILD_BUG();
