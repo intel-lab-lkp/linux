@@ -2003,6 +2003,12 @@ static int perf_sample__fprintf_synth_iflag_chg(struct perf_sample *sample, FILE
 	return len + perf_sample__fprintf_pt_spacing(len, fp);
 }
 
+static void arch_perf_sample__fprintf_synth_evt(struct perf_sample *data __maybe_unused,
+		 FILE *fp __maybe_unused, u64 config __maybe_unused)
+{
+	return;
+}
+
 static int perf_sample__fprintf_synth(struct perf_sample *sample,
 				      struct evsel *evsel, FILE *fp)
 {
@@ -2026,6 +2032,7 @@ static int perf_sample__fprintf_synth(struct perf_sample *sample,
 	case PERF_SYNTH_INTEL_IFLAG_CHG:
 		return perf_sample__fprintf_synth_iflag_chg(sample, fp);
 	default:
+		arch_perf_sample__fprintf_synth_evt(sample, fp, evsel->core.attr.config);
 		break;
 	}
 
