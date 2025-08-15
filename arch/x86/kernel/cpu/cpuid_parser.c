@@ -27,6 +27,29 @@ static void cpuid_read_generic(const struct cpuid_parse_entry *e, struct cpuid_r
 		cpuid_read_subleaf(e->leaf, e->subleaf + i, output->regs);
 }
 
+static void cpuid_read_0x80000000(const struct cpuid_parse_entry *e, struct cpuid_read_output *output)
+{
+	struct leaf_0x80000000_0 *l = (struct leaf_0x80000000_0 *)output->regs;
+
+	cpuid_read_subleaf(e->leaf, e->subleaf, l);
+
+	/*
+	 * Protect against 32-bit CPUs lacking an extended CPUID range: Ensure that the
+	 * returned max extended CPUID leaf is in the 0x80000001-0x8000ffff range.
+	 *
+	 * Do not depend on leaving 'info->nr_entries' set as zero, but zero-out the
+	 * whole leaf output area as well.  This is due to the CPUID parser internals
+	 * using the __cpuid_leaves_subleaf_0() API to get the cached max extended leaf,
+	 * which does not do any sanity checks,
+	 */
+	if ((l->max_ext_leaf & 0xffff0000) != 0x80000000) {
+		*l = (struct leaf_0x80000000_0){ };
+		return;
+	}
+
+	output->info->nr_entries = 1;
+}
+
 /*
  * CPUID parser tables:
  *
@@ -46,6 +69,7 @@ static unsigned int cpuid_range_max_leaf(const struct cpuid_table *t, unsigned i
 {
 	switch (range) {
 	case CPUID_BASE_START:	return __cpuid_leaves_subleaf_0(&t->leaves, 0x0).max_std_leaf;
+	case CPUID_EXT_START:   return __cpuid_leaves_subleaf_0(&t->leaves, 0x80000000).max_ext_leaf;
 	default:		return 0;
 	}
 }
@@ -61,7 +85,8 @@ cpuid_range_valid(const struct cpuid_table *t, unsigned int leaf, unsigned int s
 
 static bool cpuid_leaf_in_range(const struct cpuid_table *t, unsigned int leaf)
 {
-	return cpuid_range_valid(t, leaf, CPUID_BASE_START, CPUID_BASE_END);
+	return cpuid_range_valid(t, leaf, CPUID_BASE_START, CPUID_BASE_END) ||
+	       cpuid_range_valid(t, leaf, CPUID_EXT_START, CPUID_EXT_END);
 }
 
 static void
