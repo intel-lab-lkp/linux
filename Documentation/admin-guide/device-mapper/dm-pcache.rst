@@ -40,9 +40,10 @@ Constructor
 ``cache_mode``              Optional, Only ``writeback`` is accepted at the moment.
 
 ``data_crc``                Optional, default to ``false``
-                            ``true``  – store CRC32 for every cached entry and
-                                      verify on reads
-                            ``false`` – skip CRC (faster)
+
+                            * ``true``  – store CRC32 for every cached entry and
+                              verify on reads
+                            * ``false`` – skip CRC (faster)
 =========================  ====================================================
 
 Example
