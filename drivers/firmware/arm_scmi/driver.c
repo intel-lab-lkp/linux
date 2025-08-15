@@ -34,6 +34,7 @@
 #include <linux/processor.h>
 #include <linux/refcount.h>
 #include <linux/slab.h>
+#include <linux/scmi_quirks.h>
 #include <linux/xarray.h>
 
 #include "common.h"

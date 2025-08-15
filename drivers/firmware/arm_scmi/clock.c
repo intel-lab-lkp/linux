@@ -7,11 +7,11 @@
 
 #include <linux/module.h>
 #include <linux/limits.h>
+#include <linux/scmi_quirks.h>
 #include <linux/sort.h>
 
 #include "protocols.h"
 #include "notify.h"
-#include "quirks.h"
 
 /* Updated only after ALL the mandatory features for that version are merged */
 #define SCMI_PROTOCOL_SUPPORTED_VERSION		0x30000
