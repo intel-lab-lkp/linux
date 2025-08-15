@@ -48,6 +48,9 @@ enum perf_event_x86_regs {
 	PERF_REG_X86_32_MAX = PERF_REG_X86_GS + 1,
 	PERF_REG_X86_64_MAX = PERF_REG_X86_R31 + 1,
 
+	PERF_REG_X86_SSP,
+	PERF_REG_MISC_MAX = PERF_REG_X86_SSP + 1,
+
 	/*
 	 * These all need two bits set because they are 128bit.
 	 * These are only available when !PERF_SAMPLE_REGS_ABI_SIMD
