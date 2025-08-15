@@ -121,6 +121,8 @@ use crate::types::Opaque;
 use core::cell::UnsafeCell;
 use core::marker::PhantomData;
 
+pub use crate::configfs_attrs;
+
 /// A configfs subsystem.
 ///
 /// This is the top level entrypoint for a configfs hierarchy. To register
