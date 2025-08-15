@@ -1587,7 +1587,7 @@ TEST_F(ipv4_tcp, port_endianness)
 				       &bind_connect_host_endian_p1, 0));
 	enforce_ruleset(_metadata, ruleset_fd);
 
-	/* No restriction for big endinan CPU. */
+	/* No restriction for big endian CPU. */
 	test_bind_and_connect(_metadata, &self->srv0, false, little_endian);
 
 	/* No restriction for any CPU. */
