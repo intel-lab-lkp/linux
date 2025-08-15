@@ -220,7 +220,7 @@ static efi_status_t get_max_payload(size_t *size)
 				   SMM_VARIABLE_FUNCTION_GET_PAYLOAD_SIZE,
 				   &ret);
 	if (!var_payload)
-		return EFI_OUT_OF_RESOURCES;
+		return ret;
 
 	ret = mm_communicate(comm_buf, payload_size);
 	if (ret != EFI_SUCCESS)
@@ -267,7 +267,7 @@ static efi_status_t get_property_int(u16 *name, size_t name_size,
 		&comm_buf, &nr_pages, payload_size,
 		SMM_VARIABLE_FUNCTION_VAR_CHECK_VARIABLE_PROPERTY_GET, &ret);
 	if (!smm_property)
-		return EFI_OUT_OF_RESOURCES;
+		return ret;
 
 	memcpy(&smm_property->guid, vendor, sizeof(smm_property->guid));
 	smm_property->name_size = name_size;
@@ -324,7 +324,7 @@ static efi_status_t tee_get_variable(u16 *name, efi_guid_t *vendor,
 	var_acc = setup_mm_hdr(&comm_buf, &nr_pages, payload_size,
 			       SMM_VARIABLE_FUNCTION_GET_VARIABLE, &ret);
 	if (!var_acc)
-		return EFI_OUT_OF_RESOURCES;
+		return ret;
 
 	/* Fill in contents */
 	memcpy(&var_acc->guid, vendor, sizeof(var_acc->guid));
@@ -391,7 +391,7 @@ static efi_status_t tee_get_next_variable(unsigned long *name_size,
 				   SMM_VARIABLE_FUNCTION_GET_NEXT_VARIABLE_NAME,
 				   &ret);
 	if (!var_getnext)
-		return EFI_OUT_OF_RESOURCES;
+		return ret;
 
 	/* Fill in contents */
 	memcpy(&var_getnext->guid, guid, sizeof(var_getnext->guid));
@@ -448,7 +448,7 @@ static efi_status_t tee_set_variable(efi_char16_t *name, efi_guid_t *vendor,
 	var_acc = setup_mm_hdr(&comm_buf, &nr_pages, payload_size,
 			       SMM_VARIABLE_FUNCTION_SET_VARIABLE, &ret);
 	if (!var_acc)
-		return EFI_OUT_OF_RESOURCES;
+		return ret;
 
 	/*
 	 * The API has the ability to override RO flags. If no RO check was
@@ -505,7 +505,7 @@ static efi_status_t tee_query_variable_info(u32 attributes,
 				SMM_VARIABLE_FUNCTION_QUERY_VARIABLE_INFO,
 				&ret);
 	if (!mm_query_info)
-		return EFI_OUT_OF_RESOURCES;
+		return ret;
 
 	mm_query_info->attr = attributes;
 	ret = mm_communicate(comm_buf, payload_size);
