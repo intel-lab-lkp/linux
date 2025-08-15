@@ -87,8 +87,6 @@ int powercap_set_enabled(int mode)
 
 /*
  * Hardcoded, because rapl is the only powercap implementation
-- * this needs to get more generic if more powercap implementations
- * should show up
  */
 int powercap_get_driver(char *driver, int buflen)
 {
