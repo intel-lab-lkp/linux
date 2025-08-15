@@ -19,6 +19,7 @@
 #include <linux/pm_qos.h>
 #include <linux/slab.h>
 #include <linux/scmi_protocol.h>
+#include <linux/scmi_quirks.h>
 #include <linux/types.h>
 #include <linux/units.h>
 
@@ -393,12 +394,20 @@ static struct cpufreq_driver scmi_cpufreq_driver = {
 	.set_boost	= cpufreq_boost_set_sw,
 };
 
+#define QUIRK_SCMI_CPUFREQ_CHECK_DT_PROPS			\
+	({							\
+		if (true)					\
+			return true;				\
+	})
+
 static bool scmi_dev_used_by_cpus(struct device *scmi_dev)
 {
 	struct device_node *scmi_np = dev_of_node(scmi_dev);
 	struct device_node *cpu_np, *np;
 	struct device *cpu_dev;
 	int cpu, idx;
+
+	SCMI_QUIRK(scmi_cpufreq_no_check_dt_props, QUIRK_SCMI_CPUFREQ_CHECK_DT_PROPS);
 
 	if (!scmi_np)
 		return false;

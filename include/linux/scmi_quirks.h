@@ -40,5 +40,6 @@
 /* Quirk delarations */
 DECLARE_SCMI_QUIRK(clock_rates_triplet_out_of_spec);
 DECLARE_SCMI_QUIRK(perf_level_get_fc_force);
+DECLARE_SCMI_QUIRK(scmi_cpufreq_no_check_dt_props);
 
 #endif /* _SCMI_QUIRKS_H */
