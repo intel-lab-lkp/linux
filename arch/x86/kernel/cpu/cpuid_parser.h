@@ -130,6 +130,8 @@ struct cpuid_parse_entry {
 	CPUID_PARSE_ENTRY(0x2,		0,		0x2),				\
 	CPUID_PARSE_ENTRY(0x4,		0,		deterministic_cache),		\
 	CPUID_PARSE_ENTRY(0x80000000,	0,		0x80000000),			\
+	CPUID_PARSE_ENTRY(0x80000005,	0,		generic),			\
+	CPUID_PARSE_ENTRY(0x80000006,	0,		generic),			\
 	CPUID_PARSE_ENTRY(0x8000001d,	0,		deterministic_cache),		\
 
 /*
