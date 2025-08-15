@@ -1389,10 +1389,7 @@ static inline bool is_core_idle(int cpu)
 #ifdef CONFIG_SCHED_SMT
 	int sibling;
 
-	for_each_cpu(sibling, cpu_smt_mask(cpu)) {
-		if (cpu == sibling)
-			continue;
-
+	for_each_cpu_andnot(sibling, cpu_smt_mask(cpu), cpumask_of(cpu)) {
 		if (!idle_cpu(sibling))
 			return false;
 	}
@@ -2474,11 +2471,7 @@ static void task_numa_find_cpu(struct task_numa_env *env,
 		maymove = !load_too_imbalanced(src_load, dst_load, env);
 	}
 
-	for_each_cpu(cpu, cpumask_of_node(env->dst_nid)) {
-		/* Skip this CPU if the source task cannot migrate */
-		if (!cpumask_test_cpu(cpu, env->p->cpus_ptr))
-			continue;
-
+	for_each_cpu_and(cpu, cpumask_of_node(env->dst_nid), env->p->cpus_ptr) {
 		env->dst_cpu = cpu;
 		if (task_numa_compare(env, taskimp, groupimp, maymove))
 			break;
@@ -7493,10 +7486,7 @@ void __update_idle_core(struct rq *rq)
 	if (test_idle_cores(core))
 		goto unlock;
 
-	for_each_cpu(cpu, cpu_smt_mask(core)) {
-		if (cpu == core)
-			continue;
-
+	for_each_cpu_andnot(cpu, cpu_smt_mask(core), cpumask_of(core)) {
 		if (!available_idle_cpu(cpu))
 			goto unlock;
 	}
