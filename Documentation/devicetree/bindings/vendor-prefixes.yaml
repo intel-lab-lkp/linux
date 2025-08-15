@@ -781,6 +781,8 @@ patternProperties:
     description: Jadard Technology Inc.
   "^jasonic,.*":
     description: Jasonic Technology Ltd.
+  "^jcore,.*":
+    description: J-Core Open Processor
   "^jdi,.*":
     description: Japan Display Inc.
   "^jedec,.*":
