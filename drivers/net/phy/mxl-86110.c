@@ -71,6 +71,13 @@
 
 #define MXL86110_MAX_LEDS	3
 /* LED registers and defines */
+#define MXL86110_COM_EXT_LED_GEN_CFG			0xA00B
+# define MXL86110_COM_EXT_LED_GEN_CFG_LFE(x)		BIT(2 + 3 * (x))
+# define MXL86110_COM_EXT_LED_GEN_CFG_LFM(x)		({ typeof(x) _x = (x); \
+							  GENMASK(1 + (3 * (_x)), \
+								 3 * (_x)); })
+#  define MXL86110_COM_EXT_LED_GEN_CFG_LFME(x)		BIT(3 * (x))
+
 #define MXL86110_LED0_CFG_REG 0xA00C
 #define MXL86110_LED1_CFG_REG 0xA00D
 #define MXL86110_LED2_CFG_REG 0xA00E
@@ -394,6 +401,7 @@ static int mxl86110_led_hw_control_set(struct phy_device *phydev, u8 index,
 				       unsigned long rules)
 {
 	u16 val = 0;
+	int ret;
 
 	if (index >= MXL86110_MAX_LEDS)
 		return -EINVAL;
@@ -423,8 +431,50 @@ static int mxl86110_led_hw_control_set(struct phy_device *phydev, u8 index,
 	    rules & BIT(TRIGGER_NETDEV_RX))
 		val |= MXL86110_LEDX_CFG_BLINK;
 
-	return mxl86110_write_extended_reg(phydev,
+	ret = mxl86110_write_extended_reg(phydev,
 					  MXL86110_LED0_CFG_REG + index, val);
+	if (ret)
+		return ret;
+
+	phy_lock_mdio_bus(phydev);
+
+	ret =  __mxl86110_modify_extended_reg(phydev,
+					      MXL86110_COM_EXT_LED_GEN_CFG,
+					      MXL86110_COM_EXT_LED_GEN_CFG_LFE(index),
+					      0);
+
+	phy_unlock_mdio_bus(phydev);
+
+	return ret;
+}
+
+static int mxl86110_led_brightness_set(struct phy_device *phydev,
+				       u8 index, enum led_brightness value)
+{
+	u16 mask, set;
+	int ret;
+
+	if (index >= MXL86110_MAX_LEDS)
+		return -EINVAL;
+
+	/* force manual control */
+	set = MXL86110_COM_EXT_LED_GEN_CFG_LFE(index);
+	/* clear previous force mode */
+	mask = MXL86110_COM_EXT_LED_GEN_CFG_LFM(index);
+
+	/* force LED to be permanently on */
+	if (value != LED_OFF)
+		set |= MXL86110_COM_EXT_LED_GEN_CFG_LFME(index);
+
+	phy_lock_mdio_bus(phydev);
+
+	ret = __mxl86110_modify_extended_reg(phydev,
+					     MXL86110_COM_EXT_LED_GEN_CFG,
+					     mask, set);
+
+	phy_unlock_mdio_bus(phydev);
+
+	return ret;
 }
 
 /**
@@ -596,6 +646,7 @@ static struct phy_driver mxl_phy_drvs[] = {
 		.config_init		= mxl86110_config_init,
 		.get_wol		= mxl86110_get_wol,
 		.set_wol		= mxl86110_set_wol,
+		.led_brightness_set	= mxl86110_led_brightness_set,
 		.led_hw_is_supported	= mxl86110_led_hw_is_supported,
 		.led_hw_control_get     = mxl86110_led_hw_control_get,
 		.led_hw_control_set     = mxl86110_led_hw_control_set,
