@@ -5,8 +5,10 @@
 #include <asm/cpuid/types.h>
 
 #include <linux/build_bug.h>
+#include <linux/init.h>
 #include <linux/types.h>
 
+#include <asm/processor.h>
 #include <asm/string.h>
 
 /*
@@ -542,5 +544,12 @@ static inline bool cpuid_amd_hygon_has_l3_cache(void)
 	__cpuid_assert_leaf_has_dynamic_subleaves(_cpuinfo, _leaf);	\
 	__cpuid_leaves_subleaf_info(&(_cpuinfo)->cpuid.leaves, _leaf, 0).nr_entries; \
 })
+
+/*
+ * CPUID parser exported APIs:
+ */
+
+void __init cpuid_parser_early_scan_cpu(struct cpuinfo_x86 *c);
+void cpuid_parser_scan_cpu(struct cpuinfo_x86 *c);
 
 #endif /* _ASM_X86_CPUID_API_H */
