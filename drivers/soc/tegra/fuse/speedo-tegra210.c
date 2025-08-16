@@ -99,6 +99,14 @@ static void __init rev_sku_to_speedo_ids(struct tegra_sku_info *sku_info,
 		sku_info->gpu_speedo_id = 1;
 		break;
 
+	case 0x8F:
+		if (speedo_rev >= 2) {
+			sku_info->cpu_speedo_id = 9;
+			sku_info->gpu_speedo_id = 2;
+			break;
+		}
+		fallthrough;
+
 	default:
 		pr_err("Tegra210: unknown SKU %#04x\n", sku);
 		/* Using the default for the error case */
