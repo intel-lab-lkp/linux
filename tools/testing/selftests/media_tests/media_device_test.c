@@ -71,7 +71,7 @@ int main(int argc, char **argv)
 	if (getuid() != 0)
 		ksft_exit_skip("Please run the test as root - Exiting.\n");
 
-	/* Generate random number of interations */
+	/* Generate random number of iterations */
 	srand((unsigned int) time(NULL));
 	count = rand();
 
