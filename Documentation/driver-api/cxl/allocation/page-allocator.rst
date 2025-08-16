@@ -62,7 +62,7 @@ Because the local node does not have :code:`ZONE_MOVABLE`, the CXL node is
 functionally unreachable for direct allocation.  As a result, the only way
 for CXL capacity to be used is via `demotion` in the reclaim path.
 
-This configuration also means that if the DRAM ndoe has :code:`ZONE_MOVABLE`
+This configuration also means that if the DRAM node has :code:`ZONE_MOVABLE`
 capacity - when that capacity is depleted, the page allocator will actually
 prefer CXL :code:`ZONE_MOVABLE` pages over DRAM :code:`ZONE_NORMAL` pages.
 
