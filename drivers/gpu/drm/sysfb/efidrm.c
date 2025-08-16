@@ -3,6 +3,7 @@
 #include <linux/aperture.h>
 #include <linux/efi.h>
 #include <linux/limits.h>
+#include <linux/mod_devicetable.h>
 #include <linux/platform_device.h>
 #include <linux/screen_info.h>
 
@@ -375,10 +376,17 @@ static void efidrm_remove(struct platform_device *pdev)
 	drm_dev_unplug(dev);
 }
 
+static const struct platform_device_id efidrm_platform_id[] = {
+	{ "efi-framebuffer" },
+	{ },
+};
+MODULE_DEVICE_TABLE(platform, efidrm_platform_id);
+
 static struct platform_driver efidrm_platform_driver = {
 	.driver = {
-		.name = "efi-framebuffer",
+		.name = "efi-display",
 	},
+	.id_table = efidrm_platform_id,
 	.probe = efidrm_probe,
 	.remove = efidrm_remove,
 };
