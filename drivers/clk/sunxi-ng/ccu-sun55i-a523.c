@@ -853,6 +853,31 @@ static struct ccu_mux usb_ohci1_clk = {
 	},
 };
 
+static SUNXI_CCU_GATE_DATA(usb2_clk, "usb2", osc24M, 0xa80, BIT(31), 0);
+
+static const struct clk_parent_data usb3_parents[] = {
+	{ .fw_name = "hosc" },
+	{ .hw = &pll_periph0_200M_clk.hw },
+	{ .hw = &pll_periph1_200M_clk.hw },
+};
+
+static SUNXI_CCU_M_DATA_WITH_MUX_GATE(usb3_clk, "usb3", usb3_parents, 0xa84,
+				      0, 5,	/* M */
+				      24, 3,	/* mux */
+				      BIT(31),	/* gate */
+				      0);
+
+static const struct clk_parent_data usb3_suspend_parents[] = {
+	{ .fw_name = "losc" },
+};
+
+static SUNXI_CCU_M_DATA_WITH_MUX_GATE(usb3_suspend_clk, "usb3-suspend",
+				      usb3_suspend_parents, 0xa88,
+				      0, 5,	/* M */
+				      24, 1,	/* mux */
+				      BIT(31),	/* gate */
+				      0);
+
 static SUNXI_CCU_GATE_HWS(bus_ohci0_clk, "bus-ohci0", ahb_hws, 0xa8c,
 			  BIT(0), 0);
 static SUNXI_CCU_GATE_HWS(bus_ohci1_clk, "bus-ohci1", ahb_hws, 0xa8c,
@@ -1290,6 +1315,9 @@ static struct ccu_common *sun55i_a523_ccu_clks[] = {
 	&bus_ths_clk.common,
 	&usb_ohci0_clk.common,
 	&usb_ohci1_clk.common,
+	&usb2_clk.common,
+	&usb3_clk.common,
+	&usb3_suspend_clk.common,
 	&bus_ohci0_clk.common,
 	&bus_ohci1_clk.common,
 	&bus_ehci0_clk.common,
@@ -1422,6 +1450,7 @@ static struct clk_hw_onecell_data sun55i_a523_hw_clks = {
 		[CLK_MBUS_DMA]		= &mbus_dma_clk.common.hw,
 		[CLK_MBUS_VE]		= &mbus_ve_clk.common.hw,
 		[CLK_MBUS_CE]		= &mbus_ce_clk.common.hw,
+		[CLK_MBUS_USB3]		= &mbus_usb3_clk.common.hw,
 		[CLK_MBUS_CSI]		= &mbus_csi_clk.common.hw,
 		[CLK_MBUS_ISP]		= &mbus_isp_clk.common.hw,
 		[CLK_MBUS_EMAC1]	= &mbus_gmac1_clk.common.hw,
@@ -1474,6 +1503,9 @@ static struct clk_hw_onecell_data sun55i_a523_hw_clks = {
 		[CLK_BUS_THS]		= &bus_ths_clk.common.hw,
 		[CLK_USB_OHCI0]		= &usb_ohci0_clk.common.hw,
 		[CLK_USB_OHCI1]		= &usb_ohci1_clk.common.hw,
+		[CLK_USB2]		= &usb2_clk.common.hw,
+		[CLK_USB3]		= &usb3_clk.common.hw,
+		[CLK_USB3_SUSPEND]	= &usb3_suspend_clk.common.hw,
 		[CLK_BUS_OHCI0]		= &bus_ohci0_clk.common.hw,
 		[CLK_BUS_OHCI1]		= &bus_ohci1_clk.common.hw,
 		[CLK_BUS_EHCI0]		= &bus_ehci0_clk.common.hw,

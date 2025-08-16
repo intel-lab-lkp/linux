@@ -185,5 +185,9 @@
 #define CLK_FANOUT0		176
 #define CLK_FANOUT1		177
 #define CLK_FANOUT2		178
+#define CLK_USB2		179
+#define CLK_USB3		180
+#define CLK_USB3_SUSPEND	181
+#define CLK_MBUS_USB3		182
 
 #endif /* _DT_BINDINGS_CLK_SUN55I_A523_CCU_H_ */

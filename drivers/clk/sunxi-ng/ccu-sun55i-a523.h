@@ -9,6 +9,6 @@
 #include <dt-bindings/clock/sun55i-a523-ccu.h>
 #include <dt-bindings/reset/sun55i-a523-ccu.h>
 
-#define CLK_NUMBER	(CLK_FANOUT2 + 1)
+#define CLK_NUMBER	(CLK_MBUS_USB3 + 1)
 
 #endif /* _CCU_SUN55I_A523_H */
