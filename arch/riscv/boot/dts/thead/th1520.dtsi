@@ -701,7 +701,7 @@
 	};
 
 	thermal-zones {
-		cpu-thermal {
+		cpu_thermal_zone: cpu-thermal {
 			polling-delay-passive = <250>;
 			polling-delay = <15000>;
 
