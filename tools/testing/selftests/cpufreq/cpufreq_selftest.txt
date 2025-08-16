@@ -1,0 +1,493 @@
+
+*** RUNNING CPUFREQ SANITY TESTS ***
+====================================
+
+CPUFreq manages: 8 CPUs
+
+** Test: Running read_all_cpufreq_files **
+
+Printing directory: /sys/devices/system/cpu/cpufreq
+
+
+Printing directory: /sys/devices/system/cpu/cpufreq/policy0
+
+affected_cpus:0
+base_frequency:1700000
+cpuinfo_max_freq:3600000
+cpuinfo_min_freq:400000
+cpuinfo_transition_latency:0
+energy_performance_available_preferences:default performance balance_performance balance_power power 
+energy_performance_preference:balance_performance
+related_cpus:0
+scaling_available_governors:performance powersave
+scaling_cur_freq:2534945
+scaling_driver:intel_pstate
+scaling_governor:powersave
+scaling_max_freq:3600000
+scaling_min_freq:400000
+scaling_setspeed:<unsupported>
+
+
+Printing directory: /sys/devices/system/cpu/cpufreq/policy1
+
+affected_cpus:1
+base_frequency:1700000
+cpuinfo_max_freq:3600000
+cpuinfo_min_freq:400000
+cpuinfo_transition_latency:0
+energy_performance_available_preferences:default performance balance_performance balance_power power 
+energy_performance_preference:balance_performance
+related_cpus:1
+scaling_available_governors:performance powersave
+scaling_cur_freq:2843282
+scaling_driver:intel_pstate
+scaling_governor:powersave
+scaling_max_freq:3600000
+scaling_min_freq:400000
+scaling_setspeed:<unsupported>
+
+
+Printing directory: /sys/devices/system/cpu/cpufreq/policy2
+
+affected_cpus:2
+base_frequency:1700000
+cpuinfo_max_freq:3600000
+cpuinfo_min_freq:400000
+cpuinfo_transition_latency:0
+energy_performance_available_preferences:default performance balance_performance balance_power power 
+energy_performance_preference:balance_performance
+related_cpus:2
+scaling_available_governors:performance powersave
+scaling_cur_freq:2870789
+scaling_driver:intel_pstate
+scaling_governor:powersave
+scaling_max_freq:3600000
+scaling_min_freq:400000
+scaling_setspeed:<unsupported>
+
+
+Printing directory: /sys/devices/system/cpu/cpufreq/policy3
+
+affected_cpus:3
+base_frequency:1700000
+cpuinfo_max_freq:3600000
+cpuinfo_min_freq:400000
+cpuinfo_transition_latency:0
+energy_performance_available_preferences:default performance balance_performance balance_power power 
+energy_performance_preference:balance_performance
+related_cpus:3
+scaling_available_governors:performance powersave
+scaling_cur_freq:2790228
+scaling_driver:intel_pstate
+scaling_governor:powersave
+scaling_max_freq:3600000
+scaling_min_freq:400000
+scaling_setspeed:<unsupported>
+
+
+Printing directory: /sys/devices/system/cpu/cpufreq/policy4
+
+affected_cpus:4
+base_frequency:1700000
+cpuinfo_max_freq:3600000
+cpuinfo_min_freq:400000
+cpuinfo_transition_latency:0
+energy_performance_available_preferences:default performance balance_performance balance_power power 
+energy_performance_preference:balance_performance
+related_cpus:4
+scaling_available_governors:performance powersave
+scaling_cur_freq:2679211
+scaling_driver:intel_pstate
+scaling_governor:powersave
+scaling_max_freq:3600000
+scaling_min_freq:400000
+scaling_setspeed:<unsupported>
+
+
+Printing directory: /sys/devices/system/cpu/cpufreq/policy5
+
+affected_cpus:5
+base_frequency:1700000
+cpuinfo_max_freq:3600000
+cpuinfo_min_freq:400000
+cpuinfo_transition_latency:0
+energy_performance_available_preferences:default performance balance_performance balance_power power 
+energy_performance_preference:balance_performance
+related_cpus:5
+scaling_available_governors:performance powersave
+scaling_cur_freq:2749009
+scaling_driver:intel_pstate
+scaling_governor:powersave
+scaling_max_freq:3600000
+scaling_min_freq:400000
+scaling_setspeed:<unsupported>
+
+
+Printing directory: /sys/devices/system/cpu/cpufreq/policy6
+
+affected_cpus:6
+base_frequency:1700000
+cpuinfo_max_freq:3600000
+cpuinfo_min_freq:400000
+cpuinfo_transition_latency:0
+energy_performance_available_preferences:default performance balance_performance balance_power power 
+energy_performance_preference:balance_performance
+related_cpus:6
+scaling_available_governors:performance powersave
+scaling_cur_freq:2723564
+scaling_driver:intel_pstate
+scaling_governor:powersave
+scaling_max_freq:3600000
+scaling_min_freq:400000
+scaling_setspeed:<unsupported>
+
+
+Printing directory: /sys/devices/system/cpu/cpufreq/policy7
+
+affected_cpus:7
+base_frequency:1700000
+cpuinfo_max_freq:3600000
+cpuinfo_min_freq:400000
+cpuinfo_transition_latency:0
+energy_performance_available_preferences:default performance balance_performance balance_power power 
+energy_performance_preference:balance_performance
+related_cpus:7
+scaling_available_governors:performance powersave
+scaling_cur_freq:2537966
+scaling_driver:intel_pstate
+scaling_governor:powersave
+scaling_max_freq:3600000
+scaling_min_freq:400000
+scaling_setspeed:<unsupported>
+
+
+------------------------------------------------
+
+** Test: Running update_all_cpufreq_files **
+
+Updating directory: /sys/devices/system/cpu/cpufreq
+
+
+Updating directory: /sys/devices/system/cpu/cpufreq/policy0
+
+Writing balance_performance to: energy_performance_preference
+Writing powersave to: scaling_governor
+Writing 3600000 to: scaling_max_freq
+Writing 400000 to: scaling_min_freq
+
+
+Updating directory: /sys/devices/system/cpu/cpufreq/policy1
+
+Writing balance_performance to: energy_performance_preference
+Writing powersave to: scaling_governor
+Writing 3600000 to: scaling_max_freq
+Writing 400000 to: scaling_min_freq
+
+
+Updating directory: /sys/devices/system/cpu/cpufreq/policy2
+
+Writing balance_performance to: energy_performance_preference
+Writing powersave to: scaling_governor
+Writing 3600000 to: scaling_max_freq
+Writing 400000 to: scaling_min_freq
+
+
+Updating directory: /sys/devices/system/cpu/cpufreq/policy3
+
+Writing balance_performance to: energy_performance_preference
+Writing powersave to: scaling_governor
+Writing 3600000 to: scaling_max_freq
+Writing 400000 to: scaling_min_freq
+
+
+Updating directory: /sys/devices/system/cpu/cpufreq/policy4
+
+Writing balance_performance to: energy_performance_preference
+Writing powersave to: scaling_governor
+Writing 3600000 to: scaling_max_freq
+Writing 400000 to: scaling_min_freq
+
+
+Updating directory: /sys/devices/system/cpu/cpufreq/policy5
+
+Writing balance_performance to: energy_performance_preference
+Writing powersave to: scaling_governor
+Writing 3600000 to: scaling_max_freq
+Writing 400000 to: scaling_min_freq
+
+
+Updating directory: /sys/devices/system/cpu/cpufreq/policy6
+
+Writing balance_performance to: energy_performance_preference
+Writing powersave to: scaling_governor
+Writing 3600000 to: scaling_max_freq
+Writing 400000 to: scaling_min_freq
+
+
+Updating directory: /sys/devices/system/cpu/cpufreq/policy7
+
+Writing balance_performance to: energy_performance_preference
+Writing powersave to: scaling_governor
+Writing 3600000 to: scaling_max_freq
+Writing 400000 to: scaling_min_freq
+
+
+------------------------------------------------
+
+** Test: Running reboot_cpus for 5 loop(s) **
+
+Offline cpu1
+Offline cpu2
+Offline cpu3
+Offline cpu4
+Offline cpu5
+Offline cpu6
+Offline cpu7
+Online cpu1
+Online cpu2
+Online cpu3
+Online cpu4
+Online cpu5
+Online cpu6
+Online cpu7
+
+Offline cpu1
+Offline cpu2
+Offline cpu3
+Offline cpu4
+Offline cpu5
+Offline cpu6
+Offline cpu7
+Online cpu1
+Online cpu2
+Online cpu3
+Online cpu4
+Online cpu5
+Online cpu6
+Online cpu7
+
+Offline cpu1
+Offline cpu2
+Offline cpu3
+Offline cpu4
+Offline cpu5
+Offline cpu6
+Offline cpu7
+Online cpu1
+Online cpu2
+Online cpu3
+Online cpu4
+Online cpu5
+Online cpu6
+Online cpu7
+
+Offline cpu1
+Offline cpu2
+Offline cpu3
+Offline cpu4
+Offline cpu5
+Offline cpu6
+Offline cpu7
+Online cpu1
+Online cpu2
+Online cpu3
+Online cpu4
+Online cpu5
+Online cpu6
+Online cpu7
+
+Offline cpu1
+Offline cpu2
+Offline cpu3
+Offline cpu4
+Offline cpu5
+Offline cpu6
+Offline cpu7
+Online cpu1
+Online cpu2
+Online cpu3
+Online cpu4
+Online cpu5
+Online cpu6
+Online cpu7
+
+
+------------------------------------------------
+
+** Test: Running shuffle_frequency_for_all_cpus for 2 loop(s) **
+
+Governor backup done for policy0: powersave
+
+test_all_frequencies: userspace governor not available for: policy0
+Governor backup done for policy1: powersave
+
+test_all_frequencies: userspace governor not available for: policy1
+Governor backup done for policy2: powersave
+
+test_all_frequencies: userspace governor not available for: policy2
+Governor backup done for policy3: powersave
+
+test_all_frequencies: userspace governor not available for: policy3
+Governor backup done for policy4: powersave
+
+test_all_frequencies: userspace governor not available for: policy4
+Governor backup done for policy5: powersave
+
+test_all_frequencies: userspace governor not available for: policy5
+Governor backup done for policy6: powersave
+
+test_all_frequencies: userspace governor not available for: policy6
+Governor backup done for policy7: powersave
+
+test_all_frequencies: userspace governor not available for: policy7
+Governor backup done for policy0: powersave
+
+test_all_frequencies: userspace governor not available for: policy0
+Governor backup done for policy1: powersave
+
+test_all_frequencies: userspace governor not available for: policy1
+Governor backup done for policy2: powersave
+
+test_all_frequencies: userspace governor not available for: policy2
+Governor backup done for policy3: powersave
+
+test_all_frequencies: userspace governor not available for: policy3
+Governor backup done for policy4: powersave
+
+test_all_frequencies: userspace governor not available for: policy4
+Governor backup done for policy5: powersave
+
+test_all_frequencies: userspace governor not available for: policy5
+Governor backup done for policy6: powersave
+
+test_all_frequencies: userspace governor not available for: policy6
+Governor backup done for policy7: powersave
+
+test_all_frequencies: userspace governor not available for: policy7
+
+------------------------------------------------
+
+** Test: Running shuffle_governors_for_all_cpus for 1 loop(s) **
+
+Governor backup done for policy0: powersave
+
+Available governors for policy0: performance powersave
+
+Switched governor for policy0 to performance
+
+No files to read for performance governor
+
+
+Switched governor for policy0 to powersave
+
+No files to read for powersave governor
+
+Governor restored for policy0 to powersave
+
+Governor backup done for policy1: powersave
+
+Available governors for policy1: performance powersave
+
+Switched governor for policy1 to performance
+
+No files to read for performance governor
+
+
+Switched governor for policy1 to powersave
+
+No files to read for powersave governor
+
+Governor restored for policy1 to powersave
+
+Governor backup done for policy2: powersave
+
+Available governors for policy2: performance powersave
+
+Switched governor for policy2 to performance
+
+No files to read for performance governor
+
+
+Switched governor for policy2 to powersave
+
+No files to read for powersave governor
+
+Governor restored for policy2 to powersave
+
+Governor backup done for policy3: powersave
+
+Available governors for policy3: performance powersave
+
+Switched governor for policy3 to performance
+
+No files to read for performance governor
+
+
+Switched governor for policy3 to powersave
+
+No files to read for powersave governor
+
+Governor restored for policy3 to powersave
+
+Governor backup done for policy4: powersave
+
+Available governors for policy4: performance powersave
+
+Switched governor for policy4 to performance
+
+No files to read for performance governor
+
+
+Switched governor for policy4 to powersave
+
+No files to read for powersave governor
+
+Governor restored for policy4 to powersave
+
+Governor backup done for policy5: powersave
+
+Available governors for policy5: performance powersave
+
+Switched governor for policy5 to performance
+
+No files to read for performance governor
+
+
+Switched governor for policy5 to powersave
+
+No files to read for powersave governor
+
+Governor restored for policy5 to powersave
+
+Governor backup done for policy6: powersave
+
+Available governors for policy6: performance powersave
+
+Switched governor for policy6 to performance
+
+No files to read for performance governor
+
+
+Switched governor for policy6 to powersave
+
+No files to read for powersave governor
+
+Governor restored for policy6 to powersave
+
+Governor backup done for policy7: powersave
+
+Available governors for policy7: performance powersave
+
+Switched governor for policy7 to performance
+
+No files to read for performance governor
+
+
+Switched governor for policy7 to powersave
+
+No files to read for powersave governor
+
+Governor restored for policy7 to powersave
+
+------------------------------------------------
+
