@@ -315,6 +315,16 @@ config NVMEM_ROCKCHIP_OTP
 	  This driver can also be built as a module. If so, the module
 	  will be called nvmem_rockchip_otp.
 
+config NVMEM_S32G_OCOTP
+	tristate "S32G SoC OCOTP support"
+	depends on ARCH_S32
+	help
+	  This is a driver for the On Chip One-Time Programmable controller
+	  (OCOTP) available on S32G platforms.
+
+	  If you say Y here, you will get support for the One Time
+	  Programmable memory pages.
+
 config NVMEM_SC27XX_EFUSE
 	tristate "Spreadtrum SC27XX eFuse Support"
 	depends on MFD_SC27XX_PMIC || COMPILE_TEST
