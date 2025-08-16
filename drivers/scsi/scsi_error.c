@@ -271,8 +271,9 @@ scsi_abort_command(struct scsi_cmnd *scmd)
  */
 static void scsi_eh_reset(struct scsi_cmnd *scmd)
 {
+	struct scsi_driver *sdrv = scsi_cmd_to_driver(scmd);
+
 	if (!blk_rq_is_passthrough(scsi_cmd_to_rq(scmd))) {
-		struct scsi_driver *sdrv = scsi_cmd_to_driver(scmd);
 		if (sdrv->eh_reset)
 			sdrv->eh_reset(scmd);
 	}
@@ -291,11 +292,46 @@ static void scsi_eh_inc_host_failed(struct rcu_head *head)
 	spin_unlock_irqrestore(shost->host_lock, flags);
 }
 
+static bool scsi_eh_scmd_add_sdev(struct scsi_cmnd *scmd)
+{
+	struct scsi_device *sdev = scmd->device;
+	struct scsi_device_eh *eh = sdev->eh;
+
+	if (!eh || !eh->add_cmnd)
+		return true;
+
+	scsi_eh_reset(scmd);
+	eh->add_cmnd(scmd);
+
+	if (eh->wakeup)
+		eh->wakeup(sdev);
+
+	return false;
+}
+
+static bool scsi_eh_scmd_add_starget(struct scsi_cmnd *scmd)
+{
+	struct scsi_device *sdev = scmd->device;
+	struct scsi_target *starget = scsi_target(sdev);
+	struct scsi_target_eh *eh = starget->eh;
+
+	if (!eh || !eh->add_cmnd)
+		return true;
+
+	scsi_eh_reset(scmd);
+	eh->add_cmnd(scmd);
+
+	if (eh->wakeup)
+		eh->wakeup(starget);
+
+	return false;
+}
+
 /**
- * scsi_eh_scmd_add - add scsi cmd to error handling.
- * @scmd:	scmd to run eh on.
+ * Add scsi cmd to error handling of Scsi_Host.
+ * This is default action of error handle.
  */
-void scsi_eh_scmd_add(struct scsi_cmnd *scmd)
+static void scsi_eh_scmd_add_shost(struct scsi_cmnd *scmd)
 {
 	struct Scsi_Host *shost = scmd->device->host;
 	unsigned long flags;
@@ -320,6 +356,43 @@ void scsi_eh_scmd_add(struct scsi_cmnd *scmd)
 	 * host_failed change.
 	 */
 	call_rcu_hurry(&scmd->rcu, scsi_eh_inc_host_failed);
+}
+
+/**
+ * scsi_eh_scmd_add - add scsi cmd to error handling.
+ * @scmd:	scmd to run eh on.
+ */
+void scsi_eh_scmd_add(struct scsi_cmnd *scmd)
+{
+	struct scsi_device *sdev = scmd->device;
+	struct scsi_target *starget = scsi_target(sdev);
+	struct Scsi_Host *shost = sdev->host;
+
+	if (unlikely(scsi_host_in_recovery(shost))) {
+		scsi_eh_scmd_add_shost(scmd);
+		return;
+	}
+
+	if (unlikely(scsi_target_in_recovery(starget))) {
+		if (scsi_eh_scmd_add_starget(scmd))
+			scsi_eh_scmd_add_shost(scmd);
+		return;
+	}
+
+	if (scsi_eh_scmd_add_sdev(scmd))
+		if (scsi_eh_scmd_add_starget(scmd))
+			scsi_eh_scmd_add_shost(scmd);
+}
+
+void scsi_eh_try_wakeup(struct scsi_device *sdev)
+{
+	struct scsi_target *starget = scsi_target(sdev);
+
+	if (sdev->eh && sdev->eh->wakeup)
+		sdev->eh->wakeup(sdev);
+
+	if (starget->eh && starget->eh->wakeup)
+		starget->eh->wakeup(starget);
 }
 
 /**
