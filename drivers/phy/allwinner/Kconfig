@@ -57,3 +57,12 @@ config PHY_SUN50I_USB3
 	  part of Allwinner H6 SoC.
 
 	  This driver controls each individual USB 2+3 host PHY combo.
+
+config PHY_SUN55I_USB3_PCIE
+	tristate "Allwinner A523 Innosilicon USB3/PCIe Combophy Driver"
+	depends on ARCH_SUNXI || COMPILE_TEST
+	depends on RESET_CONTROLLER
+	select GENERIC_PHY
+	help
+	  Enable this to support the Allwinner PCIe/USB3.0 combo PHY
+	  with Innosilicon IP block founded in A523/A527/H728/T527 SOC
