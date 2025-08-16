@@ -28,6 +28,7 @@
 #include <scsi/scsi_cmnd.h>
 #include <scsi/scsi_tcq.h>
 #include <scsi/scsi_devinfo.h>
+#include <scsi/scsi_eh.h>
 #include <linux/seqlock.h>
 
 #include "sd.h"
@@ -801,6 +802,8 @@ static const struct scsi_host_template virtscsi_host_template = {
 	.eh_device_reset_handler = virtscsi_device_reset,
 	.eh_timed_out = virtscsi_eh_timed_out,
 	.sdev_init = virtscsi_device_alloc,
+	.sdev_setup_eh = scsi_device_setup_eh,
+	.sdev_clear_eh = scsi_device_clear_eh,
 
 	.dma_boundary = UINT_MAX,
 	.map_queues = virtscsi_map_queues,
