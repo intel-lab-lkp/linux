@@ -1,0 +1,67 @@
+# SPDX-License-Identifier: GPL-2.0-only OR BSD-2-Clause
+%YAML 1.2
+---
+$id: http://devicetree.org/schemas/mips/lantiq/lantiq,gptu-xway.yaml#
+$schema: http://devicetree.org/meta-schemas/core.yaml#
+
+title: Lantiq Xway SoC series General Purpose Timer Unit (GPTU)
+
+maintainers:
+  - Aleksander Jan Bajkowski <olek2@wp.pl>
+
+description:
+  The Lantiq SoC has six built-in 16-bit general purpose timers. The voice
+  firmware needs these timers as a reference.
+
+properties:
+  $nodename:
+    pattern: "^gptu@[0-9a-f]+$"
+
+  compatible:
+    items:
+      - enum:
+          - lantiq,ase-gptu
+          - lantiq,danube-gptu
+          - lantiq,xrx100-gptu
+          - lantiq,xrx200-gptu
+      - const: lantiq,gptu-xway
+
+  reg:
+    maxItems: 1
+
+  interrupts:
+    items:
+      - description: timer1a interrupt
+      - description: timer1b interrupt
+      - description: timer2a interrupt
+      - description: timer2b interrupt
+      - description: timer3a interrupt
+      - description: timer3b interrupt
+
+  interrupt-names:
+    items:
+      - const: timer1a
+      - const: timer1b
+      - const: timer2a
+      - const: timer2b
+      - const: timer3a
+      - const: timer3b
+
+required:
+  - compatible
+  - reg
+  - interrupts
+  - interrupt-names
+
+additionalProperties: false
+
+examples:
+  - |
+    gptu@e100a00 {
+        compatible = "lantiq,ase-gptu", "lantiq,gptu-xway";
+        reg = <0xe100a00 0x100>;
+        interrupt-parent = <&icu0>;
+        interrupts = <126>, <127>, <128>, <129> ,<130>, <131>;
+        interrupt-names = "timer1a", "timer1b", "timer2a", "timer2b",
+                "timer3a", "timer3b";
+    };
