@@ -13,7 +13,7 @@
 
 #define LLSC_MAX_LOOPS	128 /* What's the largest number you can think of? */
 
-#define LLSC_FUTEX_ATOMIC_OP(op, insn)					\
+#define LLSC_FUTEX_ATOMIC_OP(op, asm_op)				\
 static __always_inline int						\
 __llsc_futex_atomic_##op(int oparg, u32 __user *uaddr, int *oval)	\
 {									\
@@ -24,7 +24,7 @@ __llsc_futex_atomic_##op(int oparg, u32 __user *uaddr, int *oval)	\
 	asm volatile("// __llsc_futex_atomic_" #op "\n"			\
 "	prfm	pstl1strm, %2\n"					\
 "1:	ldxr	%w1, %2\n"						\
-	insn "\n"							\
+"	" #asm_op "	%w3, %w1, %w5\n"				\
 "2:	stlxr	%w0, %w3, %2\n"						\
 "	cbz	%w0, 3f\n"						\
 "	sub	%w4, %w4, %w0\n"					\
@@ -46,11 +46,40 @@ __llsc_futex_atomic_##op(int oparg, u32 __user *uaddr, int *oval)	\
 	return ret;							\
 }
 
-LLSC_FUTEX_ATOMIC_OP(add, "add	%w3, %w1, %w5")
-LLSC_FUTEX_ATOMIC_OP(or, "orr	%w3, %w1, %w5")
-LLSC_FUTEX_ATOMIC_OP(and, "and	%w3, %w1, %w5")
-LLSC_FUTEX_ATOMIC_OP(eor, "eor	%w3, %w1, %w5")
-LLSC_FUTEX_ATOMIC_OP(set, "mov	%w3, %w5")
+LLSC_FUTEX_ATOMIC_OP(add, add)
+LLSC_FUTEX_ATOMIC_OP(or, orr)
+LLSC_FUTEX_ATOMIC_OP(and, and)
+LLSC_FUTEX_ATOMIC_OP(eor, eor)
+
+static __always_inline int
+__llsc_futex_atomic_set(int oparg, u32 __user *uaddr, int *oval)
+{
+	unsigned int loops = LLSC_MAX_LOOPS;
+	int ret, oldval;
+
+	uaccess_enable_privileged();
+	asm volatile("//__llsc_futex_xchg\n"
+"	prfm	pstl1strm, %2\n"
+"1:	ldxr	%w1, %2\n"
+"2:	stlxr	%w0, %w4, %2\n"
+"	cbz	%w3, 3f\n"
+"	sub	%w3, %w3, %w0\n"
+"	cbnz	%w3, 1b\n"
+"	mov	%w0, %w5\n"
+"3:\n"
+"	dmb	ish\n"
+	_ASM_EXTABLE_UACCESS_ERR(1b, 3b, %w0)
+	_ASM_EXTABLE_UACCESS_ERR(2b, 3b, %w0)
+	: "=&r" (ret), "=&r" (oldval), "+Q" (*uaddr), "+r" (loops)
+	: "r" (oparg), "Ir" (-EAGAIN)
+	: "memory");
+	uaccess_disable_privileged();
+
+	if (!ret)
+		*oval = oldval;
+
+	return ret;
+}
 
 static __always_inline int
 __llsc_futex_cmpxchg(u32 __user *uaddr, u32 oldval, u32 newval, u32 *oval)
