@@ -68,6 +68,24 @@ impl FwNode {
         unsafe { bindings::is_of_node(self.as_raw()) }
     }
 
+    /// Returns `DeviceNode` if `&self` is an OF node.
+    pub fn to_of_node(&self) -> Option<&crate::of::DeviceNode> {
+        // SAFETY: The type invariant of `Self` guarantees that `self.as_raw() is a pointer to a
+        // valid `struct fwnode_handle`.
+        let of_node = unsafe { bindings::to_of_node(self.as_raw()) };
+
+        if of_node.is_null() {
+            None
+        } else {
+            // SAFETY: `of_node` is valid. Its lifetime is tied to `&self`. We
+            // return a reference instead of an `ARef<DeviceNode>` because `to_of_node()`
+            // doesn't increment the refcount. It is safe to cast from a
+            // `struct device_node*` to a `*const DeviceNode` because `DeviceNode` is
+            // defined as a `#[repr(transparent)]` wrapper around `device_node`.
+            Some(unsafe { &*of_node.cast() })
+        }
+    }
+
     /// Returns an object that implements [`Display`](core::fmt::Display) for
     /// printing the name of a node.
     ///

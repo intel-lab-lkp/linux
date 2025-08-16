@@ -6,6 +6,7 @@ use crate::{
     bindings,
     device_id::{RawDeviceId, RawDeviceIdIndex},
     prelude::*,
+    types::Opaque
 };
 
 /// IdTable type for OF drivers.
@@ -62,4 +63,15 @@ macro_rules! of_device_table {
 
         $crate::module_device_table!("of", $module_table_name, $table_name);
     };
+}
+
+/// Devicetree device node
+#[repr(transparent)]
+pub struct DeviceNode(Opaque<bindings::device_node>);
+
+impl DeviceNode {
+    /// Obtain the raw `struct device_node *`.
+    pub fn as_raw(&self) -> *mut bindings::device_node {
+        self.0.get()
+    }
 }
