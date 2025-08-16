@@ -213,6 +213,19 @@ static int seg6_genl_sethmac(struct sk_buff *skb, struct genl_info *info)
 	hinfo->alg_id = algid;
 	hinfo->hmackeyid = hmackeyid;
 
+	switch (algid) {
+	case SEG6_HMAC_ALGO_SHA1:
+		hmac_sha1_preparekey(&hinfo->key.sha1, secret, slen);
+		break;
+	case SEG6_HMAC_ALGO_SHA256:
+		hmac_sha256_preparekey(&hinfo->key.sha256, secret, slen);
+		break;
+	default:
+		kfree(hinfo);
+		err = -EINVAL;
+		goto out_unlock;
+	}
+
 	err = seg6_hmac_info_add(net, hmackeyid, hinfo);
 	if (err)
 		kfree(hinfo);

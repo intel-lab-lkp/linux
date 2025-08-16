@@ -148,19 +148,18 @@ int seg6_hmac_compute(struct seg6_hmac_info *hinfo, struct ipv6_sr_hdr *hdr,
 
 	switch (hinfo->alg_id) {
 	case SEG6_HMAC_ALGO_SHA1:
-		hmac_sha1_usingrawkey(hinfo->secret, hinfo->slen, ring, plen,
-				      output);
+		hmac_sha1(&hinfo->key.sha1, ring, plen, output);
 		static_assert(SEG6_HMAC_FIELD_LEN > SHA1_DIGEST_SIZE);
 		memset(&output[SHA1_DIGEST_SIZE], 0,
 		       SEG6_HMAC_FIELD_LEN - SHA1_DIGEST_SIZE);
 		break;
 	case SEG6_HMAC_ALGO_SHA256:
-		hmac_sha256_usingrawkey(hinfo->secret, hinfo->slen, ring, plen,
-					output);
+		hmac_sha256(&hinfo->key.sha256, ring, plen, output);
 		static_assert(SEG6_HMAC_FIELD_LEN == SHA256_DIGEST_SIZE);
 		break;
 	default:
-		ret = -ENOENT;
+		WARN_ON_ONCE(1);
+		ret = -EINVAL;
 		break;
 	}
 	local_unlock_nested_bh(&hmac_storage.bh_lock);
