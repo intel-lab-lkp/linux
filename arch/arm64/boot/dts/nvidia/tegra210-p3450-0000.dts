@@ -594,6 +594,7 @@
 		nvidia,droop-ctrl = <0x00000f00>;
 		nvidia,force-mode = <1>;
 		nvidia,sample-rate = <25000>;
+		nvidia,dfll-max-freq = <1479000000>;
 
 		nvidia,pwm-min-microvolts = <708000>;
 		nvidia,pwm-period-nanoseconds = <2500>; /* 2.5us */
