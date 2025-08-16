@@ -377,9 +377,16 @@ static struct scsi_device *scsi_alloc_sdev(struct scsi_target *starget,
 			goto out_device_destroy;
 		}
 	}
+	if (shost->hostt->sdev_setup_eh) {
+		ret = shost->hostt->sdev_setup_eh(sdev);
+		if (ret)
+			goto out_device_eh;
+	}
 
 	return sdev;
 
+out_device_eh:
+	shost->hostt->sdev_destroy(sdev);
 out_device_destroy:
 	__scsi_remove_device(sdev);
 out:
