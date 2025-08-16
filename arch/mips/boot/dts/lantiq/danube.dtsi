@@ -69,7 +69,7 @@
 		reg = <0x10000000 0xef00000>;
 
 		gptu@e100a00 {
-			compatible = "lantiq,gptu-xway";
+			compatible = "lantiq,danube-gptu", "lantiq,gptu-xway";
 			reg = <0xe100a00 0x100>;
 			interrupt-parent = <&icu0>;
 			interrupts = <126 127 128 129 130 131>;
