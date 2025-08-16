@@ -48,6 +48,12 @@ struct movable_operations {
 	void (*putback_page)(struct page *);
 };
 
+#define MOVABLE_BALLOON		0
+#define MOVABLE_ZSMALLOC	1
+#define MOVABLE_MAX		2
+
+extern const struct movable_operations *movable_ops[MOVABLE_MAX];
+
 /* Defined in mm/debug.c: */
 extern const char *migrate_reason_names[MR_TYPES];
 
