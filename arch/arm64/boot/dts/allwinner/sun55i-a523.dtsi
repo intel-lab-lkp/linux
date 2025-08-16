@@ -606,6 +606,16 @@
 			};
 		};
 
+		combophy: phy@4f00000 {
+			compatible = "allwinner,sun55i-a523-usb3-pcie-phy";
+			reg = <0x04f00000 0x100000>;
+			clocks = <&ccu CLK_USB3>;
+			resets = <&ccu RST_BUS_PCIE_USB3>;
+			#phy-cells = <0>;
+			power-domains = <&pck600 PD_PCIE>;
+			status = "disabled";
+		};
+
 		ppu: power-controller@7001400 {
 			compatible = "allwinner,sun55i-a523-ppu";
 			reg = <0x07001400 0x400>;
