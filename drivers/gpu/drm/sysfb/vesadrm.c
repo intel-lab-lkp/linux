@@ -3,6 +3,7 @@
 #include <linux/aperture.h>
 #include <linux/ioport.h>
 #include <linux/limits.h>
+#include <linux/mod_devicetable.h>
 #include <linux/platform_device.h>
 #include <linux/screen_info.h>
 
@@ -512,10 +513,17 @@ static void vesadrm_remove(struct platform_device *pdev)
 	drm_dev_unplug(dev);
 }
 
+static const struct platform_device_id vesadrm_platform_id[] = {
+	{ "vesa-framebuffer" },
+	{ },
+};
+MODULE_DEVICE_TABLE(platform, vesadrm_platform_id);
+
 static struct platform_driver vesadrm_platform_driver = {
 	.driver = {
-		.name = "vesa-framebuffer",
+		.name = "vesa-display",
 	},
+	.id_table = vesadrm_platform_id,
 	.probe = vesadrm_probe,
 	.remove = vesadrm_remove,
 };
