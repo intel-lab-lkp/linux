@@ -5600,12 +5600,6 @@ static int ice_resume(struct device *dev)
 	if (!pci_device_is_present(pdev))
 		return -ENODEV;
 
-	ret = pci_enable_device_mem(pdev);
-	if (ret) {
-		dev_err(dev, "Cannot enable device after suspend\n");
-		return ret;
-	}
-
 	pf = pci_get_drvdata(pdev);
 	hw = &pf->hw;
 
