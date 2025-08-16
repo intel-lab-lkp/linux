@@ -24,6 +24,8 @@ extern int scsi_starget_eh(struct scsi_target *starget,
 			struct list_head *workq, struct list_head *doneq);
 extern int scsi_device_setup_eh(struct scsi_device *sdev);
 extern void scsi_device_clear_eh(struct scsi_device *sdev);
+extern int scsi_target_setup_eh(struct scsi_target *starget);
+extern void scsi_target_clear_eh(struct scsi_target *starget);
 
 static inline bool scsi_sense_is_deferred(const struct scsi_sense_hdr *sshdr)
 {
