@@ -3706,6 +3706,7 @@ static int atomisp_set_sensor_crop_and_fmt(struct atomisp_device *isp,
 	struct v4l2_subdev_state *sd_state;
 	int ret = 0;
 
+	lockdep_assert_held(&isp->mutex);
 	if (!input->sensor)
 		return -EINVAL;
 
@@ -3800,6 +3801,7 @@ int atomisp_try_fmt(struct atomisp_device *isp, struct v4l2_pix_format *f,
 	u32 padding_w, padding_h;
 	int ret;
 
+	lockdep_assert_held(&isp->mutex);
 	fmt = atomisp_get_format_bridge(f->pixelformat);
 	/* Currently, raw formats are broken!!! */
 	if (!fmt || fmt->sh_fmt == IA_CSS_FRAME_FORMAT_RAW) {
@@ -4334,6 +4336,7 @@ int atomisp_set_fmt(struct video_device *vdev, struct v4l2_format *f)
 	struct v4l2_rect isp_sink_crop;
 	int ret;
 
+	lockdep_assert_held(&isp->mutex);
 	ret = atomisp_pipe_check(pipe, true);
 	if (ret)
 		return ret;
