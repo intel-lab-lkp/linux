@@ -466,6 +466,47 @@ struct hisi_qp *hpre_create_qp(u8 type)
 	return NULL;
 }
 
+static void hpre_close_sva_prefetch(struct hisi_qm *qm)
+{
+	u32 val;
+	int ret;
+
+	if (!test_bit(QM_SUPPORT_SVA_PREFETCH, &qm->caps))
+		return;
+
+	val = readl_relaxed(qm->io_base + HPRE_PREFETCH_CFG);
+	val |= HPRE_PREFETCH_DISABLE;
+	writel(val, qm->io_base + HPRE_PREFETCH_CFG);
+
+	ret = readl_relaxed_poll_timeout(qm->io_base + HPRE_SVA_PREFTCH_DFX,
+					 val, !(val & HPRE_SVA_DISABLE_READY),
+					 HPRE_REG_RD_INTVRL_US,
+					 HPRE_REG_RD_TMOUT_US);
+	if (ret)
+		pci_err(qm->pdev, "failed to close sva prefetch\n");
+}
+
+static void hpre_open_sva_prefetch(struct hisi_qm *qm)
+{
+	u32 val;
+	int ret;
+
+	if (!test_bit(QM_SUPPORT_SVA_PREFETCH, &qm->caps))
+		return;
+
+	/* Enable prefetch */
+	val = readl_relaxed(qm->io_base + HPRE_PREFETCH_CFG);
+	val &= HPRE_PREFETCH_ENABLE;
+	writel(val, qm->io_base + HPRE_PREFETCH_CFG);
+
+	ret = readl_relaxed_poll_timeout(qm->io_base + HPRE_PREFETCH_CFG,
+					 val, !(val & HPRE_PREFETCH_DISABLE),
+					 HPRE_REG_RD_INTVRL_US,
+					 HPRE_REG_RD_TMOUT_US);
+	if (ret)
+		pci_err(qm->pdev, "failed to open sva prefetch\n");
+}
+
 static void hpre_config_pasid(struct hisi_qm *qm)
 {
 	u32 val1, val2;
@@ -484,6 +525,8 @@ static void hpre_config_pasid(struct hisi_qm *qm)
 	}
 	writel_relaxed(val1, qm->io_base + HPRE_DATA_RUSER_CFG);
 	writel_relaxed(val2, qm->io_base + HPRE_DATA_WUSER_CFG);
+
+	hpre_open_sva_prefetch(qm);
 }
 
 static int hpre_cfg_by_dsm(struct hisi_qm *qm)
@@ -561,47 +604,6 @@ static void disable_flr_of_bme(struct hisi_qm *qm)
 	val |= HPRE_QM_PM_FLR;
 	writel(val, qm->io_base + QM_PEH_AXUSER_CFG);
 	writel(PEH_AXUSER_CFG_ENABLE, qm->io_base + QM_PEH_AXUSER_CFG_ENABLE);
-}
-
-static void hpre_open_sva_prefetch(struct hisi_qm *qm)
-{
-	u32 val;
-	int ret;
-
-	if (!test_bit(QM_SUPPORT_SVA_PREFETCH, &qm->caps))
-		return;
-
-	/* Enable prefetch */
-	val = readl_relaxed(qm->io_base + HPRE_PREFETCH_CFG);
-	val &= HPRE_PREFETCH_ENABLE;
-	writel(val, qm->io_base + HPRE_PREFETCH_CFG);
-
-	ret = readl_relaxed_poll_timeout(qm->io_base + HPRE_PREFETCH_CFG,
-					 val, !(val & HPRE_PREFETCH_DISABLE),
-					 HPRE_REG_RD_INTVRL_US,
-					 HPRE_REG_RD_TMOUT_US);
-	if (ret)
-		pci_err(qm->pdev, "failed to open sva prefetch\n");
-}
-
-static void hpre_close_sva_prefetch(struct hisi_qm *qm)
-{
-	u32 val;
-	int ret;
-
-	if (!test_bit(QM_SUPPORT_SVA_PREFETCH, &qm->caps))
-		return;
-
-	val = readl_relaxed(qm->io_base + HPRE_PREFETCH_CFG);
-	val |= HPRE_PREFETCH_DISABLE;
-	writel(val, qm->io_base + HPRE_PREFETCH_CFG);
-
-	ret = readl_relaxed_poll_timeout(qm->io_base + HPRE_SVA_PREFTCH_DFX,
-					 val, !(val & HPRE_SVA_DISABLE_READY),
-					 HPRE_REG_RD_INTVRL_US,
-					 HPRE_REG_RD_TMOUT_US);
-	if (ret)
-		pci_err(qm->pdev, "failed to close sva prefetch\n");
 }
 
 static void hpre_enable_clock_gate(struct hisi_qm *qm)
@@ -1449,8 +1451,6 @@ static int hpre_pf_probe_init(struct hpre *hpre)
 	ret = hpre_set_user_domain_and_cache(qm);
 	if (ret)
 		return ret;
-
-	hpre_open_sva_prefetch(qm);
 
 	hisi_qm_dev_err_init(qm);
 	ret = hpre_show_last_regs_init(qm);
