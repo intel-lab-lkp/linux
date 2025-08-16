@@ -398,6 +398,8 @@ void scsi_device_unbusy(struct scsi_device *sdev, struct scsi_cmnd *cmd)
 
 	sbitmap_put(&sdev->budget_map, cmd->budget_token);
 	cmd->budget_token = -1;
+
+	scsi_eh_try_wakeup(sdev);
 }
 
 /*
@@ -1360,6 +1362,9 @@ static inline int scsi_dev_queue_ready(struct request_queue *q,
 {
 	int token;
 
+	if (scsi_device_in_recovery(sdev))
+		return -1;
+
 	token = sbitmap_get(&sdev->budget_map);
 	if (token < 0)
 		return -1;
@@ -1392,6 +1397,9 @@ static inline int scsi_target_queue_ready(struct Scsi_Host *shost,
 {
 	struct scsi_target *starget = scsi_target(sdev);
 	unsigned int busy;
+
+	if (scsi_target_in_recovery(starget))
+		return 0;
 
 	if (starget->single_lun) {
 		spin_lock_irq(shost->host_lock);
