@@ -5,7 +5,7 @@ crashkernel memory reservation on arm64
 Author: Baoquan He <bhe@redhat.com>
 
 Kdump mechanism is used to capture a corrupted kernel vmcore so that
-it can be subsequently analyzed. In order to do this, a preliminarily
+it can be subsequently analyzed. In order to do this, a preliminary
 reserved memory is needed to pre-load the kdump kernel and boot such
 kernel if corruption happens.
 
@@ -18,7 +18,7 @@ Kernel parameter
 
 Through the kernel parameters below, memory can be reserved accordingly
 during the early stage of the first kernel booting so that a continuous
-large chunk of memomy can be found. The low memory reservation needs to
+large chunk of memory can be found. The low memory reservation needs to
 be considered if the crashkernel is reserved from the high memory area.
 
 - crashkernel=size@offset
