@@ -503,22 +503,27 @@
 		};
 
 		usbphy: phy@4100400 {
-			compatible = "allwinner,sun55i-a523-usb-phy",
-				     "allwinner,sun20i-d1-usb-phy";
+			compatible = "allwinner,sun55i-a523-usb-phy";
 			reg = <0x4100400 0x100>,
 			      <0x4101800 0x100>,
-			      <0x4200800 0x100>;
+			      <0x4200800 0x100>,
+				  <0x4e00000 0x100>;
 			reg-names = "phy_ctrl",
 				    "pmu0",
-				    "pmu1";
+				    "pmu1",
+					"pmu2";
 			clocks = <&osc24M>,
-				 <&osc24M>;
+				 <&osc24M>,
+				 <&ccu CLK_USB2>;
 			clock-names = "usb0_phy",
-				      "usb1_phy";
+				      "usb1_phy",
+					  "usb2_phy";
 			resets = <&ccu RST_USB_PHY0>,
-				 <&ccu RST_USB_PHY1>;
+				 <&ccu RST_USB_PHY1>,
+				 <&ccu RST_BUS_3>;
 			reset-names = "usb0_reset",
-				      "usb1_reset";
+				      "usb1_reset",
+					  "usb2_reset";
 			status = "disabled";
 			#phy-cells = <1>;
 		};
