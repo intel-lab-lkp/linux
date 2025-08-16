@@ -76,6 +76,98 @@ allOf:
           properties:
             compatible:
               const: ti,twl4030-wdt
+
+        audio:
+          type: object
+          $ref: /schemas/sound/ti,twl4030-audio.yaml#
+          unevaluatedProperties: false
+
+        keypad:
+          type: object
+          $ref: /schemas/input/ti,twl4030-keypad.yaml#
+          unevaluatedProperties: false
+
+        pwm:
+          type: object
+          $ref: /schemas/pwm/pwm.yaml#
+          unevaluatedProperties: false
+          description: |
+            TWL4030 series: PWMA and PWMB (connected to LEDA and LEDB terminals)
+          properties:
+            compatible:
+              enum:
+                - ti,twl4030-pwm
+            '#pwm-cells':
+              const: 2
+          required:
+            - compatible
+            - '#pwm-cells'
+
+        pwmled:
+          type: object
+          $ref: /schemas/pwm/pwm.yaml#
+          unevaluatedProperties: false
+          description: |
+            TWL4030 series: PWMA and PWMB (connected to LEDA and LEDB terminals)
+          properties:
+            compatible:
+              enum:
+                - ti,twl4030-pwmled
+            '#pwm-cells':
+              const: 2
+          required:
+            - compatible
+            - '#pwm-cells'
+
+        'twl4030-usb':
+          type: object
+          $ref: /schemas/usb/ti,twlxxxx-usb.yaml#
+          unevaluatedProperties: false
+
+        gpio:
+          type: object
+          $ref: /schemas/gpio/ti,twl4030-gpio.yaml#
+          unevaluatedProperties: false
+
+        power:
+          type: object
+          additionalProperties: false
+          description:
+            The power management module inside the TWL4030 provides several facilities
+            to control the power resources, including power scripts. For now, the
+            binding only supports the complete shutdown of the system after poweroff.
+          properties:
+            compatible:
+              description: |
+                The compatible string determines the specific power configuration.
+                "ti,twl4030-power": Standard power control.
+                "ti,twl4030-power-reset": Recommended for OMAP3530 and similar SoCs
+                  that require a special configuration for warm reset to work correctly.
+                "ti,twl4030-power-idle": Loads the TI-recommended configuration for
+                  idle modes into the PMIC.
+                "ti,twl4030-power-idle-osc-off": Uses the recommended idle configuration
+                  but also shuts down the external oscillator. This may not work on all
+                  boards depending on the oscillator wiring.
+              enum:
+                - ti,twl4030-power
+                - ti,twl4030-power-reset
+                - ti,twl4030-power-idle
+                - ti,twl4030-power-idle-osc-off
+
+            ti,system-power-controller:
+              type: boolean
+              deprecated: true
+              description: |
+                DEPRECATED. The standard 'system-power-controller' property
+                on the parent node should be used instead.
+
+            ti,use_poweroff:
+              type: boolean
+              deprecated: true
+
+          required:
+            - compatible
+
   - if:
       properties:
         compatible:
@@ -115,6 +207,44 @@ allOf:
           properties:
             compatible:
               const: ti,twl6030-gpadc
+
+        pwm:
+          type: object
+          $ref: /schemas/pwm/pwm.yaml#
+          unevaluatedProperties: false
+          description: |
+            TWL6030 series: LED PWM (mainly used as charging indicator LED)
+          properties:
+            compatible:
+              enum:
+                - ti,twl6030-pwm
+            '#pwm-cells':
+              const: 2
+          required:
+            - compatible
+            - '#pwm-cells'
+
+        pwmled:
+          type: object
+          $ref: /schemas/pwm/pwm.yaml#
+          unevaluatedProperties: false
+          description: |
+            TWL6030 series: LED PWM (mainly used as charging indicator LED)
+          properties:
+            compatible:
+              enum:
+                - ti,twl6030-pwmled
+            '#pwm-cells':
+              const: 2
+          required:
+            - compatible
+            - '#pwm-cells'
+
+        'twl6030-usb':
+          type: object
+          $ref: /schemas/usb/ti,twlxxxx-usb.yaml#
+          unevaluatedProperties: false
+
   - if:
       properties:
         compatible:
@@ -153,6 +283,43 @@ allOf:
           properties:
             compatible:
               const: ti,twl6032-gpadc
+
+        pwm:
+          type: object
+          $ref: /schemas/pwm/pwm.yaml#
+          unevaluatedProperties: false
+          description: |
+            TWL6030 series: LED PWM (mainly used as charging indicator LED)
+          properties:
+            compatible:
+              enum:
+                - ti,twl6030-pwm
+            '#pwm-cells':
+              const: 2
+          required:
+            - compatible
+            - '#pwm-cells'
+
+        pwmled:
+          type: object
+          $ref: /schemas/pwm/pwm.yaml#
+          unevaluatedProperties: false
+          description: |
+            TWL6030 series: LED PWM (mainly used as charging indicator LED)
+          properties:
+            compatible:
+              enum:
+                - ti,twl6030-pwmled
+            '#pwm-cells':
+              const: 2
+          required:
+            - compatible
+            - '#pwm-cells'
+
+        'twl6030-usb':
+          type: object
+          $ref: /schemas/usb/ti,twlxxxx-usb.yaml
+          unevaluatedProperties: false
 
 properties:
   compatible:
@@ -271,6 +438,16 @@ examples:
           compatible = "ti,twl6030-vmmc";
           ti,retain-on-reset;
         };
+
+        pwm {
+          compatible = "ti,twl6030-pwm";
+          #pwm-cells = <2>;
+        };
+
+        pwmled {
+          compatible = "ti,twl6030-pwmled";
+          #pwm-cells = <2>;
+        };
       };
     };
 
@@ -324,6 +501,20 @@ examples:
 
         watchdog {
           compatible = "ti,twl4030-wdt";
+        };
+
+        power {
+          compatible = "ti,twl4030-power";
+        };
+
+        pwm {
+          compatible = "ti,twl4030-pwm";
+          #pwm-cells = <2>;
+        };
+
+        pwmled {
+          compatible = "ti,twl4030-pwmled";
+          #pwm-cells = <2>;
         };
       };
     };
