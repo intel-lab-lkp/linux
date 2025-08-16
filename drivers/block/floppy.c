@@ -992,7 +992,16 @@ static void (*floppy_work_fn)(void);
 
 static void floppy_work_workfn(struct work_struct *work)
 {
-	floppy_work_fn();
+	void (*handler)(void);
+	unsigned long flags;
+
+	spin_lock_irqsave(&floppy_lock, flags);
+	handler = floppy_work_fn;
+
+	spin_unlock_irqrestore(&floppy_lock, flags);
+
+	if (handler)
+		handler();
 }
 
 static DECLARE_WORK(floppy_work, floppy_work_workfn);
