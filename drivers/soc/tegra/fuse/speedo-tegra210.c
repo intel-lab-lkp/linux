@@ -68,18 +68,35 @@ static void __init rev_sku_to_speedo_ids(struct tegra_sku_info *sku_info,
 	switch (sku) {
 	case 0x00: /* Engineering SKU */
 	case 0x01: /* Engineering SKU */
-	case 0x07:
-	case 0x17:
-	case 0x27:
-		if (speedo_rev >= 2)
-			sku_info->gpu_speedo_id = 1;
+	case 0x13:
+		if (speedo_rev >= 2) {
+			sku_info->cpu_speedo_id = 5;
+			sku_info->gpu_speedo_id = 2;
+			break;
+		}
+
+		sku_info->gpu_speedo_id = 1;
 		break;
 
-	case 0x13:
-		if (speedo_rev >= 2)
-			sku_info->gpu_speedo_id = 1;
+	case 0x07:
+	case 0x17:
+		if (speedo_rev >= 2) {
+			sku_info->cpu_speedo_id = 7;
+			sku_info->gpu_speedo_id = 2;
+			break;
+		}
 
-		sku_info->cpu_speedo_id = 1;
+		sku_info->gpu_speedo_id = 1;
+		break;
+
+	case 0x27:
+		if (speedo_rev >= 2) {
+			sku_info->cpu_speedo_id = 1;
+			sku_info->gpu_speedo_id = 2;
+			break;
+		}
+
+		sku_info->gpu_speedo_id = 1;
 		break;
 
 	default:
