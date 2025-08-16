@@ -249,7 +249,7 @@ static const struct file_operations nouveau_pstate_fops = {
 	.release = single_release,
 };
 
-static struct drm_info_list nouveau_debugfs_list[] = {
+static struct drm_debugfs_info nouveau_debugfs_list[] = {
 	{ "vbios.rom",  nouveau_debugfs_vbios_image, 0, NULL },
 	{ "strap_peek", nouveau_debugfs_strap_peek, 0, NULL },
 	DRM_DEBUGFS_GPUVA_INFO(nouveau_debugfs_gpuva, NULL),
@@ -277,9 +277,8 @@ nouveau_drm_debugfs_init(struct drm_minor *minor)
 				    nouveau_debugfs_files[i].fops);
 	}
 
-	drm_debugfs_create_files(nouveau_debugfs_list,
-				 NOUVEAU_DEBUGFS_ENTRIES,
-				 minor->debugfs_root, minor);
+	drm_debugfs_add_files(minor->dev, nouveau_debugfs_list,
+			      NOUVEAU_DEBUGFS_ENTRIES);
 
 	/* Set the size of the vbios since we know it, and it's confusing to
 	 * userspace if it wants to seek() but the file has a length of 0
