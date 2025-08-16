@@ -1154,6 +1154,13 @@ struct drm_bridge {
 	unsigned int max_bpc;
 
 	/**
+	 * @supported_infoframes: Bitmask of DRM_CONNECTOR_INFOFRAME values,
+	 * listing supported infoframes. This is only relevant if
+	 * @DRM_BRIDGE_OP_HDMI is set.
+	 */
+	unsigned int supported_infoframes;
+
+	/**
 	 * @hdmi_cec_dev: device to be used as a containing device for CEC
 	 * functions.
 	 */
