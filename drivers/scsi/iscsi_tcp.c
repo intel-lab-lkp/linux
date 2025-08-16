@@ -33,6 +33,7 @@
 #include <scsi/scsi_device.h>
 #include <scsi/scsi_host.h>
 #include <scsi/scsi.h>
+#include <scsi/scsi_eh.h>
 #include <scsi/scsi_transport_iscsi.h>
 #include <trace/events/iscsi.h>
 #include <trace/events/sock.h>
@@ -1040,6 +1041,9 @@ static const struct scsi_host_template iscsi_sw_tcp_sht = {
 	.eh_target_reset_handler = iscsi_eh_recover_target,
 	.dma_boundary		= PAGE_SIZE - 1,
 	.sdev_configure		= iscsi_sw_tcp_sdev_configure,
+	.sdev_setup_eh		= scsi_device_setup_eh,
+	.sdev_clear_eh		= scsi_device_clear_eh,
+	.sdev_eh_fallback	= 1,
 	.proc_name		= "iscsi_tcp",
 	.this_id		= -1,
 	.track_queue_depth	= 1,
