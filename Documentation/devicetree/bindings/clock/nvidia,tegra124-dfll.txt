@@ -70,6 +70,9 @@ Required properties for PWM mode:
   - dvfs_pwm_enable: I/O pad configuration when PWM control is enabled.
   - dvfs_pwm_disable: I/O pad configuration when PWM control is disabled.
 
+Optional properties for limiting frequency:
+- nvidia,dfll-max-freq: Maximum scaling frequency.
+
 Example for I2C:
 
 clock@70110000 {
