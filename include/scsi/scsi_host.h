@@ -226,6 +226,19 @@ struct scsi_host_template {
 	void (* sdev_destroy)(struct scsi_device *);
 
 	/*
+	 * Setup or clear error handler field scsi_device.eh.
+	 * This error handler is working on designated device, it will only
+	 * operate the designated device, do not affect other devices.
+	 * If not set, error handle will fallback.
+	 * LLDD can use custom error handler, or use inner defined:
+	 *   scsi_device_setup_eh/scsi_device_clear_eh
+	 *
+	 * Status: OPTIONAL
+	 */
+	int (*sdev_setup_eh)(struct scsi_device *sdev);
+	void (*sdev_clear_eh)(struct scsi_device *sdev);
+
+	/*
 	 * Before the mid layer attempts to scan for a new device attached
 	 * to a target where no target currently exists, it will call this
 	 * entry in your driver.  Should your driver need to allocate any
@@ -467,6 +480,9 @@ struct scsi_host_template {
 
 	/* The queuecommand callback may block. See also BLK_MQ_F_BLOCKING. */
 	unsigned queuecommand_may_block:1;
+
+	/* The error handle of scsi_device will fallback when failed. */
+	unsigned sdev_eh_fallback:1;
 
 	/*
 	 * Countdown for host blocking with no commands outstanding.
