@@ -1991,13 +1991,44 @@ mlx5e_shampo_fill_skb_data(struct sk_buff *skb, struct mlx5e_rq *rq,
 	} while (data_bcnt);
 }
 
+static u16
+mlx5e_cqe_estimate_hdr_len(const struct mlx5_cqe64 *cqe)
+{
+	u16 hdr_len = sizeof(struct ethhdr);
+	u8 l3_type = get_cqe_l3_hdr_type(cqe);
+	u8 l4_type = get_cqe_l4_hdr_type(cqe);
+
+	if (cqe_has_vlan(cqe))
+		hdr_len += VLAN_HLEN;
+
+	if (l3_type == CQE_L3_HDR_TYPE_IPV4)
+		hdr_len += sizeof(struct iphdr);
+	else if (l3_type == CQE_L3_HDR_TYPE_IPV6)
+		hdr_len += sizeof(struct ipv6hdr);
+	else
+		return MLX5E_RX_MAX_HEAD;
+
+	if (l4_type == CQE_L4_HDR_TYPE_UDP)
+		hdr_len += sizeof(struct udphdr);
+	else if (l4_type & (CQE_L4_HDR_TYPE_TCP_NO_ACK |
+			    CQE_L4_HDR_TYPE_TCP_ACK_NO_DATA |
+			    CQE_L4_HDR_TYPE_TCP_ACK_AND_DATA))
+		/* Previous condition works because we know that
+		 * l4_type != 0x2 (CQE_L4_HDR_TYPE_UDP)
+		 */
+		hdr_len += sizeof(struct tcphdr) + TCPOLEN_TSTAMP_ALIGNED;
+	else
+		return MLX5E_RX_MAX_HEAD;
+
+	return hdr_len;
+}
+
 static struct sk_buff *
 mlx5e_skb_from_cqe_mpwrq_nonlinear(struct mlx5e_rq *rq, struct mlx5e_mpw_info *wi,
 				   struct mlx5_cqe64 *cqe, u16 cqe_bcnt, u32 head_offset,
 				   u32 page_idx)
 {
 	struct mlx5e_frag_page *frag_page = &wi->alloc_units.frag_pages[page_idx];
-	u16 headlen = min_t(u16, MLX5E_RX_MAX_HEAD, cqe_bcnt);
 	struct mlx5e_frag_page *head_page = frag_page;
 	struct mlx5e_xdp_buff *mxbuf = &rq->mxbuf;
 	u32 frag_offset    = head_offset;
@@ -2009,9 +2040,13 @@ mlx5e_skb_from_cqe_mpwrq_nonlinear(struct mlx5e_rq *rq, struct mlx5e_mpw_info *w
 	u32 linear_frame_sz;
 	u16 linear_data_len;
 	u16 linear_hr;
+	u16 headlen;
 	void *va;
 
 	prog = rcu_dereference(rq->xdp_prog);
+
+	headlen = min3(mlx5e_cqe_estimate_hdr_len(cqe), cqe_bcnt,
+		       (u16)MLX5E_RX_MAX_HEAD);
 
 	if (prog) {
 		/* area for bpf_xdp_[store|load]_bytes */
