@@ -5675,29 +5675,19 @@ ice_pci_err_detected(struct pci_dev *pdev, pci_channel_state_t err)
 static pci_ers_result_t ice_pci_err_slot_reset(struct pci_dev *pdev)
 {
 	struct ice_pf *pf = pci_get_drvdata(pdev);
-	pci_ers_result_t result;
-	int err;
 	u32 reg;
 
-	err = pci_enable_device_mem(pdev);
-	if (err) {
-		dev_err(&pdev->dev, "Cannot re-enable PCI device after reset, error %d\n",
-			err);
-		result = PCI_ERS_RESULT_DISCONNECT;
-	} else {
-		pci_set_master(pdev);
-		pci_restore_state(pdev);
-		pci_wake_from_d3(pdev, false);
+	pdev->current_state = PCI_D0;
+	pci_set_master(pdev);
+	pci_restore_state(pdev);
+	pci_wake_from_d3(pdev, false);
 
-		/* Check for life */
-		reg = rd32(&pf->hw, GLGEN_RTRIG);
-		if (!reg)
-			result = PCI_ERS_RESULT_RECOVERED;
-		else
-			result = PCI_ERS_RESULT_DISCONNECT;
-	}
-
-	return result;
+	/* Check for life */
+	reg = rd32(&pf->hw, GLGEN_RTRIG);
+	if (!reg)
+		return PCI_ERS_RESULT_RECOVERED;
+	else
+		return PCI_ERS_RESULT_DISCONNECT;
 }
 
 /**
