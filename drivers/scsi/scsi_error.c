@@ -3113,3 +3113,174 @@ void scsi_device_clear_eh(struct scsi_device *sdev)
 	sdev->eh = NULL;
 }
 EXPORT_SYMBOL_GPL(scsi_device_clear_eh);
+
+static inline void starget_clear_eh_done(struct scsi_target *starget)
+{
+	struct scsi_device *sdev;
+
+	list_for_each_entry(sdev, &starget->devices, same_target_siblings) {
+		if (!sdev->eh)
+			continue;
+		sdev->eh->get_sense_done = 0;
+		sdev->eh->stu_done   = 0;
+		sdev->eh->reset_done = 0;
+	}
+}
+
+static inline void *scsi_eh_starget_priv(struct scsi_target_eh *eh)
+{
+	return eh + 1;
+}
+
+struct starget_eh {
+	spinlock_t		eh_lock;
+	unsigned int		eh_num;
+	struct list_head	eh_cmd_q;
+	struct scsi_target	*starget;
+	struct work_struct	eh_handle_work;
+	unsigned int		fallback:1;
+};
+
+static void starget_eh_work(struct work_struct *work)
+{
+	struct scsi_cmnd *scmd, *next;
+	unsigned long flags;
+	LIST_HEAD(eh_work_q);
+	LIST_HEAD(eh_done_q);
+	struct starget_eh *stargeteh =
+			container_of(work, struct starget_eh, eh_handle_work);
+	struct scsi_target *starget = stargeteh->starget;
+	struct scsi_target_eh *eh = starget->eh;
+
+	spin_lock_irqsave(&stargeteh->eh_lock, flags);
+	list_splice_init(&stargeteh->eh_cmd_q, &eh_work_q);
+	spin_unlock_irqrestore(&stargeteh->eh_lock, flags);
+
+	if (scsi_starget_eh(starget, &eh_work_q, &eh_done_q))
+		goto out_clear_flag;
+
+	if (!stargeteh->fallback) {
+		scsi_eh_offline_sdevs(&eh_work_q, &eh_done_q);
+		goto out_clear_flag;
+	}
+
+	/*
+	 * fallback to host based error handle
+	 */
+	SCSI_LOG_ERROR_RECOVERY(2, starget_printk(KERN_INFO, starget,
+		"%s:targeteh fallback to further recovery\n", current->comm));
+	eh->reset_done = 1;
+	list_for_each_entry_safe(scmd, next, &eh_work_q, eh_entry) {
+		list_del_init(&scmd->eh_entry);
+		scsi_eh_scmd_add_shost(scmd);
+	}
+	goto out_flush_done;
+
+out_clear_flag:
+	starget_clear_eh_done(starget);
+
+out_flush_done:
+	scsi_eh_flush_done_q(&eh_done_q);
+	spin_lock_irqsave(&stargeteh->eh_lock, flags);
+	stargeteh->eh_num = 0;
+	spin_unlock_irqrestore(&stargeteh->eh_lock, flags);
+}
+
+static void starget_eh_add_cmnd(struct scsi_cmnd *scmd)
+{
+	unsigned long flags;
+	struct scsi_target *starget = scmd->device->sdev_target;
+	struct starget_eh *eh;
+
+	eh = scsi_eh_starget_priv(starget->eh);
+
+	spin_lock_irqsave(&eh->eh_lock, flags);
+	list_add_tail(&scmd->eh_entry, &eh->eh_cmd_q);
+	eh->eh_num++;
+	spin_unlock_irqrestore(&eh->eh_lock, flags);
+}
+
+static bool starget_eh_is_busy(struct scsi_target *starget)
+{
+	int ret = 0;
+	unsigned long flags;
+	struct starget_eh *eh;
+
+	eh = scsi_eh_starget_priv(starget->eh);
+
+	spin_lock_irqsave(&eh->eh_lock, flags);
+	ret = eh->eh_num;
+	spin_unlock_irqrestore(&eh->eh_lock, flags);
+
+	return ret != 0;
+}
+
+static void starget_eh_wakeup(struct scsi_target *starget)
+{
+	unsigned long flags;
+	unsigned int nr_error;
+	unsigned int nr_busy;
+	struct starget_eh *eh;
+
+	eh = scsi_eh_starget_priv(starget->eh);
+
+	spin_lock_irqsave(&eh->eh_lock, flags);
+	nr_error = eh->eh_num;
+	spin_unlock_irqrestore(&eh->eh_lock, flags);
+
+	nr_busy = atomic_read(&starget->target_busy);
+
+	if (!nr_error || nr_busy != nr_error) {
+		SCSI_LOG_ERROR_RECOVERY(5, starget_printk(KERN_INFO, starget,
+			"%s:targeteh: do not wake up, busy/error is %d/%d\n",
+			current->comm, nr_busy, nr_error));
+		return;
+	}
+
+	SCSI_LOG_ERROR_RECOVERY(2, starget_printk(KERN_INFO, starget,
+		"%s:targeteh: waking up, busy/error is %d/%d\n",
+		current->comm, nr_busy, nr_error));
+
+	schedule_work(&eh->eh_handle_work);
+}
+
+/*
+ * This is default implement of Scsi_Host.target_setup_eh.
+ */
+int scsi_target_setup_eh(struct scsi_target *starget)
+{
+	struct Scsi_Host *shost = dev_to_shost(starget->dev.parent);
+	struct scsi_target_eh *eh;
+	struct starget_eh *stargeteh;
+
+	eh = kzalloc(sizeof(struct scsi_target_eh) + sizeof(struct starget_eh),
+		GFP_KERNEL);
+	if (!eh)
+		return -ENOMEM;
+	stargeteh = scsi_eh_starget_priv(eh);
+
+	eh->add_cmnd = starget_eh_add_cmnd;
+	eh->is_busy  = starget_eh_is_busy;
+	eh->wakeup   = starget_eh_wakeup;
+	stargeteh->starget = starget;
+	stargeteh->fallback = shost->hostt->target_eh_fallback;
+
+	spin_lock_init(&stargeteh->eh_lock);
+	INIT_LIST_HEAD(&stargeteh->eh_cmd_q);
+	INIT_WORK(&stargeteh->eh_handle_work, starget_eh_work);
+
+	starget->eh = eh;
+
+	return 0;
+}
+EXPORT_SYMBOL_GPL(scsi_target_setup_eh);
+
+/*
+ * This is default implement of Scsi_Host.target_clear_eh.
+ */
+void scsi_target_clear_eh(struct scsi_target *starget)
+{
+	kfree(starget->eh);
+	starget->eh = NULL;
+}
+EXPORT_SYMBOL_GPL(scsi_target_clear_eh);
