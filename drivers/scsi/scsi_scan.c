@@ -405,6 +405,8 @@ static void scsi_target_destroy(struct scsi_target *starget)
 	starget->state = STARGET_DEL;
 	transport_destroy_device(dev);
 	spin_lock_irqsave(shost->host_lock, flags);
+	if (shost->hostt->target_clear_eh)
+		shost->hostt->target_clear_eh(starget);
 	if (shost->hostt->target_destroy)
 		shost->hostt->target_destroy(starget);
 	list_del_init(&starget->siblings);
@@ -553,6 +555,16 @@ static struct scsi_target *scsi_alloc_target(struct device *parent,
 			return NULL;
 		}
 	}
+	if (shost->hostt->target_setup_eh) {
+		error = shost->hostt->target_setup_eh(starget);
+		if (error) {
+			dev_err(dev, "target setup error handler failed, error %d\n",
+				error);
+			scsi_target_destroy(starget);
+			return NULL;
+		}
+	}
+
 	get_device(dev);
 
 	return starget;

@@ -266,6 +266,19 @@ struct scsi_host_template {
 	void (* target_destroy)(struct scsi_target *);
 
 	/*
+	 * Setup or clear error handler field scsi_target.eh.
+	 * This error handler is working on designated target, it will only
+	 * operate the designated target, do not affect other targets.
+	 * If not set, error handle will fallback.
+	 * LLDD can use custom error handler, or use inner defined:
+	 *   scsi_target_setup_eh/scsi_target_clear_eh
+	 *
+	 * Status: OPTIONAL
+	 */
+	int (*target_setup_eh)(struct scsi_target *starget);
+	void (*target_clear_eh)(struct scsi_target *starget);
+
+	/*
 	 * If a host has the ability to discover targets on its own instead
 	 * of scanning the entire bus, it can fill in this function and
 	 * call scsi_scan_host().  This function will be called periodically
@@ -483,6 +496,8 @@ struct scsi_host_template {
 
 	/* The error handle of scsi_device will fallback when failed. */
 	unsigned sdev_eh_fallback:1;
+	/* The error handle of scsi_target will fallback when failed. */
+	unsigned target_eh_fallback:1;
 
 	/*
 	 * Countdown for host blocking with no commands outstanding.
