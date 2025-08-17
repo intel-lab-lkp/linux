@@ -29,6 +29,7 @@
 #include <linux/mfd/mc13783.h>
 #include <linux/sched.h>
 #include <linux/slab.h>
+#include <linux/of.h>
 
 struct mc13783_pwrb {
 	struct input_dev *pwr;
@@ -105,8 +106,75 @@ static irqreturn_t button3_irq(int irq, void *_priv)
 	return button_irq(MC13783_IRQ_ONOFD3, _priv);
 }
 
+#ifdef CONFIG_OF
+static inline struct mc13xxx_buttons_platform_data __init *mc13xxx_pwrbutton_probe_dt(
+	struct platform_device *pdev)
+{
+	struct mc13xxx_buttons_platform_data *pdata;
+	struct device_node *parent, *child;
+	struct device *dev = &pdev->dev;
+	enum mc13xxx_chip_type chip = platform_get_device_id(pdev)->driver_data;
+	int ret = -ENODATA;
+
+	/* ONOFD3 is only supported for MC13783. */
+	int max_idx = chip != MC13XXX_CHIP_TYPE_MC13783 ? 2 : 1;
+
+	pdata = devm_kzalloc(dev, sizeof(*pdata), GFP_KERNEL);
+	if (!pdata)
+		return ERR_PTR(-ENOMEM);
+
+	parent = of_get_child_by_name(dev->parent->of_node, "pwrbuttons");
+	if (!parent)
+		goto out_node_put;
+
+	for_each_child_of_node(parent, child) {
+		u32 idx;
+		u8 dbnc = MC13783_BUTTON_DBNC_30MS;
+
+		if (of_property_read_u32(child, "reg", &idx))
+			continue;
+
+		if (idx > max_idx) {
+			dev_warn(dev, "reg out of range\n");
+			continue;
+		}
+
+		of_property_read_u8(child, "debounce-delay-value", &dbnc);
+		if (dbnc > MC13783_BUTTON_DBNC_750MS) {
+			dev_warn(dev, "debounce-delay-value out of range\n");
+			continue;
+		}
+
+		if (of_property_read_u32(child, "linux,code", &pdata->b_on_key[idx]))
+			continue;
+
+		if (of_property_read_bool(child, "active-low"))
+			pdata->b_on_flags[idx] |= MC13783_BUTTON_POL_INVERT;
+
+		if (of_property_read_bool(child, "enable-reset"))
+			pdata->b_on_flags[idx] |= MC13783_BUTTON_RESET_EN;
+
+		pdata->b_on_flags[idx] |= MC13783_BUTTON_ENABLE | dbnc;
+	}
+
+	ret = 0;
+
+out_node_put:
+	of_node_put(parent);
+
+	return ret ? ERR_PTR(ret) : pdata;
+}
+#else
+static inline struct mc13xxx_buttons_platform_data __init *mc13xxx_pwrbutton_probe_dt(
+	struct platform_device *pdev)
+{
+	return ERR_PTR(-ENODEV);
+}
+#endif
+
 static int mc13783_pwrbutton_probe(struct platform_device *pdev)
 {
+	struct device *dev = &pdev->dev;
 	const struct mc13xxx_buttons_platform_data *pdata;
 	struct mc13xxx *mc13783 = dev_get_drvdata(pdev->dev.parent);
 	enum mc13xxx_chip_type chip = platform_get_device_id(pdev)->driver_data;
@@ -116,9 +184,13 @@ static int mc13783_pwrbutton_probe(struct platform_device *pdev)
 	int reg = 0;
 
 	pdata = dev_get_platdata(&pdev->dev);
-	if (!pdata) {
-		dev_err(&pdev->dev, "missing platform data\n");
-		return -ENODEV;
+	if (dev->parent->of_node) {
+		pdata = mc13xxx_pwrbutton_probe_dt(pdev);
+		if (IS_ERR(pdata))
+			return PTR_ERR(pdata);
+	} else if (!pdata) {
+		dev_err(dev, "missing platform data\n");
+		return -ENODATA;
 	}
 
 	pwr = devm_input_allocate_device(&pdev->dev);
