@@ -24,6 +24,15 @@ Sub-nodes:
   Documentation/devicetree/bindings/leds/common.txt.
 - regulators : Contain the regulator nodes. The regulators are bound using
   their names as listed below with their registers and bits for enabling.
+- pwrbuttons : Contains the onoff input button nodes.
+  - #address-cells: Must be 1.
+  - #size-cells: Must be 0.
+  - reg: Contains the BUTTON ID (see below)
+  - linux,code
+  - debounce-delay-value: debouncing selection of 0 (0ms), 1 (default 30ms),
+    2(150ms) or 3 (750ms).
+  - active-low
+  - enable-reset
 
 MC13783 LED IDs:
     0  : Main display
@@ -110,6 +119,20 @@ MC13892 regulators:
   The bindings details of individual regulator device can be found in:
   Documentation/devicetree/bindings/regulator/regulator.txt
 
+MC13783 BUTTON IDs:
+    0  : ONOFD1
+    1  : ONOFD2
+    2  : ONOFD3
+
+MC13892 BUTTON IDs:
+    0  : PWRON1
+    1  : PWRON2
+    2  : <not supported>
+
+MC34708 BUTTON IDs:
+    0  : PWRON1
+    1  : PWRON2
+
 Examples:
 
 ecspi@70010000 { /* ECSPI1 */
@@ -150,6 +173,18 @@ ecspi@70010000 { /* ECSPI1 */
 				regulator-max-microvolt = <1850000>;
 				regulator-boot-on;
 				regulator-always-on;
+			};
+		};
+
+		pwrbuttons {
+			#address-cells = <1>;
+			#size-cells = <0>;
+			pwrbutton@0 {
+				reg = <0>;
+				linux,code = <KEY_POWER>;
+				debounce-delay-value = <2>;
+				active-low;
+				enable-reset;
 			};
 		};
 	};
