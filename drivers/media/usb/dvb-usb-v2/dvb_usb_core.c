@@ -465,7 +465,6 @@ static int dvb_usbv2_adapter_dvb_init(struct dvb_usb_adapter *adap)
 
 	adap->demux.dmx.capabilities = DMX_TS_FILTERING | DMX_SECTION_FILTERING;
 	adap->demux.priv             = adap;
-	adap->demux.filternum        = 0;
 	adap->demux.filternum        = adap->max_feed_count;
 	adap->demux.feednum          = adap->demux.filternum;
 	adap->demux.start_feed       = dvb_usb_start_feed;
