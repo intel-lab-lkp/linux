@@ -782,6 +782,7 @@ int blk_stack_limits(struct queue_limits *t, struct queue_limits *b,
 		t->features &= ~BLK_FEAT_POLL;
 
 	t->flags |= (b->flags & BLK_FLAG_MISALIGNED);
+	t->flags |= (b->flags & BLK_FLAG_STACK_IO_OPT);
 
 	t->max_sectors = min_not_zero(t->max_sectors, b->max_sectors);
 	t->max_user_sectors = min_not_zero(t->max_user_sectors,
@@ -839,7 +840,10 @@ int blk_stack_limits(struct queue_limits *t, struct queue_limits *b,
 				     b->physical_block_size);
 
 	t->io_min = max(t->io_min, b->io_min);
-	t->io_opt = lcm_not_zero(t->io_opt, b->io_opt);
+	if (!t->io_opt || !(t->flags & BLK_FLAG_STACK_IO_OPT) ||
+	    (b->flags & BLK_FLAG_STACK_IO_OPT))
+		t->io_opt = lcm_not_zero(t->io_opt, b->io_opt);
+
 	t->dma_alignment = max(t->dma_alignment, b->dma_alignment);
 
 	/* Set non-power-of-2 compatible chunk_sectors boundary */

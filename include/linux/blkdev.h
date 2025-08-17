@@ -366,6 +366,9 @@ typedef unsigned int __bitwise blk_flags_t;
 /* passthrough command IO accounting */
 #define BLK_FLAG_IOSTATS_PASSTHROUGH	((__force blk_flags_t)(1u << 2))
 
+/* ignore underlying non-stack devices io_opt */
+#define BLK_FLAG_STACK_IO_OPT		((__force blk_flags_t)(1u << 3))
+
 struct queue_limits {
 	blk_features_t		features;
 	blk_flags_t		flags;
