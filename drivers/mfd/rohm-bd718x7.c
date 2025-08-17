@@ -7,7 +7,6 @@
 // Datasheet for BD71837MWV available from
 // https://www.rohm.com/datasheet/BD71837MWV/bd71837mwv-e
 
-#include <linux/gpio_keys.h>
 #include <linux/i2c.h>
 #include <linux/input.h>
 #include <linux/interrupt.h>
@@ -15,26 +14,41 @@
 #include <linux/mfd/core.h>
 #include <linux/module.h>
 #include <linux/of.h>
+#include <linux/property.h>
 #include <linux/regmap.h>
 #include <linux/types.h>
 
-static struct gpio_keys_button button = {
-	.code = KEY_POWER,
-	.gpio = -1,
-	.type = EV_KEY,
+static const struct software_node bd718xx_pwrkey_node = {
+	.name = "bd718xx-power-key",
 };
 
-static struct gpio_keys_platform_data bd718xx_powerkey_data = {
-	.buttons = &button,
-	.nbuttons = 1,
-	.name = "bd718xx-pwrkey",
+static const struct property_entry bd718xx_powerkey_props[] = {
+	PROPERTY_ENTRY_U32("linux,code", KEY_POWER),
+	PROPERTY_ENTRY_STRING("label", "bd718xx-pwrkey"),
+	{ }
+};
+
+static const struct software_node bd718xx_powerkey_key_node = {
+	.properties = bd718xx_powerkey_props,
+	.parent = &bd718xx_pwrkey_node,
+};
+
+static const struct software_node *bd718xx_swnodes[] = {
+	&bd718xx_pwrkey_node,
+	&bd718xx_powerkey_key_node,
+	NULL,
+};
+
+static struct resource bd718xx_powerkey_irq_resources[] = {
+	DEFINE_RES_IRQ_NAMED(BD718XX_INT_PWRBTN_S, "bd718xx-pwrkey"),
 };
 
 static struct mfd_cell bd71837_mfd_cells[] = {
 	{
 		.name = "gpio-keys",
-		.platform_data = &bd718xx_powerkey_data,
-		.pdata_size = sizeof(bd718xx_powerkey_data),
+		.swnode = &bd718xx_pwrkey_node,
+		.resources = bd718xx_powerkey_irq_resources,
+		.num_resources = ARRAY_SIZE(bd718xx_powerkey_irq_resources),
 	},
 	{ .name = "bd71837-clk", },
 	{ .name = "bd71837-pmic", },
@@ -43,8 +57,9 @@ static struct mfd_cell bd71837_mfd_cells[] = {
 static struct mfd_cell bd71847_mfd_cells[] = {
 	{
 		.name = "gpio-keys",
-		.platform_data = &bd718xx_powerkey_data,
-		.pdata_size = sizeof(bd718xx_powerkey_data),
+		.swnode = &bd718xx_pwrkey_node,
+		.resources = bd718xx_powerkey_irq_resources,
+		.num_resources = ARRAY_SIZE(bd718xx_powerkey_irq_resources),
 	},
 	{ .name = "bd71847-clk", },
 	{ .name = "bd71847-pmic", },
@@ -126,6 +141,30 @@ static int bd718xx_init_press_duration(struct regmap *regmap,
 	return 0;
 }
 
+static int bd718xx_reg_cnt;
+
+static int bd718xx_i2c_register_swnodes(void)
+{
+	int error;
+
+	if (bd718xx_reg_cnt == 0) {
+		error = software_node_register_node_group(bd718xx_swnodes);
+		if (error)
+			return error;
+	}
+
+	bd718xx_reg_cnt++;
+	return 0;
+}
+
+static void bd718xx_i2c_unregister_swnodes(void *dummy)
+{
+	if (bd718xx_reg_cnt != 0) {
+		software_node_unregister_node_group(bd718xx_swnodes);
+		bd718xx_reg_cnt--;
+	}
+}
+
 static int bd718xx_i2c_probe(struct i2c_client *i2c)
 {
 	struct regmap *regmap;
@@ -170,12 +209,17 @@ static int bd718xx_i2c_probe(struct i2c_client *i2c)
 	if (ret)
 		return ret;
 
-	ret = regmap_irq_get_virq(irq_data, BD718XX_INT_PWRBTN_S);
+	ret = bd718xx_i2c_register_swnodes();
+	if (ret)
+		return dev_err_probe(&i2c->dev, ret, "Failed to register swnodes\n");
 
+	ret = devm_add_action_or_reset(&i2c->dev, bd718xx_i2c_unregister_swnodes, NULL);
+	if (ret)
+		return ret;
+
+	ret = regmap_irq_get_virq(irq_data, BD718XX_INT_PWRBTN_S);
 	if (ret < 0)
 		return dev_err_probe(&i2c->dev, ret, "Failed to get the IRQ\n");
-
-	button.irq = ret;
 
 	ret = devm_mfd_add_devices(&i2c->dev, PLATFORM_DEVID_AUTO,
 				   mfd, cells, NULL, 0,
