@@ -934,7 +934,7 @@ TEST(KILL_unknown)
 	ASSERT_EQ(SIGSYS, WTERMSIG(status));
 }
 
-/* TODO(wad) add 64-bit versus 32-bit arg tests. */
+/* TODO(wad) add tests for 64-bit versus 32-bit argument handling differences. */
 TEST(arg_out_of_range)
 {
 	struct sock_filter filter[] = {
@@ -3515,7 +3515,7 @@ TEST(user_notification_kill_in_middle)
 	ASSERT_GE(listener, 0);
 
 	/*
-	 * Check that nothing bad happens when we kill the task in the middle
+	 * Check that killing the task in the middle of a syscall does not cause crashes or hangs when we kill the task in the middle
 	 * of a syscall.
 	 */
 	pid = fork();
@@ -3803,7 +3803,7 @@ TEST(user_notification_fault_recv)
 	if (pid == 0)
 		exit(syscall(__NR_getppid) != USER_NOTIF_MAGIC);
 
-	/* Do a bad recv() */
+	/* Test invalid recv() with NULL parameter */
 	EXPECT_EQ(ioctl(listener, SECCOMP_IOCTL_NOTIF_RECV, NULL), -1);
 	EXPECT_EQ(errno, EFAULT);
 
@@ -4174,13 +4174,13 @@ TEST(user_notification_addfd)
 	addfd.id = req.id;
 	addfd.flags = 0x0;
 
-	/* Verify bad newfd_flags cannot be set */
+	/* Verify invalid newfd_flags cannot be set */
 	addfd.newfd_flags = ~O_CLOEXEC;
 	EXPECT_EQ(ioctl(listener, SECCOMP_IOCTL_NOTIF_ADDFD, &addfd), -1);
 	EXPECT_EQ(errno, EINVAL);
 	addfd.newfd_flags = O_CLOEXEC;
 
-	/* Verify bad flags cannot be set */
+	/* Verify invalid flags cannot be set */
 	addfd.flags = 0xff;
 	EXPECT_EQ(ioctl(listener, SECCOMP_IOCTL_NOTIF_ADDFD, &addfd), -1);
 	EXPECT_EQ(errno, EINVAL);
