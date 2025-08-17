@@ -18,6 +18,7 @@
 #include <linux/nls.h>
 #include <linux/buffer_head.h>
 #include <linux/magic.h>
+#include "../nls/nls_ucs2_utils.h"
 
 #include "exfat_raw.h"
 #include "exfat_fs.h"
@@ -573,6 +574,98 @@ static int exfat_verify_boot_region(struct super_block *sb)
 	return 0;
 }
 
+static int exfat_get_volume_label_ptrs(struct super_block *sb,
+				       struct buffer_head **out_bh,
+				       struct exfat_dentry **out_dentry)
+{
+	int i;
+	unsigned int type;
+	struct exfat_sb_info *sbi = EXFAT_SB(sb);
+	struct exfat_chain clu;
+	struct exfat_dentry *ep;
+	struct buffer_head *bh;
+
+	clu.dir = sbi->root_dir;
+	clu.flags = ALLOC_FAT_CHAIN;
+
+	while (clu.dir != EXFAT_EOF_CLUSTER) {
+		for (i = 0; i < sbi->dentries_per_clu; i++) {
+			ep = exfat_get_dentry(sb, &clu, i, &bh);
+
+			if (!ep)
+				return -EIO;
+
+			type = exfat_get_entry_type(ep);
+			if (type == TYPE_UNUSED) {
+				brelse(bh);
+				return -EIO;
+			}
+
+			if (type == TYPE_VOLUME) {
+				*out_bh = bh;
+				*out_dentry = ep;
+				return 0;
+			}
+
+			brelse(bh);
+		}
+
+		if (exfat_get_next_cluster(sb, &(clu.dir)))
+			return -EIO;
+	}
+
+	return -EIO;
+}
+
+static int exfat_read_volume_label(struct super_block *sb)
+{
+	int ret, i;
+	struct exfat_sb_info *sbi = EXFAT_SB(sb);
+	struct buffer_head *bh;
+	struct exfat_dentry *ep;
+
+	ret = exfat_get_volume_label_ptrs(sb, &bh, &ep);
+	if (ret < 0)
+		goto cleanup;
+
+	for (i = 0; i < EXFAT_VOLUME_LABEL_LEN; i++)
+		sbi->volume_label[i] = le16_to_cpu(ep->dentry.volume_label.volume_label[i]);
+
+cleanup:
+	if (bh)
+		brelse(bh);
+
+	return ret;
+}
+
+int exfat_write_volume_label(struct super_block *sb)
+{
+	int ret, i;
+	struct exfat_sb_info *sbi = EXFAT_SB(sb);
+	struct buffer_head *bh;
+	struct exfat_dentry *ep;
+
+	ret = exfat_get_volume_label_ptrs(sb, &bh, &ep);
+	if (ret < 0)
+		goto cleanup;
+
+	mutex_lock(&sbi->s_lock);
+	for (i = 0; i < EXFAT_VOLUME_LABEL_LEN; i++)
+		ep->dentry.volume_label.volume_label[i] = cpu_to_le16(sbi->volume_label[i]);
+
+	ep->dentry.volume_label.char_count =
+		UniStrnlen(sbi->volume_label, EXFAT_VOLUME_LABEL_LEN);
+	mutex_unlock(&sbi->s_lock);
+
+cleanup:
+	if (bh) {
+		exfat_update_bh(bh, true);
+		brelse(bh);
+	}
+
+	return ret;
+}
+
 /* mount the file system volume */
 static int __exfat_fill_super(struct super_block *sb,
 		struct exfat_chain *root_clu)
@@ -613,6 +706,12 @@ static int __exfat_fill_super(struct super_block *sb,
 	ret = exfat_load_bitmap(sb);
 	if (ret) {
 		exfat_err(sb, "failed to load alloc-bitmap");
+		goto free_bh;
+	}
+
+	ret = exfat_read_volume_label(sb);
+	if (ret) {
+		exfat_err(sb, "failed to read volume label");
 		goto free_bh;
 	}
 
