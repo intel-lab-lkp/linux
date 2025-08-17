@@ -495,6 +495,8 @@ static int i2c_device_probe(struct device *dev)
 	struct i2c_driver	*driver;
 	bool do_power_on;
 	int status;
+	int err_reason;
+	bool has_id_table, has_acpi_match, has_of_match;
 
 	if (!client)
 		return 0;
@@ -509,38 +511,54 @@ static int i2c_device_probe(struct device *dev)
 			/* Keep adapter active when Host Notify is required */
 			pm_runtime_get_sync(&client->adapter->dev);
 			irq = i2c_smbus_host_notify_to_irq(client);
+			err_reason = I2C_TRACE_REASON_HOST_NOTIFY;
 		} else if (is_of_node(fwnode)) {
 			irq = fwnode_irq_get_byname(fwnode, "irq");
 			if (irq == -EINVAL || irq == -ENODATA)
 				irq = fwnode_irq_get(fwnode, 0);
+			err_reason = I2C_TRACE_REASON_FROM_OF;
 		} else if (is_acpi_device_node(fwnode)) {
 			bool wake_capable;
 
 			irq = i2c_acpi_get_irq(client, &wake_capable);
 			if (irq > 0 && wake_capable)
 				client->flags |= I2C_CLIENT_WAKE;
+			err_reason = I2C_TRACE_REASON_FROM_ACPI;
 		}
 		if (irq == -EPROBE_DEFER) {
 			status = dev_err_probe(dev, irq, "can't get irq\n");
+			err_reason = I2C_TRACE_REASON_EPROBE_DEFER_IRQ;
 			goto put_sync_adapter;
 		}
 
-		if (irq < 0)
+		if (irq < 0) {
+			trace_i2c_device_probe_debug(dev, err_reason);
 			irq = 0;
+		}
 
 		client->irq = irq;
 	}
 
 	driver = to_i2c_driver(dev->driver);
 
+	has_id_table = driver->id_table;
+	has_acpi_match = acpi_driver_match_device(dev, dev->driver);
+	has_of_match = i2c_of_match_device(dev->driver->of_match_table, client);
+
+	if (!has_id_table)
+		trace_i2c_device_probe_debug(dev, I2C_TRACE_REASON_NO_I2C_ID_TABLE);
+	if (!has_acpi_match)
+		trace_i2c_device_probe_debug(dev, I2C_TRACE_REASON_ACPI_ID_MISMATCH);
+	if (!has_of_match)
+		trace_i2c_device_probe_debug(dev, I2C_TRACE_REASON_OF_ID_MISMATCH);
+
 	/*
 	 * An I2C ID table is not mandatory, if and only if, a suitable OF
 	 * or ACPI ID table is supplied for the probing device.
 	 */
-	if (!driver->id_table &&
-	    !acpi_driver_match_device(dev, dev->driver) &&
-	    !i2c_of_match_device(dev->driver->of_match_table, client)) {
+	if (!has_id_table && !has_acpi_match && !has_of_match) {
 		status = -ENODEV;
+		err_reason = I2C_TRACE_REASON_NO_ID_MATCH;
 		goto put_sync_adapter;
 	}
 
@@ -550,47 +568,60 @@ static int i2c_device_probe(struct device *dev)
 		wakeirq = fwnode_irq_get_byname(fwnode, "wakeup");
 		if (wakeirq == -EPROBE_DEFER) {
 			status = dev_err_probe(dev, wakeirq, "can't get wakeirq\n");
+			err_reason = I2C_TRACE_REASON_EPROBE_DEFER_WAKEIRQ;
 			goto put_sync_adapter;
 		}
 
 		device_init_wakeup(&client->dev, true);
 
-		if (wakeirq > 0 && wakeirq != client->irq)
+		if (wakeirq > 0 && wakeirq != client->irq) {
 			status = dev_pm_set_dedicated_wake_irq(dev, wakeirq);
-		else if (client->irq > 0)
+			err_reason = I2C_TRACE_REASON_SET_DED_WAKE_FAILED;
+		} else if (client->irq > 0) {
 			status = dev_pm_set_wake_irq(dev, client->irq);
-		else
+			err_reason = I2C_TRACE_REASON_SET_WAKE_FAILED;
+		} else {
 			status = 0;
+			err_reason = I2C_TRACE_REASON_NO_IRQ;
+		}
 
-		if (status)
+		if (status) {
 			dev_warn(&client->dev, "failed to set up wakeup irq\n");
+			trace_i2c_device_probe_debug(&client->dev, err_reason);
+		}
 	}
 
 	dev_dbg(dev, "probe\n");
 
 	status = of_clk_set_defaults(to_of_node(fwnode), false);
-	if (status < 0)
+	if (status < 0) {
+		err_reason = I2C_TRACE_REASON_SET_DEF_CLOCKS;
 		goto err_clear_wakeup_irq;
-
+	}
 	do_power_on = !i2c_acpi_waive_d0_probe(dev);
 	status = dev_pm_domain_attach(&client->dev, do_power_on ? PD_FLAG_ATTACH_POWER_ON : 0);
-	if (status)
+	if (status) {
+		err_reason = I2C_TRACE_REASON_ATTACH_PM_DOMAIN;
 		goto err_clear_wakeup_irq;
-
+	}
 	client->devres_group_id = devres_open_group(&client->dev, NULL,
 						    GFP_KERNEL);
 	if (!client->devres_group_id) {
 		status = -ENOMEM;
+		err_reason = I2C_TRACE_REASON_OPEN_DEVRES_GROUP;
 		goto err_detach_pm_domain;
 	}
 
 	client->debugfs = debugfs_create_dir(dev_name(&client->dev),
 					     client->adapter->debugfs);
 
-	if (driver->probe)
+	if (driver->probe) {
 		status = driver->probe(client);
-	else
+		err_reason = I2C_TRACE_REASON_PROBE_FAILED;
+	} else {
 		status = -EINVAL;
+		err_reason = I2C_TRACE_REASON_NO_PROBE;
+	}
 
 	/*
 	 * Note that we are not closing the devres group opened above so
@@ -602,6 +633,8 @@ static int i2c_device_probe(struct device *dev)
 
 	if (status)
 		goto err_release_driver_resources;
+
+	trace_i2c_device_probe_complete(&client->dev, status, err_reason);
 
 	return 0;
 
@@ -616,6 +649,8 @@ err_clear_wakeup_irq:
 put_sync_adapter:
 	if (client->flags & I2C_CLIENT_HOST_NOTIFY)
 		pm_runtime_put_sync(&client->adapter->dev);
+
+	trace_i2c_device_probe_complete(&client->dev, status, err_reason);
 
 	return status;
 }
