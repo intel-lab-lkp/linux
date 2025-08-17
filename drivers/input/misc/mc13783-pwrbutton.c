@@ -33,12 +33,13 @@
 struct mc13783_pwrb {
 	struct input_dev *pwr;
 	struct mc13xxx *mc13783;
-#define MC13783_PWRB_B1_POL_INVERT	(1 << 0)
-#define MC13783_PWRB_B2_POL_INVERT	(1 << 1)
-#define MC13783_PWRB_B3_POL_INVERT	(1 << 2)
 	int flags;
 	unsigned short keymap[3];
 };
+
+#define MC13783_PWRB_B1_POL_INVERT	(1 << 0)
+#define MC13783_PWRB_B2_POL_INVERT	(1 << 1)
+#define MC13783_PWRB_B3_POL_INVERT	(1 << 2)
 
 #define MC13783_REG_INTERRUPT_SENSE_1		5
 #define MC13783_IRQSENSE1_ONOFD1S		(1 << 3)
@@ -108,6 +109,7 @@ static int mc13783_pwrbutton_probe(struct platform_device *pdev)
 {
 	const struct mc13xxx_buttons_platform_data *pdata;
 	struct mc13xxx *mc13783 = dev_get_drvdata(pdev->dev.parent);
+	enum mc13xxx_chip_type chip = platform_get_device_id(pdev)->driver_data;
 	struct input_dev *pwr;
 	struct mc13783_pwrb *priv;
 	int err = 0;
@@ -126,6 +128,11 @@ static int mc13783_pwrbutton_probe(struct platform_device *pdev)
 	priv = devm_kzalloc(&pdev->dev, sizeof(*priv), GFP_KERNEL);
 	if (!priv)
 		return -ENOMEM;
+
+	/* ONOFD3 is only supported for MC13783. */
+	if (pdata->b3on_flags & MC13783_BUTTON_ENABLE &&
+		chip != MC13XXX_CHIP_TYPE_MC13783)
+		return -ENODEV;
 
 	reg |= (pdata->b1on_flags & 0x3) << MC13783_POWER_CONTROL_2_ON1BDBNC;
 	reg |= (pdata->b2on_flags & 0x3) << MC13783_POWER_CONTROL_2_ON2BDBNC;
@@ -254,7 +261,15 @@ static void mc13783_pwrbutton_remove(struct platform_device *pdev)
 	mc13xxx_unlock(priv->mc13783);
 }
 
+static const struct platform_device_id mc13xxx_pwrbutton_idtable[] = {
+	{ "mc13783-pwrbutton", MC13XXX_CHIP_TYPE_MC13783 },
+	{ "mc13892-pwrbutton", MC13XXX_CHIP_TYPE_MC13892 },
+	{ "mc34708-pwrbutton", MC13XXX_CHIP_TYPE_MC34708 },
+	{ /* sentinel */ }
+};
+
 static struct platform_driver mc13783_pwrbutton_driver = {
+	.id_table	= mc13xxx_pwrbutton_idtable,
 	.probe		= mc13783_pwrbutton_probe,
 	.remove		= mc13783_pwrbutton_remove,
 	.driver		= {

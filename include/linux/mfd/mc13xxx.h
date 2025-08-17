@@ -67,6 +67,8 @@ int mc13xxx_irq_unmask(struct mc13xxx *mc13xxx, int irq);
 #define MC13XXX_IRQ_LOBATH	14
 #define MC13XXX_IRQ_1HZ		24
 #define MC13XXX_IRQ_TODA	25
+#define MC13XXX_IRQ_PWRON1	27
+#define MC13XXX_IRQ_PWRON2	28
 #define MC13XXX_IRQ_SYSRST	30
 #define MC13XXX_IRQ_RTCRST	31
 #define MC13XXX_IRQ_PC		32
@@ -77,6 +79,13 @@ int mc13xxx_irq_unmask(struct mc13xxx *mc13xxx, int irq);
 #define MC13XXX_IRQ_CLK		38
 
 struct regulator_init_data;
+
+enum mc13xxx_chip_type {
+	MC13XXX_CHIP_TYPE_MC13783,
+	MC13XXX_CHIP_TYPE_MC13892,
+	MC13XXX_CHIP_TYPE_MC34708,
+	MC13XXX_CHIP_TYPE_AMOUNT
+};
 
 struct mc13xxx_regulator_init_data {
 	int id;
