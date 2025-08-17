@@ -84,14 +84,36 @@ int rxe_cq_resize_queue(struct rxe_cq *cq, int cqe,
 /* caller holds reference to cq */
 int rxe_cq_post(struct rxe_cq *cq, struct rxe_cqe *cqe, int solicited)
 {
-	struct ib_event ev;
-	int full;
-	void *addr;
 	unsigned long flags;
+	u32 spin_cnt = 3000;
+	struct ib_event ev;
+	void *addr;
+	int full;
 
 	spin_lock_irqsave(&cq->cq_lock, flags);
 
 	full = queue_full(cq->queue, QUEUE_TYPE_TO_CLIENT);
+	if (likely(!full))
+		goto post_queue;
+
+	/* constant backoff until queue is ready */
+	while (spin_cnt--) {
+		full = queue_full(cq->queue, QUEUE_TYPE_TO_CLIENT);
+		if (!full)
+			goto post_queue;
+
+		cpu_relax();
+	}
+
+	/* try giving up cpu and retry */
+	if (full) {
+		spin_unlock_irqrestore(&cq->cq_lock, flags);
+		cond_resched();
+		spin_lock_irqsave(&cq->cq_lock, flags);
+
+		full = queue_full(cq->queue, QUEUE_TYPE_TO_CLIENT);
+	}
+
 	if (unlikely(full)) {
 		rxe_err_cq(cq, "queue full\n");
 		spin_unlock_irqrestore(&cq->cq_lock, flags);
@@ -105,6 +127,7 @@ int rxe_cq_post(struct rxe_cq *cq, struct rxe_cqe *cqe, int solicited)
 		return -EBUSY;
 	}
 
+ post_queue:
 	addr = queue_producer_addr(cq->queue, QUEUE_TYPE_TO_CLIENT);
 	memcpy(addr, cqe, sizeof(*cqe));
 
