@@ -281,9 +281,10 @@ enum flag_bits {
 				 * It is expects that no bad block log
 				 * is present.
 				 */
-	LastDev,		/* Seems to be the last working dev as
-				 * it didn't fail, so don't use FailFast
-				 * any more for metadata
+	FailfastIOFailure,	/* A device that failled a metadata write
+				 * with failfast.
+				 * error_handler must not fail the array
+				 * if last device has this flag.
 				 */
 	CollisionCheck,		/*
 				 * check if there is collision between raid1
