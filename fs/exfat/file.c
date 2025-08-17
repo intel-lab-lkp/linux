@@ -12,6 +12,7 @@
 #include <linux/security.h>
 #include <linux/msdos_fs.h>
 #include <linux/writeback.h>
+#include "../nls/nls_ucs2_utils.h"
 
 #include "exfat_raw.h"
 #include "exfat_fs.h"
@@ -486,6 +487,57 @@ static int exfat_ioctl_shutdown(struct super_block *sb, unsigned long arg)
 	return exfat_force_shutdown(sb, flags);
 }
 
+static int exfat_ioctl_get_volume_label(struct super_block *sb, unsigned long arg)
+{
+	int ret;
+	char utf8[FSLABEL_MAX] = {0};
+	struct exfat_sb_info *sbi = EXFAT_SB(sb);
+	size_t len = UniStrnlen(sbi->volume_label, EXFAT_VOLUME_LABEL_LEN);
+
+	mutex_lock(&sbi->s_lock);
+	ret = utf16s_to_utf8s(sbi->volume_label, len,
+				UTF16_HOST_ENDIAN, utf8, FSLABEL_MAX);
+	mutex_unlock(&sbi->s_lock);
+
+	if (ret < 0)
+		return ret;
+
+	if (copy_to_user((char __user *)arg, utf8, FSLABEL_MAX))
+		return -EFAULT;
+
+	return 0;
+}
+
+static int exfat_ioctl_set_volume_label(struct super_block *sb, unsigned long arg)
+{
+	int ret = 0;
+	char utf8[FSLABEL_MAX];
+	size_t len;
+	unsigned short utf16[EXFAT_VOLUME_LABEL_LEN] = {0};
+	struct exfat_sb_info *sbi = EXFAT_SB(sb);
+
+	if (!capable(CAP_SYS_ADMIN))
+		return -EPERM;
+
+	if (copy_from_user(utf8, (char __user *)arg, FSLABEL_MAX))
+		return -EFAULT;
+
+	len = strnlen(utf8, FSLABEL_MAX);
+	if (len > EXFAT_VOLUME_LABEL_LEN)
+		exfat_info(sb, "Volume label length too long, truncating");
+
+	mutex_lock(&sbi->s_lock);
+	ret = utf8s_to_utf16s(utf8, len, UTF16_HOST_ENDIAN, utf16, EXFAT_VOLUME_LABEL_LEN);
+	mutex_unlock(&sbi->s_lock);
+
+	if (ret < 0)
+		return ret;
+
+	memcpy(sbi->volume_label, utf16, sizeof(sbi->volume_label));
+
+	return exfat_write_volume_label(sb);
+}
+
 long exfat_ioctl(struct file *filp, unsigned int cmd, unsigned long arg)
 {
 	struct inode *inode = file_inode(filp);
@@ -500,6 +552,10 @@ long exfat_ioctl(struct file *filp, unsigned int cmd, unsigned long arg)
 		return exfat_ioctl_shutdown(inode->i_sb, arg);
 	case FITRIM:
 		return exfat_ioctl_fitrim(inode, arg);
+	case FS_IOC_GETFSLABEL:
+		return exfat_ioctl_get_volume_label(inode->i_sb, arg);
+	case FS_IOC_SETFSLABEL:
+		return exfat_ioctl_set_volume_label(inode->i_sb, arg);
 	default:
 		return -ENOTTY;
 	}
