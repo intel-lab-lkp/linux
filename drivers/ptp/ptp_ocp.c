@@ -1562,7 +1562,8 @@ ptp_ocp_watchdog(struct timer_list *t)
 static void
 ptp_ocp_estimate_pci_timing(struct ptp_ocp *bp)
 {
-	ktime_t start, end, delay = U64_MAX;
+	ktime_t start, end;
+	s64 delay_ns = U32_MAX; /* 4.29 seconds is high enough */
 	u32 ctrl;
 	int i;
 
@@ -1572,15 +1573,16 @@ ptp_ocp_estimate_pci_timing(struct ptp_ocp *bp)
 
 		iowrite32(ctrl, &bp->reg->ctrl);
 
-		start = ktime_get_raw_ns();
+		start = ktime_get_raw();
 
 		ctrl = ioread32(&bp->reg->ctrl);
 
-		end = ktime_get_raw_ns();
+		end = ktime_get_raw();
 
-		delay = min(delay, end - start);
+		delay_ns = min(delay_ns, ktime_to_ns(end - start));
 	}
-	bp->ts_window_adjust = (delay >> 5) * 3;
+	delay_ns = max(0, delay_ns);
+	bp->ts_window_adjust = (delay_ns >> 5) * 3;
 }
 
 static int
@@ -1898,7 +1900,7 @@ ptp_ocp_devlink_info_get(struct devlink *devlink, struct devlink_info_req *req,
 	int err;
 
 	fw_image = bp->fw_loader ? "loader" : "fw";
-	sprintf(buf, "%d.%d", bp->fw_tag, bp->fw_version);
+	sprintf(buf, "%hhu.%hu", bp->fw_tag, bp->fw_version);
 	err = devlink_info_version_running_put(req, fw_image, buf);
 	if (err)
 		return err;
@@ -3259,7 +3261,7 @@ signal_show(struct device *dev, struct device_attribute *attr, char *buf)
 	i = (uintptr_t)ea->var;
 	signal = &bp->signal[i];
 
-	count = sysfs_emit(buf, "%llu %d %llu %d", signal->period,
+	count = sysfs_emit(buf, "%lli %d %lli %d", signal->period,
 			   signal->duty, signal->phase, signal->polarity);
 
 	ts = ktime_to_timespec64(signal->start);
@@ -3293,7 +3295,7 @@ period_show(struct device *dev, struct device_attribute *attr, char *buf)
 	struct ptp_ocp *bp = dev_get_drvdata(dev);
 	int i = (uintptr_t)ea->var;
 
-	return sysfs_emit(buf, "%llu\n", bp->signal[i].period);
+	return sysfs_emit(buf, "%lli\n", bp->signal[i].period);
 }
 static EXT_ATTR_RO(signal, period, 0);
 static EXT_ATTR_RO(signal, period, 1);
@@ -3307,7 +3309,7 @@ phase_show(struct device *dev, struct device_attribute *attr, char *buf)
 	struct ptp_ocp *bp = dev_get_drvdata(dev);
 	int i = (uintptr_t)ea->var;
 
-	return sysfs_emit(buf, "%llu\n", bp->signal[i].phase);
+	return sysfs_emit(buf, "%lli\n", bp->signal[i].phase);
 }
 static EXT_ATTR_RO(signal, phase, 0);
 static EXT_ATTR_RO(signal, phase, 1);
@@ -3352,7 +3354,7 @@ start_show(struct device *dev, struct device_attribute *attr, char *buf)
 	struct timespec64 ts;
 
 	ts = ktime_to_timespec64(bp->signal[i].start);
-	return sysfs_emit(buf, "%llu.%lu\n", ts.tv_sec, ts.tv_nsec);
+	return sysfs_emit(buf, "%lli.%li\n", ts.tv_sec, ts.tv_nsec);
 }
 static EXT_ATTR_RO(signal, start, 0);
 static EXT_ATTR_RO(signal, start, 1);
@@ -3507,7 +3509,7 @@ utc_tai_offset_show(struct device *dev,
 {
 	struct ptp_ocp *bp = dev_get_drvdata(dev);
 
-	return sysfs_emit(buf, "%d\n", bp->utc_tai_offset);
+	return sysfs_emit(buf, "%u\n", bp->utc_tai_offset);
 }
 
 static ssize_t
@@ -3535,7 +3537,7 @@ ts_window_adjust_show(struct device *dev,
 {
 	struct ptp_ocp *bp = dev_get_drvdata(dev);
 
-	return sysfs_emit(buf, "%d\n", bp->ts_window_adjust);
+	return sysfs_emit(buf, "%u\n", bp->ts_window_adjust);
 }
 
 static ssize_t
@@ -4024,7 +4026,7 @@ _signal_summary_show(struct seq_file *s, struct ptp_ocp *bp, int nr)
 
 	on = signal->running;
 	sprintf(label, "GEN%d", nr + 1);
-	seq_printf(s, "%7s: %s, period:%llu duty:%d%% phase:%llu pol:%d",
+	seq_printf(s, "%7s: %s, period:%lli duty:%d%% phase:%lli pol:%d",
 		   label, on ? " ON" : "OFF",
 		   signal->period, signal->duty, signal->phase,
 		   signal->polarity);
@@ -4034,7 +4036,7 @@ _signal_summary_show(struct seq_file *s, struct ptp_ocp *bp, int nr)
 	val = ioread32(&reg->status);
 	seq_printf(s, " %x]", val);
 
-	seq_printf(s, " start:%llu\n", signal->start);
+	seq_printf(s, " start:%lli\n", signal->start);
 }
 
 static void
@@ -4291,7 +4293,7 @@ ptp_ocp_summary_show(struct seq_file *s, void *data)
 
 		seq_printf(s, "%7s: %lld.%ld == %ptT TAI\n", "PHC",
 			   ts.tv_sec, ts.tv_nsec, &ts);
-		seq_printf(s, "%7s: %lld.%ld == %ptT UTC offset %d\n", "SYS",
+		seq_printf(s, "%7s: %lld.%ld == %ptT UTC offset %u\n", "SYS",
 			   sys_ts.tv_sec, sys_ts.tv_nsec, &sys_ts,
 			   bp->utc_tai_offset);
 		seq_printf(s, "%7s: PHC:SYS offset: %lld  window: %lld\n", "",
