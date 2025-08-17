@@ -46,7 +46,7 @@ void autofs_catatonic_mode(struct autofs_sb_info *sbi)
 static int autofs_write(struct autofs_sb_info *sbi,
 			struct file *file, const void *addr, int bytes)
 {
-	unsigned long sigpipe, flags;
+	unsigned long sigpipe;
 	const char *data = (const char *)addr;
 	ssize_t wr = 0;
 
@@ -66,10 +66,10 @@ static int autofs_write(struct autofs_sb_info *sbi,
 	 * SIGPIPE unless it was already supposed to get one
 	 */
 	if (wr == -EPIPE && !sigpipe) {
-		spin_lock_irqsave(&current->sighand->siglock, flags);
+		spin_lock_irq(&current->sighand->siglock);
 		sigdelset(&current->pending.signal, SIGPIPE);
 		recalc_sigpending();
-		spin_unlock_irqrestore(&current->sighand->siglock, flags);
+		spin_unlock_irq(&current->sighand->siglock);
 	}
 
 	/* if 'wr' returned 0 (impossible) we assume -EIO (safe) */
