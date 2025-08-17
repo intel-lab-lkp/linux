@@ -1934,6 +1934,9 @@ static s32 cake_enqueue(struct sk_buff *skb, struct Qdisc *sch,
 			cake_drop(sch, to_free);
 		}
 		b->drop_overlimit += dropped;
+
+		if (dropped)
+			return NET_XMIT_CN;
 	}
 	return NET_XMIT_SUCCESS;
 }
