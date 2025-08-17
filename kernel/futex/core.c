@@ -1733,13 +1733,9 @@ int futex_mm_init(struct mm_struct *mm)
 
 void futex_hash_free(struct mm_struct *mm)
 {
-	struct futex_private_hash *fph;
-
 	free_percpu(mm->futex_ref);
 	kvfree(mm->futex_phash_new);
-	fph = rcu_dereference_raw(mm->futex_phash);
-	if (fph)
-		kvfree(fph);
+	kvfree(rcu_dereference_raw(mm->futex_phash));
 }
 
 static bool futex_pivot_pending(struct mm_struct *mm)
