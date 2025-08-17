@@ -553,15 +553,13 @@ static void ppl_io_unit_finished(struct ppl_io_unit *io)
 
 	pr_debug("%s: seq: %llu\n", __func__, io->seq);
 
-	local_irq_save(flags);
-
-	spin_lock(&log->io_list_lock);
+	spin_lock_irqsave(&log->io_list_lock, flags);
 	list_del(&io->log_sibling);
-	spin_unlock(&log->io_list_lock);
+	spin_unlock_irqrestore(&log->io_list_lock, flags);
 
 	mempool_free(io, &ppl_conf->io_pool);
 
-	spin_lock(&ppl_conf->no_mem_stripes_lock);
+	spin_lock_irqsave(&ppl_conf->no_mem_stripes_lock, flags);
 	if (!list_empty(&ppl_conf->no_mem_stripes)) {
 		struct stripe_head *sh;
 
@@ -571,9 +569,7 @@ static void ppl_io_unit_finished(struct ppl_io_unit *io)
 		set_bit(STRIPE_HANDLE, &sh->state);
 		raid5_release_stripe(sh);
 	}
-	spin_unlock(&ppl_conf->no_mem_stripes_lock);
-
-	local_irq_restore(flags);
+	spin_unlock_irqrestore(&ppl_conf->no_mem_stripes_lock, flags);
 
 	wake_up(&conf->wait_for_quiescent);
 }
