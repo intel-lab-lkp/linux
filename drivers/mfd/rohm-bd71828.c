@@ -4,7 +4,6 @@
 //
 // ROHM BD71828/BD71815 PMIC driver
 
-#include <linux/gpio_keys.h>
 #include <linux/i2c.h>
 #include <linux/input.h>
 #include <linux/interrupt.h>
@@ -16,20 +15,31 @@
 #include <linux/mfd/rohm-generic.h>
 #include <linux/module.h>
 #include <linux/of.h>
+#include <linux/property.h>
 #include <linux/regmap.h>
 #include <linux/types.h>
 
-static struct gpio_keys_button button = {
-	.code = KEY_POWER,
-	.gpio = -1,
-	.type = EV_KEY,
+static const struct software_node bd71828_pwrkey_node = {
+	.name = "bd71828-power-key",
 };
 
-static const struct gpio_keys_platform_data bd71828_powerkey_data = {
-	.buttons = &button,
-	.nbuttons = 1,
-	.name = "bd71828-pwrkey",
+static const struct property_entry bd71828_powerkey_props[] = {
+	PROPERTY_ENTRY_U32("linux,code", KEY_POWER),
+	PROPERTY_ENTRY_STRING("label", "bd71828-pwrkey"),
+	{ }
 };
+
+static const struct software_node bd71828_powerkey_key_node = {
+	.properties = bd71828_powerkey_props,
+	.parent = &bd71828_pwrkey_node,
+};
+
+static const struct software_node *bd71828_swnodes[] = {
+	&bd71828_pwrkey_node,
+	&bd71828_powerkey_key_node,
+	NULL,
+};
+
 
 static const struct resource bd71815_rtc_irqs[] = {
 	DEFINE_RES_IRQ_NAMED(BD71815_INT_RTC0, "bd70528-rtc-alm-0"),
@@ -93,6 +103,10 @@ static const struct resource bd71815_power_irqs[] = {
 	DEFINE_RES_IRQ_NAMED(BD71815_INT_TEMP_BAT_HI_DET, "bd71815-bat-hi-det"),
 };
 
+static const struct resource bd71828_powerkey_irq_resources[] = {
+	DEFINE_RES_IRQ_NAMED(BD71828_INT_SHORTPUSH, "bd71828-pwrkey"),
+};
+
 static const struct mfd_cell bd71815_mfd_cells[] = {
 	{ .name = "bd71815-pmic", },
 	{ .name = "bd71815-clk", },
@@ -125,8 +139,9 @@ static const struct mfd_cell bd71828_mfd_cells[] = {
 		.num_resources = ARRAY_SIZE(bd71828_rtc_irqs),
 	}, {
 		.name = "gpio-keys",
-		.platform_data = &bd71828_powerkey_data,
-		.pdata_size = sizeof(bd71828_powerkey_data),
+		.swnode = &bd71828_pwrkey_node,
+		.resources = bd71828_powerkey_irq_resources,
+		.num_resources = ARRAY_SIZE(bd71828_powerkey_irq_resources),
 	},
 };
 
@@ -464,6 +479,30 @@ static int set_clk_mode(struct device *dev, struct regmap *regmap,
 				  OUT32K_MODE_CMOS);
 }
 
+static int bd71828_reg_cnt;
+
+static int bd71828_i2c_register_swnodes(void)
+{
+	int error;
+
+	if (bd71828_reg_cnt == 0) {
+		error = software_node_register_node_group(bd71828_swnodes);
+		if (error)
+			return error;
+	}
+
+	bd71828_reg_cnt++;
+	return 0;
+}
+
+static void bd71828_i2c_unregister_swnodes(void *dummy)
+{
+	if (bd71828_reg_cnt != 0) {
+		software_node_unregister_node_group(bd71828_swnodes);
+		bd71828_reg_cnt--;
+	}
+}
+
 static struct i2c_client *bd71828_dev;
 static void bd71828_power_off(void)
 {
@@ -495,7 +534,6 @@ static int bd71828_i2c_probe(struct i2c_client *i2c)
 	unsigned int chip_type;
 	const struct mfd_cell *mfd;
 	int cells;
-	int button_irq;
 	int clkmode_reg;
 
 	if (!i2c->irq) {
@@ -512,7 +550,14 @@ static int bd71828_i2c_probe(struct i2c_client *i2c)
 		regmap_config = &bd71828_regmap;
 		irqchip = &bd71828_irq_chip;
 		clkmode_reg = BD71828_REG_OUT32K;
-		button_irq = BD71828_INT_SHORTPUSH;
+		ret = bd71828_i2c_register_swnodes();
+		if (ret)
+			return dev_err_probe(&i2c->dev, ret, "Failed to register swnodes\n");
+
+		ret = devm_add_action_or_reset(&i2c->dev, bd71828_i2c_unregister_swnodes, NULL);
+		if (ret)
+			return ret;
+
 		break;
 	case ROHM_CHIP_TYPE_BD71815:
 		mfd = bd71815_mfd_cells;
@@ -526,7 +571,6 @@ static int bd71828_i2c_probe(struct i2c_client *i2c)
 		 * BD71815 data-sheet does not list the power-button IRQ so we
 		 * don't use it.
 		 */
-		button_irq = 0;
 		break;
 	default:
 		dev_err(&i2c->dev, "Unknown device type");
@@ -546,15 +590,6 @@ static int bd71828_i2c_probe(struct i2c_client *i2c)
 
 	dev_dbg(&i2c->dev, "Registered %d IRQs for chip\n",
 		irqchip->num_irqs);
-
-	if (button_irq) {
-		ret = regmap_irq_get_virq(irq_data, button_irq);
-		if (ret < 0)
-			return dev_err_probe(&i2c->dev, ret,
-					     "Failed to get the power-key IRQ\n");
-
-		button.irq = ret;
-	}
 
 	ret = set_clk_mode(&i2c->dev, regmap, clkmode_reg);
 	if (ret)
