@@ -1449,6 +1449,18 @@ static int follow_automount(struct path *path, int *count, unsigned lookup_flags
 	    dentry->d_inode)
 		return -EISDIR;
 
+	/* "if" above returned -EISDIR if we want to get automount point itself
+	 * as opposed to new mount. Getting automount point itself is, of course,
+	 * totally okay even if we have LOOKUP_NO_XDEV.
+	 *
+	 * But if we got here, then we want to get
+	 * new mount. Let's deny this if LOOKUP_NO_XDEV is specified.
+	 * If we have LOOKUP_NO_XDEV, then we want to deny not only
+	 * traversing through automounts, but also triggering them
+	 */
+	if (lookup_flags & LOOKUP_NO_XDEV)
+		return -EXDEV;
+
 	if (count && (*count)++ >= MAXSYMLINKS)
 		return -ELOOP;
 
@@ -1472,6 +1484,10 @@ static int __traverse_mounts(struct path *path, unsigned flags, bool *jumped,
 		/* Allow the filesystem to manage the transit without i_rwsem
 		 * being held. */
 		if (flags & DCACHE_MANAGE_TRANSIT) {
+			if (lookup_flags & LOOKUP_NO_XDEV) {
+				ret = -EXDEV;
+				break;
+			}
 			ret = path->dentry->d_op->d_manage(path, false);
 			flags = smp_load_acquire(&path->dentry->d_flags);
 			if (ret < 0)
