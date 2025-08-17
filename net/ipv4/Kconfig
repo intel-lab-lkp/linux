@@ -499,7 +499,7 @@ config TCP_CONG_CUBIC
 	help
 	  This is version 2.0 of BIC-TCP which uses a cubic growth function
 	  among other techniques.
-	  See http://www.csc.ncsu.edu/faculty/rhee/export/bitcp/cubic-paper.pdf
+	  See https://web.archive.org/web/20060103185400/http://www.csc.ncsu.edu/faculty/rhee/export/bitcp/cubic-paper.pdf
 
 config TCP_CONG_WESTWOOD
 	tristate "TCP Westwood+"
