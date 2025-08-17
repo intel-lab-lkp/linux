@@ -25,6 +25,8 @@ extern void hpet_read(int, const char **);
 #include <sys/poll.h>
 #include <sys/ioctl.h>
 
+#define ARRAY_SIZE(x)	(sizeof(x) / sizeof(x[0]))
+
 struct hpet_command {
 	char		*command;
 	void		(*func)(int argc, const char ** argv);
@@ -56,12 +58,17 @@ main(int argc, const char ** argv)
 	argv++;
 
 	if (!argc) {
-		fprintf(stderr, "-hpet: requires command\n");
+		fprintf(stderr, "-hpet: requires command\n"
+			"Format: hpet_example <command> </dev/device_name>\n");
+		fprintf(stderr, "Supported commands:\n");
+		for (i = 0; i < ARRAY_SIZE(hpet_command); i++)
+			fprintf(stderr, "\t%s\n", hpet_command[i].command);
+		fprintf(stderr, "\nExample: $ ./hpet_example info /dev/hpet\n");
 		return -1;
 	}
 
 
-	for (i = 0; i < (sizeof (hpet_command) / sizeof (hpet_command[0])); i++)
+	for (i = 0; i < ARRAY_SIZE(hpet_command); i++)
 		if (!strcmp(argv[0], hpet_command[i].command)) {
 			argc--;
 			argv++;
