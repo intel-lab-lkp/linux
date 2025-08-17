@@ -1306,7 +1306,7 @@ static void put_ctx(struct perf_event_context *ctx)
  * perf_event_context::mutex nests and those are:
  *
  *  - perf_event_exit_task_context()	[ child , 0 ]
- *      perf_event_exit_event()
+ *      perf_event_detach_event()
  *        put_event()			[ parent, 1 ]
  *
  *  - perf_event_init_context()		[ parent, 0 ]
@@ -2318,7 +2318,7 @@ out:
 
 static void sync_child_event(struct perf_event *child_event);
 
-static void perf_child_detach(struct perf_event *event)
+static void perf_child_detach(struct perf_event *event, bool sync_child)
 {
 	struct perf_event *parent_event = event->parent;
 
@@ -2336,7 +2336,9 @@ static void perf_child_detach(struct perf_event *event)
 	lockdep_assert_held(&parent_event->child_mutex);
 	 */
 
-	sync_child_event(event);
+	if (sync_child)
+		sync_child_event(event);
+
 	list_del_init(&event->child_list);
 }
 
@@ -2507,7 +2509,7 @@ __perf_remove_from_context(struct perf_event *event,
 	if (flags & DETACH_GROUP)
 		perf_group_detach(event);
 	if (flags & DETACH_CHILD)
-		perf_child_detach(event);
+		perf_child_detach(event, (flags & DETACH_EXIT) != 0);
 	list_del_event(event, ctx);
 
 	if (!pmu_ctx->nr_events) {
@@ -2613,7 +2615,7 @@ static void __perf_event_disable(struct perf_event *event,
  * remains valid.  This condition is satisfied when called through
  * perf_event_for_each_child or perf_event_for_each because they
  * hold the top-level event's child_mutex, so any descendant that
- * goes to exit will block in perf_event_exit_event().
+ * goes to exit will block in perf_event_detach_event().
  *
  * When called from perf_pending_disable it's OK because event->ctx
  * is the current context on this CPU and preemption is disabled,
@@ -4579,9 +4581,9 @@ out:
 }
 
 static void perf_remove_from_owner(struct perf_event *event);
-static void perf_event_exit_event(struct perf_event *event,
+static void perf_event_detach_event(struct perf_event *event,
 				  struct perf_event_context *ctx,
-				  bool revoke);
+				  bool revoke, bool exit);
 
 /*
  * Removes all events from the current task that have been marked
@@ -4608,7 +4610,7 @@ static void perf_event_remove_on_exec(struct perf_event_context *ctx)
 
 		modified = true;
 
-		perf_event_exit_event(event, ctx, false);
+		perf_event_detach_event(event, ctx, false, true);
 	}
 
 	raw_spin_lock_irqsave(&ctx->lock, flags);
@@ -6178,7 +6180,7 @@ EXPORT_SYMBOL_GPL(perf_event_pause);
 /*
  * Holding the top-level event's child_mutex means that any
  * descendant process that has inherited this event will block
- * in perf_event_exit_event() if it goes to exit, thus satisfying the
+ * in perf_event_detach_event() if it goes to exit, thus satisfying the
  * task existence requirements of perf_event_enable/disable.
  */
 static void perf_event_for_each_child(struct perf_event *event,
@@ -12393,7 +12395,7 @@ static void __pmu_detach_event(struct pmu *pmu, struct perf_event *event,
 	/*
 	 * De-schedule the event and mark it REVOKED.
 	 */
-	perf_event_exit_event(event, ctx, true);
+	perf_event_detach_event(event, ctx, true, true);
 
 	/*
 	 * All _free_event() bits that rely on event->pmu:
@@ -13975,12 +13977,15 @@ static void sync_child_event(struct perf_event *child_event)
 }
 
 static void
-perf_event_exit_event(struct perf_event *event,
-		      struct perf_event_context *ctx, bool revoke)
+perf_event_detach_event(struct perf_event *event,
+		      struct perf_event_context *ctx, bool revoke, bool exit)
 {
 	struct perf_event *parent_event = event->parent;
-	unsigned long detach_flags = DETACH_EXIT;
+	unsigned long detach_flags = 0;
 	unsigned int attach_state;
+
+	if (exit)
+		detach_flags |= DETACH_EXIT;
 
 	if (parent_event) {
 		/*
@@ -14058,6 +14063,17 @@ static void perf_event_exit_task_context(struct task_struct *task, bool exit)
 	mutex_lock(&ctx->mutex);
 
 	/*
+	 * Report the task dead after unscheduling the events so that we
+	 * won't get any samples after PERF_RECORD_EXIT. We can however still
+	 * get a few PERF_RECORD_READ events.
+	 */
+	if (exit)
+		perf_event_task(task, ctx, 0);
+
+	list_for_each_entry_safe(child_event, next, &ctx->event_list, event_entry)
+		perf_event_detach_event(child_event, ctx, false, exit);
+
+	/*
 	 * In a single ctx::lock section, de-schedule the events and detach the
 	 * context from the task such that we cannot ever get it scheduled back
 	 * in.
@@ -14080,17 +14096,6 @@ static void perf_event_exit_task_context(struct task_struct *task, bool exit)
 
 	if (clone_ctx)
 		put_ctx(clone_ctx);
-
-	/*
-	 * Report the task dead after unscheduling the events so that we
-	 * won't get any samples after PERF_RECORD_EXIT. We can however still
-	 * get a few PERF_RECORD_READ events.
-	 */
-	if (exit)
-		perf_event_task(task, ctx, 0);
-
-	list_for_each_entry_safe(child_event, next, &ctx->event_list, event_entry)
-		perf_event_exit_event(child_event, ctx, false);
 
 	mutex_unlock(&ctx->mutex);
 
