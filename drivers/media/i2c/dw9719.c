@@ -282,6 +282,8 @@ static int dw9719_probe(struct i2c_client *client)
 	if (!dw9719)
 		return -ENOMEM;
 
+	dw9719->model = (enum dw9719_model)i2c_get_match_data(client);
+
 	dw9719->regmap = devm_cci_regmap_init_i2c(client, 8);
 	if (IS_ERR(dw9719->regmap))
 		return PTR_ERR(dw9719->regmap);
@@ -361,8 +363,8 @@ static void dw9719_remove(struct i2c_client *client)
 }
 
 static const struct i2c_device_id dw9719_id_table[] = {
-	{ "dw9719" },
-	{ "dw9761" },
+	{ "dw9719", .driver_data = DW9719 },
+	{ "dw9761", .driver_data = DW9761 },
 	{ }
 };
 MODULE_DEVICE_TABLE(i2c, dw9719_id_table);
