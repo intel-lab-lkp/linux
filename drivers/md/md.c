@@ -426,6 +426,55 @@ check_suspended:
 }
 EXPORT_SYMBOL(md_handle_request);
 
+/**
+ * For raid456 read/write request, if bio LBA isn't aligned tot io_opt,
+ * split the non io_opt aligned header, to make the second part's LBA be
+ * aligned to io_opt. Otherwise still call bio_split_to_limits() to
+ * handle bio split with queue limits.
+ */
+static struct bio *bio_split_by_io_opt(struct bio *bio)
+{
+	sector_t io_opt_sectors, start, offset;
+	struct queue_limits lim;
+	struct mddev *mddev;
+	struct bio *split;
+	int level;
+
+	mddev = bio->bi_bdev->bd_disk->private_data;
+	level = mddev->level;
+
+	/* Only handle read456 read/write requests */
+	if (level == 1 || level == 10 || level == 0 || level == LEVEL_LINEAR ||
+	    (bio_op(bio) != REQ_OP_READ && bio_op(bio) != REQ_OP_WRITE))
+		return bio_split_to_limits(bio);
+
+	/* In case raid456 chunk size is too large */
+	lim = mddev->gendisk->queue->limits;
+	io_opt_sectors = lim.io_opt >> SECTOR_SHIFT;
+	if (unlikely(io_opt_sectors > lim.max_hw_sectors))
+		return bio_split_to_limits(bio);
+
+	/* Small request, no need to split */
+	if (bio_sectors(bio) <= io_opt_sectors)
+		return bio;
+
+	/* Only split the non-io-opt aligned header part */
+	start = bio->bi_iter.bi_sector;
+	offset = sector_div(start, io_opt_sectors);
+	if (offset == 0)
+		return bio_split_to_limits(bio);
+
+	split = bio_split(bio, (io_opt_sectors - offset), GFP_NOIO,
+			  &bio->bi_bdev->bd_disk->bio_split);
+	if (!split)
+		return bio_split_to_limits(bio);
+
+	split->bi_opf |= REQ_NOMERGE;
+	bio_chain(split, bio);
+	submit_bio_noacct(bio);
+	return split;
+}
+
 static void md_submit_bio(struct bio *bio)
 {
 	const int rw = bio_data_dir(bio);
@@ -441,7 +490,7 @@ static void md_submit_bio(struct bio *bio)
 		return;
 	}
 
-	bio = bio_split_to_limits(bio);
+	bio = bio_split_by_io_opt(bio);
 	if (!bio)
 		return;
 

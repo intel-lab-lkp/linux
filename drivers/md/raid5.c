@@ -7759,9 +7759,13 @@ static int raid5_set_limits(struct mddev *mddev)
 
 	/*
 	 * Requests require having a bitmap for each stripe.
-	 * Limit the max sectors based on this.
+	 * Limit the max sectors based on this. And being
+	 * aligned to lim.io_opt for better I/O performance.
 	 */
 	lim.max_hw_sectors = RAID5_MAX_REQ_STRIPES << RAID5_STRIPE_SHIFT(conf);
+	if (lim.max_hw_sectors > lim.io_opt >> SECTOR_SHIFT)
+		lim.max_hw_sectors = rounddown(lim.max_hw_sectors,
+			  lim.io_opt >> SECTOR_SHIFT);
 
 	/* No restrictions on the number of segments in the request */
 	lim.max_segments = USHRT_MAX;
