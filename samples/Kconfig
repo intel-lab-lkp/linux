@@ -183,6 +183,9 @@ config SAMPLE_SECCOMP
 config SAMPLE_TIMER
 	bool "Timer sample"
 	depends on CC_CAN_LINK && HEADERS_INSTALL
+	help
+	  Build sample programs to demostrate timers.
+	  Currenlty supports High Precision Event Timer (HPET) sample.
 
 config SAMPLE_TSM_MR
 	tristate "TSM measurement sample"
