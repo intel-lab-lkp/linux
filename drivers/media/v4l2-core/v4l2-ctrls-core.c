@@ -2823,3 +2823,15 @@ int __v4l2_s_ctrl_multi_to_single(struct v4l2_ctrl *ctrl_multi)
 }
 EXPORT_SYMBOL(__v4l2_s_ctrl_multi_to_single);
 
+int __v4l2_s_ctrl_single_to_multi(struct v4l2_ctrl *ctrl_single)
+{
+	struct v4l2_ctrl *ctrl_multi = __v4l2_get_multi_ctrl(ctrl_single);
+
+	if (!ctrl_multi || !ctrl_single)
+		return -EINVAL;
+
+	ctrl_multi->p_cur.p_u32[0] = ctrl_single->val;
+	return __v4l2_ctrl_s_ctrl_compound(ctrl_multi, V4L2_CTRL_TYPE_U32,
+					  ctrl_multi->p_cur.p_u32);
+}
+EXPORT_SYMBOL(__v4l2_s_ctrl_single_to_multi);

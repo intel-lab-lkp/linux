@@ -1664,6 +1664,23 @@ struct v4l2_ctrl *__v4l2_get_single_ctrl(struct v4l2_ctrl *ctrl_multi);
 int __v4l2_s_ctrl_multi_to_single(struct v4l2_ctrl *ctrl_multi);
 
 /**
+ * __v4l2_s_ctrl_single_to_multi() - Set the multi-capture control for a
+ *				     given single-capture control
+ *
+ * @ctrl_single: pointer to &struct v4l2_ctrl for the single-capture control
+ *
+ * This function finds the corresponding multi-capture control for a given
+ * single-capture control, and updates only the value corresponding to the
+ * first capture with the same value as the single-capture control value.
+ *
+ * This function assumes the control's handler is already locked,
+ * allowing it to be used from within the &v4l2_ctrl_ops functions.
+ *
+ * Return: 0 on success, a negative error code on failure.
+ */
+int __v4l2_s_ctrl_single_to_multi(struct v4l2_ctrl *ctrl_single);
+
+/**
  * v4l2_ctrl_type_op_equal - Default v4l2_ctrl_type_ops equal callback.
  *
  * @ctrl: The v4l2_ctrl pointer.
