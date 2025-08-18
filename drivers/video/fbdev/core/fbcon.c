@@ -405,9 +405,9 @@ static void fb_flashcursor(struct work_struct *work)
 
 	c = scr_readw((u16 *) vc->vc_pos);
 	enable = confb->cursor_flash && !confb->cursor_state.enable;
-	confb->cursor(vc, info, enable,
-		      get_fg_color(vc, info, c),
-		      get_bg_color(vc, info, c));
+	confb->bitops->cursor(vc, info, enable,
+			      get_fg_color(vc, info, c),
+			      get_bg_color(vc, info, c));
 	console_unlock();
 
 	queue_delayed_work(system_power_efficient_wq, &confb->cursor_work,
@@ -1162,7 +1162,7 @@ static void fbcon_init(struct vc_data *vc, bool init)
 	if (logo)
 		fbcon_prepare_logo(vc, info, cols, rows, new_cols, new_rows);
 
-	if (confb->rotate_font && confb->rotate_font(info, vc)) {
+	if (confb->bitops->rotate_font && confb->bitops->rotate_font(info, vc)) {
 		confb->rotate = FB_ROTATE_UR;
 		set_blitting_type(vc, info);
 	}
@@ -1303,10 +1303,11 @@ static void __fbcon_clear(struct vc_data *vc, unsigned int sy, unsigned int sx,
 	y_break = p->vrows - p->yscroll;
 	if (sy < y_break && sy + height - 1 >= y_break) {
 		u_int b = y_break - sy;
-		confb->clear(vc, info, real_y(p, sy), sx, b, width, fg, bg);
-		confb->clear(vc, info, real_y(p, sy + b), sx, height - b, width, fg, bg);
+		confb->bitops->clear(vc, info, real_y(p, sy), sx, b, width, fg, bg);
+		confb->bitops->clear(vc, info, real_y(p, sy + b), sx, height - b,
+				     width, fg, bg);
 	} else
-		confb->clear(vc, info, real_y(p, sy), sx, height, width, fg, bg);
+		confb->bitops->clear(vc, info, real_y(p, sy), sx, height, width, fg, bg);
 }
 
 static void fbcon_clear(struct vc_data *vc, unsigned int sy, unsigned int sx,
@@ -1323,9 +1324,9 @@ static void fbcon_putcs(struct vc_data *vc, const u16 *s, unsigned int count,
 	struct fbcon *confb = info->fbcon_par;
 
 	if (fbcon_is_active(vc, info))
-		confb->putcs(vc, info, s, count, real_y(p, ypos), xpos,
-			     get_fg_color(vc, info, scr_readw(s)),
-			     get_bg_color(vc, info, scr_readw(s)));
+		confb->bitops->putcs(vc, info, s, count, real_y(p, ypos), xpos,
+				     get_fg_color(vc, info, scr_readw(s)),
+				     get_bg_color(vc, info, scr_readw(s)));
 }
 
 static void fbcon_clear_margins(struct vc_data *vc, int bottom_only)
@@ -1334,7 +1335,7 @@ static void fbcon_clear_margins(struct vc_data *vc, int bottom_only)
 	struct fbcon *confb = info->fbcon_par;
 
 	if (fbcon_is_active(vc, info))
-		confb->clear_margins(vc, info, margin_color, bottom_only);
+		confb->bitops->clear_margins(vc, info, margin_color, bottom_only);
 }
 
 static void fbcon_cursor(struct vc_data *vc, bool enable)
@@ -1355,12 +1356,12 @@ static void fbcon_cursor(struct vc_data *vc, bool enable)
 
 	confb->cursor_flash = enable;
 
-	if (!confb->cursor)
+	if (!confb->bitops->cursor)
 		return;
 
-	confb->cursor(vc, info, enable,
-		      get_fg_color(vc, info, c),
-		      get_bg_color(vc, info, c));
+	confb->bitops->cursor(vc, info, enable,
+			      get_fg_color(vc, info, c),
+			      get_bg_color(vc, info, c));
 }
 
 static int scrollback_phys_max = 0;
@@ -1444,7 +1445,7 @@ static __inline__ void ywrap_up(struct vc_data *vc, int count)
 	confb->var.xoffset = 0;
 	confb->var.yoffset = p->yscroll * vc->vc_font.height;
 	confb->var.vmode |= FB_VMODE_YWRAP;
-	confb->update_start(info);
+	confb->bitops->update_start(info);
 	scrollback_max += count;
 	if (scrollback_max > scrollback_phys_max)
 		scrollback_max = scrollback_phys_max;
@@ -1463,7 +1464,7 @@ static __inline__ void ywrap_down(struct vc_data *vc, int count)
 	confb->var.xoffset = 0;
 	confb->var.yoffset = p->yscroll * vc->vc_font.height;
 	confb->var.vmode |= FB_VMODE_YWRAP;
-	confb->update_start(info);
+	confb->bitops->update_start(info);
 	scrollback_max -= count;
 	if (scrollback_max < 0)
 		scrollback_max = 0;
@@ -1478,15 +1479,15 @@ static __inline__ void ypan_up(struct vc_data *vc, int count)
 
 	p->yscroll += count;
 	if (p->yscroll > p->vrows - vc->vc_rows) {
-		confb->bmove(vc, info, p->vrows - vc->vc_rows,
-				  0, 0, 0, vc->vc_rows, vc->vc_cols);
+		confb->bitops->bmove(vc, info, p->vrows - vc->vc_rows,
+				     0, 0, 0, vc->vc_rows, vc->vc_cols);
 		p->yscroll -= p->vrows - vc->vc_rows;
 	}
 
 	confb->var.xoffset = 0;
 	confb->var.yoffset = p->yscroll * vc->vc_font.height;
 	confb->var.vmode &= ~FB_VMODE_YWRAP;
-	confb->update_start(info);
+	confb->bitops->update_start(info);
 	fbcon_clear_margins(vc, 1);
 	scrollback_max += count;
 	if (scrollback_max > scrollback_phys_max)
@@ -1510,7 +1511,7 @@ static __inline__ void ypan_up_redraw(struct vc_data *vc, int t, int count)
 	confb->var.xoffset = 0;
 	confb->var.yoffset = p->yscroll * vc->vc_font.height;
 	confb->var.vmode &= ~FB_VMODE_YWRAP;
-	confb->update_start(info);
+	confb->bitops->update_start(info);
 	fbcon_clear_margins(vc, 1);
 	scrollback_max += count;
 	if (scrollback_max > scrollback_phys_max)
@@ -1526,15 +1527,15 @@ static __inline__ void ypan_down(struct vc_data *vc, int count)
 
 	p->yscroll -= count;
 	if (p->yscroll < 0) {
-		confb->bmove(vc, info, 0, 0, p->vrows - vc->vc_rows,
-				  0, vc->vc_rows, vc->vc_cols);
+		confb->bitops->bmove(vc, info, 0, 0, p->vrows - vc->vc_rows,
+				     0, vc->vc_rows, vc->vc_cols);
 		p->yscroll += p->vrows - vc->vc_rows;
 	}
 
 	confb->var.xoffset = 0;
 	confb->var.yoffset = p->yscroll * vc->vc_font.height;
 	confb->var.vmode &= ~FB_VMODE_YWRAP;
-	confb->update_start(info);
+	confb->bitops->update_start(info);
 	fbcon_clear_margins(vc, 1);
 	scrollback_max -= count;
 	if (scrollback_max < 0)
@@ -1558,7 +1559,7 @@ static __inline__ void ypan_down_redraw(struct vc_data *vc, int t, int count)
 	confb->var.xoffset = 0;
 	confb->var.yoffset = p->yscroll * vc->vc_font.height;
 	confb->var.vmode &= ~FB_VMODE_YWRAP;
-	confb->update_start(info);
+	confb->bitops->update_start(info);
 	fbcon_clear_margins(vc, 1);
 	scrollback_max -= count;
 	if (scrollback_max < 0)
@@ -1620,8 +1621,8 @@ static void fbcon_redraw_blit(struct vc_data *vc, struct fb_info *info,
 
 			if (c == scr_readw(d)) {
 				if (s > start) {
-					confb->bmove(vc, info, line + ycount, x,
-						     line, x, 1, s - start);
+					confb->bitops->bmove(vc, info, line + ycount, x,
+							     line, x, 1, s - start);
 					x += s - start + 1;
 					start = s + 1;
 				} else {
@@ -1636,7 +1637,8 @@ static void fbcon_redraw_blit(struct vc_data *vc, struct fb_info *info,
 			d++;
 		} while (s < le);
 		if (s > start)
-			confb->bmove(vc, info, line + ycount, x, line, x, 1, s - start);
+			confb->bitops->bmove(vc, info, line + ycount, x, line, x, 1,
+					     s - start);
 		console_conditional_schedule();
 		if (ycount > 0)
 			line++;
@@ -1741,7 +1743,8 @@ static void fbcon_bmove_rec(struct vc_data *vc, struct fbcon_display *p, int sy,
 		}
 		return;
 	}
-	confb->bmove(vc, info, real_y(p, sy), sx, real_y(p, dy), dx, height, width);
+	confb->bitops->bmove(vc, info, real_y(p, sy), sx, real_y(p, dy), dx,
+			     height, width);
 }
 
 static void fbcon_bmove(struct vc_data *vc, int sy, int sx, int dy, int dx,
@@ -2161,7 +2164,7 @@ static bool fbcon_switch(struct vc_data *vc)
 	set_blitting_type(vc, info);
 	confb->cursor_reset = 1;
 
-	if (confb->rotate_font && confb->rotate_font(info, vc)) {
+	if (confb->bitops->rotate_font && confb->bitops->rotate_font(info, vc)) {
 		confb->rotate = FB_ROTATE_UR;
 		set_blitting_type(vc, info);
 	}
@@ -2194,7 +2197,7 @@ static bool fbcon_switch(struct vc_data *vc)
 
 	if (fbcon_is_active(vc, info)) {
 	    confb->var.xoffset = confb->var.yoffset = p->yscroll = 0;
-	    confb->update_start(info);
+	    confb->bitops->update_start(info);
 	}
 
 	fbcon_set_palette(vc, color_table);
@@ -2693,7 +2696,7 @@ static void fbcon_modechanged(struct fb_info *info)
 
 		if (fbcon_is_active(vc, info)) {
 		    confb->var.xoffset = confb->var.yoffset = p->yscroll = 0;
-		    confb->update_start(info);
+		    confb->bitops->update_start(info);
 		}
 
 		fbcon_set_palette(vc, color_table);
