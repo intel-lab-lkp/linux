@@ -142,7 +142,6 @@ virtio_vdpa_setup_vq(struct virtio_device *vdev, unsigned int index,
 	/* Assume split virtqueue, switch to packed if necessary */
 	struct vdpa_vq_state state = {0};
 	u32 align, max_num, min_num = 1;
-	bool may_reduce_num = true;
 	int err;
 
 	if (!name)
@@ -176,8 +175,6 @@ virtio_vdpa_setup_vq(struct virtio_device *vdev, unsigned int index,
 	if (ops->get_vq_num_min)
 		min_num = ops->get_vq_num_min(vdpa);
 
-	may_reduce_num = (max_num == min_num) ? false : true;
-
 	/* Create the vring */
 	align = ops->get_vq_align(vdpa);
 
@@ -186,7 +183,7 @@ virtio_vdpa_setup_vq(struct virtio_device *vdev, unsigned int index,
 	else
 		dma_dev = vdpa_get_dma_dev(vdpa);
 	vq = vring_create_virtqueue_dma(index, max_num, align, vdev,
-					true, may_reduce_num, ctx,
+					true, max_num == min_num, ctx,
 					notify, callback, name, dma_dev);
 	if (!vq) {
 		err = -ENOMEM;
