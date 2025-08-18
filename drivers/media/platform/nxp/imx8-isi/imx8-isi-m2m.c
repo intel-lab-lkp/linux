@@ -709,6 +709,14 @@ static int mxc_isi_m2m_release(struct file *file)
 	struct mxc_isi_m2m *m2m = video_drvdata(file);
 	struct mxc_isi_m2m_ctx *ctx = to_isi_m2m_ctx(file->private_data);
 
+	if (ctx->queues.out.streaming)
+		mxc_isi_m2m_streamoff(file, &ctx->fh,
+				      V4L2_BUF_TYPE_VIDEO_OUTPUT_MPLANE);
+
+	if (ctx->queues.cap.streaming)
+		mxc_isi_m2m_streamoff(file, &ctx->fh,
+				      V4L2_BUF_TYPE_VIDEO_CAPTURE_MPLANE);
+
 	v4l2_m2m_ctx_release(ctx->fh.m2m_ctx);
 	mxc_isi_m2m_ctx_ctrls_delete(ctx);
 
