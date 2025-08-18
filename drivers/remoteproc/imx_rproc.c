@@ -8,6 +8,7 @@
 #include <linux/clk.h>
 #include <linux/err.h>
 #include <linux/firmware/imx/sci.h>
+#include <linux/imx_rpmsg.h>
 #include <linux/interrupt.h>
 #include <linux/kernel.h>
 #include <linux/mailbox_client.h>
@@ -15,12 +16,15 @@
 #include <linux/module.h>
 #include <linux/of.h>
 #include <linux/of_address.h>
+#include <linux/of_irq.h>
+#include <linux/of_platform.h>
 #include <linux/of_reserved_mem.h>
 #include <linux/platform_device.h>
 #include <linux/pm_domain.h>
 #include <linux/reboot.h>
 #include <linux/regmap.h>
 #include <linux/remoteproc.h>
+#include <linux/rpmsg.h>
 #include <linux/workqueue.h>
 
 #include "imx_rproc.h"
@@ -1068,6 +1072,126 @@ static int imx_rproc_sys_off_handler(struct sys_off_data *data)
 	return NOTIFY_DONE;
 }
 
+struct imx_rpmsg_driver {
+	struct rpmsg_driver rpdrv;
+	void *driver_data;
+};
+
+static char *channel_device_map[][2] = {
+	{"rpmsg-io-channel", "fsl,imx-rpmsg-gpio"},
+	{"rpmsg-i2c-channel", "fsl,imx-rpmsg-i2c"},
+};
+
+static int imx_rpmsg_endpoint_cb(struct rpmsg_device *rpdev,
+	void *data, int len, void *priv, u32 src)
+{
+	struct imx_rpmsg_driver_data *drvdata;
+
+	drvdata = dev_get_drvdata(&rpdev->dev);
+	if (drvdata && drvdata->rx_callback)
+		return drvdata->rx_callback(rpdev, data, len, priv, src);
+
+	return 0;
+}
+
+static void imx_rpmsg_endpoint_remove(struct rpmsg_device *rpdev)
+{
+	of_platform_depopulate(&rpdev->dev);
+}
+
+static int imx_rpmsg_endpoint_probe(struct rpmsg_device *rpdev)
+{
+	struct imx_rpmsg_driver_data *drvdata;
+	struct imx_rpmsg_driver *imx_rpdrv;
+	struct device *dev = &rpdev->dev;
+	struct of_dev_auxdata *auxdata;
+	struct rpmsg_driver *rpdrv;
+	int i;
+
+	rpdrv = container_of(dev->driver, struct rpmsg_driver, drv);
+	imx_rpdrv = container_of(rpdrv, struct imx_rpmsg_driver, rpdrv);
+
+	if (!imx_rpdrv->driver_data)
+		return -EINVAL;
+
+	drvdata = devm_kmemdup(dev, imx_rpdrv->driver_data, sizeof(*drvdata), GFP_KERNEL);
+	if (!drvdata)
+		return -ENOMEM;
+
+	i = drvdata->map_idx;
+	if (i >= ARRAY_SIZE(channel_device_map))
+		return -ENODEV;
+
+	auxdata = devm_kzalloc(dev, sizeof(*auxdata)*2, GFP_KERNEL);
+	if (!auxdata)
+		return -ENOMEM;
+
+	drvdata->rpdev = rpdev;
+	auxdata[0].compatible = channel_device_map[i][1];
+	auxdata[0].platform_data = drvdata;
+	dev_set_drvdata(dev, drvdata);
+
+	of_platform_populate(drvdata->channel_node, NULL, auxdata, dev);
+	of_node_put(drvdata->channel_node);
+
+	return 0;
+}
+
+static int imx_of_rpmsg_node_init(struct platform_device *pdev)
+{
+	struct device_node *np __free(device_node), *channel;
+	struct imx_rpmsg_driver_data *driver_data;
+	struct imx_rpmsg_driver *rp_driver;
+	struct rpmsg_device_id *rpdev_id;
+	int i, ret;
+
+	int count = ARRAY_SIZE(channel_device_map);
+	struct device *dev = &pdev->dev;
+
+	np = of_get_child_by_name(dev->of_node, "rpmsg");
+	if (!np)
+		return 0;
+
+	for (i = 0; i < count; i++) {
+		ret = -ENOMEM;
+		channel = of_get_child_by_name(np, channel_device_map[i][0]);
+		if (!channel)
+			continue;
+
+		rpdev_id = devm_kzalloc(dev, sizeof(*rpdev_id)*2, GFP_KERNEL);
+		if (!rpdev_id)
+			break;
+		strscpy(rpdev_id[0].name, channel_device_map[i][0], RPMSG_NAME_SIZE);
+
+		rp_driver = devm_kzalloc(dev, sizeof(*rp_driver), GFP_KERNEL);
+		if (!rp_driver)
+			break;
+
+		driver_data = devm_kzalloc(dev, sizeof(*driver_data), GFP_KERNEL);
+		if (!driver_data)
+			break;
+
+		ret = 0;
+		driver_data->rproc_name = dev->of_node->name;
+		driver_data->channel_node = channel;
+		driver_data->map_idx = i;
+
+		rp_driver->rpdrv.drv.name = channel_device_map[i][0];
+		rp_driver->rpdrv.id_table = rpdev_id;
+		rp_driver->rpdrv.probe = imx_rpmsg_endpoint_probe;
+		rp_driver->rpdrv.remove = imx_rpmsg_endpoint_remove;
+		rp_driver->rpdrv.callback = imx_rpmsg_endpoint_cb;
+		rp_driver->driver_data = driver_data;
+
+		register_rpmsg_driver(&rp_driver->rpdrv);
+	}
+
+	if ((ret < 0) && channel)
+		of_node_put(channel);
+
+	return ret;
+}
+
 static int imx_rproc_probe(struct platform_device *pdev)
 {
 	struct device *dev = &pdev->dev;
@@ -1152,6 +1276,7 @@ static int imx_rproc_probe(struct platform_device *pdev)
 		goto err_put_clk;
 	}
 
+	imx_of_rpmsg_node_init(pdev);
 	return 0;
 
 err_put_clk:
