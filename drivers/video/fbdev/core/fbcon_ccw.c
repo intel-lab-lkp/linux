@@ -60,10 +60,10 @@ static void ccw_update_attr(u8 *dst, u8 *src, int attribute,
 }
 
 
-static void ccw_bmove(struct vc_data *vc, struct fb_info *info, int sy,
-		     int sx, int dy, int dx, int height, int width)
+static void ccw_bmove(struct vc_data *vc, struct fbcon *confb, int sy,
+		      int sx, int dy, int dx, int height, int width)
 {
-	struct fbcon *confb = info->fbcon_par;
+	struct fb_info *info = confb->info;
 	struct fb_copyarea area;
 	u32 vyres = GETVYRES(confb->p, info);
 
@@ -77,10 +77,10 @@ static void ccw_bmove(struct vc_data *vc, struct fb_info *info, int sy,
 	info->fbops->fb_copyarea(info, &area);
 }
 
-static void ccw_clear(struct vc_data *vc, struct fb_info *info, int sy,
-		     int sx, int height, int width, int fg, int bg)
+static void ccw_clear(struct vc_data *vc, struct fbcon *confb, int sy,
+		      int sx, int height, int width, int fg, int bg)
 {
-	struct fbcon *confb = info->fbcon_par;
+	struct fb_info *info = confb->info;
 	struct fb_fillrect region;
 	u32 vyres = GETVYRES(confb->p, info);
 
@@ -94,12 +94,12 @@ static void ccw_clear(struct vc_data *vc, struct fb_info *info, int sy,
 	info->fbops->fb_fillrect(info, &region);
 }
 
-static inline void ccw_putcs_aligned(struct vc_data *vc, struct fb_info *info,
-				    const u16 *s, u32 attr, u32 cnt,
-				    u32 d_pitch, u32 s_pitch, u32 cellsize,
-				    struct fb_image *image, u8 *buf, u8 *dst)
+static inline void ccw_putcs_aligned(struct vc_data *vc, struct fbcon *confb,
+				     const u16 *s, u32 attr, u32 cnt,
+				     u32 d_pitch, u32 s_pitch, u32 cellsize,
+				     struct fb_image *image, u8 *buf, u8 *dst)
 {
-	struct fbcon *confb = info->fbcon_par;
+	struct fb_info *info = confb->info;
 	u16 charmask = vc->vc_hi_font_mask ? 0x1ff : 0xff;
 	u32 idx = (vc->vc_font.height + 7) >> 3;
 	u8 *src;
@@ -125,12 +125,12 @@ static inline void ccw_putcs_aligned(struct vc_data *vc, struct fb_info *info,
 	info->fbops->fb_imageblit(info, image);
 }
 
-static void ccw_putcs(struct vc_data *vc, struct fb_info *info,
+static void ccw_putcs(struct vc_data *vc, struct fbcon *confb,
 		      const unsigned short *s, int count, int yy, int xx,
 		      int fg, int bg)
 {
 	struct fb_image image;
-	struct fbcon *confb = info->fbcon_par;
+	struct fb_info *info = confb->info;
 	u32 width = (vc->vc_font.height + 7)/8;
 	u32 cellsize = width * vc->vc_font.width;
 	u32 maxcnt = info->pixmap.size/cellsize;
@@ -172,8 +172,8 @@ static void ccw_putcs(struct vc_data *vc, struct fb_info *info,
 		size &= ~buf_align;
 		dst = fb_get_buffer_offset(info, &info->pixmap, size);
 		image.data = dst;
-		ccw_putcs_aligned(vc, info, s, attribute, cnt, pitch,
-				 width, cellsize, &image, buf, dst);
+		ccw_putcs_aligned(vc, confb, s, attribute, cnt, pitch,
+				  width, cellsize, &image, buf, dst);
 		image.dy += image.height;
 		count -= cnt;
 		s -= cnt;
@@ -187,9 +187,10 @@ static void ccw_putcs(struct vc_data *vc, struct fb_info *info,
 
 }
 
-static void ccw_clear_margins(struct vc_data *vc, struct fb_info *info,
+static void ccw_clear_margins(struct vc_data *vc, struct fbcon *confb,
 			      int color, int bottom_only)
 {
+	struct fb_info *info = confb->info;
 	unsigned int cw = vc->vc_font.width;
 	unsigned int ch = vc->vc_font.height;
 	unsigned int rw = info->var.yres - (vc->vc_cols*cw);
@@ -217,11 +218,11 @@ static void ccw_clear_margins(struct vc_data *vc, struct fb_info *info,
 	}
 }
 
-static void ccw_cursor(struct vc_data *vc, struct fb_info *info, bool enable,
+static void ccw_cursor(struct vc_data *vc, struct fbcon *confb, bool enable,
 		       int fg, int bg)
 {
 	struct fb_cursor cursor;
-	struct fbcon *confb = info->fbcon_par;
+	struct fb_info *info = confb->info;
 	unsigned short charmask = vc->vc_hi_font_mask ? 0x1ff : 0xff;
 	int w = (vc->vc_font.height + 7) >> 3, c;
 	int y = real_y(confb->p, vc->state.y);
@@ -373,9 +374,9 @@ static void ccw_cursor(struct vc_data *vc, struct fb_info *info, bool enable,
 	confb->cursor_reset = 0;
 }
 
-static int ccw_update_start(struct fb_info *info)
+static int ccw_update_start(struct fbcon *confb)
 {
-	struct fbcon *confb = info->fbcon_par;
+	struct fb_info *info = confb->info;
 	u32 yoffset;
 	u32 vyres = GETVYRES(confb->p, info);
 	int err;

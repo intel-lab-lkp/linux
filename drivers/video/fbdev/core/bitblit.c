@@ -43,9 +43,10 @@ static void update_attr(u8 *dst, u8 *src, int attribute,
 	}
 }
 
-static void bit_bmove(struct vc_data *vc, struct fb_info *info, int sy,
+static void bit_bmove(struct vc_data *vc, struct fbcon *confb, int sy,
 		      int sx, int dy, int dx, int height, int width)
 {
+	struct fb_info *info = confb->info;
 	struct fb_copyarea area;
 
 	area.sx = sx * vc->vc_font.width;
@@ -58,9 +59,10 @@ static void bit_bmove(struct vc_data *vc, struct fb_info *info, int sy,
 	info->fbops->fb_copyarea(info, &area);
 }
 
-static void bit_clear(struct vc_data *vc, struct fb_info *info, int sy,
+static void bit_clear(struct vc_data *vc, struct fbcon *confb, int sy,
 		      int sx, int height, int width, int fg, int bg)
 {
+	struct fb_info *info = confb->info;
 	struct fb_fillrect region;
 
 	region.color = bg;
@@ -73,11 +75,12 @@ static void bit_clear(struct vc_data *vc, struct fb_info *info, int sy,
 	info->fbops->fb_fillrect(info, &region);
 }
 
-static inline void bit_putcs_aligned(struct vc_data *vc, struct fb_info *info,
+static inline void bit_putcs_aligned(struct vc_data *vc, struct fbcon *confb,
 				     const u16 *s, u32 attr, u32 cnt,
 				     u32 d_pitch, u32 s_pitch, u32 cellsize,
 				     struct fb_image *image, u8 *buf, u8 *dst)
 {
+	struct fb_info *info = confb->info;
 	u16 charmask = vc->vc_hi_font_mask ? 0x1ff : 0xff;
 	u32 idx = vc->vc_font.width >> 3;
 	u8 *src;
@@ -105,12 +108,13 @@ static inline void bit_putcs_aligned(struct vc_data *vc, struct fb_info *info,
 }
 
 static inline void bit_putcs_unaligned(struct vc_data *vc,
-				       struct fb_info *info, const u16 *s,
+				       struct fbcon *confb, const u16 *s,
 				       u32 attr, u32 cnt, u32 d_pitch,
 				       u32 s_pitch, u32 cellsize,
 				       struct fb_image *image, u8 *buf,
 				       u8 *dst)
 {
+	struct fb_info *info = confb->info;
 	u16 charmask = vc->vc_hi_font_mask ? 0x1ff : 0xff;
 	u32 shift_low = 0, mod = vc->vc_font.width % 8;
 	u32 shift_high = 8;
@@ -139,10 +143,11 @@ static inline void bit_putcs_unaligned(struct vc_data *vc,
 
 }
 
-static void bit_putcs(struct vc_data *vc, struct fb_info *info,
+static void bit_putcs(struct vc_data *vc, struct fbcon *confb,
 		      const unsigned short *s, int count, int yy, int xx,
 		      int fg, int bg)
 {
+	struct fb_info *info = confb->info;
 	struct fb_image image;
 	u32 width = DIV_ROUND_UP(vc->vc_font.width, 8);
 	u32 cellsize = width * vc->vc_font.height;
@@ -181,10 +186,10 @@ static void bit_putcs(struct vc_data *vc, struct fb_info *info,
 		image.data = dst;
 
 		if (!mod)
-			bit_putcs_aligned(vc, info, s, attribute, cnt, pitch,
+			bit_putcs_aligned(vc, confb, s, attribute, cnt, pitch,
 					  width, cellsize, &image, buf, dst);
 		else
-			bit_putcs_unaligned(vc, info, s, attribute, cnt,
+			bit_putcs_unaligned(vc, confb, s, attribute, cnt,
 					    pitch, width, cellsize, &image,
 					    buf, dst);
 
@@ -201,9 +206,10 @@ static void bit_putcs(struct vc_data *vc, struct fb_info *info,
 
 }
 
-static void bit_clear_margins(struct vc_data *vc, struct fb_info *info,
+static void bit_clear_margins(struct vc_data *vc, struct fbcon *confb,
 			      int color, int bottom_only)
 {
+	struct fb_info *info = confb->info;
 	unsigned int cw = vc->vc_font.width;
 	unsigned int ch = vc->vc_font.height;
 	unsigned int rw = info->var.xres - (vc->vc_cols*cw);
@@ -232,11 +238,11 @@ static void bit_clear_margins(struct vc_data *vc, struct fb_info *info,
 	}
 }
 
-static void bit_cursor(struct vc_data *vc, struct fb_info *info, bool enable,
+static void bit_cursor(struct vc_data *vc, struct fbcon *confb, bool enable,
 		       int fg, int bg)
 {
 	struct fb_cursor cursor;
-	struct fbcon *confb = info->fbcon_par;
+	struct fb_info *info = confb->info;
 	unsigned short charmask = vc->vc_hi_font_mask ? 0x1ff : 0xff;
 	int w = DIV_ROUND_UP(vc->vc_font.width, 8), c;
 	int y = real_y(confb->p, vc->state.y);
@@ -372,9 +378,9 @@ static void bit_cursor(struct vc_data *vc, struct fb_info *info, bool enable,
 	confb->cursor_reset = 0;
 }
 
-static int bit_update_start(struct fb_info *info)
+static int bit_update_start(struct fbcon *confb)
 {
-	struct fbcon *confb = info->fbcon_par;
+	struct fb_info *info = confb->info;
 	int err;
 
 	err = fb_pan_display(info, &confb->var);

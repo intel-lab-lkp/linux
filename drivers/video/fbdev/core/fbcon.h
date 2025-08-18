@@ -18,6 +18,8 @@
 
 #include <asm/io.h>
 
+struct fbcon;
+
    /*
     *    This is the interface between the low-level console driver and the
     *    low-level frame buffer device
@@ -52,19 +54,19 @@ struct fbcon_display {
 };
 
 struct fbcon_bitops {
-	void (*bmove)(struct vc_data *vc, struct fb_info *info, int sy,
+	void (*bmove)(struct vc_data *vc, struct fbcon *confb, int sy,
 		      int sx, int dy, int dx, int height, int width);
-	void (*clear)(struct vc_data *vc, struct fb_info *info, int sy,
+	void (*clear)(struct vc_data *vc, struct fbcon *confb, int sy,
 		      int sx, int height, int width, int fb, int bg);
-	void (*putcs)(struct vc_data *vc, struct fb_info *info,
+	void (*putcs)(struct vc_data *vc, struct fbcon *confb,
 		      const unsigned short *s, int count, int yy, int xx,
 		      int fg, int bg);
-	void (*clear_margins)(struct vc_data *vc, struct fb_info *info,
+	void (*clear_margins)(struct vc_data *vc, struct fbcon *confb,
 			      int color, int bottom_only);
-	void (*cursor)(struct vc_data *vc, struct fb_info *info,
+	void (*cursor)(struct vc_data *vc, struct fbcon *confb,
 		       bool enable, int fg, int bg);
-	int  (*update_start)(struct fb_info *info);
-	int  (*rotate_font)(struct fb_info *info, struct vc_data *vc);
+	int  (*update_start)(struct fbcon *confb);
+	int  (*rotate_font)(struct fbcon *confb, struct vc_data *vc);
 };
 
 struct fbcon {

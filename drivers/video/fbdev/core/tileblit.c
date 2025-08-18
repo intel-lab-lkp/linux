@@ -16,9 +16,10 @@
 #include <asm/types.h>
 #include "fbcon.h"
 
-static void tile_bmove(struct vc_data *vc, struct fb_info *info, int sy,
+static void tile_bmove(struct vc_data *vc, struct fbcon *confb, int sy,
 		       int sx, int dy, int dx, int height, int width)
 {
+	struct fb_info *info = confb->info;
 	struct fb_tilearea area;
 
 	area.sx = sx;
@@ -31,9 +32,10 @@ static void tile_bmove(struct vc_data *vc, struct fb_info *info, int sy,
 	info->tileops->fb_tilecopy(info, &area);
 }
 
-static void tile_clear(struct vc_data *vc, struct fb_info *info, int sy,
+static void tile_clear(struct vc_data *vc, struct fbcon *confb, int sy,
 		       int sx, int height, int width, int fg, int bg)
 {
+	struct fb_info *info = confb->info;
 	struct fb_tilerect rect;
 
 	rect.index = vc->vc_video_erase_char &
@@ -49,10 +51,11 @@ static void tile_clear(struct vc_data *vc, struct fb_info *info, int sy,
 	info->tileops->fb_tilefill(info, &rect);
 }
 
-static void tile_putcs(struct vc_data *vc, struct fb_info *info,
+static void tile_putcs(struct vc_data *vc, struct fbcon *confb,
 		       const unsigned short *s, int count, int yy, int xx,
 		       int fg, int bg)
 {
+	struct fb_info *info = confb->info;
 	struct fb_tileblit blit;
 	unsigned short charmask = vc->vc_hi_font_mask ? 0x1ff : 0xff;
 	int size = sizeof(u32) * count, i;
@@ -71,9 +74,10 @@ static void tile_putcs(struct vc_data *vc, struct fb_info *info,
 	info->tileops->fb_tileblit(info, &blit);
 }
 
-static void tile_clear_margins(struct vc_data *vc, struct fb_info *info,
+static void tile_clear_margins(struct vc_data *vc, struct fbcon *confb,
 			       int color, int bottom_only)
 {
+	struct fb_info *info = confb->info;
 	unsigned int cw = vc->vc_font.width;
 	unsigned int ch = vc->vc_font.height;
 	unsigned int rw = info->var.xres - (vc->vc_cols*cw);
@@ -112,9 +116,10 @@ static void tile_clear_margins(struct vc_data *vc, struct fb_info *info,
 	}
 }
 
-static void tile_cursor(struct vc_data *vc, struct fb_info *info, bool enable,
+static void tile_cursor(struct vc_data *vc, struct fbcon *confb, bool enable,
 			int fg, int bg)
 {
+	struct fb_info *info = confb->info;
 	struct fb_tilecursor cursor;
 	int use_sw = vc->vc_cursor_type & CUR_SW;
 
@@ -149,9 +154,9 @@ static void tile_cursor(struct vc_data *vc, struct fb_info *info, bool enable,
 	info->tileops->fb_tilecursor(info, &cursor);
 }
 
-static int tile_update_start(struct fb_info *info)
+static int tile_update_start(struct fbcon *confb)
 {
-	struct fbcon *confb = info->fbcon_par;
+	struct fb_info *info = confb->info;
 	int err;
 
 	err = fb_pan_display(info, &confb->var);

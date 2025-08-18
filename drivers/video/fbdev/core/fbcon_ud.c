@@ -45,10 +45,10 @@ static void ud_update_attr(u8 *dst, u8 *src, int attribute,
 }
 
 
-static void ud_bmove(struct vc_data *vc, struct fb_info *info, int sy,
+static void ud_bmove(struct vc_data *vc, struct fbcon *confb, int sy,
 		     int sx, int dy, int dx, int height, int width)
 {
-	struct fbcon *confb = info->fbcon_par;
+	struct fb_info *info = confb->info;
 	struct fb_copyarea area;
 	u32 vyres = GETVYRES(confb->p, info);
 	u32 vxres = GETVXRES(confb->p, info);
@@ -63,10 +63,10 @@ static void ud_bmove(struct vc_data *vc, struct fb_info *info, int sy,
 	info->fbops->fb_copyarea(info, &area);
 }
 
-static void ud_clear(struct vc_data *vc, struct fb_info *info, int sy,
+static void ud_clear(struct vc_data *vc, struct fbcon *confb, int sy,
 		     int sx, int height, int width, int fg, int bg)
 {
-	struct fbcon *confb = info->fbcon_par;
+	struct fb_info *info = confb->info;
 	struct fb_fillrect region;
 	u32 vyres = GETVYRES(confb->p, info);
 	u32 vxres = GETVXRES(confb->p, info);
@@ -81,12 +81,12 @@ static void ud_clear(struct vc_data *vc, struct fb_info *info, int sy,
 	info->fbops->fb_fillrect(info, &region);
 }
 
-static inline void ud_putcs_aligned(struct vc_data *vc, struct fb_info *info,
+static inline void ud_putcs_aligned(struct vc_data *vc, struct fbcon *confb,
 				    const u16 *s, u32 attr, u32 cnt,
 				    u32 d_pitch, u32 s_pitch, u32 cellsize,
 				    struct fb_image *image, u8 *buf, u8 *dst)
 {
-	struct fbcon *confb = info->fbcon_par;
+	struct fb_info *info = confb->info;
 	u16 charmask = vc->vc_hi_font_mask ? 0x1ff : 0xff;
 	u32 idx = vc->vc_font.width >> 3;
 	u8 *src;
@@ -113,13 +113,13 @@ static inline void ud_putcs_aligned(struct vc_data *vc, struct fb_info *info,
 }
 
 static inline void ud_putcs_unaligned(struct vc_data *vc,
-				      struct fb_info *info, const u16 *s,
+				      struct fbcon *confb, const u16 *s,
 				      u32 attr, u32 cnt, u32 d_pitch,
 				      u32 s_pitch, u32 cellsize,
 				      struct fb_image *image, u8 *buf,
 				      u8 *dst)
 {
-	struct fbcon *confb = info->fbcon_par;
+	struct fb_info *info = confb->info;
 	u16 charmask = vc->vc_hi_font_mask ? 0x1ff : 0xff;
 	u32 shift_low = 0, mod = vc->vc_font.width % 8;
 	u32 shift_high = 8;
@@ -147,12 +147,12 @@ static inline void ud_putcs_unaligned(struct vc_data *vc,
 
 }
 
-static void ud_putcs(struct vc_data *vc, struct fb_info *info,
-		      const unsigned short *s, int count, int yy, int xx,
-		      int fg, int bg)
+static void ud_putcs(struct vc_data *vc, struct fbcon *confb,
+		     const unsigned short *s, int count, int yy, int xx,
+		     int fg, int bg)
 {
 	struct fb_image image;
-	struct fbcon *confb = info->fbcon_par;
+	struct fb_info *info = confb->info;
 	u32 width = (vc->vc_font.width + 7)/8;
 	u32 cellsize = width * vc->vc_font.height;
 	u32 maxcnt = info->pixmap.size/cellsize;
@@ -197,10 +197,10 @@ static void ud_putcs(struct vc_data *vc, struct fb_info *info,
 		image.data = dst;
 
 		if (!mod)
-			ud_putcs_aligned(vc, info, s, attribute, cnt, pitch,
+			ud_putcs_aligned(vc, confb, s, attribute, cnt, pitch,
 					 width, cellsize, &image, buf, dst);
 		else
-			ud_putcs_unaligned(vc, info, s, attribute, cnt, pitch,
+			ud_putcs_unaligned(vc, confb, s, attribute, cnt, pitch,
 					   width, cellsize, &image,
 					   buf, dst);
 
@@ -218,9 +218,10 @@ static void ud_putcs(struct vc_data *vc, struct fb_info *info,
 
 }
 
-static void ud_clear_margins(struct vc_data *vc, struct fb_info *info,
+static void ud_clear_margins(struct vc_data *vc, struct fbcon *confb,
 			     int color, int bottom_only)
 {
+	struct fb_info *info = confb->info;
 	unsigned int cw = vc->vc_font.width;
 	unsigned int ch = vc->vc_font.height;
 	unsigned int rw = info->var.xres - (vc->vc_cols*cw);
@@ -247,11 +248,11 @@ static void ud_clear_margins(struct vc_data *vc, struct fb_info *info,
 	}
 }
 
-static void ud_cursor(struct vc_data *vc, struct fb_info *info, bool enable,
+static void ud_cursor(struct vc_data *vc, struct fbcon *confb, bool enable,
 		      int fg, int bg)
 {
 	struct fb_cursor cursor;
-	struct fbcon *confb = info->fbcon_par;
+	struct fb_info *info = confb->info;
 	unsigned short charmask = vc->vc_hi_font_mask ? 0x1ff : 0xff;
 	int w = (vc->vc_font.width + 7) >> 3, c;
 	int y = real_y(confb->p, vc->state.y);
@@ -396,9 +397,9 @@ static void ud_cursor(struct vc_data *vc, struct fb_info *info, bool enable,
 	confb->cursor_reset = 0;
 }
 
-static int ud_update_start(struct fb_info *info)
+static int ud_update_start(struct fbcon *confb)
 {
-	struct fbcon *confb = info->fbcon_par;
+	struct fb_info *info = confb->info;
 	int xoffset, yoffset;
 	u32 vyres = GETVYRES(confb->p, info);
 	u32 vxres = GETVXRES(confb->p, info);

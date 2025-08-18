@@ -7,6 +7,8 @@
 #include <linux/fb.h>
 #include <linux/mutex.h>
 
+#include "fbcon.h"
+
 /* fb_devfs.c */
 #if defined(CONFIG_FB_DEVICE)
 int fb_register_chrdev(void);

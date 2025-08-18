@@ -18,9 +18,9 @@
 #include "fbcon.h"
 #include "fbcon_rotate.h"
 
-int fbcon_rotate_font(struct fb_info *info, struct vc_data *vc)
+int fbcon_rotate_font(struct fbcon *confb, struct vc_data *vc)
 {
-	struct fbcon *confb = info->fbcon_par;
+	struct fb_info *info = confb->info;
 	int len, err = 0;
 	int s_cellsize, d_cellsize, i;
 	const u8 *src;
