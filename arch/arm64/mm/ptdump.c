@@ -407,6 +407,13 @@ void __init ptdump_init(void)
 	ptdump_initialize();
 }
 
+#ifdef CONFIG_ARM64_PTDUMP_CONSOLE
+void __init arm64_kernel_pgtable_dump(void)
+{
+	ptdump_walk(CONSOLE, &kernel_ptdump_info);
+}
+#endif
+
 static int __init ptdump_debugfs_init(void)
 {
 	ptdump_debugfs_register(&kernel_ptdump_info, "kernel_page_tables");

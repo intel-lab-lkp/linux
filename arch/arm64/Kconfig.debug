@@ -20,4 +20,16 @@ config ARM64_RELOC_TEST
 	depends on m
 	tristate "Relocation testing module"
 
+config ARM64_PTDUMP_CONSOLE
+	bool "Dump early kernel page table"
+	depends on DEBUG_KERNEL
+	depends on ARCH_HAS_PTDUMP
+	select PTDUMP
+	help
+	  Enable this option to dump early kernel page table entries during
+	  boot using the PTDUMP framework. This helps in examining kernel's
+	  page table mapping entries and their attributes etc.
+
+	  If in doubt, say N.
+
 source "drivers/hwtracing/coresight/Kconfig"
