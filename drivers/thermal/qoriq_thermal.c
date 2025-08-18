@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0
 //
 // Copyright 2016 Freescale Semiconductor, Inc.
+// Copyright 2025 NXP
 
 #include <linux/clk.h>
 #include <linux/err.h>
@@ -24,6 +25,7 @@
 #define TMTMIR_DEFAULT	0x0000000f
 #define TIER_DISABLE	0x0
 #define TEUMR0_V2		0x51009c00
+#define TEUMR0_V21		0x55000c00
 #define TMSARA_V2		0xe
 #define TMU_VER1		0x1
 #define TMU_VER2		0x2
@@ -66,11 +68,17 @@
 						   */
 #define REGS_V2_TEUMR(n)	(0xf00 + 4 * (n))
 
+#define GET_TEUMR0(drvdata)	(drvdata && drvdata->teumr0 ? drvdata->teumr0 : TEUMR0_V2)
+
 /*
  * Thermal zone data
  */
 struct qoriq_sensor {
 	int				id;
+};
+
+struct tmu_drvdata {
+	u32 teumr0;
 };
 
 struct qoriq_tmu_data {
@@ -79,6 +87,7 @@ struct qoriq_tmu_data {
 	struct regmap *regmap;
 	struct clk *clk;
 	struct qoriq_sensor	sensor[SITES_MAX];
+	const struct tmu_drvdata *drvdata;
 };
 
 static struct qoriq_tmu_data *qoriq_sensor_to_data(struct qoriq_sensor *s)
@@ -234,7 +243,7 @@ static void qoriq_tmu_init_device(struct qoriq_tmu_data *data)
 		regmap_write(data->regmap, REGS_TMTMIR, TMTMIR_DEFAULT);
 	} else {
 		regmap_write(data->regmap, REGS_V2_TMTMIR, TMTMIR_DEFAULT);
-		regmap_write(data->regmap, REGS_V2_TEUMR(0), TEUMR0_V2);
+		regmap_write(data->regmap, REGS_V2_TEUMR(0), GET_TEUMR0(data->drvdata));
 	}
 
 	/* Disable monitoring */
@@ -319,6 +328,8 @@ static int qoriq_tmu_probe(struct platform_device *pdev)
 
 	data->ver = (ver >> 8) & 0xff;
 
+	data->drvdata = of_device_get_match_data(&pdev->dev);
+
 	qoriq_tmu_init_device(data);	/* TMU initialization */
 
 	ret = qoriq_tmu_calibration(dev, data);	/* TMU calibration */
@@ -376,9 +387,14 @@ static int qoriq_tmu_resume(struct device *dev)
 static DEFINE_SIMPLE_DEV_PM_OPS(qoriq_tmu_pm_ops,
 				qoriq_tmu_suspend, qoriq_tmu_resume);
 
+static const struct tmu_drvdata imx93_data = {
+	.teumr0 = TEUMR0_V21,
+};
+
 static const struct of_device_id qoriq_tmu_match[] = {
 	{ .compatible = "fsl,qoriq-tmu", },
 	{ .compatible = "fsl,imx8mq-tmu", },
+	{ .compatible = "fsl,imx93-tmu", .data = &imx93_data },
 	{},
 };
 MODULE_DEVICE_TABLE(of, qoriq_tmu_match);
