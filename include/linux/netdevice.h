@@ -874,6 +874,7 @@ enum net_device_path_type {
 	DEV_PATH_PPPOE,
 	DEV_PATH_DSA,
 	DEV_PATH_MTK_WDMA,
+	DEV_PATH_IPENCAP,
 };
 
 struct net_device_path {
