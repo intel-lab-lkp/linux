@@ -2893,7 +2893,7 @@ fuse_direct_IO(struct kiocb *iocb, struct iov_iter *iter)
 
 static int fuse_writeback_range(struct inode *inode, loff_t start, loff_t end)
 {
-	int err = filemap_write_and_wait_range(inode->i_mapping, start, LLONG_MAX);
+	int err = filemap_write_and_wait_range(inode->i_mapping, start, end);
 
 	if (!err)
 		fuse_sync_writes(inode);
@@ -2936,9 +2936,8 @@ static long fuse_file_fallocate(struct file *file, int mode, loff_t offset,
 	}
 
 	if (mode & (FALLOC_FL_PUNCH_HOLE | FALLOC_FL_ZERO_RANGE)) {
-		loff_t endbyte = offset + length - 1;
-
-		err = fuse_writeback_range(inode, offset, endbyte);
+		/* flush extending writes for upcoming write operations */
+		err = fuse_writeback_range(inode, offset, LLONG_MAX);
 		if (err)
 			goto out;
 	}
@@ -3059,7 +3058,8 @@ static ssize_t __fuse_copy_file_range(struct file *file_in, loff_t pos_in,
 	 * To fix this a mapping->invalidate_lock could be used to prevent new
 	 * faults while the copy is ongoing.
 	 */
-	err = fuse_writeback_range(inode_out, pos_out, pos_out + len - 1);
+	/*  flush extending writes for upcoming write operations */
+	err = fuse_writeback_range(inode_out, pos_out, LLONG_MAX);
 	if (err)
 		goto out;
 
