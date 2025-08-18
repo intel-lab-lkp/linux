@@ -8765,12 +8765,6 @@ void __init sched_init(void)
 #endif /* CONFIG_FAIR_GROUP_SCHED */
 
 #ifdef CONFIG_RT_GROUP_SCHED
-		/*
-		 * This is required for init cpu because rt.c:__enable_runtime()
-		 * starts working after scheduler_running, which is not the case
-		 * yet.
-		 */
-		rq->rt.rt_runtime = global_rt_runtime();
 		init_tg_rt_entry(&root_task_group, &rq->rt, NULL, i, NULL);
 #endif
 		rq->sd = NULL;
