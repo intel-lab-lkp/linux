@@ -127,7 +127,6 @@ xe-y += xe_bb.o \
 	xe_tuning.o \
 	xe_uc.o \
 	xe_uc_fw.o \
-	xe_userptr.o \
 	xe_vm.o \
 	xe_vram.o \
 	xe_vram_freq.o \
@@ -137,8 +136,8 @@ xe-y += xe_bb.o \
 	xe_wopcm.o
 
 xe-$(CONFIG_I2C)	+= xe_i2c.o
-xe-$(CONFIG_HMM_MIRROR) += xe_hmm.o
 xe-$(CONFIG_DRM_XE_GPUSVM) += xe_svm.o
+xe-$(CONFIG_DRM_GPUSVM) += xe_userptr.o
 
 # graphics hardware monitoring (HWMON) support
 xe-$(CONFIG_HWMON) += xe_hwmon.o
