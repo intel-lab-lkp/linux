@@ -2,12 +2,14 @@
 
 //! DRM subsystem abstractions.
 
+pub mod connector;
 pub mod device;
 pub mod driver;
 pub mod file;
 pub mod gem;
 pub mod ioctl;
 
+pub use self::connector::Connector;
 pub use self::device::Device;
 pub use self::driver::Driver;
 pub use self::driver::DriverInfo;

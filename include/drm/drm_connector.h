@@ -2305,6 +2305,11 @@ struct drm_connector {
 	 * @cec: CEC-related data.
 	 */
 	struct drm_connector_cec cec;
+
+	/**
+	 * @rust: private data for Rust connector API.
+	 */
+	void *rust;
 };
 
 #define obj_to_connector(x) container_of(x, struct drm_connector, base)
@@ -2345,6 +2350,21 @@ int drm_connector_attach_encoder(struct drm_connector *connector,
 				      struct drm_encoder *encoder);
 
 void drm_connector_cleanup(struct drm_connector *connector);
+
+#if IS_ENABLED(CONFIG_RUST)
+int drm_connector_init_rust(struct drm_connector *connector);
+void drm_connector_cleanup_rust(struct drm_connector *connector);
+#else
+static inline int drm_connector_init_rust(struct drm_connector *connector)
+{
+	return 0;
+}
+
+static inline void drm_connector_cleanup_rust(struct drm_connector *connector)
+{
+}
+#endif
+
 
 static inline unsigned int drm_connector_index(const struct drm_connector *connector)
 {

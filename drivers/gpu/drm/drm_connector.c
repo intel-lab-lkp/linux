@@ -272,6 +272,10 @@ static int drm_connector_init_only(struct drm_device *dev,
 		goto out_put_type_id;
 	}
 
+	ret = drm_connector_init_rust(connector);
+	if (ret)
+		goto out_put_name;
+
 	/* provide ddc symlink in sysfs */
 	connector->ddc = ddc;
 
@@ -317,6 +321,9 @@ static int drm_connector_init_only(struct drm_device *dev,
 	}
 
 	connector->debugfs_entry = NULL;
+out_put_name:
+	if (ret)
+		kfree(connector->name);
 out_put_type_id:
 	if (ret)
 		ida_free(connector_ida, connector->connector_type_id);
@@ -760,6 +767,8 @@ void drm_connector_cleanup(struct drm_connector *connector)
 	if (WARN_ON(connector->registration_state ==
 		    DRM_CONNECTOR_REGISTERED))
 		drm_connector_unregister(connector);
+
+	drm_connector_cleanup_rust(connector);
 
 	platform_device_unregister(connector->hdmi_audio.codec_pdev);
 
