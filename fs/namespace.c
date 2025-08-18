@@ -2741,6 +2741,7 @@ static int attach_recursive_mnt(struct mount *source_mnt,
 /**
  * do_lock_mount - lock mount and mountpoint
  * @path:    target path
+ * @pinned: on success, holds a pin guarding the mountpoint
  * @beneath: whether the intention is to mount beneath @path
  *
  * Follow the mount stack on @path until the top mount @mnt is found. If
@@ -2769,8 +2770,7 @@ static int attach_recursive_mnt(struct mount *source_mnt,
  * to @mnt->mnt_mp->m_dentry. But if @mnt has been unmounted it will
  * point to @mnt->mnt_root and @mnt->mnt_mp will be NULL.
  *
- * Return: Either the target mountpoint on the top mount or the top
- *         mount's mountpoint.
+ * Return: On success, 0 is returned. On failure, err is returned.
  */
 static int do_lock_mount(struct path *path, struct pinned_mountpoint *pinned, bool beneath)
 {
