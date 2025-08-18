@@ -1116,7 +1116,7 @@ static struct super_block *cifs_get_tcon_super(struct cifs_tcon *tcon)
 	struct cifs_sb_info *cifs_sb;
 
 	if (!tcon)
-		return NULL;
+		return ERR_PTR(-EINVAL);
 
 	spin_lock(&tcon->sb_list_lock);
 	list_for_each_entry(cifs_sb, &tcon->cifs_sb_list, tcon_sb_link) {
@@ -1141,7 +1141,7 @@ static struct super_block *cifs_get_tcon_super(struct cifs_tcon *tcon)
 	}
 	spin_unlock(&tcon->sb_list_lock);
 
-	return NULL;
+	return ERR_PTR(-ENOENT);
 }
 
 struct super_block *cifs_get_dfs_tcon_super(struct cifs_tcon *tcon)
