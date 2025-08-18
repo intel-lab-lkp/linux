@@ -96,7 +96,7 @@ static int axff_init(struct hid_device *hid)
 		return -ENODEV;
 	}
 
-	axff = kzalloc(sizeof(struct axff_device), GFP_KERNEL);
+	axff = devm_kzalloc(&hid->dev, sizeof(struct axff_device), GFP_KERNEL);
 	if (!axff)
 		return -ENOMEM;
 
@@ -104,7 +104,7 @@ static int axff_init(struct hid_device *hid)
 
 	error = input_ff_create_memless(dev, axff, axff_play);
 	if (error)
-		goto err_free_mem;
+		return error;
 
 	axff->report = report;
 	hid_hw_request(hid, axff->report, HID_REQ_SET_REPORT);
@@ -112,10 +112,6 @@ static int axff_init(struct hid_device *hid)
 	hid_info(hid, "Force Feedback for ACRUX game controllers by Sergei Kolzun <x0r@dv-life.ru>\n");
 
 	return 0;
-
-err_free_mem:
-	kfree(axff);
-	return error;
 }
 #else
 static inline int axff_init(struct hid_device *hid)
