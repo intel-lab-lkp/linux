@@ -50,6 +50,18 @@ enum adc_sort_mode {
 	ADC_INCREMENT,
 };
 
+/*
+ * The GRF availability depends on the specific SoC
+ * GRF_NONE: the SoC does not have a GRF associated with the tsadc
+ * GRF_OPTIONAL: the SoC has a GRF, but the driver can work without it
+ * GRF_MANDATORY: the SoC has a GRF and it is required for proper operation
+ */
+enum tsadc_grf_mode {
+	GRF_NONE,
+	GRF_OPTIONAL,
+	GRF_MANDATORY,
+};
+
 #include "thermal_hwmon.h"
 
 /**
@@ -96,6 +108,9 @@ struct rockchip_tsadc_chip {
 	int tshut_temp;
 	enum tshut_mode tshut_mode;
 	enum tshut_polarity tshut_polarity;
+
+	/* GRF availability */
+	enum tsadc_grf_mode grf_mode;
 
 	/* Chip-wide methods */
 	void (*initialize)(struct regmap *grf,
@@ -1099,6 +1114,8 @@ static const struct rockchip_tsadc_chip px30_tsadc_data = {
 	.chn_offset = 0,
 	.chn_num = 2, /* 2 channels for tsadc */
 
+	.grf_mode = GRF_MANDATORY,
+
 	.tshut_mode = TSHUT_MODE_CRU, /* default TSHUT via CRU */
 	.tshut_temp = 95000,
 
@@ -1122,6 +1139,8 @@ static const struct rockchip_tsadc_chip rv1108_tsadc_data = {
 	/* cpu */
 	.chn_offset = 0,
 	.chn_num = 1, /* one channel for tsadc */
+
+	.grf_mode = GRF_NONE,
 
 	.tshut_mode = TSHUT_MODE_GPIO, /* default TSHUT via GPIO give PMIC */
 	.tshut_polarity = TSHUT_LOW_ACTIVE, /* default TSHUT LOW ACTIVE */
@@ -1148,6 +1167,8 @@ static const struct rockchip_tsadc_chip rk3228_tsadc_data = {
 	.chn_offset = 0,
 	.chn_num = 1, /* one channel for tsadc */
 
+	.grf_mode = GRF_NONE,
+
 	.tshut_mode = TSHUT_MODE_GPIO, /* default TSHUT via GPIO give PMIC */
 	.tshut_polarity = TSHUT_LOW_ACTIVE, /* default TSHUT LOW ACTIVE */
 	.tshut_temp = 95000,
@@ -1172,6 +1193,8 @@ static const struct rockchip_tsadc_chip rk3288_tsadc_data = {
 	/* cpu, gpu */
 	.chn_offset = 1,
 	.chn_num = 2, /* two channels for tsadc */
+
+	.grf_mode = GRF_NONE,
 
 	.tshut_mode = TSHUT_MODE_GPIO, /* default TSHUT via GPIO give PMIC */
 	.tshut_polarity = TSHUT_LOW_ACTIVE, /* default TSHUT LOW ACTIVE */
@@ -1198,6 +1221,8 @@ static const struct rockchip_tsadc_chip rk3328_tsadc_data = {
 	.chn_offset = 0,
 	.chn_num = 1, /* one channels for tsadc */
 
+	.grf_mode = GRF_NONE,
+
 	.tshut_mode = TSHUT_MODE_CRU, /* default TSHUT via CRU */
 	.tshut_temp = 95000,
 
@@ -1221,6 +1246,8 @@ static const struct rockchip_tsadc_chip rk3366_tsadc_data = {
 	/* cpu, gpu */
 	.chn_offset = 0,
 	.chn_num = 2, /* two channels for tsadc */
+
+	.grf_mode = GRF_OPTIONAL,
 
 	.tshut_mode = TSHUT_MODE_GPIO, /* default TSHUT via GPIO give PMIC */
 	.tshut_polarity = TSHUT_LOW_ACTIVE, /* default TSHUT LOW ACTIVE */
@@ -1247,6 +1274,8 @@ static const struct rockchip_tsadc_chip rk3368_tsadc_data = {
 	.chn_offset = 0,
 	.chn_num = 2, /* two channels for tsadc */
 
+	.grf_mode = GRF_NONE,
+
 	.tshut_mode = TSHUT_MODE_GPIO, /* default TSHUT via GPIO give PMIC */
 	.tshut_polarity = TSHUT_LOW_ACTIVE, /* default TSHUT LOW ACTIVE */
 	.tshut_temp = 95000,
@@ -1271,6 +1300,8 @@ static const struct rockchip_tsadc_chip rk3399_tsadc_data = {
 	/* cpu, gpu */
 	.chn_offset = 0,
 	.chn_num = 2, /* two channels for tsadc */
+
+	.grf_mode = GRF_OPTIONAL,
 
 	.tshut_mode = TSHUT_MODE_GPIO, /* default TSHUT via GPIO give PMIC */
 	.tshut_polarity = TSHUT_LOW_ACTIVE, /* default TSHUT LOW ACTIVE */
@@ -1297,6 +1328,8 @@ static const struct rockchip_tsadc_chip rk3568_tsadc_data = {
 	.chn_offset = 0,
 	.chn_num = 2, /* two channels for tsadc */
 
+	.grf_mode = GRF_OPTIONAL,
+
 	.tshut_mode = TSHUT_MODE_GPIO, /* default TSHUT via GPIO give PMIC */
 	.tshut_polarity = TSHUT_LOW_ACTIVE, /* default TSHUT LOW ACTIVE */
 	.tshut_temp = 95000,
@@ -1321,6 +1354,7 @@ static const struct rockchip_tsadc_chip rk3576_tsadc_data = {
 	/* top, big_core, little_core, ddr, npu, gpu */
 	.chn_offset = 0,
 	.chn_num = 6, /* six channels for tsadc */
+	.grf_mode = GRF_NONE,
 	.tshut_mode = TSHUT_MODE_GPIO, /* default TSHUT via GPIO give PMIC */
 	.tshut_polarity = TSHUT_LOW_ACTIVE, /* default TSHUT LOW ACTIVE */
 	.tshut_temp = 95000,
@@ -1345,6 +1379,7 @@ static const struct rockchip_tsadc_chip rk3588_tsadc_data = {
 	/* top, big_core0, big_core1, little_core, center, gpu, npu */
 	.chn_offset = 0,
 	.chn_num = 7, /* seven channels for tsadc */
+	.grf_mode = GRF_NONE,
 	.tshut_mode = TSHUT_MODE_GPIO, /* default TSHUT via GPIO give PMIC */
 	.tshut_polarity = TSHUT_LOW_ACTIVE, /* default TSHUT LOW ACTIVE */
 	.tshut_temp = 95000,
@@ -1572,7 +1607,7 @@ static int rockchip_configure_from_dt(struct device *dev,
 				      struct device_node *np,
 				      struct rockchip_thermal_data *thermal)
 {
-	u32 shut_temp, tshut_mode, tshut_polarity;
+	u32 shut_temp, tshut_mode, tshut_polarity, ret;
 
 	if (of_property_read_u32(np, "rockchip,hw-tshut-temp", &shut_temp)) {
 		dev_warn(dev,
@@ -1621,12 +1656,16 @@ static int rockchip_configure_from_dt(struct device *dev,
 		return -EINVAL;
 	}
 
-	/* The tsadc wont to handle the error in here since some SoCs didn't
-	 * need this property.
-	 */
-	thermal->grf = syscon_regmap_lookup_by_phandle(np, "rockchip,grf");
-	if (IS_ERR(thermal->grf))
-		dev_warn(dev, "Missing rockchip,grf property\n");
+	if (thermal->chip->grf_mode != GRF_NONE) {
+		thermal->grf = syscon_regmap_lookup_by_phandle(np, "rockchip,grf");
+		if (IS_ERR(thermal->grf)) {
+			ret = PTR_ERR(thermal->grf);
+			if (thermal->chip->grf_mode == GRF_OPTIONAL)
+				dev_warn(dev, "Missing rockchip,grf property\n");
+			else
+				return dev_err_probe(dev, ret, "Missing rockchip,grf property\n");
+		}
+	}
 
 	rockchip_get_trim_configuration(dev, np, thermal);
 
