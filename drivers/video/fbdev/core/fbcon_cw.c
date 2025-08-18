@@ -383,7 +383,7 @@ static const struct fbcon_bitops cw_fbcon_bitops = {
 	.rotate_font = fbcon_rotate_font,
 };
 
-void fbcon_rotate_cw(struct fbcon *confb)
+void fbcon_set_bitops_cw(struct fbcon *confb)
 {
 	confb->bitops = &cw_fbcon_bitops;
 }

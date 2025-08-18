@@ -81,6 +81,7 @@
 #include <asm/irq.h>
 
 #include "fbcon.h"
+#include "fbcon_rotate.h"
 #include "fb_internal.h"
 
 /*
@@ -269,6 +270,26 @@ static void fbcon_rotate_all(struct fb_info *info, u32 rotate)
 	return;
 }
 #endif /* CONFIG_FRAMEBUFFER_CONSOLE_ROTATION */
+
+static void fbcon_set_bitops(struct fbcon *confb)
+{
+	switch (confb->rotate) {
+	default:
+		fallthrough;
+	case FB_ROTATE_UR:
+		fbcon_set_bitops_ur(confb);
+		break;
+	case FB_ROTATE_CW:
+		fbcon_set_bitops_cw(confb);
+		break;
+	case FB_ROTATE_UD:
+		fbcon_set_bitops_ud(confb);
+		break;
+	case FB_ROTATE_CCW:
+		fbcon_set_bitops_ccw(confb);
+		break;
+	}
+}
 
 static int fbcon_get_rotate(struct fb_info *info)
 {
