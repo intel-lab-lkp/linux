@@ -123,6 +123,8 @@ static int fdb_fill_info(struct sk_buff *skb, const struct net_bridge *br,
 		goto nla_put_failure;
 	if (nla_put_u32(skb, NDA_MASTER, br->dev->ifindex))
 		goto nla_put_failure;
+	if (nla_put_u8(skb, NDA_PROTOCOL, fdb->protocol))
+		goto nla_put_failure;
 	if (nla_put_u32(skb, NDA_FLAGS_EXT, ext_flags))
 		goto nla_put_failure;
 
@@ -1153,7 +1155,8 @@ static int fdb_add_entry(struct net_bridge *br, struct net_bridge_port *source,
 static int __br_fdb_add(struct ndmsg *ndm, struct net_bridge *br,
 			struct net_bridge_port *p, const unsigned char *addr,
 			u16 nlh_flags, u16 vid, struct nlattr *nfea_tb[],
-			bool *notified, struct netlink_ext_ack *extack)
+			bool *notified, struct netlink_ext_ack *extack,
+			u8 protocol)
 {
 	int err = 0;
 
@@ -1177,7 +1180,8 @@ static int __br_fdb_add(struct ndmsg *ndm, struct net_bridge *br,
 					   "FDB entry towards bridge must be permanent");
 			return -EINVAL;
 		}
-		err = br_fdb_external_learn_add(br, p, addr, vid, false, true);
+		err = br_fdb_external_learn_add(br, p, addr, vid, false, true,
+						protocol);
 	} else {
 		spin_lock_bh(&br->hash_lock);
 		err = fdb_add_entry(br, p, addr, ndm, nlh_flags, vid, nfea_tb);
@@ -1206,6 +1210,7 @@ int br_fdb_add(struct ndmsg *ndm, struct nlattr *tb[],
 	struct net_bridge_vlan *v;
 	struct net_bridge *br = NULL;
 	u32 ext_flags = 0;
+	u8 protocol = RTPROT_UNSPEC;
 	int err = 0;
 
 	trace_br_fdb_add(ndm, dev, addr, vid, nlh_flags);
@@ -1237,6 +1242,9 @@ int br_fdb_add(struct ndmsg *ndm, struct nlattr *tb[],
 	if (tb[NDA_FLAGS_EXT])
 		ext_flags = nla_get_u32(tb[NDA_FLAGS_EXT]);
 
+	if (tb[NDA_PROTOCOL])
+		protocol = nla_get_u8(tb[NDA_PROTOCOL]);
+
 	if (ext_flags & NTF_EXT_LOCKED) {
 		NL_SET_ERR_MSG_MOD(extack, "Cannot add FDB entry with \"locked\" flag set");
 		return -EINVAL;
@@ -1261,10 +1269,10 @@ int br_fdb_add(struct ndmsg *ndm, struct nlattr *tb[],
 
 		/* VID was specified, so use it. */
 		err = __br_fdb_add(ndm, br, p, addr, nlh_flags, vid, nfea_tb,
-				   notified, extack);
+				   notified, extack, protocol);
 	} else {
 		err = __br_fdb_add(ndm, br, p, addr, nlh_flags, 0, nfea_tb,
-				   notified, extack);
+				   notified, extack, protocol);
 		if (err || !vg || !vg->num_vlans)
 			goto out;
 
@@ -1276,7 +1284,7 @@ int br_fdb_add(struct ndmsg *ndm, struct nlattr *tb[],
 			if (!br_vlan_should_use(v))
 				continue;
 			err = __br_fdb_add(ndm, br, p, addr, nlh_flags, v->vid,
-					   nfea_tb, notified, extack);
+					   nfea_tb, notified, extack, protocol);
 			if (err)
 				goto out;
 		}
@@ -1288,13 +1296,21 @@ out:
 
 static int fdb_delete_by_addr_and_port(struct net_bridge *br,
 				       const struct net_bridge_port *p,
-				       const u8 *addr, u16 vlan, bool *notified)
+				       const u8 *addr, u16 vlan, u8 protocol,
+				       bool *notified)
 {
 	struct net_bridge_fdb_entry *fdb;
 
 	fdb = br_fdb_find(br, addr, vlan);
 	if (!fdb || READ_ONCE(fdb->dst) != p)
 		return -ENOENT;
+
+	/* If the delete comes from a different protocol type,
+	* that type is used in the notification as some software
+	* may be expecting multiple deletes (control learned +
+	* hardware datapath learned) */
+	if (protocol != RTPROT_UNSPEC)
+		fdb->protocol = protocol;
 
 	fdb_delete(br, fdb, true);
 	*notified = true;
@@ -1304,12 +1320,13 @@ static int fdb_delete_by_addr_and_port(struct net_bridge *br,
 
 static int __br_fdb_delete(struct net_bridge *br,
 			   const struct net_bridge_port *p,
-			   const unsigned char *addr, u16 vid, bool *notified)
+			   const unsigned char *addr, u16 vid, u8 protocol,
+			   bool *notified)
 {
 	int err;
 
 	spin_lock_bh(&br->hash_lock);
-	err = fdb_delete_by_addr_and_port(br, p, addr, vid, notified);
+	err = fdb_delete_by_addr_and_port(br, p, addr, vid, protocol, notified);
 	spin_unlock_bh(&br->hash_lock);
 
 	return err;
@@ -1324,7 +1341,11 @@ int br_fdb_delete(struct ndmsg *ndm, struct nlattr *tb[],
 	struct net_bridge_vlan_group *vg;
 	struct net_bridge_port *p = NULL;
 	struct net_bridge *br;
+	u8 protocol = RTPROT_UNSPEC;
 	int err;
+
+	if (tb[NDA_PROTOCOL])
+		protocol = nla_get_u8(tb[NDA_PROTOCOL]);
 
 	if (netif_is_bridge_master(dev)) {
 		br = netdev_priv(dev);
@@ -1341,19 +1362,20 @@ int br_fdb_delete(struct ndmsg *ndm, struct nlattr *tb[],
 	}
 
 	if (vid) {
-		err = __br_fdb_delete(br, p, addr, vid, notified);
+		err = __br_fdb_delete(br, p, addr, vid, protocol, notified);
 	} else {
 		struct net_bridge_vlan *v;
 
 		err = -ENOENT;
-		err &= __br_fdb_delete(br, p, addr, 0, notified);
+		err &= __br_fdb_delete(br, p, addr, 0, protocol, notified);
 		if (!vg || !vg->num_vlans)
 			return err;
 
 		list_for_each_entry(v, &vg->vlan_list, vlist) {
 			if (!br_vlan_should_use(v))
 				continue;
-			err &= __br_fdb_delete(br, p, addr, v->vid, notified);
+			err &= __br_fdb_delete(br, p, addr, v->vid, protocol,
+					       notified);
 		}
 	}
 
@@ -1414,7 +1436,7 @@ void br_fdb_unsync_static(struct net_bridge *br, struct net_bridge_port *p)
 
 int br_fdb_external_learn_add(struct net_bridge *br, struct net_bridge_port *p,
 			      const unsigned char *addr, u16 vid, bool locked,
-			      bool swdev_notify)
+			      bool swdev_notify, u8 protocol)
 {
 	struct net_bridge_fdb_entry *fdb;
 	bool modified = false;
@@ -1445,6 +1467,7 @@ int br_fdb_external_learn_add(struct net_bridge *br, struct net_bridge_port *p,
 			err = -ENOMEM;
 			goto err_unlock;
 		}
+		fdb->protocol = protocol;
 		fdb_notify(br, fdb, RTM_NEWNEIGH, swdev_notify);
 	} else {
 		if (locked &&
@@ -1482,6 +1505,11 @@ int br_fdb_external_learn_add(struct net_bridge *br, struct net_bridge_port *p,
 		if ((swdev_notify || !p) &&
 		    test_and_clear_bit(BR_FDB_DYNAMIC_LEARNED, &fdb->flags))
 			atomic_dec(&br->fdb_n_learned);
+
+		if (fdb->protocol != protocol) {
+			modified = true;
+			fdb->protocol = protocol;
+		}
 
 		if (modified)
 			fdb_notify(br, fdb, RTM_NEWNEIGH, swdev_notify);

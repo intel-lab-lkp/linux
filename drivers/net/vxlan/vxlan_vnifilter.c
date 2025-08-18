@@ -482,15 +482,12 @@ static int vxlan_update_default_fdb_entry(struct vxlan_dev *vxlan, __be32 vni,
 
 	spin_lock_bh(&vxlan->hash_lock);
 	if (remote_ip && !vxlan_addr_any(remote_ip)) {
-		err = vxlan_fdb_update(vxlan, all_zeros_mac,
-				       remote_ip,
+		err = vxlan_fdb_update(vxlan, all_zeros_mac, remote_ip,
 				       NUD_REACHABLE | NUD_PERMANENT,
 				       NLM_F_APPEND | NLM_F_CREATE,
-				       vxlan->cfg.dst_port,
-				       vni,
-				       vni,
-				       dst->remote_ifindex,
-				       NTF_SELF, 0, true, extack);
+				       vxlan->cfg.dst_port, vni, vni,
+				       dst->remote_ifindex, NTF_SELF, 0, true,
+				       extack, RTPROT_UNSPEC);
 		if (err) {
 			spin_unlock_bh(&vxlan->hash_lock);
 			return err;

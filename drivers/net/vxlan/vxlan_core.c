@@ -206,6 +206,8 @@ static int vxlan_fdb_info(struct sk_buff *skb, struct vxlan_dev *vxlan,
 			peernet2id(dev_net(vxlan->dev), vxlan->net)))
 		goto nla_put_failure;
 
+	if (nla_put_u8(skb, NDA_PROTOCOL, fdb->protocol))
+		goto nla_put_failure;
 	if (send_eth && nla_put(skb, NDA_LLADDR, ETH_ALEN, &fdb->key.eth_addr))
 		goto nla_put_failure;
 	if (nh) {
@@ -852,12 +854,11 @@ err_inval:
 	return err;
 }
 
-int vxlan_fdb_create(struct vxlan_dev *vxlan,
-		     const u8 *mac, union vxlan_addr *ip,
-		     __u16 state, __be16 port, __be32 src_vni,
-		     __be32 vni, __u32 ifindex, __u16 ndm_flags,
+int vxlan_fdb_create(struct vxlan_dev *vxlan, const u8 *mac,
+		     union vxlan_addr *ip, __u16 state, __be16 port,
+		     __be32 src_vni, __be32 vni, __u32 ifindex, __u16 ndm_flags,
 		     u32 nhid, struct vxlan_fdb **fdb,
-		     struct netlink_ext_ack *extack)
+		     struct netlink_ext_ack *extack, u8 protocol)
 {
 	struct vxlan_rdst *rd = NULL;
 	struct vxlan_fdb *f;
@@ -872,6 +873,7 @@ int vxlan_fdb_create(struct vxlan_dev *vxlan,
 	if (!f)
 		return -ENOMEM;
 
+	f->protocol = protocol;
 	if (nhid)
 		rc = vxlan_fdb_nh_update(vxlan, f, nhid, extack);
 	else
@@ -964,14 +966,12 @@ static void vxlan_dst_free(struct rcu_head *head)
 	kfree(rd);
 }
 
-static int vxlan_fdb_update_existing(struct vxlan_dev *vxlan,
-				     union vxlan_addr *ip,
-				     __u16 state, __u16 flags,
-				     __be16 port, __be32 vni,
-				     __u32 ifindex, __u16 ndm_flags,
-				     struct vxlan_fdb *f, u32 nhid,
-				     bool swdev_notify,
-				     struct netlink_ext_ack *extack)
+static int
+vxlan_fdb_update_existing(struct vxlan_dev *vxlan, union vxlan_addr *ip,
+			  __u16 state, __u16 flags, __be16 port, __be32 vni,
+			  __u32 ifindex, __u16 ndm_flags, struct vxlan_fdb *f,
+			  u32 nhid, bool swdev_notify,
+			  struct netlink_ext_ack *extack, u8 protocol)
 {
 	__u16 fdb_flags = (ndm_flags & ~NTF_USE);
 	struct vxlan_rdst *rd = NULL;
@@ -1003,6 +1003,11 @@ static int vxlan_fdb_update_existing(struct vxlan_dev *vxlan,
 		}
 		if (f->flags != fdb_flags) {
 			f->flags = fdb_flags;
+			notify = 1;
+		}
+		if (f->protocol != protocol) {
+			f->protocol = protocol;
+			f->updated = jiffies;
 			notify = 1;
 		}
 	}
@@ -1063,13 +1068,12 @@ err_notify:
 	return err;
 }
 
-static int vxlan_fdb_update_create(struct vxlan_dev *vxlan,
-				   const u8 *mac, union vxlan_addr *ip,
-				   __u16 state, __u16 flags,
-				   __be16 port, __be32 src_vni, __be32 vni,
-				   __u32 ifindex, __u16 ndm_flags, u32 nhid,
-				   bool swdev_notify,
-				   struct netlink_ext_ack *extack)
+static int vxlan_fdb_update_create(struct vxlan_dev *vxlan, const u8 *mac,
+				   union vxlan_addr *ip, __u16 state,
+				   __u16 flags, __be16 port, __be32 src_vni,
+				   __be32 vni, __u32 ifindex, __u16 ndm_flags,
+				   u32 nhid, bool swdev_notify,
+				   struct netlink_ext_ack *extack, u8 protocol)
 {
 	__u16 fdb_flags = (ndm_flags & ~NTF_USE);
 	struct vxlan_fdb *f;
@@ -1081,8 +1085,8 @@ static int vxlan_fdb_update_create(struct vxlan_dev *vxlan,
 		return -EOPNOTSUPP;
 
 	netdev_dbg(vxlan->dev, "add %pM -> %pIS\n", mac, ip);
-	rc = vxlan_fdb_create(vxlan, mac, ip, state, port, src_vni,
-			      vni, ifindex, fdb_flags, nhid, &f, extack);
+	rc = vxlan_fdb_create(vxlan, mac, ip, state, port, src_vni, vni,
+			      ifindex, fdb_flags, nhid, &f, extack, protocol);
 	if (rc < 0)
 		return rc;
 
@@ -1099,13 +1103,11 @@ err_notify:
 }
 
 /* Add new entry to forwarding table -- assumes lock held */
-int vxlan_fdb_update(struct vxlan_dev *vxlan,
-		     const u8 *mac, union vxlan_addr *ip,
-		     __u16 state, __u16 flags,
-		     __be16 port, __be32 src_vni, __be32 vni,
-		     __u32 ifindex, __u16 ndm_flags, u32 nhid,
-		     bool swdev_notify,
-		     struct netlink_ext_ack *extack)
+int vxlan_fdb_update(struct vxlan_dev *vxlan, const u8 *mac,
+		     union vxlan_addr *ip, __u16 state, __u16 flags,
+		     __be16 port, __be32 src_vni, __be32 vni, __u32 ifindex,
+		     __u16 ndm_flags, u32 nhid, bool swdev_notify,
+		     struct netlink_ext_ack *extack, u8 protocol)
 {
 	struct vxlan_fdb *f;
 
@@ -1119,7 +1121,8 @@ int vxlan_fdb_update(struct vxlan_dev *vxlan,
 
 		return vxlan_fdb_update_existing(vxlan, ip, state, flags, port,
 						 vni, ifindex, ndm_flags, f,
-						 nhid, swdev_notify, extack);
+						 nhid, swdev_notify, extack,
+						 protocol);
 	} else {
 		if (!(flags & NLM_F_CREATE))
 			return -ENOENT;
@@ -1127,7 +1130,7 @@ int vxlan_fdb_update(struct vxlan_dev *vxlan,
 		return vxlan_fdb_update_create(vxlan, mac, ip, state, flags,
 					       port, src_vni, vni, ifindex,
 					       ndm_flags, nhid, swdev_notify,
-					       extack);
+					       extack, protocol);
 	}
 }
 
@@ -1142,7 +1145,7 @@ static void vxlan_fdb_dst_destroy(struct vxlan_dev *vxlan, struct vxlan_fdb *f,
 static int vxlan_fdb_parse(struct nlattr *tb[], struct vxlan_dev *vxlan,
 			   union vxlan_addr *ip, __be16 *port, __be32 *src_vni,
 			   __be32 *vni, u32 *ifindex, u32 *nhid,
-			   struct netlink_ext_ack *extack)
+			   struct netlink_ext_ack *extack, u8 *protocol)
 {
 	struct net *net = dev_net(vxlan->dev);
 	int err;
@@ -1222,6 +1225,11 @@ static int vxlan_fdb_parse(struct nlattr *tb[], struct vxlan_dev *vxlan,
 
 	*nhid = nla_get_u32_default(tb[NDA_NH_ID], 0);
 
+	if (tb[NDA_PROTOCOL])
+		*protocol = nla_get_u8(tb[NDA_PROTOCOL]);
+	else
+		*protocol = RTPROT_UNSPEC;
+
 	return 0;
 }
 
@@ -1238,6 +1246,7 @@ static int vxlan_fdb_add(struct ndmsg *ndm, struct nlattr *tb[],
 	__be32 src_vni, vni;
 	u32 ifindex, nhid;
 	int err;
+	u8 protocol;
 
 	if (!(ndm->ndm_state & (NUD_PERMANENT|NUD_REACHABLE))) {
 		pr_info("RTM_NEWNEIGH with invalid state %#x\n",
@@ -1249,7 +1258,7 @@ static int vxlan_fdb_add(struct ndmsg *ndm, struct nlattr *tb[],
 		return -EINVAL;
 
 	err = vxlan_fdb_parse(tb, vxlan, &ip, &port, &src_vni, &vni, &ifindex,
-			      &nhid, extack);
+			      &nhid, extack, &protocol);
 	if (err)
 		return err;
 
@@ -1257,10 +1266,10 @@ static int vxlan_fdb_add(struct ndmsg *ndm, struct nlattr *tb[],
 		return -EAFNOSUPPORT;
 
 	spin_lock_bh(&vxlan->hash_lock);
-	err = vxlan_fdb_update(vxlan, addr, &ip, ndm->ndm_state, flags,
-			       port, src_vni, vni, ifindex,
-			       ndm->ndm_flags | NTF_VXLAN_ADDED_BY_USER,
-			       nhid, true, extack);
+	err = vxlan_fdb_update(vxlan, addr, &ip, ndm->ndm_state, flags, port,
+			       src_vni, vni, ifindex,
+			       ndm->ndm_flags | NTF_VXLAN_ADDED_BY_USER, nhid,
+			       true, extack, protocol);
 	spin_unlock_bh(&vxlan->hash_lock);
 
 	if (!err)
@@ -1314,9 +1323,10 @@ static int vxlan_fdb_delete(struct ndmsg *ndm, struct nlattr *tb[],
 	u32 ifindex, nhid;
 	__be16 port;
 	int err;
+	u8 protocol;
 
 	err = vxlan_fdb_parse(tb, vxlan, &ip, &port, &src_vni, &vni, &ifindex,
-			      &nhid, extack);
+			      &nhid, extack, &protocol);
 	if (err)
 		return err;
 
@@ -1470,13 +1480,12 @@ static enum skb_drop_reason vxlan_snoop(struct net_device *dev,
 
 		/* close off race between vxlan_flush and incoming packets */
 		if (netif_running(dev))
-			vxlan_fdb_update(vxlan, src_mac, src_ip,
-					 NUD_REACHABLE,
-					 NLM_F_EXCL|NLM_F_CREATE,
-					 vxlan->cfg.dst_port,
-					 vni,
-					 vxlan->default_dst.remote_vni,
-					 ifindex, NTF_SELF, 0, true, NULL);
+			vxlan_fdb_update(vxlan, src_mac, src_ip, NUD_REACHABLE,
+					 NLM_F_EXCL | NLM_F_CREATE,
+					 vxlan->cfg.dst_port, vni,
+					 vxlan->default_dst.remote_vni, ifindex,
+					 NTF_SELF, 0, true, NULL,
+					 RTPROT_UNSPEC);
 		spin_unlock(&vxlan->hash_lock);
 	}
 
@@ -3963,15 +3972,13 @@ static int __vxlan_dev_create(struct net *net, struct net_device *dev,
 	/* create an fdb entry for a valid default destination */
 	if (!vxlan_addr_any(&dst->remote_ip)) {
 		spin_lock_bh(&vxlan->hash_lock);
-		err = vxlan_fdb_update(vxlan, all_zeros_mac,
-				       &dst->remote_ip,
+		err = vxlan_fdb_update(vxlan, all_zeros_mac, &dst->remote_ip,
 				       NUD_REACHABLE | NUD_PERMANENT,
 				       NLM_F_EXCL | NLM_F_CREATE,
-				       vxlan->cfg.dst_port,
-				       dst->remote_vni,
-				       dst->remote_vni,
-				       dst->remote_ifindex,
-				       NTF_SELF, 0, true, extack);
+				       vxlan->cfg.dst_port, dst->remote_vni,
+				       dst->remote_vni, dst->remote_ifindex,
+				       NTF_SELF, 0, true, extack,
+				       RTPROT_UNSPEC);
 		spin_unlock_bh(&vxlan->hash_lock);
 		if (err)
 			goto unlink;
@@ -4416,10 +4423,10 @@ static int vxlan_changelink(struct net_device *dev, struct nlattr *tb[],
 					       &conf.remote_ip,
 					       NUD_REACHABLE | NUD_PERMANENT,
 					       NLM_F_APPEND | NLM_F_CREATE,
-					       vxlan->cfg.dst_port,
-					       conf.vni, conf.vni,
-					       conf.remote_ifindex,
-					       NTF_SELF, 0, true, extack);
+					       vxlan->cfg.dst_port, conf.vni,
+					       conf.vni, conf.remote_ifindex,
+					       NTF_SELF, 0, true, extack,
+					       RTPROT_UNSPEC);
 			if (err) {
 				spin_unlock_bh(&vxlan->hash_lock);
 				netdev_adjacent_change_abort(dst->remote_dev,
@@ -4767,14 +4774,11 @@ vxlan_fdb_external_learn_add(struct net_device *dev,
 
 	spin_lock_bh(&vxlan->hash_lock);
 	err = vxlan_fdb_update(vxlan, fdb_info->eth_addr, &fdb_info->remote_ip,
-			       NUD_REACHABLE,
-			       NLM_F_CREATE | NLM_F_REPLACE,
-			       fdb_info->remote_port,
-			       fdb_info->vni,
-			       fdb_info->remote_vni,
-			       fdb_info->remote_ifindex,
-			       NTF_USE | NTF_SELF | NTF_EXT_LEARNED,
-			       0, false, extack);
+			       NUD_REACHABLE, NLM_F_CREATE | NLM_F_REPLACE,
+			       fdb_info->remote_port, fdb_info->vni,
+			       fdb_info->remote_vni, fdb_info->remote_ifindex,
+			       NTF_USE | NTF_SELF | NTF_EXT_LEARNED, 0, false,
+			       extack, RTPROT_UNSPEC);
 	spin_unlock_bh(&vxlan->hash_lock);
 
 	return err;

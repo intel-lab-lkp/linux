@@ -39,6 +39,7 @@ struct vxlan_fdb {
 	struct vxlan_fdb_key key;
 	u16		  state;	/* see ndm_state */
 	u16		  flags;	/* see ndm_flags and below */
+	u8 protocol; /* protocol for FDB entry */
 	struct list_head  nh_list;
 	struct hlist_node fdb_node;
 	struct nexthop __rcu *nh;
@@ -180,24 +181,22 @@ vxlan_vnifilter_lookup(struct vxlan_dev *vxlan, __be32 vni)
 }
 
 /* vxlan_core.c */
-int vxlan_fdb_create(struct vxlan_dev *vxlan,
-		     const u8 *mac, union vxlan_addr *ip,
-		     __u16 state, __be16 port, __be32 src_vni,
-		     __be32 vni, __u32 ifindex, __u16 ndm_flags,
+int vxlan_fdb_create(struct vxlan_dev *vxlan, const u8 *mac,
+		     union vxlan_addr *ip, __u16 state, __be16 port,
+		     __be32 src_vni, __be32 vni, __u32 ifindex, __u16 ndm_flags,
 		     u32 nhid, struct vxlan_fdb **fdb,
-		     struct netlink_ext_ack *extack);
+		     struct netlink_ext_ack *extack, u8 protocol);
 int __vxlan_fdb_delete(struct vxlan_dev *vxlan,
 		       const unsigned char *addr, union vxlan_addr ip,
 		       __be16 port, __be32 src_vni, __be32 vni,
 		       u32 ifindex, bool swdev_notify);
 u32 eth_vni_hash(const unsigned char *addr, __be32 vni);
 u32 fdb_head_index(struct vxlan_dev *vxlan, const u8 *mac, __be32 vni);
-int vxlan_fdb_update(struct vxlan_dev *vxlan,
-		     const u8 *mac, union vxlan_addr *ip,
-		     __u16 state, __u16 flags,
-		     __be16 port, __be32 src_vni, __be32 vni,
-		     __u32 ifindex, __u16 ndm_flags, u32 nhid,
-		     bool swdev_notify, struct netlink_ext_ack *extack);
+int vxlan_fdb_update(struct vxlan_dev *vxlan, const u8 *mac,
+		     union vxlan_addr *ip, __u16 state, __u16 flags,
+		     __be16 port, __be32 src_vni, __be32 vni, __u32 ifindex,
+		     __u16 ndm_flags, u32 nhid, bool swdev_notify,
+		     struct netlink_ext_ack *extack, u8 protocol);
 void vxlan_xmit_one(struct sk_buff *skb, struct net_device *dev,
 		    __be32 default_vni, struct vxlan_rdst *rdst, bool did_rsc);
 int vxlan_vni_in_use(struct net *src_net, struct vxlan_dev *vxlan,
