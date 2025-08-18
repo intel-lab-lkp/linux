@@ -408,7 +408,7 @@ cleanup:
 	 * If there was a failure reclaiming the page then it is no longer safe
 	 * to release it back to the system; leak it instead.
 	 */
-	snp_leak_pages(__phys_to_pfn(paddr), npages - i);
+	snp_leak_pages(__phys_to_pfn(paddr), npages - i, false);
 	return ret;
 }
 
