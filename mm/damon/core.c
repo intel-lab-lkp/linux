@@ -366,7 +366,7 @@ static struct damos_quota *damos_quota_init(struct damos_quota *quota)
 	quota->total_charged_sz = 0;
 	quota->total_charged_ns = 0;
 	quota->charged_sz = 0;
-	quota->charged_from = 0;
+	quota->charged_from = INITIAL_JIFFIES;
 	quota->charge_target_from = NULL;
 	quota->charge_addr_from = 0;
 	quota->esz_bp = 0;
