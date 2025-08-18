@@ -1064,7 +1064,6 @@ struct extcon_dev *extcon_dev_allocate(const unsigned int *supported_cable)
 	if (!edev)
 		return ERR_PTR(-ENOMEM);
 
-	edev->max_supported = 0;
 	edev->supported_cable = supported_cable;
 
 	return edev;
