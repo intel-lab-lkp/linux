@@ -508,7 +508,6 @@ static int hci_uart_tty_open(struct tty_struct *tty)
 
 	/* disable alignment support by default */
 	hu->alignment = 1;
-	hu->padding = 0;
 
 	/* Use serial port speed as oper_speed */
 	hu->oper_speed = tty->termios.c_ospeed;
