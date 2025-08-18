@@ -57,6 +57,7 @@ struct ptdump_pg_state {
 	unsigned long uxn_pages;
 };
 
+void __init ptdump_init(void);
 void ptdump_walk(struct seq_file *s, struct ptdump_info *info);
 void note_page(struct ptdump_state *pt_st, unsigned long addr, int level,
 	       pteval_t val);
@@ -74,6 +75,7 @@ static inline void ptdump_debugfs_register(struct ptdump_info *info,
 					   const char *name) { }
 #endif /* CONFIG_PTDUMP_DEBUGFS */
 #else
+static inline void __init ptdump_init(void) { }
 static inline void note_page(struct ptdump_state *pt_st, unsigned long addr,
 			     int level, pteval_t val) { }
 static inline void note_page_pte(struct ptdump_state *st, unsigned long addr, pte_t pte) { }
