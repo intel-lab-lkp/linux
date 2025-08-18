@@ -381,4 +381,5 @@ void fbcon_rotate_cw(struct fbcon *confb)
 	confb->clear_margins = cw_clear_margins;
 	confb->cursor = cw_cursor;
 	confb->update_start = cw_update_start;
+	confb->rotate_font = fbcon_rotate_font;
 }
