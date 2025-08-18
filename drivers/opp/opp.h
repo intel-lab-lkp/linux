@@ -249,6 +249,19 @@ struct opp_table {
 #endif
 };
 
+/**
+ * struct dev_pm_opp_key - Key used to identify OPP entries
+ * @freq:       Frequency in Hz
+ * @level:      Performance level associated with the frequency
+ *
+ * This is internal structure, used to help in mapping frequency
+ * and performance level combinations to specific OPP entries.
+ */
+struct dev_pm_opp_key {
+	unsigned long freq;
+	unsigned int level;
+};
+
 /* Routines internal to opp core */
 bool _opp_remove_all_static(struct opp_table *opp_table);
 int _get_opp_count(struct opp_table *opp_table);
