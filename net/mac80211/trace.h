@@ -3136,6 +3136,32 @@ TRACE_EVENT(api_radar_detected,
 	)
 );
 
+TRACE_EVENT(api_incumbent_signal_detected,
+	TP_PROTO(struct ieee80211_local *local,
+		 struct ieee80211_chanctx_conf *chanctx_conf),
+
+	TP_ARGS(local, chanctx_conf),
+
+	TP_STRUCT__entry(
+		LOCAL_ENTRY
+		CHANDEF_ENTRY
+		__field(u32, bitmap)
+	),
+
+	TP_fast_assign(
+		LOCAL_ASSIGN;
+		CHANDEF_ASSIGN(&chanctx_conf->def)
+		__entry->bitmap =
+			chanctx_conf ? chanctx_conf->incumbt_sig_intf_bmap : 0;
+	),
+
+	TP_printk(
+		LOCAL_PR_FMT " Incumbent signal detected."
+		CHANDEF_PR_FMT " Bitmap: 0x%x ",
+		LOCAL_PR_ARG, CHANDEF_PR_ARG, __entry->bitmap
+	)
+);
+
 TRACE_EVENT(api_request_smps,
 	TP_PROTO(struct ieee80211_local *local,
 		 struct ieee80211_sub_if_data *sdata,

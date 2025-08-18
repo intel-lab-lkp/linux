@@ -3533,6 +3533,32 @@ void ieee80211_dfs_cac_cancel(struct ieee80211_local *local,
 	}
 }
 
+void ieee80211_incumbent_signal_detected_work(struct wiphy *wiphy,
+					      struct wiphy_work *work)
+{
+	struct ieee80211_local *local =
+		container_of(work, struct ieee80211_local,
+			     incumbent_signal_detected_work);
+	struct ieee80211_chanctx_conf *conf;
+	struct ieee80211_chanctx *ctx;
+
+	lockdep_assert_wiphy(local->hw.wiphy);
+
+	list_for_each_entry(ctx, &local->chanctx_list, list) {
+		if (ctx->replace_state == IEEE80211_CHANCTX_REPLACES_OTHER)
+			continue;
+
+		if (!ctx->conf.incumbt_sig_intf_bmap)
+			continue;
+
+		conf = &ctx->conf;
+		cfg80211_incumbent_signal_detect_event(local->hw.wiphy,
+						       &conf->def,
+						       conf->incumbt_sig_intf_bmap,
+						       GFP_KERNEL);
+	}
+}
+
 void ieee80211_dfs_radar_detected_work(struct wiphy *wiphy,
 				       struct wiphy_work *work)
 {
@@ -3590,6 +3616,19 @@ void ieee80211_radar_detected(struct ieee80211_hw *hw,
 	wiphy_work_queue(hw->wiphy, &local->radar_detected_work);
 }
 EXPORT_SYMBOL(ieee80211_radar_detected);
+
+void ieee80211_incumbent_signal_detected(struct ieee80211_hw *hw,
+					 struct ieee80211_chanctx_conf *chanctx_conf,
+					 u32 incumbt_sig_intf_bmap)
+{
+	struct ieee80211_local *local = hw_to_local(hw);
+
+	chanctx_conf->incumbt_sig_intf_bmap = incumbt_sig_intf_bmap;
+
+	trace_api_incumbent_signal_detected(local, chanctx_conf);
+	wiphy_work_queue(hw->wiphy, &local->incumbent_signal_detected_work);
+}
+EXPORT_SYMBOL(ieee80211_incumbent_signal_detected);
 
 void ieee80211_chandef_downgrade(struct cfg80211_chan_def *c,
 				 struct ieee80211_conn_settings *conn)

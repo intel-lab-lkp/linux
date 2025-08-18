@@ -1675,6 +1675,8 @@ struct ieee80211_local {
 	u8 ext_capa[8];
 
 	bool wbrf_supported;
+
+	struct wiphy_work incumbent_signal_detected_work;
 };
 
 static inline struct ieee80211_sub_if_data *
@@ -2883,5 +2885,8 @@ ieee80211_determine_chan_mode(struct ieee80211_sub_if_data *sdata,
 #define EXPORT_SYMBOL_IF_MAC80211_KUNIT(sym)
 #define VISIBLE_IF_MAC80211_KUNIT static
 #endif
+
+void ieee80211_incumbent_signal_detected_work(struct wiphy *wiphy,
+					      struct wiphy_work *work);
 
 #endif /* IEEE80211_I_H */
