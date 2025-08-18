@@ -947,6 +947,8 @@ EXPORT_SYMBOL(__v4l2_ctrl_s_ctrl_string);
 int __v4l2_ctrl_s_ctrl_compound(struct v4l2_ctrl *ctrl,
 				enum v4l2_ctrl_type type, const void *p)
 {
+	int ret;
+
 	lockdep_assert_held(ctrl->handler->lock);
 
 	/* It's a driver bug if this happens. */
@@ -956,7 +958,14 @@ int __v4l2_ctrl_s_ctrl_compound(struct v4l2_ctrl *ctrl,
 	if (WARN_ON(ctrl->is_dyn_array))
 		return -EINVAL;
 	memcpy(ctrl->p_new.p, p, ctrl->elems * ctrl->elem_size);
-	return set_ctrl(NULL, ctrl, 0);
+	ret = set_ctrl(NULL, ctrl, 0);
+	if (!ret)
+		return ret;
+	/*
+	 * this can be removed when backward compatibility with legacy
+	 * single exposure and gain controls is no longer needed
+	 */
+	return __v4l2_s_ctrl_multi_to_single(ctrl);
 }
 EXPORT_SYMBOL(__v4l2_ctrl_s_ctrl_compound);
 
@@ -968,6 +977,7 @@ int __v4l2_ctrl_modify_range(struct v4l2_ctrl *ctrl,
 {
 	bool value_changed;
 	bool range_changed = false;
+	struct v4l2_ctrl *ctrl_single = NULL;
 	int ret;
 
 	lockdep_assert_held(ctrl->handler->lock);
@@ -982,8 +992,11 @@ int __v4l2_ctrl_modify_range(struct v4l2_ctrl *ctrl,
 	case V4L2_CTRL_TYPE_U8:
 	case V4L2_CTRL_TYPE_U16:
 	case V4L2_CTRL_TYPE_U32:
-		if (ctrl->is_array)
-			return -EINVAL;
+		if (ctrl->is_array) {
+			ctrl_single = __v4l2_get_single_ctrl(ctrl);
+			if (!ctrl_single)
+				return -EINVAL;
+		}
 		ret = check_range(ctrl->type, min, max, step, def);
 		if (ret)
 			return ret;
@@ -1015,6 +1028,15 @@ int __v4l2_ctrl_modify_range(struct v4l2_ctrl *ctrl,
 		ret = set_ctrl(NULL, ctrl, V4L2_EVENT_CTRL_CH_RANGE);
 	else if (range_changed)
 		send_event(NULL, ctrl, V4L2_EVENT_CTRL_CH_RANGE);
+	if (ret)
+		return ret;
+	/*
+	 * this can be removed when backward compatibility with legacy
+	 * single exposure and gain controls is no longer needed
+	 */
+	if (ctrl_single)
+		ret = __v4l2_ctrl_modify_range(ctrl_single, min, max, step, def);
+
 	return ret;
 }
 EXPORT_SYMBOL(__v4l2_ctrl_modify_range);

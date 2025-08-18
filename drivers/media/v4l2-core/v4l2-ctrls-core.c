@@ -2478,6 +2478,7 @@ int try_or_set_cluster(struct v4l2_fh *fh, struct v4l2_ctrl *master,
 	bool update_flag;
 	int ret;
 	int i;
+	struct v4l2_ctrl *master_multi = NULL;
 
 	/*
 	 * Go through the cluster and either validate the new value or
@@ -2508,7 +2509,16 @@ int try_or_set_cluster(struct v4l2_fh *fh, struct v4l2_ctrl *master,
 	/* Don't set if there is no change */
 	if (ret || !set || !cluster_changed(master))
 		return ret;
-	ret = call_op(master, s_ctrl);
+
+	/*
+	 * for sensor drivers that no longer handle single-capture controls in
+	 * s_ctrl, set the corresponding multi-capture control instead
+	 */
+	master_multi = __v4l2_get_multi_ctrl(master);
+	if (master_multi)
+		ret = call_op(master_multi, s_ctrl);
+	else
+		ret = call_op(master, s_ctrl);
 	if (ret)
 		return ret;
 
@@ -2590,6 +2600,7 @@ int __v4l2_ctrl_handler_setup(struct v4l2_ctrl_handler *hdl)
 
 	list_for_each_entry(ctrl, &hdl->ctrls, node) {
 		struct v4l2_ctrl *master = ctrl->cluster[0];
+		struct v4l2_ctrl *master_multi = __v4l2_get_multi_ctrl(master);
 		int i;
 
 		/* Skip if this control was already handled by a cluster. */
@@ -2605,7 +2616,15 @@ int __v4l2_ctrl_handler_setup(struct v4l2_ctrl_handler *hdl)
 				master->cluster[i]->done = true;
 			}
 		}
-		ret = call_op(master, s_ctrl);
+		/*
+		 * for sensor drivers that no longer handle single-capture
+		 * controls in s_ctrl, set the corresponding multi-capture
+		 * control instead
+		 */
+		if (master_multi)
+			ret = call_op(master_multi, s_ctrl);
+		else
+			ret = call_op(master, s_ctrl);
 		if (ret)
 			break;
 	}
