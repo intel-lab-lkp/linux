@@ -86,6 +86,33 @@
 //!     return -1;
 //!   }
 //!
+//!   // Set a file offset
+//!   printf("Call lseek SEEK_SET\n");
+//!   ret = lseek(fd, 10, SEEK_SET);
+//!   if (ret == 10)
+//!     printf("lseek: Succeed to SEEK_SET\n");
+//!   else
+//!     printf("lseek: Failed to SEEK_SET\n");
+//!
+//!   // Change the file offset from the initial value
+//!   printf("Call lseek SEEK_CUR\n");
+//!   ret = lseek(fd, 10, SEEK_CUR);
+//!   if (ret == 20)
+//!     printf("lseek: Succeed to SEEK_CUR\n");
+//!   else
+//!     printf("lseek: Failed to SEEK_CUR\n");
+//!
+//!   // i_size is 0. So the following task always should fail.
+//!   printf("Call lseek SEEK_END\n");
+//!   ret = lseek(fd, -10, SEEK_END);
+//!   if (ret < 0)
+//!     perror("lseek: Succeeded to fail - this was expected");
+//!   else {
+//!     printf("lseek: Failed to fail SEEK_END\n");
+//!     close(fd);
+//!     return -1;
+//!   }
+//!
 //!   // Close the device file
 //!   printf("Closing /dev/rust-misc-device\n");
 //!   close(fd);
@@ -113,6 +140,10 @@ use kernel::{
 const RUST_MISC_DEV_HELLO: u32 = _IO('|' as u32, 0x80);
 const RUST_MISC_DEV_GET_VALUE: u32 = _IOR::<i32>('|' as u32, 0x81);
 const RUST_MISC_DEV_SET_VALUE: u32 = _IOW::<i32>('|' as u32, 0x82);
+
+const SEEK_SET: i32 = 0;
+const SEEK_CUR: i32 = 1;
+const SEEK_END: i32 = 2;
 
 module! {
     type: RustMiscDeviceModule,
@@ -171,6 +202,43 @@ impl MiscDevice for RustMiscDevice {
             },
             GFP_KERNEL,
         )
+    }
+
+    fn llseek(me: Pin<&RustMiscDevice>, file: &File, offset: i64, whence: i32) -> Result<isize> {
+        dev_info!(me.dev, "LLSEEK Rust Misc Device Sample\n");
+        let pos: i64;
+        let eof: i64;
+
+        // SAFETY:
+        // * The file is valid for the duration of this call.
+        // * f_inode must be valid while the file is valid.
+        unsafe {
+            pos = (*file.as_ptr()).f_pos;
+            eof = (*(*file.as_ptr()).f_inode).i_size;
+        }
+
+        let new_pos = match whence {
+            SEEK_SET => offset,
+            SEEK_CUR => pos + offset,
+            SEEK_END => eof + offset,
+            _ => {
+                dev_err!(me.dev, "LLSEEK does not recognised: {}.\n", whence);
+                return Err(EINVAL);
+            }
+        };
+
+        if new_pos < 0 {
+            dev_err!(me.dev, "The file offset becomes negative: {}.\n", new_pos);
+            return Err(EINVAL);
+        }
+
+        // SAFETY: The file is valid for the duration of this call.
+        let ret: isize = unsafe {
+            (*file.as_ptr()).f_pos = new_pos;
+            new_pos as isize
+        };
+
+        Ok(ret)
     }
 
     fn ioctl(me: Pin<&RustMiscDevice>, _file: &File, cmd: u32, arg: usize) -> Result<isize> {
