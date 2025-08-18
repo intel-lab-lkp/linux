@@ -441,6 +441,12 @@ HWCAP3_MTE_FAR
 HWCAP3_MTE_STORE_ONLY
     Functionality implied by ID_AA64PFR2_EL1.MTESTOREONLY == 0b0001.
 
+HWCAP3_LS64
+    Functionality implied by ID_AA64ISAR1_EL1.LS64 == 0b0001.
+
+HWCAP3_LS64_V
+    Functionality implied by ID_AA64ISAR1_EL1.LS64 == 0b0010.
+
 4. Unused AT_HWCAP bits
 -----------------------
 
