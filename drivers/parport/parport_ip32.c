@@ -372,7 +372,7 @@ static void parport_ip32_dump_state(struct parport *p, char *str,
 		if ((cnfgA & CNFGA_ID_MASK) != CNFGA_ID_8)
 			pr_cont(",%d byte%s left",
 				cnfgA & CNFGA_PWORDLEFT,
-				((cnfgA & CNFGA_PWORDLEFT) > 1) ? "s" : "");
+				str_plural(cnfgA & CNFGA_PWORDLEFT));
 		pr_cont("\n");
 		printk(KERN_DEBUG PPIP32 "    cnfgB=0x%02x", cnfgB);
 		pr_cont(" irq=%u,dma=%u",
