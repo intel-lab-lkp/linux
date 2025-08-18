@@ -3217,8 +3217,7 @@ int bmp280_common_probe(struct device *dev,
 		return dev_err_probe(dev, PTR_ERR(gpiod), "failed to get reset GPIO\n");
 
 	/* Deassert the signal */
-	dev_info(dev, "release reset\n");
-	gpiod_set_value(gpiod, 0);
+	gpiod_set_value_cansleep(gpiod, 0);
 
 	data->regmap = regmap;
 
