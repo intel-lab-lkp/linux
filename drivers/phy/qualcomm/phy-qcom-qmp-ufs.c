@@ -1110,6 +1110,9 @@ struct qmp_phy_cfg {
 	const char * const *vreg_list;
 	int num_vregs;
 
+	/* regulator load values in same order as vreg_list */
+	const int *vreg_load_ua;
+
 	/* array of registers with different offsets */
 	const unsigned int *regs;
 
@@ -1901,8 +1904,11 @@ static int qmp_ufs_vreg_init(struct qmp_ufs *qmp)
 	if (!qmp->vregs)
 		return -ENOMEM;
 
-	for (i = 0; i < num; i++)
+	for (i = 0; i < num; i++) {
 		qmp->vregs[i].supply = cfg->vreg_list[i];
+		if (cfg->vreg_load_ua)
+			qmp->vregs[i].init_load_uA = cfg->vreg_load_ua[i];
+	}
 
 	return devm_regulator_bulk_get(dev, num, qmp->vregs);
 }
