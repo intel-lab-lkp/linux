@@ -2256,7 +2256,7 @@ static void hci_cs_create_conn(struct hci_dev *hdev, __u8 status)
 
 	if (status) {
 		if (conn && conn->state == BT_CONNECT) {
-			conn->state = BT_CLOSED;
+			hci_conn_set_state(conn, BT_CLOSED);
 			hci_connect_cfm(conn, status);
 			hci_conn_del(conn);
 		}
@@ -2299,7 +2299,7 @@ static void hci_cs_add_sco(struct hci_dev *hdev, __u8 status)
 		link = list_first_entry_or_null(&acl->link_list,
 						struct hci_link, list);
 		if (link && link->conn) {
-			link->conn->state = BT_CLOSED;
+			hci_conn_set_state(link->conn, BT_CLOSED);
 
 			hci_connect_cfm(link->conn, status);
 			hci_conn_del(link->conn);
@@ -2582,7 +2582,7 @@ static void hci_setup_sync_conn_status(struct hci_dev *hdev, __u16 handle,
 		link = list_first_entry_or_null(&acl->link_list,
 						struct hci_link, list);
 		if (link && link->conn) {
-			link->conn->state = BT_CLOSED;
+			hci_conn_set_state(link->conn, BT_CLOSED);
 
 			hci_connect_cfm(link->conn, status);
 			hci_conn_del(link->conn);
@@ -3138,7 +3138,7 @@ static void hci_conn_complete_evt(struct hci_dev *hdev, void *data,
 			goto done;
 
 		if (conn->type == ACL_LINK) {
-			conn->state = BT_CONFIG;
+			hci_conn_set_state(conn, BT_CONFIG);
 			hci_conn_hold(conn);
 
 			if (!conn->out && !hci_conn_ssp_enabled(conn) &&
@@ -3147,7 +3147,7 @@ static void hci_conn_complete_evt(struct hci_dev *hdev, void *data,
 			else
 				conn->disc_timeout = HCI_DISCONN_TIMEOUT;
 		} else
-			conn->state = BT_CONNECTED;
+			hci_conn_set_state(conn, BT_CONNECTED);
 
 		hci_debugfs_create_conn(conn);
 		hci_conn_add_sysfs(conn);
@@ -3294,7 +3294,7 @@ static void hci_conn_request_evt(struct hci_dev *hdev, void *data,
 	if (ev->link_type == ACL_LINK ||
 	    (!(flags & HCI_PROTO_DEFER) && !lmp_esco_capable(hdev))) {
 		struct hci_cp_accept_conn_req cp;
-		conn->state = BT_CONNECT;
+		hci_conn_set_state(conn, BT_CONNECT);
 
 		bacpy(&cp.bdaddr, &ev->bdaddr);
 
@@ -3306,7 +3306,7 @@ static void hci_conn_request_evt(struct hci_dev *hdev, void *data,
 		hci_send_cmd(hdev, HCI_OP_ACCEPT_CONN_REQ, sizeof(cp), &cp);
 	} else if (!(flags & HCI_PROTO_DEFER)) {
 		struct hci_cp_accept_sync_conn_req cp;
-		conn->state = BT_CONNECT;
+		hci_conn_set_state(conn, BT_CONNECT);
 
 		bacpy(&cp.bdaddr, &ev->bdaddr);
 		cp.pkt_type = cpu_to_le16(conn->pkt_type);
@@ -3320,7 +3320,7 @@ static void hci_conn_request_evt(struct hci_dev *hdev, void *data,
 		hci_send_cmd(hdev, HCI_OP_ACCEPT_SYNC_CONN_REQ, sizeof(cp),
 			     &cp);
 	} else {
-		conn->state = BT_CONNECT2;
+		hci_conn_set_state(conn, BT_CONNECT2);
 		hci_connect_cfm(conn, 0);
 	}
 
@@ -3368,7 +3368,7 @@ static void hci_disconn_complete_evt(struct hci_dev *hdev, void *data,
 		goto unlock;
 	}
 
-	conn->state = BT_CLOSED;
+	hci_conn_set_state(conn, BT_CLOSED);
 
 	mgmt_connected = test_and_clear_bit(HCI_CONN_MGMT_CONNECTED, &conn->flags);
 
@@ -3472,7 +3472,7 @@ static void hci_auth_complete_evt(struct hci_dev *hdev, void *data,
 			hci_send_cmd(hdev, HCI_OP_SET_CONN_ENCRYPT, sizeof(cp),
 				     &cp);
 		} else {
-			conn->state = BT_CONNECTED;
+			hci_conn_set_state(conn, BT_CONNECTED);
 			hci_connect_cfm(conn, ev->status);
 			hci_conn_drop(conn);
 		}
@@ -3708,7 +3708,7 @@ static void hci_remote_features_evt(struct hci_dev *hdev, void *data,
 	}
 
 	if (!hci_outgoing_auth_needed(hdev, conn)) {
-		conn->state = BT_CONNECTED;
+		hci_conn_set_state(conn, BT_CONNECTED);
 		hci_connect_cfm(conn, ev->status);
 		hci_conn_drop(conn);
 	}
@@ -4249,7 +4249,7 @@ static void hci_cs_le_create_cis(struct hci_dev *hdev, u8 status)
 			if (test_and_clear_bit(HCI_CONN_CREATE_CIS,
 					       &conn->flags))
 				pending = true;
-			conn->state = BT_CLOSED;
+			hci_conn_set_state(conn, BT_CLOSED);
 			hci_connect_cfm(conn, status);
 			hci_conn_del(conn);
 		}
@@ -4879,7 +4879,7 @@ static void hci_remote_ext_features_evt(struct hci_dev *hdev, void *data,
 	}
 
 	if (!hci_outgoing_auth_needed(hdev, conn)) {
-		conn->state = BT_CONNECTED;
+		hci_conn_set_state(conn, BT_CONNECTED);
 		hci_connect_cfm(conn, ev->status);
 		hci_conn_drop(conn);
 	}
@@ -4946,7 +4946,7 @@ static void hci_sync_conn_complete_evt(struct hci_dev *hdev, void *data,
 	case 0x00:
 		status = hci_conn_set_handle(conn, __le16_to_cpu(ev->handle));
 		if (status) {
-			conn->state = BT_CLOSED;
+			hci_conn_set_state(conn, BT_CLOSED);
 			break;
 		}
 
@@ -4974,7 +4974,7 @@ static void hci_sync_conn_complete_evt(struct hci_dev *hdev, void *data,
 		fallthrough;
 
 	default:
-		conn->state = BT_CLOSED;
+		hci_conn_set_state(conn, BT_CLOSED);
 		break;
 	}
 
@@ -5107,7 +5107,7 @@ static void hci_key_refresh_complete_evt(struct hci_dev *hdev, void *data,
 
 	if (conn->state == BT_CONFIG) {
 		if (!ev->status)
-			conn->state = BT_CONNECTED;
+			hci_conn_set_state(conn, BT_CONNECTED);
 
 		hci_connect_cfm(conn, ev->status);
 		hci_conn_drop(conn);
@@ -5706,7 +5706,7 @@ static void le_conn_complete_evt(struct hci_dev *hdev, u8 status,
 	mgmt_device_connected(hdev, conn, NULL, 0);
 
 	conn->sec_level = BT_SECURITY_LOW;
-	conn->state = BT_CONFIG;
+	hci_conn_set_state(conn, BT_CONFIG);
 
 	/* Store current advertising instance as connection advertising instance
 	 * when software rotation is in use so it can be re-enabled when
@@ -5742,7 +5742,7 @@ static void le_conn_complete_evt(struct hci_dev *hdev, u8 status,
 
 		hci_conn_hold(conn);
 	} else {
-		conn->state = BT_CONNECTED;
+		hci_conn_set_state(conn, BT_CONNECTED);
 		hci_connect_cfm(conn, status);
 	}
 
@@ -6475,7 +6475,7 @@ static void hci_le_remote_feat_complete_evt(struct hci_dev *hdev, void *data,
 			else
 				status = ev->status;
 
-			conn->state = BT_CONNECTED;
+			hci_conn_set_state(conn, BT_CONNECTED);
 			hci_connect_cfm(conn, status);
 			hci_conn_drop(conn);
 		}
@@ -6759,14 +6759,14 @@ static void hci_le_cis_established_evt(struct hci_dev *hdev, void *data,
 	}
 
 	if (!ev->status) {
-		conn->state = BT_CONNECTED;
+		hci_conn_set_state(conn, BT_CONNECTED);
 		hci_debugfs_create_conn(conn);
 		hci_conn_add_sysfs(conn);
 		hci_iso_setup_path(conn);
 		goto unlock;
 	}
 
-	conn->state = BT_CLOSED;
+	hci_conn_set_state(conn, BT_CLOSED);
 	hci_connect_cfm(conn, ev->status);
 	hci_conn_del(conn);
 
@@ -6884,7 +6884,7 @@ static void hci_le_create_big_complete_evt(struct hci_dev *hdev, void *data,
 					__le16_to_cpu(ev->bis_handle[i++])))
 			continue;
 
-		conn->state = BT_CONNECTED;
+		hci_conn_set_state(conn, BT_CONNECTED);
 		set_bit(HCI_CONN_BIG_CREATED, &conn->flags);
 		hci_debugfs_create_conn(conn);
 		hci_conn_add_sysfs(conn);

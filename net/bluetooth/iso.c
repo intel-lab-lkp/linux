@@ -1462,7 +1462,7 @@ static void iso_conn_defer_accept(struct hci_conn *conn)
 
 	BT_DBG("conn %p", conn);
 
-	conn->state = BT_CONFIG;
+	hci_conn_set_state(conn, BT_CONFIG);
 
 	cp.handle = cpu_to_le16(conn->handle);
 

@@ -1704,6 +1704,14 @@ static inline struct hci_dev *hci_dev_hold(struct hci_dev *d)
 #define to_hci_dev(d) container_of(d, struct hci_dev, dev)
 #define to_hci_conn(c) container_of(c, struct hci_conn, dev)
 
+#define hci_conn_set_state(c, s) \
+	do { \
+		bt_dev_dbg((c)->hdev, "hcon %p handle 0x%04x state %s -> %s", \
+			   (c), (c)->handle, state_to_string((c)->state), \
+			   state_to_string(s)); \
+		(c)->state = s; \
+	} while (0)
+
 static inline void *hci_get_drvdata(struct hci_dev *hdev)
 {
 	return dev_get_drvdata(&hdev->dev);
@@ -2133,7 +2141,7 @@ static inline void hci_encrypt_cfm(struct hci_conn *conn, __u8 status)
 
 	if (conn->state == BT_CONFIG) {
 		if (!status)
-			conn->state = BT_CONNECTED;
+			hci_conn_set_state(conn, BT_CONNECTED);
 
 		hci_connect_cfm(conn, status);
 		hci_conn_drop(conn);

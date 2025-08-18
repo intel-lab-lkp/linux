@@ -5682,7 +5682,7 @@ int hci_abort_conn_sync(struct hci_dev *hdev, struct hci_conn *conn, u8 reason)
 	 * safely.
 	 */
 	if (disconnect) {
-		conn->state = BT_CLOSED;
+		hci_conn_set_state(conn, BT_CLOSED);
 		hci_disconn_cfm(conn, reason);
 		hci_conn_del(conn);
 	} else {
@@ -6518,7 +6518,7 @@ static int hci_le_create_conn_sync(struct hci_dev *hdev, void *data)
 	bt_dev_dbg(hdev, "conn %p", conn);
 
 	clear_bit(HCI_CONN_SCANNING, &conn->flags);
-	conn->state = BT_CONNECT;
+	hci_conn_set_state(conn, BT_CONNECT);
 
 	/* If requested to connect as peripheral use directed advertising */
 	if (conn->role == HCI_ROLE_SLAVE) {
@@ -6858,7 +6858,7 @@ static int hci_acl_create_conn_sync(struct hci_dev *hdev, void *data)
 			bt_dev_warn(hdev, "Failed to cancel inquiry %d", err);
 	}
 
-	conn->state = BT_CONNECT;
+	hci_conn_set_state(conn, BT_CONNECT);
 	conn->out = true;
 	conn->role = HCI_ROLE_MASTER;
 

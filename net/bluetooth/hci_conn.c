@@ -204,7 +204,7 @@ static void hci_add_sco(struct hci_conn *conn, __u16 handle)
 
 	bt_dev_dbg(hdev, "hcon %p", conn);
 
-	conn->state = BT_CONNECT;
+	hci_conn_set_state(conn, BT_CONNECT);
 	conn->out = true;
 
 	conn->attempt++;
@@ -296,7 +296,7 @@ static int hci_enhanced_setup_sync(struct hci_dev *hdev, void *data)
 
 	configure_datapath_sync(hdev, &conn->codec);
 
-	conn->state = BT_CONNECT;
+	hci_conn_set_state(conn, BT_CONNECT);
 	conn->out = true;
 
 	conn->attempt++;
@@ -413,7 +413,7 @@ static bool hci_setup_sync_conn(struct hci_conn *conn, __u16 handle)
 
 	bt_dev_dbg(hdev, "hcon %p", conn);
 
-	conn->state = BT_CONNECT;
+	hci_conn_set_state(conn, BT_CONNECT);
 	conn->out = true;
 
 	conn->attempt++;
@@ -1311,7 +1311,7 @@ void hci_conn_failed(struct hci_conn *conn, u8 status)
 	test_and_clear_bit(HCI_CONN_BIG_SYNC_FAILED, &conn->flags);
 	test_and_clear_bit(HCI_CONN_PA_SYNC_FAILED, &conn->flags);
 
-	conn->state = BT_CLOSED;
+	hci_conn_set_state(conn, BT_CLOSED);
 	hci_connect_cfm(conn, status);
 	hci_conn_del(conn);
 }
@@ -1582,7 +1582,7 @@ static struct hci_conn *hci_add_bis(struct hci_dev *hdev, bdaddr_t *dst,
 	if (IS_ERR(conn))
 		return conn;
 
-	conn->state = BT_CONNECT;
+	hci_conn_set_state(conn, BT_CONNECT);
 	conn->sid = sid;
 	conn->conn_timeout = timeout;
 
@@ -1633,7 +1633,7 @@ struct hci_conn *hci_connect_le_scan(struct hci_dev *hdev, bdaddr_t *dst,
 		return ERR_PTR(-EBUSY);
 	}
 
-	conn->state = BT_CONNECT;
+	hci_conn_set_state(conn, BT_CONNECT);
 	set_bit(HCI_CONN_SCANNING, &conn->flags);
 	conn->dst_type = dst_type;
 	conn->sec_level = BT_SECURITY_LOW;
@@ -2131,7 +2131,7 @@ struct hci_conn *hci_pa_create_sync(struct hci_dev *hdev, bdaddr_t *dst,
 	conn->iso_qos = *qos;
 	conn->dst_type = dst_type;
 	conn->sid = sid;
-	conn->state = BT_LISTEN;
+	hci_conn_set_state(conn, BT_LISTEN);
 	conn->conn_timeout = msecs_to_jiffies(qos->bcast.sync_timeout * 10);
 
 	hci_conn_hold(conn);
@@ -2193,7 +2193,7 @@ struct hci_conn *hci_bind_bis(struct hci_dev *hdev, bdaddr_t *dst, __u8 sid,
 					      HCI_ROLE_MASTER);
 	if (conn) {
 		memcpy(qos, &conn->iso_qos, sizeof(*qos));
-		conn->state = BT_CONNECTED;
+		hci_conn_set_state(conn, BT_CONNECTED);
 		return conn;
 	}
 
@@ -2221,7 +2221,7 @@ struct hci_conn *hci_bind_bis(struct hci_dev *hdev, bdaddr_t *dst, __u8 sid,
 			  hdev->le_tx_def_phys);
 
 	conn->iso_qos = *qos;
-	conn->state = BT_BOUND;
+	hci_conn_set_state(conn, BT_BOUND);
 
 	/* Link BISes together */
 	parent = hci_conn_hash_lookup_big(hdev,
@@ -2602,7 +2602,7 @@ void hci_conn_hash_flush(struct hci_dev *hdev)
 	while ((conn = list_first_entry_or_null(head,
 						struct hci_conn,
 						list)) != NULL) {
-		conn->state = BT_CLOSED;
+		hci_conn_set_state(conn, BT_CLOSED);
 		hci_disconn_cfm(conn, HCI_ERROR_LOCAL_HOST_TERM);
 		hci_conn_del(conn);
 	}
