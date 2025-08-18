@@ -2308,7 +2308,7 @@ void mmc_start_host(struct mmc_host *host)
 	bool power_up = !(host->caps2 &
 			 (MMC_CAP2_NO_PRESCAN_POWERUP | MMC_CAP2_SD_UHS2));
 
-	host->f_init = max(min(freqs[0], host->f_max), host->f_min);
+	host->f_init = clamp(freqs[0], host->f_min, host->f_max);
 	host->rescan_disable = 0;
 
 	if (power_up) {
