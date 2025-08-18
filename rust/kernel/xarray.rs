@@ -119,6 +119,7 @@ impl<T: ForeignOwnable> XArray<T> {
     }
 
     /// Attempts to lock the [`XArray`] for exclusive access.
+    #[inline]
     pub fn try_lock(&self) -> Option<Guard<'_, T>> {
         // SAFETY: `self.xa` is always valid by the type invariant.
         if (unsafe { bindings::xa_trylock(self.xa.get()) } != 0) {
@@ -132,6 +133,7 @@ impl<T: ForeignOwnable> XArray<T> {
     }
 
     /// Locks the [`XArray`] for exclusive access.
+    #[inline]
     pub fn lock(&self) -> Guard<'_, T> {
         // SAFETY: `self.xa` is always valid by the type invariant.
         unsafe { bindings::xa_lock(self.xa.get()) };
