@@ -839,7 +839,7 @@ int usbnet_stop (struct net_device *net)
 	pm = usb_autopm_get_interface(dev->intf);
 	/* allow minidriver to stop correctly (wireless devices to turn off
 	 * radio etc) */
-	if (info->stop) {
+	if (info->stop && !dev->suspend_count) {
 		retval = info->stop(dev);
 		if (retval < 0)
 			netif_info(dev, ifdown, dev->net,
