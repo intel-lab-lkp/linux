@@ -271,7 +271,7 @@ static void sev_decommission(unsigned int handle)
 static int kvm_rmp_make_shared(struct kvm *kvm, u64 pfn, enum pg_level level)
 {
 	if (KVM_BUG_ON(rmp_make_shared(pfn, level), kvm)) {
-		snp_leak_pages(pfn, page_level_size(level) >> PAGE_SHIFT);
+		snp_leak_pages(pfn, page_level_size(level) >> PAGE_SHIFT, false);
 		return -EIO;
 	}
 
@@ -300,7 +300,7 @@ static int snp_page_reclaim(struct kvm *kvm, u64 pfn)
 	data.paddr = __sme_set(pfn << PAGE_SHIFT);
 	rc = sev_do_cmd(SEV_CMD_SNP_PAGE_RECLAIM, &data, &fw_err);
 	if (KVM_BUG(rc, kvm, "Failed to reclaim PFN %llx, rc %d fw_err %d", pfn, rc, fw_err)) {
-		snp_leak_pages(pfn, 1);
+		snp_leak_pages(pfn, 1, false);
 		return -EIO;
 	}
 
