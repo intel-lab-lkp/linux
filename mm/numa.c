@@ -40,14 +40,14 @@ void __init alloc_offline_node_data(int nid)
 
 /* Stub functions: */
 
-#ifndef memory_add_physaddr_to_nid
-int memory_add_physaddr_to_nid(u64 start)
+#ifndef memory_get_phys_to_nid
+int memory_get_phys_to_nid(u64 start)
 {
 	pr_info_once("Unknown online node for memory at 0x%llx, assuming node 0\n",
 			start);
 	return 0;
 }
-EXPORT_SYMBOL_GPL(memory_add_physaddr_to_nid);
+EXPORT_SYMBOL_GPL(memory_get_phys_to_nid);
 #endif
 
 #ifndef phys_to_target_node

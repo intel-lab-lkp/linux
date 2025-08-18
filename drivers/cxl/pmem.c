@@ -410,7 +410,7 @@ static int cxl_pmem_region_probe(struct device *dev)
 	ndr_desc.res = res;
 	ndr_desc.provider_data = cxlr_pmem;
 
-	ndr_desc.numa_node = memory_add_physaddr_to_nid(res->start);
+	ndr_desc.numa_node = memory_get_phys_to_nid(res->start);
 	ndr_desc.target_node = phys_to_target_node(res->start);
 	if (ndr_desc.target_node == NUMA_NO_NODE) {
 		ndr_desc.target_node = ndr_desc.numa_node;

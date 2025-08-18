@@ -54,11 +54,11 @@ EXPORT_SYMBOL(__phys_mem_access_prot);
 static DEFINE_MUTEX(linear_mapping_mutex);
 
 #ifdef CONFIG_NUMA
-int memory_add_physaddr_to_nid(u64 start)
+int memory_get_phys_to_nid(u64 start)
 {
 	return hot_add_scn_to_nid(start);
 }
-EXPORT_SYMBOL_GPL(memory_add_physaddr_to_nid);
+EXPORT_SYMBOL_GPL(memory_get_phys_to_nid);
 #endif
 
 int __weak create_section_mapping(unsigned long start, unsigned long end,

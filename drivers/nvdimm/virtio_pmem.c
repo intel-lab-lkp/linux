@@ -100,7 +100,7 @@ static int virtio_pmem_probe(struct virtio_device *vdev)
 
 	ndr_desc.res = &res;
 
-	ndr_desc.numa_node = memory_add_physaddr_to_nid(res.start);
+	ndr_desc.numa_node = memory_get_phys_to_nid(res.start);
 	ndr_desc.target_node = phys_to_target_node(res.start);
 	if (ndr_desc.target_node == NUMA_NO_NODE) {
 		ndr_desc.target_node = ndr_desc.numa_node;

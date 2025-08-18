@@ -7,11 +7,11 @@
 
 #ifdef CONFIG_NUMA
 
-static inline int memory_add_physaddr_to_nid(u64 addr)
+static inline int memory_get_phys_to_nid(u64 addr)
 {
 	return 0;
 }
-#define memory_add_physaddr_to_nid memory_add_physaddr_to_nid
+#define memory_get_phys_to_nid memory_get_phys_to_nid
 
 static inline int phys_to_target_node(u64 start)
 {

@@ -33,8 +33,8 @@ int numa_nearest_node(int node, unsigned int state);
 
 int nearest_node_nodemask(int node, nodemask_t *mask);
 
-#ifndef memory_add_physaddr_to_nid
-int memory_add_physaddr_to_nid(u64 start);
+#ifndef memory_get_phys_to_nid
+int memory_get_phys_to_nid(u64 start);
 #endif
 
 #ifndef phys_to_target_node
@@ -54,7 +54,7 @@ static inline int nearest_node_nodemask(int node, nodemask_t *mask)
 	return NUMA_NO_NODE;
 }
 
-static inline int memory_add_physaddr_to_nid(u64 start)
+static inline int memory_get_phys_to_nid(u64 start)
 {
 	return 0;
 }

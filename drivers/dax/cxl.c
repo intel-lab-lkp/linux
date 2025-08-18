@@ -15,7 +15,7 @@ static int cxl_dax_region_probe(struct device *dev)
 	struct dev_dax_data data;
 
 	if (nid == NUMA_NO_NODE)
-		nid = memory_add_physaddr_to_nid(cxlr_dax->hpa_range.start);
+		nid = memory_get_phys_to_nid(cxlr_dax->hpa_range.start);
 
 	dax_region = alloc_dax_region(dev, cxlr->id, &cxlr_dax->hpa_range, nid,
 				      PMD_SIZE, IORESOURCE_DAX_KMEM);

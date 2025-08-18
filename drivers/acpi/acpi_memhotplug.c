@@ -183,7 +183,7 @@ static int acpi_memory_enable_device(struct acpi_memory_device *mem_device)
 			continue;
 		/* We want a single node for the whole memory group */
 		if (node < 0)
-			node = memory_add_physaddr_to_nid(info->start_addr);
+			node = memory_get_phys_to_nid(info->start_addr);
 		total_length += info->length;
 	}
 

@@ -14,8 +14,8 @@
 
 #ifdef CONFIG_MEMORY_HOTPLUG
 extern int remove_section_mapping(unsigned long start, unsigned long end);
-extern int memory_add_physaddr_to_nid(u64 start);
-#define memory_add_physaddr_to_nid memory_add_physaddr_to_nid
+extern int memory_get_phys_to_nid(u64 start);
+#define memory_get_phys_to_nid memory_get_phys_to_nid
 
 #ifdef CONFIG_NUMA
 extern int hot_add_scn_to_nid(unsigned long scn_addr);

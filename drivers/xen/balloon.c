@@ -284,7 +284,7 @@ static enum bp_state reserve_additional_memory(void)
 	if (!resource)
 		goto err;
 
-	nid = memory_add_physaddr_to_nid(resource->start);
+	nid = memory_get_phys_to_nid(resource->start);
 
 #ifdef CONFIG_XEN_HAVE_PVMMU
 	/*

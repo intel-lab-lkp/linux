@@ -725,7 +725,7 @@ static void hv_mem_hot_add(unsigned long start, unsigned long size,
 
 		reinit_completion(&dm_device.ol_waitevent);
 
-		nid = memory_add_physaddr_to_nid(PFN_PHYS(start_pfn));
+		nid = memory_get_phys_to_nid(PFN_PHYS(start_pfn));
 		ret = add_memory(nid, PFN_PHYS((start_pfn)),
 				 HA_BYTES_IN_CHUNK, MHP_MERGE_RESOURCE);
 
@@ -1701,8 +1701,8 @@ static int hot_add_enabled(void)
 {
 	/*
 	 * Disable hot add on ARM64, because we currently rely on
-	 * memory_add_physaddr_to_nid() to get a node id of a hot add range,
-	 * however ARM64's memory_add_physaddr_to_nid() always return 0 and
+	 * memory_get_phys_to_nid() to get a node id of a hot add range,
+	 * however ARM64's memory_get_phys_to_nid() always return 0 and
 	 * DM_MEM_HOT_ADD_REQUEST doesn't have the NUMA node information for
 	 * add_memory().
 	 */
