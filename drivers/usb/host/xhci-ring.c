@@ -1420,6 +1420,7 @@ static void xhci_handle_cmd_set_deq(struct xhci_hcd *xhci, int slot_id,
 	struct xhci_slot_ctx *slot_ctx;
 	struct xhci_stream_ctx *stream_ctx;
 	struct xhci_td *td, *tmp_td;
+	dma_addr_t deq;
 
 	ep_index = TRB_TO_EP_INDEX(le32_to_cpu(trb->generic.field[3]));
 	stream_id = TRB_TO_STREAM_ID(le32_to_cpu(trb->generic.field[2]));
@@ -1451,7 +1452,14 @@ static void xhci_handle_cmd_set_deq(struct xhci_hcd *xhci, int slot_id,
 
 		switch (cmd_comp_code) {
 		case COMP_TRB_ERROR:
-			xhci_warn(xhci, "WARN Set TR Deq Ptr cmd invalid because of stream ID configuration\n");
+			/*
+			 * Caused by incorrect Stream ID, already checked by xhci_virt_ep_to_ring(),
+			 * or failed boundary check. A failed boundary check means that Set TR Deq
+			 * command references memory that it doesn't have access to.
+			 */
+			deq = le64_to_cpu(trb->event_cmd.cmd_trb) & SCTX_DEQ_MASK;
+			xhci_warn(xhci, "Set TR Deq error stream %u boundary check failed TRB @%pad slot %d ep %u\n",
+				  stream_id, &deq, slot_id, ep_index);
 			break;
 		case COMP_CONTEXT_STATE_ERROR:
 			xhci_warn(xhci, "WARN Set TR Deq Ptr cmd failed due to incorrect slot or ep state.\n");
@@ -1478,7 +1486,6 @@ static void xhci_handle_cmd_set_deq(struct xhci_hcd *xhci, int slot_id,
 		 * cancelling URBs, which might not be an error...
 		 */
 	} else {
-		u64 deq;
 		/* 4.6.10 deq ptr is written to the stream ctx for streams */
 		if (ep->ep_state & EP_HAS_STREAMS) {
 			deq = le64_to_cpu(stream_ctx->stream_ring) & SCTX_DEQ_MASK;
@@ -1500,7 +1507,7 @@ static void xhci_handle_cmd_set_deq(struct xhci_hcd *xhci, int slot_id,
 			deq = le64_to_cpu(ep_ctx->deq) & ~EP_CTX_CYCLE_MASK;
 		}
 		xhci_dbg_trace(xhci, trace_xhci_dbg_cancel_urb,
-			"Successful Set TR Deq Ptr cmd, deq = @%08llx", deq);
+			"Successful Set TR Deq Ptr cmd, deq = @%pad", &deq);
 		if (xhci_trb_virt_to_dma(ep->queued_deq_seg,
 					 ep->queued_deq_ptr) == deq) {
 			/* Update the ring's dequeue segment and dequeue pointer
