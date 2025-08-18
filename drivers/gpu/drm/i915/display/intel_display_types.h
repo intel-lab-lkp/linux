@@ -1318,6 +1318,7 @@ struct intel_crtc_state {
 		u8 pipeline_full;
 		u16 flipline, vmin, vmax, guardband;
 		u32 vsync_end, vsync_start;
+		bool use_highest_mode;
 	} vrr;
 
 	/* Content Match Refresh Rate state */
