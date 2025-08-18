@@ -2719,3 +2719,88 @@ int v4l2_ctrl_new_fwnode_properties(struct v4l2_ctrl_handler *hdl,
 	return hdl->error;
 }
 EXPORT_SYMBOL(v4l2_ctrl_new_fwnode_properties);
+
+int v4l2_ctrl_new_single_cap_ctrls(struct v4l2_ctrl_handler *hdl,
+				   const struct v4l2_ctrl_ops *ctrl_ops)
+{
+	if (hdl->error)
+		return hdl->error;
+
+	v4l2_ctrl_new_std(hdl, ctrl_ops, V4L2_CID_EXPOSURE,
+			  0, 0, 1, 0);
+
+	v4l2_ctrl_new_std(hdl, ctrl_ops, V4L2_CID_ANALOGUE_GAIN,
+			  0, 0, 1, 0);
+
+	v4l2_ctrl_new_std(hdl, ctrl_ops, V4L2_CID_DIGITAL_GAIN,
+			  0, 0, 1, 0);
+
+	return hdl->error;
+}
+EXPORT_SYMBOL(v4l2_ctrl_new_single_cap_ctrls);
+
+struct v4l2_ctrl *__v4l2_get_multi_ctrl(struct v4l2_ctrl *ctrl_single)
+{
+	struct v4l2_ctrl_handler *hdl = ctrl_single->handler;
+	struct v4l2_ctrl_ref *ref;
+
+	switch (ctrl_single->id) {
+	case V4L2_CID_EXPOSURE:
+		ref = find_ref(hdl, V4L2_CID_EXPOSURE_MULTI);
+		break;
+	case V4L2_CID_ANALOGUE_GAIN:
+		ref = find_ref(hdl, V4L2_CID_AGAIN_MULTI);
+		break;
+	case V4L2_CID_DIGITAL_GAIN:
+		ref = find_ref(hdl, V4L2_CID_DGAIN_MULTI);
+		break;
+	default:
+		return NULL;
+	}
+
+	return ref->ctrl;
+}
+EXPORT_SYMBOL(__v4l2_get_multi_ctrl);
+
+struct v4l2_ctrl *__v4l2_get_single_ctrl(struct v4l2_ctrl *ctrl_multi)
+{
+	struct v4l2_ctrl_handler *hdl = ctrl_multi->handler;
+	struct v4l2_ctrl_ref *ref;
+
+	switch (ctrl_multi->id) {
+	case V4L2_CID_EXPOSURE_MULTI:
+		ref = find_ref(hdl, V4L2_CID_EXPOSURE);
+		break;
+	case V4L2_CID_AGAIN_MULTI:
+		ref = find_ref(hdl, V4L2_CID_ANALOGUE_GAIN);
+		break;
+	case V4L2_CID_DGAIN_MULTI:
+		ref = find_ref(hdl, V4L2_CID_DIGITAL_GAIN);
+		break;
+	default:
+		return NULL;
+	}
+
+	return ref->ctrl;
+}
+EXPORT_SYMBOL(__v4l2_get_single_ctrl);
+
+int __v4l2_s_ctrl_multi_to_single(struct v4l2_ctrl *ctrl_multi)
+{
+	struct v4l2_ctrl *ctrl_single = NULL;
+
+	if (!ctrl_multi)
+		return -EINVAL;
+
+	ctrl_single = __v4l2_get_single_ctrl(ctrl_multi);
+	/* don't fail if no corresponding single control is found */
+	if (!ctrl_single)
+		return 0;
+
+	/* update the value of the single control, without calling s_ctrl */
+	ctrl_single->cur.val = ctrl_multi->p_cur.p_u32[0];
+
+	return 0;
+}
+EXPORT_SYMBOL(__v4l2_s_ctrl_multi_to_single);
+

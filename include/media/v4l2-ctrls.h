@@ -1588,6 +1588,82 @@ int v4l2_ctrl_new_fwnode_properties(struct v4l2_ctrl_handler *hdl,
 				    const struct v4l2_fwnode_device_properties *p);
 
 /**
+ * v4l2_ctrl_new_single_cap_ctrls() - Register single capture controls for
+ *				      backward compatibility
+ *
+ * @hdl: pointer to &struct v4l2_ctrl_handler to register controls on
+ * @ctrl_ops: pointer to &struct v4l2_ctrl_ops to register controls with
+ *
+ * This function registers the single capture controls for exposure
+ * and gains, for backward compatibility with userspace applications that
+ * do not use yet the new, multi-capture controls.
+ *
+ * Currently, the following v4l2 controls are parsed and registered:
+ * - V4L2_CID_EXPOSURE
+ * - V4L2_CID_ANALOGUE_GAIN
+ * - V4L2_CID_DIGITAL_GAIN;
+ *
+ * Controls already registered by the caller with the @hdl control handler are
+ * not overwritten. Callers should register the controls they want to handle
+ * themselves before calling this function.
+ *
+ * Return: 0 on success, a negative error code on failure.
+ */
+int v4l2_ctrl_new_single_cap_ctrls(struct v4l2_ctrl_handler *hdl,
+				   const struct v4l2_ctrl_ops *ctrl_ops);
+
+/**
+ * __v4l2_get_multi_ctrl() - Return the multi-capture controls for a given
+ *			     single-capture control
+ *
+ * @ctrl_single: pointer to &struct v4l2_ctrl for the single-capture control
+ *
+ * This function finds the corresponding multi-capture control for a given
+ * single-capture control.
+ *
+ * This function assumes the control's handler is already locked,
+ * allowing it to be used from within the &v4l2_ctrl_ops functions.
+ *
+ * Return: a pointer to the multi-capture control if found, NULL otherwise.
+ */
+struct v4l2_ctrl *__v4l2_get_multi_ctrl(struct v4l2_ctrl *ctrl_single);
+
+/**
+ * __v4l2_get_single_ctrl() - Return the single-capture controls for a given
+ *			      multi-capture control
+ *
+ * @ctrl_multi: pointer to &struct v4l2_ctrl for the multi-capture control
+ *
+ * This function finds the corresponding single-capture control for a given
+ * multi-capture control.
+ *
+ * This function assumes the control's handler is already locked,
+ * allowing it to be used from within the &v4l2_ctrl_ops functions.
+ *
+ * Return: a pointer to the single-capture control if found, NULL otherwise.
+ */
+struct v4l2_ctrl *__v4l2_get_single_ctrl(struct v4l2_ctrl *ctrl_multi);
+
+/**
+ * __v4l2_s_ctrl_multi_to_single() - Set the single-capture control for a
+ *				     given multi-capture control
+ *
+ * @ctrl_multi: pointer to &struct v4l2_ctrl for the multi-capture control
+ *
+ * This function finds the corresponding single-capture control for a given
+ * multi-capture control, and updates single-capture control with the value
+ * from the first element of the multie-capture control, to ensure
+ * backward compatibility with older user-space applications that still use
+ * the single-capture exposure and gain controls.
+ *
+ * This function assumes the control's handler is already locked,
+ * allowing it to be used from within the &v4l2_ctrl_ops functions.
+ *
+ * Return: 0 on success, a negative error code on failure.
+ */
+int __v4l2_s_ctrl_multi_to_single(struct v4l2_ctrl *ctrl_multi);
+
+/**
  * v4l2_ctrl_type_op_equal - Default v4l2_ctrl_type_ops equal callback.
  *
  * @ctrl: The v4l2_ctrl pointer.
