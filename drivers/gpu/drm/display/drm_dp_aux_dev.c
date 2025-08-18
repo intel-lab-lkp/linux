@@ -52,8 +52,7 @@ struct drm_dp_aux_dev {
 
 #define DRM_AUX_MINORS	256
 #define AUX_MAX_OFFSET	(1 << 20)
-static DEFINE_IDR(aux_idr);
-static DEFINE_MUTEX(aux_idr_mutex);
+static DEFINE_XARRAY_ALLOC(aux_xa);
 static struct class *drm_dp_aux_dev_class;
 static int drm_dev_major = -1;
 
@@ -61,11 +60,11 @@ static struct drm_dp_aux_dev *drm_dp_aux_dev_get_by_minor(unsigned index)
 {
 	struct drm_dp_aux_dev *aux_dev = NULL;
 
-	mutex_lock(&aux_idr_mutex);
-	aux_dev = idr_find(&aux_idr, index);
+	xa_lock(&aux_xa);
+	aux_dev = xa_load(&aux_xa, index);
 	if (aux_dev && !kref_get_unless_zero(&aux_dev->refcount))
 		aux_dev = NULL;
-	mutex_unlock(&aux_idr_mutex);
+	xa_unlock(&aux_xa);
 
 	return aux_dev;
 }
@@ -73,7 +72,7 @@ static struct drm_dp_aux_dev *drm_dp_aux_dev_get_by_minor(unsigned index)
 static struct drm_dp_aux_dev *alloc_drm_dp_aux_dev(struct drm_dp_aux *aux)
 {
 	struct drm_dp_aux_dev *aux_dev;
-	int index;
+	int err;
 
 	aux_dev = kzalloc(sizeof(*aux_dev), GFP_KERNEL);
 	if (!aux_dev)
@@ -82,14 +81,12 @@ static struct drm_dp_aux_dev *alloc_drm_dp_aux_dev(struct drm_dp_aux *aux)
 	atomic_set(&aux_dev->usecount, 1);
 	kref_init(&aux_dev->refcount);
 
-	mutex_lock(&aux_idr_mutex);
-	index = idr_alloc(&aux_idr, aux_dev, 0, DRM_AUX_MINORS, GFP_KERNEL);
-	mutex_unlock(&aux_idr_mutex);
-	if (index < 0) {
+	err = xa_alloc(&aux_xa, &aux_dev->index,
+				XA_LIMIT(0, DRM_AUX_MINORS - 1), aux_dev, GFP_KERNEL);
+	if (err < 0) {
 		kfree(aux_dev);
-		return ERR_PTR(index);
+		return ERR_PTR(err);
 	}
-	aux_dev->index = index;
 
 	return aux_dev;
 }
@@ -250,22 +247,19 @@ static const struct file_operations auxdev_fops = {
 
 static struct drm_dp_aux_dev *drm_dp_aux_dev_get_by_aux(struct drm_dp_aux *aux)
 {
-	struct drm_dp_aux_dev *iter, *aux_dev = NULL;
-	int id;
+	struct drm_dp_aux_dev *aux_dev;
+	unsigned long id;
 
 	/* don't increase kref count here because this function should only be
 	 * used by drm_dp_aux_unregister_devnode. Thus, it will always have at
 	 * least one reference - the one that drm_dp_aux_register_devnode
 	 * created
 	 */
-	mutex_lock(&aux_idr_mutex);
-	idr_for_each_entry(&aux_idr, iter, id) {
-		if (iter->aux == aux) {
-			aux_dev = iter;
+	xa_for_each(&aux_xa, id, aux_dev) {
+		if (aux_dev->aux == aux)
 			break;
-		}
 	}
-	mutex_unlock(&aux_idr_mutex);
+
 	return aux_dev;
 }
 
@@ -284,9 +278,7 @@ void drm_dp_aux_unregister_devnode(struct drm_dp_aux *aux)
 	 */
 	aux->drm_dev = NULL;
 
-	mutex_lock(&aux_idr_mutex);
-	idr_remove(&aux_idr, aux_dev->index);
-	mutex_unlock(&aux_idr_mutex);
+	xa_erase(&aux_xa, aux_dev->index);
 
 	atomic_dec(&aux_dev->usecount);
 	wait_var_event(&aux_dev->usecount, !atomic_read(&aux_dev->usecount));
