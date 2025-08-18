@@ -127,6 +127,7 @@ xe-y += xe_bb.o \
 	xe_tuning.o \
 	xe_uc.o \
 	xe_uc_fw.o \
+	xe_userptr.o \
 	xe_vm.o \
 	xe_vram.o \
 	xe_vram_freq.o \
