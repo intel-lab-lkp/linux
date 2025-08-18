@@ -17,13 +17,13 @@ static inline bool vcpu_has_nv(const struct kvm_vcpu *vcpu)
 /* Translation helpers from non-VHE EL2 to EL1 */
 static inline u64 tcr_el2_ps_to_tcr_el1_ips(u64 tcr_el2)
 {
-	return (u64)FIELD_GET(TCR_EL2_PS_MASK, tcr_el2) << TCR_IPS_SHIFT;
+	return (u64)FIELD_GET(TCR_EL2_PS_MASK, tcr_el2) << TCR_EL1_IPS_SHIFT;
 }
 
 static inline u64 translate_tcr_el2_to_tcr_el1(u64 tcr)
 {
-	return TCR_EPD1_MASK |				/* disable TTBR1_EL1 */
-	       ((tcr & TCR_EL2_TBI) ? TCR_TBI0 : 0) |
+	return TCR_EL1_EPD1_MASK |			/* disable TTBR1_EL1 */
+	       ((tcr & TCR_EL2_TBI) ? TCR_EL1_TBI0 : 0) |
 	       tcr_el2_ps_to_tcr_el1_ips(tcr) |
 	       (tcr & TCR_EL2_TG0_MASK) |
 	       (tcr & TCR_EL2_ORGN0_MASK) |

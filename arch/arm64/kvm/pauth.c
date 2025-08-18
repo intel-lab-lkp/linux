@@ -73,11 +73,11 @@ static bool effective_tbi(struct kvm_vcpu *vcpu, bool bit55)
 		tbi = tcr & BIT(20);
 		tbid = tcr & BIT(29);
 	} else if (bit55) {
-		tbi = tcr & TCR_TBI1;
-		tbid = tcr & TCR_TBID1;
+		tbi = tcr & TCR_EL1_TBI1;
+		tbid = tcr & TCR_EL1_TBID1;
 	} else {
-		tbi = tcr & TCR_TBI0;
-		tbid = tcr & TCR_TBID0;
+		tbi = tcr & TCR_EL1_TBI0;
+		tbid = tcr & TCR_EL1_TBID0;
 	}
 
 	return tbi && !tbid;
@@ -91,9 +91,9 @@ static int compute_bottom_pac(struct kvm_vcpu *vcpu, bool bit55)
 	int txsz;
 
 	if (!vcpu_el2_e2h_is_set(vcpu) || !bit55)
-		txsz = FIELD_GET(TCR_T0SZ_MASK, tcr);
+		txsz = FIELD_GET(TCR_EL1_T0SZ_MASK, tcr);
 	else
-		txsz = FIELD_GET(TCR_T1SZ_MASK, tcr);
+		txsz = FIELD_GET(TCR_EL1_T1SZ_MASK, tcr);
 
 	return 64 - clamp(txsz, mintxsz, maxtxsz);
 }

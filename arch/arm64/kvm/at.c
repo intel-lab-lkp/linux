@@ -134,8 +134,8 @@ static int setup_s1_walk(struct kvm_vcpu *vcpu, struct s1_walk_info *wi,
 	tbi = (wi->regime == TR_EL2 ?
 	       FIELD_GET(TCR_EL2_TBI, tcr) :
 	       (va55 ?
-		FIELD_GET(TCR_TBI1, tcr) :
-		FIELD_GET(TCR_TBI0, tcr)));
+		FIELD_GET(TCR_EL1_TBI1, tcr) :
+		FIELD_GET(TCR_EL1_TBI0, tcr)));
 
 	if (!tbi && (u64)sign_extend64(va, 55) != va)
 		goto addrsz;
@@ -183,8 +183,8 @@ static int setup_s1_walk(struct kvm_vcpu *vcpu, struct s1_walk_info *wi,
 	wi->hpd &= (wi->regime == TR_EL2 ?
 		    FIELD_GET(TCR_EL2_HPD, tcr) :
 		    (va55 ?
-		     FIELD_GET(TCR_HPD1, tcr) :
-		     FIELD_GET(TCR_HPD0, tcr)));
+		     FIELD_GET(TCR_EL1_HPD1, tcr) :
+		     FIELD_GET(TCR_EL1_HPD0, tcr)));
 	/* R_JHSVW */
 	wi->hpd |= s1pie_enabled(vcpu, wi->regime);
 
@@ -196,28 +196,28 @@ static int setup_s1_walk(struct kvm_vcpu *vcpu, struct s1_walk_info *wi,
 
 	/* Someone was silly enough to encode TG0/TG1 differently */
 	if (va55) {
-		wi->txsz = FIELD_GET(TCR_T1SZ_MASK, tcr);
-		tg = FIELD_GET(TCR_TG1_MASK, tcr);
+		wi->txsz = FIELD_GET(TCR_EL1_T1SZ_MASK, tcr);
+		tg = FIELD_GET(TCR_EL1_TG1_MASK, tcr);
 
-		switch (tg << TCR_TG1_SHIFT) {
-		case TCR_TG1_4K:
+		switch (tg << TCR_EL1_TG1_SHIFT) {
+		case TCR_EL1_TG1_4K:
 			wi->pgshift = 12;	 break;
-		case TCR_TG1_16K:
+		case TCR_EL1_TG1_16K:
 			wi->pgshift = 14;	 break;
-		case TCR_TG1_64K:
+		case TCR_EL1_TG1_64K:
 		default:	    /* IMPDEF: treat any other value as 64k */
 			wi->pgshift = 16;	 break;
 		}
 	} else {
-		wi->txsz = FIELD_GET(TCR_T0SZ_MASK, tcr);
-		tg = FIELD_GET(TCR_TG0_MASK, tcr);
+		wi->txsz = FIELD_GET(TCR_EL1_T0SZ_MASK, tcr);
+		tg = FIELD_GET(TCR_EL1_TG0_MASK, tcr);
 
-		switch (tg << TCR_TG0_SHIFT) {
-		case TCR_TG0_4K:
+		switch (tg) {
+		case TCR_EL1_TG0_4K:
 			wi->pgshift = 12;	 break;
-		case TCR_TG0_16K:
+		case TCR_EL1_TG0_16K:
 			wi->pgshift = 14;	 break;
-		case TCR_TG0_64K:
+		case TCR_EL1_TG0_64K:
 		default:	    /* IMPDEF: treat any other value as 64k */
 			wi->pgshift = 16;	 break;
 		}
@@ -236,11 +236,11 @@ static int setup_s1_walk(struct kvm_vcpu *vcpu, struct s1_walk_info *wi,
 	switch (BIT(wi->pgshift)) {
 	case SZ_4K:
 		lva = kvm_has_feat(vcpu->kvm, ID_AA64MMFR0_EL1, TGRAN4, 52_BIT);
-		lva &= tcr & (wi->regime == TR_EL2 ? TCR_EL2_DS : TCR_DS);
+		lva &= tcr & (wi->regime == TR_EL2 ? TCR_EL2_DS : TCR_EL1_DS);
 		break;
 	case SZ_16K:
 		lva = kvm_has_feat(vcpu->kvm, ID_AA64MMFR0_EL1, TGRAN16, 52_BIT);
-		lva &= tcr & (wi->regime == TR_EL2 ? TCR_EL2_DS : TCR_DS);
+		lva &= tcr & (wi->regime == TR_EL2 ? TCR_EL2_DS : TCR_EL1_DS);
 		break;
 	case SZ_64K:
 		lva = kvm_has_feat(vcpu->kvm, ID_AA64MMFR2_EL1, VARange, 52);
@@ -259,12 +259,12 @@ static int setup_s1_walk(struct kvm_vcpu *vcpu, struct s1_walk_info *wi,
 
 	/* I_ZFSYQ */
 	if (wi->regime != TR_EL2 &&
-	    (tcr & (va55 ? TCR_EPD1_MASK : TCR_EPD0_MASK)))
+	    (tcr & (va55 ? TCR_EL1_EPD1_MASK : TCR_EL1_EPD0_MASK)))
 		goto transfault_l0;
 
 	/* R_BNDVG and following statements */
 	if (kvm_has_feat(vcpu->kvm, ID_AA64MMFR2_EL1, E0PD, IMP) &&
-	    wi->as_el0 && (tcr & (va55 ? TCR_E0PD1 : TCR_E0PD0)))
+	    wi->as_el0 && (tcr & (va55 ? TCR_EL1_E0PD1 : TCR_EL1_E0PD0)))
 		goto transfault_l0;
 
 	/* AArch64.S1StartLevel() */
@@ -272,7 +272,7 @@ static int setup_s1_walk(struct kvm_vcpu *vcpu, struct s1_walk_info *wi,
 	wi->sl = 3 - (((ia_bits - 1) - wi->pgshift) / stride);
 
 	ps = (wi->regime == TR_EL2 ?
-	      FIELD_GET(TCR_EL2_PS_MASK, tcr) : FIELD_GET(TCR_IPS_MASK, tcr));
+	      FIELD_GET(TCR_EL2_PS_MASK, tcr) : FIELD_GET(TCR_EL1_IPS_MASK, tcr));
 
 	wi->max_oa_bits = min(get_kvm_ipa_limit(), ps_to_output_size(ps));
 
@@ -421,13 +421,13 @@ static int walk_s1(struct kvm_vcpu *vcpu, struct s1_walk_info *wi,
 		switch (wi->regime) {
 		case TR_EL10:
 			tcr = vcpu_read_sys_reg(vcpu, TCR_EL1);
-			asid_ttbr = ((tcr & TCR_A1) ?
+			asid_ttbr = ((tcr & TCR_EL1_A1) ?
 				     vcpu_read_sys_reg(vcpu, TTBR1_EL1) :
 				     vcpu_read_sys_reg(vcpu, TTBR0_EL1));
 			break;
 		case TR_EL20:
 			tcr = vcpu_read_sys_reg(vcpu, TCR_EL2);
-			asid_ttbr = ((tcr & TCR_A1) ?
+			asid_ttbr = ((tcr & TCR_EL1_A1) ?
 				     vcpu_read_sys_reg(vcpu, TTBR1_EL2) :
 				     vcpu_read_sys_reg(vcpu, TTBR0_EL2));
 			break;
@@ -437,7 +437,7 @@ static int walk_s1(struct kvm_vcpu *vcpu, struct s1_walk_info *wi,
 
 		wr->asid = FIELD_GET(TTBR_ASID_MASK, asid_ttbr);
 		if (!kvm_has_feat_enum(vcpu->kvm, ID_AA64MMFR0_EL1, ASIDBITS, 16) ||
-		    !(tcr & TCR_ASID16))
+		    !(tcr & TCR_EL1_AS))
 			wr->asid &= GENMASK(7, 0);
 	}
 

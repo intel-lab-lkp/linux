@@ -717,7 +717,7 @@ static bool handle_ampere1_tcr(struct kvm_vcpu *vcpu)
 	 * Uphold the requirements of the architecture by masking guest writes
 	 * to TCR_EL1.{HA,HD} here.
 	 */
-	val &= ~(TCR_HD | TCR_HA);
+	val &= ~(TCR_EL1_HD | TCR_EL1_HA);
 	write_sysreg_el1(val, SYS_TCR);
 	__kvm_skip_instr(vcpu);
 	return true;

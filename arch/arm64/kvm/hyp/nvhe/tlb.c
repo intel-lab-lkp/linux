@@ -84,7 +84,7 @@ static void enter_vmid_context(struct kvm_s2_mmu *mmu,
 		 * temporarily enabled in the next context.
 		 */
 		val = cxt->tcr = read_sysreg_el1(SYS_TCR);
-		val |= TCR_EPD1_MASK | TCR_EPD0_MASK;
+		val |= TCR_EL1_EPD1_MASK | TCR_EL1_EPD0_MASK;
 		write_sysreg_el1(val, SYS_TCR);
 		isb();
 

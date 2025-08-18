@@ -1992,10 +1992,10 @@ static void __init cpu_prepare_hyp_mode(int cpu, u32 hyp_va_bits)
 
 	tcr = read_sysreg(tcr_el1);
 	if (cpus_have_final_cap(ARM64_KVM_HVHE)) {
-		tcr &= ~(TCR_HD | TCR_HA | TCR_A1 | TCR_T0SZ_MASK);
-		tcr |= TCR_EPD1_MASK;
+		tcr &= ~(TCR_EL1_HD | TCR_EL1_HA | TCR_EL1_A1 | TCR_EL1_T0SZ_MASK);
+		tcr |= TCR_EL1_EPD1_MASK;
 	} else {
-		unsigned long ips = FIELD_GET(TCR_IPS_MASK, tcr);
+		unsigned long ips = FIELD_GET(TCR_EL1_IPS_MASK, tcr);
 
 		tcr &= TCR_EL2_MASK;
 		tcr |= TCR_EL2_RES1 | FIELD_PREP(TCR_EL2_PS_MASK, ips);

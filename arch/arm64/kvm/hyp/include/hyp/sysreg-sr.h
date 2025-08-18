@@ -195,7 +195,7 @@ static inline void __sysreg_restore_el1_state(struct kvm_cpu_context *ctxt,
 		 * set. Pairs with nVHE's __activate_traps().
 		 */
 		write_sysreg_el1((ctxt_sys_reg(ctxt, TCR_EL1) |
-				  TCR_EPD1_MASK | TCR_EPD0_MASK),
+				  TCR_EL1_EPD1_MASK | TCR_EL1_EPD0_MASK),
 				 SYS_TCR);
 		isb();
 	}
