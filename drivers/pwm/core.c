@@ -2620,7 +2620,7 @@ static int pwm_seq_show(struct seq_file *s, void *v)
 		   (char *)s->private, chip->id,
 		   pwmchip_parent(chip)->bus ? pwmchip_parent(chip)->bus->name : "no-bus",
 		   dev_name(pwmchip_parent(chip)), chip->npwm,
-		   (chip->npwm != 1) ? "s" : "");
+		   str_plural(chip->npwm));
 
 	pwm_dbg_show(chip, s);
 
