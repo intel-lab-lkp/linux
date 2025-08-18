@@ -1172,6 +1172,17 @@ static const char * const qmp_phy_vreg_l[] = {
 	"vdda-phy", "vdda-pll",
 };
 
+/* Regulator load arrays for specific configurations */
+static const int sm8650_vreg_load_ua[] = {
+	205000, /* vdda-phy */
+	17500,  /* vdda-pll */
+};
+
+static const int sm8750_vreg_load_ua[] = {
+	213000, /* vdda-phy */
+	18300,  /* vdda-pll */
+};
+
 static const struct qmp_ufs_offsets qmp_ufs_offsets = {
 	.serdes		= 0,
 	.pcs		= 0xc00,
@@ -1642,6 +1653,7 @@ static const struct qmp_phy_cfg sm8650_ufsphy_cfg = {
 
 	.vreg_list		= qmp_phy_vreg_l,
 	.num_vregs		= ARRAY_SIZE(qmp_phy_vreg_l),
+	.vreg_load_ua		= sm8650_vreg_load_ua,
 	.regs			= ufsphy_v6_regs_layout,
 };
 
@@ -1680,6 +1692,7 @@ static const struct qmp_phy_cfg sm8750_ufsphy_cfg = {
 
 	.vreg_list		= qmp_phy_vreg_l,
 	.num_vregs		= ARRAY_SIZE(qmp_phy_vreg_l),
+	.vreg_load_ua		= sm8750_vreg_load_ua,
 	.regs			= ufsphy_v6_regs_layout,
 
 };
