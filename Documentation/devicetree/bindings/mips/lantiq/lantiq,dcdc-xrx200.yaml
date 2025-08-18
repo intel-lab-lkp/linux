@@ -1,0 +1,38 @@
+# SPDX-License-Identifier: GPL-2.0-only OR BSD-2-Clause
+%YAML 1.2
+---
+$id: http://devicetree.org/schemas/mips/lantiq/lantiq,dcdc-xrx200.yaml#
+$schema: http://devicetree.org/meta-schemas/core.yaml#
+
+title: Lantiq DCDC (DC-DC converter with voltage sensor)
+
+maintainers:
+  - Aleksander Jan Bajkowski <olek2@wp.pl>
+
+description:
+  Lantiq DCDC is a voltage converter with a voltage sensor. The converter is
+  inside the xRX200 SoC. This driver only reads the voltage and prints it at
+  startup. The voltage supplied by this converter powers one of the power
+  domains. It powers the CPU core and probably other peripherals as well.
+
+properties:
+  compatible:
+    items:
+      - enum:
+          - lantiq,dcdc-xrx200
+
+  reg:
+    maxItems: 1
+
+required:
+  - compatible
+  - reg
+
+additionalProperties: false
+
+examples:
+  - |
+    dcdc@106a00 {
+        compatible = "lantiq,dcdc-xrx200";
+        reg = <0x106a00 0x200>;
+    };
