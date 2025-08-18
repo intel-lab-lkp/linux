@@ -4402,6 +4402,63 @@ Field	1	PIE
 Field	0	PnCH
 EndSysreg
 
+Sysreg	VTCR_EL2	3	4	2	1	2
+Res0	63:46
+Field	45	HDBSS
+Field	44	HAFT
+Res0	43:42
+Field	41	TL0
+Field	40	GCSH
+Res0	39
+Field	38	D128
+Field	37	S2POE
+Field	36	S2PIE
+Field	35	TL1
+Field	34	AssuredOnly
+Field	33	SL2
+Field	32	DS
+Res1	31
+Field	30	NSA
+Field	29	NSW
+Field	28	HWU62
+Field	27	HWU61
+Field	26	HWU60
+Field	25	HWU59
+Res0	24:23
+Field	22	HD
+Field	21	HA
+Res0	20
+UnsignedEnum	19	VS
+	0b0	8BIT
+	0b1	16BIT
+EndEnum
+Field	18:16	PS
+UnsignedEnum	15:14	TG0
+		0b00	4K
+		0b01	64K
+		0b10	16K
+EndEnum
+UnsignedEnum	13:12	SH0
+		0b00	NONE
+		0b10	OUTER
+		0b11	INNER
+EndEnum
+UnsignedEnum	11:10	ORGN0
+	0b00	NC
+	0b01	WBWA
+	0b10	WT
+	0b11	WBnWA
+EndEnum
+UnsignedEnum	9:8	IRGN0
+	0b00	NC
+	0b01	WBWA
+	0b10	WT
+	0b11	WBnWA
+EndEnum
+Field	7:6	SL0
+Field	5:0	T0SZ
+EndSysreg
+
 SysregFields MAIR2_ELx
 Field	63:56	Attr7
 Field	55:48	Attr6
