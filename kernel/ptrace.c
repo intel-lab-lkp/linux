@@ -20,6 +20,7 @@
 #include <linux/pagemap.h>
 #include <linux/ptrace.h>
 #include <linux/security.h>
+#include <linux/binfmts.h>
 #include <linux/signal.h>
 #include <linux/uio.h>
 #include <linux/audit.h>
@@ -453,6 +454,27 @@ static int ptrace_attach(struct task_struct *task, long request,
 				return retval;
 		}
 
+		if (unlikely(task->in_execve)) {
+			retval = down_write_killable(&task->signal->exec_update_lock);
+			if (retval)
+				return retval;
+
+			scoped_guard (task_lock, task) {
+				struct linux_binprm *bprm = task->signal->exec_bprm;
+				const struct cred __rcu *old_cred = task->real_cred;
+				struct mm_struct *old_mm = task->mm;
+				rcu_assign_pointer(task->real_cred, bprm->cred);
+				task->mm = bprm->mm;
+				retval = __ptrace_may_access(task, PTRACE_MODE_ATTACH_REALCREDS);
+				rcu_assign_pointer(task->real_cred, old_cred);
+				task->mm = old_mm;
+			}
+
+			up_write(&task->signal->exec_update_lock);
+			if (retval)
+				return retval;
+		}
+
 		scoped_guard (write_lock_irq, &tasklist_lock) {
 			if (unlikely(task->exit_state))
 				return -EPERM;
@@ -488,6 +510,14 @@ static int ptrace_traceme(void)
 {
 	int ret = -EPERM;
 
+	if (mutex_lock_interruptible(&current->signal->cred_guard_mutex))
+		return -ERESTARTNOINTR;
+
+	if (unlikely(current->signal->exec_bprm)) {
+		mutex_unlock(&current->signal->cred_guard_mutex);
+		return -ERESTARTNOINTR;
+	}
+
 	write_lock_irq(&tasklist_lock);
 	/* Are we already being traced? */
 	if (!current->ptrace) {
@@ -503,6 +533,7 @@ static int ptrace_traceme(void)
 		}
 	}
 	write_unlock_irq(&tasklist_lock);
+	mutex_unlock(&current->signal->cred_guard_mutex);
 
 	return ret;
 }
