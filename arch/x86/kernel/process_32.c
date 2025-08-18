@@ -56,6 +56,7 @@
 
 #include "process.h"
 
+__no_sanitize_address
 void __show_regs(struct pt_regs *regs, enum show_regs_mode mode,
 		 const char *log_lvl)
 {
