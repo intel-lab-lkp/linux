@@ -1,0 +1,94 @@
+# SPDX-License-Identifier: (GPL-2.0-only OR BSD-2-Clause)
+%YAML 1.2
+---
+$id: http://devicetree.org/schemas/power/mediatek,mt8189-power-controller.yaml#
+$schema: http://devicetree.org/meta-schemas/core.yaml#
+
+title: MediaTek Power Domains Controller for MT8189
+
+maintainers:
+  - Qiqi Wang <qiqi.wang@mediatek.com>
+
+description: |
+  MediaTek processors include support for multiple power domains which can be
+  powered up/down by software based on different application scenes to save power.
+
+  IP cores belonging to a power domain should contain a 'power-domains'
+  property that is a phandle for SCPSYS node representing the domain.
+
+properties:
+  $nodename:
+    pattern: '^power-controller(@[0-9a-f]+)?$'
+
+  compatible:
+    enum:
+      - mediatek,mt8189-scpsys
+
+  '#power-domain-cells':
+    const: 1
+
+  reg:
+    description: physical base address and size of the power-controller's register area.
+
+  infra-infracfg-ao-reg-bus:
+    $ref: /schemas/types.yaml#/definitions/phandle
+    description: phandle to the device containing the infracfg register range.
+
+  emicfg-ao-mem:
+    $ref: /schemas/types.yaml#/definitions/phandle
+    description: phandle to the device containing the emicfg register range.
+
+  vlpcfg-reg-bus:
+    $ref: /schemas/types.yaml#/definitions/phandle
+    description: phandle to the device containing the vlpcfg (very low power config) register range.
+
+  clocks:
+    description: |
+      A number of phandles to clocks that need to be enabled during domain
+      power-up sequencing.
+
+  clock-names:
+    description: |
+      List of names of clocks, in order to match the power-up sequencing
+      for each power domain we need to group the clocks by name. BASIC
+      clocks need to be enabled before enabling the corresponding power
+      domain, and should not have a '-' in their name (i.e mm, mfg, venc).
+      SUSBYS clocks need to be enabled before releasing the bus protection,
+      and should contain a '-' in their name (i.e mm-0, isp-0, cam-0).
+
+      In order to follow properly the power-up sequencing, the clocks must
+      be specified by order, adding first the BASIC clocks followed by the
+      SUSBSYS clocks.
+
+  domain-supply:
+    description: domain regulator supply.
+
+required:
+  - compatible
+  - reg
+
+additionalProperties: false
+
+examples:
+  - |
+    #include <dt-bindings/clock/mt8189-clk.h>
+    #include <dt-bindings/power/mt8189-power.h>
+
+    soc {
+        #address-cells = <2>;
+        #size-cells = <2>;
+        scpsys: power-controller@1c001000 {
+            compatible = "mediatek,mt8189-scpsys";
+            reg = <0 0x1c001000 0 0x1000>;
+            #power-domain-cells = <1>;
+            infra-infracfg-ao-reg-bus = <&infracfg_ao_clk>;
+            emicfg-ao-mem = <&emicfg_ao_mem_clk>;
+            vlpcfg-reg-bus = <&vlpcfg_reg_bus_clk>;
+            clocks = /* MFG */
+                <&topckgen_clk CLK_TOP_MFG_REF_SEL>,
+                <&apmixedsys_clk CLK_APMIXED_MFGPLL>;
+            clock-names = "mfg", "mfg_top";
+            mfg0-supply = <&mt6359_vproc1_buck_reg>;
+            mfg1-supply = <&mt6359_vsram_proc1_ldo_reg>;
+        };
+    };
