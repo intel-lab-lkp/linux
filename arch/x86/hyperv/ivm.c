@@ -462,6 +462,150 @@ void hv_ivm_msr_read(u64 msr, u64 *value)
 }
 
 /*
+ * Keep track of the PFN regions which were shared with the host. The access
+ * must be revoked upon kexec/kdump (see hv_ivm_clear_host_access()).
+ */
+struct hv_enc_pfn_region {
+	struct list_head list;
+	u64 pfn;
+	int count;
+};
+
+static LIST_HEAD(hv_list_enc);
+static DEFINE_RAW_SPINLOCK(hv_list_enc_lock);
+
+static int hv_list_enc_add(const u64 *pfn_list, int count)
+{
+	struct hv_enc_pfn_region *ent;
+	unsigned long flags;
+	bool found = false;
+	u64 pfn;
+	int i;
+
+	for (i = 0; i < count; i++) {
+		pfn = pfn_list[i];
+
+		found = false;
+		raw_spin_lock_irqsave(&hv_list_enc_lock, flags);
+		list_for_each_entry(ent, &hv_list_enc, list) {
+			if ((ent->pfn <= pfn) && (ent->pfn + ent->count - 1 >= pfn)) {
+				/* Nothin to do - pfn is already in the list */
+				found = true;
+			} else if (ent->pfn + ent->count == pfn) {
+				/* Grow existing region up */
+				found = true;
+				ent->count++;
+			} else if (pfn + 1 == ent->pfn) {
+				/* Grow existing region down */
+				found = true;
+				ent->pfn--;
+				ent->count++;
+			}
+		};
+		raw_spin_unlock_irqrestore(&hv_list_enc_lock, flags);
+
+		if (found)
+			continue;
+
+		/* No adajacent region found -- creating a new one */
+		ent = kzalloc(sizeof(struct hv_enc_pfn_region), GFP_KERNEL);
+		if (!ent)
+			return -ENOMEM;
+
+		ent->pfn = pfn;
+		ent->count = 1;
+
+		raw_spin_lock_irqsave(&hv_list_enc_lock, flags);
+		list_add(&ent->list, &hv_list_enc);
+		raw_spin_unlock_irqrestore(&hv_list_enc_lock, flags);
+	}
+
+	return 0;
+}
+
+static void hv_list_enc_remove(const u64 *pfn_list, int count)
+{
+	struct hv_enc_pfn_region *ent, *t;
+	unsigned long flags;
+	u64 pfn;
+	int i;
+
+	for (i = 0; i < count; i++) {
+		pfn = pfn_list[i];
+
+		raw_spin_lock_irqsave(&hv_list_enc_lock, flags);
+		list_for_each_entry_safe(ent, t, &hv_list_enc, list) {
+			if (pfn == ent->pfn + count - 1) {
+				/* Removing tail pfn */
+				ent->count--;
+				if (!ent->count) {
+					list_del(&ent->list);
+					kfree(ent);
+				}
+			} else if (pfn == ent->pfn) {
+				/* Removing head pfn */
+				ent->count--;
+				ent->pfn++;
+				if (!ent->count) {
+					list_del(&ent->list);
+					kfree(ent);
+				}
+			}
+
+			/*
+			 * Removing PFNs in the middle of a region is not implemented; the
+			 * list is currently only used for cleanup upon kexec and there's
+			 * no harm done if we issue an extra unneeded hypercall making some
+			 * region encrypted when it already is.
+			 */
+		};
+		raw_spin_unlock_irqrestore(&hv_list_enc_lock, flags);
+	}
+}
+
+void hv_ivm_clear_host_access(void)
+{
+	struct hv_gpa_range_for_visibility *input;
+	struct hv_enc_pfn_region *ent;
+	unsigned long flags;
+	u64 hv_status;
+	int cur, i;
+
+	if (!hv_is_isolation_supported())
+		return;
+
+	raw_spin_lock_irqsave(&hv_list_enc_lock, flags);
+
+	input = *this_cpu_ptr(hyperv_pcpu_input_arg);
+	if (!input)
+		goto unlock;
+
+	list_for_each_entry(ent, &hv_list_enc, list) {
+		for (i = 0, cur = 0; i < ent->count; i++) {
+			input->gpa_page_list[cur] = ent->pfn + i;
+			cur++;
+
+			if (cur == HV_MAX_MODIFY_GPA_REP_COUNT || i == ent->count - 1) {
+				input->partition_id = HV_PARTITION_ID_SELF;
+				input->host_visibility = VMBUS_PAGE_NOT_VISIBLE;
+				input->reserved0 = 0;
+				input->reserved1 = 0;
+				hv_status = hv_do_rep_hypercall(
+					HVCALL_MODIFY_SPARSE_GPA_PAGE_HOST_VISIBILITY,
+					cur, 0, input, NULL);
+				WARN_ON_ONCE(!hv_result_success(hv_status));
+				cur = 0;
+			}
+		}
+
+	};
+
+unlock:
+	raw_spin_unlock_irqrestore(&hv_list_enc_lock, flags);
+}
+EXPORT_SYMBOL_GPL(hv_ivm_clear_host_access);
+
+/*
  * hv_mark_gpa_visibility - Set pages visible to host via hvcall.
  *
  * In Isolation VM, all guest memory is encrypted from host and guest
@@ -474,6 +618,7 @@ static int hv_mark_gpa_visibility(u16 count, const u64 pfn[],
 	struct hv_gpa_range_for_visibility *input;
 	u64 hv_status;
 	unsigned long flags;
+	int ret;
 
 	/* no-op if partition isolation is not enabled */
 	if (!hv_is_isolation_supported())
@@ -483,6 +628,14 @@ static int hv_mark_gpa_visibility(u16 count, const u64 pfn[],
 		pr_err("Hyper-V: GPA count:%d exceeds supported:%lu\n", count,
 			HV_MAX_MODIFY_GPA_REP_COUNT);
 		return -EINVAL;
+	}
+
+	if (visibility == VMBUS_PAGE_NOT_VISIBLE) {
+		hv_list_enc_remove(pfn, count);
+	} else {
+		ret = hv_list_enc_add(pfn, count);
+		if (ret)
+			return ret;
 	}
 
 	local_irq_save(flags);
