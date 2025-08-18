@@ -1472,11 +1472,29 @@ static void xhci_handle_cmd_set_deq(struct xhci_hcd *xhci, int slot_id,
 				goto td_cleanup;
 			}
 
-			xhci_warn(xhci, "WARN Set TR Deq Ptr cmd failed due to incorrect ep state.\n");
 			ep_state = GET_EP_CTX_STATE(ep_ctx);
-			xhci_dbg_trace(xhci, trace_xhci_dbg_cancel_urb,
-					"Slot state = %u, EP state = %u",
-					slot_state, ep_state);
+			switch (ep_state) {
+			case EP_STATE_DISABLED:
+				xhci_warn(xhci, "Set TR Deq error slot %d ep %u is Disabled\n",
+					  slot_id, ep_index);
+				goto td_cleanup;
+			case EP_STATE_RUNNING:
+				xhci_warn(xhci, "Set TR Deq error ep Running slot %d ep %u ep flag 0x%x\n",
+					  slot_id, ep_index, ep->ep_state);
+				break;
+			case EP_STATE_HALTED:
+				xhci_warn(xhci, "Set TR Deq error ep Halted slot %d ep %u ep flag 0x%x\n",
+					  slot_id, ep_index, ep->ep_state);
+				break;
+			case EP_STATE_STOPPED:
+			case EP_STATE_ERROR:
+				xhci_warn(xhci, "Set TR Deq error with correct states, reissuing the command\n");
+				list_for_each_entry(td, &ep->cancelled_td_list, cancelled_td_list) {
+					if (td->cancel_status == TD_CLEARING_CACHE)
+						td->cancel_status = TD_DIRTY;
+				}
+				goto cleanup;
+			}
 			break;
 		default:
 			xhci_warn(xhci, "WARN Set TR Deq Ptr cmd with unknown completion code of %u.\n",
