@@ -747,6 +747,9 @@ xfs_buf_read_map(
 		/* bad CRC means corrupted metadata */
 		if (error == -EFSBADCRC)
 			error = -EFSCORRUPTED;
+		/* ENODATA == ENOATTR which confuses xattr layers */
+		if (error == -ENODATA)
+			error = -EIO;
 		return error;
 	}
 
