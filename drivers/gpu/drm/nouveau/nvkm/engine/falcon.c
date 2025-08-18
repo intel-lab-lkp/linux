@@ -262,6 +262,7 @@ nvkm_falcon_init(struct nvkm_engine *engine)
 	/* upload firmware bootloader (or the full code segments) */
 	if (falcon->core) {
 		u64 addr = nvkm_memory_addr(falcon->core);
+
 		if (device->card_type < NV_C0)
 			nvkm_wr32(device, base + 0x618, 0x04000000);
 		else
@@ -341,8 +342,10 @@ nvkm_falcon_new_(const struct nvkm_falcon_func *func, struct nvkm_device *device
 {
 	struct nvkm_falcon *falcon;
 
-	if (!(falcon = kzalloc(sizeof(*falcon), GFP_KERNEL)))
+	falcon = kzalloc(sizeof(*falcon), GFP_KERNEL);
+	if (!falcon)
 		return -ENOMEM;
+
 	falcon->func = func;
 	falcon->addr = addr;
 	falcon->code.data = func->code.data;
