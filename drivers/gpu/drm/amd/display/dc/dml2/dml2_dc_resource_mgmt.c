@@ -500,12 +500,7 @@ static void sort_pipes_for_splitting(struct dc_plane_pipe_pool *pipes)
 
 			if (cur_index == pipes->num_pipes_assigned_to_plane_for_mpcc_combine - 1) {
 				cur_index = 0;
-
-				if (swapped)
-					sorted = false;
-				else
-					sorted = true;
-
+				sorted = !swapped;
 				swapped = false;
 			}
 
