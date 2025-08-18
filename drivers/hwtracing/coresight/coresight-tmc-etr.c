@@ -1263,7 +1263,7 @@ static struct etr_buf *tmc_etr_get_sysfs_buffer(struct coresight_device *csdev)
 		raw_spin_lock_irqsave(&drvdata->spinlock, flags);
 	}
 
-	if (drvdata->reading || coresight_get_mode(csdev) == CS_MODE_PERF) {
+	if (drvdata->reading) {
 		ret = -EBUSY;
 		goto out;
 	}
@@ -1300,20 +1300,18 @@ static int tmc_enable_etr_sink_sysfs(struct coresight_device *csdev)
 	raw_spin_lock_irqsave(&drvdata->spinlock, flags);
 
 	/*
-	 * In sysFS mode we can have multiple writers per sink.  Since this
-	 * sink is already enabled no memory is needed and the HW need not be
-	 * touched, even if the buffer size has changed.
+	 * When two sysfs sessions race to acquire an idle sink, both may enter
+	 * this function. We need to recheck if the sink is already in use to
+	 * prevent duplicate hardware configuration.
 	 */
-	if (coresight_get_mode(csdev) == CS_MODE_SYSFS) {
+	if (csdev->refcnt) {
 		csdev->refcnt++;
 		goto out;
 	}
 
 	ret = tmc_etr_enable_hw(drvdata, sysfs_buf);
-	if (!ret) {
-		coresight_set_mode(csdev, CS_MODE_SYSFS);
+	if (!ret)
 		csdev->refcnt++;
-	}
 
 out:
 	raw_spin_unlock_irqrestore(&drvdata->spinlock, flags);
@@ -1729,39 +1727,24 @@ static int tmc_enable_etr_sink_perf(struct coresight_device *csdev, void *data)
 {
 	int rc = 0;
 	pid_t pid;
-	unsigned long flags;
 	struct tmc_drvdata *drvdata = dev_get_drvdata(csdev->dev.parent);
 	struct perf_output_handle *handle = data;
 	struct etr_perf_buffer *etr_perf = etm_perf_sink_config(handle);
 
-	raw_spin_lock_irqsave(&drvdata->spinlock, flags);
-	 /* Don't use this sink if it is already claimed by sysFS */
-	if (coresight_get_mode(csdev) == CS_MODE_SYSFS) {
-		rc = -EBUSY;
-		goto unlock_out;
-	}
-
-	if (WARN_ON(!etr_perf || !etr_perf->etr_buf)) {
-		rc = -EINVAL;
-		goto unlock_out;
-	}
+	if (WARN_ON(!etr_perf || !etr_perf->etr_buf))
+		return -EINVAL;
 
 	/* Get a handle on the pid of the session owner */
 	pid = etr_perf->pid;
 
 	/* Do not proceed if this device is associated with another session */
-	if (drvdata->pid != -1 && drvdata->pid != pid) {
-		rc = -EBUSY;
-		goto unlock_out;
-	}
+	if (drvdata->pid != -1 && drvdata->pid != pid)
+		return -EBUSY;
 
-	/*
-	 * No HW configuration is needed if the sink is already in
-	 * use for this session.
-	 */
+	/* The sink is already in use for this session */
 	if (drvdata->pid == pid) {
 		csdev->refcnt++;
-		goto unlock_out;
+		return rc;
 	}
 
 	rc = tmc_etr_enable_hw(drvdata, etr_perf->etr_buf);
@@ -1773,22 +1756,43 @@ static int tmc_enable_etr_sink_perf(struct coresight_device *csdev, void *data)
 		csdev->refcnt++;
 	}
 
-unlock_out:
-	raw_spin_unlock_irqrestore(&drvdata->spinlock, flags);
 	return rc;
 }
 
 static int tmc_enable_etr_sink(struct coresight_device *csdev,
 			       enum cs_mode mode, void *data)
 {
-	switch (mode) {
-	case CS_MODE_SYSFS:
-		return tmc_enable_etr_sink_sysfs(csdev);
-	case CS_MODE_PERF:
-		return tmc_enable_etr_sink_perf(csdev, data);
-	default:
-		return -EINVAL;
+	struct tmc_drvdata *drvdata = dev_get_drvdata(csdev->dev.parent);
+	int rc;
+
+	scoped_guard(raw_spinlock_irqsave, &drvdata->spinlock) {
+		if (coresight_get_mode(csdev) != CS_MODE_DISABLED &&
+		    coresight_get_mode(csdev) != mode)
+			return -EBUSY;
+
+		switch (mode) {
+		case CS_MODE_SYSFS:
+			if (csdev->refcnt) {
+				/* The sink is already enabled */
+				csdev->refcnt++;
+				return 0;
+			}
+			coresight_set_mode(csdev, mode);
+			break;
+		case CS_MODE_PERF:
+			return tmc_enable_etr_sink_perf(csdev, data);
+		default:
+			return -EINVAL;
+		}
 	}
+
+	rc = tmc_enable_etr_sink_sysfs(csdev);
+	if (rc) {
+		scoped_guard(raw_spinlock_irqsave, &drvdata->spinlock)
+		coresight_set_mode(csdev, CS_MODE_DISABLED);
+	}
+
+	return rc;
 }
 
 static int tmc_disable_etr_sink(struct coresight_device *csdev)
