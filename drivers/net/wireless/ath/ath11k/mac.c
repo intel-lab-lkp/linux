@@ -7936,10 +7936,8 @@ static void ath11k_mac_parse_tx_pwr_env(struct ath11k *ar,
 			    "no transmit power envelope match client power type %d\n",
 			    client_type);
 		return;
-	} else if (!reg_tpe_count) {
-		use_local_tpe = true;
 	} else {
-		use_local_tpe = false;
+		use_local_tpe = !reg_tpe_count;
 	}
 
 	if (use_local_tpe) {
