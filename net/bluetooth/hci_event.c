@@ -947,8 +947,8 @@ static u8 hci_cc_read_buffer_size(struct hci_dev *hdev, void *data,
 	hdev->acl_cnt = hdev->acl_pkts;
 	hdev->sco_cnt = hdev->sco_pkts;
 
-	BT_DBG("%s acl mtu %d:%d sco mtu %d:%d", hdev->name, hdev->acl_mtu,
-	       hdev->acl_pkts, hdev->sco_mtu, hdev->sco_pkts);
+	bt_dev_dbg(hdev, "acl mtu %d:%d sco mtu %d:%d", hdev->acl_mtu,
+		   hdev->acl_pkts, hdev->sco_mtu, hdev->sco_pkts);
 
 	if (!hdev->acl_mtu || !hdev->acl_pkts)
 		return HCI_ERROR_INVALID_PARAMETERS;
@@ -1214,7 +1214,7 @@ static u8 hci_cc_le_read_buffer_size(struct hci_dev *hdev, void *data,
 
 	hdev->le_cnt = hdev->le_pkts;
 
-	BT_DBG("%s le mtu %d:%d", hdev->name, hdev->le_mtu, hdev->le_pkts);
+	bt_dev_dbg(hdev, "le mtu %d:%d", hdev->le_mtu, hdev->le_pkts);
 
 	if (hdev->le_mtu && hdev->le_mtu < HCI_MIN_LE_MTU)
 		return HCI_ERROR_INVALID_PARAMETERS;
@@ -1227,7 +1227,7 @@ static u8 hci_cc_le_read_local_features(struct hci_dev *hdev, void *data,
 {
 	struct hci_rp_le_read_local_features *rp = data;
 
-	BT_DBG("%s status 0x%2.2x", hdev->name, rp->status);
+	bt_dev_dbg(hdev, "status 0x%2.2x", rp->status);
 
 	if (rp->status)
 		return rp->status;
@@ -2921,7 +2921,7 @@ static void hci_cs_switch_role(struct hci_dev *hdev, u8 status)
 	struct hci_cp_switch_role *cp;
 	struct hci_conn *conn;
 
-	BT_DBG("%s status 0x%2.2x", hdev->name, status);
+	bt_dev_dbg(hdev, "status 0x%2.2x", status);
 
 	if (!status)
 		return;
@@ -3753,8 +3753,8 @@ static u8 hci_cc_le_read_buffer_size_v2(struct hci_dev *hdev, void *data,
 	hdev->le_cnt  = hdev->le_pkts;
 	hdev->iso_cnt = hdev->iso_pkts;
 
-	BT_DBG("%s acl mtu %d:%d iso mtu %d:%d", hdev->name, hdev->acl_mtu,
-	       hdev->acl_pkts, hdev->iso_mtu, hdev->iso_pkts);
+	bt_dev_dbg(hdev, "acl mtu %d:%d iso mtu %d:%d", hdev->acl_mtu,
+		   hdev->acl_pkts, hdev->iso_mtu, hdev->iso_pkts);
 
 	if (hdev->le_mtu && hdev->le_mtu < HCI_MIN_LE_MTU)
 		return HCI_ERROR_INVALID_PARAMETERS;
@@ -5336,8 +5336,9 @@ static void hci_user_confirm_request_evt(struct hci_dev *hdev, void *data,
 			goto confirm;
 		}
 
-		BT_DBG("Auto-accept of user confirmation with %ums delay",
-		       hdev->auto_accept_delay);
+		bt_dev_dbg(hdev,
+			   "Auto-accept of user confirmation with %ums delay",
+			   hdev->auto_accept_delay);
 
 		if (hdev->auto_accept_delay > 0) {
 			int delay = msecs_to_jiffies(hdev->auto_accept_delay);
@@ -5967,7 +5968,7 @@ static struct hci_conn *check_pending_le_conn(struct hci_dev *hdev,
 		 */
 		break;
 	default:
-		BT_DBG("Failed to connect: err %ld", PTR_ERR(conn));
+		bt_dev_dbg(hdev, "Failed to connect: err %ld", PTR_ERR(conn));
 		return NULL;
 	}
 
@@ -6861,7 +6862,7 @@ static void hci_le_create_big_complete_evt(struct hci_dev *hdev, void *data,
 	struct hci_conn *conn;
 	__u8 i = 0;
 
-	BT_DBG("%s status 0x%2.2x", hdev->name, ev->status);
+	bt_dev_dbg(hdev, "status 0x%2.2x", ev->status);
 
 	if (!hci_le_ev_skb_pull(hdev, skb, HCI_EVT_LE_CREATE_BIG_COMPLETE,
 				flex_array_size(ev, bis_handle, ev->num_bis)))
@@ -7239,8 +7240,8 @@ static bool hci_get_cmd_complete(struct hci_dev *hdev, u16 opcode,
 		return false;
 
 	if (opcode != __le16_to_cpu(ev->opcode)) {
-		BT_DBG("opcode doesn't match (0x%2.2x != 0x%2.2x)", opcode,
-		       __le16_to_cpu(ev->opcode));
+		bt_dev_dbg(hdev, "opcode doesn't match (0x%2.2x != 0x%2.2x)",
+			   opcode, __le16_to_cpu(ev->opcode));
 		return false;
 	}
 
