@@ -232,7 +232,7 @@ static void handle___kvm_vcpu_run(struct kvm_cpu_context *host_ctxt)
 		fpsimd_lazy_switch_to_host(vcpu);
 	}
 out:
-	cpu_reg(host_ctxt, 1) =  ret;
+	cpu_reg(host_ctxt, 1) = ret;
 }
 
 static int pkvm_refill_memcache(struct pkvm_hyp_vcpu *hyp_vcpu)
@@ -266,7 +266,7 @@ static void handle___pkvm_host_share_guest(struct kvm_cpu_context *host_ctxt)
 
 	ret = __pkvm_host_share_guest(pfn, gfn, nr_pages, hyp_vcpu, prot);
 out:
-	cpu_reg(host_ctxt, 1) =  ret;
+	cpu_reg(host_ctxt, 1) = ret;
 }
 
 static void handle___pkvm_host_unshare_guest(struct kvm_cpu_context *host_ctxt)
@@ -287,7 +287,7 @@ static void handle___pkvm_host_unshare_guest(struct kvm_cpu_context *host_ctxt)
 	ret = __pkvm_host_unshare_guest(gfn, nr_pages, hyp_vm);
 	put_pkvm_hyp_vm(hyp_vm);
 out:
-	cpu_reg(host_ctxt, 1) =  ret;
+	cpu_reg(host_ctxt, 1) = ret;
 }
 
 static void handle___pkvm_host_relax_perms_guest(struct kvm_cpu_context *host_ctxt)
@@ -367,7 +367,7 @@ static void handle___pkvm_host_mkyoung_guest(struct kvm_cpu_context *host_ctxt)
 
 	ret = __pkvm_host_mkyoung_guest(gfn, hyp_vcpu);
 out:
-	cpu_reg(host_ctxt, 1) =  ret;
+	cpu_reg(host_ctxt, 1) = ret;
 }
 
 static void handle___kvm_adjust_pc(struct kvm_cpu_context *host_ctxt)
