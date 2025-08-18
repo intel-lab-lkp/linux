@@ -223,17 +223,47 @@
 #define MAC_TSSR			0x0d20
 #define MAC_TXSNR			0x0d30
 #define MAC_TXSSR			0x0d34
+#define MAC_AUXCR			0x0d40
+#define MAC_ATSNR			0x0d48
+#define MAC_ATSSR			0x0d4C
 #define MAC_TICNR                       0x0d58
 #define MAC_TICSNR                      0x0d5C
 #define MAC_TECNR                       0x0d60
 #define MAC_TECSNR                      0x0d64
-
+#define MAC_PPSCR			0x0d70
+#define MAC_PPS0_TTSR			0x0d80
+#define MAC_PPS0_TTNSR			0x0d84
+#define MAC_PPS0_INTERVAL		0x0d88
+#define MAC_PPS0_WIDTH			0x0d8C
 #define MAC_QTFCR_INC			4
 #define MAC_MACA_INC			4
 #define MAC_HTR_INC			4
 
 #define MAC_RQC2_INC			4
 #define MAC_RQC2_Q_PER_REG		4
+
+/* PPS helpers */
+#define PPSEN0				BIT(4)
+#define MAC_PPSx_TTSR(x)		((MAC_PPS0_TTSR) + ((x) * 0x10))
+#define MAC_PPSx_TTNSR(x)		((MAC_PPS0_TTNSR) + ((x) * 0x10))
+#define MAC_PPSx_INTERVAL(x)		((MAC_PPS0_INTERVAL) + ((x) * 0x10))
+#define MAC_PPSx_WIDTH(x)		((MAC_PPS0_WIDTH) + ((x) * 0x10))
+#define PPS_MAXIDX(x)			((((x) + 1) * 8) - 1)
+#define PPS_MINIDX(x)			((x) * 8)
+#define PPSx_MASK(x) ({						\
+	unsigned int __x = (x);					\
+	GENMASK(PPS_MAXIDX(__x), PPS_MINIDX(__x));		\
+})
+#define PPSCMDx(x, val) ({					\
+	unsigned int __x = (x);					\
+	GENMASK(PPS_MINIDX(__x) + 3, PPS_MINIDX(__x)) &		\
+	((val) << PPS_MINIDX(__x));				\
+})
+#define TRGTMODSELx(x, val) ({					\
+	unsigned int __x = (x);					\
+	GENMASK(PPS_MAXIDX(__x) - 1, PPS_MAXIDX(__x) - 2) &	\
+	((val) << (PPS_MAXIDX(__x) - 2));			\
+})
 
 /* MAC register entry bit positions and sizes */
 #define MAC_HWF0R_ADDMACADRSEL_INDEX	18
@@ -460,8 +490,26 @@
 #define MAC_TSCR_TXTSSTSM_WIDTH		1
 #define MAC_TSSR_TXTSC_INDEX		15
 #define MAC_TSSR_TXTSC_WIDTH		1
+#define MAC_TSSR_ATSSTN_INDEX		16
+#define MAC_TSSR_ATSSTN_WIDTH		4
+#define MAC_TSSR_ATSNS_INDEX		25
+#define MAC_TSSR_ATSNS_WIDTH		5
+#define MAC_TSSR_ATSSTM_INDEX		24
+#define MAC_TSSR_ATSSTM_WIDTH		1
+#define MAC_TSSR_ATSSTN_INDEX		16
+#define MAC_TSSR_ATSSTN_WIDTH		4
+#define MAC_TSSR_AUXTSTRIG_INDEX	2
+#define MAC_TSSR_AUXTSTRIG_WIDTH	1
 #define MAC_TXSNR_TXTSSTSMIS_INDEX	31
 #define MAC_TXSNR_TXTSSTSMIS_WIDTH	1
+#define MAC_AUXCR_ATSEN3_INDEX		7
+#define MAC_AUXCR_ATSEN3_WIDTH		1
+#define MAC_AUXCR_ATSEN2_INDEX		6
+#define MAC_AUXCR_ATSEN2_WIDTH		1
+#define MAC_AUXCR_ATSEN1_INDEX		5
+#define MAC_AUXCR_ATSEN1_WIDTH		1
+#define MAC_AUXCR_ATSEN0_INDEX		4
+#define MAC_AUXCR_ATSEN0_WIDTH		1
 #define MAC_TICSNR_TSICSNS_INDEX	8
 #define MAC_TICSNR_TSICSNS_WIDTH	8
 #define MAC_TECSNR_TSECSNS_INDEX	8
@@ -496,8 +544,14 @@
 #define MAC_VR_SNPSVER_WIDTH		8
 #define MAC_VR_USERVER_INDEX		16
 #define MAC_VR_USERVER_WIDTH		8
+#define MAC_PPSCR_PPSEN0_INDEX		4
+#define MAC_PPSCR_PPSEN0_WIDTH		1
+#define MAC_PPSCR_PPSCTRL0_INDEX	0
+#define MAC_PPSCR_PPSCTRL0_WIDTH	4
+#define MAC_PPSx_TTNSR_TRGTBUSY0_INDEX	31
+#define MAC_PPSx_TTNSR_TRGTBUSY0_WIDTH	1
 
-/* MMC register offsets */
+ /* MMC register offsets */
 #define MMC_CR				0x0800
 #define MMC_RISR			0x0804
 #define MMC_TISR			0x0808
