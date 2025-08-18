@@ -77,6 +77,25 @@ static int first_non_ff(void *buf, int len)
 	return -1;
 }
 
+static int ubifs_buf_bitflip_count(void *buf, int len)
+{
+	uint8_t tmp, shift;
+	uint8_t *p = buf;
+	int i, count = 0;
+
+	for (i = 0; i < len; i++) {
+		tmp = *p++;
+		if (tmp != 0xff) {
+			shift = (uint8_t)0;
+			while (shift <= 7)
+				if (!(tmp & (uint8_t)(1 << shift++)))
+					count++;
+		}
+	}
+
+	return count;
+}
+
 /**
  * get_master_node - get the last valid master node allowing for corruption.
  * @c: UBIFS file-system description object
@@ -690,6 +709,12 @@ struct ubifs_scan_leb *ubifs_recover_leb(struct ubifs_info *c, int lnum,
 			 * See header comment for this file for more
 			 * explanations about the reasons we have this check.
 			 */
+			int bitflip_count = ubifs_buf_bitflip_count(buf, len);
+
+			ubifs_assert(c, bitflip_count > 0);
+			ubifs_msg(c, "corrupt empty space LEB %d:%d, corruption starts at %d, bitflip count %d, try to rescure",
+					lnum, offs, corruption, bitflip_count);
+			goto rescure;
 			ubifs_err(c, "corrupt empty space LEB %d:%d, corruption starts at %d",
 				  lnum, offs, corruption);
 			/* Make sure we dump interesting non-0xFF data */
@@ -766,6 +791,7 @@ struct ubifs_scan_leb *ubifs_recover_leb(struct ubifs_info *c, int lnum,
 	len = c->leb_size - offs;
 
 	clean_buf(c, &buf, lnum, &offs, &len);
+rescure:
 	ubifs_end_scan(c, sleb, lnum, offs);
 
 	err = fix_unclean_leb(c, sleb, start);
