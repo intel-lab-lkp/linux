@@ -4783,6 +4783,18 @@ static int pci_bus_max_d3cold_delay(const struct pci_bus *bus)
 	return max(min_delay, max_delay);
 }
 
+struct pci_bridge_rst {
+	int ret;
+	int timeout;
+	char *reset_type;
+};
+
+static int pci_bridge_rst_wait_dev(struct pci_dev *dev, void *data)
+{
+	struct pci_bridge_rst *d = data;
+	return d->ret = pci_dev_wait(dev, d->reset_type, d->timeout);
+}
+
 /**
  * pci_bridge_wait_for_secondary_bus - Wait for secondary bus to be accessible
  * @dev: PCI bridge
@@ -4801,8 +4813,8 @@ static int pci_bus_max_d3cold_delay(const struct pci_bus *bus)
  */
 int pci_bridge_wait_for_secondary_bus(struct pci_dev *dev, char *reset_type)
 {
-	struct pci_dev *child __free(pci_dev_put) = NULL;
 	int delay;
+	struct pci_bridge_rst data = {.reset_type = reset_type};
 
 	if (pci_dev_is_disconnected(dev))
 		return 0;
@@ -4829,9 +4841,6 @@ int pci_bridge_wait_for_secondary_bus(struct pci_dev *dev, char *reset_type)
 		up_read(&pci_bus_sem);
 		return 0;
 	}
-
-	child = pci_dev_get(list_first_entry(&dev->subordinate->devices,
-					     struct pci_dev, bus_list));
 	up_read(&pci_bus_sem);
 
 	/*
@@ -4868,7 +4877,9 @@ int pci_bridge_wait_for_secondary_bus(struct pci_dev *dev, char *reset_type)
 		pci_dbg(dev, "waiting %d ms for downstream link\n", delay);
 		msleep(delay);
 
-		if (!pci_dev_wait(child, reset_type, PCI_RESET_WAIT - delay))
+		data.timeout = PCI_RESET_WAIT - delay;
+		pci_walk_bus(dev->subordinate, pci_bridge_rst_wait_dev, &data);
+		if (!data.ret)
 			return 0;
 
 		/*
@@ -4883,8 +4894,9 @@ int pci_bridge_wait_for_secondary_bus(struct pci_dev *dev, char *reset_type)
 		if (!(status & PCI_EXP_LNKSTA_DLLLA))
 			return -ENOTTY;
 
-		return pci_dev_wait(child, reset_type,
-				    PCIE_RESET_READY_POLL_MS - PCI_RESET_WAIT);
+		data.timeout = PCIE_RESET_READY_POLL_MS - PCI_RESET_WAIT;
+		pci_walk_bus(dev->subordinate, pci_bridge_rst_wait_dev, &data);
+		return data.ret;
 	}
 
 	pci_dbg(dev, "waiting %d ms for downstream link, after activation\n",
@@ -4895,8 +4907,9 @@ int pci_bridge_wait_for_secondary_bus(struct pci_dev *dev, char *reset_type)
 		return -ENOTTY;
 	}
 
-	return pci_dev_wait(child, reset_type,
-			    PCIE_RESET_READY_POLL_MS - delay);
+	data.timeout = PCIE_RESET_READY_POLL_MS - delay;
+	pci_walk_bus(dev->subordinate, pci_bridge_rst_wait_dev, &data);
+	return data.ret;
 }
 
 void pci_reset_secondary_bus(struct pci_dev *dev)
