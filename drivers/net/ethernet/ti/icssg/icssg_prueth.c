@@ -716,6 +716,7 @@ static void prueth_destroy_txq(struct prueth_emac *emac)
 		k3_udma_glue_disable_tx_chn(emac->tx_chns[i].tx_chn);
 		napi_disable(&emac->tx_chns[i].napi_tx);
 		hrtimer_cancel(&emac->tx_chns[i].tx_hrtimer);
+		emac->tx_chns[i].xsk_pool = NULL;
 	}
 }
 
@@ -752,6 +753,7 @@ static int prueth_create_txq(struct prueth_emac *emac)
 		if (ret)
 			goto reset_tx_chan;
 		napi_enable(&emac->tx_chns[i].napi_tx);
+		emac->tx_chns[i].xsk_pool = prueth_get_xsk_pool(emac, i);
 	}
 	return 0;
 
@@ -821,6 +823,7 @@ static int emac_ndo_open(struct net_device *ndev)
 		return ret;
 	}
 
+	emac->xsk_qid = -EINVAL;
 	init_completion(&emac->cmd_complete);
 	ret = prueth_init_tx_chns(emac);
 	if (ret) {
@@ -1301,6 +1304,7 @@ static int emac_ndo_bpf(struct net_device *ndev, struct netdev_bpf *bpf)
 static int prueth_xsk_wakeup(struct net_device *ndev, u32 qid, u32 flags)
 {
 	struct prueth_emac *emac = netdev_priv(ndev);
+	struct prueth_tx_chn *tx_chn = &emac->tx_chns[qid];
 
 	if (!netif_running(ndev) || !netif_carrier_ok(ndev))
 		return -ENETDOWN;
@@ -1313,6 +1317,18 @@ static int prueth_xsk_wakeup(struct net_device *ndev, u32 qid, u32 flags)
 	if (qid >= PRUETH_MAX_RX_FLOWS || qid >= emac->tx_ch_num) {
 		netdev_err(ndev, "Invalid XSK queue ID %d\n", qid);
 		return -EINVAL;
+	}
+
+	if (!tx_chn->xsk_pool) {
+		netdev_err(ndev, "XSK pool not registered for queue %d\n", qid);
+		return -EINVAL;
+	}
+
+	if (flags & XDP_WAKEUP_TX) {
+		if (!napi_if_scheduled_mark_missed(&tx_chn->napi_tx)) {
+			if (likely(napi_schedule_prep(&tx_chn->napi_tx)))
+				__napi_schedule(&tx_chn->napi_tx);
+		}
 	}
 
 	return 0;

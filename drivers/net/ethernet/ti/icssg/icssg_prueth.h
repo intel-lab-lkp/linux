@@ -128,6 +128,8 @@ struct prueth_tx_chn {
 	char name[32];
 	struct hrtimer tx_hrtimer;
 	unsigned long tx_pace_timeout_ns;
+	struct xsk_buff_pool *xsk_pool;
+	bool irq_disabled;
 };
 
 struct prueth_rx_chn {
@@ -148,6 +150,7 @@ enum prueth_swdata_type {
 	PRUETH_SWDATA_PAGE,
 	PRUETH_SWDATA_CMD,
 	PRUETH_SWDATA_XDPF,
+	PRUETH_SWDATA_XSK,
 };
 
 struct prueth_swdata {
@@ -506,5 +509,7 @@ static inline bool prueth_xdp_is_enabled(struct prueth_emac *emac)
 {
 	return !!READ_ONCE(emac->xdp_prog);
 }
+
+struct xsk_buff_pool *prueth_get_xsk_pool(struct prueth_emac *emac, u32 qid);
 
 #endif /* __NET_TI_ICSSG_PRUETH_H */
