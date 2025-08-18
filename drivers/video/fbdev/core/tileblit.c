@@ -151,34 +151,34 @@ static void tile_cursor(struct vc_data *vc, struct fb_info *info, bool enable,
 
 static int tile_update_start(struct fb_info *info)
 {
-	struct fbcon_ops *ops = info->fbcon_par;
+	struct fbcon *confb = info->fbcon_par;
 	int err;
 
-	err = fb_pan_display(info, &ops->var);
-	ops->var.xoffset = info->var.xoffset;
-	ops->var.yoffset = info->var.yoffset;
-	ops->var.vmode = info->var.vmode;
+	err = fb_pan_display(info, &confb->var);
+	confb->var.xoffset = info->var.xoffset;
+	confb->var.yoffset = info->var.yoffset;
+	confb->var.vmode = info->var.vmode;
 	return err;
 }
 
 void fbcon_set_tileops(struct vc_data *vc, struct fb_info *info)
 {
 	struct fb_tilemap map;
-	struct fbcon_ops *ops = info->fbcon_par;
+	struct fbcon *confb = info->fbcon_par;
 
-	ops->bmove = tile_bmove;
-	ops->clear = tile_clear;
-	ops->putcs = tile_putcs;
-	ops->clear_margins = tile_clear_margins;
-	ops->cursor = tile_cursor;
-	ops->update_start = tile_update_start;
+	confb->bmove = tile_bmove;
+	confb->clear = tile_clear;
+	confb->putcs = tile_putcs;
+	confb->clear_margins = tile_clear_margins;
+	confb->cursor = tile_cursor;
+	confb->update_start = tile_update_start;
 
-	if (ops->p) {
+	if (confb->p) {
 		map.width = vc->vc_font.width;
 		map.height = vc->vc_font.height;
 		map.depth = 1;
 		map.length = vc->vc_font.charcount;
-		map.data = ops->p->fontdata;
+		map.data = confb->p->fontdata;
 		info->tileops->fb_settile(info, &map);
 	}
 }

@@ -90,7 +90,7 @@ static inline void rotate_ccw(const char *in, char *out, u32 width, u32 height)
 	}
 }
 
-extern void fbcon_rotate_cw(struct fbcon_ops *ops);
-extern void fbcon_rotate_ud(struct fbcon_ops *ops);
-extern void fbcon_rotate_ccw(struct fbcon_ops *ops);
+extern void fbcon_rotate_cw(struct fbcon *confb);
+extern void fbcon_rotate_ud(struct fbcon *confb);
+extern void fbcon_rotate_ccw(struct fbcon *confb);
 #endif
