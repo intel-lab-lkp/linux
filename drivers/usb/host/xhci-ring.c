@@ -1461,6 +1461,9 @@ static void xhci_handle_cmd_set_deq(struct xhci_hcd *xhci, int slot_id,
 			xhci_warn(xhci, "Set TR Deq error stream %u boundary check failed TRB @%pad slot %d ep %u\n",
 				  stream_id, &deq, slot_id, ep_index);
 			break;
+		case COMP_SLOT_NOT_ENABLED_ERROR:
+			xhci_warn(xhci, "Set TR Deq error slot %d is Disabled\n", slot_id);
+			goto td_cleanup;
 		case COMP_CONTEXT_STATE_ERROR:
 			xhci_warn(xhci, "WARN Set TR Deq Ptr cmd failed due to incorrect slot or ep state.\n");
 			ep_state = GET_EP_CTX_STATE(ep_ctx);
@@ -1469,10 +1472,6 @@ static void xhci_handle_cmd_set_deq(struct xhci_hcd *xhci, int slot_id,
 			xhci_dbg_trace(xhci, trace_xhci_dbg_cancel_urb,
 					"Slot state = %u, EP state = %u",
 					slot_state, ep_state);
-			break;
-		case COMP_SLOT_NOT_ENABLED_ERROR:
-			xhci_warn(xhci, "WARN Set TR Deq Ptr cmd failed because slot %u was not enabled.\n",
-					slot_id);
 			break;
 		default:
 			xhci_warn(xhci, "WARN Set TR Deq Ptr cmd with unknown completion code of %u.\n",
@@ -1553,6 +1552,17 @@ cleanup:
 		/* Restart any rings with pending URBs */
 		xhci_dbg(ep->xhci, "%s: All TDs cleared, ring doorbell\n", __func__);
 		ring_doorbell_for_active_rings(xhci, slot_id, ep_index);
+	}
+	return;
+td_cleanup:
+	ep->ep_state &= ~SET_DEQ_PENDING;
+	ep->queued_deq_seg = NULL;
+	ep->queued_deq_ptr = NULL;
+
+	list_for_each_entry_safe(td, tmp_td, &ep->cancelled_td_list, cancelled_td_list) {
+		td->cancel_status = TD_CLEARED;
+		ep_ring = xhci_urb_to_transfer_ring(xhci, td->urb);
+		xhci_td_cleanup(xhci, td, ep_ring, td->status);
 	}
 }
 
