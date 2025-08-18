@@ -8985,6 +8985,23 @@ cfg80211_background_radar_event(struct wiphy *wiphy,
 }
 
 /**
+ * cfg80211_incumbent_signal_detect_event - Incumbent signal detection event
+ * @wiphy: the wiphy
+ * @chandef: chandef for the current channel
+ * @signal_interference_bitmap: Incumbent signal interference bitmap.
+ *	See %NL80211_ATTR_INCUMBENT_SIGNAL_INTERFERENCE_BITMAP description for
+ *	the usage.
+ * @gfp: context flags
+ *
+ * This function is called when any incumbent signal is detected on the
+ * current channel in the 6 GHz band.
+ */
+void cfg80211_incumbent_signal_detect_event(struct wiphy *wiphy,
+					    struct cfg80211_chan_def *chandef,
+					    u32 signal_interference_bitmap,
+					    gfp_t gfp);
+
+/**
  * cfg80211_sta_opmode_change_notify - STA's ht/vht operation mode change event
  * @dev: network device
  * @mac: MAC address of a station which opmode got modified

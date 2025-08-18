@@ -117,6 +117,10 @@ nl80211_radar_notify(struct cfg80211_registered_device *rdev,
 		     enum nl80211_radar_event event,
 		     struct net_device *netdev, gfp_t gfp);
 
+void nl80211_incumbent_signal_notify(struct cfg80211_registered_device *rdev,
+				     struct cfg80211_chan_def *chandef,
+				     u32 signal_interference_bitmap, gfp_t gfp);
+
 void nl80211_send_ap_stopped(struct wireless_dev *wdev, unsigned int link_id);
 
 void cfg80211_free_coalesce(struct cfg80211_coalesce *coalesce);
