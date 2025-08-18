@@ -120,12 +120,12 @@ struct drm_master {
 	struct idr leases;
 
 	/**
-	 * @lessee_idr:
+	 * @lessee_xa:
 	 *
 	 * All lessees under this owner (only used where @lessor is NULL).
 	 * Protected by &drm_device.mode_config's &drm_mode_config.idr_mutex.
 	 */
-	struct idr lessee_idr;
+	struct xarray lessee_xa;
 };
 
 struct drm_master *drm_master_get(struct drm_master *master);

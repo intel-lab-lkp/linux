@@ -143,8 +143,7 @@ struct drm_master *drm_master_create(struct drm_device *dev)
 	/* initialize the tree of output resource lessees */
 	INIT_LIST_HEAD(&master->lessees);
 	INIT_LIST_HEAD(&master->lessee_list);
-	idr_init(&master->leases);
-	idr_init_base(&master->lessee_idr, 1);
+	xa_init_flags(&master->lessee_xa, XA_FLAGS_ALLOC1);
 
 	return master;
 }
@@ -425,7 +424,6 @@ static void drm_master_destroy(struct kref *kref)
 		drm_lease_destroy(master);
 
 	idr_destroy(&master->leases);
-	idr_destroy(&master->lessee_idr);
 
 	kfree(master->unique);
 	kfree(master);
