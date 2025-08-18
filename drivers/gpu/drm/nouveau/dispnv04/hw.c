@@ -172,7 +172,9 @@ nouveau_hw_get_pllvals(struct drm_device *dev, enum nvbios_pll_type plltype,
 	int ret;
 
 	ret = nvbios_pll_parse(bios, plltype, &pll_lim);
-	if (ret || !(reg1 = pll_lim.reg))
+	reg1 = pll_lim.reg;
+
+	if (ret || !reg1)
 		return -ENOENT;
 
 	pll1 = nvif_rd32(device, reg1);
@@ -747,7 +749,7 @@ nv_load_state_ext(struct drm_device *dev, int head,
 			/* Not waiting for vertical retrace before modifying
 			   CRE_53/CRE_54 causes lockups. */
 			nvif_msec(&drm->client.device, 650,
-				if ( (nvif_rd32(device, NV_PRMCIO_INP0__COLOR) & 8))
+				if ((nvif_rd32(device, NV_PRMCIO_INP0__COLOR) & 8))
 					break;
 			);
 			nvif_msec(&drm->client.device, 650,
