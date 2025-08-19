@@ -408,16 +408,13 @@ static int am33xx_pm_alloc_sram(void)
 
 	ocmcram_location = gen_pool_alloc(sram_pool, *pm_sram->do_wfi_sz);
 	if (!ocmcram_location)
-		return dev_err_probe(pm33xx_dev, -ENOMEM,
-				     "PM: %s: Unable to allocate memory from ocmcram\n",
-				     __func__);
+		return -ENOMEM;
 
 	ocmcram_location_data = gen_pool_alloc(sram_pool_data,
 					       sizeof(struct emif_regs_amx3));
 	if (!ocmcram_location_data) {
 		gen_pool_free(sram_pool, ocmcram_location, *pm_sram->do_wfi_sz);
-		return dev_err_probe(pm33xx_dev, -ENOMEM,
-				     "PM: Unable to allocate memory from ocmcram\n");
+		return -ENOMEM;
 	}
 
 	return 0;

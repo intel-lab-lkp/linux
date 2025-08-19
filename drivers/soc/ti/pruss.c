@@ -443,9 +443,8 @@ static int pruss_of_setup_memories(struct device *dev, struct pruss *pruss)
 		pruss->mem_regions[i].va = devm_ioremap(dev, res.start,
 							resource_size(&res));
 		if (!pruss->mem_regions[i].va)
-			return dev_err_probe(dev, -ENOMEM,
-					     "failed to parse and map memory resource %d %s\n",
-					     i, mem_names[i]);
+			return -ENOMEM;
+
 		pruss->mem_regions[i].pa = res.start;
 		pruss->mem_regions[i].size = resource_size(&res);
 
