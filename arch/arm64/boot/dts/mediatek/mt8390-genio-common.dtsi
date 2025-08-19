@@ -414,7 +414,7 @@
 			data-role = "dual";
 			op-sink-microwatt = <10000000>;
 			power-role = "dual";
-			try-power-role  = "sink";
+			try-power-role = "sink";
 			pd-revision = /bits/ 8 <0x03 0x00 0x01 0x08>;
 
 			sink-pdos = <PDO_FIXED(5000, 2000,
@@ -1130,7 +1130,7 @@
 };
 
 &eth {
-	phy-mode ="rgmii-id";
+	phy-mode = "rgmii-id";
 	phy-handle = <&ethernet_phy0>;
 	pinctrl-names = "default", "sleep";
 	pinctrl-0 = <&eth_default_pins>;

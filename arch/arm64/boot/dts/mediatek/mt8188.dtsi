@@ -1152,9 +1152,9 @@
 									 <&camsys CLK_CAM_MAIN_CAM2MM0_GALS>,
 									 <&camsys CLK_CAM_MAIN_CAM2MM1_GALS>,
 									 <&camsys CLK_CAM_MAIN_CAM2SYS_GALS>;
-								clock-names= "ss-cam-l13", "ss-cam-l14",
-									     "ss-cam-mm0", "ss-cam-mm1",
-									     "ss-camsys";
+								clock-names = "ss-cam-l13", "ss-cam-l14",
+									      "ss-cam-mm0", "ss-cam-mm1",
+									      "ss-camsys";
 								mediatek,infracfg = <&infracfg_ao>;
 								#address-cells = <1>;
 								#size-cells = <0>;
@@ -1172,7 +1172,7 @@
 								};
 
 								power-domain@MT8188_POWER_DOMAIN_CAM_SUBA {
-									reg =<MT8188_POWER_DOMAIN_CAM_SUBA>;
+									reg = <MT8188_POWER_DOMAIN_CAM_SUBA>;
 									clocks = <&camsys CLK_CAM_MAIN_CAM_SUBA>,
 										 <&camsys_rawa CLK_CAM_RAWA_LARBX>,
 										 <&camsys_yuva CLK_CAM_YUVA_LARBX>;

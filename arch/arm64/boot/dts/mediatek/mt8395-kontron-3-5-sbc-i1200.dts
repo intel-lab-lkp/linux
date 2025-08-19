@@ -266,7 +266,7 @@
 };
 
 &eth {
-	phy-mode ="rgmii-id";
+	phy-mode = "rgmii-id";
 	phy-handle = <&ethernet_phy0>;
 	pinctrl-names = "default", "sleep";
 	pinctrl-0 = <&eth_default_pins>;
