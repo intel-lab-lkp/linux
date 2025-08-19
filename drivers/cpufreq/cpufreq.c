@@ -85,8 +85,7 @@ static int cpufreq_init_governor(struct cpufreq_policy *policy);
 static void cpufreq_exit_governor(struct cpufreq_policy *policy);
 static void cpufreq_governor_limits(struct cpufreq_policy *policy);
 static int cpufreq_set_policy(struct cpufreq_policy *policy,
-			      struct cpufreq_governor *new_gov,
-			      unsigned int new_pol);
+			      struct cpufreq_governor *new_gov);
 static bool cpufreq_boost_supported(void);
 static int cpufreq_boost_trigger_state(int state);
 
@@ -822,7 +821,8 @@ static ssize_t store_scaling_governor(struct cpufreq_policy *policy,
 		if (!new_pol)
 			return -EINVAL;
 
-		ret = cpufreq_set_policy(policy, NULL, new_pol);
+		policy->policy = new_pol;
+		ret = cpufreq_set_policy(policy, NULL);
 	} else {
 		struct cpufreq_governor *new_gov;
 
@@ -830,8 +830,8 @@ static ssize_t store_scaling_governor(struct cpufreq_policy *policy,
 		if (!new_gov)
 			return -EINVAL;
 
-		ret = cpufreq_set_policy(policy, new_gov,
-					 CPUFREQ_POLICY_UNKNOWN);
+		policy->policy = CPUFREQ_POLICY_UNKNOWN;
+		ret = cpufreq_set_policy(policy, new_gov);
 
 		module_put(new_gov->owner);
 	}
@@ -1154,7 +1154,8 @@ static int cpufreq_init_policy(struct cpufreq_policy *policy)
 			return -ENODATA;
 	}
 
-	ret = cpufreq_set_policy(policy, gov, pol);
+	policy->policy = pol;
+	ret = cpufreq_set_policy(policy, gov);
 	if (gov)
 		module_put(gov->owner);
 
@@ -1190,7 +1191,7 @@ void refresh_frequency_limits(struct cpufreq_policy *policy)
 	if (!policy_is_inactive(policy)) {
 		pr_debug("updating policy for CPU %u\n", policy->cpu);
 
-		cpufreq_set_policy(policy, policy->governor, policy->policy);
+		cpufreq_set_policy(policy, policy->governor);
 	}
 }
 EXPORT_SYMBOL(refresh_frequency_limits);
@@ -2610,7 +2611,6 @@ static void cpufreq_update_pressure(struct cpufreq_policy *policy)
  * cpufreq_set_policy - Modify cpufreq policy parameters.
  * @policy: Policy object to modify.
  * @new_gov: Policy governor pointer.
- * @new_pol: Policy value (for drivers with built-in governors).
  *
  * Invoke the cpufreq driver's ->verify() callback to sanity-check the frequency
  * limits to be set for the policy, update @policy with the verified limits
@@ -2622,8 +2622,7 @@ static void cpufreq_update_pressure(struct cpufreq_policy *policy)
  * The cpuinfo part of @policy is not updated by this function.
  */
 static int cpufreq_set_policy(struct cpufreq_policy *policy,
-			      struct cpufreq_governor *new_gov,
-			      unsigned int new_pol)
+			      struct cpufreq_governor *new_gov)
 {
 	struct cpufreq_policy_data new_data;
 	struct cpufreq_governor *old_gov;
@@ -2676,7 +2675,6 @@ static int cpufreq_set_policy(struct cpufreq_policy *policy,
 		 policy->min, policy->max);
 
 	if (cpufreq_driver->setpolicy) {
-		policy->policy = new_pol;
 		pr_debug("setting range\n");
 		return cpufreq_driver->setpolicy(policy);
 	}
