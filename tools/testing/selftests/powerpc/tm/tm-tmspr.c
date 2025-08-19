@@ -9,7 +9,7 @@
  * - TFIAR  - stores address of location of transaction failure
  * - TFHAR  - stores address of software failure handler (if transaction
  *   fails)
- * - TEXASR - lots of info about the transacion(s)
+ * - TEXASR - lots of info about the transaction(s)
  *
  * (1) create more threads than cpus
  * (2) in each thread:

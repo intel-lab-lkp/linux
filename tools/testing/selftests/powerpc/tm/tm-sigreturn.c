@@ -5,7 +5,7 @@
  *
  * Test the kernel's signal returning code to check reclaim is done if the
  * sigreturn() is called while in a transaction (suspended since active is
- * already dropped trough the system call path).
+ * already dropped through the system call path).
  *
  * The kernel must discard the transaction when entering sigreturn, since
  * restoring the potential TM SPRS from the signal frame is requiring to not be
