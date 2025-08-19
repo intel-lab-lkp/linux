@@ -10,7 +10,7 @@
  *
  * We create two sets of source and destination buffers, one in regular memory,
  * the other cache-inhibited (by default we use /dev/fb0 for this, but an
- * alterative path for cache-inhibited memory may be provided, e.g. memtrace).
+ * alternative path for cache-inhibited memory may be provided, e.g. memtrace).
  *
  * We initialise the source buffers, then use whichever set of load/store
  * instructions is under test to copy bytes from the source buffers to the
@@ -215,7 +215,7 @@ int test_memcmp(void *s1, void *s2, int n, int offset, char *test_name)
 }
 
 /*
- * Do two memcpy tests using the same instructions. One cachable
+ * Do two memcpy tests using the same instructions. One cacheable
  * memory and the other doesn't.
  */
 int do_test(char *test_name, void (*test_func)(char *, char *))

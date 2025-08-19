@@ -21,7 +21,7 @@
  * Testcase for group constraint check of unit and pmc bits which is
  * used to program corresponding unit and pmc field in Monitor Mode
  * Control Register 1 (MMCR1)
- * One of the event in the group should use PMC 4 incase units field
+ * One of the event in the group should use PMC 4 in case units field
  * value is within 6 to 9 otherwise event_open for the group will fail.
  */
 static int group_constraint_unit(void)
@@ -37,21 +37,21 @@ static int group_constraint_unit(void)
 	SKIP_IF(platform_check_for_tests());
 	SKIP_IF(have_hwcap2(PPC_FEATURE2_ARCH_3_1));
 
-	/* Init the events for the group contraint check for unit bits */
+	/* Init the events for the group constraint check for unit bits */
 	e = &events[0];
 	event_init(e, EventCode_1);
 
 	 /* Expected to fail as PMC 4 is not used with unit field value 6 to 9 */
 	FAIL_IF(!event_open(&events[0]));
 
-	/* Init the events for the group contraint check for unit bits */
+	/* Init the events for the group constraint check for unit bits */
 	e = &events[1];
 	event_init(e, EventCode_2);
 
 	/* Expected to pass as PMC 4 is used with unit field value 6 to 9 */
 	FAIL_IF(event_open(&events[1]));
 
-	/* Init the event for the group contraint unit test */
+	/* Init the event for the group constraint unit test */
 	e = &events[2];
 	event_init(e, EventCode_3);
 

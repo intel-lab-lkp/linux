@@ -30,12 +30,12 @@ static int group_constraint_l2l3_sel(void)
 
 	/*
 	 * Check for platform support for the test.
-	 * This test is only aplicable on ISA v3.1
+	 * This test is only applicable on ISA v3.1
 	 */
 	SKIP_IF(platform_check_for_tests());
 	SKIP_IF(!have_hwcap2(PPC_FEATURE2_ARCH_3_1));
 
-	/* Init the events for the group contraint check for l2l3_sel bits */
+	/* Init the events for the group constraint check for l2l3_sel bits */
 	event_init(&leader, EventCode_1);
 	FAIL_IF(event_open(&leader));
 
@@ -46,7 +46,7 @@ static int group_constraint_l2l3_sel(void)
 
 	event_close(&event);
 
-	/* Init the event for the group contraint l2l3_sel test */
+	/* Init the event for the group constraint l2l3_sel test */
 	event_init(&event, EventCode_3);
 
 	/* Expected to succeed as sibling event request same l2l3_sel bits as leader */

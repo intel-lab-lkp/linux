@@ -37,7 +37,7 @@ static int group_constraint_thresh_cmp(void)
 	SKIP_IF(platform_check_for_tests());
 
 	if (have_hwcap2(PPC_FEATURE2_ARCH_3_1)) {
-		/* Init the events for the group contraint check for thresh_cmp bits */
+		/* Init the events for the group constraint check for thresh_cmp bits */
 		event_init(&leader, p10_EventCode_1);
 
 		/* Add the thresh_cmp value for leader in config1 */
@@ -54,7 +54,7 @@ static int group_constraint_thresh_cmp(void)
 
 		event_close(&event);
 
-		/* Init the event for the group contraint thresh compare test */
+		/* Init the event for the group constraint thresh compare test */
 		event_init(&event, p10_EventCode_2);
 
 		/* Add the same thresh_cmp value for leader and sibling event in config1 */
@@ -66,7 +66,7 @@ static int group_constraint_thresh_cmp(void)
 		event_close(&leader);
 		event_close(&event);
 	} else {
-		/* Init the events for the group contraint check for thresh_cmp bits */
+		/* Init the events for the group constraint check for thresh_cmp bits */
 		event_init(&leader, p9_EventCode_1);
 		FAIL_IF(event_open(&leader));
 
@@ -77,7 +77,7 @@ static int group_constraint_thresh_cmp(void)
 
 		event_close(&event);
 
-		/* Init the event for the group contraint thresh compare test */
+		/* Init the event for the group constraint thresh compare test */
 		event_init(&event, p9_EventCode_3);
 
 		/* Expected to succeed as sibling and leader event request same thresh_cmp bits */

@@ -74,7 +74,7 @@ int test_preempt_vmx(void)
 	}
 
 	setbuf(stdout, NULL);
-	/* Not really nessesary but nice to wait for every thread to start */
+	/* Not really necessary but nice to wait for every thread to start */
 	printf("\tWaiting for all workers to start...");
 	while(threads_starting)
 		asm volatile("": : :"memory");

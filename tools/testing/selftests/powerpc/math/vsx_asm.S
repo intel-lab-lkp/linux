@@ -7,7 +7,7 @@
 #include "vsx_asm.h"
 
 #long check_vsx(vector int *r3);
-#This function wraps storeing VSX regs to the end of an array and a
+#This function wraps storing VSX regs to the end of an array and a
 #call to a comparison function in C which boils down to a memcmp()
 FUNC_START(check_vsx)
 	PUSH_BASIC_STACK(32)

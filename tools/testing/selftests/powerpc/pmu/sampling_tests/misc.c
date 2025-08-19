@@ -466,7 +466,7 @@ int get_thresh_cmp_val(struct event event)
 		return value;
 
 	/*
-	 * Incase of P10, thresh_cmp value is not part of raw event code
+	 * In case of P10, thresh_cmp value is not part of raw event code
 	 * and provided via attr.config1 parameter. To program threshold in MMCRA,
 	 * take a 18 bit number N and shift right 2 places and increment
 	 * the exponent E by 1 until the upper 10 bits of N are zero.
@@ -498,7 +498,7 @@ int get_thresh_cmp_val(struct event event)
  * by comparing base_platform value from auxv and real
  * PVR value.
  * auxv_base_platform() func gives information of "base platform"
- * corresponding to PVR value. Incase, if the distro doesn't
+ * corresponding to PVR value. In case, if the distro doesn't
  * support platform PVR (missing cputable support), base platform
  * in auxv will have a default value other than the real PVR's.
  * In this case, ISAv3 PMU (generic compat PMU) will be registered

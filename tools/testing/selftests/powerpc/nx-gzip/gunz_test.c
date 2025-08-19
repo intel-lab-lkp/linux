@@ -102,7 +102,7 @@ const int window_max = 1<<15;
  * the indirect (base) dde that points to a list of direct ddes.
  * See Section 6.4 of the NX-gzip user manual for DDE description.
  * Addr=NULL, len=0 clears the ddl[0].  Returns the total number of
- * bytes in ddl.  Caller is responsible for allocting the array of
+ * bytes in ddl.  Caller is responsible for allocating the array of
  * nx_dde_t *ddl.  If N addresses are required in the scatter-gather
  * list, the ddl array must have N+1 entries minimum.
  */

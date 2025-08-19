@@ -35,7 +35,7 @@ static int group_constraint_thresh_ctl(void)
 	/* Check for platform support for the test */
 	SKIP_IF(platform_check_for_tests());
 
-	/* Init the events for the group contraint thresh control test */
+	/* Init the events for the group constraint thresh control test */
 	event_init(&leader, EventCode_1);
 	FAIL_IF(event_open(&leader));
 
@@ -46,7 +46,7 @@ static int group_constraint_thresh_ctl(void)
 
 	event_close(&event);
 
-	/* Init the event for the group contraint thresh control test */
+	/* Init the event for the group constraint thresh control test */
 	event_init(&event, EventCode_3);
 
 	 /* Expected to succeed as sibling and leader event request same thresh_ctl bits */

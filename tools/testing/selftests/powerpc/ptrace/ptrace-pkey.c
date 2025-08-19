@@ -73,7 +73,7 @@ static int child(struct shared_info *info)
 	info->amr2 |= 3ul << pkeyshift(pkey2);
 	/*
 	 * invalid amr value where we try to force write
-	 * things which are deined by a uamor setting.
+	 * things which are denied by a uamor setting.
 	 */
 	info->invalid_amr = info->amr2 | (~0x0UL & ~info->expected_uamor);
 
