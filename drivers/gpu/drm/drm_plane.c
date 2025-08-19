@@ -483,7 +483,7 @@ static int __drm_universal_plane_init(struct drm_device *dev,
 	if (format_modifier_count) {
 		blob = create_in_format_blob(dev, plane,
 					     plane->funcs->format_mod_supported);
-		if (!IS_ERR(blob))
+		if (blob)
 			drm_object_attach_property(&plane->base,
 						   config->modifiers_property,
 						   blob->base.id);
@@ -492,7 +492,7 @@ static int __drm_universal_plane_init(struct drm_device *dev,
 	if (plane->funcs->format_mod_supported_async) {
 		blob = create_in_format_blob(dev, plane,
 					     plane->funcs->format_mod_supported_async);
-		if (!IS_ERR(blob))
+		if (blob)
 			drm_object_attach_property(&plane->base,
 						   config->async_modifiers_property,
 						   blob->base.id);
