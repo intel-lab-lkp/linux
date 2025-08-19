@@ -14,7 +14,7 @@
 struct mce {
 	__u64 status;		/* Bank's MCi_STATUS MSR */
 	__u64 misc;		/* Bank's MCi_MISC MSR */
-	__u64 addr;		/* Bank's MCi_ADDR MSR */
+	__u64 addr;		/* Address from bank's MCi_ADDR MSR */
 	__u64 mcgstatus;	/* Machine Check Global Status MSR */
 	__u64 ip;		/* Instruction Pointer when the error happened */
 	__u64 tsc;		/* CPU time stamp counter */
