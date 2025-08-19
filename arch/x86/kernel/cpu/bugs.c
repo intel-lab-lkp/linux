@@ -1070,7 +1070,6 @@ static void __init gds_select_mitigation(void)
 			gds_mitigation = GDS_MITIGATION_FULL;
 		else {
 			gds_mitigation = GDS_MITIGATION_OFF;
-			return;
 		}
 	}
 
