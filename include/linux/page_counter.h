@@ -13,6 +13,7 @@ struct page_counter {
 	 * v2. The memcg->memory.usage is a hot member of struct mem_cgroup.
 	 */
 	atomic_long_t usage;
+	atomic_long_t pinned;
 	unsigned long failcnt; /* v1-only field */
 
 	CACHELINE_PADDING(_pad1_);
@@ -68,11 +69,18 @@ static inline unsigned long page_counter_read(struct page_counter *counter)
 	return atomic_long_read(&counter->usage);
 }
 
+static inline unsigned long page_counter_pinned(struct page_counter *counter)
+{
+	return atomic_long_read(&counter->pinned);
+}
+
 void page_counter_cancel(struct page_counter *counter, unsigned long nr_pages);
 void page_counter_charge(struct page_counter *counter, unsigned long nr_pages);
 bool page_counter_try_charge(struct page_counter *counter,
 			     unsigned long nr_pages,
 			     struct page_counter **fail);
+bool page_counter_try_pin(struct page_counter *counter, unsigned long nr_pages);
+void page_counter_unpin(struct page_counter *counter, unsigned long nr_pages);
 void page_counter_uncharge(struct page_counter *counter, unsigned long nr_pages);
 void page_counter_set_min(struct page_counter *counter, unsigned long nr_pages);
 void page_counter_set_low(struct page_counter *counter, unsigned long nr_pages);

@@ -184,6 +184,82 @@ void page_counter_uncharge(struct page_counter *counter, unsigned long nr_pages)
 		page_counter_cancel(c, nr_pages);
 }
 
+static void page_counter_unpin_one(struct page_counter *counter, unsigned long nr_pages)
+{
+	long new;
+
+	new = atomic_long_sub_return(nr_pages, &counter->pinned);
+	/* More uncharges than charges? */
+	if (WARN_ONCE(new < 0, "page_counter pinned underflow: %ld nr_pages=%lu\n",
+		      new, nr_pages))
+		atomic_long_set(&counter->pinned, 0);
+}
+
+/**
+ * page_counter_try_pin - try to hierarchically pin pages
+ * @counter: counter
+ * @nr_pages: number of pages to charge
+ *
+ * Returns %true on success, or %false if any counter goes above,
+ * the 'min' limit. Failing cgroup is not returned, as pinned memory
+ * cannot be evicted.
+ */
+bool page_counter_try_pin(struct page_counter *counter,
+			     unsigned long nr_pages)
+{
+	struct page_counter *c, *fail;
+	bool track_failcnt = counter->track_failcnt;
+
+	for (c = counter; c; c = c->parent) {
+		long new;
+		/*
+		 * Pin speculatively to avoid an expensive CAS.  If
+		 * a bigger charge fails, it might falsely lock out a
+		 * racing smaller charge and send it into reclaim
+		 * early, but the error is limited to the difference
+		 * between the two sizes, which is less than 2M/4M in
+		 * case of a THP locking out a regular page charge.
+		 *
+		 * The atomic_long_add_return() implies a full memory
+		 * barrier between incrementing the count and reading
+		 * the limit.  When racing with page_counter_set_max(),
+		 * we either see the new limit or the setter sees the
+		 * counter has changed and retries.
+		 */
+		new = atomic_long_add_return(nr_pages, &c->pinned);
+		if (new > READ_ONCE(c->min)) {
+			atomic_long_sub(nr_pages, &c->pinned);
+			/*
+			 * This is racy, but we can live with some
+			 * inaccuracy in the failcnt which is only used
+			 * to report stats.
+			 */
+			if (track_failcnt)
+				data_race(c->failcnt++);
+			fail = c;
+			goto failed;
+		}
+	}
+	return true;
+
+failed:
+	for (c = counter; c != fail; c = c->parent)
+		page_counter_unpin_one(c, nr_pages);
+
+	return false;
+}
+
+/**
+ * page_counter_unpin - hierarchically unpin pages
+ * @counter: counter
+ * @nr_pages: number of pages to uncharge
+ */
+void page_counter_unpin(struct page_counter *counter, unsigned long nr_pages)
+{
+	for (struct page_counter *c = counter; c; c = c->parent)
+		page_counter_unpin_one(c, nr_pages);
+}
+
 /**
  * page_counter_set_max - set the maximum number of pages allowed
  * @counter: counter
@@ -425,7 +501,7 @@ void page_counter_calculate_protection(struct page_counter *root,
 				       struct page_counter *counter,
 				       bool recursive_protection)
 {
-	unsigned long usage, parent_usage;
+	unsigned long usage, parent_usage, pinned, min, low;
 	struct page_counter *parent = counter->parent;
 
 	/*
@@ -442,23 +518,31 @@ void page_counter_calculate_protection(struct page_counter *root,
 	if (!usage)
 		return;
 
+	pinned = page_counter_pinned(counter);
+
+	/* For calculation purposes, pinned memory is subtracted from min/low */
+	min = READ_ONCE(counter->min);
+	if (pinned > min)
+		min = 0;
+	low = READ_ONCE(counter->low);
+	if (pinned > low)
+		low = 0;
+
 	if (parent == root) {
-		counter->emin = READ_ONCE(counter->min);
-		counter->elow = READ_ONCE(counter->low);
+		counter->emin = min;
+		counter->elow = low;
 		return;
 	}
 
 	parent_usage = page_counter_read(parent);
 
 	WRITE_ONCE(counter->emin, effective_protection(usage, parent_usage,
-			READ_ONCE(counter->min),
-			READ_ONCE(parent->emin),
+			min, READ_ONCE(parent->emin),
 			atomic_long_read(&parent->children_min_usage),
 			recursive_protection));
 
 	WRITE_ONCE(counter->elow, effective_protection(usage, parent_usage,
-			READ_ONCE(counter->low),
-			READ_ONCE(parent->elow),
+			low, READ_ONCE(parent->elow),
 			atomic_long_read(&parent->children_low_usage),
 			recursive_protection));
 }
