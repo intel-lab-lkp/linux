@@ -654,6 +654,26 @@ config RISCV_ISA_V_DEFAULT_ENABLE
 
 	  If you don't know what to do here, say Y.
 
+config RISCV_ISA_V_VSTATE_DISCARD
+	bool "Enable Vector state discard by default"
+	depends on RISCV_ISA_V
+	default n
+	help
+	  Discarding vector state (also known as clobbering) on syscall entry
+	  can help identify userspace programs that are mistakenly relying on
+	  vector registers being preserved across syscalls. This can be useful
+	  for debugging and testing. However, this behavior can negatively
+	  impact performance on some RISC-V implementations and is not strictly
+	  necessary.
+
+	  Select Y here if you want mandatory clobbering of vector state even
+	  though it can increase the duration of syscalls on some RISC-V cores.
+	  If you don't know what to do, then select N.
+
+	  This choice sets the initial value of the abi.riscv_v_vstate_discard
+	  sysctl. Regardless of whether you choose Y or N, the sysctl can still
+	  be changed by the user while the system is running.
+
 config RISCV_ISA_V_UCOPY_THRESHOLD
 	int "Threshold size for vectorized user copies"
 	depends on RISCV_ISA_V
