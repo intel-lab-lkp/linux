@@ -276,11 +276,15 @@ EXPORT_SYMBOL_GPL(rpc_destroy_wait_queue);
 
 static int rpc_wait_bit_killable(struct wait_bit_key *key, int mode)
 {
-	if (unlikely(current->flags & PF_EXITING))
-		return -EINTR;
-	schedule();
-	if (signal_pending_state(mode, current))
-		return -ERESTARTSYS;
+	if (unlikely(current->flags & PF_EXITING)) {
+		/* Cannot be killed by a signal, so don't wait indefinitely */
+		if (schedule_timeout(5 * HZ) == 0)
+			return -EINTR;
+	} else {
+		schedule();
+		if (signal_pending_state(mode, current))
+			return -ERESTARTSYS;
+	}
 	return 0;
 }
 
