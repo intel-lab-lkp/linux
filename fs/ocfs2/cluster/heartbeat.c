@@ -2011,7 +2011,6 @@ static struct config_item *o2hb_heartbeat_group_make_item(struct config_group *g
 	}
 
 	spin_lock(&o2hb_live_lock);
-	reg->hr_region_num = 0;
 	if (o2hb_global_heartbeat_active()) {
 		reg->hr_region_num = find_first_zero_bit(o2hb_region_bitmap,
 							 O2NM_MAX_REGIONS);
