@@ -570,8 +570,38 @@ struct rvu_cpt_eng_grp {
 	u8 grp_num;
 };
 
+struct rvu_cpt_rx_inline_lf_cfg {
+	u16 sso_pf_func;
+	u16 param1;
+	u16 param2;
+	u16 opcode;
+	u32 credit;
+	u32 credit_th;
+	u16 bpid;
+	u32 reserved;
+	u8 ctx_ilen_valid : 1;
+	u8 ctx_ilen : 7;
+};
+
+struct rvu_cpt_inst_queue {
+	u8 *vaddr;
+	u8 *real_vaddr;
+	dma_addr_t dma_addr;
+	dma_addr_t real_dma_addr;
+	u32 size;
+};
+
 struct rvu_cpt {
 	struct rvu_cpt_eng_grp eng_grp[OTX2_CPT_MAX_ENG_TYPES];
+
+	/* RX inline ipsec lock */
+	struct mutex lock;
+	bool rx_initialized;
+	u16 msix_offset;
+	u8 inline_ipsec_egrp;
+	struct rvu_cpt_inst_queue cpt0_iq;
+	struct rvu_cpt_inst_queue cpt1_iq;
+	struct rvu_cpt_rx_inline_lf_cfg rx_cfg;
 };
 
 struct rvu {
@@ -1129,6 +1159,8 @@ void rvu_program_channels(struct rvu *rvu);
 
 /* CN10K NIX */
 void rvu_nix_block_cn10k_init(struct rvu *rvu, struct nix_hw *nix_hw);
+void nix_inline_ipsec_cfg(struct rvu *rvu, struct nix_inline_ipsec_cfg *req,
+			  int blkaddr);
 
 /* CN10K RVU - LMT*/
 void rvu_reset_lmt_map_tbl(struct rvu *rvu, u16 pcifunc);
@@ -1160,6 +1192,8 @@ int rvu_mcs_init(struct rvu *rvu);
 int rvu_mcs_flr_handler(struct rvu *rvu, u16 pcifunc);
 void rvu_mcs_ptp_cfg(struct rvu *rvu, u8 rpm_id, u8 lmac_id, bool ena);
 void rvu_mcs_exit(struct rvu *rvu);
+u16 rvu_get_msix_offset(struct rvu *rvu, struct rvu_pfvf *pfvf,
+			int blkaddr, int lf);
 
 /* Representor APIs */
 int rvu_rep_pf_init(struct rvu *rvu);
