@@ -1,10 +1,11 @@
 /* SPDX-License-Identifier: (GPL-2.0+ OR BSD-3-Clause) */
-/* Copyright 2024 NXP
+/* Copyright 2024-2025 NXP
  */
 #ifndef __NETC_GLOBAL_H
 #define __NETC_GLOBAL_H
 
 #include <linux/io.h>
+#include <linux/pci.h>
 
 static inline u32 netc_read(void __iomem *reg)
 {
