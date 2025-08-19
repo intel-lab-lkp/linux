@@ -100,6 +100,13 @@ static int smmu_unshare_pages(phys_addr_t addr, size_t size)
 	return 0;
 }
 
+static int smmu_abort_gbpa(struct hyp_arm_smmu_v3_device *smmu)
+{
+	writel_relaxed(GBPA_UPDATE | GBPA_ABORT, smmu->base + ARM_SMMU_GBPA);
+	/* Wait till UPDATE is cleared. */
+	return smmu_wait(readl_relaxed(smmu->base + ARM_SMMU_GBPA) == GBPA_ABORT);
+}
+
 static bool smmu_cmdq_full(struct arm_smmu_queue *cmdq)
 {
 	struct arm_smmu_ll_queue *llq = &cmdq->llq;
@@ -416,6 +423,10 @@ static int smmu_init_device(struct hyp_arm_smmu_v3_device *smmu)
 	if (ret)
 		goto out_ret;
 
+	ret = smmu_abort_gbpa(smmu);
+	if (ret)
+		goto out_ret;
+
 	return 0;
 
 out_ret:
@@ -663,10 +674,14 @@ static bool smmu_dabt_device(struct hyp_arm_smmu_v3_device *smmu,
 			smmu->host_ste_cfg = val;
 		}
 		goto out_ret;
-	/* Passthrough the register access for bisectiblity, handled later */
 	case ARM_SMMU_GBPA:
-		mask = read_write;
-		break;
+		if (is_write)
+			smmu->gbpa = val & ~GBPA_UPDATE;
+		else
+			regs->regs[rd] = smmu->gbpa;
+
+		WARN_ON(len != sizeof(u32));
+		goto out_ret;
 	case ARM_SMMU_CR0:
 		if (is_write) {
 			bool last_cmdq_en = is_cmdq_enabled(smmu);
