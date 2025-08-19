@@ -34,7 +34,7 @@
  */
 
 
-#define TASKSTATS_VERSION	16
+#define TASKSTATS_VERSION	17
 #define TS_COMM_LEN		32	/* should be >= TASK_COMM_LEN
 					 * in linux/sched.h */
 
@@ -230,6 +230,13 @@ struct taskstats {
 
 	__u64	irq_delay_max;
 	__u64	irq_delay_min;
+
+	/* v17: Delay waiting for SOFTIRQ */
+	__u64	soft_count;
+	__u64	soft_delay_total;
+
+	__u64	soft_delay_max;
+	__u64	soft_delay_min;
 };
 
 

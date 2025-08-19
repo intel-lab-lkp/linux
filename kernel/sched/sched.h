@@ -1219,6 +1219,7 @@ struct rq {
 
 #ifdef CONFIG_IRQ_TIME_ACCOUNTING
 	u64			prev_irq_time;
+	u64			prev_soft_time;
 	u64			psi_irq_time;
 #endif
 #ifdef CONFIG_PARAVIRT
@@ -3135,8 +3136,10 @@ static inline void sched_core_tick(struct rq *rq) { }
 
 struct irqtime {
 	u64			total;
+	u64			total_soft;
 	u64			tick_delta;
 	u64			irq_start_time;
+	u64			soft_start_time;
 	struct u64_stats_sync	sync;
 };
 
@@ -3153,7 +3156,7 @@ static inline int irqtime_enabled(void)
  * Otherwise ksoftirqd's sum_exec_runtime is subtracted its own runtime
  * and never move forward.
  */
-static inline u64 irq_time_read(int cpu)
+static inline u64 irq_time_read(int cpu, u64 *total_soft)
 {
 	struct irqtime *irqtime = &per_cpu(cpu_irqtime, cpu);
 	unsigned int seq;
@@ -3162,6 +3165,7 @@ static inline u64 irq_time_read(int cpu)
 	do {
 		seq = __u64_stats_fetch_begin(&irqtime->sync);
 		total = irqtime->total;
+		*total_soft = irqtime->total_soft;
 	} while (__u64_stats_fetch_retry(&irqtime->sync, seq));
 
 	return total;

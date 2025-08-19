@@ -38,13 +38,14 @@ void disable_sched_clock_irqtime(void)
 }
 
 static void irqtime_account_delta(struct irqtime *irqtime, u64 delta,
-				  enum cpu_usage_stat idx)
+				  u64 delta_soft, enum cpu_usage_stat idx)
 {
 	u64 *cpustat = kcpustat_this_cpu->cpustat;
 
 	u64_stats_update_begin(&irqtime->sync);
 	cpustat[idx] += delta;
 	irqtime->total += delta;
+	irqtime->total_soft += delta_soft;
 	irqtime->tick_delta += delta;
 	u64_stats_update_end(&irqtime->sync);
 }
@@ -57,16 +58,26 @@ void irqtime_account_irq(struct task_struct *curr, unsigned int offset)
 {
 	struct irqtime *irqtime = this_cpu_ptr(&cpu_irqtime);
 	unsigned int pc;
-	s64 delta;
+	s64 delta, delta_soft = 0, cpu_clock;
 	int cpu;
 
 	if (!irqtime_enabled())
 		return;
 
 	cpu = smp_processor_id();
-	delta = sched_clock_cpu(cpu) - irqtime->irq_start_time;
+	cpu_clock = sched_clock_cpu(cpu);
+	delta = cpu_clock - irqtime->irq_start_time;
 	irqtime->irq_start_time += delta;
 	pc = irq_count() - offset;
+
+	/*
+	 * We only account softirq time when we are called by
+	 * account_softirq_enter{,exit}
+	 */
+	if ((offset & SOFTIRQ_OFFSET) || (pc & SOFTIRQ_OFFSET)) {
+		delta_soft = cpu_clock - irqtime->soft_start_time;
+		irqtime->soft_start_time += delta_soft;
+	}
 
 	/*
 	 * We do not account for softirq time from ksoftirqd here.
@@ -75,9 +86,9 @@ void irqtime_account_irq(struct task_struct *curr, unsigned int offset)
 	 * that do not consume any time, but still wants to run.
 	 */
 	if (pc & HARDIRQ_MASK)
-		irqtime_account_delta(irqtime, delta, CPUTIME_IRQ);
+		irqtime_account_delta(irqtime, delta, delta_soft, CPUTIME_IRQ);
 	else if ((pc & SOFTIRQ_OFFSET) && curr != this_cpu_ksoftirqd())
-		irqtime_account_delta(irqtime, delta, CPUTIME_SOFTIRQ);
+		irqtime_account_delta(irqtime, delta, delta_soft, CPUTIME_SOFTIRQ);
 }
 
 static u64 irqtime_tick_accounted(u64 maxtime)

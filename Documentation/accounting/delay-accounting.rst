@@ -17,6 +17,7 @@ e) thrashing
 f) direct compact
 g) write-protect copy
 h) IRQ/SOFTIRQ
+i) SOFTIRQ
 
 and makes these statistics available to userspace through
 the taskstats interface.
@@ -50,7 +51,7 @@ this structure. See
 for a description of the fields pertaining to delay accounting.
 It will generally be in the form of counters returning the cumulative
 delay seen for cpu, sync block I/O, swapin, memory reclaim, thrash page
-cache, direct compact, write-protect copy, IRQ/SOFTIRQ etc.
+cache, direct compact, write-protect copy, IRQ/SOFTIRQ, SOFTIRQ etc.
 
 Taking the difference of two successive readings of a given
 counter (say cpu_delay_total) for a task will give the delay
@@ -122,6 +123,8 @@ Get sum and peak of delays, since system boot, for all pids with tgid 242::
 	WPCOPY      count    delay total  delay average      delay max      delay min
 	              156       11215873          0.072ms     0.207403ms     0.033913ms
 	IRQ         count    delay total  delay average      delay max      delay min
+	                0              0          0.000ms     0.000000ms     0.000000ms
+	SOFTIRQ     count    delay total  delay average      delay max      delay min
 	                0              0          0.000ms     0.000000ms     0.000000ms
 
 Get IO accounting for pid 1, it works only with -p::
