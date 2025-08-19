@@ -211,6 +211,84 @@ definitions:
         name: discard
         value: 31
 
+  -
+    name: phy-mse-capability
+    doc: |
+      Bitmask flags for MSE capabilities.
+
+      These flags are used in the 'supported_caps' field of struct
+      phy_mse_config to indicate which measurement capabilities are supported
+      by the PHY hardware.
+    type: flags
+    name-prefix: phy-mse-cap-
+    entries:
+      -
+        name: avg
+        doc: Average MSE value is supported.
+      -
+        name: peak
+        doc: Current peak MSE value is supported.
+      -
+        name: worst-peak
+        doc: Worst-case peak MSE (latched high-water mark) is supported.
+      -
+        name: channel-a
+        doc: Diagnostics for Channel A are supported.
+      -
+        name: channel-b
+        doc: Diagnostics for Channel B are supported.
+      -
+        name: channel-c
+        doc: Diagnostics for Channel C are supported.
+      -
+        name: channel-d
+        doc: Diagnostics for Channel D are supported.
+      -
+        name: worst-channel
+        doc: |
+          Hardware or drivers can identify the single worst-performing channel
+          without needing to query each one individually.
+      -
+        name: link
+        doc: |
+          Hardware provides only a link-wide aggregate MSE or cannot map
+          the measurement to a specific channel/pair. Typical for media where
+          the MDI/MDI-X resolution or pair mapping is unknown (e.g. 100BASE-TX).
+
+  -
+    name: phy-mse-channel
+    doc: |
+      Identifiers for the 'channel' parameter used to select which diagnostic
+      data to retrieve.
+    type: enum
+    name-prefix: phy-mse-channel-
+    entries:
+      -
+        name: a
+        value: 0
+        doc: Request data for channel A.
+      -
+        name: b
+        doc: Request data for channel B.
+      -
+        name: c
+        doc: Request data for channel C.
+      -
+        name: d
+        doc: Request data for channel D.
+      -
+        name: link
+        doc: |
+          Request data for the link as a whole. Use when the PHY exposes only
+          a link-wide aggregate MSE or cannot attribute results to any single
+          channel/pair (e.g. 100BASE-TX with unknown MDI/MDI-X mapping).
+      -
+        name: worst
+        doc: |
+          Request data for the single worst-performing channel. This is a
+          convenience for PHYs or drivers that can identify the worst channel
+          in hardware.
+
 attribute-sets:
   -
     name: header

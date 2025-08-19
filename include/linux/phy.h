@@ -894,6 +894,78 @@ struct phy_led {
 #define to_phy_led(d) container_of(d, struct phy_led, led_cdev)
 
 /**
+ * struct phy_mse_config - Configuration for MSE measurement (current link mode)
+ *
+ * These properties apply to the current link mode and may change when link
+ * settings change. Callers should re-query after any link state change.
+ *
+ * Scaling:
+ *  - max_average_mse and max_peak_mse define the scale for corresponding
+ *    snapshot values. Users may normalize by dividing snapshot by the
+ *    respective max_* value to obtain a 0..1 ratio. Drivers must ensure
+ *    snapshot values do not exceed the corresponding max_*.
+ *  - If PHY_MSE_CAP_AVG is set, max_average_mse MUST be > 0.
+ *  - If PHY_MSE_CAP_PEAK or PHY_MSE_CAP_WORST_PEAK is set,
+ *    max_peak_mse MUST be > 0.
+ *
+ * Timing:
+ *  - refresh_rate_ps is the typical interval (picoseconds) between hardware
+ *    updates. Implementations may return older snapshots; do not assume
+ *    synchronous sampling.
+ *  - num_symbols is the number of symbols aggregated per hardware sample.
+ *
+ * Link-wide mode:
+ *  - Some PHYs only expose a link-wide aggregate MSE, or cannot map their
+ *    measurement to a specific channel/pair (e.g. 100BASE-TX when MDI/MDI-X
+ *    resolution is unknown). In that case, callers must use the LINK selector.
+ *
+ * Capabilities:
+ *  - supported_caps is a bitmask composed of PHY_MSE_CAP_* values from the
+ *    UAPI header. Channel-related capability bits indicate which channel
+ *    identifiers are valid.
+ *  - Callers should select only those channels/selectors that are indicated
+ *    as supported by supported_caps.
+ *
+ * If supported_caps is 0 the device provides no MSE diagnostics and drivers
+ * should typically return -EOPNOTSUPP from the ops.
+ */
+struct phy_mse_config {
+	u32 max_average_mse;
+	u32 max_peak_mse;
+	u64 refresh_rate_ps;
+	u64 num_symbols;
+	u32 supported_caps;
+};
+
+/**
+ * struct phy_mse_snapshot - Snapshot of MSE diagnostic values
+ *
+ * All fields refer to the same measurement window.
+ *
+ * Semantics:
+ *  - peak_mse is the current peak within the window.
+ *  - worst_peak_mse is a latched high-water mark since the last successful
+ *    read and MUST be cleared by the driver or hardware on read
+ *    (read-to-clear).
+ *
+ * Channel:
+ *  - 'channel' holds an integer identifier compatible with the UAPI
+ *    ethtool_phy_mse_channel enum. Callers must validate the requested
+ *    channel against supported_caps returned by get_mse_config() and must
+ *    use LINK when only link-wide is supported.
+ *  - Values must be one of the PHY_MSE_CHANNEL_* constants.
+ *  - Drivers must not coerce the requested selector (e.g. must not switch
+ *    a per-channel request to LINK). If an unsupported selector is requested,
+ *    return -EOPNOTSUPP.
+ */
+struct phy_mse_snapshot {
+	u32 channel;
+	u32 average_mse;
+	u32 peak_mse;
+	u32 worst_peak_mse;
+};
+
+/**
  * struct phy_driver - Driver structure for a particular PHY type
  *
  * @mdiodrv: Data common to all MDIO devices
@@ -1173,6 +1245,60 @@ struct phy_driver {
 	int (*get_sqi)(struct phy_device *dev);
 	/** @get_sqi_max: Get the maximum signal quality indication */
 	int (*get_sqi_max)(struct phy_device *dev);
+
+	/**
+	 * get_mse_config - Get configuration and scale of MSE measurement
+	 * @dev:    PHY device
+	 * @config: Output (filled on success)
+	 *
+	 * Fill @config with the PHY's MSE configuration for the current
+	 * link mode: scale limits (max_average_mse, max_peak_mse), update
+	 * interval (refresh_rate_ps), sample length (num_symbols) and the
+	 * capability bitmask (supported_caps).
+	 *
+	 * Implementations may defer configuration until hardware has
+	 * converged; in that case they should return -EAGAIN and allow the
+	 * caller to retry later.
+	 *
+	 * Return:
+	 *  * 0              - success, @config is valid
+	 *  * -EOPNOTSUPP    - MSE configuration not implemented by the PHY
+	 *		       or not supported in the current link mode
+	 *  * -ENETDOWN      - link is down and configuration is not
+	 *		       available in that state
+	 *  * -EAGAIN        - configuration not yet established; retry later
+	 *  * <other>        - other negative errno on failure
+	 */
+	int (*get_mse_config)(struct phy_device *dev,
+			      struct phy_mse_config *config);
+
+	/**
+	 * get_mse_snapshot - Retrieve a snapshot of MSE diagnostic values
+	 * @dev:      PHY device
+	 * @channel:  Channel identifier (PHY_MSE_CHANNEL_*)
+	 * @snapshot: Output (filled on success)
+	 *
+	 * Fill @snapshot with a correlated set of MSE values from the most
+	 * recent measurement window.
+	 *
+	 * Callers must validate @channel against supported_caps returned by
+	 * get_mse_config(). Drivers must not coerce @channel; if the requested
+	 * selector is not implemented by the device or current link mode,
+	 * the operation must fail.
+	 *
+	 * On success, @snapshot->channel MUST equal the requested @channel.
+	 * worst_peak_mse is latched and must be treated as read-to-clear.
+	 *
+	 * Return:
+	 *  * 0           - success, @snapshot is valid
+	 *  * -EOPNOTSUPP - selector not implemented by device or link mode
+	 *  * -ENETDOWN   - link is down and data is not available in that state
+	 *  * -EAGAIN     - data not yet available (e.g. first sampling
+	 *		    incomplete)
+	 *  * <other>     - other negative errno on failure
+	 */
+	int (*get_mse_snapshot)(struct phy_device *dev, u32 channel,
+				struct phy_mse_snapshot *snapshot);
 
 	/* PLCA RS interface */
 	/** @get_plca_cfg: Return the current PLCA configuration */

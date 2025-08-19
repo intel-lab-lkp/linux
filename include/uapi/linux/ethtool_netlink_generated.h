@@ -77,6 +77,60 @@ enum ethtool_pse_event {
 	ETHTOOL_PSE_EVENT_SW_PW_CONTROL_ERROR = 64,
 };
 
+/**
+ * enum ethtool_phy_mse_capability - Bitmask flags for MSE capabilities. These
+ *   flags are used in the 'supported_caps' field of struct phy_mse_config to
+ *   indicate which measurement capabilities are supported by the PHY hardware.
+ * @PHY_MSE_CAP_AVG: Average MSE value is supported.
+ * @PHY_MSE_CAP_PEAK: Current peak MSE value is supported.
+ * @PHY_MSE_CAP_WORST_PEAK: Worst-case peak MSE (latched high-water mark) is
+ *   supported.
+ * @PHY_MSE_CAP_CHANNEL_A: Diagnostics for Channel A are supported.
+ * @PHY_MSE_CAP_CHANNEL_B: Diagnostics for Channel B are supported.
+ * @PHY_MSE_CAP_CHANNEL_C: Diagnostics for Channel C are supported.
+ * @PHY_MSE_CAP_CHANNEL_D: Diagnostics for Channel D are supported.
+ * @PHY_MSE_CAP_WORST_CHANNEL: Hardware or drivers can identify the single
+ *   worst-performing channel without needing to query each one individually.
+ * @PHY_MSE_CAP_LINK: Hardware provides only a link-wide aggregate MSE or
+ *   cannot map the measurement to a specific channel/pair. Typical for media
+ *   where the MDI/MDI-X resolution or pair mapping is unknown (e.g.
+ *   100BASE-TX).
+ */
+enum ethtool_phy_mse_capability {
+	PHY_MSE_CAP_AVG = 1,
+	PHY_MSE_CAP_PEAK = 2,
+	PHY_MSE_CAP_WORST_PEAK = 4,
+	PHY_MSE_CAP_CHANNEL_A = 8,
+	PHY_MSE_CAP_CHANNEL_B = 16,
+	PHY_MSE_CAP_CHANNEL_C = 32,
+	PHY_MSE_CAP_CHANNEL_D = 64,
+	PHY_MSE_CAP_WORST_CHANNEL = 128,
+	PHY_MSE_CAP_LINK = 256,
+};
+
+/**
+ * enum ethtool_phy_mse_channel - Identifiers for the 'channel' parameter used
+ *   to select which diagnostic data to retrieve.
+ * @PHY_MSE_CHANNEL_A: Request data for channel A.
+ * @PHY_MSE_CHANNEL_B: Request data for channel B.
+ * @PHY_MSE_CHANNEL_C: Request data for channel C.
+ * @PHY_MSE_CHANNEL_D: Request data for channel D.
+ * @PHY_MSE_CHANNEL_LINK: Request data for the link as a whole. Use when the
+ *   PHY exposes only a link-wide aggregate MSE or cannot attribute results to
+ *   any single channel/pair (e.g. 100BASE-TX with unknown MDI/MDI-X mapping).
+ * @PHY_MSE_CHANNEL_WORST: Request data for the single worst-performing
+ *   channel. This is a convenience for PHYs or drivers that can identify the
+ *   worst channel in hardware.
+ */
+enum ethtool_phy_mse_channel {
+	PHY_MSE_CHANNEL_A,
+	PHY_MSE_CHANNEL_B,
+	PHY_MSE_CHANNEL_C,
+	PHY_MSE_CHANNEL_D,
+	PHY_MSE_CHANNEL_LINK,
+	PHY_MSE_CHANNEL_WORST,
+};
+
 enum {
 	ETHTOOL_A_HEADER_UNSPEC,
 	ETHTOOL_A_HEADER_DEV_INDEX,
