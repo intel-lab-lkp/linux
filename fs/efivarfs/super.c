@@ -152,7 +152,7 @@ static int efivarfs_d_compare(const struct dentry *dentry,
 {
 	int guid = len - EFI_VARIABLE_GUID_LEN;
 
-	if (name->len != len)
+	if (name->len != len || len <= EFI_VARIABLE_GUID_LEN)
 		return 1;
 
 	/* Case-sensitive compare for the variable name */
