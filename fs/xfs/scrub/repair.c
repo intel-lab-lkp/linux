@@ -38,7 +38,6 @@
 #include "xfs_attr.h"
 #include "xfs_dir2.h"
 #include "xfs_rtrmap_btree.h"
-#include "xfs_rtbitmap.h"
 #include "xfs_rtgroup.h"
 #include "xfs_rtalloc.h"
 #include "xfs_metafile.h"
