@@ -407,7 +407,6 @@ void fat_attach(struct inode *inode, loff_t i_pos)
 					  + fat_hash(i_pos);
 
 		spin_lock(&sbi->inode_hash_lock);
-		MSDOS_I(inode)->i_pos = i_pos;
 		hlist_add_head(&MSDOS_I(inode)->i_fat_hash, head);
 		spin_unlock(&sbi->inode_hash_lock);
 	}
@@ -431,7 +430,6 @@ void fat_detach(struct inode *inode)
 {
 	struct msdos_sb_info *sbi = MSDOS_SB(inode->i_sb);
 	spin_lock(&sbi->inode_hash_lock);
-	MSDOS_I(inode)->i_pos = 0;
 	hlist_del_init(&MSDOS_I(inode)->i_fat_hash);
 	spin_unlock(&sbi->inode_hash_lock);
 
@@ -515,7 +513,6 @@ int fat_fill_inode(struct inode *inode, struct msdos_dir_entry *de)
 	struct timespec64 mtime;
 	int error;
 
-	MSDOS_I(inode)->i_pos = 0;
 	inode->i_uid = sbi->options.fs_uid;
 	inode->i_gid = sbi->options.fs_gid;
 	inode_inc_iversion(inode);
@@ -606,6 +603,7 @@ struct inode *fat_build_inode(struct super_block *sb,
 		goto out;
 	}
 	inode->i_ino = iunique(sb, MSDOS_ROOT_INO);
+	MSDOS_I(inode)->i_pos = i_pos;
 	inode_set_iversion(inode, 1);
 	err = fat_fill_inode(inode, de);
 	if (err) {
