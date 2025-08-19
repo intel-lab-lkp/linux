@@ -11,6 +11,7 @@
 #include <linux/pci-epf.h>
 #include <linux/phy/phy.h>
 #include "pcie-cadence-lga-regs.h"
+#include "pcie-cadence-hpa-regs.h"
 
 enum cdns_pcie_rp_bar {
 	RP_BAR_UNDEFINED = -1,
