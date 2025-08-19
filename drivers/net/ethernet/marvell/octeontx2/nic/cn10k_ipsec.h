@@ -104,6 +104,8 @@ struct cn10k_ipsec {
 	atomic_t cpt_state;
 	struct cn10k_cpt_inst_queue iq;
 
+	u32 bpid;	/* Backpressure ID for NIX <-> CPT */
+
 	/* SA info */
 	u32 sa_size;
 	u32 outb_sa_count;
