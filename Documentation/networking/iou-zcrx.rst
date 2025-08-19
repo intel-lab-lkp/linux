@@ -41,6 +41,16 @@ RSS
 In addition to flow steering above, RSS is required to steer all other non-zero
 copy flows away from queues that are configured for io_uring ZC Rx.
 
+Supported NICs
+==============
+
+Zero copy Rx currently support two NIC families:
+
+* Broadcom Thor (BCM95750x) family
+  * Minimum FW is 232
+* Mellanox ConnectX-7 (MT2910) family
+  * Minimum FW is 28.42
+
 Usage
 =====
 
@@ -56,6 +66,10 @@ Ensure there are at least two queues::
 Enable header/data split::
 
   ethtool -G eth0 tcp-data-split on
+
+Enable HW GRO (for Mellanox NICs)::
+
+  ethtool -K eth0 rx-gro-hw on
 
 Carve out half of the HW Rx queues for zero copy using RSS::
 
