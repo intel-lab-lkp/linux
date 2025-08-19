@@ -1,6 +1,6 @@
 #!/bin/sh
 # SPDX-License-Identifier: GPL-2.0
-# description: event tracing - restricts events based on pid
+# description: event tracing - restrict events based on PID
 # requires: set_event set_event_pid events/sched
 # flags: instance
 

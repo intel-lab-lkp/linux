@@ -1,6 +1,6 @@
 #!/bin/sh
 # SPDX-License-Identifier: GPL-2.0
-# description: event tracing - restricts events based on pid notrace filtering
+# description: event tracing - restrict events based on PID notrace filtering
 # requires: set_event events/sched set_event_pid set_event_notrace_pid
 # flags: instance
 
