@@ -725,8 +725,31 @@ int avic_init_vcpu(struct vcpu_svm *svm)
 
 void avic_apicv_post_state_restore(struct kvm_vcpu *vcpu)
 {
+	struct vcpu_svm *svm = to_svm(vcpu);
+	u64 cr8;
+
 	avic_handle_dfr_update(vcpu);
 	avic_handle_ldr_update(vcpu);
+
+	/* Running nested should have inhibited AVIC. */
+	if (WARN_ON_ONCE(nested_svm_virtualize_tpr(vcpu)))
+		return;
+
+	/*
+	 * Sync TPR from LAPIC TASKPRI into V_TPR field of the VMCB.
+	 *
+	 * When AVIC is enabled the normal pre-VMRUN sync in sync_lapic_to_cr8()
+	 * is inhibited so any set TPR LAPIC state would not get reflected
+	 * in V_TPR.
+	 *
+	 * Practice shows that it is the V_TPR that is actually used by the
+	 * AVIC to decide whether to issue pending interrupts to the CPU, not
+	 * TPR in TASKPRI.
+	 */
+	cr8 = kvm_get_cr8(vcpu);
+	svm->vmcb->control.int_ctl &= ~V_TPR_MASK;
+	svm->vmcb->control.int_ctl |= cr8 & V_TPR_MASK;
+	WARN_ON_ONCE(!vmcb_is_dirty(svm->vmcb, VMCB_INTR));
 }
 
 static void svm_ir_list_del(struct kvm_kernel_irqfd *irqfd)
