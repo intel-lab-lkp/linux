@@ -751,7 +751,7 @@ bool tmigr_update_events(struct tmigr_group *group, struct tmigr_group *child,
 		 * be scheduled. If the activate wins, the event is properly
 		 * ignored.
 		 */
-		ignore = (nextexp == KTIME_MAX) ? true : false;
+		ignore = (nextexp == KTIME_MAX);
 		WRITE_ONCE(evt->ignore, ignore);
 	} else {
 		nextexp = data->nextexp;
