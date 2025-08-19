@@ -238,6 +238,8 @@ static __attribute__((unused))
 int sys_dup2(int old, int new)
 {
 #if defined(__NR_dup3)
+	if (old == new)
+		return old;
 	return my_syscall3(__NR_dup3, old, new, 0);
 #elif defined(__NR_dup2)
 	return my_syscall2(__NR_dup2, old, new);
