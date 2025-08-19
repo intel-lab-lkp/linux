@@ -252,7 +252,9 @@ allOf:
       properties:
         compatible:
           contains:
-            pattern: '^qcom,adreno-506\.[0-9]+$'
+            oneOf:
+              - pattern: '^qcom,adreno-505\.[0-9]+$'
+              - pattern: '^qcom,adreno-506\.[0-9]+$'
     then:
       properties:
         clocks:
