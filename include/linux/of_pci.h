@@ -12,6 +12,7 @@ struct device_node;
 struct device_node *of_pci_find_child_device(struct device_node *parent,
 					     unsigned int devfn);
 int of_pci_get_devfn(struct device_node *np);
+int of_pci_get_bdf(struct device_node *np);
 void of_pci_check_probe_only(void);
 #else
 static inline struct device_node *of_pci_find_child_device(struct device_node *parent,
@@ -21,6 +22,11 @@ static inline struct device_node *of_pci_find_child_device(struct device_node *p
 }
 
 static inline int of_pci_get_devfn(struct device_node *np)
+{
+	return -EINVAL;
+}
+
+static inline int of_pci_get_bdf(struct device_node *np)
 {
 	return -EINVAL;
 }

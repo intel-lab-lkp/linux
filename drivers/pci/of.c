@@ -184,6 +184,27 @@ int of_pci_get_devfn(struct device_node *np)
 EXPORT_SYMBOL_GPL(of_pci_get_devfn);
 
 /**
+ * of_pci_get_bdf() - Get Bus:Device:Function (BDF) numbers for a device node
+ * @np: device node
+ *
+ * Parses a standard 5-cell PCI resource and returns an 16-bit value that
+ * corresponds to the BDF of the node. On error, a negative error code is
+ * returned.
+ */
+int of_pci_get_bdf(struct device_node *np)
+{
+	u32 reg[5];
+	int error;
+
+	error = of_property_read_u32_array(np, "reg", reg, ARRAY_SIZE(reg));
+	if (error)
+		return error;
+
+	return (reg[0] >> 8) & 0xffff;
+}
+EXPORT_SYMBOL_GPL(of_pci_get_bdf);
+
+/**
  * of_pci_parse_bus_range() - parse the bus-range property of a PCI device
  * @node: device node
  * @res: address to a struct resource to return the bus-range
