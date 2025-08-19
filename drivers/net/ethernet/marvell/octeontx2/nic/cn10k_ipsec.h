@@ -346,6 +346,7 @@ void cn10k_ipsec_free_aura_ptrs(struct otx2_nic *pfvf);
 struct nix_wqe_rx_s *cn10k_ipsec_process_cpt_metapkt(struct otx2_nic *pfvf,
 						     struct sk_buff *skb,
 						     dma_addr_t seg_addr);
+void cn10k_ipsec_inb_disable_flows(struct otx2_nic *pfvf);
 #else
 static inline __maybe_unused int cn10k_ipsec_init(struct net_device *netdev)
 {
@@ -389,5 +390,11 @@ struct nix_wqe_rx_s *cn10k_ipsec_process_cpt_metapkt(struct otx2_nic *pfvf,
 {
 	return NULL;
 }
+
+static inline __maybe_unused
+void cn10k_ipsec_inb_delete_flows(struct otx2_nic *pfvf)
+{
+}
+
 #endif
 #endif // CN10K_IPSEC_H
