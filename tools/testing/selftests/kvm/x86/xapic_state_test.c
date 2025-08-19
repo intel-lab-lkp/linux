@@ -1,9 +1,11 @@
 // SPDX-License-Identifier: GPL-2.0-only
 #include <fcntl.h>
+#include <stdatomic.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <sys/ioctl.h>
+#include <unistd.h>
 
 #include "apic.h"
 #include "kvm_util.h"
@@ -15,6 +17,245 @@ struct xapic_vcpu {
 	bool is_x2apic;
 	bool has_xavic_errata;
 };
+
+#define IRQ_VECTOR 0x20
+
+/* See also the comment at similar assertion in memslot_perf_test.c */
+static_assert(ATOMIC_INT_LOCK_FREE == 2, "atomic int is not lockless");
+
+static atomic_uint tpr_guest_irq_sync_val;
+
+static void tpr_guest_irq_sync_flag_reset(void)
+{
+	atomic_store_explicit(&tpr_guest_irq_sync_val, 0,
+			      memory_order_release);
+}
+
+static unsigned int tpr_guest_irq_sync_val_get(void)
+{
+	return atomic_load_explicit(&tpr_guest_irq_sync_val,
+				    memory_order_acquire);
+}
+
+static void tpr_guest_irq_sync_val_inc(void)
+{
+	atomic_fetch_add_explicit(&tpr_guest_irq_sync_val, 1,
+				  memory_order_acq_rel);
+}
+
+static void tpr_guest_irq_handler_xapic(struct ex_regs *regs)
+{
+	tpr_guest_irq_sync_val_inc();
+
+	xapic_write_reg(APIC_EOI, 0);
+}
+
+static void tpr_guest_irq_handler_x2apic(struct ex_regs *regs)
+{
+	tpr_guest_irq_sync_val_inc();
+
+	x2apic_write_reg(APIC_EOI, 0);
+}
+
+static void tpr_guest_irq_queue(bool x2apic)
+{
+	if (x2apic) {
+		x2apic_write_reg(APIC_SELF_IPI, IRQ_VECTOR);
+	} else {
+		uint32_t icr, icr2;
+
+		icr = APIC_DEST_SELF | APIC_DEST_PHYSICAL | APIC_DM_FIXED |
+			IRQ_VECTOR;
+		icr2 = 0;
+
+		xapic_write_reg(APIC_ICR2, icr2);
+		xapic_write_reg(APIC_ICR, icr);
+	}
+}
+
+static uint8_t tpr_guest_tpr_get(bool x2apic)
+{
+	uint32_t taskpri;
+
+	if (x2apic)
+		taskpri = x2apic_read_reg(APIC_TASKPRI);
+	else
+		taskpri = xapic_read_reg(APIC_TASKPRI);
+
+	return (taskpri & APIC_TASKPRI_TP_MASK) >> APIC_TASKPRI_TP_SHIFT;
+}
+
+static uint8_t tpr_guest_ppr_get(bool x2apic)
+{
+	uint32_t procpri;
+
+	if (x2apic)
+		procpri = x2apic_read_reg(APIC_PROCPRI);
+	else
+		procpri = xapic_read_reg(APIC_PROCPRI);
+
+	return (procpri & APIC_PROCPRI_PP_MASK) >> APIC_PROCPRI_PP_SHIFT;
+}
+
+static uint8_t tpr_guest_cr8_get(void)
+{
+	uint64_t cr8;
+
+	asm volatile ("mov %%cr8, %[cr8]\n\t" : [cr8] "=r"(cr8));
+
+	return cr8 & GENMASK(3, 0);
+}
+
+static void tpr_guest_check_tpr_ppr_cr8_equal(bool x2apic)
+{
+	uint8_t tpr;
+
+	tpr = tpr_guest_tpr_get(x2apic);
+
+	GUEST_ASSERT_EQ(tpr_guest_ppr_get(x2apic), tpr);
+	GUEST_ASSERT_EQ(tpr_guest_cr8_get(), tpr);
+}
+
+static void tpr_guest_code(uint64_t x2apic)
+{
+	cli();
+
+	if (x2apic)
+		x2apic_enable();
+	else
+		xapic_enable();
+
+	tpr_guest_check_tpr_ppr_cr8_equal(x2apic);
+
+	tpr_guest_irq_queue(x2apic);
+
+	/* TPR = 0 but IRQ masked by IF=0, should not fire */
+	udelay(1000);
+	GUEST_ASSERT_EQ(tpr_guest_irq_sync_val_get(), 0);
+
+	sti();
+
+	/* IF=1 now, IRQ should fire */
+	while (tpr_guest_irq_sync_val_get() == 0)
+		cpu_relax();
+	GUEST_ASSERT_EQ(tpr_guest_irq_sync_val_get(), 1);
+
+	GUEST_SYNC(0);
+	tpr_guest_check_tpr_ppr_cr8_equal(x2apic);
+
+	tpr_guest_irq_queue(x2apic);
+
+	/* IRQ masked by barely high enough TPR now, should not fire */
+	udelay(1000);
+	GUEST_ASSERT_EQ(tpr_guest_irq_sync_val_get(), 1);
+
+	GUEST_SYNC(1);
+	tpr_guest_check_tpr_ppr_cr8_equal(x2apic);
+
+	/* TPR barely low enough now to unmask IRQ, should fire */
+	while (tpr_guest_irq_sync_val_get() == 1)
+		cpu_relax();
+	GUEST_ASSERT_EQ(tpr_guest_irq_sync_val_get(), 2);
+
+	GUEST_DONE();
+}
+
+static uint8_t lapic_tpr_get(struct kvm_lapic_state *xapic)
+{
+	return (*((u32 *)&xapic->regs[APIC_TASKPRI]) & APIC_TASKPRI_TP_MASK) >>
+		APIC_TASKPRI_TP_SHIFT;
+}
+
+static void lapic_tpr_set(struct kvm_lapic_state *xapic, uint8_t val)
+{
+	*((u32 *)&xapic->regs[APIC_TASKPRI]) &= ~APIC_TASKPRI_TP_MASK;
+	*((u32 *)&xapic->regs[APIC_TASKPRI]) |= val << APIC_TASKPRI_TP_SHIFT;
+}
+
+static uint8_t sregs_tpr(struct kvm_sregs *sregs)
+{
+	return sregs->cr8 & GENMASK(3, 0);
+}
+
+static void test_tpr_check_tpr_zero(struct kvm_vcpu *vcpu)
+{
+	struct kvm_lapic_state xapic;
+
+	vcpu_ioctl(vcpu, KVM_GET_LAPIC, &xapic);
+
+	TEST_ASSERT_EQ(lapic_tpr_get(&xapic), 0);
+}
+
+static void test_tpr_check_tpr_cr8_equal(struct kvm_vcpu *vcpu)
+{
+	struct kvm_sregs sregs;
+	struct kvm_lapic_state xapic;
+
+	vcpu_sregs_get(vcpu, &sregs);
+	vcpu_ioctl(vcpu, KVM_GET_LAPIC, &xapic);
+
+	TEST_ASSERT_EQ(sregs_tpr(&sregs), lapic_tpr_get(&xapic));
+}
+
+static void test_tpr_mask_irq(struct kvm_vcpu *vcpu, bool mask)
+{
+	struct kvm_lapic_state xapic;
+	uint8_t tpr;
+
+	static_assert(IRQ_VECTOR >= 16, "invalid IRQ vector number");
+	tpr = IRQ_VECTOR / 16;
+	if (!mask)
+		tpr--;
+
+	vcpu_ioctl(vcpu, KVM_GET_LAPIC, &xapic);
+	lapic_tpr_set(&xapic, tpr);
+	vcpu_ioctl(vcpu, KVM_SET_LAPIC, &xapic);
+}
+
+static void test_tpr(struct kvm_vcpu *vcpu, bool x2apic)
+{
+	bool run_guest = true;
+
+	vcpu_args_set(vcpu, 1, (uint64_t)x2apic);
+
+	/* According to the SDM/APM the TPR value at reset is 0 */
+	test_tpr_check_tpr_zero(vcpu);
+	test_tpr_check_tpr_cr8_equal(vcpu);
+
+	tpr_guest_irq_sync_flag_reset();
+
+	while (run_guest) {
+		struct ucall uc;
+
+		alarm(2);
+		vcpu_run(vcpu);
+		alarm(0);
+
+		switch (get_ucall(vcpu, &uc)) {
+		case UCALL_ABORT:
+			REPORT_GUEST_ASSERT(uc);
+			break;
+		case UCALL_DONE:
+			test_tpr_check_tpr_cr8_equal(vcpu);
+
+			run_guest = false;
+			break;
+		case UCALL_SYNC:
+			test_tpr_check_tpr_cr8_equal(vcpu);
+
+			if (uc.args[1] == 0)
+				test_tpr_mask_irq(vcpu, true);
+			else if (uc.args[1] == 1)
+				test_tpr_mask_irq(vcpu, false);
+			else
+				TEST_FAIL("Unknown SYNC %lu", uc.args[1]);
+			break;
+		default:
+			TEST_FAIL("Unknown ucall result 0x%lx", uc.cmd);
+			break;
+		}
+	}
+}
 
 static void xapic_guest_code(void)
 {
@@ -195,6 +436,12 @@ static void test_apic_id(void)
 	kvm_vm_free(vm);
 }
 
+static void clear_x2apic_cap_map_apic(struct kvm_vm *vm, struct kvm_vcpu *vcpu)
+{
+	vcpu_clear_cpuid_feature(vcpu, X86_FEATURE_X2APIC);
+	virt_pg_map(vm, APIC_DEFAULT_GPA, APIC_DEFAULT_GPA);
+}
+
 static void test_x2apic_id(void)
 {
 	struct kvm_lapic_state lapic = {};
@@ -230,8 +477,15 @@ int main(int argc, char *argv[])
 	};
 	struct kvm_vm *vm;
 
+	/* x2APIC tests */
+
 	vm = vm_create_with_one_vcpu(&x.vcpu, x2apic_guest_code);
 	test_icr(&x);
+	kvm_vm_free(vm);
+
+	vm = vm_create_with_one_vcpu(&x.vcpu, tpr_guest_code);
+	vm_install_exception_handler(vm, IRQ_VECTOR, tpr_guest_irq_handler_x2apic);
+	test_tpr(x.vcpu, true);
 	kvm_vm_free(vm);
 
 	/*
@@ -251,10 +505,15 @@ int main(int argc, char *argv[])
 	x.has_xavic_errata = host_cpu_is_amd &&
 			     get_kvm_amd_param_bool("avic");
 
-	vcpu_clear_cpuid_feature(x.vcpu, X86_FEATURE_X2APIC);
-
-	virt_pg_map(vm, APIC_DEFAULT_GPA, APIC_DEFAULT_GPA);
+	clear_x2apic_cap_map_apic(vm, x.vcpu);
 	test_icr(&x);
+	kvm_vm_free(vm);
+
+	/* Also do a TPR non-x2APIC test */
+	vm = vm_create_with_one_vcpu(&x.vcpu, tpr_guest_code);
+	clear_x2apic_cap_map_apic(vm, x.vcpu);
+	vm_install_exception_handler(vm, IRQ_VECTOR, tpr_guest_irq_handler_xapic);
+	test_tpr(x.vcpu, false);
 	kvm_vm_free(vm);
 
 	test_apic_id();
