@@ -1026,6 +1026,19 @@ static int cn10k_outb_cpt_clean(struct otx2_nic *pf)
 	return ret;
 }
 
+static u32 cn10k_inb_alloc_sa(struct otx2_nic *pf, struct xfrm_state *x)
+{
+	u32 sa_index = 0;
+
+	sa_index = find_first_zero_bit(pf->ipsec.inb_sa_table, CN10K_IPSEC_INB_MAX_SA);
+	if (sa_index >= CN10K_IPSEC_INB_MAX_SA)
+		return sa_index;
+
+	set_bit(sa_index, pf->ipsec.inb_sa_table);
+
+	return sa_index;
+}
+
 static void cn10k_cpt_inst_flush(struct otx2_nic *pf, struct cpt_inst_s *inst,
 				 u64 size)
 {
@@ -1140,6 +1153,137 @@ free_mem:
 	return ret;
 }
 
+static int cn10k_inb_write_sa(struct otx2_nic *pf,
+			      struct xfrm_state *x,
+			      struct cn10k_inb_sw_ctx_info *inb_ctx_info)
+{
+	dma_addr_t res_iova, dptr_iova, sa_iova;
+	struct cn10k_rx_sa_s *sa_dptr, *sa_cptr;
+	struct cpt_inst_s inst;
+	u32 sa_size, off;
+	struct cpt_res_s *res;
+	u64 reg_val;
+	int ret;
+
+	res = dma_alloc_coherent(pf->dev, sizeof(struct cpt_res_s),
+				 &res_iova, GFP_ATOMIC);
+	if (!res)
+		return -ENOMEM;
+
+	sa_cptr = inb_ctx_info->sa_entry;
+	sa_iova = inb_ctx_info->sa_iova;
+	sa_size = sizeof(struct cn10k_rx_sa_s);
+
+	sa_dptr = dma_alloc_coherent(pf->dev, sa_size, &dptr_iova, GFP_ATOMIC);
+	if (!sa_dptr) {
+		dma_free_coherent(pf->dev, sizeof(struct cpt_res_s), res,
+				  res_iova);
+		return -ENOMEM;
+	}
+
+	for (off = 0; off < (sa_size / 8); off++)
+		*((u64 *)sa_dptr + off) = (__force u64)cpu_to_be64(*((u64 *)sa_cptr + off));
+
+	memset(&inst, 0, sizeof(struct cpt_inst_s));
+
+	res->compcode = 0;
+	inst.res_addr = res_iova;
+	inst.dptr = (u64)dptr_iova;
+	inst.param2 = sa_size >> 3;
+	inst.dlen = sa_size;
+	inst.opcode_major = CN10K_IPSEC_MAJOR_OP_WRITE_SA;
+	inst.opcode_minor = CN10K_IPSEC_MINOR_OP_WRITE_SA;
+	inst.cptr = sa_iova;
+	inst.ctx_val = 1;
+	inst.egrp = CN10K_DEF_CPT_IPSEC_EGRP;
+
+	/* Re-use Outbound CPT LF to install Ingress SAs as well because
+	 * the driver does not own the ingress CPT LF.
+	 */
+	pf->ipsec.io_addr = (__force u64)otx2_get_regaddr(pf, CN10K_CPT_LF_NQX(0));
+	cn10k_cpt_inst_flush(pf, &inst, sizeof(struct cpt_inst_s));
+	dma_wmb();
+
+	ret = cn10k_wait_for_cpt_respose(pf, res);
+	if (ret)
+		goto out;
+
+	/* Trigger CTX flush to write dirty data back to DRAM */
+	reg_val = FIELD_PREP(GENMASK_ULL(45, 0), sa_iova >> 7);
+	otx2_write64(pf, CN10K_CPT_LF_CTX_FLUSH, reg_val);
+
+out:
+	dma_free_coherent(pf->dev, sa_size, sa_dptr, dptr_iova);
+	dma_free_coherent(pf->dev, sizeof(struct cpt_res_s), res, res_iova);
+	return ret;
+}
+
+static void cn10k_xfrm_inb_prepare_sa(struct otx2_nic *pf, struct xfrm_state *x,
+				      struct cn10k_inb_sw_ctx_info *inb_ctx_info)
+{
+	struct cn10k_rx_sa_s *sa_entry = inb_ctx_info->sa_entry;
+	int key_len = (x->aead->alg_key_len + 7) / 8;
+	u8 *key = x->aead->alg_key;
+	u32 sa_size = sizeof(struct cn10k_rx_sa_s);
+	u64 *tmp_key;
+	u32 *tmp_salt;
+	int idx;
+
+	memset(sa_entry, 0, sizeof(struct cn10k_rx_sa_s));
+
+	/* Disable ESN for now */
+	sa_entry->esn_en = 0;
+
+	/* HW context offset is word-31 */
+	sa_entry->hw_ctx_off = 31;
+	sa_entry->pkind = NPC_RX_CPT_HDR_PKIND;
+	sa_entry->eth_ovrwr = 1;
+	sa_entry->pkt_output = 1;
+	sa_entry->pkt_format = 1;
+	sa_entry->orig_pkt_free = 0;
+	/* context push size is up to word 31 */
+	sa_entry->ctx_push_size = 31 + 1;
+	/* context size, 128 Byte aligned up */
+	sa_entry->ctx_size = (sa_size / OTX2_ALIGN)  & 0xF;
+
+	sa_entry->cookie = inb_ctx_info->sa_index;
+
+	/* 1 word (??) prepanded to context header size */
+	sa_entry->ctx_hdr_size = 1;
+	/* Mark SA entry valid */
+	sa_entry->aop_valid = 1;
+
+	sa_entry->sa_dir = 0;			/* Inbound */
+	sa_entry->ipsec_protocol = 1;		/* ESP */
+	/* Default to Transport Mode */
+	if (x->props.mode == XFRM_MODE_TUNNEL)
+		sa_entry->ipsec_mode = 1;	/* Tunnel Mode */
+
+	sa_entry->et_ovrwr_ddr_en = 1;
+	sa_entry->enc_type = 5;			/* AES-GCM only */
+	sa_entry->aes_key_len = 1;		/* AES key length 128 */
+	sa_entry->l2_l3_hdr_on_error = 1;
+	sa_entry->spi = (__force u32)be32_to_cpu(x->id.spi);
+
+	/* Last 4 bytes are salt */
+	key_len -= 4;
+	memcpy(sa_entry->cipher_key, key, key_len);
+	tmp_key = (u64 *)sa_entry->cipher_key;
+
+	for (idx = 0; idx < key_len / 8; idx++)
+		tmp_key[idx] = (__force u64)cpu_to_be64(tmp_key[idx]);
+
+	memcpy(&sa_entry->iv_gcm_salt, key + key_len, 4);
+	tmp_salt = (u32 *)&sa_entry->iv_gcm_salt;
+	*tmp_salt = (__force u32)cpu_to_be32(*tmp_salt);
+
+	/* Write SA context data to memory before enabling */
+	wmb();
+
+	/* Enable SA */
+	sa_entry->sa_valid = 1;
+}
+
 static int cn10k_ipsec_get_hw_ctx_offset(void)
 {
 	/* Offset on Hardware-context offset in word */
@@ -1247,11 +1391,6 @@ static int cn10k_ipsec_validate_state(struct xfrm_state *x,
 				   "Only IPv4/v6 xfrm states may be offloaded");
 		return -EINVAL;
 	}
-	if (x->xso.type != XFRM_DEV_OFFLOAD_CRYPTO) {
-		NL_SET_ERR_MSG_MOD(extack,
-				   "Cannot offload other than crypto-mode");
-		return -EINVAL;
-	}
 	if (x->props.mode != XFRM_MODE_TRANSPORT &&
 	    x->props.mode != XFRM_MODE_TUNNEL) {
 		NL_SET_ERR_MSG_MOD(extack,
@@ -1261,11 +1400,6 @@ static int cn10k_ipsec_validate_state(struct xfrm_state *x,
 	if (x->id.proto != IPPROTO_ESP) {
 		NL_SET_ERR_MSG_MOD(extack,
 				   "Only ESP xfrm state may be offloaded");
-		return -EINVAL;
-	}
-	if (x->encap) {
-		NL_SET_ERR_MSG_MOD(extack,
-				   "Encapsulated xfrm state may not be offloaded");
 		return -EINVAL;
 	}
 	if (!x->aead) {
@@ -1304,11 +1438,95 @@ static int cn10k_ipsec_validate_state(struct xfrm_state *x,
 	return 0;
 }
 
-static int cn10k_ipsec_inb_add_state(struct xfrm_state *x,
+static int cn10k_ipsec_inb_add_state(struct net_device *dev,
+				     struct xfrm_state *x,
 				     struct netlink_ext_ack *extack)
 {
-	NL_SET_ERR_MSG_MOD(extack, "xfrm inbound offload not supported");
-	return -EOPNOTSUPP;
+	struct cn10k_inb_sw_ctx_info *inb_ctx_info = NULL, *inb_ctx;
+	bool enable_rule = false;
+	struct otx2_nic *pf;
+	u64 *sa_offset_ptr;
+	u32 sa_index = 0;
+	int err = 0;
+
+	pf = netdev_priv(dev);
+
+	/* If XFRM policy was added before state, then the inb_ctx_info instance
+	 * would be allocated there.
+	 */
+	list_for_each_entry(inb_ctx, &pf->ipsec.inb_sw_ctx_list, list) {
+		if (inb_ctx->reqid == x->props.reqid) {
+			inb_ctx_info = inb_ctx;
+			enable_rule = true;
+			break;
+		}
+	}
+
+	if (!inb_ctx_info) {
+		/* Allocate a structure to track SA related info in driver */
+		inb_ctx_info = devm_kzalloc(pf->dev, sizeof(*inb_ctx_info), GFP_KERNEL);
+		if (!inb_ctx_info)
+			return -ENOMEM;
+
+		/* Stash pointer in the xfrm offload handle */
+		x->xso.offload_handle = (unsigned long)inb_ctx_info;
+	}
+
+	sa_index = cn10k_inb_alloc_sa(pf, x);
+	if (sa_index >= CN10K_IPSEC_INB_MAX_SA) {
+		netdev_err(dev, "Failed to find free entry in SA Table\n");
+		err = -ENOMEM;
+		goto err_out;
+	}
+
+	/* Fill in information for bookkeeping */
+	inb_ctx_info->sa_index = sa_index;
+	inb_ctx_info->spi = x->id.spi;
+	inb_ctx_info->reqid = x->props.reqid;
+	inb_ctx_info->sa_entry = pf->ipsec.inb_sa->base +
+				 (sa_index * pf->ipsec.sa_tbl_entry_sz);
+	inb_ctx_info->sa_iova = pf->ipsec.inb_sa->iova +
+				(sa_index * pf->ipsec.sa_tbl_entry_sz);
+	inb_ctx_info->x_state = x;
+
+	/* Store XFRM state pointer in SA context at an offset of 1KB.
+	 * It will be later used in the rcv_pkt_handler to associate
+	 * an skb with XFRM state.
+	 */
+	sa_offset_ptr = pf->ipsec.inb_sa->base +
+		 (sa_index * pf->ipsec.sa_tbl_entry_sz) + 1024;
+	*sa_offset_ptr = (u64)x;
+
+	err = cn10k_inb_install_spi_to_sa_match_entry(pf, x, inb_ctx_info);
+	if (err) {
+		netdev_err(dev, "Failed to install Inbound IPSec exact match entry\n");
+		goto err_out;
+	}
+
+	/* Fill the Inbound SA context structure */
+	cn10k_xfrm_inb_prepare_sa(pf, x, inb_ctx_info);
+
+	err = cn10k_inb_write_sa(pf, x, inb_ctx_info);
+	if (err)
+		netdev_err(dev, "Error writing inbound SA\n");
+
+	/* Enable NPC rule if policy was already installed */
+	if (enable_rule) {
+		err = cn10k_inb_ena_dis_flow(pf, inb_ctx_info, false);
+		if (err)
+			netdev_err(dev, "Failed to enable rule\n");
+	} else {
+		/* All set, add ctx_info to the list */
+		list_add_tail(&inb_ctx_info->list, &pf->ipsec.inb_sw_ctx_list);
+	}
+
+	cn10k_cpt_device_set_available(pf);
+	return err;
+
+err_out:
+	x->xso.offload_handle = 0;
+	devm_kfree(pf->dev, inb_ctx_info);
+	return err;
 }
 
 static int cn10k_ipsec_outb_add_state(struct net_device *dev,
@@ -1319,10 +1537,6 @@ static int cn10k_ipsec_outb_add_state(struct net_device *dev,
 	struct qmem *sa_info;
 	struct otx2_nic *pf;
 	int err;
-
-	err = cn10k_ipsec_validate_state(x, extack);
-	if (err)
-		return err;
 
 	pf = netdev_priv(dev);
 
@@ -1352,10 +1566,52 @@ static int cn10k_ipsec_add_state(struct net_device *dev,
 				 struct xfrm_state *x,
 				 struct netlink_ext_ack *extack)
 {
+	int err;
+
+	err = cn10k_ipsec_validate_state(x, extack);
+	if (err)
+		return err;
+
 	if (x->xso.dir == XFRM_DEV_OFFLOAD_IN)
-		return cn10k_ipsec_inb_add_state(x, extack);
+		return cn10k_ipsec_inb_add_state(dev, x, extack);
 	else
 		return cn10k_ipsec_outb_add_state(dev, x, extack);
+
+	return err;
+}
+
+static void cn10k_ipsec_inb_del_state(struct net_device *dev,
+				      struct otx2_nic *pf, struct xfrm_state *x)
+{
+	struct cn10k_inb_sw_ctx_info *inb_ctx_info;
+	struct cn10k_rx_sa_s *sa_entry;
+	int err = 0;
+
+	/* 1. Find SPI to SA entry */
+	inb_ctx_info = (struct cn10k_inb_sw_ctx_info *)x->xso.offload_handle;
+
+	if (inb_ctx_info->spi != x->id.spi) {
+		netdev_err(dev, "SPI Mismatch (ctx) 0x%x != 0x%x (xfrm)\n",
+			   inb_ctx_info->spi, be32_to_cpu(x->id.spi));
+		return;
+	}
+
+	/* 2. Delete SA in CPT HW */
+	sa_entry = inb_ctx_info->sa_entry;
+	memset(sa_entry, 0, sizeof(struct cn10k_rx_sa_s));
+
+	sa_entry->ctx_push_size = 31 + 1;
+	sa_entry->ctx_size = (sizeof(struct cn10k_rx_sa_s) / OTX2_ALIGN) & 0xF;
+	sa_entry->aop_valid = 1;
+
+	if (cn10k_cpt_device_set_inuse(pf)) {
+		err = cn10k_inb_write_sa(pf, x, inb_ctx_info);
+		if (err)
+			netdev_err(dev, "Error (%d) deleting INB SA\n", err);
+		cn10k_cpt_device_set_available(pf);
+	}
+
+	x->xso.offload_handle = 0;
 }
 
 static void cn10k_ipsec_del_state(struct net_device *dev, struct xfrm_state *x)
@@ -1365,10 +1621,10 @@ static void cn10k_ipsec_del_state(struct net_device *dev, struct xfrm_state *x)
 	struct otx2_nic *pf;
 	int err;
 
-	if (x->xso.dir == XFRM_DEV_OFFLOAD_IN)
-		return;
-
 	pf = netdev_priv(dev);
+
+	if (x->xso.dir == XFRM_DEV_OFFLOAD_IN)
+		return cn10k_ipsec_inb_del_state(dev, pf, x);
 
 	sa_info = (struct qmem *)x->xso.offload_handle;
 	sa_entry = (struct cn10k_tx_sa_s *)sa_info->base;
@@ -1388,13 +1644,112 @@ static void cn10k_ipsec_del_state(struct net_device *dev, struct xfrm_state *x)
 	/* If no more SA's then update netdev feature for potential change
 	 * in NETIF_F_HW_ESP.
 	 */
-	if (!--pf->ipsec.outb_sa_count)
-		queue_work(pf->ipsec.sa_workq, &pf->ipsec.sa_work);
+	pf->ipsec.outb_sa_count--;
+	queue_work(pf->ipsec.sa_workq, &pf->ipsec.sa_work);
+}
+
+static int cn10k_ipsec_policy_add(struct xfrm_policy *x,
+				  struct netlink_ext_ack *extack)
+{
+	struct cn10k_inb_sw_ctx_info *inb_ctx_info = NULL, *inb_ctx;
+	struct net_device *netdev = x->xdo.dev;
+	struct otx2_nic *pf;
+	int ret = 0;
+	bool disable_rule = true;
+
+	if (x->xdo.dir != XFRM_DEV_OFFLOAD_IN) {
+		netdev_err(netdev, "ERR: Can only offload Inbound policies\n");
+		ret = -EINVAL;
+	}
+
+	if (x->xdo.type != XFRM_DEV_OFFLOAD_PACKET) {
+		netdev_err(netdev, "ERR: Only Packet mode supported\n");
+		ret = -EINVAL;
+	}
+
+	pf = netdev_priv(netdev);
+
+	/* If XFRM state was added before policy, then the inb_ctx_info instance
+	 * would be allocated there.
+	 */
+	list_for_each_entry(inb_ctx, &pf->ipsec.inb_sw_ctx_list, list) {
+		if (inb_ctx->reqid == x->xfrm_vec[0].reqid) {
+			inb_ctx_info = inb_ctx;
+			disable_rule = false;
+			break;
+		}
+	}
+
+	if (!inb_ctx_info) {
+		/* Allocate a structure to track SA related info in driver */
+		inb_ctx_info = devm_kzalloc(pf->dev, sizeof(*inb_ctx_info), GFP_KERNEL);
+		if (!inb_ctx_info)
+			return -ENOMEM;
+
+		inb_ctx_info->reqid = x->xfrm_vec[0].reqid;
+	}
+
+	ret = cn10k_inb_alloc_mcam_entry(pf, inb_ctx_info);
+	if (ret) {
+		netdev_err(netdev, "Failed to allocate MCAM entry for Inbound IPSec flow\n");
+		goto err_out;
+	}
+
+	ret = cn10k_inb_install_flow(pf, inb_ctx_info);
+	if (ret) {
+		netdev_err(netdev, "Failed to install Inbound IPSec flow\n");
+		goto err_out;
+	}
+
+	/* Leave rule in a disabled state until xfrm_state add is completed */
+	if (disable_rule) {
+		ret = cn10k_inb_ena_dis_flow(pf, inb_ctx_info, true);
+		if (ret)
+			netdev_err(netdev, "Failed to disable rule\n");
+
+		/* All set, add ctx_info to the list */
+		list_add_tail(&inb_ctx_info->list, &pf->ipsec.inb_sw_ctx_list);
+	}
+
+	/* Stash pointer in the xfrm offload handle */
+	x->xdo.offload_handle = (unsigned long)inb_ctx_info;
+
+err_out:
+	return ret;
+}
+
+static void cn10k_ipsec_policy_delete(struct xfrm_policy *x)
+{
+	struct cn10k_inb_sw_ctx_info *inb_ctx_info;
+	struct net_device *netdev = x->xdo.dev;
+	struct otx2_nic *pf;
+
+	if (!x->xdo.offload_handle)
+		return;
+
+	pf = netdev_priv(netdev);
+	inb_ctx_info = (struct cn10k_inb_sw_ctx_info *)x->xdo.offload_handle;
+
+	/* Schedule a workqueue to free NPC rule and SPI-to-SA match table
+	 * entry because they are freed via a mailbox call which can sleep
+	 * and the delete policy routine from XFRM stack is called in an
+	 * atomic context.
+	 */
+	inb_ctx_info->delete_npc_and_match_entry = true;
+	queue_work(pf->ipsec.sa_workq, &pf->ipsec.sa_work);
+}
+
+static void cn10k_ipsec_policy_free(struct xfrm_policy *x)
+{
+	return;
 }
 
 static const struct xfrmdev_ops cn10k_ipsec_xfrmdev_ops = {
 	.xdo_dev_state_add	= cn10k_ipsec_add_state,
 	.xdo_dev_state_delete	= cn10k_ipsec_del_state,
+	.xdo_dev_policy_add	= cn10k_ipsec_policy_add,
+	.xdo_dev_policy_delete	= cn10k_ipsec_policy_delete,
+	.xdo_dev_policy_free	= cn10k_ipsec_policy_free,
 };
 
 static void cn10k_ipsec_sa_wq_handler(struct work_struct *work)
