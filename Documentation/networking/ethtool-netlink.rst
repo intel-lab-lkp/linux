@@ -242,6 +242,7 @@ Userspace to kernel:
   ``ETHTOOL_MSG_RSS_SET``               set RSS settings
   ``ETHTOOL_MSG_RSS_CREATE_ACT``        create an additional RSS context
   ``ETHTOOL_MSG_RSS_DELETE_ACT``        delete an additional RSS context
+  ``ETHTOOL_MSG_MSE_GET``               get MSE diagnostic data
   ===================================== =================================
 
 Kernel to userspace:
@@ -299,6 +300,7 @@ Kernel to userspace:
   ``ETHTOOL_MSG_RSS_CREATE_ACT_REPLY``     create an additional RSS context
   ``ETHTOOL_MSG_RSS_CREATE_NTF``           additional RSS context created
   ``ETHTOOL_MSG_RSS_DELETE_NTF``           additional RSS context deleted
+  ``ETHTOOL_MSG_MSE_GET_REPLY``            MSE diagnostic data
   ======================================== =================================
 
 ``GET`` requests are sent by userspace applications to retrieve device
@@ -2452,6 +2454,69 @@ Kernel response contents:
   ======================================== ======  ============================
 
 For a description of each attribute, see ``TSCONFIG_GET``.
+
+MSE_GET
+=======
+
+Retrieves detailed Mean Square Error (MSE) diagnostic information from the PHY.
+
+Request Contents:
+
+  ====================================  ======  ============================
+  ETHTOOL_A_MSE_HEADER                  nested  request header
+  ETHTOOL_A_MSE_CHANNEL                 u32     optional channel enum value
+  ====================================  ======  ============================
+
+.. kernel-doc:: include/uapi/linux/ethtool_netlink_generated.h
+    :identifiers: phy_mse_channel
+
+The optional ``ETHTOOL_A_MSE_CHANNEL`` attribute allows the caller to request
+data for a specific channel. If omitted, the kernel will return snapshots for
+all supported channels.
+
+Kernel Response Contents:
+
+  ====================================  ======  ============================
+  ETHTOOL_A_MSE_HEADER                  nested  reply header
+  ETHTOOL_A_MSE_CONFIG                  nested  MSE measurement configuration
+  ETHTOOL_A_MSE_SNAPSHOT+               nested  one or more MSE snapshots
+  ====================================  ======  ============================
+
+MSE Configuration
+-----------------
+
+This nested attribute contains the full configuration properties for the MSE
+measurements
+
+  ===============================================  ======  ====================
+  ETHTOOL_A_MSE_CONFIG_MAX_AVERAGE_MSE             u32     max avg_mse scale
+  ETHTOOL_A_MSE_CONFIG_MAX_PEAK_MSE                u32     max peak_mse scale
+  ETHTOOL_A_MSE_CONFIG_REFRESH_RATE_PS             u64     sample rate (ps)
+  ETHTOOL_A_MSE_CONFIG_NUM_SYMBOLS                 u64     symbols per sample
+  ETHTOOL_A_MSE_CONFIG_SUPPORTED_CAPS              bitset  capability bitmask
+  ===============================================  ======  ====================
+
+.. kernel-doc:: include/linux/phy.h
+    :identifiers: phy_mse_config
+
+.. kernel-doc:: include/uapi/linux/ethtool_netlink_generated.h
+    :identifiers: phy_mse_snapshot
+
+MSE Snapshot
+------------
+
+This nested attribute contains an atomic snapshot of MSE values for a specific
+channel or for the link as a whole.
+
+  ===============================================  ======  ======================
+  ETHTOOL_A_MSE_SNAPSHOT_CHANNEL                   u32     channel enum value
+  ETHTOOL_A_MSE_SNAPSHOT_AVERAGE_MSE               u32     average MSE value
+  ETHTOOL_A_MSE_SNAPSHOT_PEAK_MSE                  u32     current peak MSE
+  ETHTOOL_A_MSE_SNAPSHOT_WORST_PEAK_MSE            u32     worst-case peak MSE
+  ===============================================  ======  ======================
+
+.. kernel-doc:: include/linux/phy.h
+    :identifiers: phy_mse_snapshot
 
 Request translation
 ===================
