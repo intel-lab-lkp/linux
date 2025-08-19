@@ -13,7 +13,6 @@
 #define OTX2_CPT_DRV_NAME    "rvu_cptpf"
 #define OTX2_CPT_DRV_STRING  "Marvell RVU CPT Physical Function Driver"
 
-#define CPT_UC_RID_CN9K_B0   1
 #define CPT_UC_RID_CN10K_A   4
 #define CPT_UC_RID_CN10K_B   5
 
@@ -477,19 +476,10 @@ static int cptpf_afpf_mbox_init(struct otx2_cptpf_dev *cptpf)
 	if (err)
 		goto error;
 
-	err = otx2_mbox_init(&cptpf->afpf_mbox_up, cptpf->afpf_mbox_base,
-			     pdev, cptpf->reg_base, MBOX_DIR_PFAF_UP, 1);
-	if (err)
-		goto mbox_cleanup;
-
 	INIT_WORK(&cptpf->afpf_mbox_work, otx2_cptpf_afpf_mbox_handler);
-	INIT_WORK(&cptpf->afpf_mbox_up_work, otx2_cptpf_afpf_mbox_up_handler);
 	mutex_init(&cptpf->lock);
-
 	return 0;
 
-mbox_cleanup:
-	otx2_mbox_destroy(&cptpf->afpf_mbox);
 error:
 	destroy_workqueue(cptpf->afpf_mbox_wq);
 	return err;
@@ -499,33 +489,6 @@ static void cptpf_afpf_mbox_destroy(struct otx2_cptpf_dev *cptpf)
 {
 	destroy_workqueue(cptpf->afpf_mbox_wq);
 	otx2_mbox_destroy(&cptpf->afpf_mbox);
-	otx2_mbox_destroy(&cptpf->afpf_mbox_up);
-}
-
-static ssize_t sso_pf_func_ovrd_show(struct device *dev,
-				     struct device_attribute *attr, char *buf)
-{
-	struct otx2_cptpf_dev *cptpf = dev_get_drvdata(dev);
-
-	return sprintf(buf, "%d\n", cptpf->sso_pf_func_ovrd);
-}
-
-static ssize_t sso_pf_func_ovrd_store(struct device *dev,
-				      struct device_attribute *attr,
-				      const char *buf, size_t count)
-{
-	struct otx2_cptpf_dev *cptpf = dev_get_drvdata(dev);
-	u8 sso_pf_func_ovrd;
-
-	if (!(cptpf->pdev->revision == CPT_UC_RID_CN9K_B0))
-		return count;
-
-	if (kstrtou8(buf, 0, &sso_pf_func_ovrd))
-		return -EINVAL;
-
-	cptpf->sso_pf_func_ovrd = sso_pf_func_ovrd;
-
-	return count;
 }
 
 static ssize_t kvf_limits_show(struct device *dev,
@@ -558,11 +521,9 @@ static ssize_t kvf_limits_store(struct device *dev,
 }
 
 static DEVICE_ATTR_RW(kvf_limits);
-static DEVICE_ATTR_RW(sso_pf_func_ovrd);
 
 static struct attribute *cptpf_attrs[] = {
 	&dev_attr_kvf_limits.attr,
-	&dev_attr_sso_pf_func_ovrd.attr,
 	NULL
 };
 
@@ -840,13 +801,6 @@ static void otx2_cptpf_remove(struct pci_dev *pdev)
 
 	cptpf_sriov_disable(pdev);
 	otx2_cpt_unregister_dl(cptpf);
-
-	/* Cleanup Inline CPT LF's if attached */
-	if (cptpf->lfs.lfs_num)
-		otx2_inline_cptlf_cleanup(&cptpf->lfs);
-
-	if (cptpf->cpt1_lfs.lfs_num)
-		otx2_inline_cptlf_cleanup(&cptpf->cpt1_lfs);
 
 	/* Delete sysfs entry created for kernel VF limits */
 	sysfs_remove_group(&pdev->dev.kobj, &cptpf_sysfs_group);
