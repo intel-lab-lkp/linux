@@ -3772,10 +3772,9 @@ static netdev_features_t gso_features_check(const struct sk_buff *skb,
 	 * IPv4 header has the potential to be fragmented.
 	 */
 	if (skb_shinfo(skb)->gso_type & SKB_GSO_TCPV4) {
-		struct iphdr *iph = skb->encapsulation ?
-				    inner_ip_hdr(skb) : ip_hdr(skb);
-
-		if (!(iph->frag_off & htons(IP_DF)))
+		if (!(ip_hdr(skb)->frag_off & htons(IP_DF)) ||
+		    (skb->encapsulation &&
+		     !(inner_ip_hdr(skb)->frag_off & htons(IP_DF))))
 			features &= ~NETIF_F_TSO_MANGLEID;
 	}
 
