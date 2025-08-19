@@ -14,6 +14,8 @@
 #include "pkvm/arm_smmu_v3.h"
 
 #define SMMU_KVM_CMDQ_ORDER				4
+#define SMMU_KVM_STRTAB_ORDER				(get_order(STRTAB_MAX_L1_ENTRIES * \
+							 sizeof(struct arm_smmu_strtab_l1)))
 
 extern struct kvm_iommu_ops kvm_nvhe_sym(smmu_ops);
 
@@ -60,7 +62,7 @@ static int kvm_arm_smmu_array_alloc(void)
 	/* Basic device tree parsing. */
 	for_each_compatible_node(np, NULL, "arm,smmu-v3") {
 		struct resource res;
-		void *cmdq_base;
+		void *cmdq_base, *strtab;
 
 		ret = of_address_to_resource(np, 0, &res);
 		if (ret)
@@ -94,6 +96,15 @@ static int kvm_arm_smmu_array_alloc(void)
 		kvm_arm_smmu_array[i].cmdq.base_dma = virt_to_phys(cmdq_base);
 		kvm_arm_smmu_array[i].cmdq.llq.max_n_shift = SMMU_KVM_CMDQ_ORDER + PAGE_SHIFT -
 							     CMDQ_ENT_SZ_SHIFT;
+
+		strtab = (void *)__get_free_pages(GFP_KERNEL | __GFP_ZERO, SMMU_KVM_STRTAB_ORDER);
+		if (!strtab) {
+			ret = -ENOMEM;
+			goto out_err;
+		}
+		kvm_arm_smmu_array[i].strtab_dma = virt_to_phys(strtab);
+		kvm_arm_smmu_array[i].strtab_size = PAGE_SIZE << SMMU_KVM_STRTAB_ORDER;
+
 		i++;
 	}
 
