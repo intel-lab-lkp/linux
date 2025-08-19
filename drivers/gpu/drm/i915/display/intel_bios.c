@@ -2522,10 +2522,23 @@ bool
 intel_bios_encoder_reject_edp_rate(const struct intel_bios_encoder_data *devdata,
 				   int rate)
 {
+	return devdata->child.edp_data_rate_override & edp_rate_override_mask(rate);
+}
+
+bool
+intel_bios_vbt_supports_edp_data_override(const struct intel_bios_encoder_data *devdata)
+{
 	if (!devdata || devdata->display->vbt.version < 263)
 		return false;
 
-	return devdata->child.edp_data_rate_override & edp_rate_override_mask(rate);
+	/*
+	 * This means the VBT ends up asking us to override every possible rate
+	 * indicating the VBT is broken so skip this
+	 */
+	if (hweight32(devdata->child.edp_data_rate_override) >= BDB_263_VBT_EDP_NUM_RATES)
+		return false;
+
+	return true;
 }
 
 static void sanitize_device_type(struct intel_bios_encoder_data *devdata,
