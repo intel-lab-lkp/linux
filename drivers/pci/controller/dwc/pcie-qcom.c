@@ -19,6 +19,7 @@
 #include <linux/iopoll.h>
 #include <linux/kernel.h>
 #include <linux/limits.h>
+#include <linux/idr.h>
 #include <linux/init.h>
 #include <linux/of.h>
 #include <linux/of_pci.h>
@@ -286,6 +287,7 @@ struct qcom_pcie {
 	const struct qcom_pcie_cfg *cfg;
 	struct dentry *debugfs;
 	struct list_head ports;
+	struct idr perst;
 	bool suspended;
 	bool use_pm_opp;
 };
@@ -294,14 +296,15 @@ struct qcom_pcie {
 
 static void qcom_perst_assert(struct qcom_pcie *pcie, bool assert)
 {
-	struct qcom_pcie_port *port;
 	int val = assert ? 1 : 0;
+	struct gpio_desc *perst;
+	int bdf;
 
-	if (list_empty(&pcie->ports))
+	if (idr_is_empty(&pcie->perst))
 		gpiod_set_value_cansleep(pcie->reset, val);
-	else
-		list_for_each_entry(port, &pcie->ports, list)
-			gpiod_set_value_cansleep(port->reset, val);
+
+	idr_for_each_entry(&pcie->perst, perst, bdf)
+		gpiod_set_value_cansleep(perst, val);
 }
 
 static void qcom_ep_reset_assert(struct qcom_pcie *pcie)
@@ -1702,20 +1705,58 @@ static const struct pci_ecam_ops pci_qcom_ecam_ops = {
 	}
 };
 
-static int qcom_pcie_parse_port(struct qcom_pcie *pcie, struct device_node *node)
+/* Parse PERST# from all nodes in depth first manner starting from @np */
+static int qcom_pcie_parse_perst(struct qcom_pcie *pcie,
+				 struct device_node *np)
+{
+	struct device *dev = pcie->pci->dev;
+	struct gpio_desc *reset;
+	int ret;
+
+	if (!of_find_property(np, "reset-gpios", NULL))
+		goto parse_child_node;
+
+	ret = of_pci_get_bdf(np);
+	if (ret < 0)
+		return ret;
+
+	reset = devm_fwnode_gpiod_get(dev, of_fwnode_handle(np), "reset",
+				      GPIOD_OUT_HIGH, "PERST#");
+	if (IS_ERR(reset)) {
+		/*
+		 * FIXME: GPIOLIB currently supports exclusive GPIO access only.
+		 * Non exclusive access is broken. But shared PERST# requires
+		 * non-exclusive access. So once GPIOLIB properly supports it,
+		 * implement it here.
+		 */
+		if (PTR_ERR(reset) == -EBUSY)
+			dev_err(dev, "Shared PERST# is not supported\n");
+
+		return PTR_ERR(reset);
+	}
+
+	ret = idr_alloc(&pcie->perst, reset, ret, 0, GFP_KERNEL);
+	if (ret < 0)
+		return ret;
+
+parse_child_node:
+	for_each_available_child_of_node_scoped(np, child) {
+		ret = qcom_pcie_parse_perst(pcie, child);
+		if (ret)
+			return ret;
+	}
+
+	return 0;
+}
+
+static int qcom_pcie_parse_port(struct qcom_pcie *pcie, struct device_node *np)
 {
 	struct device *dev = pcie->pci->dev;
 	struct qcom_pcie_port *port;
-	struct gpio_desc *reset;
 	struct phy *phy;
 	int ret;
 
-	reset = devm_fwnode_gpiod_get(dev, of_fwnode_handle(node),
-				      "reset", GPIOD_OUT_HIGH, "PERST#");
-	if (IS_ERR(reset))
-		return PTR_ERR(reset);
-
-	phy = devm_of_phy_get(dev, node, NULL);
+	phy = devm_of_phy_get(dev, np, NULL);
 	if (IS_ERR(phy))
 		return PTR_ERR(phy);
 
@@ -1727,7 +1768,10 @@ static int qcom_pcie_parse_port(struct qcom_pcie *pcie, struct device_node *node
 	if (ret)
 		return ret;
 
-	port->reset = reset;
+	ret = qcom_pcie_parse_perst(pcie, np);
+	if (ret)
+		return ret;
+
 	port->phy = phy;
 	INIT_LIST_HEAD(&port->list);
 	list_add_tail(&port->list, &pcie->ports);
@@ -1739,7 +1783,11 @@ static int qcom_pcie_parse_ports(struct qcom_pcie *pcie)
 {
 	struct device *dev = pcie->pci->dev;
 	struct qcom_pcie_port *port, *tmp;
-	int ret = -ENOENT;
+	struct gpio_desc *perst;
+	int ret = -ENODEV;
+	int bdf;
+
+	idr_init(&pcie->perst);
 
 	for_each_available_child_of_node_scoped(dev->of_node, of_port) {
 		ret = qcom_pcie_parse_port(pcie, of_port);
@@ -1750,8 +1798,13 @@ static int qcom_pcie_parse_ports(struct qcom_pcie *pcie)
 	return ret;
 
 err_port_del:
-	list_for_each_entry_safe(port, tmp, &pcie->ports, list)
+	list_for_each_entry_safe(port, tmp, &pcie->ports, list) {
+		phy_exit(port->phy);
 		list_del(&port->list);
+	}
+
+	idr_for_each_entry(&pcie->perst, perst, bdf)
+		idr_remove(&pcie->perst, bdf);
 
 	return ret;
 }
@@ -1782,12 +1835,13 @@ static int qcom_pcie_probe(struct platform_device *pdev)
 	unsigned long max_freq = ULONG_MAX;
 	struct qcom_pcie_port *port, *tmp;
 	struct device *dev = &pdev->dev;
+	struct gpio_desc *perst;
 	struct dev_pm_opp *opp;
 	struct qcom_pcie *pcie;
 	struct dw_pcie_rp *pp;
 	struct resource *res;
 	struct dw_pcie *pci;
-	int ret, irq;
+	int ret, irq, bdf;
 	char *name;
 
 	pcie_cfg = of_device_get_match_data(dev);
@@ -1927,7 +1981,7 @@ static int qcom_pcie_probe(struct platform_device *pdev)
 
 	ret = qcom_pcie_parse_ports(pcie);
 	if (ret) {
-		if (ret != -ENOENT) {
+		if (ret != -ENODEV) {
 			dev_err_probe(pci->dev, ret,
 				      "Failed to parse Root Port: %d\n", ret);
 			goto err_pm_runtime_put;
@@ -1989,6 +2043,8 @@ err_phy_exit:
 	qcom_pcie_phy_exit(pcie);
 	list_for_each_entry_safe(port, tmp, &pcie->ports, list)
 		list_del(&port->list);
+	idr_for_each_entry(&pcie->perst, perst, bdf)
+		idr_remove(&pcie->perst, bdf);
 err_pm_runtime_put:
 	pm_runtime_put(dev);
 	pm_runtime_disable(dev);
