@@ -138,7 +138,7 @@ int main(void)
 		return 1;
 	}
 	if (sfs.f_type != 0x9fa0) {
-		fprintf(stderr, "error: unexpected f_type %lx\n", (long)sfs.f_type);
+		fprintf(stderr, "error: /proc is not procfs (f_type = %lx)\n", (long)sfs.f_type);
 		return 2;
 	}
 
