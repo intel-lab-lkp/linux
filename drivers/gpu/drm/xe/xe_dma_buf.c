@@ -53,6 +53,11 @@ static int xe_dma_buf_pin(struct dma_buf_attachment *attach)
 	struct xe_device *xe = xe_bo_device(bo);
 	int ret;
 
+	if (bo->flags & XE_BO_FLAG_PINNED) {
+		ttm_bo_pin(&bo->ttm);
+		return 0;
+	}
+
 	/*
 	 * For now only support pinning in TT memory, for two reasons:
 	 * 1) Avoid pinning in a placement not accessible to some importers.
@@ -83,7 +88,10 @@ static void xe_dma_buf_unpin(struct dma_buf_attachment *attach)
 	struct drm_gem_object *obj = attach->dmabuf->priv;
 	struct xe_bo *bo = gem_to_xe_bo(obj);
 
-	xe_bo_unpin_external(bo);
+	if (bo->flags & XE_BO_FLAG_PINNED)
+		ttm_bo_unpin(&bo->ttm);
+	else
+		xe_bo_unpin_external(bo);
 }
 
 static struct sg_table *xe_dma_buf_map(struct dma_buf_attachment *attach,

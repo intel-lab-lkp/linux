@@ -765,12 +765,15 @@ struct drm_xe_device_query {
  *    until the object is either bound to a virtual memory region via
  *    VM_BIND or accessed by the CPU. As a result, no backing memory is
  *    reserved at the time of GEM object creation.
- *  - %DRM_XE_GEM_CREATE_FLAG_SCANOUT
+ *  - %DRM_XE_GEM_CREATE_FLAG_SCANOUT - GEM object will be used
+ *    display framebuffer.
  *  - %DRM_XE_GEM_CREATE_FLAG_NEEDS_VISIBLE_VRAM - When using VRAM as a
  *    possible placement, ensure that the corresponding VRAM allocation
  *    will always use the CPU accessible part of VRAM. This is important
  *    for small-bar systems (on full-bar systems this gets turned into a
  *    noop).
+ *  - %DRM_XE_GEM_CREATE_FLAG_PINNED - Pin the backing memory permanently
+ *    on allocation, if withing cgroups limits.
  *    Note1: System memory can be used as an extra placement if the kernel
  *    should spill the allocation to system memory, if space can't be made
  *    available in the CPU accessible part of VRAM (giving the same
@@ -781,6 +784,10 @@ struct drm_xe_device_query {
  *    need to use VRAM for display surfaces, therefore the kernel requires
  *    setting this flag for such objects, otherwise an error is thrown on
  *    small-bar systems.
+ *    Note3: %DRM_XE_GEM_CREATE_FLAG_PINNED requires the BO to have only
+ *    a single placement, no vm_id, requires (device) memory cgroups enabled,
+ *    and is incompatible with the %DEFER_BACKING and %NEEDS_VISIBLE_VRAM
+ *    flags.
  *
  * @cpu_caching supports the following values:
  *  - %DRM_XE_GEM_CPU_CACHING_WB - Allocate the pages with write-back
@@ -827,6 +834,7 @@ struct drm_xe_gem_create {
 #define DRM_XE_GEM_CREATE_FLAG_DEFER_BACKING		(1 << 0)
 #define DRM_XE_GEM_CREATE_FLAG_SCANOUT			(1 << 1)
 #define DRM_XE_GEM_CREATE_FLAG_NEEDS_VISIBLE_VRAM	(1 << 2)
+#define DRM_XE_GEM_CREATE_FLAG_PINNED			(1 << 3)
 	/**
 	 * @flags: Flags, currently a mask of memory instances of where BO can
 	 * be placed

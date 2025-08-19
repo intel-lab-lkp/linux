@@ -5,6 +5,7 @@
 
 #include "xe_bo.h"
 
+#include <linux/cgroup_dmem.h>
 #include <linux/dma-buf.h>
 #include <linux/nospec.h>
 
@@ -208,7 +209,8 @@ static bool force_contiguous(u32 bo_flags)
 	 * must be contiguous, also only contiguous BOs support xe_bo_vmap.
 	 */
 	return bo_flags & XE_BO_FLAG_NEEDS_CPU_ACCESS &&
-	       bo_flags & XE_BO_FLAG_PINNED;
+	       bo_flags & XE_BO_FLAG_PINNED &&
+	       !(bo_flags & XE_BO_FLAG_USER);
 }
 
 static void add_vram(struct xe_device *xe, struct xe_bo *bo,
@@ -1697,6 +1699,16 @@ static void xe_gem_object_free(struct drm_gem_object *obj)
 	ttm_bo_put(container_of(obj, struct ttm_buffer_object, base));
 }
 
+static void xe_bo_unpin_user(struct xe_bo *bo)
+{
+	xe_bo_unpin_external(bo);
+
+	if (bo->flags & XE_BO_FLAG_SYSTEM)
+		WARN_ON(1);
+	else
+		dmem_cgroup_unpin(bo->ttm.resource->css, xe_bo_size(bo));
+}
+
 static void xe_gem_object_close(struct drm_gem_object *obj,
 				struct drm_file *file_priv)
 {
@@ -1707,6 +1719,10 @@ static void xe_gem_object_close(struct drm_gem_object *obj,
 
 		xe_bo_lock(bo, false);
 		ttm_bo_set_bulk_move(&bo->ttm, NULL);
+		xe_bo_unlock(bo);
+	} else if (bo->flags & XE_BO_FLAG_PINNED) {
+		xe_bo_lock(bo, false);
+		xe_bo_unpin_user(bo);
 		xe_bo_unlock(bo);
 	}
 }
@@ -2128,8 +2144,27 @@ struct xe_bo *xe_bo_create_user(struct xe_device *xe, struct xe_tile *tile,
 	struct xe_bo *bo = __xe_bo_create_locked(xe, tile, vm, size, 0, ~0ULL,
 						 cpu_caching, ttm_bo_type_device,
 						 flags | XE_BO_FLAG_USER, 0);
-	if (!IS_ERR(bo))
+	if (!IS_ERR(bo)) {
+		int ret = 0;
+
+		if (bo->flags & XE_BO_FLAG_PINNED) {
+			if (bo->flags & XE_BO_FLAG_SYSTEM) {
+				ret = -ENOSYS; // TODO
+			} else {
+				ret = dmem_cgroup_try_pin(bo->ttm.resource->css, size);
+			}
+			if (!ret)
+				ret = xe_bo_pin_external(bo);
+			else if (ret == -EAGAIN)
+				ret = -ENOSPC;
+		}
+
 		xe_bo_unlock_vm_held(bo);
+		if (ret) {
+			xe_bo_put(bo);
+			return ERR_PTR(ret);
+		}
+	}
 
 	return bo;
 }
@@ -2745,6 +2780,28 @@ int xe_gem_create_ioctl(struct drm_device *dev, void *data,
 			 args->cpu_caching == DRM_XE_GEM_CPU_CACHING_WB))
 		return -EINVAL;
 
+	if (XE_IOCTL_DBG(xe, args->flags & DRM_XE_GEM_CREATE_FLAG_PINNED)) {
+		bool pinned_flag = true;
+		/* Only allow a single placement for pinning */
+		if (XE_IOCTL_DBG(xe, pinned_flag && hweight32(args->placement) != 1))
+			return -EINVAL;
+
+		/* Meant for exporting, do not allow a VM-local BO */
+		if (XE_IOCTL_DBG(xe, pinned_flag && args->vm_id))
+			return -EINVAL;
+
+		/* Similarly, force fail at creation time for now. We may relax this requirement later */
+		if (XE_IOCTL_DBG(xe, pinned_flag && args->flags & DRM_XE_GEM_CREATE_FLAG_DEFER_BACKING))
+			return -EINVAL;
+
+		/* Require the appropriate cgroups to be enabled. */
+		if (XE_IOCTL_DBG(xe, pinned_flag && !IS_ENABLED(CONFIG_CGROUP_DMEM) && bo_flags & XE_BO_FLAG_VRAM_MASK) ||
+		    XE_IOCTL_DBG(xe, pinned_flag && !IS_ENABLED(CONFIG_MEMCG) && bo_flags & XE_BO_FLAG_SYSTEM))
+			return -EINVAL;
+
+		bo_flags |= XE_BO_FLAG_PINNED;
+	}
+
 	if (args->vm_id) {
 		vm = xe_vm_lookup(xef, args->vm_id);
 		if (XE_IOCTL_DBG(xe, !vm))
@@ -2789,6 +2846,11 @@ out_bulk:
 		xe_vm_lock(vm, false);
 		__xe_bo_unset_bulk_move(bo);
 		xe_vm_unlock(vm);
+	}
+	if (bo->flags & XE_BO_FLAG_PINNED) {
+		xe_bo_lock(bo, false);
+		xe_bo_unpin_user(bo);
+		xe_bo_unlock(bo);
 	}
 out_put:
 	xe_bo_put(bo);
