@@ -156,6 +156,9 @@ static int late_bind_create_files(struct device *dev)
 	u32 cap;
 	int ret;
 
+	if (xe->info.skip_pcode)
+		return 0;
+
 	xe_pm_runtime_get(xe);
 
 	ret = xe_pcode_read(root, PCODE_MBOX(PCODE_LATE_BINDING, GET_CAPABILITY_STATUS, 0),
