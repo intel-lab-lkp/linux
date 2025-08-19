@@ -1146,8 +1146,20 @@ static void ops_run_io(struct stripe_head *sh, struct stripe_head_state *s)
 
 	might_sleep();
 
+	/* Successfully logged to journal */
 	if (log_stripe(sh, s) == 0)
 		return;
+
+	/*
+	 * Journal device failed. Only abort writes if we have
+	 * too many failed devices to maintain consistency.
+	 */
+	if (conf->log && r5l_log_disk_error(conf) &&
+	    s->failed > conf->max_degraded &&
+	    (s->to_write || s->written)) {
+		set_bit(STRIPE_HANDLE, &sh->state);
+		return;
+	}
 
 	should_defer = conf->batch_bio_dispatch && conf->group_cnt;
 
@@ -3672,6 +3684,13 @@ handle_failed_stripe(struct r5conf *conf, struct stripe_head *sh,
 		 * still be locked - so just clear all R5_LOCKED flags
 		 */
 		clear_bit(R5_LOCKED, &sh->dev[i].flags);
+		/* Clear R5_Want* flags to prevent stale operations
+		 * from executing on retry.
+		 */
+		clear_bit(R5_Wantwrite, &sh->dev[i].flags);
+		clear_bit(R5_Wantcompute, &sh->dev[i].flags);
+		clear_bit(R5_WantFUA, &sh->dev[i].flags);
+		clear_bit(R5_Wantdrain, &sh->dev[i].flags);
 	}
 	s->to_write = 0;
 	s->written = 0;
