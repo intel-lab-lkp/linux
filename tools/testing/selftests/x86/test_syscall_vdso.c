@@ -116,10 +116,10 @@ void print_regs64(void)
 {
 	if (!kernel_is_64bit)
 		return;
-	printf("ax:%016llx bx:%016llx cx:%016llx dx:%016llx\n", regs64.rax,  regs64.rbx,  regs64.rcx,  regs64.rdx);
-	printf("si:%016llx di:%016llx bp:%016llx sp:%016llx\n", regs64.rsi,  regs64.rdi,  regs64.rbp,  regs64.rsp);
-	printf(" 8:%016llx  9:%016llx 10:%016llx 11:%016llx\n", regs64.r8 ,  regs64.r9 ,  regs64.r10,  regs64.r11);
-	printf("12:%016llx 13:%016llx 14:%016llx 15:%016llx\n", regs64.r12,  regs64.r13,  regs64.r14,  regs64.r15);
+	printf("ax:%016llx bx:%016llx cx:%016llx dx:%016llx\n",	regs64.rax,	regs64.rbx,	regs64.rcx,	regs64.rdx);
+	printf("si:%016llx di:%016llx bp:%016llx sp:%016llx\n",	regs64.rsi,	regs64.rdi,	regs64.rbp,	regs64.rsp);
+	printf(" 8:%016llx  9:%016llx 10:%016llx 11:%016llx\n",	regs64.r8,	regs64.r9,	regs64.r10,	regs64.r11);
+	printf("12:%016llx 13:%016llx 14:%016llx 15:%016llx\n",	regs64.r12,	regs64.r13,	regs64.r14,	regs64.r15);
 }
 
 int check_regs64(void)
@@ -179,7 +179,7 @@ struct {
 	int sz;
 } sigmask_desc;
 
-void prep_args()
+void prep_args(void)
 {
 	nfds = 42;
 	FD_ZERO(&rfds);
@@ -201,28 +201,28 @@ void prep_args()
 static void print_flags(const char *name, unsigned long r)
 {
 	static const char *bitarray[] = {
-	"\n" ,"c\n" ,/* Carry Flag */
-	"0 " ,"1 "  ,/* Bit 1 - always on */
-	""   ,"p "  ,/* Parity Flag */
-	"0 " ,"3? " ,
-	""   ,"a "  ,/* Auxiliary carry Flag */
-	"0 " ,"5? " ,
-	""   ,"z "  ,/* Zero Flag */
-	""   ,"s "  ,/* Sign Flag */
-	""   ,"t "  ,/* Trap Flag */
-	""   ,"i "  ,/* Interrupt Flag */
-	""   ,"d "  ,/* Direction Flag */
-	""   ,"o "  ,/* Overflow Flag */
-	"0 " ,"1 "  ,/* I/O Privilege Level (2 bits) */
-	"0"  ,"1"   ,/* I/O Privilege Level (2 bits) */
-	""   ,"n "  ,/* Nested Task */
-	"0 " ,"15? ",
-	""   ,"r "  ,/* Resume Flag */
-	""   ,"v "  ,/* Virtual Mode */
-	""   ,"ac " ,/* Alignment Check/Access Control */
-	""   ,"vif ",/* Virtual Interrupt Flag */
-	""   ,"vip ",/* Virtual Interrupt Pending */
-	""   ,"id " ,/* CPUID detection */
+	"\n",	"c\n",	/* Carry Flag */
+	"0 ",	"1 ",	/* Bit 1 - always on */
+	"",		"p ",	/* Parity Flag */
+	"0 ",	"3? ",
+	"",		"a ",	/* Auxiliary carry Flag */
+	"0 ",	"5? ",
+	"",		"z ",	/* Zero Flag */
+	"",		"s ",	/* Sign Flag */
+	"",		"t ",	/* Trap Flag */
+	"",		"i ",	/* Interrupt Flag */
+	"",		"d ",	/* Direction Flag */
+	"",		"o ",	/* Overflow Flag */
+	"0 ",	"1 ",	/* I/O Privilege Level (2 bits) */
+	"0",	"1",	/* I/O Privilege Level (2 bits) */
+	"",		"n ",	/* Nested Task */
+	"0 ",	"15? ",
+	"",		"r ",	/* Resume Flag */
+	"",		"v ",	/* Virtual Mode */
+	"",		"ac ",	/* Alignment Check/Access Control */
+	"",		"vif ",	/* Virtual Interrupt Flag */
+	"",		"vip ",	/* Virtual Interrupt Pending */
+	"",		"id ",	/* CPUID detection */
 	NULL
 	};
 	const char **bitstr;
@@ -320,7 +320,7 @@ int run_syscall(void)
 	return check_regs64();
 }
 
-int run_syscall_twice()
+int run_syscall_twice(void)
 {
 	int exitcode = 0;
 	long sv;
@@ -337,7 +337,7 @@ int run_syscall_twice()
 	return exitcode;
 }
 
-void ptrace_me()
+void ptrace_me(void)
 {
 	pid_t pid;
 
@@ -356,6 +356,7 @@ void ptrace_me()
 	printf("[RUN]\tRunning tests under ptrace\n");
 	while (1) {
 		int status;
+
 		pid = waitpid(-1, &status, __WALL);
 		if (WIFEXITED(status))
 			exit(WEXITSTATUS(status));
