@@ -234,6 +234,7 @@ static void i9xx_set_backlight(const struct drm_connector_state *conn_state, u32
 	struct intel_connector *connector = to_intel_connector(conn_state->connector);
 	struct intel_display *display = to_intel_display(connector);
 	struct intel_panel *panel = &connector->panel;
+	u32 max_level = panel->backlight.pwm_level_max ?: 1;
 	u32 tmp, mask;
 
 	drm_WARN_ON(display->drm, panel->backlight.pwm_level_max == 0);
@@ -242,7 +243,7 @@ static void i9xx_set_backlight(const struct drm_connector_state *conn_state, u32
 		struct pci_dev *pdev = to_pci_dev(display->drm->dev);
 		u8 lbpc;
 
-		lbpc = level * 0xfe / panel->backlight.pwm_level_max + 1;
+		lbpc = level * 0xfe / max_level + 1;
 		level /= lbpc;
 		pci_write_config_byte(pdev, LBPC, lbpc);
 	}
