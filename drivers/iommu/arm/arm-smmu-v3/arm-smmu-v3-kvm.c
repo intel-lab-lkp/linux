@@ -13,6 +13,8 @@
 #include "arm-smmu-v3.h"
 #include "pkvm/arm_smmu_v3.h"
 
+#define SMMU_KVM_CMDQ_ORDER				4
+
 extern struct kvm_iommu_ops kvm_nvhe_sym(smmu_ops);
 
 static size_t				kvm_arm_smmu_count;
@@ -58,6 +60,7 @@ static int kvm_arm_smmu_array_alloc(void)
 	/* Basic device tree parsing. */
 	for_each_compatible_node(np, NULL, "arm,smmu-v3") {
 		struct resource res;
+		void *cmdq_base;
 
 		ret = of_address_to_resource(np, 0, &res);
 		if (ret)
@@ -74,6 +77,23 @@ static int kvm_arm_smmu_array_alloc(void)
 		if (of_dma_is_coherent(np))
 			kvm_arm_smmu_array[i].features |= ARM_SMMU_FEAT_COHERENCY;
 
+		/*
+		 * Allocate shadow for the command queue, it doesn't have to be the same
+		 * size as the host.
+		 * Only populate base_dma and llq.max_n_shift, the hypervisor will init
+		 * the rest.
+		 * We don't what size the host will choose at this point, the shadow copy
+		 * will 64K which is a reasonable size.
+		 */
+		cmdq_base = (void *)__get_free_pages(GFP_KERNEL | __GFP_ZERO, SMMU_KVM_CMDQ_ORDER);
+		if (!cmdq_base) {
+			ret = -ENOMEM;
+			goto out_err;
+		}
+
+		kvm_arm_smmu_array[i].cmdq.base_dma = virt_to_phys(cmdq_base);
+		kvm_arm_smmu_array[i].cmdq.llq.max_n_shift = SMMU_KVM_CMDQ_ORDER + PAGE_SHIFT -
+							     CMDQ_ENT_SZ_SHIFT;
 		i++;
 	}
 
