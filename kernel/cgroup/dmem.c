@@ -147,6 +147,11 @@ static u64 get_resource_current(struct dmem_cgroup_pool_state *pool)
 	return pool ? page_counter_read(&pool->cnt) : 0;
 }
 
+static u64 get_resource_pinned(struct dmem_cgroup_pool_state *pool)
+{
+	return pool ? page_counter_pinned(&pool->cnt) : 0;
+}
+
 static void reset_all_resource_limits(struct dmem_cgroup_pool_state *rpool)
 {
 	set_resource_min(rpool, 0);
@@ -270,7 +275,7 @@ bool dmem_cgroup_state_evict_valuable(struct dmem_cgroup_pool_state *limit_pool,
 {
 	struct dmem_cgroup_pool_state *pool = test_pool;
 	struct page_counter *ctest;
-	u64 used, min, low;
+	u64 used, min, low, pinned;
 
 	/* Can always evict from current pool, despite limits */
 	if (limit_pool == test_pool)
@@ -296,16 +301,18 @@ bool dmem_cgroup_state_evict_valuable(struct dmem_cgroup_pool_state *limit_pool,
 
 	ctest = &test_pool->cnt;
 
+	/* Protection is calculated without pinned memory */
 	dmem_cgroup_calculate_protection(limit_pool, test_pool);
 
 	used = page_counter_read(ctest);
-	min = READ_ONCE(ctest->emin);
+	pinned = page_counter_pinned(ctest);
+	min = READ_ONCE(ctest->emin) + pinned;
 
 	if (used <= min)
 		return false;
 
 	if (!ignore_low) {
-		low = READ_ONCE(ctest->elow);
+		low = READ_ONCE(ctest->elow) + pinned;
 		if (used > low)
 			return true;
 
@@ -641,6 +648,41 @@ err:
 }
 EXPORT_SYMBOL_GPL(dmem_cgroup_try_charge);
 
+/**
+ * dmem_cgroup_unpin() - Unpin from a pool.
+ * @pool: Pool to unpin.
+ * @size: Size to unpin.
+ *
+ * Undoes the effects of dmem_cgroup_try_pin.
+ * Must be called with the returned pool as argument,
+ * and same @index and @size.
+ */
+void dmem_cgroup_unpin(struct dmem_cgroup_pool_state *pool, u64 size)
+{
+	if (pool)
+		page_counter_unpin(&pool->cnt, size);
+}
+EXPORT_SYMBOL_GPL(dmem_cgroup_unpin);
+
+/**
+ * dmem_cgroup_try_pin() - Try pinning an existing allocation to a region.
+ * @pool: dmem region to pin
+ * @size: Size (in bytes) to pin.
+ *
+ * This function pins in @pool for a size of @size bytes.
+ *
+ * If the function succeeds, the memory is succesfully accounted as being pinned.
+ * The memory may not be uncharged before unpin is called.
+ *
+ * Return: 0 on success, -EAGAIN on hitting a limit, or a negative errno on failure.
+ */
+int dmem_cgroup_try_pin(struct dmem_cgroup_pool_state *pool, u64 size)
+{
+	return page_counter_try_pin(&pool->cnt, size) ? 0 : -EAGAIN;
+
+}
+EXPORT_SYMBOL_GPL(dmem_cgroup_try_pin);
+
 static int dmem_cgroup_region_capacity_show(struct seq_file *sf, void *v)
 {
 	struct dmem_cgroup_region *region;
@@ -756,6 +798,11 @@ static int dmem_cgroup_region_current_show(struct seq_file *sf, void *v)
 	return dmemcg_limit_show(sf, v, get_resource_current);
 }
 
+static int dmem_cgroup_region_pinned_show(struct seq_file *sf, void *v)
+{
+	return dmemcg_limit_show(sf, v, get_resource_pinned);
+}
+
 static int dmem_cgroup_region_min_show(struct seq_file *sf, void *v)
 {
 	return dmemcg_limit_show(sf, v, get_resource_min);
@@ -798,6 +845,10 @@ static struct cftype files[] = {
 	{
 		.name = "current",
 		.seq_show = dmem_cgroup_region_current_show,
+	},
+	{
+		.name = "pinned",
+		.seq_show = dmem_cgroup_region_pinned_show,
 	},
 	{
 		.name = "min",
