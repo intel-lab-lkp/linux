@@ -32,15 +32,15 @@ properties:
   interrupts:
     oneOf:
       - items:
-          - description: CRU Interrupt for image_conv
-          - description: CRU Interrupt for image_conv_err
-          - description: CRU AXI master error interrupt
+          - description: Interrupt for image_conv
+          - description: Interrupt for image_conv_err
+          - description: AXI master error interrupt
       - items:
-          - description: CRU Interrupt for image_conv
-          - description: CRU AXI master error interrupt
-          - description: CRU Video Data AXI Master Address 0 Write End interrupt
-          - description: CRU Statistics data AXI master addr 0 write end interrupt
-          - description: CRU Video statistics data AXI master addr 0 write end interrupt
+          - description: Interrupt for image_conv
+          - description: AXI master error interrupt
+          - description: Video Data AXI Master Address 0 Write End interrupt
+          - description: Statistics data AXI master addr 0 write end interrupt
+          - description: Video statistics data AXI master addr 0 write end interrupt
 
   interrupt-names:
     oneOf:
@@ -57,9 +57,9 @@ properties:
 
   clocks:
     items:
-      - description: CRU Main clock
-      - description: CRU Register access clock
-      - description: CRU image transfer clock
+      - description: Main clock
+      - description: Register access clock
+      - description: Image transfer clock
 
   clock-names:
     items:
