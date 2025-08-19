@@ -4576,12 +4576,6 @@ static const struct of_device_id arm_smmu_of_match[] = {
 };
 MODULE_DEVICE_TABLE(of, arm_smmu_of_match);
 
-static void arm_smmu_driver_unregister(struct platform_driver *drv)
-{
-	arm_smmu_sva_notifier_synchronize();
-	platform_driver_unregister(drv);
-}
-
 static struct platform_driver arm_smmu_driver = {
 	.driver	= {
 		.name			= "arm-smmu-v3",
@@ -4592,8 +4586,27 @@ static struct platform_driver arm_smmu_driver = {
 	.remove = arm_smmu_device_remove,
 	.shutdown = arm_smmu_device_shutdown,
 };
+
+#ifndef CONFIG_ARM_SMMU_V3_PKVM
+static void arm_smmu_driver_unregister(struct platform_driver *drv)
+{
+	arm_smmu_sva_notifier_synchronize();
+	platform_driver_unregister(drv);
+}
+
 module_driver(arm_smmu_driver, platform_driver_register,
 	      arm_smmu_driver_unregister);
+#else
+/*
+ * Must be done after the hypervisor initializes at module_init()
+ * No need for unregister as this is a built in driver.
+ */
+static int arm_smmu_driver_register(void)
+{
+	return platform_driver_register(&arm_smmu_driver);
+}
+device_initcall_sync(arm_smmu_driver_register);
+#endif /* !CONFIG_ARM_SMMU_V3_PKVM */
 
 MODULE_DESCRIPTION("IOMMU API for ARM architected SMMUv3 implementations");
 MODULE_AUTHOR("Will Deacon <will@kernel.org>");
