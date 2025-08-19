@@ -416,6 +416,10 @@ static bool __init should_mitigate_vuln(unsigned int bug)
 		       cpu_attack_vector_mitigated(CPU_MITIGATE_USER_USER) ||
 		       cpu_attack_vector_mitigated(CPU_MITIGATE_GUEST_GUEST) ||
 		       (smt_mitigations != SMT_MITIGATIONS_OFF);
+
+	case X86_BUG_SPEC_STORE_BYPASS:
+		return cpu_attack_vector_mitigated(CPU_MITIGATE_USER_USER);
+
 	default:
 		WARN(1, "Unknown bug %x\n", bug);
 		return false;
@@ -2595,7 +2599,7 @@ void cpu_bugs_smt_update(void)
 #define pr_fmt(fmt)	"Speculative Store Bypass: " fmt
 
 static enum ssb_mitigation ssb_mode __ro_after_init =
-	IS_ENABLED(CONFIG_MITIGATION_SSB) ? SPEC_STORE_BYPASS_PRCTL : SPEC_STORE_BYPASS_NONE;
+	IS_ENABLED(CONFIG_MITIGATION_SSB) ? SPEC_STORE_BYPASS_AUTO : SPEC_STORE_BYPASS_NONE;
 
 static const char * const ssb_strings[] = {
 	[SPEC_STORE_BYPASS_NONE]	= "Vulnerable",
@@ -2626,7 +2630,7 @@ static int __init ssb_parse_cmdline(char *str)
 		return 0;
 
 	if (!strcmp(str, "auto"))
-		ssb_mode = SPEC_STORE_BYPASS_PRCTL;
+		ssb_mode = SPEC_STORE_BYPASS_AUTO;
 	else if (!strcmp(str, "on"))
 		ssb_mode = SPEC_STORE_BYPASS_DISABLE;
 	else if (!strcmp(str, "off"))
@@ -2646,9 +2650,16 @@ early_param("spec_store_bypass_disable", ssb_parse_cmdline);
 
 static void __init ssb_select_mitigation(void)
 {
-	if (!boot_cpu_has_bug(X86_BUG_SPEC_STORE_BYPASS) || cpu_mitigations_off()) {
+	if (!boot_cpu_has_bug(X86_BUG_SPEC_STORE_BYPASS)) {
 		ssb_mode = SPEC_STORE_BYPASS_NONE;
 		return;
+	}
+
+	if (ssb_mode == SPEC_STORE_BYPASS_AUTO) {
+		if (should_mitigate_vuln(X86_BUG_SPEC_STORE_BYPASS))
+			ssb_mode = SPEC_STORE_BYPASS_PRCTL;
+		else
+			ssb_mode = SPEC_STORE_BYPASS_NONE;
 	}
 
 	if (!boot_cpu_has(X86_FEATURE_SSBD))
@@ -2870,6 +2881,7 @@ static int ssb_prctl_get(struct task_struct *task)
 		return PR_SPEC_DISABLE;
 	case SPEC_STORE_BYPASS_SECCOMP:
 	case SPEC_STORE_BYPASS_PRCTL:
+	case SPEC_STORE_BYPASS_AUTO:
 		if (task_spec_ssb_force_disable(task))
 			return PR_SPEC_PRCTL | PR_SPEC_FORCE_DISABLE;
 		if (task_spec_ssb_noexec(task))
