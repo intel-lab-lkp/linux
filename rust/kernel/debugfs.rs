@@ -16,10 +16,10 @@ use core::marker::PhantomPinned;
 use core::ops::Deref;
 
 mod traits;
-pub use traits::Render;
+pub use traits::{Render, UpdateFromSlice};
 
 mod file_ops;
-use file_ops::{FileOps, ReadFile};
+use file_ops::{FileOps, ReadFile, ReadWriteFile, WriteFile};
 #[cfg(CONFIG_DEBUG_FS)]
 mod entry;
 #[cfg(CONFIG_DEBUG_FS)]
@@ -135,6 +135,43 @@ impl Dir {
     ) -> impl PinInit<File<T>, E> + 'a {
         let file_ops = &<T as ReadFile<_>>::FILE_OPS;
         self.create_file(name, data, file_ops)
+    }
+
+    /// Creates a read-write file in this directory.
+    ///
+    /// Reading the file uses the [`Render`] implementation.
+    /// Writing to the file uses the [`UpdateFromSlice`] implementation.
+    pub fn read_write_file<
+        'a,
+        T: Render + UpdateFromSlice + Send + Sync + 'static,
+        E: 'a,
+        TI: PinInit<T, E> + 'a,
+    >(
+        &'a self,
+        name: &'a CStr,
+        data: TI,
+    ) -> impl PinInit<File<T>, E> + 'a {
+        let file_ops = &<T as ReadWriteFile<_>>::FILE_OPS;
+        self.create_file(name, data, file_ops)
+    }
+
+    /// Creates a write-only file in this directory.
+    ///
+    /// The file owns its backing data. Writing to the file uses the [`UpdateFromSlice`]
+    /// implementation.
+    ///
+    /// The file is removed when the returned [`File`] is dropped.
+    pub fn write_only_file<
+        'a,
+        T: UpdateFromSlice + Send + Sync + 'static,
+        E: 'a,
+        TI: PinInit<T, E> + 'a,
+    >(
+        &'a self,
+        name: &'a CStr,
+        data: TI,
+    ) -> impl PinInit<File<T>, E> + 'a {
+        self.create_file(name, data, &T::FILE_OPS)
     }
 }
 
