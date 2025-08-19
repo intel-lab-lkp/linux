@@ -4284,6 +4284,7 @@ bool intel_psr_needs_alpm_aux_less(struct intel_dp *intel_dp,
 
 bool intel_psr_use_trans_push(const struct intel_crtc_state *crtc_state)
 {
-	/* TODO: Enable using trans push when everything is in place */
-	return false;
+	struct intel_display *display = to_intel_display(crtc_state);
+
+	return HAS_PSR_FRAME_CHANGE(display) && crtc_state->has_psr;
 }
