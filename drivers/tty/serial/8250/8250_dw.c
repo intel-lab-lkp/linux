@@ -33,6 +33,9 @@
 /* Offsets for the DesignWare specific registers */
 #define DW_UART_USR	0x1f /* UART Status Register */
 #define DW_UART_DMASA	0xa8 /* DMA Software Ack */
+#define DW_UART_USR_BUSY 0x1 /* UART Busy status */
+#define DW_UART_USR_TFNF 0x2 /* UART TX FIFO not full */
+#define DW_UART_USR_TFE  0x4 /* UART TX FIFO empty */
 
 #define OCTEON_UART_USR	0x27 /* UART Status Register */
 
@@ -56,6 +59,10 @@
 #define DW_UART_QUIRK_IS_DMA_FC		BIT(3)
 #define DW_UART_QUIRK_APMC0D08		BIT(4)
 #define DW_UART_QUIRK_CPR_VALUE		BIT(5)
+#define DW_UART_QUIRK_APB		BIT(6)
+
+#define DW8250_REG( p, reg ) \
+	((void __iomem *)(p->membase + ((reg) << p->regshift)))
 
 struct dw8250_platform_data {
 	u8 usr_reg;
@@ -218,6 +225,47 @@ static void dw8250_serial_out38x(struct uart_port *p, unsigned int offset, u32 v
 		dw8250_tx_wait_empty(p);
 
 	dw8250_serial_out(p, offset, value);
+}
+
+/* Drain FIFO and wait for USR to be not busy and TX/RX FIFO empty */
+static void dw8250_tx_wait_empty_apb(struct uart_port *p)
+{
+	unsigned int tries = 20000;
+	unsigned int delay_threshold = tries - 1000;
+	unsigned int usr;
+
+	while (tries--) {
+		usr = readl(DW8250_REG(p, DW_UART_USR));
+
+		/* Check UART free and TX/RX FIFO empty */
+		if ((usr & ~DW_UART_USR_TFNF) == DW_UART_USR_TFE)
+			break;
+
+		/* FIFO is still not empty, try to clear it */
+		if (tries < delay_threshold) {
+			writel(UART_FCR_ENABLE_FIFO, DW8250_REG(p, UART_FCR));
+			writel(UART_FCR_ENABLE_FIFO | UART_FCR_CLEAR_RCVR |
+			UART_FCR_CLEAR_XMIT, DW8250_REG(p, UART_FCR));
+			writel(0, DW8250_REG(p, UART_FCR));
+			udelay (1);
+		}
+	}
+}
+
+static void dw8250_serial_outapb(struct uart_port *p, int offset, int value)
+{
+       struct dw8250_data *d = to_dw8250_data(p->private_data);
+
+	if(offset == UART_LCR && !d->uart_16550_compatible)
+		dw8250_tx_wait_empty_apb(p);
+
+	writel(value, DW8250_REG(p, offset));
+
+	if (offset == UART_LCR && !d->uart_16550_compatible) {
+		/* Check FIFO is left enabled and LCR was written */
+		writel(UART_FCR_ENABLE_FIFO, DW8250_REG(p, UART_FCR));
+		dw8250_check_lcr(p, value);
+	}
 }
 
 static u32 dw8250_serial_in(struct uart_port *p, unsigned int offset)
@@ -520,6 +568,12 @@ static void dw8250_quirks(struct uart_port *p, struct dw8250_data *data)
 		p->serial_in = dw8250_serial_in32;
 		data->uart_16550_compatible = true;
 	}
+	if (quirks & DW_UART_QUIRK_DWAPB) {
+		p->type = PORT_DWAPB;
+		p->flags |= UPF_FIXED_TYPE;
+		p->serial_out = dw8250_serial_outapb;
+		data->skip_autocfg = true;
+	}
 }
 
 static void dw8250_reset_control_assert(void *data)
@@ -755,6 +809,7 @@ static const struct dev_pm_ops dw8250_pm_ops = {
 
 static const struct dw8250_platform_data dw8250_dw_apb = {
 	.usr_reg = DW_UART_USR,
+	.quirks = DW_UART_QUIRK_APB,
 };
 
 static const struct dw8250_platform_data dw8250_octeon_3860_data = {
