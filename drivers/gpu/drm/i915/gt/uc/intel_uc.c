@@ -659,7 +659,7 @@ void intel_uc_runtime_suspend(struct intel_uc *uc)
 	struct intel_guc *guc = &uc->guc;
 
 	if (!intel_guc_is_ready(guc)) {
-		guc->interrupts.enabled = false;
+		atomic_set(&guc->interrupts.enabled, false);
 		return;
 	}
 
@@ -687,7 +687,7 @@ void intel_uc_suspend(struct intel_uc *uc)
 	wake_up_all_tlb_invalidate(guc);
 
 	if (!intel_guc_is_ready(guc)) {
-		guc->interrupts.enabled = false;
+		atomic_set(&guc->interrupts.enabled, false);
 		return;
 	}
 

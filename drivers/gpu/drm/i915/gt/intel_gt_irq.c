@@ -20,7 +20,7 @@
 
 static void guc_irq_handler(struct intel_guc *guc, u16 iir)
 {
-	if (unlikely(!guc->interrupts.enabled))
+	if (unlikely(!atomic_read(&guc->interrupts.enabled)))
 		return;
 
 	if (iir & GUC_INTR_GUC2HOST)

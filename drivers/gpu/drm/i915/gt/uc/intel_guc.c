@@ -101,7 +101,7 @@ static void gen9_enable_guc_interrupts(struct intel_guc *guc)
 	gen6_gt_pm_enable_irq(gt, gt->pm_guc_events);
 	spin_unlock_irq(gt->irq_lock);
 
-	guc->interrupts.enabled = true;
+	atomic_set(&guc->interrupts.enabled, true);
 }
 
 static void gen9_disable_guc_interrupts(struct intel_guc *guc)
@@ -109,7 +109,7 @@ static void gen9_disable_guc_interrupts(struct intel_guc *guc)
 	struct intel_gt *gt = guc_to_gt(guc);
 
 	assert_rpm_wakelock_held(&gt->i915->runtime_pm);
-	guc->interrupts.enabled = false;
+	atomic_set(&guc->interrupts.enabled, false);
 
 	spin_lock_irq(gt->irq_lock);
 
@@ -146,14 +146,14 @@ static void gen11_enable_guc_interrupts(struct intel_guc *guc)
 	__gen11_reset_guc_interrupts(gt);
 	spin_unlock_irq(gt->irq_lock);
 
-	guc->interrupts.enabled = true;
+	atomic_set(&guc->interrupts.enabled, true);
 }
 
 static void gen11_disable_guc_interrupts(struct intel_guc *guc)
 {
 	struct intel_gt *gt = guc_to_gt(guc);
 
-	guc->interrupts.enabled = false;
+	atomic_set(&guc->interrupts.enabled, false);
 	intel_synchronize_irq(gt->i915);
 
 	gen11_reset_guc_interrupts(guc);

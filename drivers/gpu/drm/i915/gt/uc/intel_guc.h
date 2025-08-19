@@ -93,7 +93,7 @@ struct intel_guc {
 
 	/** @interrupts: pointers to GuC interrupt-managing functions. */
 	struct {
-		bool enabled;
+		atomic_t enabled;
 		void (*reset)(struct intel_guc *guc);
 		void (*enable)(struct intel_guc *guc);
 		void (*disable)(struct intel_guc *guc);
@@ -393,7 +393,7 @@ retry:
 /* Only call this from the interrupt handler code */
 static inline void intel_guc_to_host_event_handler(struct intel_guc *guc)
 {
-	if (guc->interrupts.enabled)
+	if (atomic_read(&guc->interrupts.enabled))
 		intel_guc_ct_event_handler(&guc->ct);
 }
 
