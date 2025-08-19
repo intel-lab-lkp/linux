@@ -117,6 +117,21 @@ void drm_mode_probed_add(struct drm_connector *connector,
 }
 EXPORT_SYMBOL(drm_mode_probed_add);
 
+/**
+ * drm_mode_remove - remove a mode from the associated list and destroy it
+ * @connector: connector of the mode
+ * @mode: mode data
+ *
+ * Remove @mode from the associated list, then free @mode object itself.
+ */
+void drm_mode_remove(struct drm_connector *connector,
+		     struct drm_display_mode *mode)
+{
+	list_del(&mode->head);
+	drm_mode_destroy(connector->dev, mode);
+}
+EXPORT_SYMBOL(drm_mode_remove);
+
 enum drm_mode_analog {
 	DRM_MODE_ANALOG_NTSC, /* 525 lines, 60Hz */
 	DRM_MODE_ANALOG_PAL, /* 625 lines, 50Hz */
