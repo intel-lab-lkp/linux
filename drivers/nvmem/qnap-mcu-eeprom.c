@@ -9,8 +9,8 @@
  * Copyright (C) 2008 Wolfram Sang, Pengutronix
  */
 
-#include <linux/mfd/qnap-mcu.h>
 #include <linux/module.h>
+#include <linux/mfd/qnap-mcu.h>
 #include <linux/nvmem-provider.h>
 #include <linux/platform_device.h>
 
