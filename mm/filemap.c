@@ -3706,6 +3706,8 @@ skip:
 	}
 
 	vmf->pte = old_ptep;
+	folio_unlock(folio);
+	folio_put(folio);
 
 	return ret;
 }
@@ -3718,7 +3720,7 @@ static vm_fault_t filemap_map_order0_folio(struct vm_fault *vmf,
 	struct page *page = &folio->page;
 
 	if (PageHWPoison(page))
-		return ret;
+		goto out;
 
 	/* See comment of filemap_map_folio_range() */
 	if (!folio_test_workingset(folio))
@@ -3730,15 +3732,19 @@ static vm_fault_t filemap_map_order0_folio(struct vm_fault *vmf,
 	 * the fault-around logic.
 	 */
 	if (!pte_none(ptep_get(vmf->pte)))
-		return ret;
+		goto out;
 
 	if (vmf->address == addr)
 		ret = VM_FAULT_NOPAGE;
 
 	set_pte_range(vmf, folio, page, 1, addr);
 	(*rss)++;
-	folio_ref_inc(folio);
+	folio_unlock(folio);
+	return ret;
 
+out:
+	folio_unlock(folio);
+	folio_put(folio);
 	return ret;
 }
 
@@ -3796,9 +3802,6 @@ vm_fault_t filemap_map_pages(struct vm_fault *vmf,
 			ret |= filemap_map_folio_range(vmf, folio,
 					xas.xa_index - folio->index, addr,
 					nr_pages, &rss, &mmap_miss);
-
-		folio_unlock(folio);
-		folio_put(folio);
 	} while ((folio = next_uptodate_folio(&xas, mapping, end_pgoff)) != NULL);
 	add_mm_counter(vma->vm_mm, folio_type, rss);
 	pte_unmap_unlock(vmf->pte, vmf->ptl);
