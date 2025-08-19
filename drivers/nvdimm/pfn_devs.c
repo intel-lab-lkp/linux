@@ -755,7 +755,7 @@ static int nd_pfn_init(struct nd_pfn *nd_pfn)
 	if (rc != -ENODEV)
 		return rc;
 
-	/* no info block, do init */;
+	/* no info block, do init */
 	memset(pfn_sb, 0, sizeof(*pfn_sb));
 
 	nd_region = to_nd_region(nd_pfn->dev.parent);
