@@ -119,7 +119,20 @@
 		cdns,no-bar-match-nbits = <64>;
 		ti,syscon-pcie-ctrl = <&pcie0_ctrl 0x0>;
 		msi-map = <0x0 &gic_its 0x0 0x10000>;
+		#interrupt-cells = <1>;
+		interrupt-map-mask = <0 0 0 7>;
+		interrupt-map = <0 0 0 1 &pcie0_intc 0>, /* INT A */
+				<0 0 0 2 &pcie0_intc 0>, /* INT B */
+				<0 0 0 3 &pcie0_intc 0>, /* INT C */
+				<0 0 0 4 &pcie0_intc 0>; /* INT D */
 		status = "disabled";
+
+		pcie0_intc: interrupt-controller {
+			interrupt-controller;
+			#interrupt-cells = <1>;
+			interrupt-parent = <&gic500>;
+			interrupts = <GIC_SPI 95 IRQ_TYPE_EDGE_RISING>;
+		};
 	};
 
 	usbss1: usb@f920000 {
