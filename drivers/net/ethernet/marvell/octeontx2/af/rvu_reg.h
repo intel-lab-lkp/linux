@@ -396,6 +396,10 @@
 #define NIX_AF_RX_CHANX_CFG(a)                  (0x1A30 | (a) << 15)
 #define NIX_AF_CINT_TIMERX(a)                   (0x1A40 | (a) << 18)
 #define NIX_AF_LSO_FORMATX_FIELDX(a, b)         (0x1B00 | (a) << 16 | (b) << 3)
+#define NIX_AF_SPI_TO_SA_KEYX_WAYX(a, b)        (0x1C00 | (a) << 16 | (b) << 3)
+#define NIX_AF_SPI_TO_SA_VALUEX_WAYX(a, b)      (0x1C40 | (a) << 16 | (b) << 3)
+#define NIX_AF_SPI_TO_SA_HASH_KEY               (0x1C90)
+#define NIX_AF_SPI_TO_SA_HASH_VALUE             (0x1CA0)
 #define NIX_AF_LFX_CFG(a)		(0x4000 | (a) << 17)
 #define NIX_AF_LFX_SQS_CFG(a)		(0x4020 | (a) << 17)
 #define NIX_AF_LFX_TX_CFG2(a)		(0x4028 | (a) << 17)
@@ -462,6 +466,11 @@
 #define NIX_AF_LFX_RX_IPSEC_CFG1_SPB_CPT_ENA	BIT_ULL(37)
 #define NIX_AF_LFX_RX_IPSEC_CFG1_SA_IDX_WIDTH	GENMASK_ULL(36, 32)
 #define NIX_AF_LFX_RX_IPSEC_CFG1_SA_IDX_MAX	GENMASK_ULL(31, 0)
+
+#define NIX_AF_SPI_TO_SA_KEYX_WAYX_VALID	BIT_ULL(55)
+#define NIX_AF_SPI_TO_SA_LFID_MASK		GENMASK_ULL(54, 48)
+#define NIX_AF_SPI_TO_SA_MATCH_ID_MASK		GENMASK_ULL(47, 32)
+#define NIX_AF_SPI_TO_SA_SPI_INDEX_MASK		GENMASK_ULL(31, 0)
 
 #define NIX_AF_LF_CFG_SHIFT		17
 #define NIX_AF_LF_SSO_PF_FUNC_SHIFT	16
