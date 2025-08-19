@@ -12194,18 +12194,44 @@ static inline int on_null_domain(struct rq *rq)
 static inline int find_new_ilb(void)
 {
 	const struct cpumask *hk_mask;
-	int ilb_cpu;
+	struct cpumask ilb_mask;
+	int ilb_cpu, this_cpu = smp_processor_id();
 
 	hk_mask = housekeeping_cpumask(HK_TYPE_KERNEL_NOISE);
 
-	for_each_cpu_and(ilb_cpu, nohz.idle_cpus_mask, hk_mask) {
+	/*
+	 * Look for an idle cpu who is both NOHZ_idle and housekeeping.
+	 * If no such cpu, look for an idle housekeeping cpu.
+	 */
+	if (!cpumask_and(&ilb_mask, nohz.idle_cpus_mask, hk_mask))
+		cpumask_copy(&ilb_mask, hk_mask);
 
-		if (ilb_cpu == smp_processor_id())
+	for_each_cpu(ilb_cpu, &ilb_mask) {
+		if (ilb_cpu == this_cpu)
 			continue;
 
 		if (idle_cpu(ilb_cpu))
 			return ilb_cpu;
 	}
+
+	/*
+	 * If CPU has no SMT, look for an idle NOHZ_idle cpu.
+	 * Run NOHZ ILB may cause jitter on SMT sibling CPU.
+	 */
+	if (!sched_smt_active()) {
+		for_each_cpu(ilb_cpu, nohz.idle_cpus_mask) {
+			if (ilb_cpu == this_cpu)
+				continue;
+
+			if (idle_cpu(ilb_cpu))
+				return ilb_cpu;
+		}
+	}
+
+	/* Select the first housekeeping cpu anyway. */
+	ilb_cpu = cpumask_first(hk_mask);
+	if (ilb_cpu < nr_cpu_ids)
+		return ilb_cpu;
 
 	return -1;
 }
