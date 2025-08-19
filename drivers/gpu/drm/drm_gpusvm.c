@@ -345,7 +345,7 @@ notifier_iter_first(struct rb_root_cached *root, unsigned long start,
 /**
  * drm_gpusvm_for_each_notifier() - Iterate over GPU SVM notifiers in a gpusvm
  * @notifier__: Iterator variable for the notifiers
- * @notifier__: Pointer to the GPU SVM notifier
+ * @gpusvm__: Pointer to the GPU SVM structure
  * @start__: Start address of the notifier
  * @end__: End address of the notifier
  *
@@ -360,7 +360,7 @@ notifier_iter_first(struct rb_root_cached *root, unsigned long start,
  * drm_gpusvm_for_each_notifier_safe() - Safely iterate over GPU SVM notifiers in a gpusvm
  * @notifier__: Iterator variable for the notifiers
  * @next__: Iterator variable for the notifiers temporay storage
- * @notifier__: Pointer to the GPU SVM notifier
+ * @gpusvm__: Pointer to the GPU SVM structure
  * @start__: Start address of the notifier
  * @end__: End address of the notifier
  *
@@ -1437,7 +1437,6 @@ EXPORT_SYMBOL_GPL(drm_gpusvm_range_get_pages);
 
 /**
  * drm_gpusvm_range_unmap_pages() - Unmap pages associated with a GPU SVM range
- * drm_gpusvm_range_evict() - Evict GPU SVM range
  * @gpusvm: Pointer to the GPU SVM structure
  * @range: Pointer to the GPU SVM range structure
  * @ctx: GPU SVM context
