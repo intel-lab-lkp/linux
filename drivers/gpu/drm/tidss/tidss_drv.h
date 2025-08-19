@@ -23,7 +23,16 @@ struct tidss_device {
 	const struct dispc_features *feat;
 	struct dispc_device *dispc;
 	bool is_ext_vp_clk[TIDSS_MAX_PORTS];
-
+	/*
+	 * Stores highest pixel clock value found to be valid while checking
+	 * supported modes for connected display
+	 */
+	unsigned long max_successful_rate[TIDSS_MAX_PORTS];
+	/*
+	 * Stores the highest attempted pixel clock rate whose validated
+	 * clock is within the tolerance range
+	 */
+	unsigned long max_attempted_rate[TIDSS_MAX_PORTS];
 
 	unsigned int num_crtcs;
 	struct drm_crtc *crtcs[TIDSS_MAX_PORTS];
