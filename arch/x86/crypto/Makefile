@@ -46,10 +46,8 @@ obj-$(CONFIG_CRYPTO_AES_NI_INTEL) += aesni-intel.o
 aesni-intel-y := aesni-intel_asm.o aesni-intel_glue.o
 aesni-intel-$(CONFIG_64BIT) += aes-ctr-avx-x86_64.o \
 			       aes-gcm-aesni-x86_64.o \
-			       aes-xts-avx-x86_64.o
-ifeq ($(CONFIG_AS_VPCLMULQDQ),y)
-aesni-intel-$(CONFIG_64BIT) += aes-gcm-avx10-x86_64.o
-endif
+			       aes-xts-avx-x86_64.o \
+			       aes-gcm-avx10-x86_64.o
 
 obj-$(CONFIG_CRYPTO_SHA1_SSSE3) += sha1-ssse3.o
 sha1-ssse3-y := sha1_avx2_x86_64_asm.o sha1_ssse3_asm.o sha1_ni_asm.o sha1_ssse3_glue.o
