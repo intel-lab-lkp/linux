@@ -337,8 +337,8 @@ static void cuse_process_init_reply(struct fuse_mount *fm,
 		goto err;
 
 	fc->minor = arg->minor;
-	fc->max_read = max_t(unsigned, arg->max_read, 4096);
-	fc->max_write = max_t(unsigned, arg->max_write, 4096);
+	fc->max_read = max_t(unsigned int, arg->max_read, PAGE_SIZE);
+	fc->max_write = max_t(unsigned int, arg->max_write, PAGE_SIZE);
 
 	/* parse init reply */
 	cc->unrestricted_ioctl = arg->flags & CUSE_UNRESTRICTED_IOCTL;

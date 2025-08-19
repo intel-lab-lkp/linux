@@ -1450,8 +1450,8 @@ static void process_init_reply(struct fuse_mount *fm, struct fuse_args *args,
 		fm->sb->s_bdi->ra_pages =
 				min(fm->sb->s_bdi->ra_pages, ra_pages);
 		fc->minor = arg->minor;
-		fc->max_write = arg->minor < 5 ? 4096 : arg->max_write;
-		fc->max_write = max_t(unsigned, 4096, fc->max_write);
+		fc->max_write = arg->minor < 5 ? PAGE_SIZE : arg->max_write;
+		fc->max_write = max_t(unsigned int, PAGE_SIZE, fc->max_write);
 		fc->conn_init = 1;
 	}
 	kfree(ia);
@@ -1843,7 +1843,7 @@ int fuse_fill_super_common(struct super_block *sb, struct fuse_fs_context *ctx)
 	fc->user_id = ctx->user_id;
 	fc->group_id = ctx->group_id;
 	fc->legacy_opts_show = ctx->legacy_opts_show;
-	fc->max_read = max_t(unsigned int, 4096, ctx->max_read);
+	fc->max_read = max_t(unsigned int, PAGE_SIZE, ctx->max_read);
 	fc->destroy = ctx->destroy;
 	fc->no_control = ctx->no_control;
 	fc->no_force_umount = ctx->no_force_umount;
