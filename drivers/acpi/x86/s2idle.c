@@ -189,6 +189,13 @@ free_acpi_buffer:
 	ACPI_FREE(out_obj);
 }
 
+static void lpi_constraints_table_free(void)
+{
+	kfree(lpi_constraints_table);
+	lpi_constraints_table = NULL;
+	lpi_constraints_table_size = 0;
+}
+
 static void lpi_device_get_constraints(void)
 {
 	union acpi_object *out_obj;
@@ -203,6 +210,8 @@ static void lpi_device_get_constraints(void)
 
 	if (!out_obj)
 		return;
+	/* Function to free lpi_constraints_table before allocating a new one */
+	lpi_constraints_table_free();
 
 	lpi_constraints_table = kcalloc(out_obj->package.count,
 					sizeof(*lpi_constraints_table),
