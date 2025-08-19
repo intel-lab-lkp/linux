@@ -629,7 +629,7 @@ int kobject_uevent_env(struct kobject *kobj, enum kobject_action action,
 						 env->envp, GFP_KERNEL,
 						 NULL, cleanup_uevent_env, env);
 		if (info) {
-			retval = call_usermodehelper_exec(info, UMH_NO_WAIT);
+			retval = call_usermodehelper_exec(info, UMH_WAIT_EXEC);
 			env = NULL;	/* freed by cleanup_uevent_env */
 		}
 	}
