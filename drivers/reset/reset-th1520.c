@@ -154,6 +154,7 @@ static int th1520_reset_probe(struct platform_device *pdev)
 
 static const struct of_device_id th1520_reset_match[] = {
 	{ .compatible = "thead,th1520-reset" },
+	{ .compatible = "thead,th1520-reset-vo" },
 	{ /* sentinel */ }
 };
 MODULE_DEVICE_TABLE(of, th1520_reset_match);
