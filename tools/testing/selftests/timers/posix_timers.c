@@ -673,8 +673,9 @@ int main(int argc, char **argv)
 	ksft_print_header();
 	ksft_set_plan(19);
 
-	ksft_print_msg("Testing posix timers. False negative may happen on CPU execution \n");
-	ksft_print_msg("based timers if other threads run on the CPU...\n");
+	ksft_print_msg("Testing POSIX timers.\n");
+	ksft_print_msg("False negatives may occur in tests\n");
+	ksft_print_msg("relying on timers if other threads run on the CPU\n");
 
 	check_timer_create_exact();
 
