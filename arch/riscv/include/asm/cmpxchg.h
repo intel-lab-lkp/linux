@@ -370,74 +370,71 @@ static __always_inline void __cmpwait(volatile void *ptr,
 	u32 *__ptr32b;
 	ulong __s, __val, __mask;
 
-	asm goto(ALTERNATIVE("j %l[no_zawrs]", "nop",
-			     0, RISCV_ISA_EXT_ZAWRS, 1)
-		 : : : : no_zawrs);
+	if (use_alternative_likely(0, RISCV_ISA_EXT_ZAWRS)) {
+		switch (size) {
+		case 1:
+			__ptr32b = (u32 *)((ulong)(ptr) & ~0x3);
+			__s = ((ulong)(ptr) & 0x3) * BITS_PER_BYTE;
+			__val = val << __s;
+			__mask = 0xff << __s;
 
-	switch (size) {
-	case 1:
-		__ptr32b = (u32 *)((ulong)(ptr) & ~0x3);
-		__s = ((ulong)(ptr) & 0x3) * BITS_PER_BYTE;
-		__val = val << __s;
-		__mask = 0xff << __s;
+			asm volatile(
+			"	lr.w	%0, %1\n"
+			"	and	%0, %0, %3\n"
+			"	xor	%0, %0, %2\n"
+			"	bnez	%0, 1f\n"
+				ZAWRS_WRS_NTO "\n"
+			"1:"
+			: "=&r" (tmp), "+A" (*(__ptr32b))
+			: "r" (__val), "r" (__mask)
+			: "memory");
+			break;
+		case 2:
+			__ptr32b = (u32 *)((ulong)(ptr) & ~0x3);
+			__s = ((ulong)(ptr) & 0x2) * BITS_PER_BYTE;
+			__val = val << __s;
+			__mask = 0xffff << __s;
 
-		asm volatile(
-		"	lr.w	%0, %1\n"
-		"	and	%0, %0, %3\n"
-		"	xor	%0, %0, %2\n"
-		"	bnez	%0, 1f\n"
-			ZAWRS_WRS_NTO "\n"
-		"1:"
-		: "=&r" (tmp), "+A" (*(__ptr32b))
-		: "r" (__val), "r" (__mask)
-		: "memory");
-		break;
-	case 2:
-		__ptr32b = (u32 *)((ulong)(ptr) & ~0x3);
-		__s = ((ulong)(ptr) & 0x2) * BITS_PER_BYTE;
-		__val = val << __s;
-		__mask = 0xffff << __s;
-
-		asm volatile(
-		"	lr.w	%0, %1\n"
-		"	and	%0, %0, %3\n"
-		"	xor	%0, %0, %2\n"
-		"	bnez	%0, 1f\n"
-			ZAWRS_WRS_NTO "\n"
-		"1:"
-		: "=&r" (tmp), "+A" (*(__ptr32b))
-		: "r" (__val), "r" (__mask)
-		: "memory");
-		break;
-	case 4:
-		asm volatile(
-		"	lr.w	%0, %1\n"
-		"	xor	%0, %0, %2\n"
-		"	bnez	%0, 1f\n"
-			ZAWRS_WRS_NTO "\n"
-		"1:"
-		: "=&r" (tmp), "+A" (*(u32 *)ptr)
-		: "r" (val));
-		break;
+			asm volatile(
+			"	lr.w	%0, %1\n"
+			"	and	%0, %0, %3\n"
+			"	xor	%0, %0, %2\n"
+			"	bnez	%0, 1f\n"
+				ZAWRS_WRS_NTO "\n"
+			"1:"
+			: "=&r" (tmp), "+A" (*(__ptr32b))
+			: "r" (__val), "r" (__mask)
+			: "memory");
+			break;
+		case 4:
+			asm volatile(
+			"	lr.w	%0, %1\n"
+			"	xor	%0, %0, %2\n"
+			"	bnez	%0, 1f\n"
+				ZAWRS_WRS_NTO "\n"
+			"1:"
+			: "=&r" (tmp), "+A" (*(u32 *)ptr)
+			: "r" (val));
+			break;
 #if __riscv_xlen == 64
-	case 8:
-		asm volatile(
-		"	lr.d	%0, %1\n"
-		"	xor	%0, %0, %2\n"
-		"	bnez	%0, 1f\n"
-			ZAWRS_WRS_NTO "\n"
-		"1:"
-		: "=&r" (tmp), "+A" (*(u64 *)ptr)
-		: "r" (val));
-		break;
+		case 8:
+			asm volatile(
+			"	lr.d	%0, %1\n"
+			"	xor	%0, %0, %2\n"
+			"	bnez	%0, 1f\n"
+				ZAWRS_WRS_NTO "\n"
+			"1:"
+			: "=&r" (tmp), "+A" (*(u64 *)ptr)
+			: "r" (val));
+			break;
 #endif
-	default:
-		BUILD_BUG();
+		default:
+			BUILD_BUG();
+		}
+
+		return;
 	}
 
-	return;
-
-no_zawrs:
 	asm volatile(RISCV_PAUSE : : : "memory");
 }
 
