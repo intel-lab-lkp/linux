@@ -237,14 +237,20 @@ int copy_thread(struct task_struct *p, const struct kernel_clone_args *args)
 
 	if (unlikely(args->fn)) {
 		/*
-		 * A user space thread, but it doesn't return to
-		 * ret_after_fork().
+		 * A non-PF_KTHREAD thread, but it doesn't return from
+		 * ret_from_fork().
+		 *
+		 * Either a PF_USER_WORKER kernel thread, in this case
+		 * arg->fn() must not return.
+		 * Or a user space task created by user_mode_thread(), in
+		 * this case arg->fn() can only return after a successful
+		 * kernel_execve().
 		 *
 		 * In order to indicate that to tools like gdb,
 		 * we reset the stack and instruction pointers.
 		 *
 		 * It does the same kernel frame setup to return to a kernel
-		 * function that a kernel thread does.
+		 * function that a PF_KTHREAD thread does.
 		 */
 		childregs->sp = 0;
 		childregs->ip = 0;
