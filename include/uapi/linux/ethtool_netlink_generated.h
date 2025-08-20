@@ -384,7 +384,13 @@ enum {
 	ETHTOOL_A_COALESCE_MAX = (__ETHTOOL_A_COALESCE_CNT - 1)
 };
 
-enum {
+/**
+ * enum ethtool_pause_stat - Statistics counters for link-wide PAUSE frames
+ *   (IEEE 802.3 Annex 31B).
+ * @ETHTOOL_A_PAUSE_STAT_TX_FRAMES: Number of PAUSE frames transmitted.
+ * @ETHTOOL_A_PAUSE_STAT_RX_FRAMES: Number of PAUSE frames received.
+ */
+enum ethtool_a_pause_stat {
 	ETHTOOL_A_PAUSE_STAT_UNSPEC,
 	ETHTOOL_A_PAUSE_STAT_PAD,
 	ETHTOOL_A_PAUSE_STAT_TX_FRAMES,
@@ -394,7 +400,25 @@ enum {
 	ETHTOOL_A_PAUSE_STAT_MAX = (__ETHTOOL_A_PAUSE_STAT_CNT - 1)
 };
 
-enum {
+/**
+ * enum ethtool_pause - Parameters for link-wide PAUSE (IEEE 802.3 Annex 31B).
+ * @ETHTOOL_A_PAUSE_AUTONEG: Acts as a mode selector for the driver. On GET:
+ *   indicates the driver's behavior. If true, the driver will respect the
+ *   negotiated outcome; if false, the driver will use a forced configuration.
+ *   On SET: if true, the driver configures the PHY's advertisement based on
+ *   the rx and tx attributes. If false, the driver forces the MAC into the
+ *   state defined by the rx and tx attributes.
+ * @ETHTOOL_A_PAUSE_RX: Enable receiving PAUSE frames (pausing local TX). On
+ *   GET: reflects the currently preferred configuration state.
+ * @ETHTOOL_A_PAUSE_TX: Enable transmitting PAUSE frames (pausing peer TX). On
+ *   GET: reflects the currently preferred configuration state.
+ * @ETHTOOL_A_PAUSE_STATS: Contains the pause statistics counters. The source
+ *   of these statistics is determined by stats-src.
+ * @ETHTOOL_A_PAUSE_STATS_SRC: Selects the source of the MAC statistics, values
+ *   from enum ethtool_mac_stats_src. This allows requesting statistics from an
+ *   aggregated MAC or a specific PHY, for example.
+ */
+enum ethtool_a_pause {
 	ETHTOOL_A_PAUSE_UNSPEC,
 	ETHTOOL_A_PAUSE_HEADER,
 	ETHTOOL_A_PAUSE_AUTONEG,
