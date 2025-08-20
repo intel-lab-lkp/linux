@@ -3225,6 +3225,29 @@ def render_uapi(family, cw):
         if attr_set.subset_of:
             continue
 
+        # Write kdoc for attribute-set enums
+        has_main_doc = 'doc' in attr_set.yaml and attr_set.yaml['doc']
+        has_attr_doc = any('doc' in attr for _, attr in attr_set.items())
+
+        if has_main_doc or has_attr_doc:
+            if has_attr_doc:
+                cw.p('/**')
+                # Construct the main description line for the enum
+                doc_line = f"enum {c_lower(family.ident_name + '_' + attr_set.name)}"
+                if has_main_doc:
+                    doc_line += f" - {attr_set.yaml['doc']}"
+                cw.write_doc_line(doc_line)
+
+                # Write documentation for each attribute (enum member)
+                for _, attr in attr_set.items():
+                    if 'doc' in attr and attr['doc']:
+                        doc = f"@{attr.enum_name}: {attr['doc']}"
+                        cw.write_doc_line(doc)
+            else:  # Only has main doc, use a simpler comment block
+                cw.p('/*')
+                cw.write_doc_line(attr_set.yaml['doc'], indent=False)
+            cw.p(' */')
+
         max_value = f"({attr_set.cnt_name} - 1)"
 
         val = 0
