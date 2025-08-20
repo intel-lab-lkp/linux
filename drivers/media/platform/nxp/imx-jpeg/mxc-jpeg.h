@@ -34,6 +34,7 @@
 enum mxc_jpeg_enc_state {
 	MXC_JPEG_ENCODING	= 0, /* jpeg encode phase */
 	MXC_JPEG_ENC_CONF	= 1, /* jpeg encoder config phase */
+	MXC_JPEG_ENC_DONE	= 2, /* jpeg encoder done/ready phase */
 };
 
 enum mxc_jpeg_mode {

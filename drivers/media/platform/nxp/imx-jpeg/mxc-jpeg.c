@@ -989,6 +989,7 @@ static irqreturn_t mxc_jpeg_dec_irq(int irq, void *priv)
 
 		dev_err(dev, "Encoder/decoder error, dec_ret = 0x%08x, status=0x%08x",
 			dec_ret, ret);
+		ctx->enc_state = MXC_JPEG_ENC_DONE;
 		mxc_jpeg_clr_desc(reg, slot);
 		mxc_jpeg_sw_reset(reg);
 		buf_state = VB2_BUF_STATE_ERROR;
@@ -1042,9 +1043,16 @@ static irqreturn_t mxc_jpeg_dec_irq(int irq, void *priv)
 
 buffers_done:
 	mxc_jpeg_job_finish(ctx, buf_state, false);
-	spin_unlock(&jpeg->hw_lock);
 	cancel_delayed_work(&ctx->task_timer);
+
+	if (jpeg->mode == MXC_JPEG_ENCODE && ctx->enc_state == MXC_JPEG_ENCODING)
+		ctx->enc_state = MXC_JPEG_ENC_DONE;
+
 	v4l2_m2m_job_finish(jpeg->m2m_dev, ctx->fh.m2m_ctx);
+
+	spin_unlock(&jpeg->hw_lock);
+
+
 	return IRQ_HANDLED;
 job_unlock:
 	spin_unlock(&jpeg->hw_lock);
@@ -1468,8 +1476,12 @@ static bool mxc_jpeg_source_change(struct mxc_jpeg_ctx *ctx,
 static int mxc_jpeg_job_ready(void *priv)
 {
 	struct mxc_jpeg_ctx *ctx = priv;
+	struct mxc_jpeg_dev *jpeg = ctx->mxc_jpeg;
 
-	return ctx->source_change ? 0 : 1;
+	if (jpeg->mode == MXC_JPEG_ENCODE)
+		return ctx->enc_state == MXC_JPEG_ENC_DONE;
+	else
+		return ctx->source_change ? 0 : 1;
 }
 
 static void mxc_jpeg_device_run_timeout(struct work_struct *work)
@@ -1693,6 +1705,8 @@ static int mxc_jpeg_start_streaming(struct vb2_queue *q, unsigned int count)
 
 	if (ctx->mxc_jpeg->mode == MXC_JPEG_DECODE && V4L2_TYPE_IS_CAPTURE(q->type))
 		ctx->source_change = 0;
+	if (ctx->mxc_jpeg->mode == MXC_JPEG_ENCODE)
+		ctx->enc_state = MXC_JPEG_ENC_DONE;
 	dev_dbg(ctx->mxc_jpeg->dev, "Start streaming ctx=%p", ctx);
 	q_data->sequence = 0;
 
