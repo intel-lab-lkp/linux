@@ -37,13 +37,11 @@ static int imx_aipstz_probe(struct platform_device *pdev)
 
 	data = devm_kzalloc(&pdev->dev, sizeof(*data), GFP_KERNEL);
 	if (!data)
-		return dev_err_probe(&pdev->dev, -ENOMEM,
-				     "failed to allocate data memory\n");
+		return -ENOMEM;
 
 	data->base = devm_platform_get_and_ioremap_resource(pdev, 0, NULL);
 	if (IS_ERR(data->base))
-		return dev_err_probe(&pdev->dev, -ENOMEM,
-				     "failed to get/ioremap AC memory\n");
+		return -ENOMEM;
 
 	data->default_cfg = of_device_get_match_data(&pdev->dev);
 
