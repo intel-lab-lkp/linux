@@ -601,7 +601,7 @@
 			  "SOC_I2C4_1V8_SDA_400K",
 			  "SOC_I2C4_1V8_SCL_400K";
 
-	aud_i2s2: aud_i2s2 {
+	aud_i2s2: aud_i2s2_pins {
 		pins1 {
 			pinmux = <MT8173_PIN_128_I2S0_LRCK__FUNC_I2S1_WS>,
 				 <MT8173_PIN_129_I2S0_BCK__FUNC_I2S1_BCK>,
@@ -654,14 +654,14 @@
 		};
 	};
 
-	i2c1_pins_a: i2c1 {
+	i2c1_pins_a: i2c1_pins {
 		da9211_pins {
 			pinmux = <MT8173_PIN_15_EINT15__FUNC_GPIO15>;
 			bias-pull-up;
 		};
 	};
 
-	mmc0_pins_default: mmc0default {
+	mmc0_pins_default: mmc0_default_pins {
 		pins_cmd_dat {
 			pinmux = <MT8173_PIN_57_MSDC0_DAT0__FUNC_MSDC0_DAT0>,
 				 <MT8173_PIN_58_MSDC0_DAT1__FUNC_MSDC0_DAT1>,
@@ -686,7 +686,7 @@
 		};
 	};
 
-	mmc1_pins_default: mmc1default {
+	mmc1_pins_default: mmc1_default_pins {
 		pins_cmd_dat {
 			pinmux = <MT8173_PIN_73_MSDC1_DAT0__FUNC_MSDC1_DAT0>,
 				 <MT8173_PIN_74_MSDC1_DAT1__FUNC_MSDC1_DAT1>,
@@ -710,7 +710,7 @@
 		};
 	};
 
-	mmc3_pins_default: mmc3default {
+	mmc3_pins_default: mmc3_default_pins {
 		pins_dat {
 			pinmux = <MT8173_PIN_22_MSDC3_DAT0__FUNC_MSDC3_DAT0>,
 				 <MT8173_PIN_23_MSDC3_DAT1__FUNC_MSDC3_DAT1>,
@@ -735,7 +735,7 @@
 		};
 	};
 
-	mmc0_pins_uhs: mmc0 {
+	mmc0_pins_uhs: mmc0_uhs_pins {
 		pins_cmd_dat {
 			pinmux = <MT8173_PIN_57_MSDC0_DAT0__FUNC_MSDC0_DAT0>,
 				 <MT8173_PIN_58_MSDC0_DAT1__FUNC_MSDC0_DAT1>,
@@ -769,7 +769,7 @@
 		};
 	};
 
-	mmc1_pins_uhs: mmc1 {
+	mmc1_pins_uhs: mmc1_uhs_pins {
 		pins_cmd_dat {
 			pinmux = <MT8173_PIN_73_MSDC1_DAT0__FUNC_MSDC1_DAT0>,
 				 <MT8173_PIN_74_MSDC1_DAT1__FUNC_MSDC1_DAT1>,
@@ -788,7 +788,7 @@
 		};
 	};
 
-	mmc3_pins_uhs: mmc3 {
+	mmc3_pins_uhs: mmc3_uhs_pins {
 		pins_dat {
 			pinmux = <MT8173_PIN_22_MSDC3_DAT0__FUNC_MSDC3_DAT0>,
 				 <MT8173_PIN_23_MSDC3_DAT1__FUNC_MSDC3_DAT1>,
@@ -813,7 +813,7 @@
 		};
 	};
 
-	nor_gpio1_pins: nor {
+	nor_gpio1_pins: nor_pins {
 		pins1 {
 			pinmux = <MT8173_PIN_6_EINT6__FUNC_SFCS0>,
 				 <MT8173_PIN_7_EINT7__FUNC_SFHOLD>,
@@ -863,7 +863,7 @@
 		};
 	};
 
-	rt5650_irq: rt5650_irq {
+	rt5650_irq: rt5650_irq_pins {
 		pins1 {
 			pinmux = <MT8173_PIN_3_EINT3__FUNC_GPIO3>;
 			bias-pull-down;
@@ -877,7 +877,7 @@
 		};
 	};
 
-	spi_pins_a: spi1 {
+	spi_pins_a: spi1_pins {
 		pins1 {
 			pinmux = <MT8173_PIN_0_EINT0__FUNC_GPIO0>;
 			bias-pull-up;
@@ -892,7 +892,7 @@
 		};
 	};
 
-	trackpad_irq: trackpad_irq {
+	trackpad_irq: trackpad_irq_pins {
 		pins1 {
 			pinmux = <MT8173_PIN_117_URXD3__FUNC_GPIO117>;
 			input-enable;
@@ -900,7 +900,7 @@
 		};
 	};
 
-	usb_pins: usb {
+	usb_pins: usb_pins {
 		pins1 {
 			pinmux = <MT8173_PIN_101_MSDC2_DAT1__FUNC_GPIO101>;
 			output-high;

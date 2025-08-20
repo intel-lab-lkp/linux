@@ -80,7 +80,7 @@
 		};
 	};
 
-	mmc1_pins_default: mmc1default {
+	mmc1_pins_default: mmc1_default_pins {
 		pins_wp {
 			pinmux = <MT8173_PIN_42_DSI_TE__FUNC_GPIO42>;
 			input-enable;
