@@ -32,6 +32,7 @@
 #include <asm/msr.h>
 #include <asm/topology.h>
 #include <asm/uv/uv.h>
+#include <asm/uv/uv_hub.h>
 #include <asm/sev.h>
 
 unsigned int __read_mostly cpu_khz;	/* TSC clocks / usec, not used here */
@@ -1261,7 +1262,7 @@ static void __init check_system_tsc_reliable(void)
 	if (boot_cpu_has(X86_FEATURE_CONSTANT_TSC) &&
 	    boot_cpu_has(X86_FEATURE_NONSTOP_TSC) &&
 	    boot_cpu_has(X86_FEATURE_TSC_ADJUST) &&
-	    topology_max_packages() <= 4)
+	    (topology_max_packages() <= 4 || is_uvy_hub()))
 		tsc_disable_clocksource_watchdog();
 }
 

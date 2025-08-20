@@ -38,6 +38,9 @@ static inline int is_uv_system(void)	{ return 0; }
 static inline int is_uv_hubbed(int uv)	{ return 0; }
 static inline void uv_cpu_init(void)	{ }
 static inline void uv_system_init(void)	{ }
+static inline int is_uvx_hub(void) { return 0; }
+static inline int is_uvy_hub(void) { return 0; }
+static inline int is_uv_hub(void) { return 0; }
 
 #endif	/* X86_UV */
 
