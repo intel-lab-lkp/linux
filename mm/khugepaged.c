@@ -2411,10 +2411,12 @@ immap_locked:
 		xas_lock_irq(&xas);
 	}
 
-	if (is_shmem)
-		__lruvec_stat_mod_folio(new_folio, NR_SHMEM_THPS, HPAGE_PMD_NR);
-	else
-		__lruvec_stat_mod_folio(new_folio, NR_FILE_THPS, HPAGE_PMD_NR);
+	if (order == HPAGE_PMD_ORDER) {
+		if (is_shmem)
+			__lruvec_stat_mod_folio(new_folio, NR_SHMEM_THPS, HPAGE_PMD_NR);
+		else
+			__lruvec_stat_mod_folio(new_folio, NR_FILE_THPS, HPAGE_PMD_NR);
+	}
 
 	if (nr_none) {
 		__lruvec_stat_mod_folio(new_folio, NR_FILE_PAGES, nr_none);
