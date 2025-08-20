@@ -3038,8 +3038,48 @@ static const struct iommu_dirty_ops amd_dirty_ops = {
 	.read_and_clear_dirty = amd_iommu_read_and_clear_dirty,
 };
 
+#define AMD_VIOMMU_EFR_GUEST_TRANSLATION_FLAGS \
+	(FEATURE_GT | FEATURE_GA | FEATURE_GIOSUP | \
+	 FEATURE_PPR | FEATURE_EPHSUP)
+
+static void _build_efr_guest_translation(struct amd_iommu *iommu, u64 *efr, u64 *efr2)
+{
+	/*
+	 * Build the EFR against the current hardware capabilities
+	 *
+	 * Also, not all IOMMU features are emulated by KVM.
+	 * Therefore, only advertise what KVM can support
+	 * or virtualzied by the hardware.
+	 */
+	if (!efr)
+		return;
+
+	*efr |= (amd_iommu_efr & AMD_VIOMMU_EFR_GUEST_TRANSLATION_FLAGS);
+	*efr |= (FIELD_GET(FEATURE_GATS, amd_iommu_efr) << FEATURE_GATS_SHIFT);
+	*efr |= (FIELD_GET(FEATURE_GLX, amd_iommu_efr) << FEATURE_GLX_SHIFT);
+	*efr |= (FIELD_GET(FEATURE_PASMAX, amd_iommu_efr) << FEATURE_PASMAX_SHIFT);
+	pr_debug("%s: efr=%#llx\n", __func__, *efr);
+}
+
+static void *amd_iommu_hw_info(struct device *dev, u32 *length, u32 *type)
+{
+	struct iommu_hw_info_amd *hwinfo;
+	struct amd_iommu *iommu = rlookup_amd_iommu(dev);
+
+	hwinfo = kzalloc(sizeof(*hwinfo), GFP_KERNEL);
+	if (!hwinfo)
+		return ERR_PTR(-ENOMEM);
+
+	*length = sizeof(*hwinfo);
+	*type = IOMMU_HW_INFO_TYPE_AMD;
+
+	_build_efr_guest_translation(iommu, &hwinfo->efr, &hwinfo->efr2);
+	return hwinfo;
+}
+
 const struct iommu_ops amd_iommu_ops = {
 	.capable = amd_iommu_capable,
+	.hw_info = amd_iommu_hw_info,
 	.blocked_domain = &blocked_domain,
 	.release_domain = &release_domain,
 	.identity_domain = &identity_domain.domain,
