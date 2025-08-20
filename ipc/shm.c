@@ -588,6 +588,22 @@ static struct mempolicy *shm_get_policy(struct vm_area_struct *vma,
 }
 #endif
 
+static void shm_unmap_page_range(struct mmu_gather *tlb,
+				 struct vm_area_struct *vma,
+				 unsigned long addr, unsigned long end,
+				 struct zap_details *details)
+{
+	struct file *file = vma->vm_file;
+	struct shm_file_data *sfd = shm_file_data(file);
+
+	if (sfd->vm_ops->unmap_page_range) {
+		sfd->vm_ops->unmap_page_range(tlb, vma, addr, end, details);
+		return;
+	}
+
+	__unmap_page_range(tlb, vma, addr, end, details);
+}
+
 static int shm_mmap(struct file *file, struct vm_area_struct *vma)
 {
 	struct shm_file_data *sfd = shm_file_data(file);
@@ -688,6 +704,7 @@ static const struct vm_operations_struct shm_vm_ops = {
 	.set_policy = shm_set_policy,
 	.get_policy = shm_get_policy,
 #endif
+	.unmap_page_range = shm_unmap_page_range,
 };
 
 /**

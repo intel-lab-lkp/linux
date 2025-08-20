@@ -5461,6 +5461,30 @@ static vm_fault_t hugetlb_vm_op_fault(struct vm_fault *vmf)
 	return 0;
 }
 
+static void hugetlb_vm_op_unmap_page_range(struct mmu_gather *tlb,
+				struct vm_area_struct *vma,
+				unsigned long addr, unsigned long end,
+				struct zap_details *details)
+{
+	zap_flags_t zap_flags = details ?  details->zap_flags : 0;
+
+	/*
+	 * It is undesirable to test vma->vm_file as it
+	 * should be non-null for valid hugetlb area.
+	 * However, vm_file will be NULL in the error
+	 * cleanup path of mmap_region. When
+	 * hugetlbfs ->mmap method fails,
+	 * mmap_region() nullifies vma->vm_file
+	 * before calling this function to clean up.
+	 * Since no pte has actually been setup, it is
+	 * safe to do nothing in this case.
+	 */
+	if (!vma->vm_file)
+		return;
+
+	__unmap_hugepage_range(tlb, vma, addr, end, NULL, zap_flags);
+}
+
 /*
  * When a new function is introduced to vm_operations_struct and added
  * to hugetlb_vm_ops, please consider adding the function to shm_vm_ops.
@@ -5474,6 +5498,7 @@ const struct vm_operations_struct hugetlb_vm_ops = {
 	.close = hugetlb_vm_op_close,
 	.may_split = hugetlb_vm_op_split,
 	.pagesize = hugetlb_vm_op_pagesize,
+	.unmap_page_range = hugetlb_vm_op_unmap_page_range,
 };
 
 static pte_t make_huge_pte(struct vm_area_struct *vma, struct folio *folio,
