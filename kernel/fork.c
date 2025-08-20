@@ -2143,6 +2143,7 @@ __latent_entropy struct task_struct *copy_process(
 #endif
 
 	unwind_task_init(p);
+	mshare_init_task(p);
 
 	/* Perform scheduler related setup. Assign this task to a CPU. */
 	retval = sched_fork(clone_flags, p);

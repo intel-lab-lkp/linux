@@ -17,6 +17,7 @@
 #include <linux/fs_context.h>
 #include <linux/mman.h>
 #include <linux/mmu_notifier.h>
+#include <linux/mshare.h>
 #include <uapi/linux/magic.h>
 #include <linux/falloc.h>
 #include <asm/tlbflush.h>
@@ -27,6 +28,7 @@ const unsigned long mshare_align = P4D_SIZE;
 const unsigned long mshare_base = mshare_align;
 
 #define MSHARE_INITIALIZED	0x1
+#define MSHARE_HAS_OWNER	0x2
 
 struct mshare_data {
 	struct mm_struct *mm;
@@ -35,11 +37,71 @@ struct mshare_data {
 	unsigned long size;
 	unsigned long flags;
 	struct mmu_notifier mn;
+	struct list_head list;
 };
 
 static inline bool mshare_is_initialized(struct mshare_data *m_data)
 {
 	return test_bit(MSHARE_INITIALIZED, &m_data->flags);
+}
+
+static inline bool mshare_has_owner(struct mshare_data *m_data)
+{
+	return test_bit(MSHARE_HAS_OWNER, &m_data->flags);
+}
+
+static bool mshare_data_getref(struct mshare_data *m_data);
+static void mshare_data_putref(struct mshare_data *m_data);
+
+void exit_mshare(struct task_struct *task)
+{
+	for (;;) {
+		struct mshare_data *m_data;
+		int error;
+
+		task_lock(task);
+
+		if (list_empty(&task->mshare_mem)) {
+			task_unlock(task);
+			break;
+		}
+
+		m_data = list_first_entry(&task->mshare_mem, struct mshare_data,
+						list);
+
+		WARN_ON_ONCE(!mshare_data_getref(m_data));
+
+		list_del_init(&m_data->list);
+		task_unlock(task);
+
+		/*
+		 * The owner of an mshare region is going away. Unmap
+		 * everything in the region and prevent more mappings from
+		 * being created.
+		 *
+		 * XXX
+		 * The fact that the unmap can possibly fail is problematic.
+		 * One alternative is doing a subset of what exit_mmap() does.
+		 * If it's preferrable to preserve the mappings then another
+		 * approach is to fail any further faults on the mshare region
+		 * and unlink the shared page tables from the page tables of
+		 * each sharing process by walking the rmap via the msharefs
+		 * inode.
+		 * Unmapping everything means mshare memory is freed up when
+		 * the owner exits which may be preferrable for OOM situations.
+		 */
+
+		clear_bit(MSHARE_HAS_OWNER, &m_data->flags);
+
+		mmap_write_lock(m_data->mm);
+		error = do_munmap(m_data->mm, m_data->start, m_data->size, NULL);
+		mmap_write_unlock(m_data->mm);
+
+		if (error)
+			pr_warn("%s: do_munmap returned %d\n", __func__, error);
+
+		mshare_data_putref(m_data);
+	}
 }
 
 static void mshare_invalidate_tlbs(struct mmu_notifier *mn, struct mm_struct *mm,
@@ -362,6 +424,11 @@ msharefs_fill_mm(struct inode *inode)
 	ret = mmu_notifier_register(&m_data->mn, mm);
 	if (ret)
 		goto err_free;
+	INIT_LIST_HEAD(&m_data->list);
+	task_lock(current);
+	list_add(&m_data->list, &current->mshare_mem);
+	task_unlock(current);
+	set_bit(MSHARE_HAS_OWNER, &m_data->flags);
 
 	refcount_set(&m_data->ref, 1);
 	inode->i_private = m_data;
@@ -378,6 +445,11 @@ msharefs_delmm(struct mshare_data *m_data)
 {
 	mmput(m_data->mm);
 	kfree(m_data);
+}
+
+static bool mshare_data_getref(struct mshare_data *m_data)
+{
+	return refcount_inc_not_zero(&m_data->ref);
 }
 
 static void mshare_data_putref(struct mshare_data *m_data)
@@ -542,6 +614,17 @@ msharefs_evict_inode(struct inode *inode)
 
 	if (!m_data)
 		goto out;
+
+	rcu_read_lock();
+
+	if (!list_empty(&m_data->list)) {
+		struct task_struct *owner = m_data->mm->owner;
+
+		task_lock(owner);
+		list_del_init(&m_data->list);
+		task_unlock(owner);
+	}
+	rcu_read_unlock();
 
 	mshare_data_putref(m_data);
 out:

@@ -951,6 +951,7 @@ void __noreturn do_exit(long code)
 	if (group_dead)
 		acct_process();
 
+	exit_mshare(tsk);
 	exit_sem(tsk);
 	exit_shm(tsk);
 	exit_files(tsk);

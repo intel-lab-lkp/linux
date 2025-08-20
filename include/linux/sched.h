@@ -48,6 +48,7 @@
 #include <linux/uidgid_types.h>
 #include <linux/tracepoint-defs.h>
 #include <linux/unwind_deferred_types.h>
+#include <linux/mshare.h>
 #include <asm/kmap_size.h>
 
 /* task_struct member predeclarations (sorted alphabetically): */
@@ -1653,6 +1654,10 @@ struct task_struct {
 
 	/* CPU-specific state of this task: */
 	struct thread_struct		thread;
+
+#ifdef CONFIG_MSHARE
+	struct list_head		mshare_mem;
+#endif
 
 	/*
 	 * New fields for task_struct should be added above here, so that
