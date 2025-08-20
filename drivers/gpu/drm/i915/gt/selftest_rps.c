@@ -1216,6 +1216,11 @@ int live_rps_power(void *arg)
 		if (11 * min.power > 10 * max.power) {
 			pr_err("%s: did not conserve power when setting lower frequency!\n",
 			       engine->name);
+			pr_debug("%s: RPS Debug - max_freq:%u:%uMHz, rp0_freq:%u:%uMHz, max_freq_softlimit:%u:%uMHz\n",
+				 engine->name, rps->max_freq, intel_gpu_freq(rps, rps->max_freq),
+				 rps->rp0_freq, intel_gpu_freq(rps, rps->rp0_freq),
+				 rps->max_freq_softlimit, intel_gpu_freq(rps,
+				 rps->max_freq_softlimit));
 			err = -EINVAL;
 			break;
 		}
