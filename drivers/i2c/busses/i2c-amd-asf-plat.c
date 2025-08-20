@@ -306,7 +306,7 @@ static int amd_asf_probe(struct platform_device *pdev)
 
 	asf_dev = devm_kzalloc(dev, sizeof(*asf_dev), GFP_KERNEL);
 	if (!asf_dev)
-		return dev_err_probe(dev, -ENOMEM, "Failed to allocate memory\n");
+		return -ENOMEM;
 
 	asf_dev->mmio_cfg.use_mmio = true;
 	asf_dev->port_addr = platform_get_resource(pdev, IORESOURCE_IO, 0);
