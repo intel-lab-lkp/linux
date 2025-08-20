@@ -343,6 +343,9 @@ void __init kasan_init(void)
 	unsigned long shadow_cea_begin, shadow_cea_per_cpu_begin, shadow_cea_end;
 	int i;
 
+	if (kasan_arg_disabled)
+		return;
+
 	memcpy(early_top_pgt, init_top_pgt, sizeof(early_top_pgt));
 
 	/*
@@ -449,6 +452,9 @@ void __init kasan_init(void)
 	}
 	/* Flush TLBs again to be sure that write protection applied. */
 	__flush_tlb_all();
+
+	/* KASAN is now initialized, enable it. */
+	static_branch_enable(&kasan_flag_enabled);
 
 	init_task.kasan_depth = 0;
 	pr_info("KernelAddressSanitizer initialized\n");
