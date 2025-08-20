@@ -102,6 +102,7 @@ Documentation for filesystem implementations.
    fuse-passthrough
    inotify
    isofs
+   msharefs
    nilfs2
    nfs/index
    ntfs3

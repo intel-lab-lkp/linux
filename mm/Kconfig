@@ -1400,6 +1400,17 @@ config PT_RECLAIM
 config FIND_NORMAL_PAGE
 	def_bool n
 
+config MSHARE
+	bool "Mshare"
+	depends on MMU
+	help
+	  Enable msharefs: A pseudo filesystem that allows multiple processes
+	  to share kernel resources for mapping shared pages. A file created on
+	  msharefs represents a shared region where all processes mapping that
+	  region will map objects within it with shared page table entries and
+	  VMAs. Ioctls are used to configure and map objects into the shared
+	  region.
+
 source "mm/damon/Kconfig"
 
 endmenu
