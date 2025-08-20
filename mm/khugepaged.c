@@ -453,7 +453,7 @@ static bool hugepage_enabled(void)
 	if (READ_ONCE(huge_anon_orders_inherit) &&
 	    hugepage_global_enabled())
 		return true;
-	if (IS_ENABLED(CONFIG_SHMEM) && shmem_hpage_pmd_enabled())
+	if (IS_ENABLED(CONFIG_SHMEM) && shmem_hpage_enabled())
 		return true;
 	return false;
 }
