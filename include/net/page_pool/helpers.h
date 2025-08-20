@@ -505,6 +505,15 @@ static inline void page_pool_nid_changed(struct page_pool *pool, int new_nid)
 		page_pool_update_nid(pool, new_nid);
 }
 
+bool __page_pool_rxq_wants_unreadable(struct net_device *dev, unsigned int qid);
+
+static inline bool
+page_pool_rxq_wants_unreadable(const struct page_pool_params *pp_params)
+{
+	return __page_pool_rxq_wants_unreadable(pp_params->netdev,
+						pp_params->queue_idx);
+}
+
 static inline bool page_pool_is_unreadable(struct page_pool *pool)
 {
 	return !!pool->mp_ops;

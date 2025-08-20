@@ -190,6 +190,14 @@ static void page_pool_struct_check(void)
 				    PAGE_POOL_FRAG_GROUP_ALIGN);
 }
 
+bool __page_pool_rxq_wants_unreadable(struct net_device *dev, unsigned int qid)
+{
+	struct netdev_rx_queue *rxq = __netif_get_rx_queue(dev, qid);
+
+	return !!rxq->mp_params.mp_ops;
+}
+EXPORT_SYMBOL(__page_pool_rxq_wants_unreadable);
+
 static int page_pool_init(struct page_pool *pool,
 			  const struct page_pool_params *params,
 			  int cpuid)
