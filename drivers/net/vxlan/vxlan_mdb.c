@@ -740,8 +740,7 @@ static int vxlan_mdb_remote_init(const struct vxlan_mdb_config *cfg,
 	return 0;
 }
 
-static void vxlan_mdb_remote_fini(struct vxlan_dev *vxlan,
-				  struct vxlan_mdb_remote *remote)
+static void vxlan_mdb_remote_fini(struct vxlan_mdb_remote *remote)
 {
 	WARN_ON_ONCE(!hlist_empty(&remote->src_list));
 	vxlan_mdb_remote_rdst_fini(rtnl_dereference(remote->rd));
@@ -1159,7 +1158,7 @@ static int vxlan_mdb_remote_add(const struct vxlan_mdb_config *cfg,
 	return 0;
 
 err_remote_fini:
-	vxlan_mdb_remote_fini(cfg->vxlan, remote);
+	vxlan_mdb_remote_fini(remote);
 err_free_remote:
 	kfree(remote);
 	return err;
@@ -1172,7 +1171,7 @@ static void vxlan_mdb_remote_del(struct vxlan_dev *vxlan,
 	vxlan_mdb_remote_notify(vxlan, mdb_entry, remote, RTM_DELMDB);
 	list_del_rcu(&remote->list);
 	vxlan_mdb_remote_srcs_del(vxlan, &mdb_entry->key, remote);
-	vxlan_mdb_remote_fini(vxlan, remote);
+	vxlan_mdb_remote_fini(remote);
 	kfree_rcu(remote, rcu);
 }
 
