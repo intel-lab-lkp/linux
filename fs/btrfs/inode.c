@@ -965,14 +965,6 @@ again:
 		goto mark_incompressible;
 
 	/*
-	 * Zero the tail end of the last page, as we might be sending it down
-	 * to disk.
-	 */
-	poff = offset_in_page(total_compressed);
-	if (poff)
-		folio_zero_range(folios[nr_folios - 1], poff, PAGE_SIZE - poff);
-
-	/*
 	 * Try to create an inline extent.
 	 *
 	 * If we didn't compress the entire range, try to create an uncompressed
