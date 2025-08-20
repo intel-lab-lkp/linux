@@ -228,9 +228,18 @@ static inline void free_pmd_range(struct mmu_gather *tlb, pud_t *pud,
 	mm_dec_nr_pmds(tlb->mm);
 }
 
+static inline bool pud_range_is_shared(pud_t *pud)
+{
+	if (ptdesc_pud_pts_count(virt_to_ptdesc(pud)))
+		return true;
+
+	return false;
+}
+
 static inline void free_pud_range(struct mmu_gather *tlb, p4d_t *p4d,
 				unsigned long addr, unsigned long end,
-				unsigned long floor, unsigned long ceiling)
+				unsigned long floor, unsigned long ceiling,
+				bool *pud_is_shared)
 {
 	pud_t *pud;
 	unsigned long next;
@@ -257,6 +266,10 @@ static inline void free_pud_range(struct mmu_gather *tlb, p4d_t *p4d,
 		return;
 
 	pud = pud_offset(p4d, start);
+	if (unlikely(pud_range_is_shared(pud))) {
+		*pud_is_shared = true;
+		return;
+	}
 	p4d_clear(p4d);
 	pud_free_tlb(tlb, pud, start);
 	mm_dec_nr_puds(tlb->mm);
@@ -269,6 +282,7 @@ static inline void free_p4d_range(struct mmu_gather *tlb, pgd_t *pgd,
 	p4d_t *p4d;
 	unsigned long next;
 	unsigned long start;
+	bool pud_is_shared = false;
 
 	start = addr;
 	p4d = p4d_offset(pgd, addr);
@@ -276,7 +290,8 @@ static inline void free_p4d_range(struct mmu_gather *tlb, pgd_t *pgd,
 		next = p4d_addr_end(addr, end);
 		if (p4d_none_or_clear_bad(p4d))
 			continue;
-		free_pud_range(tlb, p4d, addr, next, floor, ceiling);
+		free_pud_range(tlb, p4d, addr, next, floor, ceiling,
+				&pud_is_shared);
 	} while (p4d++, addr = next, addr != end);
 
 	start &= PGDIR_MASK;
@@ -290,6 +305,8 @@ static inline void free_p4d_range(struct mmu_gather *tlb, pgd_t *pgd,
 	if (end - 1 > ceiling - 1)
 		return;
 
+	if (unlikely(pud_is_shared))
+		return;
 	p4d = p4d_offset(pgd, start);
 	pgd_clear(pgd);
 	p4d_free_tlb(tlb, p4d, start);
