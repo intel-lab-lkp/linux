@@ -205,6 +205,7 @@ static int get_family_id(int sd)
  * version >= 13  - supports WPCOPY statistics
  * version >= 14  - supports IRQ statistics
  * version >= 16  - supports *_max and *_min delay statistics
+ * version >= 17  - supports SOFTIRQ statistics
  *
  * Always verify version before accessing version-dependent fields
  * to maintain backward compatibility.
@@ -295,6 +296,12 @@ static void print_delayacct(struct taskstats *t)
 		PRINT_FILED_DELAY("IRQ", t->version, t,
 			irq_count, irq_delay_total,
 			irq_delay_max, irq_delay_min);
+	}
+
+	if (t->version >= 17) {
+		PRINT_FILED_DELAY("SOFTIRQ", t->version, t,
+			soft_count, soft_delay_total,
+			soft_delay_max, soft_delay_min);
 	}
 }
 

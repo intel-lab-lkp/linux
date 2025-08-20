@@ -189,6 +189,7 @@ int delayacct_add_tsk(struct taskstats *d, struct task_struct *tsk)
 	UPDATE_DELAY(compact);
 	UPDATE_DELAY(wpcopy);
 	UPDATE_DELAY(irq);
+	UPDATE_DELAY(soft);
 	raw_spin_unlock_irqrestore(&tsk->delays->lock, flags);
 
 	return 0;
@@ -289,7 +290,7 @@ void __delayacct_wpcopy_end(void)
 		      &current->delays->wpcopy_delay_min);
 }
 
-void __delayacct_irq(struct task_struct *task, u32 delta)
+void __delayacct_irq(struct task_struct *task, u32 delta, u32 delta_soft)
 {
 	unsigned long flags;
 
@@ -300,6 +301,12 @@ void __delayacct_irq(struct task_struct *task, u32 delta)
 		task->delays->irq_delay_max = delta;
 	if (delta && (!task->delays->irq_delay_min || delta < task->delays->irq_delay_min))
 		task->delays->irq_delay_min = delta;
+	task->delays->soft_delay += delta_soft;
+	task->delays->soft_count++;
+	if (delta_soft > task->delays->soft_delay_max)
+		task->delays->soft_delay_max = delta_soft;
+	if (delta_soft && (!task->delays->soft_delay_min || delta_soft < task->delays->soft_delay_min))
+		task->delays->soft_delay_min = delta_soft;
 	raw_spin_unlock_irqrestore(&task->delays->lock, flags);
 }
 

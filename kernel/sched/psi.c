@@ -1009,6 +1009,7 @@ void psi_account_irqtime(struct rq *rq, struct task_struct *curr, struct task_st
 	struct psi_group_cpu *groupc;
 	s64 delta;
 	u64 irq;
+	u64 __maybe_unused soft_irq;
 	u64 now;
 
 	if (static_branch_likely(&psi_disabled) || !irqtime_enabled())
@@ -1021,7 +1022,7 @@ void psi_account_irqtime(struct rq *rq, struct task_struct *curr, struct task_st
 	if (prev && task_psi_group(prev) == task_psi_group(curr))
 		return;
 
-	irq = irq_time_read(cpu);
+	irq = irq_time_read(cpu, &soft_irq);
 	delta = (s64)(irq - rq->psi_irq_time);
 	if (delta < 0)
 		return;
