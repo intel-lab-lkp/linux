@@ -468,12 +468,20 @@ int dw_pcie_prog_outbound_atu(struct dw_pcie *pci,
 	u32 retries, val;
 	u64 limit_addr;
 
-	limit_addr = parent_bus_addr + atu->size - 1;
+	if (pci->ops && pci->ops->outbound_atu_check) {
+		val = pci->ops->outbound_atu_check(pci, atu, &limit_addr);
+		if (val)
+			return val;
+	} else {
+		limit_addr = parent_bus_addr + atu->size - 1;
 
-	if ((limit_addr & ~pci->region_limit) != (parent_bus_addr & ~pci->region_limit) ||
-	    !IS_ALIGNED(parent_bus_addr, pci->region_align) ||
-	    !IS_ALIGNED(atu->pci_addr, pci->region_align) || !atu->size) {
-		return -EINVAL;
+		if ((limit_addr & ~pci->region_limit) !=
+		    (parent_bus_addr & ~pci->region_limit) ||
+		    !IS_ALIGNED(parent_bus_addr, pci->region_align) ||
+		    !IS_ALIGNED(atu->pci_addr, pci->region_align) ||
+		    !atu->size) {
+			return -EINVAL;
+		}
 	}
 
 	dw_pcie_writel_atu_ob(pci, atu->index, PCIE_ATU_LOWER_BASE,

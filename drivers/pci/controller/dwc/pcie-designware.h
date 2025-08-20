@@ -469,6 +469,9 @@ struct dw_pcie_ep {
 
 struct dw_pcie_ops {
 	u64	(*cpu_addr_fixup)(struct dw_pcie *pcie, u64 cpu_addr);
+	u32	(*outbound_atu_check)(struct dw_pcie *pcie,
+				      const struct dw_pcie_ob_atu_cfg *atu,
+				      u64 *limit_addr);
 	u32	(*read_dbi)(struct dw_pcie *pcie, void __iomem *base, u32 reg,
 			    size_t size);
 	void	(*write_dbi)(struct dw_pcie *pcie, void __iomem *base, u32 reg,
