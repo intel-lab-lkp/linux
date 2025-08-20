@@ -2807,6 +2807,10 @@ static int get_new_segment(struct f2fs_sb_info *sbi,
 	}
 #endif
 
+	if (sbi->allocate_section_policy == ALLOCATE_FORWARD_FROM_HINT &&
+		hint < sbi->allocate_section_hint)
+		hint = sbi->allocate_section_hint;
+
 find_other_zone:
 	secno = find_next_zero_bit(free_i->free_secmap, MAIN_SECS(sbi), hint);
 
@@ -2828,13 +2832,25 @@ find_other_zone:
 #endif
 
 	if (secno >= MAIN_SECS(sbi)) {
-		secno = find_first_zero_bit(free_i->free_secmap,
+		if (sbi->allocate_section_policy == ALLOCATE_FORWARD_FROM_HINT) {
+			secno = find_next_zero_bit(free_i->free_secmap,
+							MAIN_SECS(sbi), sbi->allocate_section_hint);
+			if (secno >= MAIN_SECS(sbi))
+				secno = find_first_zero_bit(free_i->free_secmap,
+								MAIN_SECS(sbi));
+		} else {
+			secno = find_first_zero_bit(free_i->free_secmap,
 							MAIN_SECS(sbi));
+		}
 		if (secno >= MAIN_SECS(sbi)) {
 			ret = -ENOSPC;
 			f2fs_bug_on(sbi, !pinning);
 			goto out_unlock;
 		}
+	} else if (sbi->allocate_section_policy == ALLOCATE_FORWARD_WITHIN_HINT &&
+				secno >= sbi->allocate_section_hint) {
+		secno = find_first_zero_bit(free_i->free_secmap,
+							MAIN_SECS(sbi));
 	}
 	segno = GET_SEG_FROM_SEC(sbi, secno);
 	zoneno = GET_ZONE_FROM_SEC(sbi, secno);
