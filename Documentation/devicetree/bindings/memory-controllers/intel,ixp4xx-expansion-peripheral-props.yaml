@@ -15,6 +15,11 @@ maintainers:
   - Linus Walleij <linus.walleij@linaro.org>
 
 properties:
+  bank-width:
+    description: Width (in bytes) of the device on the chip select bank.
+    $ref: /schemas/types.yaml#/definitions/uint32
+    enum: [ 1, 2, 4 ]
+
   intel,ixp4xx-eb-t1:
     description: Address timing, extend address phase with n cycles.
     $ref: /schemas/types.yaml#/definitions/uint32
