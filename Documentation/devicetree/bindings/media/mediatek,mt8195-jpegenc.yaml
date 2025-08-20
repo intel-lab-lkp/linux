@@ -36,7 +36,7 @@ properties:
 
 # Required child node:
 patternProperties:
-  "^jpgenc@[0-9a-f]+$":
+  "^jpgenc@[0-9],[0-9a-f]+$":
     type: object
     description:
       The jpeg encoder hardware device node which should be added as subnodes to
@@ -100,7 +100,7 @@ examples:
         #address-cells = <2>;
         #size-cells = <2>;
 
-        jpgenc-master {
+        jpeg-encoder@1a030000 {
             compatible = "mediatek,mt8195-jpgenc";
             power-domains = <&spm MT8195_POWER_DOMAIN_VENC_CORE1>;
             iommus = <&iommu_vpp M4U_PORT_L20_JPGENC_Y_RDMA>,
@@ -109,11 +109,12 @@ examples:
                      <&iommu_vpp M4U_PORT_L20_JPGENC_BSDMA>;
             #address-cells = <2>;
             #size-cells = <2>;
-            ranges;
+            ranges = <0 0 0 0x1a030000 0 0x10000>,
+                     <1 0 0 0x1b030000 0 0x10000>;
 
-            jpgenc@1a030000 {
+            jpgenc@0,0 {
                 compatible = "mediatek,mt8195-jpgenc-hw";
-                reg = <0 0x1a030000 0 0x10000>;
+                reg = <0 0 0 0x10000>;
                 iommus = <&iommu_vdo M4U_PORT_L19_JPGENC_Y_RDMA>,
                          <&iommu_vdo M4U_PORT_L19_JPGENC_C_RDMA>,
                          <&iommu_vdo M4U_PORT_L19_JPGENC_Q_TABLE>,
@@ -124,9 +125,9 @@ examples:
                 power-domains = <&spm MT8195_POWER_DOMAIN_VENC>;
             };
 
-            jpgenc@1b030000 {
+            jpgenc@1,0 {
                 compatible = "mediatek,mt8195-jpgenc-hw";
-                reg = <0 0x1b030000 0 0x10000>;
+                reg = <1 0 0 0x10000>;
                 iommus = <&iommu_vpp M4U_PORT_L20_JPGENC_Y_RDMA>,
                          <&iommu_vpp M4U_PORT_L20_JPGENC_C_RDMA>,
                          <&iommu_vpp M4U_PORT_L20_JPGENC_Q_TABLE>,
