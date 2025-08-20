@@ -102,7 +102,7 @@ clear_trace
 
 cnt=`cnt_trace`
 if [ $cnt -ne 0 ]; then
-    fail "Tracing is still happeing"
+    fail "Tracing is still happening"
 fi
 
 echo "!$func:traceoff" >> set_ftrace_filter
