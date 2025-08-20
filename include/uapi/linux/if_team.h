@@ -12,6 +12,12 @@
 #define TEAM_STRING_MAX_LEN			32
 #define TEAM_GENL_CHANGE_EVENT_MC_GRP_NAME	"change_event"
 
+/*
+ * The team nested layout of get/set msg looks like [TEAM_ATTR_LIST_OPTION]
+ * [TEAM_ATTR_ITEM_OPTION] [TEAM_ATTR_OPTION_*], ... [TEAM_ATTR_ITEM_OPTION]
+ * [TEAM_ATTR_OPTION_*], ... ... [TEAM_ATTR_LIST_PORT] [TEAM_ATTR_ITEM_PORT]
+ * [TEAM_ATTR_PORT_*], ... [TEAM_ATTR_ITEM_PORT] [TEAM_ATTR_PORT_*], ... ...
+ */
 enum {
 	TEAM_ATTR_UNSPEC,
 	TEAM_ATTR_TEAM_IFINDEX,
@@ -30,6 +36,11 @@ enum {
 	TEAM_ATTR_ITEM_OPTION_MAX = (__TEAM_ATTR_ITEM_OPTION_MAX - 1)
 };
 
+/**
+ * enum team_attr_option
+ * @TEAM_ATTR_OPTION_PORT_IFINDEX: for per-port options
+ * @TEAM_ATTR_OPTION_ARRAY_INDEX: for array options
+ */
 enum {
 	TEAM_ATTR_OPTION_UNSPEC,
 	TEAM_ATTR_OPTION_NAME,

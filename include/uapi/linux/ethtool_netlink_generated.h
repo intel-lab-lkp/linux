@@ -197,6 +197,15 @@ enum {
 	ETHTOOL_A_RINGS_MAX = (__ETHTOOL_A_RINGS_CNT - 1)
 };
 
+/**
+ * enum ethtool_mm_stat - MAC Merge (802.3)
+ * @ETHTOOL_A_MM_STAT_REASSEMBLY_ERRORS: aMACMergeFrameAssErrorCount
+ * @ETHTOOL_A_MM_STAT_SMD_ERRORS: aMACMergeFrameSmdErrorCount
+ * @ETHTOOL_A_MM_STAT_REASSEMBLY_OK: aMACMergeFrameAssOkCount
+ * @ETHTOOL_A_MM_STAT_RX_FRAG_COUNT: aMACMergeFragCountRx
+ * @ETHTOOL_A_MM_STAT_TX_FRAG_COUNT: aMACMergeFragCountTx
+ * @ETHTOOL_A_MM_STAT_HOLD_COUNT: aMACMergeHoldCount
+ */
 enum {
 	ETHTOOL_A_MM_STAT_UNSPEC,
 	ETHTOOL_A_MM_STAT_PAD,
@@ -448,6 +457,12 @@ enum {
 	ETHTOOL_A_TSINFO_MAX = (__ETHTOOL_A_TSINFO_CNT - 1)
 };
 
+/**
+ * enum ethtool_cable_result
+ * @ETHTOOL_A_CABLE_RESULT_PAIR: ETHTOOL_A_CABLE_PAIR
+ * @ETHTOOL_A_CABLE_RESULT_CODE: ETHTOOL_A_CABLE_RESULT_CODE
+ * @ETHTOOL_A_CABLE_RESULT_SRC: ETHTOOL_A_CABLE_INF_SRC
+ */
 enum {
 	ETHTOOL_A_CABLE_RESULT_UNSPEC,
 	ETHTOOL_A_CABLE_RESULT_PAIR,
@@ -485,6 +500,10 @@ enum {
 	ETHTOOL_A_CABLE_TEST_MAX = (__ETHTOOL_A_CABLE_TEST_CNT - 1)
 };
 
+/**
+ * enum ethtool_cable_test_ntf
+ * @ETHTOOL_A_CABLE_TEST_NTF_STATUS: _STARTED/_COMPLETE
+ */
 enum {
 	ETHTOOL_A_CABLE_TEST_NTF_UNSPEC,
 	ETHTOOL_A_CABLE_TEST_NTF_HEADER,
@@ -678,6 +697,12 @@ enum {
 	ETHTOOL_A_PSE_MAX = (__ETHTOOL_A_PSE_CNT - 1)
 };
 
+/*
+ * Flow types, corresponding to those defined in the old ethtool header for
+ * RXFH and RXNFC as ${PROTO}_FLOW. The values are not matching the old ones to
+ * avoid carrying into Netlink the IP_USER_FLOW vs IPV4_FLOW vs IPV4_USER_FLOW
+ * confusion.
+ */
 enum {
 	ETHTOOL_A_FLOW_ETHER = 1,
 	ETHTOOL_A_FLOW_IP4,
@@ -783,6 +808,10 @@ enum {
 	ETHTOOL_A_TSCONFIG_MAX = (__ETHTOOL_A_TSCONFIG_CNT - 1)
 };
 
+/**
+ * enum ethtool_pse_ntf
+ * @ETHTOOL_A_PSE_NTF_EVENTS: List of events reported by the PSE controller
+ */
 enum {
 	ETHTOOL_A_PSE_NTF_HEADER = 1,
 	ETHTOOL_A_PSE_NTF_EVENTS,

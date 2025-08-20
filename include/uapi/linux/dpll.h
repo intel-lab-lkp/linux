@@ -203,6 +203,18 @@ enum dpll_feature_state {
 	DPLL_FEATURE_STATE_ENABLE,
 };
 
+/**
+ * enum dpll_dpll
+ * @DPLL_A_CLOCK_QUALITY_LEVEL: Level of quality of a clock device. This mainly
+ *   applies when the dpll lock-status is DPLL_LOCK_STATUS_HOLDOVER. This could
+ *   be put to message multiple times to indicate possible parallel quality
+ *   levels (e.g. one specified by ITU option 1 and another one specified by
+ *   option 2).
+ * @DPLL_A_PHASE_OFFSET_MONITOR: Receive or request state of phase offset
+ *   monitor feature. If enabled, dpll device shall monitor and notify all
+ *   currently available inputs for changes of their phase offset against the
+ *   dpll device.
+ */
 enum dpll_a {
 	DPLL_A_ID = 1,
 	DPLL_A_MODULE_NAME,
@@ -221,6 +233,24 @@ enum dpll_a {
 	DPLL_A_MAX = (__DPLL_A_MAX - 1)
 };
 
+/**
+ * enum dpll_pin
+ * @DPLL_A_PIN_FRACTIONAL_FREQUENCY_OFFSET: The FFO (Fractional Frequency
+ *   Offset) between the RX and TX symbol rate on the media associated with the
+ *   pin: (rx_frequency-tx_frequency)/rx_frequency Value is in PPM (parts per
+ *   million). This may be implemented for example for pin of type
+ *   PIN_TYPE_SYNCE_ETH_PORT.
+ * @DPLL_A_PIN_ESYNC_FREQUENCY: Frequency of Embedded SYNC signal. If provided,
+ *   the pin is configured with a SYNC signal embedded into its base clock
+ *   frequency.
+ * @DPLL_A_PIN_ESYNC_FREQUENCY_SUPPORTED: If provided a pin is capable of
+ *   embedding a SYNC signal (within given range) into its base frequency
+ *   signal.
+ * @DPLL_A_PIN_ESYNC_PULSE: A ratio of high to low state of a SYNC signal pulse
+ *   embedded into base clock frequency. Value is in percents.
+ * @DPLL_A_PIN_REFERENCE_SYNC: Capable pin provides list of pins that can be
+ *   bound to create a reference-sync pin pair.
+ */
 enum dpll_a_pin {
 	DPLL_A_PIN_ID = 1,
 	DPLL_A_PIN_PARENT_ID,
