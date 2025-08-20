@@ -153,7 +153,7 @@ size in bytes.
 GEM uses shmem to allocate anonymous pageable memory.
 drm_gem_object_init() will create an shmfs file of the
 requested size and store it into the struct :c:type:`struct
-drm_gem_object <drm_gem_object>` filp field. The memory is
+drm_gem_object <drm_gem_object>` flip field. The memory is
 used as either main storage for the object when the graphics hardware
 uses system memory directly or as a backing store otherwise.
 
