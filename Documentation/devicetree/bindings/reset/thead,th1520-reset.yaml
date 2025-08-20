@@ -15,8 +15,11 @@ maintainers:
 
 properties:
   compatible:
-    enum:
-      - thead,th1520-reset
+    oneOf:
+      - enum:
+          - thead,th1520-reset-vo
+      - const: thead,th1520-reset
+        deprecated: true
 
   reg:
     maxItems: 1
@@ -33,12 +36,8 @@ additionalProperties: false
 
 examples:
   - |
-    soc {
-      #address-cells = <2>;
-      #size-cells = <2>;
-      rst: reset-controller@ffef528000 {
-        compatible = "thead,th1520-reset";
-        reg = <0xff 0xef528000 0x0 0x1000>;
+    reset-controller@ffef528000 {
+        compatible = "thead,th1520-reset-vo";
+        reg = <0xef528000 0x1000>;
         #reset-cells = <1>;
-      };
     };
