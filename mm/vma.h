@@ -51,6 +51,7 @@ struct vma_munmap_struct {
 	unsigned long exec_vm;
 	unsigned long stack_vm;
 	unsigned long data_vm;
+	struct mm_struct *mm;
 };
 
 enum vma_merge_state {
