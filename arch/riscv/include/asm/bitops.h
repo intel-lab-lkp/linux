@@ -47,20 +47,17 @@
 
 static __always_inline unsigned long variable__ffs(unsigned long word)
 {
-	asm goto(ALTERNATIVE("j %l[legacy]", "nop", 0,
-				      RISCV_ISA_EXT_ZBB, 1)
-			  : : : : legacy);
+	if (use_alternative_likely(0, RISCV_ISA_EXT_ZBB)) {
+		asm volatile (".option push\n"
+			      ".option arch,+zbb\n"
+			      "ctz %0, %1\n"
+			      ".option pop\n"
+			      : "=r" (word) : "r" (word) :);
 
-	asm volatile (".option push\n"
-		      ".option arch,+zbb\n"
-		      "ctz %0, %1\n"
-		      ".option pop\n"
-		      : "=r" (word) : "r" (word) :);
-
-	return word;
-
-legacy:
-	return generic___ffs(word);
+		return word;
+	} else {
+		return generic___ffs(word);
+	}
 }
 
 /**
@@ -76,20 +73,17 @@ legacy:
 
 static __always_inline unsigned long variable__fls(unsigned long word)
 {
-	asm goto(ALTERNATIVE("j %l[legacy]", "nop", 0,
-				      RISCV_ISA_EXT_ZBB, 1)
-			  : : : : legacy);
+	if (use_alternative_likely(0, RISCV_ISA_EXT_ZBB)) {
+		asm volatile (".option push\n"
+			      ".option arch,+zbb\n"
+			      "clz %0, %1\n"
+			      ".option pop\n"
+			      : "=r" (word) : "r" (word) :);
 
-	asm volatile (".option push\n"
-		      ".option arch,+zbb\n"
-		      "clz %0, %1\n"
-		      ".option pop\n"
-		      : "=r" (word) : "r" (word) :);
-
-	return BITS_PER_LONG - 1 - word;
-
-legacy:
-	return generic___fls(word);
+		return BITS_PER_LONG - 1 - word;
+	} else {
+		return generic___fls(word);
+	}
 }
 
 /**
@@ -105,23 +99,20 @@ legacy:
 
 static __always_inline int variable_ffs(int x)
 {
-	asm goto(ALTERNATIVE("j %l[legacy]", "nop", 0,
-				      RISCV_ISA_EXT_ZBB, 1)
-			  : : : : legacy);
+	if (use_alternative_likely(0, RISCV_ISA_EXT_ZBB)) {
+		if (!x)
+			return 0;
 
-	if (!x)
-		return 0;
+		asm volatile (".option push\n"
+			      ".option arch,+zbb\n"
+			      CTZW "%0, %1\n"
+			      ".option pop\n"
+			      : "=r" (x) : "r" (x) :);
 
-	asm volatile (".option push\n"
-		      ".option arch,+zbb\n"
-		      CTZW "%0, %1\n"
-		      ".option pop\n"
-		      : "=r" (x) : "r" (x) :);
-
-	return x + 1;
-
-legacy:
-	return generic_ffs(x);
+		return x + 1;
+	} else {
+		return generic_ffs(x);
+	}
 }
 
 /**
@@ -137,23 +128,20 @@ legacy:
 
 static __always_inline int variable_fls(unsigned int x)
 {
-	asm goto(ALTERNATIVE("j %l[legacy]", "nop", 0,
-				      RISCV_ISA_EXT_ZBB, 1)
-			  : : : : legacy);
+	if (use_alternative_likely(0, RISCV_ISA_EXT_ZBB)) {
+		if (!x)
+			return 0;
 
-	if (!x)
-		return 0;
+		asm volatile (".option push\n"
+			      ".option arch,+zbb\n"
+			      CLZW "%0, %1\n"
+			      ".option pop\n"
+			      : "=r" (x) : "r" (x) :);
 
-	asm volatile (".option push\n"
-		      ".option arch,+zbb\n"
-		      CLZW "%0, %1\n"
-		      ".option pop\n"
-		      : "=r" (x) : "r" (x) :);
-
-	return 32 - x;
-
-legacy:
-	return generic_fls(x);
+		return 32 - x;
+	} else {
+		return generic_fls(x);
+	}
 }
 
 /**
