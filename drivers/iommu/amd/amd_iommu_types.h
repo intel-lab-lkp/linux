@@ -552,6 +552,7 @@ struct gcr3_tbl_info {
 	int	glx;		/* Number of levels for GCR3 table */
 	u32	pasid_cnt;	/* Track attached PASIDs */
 	u16	domid;		/* Per device domain ID */
+	bool	giov;		/* Track DTE[GIOV] */
 };
 
 struct amd_io_pgtable {

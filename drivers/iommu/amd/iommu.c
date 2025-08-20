@@ -1872,6 +1872,7 @@ static void free_gcr3_table(struct gcr3_tbl_info *gcr3_info)
 
 	iommu_free_pages(gcr3_info->gcr3_tbl);
 	gcr3_info->gcr3_tbl = NULL;
+	gcr3_info->giov = false;
 }
 
 /*
@@ -2027,8 +2028,8 @@ static void set_dte_gcr3_table(struct amd_iommu *iommu,
 	if (!gcr3_info->gcr3_tbl)
 		return;
 
-	pr_debug("%s: devid=%#x, glx=%#x, gcr3_tbl=%#llx\n",
-		 __func__, dev_data->devid, gcr3_info->glx,
+	pr_debug("%s: devid=%#x, glx=%#x, giov=%#x, gcr3_tbl=%#llx\n",
+		 __func__, dev_data->devid, gcr3_info->glx, gcr3_info->giov,
 		 (unsigned long long)gcr3_info->gcr3_tbl);
 
 	gcr3 = iommu_virt_to_phys(gcr3_info->gcr3_tbl);
@@ -2036,7 +2037,7 @@ static void set_dte_gcr3_table(struct amd_iommu *iommu,
 	target->data[0] |= DTE_FLAG_GV |
 			   FIELD_PREP(DTE_GLX, gcr3_info->glx) |
 			   FIELD_PREP(DTE_GCR3_14_12, gcr3 >> 12);
-	if (pdom_is_v2_pgtbl_mode(dev_data->domain))
+	if (gcr3_info->giov)
 		target->data[0] |= DTE_FLAG_GIOV;
 
 	target->data[1] |= FIELD_PREP(DTE_GCR3_30_15, gcr3 >> 15) |
@@ -2178,8 +2179,17 @@ static int init_gcr3_table(struct iommu_dev_data *dev_data,
 		return ret;
 
 	ret = update_gcr3(dev_data, 0, iommu_virt_to_phys(pdom->iop.pgd), true);
-	if (ret)
+	if (!ret) {
+		/*
+		 * GIOV is required for PD_MODE_V2 because we need
+		 * to support the case where the end-point device
+		 * does not have PASID in the TLP prefix when setting
+		 * up to use the v2 table.
+		 */
+		dev_data->gcr3_info.giov = true;
+	} else {
 		free_gcr3_table(&dev_data->gcr3_info);
+	}
 
 	return ret;
 }
