@@ -2537,6 +2537,7 @@ static int collapse_scan_file(struct mm_struct *mm, struct vm_area_struct *vma,
 	struct folio *folio = NULL;
 	struct address_space *mapping = file->f_mapping;
 	XA_STATE(xas, &mapping->i_pages, start);
+	unsigned int highest_enabled_order;
 	int present, swap, nr_pages;
 	unsigned long enabled_orders;
 	int node = NUMA_NO_NODE;
@@ -2556,6 +2557,7 @@ static int collapse_scan_file(struct mm_struct *mm, struct vm_area_struct *vma,
 	else
 		enabled_orders = BIT(HPAGE_PMD_ORDER);
 	is_pmd_only = (enabled_orders == (1 << HPAGE_PMD_ORDER));
+	highest_enabled_order = highest_order(enabled_orders);
 
 	rcu_read_lock();
 	xas_for_each(&xas, folio, start + HPAGE_PMD_NR - 1) {
@@ -2631,8 +2633,11 @@ static int collapse_scan_file(struct mm_struct *mm, struct vm_area_struct *vma,
 		/*
 		 * If there are folios present, keep track of it in the bitmap
 		 * for file/shmem mTHP collapse.
+		 * Skip those folios whose order has already exceeded the
+		 * 'highest_enabled_order', meaning they cannot be collapsed
+		 * into larger order folios.
 		 */
-		if (!is_pmd_only) {
+		if (!is_pmd_only && folio_order(folio) < highest_enabled_order) {
 			pgoff_t pgoff = max_t(pgoff_t, start, folio->index) - start;
 
 			nr_pages = min_t(int, HPAGE_PMD_NR - pgoff, nr_pages);
