@@ -1856,6 +1856,18 @@ static void free_gcr3_tbl_level2(u64 *tbl)
 	}
 }
 
+static inline bool amd_iommu_domain_is_nested(struct protection_domain *pdom)
+{
+	return (pdom && (pdom->domain.type == IOMMU_DOMAIN_NESTED));
+}
+
+static inline bool has_gcr3_table(struct gcr3_tbl_info *gcr3_info)
+{
+	if (!gcr3_info || (!gcr3_info->gcr3_tbl && !gcr3_info->trp_gpa))
+		return false;
+	return true;
+}
+
 static void free_gcr3_table(struct gcr3_tbl_info *gcr3_info)
 {
 	if (gcr3_info->glx == 2)
@@ -1901,7 +1913,7 @@ static int setup_gcr3_table(struct gcr3_tbl_info *gcr3_info,
 	if (levels > amd_iommu_max_glx_val)
 		return -EINVAL;
 
-	if (gcr3_info->gcr3_tbl)
+	if (has_gcr3_table(gcr3_info))
 		return -EBUSY;
 
 	/* Allocate per device domain ID */
@@ -2023,16 +2035,30 @@ static void set_dte_gcr3_table(struct amd_iommu *iommu,
 			       struct dev_table_entry *target)
 {
 	struct gcr3_tbl_info *gcr3_info = &dev_data->gcr3_info;
+	struct protection_domain *pdom = dev_data->domain;
 	u64 gcr3;
 
-	if (!gcr3_info->gcr3_tbl)
+	if (!has_gcr3_table(gcr3_info))
 		return;
 
-	pr_debug("%s: devid=%#x, glx=%#x, giov=%#x, gcr3_tbl=%#llx\n",
+	/* We need to check host capability before setting the mode.  */
+	if ((pdom->guest_paging_mode == PAGE_MODE_5_LEVEL) &&
+	    (amd_iommu_gpt_level < PAGE_MODE_5_LEVEL)) {
+		pr_err("Cannot support Guest paging mode=%#x (dom_id=%#x).\n",
+		       pdom->guest_paging_mode, pdom->id);
+		return;
+	}
+
+	pr_debug("%s: devid=%#x, glx=%#x, giov=%#x, gcr3_tbl=%#llx, trp_gpa=%#llx, type=%#x\n",
 		 __func__, dev_data->devid, gcr3_info->glx, gcr3_info->giov,
-		 (unsigned long long)gcr3_info->gcr3_tbl);
+		 (unsigned long long)gcr3_info->gcr3_tbl, gcr3_info->trp_gpa,
+		 pdom->domain.type);
 
 	gcr3 = iommu_virt_to_phys(gcr3_info->gcr3_tbl);
+
+	/* For nested domain, use GCR3 GPA provided */
+	if (gcr3_info->trp_gpa)
+		gcr3 = gcr3_info->trp_gpa;
 
 	target->data[0] |= DTE_FLAG_GV |
 			   FIELD_PREP(DTE_GLX, gcr3_info->glx) |
@@ -2044,7 +2070,7 @@ static void set_dte_gcr3_table(struct amd_iommu *iommu,
 			   FIELD_PREP(DTE_GCR3_51_31, gcr3 >> 31);
 
 	/* Guest page table can only support 4 and 5 levels  */
-	if (amd_iommu_gpt_level == PAGE_MODE_5_LEVEL)
+	if (pdom->guest_paging_mode == PAGE_MODE_5_LEVEL)
 		target->data[2] |= FIELD_PREP(DTE_GPT_LEVEL_MASK, GUEST_PGTABLE_5_LEVEL);
 	else
 		target->data[2] |= FIELD_PREP(DTE_GPT_LEVEL_MASK, GUEST_PGTABLE_4_LEVEL);
@@ -2061,7 +2087,14 @@ static void set_dte_entry(struct amd_iommu *iommu,
 	struct gcr3_tbl_info *gcr3_info = &dev_data->gcr3_info;
 	struct dev_table_entry *dte = &get_dev_table(iommu)[dev_data->devid];
 
-	if (gcr3_info && gcr3_info->gcr3_tbl)
+	/*
+	 * For nested domain, use parent domain to setup v1 table
+	 * information and domain id.
+	 */
+	if (amd_iommu_domain_is_nested(domain))
+		domain = domain->parent;
+
+	if (has_gcr3_table(gcr3_info))
 		domid = dev_data->gcr3_info.domid;
 	else
 		domid = domain->id;
@@ -2293,7 +2326,8 @@ int __amd_iommu_attach_device(struct device *dev, struct protection_domain *doma
 		goto out;
 
 	/* Setup GCR3 table */
-	if (pdom_is_sva_capable(domain)) {
+	if (!amd_iommu_domain_is_nested(domain) && pdom_is_sva_capable(domain)) {
+		pr_warn("%s: Allocating guest page table\n", __func__);
 		ret = init_gcr3_table(dev_data, domain);
 		if (ret) {
 			pdom_detach_iommu(iommu, domain);
@@ -2519,6 +2553,7 @@ static int pdom_setup_pgtable(struct protection_domain *domain,
 		fmt = AMD_IOMMU_V1;
 		break;
 	case PD_MODE_V2:
+		domain->guest_paging_mode = amd_iommu_gpt_level;
 		fmt = AMD_IOMMU_V2;
 		break;
 	case PD_MODE_NONE:

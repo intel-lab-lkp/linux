@@ -188,6 +188,7 @@
 #define CONTROL_EPH_EN		45
 #define CONTROL_XT_EN		50
 #define CONTROL_INTCAPXT_EN	51
+#define CONTROL_GCR3TRPMODE	58
 #define CONTROL_IRTCACHEDIS	59
 #define CONTROL_SNPAVIC_EN	61
 
@@ -417,6 +418,8 @@
 #define DTE_FLAG_V	BIT_ULL(0)
 #define DTE_FLAG_TV	BIT_ULL(1)
 #define DTE_FLAG_HAD	(3ULL << 7)
+#define DTE_FLAG_PPR	BIT_ULL(52)
+#define DTE_FLAG_GLX	BIT_ULL(53)
 #define DTE_FLAG_GIOV	BIT_ULL(54)
 #define DTE_FLAG_GV	BIT_ULL(55)
 #define DTE_GLX		GENMASK_ULL(57, 56)
@@ -552,6 +555,7 @@ struct amd_irte_ops;
 
 struct gcr3_tbl_info {
 	u64	*gcr3_tbl;	/* Guest CR3 table */
+	u64	trp_gpa;	/* Guest CR3 TRP GPA for nested domain */
 	int	glx;		/* Number of levels for GCR3 table */
 	u32	pasid_cnt;	/* Track attached PASIDs */
 	u16	domid;		/* Per device domain ID */
@@ -607,6 +611,7 @@ struct protection_domain {
 
 	struct protection_domain *parent; /* Nested parent domain */
 	struct iommu_hwpt_amd_v2 guest_hwpt;
+	u16 guest_paging_mode;	/* Guest paging mode */
 };
 
 /*
