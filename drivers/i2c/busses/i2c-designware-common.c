@@ -776,7 +776,8 @@ static int i2c_dw_runtime_suspend(struct device *device)
 		return 0;
 
 	i2c_dw_disable(dev);
-	i2c_dw_prepare_clk(dev, false);
+	clk_disable(dev->clk);
+	clk_disable(dev->pclk);
 
 	return 0;
 }
@@ -794,8 +795,10 @@ static int i2c_dw_runtime_resume(struct device *device)
 {
 	struct dw_i2c_dev *dev = dev_get_drvdata(device);
 
-	if (!dev->shared_with_punit)
-		i2c_dw_prepare_clk(dev, true);
+	if (!dev->shared_with_punit) {
+		clk_enable(dev->pclk);
+		clk_enable(dev->clk);
+	}
 
 	dev->init(dev);
 
