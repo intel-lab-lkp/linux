@@ -431,6 +431,13 @@ extern unsigned int kobjsize(const void *objp);
 #define VM_SEALED	VM_NONE
 #endif
 
+#ifdef CONFIG_MSHARE
+#define VM_MSHARE_BIT	43
+#define VM_MSHARE	BIT(VM_MSHARE_BIT)
+#else
+#define VM_MSHARE	VM_NONE
+#endif
+
 /* Bits set in the VMA until the stack is in its final location */
 #define VM_STACK_INCOMPLETE_SETUP (VM_RAND_READ | VM_SEQ_READ | VM_STACK_EARLY)
 
@@ -987,6 +994,18 @@ static inline bool vma_is_anon_shmem(struct vm_area_struct *vma) { return false;
 #endif
 
 int vma_is_stack_for_current(struct vm_area_struct *vma);
+
+#ifdef CONFIG_MSHARE
+static inline bool vma_is_mshare(const struct vm_area_struct *vma)
+{
+	return vma->vm_flags & VM_MSHARE;
+}
+#else
+static inline bool vma_is_mshare(const struct vm_area_struct *vma)
+{
+	return false;
+}
+#endif
 
 /* flush_tlb_range() takes a vma, not a mm, and can care about flags */
 #define TLB_FLUSH_VMA(mm,flags) { .vm_mm = (mm), .vm_flags = (flags) }
