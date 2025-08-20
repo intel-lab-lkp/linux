@@ -37,6 +37,8 @@
 
 #define SN_DEVICE_ID_REGS			0x00	/* up to 0x07 */
 #define SN_DEVICE_REV_REG			0x08
+#define SN_RESET_REG				0x09
+#define  SOFT_RESET				BIT(0)
 #define SN_DPPLL_SRC_REG			0x0A
 #define  DPPLL_CLK_SRC_DSICLK			BIT(0)
 #define  REFCLK_FREQ_MASK			GENMASK(3, 1)
@@ -48,7 +50,9 @@
 #define  CHA_DSI_LANES(x)			((x) << 3)
 #define SN_DSIA_CLK_FREQ_REG			0x12
 #define SN_CHA_ACTIVE_LINE_LENGTH_LOW_REG	0x20
+#define SN_CHA_ACTIVE_LINE_LENGTH_HIGH_REG	0x21
 #define SN_CHA_VERTICAL_DISPLAY_SIZE_LOW_REG	0x24
+#define SN_CHA_VERTICAL_DISPLAY_SIZE_HIGH_REG	0x25
 #define SN_CHA_HSYNC_PULSE_WIDTH_LOW_REG	0x2C
 #define SN_CHA_HSYNC_PULSE_WIDTH_HIGH_REG	0x2D
 #define  CHA_HSYNC_POLARITY			BIT(7)
@@ -59,9 +63,14 @@
 #define SN_CHA_VERTICAL_BACK_PORCH_REG		0x36
 #define SN_CHA_HORIZONTAL_FRONT_PORCH_REG	0x38
 #define SN_CHA_VERTICAL_FRONT_PORCH_REG		0x3A
+#define SN_COLOR_BAR_REG			0x3C
+#define  COLOR_BAR_EN				BIT(4)
 #define SN_LN_ASSIGN_REG			0x59
 #define  LN_ASSIGN_WIDTH			2
 #define SN_ENH_FRAME_REG			0x5A
+#define  SCRAMBLER_CONTROL_MASK			GENMASK(1, 0)
+#define  SCRAMBLER_CONTROL_STANDARD		0
+#define  SCRAMBLER_CONTROL_ASSR			1
 #define  VSTREAM_ENABLE				BIT(3)
 #define  LN_POLRS_OFFSET			4
 #define  LN_POLRS_MASK				0xf0
@@ -106,10 +115,116 @@
 #define SN_PWM_EN_INV_REG			0xA5
 #define  SN_PWM_INV_MASK			BIT(0)
 #define  SN_PWM_EN_MASK				BIT(1)
+
+#define SN_PSR_REG				0xC8
+#define  PSR_TRAIN				BIT(0)
+#define  PSR_EXIT_VIDEO				BIT(1)
+
+#define SN_IRQ_EN_REG				0xE0
+#define  IRQ_EN					BIT(0)
+#define SN_CHA_IRQ_EN0_REG			0xE1
+#define  CHA_CONTENTION_DET_EN			BIT(7)
+#define  CHA_FALSE_CTRL_EN			BIT(6)
+#define  CHA_TIMEOUT_EN				BIT(5)
+#define  CHA_LP_TX_SYNC_EN			BIT(4)
+#define  CHA_ESC_ENTRY_EN			BIT(3)
+#define  CHA_EOT_SYNC_EN			BIT(2)
+#define  CHA_SOT_SYNC_EN			BIT(1)
+#define  CHA_SOT_BIT_EN				BIT(0)
+
+#define SN_CHB_IRQ_EN0_REG			0xE3
+#define SN_CHB_IRQ_EN1_REG			0xE4
+#define SN_AUX_CMD_EN_REG			0xE5
+
+#define SN_CHA_IRQ_EN1_REG			0xE2
+#define  CHA_DSI_PROTOCOL_EN			BIT(7)
+#define  CHA_INVALID_LENGTH_EN			BIT(5)
+#define  CHA_DATATYPE_EN			BIT(3)
+#define  CHA_CHECKSUM_EN			BIT(2)
+#define  CHA_UNC_ECC_EN				BIT(1)
+#define  CHA_COR_ECC_EN				BIT(0)
+
+#define SN_IRQ_EVENTS_EN_REG			0xE6
+#define  IRQ_HPD_EN				BIT(0)
+#define  HPD_INSERTION_EN			BIT(1)
+#define  HPD_REMOVAL_EN				BIT(2)
+#define  HPD_REPLUG_EN				BIT(3)
+#define  PLL_UNLOCK_EN				BIT(5)
+
+#define SN_DPTL_IRQ_EN0_REG			0xE7
+#define SN_DPTL_IRQ_EN1_REG			0xE8
+#define SN_LT_IRQ_EN_REG			0xE9
+#define SN_CHA_IRQ_STATUS0_REG			0xF0
+#define  CHA_CONTENTION_DET_ERR			BIT(7)
+#define  CHA_FALSE_CTRL_ERR			BIT(6)
+#define  CHA_TIMEOUT_ERR			BIT(5)
+#define  CHA_LP_TX_SYNC_ERR			BIT(4)
+#define  CHA_ESC_ERRTRY_ERR			BIT(3)
+#define  CHA_EOT_SYNC_ERR			BIT(2)
+#define  CHA_SOT_SYNC_ERR			BIT(1)
+#define  CHA_SOT_BIT_ERR			BIT(0)
+#define SN_CHA_IRQ_STATUS1_REG			0xF1
+#define  CHA_DSI_PROTOCOL_ERR			BIT(7)
+#define  CHA_INVALID_LENGTH_ERR			BIT(5)
+#define  CHA_DATATYPE_ERR			BIT(3)
+#define  CHA_CHECKSUM_ERR			BIT(2)
+#define  CHA_UNC_ECC_ERR			BIT(1)
+#define  CHA_COR_ECC_ERR			BIT(0)
+#define SN_CHB_IRQ_STATUS0_REG			0xF2
+#define SN_CHB_IRQ_STATUS1_REG			0xF3
+#define  CHB_FALSE_CTRL_ERR			BIT(6)
+#define  CHB_LP_TX_SYNC_ERR			BIT(4)
+#define  CHB_EOT_SYNC_ERR			BIT(2)
+#define  CHB_SOT_SYNC_ERR			BIT(1)
+#define  CHB_SOT_BIT_ERR			BIT(0)
+
+#define  CHB_DSI_PROTOCOL_ERR			BIT(7)
+#define  CHB_INVALID_LENGTH_ERR			BIT(5)
+#define  CHB_DATATYPE_ERR			BIT(3)
+#define  CHB_CHECKSUM_ERR			BIT(2)
+#define  CHB_UNC_ECC_ERR			BIT(1)
+#define  CHB_COR_ECC_ERR			BIT(0)
 #define SN_AUX_CMD_STATUS_REG			0xF4
 #define  AUX_IRQ_STATUS_AUX_RPLY_TOUT		BIT(3)
 #define  AUX_IRQ_STATUS_AUX_SHORT		BIT(5)
 #define  AUX_IRQ_STATUS_NAT_I2C_FAIL		BIT(6)
+#define  AUX_IRQ_STATUS_I2C_DEFR		BIT(7)
+#define  AUX_IRQ_STATUS_AUX_SHORT		BIT(5)
+#define  AUX_IRQ_STATUS_AUX_DEFR		BIT(4)
+#define  AUX_IRQ_STATUS_AUX_RPLY_TOUT		BIT(3)
+#define  AUX_IRQ_STATUS_SEND_INT		BIT(0)
+#define SN_IRQ_STATUS_REG			0xF5
+#define  HPD_PLL_UNLOCK				BIT(5)
+#define  HPD_REPLUG_STATUS			BIT(3)
+#define  HPD_REMOVAL_STATUS			BIT(2)
+#define  HPD_INSERTION_STATUS			BIT(1)
+#define  IRQ_HPD_STATUS				BIT(0)
+#define SN_IRQ_EVENTS_DPTL_REG_1		0xF6
+#define  VIDEO_WIDTH_PROG_ERR			BIT(7)
+#define  LOSS_OF_DP_SYNC_LOCK_ERR		BIT(6)
+#define  DPTL_UNEXPECTED_DATA_ERR		BIT(5)
+#define  DPTL_UNEXPECTED_SECDATA_ERR		BIT(4)
+#define  DPTL_UNEXPECTED_DATA_END_ERR		BIT(3)
+#define  DPTL_UNEXPECTED_PIXEL_DATA_ERR		BIT(2)
+#define  DPTL_UNEXPECTED_HSYNC_ERR		BIT(1)
+#define  DPTL_UNEXPECTED_VSYNC_ERR		BIT(0)
+#define SN_IRQ_EVENTS_DPTL_REG_2		0xF7
+#define  DPTL_SECONDARY_DATA_PACKET_PROG_ERR	BIT(1)
+#define  DPTL_DATA_UNDERRUN_ERR			BIT(0)
+#define SN_IRQ_LT				0xF8
+#define  LT_EQ_CR_ERR				BIT(5)
+#define  LT_EQ_LPCNT_ERR			BIT(4)
+#define  LT_CR_MAXVOD_ERR			BIT(3)
+#define  LT_CR_LPCNT_ERR			BIT(2)
+#define  LT_FAIL				BIT(1)
+#define  LT_PASS				BIT(0)
+
+#define SN_PAGE_SELECT_REG			0xFF
+#define  SN_PAGE_SELECT_STANDARD		0x00
+#define  SN_PAGE_SELECT_TEST			0x07
+#define SN_ASSR_OVERRIDE_REG			0x16
+#define SN_ASSR_OVERRIDE_RO			0x00
+#define SN_ASSR_OVERRIDE_RW			0x01
 
 #define MIN_DSI_CLK_FREQ_MHZ	40
 
@@ -151,6 +266,7 @@
  * @dp_lanes:     Count of dp_lanes we're using.
  * @ln_assign:    Value to program to the LN_ASSIGN register.
  * @ln_polrs:     Value for the 4-bit LN_POLRS field of SN_ENH_FRAME_REG.
+ * @no_hpd:       If true then the hot-plug functionality is disabled.
  * @comms_enabled: If true then communication over the aux channel is enabled.
  * @comms_mutex:   Protects modification of comms_enabled.
  *
@@ -189,6 +305,7 @@ struct ti_sn65dsi86 {
 	int				dp_lanes;
 	u8				ln_assign;
 	u8				ln_polrs;
+	bool			no_hpd;
 	bool				comms_enabled;
 	struct mutex			comms_mutex;
 
@@ -987,6 +1104,11 @@ static int ti_sn_link_training(struct ti_sn65dsi86 *pdata, int dp_rate_idx,
 	int ret;
 	int i;
 
+	/*
+	 * DP data rate and lanes number will be set by the bridge by writing
+	 * to DP_LINK_BW_SET and DP_LANE_COUNT_SET.
+	 */
+
 	/* set dp clk frequency value */
 	regmap_update_bits(pdata->regmap, SN_DATARATE_CONFIG_REG,
 			   DP_DATARATE_MASK, DP_DATARATE(dp_rate_idx));
@@ -1105,7 +1227,10 @@ static void ti_sn_bridge_atomic_enable(struct drm_bridge *bridge,
 
 	valid_rates = ti_sn_bridge_read_valid_rates(pdata);
 
-	/* Train until we run out of rates */
+	/*
+	 * Train until we run out of rates. Start with the lowest possible rate
+	 * and move up in order to select the lowest working functioning point.
+	 */
 	for (dp_rate_idx = ti_sn_bridge_calc_min_dp_rate_idx(pdata, state, bpp);
 	     dp_rate_idx < ARRAY_SIZE(ti_sn_bridge_dp_rate_lut);
 	     dp_rate_idx++) {
@@ -1116,9 +1241,13 @@ static void ti_sn_bridge_atomic_enable(struct drm_bridge *bridge,
 		if (!ret)
 			break;
 	}
-	if (ret) {
+	if (ret || dp_rate_idx == ARRAY_SIZE(ti_sn_bridge_dp_rate_lut)) {
 		DRM_DEV_ERROR(pdata->dev, "%s (%d)\n", last_err_str, ret);
 		return;
+	} else {
+		DRM_DEV_INFO(pdata->dev,
+			     "Link training selected rate: %u MHz\n",
+			     ti_sn_bridge_dp_rate_lut[dp_rate_idx]);
 	}
 
 	/* config video parameters */
@@ -1298,6 +1427,69 @@ static int ti_sn_bridge_parse_dsi_host(struct ti_sn65dsi86 *pdata)
 	return 0;
 }
 
+static irqreturn_t ti_sn_bridge_interrupt(int irq, void *private)
+{
+	struct ti_sn65dsi86 *pdata = private;
+	struct drm_device *dev = pdata->bridge.dev;
+	u32 status = 0;
+	bool hpd_event = false;
+
+	regmap_read(pdata->regmap, SN_IRQ_STATUS_REG, &status);
+	if (status & (HPD_REMOVAL_STATUS | HPD_INSERTION_STATUS))
+		hpd_event = true;
+
+	/*
+	 * Writing back the status register to acknowledge the IRQ apparently
+	 * needs to take place right after reading it or the bridge will get
+	 * confused and fail to report subsequent IRQs.
+	 */
+	if (status)
+		drm_err(dev, "(SN_IRQ_STATUS_REG = %#x)\n", status);
+	regmap_write(pdata->regmap, SN_IRQ_STATUS_REG, status);
+
+	regmap_read(pdata->regmap, SN_CHA_IRQ_STATUS0_REG, &status);
+	if (status)
+		drm_err(dev, "DSI CHA error reported (status0 = %#x)\n", status);
+	regmap_write(pdata->regmap, SN_CHA_IRQ_STATUS0_REG, status);
+	if (status)
+		regmap_write(pdata->regmap, SN_RESET_REG, SOFT_RESET);
+
+	regmap_read(pdata->regmap, SN_CHA_IRQ_STATUS1_REG, &status);
+	if (status)
+		drm_err(dev, "DSI CHA error reported (status1 = %#x)\n", status);
+	regmap_write(pdata->regmap, SN_CHA_IRQ_STATUS1_REG, status);
+	if (status)
+		regmap_write(pdata->regmap, SN_RESET_REG, SOFT_RESET);
+
+	/* Dirty hack to reset the soft if any error occurs on the DP side */
+	regmap_read(pdata->regmap, SN_IRQ_EVENTS_DPTL_REG_1, &status);
+	if (status)
+		drm_err(dev, "(SN_IRQ_EVENTS_DPTL_REG_1 = %#x)\n", status);
+	regmap_write(pdata->regmap, SN_IRQ_EVENTS_DPTL_REG_1, status);
+	if (status)
+		regmap_write(pdata->regmap, SN_RESET_REG, SOFT_RESET);
+
+	regmap_read(pdata->regmap, SN_IRQ_EVENTS_DPTL_REG_2, &status);
+	if (status)
+		drm_err(dev, "(SN_IRQ_EVENTS_DPTL_REG_2 = %#x)\n", status);
+	regmap_write(pdata->regmap, SN_IRQ_EVENTS_DPTL_REG_2, status);
+	if (status)
+		regmap_write(pdata->regmap, SN_RESET_REG, SOFT_RESET);
+
+	regmap_read(pdata->regmap, SN_IRQ_LT, &status);
+	if (status)
+		drm_err(dev, "(SN_IRQ_LT = %#x)\n", status);
+	regmap_write(pdata->regmap, SN_IRQ_LT, status);
+	if (status)
+		regmap_write(pdata->regmap, SN_RESET_REG, SOFT_RESET);
+
+	/* Only send the HPD event if we are bound with a device. */
+	if (dev && !pdata->no_hpd && hpd_event)
+		drm_kms_helper_hotplug_event(dev);
+
+	return IRQ_HANDLED;
+}
+
 static int ti_sn_bridge_probe(struct auxiliary_device *adev,
 			      const struct auxiliary_device_id *id)
 {
@@ -1335,9 +1527,48 @@ static int ti_sn_bridge_probe(struct auxiliary_device *adev,
 		 * for eDP.
 		 */
 		mutex_lock(&pdata->comms_mutex);
-		if (pdata->comms_enabled)
+		if (pdata->comms_enabled) {
+			/* Enable HPD and PLL events. */
+			regmap_write(pdata->regmap, SN_IRQ_EVENTS_EN_REG,
+					PLL_UNLOCK_EN |
+					HPD_REPLUG_EN |
+					HPD_REMOVAL_EN |
+					HPD_INSERTION_EN |
+					IRQ_HPD_EN);
+
+			/* Enable DSI CHA error reporting events. */
+			regmap_write(pdata->regmap, SN_CHA_IRQ_EN0_REG,
+					CHA_CONTENTION_DET_EN |
+					CHA_FALSE_CTRL_EN |
+					CHA_TIMEOUT_EN |
+					CHA_LP_TX_SYNC_EN |
+					CHA_ESC_ENTRY_EN |
+					CHA_EOT_SYNC_EN |
+					CHA_SOT_SYNC_EN |
+					CHA_SOT_BIT_EN);
+
+			regmap_write(pdata->regmap, SN_CHA_IRQ_EN1_REG,
+					CHA_DSI_PROTOCOL_EN |
+					CHA_INVALID_LENGTH_EN |
+					CHA_DATATYPE_EN |
+					CHA_CHECKSUM_EN |
+					CHA_UNC_ECC_EN |
+					CHA_COR_ECC_EN);
+
+			/* Disable DSI CHB error reporting events. */
+			regmap_write(pdata->regmap, SN_CHB_IRQ_EN0_REG, 0);
+			regmap_write(pdata->regmap, SN_CHB_IRQ_EN1_REG, 0);
+
 			regmap_update_bits(pdata->regmap, SN_HPD_DISABLE_REG,
-					   HPD_DISABLE, 0);
+					HPD_DISABLE, 0);
+
+			/* Enable DisplayPort error reporting events. */
+			regmap_write(pdata->regmap, SN_DPTL_IRQ_EN0_REG, 0xFF);
+			regmap_write(pdata->regmap, SN_DPTL_IRQ_EN1_REG, 0xFF);
+
+			regmap_update_bits(pdata->regmap, SN_IRQ_EN_REG, IRQ_EN,
+			IRQ_EN);
+		}
 		mutex_unlock(&pdata->comms_mutex);
 	}
 
@@ -1884,8 +2115,12 @@ static inline void ti_sn_gpio_unregister(void) {}
 
 static void ti_sn65dsi86_runtime_disable(void *data)
 {
-	pm_runtime_dont_use_autosuspend(data);
-	pm_runtime_disable(data);
+	if (pm_runtime_enabled(data)) {
+		pm_runtime_dont_use_autosuspend(data);
+		pm_runtime_disable(data);
+	} else {
+		ti_sn65dsi86_suspend(data);
+	}
 }
 
 static int ti_sn65dsi86_parse_regulators(struct ti_sn65dsi86 *pdata)
@@ -1943,12 +2178,52 @@ static int ti_sn65dsi86_probe(struct i2c_client *client)
 		return dev_err_probe(dev, PTR_ERR(pdata->refclk),
 				     "failed to get reference clock\n");
 
+	pdata->no_hpd = of_property_read_bool(pdata->host_node, "no-hpd");
 	pm_runtime_enable(dev);
 	pm_runtime_set_autosuspend_delay(pdata->dev, 500);
 	pm_runtime_use_autosuspend(pdata->dev);
 	ret = devm_add_action_or_reset(dev, ti_sn65dsi86_runtime_disable, dev);
 	if (ret)
 		return ret;
+
+	if (client->irq && !pdata->no_hpd) {
+		enum drm_connector_status status;
+
+		pm_runtime_disable(pdata->dev);
+		ti_sn65dsi86_resume(pdata->dev);
+		ret = devm_request_threaded_irq(pdata->dev, client->irq, NULL,
+						ti_sn_bridge_interrupt,
+						IRQF_TRIGGER_RISING |
+						IRQF_TRIGGER_FALLING |
+						IRQF_ONESHOT,
+						"ti_sn65dsi86", pdata);
+
+		/*
+		 * Cleaning status register at probe is needed because if the irq is
+		 * already high, the rising/falling condition will never occurs
+		 */
+		regmap_read(pdata->regmap, SN_IRQ_STATUS_REG, &status);
+		regmap_write(pdata->regmap, SN_IRQ_STATUS_REG, status);
+		regmap_read(pdata->regmap, SN_CHA_IRQ_STATUS0_REG, &status);
+		regmap_write(pdata->regmap, SN_CHA_IRQ_STATUS0_REG, status);
+		regmap_read(pdata->regmap, SN_CHA_IRQ_STATUS1_REG, &status);
+		regmap_write(pdata->regmap, SN_CHA_IRQ_STATUS1_REG, status);
+		regmap_read(pdata->regmap, SN_IRQ_EVENTS_DPTL_REG_1, &status);
+		regmap_write(pdata->regmap, SN_IRQ_EVENTS_DPTL_REG_1, status);
+		regmap_read(pdata->regmap, SN_IRQ_EVENTS_DPTL_REG_2, &status);
+		regmap_write(pdata->regmap, SN_IRQ_EVENTS_DPTL_REG_2, status);
+		regmap_read(pdata->regmap, SN_IRQ_LT, &status);
+		regmap_write(pdata->regmap, SN_IRQ_LT, status);
+
+		if (ret) {
+			return dev_err_probe(dev, ret,
+					     "failed to request interrupt\n");
+		}
+	} else {
+		pm_runtime_enable(dev);
+		pm_runtime_set_autosuspend_delay(pdata->dev, 500);
+		pm_runtime_use_autosuspend(pdata->dev);
+	}
 
 	pm_runtime_get_sync(dev);
 	ret = regmap_bulk_read(pdata->regmap, SN_DEVICE_ID_REGS, id_buf, ARRAY_SIZE(id_buf));
