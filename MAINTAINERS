@@ -26757,6 +26757,7 @@ F:	sound/virtio/*
 VIRTIO SPI DRIVER
 M:	Haixu Cui <quic_haixcui@quicinc.com>
 S:	Maintained
+F:	drivers/spi/spi-virtio.c
 F:	include/uapi/linux/virtio_spi.h
 
 VIRTUAL BOX GUEST DEVICE DRIVER
