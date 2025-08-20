@@ -27,7 +27,7 @@ SEC("uprobe//proc/self/exe:target_1")
 int BPF_UPROBE(uprobe_1)
 {
 	/* target_1 is recursive wit depth of 2, so we capture two separate
-	 * stack traces, depending on which occurence it is
+	 * stack traces, depending on which occurrence it is
 	 */
 	static bool recur = false;
 
