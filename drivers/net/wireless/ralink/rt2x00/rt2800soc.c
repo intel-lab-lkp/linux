@@ -289,7 +289,7 @@ static int rt2x00soc_probe(struct platform_device *pdev, const struct rt2x00_ops
 
 	hw = ieee80211_alloc_hw(sizeof(struct rt2x00_dev), ops->hw);
 	if (!hw)
-		return dev_err_probe(&pdev->dev, -ENOMEM, "Failed to allocate hardware");
+		return -ENOMEM;
 
 	platform_set_drvdata(pdev, hw);
 
