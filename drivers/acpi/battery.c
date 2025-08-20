@@ -445,8 +445,9 @@ static int extract_package(struct acpi_battery *battery,
 			case ACPI_TYPE_BUFFER:
 				if (len > element->buffer.length + 1)
 					len = element->buffer.length + 1;
+				strscpy(ptr, element->buffer.pointer, len);
 
-				fallthrough;
+				break;
 			case ACPI_TYPE_STRING:
 				strscpy(ptr, element->string.pointer, len);
 
