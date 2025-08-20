@@ -578,6 +578,7 @@ msharefs_fill_mm(struct inode *inode)
 	if (!mm)
 		return -ENOMEM;
 
+	mm_flags_set(MMF_MSHARE, mm);
 	mm->mmap_base = mshare_base;
 	mm->task_size = 0;
 
