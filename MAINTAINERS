@@ -12206,7 +12206,7 @@ F:	drivers/scsi/isci/
 
 INTEL CPU family model numbers
 M:	Tony Luck <tony.luck@intel.com>
-M:	x86@kernel.org
+L:	x86@kernel.org
 L:	linux-kernel@vger.kernel.org
 S:	Supported
 F:	arch/x86/include/asm/intel-family.h
@@ -27223,8 +27223,8 @@ M:	Thomas Gleixner <tglx@linutronix.de>
 M:	Ingo Molnar <mingo@redhat.com>
 M:	Borislav Petkov <bp@alien8.de>
 M:	Dave Hansen <dave.hansen@linux.intel.com>
-M:	x86@kernel.org
 R:	"H. Peter Anvin" <hpa@zytor.com>
+L:	x86@kernel.org
 L:	linux-kernel@vger.kernel.org
 S:	Maintained
 T:	git git://git.kernel.org/pub/scm/linux/kernel/git/tip/tip.git x86/core
@@ -27236,8 +27236,8 @@ F:	tools/testing/selftests/x86
 X86 CPUID DATABASE
 M:	Borislav Petkov <bp@alien8.de>
 M:	Thomas Gleixner <tglx@linutronix.de>
-M:	x86@kernel.org
 R:	Ahmed S. Darwish <darwi@linutronix.de>
+L:	x86@kernel.org
 L:	x86-cpuid@lists.linux.dev
 S:	Maintained
 W:	https://x86-cpuid.org
