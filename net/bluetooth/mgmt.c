@@ -4413,13 +4413,11 @@ static int read_controller_cap(struct sock *sk, struct hci_dev *hdev,
 				 rp, sizeof(*rp) + cap_len);
 }
 
-#ifdef CONFIG_BT_FEATURE_DEBUG
 /* d4992530-b9ec-469f-ab01-6c481c47da1c */
 static const u8 debug_uuid[16] = {
 	0x1c, 0xda, 0x47, 0x1c, 0x48, 0x6c, 0x01, 0xab,
 	0x9f, 0x46, 0xec, 0xb9, 0x30, 0x25, 0x99, 0xd4,
 };
-#endif
 
 /* 330859bc-7506-492d-9370-9a6f0614037f */
 static const u8 quality_report_uuid[16] = {
@@ -4468,15 +4466,13 @@ static int read_exp_features_info(struct sock *sk, struct hci_dev *hdev,
 	if (!rp)
 		return -ENOMEM;
 
-#ifdef CONFIG_BT_FEATURE_DEBUG
-	if (!hdev) {
+	if (IS_ENABLED(CONFIG_BT_FEATURE_DEBUG)) {
 		flags = bt_dbg_get() ? BIT(0) : 0;
 
 		memcpy(rp->features[idx].uuid, debug_uuid, 16);
 		rp->features[idx].flags = cpu_to_le32(flags);
 		idx++;
 	}
-#endif
 
 	if (hdev && hci_dev_le_state_simultaneous(hdev)) {
 		if (hci_dev_test_flag(hdev, HCI_LE_SIMULTANEOUS_ROLES))
