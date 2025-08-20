@@ -16,6 +16,10 @@
 #include <linux/platform_device.h>
 #include <acpi/battery.h>
 
+#include "firmware_attributes_class.h"
+
+#define DRIVER_NAME "ayaneo-ec"
+
 #define AYANEO_PWM_ENABLE_REG	 0x4A
 #define AYANEO_PWM_REG		 0x4B
 #define AYANEO_PWM_MODE_AUTO	 0x00
@@ -30,20 +34,60 @@
 #define AYANEO_CHARGE_VAL_AUTO		0xaa
 #define AYANEO_CHARGE_VAL_INHIBIT	0x55
 
+#define AYANEO_POWER_REG	0x2d
+#define AYANEO_POWER_OFF	0xfe
+#define AYANEO_POWER_ON		0xff
+#define AYANEO_MODULE_REG	0x2f
+#define AYANEO_MODULE_LEFT	BIT(0)
+#define AYANEO_MODULE_RIGHT	BIT(1)
+
+enum ayaneo_fw_attr_id {
+	AYANEO_ATTR_CONTROLLER_MODULES,
+	AYANEO_ATTR_CONTROLLER_POWER,
+};
+
+static const char *const ayaneo_fw_attr_name[] = {
+	[AYANEO_ATTR_CONTROLLER_MODULES] = "controller_modules",
+	[AYANEO_ATTR_CONTROLLER_POWER] = "controller_power",
+};
+
+static const char *const ayaneo_fw_attr_desc[] = {
+	[AYANEO_ATTR_CONTROLLER_MODULES] =
+		"Which controller Magic Modules are connected (none, left, right, both)",
+	[AYANEO_ATTR_CONTROLLER_POWER] = "Controller power state (on, off)",
+};
+
+#define AYANEO_ATTR_ENUM_MAX_ATTRS 7
+#define AYANEO_ATTR_LANGUAGE_CODE "en_US.UTF-8"
+
 struct ayaneo_ec_quirk {
 	bool has_fan_control;
 	bool has_charge_control;
+	bool has_magic_modules;
+	bool has_controller_power;
 };
 
 struct ayaneo_ec_platform_data {
 	struct platform_device *pdev;
 	struct ayaneo_ec_quirk *quirks;
 	struct acpi_battery_hook battery_hook;
+	struct device *fw_attrs_dev;
+	struct kset *fw_attrs_kset;
+};
+
+struct ayaneo_fw_attr {
+	struct ayaneo_ec_platform_data *data;
+	enum ayaneo_fw_attr_id fw_attr_id;
+	struct attribute_group attr_group;
+	struct kobj_attribute display_name;
+	struct kobj_attribute current_value;
 };
 
 static const struct ayaneo_ec_quirk ayaneo3 = {
 	.has_fan_control = true,
 	.has_charge_control = true,
+	.has_magic_modules = true,
+	.has_controller_power = true,
 };
 
 static const struct dmi_system_id dmi_table[] = {
@@ -260,6 +304,159 @@ static int ayaneo_remove_battery(struct power_supply *battery,
 	return 0;
 }
 
+static void ayaneo_kset_unregister(void *data)
+{
+	struct kset *kset = data;
+
+	kset_unregister(kset);
+}
+
+static void ayaneo_fw_attrs_dev_unregister(void *data)
+{
+	struct device *fw_attrs_dev = data;
+
+	device_unregister(fw_attrs_dev);
+}
+
+static ssize_t display_name_language_code_show(struct kobject *kobj,
+					       struct kobj_attribute *attr,
+					       char *buf)
+{
+	return sysfs_emit(buf, "%s\n", AYANEO_ATTR_LANGUAGE_CODE);
+}
+
+static struct kobj_attribute fw_attr_display_name_language_code =
+	__ATTR_RO(display_name_language_code);
+
+static ssize_t display_name_show(struct kobject *kobj,
+				 struct kobj_attribute *attr, char *buf)
+{
+	struct ayaneo_fw_attr *fw_attr =
+		container_of(attr, struct ayaneo_fw_attr, display_name);
+
+	return sysfs_emit(buf, "%s\n", ayaneo_fw_attr_desc[fw_attr->fw_attr_id]);
+}
+
+static ssize_t current_value_show(struct kobject *kobj,
+				  struct kobj_attribute *attr, char *buf)
+{
+	struct ayaneo_fw_attr *fw_attr =
+		container_of(attr, struct ayaneo_fw_attr, current_value);
+	bool left, right;
+	char *out;
+	int ret;
+	u8 tmp;
+
+	switch (fw_attr->fw_attr_id) {
+	case AYANEO_ATTR_CONTROLLER_MODULES:
+		ret = ec_read(AYANEO_MODULE_REG, &tmp);
+		if (ret)
+			return ret;
+		left = !(tmp & AYANEO_MODULE_LEFT);
+		right = !(tmp & AYANEO_MODULE_RIGHT);
+
+		if (left && right)
+			out = "both";
+		else if (left)
+			out = "left";
+		else if (right)
+			out = "right";
+		else
+			out = "none";
+
+		return sysfs_emit(buf, "%s\n", out);
+	case AYANEO_ATTR_CONTROLLER_POWER:
+		ret = ec_read(AYANEO_POWER_REG, &tmp);
+		if (ret)
+			return ret;
+
+		if (tmp == AYANEO_POWER_OFF)
+			out = "off";
+		else
+			out = "on";
+
+		return sysfs_emit(buf, "%s\n", out);
+	}
+	return -EINVAL;
+}
+
+static ssize_t current_value_store(struct kobject *kobj,
+				   struct kobj_attribute *attr, const char *buf,
+				   size_t count)
+{
+	struct ayaneo_fw_attr *fw_attr =
+		container_of(attr, struct ayaneo_fw_attr, current_value);
+	int ret;
+
+	switch (fw_attr->fw_attr_id) {
+	case AYANEO_ATTR_CONTROLLER_POWER:
+		if (sysfs_streq(buf, "on"))
+			ret = ec_write(AYANEO_POWER_REG, AYANEO_POWER_ON);
+		else if (sysfs_streq(buf, "off"))
+			ret = ec_write(AYANEO_POWER_REG, AYANEO_POWER_OFF);
+		if (ret)
+			return ret;
+		return count;
+	case AYANEO_ATTR_CONTROLLER_MODULES:
+		return -EINVAL;
+	}
+	return -EINVAL;
+}
+
+static ssize_t type_show(struct kobject *kobj, struct kobj_attribute *attr,
+			 char *buf)
+{
+	return sysfs_emit(buf, "string\n");
+}
+
+static struct kobj_attribute fw_attr_type_string = {
+	.attr = { .name = "type", .mode = 0444 },
+	.show = type_show,
+};
+
+static int ayaneo_fw_attr_init(struct ayaneo_ec_platform_data *data,
+			       const enum ayaneo_fw_attr_id fw_attr_id,
+			       bool read_only)
+{
+	struct ayaneo_fw_attr *fw_attr;
+	struct attribute **attrs;
+	int idx = 0;
+
+	fw_attr = devm_kzalloc(&data->pdev->dev, sizeof(*fw_attr), GFP_KERNEL);
+	if (!fw_attr)
+		return -ENOMEM;
+
+	attrs = devm_kcalloc(&data->pdev->dev, AYANEO_ATTR_ENUM_MAX_ATTRS + 1,
+			     sizeof(*attrs), GFP_KERNEL);
+	if (!attrs)
+		return -ENOMEM;
+
+	fw_attr->data = data;
+	fw_attr->fw_attr_id = fw_attr_id;
+	fw_attr->attr_group.name = ayaneo_fw_attr_name[fw_attr_id];
+	fw_attr->attr_group.attrs = attrs;
+
+	attrs[idx++] = &fw_attr_type_string.attr;
+	attrs[idx++] = &fw_attr_display_name_language_code.attr;
+
+	sysfs_attr_init(&fw_attr->display_name.attr);
+	fw_attr->display_name.attr.name = "display_name";
+	fw_attr->display_name.attr.mode = 0444;
+	fw_attr->display_name.show = display_name_show;
+	attrs[idx++] = &fw_attr->display_name.attr;
+
+	sysfs_attr_init(&fw_attr->current_value.attr);
+	fw_attr->current_value.attr.name = "current_value";
+	fw_attr->current_value.attr.mode = read_only ? 0444 : 0644;
+	fw_attr->current_value.show = current_value_show;
+	fw_attr->current_value.store = current_value_store;
+	attrs[idx++] = &fw_attr->current_value.attr;
+
+	attrs[idx] = NULL;
+	return sysfs_create_group(&data->fw_attrs_kset->kobj,
+				  &fw_attr->attr_group);
+}
+
 static int ayaneo_ec_probe(struct platform_device *pdev)
 {
 	const struct dmi_system_id *dmi_entry;
@@ -295,12 +492,48 @@ static int ayaneo_ec_probe(struct platform_device *pdev)
 			return ret;
 	}
 
+	if (data->quirks->has_magic_modules || data->quirks->has_controller_power) {
+		data->fw_attrs_dev = device_create(&firmware_attributes_class, NULL,
+						MKDEV(0, 0), NULL, "%s",
+						DRIVER_NAME);
+		if (IS_ERR(data->fw_attrs_dev))
+			return PTR_ERR(data->fw_attrs_dev);
+
+		ret = devm_add_action_or_reset(&data->pdev->dev,
+					ayaneo_fw_attrs_dev_unregister,
+					data->fw_attrs_dev);
+		if (ret)
+			return ret;
+
+		data->fw_attrs_kset = kset_create_and_add("attributes", NULL,
+							&data->fw_attrs_dev->kobj);
+		if (!data->fw_attrs_kset)
+			return -ENOMEM;
+
+		ret = devm_add_action_or_reset(&data->pdev->dev, ayaneo_kset_unregister,
+					data->fw_attrs_kset);
+
+		if (data->quirks->has_magic_modules) {
+			ret = ayaneo_fw_attr_init(
+				data, AYANEO_ATTR_CONTROLLER_MODULES, true);
+			if (ret)
+				return ret;
+		}
+
+		if (data->quirks->has_controller_power) {
+			ret = ayaneo_fw_attr_init(
+				data, AYANEO_ATTR_CONTROLLER_POWER, false);
+			if (ret)
+				return ret;
+		}
+	}
+
 	return 0;
 }
 
 static struct platform_driver ayaneo_platform_driver = {
 	.driver = {
-		.name = "ayaneo-ec",
+		.name = DRIVER_NAME,
 	},
 	.probe = ayaneo_ec_probe,
 };
