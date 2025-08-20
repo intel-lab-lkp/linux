@@ -291,7 +291,7 @@ static int gpu_i2c_probe(struct pci_dev *pdev, const struct pci_device_id *id)
 
 	i2cd->regs = pcim_iomap(pdev, 0, 0);
 	if (!i2cd->regs)
-		return dev_err_probe(dev, -ENOMEM, "pcim_iomap failed\n");
+		return -ENOMEM;
 
 	status = pci_alloc_irq_vectors(pdev, 1, 1, PCI_IRQ_MSI);
 	if (status < 0)
