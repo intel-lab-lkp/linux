@@ -237,10 +237,6 @@ void nfsd_reply_cache_shutdown(struct nfsd_net *nn)
 
 }
 
-/*
- * Move cache entry to end of LRU list, and queue the cleaner to run if it's
- * not already scheduled.
- */
 static void
 lru_put_end(struct nfsd_drc_bucket *b, struct nfsd_cacherep *rp)
 {
@@ -453,8 +449,6 @@ out:
 				nn->longest_chain_cachesize,
 				atomic_read(&nn->num_drc_entries));
 	}
-
-	lru_put_end(b, ret);
 	return ret;
 }
 
