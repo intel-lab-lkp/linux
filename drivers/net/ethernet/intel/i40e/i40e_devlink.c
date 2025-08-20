@@ -212,6 +212,7 @@ int i40e_devlink_create_port(struct i40e_pf *pf)
 
 	attrs.flavour = DEVLINK_PORT_FLAVOUR_PHYSICAL;
 	attrs.phys.port_number = pf->hw.pf_id;
+	attrs.no_phys_port_name = 1;
 	i40e_devlink_set_switch_id(pf, &attrs.switch_id);
 	devlink_port_attrs_set(&pf->devlink_port, &attrs);
 	err = devlink_port_register(devlink, &pf->devlink_port, pf->hw.pf_id);
