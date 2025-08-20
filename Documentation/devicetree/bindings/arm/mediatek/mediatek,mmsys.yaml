@@ -68,6 +68,12 @@ properties:
       of the power controller specified by phandle. See
       Documentation/devicetree/bindings/power/power-domain.yaml for details.
 
+  assigned-clocks:
+    maxItems: 1
+
+  assigned-clock-rates:
+    maxItems: 1
+
   mboxes:
     description:
       Using mailbox to communicate with GCE, it should have this
@@ -130,6 +136,7 @@ additionalProperties: false
 
 examples:
   - |
+    #include <dt-bindings/clock/mt8173-clk.h>
     #include <dt-bindings/power/mt8173-power.h>
     #include <dt-bindings/gce/mt8173-gce.h>
 
@@ -137,6 +144,8 @@ examples:
         compatible = "mediatek,mt8173-mmsys", "syscon";
         reg = <0x14000000 0x1000>;
         power-domains = <&spm MT8173_POWER_DOMAIN_MM>;
+        assigned-clocks = <&topckgen CLK_TOP_MM_SEL>;
+        assigned-clock-rates = <400000000>;
         #clock-cells = <1>;
         #reset-cells = <1>;
         mboxes = <&gce 0 CMDQ_THR_PRIO_HIGHEST>,
