@@ -496,7 +496,7 @@ void khugepaged_enter_vma(struct vm_area_struct *vma,
 	if (!mm_flags_test(MMF_VM_HUGEPAGE, vma->vm_mm) &&
 	    hugepage_enabled()) {
 		unsigned long orders = vma_is_anonymous(vma) ?
-					THP_ORDERS_ALL_ANON : BIT(PMD_ORDER);
+				THP_ORDERS_ALL_ANON : THP_ORDERS_ALL_FILE_DEFAULT;
 
 		if (thp_vma_allowable_orders(vma, vm_flags, TVA_KHUGEPAGED,
 					    orders))
@@ -2780,7 +2780,7 @@ static unsigned int collapse_scan_mm_slot(unsigned int pages, int *result,
 	vma_iter_init(&vmi, mm, khugepaged_scan.address);
 	for_each_vma(vmi, vma) {
 		unsigned long orders = vma_is_anonymous(vma) ?
-					THP_ORDERS_ALL_ANON : BIT(PMD_ORDER);
+				THP_ORDERS_ALL_ANON : THP_ORDERS_ALL_FILE_DEFAULT;
 		unsigned long hstart, hend;
 
 		cond_resched();
