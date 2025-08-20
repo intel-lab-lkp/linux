@@ -14,8 +14,10 @@
  *
  */
 
+#include <linux/file.h>
 #include <linux/fs.h>
 #include <linux/fs_context.h>
+#include <linux/hugetlb.h>
 #include <linux/mman.h>
 #include <linux/mmu_notifier.h>
 #include <linux/mshare.h>
@@ -345,12 +347,15 @@ msharefs_get_unmapped_area(struct file *file, unsigned long addr,
 				pgoff, flags);
 }
 
+static const struct file_operations msharefs_file_operations;
+
 static long
 msharefs_create_mapping(struct mshare_data *m_data, struct mshare_create *mcreate)
 {
 	struct mm_struct *host_mm = m_data->mm;
 	unsigned long mshare_start, mshare_end;
 	unsigned long region_offset = mcreate->region_offset;
+	unsigned long pgoff = mcreate->offset >> PAGE_SHIFT;
 	unsigned long size = mcreate->size;
 	unsigned int fd = mcreate->fd;
 	int flags = mcreate->flags;
@@ -359,37 +364,87 @@ msharefs_create_mapping(struct mshare_data *m_data, struct mshare_create *mcreat
 	unsigned long mapped_addr;
 	unsigned long addr;
 	vm_flags_t vm_flags;
+	struct file *file = NULL;
 	int error = -EINVAL;
 
 	mshare_start = m_data->start;
 	mshare_end = mshare_start + m_data->size;
 	addr = mshare_start + region_offset;
 
-	if ((addr < mshare_start) || (addr >= mshare_end) ||
-	    (addr + size > mshare_end))
+	/*
+	 * Check the size later after size has possibly been
+	 * adjusted.
+	 */
+	if ((addr < mshare_start) || (addr >= mshare_end))
 		goto out;
 
 	/*
-	 * Only anonymous shared memory at fixed addresses is allowed for now.
+	 * Only shared memory at fixed addresses is allowed for now.
 	 */
 	if ((flags & (MAP_SHARED | MAP_FIXED)) != (MAP_SHARED | MAP_FIXED))
 		goto out;
-	if (fd != -1)
-		goto out;
+
+	if (!(flags & MAP_ANONYMOUS)) {
+		file = fget(fd);
+		if (!file) {
+			error = -EBADF;
+			goto out;
+		}
+		if (is_file_hugepages(file)) {
+			size = ALIGN(size, huge_page_size(hstate_file(file)));
+		} else if (unlikely(flags & MAP_HUGETLB)) {
+			error = -EINVAL;
+			goto out_fput;
+		} else if (file->f_op == &msharefs_file_operations) {
+			error = -EINVAL;
+			goto out_fput;
+		}
+	} else if (flags & MAP_HUGETLB) {
+		struct hstate *hs;
+
+		hs = hstate_sizelog((flags >> MAP_HUGE_SHIFT) & MAP_HUGE_MASK);
+		if (!hs)
+			return -EINVAL;
+
+		size = ALIGN(size, huge_page_size(hs));
+		/*
+		 * VM_NORESERVE is used because the reservations will be
+		 * taken when vm_ops->mmap() is called
+		 */
+		file = hugetlb_file_setup(HUGETLB_ANON_FILE, size,
+				VM_NORESERVE,
+				HUGETLB_ANONHUGE_INODE,
+				(flags >> MAP_HUGE_SHIFT) & MAP_HUGE_MASK);
+		if (IS_ERR(file)) {
+			error = PTR_ERR(file);
+			goto out;
+		}
+	}
+
+	if (addr + size > mshare_end)
+		goto out_fput;
+
+	error = security_mmap_file(file, prot, flags);
+	if (error)
+		goto out_fput;
 
 	if (mmap_write_lock_killable(host_mm)) {
 		error = -EINTR;
-		goto out;
+		goto out_fput;
 	}
 
 	error = 0;
-	mapped_addr = __do_mmap(NULL, addr, size, prot, flags, vm_flags,
-				0, &populate, NULL, host_mm);
+	mapped_addr = __do_mmap(file, addr, size, prot, flags, vm_flags,
+				pgoff, &populate, NULL, host_mm);
 
 	if (IS_ERR_VALUE(mapped_addr))
 		error = (long)mapped_addr;
 
 	mmap_write_unlock(host_mm);
+
+out_fput:
+	if (file)
+		fput(file);
 out:
 	return error;
 }
