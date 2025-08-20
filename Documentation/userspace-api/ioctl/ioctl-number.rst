@@ -308,6 +308,7 @@ Code  Seq#    Include File                                             Comments
 'v'   20-27  arch/powerpc/include/uapi/asm/vas-api.h                   VAS API
 'v'   C0-FF  linux/meye.h                                              conflict!
 'w'   all                                                              CERN SCI driver
+'x'   00-1F  linux/msharefs.h                                          msharefs filesystem
 'y'   00-1F                                                            packet based user level communications
                                                                        <mailto:zapman@interlan.net>
 'z'   00-3F                                                            CAN bus card conflict!

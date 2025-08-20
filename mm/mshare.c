@@ -10,6 +10,7 @@
  *
  * Copyright (C) 2024 Oracle Corp. All rights reserved.
  * Author:	Khalid Aziz <khalid@kernel.org>
+ * Author:	Matthew Wilcox <willy@infradead.org>
  *
  */
 
@@ -19,6 +20,7 @@
 #include <linux/mmu_notifier.h>
 #include <linux/mshare.h>
 #include <uapi/linux/magic.h>
+#include <uapi/linux/msharefs.h>
 #include <linux/falloc.h>
 #include <asm/tlbflush.h>
 
@@ -308,7 +310,7 @@ msharefs_get_unmapped_area(struct file *file, unsigned long addr,
 	if ((flags & MAP_TYPE) == MAP_PRIVATE)
 		return -EINVAL;
 
-	if (!mshare_is_initialized(m_data))
+	if (!mshare_is_initialized(m_data) || !mshare_has_owner(m_data))
 		return -EINVAL;
 
 	mshare_start = m_data->start;
@@ -341,6 +343,77 @@ msharefs_get_unmapped_area(struct file *file, unsigned long addr,
 	else
 		return msharefs_get_unmapped_area_topdown(file, addr, len,
 				pgoff, flags);
+}
+
+static long
+msharefs_create_mapping(struct mshare_data *m_data, struct mshare_create *mcreate)
+{
+	struct mm_struct *host_mm = m_data->mm;
+	unsigned long mshare_start, mshare_end;
+	unsigned long region_offset = mcreate->region_offset;
+	unsigned long size = mcreate->size;
+	unsigned int fd = mcreate->fd;
+	int flags = mcreate->flags;
+	int prot = mcreate->prot;
+	unsigned long populate = 0;
+	unsigned long mapped_addr;
+	unsigned long addr;
+	vm_flags_t vm_flags;
+	int error = -EINVAL;
+
+	mshare_start = m_data->start;
+	mshare_end = mshare_start + m_data->size;
+	addr = mshare_start + region_offset;
+
+	if ((addr < mshare_start) || (addr >= mshare_end) ||
+	    (addr + size > mshare_end))
+		goto out;
+
+	/*
+	 * Only anonymous shared memory at fixed addresses is allowed for now.
+	 */
+	if ((flags & (MAP_SHARED | MAP_FIXED)) != (MAP_SHARED | MAP_FIXED))
+		goto out;
+	if (fd != -1)
+		goto out;
+
+	if (mmap_write_lock_killable(host_mm)) {
+		error = -EINTR;
+		goto out;
+	}
+
+	error = 0;
+	mapped_addr = __do_mmap(NULL, addr, size, prot, flags, vm_flags,
+				0, &populate, NULL, host_mm);
+
+	if (IS_ERR_VALUE(mapped_addr))
+		error = (long)mapped_addr;
+
+	mmap_write_unlock(host_mm);
+out:
+	return error;
+}
+
+static long
+msharefs_ioctl(struct file *filp, unsigned int cmd, unsigned long arg)
+{
+	struct mshare_data *m_data = filp->private_data;
+	struct mshare_create mcreate;
+
+	if (!mshare_is_initialized(m_data))
+		return -EINVAL;
+
+	switch (cmd) {
+	case MSHAREFS_CREATE_MAPPING:
+		if (copy_from_user(&mcreate, (struct mshare_create __user *)arg,
+			sizeof(mcreate)))
+			return -EFAULT;
+
+		return msharefs_create_mapping(m_data, &mcreate);
+
+	default:
+		return -ENOTTY;
+	}
 }
 
 static int msharefs_set_size(struct mshare_data *m_data, unsigned long size)
@@ -398,6 +471,7 @@ static const struct file_operations msharefs_file_operations = {
 	.open			= simple_open,
 	.mmap			= msharefs_mmap,
 	.get_unmapped_area	= msharefs_get_unmapped_area,
+	.unlocked_ioctl		= msharefs_ioctl,
 	.fallocate		= msharefs_fallocate,
 };
 
