@@ -88,7 +88,7 @@ def mkdir(folder, mode=0o775):
         os.makedirs(folder, mode)
 
 def file2literal(fname):
-    with open(fname, "r") as src:
+    with open(fname, "r", encoding='utf8', errors='surrogateescape') as src:
         data = src.read()
         node = nodes.literal_block(data, data)
     return node
@@ -355,7 +355,7 @@ def dot2format(app, dot_fname, out_fname):
     cmd = [dot_cmd, '-T%s' % out_format, dot_fname]
     exit_code = 42
 
-    with open(out_fname, "w") as out:
+    with open(out_fname, "w", encoding='utf8', errors='surrogateescape') as out:
         exit_code = subprocess.call(cmd, stdout = out)
         if exit_code != 0:
             logger.warning(
@@ -533,7 +533,7 @@ def visit_kernel_render(self, node):
     literal_block = node[0]
 
     code      = literal_block.astext()
-    hashobj   = code.encode('utf-8') #  str(node.attributes)
+    hashobj   = code.encode('utf-8', errors='surrogateescape')) #  str(node.attributes)
     fname     = path.join('%s-%s' % (srclang, sha1(hashobj).hexdigest()))
 
     tmp_fname = path.join(
@@ -541,7 +541,7 @@ def visit_kernel_render(self, node):
 
     if not path.isfile(tmp_fname):
         mkdir(path.dirname(tmp_fname))
-        with open(tmp_fname, "w") as out:
+        with open(tmp_fname, "w", encoding='utf8', errors='surrogateescape') as out:
             out.write(code)
 
     img_node = nodes.image(node.rawsource, **node.attributes)
