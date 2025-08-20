@@ -158,4 +158,77 @@
 	_ALTERNATIVE_CFG_2(old_content, new_content_1, vendor_id_1, patch_id_1, CONFIG_k_1,	\
 					new_content_2, vendor_id_2, patch_id_2, CONFIG_k_2)
 
+/*
+ * use_alternative_{likely,unlikely}() returns true if the alternative is
+ * applied and false otherwise, but in a way where the compiler can optimize
+ * this check down to a nop instruction that's patched into a jump, or vice
+ * versa.
+ *
+ * Always returns false if the alternatives mechanism is not available.
+ *
+ * Usage example:
+ *   if (use_alternative_likely(0, RISCV_ISA_ZBB))
+ *
+ * Similar to static keys, "likely" means use a nop if the alternative is
+ * selected, and jump if unselected; "unlikely" is the other way around.
+ */
+
+#ifndef __ASSEMBLER__
+
+#include <linux/types.h>
+
+#ifdef CONFIG_RISCV_ALTERNATIVE
+
+static __always_inline bool use_alternative_likely(u16 vendor_id, u32 patch_id)
+{
+	BUILD_BUG_ON(!__builtin_constant_p(vendor_id));
+	BUILD_BUG_ON(!__builtin_constant_p(patch_id));
+
+	asm goto(ALTERNATIVE("j %l[no_alt]", "nop", %[vendor_id], %[patch_id], 1)
+		 :
+		 : [vendor_id] "i"(vendor_id),
+		   [patch_id] "i"(patch_id)
+		 :
+		 : no_alt);
+
+	return true;
+
+no_alt:
+	return false;
+}
+
+static __always_inline bool use_alternative_unlikely(u16 vendor_id, u32 patch_id)
+{
+	BUILD_BUG_ON(!__builtin_constant_p(vendor_id));
+	BUILD_BUG_ON(!__builtin_constant_p(patch_id));
+
+	asm goto(ALTERNATIVE("nop", "j %l[alt]", %[vendor_id], %[patch_id], 1)
+		 :
+		 : [vendor_id] "i"(vendor_id),
+		   [patch_id] "i"(patch_id)
+		 :
+		 : alt);
+
+	return false;
+
+alt:
+	return true;
+}
+
+#else
+
+static inline bool use_alternative_likely(u16 vendor_id, u32 patch_id)
+{
+	return false;
+}
+
+static inline bool use_alternative_unlikely(u16 vendor_id, u32 patch_id)
+{
+	return false;
+}
+
+#endif /* CONFIG_RISCV_ALTERNATIVE */
+
+#endif /* __ASSEMBLER__ */
+
 #endif
