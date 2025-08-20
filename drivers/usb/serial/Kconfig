@@ -112,6 +112,16 @@ config USB_SERIAL_CH341
 	  To compile this driver as a module, choose M here: the
 	  module will be called ch341.
 
+config USB_SERIAL_NUV_MULTI_UART
+	tristate "USB Nuvoton Multi-Ports Serial Driver"
+	depends on USB_SERIAL
+	help
+	Say Y here if you want to use a Nuvoton Multi-Ports USB to
+	serial converter device
+	
+	To compile this driver as a module, choose M here: the
+	module will be called nct_usb_serial.
+
 config USB_SERIAL_WHITEHEAT
 	tristate "USB ConnectTech WhiteHEAT Serial Driver"
 	select USB_EZUSB_FX2
