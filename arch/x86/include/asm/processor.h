@@ -499,6 +499,10 @@ struct thread_struct {
 
 	unsigned int		iopl_warn:1;
 
+#ifdef CONFIG_X86_HNOP_EMU
+	unsigned int		hnop_warn:1;
+#endif
+
 	/*
 	 * Protection Keys Register for Userspace.  Loaded immediately on
 	 * context switch. Store it in thread_struct to avoid a lookup in

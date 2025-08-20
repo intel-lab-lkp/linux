@@ -1289,6 +1289,35 @@ config X86_IOPL_IOPERM
 	  ability to disable interrupts from user space which would be
 	  granted if the hardware IOPL mechanism would be used.
 
+config X86_HNOP_EMU
+	bool "Hintable NOPs emulation"
+	depends on X86_32
+	default y
+	help
+	  Hintable NOPs are a series of instructions introduced by Intel with
+	  the Pentium Pro (i686), and described in US patent US5701442A.
+
+	  These instructions were reserved to allow backwards-compatible
+	  changes in the instruction set possible, by having old processors
+	  treat them as variable-length NOPs, while having other semantics in
+	  modern processors.
+
+	  Some modern uses are:
+	   - Multi-byte/long NOPs
+	   - Indirect Branch Tracking (ENDBR32)
+	   - Shadow Stack (part of CET)
+
+	  Some processors advertising i686 compatibility (such as Cyrix MII,
+	  VIA C3 Nehalem or DM&P Vortex86DX3) lack full support for them,
+	  which may cause SIGILL to be incorrectly raised in user space when
+	  a hintable NOP is encountered.
+
+	  Say Y here if you want the kernel to emulate them, allowing programs
+	  that make use of them to run transparently on such processors.
+
+	  This emulation has no performance penalty for processors that
+	  properly support them, so if unsure, enable it.
+
 config TOSHIBA
 	tristate "Toshiba Laptop support"
 	depends on X86_32
