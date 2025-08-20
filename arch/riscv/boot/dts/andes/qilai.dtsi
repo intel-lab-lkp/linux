@@ -183,5 +183,81 @@
 			reg-io-width = <4>;
 			no-loopback-test;
 		};
+
+		/* DM0 */
+		pci@80000000 {
+			compatible = "andestech,qilai-pcie";
+			device_type = "pci";
+			reg = <0x00 0x80000000 0x00 0x20000000>, /* DBI registers */
+			      <0x20 0x00000000 0x00 0x00010000>, /* Configuration registers */
+			      <0x00 0x04000000 0x00 0x00001000>; /* APB registers */
+			reg-names = "dbi", "config", "apb";
+			bus-range = <0x0 0xff>;
+			num-viewport = <4>;
+			#address-cells = <3>;
+			#size-cells = <2>;
+			ranges = <0x02000000 0x00 0x10000000 0x20 0x10000000 0x0 0xF0000000>,
+				 <0x43000000 0x01 0x00000000 0x21 0x0000000 0x1F 0x00000000>;
+			#interrupt-cells = <1>;
+			interrupts = <0xF IRQ_TYPE_LEVEL_HIGH>;
+			interrupt-names = "msi";
+			interrupt-parent = <&plic>;
+			interrupt-map-mask = <0 0 0 0>;
+			interrupt-map = <0 0 0 1 &plic 0xF IRQ_TYPE_LEVEL_HIGH>,
+					<0 0 0 2 &plic 0xF IRQ_TYPE_LEVEL_HIGH>,
+					<0 0 0 3 &plic 0xF IRQ_TYPE_LEVEL_HIGH>,
+					<0 0 0 4 &plic 0xF IRQ_TYPE_LEVEL_HIGH>;
+		};
+
+		/* DM1 */
+		pci@a0000000 {
+			compatible = "andestech,qilai-pcie";
+			device_type = "pci";
+			reg = <0x00 0xA0000000 0x00 0x20000000>, /* DBI registers */
+			      <0x10 0x00000000 0x00 0x00010000>, /* Configuration registers */
+			      <0x00 0x04001000 0x00 0x00001000>; /* APB registers */
+			reg-names = "dbi", "config", "apb";
+			bus-range = <0x0 0xff>;
+			num-viewport = <4>;
+			#address-cells = <3>;
+			#size-cells = <2>;
+			ranges = <0x02000000 0x00 0x10000000 0x10 0x10000000 0x0 0xF0000000>,
+				 <0x43000000 0x01 0x00000000 0x11 0x00000000 0x7 0x00000000>;
+			#interrupt-cells = <1>;
+			interrupts = <0xE IRQ_TYPE_LEVEL_HIGH>;
+			interrupt-names = "msi";
+			interrupt-parent = <&plic>;
+			interrupt-controller;
+			interrupt-map-mask = <0 0 0 0>;
+			interrupt-map = <0 0 0 1 &plic 0xE IRQ_TYPE_LEVEL_HIGH>,
+					<0 0 0 2 &plic 0xE IRQ_TYPE_LEVEL_HIGH>,
+					<0 0 0 3 &plic 0xE IRQ_TYPE_LEVEL_HIGH>,
+					<0 0 0 4 &plic 0xE IRQ_TYPE_LEVEL_HIGH>;
+		};
+
+		/* DM2 */
+		pci@c0000000 {
+			compatible = "andestech,qilai-pcie";
+			device_type = "pci";
+			reg = <0x00 0xC0000000 0x00 0x20000000>, /* DBI registers */
+			      <0x18 0x00000000 0x00 0x00010000>, /* Configuration registers */
+			      <0x00 0x04002000 0x00 0x00001000>; /* APB registers */
+			reg-names = "dbi", "config", "apb";
+			bus-range = <0x0 0xff>;
+			num-viewport = <4>;
+			#address-cells = <3>;
+			#size-cells = <2>;
+			ranges = <0x02000000 0x00 0x10000000 0x18 0x10000000 0x0 0xF0000000>,
+				 <0x43000000 0x01 0x00000000 0x19 0x00000000 0x7 0x00000000>;
+			#interrupt-cells = <1>;
+			interrupts = <0xD IRQ_TYPE_LEVEL_HIGH>;
+			interrupt-names = "msi";
+			interrupt-parent = <&plic>;
+			interrupt-map-mask = <0 0 0 0>;
+			interrupt-map = <0 0 0 1 &plic 0xD IRQ_TYPE_LEVEL_HIGH>,
+					<0 0 0 2 &plic 0xD IRQ_TYPE_LEVEL_HIGH>,
+					<0 0 0 3 &plic 0xD IRQ_TYPE_LEVEL_HIGH>,
+					<0 0 0 4 &plic 0xD IRQ_TYPE_LEVEL_HIGH>;
+		};
 	};
 };
