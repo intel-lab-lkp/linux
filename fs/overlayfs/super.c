@@ -512,9 +512,9 @@ static int ovl_get_upper(struct super_block *sb, struct ovl_fs *ofs,
 		goto out;
 
 	upper_mnt = clone_private_mount(upperpath);
-	err = PTR_ERR(upper_mnt);
 	if (IS_ERR(upper_mnt)) {
 		pr_err("failed to clone upperpath\n");
+		err = PTR_ERR(upper_mnt);
 		goto out;
 	}
 
