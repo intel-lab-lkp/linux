@@ -559,5 +559,13 @@ bool assert_port_valid(struct intel_display *display, enum port port);
 
 bool intel_scanout_needs_vtd_wa(struct intel_display *display);
 int intel_crtc_num_joined_pipes(const struct intel_crtc_state *crtc_state);
+int intel_display_scaler_prefill_latency(int num_scaler_users, u64 hscale, u64 vscale,
+					 int chroma_downscaling_factor,
+					 int cdclk_prefill_adjustment,
+					 int linetime);
+int intel_display_dsc_prefill_latency(int num_scaler_users, u64 *hscale, u64 *vscale,
+				      int chroma_downscaling_factor,
+				      int cdclk_prefill_adjustment,
+				      int linetime);
 
 #endif
