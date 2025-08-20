@@ -2663,6 +2663,16 @@ static void intel_pmu_drain_pebs_icl(struct pt_regs *iregs, struct perf_sample_d
 			continue;
 
 		event = cpuc->events[bit];
+		/*
+		 * perf_event_overflow() called by below __intel_pmu_pebs_last_event()
+		 * could trigger interrupt throttle and clear all event pointers of the
+		 * group in cpuc->events[] to NULL. So need to re-check if cpuc->events[*]
+		 * is NULL, if so it indicates the event has been throttled (stopped) and
+		 * the corresponding last PEBS records have been processed in stopping
+		 * event, don't need to process it again.
+		 */
+		if (!event)
+			continue;
 
 		__intel_pmu_pebs_last_event(event, iregs, regs, data, last[bit],
 					    counts[bit], setup_pebs_adaptive_sample_data);
