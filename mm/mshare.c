@@ -15,16 +15,19 @@
 
 #include <linux/fs.h>
 #include <linux/fs_context.h>
+#include <linux/mman.h>
 #include <uapi/linux/magic.h>
 #include <linux/falloc.h>
 
 const unsigned long mshare_align = P4D_SIZE;
+const unsigned long mshare_base = mshare_align;
 
 #define MSHARE_INITIALIZED	0x1
 
 struct mshare_data {
 	struct mm_struct *mm;
 	refcount_t ref;
+	unsigned long start;
 	unsigned long size;
 	unsigned long flags;
 };
@@ -32,6 +35,130 @@ struct mshare_data {
 static inline bool mshare_is_initialized(struct mshare_data *m_data)
 {
 	return test_bit(MSHARE_INITIALIZED, &m_data->flags);
+}
+
+static int mshare_vm_op_split(struct vm_area_struct *vma, unsigned long addr)
+{
+	return -EINVAL;
+}
+
+static int mshare_vm_op_mprotect(struct vm_area_struct *vma, unsigned long start,
+				 unsigned long end, unsigned long newflags)
+{
+	return -EINVAL;
+}
+
+static const struct vm_operations_struct msharefs_vm_ops = {
+	.may_split = mshare_vm_op_split,
+	.mprotect = mshare_vm_op_mprotect,
+};
+
+/*
+ * msharefs_mmap() - mmap an mshare region
+ */
+static int
+msharefs_mmap(struct file *file, struct vm_area_struct *vma)
+{
+	struct mshare_data *m_data = file->private_data;
+
+	vma->vm_private_data = m_data;
+	vm_flags_set(vma, VM_MSHARE | VM_DONTEXPAND);
+	vma->vm_ops = &msharefs_vm_ops;
+
+	return 0;
+}
+
+static unsigned long
+msharefs_get_unmapped_area_bottomup(struct file *file, unsigned long addr,
+		unsigned long len, unsigned long pgoff, unsigned long flags)
+{
+	struct vm_unmapped_area_info info = {};
+
+	info.length = len;
+	info.low_limit = current->mm->mmap_base;
+	info.high_limit = arch_get_mmap_end(addr, len, flags);
+	info.align_mask = PAGE_MASK & (mshare_align - 1);
+	return vm_unmapped_area(&info);
+}
+
+static unsigned long
+msharefs_get_unmapped_area_topdown(struct file *file, unsigned long addr,
+		unsigned long len, unsigned long pgoff, unsigned long flags)
+{
+	struct vm_unmapped_area_info info = {};
+
+	info.flags = VM_UNMAPPED_AREA_TOPDOWN;
+	info.length = len;
+	info.low_limit = PAGE_SIZE;
+	info.high_limit = arch_get_mmap_base(addr, current->mm->mmap_base);
+	info.align_mask = PAGE_MASK & (mshare_align - 1);
+	addr = vm_unmapped_area(&info);
+
+	/*
+	 * A failed mmap() very likely causes application failure,
+	 * so fall back to the bottom-up function here. This scenario
+	 * can happen with large stack limits and large mmap()
+	 * allocations.
+	 */
+	if (unlikely(offset_in_page(addr))) {
+		VM_BUG_ON(addr != -ENOMEM);
+		info.flags = 0;
+		info.low_limit = current->mm->mmap_base;
+		info.high_limit = arch_get_mmap_end(addr, len, flags);
+		addr = vm_unmapped_area(&info);
+	}
+
+	return addr;
+}
+
+static unsigned long
+msharefs_get_unmapped_area(struct file *file, unsigned long addr,
+		unsigned long len, unsigned long pgoff, unsigned long flags)
+{
+	struct mshare_data *m_data = file->private_data;
+	struct mm_struct *mm = current->mm;
+	struct vm_area_struct *vma, *prev;
+	unsigned long mshare_start, mshare_size;
+	const unsigned long mmap_end = arch_get_mmap_end(addr, len, flags);
+
+	mmap_assert_write_locked(mm);
+
+	if ((flags & MAP_TYPE) == MAP_PRIVATE)
+		return -EINVAL;
+
+	if (!mshare_is_initialized(m_data))
+		return -EINVAL;
+
+	mshare_start = m_data->start;
+	mshare_size = m_data->size;
+
+	if (len != mshare_size)
+		return -EINVAL;
+
+	if (len > mmap_end - mmap_min_addr)
+		return -ENOMEM;
+
+	if (flags & MAP_FIXED) {
+		if (!IS_ALIGNED(addr, mshare_align))
+			return -EINVAL;
+		return addr;
+	}
+
+	if (addr) {
+		addr = ALIGN(addr, mshare_align);
+		vma = find_vma_prev(mm, addr, &prev);
+		if (mmap_end - len >= addr && addr >= mmap_min_addr &&
+		    (!vma || addr + len <= vm_start_gap(vma)) &&
+		    (!prev || addr >= vm_end_gap(prev)))
+			return addr;
+	}
+
+	if (!mm_flags_test(MMF_TOPDOWN, mm))
+		return msharefs_get_unmapped_area_bottomup(file, addr, len,
+				pgoff, flags);
+	else
+		return msharefs_get_unmapped_area_topdown(file, addr, len,
+				pgoff, flags);
 }
 
 static int msharefs_set_size(struct mshare_data *m_data, unsigned long size)
@@ -87,6 +214,8 @@ static const struct inode_operations msharefs_file_inode_ops;
 
 static const struct file_operations msharefs_file_operations = {
 	.open			= simple_open,
+	.mmap			= msharefs_mmap,
+	.get_unmapped_area	= msharefs_get_unmapped_area,
 	.fallocate		= msharefs_fallocate,
 };
 
@@ -101,12 +230,14 @@ msharefs_fill_mm(struct inode *inode)
 	if (!mm)
 		return -ENOMEM;
 
-	mm->mmap_base = mm->task_size = 0;
+	mm->mmap_base = mshare_base;
+	mm->task_size = 0;
 
 	m_data = kzalloc(sizeof(*m_data), GFP_KERNEL);
 	if (!m_data)
 		goto err_free;
 	m_data->mm = mm;
+	m_data->start = mshare_base;
 
 	refcount_set(&m_data->ref, 1);
 	inode->i_private = m_data;
