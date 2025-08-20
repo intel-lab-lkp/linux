@@ -28,6 +28,7 @@
 #include "lantiq_gswip.h"
 #include "lantiq_pce.h"
 
+#include <linux/byteorder/generic.h>
 #include <linux/delay.h>
 #include <linux/etherdevice.h>
 #include <linux/firmware.h>
@@ -1935,6 +1936,8 @@ static int gswip_probe(struct platform_device *pdev)
 			return dev_err_probe(dev, err,
 					     "gphy fw probe failed\n");
 	}
+
+	priv->version = le16_to_cpu((__le16 __force)version);
 
 	/* bring up the mdio bus */
 	err = gswip_mdio(priv);
