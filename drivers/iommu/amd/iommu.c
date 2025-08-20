@@ -2599,20 +2599,39 @@ do_iommu_domain_alloc(struct device *dev, u32 flags,
 	return &domain->domain;
 }
 
+static inline bool is_nest_parent_supported(u32 flags)
+{
+	/* Only allow nest parent when these features are supported */
+	if ((flags & IOMMU_HWPT_ALLOC_NEST_PARENT) &&
+	    (!check_feature(FEATURE_GT) ||
+	     !check_feature(FEATURE_GIOSUP) ||
+	     !check_feature2(FEATURE_GCR3TRPMODE)))
+		return false;
+
+	return true;
+}
+
 static struct iommu_domain *
 amd_iommu_domain_alloc_paging_flags(struct device *dev, u32 flags,
 				    const struct iommu_user_data *user_data)
 
 {
+	struct iommu_dev_data *dev_data = dev_iommu_priv_get(dev);
 	struct amd_iommu *iommu = get_amd_iommu_from_dev(dev);
 	const u32 supported_flags = IOMMU_HWPT_ALLOC_DIRTY_TRACKING |
-						IOMMU_HWPT_ALLOC_PASID;
+						IOMMU_HWPT_ALLOC_PASID |
+						IOMMU_HWPT_ALLOC_NEST_PARENT;
 
-	if ((flags & ~supported_flags) || user_data)
+	/* Check supported flags */
+	if ((flags & ~supported_flags) || user_data || !is_nest_parent_supported(flags))
 		return ERR_PTR(-EOPNOTSUPP);
+
+	pr_debug("%s: IOMMU devid=%#x, flags=%#x\n", __func__, dev_data->devid, flags);
 
 	switch (flags & supported_flags) {
 	case IOMMU_HWPT_ALLOC_DIRTY_TRACKING:
+	case IOMMU_HWPT_ALLOC_DIRTY_TRACKING | IOMMU_HWPT_ALLOC_NEST_PARENT:
+	case IOMMU_HWPT_ALLOC_NEST_PARENT:
 		/* Allocate domain with v1 page table for dirty tracking */
 		if (!amd_iommu_hd_support(iommu))
 			break;
@@ -2626,6 +2645,7 @@ amd_iommu_domain_alloc_paging_flags(struct device *dev, u32 flags,
 		/* If nothing specific is required use the kernel commandline default */
 		return do_iommu_domain_alloc(dev, 0, amd_iommu_pgtable);
 	default:
+		pr_err("%s: Unhandled flag : 0x%x\n", __func__, flags);
 		break;
 	}
 	return ERR_PTR(-EOPNOTSUPP);
