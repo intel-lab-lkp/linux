@@ -6468,8 +6468,16 @@ vm_fault_t handle_mm_fault(struct vm_area_struct *vma, unsigned long address,
 	struct mm_struct *mm = vma->vm_mm;
 	vm_fault_t ret;
 	bool is_droppable;
+	bool is_mshare = mm_flags_test(MMF_MSHARE, mm);
+	struct mem_cgroup *mshare_memcg;
+	struct mem_cgroup *memcg;
 
 	__set_current_state(TASK_RUNNING);
+
+	if (unlikely(is_mshare)) {
+		mshare_memcg = get_mem_cgroup_from_mm(vma->vm_mm);
+		memcg = set_active_memcg(mshare_memcg);
+	}
 
 	ret = sanitize_fault_flags(vma, &flags);
 	if (ret)
@@ -6529,6 +6537,11 @@ vm_fault_t handle_mm_fault(struct vm_area_struct *vma, unsigned long address,
 	}
 out:
 	mm_account_fault(mm, regs, address, flags, ret);
+
+	if (unlikely(is_mshare)) {
+		set_active_memcg(memcg);
+		mem_cgroup_put(mshare_memcg);
+	}
 
 	return ret;
 }
