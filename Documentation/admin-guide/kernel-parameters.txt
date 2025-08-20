@@ -2894,6 +2894,24 @@
 			(enabled). Disable by KVM if hardware lacks support
 			for NPT.
 
+	kvm-amd.ciphertext_hiding_asids=
+			[KVM,AMD] Ciphertext hiding prevents host accesses from reading
+			the ciphertext of SNP guest private memory. Instead of reading
+			ciphertext, the host will see constant default values (0xff).
+			The SEV ASID space is split into SEV and joint SEV-ES and SEV-SNP
+			ASID space. Ciphertext hiding further partitions the joint
+			SEV-ES/SEV-SNP ASID space into separate SEV-ES and SEV-SNP ASID
+			ranges with the SEV-SNP ASID range starting at 1. For SEV-ES/
+			SEV-SNP guests the maximum ASID available is MIN_SEV_ASID - 1
+			where MIN_SEV_ASID value is discovered by CPUID Fn8000_001F[EDX].
+
+			Format: { <unsigned int> | -1 }
+			A non-zero value enables SEV-SNP ciphertext hiding feature and sets
+			the ASID range available for SEV-SNP guests.
+			A Value of -1 assigns all ASIDs available in the joint SEV-ES
+			and SEV-SNP ASID range to SNP guests, effectively disabling
+			SEV-ES.
+
 	kvm-arm.mode=
 			[KVM,ARM,EARLY] Select one of KVM/arm64's modes of
 			operation.
