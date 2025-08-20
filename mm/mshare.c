@@ -19,6 +19,11 @@
 
 const unsigned long mshare_align = P4D_SIZE;
 
+struct mshare_data {
+	struct mm_struct *mm;
+	refcount_t ref;
+};
+
 static const struct inode_operations msharefs_dir_inode_ops;
 static const struct inode_operations msharefs_file_inode_ops;
 
@@ -26,11 +31,55 @@ static const struct file_operations msharefs_file_operations = {
 	.open			= simple_open,
 };
 
+static int
+msharefs_fill_mm(struct inode *inode)
+{
+	struct mm_struct *mm;
+	struct mshare_data *m_data = NULL;
+	int ret = -ENOMEM;
+
+	mm = mm_alloc();
+	if (!mm)
+		return -ENOMEM;
+
+	mm->mmap_base = mm->task_size = 0;
+
+	m_data = kzalloc(sizeof(*m_data), GFP_KERNEL);
+	if (!m_data)
+		goto err_free;
+	m_data->mm = mm;
+
+	refcount_set(&m_data->ref, 1);
+	inode->i_private = m_data;
+	return 0;
+
+err_free:
+	mmput(mm);
+	kfree(m_data);
+	return ret;
+}
+
+static void
+msharefs_delmm(struct mshare_data *m_data)
+{
+	mmput(m_data->mm);
+	kfree(m_data);
+}
+
+static void mshare_data_putref(struct mshare_data *m_data)
+{
+	if (!refcount_dec_and_test(&m_data->ref))
+		return;
+
+	msharefs_delmm(m_data);
+}
+
 static struct inode
 *msharefs_get_inode(struct mnt_idmap *idmap, struct super_block *sb,
 			const struct inode *dir, umode_t mode)
 {
 	struct inode *inode = new_inode(sb);
+	int ret;
 
 	if (!inode)
 		return ERR_PTR(-ENOMEM);
@@ -43,6 +92,11 @@ static struct inode
 	case S_IFREG:
 		inode->i_op = &msharefs_file_inode_ops;
 		inode->i_fop = &msharefs_file_operations;
+		ret = msharefs_fill_mm(inode);
+		if (ret) {
+			iput(inode);
+			inode = ERR_PTR(ret);
+		}
 		break;
 	case S_IFDIR:
 		inode->i_op = &msharefs_dir_inode_ops;
@@ -141,6 +195,19 @@ static const struct inode_operations msharefs_dir_inode_ops = {
 	.rename		= msharefs_rename,
 };
 
+static void
+msharefs_evict_inode(struct inode *inode)
+{
+	struct mshare_data *m_data = inode->i_private;
+
+	if (!m_data)
+		goto out;
+
+	mshare_data_putref(m_data);
+out:
+	clear_inode(inode);
+}
+
 static ssize_t
 mshare_info_read(struct file *file, char __user *buf, size_t nbytes,
 		loff_t *ppos)
@@ -158,6 +225,7 @@ static const struct file_operations mshare_info_ops = {
 
 static const struct super_operations mshare_s_ops = {
 	.statfs		= simple_statfs,
+	.evict_inode	= msharefs_evict_inode,
 };
 
 static int
