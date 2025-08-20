@@ -110,7 +110,7 @@ fi
 
 cnt=`count_pid $child`
 if [ $cnt -ne 0 ]; then
-    fail "Child of filtered out taskhas events"
+    fail "Child of filtered out task has events"
 fi
 
 cnt=`count_no_pid $mypid`
