@@ -1137,11 +1137,16 @@ transcoder_has_psr2(struct intel_display *display, enum transcoder cpu_transcode
 
 static u32 intel_get_frame_time_us(const struct intel_crtc_state *crtc_state)
 {
+	int vrefresh;
+
 	if (!crtc_state->hw.active)
 		return 0;
 
-	return DIV_ROUND_UP(1000 * 1000,
-			    drm_mode_vrefresh(&crtc_state->hw.adjusted_mode));
+	vrefresh = drm_mode_vrefresh(&crtc_state->hw.adjusted_mode);
+	if (vrefresh <= 0)
+		return 0;
+
+	return DIV_ROUND_UP(1000 * 1000, vrefresh);
 }
 
 static void psr2_program_idle_frames(struct intel_dp *intel_dp,
