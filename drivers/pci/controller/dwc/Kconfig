@@ -49,6 +49,19 @@ config PCIE_AMD_MDB
 	  DesignWare IP and therefore the driver re-uses the DesignWare
 	  core functions to implement the driver.
 
+config PCIE_ANDES_QILAI
+	bool "ANDES QiLai PCIe controller"
+	depends on OF && (RISCV || COMPILE_TEST)
+	depends on PCI_MSI
+	depends on ARCH_ANDES
+	select PCIE_DW_HOST
+	default y if ARCH_ANDES
+	help
+	  Say Y here if you want to enable PCIe controller support on Andes
+	  QiLai SoCs. The Andes QiLai SoCs PCIe controller is based on
+	  DesignWare IP and therefore the driver re-uses the DesignWare
+	  core functions to implement the driver.
+
 config PCI_MESON
 	tristate "Amlogic Meson PCIe controller"
 	default m if ARCH_MESON
