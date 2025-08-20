@@ -532,15 +532,23 @@ void __i2c_dw_disable(struct dw_i2c_dev *dev)
 			 * 25us) to ensure the I2C ENABLE bit is already set
 			 * as described in the DesignWare I2C databook.
 			 */
-			fsleep(DIV_ROUND_CLOSEST_ULL(10 * MICRO, t->bus_freq_hz));
+			if (dev->atomic)
+				udelay(DIV_ROUND_CLOSEST_ULL(10 * MICRO, t->bus_freq_hz));
+			else
+				fsleep(DIV_ROUND_CLOSEST_ULL(10 * MICRO, t->bus_freq_hz));
 			/* Set ENABLE bit before setting ABORT */
 			enable |= DW_IC_ENABLE_ENABLE;
 		}
 
 		regmap_write(dev->map, DW_IC_ENABLE, enable | DW_IC_ENABLE_ABORT);
-		ret = regmap_read_poll_timeout(dev->map, DW_IC_ENABLE, enable,
-					       !(enable & DW_IC_ENABLE_ABORT), 10,
-					       100);
+		if (dev->atomic)
+			ret = regmap_read_poll_timeout_atomic(dev->map, DW_IC_ENABLE, enable,
+							      !(enable & DW_IC_ENABLE_ABORT), 10,
+							      100);
+		else
+			ret = regmap_read_poll_timeout(dev->map, DW_IC_ENABLE, enable,
+						       !(enable & DW_IC_ENABLE_ABORT), 10,
+						       100);
 		if (ret)
 			dev_err(dev->dev, "timeout while trying to abort current transfer\n");
 	}
@@ -560,7 +568,10 @@ void __i2c_dw_disable(struct dw_i2c_dev *dev)
 		 * transfer supported by the driver (for 400kHz this is
 		 * 25us) as described in the DesignWare I2C databook.
 		 */
-		usleep_range(25, 250);
+		if (dev->atomic)
+			udelay(25);
+		else
+			usleep_range(25, 250);
 	} while (timeout--);
 
 	dev_warn(dev->dev, "timeout in disabling adapter\n");
@@ -607,7 +618,7 @@ int i2c_dw_acquire_lock(struct dw_i2c_dev *dev)
 {
 	int ret;
 
-	if (!dev->acquire_lock)
+	if (dev->atomic || !dev->acquire_lock)
 		return 0;
 
 	ret = dev->acquire_lock();
@@ -621,7 +632,7 @@ int i2c_dw_acquire_lock(struct dw_i2c_dev *dev)
 
 void i2c_dw_release_lock(struct dw_i2c_dev *dev)
 {
-	if (dev->release_lock)
+	if (!dev->atomic && dev->release_lock)
 		dev->release_lock();
 }
 
@@ -633,11 +644,18 @@ int i2c_dw_wait_bus_not_busy(struct dw_i2c_dev *dev)
 	unsigned int status;
 	int ret;
 
-	ret = regmap_read_poll_timeout(dev->map, DW_IC_STATUS, status,
-				       !(status & DW_IC_STATUS_ACTIVITY),
-				       1100, 20000);
+	if (dev->atomic)
+		ret = regmap_read_poll_timeout_atomic(dev->map, DW_IC_STATUS, status,
+						      !(status & DW_IC_STATUS_ACTIVITY),
+						      1100, 20000);
+	else
+		ret = regmap_read_poll_timeout(dev->map, DW_IC_STATUS, status,
+					       !(status & DW_IC_STATUS_ACTIVITY),
+					       1100, 20000);
 	if (ret) {
 		dev_warn(dev->dev, "timeout waiting for bus ready\n");
+		if (dev->atomic)
+			return ret;
 
 		i2c_recover_bus(&dev->adapter);
 
