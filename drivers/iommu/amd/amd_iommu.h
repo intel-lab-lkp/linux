@@ -88,6 +88,8 @@ int amd_iommu_complete_ppr(struct device *dev, u32 pasid, int status, int tag);
  * This function flushes all internal caches of
  * the IOMMU used by this driver.
  */
+int __amd_iommu_attach_device(struct device *dev, struct protection_domain *domain);
+void amd_iommu_detach_device(struct device *dev);
 void amd_iommu_flush_all_caches(struct amd_iommu *iommu);
 void amd_iommu_update_and_flush_device_table(struct protection_domain *domain);
 void amd_iommu_domain_flush_pages(struct protection_domain *domain,
