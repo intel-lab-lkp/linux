@@ -113,6 +113,7 @@ pub mod print;
 pub mod rbtree;
 pub mod regulator;
 pub mod revocable;
+pub mod scatterlist;
 pub mod security;
 pub mod seq_file;
 pub mod sizes;
