@@ -19,6 +19,7 @@
  * msharefs specific ioctl commands
  */
 #define MSHAREFS_CREATE_MAPPING	_IOW('x', 0,  struct mshare_create)
+#define MSHAREFS_UNMAP		_IOW('x', 1,  struct mshare_unmap)
 
 struct mshare_create {
 	__u64 region_offset;
@@ -28,4 +29,10 @@ struct mshare_create {
 	__u32 flags;
 	__u32 fd;
 };
+
+struct mshare_unmap {
+	__u64 region_offset;
+	__u64 size;
+};
+
 #endif
