@@ -462,9 +462,11 @@ static void rtw89_pci_tx_status(struct rtw89_dev *rtwdev,
 				struct sk_buff *skb, u8 tx_status)
 {
 	struct rtw89_tx_skb_data *skb_data = RTW89_TX_SKB_CB(skb);
+	struct rtw89_tx_wait_info *wait = skb_data->wait;
 	struct ieee80211_tx_info *info;
 
-	rtw89_core_tx_wait_complete(rtwdev, skb_data, tx_status == RTW89_TX_DONE);
+	if (wait)
+		rtw89_core_tx_wait_complete(rtwdev, wait, tx_status == RTW89_TX_DONE);
 
 	info = IEEE80211_SKB_CB(skb);
 	ieee80211_tx_info_clear_status(info);
@@ -1387,7 +1389,7 @@ static int rtw89_pci_txwd_submit(struct rtw89_dev *rtwdev,
 	}
 
 	tx_data->dma = dma;
-	rcu_assign_pointer(skb_data->wait, NULL);
+	skb_data->wait = NULL;
 
 	txwp_len = sizeof(*txwp_info);
 	txwd_len = chip->txwd_body_size;

@@ -1088,6 +1088,7 @@ int rtw89_core_tx_kick_off_and_wait(struct rtw89_dev *rtwdev, struct sk_buff *sk
 	struct rtw89_tx_skb_data *skb_data = RTW89_TX_SKB_CB(skb);
 	struct rtw89_tx_wait_info *wait;
 	unsigned long time_left;
+	bool free_wait = true;
 	int ret = 0;
 
 	wait = kzalloc(sizeof(*wait), GFP_KERNEL);
@@ -1097,7 +1098,8 @@ int rtw89_core_tx_kick_off_and_wait(struct rtw89_dev *rtwdev, struct sk_buff *sk
 	}
 
 	init_completion(&wait->completion);
-	rcu_assign_pointer(skb_data->wait, wait);
+	spin_lock_init(&wait->owner_lock);
+	skb_data->wait = wait;
 
 	rtw89_core_tx_kick_off(rtwdev, qsel);
 	time_left = wait_for_completion_timeout(&wait->completion,
@@ -1107,8 +1109,15 @@ int rtw89_core_tx_kick_off_and_wait(struct rtw89_dev *rtwdev, struct sk_buff *sk
 	else if (!wait->tx_done)
 		ret = -EAGAIN;
 
-	rcu_assign_pointer(skb_data->wait, NULL);
-	kfree_rcu(wait, rcu_head);
+	spin_lock_bh(&wait->owner_lock);
+	if (time_left == 0 && wait->owner != RTW89_TX_WAIT_OWNER_WAIT) {
+		free_wait = false;
+		wait->owner = RTW89_TX_WAIT_OWNER_COMPLETE;
+	}
+	spin_unlock_bh(&wait->owner_lock);
+
+	if (free_wait)
+		kfree(wait);
 
 	return ret;
 }

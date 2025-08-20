@@ -3506,14 +3506,21 @@ struct rtw89_phy_rate_pattern {
 	bool enable;
 };
 
+enum rtw89_tx_wait_owner {
+	RTW89_TX_WAIT_OWNER_UNDET,
+	RTW89_TX_WAIT_OWNER_WAIT,
+	RTW89_TX_WAIT_OWNER_COMPLETE,
+};
+
 struct rtw89_tx_wait_info {
-	struct rcu_head rcu_head;
 	struct completion completion;
 	bool tx_done;
+	spinlock_t owner_lock; /* lock to access owner */
+	enum rtw89_tx_wait_owner owner;
 };
 
 struct rtw89_tx_skb_data {
-	struct rtw89_tx_wait_info __rcu *wait;
+	struct rtw89_tx_wait_info *wait;
 	u8 hci_priv[];
 };
 
@@ -7259,22 +7266,23 @@ static inline struct sk_buff *rtw89_alloc_skb_for_rx(struct rtw89_dev *rtwdev,
 }
 
 static inline void rtw89_core_tx_wait_complete(struct rtw89_dev *rtwdev,
-					       struct rtw89_tx_skb_data *skb_data,
+					       struct rtw89_tx_wait_info *wait,
 					       bool tx_done)
 {
-	struct rtw89_tx_wait_info *wait;
-
-	rcu_read_lock();
-
-	wait = rcu_dereference(skb_data->wait);
-	if (!wait)
-		goto out;
+	bool free_wait = true;
 
 	wait->tx_done = tx_done;
-	complete(&wait->completion);
 
-out:
-	rcu_read_unlock();
+	spin_lock_bh(&wait->owner_lock);
+	complete(&wait->completion);
+	if (wait->owner != RTW89_TX_WAIT_OWNER_COMPLETE) {
+		free_wait = false;
+		wait->owner = RTW89_TX_WAIT_OWNER_WAIT;
+	}
+	spin_unlock_bh(&wait->owner_lock);
+
+	if (free_wait)
+		kfree(wait);
 }
 
 static inline bool rtw89_is_mlo_1_1(struct rtw89_dev *rtwdev)
