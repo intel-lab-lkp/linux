@@ -62,10 +62,10 @@
 #include <vdso/vsyscall.h>
 #endif
 #include <asm/archrandom.h>
-#include <asm/processor.h>
+#include <linux/processor.h>
 #include <asm/irq.h>
 #include <asm/irq_regs.h>
-#include <asm/io.h>
+#include <linux/io.h>
 
 /*********************************************************************
  *
@@ -163,16 +163,19 @@ int __cold execute_with_initialized_rng(struct notifier_block *nb)
 	if (crng_ready())
 		nb->notifier_call(nb, 0, NULL);
 	else
-		ret = raw_notifier_chain_register((struct raw_notifier_head *)&random_ready_notifier.head, nb);
+		ret = raw_notifier_chain_register((struct raw_notifier_head *)
+			&random_ready_notifier.head,
+			nb);
 	spin_unlock_irqrestore(&random_ready_notifier.lock, flags);
 	return ret;
 }
 
 #define warn_unseeded_randomness() \
-	if (IS_ENABLED(CONFIG_WARN_ALL_UNSEEDED_RANDOM) && !crng_ready()) \
-		printk_deferred(KERN_NOTICE "random: %s called from %pS with crng_init=%d\n", \
-				__func__, (void *)_RET_IP_, crng_init)
-
+	do { \
+		if (IS_ENABLED(CONFIG_WARN_ALL_UNSEEDED_RANDOM) && !crng_ready()) \
+			printk_deferred("random: %s called from %pS with crng_init=%d\n", \
+					__func__, (void *)_RET_IP_, crng_init); \
+	} while (0)
 
 /*********************************************************************
  *
@@ -211,7 +214,7 @@ enum {
 static struct {
 	u8 key[CHACHA_KEY_SIZE] __aligned(__alignof__(long));
 	unsigned long generation;
-	spinlock_t lock;
+	spinlock_t lock;	/* Protects base_crng state */
 } base_crng = {
 	.lock = __SPIN_LOCK_UNLOCKED(base_crng.lock)
 };
@@ -238,11 +241,12 @@ static unsigned int crng_reseed_interval(void)
 
 	if (unlikely(READ_ONCE(early_boot))) {
 		time64_t uptime = ktime_get_seconds();
+
 		if (uptime >= CRNG_RESEED_INTERVAL / HZ * 2)
 			WRITE_ONCE(early_boot, false);
 		else
 			return max_t(unsigned int, CRNG_RESEED_START_INTERVAL,
-				     (unsigned int)uptime / 2 * HZ);
+				(unsigned int)uptime / 2 * HZ);
 	}
 	return CRNG_RESEED_INTERVAL;
 }
@@ -318,8 +322,9 @@ static void crng_fast_key_erasure(u8 key[CHACHA_KEY_SIZE],
 {
 	u8 first_block[CHACHA_BLOCK_SIZE];
 
-	BUG_ON(random_data_len > 32);
-
+		WARN_ON_ONCE(random_data_len > 32);
+		if (random_data_len > 32)
+			return;
 	chacha_init_consts(chacha_state);
 	memcpy(&chacha_state->x[4], key, CHACHA_KEY_SIZE);
 	memset(&chacha_state->x[12], 0, sizeof(u32) * 4);
@@ -341,8 +346,9 @@ static void crng_make_state(struct chacha_state *chacha_state,
 	unsigned long flags;
 	struct crng *crng;
 
-	BUG_ON(random_data_len > 32);
-
+		WARN_ON_ONCE(random_data_len > 32);
+		if (random_data_len > 32)
+			return;
 	/*
 	 * For the fast path, we check whether we're ready, unlocked first, and
 	 * then re-check once locked later. In the case where we're really not
@@ -582,6 +588,7 @@ u32 __get_random_u32_below(u32 ceil)
 	mult = (u64)ceil * rand;
 	if (unlikely((u32)mult < ceil)) {
 		u32 bound = -ceil % ceil;
+
 		while (unlikely((u32)mult < bound))
 			mult = (u64)ceil * get_random_u32();
 	}
@@ -610,7 +617,6 @@ int __cold random_prepare_cpu(unsigned int cpu)
 }
 #endif
 
-
 /**********************************************************************
  *
  * Entropy accumulation and extraction routines.
@@ -637,7 +643,7 @@ enum {
 
 static struct {
 	struct blake2s_state hash;
-	spinlock_t lock;
+	spinlock_t lock;	/* Protects input_pool state */
 	unsigned int init_bits;
 } input_pool = {
 	.hash.h = { BLAKE2S_IV0 ^ (0x01010000 | BLAKE2S_HASH_SIZE),
@@ -720,7 +726,11 @@ static void extract_entropy(void *buf, size_t len)
 	memzero_explicit(&block, sizeof(block));
 }
 
-#define credit_init_bits(bits) if (!crng_ready()) _credit_init_bits(bits)
+#define credit_init_bits(bits) \
+	do { \
+		if (!crng_ready()) \
+			_credit_init_bits(bits); \
+	} while (0)
 
 static void __cold _credit_init_bits(size_t bits)
 {
@@ -764,7 +774,6 @@ static void __cold _credit_init_bits(size_t bits)
 	}
 }
 
-
 /**********************************************************************
  *
  * Entropy collection routines.
@@ -773,7 +782,8 @@ static void __cold _credit_init_bits(size_t bits)
  * the above entropy accumulation routines:
  *
  *	void add_device_randomness(const void *buf, size_t len);
- *	void add_hwgenerator_randomness(const void *buf, size_t len, size_t entropy, bool sleep_after);
+ *	void add_hwgenerator_randomness(const void *buf, size_t len, size_t entropy,
+ *				       bool sleep_after);
  *	void add_bootloader_randomness(const void *buf, size_t len);
  *	void add_vmfork_randomness(const void *unique_vm_id, size_t len);
  *	void add_interrupt_randomness(int irq);
@@ -826,6 +836,7 @@ static int __init parse_trust_cpu(char *arg)
 {
 	return kstrtobool(arg, &trust_cpu);
 }
+
 static int __init parse_trust_bootloader(char *arg)
 {
 	return kstrtobool(arg, &trust_bootloader);
@@ -849,12 +860,15 @@ static int random_pm_notification(struct notifier_block *nb, unsigned long actio
 	_mix_pool_bytes(&entropy, sizeof(entropy));
 	spin_unlock_irqrestore(&input_pool.lock, flags);
 
-	if (crng_ready() && (action == PM_RESTORE_PREPARE ||
-	    (action == PM_POST_SUSPEND && !IS_ENABLED(CONFIG_PM_AUTOSLEEP) &&
-	     !IS_ENABLED(CONFIG_PM_USERSPACE_AUTOSLEEP)))) {
+	if (crng_ready() &&
+	    (action == PM_RESTORE_PREPARE ||
+		 (action == PM_POST_SUSPEND &&
+		  !IS_ENABLED(CONFIG_PM_AUTOSLEEP) &&
+		  !IS_ENABLED(CONFIG_PM_USERSPACE_AUTOSLEEP)))) {
 		crng_reseed(NULL);
 		pr_notice("crng reseeded on system resumption\n");
 	}
+
 	return 0;
 }
 
@@ -871,6 +885,7 @@ void __init random_init_early(const char *command_line)
 
 #if defined(LATENT_ENTROPY_PLUGIN)
 	static const u8 compiletime_seed[BLAKE2S_BLOCK_SIZE] __initconst __latent_entropy;
+
 	_mix_pool_bytes(compiletime_seed, sizeof(compiletime_seed));
 #endif
 
@@ -928,8 +943,7 @@ void __init random_init(void)
 
 	WARN_ON(register_pm_notifier(&pm_notifier));
 
-	WARN(!entropy, "Missing cycle counter and fallback timer; RNG "
-		       "entropy collection will consequently suffer.");
+	WARN(!entropy, "Missing cycle counter and fallback timer; RNG entropy collection will consequently suffer.");
 }
 
 /*
@@ -999,6 +1013,7 @@ void __cold add_vmfork_randomness(const void *unique_vm_id, size_t len)
 	}
 	blocking_notifier_call_chain(&vmfork_chain, 0, NULL);
 }
+
 #if IS_MODULE(CONFIG_VMGENID)
 EXPORT_SYMBOL_GPL(add_vmfork_randomness);
 #endif
@@ -1249,7 +1264,7 @@ void __cold rand_initialize_disk(struct gendisk *disk)
 	 * If kzalloc returns null, we just won't use that entropy
 	 * source.
 	 */
-	state = kzalloc(sizeof(struct timer_rand_state), GFP_KERNEL);
+	state = kzalloc(sizeof(*state), GFP_KERNEL);
 	if (state) {
 		state->last_time = INITIAL_JIFFIES;
 		disk->random = state;
@@ -1326,7 +1341,8 @@ static void __cold try_to_generate_entropy(void)
 			preempt_disable();
 
 			/* Only schedule callbacks on timer CPUs that are online. */
-			cpumask_and(&timer_cpus, housekeeping_cpumask(HK_TYPE_TIMER), cpu_online_mask);
+			cpumask_and(&timer_cpus, housekeeping_cpumask(HK_TYPE_TIMER),
+				    cpu_online_mask);
 			num_cpus = cpumask_weight(&timer_cpus);
 			/* In very bizarre case of misconfiguration, fallback to all online. */
 			if (unlikely(num_cpus == 0)) {
@@ -1357,7 +1373,6 @@ static void __cold try_to_generate_entropy(void)
 	timer_delete_sync(&stack->timer);
 	timer_destroy_on_stack(&stack->timer);
 }
-
 
 /**********************************************************************
  *
@@ -1467,9 +1482,9 @@ static ssize_t urandom_read_iter(struct kiocb *kiocb, struct iov_iter *iter)
 		try_to_generate_entropy();
 
 	if (!crng_ready()) {
-		if (!ratelimit_disable && maxwarn <= 0)
+		if (!ratelimit_disable && maxwarn <= 0) {
 			ratelimit_state_inc_miss(&urandom_warning);
-		else if (ratelimit_disable || __ratelimit(&urandom_warning)) {
+		} else if (ratelimit_disable || __ratelimit(&urandom_warning)) {
 			--maxwarn;
 			pr_notice("%s: uninitialized urandom read (%zu bytes read)\n",
 				  current->comm, iov_iter_count(iter));
@@ -1585,7 +1600,6 @@ const struct file_operations urandom_fops = {
 	.splice_write = iter_file_splice_write,
 };
 
-
 /********************************************************************
  *
  * Sysctl interface.
@@ -1635,7 +1649,7 @@ static int proc_do_uuid(const struct ctl_table *table, int write, void *buf,
 {
 	u8 tmp_uuid[UUID_SIZE], *uuid;
 	char uuid_string[UUID_STRING_LEN + 1];
-	struct ctl_table fake_table = {
+	const struct ctl_table fake_table = {
 		.data = uuid_string,
 		.maxlen = UUID_STRING_LEN
 	};
