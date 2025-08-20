@@ -235,7 +235,7 @@
 		compatible = "thead,th1520-aon";
 		mboxes = <&mbox_910t 1>;
 		mbox-names = "aon";
-		resets = <&rst TH1520_RESET_ID_GPU_CLKGEN>;
+		resets = <&rst_vo TH1520_RESET_ID_GPU_CLKGEN>;
 		reset-names = "gpu-clkgen";
 		#power-domain-cells = <1>;
 	};
@@ -500,8 +500,8 @@
 			#clock-cells = <1>;
 		};
 
-		rst: reset-controller@ffef528000 {
-			compatible = "thead,th1520-reset";
+		rst_vo: reset-controller@ffef528000 {
+			compatible = "thead,th1520-reset-vo";
 			reg = <0xff 0xef528000 0x0 0x4f>;
 			#reset-cells = <1>;
 		};
