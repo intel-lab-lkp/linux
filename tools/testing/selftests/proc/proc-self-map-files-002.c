@@ -67,7 +67,7 @@ int main(void)
 			break;
 	}
 	if (va == va_max) {
-		fprintf(stderr, "error: mmap doesn't like you\n");
+		fprintf(stderr, "error: failed to find available memory address for mapping\n");
 		return 1;
 	}
 

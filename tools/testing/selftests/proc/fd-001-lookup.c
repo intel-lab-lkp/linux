@@ -60,7 +60,7 @@ static void test_lookup(unsigned int fd)
 	snprintf(buf, sizeof(buf), "/proc/self/fd/%u", fd);
 	test_lookup_pass(buf);
 
-	/* leading junk */
+	/* Leading junk */
 	for (c = 1; c <= 255; c++) {
 		if (c == '/')
 			continue;
@@ -68,7 +68,7 @@ static void test_lookup(unsigned int fd)
 		test_lookup_fail(buf);
 	}
 
-	/* trailing junk */
+	/* Trailing junk */
 	for (c = 1; c <= 255; c++) {
 		if (c == '/')
 			continue;

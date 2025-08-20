@@ -138,10 +138,10 @@ static void copy_last_line(struct page_content *page, char *last_line)
 {
 	/* Get the last line in the first page */
 	const char *end = page->data + page->size - 1;
-	/* skip last newline */
+	/* Skip last newline */
 	const char *pos = end - 1;
 
-	/* search previous newline */
+	/* Search previous newline */
 	while (pos[-1] != '\n')
 		pos--;
 	strncpy(last_line, pos, end - pos);
@@ -412,7 +412,7 @@ FIXTURE_SETUP(proc_maps_race)
 	self->vma_count = self->page_size / 32 + 1;
 	self->shared_mem_size = sizeof(struct vma_modifier_info) + self->vma_count * sizeof(void *);
 
-	/* map shared memory for communication with the child process */
+	/* Map shared memory for communication with the child process */
 	self->mod_info = (struct vma_modifier_info *)mmap(NULL, self->shared_mem_size,
 				PROT_READ | PROT_WRITE, MAP_SHARED | MAP_ANONYMOUS, -1, 0);
 	ASSERT_NE(self->mod_info, MAP_FAILED);
@@ -439,7 +439,7 @@ FIXTURE_SETUP(proc_maps_race)
 			mod_info->child_mapped_addr[i] = mmap(NULL, self->page_size * 3, prot,
 					MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
 			ASSERT_NE(mod_info->child_mapped_addr[i], MAP_FAILED);
-			/* change protection in adjacent maps to prevent merging */
+			/* Change protection in adjacent maps to prevent merging */
 			prot ^= PROT_WRITE;
 		}
 		signal_state(mod_info, CHILD_READY);
@@ -536,7 +536,7 @@ TEST_F(proc_maps_race, test_maps_tearing_from_split)
 
 	wait_for_state(mod_info, SETUP_READY);
 
-	/* re-read the file to avoid using stale data from previous test */
+	/* Re-read the file to avoid using stale data from previous test */
 	ASSERT_TRUE(read_boundary_lines(self, &self->last_line, &self->first_line));
 
 	mod_info->vma_modify = split_vma;
@@ -600,7 +600,7 @@ TEST_F(proc_maps_race, test_maps_tearing_from_split)
 	} while (end_ts.tv_sec - start_ts.tv_sec < self->duration_sec);
 	end_test_loop(self->verbose);
 
-	/* Signal the modifyer thread to stop and wait until it exits */
+	/* Signal the modifier thread to stop and wait until it exits */
 	signal_state(mod_info, TEST_DONE);
 }
 
@@ -615,7 +615,7 @@ TEST_F(proc_maps_race, test_maps_tearing_from_resize)
 
 	wait_for_state(mod_info, SETUP_READY);
 
-	/* re-read the file to avoid using stale data from previous test */
+	/* Re-read the file to avoid using stale data from previous test */
 	ASSERT_TRUE(read_boundary_lines(self, &self->last_line, &self->first_line));
 
 	mod_info->vma_modify = shrink_vma;
@@ -653,7 +653,7 @@ TEST_F(proc_maps_race, test_maps_tearing_from_resize)
 					strcmp(new_first_line.text, restored_last_line.text),
 					"Shrink result invalid", self));
 		} else {
-			/* The vmas should be consistent with the original/resored state */
+			/* The vmas should be consistent with the original/restored state */
 			ASSERT_FALSE(print_boundaries_on(
 					strcmp(new_last_line.text, restored_last_line.text),
 					"Expand result invalid", self));
@@ -667,7 +667,7 @@ TEST_F(proc_maps_race, test_maps_tearing_from_resize)
 	} while (end_ts.tv_sec - start_ts.tv_sec < self->duration_sec);
 	end_test_loop(self->verbose);
 
-	/* Signal the modifyer thread to stop and wait until it exits */
+	/* Signal the modifier thread to stop and wait until it exits */
 	signal_state(mod_info, TEST_DONE);
 }
 
@@ -682,7 +682,7 @@ TEST_F(proc_maps_race, test_maps_tearing_from_remap)
 
 	wait_for_state(mod_info, SETUP_READY);
 
-	/* re-read the file to avoid using stale data from previous test */
+	/* Re-read the file to avoid using stale data from previous test */
 	ASSERT_TRUE(read_boundary_lines(self, &self->last_line, &self->first_line));
 
 	mod_info->vma_modify = remap_vma;
@@ -734,7 +734,7 @@ TEST_F(proc_maps_race, test_maps_tearing_from_remap)
 	} while (end_ts.tv_sec - start_ts.tv_sec < self->duration_sec);
 	end_test_loop(self->verbose);
 
-	/* Signal the modifyer thread to stop and wait until it exits */
+	/* Signal the modifier thread to stop and wait until it exits */
 	signal_state(mod_info, TEST_DONE);
 }
 

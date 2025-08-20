@@ -41,7 +41,7 @@ static void f_reg(DIR *d, const char *filename)
 	int fd;
 	ssize_t rv;
 
-	/* read from /proc/kmsg can block */
+	/* Read from /proc/kmsg can block */
 	fd = openat(dirfd(d), filename, O_RDONLY|O_NONBLOCK);
 	if (fd == -1)
 		return;
