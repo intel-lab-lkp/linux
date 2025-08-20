@@ -1215,6 +1215,8 @@ void do_user_addr_fault(struct pt_regs *regs,
 	struct mm_struct *mm;
 	vm_fault_t fault;
 	unsigned int flags = FAULT_FLAG_DEFAULT;
+	bool is_shared_vma;
+	unsigned long addr;
 
 	tsk = current;
 	mm = tsk->mm;
@@ -1328,6 +1330,12 @@ void do_user_addr_fault(struct pt_regs *regs,
 	if (!vma)
 		goto lock_mmap;
 
+	/* mshare does not support per-VMA locks yet */
+	if (vma_is_mshare(vma)) {
+		vma_end_read(vma);
+		goto lock_mmap;
+	}
+
 	if (unlikely(access_error(error_code, vma))) {
 		bad_area_access_error(regs, error_code, address, NULL, vma);
 		count_vm_vma_lock_event(VMA_LOCK_SUCCESS);
@@ -1356,10 +1364,29 @@ void do_user_addr_fault(struct pt_regs *regs,
 lock_mmap:
 
 retry:
+	addr = address;
+	is_shared_vma = false;
 	vma = lock_mm_and_find_vma(mm, address, regs);
 	if (unlikely(!vma)) {
 		bad_area_nosemaphore(regs, error_code, address);
 		return;
+	}
+
+	if (unlikely(vma_is_mshare(vma))) {
+		fault = find_shared_vma(&vma, &addr);
+
+		if (fault) {
+			mmap_read_unlock(mm);
+			goto done;
+		}
+
+		if (!vma) {
+			mmap_read_unlock(mm);
+			bad_area_nosemaphore(regs, error_code, address);
+			return;
+		}
+
+		is_shared_vma = true;
 	}
 
 	/*
@@ -1367,6 +1394,8 @@ retry:
 	 * we can handle it..
 	 */
 	if (unlikely(access_error(error_code, vma))) {
+		if (unlikely(is_shared_vma))
+			mmap_read_unlock(vma->vm_mm);
 		bad_area_access_error(regs, error_code, address, mm, vma);
 		return;
 	}
@@ -1384,7 +1413,14 @@ retry:
 	 * userland). The return to userland is identified whenever
 	 * FAULT_FLAG_USER|FAULT_FLAG_KILLABLE are both set in flags.
 	 */
-	fault = handle_mm_fault(vma, address, flags, regs);
+	fault = handle_mm_fault(vma, addr, flags, regs);
+
+	/*
+	 * If the lock on the shared mm has been released, release the lock
+	 * on the task's mm now.
+	 */
+	if (unlikely(is_shared_vma) && (fault & (VM_FAULT_COMPLETED | VM_FAULT_RETRY)))
+		mmap_read_unlock(mm);
 
 	if (fault_signal_pending(fault, regs)) {
 		/*
@@ -1412,6 +1448,8 @@ retry:
 		goto retry;
 	}
 
+	if (unlikely(is_shared_vma))
+		mmap_read_unlock(vma->vm_mm);
 	mmap_read_unlock(mm);
 done:
 	if (likely(!(fault & VM_FAULT_ERROR)))

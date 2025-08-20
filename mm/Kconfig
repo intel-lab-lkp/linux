@@ -1402,7 +1402,7 @@ config FIND_NORMAL_PAGE
 
 config MSHARE
 	bool "Mshare"
-	depends on MMU
+	depends on MMU && ARCH_SUPPORTS_MSHARE
 	help
 	  Enable msharefs: A pseudo filesystem that allows multiple processes
 	  to share kernel resources for mapping shared pages. A file created on
