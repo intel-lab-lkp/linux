@@ -295,12 +295,45 @@ DEFINE_IDTENTRY(exc_overflow)
 	do_error_trap(regs, 0, "overflow", X86_TRAP_OF, SIGSEGV, 0, NULL);
 }
 
+static bool handle_hnop(struct pt_regs *regs)
+{
+	unsigned char buf[MAX_INSN_SIZE];
+	unsigned long nr_copied;
+	struct insn insn;
+
+	if (!IS_ENABLED(CONFIG_X86_HNOP_EMU))
+		return false;
+
+	nr_copied = insn_fetch_from_user(regs, buf);
+	if (nr_copied <= 0)
+		return false;
+
+	if (!insn_decode_from_regs(&insn, regs, buf, nr_copied))
+		return false;
+
+	/* Hintable NOPs cover 0F 18 to 0F 1F */
+	if (insn.opcode.bytes[0] != 0x0F ||
+	    insn.opcode.bytes[1] < 0x18 || insn.opcode.bytes[1] > 0x1F)
+		return false;
+
+	pr_warn_once("%s[%d] uses hintable NOPs that your processor does not support.\n"
+		     "The kernel is emulating them; the performance of this "
+		     "and other executables using them will be impacted.\n",
+		     current->comm, task_pid_nr(current));
+
+	regs->ip += insn.length;
+	return true;
+}
+
 #ifdef CONFIG_X86_F00F_BUG
 void handle_invalid_op(struct pt_regs *regs)
 #else
 static inline void handle_invalid_op(struct pt_regs *regs)
 #endif
 {
+	if (user_mode(regs) && handle_hnop(regs))
+		return;
+
 	do_error_trap(regs, 0, "invalid opcode", X86_TRAP_UD, SIGILL,
 		      ILL_ILLOPN, error_get_trap_addr(regs));
 }
