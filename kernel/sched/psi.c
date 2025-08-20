@@ -141,6 +141,8 @@
 #include <linux/psi.h>
 #include "sched.h"
 
+EXPORT_TRACEPOINT_SYMBOL_GPL(psi_event_tp);
+
 static int psi_bug __read_mostly;
 
 DEFINE_STATIC_KEY_FALSE(psi_disabled);
@@ -508,6 +510,8 @@ static void update_triggers(struct psi_group *group, u64 now,
 		/* Limit event signaling to once per window */
 		if (now < t->last_event_time + t->win.size)
 			continue;
+
+		trace_psi_event_tp(t);
 
 		/* Generate an event */
 		if (cmpxchg(&t->event, 0, 1) == 0) {

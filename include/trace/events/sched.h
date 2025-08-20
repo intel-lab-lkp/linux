@@ -896,6 +896,11 @@ DECLARE_TRACE(sched_set_need_resched,
 	TP_PROTO(struct task_struct *tsk, int cpu, int tif),
 	TP_ARGS(tsk, cpu, tif));
 
+struct psi_trigger;
+DECLARE_TRACE(psi_event,
+	TP_PROTO(struct psi_trigger *t),
+	TP_ARGS(t));
+
 #endif /* _TRACE_SCHED_H */
 
 /* This part must be outside protection */
