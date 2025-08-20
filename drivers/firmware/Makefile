@@ -2,6 +2,9 @@
 #
 # Makefile for the linux kernel.
 #
+
+ccflags-y += -I$(src)			# needed for trace events
+
 obj-$(CONFIG_ARM_SCPI_PROTOCOL)	+= arm_scpi.o
 obj-$(CONFIG_ARM_SDE_INTERFACE)	+= arm_sdei.o
 obj-$(CONFIG_DMI)		+= dmi_scan.o

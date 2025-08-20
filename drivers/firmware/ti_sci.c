@@ -127,6 +127,9 @@ struct ti_sci_info {
 #define cl_to_ti_sci_info(c)	container_of(c, struct ti_sci_info, cl)
 #define handle_to_ti_sci_info(h) container_of(h, struct ti_sci_info, handle)
 
+#define CREATE_TRACE_POINTS
+#include "ti_sci_trace.h"
+
 #ifdef CONFIG_DEBUG_FS
 
 /**
@@ -269,6 +272,9 @@ static void ti_sci_rx_callback(struct mbox_client *cl, void *m)
 		return;
 	}
 
+	trace_ti_sci_rx_callback(hdr, 0);
+	trace_ti_sci_msg_dump(hdr, xfer);
+
 	ti_sci_dump_header_dbg(dev, hdr);
 	/* Take a copy to the rx buffer.. */
 	memcpy(xfer->xfer_buf, mbox_msg->buf, xfer->rx_len);
@@ -402,6 +408,9 @@ static inline int ti_sci_do_xfer(struct ti_sci_info *info,
 	int timeout;
 	struct device *dev = info->dev;
 	bool done_state = true;
+	struct ti_sci_msg_hdr *hdr = (struct ti_sci_msg_hdr *)xfer->tx_message.buf;
+
+	trace_ti_sci_xfer_begin(hdr, 0);
 
 	ret = mbox_send_message(info->chan_tx, &xfer->tx_message);
 	if (ret < 0)
@@ -436,6 +445,8 @@ static inline int ti_sci_do_xfer(struct ti_sci_info *info,
 	 * received our message.
 	 */
 	mbox_client_txdone(info->chan_tx, ret);
+
+	trace_ti_sci_xfer_end(hdr, ret);
 
 	return ret;
 }
