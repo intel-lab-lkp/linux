@@ -447,6 +447,7 @@ struct nvme_subsystem {
 #ifdef CONFIG_NVME_MULTIPATH
 	enum nvme_iopolicy	iopolicy;
 #endif
+	bool			use_awupf;
 };
 
 /*

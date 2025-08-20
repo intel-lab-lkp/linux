@@ -894,6 +894,75 @@ static ssize_t nvme_subsys_show_type(struct device *dev,
 }
 static SUBSYS_ATTR_RO(subsystype, S_IRUGO, nvme_subsys_show_type);
 
+static ssize_t nvme_subsys_use_awupf_show(struct device *dev,
+				    struct device_attribute *attr,
+				    char *buf)
+{
+	struct nvme_subsystem *subsys =
+		container_of(dev, struct nvme_subsystem, dev);
+
+	return sysfs_emit(buf, "%d\n", subsys->use_awupf);
+}
+
+static ssize_t nvme_subsys_use_awupf_store(struct device *dev,
+		struct device_attribute *attr, const char *buf, size_t count)
+{
+	struct nvme_subsystem *subsys =
+		container_of(dev, struct nvme_subsystem, dev);
+	struct nvme_ns_head *h;
+	struct nvme_ctrl *tmp;
+	bool enabled;
+	int err;
+
+	err = kstrtobool(buf, &enabled);
+	if (err)
+		return -EINVAL;
+
+	mutex_lock(&nvme_subsystems_lock);
+	if (subsys->use_awupf == enabled)
+		goto out_unlock;
+
+	list_for_each_entry(h, &subsys->nsheads, entry) {
+		struct queue_limits lim;
+		unsigned int memflags;
+
+		if (!nvme_ns_head_multipath(h))
+			continue;
+
+		/*
+		 * The head NS queue atomic limits are stacked. We need to zero
+		 * to stack all the limits per-controller afresh.
+		 */
+		lim = queue_limits_start_update(h->disk->queue);
+		memflags = blk_mq_freeze_queue(h->disk->queue);
+
+		lim.atomic_write_hw_max = 0;
+		lim.atomic_write_hw_unit_min = 0;
+		lim.atomic_write_hw_unit_max = 0;
+		lim.atomic_write_hw_boundary = 0;
+
+		err = queue_limits_commit_update(h->disk->queue, &lim);
+		blk_mq_unfreeze_queue(h->disk->queue, memflags);
+		if (err) {
+			count = err;
+			goto out_unlock;
+		}
+	}
+
+	list_for_each_entry(tmp, &subsys->ctrls, subsys_entry)
+		nvme_queue_scan(tmp);
+
+	subsys->use_awupf = enabled;
+out_unlock:
+	mutex_unlock(&nvme_subsystems_lock);
+
+	return count;
+}
+
+static struct device_attribute subsys_attr_use_awupf = \
+	__ATTR(use_awupf, S_IRUGO | S_IWUSR, \
+	nvme_subsys_use_awupf_show, nvme_subsys_use_awupf_store);
+
 #define nvme_subsys_show_str_function(field)				\
 static ssize_t subsys_##field##_show(struct device *dev,		\
 			    struct device_attribute *attr, char *buf)	\
@@ -918,6 +987,7 @@ static struct attribute *nvme_subsys_attrs[] = {
 #ifdef CONFIG_NVME_MULTIPATH
 	&subsys_attr_iopolicy.attr,
 #endif
+	&subsys_attr_use_awupf.attr,
 	NULL,
 };
 

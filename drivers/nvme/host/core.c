@@ -2040,7 +2040,7 @@ static u32 nvme_configure_atomic_write(struct nvme_ns *ns,
 		atomic_bs = (1 + le16_to_cpu(id->nawupf)) * bs;
 		if (id->nabspf)
 			boundary = (le16_to_cpu(id->nabspf) + 1) * bs;
-	} else {
+	} else if (ns->ctrl->subsys->use_awupf) {
 		/*
 		 * Use the controller wide atomic write unit.  This sucks
 		 * because the limit is defined in terms of logical blocks while
@@ -2049,6 +2049,8 @@ static u32 nvme_configure_atomic_write(struct nvme_ns *ns,
 		 * values for different controllers in the subsystem.
 		 */
 		atomic_bs = (1 + ns->ctrl->subsys->awupf) * bs;
+	} else {
+		atomic_bs = bs;
 	}
 
 	lim->atomic_write_hw_max = atomic_bs;
