@@ -21,6 +21,8 @@
 #include <linux/falloc.h>
 #include <asm/tlbflush.h>
 
+#include <asm/tlb.h>
+
 const unsigned long mshare_align = P4D_SIZE;
 const unsigned long mshare_base = mshare_align;
 
@@ -50,6 +52,66 @@ static const struct mmu_notifier_ops mshare_mmu_ops = {
 	.arch_invalidate_secondary_tlbs = mshare_invalidate_tlbs,
 };
 
+static p4d_t *walk_to_p4d(struct mm_struct *mm, unsigned long addr)
+{
+	pgd_t *pgd;
+	p4d_t *p4d;
+
+	pgd = pgd_offset(mm, addr);
+	p4d = p4d_alloc(mm, pgd, addr);
+	if (!p4d)
+		return NULL;
+
+	return p4d;
+}
+
+/* Returns holding the host mm's lock for read.  Caller must release. */
+vm_fault_t
+find_shared_vma(struct vm_area_struct **vmap, unsigned long *addrp)
+{
+	struct vm_area_struct *vma, *guest = *vmap;
+	struct mshare_data *m_data = guest->vm_private_data;
+	struct mm_struct *host_mm = m_data->mm;
+	unsigned long host_addr;
+	p4d_t *p4d, *guest_p4d;
+
+	mmap_read_lock_nested(host_mm, SINGLE_DEPTH_NESTING);
+	host_addr = *addrp - guest->vm_start + host_mm->mmap_base;
+	p4d = walk_to_p4d(host_mm, host_addr);
+	guest_p4d = walk_to_p4d(guest->vm_mm, *addrp);
+	if (!p4d_same(*guest_p4d, *p4d)) {
+		spinlock_t *guest_ptl = &guest->vm_mm->page_table_lock;
+
+		spin_lock(guest_ptl);
+		if (!p4d_same(*guest_p4d, *p4d)) {
+			pud_t *pud = p4d_pgtable(*p4d);
+
+			ptdesc_pud_pts_inc(virt_to_ptdesc(pud));
+			set_p4d(guest_p4d, *p4d);
+			spin_unlock(guest_ptl);
+			mmap_read_unlock(host_mm);
+			return VM_FAULT_NOPAGE;
+		}
+		spin_unlock(guest_ptl);
+	}
+
+	*addrp = host_addr;
+	vma = find_vma(host_mm, host_addr);
+
+	/* XXX: expand stack? */
+	if (vma && vma->vm_start > host_addr)
+		vma = NULL;
+
+	*vmap = vma;
+
+	/*
+	 * release host mm lock unless a matching vma is found
+	 */
+	if (!vma)
+		mmap_read_unlock(host_mm);
+	return 0;
+}
+
 static int mshare_vm_op_split(struct vm_area_struct *vma, unsigned long addr)
 {
 	return -EINVAL;
@@ -61,9 +123,54 @@ static int mshare_vm_op_mprotect(struct vm_area_struct *vma, unsigned long start
 	return -EINVAL;
 }
 
+/*
+ * Unlink any shared page tables in the range and ensure TLBs are flushed.
+ * Pages in the mshare region itself are not unmapped.
+ */
+static void mshare_vm_op_unshare_page_range(struct mmu_gather *tlb,
+				struct vm_area_struct *vma,
+				unsigned long addr, unsigned long end,
+				struct zap_details *details)
+{
+	struct mm_struct *mm = vma->vm_mm;
+	spinlock_t *ptl = &mm->page_table_lock;
+	unsigned long sz = mshare_align;
+	pgd_t *pgd;
+	p4d_t *p4d;
+	pud_t *pud;
+
+	WARN_ON(!vma_is_mshare(vma));
+
+	tlb_start_vma(tlb, vma);
+
+	for (; addr < end ; addr += sz) {
+		spin_lock(ptl);
+
+		pgd = pgd_offset(mm, addr);
+		if (!pgd_present(*pgd)) {
+			spin_unlock(ptl);
+			continue;
+		}
+		p4d = p4d_offset(pgd, addr);
+		if (!p4d_present(*p4d)) {
+			spin_unlock(ptl);
+			continue;
+		}
+		pud = p4d_pgtable(*p4d);
+		ptdesc_pud_pts_dec(virt_to_ptdesc(pud));
+
+		p4d_clear(p4d);
+		spin_unlock(ptl);
+		tlb_flush_p4d_range(tlb, addr, sz);
+	}
+
+	tlb_end_vma(tlb, vma);
+}
+
 static const struct vm_operations_struct msharefs_vm_ops = {
 	.may_split = mshare_vm_op_split,
 	.mprotect = mshare_vm_op_mprotect,
+	.unmap_page_range = mshare_vm_op_unshare_page_range,
 };
 
 /*
