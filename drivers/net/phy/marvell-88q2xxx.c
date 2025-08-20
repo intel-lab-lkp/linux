@@ -118,6 +118,11 @@
 #define MV88Q2XXX_LED_INDEX_TX_ENABLE			0
 #define MV88Q2XXX_LED_INDEX_GPIO			1
 
+/* Marvell vendor PMA/PMD control for forced master/slave when AN is disabled */
+#define PMAPMD_MVL_PMAPMD_CTL				0x0834
+#define MASTER_MODE					BIT(14)
+#define MODE_MASK					BIT(14)
+
 struct mv88q2xxx_priv {
 	bool enable_led0;
 };
@@ -377,18 +382,90 @@ static int mv88q2xxx_read_link(struct phy_device *phydev)
 static int mv88q2xxx_read_master_slave_state(struct phy_device *phydev)
 {
 	int ret;
+	int adv_l, adv_m, stat, stat2;
 
-	phydev->master_slave_state = MASTER_SLAVE_STATE_UNKNOWN;
-	ret = phy_read_mmd(phydev, MDIO_MMD_AN, MDIO_MMD_AN_MV_STAT);
-	if (ret < 0)
-		return ret;
+	/* In forced mode, state and config are controlled via PMAPMD 0x834 */
+	if (phydev->autoneg == AUTONEG_DISABLE) {
+		ret = phy_read_mmd(phydev, MDIO_MMD_PMAPMD, PMAPMD_MVL_PMAPMD_CTL);
+		if (ret < 0)
+			return ret;
 
-	if (ret & MDIO_MMD_AN_MV_STAT_LOCAL_MASTER)
+		if (ret & MASTER_MODE) {
+			phydev->master_slave_state = MASTER_SLAVE_STATE_MASTER;
+			phydev->master_slave_get = MASTER_SLAVE_CFG_MASTER_FORCE;
+		} else {
+			phydev->master_slave_state = MASTER_SLAVE_STATE_SLAVE;
+			phydev->master_slave_get = MASTER_SLAVE_CFG_SLAVE_FORCE;
+		}
+		return 0;
+	}
+
+
+	adv_l = phy_read_mmd(phydev, MDIO_MMD_AN, MDIO_AN_T1_ADV_L);
+	if (adv_l < 0)
+		return adv_l;
+	adv_m = phy_read_mmd(phydev, MDIO_MMD_AN, MDIO_AN_T1_ADV_M);
+	if (adv_m < 0)
+		return adv_m;
+
+	if (adv_l & MDIO_AN_T1_ADV_L_FORCE_MS)
+		phydev->master_slave_get = MASTER_SLAVE_CFG_MASTER_FORCE;
+	else if (adv_m & MDIO_AN_T1_ADV_M_MST)
+		phydev->master_slave_get = MASTER_SLAVE_CFG_MASTER_PREFERRED;
+	else
+		phydev->master_slave_get = MASTER_SLAVE_CFG_SLAVE_PREFERRED;
+
+	stat = phy_read_mmd(phydev, MDIO_MMD_AN, MDIO_MMD_AN_MV_STAT);
+	if (stat < 0)
+		return stat;
+
+	if (stat & MDIO_MMD_AN_MV_STAT_MS_CONF_FAULT) {
+		phydev->master_slave_state = MASTER_SLAVE_STATE_ERR;
+		return 0;
+	}
+
+	stat2 = phy_read_mmd(phydev, MDIO_MMD_AN, MDIO_MMD_AN_MV_STAT2);
+	if (stat2 < 0)
+		return stat2;
+	if (!(stat2 & MDIO_MMD_AN_MV_STAT2_AN_RESOLVED)) {
+		phydev->master_slave_state = MASTER_SLAVE_STATE_UNKNOWN;
+		return 0;
+	}
+
+	if (stat & MDIO_MMD_AN_MV_STAT_LOCAL_MASTER)
 		phydev->master_slave_state = MASTER_SLAVE_STATE_MASTER;
 	else
 		phydev->master_slave_state = MASTER_SLAVE_STATE_SLAVE;
 
 	return 0;
+}
+
+static int mv88q2xxx_setup_master_slave_forced(struct phy_device *phydev)
+{
+	int ret = 0;
+
+	switch (phydev->master_slave_set) {
+	case MASTER_SLAVE_CFG_MASTER_FORCE:
+	case MASTER_SLAVE_CFG_MASTER_PREFERRED:
+		ret = phy_modify_mmd_changed(phydev, MDIO_MMD_PMAPMD,
+					     PMAPMD_MVL_PMAPMD_CTL,
+					     MODE_MASK, MASTER_MODE);
+		break;
+	case MASTER_SLAVE_CFG_SLAVE_FORCE:
+	case MASTER_SLAVE_CFG_SLAVE_PREFERRED:
+		ret = phy_modify_mmd_changed(phydev, MDIO_MMD_PMAPMD,
+					     PMAPMD_MVL_PMAPMD_CTL,
+					     MODE_MASK, 0);
+		break;
+	case MASTER_SLAVE_CFG_UNKNOWN:
+	case MASTER_SLAVE_CFG_UNSUPPORTED:
+	default:
+		phydev_warn(phydev, "Unsupported Master/Slave mode\n");
+		ret = 0;
+		break;
+	}
+
+	return ret;
 }
 
 static int mv88q2xxx_read_aneg_speed(struct phy_device *phydev)
@@ -448,6 +525,11 @@ static int mv88q2xxx_read_status(struct phy_device *phydev)
 	if (ret < 0)
 		return ret;
 
+	/* Populate master/slave status also for forced modes */
+	ret = mv88q2xxx_read_master_slave_state(phydev);
+	if (ret < 0 && ret != -EOPNOTSUPP)
+		return ret;
+
 	return genphy_c45_read_pma(phydev);
 }
 
@@ -477,6 +559,20 @@ static int mv88q2xxx_config_aneg(struct phy_device *phydev)
 	ret = genphy_c45_config_aneg(phydev);
 	if (ret)
 		return ret;
+
+	/* Configure Base-T1 master/slave per phydev->master_slave_set.
+	 * For AN disabled, program PMAPMD role directly; otherwise rely on
+	 * the standard Base-T1 AN advertisement bits.
+	 */
+	if (phydev->autoneg == AUTONEG_DISABLE) {
+		ret = mv88q2xxx_setup_master_slave_forced(phydev);
+		if (ret)
+			return ret;
+	} else {
+		ret = genphy_c45_pma_baset1_setup_master_slave(phydev);
+		if (ret)
+			return ret;
+	}
 
 	return phydev->drv->soft_reset(phydev);
 }
