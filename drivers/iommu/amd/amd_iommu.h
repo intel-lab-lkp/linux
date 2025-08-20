@@ -8,6 +8,7 @@
 #define AMD_IOMMU_H
 
 #include <linux/iommu.h>
+#include <uapi/linux/iommufd.h>
 
 #include "amd_iommu_types.h"
 
@@ -190,4 +191,8 @@ void amd_iommu_domain_set_pgtable(struct protection_domain *domain,
 struct dev_table_entry *get_dev_table(struct amd_iommu *iommu);
 struct iommu_dev_data *search_dev_data(struct amd_iommu *iommu, u16 devid);
 
+/* NESTED */
+struct iommu_domain *
+amd_iommu_domain_alloc_nested(struct device *dev, struct iommu_domain *parent,
+			      u32 flags, const struct iommu_user_data *user_data);
 #endif /* AMD_IOMMU_H */

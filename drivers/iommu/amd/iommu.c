@@ -2616,6 +2616,7 @@ amd_iommu_domain_alloc_paging_flags(struct device *dev, u32 flags,
 				    const struct iommu_user_data *user_data)
 
 {
+	struct iommu_domain *dom = ERR_PTR(-EOPNOTSUPP);
 	struct iommu_dev_data *dev_data = dev_iommu_priv_get(dev);
 	struct amd_iommu *iommu = get_amd_iommu_from_dev(dev);
 	const u32 supported_flags = IOMMU_HWPT_ALLOC_DIRTY_TRACKING |
@@ -2626,29 +2627,31 @@ amd_iommu_domain_alloc_paging_flags(struct device *dev, u32 flags,
 	if ((flags & ~supported_flags) || user_data || !is_nest_parent_supported(flags))
 		return ERR_PTR(-EOPNOTSUPP);
 
-	pr_debug("%s: IOMMU devid=%#x, flags=%#x\n", __func__, dev_data->devid, flags);
+	pr_debug("%s: IOMMU devid=%#x, flags=%#x, supported_flags=%#x\n", __func__, dev_data->devid, flags, supported_flags);
 
 	switch (flags & supported_flags) {
 	case IOMMU_HWPT_ALLOC_DIRTY_TRACKING:
 	case IOMMU_HWPT_ALLOC_DIRTY_TRACKING | IOMMU_HWPT_ALLOC_NEST_PARENT:
 	case IOMMU_HWPT_ALLOC_NEST_PARENT:
 		/* Allocate domain with v1 page table for dirty tracking */
-		if (!amd_iommu_hd_support(iommu))
-			break;
-		return do_iommu_domain_alloc(dev, flags, PD_MODE_V1);
+		if (amd_iommu_hd_support(iommu))
+			dom = do_iommu_domain_alloc(dev, flags, PD_MODE_V1);
+		break;
 	case IOMMU_HWPT_ALLOC_PASID:
 		/* Allocate domain with v2 page table if IOMMU supports PASID. */
-		if (!amd_iommu_pasid_supported())
-			break;
-		return do_iommu_domain_alloc(dev, flags, PD_MODE_V2);
+		if (amd_iommu_pasid_supported())
+			dom = do_iommu_domain_alloc(dev, flags, PD_MODE_V2);
+		break;
 	case 0:
 		/* If nothing specific is required use the kernel commandline default */
-		return do_iommu_domain_alloc(dev, 0, amd_iommu_pgtable);
+		dom = do_iommu_domain_alloc(dev, 0, amd_iommu_pgtable);
+		break;
 	default:
 		pr_err("%s: Unhandled flag : 0x%x\n", __func__, flags);
 		break;
 	}
-	return ERR_PTR(-EOPNOTSUPP);
+
+	return dom;
 }
 
 void amd_iommu_domain_free(struct iommu_domain *dom)
@@ -3073,6 +3076,7 @@ const struct iommu_ops amd_iommu_ops = {
 	.release_domain = &release_domain,
 	.identity_domain = &identity_domain.domain,
 	.domain_alloc_paging_flags = amd_iommu_domain_alloc_paging_flags,
+	.domain_alloc_nested = amd_iommu_domain_alloc_nested,
 	.domain_alloc_sva = amd_iommu_domain_alloc_sva,
 	.probe_device = amd_iommu_probe_device,
 	.release_device = amd_iommu_release_device,
