@@ -113,6 +113,7 @@
 		simple-audio-card,mclk-fs = <256>;
 		simple-audio-card,bitclock-master = <&daicpu>;
 		simple-audio-card,frame-master = <&daicpu>;
+		simple-audio-card,pin-switches = "Headphones";
 		/*TODO: SARADC_IN3 is used as MIC detection / key input */
 
 		daicpu: simple-audio-card,cpu {
