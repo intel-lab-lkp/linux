@@ -913,6 +913,9 @@ static int get_inode_info(struct btrfs_root *root, u64 ino,
 	struct btrfs_inode_item *ii;
 	struct btrfs_key key;
 
+	if (!info)
+		return 0;
+
 	path = alloc_path_for_send();
 	if (!path)
 		return -ENOMEM;
@@ -926,9 +929,6 @@ static int get_inode_info(struct btrfs_root *root, u64 ino,
 			ret = -ENOENT;
 		goto out;
 	}
-
-	if (!info)
-		goto out;
 
 	ii = btrfs_item_ptr(path->nodes[0], path->slots[0],
 			struct btrfs_inode_item);
