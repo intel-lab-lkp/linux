@@ -121,7 +121,7 @@ parse_gitsource()
 	en_sum=$(awk 'BEGIN {sum=0};{sum += $1};END {print sum}' $OUTFILE_GIT-energy-$1-$2.log)
 	printf "Gitsource-$1-#$2 power consumption(J): $en_sum\n" | tee -a $OUTFILE_GIT.result
 
-	# Permance is the number of run gitsource per second, denoted 1/t, where 1 is the number of run gitsource in t
+	# Performance is the number of run gitsource per second, denoted 1/t, where 1 is the number of run gitsource in t
 	# seconds. It is well known that P=E/t, where P is power measured in watts(W), E is energy measured in joules(J),
 	# and t is time measured in seconds(s). This means that performance per watt becomes
 	#        1/t     1/t     1
@@ -179,7 +179,7 @@ gather_gitsource()
 	avg_en=$(awk 'BEGIN {sum=0};{sum += $1};END {print sum/'$LOOP_TIMES'}' $OUTFILE_GIT-energy-$1.log)
 	printf "Gitsource-$1 avg power consumption(J): $avg_en\n" | tee -a $OUTFILE_GIT.result
 
-	# Permance is the number of run gitsource per second, denoted 1/t, where 1 is the number of run gitsource in t
+	# Performance is the number of run gitsource per second, denoted 1/t, where 1 is the number of run gitsource in t
 	# seconds. It is well known that P=E/t, where P is power measured in watts(W), E is energy measured in joules(J),
 	# and t is time measured in seconds(s). This means that performance per watt becomes
 	#        1/t     1/t     1
