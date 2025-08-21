@@ -282,7 +282,7 @@ static int do_tests(int uid, const char *our_path)
 				"PR_CAP_AMBIENT_RAISE isn't supported\n");
 		else
 			ksft_test_result_fail(
-				"PR_CAP_AMBIENT_RAISE should have failed eith EPERM on a non-inheritable cap\n");
+				"PR_CAP_AMBIENT_RAISE should have failed with EPERM on a non-inheritable cap\n");
 		return 1;
 	}
 	ksft_test_result_pass(
