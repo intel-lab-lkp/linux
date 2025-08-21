@@ -3393,6 +3393,33 @@ static inline void iobj_get(struct inode *inode)
 	refcount_inc(&inode->i_obj_count);
 }
 
+static inline struct inode *inode_tryget(struct inode *inode)
+{
+	/*
+	 * We are using inode_tryget() because we're interested in getting a
+	 * live reference to the inode, which is ->i_count. Normally we would
+	 * grab i_obj_count first, as it is the highe priority reference.
+	 * However we're only interested in making sure we have a live inode,
+	 * and we know that if we get a reference for i_count then we can safely
+	 * acquire i_obj_count because we always drop i_obj_count after dropping
+	 * an i_count reference.
+	 *
+	 * This is meant to be used either in a place where we have an existing
+	 * i_obj_count reference on the inode, or under rcu_read_lock() so we
+	 * know we're safe in accessing this inode still.
+	 */
+	if (!refcount_inc_not_zero(&inode->i_count)) {
+		/*
+		 * If we failed to increment the reference count, then the
+		 * inode is being freed or has been freed.  We return NULL
+		 * in this case.
+		 */
+		return NULL;
+	}
+	iobj_get(inode);
+	return inode;
+}
+
 /*
  * inode->i_lock must be held
  */
