@@ -3,7 +3,7 @@
  * CAN driver for esd electronics gmbh CAN-USB/2, CAN-USB/3 and CAN-USB/Micro
  *
  * Copyright (C) 2010-2012 esd electronic system design gmbh, Matthias Fuchs <socketcan@esd.eu>
- * Copyright (C) 2022-2024 esd electronics gmbh, Frank Jungclaus <frank.jungclaus@esd.eu>
+ * Copyright (C) 2022-2025 esd electronics gmbh, Frank Jungclaus <frank.jungclaus@esd.eu>
  */
 
 #include <linux/can.h>
@@ -43,6 +43,9 @@ MODULE_LICENSE("GPL v2");
 #define ESD_USB_CMD_SETBAUD		4 /* also used for SETBAUD_REPLY */
 #define ESD_USB_CMD_TS			5 /* also used for TS_REPLY */
 #define ESD_USB_CMD_IDADD		6 /* also used for IDADD_REPLY */
+
+/* esd version message name size */
+#define ESD_USB_FW_NAME_SZ 16
 
 /* esd CAN message flags - dlc field */
 #define ESD_USB_RTR	BIT(4)
@@ -95,6 +98,7 @@ MODULE_LICENSE("GPL v2");
 #define ESD_USB_RX_BUFFER_SIZE		1024
 #define ESD_USB_MAX_RX_URBS		4
 #define ESD_USB_MAX_TX_URBS		16 /* must be power of 2 */
+#define ESD_USB_DRAIN_TIMEOUT_MS	100
 
 /* Modes for CAN-USB/3, to be used for esd_usb_3_set_baudrate_msg_x.mode */
 #define ESD_USB_3_BAUDRATE_MODE_DISABLE		0 /* remove from bus */
@@ -131,7 +135,7 @@ struct esd_usb_version_reply_msg {
 	u8 nets;
 	u8 features;
 	__le32 version;
-	u8 name[16];
+	u8 name[ESD_USB_FW_NAME_SZ];
 	__le32 rsvd;
 	__le32 ts;
 };
@@ -625,17 +629,106 @@ static int esd_usb_send_msg(struct esd_usb *dev, union esd_usb_msg *msg)
 			    1000);
 }
 
-static int esd_usb_wait_msg(struct esd_usb *dev,
-			    union esd_usb_msg *msg)
+static int esd_usb_req_version(struct esd_usb *dev)
 {
-	int actual_length;
+	union esd_usb_msg *msg;
+	int err;
 
-	return usb_bulk_msg(dev->udev,
-			    usb_rcvbulkpipe(dev->udev, 1),
-			    msg,
-			    sizeof(*msg),
-			    &actual_length,
-			    1000);
+	msg = kmalloc(sizeof(*msg), GFP_KERNEL);
+	if (!msg)
+		return -ENOMEM;
+
+	msg->hdr.cmd = ESD_USB_CMD_VERSION;
+	msg->hdr.len = sizeof(struct esd_usb_version_msg) / sizeof(u32); /* # of 32bit words */
+	msg->version.rsvd = 0;
+	msg->version.flags = 0;
+	msg->version.drv_version = 0;
+
+	err = esd_usb_send_msg(dev, msg);
+	kfree(msg);
+	return err;
+}
+
+static int esd_usb_recv_version(struct esd_usb *dev)
+{
+	/* Device hardware has 2 RX buffers with ESD_USB_RX_BUFFER_SIZE, * 4 to give some slack. */
+	const int max_drain_bytes = (4 * ESD_USB_RX_BUFFER_SIZE);
+	unsigned long end_jiffies;
+	void *rx_buf;
+	int cnt_other = 0;
+	int cnt_ts = 0;
+	int cnt_vs = 0;
+	int len_sum = 0;
+	int attempt = 0;
+	int err;
+
+	rx_buf = kmalloc(ESD_USB_RX_BUFFER_SIZE, GFP_KERNEL);
+	if (!rx_buf)
+		return -ENOMEM;
+
+	end_jiffies = jiffies + msecs_to_jiffies(ESD_USB_DRAIN_TIMEOUT_MS);
+	do {
+		int actual_length;
+		int pos;
+
+		err = usb_bulk_msg(dev->udev,
+				   usb_rcvbulkpipe(dev->udev, 1),
+				   rx_buf,
+				   ESD_USB_RX_BUFFER_SIZE,
+				   &actual_length,
+				   ESD_USB_DRAIN_TIMEOUT_MS);
+		dev_dbg(&dev->udev->dev, "AT %d, LEN %d, ERR %d\n", attempt, actual_length, err);
+		++attempt;
+		if (err)
+			goto bail;
+		if (actual_length == 0)
+			continue;
+
+		err = -ENOENT;
+		len_sum += actual_length;
+		pos = 0;
+		while (pos < actual_length - sizeof(struct esd_usb_header_msg)) {
+			union esd_usb_msg *p_msg;
+
+			p_msg = (union esd_usb_msg *)(rx_buf + pos);
+
+			pos += p_msg->hdr.len * sizeof(u32); /* convert to # of bytes */
+			if (pos > actual_length) {
+				dev_err(&dev->udev->dev, "format error\n");
+				err = -EPROTO;
+				goto bail;
+			}
+
+			switch (p_msg->hdr.cmd) {
+			case ESD_USB_CMD_VERSION:
+				++cnt_vs;
+				dev->net_count = min(p_msg->version_reply.nets, ESD_USB_MAX_NETS);
+				dev->version = le32_to_cpu(p_msg->version_reply.version);
+				err = 0;
+				dev_dbg(&dev->udev->dev, "TS 0x%08x, V 0x%08x, N %u, F 0x%02x, %.*s\n",
+					le32_to_cpu(p_msg->version_reply.ts),
+					le32_to_cpu(p_msg->version_reply.version),
+					p_msg->version_reply.nets,
+					p_msg->version_reply.features,
+					ESD_USB_FW_NAME_SZ, p_msg->version_reply.name);
+				break;
+			case ESD_USB_CMD_TS:
+				++cnt_ts;
+				dev_dbg(&dev->udev->dev, "TS 0x%08x\n",
+					le32_to_cpu(p_msg->rx.ts));
+				break;
+			default:
+				++cnt_other;
+				dev_dbg(&dev->udev->dev, "HDR %d\n", p_msg->hdr.cmd);
+				break;
+			}
+		}
+	} while (cnt_vs == 0 && len_sum < max_drain_bytes && time_before(jiffies, end_jiffies));
+bail:
+	dev_dbg(&dev->udev->dev, "RC=%d; ATT=%d, TS=%d, VS=%d, O=%d, B=%d\n",
+		err, attempt, cnt_ts, cnt_vs, cnt_other, len_sum);
+	kfree(rx_buf);
+	return err;
 }
 
 static int esd_usb_setup_rx_urbs(struct esd_usb *dev)
@@ -1273,13 +1366,12 @@ static int esd_usb_probe(struct usb_interface *intf,
 			 const struct usb_device_id *id)
 {
 	struct esd_usb *dev;
-	union esd_usb_msg *msg;
 	int i, err;
 
 	dev = kzalloc(sizeof(*dev), GFP_KERNEL);
 	if (!dev) {
 		err = -ENOMEM;
-		goto done;
+		goto bail;
 	}
 
 	dev->udev = interface_to_usbdev(intf);
@@ -1288,33 +1380,18 @@ static int esd_usb_probe(struct usb_interface *intf,
 
 	usb_set_intfdata(intf, dev);
 
-	msg = kmalloc(sizeof(*msg), GFP_KERNEL);
-	if (!msg) {
-		err = -ENOMEM;
-		goto free_msg;
-	}
-
 	/* query number of CAN interfaces (nets) */
-	msg->hdr.cmd = ESD_USB_CMD_VERSION;
-	msg->hdr.len = sizeof(struct esd_usb_version_msg) / sizeof(u32); /* # of 32bit words */
-	msg->version.rsvd = 0;
-	msg->version.flags = 0;
-	msg->version.drv_version = 0;
-
-	err = esd_usb_send_msg(dev, msg);
+	err = esd_usb_req_version(dev);
 	if (err < 0) {
 		dev_err(&intf->dev, "sending version message failed\n");
-		goto free_msg;
+		goto bail;
 	}
 
-	err = esd_usb_wait_msg(dev, msg);
+	err = esd_usb_recv_version(dev);
 	if (err < 0) {
 		dev_err(&intf->dev, "no version message answer\n");
-		goto free_msg;
+		goto bail;
 	}
-
-	dev->net_count = (int)msg->version_reply.nets;
-	dev->version = le32_to_cpu(msg->version_reply.version);
 
 	if (device_create_file(&intf->dev, &dev_attr_firmware))
 		dev_err(&intf->dev,
@@ -1332,11 +1409,9 @@ static int esd_usb_probe(struct usb_interface *intf,
 	for (i = 0; i < dev->net_count; i++)
 		esd_usb_probe_one_net(intf, i);
 
-free_msg:
-	kfree(msg);
+bail:
 	if (err)
 		kfree(dev);
-done:
 	return err;
 }
 
