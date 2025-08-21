@@ -2949,9 +2949,19 @@ static inline int i40e_check_vf_permission(struct i40e_vf *vf,
 	 * all VFs.
 	 */
 	} else {
-		if ((i40e_count_filters(vsi) + mac2add_cnt) >
+		/* Enforce per-VF MAC filter limit only if enabled by
+		 * user/module param "max_mac_per_vf",
+		 * Currently, the parameter is used as a flag to indicate
+		 * whether the per-VF MAC limit should be enabled or not.
+		 *
+		 * If future work introduces VF MAC limits through devlink
+		 * resources, we can still use "max_mac_per_vf" as a fallback
+		 * for the maximum number of MACs per VF.
+		 */
+		if (((i40e_count_filters(vsi) + mac2add_cnt) >
 		    I40E_VC_MAX_MACVLAN_PER_TRUSTED_VF(pf->num_alloc_vfs,
-						       hw->num_ports)) {
+						       hw->num_ports)) &&
+						       pf->max_mac_per_vf) {
 			dev_err(&pf->pdev->dev,
 				"Cannot add more MAC addresses, trusted VF exhausted it's resources\n");
 			return -EPERM;

@@ -7,6 +7,25 @@ i40e devlink support
 This document describes the devlink features implemented by the ``i40e``
 device driver.
 
+Parameters
+==========
+
+.. list-table:: Driver specific parameters implemented
+    :widths: 5 5 90
+
+    * - Name
+      - Mode
+      - Description
+    * - ``max_mac_per_vf``
+      - runtime
+      - Determines whether the per-VF MAC filter limit is enforced on i40e devices.
+        When set to 0: no limit is enforced, and each VF can request any
+        number of MAC addresses (legacy behavior).
+        When set to non-zero: the driver enforces a calculated per-VF MAC filter limit
+        based on the number of allocated VFs.
+
+        Default value of ``max_mac_per_vf`` parameter is ``0``.
+
 Info versions
 =============
 
