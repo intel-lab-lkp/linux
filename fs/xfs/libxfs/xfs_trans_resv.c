@@ -1152,7 +1152,7 @@ xfs_calc_attrsetm_reservation(
  * Since the runtime attribute transaction space is dependent on the total
  * blocks needed for the 1st bmap, here we calculate out the space unit for
  * one block so that the caller could figure out the total space according
- * to the attibute extent length in blocks by:
+ * to the attribute extent length in blocks by:
  *	ext * M_RES(mp)->tr_attrsetrt.tr_logres
  */
 STATIC uint
