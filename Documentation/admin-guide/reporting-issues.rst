@@ -471,8 +471,8 @@ before proceeding.
 
 Note, you might not be aware that your system is using one of these solutions:
 they often get set up silently when you install Nvidia's proprietary graphics
-driver, VirtualBox, or other software that requires a some support from a
-module not part of the Linux kernel. That why your might need to uninstall the
+driver, VirtualBox, or other software that requires some support from a
+module not part of the Linux kernel. That's why you might need to uninstall the
 packages with such software to get rid of any 3rd party kernel module.
 
 
