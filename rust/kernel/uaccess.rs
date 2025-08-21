@@ -7,7 +7,7 @@
 use crate::{
     alloc::{Allocator, Flags},
     bindings,
-    error::Result,
+    error::{to_result, Result},
     ffi::{c_char, c_void},
     prelude::*,
     transmute::{AsBytes, FromBytes},
@@ -495,9 +495,7 @@ fn raw_strncpy_from_user(dst: &mut [MaybeUninit<u8>], src: UserPtr) -> Result<us
         )
     };
 
-    if res < 0 {
-        return Err(Error::from_errno(res as i32));
-    }
+    to_result(res as i32)?;
 
     #[cfg(CONFIG_RUST_OVERFLOW_CHECKS)]
     assert!(res <= len);
