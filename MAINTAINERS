@@ -26959,6 +26959,7 @@ VORTEX HARDWARE SUPPORT
 R:	Marcos Del Sol Vives <marcos@orca.pet>
 S:	Maintained
 F:	drivers/gpio/gpio-vortex.c
+F:	drivers/mfd/vortex-sb.c
 
 VRF
 M:	David Ahern <dsahern@kernel.org>
