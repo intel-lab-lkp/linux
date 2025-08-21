@@ -104,9 +104,9 @@
 #include <linux/sunrpc/svc_rdma.h>
 
 #include "xprt_rdma.h"
-#include <trace/events/rpcrdma.h>
+#include "pool.h"
 
-static void svc_rdma_wc_receive(struct ib_cq *cq, struct ib_wc *wc);
+#include <trace/events/rpcrdma.h>
 
 static inline struct svc_rdma_recv_ctxt *
 svc_rdma_next_recv_ctxt(struct list_head *list)
@@ -115,14 +115,14 @@ svc_rdma_next_recv_ctxt(struct list_head *list)
 					rc_list);
 }
 
+static void svc_rdma_wc_receive(struct ib_cq *cq, struct ib_wc *wc);
+
 static struct svc_rdma_recv_ctxt *
 svc_rdma_recv_ctxt_alloc(struct svcxprt_rdma *rdma)
 {
 	int node = ibdev_to_node(rdma->sc_cm_id->device);
 	struct svc_rdma_recv_ctxt *ctxt;
 	unsigned long pages;
-	dma_addr_t addr;
-	void *buffer;
 
 	pages = svc_serv_maxpages(rdma->sc_xprt.xpt_server);
 	ctxt = kzalloc_node(struct_size(ctxt, rc_pages, pages),
@@ -130,13 +130,10 @@ svc_rdma_recv_ctxt_alloc(struct svcxprt_rdma *rdma)
 	if (!ctxt)
 		goto fail0;
 	ctxt->rc_maxpages = pages;
-	buffer = kmalloc_node(rdma->sc_max_req_size, GFP_KERNEL, node);
-	if (!buffer)
+
+	if (!rpcrdma_pool_buffer_alloc(rdma->sc_recv_pool, GFP_KERNEL,
+				       &ctxt->rc_recv_buf, &ctxt->rc_recv_sge))
 		goto fail1;
-	addr = ib_dma_map_single(rdma->sc_pd->device, buffer,
-				 rdma->sc_max_req_size, DMA_FROM_DEVICE);
-	if (ib_dma_mapping_error(rdma->sc_pd->device, addr))
-		goto fail2;
 
 	svc_rdma_recv_cid_init(rdma, &ctxt->rc_cid);
 	pcl_init(&ctxt->rc_call_pcl);
@@ -149,28 +146,13 @@ svc_rdma_recv_ctxt_alloc(struct svcxprt_rdma *rdma)
 	ctxt->rc_recv_wr.sg_list = &ctxt->rc_recv_sge;
 	ctxt->rc_recv_wr.num_sge = 1;
 	ctxt->rc_cqe.done = svc_rdma_wc_receive;
-	ctxt->rc_recv_sge.addr = addr;
-	ctxt->rc_recv_sge.length = rdma->sc_max_req_size;
-	ctxt->rc_recv_sge.lkey = rdma->sc_pd->local_dma_lkey;
-	ctxt->rc_recv_buf = buffer;
 	svc_rdma_cc_init(rdma, &ctxt->rc_cc);
 	return ctxt;
 
-fail2:
-	kfree(buffer);
 fail1:
 	kfree(ctxt);
 fail0:
 	return NULL;
-}
-
-static void svc_rdma_recv_ctxt_destroy(struct svcxprt_rdma *rdma,
-				       struct svc_rdma_recv_ctxt *ctxt)
-{
-	ib_dma_unmap_single(rdma->sc_pd->device, ctxt->rc_recv_sge.addr,
-			    ctxt->rc_recv_sge.length, DMA_FROM_DEVICE);
-	kfree(ctxt->rc_recv_buf);
-	kfree(ctxt);
 }
 
 /**
@@ -185,8 +167,9 @@ void svc_rdma_recv_ctxts_destroy(struct svcxprt_rdma *rdma)
 
 	while ((node = llist_del_first(&rdma->sc_recv_ctxts))) {
 		ctxt = llist_entry(node, struct svc_rdma_recv_ctxt, rc_node);
-		svc_rdma_recv_ctxt_destroy(rdma, ctxt);
+		kfree(ctxt);
 	}
+	rpcrdma_pool_destroy(rdma->sc_recv_pool);
 }
 
 /**
@@ -306,6 +289,12 @@ err_free:
 bool svc_rdma_post_recvs(struct svcxprt_rdma *rdma)
 {
 	unsigned int total;
+
+	rdma->sc_recv_pool = rpcrdma_pool_create(rdma->sc_pd,
+						 rdma->sc_max_req_size,
+						 GFP_KERNEL);
+	if (!rdma->sc_recv_pool)
+		return false;
 
 	/* For each credit, allocate enough recv_ctxts for one
 	 * posted Receive and one RPC in process.
@@ -962,9 +951,7 @@ int svc_rdma_recvfrom(struct svc_rqst *rqstp)
 		return 0;
 
 	percpu_counter_inc(&svcrdma_stat_recv);
-	ib_dma_sync_single_for_cpu(rdma_xprt->sc_pd->device,
-				   ctxt->rc_recv_sge.addr, ctxt->rc_byte_len,
-				   DMA_FROM_DEVICE);
+	rpcrdma_pool_buffer_sync(rdma_xprt->sc_recv_pool, &ctxt->rc_recv_sge);
 	svc_rdma_build_arg_xdr(rqstp, ctxt);
 
 	ret = svc_rdma_xdr_decode_req(&rqstp->rq_arg, ctxt);
