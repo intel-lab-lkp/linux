@@ -496,6 +496,7 @@
 #define X86_FEATURE_TSA_L1_NO		(21*32+12) /* AMD CPU not vulnerable to TSA-L1 */
 #define X86_FEATURE_CLEAR_CPU_BUF_VM	(21*32+13) /* Clear CPU buffers using VERW before VMRUN */
 #define X86_FEATURE_MSR_IMM		(21*32+14) /* MSR immediate form instructions */
+#define X86_FEATURE_X2AVIC_EXT		(21*32+15) /* AMD SVM x2AVIC support for 4k vCPUs */
 
 /*
  * BUG word(s)
