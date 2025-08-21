@@ -212,7 +212,9 @@ static inline enum cp_reason_type need_do_checkpoint(struct inode *inode)
 
 	if (!S_ISREG(inode->i_mode))
 		cp_reason = CP_NON_REGULAR;
-	else if (f2fs_compressed_file(inode))
+	else if (f2fs_compressed_file(inode) &&
+		 !(F2FS_I(inode)->i_compress_flag &
+			 BIT(COMPRESS_SKIP_WRITE_CP)))
 		cp_reason = CP_COMPRESSED;
 	else if (inode->i_nlink != 1)
 		cp_reason = CP_HARDLINK;
@@ -5234,6 +5236,11 @@ static ssize_t f2fs_file_write_iter(struct kiocb *iocb, struct iov_iter *from)
 			f2fs_dio_write_iter(iocb, from, &may_need_sync) :
 			f2fs_buffered_write_iter(iocb, from);
 
+		/* skip checkpoint for normal write compress file */
+		if (f2fs_compressed_file(inode))
+			F2FS_I(inode)->i_compress_flag |=
+				BIT(COMPRESS_SKIP_WRITE_CP);
+
 		trace_f2fs_datawrite_end(inode, orig_pos, ret);
 	}
 
@@ -5250,13 +5257,16 @@ static ssize_t f2fs_file_write_iter(struct kiocb *iocb, struct iov_iter *from)
 	}
 
 	clear_inode_flag(inode, FI_PREALLOCATED_ALL);
+
+	if (ret > 0 && may_need_sync)
+		ret = generic_write_sync(iocb, ret);
+
+	if (f2fs_compressed_file(inode))
+		F2FS_I(inode)->i_compress_flag &= ~BIT(COMPRESS_SKIP_WRITE_CP);
 out_unlock:
 	inode_unlock(inode);
 out:
 	trace_f2fs_file_write_iter(inode, orig_pos, orig_count, ret);
-
-	if (ret > 0 && may_need_sync)
-		ret = generic_write_sync(iocb, ret);
 
 	/* If buffered IO was forced, flush and drop the data from
 	 * the page cache to preserve O_DIRECT semantics

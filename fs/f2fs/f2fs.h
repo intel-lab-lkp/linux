@@ -1531,6 +1531,7 @@ enum compress_algorithm_type {
 
 enum compress_flag {
 	COMPRESS_CHKSUM,
+	COMPRESS_SKIP_WRITE_CP,
 	COMPRESS_MAX_FLAG,
 };
 
