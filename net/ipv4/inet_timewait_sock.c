@@ -15,7 +15,7 @@
 #include <net/inet_hashtables.h>
 #include <net/inet_timewait_sock.h>
 #include <net/ip.h>
-
+#include <net/tcp.h>
 
 /**
  *	inet_twsk_bind_unhash - unhash a timewait socket from bind hash
@@ -73,7 +73,7 @@ static void inet_twsk_kill(struct inet_timewait_sock *tw)
 
 void inet_twsk_free(struct inet_timewait_sock *tw)
 {
-	twsk_destructor((struct sock *)tw);
+	tcp_twsk_destructor((struct sock *)tw);
 	kfree(tw);
 }
 
