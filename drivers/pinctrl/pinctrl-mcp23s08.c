@@ -574,16 +574,11 @@ static int mcp23s08_irq_setup(struct mcp23s08 *mcp)
 {
 	struct gpio_chip *chip = &mcp->chip;
 	int err;
-	unsigned long irqflags = IRQF_ONESHOT | IRQF_SHARED;
-
-	if (mcp->irq_active_high)
-		irqflags |= IRQF_TRIGGER_HIGH;
-	else
-		irqflags |= IRQF_TRIGGER_LOW;
 
 	err = devm_request_threaded_irq(chip->parent, mcp->irq, NULL,
 					mcp23s08_irq,
-					irqflags, dev_name(chip->parent), mcp);
+					IRQF_ONESHOT | IRQF_SHARED,
+					dev_name(chip->parent), mcp);
 	if (err != 0) {
 		dev_err(chip->parent, "unable to request IRQ#%d: %d\n",
 			mcp->irq, err);
