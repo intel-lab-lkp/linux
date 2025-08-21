@@ -580,10 +580,11 @@ int v4l2_fill_pixfmt_mp(struct v4l2_pix_format_mplane *pixfmt, u32 pixelformat,
 #ifdef CONFIG_MEDIA_CONTROLLER
 #define v4l2_get_link_freq(pad, mul, div)				\
 	_Generic(pad,							\
+		 const struct media_pad *: __v4l2_get_link_freq_pad,	\
 		 struct media_pad *: __v4l2_get_link_freq_pad,		\
 		 struct v4l2_ctrl_handler *: __v4l2_get_link_freq_ctrl)	\
 	(pad, mul, div)
-s64 __v4l2_get_link_freq_pad(struct media_pad *pad, unsigned int mul,
+s64 __v4l2_get_link_freq_pad(const struct media_pad *pad, unsigned int mul,
 			     unsigned int div);
 #else
 #define v4l2_get_link_freq(handler, mul, div)		\
