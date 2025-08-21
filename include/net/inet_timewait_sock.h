@@ -48,7 +48,6 @@ struct inet_timewait_sock {
 #define tw_tx_queue_mapping	__tw_common.skc_tx_queue_mapping
 #define tw_rx_queue_mapping	__tw_common.skc_rx_queue_mapping
 #define tw_hash			__tw_common.skc_hash
-#define tw_prot			__tw_common.skc_prot
 #define tw_net			__tw_common.skc_net
 #define tw_daddr        	__tw_common.skc_daddr
 #define tw_v6_daddr		__tw_common.skc_v6_daddr

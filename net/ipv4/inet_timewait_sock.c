@@ -73,10 +73,8 @@ static void inet_twsk_kill(struct inet_timewait_sock *tw)
 
 void inet_twsk_free(struct inet_timewait_sock *tw)
 {
-	struct module *owner = tw->tw_prot->owner;
 	twsk_destructor((struct sock *)tw);
-	kmem_cache_free(tw->tw_prot->twsk_prot->twsk_slab, tw);
-	module_put(owner);
+	kfree(tw);
 }
 
 void inet_twsk_put(struct inet_timewait_sock *tw)
@@ -206,7 +204,6 @@ struct inet_timewait_sock *inet_twsk_alloc(const struct sock *sk,
 		tw->tw_hash	    = sk->sk_hash;
 		tw->tw_ipv6only	    = 0;
 		tw->tw_transparent  = inet_test_bit(TRANSPARENT, sk);
-		tw->tw_prot	    = sk->sk_prot_creator;
 		atomic64_set(&tw->tw_cookie, atomic64_read(&sk->sk_cookie));
 		twsk_net_set(tw, sock_net(sk));
 		timer_setup(&tw->tw_timer, tw_timer_handler, 0);
@@ -216,8 +213,6 @@ struct inet_timewait_sock *inet_twsk_alloc(const struct sock *sk,
 		 * timewait socket.
 		 */
 		refcount_set(&tw->tw_refcnt, 0);
-
-		__module_get(tw->tw_prot->owner);
 	}
 
 	return tw;
