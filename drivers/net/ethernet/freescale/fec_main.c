@@ -1148,8 +1148,8 @@ fec_restart(struct net_device *ndev)
 	u32 rcntl = FEC_RCR_MII;
 	u32 ecntl = FEC_ECR_ETHEREN;
 
-	if (fep->max_buf_size == OPT_FRAME_SIZE)
-		rcntl |= (fep->max_buf_size << 16);
+	if (OPT_FRAME_SIZE != 0)
+		rcntl |= (fep->rx_frame_size << 16);
 
 	if (fep->bufdesc_ex)
 		fec_ptp_save_state(fep);
@@ -1194,7 +1194,7 @@ fec_restart(struct net_device *ndev)
 		else
 			val &= ~FEC_RACC_OPTIONS;
 		writel(val, fep->hwp + FEC_RACC);
-		writel(fep->max_buf_size, fep->hwp + FEC_FTRL);
+		writel(fep->rx_frame_size, fep->hwp + FEC_FTRL);
 	}
 #endif
 
@@ -4563,6 +4563,7 @@ fec_probe(struct platform_device *pdev)
 	pinctrl_pm_select_sleep_state(&pdev->dev);
 
 	fep->pagepool_order = 0;
+	fep->rx_frame_size = FEC_ENET_RX_FRSIZE;
 	fep->max_buf_size = PKT_MAXBUF_SIZE;
 	ndev->max_mtu = fep->max_buf_size - ETH_HLEN - ETH_FCS_LEN;
 
