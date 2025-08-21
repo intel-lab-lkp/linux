@@ -1077,6 +1077,17 @@ config GPIO_TS5500
 	  blocks of the TS-5500: DIO1, DIO2 and the LCD port, and the TS-5600
 	  LCD port.
 
+config GPIO_VORTEX
+	tristate "Vortex SoC GPIO support"
+	select REGMAP_MMIO
+	select GPIO_REGMAP
+	help
+	  Driver to access the five 8-bit bidirectional GPIO ports present on
+	  all DM&P Vortex SoCs.
+
+	  To compile this driver as a module, choose M here: the module will
+	  be called gpio-vortex.
+
 config GPIO_WINBOND
 	tristate "Winbond Super I/O GPIO support"
 	select ISA_BUS_API
