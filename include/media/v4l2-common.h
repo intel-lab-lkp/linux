@@ -566,9 +566,11 @@ int v4l2_fill_pixfmt_mp(struct v4l2_pix_format_mplane *pixfmt, u32 pixelformat,
  *	 times two on D-PHY, 1 on parallel. 0 otherwise.
  *
  * This function is intended for obtaining the link frequency from the
- * transmitter sub-device's pad. It returns the link rate, either from the
- * V4L2_CID_LINK_FREQ control implemented by the transmitter, or value
- * calculated based on the V4L2_CID_PIXEL_RATE implemented by the transmitter.
+ * transmitter sub-device's @pad. It returns the link rate, primarily obtained
+ * through the get_mbus_config sub-device pad operation or secondarily through
+ * either from the V4L2_CID_LINK_FREQ control implemented by the transmitter, or
+ * value calculated based on the V4L2_CID_PIXEL_RATE implemented by the
+ * transmitter.
  *
  * Return:
  * * >0: Link frequency
