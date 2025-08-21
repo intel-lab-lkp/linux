@@ -3144,10 +3144,19 @@ void pci_d3cold_disable(struct pci_dev *dev)
 }
 EXPORT_SYMBOL_GPL(pci_d3cold_disable);
 
-void pci_pm_power_up_and_verify_state(struct pci_dev *pci_dev)
+int pci_pm_power_up_and_verify_state(struct pci_dev *pci_dev)
 {
-	pci_power_up(pci_dev);
+	int ret;
+
+	ret = pci_power_up(pci_dev);
 	pci_update_current_state(pci_dev, PCI_D0);
+
+	if (ret < 0 && pci_dev->current_state == PCI_D3cold) {
+		dev_err(&pci_dev->dev, "Failed to power up device: %d\n", ret);
+		return ret;
+	}
+
+	return 0;
 }
 
 /**
