@@ -82,7 +82,7 @@ static struct drm_master*
 _drm_find_lessee(struct drm_master *master, int lessee_id)
 {
 	lockdep_assert_held(&master->dev->mode_config.idr_mutex);
-	return idr_find(&drm_lease_owner(master)->lessee_idr, lessee_id);
+	return xa_load(&drm_lease_owner(master)->lessee_xa, lessee_id);
 }
 
 static int _drm_lease_held_master(struct drm_master *master, int id)
@@ -210,7 +210,6 @@ static struct drm_master *drm_lease_create(struct drm_master *lessor, struct idr
 	int error;
 	struct drm_master *lessee;
 	int object;
-	int id;
 	void *entry;
 
 	drm_dbg_lease(dev, "lessor %d\n", lessor->lessee_id);
@@ -237,13 +236,11 @@ static struct drm_master *drm_lease_create(struct drm_master *lessor, struct idr
 	}
 
 	/* Insert the new lessee into the tree */
-	id = idr_alloc(&(drm_lease_owner(lessor)->lessee_idr), lessee, 1, 0, GFP_KERNEL);
-	if (id < 0) {
-		error = id;
+	error = xa_alloc(&drm_lease_owner(lessor)->lessee_xa,
+			&lessee->lessee_id, lessee, xa_limit_32b, GFP_KERNEL);
+	if (error < 0)
 		goto out_lessee;
-	}
 
-	lessee->lessee_id = id;
 	lessee->lessor = drm_master_get(lessor);
 	list_add_tail(&lessee->lessee_list, &lessor->lessees);
 
@@ -276,11 +273,11 @@ void drm_lease_destroy(struct drm_master *master)
 	 */
 	WARN_ON(!list_empty(&master->lessees));
 
-	/* Remove this master from the lessee idr in the owner */
+	/* Remove this master from the lessee array in the owner */
 	if (master->lessee_id != 0) {
 		drm_dbg_lease(dev, "remove master %d from device list of lessees\n",
 			      master->lessee_id);
-		idr_remove(&(drm_lease_owner(master)->lessee_idr), master->lessee_id);
+		xa_erase(&drm_lease_owner(master)->lessee_xa, master->lessee_id);
 	}
 
 	/* Remove this master from any lessee list it may be on */
