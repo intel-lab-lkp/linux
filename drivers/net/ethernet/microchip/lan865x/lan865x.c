@@ -314,12 +314,22 @@ static int lan865x_net_open(struct net_device *netdev)
 	return 0;
 }
 
+static int lan865x_eth_ioctl(struct net_device *netdev, struct ifreq *rq,
+			     int cmd)
+{
+	if (!netif_running(netdev))
+		return -EINVAL;
+
+	return phy_mii_ioctl(netdev->phydev, rq, cmd);
+}
+
 static const struct net_device_ops lan865x_netdev_ops = {
 	.ndo_open		= lan865x_net_open,
 	.ndo_stop		= lan865x_net_close,
 	.ndo_start_xmit		= lan865x_send_packet,
 	.ndo_set_rx_mode	= lan865x_set_multicast_list,
 	.ndo_set_mac_address	= lan865x_set_mac_address,
+	.ndo_eth_ioctl          = lan865x_eth_ioctl,
 };
 
 static int lan865x_probe(struct spi_device *spi)
