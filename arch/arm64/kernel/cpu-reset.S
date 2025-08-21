@@ -37,6 +37,10 @@ SYM_TYPED_FUNC_START(cpu_soft_restart)
 	 * regime if HCR_EL2.E2H == 1
 	 */
 	msr	sctlr_el1, x12
+
+	mov_q	x12, INIT_SCTLR2_EL1
+	set_sctlr2_elx	1, x12, x8
+
 	isb
 
 	cbz	x0, 1f				// el2_switch?
