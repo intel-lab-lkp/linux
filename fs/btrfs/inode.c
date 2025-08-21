@@ -864,7 +864,6 @@ static void compress_file_range(struct btrfs_work *work)
 	unsigned long nr_folios;
 	unsigned long total_compressed = 0;
 	unsigned long total_in = 0;
-	unsigned int poff;
 	int i;
 	int compress_type = fs_info->compress_type;
 	int compress_level = fs_info->compress_level;
@@ -965,14 +964,6 @@ again:
 		goto mark_incompressible;
 
 	/*
-	 * Zero the tail end of the last page, as we might be sending it down
-	 * to disk.
-	 */
-	poff = offset_in_page(total_compressed);
-	if (poff)
-		folio_zero_range(folios[nr_folios - 1], poff, PAGE_SIZE - poff);
-
-	/*
 	 * Try to create an inline extent.
 	 *
 	 * If we didn't compress the entire range, try to create an uncompressed
@@ -998,15 +989,7 @@ again:
 	 * block size boundary so the allocator does sane things.
 	 */
 	total_compressed = ALIGN(total_compressed, blocksize);
-
-	/*
-	 * One last check to make sure the compression is really a win, compare
-	 * the page count read with the blocks on disk, compression must free at
-	 * least one sector.
-	 */
 	total_in = round_up(total_in, fs_info->sectorsize);
-	if (total_compressed + blocksize > total_in)
-		goto mark_incompressible;
 
 	/*
 	 * The async work queues will take care of doing actual allocation on
