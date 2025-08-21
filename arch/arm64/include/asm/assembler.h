@@ -738,6 +738,21 @@ alternative_endif
 	set_sctlr sctlr_el2, \reg
 .endm
 
+/* Set SCTLR2_ELx to the @reg value. */
+.macro set_sctlr2_elx, el, reg, tmp
+	mrs_s	\tmp, SYS_ID_AA64MMFR3_EL1
+	ubfx	\tmp, \tmp, #ID_AA64MMFR3_EL1_SCTLRX_SHIFT, #4
+	cbz	\tmp, .Lskip_sctlr2_\@
+	.if	\el == 2
+	msr_s	SYS_SCTLR2_EL2, \reg
+	.elseif	\el == 12
+	msr_s	SYS_SCTLR2_EL12, \reg
+	.else
+	msr_s	SYS_SCTLR2_EL1, \reg
+	.endif
+.Lskip_sctlr2_\@:
+.endm
+
 	/*
 	 * Check whether asm code should yield as soon as it is able. This is
 	 * the case if we are currently running in task context, and the

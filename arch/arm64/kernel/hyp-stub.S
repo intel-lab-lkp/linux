@@ -144,7 +144,17 @@ SYM_CODE_START_LOCAL(__finalise_el2)
 
 .Lskip_indirection:
 .Lskip_tcr2:
+	mrs_s	x1, SYS_ID_AA64MMFR3_EL1
+	ubfx	x1, x1, #ID_AA64MMFR3_EL1_SCTLRX_SHIFT, #4
+	cbz	x1, .Lskip_sctlr2
+	mrs_s	x1, SYS_SCTLR2_EL12
+	msr_s	SYS_SCTLR2_EL1, x1
 
+	// clean SCTLR2_EL1
+	mov_q	x1, INIT_SCTLR2_EL1
+	msr_s	SYS_SCTLR2_EL12, x1
+
+.Lskip_sctlr2:
 	isb
 
 	// Hack the exception return to stay at EL2
