@@ -330,7 +330,9 @@ kci_test_promote_secondaries()
 	for i in $(seq 2 254);do
 		IP="10.23.11.$i"
 		ip -f inet addr add $IP/16 brd + dev "$devdummy"
-		ifconfig "$devdummy" $IP netmask 255.255.0.0
+		if command -v ifconfig >/dev/null 2>&1; then
+			ifconfig "$devdummy" $IP netmask 255.255.0.0
+		fi
 	done
 
 	ip addr flush dev "$devdummy"
@@ -1200,6 +1202,12 @@ do_test_address_proto()
 	local count
 	local ret=0
 	local err
+
+	run_cmd_grep 'proto' ip address help
+	if [ $? -ne 0 ];then
+		end_test "SKIP: addr proto ${what}: iproute2 too old"
+		return $ksft_skip
+	fi
 
 	ip address add dev "$devdummy" "$addr3"
 	check_err $?
