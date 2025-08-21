@@ -185,6 +185,20 @@ int avic_ga_log_notifier(u32 ga_tag)
 	return 0;
 }
 
+int avic_alloc_physical_id_table(struct kvm *kvm)
+{
+	struct kvm_svm *kvm_svm = to_kvm_svm(kvm);
+
+	if (kvm_svm->avic_physical_id_table || !enable_apicv || !irqchip_in_kernel(kvm))
+		return 0;
+
+	kvm_svm->avic_physical_id_table = (void *)get_zeroed_page(GFP_KERNEL_ACCOUNT);
+	if (!kvm_svm->avic_physical_id_table)
+		return -ENOMEM;
+
+	return 0;
+}
+
 void avic_vm_destroy(struct kvm *kvm)
 {
 	unsigned long flags;
@@ -211,10 +225,6 @@ int avic_vm_init(struct kvm *kvm)
 
 	if (!enable_apicv)
 		return 0;
-
-	kvm_svm->avic_physical_id_table = (void *)get_zeroed_page(GFP_KERNEL_ACCOUNT);
-	if (!kvm_svm->avic_physical_id_table)
-		goto free_avic;
 
 	kvm_svm->avic_logical_id_table = (void *)get_zeroed_page(GFP_KERNEL_ACCOUNT);
 	if (!kvm_svm->avic_logical_id_table)
