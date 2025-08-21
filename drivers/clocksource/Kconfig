@@ -152,6 +152,13 @@ config REALTEK_OTTO_TIMER
 	  RT8391, RTL8392, RTL8393 and RTL8396 and chips of the RTL930x series
 	  such as RTL9301, RTL9302 or RTL9303.
 
+config SSE_TIMER
+	bool "ARM SSE(Subsystems for Embedded) system timer driver"
+	depends on COMMON_CLK
+	default n
+	help
+	  Enables support for the ARM SSE(Subsystems for Embedded) system timer driver.
+
 config SUN4I_TIMER
 	bool "Sun4i timer driver" if COMPILE_TEST
 	depends on HAS_IOMEM
