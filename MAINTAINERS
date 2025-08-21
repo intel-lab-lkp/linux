@@ -17853,6 +17853,17 @@ F:	include/uapi/linux/unix_diag.h
 F:	net/unix/
 F:	tools/testing/selftests/net/af_unix/
 
+NETWORKING [NETMEM, NET_IOV & MEMORY PROVIDERS]
+L:	netdev@vger.kernel.org
+S:	Maintained
+Q:	https://patchwork.kernel.org/project/netdevbpf/list/
+B:	mailto:netdev@vger.kernel.org
+P:	Documentation/process/maintainer-netdev.rst
+T:	git git://git.kernel.org/pub/scm/linux/kernel/git/netdev/net.git
+T:	git git://git.kernel.org/pub/scm/linux/kernel/git/netdev/net-next.git
+F:	io_uring/zcrx.*
+K:	\bnet(mem_ref|_iov)\b
+
 NETXEN (1/10) GbE SUPPORT
 M:	Manish Chopra <manishc@marvell.com>
 M:	Rahul Verma <rahulv@marvell.com>
