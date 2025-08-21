@@ -2336,6 +2336,105 @@ DECLARE_EVENT_CLASS(rpcrdma_client_register_class,
 DEFINE_CLIENT_REGISTER_EVENT(rpcrdma_client_register);
 DEFINE_CLIENT_REGISTER_EVENT(rpcrdma_client_unregister);
 
+TRACE_EVENT(rpcrdma_pool_create,
+	TP_PROTO(
+		unsigned int poolid,
+		size_t bufsize
+	),
+
+	TP_ARGS(poolid, bufsize),
+
+	TP_STRUCT__entry(
+		__field(unsigned int, poolid)
+		__field(size_t, bufsize)
+	),
+
+	TP_fast_assign(
+		__entry->poolid = poolid;
+		__entry->bufsize = bufsize;
+	),
+
+	TP_printk("poolid=%u bufsize=%zu bytes",
+		__entry->poolid, __entry->bufsize
+	)
+);
+
+TRACE_EVENT(rpcrdma_pool_destroy,
+	TP_PROTO(
+		unsigned int poolid
+	),
+
+	TP_ARGS(poolid),
+
+	TP_STRUCT__entry(
+		__field(unsigned int, poolid)
+	),
+
+	TP_fast_assign(
+		__entry->poolid = poolid;),
+
+	TP_printk("poolid=%u",
+		__entry->poolid
+	)
+);
+
+DECLARE_EVENT_CLASS(rpcrdma_pool_shard_class,
+	TP_PROTO(
+		unsigned int poolid,
+		u32 shardid
+	),
+
+	TP_ARGS(poolid, shardid),
+
+	TP_STRUCT__entry(
+		__field(unsigned int, poolid)
+		__field(u32, shardid)
+	),
+
+	TP_fast_assign(
+		__entry->poolid = poolid;
+		__entry->shardid = shardid;
+	),
+
+	TP_printk("poolid=%u shardid=%u",
+		__entry->poolid, __entry->shardid
+	)
+);
+
+#define DEFINE_RPCRDMA_POOL_SHARD_EVENT(name)				\
+	DEFINE_EVENT(rpcrdma_pool_shard_class, name,			\
+	TP_PROTO(							\
+		unsigned int poolid,					\
+		u32 shardid						\
+	),								\
+	TP_ARGS(poolid, shardid))
+
+DEFINE_RPCRDMA_POOL_SHARD_EVENT(rpcrdma_pool_shard_new);
+DEFINE_RPCRDMA_POOL_SHARD_EVENT(rpcrdma_pool_shard_free);
+
+TRACE_EVENT(rpcrdma_pool_buffer,
+	TP_PROTO(
+		unsigned int poolid,
+		const void *buffer
+	),
+
+	TP_ARGS(poolid, buffer),
+
+	TP_STRUCT__entry(
+		__field(unsigned int, poolid)
+		__field(const void *, buffer)
+	),
+
+	TP_fast_assign(
+		__entry->poolid = poolid;
+		__entry->buffer = buffer;
+	),
+
+	TP_printk("poolid=%u buffer=%p",
+		__entry->poolid, __entry->buffer
+	)
+);
+
 #endif /* _TRACE_RPCRDMA_H */
 
 #include <trace/define_trace.h>
