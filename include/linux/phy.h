@@ -894,6 +894,74 @@ struct phy_led {
 #define to_phy_led(d) container_of(d, struct phy_led, led_cdev)
 
 /**
+ * struct phy_mse_config - Configuration for Mean Square Error (MSE) measurement
+ *
+ * Describes the MSE measurement capabilities for the current link mode. These
+ * properties are dynamic and may change when link settings are modified.
+ * Callers should re-query this configuration after any link state change to
+ * ensure they have the most up-to-date information.
+ *
+ * Callers should only request measurements for channels and types that are
+ * indicated as supported by the @supported_caps bitmask. If @supported_caps
+ * is 0, the device provides no MSE diagnostics, and driver operations should
+ * typically return -EOPNOTSUPP.
+ *
+ * Snapshot values for average and peak MSE can be normalized to a 0..1 ratio
+ * by dividing the raw snapshot by the corresponding @max_average_mse or
+ * @max_peak_mse value.
+ *
+ * @max_average_mse: The maximum value for an average MSE snapshot. This
+ *   defines the scale for the measurement. If the PHY_MSE_CAP_AVG capability is
+ *   supported, this value MUST be greater than 0.
+ * @max_peak_mse: The maximum value for a peak MSE snapshot. If either
+ *   PHY_MSE_CAP_PEAK or PHY_MSE_CAP_WORST_PEAK is supported, this value MUST
+ *   be greater than 0.
+ * @refresh_rate_ps: The typical interval, in picoseconds, between hardware
+ *   updates of the MSE values. This is an estimate, and callers should not
+ *   assume synchronous sampling.
+ * @num_symbols: The number of symbols aggregated per hardware sample to
+ *   calculate the MSE.
+ * @supported_caps: A bitmask of PHY_MSE_CAP_* values indicating which
+ *   measurement types (e.g., average, peak) and channels
+ *   (e.g., per-pair or link-wide) are supported.
+ */
+struct phy_mse_config {
+	u32 max_average_mse;
+	u32 max_peak_mse;
+	u64 refresh_rate_ps;
+	u64 num_symbols;
+	u32 supported_caps;
+};
+
+/**
+ * struct phy_mse_snapshot - A snapshot of Mean Square Error (MSE) diagnostics
+ *
+ * Holds a set of MSE diagnostic values that were all captured from a single
+ * measurement window.
+ *
+ * The @channel field is an input parameter specified by the caller. Drivers
+ * must validate the requested channel against the capabilities returned by
+ * get_mse_config(). If an unsupported channel is requested, the driver must
+ * return -EOPNOTSUPP and must not coerce the request to a different channel
+ * (e.g., changing a per-channel request to a link-wide one).
+ *
+ * @channel: Input: The requested channel for the measurement, which must
+ *   be one of the PHY_MSE_CHANNEL_* constants.
+ * @average_mse: The average MSE value over the measurement window.
+ * @peak_mse: The peak MSE value observed within the measurement window.
+ * @worst_peak_mse: A latched high-water mark of the peak MSE. This value
+ *   represents the worst (highest) peak seen since this field
+ *   was last read. It MUST be cleared by the driver or hardware
+ *   upon reading (i.e., it has read-to-clear semantics).
+ */
+struct phy_mse_snapshot {
+	u32 channel;
+	u32 average_mse;
+	u32 peak_mse;
+	u32 worst_peak_mse;
+};
+
+/**
  * struct phy_driver - Driver structure for a particular PHY type
  *
  * @mdiodrv: Data common to all MDIO devices
@@ -1173,6 +1241,53 @@ struct phy_driver {
 	int (*get_sqi)(struct phy_device *dev);
 	/** @get_sqi_max: Get the maximum signal quality indication */
 	int (*get_sqi_max)(struct phy_device *dev);
+
+	/**
+	 * @get_mse_config: Get configuration and scale of MSE measurement
+	 * @dev:    PHY device
+	 * @config: Output (filled on success)
+	 *
+	 * Fill @config with the PHY's MSE configuration for the current
+	 * link mode: scale limits (max_average_mse, max_peak_mse), update
+	 * interval (refresh_rate_ps), sample length (num_symbols) and the
+	 * capability bitmask (supported_caps).
+	 *
+	 * Implementations may defer configuration until hardware has
+	 * converged; in that case they should return -EAGAIN and allow the
+	 * caller to retry later.
+	 *
+	 * Return: 0 on success. On failure, returns a negative errno code, such
+	 * as -EOPNOTSUPP if MSE measurement is not supported by the PHY or in
+	 * the current link mode, or -EAGAIN if the configuration is not yet
+	 * available.
+	 */
+	int (*get_mse_config)(struct phy_device *dev,
+			      struct phy_mse_config *config);
+
+	/**
+	 * @get_mse_snapshot: Retrieve a snapshot of MSE diagnostic values
+	 * @dev:      PHY device
+	 * @channel:  Channel identifier (PHY_MSE_CHANNEL_*)
+	 * @snapshot: Output (filled on success)
+	 *
+	 * Fill @snapshot with a correlated set of MSE values from the most
+	 * recent measurement window.
+	 *
+	 * Callers must validate @channel against supported_caps returned by
+	 * get_mse_config(). Drivers must not coerce @channel; if the requested
+	 * selector is not implemented by the device or current link mode,
+	 * the operation must fail.
+	 *
+	 * On success, @snapshot->channel MUST equal the requested @channel.
+	 * worst_peak_mse is latched and must be treated as read-to-clear.
+	 *
+	 * Return: 0 on success. On failure, returns a negative errno code, such
+	 * as -EOPNOTSUPP if MSE measurement is not supported by the PHY or in
+	 * the current link mode, or -EAGAIN if the configuration is not yet
+	 * available.
+	 */
+	int (*get_mse_snapshot)(struct phy_device *dev, u32 channel,
+				struct phy_mse_snapshot *snapshot);
 
 	/* PLCA RS interface */
 	/** @get_plca_cfg: Return the current PLCA configuration */
