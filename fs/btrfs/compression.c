@@ -1025,6 +1025,43 @@ int btrfs_compress_filemap_get_folio(struct address_space *mapping, u64 start,
 }
 
 /*
+ * Fill the range between (total_out, round_up(total_out, blocksize)) with zero.
+ *
+ * If bs > ps, also allocate extra folios to ensure the compressed folios are aligned
+ * to block size.
+ */
+static int pad_compressed_folios(struct btrfs_fs_info *fs_info, struct folio **folios,
+				 unsigned long orig_len,  unsigned long *out_folios,
+				 unsigned long *total_out)
+{
+	const unsigned long aligned_len = round_up(*total_out, fs_info->sectorsize);
+	const unsigned long aligned_nr_folios = aligned_len >> PAGE_SHIFT;
+
+	ASSERT(aligned_nr_folios <= BTRFS_MAX_COMPRESSED_PAGES);
+	ASSERT(*out_folios == DIV_ROUND_UP_POW2(*total_out, PAGE_SIZE),
+	       "out_folios=%lu total_out=%lu", *out_folios, *total_out);
+
+	/* Zero the tailing part of the compressed folio. */
+	if (!IS_ALIGNED(*total_out, PAGE_SIZE))
+		folio_zero_range(folios[*total_out >> PAGE_SHIFT], offset_in_page(*total_out),
+				PAGE_SIZE - offset_in_page(*total_out));
+
+	/* Padding the compressed folios to blocksize. */
+	for (unsigned long cur = *out_folios; cur < aligned_nr_folios; cur++) {
+		struct folio *folio;
+
+		ASSERT(folios[cur] == NULL);
+		folio = btrfs_alloc_compr_folio();
+		if (!folio)
+			return -ENOMEM;
+		folios[cur] = folio;
+		folio_zero_range(folio, 0, PAGE_SIZE);
+		(*out_folios)++;
+	}
+	return 0;
+}
+
+/*
  * Given an address space and start and length, compress the bytes into @pages
  * that are allocated on demand.
  *
@@ -1033,7 +1070,7 @@ int btrfs_compress_filemap_get_folio(struct address_space *mapping, u64 start,
  * - compression algo are 0-3
  * - the level are bits 4-7
  *
- * @out_pages is an in/out parameter, holds maximum number of pages to allocate
+ * @out_folios is an in/out parameter, holds maximum number of pages to allocate
  * and returns number of actually allocated pages
  *
  * @total_in is used to return the number of bytes actually read.  It
@@ -1060,6 +1097,9 @@ int btrfs_compress_folios(unsigned int type, int level, struct btrfs_inode *inod
 	/* The total read-in bytes should be no larger than the input. */
 	ASSERT(*total_in <= orig_len);
 	put_workspace(fs_info, type, workspace);
+	if (ret < 0)
+		return ret;
+	ret = pad_compressed_folios(fs_info, folios, orig_len, out_folios, total_out);
 	return ret;
 }
 
