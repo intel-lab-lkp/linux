@@ -775,8 +775,7 @@ static int mhuv3_initialize_channels(struct device *dev, struct mhuv3 *mhu)
 	mbox->chans = devm_kcalloc(dev, mhu->num_chans,
 				   sizeof(*mbox->chans), GFP_KERNEL);
 	if (!mbox->chans)
-		return dev_err_probe(dev, -ENOMEM,
-				     "Failed to initialize channels\n");
+		return -ENOMEM;
 
 	for (i = 0; i < NUM_EXT && !ret; i++)
 		if (mhu->ext[i])
