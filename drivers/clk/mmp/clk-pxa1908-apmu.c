@@ -98,7 +98,7 @@ static int pxa1908_apmu_probe(struct platform_device *pdev)
 
 	pxa1908_axi_periph_clk_init(pxa_unit);
 
-	return 0;
+	return pxa1908_pd_register(&pdev->dev);
 }
 
 static const struct of_device_id pxa1908_apmu_match_table[] = {

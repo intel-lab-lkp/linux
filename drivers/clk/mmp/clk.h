@@ -258,4 +258,6 @@ struct generic_pm_domain *mmp_pm_domain_register(const char *name,
 		u32 power_on, u32 reset, u32 clock_enable,
 		unsigned int flags, spinlock_t *lock);
 
+int pxa1908_pd_register(struct device *dev);
+
 #endif
