@@ -31,6 +31,7 @@
 #include <linux/compiler.h>
 #include <linux/moduleparam.h>
 #include <linux/fs.h>
+#include <linux/workqueue.h>
 
 #include "power.h"
 
@@ -73,6 +74,19 @@ bool pm_suspend_default_s2idle(void)
 	return mem_sleep_current == PM_SUSPEND_TO_IDLE;
 }
 EXPORT_SYMBOL_GPL(pm_suspend_default_s2idle);
+
+static DECLARE_COMPLETION(suspend_fs_sync_complete);
+
+/**
+ * suspend_abort_fs_sync - Abort fs_sync to abort suspend early
+ *
+ * This function aborts the fs_sync stage of suspend so that suspend itself can
+ * be aborted early.
+ */
+void suspend_abort_fs_sync(void)
+{
+	complete(&suspend_fs_sync_complete);
+}
 
 void s2idle_set_ops(const struct platform_s2idle_ops *ops)
 {
@@ -403,6 +417,34 @@ void __weak arch_suspend_enable_irqs(void)
 	local_irq_enable();
 }
 
+static void sync_filesystems_fn(struct work_struct *work)
+{
+	ksys_sync_helper();
+	complete(&suspend_fs_sync_complete);
+}
+static DECLARE_WORK(sync_filesystems, sync_filesystems_fn);
+
+/**
+ * suspend_fs_sync_with_abort - Trigger fs_sync with ability to abort
+ *
+ * Return 0 on successful file system sync, otherwise returns -EBUSY if file
+ * system sync was aborted.
+ */
+static int suspend_fs_sync_with_abort(void)
+{
+	reinit_completion(&suspend_fs_sync_complete);
+	schedule_work(&sync_filesystems);
+	/*
+	 * Completion is triggered by fs_sync finishing or a suspend abort
+	 * signal, whichever comes first
+	 */
+	wait_for_completion(&suspend_fs_sync_complete);
+	if (pm_wakeup_pending())
+		return -EBUSY;
+
+	return 0;
+}
+
 /**
  * suspend_enter - Make the system enter the given sleep state.
  * @state: System sleep state to enter.
@@ -588,14 +630,16 @@ static int enter_state(suspend_state_t state)
 	if (state == PM_SUSPEND_TO_IDLE)
 		s2idle_begin();
 
+	pm_wakeup_clear(0);
 	if (sync_on_suspend_enabled) {
 		trace_suspend_resume(TPS("sync_filesystems"), 0, true);
-		ksys_sync_helper();
+		error = suspend_fs_sync_with_abort();
 		trace_suspend_resume(TPS("sync_filesystems"), 0, false);
+		if (error)
+			goto Unlock;
 	}
 
 	pm_pr_dbg("Preparing system for sleep (%s)\n", mem_sleep_labels[state]);
-	pm_wakeup_clear(0);
 	pm_suspend_clear_flags();
 	error = suspend_prepare(state);
 	if (error)
