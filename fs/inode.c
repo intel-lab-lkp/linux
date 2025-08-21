@@ -1928,22 +1928,23 @@ void iput(struct inode *inode)
 	if (!inode)
 		return;
 	BUG_ON(inode->i_state & I_CLEAR);
-retry:
-	if (atomic_dec_and_lock(&inode->i_count, &inode->i_lock)) {
-		if (inode->i_nlink && (inode->i_state & I_DIRTY_TIME)) {
-			/*
-			 * Increment i_count directly as we still have our
-			 * i_obj_count reference still. This is temporary and
-			 * will go away in a future patch.
-			 */
-			atomic_inc(&inode->i_count);
-			spin_unlock(&inode->i_lock);
-			trace_writeback_lazytime_iput(inode);
-			mark_inode_dirty_sync(inode);
-			goto retry;
-		}
-		iput_final(inode);
+
+	if (atomic_add_unless(&inode->i_count, -1, 1)) {
+		iobj_put(inode);
+		return;
 	}
+
+	if (inode->i_nlink && (inode->i_state & I_DIRTY_TIME)) {
+		trace_writeback_lazytime_iput(inode);
+		mark_inode_dirty_sync(inode);
+	}
+
+	spin_lock(&inode->i_lock);
+	if (atomic_dec_and_test(&inode->i_count))
+		iput_final(inode);
+	else
+		spin_unlock(&inode->i_lock);
+
 	iobj_put(inode);
 }
 EXPORT_SYMBOL(iput);
