@@ -2164,8 +2164,7 @@ static int arm_smmu_device_probe(struct platform_device *pdev)
 	smmu->irqs = devm_kcalloc(dev, smmu->num_context_irqs,
 				  sizeof(*smmu->irqs), GFP_KERNEL);
 	if (!smmu->irqs)
-		return dev_err_probe(dev, -ENOMEM, "failed to allocate %d irqs\n",
-				     smmu->num_context_irqs);
+		return -ENOMEM;
 
 	for (i = 0; i < smmu->num_context_irqs; i++) {
 		int irq = platform_get_irq(pdev, global_irqs + pmu_irqs + i);
