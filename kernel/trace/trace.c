@@ -853,10 +853,10 @@ int trace_pid_write(struct trace_pid_list *filtered_pids,
 		ubuf += ret;
 		cnt -= ret;
 
+		ret = -EINVAL;
 		if (!trace_parser_loaded(&parser))
 			break;
 
-		ret = -EINVAL;
 		if (kstrtoul(parser.buffer, 0, &val))
 			break;
 
