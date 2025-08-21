@@ -252,10 +252,10 @@ void ext4_free_inode(handle_t *handle, struct inode *inode)
 		       "nonexistent device\n", __func__, __LINE__);
 		return;
 	}
-	if (atomic_read(&inode->i_count) > 1) {
+	if (refcount_read(&inode->i_count) > 1) {
 		ext4_msg(sb, KERN_ERR, "%s:%d: inode #%lu: count=%d",
 			 __func__, __LINE__, inode->i_ino,
-			 atomic_read(&inode->i_count));
+			 refcount_read(&inode->i_count));
 		return;
 	}
 	if (inode->i_nlink) {
