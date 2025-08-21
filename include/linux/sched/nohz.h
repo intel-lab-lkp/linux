@@ -9,8 +9,10 @@
 #ifdef CONFIG_NO_HZ_COMMON
 extern void nohz_balance_enter_idle(int cpu);
 extern int get_nohz_timer_target(void);
+extern bool nohz_balance_idle_cpu(int cpu);
 #else
 static inline void nohz_balance_enter_idle(int cpu) { }
+static inline bool nohz_balance_idle_cpu(int cpu) { return false; }
 #endif
 
 #ifdef CONFIG_NO_HZ_COMMON

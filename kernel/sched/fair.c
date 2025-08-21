@@ -7109,6 +7109,11 @@ static struct {
 	unsigned long next_blocked;	/* Next update of blocked load in jiffies */
 } nohz ____cacheline_aligned;
 
+inline bool nohz_balance_idle_cpu(int cpu)
+{
+	return cpumask_test_cpu(cpu, nohz.idle_cpus_mask);
+}
+
 #endif /* CONFIG_NO_HZ_COMMON */
 
 static unsigned long cpu_load(struct rq *rq)
