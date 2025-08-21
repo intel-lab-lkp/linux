@@ -667,7 +667,7 @@ static u8 build_attr(struct vc_data *vc, u8 _color,
 	{
 	u8 a = _color;
 	if (!vc->vc_can_do_color)
-		return _intensity |
+		return (_intensity & ~(vc->vc_hi_font_mask ? 1 : 0)) |
 		       (_italic    << 1) |
 		       (_underline << 2) |
 		       (_reverse   << 3) |
