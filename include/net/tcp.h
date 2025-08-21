@@ -2225,6 +2225,21 @@ static inline bool inet_sk_transparent(const struct sock *sk)
 	return inet_test_bit(TRANSPARENT, sk);
 }
 
+/**
+ * inet_sk_autobind - Check if socket was bound to a port at connect() time.
+ * @sk: &struct inet_connection_sock or &struct inet_timewait_sock
+ */
+static inline bool inet_sk_autobind(const struct sock *sk)
+{
+	switch (sk->sk_state) {
+	case TCP_TIME_WAIT:
+		return inet_twsk(sk)->tw_autobind;
+	case TCP_NEW_SYN_RECV:
+		return false; /* n/a to request sock */
+	}
+	return inet_test_bit(AUTOBIND, sk);
+}
+
 /* Determines whether this is a thin stream (which may suffer from
  * increased latency). Used to trigger latency-reducing mechanisms.
  */

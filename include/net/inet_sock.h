@@ -279,6 +279,8 @@ enum {
 	INET_FLAGS_RTALERT_ISOLATE = 28,
 	INET_FLAGS_SNDFLOW	= 29,
 	INET_FLAGS_RTALERT	= 30,
+	/* socket bound to a port at connect() time */
+	INET_FLAGS_AUTOBIND	= 31,
 };
 
 /* cmsg flags for inet */
