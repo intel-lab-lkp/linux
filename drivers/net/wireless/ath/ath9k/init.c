@@ -625,7 +625,7 @@ static int ath9k_of_init(struct ath_softc *sc)
 	struct ath_hw *ah = sc->sc_ah;
 	struct ath_common *common = ath9k_hw_common(ah);
 	enum ath_bus_type bus_type = common->bus_ops->ath_bus_type;
-	char eeprom_name[100];
+	const char *eeprom_name;
 	int ret;
 
 	if (!of_device_is_available(np))
@@ -635,9 +635,8 @@ static int ath9k_of_init(struct ath_softc *sc)
 
 	if (of_property_read_bool(np, "qca,no-eeprom")) {
 		/* ath9k-eeprom-<bus>-<id>.bin */
-		scnprintf(eeprom_name, sizeof(eeprom_name),
-			  "ath9k-eeprom-%s-%s.bin",
-			  ath_bus_type_to_string(bus_type), dev_name(ah->dev));
+		eeprom_name = devm_kasprintf(ah->dev, GFP_KERNEL, "ath9k-eeprom-%s-%s.bin",
+					     ath_bus_type_to_string(bus_type), dev_name(ah->dev));
 
 		ret = ath9k_eeprom_request(sc, eeprom_name);
 		if (ret)

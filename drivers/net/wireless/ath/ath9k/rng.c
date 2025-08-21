@@ -103,8 +103,8 @@ void ath9k_rng_start(struct ath_softc *sc)
 	if (!AR_SREV_9300_20_OR_LATER(ah))
 		return;
 
-	snprintf(sc->rng_name, sizeof(sc->rng_name), "ath9k_%u",
-		 (atomic_inc_return(&serial) - 1) & U16_MAX);
+	sc->rng_name = devm_kasprintf(sc->dev, GFP_KERNEL, "ath9k_%u",
+				      (atomic_inc_return(&serial) - 1) & U16_MAX);
 	sc->rng_ops.name = sc->rng_name;
 	sc->rng_ops.read = ath9k_rng_read;
 	sc->rng_ops.quality = 320;

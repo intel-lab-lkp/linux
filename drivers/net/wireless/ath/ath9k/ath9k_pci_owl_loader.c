@@ -140,19 +140,10 @@ static void owl_fw_cb(const struct firmware *fw, void *context)
 static const char *owl_get_eeprom_name(struct pci_dev *pdev)
 {
 	struct device *dev = &pdev->dev;
-	char *eeprom_name;
 
 	dev_dbg(dev, "using auto-generated eeprom filename\n");
 
-	eeprom_name = devm_kzalloc(dev, EEPROM_FILENAME_LEN, GFP_KERNEL);
-	if (!eeprom_name)
-		return NULL;
-
-	/* this should match the pattern used in ath9k/init.c */
-	scnprintf(eeprom_name, EEPROM_FILENAME_LEN, "ath9k-eeprom-pci-%s.bin",
-		  dev_name(dev));
-
-	return eeprom_name;
+	return devm_kasprintf(dev, GFP_KERNEL, "ath9k-eeprom-pci-%s.bin", dev_name(dev));
 }
 
 static void owl_nvmem_work(struct work_struct *work)
