@@ -370,9 +370,10 @@ static __always_inline void __cmpwait(volatile void *ptr,
 	u32 *__ptr32b;
 	ulong __s, __val, __mask;
 
-	asm goto(ALTERNATIVE("j %l[no_zawrs]", "nop",
-			     0, RISCV_ISA_EXT_ZAWRS, 1)
-		 : : : : no_zawrs);
+	if (!__riscv_has_extension_likely(0, RISCV_ISA_EXT_ZAWRS)) {
+		asm volatile(RISCV_PAUSE : : : "memory");
+		return;
+	}
 
 	switch (size) {
 	case 1:
@@ -434,11 +435,6 @@ static __always_inline void __cmpwait(volatile void *ptr,
 	default:
 		BUILD_BUG();
 	}
-
-	return;
-
-no_zawrs:
-	asm volatile(RISCV_PAUSE : : : "memory");
 }
 
 #define __cmpwait_relaxed(ptr, val) \
