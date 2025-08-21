@@ -603,15 +603,15 @@ int init_cache_level(unsigned int cpu)
  * ECX as cache index. Then right shift apicid by the number's order to get
  * cache id for this cache node.
  */
-static void get_cache_id(int cpu, struct _cpuid4_info *id4)
+static unsigned int get_cache_id(u32 apicid, struct _cpuid4_info *id4)
 {
-	struct cpuinfo_x86 *c = &cpu_data(cpu);
 	unsigned long num_threads_sharing;
 	int index_msb;
 
 	num_threads_sharing = 1 + id4->eax.split.num_threads_sharing;
 	index_msb = get_count_order(num_threads_sharing);
-	id4->id = c->topo.apicid >> index_msb;
+
+	return apicid >> index_msb;
 }
 
 int populate_cache_leaves(unsigned int cpu)
@@ -619,6 +619,7 @@ int populate_cache_leaves(unsigned int cpu)
 	struct cpu_cacheinfo *this_cpu_ci = get_cpu_cacheinfo(cpu);
 	struct cacheinfo *ci = this_cpu_ci->info_list;
 	u8 cpu_vendor = boot_cpu_data.x86_vendor;
+	u32 apicid = cpu_data(cpu).topo.apicid;
 	struct amd_northbridge *nb = NULL;
 	struct _cpuid4_info id4 = {};
 	int idx, ret;
@@ -628,7 +629,7 @@ int populate_cache_leaves(unsigned int cpu)
 		if (ret)
 			return ret;
 
-		get_cache_id(cpu, &id4);
+		id4.id = get_cache_id(apicid, &id4);
 
 		if (cpu_vendor == X86_VENDOR_AMD || cpu_vendor == X86_VENDOR_HYGON)
 			nb = amd_init_l3_cache(idx);
