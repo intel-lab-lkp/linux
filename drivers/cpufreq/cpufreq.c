@@ -2909,6 +2909,8 @@ static int cpuhp_cpufreq_offline(unsigned int cpu)
 int cpufreq_register_driver(struct cpufreq_driver *driver_data)
 {
 	unsigned long flags;
+	bool has_setpolicy = driver_data->setpolicy;
+	bool has_target = driver_data->target_index || driver_data->target;
 	int ret;
 
 	if (cpufreq_disabled())
@@ -2922,10 +2924,7 @@ int cpufreq_register_driver(struct cpufreq_driver *driver_data)
 		return -EPROBE_DEFER;
 
 	if (!driver_data || !driver_data->verify || !driver_data->init ||
-	    !(driver_data->setpolicy || driver_data->target_index ||
-		    driver_data->target) ||
-	     (driver_data->setpolicy && (driver_data->target_index ||
-		    driver_data->target)) ||
+	     (has_setpolicy == has_target) ||
 	     (!driver_data->get_intermediate != !driver_data->target_intermediate) ||
 	     (!driver_data->online != !driver_data->offline) ||
 		 (driver_data->adjust_perf && !driver_data->fast_switch))
