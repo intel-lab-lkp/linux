@@ -249,6 +249,47 @@ struct dp83td510_priv {
 #define DP83TD510E_ALCD_COMPLETE			BIT(15)
 #define DP83TD510E_ALCD_CABLE_LENGTH			GENMASK(10, 0)
 
+static int dp83td510_get_mse_config(struct phy_device *phydev,
+				    struct phy_mse_config *config)
+{
+	/* The DP83TD510E datasheet does not specify peak MSE values.
+	 * It only provides a single MSE value which is used to derive SQI.
+	 * Therefore, we only support the average MSE capability.
+	 */
+	config->supported_caps = PHY_MSE_CAP_AVG | PHY_MSE_CAP_LINK |
+		PHY_MSE_CAP_CHANNEL_A;
+	config->max_average_mse = 0xFFFF;
+
+	/* The datasheet does not specify the refresh rate or symbol count,
+	 * but based on similar PHYs and standards, we can assume a common
+	 * value. For 10BaseT1L, the symbol rate is 7.5 MBd. A common
+	 * diagnostic interval is around 1ms.
+	 * 7.5e6 symbols/sec * 0.001 sec = 7500 symbols.
+	 */
+	config->refresh_rate_ps = 1000000000; /* 1 ms */
+	config->num_symbols = 7500;
+
+	return 0;
+}
+
+static int dp83td510_get_mse_snapshot(struct phy_device *phydev, u32 channel,
+				      struct phy_mse_snapshot *snapshot)
+{
+	int ret;
+
+	if (channel != PHY_MSE_CHANNEL_LINK &&
+	    channel != PHY_MSE_CHANNEL_A)
+		return -EOPNOTSUPP;
+
+	ret = phy_read_mmd(phydev, MDIO_MMD_VEND2, DP83TD510E_MSE_DETECT);
+	if (ret < 0)
+		return ret;
+
+	snapshot->average_mse = ret;
+
+	return 0;
+}
+
 static int dp83td510_led_brightness_set(struct phy_device *phydev, u8 index,
 					enum led_brightness brightness)
 {
@@ -892,6 +933,9 @@ static struct phy_driver dp83td510_driver[] = {
 	.cable_test_get_status = dp83td510_cable_test_get_status,
 	.get_phy_stats	= dp83td510_get_phy_stats,
 	.update_stats	= dp83td510_update_stats,
+
+	.get_mse_config	= dp83td510_get_mse_config,
+	.get_mse_snapshot = dp83td510_get_mse_snapshot,
 
 	.led_brightness_set = dp83td510_led_brightness_set,
 	.led_hw_is_supported = dp83td510_led_hw_is_supported,
