@@ -14,6 +14,12 @@
 
 #include <drm/drm_print.h>
 
+enum free_tree {
+	CLEAR_TREE = 0,
+	DIRTY_TREE,
+	MAX_FREE_TREES,
+};
+
 #define range_overflows(start, size, max) ({ \
 	typeof(start) start__ = (start); \
 	typeof(size) size__ = (size); \
@@ -73,7 +79,7 @@ struct drm_buddy_block {
  */
 struct drm_buddy {
 	/* Maintain a free list for each order. */
-	struct rb_root *free_tree;
+	struct rb_root *free_trees[MAX_FREE_TREES];
 
 	/*
 	 * Maintain explicit binary tree(s) to track the allocation of the
