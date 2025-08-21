@@ -57,6 +57,8 @@ TRACE_EVENT_CONDITION(smbus_write,
 		case I2C_SMBUS_I2C_BLOCK_DATA:
 			__entry->len = data->block[0] + 1;
 		copy:
+			if (__entry->len > I2C_SMBUS_BLOCK_MAX + 2)
+				__entry->len = I2C_SMBUS_BLOCK_MAX + 2;
 			memcpy(__entry->buf, data->block, __entry->len);
 			break;
 		case I2C_SMBUS_QUICK:
