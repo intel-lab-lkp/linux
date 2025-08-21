@@ -130,6 +130,7 @@
 	mmc-ddr-1_8v;
 	mmc-hs200-1_8v;
 	non-removable;
+	max-frequency = <75000000>;
 	vmmc-supply = <&reg_cldo3>;
 	vqmmc-supply = <&reg_cldo1>;
 	status = "okay";
