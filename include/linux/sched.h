@@ -1972,7 +1972,8 @@ extern void kick_process(struct task_struct *tsk);
 
 extern void __set_task_comm(struct task_struct *tsk, const char *from, bool exec);
 #define set_task_comm(tsk, from) ({			\
-	BUILD_BUG_ON(sizeof(from) < TASK_COMM_LEN);	\
+	static_assert(sizeof(from) >= TASK_COMM_LEN,	\
+		"tsk->comm size being set should be >= TASK_COMM_LEN");	\
 	__set_task_comm(tsk, from, false);		\
 })
 
