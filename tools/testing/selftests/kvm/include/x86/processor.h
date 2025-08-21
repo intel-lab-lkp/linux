@@ -1026,6 +1026,12 @@ static inline struct kvm_cpuid2 *allocate_kvm_cpuid2(int nr_entries)
 
 void vcpu_init_cpuid(struct kvm_vcpu *vcpu, const struct kvm_cpuid2 *cpuid);
 
+uint16_t kvm_get_default_idt_limit(void);
+uint16_t kvm_get_default_gdt_limit(void);
+uint64_t kvm_get_default_cr0(void);
+uint64_t kvm_get_default_cr4(void);
+uint64_t kvm_get_default_efer(void);
+
 static inline void vcpu_get_cpuid(struct kvm_vcpu *vcpu)
 {
 	vcpu_ioctl(vcpu, KVM_GET_CPUID2, vcpu->cpuid);
