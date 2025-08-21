@@ -75,6 +75,8 @@ bool pm_suspend_default_s2idle(void)
 }
 EXPORT_SYMBOL_GPL(pm_suspend_default_s2idle);
 
+static bool suspend_fs_sync_queued;
+static DEFINE_SPINLOCK(suspend_fs_sync_lock);
 static DECLARE_COMPLETION(suspend_fs_sync_complete);
 
 /**
@@ -85,7 +87,9 @@ static DECLARE_COMPLETION(suspend_fs_sync_complete);
  */
 void suspend_abort_fs_sync(void)
 {
+	spin_lock(&suspend_fs_sync_lock);
 	complete(&suspend_fs_sync_complete);
+	spin_unlock(&suspend_fs_sync_lock);
 }
 
 void s2idle_set_ops(const struct platform_s2idle_ops *ops)
@@ -420,7 +424,11 @@ void __weak arch_suspend_enable_irqs(void)
 static void sync_filesystems_fn(struct work_struct *work)
 {
 	ksys_sync_helper();
+
+	spin_lock(&suspend_fs_sync_lock);
+	suspend_fs_sync_queued = false;
 	complete(&suspend_fs_sync_complete);
+	spin_unlock(&suspend_fs_sync_lock);
 }
 static DECLARE_WORK(sync_filesystems, sync_filesystems_fn);
 
@@ -432,8 +440,26 @@ static DECLARE_WORK(sync_filesystems, sync_filesystems_fn);
  */
 static int suspend_fs_sync_with_abort(void)
 {
+	bool need_suspend_fs_sync_requeue;
+
+Start_fs_sync:
+	spin_lock(&suspend_fs_sync_lock);
 	reinit_completion(&suspend_fs_sync_complete);
-	schedule_work(&sync_filesystems);
+	/*
+	 * Handle the case where a suspend immediately follows a previous
+	 * suspend that was aborted during fs_sync. In this case, wait for the
+	 * previous filesystem sync to finish. Then do another filesystem sync
+	 * so any subsequent filesystem changes are synced before suspending.
+	 */
+	if (suspend_fs_sync_queued) {
+		need_suspend_fs_sync_requeue = true;
+	} else {
+		need_suspend_fs_sync_requeue = false;
+		suspend_fs_sync_queued = true;
+		schedule_work(&sync_filesystems);
+	}
+	spin_unlock(&suspend_fs_sync_lock);
+
 	/*
 	 * Completion is triggered by fs_sync finishing or a suspend abort
 	 * signal, whichever comes first
@@ -441,6 +467,8 @@ static int suspend_fs_sync_with_abort(void)
 	wait_for_completion(&suspend_fs_sync_complete);
 	if (pm_wakeup_pending())
 		return -EBUSY;
+	if (need_suspend_fs_sync_requeue)
+		goto Start_fs_sync;
 
 	return 0;
 }
