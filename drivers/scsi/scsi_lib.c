@@ -1153,6 +1153,11 @@ blk_status_t scsi_alloc_sgtables(struct scsi_cmnd *cmd)
 	if (blk_rq_bytes(rq) & rq->q->limits.dma_pad_mask) {
 		unsigned int pad_len =
 			(rq->q->limits.dma_pad_mask & ~blk_rq_bytes(rq)) + 1;
+		unsigned int pad_offset = last_sg->offset + last_sg->length;
+		void *vaddr = kmap_local_page(sg_page(last_sg));
+
+		memset(vaddr + pad_offset, 0, pad_len);
+		kunmap_local(vaddr);
 
 		last_sg->length += pad_len;
 		cmd->extra_len += pad_len;
