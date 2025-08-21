@@ -4023,6 +4023,49 @@ static int fec_hwtstamp_set(struct net_device *ndev,
 	return fec_ptp_set(ndev, config, extack);
 }
 
+static int fec_change_mtu(struct net_device *ndev, int new_mtu)
+{
+	struct fec_enet_private *fep = netdev_priv(ndev);
+	int order, done;
+	bool running;
+
+	order = get_order(new_mtu + ETH_HLEN + ETH_FCS_LEN);
+	if (fep->pagepool_order == order) {
+		WRITE_ONCE(ndev->mtu, new_mtu);
+		return 0;
+	}
+
+	fep->pagepool_order = order;
+	fep->rx_frame_size = (PAGE_SIZE << order) - FEC_ENET_XDP_HEADROOM
+			     - SKB_DATA_ALIGN(sizeof(struct skb_shared_info));
+
+	running = netif_running(ndev);
+	if (!running) {
+		WRITE_ONCE(ndev->mtu, new_mtu);
+		return 0;
+	}
+
+	/* Stop TX/RX and free the buffers */
+	napi_disable(&fep->napi);
+	netif_tx_disable(ndev);
+	read_poll_timeout(fec_enet_rx_napi, done, (done == 0),
+			  10, 1000, false, &fep->napi, 10);
+	fec_stop(ndev);
+	fec_enet_free_buffers(ndev);
+
+	WRITE_ONCE(ndev->mtu, new_mtu);
+
+	/* Create the pagepool according the new mtu */
+	if (fec_enet_alloc_buffers(ndev) < 0)
+		return -ENOMEM;
+
+	fec_restart(ndev);
+	napi_enable(&fep->napi);
+	netif_tx_start_all_queues(ndev);
+
+	return 0;
+}
+
 static const struct net_device_ops fec_netdev_ops = {
 	.ndo_open		= fec_enet_open,
 	.ndo_stop		= fec_enet_close,
@@ -4032,6 +4075,7 @@ static const struct net_device_ops fec_netdev_ops = {
 	.ndo_validate_addr	= eth_validate_addr,
 	.ndo_tx_timeout		= fec_timeout,
 	.ndo_set_mac_address	= fec_set_mac_address,
+	.ndo_change_mtu		= fec_change_mtu,
 	.ndo_eth_ioctl		= phy_do_ioctl_running,
 	.ndo_set_features	= fec_set_features,
 	.ndo_bpf		= fec_enet_bpf,
