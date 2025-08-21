@@ -75,9 +75,49 @@ static inline bool should_stop_iteration(void)
 	return signal_pending(current);
 }
 
-/*
- * This funcion reads the *physical* memory. The f_pos points directly to the
- * memory location.
+/**
+ * read_mem - read from physical memory (/dev/mem).
+ * @file: file structure for the device.
+ * @buf: user-space buffer to copy data to.
+ * @count: number of bytes to read.
+ * @ppos: pointer to the current file position, representing the physical
+ *        address to read from.
+ *
+ * Function's expectations:
+ *
+ * - This function shall check if the value pointed by ppos exceeds the
+ *   maximum addressable physical address;
+ *
+ * - This function shall check if the physical address range to be read
+ *   is valid (i.e. it falls within a memory block and if it can be mapped
+ *   to the kernel address space);
+ *
+ * - For each memory page falling in the requested physical range
+ *   [ppos, ppos + count - 1]:
+ *   - this function shall check if user space access is allowed;
+ *
+ *   - if access is allowed, the memory content from the page range falling
+ *     within the requested physical range shall be copied to the user space
+ *     buffer;
+ *
+ *   - zeros shall be copied to the user space buffer (for the page range
+ *     falling within the requested physical range):
+ *     - if access to the memory page is restricted or,
+ *     - if the current page is page 0 on HW architectures where page 0 is not
+ *       mapped.
+ *
+ * - The file position '*ppos' shall be advanced by the number of bytes
+ *   successfully copied to user space (including zeros).
+ *
+ * Context: process context.
+ *
+ * Return:
+ * * the number of bytes copied to user on success
+ * * %-EFAULT - the requested address range is not valid or a fault happened
+ *   when copying to user
+ * * %-EPERM - access to any of the required pages is not allowed
+ * * %-ENOMEM - out of memory error for auxiliary kernel buffers supporting
+ *   the operation of copying content from the physical pages
  */
 static ssize_t read_mem(struct file *file, char __user *buf,
 			size_t count, loff_t *ppos)
@@ -166,6 +206,48 @@ failed:
 	return err;
 }
 
+/**
+ * write_mem - write to physical memory (/dev/mem).
+ * @file: file structure for the device.
+ * @buf: user-space buffer containing the data to write.
+ * @count: number of bytes to write.
+ * @ppos: pointer to the current file position, representing the physical
+ *        address to write to.
+ *
+ * Function's expectations:
+ * - This function shall check if the value pointed by ppos exceeds the
+ *   maximum addressable physical address;
+ *
+ * - This function shall check if the physical address range to be written
+ *   is valid (i.e. it falls within a memory block and if it can be mapped
+ *   to the kernel address space);
+ *
+ * - For each memory page falling in the physical range to be written
+ *   [ppos, ppos + count - 1]:
+ *   - this function shall check if user space access is allowed;
+ *
+ *   - the content from the user space buffer shall be copied to the page range
+ *     falling within the physical range to be written if access is allowed;
+ *
+ *   - the data to be copied from the user space buffer (for the page range
+ *     falling within the range to be written) shall be skipped:
+ *     - if access to the memory page is restricted or,
+ *     - if the current page is page 0 on HW architectures where page 0 is not
+ *       mapped.
+ *
+ * - The file position '*ppos' shall be advanced by the number of bytes
+ *   successfully copied from user space (including skipped bytes).
+ *
+ * Context: process context.
+ *
+ * Return:
+ * * the number of bytes copied to user on success
+ * * %-EFBIG - the value pointed by ppos exceeds the maximum addressable
+ *   physical address
+ * * %-EFAULT - the physical address range is not valid or a fault happened
+ *   when copying from user
+ * * %-EPERM - access to any of the required pages is not allowed
+ */
 static ssize_t write_mem(struct file *file, const char __user *buf,
 			 size_t count, loff_t *ppos)
 {
@@ -322,6 +404,37 @@ static const struct vm_operations_struct mmap_mem_ops = {
 #endif
 };
 
+/**
+ * mmap_mem - map physical memory into user space (/dev/mem).
+ * @file: file structure for the device.
+ * @vma: virtual memory area structure describing the user mapping.
+ *
+ * Function's expectations:
+ * - This function shall check if the requested physical address range to be
+ *   mapped fits within the maximum addressable physical range;
+ *
+ * - This function shall check if the requested  physical range corresponds to
+ *   a valid physical range and if access is allowed on it;
+ *
+ * - This function shall check if the input virtual memory area can be used for
+ *   a private mapping (always OK if there is an MMU);
+ *
+ * - This function shall set the virtual memory area operations to
+ *   &mmap_mem_ops;
+ *
+ * - This function shall establish a mapping between the user-space
+ *   virtual memory area described by vma and the physical memory
+ *   range specified by vma->vm_pgoff and size;
+ *
+ * Context: process context.
+ *
+ * Return:
+ * * 0 on success
+ * * %-EAGAIN - invalid or unsupported mapping requested (remap_pfn_range()
+ *   fails)
+ * * %-EINVAL - requested physical range to be mapped is not valid
+ * * %-EPERM - no permission to access the requested physical range
+ */
 static int mmap_mem(struct file *file, struct vm_area_struct *vma)
 {
 	size_t size = vma->vm_end - vma->vm_start;
@@ -550,13 +663,44 @@ static loff_t null_lseek(struct file *file, loff_t offset, int orig)
 	return file->f_pos = 0;
 }
 
-/*
+/**
+ * memory_lseek - change the file position.
+ * @file: file structure for the device.
+ * @offset: file offset to seek to.
+ * @orig: where to start seeking from (see whence in the llseek manpage).
+ *
+ * Function's expectations:
+ * - This function shall lock the semaphore of the inode corresponding to the
+ *   input file before any operation and unlock it before returning.
+ *
+ * - This function shall check the orig value and accordingly:
+ *   - if it is equal to SEEK_CUR, the current file position shall be
+ *     incremented by the input offset;
+ *   - if it is equal to SEEK_SET, the current file position shall be
+ *     set to the input offset value;
+ *   - any other value shall result in an error condition.
+ *
+ * - Before writing the current file position, the new position value
+ *   shall be checked to not overlap with Linux ERRNO values.
+ *
+ * Assumptions of Use:
+ * - the input file pointer is expected to be valid.
+ *
+ * Notes:
  * The memory devices use the full 32/64 bits of the offset, and so we cannot
  * check against negative addresses: they are ok. The return value is weird,
  * though, in that case (0).
  *
- * also note that seeking relative to the "end of file" isn't supported:
- * it has no meaning, so it returns -EINVAL.
+ * Also note that seeking relative to the "end of file" isn't supported:
+ * it has no meaning, so passing orig equal to SEEK_END returns -EINVAL.
+ *
+ * Context: process context, locks/unlocks inode->i_rwsem
+ *
+ * Return:
+ * * the new file position on success
+ * * %-EOVERFLOW - the new position value equals or exceeds
+ *   (unsigned long long) -MAX_ERRNO
+ * * %-EINVAL - the orig parameter is invalid
  */
 static loff_t memory_lseek(struct file *file, loff_t offset, int orig)
 {
@@ -584,6 +728,32 @@ static loff_t memory_lseek(struct file *file, loff_t offset, int orig)
 	return ret;
 }
 
+/**
+ * open_port - open the I/O port device (/dev/port).
+ * @inode: inode of the device file.
+ * @filp: file structure for the device.
+ *
+ * Function's expectations:
+ * - This function shall check if the caller has sufficient capabilities to
+ *   perform raw I/O access;
+ *
+ * - This function shall check if the kernel is locked down with the
+ *   &LOCKDOWN_DEV_MEM restriction;
+ *
+ * - If the input inode corresponds to /dev/mem, the f_mapping pointer
+ *   of the input file structure shall be set to the i_mapping pointer
+ *   of the input inode;
+ *
+ * Assumptions of Use:
+ * - The input inode and filp are expected to be valid.
+ *
+ * Context: process context.
+ *
+ * Return:
+ * * 0 on success
+ * * %-EPERM - caller lacks the required capability (CAP_SYS_RAWIO)
+ * * any error returned by securty_locked_down()
+ */
 static int open_port(struct inode *inode, struct file *filp)
 {
 	int rc;
@@ -691,6 +861,33 @@ static const struct memdev {
 #endif
 };
 
+/**
+ * memory_open - set the filp f_op to the memory device fops and invoke open().
+ * @inode: inode of the device file.
+ * @filp: file structure for the device.
+ *
+ * Function's expectations:
+ * - This function shall retrieve the minor number associated with the input
+ *   inode and the memory device corresponding to such minor number;
+ *
+ * - The file operations pointer shall be set to the memory device file operations;
+ *
+ * - The file mode member of the input filp shall be OR'd with the device mode;
+ *
+ * - The memory device open() file operation shall be invoked.
+ *
+ * Assumptions of Use:
+ * - The input inode and filp are expected to be non-NULL.
+ *
+ * Context: process context.
+ *
+ * Return:
+ * * 0 on success
+ * * %-ENXIO - the minor number corresponding to the input inode cannot be
+ *   associated with any device or the corresponding device has a NULL fops
+ *   pointer
+ * * any error returned by the device specific open function pointer
+ */
 static int memory_open(struct inode *inode, struct file *filp)
 {
 	int minor;
