@@ -59,6 +59,7 @@
 #include <net/cfg80211.h>
 #include <net/ieee80211_radiotap.h>
 
+#include <linux/of_net.h>
 #include <linux/unaligned.h>
 
 #include <net/mac80211.h>
@@ -2570,6 +2571,19 @@ static const struct ieee80211_iface_combination if_comb = {
 	.num_different_channels = 1,
 };
 
+static int ath5k_of_init(struct ath5k_hw *ah)
+{
+	struct ath_common *common = ath5k_hw_common(ah);
+	struct device_node *np = ah->dev->of_node;
+	int ret;
+
+	ret = of_get_mac_address(np, common->macaddr);
+	if (ret == -EPROBE_DEFER)
+		return ret;
+
+	return 0;
+}
+
 int
 ath5k_init_ah(struct ath5k_hw *ah, const struct ath_bus_ops *bus_ops)
 {
@@ -2637,6 +2651,10 @@ ath5k_init_ah(struct ath5k_hw *ah, const struct ath_bus_ops *bus_ops)
 	common->hw = hw;
 	common->priv = ah;
 	common->clockrate = 40;
+
+	ret = ath5k_of_init(ah);
+	if (ret)
+		return ret;
 
 	/*
 	 * Cache line size is used to size and align various
