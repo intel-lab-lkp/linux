@@ -115,24 +115,135 @@ static void drm_test_panic_screen_user_page(struct kunit *test)
 	kfree(pages);
 }
 
+#ifdef CONFIG_DRM_PANIC_KUNIT_TEST_DUMP
+#include <linux/base64.h>
+#include <linux/delay.h>
+#include <linux/zlib.h>
+
+#define LINE_LEN 128
+
+#define COMPR_LEVEL 6
+#define WINDOW_BITS 12
+#define MEM_LEVEL 4
+
+static int compress_image(u8 *src, int size, u8 *dst)
+{
+	struct z_stream_s stream;
+
+	stream.workspace = kmalloc(zlib_deflate_workspacesize(WINDOW_BITS, MEM_LEVEL),
+				   GFP_KERNEL);
+
+	if (zlib_deflateInit2(&stream, COMPR_LEVEL, Z_DEFLATED, WINDOW_BITS,
+			      MEM_LEVEL, Z_DEFAULT_STRATEGY) != Z_OK)
+		return -EINVAL;
+
+	stream.next_in = src;
+	stream.avail_in = size;
+	stream.total_in = 0;
+	stream.next_out = dst;
+	stream.avail_out = size;
+	stream.total_out = 0;
+
+	if (zlib_deflate(&stream, Z_FINISH) != Z_STREAM_END)
+		return -EINVAL;
+
+	if (zlib_deflateEnd(&stream) != Z_OK)
+		return -EINVAL;
+
+	kfree(stream.workspace);
+
+	return stream.total_out;
+}
+
+static void dump_image(u8 *fb, unsigned int width, unsigned int height)
+{
+	int len = 0;
+	char *dst;
+	char *compressed;
+	int sent = 0;
+	int stride = DIV_ROUND_UP(width, 8);
+	int size = stride * height;
+
+	compressed = vzalloc(size);
+	if (!compressed)
+		return;
+	len = compress_image(fb, size, compressed);
+	if (len < 0) {
+		pr_err("Compression failed %d", len);
+		return;
+	}
+
+	dst = vzalloc(4 * DIV_ROUND_UP(len, 3) + 1);
+	if (!dst)
+		return;
+
+	len = base64_encode(compressed, len, dst);
+
+	pr_info("KUNIT PANIC IMAGE DUMP START %dx%d", width, height);
+	while (len > 0) {
+		char save = dst[sent + LINE_LEN];
+
+		dst[sent + LINE_LEN] = 0;
+		pr_info("%s", dst + sent);
+		dst[sent + LINE_LEN] = save;
+		sent += LINE_LEN;
+		len -= LINE_LEN;
+	}
+	pr_info("KUNIT PANIC IMAGE DUMP END");
+	vfree(compressed);
+	vfree(dst);
+
+}
+
+// Ignore pixel format, use 1bit per pixel in monochrome.
+static void drm_test_panic_set_pixel(struct drm_scanout_buffer *sb,
+				     unsigned int x,
+				     unsigned int y,
+				     u32 color)
+{
+	int stride = DIV_ROUND_UP(sb->width, 8);
+	size_t off = x / 8 + y * stride;
+	u8 shift = 7 - (x % 8);
+	u8 *fb = (u8 *) sb->private;
+
+	if (color)
+		fb[off] |= 1 << shift;
+	else
+		fb[off] &= ~(1 << shift);
+}
+
+#else
+static void dump_image(u8 *fb, unsigned int width, unsigned int height) {}
 static void drm_test_panic_set_pixel(struct drm_scanout_buffer *sb,
 				     unsigned int x,
 				     unsigned int y,
 				     u32 color)
 {
 }
+#endif
 
 static void drm_test_panic_screen_user_set_pixel(struct kunit *test)
 {
 	struct drm_scanout_buffer *sb = test->priv;
 	const struct drm_test_mode *params = test->param_value;
+	int fb_size;
+	u8 *fb;
 
 	sb->format = drm_format_info(params->format);
+	fb_size = DIV_ROUND_UP(params->width, 8) * params->height;
+
+	fb = vzalloc(fb_size);
+	KUNIT_ASSERT_NOT_NULL(test, fb);
+	sb->private = fb;
 	sb->set_pixel = drm_test_panic_set_pixel;
 	sb->width = params->width;
 	sb->height = params->height;
 
 	params->draw_screen(sb);
+	if (params->format == DRM_FORMAT_XRGB8888)
+		dump_image(fb, sb->width, sb->height);
+
+	vfree(fb);
 }
 
 static void drm_test_panic_desc(const struct drm_test_mode *t, char *desc)

@@ -84,6 +84,20 @@ config DRM_KUNIT_TEST
 
 	  If in doubt, say "N".
 
+config DRM_PANIC_KUNIT_TEST_DUMP
+	bool "Enable screen dump to logs in KUnit tests for drm_panic"
+	default n
+	depends on DRM && DRM_PANIC && DRM_KUNIT_TEST
+	select ZLIB_DEFLATE
+	help
+	  This allows to dump the panic screen to the KUnit tests logs.
+	  It's possible with a small python script to write pngs from the logs.
+
+	  This is only to help developers customizing the drm_panic screen,
+	  checking the result for different resolutions.
+
+	  If in doubt, say "N"
+
 config DRM_TTM_KUNIT_TEST
 	tristate "KUnit tests for TTM" if !KUNIT_ALL_TESTS
 	default n
