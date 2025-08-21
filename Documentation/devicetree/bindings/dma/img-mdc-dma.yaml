@@ -1,0 +1,98 @@
+# SPDX-License-Identifier: (GPL-2.0-only OR BSD-2-Clause)
+%YAML 1.2
+---
+$id: http://devicetree.org/schemas/dma/img-mdc-dma.yaml#
+$schema: http://devicetree.org/meta-schemas/core.yaml#
+
+title: IMG Multi-threaded DMA Controller (MDC)
+
+maintainers:
+  - Vinod Koul <vkoul@kernel.org>
+
+allOf:
+  - $ref: /schemas/dma/dma-controller.yaml#
+
+properties:
+  compatible:
+    description: Must be "img,pistachio-mdc-dma".
+    const: img,pistachio-mdc-dma
+
+  reg:
+    description:
+      Must contain the base address and length of the MDC registers.
+    minItems: 1
+
+  interrupts:
+    description:
+      Must contain all the per-channel DMA interrupts.
+
+  clocks:
+    description: |
+      Must contain an entry for each entry in clock-names.
+      See clock/clock.yaml for details.
+
+  clock-names:
+    description: |
+      Must include the following entries:
+        - sys: MDC system interface clock.
+    minItems: 1
+    contains: { const: sys }
+
+  img,cr-periph:
+    $ref: /schemas/types.yaml#/definitions/phandle
+    description: |
+      Must contain a phandle to the peripheral control syscon node
+      which contains the DMA request to channel mapping registers.
+
+  img,max-burst-multiplier:
+    description: |
+      Must be the maximum supported burst size multiplier.
+      The maximum burst size is this value multiplied by the
+      hardware-reported bus width.
+    $ref: /schemas/types.yaml#/definitions/uint32
+
+  "#dma-cells":
+    description: |
+      Must be 3:
+        - The first cell is the peripheral's DMA request line.
+        - The second cell is a bitmap specifying to which channels the DMA request
+          line may be mapped (i.e. bit N set indicates channel N is usable).
+        - The third cell is the thread ID to be used by the channel.
+    const: 3
+
+  dma-channels:
+    description: |
+      Number of supported DMA channels, up to 32. If not specified
+      the number reported by the hardware is used.
+    $ref: /schemas/types.yaml#/definitions/uint32
+    maximum: 32
+
+required:
+  - compatible
+  - reg
+  - interrupts
+  - clocks
+  - clock-names
+  - "img,cr-periph"
+  - "img,max-burst-multiplier"
+  - "#dma-cells"
+
+unevaluatedProperties: false
+
+examples:
+  - |
+    #include <dt-bindings/interrupt-controller/mips-gic.h>
+    #include <dt-bindings/interrupt-controller/irq.h>
+    mdc: dma-controller@18143000 {
+      compatible = "img,pistachio-mdc-dma";
+      reg = <0x18143000 0x1000>;
+      interrupts = <GIC_SHARED 27 IRQ_TYPE_LEVEL_HIGH>,
+            <GIC_SHARED 28 IRQ_TYPE_LEVEL_HIGH>;
+      clocks = <&system_clk>;
+      clock-names = "sys";
+
+      img,max-burst-multiplier = <16>;
+      img,cr-periph = <&cr_periph>;
+
+      #dma-cells = <3>;
+    };
