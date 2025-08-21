@@ -615,6 +615,9 @@ void hyperv_cleanup(void)
 	union hv_x64_msr_hypercall_contents hypercall_msr;
 	union hv_reference_tsc_msr tsc_msr;
 
+	/* Retract host access to shared memory in case of isolation */
+	hv_ivm_clear_host_access();
+
 	/* Reset our OS id */
 	wrmsrq(HV_X64_MSR_GUEST_OS_ID, 0);
 	hv_ivm_msr_write(HV_X64_MSR_GUEST_OS_ID, 0);

@@ -478,6 +478,188 @@ void hv_ivm_msr_read(u64 msr, u64 *value)
 }
 
 /*
+ * Keep track of the PFN regions which were shared with the host. The access
+ * must be revoked upon kexec/kdump (see hv_ivm_clear_host_access()).
+ */
+struct hv_enc_pfn_region {
+	struct list_head list;
+	u64 pfn;
+	int count;
+};
+
+static LIST_HEAD(hv_list_enc);
+static DEFINE_RAW_SPINLOCK(hv_list_enc_lock);
+
+static int hv_list_enc_add(const u64 *pfn_list, int count)
+{
+	struct hv_enc_pfn_region *ent;
+	unsigned long flags;
+	u64 pfn;
+	int i;
+
+	for (i = 0; i < count; i++) {
+		pfn = pfn_list[i];
+
+		raw_spin_lock_irqsave(&hv_list_enc_lock, flags);
+		/* Check if the PFN already exists in some region first */
+		list_for_each_entry(ent, &hv_list_enc, list) {
+			if ((ent->pfn <= pfn) && (ent->pfn + ent->count - 1 >= pfn))
+				/* Nothing to do - pfn is already in the list */
+				goto unlock_done;
+		}
+
+		/*
+		 * Check if the PFN is adjacent to an existing region. Growing
+		 * a region can make it adjacent to another one but merging is
+		 * not (yet) implemented for simplicity. A PFN cannot be added
+		 * to two regions to keep the logic in hv_list_enc_remove()
+		 * correct.
+		 */
+		list_for_each_entry(ent, &hv_list_enc, list) {
+			if (ent->pfn + ent->count == pfn) {
+				/* Grow existing region up */
+				ent->count++;
+				goto unlock_done;
+			} else if (pfn + 1 == ent->pfn) {
+				/* Grow existing region down */
+				ent->pfn--;
+				ent->count++;
+				goto unlock_done;
+			}
+		}
+		raw_spin_unlock_irqrestore(&hv_list_enc_lock, flags);
+
+		/* No adjacent region found -- create a new one */
+		ent = kzalloc(sizeof(struct hv_enc_pfn_region), GFP_KERNEL);
+		if (!ent)
+			return -ENOMEM;
+
+		ent->pfn = pfn;
+		ent->count = 1;
+
+		raw_spin_lock_irqsave(&hv_list_enc_lock, flags);
+		list_add(&ent->list, &hv_list_enc);
+
+unlock_done:
+		raw_spin_unlock_irqrestore(&hv_list_enc_lock, flags);
+	}
+
+	return 0;
+}
+
+static void hv_list_enc_remove(const u64 *pfn_list, int count)
+{
+	struct hv_enc_pfn_region *ent, *t;
+	struct hv_enc_pfn_region new_region;
+	unsigned long flags;
+	u64 pfn;
+	int i;
+
+	for (i = 0; i < count; i++) {
+		pfn = pfn_list[i];
+
+		raw_spin_lock_irqsave(&hv_list_enc_lock, flags);
+		list_for_each_entry_safe(ent, t, &hv_list_enc, list) {
+			if (pfn == ent->pfn + ent->count - 1) {
+				/* Removing tail pfn */
+				ent->count--;
+				if (!ent->count) {
+					list_del(&ent->list);
+					kfree(ent);
+				}
+				goto unlock_done;
+			} else if (pfn == ent->pfn) {
+				/* Removing head pfn */
+				ent->count--;
+				ent->pfn++;
+				if (!ent->count) {
+					list_del(&ent->list);
+					kfree(ent);
+				}
+				goto unlock_done;
+			} else if (pfn > ent->pfn && pfn < ent->pfn + ent->count - 1) {
+				/*
+				 * Removing a pfn in the middle. Cut off the tail
+				 * of the existing region and create a template for
+				 * the new one.
+				 */
+				new_region.pfn = pfn + 1;
+				new_region.count = ent->count - (pfn - ent->pfn + 1);
+				ent->count = pfn - ent->pfn;
+				goto unlock_split;
+			}
+
+		}
+unlock_done:
+		raw_spin_unlock_irqrestore(&hv_list_enc_lock, flags);
+		continue;
+
+unlock_split:
+		raw_spin_unlock_irqrestore(&hv_list_enc_lock, flags);
+
+		ent = kzalloc(sizeof(struct hv_enc_pfn_region), GFP_KERNEL);
+		/*
+		 * There is no apparent good way to recover from -ENOMEM
+		 * situation, the accouting is going to be wrong either way.
+		 * Proceed with the rest of the list to make it 'less wrong'.
+		 */
+		if (WARN_ON_ONCE(!ent))
+			continue;
+
+		ent->pfn = new_region.pfn;
+		ent->count = new_region.count;
+
+		raw_spin_lock_irqsave(&hv_list_enc_lock, flags);
+		list_add(&ent->list, &hv_list_enc);
+		raw_spin_unlock_irqrestore(&hv_list_enc_lock, flags);
+	}
+}
+
+void hv_ivm_clear_host_access(void)
+{
+	struct hv_gpa_range_for_visibility *input;
+	struct hv_enc_pfn_region *ent;
+	unsigned long flags;
+	u64 hv_status;
+	int batch_size, cur, i;
+
+	if (!hv_is_isolation_supported())
+		return;
+
+	raw_spin_lock_irqsave(&hv_list_enc_lock, flags);
+
+	batch_size = MIN(hv_setup_in_array(&input, sizeof(*input),
+					   sizeof(input->gpa_page_list[0])),
+			 HV_MAX_MODIFY_GPA_REP_COUNT);
+	if (unlikely(!input))
+		goto unlock;
+
+	list_for_each_entry(ent, &hv_list_enc, list) {
+		for (i = 0, cur = 0; i < ent->count; i++) {
+			input->gpa_page_list[cur] = ent->pfn + i;
+			cur++;
+
+			if (cur == batch_size || i == ent->count - 1) {
+				input->partition_id = HV_PARTITION_ID_SELF;
+				input->host_visibility = VMBUS_PAGE_NOT_VISIBLE;
+				input->reserved0 = 0;
+				input->reserved1 = 0;
+				hv_status = hv_do_rep_hypercall(
+					HVCALL_MODIFY_SPARSE_GPA_PAGE_HOST_VISIBILITY,
+					cur, 0, input, NULL);
+				WARN_ON_ONCE(!hv_result_success(hv_status));
+				cur = 0;
+			}
+		}
+
+	};
+
+unlock:
+	raw_spin_unlock_irqrestore(&hv_list_enc_lock, flags);
+}
+EXPORT_SYMBOL_GPL(hv_ivm_clear_host_access);
+
+/*
  * hv_mark_gpa_visibility - Set pages visible to host via hvcall.
  *
  * In Isolation VM, all guest memory is encrypted from host and guest
@@ -491,24 +673,33 @@ static int hv_mark_gpa_visibility(u16 count, const u64 pfn[],
 	u64 hv_status;
 	int batch_size;
 	unsigned long flags;
+	int ret;
 
 	/* no-op if partition isolation is not enabled */
 	if (!hv_is_isolation_supported())
 		return 0;
 
+	if (visibility == VMBUS_PAGE_NOT_VISIBLE) {
+		hv_list_enc_remove(pfn, count);
+	} else {
+		ret = hv_list_enc_add(pfn, count);
+		if (ret)
+			return ret;
+	}
+
 	local_irq_save(flags);
 	batch_size = hv_setup_in_array(&input, sizeof(*input),
 					sizeof(input->gpa_page_list[0]));
 	if (unlikely(!input)) {
-		local_irq_restore(flags);
-		return -EINVAL;
+		ret = -EINVAL;
+		goto unlock;
 	}
 
 	if (count > batch_size) {
 		pr_err("Hyper-V: GPA count:%d exceeds supported:%u\n", count,
 		       batch_size);
-		local_irq_restore(flags);
-		return -EINVAL;
+		ret = -EINVAL;
+		goto unlock;
 	}
 
 	input->partition_id = HV_PARTITION_ID_SELF;
@@ -517,12 +708,18 @@ static int hv_mark_gpa_visibility(u16 count, const u64 pfn[],
 	hv_status = hv_do_rep_hypercall(
 			HVCALL_MODIFY_SPARSE_GPA_PAGE_HOST_VISIBILITY, count,
 			0, input, NULL);
+	if (hv_result_success(hv_status))
+		ret = 0;
+	else
+		ret = -EFAULT;
+
+unlock:
 	local_irq_restore(flags);
 
-	if (hv_result_success(hv_status))
-		return 0;
-	else
-		return -EFAULT;
+	if (ret)
+		hv_list_enc_remove(pfn, count);
+
+	return ret;
 }
 
 /*

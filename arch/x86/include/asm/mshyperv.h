@@ -208,10 +208,12 @@ static inline int hv_snp_boot_ap(u32 apic_id, unsigned long start_ip,
 void hv_vtom_init(void);
 void hv_ivm_msr_write(u64 msr, u64 value);
 void hv_ivm_msr_read(u64 msr, u64 *value);
+void hv_ivm_clear_host_access(void);
 #else
 static inline void hv_vtom_init(void) {}
 static inline void hv_ivm_msr_write(u64 msr, u64 value) {}
 static inline void hv_ivm_msr_read(u64 msr, u64 *value) {}
+static inline void hv_ivm_clear_host_access(void) {}
 #endif
 
 static inline bool hv_is_synic_msr(unsigned int reg)
