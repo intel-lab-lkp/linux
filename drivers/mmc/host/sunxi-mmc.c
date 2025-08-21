@@ -1371,8 +1371,8 @@ static int sunxi_mmc_probe(struct platform_device *pdev)
 
 	mmc = devm_mmc_alloc_host(&pdev->dev, sizeof(*host));
 	if (!mmc)
-		return dev_err_probe(&pdev->dev, -ENOMEM,
-				     "mmc alloc host failed\n");
+		return -ENOMEM;
+
 	platform_set_drvdata(pdev, mmc);
 
 	host = mmc_priv(mmc);
@@ -1387,8 +1387,7 @@ static int sunxi_mmc_probe(struct platform_device *pdev)
 	host->sg_cpu = dma_alloc_coherent(&pdev->dev, PAGE_SIZE,
 					  &host->sg_dma, GFP_KERNEL);
 	if (!host->sg_cpu)
-		return dev_err_probe(&pdev->dev, -ENOMEM,
-				     "Failed to allocate DMA descriptor mem\n");
+		return -ENOMEM;
 
 	if (host->cfg->ccu_has_timings_switch) {
 		/*
