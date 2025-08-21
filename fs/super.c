@@ -364,6 +364,8 @@ static struct super_block *alloc_super(struct file_system_type *type, int flags,
 	spin_lock_init(&s->s_inode_list_lock);
 	INIT_LIST_HEAD(&s->s_inodes_wb);
 	spin_lock_init(&s->s_inode_wblist_lock);
+	INIT_LIST_HEAD(&s->s_cached_inodes);
+	spin_lock_init(&s->s_cached_inodes_lock);
 
 	s->s_count = 1;
 	atomic_set(&s->s_active, 1);
@@ -409,6 +411,7 @@ static void __put_super(struct super_block *s)
 		WARN_ON(s->s_dentry_lru.node);
 		WARN_ON(s->s_inode_lru.node);
 		WARN_ON(!list_empty(&s->s_mounts));
+		WARN_ON(!list_empty(&s->s_cached_inodes));
 		call_rcu(&s->rcu, destroy_super_rcu);
 	}
 }

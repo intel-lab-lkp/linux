@@ -749,6 +749,9 @@ is_uncached_acl(struct posix_acl *acl)
  *			->i_lru is on the LRU and those that are using ->i_lru
  *			for some other means.
  *
+ * I_CACHED_LRU		Inode is cached because it is dirty or isn't shrinkable,
+ *			and thus is on the s_cached_inode_lru list.
+ *
  * Q: What is the difference between I_WILL_FREE and I_FREEING?
  *
  * __I_{SYNC,NEW,LRU_ISOLATING} are used to derive unique addresses to wait
@@ -786,6 +789,7 @@ enum inode_state_bits {
 	INODE_BIT(I_SYNC_QUEUED),
 	INODE_BIT(I_PINNING_NETFS_WB),
 	INODE_BIT(I_LRU),
+	INODE_BIT(I_CACHED_LRU),
 };
 
 #define I_DIRTY_INODE (I_DIRTY_SYNC | I_DIRTY_DATASYNC)
@@ -1584,6 +1588,13 @@ struct super_block {
 
 	spinlock_t		s_inode_wblist_lock;
 	struct list_head	s_inodes_wb;	/* writeback inodes */
+
+	/*
+	 * Cached inodes, any inodes that their reference is held by another
+	 * mechanism, such as dirty inodes or unshrinkable inodes.
+	 */
+	spinlock_t		s_cached_inodes_lock;
+	struct list_head	s_cached_inodes;
 } __randomize_layout;
 
 static inline struct user_namespace *i_user_ns(const struct inode *inode)

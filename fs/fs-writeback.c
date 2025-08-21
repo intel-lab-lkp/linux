@@ -2736,6 +2736,14 @@ static void wait_sb_inodes(struct super_block *sb)
 			continue;
 		}
 		__iget(inode);
+
+		/*
+		 * We could have potentially ended up on the cached LRU list, so
+		 * remove ourselves from this list now that we have a reference,
+		 * the iput will handle placing it back on the appropriate LRU
+		 * list if necessary.
+		 */
+		inode_lru_list_del(inode);
 		spin_unlock(&inode->i_lock);
 		rcu_read_unlock();
 

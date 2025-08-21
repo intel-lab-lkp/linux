@@ -29,7 +29,8 @@
 		{I_SYNC_QUEUED,		"I_SYNC_QUEUED"},	\
 		{I_PINNING_NETFS_WB,	"I_PINNING_NETFS_WB"},	\
 		{I_LRU_ISOLATING,	"I_LRU_ISOLATING"},	\
-		{I_LRU,			"I_LRU"}		\
+		{I_LRU,			"I_LRU"},		\
+		{I_CACHED_LRU,		"I_CACHED_LRU"}		\
 	)
 
 /* enums need to be exported to user space */

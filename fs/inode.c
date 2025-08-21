@@ -319,6 +319,23 @@ void free_inode_nonrcu(struct inode *inode)
 }
 EXPORT_SYMBOL(free_inode_nonrcu);
 
+/*
+ * Some inodes need to stay pinned in memory because they are dirty or there are
+ * cached pages that the VM wants to keep around to avoid thrashing. This does
+ * the appropriate checks to see if we want to sheild this inode from periodic
+ * reclaim. Must be called with ->i_lock held.
+ */
+static bool inode_needs_cached(struct inode *inode)
+{
+	lockdep_assert_held(&inode->i_lock);
+
+	if (inode->i_state & (I_DIRTY_ALL | I_SYNC))
+		return true;
+	if (!mapping_shrinkable(&inode->i_data))
+		return true;
+	return false;
+}
+
 static void i_callback(struct rcu_head *head)
 {
 	struct inode *inode = container_of(head, struct inode, i_rcu);
@@ -532,20 +549,67 @@ void ihold(struct inode *inode)
 }
 EXPORT_SYMBOL(ihold);
 
+static void inode_add_cached_lru(struct inode *inode)
+{
+	lockdep_assert_held(&inode->i_lock);
+
+	if (inode->i_state & I_CACHED_LRU)
+		return;
+	if (!list_empty(&inode->i_lru))
+		return;
+
+	inode->i_state |= I_CACHED_LRU;
+	spin_lock(&inode->i_sb->s_cached_inodes_lock);
+	list_add(&inode->i_lru, &inode->i_sb->s_cached_inodes);
+	spin_unlock(&inode->i_sb->s_cached_inodes_lock);
+	iobj_get(inode);
+}
+
+static bool __inode_del_cached_lru(struct inode *inode)
+{
+	lockdep_assert_held(&inode->i_lock);
+
+	if (!(inode->i_state & I_CACHED_LRU))
+		return false;
+
+	inode->i_state &= ~I_CACHED_LRU;
+	spin_lock(&inode->i_sb->s_cached_inodes_lock);
+	list_del_init(&inode->i_lru);
+	spin_unlock(&inode->i_sb->s_cached_inodes_lock);
+	return true;
+}
+
+static bool inode_del_cached_lru(struct inode *inode)
+{
+	if (__inode_del_cached_lru(inode)) {
+		iobj_put(inode);
+		return true;
+	}
+	return false;
+}
+
 static void __inode_add_lru(struct inode *inode, bool rotate)
 {
-	if (inode->i_state & (I_DIRTY_ALL | I_SYNC | I_FREEING | I_WILL_FREE))
+	bool need_ref = true;
+
+	lockdep_assert_held(&inode->i_lock);
+
+	if (inode->i_state & (I_FREEING | I_WILL_FREE))
 		return;
 	if (atomic_read(&inode->i_count))
 		return;
 	if (!(inode->i_sb->s_flags & SB_ACTIVE))
 		return;
-	if (!mapping_shrinkable(&inode->i_data))
+	if (inode_needs_cached(inode)) {
+		inode_add_cached_lru(inode);
 		return;
+	}
 
+	need_ref = __inode_del_cached_lru(inode) == false;
 	if (list_lru_add_obj(&inode->i_sb->s_inode_lru, &inode->i_lru)) {
-		iobj_get(inode);
 		inode->i_state |= I_LRU;
+		if (need_ref)
+			iobj_get(inode);
 		this_cpu_inc(nr_unused);
 	} else if (rotate) {
 		inode->i_state |= I_REFERENCED;
@@ -573,8 +637,19 @@ void inode_add_lru(struct inode *inode)
 	__inode_add_lru(inode, false);
 }
 
-static void inode_lru_list_del(struct inode *inode)
+/*
+ * Caller must be holding it's own i_count reference on this inode in order to
+ * prevent this being the final iput.
+ *
+ * Needs inode->i_lock held.
+ */
+void inode_lru_list_del(struct inode *inode)
 {
+	lockdep_assert_held(&inode->i_lock);
+
+	if (inode_del_cached_lru(inode))
+		return;
+
 	if (!(inode->i_state & I_LRU))
 		return;
 
@@ -951,14 +1026,29 @@ static enum lru_status inode_lru_isolate(struct list_head *item,
 		return LRU_SKIP;
 
 	/*
+	 * This inode is either dirty or has page cache we want to keep around,
+	 * so move it to the cached list.
+	 *
+	 * We drop the extra i_obj_count reference we grab when adding it to the
+	 * cached lru.
+	 */
+	if (inode_needs_cached(inode)) {
+		list_lru_isolate(lru, &inode->i_lru);
+		inode_add_cached_lru(inode);
+		iobj_put(inode);
+		spin_unlock(&inode->i_lock);
+		this_cpu_dec(nr_unused);
+		return LRU_REMOVED;
+	}
+
+	/*
 	 * Inodes can get referenced, redirtied, or repopulated while
 	 * they're already on the LRU, and this can make them
 	 * unreclaimable for a while. Remove them lazily here; iput,
 	 * sync, or the last page cache deletion will requeue them.
 	 */
 	if (atomic_read(&inode->i_count) ||
-	    (inode->i_state & ~I_REFERENCED) ||
-	    !mapping_shrinkable(&inode->i_data)) {
+	    (inode->i_state & ~I_REFERENCED)) {
 		list_lru_isolate(lru, &inode->i_lru);
 		inode->i_state &= ~I_LRU;
 		spin_unlock(&inode->i_lock);
