@@ -184,6 +184,7 @@ struct thread_struct {
 	u64			mte_ctrl;
 #endif
 	u64			sctlr_user;
+	u64			sctlr2_user;
 	u64			svcr;
 	u64			tpidr2_el0;
 	u64			por_el0;
@@ -257,6 +258,8 @@ static inline void task_set_sve_vl_onexec(struct task_struct *task,
 #define SCTLR_USER_MASK                                                        \
 	(SCTLR_ELx_ENIA | SCTLR_ELx_ENIB | SCTLR_ELx_ENDA | SCTLR_ELx_ENDB |   \
 	 SCTLR_EL1_TCF0_MASK)
+
+#define SCTLR2_USER_MASK	(0)
 
 static inline void arch_thread_struct_whitelist(unsigned long *offset,
 						unsigned long *size)
