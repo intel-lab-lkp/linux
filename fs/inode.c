@@ -434,8 +434,18 @@ void drop_nlink(struct inode *inode)
 {
 	WARN_ON(inode->i_nlink == 0);
 	inode->__i_nlink--;
-	if (!inode->i_nlink)
+	if (!inode->i_nlink) {
+		/*
+		 * LRU's hold a full ref on the inode, but if we've unlinked it
+		 * then we want the inode to be freed when the last user goes,
+		 * so delete the inode from the LRU list.
+		 */
+		spin_lock(&inode->i_lock);
+		inode_lru_list_del(inode);
+		spin_unlock(&inode->i_lock);
+
 		atomic_long_inc(&inode->i_sb->s_remove_count);
+	}
 }
 EXPORT_SYMBOL(drop_nlink);
 
@@ -451,6 +461,12 @@ void clear_nlink(struct inode *inode)
 {
 	if (inode->i_nlink) {
 		inode->__i_nlink = 0;
+
+		/* See comment in drop_nlink(). */
+		spin_lock(&inode->i_lock);
+		inode_lru_list_del(inode);
+		spin_unlock(&inode->i_lock);
+
 		atomic_long_inc(&inode->i_sb->s_remove_count);
 	}
 }
@@ -555,6 +571,8 @@ static void inode_add_cached_lru(struct inode *inode)
 
 	if (inode->i_state & I_CACHED_LRU)
 		return;
+	if (inode->__i_nlink == 0)
+		return;
 	if (!list_empty(&inode->i_lru))
 		return;
 
@@ -562,7 +580,7 @@ static void inode_add_cached_lru(struct inode *inode)
 	spin_lock(&inode->i_sb->s_cached_inodes_lock);
 	list_add(&inode->i_lru, &inode->i_sb->s_cached_inodes);
 	spin_unlock(&inode->i_sb->s_cached_inodes_lock);
-	iobj_get(inode);
+	__iget(inode);
 }
 
 static bool __inode_del_cached_lru(struct inode *inode)
@@ -582,7 +600,7 @@ static bool __inode_del_cached_lru(struct inode *inode)
 static bool inode_del_cached_lru(struct inode *inode)
 {
 	if (__inode_del_cached_lru(inode)) {
-		iobj_put(inode);
+		iput(inode);
 		return true;
 	}
 	return false;
@@ -598,6 +616,8 @@ static void __inode_add_lru(struct inode *inode, bool rotate)
 		return;
 	if (atomic_read(&inode->i_count))
 		return;
+	if (inode->__i_nlink == 0)
+		return;
 	if (!(inode->i_sb->s_flags & SB_ACTIVE))
 		return;
 	if (inode_needs_cached(inode)) {
@@ -609,7 +629,7 @@ static void __inode_add_lru(struct inode *inode, bool rotate)
 	if (list_lru_add_obj(&inode->i_sb->s_inode_lru, &inode->i_lru)) {
 		inode->i_state |= I_LRU;
 		if (need_ref)
-			iobj_get(inode);
+			__iget(inode);
 		this_cpu_inc(nr_unused);
 	} else if (rotate) {
 		inode->i_state |= I_REFERENCED;
@@ -655,7 +675,7 @@ void inode_lru_list_del(struct inode *inode)
 
 	if (list_lru_del_obj(&inode->i_sb->s_inode_lru, &inode->i_lru)) {
 		inode->i_state &= ~I_LRU;
-		iobj_put(inode);
+		iput(inode);
 		this_cpu_dec(nr_unused);
 	}
 }
@@ -926,6 +946,7 @@ static void evict(struct inode *inode)
 	BUG_ON(inode->i_state != (I_FREEING | I_CLEAR));
 }
 
+static void iput_evict(struct inode *inode);
 /*
  * dispose_list - dispose of the contents of a local list
  * @head: the head of the list to free
@@ -933,20 +954,14 @@ static void evict(struct inode *inode)
  * Dispose-list gets a local list with local inodes in it, so it doesn't
  * need to worry about list corruption and SMP locks.
  */
-static void dispose_list(struct list_head *head, bool for_lru)
+static void dispose_list(struct list_head *head)
 {
 	while (!list_empty(head)) {
 		struct inode *inode;
 
 		inode = list_first_entry(head, struct inode, i_lru);
 		list_del_init(&inode->i_lru);
-
-		if (for_lru) {
-			evict(inode);
-			iobj_put(inode);
-		} else {
-			iput(inode);
-		}
+		iput_evict(inode);
 		cond_resched();
 	}
 }
@@ -987,13 +1002,13 @@ again:
 		if (need_resched()) {
 			spin_unlock(&sb->s_inode_list_lock);
 			cond_resched();
-			dispose_list(&dispose, false);
+			dispose_list(&dispose);
 			goto again;
 		}
 	}
 	spin_unlock(&sb->s_inode_list_lock);
 
-	dispose_list(&dispose, false);
+	dispose_list(&dispose);
 }
 EXPORT_SYMBOL_GPL(evict_inodes);
 
@@ -1031,22 +1046,7 @@ static enum lru_status inode_lru_isolate(struct list_head *item,
 	if (inode_needs_cached(inode)) {
 		list_lru_isolate(lru, &inode->i_lru);
 		inode_add_cached_lru(inode);
-		iobj_put(inode);
-		spin_unlock(&inode->i_lock);
-		this_cpu_dec(nr_unused);
-		return LRU_REMOVED;
-	}
-
-	/*
-	 * Inodes can get referenced, redirtied, or repopulated while
-	 * they're already on the LRU, and this can make them
-	 * unreclaimable for a while. Remove them lazily here; iput,
-	 * sync, or the last page cache deletion will requeue them.
-	 */
-	if (atomic_read(&inode->i_count) ||
-	    (inode->i_state & ~I_REFERENCED)) {
-		list_lru_isolate(lru, &inode->i_lru);
-		inode->i_state &= ~I_LRU;
+		iput(inode);
 		spin_unlock(&inode->i_lock);
 		this_cpu_dec(nr_unused);
 		return LRU_REMOVED;
@@ -1082,7 +1082,6 @@ static enum lru_status inode_lru_isolate(struct list_head *item,
 	}
 
 	WARN_ON(inode->i_state & I_NEW);
-	inode->i_state |= I_FREEING;
 	inode->i_state &= ~I_LRU;
 	list_lru_isolate_move(lru, &inode->i_lru, freeable);
 	spin_unlock(&inode->i_lock);
@@ -1104,7 +1103,7 @@ long prune_icache_sb(struct super_block *sb, struct shrink_control *sc)
 
 	freed = list_lru_shrink_walk(&sb->s_inode_lru, sc,
 				     inode_lru_isolate, &freeable);
-	dispose_list(&freeable, true);
+	dispose_list(&freeable);
 	return freed;
 }
 
@@ -1967,7 +1966,7 @@ EXPORT_SYMBOL(generic_delete_inode);
  * in cache if fs is alive, sync and evict if fs is
  * shutting down.
  */
-static void iput_final(struct inode *inode)
+static void iput_final(struct inode *inode, bool skip_lru)
 {
 	struct super_block *sb = inode->i_sb;
 	const struct super_operations *op = inode->i_sb->s_op;
@@ -1981,13 +1980,15 @@ static void iput_final(struct inode *inode)
 	else
 		drop = generic_drop_inode(inode);
 
-	if (!drop &&
+	if (!drop && !skip_lru &&
 	    !(inode->i_state & I_DONTCACHE) &&
 	    (sb->s_flags & SB_ACTIVE)) {
 		__inode_add_lru(inode, true);
 		spin_unlock(&inode->i_lock);
 		return;
 	}
+
+	WARN_ON(!list_empty(&inode->i_lru));
 
 	state = inode->i_state;
 	if (!drop) {
@@ -2003,23 +2004,12 @@ static void iput_final(struct inode *inode)
 	}
 
 	WRITE_ONCE(inode->i_state, state | I_FREEING);
-	if (!list_empty(&inode->i_lru))
-		inode_lru_list_del(inode);
 	spin_unlock(&inode->i_lock);
 
 	evict(inode);
 }
 
-/**
- *	iput	- put an inode
- *	@inode: inode to put
- *
- *	Puts an inode, dropping its usage count. If the inode use count hits
- *	zero, the inode is then freed and may also be destroyed.
- *
- *	Consequently, iput() can sleep.
- */
-void iput(struct inode *inode)
+static void __iput(struct inode *inode, bool skip_lru)
 {
 	if (!inode)
 		return;
@@ -2037,11 +2027,30 @@ void iput(struct inode *inode)
 
 	spin_lock(&inode->i_lock);
 	if (atomic_dec_and_test(&inode->i_count))
-		iput_final(inode);
+		iput_final(inode, skip_lru);
 	else
 		spin_unlock(&inode->i_lock);
 
 	iobj_put(inode);
+}
+
+static void iput_evict(struct inode *inode)
+{
+	__iput(inode, true);
+}
+
+/**
+ *	iput	- put an inode
+ *	@inode: inode to put
+ *
+ *	Puts an inode, dropping its usage count. If the inode use count hits
+ *	zero, the inode is then freed and may also be destroyed.
+ *
+ *	Consequently, iput() can sleep.
+ */
+void iput(struct inode *inode)
+{
+	__iput(inode, false);
 }
 EXPORT_SYMBOL(iput);
 
