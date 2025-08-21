@@ -460,9 +460,6 @@ static void esd_usb_tx_done_msg(struct esd_usb_net_priv *priv,
 	struct net_device *netdev = priv->netdev;
 	struct esd_tx_urb_context *context;
 
-	if (!netif_device_present(netdev))
-		return;
-
 	context = &priv->tx_contexts[msg->txdone.hnd & (ESD_USB_MAX_TX_URBS - 1)];
 
 	if (!msg->txdone.status) {
@@ -477,6 +474,9 @@ static void esd_usb_tx_done_msg(struct esd_usb_net_priv *priv,
 	/* Release context */
 	context->echo_index = ESD_USB_MAX_TX_URBS;
 	atomic_dec(&priv->active_tx_jobs);
+
+	if (!netif_device_present(netdev))
+		return;
 
 	netif_wake_queue(netdev);
 }
@@ -975,9 +975,11 @@ static netdev_tx_t esd_usb_start_xmit(struct sk_buff *skb,
 		}
 	}
 
-	/* This may never happen */
+	/* This should never happen */
 	if (!context) {
-		netdev_warn(netdev, "couldn't find free context\n");
+		netdev_warn(netdev, "No free context. Jobs: %d\n",
+			    atomic_read(&priv->active_tx_jobs));
+		netif_stop_queue(netdev);
 		ret = NETDEV_TX_BUSY;
 		goto releasebuf;
 	}
@@ -1008,6 +1010,8 @@ static netdev_tx_t esd_usb_start_xmit(struct sk_buff *skb,
 	if (err) {
 		can_free_echo_skb(netdev, context->echo_index, NULL);
 
+		/* Release used context on error */
+		context->echo_index = ESD_USB_MAX_TX_URBS;
 		atomic_dec(&priv->active_tx_jobs);
 		usb_unanchor_urb(urb);
 
