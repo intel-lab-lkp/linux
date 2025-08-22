@@ -88,6 +88,8 @@ required:
   - clock-names
 
 allOf:
+  - $ref: ahci-common.yaml#
+
   - if:
       properties:
         compatible:
@@ -112,7 +114,7 @@ allOf:
         clock-names:
           minItems: 2
 
-additionalProperties: false
+unevaluatedProperties: false
 
 examples:
   - |
