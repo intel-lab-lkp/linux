@@ -2127,6 +2127,8 @@ static int parse_events__sort_events_and_fix_groups(struct list_head *list)
 	int ret;
 	struct evsel *force_grouped_leader = NULL;
 	bool last_event_was_forced_leader = false;
+	bool has_slots = false;
+	bool has_metrics = false;
 
 	/* On x86 topdown metrics events require a slots event. */
 	ret = arch_evlist__add_required_events(list);
@@ -2147,6 +2149,11 @@ static int parse_events__sort_events_and_fix_groups(struct list_head *list)
 		if (pos == pos_leader)
 			orig_num_leaders++;
 
+		if (!has_slots)
+			has_slots = arch_is_topdown_slots(pos);
+		if (!has_metrics)
+			has_metrics = arch_is_topdown_metrics(pos);
+
 		/*
 		 * Ensure indexes are sequential, in particular for multiple
 		 * event lists being merged. The indexes are used to detect when
@@ -2162,6 +2169,10 @@ static int parse_events__sort_events_and_fix_groups(struct list_head *list)
 		if (force_grouped_idx == -1 && arch_evsel__must_be_in_group(pos))
 			force_grouped_idx = pos_leader->core.idx;
 	}
+
+	/* Don't regroup if there are only topdown slots events. */
+	if (force_grouped_idx != -1 && has_slots && !has_metrics)
+		force_grouped_idx = -1;
 
 	/* Sort events. */
 	list_sort(&force_grouped_idx, list, evlist__cmp);

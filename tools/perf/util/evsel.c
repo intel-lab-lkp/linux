@@ -3965,6 +3965,16 @@ int evsel__source_count(const struct evsel *evsel)
 	return count;
 }
 
+bool __weak arch_is_topdown_slots(const struct evsel *evsel __maybe_unused)
+{
+	return false;
+}
+
+bool __weak arch_is_topdown_metrics(const struct evsel *evsel __maybe_unused)
+{
+	return false;
+}
+
 bool __weak arch_evsel__must_be_in_group(const struct evsel *evsel __maybe_unused)
 {
 	return false;
