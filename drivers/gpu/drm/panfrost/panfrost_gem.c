@@ -368,6 +368,26 @@ panfrost_gem_set_label(struct drm_gem_object *obj, const char *label)
 	kfree_const(old_label);
 }
 
+int
+panfrost_gem_sync(struct drm_gem_object *obj, u32 flags,
+		  u32 offset, u32 size)
+{
+	struct panfrost_gem_object *bo = to_panfrost_bo(obj);
+	enum dma_data_direction dir = DMA_NONE;
+
+	if ((flags & PANFROST_BO_SYNC_TO_DEVICE) &&
+	    (flags & PANFROST_BO_SYNC_FROM_DEVICE))
+		return -EINVAL;
+	else if (flags & PANFROST_BO_SYNC_TO_DEVICE)
+		dir = DMA_TO_DEVICE;
+	else if (flags & PANFROST_BO_SYNC_FROM_DEVICE)
+		dir = DMA_FROM_DEVICE;
+	else
+		return 0;
+
+	return drm_gem_shmem_sync_mmap(&bo->base, offset, size, dir);
+}
+
 void
 panfrost_gem_internal_set_label(struct drm_gem_object *obj, const char *label)
 {
