@@ -3587,12 +3587,23 @@ static unsigned long __init hugetlb_pages_alloc_boot(struct hstate *h)
 		.numa_aware	= true
 	};
 
+	unsigned long huge_reserved_pages = h->max_huge_pages << h->order;
+	unsigned long huge_pages, remaining, total_pages;
 	unsigned long jiffies_start;
 	unsigned long jiffies_end;
 
+	total_pages = totalram_pages() * 90 / 100;
+	if (huge_reserved_pages > total_pages) {
+		huge_pages =  h->max_huge_pages * 90 / 100;
+		remaining = h->max_huge_pages - huge_pages;
+	} else {
+		huge_pages =  h->max_huge_pages;
+		remaining = 0;
+	}
+
 	job.thread_fn	= hugetlb_pages_alloc_boot_node;
 	job.start	= 0;
-	job.size	= h->max_huge_pages;
+	job.size	= huge_pages;
 
 	/*
 	 * job.max_threads is 25% of the available cpu threads by default.
@@ -3616,10 +3627,16 @@ static unsigned long __init hugetlb_pages_alloc_boot(struct hstate *h)
 	}
 
 	job.max_threads	= hugepage_allocation_threads;
-	job.min_chunk	= h->max_huge_pages / hugepage_allocation_threads;
+	job.min_chunk	= huge_pages / hugepage_allocation_threads;
 
 	jiffies_start = jiffies;
 	padata_do_multithreaded(&job);
+	if (remaining) {
+		job.start   = huge_pages;
+		job.size    = remaining;
+		job.min_chunk   = remaining / hugepage_allocation_threads;
+		padata_do_multithreaded(&job);
+	}
 	jiffies_end = jiffies;
 
 	pr_info("HugeTLB: allocation took %dms with hugepage_allocation_threads=%ld\n",
