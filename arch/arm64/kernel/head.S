@@ -86,6 +86,18 @@ SYM_CODE_START(primary_entry)
 	bl	record_mmu_state
 	bl	preserve_boot_args
 
+	adrp	x0, reserved_pg_dir
+	add	x1, x0, #PAGE_SIZE
+0:	str	xzr, [x0], 8
+	cmp	x0, x1
+	b.lo	0b
+
+	adrp	x0, __pi_init_idmap_pg_dir
+	adrp	x1, __pi_init_idmap_pg_end
+1:	str	xzr, [x0], 8
+	cmp	x0, x1
+	b.lo	1b
+
 	adrp	x1, early_init_stack
 	mov	sp, x1
 	mov	x29, xzr

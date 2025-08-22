@@ -760,7 +760,7 @@ static int __init map_entry_trampoline(void)
 	pgprot_val(prot) &= ~PTE_NG;
 
 	/* Map only the text into the trampoline page table */
-	memset(tramp_pg_dir, 0, PGD_SIZE);
+	memset(tramp_pg_dir, 0, PAGE_SIZE);
 	__create_pgd_mapping(tramp_pg_dir, pa_start, TRAMP_VALIAS,
 			     entry_tramp_text_size(), prot,
 			     pgd_pgtable_alloc_init_mm, NO_BLOCK_MAPPINGS);
@@ -805,6 +805,7 @@ static void __init create_idmap(void)
 	u64 end   = __pa_symbol(__idmap_text_end);
 	u64 ptep  = __pa_symbol(idmap_ptes);
 
+	memset(idmap_pg_dir, 0, PAGE_SIZE);
 	__pi_map_range(&ptep, start, end, start, PAGE_KERNEL_ROX,
 		       IDMAP_ROOT_LEVEL, (pte_t *)idmap_pg_dir, false,
 		       __phys_to_virt(ptep) - ptep);
