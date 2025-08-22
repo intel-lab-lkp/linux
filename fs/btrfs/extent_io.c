@@ -1643,6 +1643,32 @@ static int submit_one_sector(struct btrfs_inode *inode,
 }
 
 /*
+ * Check that the folio has been set up for IO  and its range has an ordered
+ * extent.
+ *
+ * Historical note: this used to be fixup worker that handled pages/folios
+ * dirtied out-of-band outside of the filesystem and restarted the whole
+ * process again. This cannot happen anymore since 5.8 and get_user_pages()
+ * update. This check is to catch bugs.
+ *
+ * Return: true if the check fails and folio is dirty
+ */
+static bool btrfs_check_folio_for_writepage(struct folio *folio)
+{
+	struct btrfs_inode *inode = folio_to_inode(folio);
+
+	/* This folio has ordered extent covering it already */
+	if (folio_test_ordered(folio))
+		return false;
+
+	DEBUG_WARN();
+	btrfs_err_rl(inode->root->fs_info,
+"root %lld ino %llu folio %llu is marked dirty without notifying the fs",
+		     btrfs_root_id(inode->root), btrfs_ino(inode), folio_pos(folio));
+	return true;
+}
+
+/*
  * Helper for extent_writepage().  This calls the writepage start hooks,
  * and does the loop to map the page into extents and bios.
  *
@@ -1669,18 +1695,12 @@ static noinline_for_stack int extent_writepage_io(struct btrfs_inode *inode,
 	ASSERT(start >= folio_start &&
 	       start + len <= folio_start + folio_size(folio));
 
-	ret = btrfs_writepage_cow_fixup(folio);
-	if (ret == -EAGAIN) {
-		/* Fixup worker will requeue */
-		folio_redirty_for_writepage(bio_ctrl->wbc, folio);
-		folio_unlock(folio);
-		return 1;
-	}
-	if (ret < 0) {
+	ret = btrfs_check_folio_for_writepage(folio);
+	if (ret) {
 		btrfs_folio_clear_dirty(fs_info, folio, start, len);
 		btrfs_folio_set_writeback(fs_info, folio, start, len);
 		btrfs_folio_clear_writeback(fs_info, folio, start, len);
-		return ret;
+		return -EUCLEAN;
 	}
 
 	for (cur = start; cur < start + len; cur += fs_info->sectorsize)
