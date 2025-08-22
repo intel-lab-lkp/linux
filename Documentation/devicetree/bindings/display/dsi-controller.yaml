@@ -73,6 +73,24 @@ patternProperties:
     required:
       - reg
 
+  "^bridge@[0-3]$":
+    description: Bridge connected to the DSI link
+    type: object
+
+    properties:
+      reg:
+        minimum: 0
+        maximum: 3
+        description:
+          The virtual channel number of a DSI peripheral. Must be in the range
+          from 0 to 3, as DSI uses a 2-bit addressing scheme. Some DSI
+          peripherals respond to more than a single virtual channel. In that
+          case the reg property can take multiple entries, one for each virtual
+          channel that the peripheral responds to.
+
+    required:
+      - reg
+
 additionalProperties: true
 
 examples:
