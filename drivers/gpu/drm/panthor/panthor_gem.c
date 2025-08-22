@@ -344,6 +344,26 @@ panthor_gem_kernel_bo_set_label(struct panthor_kernel_bo *bo, const char *label)
 	panthor_gem_bo_set_label(bo->obj, str);
 }
 
+int
+panthor_gem_bo_sync(struct drm_gem_object *obj, u32 flags,
+		    u64 offset, u64 size)
+{
+	struct panthor_gem_object *bo = to_panthor_bo(obj);
+	enum dma_data_direction dir = DMA_NONE;
+
+	if ((flags & DRM_PANTHOR_BO_SYNC_TO_DEVICE) &&
+	    (flags & DRM_PANTHOR_BO_SYNC_FROM_DEVICE))
+		return -EINVAL;
+	else if (flags & DRM_PANTHOR_BO_SYNC_TO_DEVICE)
+		dir = DMA_TO_DEVICE;
+	else if (flags & DRM_PANTHOR_BO_SYNC_FROM_DEVICE)
+		dir = DMA_FROM_DEVICE;
+	else
+		return 0;
+
+	return drm_gem_shmem_sync_mmap(&bo->base, offset, size, dir);
+}
+
 #ifdef CONFIG_DEBUG_FS
 struct gem_size_totals {
 	size_t size;
