@@ -19,18 +19,21 @@ properties:
           - enum:
               - microchip,ata6561
           - const: ti,tcan1042
+      - items:
+          - enum:
+              - nxp,tja1051
+          - const: ti,tcan1043
       - enum:
           - ti,tcan1042
           - ti,tcan1043
+          - nxp,tja1048
           - nxp,tjr1443
 
-  '#phy-cells':
-    const: 0
+  '#phy-cells': true
 
   standby-gpios:
     description:
       gpio node to toggle standby signal on transceiver
-    maxItems: 1
 
   enable-gpios:
     description:
@@ -52,6 +55,26 @@ properties:
 required:
   - compatible
   - '#phy-cells'
+
+allOf:
+  - if:
+      properties:
+        compatible:
+          contains:
+            const: nxp,tja1048
+
+    then:
+      properties:
+        '#phy-cells':
+          const: 1
+        standby-gpios:
+          maxItems: 2
+    else:
+      properties:
+        '#phy-cells':
+          const: 0
+        standby-gpios:
+          maxItems: 1
 
 additionalProperties: false
 
