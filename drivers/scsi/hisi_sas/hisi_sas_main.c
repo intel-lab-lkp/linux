@@ -740,7 +740,7 @@ static void hisi_sas_sync_cq(struct hisi_sas_cq *cq)
 	if (hisi_sas_queue_is_poll(cq))
 		hisi_sas_sync_poll_cq(cq);
 	else
-		synchronize_irq(cq->irq_no);
+		tasklet_kill(&cq->tasklet);
 }
 
 void hisi_sas_sync_poll_cqs(struct hisi_hba *hisi_hba)
@@ -779,7 +779,7 @@ static void hisi_sas_tmf_aborted(struct sas_task *task)
 		struct hisi_sas_cq *cq =
 			   &hisi_hba->cq[slot->dlvry_queue];
 		/*
-		 * sync irq or poll queue to avoid free'ing task
+		 * flush tasklet or poll queue to avoid free'ing task
 		 * before using task in IO completion
 		 */
 		hisi_sas_sync_cq(cq);
@@ -1705,8 +1705,8 @@ static int hisi_sas_abort_task(struct sas_task *task)
 
 		if (slot) {
 			/*
-			 * sync irq or poll queue to avoid free'ing task
-			 * before using task in IO completion
+			 * flush tasklet or poll queue to avoid free'ing
+			 * task before using task in IO completion
 			 */
 			cq = &hisi_hba->cq[slot->dlvry_queue];
 			hisi_sas_sync_cq(cq);
@@ -1779,8 +1779,8 @@ static int hisi_sas_abort_task(struct sas_task *task)
 		if (((rc < 0) || (rc == TMF_RESP_FUNC_FAILED)) &&
 					task->lldd_task) {
 			/*
-			 * sync irq or poll queue to avoid free'ing task
-			 * before using task in IO completion
+			 * flush tasklet or poll queue to avoid free'ing
+			 * task before using task in IO completion
 			 */
 			hisi_sas_sync_cq(cq);
 			slot->task = NULL;
@@ -2042,8 +2042,8 @@ static bool hisi_sas_internal_abort_timeout(struct sas_task *task,
 			struct hisi_sas_cq *cq =
 				&hisi_hba->cq[slot->dlvry_queue];
 			/*
-			 * sync irq or poll queue to avoid free'ing task
-			 * before using task in IO completion
+			 * flush tasklet or poll queue to avoid free'ing
+			 * task before using task in IO completion
 			 */
 			hisi_sas_sync_cq(cq);
 			slot->task = NULL;

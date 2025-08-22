@@ -2569,13 +2569,11 @@ static int queue_complete_v3_hw(struct Scsi_Host *shost, unsigned int queue)
 	return completed;
 }
 
-static irqreturn_t cq_thread_v3_hw(int irq_no, void *p)
+static void cq_tasklet_v3_hw(unsigned long val)
 {
-	struct hisi_sas_cq *cq = p;
+	struct hisi_sas_cq *cq = (struct hisi_sas_cq *)val;
 
 	complete_v3_hw(cq);
-
-	return IRQ_HANDLED;
 }
 
 static irqreturn_t cq_interrupt_v3_hw(int irq_no, void *p)
@@ -2585,8 +2583,9 @@ static irqreturn_t cq_interrupt_v3_hw(int irq_no, void *p)
 	int queue = cq->id;
 
 	hisi_sas_write32(hisi_hba, OQ_INT_SRC, 1 << queue);
+	tasklet_schedule(&cq->tasklet);
 
-	return IRQ_WAKE_THREAD;
+	return IRQ_HANDLED;
 }
 
 static void hisi_sas_v3_free_vectors(void *data)
@@ -2657,16 +2656,13 @@ static int interrupt_init_v3_hw(struct hisi_hba *hisi_hba)
 
 	for (i = 0; i < hisi_hba->cq_nvecs; i++) {
 		struct hisi_sas_cq *cq = &hisi_hba->cq[i];
+		struct tasklet_struct *t = &cq->tasklet;
 		int nr = hisi_sas_intr_conv ? BASE_VECTORS_V3_HW :
 					      BASE_VECTORS_V3_HW + i;
-		unsigned long irqflags = hisi_sas_intr_conv ? IRQF_SHARED :
-							      IRQF_ONESHOT;
+		unsigned long irqflags = hisi_sas_intr_conv ? IRQF_SHARED : 0;
 
-		cq->irq_no = pci_irq_vector(pdev, nr);
-		rc = devm_request_threaded_irq(dev, cq->irq_no,
-				      cq_interrupt_v3_hw,
-				      cq_thread_v3_hw,
-				      irqflags,
+		rc = devm_request_irq(dev, pci_irq_vector(pdev, nr),
+				      cq_interrupt_v3_hw, irqflags,
 				      DRV_NAME " cq", cq);
 		if (rc) {
 			dev_err(dev, "could not request cq%d interrupt, rc=%d\n",
@@ -2678,6 +2674,8 @@ static int interrupt_init_v3_hw(struct hisi_hba *hisi_hba)
 			dev_err(dev, "could not get cq%d irq affinity!\n", i);
 			return -ENOENT;
 		}
+
+		tasklet_init(t, cq_tasklet_v3_hw, (unsigned long)cq);
 	}
 
 	return 0;
@@ -2750,8 +2748,8 @@ static int disable_host_v3_hw(struct hisi_hba *hisi_hba)
 	u32 status, reg_val;
 	int rc;
 
-	hisi_sas_sync_poll_cqs(hisi_hba);
 	hisi_sas_write32(hisi_hba, DLVRY_QUEUE_ENABLE, 0x0);
+	hisi_sas_sync_cqs(hisi_hba);
 
 	hisi_sas_stop_phys(hisi_hba);
 
@@ -5100,6 +5098,7 @@ static void hisi_sas_v3_remove(struct pci_dev *pdev)
 	sas_remove_host(shost);
 
 	hisi_sas_v3_destroy_irqs(pdev, hisi_hba);
+	hisi_sas_sync_cqs(hisi_hba);
 	hisi_sas_free(hisi_hba);
 	scsi_host_put(shost);
 }
