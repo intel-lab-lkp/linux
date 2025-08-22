@@ -63,7 +63,13 @@ static void kvm_reset_dirty_gfn(struct kvm *kvm, u32 slot, u64 offset, u64 mask)
 
 	memslot = id_to_memslot(__kvm_memslots(kvm, as_id), id);
 
-	if (!memslot || (offset + __fls(mask)) >= memslot->npages)
+	/*
+	 * Userspace can write arbitrary data into the dirty ring, making it
+	 * possible for misbehaving userspace to try to reset an out-of-memslot
+	 * GFN or a GFN in a memslot that isn't being dirty-logged.
+	 */
+	if (!memslot || (offset + __fls(mask)) >= memslot->npages ||
+	    !kvm_slot_dirty_track_enabled(memslot))
 		return;
 
 	KVM_MMU_LOCK(kvm);
