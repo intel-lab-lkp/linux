@@ -18,6 +18,7 @@
 #include <linux/nls.h>
 #include <linux/buffer_head.h>
 #include <linux/magic.h>
+#include "../nls/nls_ucs2_utils.h"
 
 #include "exfat_raw.h"
 #include "exfat_fs.h"
@@ -573,6 +574,228 @@ static int exfat_verify_boot_region(struct super_block *sb)
 	return 0;
 }
 
+static int exfat_get_volume_label_ptrs(struct super_block *sb,
+				       struct buffer_head **out_bh,
+				       struct exfat_dentry **out_dentry,
+				       struct inode *root_inode)
+{
+	int i, ret;
+	unsigned int type, old_clu;
+	struct exfat_sb_info *sbi = EXFAT_SB(sb);
+	struct exfat_chain clu;
+	struct exfat_dentry *ep, *deleted_ep = NULL;
+	struct buffer_head *bh, *deleted_bh;
+
+	clu.dir = sbi->root_dir;
+	clu.flags = ALLOC_FAT_CHAIN;
+
+	while (clu.dir != EXFAT_EOF_CLUSTER) {
+		for (i = 0; i < sbi->dentries_per_clu; i++) {
+			ep = exfat_get_dentry(sb, &clu, i, &bh);
+
+			if (!ep) {
+				ret = -EIO;
+				goto end;
+			}
+
+			type = exfat_get_entry_type(ep);
+			if (type == TYPE_DELETED && !deleted_ep && root_inode) {
+				deleted_ep = ep;
+				deleted_bh = bh;
+				continue;
+			}
+
+			if (type == TYPE_UNUSED) {
+				if (!root_inode) {
+					brelse(bh);
+					ret = -ENOENT;
+					goto end;
+				}
+
+				if (deleted_ep) {
+					brelse(bh);
+					goto end;
+				}
+
+				if (i < sbi->dentries_per_clu - 1) {
+					deleted_ep = ep;
+					deleted_bh = bh;
+
+					ep = exfat_get_dentry(sb, &clu,
+							      i + 1, &bh);
+					memset(ep, 0,
+					       sizeof(struct exfat_dentry));
+					ep->type = EXFAT_UNUSED;
+					exfat_update_bh(bh, true);
+					brelse(bh);
+
+					goto end;
+				}
+
+				// Last dentry in cluster
+				clu.size = 0;
+				old_clu = clu.dir;
+				ret = exfat_alloc_cluster(root_inode, 1,
+							  &clu, true);
+				if (ret < 0) {
+					brelse(bh);
+					goto end;
+				}
+
+				ret = exfat_ent_set(sb, old_clu, clu.dir);
+				if (ret < 0) {
+					exfat_free_cluster(root_inode, &clu);
+					brelse(bh);
+					goto end;
+				}
+
+				ret = exfat_zeroed_cluster(root_inode, clu.dir);
+				if (ret < 0) {
+					exfat_free_cluster(root_inode, &clu);
+					brelse(bh);
+					goto end;
+				}
+
+				deleted_ep = ep;
+				deleted_bh = bh;
+				goto end;
+			}
+
+			if (type == TYPE_VOLUME) {
+				*out_bh = bh;
+				*out_dentry = ep;
+
+				if (deleted_ep)
+					brelse(deleted_bh);
+
+				return 0;
+			}
+
+			brelse(bh);
+		}
+
+		if (exfat_get_next_cluster(sb, &(clu.dir))) {
+			ret = -EIO;
+			goto end;
+		}
+	}
+
+	ret = -EIO;
+
+end:
+	if (deleted_ep) {
+		*out_bh = deleted_bh;
+		*out_dentry = deleted_ep;
+		memset((*out_dentry), 0, sizeof(struct exfat_dentry));
+		(*out_dentry)->type = EXFAT_VOLUME;
+		return 0;
+	}
+
+	*out_bh = NULL;
+	*out_dentry = NULL;
+	return ret;
+}
+
+static int exfat_alloc_volume_label(struct super_block *sb)
+{
+	struct exfat_sb_info *sbi = EXFAT_SB(sb);
+
+	if (sbi->volume_label)
+		return 0;
+
+
+	mutex_lock(&sbi->s_lock);
+	sbi->volume_label = kcalloc(EXFAT_VOLUME_LABEL_LEN,
+						     sizeof(short), GFP_KERNEL);
+	mutex_unlock(&sbi->s_lock);
+
+	if (!sbi->volume_label)
+		return -ENOMEM;
+
+	return 0;
+}
+
+int exfat_read_volume_label(struct super_block *sb)
+{
+	int ret, i;
+	struct exfat_sb_info *sbi = EXFAT_SB(sb);
+	struct buffer_head *bh = NULL;
+	struct exfat_dentry *ep = NULL;
+
+	ret = exfat_get_volume_label_ptrs(sb, &bh, &ep, NULL);
+	// ENOENT signifies that a volume label dentry doesn't exist
+	// We will treat this as an empty volume label and not fail.
+	if (ret < 0 && ret != -ENOENT)
+		goto cleanup;
+
+	ret = exfat_alloc_volume_label(sb);
+	if (ret < 0)
+		goto cleanup;
+
+	mutex_lock(&sbi->s_lock);
+	if (!ep)
+		memset(sbi->volume_label, 0, EXFAT_VOLUME_LABEL_LEN);
+	else
+		for (i = 0; i < EXFAT_VOLUME_LABEL_LEN; i++)
+			sbi->volume_label[i] = le16_to_cpu(ep->dentry.volume_label.volume_label[i]);
+	mutex_unlock(&sbi->s_lock);
+
+	ret = 0;
+
+cleanup:
+	if (bh)
+		brelse(bh);
+
+	return ret;
+}
+
+int exfat_write_volume_label(struct super_block *sb,
+			     struct exfat_uni_name *uniname,
+			     struct inode *root_inode)
+{
+	int ret, i;
+	struct exfat_sb_info *sbi = EXFAT_SB(sb);
+	struct buffer_head *bh = NULL;
+	struct exfat_dentry *ep = NULL;
+
+	if (uniname->name_len > EXFAT_VOLUME_LABEL_LEN) {
+		ret = -EINVAL;
+		goto cleanup;
+	}
+
+	ret = exfat_get_volume_label_ptrs(sb, &bh, &ep, root_inode);
+	if (ret < 0)
+		goto cleanup;
+
+	ret = exfat_alloc_volume_label(sb);
+	if (ret < 0)
+		goto cleanup;
+
+	memcpy(sbi->volume_label, uniname->name,
+	       uniname->name_len * sizeof(short));
+
+	mutex_lock(&sbi->s_lock);
+	for (i = 0; i < uniname->name_len; i++)
+		ep->dentry.volume_label.volume_label[i] =
+			cpu_to_le16(sbi->volume_label[i]);
+	// Fill the rest of the str with 0x0000
+	for (; i < EXFAT_VOLUME_LABEL_LEN; i++)
+		ep->dentry.volume_label.volume_label[i] = 0x0000;
+
+	ep->dentry.volume_label.char_count = uniname->name_len;
+	mutex_unlock(&sbi->s_lock);
+
+	ret = 0;
+
+cleanup:
+	if (bh) {
+		exfat_update_bh(bh, true);
+		brelse(bh);
+	}
+
+	return ret;
+}
+
 /* mount the file system volume */
 static int __exfat_fill_super(struct super_block *sb,
 		struct exfat_chain *root_clu)
@@ -791,6 +1014,7 @@ static void delayed_free(struct rcu_head *p)
 
 	unload_nls(sbi->nls_io);
 	exfat_free_upcase_table(sbi);
+	kfree(sbi->volume_label);
 	exfat_free_sbi(sbi);
 }
 

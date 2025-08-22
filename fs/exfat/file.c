@@ -12,6 +12,7 @@
 #include <linux/security.h>
 #include <linux/msdos_fs.h>
 #include <linux/writeback.h>
+#include "../nls/nls_ucs2_utils.h"
 
 #include "exfat_raw.h"
 #include "exfat_fs.h"
@@ -486,10 +487,93 @@ static int exfat_ioctl_shutdown(struct super_block *sb, unsigned long arg)
 	return exfat_force_shutdown(sb, flags);
 }
 
+static int exfat_ioctl_get_volume_label(struct super_block *sb, unsigned long arg)
+{
+	int ret;
+	char utf8[FSLABEL_MAX] = {0};
+	struct exfat_uni_name *uniname;
+	struct exfat_sb_info *sbi = EXFAT_SB(sb);
+
+	uniname = kmalloc(sizeof(struct exfat_uni_name), GFP_KERNEL);
+	if (!uniname)
+		return -ENOMEM;
+
+	ret = exfat_read_volume_label(sb);
+	if (ret < 0)
+		goto cleanup;
+
+	memcpy(uniname->name, sbi->volume_label,
+	       EXFAT_VOLUME_LABEL_LEN * sizeof(short));
+	uniname->name[EXFAT_VOLUME_LABEL_LEN] = 0x0000;
+	uniname->name_len = UniStrnlen(uniname->name, EXFAT_VOLUME_LABEL_LEN);
+
+	ret = exfat_utf16_to_nls(sb, uniname, utf8, FSLABEL_MAX);
+	if (ret < 0)
+		goto cleanup;
+
+	if (copy_to_user((char __user *)arg, utf8, FSLABEL_MAX)) {
+		ret = -EFAULT;
+		goto cleanup;
+	}
+
+	ret = 0;
+
+cleanup:
+	kfree(uniname);
+	return ret;
+}
+
+static int exfat_ioctl_set_volume_label(struct super_block *sb,
+					unsigned long arg,
+					struct inode *root_inode)
+{
+	int ret, lossy;
+	char utf8[FSLABEL_MAX];
+	struct exfat_uni_name *uniname;
+
+	if (!capable(CAP_SYS_ADMIN))
+		return -EPERM;
+
+	uniname = kmalloc(sizeof(struct exfat_uni_name), GFP_KERNEL);
+	if (!uniname)
+		return -ENOMEM;
+
+	if (copy_from_user(utf8, (char __user *)arg, FSLABEL_MAX)) {
+		ret = -EFAULT;
+		goto cleanup;
+	}
+
+	if (utf8[0]) {
+		ret = exfat_nls_to_utf16(sb, utf8, strnlen(utf8, FSLABEL_MAX),
+					 uniname, &lossy);
+		if (ret < 0)
+			goto cleanup;
+		else if (lossy & NLS_NAME_LOSSY) {
+			ret = -EINVAL;
+			goto cleanup;
+		}
+	} else {
+		uniname->name[0] = 0x0000;
+		uniname->name_len = 0;
+	}
+
+	if (uniname->name_len > EXFAT_VOLUME_LABEL_LEN) {
+		exfat_info(sb, "Volume label length too long, truncating");
+		uniname->name_len = EXFAT_VOLUME_LABEL_LEN;
+	}
+
+	ret = exfat_write_volume_label(sb, uniname, root_inode);
+
+cleanup:
+	kfree(uniname);
+	return ret;
+}
+
 long exfat_ioctl(struct file *filp, unsigned int cmd, unsigned long arg)
 {
 	struct inode *inode = file_inode(filp);
 	u32 __user *user_attr = (u32 __user *)arg;
+	struct inode *root_inode = filp->f_path.mnt->mnt_root->d_inode;
 
 	switch (cmd) {
 	case FAT_IOCTL_GET_ATTRIBUTES:
@@ -500,6 +584,10 @@ long exfat_ioctl(struct file *filp, unsigned int cmd, unsigned long arg)
 		return exfat_ioctl_shutdown(inode->i_sb, arg);
 	case FITRIM:
 		return exfat_ioctl_fitrim(inode, arg);
+	case FS_IOC_GETFSLABEL:
+		return exfat_ioctl_get_volume_label(inode->i_sb, arg);
+	case FS_IOC_SETFSLABEL:
+		return exfat_ioctl_set_volume_label(inode->i_sb, arg, root_inode);
 	default:
 		return -ENOTTY;
 	}
