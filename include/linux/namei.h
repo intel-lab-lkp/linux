@@ -84,6 +84,22 @@ struct dentry *lookup_one_positive_unlocked(struct mnt_idmap *idmap,
 void end_dirop(struct dentry *de);
 void end_dirop_mkdir(struct dentry *de, struct dentry *parent);
 
+/* filesystems which use the dcache as backing store don't
+ * keep a reference after creating an object.
+ */
+static inline struct dentry *simple_end_creating(struct dentry *dentry)
+{
+	dget(dentry);
+	end_dirop(dentry);
+	return dentry;
+}
+
+/* On failure, the don't keep a reference */
+static inline void simple_failed_creating(struct dentry *dentry)
+{
+	end_dirop(dentry);
+}
+
 extern int follow_down_one(struct path *);
 extern int follow_down(struct path *path, unsigned int flags);
 extern int follow_up(struct path *);

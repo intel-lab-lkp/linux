@@ -536,8 +536,7 @@ static int rpc_new_file(struct dentry *parent,
 
 	inode = rpc_get_inode(dir->i_sb, S_IFREG | mode);
 	if (unlikely(!inode)) {
-		dput(dentry);
-		inode_unlock(dir);
+		simple_failed_creating(dentry);
 		return -ENOMEM;
 	}
 	inode->i_ino = iunique(dir->i_sb, 100);
@@ -546,7 +545,7 @@ static int rpc_new_file(struct dentry *parent,
 	rpc_inode_setowner(inode, private);
 	d_instantiate(dentry, inode);
 	fsnotify_create(dir, dentry);
-	inode_unlock(dir);
+	simple_end_creating(dentry);
 	return 0;
 }
 
@@ -572,9 +571,8 @@ static struct dentry *rpc_new_dir(struct dentry *parent,
 	inc_nlink(dir);
 	d_instantiate(dentry, inode);
 	fsnotify_mkdir(dir, dentry);
-	inode_unlock(dir);
 
-	return dentry;
+	return simple_end_creating(dentry);
 }
 
 static int rpc_populate(struct dentry *parent,
@@ -669,9 +667,8 @@ int rpc_mkpipe_dentry(struct dentry *parent, const char *name,
 	rpci->pipe = pipe;
 	rpc_inode_setowner(inode, private);
 	d_instantiate(dentry, inode);
-	pipe->dentry = dentry;
 	fsnotify_create(dir, dentry);
-	inode_unlock(dir);
+	pipe->dentry = simple_end_creating(dentry);
 	return 0;
 
 failed:
