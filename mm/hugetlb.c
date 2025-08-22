@@ -5954,6 +5954,8 @@ void __unmap_hugepage_range(struct mmu_gather *tlb, struct vm_area_struct *vma,
 		 * If there we are freeing a surplus, do not set the restore
 		 * reservation bit.
 		 */
+		spin_lock_irq(&hugetlb_lock);
+
 		if (!h->surplus_huge_pages && __vma_private_lock(vma) &&
 		    folio_test_anon(folio)) {
 			folio_set_hugetlb_restore_reserve(folio);
@@ -5961,6 +5963,7 @@ void __unmap_hugepage_range(struct mmu_gather *tlb, struct vm_area_struct *vma,
 			adjust_reservation = true;
 		}
 
+		spin_unlock_irq(&hugetlb_lock);
 		spin_unlock(ptl);
 
 		/*
