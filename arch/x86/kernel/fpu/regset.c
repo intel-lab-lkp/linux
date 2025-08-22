@@ -43,16 +43,12 @@ int regset_xregset_fpregs_active(struct task_struct *target, const struct user_r
  *   - ptrace to dump fpstate of a stopped task, in which case the registers
  *     have already been saved to fpstate on context switch.
  */
-static void sync_fpstate(struct fpu *fpu)
-{
-	if (fpu == x86_task_fpu(current))
-		fpu_sync_fpstate(fpu);
-}
-
 static struct fpstate *get_fpstate(struct task_struct *task)
 {
 	struct fpu *fpu = x86_task_fpu(task);
-	sync_fpstate(fpu);
+
+	if (task == current)
+		fpu_sync_fpstate(fpu);
 	return fpu->fpstate;
 }
 
