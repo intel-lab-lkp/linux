@@ -30,6 +30,10 @@
 #define _ASM_GENERIC_FCNTL_H
 #include <linux/fcntl.h>
 
+#ifndef O_DENY_WRITE
+#define O_DENY_WRITE 040000000
+#endif
+
 #include "../kselftest_harness.h"
 
 static int sys_execveat(int dirfd, const char *pathname, char *const argv[],
@@ -317,6 +321,221 @@ TEST_F(access, non_regular_files)
 	test_exec_path(_metadata, fifo_path, EACCES);
 	test_exec_fd(_metadata, self->socket_fds[0], EACCES);
 	test_exec_fd(_metadata, self->pipefd, EACCES);
+}
+
+TEST_F(access, deny_write_check_open)
+{
+	int fd_deny, fd_read, fd_write;
+
+	fd_deny = open(reg_file_path, O_DENY_WRITE | O_RDONLY | O_CLOEXEC);
+	ASSERT_LE(0, fd_deny);
+
+	/* Concurrent reads are always allowed. */
+	fd_read = open(reg_file_path, O_RDONLY | O_CLOEXEC);
+	EXPECT_LE(0, fd_read);
+	EXPECT_EQ(0, close(fd_read));
+
+	/* Concurrent writes are denied. */
+	fd_write = open(reg_file_path, O_WRONLY | O_CLOEXEC);
+	EXPECT_EQ(-1, fd_write);
+	EXPECT_EQ(ETXTBSY, errno);
+
+	/* Drops O_DENY_WRITE. */
+	EXPECT_EQ(0, close(fd_deny));
+
+	/* The restriction is now gone. */
+	fd_write = open(reg_file_path, O_WRONLY | O_CLOEXEC);
+	EXPECT_LE(0, fd_write);
+	EXPECT_EQ(0, close(fd_write));
+}
+
+TEST_F(access, deny_write_check_open_and_fcntl)
+{
+	int fd_deny, fd_read, fd_write, flags;
+
+	fd_deny = open(reg_file_path, O_DENY_WRITE | O_RDONLY | O_CLOEXEC);
+	ASSERT_LE(0, fd_deny);
+
+	/* Sets O_DENY_WRITE a "second" time. */
+	flags = fcntl(fd_deny, F_GETFL);
+	ASSERT_NE(-1, flags);
+	EXPECT_EQ(0, fcntl(fd_deny, F_SETFL, flags | O_DENY_WRITE));
+
+	/* Concurrent reads are always allowed. */
+	fd_read = open(reg_file_path, O_RDONLY | O_CLOEXEC);
+	EXPECT_LE(0, fd_read);
+	EXPECT_EQ(0, close(fd_read));
+
+	/* Concurrent writes are denied. */
+	fd_write = open(reg_file_path, O_WRONLY | O_CLOEXEC);
+	EXPECT_EQ(-1, fd_write);
+	EXPECT_EQ(ETXTBSY, errno);
+
+	/* Drops O_DENY_WRITE. */
+	EXPECT_EQ(0, close(fd_deny));
+
+	/* The restriction is now gone. */
+	fd_write = open(reg_file_path, O_WRONLY | O_CLOEXEC);
+	EXPECT_LE(0, fd_write);
+	EXPECT_EQ(0, close(fd_write));
+}
+
+TEST_F(access, deny_write_check_fcntl)
+{
+	int fd_deny, fd_read, fd_write, flags;
+
+	fd_deny = open(reg_file_path, O_RDONLY | O_CLOEXEC);
+	ASSERT_LE(0, fd_deny);
+
+	/* Sets O_DENY_WRITE a first time. */
+	flags = fcntl(fd_deny, F_GETFL);
+	ASSERT_NE(-1, flags);
+	EXPECT_EQ(0, fcntl(fd_deny, F_SETFL, flags | O_DENY_WRITE));
+
+	/* Sets O_DENY_WRITE a "second" time. */
+	EXPECT_EQ(0, fcntl(fd_deny, F_SETFL, flags | O_DENY_WRITE));
+
+	/* Concurrent reads are always allowed. */
+	fd_read = open(reg_file_path, O_RDONLY | O_CLOEXEC);
+	EXPECT_LE(0, fd_read);
+	EXPECT_EQ(0, close(fd_read));
+
+	/* Concurrent writes are denied. */
+	fd_write = open(reg_file_path, O_WRONLY | O_CLOEXEC);
+	EXPECT_EQ(-1, fd_write);
+	EXPECT_EQ(ETXTBSY, errno);
+
+	/* Drops O_DENY_WRITE. */
+	EXPECT_EQ(0, fcntl(fd_deny, F_SETFL, flags & ~O_DENY_WRITE));
+
+	/* The restriction is now gone. */
+	fd_write = open(reg_file_path, O_WRONLY | O_CLOEXEC);
+	EXPECT_LE(0, fd_write);
+	EXPECT_EQ(0, close(fd_write));
+
+	EXPECT_EQ(0, close(fd_deny));
+}
+
+static void test_deny_write_open(struct __test_metadata *_metadata,
+				 const char *const path, int flags,
+				 const int err_code)
+{
+	int fd;
+
+	flags |= O_CLOEXEC;
+
+	/* Do not block on pipes. */
+	if (path == fifo_path)
+		flags |= O_NONBLOCK;
+
+	fd = open(path, flags | O_RDONLY);
+	if (err_code) {
+		ASSERT_EQ(-1, fd)
+		{
+			TH_LOG("Successfully opened %s", path);
+		}
+		EXPECT_EQ(errno, err_code)
+		{
+			TH_LOG("Wrong error code for %s: %s", path,
+			       strerror(errno));
+		}
+	} else {
+		ASSERT_LE(0, fd)
+		{
+			TH_LOG("Failed to open %s: %s", path, strerror(errno));
+		}
+		EXPECT_EQ(0, close(fd));
+	}
+}
+
+TEST_F(access, deny_write_type_open)
+{
+	test_deny_write_open(_metadata, reg_file_path, O_DENY_WRITE, 0);
+	test_deny_write_open(_metadata, dir_path, O_DENY_WRITE, EINVAL);
+	test_deny_write_open(_metadata, block_dev_path, O_DENY_WRITE, EINVAL);
+	test_deny_write_open(_metadata, char_dev_path, O_DENY_WRITE, EINVAL);
+	test_deny_write_open(_metadata, fifo_path, O_DENY_WRITE, EINVAL);
+}
+
+static void test_deny_write_fcntl(struct __test_metadata *_metadata,
+				  const char *const path, int setfl,
+				  const int err_code)
+{
+	int fd, ret;
+	int getfl, flags = O_CLOEXEC;
+
+	/* Do not block on pipes. */
+	if (path == fifo_path)
+		flags |= O_NONBLOCK;
+
+	fd = open(path, flags | O_RDONLY);
+	ASSERT_LE(0, fd)
+	{
+		TH_LOG("Failed to open %s: %s", path, strerror(errno));
+	}
+	getfl = fcntl(fd, F_GETFL);
+	ASSERT_NE(-1, getfl);
+	ret = fcntl(fd, F_SETFL, getfl | setfl);
+	if (err_code) {
+		ASSERT_EQ(-1, ret)
+		{
+			TH_LOG("Successfully updated flags for %s", path);
+		}
+		EXPECT_EQ(errno, err_code)
+		{
+			TH_LOG("Wrong error code for %s: %s", path,
+			       strerror(errno));
+		}
+	} else {
+		ASSERT_LE(0, ret)
+		{
+			TH_LOG("Failed to update flags for %s: %s", path,
+			       strerror(errno));
+		}
+		EXPECT_EQ(0, close(fd));
+	}
+}
+
+TEST_F(access, deny_write_type_fcntl)
+{
+	int flags;
+
+	test_deny_write_fcntl(_metadata, reg_file_path, O_DENY_WRITE, 0);
+	test_deny_write_fcntl(_metadata, dir_path, O_DENY_WRITE, EINVAL);
+	test_deny_write_fcntl(_metadata, block_dev_path, O_DENY_WRITE, EINVAL);
+	test_deny_write_fcntl(_metadata, char_dev_path, O_DENY_WRITE, EINVAL);
+	test_deny_write_fcntl(_metadata, fifo_path, O_DENY_WRITE, EINVAL);
+
+	flags = fcntl(self->socket_fds[0], F_GETFL);
+	ASSERT_NE(-1, flags);
+	EXPECT_EQ(-1,
+		  fcntl(self->socket_fds[0], F_SETFL, flags | O_DENY_WRITE));
+	EXPECT_EQ(EINVAL, errno);
+
+	flags = fcntl(self->pipefd, F_GETFL);
+	ASSERT_NE(-1, flags);
+	EXPECT_EQ(-1, fcntl(self->pipefd, F_SETFL, flags | O_DENY_WRITE));
+	EXPECT_EQ(EINVAL, errno);
+}
+
+TEST_F(access, allow_write_type_fcntl)
+{
+	int flags;
+
+	test_deny_write_fcntl(_metadata, reg_file_path, 0, 0);
+	test_deny_write_fcntl(_metadata, dir_path, 0, 0);
+	test_deny_write_fcntl(_metadata, block_dev_path, 0, 0);
+	test_deny_write_fcntl(_metadata, char_dev_path, 0, 0);
+	test_deny_write_fcntl(_metadata, fifo_path, 0, 0);
+
+	flags = fcntl(self->socket_fds[0], F_GETFL);
+	ASSERT_NE(-1, flags);
+	EXPECT_EQ(0,
+		  fcntl(self->socket_fds[0], F_SETFL, flags & ~O_DENY_WRITE));
+
+	flags = fcntl(self->pipefd, F_GETFL);
+	ASSERT_NE(-1, flags);
+	EXPECT_EQ(0, fcntl(self->pipefd, F_SETFL, flags & ~O_DENY_WRITE));
 }
 
 /* clang-format off */
