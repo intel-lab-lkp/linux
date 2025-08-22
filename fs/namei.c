@@ -2778,6 +2778,43 @@ static struct dentry *start_dirop(struct dentry *parent, struct qstr *name,
 	return dentry;
 }
 
+/**
+ * end_dirop - signal completion of a dirop
+ * @de - the dentry which was returned by start_dirop or similar.
+ *
+ * If the de is an error, nothing happens. Otherwise any lock taken to
+ * protect the dentry is dropped and the dentry itself is release (dput()).
+ */
+void end_dirop(struct dentry *de)
+{
+	if (!IS_ERR(de)) {
+		inode_unlock(de->d_parent->d_inode);
+		dput(de);
+	}
+}
+EXPORT_SYMBOL(end_dirop);
+
+/**
+ * end_dirop_mkdir - signal completion of a dirop which could have been vfs_mkdir
+ * @de - the dentry which was returned by start_dirop or similar.
+ * @parent - the parent in which the mkdir happened.
+ *
+ * Because vfs_mkdir() dput()s the dentry on failure, end_dirop() cannot be
+ * used with it.  Instead this function must be used, and it must not be caller
+ * if the original lookup failed.
+ *
+ * If de is an error the parent is unlocked, else this behaves the same as
+ * end_dirop().
+ */
+void end_dirop_mkdir(struct dentry *de, struct dentry *parent)
+{
+	if (IS_ERR(de))
+		inode_unlock(parent->d_inode);
+	else
+		end_dirop(de);
+}
+EXPORT_SYMBOL(end_dirop_mkdir);
+
 /* does lookup, returns the object with parent locked */
 static struct dentry *__kern_path_locked(int dfd, struct filename *name, struct path *path)
 {
@@ -4174,9 +4211,8 @@ static struct dentry *filename_create(int dfd, struct filename *name,
 
 	return dentry;
 fail:
-	dput(dentry);
+	end_dirop(dentry);
 	dentry = ERR_PTR(error);
-	inode_unlock(path->dentry->d_inode);
 out_drop_write:
 	if (!error)
 		mnt_drop_write(path->mnt);
@@ -4198,9 +4234,7 @@ EXPORT_SYMBOL(kern_path_create);
 
 void done_path_create(struct path *path, struct dentry *dentry)
 {
-	if (!IS_ERR(dentry))
-		dput(dentry);
-	inode_unlock(path->dentry->d_inode);
+	end_dirop_mkdir(dentry, path->dentry);
 	mnt_drop_write(path->mnt);
 	path_put(path);
 }
@@ -4540,8 +4574,7 @@ retry:
 		goto exit4;
 	error = vfs_rmdir(mnt_idmap(path.mnt), path.dentry->d_inode, dentry);
 exit4:
-	dput(dentry);
-	inode_unlock(path.dentry->d_inode);
+	end_dirop(dentry);
 exit3:
 	mnt_drop_write(path.mnt);
 exit2:
@@ -4674,8 +4707,7 @@ retry_deleg:
 		error = vfs_unlink(mnt_idmap(path.mnt), path.dentry->d_inode,
 				   dentry, &delegated_inode);
 exit3:
-		dput(dentry);
-		inode_unlock(path.dentry->d_inode);
+		end_dirop(dentry);
 	}
 	if (inode)
 		iput(inode);	/* truncate the inode here */

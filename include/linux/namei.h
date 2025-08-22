@@ -81,6 +81,9 @@ struct dentry *lookup_one_positive_unlocked(struct mnt_idmap *idmap,
 					    struct qstr *name,
 					    struct dentry *base);
 
+void end_dirop(struct dentry *de);
+void end_dirop_mkdir(struct dentry *de, struct dentry *parent);
+
 extern int follow_down_one(struct path *);
 extern int follow_down(struct path *path, unsigned int flags);
 extern int follow_up(struct path *);
