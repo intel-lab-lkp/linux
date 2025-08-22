@@ -28,6 +28,9 @@
 #include "../pci.h"
 #include "pciehp.h"
 
+#define WAIT_PDS_TIMEOUT_US	10000
+#define POLL_CMD_TIMEOUT_US	10000
+
 static const struct dmi_system_id inband_presence_disabled_dmi_table[] = {
 	/*
 	 * Match all Dell systems, as some Dell systems have inband
@@ -103,7 +106,7 @@ static int pcie_poll_cmd(struct controller *ctrl, int timeout)
 			smp_mb();
 			return 1;
 		}
-		msleep(10);
+		usleep_range(POLL_CMD_TIMEOUT_US, POLL_CMD_TIMEOUT_US + 100);
 		timeout -= 10;
 	} while (timeout >= 0);
 	return 0;	/* timeout */
@@ -284,6 +287,7 @@ static void pcie_wait_for_presence(struct pci_dev *pdev)
 		if (slot_status & PCI_EXP_SLTSTA_PDS)
 			return;
 		msleep(10);
+		usleep_range(WAIT_PDS_TIMEOUT_US, WAIT_PDS_TIMEOUT_US + 100);
 		timeout -= 10;
 	} while (timeout > 0);
 }
