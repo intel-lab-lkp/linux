@@ -1992,6 +1992,11 @@ static int tdx_handle_ept_violation(struct kvm_vcpu *vcpu)
 	 * blocked by TDs, false positives are inevitable i.e., KVM may re-enter
 	 * the guest even if the IRQ/NMI can't be delivered.
 	 *
+	 * Breaking out of the local retries if a retry is caused by faulting
+	 * in an invalid memslot (indicating the slot is under removal), so that
+	 * the slot removal will not be blocked due to waiting for releasing
+	 * SRCU lock in the VMExit handler.
+	 *
 	 * Note: even without breaking out of local retries, zero-step
 	 * mitigation may still occur due to
 	 * - invoking of TDH.VP.ENTER after KVM_EXIT_MEMORY_FAULT,
@@ -2002,6 +2007,8 @@ static int tdx_handle_ept_violation(struct kvm_vcpu *vcpu)
 	 * handle retries locally in their EPT violation handlers.
 	 */
 	while (1) {
+		struct kvm_memory_slot *slot;
+
 		ret = __vmx_handle_ept_violation(vcpu, gpa, exit_qual);
 
 		if (ret != RET_PF_RETRY || !local_retry)
@@ -2014,6 +2021,10 @@ static int tdx_handle_ept_violation(struct kvm_vcpu *vcpu)
 			ret = -EIO;
 			break;
 		}
+
+		slot = kvm_vcpu_gfn_to_memslot(vcpu, gpa_to_gfn(gpa));
+		if (slot && slot->flags & KVM_MEMSLOT_INVALID)
+			break;
 
 		cond_resched();
 	}
