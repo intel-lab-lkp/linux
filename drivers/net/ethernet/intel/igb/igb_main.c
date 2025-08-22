@@ -6576,7 +6576,7 @@ netdev_tx_t igb_xmit_frame_ring(struct sk_buff *skb,
 			adapter->ptp_tx_skb = skb_get(skb);
 			adapter->ptp_tx_start = jiffies;
 			if (adapter->hw.mac.type == e1000_82576)
-				schedule_work(&adapter->ptp_tx_work);
+				ptp_schedule_worker(adapter->ptp_clock, 0);
 		} else {
 			adapter->tx_hwtstamp_skipped++;
 		}
@@ -6612,7 +6612,7 @@ cleanup_tx_tstamp:
 		dev_kfree_skb_any(adapter->ptp_tx_skb);
 		adapter->ptp_tx_skb = NULL;
 		if (adapter->hw.mac.type == e1000_82576)
-			cancel_work_sync(&adapter->ptp_tx_work);
+			ptp_cancel_worker_sync(adapter->ptp_clock);
 		clear_bit_unlock(__IGB_PTP_TX_IN_PROGRESS, &adapter->state);
 	}
 
@@ -7080,7 +7080,7 @@ static void igb_tsync_interrupt(struct igb_adapter *adapter)
 
 	if (tsicr & E1000_TSICR_TXTS) {
 		/* retrieve hardware timestamp */
-		schedule_work(&adapter->ptp_tx_work);
+		ptp_schedule_worker(adapter->ptp_clock, 0);
 	}
 
 	if (tsicr & TSINTR_TT0)

@@ -798,20 +798,20 @@ static int igb_ptp_verify_pin(struct ptp_clock_info *ptp, unsigned int pin,
 
 /**
  * igb_ptp_tx_work
- * @work: pointer to work struct
+ * @ptp: pointer to ptp clock information
  *
  * This work function polls the TSYNCTXCTL valid bit to determine when a
  * timestamp has been taken for the current stored skb.
  **/
-static void igb_ptp_tx_work(struct work_struct *work)
+static long igb_ptp_tx_work(struct ptp_clock_info *ptp)
 {
-	struct igb_adapter *adapter = container_of(work, struct igb_adapter,
-						   ptp_tx_work);
+	struct igb_adapter *adapter = container_of(ptp, struct igb_adapter,
+						   ptp_caps);
 	struct e1000_hw *hw = &adapter->hw;
 	u32 tsynctxctl;
 
 	if (!adapter->ptp_tx_skb)
-		return;
+		return -1;
 
 	if (time_is_before_jiffies(adapter->ptp_tx_start +
 				   IGB_PTP_TX_TIMEOUT)) {
@@ -824,15 +824,17 @@ static void igb_ptp_tx_work(struct work_struct *work)
 		 */
 		rd32(E1000_TXSTMPH);
 		dev_warn(&adapter->pdev->dev, "clearing Tx timestamp hang\n");
-		return;
+		return -1;
 	}
 
 	tsynctxctl = rd32(E1000_TSYNCTXCTL);
-	if (tsynctxctl & E1000_TSYNCTXCTL_VALID)
+	if (tsynctxctl & E1000_TSYNCTXCTL_VALID) {
 		igb_ptp_tx_hwtstamp(adapter);
-	else
-		/* reschedule to check later */
-		schedule_work(&adapter->ptp_tx_work);
+		return -1;
+	}
+
+	/* reschedule to check later */
+	return 1;
 }
 
 static void igb_ptp_overflow_check(struct work_struct *work)
@@ -915,7 +917,7 @@ void igb_ptp_tx_hang(struct igb_adapter *adapter)
 	 * timestamp bit when this occurs.
 	 */
 	if (timeout) {
-		cancel_work_sync(&adapter->ptp_tx_work);
+		ptp_cancel_worker_sync(adapter->ptp_clock);
 		dev_kfree_skb_any(adapter->ptp_tx_skb);
 		adapter->ptp_tx_skb = NULL;
 		clear_bit_unlock(__IGB_PTP_TX_IN_PROGRESS, &adapter->state);
@@ -1381,6 +1383,7 @@ void igb_ptp_init(struct igb_adapter *adapter)
 		return;
 	}
 
+	adapter->ptp_caps.do_aux_work = igb_ptp_tx_work;
 	adapter->ptp_clock = ptp_clock_register(&adapter->ptp_caps,
 						&adapter->pdev->dev);
 	if (IS_ERR(adapter->ptp_clock)) {
@@ -1392,7 +1395,6 @@ void igb_ptp_init(struct igb_adapter *adapter)
 		adapter->ptp_flags |= IGB_PTP_ENABLED;
 
 		spin_lock_init(&adapter->tmreg_lock);
-		INIT_WORK(&adapter->ptp_tx_work, igb_ptp_tx_work);
 
 		if (adapter->ptp_flags & IGB_PTP_OVERFLOW_CHECK)
 			INIT_DELAYED_WORK(&adapter->ptp_overflow_work,
@@ -1437,7 +1439,7 @@ void igb_ptp_suspend(struct igb_adapter *adapter)
 	if (adapter->ptp_flags & IGB_PTP_OVERFLOW_CHECK)
 		cancel_delayed_work_sync(&adapter->ptp_overflow_work);
 
-	cancel_work_sync(&adapter->ptp_tx_work);
+	ptp_cancel_worker_sync(adapter->ptp_clock);
 	if (adapter->ptp_tx_skb) {
 		dev_kfree_skb_any(adapter->ptp_tx_skb);
 		adapter->ptp_tx_skb = NULL;
