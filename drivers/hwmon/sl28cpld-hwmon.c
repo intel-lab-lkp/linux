@@ -18,6 +18,9 @@
 #define   FAN_SCALE_X8		BIT(7)
 #define   FAN_VALUE_MASK	GENMASK(6, 0)
 
+#define SA67MCU_VOLTAGE(n)	(0x00 + ((n) * 2))
+#define SA67MCU_TEMP(n)		(0x04 + ((n) * 2))
+
 struct sl28cpld_hwmon {
 	struct regmap *regmap;
 	u32 offset;
@@ -75,14 +78,81 @@ static const struct hwmon_chip_info sl28cpld_hwmon_chip_info = {
 	.info = sl28cpld_hwmon_info,
 };
 
+static int sa67mcu_hwmon_read(struct device *dev,
+			      enum hwmon_sensor_types type, u32 attr,
+			      int channel, long *input)
+{
+	struct sl28cpld_hwmon *hwmon = dev_get_drvdata(dev);
+	unsigned int offset;
+	u8 reg[2];
+	int ret;
+
+	switch (type) {
+	case hwmon_in:
+		switch (attr) {
+		case hwmon_in_input:
+			offset = hwmon->offset + SA67MCU_VOLTAGE(channel);
+			break;
+		default:
+			return -EOPNOTSUPP;
+		}
+		break;
+	case hwmon_temp:
+		switch (attr) {
+		case hwmon_temp_input:
+			offset = hwmon->offset + SA67MCU_TEMP(channel);
+			break;
+		default:
+			return -EOPNOTSUPP;
+		}
+		break;
+	default:
+		return -EOPNOTSUPP;
+	}
+
+	/* Reading the low byte will capture the value */
+	ret = regmap_bulk_read(hwmon->regmap, offset, reg, ARRAY_SIZE(reg));
+	if (ret)
+		return ret;
+
+	*input = reg[1] << 8 | reg[0];
+
+	/* Temperatures are s16 and in 0.1degC steps. */
+	if (type == hwmon_temp)
+		*input = sign_extend32(*input, 15) * 100;
+
+	return 0;
+}
+
+static const struct hwmon_channel_info * const sa67mcu_hwmon_info[] = {
+	HWMON_CHANNEL_INFO(in, HWMON_I_INPUT, HWMON_I_INPUT),
+	HWMON_CHANNEL_INFO(temp, HWMON_T_INPUT),
+	NULL
+};
+
+static const struct hwmon_ops sa67mcu_hwmon_ops = {
+	.visible = 0444,
+	.read = sa67mcu_hwmon_read,
+};
+
+static const struct hwmon_chip_info sa67mcu_hwmon_chip_info = {
+	.ops = &sa67mcu_hwmon_ops,
+	.info = sa67mcu_hwmon_info,
+};
+
 static int sl28cpld_hwmon_probe(struct platform_device *pdev)
 {
+	const struct hwmon_chip_info *chip_info;
 	struct sl28cpld_hwmon *hwmon;
 	struct device *hwmon_dev;
 	int ret;
 
 	if (!pdev->dev.parent)
 		return -ENODEV;
+
+	chip_info = device_get_match_data(&pdev->dev);
+	if (!chip_info)
+		return -EINVAL;
 
 	hwmon = devm_kzalloc(&pdev->dev, sizeof(*hwmon), GFP_KERNEL);
 	if (!hwmon)
@@ -97,8 +167,7 @@ static int sl28cpld_hwmon_probe(struct platform_device *pdev)
 		return -EINVAL;
 
 	hwmon_dev = devm_hwmon_device_register_with_info(&pdev->dev,
-				"sl28cpld_hwmon", hwmon,
-				&sl28cpld_hwmon_chip_info, NULL);
+				"sl28cpld_hwmon", hwmon, chip_info, NULL);
 	if (IS_ERR(hwmon_dev))
 		dev_err(&pdev->dev, "failed to register as hwmon device");
 
@@ -106,7 +175,8 @@ static int sl28cpld_hwmon_probe(struct platform_device *pdev)
 }
 
 static const struct of_device_id sl28cpld_hwmon_of_match[] = {
-	{ .compatible = "kontron,sl28cpld-fan" },
+	{ .compatible = "kontron,sl28cpld-fan", .data = &sl28cpld_hwmon_chip_info },
+	{ .compatible = "kontron,sa67mcu-hwmon", .data = &sa67mcu_hwmon_chip_info },
 	{}
 };
 MODULE_DEVICE_TABLE(of, sl28cpld_hwmon_of_match);
