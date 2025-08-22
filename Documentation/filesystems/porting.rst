@@ -1291,3 +1291,15 @@ parameters for the file system to set this state.
 
 d_alloc_parallel() signature has changed - it no longer receives a
 waitqueue_head.  It uses one from an internal table when needed.
+
+---
+
+** mandatory**
+
+kern_path_create() and user_path_create() can return a d_in_lookup()
+dentry as can lookup_one_qstr_excl() if passed "O_CREATE|O_EXCL" or
+"O_RENAME_TARGET".  This can currently only happen if the target
+filesystem is NFS.
+
+inode_operations.lookup() is now only ever called with a d_in_lookup()
+dentry (i.e. DCACHE_PAR_LOOKUP will be set).
