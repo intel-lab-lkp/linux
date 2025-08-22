@@ -27,4 +27,5 @@ Linux Kernel中的文件系统
    debugfs
    tmpfs
    ubifs
+   ubifs-authentication
 
