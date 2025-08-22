@@ -206,9 +206,11 @@ static int amdgpu_ctx_init_entity(struct amdgpu_ctx *ctx, u32 hw_ip,
 {
 	struct drm_gpu_scheduler **scheds = NULL, *sched = NULL;
 	struct amdgpu_device *adev = ctx->mgr->adev;
+	bool static_load_balancing = false;
 	struct amdgpu_ctx_entity *entity;
 	enum drm_sched_priority drm_prio;
 	unsigned int hw_prio, num_scheds;
+	struct amdgpu_ring *aring;
 	int32_t ctx_prio;
 	int r;
 
@@ -236,17 +238,22 @@ static int amdgpu_ctx_init_entity(struct amdgpu_ctx *ctx, u32 hw_ip,
 		r = amdgpu_xcp_select_scheds(adev, hw_ip, hw_prio, fpriv,
 						&num_scheds, &scheds);
 		if (r)
-			goto cleanup_entity;
+			goto error_free_entity;
 	}
 
 	/* disable load balance if the hw engine retains context among dependent jobs */
-	if (hw_ip == AMDGPU_HW_IP_VCN_ENC ||
-	    hw_ip == AMDGPU_HW_IP_VCN_DEC ||
-	    hw_ip == AMDGPU_HW_IP_UVD_ENC ||
-	    hw_ip == AMDGPU_HW_IP_UVD) {
+	static_load_balancing = hw_ip == AMDGPU_HW_IP_VCN_ENC ||
+				hw_ip == AMDGPU_HW_IP_VCN_DEC ||
+				hw_ip == AMDGPU_HW_IP_UVD_ENC ||
+				hw_ip == AMDGPU_HW_IP_UVD;
+
+	if (static_load_balancing) {
 		sched = drm_sched_pick_best(scheds, num_scheds);
 		scheds = &sched;
 		num_scheds = 1;
+		aring = container_of(sched, struct amdgpu_ring, sched);
+		entity->sched_ring_score = aring->sched_score;
+		atomic_inc(entity->sched_ring_score);
 	}
 
 	r = drm_sched_entity_init(&entity->entity, drm_prio, scheds, num_scheds,
@@ -264,6 +271,9 @@ cleanup_entity:
 	drm_sched_entity_fini(&entity->entity);
 
 error_free_entity:
+	if (static_load_balancing)
+		atomic_dec(entity->sched_ring_score);
+
 	kfree(entity);
 
 	return r;
@@ -513,6 +523,9 @@ static void amdgpu_ctx_do_release(struct kref *ref)
 		for (j = 0; j < amdgpu_ctx_num_entities[i]; ++j) {
 			if (!ctx->entities[i][j])
 				continue;
+
+			if (ctx->entities[i][j]->sched_ring_score)
+				atomic_dec(ctx->entities[i][j]->sched_ring_score);
 
 			drm_sched_entity_destroy(&ctx->entities[i][j]->entity);
 		}
