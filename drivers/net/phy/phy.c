@@ -83,6 +83,16 @@ static void phy_link_down(struct phy_device *phydev)
 {
 	phydev->phy_link_change(phydev, false);
 	phy_led_trigger_change_speed(phydev);
+
+	/* Clear the outdated link parameters */
+	phydev->speed = SPEED_UNKNOWN;
+	phydev->duplex = DUPLEX_UNKNOWN;
+	if (phydev->master_slave_state != MASTER_SLAVE_STATE_UNSUPPORTED)
+		phydev->master_slave_state = MASTER_SLAVE_STATE_UNKNOWN;
+	phydev->mdix = ETH_TP_MDI_INVALID;
+	linkmode_zero(phydev->lp_advertising);
+	phydev->eee_active = false;
+
 	WRITE_ONCE(phydev->link_down_events, phydev->link_down_events + 1);
 }
 
