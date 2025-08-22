@@ -10,6 +10,9 @@ maintainers:
   - Chen-Yu Tsai <wens@csie.org>
   - Maxime Ripard <mripard@kernel.org>
 
+allOf:
+  - $ref: ahci-common.yaml#
+
 properties:
   compatible:
     const: allwinner,sun4i-a10-ahci
@@ -25,16 +28,13 @@ properties:
   interrupts:
     maxItems: 1
 
-  target-supply:
-    description: Regulator for SATA target power
-
 required:
   - compatible
   - reg
   - clocks
   - interrupts
 
-additionalProperties: false
+unevaluatedProperties: false
 
 examples:
   - |
