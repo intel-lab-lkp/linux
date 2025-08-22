@@ -81,8 +81,26 @@ struct dentry *lookup_one_positive_unlocked(struct mnt_idmap *idmap,
 					    struct qstr *name,
 					    struct dentry *base);
 
+struct dentry *start_creating(struct mnt_idmap *idmap, struct dentry *parent,
+			      struct qstr *name);
+
 void end_dirop(struct dentry *de);
 void end_dirop_mkdir(struct dentry *de, struct dentry *parent);
+
+/* end_creating - finish action started with start_creating
+ * @child - dentry returned by start_creating()
+ * @parent - dentry given to start_creating()
+ *
+ * Unlock and release the child.
+ *
+ * Unlike end_dirop() this can only be called if start_creating() succeeded.
+ * It handles @child being and error as vfs_mkdir() might have converted the
+ * dentry to an error - in that case the parent still needs to be unlocked.
+ */
+static inline void end_creating(struct dentry *child, struct dentry *parent)
+{
+	end_dirop_mkdir(child, parent);
+}
 
 /* filesystems which use the dcache as backing store don't
  * keep a reference after creating an object.
