@@ -26955,6 +26955,11 @@ VOLTAGE AND CURRENT REGULATOR IRQ HELPERS
 R:	Matti Vaittinen <mazziesaccount@gmail.com>
 F:	drivers/regulator/irq_helpers.c
 
+VORTEX HARDWARE SUPPORT
+R:	Marcos Del Sol Vives <marcos@orca.pet>
+S:	Maintained
+F:	drivers/gpio/gpio-vortex.c
+
 VRF
 M:	David Ahern <dsahern@kernel.org>
 L:	netdev@vger.kernel.org
