@@ -15101,6 +15101,13 @@ W:	https://linuxtv.org
 T:	git git://linuxtv.org/media.git
 F:	drivers/media/radio/radio-maxiradio*
 
+MAXLINEAR ETHERNET DRIVER
+M:	Jack Ping Chng <jchng@maxlinear.com>
+L:	netdev@vger.kernel.org
+S:	Maintained
+F:	Documentation/networking/device_drivers/ethernet/maxlinear/*
+F:	drivers/net/ethernet/maxlinear/
+
 MAXLINEAR ETHERNET PHY DRIVER
 M:	Xu Liang <lxu@maxlinear.com>
 L:	netdev@vger.kernel.org

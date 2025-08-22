@@ -44,6 +44,7 @@ Contents:
    marvell/octeontx2
    marvell/octeon_ep
    marvell/octeon_ep_vf
+   maxlinear/mxl
    mellanox/mlx5/index
    meta/fbnic
    microsoft/netvsc
