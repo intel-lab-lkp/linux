@@ -112,7 +112,7 @@ int module_sig_check(struct load_info *info, int flags)
 	}
 
 	if (is_module_sig_enforced()) {
-		pr_notice("Loading of %s is rejected\n", reason);
+		pr_err("Loading of %s is rejected\n", reason);
 		return -EKEYREJECTED;
 	}
 
