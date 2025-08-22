@@ -341,6 +341,9 @@ static int iomap_dio_bio_iter(struct iomap_iter *iter, struct iomap_dio *dio)
 	    !bdev_iter_is_aligned(iomap->bdev, dio->submit.iter))
 		return -EINVAL;
 
+	if (iter->flags & IOMAP_ALLOC_CACHE)
+		bio_opf |= REQ_ALLOC_CACHE;
+
 	if (dio->flags & IOMAP_DIO_WRITE) {
 		bio_opf |= REQ_OP_WRITE;
 
@@ -635,6 +638,9 @@ __iomap_dio_rw(struct kiocb *iocb, struct iov_iter *iter,
 
 	if (iocb->ki_flags & IOCB_NOWAIT)
 		iomi.flags |= IOMAP_NOWAIT;
+
+	if (iocb->ki_flags & IOCB_ALLOC_CACHE)
+		iomi.flags |= IOMAP_ALLOC_CACHE;
 
 	if (iov_iter_rw(iter) == READ) {
 		/* reads can always complete inline */

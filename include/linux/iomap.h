@@ -196,6 +196,7 @@ struct iomap_write_ops {
 #endif /* CONFIG_FS_DAX */
 #define IOMAP_ATOMIC		(1 << 9) /* torn-write protection */
 #define IOMAP_DONTCACHE		(1 << 10)
+#define IOMAP_ALLOC_CACHE	(1 << 11)
 
 struct iomap_ops {
 	/*
