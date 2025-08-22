@@ -1285,3 +1285,9 @@ rather than a VMA, as the VMA at this stage is not yet valid.
 The vm_area_desc provides the minimum required information for a filesystem
 to initialise state upon memory mapping of a file-backed region, and output
 parameters for the file system to set this state.
+---
+
+** mandatory**
+
+d_alloc_parallel() signature has changed - it no longer receives a
+waitqueue_head.  It uses one from an internal table when needed.
