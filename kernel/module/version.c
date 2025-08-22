@@ -41,10 +41,6 @@ int check_version(const struct load_info *info,
 		return 1;
 	}
 
-	/* No versions at all?  modprobe --force does this. */
-	if (versindex == 0)
-		return try_to_force_load(mod, symname) == 0;
-
 	versions = (void *)sechdrs[versindex].sh_addr;
 	num_versions = sechdrs[versindex].sh_size
 		/ sizeof(struct modversion_info);
@@ -80,6 +76,11 @@ int check_modstruct_version(const struct load_info *info,
 		.gplok	= true,
 	};
 	bool have_symbol;
+
+	/* No versions at all?  modprobe --force does this. */
+	if (info->index.vers == 0 &&
+	    try_to_force_load(mod, "no versions module"))
+		return 1;
 
 	/*
 	 * Since this should be found in kernel (which can't be removed), no
