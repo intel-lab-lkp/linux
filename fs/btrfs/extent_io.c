@@ -131,6 +131,13 @@ struct btrfs_bio_ctrl {
 	 */
 	unsigned long submit_bitmap;
 	struct readahead_control *ractl;
+
+	/*
+	 * The extent map of the last hit compressed extent map.
+	 * The current btrfs_bio_is_contig() doesn't have enough info to
+	 * determine if we can really merge compressed read.
+	 */
+	struct extent_map last_compressed_em;
 };
 
 /*
@@ -957,6 +964,37 @@ static void btrfs_readahead_expand(struct readahead_control *ractl,
 		readahead_expand(ractl, ra_pos, em_end - ra_pos);
 }
 
+static void save_compressed_em(struct btrfs_bio_ctrl *bio_ctrl,
+			       const struct extent_map *em)
+{
+	if (btrfs_extent_map_compression(em) == BTRFS_COMPRESS_NONE)
+		return;
+	memcpy(&bio_ctrl->last_compressed_em, em, sizeof(*em));
+}
+
+static bool is_same_compressed_em(struct btrfs_bio_ctrl *bio_ctrl,
+				  const struct extent_map *em)
+{
+	const struct extent_map *cur_em = &bio_ctrl->last_compressed_em;
+
+	/*
+	 * Only if the em is completely the same as the previous one we cna merge
+	 * the current folio in the read bio.
+	 *
+	 * If such merge happened incorrectly, we will have a bio which is
+	 * larger than the compressed bio, resulting the tailing part not to be
+	 * read out correctly.
+	 */
+	if (em->flags != cur_em->flags ||
+	    em->start != cur_em->start ||
+	    em->len != cur_em->len ||
+	    em->disk_bytenr != cur_em->disk_bytenr ||
+	    em->disk_num_bytes != cur_em->disk_num_bytes ||
+	    em->offset != cur_em->offset)
+		return false;
+	return true;
+}
+
 /*
  * basic readpage implementation.  Locked extent state structs are inserted
  * into the tree that are removed when the IO is done (by the end_io
@@ -1080,9 +1118,19 @@ static int btrfs_do_readpage(struct folio *folio, struct extent_map **em_cached,
 		    *prev_em_start != em->start)
 			force_bio_submit = true;
 
+		/*
+		 * We must ensure we only merge compressed read when the current
+		 * extent map matches the previous one exactly.
+		 */
+		if (compress_type != BTRFS_COMPRESS_NONE) {
+			if (!is_same_compressed_em(bio_ctrl, em))
+				force_bio_submit = true;
+		}
+
 		if (prev_em_start)
 			*prev_em_start = em->start;
 
+		save_compressed_em(bio_ctrl, em);
 		em_gen = em->generation;
 		btrfs_free_extent_map(em);
 		em = NULL;
