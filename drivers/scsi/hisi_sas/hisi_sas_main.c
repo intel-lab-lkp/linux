@@ -193,11 +193,13 @@ static void hisi_sas_slot_index_clear(struct hisi_hba *hisi_hba, int slot_idx)
 
 static void hisi_sas_slot_index_free(struct hisi_hba *hisi_hba, int slot_idx)
 {
+	unsigned long flags;
+
 	if (hisi_hba->hw->slot_index_alloc ||
 	    slot_idx < HISI_SAS_RESERVED_IPTT) {
-		spin_lock(&hisi_hba->lock);
+		spin_lock_irqsave(&hisi_hba->lock, flags);
 		hisi_sas_slot_index_clear(hisi_hba, slot_idx);
-		spin_unlock(&hisi_hba->lock);
+		spin_unlock_irqrestore(&hisi_hba->lock, flags);
 	}
 }
 
@@ -213,11 +215,12 @@ static int hisi_sas_slot_index_alloc(struct hisi_hba *hisi_hba,
 {
 	int index;
 	void *bitmap = hisi_hba->slot_index_tags;
+	unsigned long flags;
 
 	if (rq)
 		return rq->tag + HISI_SAS_RESERVED_IPTT;
 
-	spin_lock(&hisi_hba->lock);
+	spin_lock_irqsave(&hisi_hba->lock, flags);
 	index = find_next_zero_bit(bitmap, HISI_SAS_RESERVED_IPTT,
 				   hisi_hba->last_slot_index + 1);
 	if (index >= HISI_SAS_RESERVED_IPTT) {
@@ -225,13 +228,13 @@ static int hisi_sas_slot_index_alloc(struct hisi_hba *hisi_hba,
 				HISI_SAS_RESERVED_IPTT,
 				0);
 		if (index >= HISI_SAS_RESERVED_IPTT) {
-			spin_unlock(&hisi_hba->lock);
+			spin_unlock_irqrestore(&hisi_hba->lock, flags);
 			return -SAS_QUEUE_FULL;
 		}
 	}
 	hisi_sas_slot_index_set(hisi_hba, index);
 	hisi_hba->last_slot_index = index;
-	spin_unlock(&hisi_hba->lock);
+	spin_unlock_irqrestore(&hisi_hba->lock, flags);
 
 	return index;
 }
@@ -239,6 +242,7 @@ static int hisi_sas_slot_index_alloc(struct hisi_hba *hisi_hba,
 void hisi_sas_slot_task_free(struct hisi_hba *hisi_hba, struct sas_task *task,
 			     struct hisi_sas_slot *slot, bool need_lock)
 {
+	unsigned long flags;
 	int device_id = slot->device_id;
 	struct hisi_sas_device *sas_dev = &hisi_hba->devices[device_id];
 
@@ -272,9 +276,9 @@ void hisi_sas_slot_task_free(struct hisi_hba *hisi_hba, struct sas_task *task,
 	}
 
 	if (need_lock) {
-		spin_lock(&sas_dev->lock);
+		spin_lock_irqsave(&sas_dev->lock, flags);
 		list_del_init(&slot->entry);
-		spin_unlock(&sas_dev->lock);
+		spin_unlock_irqrestore(&sas_dev->lock, flags);
 	} else {
 		list_del_init(&slot->entry);
 	}
@@ -436,15 +440,16 @@ void hisi_sas_task_deliver(struct hisi_hba *hisi_hba,
 	int dlvry_queue_slot, dlvry_queue;
 	struct sas_task *task = slot->task;
 	int wr_q_index;
+	unsigned long flags;
 
-	spin_lock(&dq->lock);
+	spin_lock_irqsave(&dq->lock, flags);
 	wr_q_index = dq->wr_point;
 	dq->wr_point = (dq->wr_point + 1) % HISI_SAS_QUEUE_SLOTS;
 	list_add_tail(&slot->delivery, &dq->list);
-	spin_unlock(&dq->lock);
-	spin_lock(&sas_dev->lock);
+	spin_unlock_irqrestore(&dq->lock, flags);
+	spin_lock_irqsave(&sas_dev->lock, flags);
 	list_add_tail(&slot->entry, &sas_dev->list);
-	spin_unlock(&sas_dev->lock);
+	spin_unlock_irqrestore(&sas_dev->lock, flags);
 
 	dlvry_queue = dq->id;
 	dlvry_queue_slot = wr_q_index;
@@ -485,9 +490,9 @@ void hisi_sas_task_deliver(struct hisi_hba *hisi_hba,
 	smp_wmb();
 	WRITE_ONCE(slot->ready, 1);
 
-	spin_lock(&dq->lock);
+	spin_lock_irqsave(&dq->lock, flags);
 	hisi_hba->hw->start_delivery(dq);
-	spin_unlock(&dq->lock);
+	spin_unlock_irqrestore(&dq->lock, flags);
 }
 
 static int hisi_sas_queue_command(struct sas_task *task, gfp_t gfp_flags)
@@ -690,11 +695,12 @@ static struct hisi_sas_device *hisi_sas_alloc_dev(struct domain_device *device)
 {
 	struct hisi_hba *hisi_hba = dev_to_hisi_hba(device);
 	struct hisi_sas_device *sas_dev = NULL;
+	unsigned long flags;
 	int last = hisi_hba->last_dev_id;
 	int first = (hisi_hba->last_dev_id + 1) % HISI_SAS_MAX_DEVICES;
 	int i;
 
-	spin_lock(&hisi_hba->lock);
+	spin_lock_irqsave(&hisi_hba->lock, flags);
 	for (i = first; i != last; i %= HISI_SAS_MAX_DEVICES) {
 		if (hisi_hba->devices[i].dev_type == SAS_PHY_UNUSED) {
 			int queue = i % hisi_hba->queue_count;
@@ -714,16 +720,18 @@ static struct hisi_sas_device *hisi_sas_alloc_dev(struct domain_device *device)
 		i++;
 	}
 	hisi_hba->last_dev_id = i;
-	spin_unlock(&hisi_hba->lock);
+	spin_unlock_irqrestore(&hisi_hba->lock, flags);
 
 	return sas_dev;
 }
 
 static void hisi_sas_sync_poll_cq(struct hisi_sas_cq *cq)
 {
+	unsigned long flags;
+
 	/* make sure CQ entries being processed are processed to completion */
-	spin_lock(&cq->poll_lock);
-	spin_unlock(&cq->poll_lock);
+	spin_lock_irqsave(&cq->poll_lock, flags);
+	spin_unlock_irqrestore(&cq->poll_lock, flags);
 }
 
 static bool hisi_sas_queue_is_poll(struct hisi_sas_cq *cq)
@@ -1155,12 +1163,13 @@ static void hisi_sas_release_task(struct hisi_hba *hisi_hba,
 {
 	struct hisi_sas_slot *slot, *slot2;
 	struct hisi_sas_device *sas_dev = device->lldd_dev;
+	unsigned long flags;
 
-	spin_lock(&sas_dev->lock);
+	spin_lock_irqsave(&sas_dev->lock, flags);
 	list_for_each_entry_safe(slot, slot2, &sas_dev->list, entry)
 		hisi_sas_do_release_task(hisi_hba, slot->task, slot, false);
 
-	spin_unlock(&sas_dev->lock);
+	spin_unlock_irqrestore(&sas_dev->lock, flags);
 }
 
 void hisi_sas_release_tasks(struct hisi_hba *hisi_hba)

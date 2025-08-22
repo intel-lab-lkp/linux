@@ -954,10 +954,11 @@ static void dereg_device_v3_hw(struct hisi_hba *hisi_hba,
 	struct hisi_sas_slot *slot, *slot2;
 	struct hisi_sas_device *sas_dev = device->lldd_dev;
 	u32 cfg_abt_set_query_iptt;
+	unsigned long flags;
 
 	cfg_abt_set_query_iptt = hisi_sas_read32(hisi_hba,
 		CFG_ABT_SET_QUERY_IPTT);
-	spin_lock(&sas_dev->lock);
+	spin_lock_irqsave(&sas_dev->lock, flags);
 	list_for_each_entry_safe(slot, slot2, &sas_dev->list, entry) {
 		cfg_abt_set_query_iptt &= ~CFG_SET_ABORTED_IPTT_MSK;
 		cfg_abt_set_query_iptt |= (1 << CFG_SET_ABORTED_EN_OFF) |
@@ -965,7 +966,7 @@ static void dereg_device_v3_hw(struct hisi_hba *hisi_hba,
 		hisi_sas_write32(hisi_hba, CFG_ABT_SET_QUERY_IPTT,
 			cfg_abt_set_query_iptt);
 	}
-	spin_unlock(&sas_dev->lock);
+	spin_unlock_irqrestore(&sas_dev->lock, flags);
 	cfg_abt_set_query_iptt &= ~(1 << CFG_SET_ABORTED_EN_OFF);
 	hisi_sas_write32(hisi_hba, CFG_ABT_SET_QUERY_IPTT,
 		cfg_abt_set_query_iptt);
@@ -1587,6 +1588,7 @@ static irqreturn_t phy_up_v3_hw(int phy_no, struct hisi_hba *hisi_hba)
 	struct hisi_sas_phy *phy = &hisi_hba->phy[phy_no];
 	struct asd_sas_phy *sas_phy = &phy->sas_phy;
 	struct device *dev = hisi_hba->dev;
+	unsigned long flags;
 
 	hisi_sas_phy_write32(hisi_hba, phy_no, PHYCTRL_PHY_ENA_MSK, 1);
 
@@ -1664,11 +1666,11 @@ static irqreturn_t phy_up_v3_hw(int phy_no, struct hisi_hba *hisi_hba)
 	}
 
 	phy->port_id = port_id;
-	spin_lock(&phy->lock);
+	spin_lock_irqsave(&phy->lock, flags);
 	/* Delete timer and set phy_attached atomically */
 	timer_delete(&phy->timer);
 	phy->phy_attached = 1;
-	spin_unlock(&phy->lock);
+	spin_unlock_irqrestore(&phy->lock, flags);
 
 	/*
 	 * Call pm_runtime_get_noresume() which pairs with
@@ -2560,11 +2562,12 @@ static int queue_complete_v3_hw(struct Scsi_Host *shost, unsigned int queue)
 {
 	struct hisi_hba *hisi_hba = shost_priv(shost);
 	struct hisi_sas_cq *cq = &hisi_hba->cq[queue];
+	unsigned long flags;
 	int completed;
 
-	spin_lock(&cq->poll_lock);
+	spin_lock_irqsave(&cq->poll_lock, flags);
 	completed = complete_v3_hw(cq);
-	spin_unlock(&cq->poll_lock);
+	spin_unlock_irqrestore(&cq->poll_lock, flags);
 
 	return completed;
 }
