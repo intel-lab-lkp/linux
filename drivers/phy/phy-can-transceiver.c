@@ -86,6 +86,10 @@ static const struct of_device_id can_transceiver_phy_ids[] = {
 		.data = &tcan1043_drvdata
 	},
 	{
+		.compatible = "nxp,tja1051",
+		.data = &tcan1043_drvdata
+	},
+	{
 		.compatible = "nxp,tjr1443",
 		.data = &tcan1043_drvdata
 	},
