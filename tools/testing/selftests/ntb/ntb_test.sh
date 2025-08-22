@@ -39,7 +39,7 @@ function show_help()
 	echo "  -d              run dma tests for ntb_perf"
 	echo "  -p ORDER        total data order for ntb_perf"
 	echo "                  (default: $PERF_RUN_ORDER)"
-	echo "  -w MAX_MW_SIZE  maxmium memory window size for ntb_perf"
+	echo "  -w MAX_MW_SIZE  maximum memory window size for ntb_perf"
 	echo
 }
 
