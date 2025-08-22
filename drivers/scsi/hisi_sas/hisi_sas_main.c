@@ -751,19 +751,6 @@ static void hisi_sas_sync_cq(struct hisi_sas_cq *cq)
 		tasklet_kill(&cq->tasklet);
 }
 
-void hisi_sas_sync_poll_cqs(struct hisi_hba *hisi_hba)
-{
-	int i;
-
-	for (i = 0; i < hisi_hba->queue_count; i++) {
-		struct hisi_sas_cq *cq = &hisi_hba->cq[i];
-
-		if (hisi_sas_queue_is_poll(cq))
-			hisi_sas_sync_poll_cq(cq);
-	}
-}
-EXPORT_SYMBOL_GPL(hisi_sas_sync_poll_cqs);
-
 void hisi_sas_sync_cqs(struct hisi_hba *hisi_hba)
 {
 	int i;
