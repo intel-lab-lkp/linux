@@ -30,6 +30,7 @@
 
 #include <linux/iio/iio.h>
 #include <linux/iio/events.h>
+#include <linux/pm_runtime.h>
 
 #include <linux/unaligned.h>
 
@@ -105,6 +106,7 @@ struct ltr390_data {
 	enum ltr390_mode mode;
 	int gain;
 	int int_time_us;
+	bool irq_enabled;
 };
 
 static const struct regmap_range ltr390_readable_reg_ranges[] = {
@@ -153,6 +155,25 @@ static const int ltr390_samp_freq_table[][2] = {
 		[6] = { 500, 2000 },
 		[7] = { 500, 2000 },
 };
+
+static int ltr390_set_power_state(struct ltr390_data *data, bool on)
+{
+	struct device *dev = &data->client->dev;
+	int ret = 0;
+
+	if (on) {
+		ret = pm_runtime_resume_and_get(dev);
+		if (ret) {
+			dev_err(dev, "failed to resume runtime PM: %d\n", ret);
+			return ret;
+		}
+	} else {
+		pm_runtime_mark_last_busy(dev);
+		pm_runtime_put_autosuspend(dev);
+	}
+
+	return ret;
+}
 
 static int ltr390_register_read(struct ltr390_data *data, u8 register_address)
 {
@@ -223,61 +244,76 @@ static int ltr390_read_raw(struct iio_dev *iio_device,
 	struct ltr390_data *data = iio_priv(iio_device);
 
 	guard(mutex)(&data->lock);
+
+	ltr390_set_power_state(data, true);
+
 	switch (mask) {
 	case IIO_CHAN_INFO_RAW:
 		switch (chan->type) {
 		case IIO_UVINDEX:
 			ret = ltr390_set_mode(data, LTR390_SET_UVS_MODE);
 			if (ret < 0)
-				return ret;
+				goto handle_pm;
 
 			ret = ltr390_register_read(data, LTR390_UVS_DATA);
 			if (ret < 0)
-				return ret;
+				goto handle_pm;
 			break;
 
 		case IIO_LIGHT:
 			ret = ltr390_set_mode(data, LTR390_SET_ALS_MODE);
 			if (ret < 0)
-				return ret;
+				goto handle_pm;
 
 			ret = ltr390_register_read(data, LTR390_ALS_DATA);
 			if (ret < 0)
-				return ret;
+				goto handle_pm;
 			break;
 
 		default:
-			return -EINVAL;
+			ret = -EINVAL;
+			goto handle_pm;
 		}
 		*val = ret;
-		return IIO_VAL_INT;
+		ret = IIO_VAL_INT;
+		break;
+
 	case IIO_CHAN_INFO_SCALE:
 		switch (chan->type) {
 		case IIO_UVINDEX:
 			*val = LTR390_WINDOW_FACTOR * LTR390_FRACTIONAL_PRECISION;
 			*val2 = ltr390_counts_per_uvi(data);
-			return IIO_VAL_FRACTIONAL;
+			ret = IIO_VAL_FRACTIONAL;
+			break;
 
 		case IIO_LIGHT:
 			*val = LTR390_WINDOW_FACTOR * 6 * 100;
 			*val2 = data->gain * data->int_time_us;
-			return IIO_VAL_FRACTIONAL;
+			ret = IIO_VAL_FRACTIONAL;
+			break;
 
 		default:
-			return -EINVAL;
+			ret = -EINVAL;
 		}
+		break;
 
 	case IIO_CHAN_INFO_INT_TIME:
 		*val = data->int_time_us;
-		return IIO_VAL_INT;
+		ret = IIO_VAL_INT;
+		break;
 
 	case IIO_CHAN_INFO_SAMP_FREQ:
 		*val = ltr390_get_samp_freq_or_period(data, LTR390_GET_FREQ);
-		return IIO_VAL_INT;
+		ret = IIO_VAL_INT;
+		break;
 
 	default:
-		return -EINVAL;
+		ret = -EINVAL;
 	}
+
+handle_pm:
+	ltr390_set_power_state(data, false);
+	return ret;
 }
 
 /* integration time in us */
@@ -418,30 +454,43 @@ static int ltr390_read_avail(struct iio_dev *indio_dev, struct iio_chan_spec con
 static int ltr390_write_raw(struct iio_dev *indio_dev, struct iio_chan_spec const *chan,
 				int val, int val2, long mask)
 {
+	int ret;
 	struct ltr390_data *data = iio_priv(indio_dev);
+
+	ltr390_set_power_state(data, true);
 
 	switch (mask) {
 	case IIO_CHAN_INFO_SCALE:
-		if (val2 != 0)
-			return -EINVAL;
+		if (val2 != 0) {
+			ret = -EINVAL;
+			goto handle_pm;
+		}
 
-		return ltr390_set_gain(data, val);
-
+		ret = ltr390_set_gain(data, val);
+		break;
 	case IIO_CHAN_INFO_INT_TIME:
-		if (val2 != 0)
-			return -EINVAL;
+		if (val2 != 0) {
+			ret = -EINVAL;
+			goto handle_pm;
+		}
 
-		return ltr390_set_int_time(data, val);
-
+		ret = ltr390_set_int_time(data, val);
+		break;
 	case IIO_CHAN_INFO_SAMP_FREQ:
-		if (val2 != 0)
-			return -EINVAL;
+		if (val2 != 0) {
+			ret = -EINVAL;
+			goto handle_pm;
+		}
 
-		return ltr390_set_samp_freq(data, val);
-
+		ret = ltr390_set_samp_freq(data, val);
+		break;
 	default:
-		return -EINVAL;
+		ret = -EINVAL;
 	}
+
+handle_pm:
+	ltr390_set_power_state(data, false);
+	return ret;
 }
 
 static int ltr390_read_intr_prst(struct ltr390_data *data, int *val)
@@ -534,16 +583,24 @@ static int ltr390_read_event_value(struct iio_dev *indio_dev,
 				enum iio_event_info info,
 				int *val, int *val2)
 {
+	int ret;
+	struct ltr390_data *data = iio_priv(indio_dev);
+
+	ltr390_set_power_state(data, true);
+
 	switch (info) {
 	case IIO_EV_INFO_VALUE:
-		return ltr390_read_threshold(indio_dev, dir, val, val2);
-
+		ret = ltr390_read_threshold(indio_dev, dir, val, val2);
+		break;
 	case IIO_EV_INFO_PERIOD:
-		return ltr390_read_intr_prst(iio_priv(indio_dev), val);
-
+		ret = ltr390_read_intr_prst(iio_priv(indio_dev), val);
+		break;
 	default:
-		return -EINVAL;
+		ret = -EINVAL;
 	}
+
+	ltr390_set_power_state(data, false);
+	return ret;
 }
 
 static int ltr390_write_event_value(struct iio_dev *indio_dev,
@@ -553,22 +610,35 @@ static int ltr390_write_event_value(struct iio_dev *indio_dev,
 				enum iio_event_info info,
 				int val, int val2)
 {
+	int ret;
+	struct ltr390_data *data = iio_priv(indio_dev);
+
+	ltr390_set_power_state(data, true);
+
 	switch (info) {
 	case IIO_EV_INFO_VALUE:
-		if (val2 != 0)
-			return -EINVAL;
+		if (val2 != 0) {
+			ret = -EINVAL;
+			goto handle_pm;
+		}
 
-		return ltr390_write_threshold(indio_dev, dir, val, val2);
-
+		ret = ltr390_write_threshold(indio_dev, dir, val, val2);
+		break;
 	case IIO_EV_INFO_PERIOD:
-		if (val2 != 0)
-			return -EINVAL;
+		if (val2 != 0) {
+			ret = -EINVAL;
+			goto handle_pm;
+		}
 
-		return ltr390_write_intr_prst(iio_priv(indio_dev), val);
-
+		ret = ltr390_write_intr_prst(iio_priv(indio_dev), val);
+		break;
 	default:
-		return -EINVAL;
+		ret = -EINVAL;
 	}
+
+handle_pm:
+	ltr390_set_power_state(data, false);
+	return ret;
 }
 
 static int ltr390_read_event_config(struct iio_dev *indio_dev,
@@ -579,7 +649,12 @@ static int ltr390_read_event_config(struct iio_dev *indio_dev,
 	struct ltr390_data *data = iio_priv(indio_dev);
 	int ret, status;
 
+	ltr390_set_power_state(data, true);
+
 	ret = regmap_read(data->regmap, LTR390_INT_CFG, &status);
+
+	ltr390_set_power_state(data, false);
+
 	if (ret < 0)
 		return ret;
 
@@ -595,32 +670,43 @@ static int ltr390_write_event_config(struct iio_dev *indio_dev,
 	struct ltr390_data *data = iio_priv(indio_dev);
 	int ret;
 
-	if (!state)
-		return regmap_clear_bits(data->regmap, LTR390_INT_CFG, LTR390_LS_INT_EN);
+	ltr390_set_power_state(data, true);
 
 	guard(mutex)(&data->lock);
+
+	if (!state) {
+		ret = regmap_clear_bits(data->regmap, LTR390_INT_CFG, LTR390_LS_INT_EN);
+		data->irq_enabled = false;
+		goto handle_pm;
+	}
+
 	ret = regmap_set_bits(data->regmap, LTR390_INT_CFG, LTR390_LS_INT_EN);
 	if (ret < 0)
-		return ret;
+		goto handle_pm;
+	data->irq_enabled = true;
 
 	switch (chan->type) {
 	case IIO_LIGHT:
 		ret = ltr390_set_mode(data, LTR390_SET_ALS_MODE);
 		if (ret < 0)
-			return ret;
+			goto handle_pm;
 
-		return regmap_clear_bits(data->regmap, LTR390_INT_CFG, LTR390_LS_INT_SEL_UVS);
-
+		ret = regmap_clear_bits(data->regmap, LTR390_INT_CFG, LTR390_LS_INT_SEL_UVS);
+		break;
 	case IIO_UVINDEX:
 		ret = ltr390_set_mode(data, LTR390_SET_UVS_MODE);
 		if (ret < 0)
-			return ret;
+			goto handle_pm;
 
-		return regmap_set_bits(data->regmap, LTR390_INT_CFG, LTR390_LS_INT_SEL_UVS);
-
+		ret = regmap_set_bits(data->regmap, LTR390_INT_CFG, LTR390_LS_INT_SEL_UVS);
+		break;
 	default:
-		return -EINVAL;
+		ret = -EINVAL;
 	}
+
+handle_pm:
+	ltr390_set_power_state(data, false);
+	return ret;
 }
 
 static int ltr390_debugfs_reg_access(struct iio_dev *indio_dev,
@@ -628,13 +714,19 @@ static int ltr390_debugfs_reg_access(struct iio_dev *indio_dev,
 						unsigned int *readval)
 {
 	struct ltr390_data *data = iio_priv(indio_dev);
+	int ret;
 
 	guard(mutex)(&data->lock);
 
-	if (readval)
-		return regmap_read(data->regmap, reg, readval);
+	ltr390_set_power_state(data, true);
 
-	return regmap_write(data->regmap, reg, writeval);
+	if (readval)
+		ret = regmap_read(data->regmap, reg, readval);
+	else
+		ret = regmap_write(data->regmap, reg, writeval);
+
+	ltr390_set_power_state(data, false);
+	return ret;
 }
 
 static const struct iio_info ltr390_info = {
@@ -690,10 +782,30 @@ static void ltr390_powerdown(void *priv)
 	if (regmap_clear_bits(data->regmap, LTR390_INT_CFG,
 				LTR390_LS_INT_EN) < 0)
 		dev_err(&data->client->dev, "failed to disable interrupts\n");
+	data->irq_enabled = false;
 
 	if (regmap_clear_bits(data->regmap, LTR390_MAIN_CTRL,
 			LTR390_SENSOR_ENABLE) < 0)
 		dev_err(&data->client->dev, "failed to disable sensor\n");
+}
+
+static int ltr390_pm_init(struct ltr390_data *data)
+{
+	int ret;
+	struct device *dev = &data->client->dev;
+
+	ret = pm_runtime_set_active(dev);
+	if (ret)
+		return ret;
+
+	ret = devm_pm_runtime_enable(dev);
+	if (ret)
+		return dev_err_probe(dev, ret,
+					"failed to enable powermanagement\n");
+
+	pm_runtime_set_autosuspend_delay(dev, 1000);
+	pm_runtime_use_autosuspend(dev);
+	return 0;
 }
 
 static int ltr390_probe(struct i2c_client *client)
@@ -708,6 +820,8 @@ static int ltr390_probe(struct i2c_client *client)
 	if (!indio_dev)
 		return -ENOMEM;
 
+	i2c_set_clientdata(client, indio_dev);
+
 	data = iio_priv(indio_dev);
 	data->regmap = devm_regmap_init_i2c(client, &ltr390_regmap_config);
 	if (IS_ERR(data->regmap))
@@ -721,6 +835,8 @@ static int ltr390_probe(struct i2c_client *client)
 	data->gain = 3;
 	/* default mode for ltr390 is ALS mode */
 	data->mode = LTR390_SET_ALS_MODE;
+	/* default irq_enabled is false */
+	data->irq_enabled = false;
 
 	mutex_init(&data->lock);
 
@@ -763,6 +879,7 @@ static int ltr390_probe(struct i2c_client *client)
 					     "request irq (%d) failed\n", client->irq);
 	}
 
+	ltr390_pm_init(data);
 	return devm_iio_device_register(dev, indio_dev);
 }
 
@@ -784,7 +901,30 @@ static int ltr390_resume(struct device *dev)
 				LTR390_SENSOR_ENABLE);
 }
 
-static DEFINE_SIMPLE_DEV_PM_OPS(ltr390_pm_ops, ltr390_suspend, ltr390_resume);
+static int ltr390_runtime_suspend(struct device *dev)
+{
+	struct iio_dev *indio_dev = dev_get_drvdata(dev);
+	struct ltr390_data *data = iio_priv(indio_dev);
+
+	guard(mutex)(&data->lock);
+	if (data->irq_enabled)
+		return 0;
+	return regmap_clear_bits(data->regmap, LTR390_MAIN_CTRL,
+				LTR390_SENSOR_ENABLE);
+}
+
+static int ltr390_runtime_resume(struct device *dev)
+{
+	struct iio_dev *indio_dev = dev_get_drvdata(dev);
+	struct ltr390_data *data = iio_priv(indio_dev);
+
+	return regmap_set_bits(data->regmap, LTR390_MAIN_CTRL,
+				LTR390_SENSOR_ENABLE);
+}
+
+static _DEFINE_DEV_PM_OPS(ltr390_pm_ops,
+		ltr390_suspend, ltr390_resume,
+		ltr390_runtime_suspend, ltr390_runtime_resume, NULL);
 
 static const struct i2c_device_id ltr390_id[] = {
 	{ "ltr390" },
@@ -802,7 +942,7 @@ static struct i2c_driver ltr390_driver = {
 	.driver = {
 		.name = "ltr390",
 		.of_match_table = ltr390_of_table,
-		.pm = pm_sleep_ptr(&ltr390_pm_ops),
+		.pm = pm_ptr(&ltr390_pm_ops),
 	},
 	.probe = ltr390_probe,
 	.id_table = ltr390_id,
