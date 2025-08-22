@@ -222,9 +222,7 @@ static int stringtable_insert(struct data *d, const char *str)
 {
 	unsigned int i;
 
-	/* FIXME: do this more efficiently? */
-
-	for (i = 0; i < d->len; i++) {
+	for (i = 0; i < d->len; i += strlen(d->val + i) + 1) {
 		if (streq(str, d->val + i))
 			return i;
 	}
