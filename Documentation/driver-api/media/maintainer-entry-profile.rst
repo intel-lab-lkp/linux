@@ -177,6 +177,11 @@ b. Committers' workflow: patches are handled by media committers::
 On both workflows, all patches shall be properly reviewed at
 linux-media@vger.kernel.org (LMML) before being merged at media-committers.git.
 
+Such patches will be reviewed timely by the maintainers and reviewers as
+listed in the MAINTAINERS file. The subsystem maintainers will follow one of
+the above workflows, e. g. they will either send a pull request or merge
+patches directly at the media-committers tree.
+
 When patches are picked by patchwork and when merged at media-committers,
 CI bots will check for errors and may provide e-mail feedback about
 patch problems. When this happens, the patch submitter must fix them or
