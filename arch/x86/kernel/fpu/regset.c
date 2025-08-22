@@ -45,8 +45,12 @@ int regset_xregset_fpregs_active(struct task_struct *target, const struct user_r
  */
 static struct fpstate *get_fpstate(struct task_struct *task)
 {
-	struct fpu *fpu = x86_task_fpu(task);
+	struct fpu *fpu;
 
+	if (unlikely(task->flags & PF_USER_WORKER))
+		return &init_fpstate;
+
+	fpu = x86_task_fpu(task);
 	if (task == current)
 		fpu_sync_fpstate(fpu);
 	return fpu->fpstate;
