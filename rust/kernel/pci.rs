@@ -10,7 +10,7 @@ use crate::{
     devres::Devres,
     driver,
     error::{from_result, to_result, Result},
-    io::{Io, IoRaw},
+    io::{resource::ResourceSize, Io, IoRaw},
     irq::{self, IrqRequest},
     str::CStr,
     sync::aref::ARef,
@@ -437,7 +437,7 @@ impl Device {
     }
 
     /// Returns the start of the given PCI bar resource.
-    pub fn resource_start(&self, bar: u32) -> Result<bindings::resource_size_t> {
+    pub fn resource_start(&self, bar: u32) -> Result<ResourceSize> {
         if !Bar::index_is_valid(bar) {
             return Err(EINVAL);
         }
@@ -449,7 +449,7 @@ impl Device {
     }
 
     /// Returns the size of the given PCI bar resource.
-    pub fn resource_len(&self, bar: u32) -> Result<bindings::resource_size_t> {
+    pub fn resource_len(&self, bar: u32) -> Result<ResourceSize> {
         if !Bar::index_is_valid(bar) {
             return Err(EINVAL);
         }
