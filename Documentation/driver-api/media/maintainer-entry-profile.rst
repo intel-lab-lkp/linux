@@ -73,6 +73,9 @@ as described at Documentation/process/index.rst and to the Kernel
 development rules inside the Kernel documentation, including its code of
 conduct.
 
+More details about media commiters' roles and responsibilities can be
+found here: Documentation/driver-api/media/media-committer.rst.
+
 .. [2] Everything that would break backward compatibility with existing
        non-kernel code are API/ABI changes. This includes ioctl and sysfs
        interfaces, v4l2 controls, and their behaviors.
@@ -224,6 +227,11 @@ shall be validated by using PGP signing at some moment.
 See: :ref:`kernel_org_trust_repository`.
 
 With the pull request workflow, pull requests shall use PGP-signed tags.
+
+With the committers' workflow, this is ensured at the time merge request
+rights will be granted to the gitlab instance used by the media-committers.git
+tree, after receiving the e-mail documented in
+:ref:`media-committer-agreement`.
 
 For more details about PGP sign, please read
 Documentation/process/maintainer-pgp-guide.rst.
