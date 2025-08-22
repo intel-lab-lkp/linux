@@ -518,7 +518,7 @@ static int idpf_del_mac_filter(struct idpf_vport *vport,
 	}
 	spin_unlock_bh(&vport_config->mac_filter_list_lock);
 
-	if (np->state == __IDPF_VPORT_UP) {
+	if (test_bit(IDPF_VPORT_UP, np->state)) {
 		int err;
 
 		err = idpf_add_del_mac_filters(np->adapter, vport_config,
@@ -591,7 +591,7 @@ static int idpf_add_mac_filter(struct idpf_vport *vport,
 	if (err)
 		return err;
 
-	if (np->state == __IDPF_VPORT_UP)
+	if (test_bit(IDPF_VPORT_UP, np->state))
 		err = idpf_add_del_mac_filters(np->adapter, vport_config,
 					       vport->default_mac_addr,
 					       np->vport_id, true, async);
@@ -903,7 +903,7 @@ static void idpf_vport_stop(struct idpf_vport *vport, bool rtnl)
 	struct idpf_queue_id_reg_info *chunks;
 	u32 vport_id = vport->vport_id;
 
-	if (np->state <= __IDPF_VPORT_DOWN)
+	if (!test_bit(IDPF_VPORT_UP, np->state))
 		return;
 
 	if (rtnl)
@@ -932,7 +932,7 @@ static void idpf_vport_stop(struct idpf_vport *vport, bool rtnl)
 	idpf_xdp_rxq_info_deinit_all(rsrc);
 	idpf_vport_queues_rel(vport, rsrc);
 	idpf_vport_intr_rel(rsrc);
-	np->state = __IDPF_VPORT_DOWN;
+	clear_bit(IDPF_VPORT_UP, np->state);
 
 	if (rtnl)
 		rtnl_unlock();
@@ -1362,7 +1362,7 @@ static int idpf_up_complete(struct idpf_vport *vport)
 		netif_tx_start_all_queues(vport->netdev);
 	}
 
-	np->state = __IDPF_VPORT_UP;
+	set_bit(IDPF_VPORT_UP, np->state);
 
 	return 0;
 }
@@ -1411,7 +1411,7 @@ static int idpf_vport_open(struct idpf_vport *vport, bool rtnl)
 	bool rsc_ena;
 	int err;
 
-	if (np->state != __IDPF_VPORT_DOWN)
+	if (test_bit(IDPF_VPORT_UP, np->state))
 		return -EBUSY;
 
 	if (rtnl)
@@ -1623,7 +1623,7 @@ void idpf_init_task(struct work_struct *work)
 
 	/* Once state is put into DOWN, driver is ready for dev_open */
 	np = netdev_priv(vport->netdev);
-	np->state = __IDPF_VPORT_DOWN;
+	clear_bit(IDPF_VPORT_UP, np->state);
 	if (test_and_clear_bit(IDPF_VPORT_UP_REQUESTED, vport_config->flags))
 		idpf_vport_open(vport, true);
 
@@ -1820,7 +1820,7 @@ static void idpf_set_vport_state(struct idpf_adapter *adapter)
 			continue;
 
 		np = netdev_priv(adapter->netdevs[i]);
-		if (np->state == __IDPF_VPORT_UP)
+		if (test_bit(IDPF_VPORT_UP, np->state))
 			set_bit(IDPF_VPORT_UP_REQUESTED,
 				adapter->vport_config[i]->flags);
 	}
@@ -1958,8 +1958,8 @@ int idpf_initiate_soft_reset(struct idpf_vport *vport,
 			     enum idpf_vport_reset_cause reset_cause)
 {
 	struct idpf_netdev_priv *np = netdev_priv(vport->netdev);
+	bool vport_is_up = test_bit(IDPF_VPORT_UP, np->state);
 	struct idpf_q_vec_rsrc *rsrc = &vport->dflt_qv_rsrc;
-	enum idpf_vport_state current_state = np->state;
 	struct idpf_adapter *adapter = vport->adapter;
 	struct idpf_vport_config *vport_config;
 	struct idpf_q_vec_rsrc *new_rsrc;
@@ -2017,7 +2017,7 @@ int idpf_initiate_soft_reset(struct idpf_vport *vport,
 
 	vport_config = adapter->vport_config[vport->idx];
 
-	if (current_state <= __IDPF_VPORT_DOWN) {
+	if (!vport_is_up) {
 		idpf_send_delete_queues_msg(adapter, &vport_config->qid_reg_info,
 					    vport_id);
 	} else {
@@ -2043,7 +2043,7 @@ int idpf_initiate_soft_reset(struct idpf_vport *vport,
 	if (err)
 		goto err_open;
 
-	if (current_state == __IDPF_VPORT_UP)
+	if (vport_is_up)
 		err = idpf_vport_open(vport, false);
 
 	goto free_vport;
@@ -2052,7 +2052,7 @@ err_reset:
 	idpf_send_add_queues_msg(adapter, vport_config, rsrc, vport_id);
 
 err_open:
-	if (current_state == __IDPF_VPORT_UP)
+	if (vport_is_up)
 		idpf_vport_open(vport, false);
 
 free_vport:
