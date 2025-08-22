@@ -4385,7 +4385,6 @@ void tcp_send_probe0(struct sock *sk)
 {
 	struct inet_connection_sock *icsk = inet_csk(sk);
 	struct tcp_sock *tp = tcp_sk(sk);
-	struct net *net = sock_net(sk);
 	unsigned long timeout;
 	int err;
 
@@ -4401,8 +4400,7 @@ void tcp_send_probe0(struct sock *sk)
 
 	icsk->icsk_probes_out++;
 	if (err <= 0) {
-		if (icsk->icsk_backoff < READ_ONCE(net->ipv4.sysctl_tcp_retries2))
-			icsk->icsk_backoff++;
+		icsk->icsk_backoff++;
 		timeout = tcp_probe0_when(sk, tcp_rto_max(sk));
 	} else {
 		/* If packet was not sent due to local congestion,

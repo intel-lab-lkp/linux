@@ -419,9 +419,9 @@ static void tcp_probe_timer(struct sock *sk)
 	if (sock_flag(sk, SOCK_DEAD)) {
 		unsigned int rto_max = tcp_rto_max(sk);
 		const bool alive = inet_csk_rto_backoff(icsk, rto_max) < rto_max;
+		int orphan_probes = tcp_orphan_retries(sk, alive);
 
-		max_probes = tcp_orphan_retries(sk, alive);
-		if (!alive && icsk->icsk_backoff >= max_probes)
+		if (!alive || icsk->icsk_backoff >= orphan_probes)
 			goto abort;
 		if (tcp_out_of_resources(sk, true))
 			return;
