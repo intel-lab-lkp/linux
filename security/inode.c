@@ -129,20 +129,14 @@ static struct dentry *securityfs_create_dentry(const char *name, umode_t mode,
 
 	dir = d_inode(parent);
 
-	inode_lock(dir);
-	dentry = lookup_noperm(&QSTR(name), parent);
+	dentry = simple_start_creating(parent, name);
 	if (IS_ERR(dentry))
 		goto out;
-
-	if (d_really_is_positive(dentry)) {
-		error = -EEXIST;
-		goto out1;
-	}
 
 	inode = new_inode(dir->i_sb);
 	if (!inode) {
 		error = -ENOMEM;
-		goto out1;
+		goto out;
 	}
 
 	inode->i_ino = get_next_ino();
@@ -161,14 +155,11 @@ static struct dentry *securityfs_create_dentry(const char *name, umode_t mode,
 		inode->i_fop = fops;
 	}
 	d_instantiate(dentry, inode);
-	inode_unlock(dir);
-	return dentry;
+	return simple_end_creating(dentry);
 
-out1:
-	dput(dentry);
-	dentry = ERR_PTR(error);
 out:
-	inode_unlock(dir);
+	simple_failed_creating(dentry);
+	dentry = ERR_PTR(error);
 	if (pinned)
 		simple_release_fs(&mount, &mount_count);
 	return dentry;

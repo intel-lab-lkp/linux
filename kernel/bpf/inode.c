@@ -420,16 +420,14 @@ static int bpf_iter_link_pin_kernel(struct dentry *parent,
 	struct dentry *dentry;
 	int ret;
 
-	inode_lock(parent->d_inode);
-	dentry = lookup_noperm(&QSTR(name), parent);
-	if (IS_ERR(dentry)) {
-		inode_unlock(parent->d_inode);
-		return PTR_ERR(dentry);
-	}
+	dentry = simple_start_creating(parent, name);
+	if (IS_ERR(dentry))
+	return PTR_ERR(dentry);
+
 	ret = bpf_mkobj_ops(dentry, mode, link, &bpf_link_iops,
 			    &bpf_iter_fops);
-	dput(dentry);
-	inode_unlock(parent->d_inode);
+	/* bpf_mkobj_ops took the ref if needed, so we dput() here */
+	dput(simple_end_creating(dentry));
 	return ret;
 }
 

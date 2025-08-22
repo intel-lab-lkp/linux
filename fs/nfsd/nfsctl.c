@@ -1147,24 +1147,21 @@ static int __nfsd_mkdir(struct inode *dir, struct dentry *dentry, umode_t mode, 
 
 static struct dentry *nfsd_mkdir(struct dentry *parent, struct nfsdfs_client *ncl, char *name)
 {
-	struct inode *dir = parent->d_inode;
 	struct dentry *dentry;
-	int ret = -ENOMEM;
+	int ret;
 
-	inode_lock(dir);
-	dentry = d_alloc_name(parent, name);
-	if (!dentry)
-		goto out_err;
+	dentry = simple_start_creating(parent, name);
+	if (IS_ERR(dentry))
+		return dentry;
+
 	ret = __nfsd_mkdir(d_inode(parent), dentry, S_IFDIR | 0600, ncl);
 	if (ret)
 		goto out_err;
-out:
-	inode_unlock(dir);
-	return dentry;
+	return simple_end_creating(dentry);
+
 out_err:
-	dput(dentry);
-	dentry = ERR_PTR(ret);
-	goto out;
+	simple_failed_creating(dentry);
+	return ERR_PTR(ret);
 }
 
 #if IS_ENABLED(CONFIG_SUNRPC_GSS)
@@ -1193,19 +1190,18 @@ static int __nfsd_symlink(struct inode *dir, struct dentry *dentry,
 static void _nfsd_symlink(struct dentry *parent, const char *name,
 			  const char *content)
 {
-	struct inode *dir = parent->d_inode;
 	struct dentry *dentry;
 	int ret;
 
-	inode_lock(dir);
-	dentry = d_alloc_name(parent, name);
-	if (!dentry)
-		goto out;
+	dentry = simple_start_creating(parent, name);
+	if (IS_ERR(dentry))
+		return;
 	ret = __nfsd_symlink(d_inode(parent), dentry, S_IFLNK | 0777, content);
-	if (ret)
-		dput(dentry);
-out:
-	inode_unlock(dir);
+	if (ret) {
+		simple_failed_creating(dentry);
+		return;
+	}
+	simple_end_creating(dentry);
 }
 #else
 static inline void _nfsd_symlink(struct dentry *parent, const char *name,
@@ -1250,30 +1246,24 @@ static  int nfsdfs_create_files(struct dentry *root,
 	struct dentry *dentry;
 	int i;
 
-	inode_lock(dir);
 	for (i = 0; files->name && files->name[0]; i++, files++) {
-		dentry = d_alloc_name(root, files->name);
-		if (!dentry)
-			goto out;
+		dentry = simple_start_creating(root, files->name);
+		if (IS_ERR(dentry))
+			return PTR_ERR(dentry);;
 		inode = nfsd_get_inode(d_inode(root)->i_sb,
 					S_IFREG | files->mode);
 		if (!inode) {
-			dput(dentry);
-			goto out;
+			simple_failed_creating(dentry);
+			return -ENOMEM;
 		}
 		kref_get(&ncl->cl_ref);
 		inode->i_fop = files->ops;
 		inode->i_private = ncl;
 		d_add(dentry, inode);
 		fsnotify_create(dir, dentry);
-		if (fdentries)
-			fdentries[i] = dentry;
+		fdentries[i] = simple_end_creating(dentry);
 	}
-	inode_unlock(dir);
 	return 0;
-out:
-	inode_unlock(dir);
-	return -ENOMEM;
 }
 
 /* on success, returns positive number unique to that client. */

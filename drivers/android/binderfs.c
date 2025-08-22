@@ -181,28 +181,17 @@ static int binderfs_binder_device_create(struct inode *ref_inode,
 	}
 
 	root = sb->s_root;
-	inode_lock(d_inode(root));
 
-	/* look it up */
-	dentry = lookup_noperm(&QSTR(name), root);
+	dentry = simple_start_creating(root, name);
 	if (IS_ERR(dentry)) {
-		inode_unlock(d_inode(root));
 		ret = PTR_ERR(dentry);
-		goto err;
-	}
-
-	if (d_really_is_positive(dentry)) {
-		/* already exists */
-		dput(dentry);
-		inode_unlock(d_inode(root));
-		ret = -EEXIST;
 		goto err;
 	}
 
 	inode->i_private = device;
 	d_instantiate(dentry, inode);
 	fsnotify_create(root->d_inode, dentry);
-	inode_unlock(d_inode(root));
+	simple_end_creating(dentry);
 
 	binder_add_device(device);
 
@@ -482,19 +471,7 @@ static struct inode *binderfs_make_inode(struct super_block *sb, int mode)
 static struct dentry *binderfs_create_dentry(struct dentry *parent,
 					     const char *name)
 {
-	struct dentry *dentry;
-
-	dentry = lookup_noperm(&QSTR(name), parent);
-	if (IS_ERR(dentry))
-		return dentry;
-
-	/* Return error if the file/dir already exists. */
-	if (d_really_is_positive(dentry)) {
-		dput(dentry);
-		return ERR_PTR(-EEXIST);
-	}
-
-	return dentry;
+	return simple_start_creating(parent, name);
 }
 
 struct dentry *binderfs_create_file(struct dentry *parent, const char *name,
@@ -506,18 +483,16 @@ struct dentry *binderfs_create_file(struct dentry *parent, const char *name,
 	struct super_block *sb;
 
 	parent_inode = d_inode(parent);
-	inode_lock(parent_inode);
 
 	dentry = binderfs_create_dentry(parent, name);
 	if (IS_ERR(dentry))
-		goto out;
+		return dentry;
 
 	sb = parent_inode->i_sb;
 	new_inode = binderfs_make_inode(sb, S_IFREG | 0444);
 	if (!new_inode) {
-		dput(dentry);
-		dentry = ERR_PTR(-ENOMEM);
-		goto out;
+		simple_failed_creating(dentry);
+		return ERR_PTR(-ENOMEM);
 	}
 
 	new_inode->i_fop = fops;
@@ -525,9 +500,7 @@ struct dentry *binderfs_create_file(struct dentry *parent, const char *name,
 	d_instantiate(dentry, new_inode);
 	fsnotify_create(parent_inode, dentry);
 
-out:
-	inode_unlock(parent_inode);
-	return dentry;
+	return simple_end_creating(dentry);
 }
 
 static struct dentry *binderfs_create_dir(struct dentry *parent,
@@ -538,18 +511,16 @@ static struct dentry *binderfs_create_dir(struct dentry *parent,
 	struct super_block *sb;
 
 	parent_inode = d_inode(parent);
-	inode_lock(parent_inode);
 
 	dentry = binderfs_create_dentry(parent, name);
 	if (IS_ERR(dentry))
-		goto out;
+		return dentry;
 
 	sb = parent_inode->i_sb;
 	new_inode = binderfs_make_inode(sb, S_IFDIR | 0755);
 	if (!new_inode) {
-		dput(dentry);
-		dentry = ERR_PTR(-ENOMEM);
-		goto out;
+		simple_failed_creating(dentry);
+		return ERR_PTR(-ENOMEM);
 	}
 
 	new_inode->i_fop = &simple_dir_operations;
@@ -560,9 +531,7 @@ static struct dentry *binderfs_create_dir(struct dentry *parent,
 	inc_nlink(parent_inode);
 	fsnotify_mkdir(parent_inode, dentry);
 
-out:
-	inode_unlock(parent_inode);
-	return dentry;
+	return simple_end_creating(dentry);
 }
 
 static int binder_features_show(struct seq_file *m, void *unused)

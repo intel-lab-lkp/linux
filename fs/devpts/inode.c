@@ -259,7 +259,6 @@ static int devpts_parse_param(struct fs_context *fc, struct fs_parameter *param)
 static int mknod_ptmx(struct super_block *sb, struct fs_context *fc)
 {
 	int mode;
-	int rc = -ENOMEM;
 	struct dentry *dentry;
 	struct inode *inode;
 	struct dentry *root = sb->s_root;
@@ -268,18 +267,15 @@ static int mknod_ptmx(struct super_block *sb, struct fs_context *fc)
 	kuid_t ptmx_uid = current_fsuid();
 	kgid_t ptmx_gid = current_fsgid();
 
-	inode_lock(d_inode(root));
+	dentry = simple_start_creating(root, "ptmx");
+	if (IS_ERR(dentry)) {
+		if (dentry == ERR_PTR(-EEXIST)) {
+			/* If we have already created ptmx node, return */
+			return 0;
+		}
 
-	/* If we have already created ptmx node, return */
-	if (fsi->ptmx_dentry) {
-		rc = 0;
-		goto out;
-	}
-
-	dentry = d_alloc_name(root, "ptmx");
-	if (!dentry) {
 		pr_err("Unable to alloc dentry for ptmx node\n");
-		goto out;
+		return -ENOMEM;
 	}
 
 	/*
@@ -288,8 +284,8 @@ static int mknod_ptmx(struct super_block *sb, struct fs_context *fc)
 	inode = new_inode(sb);
 	if (!inode) {
 		pr_err("Unable to alloc inode for ptmx node\n");
-		dput(dentry);
-		goto out;
+		simple_failed_creating(dentry);
+		return -ENOMEM;
 	}
 
 	inode->i_ino = 2;
@@ -302,11 +298,8 @@ static int mknod_ptmx(struct super_block *sb, struct fs_context *fc)
 
 	d_add(dentry, inode);
 
-	fsi->ptmx_dentry = dentry;
-	rc = 0;
-out:
-	inode_unlock(d_inode(root));
-	return rc;
+	fsi->ptmx_dentry = simple_end_creating(dentry);
+	return 0;
 }
 
 static void update_ptmx_mode(struct pts_fs_info *fsi)

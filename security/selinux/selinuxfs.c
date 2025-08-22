@@ -1949,15 +1949,16 @@ static const struct inode_operations swapover_dir_inode_operations = {
 static struct dentry *sel_make_swapover_dir(struct super_block *sb,
 						unsigned long *ino)
 {
-	struct dentry *dentry = d_alloc_name(sb->s_root, ".swapover");
+	struct dentry *dentry;
 	struct inode *inode;
 
+	dentry = simple_start_creating(sb->s_root, ".swapover");
 	if (!dentry)
 		return ERR_PTR(-ENOMEM);
 
 	inode = sel_make_inode(sb, S_IFDIR);
 	if (!inode) {
-		dput(dentry);
+		simple_failed_creating(dentry);
 		return ERR_PTR(-ENOMEM);
 	}
 
@@ -1968,8 +1969,7 @@ static struct dentry *sel_make_swapover_dir(struct super_block *sb,
 	inode_lock(sb->s_root->d_inode);
 	d_add(dentry, inode);
 	inc_nlink(sb->s_root->d_inode);
-	inode_unlock(sb->s_root->d_inode);
-	return dentry;
+	return simple_end_creating(dentry);
 }
 
 #define NULL_FILE_NAME "null"

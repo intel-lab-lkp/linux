@@ -796,28 +796,23 @@ static ssize_t bm_register_write(struct file *file, const char __user *buffer,
 		revert_creds(old_cred);
 		if (IS_ERR(f)) {
 			pr_notice("register: failed to install interpreter file %s\n",
-				 e->interpreter);
+				  e->interpreter);
 			kfree(e);
 			return PTR_ERR(f);
 		}
 		e->interp_file = f;
 	}
 
-	inode_lock(d_inode(root));
-	dentry = lookup_noperm(&QSTR(e->name), root);
+	dentry = simple_start_creating(root, e->name);
 	err = PTR_ERR(dentry);
 	if (IS_ERR(dentry))
 		goto out;
-
-	err = -EEXIST;
-	if (d_really_is_positive(dentry))
-		goto out2;
 
 	inode = bm_get_inode(sb, S_IFREG | 0644);
 
 	err = -ENOMEM;
 	if (!inode)
-		goto out2;
+		goto out;
 
 	refcount_set(&e->users, 1);
 	e->dentry = dget(dentry);
@@ -830,19 +825,16 @@ static ssize_t bm_register_write(struct file *file, const char __user *buffer,
 	list_add(&e->list, &misc->entries);
 	write_unlock(&misc->entries_lock);
 
-	err = 0;
-out2:
-	dput(dentry);
-out:
-	inode_unlock(d_inode(root));
-
-	if (err) {
-		if (f)
-			filp_close(f, NULL);
-		kfree(e);
-		return err;
-	}
+	simple_end_creating(dentry);
 	return count;
+
+out:
+	simple_failed_creating(dentry);
+
+	if (f)
+		filp_close(f, NULL);
+	kfree(e);
+	return err;
 }
 
 static const struct file_operations bm_register_operations = {
