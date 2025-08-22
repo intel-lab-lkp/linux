@@ -214,6 +214,8 @@
 #define  PCIE_DVT_PMU_PCIE_PHY_CTRL_DAST_PWRDN_MASK		0x1
 #define  PCIE_DVT_PMU_PCIE_PHY_CTRL_DAST_PWRDN_SHIFT		0x0
 
+#define PCIE_LINK_UP_CHECK_US	5000
+
 /* Forward declarations */
 struct brcm_pcie;
 
@@ -1365,7 +1367,8 @@ static int brcm_pcie_start_link(struct brcm_pcie *pcie)
 	 * total of 100ms.
 	 */
 	for (i = 0; i < 100 && !brcm_pcie_link_up(pcie); i += 5)
-		msleep(5);
+		usleep_range(PCIE_LINK_UP_CHECK_US,
+			     PCIE_LINK_UP_CHECK_US + 100);
 
 	if (!brcm_pcie_link_up(pcie)) {
 		dev_err(dev, "link down\n");
