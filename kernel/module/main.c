@@ -2571,7 +2571,7 @@ static void module_augment_kernel_taints(struct module *mod, struct load_info *i
 
 }
 
-static int check_modinfo(struct module *mod, struct load_info *info, int flags)
+static int check_modinfo_vermagic(struct module *mod, struct load_info *info, int flags)
 {
 	const char *modmagic = get_modinfo(info, "vermagic");
 	int err;
@@ -2589,10 +2589,6 @@ static int check_modinfo(struct module *mod, struct load_info *info, int flags)
 		       info->name, modmagic, vermagic);
 		return -ENOEXEC;
 	}
-
-	err = check_modinfo_livepatch(mod, info);
-	if (err)
-		return err;
 
 	return 0;
 }
@@ -3334,7 +3330,11 @@ static int early_mod_check(struct load_info *info, int flags)
 	if (!check_modstruct_version(info, info->mod))
 		return -ENOEXEC;
 
-	err = check_modinfo(info->mod, info, flags);
+	err = check_modinfo_vermagic(info->mod, info, flags);
+	if (err)
+		return err;
+
+	err = check_modinfo_livepatch(info->mod, info);
 	if (err)
 		return err;
 
