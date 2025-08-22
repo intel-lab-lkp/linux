@@ -2180,9 +2180,11 @@ static enum dc_status dc_commit_state_no_check(struct dc *dc, struct dc_state *c
 	/* Full update should unconditionally be triggered when dc_commit_state_no_check is called */
 	for (i = 0; i < context->stream_count; i++) {
 		uint32_t prev_dsc_changed = context->streams[i]->update_flags.bits.dsc_changed;
+		uint32_t prev_out_tf = context->streams[i]->update_flags.bits.out_tf;
 
 		context->streams[i]->update_flags.raw = 0xFFFFFFFF;
 		context->streams[i]->update_flags.bits.dsc_changed = prev_dsc_changed;
+		context->streams[i]->update_flags.bits.out_tf = prev_out_tf;
 	}
 
 	determine_pipe_unlock_order(dc, context);
@@ -3007,8 +3009,11 @@ enum surface_update_type dc_check_update_surfaces_for_stream(
 	if (type == UPDATE_TYPE_FULL) {
 		if (stream_update) {
 			uint32_t dsc_changed = stream_update->stream->update_flags.bits.dsc_changed;
+			uint32_t out_tf = stream_update->stream->update_flags.bits.out_tf;
+
 			stream_update->stream->update_flags.raw = 0xFFFFFFFF;
 			stream_update->stream->update_flags.bits.dsc_changed = dsc_changed;
+			stream_update->stream->update_flags.bits.out_tf = out_tf;
 		}
 		for (i = 0; i < surface_count; i++)
 			updates[i].surface->update_flags.raw = 0xFFFFFFFF;
