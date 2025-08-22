@@ -384,6 +384,34 @@ impl CStr {
         unsafe { core::str::from_utf8_unchecked(self.as_bytes()) }
     }
 
+    /// Convert this [`CStr`] into a [`&str`], checking for valid UTF-8.
+    ///
+    /// This function validates that the [`CStr`] contains valid UTF-8 data
+    /// and returns the corresponding [`&str`] slice. If the contents are not
+    /// valid UTF-8, it returns an error.
+    ///
+    /// This is the safe alternative to [`as_str_unchecked`].
+    ///
+    /// [`as_str_unchecked`]: #method.as_str_unchecked
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// # use kernel::c_str;
+    /// # use kernel::str::CStr;
+    /// let valid_utf8 = c_str!("ツ");
+    /// assert_eq!(valid_utf8.as_str().unwrap(), "ツ");
+    ///
+    /// // This would fail for invalid UTF-8
+    /// let bytes = b"\xc3\x28\0";
+    /// let invalid_cstr = CStr::from_bytes_with_nul(bytes).unwrap();
+    /// assert!(invalid_cstr.as_str().is_err());
+    /// ```
+    #[inline]
+    pub fn as_str(&self) -> Result<&str, core::str::Utf8Error> {
+        core::str::from_utf8(self.as_bytes())
+    }
+
     /// Convert this [`CStr`] into a [`CString`] by allocating memory and
     /// copying over the string data.
     pub fn to_cstring(&self) -> Result<CString, AllocError> {
@@ -651,6 +679,50 @@ mod tests {
         // SAFETY: The contents come from a string literal which contains valid UTF-8.
         let unchecked_str = unsafe { checked_cstr.as_str_unchecked() };
         assert_eq!(unchecked_str, "🐧");
+        Ok(())
+    }
+
+    #[test]
+    fn test_cstr_as_str_valid_utf8() -> Result {
+        let valid_bytes = b"\xf0\x9f\xa6\x80\0";
+        let cstr = CStr::from_bytes_with_nul(valid_bytes)?;
+        let result = cstr.as_str();
+        assert!(result.is_ok());
+        assert_eq!(result.unwrap(), "🦀");
+
+        let ascii_bytes = b"hello, world!\0";
+        let ascii_cstr = CStr::from_bytes_with_nul(ascii_bytes)?;
+        let ascii_result = ascii_cstr.as_str();
+        assert!(ascii_result.is_ok());
+        assert_eq!(ascii_result.unwrap(), "hello, world!");
+
+        let empty_bytes = b"\0";
+        let empty_cstr = CStr::from_bytes_with_nul(empty_bytes)?;
+        let empty_result = empty_cstr.as_str();
+        assert!(empty_result.is_ok());
+        assert_eq!(empty_result.unwrap(), "");
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_cstr_as_str_invalid_utf8() -> Result {
+        let bad_bytes = b"\xc3\x28\0";
+        let bad_cstr = CStr::from_bytes_with_nul(bad_bytes)?;
+        let result = bad_cstr.as_str();
+        assert!(result.is_err());
+
+        let bad_bytes2 = b"\xf0\x28\x8c\x28\0";
+        let bad_cstr2 = CStr::from_bytes_with_nul(bad_bytes2)?;
+        let result2 = bad_cstr2.as_str();
+        assert!(result2.is_err());
+
+        // Test with incomplete UTF-8 sequence
+        let incomplete_bytes = b"\xf0\x9f\0";
+        let incomplete_cstr = CStr::from_bytes_with_nul(incomplete_bytes)?;
+        let incomplete_result = incomplete_cstr.as_str();
+        assert!(incomplete_result.is_err());
+
         Ok(())
     }
 
