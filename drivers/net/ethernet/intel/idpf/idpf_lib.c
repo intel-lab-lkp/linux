@@ -903,7 +903,7 @@ static void idpf_vport_stop(struct idpf_vport *vport, bool rtnl)
 	struct idpf_queue_id_reg_info *chunks;
 	u32 vport_id = vport->vport_id;
 
-	if (!test_bit(IDPF_VPORT_UP, np->state))
+	if (!test_and_clear_bit(IDPF_VPORT_UP, np->state))
 		return;
 
 	if (rtnl)
@@ -932,7 +932,6 @@ static void idpf_vport_stop(struct idpf_vport *vport, bool rtnl)
 	idpf_xdp_rxq_info_deinit_all(rsrc);
 	idpf_vport_queues_rel(vport, rsrc);
 	idpf_vport_intr_rel(rsrc);
-	clear_bit(IDPF_VPORT_UP, np->state);
 
 	if (rtnl)
 		rtnl_unlock();
