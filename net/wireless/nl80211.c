@@ -7624,7 +7624,7 @@ static int nl80211_get_station(struct sk_buff *skb, struct genl_info *info)
 		return err;
 	}
 
-	msg = nlmsg_new(NLMSG_DEFAULT_SIZE, GFP_KERNEL);
+	msg = nlmsg_new(4096, GFP_KERNEL);
 	if (!msg) {
 		cfg80211_sinfo_release_content(&sinfo);
 		return -ENOMEM;
