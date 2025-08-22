@@ -551,7 +551,7 @@ s64 __v4l2_get_link_freq_ctrl(struct v4l2_ctrl_handler *handler,
 EXPORT_SYMBOL_GPL(__v4l2_get_link_freq_ctrl);
 
 #ifdef CONFIG_MEDIA_CONTROLLER
-s64 __v4l2_get_link_freq_pad(struct media_pad *pad, unsigned int mul,
+s64 __v4l2_get_link_freq_pad(const struct media_pad *pad, unsigned int mul,
 			     unsigned int div)
 {
 	struct v4l2_mbus_config mbus_config = {};
