@@ -12,6 +12,7 @@
    :maxdepth: 1
 
    process/howto
+   process/cve
    core-api/wrappers/memory-barriers.rst
 
 .. raw:: latex
