@@ -894,7 +894,7 @@ static void idpf_vport_stop(struct idpf_vport *vport, bool rtnl)
 {
 	struct idpf_netdev_priv *np = netdev_priv(vport->netdev);
 
-	if (!test_bit(IDPF_VPORT_UP, np->state))
+	if (!test_and_clear_bit(IDPF_VPORT_UP, np->state))
 		return;
 
 	if (rtnl)
@@ -921,7 +921,6 @@ static void idpf_vport_stop(struct idpf_vport *vport, bool rtnl)
 	idpf_xdp_rxq_info_deinit_all(vport);
 	idpf_vport_queues_rel(vport);
 	idpf_vport_intr_rel(vport);
-	clear_bit(IDPF_VPORT_UP, np->state);
 
 	if (rtnl)
 		rtnl_unlock();
