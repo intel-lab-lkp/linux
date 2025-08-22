@@ -1256,7 +1256,8 @@ out:
 /**
  * copy_xstate_to_uabi_buf - Copy kernel saved xstate to a UABI buffer
  * @to:		membuf descriptor
- * @tsk:	The task from which to copy the saved xstate
+ * @fpstate:	The fpstate buffer from which to copy
+ * @pkru_val:	The PKRU value to store in the PKRU component
  * @copy_mode:	The requested copy mode
  *
  * Converts from kernel XSAVE or XSAVES compacted format to UABI conforming
@@ -1265,12 +1266,11 @@ out:
  *
  * It supports partial copy but @to.pos always starts from zero.
  */
-void copy_xstate_to_uabi_buf(struct membuf to, struct task_struct *tsk,
-			     enum xstate_copy_mode copy_mode)
+void copy_xstate_to_uabi_buf(struct membuf to, struct fpstate *fpstate,
+			     u32 pkru_val, enum xstate_copy_mode copy_mode)
 {
-	__copy_xstate_to_uabi_buf(to, x86_task_fpu(tsk)->fpstate,
-				  x86_task_fpu(tsk)->fpstate->user_xfeatures,
-				  tsk->thread.pkru, copy_mode);
+	__copy_xstate_to_uabi_buf(to, fpstate, fpstate->user_xfeatures,
+				  pkru_val, copy_mode);
 }
 
 static int copy_from_buffer(void *dst, unsigned int offset, unsigned int size,

@@ -83,7 +83,7 @@ int xfpregs_get(struct task_struct *target, const struct user_regset *regset,
 				    sizeof(fpu->fpstate->regs.fxsave));
 	}
 
-	copy_xstate_to_uabi_buf(to, target, XSTATE_COPY_FX);
+	copy_xstate_to_uabi_buf(to, fpu->fpstate, target->thread.pkru, XSTATE_COPY_FX);
 	return 0;
 }
 
@@ -130,12 +130,14 @@ int xfpregs_set(struct task_struct *target, const struct user_regset *regset,
 int xstateregs_get(struct task_struct *target, const struct user_regset *regset,
 		struct membuf to)
 {
+	struct fpu *fpu = x86_task_fpu(target);
+
 	if (!cpu_feature_enabled(X86_FEATURE_XSAVE))
 		return -ENODEV;
 
-	sync_fpstate(x86_task_fpu(target));
+	sync_fpstate(fpu);
 
-	copy_xstate_to_uabi_buf(to, target, XSTATE_COPY_XSAVE);
+	copy_xstate_to_uabi_buf(to, fpu->fpstate, target->thread.pkru, XSTATE_COPY_XSAVE);
 	return 0;
 }
 
@@ -419,7 +421,7 @@ int fpregs_get(struct task_struct *target, const struct user_regset *regset,
 		struct membuf mb = { .p = &fxsave, .left = sizeof(fxsave) };
 
 		/* Handle init state optimized xstate correctly */
-		copy_xstate_to_uabi_buf(mb, target, XSTATE_COPY_FP);
+		copy_xstate_to_uabi_buf(mb, fpu->fpstate, target->thread.pkru, XSTATE_COPY_FP);
 		fx = &fxsave;
 	} else {
 		fx = &fpu->fpstate->regs.fxsave;
