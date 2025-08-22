@@ -659,6 +659,70 @@ int drm_gem_shmem_mmap(struct drm_gem_shmem_object *shmem, struct vm_area_struct
 EXPORT_SYMBOL_GPL(drm_gem_shmem_mmap);
 
 /**
+ * drm_gem_shmem_sync_mmap - Sync memor-mapped data to/from the device
+ * @shmem: shmem GEM object
+ * @offset: Offset into the GEM object
+ * @size: Size of the area to sync
+ *
+ * Returns:
+ * 0 on success or a negative error code on failure.
+ */
+int
+drm_gem_shmem_sync_mmap(struct drm_gem_shmem_object *shmem,
+			size_t offset, size_t size,
+			enum dma_data_direction dir)
+{
+	struct drm_device *dev = shmem->base.dev;
+	struct sg_table *sgt;
+	struct scatterlist *sgl;
+	unsigned int count;
+
+	if (dir == DMA_NONE)
+		return 0;
+
+	/* Don't bother if it's WC-mapped */
+	if (shmem->map_wc)
+		return 0;
+
+	if (size == 0)
+		return 0;
+
+	if (offset + size < offset || offset + size > shmem->base.size)
+		return -EINVAL;
+
+	sgt = drm_gem_shmem_get_pages_sgt(shmem);
+	if (IS_ERR(sgt))
+		return PTR_ERR(sgt);
+
+	for_each_sgtable_dma_sg(sgt, sgl, count) {
+		if (size == 0)
+			break;
+
+		dma_addr_t paddr = sg_dma_address(sgl);
+		size_t len = sg_dma_len(sgl);
+
+		if (len <= offset) {
+			offset -= len;
+			continue;
+		}
+
+		paddr += offset;
+		len -= offset;
+		len = min_t(size_t, len, size);
+		size -= len;
+		offset = 0;
+
+		if (dir == DMA_FROM_DEVICE)
+			dma_sync_single_for_cpu(dev->dev, paddr, len, dir);
+		else
+			dma_sync_single_for_device(dev->dev, paddr, len, dir);
+	}
+
+	return 0;
+}
+EXPORT_SYMBOL_GPL(drm_gem_shmem_sync_mmap);
+
+/**
  * drm_gem_shmem_print_info() - Print &drm_gem_shmem_object info for debugfs
  * @shmem: shmem GEM object
  * @p: DRM printer

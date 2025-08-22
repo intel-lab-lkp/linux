@@ -121,6 +121,9 @@ int drm_gem_shmem_vmap_locked(struct drm_gem_shmem_object *shmem,
 void drm_gem_shmem_vunmap_locked(struct drm_gem_shmem_object *shmem,
 				 struct iosys_map *map);
 int drm_gem_shmem_mmap(struct drm_gem_shmem_object *shmem, struct vm_area_struct *vma);
+int drm_gem_shmem_sync_mmap(struct drm_gem_shmem_object *shmem,
+			    size_t offset, size_t size,
+			    enum dma_data_direction dir);
 
 int drm_gem_shmem_pin_locked(struct drm_gem_shmem_object *shmem);
 void drm_gem_shmem_unpin_locked(struct drm_gem_shmem_object *shmem);
