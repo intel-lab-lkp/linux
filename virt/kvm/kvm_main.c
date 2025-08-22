@@ -620,6 +620,17 @@ static __always_inline kvm_mn_ret_t kvm_handle_hva_range(struct kvm *kvm,
 			gfn_range.slot = slot;
 			gfn_range.lockless = range->lockless;
 
+#ifdef CONFIG_KVM_GENERIC_MEMORY_ATTRIBUTES
+			/*
+			 * If GFN range are all private, no need to invoke the
+			 * handler.
+			 */
+			if (kvm_range_has_memory_attributes(kvm, gfn_range.start,
+							    gfn_range.end, ~0,
+							    KVM_MEMORY_ATTRIBUTE_PRIVATE))
+				continue;
+#endif
+
 			if (!r.found_memslot) {
 				r.found_memslot = true;
 				if (!range->lockless) {
