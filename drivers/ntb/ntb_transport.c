@@ -59,6 +59,7 @@
 #include <linux/slab.h>
 #include <linux/types.h>
 #include <linux/uaccess.h>
+#include <linux/mutex.h>
 #include "linux/ntb.h"
 #include "linux/ntb_transport.h"
 
@@ -241,6 +242,9 @@ struct ntb_transport_ctx {
 	struct work_struct link_cleanup;
 
 	struct dentry *debugfs_node_dir;
+
+	/* Make sure workq of link event be executed serially */
+	struct mutex link_event_lock;
 };
 
 enum {
@@ -1024,7 +1028,9 @@ static void ntb_transport_link_cleanup_work(struct work_struct *work)
 	struct ntb_transport_ctx *nt =
 		container_of(work, struct ntb_transport_ctx, link_cleanup);
 
+	mutex_lock(&nt->link_event_lock);
 	ntb_transport_link_cleanup(nt);
+	mutex_unlock(&nt->link_event_lock);
 }
 
 static void ntb_transport_event_callback(void *data)
@@ -1046,6 +1052,8 @@ static void ntb_transport_link_work(struct work_struct *work)
 	resource_size_t size;
 	u32 val;
 	int rc = 0, i, spad;
+
+	mutex_lock(&nt->link_event_lock);
 
 	/* send the local info, in the opposite order of the way we read it */
 
@@ -1125,6 +1133,7 @@ static void ntb_transport_link_work(struct work_struct *work)
 			schedule_delayed_work(&qp->link_work, 0);
 	}
 
+	mutex_unlock(&nt->link_event_lock);
 	return;
 
 out1:
@@ -1132,10 +1141,13 @@ out1:
 		ntb_free_mw(nt, i);
 
 	/* if there's an actual failure, we should just bail */
-	if (rc < 0)
+	if (rc < 0) {
+		mutex_unlock(&nt->link_event_lock);
 		return;
+	}
 
 out:
+	mutex_unlock(&nt->link_event_lock);
 	if (ntb_link_is_up(ndev, NULL, NULL) == 1)
 		schedule_delayed_work(&nt->link_work,
 				      msecs_to_jiffies(NTB_LINK_DOWN_TIMEOUT));
