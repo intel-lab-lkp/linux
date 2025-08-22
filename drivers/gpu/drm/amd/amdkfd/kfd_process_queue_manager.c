@@ -610,7 +610,7 @@ int pqm_update_queue_properties(struct process_queue_manager *pqm,
 		}
 
 		kfd_queue_unref_bo_va(vm, &pqn->q->properties.ring_bo);
-		kfd_queue_buffer_put(&pqn->q->properties.ring_bo);
+		amdgpu_bo_unref(&pqn->q->properties.ring_bo);
 		amdgpu_bo_unreserve(vm->root.bo);
 
 		pqn->q->properties.ring_bo = p->ring_bo;
