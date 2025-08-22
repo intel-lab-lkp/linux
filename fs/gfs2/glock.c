@@ -121,7 +121,7 @@ static void wake_up_glock(struct gfs2_glock *gl)
 	wait_queue_head_t *wq = glock_waitqueue(&gl->gl_name);
 
 	if (waitqueue_active(wq))
-		__wake_up(wq, TASK_NORMAL, 1, &gl->gl_name);
+		wake_up_key(wq, &gl->gl_name);
 }
 
 static void gfs2_glock_dealloc(struct rcu_head *rcu)

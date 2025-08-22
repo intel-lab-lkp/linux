@@ -278,7 +278,7 @@ void percpu_up_write(struct percpu_rw_semaphore *sem)
 	/*
 	 * Prod any pending reader/writer to make progress.
 	 */
-	__wake_up(&sem->waiters, TASK_NORMAL, 1, sem);
+	wake_up_key(&sem->waiters, sem);
 
 	/*
 	 * Once this completes (at least one RCU-sched grace period hence) the

@@ -689,7 +689,7 @@ __be32 nfs4_callback_notify_lock(void *argp, void *resp,
 
 	/* Don't wake anybody if the string looked bogus */
 	if (args->cbnl_valid)
-		__wake_up(&cps->clp->cl_lock_waitq, TASK_NORMAL, 0, args);
+		wake_up_key(&cps->clp->cl_lock_waitq, args);
 
 	return htonl(NFS4_OK);
 }

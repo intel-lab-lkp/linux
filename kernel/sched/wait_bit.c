@@ -126,7 +126,7 @@ void __wake_up_bit(struct wait_queue_head *wq_head, unsigned long *word, int bit
 	struct wait_bit_key key = __WAIT_BIT_KEY_INITIALIZER(word, bit);
 
 	if (waitqueue_active(wq_head))
-		__wake_up(wq_head, TASK_NORMAL, 1, &key);
+		wake_up_key(wq_head, &key);
 }
 EXPORT_SYMBOL(__wake_up_bit);
 

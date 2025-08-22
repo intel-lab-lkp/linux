@@ -1328,7 +1328,7 @@ void memcg1_oom_recover(struct mem_cgroup *memcg)
 	 * triggering notification.
 	 */
 	if (memcg && memcg->under_oom)
-		__wake_up(&memcg_oom_waitq, TASK_NORMAL, 0, memcg);
+		wake_up_key(&memcg_oom_waitq, memcg);
 }
 
 /**

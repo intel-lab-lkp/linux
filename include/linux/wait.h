@@ -224,6 +224,7 @@ void __wake_up_pollfree(struct wait_queue_head *wq_head);
 #define wake_up_locked(x)		__wake_up_locked((x), TASK_NORMAL, 1)
 #define wake_up_all_locked(x)		__wake_up_locked((x), TASK_NORMAL, 0)
 #define wake_up_sync(x)			__wake_up_sync(x, TASK_NORMAL)
+#define wake_up_key(x,k)		__wake_up(x, TASK_NORMAL, 1, k);
 
 #define wake_up_interruptible(x)	__wake_up(x, TASK_INTERRUPTIBLE, 1, NULL)
 #define wake_up_interruptible_nr(x, nr)	__wake_up(x, TASK_INTERRUPTIBLE, nr, NULL)
@@ -236,7 +237,7 @@ void __wake_up_pollfree(struct wait_queue_head *wq_head);
 #define poll_to_key(m) ((void *)(__force uintptr_t)(__poll_t)(m))
 #define key_to_poll(m) ((__force __poll_t)(uintptr_t)(void *)(m))
 #define wake_up_poll(x, m)							\
-	__wake_up(x, TASK_NORMAL, 1, poll_to_key(m))
+	wake_up_key(x, poll_to_key(m))
 #define wake_up_poll_on_current_cpu(x, m)					\
 	__wake_up_on_current_cpu(x, TASK_NORMAL, poll_to_key(m))
 #define wake_up_locked_poll(x, m)						\

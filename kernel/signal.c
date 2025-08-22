@@ -2154,8 +2154,7 @@ void do_notify_pidfd(struct task_struct *task)
 
 	WARN_ON(task->exit_state == 0);
 
-	__wake_up(&pid->wait_pidfd, TASK_NORMAL, 0,
-			poll_to_key(EPOLLIN | EPOLLRDNORM));
+	wake_up_poll(&pid->wait_pidfd, EPOLLIN | EPOLLRDNORM);
 }
 
 /*

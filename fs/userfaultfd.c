@@ -874,7 +874,7 @@ static int userfaultfd_release(struct inode *inode, struct file *file)
 	 */
 	spin_lock_irq(&ctx->fault_pending_wqh.lock);
 	__wake_up_locked_key(&ctx->fault_pending_wqh, TASK_NORMAL, &range);
-	__wake_up(&ctx->fault_wqh, TASK_NORMAL, 1, &range);
+	wake_up_key(&ctx->fault_wqh, &range);
 	spin_unlock_irq(&ctx->fault_pending_wqh.lock);
 
 	/* Flush pending events that may still wait on event_wqh */
@@ -1175,7 +1175,7 @@ static void __wake_userfault(struct userfaultfd_ctx *ctx,
 		__wake_up_locked_key(&ctx->fault_pending_wqh, TASK_NORMAL,
 				     range);
 	if (waitqueue_active(&ctx->fault_wqh))
-		__wake_up(&ctx->fault_wqh, TASK_NORMAL, 1, range);
+		wake_up_key(&ctx->fault_wqh, range);
 	spin_unlock_irq(&ctx->fault_pending_wqh.lock);
 }
 

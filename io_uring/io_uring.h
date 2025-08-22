@@ -304,7 +304,7 @@ static inline void __io_wq_wake(struct wait_queue_head *wq)
 	 * epoll and should terminate multishot poll at that point.
 	 */
 	if (wq_has_sleeper(wq))
-		__wake_up(wq, TASK_NORMAL, 0, poll_to_key(EPOLL_URING_WAKE | EPOLLIN));
+		wake_up_poll(wq, EPOLL_URING_WAKE | EPOLLIN);
 }
 
 static inline void io_poll_wq_wake(struct io_ring_ctx *ctx)
