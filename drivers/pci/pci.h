@@ -16,6 +16,7 @@ struct pcie_tlp_log;
 #define PCI_VSEC_ID_INTEL_TBT	0x1234	/* Thunderbolt */
 
 #define PCIE_LINK_RETRAIN_TIMEOUT_MS	1000
+#define PCIE_LINK_STATUS_CHECK_US	1000
 
 /*
  * Power stable to PERST# inactive.

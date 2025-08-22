@@ -4683,7 +4683,7 @@ static int pcie_wait_for_link_status(struct pci_dev *pdev,
 		pcie_capability_read_word(pdev, PCI_EXP_LNKSTA, &lnksta);
 		if ((lnksta & lnksta_mask) == lnksta_match)
 			return 0;
-		msleep(1);
+		fsleep(PCIE_LINK_STATUS_CHECK_US);
 	} while (time_before(jiffies, end_jiffies));
 
 	return -ETIMEDOUT;
