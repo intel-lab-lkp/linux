@@ -3885,6 +3885,12 @@ static int do_open(struct nameidata *nd,
 	error = may_open(idmap, &nd->path, acc_mode, open_flag);
 	if (!error && !(file->f_mode & FMODE_OPENED))
 		error = vfs_open(&nd->path, file);
+	if (!error && (open_flag & O_DENY_WRITE)) {
+		if (S_ISREG(file_inode(file)->i_mode))
+			error = exe_file_deny_write_access(file);
+		else
+			error = -EINVAL;
+	}
 	if (!error)
 		error = security_file_post_open(file, op->acc_mode);
 	if (!error && do_truncate)

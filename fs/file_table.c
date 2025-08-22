@@ -460,6 +460,8 @@ static void __fput(struct file *file)
 	locks_remove_file(file);
 
 	security_file_release(file);
+	if (unlikely(file->f_flags & O_DENY_WRITE))
+		exe_file_allow_write_access(file);
 	if (unlikely(file->f_flags & FASYNC)) {
 		if (file->f_op->fasync)
 			file->f_op->fasync(-1, file, 0);

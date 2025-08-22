@@ -34,7 +34,8 @@
 
 #include "internal.h"
 
-#define SETFL_MASK (O_APPEND | O_NONBLOCK | O_NDELAY | O_DIRECT | O_NOATIME)
+#define SETFL_MASK (O_APPEND | O_NONBLOCK | O_NDELAY | O_DIRECT | O_NOATIME | \
+	O_DENY_WRITE)
 
 static int setfl(int fd, struct file * filp, unsigned int arg)
 {
@@ -80,8 +81,29 @@ static int setfl(int fd, struct file * filp, unsigned int arg)
 			error = 0;
 	}
 	spin_lock(&filp->f_lock);
+
+	if (arg & O_DENY_WRITE) {
+		/* Only regular files. */
+		if (!S_ISREG(inode->i_mode)) {
+			error = -EINVAL;
+			goto unlock;
+		}
+
+		/* Only sets once. */
+		if (!(filp->f_flags & O_DENY_WRITE)) {
+			error = exe_file_deny_write_access(filp);
+			if (error)
+				goto unlock;
+		}
+	} else {
+		if (filp->f_flags & O_DENY_WRITE)
+			exe_file_allow_write_access(filp);
+	}
+
 	filp->f_flags = (arg & SETFL_MASK) | (filp->f_flags & ~SETFL_MASK);
 	filp->f_iocb_flags = iocb_flags(filp);
+
+unlock:
 	spin_unlock(&filp->f_lock);
 
  out:
@@ -1158,7 +1180,7 @@ static int __init fcntl_init(void)
 	 * Exceptions: O_NONBLOCK is a two bit define on parisc; O_NDELAY
 	 * is defined as O_NONBLOCK on some platforms and not on others.
 	 */
-	BUILD_BUG_ON(20 - 1 /* for O_RDONLY being 0 */ !=
+	BUILD_BUG_ON(21 - 1 /* for O_RDONLY being 0 */ !=
 		HWEIGHT32(
 			(VALID_OPEN_FLAGS & ~(O_NONBLOCK | O_NDELAY)) |
 			__FMODE_EXEC));
