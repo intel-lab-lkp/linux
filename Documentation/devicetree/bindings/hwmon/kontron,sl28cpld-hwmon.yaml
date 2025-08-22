@@ -17,6 +17,7 @@ properties:
   compatible:
     enum:
       - kontron,sl28cpld-fan
+      - kontron,sa67mcu-hwmon
 
   reg:
     maxItems: 1
