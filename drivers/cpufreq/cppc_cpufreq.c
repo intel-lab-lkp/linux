@@ -884,6 +884,10 @@ static ssize_t show_auto_select(struct cpufreq_policy *policy, char *buf)
 static ssize_t store_auto_select(struct cpufreq_policy *policy,
 				 const char *buf, size_t count)
 {
+	struct cppc_cpudata *cpu_data = policy->driver_data;
+	unsigned int cpu = policy->cpu;
+	bool update_reg = false;
+	u32 min_perf, max_perf;
 	bool val;
 	int ret;
 
@@ -891,9 +895,48 @@ static ssize_t store_auto_select(struct cpufreq_policy *policy,
 	if (ret)
 		return ret;
 
-	ret = cppc_set_auto_sel(policy->cpu, val);
-	if (ret)
+	mutex_lock(&cppc_cpufreq_update_autosel_config_lock);
+	if (val) {
+		/* Enabling auto_select: set current user-configured limits */
+		min_perf = cpu_data->perf_ctrls.min_perf;
+		max_perf = cpu_data->perf_ctrls.max_perf;
+		update_reg = true;
+	} else {
+		/*
+		 * Disabling auto_select: set defaults for OS control.
+		 * Use lowest_nonlinear_perf as minimum to avoid very low frequencies
+		 * and nominal_perf as maximum for balanced operation.
+		 */
+		min_perf = cpu_data->perf_caps.lowest_nonlinear_perf;
+		max_perf = cpu_data->perf_caps.nominal_perf;
+	}
+
+	ret = cppc_set_auto_sel(cpu, val);
+	if (ret) {
+		pr_warn("failed to set auto_sel for cpu:%d (%d)\n", cpu, ret);
+		mutex_unlock(&cppc_cpufreq_update_autosel_config_lock);
 		return ret;
+	}
+	cpu_data->perf_caps.auto_sel = val;
+	mutex_unlock(&cppc_cpufreq_update_autosel_config_lock);
+
+	/*
+	 * On enabling auto_select: set min/max_perf register and update policy.
+	 * On disabling auto_select: update only policy.
+	 */
+	ret = cppc_cpufreq_set_min_perf(policy, min_perf, update_reg, true);
+	if (ret) {
+		pr_warn("failed to %s update min policy for cpu:%d (%d)\n",
+			val > 0 ? "set min_perf and" : "", cpu, ret);
+		return ret;
+	}
+
+	ret = cppc_cpufreq_set_max_perf(policy, max_perf, update_reg, true);
+	if (ret) {
+		pr_warn("failed to %s update max policy for cpu:%d (%d)\n",
+			val > 0 ? "set max_perf and" : "", cpu, ret);
+		return ret;
+	}
 
 	return count;
 }
