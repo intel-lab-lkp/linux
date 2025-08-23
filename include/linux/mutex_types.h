@@ -51,7 +51,7 @@ struct mutex {
 #ifdef CONFIG_DEBUG_LOCK_ALLOC
 	struct lockdep_map	dep_map;
 #endif
-};
+} __aligned(4); /* For hung_task blocker tracking, which encodes type in LSBs */
 
 #else /* !CONFIG_PREEMPT_RT */
 /*

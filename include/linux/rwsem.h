@@ -64,7 +64,7 @@ struct rw_semaphore {
 #ifdef CONFIG_DEBUG_LOCK_ALLOC
 	struct lockdep_map	dep_map;
 #endif
-};
+} __aligned(4); /* For hung_task blocker tracking, which encodes type in LSBs */
 
 #define RWSEM_UNLOCKED_VALUE		0UL
 #define RWSEM_WRITER_LOCKED		(1UL << 0)

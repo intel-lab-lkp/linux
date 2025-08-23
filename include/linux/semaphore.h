@@ -20,7 +20,7 @@ struct semaphore {
 #ifdef CONFIG_DETECT_HUNG_TASK_BLOCKER
 	unsigned long		last_holder;
 #endif
-};
+} __aligned(4); /* For hung_task blocker tracking, which encodes type in LSBs */
 
 #ifdef CONFIG_DETECT_HUNG_TASK_BLOCKER
 #define __LAST_HOLDER_SEMAPHORE_INITIALIZER				\
