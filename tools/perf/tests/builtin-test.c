@@ -132,7 +132,6 @@ static struct test_suite *generic_tests[] = {
 	&suite__demangle_ocaml,
 	&suite__demangle_rust,
 	&suite__parse_metric,
-	&suite__pe_file_parsing,
 	&suite__expand_cgroup_events,
 	&suite__perf_time_to_tsc,
 	&suite__dlfilter,

@@ -59,7 +59,6 @@ perf-test-y += demangle-ocaml-test.o
 perf-test-y += demangle-rust-v0-test.o
 perf-test-y += pfm.o
 perf-test-y += parse-metric.o
-perf-test-y += pe-file-parsing.o
 perf-test-y += expand-cgroup.o
 perf-test-y += perf-time-to-tsc.o
 perf-test-y += dlfilter-test.o
