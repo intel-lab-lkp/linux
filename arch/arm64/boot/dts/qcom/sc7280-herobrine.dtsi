@@ -394,6 +394,16 @@ vreg_edp_3p3: &pp3300_left_in_mlb {};
 
 /* ADDITIONS TO NODES DEFINED IN PARENT DEVICE TREE FILES */
 
+/* QoS seems to have conflicts with boot firmware on these devices. */
+&aggre1_noc {
+	/delete-property/ clocks;
+};
+
+/* QoS seems to have conflicts with boot firmware on these devices. */
+&aggre2_noc {
+	/delete-property/ clocks;
+};
+
 &edp_panel {
 	/* Our board provides power to the qcard for the eDP panel. */
 	power-supply = <&vreg_edp_3p3>;
