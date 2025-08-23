@@ -355,7 +355,7 @@ static int shmem_set_epp(struct cpufreq_policy *policy, u8 epp)
 		return 0;
 
 	perf_ctrls.energy_perf = epp;
-	ret = cppc_set_epp_perf(cpudata->cpu, &perf_ctrls, 1);
+	ret = cppc_set_epp_and_autosel(cpudata->cpu, &perf_ctrls, 1);
 	if (ret) {
 		pr_debug("failed to set energy perf value (%d)\n", ret);
 		return ret;
