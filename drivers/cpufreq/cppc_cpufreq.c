@@ -38,6 +38,8 @@ static enum {
 module_param(fie_disabled, int, 0444);
 MODULE_PARM_DESC(fie_disabled, "Disable Frequency Invariance Engine (FIE)");
 
+static DEFINE_MUTEX(cppc_cpufreq_update_autosel_config_lock);
+
 /* Frequency invariance support */
 struct cppc_freq_invariance {
 	int cpu;
@@ -574,6 +576,74 @@ static void cppc_cpufreq_put_cpu_data(struct cpufreq_policy *policy)
 	policy->driver_data = NULL;
 }
 
+static int cppc_cpufreq_set_min_perf(struct cpufreq_policy *policy, u64 val,
+				     bool update_reg, bool update_policy)
+{
+	struct cppc_cpudata *cpu_data = policy->driver_data;
+	struct cppc_perf_caps *caps = &cpu_data->perf_caps;
+	unsigned int cpu = policy->cpu;
+	unsigned int min_freq;
+	u32 min_perf;
+	int ret;
+
+	mutex_lock(&cppc_cpufreq_update_autosel_config_lock);
+
+	min_perf = clamp(val, cpu_data->perf_caps.lowest_perf, cpu_data->perf_caps.highest_perf);
+	if (update_reg) {
+		ret = cppc_set_min_perf(policy->cpu, min_perf);
+		if (ret)
+			goto out;
+		cpu_data->perf_ctrls.min_perf = min_perf;
+	}
+
+	if (update_policy) {
+		min_freq = cppc_perf_to_khz(caps, min_perf);
+		ret = freq_qos_update_request(policy->min_freq_req, min_freq);
+		if (ret < 0)
+			pr_warn("Failed to update min freq constraint for CPU%d: %d\n", cpu, ret);
+		else
+			ret = 0;
+	}
+
+out:
+	mutex_unlock(&cppc_cpufreq_update_autosel_config_lock);
+	return (ret == -EOPNOTSUPP) ? 0 : ret;
+}
+
+static int cppc_cpufreq_set_max_perf(struct cpufreq_policy *policy, u64 val,
+				     bool update_reg, bool update_policy)
+{
+	struct cppc_cpudata *cpu_data = policy->driver_data;
+	struct cppc_perf_caps *caps = &cpu_data->perf_caps;
+	unsigned int cpu = policy->cpu;
+	unsigned int max_freq;
+	u32 max_perf;
+	int ret;
+
+	mutex_lock(&cppc_cpufreq_update_autosel_config_lock);
+
+	max_perf = clamp(val, cpu_data->perf_caps.lowest_perf, cpu_data->perf_caps.highest_perf);
+	if (update_reg) {
+		ret = cppc_set_max_perf(policy->cpu, max_perf);
+		if (ret)
+			goto out;
+		cpu_data->perf_ctrls.max_perf = max_perf;
+	}
+
+	if (update_policy) {
+		max_freq = cppc_perf_to_khz(caps, max_perf);
+		ret = freq_qos_update_request(policy->max_freq_req, max_freq);
+		if (ret < 0)
+			pr_warn("Failed to update max freq constraint for CPU%d: %d\n", cpu, ret);
+		else
+			ret = 0;
+	}
+
+out:
+	mutex_unlock(&cppc_cpufreq_update_autosel_config_lock);
+	return (ret == -EOPNOTSUPP) ? 0 : ret;
+}
+
 static int cppc_cpufreq_cpu_init(struct cpufreq_policy *policy)
 {
 	unsigned int cpu = policy->cpu;
@@ -896,16 +966,88 @@ static ssize_t store_energy_performance_preference_val(struct cpufreq_policy *po
 	return count;
 }
 
+static ssize_t show_min_perf(struct cpufreq_policy *policy, char *buf)
+{
+	u64 val;
+	int ret;
+
+	ret = cppc_get_min_perf(policy->cpu, &val);
+
+	/* show "<unsupported>" when this register is not supported by cpc */
+	if (ret == -EOPNOTSUPP)
+		return sysfs_emit(buf, "<unsupported>\n");
+
+	if (ret)
+		return ret;
+
+	return sysfs_emit(buf, "%llu\n", val);
+}
+
+static ssize_t store_min_perf(struct cpufreq_policy *policy, const char *buf, size_t count)
+{
+	struct cppc_cpudata *cpu_data = policy->driver_data;
+	u64 val;
+	int ret;
+
+	ret = kstrtou64(buf, 0, &val);
+	if (ret)
+		return ret;
+
+	ret = cppc_cpufreq_set_min_perf(policy, val, true, cpu_data->perf_caps.auto_sel);
+	if (ret)
+		return ret;
+
+	return count;
+}
+
+static ssize_t show_max_perf(struct cpufreq_policy *policy, char *buf)
+{
+	u64 val;
+	int ret;
+
+	ret = cppc_get_max_perf(policy->cpu, &val);
+
+	/* show "<unsupported>" when this register is not supported by cpc */
+	if (ret == -EOPNOTSUPP)
+		return sysfs_emit(buf, "<unsupported>\n");
+
+	if (ret)
+		return ret;
+
+	return sysfs_emit(buf, "%llu\n", val);
+}
+
+static ssize_t store_max_perf(struct cpufreq_policy *policy, const char *buf, size_t count)
+{
+	struct cppc_cpudata *cpu_data = policy->driver_data;
+	u64 val;
+	int ret;
+
+	ret = kstrtou64(buf, 0, &val);
+	if (ret)
+		return ret;
+
+	ret = cppc_cpufreq_set_max_perf(policy, val, true, cpu_data->perf_caps.auto_sel);
+	if (ret)
+		return ret;
+
+	return count;
+}
+
 cpufreq_freq_attr_ro(freqdomain_cpus);
 cpufreq_freq_attr_rw(auto_select);
 cpufreq_freq_attr_rw(auto_act_window);
 cpufreq_freq_attr_rw(energy_performance_preference_val);
+cpufreq_freq_attr_rw(min_perf);
+cpufreq_freq_attr_rw(max_perf);
 
 static struct freq_attr *cppc_cpufreq_attr[] = {
 	&freqdomain_cpus,
 	&auto_select,
 	&auto_act_window,
 	&energy_performance_preference_val,
+	&min_perf,
+	&max_perf,
 	NULL,
 };
 
