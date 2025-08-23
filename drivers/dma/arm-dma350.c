@@ -7,6 +7,7 @@
 #include <linux/dma-mapping.h>
 #include <linux/io.h>
 #include <linux/of.h>
+#include <linux/of_dma.h>
 #include <linux/module.h>
 #include <linux/platform_device.h>
 
@@ -635,7 +636,7 @@ static int d350_probe(struct platform_device *pdev)
 	if (ret)
 		return dev_err_probe(dev, ret, "Failed to register DMA device\n");
 
-	return 0;
+	return of_dma_controller_register(dev->of_node, of_dma_xlate_by_chan_id, &dmac->dma);
 }
 
 static void d350_remove(struct platform_device *pdev)
@@ -643,6 +644,7 @@ static void d350_remove(struct platform_device *pdev)
 	struct d350 *dmac = platform_get_drvdata(pdev);
 
 	dma_async_device_unregister(&dmac->dma);
+	of_dma_controller_free(pdev->dev.of_node);
 }
 
 static const struct of_device_id d350_of_match[] __maybe_unused = {
