@@ -27,11 +27,11 @@ exec_direct() {
 	out="$(PATH="." "$@" "${script}")" || ret=$?
 
 	if [[ ${ret} -ne ${expect} ]]; then
-		echo "ERROR: Wrong expectation for direct file execution: ${ret}"
+		echo "ERROR: Incorrect expectation for direct file execution: ${ret}"
 		return 1
 	fi
 	if [[ ${ret} -eq 0 && "${out}" != "${EXPECTED_OUTPUT}" ]]; then
-		echo "ERROR: Wrong output for direct file execution: ${out}"
+		echo "ERROR: Incorrect output for direct file execution: ${out}"
 		return 1
 	fi
 }
@@ -47,11 +47,11 @@ exec_indirect() {
 	out="$("$@" ./inc "${script}")" || ret=$?
 
 	if [[ ${ret} -ne ${expect} ]]; then
-		echo "ERROR: Wrong expectation for indirect file execution: ${ret}"
+		echo "ERROR: Incorrect expectation for indirect file execution: ${ret}"
 		return 1
 	fi
 	if [[ ${ret} -eq 0 && "${out}" != "${EXPECTED_OUTPUT}" ]]; then
-		echo "ERROR: Wrong output for indirect file execution: ${out}"
+		echo "ERROR: Incorrect output for indirect file execution: ${out}"
 		return 1
 	fi
 }
@@ -67,11 +67,11 @@ exec_stdin_reg() {
 	out="$("$@" ./inc -i < "${script}")" || ret=$?
 
 	if [[ ${ret} -ne ${expect} ]]; then
-		echo "ERROR: Wrong expectation for stdin regular file execution: ${ret}"
+		echo "ERROR: Incorrect expectation for stdin regular file execution: ${ret}"
 		return 1
 	fi
 	if [[ ${ret} -eq 0 && "${out}" != "${EXPECTED_OUTPUT}" ]]; then
-		echo "ERROR: Wrong output for stdin regular file execution: ${out}"
+		echo "ERROR: Incorrect output for stdin regular file execution: ${out}"
 		return 1
 	fi
 }
@@ -86,7 +86,7 @@ exec_stdin_pipe() {
 	out="$(cat script-exec.inc | "$@" ./inc -i)" || ret=$?
 
 	if [[ ${ret} -ne ${expect} ]]; then
-		echo "ERROR: Wrong expectation for stdin pipe execution: ${ret}"
+		echo "ERROR: Incorrect expectation for stdin pipe execution: ${ret}"
 		return 1
 	fi
 }
@@ -101,11 +101,11 @@ exec_argument() {
 	out="$("$@" ./inc -c "$(< script-exec.inc)")" || ret=$?
 
 	if [[ ${ret} -ne ${expect} ]]; then
-		echo "ERROR: Wrong expectation for arbitrary argument execution: ${ret}"
+		echo "ERROR: Incorrect expectation for arbitrary argument execution: ${ret}"
 		return 1
 	fi
 	if [[ ${ret} -eq 0 && "${out}" != "${EXPECTED_OUTPUT}" ]]; then
-		echo "ERROR: Wrong output for arbitrary argument execution: ${out}"
+		echo "ERROR: Incorrect output for arbitrary argument execution: ${out}"
 		return 1
 	fi
 }
