@@ -534,7 +534,7 @@ static int d350_probe(struct platform_device *pdev)
 	struct device *dev = &pdev->dev;
 	struct d350 *dmac;
 	void __iomem *base;
-	u32 reg;
+	u32 reg, dma_chan_mask;
 	int ret, nchan, dw, aw, r, p;
 	bool coherent, memset;
 
@@ -562,6 +562,15 @@ static int d350_probe(struct platform_device *pdev)
 		return -ENOMEM;
 
 	dmac->nchan = nchan;
+
+	/* Enable all channels by default */
+	dma_chan_mask = nchan - 1;
+
+	ret = of_property_read_u32(dev->of_node, "dma-channel-mask", &dma_chan_mask);
+	if (ret < 0 && (ret != -EINVAL)) {
+		dev_err(&pdev->dev, "dma-channel-mask is not complete.\n");
+		return ret;
+	}
 
 	reg = readl_relaxed(base + DMAINFO + DMA_BUILDCFG1);
 	dmac->nreq = FIELD_GET(DMA_CFG_NUM_TRIGGER_IN, reg);
@@ -592,6 +601,11 @@ static int d350_probe(struct platform_device *pdev)
 	memset = true;
 	for (int i = 0; i < nchan; i++) {
 		struct d350_chan *dch = &dmac->channels[i];
+		char ch_irqname[8];
+
+		/* skip for reserved channels */
+		if (!test_bit(i, (unsigned long *)&dma_chan_mask))
+			continue;
 
 		dch->coherent = coherent;
 		dch->base = base + DMACH(i);
@@ -602,7 +616,9 @@ static int d350_probe(struct platform_device *pdev)
 			dev_warn(dev, "No command link support on channel %d\n", i);
 			continue;
 		}
-		dch->irq = platform_get_irq(pdev, i);
+
+		snprintf(ch_irqname, sizeof(ch_irqname), "ch%d", i);
+		dch->irq = platform_get_irq_byname(pdev, ch_irqname);
 		if (dch->irq < 0)
 			return dch->irq;
 
