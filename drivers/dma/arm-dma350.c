@@ -377,6 +377,8 @@ static enum dma_status d350_tx_status(struct dma_chan *chan, dma_cookie_t cookie
 	u32 residue = 0;
 
 	status = dma_cookie_status(chan, cookie, state);
+	if (status == DMA_COMPLETE || !state)
+		return status;
 
 	spin_lock_irqsave(&dch->vc.lock, flags);
 	if (cookie == dch->cookie) {
