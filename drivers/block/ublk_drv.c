@@ -1595,6 +1595,48 @@ static void ublk_set_canceling(struct ublk_device *ub, bool canceling)
 		ublk_get_queue(ub, i)->canceling = canceling;
 }
 
+static bool has_io_with_active_ref(struct ublk_queue *ubq)
+{
+	int i;
+
+	for (i = 0; i < ubq->q_depth; i++) {
+		struct ublk_io *io = &ubq->ios[i];
+		unsigned int refs = refcount_read(&io->ref) +
+			io->task_registered_buffers;
+
+		/* UBLK_REFCOUNT_INIT or zero means no active reference */
+		if (refs != UBLK_REFCOUNT_INIT && refs != 0)
+			return true;
+	}
+	return false;
+}
+
+static void ublk_drain_io_references(struct ublk_device *ub)
+{
+	int i, j;
+
+	for (i = 0; i < ub->dev_info.nr_hw_queues; i++) {
+		struct ublk_queue *ubq = ublk_get_queue(ub, i);
+
+		if (!ublk_need_req_ref(ubq))
+			continue;
+
+		while (has_io_with_active_ref(ubq))
+			mdelay(3);
+
+		for (j = 0; j < ubq->q_depth; j++) {
+			struct ublk_io *io = &ubq->ios[j];
+			/*
+			 * Reinitialize reference counting fields after
+			 * draining. This ensures clean state for queue
+			 * reinitialization.
+			 */
+			refcount_set(&io->ref, 0);
+			io->task_registered_buffers = 0;
+		}
+	}
+}
+
 static int ublk_ch_release(struct inode *inode, struct file *filp)
 {
 	struct ublk_device *ub = filp->private_data;
@@ -1608,6 +1650,20 @@ static int ublk_ch_release(struct inode *inode, struct file *filp)
 	disk = ublk_get_disk(ub);
 	if (!disk)
 		goto out;
+
+	/*
+	 * For zero-copy and auto buffer register modes, I/O references
+	 * might not be dropped naturally when the daemon is killed, but
+	 * io_uring guarantees that registered bvec kernel buffers are
+	 * unregistered finally when freeing io_uring context, then the
+	 * active references are dropped.
+	 *
+	 * Wait until active references are dropped for avoiding use-after-free
+	 *
+	 * This way won't hang because releasing ublk char device doesn't
+	 * rely on unregistering sqe buffers in do_exit() path.
+	 */
+	ublk_drain_io_references(ub);
 
 	/*
 	 * All uring_cmd are done now, so abort any request outstanding to
