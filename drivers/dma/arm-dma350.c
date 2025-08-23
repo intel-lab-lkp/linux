@@ -212,8 +212,10 @@ struct d350_chan {
 	enum dma_status status;
 	dma_cookie_t cookie;
 	u32 residue;
+	u32 periods;
 	u8 tsz;
 	u8 ch;
+	bool cyclic;
 	bool has_trig;
 	bool has_wrap;
 	bool coherent;
@@ -475,6 +477,105 @@ err_cmd_alloc:
 	return NULL;
 }
 
+static struct dma_async_tx_descriptor *
+d350_prep_cyclic(struct dma_chan *chan, dma_addr_t buf_addr,
+		 size_t buf_len, size_t period_len, enum dma_transfer_direction dir,
+		 unsigned long flags)
+{
+	struct d350_chan *dch = to_d350_chan(chan);
+	u32 periods, trig, *cmd, tsz;
+	dma_addr_t src, dst, phys;
+	struct d350_desc *desc;
+	struct d350_sg *dsg;
+	int i, j;
+
+	if (unlikely(!is_slave_direction(dir) || !buf_len || !period_len))
+		return NULL;
+
+	periods = buf_len / period_len;
+
+	desc = kzalloc(struct_size(desc, sg, periods), GFP_NOWAIT);
+	if (!desc)
+		return NULL;
+
+	dch->cyclic = true;
+	desc->sglen = periods;
+
+	if (dir == DMA_MEM_TO_DEV)
+		tsz = __ffs(dch->config.dst_addr_width | (1 << dch->tsz));
+	else
+		tsz = __ffs(dch->config.src_addr_width | (1 << dch->tsz));
+
+	for (i = 0; i < periods; i++) {
+		desc->sg[i].command = dma_pool_zalloc(dch->cmd_pool, GFP_NOWAIT, &phys);
+		if (unlikely(!desc->sg[i].command))
+			goto err_cmd_alloc;
+
+		desc->sg[i].phys = phys;
+		dsg = &desc->sg[i];
+
+		if (dir == DMA_MEM_TO_DEV) {
+			src = buf_addr + i * period_len;
+			dst = dch->config.dst_addr;
+			trig = CH_CTRL_USEDESTRIGIN;
+		} else {
+			src = dch->config.src_addr;
+			dst = buf_addr + i * period_len;
+			trig = CH_CTRL_USESRCTRIGIN;
+		}
+		dsg->tsz = tsz;
+		dsg->xsize = lower_16_bits(period_len >> dsg->tsz);
+		dsg->xsizehi = upper_16_bits(period_len >> dsg->tsz);
+
+		cmd = dsg->command;
+		cmd[0] = LINK_CTRL | LINK_SRCADDR | LINK_SRCADDRHI | LINK_DESADDR |
+			 LINK_DESADDRHI | LINK_XSIZE | LINK_XSIZEHI | LINK_SRCTRANSCFG |
+			 LINK_DESTRANSCFG | LINK_XADDRINC | LINK_LINKADDR;
+
+		cmd[1] = FIELD_PREP(CH_CTRL_TRANSIZE, dsg->tsz) |
+			 FIELD_PREP(CH_CTRL_XTYPE, CH_CTRL_XTYPE_CONTINUE) |
+			 FIELD_PREP(CH_CTRL_DONETYPE, CH_CTRL_DONETYPE_CMD) | trig;
+
+		cmd[2] = lower_32_bits(src);
+		cmd[3] = upper_32_bits(src);
+		cmd[4] = lower_32_bits(dst);
+		cmd[5] = upper_32_bits(dst);
+		cmd[6] = FIELD_PREP(CH_XY_SRC, dsg->xsize) | FIELD_PREP(CH_XY_DES, dsg->xsize);
+		cmd[7] = FIELD_PREP(CH_XY_SRC, dsg->xsizehi) | FIELD_PREP(CH_XY_DES, dsg->xsizehi);
+		if (dir == DMA_MEM_TO_DEV) {
+			cmd[0] |= LINK_DESTRIGINCFG;
+			cmd[8] = dch->coherent ? TRANSCFG_WB : TRANSCFG_NC;
+			cmd[9] = TRANSCFG_DEVICE;
+			cmd[10] = FIELD_PREP(CH_XY_SRC, 1);
+			cmd[11] = FIELD_PREP(CH_DESTRIGINMODE, CH_DESTRIG_DMA_FC) |
+				  FIELD_PREP(CH_DESTRIGINTYPE, CH_DESTRIG_HW_REQ);
+		} else {
+			cmd[0] |= LINK_SRCTRIGINCFG;
+			cmd[8] = TRANSCFG_DEVICE;
+			cmd[9] = dch->coherent ? TRANSCFG_WB : TRANSCFG_NC;
+			cmd[10] = FIELD_PREP(CH_XY_DES, 1);
+			cmd[11] = FIELD_PREP(CH_SRCTRIGINMODE, CH_SRCTRIG_DMA_FC) |
+				  FIELD_PREP(CH_SRCTRIGINTYPE, CH_SRCTRIG_HW_REQ);
+		}
+
+		if (i)
+			desc->sg[i - 1].command[12] = phys | CH_LINKADDR_EN;
+	}
+
+	/* cyclic list */
+	desc->sg[periods - 1].command[12] = desc->sg[0].phys | CH_LINKADDR_EN;
+
+	mb();
+
+	return vchan_tx_prep(&dch->vc, &desc->vd, flags);
+
+err_cmd_alloc:
+	for (j = 0; j < i; j++)
+		dma_pool_free(dch->cmd_pool, desc->sg[j].command, desc->sg[j].phys);
+	kfree(desc);
+	return NULL;
+}
+
 static int d350_slave_config(struct dma_chan *chan, struct dma_slave_config *config)
 {
 	struct d350_chan *dch = to_d350_chan(chan);
@@ -565,6 +666,7 @@ static int d350_terminate_all(struct dma_chan *chan)
 	}
 	vchan_get_all_descriptors(&dch->vc, &list);
 	list_splice_tail(&list, &dch->vc.desc_terminated);
+	dch->cyclic = false;
 	spin_unlock_irqrestore(&dch->vc.lock, flags);
 
 	return 0;
@@ -716,11 +818,15 @@ static irqreturn_t d350_irq(int irq, void *data)
 
 	spin_lock(&dch->vc.lock);
 	if (ch_status & CH_STAT_INTR_DONE) {
-		vchan_cookie_complete(vd);
-		dch->desc = NULL;
-		dch->status = DMA_COMPLETE;
-		dch->residue = 0;
-		d350_start_next(dch);
+		if (dch->cyclic) {
+			vchan_cyclic_callback(vd);
+		} else {
+			vchan_cookie_complete(vd);
+			dch->desc = NULL;
+			dch->status = DMA_COMPLETE;
+			dch->residue = 0;
+			d350_start_next(dch);
+		}
 	} else {
 		dch->status = DMA_ERROR;
 		dch->residue = vd->tx_result.residue;
@@ -886,8 +992,10 @@ static int d350_probe(struct platform_device *pdev)
 	if (trig_bits) {
 		dmac->dma.directions |= (BIT(DMA_DEV_TO_MEM) | BIT(DMA_MEM_TO_DEV));
 		dma_cap_set(DMA_SLAVE, dmac->dma.cap_mask);
+		dma_cap_set(DMA_CYCLIC, dmac->dma.cap_mask);
 		dmac->dma.device_config = d350_slave_config;
 		dmac->dma.device_prep_slave_sg = d350_prep_slave_sg;
+		dmac->dma.device_prep_dma_cyclic = d350_prep_cyclic;
 	}
 
 	if (memset) {
