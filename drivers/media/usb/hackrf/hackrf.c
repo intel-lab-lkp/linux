@@ -1515,6 +1515,8 @@ err_video_unregister_device_rx:
 	video_unregister_device(&dev->rx_vdev);
 err_v4l2_device_unregister:
 	v4l2_device_unregister(&dev->v4l2_dev);
+	dev_dbg(&intf->dev, "failed=%d\n", ret);
+	return ret;
 err_v4l2_ctrl_handler_free_tx:
 	v4l2_ctrl_handler_free(&dev->tx_ctrl_handler);
 err_v4l2_ctrl_handler_free_rx:
