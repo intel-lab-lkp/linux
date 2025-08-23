@@ -30,15 +30,20 @@
 #include <linux/sched.h>
 #include <linux/slab.h>
 
+struct mc13xxx_button_devtype {
+	int button_id_max;
+};
+
 struct mc13783_pwrb {
 	struct input_dev *pwr;
 	struct mc13xxx *mc13783;
-#define MC13783_PWRB_B1_POL_INVERT	(1 << 0)
-#define MC13783_PWRB_B2_POL_INVERT	(1 << 1)
-#define MC13783_PWRB_B3_POL_INVERT	(1 << 2)
 	int flags;
 	unsigned short keymap[3];
 };
+
+#define MC13783_PWRB_B1_POL_INVERT	(1 << 0)
+#define MC13783_PWRB_B2_POL_INVERT	(1 << 1)
+#define MC13783_PWRB_B3_POL_INVERT	(1 << 2)
 
 #define MC13783_REG_INTERRUPT_SENSE_1		5
 #define MC13783_IRQSENSE1_ONOFD1S		(1 << 3)
@@ -108,6 +113,8 @@ static int mc13783_pwrbutton_probe(struct platform_device *pdev)
 {
 	const struct mc13xxx_buttons_platform_data *pdata;
 	struct mc13xxx *mc13783 = dev_get_drvdata(pdev->dev.parent);
+	struct mc13xxx_button_devtype *devtype =
+		(struct mc13xxx_button_devtype *)pdev->id_entry->driver_data;
 	struct input_dev *pwr;
 	struct mc13783_pwrb *priv;
 	int err = 0;
@@ -126,6 +133,11 @@ static int mc13783_pwrbutton_probe(struct platform_device *pdev)
 	priv = devm_kzalloc(&pdev->dev, sizeof(*priv), GFP_KERNEL);
 	if (!priv)
 		return -ENOMEM;
+
+	if (devtype->button_id_max < 2 && pdata->b_on_flags[2] & 0x3) {
+		dev_err(&pdev->dev, "button not supported\n");
+		return -ENODEV;
+	}
 
 	reg |= (pdata->b_on_flags[0] & 0x3) << MC13783_POWER_CONTROL_2_ON1BDBNC;
 	reg |= (pdata->b_on_flags[1] & 0x3) << MC13783_POWER_CONTROL_2_ON2BDBNC;
@@ -239,12 +251,15 @@ static void mc13783_pwrbutton_remove(struct platform_device *pdev)
 {
 	struct mc13783_pwrb *priv = platform_get_drvdata(pdev);
 	const struct mc13xxx_buttons_platform_data *pdata;
+	struct mc13xxx_button_devtype *devtype =
+		(struct mc13xxx_button_devtype *)pdev->id_entry->driver_data;
 
 	pdata = dev_get_platdata(&pdev->dev);
 
 	mc13xxx_lock(priv->mc13783);
 
-	if (pdata->b_on_flags[2] & MC13783_BUTTON_ENABLE)
+	if (devtype->button_id_max >= 2 &&
+		pdata->b_on_flags[2] & MC13783_BUTTON_ENABLE)
 		mc13xxx_irq_free(priv->mc13783, MC13783_IRQ_ONOFD3, priv);
 	if (pdata->b_on_flags[1] & MC13783_BUTTON_ENABLE)
 		mc13xxx_irq_free(priv->mc13783, MC13783_IRQ_ONOFD2, priv);
@@ -254,7 +269,28 @@ static void mc13783_pwrbutton_remove(struct platform_device *pdev)
 	mc13xxx_unlock(priv->mc13783);
 }
 
+static const struct mc13xxx_button_devtype mc13783_button_devtype = {
+	.button_id_max	= 2,
+};
+
+static const struct mc13xxx_button_devtype mc13892_button_devtype = {
+	/* PWRON3 is not supported yet. */
+	.button_id_max	= 1,
+};
+
+static const struct mc13xxx_button_devtype mc34708_button_devtype = {
+	.button_id_max	= 1,
+};
+
+static const struct platform_device_id mc13xxx_pwrbutton_idtable[] = {
+	{ "mc13783-pwrbutton", (kernel_ulong_t)&mc13783_button_devtype },
+	{ "mc13892-pwrbutton", (kernel_ulong_t)&mc13892_button_devtype },
+	{ "mc34708-pwrbutton", (kernel_ulong_t)&mc34708_button_devtype },
+	{ /* sentinel */ }
+};
+
 static struct platform_driver mc13783_pwrbutton_driver = {
+	.id_table	= mc13xxx_pwrbutton_idtable,
 	.probe		= mc13783_pwrbutton_probe,
 	.remove		= mc13783_pwrbutton_remove,
 	.driver		= {

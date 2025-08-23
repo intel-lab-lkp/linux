@@ -276,8 +276,8 @@ config INPUT_MC13783_PWRBUTTON
 	tristate "MC13783 ON buttons"
 	depends on MFD_MC13XXX
 	help
-	  Support the ON buttons of MC13783 PMIC as an input device
-	  reporting power button status.
+	  Support the ON buttons of MC13783/MC13892/MC34708 PMIC as an input
+	  device reporting power button status.
 
 	  To compile this driver as a module, choose M here: the module
 	  will be called mc13783-pwrbutton.
