@@ -27,6 +27,7 @@ perf-util-y += find_bit.o
 perf-util-y += get_current_dir_name.o
 perf-util-y += levenshtein.o
 perf-util-y += llvm.o
+perf-util-y += llvm-c-helpers.o
 perf-util-y += mmap.o
 perf-util-y += memswap.o
 perf-util-y += parse-events.o
@@ -248,7 +249,6 @@ perf-util-$(CONFIG_CXX_DEMANGLE) += demangle-cxx.o
 perf-util-y += demangle-ocaml.o
 perf-util-y += demangle-java.o
 perf-util-y += demangle-rust-v0.o
-perf-util-$(CONFIG_LIBLLVM) += llvm-c-helpers.o
 
 CFLAGS_demangle-rust-v0.o += -Wno-shadow -Wno-declaration-after-statement \
     -Wno-switch-default -Wno-switch-enum -Wno-missing-field-initializers
