@@ -131,6 +131,22 @@ struct btrfs_bio_ctrl {
 	 */
 	unsigned long submit_bitmap;
 	struct readahead_control *ractl;
+
+	/*
+	 * The start/len of the last hit compressed extent map.
+	 *
+	 * The current btrfs_bio_is_contig() only uses disk_bytenr as
+	 * the condition to check if the read can be merged with previous
+	 * bio, which is not correct. E.g. two file extents pointing to the
+	 * same extent.
+	 *
+	 * So here we need to do extra check to merge reads that are
+	 * covered by the same extent map.
+	 * Just extent_map::start/len will be enough, as they are unique
+	 * inside the same inode.
+	 */
+	u64 last_compress_em_start;
+	u64 last_compress_em_len;
 };
 
 /*
@@ -957,6 +973,32 @@ static void btrfs_readahead_expand(struct readahead_control *ractl,
 		readahead_expand(ractl, ra_pos, em_end - ra_pos);
 }
 
+static void save_compressed_em(struct btrfs_bio_ctrl *bio_ctrl,
+			       const struct extent_map *em)
+{
+	if (btrfs_extent_map_compression(em) == BTRFS_COMPRESS_NONE)
+		return;
+	bio_ctrl->last_compress_em_start = em->start;
+	bio_ctrl->last_compress_em_len = em->len;
+}
+
+static bool is_same_compressed_em(struct btrfs_bio_ctrl *bio_ctrl,
+				  const struct extent_map *em)
+{
+	/*
+	 * Only if the em is completely the same as the previous one we can merge
+	 * the current folio in the read bio.
+	 *
+	 * Here we only need to compare the em->start/len against saved
+	 * last_compress_em_start/len, as start/len inside an inode are unique,
+	 * and compressed extent maps are never merged.
+	 */
+	if (em->start != bio_ctrl->last_compress_em_start ||
+	    em->len != bio_ctrl->last_compress_em_len)
+		return false;
+	return true;
+}
+
 /*
  * basic readpage implementation.  Locked extent state structs are inserted
  * into the tree that are removed when the IO is done (by the end_io
@@ -1080,9 +1122,19 @@ static int btrfs_do_readpage(struct folio *folio, struct extent_map **em_cached,
 		    *prev_em_start != em->start)
 			force_bio_submit = true;
 
+		/*
+		 * We must ensure we only merge compressed read when the current
+		 * extent map matches the previous one exactly.
+		 */
+		if (compress_type != BTRFS_COMPRESS_NONE) {
+			if (!is_same_compressed_em(bio_ctrl, em))
+				force_bio_submit = true;
+		}
+
 		if (prev_em_start)
 			*prev_em_start = em->start;
 
+		save_compressed_em(bio_ctrl, em);
 		em_gen = em->generation;
 		btrfs_free_extent_map(em);
 		em = NULL;
