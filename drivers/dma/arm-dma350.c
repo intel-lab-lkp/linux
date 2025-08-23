@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0
 // Copyright (C) 2024-2025 Arm Limited
+// Copyright (C) 2025 Synaptics Incorporated
 // Arm DMA-350 driver
 
 #include <linux/bitfield.h>
@@ -98,7 +99,23 @@
 
 #define CH_FILLVAL		0x38
 #define CH_SRCTRIGINCFG		0x4c
+#define CH_SRCTRIGINMODE	GENMASK(11, 10)
+#define CH_SRCTRIG_CMD		0
+#define CH_SRCTRIG_DMA_FC	2
+#define CH_SRCTRIG_PERIF_FC	3
+#define CH_SRCTRIGINTYPE	GENMASK(9, 8)
+#define CH_SRCTRIG_SW_REQ	0
+#define CH_SRCTRIG_HW_REQ	2
+#define CH_SRCTRIG_INTERN_REQ	3
 #define CH_DESTRIGINCFG		0x50
+#define CH_DESTRIGINMODE	GENMASK(11, 10)
+#define CH_DESTRIG_CMD		0
+#define CH_DESTRIG_DMA_FC	2
+#define CH_DESTRIG_PERIF_FC	3
+#define CH_DESTRIGINTYPE	GENMASK(9, 8)
+#define CH_DESTRIG_SW_REQ	0
+#define CH_DESTRIG_HW_REQ	2
+#define CH_DESTRIG_INTERN_REQ	3
 #define CH_LINKATTR		0x70
 #define CH_LINK_SHAREATTR	GENMASK(9, 8)
 #define CH_LINK_MEMATTR		GENMASK(7, 0)
@@ -190,11 +207,13 @@ struct d350_chan {
 	struct d350_desc *desc;
 	void __iomem *base;
 	struct dma_pool *cmd_pool;
+	struct dma_slave_config config;
 	int irq;
 	enum dma_status status;
 	dma_cookie_t cookie;
 	u32 residue;
 	u8 tsz;
+	u8 ch;
 	bool has_trig;
 	bool has_wrap;
 	bool coherent;
@@ -325,6 +344,144 @@ static struct dma_async_tx_descriptor *d350_prep_memset(struct dma_chan *chan,
 	mb();
 
 	return vchan_tx_prep(&dch->vc, &desc->vd, flags);
+}
+
+static struct dma_async_tx_descriptor *
+d350_prep_slave_sg(struct dma_chan *chan, struct scatterlist *sgl,
+		   unsigned int sg_len, enum dma_transfer_direction dir,
+		   unsigned long flags, void *context)
+{
+	struct d350_chan *dch = to_d350_chan(chan);
+	dma_addr_t src, dst, phys;
+	struct d350_desc *desc;
+	struct scatterlist *sg;
+	u32 len, trig, *cmd, *la_cmd, tsz;
+	struct d350_sg *dsg;
+	int i, j;
+
+	if (unlikely(!is_slave_direction(dir) || !sg_len))
+		return NULL;
+
+	desc = kzalloc(struct_size(desc, sg, sg_len), GFP_NOWAIT);
+	if (!desc)
+		return NULL;
+
+	desc->sglen = sg_len;
+
+	if (dir == DMA_MEM_TO_DEV)
+		tsz = __ffs(dch->config.dst_addr_width | (1 << dch->tsz));
+	else
+		tsz = __ffs(dch->config.src_addr_width | (1 << dch->tsz));
+
+	for_each_sg(sgl, sg, sg_len, i) {
+		desc->sg[i].command = dma_pool_zalloc(dch->cmd_pool, GFP_NOWAIT, &phys);
+		if (unlikely(!desc->sg[i].command))
+			goto err_cmd_alloc;
+
+		desc->sg[i].phys = phys;
+		dsg = &desc->sg[i];
+		len = sg_dma_len(sg);
+
+		if (dir == DMA_MEM_TO_DEV) {
+			src = sg_dma_address(sg);
+			dst = dch->config.dst_addr;
+			trig = CH_CTRL_USEDESTRIGIN;
+		} else {
+			src = dch->config.src_addr;
+			dst = sg_dma_address(sg);
+			trig = CH_CTRL_USESRCTRIGIN;
+		}
+		dsg->tsz = tsz;
+		dsg->xsize = lower_16_bits(len >> dsg->tsz);
+		dsg->xsizehi = upper_16_bits(len >> dsg->tsz);
+
+		cmd = dsg->command;
+		if (!i) {
+			cmd[0] = LINK_CTRL | LINK_SRCADDR | LINK_SRCADDRHI | LINK_DESADDR |
+				 LINK_DESADDRHI | LINK_XSIZE | LINK_XSIZEHI | LINK_SRCTRANSCFG |
+				 LINK_DESTRANSCFG | LINK_XADDRINC | LINK_LINKADDR;
+
+			cmd[1] = FIELD_PREP(CH_CTRL_TRANSIZE, dsg->tsz) | trig |
+				 FIELD_PREP(CH_CTRL_XTYPE, CH_CTRL_XTYPE_CONTINUE);
+
+			cmd[2] = lower_32_bits(src);
+			cmd[3] = upper_32_bits(src);
+			cmd[4] = lower_32_bits(dst);
+			cmd[5] = upper_32_bits(dst);
+			cmd[6] = FIELD_PREP(CH_XY_SRC, dsg->xsize) |
+				 FIELD_PREP(CH_XY_DES, dsg->xsize);
+			cmd[7] = FIELD_PREP(CH_XY_SRC, dsg->xsizehi) |
+				 FIELD_PREP(CH_XY_DES, dsg->xsizehi);
+			if (dir == DMA_MEM_TO_DEV) {
+				cmd[0] |= LINK_DESTRIGINCFG;
+				cmd[8] = dch->coherent ? TRANSCFG_WB : TRANSCFG_NC;
+				cmd[9] = TRANSCFG_DEVICE;
+				cmd[10] = FIELD_PREP(CH_XY_SRC, 1);
+				cmd[11] = FIELD_PREP(CH_DESTRIGINMODE, CH_DESTRIG_DMA_FC) |
+					  FIELD_PREP(CH_DESTRIGINTYPE, CH_DESTRIG_HW_REQ);
+			} else {
+				cmd[0] |= LINK_SRCTRIGINCFG;
+				cmd[8] = TRANSCFG_DEVICE;
+				cmd[9] = dch->coherent ? TRANSCFG_WB : TRANSCFG_NC;
+				cmd[10] = FIELD_PREP(CH_XY_DES, 1);
+				cmd[11] = FIELD_PREP(CH_SRCTRIGINMODE, CH_SRCTRIG_DMA_FC) |
+					  FIELD_PREP(CH_SRCTRIGINTYPE, CH_SRCTRIG_HW_REQ);
+			}
+			la_cmd = &cmd[12];
+		} else {
+			*la_cmd = phys | CH_LINKADDR_EN;
+			if (i == sg_len - 1) {
+				cmd[0] = LINK_CTRL | LINK_SRCADDR | LINK_SRCADDRHI | LINK_DESADDR |
+					 LINK_DESADDRHI | LINK_XSIZE | LINK_XSIZEHI | LINK_LINKADDR;
+				cmd[1] = FIELD_PREP(CH_CTRL_TRANSIZE, dsg->tsz) | trig |
+					 FIELD_PREP(CH_CTRL_XTYPE, CH_CTRL_XTYPE_CONTINUE);
+				cmd[2] = lower_32_bits(src);
+				cmd[3] = upper_32_bits(src);
+				cmd[4] = lower_32_bits(dst);
+				cmd[5] = upper_32_bits(dst);
+				cmd[6] = FIELD_PREP(CH_XY_SRC, dsg->xsize) |
+					 FIELD_PREP(CH_XY_DES, dsg->xsize);
+				cmd[7] = FIELD_PREP(CH_XY_SRC, dsg->xsizehi) |
+					 FIELD_PREP(CH_XY_DES, dsg->xsizehi);
+				la_cmd = &cmd[8];
+			} else {
+				cmd[0] = LINK_SRCADDR | LINK_SRCADDRHI | LINK_DESADDR |
+					 LINK_DESADDRHI | LINK_XSIZE | LINK_XSIZEHI | LINK_LINKADDR;
+				cmd[1] = lower_32_bits(src);
+				cmd[2] = upper_32_bits(src);
+				cmd[3] = lower_32_bits(dst);
+				cmd[4] = upper_32_bits(dst);
+				cmd[5] = FIELD_PREP(CH_XY_SRC, dsg->xsize) |
+					 FIELD_PREP(CH_XY_DES, dsg->xsize);
+				cmd[6] = FIELD_PREP(CH_XY_SRC, dsg->xsizehi) |
+					 FIELD_PREP(CH_XY_DES, dsg->xsizehi);
+				la_cmd = &cmd[7];
+			}
+		}
+	}
+
+	/* the last command */
+	*la_cmd = 0;
+	desc->sg[sg_len - 1].command[1] |= FIELD_PREP(CH_CTRL_DONETYPE, CH_CTRL_DONETYPE_CMD);
+
+	mb();
+
+	return vchan_tx_prep(&dch->vc, &desc->vd, flags);
+
+err_cmd_alloc:
+	for (j = 0; j < i; j++)
+		dma_pool_free(dch->cmd_pool, desc->sg[j].command, desc->sg[j].phys);
+	kfree(desc);
+	return NULL;
+}
+
+static int d350_slave_config(struct dma_chan *chan, struct dma_slave_config *config)
+{
+	struct d350_chan *dch = to_d350_chan(chan);
+
+	memcpy(&dch->config, config, sizeof(*config));
+
+	return 0;
 }
 
 static int d350_pause(struct dma_chan *chan)
@@ -558,8 +715,9 @@ static irqreturn_t d350_irq(int irq, void *data)
 	writel_relaxed(ch_status, dch->base + CH_STATUS);
 
 	spin_lock(&dch->vc.lock);
-	vchan_cookie_complete(vd);
 	if (ch_status & CH_STAT_INTR_DONE) {
+		vchan_cookie_complete(vd);
+		dch->desc = NULL;
 		dch->status = DMA_COMPLETE;
 		dch->residue = 0;
 		d350_start_next(dch);
@@ -617,7 +775,7 @@ static int d350_probe(struct platform_device *pdev)
 	struct device *dev = &pdev->dev;
 	struct d350 *dmac;
 	void __iomem *base;
-	u32 reg, dma_chan_mask;
+	u32 reg, dma_chan_mask, trig_bits = 0;
 	int ret, nchan, dw, aw, r, p;
 	bool coherent, memset;
 
@@ -637,13 +795,11 @@ static int d350_probe(struct platform_device *pdev)
 	dw = 1 << FIELD_GET(DMA_CFG_DATA_WIDTH, reg);
 	aw = FIELD_GET(DMA_CFG_ADDR_WIDTH, reg) + 1;
 
-	dma_set_mask_and_coherent(dev, DMA_BIT_MASK(aw));
-	coherent = device_get_dma_attr(dev) == DEV_DMA_COHERENT;
-
 	dmac = devm_kzalloc(dev, struct_size(dmac, channels, nchan), GFP_KERNEL);
 	if (!dmac)
 		return -ENOMEM;
 
+	dmac->dma.dev = dev;
 	dmac->nchan = nchan;
 
 	/* Enable all channels by default */
@@ -655,12 +811,14 @@ static int d350_probe(struct platform_device *pdev)
 		return ret;
 	}
 
+	dma_set_mask_and_coherent(dev, DMA_BIT_MASK(aw));
+	coherent = device_get_dma_attr(dev) == DEV_DMA_COHERENT;
+
 	reg = readl_relaxed(base + DMAINFO + DMA_BUILDCFG1);
 	dmac->nreq = FIELD_GET(DMA_CFG_NUM_TRIGGER_IN, reg);
 
 	dev_dbg(dev, "DMA-350 r%dp%d with %d channels, %d requests\n", r, p, dmac->nchan, dmac->nreq);
 
-	dmac->dma.dev = dev;
 	for (int i = min(dw, 16); i > 0; i /= 2) {
 		dmac->dma.src_addr_widths |= BIT(i);
 		dmac->dma.dst_addr_widths |= BIT(i);
@@ -692,6 +850,7 @@ static int d350_probe(struct platform_device *pdev)
 
 		dch->coherent = coherent;
 		dch->base = base + DMACH(i);
+		dch->ch = i;
 		writel_relaxed(CH_CMD_CLEAR, dch->base + CH_CMD);
 
 		reg = readl_relaxed(dch->base + CH_BUILDCFG1);
@@ -711,6 +870,7 @@ static int d350_probe(struct platform_device *pdev)
 
 		/* Fill is a special case of Wrap */
 		memset &= dch->has_wrap;
+		trig_bits |= dch->has_trig << dch->ch;
 
 		reg = readl_relaxed(dch->base + CH_BUILDCFG0);
 		dch->tsz = FIELD_GET(CH_CFG_DATA_WIDTH, reg);
@@ -721,6 +881,13 @@ static int d350_probe(struct platform_device *pdev)
 
 		dch->vc.desc_free = d350_desc_free;
 		vchan_init(&dch->vc, &dmac->dma);
+	}
+
+	if (trig_bits) {
+		dmac->dma.directions |= (BIT(DMA_DEV_TO_MEM) | BIT(DMA_MEM_TO_DEV));
+		dma_cap_set(DMA_SLAVE, dmac->dma.cap_mask);
+		dmac->dma.device_config = d350_slave_config;
+		dmac->dma.device_prep_slave_sg = d350_prep_slave_sg;
 	}
 
 	if (memset) {
@@ -759,5 +926,6 @@ static struct platform_driver d350_driver = {
 module_platform_driver(d350_driver);
 
 MODULE_AUTHOR("Robin Murphy <robin.murphy@arm.com>");
+MODULE_AUTHOR("Jisheng Zhang <jszhang@kernel.org>");
 MODULE_DESCRIPTION("Arm DMA-350 driver");
 MODULE_LICENSE("GPL v2");
