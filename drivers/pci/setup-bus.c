@@ -1714,7 +1714,6 @@ static void pci_bridge_release_resources(struct pci_bus *bus,
 {
 	struct pci_dev *dev = bus->self;
 	struct resource *r;
-	unsigned int old_flags;
 	struct resource *b_res;
 	int idx = 1;
 
@@ -1751,7 +1750,9 @@ static void pci_bridge_release_resources(struct pci_bus *bus,
 	/* If there are children, release them all */
 	release_child_resources(r);
 	if (!release_resource(r)) {
-		type = old_flags = r->flags & PCI_RES_TYPE_MASK;
+		unsigned int old_flags = r->flags & PCI_RES_TYPE_MASK;
+
+		type = old_flags;
 		pci_info(dev, "resource %d %pR released\n",
 			 PCI_BRIDGE_RESOURCES + idx, r);
 		/* Keep the old size */
