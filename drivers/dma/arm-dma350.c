@@ -399,10 +399,13 @@ static enum dma_status d350_tx_status(struct dma_chan *chan, dma_cookie_t cookie
 static void d350_start_next(struct d350_chan *dch)
 {
 	u32 hdr, *reg;
+	struct virt_dma_desc *vd;
 
-	dch->desc = to_d350_desc(vchan_next_desc(&dch->vc));
-	if (!dch->desc)
+	vd = vchan_next_desc(&dch->vc);
+	if (!vd)
 		return;
+
+	dch->desc = to_d350_desc(vd);
 
 	list_del(&dch->desc->vd.node);
 	dch->status = DMA_IN_PROGRESS;
