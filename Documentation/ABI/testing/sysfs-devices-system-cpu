@@ -327,6 +327,49 @@ Description:	Energy performance preference
 
 		This file is only present if the cppc-cpufreq driver is in use.
 
+What:           /sys/devices/system/cpu/cpuX/cpufreq/min_perf
+Date:           Aug 2025
+Contact:        linux-pm@vger.kernel.org
+Description:    Minimum Performance
+
+		Read/write a 32 bits value from/to this file. This file
+		conveys the minimum performance level at which the platform
+		may run. Minimum performance may be set to any performance
+		value in the range [Lowest Performance, Highest Performance],
+		inclusive but must be set to a value that is less than or
+		equal to that specified by the Maximum Performance Register.
+
+		Writing to this file only has meaning when Autonomous Selection
+		is enabled.
+
+		This file is only present if the cppc-cpufreq driver is in use.
+
+What:           /sys/devices/system/cpu/cpuX/cpufreq/max_perf
+Date:           Aug 2025
+Contact:        linux-pm@vger.kernel.org
+Description:    Minimum Performance
+
+		Read/write a 32 bits value from/to this file. This file conveys
+		the maximum performance level at which the platform may run.
+		Maximum performance may be set to any performance value in the
+		range [Lowest Performance, Highest Performance], inclusive.
+
+		Writing to this file only has meaning when Autonomous Selection is
+		enabled.
+
+		This file is only present if the cppc-cpufreq driver is in use.
+
+What:           /sys/devices/system/cpu/cpuX/cpufreq/perf_limited
+Date:           Aug 2025
+Contact:        linux-pm@vger.kernel.org
+Description:    Minimum Performance
+
+		Read/write a 32 bits value from/to this file. This file indicates
+		to OSPM that an unpredictable event has limited processor
+		performance, and the delivered performance may be less than
+		desired/minimum performance.
+
+		This file is only present if the cppc-cpufreq driver is in use.
 
 What:		/sys/devices/system/cpu/cpu*/cache/index3/cache_disable_{0,1}
 Date:		August 2008
