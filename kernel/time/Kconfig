@@ -221,4 +221,14 @@ config POSIX_AUX_CLOCKS
 	  and other clock domains, which are not correlated to the TAI/NTP
 	  notion of time.
 
+config BOOT_TIME_TRACKER
+	bool "boot time tracking support"
+	help
+	  Prints boot timestamps at the beginning of the kernel and when the
+	  first user-space process is launched. This helps measure basic
+	  boot latency for embedded and multi-core systems.
+
+	  The messages appear using printk and can be parsed by boot
+	  instrumentation tools or console logs.
+
 endmenu
