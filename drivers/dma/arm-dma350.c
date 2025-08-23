@@ -632,7 +632,7 @@ static int d350_probe(struct platform_device *pdev)
 
 	platform_set_drvdata(pdev, dmac);
 
-	ret = dma_async_device_register(&dmac->dma);
+	ret = dmaenginem_async_device_register(&dmac->dma);
 	if (ret)
 		return dev_err_probe(dev, ret, "Failed to register DMA device\n");
 
@@ -641,9 +641,6 @@ static int d350_probe(struct platform_device *pdev)
 
 static void d350_remove(struct platform_device *pdev)
 {
-	struct d350 *dmac = platform_get_drvdata(pdev);
-
-	dma_async_device_unregister(&dmac->dma);
 	of_dma_controller_free(pdev->dev.of_node);
 }
 
