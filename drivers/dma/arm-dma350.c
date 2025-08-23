@@ -604,8 +604,7 @@ static int d350_probe(struct platform_device *pdev)
 		}
 		dch->irq = platform_get_irq(pdev, i);
 		if (dch->irq < 0)
-			return dev_err_probe(dev, dch->irq,
-					     "Failed to get IRQ for channel %d\n", i);
+			return dch->irq;
 
 		dch->has_wrap = FIELD_GET(CH_CFG_HAS_WRAP, reg);
 		dch->has_trig = FIELD_GET(CH_CFG_HAS_TRIGIN, reg) &
