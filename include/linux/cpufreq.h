@@ -474,6 +474,16 @@ struct cpufreq_driver {
  */
 #define CPUFREQ_NO_AUTO_DYNAMIC_SWITCHING	BIT(6)
 
+/*
+ * Set by drivers which want cpufreq core to avoid verifying that the current
+ * frequency of the policy matches the frequency returned by the driver's get()
+ * function. The get() function on certain drivers returns unreliable values,
+ * and this can result in the frequency (and consequently system performance)
+ * being reduced even though the governor didn't want the frequencies to be
+ * reduced.
+ */
+#define CPUFREQ_DONT_VERIFY_FREQ_ON_GOVERNOR_START	BIT(7)
+
 int cpufreq_register_driver(struct cpufreq_driver *driver_data);
 void cpufreq_unregister_driver(struct cpufreq_driver *driver_data);
 
