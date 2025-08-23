@@ -762,6 +762,10 @@ static int z_erofs_register_pcluster(struct z_erofs_frontend *fe)
 	pcl->from_meta = map->m_flags & EROFS_MAP_META;
 	fe->mode = Z_EROFS_PCLUSTER_FOLLOWED;
 
+	if (pcl->algorithmformat >= Z_EROFS_COMPRESSION_MAX) {
+		err = -EINVAL;
+		goto out;
+	}
 	/*
 	 * lock all primary followed works before visible to others
 	 * and mutex_trylock *never* fails for a new pcluster.
@@ -796,6 +800,7 @@ static int z_erofs_register_pcluster(struct z_erofs_frontend *fe)
 
 err_out:
 	mutex_unlock(&pcl->lock);
+out:
 	z_erofs_free_pcluster(pcl);
 	return err;
 }
