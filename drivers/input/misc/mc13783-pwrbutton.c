@@ -27,6 +27,7 @@
 #include <linux/interrupt.h>
 #include <linux/platform_device.h>
 #include <linux/mfd/mc13783.h>
+#include <linux/property.h>
 #include <linux/sched.h>
 #include <linux/slab.h>
 
@@ -109,8 +110,82 @@ static irqreturn_t button3_irq(int irq, void *_priv)
 	return button_irq(MC13783_IRQ_ONOFD3, _priv);
 }
 
-static int mc13783_pwrbutton_probe(struct platform_device *pdev)
+#ifdef CONFIG_OF
+static struct mc13xxx_buttons_platform_data __init *mc13xxx_pwrbutton_probe_dt(
+	struct platform_device *pdev)
 {
+	struct mc13xxx_buttons_platform_data *pdata;
+	struct fwnode_handle *child;
+	struct device *dev = &pdev->dev;
+	struct mc13xxx_button_devtype *devtype =
+		(struct mc13xxx_button_devtype *)platform_get_device_id(pdev)->driver_data;
+
+	pdata = devm_kzalloc(dev, sizeof(*pdata), GFP_KERNEL);
+	if (!pdata)
+		return ERR_PTR(-ENOMEM);
+
+	struct fwnode_handle *parent __free(fwnode_handle) =
+		device_get_named_child_node(dev->parent, "buttons");
+	if (!parent)
+		return ERR_PTR(-ENODATA);
+
+	fwnode_for_each_child_node(parent, child) {
+		u32 idx;
+		u8 dbnc = MC13783_BUTTON_DBNC_30MS;
+		u16 dbnc_ms;
+
+		if (fwnode_property_read_u32(child, "reg", &idx))
+			continue;
+
+		if (idx > devtype->button_id_max) {
+			dev_warn(dev, "reg out of range\n");
+			continue;
+		}
+
+		fwnode_property_read_u16(child, "debounce-delay-ms", &dbnc_ms);
+		switch (dbnc_ms) {
+		case 0:
+			dbnc = MC13783_BUTTON_DBNC_0MS;
+			break;
+		case 30:
+			dbnc = MC13783_BUTTON_DBNC_30MS;
+			break;
+		case 150:
+			dbnc = MC13783_BUTTON_DBNC_150MS;
+			break;
+		case 750:
+			dbnc = MC13783_BUTTON_DBNC_750MS;
+			break;
+		default:
+			dev_warn(dev, "invalid debounce-delay-ms value\n");
+			continue;
+		}
+
+		if (fwnode_property_read_u32(child, "linux,code", &pdata->b_on_key[idx]))
+			continue;
+
+		if (fwnode_property_read_bool(child, "active-low"))
+			pdata->b_on_flags[idx] |= MC13783_BUTTON_POL_INVERT;
+
+		if (fwnode_property_read_bool(child, "fsl,enable-reset"))
+			pdata->b_on_flags[idx] |= MC13783_BUTTON_RESET_EN;
+
+		pdata->b_on_flags[idx] |= MC13783_BUTTON_ENABLE | dbnc;
+	}
+
+	return pdata;
+}
+#else
+static inline struct mc13xxx_buttons_platform_data __init *mc13xxx_pwrbutton_probe_dt(
+	struct platform_device *pdev)
+{
+	return ERR_PTR(-ENODEV);
+}
+#endif
+
+static int __init mc13783_pwrbutton_probe(struct platform_device *pdev)
+{
+	struct device *dev = &pdev->dev;
 	const struct mc13xxx_buttons_platform_data *pdata;
 	struct mc13xxx *mc13783 = dev_get_drvdata(pdev->dev.parent);
 	struct mc13xxx_button_devtype *devtype =
@@ -121,9 +196,13 @@ static int mc13783_pwrbutton_probe(struct platform_device *pdev)
 	int reg = 0;
 
 	pdata = dev_get_platdata(&pdev->dev);
-	if (!pdata) {
-		dev_err(&pdev->dev, "missing platform data\n");
-		return -ENODEV;
+	if (dev->parent->of_node) {
+		pdata = mc13xxx_pwrbutton_probe_dt(pdev);
+		if (IS_ERR(pdata))
+			return PTR_ERR(pdata);
+	} else if (!pdata) {
+		dev_err(dev, "missing platform data\n");
+		return -ENODATA;
 	}
 
 	pwr = devm_input_allocate_device(&pdev->dev);
@@ -290,15 +369,14 @@ static const struct platform_device_id mc13xxx_pwrbutton_idtable[] = {
 };
 
 static struct platform_driver mc13783_pwrbutton_driver = {
-	.id_table	= mc13xxx_pwrbutton_idtable,
-	.probe		= mc13783_pwrbutton_probe,
-	.remove		= mc13783_pwrbutton_remove,
 	.driver		= {
 		.name	= "mc13783-pwrbutton",
 	},
+	.id_table	= mc13xxx_pwrbutton_idtable,
+	.remove		= mc13783_pwrbutton_remove,
 };
 
-module_platform_driver(mc13783_pwrbutton_driver);
+module_platform_driver_probe(mc13783_pwrbutton_driver, mc13783_pwrbutton_probe);
 
 MODULE_ALIAS("platform:mc13783-pwrbutton");
 MODULE_DESCRIPTION("MC13783 Power Button");
