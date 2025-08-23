@@ -685,7 +685,7 @@ static int write_and_verify(struct ctl_data *ctl,
 	}
 
 	/*
-	 * Use the libray to compare values, if there's a mismatch
+	 * Use the library to compare values, if there's a mismatch
 	 * carry on and try to provide a more useful diagnostic than
 	 * just "mismatch".
 	 */
