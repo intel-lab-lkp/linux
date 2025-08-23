@@ -32,6 +32,10 @@ properties:
       - description: Channel 6 interrupt
       - description: Channel 7 interrupt
 
+  interrupt-names:
+    minItems: 1
+    maxItems: 8
+
   "#dma-cells":
     const: 1
     description: The cell is the trigger input number
@@ -40,5 +44,6 @@ required:
   - compatible
   - reg
   - interrupts
+  - interrupt-names
 
 unevaluatedProperties: false
