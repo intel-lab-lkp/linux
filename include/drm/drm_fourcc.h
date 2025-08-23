@@ -56,7 +56,7 @@
 struct drm_device;
 
 /**
- * struct drm_format_info - information about a DRM format
+ * @struct drm_format_info - information about a DRM format
  */
 struct drm_format_info {
 	/** @format: 4CC format identifier (DRM_FORMAT_*) */
