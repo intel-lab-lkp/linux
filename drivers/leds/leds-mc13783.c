@@ -127,7 +127,7 @@ static struct mc13xxx_leds_platform_data __init *mc13xxx_led_probe_dt(
 	if (!parent)
 		return ERR_PTR(-ENODATA);
 
-	ret = of_property_read_u32_array(parent, "led-control",
+	ret = of_property_read_u32_array(parent, "fsl,led-control",
 					 pdata->led_control,
 					 leds->devtype->num_regs);
 	if (ret)
