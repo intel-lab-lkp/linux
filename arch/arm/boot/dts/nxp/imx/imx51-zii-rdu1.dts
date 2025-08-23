@@ -396,7 +396,7 @@
 		leds {
 			#address-cells = <1>;
 			#size-cells = <0>;
-			led-control = <0x0 0x0 0x3f83f8 0x0>;
+			fsl,led-control = <0x0 0x0 0x3f83f8 0x0>;
 
 			sysled0@3 {
 				reg = <3>;
