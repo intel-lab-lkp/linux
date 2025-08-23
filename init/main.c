@@ -115,6 +115,10 @@
 
 #include <kunit/test.h>
 
+#ifdef CONFIG_BOOT_TIME_TRACKER
+#include <linux/boot_time_now.h>
+#endif
+
 static int kernel_init(void *);
 
 /*
@@ -929,6 +933,11 @@ void start_kernel(void)
 	page_address_init();
 	pr_notice("%s", linux_banner);
 	setup_arch(&command_line);
+
+#ifdef CONFIG_BOOT_TIME_TRACKER
+	pr_info("[BOOT TRACKER] - ID:%d, %s = %llu\n",
+		BOOTSTAGE_ID_KERNEL_START, __func__, boot_time_now());
+#endif
 	/* Static keys and static calls are needed by LSMs */
 	jump_label_init();
 	static_call_init();
@@ -1503,6 +1512,10 @@ static int __ref kernel_init(void *unused)
 
 	do_sysctl_args();
 
+#ifdef CONFIG_BOOT_TIME_TRACKER
+	pr_info("[BOOT TRACKER] - ID:%d, %s = %llu\n",
+		BOOTSTAGE_ID_KERNEL_END, __func__, boot_time_now());
+#endif
 	if (ramdisk_execute_command) {
 		ret = run_init_process(ramdisk_execute_command);
 		if (!ret)

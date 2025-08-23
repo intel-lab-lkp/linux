@@ -1995,6 +1995,7 @@ L:	linux-arm-kernel@lists.infradead.org (moderated for non-subscribers)
 S:	Maintained
 F:	arch/arm/include/asm/arch_timer.h
 F:	arch/arm64/include/asm/arch_timer.h
+F:	arch/arm64/include/asm/boot_time_primitives.h
 F:	drivers/clocksource/arm_arch_timer.c
 F:	drivers/clocksource/arm_arch_timer_mmio.c
 
@@ -25477,6 +25478,7 @@ R:	Stephen Boyd <sboyd@kernel.org>
 L:	linux-kernel@vger.kernel.org
 S:	Supported
 T:	git git://git.kernel.org/pub/scm/linux/kernel/git/tip/tip.git timers/core
+F:	include/linux/boot_time_now.h
 F:	include/linux/clocksource.h
 F:	include/linux/time.h
 F:	include/linux/timekeeper_internal.h
@@ -25485,6 +25487,7 @@ F:	include/linux/timex.h
 F:	include/uapi/linux/time.h
 F:	include/uapi/linux/timex.h
 F:	kernel/time/alarmtimer.c
+F:	kernel/time/boot_time_now.c
 F:	kernel/time/clocksource*
 F:	kernel/time/ntp*
 F:	kernel/time/time.c
