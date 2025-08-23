@@ -3839,9 +3839,8 @@ msi_initialize_err:
 	}
 
 iomap_err:
-	kfree(dd);
 	pci_set_drvdata(pdev, NULL);
-	return rv;
+	kfree(dd);
 done:
 	return rv;
 }
