@@ -404,6 +404,7 @@ failed_dvb:
 	as102_free_usb_stream_buffer(as102_dev);
 failed_stream:
 	usb_deregister_dev(intf, &as102_usb_class_driver);
+	return ret;
 failed:
 	usb_put_dev(as102_dev->bus_adap.usb_dev);
 	usb_set_intfdata(intf, NULL);
