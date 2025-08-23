@@ -88,6 +88,21 @@ static irqreturn_t button_irq(int irq, void *_priv)
 	return IRQ_HANDLED;
 }
 
+static irqreturn_t button1_irq(int irq, void *_priv)
+{
+	return button_irq(MC13783_IRQ_ONOFD1, _priv);
+}
+
+static irqreturn_t button2_irq(int irq, void *_priv)
+{
+	return button_irq(MC13783_IRQ_ONOFD2, _priv);
+}
+
+static irqreturn_t button3_irq(int irq, void *_priv)
+{
+	return button_irq(MC13783_IRQ_ONOFD3, _priv);
+}
+
 static int mc13783_pwrbutton_probe(struct platform_device *pdev)
 {
 	const struct mc13xxx_buttons_platform_data *pdata;
@@ -137,7 +152,7 @@ static int mc13783_pwrbutton_probe(struct platform_device *pdev)
 			reg |= MC13783_POWER_CONTROL_2_ON1BRSTEN;
 
 		err = mc13xxx_irq_request(mc13783, MC13783_IRQ_ONOFD1,
-					  button_irq, "b1on", priv);
+					  button1_irq, "b1on", priv);
 		if (err) {
 			dev_dbg(&pdev->dev, "Can't request irq\n");
 			goto free_priv;
@@ -156,7 +171,7 @@ static int mc13783_pwrbutton_probe(struct platform_device *pdev)
 			reg |= MC13783_POWER_CONTROL_2_ON2BRSTEN;
 
 		err = mc13xxx_irq_request(mc13783, MC13783_IRQ_ONOFD2,
-					  button_irq, "b2on", priv);
+					  button2_irq, "b2on", priv);
 		if (err) {
 			dev_dbg(&pdev->dev, "Can't request irq\n");
 			goto free_irq_b1;
@@ -175,7 +190,7 @@ static int mc13783_pwrbutton_probe(struct platform_device *pdev)
 			reg |= MC13783_POWER_CONTROL_2_ON3BRSTEN;
 
 		err = mc13xxx_irq_request(mc13783, MC13783_IRQ_ONOFD3,
-					  button_irq, "b3on", priv);
+					  button3_irq, "b3on", priv);
 		if (err) {
 			dev_dbg(&pdev->dev, "Can't request irq: %d\n", err);
 			goto free_irq_b2;
