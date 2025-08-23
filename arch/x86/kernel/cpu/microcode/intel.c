@@ -20,6 +20,8 @@
 #include <linux/cpu.h>
 #include <linux/uio.h>
 #include <linux/mm.h>
+#include <linux/delay.h>
+#include <linux/io.h>
 
 #include <asm/cpu_device_id.h>
 #include <asm/processor.h>
@@ -32,6 +34,16 @@
 static const char ucode_path[] = "kernel/x86/microcode/GenuineIntel.bin";
 
 #define UCODE_BSP_LOADED	((struct microcode_intel *)0x1UL)
+
+/* Defines for the microcode staging mailbox interface */
+
+#define MBOX_REG_NUM		4
+#define MBOX_REG_SIZE		sizeof(u32)
+
+#define MBOX_CONTROL_OFFSET	0x0
+#define MBOX_STATUS_OFFSET	0x4
+
+#define MASK_MBOX_CTRL_ABORT	BIT(0)
 
 /* Current microcode patch used in early patching on the APs. */
 static struct microcode_intel *ucode_patch_va __read_mostly;
@@ -319,13 +331,130 @@ static __init struct microcode_intel *scan_microcode(void *data, size_t size,
 }
 
 /*
- * Handle the staging process using the mailbox MMIO interface.
- * Return the result state.
+ * Prepare for a new microcode transfer: reset hardware and record the
+ * image size.
+ */
+static void init_stage(struct staging_state *ss)
+{
+	ss->ucode_len = get_totalsize(&ucode_patch_late->hdr);
+
+	/*
+	 * Abort any ongoing process, effectively resetting the device.
+	 * Unlike regular mailbox data processing requests, this
+	 * operation does not require a status check.
+	 */
+	writel(MASK_MBOX_CTRL_ABORT, ss->mmio_base + MBOX_CONTROL_OFFSET);
+}
+
+/*
+ * Return PAGE_SIZE, or remaining bytes if this is the final chunk
+ */
+static inline unsigned int calc_next_chunk_size(unsigned int ucode_len, unsigned int offset)
+{
+	return min(PAGE_SIZE, ucode_len - offset);
+}
+
+/*
+ * Update the chunk size and decide whether another chunk can be sent.
+ * This accounts for remaining data and retry limits.
+ */
+static bool can_send_next_chunk(struct staging_state *ss)
+{
+	ss->chunk_size = calc_next_chunk_size(ss->ucode_len, ss->offset);
+	/*
+	 * Each microcode image is divided into chunks, each at most
+	 * one page size. A 10-chunk  image would typically require 10
+	 * transactions.
+	 *
+	 * However, the hardware managing the mailbox has limited
+	 * resources and may not cache the entire image, potentially
+	 * requesting the same chunk multiple times.
+	 *
+	 * To tolerate this behavior, allow up to twice the expected
+	 * number of transactions (i.e., a 10-chunk image can take up to
+	 * 20 attempts).
+	 *
+	 * If the number of attempts exceeds this limit, the hardware is
+	 * likely stuck and mark the state as timeout.
+	 */
+	if (ss->bytes_sent + ss->chunk_size > ss->ucode_len * 2) {
+		ss->state = UCODE_TIMEOUT;
+		return false;
+	}
+
+	return true;
+}
+
+/*
+ * Determine whether staging is complete: either the hardware signaled
+ * the end offset, or no more transactions are permitted (retry limit
+ * reached).
+ */
+static inline bool staging_is_complete(struct staging_state *ss)
+{
+	return (ss->offset == UINT_MAX) || !can_send_next_chunk(ss);
+}
+
+/*
+ * Transmit a chunk of the microcode image to the hardware.
+ * Return 0 on success, or an error code on failure.
+ */
+static int send_data_chunk(struct staging_state *ss, void *ucode_ptr __maybe_unused)
+{
+	pr_debug_once("Staging mailbox loading code needs to be implemented.\n");
+	ss->state = UCODE_ERROR;
+	return -EPROTONOSUPPORT;
+}
+
+/*
+ * Retrieve the next offset from the hardware response.
+ * Return 0 on success, or an error code on failure.
+ */
+static int fetch_next_offset(struct staging_state *ss)
+{
+	pr_debug_once("Staging mailbox response handling code needs to be implemented.\n\n");
+	ss->state = UCODE_ERROR;
+	return -EPROTONOSUPPORT;
+}
+
+/*
+ * Handle the staging process using the mailbox MMIO interface. The
+ * microcode image is transferred in chunks until completion. Return the
+ * result state.
  */
 static enum ucode_state do_stage(u64 mmio_pa)
 {
-	pr_debug_once("Staging implementation is pending.\n");
-	return UCODE_ERROR;
+	struct staging_state ss = {};
+	int err;
+
+	ss.mmio_base = ioremap(mmio_pa, MBOX_REG_NUM * MBOX_REG_SIZE);
+	if (WARN_ON_ONCE(!ss.mmio_base))
+		return UCODE_ERROR;
+
+	init_stage(&ss);
+
+	/* Perform the staging process while within the retry limit */
+	while (!staging_is_complete(&ss)) {
+		/* Send a chunk of microcode each time: */
+		err = send_data_chunk(&ss, ucode_patch_late);
+		if (err)
+			break;
+		/*
+		 * Then, ask the hardware which piece of the image it
+		 * needs next. The same piece may be sent more than once.
+		 */
+		err = fetch_next_offset(&ss);
+		if (err)
+			break;
+	}
+
+	iounmap(ss.mmio_base);
+
+	/*
+	 * The helpers update ss.state on error. The final state is
+	 * returned to the caller.
+	 */
+	return ss.state;
 }
 
 static void stage_microcode(void)
