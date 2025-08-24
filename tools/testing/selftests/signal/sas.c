@@ -64,7 +64,7 @@ void my_usr1(int sig, siginfo_t *si, void *u)
 		exit(EXIT_FAILURE);
 	}
 	if (stk.ss_flags != SS_DISABLE)
-		ksft_test_result_fail("tss_flags=%x, should be SS_DISABLE\n",
+		ksft_test_result_fail("ss_flags=%x, should be SS_DISABLE\n",
 				stk.ss_flags);
 	else
 		ksft_test_result_pass(
