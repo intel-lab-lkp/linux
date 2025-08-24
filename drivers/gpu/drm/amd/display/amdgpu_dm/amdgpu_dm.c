@@ -4739,7 +4739,8 @@ static void amdgpu_dm_update_backlight_caps(struct amdgpu_display_manager *dm,
 }
 
 static int get_brightness_range(const struct amdgpu_dm_backlight_caps *caps,
-				unsigned int *min, unsigned int *max)
+				unsigned int *min, unsigned int *max,
+				unsigned int *multiple)
 {
 	if (!caps)
 		return 0;
@@ -4748,10 +4749,12 @@ static int get_brightness_range(const struct amdgpu_dm_backlight_caps *caps,
 		// Firmware limits are in nits, DC API wants millinits.
 		*max = 1000 * caps->aux_max_input_signal;
 		*min = 1000 * caps->aux_min_input_signal;
+		*multiple = 100;
 	} else {
 		// Firmware limits are 8-bit, PWM control is 16-bit.
 		*max = 0x101 * caps->max_input_signal;
 		*min = 0x101 * caps->min_input_signal;
+		*multiple = 1;
 	}
 	return 1;
 }
@@ -4813,23 +4816,25 @@ static void convert_custom_brightness(const struct amdgpu_dm_backlight_caps *cap
 static u32 convert_brightness_from_user(const struct amdgpu_dm_backlight_caps *caps,
 					uint32_t brightness)
 {
-	unsigned int min, max;
+	unsigned int min, max, multiple;
 
-	if (!get_brightness_range(caps, &min, &max))
+	if (!get_brightness_range(caps, &min, &max, &multiple))
 		return brightness;
 
 	convert_custom_brightness(caps, min, max, &brightness);
 
-	// Rescale 0..max to min..max
-	return min + DIV_ROUND_CLOSEST_ULL((u64)(max - min) * brightness, max);
+	// Rescale 0..max to min..max rounding to nearest multiple
+	return rounddown(
+		min + DIV_ROUND_CLOSEST_ULL((u64)(max - min) * brightness, max),
+		multiple);
 }
 
 static u32 convert_brightness_to_user(const struct amdgpu_dm_backlight_caps *caps,
 				      uint32_t brightness)
 {
-	unsigned int min, max;
+	unsigned int min, max, multiple;
 
-	if (!get_brightness_range(caps, &min, &max))
+	if (!get_brightness_range(caps, &min, &max, &multiple))
 		return brightness;
 
 	if (brightness < min)
@@ -4970,7 +4975,7 @@ amdgpu_dm_register_backlight_device(struct amdgpu_dm_connector *aconnector)
 	struct backlight_properties props = { 0 };
 	struct amdgpu_dm_backlight_caps *caps;
 	char bl_name[16];
-	int min, max;
+	int min, max, multiple;
 
 	if (aconnector->bl_idx == -1)
 		return;
@@ -4983,15 +4988,16 @@ amdgpu_dm_register_backlight_device(struct amdgpu_dm_connector *aconnector)
 	}
 
 	caps = &dm->backlight_caps[aconnector->bl_idx];
-	if (get_brightness_range(caps, &min, &max)) {
+	if (get_brightness_range(caps, &min, &max, &multiple)) {
 		if (power_supply_is_system_supplied() > 0)
 			props.brightness = DIV_ROUND_CLOSEST((max - min) * caps->ac_level, 100);
 		else
 			props.brightness = DIV_ROUND_CLOSEST((max - min) * caps->dc_level, 100);
 		/* min is zero, so max needs to be adjusted */
 		props.max_brightness = max - min;
-		drm_dbg(drm, "Backlight caps: min: %d, max: %d, ac %d, dc %d\n", min, max,
-			caps->ac_level, caps->dc_level);
+		drm_dbg(drm,
+			"Backlight caps: min: %d, max: %d, ac %d, dc %d, multiple: %d\n",
+			min, max, caps->ac_level, caps->dc_level, multiple);
 	} else
 		props.brightness = props.max_brightness = MAX_BACKLIGHT_LEVEL;
 
