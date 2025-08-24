@@ -23,6 +23,14 @@ or, to assemble a partitionable array::
 
   md=d<md device no.>,dev0,dev1,...,devn
 
+if you are using superblock versions greater than 0, use the following::
+
+  md=v<superblock version no.>,<md device no.>,dev0,dev1,...,devn
+
+for example, for a raid array with superblock version 1.2 it could look like this::
+
+  md=v1.2,0,/dev/sda1,/dev/sdb1
+
 ``md device no.``
 +++++++++++++++++
 
