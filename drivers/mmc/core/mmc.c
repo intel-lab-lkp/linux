@@ -2317,6 +2317,14 @@ static const struct mmc_bus_ops mmc_ops = {
 };
 
 /*
+ * Export function for mmc detection 
+ */
+int mmc_detect_mmc(struct mmc_host *host){
+	mmc_detect(host);
+	return 0;
+}
+
+/*
  * Starting point for MMC card init.
  */
 int mmc_attach_mmc(struct mmc_host *host)

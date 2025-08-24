@@ -2123,6 +2123,11 @@ int _mmc_detect_card_removed(struct mmc_host *host)
 
 	ret = host->bus_ops->alive(host);
 
+        if(mmc_host_is_spi(host)) {
+        	if(host->ops->get_cd){
+       			ret = !host->ops->get_cd(host);
+                }
+        }
 	/*
 	 * Card detect status and alive check may be out of sync if card is
 	 * removed slowly, when card detect switch changes while card/slot
@@ -2238,9 +2243,13 @@ void mmc_rescan(struct work_struct *work)
 	}
 
 	/* Verify a registered card to be functional, else remove it. */
-	if (host->bus_ops)
-		host->bus_ops->detect(host);
-
+	if (host->bus_ops){
+		if (mmc_host_is_spi(host)){
+			mmc_detect_mmc(host);
+		}else{
+			host->bus_ops->detect(host);
+		}
+	}
 	host->detect_change = 0;
 
 	/* if there still is a card present, stop here */
