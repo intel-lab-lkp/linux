@@ -88,7 +88,7 @@ the VM is shut down.
 =============
 
 As of Linux 2.6.22, the KVM ABI has been stabilized: no backward
-incompatible change are allowed.  However, there is an extension
+incompatible changes are allowed.  However, there is an extension
 facility that allows backward-compatible extensions to the API to be
 queried and used.
 
@@ -1198,7 +1198,7 @@ pending until the guest takes the exception by unmasking PSTATE.A.
 
 Running the VCPU may cause it to take a pending SError, or make an access that
 causes an SError to become pending. The event's description is only valid while
-the VPCU is not running.
+the VCPU is not running.
 
 This API provides a way to read and write the pending 'event' state that is not
 visible to the guest. To save, restore or migrate a VCPU the struct representing
@@ -1293,7 +1293,7 @@ ARM64:
 User space may need to inject several types of events to the guest.
 
 Set the pending SError exception state for this VCPU. It is not possible to
-'cancel' an Serror that has been made pending.
+'cancel' an SError that has been made pending.
 
 If the guest performed an access to I/O memory which could not be handled by
 userspace, for example because of missing instruction syndrome decode
@@ -1832,7 +1832,7 @@ emulate them efficiently. The fields in each entry are defined as follows:
          the values returned by the cpuid instruction for
          this function/index combination
 
-x2APIC (CPUID leaf 1, ecx[21) and TSC deadline timer (CPUID leaf 1, ecx[24])
+x2APIC (CPUID leaf 1, ecx[21]) and TSC deadline timer (CPUID leaf 1, ecx[24])
 may be returned as true, but they depend on KVM_CREATE_IRQCHIP for in-kernel
 emulation of the local APIC.  TSC deadline timer support is also reported via::
 
@@ -3222,8 +3222,8 @@ default-sized hash table (16 MB).
 
 If this ioctl is called when a hash table has already been allocated,
 with a different order from the existing hash table, the existing hash
-table will be freed and a new one allocated.  If this is ioctl is
-called when a hash table has already been allocated of the same order
+table will be freed and a new one allocated.  If this ioctl is called
+when a hash table has already been allocated of the same order
 as specified, the kernel will clear out the existing hash table (zero
 all HPTEs).  In either case, if the guest is using the virtualized
 real-mode area (VRMA) facility, the kernel will re-create the VMRA
@@ -4434,7 +4434,7 @@ base 2 of the page size in the bottom 6 bits.
 :Returns: 0 on successful completion,
 	 >0 if a new HPT is being prepared, the value is an estimated
          number of milliseconds until preparation is complete,
-         -EFAULT if struct kvm_reinject_control cannot be read,
+         -EFAULT if struct kvm_ppc_resize_hpt cannot be read,
 	 -EINVAL if the supplied shift or flags are invalid,
 	 -ENOMEM if unable to allocate the new HPT,
 
@@ -4488,7 +4488,7 @@ ones will monitor preparation until it completes or fails.
 :Returns: 0 on successful completion,
          -EFAULT if struct kvm_reinject_control cannot be read,
 	 -EINVAL if the supplied shift or flags are invalid,
-	 -ENXIO is there is no pending HPT, or the pending HPT doesn't
+	 -ENXIO if there is no pending HPT, or the pending HPT doesn't
          have the requested size,
 	 -EBUSY if the pending HPT is not fully prepared,
 	 -ENOSPC if there was a hash collision when moving existing
@@ -8925,7 +8925,7 @@ This capability indicates that KVM supports steal time accounting.
 When steal time accounting is supported it may be enabled with
 architecture-specific interfaces.  This capability and the architecture-
 specific interfaces must be consistent, i.e. if one says the feature
-is supported, than the other should as well and vice versa.  For arm64
+is supported, then the other should as well and vice versa.  For arm64
 see Documentation/virt/kvm/devices/vcpu.rst "KVM_ARM_VCPU_PVTIME_CTRL".
 For x86 see Documentation/virt/kvm/x86/msr.rst "MSR_KVM_STEAL_TIME".
 
