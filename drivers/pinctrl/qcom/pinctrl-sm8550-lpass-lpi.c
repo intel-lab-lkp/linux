@@ -199,6 +199,7 @@ static const struct lpi_pinctrl_variant_data sm8550_lpi_data = {
 	.ngroups = ARRAY_SIZE(sm8550_groups),
 	.functions = sm8550_functions,
 	.nfunctions = ARRAY_SIZE(sm8550_functions),
+	.pin_offset = pin_offset_default,
 };
 
 static const struct of_device_id lpi_pinctrl_of_match[] = {

@@ -162,6 +162,7 @@ static const struct lpi_pinctrl_variant_data sc8280xp_lpi_data = {
 	.ngroups = ARRAY_SIZE(sc8280xp_groups),
 	.functions = sc8280xp_functions,
 	.nfunctions = ARRAY_SIZE(sc8280xp_functions),
+	.pin_offset = pin_offset_default,
 };
 
 static const struct of_device_id lpi_pinctrl_of_match[] = {

@@ -206,6 +206,7 @@ static const struct lpi_pinctrl_variant_data sm8650_lpi_data = {
 	.functions = sm8650_functions,
 	.nfunctions = ARRAY_SIZE(sm8650_functions),
 	.flags = LPI_FLAG_SLEW_RATE_SAME_REG,
+	.pin_offset = pin_offset_default,
 };
 
 static const struct of_device_id lpi_pinctrl_of_match[] = {

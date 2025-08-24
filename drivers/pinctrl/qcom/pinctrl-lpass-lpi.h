@@ -85,9 +85,11 @@ struct lpi_pinctrl_variant_data {
 	const struct lpi_function *functions;
 	int nfunctions;
 	unsigned int flags;
+	u32 (*pin_offset)(int pin_id);
 };
 
 int lpi_pinctrl_probe(struct platform_device *pdev);
 void lpi_pinctrl_remove(struct platform_device *pdev);
+u32 pin_offset_default(int pin_id);
 
 #endif /*__PINCTRL_LPASS_LPI_H__*/
