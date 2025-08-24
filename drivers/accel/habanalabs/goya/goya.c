@@ -15,6 +15,7 @@
 #include <linux/hwmon.h>
 #include <linux/iommu.h>
 #include <linux/seq_file.h>
+#include <linux/string_choices.h>
 
 /*
  * GOYA security scheme:
@@ -819,7 +820,7 @@ int goya_set_frequency(struct hl_device *hdev, enum hl_pll_frequency freq)
 		return 0;
 
 	dev_dbg(hdev->dev, "Changing device frequency to %s\n",
-		freq == PLL_HIGH ? "high" : "low");
+		str_high_low(freq == PLL_HIGH));
 
 	goya_set_pll_profile(hdev, freq);
 

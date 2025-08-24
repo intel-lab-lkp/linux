@@ -14,6 +14,7 @@
 #include <linux/slab.h>
 #include <linux/ctype.h>
 #include <linux/vmalloc.h>
+#include <linux/string_choices.h>
 
 #include <trace/events/habanalabs.h>
 
@@ -1705,13 +1706,13 @@ static void hl_fw_preboot_update_state(struct hl_device *hdev)
 							cpu_boot_dev_sts1);
 
 	dev_dbg(hdev->dev, "Firmware preboot hard-reset is %s\n",
-			prop->hard_reset_done_by_fw ? "enabled" : "disabled");
+			str_enabled_disabled(prop->hard_reset_done_by_fw));
 
 	dev_dbg(hdev->dev, "firmware-level security is %s\n",
-			prop->fw_security_enabled ? "enabled" : "disabled");
+			str_enabled_disabled(prop->fw_security_enabled));
 
 	dev_dbg(hdev->dev, "GIC controller is %s\n",
-			prop->gic_interrupts_enable ? "enabled" : "disabled");
+			str_enabled_disabled(prop->gic_interrupts_enable));
 }
 
 static int hl_fw_static_read_preboot_status(struct hl_device *hdev)
@@ -2455,7 +2456,7 @@ static void hl_fw_boot_fit_update_state(struct hl_device *hdev,
 	}
 
 	dev_dbg(hdev->dev, "Firmware boot CPU hard-reset is %s\n",
-			prop->hard_reset_done_by_fw ? "enabled" : "disabled");
+			str_enabled_disabled(prop->hard_reset_done_by_fw));
 }
 
 static void hl_fw_dynamic_update_linux_interrupt_if(struct hl_device *hdev)
@@ -2647,8 +2648,7 @@ static void hl_fw_linux_update_state(struct hl_device *hdev,
 			prop->fw_app_cpu_boot_dev_sts0);
 
 		dev_dbg(hdev->dev, "GIC controller is %s\n",
-				prop->gic_interrupts_enable ?
-						"enabled" : "disabled");
+				str_enabled_disabled(prop->gic_interrupts_enable));
 	}
 
 	if (prop->fw_cpu_boot_dev_sts1_valid) {
@@ -2660,7 +2660,7 @@ static void hl_fw_linux_update_state(struct hl_device *hdev,
 	}
 
 	dev_dbg(hdev->dev, "Firmware application CPU hard-reset is %s\n",
-			prop->hard_reset_done_by_fw ? "enabled" : "disabled");
+			str_enabled_disabled(prop->hard_reset_done_by_fw));
 
 	dev_info(hdev->dev, "Successfully loaded firmware to device\n");
 }
