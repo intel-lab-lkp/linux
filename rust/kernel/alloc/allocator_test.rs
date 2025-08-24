@@ -35,6 +35,8 @@ extern "C" {
 // - passing a pointer to a valid memory allocation created by this `Allocator` is always OK,
 // - `realloc` provides the guarantees as provided in the `# Guarantees` section.
 unsafe impl Allocator for Cmalloc {
+    const MIN_ALIGN: usize = bindings::ARCH_KMALLOC_MINALIGN;
+
     unsafe fn realloc(
         ptr: Option<NonNull<u8>>,
         layout: Layout,
