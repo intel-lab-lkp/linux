@@ -6,7 +6,7 @@
 #include <libgen.h>
 #include <limits.h>
 #include <linux/coredump.h>
-#include <linux/fs.h>
+#include <sys/mount.h>
 #include <linux/limits.h>
 #include <pthread.h>
 #include <string.h>
@@ -18,6 +18,7 @@
 #include <sys/socket.h>
 #include <sys/un.h>
 #include <unistd.h>
+#include <stddef.h>
 
 #include "../kselftest_harness.h"
 #include "../filesystems/wrappers.h"
