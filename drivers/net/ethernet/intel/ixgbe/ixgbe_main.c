@@ -4323,14 +4323,22 @@ static void ixgbe_setup_reta(struct ixgbe_adapter *adapter)
 	/* Fill out hash function seeds */
 	ixgbe_store_key(adapter);
 
-	/* Fill out redirection table */
-	memset(adapter->rss_indir_tbl, 0, sizeof(adapter->rss_indir_tbl));
+	/* Update redirection table in memory on first init or queue count
+	 * change, otherwise preserve user configurations. Then always
+	 * write to hardware.
+	 */
+	if (adapter->last_rss_i != rss_i) {
+		memset(adapter->rss_indir_tbl, 0,
+		       sizeof(adapter->rss_indir_tbl));
 
-	for (i = 0, j = 0; i < reta_entries; i++, j++) {
-		if (j == rss_i)
-			j = 0;
+		for (i = 0, j = 0; i < reta_entries; i++, j++) {
+			if (j == rss_i)
+				j = 0;
 
-		adapter->rss_indir_tbl[i] = j;
+			adapter->rss_indir_tbl[i] = j;
+		}
+
+		adapter->last_rss_i = rss_i;
 	}
 
 	ixgbe_store_reta(adapter);
@@ -4352,12 +4360,19 @@ static void ixgbe_setup_vfreta(struct ixgbe_adapter *adapter)
 					*(adapter->rss_key + i));
 	}
 
-	/* Fill out the redirection table */
-	for (i = 0, j = 0; i < 64; i++, j++) {
-		if (j == rss_i)
-			j = 0;
+	/* Update redirection table in memory on first init or queue count
+	 * change, otherwise preserve user configurations. Then always
+	 * write to hardware.
+	 */
+	if (adapter->last_rss_i != rss_i) {
+		for (i = 0, j = 0; i < 64; i++, j++) {
+			if (j == rss_i)
+				j = 0;
 
-		adapter->rss_indir_tbl[i] = j;
+			adapter->rss_indir_tbl[i] = j;
+		}
+
+		adapter->last_rss_i = rss_i;
 	}
 
 	ixgbe_store_vfreta(adapter);
