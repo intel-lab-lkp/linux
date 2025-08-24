@@ -288,14 +288,25 @@ static struct perf_event *ptrace_hbp_create(unsigned int note_type,
 {
 	struct perf_event *bp;
 	struct perf_event_attr attr;
-	int err, type;
+	int err, type, min_len;
 
+	/*
+	 * min_len ensures any possibly valid address can pass alignment
+	 * validation with it.
+	 * This is for compat mode, in which addr and ctrl can only be set
+	 * one after one with SETHBPREGS. If addr is set first, ctrl will
+	 * remain as initial value.
+	 */
 	switch (note_type) {
 	case NT_ARM_HW_BREAK:
 		type = HW_BREAKPOINT_X;
+		min_len = (tsk && is_compat_thread(task_thread_info(tsk))) ?
+				  HW_BREAKPOINT_LEN_2 :
+				  HW_BREAKPOINT_LEN_4;
 		break;
 	case NT_ARM_HW_WATCH:
 		type = HW_BREAKPOINT_RW;
+		min_len = HW_BREAKPOINT_LEN_1;
 		break;
 	default:
 		return ERR_PTR(-EINVAL);
@@ -308,7 +319,7 @@ static struct perf_event *ptrace_hbp_create(unsigned int note_type,
 	 * (i.e. values that will pass validation).
 	 */
 	attr.bp_addr	= 0;
-	attr.bp_len	= HW_BREAKPOINT_LEN_4;
+	attr.bp_len	= min_len;
 	attr.bp_type	= type;
 	attr.disabled	= 1;
 
