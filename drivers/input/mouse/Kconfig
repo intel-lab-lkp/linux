@@ -300,6 +300,16 @@ config MOUSE_ELAN_I2C_SMBUS
 
 	   If unsure, say Y.
 
+config MOUSE_ELAN_EKTP1059
+	tristate "Elan EKTP1059 Touchpad"
+	depends on SPI
+	help
+	  Say Y here if you have an Elan ETKP1059 touchpad connected
+	  via SPI.
+
+	  To compile this driver as a module, choose M here: the
+	  module will be called elan_ektp1059.
+
 config MOUSE_INPORT
 	tristate "InPort/MS/ATIXL busmouse"
 	depends on ISA
