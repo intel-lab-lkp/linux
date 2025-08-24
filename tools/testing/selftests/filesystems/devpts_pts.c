@@ -127,7 +127,7 @@ static int do_tiocgptpeer(char *ptmx, char *expected_procfd_contents)
 			fret = KSFT_SKIP;
 		} else {
 			fprintf(stderr,
-				"Failed to perform TIOCGPTPEER ioctl\n");
+				"TIOCGPTPEER ioctl operation failed\n");
 			fret = EXIT_FAILURE;
 		}
 		goto do_cleanup;
