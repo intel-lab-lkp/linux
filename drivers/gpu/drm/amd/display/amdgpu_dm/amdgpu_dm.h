@@ -201,6 +201,12 @@ struct amdgpu_dm_backlight_caps {
 	 */
 	bool aux_support;
 	/**
+	 * @brightness_mask: After deriving brightness, or it with this mask.
+	 * This is used to workaround panels that have issues with certain
+	 * brightness values.
+	 */
+	u32 brightness_mask;
+	/**
 	 * @ac_level: the default brightness if booted on AC
 	 */
 	u8 ac_level;
