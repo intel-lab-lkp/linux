@@ -40,6 +40,7 @@ struct jffs2_mount_opts {
 	 * available space is less then 'rp_size'. */
 	bool set_rp_size;
 	unsigned int rp_size;
+	bool erase_on_mount;
 };
 
 /* A struct for the overall file system control.  Pointers to
