@@ -618,10 +618,14 @@ Stateless Codec Control ID
       -
     * - ``V4L2_H264_DECODE_PARAM_FLAG_PFRAME``
       - 0x00000008
-      -
+      - All submitted slices for the frame are P slices. This is a compability
+        flag required for decoders that only support decoding such frames, but
+        should not be required for slice-based decoders.
     * - ``V4L2_H264_DECODE_PARAM_FLAG_BFRAME``
       - 0x00000010
-      -
+      - All submitted slices for the frame are B slices. This is a compability
+        flag required for decoders that only support decoding such frames, but
+        should not be required for slice-based decoders.
 
 .. raw:: latex
 
