@@ -415,12 +415,26 @@ static u32 ptrace_get_hbp_resource_info(void)
 static struct perf_event *ptrace_hbp_create(struct task_struct *tsk, int type)
 {
 	struct perf_event_attr attr;
+	int min_len;
+
+	/*
+	 * min_len ensures any possibly valid address can pass alignment
+	 * validation with it.
+	 * In PTRACE_SETHBPREGS, addr and ctrl can only be set one after one. If
+	 * addr is set first, ctrl will remain as initial value.
+	 */
+	if (type == HW_BREAKPOINT_X)
+		min_len = (tsk && is_compat_thread(task_thread_info(tsk))) ?
+				  HW_BREAKPOINT_LEN_2 :
+				  HW_BREAKPOINT_LEN_4;
+	else // watchpoint
+		min_len = HW_BREAKPOINT_LEN_1;
 
 	ptrace_breakpoint_init(&attr);
 
 	/* Initialise fields to sane defaults. */
 	attr.bp_addr	= 0;
-	attr.bp_len	= HW_BREAKPOINT_LEN_4;
+	attr.bp_len	= min_len;
 	attr.bp_type	= type;
 	attr.disabled	= 1;
 
