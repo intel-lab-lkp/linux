@@ -1130,6 +1130,9 @@ drm_atomic_get_connector_state(struct drm_atomic_state *state,
 
 	WARN_ON(!state->acquire_ctx);
 
+	if (state->connectors[index].state)
+		return state->connectors[index].state;
+
 	ret = drm_modeset_lock(&config->connection_mutex, state->acquire_ctx);
 	if (ret)
 		return ERR_PTR(ret);
@@ -1151,9 +1154,6 @@ drm_atomic_get_connector_state(struct drm_atomic_state *state,
 
 		state->num_connector = alloc;
 	}
-
-	if (state->connectors[index].state)
-		return state->connectors[index].state;
 
 	connector_state = connector->funcs->atomic_duplicate_state(connector);
 	if (!connector_state)
