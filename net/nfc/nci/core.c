@@ -31,6 +31,11 @@
 #include <net/nfc/nci_core.h>
 #include <linux/nfc.h>
 
+unsigned int nci_data_timeout = 3000;
+module_param_named(data_timeout, nci_data_timeout, uint, 0644);
+MODULE_PARM_DESC(data_timeout, "Round-trip communication timeout in milliseconds");
+EXPORT_SYMBOL_GPL(nci_data_timeout);
+
 struct core_conn_create_data {
 	int length;
 	struct nci_core_conn_create_cmd *cmd;

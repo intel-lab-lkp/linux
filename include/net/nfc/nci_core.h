@@ -52,7 +52,9 @@ enum nci_state {
 #define NCI_RF_DISC_SELECT_TIMEOUT		5000
 #define NCI_RF_DEACTIVATE_TIMEOUT		30000
 #define NCI_CMD_TIMEOUT				5000
-#define NCI_DATA_TIMEOUT			700
+
+extern unsigned int nci_data_timeout;
+#define NCI_DATA_TIMEOUT			nci_data_timeout
 
 struct nci_dev;
 
