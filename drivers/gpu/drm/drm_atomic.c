@@ -1130,8 +1130,9 @@ drm_atomic_get_connector_state(struct drm_atomic_state *state,
 
 	WARN_ON(!state->acquire_ctx);
 
-	if (state->connectors[index].state)
-		return state->connectors[index].state;
+	connector_state = drm_atomic_get_existing_connector_state(state, connector);
+	if (connector_state)
+		return connector_state;
 
 	ret = drm_modeset_lock(&config->connection_mutex, state->acquire_ctx);
 	if (ret)
