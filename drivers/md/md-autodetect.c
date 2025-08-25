@@ -32,6 +32,8 @@ static struct md_setup_args {
 	int partitioned;
 	int level;
 	int chunk;
+	int major_version;
+	int minor_version;
 	char *device_names;
 } md_setup_args[256] __initdata;
 
@@ -63,6 +65,7 @@ static int __init md_setup(char *str)
 	char *pername = "";
 	char *str1;
 	int ent;
+	int major_i = 0, minor_i = 0;
 
 	if (*str == 'd') {
 		partitioned = 1;
@@ -109,6 +112,49 @@ static int __init md_setup(char *str)
 	case 0:
 		md_setup_args[ent].level = LEVEL_NONE;
 		pername="super-block";
+
+		if (*str == 'v') { /* Superblock version */
+			char *version = ++str;
+			char *version_end = strchr(str, ',');
+
+			if (!version_end) {
+				pr_warn("md: Version (%s) has been specified wrongly, no ',' found, use like this: md=<md dev. no.>,X.X,...\n",
+					version);
+				return 0;
+			}
+			*version_end = '\0';
+			str = version_end + 1;
+
+			char *separator = strchr(version, '.');
+
+			if (!separator) {
+				pr_warn("md: Version (%s) has been specified wrongly, no '.' to separate major and minor version found, use like this: md=<md dev. no.>,vX.X,...\n",
+					version);
+				return 0;
+			}
+			*separator = '\0';
+			char *minor_s = separator + 1;
+
+			int ret = kstrtoint(version, 10, &major_i);
+
+			if (ret != 0) {
+				pr_warn("md: Version has been specified wrongly, couldn't convert major '%s' to number, use like this: md=<md dev. no.>,vX.X,...\n",
+					version);
+				return 0;
+			}
+			if (major_i != 0 && major_i != 1) {
+				pr_warn("md: Major version %d is not valid, use 0 or 1\n",
+					major_i);
+				return 0;
+			}
+			ret = kstrtoint(minor_s, 10, &minor_i);
+			if (ret != 0) {
+				pr_warn("md: Version has been specified wrongly, couldn't convert minor '%s' to number, use like this: md=<md dev. no.>,vX.X,...\n",
+					minor_s);
+				return 0;
+			}
+		}
+
 	}
 
 	printk(KERN_INFO "md: Will configure md%d (%s) from %s, below.\n",
@@ -116,6 +162,8 @@ static int __init md_setup(char *str)
 	md_setup_args[ent].device_names = str;
 	md_setup_args[ent].partitioned = partitioned;
 	md_setup_args[ent].minor = minor;
+	md_setup_args[ent].minor_version = minor_i;
+	md_setup_args[ent].major_version = major_i;
 
 	return 1;
 }
@@ -200,6 +248,9 @@ static void __init md_setup_drive(struct md_setup_args *args)
 
 	err = md_set_array_info(mddev, &ainfo);
 
+	mddev->major_version = args->major_version;
+	mddev->minor_version = args->minor_version;
+
 	for (i = 0; i <= MD_SB_DISKS && devices[i]; i++) {
 		struct mdu_disk_info_s dinfo = {
 			.major	= MAJOR(devices[i]),
@@ -273,11 +324,15 @@ void __init md_run_setup(void)
 {
 	int ent;
 
+	/*
+	 * Assemble manually defined raids first
+	 */
+	for (ent = 0; ent < md_setup_ents; ent++)
+		md_setup_drive(&md_setup_args[ent]);
+
 	if (raid_noautodetect)
 		printk(KERN_INFO "md: Skipping autodetection of RAID arrays. (raid=autodetect will force)\n");
 	else
 		autodetect_raid();
 
-	for (ent = 0; ent < md_setup_ents; ent++)
-		md_setup_drive(&md_setup_args[ent]);
 }
