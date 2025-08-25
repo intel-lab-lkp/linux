@@ -100,7 +100,7 @@ static void find_start_end(unsigned long addr, unsigned long flags,
 		   conflicts with the heap, but we assume that glibc
 		   malloc knows how to fall back to mmap. Give it 1GB
 		   of playground for now. -AK */
-		*begin = 0x40000000;
+		*begin = 0x10000000;
 		*end = 0x80000000;
 		if (current->flags & PF_RANDOMIZE) {
 			*begin = randomize_page(*begin, 0x02000000);
