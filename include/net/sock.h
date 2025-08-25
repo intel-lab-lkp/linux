@@ -390,7 +390,6 @@ struct sock {
 
 	__cacheline_group_begin(sock_write_rx);
 
-	atomic_t		sk_drops;
 	__s32			sk_peek_off;
 	struct sk_buff_head	sk_error_queue;
 	struct sk_buff_head	sk_receive_queue;
@@ -564,13 +563,14 @@ struct sock {
 #ifdef CONFIG_BPF_SYSCALL
 	struct bpf_local_storage __rcu	*sk_bpf_storage;
 #endif
-	struct rcu_head		sk_rcu;
-	netns_tracker		ns_tracker;
 	struct xarray		sk_user_frags;
 
 #if IS_ENABLED(CONFIG_PROVE_LOCKING) && IS_ENABLED(CONFIG_MODULES)
 	struct module		*sk_owner;
 #endif
+	atomic_t		sk_drops ____cacheline_aligned_in_smp;
+	struct rcu_head		sk_rcu;
+	netns_tracker		ns_tracker;
 };
 
 struct sock_bh_locked {
