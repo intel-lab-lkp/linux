@@ -250,7 +250,14 @@ ad_select
 		ports (slaves).  Reselection occurs as described under the
 		"bandwidth" setting, above.
 
-	The bandwidth and count selection policies permit failover of
+	prio or 3
+
+		The active aggregator is chosen by the highest total sum of
+		actor port priorities across its active ports. Note this
+		priority is actor_port_prio, not per port prio, which is
+		used for primary reselect.
+
+	The bandwidth, count and prio selection policies permit failover of
 	802.3ad aggregations when partial failure of the active aggregator
 	occurs.  This keeps the aggregator with the highest availability
 	(either in bandwidth or in number of ports) active at all times.
