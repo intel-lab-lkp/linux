@@ -276,17 +276,9 @@ static int sg2042_msi_probe(struct platform_device *pdev)
 	data->doorbell_addr = res->start;
 
 	ret = fwnode_property_get_reference_args(dev_fwnode(dev), "msi-ranges",
-						 "#interrupt-cells", 0, 0, &args);
+						 NULL, 3, 0, &args);
 	if (ret) {
-		dev_err(dev, "Unable to parse MSI vec base\n");
-		return ret;
-	}
-	fwnode_handle_put(args.fwnode);
-
-	ret = fwnode_property_get_reference_args(dev_fwnode(dev), "msi-ranges", NULL,
-						 args.nargs + 1, 0, &args);
-	if (ret) {
-		dev_err(dev, "Unable to parse MSI vec number\n");
+		dev_err(dev, "Unable to parse MSI Ranges\n");
 		return ret;
 	}
 
@@ -298,7 +290,7 @@ static int sg2042_msi_probe(struct platform_device *pdev)
 	}
 
 	data->irq_first = (u32)args.args[0];
-	data->num_irqs = (u32)args.args[args.nargs - 1];
+	data->num_irqs = (u32)args.args[2];
 
 	mutex_init(&data->msi_map_lock);
 
