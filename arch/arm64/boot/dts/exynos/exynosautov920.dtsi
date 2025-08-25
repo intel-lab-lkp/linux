@@ -337,6 +337,39 @@
 			samsung,cluster-index = <1>;
 		};
 
+		tmuctrl_top: tmutop-thermal@100a0000 {
+			compatible = "samsung,exynosautov920-tmu";
+			reg = <0x100A0000 0x1000>;
+			interrupts = <GIC_SPI 951 IRQ_TYPE_LEVEL_HIGH>;
+			clocks = <&cmu_misc CLK_DOUT_MISC_NOCP>;
+			clock-names = "tmu_apbif";
+			#thermal-sensor-cells = <1>;
+			tmu-name = "TMU_TOP";
+			sensor-index-ranges = <1 12>;
+		};
+
+		tmuctrl_sub0: tmusub0-thermal@100b0000 {
+			compatible = "samsung,exynosautov920-tmu";
+			reg = <0x100B0000 0x1000>;
+			interrupts = <GIC_SPI 950 IRQ_TYPE_LEVEL_HIGH>;
+			clocks = <&cmu_misc CLK_DOUT_MISC_NOCP>;
+			clock-names = "tmu_apbif";
+			#thermal-sensor-cells = <1>;
+			tmu-name = "TMU_SUB0";
+			sensor-index-ranges = <3 10>;
+		};
+
+		tmuctrl_sub1: tmusub1-thermal@100c0000 {
+			compatible = "samsung,exynosautov920-tmu";
+			reg = <0x100C0000 0x1000>;
+			interrupts = <GIC_SPI 949 IRQ_TYPE_LEVEL_HIGH>;
+			clocks = <&cmu_misc CLK_DOUT_MISC_NOCP>;
+			clock-names = "tmu_apbif";
+			#thermal-sensor-cells = <1>;
+			tmu-name = "TMU_SUB1";
+			sensor-index-ranges = <1 7>;
+		};
+
 		gic: interrupt-controller@10400000 {
 			compatible = "arm,gic-v3";
 			#interrupt-cells = <3>;
@@ -1654,3 +1687,4 @@
 };
 
 #include "exynosautov920-pinctrl.dtsi"
+#include "exynosautov920-tmu.dtsi"
