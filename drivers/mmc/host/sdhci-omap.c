@@ -939,15 +939,9 @@ static const struct sdhci_ops sdhci_omap_ops = {
 	.set_timeout = sdhci_omap_set_timeout,
 };
 
-static unsigned int sdhci_omap_regulator_get_caps(struct device *dev,
-						  const char *name)
+static unsigned int sdhci_omap_regulator_get_caps(struct regulator *reg)
 {
-	struct regulator *reg;
 	unsigned int caps = 0;
-
-	reg = regulator_get(dev, name);
-	if (IS_ERR(reg))
-		return ~0U;
 
 	if (regulator_is_supported_voltage(reg, 1700000, 1950000) > 0)
 		caps |= SDHCI_CAN_VDD_180;
@@ -955,8 +949,6 @@ static unsigned int sdhci_omap_regulator_get_caps(struct device *dev,
 		caps |= SDHCI_CAN_VDD_300;
 	if (regulator_is_supported_voltage(reg, 3150000, 3600000) > 0)
 		caps |= SDHCI_CAN_VDD_330;
-
-	regulator_put(reg);
 
 	return caps;
 }
@@ -967,11 +959,20 @@ static int sdhci_omap_set_capabilities(struct sdhci_host *host)
 	struct sdhci_omap_host *omap_host = sdhci_pltfm_priv(pltfm_host);
 	struct device *dev = omap_host->dev;
 	const u32 mask = SDHCI_CAN_VDD_180 | SDHCI_CAN_VDD_300 | SDHCI_CAN_VDD_330;
-	unsigned int pbias, vqmmc, caps = 0;
+	unsigned int pbias = ~0U, vqmmc = ~0U, caps = 0;
+	struct	regulator *reg_vqmmc;
 	u32 reg;
 
-	pbias = sdhci_omap_regulator_get_caps(dev, "pbias");
-	vqmmc = sdhci_omap_regulator_get_caps(dev, "vqmmc");
+	if (!IS_ERR(omap_host->pbias))
+		pbias = sdhci_omap_regulator_get_caps(omap_host->pbias);
+
+	/* mmc->supply.vqmmc is not initialized yet */
+	reg_vqmmc = regulator_get_optional(dev, "vqmmc");
+	if (!IS_ERR(reg_vqmmc)) {
+		vqmmc = sdhci_omap_regulator_get_caps(reg_vqmmc);
+		regulator_put(reg_vqmmc);
+	}
+
 	caps = pbias & vqmmc;
 
 	if (pbias != ~0U && vqmmc == ~0U)
