@@ -1,0 +1,89 @@
+# SPDX-License-Identifier: (GPL-2.0-only OR BSD-2-Clause)
+%YAML 1.2
+---
+$id: http://devicetree.org/schemas/dma/img,pistachio-mdc-dma.yaml#
+$schema: http://devicetree.org/meta-schemas/core.yaml#
+
+title: IMG Multi-threaded DMA Controller (MDC)
+
+maintainers:
+  - Rahul Bedarkar <rahulbedarkar89@gmail.com>
+  - linux-mips@vger.kernel.org
+
+allOf:
+  - $ref: /schemas/dma/dma-controller.yaml#
+
+properties:
+  compatible:
+    const: img,pistachio-mdc-dma
+
+  reg:
+    maxItems: 1
+
+  interrupts:
+    minItems: 1
+    maxItems: 32
+
+  clocks:
+    maxItems: 1
+
+  clock-names:
+    items:
+      - const: sys
+
+  img,cr-periph:
+    $ref: /schemas/types.yaml#/definitions/phandle
+    description:
+      Phandle to peripheral control syscon node with DMA request to channel
+      mapping registers.
+
+  img,max-burst-multiplier:
+    $ref: /schemas/types.yaml#/definitions/uint32
+    minimum: 1
+    description:
+      Maximum supported burst size multiplier. The maximum burst size is this
+      value multiplied by the hardware-reported bus width.
+
+  "#dma-cells":
+    const: 3
+    description: |
+      DMA specifier cells:
+        1: peripheral's DMA request line
+        2: channel bitmap: bit N set indicates channel N is usable
+        3: thread ID to be used by the channel
+
+  dma-channels:
+    minimum: 1
+    maximum: 32
+    description: Defaults to HW-reported value if not specified.
+
+required:
+  - compatible
+  - reg
+  - interrupts
+  - clocks
+  - clock-names
+  - img,cr-periph
+  - img,max-burst-multiplier
+  - "#dma-cells"
+
+unevaluatedProperties: false
+
+examples:
+  - |
+    #include <dt-bindings/interrupt-controller/mips-gic.h>
+    #include <dt-bindings/interrupt-controller/irq.h>
+
+    dma-controller@18143000 {
+      compatible = "img,pistachio-mdc-dma";
+      reg = <0x18143000 0x1000>;
+      interrupts = <GIC_SHARED 27 IRQ_TYPE_LEVEL_HIGH>,
+                   <GIC_SHARED 28 IRQ_TYPE_LEVEL_HIGH>;
+      clocks = <&system_clk>;
+      clock-names = "sys";
+
+      img,max-burst-multiplier = <16>;
+      img,cr-periph = <&cr_periph>;
+
+      #dma-cells = <3>;
+    };
