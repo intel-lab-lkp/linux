@@ -163,7 +163,8 @@ static void parse_topology(struct topo_scan *tscan, bool early)
 		break;
 	case X86_VENDOR_CENTAUR:
 	case X86_VENDOR_ZHAOXIN:
-		parse_legacy(tscan);
+		if (!cpu_parse_topology_ext(tscan))
+			parse_legacy(tscan);
 		break;
 	case X86_VENDOR_INTEL:
 		if (!IS_ENABLED(CONFIG_CPU_SUP_INTEL) || !cpu_parse_topology_ext(tscan))
