@@ -8,6 +8,7 @@ title: Samsung Exynos SoC Thermal Management Unit (TMU)
 
 maintainers:
   - Krzysztof Kozlowski <krzk@kernel.org>
+  - Shin Son <shin.son@samsung.com>
 
 description: |
   For multi-instance tmu each instance should have an alias correctly numbered
@@ -27,6 +28,7 @@ properties:
       - samsung,exynos5420-tmu-ext-triminfo
       - samsung,exynos5433-tmu
       - samsung,exynos7-tmu
+      - samsung,exynosautov920-tmu
 
   clocks:
     minItems: 1
@@ -62,10 +64,28 @@ properties:
     minItems: 1
 
   '#thermal-sensor-cells':
-    const: 0
+    enum:
+      - 0
+      - 1
 
   vtmu-supply:
     description: The regulator node supplying voltage to TMU.
+
+  tmu-name:
+    description: The TMU hardware name.
+    $ref: /schemas/types.yaml#/definitions/string-array
+    minItems: 1
+    maxItems: 1
+
+  sensor-index-ranges:
+    description: |
+      Valid Sensor index ranges for the TMU hardware.
+
+      Note:: On the ExynosautoV920 variant, the fifth sensor in the TMU SUB1 is disabled,
+      so the driver skips it when matching by tmu-name.
+    $ref: /schemas/types.yaml#/definitions/uint32-array
+    minItems: 2
+    maxItems: 2
 
 required:
   - compatible
@@ -131,6 +151,7 @@ allOf:
               - samsung,exynos5250-tmu
               - samsung,exynos5260-tmu
               - samsung,exynos5420-tmu
+              - samsung,exynosautov920-tmu
     then:
       properties:
         clocks:
