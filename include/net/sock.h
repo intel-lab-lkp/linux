@@ -282,6 +282,7 @@ struct sk_filter;
   *	@sk_err_soft: errors that don't cause failure but are the cause of a
   *		      persistent failure not just 'timed out'
   *	@sk_drops: raw/udp drops counter
+  *	@sk_drops1: second drops counter
   *	@sk_ack_backlog: current listen backlog
   *	@sk_max_ack_backlog: listen backlog set in listen()
   *	@sk_uid: user id of owner
@@ -571,6 +572,11 @@ struct sock {
 	atomic_t		sk_drops ____cacheline_aligned_in_smp;
 	struct rcu_head		sk_rcu;
 	netns_tracker		ns_tracker;
+#if defined(CONFIG_NUMA)
+	atomic_t		sk_drops1 ____cacheline_aligned_in_smp;
+#else
+	atomic_t		sk_drops1;
+#endif
 };
 
 struct sock_bh_locked {
@@ -2684,17 +2690,31 @@ struct sock_skb_cb {
 
 static inline void sk_drops_inc(struct sock *sk)
 {
+#if defined(CONFIG_NUMA)
+	int n = numa_node_id() % 2;
+
+	if (n)
+		atomic_inc(&sk->sk_drops1);
+	else
+		atomic_inc(&sk->sk_drops);
+#else
 	atomic_inc(&sk->sk_drops);
+#endif
 }
 
 static inline int sk_drops_read(const struct sock *sk)
 {
+#if defined(CONFIG_NUMA)
+	return atomic_read(&sk->sk_drops) + atomic_read(&sk->sk_drops1);
+#else
 	return atomic_read(&sk->sk_drops);
+#endif
 }
 
 static inline void sk_drops_reset(struct sock *sk)
 {
 	atomic_set(&sk->sk_drops, 0);
+	atomic_set(&sk->sk_drops1, 0);
 }
 
 static inline void

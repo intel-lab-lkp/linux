@@ -57,7 +57,8 @@ int dump_netlink(struct bpf_iter__netlink *ctx)
 		inode = SOCK_INODE(sk);
 		bpf_probe_read_kernel(&ino, sizeof(ino), &inode->i_ino);
 	}
-	BPF_SEQ_PRINTF(seq, "%-8u %-8lu\n", s->sk_drops.counter, ino);
+	BPF_SEQ_PRINTF(seq, "%-8u %-8lu\n",
+		       s->sk_drops.counter + s->sk_drops1.counter, ino);
 
 	return 0;
 }
