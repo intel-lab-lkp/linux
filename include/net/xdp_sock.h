@@ -70,6 +70,7 @@ struct xdp_sock {
 	 * preventing other XSKs from being starved.
 	 */
 	u32 tx_budget_spent;
+	u32 generic_xmit_batch;
 
 	/* Statistics */
 	u64 rx_dropped;
@@ -89,6 +90,8 @@ struct xdp_sock {
 	struct mutex mutex;
 	struct xsk_queue *fq_tmp; /* Only as tmp storage before bind */
 	struct xsk_queue *cq_tmp; /* Only as tmp storage before bind */
+	struct sk_buff **skb_cache;
+	struct xdp_desc *desc_batch;
 };
 
 /*
