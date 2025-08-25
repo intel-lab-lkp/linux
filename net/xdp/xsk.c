@@ -803,8 +803,6 @@ static int __xsk_generic_xmit_batch(struct xdp_sock *xs)
 	u32 max_batch, expected;
 	int err = 0;
 
-	mutex_lock(&xs->mutex);
-
 	/* Since we dropped the RCU read lock, the socket state might have changed. */
 	if (unlikely(!xsk_is_bound(xs))) {
 		err = -ENXIO;
@@ -902,20 +900,16 @@ out:
 	if (sent_frame)
 		__xsk_tx_release(xs);
 
-	mutex_unlock(&xs->mutex);
 	return err;
 }
 
-static int __xsk_generic_xmit(struct sock *sk)
+static int __xsk_generic_xmit(struct xdp_sock *xs)
 {
-	struct xdp_sock *xs = xdp_sk(sk);
 	bool sent_frame = false;
 	struct xdp_desc desc;
 	struct sk_buff *skb;
 	u32 max_batch;
 	int err = 0;
-
-	mutex_lock(&xs->mutex);
 
 	/* Since we dropped the RCU read lock, the socket state might have changed. */
 	if (unlikely(!xsk_is_bound(xs))) {
@@ -991,17 +985,22 @@ out:
 	if (sent_frame)
 		__xsk_tx_release(xs);
 
-	mutex_unlock(&xs->mutex);
 	return err;
 }
 
 static int xsk_generic_xmit(struct sock *sk)
 {
+	struct xdp_sock *xs = xdp_sk(sk);
 	int ret;
 
 	/* Drop the RCU lock since the SKB path might sleep. */
 	rcu_read_unlock();
-	ret = __xsk_generic_xmit(sk);
+	mutex_lock(&xs->mutex);
+	if (xs->generic_xmit_batch)
+		ret = __xsk_generic_xmit_batch(xs);
+	else
+		ret = __xsk_generic_xmit(xs);
+	mutex_unlock(&xs->mutex);
 	/* Reaquire RCU lock before going into common code. */
 	rcu_read_lock();
 
