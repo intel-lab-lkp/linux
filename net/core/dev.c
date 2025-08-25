@@ -4754,6 +4754,25 @@ out:
 }
 EXPORT_SYMBOL(__dev_queue_xmit);
 
+int xsk_direct_xmit_batch(struct sk_buff **skbs, struct net_device *dev,
+			  struct netdev_queue *txq, int *cur,
+			  int start, int end)
+{
+	int ret = NETDEV_TX_BUSY;
+
+	local_bh_disable();
+	HARD_TX_LOCK(dev, txq, smp_processor_id());
+	for (*cur = start; *cur >= end; (*cur)--) {
+		ret = netdev_start_xmit(skbs[*cur], dev, txq, false);
+		if (ret != NETDEV_TX_OK)
+			break;
+	}
+	HARD_TX_UNLOCK(dev, txq);
+	local_bh_enable();
+
+	return ret;
+}
+
 int __dev_direct_xmit(struct sk_buff *skb, u16 queue_id)
 {
 	struct net_device *dev = skb->dev;

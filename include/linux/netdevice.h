@@ -3355,6 +3355,9 @@ u16 dev_pick_tx_zero(struct net_device *dev, struct sk_buff *skb,
 
 int __dev_queue_xmit(struct sk_buff *skb, struct net_device *sb_dev);
 int __dev_direct_xmit(struct sk_buff *skb, u16 queue_id);
+int xsk_direct_xmit_batch(struct sk_buff **skbs, struct net_device *dev,
+			  struct netdev_queue *txq, int *cur,
+			  int start, int end);
 
 static inline int dev_queue_xmit(struct sk_buff *skb)
 {
