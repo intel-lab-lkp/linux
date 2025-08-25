@@ -1130,7 +1130,7 @@ drm_atomic_get_connector_state(struct drm_atomic_state *state,
 
 	WARN_ON(!state->acquire_ctx);
 
-	connector_state = drm_atomic_get_existing_connector_state(state, connector);
+	connector_state = drm_atomic_get_new_connector_state(state, connector);
 	if (connector_state)
 		return connector_state;
 
