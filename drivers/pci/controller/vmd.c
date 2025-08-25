@@ -71,10 +71,9 @@ enum vmd_features {
 	VMD_FEAT_CAN_BYPASS_MSI_REMAP		= (1 << 4),
 
 	/*
-	 * Enable ASPM on the PCIE root ports and set the default LTR of the
-	 * storage devices on platforms where these values are not configured by
-	 * BIOS. This is needed for laptops, which require these settings for
-	 * proper power management of the SoC.
+	 * Program default LTR values for storage devices on platforms where
+	 * firmware did not. Required on many laptops for proper SoC power
+	 * management.
 	 */
 	VMD_FEAT_BIOS_PM_QUIRK		= (1 << 5),
 };
@@ -733,7 +732,7 @@ static void vmd_copy_host_bridge_flags(struct pci_host_bridge *root_bridge,
 }
 
 /*
- * Enable ASPM and LTR settings on devices that aren't configured by BIOS.
+ * Enable LTR settings on devices that aren't configured by BIOS.
  */
 static int vmd_pm_enable_quirk(struct pci_dev *pdev, void *userdata)
 {
@@ -747,7 +746,7 @@ static int vmd_pm_enable_quirk(struct pci_dev *pdev, void *userdata)
 
 	pos = pci_find_ext_capability(pdev, PCI_EXT_CAP_ID_LTR);
 	if (!pos)
-		goto out_state_change;
+		return 0;
 
 	/*
 	 * Skip if the max snoop LTR is non-zero, indicating BIOS has set it
@@ -755,7 +754,7 @@ static int vmd_pm_enable_quirk(struct pci_dev *pdev, void *userdata)
 	 */
 	pci_read_config_dword(pdev, pos + PCI_LTR_MAX_SNOOP_LAT, &ltr_reg);
 	if (!!(ltr_reg & (PCI_LTR_VALUE_MASK | PCI_LTR_SCALE_MASK)))
-		goto out_state_change;
+		return 0;
 
 	/*
 	 * Set the default values to the maximum required by the platform to
@@ -767,13 +766,6 @@ static int vmd_pm_enable_quirk(struct pci_dev *pdev, void *userdata)
 	pci_write_config_dword(pdev, pos + PCI_LTR_MAX_SNOOP_LAT, ltr_reg);
 	pci_info(pdev, "VMD: Default LTR value set by driver\n");
 
-out_state_change:
-	/*
-	 * Ensure devices are in D0 before enabling PCI-PM L1 PM Substates, per
-	 * PCIe r6.0, sec 5.5.4.
-	 */
-	pci_set_power_state_locked(pdev, PCI_D0);
-	pci_enable_link_state_locked(pdev, PCIE_LINK_STATE_ALL);
 	return 0;
 }
 
@@ -921,6 +913,8 @@ static int vmd_enable_domain(struct vmd_dev *vmd, unsigned long features)
 	WARN(sysfs_create_link(&vmd->dev->dev.kobj, &vmd->bus->dev.kobj,
 			       "domain"), "Can't create symlink to domain\n");
 
+	pci_host_set_default_pcie_link_state(to_pci_host_bridge(vmd->bus->bridge),
+					     PCIE_LINK_STATE_ALL);
 	vmd_acpi_begin();
 
 	pci_scan_child_bus(vmd->bus);
