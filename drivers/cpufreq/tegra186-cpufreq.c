@@ -115,6 +115,11 @@ static unsigned int tegra186_cpufreq_get(unsigned int cpu)
 
 	edvd_offset = data->cpus[policy->cpu].edvd_offset;
 	ndiv = readl(data->regs + edvd_offset) & EDVD_CORE_VOLT_FREQ_F_MASK;
+	if (ndiv == 0) {
+		dev_warn_once(get_cpu_device(policy->cpu),
+			 "Scaling registers invalid, using expected values");
+		ndiv = 35;
+	}
 	cluster_id = data->cpus[policy->cpu].bpmp_cluster_id;
 	cluster = &data->clusters[cluster_id];
 	cpufreq_cpu_put(policy);
