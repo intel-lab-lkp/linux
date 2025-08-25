@@ -215,7 +215,7 @@ static int seg6_genl_sethmac(struct sk_buff *skb, struct genl_info *info)
 
 	err = seg6_hmac_info_add(net, hmackeyid, hinfo);
 	if (err)
-		kfree(hinfo);
+		kfree_sensitive(hinfo);
 
 out_unlock:
 	mutex_unlock(&sdata->lock);

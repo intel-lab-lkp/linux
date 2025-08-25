@@ -57,9 +57,17 @@ static int seg6_hmac_cmpfn(struct rhashtable_compare_arg *arg, const void *obj)
 	return (hinfo->hmackeyid != *(__u32 *)arg->key);
 }
 
+static void seg6_hinfo_free_callback_rcu(struct rcu_head *head)
+{
+	struct seg6_hmac_info *hinfo;
+
+	hinfo = container_of(head, struct seg6_hmac_info, rcu);
+	kfree_sensitive(hinfo);
+}
+
 static inline void seg6_hinfo_release(struct seg6_hmac_info *hinfo)
 {
-	kfree_rcu(hinfo, rcu);
+	call_rcu(&hinfo->rcu, seg6_hinfo_free_callback_rcu);
 }
 
 static void seg6_free_hi(void *ptr, void *arg)
