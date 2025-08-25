@@ -7749,8 +7749,9 @@ static int cmp_loc_by_count(const void *a, const void *b, const void *data)
 
 	if (loc1->count > loc2->count)
 		return -1;
-	else
+	if (loc1->count < loc2->count)
 		return 1;
+	return 0;
 }
 
 static void *slab_debugfs_start(struct seq_file *seq, loff_t *ppos)
