@@ -36,6 +36,7 @@
 #include <linux/export.h>
 
 void *hv_hypercall_pg;
+EXPORT_SYMBOL_GPL(hv_hypercall_pg);
 
 #ifdef CONFIG_X86_64
 static u64 __hv_hyperfail(u64 control, u64 param1, u64 param2)
@@ -73,7 +74,6 @@ static inline void hv_set_hypercall_pg(void *ptr)
 {
 	hv_hypercall_pg = ptr;
 }
-EXPORT_SYMBOL_GPL(hv_hypercall_pg);
 #endif
 
 union hv_ghcb * __percpu *hv_ghcb_pg;
