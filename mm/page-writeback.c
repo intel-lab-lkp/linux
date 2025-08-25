@@ -722,6 +722,59 @@ static int __bdi_set_max_ratio(struct backing_dev_info *bdi, unsigned int max_ra
 	return ret;
 }
 
+static int __bdi_set_wb_ctx(struct backing_dev_info *bdi, int nwritebacks)
+{
+	struct bdi_writeback_ctx **new_ctx_arr, **old_ctx_arr;
+	int i, ret;
+
+	new_ctx_arr = kcalloc(nwritebacks, sizeof(struct bdi_writeback_ctx *), GFP_KERNEL);
+	if (!new_ctx_arr)
+		return -ENOMEM;
+
+	for (i = 0; i < min(bdi->nr_wb_ctx, nwritebacks); i++)
+		new_ctx_arr[i] = bdi->wb_ctx_arr[i];
+
+	for (i = bdi->nr_wb_ctx; i < nwritebacks; i++) {
+		new_ctx_arr[i] = (struct bdi_writeback_ctx *)
+			kzalloc(sizeof(struct bdi_writeback_ctx), GFP_KERNEL);
+		if (!new_ctx_arr[i]) {
+			pr_err("Failed to allocate %d", i);
+			while (--i >= bdi->nr_wb_ctx)
+				kfree(new_ctx_arr[i]);
+			kfree(new_ctx_arr);
+			return -ENOMEM;
+		}
+		INIT_LIST_HEAD(&new_ctx_arr[i]->wb_list);
+		init_waitqueue_head(&new_ctx_arr[i]->wb_waitq);
+	}
+
+	for (i = bdi->nr_wb_ctx; i < nwritebacks; i++) {
+		ret = bdi_wb_ctx_init(bdi, new_ctx_arr[i]);
+		if (ret) {
+			while (--i >= bdi->nr_wb_ctx) {
+				bdi_wb_ctx_exit(bdi, new_ctx_arr[i]);
+				kfree(new_ctx_arr[i]);
+			}
+			kfree(new_ctx_arr);
+			return ret;
+		}
+		list_add_tail_rcu(&new_ctx_arr[i]->wb.bdi_node, &new_ctx_arr[i]->wb_list);
+		set_bit(WB_registered, &new_ctx_arr[i]->wb.state);
+	}
+
+	// Make sure the initialization is done before assignment
+	smp_wmb();
+
+	old_ctx_arr = bdi->wb_ctx_arr;
+	spin_lock_bh(&bdi_lock);
+	bdi->wb_ctx_arr = new_ctx_arr;
+	bdi->nr_wb_ctx = nwritebacks;
+	spin_unlock_bh(&bdi_lock);
+
+	kfree(old_ctx_arr);
+	return 0;
+}
+
 int bdi_set_min_ratio_no_scale(struct backing_dev_info *bdi, unsigned int min_ratio)
 {
 	return __bdi_set_min_ratio(bdi, min_ratio);
@@ -798,6 +851,14 @@ int bdi_set_strict_limit(struct backing_dev_info *bdi, unsigned int strict_limit
 	spin_unlock_bh(&bdi_lock);
 
 	return 0;
+}
+
+int bdi_set_nwritebacks(struct backing_dev_info *bdi, int nwritebacks)
+{
+	if (nwritebacks < bdi->nr_wb_ctx)
+		return -EINVAL;
+
+	return __bdi_set_wb_ctx(bdi, nwritebacks);
 }
 
 static unsigned long dirty_freerun_ceiling(unsigned long thresh,

@@ -100,6 +100,7 @@ int bdi_set_max_ratio_no_scale(struct backing_dev_info *bdi, unsigned int max_ra
 int bdi_set_min_bytes(struct backing_dev_info *bdi, u64 min_bytes);
 int bdi_set_max_bytes(struct backing_dev_info *bdi, u64 max_bytes);
 int bdi_set_strict_limit(struct backing_dev_info *bdi, unsigned int strict_limit);
+int bdi_set_nwritebacks(struct backing_dev_info *bdi, int nwritebacks);
 
 /*
  * Flags in backing_dev_info::capability
@@ -114,6 +115,8 @@ int bdi_set_strict_limit(struct backing_dev_info *bdi, unsigned int strict_limit
 extern struct backing_dev_info noop_backing_dev_info;
 
 int bdi_init(struct backing_dev_info *bdi);
+int bdi_wb_ctx_init(struct backing_dev_info *bdi, struct bdi_writeback_ctx *bdi_wb_ctx);
+void bdi_wb_ctx_exit(struct backing_dev_info *bdi, struct bdi_writeback_ctx *bdi_wb_ctx);
 
 /**
  * writeback_in_progress - determine whether there is writeback in progress
