@@ -373,6 +373,39 @@ static void pcie_set_clkpm(struct pcie_link_state *link, int enable)
 	pcie_set_clkpm_nocheck(link, enable);
 }
 
+/**
+ * pci_host_set_default_pcie_link_state - set controller-provided default ASPM/CLKPM mask
+ * @host: host bridge on which to apply the defaults
+ * @state: PCIE_LINK_STATE_XXX flags
+ *
+ * Allows a PCIe controller driver to specify the default ASPM and/or
+ * Clock Power Management (CLKPM) link state mask that will be used
+ * for links under this host bridge during ASPM/CLKPM capability init.
+ *
+ * The value is consumed in pcie_aspm_cap_init() and pcie_clkpm_cap_init()
+ * to override the firmware-discovered defaults.
+ *
+ * Interpretation of aspm_default_link_state:
+ *   - Nonzero: bitmask of PCIE_LINK_STATE_* values to be used as defaults
+ *   - Zero:    no override provided; ASPM/CLKPM defaults fall back to
+ *              values discovered in hardware/firmware
+ *
+ * Note: zero is always treated as "unset", not as "force ASPM/CLKPM off".
+ */
+void pci_host_set_default_pcie_link_state(struct pci_host_bridge *host,
+					  unsigned int state)
+{
+	host->aspm_default_link_state = state;
+}
+EXPORT_SYMBOL_GPL(pci_host_set_default_pcie_link_state);
+
+static u32 pci_host_get_default_pcie_link_state(struct pci_dev *dev)
+{
+	struct pci_host_bridge *host = pci_find_host_bridge(dev->bus);
+
+	return host ? host->aspm_default_link_state : 0;
+}
+
 static void pcie_clkpm_cap_init(struct pcie_link_state *link, int blacklist)
 {
 	int capable = 1, enabled = 1;
@@ -394,7 +427,10 @@ static void pcie_clkpm_cap_init(struct pcie_link_state *link, int blacklist)
 			enabled = 0;
 	}
 	link->clkpm_enabled = enabled;
-	link->clkpm_default = enabled;
+	if (pci_host_get_default_pcie_link_state(link->pdev) & PCIE_LINK_STATE_CLKPM)
+		link->clkpm_default = 1;
+	else
+		link->clkpm_default = enabled;
 	link->clkpm_capable = capable;
 	link->clkpm_disable = blacklist ? 1 : 0;
 }
@@ -866,7 +902,9 @@ static void pcie_aspm_cap_init(struct pcie_link_state *link, int blacklist)
 	}
 
 	/* Save default state */
-	link->aspm_default = link->aspm_enabled;
+	link->aspm_default = pci_host_get_default_pcie_link_state(parent);
+	if (!link->aspm_default)
+		link->aspm_default = link->aspm_enabled;
 
 	/* Setup initial capable state. Will be updated later */
 	link->aspm_capable = link->aspm_support;
