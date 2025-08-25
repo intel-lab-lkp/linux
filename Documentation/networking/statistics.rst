@@ -222,8 +222,18 @@ Retrieving ethtool statistics is a multi-syscall process, drivers are advised
 to keep the number of statistics constant to avoid race conditions with
 user space trying to read them.
 
-Statistics must persist across routine operations like bringing the interface
-down and up.
+Statistics are expected to persist across routine operations like bringing the
+interface down and up. This includes both standard interface statistics and
+driver-defined statistics reported via `ethtool -S`.
+
+However, this behavior is not always strictly followed, and some drivers do
+reset these counters to zero when the device is closed and reopened. This can
+lead to misinterpretation of network behavior by monitoring tools, such as
+SNMP, that expect monotonically increasing counters.
+
+Driver authors are expected to preserve statistics across interface down/up
+cycles to ensure consistent reporting and better integration with monitoring
+tools that consume these statistics.
 
 Kernel-internal data structures
 -------------------------------
