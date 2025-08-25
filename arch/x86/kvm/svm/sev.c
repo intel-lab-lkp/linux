@@ -4666,7 +4666,8 @@ struct page *snp_safe_alloc_page_node(int node, gfp_t gfp)
 	unsigned long pfn;
 	struct page *p;
 
-	if (!cc_platform_has(CC_ATTR_HOST_SEV_SNP))
+	if (!cc_platform_has(CC_ATTR_HOST_SEV_SNP) ||
+	    cpu_feature_enabled(X86_FEATURE_HV_INUSE_WR_ALLOWED))
 		return alloc_pages_node(node, gfp | __GFP_ZERO, 0);
 
 	/*
