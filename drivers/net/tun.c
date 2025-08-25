@@ -1060,13 +1060,16 @@ static netdev_tx_t tun_net_xmit(struct sk_buff *skb, struct net_device *dev)
 
 	nf_reset_ct(skb);
 
-	if (ptr_ring_produce(&tfile->tx_ring, skb)) {
+	queue = netdev_get_tx_queue(dev, txq);
+	if (unlikely(ptr_ring_produce(&tfile->tx_ring, skb))) {
+		netif_tx_stop_queue(queue);
 		drop_reason = SKB_DROP_REASON_FULL_RING;
 		goto drop;
 	}
+	if (ptr_ring_full(&tfile->tx_ring))
+		netif_tx_stop_queue(queue);
 
 	/* dev->lltx requires to do our own update of trans_start */
-	queue = netdev_get_tx_queue(dev, txq);
 	txq_trans_cond_update(queue);
 
 	/* Notify and wake up reader process */
@@ -2110,9 +2113,10 @@ done:
 	return total;
 }
 
-static void *tun_ring_recv(struct tun_file *tfile, int noblock, int *err)
+static void *tun_ring_recv(struct tun_struct *tun, struct tun_file *tfile, int noblock, int *err)
 {
 	DECLARE_WAITQUEUE(wait, current);
+	struct netdev_queue *txq;
 	void *ptr = NULL;
 	int error = 0;
 
@@ -2124,6 +2128,7 @@ static void *tun_ring_recv(struct tun_file *tfile, int noblock, int *err)
 		goto out;
 	}
 
+	txq = netdev_get_tx_queue(tun->dev, tfile->queue_index);
 	add_wait_queue(&tfile->socket.wq.wait, &wait);
 
 	while (1) {
@@ -2131,6 +2136,9 @@ static void *tun_ring_recv(struct tun_file *tfile, int noblock, int *err)
 		ptr = ptr_ring_consume(&tfile->tx_ring);
 		if (ptr)
 			break;
+
+		netif_tx_wake_queue(txq);
+
 		if (signal_pending(current)) {
 			error = -ERESTARTSYS;
 			break;
@@ -2147,6 +2155,10 @@ static void *tun_ring_recv(struct tun_file *tfile, int noblock, int *err)
 	remove_wait_queue(&tfile->socket.wq.wait, &wait);
 
 out:
+	if (ptr_ring_empty(&tfile->tx_ring)) {
+		txq = netdev_get_tx_queue(tun->dev, tfile->queue_index);
+		netif_tx_wake_queue(txq);
+	}
 	*err = error;
 	return ptr;
 }
@@ -2165,7 +2177,7 @@ static ssize_t tun_do_read(struct tun_struct *tun, struct tun_file *tfile,
 
 	if (!ptr) {
 		/* Read frames from ring */
-		ptr = tun_ring_recv(tfile, noblock, &err);
+		ptr = tun_ring_recv(tun, tfile, noblock, &err);
 		if (!ptr)
 			return err;
 	}
@@ -3711,6 +3723,25 @@ struct socket *tun_get_socket(struct file *file)
 	return &tfile->socket;
 }
 EXPORT_SYMBOL_GPL(tun_get_socket);
+
+struct netdev_queue *tun_get_netdev_queue(struct file *file)
+{
+	struct netdev_queue *txq;
+	struct net_device *dev;
+	struct tun_file *tfile;
+
+	if (file->f_op != &tun_fops)
+		return ERR_PTR(-EINVAL);
+	tfile = file->private_data;
+	if (!tfile)
+		return ERR_PTR(-EBADFD);
+	rcu_read_lock();
+	dev = rcu_dereference(tfile->tun)->dev;
+	txq = netdev_get_tx_queue(dev, tfile->queue_index);
+	rcu_read_unlock();
+	return txq;
+}
+EXPORT_SYMBOL_GPL(tun_get_netdev_queue);
 
 struct ptr_ring *tun_get_tx_ring(struct file *file)
 {

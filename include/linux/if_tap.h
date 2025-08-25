@@ -10,11 +10,16 @@ struct socket;
 
 #if IS_ENABLED(CONFIG_TAP)
 struct socket *tap_get_socket(struct file *);
+struct netdev_queue *tap_get_netdev_queue(struct file *file);
 struct ptr_ring *tap_get_ptr_ring(struct file *file);
 #else
 #include <linux/err.h>
 #include <linux/errno.h>
 static inline struct socket *tap_get_socket(struct file *f)
+{
+	return ERR_PTR(-EINVAL);
+}
+static inline struct netdev_queue *tap_get_netdev_queue(struct file *f)
 {
 	return ERR_PTR(-EINVAL);
 }

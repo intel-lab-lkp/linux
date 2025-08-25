@@ -758,6 +758,8 @@ static ssize_t tap_do_read(struct tap_queue *q,
 			   int noblock, struct sk_buff *skb)
 {
 	DEFINE_WAIT(wait);
+	struct netdev_queue *txq;
+	struct net_device *dev;
 	ssize_t ret = 0;
 
 	if (!iov_iter_count(to)) {
@@ -785,11 +787,25 @@ static ssize_t tap_do_read(struct tap_queue *q,
 			ret = -ERESTARTSYS;
 			break;
 		}
+		rcu_read_lock();
+		dev = rcu_dereference(q->tap)->dev;
+		txq = netdev_get_tx_queue(dev, q->queue_index);
+		netif_tx_wake_queue(txq);
+		rcu_read_unlock();
+
 		/* Nothing to read, let's sleep */
 		schedule();
 	}
 	if (!noblock)
 		finish_wait(sk_sleep(&q->sk), &wait);
+
+	if (ptr_ring_empty(&q->ring)) {
+		rcu_read_lock();
+		dev = rcu_dereference(q->tap)->dev;
+		txq = netdev_get_tx_queue(dev, q->queue_index);
+		netif_tx_wake_queue(txq);
+		rcu_read_unlock();
+	}
 
 put:
 	if (skb) {
@@ -1175,6 +1191,25 @@ struct socket *tap_get_socket(struct file *file)
 	return &q->sock;
 }
 EXPORT_SYMBOL_GPL(tap_get_socket);
+
+struct netdev_queue *tap_get_netdev_queue(struct file *file)
+{
+	struct netdev_queue *txq;
+	struct net_device *dev;
+	struct tap_queue *q;
+
+	if (file->f_op != &tap_fops)
+		return ERR_PTR(-EINVAL);
+	q = file->private_data;
+	if (!q)
+		return ERR_PTR(-EBADFD);
+	rcu_read_lock();
+	dev = rcu_dereference(q->tap)->dev;
+	txq = netdev_get_tx_queue(dev, q->queue_index);
+	rcu_read_unlock();
+	return txq;
+}
+EXPORT_SYMBOL_GPL(tap_get_netdev_queue);
 
 struct ptr_ring *tap_get_ptr_ring(struct file *file)
 {

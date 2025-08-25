@@ -130,6 +130,7 @@ struct vhost_net_virtqueue {
 	struct vhost_net_buf rxq;
 	/* Batched XDP buffs */
 	struct xdp_buff *xdp;
+	struct netdev_queue *netdev_queue;
 };
 
 struct vhost_net {
@@ -182,6 +183,8 @@ static int vhost_net_buf_produce(struct vhost_net_virtqueue *nvq)
 	rxq->head = 0;
 	rxq->tail = ptr_ring_consume_batched(nvq->rx_ring, rxq->queue,
 					      VHOST_NET_BATCH);
+	if (ptr_ring_empty(nvq->rx_ring))
+		netif_tx_wake_queue(nvq->netdev_queue);
 	return rxq->tail;
 }
 
@@ -1469,6 +1472,21 @@ err:
 	return ERR_PTR(r);
 }
 
+static struct netdev_queue *get_tap_netdev_queue(struct file *file)
+{
+	struct netdev_queue *q;
+
+	q = tun_get_netdev_queue(file);
+	if (!IS_ERR(q))
+		goto out;
+	q = tap_get_netdev_queue(file);
+	if (!IS_ERR(q))
+		goto out;
+	q = NULL;
+out:
+	return q;
+}
+
 static struct ptr_ring *get_tap_ptr_ring(struct file *file)
 {
 	struct ptr_ring *ring;
@@ -1570,10 +1588,12 @@ static long vhost_net_set_backend(struct vhost_net *n, unsigned index, int fd)
 		if (r)
 			goto err_used;
 		if (index == VHOST_NET_VQ_RX) {
-			if (sock)
+			if (sock) {
 				nvq->rx_ring = get_tap_ptr_ring(sock->file);
-			else
+				nvq->netdev_queue = get_tap_netdev_queue(sock->file);
+			} else {
 				nvq->rx_ring = NULL;
+			}
 		}
 
 		oldubufs = nvq->ubufs;

@@ -21,6 +21,7 @@ struct tun_msg_ctl {
 
 #if defined(CONFIG_TUN) || defined(CONFIG_TUN_MODULE)
 struct socket *tun_get_socket(struct file *);
+struct netdev_queue *tun_get_netdev_queue(struct file *file);
 struct ptr_ring *tun_get_tx_ring(struct file *file);
 
 static inline bool tun_is_xdp_frame(void *ptr)
@@ -46,6 +47,11 @@ struct file;
 struct socket;
 
 static inline struct socket *tun_get_socket(struct file *f)
+{
+	return ERR_PTR(-EINVAL);
+}
+
+static inline struct netdev_queue *tun_get_netdev_queue(struct file *f)
 {
 	return ERR_PTR(-EINVAL);
 }
