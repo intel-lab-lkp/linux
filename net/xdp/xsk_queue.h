@@ -389,17 +389,37 @@ static inline int xskq_prod_reserve_addr(struct xsk_queue *q, u64 addr)
 	return 0;
 }
 
-static inline void xskq_prod_write_addr_batch(struct xsk_queue *q, struct xdp_desc *descs,
-					      u32 nb_entries)
+static inline u32 xskq_prod_write_addr_batch(struct xsk_queue *q, struct xdp_desc *descs,
+					     u32 nb_entries)
 {
 	struct xdp_umem_ring *ring = (struct xdp_umem_ring *)q->ring;
 	u32 i, cached_prod;
+	u32 nb_pkts = 0;
 
 	/* A, matches D */
 	cached_prod = q->cached_prod;
-	for (i = 0; i < nb_entries; i++)
+	for (i = 0; i < nb_entries; i++) {
 		ring->desc[cached_prod++ & q->ring_mask] = descs[i].addr;
+		if (!xp_mb_desc(&descs[i]))
+			nb_pkts++;
+	}
 	q->cached_prod = cached_prod;
+
+	return nb_pkts;
+}
+
+static inline u32
+xskq_prod_write_addr_batch_locked(struct xsk_buff_pool *pool,
+				  struct xdp_desc *descs, u32 nb_entries)
+{
+	unsigned long flags;
+	u32 nb_pkts;
+
+	spin_lock_irqsave(&pool->cq_lock, flags);
+	nb_pkts = xskq_prod_write_addr_batch(pool->cq, descs, nb_entries);
+	spin_unlock_irqrestore(&pool->cq_lock, flags);
+
+	return nb_pkts;
 }
 
 static inline int xskq_prod_reserve_desc(struct xsk_queue *q,
