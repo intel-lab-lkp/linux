@@ -527,11 +527,14 @@ config SEG_LED_GPIO
 	  will be called seg-led-gpio.
 
 config TM16XX
-	tristate "TM16XX-compatible 7-segment LED controllers"
+	tristate "TM16XX-compatible 7-segment LED controllers with keyscan"
 	depends on SPI || I2C
+	depends on INPUT
 	select NEW_LEDS
 	select LEDS_CLASS
 	select LEDS_TRIGGERS
+	select INPUT_MATRIXKMAP
+	select TM16XX_KEYPAD if (INPUT)
 	help
 	  This driver supports the following TM16XX compatible
 	  I2C and SPI 7-segment led display chips:
@@ -543,6 +546,12 @@ config TM16XX
 
 	  This driver can also be built as a module. If so, the module
 	  will be called tm16xx.
+
+config TM16XX_KEYPAD
+	bool
+	depends on TM16XX
+	help
+	  Enable keyscan support for TM16XX driver.
 
 #
 # Character LCD with non-conforming interface section
