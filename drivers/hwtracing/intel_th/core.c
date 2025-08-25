@@ -715,7 +715,9 @@ fail_put_device:
 int intel_th_output_enable(struct intel_th *th, unsigned int otype)
 {
 	struct intel_th_device *thdev;
-	int src = 0, dst = 0;
+	int src = 0, dst = 0, ret = 0;
+
+	disable_irq(th->irq);
 
 	for (src = 0, dst = 0; dst <= th->num_thdevs; src++, dst++) {
 		for (; src < ARRAY_SIZE(intel_th_subdevices); src++) {
@@ -730,7 +732,7 @@ int intel_th_output_enable(struct intel_th *th, unsigned int otype)
 
 		/* no unallocated matching subdevices */
 		if (src == ARRAY_SIZE(intel_th_subdevices))
-			return -ENODEV;
+			goto nodev;
 
 		for (; dst < th->num_thdevs; dst++) {
 			if (th->thdev[dst]->type != INTEL_TH_OUTPUT)
@@ -750,16 +752,19 @@ int intel_th_output_enable(struct intel_th *th, unsigned int otype)
 			goto found;
 	}
 
+nodev:
+	enable_irq(th->irq);
 	return -ENODEV;
 
 found:
 	thdev = intel_th_subdevice_alloc(th, &intel_th_subdevices[src]);
 	if (IS_ERR(thdev))
-		return PTR_ERR(thdev);
+		ret = PTR_ERR(thdev);
+	else
+		th->thdev[th->num_thdevs++] = thdev;
 
-	th->thdev[th->num_thdevs++] = thdev;
-
-	return 0;
+	enable_irq(th->irq);
+	return ret;
 }
 EXPORT_SYMBOL_GPL(intel_th_output_enable);
 
