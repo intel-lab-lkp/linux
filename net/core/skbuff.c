@@ -80,6 +80,8 @@
 #include <net/mctp.h>
 #include <net/page_pool/helpers.h>
 #include <net/dropreason.h>
+#include <net/xdp_sock.h>
+#include <net/xsk_buff_pool.h>
 
 #include <linux/uaccess.h>
 #include <trace/events/skb.h>
@@ -612,6 +614,107 @@ out:
 		*pfmemalloc = ret_pfmemalloc;
 
 	return obj;
+}
+
+int xsk_alloc_batch_skb(struct xdp_sock *xs, u32 nb_pkts, u32 nb_descs,
+			int *consumed, int *start, int *end)
+{
+	struct xdp_desc *descs = xs->desc_batch;
+	struct sk_buff **skbs = xs->skb_cache;
+	gfp_t gfp_mask = xs->sk.sk_allocation;
+	struct net_device *dev = xs->dev;
+	int node = NUMA_NO_NODE;
+	struct sk_buff *skb;
+	u32 i = 0, j = 0;
+	bool pfmemalloc;
+	u32 base_len;
+	int err = 0;
+	u8 *data;
+
+	base_len = max(NET_SKB_PAD, L1_CACHE_ALIGN(dev->needed_headroom));
+	if (!(dev->priv_flags & IFF_TX_SKB_NO_LINEAR))
+		base_len += dev->needed_tailroom;
+
+	if (xs->skb_count >= nb_pkts)
+		goto build;
+
+	if (xs->skb) {
+		i = 1;
+		xs->skb_count++;
+	}
+
+	xs->skb_count += kmem_cache_alloc_bulk(net_hotdata.skbuff_cache,
+					       gfp_mask, nb_pkts - xs->skb_count,
+					       (void **)&skbs[xs->skb_count]);
+	if (xs->skb_count < nb_pkts)
+		nb_pkts = xs->skb_count;
+
+build:
+	for (i = 0, j = 0; j < nb_descs; j++) {
+		if (!xs->skb) {
+			u32 size = base_len + descs[j].len;
+
+			/* In case we don't have enough allocated skbs */
+			if (i >= nb_pkts) {
+				err = -EAGAIN;
+				break;
+			}
+
+			if (sk_wmem_alloc_get(&xs->sk) > READ_ONCE(xs->sk.sk_sndbuf)) {
+				err = -EAGAIN;
+				break;
+			}
+
+			skb = skbs[xs->skb_count - 1 - i];
+
+			prefetchw(skb);
+			/* We do our best to align skb_shared_info on a separate cache
+			 * line. It usually works because kmalloc(X > SMP_CACHE_BYTES) gives
+			 * aligned memory blocks, unless SLUB/SLAB debug is enabled.
+			 * Both skb->head and skb_shared_info are cache line aligned.
+			 */
+			data = kmalloc_reserve(&size, gfp_mask, node, &pfmemalloc);
+			if (unlikely(!data)) {
+				err = -ENOBUFS;
+				break;
+			}
+			/* kmalloc_size_roundup() might give us more room than requested.
+			 * Put skb_shared_info exactly at the end of allocated zone,
+			 * to allow max possible filling before reallocation.
+			 */
+			prefetchw(data + SKB_WITH_OVERHEAD(size));
+
+			memset(skb, 0, offsetof(struct sk_buff, tail));
+			__build_skb_around(skb, data, size);
+			skb->pfmemalloc = pfmemalloc;
+			skb_set_owner_w(skb, &xs->sk);
+		} else if (unlikely(i == 0)) {
+			/* We have a skb in cache that is left last time */
+			kmem_cache_free(net_hotdata.skbuff_cache, skbs[xs->skb_count - 1]);
+			skbs[xs->skb_count - 1] = xs->skb;
+		}
+
+		skb = xsk_build_skb(xs, skb, &descs[j]);
+		if (IS_ERR(skb)) {
+			err = PTR_ERR(skb);
+			break;
+		}
+
+		if (xp_mb_desc(&descs[j])) {
+			xs->skb = skb;
+			continue;
+		}
+
+		xs->skb = NULL;
+		i++;
+	}
+
+	*consumed = j;
+	*start = xs->skb_count - 1;
+	*end = xs->skb_count - i;
+	xs->skb_count -= i;
+
+	return err;
 }
 
 /* 	Allocate a new skbuff. We do this ourselves so we can fill in a few
