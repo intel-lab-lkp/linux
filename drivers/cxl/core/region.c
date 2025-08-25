@@ -3306,9 +3306,9 @@ static int cxl_extended_linear_cache_resize(struct cxl_region *cxlr,
 		return 0;
 
 	if (size != cache_size) {
-		dev_warn(&cxlr->dev,
-			 "Extended Linear Cache size %pa != CXL size %pa. No Support!",
-			 &cache_size, &size);
+		dev_dbg(&cxlr->dev,
+			"Extended Linear Cache size %pa != CXL size %pa. No Support!",
+			&cache_size, &size);
 		return -ENXIO;
 	}
 

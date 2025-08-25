@@ -359,9 +359,9 @@ static int cxl_acpi_set_cache_size(struct cxl_root_decoder *cxlrd)
 	 */
 	size = size >> 1;
 	if (cache_size && size != cache_size) {
-		dev_warn(&cxld->dev,
-			 "Extended Linear Cache size %pa != CXL size %pa. No Support!",
-			 &cache_size, &size);
+		dev_dbg(&cxld->dev,
+			"Extended Linear Cache size %pa != CXL size %pa. No Support!",
+			&cache_size, &size);
 		return -ENXIO;
 	}
 
