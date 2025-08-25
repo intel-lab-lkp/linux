@@ -1326,8 +1326,8 @@ static int efx_ef10_init_nic(struct efx_nic *efx)
 		efx->must_realloc_vis = false;
 	}
 
-	nic_data->mc_stats = kmalloc(efx->num_mac_stats * sizeof(__le64),
-				     GFP_KERNEL);
+	nic_data->mc_stats = kmalloc_array(efx->num_mac_stats, sizeof(__le64),
+					   GFP_KERNEL);
 	if (!nic_data->mc_stats)
 		return -ENOMEM;
 
