@@ -949,11 +949,11 @@ static unsigned int sdhci_omap_regulator_get_caps(struct device *dev,
 	if (IS_ERR(reg))
 		return ~0U;
 
-	if (regulator_is_supported_voltage(reg, 1700000, 1950000))
+	if (regulator_is_supported_voltage(reg, 1700000, 1950000) > 0)
 		caps |= SDHCI_CAN_VDD_180;
-	if (regulator_is_supported_voltage(reg, 2700000, 3150000))
+	if (regulator_is_supported_voltage(reg, 2700000, 3150000) > 0)
 		caps |= SDHCI_CAN_VDD_300;
-	if (regulator_is_supported_voltage(reg, 3150000, 3600000))
+	if (regulator_is_supported_voltage(reg, 3150000, 3600000) > 0)
 		caps |= SDHCI_CAN_VDD_330;
 
 	regulator_put(reg);
