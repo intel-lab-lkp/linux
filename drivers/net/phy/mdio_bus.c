@@ -33,8 +33,10 @@
 #define CREATE_TRACE_POINTS
 #include <trace/events/mdio.h>
 
-static int mdiobus_register_gpiod(struct mdio_device *mdiodev)
+static int mdiobus_register_reset(struct mdio_device *mdiodev)
 {
+	struct reset_control *reset;
+
 	/* Deassert the optional reset signal */
 	mdiodev->reset_gpio = gpiod_get_optional(&mdiodev->dev,
 						 "reset", GPIOD_OUT_LOW);
@@ -43,13 +45,6 @@ static int mdiobus_register_gpiod(struct mdio_device *mdiodev)
 
 	if (mdiodev->reset_gpio)
 		gpiod_set_consumer_name(mdiodev->reset_gpio, "PHY reset");
-
-	return 0;
-}
-
-static int mdiobus_register_reset(struct mdio_device *mdiodev)
-{
-	struct reset_control *reset;
 
 	reset = reset_control_get_optional_exclusive(&mdiodev->dev, "phy");
 	if (IS_ERR(reset))
@@ -68,10 +63,6 @@ int mdiobus_register_device(struct mdio_device *mdiodev)
 		return -EBUSY;
 
 	if (mdiodev->flags & MDIO_DEVICE_FLAG_PHY) {
-		err = mdiobus_register_gpiod(mdiodev);
-		if (err)
-			return err;
-
 		err = mdiobus_register_reset(mdiodev);
 		if (err)
 			return err;
