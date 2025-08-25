@@ -95,8 +95,7 @@ int armada_drm_plane_atomic_check(struct drm_plane *plane,
 	}
 
 	if (state)
-		crtc_state = drm_atomic_get_existing_crtc_state(state,
-								crtc);
+		crtc_state = drm_atomic_get_new_crtc_state(state, crtc);
 	else
 		crtc_state = crtc->state;
 
