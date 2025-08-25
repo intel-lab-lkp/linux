@@ -100,6 +100,11 @@
 /* Time in jiffies before concluding Tx hung */
 #define TX_TIMEOUT	((400*HZ)/1000)
 
+/* Time in jiffies before autoneg interval ends*/
+#define AUTONEG_TIMEOUT ((100 * HZ) / 1000)
+
+#define RUN_AT(x) (jiffies + (x))
+
 /****************
  * Some constants used to access the hardware
  */
@@ -281,6 +286,9 @@ struct local_info {
     unsigned last_ptr_value; /* last packets transmitted value */
     const char *manf_str;
     struct work_struct tx_timeout_task;
+	struct timer_list timer; /* auto negotiation timer*/
+	int autoneg_attempts;
+	struct completion autoneg_done;
 };
 
 /****************
@@ -300,6 +308,7 @@ static const struct ethtool_ops netdev_ethtool_ops;
 static void hardreset(struct net_device *dev);
 static void do_reset(struct net_device *dev, int full);
 static int init_mii(struct net_device *dev);
+static void autoneg_timer(struct timer_list *t);
 static void do_powerdown(struct net_device *dev);
 static int do_stop(struct net_device *dev);
 
@@ -1561,6 +1570,8 @@ do_reset(struct net_device *dev, int full)
     PutByte(XIRCREG40_TXST1,  0x00); /* TEN, rsv, PTD, EXT, retry_counter:4  */
 
     if (full && local->mohawk && init_mii(dev)) {
+	if (local->probe_port)
+		wait_for_completion(&local->autoneg_done);
 	if (dev->if_port == 4 || local->dingo || local->new_mii) {
 	    netdev_info(dev, "MII selected\n");
 	    SelectPage(2);
@@ -1629,8 +1640,7 @@ init_mii(struct net_device *dev)
 {
     struct local_info *local = netdev_priv(dev);
     unsigned int ioaddr = dev->base_addr;
-    unsigned control, status, linkpartner;
-    int i;
+	unsigned int control, status;
 
     if (if_port == 4 || if_port == 1) { /* force 100BaseT or 10BaseT */
 	dev->if_port = if_port;
@@ -1663,35 +1673,49 @@ init_mii(struct net_device *dev)
     if (local->probe_port) {
 	/* according to the DP83840A specs the auto negotiation process
 	 * may take up to 3.5 sec, so we use this also for our ML6692
-	 * Fixme: Better to use a timer here!
 	 */
-	for (i=0; i < 35; i++) {
-	    msleep(100);	 /* wait 100 msec */
-	    status = mii_rd(ioaddr,  0, 1);
-	    if ((status & 0x0020) && (status & 0x0004))
-		break;
+	local->dev = dev;
+	local->autoneg_attempts = 0;
+	init_completion(&local->autoneg_done);
+	timer_setup(&local->timer, autoneg_timer, 0);
+	local->timer.expires = RUN_AT(AUTONEG_TIMEOUT); /* 100msec intervals*/
+	add_timer(&local->timer);
 	}
 
-	if (!(status & 0x0020)) {
-	    netdev_info(dev, "autonegotiation failed; using 10mbs\n");
-	    if (!local->new_mii) {
-		control = 0x0000;
-		mii_wr(ioaddr,  0, 0, control, 16);
-		udelay(100);
-		SelectPage(0);
-		dev->if_port = (GetByte(XIRCREG_ESR) & MediaSelect) ? 1 : 2;
-	    }
+	return 1;
+}
+
+static void autoneg_timer(struct timer_list *t)
+{
+	struct local_info *local = timer_container_of(local, t, timer);
+	unsigned int ioaddr = local->dev->base_addr;
+	unsigned int status, linkpartner, control;
+
+	status = mii_rd(ioaddr, 0, 1);
+	if ((status & 0x0020) && (status & 0x0004)) {
+		linkpartner = mii_rd(ioaddr, 0, 5);
+		netdev_info(local->dev, "MII link partner: %04x\n",
+			    linkpartner);
+		if (linkpartner & 0x0080)
+			local->dev->if_port = 4;
+		else
+			local->dev->if_port = 1;
+		complete(&local->autoneg_done);
+	} else if (local->autoneg_attempts++ < 35) {
+		mod_timer(&local->timer, RUN_AT(AUTONEG_TIMEOUT));
 	} else {
-	    linkpartner = mii_rd(ioaddr, 0, 5);
-	    netdev_info(dev, "MII link partner: %04x\n", linkpartner);
-	    if (linkpartner & 0x0080) {
-		dev->if_port = 4;
-	    } else
-		dev->if_port = 1;
+		netdev_info(local->dev,
+			    "autonegotiation failed; using 10mbs\n");
+		if (!local->new_mii) {
+			control = 0x0000;
+			mii_wr(ioaddr, 0, 0, control, 16);
+			usleep_range(100, 150);
+			SelectPage(0);
+			local->dev->if_port =
+				(GetByte(XIRCREG_ESR) & MediaSelect) ? 1 : 2;
+		}
+		complete(&local->autoneg_done);
 	}
-    }
-
-    return 1;
 }
 
 static void
