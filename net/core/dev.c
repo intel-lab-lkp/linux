@@ -4763,7 +4763,9 @@ int xsk_direct_xmit_batch(struct sk_buff **skbs, struct net_device *dev,
 	local_bh_disable();
 	HARD_TX_LOCK(dev, txq, smp_processor_id());
 	for (*cur = start; *cur >= end; (*cur)--) {
-		ret = netdev_start_xmit(skbs[*cur], dev, txq, false);
+		bool more = !!(*cur != end);
+
+		ret = netdev_start_xmit(skbs[*cur], dev, txq, more);
 		if (ret != NETDEV_TX_OK)
 			break;
 	}
