@@ -194,6 +194,9 @@ static int tpmi_cpu_online(unsigned int cpu)
 	if (ret)
 		return 0;
 
+	if (!tpmi_domain_is_valid(info))
+		return 0;
+
 	index = info->pkg_id * MAX_POWER_DOMAINS + info->punit_domain_id;
 
 	guard(mutex)(&tpmi_lock);
