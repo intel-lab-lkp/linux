@@ -49,12 +49,15 @@ static bool hsr_check_carrier(struct hsr_port *master)
 
 	ASSERT_RTNL();
 
+	rcu_read_lock();
 	hsr_for_each_port(master->hsr, port) {
 		if (port->type != HSR_PT_MASTER && is_slave_up(port->dev)) {
+			rcu_read_unlock();
 			netif_carrier_on(master->dev);
 			return true;
 		}
 	}
+	rcu_read_unlock();
 
 	netif_carrier_off(master->dev);
 
@@ -105,9 +108,12 @@ int hsr_get_max_mtu(struct hsr_priv *hsr)
 	struct hsr_port *port;
 
 	mtu_max = ETH_DATA_LEN;
+
+	rcu_read_lock();
 	hsr_for_each_port(hsr, port)
 		if (port->type != HSR_PT_MASTER)
 			mtu_max = min(port->dev->mtu, mtu_max);
+	rcu_read_unlock();
 
 	if (mtu_max < HSR_HLEN)
 		return 0;
@@ -139,6 +145,7 @@ static int hsr_dev_open(struct net_device *dev)
 
 	hsr = netdev_priv(dev);
 
+	rcu_read_lock();
 	hsr_for_each_port(hsr, port) {
 		if (port->type == HSR_PT_MASTER)
 			continue;
@@ -159,6 +166,7 @@ static int hsr_dev_open(struct net_device *dev)
 			netdev_warn(dev, "%s (%s) is not up; please bring it up to get a fully working HSR network\n",
 				    designation, port->dev->name);
 	}
+	rcu_read_unlock();
 
 	if (!designation)
 		netdev_warn(dev, "No slave devices configured\n");
@@ -172,6 +180,8 @@ static int hsr_dev_close(struct net_device *dev)
 	struct hsr_priv *hsr;
 
 	hsr = netdev_priv(dev);
+
+	rcu_read_lock();
 	hsr_for_each_port(hsr, port) {
 		if (port->type == HSR_PT_MASTER)
 			continue;
@@ -185,6 +195,7 @@ static int hsr_dev_close(struct net_device *dev)
 			break;
 		}
 	}
+	rcu_read_unlock();
 
 	return 0;
 }
@@ -205,10 +216,13 @@ static netdev_features_t hsr_features_recompute(struct hsr_priv *hsr,
 	 * may become enabled.
 	 */
 	features &= ~NETIF_F_ONE_FOR_ALL;
+
+	rcu_read_lock();
 	hsr_for_each_port(hsr, port)
 		features = netdev_increment_features(features,
 						     port->dev->features,
 						     mask);
+	rcu_read_unlock();
 
 	return features;
 }
@@ -410,14 +424,11 @@ static void hsr_announce(struct timer_list *t)
 
 	hsr = timer_container_of(hsr, t, announce_timer);
 
-	rcu_read_lock();
 	master = hsr_port_get_hsr(hsr, HSR_PT_MASTER);
 	hsr->proto_ops->send_sv_frame(master, &interval, master->dev->dev_addr);
 
 	if (is_admin_up(master->dev))
 		mod_timer(&hsr->announce_timer, jiffies + interval);
-
-	rcu_read_unlock();
 }
 
 /* Announce (supervision frame) timer function for RedBox
@@ -430,7 +441,6 @@ static void hsr_proxy_announce(struct timer_list *t)
 	unsigned long interval = 0;
 	struct hsr_node *node;
 
-	rcu_read_lock();
 	/* RedBOX sends supervisory frames to HSR network with MAC addresses
 	 * of SAN nodes stored in ProxyNodeTable.
 	 */
@@ -438,6 +448,7 @@ static void hsr_proxy_announce(struct timer_list *t)
 	if (!interlink)
 		goto done;
 
+	rcu_read_lock();
 	list_for_each_entry_rcu(node, &hsr->proxy_node_db, mac_list) {
 		if (hsr_addr_is_redbox(hsr, node->macaddress_A))
 			continue;
@@ -484,6 +495,7 @@ static void hsr_set_rx_mode(struct net_device *dev)
 
 	hsr = netdev_priv(dev);
 
+	rcu_read_lock();
 	hsr_for_each_port(hsr, port) {
 		if (port->type == HSR_PT_MASTER)
 			continue;
@@ -497,6 +509,7 @@ static void hsr_set_rx_mode(struct net_device *dev)
 			break;
 		}
 	}
+	rcu_read_unlock();
 }
 
 static void hsr_change_rx_flags(struct net_device *dev, int change)
@@ -506,6 +519,7 @@ static void hsr_change_rx_flags(struct net_device *dev, int change)
 
 	hsr = netdev_priv(dev);
 
+	rcu_read_lock();
 	hsr_for_each_port(hsr, port) {
 		if (port->type == HSR_PT_MASTER)
 			continue;
@@ -521,6 +535,7 @@ static void hsr_change_rx_flags(struct net_device *dev, int change)
 			break;
 		}
 	}
+	rcu_read_unlock();
 }
 
 static int hsr_ndo_vlan_rx_add_vid(struct net_device *dev,
@@ -534,6 +549,7 @@ static int hsr_ndo_vlan_rx_add_vid(struct net_device *dev,
 
 	hsr = netdev_priv(dev);
 
+	rcu_read_lock();
 	hsr_for_each_port(hsr, port) {
 		if (port->type == HSR_PT_MASTER ||
 		    port->type == HSR_PT_INTERLINK)
@@ -547,6 +563,8 @@ static int hsr_ndo_vlan_rx_add_vid(struct net_device *dev,
 				netdev_err(dev, "add vid failed for Slave-A\n");
 				if (is_slave_b_added)
 					vlan_vid_del(port->dev, proto, vid);
+
+				rcu_read_unlock();
 				return ret;
 			}
 
@@ -559,6 +577,8 @@ static int hsr_ndo_vlan_rx_add_vid(struct net_device *dev,
 				netdev_err(dev, "add vid failed for Slave-B\n");
 				if (is_slave_a_added)
 					vlan_vid_del(port->dev, proto, vid);
+
+				rcu_read_unlock();
 				return ret;
 			}
 
@@ -568,6 +588,7 @@ static int hsr_ndo_vlan_rx_add_vid(struct net_device *dev,
 			break;
 		}
 	}
+	rcu_read_unlock();
 
 	return 0;
 }
@@ -580,6 +601,7 @@ static int hsr_ndo_vlan_rx_kill_vid(struct net_device *dev,
 
 	hsr = netdev_priv(dev);
 
+	rcu_read_lock();
 	hsr_for_each_port(hsr, port) {
 		switch (port->type) {
 		case HSR_PT_SLAVE_A:
@@ -590,6 +612,7 @@ static int hsr_ndo_vlan_rx_kill_vid(struct net_device *dev,
 			break;
 		}
 	}
+	rcu_read_unlock();
 
 	return 0;
 }
@@ -672,9 +695,13 @@ struct net_device *hsr_get_port_ndev(struct net_device *ndev,
 	struct hsr_priv *hsr = netdev_priv(ndev);
 	struct hsr_port *port;
 
+	rcu_read_lock();
 	hsr_for_each_port(hsr, port)
-		if (port->type == pt)
+		if (port->type == pt) {
+			rcu_read_unlock();
 			return port->dev;
+		}
+	rcu_read_unlock();
 	return NULL;
 }
 EXPORT_SYMBOL(hsr_get_port_ndev);

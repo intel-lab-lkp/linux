@@ -22,9 +22,13 @@ static bool hsr_slave_empty(struct hsr_priv *hsr)
 {
 	struct hsr_port *port;
 
+	rcu_read_lock();
 	hsr_for_each_port(hsr, port)
-		if (port->type != HSR_PT_MASTER)
+		if (port->type != HSR_PT_MASTER) {
+			rcu_read_unlock();
 			return false;
+		}
+	rcu_read_unlock();
 	return true;
 }
 
@@ -134,9 +138,13 @@ struct hsr_port *hsr_port_get_hsr(struct hsr_priv *hsr, enum hsr_port_type pt)
 {
 	struct hsr_port *port;
 
+	rcu_read_lock();
 	hsr_for_each_port(hsr, port)
-		if (port->type == pt)
+		if (port->type == pt) {
+			rcu_read_unlock();
 			return port;
+		}
+	rcu_read_unlock();
 	return NULL;
 }
 
