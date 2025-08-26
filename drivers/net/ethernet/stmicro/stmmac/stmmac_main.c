@@ -950,7 +950,9 @@ static void stmmac_mac_link_down(struct phylink_config *config,
 {
 	struct stmmac_priv *priv = netdev_priv(to_net_dev(config->dev));
 
-	stmmac_mac_set(priv, priv->ioaddr, false);
+	if (!(priv->plat->flags & STMMAC_FLAG_ARP_OFFLOAD_EN))
+		stmmac_mac_set(priv, priv->ioaddr, false);
+
 	if (priv->dma_cap.eee)
 		stmmac_set_eee_pls(priv, priv->hw, false);
 
@@ -4181,6 +4183,10 @@ static int stmmac_release(struct net_device *dev)
 
 	/* Release and free the Rx/Tx resources */
 	free_dma_desc_resources(priv, &priv->dma_conf);
+
+	/* Disable MAC Rx/Tx */
+	stmmac_mac_set(priv, priv->ioaddr, priv->plat->flags &
+					   STMMAC_FLAG_ARP_OFFLOAD_EN);
 
 	/* Powerdown Serdes if there is */
 	if (priv->plat->serdes_powerdown)
