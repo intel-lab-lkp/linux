@@ -911,10 +911,15 @@ void __init setup_arch(char **cmdline_p)
 	strscpy(boot_command_line, builtin_cmdline, COMMAND_LINE_SIZE);
 #else
 	if (builtin_cmdline[0]) {
-		/* append boot loader cmdline to builtin */
-		strlcat(builtin_cmdline, " ", COMMAND_LINE_SIZE);
-		strlcat(builtin_cmdline, boot_command_line, COMMAND_LINE_SIZE);
-		strscpy(boot_command_line, builtin_cmdline, COMMAND_LINE_SIZE);
+		if (!IS_ENABLED(CONFIG_CMDLINE_EXTEND)) {
+			/* append boot loader cmdline to builtin */
+			strlcat(builtin_cmdline, " ", COMMAND_LINE_SIZE);
+			strlcat(builtin_cmdline, boot_command_line, COMMAND_LINE_SIZE);
+			strscpy(boot_command_line, builtin_cmdline, COMMAND_LINE_SIZE);
+		} else {
+			strlcat(boot_command_line, " ", COMMAND_LINE_SIZE);
+			strlcat(boot_command_line, builtin_cmdline, COMMAND_LINE_SIZE);
+		}
 	}
 #endif
 	builtin_cmdline_added = true;
