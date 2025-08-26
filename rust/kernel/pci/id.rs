@@ -118,15 +118,14 @@ impl TryFrom<u32> for ClassMask {
 /// ```
 /// # use kernel::{device::Core, pci::{self, Vendor}, prelude::*};
 /// fn log_device_info(pdev: &pci::Device<Core>) -> Result<()> {
-///     // Compare raw vendor ID with known vendor constant
-///     let vendor_id = pdev.vendor_id();
-///     if vendor_id == Vendor::NVIDIA.as_raw() {
-///         dev_info!(
-///             pdev.as_ref(),
-///             "Found NVIDIA device: 0x{:x}\n",
-///             pdev.device_id()
-///         );
-///     }
+///     // Get the validated PCI vendor ID
+///     let vendor = pdev.vendor_id();
+///     dev_info!(
+///         pdev.as_ref(),
+///         "Device: Vendor={}, Device=0x{:x}\n",
+///         vendor,
+///         pdev.device_id()
+///     );
 ///     Ok(())
 /// }
 /// ```
@@ -152,7 +151,6 @@ macro_rules! define_all_pci_vendors {
 impl Vendor {
     /// Create a Vendor from a raw 16-bit vendor ID.
     /// Only accessible from the parent pci module.
-    #[expect(dead_code)]
     #[inline]
     pub(super) fn from_raw(vendor_id: u16) -> Self {
         Self(vendor_id)
