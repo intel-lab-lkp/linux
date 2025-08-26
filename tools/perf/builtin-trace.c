@@ -2983,8 +2983,10 @@ static int trace__fprintf_callchain(struct trace *trace, struct perf_sample *sam
 {
 	/* TODO: user-configurable print_opts */
 	const unsigned int print_opts = EVSEL__PRINT_SYM |
-				        EVSEL__PRINT_DSO |
-				        EVSEL__PRINT_UNKNOWN_AS_ADDR;
+				EVSEL__PRINT_DSO |
+				EVSEL__PRINT_UNKNOWN_AS_ADDR |
+				EVSEL__PRINT_IP |
+				EVSEL__PRINT_SYMOFFSET;
 
 	return sample__fprintf_callchain(sample, 38, print_opts, get_tls_callchain_cursor(), symbol_conf.bt_stop_list, trace->output);
 }
