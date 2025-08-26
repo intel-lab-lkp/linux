@@ -2572,7 +2572,9 @@ int unpoison_memory(unsigned long pfn)
 	if (!pfn_valid(pfn))
 		return -ENXIO;
 
-	p = pfn_to_page(pfn);
+	p = pfn_to_online_page(pfn);
+	if (!p)
+		return -EIO;
 	folio = page_folio(p);
 
 	mutex_lock(&mf_mutex);
