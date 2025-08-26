@@ -1724,13 +1724,6 @@ sd_init(struct sched_domain_topology_level *tl,
 	return sd;
 }
 
-#ifdef CONFIG_SCHED_SMT
-static const struct cpumask *tl_smt_mask(struct sched_domain_topology_level *tl, int cpu)
-{
-	return cpu_smt_mask(cpu);
-}
-#endif
-
 #ifdef CONFIG_SCHED_CLUSTER
 static const struct cpumask *tl_cls_mask(struct sched_domain_topology_level *tl, int cpu)
 {

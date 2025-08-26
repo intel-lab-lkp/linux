@@ -1038,11 +1038,6 @@ static const struct cpumask *smallcore_smt_mask(struct sched_domain_topology_lev
 {
 	return cpu_smallcore_mask(cpu);
 }
-
-static const struct cpumask *tl_smt_mask(struct sched_domain_topology_level *tl, int cpu)
-{
-	return cpu_smt_mask(cpu);
-}
 #endif
 
 static struct cpumask *cpu_corgrp_mask(int cpu)
