@@ -514,11 +514,6 @@ const struct cpumask *cpu_coregroup_mask(int cpu)
 	return &cpu_topology[cpu].core_mask;
 }
 
-static const struct cpumask *cpu_mc_mask(struct sched_domain_topology_level *tl, int cpu)
-{
-	return &cpu_topology[cpu].core_mask;
-}
-
 static const struct cpumask *cpu_book_mask(struct sched_domain_topology_level *tl, int cpu)
 {
 	return &cpu_topology[cpu].book_mask;
@@ -536,7 +531,7 @@ static const struct cpumask *cpu_pkg_mask(struct sched_domain_topology_level *tl
 
 static struct sched_domain_topology_level s390_topology[] = {
 	SDTL_INIT(tl_smt_mask, cpu_smt_flags, SMT),
-	SDTL_INIT(cpu_mc_mask, cpu_core_flags, MC),
+	SDTL_INIT(tl_mc_mask, cpu_core_flags, MC),
 	SDTL_INIT(cpu_book_mask, NULL, BOOK),
 	SDTL_INIT(cpu_drawer_mask, NULL, DRAWER),
 	SDTL_INIT(cpu_pkg_mask, NULL, PKG),

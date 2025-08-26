@@ -63,7 +63,13 @@ static inline int cpu_core_flags(void)
 {
 	return SD_SHARE_LLC;
 }
-#endif
+
+static const __maybe_unused
+struct cpumask *tl_mc_mask(struct sched_domain_topology_level *tl, int cpu)
+{
+	return cpu_coregroup_mask(cpu);
+}
+#endif /* CONFIG_SCHED_MC */
 
 #ifdef CONFIG_NUMA
 static inline int cpu_numa_flags(void)
