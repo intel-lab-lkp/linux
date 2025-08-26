@@ -927,9 +927,14 @@ static inline u8 get_cqe_lro_tcppsh(struct mlx5_cqe64 *cqe)
 	return (cqe->lro.tcppsh_abort_dupack >> 6) & 1;
 }
 
-static inline u8 get_cqe_l4_hdr_type(struct mlx5_cqe64 *cqe)
+static inline u8 get_cqe_l4_hdr_type(const struct mlx5_cqe64 *cqe)
 {
 	return (cqe->l4_l3_hdr_type >> 4) & 0x7;
+}
+
+static inline u8 get_cqe_l3_hdr_type(const struct mlx5_cqe64 *cqe)
+{
+	return (cqe->l4_l3_hdr_type >> 2) & 0x3;
 }
 
 static inline bool cqe_is_tunneled(struct mlx5_cqe64 *cqe)
@@ -1010,6 +1015,11 @@ enum {
 	CQE_L4_HDR_TYPE_UDP			= 0x2,
 	CQE_L4_HDR_TYPE_TCP_ACK_NO_DATA		= 0x3,
 	CQE_L4_HDR_TYPE_TCP_ACK_AND_DATA	= 0x4,
+};
+
+enum {
+	CQE_L3_HDR_TYPE_IPV6			= 0x1,
+	CQE_L3_HDR_TYPE_IPV4			= 0x2,
 };
 
 enum {
