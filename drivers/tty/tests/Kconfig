@@ -1,0 +1,44 @@
+# SPDX-License-Identifier: GPL-2.0
+menu "TTY KUnit tests"
+	depends on KUNIT && TTY
+
+config TTY_KUNIT_TESTS
+	bool "TTY KUnit test infrastructure"
+	depends on KUNIT && TTY
+	default KUNIT_ALL_TESTS
+	help
+	  Enable KUnit test infrastructure for TTY drivers.
+
+	  This enables test helper functions that are included directly
+	  into tty_io.c to provide access to internal TTY functions for
+	  testing. The helpers are only available when KUNIT is enabled.
+
+	  This option provides the foundation for TTY testing but does not
+	  run any tests by itself. Enable specific test suites below.
+
+config TTY_KUNIT_CORE_TESTS
+	bool "TTY core functionality tests"
+	depends on TTY_KUNIT_TESTS
+	default KUNIT_ALL_TESTS
+	help
+	  Enable KUnit tests for TTY core functionality.
+
+	  Tests cover basic TTY operations including open/close lifecycle,
+	  write operations, buffer management, line discipline integration,
+	  and error handling through real kernel code paths.
+
+	  If unsure, say N.
+
+config TTY_KUNIT_NULL_TTY_TESTS
+	tristate "TTY null driver tests" if !KUNIT_ALL_TESTS
+	depends on TTY_KUNIT_TESTS && NULL_TTY
+	default KUNIT_ALL_TESTS
+	help
+	  Enable KUnit tests for the TTY null driver.
+
+	  Tests validate ttynull behavior as a data sink, including write
+	  operations, data discarding, and error handling. The ttynull
+	  driver discards all written data while providing minimal overhead.
+
+	  If unsure, say N.
+endmenu

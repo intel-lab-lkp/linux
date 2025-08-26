@@ -424,6 +424,15 @@ config RPMSG_TTY
 	  To compile this driver as a module, choose M here: the module will be
 	  called rpmsg_tty.
 
+config TTY_GCOV_PROFILE
+	bool "Enable gcov profiling for TTY subsystem"
+	depends on GCOV_KERNEL && TTY
+	help
+	  Instrument drivers/tty/* with gcov when GCOV is enabled.
+	  Useful for targeted coverage runs without profiling the whole kernel.
+
+source "drivers/tty/tests/Kconfig"
+
 endif # TTY
 
 source "drivers/tty/serdev/Kconfig"

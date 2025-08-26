@@ -29,3 +29,10 @@ obj-$(CONFIG_VCC)		+= vcc.o
 obj-$(CONFIG_RPMSG_TTY)		+= rpmsg_tty.o
 
 obj-y += ipwireless/
+
+obj-$(CONFIG_TTY_KUNIT_TESTS) += tests/
+
+# tty profiling & coverage
+ifdef CONFIG_TTY_GCOV_PROFILE
+GCOV_PROFILE := y
+endif

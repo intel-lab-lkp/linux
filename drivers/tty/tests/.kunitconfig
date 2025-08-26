@@ -1,0 +1,44 @@
+# TTY KUnit Test Configuration
+# =============================
+#
+# Running test with something like this:
+# -------------------------------------
+# ./tools/testing/kunit/kunit.py run tty_io_core \
+#     --kunitconfig=.kunit/ \
+#     --kunitconfig=drivers/tty/tests/.kunitconfig \
+#     --jobs "$(nproc)" \
+#     --arch=x86_64 \
+#     --make_options="LLVM=-18"
+
+# Core KUnit Infrastructure
+# -------------------------
+CONFIG_KUNIT=y
+CONFIG_KUNIT_DEBUGFS=y
+CONFIG_KUNIT_TEST=y
+CONFIG_PROC_FS=y
+CONFIG_SYSFS=y
+CONFIG_DEBUG_FS=y
+
+# TTY Subsystem Core
+# ------------------
+CONFIG_TTY=y
+CONFIG_UNIX98_PTYS=y
+CONFIG_SERIAL_CORE=y
+CONFIG_VT=y
+CONFIG_VT_CONSOLE=y
+
+# TTY Drivers for Testing
+# -----------------------
+# Enable ttynull driver (required for ttynull tests)
+CONFIG_NULL_TTY=y
+
+# TTY KUnit Tests
+# ---------------
+CONFIG_TTY_KUNIT_TESTS=y
+CONFIG_TTY_KUNIT_CORE_TESTS=y
+CONFIG_TTY_KUNIT_NULL_TTY_TESTS=y
+
+# Code Coverage
+# -------------------------------------------
+CONFIG_GCOV_KERNEL=y
+CONFIG_TTY_GCOV_PROFILE=y
