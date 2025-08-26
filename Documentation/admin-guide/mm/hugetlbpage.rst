@@ -156,6 +156,18 @@ hugepage_alloc_threads
 		hugepage_alloc_threads=8
 
 	Note that this parameter only applies to non-gigantic huge pages.
+
+hugepage_split_ratio
+    Controls the threshold for two-phase hugepage allocation.
+    When the total number of reserved hugepages (huge_reserved_pages) exceeds
+    (totalram_pages * hugepage_split_ratio / 100), the hugepage allocation process
+    during boot is split into two batches.
+
+    Default value is 90, meaning the two-phase allocation is triggered when
+    reserved hugepages exceed 90% of total system RAM.
+    The value can be adjusted via the kernel command line parameter
+    "hugepage_split_ratio=". Valid range is 1 to 99.
+
 default_hugepagesz
 	Specify the default huge page size.  This parameter can
 	only be specified once on the command line.  default_hugepagesz can
