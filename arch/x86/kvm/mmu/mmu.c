@@ -7376,7 +7376,7 @@ static void kvm_wake_nx_recovery_thread(struct kvm *kvm)
 	struct vhost_task *nx_thread = READ_ONCE(kvm->arch.nx_huge_page_recovery_thread);
 
 	if (nx_thread)
-		vhost_task_wake(nx_thread);
+		vhost_task_wake_safe(nx_thread);
 }
 
 static int get_nx_huge_pages(char *buffer, const struct kernel_param *kp)
