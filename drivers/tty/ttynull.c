@@ -6,6 +6,7 @@
  *  Copyright (C) 2010 Samo Pogacnik
  */
 
+#include <kunit/visibility.h>
 #include <linux/console.h>
 #include <linux/module.h>
 #include <linux/tty.h>
@@ -105,6 +106,10 @@ static void __exit ttynull_exit(void)
 
 module_init(ttynull_init);
 module_exit(ttynull_exit);
+
+#ifdef CONFIG_TTY_KUNIT_NULL_TTY_TESTS
+#include "tests/test_ttynull.c"
+#endif /* CONFIG_TTY_KUNIT_TTYNULL_TESTS */
 
 MODULE_DESCRIPTION("NULL TTY driver");
 MODULE_LICENSE("GPL v2");
