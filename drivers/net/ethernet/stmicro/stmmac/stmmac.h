@@ -206,6 +206,7 @@ enum stmmac_rfs_type {
 	STMMAC_RFS_T_VLAN,
 	STMMAC_RFS_T_LLDP,
 	STMMAC_RFS_T_1588,
+	STMMAC_RFS_T_IP,
 	STMMAC_RFS_T_MAX,
 };
 
