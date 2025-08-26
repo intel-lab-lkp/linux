@@ -148,7 +148,9 @@ static inline const struct cpumask *cpu_smt_mask(int cpu)
 }
 #endif /* CONFIG_SCHED_SMT */
 
+#ifdef CONFIG_SCHED_MC
 extern const struct cpumask *cpu_coregroup_mask(int cpu);
+#endif
 
 /* Since OpenPIC has only 4 IPIs, we use slightly different message numbers.
  *

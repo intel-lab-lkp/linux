@@ -1059,6 +1059,7 @@ static bool has_coregroup_support(void)
 	return coregroup_enabled;
 }
 
+#ifdef CONFIG_SCHED_MC
 const struct cpumask *cpu_coregroup_mask(int cpu)
 {
 	if (has_coregroup_support())
@@ -1071,6 +1072,7 @@ static const struct cpumask *cpu_mc_mask(struct sched_domain_topology_level *tl,
 {
 	return cpu_corgrp_mask(cpu);
 }
+#endif
 
 static const struct cpumask *cpu_pkg_mask(struct sched_domain_topology_level *tl, int cpu)
 {
@@ -1729,10 +1731,12 @@ static void __init build_sched_topology(void)
 			SDTL_INIT(shared_cache_mask, powerpc_shared_cache_flags, CACHE);
 	}
 
+#ifdef CONFIG_SCHED_MC
 	if (has_coregroup_support()) {
 		powerpc_topology[i++] =
 			SDTL_INIT(cpu_mc_mask, powerpc_shared_proc_flags, MC);
 	}
+#endif
 
 	powerpc_topology[i++] = SDTL_INIT(cpu_pkg_mask, powerpc_shared_proc_flags, PKG);
 

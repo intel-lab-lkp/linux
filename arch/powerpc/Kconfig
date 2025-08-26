@@ -971,6 +971,15 @@ config SCHED_SMT
 	  when dealing with POWER5 cpus at a cost of slightly increased
 	  overhead in some places. If unsure say N here.
 
+config SCHED_MC
+	bool "Multi-Core Cache (MC) scheduler support"
+	depends on PPC64 && SMP
+	default y
+	help
+	  MC scheduler support improves the CPU scheduler's decision making
+	  when dealing with POWER systems that contain multiple Last Level
+	  Cache instances on the same socket. If unsure say Y here.
+
 config PPC_DENORMALISATION
 	bool "PowerPC denormalisation exception handling"
 	depends on PPC_BOOK3S_64
