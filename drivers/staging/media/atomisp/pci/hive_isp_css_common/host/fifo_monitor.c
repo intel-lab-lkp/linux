@@ -49,10 +49,9 @@ static inline bool fifo_monitor_status_accept(const fifo_monitor_ID_t ID,
 	return (data >> (((port_id * 2) + _hive_str_mon_accept_offset))) & 0x1;
 }
 
-void fifo_channel_get_state(
-    const fifo_monitor_ID_t		ID,
-    const fifo_channel_t		channel_id,
-    fifo_channel_state_t		*state)
+void fifo_channel_get_state(const fifo_monitor_ID_t ID,
+			    const fifo_channel_t channel_id,
+			    fifo_channel_state_t *state)
 {
 	assert(channel_id < N_FIFO_CHANNEL);
 	assert(state);
@@ -504,12 +503,10 @@ void fifo_channel_get_state(
 	return;
 }
 
-void fifo_switch_get_state(
-    const fifo_monitor_ID_t		ID,
-    const fifo_switch_t			switch_id,
-    fifo_switch_state_t			*state)
+void fifo_switch_get_state(const fifo_monitor_ID_t ID, const fifo_switch_t switch_id,
+			   fifo_switch_state_t *state)
 {
-	hrt_data		data = (hrt_data)-1;
+	hrt_data data = (hrt_data)-1;
 
 	assert(ID == FIFO_MONITOR0_ID);
 	assert(switch_id < N_FIFO_SWITCH);
@@ -526,12 +523,10 @@ void fifo_switch_get_state(
 	return;
 }
 
-void fifo_monitor_get_state(
-    const fifo_monitor_ID_t		ID,
-    fifo_monitor_state_t		*state)
+void fifo_monitor_get_state(const fifo_monitor_ID_t ID, fifo_monitor_state_t *state)
 {
-	fifo_channel_t	ch_id;
-	fifo_switch_t	sw_id;
+	fifo_channel_t ch_id;
+	fifo_switch_t sw_id;
 
 	assert(ID < N_FIFO_MONITOR_ID);
 	assert(state);
