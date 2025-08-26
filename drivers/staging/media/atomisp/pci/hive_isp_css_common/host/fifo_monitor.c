@@ -499,8 +499,6 @@ void fifo_channel_get_state(const fifo_monitor_ID_t ID,
 		assert(0);
 		break;
 	}
-
-	return;
 }
 
 void fifo_switch_get_state(const fifo_monitor_ID_t ID, const fifo_switch_t switch_id,
@@ -519,8 +517,6 @@ void fifo_switch_get_state(const fifo_monitor_ID_t ID, const fifo_switch_t switc
 	state->is_none = (data == HIVE_ISP_CSS_STREAM_SWITCH_NONE);
 	state->is_sp = (data == HIVE_ISP_CSS_STREAM_SWITCH_SP);
 	state->is_isp = (data == HIVE_ISP_CSS_STREAM_SWITCH_ISP);
-
-	return;
 }
 
 void fifo_monitor_get_state(const fifo_monitor_ID_t ID, fifo_monitor_state_t *state)
@@ -540,5 +536,4 @@ void fifo_monitor_get_state(const fifo_monitor_ID_t ID, fifo_monitor_state_t *st
 		fifo_switch_get_state(ID, sw_id,
 				      &state->fifo_switches[sw_id]);
 	}
-	return;
 }
