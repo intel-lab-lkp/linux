@@ -140,11 +140,17 @@ static irqreturn_t liteuart_interrupt(int irq, void *data)
 	 * irq[save|restore] spin_lock variants to cover all possibilities
 	 */
 	uart_port_lock_irqsave(port, &flags);
-	isr = litex_read8(port->membase + OFF_EV_PENDING) & uart->irq_reg;
-	if (isr & EV_RX)
-		liteuart_rx_chars(port);
-	if (isr & EV_TX)
-		liteuart_tx_chars(port);
+
+	isr = litex_read8(port->membase + OFF_EV_PENDING);
+
+	while (isr & uart->irq_reg) {
+		if (isr & EV_RX)
+			liteuart_rx_chars(port);
+		if (isr & EV_TX)
+			liteuart_tx_chars(port);
+		isr = litex_read8(port->membase + OFF_EV_PENDING);
+	}
+
 	uart_port_unlock_irqrestore(port, flags);
 
 	return IRQ_RETVAL(isr);
