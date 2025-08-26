@@ -747,6 +747,8 @@ bool smc_ib_is_sg_need_sync(struct smc_link *lnk,
 		    buf_slot->sgt[lnk->link_idx].nents, i) {
 		if (!sg_dma_len(sg))
 			break;
+		if (!lnk->smcibdev->ibdev->dma_device)
+			break;
 		if (dma_need_sync(lnk->smcibdev->ibdev->dma_device,
 				  sg_dma_address(sg))) {
 			ret = true;
