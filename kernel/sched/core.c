@@ -7590,11 +7590,11 @@ const struct sched_class *__setscheduler_class(int policy, int prio)
  * name such that if someone were to implement this function we get to compare
  * notes.
  */
-#define fetch_and_set(x, v) ({ int _x = (x); (x) = (v); _x; })
 
 void rt_mutex_pre_schedule(void)
 {
-	lockdep_assert(!fetch_and_set(current->sched_rt_mutex, 1));
+	lockdep_assert(!current->sched_rt_mutex);
+	current->sched_rt_mutex = 1;
 	sched_submit_work(current);
 }
 
@@ -7607,7 +7607,9 @@ void rt_mutex_schedule(void)
 void rt_mutex_post_schedule(void)
 {
 	sched_update_worker(current);
-	lockdep_assert(fetch_and_set(current->sched_rt_mutex, 0));
+	lockdep_assert(current->sched_rt_mutex);
+	current->sched_rt_mutex = 0;
+
 }
 
 /*
