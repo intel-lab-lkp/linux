@@ -2360,6 +2360,8 @@ static int snp_launch_update(struct kvm *kvm, struct kvm_sev_cmd *argp)
 		return -EINVAL;
 
 	npages = params.len / PAGE_SIZE;
+	if (npages <= 0)
+		return -EINVAL;
 
 	/*
 	 * For each GFN that's being prepared as part of the initial guest
