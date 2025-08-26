@@ -1,0 +1,73 @@
+# SPDX-License-Identifier: (GPL-2.0 OR BSD-2-Clause)
+%YAML 1.2
+---
+$id: http://devicetree.org/schemas/net/mxl,lgm-eth.yaml#
+$schema: http://devicetree.org/meta-schemas/core.yaml#
+
+title: MaxLinear LGM Ethernet Controller
+
+maintainers:
+  - Jack Ping Chng <jchng@maxlinear.com>
+
+description:
+  Binding for MaxLinear LGM Ethernet controller
+
+properties:
+  compatible:
+    enum:
+      - mxl,lgm-eth
+
+  clocks:
+    maxItems: 1
+
+  clock-names:
+    items:
+      - const: ethif
+
+  resets:
+    maxItems: 1
+
+  '#address-cells':
+    const: 1
+  '#size-cells':
+    const: 0
+
+patternProperties:
+  "^interface@[1-4]$":
+    type: object
+    properties:
+      compatible:
+        const: mxl,lgm-mac
+
+      reg:
+        minimum: 1
+        maximum: 4
+
+    required:
+      - compatible
+      - reg
+
+required:
+  - compatible
+  - clocks
+  - clock-names
+  - '#address-cells'
+  - '#size-cells'
+
+additionalProperties: false
+
+examples:
+  - |
+    eth {
+      compatible = "mxl,lgm-eth";
+      clocks = <&cgu0 32>;
+      clock-names = "ethif";
+      resets = <&rcu0 0x70 8>;
+      #address-cells = <1>;
+      #size-cells = <0>;
+
+      mac: interface@1 {
+        compatible = "mxl,eth-mac";
+        reg = <1>;
+      };
+    };
