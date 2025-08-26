@@ -133,6 +133,7 @@ impl DeviceId {
     /// Equivalent to C's `PCI_DEVICE` macro.
     ///
     /// Create a new `pci::DeviceId` from a vendor and device ID.
+    #[inline]
     pub const fn from_id(vendor: Vendor, device: u32) -> Self {
         Self(bindings::pci_device_id {
             vendor: vendor.as_raw() as u32,
@@ -149,6 +150,7 @@ impl DeviceId {
     /// Equivalent to C's `PCI_DEVICE_CLASS` macro.
     ///
     /// Create a new `pci::DeviceId` from a class number and mask.
+    #[inline]
     pub const fn from_class(class: u32, class_mask: u32) -> Self {
         Self(bindings::pci_device_id {
             vendor: DeviceId::PCI_ANY_ID,
@@ -385,6 +387,7 @@ impl<const SIZE: usize> Bar<SIZE> {
 }
 
 impl Bar {
+    #[inline]
     fn index_is_valid(index: u32) -> bool {
         // A `struct pci_dev` owns an array of resources with at most `PCI_NUM_RESOURCES` entries.
         index < bindings::PCI_NUM_RESOURCES
@@ -407,6 +410,7 @@ impl<const SIZE: usize> Deref for Bar<SIZE> {
 }
 
 impl<Ctx: device::DeviceContext> Device<Ctx> {
+    #[inline]
     fn as_raw(&self) -> *mut bindings::pci_dev {
         self.0.get()
     }
@@ -422,6 +426,7 @@ impl Device {
     }
 
     /// Returns the PCI device ID.
+    #[inline]
     pub fn device_id(&self) -> u16 {
         // SAFETY: `self.as_raw` is a valid pointer to a `struct pci_dev`.
         unsafe { (*self.as_raw()).device }
@@ -476,6 +481,7 @@ impl Device<device::Core> {
     }
 
     /// Enable bus-mastering for this device.
+    #[inline]
     pub fn set_master(&self) {
         // SAFETY: `self.as_raw` is guaranteed to be a pointer to a valid `struct pci_dev`.
         unsafe { bindings::pci_set_master(self.as_raw()) };
