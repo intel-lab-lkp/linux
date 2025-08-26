@@ -107,7 +107,8 @@ Typical cases and caveats
   constraints (e.g. list of items).
 
 - For names used in {clock,dma,interrupt,reset}-names, do not add any suffix,
-  e.g.: "tx" instead of "txirq" (for interrupt).
+  e.g.: "tx" instead of "txirq" (for interrupt). Except when only single letter
+  remains after removing the suffix, e.g., 'pclk', 'hclk'.
 
 - Properties without schema types (e.g. without standard suffix or not defined
   by schema) need the type, even if this is an enum.
