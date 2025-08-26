@@ -1059,6 +1059,14 @@ static bool has_coregroup_support(void)
 	return coregroup_enabled;
 }
 
+const struct cpumask *cpu_coregroup_mask(int cpu)
+{
+	if (has_coregroup_support())
+		return per_cpu(cpu_corgrp_map, cpu);
+
+	return cpu_node_mask(cpu);
+}
+
 static const struct cpumask *cpu_mc_mask(struct sched_domain_topology_level *tl, int cpu)
 {
 	return cpu_corgrp_mask(cpu);
