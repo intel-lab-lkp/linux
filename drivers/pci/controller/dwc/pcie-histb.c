@@ -49,14 +49,20 @@
 #define PCIE_LTSSM_STATE_MASK		GENMASK(5, 0)
 #define PCIE_LTSSM_STATE_ACTIVE		0x11
 
+#define PCIE_HISTB_NUM_RESETS   ARRAY_SIZE(histb_pci_rsts)
+
+static const char * const histb_pci_rsts[] = {
+	"soft",
+	"sys",
+	"bus",
+};
+
 struct histb_pcie {
 	struct dw_pcie *pci;
 	struct  clk_bulk_data *clks;
 	int     num_clks;
 	struct phy *phy;
-	struct reset_control *soft_reset;
-	struct reset_control *sys_reset;
-	struct reset_control *bus_reset;
+	struct  reset_control_bulk_data reset[PCIE_HISTB_NUM_RESETS];
 	void __iomem *ctrl;
 	struct gpio_desc *reset_gpio;
 	struct regulator *vpcie;
@@ -198,9 +204,8 @@ static const struct dw_pcie_host_ops histb_pcie_host_ops = {
 
 static void histb_pcie_host_disable(struct histb_pcie *hipcie)
 {
-	reset_control_assert(hipcie->soft_reset);
-	reset_control_assert(hipcie->sys_reset);
-	reset_control_assert(hipcie->bus_reset);
+	reset_control_bulk_assert(PCIE_HISTB_NUM_RESETS,
+				  hipcie->reset);
 
 	clk_bulk_disable_unprepare(hipcie->num_clks, hipcie->clks);
 
@@ -236,14 +241,19 @@ static int histb_pcie_host_enable(struct dw_pcie_rp *pp)
 		goto reg_dis;
 	}
 
-	reset_control_assert(hipcie->soft_reset);
-	reset_control_deassert(hipcie->soft_reset);
+	ret = reset_control_bulk_assert(PCIE_HISTB_NUM_RESETS,
+					hipcie->reset);
+	if (ret) {
+		dev_err(dev, "Couldn't assert reset %d\n", ret);
+		goto reg_dis;
+	}
 
-	reset_control_assert(hipcie->sys_reset);
-	reset_control_deassert(hipcie->sys_reset);
-
-	reset_control_assert(hipcie->bus_reset);
-	reset_control_deassert(hipcie->bus_reset);
+	ret = reset_control_bulk_deassert(PCIE_HISTB_NUM_RESETS,
+					  hipcie->reset);
+	if (ret) {
+		dev_err(dev, "Couldn't dessert reset %d\n", ret);
+		goto reg_dis;
+	}
 
 	return 0;
 
@@ -321,23 +331,12 @@ static int histb_pcie_probe(struct platform_device *pdev)
 		return dev_err_probe(dev, hipcie->num_clks,
 				     "failed to get clocks\n");
 
-	hipcie->soft_reset = devm_reset_control_get(dev, "soft");
-	if (IS_ERR(hipcie->soft_reset)) {
-		dev_err(dev, "couldn't get soft reset\n");
-		return PTR_ERR(hipcie->soft_reset);
-	}
+	ret = devm_reset_control_bulk_get_exclusive(dev,
+						    PCIE_HISTB_NUM_RESETS,
+						    hipcie->reset);
+	if (ret)
+		return dev_err_probe(dev, ret, "Cannot get the Core resets\n");
 
-	hipcie->sys_reset = devm_reset_control_get(dev, "sys");
-	if (IS_ERR(hipcie->sys_reset)) {
-		dev_err(dev, "couldn't get sys reset\n");
-		return PTR_ERR(hipcie->sys_reset);
-	}
-
-	hipcie->bus_reset = devm_reset_control_get(dev, "bus");
-	if (IS_ERR(hipcie->bus_reset)) {
-		dev_err(dev, "couldn't get bus reset\n");
-		return PTR_ERR(hipcie->bus_reset);
-	}
 
 	hipcie->phy = devm_phy_get(dev, "phy");
 	if (IS_ERR(hipcie->phy)) {
