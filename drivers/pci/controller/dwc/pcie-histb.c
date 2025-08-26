@@ -51,10 +51,8 @@
 
 struct histb_pcie {
 	struct dw_pcie *pci;
-	struct clk *aux_clk;
-	struct clk *pipe_clk;
-	struct clk *sys_clk;
-	struct clk *bus_clk;
+	struct  clk_bulk_data *clks;
+	int     num_clks;
 	struct phy *phy;
 	struct reset_control *soft_reset;
 	struct reset_control *sys_reset;
@@ -204,10 +202,7 @@ static void histb_pcie_host_disable(struct histb_pcie *hipcie)
 	reset_control_assert(hipcie->sys_reset);
 	reset_control_assert(hipcie->bus_reset);
 
-	clk_disable_unprepare(hipcie->aux_clk);
-	clk_disable_unprepare(hipcie->pipe_clk);
-	clk_disable_unprepare(hipcie->sys_clk);
-	clk_disable_unprepare(hipcie->bus_clk);
+	clk_bulk_disable_unprepare(hipcie->num_clks, hipcie->clks);
 
 	if (hipcie->reset_gpio)
 		gpiod_set_value_cansleep(hipcie->reset_gpio, 1);
@@ -235,28 +230,10 @@ static int histb_pcie_host_enable(struct dw_pcie_rp *pp)
 	if (hipcie->reset_gpio)
 		gpiod_set_value_cansleep(hipcie->reset_gpio, 0);
 
-	ret = clk_prepare_enable(hipcie->bus_clk);
+	ret = clk_bulk_prepare_enable(hipcie->num_clks, hipcie->clks);
 	if (ret) {
-		dev_err(dev, "cannot prepare/enable bus clk\n");
-		goto err_bus_clk;
-	}
-
-	ret = clk_prepare_enable(hipcie->sys_clk);
-	if (ret) {
-		dev_err(dev, "cannot prepare/enable sys clk\n");
-		goto err_sys_clk;
-	}
-
-	ret = clk_prepare_enable(hipcie->pipe_clk);
-	if (ret) {
-		dev_err(dev, "cannot prepare/enable pipe clk\n");
-		goto err_pipe_clk;
-	}
-
-	ret = clk_prepare_enable(hipcie->aux_clk);
-	if (ret) {
-		dev_err(dev, "cannot prepare/enable aux clk\n");
-		goto err_aux_clk;
+		ret = dev_err_probe(dev, ret, "failed to enable clocks\n");
+		goto reg_dis;
 	}
 
 	reset_control_assert(hipcie->soft_reset);
@@ -270,13 +247,7 @@ static int histb_pcie_host_enable(struct dw_pcie_rp *pp)
 
 	return 0;
 
-err_aux_clk:
-	clk_disable_unprepare(hipcie->pipe_clk);
-err_pipe_clk:
-	clk_disable_unprepare(hipcie->sys_clk);
-err_sys_clk:
-	clk_disable_unprepare(hipcie->bus_clk);
-err_bus_clk:
+reg_dis:
 	if (hipcie->vpcie)
 		regulator_disable(hipcie->vpcie);
 
@@ -345,29 +316,10 @@ static int histb_pcie_probe(struct platform_device *pdev)
 		return ret;
 	}
 
-	hipcie->aux_clk = devm_clk_get(dev, "aux");
-	if (IS_ERR(hipcie->aux_clk)) {
-		dev_err(dev, "Failed to get PCIe aux clk\n");
-		return PTR_ERR(hipcie->aux_clk);
-	}
-
-	hipcie->pipe_clk = devm_clk_get(dev, "pipe");
-	if (IS_ERR(hipcie->pipe_clk)) {
-		dev_err(dev, "Failed to get PCIe pipe clk\n");
-		return PTR_ERR(hipcie->pipe_clk);
-	}
-
-	hipcie->sys_clk = devm_clk_get(dev, "sys");
-	if (IS_ERR(hipcie->sys_clk)) {
-		dev_err(dev, "Failed to get PCIEe sys clk\n");
-		return PTR_ERR(hipcie->sys_clk);
-	}
-
-	hipcie->bus_clk = devm_clk_get(dev, "bus");
-	if (IS_ERR(hipcie->bus_clk)) {
-		dev_err(dev, "Failed to get PCIe bus clk\n");
-		return PTR_ERR(hipcie->bus_clk);
-	}
+	hipcie->num_clks = devm_clk_bulk_get_all(dev, &hipcie->clks);
+	if (hipcie->num_clks < 0)
+		return dev_err_probe(dev, hipcie->num_clks,
+				     "failed to get clocks\n");
 
 	hipcie->soft_reset = devm_reset_control_get(dev, "soft");
 	if (IS_ERR(hipcie->soft_reset)) {
