@@ -1064,11 +1064,6 @@ const struct cpumask *cpu_coregroup_mask(int cpu)
 }
 #endif
 
-static const struct cpumask *cpu_pkg_mask(struct sched_domain_topology_level *tl, int cpu)
-{
-	return cpu_node_mask(cpu);
-}
-
 static int __init init_big_cores(void)
 {
 	int cpu;
@@ -1728,7 +1723,7 @@ static void __init build_sched_topology(void)
 	}
 #endif
 
-	powerpc_topology[i++] = SDTL_INIT(cpu_pkg_mask, powerpc_shared_proc_flags, PKG);
+	powerpc_topology[i++] = SDTL_INIT(tl_pkg_mask, powerpc_shared_proc_flags, PKG);
 
 	/* There must be one trailing NULL entry left.  */
 	BUG_ON(i >= ARRAY_SIZE(powerpc_topology) - 1);
