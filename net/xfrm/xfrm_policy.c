@@ -3780,6 +3780,7 @@ int __xfrm_policy_check(struct sock *sk, int dir, struct sk_buff *skb,
 			if (IS_ERR(pols[1])) {
 				XFRM_INC_STATS(net, LINUX_MIB_XFRMINPOLERROR);
 				xfrm_pol_put(pols[0]);
+				pols[0] = NULL;           // Clear pointer to prevent reuse
 				return 0;
 			}
 			/* This write can happen from different cpus. */
