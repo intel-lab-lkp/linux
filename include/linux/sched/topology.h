@@ -50,7 +50,13 @@ static inline int cpu_cluster_flags(void)
 {
 	return SD_CLUSTER | SD_SHARE_LLC;
 }
-#endif
+
+static const __maybe_unused
+struct cpumask *tl_cls_mask(struct sched_domain_topology_level *tl, int cpu)
+{
+	return cpu_clustergroup_mask(cpu);
+}
+#endif /* CONFIG_SCHED_CLUSTER */
 
 #ifdef CONFIG_SCHED_MC
 static inline int cpu_core_flags(void)
