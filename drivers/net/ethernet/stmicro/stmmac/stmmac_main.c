@@ -40,6 +40,7 @@
 #include <linux/phylink.h>
 #include <linux/udp.h>
 #include <linux/bpf_trace.h>
+#include <linux/inetdevice.h>
 #include <net/page_pool/helpers.h>
 #include <net/pkt_cls.h>
 #include <net/xdp_sock_drv.h>
@@ -964,6 +965,8 @@ static void stmmac_mac_link_up(struct phylink_config *config,
 			       bool tx_pause, bool rx_pause)
 {
 	struct stmmac_priv *priv = netdev_priv(to_net_dev(config->dev));
+	struct in_device *in_dev;
+	struct in_ifaddr *ifa;
 	unsigned int flow_ctrl;
 	u32 old_ctrl, ctrl;
 	int ret;
@@ -1076,6 +1079,20 @@ static void stmmac_mac_link_up(struct phylink_config *config,
 
 	if (priv->plat->flags & STMMAC_FLAG_HWTSTAMP_CORRECT_LATENCY)
 		stmmac_hwtstamp_correct_latency(priv, priv);
+
+	if (priv->plat->flags & STMMAC_FLAG_ARP_OFFLOAD_EN) {
+		in_dev = in_dev_get(priv->dev);
+		if (!in_dev)
+			return;
+
+		ifa = in_dev->ifa_list;
+		if (!ifa)
+			return;
+
+		stmmac_set_arp_offload(priv, priv->hw, true,
+				       ntohl(ifa->ifa_address));
+		in_dev_put(in_dev);
+	}
 }
 
 static void stmmac_mac_disable_tx_lpi(struct phylink_config *config)
