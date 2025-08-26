@@ -190,6 +190,47 @@ static void hinic3_free_txrxq_resources(struct net_device *netdev,
 	q_params->txqs_res = NULL;
 }
 
+static int hinic3_configure_txrxqs(struct net_device *netdev,
+				   struct hinic3_dyna_txrxq_params *q_params)
+{
+	int err;
+
+	err = hinic3_configure_txqs(netdev, q_params->num_qps,
+				    q_params->sq_depth, q_params->txqs_res);
+	if (err) {
+		netdev_err(netdev, "Failed to configure txqs\n");
+		return err;
+	}
+
+	err = hinic3_configure_rxqs(netdev, q_params->num_qps,
+				    q_params->rq_depth, q_params->rxqs_res);
+	if (err) {
+		netdev_err(netdev, "Failed to configure rxqs\n");
+		return err;
+	}
+
+	return 0;
+}
+
+static int hinic3_configure(struct net_device *netdev)
+{
+	struct hinic3_nic_dev *nic_dev = netdev_priv(netdev);
+	int err;
+
+	netdev->min_mtu = HINIC3_MIN_MTU_SIZE;
+	netdev->max_mtu = HINIC3_MAX_JUMBO_FRAME_SIZE;
+	err = hinic3_set_port_mtu(netdev, netdev->mtu);
+	if (err) {
+		netdev_err(netdev, "Failed to set mtu\n");
+		return err;
+	}
+
+	/* Ensure DCB is disabled */
+	hinic3_sync_dcb_state(nic_dev->hwdev, 1, 0);
+
+	return 0;
+}
+
 static int hinic3_alloc_channel_resources(struct net_device *netdev,
 					  struct hinic3_dyna_qp_params *qp_params,
 					  struct hinic3_dyna_txrxq_params *trxq_params)
@@ -238,13 +279,28 @@ static int hinic3_open_channel(struct net_device *netdev)
 		return err;
 	}
 
+	err = hinic3_configure_txrxqs(netdev, &nic_dev->q_params);
+	if (err) {
+		netdev_err(netdev, "Failed to configure txrxqs\n");
+		goto err_free_qp_ctxts;
+	}
+
 	err = hinic3_qps_irq_init(netdev);
 	if (err) {
 		netdev_err(netdev, "Failed to init txrxq irq\n");
 		goto err_free_qp_ctxts;
 	}
 
+	err = hinic3_configure(netdev);
+	if (err) {
+		netdev_err(netdev, "Failed to init txrxq irq\n");
+		goto err_uninit_qps_irq;
+	}
+
 	return 0;
+
+err_uninit_qps_irq:
+	hinic3_qps_irq_uninit(netdev);
 
 err_free_qp_ctxts:
 	hinic3_free_qp_ctxts(nic_dev);
