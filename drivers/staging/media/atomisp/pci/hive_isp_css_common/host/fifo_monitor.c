@@ -58,442 +58,478 @@ void fifo_channel_get_state(const fifo_monitor_ID_t ID,
 
 	switch (channel_id) {
 	case FIFO_CHANNEL_ISP0_TO_SP0:
-		state->src_valid   = fifo_monitor_status_valid(ID,
-				     HIVE_GP_REGS_ISP_STREAM_STAT_IDX,
-				     ISP_STR_MON_PORT_SND_SP); /* ISP_STR_MON_PORT_ISP2SP */
-		state->fifo_accept = fifo_monitor_status_accept(ID,
-				     HIVE_GP_REGS_ISP_STREAM_STAT_IDX,
-				     ISP_STR_MON_PORT_SND_SP);
-		state->fifo_valid  = fifo_monitor_status_valid(ID,
-				     HIVE_GP_REGS_SP_STREAM_STAT_IDX,
-				     SP_STR_MON_PORT_RCV_ISP); /* ISP_STR_MON_PORT_SP2ISP */
-		state->sink_accept = fifo_monitor_status_accept(ID,
-				     HIVE_GP_REGS_SP_STREAM_STAT_IDX,
-				     SP_STR_MON_PORT_RCV_ISP);
+		state->src_valid =
+		    fifo_monitor_status_valid(ID, HIVE_GP_REGS_ISP_STREAM_STAT_IDX,
+					      ISP_STR_MON_PORT_SND_SP);
+					      /* ISP_STR_MON_PORT_ISP2SP */
+		state->fifo_accept =
+		    fifo_monitor_status_accept(ID, HIVE_GP_REGS_ISP_STREAM_STAT_IDX,
+					       ISP_STR_MON_PORT_SND_SP);
+		state->fifo_valid =
+		    fifo_monitor_status_valid(ID, HIVE_GP_REGS_SP_STREAM_STAT_IDX,
+					      SP_STR_MON_PORT_RCV_ISP);
+					      /* ISP_STR_MON_PORT_SP2ISP */
+		state->sink_accept =
+		    fifo_monitor_status_accept(ID, HIVE_GP_REGS_SP_STREAM_STAT_IDX,
+					       SP_STR_MON_PORT_RCV_ISP);
 		break;
 	case FIFO_CHANNEL_SP0_TO_ISP0:
-		state->src_valid   = fifo_monitor_status_valid(ID,
-				     HIVE_GP_REGS_SP_STREAM_STAT_IDX,
-				     SP_STR_MON_PORT_SND_ISP); /* ISP_STR_MON_PORT_SP2ISP */
-		state->fifo_accept = fifo_monitor_status_accept(ID,
-				     HIVE_GP_REGS_SP_STREAM_STAT_IDX,
-				     SP_STR_MON_PORT_SND_ISP);
-		state->fifo_valid  = fifo_monitor_status_valid(ID,
-				     HIVE_GP_REGS_ISP_STREAM_STAT_IDX,
-				     ISP_STR_MON_PORT_RCV_SP); /* ISP_STR_MON_PORT_ISP2SP */
-		state->sink_accept = fifo_monitor_status_accept(ID,
-				     HIVE_GP_REGS_ISP_STREAM_STAT_IDX,
-				     ISP_STR_MON_PORT_RCV_SP);
+		state->src_valid =
+		    fifo_monitor_status_valid(ID, HIVE_GP_REGS_SP_STREAM_STAT_IDX,
+					      SP_STR_MON_PORT_SND_ISP);
+					      /* ISP_STR_MON_PORT_SP2ISP */
+		state->fifo_accept =
+		    fifo_monitor_status_accept(ID, HIVE_GP_REGS_SP_STREAM_STAT_IDX,
+					       SP_STR_MON_PORT_SND_ISP);
+		state->fifo_valid =
+		    fifo_monitor_status_valid(ID, HIVE_GP_REGS_ISP_STREAM_STAT_IDX,
+					      ISP_STR_MON_PORT_RCV_SP);
+					      /* ISP_STR_MON_PORT_ISP2SP */
+		state->sink_accept =
+		    fifo_monitor_status_accept(ID, HIVE_GP_REGS_ISP_STREAM_STAT_IDX,
+					       ISP_STR_MON_PORT_RCV_SP);
 		break;
 	case FIFO_CHANNEL_ISP0_TO_IF0:
-		state->src_valid   = fifo_monitor_status_valid(ID,
-				     HIVE_GP_REGS_ISP_STREAM_STAT_IDX,
-				     ISP_STR_MON_PORT_SND_PIF_A); /* ISP_STR_MON_PORT_ISP2PIFA */
-		state->fifo_accept = fifo_monitor_status_accept(ID,
-				     HIVE_GP_REGS_ISP_STREAM_STAT_IDX,
-				     ISP_STR_MON_PORT_SND_PIF_A);
-		state->fifo_valid  = fifo_monitor_status_valid(ID,
-				     HIVE_GP_REGS_MOD_STREAM_STAT_IDX,
-				     MOD_STR_MON_PORT_RCV_PIF_A); /* MOD_STR_MON_PORT_CELLS2PIFA */
-		state->sink_accept = fifo_monitor_status_accept(ID,
-				     HIVE_GP_REGS_MOD_STREAM_STAT_IDX,
-				     MOD_STR_MON_PORT_RCV_PIF_A);
+		state->src_valid =
+		    fifo_monitor_status_valid(ID, HIVE_GP_REGS_ISP_STREAM_STAT_IDX,
+					      ISP_STR_MON_PORT_SND_PIF_A);
+					      /* ISP_STR_MON_PORT_ISP2PIFA */
+		state->fifo_accept =
+		    fifo_monitor_status_accept(ID, HIVE_GP_REGS_ISP_STREAM_STAT_IDX,
+					       ISP_STR_MON_PORT_SND_PIF_A);
+		state->fifo_valid =
+		    fifo_monitor_status_valid(ID, HIVE_GP_REGS_MOD_STREAM_STAT_IDX,
+					      MOD_STR_MON_PORT_RCV_PIF_A);
+					      /* MOD_STR_MON_PORT_CELLS2PIFA */
+		state->sink_accept =
+		    fifo_monitor_status_accept(ID, HIVE_GP_REGS_MOD_STREAM_STAT_IDX,
+					       MOD_STR_MON_PORT_RCV_PIF_A);
 		break;
 	case FIFO_CHANNEL_IF0_TO_ISP0:
-		state->src_valid   = fifo_monitor_status_valid(ID,
-				     HIVE_GP_REGS_MOD_STREAM_STAT_IDX,
-				     MOD_STR_MON_PORT_SND_PIF_A); /* MOD_STR_MON_PORT_PIFA2CELLS */
-		state->fifo_accept = fifo_monitor_status_accept(ID,
-				     HIVE_GP_REGS_MOD_STREAM_STAT_IDX,
-				     MOD_STR_MON_PORT_SND_PIF_A);
-		state->fifo_valid  = fifo_monitor_status_valid(ID,
-				     HIVE_GP_REGS_ISP_STREAM_STAT_IDX,
-				     ISP_STR_MON_PORT_RCV_PIF_A); /* ISP_STR_MON_PORT_PIFA2ISP */
-		state->sink_accept = fifo_monitor_status_accept(ID,
-				     HIVE_GP_REGS_ISP_STREAM_STAT_IDX,
-				     ISP_STR_MON_PORT_RCV_PIF_A);
+		state->src_valid =
+		    fifo_monitor_status_valid(ID, HIVE_GP_REGS_MOD_STREAM_STAT_IDX,
+					      MOD_STR_MON_PORT_SND_PIF_A);
+					      /* MOD_STR_MON_PORT_PIFA2CELLS */
+		state->fifo_accept =
+		    fifo_monitor_status_accept(ID, HIVE_GP_REGS_MOD_STREAM_STAT_IDX,
+					       MOD_STR_MON_PORT_SND_PIF_A);
+		state->fifo_valid =
+		    fifo_monitor_status_valid(ID, HIVE_GP_REGS_ISP_STREAM_STAT_IDX,
+					      ISP_STR_MON_PORT_RCV_PIF_A);
+					      /* ISP_STR_MON_PORT_PIFA2ISP */
+		state->sink_accept =
+		    fifo_monitor_status_accept(ID, HIVE_GP_REGS_ISP_STREAM_STAT_IDX,
+					       ISP_STR_MON_PORT_RCV_PIF_A);
 		break;
 	case FIFO_CHANNEL_ISP0_TO_IF1:
-		state->src_valid   = fifo_monitor_status_valid(ID,
-				     HIVE_GP_REGS_ISP_STREAM_STAT_IDX,
-				     ISP_STR_MON_PORT_SND_PIF_B); /* ISP_STR_MON_PORT_ISP2PIFA */
-		state->fifo_accept = fifo_monitor_status_accept(ID,
-				     HIVE_GP_REGS_ISP_STREAM_STAT_IDX,
-				     ISP_STR_MON_PORT_SND_PIF_B);
-		state->fifo_valid  = fifo_monitor_status_valid(ID,
-				     HIVE_GP_REGS_MOD_STREAM_STAT_IDX,
-				     MOD_STR_MON_PORT_RCV_PIF_B); /* MOD_STR_MON_PORT_CELLS2PIFB */
-		state->sink_accept = fifo_monitor_status_accept(ID,
-				     HIVE_GP_REGS_MOD_STREAM_STAT_IDX,
-				     MOD_STR_MON_PORT_RCV_PIF_B);
+		state->src_valid =
+		    fifo_monitor_status_valid(ID, HIVE_GP_REGS_ISP_STREAM_STAT_IDX,
+					      ISP_STR_MON_PORT_SND_PIF_B);
+					      /* ISP_STR_MON_PORT_ISP2PIFA */
+		state->fifo_accept =
+		    fifo_monitor_status_accept(ID, HIVE_GP_REGS_ISP_STREAM_STAT_IDX,
+					       ISP_STR_MON_PORT_SND_PIF_B);
+		state->fifo_valid =
+		    fifo_monitor_status_valid(ID, HIVE_GP_REGS_MOD_STREAM_STAT_IDX,
+					      MOD_STR_MON_PORT_RCV_PIF_B);
+					      /* MOD_STR_MON_PORT_CELLS2PIFB */
+		state->sink_accept =
+		    fifo_monitor_status_accept(ID, HIVE_GP_REGS_MOD_STREAM_STAT_IDX,
+					       MOD_STR_MON_PORT_RCV_PIF_B);
 		break;
 	case FIFO_CHANNEL_IF1_TO_ISP0:
-		state->src_valid   = fifo_monitor_status_valid(ID,
-				     HIVE_GP_REGS_MOD_STREAM_STAT_IDX,
-				     MOD_STR_MON_PORT_SND_PIF_B); /* MOD_STR_MON_PORT_PIFB2CELLS */
-		state->fifo_accept = fifo_monitor_status_accept(ID,
-				     HIVE_GP_REGS_MOD_STREAM_STAT_IDX,
-				     MOD_STR_MON_PORT_SND_PIF_B);
-		state->fifo_valid  = fifo_monitor_status_valid(ID,
-				     HIVE_GP_REGS_ISP_STREAM_STAT_IDX,
-				     ISP_STR_MON_PORT_RCV_PIF_B); /* ISP_STR_MON_PORT_PIFB2ISP */
-		state->sink_accept = fifo_monitor_status_accept(ID,
-				     HIVE_GP_REGS_ISP_STREAM_STAT_IDX,
-				     ISP_STR_MON_PORT_RCV_PIF_B);
+		state->src_valid =
+		    fifo_monitor_status_valid(ID, HIVE_GP_REGS_MOD_STREAM_STAT_IDX,
+					      MOD_STR_MON_PORT_SND_PIF_B);
+					      /* MOD_STR_MON_PORT_PIFB2CELLS */
+		state->fifo_accept =
+		    fifo_monitor_status_accept(ID, HIVE_GP_REGS_MOD_STREAM_STAT_IDX,
+					       MOD_STR_MON_PORT_SND_PIF_B);
+		state->fifo_valid =
+		    fifo_monitor_status_valid(ID, HIVE_GP_REGS_ISP_STREAM_STAT_IDX,
+					      ISP_STR_MON_PORT_RCV_PIF_B);
+					      /* ISP_STR_MON_PORT_PIFB2ISP */
+		state->sink_accept =
+		    fifo_monitor_status_accept(ID, HIVE_GP_REGS_ISP_STREAM_STAT_IDX,
+					       ISP_STR_MON_PORT_RCV_PIF_B);
 		break;
 	case FIFO_CHANNEL_ISP0_TO_DMA0:
-		state->src_valid   = fifo_monitor_status_valid(ID,
-				     HIVE_GP_REGS_ISP_STREAM_STAT_IDX,
-				     ISP_STR_MON_PORT_SND_DMA); /* ISP_STR_MON_PORT_ISP2DMA */
-		state->fifo_accept = fifo_monitor_status_accept(ID,
-				     HIVE_GP_REGS_ISP_STREAM_STAT_IDX,
-				     ISP_STR_MON_PORT_SND_DMA);
-		state->fifo_valid  = fifo_monitor_status_valid(ID,
-				     HIVE_GP_REGS_MOD_STREAM_STAT_IDX,
-				     MOD_STR_MON_PORT_RCV_DMA_FR_ISP); /* MOD_STR_MON_PORT_ISP2DMA */
-		state->sink_accept = fifo_monitor_status_accept(ID,
-				     HIVE_GP_REGS_MOD_STREAM_STAT_IDX,
-				     MOD_STR_MON_PORT_RCV_DMA_FR_ISP);
+		state->src_valid =
+		    fifo_monitor_status_valid(ID, HIVE_GP_REGS_ISP_STREAM_STAT_IDX,
+					      ISP_STR_MON_PORT_SND_DMA);
+					      /* ISP_STR_MON_PORT_ISP2DMA */
+		state->fifo_accept =
+		    fifo_monitor_status_accept(ID, HIVE_GP_REGS_ISP_STREAM_STAT_IDX,
+					       ISP_STR_MON_PORT_SND_DMA);
+		state->fifo_valid =
+		    fifo_monitor_status_valid(ID, HIVE_GP_REGS_MOD_STREAM_STAT_IDX,
+					      MOD_STR_MON_PORT_RCV_DMA_FR_ISP);
+					      /* MOD_STR_MON_PORT_ISP2DMA */
+		state->sink_accept =
+		    fifo_monitor_status_accept(ID, HIVE_GP_REGS_MOD_STREAM_STAT_IDX,
+					       MOD_STR_MON_PORT_RCV_DMA_FR_ISP);
 		break;
 	case FIFO_CHANNEL_DMA0_TO_ISP0:
-		state->src_valid   = fifo_monitor_status_valid(ID,
-				     HIVE_GP_REGS_MOD_STREAM_STAT_IDX,
-				     MOD_STR_MON_PORT_SND_DMA2ISP); /* MOD_STR_MON_PORT_DMA2ISP */
-		state->fifo_accept = fifo_monitor_status_accept(ID,
-				     HIVE_GP_REGS_MOD_STREAM_STAT_IDX,
-				     MOD_STR_MON_PORT_SND_DMA2ISP);
-		state->fifo_valid  = fifo_monitor_status_valid(ID,
-				     HIVE_GP_REGS_ISP_STREAM_STAT_IDX,
-				     ISP_STR_MON_PORT_RCV_DMA); /* ISP_STR_MON_PORT_DMA2ISP */
-		state->sink_accept = fifo_monitor_status_accept(ID,
-				     HIVE_GP_REGS_ISP_STREAM_STAT_IDX,
-				     ISP_STR_MON_PORT_RCV_DMA);
+		state->src_valid =
+		    fifo_monitor_status_valid(ID, HIVE_GP_REGS_MOD_STREAM_STAT_IDX,
+					      MOD_STR_MON_PORT_SND_DMA2ISP);
+					      /* MOD_STR_MON_PORT_DMA2ISP */
+		state->fifo_accept =
+		    fifo_monitor_status_accept(ID, HIVE_GP_REGS_MOD_STREAM_STAT_IDX,
+					       MOD_STR_MON_PORT_SND_DMA2ISP);
+		state->fifo_valid =
+		    fifo_monitor_status_valid(ID, HIVE_GP_REGS_ISP_STREAM_STAT_IDX,
+					      ISP_STR_MON_PORT_RCV_DMA);
+					      /* ISP_STR_MON_PORT_DMA2ISP */
+		state->sink_accept =
+		    fifo_monitor_status_accept(ID, HIVE_GP_REGS_ISP_STREAM_STAT_IDX,
+					       ISP_STR_MON_PORT_RCV_DMA);
 		break;
 	case FIFO_CHANNEL_ISP0_TO_GDC0:
-		state->src_valid   = fifo_monitor_status_valid(ID,
-				     HIVE_GP_REGS_ISP_STREAM_STAT_IDX,
-				     ISP_STR_MON_PORT_SND_GDC); /* ISP_STR_MON_PORT_ISP2GDC1 */
-		state->fifo_accept = fifo_monitor_status_accept(ID,
-				     HIVE_GP_REGS_ISP_STREAM_STAT_IDX,
-				     ISP_STR_MON_PORT_SND_GDC);
-		state->fifo_valid  = fifo_monitor_status_valid(ID,
-				     HIVE_GP_REGS_MOD_STREAM_STAT_IDX,
-				     MOD_STR_MON_PORT_RCV_GDC); /* MOD_STR_MON_PORT_CELLS2GDC1 */
-		state->sink_accept = fifo_monitor_status_accept(ID,
-				     HIVE_GP_REGS_MOD_STREAM_STAT_IDX,
-				     MOD_STR_MON_PORT_RCV_GDC);
+		state->src_valid =
+		    fifo_monitor_status_valid(ID, HIVE_GP_REGS_ISP_STREAM_STAT_IDX,
+					      ISP_STR_MON_PORT_SND_GDC);
+					      /* ISP_STR_MON_PORT_ISP2GDC1 */
+		state->fifo_accept =
+		    fifo_monitor_status_accept(ID, HIVE_GP_REGS_ISP_STREAM_STAT_IDX,
+					       ISP_STR_MON_PORT_SND_GDC);
+		state->fifo_valid =
+		    fifo_monitor_status_valid(ID, HIVE_GP_REGS_MOD_STREAM_STAT_IDX,
+					      MOD_STR_MON_PORT_RCV_GDC);
+					      /* MOD_STR_MON_PORT_CELLS2GDC1 */
+		state->sink_accept =
+		    fifo_monitor_status_accept(ID, HIVE_GP_REGS_MOD_STREAM_STAT_IDX,
+					       MOD_STR_MON_PORT_RCV_GDC);
 		break;
 	case FIFO_CHANNEL_GDC0_TO_ISP0:
-		state->fifo_valid  = fifo_monitor_status_valid(ID,
-				     HIVE_GP_REGS_MOD_STREAM_STAT_IDX,
-				     MOD_STR_MON_PORT_SND_GDC); /* MOD_STR_MON_PORT_GDC12CELLS */
-		state->sink_accept = fifo_monitor_status_accept(ID,
-				     HIVE_GP_REGS_MOD_STREAM_STAT_IDX,
-				     MOD_STR_MON_PORT_SND_GDC);
-		state->src_valid   = fifo_monitor_status_valid(ID,
-				     HIVE_GP_REGS_ISP_STREAM_STAT_IDX,
-				     ISP_STR_MON_PORT_RCV_GDC); /* ISP_STR_MON_PORT_GDC12ISP */
-		state->fifo_accept = fifo_monitor_status_accept(ID,
-				     HIVE_GP_REGS_ISP_STREAM_STAT_IDX,
-				     ISP_STR_MON_PORT_RCV_GDC);
+		state->fifo_valid =
+		    fifo_monitor_status_valid(ID, HIVE_GP_REGS_MOD_STREAM_STAT_IDX,
+					      MOD_STR_MON_PORT_SND_GDC);
+					      /* MOD_STR_MON_PORT_GDC12CELLS */
+		state->sink_accept =
+		    fifo_monitor_status_accept(ID, HIVE_GP_REGS_MOD_STREAM_STAT_IDX,
+					       MOD_STR_MON_PORT_SND_GDC);
+		state->src_valid =
+		    fifo_monitor_status_valid(ID, HIVE_GP_REGS_ISP_STREAM_STAT_IDX,
+					      ISP_STR_MON_PORT_RCV_GDC);
+					      /* ISP_STR_MON_PORT_GDC12ISP */
+		state->fifo_accept =
+		    fifo_monitor_status_accept(ID, HIVE_GP_REGS_ISP_STREAM_STAT_IDX,
+					       ISP_STR_MON_PORT_RCV_GDC);
 		break;
 	case FIFO_CHANNEL_ISP0_TO_GDC1:
-		state->src_valid   = fifo_monitor_status_valid(ID,
-				     HIVE_GP_REGS_ISP_STREAM_STAT_IDX,
-				     ISP_STR_MON_PORT_ISP2GDC2);
-		state->fifo_accept = fifo_monitor_status_accept(ID,
-				     HIVE_GP_REGS_ISP_STREAM_STAT_IDX,
-				     ISP_STR_MON_PORT_ISP2GDC2);
-		state->fifo_valid  = fifo_monitor_status_valid(ID,
-				     HIVE_GP_REGS_MOD_STREAM_STAT_IDX,
-				     MOD_STR_MON_PORT_CELLS2GDC2);
-		state->sink_accept = fifo_monitor_status_accept(ID,
-				     HIVE_GP_REGS_MOD_STREAM_STAT_IDX,
-				     MOD_STR_MON_PORT_CELLS2GDC2);
+		state->src_valid =
+		    fifo_monitor_status_valid(ID, HIVE_GP_REGS_ISP_STREAM_STAT_IDX,
+					      ISP_STR_MON_PORT_ISP2GDC2);
+		state->fifo_accept =
+		    fifo_monitor_status_accept(ID, HIVE_GP_REGS_ISP_STREAM_STAT_IDX,
+					       ISP_STR_MON_PORT_ISP2GDC2);
+		state->fifo_valid =
+		    fifo_monitor_status_valid(ID, HIVE_GP_REGS_MOD_STREAM_STAT_IDX,
+					      MOD_STR_MON_PORT_CELLS2GDC2);
+		state->sink_accept =
+		    fifo_monitor_status_accept(ID, HIVE_GP_REGS_MOD_STREAM_STAT_IDX,
+					       MOD_STR_MON_PORT_CELLS2GDC2);
 		break;
 	case FIFO_CHANNEL_GDC1_TO_ISP0:
-		state->fifo_valid  = fifo_monitor_status_valid(ID,
-				     HIVE_GP_REGS_MOD_STREAM_STAT_IDX,
-				     MOD_STR_MON_PORT_GDC22CELLS);
-		state->sink_accept = fifo_monitor_status_accept(ID,
-				     HIVE_GP_REGS_MOD_STREAM_STAT_IDX,
-				     MOD_STR_MON_PORT_GDC22CELLS);
-		state->src_valid   = fifo_monitor_status_valid(ID,
-				     HIVE_GP_REGS_ISP_STREAM_STAT_IDX,
-				     ISP_STR_MON_PORT_GDC22ISP);
-		state->fifo_accept = fifo_monitor_status_accept(ID,
-				     HIVE_GP_REGS_ISP_STREAM_STAT_IDX,
-				     ISP_STR_MON_PORT_GDC22ISP);
+		state->fifo_valid =
+		    fifo_monitor_status_valid(ID, HIVE_GP_REGS_MOD_STREAM_STAT_IDX,
+					      MOD_STR_MON_PORT_GDC22CELLS);
+		state->sink_accept =
+		    fifo_monitor_status_accept(ID, HIVE_GP_REGS_MOD_STREAM_STAT_IDX,
+					       MOD_STR_MON_PORT_GDC22CELLS);
+		state->src_valid =
+		    fifo_monitor_status_valid(ID, HIVE_GP_REGS_ISP_STREAM_STAT_IDX,
+					      ISP_STR_MON_PORT_GDC22ISP);
+		state->fifo_accept =
+		    fifo_monitor_status_accept(ID, HIVE_GP_REGS_ISP_STREAM_STAT_IDX,
+					       ISP_STR_MON_PORT_GDC22ISP);
 		break;
 	case FIFO_CHANNEL_ISP0_TO_HOST0:
-		state->src_valid   = fifo_monitor_status_valid(ID,
-				     HIVE_GP_REGS_ISP_STREAM_STAT_IDX,
-				     ISP_STR_MON_PORT_SND_GPD); /* ISP_STR_MON_PORT_ISP2GPD */
-		state->fifo_accept = fifo_monitor_status_accept(ID,
-				     HIVE_GP_REGS_ISP_STREAM_STAT_IDX,
-				     ISP_STR_MON_PORT_SND_GPD);
+		state->src_valid =
+		    fifo_monitor_status_valid(ID, HIVE_GP_REGS_ISP_STREAM_STAT_IDX,
+					      ISP_STR_MON_PORT_SND_GPD);
+					      /* ISP_STR_MON_PORT_ISP2GPD */
+		state->fifo_accept =
+		    fifo_monitor_status_accept(ID, HIVE_GP_REGS_ISP_STREAM_STAT_IDX,
+					       ISP_STR_MON_PORT_SND_GPD);
 		{
-			hrt_data	value = ia_css_device_load_uint32(0x0000000000380014ULL);
+			hrt_data value = ia_css_device_load_uint32(0x0000000000380014ULL);
 
 			state->fifo_valid  = !_hrt_get_bit(value, 0);
 			state->sink_accept = false; /* no monitor connected */
 		}
 		break;
-	case FIFO_CHANNEL_HOST0_TO_ISP0: {
-		hrt_data	value = ia_css_device_load_uint32(0x000000000038001CULL);
+	case FIFO_CHANNEL_HOST0_TO_ISP0:
+		{
+			hrt_data value = ia_css_device_load_uint32(0x000000000038001CULL);
 
-		state->fifo_valid  = false; /* no monitor connected */
-		state->sink_accept = !_hrt_get_bit(value, 0);
-	}
-	state->src_valid   = fifo_monitor_status_valid(ID,
-			     HIVE_GP_REGS_ISP_STREAM_STAT_IDX,
-				     ISP_STR_MON_PORT_RCV_GPD); /* ISP_STR_MON_PORT_FA2ISP */
-	state->fifo_accept = fifo_monitor_status_accept(ID,
-			     HIVE_GP_REGS_ISP_STREAM_STAT_IDX,
-			     ISP_STR_MON_PORT_RCV_GPD);
+			state->fifo_valid  = false; /* no monitor connected */
+			state->sink_accept = !_hrt_get_bit(value, 0);
+		}
+		state->src_valid =
+		    fifo_monitor_status_valid(ID, HIVE_GP_REGS_ISP_STREAM_STAT_IDX,
+					      ISP_STR_MON_PORT_RCV_GPD);
+					      /* ISP_STR_MON_PORT_FA2ISP */
+		state->fifo_accept =
+		    fifo_monitor_status_accept(ID, HIVE_GP_REGS_ISP_STREAM_STAT_IDX,
+					       ISP_STR_MON_PORT_RCV_GPD);
 	break;
 	case FIFO_CHANNEL_SP0_TO_IF0:
-		state->src_valid   = fifo_monitor_status_valid(ID,
-				     HIVE_GP_REGS_SP_STREAM_STAT_IDX,
-				     SP_STR_MON_PORT_SND_PIF_A); /* SP_STR_MON_PORT_SP2PIFA */
-		state->fifo_accept = fifo_monitor_status_accept(ID,
-				     HIVE_GP_REGS_SP_STREAM_STAT_IDX,
-				     SP_STR_MON_PORT_SND_PIF_A);
-		state->fifo_valid  = fifo_monitor_status_valid(ID,
-				     HIVE_GP_REGS_MOD_STREAM_STAT_IDX,
-				     MOD_STR_MON_PORT_RCV_PIF_A); /* MOD_STR_MON_PORT_CELLS2PIFA */
-		state->sink_accept = fifo_monitor_status_accept(ID,
-				     HIVE_GP_REGS_MOD_STREAM_STAT_IDX,
-				     MOD_STR_MON_PORT_RCV_PIF_A);
+		state->src_valid =
+		    fifo_monitor_status_valid(ID, HIVE_GP_REGS_SP_STREAM_STAT_IDX,
+					      SP_STR_MON_PORT_SND_PIF_A);
+					      /* SP_STR_MON_PORT_SP2PIFA */
+		state->fifo_accept =
+		    fifo_monitor_status_accept(ID, HIVE_GP_REGS_SP_STREAM_STAT_IDX,
+					       SP_STR_MON_PORT_SND_PIF_A);
+		state->fifo_valid =
+		    fifo_monitor_status_valid(ID, HIVE_GP_REGS_MOD_STREAM_STAT_IDX,
+					      MOD_STR_MON_PORT_RCV_PIF_A);
+					      /* MOD_STR_MON_PORT_CELLS2PIFA */
+		state->sink_accept =
+		    fifo_monitor_status_accept(ID, HIVE_GP_REGS_MOD_STREAM_STAT_IDX,
+					       MOD_STR_MON_PORT_RCV_PIF_A);
 		break;
 	case FIFO_CHANNEL_IF0_TO_SP0:
-		state->src_valid   = fifo_monitor_status_valid(ID,
-				     HIVE_GP_REGS_MOD_STREAM_STAT_IDX,
-				     MOD_STR_MON_PORT_SND_PIF_A); /* MOD_STR_MON_PORT_PIFA2CELLS */
-		state->fifo_accept = fifo_monitor_status_accept(ID,
-				     HIVE_GP_REGS_MOD_STREAM_STAT_IDX,
-				     MOD_STR_MON_PORT_SND_PIF_A);
-		state->fifo_valid  = fifo_monitor_status_valid(ID,
-				     HIVE_GP_REGS_SP_STREAM_STAT_IDX,
-				     SP_STR_MON_PORT_RCV_PIF_A); /* SP_STR_MON_PORT_PIFA2SP */
-		state->sink_accept = fifo_monitor_status_accept(ID,
-				     HIVE_GP_REGS_SP_STREAM_STAT_IDX,
-				     SP_STR_MON_PORT_RCV_PIF_A);
+		state->src_valid =
+		    fifo_monitor_status_valid(ID, HIVE_GP_REGS_MOD_STREAM_STAT_IDX,
+					      MOD_STR_MON_PORT_SND_PIF_A);
+					      /* MOD_STR_MON_PORT_PIFA2CELLS */
+		state->fifo_accept =
+		    fifo_monitor_status_accept(ID, HIVE_GP_REGS_MOD_STREAM_STAT_IDX,
+					       MOD_STR_MON_PORT_SND_PIF_A);
+		state->fifo_valid =
+		    fifo_monitor_status_valid(ID, HIVE_GP_REGS_SP_STREAM_STAT_IDX,
+					      SP_STR_MON_PORT_RCV_PIF_A);
+					      /* SP_STR_MON_PORT_PIFA2SP */
+		state->sink_accept =
+		    fifo_monitor_status_accept(ID, HIVE_GP_REGS_SP_STREAM_STAT_IDX,
+					       SP_STR_MON_PORT_RCV_PIF_A);
 		break;
 	case FIFO_CHANNEL_SP0_TO_IF1:
-		state->src_valid   = fifo_monitor_status_valid(ID,
-				     HIVE_GP_REGS_SP_STREAM_STAT_IDX,
-				     SP_STR_MON_PORT_SND_PIF_B); /* SP_STR_MON_PORT_SP2PIFB */
-		state->fifo_accept = fifo_monitor_status_accept(ID,
-				     HIVE_GP_REGS_SP_STREAM_STAT_IDX,
-				     SP_STR_MON_PORT_SND_PIF_B);
-		state->fifo_valid  = fifo_monitor_status_valid(ID,
-				     HIVE_GP_REGS_MOD_STREAM_STAT_IDX,
-				     MOD_STR_MON_PORT_RCV_PIF_B); /* MOD_STR_MON_PORT_CELLS2PIFB */
-		state->sink_accept = fifo_monitor_status_accept(ID,
-				     HIVE_GP_REGS_MOD_STREAM_STAT_IDX,
-				     MOD_STR_MON_PORT_RCV_PIF_B);
+		state->src_valid =
+		    fifo_monitor_status_valid(ID, HIVE_GP_REGS_SP_STREAM_STAT_IDX,
+					      SP_STR_MON_PORT_SND_PIF_B);
+					      /* SP_STR_MON_PORT_SP2PIFB */
+		state->fifo_accept =
+		    fifo_monitor_status_accept(ID, HIVE_GP_REGS_SP_STREAM_STAT_IDX,
+					       SP_STR_MON_PORT_SND_PIF_B);
+		state->fifo_valid =
+		    fifo_monitor_status_valid(ID, HIVE_GP_REGS_MOD_STREAM_STAT_IDX,
+					      MOD_STR_MON_PORT_RCV_PIF_B);
+					      /* MOD_STR_MON_PORT_CELLS2PIFB */
+		state->sink_accept =
+		    fifo_monitor_status_accept(ID, HIVE_GP_REGS_MOD_STREAM_STAT_IDX,
+					       MOD_STR_MON_PORT_RCV_PIF_B);
 		break;
 	case FIFO_CHANNEL_IF1_TO_SP0:
-		state->src_valid   = fifo_monitor_status_valid(ID,
-				     HIVE_GP_REGS_MOD_STREAM_STAT_IDX,
-				     MOD_STR_MON_PORT_SND_PIF_B); /* MOD_STR_MON_PORT_PIFB2CELLS */
-		state->fifo_accept = fifo_monitor_status_accept(ID,
-				     HIVE_GP_REGS_MOD_STREAM_STAT_IDX,
-				     MOD_STR_MON_PORT_SND_PIF_B);
-		state->fifo_valid  = fifo_monitor_status_valid(ID,
-				     HIVE_GP_REGS_SP_STREAM_STAT_IDX,
-				     ISP_STR_MON_PORT_RCV_PIF_B); /* SP_STR_MON_PORT_PIFB2SP */
-		state->sink_accept = fifo_monitor_status_accept(ID,
-				     HIVE_GP_REGS_SP_STREAM_STAT_IDX,
-				     ISP_STR_MON_PORT_RCV_PIF_B);
+		state->src_valid =
+		    fifo_monitor_status_valid(ID, HIVE_GP_REGS_MOD_STREAM_STAT_IDX,
+					      MOD_STR_MON_PORT_SND_PIF_B);
+					      /* MOD_STR_MON_PORT_PIFB2CELLS */
+		state->fifo_accept =
+		    fifo_monitor_status_accept(ID, HIVE_GP_REGS_MOD_STREAM_STAT_IDX,
+					       MOD_STR_MON_PORT_SND_PIF_B);
+		state->fifo_valid =
+		    fifo_monitor_status_valid(ID, HIVE_GP_REGS_SP_STREAM_STAT_IDX,
+					      ISP_STR_MON_PORT_RCV_PIF_B);
+					      /* SP_STR_MON_PORT_PIFB2SP */
+		state->sink_accept =
+		    fifo_monitor_status_accept(ID, HIVE_GP_REGS_SP_STREAM_STAT_IDX,
+					       ISP_STR_MON_PORT_RCV_PIF_B);
 		break;
 	case FIFO_CHANNEL_SP0_TO_IF2:
-		state->src_valid   = fifo_monitor_status_valid(ID,
-				     HIVE_GP_REGS_SP_STREAM_STAT_IDX,
-				     SP_STR_MON_PORT_SND_SIF); /* SP_STR_MON_PORT_SP2SIF */
-		state->fifo_accept = fifo_monitor_status_accept(ID,
-				     HIVE_GP_REGS_SP_STREAM_STAT_IDX,
-				     SP_STR_MON_PORT_SND_SIF);
-		state->fifo_valid  = fifo_monitor_status_valid(ID,
-				     HIVE_GP_REGS_MOD_STREAM_STAT_IDX,
-				     MOD_STR_MON_PORT_RCV_SIF); /* MOD_STR_MON_PORT_SP2SIF */
-		state->sink_accept = fifo_monitor_status_accept(ID,
-				     HIVE_GP_REGS_MOD_STREAM_STAT_IDX,
-				     MOD_STR_MON_PORT_RCV_SIF);
+		state->src_valid =
+		    fifo_monitor_status_valid(ID, HIVE_GP_REGS_SP_STREAM_STAT_IDX,
+					      SP_STR_MON_PORT_SND_SIF); /* SP_STR_MON_PORT_SP2SIF */
+		state->fifo_accept =
+		    fifo_monitor_status_accept(ID, HIVE_GP_REGS_SP_STREAM_STAT_IDX,
+					       SP_STR_MON_PORT_SND_SIF);
+		state->fifo_valid =
+		    fifo_monitor_status_valid(ID, HIVE_GP_REGS_MOD_STREAM_STAT_IDX,
+					      MOD_STR_MON_PORT_RCV_SIF);
+					      /* MOD_STR_MON_PORT_SP2SIF */
+		state->sink_accept =
+		    fifo_monitor_status_accept(ID, HIVE_GP_REGS_MOD_STREAM_STAT_IDX,
+					       MOD_STR_MON_PORT_RCV_SIF);
 		break;
 	case FIFO_CHANNEL_IF2_TO_SP0:
-		state->src_valid   = fifo_monitor_status_valid(ID,
-				     HIVE_GP_REGS_MOD_STREAM_STAT_IDX,
-				     MOD_STR_MON_PORT_SND_SIF); /* MOD_STR_MON_PORT_SIF2SP */
-		state->fifo_accept = fifo_monitor_status_accept(ID,
-				     HIVE_GP_REGS_MOD_STREAM_STAT_IDX,
-				     MOD_STR_MON_PORT_SND_SIF);
-		state->fifo_valid  = fifo_monitor_status_valid(ID,
-				     HIVE_GP_REGS_SP_STREAM_STAT_IDX,
-				     SP_STR_MON_PORT_RCV_SIF); /* SP_STR_MON_PORT_SIF2SP */
-		state->sink_accept = fifo_monitor_status_accept(ID,
-				     HIVE_GP_REGS_SP_STREAM_STAT_IDX,
-				     SP_STR_MON_PORT_RCV_SIF);
+		state->src_valid =
+		    fifo_monitor_status_valid(ID, HIVE_GP_REGS_MOD_STREAM_STAT_IDX,
+					      MOD_STR_MON_PORT_SND_SIF);
+					      /* MOD_STR_MON_PORT_SIF2SP */
+		state->fifo_accept =
+		    fifo_monitor_status_accept(ID, HIVE_GP_REGS_MOD_STREAM_STAT_IDX,
+					       MOD_STR_MON_PORT_SND_SIF);
+		state->fifo_valid =
+		    fifo_monitor_status_valid(ID, HIVE_GP_REGS_SP_STREAM_STAT_IDX,
+					      SP_STR_MON_PORT_RCV_SIF); /* SP_STR_MON_PORT_SIF2SP */
+		state->sink_accept =
+		    fifo_monitor_status_accept(ID, HIVE_GP_REGS_SP_STREAM_STAT_IDX,
+					       SP_STR_MON_PORT_RCV_SIF);
 		break;
 	case FIFO_CHANNEL_SP0_TO_DMA0:
-		state->src_valid   = fifo_monitor_status_valid(ID,
-				     HIVE_GP_REGS_SP_STREAM_STAT_IDX,
-				     SP_STR_MON_PORT_SND_DMA); /* SP_STR_MON_PORT_SP2DMA */
-		state->fifo_accept = fifo_monitor_status_accept(ID,
-				     HIVE_GP_REGS_SP_STREAM_STAT_IDX,
-				     SP_STR_MON_PORT_SND_DMA);
-		state->fifo_valid  = fifo_monitor_status_valid(ID,
-				     HIVE_GP_REGS_MOD_STREAM_STAT_IDX,
-				     MOD_STR_MON_PORT_RCV_DMA_FR_SP); /* MOD_STR_MON_PORT_SP2DMA */
-		state->sink_accept = fifo_monitor_status_accept(ID,
-				     HIVE_GP_REGS_MOD_STREAM_STAT_IDX,
-				     MOD_STR_MON_PORT_RCV_DMA_FR_SP);
+		state->src_valid =
+		    fifo_monitor_status_valid(ID, HIVE_GP_REGS_SP_STREAM_STAT_IDX,
+					      SP_STR_MON_PORT_SND_DMA); /* SP_STR_MON_PORT_SP2DMA */
+		state->fifo_accept =
+		    fifo_monitor_status_accept(ID, HIVE_GP_REGS_SP_STREAM_STAT_IDX,
+					       SP_STR_MON_PORT_SND_DMA);
+		state->fifo_valid =
+		    fifo_monitor_status_valid(ID, HIVE_GP_REGS_MOD_STREAM_STAT_IDX,
+					      MOD_STR_MON_PORT_RCV_DMA_FR_SP);
+					      /* MOD_STR_MON_PORT_SP2DMA */
+		state->sink_accept =
+		    fifo_monitor_status_accept(ID, HIVE_GP_REGS_MOD_STREAM_STAT_IDX,
+					       MOD_STR_MON_PORT_RCV_DMA_FR_SP);
 		break;
 	case FIFO_CHANNEL_DMA0_TO_SP0:
-		state->src_valid   = fifo_monitor_status_valid(ID,
-				     HIVE_GP_REGS_MOD_STREAM_STAT_IDX,
-				     MOD_STR_MON_PORT_SND_DMA2SP); /* MOD_STR_MON_PORT_DMA2SP */
-		state->fifo_accept = fifo_monitor_status_accept(ID,
-				     HIVE_GP_REGS_MOD_STREAM_STAT_IDX,
-				     MOD_STR_MON_PORT_SND_DMA2SP);
-		state->fifo_valid  = fifo_monitor_status_valid(ID,
-				     HIVE_GP_REGS_SP_STREAM_STAT_IDX,
-				     SP_STR_MON_PORT_RCV_DMA); /* SP_STR_MON_PORT_DMA2SP */
-		state->sink_accept = fifo_monitor_status_accept(ID,
-				     HIVE_GP_REGS_SP_STREAM_STAT_IDX,
-				     SP_STR_MON_PORT_RCV_DMA);
+		state->src_valid =
+		    fifo_monitor_status_valid(ID, HIVE_GP_REGS_MOD_STREAM_STAT_IDX,
+					      MOD_STR_MON_PORT_SND_DMA2SP);
+					      /* MOD_STR_MON_PORT_DMA2SP */
+		state->fifo_accept =
+		    fifo_monitor_status_accept(ID, HIVE_GP_REGS_MOD_STREAM_STAT_IDX,
+					       MOD_STR_MON_PORT_SND_DMA2SP);
+		state->fifo_valid =
+		    fifo_monitor_status_valid(ID, HIVE_GP_REGS_SP_STREAM_STAT_IDX,
+					      SP_STR_MON_PORT_RCV_DMA); /* SP_STR_MON_PORT_DMA2SP */
+		state->sink_accept =
+		    fifo_monitor_status_accept(ID, HIVE_GP_REGS_SP_STREAM_STAT_IDX,
+					       SP_STR_MON_PORT_RCV_DMA);
 		break;
 	case FIFO_CHANNEL_SP0_TO_GDC0:
-		state->src_valid   = fifo_monitor_status_valid(ID,
-				     HIVE_GP_REGS_SP_STREAM_STAT_B_IDX,
-				     SP_STR_MON_PORT_B_SP2GDC1);
-		state->fifo_accept = fifo_monitor_status_accept(ID,
-				     HIVE_GP_REGS_SP_STREAM_STAT_B_IDX,
-				     SP_STR_MON_PORT_B_SP2GDC1);
-		state->fifo_valid  = fifo_monitor_status_valid(ID,
-				     HIVE_GP_REGS_MOD_STREAM_STAT_IDX,
-				     MOD_STR_MON_PORT_CELLS2GDC1);
-		state->sink_accept = fifo_monitor_status_accept(ID,
-				     HIVE_GP_REGS_MOD_STREAM_STAT_IDX,
-				     MOD_STR_MON_PORT_CELLS2GDC1);
+		state->src_valid =
+		     fifo_monitor_status_valid(ID, HIVE_GP_REGS_SP_STREAM_STAT_B_IDX,
+					       SP_STR_MON_PORT_B_SP2GDC1);
+		state->fifo_accept =
+		    fifo_monitor_status_accept(ID, HIVE_GP_REGS_SP_STREAM_STAT_B_IDX,
+					       SP_STR_MON_PORT_B_SP2GDC1);
+		state->fifo_valid =
+		    fifo_monitor_status_valid(ID, HIVE_GP_REGS_MOD_STREAM_STAT_IDX,
+					      MOD_STR_MON_PORT_CELLS2GDC1);
+		state->sink_accept =
+		    fifo_monitor_status_accept(ID, HIVE_GP_REGS_MOD_STREAM_STAT_IDX,
+					       MOD_STR_MON_PORT_CELLS2GDC1);
 		break;
 	case FIFO_CHANNEL_GDC0_TO_SP0:
-		state->fifo_valid  = fifo_monitor_status_valid(ID,
-				     HIVE_GP_REGS_MOD_STREAM_STAT_IDX,
-				     MOD_STR_MON_PORT_GDC12CELLS);
-		state->sink_accept = fifo_monitor_status_accept(ID,
-				     HIVE_GP_REGS_MOD_STREAM_STAT_IDX,
-				     MOD_STR_MON_PORT_GDC12CELLS);
-		state->src_valid   = fifo_monitor_status_valid(ID,
-				     HIVE_GP_REGS_SP_STREAM_STAT_B_IDX,
-				     SP_STR_MON_PORT_B_GDC12SP);
-		state->fifo_accept = fifo_monitor_status_accept(ID,
-				     HIVE_GP_REGS_SP_STREAM_STAT_B_IDX,
-				     SP_STR_MON_PORT_B_GDC12SP);
+		state->fifo_valid =
+		    fifo_monitor_status_valid(ID, HIVE_GP_REGS_MOD_STREAM_STAT_IDX,
+					      MOD_STR_MON_PORT_GDC12CELLS);
+		state->sink_accept =
+		    fifo_monitor_status_accept(ID, HIVE_GP_REGS_MOD_STREAM_STAT_IDX,
+					       MOD_STR_MON_PORT_GDC12CELLS);
+		state->src_valid =
+		    fifo_monitor_status_valid(ID, HIVE_GP_REGS_SP_STREAM_STAT_B_IDX,
+					      SP_STR_MON_PORT_B_GDC12SP);
+		state->fifo_accept =
+		    fifo_monitor_status_accept(ID, HIVE_GP_REGS_SP_STREAM_STAT_B_IDX,
+					       SP_STR_MON_PORT_B_GDC12SP);
 		break;
 	case FIFO_CHANNEL_SP0_TO_GDC1:
-		state->src_valid   = fifo_monitor_status_valid(ID,
-				     HIVE_GP_REGS_SP_STREAM_STAT_B_IDX,
-				     SP_STR_MON_PORT_B_SP2GDC2);
-		state->fifo_accept = fifo_monitor_status_accept(ID,
-				     HIVE_GP_REGS_SP_STREAM_STAT_B_IDX,
-				     SP_STR_MON_PORT_B_SP2GDC2);
-		state->fifo_valid  = fifo_monitor_status_valid(ID,
-				     HIVE_GP_REGS_MOD_STREAM_STAT_IDX,
-				     MOD_STR_MON_PORT_CELLS2GDC2);
-		state->sink_accept = fifo_monitor_status_accept(ID,
-				     HIVE_GP_REGS_MOD_STREAM_STAT_IDX,
-				     MOD_STR_MON_PORT_CELLS2GDC2);
+		state->src_valid =
+		    fifo_monitor_status_valid(ID, HIVE_GP_REGS_SP_STREAM_STAT_B_IDX,
+					      SP_STR_MON_PORT_B_SP2GDC2);
+		state->fifo_accept =
+		    fifo_monitor_status_accept(ID, HIVE_GP_REGS_SP_STREAM_STAT_B_IDX,
+					       SP_STR_MON_PORT_B_SP2GDC2);
+		state->fifo_valid =
+		    fifo_monitor_status_valid(ID, HIVE_GP_REGS_MOD_STREAM_STAT_IDX,
+					      MOD_STR_MON_PORT_CELLS2GDC2);
+		state->sink_accept =
+		    fifo_monitor_status_accept(ID, HIVE_GP_REGS_MOD_STREAM_STAT_IDX,
+					       MOD_STR_MON_PORT_CELLS2GDC2);
 		break;
 	case FIFO_CHANNEL_GDC1_TO_SP0:
-		state->fifo_valid  = fifo_monitor_status_valid(ID,
-				     HIVE_GP_REGS_MOD_STREAM_STAT_IDX,
-				     MOD_STR_MON_PORT_GDC22CELLS);
-		state->sink_accept = fifo_monitor_status_accept(ID,
-				     HIVE_GP_REGS_MOD_STREAM_STAT_IDX,
-				     MOD_STR_MON_PORT_GDC22CELLS);
-		state->src_valid   = fifo_monitor_status_valid(ID,
-				     HIVE_GP_REGS_SP_STREAM_STAT_B_IDX,
-				     SP_STR_MON_PORT_B_GDC22SP);
-		state->fifo_accept = fifo_monitor_status_accept(ID,
-				     HIVE_GP_REGS_SP_STREAM_STAT_B_IDX,
-				     SP_STR_MON_PORT_B_GDC22SP);
+		state->fifo_valid =
+		    fifo_monitor_status_valid(ID, HIVE_GP_REGS_MOD_STREAM_STAT_IDX,
+					      MOD_STR_MON_PORT_GDC22CELLS);
+		state->sink_accept =
+		    fifo_monitor_status_accept(ID, HIVE_GP_REGS_MOD_STREAM_STAT_IDX,
+					       MOD_STR_MON_PORT_GDC22CELLS);
+		state->src_valid =
+		    fifo_monitor_status_valid(ID, HIVE_GP_REGS_SP_STREAM_STAT_B_IDX,
+					      SP_STR_MON_PORT_B_GDC22SP);
+		state->fifo_accept =
+		    fifo_monitor_status_accept(ID, HIVE_GP_REGS_SP_STREAM_STAT_B_IDX,
+					       SP_STR_MON_PORT_B_GDC22SP);
 		break;
 	case FIFO_CHANNEL_SP0_TO_HOST0:
-		state->src_valid   = fifo_monitor_status_valid(ID,
-				     HIVE_GP_REGS_SP_STREAM_STAT_IDX,
-				     SP_STR_MON_PORT_SND_GPD); /* SP_STR_MON_PORT_SP2GPD */
-		state->fifo_accept = fifo_monitor_status_accept(ID,
-				     HIVE_GP_REGS_SP_STREAM_STAT_IDX,
-				     SP_STR_MON_PORT_SND_GPD);
+		state->src_valid =
+		    fifo_monitor_status_valid(ID, HIVE_GP_REGS_SP_STREAM_STAT_IDX,
+					      SP_STR_MON_PORT_SND_GPD); /* SP_STR_MON_PORT_SP2GPD */
+		state->fifo_accept =
+		    fifo_monitor_status_accept(ID, HIVE_GP_REGS_SP_STREAM_STAT_IDX,
+					       SP_STR_MON_PORT_SND_GPD);
 		{
-			hrt_data	value = ia_css_device_load_uint32(0x0000000000380010ULL);
+			hrt_data value = ia_css_device_load_uint32(0x0000000000380010ULL);
 
 			state->fifo_valid  = !_hrt_get_bit(value, 0);
 			state->sink_accept = false; /* no monitor connected */
 		}
 		break;
-	case FIFO_CHANNEL_HOST0_TO_SP0: {
-		hrt_data	value = ia_css_device_load_uint32(0x0000000000380018ULL);
+	case FIFO_CHANNEL_HOST0_TO_SP0:
+		{
+			hrt_data value = ia_css_device_load_uint32(0x0000000000380018ULL);
 
-		state->fifo_valid  = false; /* no monitor connected */
-		state->sink_accept = !_hrt_get_bit(value, 0);
-	}
-	state->src_valid   = fifo_monitor_status_valid(ID,
-			     HIVE_GP_REGS_SP_STREAM_STAT_IDX,
-				     SP_STR_MON_PORT_RCV_GPD); /* SP_STR_MON_PORT_FA2SP */
-	state->fifo_accept = fifo_monitor_status_accept(ID,
-			     HIVE_GP_REGS_SP_STREAM_STAT_IDX,
-			     SP_STR_MON_PORT_RCV_GPD);
+			state->fifo_valid = false; /* no monitor connected */
+			state->sink_accept = !_hrt_get_bit(value, 0);
+		}
+		state->src_valid =
+		    fifo_monitor_status_valid(ID, HIVE_GP_REGS_SP_STREAM_STAT_IDX,
+					      SP_STR_MON_PORT_RCV_GPD); /* SP_STR_MON_PORT_FA2SP */
+		state->fifo_accept =
+		    fifo_monitor_status_accept(ID, HIVE_GP_REGS_SP_STREAM_STAT_IDX,
+					       SP_STR_MON_PORT_RCV_GPD);
 	break;
 	case FIFO_CHANNEL_SP0_TO_STREAM2MEM0:
-		state->src_valid   = fifo_monitor_status_valid(ID,
-				     HIVE_GP_REGS_SP_STREAM_STAT_IDX,
-				     SP_STR_MON_PORT_SND_MC); /* SP_STR_MON_PORT_SP2MC */
-		state->fifo_accept = fifo_monitor_status_accept(ID,
-				     HIVE_GP_REGS_SP_STREAM_STAT_IDX,
-				     SP_STR_MON_PORT_SND_MC);
-		state->fifo_valid  = fifo_monitor_status_valid(ID,
-				     HIVE_GP_REGS_MOD_STREAM_STAT_IDX,
-				     MOD_STR_MON_PORT_RCV_MC); /* MOD_STR_MON_PORT_SP2MC */
-		state->sink_accept = fifo_monitor_status_accept(ID,
-				     HIVE_GP_REGS_MOD_STREAM_STAT_IDX,
-				     MOD_STR_MON_PORT_RCV_MC);
+		state->src_valid =
+		    fifo_monitor_status_valid(ID, HIVE_GP_REGS_SP_STREAM_STAT_IDX,
+					      SP_STR_MON_PORT_SND_MC); /* SP_STR_MON_PORT_SP2MC */
+		state->fifo_accept =
+		    fifo_monitor_status_accept(ID, HIVE_GP_REGS_SP_STREAM_STAT_IDX,
+					       SP_STR_MON_PORT_SND_MC);
+		state->fifo_valid =
+		    fifo_monitor_status_valid(ID, HIVE_GP_REGS_MOD_STREAM_STAT_IDX,
+					      MOD_STR_MON_PORT_RCV_MC); /* MOD_STR_MON_PORT_SP2MC */
+		state->sink_accept =
+		    fifo_monitor_status_accept(ID, HIVE_GP_REGS_MOD_STREAM_STAT_IDX,
+					       MOD_STR_MON_PORT_RCV_MC);
 		break;
 	case FIFO_CHANNEL_STREAM2MEM0_TO_SP0:
-		state->fifo_valid  = fifo_monitor_status_valid(ID,
-				     HIVE_GP_REGS_MOD_STREAM_STAT_IDX,
-				     MOD_STR_MON_PORT_SND_MC); /* SP_STR_MON_PORT_MC2SP */
-		state->sink_accept = fifo_monitor_status_accept(ID,
-				     HIVE_GP_REGS_MOD_STREAM_STAT_IDX,
-				     MOD_STR_MON_PORT_SND_MC);
-		state->src_valid   = fifo_monitor_status_valid(ID,
-				     HIVE_GP_REGS_SP_STREAM_STAT_IDX,
-				     SP_STR_MON_PORT_RCV_MC); /* MOD_STR_MON_PORT_MC2SP */
-		state->fifo_accept = fifo_monitor_status_accept(ID,
-				     HIVE_GP_REGS_SP_STREAM_STAT_IDX,
-				     SP_STR_MON_PORT_RCV_MC);
+		state->fifo_valid =
+		    fifo_monitor_status_valid(ID, HIVE_GP_REGS_MOD_STREAM_STAT_IDX,
+					      MOD_STR_MON_PORT_SND_MC); /* SP_STR_MON_PORT_MC2SP */
+		state->sink_accept =
+		    fifo_monitor_status_accept(ID, HIVE_GP_REGS_MOD_STREAM_STAT_IDX,
+					       MOD_STR_MON_PORT_SND_MC);
+		state->src_valid =
+		    fifo_monitor_status_valid(ID, HIVE_GP_REGS_SP_STREAM_STAT_IDX,
+					      SP_STR_MON_PORT_RCV_MC); /* MOD_STR_MON_PORT_MC2SP */
+		state->fifo_accept =
+		    fifo_monitor_status_accept(ID, HIVE_GP_REGS_SP_STREAM_STAT_IDX,
+					       SP_STR_MON_PORT_RCV_MC);
 		break;
 	case FIFO_CHANNEL_SP0_TO_INPUT_SYSTEM0:
-		state->src_valid   = fifo_monitor_status_valid(ID,
-				     HIVE_GP_REGS_SP_STREAM_STAT_IDX,
-				     SP_STR_MON_PORT_SP2ISYS);
-		state->fifo_accept = fifo_monitor_status_accept(ID,
-				     HIVE_GP_REGS_SP_STREAM_STAT_IDX,
-				     SP_STR_MON_PORT_SP2ISYS);
-		state->fifo_valid  = false;
+		state->src_valid =
+		    fifo_monitor_status_valid(ID, HIVE_GP_REGS_SP_STREAM_STAT_IDX,
+					      SP_STR_MON_PORT_SP2ISYS);
+		state->fifo_accept =
+		    fifo_monitor_status_accept(ID, HIVE_GP_REGS_SP_STREAM_STAT_IDX,
+					       SP_STR_MON_PORT_SP2ISYS);
+		state->fifo_valid = false;
 		state->sink_accept = false;
 		break;
 	case FIFO_CHANNEL_INPUT_SYSTEM0_TO_SP0:
-		state->fifo_valid  = false;
+		state->fifo_valid = false;
 		state->sink_accept = false;
-		state->src_valid   = fifo_monitor_status_valid(ID,
-				     HIVE_GP_REGS_SP_STREAM_STAT_IDX,
-				     SP_STR_MON_PORT_ISYS2SP);
-		state->fifo_accept = fifo_monitor_status_accept(ID,
-				     HIVE_GP_REGS_SP_STREAM_STAT_IDX,
-				     SP_STR_MON_PORT_ISYS2SP);
+		state->src_valid =
+		    fifo_monitor_status_valid(ID, HIVE_GP_REGS_SP_STREAM_STAT_IDX,
+					      SP_STR_MON_PORT_ISYS2SP);
+		state->fifo_accept =
+		    fifo_monitor_status_accept(ID, HIVE_GP_REGS_SP_STREAM_STAT_IDX,
+					       SP_STR_MON_PORT_ISYS2SP);
 		break;
 	default:
 		assert(0);
