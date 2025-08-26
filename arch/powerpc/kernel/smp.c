@@ -87,7 +87,7 @@ DEFINE_PER_CPU(cpumask_var_t, cpu_sibling_map);
 DEFINE_PER_CPU(cpumask_var_t, cpu_smallcore_map);
 DEFINE_PER_CPU(cpumask_var_t, cpu_l2_cache_map);
 DEFINE_PER_CPU(cpumask_var_t, cpu_core_map);
-static DEFINE_PER_CPU(cpumask_var_t, cpu_coregroup_map);
+static DEFINE_PER_CPU(cpumask_var_t, cpu_corgrp_map);
 
 EXPORT_PER_CPU_SYMBOL(cpu_sibling_map);
 EXPORT_PER_CPU_SYMBOL(cpu_l2_cache_map);
@@ -1045,9 +1045,9 @@ static const struct cpumask *tl_smt_mask(struct sched_domain_topology_level *tl,
 }
 #endif
 
-static struct cpumask *cpu_coregroup_mask(int cpu)
+static struct cpumask *cpu_corgrp_mask(int cpu)
 {
-	return per_cpu(cpu_coregroup_map, cpu);
+	return per_cpu(cpu_corgrp_map, cpu);
 }
 
 static bool has_coregroup_support(void)
@@ -1061,7 +1061,7 @@ static bool has_coregroup_support(void)
 
 static const struct cpumask *cpu_mc_mask(struct sched_domain_topology_level *tl, int cpu)
 {
-	return cpu_coregroup_mask(cpu);
+	return cpu_corgrp_mask(cpu);
 }
 
 static const struct cpumask *cpu_pkg_mask(struct sched_domain_topology_level *tl, int cpu)
@@ -1124,7 +1124,7 @@ void __init smp_prepare_cpus(unsigned int max_cpus)
 		zalloc_cpumask_var_node(&per_cpu(cpu_core_map, cpu),
 					GFP_KERNEL, cpu_to_node(cpu));
 		if (has_coregroup_support())
-			zalloc_cpumask_var_node(&per_cpu(cpu_coregroup_map, cpu),
+			zalloc_cpumask_var_node(&per_cpu(cpu_corgrp_map, cpu),
 						GFP_KERNEL, cpu_to_node(cpu));
 
 #ifdef CONFIG_NUMA
@@ -1145,7 +1145,7 @@ void __init smp_prepare_cpus(unsigned int max_cpus)
 	cpumask_set_cpu(boot_cpuid, cpu_core_mask(boot_cpuid));
 
 	if (has_coregroup_support())
-		cpumask_set_cpu(boot_cpuid, cpu_coregroup_mask(boot_cpuid));
+		cpumask_set_cpu(boot_cpuid, cpu_corgrp_mask(boot_cpuid));
 
 	init_big_cores();
 	if (has_big_cores) {
@@ -1510,8 +1510,8 @@ static void remove_cpu_from_masks(int cpu)
 		set_cpus_unrelated(cpu, i, cpu_core_mask);
 
 	if (has_coregroup_support()) {
-		for_each_cpu(i, cpu_coregroup_mask(cpu))
-			set_cpus_unrelated(cpu, i, cpu_coregroup_mask);
+		for_each_cpu(i, cpu_corgrp_mask(cpu))
+			set_cpus_unrelated(cpu, i, cpu_corgrp_mask);
 	}
 }
 #endif
@@ -1543,7 +1543,7 @@ static void update_coregroup_mask(int cpu, cpumask_var_t *mask)
 	if (!*mask) {
 		/* Assume only siblings are part of this CPU's coregroup */
 		for_each_cpu(i, submask_fn(cpu))
-			set_cpus_related(cpu, i, cpu_coregroup_mask);
+			set_cpus_related(cpu, i, cpu_corgrp_mask);
 
 		return;
 	}
@@ -1551,18 +1551,18 @@ static void update_coregroup_mask(int cpu, cpumask_var_t *mask)
 	cpumask_and(*mask, cpu_online_mask, cpu_node_mask(cpu));
 
 	/* Update coregroup mask with all the CPUs that are part of submask */
-	or_cpumasks_related(cpu, cpu, submask_fn, cpu_coregroup_mask);
+	or_cpumasks_related(cpu, cpu, submask_fn, cpu_corgrp_mask);
 
 	/* Skip all CPUs already part of coregroup mask */
-	cpumask_andnot(*mask, *mask, cpu_coregroup_mask(cpu));
+	cpumask_andnot(*mask, *mask, cpu_corgrp_mask(cpu));
 
 	for_each_cpu(i, *mask) {
 		/* Skip all CPUs not part of this coregroup */
 		if (coregroup_id == cpu_to_coregroup_id(i)) {
-			or_cpumasks_related(cpu, i, submask_fn, cpu_coregroup_mask);
+			or_cpumasks_related(cpu, i, submask_fn, cpu_corgrp_mask);
 			cpumask_andnot(*mask, *mask, submask_fn(i));
 		} else {
-			cpumask_andnot(*mask, *mask, cpu_coregroup_mask(i));
+			cpumask_andnot(*mask, *mask, cpu_corgrp_mask(i));
 		}
 	}
 }
