@@ -283,20 +283,34 @@ static int __inode_security_revalidate(struct inode *inode,
 				       struct dentry *dentry,
 				       bool may_sleep)
 {
+	struct inode_security_struct *isec;
+
 	if (!selinux_initialized())
 		return 0;
 
-	if (may_sleep)
-		might_sleep();
-	else
-		return -ECHILD;
+	/* Fast, non-blocking validity check first */
+	rcu_read_lock();
+	isec = selinux_inode(inode);
+	if (likely(isec && !is_label_invalid(isec))) {
+		rcu_read_unlock();
+		return 0;   /* valid and no sleeping done */
+	}
+	rcu_read_unlock();
 
 	/*
-	 * Check to ensure that an inode's SELinux state is valid and try
-	 * reloading the inode security label if necessary.  This will fail if
-	 * @dentry is NULL and no dentry for this inode can be found; in that
-	 * case, continue using the old label.
-	 */
+	* Label looks invalid. If we can't sleep, signal caller that a
+	* retry in a sleepable context is required. Only contexts like
+	* RCU path walk are expected to propagate -ECHILD.
+	*/
+	if (!may_sleep)
+	return -ECHILD;
+
+	/*
+	* Sleepable context: reload the label. This may block.
+	* If @dentry is NULL and no dentry can be found we'll continue
+	* using the old label, consistent with prior behavior.
+	*/
+	might_sleep();
 	inode_doinit_with_dentry(inode, dentry);
 	return 0;
 }
