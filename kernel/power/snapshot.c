@@ -135,10 +135,13 @@ void __init hibernate_reserved_size_init(void)
  * try to create the smallest image possible.
  */
 unsigned long image_size;
+#define PAGE_SIZE_KB   (PAGE_SIZE >> 10)
 
 void __init hibernate_image_size_init(void)
 {
-	image_size = ((totalram_pages() * 2) / 5) * PAGE_SIZE;
+	unsigned long CNT_8GB = (totalram_pages() * PAGE_SIZE_KB)>>23;
+
+	image_size = ((totalram_pages() * 2) / (5 * (CNT_8GB + 1))) * PAGE_SIZE;
 }
 
 /*
