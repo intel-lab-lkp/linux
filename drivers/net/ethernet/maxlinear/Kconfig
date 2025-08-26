@@ -1,0 +1,15 @@
+# SPDX-License-Identifier: GPL-2.0-only
+config NET_VENDOR_MAXLINEAR
+	bool "MaxLinear devices"
+	help
+	  If you have a MaxLinear SoC with ethernet, say Y.
+
+if NET_VENDOR_MAXLINEAR
+
+config MXL_NPU
+	tristate "MaxLinear NPU Ethernet driver"
+	help
+	  This driver supports the MaxLinear NPU Ethernet.
+
+endif #NET_VENDOR_MAXLINEAR
+
