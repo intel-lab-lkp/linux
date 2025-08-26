@@ -3134,9 +3134,11 @@ static int __perf_session__process_pipe_events(struct perf_session *session)
 	/*
 	 * If it's from a file saving pipe data (by redirection), it would have
 	 * a file name other than "-".  Then we can get the total size and show
-	 * the progress.
+	 * the progress. However, be careful because path may be NULL if input
+	 * is coming from stdin.
 	 */
-	if (strcmp(session->data->path, "-") && session->data->file.size) {
+	if (session->data->path && strcmp(session->data->path, "-")
+	    && session->data->file.size) {
 		ui_progress__init_size(&prog, session->data->file.size,
 				       "Processing events...");
 		update_prog = true;
