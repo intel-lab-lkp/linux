@@ -1,0 +1,17 @@
+# SPDX-License-Identifier: GPL-2.0-only
+#
+# Platform drivers
+#	Most drivers here are currently for webcam supporit
+
+config VIDEO_EXYNOS_SCALER
+	tristate "EXYNOS Scaler Driver"
+	depends on VIDEO_DEV && HAS_DMA && !SAMSUNG_SCALER_EXYNOSAUTO_KUNIT_TEST
+	select V4L2_MEM2MEM_DEV
+	select VIDEOBUF2_DMA_SG
+	default n
+	help
+	  This is a v4l2 driver for EXYNOS Scaler (MSCL) device.
+	  This option provides Exynos Scaler device driver support for
+	  ExynosAutoV920 SoC.
+	  When eanbled, the Scaler device will be detected and corresponding /dev/video50
+	  node will be created.
