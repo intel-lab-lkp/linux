@@ -5,9 +5,9 @@
  */
 
 #include <linux/debugfs.h>
-#include "vchiq_core.h"
-#include "vchiq_arm.h"
-#include "vchiq_debugfs.h"
+#include <linux/vchiq/vchiq_core.h>
+#include <linux/vchiq/vchiq_arm.h>
+#include <linux/vchiq/vchiq_debugfs.h>
 
 #ifdef CONFIG_DEBUG_FS
 

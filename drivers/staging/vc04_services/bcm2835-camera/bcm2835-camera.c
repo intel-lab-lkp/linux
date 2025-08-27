@@ -26,7 +26,8 @@
 #include <media/v4l2-common.h>
 #include <linux/delay.h>
 
-#include "../interface/vchiq_arm/vchiq_bus.h"
+#include <linux/vchiq/vchiq_bus.h>
+
 #include "../vchiq-mmal/mmal-common.h"
 #include "../vchiq-mmal/mmal-encodings.h"
 #include "../vchiq-mmal/mmal-vchiq.h"
