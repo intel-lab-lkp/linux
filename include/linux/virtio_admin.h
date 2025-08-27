@@ -63,6 +63,38 @@ struct virtio_admin_ops {
 		       u16 id,
 		       const void *caps,
 		       size_t cap_size);
+	/**
+	 * @object_create: Create a new object of specified type
+	 * @virtio_dev: The virtio device
+	 * @obj_type: Type of object to create
+	 * @obj_id: ID to assign to the created object
+	 * @group_type: Type of group the object belongs to
+	 * @group_member_id: Member ID within the group
+	 * @obj_specific_data: Object-specific data (must be heap allocated)
+	 * @obj_specific_data_size: Size of the object-specific data
+	 * Returns: 0 on success, negative error code on failure
+	 */
+	int (*object_create)(struct virtio_device *virtio_dev,
+			     u16 obj_type,
+			     u32 obj_id,
+			     u16 group_type,
+			     u64 group_member_id,
+			     const void *obj_specific_data,
+			     size_t obj_specific_data_size);
+	/**
+	 * @object_destroy: Destroy an existing object
+	 * @virtio_dev: The virtio device
+	 * @obj_type: Type of object to destroy
+	 * @obj_id: ID of the object to destroy
+	 * @group_type: Type of group the object belongs to
+	 * @group_member_id: Member ID within the group
+	 * Returns: 0 on success, negative error code on failure
+	 */
+	int (*object_destroy)(struct virtio_device *virtio_dev,
+			      u16 obj_type,
+			      u32 obj_id,
+			      u16 group_type,
+			      u64 group_member_id);
 };
 
 #endif /* _LINUX_VIRTIO_ADMIN_H */
