@@ -59,6 +59,7 @@ const struct mxc_gasket_ops mxc_imx8_gasket_ops = {
 #define DISP_MIX_CAMERA_MUX                     0x30
 #define DISP_MIX_CAMERA_MUX_DATA_TYPE(x)        FIELD_PREP(GENMASK(8, 3), (x))
 #define DISP_MIX_CAMERA_MUX_GASKET_ENABLE       BIT(16)
+#define DISP_MIX_CAMERA_MUX_GASKET_SRC          BIT(17)
 
 static void mxc_imx93_gasket_enable(struct mxc_isi_dev *isi,
 				    const struct v4l2_mbus_frame_desc *fd,
@@ -69,6 +70,16 @@ static void mxc_imx93_gasket_enable(struct mxc_isi_dev *isi,
 
 	val = DISP_MIX_CAMERA_MUX_DATA_TYPE(fd->entry[0].bus.csi2.dt);
 	val |= DISP_MIX_CAMERA_MUX_GASKET_ENABLE;
+
+	/*
+	 * CAMERA MUX
+	 * - [17]:	Selects source input to gasket
+	 *		0: Data from MIPI CSI
+	 *		1: Data from parallel camera
+	 */
+	if (fd->type == V4L2_MBUS_FRAME_DESC_TYPE_PARALLEL)
+		val |= DISP_MIX_CAMERA_MUX_GASKET_SRC;
+
 	regmap_write(isi->gasket, DISP_MIX_CAMERA_MUX, val);
 }
 
