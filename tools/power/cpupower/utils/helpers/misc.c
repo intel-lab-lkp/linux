@@ -213,6 +213,8 @@ void print_online_cpus(void)
 		bitmask_displaylist(online_cpus_str, str_len, online_cpus);
 		printf(_("Following CPUs are online:\n%s\n"), online_cpus_str);
 	}
+
+	free(online_cpus_str);
 }
 
 /* print_offline_cpus
@@ -232,6 +234,8 @@ void print_offline_cpus(void)
 		printf(_("Following CPUs are offline:\n%s\n"), offline_cpus_str);
 		printf(_("cpupower set operation was not performed on them\n"));
 	}
+
+	free(offline_cpus_str);
 }
 
 /*
