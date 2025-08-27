@@ -352,17 +352,13 @@ module_init(fixed_mdio_bus_init);
 static void __exit fixed_mdio_bus_exit(void)
 {
 	struct fixed_mdio_bus *fmb = &platform_fmb;
-	struct fixed_phy *fp, *tmp;
 
 	mdiobus_unregister(fmb->mii_bus);
 	mdiobus_free(fmb->mii_bus);
 	faux_device_destroy(fdev);
 
-	list_for_each_entry_safe(fp, tmp, &fmb->phys, node) {
-		list_del(&fp->node);
-		kfree(fp);
-	}
-	ida_destroy(&phy_fixed_ida);
+	for (int i = 0; i < PHY_MAX_ADDR; i++)
+		fixed_phy_del(i);
 }
 module_exit(fixed_mdio_bus_exit);
 
