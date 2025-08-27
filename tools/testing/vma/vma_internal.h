@@ -21,6 +21,7 @@
 
 #include <stdlib.h>
 
+#include <linux/atomic.h>
 #include <linux/list.h>
 #include <linux/maple_tree.h>
 #include <linux/mm.h>
@@ -1381,7 +1382,7 @@ static inline int mapping_map_writable(struct address_space *mapping)
 	do {
 		if (c < 0)
 			return -EPERM;
-	} while (!__sync_bool_compare_and_swap(&mapping->i_mmap_writable, c, c+1));
+	} while (!atomic_cmpxchg(&mapping->i_mmap_writable, c, c+1));
 
 	return 0;
 }
