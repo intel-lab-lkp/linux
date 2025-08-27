@@ -94,7 +94,7 @@ s32 igc_phy_has_link(struct igc_hw *hw, u32 iterations,
 			udelay(usec_interval);
 	}
 
-	*success = (i < iterations) ? true : false;
+	*success = i < iterations;
 
 	return ret_val;
 }
