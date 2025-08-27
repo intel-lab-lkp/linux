@@ -33,5 +33,7 @@ config VCHIQ_CDEV
 
 		If not sure, set this to 'Y'.
 
+source "drivers/platform/broadcom/vchiq-mmal/Kconfig"
+
 endif
 
