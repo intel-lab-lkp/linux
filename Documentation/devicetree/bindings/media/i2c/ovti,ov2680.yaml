@@ -58,7 +58,7 @@ properties:
     properties:
       endpoint:
         $ref: /schemas/media/video-interfaces.yaml#
-        additionalProperties: false
+        unevaluatedProperties: false
 
         properties:
           link-frequencies: true
