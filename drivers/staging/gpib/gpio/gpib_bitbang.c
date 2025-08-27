@@ -1403,17 +1403,23 @@ static void set_data_lines(u8 byte)
 
 static u8 get_data_lines(void)
 {
-	u8 ret;
+	struct gpio_desc *lines[8] = {
+		D01, D02, D03, D04, D05, D06, D07, D08
+	};
 
-	ret = gpiod_get_value(D01);
-	ret |= gpiod_get_value(D02) << 1;
-	ret |= gpiod_get_value(D03) << 2;
-	ret |= gpiod_get_value(D04) << 3;
-	ret |= gpiod_get_value(D05) << 4;
-	ret |= gpiod_get_value(D06) << 5;
-	ret |= gpiod_get_value(D07) << 6;
-	ret |= gpiod_get_value(D08) << 7;
-	return ~ret;
+	u8 val = 0;
+	int ret, i;
+
+	for (i = 0; i < 8; i++) {
+		ret = gpiod_get_value(lines[i]);
+		if (ret < 0) {
+			pr_err("get GPIO pin %d error: %d\n", i, ret);
+			continue;
+		}
+		val |= (ret & 1) << i;
+	}
+
+	return ~val;
 }
 
 static void set_data_lines_input(void)
