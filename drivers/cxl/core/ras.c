@@ -126,6 +126,9 @@ void cxl_ras_exit(void)
 	cancel_work_sync(&cxl_cper_prot_err_work);
 }
 
+static bool cxl_handle_ras(struct cxl_dev_state *cxlds, void __iomem *ras_base);
+static void cxl_handle_cor_ras(struct cxl_dev_state *cxlds, void __iomem *ras_base);
+
 #ifdef CONFIG_CXL_RCH_RAS
 static void cxl_dport_map_rch_aer(struct cxl_dport *dport)
 {
