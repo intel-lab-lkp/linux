@@ -156,7 +156,7 @@ static bool mlx4_need_mf_bond(struct mlx4_dev *dev)
 	mlx4_foreach_port(i, dev, MLX4_PORT_TYPE_ETH)
 		++num_eth_ports;
 
-	return (num_eth_ports ==  2) ? true : false;
+	return num_eth_ports == 2;
 }
 
 int __mlx4_register_mac(struct mlx4_dev *dev, u8 port, u64 mac)
