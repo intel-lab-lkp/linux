@@ -233,12 +233,6 @@ static void header_log_copy(void __iomem *ras_base, u32 *log)
 	}
 }
 
-static void cxl_handle_rdport_cor_ras(struct cxl_dev_state *cxlds,
-				      struct cxl_dport *dport)
-{
-	return cxl_handle_cor_ras(cxlds, dport->regs.ras);
-}
-
 /*
  * Log the state of the RAS status registers and prepare them to log the
  * next error status. Return 1 if reset needed.
@@ -274,12 +268,6 @@ static bool cxl_handle_ras(struct cxl_dev_state *cxlds, void __iomem *ras_base)
 	writel(status & CXL_RAS_UNCORRECTABLE_STATUS_MASK, addr);
 
 	return true;
-}
-
-static bool cxl_handle_rdport_ras(struct cxl_dev_state *cxlds,
-				  struct cxl_dport *dport)
-{
-	return cxl_handle_ras(cxlds, dport->regs.ras);
 }
 
 /*
@@ -350,9 +338,9 @@ static void cxl_handle_rdport_errors(struct cxl_dev_state *cxlds)
 
 	pci_print_aer(pdev, severity, &aer_regs);
 	if (severity == AER_CORRECTABLE)
-		cxl_handle_rdport_cor_ras(cxlds, dport);
+		cxl_handle_cor_ras(cxlds, dport->regs.ras);
 	else
-		cxl_handle_rdport_ras(cxlds, dport);
+		cxl_handle_ras(cxlds, dport->regs.ras);
 }
 
 void cxl_cor_error_detected(struct pci_dev *pdev)
