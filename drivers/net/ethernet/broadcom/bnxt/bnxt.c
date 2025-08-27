@@ -7969,7 +7969,13 @@ bnxt_hwrm_reserve_vf_rings(struct bnxt *bp, struct bnxt_hw_rings *hwr)
 	int rc;
 
 	if (!BNXT_NEW_RM(bp)) {
+		// Update all relevant resource state, not just TX rings
 		bp->hw_resc.resv_tx_rings = hwr->tx;
+		bp->hw_resc.resv_rx_rings = hwr->rx;
+		bp->hw_resc.resv_vnics = hwr->vnic;
+		bp->hw_resc.resv_rsscos_ctxs = hwr->rss_ctx;
+		bp->hw_resc.resv_cp_rings = hwr->cp;
+		bp->hw_resc.resv_hw_ring_grps = hwr->grp;
 		return 0;
 	}
 
