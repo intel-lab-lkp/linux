@@ -1685,7 +1685,7 @@ inline bool rtw_is_scan_deny(struct adapter *adapter)
 {
 	struct mlme_priv *mlmepriv = &adapter->mlmepriv;
 
-	return (atomic_read(&mlmepriv->set_scan_deny) != 0) ? true : false;
+	return (atomic_read(&mlmepriv->set_scan_deny) != 0);
 }
 
 inline void rtw_clear_scan_deny(struct adapter *adapter)
@@ -2251,8 +2251,8 @@ void rtw_ht_use_default_setting(struct adapter *padapter)
 	else
 		phtpriv->bss_coexist = 0;
 
-	phtpriv->sgi_40m = TEST_FLAG(pregistrypriv->short_gi, BIT1) ? true : false;
-	phtpriv->sgi_20m = TEST_FLAG(pregistrypriv->short_gi, BIT0) ? true : false;
+	phtpriv->sgi_40m = TEST_FLAG(pregistrypriv->short_gi, BIT1);
+	phtpriv->sgi_20m = TEST_FLAG(pregistrypriv->short_gi, BIT0);
 
 	/*  LDPC support */
 	rtw_hal_get_def_var(padapter, HAL_DEF_RX_LDPC, (u8 *)&bHwLDPCSupport);
