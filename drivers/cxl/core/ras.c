@@ -137,6 +137,14 @@ static void cxl_unmask_proto_interrupts(struct device *dev)
 	pci_aer_unmask_internal_errors(pdev);
 }
 
+void cxl_mask_proto_interrupts(struct device *dev)
+{
+	struct pci_dev *pdev = to_pci_dev(dev);
+
+	pci_aer_mask_internal_errors(pdev);
+}
+EXPORT_SYMBOL_NS_GPL(cxl_mask_proto_interrupts, "CXL");
+
 #ifdef CONFIG_CXL_RCH_RAS
 static void cxl_dport_map_rch_aer(struct cxl_dport *dport)
 {

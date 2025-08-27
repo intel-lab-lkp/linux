@@ -157,6 +157,7 @@ void cxl_cor_error_detected(struct device *dev);
 pci_ers_result_t cxl_error_detected(struct device *dev);
 void cxl_port_cor_error_detected(struct device *dev);
 pci_ers_result_t cxl_port_error_detected(struct device *dev);
+void cxl_mask_proto_interrupts(struct device *dev);
 #else
 static inline int cxl_ras_init(void)
 {
@@ -186,6 +187,7 @@ static inline pci_ers_result_t cxl_port_error_detected(struct device *dev)
 {
 	return PCI_ERS_RESULT_NONE;
 }
+static inline void cxl_mask_proto_interrupts(struct device *dev) { }
 #endif // CONFIG_CXL_RAS
 
 int cxl_gpf_port_setup(struct cxl_dport *dport);

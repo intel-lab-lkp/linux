@@ -83,12 +83,14 @@ void cxl_register_proto_err_work(struct work_struct *work);
 void cxl_unregister_proto_err_work(void);
 bool cxl_error_is_native(struct pci_dev *dev);
 void pci_aer_unmask_internal_errors(struct pci_dev *dev);
+void pci_aer_mask_internal_errors(struct pci_dev *dev);
 #else
 static inline int cxl_proto_err_kfifo_get(struct cxl_proto_err_work_data *wd) { return 0; }
 static inline void cxl_register_proto_err_work(struct work_struct *work) { }
 static inline void cxl_unregister_proto_err_work(void) { }
 static inline bool cxl_error_is_native(struct pci_dev *dev) { return false; }
 static inline void pci_aer_unmask_internal_errors(struct pci_dev *dev) { }
+static inline void pci_aer_mask_internal_errors(struct pci_dev *dev) { }
 #endif
 
 void pci_print_aer(struct pci_dev *dev, int aer_severity,
