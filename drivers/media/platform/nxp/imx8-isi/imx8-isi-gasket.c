@@ -16,8 +16,7 @@
 #define GASKET_BASE(n)				(0x0060 + (n) * 0x30)
 
 #define GASKET_CTRL				0x0000
-#define GASKET_CTRL_DATA_TYPE(dt)		((dt) << 8)
-#define GASKET_CTRL_DATA_TYPE_MASK		(0x3f << 8)
+#define GASKET_CTRL_DATA_TYPE(dt)		FIELD_PREP(GENMASK(13, 8), (dt))
 #define GASKET_CTRL_DUAL_COMP_ENABLE		BIT(1)
 #define GASKET_CTRL_ENABLE			BIT(0)
 
@@ -58,7 +57,7 @@ const struct mxc_gasket_ops mxc_imx8_gasket_ops = {
  */
 
 #define DISP_MIX_CAMERA_MUX                     0x30
-#define DISP_MIX_CAMERA_MUX_DATA_TYPE(x)        (((x) & 0x3f) << 3)
+#define DISP_MIX_CAMERA_MUX_DATA_TYPE(x)        FIELD_PREP(GENMASK(8, 3), (x))
 #define DISP_MIX_CAMERA_MUX_GASKET_ENABLE       BIT(16)
 
 static void mxc_imx93_gasket_enable(struct mxc_isi_dev *isi,
