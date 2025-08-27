@@ -183,7 +183,7 @@ static int lan966x_port_open(struct net_device *dev)
 		ANA_PORT_CFG_PORTID_VAL,
 		lan966x, ANA_PORT_CFG(port->chip_port));
 
-	err = phylink_fwnode_phy_connect(port->phylink, port->fwnode, 0);
+	err = phylink_of_phy_connect(port->phylink, port->dnode, 0);
 	if (err) {
 		netdev_err(dev, "Could not attach to PHY\n");
 		return err;
@@ -767,8 +767,8 @@ static void lan966x_cleanup_ports(struct lan966x *lan966x)
 			port->phylink = NULL;
 		}
 
-		if (port->fwnode)
-			fwnode_handle_put(port->fwnode);
+		if (port->dnode)
+			of_node_put(port->dnode);
 	}
 
 	disable_irq(lan966x->xtr_irq);
@@ -1081,7 +1081,7 @@ static int lan966x_reset_switch(struct lan966x *lan966x)
 
 static int lan966x_probe(struct platform_device *pdev)
 {
-	struct fwnode_handle *ports, *portnp;
+	struct device_node *ports, *portnp;
 	struct lan966x *lan966x;
 	int err;
 
@@ -1179,7 +1179,7 @@ static int lan966x_probe(struct platform_device *pdev)
 		}
 	}
 
-	ports = device_get_named_child_node(&pdev->dev, "ethernet-ports");
+	ports = of_get_child_by_name(pdev->dev.of_node, "ethernet-ports");
 	if (!ports)
 		return dev_err_probe(&pdev->dev, -ENODEV,
 				     "no ethernet-ports child found\n");
@@ -1191,25 +1191,27 @@ static int lan966x_probe(struct platform_device *pdev)
 	lan966x_stats_init(lan966x);
 
 	/* go over the child nodes */
-	fwnode_for_each_available_child_node(ports, portnp) {
+	for_each_available_child_of_node(ports, portnp) {
 		phy_interface_t phy_mode;
 		struct phy *serdes;
 		u32 p;
 
-		if (fwnode_property_read_u32(portnp, "reg", &p))
+		if (of_property_read_u32(portnp, "reg", &p))
 			continue;
 
-		phy_mode = fwnode_get_phy_mode(portnp);
-		err = lan966x_probe_port(lan966x, p, phy_mode, portnp);
+		err = of_get_phy_mode(portnp, &phy_mode);
+		if (err)
+			goto cleanup_ports;
+
+		err = lan966x_probe_port(lan966x, p, phy_mode, of_fwnode_handle(portnp));
 		if (err)
 			goto cleanup_ports;
 
 		/* Read needed configuration */
 		lan966x->ports[p]->config.portmode = phy_mode;
-		lan966x->ports[p]->fwnode = fwnode_handle_get(portnp);
+		lan966x->ports[p]->dnode = of_node_get(portnp);
 
-		serdes = devm_of_phy_optional_get(lan966x->dev,
-						  to_of_node(portnp), NULL);
+		serdes = devm_of_phy_optional_get(lan966x->dev, portnp, NULL);
 		if (IS_ERR(serdes)) {
 			err = PTR_ERR(serdes);
 			goto cleanup_ports;
@@ -1222,7 +1224,7 @@ static int lan966x_probe(struct platform_device *pdev)
 			goto cleanup_ports;
 	}
 
-	fwnode_handle_put(ports);
+	of_node_put(ports);
 
 	lan966x_mdb_init(lan966x);
 	err = lan966x_fdb_init(lan966x);
@@ -1255,8 +1257,8 @@ cleanup_fdb:
 	lan966x_fdb_deinit(lan966x);
 
 cleanup_ports:
-	fwnode_handle_put(ports);
-	fwnode_handle_put(portnp);
+	of_node_put(ports);
+	of_node_put(portnp);
 
 	lan966x_cleanup_ports(lan966x);
 

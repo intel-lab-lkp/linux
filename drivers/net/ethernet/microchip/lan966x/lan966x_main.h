@@ -407,7 +407,7 @@ struct lan966x_port {
 	struct lan966x_port_config config;
 	struct phylink *phylink;
 	struct phy *serdes;
-	struct fwnode_handle *fwnode;
+	struct device_node *dnode;
 
 	u8 ptp_tx_cmd;
 	bool ptp_rx_cmd;
