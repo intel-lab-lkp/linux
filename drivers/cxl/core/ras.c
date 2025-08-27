@@ -6,6 +6,7 @@
 #include <cxl/event.h>
 #include <cxlmem.h>
 #include <cxlpci.h>
+#include <cxl.h>
 #include "trace.h"
 
 static void cxl_cper_trace_corr_port_prot_err(struct pci_dev *pdev,
@@ -468,8 +469,101 @@ void cxl_endpoint_port_init_ras(struct cxl_port *ep)
 }
 EXPORT_SYMBOL_NS_GPL(cxl_endpoint_port_init_ras, "CXL");
 
+static int cxl_report_error_detected(struct device *dev, void *data)
+{
+	struct pci_dev *pdev = to_pci_dev(dev);
+	pci_ers_result_t vote, *result = data;
+
+	guard(device)(dev);
+
+	if (pci_pcie_type(pdev) == PCI_EXP_TYPE_ENDPOINT)
+		vote = cxl_error_detected(dev);
+	else
+		vote = cxl_port_error_detected(dev);
+
+	vote = cxl_error_detected(dev);
+	*result = pci_ers_merge_result(*result, vote);
+
+	return 0;
+}
+
+static int match_port_by_parent_dport(struct device *dev, const void *dport_dev)
+{
+	struct cxl_port *port;
+
+	if (!is_cxl_port(dev))
+		return 0;
+
+	port = to_cxl_port(dev);
+
+	return port->parent_dport->dport_dev == dport_dev;
+}
+
+static void cxl_walk_port(struct device *port_dev,
+			  int (*cb)(struct device *, void *),
+			  void *userdata)
+{
+	struct cxl_dport *dport = NULL;
+	struct cxl_port *port;
+	unsigned long index;
+
+	if (!port_dev)
+		return;
+
+	port = to_cxl_port(port_dev);
+	if (port->uport_dev && dev_is_pci(port->uport_dev))
+		cb(port->uport_dev, userdata);
+
+	xa_for_each(&port->dports, index, dport)
+	{
+		struct device *child_port_dev __free(put_device) =
+			bus_find_device(&cxl_bus_type, &port->dev, dport,
+					match_port_by_parent_dport);
+
+		cb(dport->dport_dev, userdata);
+
+		cxl_walk_port(child_port_dev, cxl_report_error_detected, userdata);
+	}
+
+	if (is_cxl_endpoint(port))
+		cb(port->uport_dev->parent, userdata);
+}
+
 static void cxl_do_recovery(struct device *dev)
 {
+	pci_ers_result_t status = PCI_ERS_RESULT_CAN_RECOVER;
+	struct pci_dev *pdev = to_pci_dev(dev);
+	struct cxl_dport *dport;
+	struct cxl_port *port;
+
+	if ((pci_pcie_type(pdev) == PCI_EXP_TYPE_ROOT_PORT) ||
+	    (pci_pcie_type(pdev) == PCI_EXP_TYPE_DOWNSTREAM)) {
+		port = find_cxl_port(&pdev->dev, &dport);
+	} else	if (pci_pcie_type(pdev) == PCI_EXP_TYPE_UPSTREAM) {
+		struct device *port_dev = bus_find_device(&cxl_bus_type, NULL,
+							  &pdev->dev, match_uport);
+		port = to_cxl_port(port_dev);
+	}
+
+	if (!port)
+		return;
+
+	cxl_walk_port(&port->dev, cxl_report_error_detected, &status);
+	if (status == PCI_ERS_RESULT_PANIC)
+		panic("CXL cachemem error.");
+
+	/*
+	 * If we have native control of AER, clear error status in the device
+	 * that detected the error.  If the platform retained control of AER,
+	 * it is responsible for clearing this status.  In that case, the
+	 * signaling device may not even be visible to the OS.
+	 */
+	if (cxl_error_is_native(pdev)) {
+		pcie_clear_device_status(pdev);
+		pci_aer_clear_nonfatal_status(pdev);
+		pci_aer_clear_fatal_status(pdev);
+	}
+	put_device(&port->dev);
 }
 
 static void cxl_handle_cor_ras(struct device *dev, u64 serial, void __iomem *ras_base)

@@ -81,10 +81,12 @@ static inline int pcie_aer_is_native(struct pci_dev *dev) { return 0; }
 int cxl_proto_err_kfifo_get(struct cxl_proto_err_work_data *wd);
 void cxl_register_proto_err_work(struct work_struct *work);
 void cxl_unregister_proto_err_work(void);
+bool cxl_error_is_native(struct pci_dev *dev);
 #else
 static inline int cxl_proto_err_kfifo_get(struct cxl_proto_err_work_data *wd) { return 0; }
 static inline void cxl_register_proto_err_work(struct work_struct *work) { }
 static inline void cxl_unregister_proto_err_work(void) { }
+static inline bool cxl_error_is_native(struct pci_dev *dev) { return false; }
 #endif
 
 void pci_print_aer(struct pci_dev *dev, int aer_severity,

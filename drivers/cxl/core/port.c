@@ -1347,6 +1347,7 @@ struct cxl_port *find_cxl_port(struct device *dport_dev,
 	port = __find_cxl_port(&ctx);
 	return port;
 }
+EXPORT_SYMBOL_NS_GPL(find_cxl_port, "CXL");
 
 static struct cxl_port *find_cxl_port_at(struct cxl_port *parent_port,
 					 struct device *dport_dev,
