@@ -21,9 +21,12 @@
 #include "portdrv.h"
 #include "../pci.h"
 
-static pci_ers_result_t merge_result(enum pci_ers_result orig,
-				  enum pci_ers_result new)
+pci_ers_result_t pci_ers_merge_result(enum pci_ers_result orig,
+				      enum pci_ers_result new)
 {
+	if (new == PCI_ERS_RESULT_PANIC)
+		return PCI_ERS_RESULT_PANIC;
+
 	if (new == PCI_ERS_RESULT_NO_AER_DRIVER)
 		return PCI_ERS_RESULT_NO_AER_DRIVER;
 
@@ -45,6 +48,7 @@ static pci_ers_result_t merge_result(enum pci_ers_result orig,
 
 	return orig;
 }
+EXPORT_SYMBOL(pci_ers_merge_result);
 
 static int report_error_detected(struct pci_dev *dev,
 				 pci_channel_state_t state,
@@ -81,7 +85,7 @@ static int report_error_detected(struct pci_dev *dev,
 		vote = err_handler->error_detected(dev, state);
 	}
 	pci_uevent_ers(dev, vote);
-	*result = merge_result(*result, vote);
+	*result = pci_ers_merge_result(*result, vote);
 	device_unlock(&dev->dev);
 	return 0;
 }
@@ -121,7 +125,7 @@ static int report_mmio_enabled(struct pci_dev *dev, void *data)
 
 	err_handler = pdrv->err_handler;
 	vote = err_handler->mmio_enabled(dev);
-	*result = merge_result(*result, vote);
+	*result = pci_ers_merge_result(*result, vote);
 out:
 	device_unlock(&dev->dev);
 	return 0;
@@ -140,7 +144,7 @@ static int report_slot_reset(struct pci_dev *dev, void *data)
 
 	err_handler = pdrv->err_handler;
 	vote = err_handler->slot_reset(dev);
-	*result = merge_result(*result, vote);
+	*result = pci_ers_merge_result(*result, vote);
 out:
 	device_unlock(&dev->dev);
 	return 0;

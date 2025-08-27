@@ -2760,6 +2760,17 @@ static inline bool pci_is_thunderbolt_attached(struct pci_dev *pdev)
 void pci_uevent_ers(struct pci_dev *pdev, enum  pci_ers_result err_type);
 #endif
 
+#if defined(CONFIG_PCIEAER)
+pci_ers_result_t pci_ers_merge_result(enum pci_ers_result orig,
+				      enum pci_ers_result new);
+#else
+static inline pci_ers_result_t pci_ers_merge_result(enum pci_ers_result orig,
+						    enum pci_ers_result new)
+{
+	return PCI_ERS_RESULT_NONE;
+}
+#endif
+
 #include <linux/dma-mapping.h>
 
 #define pci_emerg(pdev, fmt, arg...)	dev_emerg(&(pdev)->dev, fmt, ##arg)
