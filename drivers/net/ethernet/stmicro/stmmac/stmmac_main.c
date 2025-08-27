@@ -144,7 +144,7 @@ static void stmmac_init_fs(struct net_device *dev);
 static void stmmac_exit_fs(struct net_device *dev);
 #endif
 
-#define STMMAC_COAL_TIMER(x) (ns_to_ktime((x) * NSEC_PER_USEC))
+#define STMMAC_COAL_TIMER(x) (us_to_ktime(x))
 
 int stmmac_bus_clks_config(struct stmmac_priv *priv, bool enabled)
 {
