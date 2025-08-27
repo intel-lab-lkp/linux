@@ -53,6 +53,7 @@
 *.tar
 *.xz
 *.zst
+*.tmp
 Module.symvers
 dtbs-list
 modules.order
@@ -177,6 +178,9 @@ x509.genkey
 
 # Clang's compilation database file
 /compile_commands.json
+# Temporary files created by 'bear', a tool used for generating
+# compile_commands.json for non-Kbuild code.
+*.events.json
 
 # Documentation toolchain
 sphinx_*/
