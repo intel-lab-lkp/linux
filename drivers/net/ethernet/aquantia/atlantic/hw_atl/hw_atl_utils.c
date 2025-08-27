@@ -463,8 +463,7 @@ bool hw_atl_utils_ver_match(u32 ver_expected, u32 ver_actual)
 	ver_match = (dw_major_mask & (ver_expected ^ ver_actual)) ? false : true;
 	if (!ver_match)
 		goto err_exit;
-	ver_match = ((dw_minor_mask & ver_expected) > (dw_minor_mask & ver_actual)) ?
-		false : true;
+	ver_match = (dw_minor_mask & ver_expected) <= (dw_minor_mask & ver_actual);
 
 err_exit:
 	return ver_match;
