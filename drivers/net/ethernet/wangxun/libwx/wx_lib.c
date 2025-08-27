@@ -3016,14 +3016,12 @@ int wx_set_features(struct net_device *netdev, netdev_features_t features)
 	struct wx *wx = netdev_priv(netdev);
 	bool need_reset = false;
 
-	if (features & NETIF_F_RXHASH) {
-		wr32m(wx, WX_RDB_RA_CTL, WX_RDB_RA_CTL_RSS_EN,
-		      WX_RDB_RA_CTL_RSS_EN);
+	if (features & NETIF_F_RXHASH)
 		wx->rss_enabled = true;
-	} else {
-		wr32m(wx, WX_RDB_RA_CTL, WX_RDB_RA_CTL_RSS_EN, 0);
+	else
 		wx->rss_enabled = false;
-	}
+
+	wx_enable_rss(wx, wx->rss_enabled);
 
 	netdev->features = features;
 
