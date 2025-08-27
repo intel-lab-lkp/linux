@@ -241,10 +241,8 @@ nla_put_failure:
 	kfree_skb(skb);
 
 fail:
-	rcu_read_lock();
 	master = hsr_port_get_hsr(hsr, HSR_PT_MASTER);
 	netdev_warn(master->dev, "Could not send HSR ring error message\n");
-	rcu_read_unlock();
 }
 
 /* This is called when we haven't heard from the node with MAC address addr for
@@ -278,10 +276,8 @@ nla_put_failure:
 	kfree_skb(skb);
 
 fail:
-	rcu_read_lock();
 	master = hsr_port_get_hsr(hsr, HSR_PT_MASTER);
 	netdev_warn(master->dev, "Could not send HSR node down\n");
-	rcu_read_unlock();
 }
 
 /* HSR_C_GET_NODE_STATUS lets userspace query the internal HSR node table
