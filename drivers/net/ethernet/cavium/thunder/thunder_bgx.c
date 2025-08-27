@@ -959,7 +959,7 @@ static void bgx_poll_for_sgmii_link(struct lmac *lmac)
 		goto next_poll;
 	}
 
-	lmac->link_up = ((pcs_link & PCS_MRX_STATUS_LINK) != 0) ? true : false;
+	lmac->link_up = (pcs_link & PCS_MRX_STATUS_LINK) != 0;
 	an_result = bgx_reg_read(lmac->bgx, lmac->lmacid,
 				 BGX_GMP_PCS_ANX_AN_RESULTS);
 
