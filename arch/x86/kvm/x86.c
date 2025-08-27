@@ -3102,7 +3102,7 @@ static int kvm_vcpu_ioctl_x86_set_vcpu_events(struct kvm_vcpu *vcpu,
 			return -EINVAL;
 #endif
 
-		if (lapic_in_kernel(vcpu)) {
+		if (!kvm_apic_init_sipi_allowed(vcpu) && lapic_in_kernel(vcpu)) {
 			if (events->smi.latched_init)
 				set_bit(KVM_APIC_INIT, &vcpu->arch.apic->pending_events);
 			else
