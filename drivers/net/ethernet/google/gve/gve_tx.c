@@ -68,7 +68,7 @@ static int gve_tx_fifo_pad_alloc_one_frag(struct gve_tx_fifo *fifo,
 
 static bool gve_tx_fifo_can_alloc(struct gve_tx_fifo *fifo, size_t bytes)
 {
-	return (atomic_read(&fifo->available) <= bytes) ? false : true;
+	return atomic_read(&fifo->available) > bytes;
 }
 
 /* gve_tx_alloc_fifo - Allocate fragment(s) from Tx FIFO
