@@ -6,6 +6,7 @@
 
 #include "cxlmem.h"
 #include "cxlpci.h"
+#include "core/core.h"
 
 /**
  * DOC: cxl port
@@ -71,6 +72,8 @@ static int cxl_switch_port_probe(struct cxl_port *port)
 
 	cxl_switch_parse_cdat(port);
 
+	cxl_switch_port_init_ras(port);
+
 	cxlhdm = devm_cxl_setup_hdm(port, NULL);
 	if (!IS_ERR(cxlhdm))
 		return devm_cxl_enumerate_decoders(cxlhdm, NULL);
@@ -124,6 +127,8 @@ static int cxl_endpoint_port_probe(struct cxl_port *port)
 	rc = devm_cxl_enumerate_decoders(cxlhdm, &info);
 	if (rc)
 		return rc;
+
+	cxl_endpoint_port_init_ras(port);
 
 	/*
 	 * Now that all endpoint decoders are successfully enumerated, try to

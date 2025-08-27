@@ -284,6 +284,53 @@ void cxl_dport_init_ras_reporting(struct cxl_dport *dport, struct device *host)
 }
 EXPORT_SYMBOL_NS_GPL(cxl_dport_init_ras_reporting, "CXL");
 
+static void cxl_uport_init_ras_reporting(struct cxl_port *port,
+					 struct device *host)
+{
+	struct cxl_register_map *map = &port->reg_map;
+
+	map->host = host;
+	if (cxl_map_component_regs(map, &port->uport_regs,
+				   BIT(CXL_CM_CAP_CAP_ID_RAS)))
+		dev_dbg(&port->dev, "Failed to map RAS capability\n");
+}
+
+void cxl_switch_port_init_ras(struct cxl_port *port)
+{
+	struct cxl_dport *parent_dport = port->parent_dport;
+
+	if (is_cxl_root(to_cxl_port(port->dev.parent)))
+		return;
+
+	/* May have parent DSP or RP */
+	if (parent_dport && dev_is_pci(parent_dport->dport_dev)) {
+		struct pci_dev *pdev = to_pci_dev(parent_dport->dport_dev);
+
+		if ((pci_pcie_type(pdev) == PCI_EXP_TYPE_ROOT_PORT) ||
+		    (pci_pcie_type(pdev) == PCI_EXP_TYPE_DOWNSTREAM))
+			cxl_dport_init_ras_reporting(parent_dport, &port->dev);
+	}
+
+	cxl_uport_init_ras_reporting(port, &port->dev);
+}
+EXPORT_SYMBOL_NS_GPL(cxl_switch_port_init_ras, "CXL");
+
+void cxl_endpoint_port_init_ras(struct cxl_port *ep)
+{
+	struct cxl_dport *parent_dport;
+	struct cxl_memdev *cxlmd = to_cxl_memdev(ep->uport_dev);
+	struct cxl_port *parent_port __free(put_cxl_port) =
+		cxl_mem_find_port(cxlmd, &parent_dport);
+
+	if (!parent_dport || !dev_is_pci(parent_dport->dport_dev)) {
+		dev_err(&ep->dev, "CXL port topology not found\n");
+		return;
+	}
+
+	cxl_dport_init_ras_reporting(parent_dport, cxlmd->cxlds->dev);
+}
+EXPORT_SYMBOL_NS_GPL(cxl_endpoint_port_init_ras, "CXL");
+
 static void cxl_handle_cor_ras(struct device *dev, u64 serial, void __iomem *ras_base)
 {
 	void __iomem *addr;

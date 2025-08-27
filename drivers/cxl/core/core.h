@@ -146,6 +146,9 @@ int cxl_port_get_switch_dport_bandwidth(struct cxl_port *port,
 #ifdef CONFIG_CXL_RAS
 int cxl_ras_init(void);
 void cxl_ras_exit(void);
+void cxl_switch_port_init_ras(struct cxl_port *port);
+void cxl_endpoint_port_init_ras(struct cxl_port *ep);
+void cxl_dport_init_ras_reporting(struct cxl_dport *dport, struct device *host);
 #else
 static inline int cxl_ras_init(void)
 {
@@ -155,6 +158,10 @@ static inline int cxl_ras_init(void)
 static inline void cxl_ras_exit(void)
 {
 }
+static inline void cxl_switch_port_init_ras(struct cxl_port *port) { }
+static inline void cxl_endpoint_port_init_ras(struct cxl_port *ep) { }
+static inline void cxl_dport_init_ras_reporting(struct cxl_dport *dport,
+						struct device *host) { }
 #endif // CONFIG_CXL_RAS
 
 int cxl_gpf_port_setup(struct cxl_dport *dport);
