@@ -42,7 +42,7 @@ actually true.
 The name of the game is to **avoid** having to make a decision.  In
 particular, if somebody tells you "choose (a) or (b), we really need you
 to decide on this", you're in trouble as a manager.  The people you
-manage had better know the details better than you, so if they come to
+manage most likely know the details better than you, so if they come to
 you for a technical decision, you're screwed.  You're clearly not
 competent to make that decision for them.
 
@@ -115,7 +115,7 @@ sure as hell shouldn't encourage them by promising them that what they
 work on will be included.  Make them at least think twice before they
 embark on a big endeavor.
 
-Remember: they'd better know more about the details than you do, and
+Remember: they know the details better than you do, and
 they usually already think they have the answer to everything.  The best
 thing you can do as a manager is not to instill confidence, but rather a
 healthy dose of critical thinking on what they do.
