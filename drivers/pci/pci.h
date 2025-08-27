@@ -1179,10 +1179,14 @@ static inline void cxl_rch_enable_rcec(struct pci_dev *rcec) { }
 void pci_aer_unmask_internal_errors(struct pci_dev *dev);
 bool cxl_error_is_native(struct pci_dev *dev);
 bool is_internal_error(struct aer_err_info *info);
+bool is_cxl_error(struct pci_dev *pdev, struct aer_err_info *info);
+void cxl_forward_error(struct pci_dev *pdev, struct aer_err_info *info);
 #else
 static inline void pci_aer_unmask_internal_errors(struct pci_dev *dev) { }
 static inline bool cxl_error_is_native(struct pci_dev *dev) { return false; }
 static inline bool is_internal_error(struct aer_err_info *info) { return false; }
+static inline bool is_cxl_error(struct pci_dev *pdev, struct aer_err_info *info) { return false; }
+static inline void cxl_forward_error(struct pci_dev *pdev, struct aer_err_info *info) { }
 #endif
 
 #endif /* DRIVERS_PCI_H */
