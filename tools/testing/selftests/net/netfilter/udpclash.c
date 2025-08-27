@@ -14,6 +14,7 @@
  *  ed07d9a021df ("netfilter: nf_conntrack: resolve clash for matching conntracks")
  *  6a757c07e51f ("netfilter: conntrack: allow insertion of clashing entries")
  */
+#include <stdatomic.h>
 #include <stdio.h>
 #include <string.h>
 #include <stdlib.h>
@@ -29,7 +30,7 @@ struct thread_args {
 	int sockfd;
 };
 
-static int wait = 1;
+static atomic_int wait = ATOMIC_VAR_INIT(1);
 
 static void *thread_main(void *varg)
 {
