@@ -1086,7 +1086,7 @@ static bool find_source_device(struct pci_dev *parent,
 	return true;
 }
 
-#ifdef CONFIG_PCIEAER_CXL
+#ifdef CONFIG_CXL_RAS
 
 /**
  * pci_aer_unmask_internal_errors - unmask internal errors
