@@ -6,6 +6,7 @@
 
 #include <cxl/mailbox.h>
 #include <linux/rwsem.h>
+#include <linux/pci.h>
 
 extern const struct device_type cxl_nvdimm_bridge_type;
 extern const struct device_type cxl_nvdimm_type;
@@ -149,6 +150,11 @@ void cxl_ras_exit(void);
 void cxl_switch_port_init_ras(struct cxl_port *port);
 void cxl_endpoint_port_init_ras(struct cxl_port *ep);
 void cxl_dport_init_ras_reporting(struct cxl_dport *dport, struct device *host);
+pci_ers_result_t pci_error_detected(struct pci_dev *pdev,
+				    pci_channel_state_t error);
+void pci_cor_error_detected(struct pci_dev *pdev);
+void cxl_cor_error_detected(struct device *dev);
+pci_ers_result_t cxl_error_detected(struct device *dev);
 #else
 static inline int cxl_ras_init(void)
 {
@@ -162,6 +168,17 @@ static inline void cxl_switch_port_init_ras(struct cxl_port *port) { }
 static inline void cxl_endpoint_port_init_ras(struct cxl_port *ep) { }
 static inline void cxl_dport_init_ras_reporting(struct cxl_dport *dport,
 						struct device *host) { }
+static inline pci_ers_result_t pci_error_detected(struct pci_dev *pdev,
+						  pci_channel_state_t error)
+{
+	return PCI_ERS_RESULT_NONE;
+}
+static inline void pci_cor_error_detected(struct pci_dev *pdev) { }
+static inline void cxl_cor_error_detected(struct device *dev) { }
+static inline pci_ers_result_t cxl_error_detected(struct device *dev)
+{
+	return PCI_ERS_RESULT_NONE;
+}
 #endif // CONFIG_CXL_RAS
 
 int cxl_gpf_port_setup(struct cxl_dport *dport);
