@@ -3258,7 +3258,7 @@ static int nix_update_ingress_mce_list_hw(struct rvu *rvu,
 		err = nix_blk_setup_mce(rvu, nix_hw, idx, NIX_AQ_INSTOP_WRITE,
 					mce->pcifunc, next_idx,
 					mce->rq_rss_index, mce->dest_type,
-					(next_idx > last_idx) ? true : false);
+					next_idx > last_idx);
 		if (err)
 			return err;
 
