@@ -11,6 +11,7 @@
 #include <linux/pci_regs.h>
 #include <linux/slab.h>
 #include <linux/sysfs.h>
+#include <linux/tsm.h>
 
 #include "pci.h"
 
@@ -271,6 +272,9 @@ void pci_ide_stream_release(struct pci_ide *ide)
 
 	if (ide->partner[PCI_IDE_EP].enable)
 		pci_ide_stream_disable(pdev, ide);
+
+	if (ide->tsm_dev)
+		tsm_ide_stream_unregister(ide);
 
 	if (ide->partner[PCI_IDE_RP].setup)
 		pci_ide_stream_teardown(rp, ide);
@@ -551,7 +555,7 @@ static umode_t pci_ide_attr_visible(struct kobject *kobj, struct attribute *a, i
 	return a->mode;
 }
 
-struct attribute_group pci_ide_attr_group = {
+const struct attribute_group pci_ide_attr_group = {
 	.attrs = pci_ide_attrs,
 	.is_visible = pci_ide_attr_visible,
 };
