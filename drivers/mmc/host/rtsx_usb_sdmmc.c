@@ -1169,7 +1169,7 @@ static void sdmmc_set_ios(struct mmc_host *mmc, struct mmc_ios *ios)
 		break;
 	}
 
-	host->initial_mode = (ios->clock <= 1000000) ? true : false;
+	host->initial_mode = ios->clock <= 1000000;
 	host->clock = ios->clock;
 
 	rtsx_usb_switch_clock(host->ucr, host->clock, host->ssc_depth,
