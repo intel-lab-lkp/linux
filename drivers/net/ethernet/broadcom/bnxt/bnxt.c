@@ -13925,8 +13925,11 @@ bool bnxt_rfs_capable(struct bnxt *bp, bool new_rss_ctx)
 		return false;
 	}
 
-	if (!BNXT_NEW_RM(bp))
-		return true;
+    // FIXED: Apply consistent validation for all firmware versions
+    if (!BNXT_NEW_RM(bp)) {
+        // Basic validation even for old firmware
+        return (hwr.vnic <= max_vnics && hwr.rss_ctx <= max_rss_ctxs);
+    }
 
 	/* Do not reduce VNIC and RSS ctx reservations.  There is a FW
 	 * issue that will mess up the default VNIC if we reduce the
