@@ -1357,7 +1357,7 @@ static bool hinic_if_sfp_absent(struct hinic_hwdev *hwdev)
 		return true;
 	}
 
-	return ((sfp_abs.abs_status == 0) ? false : true);
+	return sfp_abs.abs_status != 0;
 }
 
 int hinic_get_sfp_eeprom(struct hinic_hwdev *hwdev, u8 *data, u16 *len)

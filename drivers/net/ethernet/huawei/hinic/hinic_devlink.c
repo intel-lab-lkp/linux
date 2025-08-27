@@ -174,8 +174,7 @@ static int hinic_flash_fw(struct hinic_devlink_priv *priv, const u8 *data,
 			memset(fw_update_msg->data, 0, MAX_FW_FRAGMENT_LEN);
 
 			fw_update_msg->ctl_info.SF =
-				(section_remain_send_len == section_len) ?
-				true : false;
+				section_remain_send_len == section_len;
 			fw_update_msg->section_info.FW_section_CRC = section_crc;
 			fw_update_msg->fw_section_version = section_version;
 			fw_update_msg->ctl_info.flag = UP_TYPE_A;
