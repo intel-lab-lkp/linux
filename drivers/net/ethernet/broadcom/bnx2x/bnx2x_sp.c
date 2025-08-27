@@ -1052,8 +1052,7 @@ static void bnx2x_set_one_mac_e1x(struct bnx2x *bp,
 	/* 57710 and 57711 do not support MOVE command,
 	 * so it's either ADD or DEL
 	 */
-	bool add = (elem->cmd_data.vlan_mac.cmd == BNX2X_VLAN_MAC_ADD) ?
-		true : false;
+	bool add = elem->cmd_data.vlan_mac.cmd == BNX2X_VLAN_MAC_ADD;
 
 	/* Reset the ramrod data buffer */
 	memset(config, 0, sizeof(*config));
