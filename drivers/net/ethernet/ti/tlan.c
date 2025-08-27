@@ -1804,7 +1804,6 @@ static void tlan_timer(struct timer_list *t)
 {
 	struct tlan_priv	*priv = timer_container_of(priv, t, timer);
 	struct net_device	*dev = priv->dev;
-	u32		elapsed;
 	unsigned long	flags = 0;
 
 	priv->timer.function = NULL;
@@ -1831,8 +1830,7 @@ static void tlan_timer(struct timer_list *t)
 	case TLAN_TIMER_ACTIVITY:
 		spin_lock_irqsave(&priv->lock, flags);
 		if (priv->timer.function == NULL) {
-			elapsed = jiffies - priv->timer_set_at;
-			if (elapsed >= TLAN_TIMER_ACT_DELAY) {
+			if (time_is_before_eq_jiffies(priv->timer_set_at + TLAN_TIMER_ACT_DELAY)) {
 				tlan_dio_write8(dev->base_addr,
 						TLAN_LED_REG, TLAN_LED_LINK);
 			} else  {
