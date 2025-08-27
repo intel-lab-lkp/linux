@@ -1,0 +1,11 @@
+What:		/sys/bus/iio/devices/iio:deviceX/trigger_one_shot
+Date:		August 2025
+KernelVersion:	6.17
+Contact:	Lakshay Piplani <lakshay.piplani@nxp.com>
+Description:
+		(WO) Write-only attribute to trigger a one-shot temperature
+		measurement on the P3T1750/P3T1755 sensor. Writing '1' initiates
+		the measurement if the device is in shutdown mode. Writing '0' or
+		any other value is invalid.
+
+		Returns -EBUSY if the device is not in shutdown mode.
