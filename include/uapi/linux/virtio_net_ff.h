@@ -12,6 +12,8 @@
 #define VIRTIO_NET_FF_SELECTOR_CAP 0x801
 #define VIRTIO_NET_FF_ACTION_CAP 0x802
 
+#define VIRTIO_NET_RESOURCE_OBJ_FF_GROUP 0x0200
+
 struct virtio_net_ff_cap_data {
 	__le32 groups_limit;
 	__le32 classifiers_limit;
@@ -52,4 +54,9 @@ struct virtio_net_ff_actions {
 	__u8 reserved[7];
 	__u8 actions[];
 };
+
+struct virtio_net_resource_obj_ff_group {
+	__le16 group_priority;
+};
+
 #endif
