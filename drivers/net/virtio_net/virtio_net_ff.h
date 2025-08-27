@@ -28,6 +28,12 @@ void virtnet_ff_init(struct virtnet_ff *ff, struct virtio_device *vdev);
 
 void virtnet_ff_cleanup(struct virtnet_ff *ff);
 
+int virtnet_ethtool_get_flow_count(struct virtnet_ff *ff,
+				   struct ethtool_rxnfc *info);
+int virtnet_ethtool_get_all_flows(struct virtnet_ff *ff,
+				  struct ethtool_rxnfc *info, u32 *rule_locs);
+int virtnet_ethtool_get_flow(struct virtnet_ff *ff,
+			     struct ethtool_rxnfc *info);
 int virtnet_ethtool_flow_insert(struct virtnet_ff *ff,
 				struct ethtool_rx_flow_spec *fs,
 				u16 curr_queue_pairs);
