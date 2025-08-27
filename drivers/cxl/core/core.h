@@ -143,8 +143,20 @@ bool cxl_need_node_perf_attrs_update(int nid);
 int cxl_port_get_switch_dport_bandwidth(struct cxl_port *port,
 					struct access_coordinate *c);
 
+#ifdef CONFIG_CXL_RAS
 int cxl_ras_init(void);
 void cxl_ras_exit(void);
+#else
+static inline int cxl_ras_init(void)
+{
+	return 0;
+}
+
+static inline void cxl_ras_exit(void)
+{
+}
+#endif // CONFIG_CXL_RAS
+
 int cxl_gpf_port_setup(struct cxl_dport *dport);
 
 #ifdef CONFIG_CXL_FEATURES
