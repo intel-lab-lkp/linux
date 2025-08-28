@@ -38,6 +38,7 @@ static const struct mfd_cell pm886_devs[] = {
 	MFD_CELL_RES("88pm886-onkey", pm886_onkey_resources),
 	MFD_CELL_NAME("88pm886-regulator"),
 	MFD_CELL_NAME("88pm886-rtc"),
+	MFD_CELL_NAME("88pm886-gpadc"),
 };
 
 static int pm886_power_off_handler(struct sys_off_data *sys_off_data)
