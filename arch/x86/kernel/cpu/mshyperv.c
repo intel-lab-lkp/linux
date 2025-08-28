@@ -90,6 +90,25 @@ void hv_set_non_nested_msr(unsigned int reg, u64 value)
 }
 EXPORT_SYMBOL_GPL(hv_set_non_nested_msr);
 
+/*
+ * Detect if the confidential VMBus is available.
+ */
+bool hv_confidential_vmbus_available(void)
+{
+	u32 eax;
+
+	eax = cpuid_eax(HYPERV_CPUID_VIRT_STACK_INTERFACE);
+	if (eax != HYPERV_VS_INTERFACE_EAX_SIGNATURE)
+		return false;
+
+	eax = cpuid_eax(HYPERV_CPUID_VIRT_STACK_PROPERTIES);
+
+	/*
+	 * The paravisor may set the bit in the hardware confidential VMs.
+	 */
+	return eax & HYPERV_VS_PROPERTIES_EAX_CONFIDENTIAL_VMBUS_AVAILABLE;
+}
+
 u64 hv_get_msr(unsigned int reg)
 {
 	if (hv_nested)
