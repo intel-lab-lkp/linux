@@ -4,6 +4,7 @@
 #include <linux/kvm_host.h>
 #include <linux/pagemap.h>
 #include <linux/anon_inodes.h>
+#include <linux/set_memory.h>
 
 #include "kvm_mm.h"
 
@@ -42,8 +43,18 @@ static int __kvm_gmem_prepare_folio(struct kvm *kvm, struct kvm_memory_slot *slo
 	return 0;
 }
 
+static bool kvm_gmem_test_no_direct_map(struct inode *inode)
+{
+	return ((unsigned long) inode->i_private) & GUEST_MEMFD_FLAG_NO_DIRECT_MAP;
+}
+
 static inline void kvm_gmem_mark_prepared(struct folio *folio)
 {
+	struct inode *inode = folio_inode(folio);
+
+	if (kvm_gmem_test_no_direct_map(inode))
+		set_direct_map_valid_noflush(folio_page(folio, 0), folio_nr_pages(folio), false);
+
 	folio_mark_uptodate(folio);
 }
 
@@ -429,25 +440,29 @@ static int kvm_gmem_error_folio(struct address_space *mapping, struct folio *fol
 	return MF_DELAYED;
 }
 
-#ifdef CONFIG_HAVE_KVM_ARCH_GMEM_INVALIDATE
 static void kvm_gmem_free_folio(struct address_space *mapping,
 				struct folio *folio)
 {
 	struct page *page = folio_page(folio, 0);
+
+#ifdef CONFIG_HAVE_KVM_ARCH_GMEM_INVALIDATE
 	kvm_pfn_t pfn = page_to_pfn(page);
 	int order = folio_order(folio);
-
-	kvm_arch_gmem_invalidate(pfn, pfn + (1ul << order));
-}
 #endif
+
+	if (kvm_gmem_test_no_direct_map(mapping->host))
+		WARN_ON_ONCE(set_direct_map_valid_noflush(page, folio_nr_pages(folio), true));
+
+#ifdef CONFIG_HAVE_KVM_ARCH_GMEM_INVALIDATE
+	kvm_arch_gmem_invalidate(pfn, pfn + (1ul << order));
+#endif
+}
 
 static const struct address_space_operations kvm_gmem_aops = {
 	.dirty_folio = noop_dirty_folio,
 	.migrate_folio	= kvm_gmem_migrate_folio,
 	.error_remove_folio = kvm_gmem_error_folio,
-#ifdef CONFIG_HAVE_KVM_ARCH_GMEM_INVALIDATE
 	.free_folio = kvm_gmem_free_folio,
-#endif
 };
 
 static int kvm_gmem_setattr(struct mnt_idmap *idmap, struct dentry *dentry,
@@ -504,6 +519,9 @@ static int __kvm_gmem_create(struct kvm *kvm, loff_t size, u64 flags)
 	/* Unmovable mappings are supposed to be marked unevictable as well. */
 	WARN_ON_ONCE(!mapping_unevictable(inode->i_mapping));
 
+	if (flags & GUEST_MEMFD_FLAG_NO_DIRECT_MAP)
+		mapping_set_no_direct_map(inode->i_mapping);
+
 	kvm_get_kvm(kvm);
 	gmem->kvm = kvm;
 	xa_init(&gmem->bindings);
@@ -527,6 +545,9 @@ int kvm_gmem_create(struct kvm *kvm, struct kvm_create_guest_memfd *args)
 
 	if (kvm_arch_supports_gmem_mmap(kvm))
 		valid_flags |= GUEST_MEMFD_FLAG_MMAP;
+
+	if (kvm_arch_gmem_supports_no_direct_map())
+		valid_flags |= GUEST_MEMFD_FLAG_NO_DIRECT_MAP;
 
 	if (flags & ~valid_flags)
 		return -EINVAL;
