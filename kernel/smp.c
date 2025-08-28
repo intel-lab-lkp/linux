@@ -794,7 +794,9 @@ int smp_call_function_any(const struct cpumask *mask,
 
 	/* Try for same CPU (cheapest) */
 	cpu = get_cpu();
-	if (!cpumask_test_cpu(cpu, mask))
+	if (!cpumask_intersects(mask, cpu_online_mask))
+		cpu = nr_cpu_ids;
+	else if (!cpumask_test_cpu(cpu, mask))
 		cpu = sched_numa_find_nth_cpu(mask, 0, cpu_to_node(cpu));
 
 	ret = smp_call_function_single(cpu, func, info, wait);
