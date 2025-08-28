@@ -253,6 +253,7 @@
 #define JS_AFFINITY_NEXT_LO(n)		(JS_BASE + ((n) * JS_SLOT_STRIDE) + 0x50)
 #define JS_AFFINITY_NEXT_HI(n)		(JS_BASE + ((n) * JS_SLOT_STRIDE) + 0x54)
 #define JS_CONFIG_NEXT(n)		(JS_BASE + ((n) * JS_SLOT_STRIDE) + 0x58)
+#define JS_XAFFINITY_NEXT(n)		(JS_BASE + ((n) * JS_SLOT_STRIDE) + 0x5c)
 #define JS_COMMAND_NEXT(n)		(JS_BASE + ((n) * JS_SLOT_STRIDE) + 0x60)
 #define JS_FLUSH_ID_NEXT(n)		(JS_BASE + ((n) * JS_SLOT_STRIDE) + 0x70)
 
@@ -266,6 +267,11 @@
 #define JS_CONFIG_ENABLE_FLUSH_REDUCTION	BIT(14)
 #define JS_CONFIG_DISABLE_DESCRIPTOR_WR_BK	BIT(15)
 #define JS_CONFIG_THREAD_PRI(n)			((n) << 16)
+
+/* Possible values of JS_XAFFINITY and JS_XAFFINITY_NEXT registers */
+#define JS_XAFFINITY_ENABLE		BIT(0)
+#define JS_XAFFINITY_TILER_MASK(x)	(((u32)(x) & GENMASK(7, 0)) << 8)
+#define JS_XAFFINITY_L2_MASK(x)		(((u32)(x) & GENMASK(15, 0)) << 16)
 
 #define JS_COMMAND_NOP			0x00
 #define JS_COMMAND_START		0x01
