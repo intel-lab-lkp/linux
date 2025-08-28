@@ -109,6 +109,45 @@ bool hv_confidential_vmbus_available(void)
 	return eax & HYPERV_VS_PROPERTIES_EAX_CONFIDENTIAL_VMBUS_AVAILABLE;
 }
 
+/*
+ * Attempt to get the SynIC register value from the paravisor.
+ *
+ * Not all paravisors support reading SynIC registers, so this function
+ * may fail. The register for the SynIC of the running CPU is accessed.
+ *
+ * Writes the SynIC register value into the memory pointed by val,
+ * and ~0ULL is on failure.
+ *
+ * Returns -ENODEV if the MSR is not a SynIC register, or another error
+ * code if getting the MSR fails (meaning the paravisor doesn't support
+ * relaying VMBus communucations).
+ */
+int hv_para_get_synic_register(unsigned int reg, u64 *val)
+{
+	if (!ms_hyperv.paravisor_present || !hv_is_synic_msr(reg))
+		return -ENODEV;
+	return native_read_msr_safe(reg, val);
+}
+
+/*
+ * Attempt to set the SynIC register value with the paravisor.
+ *
+ * Not all paravisors support setting SynIC registers, so this function
+ * may fail. The register for the SynIC of the running CPU is accessed.
+ *
+ * Sets the register to the value supplied.
+ *
+ * Returns: -ENODEV if the MSR is not a SynIC register, or another error
+ * code if writing to the MSR fails (meaning the paravisor doesn't support
+ * relaying VMBus communucations).
+ */
+int hv_para_set_synic_register(unsigned int reg, u64 val)
+{
+	if (!ms_hyperv.paravisor_present || !hv_is_synic_msr(reg))
+		return -ENODEV;
+	return native_write_msr_safe(reg, val);
+}
+
 u64 hv_get_msr(unsigned int reg)
 {
 	if (hv_nested)

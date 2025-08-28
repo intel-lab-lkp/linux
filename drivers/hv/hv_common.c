@@ -722,6 +722,19 @@ bool __weak hv_confidential_vmbus_available(void)
 }
 EXPORT_SYMBOL_GPL(hv_confidential_vmbus_available);
 
+int __weak hv_para_get_synic_register(unsigned int reg, u64 *val)
+{
+	*val = ~0ULL;
+	return -ENODEV;
+}
+EXPORT_SYMBOL_GPL(hv_para_get_synic_register);
+
+int __weak hv_para_set_synic_register(unsigned int reg, u64 val)
+{
+	return -ENODEV;
+}
+EXPORT_SYMBOL_GPL(hv_para_set_synic_register);
+
 void hv_identify_partition_type(void)
 {
 	/* Assume guest role */
