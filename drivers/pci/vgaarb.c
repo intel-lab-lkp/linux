@@ -1461,7 +1461,7 @@ static void vga_arbiter_notify_clients(void)
 	if (!vga_arbiter_used)
 		return;
 
-	new_state = (vga_count > 1) ? false : true;
+	new_state = vga_count <= 1;
 
 	spin_lock_irqsave(&vga_lock, flags);
 	list_for_each_entry(vgadev, &vga_list, list) {
