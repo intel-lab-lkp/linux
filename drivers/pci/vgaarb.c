@@ -510,8 +510,6 @@ EXPORT_SYMBOL(vga_get);
 static int vga_tryget(struct pci_dev *pdev, unsigned int rsrc)
 {
 	struct vga_device *vgadev;
-	unsigned long flags;
-	int rc = 0;
 
 	vga_check_first_use();
 
@@ -520,17 +518,13 @@ static int vga_tryget(struct pci_dev *pdev, unsigned int rsrc)
 		pdev = vga_default_device();
 	if (pdev == NULL)
 		return 0;
-	spin_lock_irqsave(&vga_lock, flags);
+	guard(spinlock_irqsave)(&vga_lock);
 	vgadev = vgadev_find(pdev);
-	if (vgadev == NULL) {
-		rc = -ENODEV;
-		goto bail;
-	}
+	if (vgadev == NULL)
+		return -ENODEV;
 	if (__vga_tryget(vgadev, rsrc))
-		rc = -EBUSY;
-bail:
-	spin_unlock_irqrestore(&vga_lock, flags);
-	return rc;
+		return -EBUSY;
+	return 0;
 }
 
 /**
@@ -546,20 +540,17 @@ bail:
 void vga_put(struct pci_dev *pdev, unsigned int rsrc)
 {
 	struct vga_device *vgadev;
-	unsigned long flags;
 
 	/* The caller should check for this, but let's be sure */
 	if (pdev == NULL)
 		pdev = vga_default_device();
 	if (pdev == NULL)
 		return;
-	spin_lock_irqsave(&vga_lock, flags);
+	guard(spinlock_irqsave)(&vga_lock);
 	vgadev = vgadev_find(pdev);
 	if (vgadev == NULL)
-		goto bail;
+		return;
 	__vga_put(vgadev, rsrc);
-bail:
-	spin_unlock_irqrestore(&vga_lock, flags);
 }
 EXPORT_SYMBOL(vga_put);
 
@@ -891,29 +882,20 @@ static void __vga_set_legacy_decoding(struct pci_dev *pdev,
 				      bool userspace)
 {
 	struct vga_device *vgadev;
-	unsigned long flags;
 
 	decodes &= VGA_RSRC_LEGACY_MASK;
 
-	spin_lock_irqsave(&vga_lock, flags);
+	guard(spinlock_irqsave)(&vga_lock);
 	vgadev = vgadev_find(pdev);
 	if (vgadev == NULL)
-		goto bail;
+		return;
 
 	/* Don't let userspace futz with kernel driver decodes */
 	if (userspace && vgadev->set_decode)
-		goto bail;
+		return;
 
 	/* Update the device decodes + counter */
 	vga_update_device_decodes(vgadev, decodes);
-
-	/*
-	 * XXX If somebody is going from "doesn't decode" to "decodes"
-	 * state here, additional care must be taken as we may have pending
-	 * ownership of non-legacy region.
-	 */
-bail:
-	spin_unlock_irqrestore(&vga_lock, flags);
 }
 
 /**
@@ -960,14 +942,13 @@ EXPORT_SYMBOL(vga_set_legacy_decoding);
 int vga_client_register(struct pci_dev *pdev,
 		unsigned int (*set_decode)(struct pci_dev *pdev, bool decode))
 {
-	unsigned long flags;
 	struct vga_device *vgadev;
 
-	spin_lock_irqsave(&vga_lock, flags);
-	vgadev = vgadev_find(pdev);
-	if (vgadev)
-		vgadev->set_decode = set_decode;
-	spin_unlock_irqrestore(&vga_lock, flags);
+	scoped_guard (spinlock_irqsave, &vga_lock) {
+		vgadev = vgadev_find(pdev);
+		if (vgadev)
+			vgadev->set_decode = set_decode;
+	}
 	if (!vgadev)
 		return -ENODEV;
 	return 0;
@@ -1395,7 +1376,6 @@ static __poll_t vga_arb_fpoll(struct file *file, poll_table *wait)
 static int vga_arb_open(struct inode *inode, struct file *file)
 {
 	struct vga_arb_private *priv;
-	unsigned long flags;
 
 	pr_debug("%s\n", __func__);
 
@@ -1405,9 +1385,8 @@ static int vga_arb_open(struct inode *inode, struct file *file)
 	spin_lock_init(&priv->lock);
 	file->private_data = priv;
 
-	spin_lock_irqsave(&vga_user_lock, flags);
-	list_add(&priv->list, &vga_user_list);
-	spin_unlock_irqrestore(&vga_user_lock, flags);
+	scoped_guard (spinlock_irqsave, &vga_user_lock)
+		list_add(&priv->list, &vga_user_list);
 
 	/* Set the client's lists of locks */
 	priv->target = vga_default_device(); /* Maybe this is still null! */
@@ -1422,25 +1401,25 @@ static int vga_arb_release(struct inode *inode, struct file *file)
 {
 	struct vga_arb_private *priv = file->private_data;
 	struct vga_arb_user_card *uc;
-	unsigned long flags;
 	int i;
 
 	pr_debug("%s\n", __func__);
 
-	spin_lock_irqsave(&vga_user_lock, flags);
-	list_del(&priv->list);
-	for (i = 0; i < MAX_USER_CARDS; i++) {
-		uc = &priv->cards[i];
-		if (uc->pdev == NULL)
-			continue;
-		vgaarb_dbg(&uc->pdev->dev, "uc->io_cnt == %d, uc->mem_cnt == %d\n",
-			uc->io_cnt, uc->mem_cnt);
-		while (uc->io_cnt--)
-			vga_put(uc->pdev, VGA_RSRC_LEGACY_IO);
-		while (uc->mem_cnt--)
-			vga_put(uc->pdev, VGA_RSRC_LEGACY_MEM);
+	scoped_guard (spinlock_irqsave, &vga_user_lock) {
+		list_del(&priv->list);
+		for (i = 0; i < MAX_USER_CARDS; i++) {
+			uc = &priv->cards[i];
+			if (uc->pdev == NULL)
+				continue;
+			vgaarb_dbg(&uc->pdev->dev,
+				   "uc->io_cnt == %d, uc->mem_cnt == %d\n",
+				   uc->io_cnt, uc->mem_cnt);
+			while (uc->io_cnt--)
+				vga_put(uc->pdev, VGA_RSRC_LEGACY_IO);
+			while (uc->mem_cnt--)
+				vga_put(uc->pdev, VGA_RSRC_LEGACY_MEM);
+		}
 	}
-	spin_unlock_irqrestore(&vga_user_lock, flags);
 
 	kfree(priv);
 
@@ -1454,7 +1433,6 @@ static int vga_arb_release(struct inode *inode, struct file *file)
 static void vga_arbiter_notify_clients(void)
 {
 	struct vga_device *vgadev;
-	unsigned long flags;
 	unsigned int new_decodes;
 	bool new_state;
 
@@ -1463,7 +1441,7 @@ static void vga_arbiter_notify_clients(void)
 
 	new_state = (vga_count > 1) ? false : true;
 
-	spin_lock_irqsave(&vga_lock, flags);
+	guard(spinlock_irqsave)(&vga_lock);
 	list_for_each_entry(vgadev, &vga_list, list) {
 		if (vgadev->set_decode) {
 			new_decodes = vgadev->set_decode(vgadev->pdev,
@@ -1471,7 +1449,6 @@ static void vga_arbiter_notify_clients(void)
 			vga_update_device_decodes(vgadev, new_decodes);
 		}
 	}
-	spin_unlock_irqrestore(&vga_lock, flags);
 }
 
 static int pci_notify(struct notifier_block *nb, unsigned long action,
