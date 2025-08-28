@@ -235,6 +235,7 @@ static void drm_gem_shmem_test_get_sg_table(struct kunit *test)
 		len += sg->length;
 	}
 
+	drm_gem_shmem_unpin(shmem);
 	KUNIT_EXPECT_GE(test, len, TEST_SIZE);
 }
 
