@@ -134,6 +134,9 @@
 #include <uapi/linux/vm_sockets.h>
 #include <uapi/asm-generic/ioctls.h>
 
+static struct vsock_net_callbacks vsock_net_callbacks;
+static DEFINE_MUTEX(vsock_net_callbacks_lock);
+
 static int __vsock_bind(struct sock *sk, struct sockaddr_vm *addr);
 static void vsock_sk_destruct(struct sock *sk);
 static int vsock_queue_rcv_skb(struct sock *sk, struct sk_buff *skb);
@@ -2781,6 +2784,49 @@ static void vsock_net_init(struct net *net)
 	net->vsock.mode = VSOCK_NET_MODE_GLOBAL;
 }
 
+#if IS_ENABLED(CONFIG_VSOCKETS_LOOPBACK)
+static int vsock_net_call_init(struct net *net)
+{
+	struct vsock_net_callbacks *cbs;
+	int ret;
+
+	mutex_lock(&vsock_net_callbacks_lock);
+	cbs = &vsock_net_callbacks;
+
+	ret = 0;
+	if (!cbs->owner)
+		goto out;
+
+	if (try_module_get(cbs->owner)) {
+		ret = cbs->init(net);
+		module_put(cbs->owner);
+	}
+
+out:
+	mutex_unlock(&vsock_net_callbacks_lock);
+	return ret;
+}
+
+static void vsock_net_call_exit(struct net *net)
+{
+	struct vsock_net_callbacks *cbs;
+
+	mutex_lock(&vsock_net_callbacks_lock);
+	cbs = &vsock_net_callbacks;
+
+	if (!cbs->owner)
+		goto out;
+
+	if (try_module_get(cbs->owner)) {
+		cbs->exit(net);
+		module_put(cbs->owner);
+	}
+
+out:
+	mutex_unlock(&vsock_net_callbacks_lock);
+}
+#endif /* CONFIG_VSOCKETS_LOOPBACK */
+
 static __net_init int vsock_sysctl_init_net(struct net *net)
 {
 	vsock_net_init(net);
@@ -2788,12 +2834,20 @@ static __net_init int vsock_sysctl_init_net(struct net *net)
 	if (vsock_sysctl_register(net))
 		return -ENOMEM;
 
+	if (vsock_net_call_init(net) < 0)
+		goto err_sysctl;
+
 	return 0;
+
+err_sysctl:
+	vsock_sysctl_unregister(net);
+	return -ENOMEM;
 }
 
 static __net_exit void vsock_sysctl_exit_net(struct net *net)
 {
 	vsock_sysctl_unregister(net);
+	vsock_net_call_exit(net);
 }
 
 static struct pernet_operations vsock_sysctl_ops __net_initdata = {
@@ -2937,6 +2991,62 @@ void vsock_core_unregister(const struct vsock_transport *t)
 	mutex_unlock(&vsock_register_mutex);
 }
 EXPORT_SYMBOL_GPL(vsock_core_unregister);
+
+#if IS_ENABLED(CONFIG_VSOCKETS_LOOPBACK)
+int __vsock_register_net_callbacks(int (*init)(struct net *net),
+				   void (*exit)(struct net *net),
+				   struct module *owner)
+{
+	struct vsock_net_callbacks *cbs;
+	struct net *net;
+	int ret = 0;
+
+	mutex_lock(&vsock_net_callbacks_lock);
+
+	cbs = &vsock_net_callbacks;
+	cbs->init = init;
+	cbs->exit = exit;
+	cbs->owner = owner;
+
+	/* call callbacks on any net previously created */
+	down_read(&net_rwsem);
+
+	if (try_module_get(cbs->owner)) {
+		for_each_net(net) {
+			ret = cbs->init(net);
+			if (ret < 0)
+				break;
+		}
+
+		if (ret < 0)
+			for_each_net(net)
+				cbs->exit(net);
+
+		module_put(cbs->owner);
+	}
+
+	up_read(&net_rwsem);
+	mutex_unlock(&vsock_net_callbacks_lock);
+
+	return ret;
+}
+EXPORT_SYMBOL_GPL(__vsock_register_net_callbacks);
+
+void vsock_unregister_net_callbacks(void)
+{
+	struct vsock_net_callbacks *cbs;
+
+	mutex_lock(&vsock_net_callbacks_lock);
+
+	cbs = &vsock_net_callbacks;
+	cbs->init = NULL;
+	cbs->exit = NULL;
+	cbs->owner = NULL;
+
+	mutex_unlock(&vsock_net_callbacks_lock);
+}
+EXPORT_SYMBOL_GPL(vsock_unregister_net_callbacks);
+#endif /* CONFIG_VSOCKETS_LOOPBACK */
 
 module_init(vsock_init);
 module_exit(vsock_exit);

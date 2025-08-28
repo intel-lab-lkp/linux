@@ -305,4 +305,38 @@ static inline bool vsock_net_check_mode(struct net *n1, struct net *n2)
 	       (vsock_net_mode(n1) == VSOCK_NET_MODE_GLOBAL &&
 		vsock_net_mode(n2) == VSOCK_NET_MODE_GLOBAL);
 }
+
+struct vsock_net_callbacks {
+	int (*init)(struct net *net);
+	void (*exit)(struct net *net);
+	struct module *owner;
+};
+
+#if IS_ENABLED(CONFIG_VSOCKETS_LOOPBACK)
+
+#define vsock_register_net_callbacks(__init, __exit) \
+	__vsock_register_net_callbacks((__init), (__exit), THIS_MODULE)
+
+int __vsock_register_net_callbacks(int (*init)(struct net *net),
+				   void (*exit)(struct net *net),
+				   struct module *owner);
+void vsock_unregister_net_callbacks(void);
+
+#else
+
+#define vsock_register_net_callbacks(__init, __exit) do { } while (0)
+
+static inline int __vsock_register_net_callbacks(int (*init)(struct net *net),
+						 void (*exit)(struct net *net),
+						 struct module *owner)
+{
+	return 0;
+}
+
+static inline void vsock_unregister_net_callbacks(void) {}
+static inline int vsock_net_call_init(struct net *net) { return 0; }
+static inline void vsock_net_call_exit(struct net *net) {}
+
+#endif /* CONFIG_VSOCKETS_LOOPBACK */
+
 #endif /* __AF_VSOCK_H__ */
