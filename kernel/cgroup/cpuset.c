@@ -2448,6 +2448,41 @@ static int acpus_validate_change(struct cpuset *cs, struct cpuset *trialcs,
 }
 
 /**
+ * partition_cpus_change - Handle partition state changes due to CPU mask updates
+ * @cs: The target cpuset being modified
+ * @trialcs: The trial cpuset containing proposed configuration changes
+ * @tmp: Temporary masks for intermediate calculations
+ *
+ * This function handles partition state transitions triggered by CPU mask changes.
+ * CPU modifications may cause a partition to be disabled or require state updates.
+ */
+static void partition_cpus_change(struct cpuset *cs, struct cpuset *trialcs,
+					struct tmpmasks *tmp)
+{
+	if (cs_is_member(cs))
+		return;
+
+	invalidate_cs_partition(trialcs);
+	if (trialcs->prs_err)
+		cs->prs_err = trialcs->prs_err;
+
+	if (is_remote_partition(cs)) {
+		if (trialcs->prs_err)
+			remote_partition_disable(cs, tmp);
+		else
+			remote_cpus_update(cs, trialcs->exclusive_cpus,
+					   trialcs->effective_xcpus, tmp);
+	} else {
+		if (trialcs->prs_err)
+			update_parent_effective_cpumask(cs, partcmd_invalidate,
+							NULL, tmp);
+		else
+			update_parent_effective_cpumask(cs, partcmd_update,
+							trialcs->effective_xcpus, tmp);
+	}
+}
+
+/**
  * update_cpumask - update the cpus_allowed mask of a cpuset and all tasks in it
  * @cs: the cpuset to consider
  * @trialcs: trial cpuset
@@ -2483,29 +2518,7 @@ static int update_cpumask(struct cpuset *cs, struct cpuset *trialcs,
 	 */
 	force = !cpumask_equal(cs->effective_xcpus, trialcs->effective_xcpus);
 
-	invalidate_cs_partition(trialcs);
-	if (trialcs->prs_err)
-		cs->prs_err = trialcs->prs_err;
-
-	if (is_partition_valid(cs) ||
-	   (is_partition_invalid(cs) && !trialcs->prs_err)) {
-		struct cpumask *xcpus = trialcs->effective_xcpus;
-
-		if (cpumask_empty(xcpus) && is_partition_invalid(cs))
-			xcpus = trialcs->cpus_allowed;
-
-		/*
-		 * Call remote_cpus_update() to handle valid remote partition
-		 */
-		if (is_remote_partition(cs))
-			remote_cpus_update(cs, NULL, xcpus, &tmp);
-		else if (trialcs->prs_err)
-			update_parent_effective_cpumask(cs, partcmd_invalidate,
-							NULL, &tmp);
-		else
-			update_parent_effective_cpumask(cs, partcmd_update,
-							xcpus, &tmp);
-	}
+	partition_cpus_change(cs, trialcs, &tmp);
 
 	spin_lock_irq(&callback_lock);
 	cpumask_copy(cs->cpus_allowed, trialcs->cpus_allowed);
