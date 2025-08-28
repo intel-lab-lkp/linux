@@ -300,6 +300,7 @@ bool hv_isolation_type_snp(void);
 bool hv_confidential_vmbus_available(void);
 u64 hv_ghcb_hypercall(u64 control, void *input, void *output, u32 input_size);
 u64 hv_tdx_hypercall(u64 control, u64 param1, u64 param2);
+void hv_para_set_sint_proxy(bool enable);
 int hv_para_get_synic_register(unsigned int reg, u64 *val);
 int hv_para_set_synic_register(unsigned int reg, u64 val);
 void hyperv_cleanup(void);

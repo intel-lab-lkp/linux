@@ -42,6 +42,8 @@ static inline unsigned char hv_get_nmi_reason(void)
 #if IS_ENABLED(CONFIG_HYPERV)
 extern bool hyperv_paravisor_present;
 
+extern u64 hyperv_sint_proxy_mask;
+
 extern void *hv_hypercall_pg;
 
 extern union hv_ghcb * __percpu *hv_ghcb_pg;

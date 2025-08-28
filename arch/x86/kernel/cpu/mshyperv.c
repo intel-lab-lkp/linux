@@ -28,6 +28,7 @@
 #include <asm/apic.h>
 #include <asm/timer.h>
 #include <asm/reboot.h>
+#include <asm/msr.h>
 #include <asm/nmi.h>
 #include <clocksource/hyperv_timer.h>
 #include <asm/msr.h>
@@ -37,6 +38,16 @@
 /* Is Linux running on nested Microsoft Hypervisor */
 bool hv_nested;
 struct ms_hyperv_info ms_hyperv;
+
+#define HYPERV_SINT_PROXY_ENABLE	BIT(20)
+#define HYPERV_SINT_PROXY_DISABLE	0
+
+/*
+ * When running with the paravisor, proxy the synthetic interrupts from the host
+ * by default
+ */
+u64 hv_para_sint_proxy = HYPERV_SINT_PROXY_ENABLE;
+EXPORT_SYMBOL_GPL(hv_para_sint_proxy);
 
 /* Used in modules via hv_do_hypercall(): see arch/x86/include/asm/mshyperv.h */
 bool hyperv_paravisor_present __ro_after_init;
@@ -79,13 +90,14 @@ EXPORT_SYMBOL_GPL(hv_get_non_nested_msr);
 void hv_set_non_nested_msr(unsigned int reg, u64 value)
 {
 	if (hv_is_synic_msr(reg) && ms_hyperv.paravisor_present) {
+		/* The hypervisor will get the intercept. */
 		hv_ivm_msr_write(reg, value);
 
-		/* Write proxy bit via wrmsl instruction */
+		/* Using wrmsrq so the following goes to the paravisor. */
 		if (hv_is_sint_msr(reg))
-			wrmsrq(reg, value | 1 << 20);
+			native_wrmsrq(reg, value | hv_para_sint_proxy);
 	} else {
-		wrmsrq(reg, value);
+		native_wrmsrq(reg, value);
 	}
 }
 EXPORT_SYMBOL_GPL(hv_set_non_nested_msr);
@@ -107,6 +119,16 @@ bool hv_confidential_vmbus_available(void)
 	 * The paravisor may set the bit in the hardware confidential VMs.
 	 */
 	return eax & HYPERV_VS_PROPERTIES_EAX_CONFIDENTIAL_VMBUS_AVAILABLE;
+}
+
+/*
+ * Enable or disable proxying synthetic interrupts
+ * to the paravisor.
+ */
+void hv_para_set_sint_proxy(bool enable)
+{
+	hv_para_sint_proxy =
+		enable ? HYPERV_SINT_PROXY_ENABLE : HYPERV_SINT_PROXY_DISABLE;
 }
 
 /*
