@@ -275,6 +275,8 @@ static void test_guest_memfd(unsigned long vm_type)
 
 	if (vm_check_cap(vm, KVM_CAP_GUEST_MEMFD_MMAP))
 		flags |= GUEST_MEMFD_FLAG_MMAP;
+	if (vm_check_cap(vm, KVM_CAP_GUEST_MEMFD_NO_DIRECT_MAP))
+		flags |= GUEST_MEMFD_FLAG_NO_DIRECT_MAP;
 
 	test_create_guest_memfd_multiple(vm);
 	test_create_guest_memfd_invalid_sizes(vm, flags, page_size);
