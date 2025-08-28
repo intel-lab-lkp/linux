@@ -607,6 +607,8 @@ static void cpts_calc_mult_shift(struct cpts *cpts)
 	u32 freq;
 
 	freq = clk_get_rate(cpts->refclk);
+	if (!freq)
+		return;
 
 	/* Calc the maximum number of seconds which we can run before
 	 * wrapping around.
