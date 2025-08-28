@@ -81,6 +81,7 @@ static const struct igb_stats igb_gstrings_stats[] = {
 }
 static const struct igb_stats igb_gstrings_net_stats[] = {
 	IGB_NETDEV_STAT(rx_errors),
+	IGB_NETDEV_STAT(rx_dropped),
 	IGB_NETDEV_STAT(tx_errors),
 	IGB_NETDEV_STAT(tx_dropped),
 	IGB_NETDEV_STAT(rx_length_errors),
