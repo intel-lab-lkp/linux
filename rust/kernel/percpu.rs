@@ -14,6 +14,7 @@ pub use static_::*;
 use bindings::{alloc_percpu, free_percpu};
 
 use crate::alloc::Flags;
+use crate::cpu::CpuId;
 use crate::percpu::cpu_guard::CpuGuard;
 use crate::prelude::*;
 use crate::sync::Arc;
@@ -114,6 +115,20 @@ impl<T> PerCpuPtr<T> {
         // This_cpu_area + self.0 is guaranteed to be a valid pointer by the per-CPU subsystem and
         // the invariant that self.0 is a valid offset into the per-CPU area.
         (this_cpu_area).wrapping_add(self.0 as usize).cast()
+    }
+
+    /// Get a `*mut MaybeUninit<T>` to the per-CPU variable on the CPU represented by `cpu`. Note
+    /// that without some kind of synchronization, use of the returned pointer may cause a data
+    /// race. It is the caller's responsibility to use the returned pointer in a reasonable way.
+    ///
+    /// # Safety
+    /// - The returned pointer is valid only if `self` is (that is, it points to a live allocation
+    ///   correctly sized and aligned to hold a `T`)
+    /// - The returned pointer is valid only if the bit corresponding to `cpu` is set in
+    ///   `Cpumask::possible()`.
+    pub unsafe fn get_remote_ptr(&self, cpu: CpuId) -> *mut MaybeUninit<T> {
+        // SAFETY: The requirements of this function ensure this call is safe.
+        unsafe { bindings::per_cpu_ptr(self.0.cast(), cpu.as_u32()) }.cast()
     }
 }
 

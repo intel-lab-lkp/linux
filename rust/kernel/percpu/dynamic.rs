@@ -3,6 +3,8 @@
 
 use super::*;
 
+use crate::cpumask::Cpumask;
+
 /// Represents a dynamic allocation of a per-CPU variable via alloc_percpu. Calls free_percpu when
 /// dropped.
 pub struct PerCpuAllocation<T>(PerCpuPtr<T>);
@@ -74,10 +76,48 @@ impl<T: Zeroable> DynamicPerCpu<T> {
     }
 }
 
+impl<T: Clone> DynamicPerCpu<T> {
+    /// Allocates a new per-CPU variable
+    ///
+    /// # Arguments
+    /// * `val` - The initial value of the per-CPU variable on all CPUs.
+    /// * `flags` - Flags used to allocate an `Arc` that keeps track of the underlying
+    ///   `PerCpuAllocation`.
+    pub fn new_with(val: T, flags: Flags) -> Option<Self> {
+        let alloc: PerCpuAllocation<T> = PerCpuAllocation::new_uninit()?;
+        let ptr = alloc.0;
+
+        for cpu in Cpumask::possible().iter() {
+            // SAFETY: `ptr` is a valid allocation, and `cpu` appears in `Cpumask::possible()`
+            let remote_ptr = unsafe { ptr.get_remote_ptr(cpu) };
+            // SAFETY: Each CPU's slot corresponding to `ptr` is currently uninitialized, and no
+            // one else has a reference to it. Therefore, we can freely write to it without
+            // worrying about the need to drop what was there or whether we're racing with someone
+            // else. `PerCpuPtr::get_remote_ptr` guarantees that the pointer is valid since we
+            // derived it from a valid allocation and `cpu`.
+            unsafe {
+                (*remote_ptr).write(val.clone());
+            }
+        }
+
+        let arc = Arc::new(alloc, flags).ok()?;
+
+        Some(Self { alloc: arc })
+    }
+}
+
 impl<T> PerCpu<T> for DynamicPerCpu<T> {
     unsafe fn get_mut(&mut self, guard: CpuGuard) -> PerCpuToken<'_, T> {
         // SAFETY: The requirements of `PerCpu::get_mut` and this type's invariant ensure that the
         // requirements of `PerCpuToken::new` are met.
         unsafe { PerCpuToken::new(guard, &self.alloc.0) }
+    }
+}
+
+impl<T: InteriorMutable> CheckedPerCpu<T> for DynamicPerCpu<T> {
+    fn get(&mut self, guard: CpuGuard) -> CheckedPerCpuToken<'_, T> {
+        // SAFETY: By the invariant of `DynamicPerCpu`, the memory location in each CPU's
+        // per-CPU area corresponding to this variable has been initialized.
+        unsafe { CheckedPerCpuToken::new(guard, &self.alloc.0) }
     }
 }
