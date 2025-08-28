@@ -2377,6 +2377,40 @@ static int parse_cpulist(const char *buf, struct cpumask *out_mask)
 }
 
 /**
+ * invalidate_cs_partition - Validate and mark the validity of a cpuset partition configuration
+ * @cs: The cpuset to validate
+ * This function checks multiple constraints for a cpuset partition configuration.
+ * If any check fails, it sets the appropriate error code in the cpuset and returns true.
+ * Mainly used to ensure correctness and consistency of partition configurations.
+ * Return: true if the configuration is invalid, false if valid.
+ */
+static bool invalidate_cs_partition(struct cpuset *cs)
+{
+	struct cpuset *parent = parent_cs(cs);
+
+	if (cs_is_member(cs))
+		return false;
+
+	if (cpumask_empty(cs->effective_xcpus)) {
+		cs->prs_err = PERR_INVCPUS;
+		return true;
+	}
+
+	if (prstate_housekeeping_conflict(cs->partition_root_state,
+					  cs->effective_xcpus)) {
+		cs->prs_err = PERR_HKEEPING;
+		return true;
+	}
+
+	if (tasks_nocpu_error(parent, cs, cs->effective_xcpus)) {
+		cs->prs_err = PERR_NOCPUS;
+		return true;
+	}
+
+	return false;
+}
+
+/**
  * update_cpumask - update the cpus_allowed mask of a cpuset and all tasks in it
  * @cs: the cpuset to consider
  * @trialcs: trial cpuset
@@ -2405,19 +2439,8 @@ static int update_cpumask(struct cpuset *cs, struct cpuset *trialcs,
 
 	compute_trialcs_excpus(trialcs, cs);
 
-	if (old_prs) {
-		if (is_partition_valid(cs) &&
-		    cpumask_empty(trialcs->effective_xcpus)) {
-			invalidate = true;
-			cs->prs_err = PERR_INVCPUS;
-		} else if (prstate_housekeeping_conflict(old_prs, trialcs->effective_xcpus)) {
-			invalidate = true;
-			cs->prs_err = PERR_HKEEPING;
-		} else if (tasks_nocpu_error(parent, cs, trialcs->effective_xcpus)) {
-			invalidate = true;
-			cs->prs_err = PERR_NOCPUS;
-		}
-	}
+	invalidate = invalidate_cs_partition(trialcs);
+	cs->prs_err = trialcs->prs_err;
 
 	/*
 	 * Check all the descendants in update_cpumasks_hier() if
