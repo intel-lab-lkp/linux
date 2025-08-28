@@ -811,6 +811,7 @@ static inline netdev_tx_t bond_tx_drop(struct net_device *dev, struct sk_buff *s
 
 /* Helpers for handling arp_ip_target */
 #define BOND_OPTION_STRING_MAX_SIZE 64
+#define BOND_MAX_VLAN_TAGS 5
 #define BOND_VLAN_PROTO_NONE cpu_to_be16(0xffff)
 
 static inline char *bond_arp_target_to_string(struct bond_arp_target *target,
