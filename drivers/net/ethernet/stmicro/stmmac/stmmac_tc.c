@@ -239,6 +239,7 @@ static int tc_rfs_init(struct stmmac_priv *priv)
 	priv->rfs_entries_max[STMMAC_RFS_T_VLAN] = 8;
 	priv->rfs_entries_max[STMMAC_RFS_T_LLDP] = 1;
 	priv->rfs_entries_max[STMMAC_RFS_T_1588] = 1;
+	priv->rfs_entries_max[STMMAC_RFS_T_IP] = 32;
 
 	for (i = 0; i < STMMAC_RFS_T_MAX; i++)
 		priv->rfs_entries_total += priv->rfs_entries_max[i];
@@ -777,6 +778,17 @@ static int tc_add_ethtype_flow(struct stmmac_priv *priv,
 			stmmac_rx_queue_routing(priv, priv->hw,
 						PACKET_PTPQ, tc);
 			break;
+		case ETH_P_IP:
+			if (priv->rfs_entries_cnt[STMMAC_RFS_T_IP] >=
+			    priv->rfs_entries_max[STMMAC_RFS_T_IP])
+				return -ENOENT;
+
+			entry->type = STMMAC_RFS_T_IP;
+			priv->rfs_entries_cnt[STMMAC_RFS_T_IP]++;
+
+			stmmac_rx_queue_routing(priv, priv->hw,
+						PACKET_UPQ, tc);
+			break;
 		default:
 			netdev_err(priv->dev, "EthType(0x%x) is not supported", etype);
 			return -EINVAL;
@@ -800,7 +812,7 @@ static int tc_del_ethtype_flow(struct stmmac_priv *priv,
 
 	if (!entry || !entry->in_use ||
 	    entry->type < STMMAC_RFS_T_LLDP ||
-	    entry->type > STMMAC_RFS_T_1588)
+	    entry->type > STMMAC_RFS_T_IP)
 		return -ENOENT;
 
 	switch (entry->etype) {
@@ -813,6 +825,11 @@ static int tc_del_ethtype_flow(struct stmmac_priv *priv,
 		stmmac_rx_queue_routing(priv, priv->hw,
 					PACKET_PTPQ, 0);
 		priv->rfs_entries_cnt[STMMAC_RFS_T_1588]--;
+		break;
+	case ETH_P_IP:
+		stmmac_rx_queue_routing(priv, priv->hw,
+					PACKET_UPQ, 0);
+		priv->rfs_entries_cnt[STMMAC_RFS_T_IP]--;
 		break;
 	default:
 		netdev_err(priv->dev, "EthType(0x%x) is not supported",
