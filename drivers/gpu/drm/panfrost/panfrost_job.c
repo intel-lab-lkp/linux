@@ -8,6 +8,7 @@
 #include <linux/platform_device.h>
 #include <linux/pm_runtime.h>
 #include <linux/dma-resv.h>
+#include <drm/drm_auth.h>
 #include <drm/gpu_scheduler.h>
 #include <drm/panfrost_drm.h>
 
@@ -22,6 +23,7 @@
 #include "panfrost_mmu.h"
 #include "panfrost_dump.h"
 
+#define MAX_JM_CTX_PER_FILE 128
 #define JOB_TIMEOUT_MS 500
 
 #define job_write(dev, reg, data) writel(data, dev->iomem + (reg))
@@ -125,23 +127,6 @@ int panfrost_job_get_slot(struct panfrost_job *job)
 	return 1;
 }
 
-static void panfrost_job_write_affinity(struct panfrost_device *pfdev,
-					u32 requirements,
-					int js)
-{
-	u64 affinity;
-
-	/*
-	 * Use all cores for now.
-	 * Eventually we may need to support tiler only jobs and h/w with
-	 * multiple (2) coherent core groups
-	 */
-	affinity = pfdev->features.shader_present;
-
-	job_write(pfdev, JS_AFFINITY_NEXT_LO(js), lower_32_bits(affinity));
-	job_write(pfdev, JS_AFFINITY_NEXT_HI(js), upper_32_bits(affinity));
-}
-
 static u32
 panfrost_get_job_chain_flag(const struct panfrost_job *job)
 {
@@ -198,6 +183,7 @@ panfrost_enqueue_job(struct panfrost_device *pfdev, int slot,
 static void panfrost_job_hw_submit(struct panfrost_job *job, int js)
 {
 	struct panfrost_device *pfdev = job->pfdev;
+	struct panfrost_js_ctx *js_ctx = &job->ctx->slots[js];
 	unsigned int subslot;
 	u32 cfg;
 	u64 jc_head = job->jc;
@@ -218,11 +204,15 @@ static void panfrost_job_hw_submit(struct panfrost_job *job, int js)
 	job_write(pfdev, JS_HEAD_NEXT_LO(js), lower_32_bits(jc_head));
 	job_write(pfdev, JS_HEAD_NEXT_HI(js), upper_32_bits(jc_head));
 
-	panfrost_job_write_affinity(pfdev, job->requirements, js);
+	job_write(pfdev, JS_AFFINITY_NEXT_LO(js), lower_32_bits(js_ctx->affinity));
+	job_write(pfdev, JS_AFFINITY_NEXT_HI(js), upper_32_bits(js_ctx->affinity));
+
+	if (panfrost_has_hw_feature(pfdev, HW_FEATURE_XAFFINITY))
+		job_write(pfdev, JS_XAFFINITY_NEXT(js), js_ctx->xaffinity);
 
 	/* start MMU, medium priority, cache clean/flush on end, clean/flush on
 	 * start */
-	cfg |= JS_CONFIG_THREAD_PRI(8) |
+	cfg |= js_ctx->config |
 		JS_CONFIG_START_FLUSH_CLEAN_INVALIDATE |
 		JS_CONFIG_END_FLUSH_CLEAN_INVALIDATE |
 		panfrost_get_job_chain_flag(job);
@@ -359,6 +349,7 @@ static void panfrost_job_cleanup(struct kref *ref)
 		kvfree(job->bos);
 	}
 
+	panfrost_jm_ctx_put(job->ctx);
 	kfree(job);
 }
 
@@ -917,39 +908,229 @@ void panfrost_job_fini(struct panfrost_device *pfdev)
 	destroy_workqueue(pfdev->reset.wq);
 }
 
-int panfrost_job_open(struct panfrost_file_priv *panfrost_priv)
+int panfrost_job_open(struct drm_file *file)
 {
+	struct panfrost_file_priv *panfrost_priv = file->driver_priv;
 	struct panfrost_device *pfdev = panfrost_priv->pfdev;
-	struct panfrost_job_slot *js = pfdev->js;
-	struct drm_gpu_scheduler *sched;
-	int ret, i;
+	int ret;
 
-	for (i = 0; i < NUM_JOB_SLOTS; i++) {
-		sched = &js->queue[i].sched;
-		ret = drm_sched_entity_init(&panfrost_priv->sched_entity[i],
-					    DRM_SCHED_PRIORITY_NORMAL, &sched,
-					    1, NULL);
-		if (WARN_ON(ret))
-			return ret;
-	}
+	struct drm_panfrost_jm_ctx_create default_jm_ctx = {
+		/* Fragment queue */
+		.slots[0] = {
+			.flags = PANFROST_JS_FLAG_ENABLED,
+			.priority = PANFROST_JM_CTX_PRIORITY_MEDIUM,
+			.tiler_mask = 0,
+			.l2_mask = pfdev->features.l2_present,
+			.core_mask = pfdev->features.shader_present,
+		},
+		/* Vertex/tiler/compute queue */
+		.slots[1] = {
+			.flags = PANFROST_JS_FLAG_ENABLED,
+			.priority = PANFROST_JM_CTX_PRIORITY_MEDIUM,
+			.tiler_mask = pfdev->features.tiler_present,
+			.l2_mask = pfdev->features.l2_present,
+			.core_mask = pfdev->features.shader_present,
+		},
+	};
+
+	xa_init_flags(&panfrost_priv->jm_ctxs, XA_FLAGS_ALLOC);
+
+	ret = panfrost_jm_ctx_create(file, &default_jm_ctx);
+	if (ret)
+		return ret;
+
+	/* We expect the default context to be assigned handle 0. */
+	if (WARN_ON(default_jm_ctx.handle))
+		return -EINVAL;
+
 	return 0;
 }
 
-void panfrost_job_close(struct panfrost_file_priv *panfrost_priv)
+void panfrost_job_close(struct drm_file *file)
 {
-	struct panfrost_device *pfdev = panfrost_priv->pfdev;
+	struct panfrost_file_priv *panfrost_priv = file->driver_priv;
+	struct panfrost_jm_ctx *jm_ctx;
+	unsigned long i;
+
+	xa_for_each(&panfrost_priv->jm_ctxs, i, jm_ctx)
+		panfrost_jm_ctx_destroy(file, i);
+
+	xa_destroy(&panfrost_priv->jm_ctxs);
+}
+
+int panfrost_job_is_idle(struct panfrost_device *pfdev)
+{
+	struct panfrost_job_slot *js = pfdev->js;
 	int i;
 
-	for (i = 0; i < NUM_JOB_SLOTS; i++)
-		drm_sched_entity_destroy(&panfrost_priv->sched_entity[i]);
+	for (i = 0; i < NUM_JOB_SLOTS; i++) {
+		/* If there are any jobs in the HW queue, we're not idle */
+		if (atomic_read(&js->queue[i].sched.credit_count))
+			return false;
+	}
+
+	return true;
+}
+
+static void panfrost_jm_ctx_release(struct kref *kref)
+{
+	struct panfrost_jm_ctx *jm_ctx = container_of(kref, struct panfrost_jm_ctx, refcnt);
+
+	for (u32 i = 0; i < ARRAY_SIZE(jm_ctx->slots); i++)
+		drm_sched_entity_destroy(&jm_ctx->slots[i].sched_entity);
+
+	kfree(jm_ctx);
+}
+
+void
+panfrost_jm_ctx_put(struct panfrost_jm_ctx *jm_ctx)
+{
+	if (jm_ctx)
+		kref_put(&jm_ctx->refcnt, panfrost_jm_ctx_release);
+}
+
+struct panfrost_jm_ctx *
+panfrost_jm_ctx_get(struct panfrost_jm_ctx *jm_ctx)
+{
+	if (jm_ctx)
+		kref_get(&jm_ctx->refcnt);
+
+	return jm_ctx;
+}
+
+struct panfrost_jm_ctx *
+panfrost_jm_ctx_from_handle(struct drm_file *file, u32 handle)
+{
+	struct panfrost_file_priv *priv = file->driver_priv;
+	struct panfrost_jm_ctx *jm_ctx;
+
+	xa_lock(&priv->jm_ctxs);
+	jm_ctx = panfrost_jm_ctx_get(xa_load(&priv->jm_ctxs, handle));
+	xa_unlock(&priv->jm_ctxs);
+
+	return jm_ctx;
+}
+
+static int jm_ctx_prio_to_drm_sched_prio(struct drm_file *file,
+					 enum drm_panfrost_jm_ctx_priority in,
+					 enum drm_sched_priority *out)
+{
+	switch (in) {
+	case PANFROST_JM_CTX_PRIORITY_LOW:
+		*out = DRM_SCHED_PRIORITY_LOW;
+		return 0;
+	case PANFROST_JM_CTX_PRIORITY_MEDIUM:
+		*out = DRM_SCHED_PRIORITY_NORMAL;
+		return 0;
+	case PANFROST_JM_CTX_PRIORITY_HIGH:
+		/* Higher priorities require CAP_SYS_NICE or DRM_MASTER */
+		if (!capable(CAP_SYS_NICE) && !drm_is_current_master(file))
+			return -EACCES;
+
+		*out = DRM_SCHED_PRIORITY_HIGH;
+		return 0;
+	default:
+		return -EINVAL;
+	}
+}
+
+#define PANFROST_JS_VALID_FLAGS PANFROST_JS_FLAG_ENABLED
+
+int panfrost_jm_ctx_create(struct drm_file *file,
+			   struct drm_panfrost_jm_ctx_create *args)
+{
+	struct panfrost_file_priv *priv = file->driver_priv;
+	struct panfrost_device *pfdev = priv->pfdev;
+	struct panfrost_jm_ctx *jm_ctx;
+	int ret;
+
+	if (args->pad != 0)
+		return -EINVAL;
+
+	jm_ctx = kzalloc(sizeof(*jm_ctx), GFP_KERNEL);
+	if (!jm_ctx)
+		return -ENOMEM;
+
+	kref_init(&jm_ctx->refcnt);
+
+	for (u32 i = 0; i < ARRAY_SIZE(args->slots); i++) {
+		struct drm_gpu_scheduler *sched = &pfdev->js->queue[i].sched;
+		const struct drm_panfrost_js_ctx_info *js_info = &args->slots[i];
+		struct panfrost_js_ctx *js_ctx = &jm_ctx->slots[i];
+		enum drm_sched_priority sched_prio;
+
+		if (js_info->flags & ~PANFROST_JS_VALID_FLAGS)
+			goto err_put_jm_ctx;
+
+		if (!(js_info->flags & PANFROST_JS_FLAG_ENABLED))
+			continue;
+
+		ret = jm_ctx_prio_to_drm_sched_prio(file, js_info->priority, &sched_prio);
+		if (ret)
+			goto err_put_jm_ctx;
+
+		if (js_info->core_mask & ~pfdev->features.shader_present)
+			goto err_put_jm_ctx;
+
+		if (js_info->tiler_mask & ~pfdev->features.tiler_present)
+			goto err_put_jm_ctx;
+
+		if (js_info->l2_mask & ~pfdev->features.l2_present)
+			goto err_put_jm_ctx;
+
+		js_ctx->affinity = js_info->core_mask;
+		js_ctx->config = JS_CONFIG_THREAD_PRI(js_info->priority);
+
+		if (panfrost_has_hw_feature(pfdev, HW_FEATURE_XAFFINITY)) {
+			js_ctx->xaffinity = JS_XAFFINITY_ENABLE |
+					    JS_XAFFINITY_TILER_MASK(js_info->tiler_mask) |
+					    JS_XAFFINITY_L2_MASK(js_info->l2_mask);
+		}
+
+		ret = drm_sched_entity_init(&js_ctx->sched_entity, sched_prio,
+					    &sched, 1, NULL);
+		if (ret)
+			goto err_put_jm_ctx;
+
+		js_ctx->enabled = true;
+	}
+
+	ret = xa_alloc(&priv->jm_ctxs, &args->handle, jm_ctx,
+		       XA_LIMIT(0, MAX_JM_CTX_PER_FILE), GFP_KERNEL);
+	if (ret)
+		goto err_put_jm_ctx;
+
+	return 0;
+
+err_put_jm_ctx:
+	panfrost_jm_ctx_put(jm_ctx);
+	return ret;
+}
+
+int panfrost_jm_ctx_destroy(struct drm_file *file, u32 handle)
+{
+	struct panfrost_file_priv *priv = file->driver_priv;
+	struct panfrost_device *pfdev = priv->pfdev;
+	struct panfrost_jm_ctx *jm_ctx;
+
+	jm_ctx = xa_erase(&priv->jm_ctxs, handle);
+	if (!jm_ctx)
+		return -EINVAL;
+
+	for (u32 i = 0; i < ARRAY_SIZE(jm_ctx->slots); i++) {
+		if (jm_ctx->slots[i].enabled)
+			drm_sched_entity_destroy(&jm_ctx->slots[i].sched_entity);
+	}
 
 	/* Kill in-flight jobs */
 	spin_lock(&pfdev->js->job_lock);
-	for (i = 0; i < NUM_JOB_SLOTS; i++) {
-		struct drm_sched_entity *entity = &panfrost_priv->sched_entity[i];
-		int j;
+	for (u32 i = 0; i < ARRAY_SIZE(jm_ctx->slots); i++) {
+		struct drm_sched_entity *entity = &jm_ctx->slots[i].sched_entity;
 
-		for (j = ARRAY_SIZE(pfdev->jobs[0]) - 1; j >= 0; j--) {
+		if (!jm_ctx->slots[i].enabled)
+			continue;
+
+		for (int j = ARRAY_SIZE(pfdev->jobs[0]) - 1; j >= 0; j--) {
 			struct panfrost_job *job = pfdev->jobs[i][j];
 			u32 cmd;
 
@@ -980,18 +1161,7 @@ void panfrost_job_close(struct panfrost_file_priv *panfrost_priv)
 		}
 	}
 	spin_unlock(&pfdev->js->job_lock);
-}
 
-int panfrost_job_is_idle(struct panfrost_device *pfdev)
-{
-	struct panfrost_job_slot *js = pfdev->js;
-	int i;
-
-	for (i = 0; i < NUM_JOB_SLOTS; i++) {
-		/* If there are any jobs in the HW queue, we're not idle */
-		if (atomic_read(&js->queue[i].sched.credit_count))
-			return false;
-	}
-
-	return true;
+	panfrost_jm_ctx_put(jm_ctx);
+	return 0;
 }
