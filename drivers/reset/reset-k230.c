@@ -218,7 +218,7 @@ static int k230_rst_assert(struct reset_controller_dev *rcdev, unsigned long id)
 		break;
 	case RST_TYPE_SW_DONE:
 		k230_rst_update(rstc, id, true, false,
-				id == RST_SPI2AXI ? false : true);
+				id != RST_SPI2AXI);
 		break;
 	case RST_TYPE_CPU0:
 	case RST_TYPE_FLUSH:
@@ -249,7 +249,7 @@ static int k230_rst_deassert(struct reset_controller_dev *rcdev,
 		break;
 	case RST_TYPE_SW_DONE:
 		k230_rst_update(rstc, id, false, false,
-				id == RST_SPI2AXI ? false : true);
+				id != RST_SPI2AXI);
 		break;
 	case RST_TYPE_CPU0:
 	case RST_TYPE_FLUSH:
