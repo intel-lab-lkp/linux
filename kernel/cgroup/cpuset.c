@@ -337,6 +337,11 @@ static inline bool cpuset_v2(void)
 		cgroup_subsys_on_dfl(cpuset_cgrp_subsys);
 }
 
+static inline bool cpuset_is_root(struct cpuset *cs)
+{
+	return (cs == &top_cpuset);
+}
+
 /*
  * Cgroup v2 behavior is used on the "cpus" and "mems" control files when
  * on default hierarchy or when the cpuset_v2_mode flag is set by mounting
@@ -2334,10 +2339,6 @@ static int update_cpumask(struct cpuset *cs, struct cpuset *trialcs,
 	bool force = false;
 	int old_prs = cs->partition_root_state;
 
-	/* top_cpuset.cpus_allowed tracks cpu_active_mask; it's read-only */
-	if (cs == &top_cpuset)
-		return -EACCES;
-
 	/*
 	 * An empty cpus_allowed is ok only if the cpuset has no tasks.
 	 * Since cpulist_parse() fails on an empty mask, we special case
@@ -2782,15 +2783,6 @@ static int update_nodemask(struct cpuset *cs, struct cpuset *trialcs,
 			   const char *buf)
 {
 	int retval;
-
-	/*
-	 * top_cpuset.mems_allowed tracks node_stats[N_MEMORY];
-	 * it's read-only
-	 */
-	if (cs == &top_cpuset) {
-		retval = -EACCES;
-		goto done;
-	}
 
 	/*
 	 * An empty mems_allowed is ok iff there are no tasks in the cpuset.
@@ -3256,6 +3248,10 @@ ssize_t cpuset_write_resmask(struct kernfs_open_file *of,
 	struct cpuset *cs = css_cs(of_css(of));
 	struct cpuset *trialcs;
 	int retval = -ENODEV;
+
+	/* root is read-only */
+	if (cpuset_is_root(cs))
+		return -EACCES;
 
 	buf = strstrip(buf);
 	cpuset_full_lock();
