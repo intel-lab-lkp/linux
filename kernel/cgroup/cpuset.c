@@ -2364,7 +2364,6 @@ static int update_cpumask(struct cpuset *cs, struct cpuset *trialcs,
 		 * trialcs->effective_xcpus is used as a temporary cpumask
 		 * for checking validity of the partition root.
 		 */
-		trialcs->partition_root_state = PRS_MEMBER;
 		if (!cpumask_empty(trialcs->exclusive_cpus) || is_partition_valid(cs))
 			compute_effective_exclusive_cpumask(trialcs, NULL, cs);
 	}
@@ -2498,7 +2497,6 @@ static int update_exclusive_cpumask(struct cpuset *cs, struct cpuset *trialcs,
 		return 0;
 
 	if (*buf) {
-		trialcs->partition_root_state = PRS_MEMBER;
 		/*
 		 * Reject the change if there is exclusive CPUs conflict with
 		 * the siblings.
