@@ -155,3 +155,26 @@ ssize_t test_read(int fd, void *buf, size_t count)
 
 	return num_read;
 }
+
+/* Test read via intermediary buffer
+ *
+ * Same as test_read, except read(2)s happen into a bounce buffer that is memcpy'd
+ * to buf. For use with buffers that cannot be GUP'd (e.g. guest_memfd VMAs if
+ * guest_memfd was created with GUEST_MEMFD_FLAG_NO_DIRECT_MAP).
+ */
+ssize_t test_read_bounce(int fd, void *buf, size_t count)
+{
+	void *bounce_buffer;
+	ssize_t num_read;
+
+	TEST_ASSERT(count >= 0, "Unexpected count, count: %li", count);
+
+	bounce_buffer = malloc(count);
+	TEST_ASSERT(bounce_buffer != NULL, "Failed to allocate bounce buffer");
+
+	num_read = test_read(fd, bounce_buffer, count);
+	memcpy(buf, bounce_buffer, num_read);
+	free(bounce_buffer);
+
+	return num_read;
+}
