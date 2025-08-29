@@ -1,3 +1,5 @@
+.. SPDX-License-Identifier: GPL-2.0
+
 ============================================
 Implementing I2C device drivers in userspace
 ============================================

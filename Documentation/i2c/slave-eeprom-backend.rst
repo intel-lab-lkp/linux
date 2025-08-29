@@ -1,3 +1,5 @@
+.. SPDX-License-Identifier: GPL-2.0
+
 ==============================
 Linux I2C slave EEPROM backend
 ==============================

@@ -1,3 +1,5 @@
+.. SPDX-License-Identifier: GPL-2.0
+
 ================================================================
 I2C device driver binding control from user-space in old kernels
 ================================================================

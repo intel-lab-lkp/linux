@@ -1,3 +1,5 @@
+.. SPDX-License-Identifier: GPL-2.0
+
 ============================
 Kernel driver i2c-diolan-u2c
 ============================
