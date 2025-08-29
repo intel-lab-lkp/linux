@@ -132,7 +132,6 @@ macro_rules! define_all_pci_vendors {
 impl Vendor {
     /// Create a Vendor from a raw 16-bit vendor ID.
     /// Only accessible from the parent pci module.
-    #[expect(dead_code)]
     #[inline]
     pub(super) fn from_raw(vendor_id: u16) -> Self {
         Self(vendor_id)
