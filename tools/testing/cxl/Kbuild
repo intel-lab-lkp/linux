@@ -21,6 +21,7 @@ CXL_SRC := $(DRIVERS)/cxl
 CXL_CORE_SRC := $(DRIVERS)/cxl/core
 ccflags-y := -I$(srctree)/drivers/cxl/
 ccflags-y += -D__mock=__weak
+ccflags-y += -D__mock_export=
 ccflags-y += -DTRACE_INCLUDE_PATH=$(CXL_CORE_SRC) -I$(srctree)/drivers/cxl/core/
 
 obj-m += cxl_acpi.o
@@ -29,6 +30,7 @@ cxl_acpi-y := $(CXL_SRC)/acpi.o
 cxl_acpi-y += mock_acpi.o
 cxl_acpi-y += config_check.o
 cxl_acpi-y += cxl_acpi_test.o
+cxl_acpi-y += cxl_acpi_exports.o
 
 obj-m += cxl_pmem.o
 
