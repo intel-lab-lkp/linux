@@ -217,20 +217,30 @@ static u64 mbm_overflow_count(u64 prev_msr, u64 cur_msr, unsigned int width)
 	return chunks >> shift;
 }
 
-int resctrl_arch_rmid_read(struct rdt_resource *r, struct rdt_mon_domain *d,
+int resctrl_arch_rmid_read(struct rdt_resource *r, struct rdt_domain_hdr *hdr,
 			   u32 unused, u32 rmid, enum resctrl_event_id eventid,
 			   u64 *val, void *ignored)
 {
-	struct rdt_hw_mon_domain *hw_dom = resctrl_to_arch_mon_dom(d);
-	struct rdt_hw_resource *hw_res = resctrl_to_arch_res(r);
-	int cpu = cpumask_any(&d->hdr.cpu_mask);
+	int cpu = cpumask_any(&hdr->cpu_mask);
+	struct rdt_hw_mon_domain *hw_dom;
+	struct rdt_hw_resource *hw_res;
 	struct arch_mbm_state *am;
+	struct rdt_mon_domain *d;
 	u64 msr_val, chunks;
 	u32 prmid;
 	int ret;
 
 	resctrl_arch_rmid_read_context_check();
 
+	if (r->rid != RDT_RESOURCE_L3)
+		return -EINVAL;
+
+	if (!domain_header_is_valid(hdr, RESCTRL_MON_DOMAIN, RDT_RESOURCE_L3))
+		return -EINVAL;
+
+	d = container_of(hdr, struct rdt_mon_domain, hdr);
+	hw_dom = resctrl_to_arch_mon_dom(d);
+	hw_res = resctrl_to_arch_res(r);
 	prmid = logical_rmid_to_physical_rmid(cpu, rmid);
 	ret = __rmid_read_phys(prmid, eventid, &msr_val);
 	if (ret)
