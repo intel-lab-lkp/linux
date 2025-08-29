@@ -922,5 +922,10 @@ bool cxl_endpoint_decoder_reset_detected(struct cxl_port *port);
 #define __mock static
 #endif
 
+/* Unit test build overrides this to export, otherwise static */
+#ifndef __mock_export
+#define __mock_export static
+#endif
+
 u16 cxl_gpf_get_dvsec(struct device *dev);
 #endif /* __CXL_H__ */
