@@ -818,6 +818,11 @@ static int trace_fprobe_verify_target(struct trace_fprobe *tf)
 static int __register_trace_fprobe(struct trace_fprobe *tf)
 {
 	int i, ret;
+	const char *p, *q;
+	size_t spec_len, flen = 0, nflen = 0, tlen;
+	bool have_f = false, have_nf = false;
+	char *filter __free(kfree) = NULL;
+	char *nofilter __free(kfree) = NULL;
 
 	/* Should we need new LOCKDOWN flag for fprobe? */
 	ret = security_locked_down(LOCKDOWN_KPROBES);
@@ -838,8 +843,47 @@ static int __register_trace_fprobe(struct trace_fprobe *tf)
 	if (trace_fprobe_is_tracepoint(tf))
 		return __regsiter_tracepoint_fprobe(tf);
 
-	/* TODO: handle filter, nofilter or symbol list */
-	return register_fprobe(&tf->fp, tf->symbol, NULL);
+	spec_len = strlen(tf->symbol);
+	filter = kzalloc(spec_len + 1, GFP_KERNEL);
+	nofilter = kzalloc(spec_len + 1, GFP_KERNEL);
+	if (!filter || !nofilter)
+		return -ENOMEM;
+
+	p = tf->symbol;
+	for (p = tf->symbol; p; p = q ? q + 1 : NULL) {
+		q = strchr(p, ',');
+		tlen = q ? (size_t)(q-p) : strlen(p);
+
+		/* reject empty token */
+		if (!tlen) {
+			trace_probe_log_set_index(1);
+			trace_probe_log_err(0, BAD_TP_NAME);
+			return -EINVAL;
+		}
+
+		if (*p == '!') {
+			if (tlen == 1) {
+				trace_probe_log_set_index(1);
+				trace_probe_log_err(0, BAD_TP_NAME);
+				return -EINVAL;
+			}
+			if (have_nf)
+				nofilter[nflen++] = ',';
+			memcpy(nofilter + nflen, p + 1, tlen - 1);
+			nflen += tlen - 1;
+			have_nf = true;
+		} else {
+			if (have_f)
+				filter[flen++] = ',';
+			memcpy(filter + flen, p, tlen);
+			flen += tlen;
+			have_f = true;
+		}
+	}
+
+	return register_fprobe(&tf->fp,
+			have_f ? filter : NULL,
+			have_nf ? nofilter : NULL);
 }
 
 /* Internal unregister function - just handle fprobe and flags */
