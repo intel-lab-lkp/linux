@@ -41,9 +41,9 @@ int check_version(const struct load_info *info,
 		return 1;
 	}
 
-	/* No versions at all?  modprobe --force does this. */
+	/* No versions? Ok, already tainted in check_modstruct_version(). */
 	if (versindex == 0)
-		return try_to_force_load(mod, symname) == 0;
+		return 1;
 
 	versions = (void *)sechdrs[versindex].sh_addr;
 	num_versions = sechdrs[versindex].sh_size
@@ -80,6 +80,7 @@ int check_modstruct_version(const struct load_info *info,
 		.gplok	= true,
 	};
 	bool have_symbol;
+	char *reason;
 
 	/*
 	 * Since this should be found in kernel (which can't be removed), no
@@ -90,6 +91,11 @@ int check_modstruct_version(const struct load_info *info,
 		have_symbol = find_symbol(&fsa);
 	BUG_ON(!have_symbol);
 
+	/* No versions at all?  modprobe --force does this. */
+	if (!info->index.vers && !info->index.vers_ext_crc) {
+		reason = "no versions for imported symbols";
+		return try_to_force_load(mod, reason) == 0;
+	}
 	return check_version(info, "module_layout", mod, fsa.crc);
 }
 
