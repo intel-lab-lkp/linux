@@ -574,6 +574,9 @@ static void domain_add_cpu_mon(int cpu, struct rdt_resource *r)
 	case RDT_RESOURCE_L3:
 		l3_mon_domain_setup(cpu, id, r, add_pos);
 		break;
+	case RDT_RESOURCE_PERF_PKG:
+		intel_aet_setup_mon_domain(cpu, id, r, add_pos);
+		break;
 	default:
 		pr_warn_once("Unknown resource rid=%d\n", r->rid);
 		break;
@@ -670,6 +673,15 @@ static void domain_remove_cpu_mon(int cpu, struct rdt_resource *r)
 		list_del_rcu(&hdr->list);
 		synchronize_rcu();
 		l3_mon_domain_free(hw_dom);
+		break;
+	case RDT_RESOURCE_PERF_PKG:
+		if (!domain_header_is_valid(hdr, RESCTRL_MON_DOMAIN, RDT_RESOURCE_PERF_PKG))
+			return;
+
+		resctrl_offline_mon_domain(r, hdr);
+		list_del_rcu(&hdr->list);
+		synchronize_rcu();
+		kfree(container_of(hdr, struct rdt_perf_pkg_mon_domain, hdr));
 		break;
 	default:
 		pr_warn_once("Unknown resource rid=%d\n", r->rid);
