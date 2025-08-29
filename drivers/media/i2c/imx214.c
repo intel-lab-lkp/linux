@@ -1014,8 +1014,10 @@ static int imx214_ctrls_init(struct imx214 *imx214)
 						   V4L2_CID_LINK_FREQ,
 						   imx214->bus_cfg.nr_of_link_frequencies - 1,
 						   0, imx214->bus_cfg.link_frequencies);
-	if (imx214->link_freq)
-		imx214->link_freq->flags |= V4L2_CTRL_FLAG_READ_ONLY;
+	if (!imx214->link_freq)
+		goto err_init_ctrl;
+
+	imx214->link_freq->flags |= V4L2_CTRL_FLAG_READ_ONLY;
 
 	/*
 	 * WARNING!
@@ -1101,6 +1103,7 @@ static int imx214_ctrls_init(struct imx214 *imx214)
 
 	ret = ctrl_hdlr->error;
 	if (ret) {
+err_init_ctrl:
 		v4l2_ctrl_handler_free(ctrl_hdlr);
 		dev_err(imx214->dev, "failed to add controls: %d\n", ret);
 		return ret;
