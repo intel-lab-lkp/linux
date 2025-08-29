@@ -197,26 +197,26 @@ static bool move_mount_set_group_supported(void)
 
 	if (mount("testing", "/tmp", "tmpfs", MS_NOATIME | MS_NODEV,
 		  "size=100000,mode=700"))
-		return -1;
+		return false;
 
 	if (mount(NULL, "/tmp", NULL, MS_PRIVATE, 0))
-		return -1;
+		return false;
 
 	if (mkdir(SET_GROUP_FROM, 0777))
-		return -1;
+		return false;
 
 	if (mkdir(SET_GROUP_TO, 0777))
-		return -1;
+		return false;
 
 	if (mount("testing", SET_GROUP_FROM, "tmpfs", MS_NOATIME | MS_NODEV,
 		  "size=100000,mode=700"))
-		return -1;
+		return false;
 
 	if (mount(SET_GROUP_FROM, SET_GROUP_TO, NULL, MS_BIND, NULL))
-		return -1;
+		return false;
 
 	if (mount(NULL, SET_GROUP_FROM, NULL, MS_SHARED, 0))
-		return -1;
+		return false;
 
 	ret = syscall(__NR_move_mount, AT_FDCWD, SET_GROUP_FROM,
 		      AT_FDCWD, SET_GROUP_TO, MOVE_MOUNT_SET_GROUP);
