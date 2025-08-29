@@ -3249,7 +3249,6 @@ nvme_fc_reconnect_or_delete(struct nvme_fc_ctrl *ctrl, int status)
 	struct nvme_fc_rport *rport = ctrl->rport;
 	struct nvme_fc_remote_port *portptr = &rport->remoteport;
 	unsigned long recon_delay = ctrl->ctrl.opts->reconnect_delay * HZ;
-	bool recon = true;
 
 	if (nvme_ctrl_state(&ctrl->ctrl) != NVME_CTRL_CONNECTING)
 		return;
@@ -3259,38 +3258,43 @@ nvme_fc_reconnect_or_delete(struct nvme_fc_ctrl *ctrl, int status)
 			"NVME-FC{%d}: reset: Reconnect attempt failed (%d)\n",
 			ctrl->cnum, status);
 	} else if (time_after_eq(jiffies, rport->dev_loss_end))
-		recon = false;
+		goto delete_log;
 
-	if (recon && nvmf_should_reconnect(&ctrl->ctrl, status)) {
-		if (portptr->port_state == FC_OBJSTATE_ONLINE)
-			dev_info(ctrl->ctrl.device,
-				"NVME-FC{%d}: Reconnect attempt in %ld "
-				"seconds\n",
-				ctrl->cnum, recon_delay / HZ);
-		else if (time_after(jiffies + recon_delay, rport->dev_loss_end))
-			recon_delay = rport->dev_loss_end - jiffies;
+	if (!nvmf_should_reconnect(&ctrl->ctrl, status))
+		goto delete_log;
 
-		queue_delayed_work(nvme_wq, &ctrl->connect_work, recon_delay);
-	} else {
-		if (portptr->port_state == FC_OBJSTATE_ONLINE) {
-			if (status > 0 && (status & NVME_STATUS_DNR))
-				dev_warn(ctrl->ctrl.device,
-					 "NVME-FC{%d}: reconnect failure\n",
-					 ctrl->cnum);
-			else
-				dev_warn(ctrl->ctrl.device,
-					 "NVME-FC{%d}: Max reconnect attempts "
-					 "(%d) reached.\n",
-					 ctrl->cnum, ctrl->ctrl.nr_reconnects);
-		} else
+	if (portptr->port_state != FC_OBJSTATE_ONLINE &&
+	    time_after(jiffies + recon_delay, rport->dev_loss_end))
+		recon_delay = rport->dev_loss_end - jiffies;
+
+	dev_info(ctrl->ctrl.device,
+		 "NVME-FC{%d}: Reconnect attempt in %ld seconds\n",
+		 ctrl->cnum, recon_delay / HZ);
+
+	queue_delayed_work(nvme_wq, &ctrl->connect_work, recon_delay);
+
+	return;
+
+delete_log:
+	if (portptr->port_state == FC_OBJSTATE_ONLINE) {
+		if (status > 0 && (status & NVME_STATUS_DNR))
 			dev_warn(ctrl->ctrl.device,
-				"NVME-FC{%d}: dev_loss_tmo (%d) expired "
-				"while waiting for remoteport connectivity.\n",
-				ctrl->cnum, min_t(int, portptr->dev_loss_tmo,
-					(ctrl->ctrl.opts->max_reconnects *
-					 ctrl->ctrl.opts->reconnect_delay)));
-		nvme_fc_ctrl_put(ctrl);
-	}
+				 "NVME-FC{%d}: reconnect failure\n",
+				 ctrl->cnum);
+		else
+			dev_warn(ctrl->ctrl.device,
+				 "NVME-FC{%d}: Max reconnect attempts "
+				 "(%d) reached.\n",
+				 ctrl->cnum, ctrl->ctrl.nr_reconnects);
+	} else
+		dev_warn(ctrl->ctrl.device,
+			 "NVME-FC{%d}: dev_loss_tmo (%d) expired "
+			 "while waiting for remoteport connectivity.\n",
+			 ctrl->cnum, min_t(int, portptr->dev_loss_tmo,
+					   (ctrl->ctrl.opts->max_reconnects *
+					    ctrl->ctrl.opts->reconnect_delay)));
+
+	nvme_fc_ctrl_put(ctrl);
 }
 
 static void
