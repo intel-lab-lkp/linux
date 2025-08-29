@@ -152,6 +152,18 @@ void show_iret_regs(struct pt_regs *regs, const char *log_lvl)
 static void show_regs_if_on_stack(struct stack_info *info, struct pt_regs *regs,
 				  bool partial, const char *log_lvl)
 {
+	bool kasan_disabled = false;
+
+	/*
+	 * When 'regs' resides in another task's stack space, KASAN should be
+	 * disabled to prevent false positives during 'regs->' operation, as
+	 * the 'regs' contents may change concurrently with task execution.
+	 */
+	if (!object_is_on_stack(regs)) {
+		kasan_disable_current();
+		kasan_disabled = true;
+	}
+
 	/*
 	 * These on_stack() checks aren't strictly necessary: the unwind code
 	 * has already validated the 'regs' pointer.  The checks are done for
@@ -173,6 +185,9 @@ static void show_regs_if_on_stack(struct stack_info *info, struct pt_regs *regs,
 		 */
 		show_iret_regs(regs, log_lvl);
 	}
+
+	if (kasan_disabled)
+		kasan_enable_current();
 }
 
 /*
