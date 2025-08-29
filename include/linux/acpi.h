@@ -1616,4 +1616,11 @@ static inline bool acpi_node_backed_by_real_pxm(int nid)
 }
 #endif
 
+#if IS_ENABLED(CONFIG_CXL_ACPI)
+struct cxl_cxims_data {
+	int nr_maps;
+	u64 xormaps[] __counted_by(nr_maps);
+};
+#endif
+
 #endif	/*_LINUX_ACPI_H*/
