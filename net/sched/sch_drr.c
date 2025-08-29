@@ -371,6 +371,7 @@ static int drr_enqueue(struct sk_buff *skb, struct Qdisc *sch,
 static struct sk_buff *drr_dequeue(struct Qdisc *sch)
 {
 	struct drr_sched *q = qdisc_priv(sch);
+	struct list_head *first;
 	struct drr_class *cl;
 	struct sk_buff *skb;
 	unsigned int len;
@@ -378,11 +379,15 @@ static struct sk_buff *drr_dequeue(struct Qdisc *sch)
 	if (list_empty(&q->active))
 		goto out;
 	while (1) {
-		cl = list_first_entry(&q->active, struct drr_class, alist);
-		skb = cl->qdisc->ops->peek(cl->qdisc);
-		if (skb == NULL) {
-			qdisc_warn_nonwc(__func__, cl->qdisc);
-			goto out;
+		first = q->active.next;
+		while (1) {
+			cl = list_first_entry(&q->active, struct drr_class, alist);
+			skb = cl->qdisc->ops->peek(cl->qdisc);
+			if (skb != NULL)
+				break;
+			list_move_tail(&cl->alist, &q->active);
+			if (q->active.next == first)
+				goto out;
 		}
 
 		len = qdisc_pkt_len(skb);
