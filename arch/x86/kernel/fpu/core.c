@@ -480,8 +480,7 @@ void kernel_fpu_begin_mask(unsigned int kfpu_mask)
 	WARN_ON_FPU(!this_cpu_read(kernel_fpu_allowed));
 	this_cpu_write(kernel_fpu_allowed, false);
 
-	if (!(current->flags & (PF_KTHREAD | PF_USER_WORKER)) &&
-	    !test_thread_flag(TIF_NEED_FPU_LOAD)) {
+	if (!test_thread_flag(TIF_NEED_FPU_LOAD)) {
 		set_thread_flag(TIF_NEED_FPU_LOAD);
 		save_fpregs_to_fpstate(x86_task_fpu(current));
 	}

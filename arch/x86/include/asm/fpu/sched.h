@@ -32,8 +32,7 @@ extern void fpu_flush_thread(void);
 static inline void switch_fpu(struct task_struct *old, int cpu)
 {
 	if (!test_tsk_thread_flag(old, TIF_NEED_FPU_LOAD) &&
-	    cpu_feature_enabled(X86_FEATURE_FPU) &&
-	    !(old->flags & (PF_KTHREAD | PF_USER_WORKER))) {
+	    cpu_feature_enabled(X86_FEATURE_FPU)) {
 		struct fpu *old_fpu = x86_task_fpu(old);
 
 		set_tsk_thread_flag(old, TIF_NEED_FPU_LOAD);
