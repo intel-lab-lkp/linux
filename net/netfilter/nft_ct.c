@@ -451,7 +451,6 @@ static int nft_ct_get_init(const struct nft_ctx *ctx,
 					   src.u3.ip);
 			break;
 		case NFPROTO_IPV6:
-		case NFPROTO_INET:
 			len = sizeof_field(struct nf_conntrack_tuple,
 					   src.u3.ip6);
 			break;
