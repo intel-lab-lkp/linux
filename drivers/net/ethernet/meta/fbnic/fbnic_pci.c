@@ -208,8 +208,11 @@ static void fbnic_service_task(struct work_struct *work)
 
 	fbnic_bmc_rpc_check(fbd);
 
-	if (netif_carrier_ok(fbd->netdev))
+	if (netif_carrier_ok(fbd->netdev)) {
+		netdev_lock(fbd->netdev);
 		fbnic_napi_depletion_check(fbd->netdev);
+		netdev_unlock(fbd->netdev);
+	}
 
 	if (netif_running(fbd->netdev))
 		schedule_delayed_work(&fbd->service_task, HZ);
@@ -393,12 +396,14 @@ static int fbnic_pm_suspend(struct device *dev)
 		goto null_uc_addr;
 
 	rtnl_lock();
+	netdev_lock(netdev);
 
 	netif_device_detach(netdev);
 
 	if (netif_running(netdev))
 		netdev->netdev_ops->ndo_stop(netdev);
 
+	netdev_unlock(netdev);
 	rtnl_unlock();
 
 null_uc_addr:
@@ -464,6 +469,7 @@ static int __fbnic_pm_resume(struct device *dev)
 	fbnic_reset_queues(fbn, fbn->num_tx_queues, fbn->num_rx_queues);
 
 	rtnl_lock();
+	netdev_lock(netdev);
 
 	if (netif_running(netdev)) {
 		err = __fbnic_open(fbn);
@@ -471,6 +477,7 @@ static int __fbnic_pm_resume(struct device *dev)
 			goto err_free_mbx;
 	}
 
+	netdev_unlock(netdev);
 	rtnl_unlock();
 
 	return 0;
