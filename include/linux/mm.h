@@ -3840,7 +3840,7 @@ static inline int in_gate_area(struct mm_struct *mm, unsigned long addr)
 }
 #endif	/* __HAVE_ARCH_GATE_AREA */
 
-extern bool process_shares_mm(struct task_struct *p, struct mm_struct *mm);
+extern bool process_shares_mm(struct task_struct *p, const struct mm_struct *mm);
 
 void drop_slab(void);
 
