@@ -144,8 +144,6 @@ static void stmmac_init_fs(struct net_device *dev);
 static void stmmac_exit_fs(struct net_device *dev);
 #endif
 
-#define STMMAC_COAL_TIMER(x) (ns_to_ktime((x) * NSEC_PER_USEC))
-
 int stmmac_bus_clks_config(struct stmmac_priv *priv, bool enabled)
 {
 	int ret = 0;
@@ -3198,7 +3196,7 @@ static void stmmac_tx_timer_arm(struct stmmac_priv *priv, u32 queue)
 	 */
 	if (unlikely(!napi_is_scheduled(napi)))
 		hrtimer_start(&tx_q->txtimer,
-			      STMMAC_COAL_TIMER(tx_coal_timer),
+			      us_to_ktime(tx_coal_timer),
 			      HRTIMER_MODE_REL);
 	else
 		hrtimer_try_to_cancel(&tx_q->txtimer);
