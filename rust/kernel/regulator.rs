@@ -18,7 +18,7 @@
 
 use crate::{
     bindings,
-    device::Device,
+    device::{Bound, Device},
     error::{from_err_ptr, to_result, Result},
     prelude::*,
 };
@@ -68,6 +68,26 @@ pub struct Error<State: RegulatorState> {
 
     /// The regulator that caused the error, so that the operation may be retried.
     pub regulator: Regulator<State>,
+}
+
+/// Enables a regulator whose lifetime is tied to the lifetime of `dev`.
+///
+/// This calls `regulator_disable()` and `regulator_put()` automatically on
+/// driver detach.
+///
+/// This API is identical to `devm_regulator_get_enable()`, and should be
+/// preferred if the caller only cares about the regulator being on.
+pub fn enable(dev: &Device<Bound>, name: &CStr) -> Result {
+    // SAFETY: `dev` is a valid and bound device, while `name` is a valid C
+    // string.
+    to_result(unsafe { bindings::devm_regulator_get_enable(dev.as_raw(), name.as_ptr()) })
+}
+
+/// Same as [`enable`], but calls `devm_regulator_get_enable_optional` instead.
+pub fn enable_optional(dev: &Device<Bound>, name: &CStr) -> Result {
+    // SAFETY: `dev` is a valid and bound device, while `name` is a valid C
+    // string.
+    to_result(unsafe { bindings::devm_regulator_get_enable_optional(dev.as_raw(), name.as_ptr()) })
 }
 
 /// A `struct regulator` abstraction.
@@ -142,6 +162,26 @@ pub struct Error<State: RegulatorState> {
 ///
 ///     // ...
 ///
+///     Ok(())
+/// }
+/// ```
+///
+/// If a driver only cares about the regulator being on for as long it is bound
+/// to a device, then it should use [`regulator::get_enabled`] or
+/// [`regulator::get_enabled_optional`]. This should be the default use-case
+/// unless they need more fine-grained control over the regulator's state.
+///
+/// ```
+/// # use kernel::prelude::*;
+/// # use kernel::c_str;
+/// # use kernel::device::{Bound, Device};
+/// # use kernel::regulator;
+/// fn enable(dev: &Device<Bound>) -> Result {
+///     // Obtain a reference to a (fictitious) regulator and enable it. This
+///     // call only returns whether the operation succeeded.
+///     regulator::enable(dev, c_str!("vcc"))?;
+///
+///     // The regulator will be disabled and put when `dev` is unbound.
 ///     Ok(())
 /// }
 /// ```
