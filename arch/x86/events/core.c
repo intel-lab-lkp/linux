@@ -415,7 +415,7 @@ int x86_reserve_hardware(void)
 	int err = 0;
 
 	if (!atomic_inc_not_zero(&pmc_refcount)) {
-		mutex_lock(&pmc_reserve_mutex);
+		guard(mutex)(&pmc_reserve_mutex);
 		if (atomic_read(&pmc_refcount) == 0) {
 			if (!reserve_pmc_hardware()) {
 				err = -EBUSY;
@@ -426,7 +426,6 @@ int x86_reserve_hardware(void)
 		}
 		if (!err)
 			atomic_inc(&pmc_refcount);
-		mutex_unlock(&pmc_reserve_mutex);
 	}
 
 	return err;
@@ -448,8 +447,6 @@ void x86_release_hardware(void)
  */
 int x86_add_exclusive(unsigned int what)
 {
-	int i;
-
 	/*
 	 * When lbr_pt_coexist we allow PT to coexist with either LBR or BTS.
 	 * LBR and BTS are still mutually exclusive.
@@ -458,22 +455,18 @@ int x86_add_exclusive(unsigned int what)
 		goto out;
 
 	if (!atomic_inc_not_zero(&x86_pmu.lbr_exclusive[what])) {
-		mutex_lock(&pmc_reserve_mutex);
-		for (i = 0; i < ARRAY_SIZE(x86_pmu.lbr_exclusive); i++) {
-			if (i != what && atomic_read(&x86_pmu.lbr_exclusive[i]))
-				goto fail_unlock;
+		scoped_guard(mutex, &pmc_reserve_mutex) {
+			for (int i = 0; i < ARRAY_SIZE(x86_pmu.lbr_exclusive); i++) {
+				if (i != what && atomic_read(&x86_pmu.lbr_exclusive[i]))
+					return -EBUSY;
+			}
+			atomic_inc(&x86_pmu.lbr_exclusive[what]);
 		}
-		atomic_inc(&x86_pmu.lbr_exclusive[what]);
-		mutex_unlock(&pmc_reserve_mutex);
 	}
 
 out:
 	atomic_inc(&active_events);
 	return 0;
-
-fail_unlock:
-	mutex_unlock(&pmc_reserve_mutex);
-	return -EBUSY;
 }
 
 void x86_del_exclusive(unsigned int what)
