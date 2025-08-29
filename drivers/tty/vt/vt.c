@@ -852,6 +852,7 @@ static void add_softcursor(struct vc_data *vc)
 {
 	int i = scr_readw((u16 *) vc->vc_pos);
 	u32 type = vc->vc_cursor_type;
+	int mask = vc->vc_hi_font_mask | 0xff;
 
 	if (!(type & CUR_SW))
 		return;
@@ -865,6 +866,7 @@ static void add_softcursor(struct vc_data *vc)
 		i ^= CUR_BG;
 	if ((type & CUR_INVERT_FG_BG) && (i & CUR_FG) == ((i & CUR_BG) >> 4))
 		i ^= CUR_FG;
+	i = (i & ~mask) | (softcursor_original & mask);
 	scr_writew(i, (u16 *)vc->vc_pos);
 	if (con_should_update(vc))
 		con_putc(vc, i, vc->state.y, vc->state.x);
