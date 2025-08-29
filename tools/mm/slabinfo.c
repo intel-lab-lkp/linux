@@ -230,7 +230,7 @@ static unsigned long read_slab_obj(struct slabinfo *s, const char *name)
 		buffer[0] = 0;
 		l = 0;
 	} else {
-		l = fread(buffer, 1, sizeof(buffer), f);
+		l = fread(buffer, 1, sizeof(buffer) - 1, f);
 		buffer[l] = 0;
 		fclose(f);
 	}
@@ -249,7 +249,7 @@ static unsigned long read_debug_slab_obj(struct slabinfo *s, const char *name)
 		buffer[0] = 0;
 		l = 0;
 	} else {
-		l = fread(buffer, 1, sizeof(buffer), f);
+		l = fread(buffer, 1, sizeof(buffer) - 1, f);
 		buffer[l] = 0;
 		fclose(f);
 	}
