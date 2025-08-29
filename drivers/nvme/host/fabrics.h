@@ -67,6 +67,7 @@ enum {
 	NVMF_OPT_KEYRING	= 1 << 26,
 	NVMF_OPT_TLS_KEY	= 1 << 27,
 	NVMF_OPT_CONCAT		= 1 << 28,
+	NVMF_OPT_CONNECT_ASYNC	= 1 << 29,
 };
 
 /**
@@ -111,6 +112,7 @@ enum {
  * @nr_poll_queues: number of queues for polling I/O
  * @tos: type of service
  * @fast_io_fail_tmo: Fast I/O fail timeout in seconds
+ * @connect_async: Don't wait for the initial connect attempt to succeed or fail
  */
 struct nvmf_ctrl_options {
 	struct kref		ref;
@@ -142,6 +144,7 @@ struct nvmf_ctrl_options {
 	unsigned int		nr_poll_queues;
 	int			tos;
 	int			fast_io_fail_tmo;
+	bool			connect_async;
 };
 
 int nvmf_ctrl_options_get(struct nvmf_ctrl_options *opts);

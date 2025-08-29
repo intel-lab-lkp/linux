@@ -709,6 +709,7 @@ static const match_table_t opt_tokens = {
 	{ NVMF_OPT_TLS,			"tls"			},
 	{ NVMF_OPT_CONCAT,		"concat"		},
 #endif
+	{ NVMF_OPT_CONNECT_ASYNC,	"connect_async=%d"	},
 	{ NVMF_OPT_ERR,			NULL			}
 };
 
@@ -738,6 +739,8 @@ static int nvmf_parse_options(struct nvmf_ctrl_options *opts,
 	opts->tls_key = NULL;
 	opts->keyring = NULL;
 	opts->concat = false;
+	/* keep backward compatibility with older nvme-cli */
+	opts->connect_async = true;
 
 	options = o = kstrdup(buf, GFP_KERNEL);
 	if (!options)
@@ -1064,6 +1067,19 @@ static int nvmf_parse_options(struct nvmf_ctrl_options *opts,
 			}
 			opts->concat = true;
 			break;
+		case NVMF_OPT_CONNECT_ASYNC:
+			if (match_int(args, &token)) {
+				ret = -EINVAL;
+				goto out;
+			}
+			if (token < 0 || token > 1) {
+				pr_err("Invalid connect_async %d value\n",
+				       token);
+				ret = -EINVAL;
+				goto out;
+			}
+			opts->connect_async = token;
+			break;
 		default:
 			pr_warn("unknown parameter or missing value '%s' in ctrl creation request\n",
 				p);
@@ -1316,7 +1332,7 @@ EXPORT_SYMBOL_GPL(nvmf_ctrl_options_put);
 				 NVMF_OPT_HOST_ID | NVMF_OPT_DUP_CONNECT |\
 				 NVMF_OPT_DISABLE_SQFLOW | NVMF_OPT_DISCOVERY |\
 				 NVMF_OPT_FAIL_FAST_TMO | NVMF_OPT_DHCHAP_SECRET |\
-				 NVMF_OPT_DHCHAP_CTRL_SECRET)
+				 NVMF_OPT_DHCHAP_CTRL_SECRET | NVMF_OPT_CONNECT_ASYNC)
 
 static struct nvme_ctrl *
 nvmf_create_ctrl(struct device *dev, const char *buf)
