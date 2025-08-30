@@ -742,6 +742,14 @@ static const struct dsa_switch_ops ks8995_ds_ops = {
 	.phylink_get_caps = ks8995_phylink_get_caps,
 };
 
+static void devm_reset_assert(void *data)
+{
+	struct ks8995_switch *ks = data;
+
+	/* assert reset */
+	gpiod_set_value_cansleep(ks->reset_gpio, 1);
+}
+
 /* ------------------------------------------------------------------------ */
 static int ks8995_probe(struct spi_device *spi)
 {
@@ -784,6 +792,11 @@ static int ks8995_probe(struct spi_device *spi)
 		 */
 		gpiod_set_value_cansleep(ks->reset_gpio, 0);
 		udelay(100);
+
+		err = devm_add_action_or_reset(&spi->dev,
+					       devm_reset_assert, ks);
+		if (err)
+			return err;
 	}
 
 	spi_set_drvdata(spi, ks);
@@ -834,8 +847,6 @@ static void ks8995_remove(struct spi_device *spi)
 	struct ks8995_switch *ks = spi_get_drvdata(spi);
 
 	dsa_unregister_switch(ks->ds);
-	/* assert reset */
-	gpiod_set_value_cansleep(ks->reset_gpio, 1);
 }
 
 /* ------------------------------------------------------------------------ */
