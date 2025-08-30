@@ -61,14 +61,14 @@ int intel_pasid_alloc_table(struct device *dev)
 	size = max_pasid >> (PASID_PDE_SHIFT - 3);
 	order = size ? get_order(size) : 0;
 	dir = iommu_alloc_pages_node_sz(info->iommu->node, GFP_KERNEL,
-					1 << (order + PAGE_SHIFT));
+					1 << order);
 	if (!dir) {
 		kfree(pasid_table);
 		return -ENOMEM;
 	}
 
 	pasid_table->table = dir;
-	pasid_table->max_pasid = 1 << (order + PAGE_SHIFT + 3);
+	pasid_table->max_pasid = 1 << (order + PASID_PDE_SHIFT - 3);
 	info->pasid_table = pasid_table;
 
 	if (!ecap_coherent(info->iommu->ecap))
