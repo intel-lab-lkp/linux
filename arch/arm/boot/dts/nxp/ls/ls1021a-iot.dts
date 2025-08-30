@@ -120,9 +120,12 @@
 };
 
 &enet2 {
-	fixed-link = <0 1 1000 0 0>;
 	phy-connection-type = "rgmii-id";
 	status = "okay";
+	fixed-link {
+		speed = <1000>;
+		full-duplex;
+	};
 };
 
 &esdhc {
