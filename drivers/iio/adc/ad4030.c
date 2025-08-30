@@ -20,6 +20,7 @@
 #include <linux/iio/iio.h>
 #include <linux/iio/trigger_consumer.h>
 #include <linux/iio/triggered_buffer.h>
+#include <linux/log2.h>
 #include <linux/pwm.h>
 #include <linux/regmap.h>
 #include <linux/regulator/consumer.h>
@@ -257,6 +258,10 @@ struct ad4030_state {
 
 #define AD4030_OFFLOAD_CHAN_DIFF(_idx, _scan_type)			\
 	__AD4030_CHAN_DIFF(_idx, _scan_type, 1)
+
+static const int ad4030_rx_bus_width[] = {
+	1, 2, 4, 8,
+};
 
 static const int ad4030_average_modes[] = {
 	1, 2, 4, 8, 16, 32, 64, 128,
@@ -1197,7 +1202,7 @@ static void ad4030_prepare_offload_msg(struct ad4030_state *st)
 		 */
 		offload_bpw = data_width * st->chip->num_voltage_inputs;
 	else
-		offload_bpw  = data_width;
+		offload_bpw  = data_width / (1 << st->lane_mode);
 
 	st->offload_xfer.speed_hz = AD4030_SPI_MAX_REG_XFER_SPEED;
 	st->offload_xfer.bits_per_word = offload_bpw;
@@ -1208,6 +1213,10 @@ static void ad4030_prepare_offload_msg(struct ad4030_state *st)
 
 static int ad4030_config(struct ad4030_state *st)
 {
+	struct device *dev = &st->spi->dev;
+	const char *propname;
+	u32 rx_bus_width;
+	unsigned int i;
 	int ret;
 	u8 reg_modes;
 
@@ -1215,10 +1224,28 @@ static int ad4030_config(struct ad4030_state *st)
 	st->offset_avail[1] = 1;
 	st->offset_avail[2] = BIT(st->chip->precision_bits - 1) - 1;
 
-	if (st->chip->num_voltage_inputs > 1)
+	/* Optional property specifying the number of lanes to read ADC data */
+	propname = "spi-rx-bus-width";
+	rx_bus_width = ad4030_rx_bus_width[0]; /* Default to 1 rx lane. */
+	device_property_read_u32(dev, propname, &rx_bus_width);
+	/* Check the rx bus width is valid */
+	for (i = 0; i < ARRAY_SIZE(ad4030_rx_bus_width); i++)
+		if (ad4030_rx_bus_width[i] == rx_bus_width)
+			break;
+
+	if (i >= ARRAY_SIZE(ad4030_rx_bus_width))
+		return dev_err_probe(dev, -EINVAL, "Invalid %s: %u\n",
+				     propname, rx_bus_width);
+
+	rx_bus_width = ad4030_rx_bus_width[i];
+
+	if (rx_bus_width == 8 && st->chip->num_voltage_inputs == 1)
+		return dev_err_probe(dev, -EINVAL, "1 channel with 8 lanes?\n");
+
+	if (rx_bus_width == 1 && st->chip->num_voltage_inputs > 1)
 		st->lane_mode = AD4030_LANE_MD_INTERLEAVED;
 	else
-		st->lane_mode = AD4030_LANE_MD_1_PER_CH;
+		st->lane_mode = ilog2(rx_bus_width / st->chip->num_voltage_inputs);
 
 	reg_modes = FIELD_PREP(AD4030_REG_MODES_MASK_LANE_MODE, st->lane_mode);
 
