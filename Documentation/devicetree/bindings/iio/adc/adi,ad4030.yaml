@@ -90,6 +90,13 @@ properties:
       host - Host. The Host clock mode uses an internal oscillator to clock out
              the data bits. In this mode, the spi controller is not driving SCLK.
 
+  adi,dual-data-rate:
+    description:
+      Enable dual data rate (DDR) in which two bits (per active lane) are
+      transmitted in one clock cycle. This can reduce the serial clock to
+      10 MHz while operating at a sample rate of 2 MSPS.
+    type: boolean
+
 required:
   - compatible
   - reg
@@ -98,11 +105,21 @@ required:
   - vio-supply
   - cnv-gpios
 
-oneOf:
-  - required:
-      - ref-supply
-  - required:
-      - refin-supply
+allOf:
+  - oneOf:
+      - required:
+          - ref-supply
+      - required:
+          - refin-supply
+  # DDR is available only for echo clock mode and host clock mode.
+  - if:
+      properties:
+        adi,clock-mode:
+          contains:
+            const: spi
+    then:
+      properties:
+        adi,dual-data-rate: false
 
 unevaluatedProperties: false
 
