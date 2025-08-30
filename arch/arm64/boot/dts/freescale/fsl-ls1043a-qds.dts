@@ -205,8 +205,11 @@
 	};
 
 	ethernet@f0000 { /* DTSEC9/10GEC1 */
-		fixed-link = <1 1 10000 0 0>;
 		phy-connection-type = "xgmii";
+		fixed-link {
+			speed = <10000>;
+			full-duplex;
+		};
 	};
 };
 
