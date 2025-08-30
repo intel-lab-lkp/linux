@@ -690,29 +690,6 @@ static int phylink_parse_fixedlink(struct phylink *pl,
 
 		if (ret)
 			return ret;
-	} else {
-		u32 prop[5];
-
-		ret = fwnode_property_read_u32_array(fwnode, "fixed-link",
-						     NULL, 0);
-		if (ret != ARRAY_SIZE(prop)) {
-			phylink_err(pl, "broken fixed-link?\n");
-			return -EINVAL;
-		}
-
-		ret = fwnode_property_read_u32_array(fwnode, "fixed-link",
-						     prop, ARRAY_SIZE(prop));
-		if (!ret) {
-			pl->link_config.duplex = prop[1] ?
-						DUPLEX_FULL : DUPLEX_HALF;
-			pl->link_config.speed = prop[2];
-			if (prop[3])
-				__set_bit(ETHTOOL_LINK_MODE_Pause_BIT,
-					  pl->link_config.lp_advertising);
-			if (prop[4])
-				__set_bit(ETHTOOL_LINK_MODE_Asym_Pause_BIT,
-					  pl->link_config.lp_advertising);
-		}
 	}
 
 	if (pl->link_config.speed > SPEED_1000 &&
@@ -768,7 +745,7 @@ static int phylink_parse_mode(struct phylink *pl,
 		pl->cfg_link_an_mode = MLO_AN_INBAND;
 
 	dn = fwnode_get_named_child_node(fwnode, "fixed-link");
-	if (dn || fwnode_property_present(fwnode, "fixed-link"))
+	if (dn)
 		pl->cfg_link_an_mode = MLO_AN_FIXED;
 	fwnode_handle_put(dn);
 
