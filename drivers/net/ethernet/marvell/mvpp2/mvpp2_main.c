@@ -6828,12 +6828,22 @@ static void mvpp2_acpi_start(struct mvpp2_port *port)
  */
 static bool mvpp2_use_acpi_compat_mode(struct fwnode_handle *port_fwnode)
 {
+	struct fwnode_handle *fixed_link;
+
 	if (!is_acpi_node(port_fwnode))
 		return false;
 
-	return (!fwnode_property_present(port_fwnode, "phy-handle") &&
-		!fwnode_property_present(port_fwnode, "managed") &&
-		!fwnode_get_named_child_node(port_fwnode, "fixed-link"));
+	if (fwnode_property_present(port_fwnode, "phy-handle") ||
+	    fwnode_property_present(port_fwnode, "managed"))
+		return false;
+
+	fixed_link = fwnode_get_named_child_node(port_fwnode, "fixed-link");
+	if (fixed_link) {
+		fwnode_handle_put(fixed_link);
+		return false;
+	}
+
+	return true;
 }
 
 /* Ports initialization */
