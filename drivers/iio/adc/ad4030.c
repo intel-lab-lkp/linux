@@ -74,6 +74,7 @@
 	(AD4030_REG_GAIN_X0_MSB + (AD4030_REG_GAIN_BYTES_NB * (ch)))
 #define AD4030_REG_MODES			0x20
 #define     AD4030_REG_MODES_MASK_OUT_DATA_MODE	GENMASK(2, 0)
+#define     AD4030_REG_MODES_MASK_CLOCK_MODE	GENMASK(5, 4)
 #define     AD4030_REG_MODES_MASK_LANE_MODE	GENMASK(7, 6)
 #define AD4030_REG_OSCILATOR			0x21
 #define AD4030_REG_IO				0x22
@@ -127,6 +128,12 @@ enum ad4030_out_mode {
 	AD4030_OUT_DATA_MD_32_PATTERN,
 };
 
+enum ad4030_clock_mode {
+	AD4030_SPI_CLOCK_MODE,
+	AD4030_ECHO_CLOCK_MODE,
+	AD4030_CLOCK_HOST_MODE,
+};
+
 enum ad4030_lane_mode {
 	AD4030_LANE_MD_1_PER_CH,
 	AD4030_LANE_MD_2_PER_CH,
@@ -167,6 +174,7 @@ struct ad4030_state {
 	unsigned int avg_log2;
 	enum ad4030_out_mode mode;
 	enum ad4030_lane_mode lane_mode;
+	enum ad4030_clock_mode clock_mode;
 	/* offload sampling spi message */
 	struct spi_transfer offload_xfer;
 	struct spi_message offload_msg;
@@ -261,6 +269,12 @@ struct ad4030_state {
 
 static const int ad4030_rx_bus_width[] = {
 	1, 2, 4, 8,
+};
+
+static const char * const ad4030_clock_mode_str[] = {
+	[AD4030_SPI_CLOCK_MODE] = "spi",
+	[AD4030_ECHO_CLOCK_MODE] = "echo",
+	[AD4030_CLOCK_HOST_MODE] = "host",
 };
 
 static const int ad4030_average_modes[] = {
@@ -1248,6 +1262,14 @@ static int ad4030_config(struct ad4030_state *st)
 		st->lane_mode = ilog2(rx_bus_width / st->chip->num_voltage_inputs);
 
 	reg_modes = FIELD_PREP(AD4030_REG_MODES_MASK_LANE_MODE, st->lane_mode);
+
+	/* Optional data clock mode */
+	ret = device_property_match_property_string(dev, "adi,clock-mode",
+						    ad4030_clock_mode_str,
+						    ARRAY_SIZE(ad4030_clock_mode_str));
+	/* Default to SPI clock mode. */
+	reg_modes |= FIELD_PREP(AD4030_REG_MODES_MASK_CLOCK_MODE,
+				ret >= 0 ? ret : AD4030_SPI_CLOCK_MODE);
 
 	ret = regmap_write(st->regmap, AD4030_REG_MODES, reg_modes);
 	if (ret)
