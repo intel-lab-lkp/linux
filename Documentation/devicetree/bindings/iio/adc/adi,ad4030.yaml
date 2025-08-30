@@ -78,6 +78,18 @@ properties:
   interrupt-names:
     const: busy
 
+  adi,clock-mode:
+    $ref: /schemas/types.yaml#/definitions/string
+    enum: [ spi, echo, host ]
+    default: spi
+    description:
+      Describes how the clock that frames ADC data output is setup.
+      spi  - Spi-compatible. Normal SPI operation clocking.
+      echo - Echo-clock. Synchronous clock echoing to ease timing requirements
+             when using isolation on the digital interface.
+      host - Host. The Host clock mode uses an internal oscillator to clock out
+             the data bits. In this mode, the spi controller is not driving SCLK.
+
 required:
   - compatible
   - reg
