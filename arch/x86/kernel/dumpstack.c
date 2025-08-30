@@ -189,8 +189,19 @@ static void show_trace_log_lvl(struct task_struct *task, struct pt_regs *regs,
 	unsigned long visit_mask = 0;
 	int graph_idx = 0;
 	bool partial = false;
+	bool kasan_disabled = false;
 
 	printk("%sCall Trace:\n", log_lvl);
+
+	/*
+	 * KASAN should be disabled during walking another task's stacks
+	 * to prevent false positives, as values on these stacks may change
+	 * concurrently with task execution.
+	 */
+	if (task && task != current) {
+		kasan_disable_current();
+		kasan_disabled = true;
+	}
 
 	unwind_start(&state, task, regs, stack);
 	stack = stack ?: get_stack_pointer(task, regs);
@@ -301,6 +312,9 @@ next:
 		if (stack_name)
 			printk("%s </%s>\n", log_lvl, stack_name);
 	}
+
+	if (kasan_disabled)
+		kasan_enable_current();
 }
 
 void show_stack(struct task_struct *task, unsigned long *sp,
