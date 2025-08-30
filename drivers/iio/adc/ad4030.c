@@ -74,6 +74,7 @@
 	(AD4030_REG_GAIN_X0_MSB + (AD4030_REG_GAIN_BYTES_NB * (ch)))
 #define AD4030_REG_MODES			0x20
 #define     AD4030_REG_MODES_MASK_OUT_DATA_MODE	GENMASK(2, 0)
+#define     AD4030_REG_MODES_MASK_DDR_MODE	BIT(3)
 #define     AD4030_REG_MODES_MASK_CLOCK_MODE	GENMASK(5, 4)
 #define     AD4030_REG_MODES_MASK_LANE_MODE	GENMASK(7, 6)
 #define AD4030_REG_OSCILATOR			0x21
@@ -175,6 +176,7 @@ struct ad4030_state {
 	enum ad4030_out_mode mode;
 	enum ad4030_lane_mode lane_mode;
 	enum ad4030_clock_mode clock_mode;
+	bool ddr;
 	/* offload sampling spi message */
 	struct spi_transfer offload_xfer;
 	struct spi_message offload_msg;
@@ -1218,6 +1220,9 @@ static void ad4030_prepare_offload_msg(struct ad4030_state *st)
 	else
 		offload_bpw  = data_width / (1 << st->lane_mode);
 
+	if (st->ddr)
+		offload_bpw  /= 2;
+
 	st->offload_xfer.speed_hz = AD4030_SPI_MAX_REG_XFER_SPEED;
 	st->offload_xfer.bits_per_word = offload_bpw;
 	st->offload_xfer.len = roundup_pow_of_two(BITS_TO_BYTES(offload_bpw));
@@ -1270,6 +1275,12 @@ static int ad4030_config(struct ad4030_state *st)
 	/* Default to SPI clock mode. */
 	reg_modes |= FIELD_PREP(AD4030_REG_MODES_MASK_CLOCK_MODE,
 				ret >= 0 ? ret : AD4030_SPI_CLOCK_MODE);
+
+	/* DDR is only valid for echo clock and host clock modes */
+	if (ret == AD4030_ECHO_CLOCK_MODE || ret == AD4030_CLOCK_HOST_MODE) {
+		st->ddr = device_property_read_bool(dev, "adi,dual-data-rate");
+		reg_modes |= FIELD_PREP(AD4030_REG_MODES_MASK_DDR_MODE, st->ddr);
+	}
 
 	ret = regmap_write(st->regmap, AD4030_REG_MODES, reg_modes);
 	if (ret)
