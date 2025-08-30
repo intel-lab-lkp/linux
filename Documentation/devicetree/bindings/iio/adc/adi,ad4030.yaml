@@ -39,7 +39,7 @@ properties:
     maximum: 102040816
 
   spi-rx-bus-width:
-    enum: [1, 2, 4]
+    enum: [1, 2, 4, 8]
 
   vdd-5v-supply: true
   vdd-1v8-supply: true
