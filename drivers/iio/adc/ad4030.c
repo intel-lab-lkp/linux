@@ -394,7 +394,14 @@ static int ad4030_get_chan_scale(struct iio_dev *indio_dev,
 	else
 		*val = st->vref_uv / MILLI;
 
-	*val2 = scan_type->realbits;
+	/*
+	 * Even though the sample data comes in a 30-bit chunk when the ADC
+	 * is averaging samples, the conversion precision is still 16-bit or
+	 * 24-bit depending on the device. Thus, instead of scan_type->realbits,
+	 * use chip specific precision bits to derive the correct scale to mV.
+	 */
+	*val2 = scan_type->realbits == 30 ? st->chip->precision_bits
+					  : scan_type->realbits;
 
 	return IIO_VAL_FRACTIONAL_LOG2;
 }
