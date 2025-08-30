@@ -13,9 +13,12 @@
  #include <linux/i2c.h>
  #include <linux/iio/iio.h>
  #include <linux/err.h>
+ #include <linux/pm_runtime.h>
 
 /* accel takes 20ms, gyro takes 35ms to wake from full-chip sleep */
  #define INV_ICM20948_SLEEP_WAKEUP_MS 35
+
+ #define INV_ICM20948_SUSPEND_DELAY_MS 2000
 
  #define INV_ICM20948_REG_BANK_SEL 0x7F
  #define INV_ICM20948_BANK_SEL_MASK GENMASK(5, 4)
@@ -45,6 +48,8 @@
  #define INV_ICM20948_REG_GYRO_USER_OFFSET_Z 0x2007
 
 extern const struct regmap_config inv_icm20948_regmap_config;
+
+extern const struct dev_pm_ops inv_icm20948_pm_ops;
 
 enum inv_icm20948_gyro_fs {
 	INV_ICM20948_GYRO_FS_250 = 0,
@@ -81,5 +86,7 @@ extern int inv_icm20948_core_probe(struct regmap *regmap);
 
 struct iio_dev *inv_icm20948_temp_init(struct inv_icm20948_state *state);
 struct iio_dev *inv_icm20948_gyro_init(struct inv_icm20948_state *state);
+
+int inv_icm20948_pm_setup(struct inv_icm20948_state *state);
 
  #endif

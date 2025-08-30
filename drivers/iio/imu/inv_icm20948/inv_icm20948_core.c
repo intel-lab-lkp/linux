@@ -101,7 +101,7 @@ static int inv_icm20948_setup(struct inv_icm20948_state *state)
 	if (IS_ERR(state->gyro_dev))
 		return PTR_ERR(state->gyro_dev);
 
-	return 0;
+	return inv_icm20948_pm_setup(state);
 }
 
 int inv_icm20948_core_probe(struct regmap *regmap)
@@ -113,6 +113,7 @@ int inv_icm20948_core_probe(struct regmap *regmap)
 	state = devm_kzalloc(dev, sizeof(*state), GFP_KERNEL);
 	if (!state)
 		return -ENOMEM;
+	dev_set_drvdata(dev, state);
 
 	state->regmap = regmap;
 	state->dev = dev;

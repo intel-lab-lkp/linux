@@ -73,10 +73,14 @@ static const struct iio_chan_spec inv_icm20948_gyro_channels[] = {
 static int inv_icm20948_gyro_apply_config(struct inv_icm20948_state *state)
 {
 	guard(mutex)(&state->lock);
+	pm_runtime_get_sync(state->dev);
 
-	return regmap_write_bits(state->regmap, INV_ICM20948_REG_GYRO_CONFIG_1,
+	int ret = regmap_write_bits(state->regmap, INV_ICM20948_REG_GYRO_CONFIG_1,
 				 INV_ICM20948_GYRO_CONFIG_FULLSCALE,
 				 state->gyro_conf->fsr << 1);
+
+	pm_runtime_put_autosuspend(state->dev);
+	return ret;
 }
 
 static int inv_icm20948_gyro_read_sensor(struct inv_icm20948_state *state,
@@ -99,23 +103,25 @@ static int inv_icm20948_gyro_read_sensor(struct inv_icm20948_state *state,
 		return -EINVAL;
 	}
 
+	pm_runtime_get_sync(state->dev);
+
 	__be16 raw;
 	int ret = regmap_bulk_read(state->regmap, reg, &raw, sizeof(raw));
 
 	if (ret)
-		return ret;
+		goto out;
 
 	*val = (s16)be16_to_cpu(raw);
 
-	return 0;
+out:
+	pm_runtime_put_autosuspend(state->dev);
+	return ret;
 }
 
 static int inv_icm20948_gyro_read_calibbias(struct inv_icm20948_state *state,
 					    struct iio_chan_spec const *chan,
 					    int *val, int *val2)
 {
-	guard(mutex)(&state->lock);
-
 	unsigned int reg;
 
 	switch (chan->channel2) {
@@ -133,8 +139,11 @@ static int inv_icm20948_gyro_read_calibbias(struct inv_icm20948_state *state,
 	}
 
 	__be16 offset_raw;
+
+	pm_runtime_get_sync(state->dev);
 	int ret = regmap_bulk_read(state->regmap, reg, &offset_raw,
 				   sizeof(offset_raw));
+	pm_runtime_put_autosuspend(state->dev);
 
 	if (ret)
 		return ret;
@@ -216,8 +225,6 @@ static int inv_icm20948_write_calibbias(struct inv_icm20948_state *state,
 					struct iio_chan_spec const *chan,
 					int val, int val2)
 {
-	guard(mutex)(&state->lock);
-
 	unsigned int reg;
 
 	switch (chan->channel2) {
@@ -246,8 +253,13 @@ static int inv_icm20948_write_calibbias(struct inv_icm20948_state *state,
 	s16 offset = clamp(offset64, (s64)S16_MIN, (s64)S16_MAX);
 	__be16 offset_write = cpu_to_be16(offset);
 
-	return regmap_bulk_write(state->regmap, reg, &offset_write,
+	pm_runtime_get_sync(state->dev);
+	mutex_lock(&state->lock);
+	int ret = regmap_bulk_write(state->regmap, reg, &offset_write,
 				 sizeof(offset_write));
+	mutex_unlock(&state->lock);
+	pm_runtime_put_autosuspend(state->dev);
+	return ret;
 }
 
 static int inv_icm20948_gyro_write_raw(struct iio_dev *gyro_dev,

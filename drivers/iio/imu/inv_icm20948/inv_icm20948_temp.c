@@ -24,17 +24,24 @@ static const struct iio_chan_spec
 static int inv_icm20948_temp_read_sensor(struct inv_icm20948_state *state,
 					 s16 *temp)
 {
-	guard(mutex)(&state->lock);
+	int ret;
+
+	pm_runtime_get_sync(state->dev);
+	mutex_lock(&state->lock);
 
 	__be16 raw;
-	int ret = regmap_bulk_read(state->regmap, INV_ICM20948_REG_TEMP_DATA,
+	ret = regmap_bulk_read(state->regmap, INV_ICM20948_REG_TEMP_DATA,
 				   &raw, sizeof(raw));
 	if (ret)
-		return ret;
+		goto out;
 
 	*temp = __be16_to_cpu(raw);
+	ret = 0;
 
-	return 0;
+out:
+	mutex_unlock(&state->lock);
+	pm_runtime_put_autosuspend(state->dev);
+	return ret;
 }
 
 static int inv_icm20948_temp_read_raw(struct iio_dev *temp_dev,
