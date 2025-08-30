@@ -379,21 +379,12 @@ struct phy_device *of_phy_get_and_connect(struct net_device *dev,
 }
 EXPORT_SYMBOL(of_phy_get_and_connect);
 
-/*
- * of_phy_is_fixed_link() and of_phy_register_fixed_link() must
- * support two DT bindings:
- * - the old DT binding, where 'fixed-link' was a property with 5
- *   cells encoding various information about the fixed PHY
- * - the new DT binding, where 'fixed-link' is a sub-node of the
- *   Ethernet device.
- */
 bool of_phy_is_fixed_link(struct device_node *np)
 {
 	struct device_node *dn;
 	int err;
 	const char *managed;
 
-	/* New binding */
 	dn = of_get_child_by_name(np, "fixed-link");
 	if (dn) {
 		of_node_put(dn);
@@ -404,10 +395,6 @@ bool of_phy_is_fixed_link(struct device_node *np)
 	if (err == 0 && strcmp(managed, "auto") != 0)
 		return true;
 
-	/* Old binding */
-	if (of_property_count_u32_elems(np, "fixed-link") == 5)
-		return true;
-
 	return false;
 }
 EXPORT_SYMBOL(of_phy_is_fixed_link);
@@ -416,7 +403,6 @@ int of_phy_register_fixed_link(struct device_node *np)
 {
 	struct fixed_phy_status status = {};
 	struct device_node *fixed_link_node;
-	u32 fixed_link_prop[5];
 	const char *managed;
 
 	if (of_property_read_string(np, "managed", &managed) == 0 &&
@@ -425,7 +411,6 @@ int of_phy_register_fixed_link(struct device_node *np)
 		goto register_phy;
 	}
 
-	/* New binding */
 	fixed_link_node = of_get_child_by_name(np, "fixed-link");
 	if (fixed_link_node) {
 		status.link = 1;
@@ -441,17 +426,6 @@ int of_phy_register_fixed_link(struct device_node *np)
 							  "asym-pause");
 		of_node_put(fixed_link_node);
 
-		goto register_phy;
-	}
-
-	/* Old binding */
-	if (of_property_read_u32_array(np, "fixed-link", fixed_link_prop,
-				       ARRAY_SIZE(fixed_link_prop)) == 0) {
-		status.link = 1;
-		status.duplex = fixed_link_prop[1];
-		status.speed  = fixed_link_prop[2];
-		status.pause  = fixed_link_prop[3];
-		status.asym_pause = fixed_link_prop[4];
 		goto register_phy;
 	}
 
