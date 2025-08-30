@@ -163,7 +163,7 @@ impl Spec {
 }
 
 /// Structure holding the resources required to operate the GPU.
-#[pin_data(PinnedDrop)]
+#[pin_data]
 pub(crate) struct Gpu {
     spec: Spec,
     /// MMIO mapping of PCI BAR 0
@@ -172,15 +172,6 @@ pub(crate) struct Gpu {
     /// System memory page required for flushing all pending GPU-side memory writes done through
     /// PCIE into system memory, via sysmembar (A GPU-initiated HW memory-barrier operation).
     sysmem_flush: SysmemFlush,
-}
-
-#[pinned_drop]
-impl PinnedDrop for Gpu {
-    fn drop(self: Pin<&mut Self>) {
-        // Unregister the sysmem flush page before we release it.
-        self.bar
-            .try_access_with(|b| self.sysmem_flush.unregister(b));
-    }
 }
 
 impl Gpu {
@@ -308,5 +299,14 @@ impl Gpu {
             fw,
             sysmem_flush,
         }))
+    }
+
+    pub(crate) fn unbind(&self, pdev: &pci::Device<device::Bound>) {
+        // Unregister the sysmem flush page before we release it.
+        kernel::warn_on!(self.bar.access(pdev.as_ref()).map_or(true, |bar| {
+            self.sysmem_flush.unregister(bar);
+
+            false
+        }));
     }
 }
