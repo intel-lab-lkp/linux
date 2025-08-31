@@ -288,7 +288,7 @@ static bool phy_uses_state_machine(struct phy_device *phydev)
 		return phydev->attached_dev && phydev->adjust_link;
 
 	/* phydev->phy_link_change is implicitly phylink_phy_change() */
-	return true;
+	return !!phydev->phy_link_change;
 }
 
 static bool mdio_bus_phy_may_suspend(struct phy_device *phydev)
