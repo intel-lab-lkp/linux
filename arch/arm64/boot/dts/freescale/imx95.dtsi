@@ -10,9 +10,9 @@
 #include <dt-bindings/interrupt-controller/arm-gic.h>
 #include <dt-bindings/thermal/thermal.h>
 
-#include "imx95-clock.h"
+#include <dt-bindings/clock/imx95-clock.h>
 #include "imx95-pinfunc.h"
-#include "imx95-power.h"
+#include <dt-bindings/power/imx95-power.h>
 
 / {
 	interrupt-parent = <&gic>;

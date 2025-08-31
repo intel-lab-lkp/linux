@@ -8,9 +8,9 @@
 #include <dt-bindings/input/input.h>
 #include <dt-bindings/interrupt-controller/arm-gic.h>
 
-#include "imx94-clock.h"
+#include <dt-bindings/clock/imx94-clock.h>
 #include "imx94-pinfunc.h"
-#include "imx94-power.h"
+#include <dt-bindings/power/imx94-power.h>
 
 / {
 	#address-cells = <2>;
