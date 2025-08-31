@@ -255,6 +255,8 @@ struct sddr09_card_info {
 	int		*pba_to_lba;	/* physical to logical map */
 	int		lbact;		/* number of available pages */
 	int		flags;
+	unsigned char	*buffer; /* staging buffer */
+	unsigned char	*blockbuffer; /* bounce buffer */
 #define	SDDR09_WP	1		/* write protected */
 };
 
@@ -847,11 +849,9 @@ sddr09_find_unused_pba(struct sddr09_card_info *info, unsigned int lba) {
 	return 0;
 }
 
-static int
-sddr09_write_lba(struct us_data *us, unsigned int lba,
-		 unsigned int page, unsigned int pages,
-		 unsigned char *ptr, unsigned char *blockbuffer) {
-
+static int sddr09_write_lba(struct us_data *us, unsigned int lba,
+			    unsigned int page, unsigned int pages)
+{
 	struct sddr09_card_info *info = (struct sddr09_card_info *) us->extra;
 	unsigned long address;
 	unsigned int pba, lbap;
@@ -890,13 +890,13 @@ sddr09_write_lba(struct us_data *us, unsigned int lba,
 	/* read old contents */
 	address = (pba << (info->pageshift + info->blockshift));
 	result = sddr09_read22(us, address>>1, info->blocksize,
-			       info->pageshift, blockbuffer, 0);
+			       info->pageshift, info->blockbuffer, 0);
 	if (result)
 		return result;
 
 	/* check old contents and fill lba */
 	for (i = 0; i < info->blocksize; i++) {
-		bptr = blockbuffer + i*pagelen;
+		bptr = info->blockbuffer + i * pagelen;
 		cptr = bptr + info->pagesize;
 		nand_compute_ecc(bptr, ecc);
 		if (!nand_compare_ecc(cptr+13, ecc)) {
@@ -915,9 +915,9 @@ sddr09_write_lba(struct us_data *us, unsigned int lba,
 	}
 
 	/* copy in new stuff and compute ECC */
-	xptr = ptr;
+	xptr = info->buffer;
 	for (i = page; i < page+pages; i++) {
-		bptr = blockbuffer + i*pagelen;
+		bptr = info->blockbuffer + i * pagelen;
 		cptr = bptr + info->pagesize;
 		memcpy(bptr, xptr, info->pagesize);
 		xptr += info->pagesize;
@@ -930,7 +930,7 @@ sddr09_write_lba(struct us_data *us, unsigned int lba,
 	usb_stor_dbg(us, "Rewrite PBA %d (LBA %d)\n", pba, lba);
 
 	result = sddr09_write_inplace(us, address>>1, info->blocksize,
-				      info->pageshift, blockbuffer, 0);
+				      info->pageshift, info->blockbuffer, 0);
 
 	usb_stor_dbg(us, "sddr09_write_inplace returns %d\n", result);
 
@@ -961,9 +961,6 @@ sddr09_write_data(struct us_data *us,
 
 	struct sddr09_card_info *info = (struct sddr09_card_info *) us->extra;
 	unsigned int lba, maxlba, page, pages;
-	unsigned int pagelen, blocklen;
-	unsigned char *blockbuffer;
-	unsigned char *buffer;
 	unsigned int len, offset;
 	struct scatterlist *sg;
 	int result;
@@ -974,35 +971,6 @@ sddr09_write_data(struct us_data *us,
 	maxlba = info->capacity >> (info->pageshift + info->blockshift);
 	if (lba >= maxlba)
 		return -EIO;
-
-	/*
-	 * blockbuffer is used for reading in the old data, overwriting
-	 * with the new data, and performing ECC calculations
-	 */
-
-	/*
-	 * TODO: instead of doing kmalloc/kfree for each write,
-	 * add a bufferpointer to the info structure
-	 */
-
-	pagelen = (1 << info->pageshift) + (1 << CONTROL_SHIFT);
-	blocklen = (pagelen << info->blockshift);
-	blockbuffer = kmalloc(blocklen, GFP_NOIO);
-	if (!blockbuffer)
-		return -ENOMEM;
-
-	/*
-	 * Since we don't write the user data directly to the device,
-	 * we have to create a bounce buffer and move the data a piece
-	 * at a time between the bounce buffer and the actual transfer buffer.
-	 */
-
-	len = min_t(unsigned int, sectors, info->blocksize) * info->pagesize;
-	buffer = kmalloc(len, GFP_NOIO);
-	if (!buffer) {
-		kfree(blockbuffer);
-		return -ENOMEM;
-	}
 
 	result = 0;
 	offset = 0;
@@ -1024,11 +992,10 @@ sddr09_write_data(struct us_data *us,
 		}
 
 		/* Get the data from the transfer buffer */
-		usb_stor_access_xfer_buf(buffer, len, us->srb,
-				&sg, &offset, FROM_XFER_BUF);
+		usb_stor_access_xfer_buf(info->buffer, len, us->srb, &sg,
+					 &offset, FROM_XFER_BUF);
 
-		result = sddr09_write_lba(us, lba, page, pages,
-				buffer, blockbuffer);
+		result = sddr09_write_lba(us, lba, page, pages);
 		if (result)
 			break;
 
@@ -1036,9 +1003,6 @@ sddr09_write_data(struct us_data *us,
 		lba++;
 		sectors -= pages;
 	}
-
-	kfree(buffer);
-	kfree(blockbuffer);
 
 	return result;
 }
@@ -1191,6 +1155,36 @@ sddr09_get_cardinfo(struct us_data *us, unsigned char flags) {
 	printk(KERN_WARNING "%s\n", blurbtxt);
 
 	return cardinfo;
+}
+
+static int sddr09_init_card_buffers(struct us_data *us)
+{
+	struct sddr09_card_info *info = (struct sddr09_card_info *)us->extra;
+	unsigned int pagelen, blocklen, len;
+
+	/*
+	 * blockbuffer is used for reading in the old data, overwriting
+	 * with the new data, and performing ECC calculations
+	 */
+	pagelen = (1 << info->pageshift) + (1 << CONTROL_SHIFT);
+	blocklen = (pagelen << info->blockshift);
+	info->blockbuffer = kmalloc(blocklen, GFP_NOIO);
+	if (!info->blockbuffer)
+		return -ENOMEM;
+
+	/*
+	 * Since we don't write the user data directly to the device,
+	 * we have to create a bounce buffer and move the data a piece
+	 * at a time between the bounce buffer and the actual transfer buffer.
+	 */
+	len = info->blocksize * info->pagesize;
+	info->buffer = kmalloc(len, GFP_NOIO);
+	if (!info->buffer) {
+		kfree(info->blockbuffer);
+		return -ENOMEM;
+	}
+
+	return 0;
 }
 
 static int
@@ -1403,6 +1397,8 @@ sddr09_card_info_destructor(void *extra) {
 	if (!info)
 		return;
 
+	kfree(info->buffer);
+	kfree(info->blockbuffer);
 	kfree(info->lba_to_pba);
 	kfree(info->pba_to_lba);
 }
@@ -1592,6 +1588,8 @@ static int sddr09_transport(struct scsi_cmnd *srb, struct us_data *us)
 		if (!cardinfo) {
 			/* probably no media */
 		init_error:
+			kfree(info->buffer);
+			kfree(info->blockbuffer);
 			sensekey = 0x02;	/* not ready */
 			sensecode = 0x3a;	/* medium not present */
 			return USB_STOR_TRANSPORT_FAILED;
@@ -1603,6 +1601,10 @@ static int sddr09_transport(struct scsi_cmnd *srb, struct us_data *us)
 		info->blockshift = cardinfo->blockshift;
 		info->blocksize = (1 << info->blockshift);
 		info->blockmask = info->blocksize - 1;
+
+		if (sddr09_init_card_buffers(us)) {
+			goto init_error;
+		}
 
 		// map initialization, must follow get_cardinfo()
 		if (sddr09_read_map(us)) {
