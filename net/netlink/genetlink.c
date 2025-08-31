@@ -1836,7 +1836,7 @@ static int genl_bind(struct net *net, int group)
 		    !ns_capable(net->user_ns, CAP_SYS_ADMIN))
 			ret = -EPERM;
 
-		if (family->bind)
+		if (!ret && family->bind)
 			family->bind(i);
 
 		break;
