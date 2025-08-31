@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: GPL-2.0
+ickj// SPDX-License-Identifier: GPL-2.0
 /* linux/arch/sparc64/kernel/sys_sparc.c
  *
  * This file contains various random system calls that
@@ -294,7 +294,8 @@ static unsigned long mmap_rnd(void)
 	return rnd << PAGE_SHIFT;
 }
 
-void arch_pick_mmap_layout(struct mm_struct *mm, struct rlimit *rlim_stack)
+void arch_pick_mmap_layout(struct mm_struct *const mm,
+			   const struct rlimit *const rlim_stack)
 {
 	unsigned long random_factor = mmap_rnd();
 	unsigned long gap;
