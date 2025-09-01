@@ -1502,9 +1502,8 @@ static void __intel_pstate_update_max_freq(struct cpufreq_policy *policy,
 
 static bool intel_pstate_update_max_freq(struct cpudata *cpudata)
 {
-	struct cpufreq_policy *policy __free(put_cpufreq_policy);
+	struct cpufreq_policy *policy __free(put_cpufreq_policy) = cpufreq_cpu_get(cpudata->cpu);
 
-	policy = cpufreq_cpu_get(cpudata->cpu);
 	if (!policy)
 		return false;
 
@@ -1698,19 +1697,18 @@ unlock_driver:
 static void update_qos_request(enum freq_qos_req_type type)
 {
 	struct freq_qos_request *req;
-	struct cpufreq_policy *policy;
 	int i;
 
 	for_each_possible_cpu(i) {
 		struct cpudata *cpu = all_cpu_data[i];
 		unsigned int freq, perf_pct;
+		struct cpufreq_policy *policy __free(put_cpufreq_policy) =
+			cpufreq_cpu_get(i);
 
-		policy = cpufreq_cpu_get(i);
 		if (!policy)
 			continue;
 
 		req = policy->driver_data;
-		cpufreq_cpu_put(policy);
 
 		if (!req)
 			continue;
