@@ -201,7 +201,6 @@ static struct thermal_soc_data thermal_imx7d_data = {
 
 struct imx_thermal_data {
 	struct device *dev;
-	struct cpufreq_policy *policy;
 	struct thermal_zone_device *tz;
 	struct thermal_cooling_device *cdev;
 	struct regmap *tempmon;
@@ -541,22 +540,20 @@ MODULE_DEVICE_TABLE(of, of_imx_thermal_match);
 static int imx_thermal_register_legacy_cooling(struct imx_thermal_data *data)
 {
 	struct device_node *np;
+	struct cpufreq_policy *policy __free(put_cpufreq_policy) = cpufreq_cpu_get(0);
 	int ret = 0;
 
-	data->policy = cpufreq_cpu_get(0);
-	if (!data->policy) {
+	if (!policy) {
 		pr_debug("%s: CPUFreq policy not found\n", __func__);
 		return -EPROBE_DEFER;
 	}
 
-	np = of_get_cpu_node(data->policy->cpu, NULL);
+	np = of_get_cpu_node(policy->cpu, NULL);
 
 	if (!np || !of_property_present(np, "#cooling-cells")) {
 		data->cdev = cpufreq_cooling_register(data->policy);
-		if (IS_ERR(data->cdev)) {
+		if (IS_ERR(data->cdev))
 			ret = PTR_ERR(data->cdev);
-			cpufreq_cpu_put(data->policy);
-		}
 	}
 
 	of_node_put(np);
@@ -567,7 +564,6 @@ static int imx_thermal_register_legacy_cooling(struct imx_thermal_data *data)
 static void imx_thermal_unregister_legacy_cooling(struct imx_thermal_data *data)
 {
 	cpufreq_cooling_unregister(data->cdev);
-	cpufreq_cpu_put(data->policy);
 }
 
 #else
