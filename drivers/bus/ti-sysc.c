@@ -3117,7 +3117,8 @@ static int sysc_check_active_timer(struct sysc *ddata)
 	 * can be dropped if we stop supporting old beagleboard revisions
 	 * A to B4 at some point.
 	 */
-	if (sysc_soc->soc == SOC_3430 || sysc_soc->soc == SOC_AM35)
+	if (sysc_soc->soc == SOC_3430 || sysc_soc->soc == SOC_AM35 ||
+					 sysc_soc->soc == SOC_DRA7)
 		error = -ENXIO;
 	else
 		error = -EBUSY;
