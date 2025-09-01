@@ -72,8 +72,8 @@ int ovpn_aead_encrypt(struct ovpn_peer *peer, struct ovpn_crypto_key_slot *ks,
 		return -ENOSPC;
 
 	/* sg may be required by async crypto */
-	ovpn_skb_cb(skb)->sg = kmalloc(sizeof(*ovpn_skb_cb(skb)->sg) *
-				       (nfrags + 2), GFP_ATOMIC);
+	ovpn_skb_cb(skb)->sg = kmalloc_array((nfrags + 2), sizeof(*ovpn_skb_cb(skb)->sg),
+					     GFP_ATOMIC);
 	if (unlikely(!ovpn_skb_cb(skb)->sg))
 		return -ENOMEM;
 
@@ -185,8 +185,8 @@ int ovpn_aead_decrypt(struct ovpn_peer *peer, struct ovpn_crypto_key_slot *ks,
 		return -ENOSPC;
 
 	/* sg may be required by async crypto */
-	ovpn_skb_cb(skb)->sg = kmalloc(sizeof(*ovpn_skb_cb(skb)->sg) *
-				       (nfrags + 2), GFP_ATOMIC);
+	ovpn_skb_cb(skb)->sg = kmalloc_array((nfrags + 2), sizeof(*ovpn_skb_cb(skb)->sg),
+					     GFP_ATOMIC);
 	if (unlikely(!ovpn_skb_cb(skb)->sg))
 		return -ENOMEM;
 
