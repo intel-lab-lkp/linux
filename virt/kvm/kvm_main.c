@@ -1017,7 +1017,7 @@ static int kvm_create_vm_debugfs(struct kvm *kvm, const char *fdname)
 {
 	static DEFINE_MUTEX(kvm_debugfs_lock);
 	struct dentry *dent;
-	char dir_name[ITOA_MAX_LEN * 2];
+	char dir_name[ITOA_MAX_LEN * 3];
 	struct kvm_stat_data *stat_data;
 	const struct _kvm_stats_desc *pdesc;
 	int i, ret = -ENOMEM;
@@ -1027,7 +1027,8 @@ static int kvm_create_vm_debugfs(struct kvm *kvm, const char *fdname)
 	if (!debugfs_initialized())
 		return 0;
 
-	snprintf(dir_name, sizeof(dir_name), "%d-%s", task_pid_nr(current), fdname);
+	snprintf(dir_name, sizeof(dir_name), "%d-%s-%u", task_pid_nr(current),
+		 fdname, get_random_u32());
 	mutex_lock(&kvm_debugfs_lock);
 	dent = debugfs_lookup(dir_name, kvm_debugfs_dir);
 	if (dent) {
