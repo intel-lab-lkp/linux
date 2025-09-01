@@ -1021,6 +1021,7 @@ static int xhci_invalidate_cancelled_tds(struct xhci_virt_ep *ep)
 
 	xhci = ep->xhci;
 
+again:
 	list_for_each_entry_safe(td, tmp_td, &ep->cancelled_td_list, cancelled_td_list) {
 		xhci_dbg_trace(xhci, trace_xhci_dbg_cancel_urb,
 			       "Removing canceled TD starting at 0x%llx (dma) in stream %u URB %p",
@@ -1050,14 +1051,12 @@ static int xhci_invalidate_cancelled_tds(struct xhci_virt_ep *ep)
 				break;
 			case TD_DIRTY: /* TD is cached, clear it */
 			case TD_HALTED:
-			case TD_CLEARING_CACHE_DEFERRED:
 				if (cached_td) {
 					if (cached_td->urb->stream_id != td->urb->stream_id) {
 						/* Multiple streams case, defer move dq */
 						xhci_dbg(xhci,
 							 "Move dq deferred: stream %u URB %p\n",
 							 td->urb->stream_id, td->urb);
-						td->cancel_status = TD_CLEARING_CACHE_DEFERRED;
 						break;
 					}
 
@@ -1091,22 +1090,15 @@ static int xhci_invalidate_cancelled_tds(struct xhci_virt_ep *ep)
 					cached_td);
 	if (err) {
 		/* Failed to move past cached td, just set cached TDs to no-op */
-		list_for_each_entry_safe(td, tmp_td, &ep->cancelled_td_list, cancelled_td_list) {
-			/*
-			 * Deferred TDs need to have the deq pointer set after the above command
-			 * completes, so if that failed we just give up on all of them (and
-			 * complain loudly since this could cause issues due to caching).
-			 */
-			if (td->cancel_status != TD_CLEARING_CACHE &&
-			    td->cancel_status != TD_CLEARING_CACHE_DEFERRED)
-				continue;
-			xhci_warn(xhci, "Failed to clear cancelled cached URB %p, give back anyway\n",
-				  td->urb);
-			td_to_noop(td, false);
-			ring = xhci_urb_to_transfer_ring(xhci, td->urb);
-			xhci_td_cleanup(xhci, td, ring, td->status);
+		xhci_warn(xhci, "Failed to clear cancelled cached URB %p, give back anyway\n",
+				cached_td->urb);
+		td_to_noop(cached_td, false);
+		xhci_td_cleanup(xhci, cached_td, cached_ring, cached_td->status);
 
-		}
+		/* Try to clear any deferred TDs on other streams */
+		cached_ring = NULL;
+		cached_td = NULL;
+		goto again;
 	}
 	return 0;
 }
