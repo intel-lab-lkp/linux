@@ -1717,6 +1717,54 @@ void vmw_kms_lost_device(struct drm_device *dev)
 	drm_atomic_helper_shutdown(dev);
 }
 
+/* For drm_panic */
+int vmw_du_panic_helper_plane_update(struct vmw_du_update_plane *update)
+{
+	struct drm_plane_state *state = update->plane->state;
+	struct vmw_framebuffer_bo *vfbbo =
+		container_of(update->vfb, typeof(*vfbbo), base);
+	struct drm_rect src = drm_plane_state_src(state);
+	struct drm_rect clip = {
+		.x1 = 0,
+		.y1 = 0,
+		.x2 = (src.x2 >> 16) + !!(src.x2 & 0xFFFF),
+		.y2 = (src.y2 >> 16) + !!(src.y2 & 0xFFFF),
+	};
+	DECLARE_VAL_CONTEXT(val_ctx, NULL, 0);
+	uint32_t reserved_size = 0;
+	uint32_t submit_size = 0;
+	char *cmd;
+	int ret;
+
+	vmw_bo_placement_set(vfbbo->buffer,
+			     VMW_BO_DOMAIN_SYS | VMW_BO_DOMAIN_MOB | VMW_BO_DOMAIN_GMR,
+			     VMW_BO_DOMAIN_SYS | VMW_BO_DOMAIN_MOB | VMW_BO_DOMAIN_GMR);
+
+	ret = vmw_validation_add_bo(&val_ctx, vfbbo->buffer);
+	if (ret)
+		return ret;
+
+	ret = vmw_validation_prepare(&val_ctx, NULL, false);
+	if (ret)
+		return ret;
+
+	reserved_size = update->calc_fifo_size(update, 1);
+	cmd = vmw_panic_cmdbuf_reserve_cur(update->dev_priv->cman, reserved_size);
+	if (!cmd)
+		return -ENOMEM;
+
+	vmw_du_translate_to_crtc(state, &clip);
+
+	update->clip(update, cmd, &clip, 0, 0);
+	submit_size = update->post_clip(update, cmd, &clip);
+
+	vmw_cmd_commit(update->dev_priv, submit_size);
+
+	vmw_kms_helper_validation_finish(update->dev_priv, NULL, &val_ctx,
+					 NULL, NULL);
+	return ret;
+}
+
 /**
  * vmw_du_helper_plane_update - Helper to do plane update on a display unit.
  * @update: The closure structure.

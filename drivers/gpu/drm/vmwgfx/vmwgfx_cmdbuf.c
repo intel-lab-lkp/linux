@@ -983,6 +983,17 @@ void *vmw_cmdbuf_alloc(struct vmw_cmdbuf_man *man,
 	return header->cmd;
 }
 
+/* For drm_panic */
+char *vmw_panic_cmdbuf_reserve_cur(struct vmw_cmdbuf_man *man, size_t size)
+{
+	/* Refer to cur without cur_mutex since this func is called in panic handler */
+	struct vmw_cmdbuf_header *cur = man->cur;
+
+	cur->reserved = size;
+
+	return (char *) (man->cur->cmd + man->cur_pos);
+}
+
 /**
  * vmw_cmdbuf_reserve_cur - Reserve space for commands in the current
  * command buffer.

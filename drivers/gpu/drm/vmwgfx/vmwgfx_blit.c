@@ -514,6 +514,49 @@ out:
 	return ret;
 }
 
+/* For drm_panic */
+void vmw_panic_bo_cpu_blit(struct vmw_bo *vmw_dst, u32 dst_stride,
+			   struct vmw_bo *vmw_src, u32 src_stride,
+			   u32 w, u32 h, struct vmw_diff_cpy *diff)
+{
+	struct ttm_buffer_object *src = &vmw_src->tbo;
+	struct ttm_buffer_object *dst = &vmw_dst->tbo;
+	u32 j;
+	u32 initial_line = 0;
+	u32 dst_offset = 0;
+	u32 src_offset = 0;
+	int ret = 0;
+	struct vmw_bo_blit_line_data d = {
+		.mapped_dst = 0,
+		.mapped_src = 0,
+		.dst_addr = NULL,
+		.src_addr = NULL,
+		.dst_pages = dst->ttm->pages,
+		.src_pages = src->ttm->pages,
+		.dst_num_pages = PFN_UP(dst->resource->size),
+		.src_num_pages = PFN_UP(src->resource->size),
+		.dst_prot = ttm_io_prot(dst, dst->resource, PAGE_KERNEL),
+		.src_prot = ttm_io_prot(src, src->resource, PAGE_KERNEL),
+		.diff = diff,
+	};
+
+	for (j = 0; j < h; ++j) {
+		diff->line = j + initial_line;
+		diff->line_offset = dst_offset % dst_stride;
+		ret = vmw_bo_cpu_blit_line(&d, dst_offset, src_offset, w);
+		if (ret)
+			goto out;
+
+		dst_offset += dst_stride;
+		src_offset += src_stride;
+	}
+out:
+	if (d.src_addr)
+		kunmap_atomic(d.src_addr);
+	if (d.dst_addr)
+		kunmap_atomic(d.dst_addr);
+}
+
 /**
  * vmw_bo_cpu_blit - in-kernel cpu blit.
  *

@@ -1271,6 +1271,7 @@ extern int vmw_cmdbuf_idle(struct vmw_cmdbuf_man *man, bool interruptible,
 extern void *vmw_cmdbuf_reserve(struct vmw_cmdbuf_man *man, size_t size,
 				int ctx_id, bool interruptible,
 				struct vmw_cmdbuf_header *header);
+extern char *vmw_panic_cmdbuf_reserve_cur(struct vmw_cmdbuf_man *man, size_t size);
 extern void vmw_cmdbuf_commit(struct vmw_cmdbuf_man *man, size_t size,
 			      struct vmw_cmdbuf_header *header,
 			      bool flush);
@@ -1329,6 +1330,9 @@ int vmw_bo_cpu_blit(struct vmw_bo *dst,
 		    u32 src_offset, u32 src_stride,
 		    u32 w, u32 h,
 		    struct vmw_diff_cpy *diff);
+void vmw_panic_bo_cpu_blit(struct vmw_bo *dst, u32 dst_stride,
+			   struct vmw_bo *src, u32 src_stride,
+			   u32 w, u32 h, struct vmw_diff_cpy *diff);
 
 /* Host messaging -vmwgfx_msg.c: */
 void vmw_disable_backdoor(void);

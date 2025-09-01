@@ -36,6 +36,7 @@
 #include <drm/drm_atomic_helper.h>
 #include <drm/drm_damage_helper.h>
 #include <drm/drm_fourcc.h>
+#include <drm/drm_panic.h>
 #include <drm/drm_vblank.h>
 
 #define vmw_crtc_to_stdu(x) \
@@ -1164,6 +1165,66 @@ static uint32_t vmw_stdu_bo_clip_cpu(struct vmw_du_update_plane  *update,
 	return 0;
 }
 
+/* For drm_panic */
+static uint32_t
+vmw_stdu_panic_bo_populate_update_cpu(struct vmw_du_update_plane  *update, void *cmd,
+				      struct drm_rect *bb)
+{
+	struct vmw_du_update_plane_buffer *bo_update;
+	struct vmw_screen_target_display_unit *stdu;
+	struct vmw_framebuffer_bo *vfbbo;
+	struct vmw_diff_cpy diff = VMW_CPU_BLIT_DIFF_INITIALIZER(0);
+	struct vmw_stdu_update_gb_image *cmd_img = cmd;
+	struct vmw_stdu_update *cmd_update;
+	struct vmw_bo *src_bo, *dst_bo;
+	s32 src_pitch, dst_pitch;
+	s32 width, height;
+
+	bo_update = container_of(update, typeof(*bo_update), base);
+	stdu = container_of(update->du, typeof(*stdu), base);
+	vfbbo = container_of(update->vfb, typeof(*vfbbo), base);
+
+	width = bb->x2;
+	height = bb->y2;
+
+	diff.cpp = stdu->cpp;
+
+	dst_bo = stdu->display_srf->res.guest_memory_bo;
+	dst_pitch = stdu->display_srf->metadata.base_size.width * stdu->cpp;
+
+	src_bo = vfbbo->buffer;
+	src_pitch = update->vfb->base.pitches[0];
+
+	vmw_panic_bo_cpu_blit(dst_bo, dst_pitch, src_bo, src_pitch,
+			      width * stdu->cpp, height, &diff);
+
+	if (drm_rect_visible(&diff.rect)) {
+		SVGA3dBox *box = &cmd_img->body.box;
+
+		cmd_img->header.id = SVGA_3D_CMD_UPDATE_GB_IMAGE;
+		cmd_img->header.size = sizeof(cmd_img->body);
+		cmd_img->body.image.sid = stdu->display_srf->res.id;
+		cmd_img->body.image.face = 0;
+		cmd_img->body.image.mipmap = 0;
+
+		box->x = diff.rect.x1;
+		box->y = diff.rect.y1;
+		box->z = 0;
+		box->w = drm_rect_width(&diff.rect);
+		box->h = drm_rect_height(&diff.rect);
+		box->d = 1;
+
+		cmd_update = (struct vmw_stdu_update *)&cmd_img[1];
+		vmw_stdu_populate_update(cmd_update, stdu->base.unit,
+					 diff.rect.x1, diff.rect.x2,
+					 diff.rect.y1, diff.rect.y2);
+
+		return sizeof(*cmd_img) + sizeof(*cmd_update);
+	}
+
+	return 0;
+}
+
 static uint32_t
 vmw_stdu_bo_populate_update_cpu(struct vmw_du_update_plane  *update, void *cmd,
 				struct drm_rect *bb)
@@ -1226,6 +1287,28 @@ vmw_stdu_bo_populate_update_cpu(struct vmw_du_update_plane  *update, void *cmd,
 	}
 
 	return 0;
+}
+
+/* For drm_panic */
+static int vmw_stdu_panic_plane_update_bo(struct vmw_private *dev_priv,
+					  struct drm_plane *plane,
+					  struct vmw_framebuffer *vfb)
+{
+	struct vmw_du_update_plane_buffer bo_update;
+
+	memset(&bo_update, 0, sizeof(struct vmw_du_update_plane_buffer));
+	bo_update.base.plane = plane;
+	bo_update.base.old_state = plane->state;
+	bo_update.base.dev_priv = dev_priv;
+	bo_update.base.du = vmw_crtc_to_du(plane->state->crtc);
+	bo_update.base.vfb = vfb;
+
+	bo_update.base.calc_fifo_size = vmw_stdu_bo_fifo_size_cpu;
+	bo_update.base.pre_clip = vmw_stdu_bo_pre_clip_cpu;
+	bo_update.base.clip = vmw_stdu_bo_clip_cpu;
+	bo_update.base.post_clip = vmw_stdu_panic_bo_populate_update_cpu;
+
+	return vmw_du_panic_helper_plane_update(&bo_update.base);
 }
 
 /**
@@ -1458,6 +1541,60 @@ vmw_stdu_primary_plane_atomic_update(struct drm_plane *plane,
 		vmw_fence_obj_unreference(&fence);
 }
 
+static int
+vmw_stdu_primary_plane_get_scanout_buffer(struct drm_plane *plane,
+					  struct drm_scanout_buffer *sb)
+{
+	struct vmw_framebuffer *vfb;
+	struct vmw_framebuffer_bo *vfbbo;
+	void *virtual;
+
+	if (!plane->state || !plane->state->fb || !plane->state->visible)
+		return -ENODEV;
+
+	vfb = vmw_framebuffer_to_vfb(plane->state->fb);
+
+	if (!vfb->bo)
+		return -ENODEV;
+
+	vfbbo = container_of(vfb, typeof(*vfbbo), base);
+	virtual = vmw_bo_map_and_cache(vfbbo->buffer);
+	if (!virtual)
+		return -ENODEV;
+	iosys_map_set_vaddr(&sb->map[0], virtual);
+
+	sb->format = plane->state->fb->format;
+	sb->width = plane->state->fb->width;
+	sb->height = plane->state->fb->height;
+	sb->pitch[0] = plane->state->fb->pitches[0];
+
+	return 0;
+}
+
+static void vmw_stdu_primary_plane_panic_flush(struct drm_plane *plane)
+{
+	struct drm_plane_state *state = plane->state;
+	struct vmw_plane_state *vps = vmw_plane_state_to_vps(state);
+	struct drm_crtc *crtc = state->crtc;
+	struct vmw_private *dev_priv = vmw_priv(crtc->dev);
+	struct vmw_framebuffer *vfb = vmw_framebuffer_to_vfb(state->fb);
+	struct vmw_screen_target_display_unit *stdu = vmw_crtc_to_stdu(crtc);
+	int ret;
+
+	stdu->display_srf = vmw_user_object_surface(&vps->uo);
+	stdu->content_fb_type = vps->content_fb_type;
+	stdu->cpp = vps->cpp;
+
+	ret = vmw_stdu_bind_st(dev_priv, stdu, &stdu->display_srf->res);
+	if (ret)
+		DRM_ERROR("Failed to bind surface to STDU.\n");
+
+	if (vfb->bo)
+		ret = vmw_stdu_panic_plane_update_bo(dev_priv, plane, vfb);
+	if (ret)
+		DRM_ERROR("Failed to update STDU.\n");
+}
+
 static void
 vmw_stdu_crtc_atomic_flush(struct drm_crtc *crtc,
 			   struct drm_atomic_state *state)
@@ -1506,6 +1643,8 @@ drm_plane_helper_funcs vmw_stdu_primary_plane_helper_funcs = {
 	.atomic_update = vmw_stdu_primary_plane_atomic_update,
 	.prepare_fb = vmw_stdu_primary_plane_prepare_fb,
 	.cleanup_fb = vmw_stdu_primary_plane_cleanup_fb,
+	.get_scanout_buffer = vmw_stdu_primary_plane_get_scanout_buffer,
+	.panic_flush = vmw_stdu_primary_plane_panic_flush,
 };
 
 static const struct drm_crtc_helper_funcs vmw_stdu_crtc_helper_funcs = {
