@@ -62,12 +62,11 @@ static const struct wf_control_ops clamp_ops = {
 
 static int __init wf_cpufreq_clamp_init(void)
 {
-	struct cpufreq_policy *policy;
+	struct cpufreq_policy *policy __free(put_cpufreq_policy) = cpufreq_cpu_get(0);
 	struct wf_control *clamp;
 	struct device *dev;
 	int ret;
 
-	policy = cpufreq_cpu_get(0);
 	if (!policy) {
 		pr_warn("%s: cpufreq policy not found cpu0\n", __func__);
 		return -EPROBE_DEFER;
@@ -78,8 +77,6 @@ static int __init wf_cpufreq_clamp_init(void)
 
 	ret = freq_qos_add_request(&policy->constraints, &qos_req, FREQ_QOS_MAX,
 				   max_freq);
-
-	cpufreq_cpu_put(policy);
 
 	if (ret < 0) {
 		pr_err("%s: Failed to add freq constraint (%d)\n", __func__,
