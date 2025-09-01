@@ -678,6 +678,19 @@ static enum kernel_gp_hint get_kernel_gp_address(struct pt_regs *regs,
 
 #define GPFSTR "general protection fault"
 
+void emulate_trap_flag(struct pt_regs *regs)
+{
+	struct task_struct *tsk = current;
+
+	/* If the instruction was emulated successfully, emulate trap flag */
+	if (regs->flags & X86_EFLAGS_TF) {
+		tsk->thread.cr2 = regs->ip;
+		tsk->thread.trap_nr = X86_TRAP_DB;
+		tsk->thread.error_code = 0;
+		force_sig_fault(SIGTRAP, TRAP_TRACE, (void __user *)regs->ip);
+	}
+}
+
 static bool fixup_iopl_exception(struct pt_regs *regs)
 {
 	struct thread_struct *t = &current->thread;
@@ -705,6 +718,7 @@ static bool fixup_iopl_exception(struct pt_regs *regs)
 	}
 
 	regs->ip += 1;
+	emulate_trap_flag(regs);
 	return true;
 }
 

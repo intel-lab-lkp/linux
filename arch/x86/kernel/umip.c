@@ -407,5 +407,6 @@ bool fixup_umip_exception(struct pt_regs *regs)
 
 	/* increase IP to let the program keep going */
 	regs->ip += insn.length;
+	emulate_trap_flag(regs);
 	return true;
 }
