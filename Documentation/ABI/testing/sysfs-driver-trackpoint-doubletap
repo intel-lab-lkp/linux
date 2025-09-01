@@ -1,0 +1,17 @@
+What:          /sys/bus/serio/devices/serioX/doubletap_enabled
+Date:          Aug 2025
+KernelVersion: 6.17
+Contact:       linux-input@vger.kernel.org, platform-driver-x86@vger.kernel.org
+Description:
+               A read/write attribute controlling TrackPoint doubletap.
+
+               Reading returns the current state:
+               0 - disabled
+               1 - enabled
+
+               Writing:
+               0 - disable doubletap
+               1 - enable doubletap
+
+               The attribute is only present if the TrackPoint firmware
+               supports doubletap functionality.
