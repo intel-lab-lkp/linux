@@ -80,6 +80,62 @@ static inline void rb_link_node_rcu(struct rb_node *node, struct rb_node *parent
 	})
 
 /**
+ * rbtree_for_each_entry - iterate in-order over rb_root of given type
+ *
+ * @pos:	the 'type *' to use as a loop cursor.
+ * @root:	'rb_root *' of the rbtree.
+ * @member:	the name of the rb_node field within 'type'.
+ */
+#define rbtree_for_each_entry(pos, root, member) \
+	for ((pos) = rb_entry_safe(rb_first(root), typeof(*(pos)), member); \
+	     (pos); \
+	     (pos) = rb_entry_safe(rb_next(&(pos)->member), typeof(*(pos)), member))
+
+/**
+ * rbtree_reverse_for_each_entry - iterate in reverse in-order over rb_root
+ * of given type
+ *
+ * @pos:	the 'type *' to use as a loop cursor.
+ * @root:	'rb_root *' of the rbtree.
+ * @member:	the name of the rb_node field within 'type'.
+ */
+#define rbtree_reverse_for_each_entry(pos, root, member) \
+	for ((pos) = rb_entry_safe(rb_last(root), typeof(*(pos)), member); \
+	     (pos); \
+	     (pos) = rb_entry_safe(rb_prev(&(pos)->member), typeof(*(pos)), member))
+
+/**
+ * rbtree_for_each_entry_safe - iterate in-order over rb_root safe against removal
+ *
+ * @pos:	the 'type *' to use as a loop cursor
+ * @n:		another 'type *' to use as temporary storage
+ * @root:	'rb_root *' of the rbtree
+ * @member:	the name of the rb_node field within 'type'
+ */
+#define rbtree_for_each_entry_safe(pos, n, root, member) \
+	for ((pos) = rb_entry_safe(rb_first(root), typeof(*(pos)), member), \
+	     (n) = (pos) ? rb_entry_safe(rb_next(&(pos)->member), typeof(*(pos)), member) : NULL; \
+	     (pos); \
+	     (pos) = (n), \
+	     (n) = (pos) ? rb_entry_safe(rb_next(&(pos)->member), typeof(*(pos)), member) : NULL)
+
+/**
+ * rbtree_reverse_for_each_entry_safe - iterate in reverse in-order over rb_root
+ * safe against removal
+ *
+ * @pos:	the struct type * to use as a loop cursor.
+ * @n:		another struct type * to use as temporary storage.
+ * @root:	pointer to struct rb_root to iterate.
+ * @member:	name of the rb_node field within the struct.
+ */
+#define rbtree_reverse_for_each_entry_safe(pos, n, root, member) \
+	for ((pos) = rb_entry_safe(rb_last(root), typeof(*(pos)), member), \
+	     (n) = (pos) ? rb_entry_safe(rb_prev(&(pos)->member), typeof(*(pos)), member) : NULL; \
+	     (pos); \
+	     (pos) = (n), \
+	     (n) = (pos) ? rb_entry_safe(rb_prev(&(pos)->member), typeof(*(pos)), member) : NULL)
+
+/**
  * rbtree_postorder_for_each_entry_safe - iterate in post-order over rb_root of
  * given type allowing the backing memory of @pos to be invalidated
  *
