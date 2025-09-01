@@ -298,7 +298,7 @@ static ssize_t modalias_show(struct device *dev,
 static DEVICE_ATTR_RO(modalias);
 
 static ssize_t protocol_id_show(struct device *dev,
-				 struct device_attribute *attr, char *buf)
+				struct device_attribute *attr, char *buf)
 {
 	struct scmi_device *scmi_dev = to_scmi_dev(dev);
 

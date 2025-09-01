@@ -1280,12 +1280,12 @@ void *scmi_raw_mode_init(const struct scmi_handle *handle,
 			chd = debugfs_create_dir(cdir, top_chans);
 
 			debugfs_create_file_aux_num("message", 0600, chd,
-					    raw, channels[i],
-					    &scmi_dbg_raw_mode_message_fops);
+						    raw, channels[i],
+						    &scmi_dbg_raw_mode_message_fops);
 
 			debugfs_create_file_aux_num("message_async", 0600, chd,
-					    raw, channels[i],
-					    &scmi_dbg_raw_mode_message_async_fops);
+						    raw, channels[i],
+						    &scmi_dbg_raw_mode_message_async_fops);
 
 			debugfs_create_file_aux_num("message_poll", 0600, chd,
 						    raw, channels[i],
