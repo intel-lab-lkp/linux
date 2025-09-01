@@ -144,18 +144,14 @@ static int update_pd_power_uw(struct dtpm *dtpm)
 static void pd_release(struct dtpm *dtpm)
 {
 	struct dtpm_cpu *dtpm_cpu = to_dtpm_cpu(dtpm);
-	struct cpufreq_policy *policy;
+	struct cpufreq_policy *policy __free(put_cpufreq_policy) = cpufreq_cpu_get(dtpm_cpu->cpu);
 
 	if (freq_qos_request_active(&dtpm_cpu->qos_req))
 		freq_qos_remove_request(&dtpm_cpu->qos_req);
 
-	policy = cpufreq_cpu_get(dtpm_cpu->cpu);
-	if (policy) {
+	if (policy)
 		for_each_cpu(dtpm_cpu->cpu, policy->related_cpus)
 			per_cpu(dtpm_per_cpu, dtpm_cpu->cpu) = NULL;
-
-		cpufreq_cpu_put(policy);
-	}
 
 	kfree(dtpm_cpu);
 }
@@ -192,7 +188,7 @@ static int cpuhp_dtpm_cpu_online(unsigned int cpu)
 static int __dtpm_cpu_setup(int cpu, struct dtpm *parent)
 {
 	struct dtpm_cpu *dtpm_cpu;
-	struct cpufreq_policy *policy;
+	struct cpufreq_policy *policy __free(put_cpufreq_policy) = cpufreq_cpu_get(cpu);
 	struct em_perf_state *table;
 	struct em_perf_domain *pd;
 	char name[CPUFREQ_NAME_LEN];
@@ -202,21 +198,16 @@ static int __dtpm_cpu_setup(int cpu, struct dtpm *parent)
 	if (dtpm_cpu)
 		return 0;
 
-	policy = cpufreq_cpu_get(cpu);
 	if (!policy)
 		return 0;
 
 	pd = em_cpu_get(cpu);
-	if (!pd || em_is_artificial(pd)) {
-		ret = -EINVAL;
-		goto release_policy;
-	}
+	if (!pd || em_is_artificial(pd))
+		return -EINVAL;
 
 	dtpm_cpu = kzalloc(sizeof(*dtpm_cpu), GFP_KERNEL);
-	if (!dtpm_cpu) {
-		ret = -ENOMEM;
-		goto release_policy;
-	}
+	if (!dtpm_cpu)
+		return -ENOMEM;
 
 	dtpm_init(&dtpm_cpu->dtpm, &dtpm_ops);
 	dtpm_cpu->cpu = cpu;
@@ -239,7 +230,6 @@ static int __dtpm_cpu_setup(int cpu, struct dtpm *parent)
 	if (ret < 0)
 		goto out_dtpm_unregister;
 
-	cpufreq_cpu_put(policy);
 	return 0;
 
 out_dtpm_unregister:
@@ -251,8 +241,6 @@ out_kfree_dtpm_cpu:
 		per_cpu(dtpm_per_cpu, cpu) = NULL;
 	kfree(dtpm_cpu);
 
-release_policy:
-	cpufreq_cpu_put(policy);
 	return ret;
 }
 
