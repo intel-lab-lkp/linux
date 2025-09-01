@@ -820,11 +820,13 @@ struct btrfs_fs_info {
 	struct mutex reclaim_bgs_lock;
 
 	/* Cached block sizes */
-	u32 nodesize;
-	u32 nodesize_bits;
 	u32 sectorsize;
+	u32 nodesize;
 	/* ilog2 of sectorsize, use to avoid 64bit division */
-	u32 sectorsize_bits;
+	u8 sectorsize_bits;
+	u8 nodesize_bits;
+	u8 block_min_order;
+	u8 block_max_order;
 	u32 csum_size;
 	u32 csums_per_leaf;
 	u32 stripesize;

@@ -527,14 +527,14 @@ static inline void btrfs_update_inode_mapping_flags(struct btrfs_inode *inode)
 
 static inline void btrfs_set_inode_mapping_order(struct btrfs_inode *inode)
 {
+	struct btrfs_fs_info *fs_info = inode->root->fs_info;
 	/* Metadata inode should not reach here. */
 	ASSERT(is_data_inode(inode));
 
 	/* We only allow BITS_PER_LONGS blocks for each bitmap. */
 #ifdef CONFIG_BTRFS_EXPERIMENTAL
-	mapping_set_folio_order_range(inode->vfs_inode.i_mapping, 0,
-			ilog2(((BITS_PER_LONG << inode->root->fs_info->sectorsize_bits)
-				>> PAGE_SHIFT)));
+	mapping_set_folio_order_range(inode->vfs_inode.i_mapping, fs_info->block_min_order,
+				      fs_info->block_max_order);
 #endif
 }
 
