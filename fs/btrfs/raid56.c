@@ -1513,11 +1513,11 @@ static void set_bio_pages_uptodate(struct btrfs_raid_bio *rbio, struct bio *bio)
 {
 	const u32 sectorsize = rbio->bioc->fs_info->sectorsize;
 	struct bio_vec *bvec;
-	struct bvec_iter_all iter_all;
+	int i;
 
 	ASSERT(!bio_flagged(bio, BIO_CLONED));
 
-	bio_for_each_segment_all(bvec, bio, iter_all) {
+	bio_for_each_bvec_all(bvec, bio, i) {
 		struct sector_ptr *sector;
 		phys_addr_t paddr = bvec_phys(bvec);
 
@@ -1574,7 +1574,7 @@ static void verify_bio_data_sectors(struct btrfs_raid_bio *rbio,
 	struct btrfs_fs_info *fs_info = rbio->bioc->fs_info;
 	int total_sector_nr = get_bio_sector_nr(rbio, bio);
 	struct bio_vec *bvec;
-	struct bvec_iter_all iter_all;
+	int i;
 
 	/* No data csum for the whole stripe, no need to verify. */
 	if (!rbio->csum_bitmap || !rbio->csum_buf)
@@ -1584,7 +1584,7 @@ static void verify_bio_data_sectors(struct btrfs_raid_bio *rbio,
 	if (total_sector_nr >= rbio->nr_data * rbio->stripe_nsectors)
 		return;
 
-	bio_for_each_segment_all(bvec, bio, iter_all) {
+	bio_for_each_bvec_all(bvec, bio, i) {
 		void *kaddr;
 
 		kaddr = bvec_kmap_local(bvec);
