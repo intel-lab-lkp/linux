@@ -104,3 +104,18 @@ config FIPS_SIGNATURE_SELFTEST_ECDSA
 	depends on CRYPTO_ECDSA=y || CRYPTO_ECDSA=FIPS_SIGNATURE_SELFTEST
 
 endif # ASYMMETRIC_KEY_TYPE
+
+config PKCS7_MESSAGE_PARSER_KFUZZ
+	bool "Build fuzz target for PKCS#7 parser"
+	depends on KFUZZTEST
+	depends on PKCS7_MESSAGE_PARSER
+	default y
+	help
+	  Builds the KFuzzTest targets for PKCS#7.
+
+config RSA_HELPER_KFUZZ
+	bool "Build fuzz targets for RSA helpers"
+	depends on KFUZZTEST
+	default y
+	help
+	  Builds the KFuzzTest targets for RSA helper functions.
