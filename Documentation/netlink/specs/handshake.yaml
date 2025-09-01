@@ -87,6 +87,9 @@ attribute-sets:
         name: remote-auth
         type: u32
         multi-attr: true
+      -
+          name: record-size-limit
+          type: u32
 
 operations:
   list:
