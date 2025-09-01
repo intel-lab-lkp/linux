@@ -346,9 +346,9 @@ static struct irq_domain *dmar_get_irq_domain(void)
 	static DEFINE_MUTEX(dmar_lock);
 	struct fwnode_handle *fn;
 
-	mutex_lock(&dmar_lock);
+	guard(mutex)(&dmar_lock);
 	if (dmar_domain)
-		goto out;
+		return dmar_domain;
 
 	fn = irq_domain_alloc_named_fwnode("DMAR-MSI");
 	if (fn) {
@@ -357,8 +357,7 @@ static struct irq_domain *dmar_get_irq_domain(void)
 		if (!dmar_domain)
 			irq_domain_free_fwnode(fn);
 	}
-out:
-	mutex_unlock(&dmar_lock);
+
 	return dmar_domain;
 }
 
