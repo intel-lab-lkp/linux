@@ -1771,6 +1771,7 @@ static void margining_port_init(struct tb_port *port)
 	port->usb4->margining = margining_alloc(port, &port->usb4->dev,
 						USB4_SB_TARGET_ROUTER, 0,
 						parent);
+	dput(parent);
 }
 
 static void margining_port_remove(struct tb_port *port)
