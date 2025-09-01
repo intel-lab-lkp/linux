@@ -1554,7 +1554,7 @@ static int dw_dp_bridge_atomic_check(struct drm_bridge *bridge,
 
 	if ((adjusted_mode->hsync_start - adjusted_mode->hdisplay) & 0x1) {
 		adjusted_mode->hsync_start += 1;
-		dev_warn(dp->dev, "hfp is not 2 pixeel aligned, fixup to aligned hfp\n");
+		dev_warn(dp->dev, "hfp is not 2 pixel aligned, fixup to aligned hfp\n");
 	}
 
 	if (adjusted_mode->hsync_end - adjusted_mode->hsync_start < min_hsync) {
