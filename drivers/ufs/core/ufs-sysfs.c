@@ -512,7 +512,7 @@ static ssize_t pm_qos_enable_show(struct device *dev,
 {
 	struct ufs_hba *hba = dev_get_drvdata(dev);
 
-	return sysfs_emit(buf, "%d\n", hba->pm_qos_enabled);
+	return sysfs_emit(buf, "%d\n", READ_ONCE(hba->pm_qos_enabled));
 }
 
 /**
