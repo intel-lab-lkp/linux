@@ -40,7 +40,7 @@ struct vdso_arch_data *vdso_k_arch_data = &vdso_arch_data_store.data;
 static vm_fault_t vvar_fault(const struct vm_special_mapping *sm,
 			     struct vm_area_struct *vma, struct vm_fault *vmf)
 {
-	struct page *page, *timens_page;
+	struct page *page = ZERO_PAGE(0), *timens_page;
 	unsigned long addr;
 	vm_fault_t err;
 
@@ -52,7 +52,7 @@ static vm_fault_t vvar_fault(const struct vm_special_mapping *sm,
 	switch (vmf->pgoff) {
 	case VDSO_TIME_PAGE_OFFSET:
 		if (!IS_ENABLED(CONFIG_HAVE_GENERIC_VDSO))
-			return VM_FAULT_SIGBUS;
+			break;
 		page = virt_to_page(vdso_k_time_data);
 		if (timens_page) {
 			/*
@@ -75,17 +75,17 @@ static vm_fault_t vvar_fault(const struct vm_special_mapping *sm,
 		 * See also the comment near timens_setup_vdso_data().
 		 */
 		if (!IS_ENABLED(CONFIG_TIME_NS) || !timens_page)
-			return VM_FAULT_SIGBUS;
+			break;
 		page = virt_to_page(vdso_k_time_data);
 		break;
 	case VDSO_RNG_PAGE_OFFSET:
 		if (!IS_ENABLED(CONFIG_VDSO_GETRANDOM))
-			return VM_FAULT_SIGBUS;
+			break;
 		page = virt_to_page(vdso_k_rng_data);
 		break;
 	case VDSO_ARCH_PAGES_START ... VDSO_ARCH_PAGES_END:
 		if (!IS_ENABLED(CONFIG_ARCH_HAS_VDSO_ARCH_DATA))
-			return VM_FAULT_SIGBUS;
+			break;
 		page = virt_to_page(vdso_k_arch_data) + vmf->pgoff - VDSO_ARCH_PAGES_START;
 		break;
 	default:
