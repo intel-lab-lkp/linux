@@ -136,8 +136,17 @@
  * vblanks after a timer has expired, which can be configured through the
  * ``vblankoffdelay`` module parameter.
  *
- * Drivers for hardware without support for vertical-blanking interrupts
- * must not call drm_vblank_init(). For such drivers, atomic helpers will
+ * Drivers for hardware without support for vertical-blanking interrupts can
+ * use DRM vblank timers to send vblank events at the rate of the current
+ * display mode's refresh. While not synchronized to the hardware's
+ * vertical-blanking regions, the timer helps DRM clients and compositors to
+ * adapt their update cycle to the display output. Drivers should set up
+ * vblanking as usual, but call drm_crtc_vblank_start_timer() and
+ * drm_crtc_vblank_cancel_timer() as part of their atomic mode setting.
+ * See also DRM vblank helpers for more information.
+ *
+ * Drivers without support for vertical-blanking interrupts nor timers must
+ * not call drm_vblank_init(). For these drivers, atomic helpers will
  * automatically generate fake vblank events as part of the display update.
  * This functionality also can be controlled by the driver by enabling and
  * disabling struct drm_crtc_state.no_vblank.
@@ -2162,3 +2171,112 @@ err_free:
 	return ret;
 }
 
+/*
+ * VBLANK timer
+ */
+
+static enum hrtimer_restart drm_vblank_timer_function(struct hrtimer *timer)
+{
+	struct drm_vblank_crtc_timer *vtimer =
+		container_of(timer, struct drm_vblank_crtc_timer, timer);
+	struct drm_crtc *crtc = vtimer->crtc;
+	const struct drm_crtc_helper_funcs *crtc_funcs = crtc->helper_private;
+	struct drm_device *dev = crtc->dev;
+	u64 ret_overrun;
+	bool succ;
+
+	ret_overrun = hrtimer_forward_now(&vtimer->timer, vtimer->interval);
+	if (ret_overrun != 1)
+		drm_dbg_vbl(dev, "vblank timer overrun\n");
+
+	if (crtc_funcs->handle_vblank_timeout)
+		succ = crtc_funcs->handle_vblank_timeout(crtc);
+	else
+		succ = drm_crtc_handle_vblank(crtc);
+	if (!succ)
+		return HRTIMER_NORESTART;
+
+	return HRTIMER_RESTART;
+}
+
+/**
+ * drm_crtc_vblank_start_timer - Starts the vblank timer on the given CRTC
+ * @crtc: the CRTC
+ *
+ * Drivers should call this function from their CRTC's enable_vblank
+ * function to start a vblank timer. The timer will fire after the duration
+ * of a full frame. drm_crtc_vblank_cancel_timer() disables a running timer.
+ *
+ * Returns:
+ * 0 on success, or a negative errno code otherwise.
+ */
+int drm_crtc_vblank_start_timer(struct drm_crtc *crtc)
+{
+	struct drm_vblank_crtc *vblank = drm_crtc_vblank_crtc(crtc);
+	struct drm_vblank_crtc_timer *vtimer = &vblank->vblank_timer;
+
+	if (!vtimer->crtc) {
+		vtimer->crtc = crtc;
+		hrtimer_setup(&vtimer->timer, drm_vblank_timer_function,
+			      CLOCK_MONOTONIC, HRTIMER_MODE_REL);
+	}
+
+	drm_calc_timestamping_constants(crtc, &crtc->mode);
+
+	vtimer->interval = ktime_set(0, vblank->framedur_ns);
+	hrtimer_start(&vtimer->timer, vtimer->interval, HRTIMER_MODE_REL);
+
+	return 0;
+}
+EXPORT_SYMBOL(drm_crtc_vblank_start_timer);
+
+/**
+ * drm_crtc_vblank_start_timer - Cancels the given CRTC's vblank timer
+ * @crtc: the CRTC
+ *
+ * Drivers should call this function from their CRTC's disable_vblank
+ * function to stop a vblank timer.
+ */
+void drm_crtc_vblank_cancel_timer(struct drm_crtc *crtc)
+{
+	struct drm_vblank_crtc *vblank = drm_crtc_vblank_crtc(crtc);
+	struct drm_vblank_crtc_timer *vtimer = &vblank->vblank_timer;
+
+	hrtimer_cancel(&vtimer->timer);
+}
+EXPORT_SYMBOL(drm_crtc_vblank_cancel_timer);
+
+/**
+ * drm_crtc_vblank_get_vblank_timeout - Returns the vblank timeout
+ * @crtc: The CRTC
+ * @vblank_time: Returns the next vblank timestamp
+ *
+ * The helper drm_crtc_vblank_get_vblank_timeout() returns the next vblank
+ * timestamp of the CRTC's vblank timer according to the timer's expiry
+ * time.
+ */
+void drm_crtc_vblank_get_vblank_timeout(struct drm_crtc *crtc, ktime_t *vblank_time)
+{
+	struct drm_vblank_crtc *vblank = drm_crtc_vblank_crtc(crtc);
+	struct drm_vblank_crtc_timer *vtimer = &vblank->vblank_timer;
+
+	if (!READ_ONCE(vblank->enabled)) {
+		*vblank_time = ktime_get();
+		return;
+	}
+
+	*vblank_time = READ_ONCE(vtimer->timer.node.expires);
+
+	if (drm_WARN_ON(crtc->dev, !ktime_compare(*vblank_time, vblank->time)))
+		return; /* Already expired */
+
+	/*
+	 * To prevent races we roll the hrtimer forward before we do any
+	 * interrupt processing - this is how real hw works (the interrupt
+	 * is only generated after all the vblank registers are updated)
+	 * and what the vblank core expects. Therefore we need to always
+	 * correct the timestamp by one frame.
+	 */
+	*vblank_time = ktime_sub(*vblank_time, vtimer->interval);
+}
+EXPORT_SYMBOL(drm_crtc_vblank_get_vblank_timeout);
