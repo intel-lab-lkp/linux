@@ -50,6 +50,15 @@ struct ad7816_chip_info {
 	u8  oti_data[AD7816_CS_MAX + 1];
 	u8  channel_id;	/* 0 always be temperature */
 	u8  mode;
+  /*
+   * Protects:
+   *  - SPI transactions
+   *  - GPIO toggling
+   *  - channel_id
+   *  - mode
+   *  - oti_data
+   */
+	struct mutex io_lock;
 };
 
 enum ad7816_type {
@@ -59,60 +68,71 @@ enum ad7816_type {
 };
 
 /*
- * ad7816 data access by SPI
+ * ad7816 data access by SPI - locked versions assume io_lock is held
  */
-static int ad7816_spi_read(struct ad7816_chip_info *chip, u16 *data)
+static int ad7816_spi_read_locked(struct ad7816_chip_info *chip, u8 channel, u16 *data)
 {
 	struct spi_device *spi_dev = chip->spi_dev;
 	int ret;
 	__be16 buf;
 
-	gpiod_set_value(chip->rdwr_pin, 1);
-	gpiod_set_value(chip->rdwr_pin, 0);
-	ret = spi_write(spi_dev, &chip->channel_id, sizeof(chip->channel_id));
-	if (ret < 0) {
-		dev_err(&spi_dev->dev, "SPI channel setting error\n");
+	gpiod_set_value_cansleep(chip->rdwr_pin, 1);
+	gpiod_set_value_cansleep(chip->rdwr_pin, 0);
+	/* AD7816_CS_MASK: broadcast/all-channels per hw programming model */
+	ret = spi_write(spi_dev, &channel, sizeof(channel));
+	if (ret < 0)
 		return ret;
-	}
-	gpiod_set_value(chip->rdwr_pin, 1);
+	gpiod_set_value_cansleep(chip->rdwr_pin, 1);
 
 	if (chip->mode == AD7816_PD) { /* operating mode 2 */
-		gpiod_set_value(chip->convert_pin, 1);
-		gpiod_set_value(chip->convert_pin, 0);
+		gpiod_set_value_cansleep(chip->convert_pin, 1);
+		gpiod_set_value_cansleep(chip->convert_pin, 0);
 	} else { /* operating mode 1 */
-		gpiod_set_value(chip->convert_pin, 0);
-		gpiod_set_value(chip->convert_pin, 1);
+		gpiod_set_value_cansleep(chip->convert_pin, 0);
+		gpiod_set_value_cansleep(chip->convert_pin, 1);
 	}
 
 	if (chip->id == ID_AD7816 || chip->id == ID_AD7817) {
-		while (gpiod_get_value(chip->busy_pin))
+		while (gpiod_get_value_cansleep(chip->busy_pin))
 			cpu_relax();
 	}
 
-	gpiod_set_value(chip->rdwr_pin, 0);
-	gpiod_set_value(chip->rdwr_pin, 1);
-	ret = spi_read(spi_dev, &buf, sizeof(*data));
-	if (ret < 0) {
-		dev_err(&spi_dev->dev, "SPI data read error\n");
+	gpiod_set_value_cansleep(chip->rdwr_pin, 0);
+	gpiod_set_value_cansleep(chip->rdwr_pin, 1);
+	ret = spi_read(spi_dev, &buf, sizeof(buf));
+	if (ret < 0)
 		return ret;
-	}
 
 	*data = be16_to_cpu(buf);
+	return 0;
+}
 
+static int __maybe_unused ad7816_spi_read(struct ad7816_chip_info *chip, u8 channel, u16 *data)
+{
+	int ret;
+
+	mutex_lock(&chip->io_lock);
+	ret = ad7816_spi_read_locked(chip, channel, data);
+	mutex_unlock(&chip->io_lock);
 	return ret;
 }
 
-static int ad7816_spi_write(struct ad7816_chip_info *chip, u8 data)
+static int ad7816_spi_write_locked(struct ad7816_chip_info *chip, u8 data)
 {
 	struct spi_device *spi_dev = chip->spi_dev;
+
+	gpiod_set_value_cansleep(chip->rdwr_pin, 1);
+	gpiod_set_value_cansleep(chip->rdwr_pin, 0);
+	return spi_write(spi_dev, &data, sizeof(data));
+}
+
+static int __maybe_unused ad7816_spi_write(struct ad7816_chip_info *chip, u8 data)
+{
 	int ret;
 
-	gpiod_set_value(chip->rdwr_pin, 1);
-	gpiod_set_value(chip->rdwr_pin, 0);
-	ret = spi_write(spi_dev, &data, sizeof(data));
-	if (ret < 0)
-		dev_err(&spi_dev->dev, "SPI oti data write error\n");
-
+	mutex_lock(&chip->io_lock);
+	ret = ad7816_spi_write_locked(chip, data);
+	mutex_unlock(&chip->io_lock);
 	return ret;
 }
 
@@ -122,10 +142,13 @@ static ssize_t ad7816_show_mode(struct device *dev,
 {
 	struct iio_dev *indio_dev = dev_to_iio_dev(dev);
 	struct ad7816_chip_info *chip = iio_priv(indio_dev);
+	ssize_t ret;
 
-	if (chip->mode)
-		return sprintf(buf, "power-save\n");
-	return sprintf(buf, "full\n");
+	mutex_lock(&chip->io_lock);
+	ret = sysfs_emit(buf, "%s\n", chip->mode ? "power-save" : "full");
+	mutex_unlock(&chip->io_lock);
+
+	return ret;
 }
 
 static ssize_t ad7816_store_mode(struct device *dev,
@@ -136,13 +159,18 @@ static ssize_t ad7816_store_mode(struct device *dev,
 	struct iio_dev *indio_dev = dev_to_iio_dev(dev);
 	struct ad7816_chip_info *chip = iio_priv(indio_dev);
 
-	if (strcmp(buf, "full") == 0) {
-		gpiod_set_value(chip->rdwr_pin, 1);
+	mutex_lock(&chip->io_lock);
+	if (sysfs_streq(buf, "full")) {
+		gpiod_set_value_cansleep(chip->rdwr_pin, 1);
 		chip->mode = AD7816_FULL;
-	} else {
-		gpiod_set_value(chip->rdwr_pin, 0);
+	} else if (sysfs_streq(buf, "power-save")) {
+		gpiod_set_value_cansleep(chip->rdwr_pin, 0);
 		chip->mode = AD7816_PD;
+	} else {
+		mutex_unlock(&chip->io_lock);
+		return -EINVAL;
 	}
+	mutex_unlock(&chip->io_lock);
 
 	return len;
 }
@@ -156,7 +184,7 @@ static ssize_t ad7816_show_available_modes(struct device *dev,
 					   struct device_attribute *attr,
 					   char *buf)
 {
-	return sprintf(buf, "full\npower-save\n");
+	return sysfs_emit(buf, "full\npower-save\n");
 }
 
 static IIO_DEVICE_ATTR(available_modes, 0444, ad7816_show_available_modes,
@@ -168,8 +196,13 @@ static ssize_t ad7816_show_channel(struct device *dev,
 {
 	struct iio_dev *indio_dev = dev_to_iio_dev(dev);
 	struct ad7816_chip_info *chip = iio_priv(indio_dev);
+	ssize_t ret;
 
-	return sprintf(buf, "%d\n", chip->channel_id);
+	mutex_lock(&chip->io_lock);
+	ret = sysfs_emit(buf, "%u\n", chip->channel_id);
+	mutex_unlock(&chip->io_lock);
+
+	return ret;
 }
 
 static ssize_t ad7816_store_channel(struct device *dev,
@@ -190,17 +223,34 @@ static ssize_t ad7816_store_channel(struct device *dev,
 		dev_err(&chip->spi_dev->dev, "Invalid channel id %lu for %s.\n",
 			data, indio_dev->name);
 		return -EINVAL;
-	} else if (strcmp(indio_dev->name, "ad7818") == 0 && data > 1) {
-		dev_err(&chip->spi_dev->dev,
-			"Invalid channel id %lu for ad7818.\n", data);
-		return -EINVAL;
-	} else if (strcmp(indio_dev->name, "ad7816") == 0 && data > 0) {
-		dev_err(&chip->spi_dev->dev,
-			"Invalid channel id %lu for ad7816.\n", data);
+	}
+
+	switch (chip->id) {
+	case ID_AD7816:
+		if (data > 0) {
+			dev_err(&chip->spi_dev->dev,
+				"Invalid channel id %lu for ad7816.\n", data);
+			return -EINVAL;
+		}
+		break;
+	case ID_AD7818:
+		if (data > 1) {
+			dev_err(&chip->spi_dev->dev,
+				"Invalid channel id %lu for ad7818.\n", data);
+			return -EINVAL;
+		}
+		break;
+	case ID_AD7817:
+		/* AD7817 allows all channels up to AD7816_CS_MAX */
+		break;
+	default:
+		dev_err(&chip->spi_dev->dev, "Unknown chip id %lu\n", chip->id);
 		return -EINVAL;
 	}
 
-	chip->channel_id = data;
+	mutex_lock(&chip->io_lock);
+	chip->channel_id = (u8)data;
+	mutex_unlock(&chip->io_lock);
 
 	return len;
 }
@@ -219,21 +269,25 @@ static ssize_t ad7816_show_value(struct device *dev,
 	u16 data;
 	s8 value;
 	int ret;
+	u8 ch;
 
-	ret = ad7816_spi_read(chip, &data);
+	mutex_lock(&chip->io_lock);
+	ch = chip->channel_id;                                   /* snapshot */
+	ret = ad7816_spi_read_locked(chip, ch, &data);           /* same lock */
+	mutex_unlock(&chip->io_lock);
 	if (ret)
-		return -EIO;
+		return ret;
 
 	data >>= AD7816_VALUE_OFFSET;
 
-	if (chip->channel_id == 0) {
+	if (ch == 0) {
 		value = (s8)((data >> AD7816_TEMP_FLOAT_OFFSET) - 103);
 		data &= AD7816_TEMP_FLOAT_MASK;
 		if (value < 0)
 			data = BIT(AD7816_TEMP_FLOAT_OFFSET) - data;
-		return sprintf(buf, "%d.%.2d\n", value, data * 25);
+		return sysfs_emit(buf, "%d.%.2d\n", value, data * 25);
 	}
-	return sprintf(buf, "%u\n", data);
+	return sysfs_emit(buf, "%u\n", data);
 }
 
 static IIO_DEVICE_ATTR(value, 0444, ad7816_show_value, NULL, 0);
@@ -273,58 +327,69 @@ static ssize_t ad7816_show_oti(struct device *dev,
 	struct iio_dev *indio_dev = dev_to_iio_dev(dev);
 	struct ad7816_chip_info *chip = iio_priv(indio_dev);
 	int value;
+	ssize_t ret;
 
+	mutex_lock(&chip->io_lock);
 	if (chip->channel_id > AD7816_CS_MAX) {
-		dev_err(dev, "Invalid oti channel id %d.\n", chip->channel_id);
+		dev_err(dev, "Invalid oti channel id %u.\n", chip->channel_id);
+		mutex_unlock(&chip->io_lock);
 		return -EINVAL;
 	} else if (chip->channel_id == 0) {
 		value = AD7816_BOUND_VALUE_MIN +
-			(chip->oti_data[chip->channel_id] -
-			AD7816_BOUND_VALUE_BASE);
-		return sprintf(buf, "%d\n", value);
+			(chip->oti_data[chip->channel_id] - AD7816_BOUND_VALUE_BASE);
+		ret = sysfs_emit(buf, "%d\n", value);
+	} else {
+		ret = sysfs_emit(buf, "%u\n", chip->oti_data[chip->channel_id]);
 	}
-	return sprintf(buf, "%u\n", chip->oti_data[chip->channel_id]);
+	mutex_unlock(&chip->io_lock);
+
+	return ret;
 }
 
-static inline ssize_t ad7816_set_oti(struct device *dev,
-				     struct device_attribute *attr,
-				     const char *buf,
-				     size_t len)
+static ssize_t ad7816_set_oti(struct device *dev,
+			      struct device_attribute *attr,
+			      const char *buf,
+			      size_t len)
 {
 	struct iio_dev *indio_dev = dev_to_iio_dev(dev);
 	struct ad7816_chip_info *chip = iio_priv(indio_dev);
 	long value;
-	u8 data;
+	u8 data, ch;
 	int ret;
 
 	ret = kstrtol(buf, 10, &value);
 	if (ret)
 		return ret;
 
-	if (chip->channel_id > AD7816_CS_MAX) {
-		dev_err(dev, "Invalid oti channel id %d.\n", chip->channel_id);
-		return -EINVAL;
-	} else if (chip->channel_id == 0) {
-		if (value < AD7816_BOUND_VALUE_MIN ||
-		    value > AD7816_BOUND_VALUE_MAX)
-			return -EINVAL;
+	mutex_lock(&chip->io_lock);
+	ch = chip->channel_id;
 
+	if (ch > AD7816_CS_MAX) {
+		dev_err(dev, "Invalid oti channel id %u.\n", ch);
+		mutex_unlock(&chip->io_lock);
+		return -EINVAL;
+	} else if (ch == 0) {
+		if (value < AD7816_BOUND_VALUE_MIN ||
+		    value > AD7816_BOUND_VALUE_MAX) {
+			mutex_unlock(&chip->io_lock);
+			return -EINVAL;
+		}
 		data = (u8)(value - AD7816_BOUND_VALUE_MIN +
 			AD7816_BOUND_VALUE_BASE);
 	} else {
-		if (value < AD7816_BOUND_VALUE_BASE || value > 255)
+		if (value < AD7816_BOUND_VALUE_BASE || value > 255) {
+			mutex_unlock(&chip->io_lock);
 			return -EINVAL;
-
+		}
 		data = (u8)value;
 	}
 
-	ret = ad7816_spi_write(chip, data);
-	if (ret)
-		return -EIO;
+	ret = ad7816_spi_write_locked(chip, data);
+	if (!ret)
+		chip->oti_data[ch] = data;
 
-	chip->oti_data[chip->channel_id] = data;
-
-	return len;
+	mutex_unlock(&chip->io_lock);
+	return ret ? ret : len;
 }
 
 static IIO_DEVICE_ATTR(oti, 0644,
@@ -363,6 +428,7 @@ static int ad7816_probe(struct spi_device *spi_dev)
 	dev_set_drvdata(&spi_dev->dev, indio_dev);
 
 	chip->spi_dev = spi_dev;
+	mutex_init(&chip->io_lock);
 	for (i = 0; i <= AD7816_CS_MAX; i++)
 		chip->oti_data[i] = 203;
 
