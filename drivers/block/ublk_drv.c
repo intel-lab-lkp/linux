@@ -116,6 +116,10 @@ struct ublk_uring_cmd_pdu {
 struct ublk_batch_io_data {
 	struct ublk_queue *ubq;
 	struct io_uring_cmd *cmd;
+	unsigned int issue_flags;
+
+	/* set when walking the element buffer */
+	const struct ublk_elem_header *elem;
 };
 
 /*
@@ -200,6 +204,7 @@ struct ublk_io {
 	unsigned task_registered_buffers;
 
 	void *buf_ctx_handle;
+	spinlock_t lock;
 } ____cacheline_aligned_in_smp;
 
 struct ublk_queue {
@@ -274,6 +279,16 @@ static inline bool ublk_dev_support_batch_io(const struct ublk_device *ub)
 static inline bool ublk_support_batch_io(const struct ublk_queue *ubq)
 {
 	return false;
+}
+
+static inline void ublk_io_lock(struct ublk_io *io)
+{
+	spin_lock(&io->lock);
+}
+
+static inline void ublk_io_unlock(struct ublk_io *io)
+{
+	spin_unlock(&io->lock);
 }
 
 static inline struct ublksrv_io_desc *
@@ -2542,6 +2557,171 @@ static int ublk_ch_uring_cmd(struct io_uring_cmd *cmd, unsigned int issue_flags)
 	return ublk_ch_uring_cmd_local(cmd, issue_flags);
 }
 
+static inline __u64 ublk_batch_buf_addr(const struct ublk_batch_io *uc,
+					const struct ublk_elem_header *elem)
+{
+	const void *buf = (const void *)elem;
+
+	if (uc->flags & UBLK_BATCH_F_HAS_BUF_ADDR)
+		return *(__u64 *)(buf + sizeof(*elem));
+	return -1;
+}
+
+static struct ublk_auto_buf_reg
+ublk_batch_auto_buf_reg(const struct ublk_batch_io *uc,
+			const struct ublk_elem_header *elem)
+{
+	struct ublk_auto_buf_reg reg = {
+		.index = elem->buf_index,
+		.flags = (uc->flags & UBLK_BATCH_F_AUTO_BUF_REG_FALLBACK) ?
+			UBLK_AUTO_BUF_REG_FALLBACK : 0,
+	};
+
+	return reg;
+}
+
+/* 48 can cover any type of buffer element(8, 16 and 24 bytes) */
+#define UBLK_CMD_BATCH_TMP_BUF_SZ  (48 * 10)
+struct ublk_batch_io_iter {
+	/* copy to this buffer from iterator first */
+	unsigned char buf[UBLK_CMD_BATCH_TMP_BUF_SZ];
+	struct iov_iter iter;
+	unsigned done, total;
+	unsigned char elem_bytes;
+};
+
+static int __ublk_walk_cmd_buf(struct ublk_batch_io_iter *iter,
+				struct ublk_batch_io_data *data,
+				unsigned bytes,
+				int (*cb)(struct ublk_io *io,
+					const struct ublk_batch_io_data *data))
+{
+	int i, ret = 0;
+
+	for (i = 0; i < bytes; i += iter->elem_bytes) {
+		const struct ublk_elem_header *elem =
+			(const struct ublk_elem_header *)&iter->buf[i];
+		struct ublk_io *io;
+
+		if (unlikely(elem->tag >= data->ubq->q_depth)) {
+			ret = -EINVAL;
+			break;
+		}
+
+		io = &data->ubq->ios[elem->tag];
+		data->elem = elem;
+		ret = cb(io, data);
+		if (unlikely(ret))
+			break;
+	}
+	iter->done += i;
+	return ret;
+}
+
+static int ublk_walk_cmd_buf(struct ublk_batch_io_iter *iter,
+			     struct ublk_batch_io_data *data,
+			     int (*cb)(struct ublk_io *io,
+				     const struct ublk_batch_io_data *data))
+{
+	int ret = 0;
+
+	while (iter->done < iter->total) {
+		unsigned int len = min(sizeof(iter->buf), iter->total - iter->done);
+
+		ret = copy_from_iter(iter->buf, len, &iter->iter);
+		if (ret != len) {
+			pr_warn("ublk%d: read batch cmd buffer failed %u/%u\n",
+					data->ubq->dev->dev_info.dev_id, ret, len);
+			ret = -EINVAL;
+			break;
+		}
+
+		ret = __ublk_walk_cmd_buf(iter, data, len, cb);
+		if (ret)
+			break;
+	}
+	return ret;
+}
+
+static int ublk_batch_unprep_io(struct ublk_io *io,
+				const struct ublk_batch_io_data *data)
+{
+	if (ublk_queue_ready(data->ubq))
+		data->ubq->dev->nr_queues_ready--;
+
+	ublk_io_lock(io);
+	io->flags = 0;
+	ublk_io_unlock(io);
+	data->ubq->nr_io_ready--;
+	return 0;
+}
+
+static void ublk_batch_revert_prep_cmd(struct ublk_batch_io_iter *iter,
+				       struct ublk_batch_io_data *data)
+{
+	int ret;
+
+	if (!iter->done)
+		return;
+
+	iov_iter_revert(&iter->iter, iter->done);
+	iter->total = iter->done;
+	iter->done = 0;
+
+	ret = ublk_walk_cmd_buf(iter, data, ublk_batch_unprep_io);
+	WARN_ON_ONCE(ret);
+}
+
+static int ublk_batch_prep_io(struct ublk_io *io,
+			      const struct ublk_batch_io_data *data)
+{
+	const struct ublk_batch_io *uc = io_uring_sqe_cmd(data->cmd->sqe);
+	union ublk_io_buf buf = { 0 };
+	int ret;
+
+	if (ublk_support_auto_buf_reg(data->ubq))
+		buf.auto_reg = ublk_batch_auto_buf_reg(uc, data->elem);
+	else if (ublk_need_map_io(data->ubq)) {
+		buf.addr = ublk_batch_buf_addr(uc, data->elem);
+
+		ret = ublk_check_fetch_buf(data->ubq, buf.addr);
+		if (ret)
+			return ret;
+	}
+
+	ublk_io_lock(io);
+	ret = __ublk_fetch(data->cmd, data->ubq, io);
+	if (!ret)
+		io->buf = buf;
+	ublk_io_unlock(io);
+
+	return ret;
+}
+
+static int ublk_handle_batch_prep_cmd(struct ublk_batch_io_data *data)
+{
+	struct io_uring_cmd *cmd = data->cmd;
+	const struct ublk_batch_io *uc = io_uring_sqe_cmd(cmd->sqe);
+	struct ublk_batch_io_iter iter = {
+		.total = uc->nr_elem * uc->elem_bytes,
+		.elem_bytes = uc->elem_bytes,
+	};
+	int ret;
+
+	ret = io_uring_cmd_import_fixed(cmd->sqe->addr, cmd->sqe->len,
+			WRITE, &iter.iter, cmd, data->issue_flags);
+	if (ret)
+		return ret;
+
+	mutex_lock(&data->ubq->dev->mutex);
+	ret = ublk_walk_cmd_buf(&iter, data, ublk_batch_prep_io);
+
+	if (ret && iter.done)
+		ublk_batch_revert_prep_cmd(&iter, data);
+	mutex_unlock(&data->ubq->dev->mutex);
+	return ret;
+}
+
 static int ublk_check_batch_cmd_flags(const struct ublk_batch_io *uc)
 {
 	const unsigned short mask = UBLK_BATCH_F_HAS_BUF_ADDR |
@@ -2613,6 +2793,7 @@ static int ublk_ch_batch_io_uring_cmd(struct io_uring_cmd *cmd,
 	struct ublk_device *ub = cmd->file->private_data;
 	struct ublk_batch_io_data data = {
 		.cmd = cmd,
+		.issue_flags = issue_flags,
 	};
 	u32 cmd_op = cmd->cmd_op;
 	int ret = -EINVAL;
@@ -2623,6 +2804,11 @@ static int ublk_ch_batch_io_uring_cmd(struct io_uring_cmd *cmd,
 
 	switch (cmd_op) {
 	case UBLK_U_IO_PREP_IO_CMDS:
+		ret = ublk_check_batch_cmd(&data, uc);
+		if (ret)
+			goto out;
+		ret = ublk_handle_batch_prep_cmd(&data);
+		break;
 	case UBLK_U_IO_COMMIT_IO_CMDS:
 		ret = ublk_check_batch_cmd(&data, uc);
 		if (ret)
@@ -2784,7 +2970,7 @@ static int ublk_init_queue(struct ublk_device *ub, int q_id)
 	struct ublk_queue *ubq = ublk_get_queue(ub, q_id);
 	gfp_t gfp_flags = GFP_KERNEL | __GFP_ZERO;
 	void *ptr;
-	int size;
+	int size, i;
 
 	spin_lock_init(&ubq->cancel_lock);
 	ubq->flags = ub->dev_info.flags;
@@ -2795,6 +2981,9 @@ static int ublk_init_queue(struct ublk_device *ub, int q_id)
 	ptr = (void *) __get_free_pages(gfp_flags, get_order(size));
 	if (!ptr)
 		return -ENOMEM;
+
+	for (i = 0; i < ubq->q_depth; i++)
+		spin_lock_init(&ubq->ios[i].lock);
 
 	ubq->io_cmd_buf = ptr;
 	ubq->dev = ub;
