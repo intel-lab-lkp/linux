@@ -613,22 +613,23 @@ static void do_update_region(struct vc_data *vc, unsigned long start, int count)
 {
 	unsigned int xx, yy, offset;
 	u16 *p = (u16 *)start;
+	u16 mask = 0xff00 & ~vc->vc_hi_font_mask;
 
 	offset = (start - vc->vc_origin) / 2;
 	xx = offset % vc->vc_cols;
 	yy = offset / vc->vc_cols;
 
 	for(;;) {
-		u16 attrib = scr_readw(p) & 0xff00;
+		u16 attrib = scr_readw(p) & mask;
 		int startx = xx;
 		u16 *q = p;
 		while (xx < vc->vc_cols && count) {
-			if (attrib != (scr_readw(p) & 0xff00)) {
+			if (attrib != (scr_readw(p) & mask)) {
 				if (p > q)
 					vc->vc_sw->con_putcs(vc, q, p-q, yy, startx);
 				startx = xx;
 				q = p;
-				attrib = scr_readw(p) & 0xff00;
+				attrib = scr_readw(p) & mask;
 			}
 			p++;
 			xx++;
