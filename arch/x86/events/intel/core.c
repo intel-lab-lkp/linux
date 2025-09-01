@@ -6110,18 +6110,16 @@ static ssize_t freeze_on_smi_store(struct device *cdev,
 	if (val > 1)
 		return -EINVAL;
 
-	mutex_lock(&freeze_on_smi_mutex);
+	guard(mutex)(&freeze_on_smi_mutex);
 
 	if (x86_pmu.attr_freeze_on_smi == val)
-		goto done;
+		return count;
 
 	x86_pmu.attr_freeze_on_smi = val;
 
 	cpus_read_lock();
 	on_each_cpu(flip_smm_bit, &val, 1);
 	cpus_read_unlock();
-done:
-	mutex_unlock(&freeze_on_smi_mutex);
 
 	return count;
 }
