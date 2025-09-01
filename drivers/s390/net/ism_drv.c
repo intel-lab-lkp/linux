@@ -718,8 +718,12 @@ static int __init ism_init(void)
 	debug_register_view(ism_debug_info, &debug_hex_ascii_view);
 	ret = pci_register_driver(&ism_driver);
 	if (ret)
-		debug_unregister(ism_debug_info);
+		goto err_dbg_unreg;
+	pr_info("module loaded\n");
+	return 0;
 
+err_dbg_unreg:
+	debug_unregister(ism_debug_info);
 	return ret;
 }
 
@@ -727,6 +731,7 @@ static void __exit ism_exit(void)
 {
 	pci_unregister_driver(&ism_driver);
 	debug_unregister(ism_debug_info);
+	pr_info("module unloaded\n");
 }
 
 module_init(ism_init);
