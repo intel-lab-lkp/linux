@@ -1297,7 +1297,6 @@ enum xhci_cancelled_td_status {
 	TD_HALTED,
 	TD_CLEARING_CACHE,
 	TD_CLEARING_CACHE_DEFERRED,
-	TD_CLEARED,
 };
 
 struct xhci_td {
