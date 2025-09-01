@@ -1214,7 +1214,7 @@ static void index_one_bio(struct btrfs_raid_bio *rbio, struct bio *bio)
 	while (iter.bi_size) {
 		unsigned int index = (offset >> sectorsize_bits);
 		struct sector_ptr *sector = &rbio->bio_sectors[index];
-		struct bio_vec bv = bio_iter_iovec(bio, iter);
+		struct bio_vec bv = mp_bvec_iter_bvec(bio->bi_io_vec, iter);
 
 		sector->has_paddr = true;
 		sector->paddr = bvec_phys(&bv);

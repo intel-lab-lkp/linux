@@ -1227,14 +1227,13 @@ int btrfs_decompress_buf2page(const char *buf, u32 buf_len,
 	cur_offset = decompressed;
 	/* The main loop to do the copy */
 	while (cur_offset < decompressed + buf_len) {
-		struct bio_vec bvec;
+		struct bio_vec bvec = mp_bvec_iter_bvec(orig_bio->bi_io_vec, orig_bio->bi_iter);
 		size_t copy_len;
 		u32 copy_start;
 		/* Offset inside the full decompressed extent */
 		u32 bvec_offset;
 		void *kaddr;
 
-		bvec = bio_iter_iovec(orig_bio, orig_bio->bi_iter);
 		/*
 		 * cb->start may underflow, but subtracting that value can still
 		 * give us correct offset inside the full decompressed extent.

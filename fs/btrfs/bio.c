@@ -277,8 +277,9 @@ static void btrfs_check_read_bio(struct btrfs_bio *bbio, struct btrfs_device *de
 	bbio->bio.bi_status = BLK_STS_OK;
 
 	while (iter->bi_size) {
-		struct bio_vec bv = bio_iter_iovec(&bbio->bio, *iter);
+		struct bio_vec bv = mp_bvec_iter_bvec(bbio->bio.bi_io_vec, *iter);
 
+		ASSERT(bv.bv_len >= sectorsize && IS_ALIGNED(bv.bv_len, sectorsize));
 		bv.bv_len = min(bv.bv_len, sectorsize);
 		if (status || !btrfs_data_csum_ok(bbio, dev, offset, &bv))
 			fbio = repair_one_sector(bbio, offset, &bv, fbio);
