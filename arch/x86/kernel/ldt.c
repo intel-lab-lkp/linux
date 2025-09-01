@@ -451,20 +451,18 @@ static void free_ldt_struct(struct ldt_struct *ldt)
 int ldt_dup_context(struct mm_struct *old_mm, struct mm_struct *mm)
 {
 	struct ldt_struct *new_ldt;
-	int retval = 0;
+	int retval;
 
 	if (!old_mm)
 		return 0;
 
-	mutex_lock(&old_mm->context.lock);
+	guard(mutex)(&old_mm->context.lock);
 	if (!old_mm->context.ldt)
-		goto out_unlock;
+		return 0;
 
 	new_ldt = alloc_ldt_struct(old_mm->context.ldt->nr_entries);
-	if (!new_ldt) {
-		retval = -ENOMEM;
-		goto out_unlock;
-	}
+	if (!new_ldt)
+		return -ENOMEM;
 
 	memcpy(new_ldt->entries, old_mm->context.ldt->entries,
 	       new_ldt->nr_entries * LDT_ENTRY_SIZE);
@@ -474,12 +472,10 @@ int ldt_dup_context(struct mm_struct *old_mm, struct mm_struct *mm)
 	if (retval) {
 		free_ldt_pgtables(mm);
 		free_ldt_struct(new_ldt);
-		goto out_unlock;
+		return retval;
 	}
 	mm->context.ldt = new_ldt;
 
-out_unlock:
-	mutex_unlock(&old_mm->context.lock);
 	return retval;
 }
 
