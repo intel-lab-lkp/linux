@@ -587,9 +587,9 @@ static struct request *blk_mq_rq_cache_fill(struct request_queue *q,
 	if (blk_queue_enter(q, flags))
 		return NULL;
 
-	plug->nr_ios = 1;
-
 	rq = __blk_mq_alloc_requests(&data);
+	plug->nr_ios = data.nr_tags;
+
 	if (unlikely(!rq))
 		blk_queue_exit(q);
 	return rq;
@@ -3034,11 +3034,13 @@ static struct request *blk_mq_get_new_requests(struct request_queue *q,
 
 	if (plug) {
 		data.nr_tags = plug->nr_ios;
-		plug->nr_ios = 1;
 		data.cached_rqs = &plug->cached_rqs;
 	}
 
 	rq = __blk_mq_alloc_requests(&data);
+	if (plug)
+		plug->nr_ios = data.nr_tags;
+
 	if (unlikely(!rq))
 		rq_qos_cleanup(q, bio);
 	return rq;
