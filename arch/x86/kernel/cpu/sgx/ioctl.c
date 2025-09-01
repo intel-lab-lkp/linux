@@ -501,7 +501,7 @@ static int sgx_encl_init(struct sgx_encl *encl, struct sgx_sigstruct *sigstruct,
 
 	sha256(sigstruct->modulus, SGX_MODULUS_SIZE, (u8 *)mrsigner);
 
-	mutex_lock(&encl->lock);
+	guard(mutex)(&encl->lock);
 
 	/*
 	 * ENCLS[EINIT] is interruptible because it has such a high latency,
@@ -534,7 +534,7 @@ static int sgx_encl_init(struct sgx_encl *encl, struct sgx_sigstruct *sigstruct,
 
 		if (signal_pending(current)) {
 			ret = -ERESTARTSYS;
-			goto err_out;
+			return ret;
 		}
 	}
 
@@ -550,8 +550,6 @@ static int sgx_encl_init(struct sgx_encl *encl, struct sgx_sigstruct *sigstruct,
 		set_bit(SGX_ENCL_INITIALIZED, &encl->flags);
 	}
 
-err_out:
-	mutex_unlock(&encl->lock);
 	return ret;
 }
 
