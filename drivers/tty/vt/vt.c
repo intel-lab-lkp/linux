@@ -3361,7 +3361,8 @@ static void vt_console_print(struct console *co, const char *b, unsigned count)
 				continue;
 		}
 		vc_uniscr_putc(vc, c);
-		scr_writew((vc->vc_attr << 8) + c, (unsigned short *)vc->vc_pos);
+		scr_writew(((vc->vc_attr << 8) & ~vc->vc_hi_font_mask) | c,
+			   (unsigned short *)vc->vc_pos);
 		notify_write(vc, c);
 		cnt++;
 		if (vc->state.x == vc->vc_cols - 1) {
