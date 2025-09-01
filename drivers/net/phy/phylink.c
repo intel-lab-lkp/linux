@@ -2132,9 +2132,6 @@ static int phylink_bringup_phy(struct phylink *pl, struct phy_device *phy,
 		    __ETHTOOL_LINK_MODE_MASK_NBITS, pl->supported,
 		    __ETHTOOL_LINK_MODE_MASK_NBITS, phy->advertising);
 
-	if (phy_interrupt_is_valid(phy))
-		phy_request_interrupt(phy);
-
 	if (pl->config->mac_managed_pm)
 		phy->mac_managed_pm = true;
 
@@ -2150,6 +2147,9 @@ static int phylink_bringup_phy(struct phylink *pl, struct phy_device *phy,
 		if (ret == -EOPNOTSUPP)
 			ret = 0;
 	}
+
+	if (ret == 0 && phy_interrupt_is_valid(phy))
+		phy_request_interrupt(phy);
 
 	return ret;
 }
