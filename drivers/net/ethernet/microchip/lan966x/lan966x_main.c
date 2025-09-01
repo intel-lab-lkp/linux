@@ -1083,7 +1083,6 @@ static int lan966x_probe(struct platform_device *pdev)
 {
 	struct fwnode_handle *ports, *portnp;
 	struct lan966x *lan966x;
-	u8 mac_addr[ETH_ALEN];
 	int err;
 
 	lan966x = devm_kzalloc(&pdev->dev, sizeof(*lan966x), GFP_KERNEL);
@@ -1093,9 +1092,11 @@ static int lan966x_probe(struct platform_device *pdev)
 	platform_set_drvdata(pdev, lan966x);
 	lan966x->dev = &pdev->dev;
 
-	if (!device_get_mac_address(&pdev->dev, mac_addr)) {
-		ether_addr_copy(lan966x->base_mac, mac_addr);
-	} else {
+	err = of_get_mac_address(pdev->dev.of_node, lan966x->base_mac);
+	if (err == -EPROBE_DEFER)
+		return err;
+
+	if (err) {
 		pr_info("MAC addr was not set, use random MAC\n");
 		eth_random_addr(lan966x->base_mac);
 		lan966x->base_mac[5] &= 0xf0;
