@@ -4,7 +4,7 @@
 readonly SERVER_MAC="aa:00:00:00:00:02"
 readonly CLIENT_MAC="aa:00:00:00:00:01"
 readonly TESTS=("data" "ack" "flags" "tcp" "ip" "large")
-readonly PROTOS=("ipv4" "ipv6")
+readonly PROTOS=("ipv4" "ipv6" "ipip")
 dev=""
 test="all"
 proto="ipv4"
@@ -31,7 +31,8 @@ run_test() {
       1>>log.txt
     wait "${server_pid}"
     exit_code=$?
-    if [[ ${test} == "large" && -n "${KSFT_MACHINE_SLOW}" && \
+    if [[ ( ${test} == "large" || ${protocol} == "ipip" ) && \
+          -n "${KSFT_MACHINE_SLOW}" && \
           ${exit_code} -ne 0 ]]; then
         echo "Ignoring errors due to slow environment" 1>&2
         exit_code=0
