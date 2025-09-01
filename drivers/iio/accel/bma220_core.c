@@ -31,11 +31,18 @@
  *   enable/disable irq      | in_accel_*_thresh_either_en       | 0/1
  *   threshold (slope_th)    | in_accel_thresh_either_value      | 0-15
  *   duration (slope_dur)    | in_accel_thresh_either_period     | 0-3
+ *   filter (slope_filt)     | in_accel_slope_filt               | 0/1
+ * orientation               |                                   |
+ *   mounting (orient_ex)    | in_accel_orient_ex                | 0/1
+ *   blocking                | in_accel_orient_blocking          | see [1]
  * tap sensing               |                                   |
  *   enable/disable singletap| in_accel_*_gesture_singletap_en   | 0/1 [2]
  *   enable/disable doubletap| in_accel_*_gesture_doubletap_en   | 0/1 [2]
  *   threshold (tt_th)       | in_accel_gesture_singletap_value  | 0-15
  *   duration (tt_dur)       | in_accel_gesture_doubletap_period | see [1]
+ *   sample cnt (tt_samp)    | in_accel_gesture_tap_sample_cnt   | see [1]
+ *   filter (tt_filt)        | in_accel_gesture_tap_filt         | 0/1
+ * latch time (lat_int)      | in_accel_latch_time               | see [1]
  * ----------------------------------------------------------------------------
  *
  * [1] The event related sysfs interface provides and expects raw register values
@@ -269,6 +276,7 @@ struct bma220_data {
 	u8 lpf_3db_freq_idx;
 	u8 range_idx;
 	u8 tap_type;
+	bool irq_needs_clear_if;
 	struct iio_trigger *trig;
 	struct {
 		s8 chans[3];
@@ -1083,7 +1091,167 @@ static int bma220_reg_access(struct iio_dev *indio_dev, unsigned int reg,
 	return regmap_write(data->regmap, reg, writeval);
 }
 
+/* Event related attributes not directly covered by the IIO API */
+enum bma220_attributes {
+	BMA220_ATTR_TT_FILT,
+	BMA220_ATTR_TT_SAMP,
+	BMA220_ATTR_SLOPE_FILT,
+	BMA220_ATTR_ORIENT_EX,
+	BMA220_ATTR_ORIENT_BLOCKING,
+	BMA220_ATTR_LATCH_TIME,
+};
+
+static ssize_t event_attr_reg_show(struct device *dev,
+					   struct device_attribute *attr,
+					   char *buf)
+{
+	struct bma220_data *data = iio_priv(dev_to_iio_dev(dev));
+	struct iio_dev_attr *iattr = to_iio_dev_attr(attr);
+	int ret = -EINVAL;
+	unsigned int reg_val, flags;
+
+	guard(mutex)(&data->lock);
+
+	switch (iattr->address) {
+	case BMA220_ATTR_TT_FILT:
+		ret = regmap_read(data->regmap, BMA220_REG_CONF3, &reg_val);
+		flags = FIELD_GET(BMA220_TT_FILT_MSK, reg_val);
+		break;
+	case BMA220_ATTR_TT_SAMP:
+		ret = regmap_read(data->regmap, BMA220_REG_CONF5, &reg_val);
+		flags = FIELD_GET(BMA220_TT_SAMP_MSK, reg_val);
+		break;
+	case BMA220_ATTR_SLOPE_FILT:
+		ret = regmap_read(data->regmap, BMA220_REG_CONF4, &reg_val);
+		flags = FIELD_GET(BMA220_SLOPE_FILT_MSK, reg_val);
+		break;
+	case BMA220_ATTR_ORIENT_EX:
+		ret = regmap_read(data->regmap, BMA220_REG_CONF4, &reg_val);
+		flags = FIELD_GET(BMA220_ORIENT_EX_MSK, reg_val);
+		break;
+	case BMA220_ATTR_ORIENT_BLOCKING:
+		ret = regmap_read(data->regmap, BMA220_REG_CONF5, &reg_val);
+		flags = FIELD_GET(BMA220_ORIENT_BLOCKING_MSK, reg_val);
+		break;
+	case BMA220_ATTR_LATCH_TIME:
+		ret = regmap_read(data->regmap, BMA220_REG_IE1, &reg_val);
+		flags = FIELD_GET(BMA220_INT_LATCH_MSK, reg_val);
+		break;
+	}
+
+	if (ret)
+		return ret;
+	return sysfs_emit(buf, "%d\n", flags);
+}
+
+static ssize_t event_attr_reg_store(struct device *dev,
+					    struct device_attribute *attr,
+					    const char *buf, size_t len)
+{
+	struct bma220_data *data = iio_priv(dev_to_iio_dev(dev));
+	struct iio_dev_attr *iattr = to_iio_dev_attr(attr);
+	int ret = -EINVAL;
+	int value;
+
+	if (kstrtoint(buf, 0, &value))
+		return -EINVAL;
+
+	guard(mutex)(&data->lock);
+
+	switch (iattr->address) {
+	case BMA220_ATTR_TT_FILT:
+		if (!FIELD_FIT(BMA220_TT_FILT_MSK, value))
+			return -EINVAL;
+		ret = regmap_update_bits(data->regmap, BMA220_REG_CONF3,
+					 BMA220_TT_FILT_MSK,
+					 FIELD_PREP(BMA220_TT_FILT_MSK, value));
+		break;
+	case BMA220_ATTR_TT_SAMP:
+		if (!FIELD_FIT(BMA220_TT_SAMP_MSK, value))
+			return -EINVAL;
+		ret = regmap_update_bits(data->regmap, BMA220_REG_CONF5,
+					 BMA220_TT_SAMP_MSK,
+					 FIELD_PREP(BMA220_TT_SAMP_MSK, value));
+		break;
+	case BMA220_ATTR_SLOPE_FILT:
+		if (!FIELD_FIT(BMA220_SLOPE_FILT_MSK, value))
+			return -EINVAL;
+		ret = regmap_update_bits(data->regmap, BMA220_REG_CONF4,
+					 BMA220_SLOPE_FILT_MSK,
+					 FIELD_PREP(BMA220_SLOPE_FILT_MSK, value));
+		break;
+	case BMA220_ATTR_ORIENT_EX:
+		if (!FIELD_FIT(BMA220_ORIENT_EX_MSK, value))
+			return -EINVAL;
+		ret = regmap_update_bits(data->regmap, BMA220_REG_CONF4,
+					 BMA220_ORIENT_EX_MSK,
+					 FIELD_PREP(BMA220_ORIENT_EX_MSK, value));
+		break;
+	case BMA220_ATTR_ORIENT_BLOCKING:
+		if (!FIELD_FIT(BMA220_ORIENT_BLOCKING_MSK, value))
+			return -EINVAL;
+		ret = regmap_update_bits(data->regmap, BMA220_REG_CONF5,
+					 BMA220_ORIENT_BLOCKING_MSK,
+					 FIELD_PREP(BMA220_ORIENT_BLOCKING_MSK,
+						    value));
+		break;
+	case BMA220_ATTR_LATCH_TIME:
+		if (!FIELD_FIT(BMA220_INT_LATCH_MSK, value))
+			return -EINVAL;
+		ret = regmap_update_bits(data->regmap, BMA220_REG_IE1,
+					 BMA220_INT_LATCH_MSK,
+					 FIELD_PREP(BMA220_INT_LATCH_MSK, value));
+		if (value == BMA220_INT_LATCH_MAX)
+			data->irq_needs_clear_if = true;
+		break;
+	}
+
+	if (ret < 0)
+		return -EINVAL;
+
+	return len;
+}
+
+static IIO_DEVICE_ATTR(in_accel_gesture_tap_filt, 0644,
+		       event_attr_reg_show, event_attr_reg_store,
+		       BMA220_ATTR_TT_FILT);
+
+static IIO_DEVICE_ATTR(in_accel_gesture_tap_sample_cnt, 0644,
+		       event_attr_reg_show, event_attr_reg_store,
+		       BMA220_ATTR_TT_SAMP);
+
+static IIO_DEVICE_ATTR(in_accel_thresh_either_filt, 0644,
+		       event_attr_reg_show, event_attr_reg_store,
+		       BMA220_ATTR_SLOPE_FILT);
+
+static IIO_DEVICE_ATTR(in_accel_orient_ex, 0644,
+		       event_attr_reg_show, event_attr_reg_store,
+		       BMA220_ATTR_ORIENT_EX);
+
+static IIO_DEVICE_ATTR(in_accel_orient_blocking, 0644,
+		       event_attr_reg_show, event_attr_reg_store,
+		       BMA220_ATTR_ORIENT_BLOCKING);
+
+static IIO_DEVICE_ATTR(in_accel_latch_time, 0644,
+		       event_attr_reg_show, event_attr_reg_store,
+		       BMA220_ATTR_LATCH_TIME);
+
+static struct attribute *bma220_event_attributes[] = {
+	&iio_dev_attr_in_accel_gesture_tap_filt.dev_attr.attr,
+	&iio_dev_attr_in_accel_gesture_tap_sample_cnt.dev_attr.attr,
+	&iio_dev_attr_in_accel_thresh_either_filt.dev_attr.attr,
+	&iio_dev_attr_in_accel_orient_ex.dev_attr.attr,
+	&iio_dev_attr_in_accel_orient_blocking.dev_attr.attr,
+	&iio_dev_attr_in_accel_latch_time.dev_attr.attr,
+	NULL
+};
+
+static const struct attribute_group bma220_event_attribute_group = {
+	.attrs = bma220_event_attributes,
+};
+
 static const struct iio_info bma220_info = {
+	.event_attrs		= &bma220_event_attribute_group,
 	.read_raw		= bma220_read_raw,
 	.write_raw		= bma220_write_raw,
 	.read_avail		= bma220_read_avail,
@@ -1207,6 +1375,7 @@ static int bma220_init(struct bma220_data *data)
 		}
 	}
 
+	data->irq_needs_clear_if = false;
 	data->tap_type = BMA220_TAP_TYPE_DOUBLE;
 
 	return 0;
@@ -1228,7 +1397,7 @@ static irqreturn_t bma220_irq_handler(int irq, void *private)
 {
 	struct iio_dev *indio_dev = private;
 	struct bma220_data *data = iio_priv(indio_dev);
-	int rv;
+	int rv, ret;
 	u8 bma220_reg_if[2];
 	s64 timestamp = iio_get_time_ns(indio_dev);
 
@@ -1283,6 +1452,13 @@ static irqreturn_t bma220_irq_handler(int irq, void *private)
 	}
 
 done:
+	if (data->irq_needs_clear_if) {
+		ret = bma220_reset_int(data);
+		if (ret)
+			dev_warn(data->dev,
+				 "Failed to clear interrupt flag (%pe)\n",
+				 ERR_PTR(ret));
+	}
 
 	return IRQ_HANDLED;
 }
