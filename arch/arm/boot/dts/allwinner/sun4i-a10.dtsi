@@ -317,6 +317,8 @@
 			allwinner,sram = <&emac_sram 1>;
 			pinctrl-names = "default";
 			pinctrl-0 = <&emac_pins>;
+			dmas = <&dma SUN4I_DMA_DEDICATED 7>;
+			dma-names = "rx";
 			status = "disabled";
 		};
 
