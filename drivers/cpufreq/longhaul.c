@@ -950,7 +950,7 @@ static int __init longhaul_init(void)
 
 static void __exit longhaul_exit(void)
 {
-	struct cpufreq_policy *policy = cpufreq_cpu_get(0);
+	struct cpufreq_policy *policy __free(put_cpufreq_policy) = cpufreq_cpu_get(0);
 	int i;
 
 	for (i = 0; i < numscales; i++) {
@@ -968,7 +968,6 @@ static void __exit longhaul_exit(void)
 		}
 	}
 
-	cpufreq_cpu_put(policy);
 	cpufreq_unregister_driver(&longhaul_driver);
 	kfree(longhaul_table);
 }
