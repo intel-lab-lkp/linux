@@ -293,6 +293,17 @@ static inline u16 *screenpos(const struct vc_data *vc, unsigned int offset,
 	return (u16 *)(origin + offset);
 }
 
+static inline u16 scr_read_glyph(const struct vc_data *vc, u16 *pos)
+{
+	u16 w = scr_readw(pos);
+	u16 glyph = w & 0xff;
+
+	if (w & vc->vc_hi_font_mask)
+		glyph |= 0x100;
+
+	return glyph;
+}
+
 static void con_putc(struct vc_data *vc, u16 ca, unsigned int y, unsigned int x)
 {
 	if (vc->vc_sw->con_putc)
@@ -493,7 +504,7 @@ int vc_uniscr_check(struct vc_data *vc)
 {
 	u32 **uni_lines;
 	unsigned short *p;
-	int x, y, mask;
+	int x, y;
 
 	WARN_CONSOLE_UNLOCKED();
 
@@ -514,11 +525,11 @@ int vc_uniscr_check(struct vc_data *vc)
 	 * unicode content will be available after a complete screen refresh.
 	 */
 	p = (unsigned short *)vc->vc_origin;
-	mask = vc->vc_hi_font_mask | 0xff;
 	for (y = 0; y < vc->vc_rows; y++) {
 		u32 *line = uni_lines[y];
 		for (x = 0; x < vc->vc_cols; x++) {
-			u16 glyph = scr_readw(p++) & mask;
+			u16 glyph = scr_read_glyph(vc, p++);
+
 			line[x] = inverse_translate(vc, glyph, true);
 		}
 	}
@@ -561,10 +572,10 @@ void vc_uniscr_copy_line(const struct vc_data *vc, void *dest, bool viewed,
 		 * buffer of its own.
 		 */
 		u16 *p = (u16 *)pos;
-		int mask = vc->vc_hi_font_mask | 0xff;
 		u32 *uni_buf = dest;
 		while (nr--) {
-			u16 glyph = scr_readw(p++) & mask;
+			u16 glyph = scr_read_glyph(vc, p++);
+
 			*uni_buf++ = inverse_translate(vc, glyph, true);
 		}
 	}
@@ -4920,12 +4931,9 @@ int con_font_op(struct vc_data *vc, struct console_font_op *op)
 /* used by selection */
 u16 screen_glyph(const struct vc_data *vc, int offset)
 {
-	u16 w = scr_readw(screenpos(vc, offset, true));
-	u16 c = w & 0xff;
+	u16 *pos = screenpos(vc, offset, true);
 
-	if (w & vc->vc_hi_font_mask)
-		c |= 0x100;
-	return c;
+	return scr_read_glyph(vc, pos);
 }
 EXPORT_SYMBOL_GPL(screen_glyph);
 
