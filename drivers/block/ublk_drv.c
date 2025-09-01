@@ -261,6 +261,11 @@ static inline bool ublk_dev_support_batch_io(const struct ublk_device *ub)
 	return false;
 }
 
+static inline bool ublk_support_batch_io(const struct ublk_queue *ubq)
+{
+	return false;
+}
+
 static inline struct ublksrv_io_desc *
 ublk_get_iod(const struct ublk_queue *ubq, unsigned tag)
 {
@@ -1309,6 +1314,8 @@ static void ublk_dispatch_req(struct ublk_queue *ubq,
 			__func__, ubq->q_id, req->tag, io->flags,
 			ublk_get_iod(ubq, req->tag)->addr);
 
+	WARN_ON_ONCE(ublk_support_batch_io(ubq));
+
 	/*
 	 * Task is exiting if either:
 	 *
@@ -1870,6 +1877,8 @@ static void ublk_uring_cmd_cancel_fn(struct io_uring_cmd *cmd,
 	if (WARN_ON_ONCE(pdu->tag >= ubq->q_depth))
 		return;
 
+	WARN_ON_ONCE(ublk_support_batch_io(ubq));
+
 	task = io_uring_cmd_get_task(cmd);
 	io = &ubq->ios[pdu->tag];
 	if (WARN_ON_ONCE(task && task != io->task))
@@ -2237,7 +2246,10 @@ static int __ublk_fetch(struct io_uring_cmd *cmd, struct ublk_queue *ubq,
 
 	ublk_fill_io_cmd(io, cmd);
 
-	WRITE_ONCE(io->task, get_task_struct(current));
+	if (ublk_support_batch_io(ubq))
+		WRITE_ONCE(io->task, NULL);
+	else
+		WRITE_ONCE(io->task, get_task_struct(current));
 	ublk_mark_io_ready(ub, ubq);
 out:
 	return ret;
@@ -2350,6 +2362,8 @@ static int __ublk_ch_uring_cmd(struct io_uring_cmd *cmd,
 
 	if (tag >= ubq->q_depth)
 		goto out;
+
+	WARN_ON_ONCE(ublk_support_batch_io(ubq));
 
 	io = &ubq->ios[tag];
 	/* UBLK_IO_FETCH_REQ can be handled on any task, which sets io->task */
