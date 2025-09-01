@@ -1068,7 +1068,7 @@ struct hl_encaps_signals_mgr {
  * @kernel_address: holds the queue's kernel virtual address.
  * @bus_address: holds the queue's DMA address.
  * @pq_dram_address: hold the dram address when the PQ is allocated, used when dram_bd is true in
- *                   queue properites.
+ *                   queue properties.
  * @pi: holds the queue's pi value.
  * @ci: holds the queue's ci value, AS CALCULATED BY THE DRIVER (not real ci).
  * @hw_queue_id: the id of the H/W queue.
