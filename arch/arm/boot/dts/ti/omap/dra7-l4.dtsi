@@ -4439,7 +4439,7 @@
 			 <0x0000c000 0x0002c000 0x001000>,	/* ap 29 */
 			 <0x0000f000 0x0002f000 0x001000>;	/* ap 32 */
 
-		target-module@0 {			/* 0x4ae20000, ap 19 08.0 */
+		timer12_target: target-module@0 {		/* 0x4ae20000, ap 19 08.0 */
 			compatible = "ti,sysc-omap4-timer", "ti,sysc";
 			reg = <0x0 0x4>,
 			      <0x10 0x4>;

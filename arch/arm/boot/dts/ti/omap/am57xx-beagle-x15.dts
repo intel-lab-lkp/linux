@@ -36,3 +36,12 @@
 &phy1 {
 	max-speed = <100>;
 };
+
+&timer12_target {
+	ti,no-reset-on-init;
+	ti,no-idle;
+};
+
+&counter32k {
+	status = "disabled";
+};
