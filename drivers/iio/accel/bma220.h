@@ -8,10 +8,13 @@
 #ifndef _BMA220_H
 #define _BMA220_H
 
+#include <linux/regmap.h>
+
 #include <linux/iio/iio.h>
 
+extern const struct regmap_config bma220_spi_regmap_config;
 extern const struct dev_pm_ops bma220_pm_ops;
 
-int bma220_common_probe(struct spi_device *dev);
+int bma220_common_probe(struct device *dev, struct regmap *regmap, int irq);
 
 #endif
