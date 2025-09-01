@@ -46,7 +46,9 @@ GSO type SKB_GSO_TCP_FIXEDID is specified then we will not increment the IP
 ID and all segments will use the same IP ID.  If a device has
 NETIF_F_TSO_MANGLEID set then the IP ID can be ignored when performing TSO
 and we will either increment the IP ID for all frames, or leave it at a
-static value based on driver preference.
+static value based on driver preference. For outer headers of encapsulated
+packets, the device drivers must guarantee that the IPv4 ID field is
+incremented in the case that a given header does not have the DF bit set.
 
 
 UDP Fragmentation Offload
@@ -124,10 +126,7 @@ Generic Receive Offload
 Generic receive offload is the complement to GSO.  Ideally any frame
 assembled by GRO should be segmented to create an identical sequence of
 frames using GSO, and any sequence of frames segmented by GSO should be
-able to be reassembled back to the original by GRO.  The only exception to
-this is IPv4 ID in the case that the DF bit is set for a given IP header.
-If the value of the IPv4 ID is not sequentially incrementing it will be
-altered so that it is when a frame assembled via GRO is segmented via GSO.
+able to be reassembled back to the original by GRO.
 
 
 Partial Generic Segmentation Offload
