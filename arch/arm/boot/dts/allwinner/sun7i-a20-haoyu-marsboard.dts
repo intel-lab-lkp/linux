@@ -118,6 +118,58 @@
 		pins = "PA17";
 		function = "gmac";
 	};
+
+	nand_pins_a: nand_base0@0 {
+		pins = "PC0", "PC1", "PC2",
+		"PC5", "PC8", "PC9", "PC10",
+		"PC11", "PC12", "PC13", "PC14",
+		"PC15", "PC16";
+		function = "nand0";
+		drive-strength = <10>;
+	};
+
+	nand_cs0_pins_a: nand_cs@0 {
+		pins = "PC4";
+		function = "nand0";
+		drive-strength = <10>;
+		bias-pull-up;
+	};
+
+	nand_cs1_pins_a: nand_cs@1 {
+		pins = "PC3";
+		function = "nand0";
+		drive-strength = <10>;
+		bias-pull-up;
+	};
+
+	nand_cs2_pins_a: nand_cs@2 {
+		pins = "PC17";
+		function = "nand0";
+		drive-strength = <10>;
+		bias-pull-up;
+	};
+
+	nand_cs3_pins_a: nand_cs@3 {
+		pins = "PC18";
+		function = "nand0";
+		drive-strength = <10>;
+		bias-pull-up;
+	};
+
+	nand_rb0_pins_a: nand_rb@0 {
+		pins = "PC6";
+		function = "nand0";
+		drive-strength = <10>;
+		bias-pull-up;
+	};
+
+	nand_rb1_pins_a: nand_rb@1 {
+		pins = "PC7";
+		function = "nand0";
+		drive-strength = <10>;
+		bias-pull-up;
+	};
+
 };
 
 &reg_ahci_5v {
@@ -179,4 +231,19 @@
 	usb1_vbus-supply = <&reg_usb1_vbus>;
 	usb2_vbus-supply = <&reg_usb2_vbus>;
 	status = "okay";
+};
+
+&nfc {
+	pinctrl-names = "default";
+	pinctrl-0 = <&nand_pins_a>, <&nand_cs0_pins_a>, <&nand_rb0_pins_a>, <&nand_cs1_pins_a>, <&nand_rb1_pins_a>;
+	status = "okay";
+
+	nand@0 {
+		#address-cells = <2>;
+		#size-cells = <2>;
+		reg = <0>;
+		allwinner,rb = <0>;
+		nand-ecc-mode = "hw";
+		nand-on-flash-bbt;
+	};
 };
