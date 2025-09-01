@@ -23,12 +23,21 @@ static inline bool errata_probe_pause(void)
 	return true;
 }
 
-static u32 mips_errata_probe(void)
+static inline bool errata_probe_zalrsc(unsigned long archid)
+{
+	return archid == 0x8000000000000201;
+}
+
+static u32 mips_errata_probe(unsigned long archid)
 {
 	u32 cpu_req_errata = 0;
 
 	if (errata_probe_pause())
 		cpu_req_errata |= BIT(ERRATA_MIPS_P8700_PAUSE_OPCODE);
+
+	if (errata_probe_zalrsc(archid))
+		cpu_req_errata |= BIT(ERRATA_MIPS_P8700_ZALRSC);
+
 
 	return cpu_req_errata;
 }
@@ -38,7 +47,7 @@ void mips_errata_patch_func(struct alt_entry *begin, struct alt_entry *end,
 			    unsigned int stage)
 {
 	struct alt_entry *alt;
-	u32 cpu_req_errata = mips_errata_probe();
+	u32 cpu_req_errata = mips_errata_probe(archid);
 	u32 tmp;
 
 	BUILD_BUG_ON(ERRATA_MIPS_NUMBER >= RISCV_VENDOR_EXT_ALTERNATIVES_BASE);

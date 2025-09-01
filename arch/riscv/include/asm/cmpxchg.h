@@ -56,13 +56,8 @@
 
 #define __arch_xchg(sfx, prepend, append, r, p, n)			\
 ({									\
-	__asm__ __volatile__ (						\
-		prepend							\
-		"	amoswap" sfx " %0, %2, %1\n"			\
-		append							\
-		: "=r" (r), "+A" (*(p))					\
-		: "r" (n)						\
-		: "memory");						\
+	__typeof__(*(__ptr)) __maybe_unused temp;					\
+	ALT_ARCH_XCHG(sfx, prepend, append, r, p, n, temp);	\
 })
 
 #define _arch_xchg(ptr, new, sc_sfx, swap_sfx, prepend,			\
