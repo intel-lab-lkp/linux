@@ -765,6 +765,22 @@ static blk_status_t blk_validate_atomic_write_op_size(struct request_queue *q,
 	return BLK_STS_OK;
 }
 
+/* resubmit a bio after split, see bio_submit_split_bioset() */
+void submit_split_bio_noacct(struct bio *bio)
+{
+	might_sleep();
+
+	if (should_fail_bio(bio)) {
+		bio_io_error(bio);
+		return;
+	}
+
+	if (blk_throtl_bio(bio))
+		return;
+
+	submit_bio_noacct_nocheck(bio);
+}
+
 /**
  * submit_bio_noacct - re-submit a bio to the block device layer for I/O
  * @bio:  The bio describing the location in memory and on the device.
