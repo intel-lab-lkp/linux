@@ -41,7 +41,7 @@ static void adjust_instruction_counter_name(char *out_name, char *in_name)
 {
 	int i = 0;
 
-	strcpy(out_name, in_name);
+	strscpy(out_name, in_name, sizeof(out_name));
 	while (in_name[i] != '\0') {
 		if (out_name[i] == '_')
 			out_name[i] = '.';
