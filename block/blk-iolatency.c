@@ -767,6 +767,7 @@ static int blk_iolatency_init(struct gendisk *disk)
 	if (ret)
 		goto err_qos_del;
 
+	blk_queue_flag_set(QUEUE_FLAG_BIO_ISSUE, disk->queue);
 	timer_setup(&blkiolat->timer, blkiolatency_timer_fn, 0);
 	INIT_WORK(&blkiolat->enable_work, blkiolatency_enable_work_fn);
 

@@ -372,7 +372,10 @@ static inline void blkg_put(struct blkcg_gq *blkg)
 
 static inline void blkcg_bio_issue_init(struct bio *bio)
 {
-	bio->issue_time_ns = blk_time_get_ns();
+	struct request_queue *q = bdev_get_queue(bio->bi_bdev);
+
+	if (test_bit(QUEUE_FLAG_BIO_ISSUE, &q->queue_flags))
+		bio->issue_time_ns = blk_time_get_ns();
 }
 
 static inline void blkcg_use_delay(struct blkcg_gq *blkg)
