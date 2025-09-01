@@ -158,6 +158,12 @@ enum bma220_axis {
 	AXIS_Z,
 };
 
+enum bma220_prop_wdt {
+	BMA220_PROP_WDT_OFF,
+	BMA220_PROP_WDT_1MS,
+	BMA220_PROP_WDT_10MS,
+};
+
 static const int bma220_scale_table[][2] = {
 	{0, 623000}, {1, 248000}, {2, 491000}, {4, 983000},
 };
@@ -428,10 +434,17 @@ static int bma220_power(struct bma220_data *data, bool up)
 	return -EBUSY;
 }
 
+static int bma220_wdt(struct bma220_data *data, const u8 val)
+{
+	return regmap_update_bits(data->regmap, BMA220_REG_WDT, BMA220_WDT_MASK,
+				  FIELD_PREP(BMA220_WDT_MASK, val));
+}
+
 static int bma220_init(struct bma220_data *data)
 {
 	int ret;
 	unsigned int val;
+	u32 watchdog;
 	static const char * const regulator_names[] = { "vddd", "vddio", "vdda" };
 
 	ret = devm_regulator_bulk_get_enable(data->dev,
@@ -460,6 +473,25 @@ static int bma220_init(struct bma220_data *data)
 	if (ret) {
 		dev_err(data->dev, "Failed to soft reset chip\n");
 		return ret;
+	}
+
+	ret = device_property_read_u32(data->dev, "bosch,watchdog", &watchdog);
+	if (!ret) {
+		switch (watchdog) {
+		case BMA220_PROP_WDT_1MS:
+			ret = bma220_wdt(data, BMA220_WDT_1MS);
+			break;
+		case BMA220_PROP_WDT_10MS:
+			ret = bma220_wdt(data, BMA220_WDT_10MS);
+			break;
+		default:
+			ret = bma220_wdt(data, BMA220_WDT_OFF);
+			break;
+		}
+		if (ret) {
+			dev_err(data->dev, "Failed to set watchdog\n");
+			return ret;
+		}
 	}
 
 	return 0;
