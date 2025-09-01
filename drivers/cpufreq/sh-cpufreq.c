@@ -93,7 +93,7 @@ static int sh_cpufreq_verify(struct cpufreq_policy_data *policy)
 
 	freq_table = cpuclk->nr_freqs ? cpuclk->freq_table : NULL;
 	if (freq_table)
-		return cpufreq_frequency_table_verify(policy, freq_table);
+		return cpufreq_frequency_table_verify(policy);
 
 	cpufreq_verify_within_cpu_limits(policy);
 
