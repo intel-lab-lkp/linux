@@ -278,6 +278,17 @@ int arch_bp_generic_fields(int x86_len, int x86_type,
 	return 0;
 }
 
+bool hw_breakpoint_arch_same_type(struct arch_hw_breakpoint *hw,
+				  struct perf_event_attr *attr)
+{
+	int glen, gtype;
+
+	if (arch_bp_generic_fields(hw->len, hw->type, &glen, &gtype) < 0)
+		return false;
+
+	return gtype == attr->bp_type;
+}
+
 /*
  * Check for virtual address in kernel space.
  */

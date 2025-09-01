@@ -64,6 +64,8 @@ void arch_uninstall_hw_breakpoint(struct perf_event *bp);
 void hw_breakpoint_pmu_read(struct perf_event *bp);
 void hw_breakpoint_pmu_unthrottle(struct perf_event *bp);
 
+bool hw_breakpoint_arch_same_type(struct arch_hw_breakpoint *hw,
+				  struct perf_event_attr *attr);
 extern void
 arch_fill_perf_breakpoint(struct perf_event *bp);
 
