@@ -1585,6 +1585,7 @@ int ceph_fill_trace(struct super_block *sb, struct ceph_mds_request *req)
 	struct ceph_fs_client *fsc = ceph_sb_to_fs_client(sb);
 	struct ceph_client *cl = fsc->client;
 	int err = 0;
+	struct inode *dir = NULL;
 
 	doutc(cl, "%p is_dentry %d is_target %d\n", req,
 	      rinfo->head->is_dentry, rinfo->head->is_target);
@@ -1601,7 +1602,11 @@ int ceph_fill_trace(struct super_block *sb, struct ceph_mds_request *req)
 		 * r_parent may be stale, in cases when R_PARENT_LOCKED is not set,
 		 * so we need to get the correct inode
 		 */
-		struct inode *dir = ceph_get_reply_dir(sb, req->r_parent, rinfo);
+		dir = ceph_get_reply_dir(sb, req->r_parent, rinfo);
+		if (IS_ERR(dir)) {
+			err = PTR_ERR(dir);
+			goto done;
+		}
 		if (dir) {
 			err = ceph_fill_inode(dir, NULL, &rinfo->diri,
 					      rinfo->dirfrag, session, -1,
@@ -1869,6 +1874,9 @@ retry_lookup:
 					    &dvino, ptvino);
 	}
 done:
+	/* Drop extra ref from ceph_get_reply_dir() if it returned a new inode */
+	if (!IS_ERR(dir) && dir && dir != req->r_parent)
+		iput(dir);
 	doutc(cl, "done err=%d\n", err);
 	return err;
 }
