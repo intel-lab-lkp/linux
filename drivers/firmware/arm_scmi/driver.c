@@ -76,6 +76,7 @@ static struct dentry *scmi_top_dentry;
  */
 struct scmi_xfers_info {
 	unsigned long *xfer_alloc_table;
+	/* Protects access to the xfer buffers */
 	spinlock_t xfer_lock;
 	int max_msg;
 	struct hlist_head free_xfers;
