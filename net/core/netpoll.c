@@ -703,13 +703,3 @@ void do_netpoll_cleanup(struct netpoll *np)
 }
 EXPORT_SYMBOL(do_netpoll_cleanup);
 
-void netpoll_cleanup(struct netpoll *np)
-{
-	rtnl_lock();
-	if (!np->dev)
-		goto out;
-	do_netpoll_cleanup(np);
-out:
-	rtnl_unlock();
-}
-EXPORT_SYMBOL(netpoll_cleanup);

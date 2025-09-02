@@ -260,6 +260,16 @@ static struct netconsole_target *alloc_and_init(void)
 	return nt;
 }
 
+static void netpoll_cleanup(struct netpoll *np)
+{
+	rtnl_lock();
+	if (!np->dev)
+		goto out;
+	do_netpoll_cleanup(np);
+out:
+	rtnl_unlock();
+}
+
 /* Clean up every target in the cleanup_list and move the clean targets back to
  * the main target_list.
  */
