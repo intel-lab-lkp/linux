@@ -1060,13 +1060,21 @@ static netdev_tx_t tun_net_xmit(struct sk_buff *skb, struct net_device *dev)
 
 	nf_reset_ct(skb);
 
-	if (ptr_ring_produce(&tfile->tx_ring, skb)) {
+	queue = netdev_get_tx_queue(dev, txq);
+	if (unlikely(ptr_ring_produce(&tfile->tx_ring, skb))) {
+		/* Paired with smp_rmb() in wake_netdev_queue. */
+		smp_wmb();
+		netif_tx_stop_queue(queue);
 		drop_reason = SKB_DROP_REASON_FULL_RING;
 		goto drop;
 	}
+	if (ptr_ring_full(&tfile->tx_ring)) {
+		/* Paired with smp_rmb() in wake_netdev_queue. */
+		smp_wmb();
+		netif_tx_stop_queue(queue);
+	}
 
 	/* dev->lltx requires to do our own update of trans_start */
-	queue = netdev_get_tx_queue(dev, txq);
 	txq_trans_cond_update(queue);
 
 	/* Notify and wake up reader process */
@@ -2110,6 +2118,24 @@ done:
 	return total;
 }
 
+static inline void wake_netdev_queue(struct tun_file *tfile)
+{
+	struct netdev_queue *txq;
+	struct net_device *dev;
+
+	rcu_read_lock();
+	dev = rcu_dereference(tfile->tun)->dev;
+	txq = netdev_get_tx_queue(dev, tfile->queue_index);
+
+	if (netif_tx_queue_stopped(txq)) {
+		/* Paired with smp_wmb() in tun_net_xmit. */
+		smp_rmb();
+		if (ptr_ring_spare(&tfile->tx_ring, 1))
+			netif_tx_wake_queue(txq);
+	}
+	rcu_read_unlock();
+}
+
 static void *tun_ring_recv(struct tun_file *tfile, int noblock, int *err)
 {
 	DECLARE_WAITQUEUE(wait, current);
@@ -2139,7 +2165,7 @@ static void *tun_ring_recv(struct tun_file *tfile, int noblock, int *err)
 			error = -EFAULT;
 			break;
 		}
-
+		wake_netdev_queue(tfile);
 		schedule();
 	}
 
@@ -2147,6 +2173,7 @@ static void *tun_ring_recv(struct tun_file *tfile, int noblock, int *err)
 	remove_wait_queue(&tfile->socket.wq.wait, &wait);
 
 out:
+	wake_netdev_queue(tfile);
 	*err = error;
 	return ptr;
 }
