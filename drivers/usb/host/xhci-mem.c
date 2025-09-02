@@ -932,7 +932,7 @@ void xhci_free_virt_device(struct xhci_hcd *xhci, struct xhci_virt_device *dev,
  */
 static void xhci_free_virt_devices_depth_first(struct xhci_hcd *xhci, int slot_id)
 {
-	struct xhci_virt_device *vdev;
+	struct xhci_virt_device *vdev, *vdev_i;
 	struct list_head *tt_list_head;
 	struct xhci_tt_bw_info *tt_info, *next;
 	int i;
@@ -951,9 +951,9 @@ static void xhci_free_virt_devices_depth_first(struct xhci_hcd *xhci, int slot_i
 		/* is this a hub device that added a tt_info to the tts list */
 		if (tt_info->slot_id == slot_id) {
 			/* are any devices using this tt_info? */
-			for (i = 1; i < HCS_MAX_SLOTS(xhci->hcs_params1); i++) {
-				vdev = xhci->devs[i];
-				if (vdev && (vdev->tt_info == tt_info))
+			for (i = 1; i <= HCS_MAX_SLOTS(xhci->hcs_params1); i++) {
+				vdev_i = xhci->devs[i];
+				if (vdev_i && (vdev_i->tt_info == tt_info))
 					xhci_free_virt_devices_depth_first(
 						xhci, i);
 			}
