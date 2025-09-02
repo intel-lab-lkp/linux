@@ -230,14 +230,14 @@ static inline int vma_iter_store_gfp(struct vma_iterator *vmi,
  */
 
 static inline struct vm_area_desc *vma_to_desc(struct vm_area_struct *vma,
-		struct vm_area_desc *desc)
+		struct file *file, struct vm_area_desc *desc)
 {
 	desc->mm = vma->vm_mm;
 	desc->start = vma->vm_start;
 	desc->end = vma->vm_end;
 
 	desc->pgoff = vma->vm_pgoff;
-	desc->file = vma->vm_file;
+	desc->file = file;
 	desc->vm_flags = vma->vm_flags;
 	desc->page_prot = vma->vm_page_prot;
 
@@ -248,7 +248,7 @@ static inline struct vm_area_desc *vma_to_desc(struct vm_area_struct *vma,
 }
 
 static inline void set_vma_from_desc(struct vm_area_struct *vma,
-		struct vm_area_desc *desc)
+		struct file *orig_file, struct vm_area_desc *desc)
 {
 	/*
 	 * Since we're invoking .mmap_prepare() despite having a partially
@@ -258,7 +258,13 @@ static inline void set_vma_from_desc(struct vm_area_struct *vma,
 
 	/* Mutable fields. Populated with initial state. */
 	vma->vm_pgoff = desc->pgoff;
-	if (vma->vm_file != desc->file)
+	/*
+	 * The desc->file may not be the same as vma->vm_file, but if the
+	 * f_op->mmap_prepare() handler is setting this parameter to something
+	 * different, it indicates that it wishes the VMA to have its file
+	 * assigned to this.
+	 */
+	if (orig_file != desc->file && vma->vm_file != desc->file)
 		vma_set_file(vma, desc->file);
 	if (vma->vm_flags != desc->vm_flags)
 		vm_flags_set(vma, desc->vm_flags);

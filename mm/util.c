@@ -1134,6 +1134,29 @@ EXPORT_SYMBOL(flush_dcache_folio);
 #endif
 
 /**
+ * __compat_vma_mmap_prepare() - See description for compat_vma_mmap_prepare()
+ * for details. This is the same operation, only with a specific file operations
+ * struct which may or may not be the same as vma->vm_file->f_op.
+ * @f_op - The file operations whose .mmap_prepare() hook is specified.
+ * @vma: The VMA to apply the .mmap_prepare() hook to.
+ * Returns: 0 on success or error.
+ */
+int __compat_vma_mmap_prepare(const struct file_operations *f_op,
+		struct file *file, struct vm_area_struct *vma)
+{
+	struct vm_area_desc desc;
+	int err;
+
+	err = f_op->mmap_prepare(vma_to_desc(vma, file, &desc));
+	if (err)
+		return err;
+	set_vma_from_desc(vma, file, &desc);
+
+	return 0;
+}
+EXPORT_SYMBOL(__compat_vma_mmap_prepare);
+
+/**
  * compat_vma_mmap_prepare() - Apply the file's .mmap_prepare() hook to an
  * existing VMA
  * @file: The file which possesss an f_op->mmap_prepare() hook
@@ -1161,15 +1184,7 @@ EXPORT_SYMBOL(flush_dcache_folio);
  */
 int compat_vma_mmap_prepare(struct file *file, struct vm_area_struct *vma)
 {
-	struct vm_area_desc desc;
-	int err;
-
-	err = file->f_op->mmap_prepare(vma_to_desc(vma, &desc));
-	if (err)
-		return err;
-	set_vma_from_desc(vma, &desc);
-
-	return 0;
+	return __compat_vma_mmap_prepare(file->f_op, file, vma);
 }
 EXPORT_SYMBOL(compat_vma_mmap_prepare);
 

@@ -1411,23 +1411,28 @@ static inline void free_anon_vma_name(struct vm_area_struct *vma)
 
 /* Declared in vma.h. */
 static inline void set_vma_from_desc(struct vm_area_struct *vma,
-		struct vm_area_desc *desc);
-
+		struct file *orig_file, struct vm_area_desc *desc);
 static inline struct vm_area_desc *vma_to_desc(struct vm_area_struct *vma,
-		struct vm_area_desc *desc);
+		struct file *file, struct vm_area_desc *desc);
 
-static int compat_vma_mmap_prepare(struct file *file,
-		struct vm_area_struct *vma)
+static inline int __compat_vma_mmap_prepare(const struct file_operations *f_op,
+		struct file *file, struct vm_area_struct *vma)
 {
 	struct vm_area_desc desc;
 	int err;
 
-	err = file->f_op->mmap_prepare(vma_to_desc(vma, &desc));
+	err = f_op->mmap_prepare(vma_to_desc(vma, file, &desc));
 	if (err)
 		return err;
-	set_vma_from_desc(vma, &desc);
+	set_vma_from_desc(vma, file, &desc);
 
 	return 0;
+}
+
+static inline int compat_vma_mmap_prepare(struct file *file,
+		struct vm_area_struct *vma)
+{
+	return __compat_vma_mmap_prepare(file->f_op, file, vma);
 }
 
 /* Did the driver provide valid mmap hook configuration? */
