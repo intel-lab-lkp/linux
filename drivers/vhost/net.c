@@ -131,6 +131,7 @@ struct vhost_net_virtqueue {
 	struct vhost_net_buf rxq;
 	/* Batched XDP buffs */
 	struct xdp_buff *xdp;
+	void (*wake_netdev_queue)(struct file *f);
 };
 
 struct vhost_net {
@@ -176,13 +177,16 @@ static void *vhost_net_buf_consume(struct vhost_net_buf *rxq)
 	return ret;
 }
 
-static int vhost_net_buf_produce(struct vhost_net_virtqueue *nvq)
+static int vhost_net_buf_produce(struct vhost_net_virtqueue *nvq,
+								 struct sock *sk)
 {
+	struct file *file = sk->sk_socket->file;
 	struct vhost_net_buf *rxq = &nvq->rxq;
 
 	rxq->head = 0;
 	rxq->tail = ptr_ring_consume_batched(nvq->rx_ring, rxq->queue,
 					      VHOST_NET_BATCH);
+	nvq->wake_netdev_queue(file);
 	return rxq->tail;
 }
 
@@ -209,14 +213,15 @@ static int vhost_net_buf_peek_len(void *ptr)
 	return __skb_array_len_with_tag(ptr);
 }
 
-static int vhost_net_buf_peek(struct vhost_net_virtqueue *nvq)
+static int vhost_net_buf_peek(struct vhost_net_virtqueue *nvq,
+							  struct sock *sk)
 {
 	struct vhost_net_buf *rxq = &nvq->rxq;
 
 	if (!vhost_net_buf_is_empty(rxq))
 		goto out;
 
-	if (!vhost_net_buf_produce(nvq))
+	if (!vhost_net_buf_produce(nvq, sk))
 		return 0;
 
 out:
@@ -999,7 +1004,7 @@ static int peek_head_len(struct vhost_net_virtqueue *rvq, struct sock *sk)
 	unsigned long flags;
 
 	if (rvq->rx_ring)
-		return vhost_net_buf_peek(rvq);
+		return vhost_net_buf_peek(rvq, sk);
 
 	spin_lock_irqsave(&sk->sk_receive_queue.lock, flags);
 	head = skb_peek(&sk->sk_receive_queue);
@@ -1504,6 +1509,19 @@ static struct socket *get_tap_socket(int fd)
 	return sock;
 }
 
+static void (*get_wake_netdev_queue(struct file *file))(struct file *file)
+{
+	struct ptr_ring *ring;
+
+	ring = tun_get_tx_ring(file);
+	if (!IS_ERR(ring))
+		return tun_wake_netdev_queue;
+	ring = tap_get_ptr_ring(file);
+	if (!IS_ERR(ring))
+		return tap_wake_netdev_queue;
+	return NULL;
+}
+
 static struct socket *get_socket(int fd)
 {
 	struct socket *sock;
@@ -1575,10 +1593,14 @@ static long vhost_net_set_backend(struct vhost_net *n, unsigned index, int fd)
 		if (r)
 			goto err_used;
 		if (index == VHOST_NET_VQ_RX) {
-			if (sock)
+			if (sock) {
 				nvq->rx_ring = get_tap_ptr_ring(sock->file);
-			else
+				nvq->wake_netdev_queue =
+					get_wake_netdev_queue(sock->file);
+			} else {
 				nvq->rx_ring = NULL;
+				nvq->wake_netdev_queue = NULL;
+			}
 		}
 
 		oldubufs = nvq->ubufs;

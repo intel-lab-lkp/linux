@@ -3739,6 +3739,12 @@ struct socket *tun_get_socket(struct file *file)
 }
 EXPORT_SYMBOL_GPL(tun_get_socket);
 
+void tun_wake_netdev_queue(struct file *file)
+{
+	wake_netdev_queue(file->private_data);
+}
+EXPORT_SYMBOL_GPL(tun_wake_netdev_queue);
+
 struct ptr_ring *tun_get_tx_ring(struct file *file)
 {
 	struct tun_file *tfile;

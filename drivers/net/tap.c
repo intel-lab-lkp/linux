@@ -1198,6 +1198,12 @@ struct socket *tap_get_socket(struct file *file)
 }
 EXPORT_SYMBOL_GPL(tap_get_socket);
 
+void tap_wake_netdev_queue(struct file *file)
+{
+	wake_netdev_queue(file->private_data);
+}
+EXPORT_SYMBOL_GPL(tap_wake_netdev_queue);
+
 struct ptr_ring *tap_get_ptr_ring(struct file *file)
 {
 	struct tap_queue *q;
