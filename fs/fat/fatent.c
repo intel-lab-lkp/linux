@@ -379,6 +379,7 @@ static int fat_mirror_bhs(struct super_block *sb, struct buffer_head **bhs,
 	struct msdos_sb_info *sbi = MSDOS_SB(sb);
 	struct buffer_head *c_bh;
 	int err, n, copy;
+	bool is_fat12 = is_fat12(sbi);
 
 	err = 0;
 	for (copy = 1; copy < sbi->fats; copy++) {
@@ -392,7 +393,17 @@ static int fat_mirror_bhs(struct super_block *sb, struct buffer_head **bhs,
 			}
 			/* Avoid race with userspace read via bdev */
 			lock_buffer(c_bh);
+			/*
+			 * For FAT12, protect memcpy() of the source sector
+			 * against concurrent 12-bit entry updates in
+			 * fat12_ent_put(), otherwise we may copy a torn
+			 * pair of bytes into the mirror FAT.
+			 */
+			if (is_fat12)
+				spin_lock(&fat12_entry_lock);
 			memcpy(c_bh->b_data, bhs[n]->b_data, sb->s_blocksize);
+			if (is_fat12)
+				spin_unlock(&fat12_entry_lock);
 			set_buffer_uptodate(c_bh);
 			unlock_buffer(c_bh);
 			mark_buffer_dirty_inode(c_bh, sbi->fat_inode);
