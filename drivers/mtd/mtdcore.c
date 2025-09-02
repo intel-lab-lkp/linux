@@ -2407,6 +2407,8 @@ int mtd_block_markbad(struct mtd_info *mtd, loff_t ofs)
 {
 	struct mtd_info *master = mtd_get_master(mtd);
 	int ret;
+	loff_t moffs;
+	int oldbad = -1;
 
 	if (!master->_block_markbad)
 		return -EOPNOTSUPP;
@@ -2418,13 +2420,31 @@ int mtd_block_markbad(struct mtd_info *mtd, loff_t ofs)
 	if (mtd->flags & MTD_SLC_ON_MLC_EMULATION)
 		ofs = (loff_t)mtd_div_by_eb(ofs, mtd) * master->erasesize;
 
-	ret = master->_block_markbad(master, mtd_get_master_ofs(mtd, ofs));
+	moffs = mtd_get_master_ofs(mtd, ofs);
+
+	/* Pre-check: remember current state if available. */
+	if (master->_block_isbad)
+		oldbad = master->_block_isbad(master, moffs);
+
+	ret = master->_block_markbad(master, moffs);
 	if (ret)
 		return ret;
 
-	while (mtd->parent) {
-		mtd->ecc_stats.badblocks++;
-		mtd = mtd->parent;
+	/*
+	 * Post-check and bump stats only on a confirmed good->bad transition.
+	 * If _block_isbad is not implemented, be conservative and do not bump.
+	 */
+	if (master->_block_isbad) {
+		/* If it was already bad, nothing to do. */
+		if (oldbad > 0)
+			return 0;
+
+		if (master->_block_isbad(master, moffs) > 0) {
+			while (mtd->parent) {
+				mtd->ecc_stats.badblocks++;
+				mtd = mtd->parent;
+			}
+		}
 	}
 
 	return 0;
