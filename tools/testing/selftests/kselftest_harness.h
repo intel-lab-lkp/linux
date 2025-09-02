@@ -69,6 +69,7 @@
 #include <unistd.h>
 
 #include "kselftest.h"
+#include "pidfd/pidfd.h"
 
 #define TEST_TIMEOUT_DEFAULT 30
 
