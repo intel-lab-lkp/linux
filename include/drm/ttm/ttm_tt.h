@@ -126,6 +126,8 @@ struct ttm_tt {
 	enum ttm_caching caching;
 	/** @restore: Partial restoration from backup state. TTM private */
 	struct ttm_pool_tt_restore *restore;
+	/** @objcg: Object cgroup for this TT allocation */
+	struct obj_cgroup *objcg;
 };
 
 /**
