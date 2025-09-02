@@ -156,7 +156,7 @@ void blk_throtl_cancel_bios(struct gendisk *disk);
 
 static inline bool blk_throtl_activated(struct request_queue *q)
 {
-	return q->td != NULL;
+	return q->td != NULL && test_bit(blkcg_policy_throtl.plid, q->blkcg_pols);
 }
 
 static inline bool blk_should_throtl(struct bio *bio)
