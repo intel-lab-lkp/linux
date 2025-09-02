@@ -1289,6 +1289,8 @@ const char * const vmstat_text[] = {
 	[I(NR_HUGETLB)]				= "nr_hugetlb",
 #endif
 	[I(NR_BALLOON_PAGES)]			= "nr_balloon_pages",
+	[I(NR_GPU_ACTIVE)]			= "nr_gpu_active",
+	[I(NR_GPU_RECLAIM)]			= "nr_gpu_reclaim",
 #undef I
 
 	/* system-wide enum vm_stat_item counters */
