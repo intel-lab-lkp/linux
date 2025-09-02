@@ -80,7 +80,7 @@ static int alloc_callchain_buffers(void)
 	 * accessed from NMI. Use a temporary manual per cpu allocation
 	 * until that gets sorted out.
 	 */
-	size = offsetof(struct callchain_cpus_entries, cpu_entries[nr_cpu_ids]);
+	size = struct_size(entries, cpu_entries, nr_cpu_ids);
 
 	entries = kzalloc(size, GFP_KERNEL);
 	if (!entries)
