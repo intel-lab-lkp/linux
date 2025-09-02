@@ -68,6 +68,8 @@
 	ret >= 0; \
 })
 #define PSI_LINE_FORMAT "%-12s %6.1f%%/%6.1f%%/%6.1f%%/%8llu(ms)\n"
+#define FMT_NORMAL "%8.2f %8.2f %8.2f %8.2f\n"
+#define FMT_MEMVERBOSE "%8.2f %8.2f %8.2f %8.2f %8.2f %8.2f %8.2f %8.2f %8.2f\n"
 
 /* Program settings structure */
 struct config {
@@ -78,6 +80,7 @@ struct config {
 	int output_one_time;	/* Output once and exit */
 	int monitor_pid;		/* Monitor specific PID */
 	char *container_path;	/* Path to container cgroup */
+	int mem_verbose_mode;	/* Memory detailed display mode */
 };
 
 /* PSI statistics structure */
@@ -163,13 +166,14 @@ static void usage(void)
 {
 	printf("Usage: delaytop [Options]\n"
 	"Options:\n"
-	"  -h, --help				Show this help message and exit\n"
-	"  -d, --delay=SECONDS	  Set refresh interval (default: 2 seconds, min: 1)\n"
-	"  -n, --iterations=COUNT	Set number of updates (default: 0 = infinite)\n"
-	"  -P, --processes=NUMBER	Set maximum number of processes to show (default: 20, max: 1000)\n"
-	"  -o, --once				Display once and exit\n"
-	"  -p, --pid=PID			Monitor only the specified PID\n"
-	"  -C, --container=PATH	 Monitor the container at specified cgroup path\n");
+	"  -h, --help               Show this help message and exit\n"
+	"  -d, --delay=SECONDS      Set refresh interval (default: 2 seconds, min: 1)\n"
+	"  -n, --iterations=COUNT   Set number of updates (default: 0 = infinite)\n"
+	"  -P, --processes=NUMBER   Set maximum number of processes to show (default: 20, max: 1000)\n"
+	"  -o, --once               Display once and exit\n"
+	"  -p, --pid=PID            Monitor only the specified PID\n"
+	"  -C, --container=PATH     Monitor the container at specified cgroup path\n"
+	"  -M, --memverbose         Display memory detailed information\n");
 	exit(0);
 }
 
@@ -185,6 +189,7 @@ static void parse_args(int argc, char **argv)
 		{"once", no_argument, 0, 'o'},
 		{"processes", required_argument, 0, 'P'},
 		{"container", required_argument, 0, 'C'},
+		{"memverbose", no_argument, 0, 'M'},
 		{0, 0, 0, 0}
 	};
 
@@ -196,11 +201,12 @@ static void parse_args(int argc, char **argv)
 	cfg.output_one_time = 0;
 	cfg.monitor_pid = 0;	/* 0 means monitor all PIDs */
 	cfg.container_path = NULL;
+	cfg.mem_verbose_mode = 0;
 
 	while (1) {
 		int option_index = 0;
 
-		c = getopt_long(argc, argv, "hd:n:p:oP:C:", long_options, &option_index);
+		c = getopt_long(argc, argv, "hd:n:p:oP:C:M", long_options, &option_index);
 		if (c == -1)
 			break;
 
@@ -246,6 +252,9 @@ static void parse_args(int argc, char **argv)
 			break;
 		case 'C':
 			cfg.container_path = strdup(optarg);
+			break;
+		case 'M':
+			cfg.mem_verbose_mode = 1;
 			break;
 		default:
 			fprintf(stderr, "Try 'delaytop --help' for more information.\n");
@@ -582,6 +591,25 @@ static double average_ms(unsigned long long total, unsigned long long count)
 	return (double)total / 1000000.0 / count;
 }
 
+/* Calculate average delay in milliseconds for memory */
+static unsigned long long task_total_mem_delay(const struct task_info *t)
+{
+	return t->swapin_delay_total +
+		t->freepages_delay_total +
+		t->thrashing_delay_total +
+		t->compact_delay_total +
+		t->wpcopy_delay_total;
+}
+
+static unsigned long long task_total_mem_count(const struct task_info *t)
+{
+	return t->swapin_count +
+		t->freepages_count +
+		t->thrashing_count +
+		t->compact_count +
+		t->wpcopy_count;
+}
+
 /* Comparison function for sorting tasks */
 static int compare_tasks(const void *a, const void *b)
 {
@@ -740,27 +768,62 @@ static void display_results(void)
 	}
 	suc &= BOOL_FPRINT(out, "Top %d processes (sorted by CPU delay):\n",
 			cfg.max_processes);
-	suc &= BOOL_FPRINT(out, "%5s  %5s  %-17s", "PID", "TGID", "COMMAND");
-	suc &= BOOL_FPRINT(out, "%7s %7s %7s %7s %7s %7s %7s %7s\n",
-		"CPU(ms)", "IO(ms)", "SWAP(ms)", "RCL(ms)",
-		"THR(ms)", "CMP(ms)", "WP(ms)", "IRQ(ms)");
+	suc &= BOOL_FPRINT(out, "%8s  %8s  %-17s", "PID", "TGID", "COMMAND");
 
-	suc &= BOOL_FPRINT(out, "-----------------------------------------------");
-	suc &= BOOL_FPRINT(out, "----------------------------------------------\n");
+	if (!cfg.mem_verbose_mode) {
+		suc &= BOOL_FPRINT(out, "%8s %8s %8s %8s\n",
+			"CPU(ms)", "IO(ms)", "IRQ(ms)", "MEM(ms)");
+		suc &= BOOL_FPRINT(out, "-----------------------");
+		suc &= BOOL_FPRINT(out, "-----------------------");
+		suc &= BOOL_FPRINT(out, "--------------------------\n");
+	} else {
+		suc &= BOOL_FPRINT(out, "%8s %8s %8s %8s %8s %8s %8s %8s %8s\n",
+			"CPU(ms)", "IO(ms)", "IRQ(ms)", "MEM(ms)",
+			"SWAP(ms)", "RCL(ms)", "THR(ms)", "CMP(ms)", "WP(ms)");
+		suc &= BOOL_FPRINT(out, "-----------------------");
+		suc &= BOOL_FPRINT(out, "-----------------------");
+		suc &= BOOL_FPRINT(out, "-----------------------");
+		suc &= BOOL_FPRINT(out, "-----------------------");
+		suc &= BOOL_FPRINT(out, "-------------------------\n");
+	}
+
+
 	count = task_count < cfg.max_processes ? task_count : cfg.max_processes;
 
 	for (i = 0; i < count; i++) {
-		suc &= BOOL_FPRINT(out, "%5d  %5d  %-15s",
+		suc &= BOOL_FPRINT(out, "%8d  %8d  %-15s",
 			tasks[i].pid, tasks[i].tgid, tasks[i].command);
-		suc &= BOOL_FPRINT(out, "%7.2f %7.2f %7.2f %7.2f %7.2f %7.2f %7.2f %7.2f\n",
-			average_ms(tasks[i].cpu_delay_total, tasks[i].cpu_count),
-			average_ms(tasks[i].blkio_delay_total, tasks[i].blkio_count),
-			average_ms(tasks[i].swapin_delay_total, tasks[i].swapin_count),
-			average_ms(tasks[i].freepages_delay_total, tasks[i].freepages_count),
-			average_ms(tasks[i].thrashing_delay_total, tasks[i].thrashing_count),
-			average_ms(tasks[i].compact_delay_total, tasks[i].compact_count),
-			average_ms(tasks[i].wpcopy_delay_total, tasks[i].wpcopy_count),
-			average_ms(tasks[i].irq_delay_total, tasks[i].irq_count));
+		if (!cfg.mem_verbose_mode) {
+			suc &= BOOL_FPRINT(out, FMT_NORMAL,
+				average_ms(tasks[i].cpu_delay_total,
+						   tasks[i].cpu_count),
+				average_ms(tasks[i].blkio_delay_total,
+						   tasks[i].blkio_count),
+				average_ms(tasks[i].irq_delay_total,
+						   tasks[i].irq_count),
+				average_ms(task_total_mem_delay(&tasks[i]),
+						   task_total_mem_count(&tasks[i])));
+		} else {
+			suc &= BOOL_FPRINT(out, FMT_MEMVERBOSE,
+				average_ms(tasks[i].cpu_delay_total,
+						   tasks[i].cpu_count),
+				average_ms(tasks[i].blkio_delay_total,
+						   tasks[i].blkio_count),
+				average_ms(tasks[i].irq_delay_total,
+						   tasks[i].irq_count),
+				average_ms(task_total_mem_delay(&tasks[i]),
+						   task_total_mem_count(&tasks[i])),
+				average_ms(tasks[i].swapin_delay_total,
+						   tasks[i].swapin_count),
+				average_ms(tasks[i].freepages_delay_total,
+						   tasks[i].freepages_count),
+				average_ms(tasks[i].thrashing_delay_total,
+						   tasks[i].thrashing_count),
+				average_ms(tasks[i].compact_delay_total,
+						   tasks[i].compact_count),
+				average_ms(tasks[i].wpcopy_delay_total,
+						   tasks[i].wpcopy_count));
+		}
 	}
 
 	suc &= BOOL_FPRINT(out, "\n");
