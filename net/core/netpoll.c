@@ -496,7 +496,8 @@ static void push_eth(struct netpoll *np, struct sk_buff *skb)
 		eth->h_proto = htons(ETH_P_IP);
 }
 
-int netpoll_send_udp(struct netpoll *np, const char *msg, int len)
+struct sk_buff *netpoll_prepare_skb(struct netpoll *np, const char *msg,
+				    int len)
 {
 	int total_len, ip_len, udp_len;
 	struct sk_buff *skb;
@@ -515,7 +516,7 @@ int netpoll_send_udp(struct netpoll *np, const char *msg, int len)
 	skb = find_skb(np, total_len + np->dev->needed_tailroom,
 		       total_len - len);
 	if (!skb)
-		return -ENOMEM;
+		return NULL;
 
 	skb_copy_to_linear_data(skb, msg, len);
 	skb_put(skb, len);
@@ -528,9 +529,9 @@ int netpoll_send_udp(struct netpoll *np, const char *msg, int len)
 	push_eth(np, skb);
 	skb->dev = np->dev;
 
-	return (int)netpoll_send_skb(np, skb);
+	return skb;
 }
-EXPORT_SYMBOL(netpoll_send_udp);
+EXPORT_SYMBOL(netpoll_prepare_skb);
 
 
 static void skb_pool_flush(struct netpoll *np)

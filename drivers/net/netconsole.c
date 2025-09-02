@@ -1492,18 +1492,25 @@ static struct notifier_block netconsole_netdev_notifier = {
  */
 static void send_udp(struct netconsole_target *nt, const char *msg, int len)
 {
-	int result = netpoll_send_udp(&nt->np, msg, len);
+	struct sk_buff *skb;
+	netdev_tx_t result;
 
-	if (IS_ENABLED(CONFIG_NETCONSOLE_DYNAMIC)) {
-		if (result == NET_XMIT_DROP) {
-			u64_stats_update_begin(&nt->stats.syncp);
-			u64_stats_inc(&nt->stats.xmit_drop_count);
-			u64_stats_update_end(&nt->stats.syncp);
-		} else if (result == -ENOMEM) {
+	skb = netpoll_prepare_skb(&nt->np, msg, len);
+	if (!skb) {
+		if (IS_ENABLED(CONFIG_NETCONSOLE_DYNAMIC)) {
 			u64_stats_update_begin(&nt->stats.syncp);
 			u64_stats_inc(&nt->stats.enomem_count);
 			u64_stats_update_end(&nt->stats.syncp);
 		}
+		return;
+	}
+
+	result = netpoll_send_skb(&nt->np, skb);
+
+	if (IS_ENABLED(CONFIG_NETCONSOLE_DYNAMIC) && result == NET_XMIT_DROP) {
+		u64_stats_update_begin(&nt->stats.syncp);
+		u64_stats_inc(&nt->stats.xmit_drop_count);
+		u64_stats_update_end(&nt->stats.syncp);
 	}
 }
 
