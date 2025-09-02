@@ -1407,7 +1407,7 @@ csio_disable_port(struct device *dev,
 	bool disable;
 
 	if (*buf == '1' || *buf == '0')
-		disable = (*buf == '1') ? true : false;
+		disable = *buf == '1';
 	else
 		return -EINVAL;
 
