@@ -666,7 +666,7 @@ static void mlx5e_rx_compute_wqe_bulk_params(struct mlx5e_params *params,
 	info->refill_unit = DIV_ROUND_UP(info->wqe_bulk, split_factor);
 }
 
-#define DEFAULT_FRAG_SIZE (2048)
+#define DEFAULT_FRAG_SIZE (PAGE_SIZE / 2)
 
 static int mlx5e_build_rq_frags_info(struct mlx5_core_dev *mdev,
 				     struct mlx5e_params *params,
