@@ -625,23 +625,20 @@ void release_bp_slot(struct perf_event *bp)
 static int __modify_bp_slot(struct perf_event *bp, u64 old_type, u64 new_type)
 {
 	int err;
+	enum bp_type_idx old_type_idx, new_type_idx;
+
+	old_type_idx = find_slot_idx(old_type);
+	new_type_idx = find_slot_idx(new_type);
+	if (old_type_idx == new_type_idx)
+		return 0;
+
+	err = __reserve_bp_slot(bp, new_type);
+	if (err)
+		return err;
 
 	__release_bp_slot(bp, old_type);
 
-	err = __reserve_bp_slot(bp, new_type);
-	if (err) {
-		/*
-		 * Reserve the old_type slot back in case
-		 * there's no space for the new type.
-		 *
-		 * This must succeed, because we just released
-		 * the old_type slot in the __release_bp_slot
-		 * call above. If not, something is broken.
-		 */
-		WARN_ON(__reserve_bp_slot(bp, old_type));
-	}
-
-	return err;
+	return 0;
 }
 
 static int modify_bp_slot(struct perf_event *bp, u64 old_type, u64 new_type)
