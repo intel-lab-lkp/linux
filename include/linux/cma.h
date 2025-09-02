@@ -61,6 +61,10 @@ extern void cma_reserve_pages_on_error(struct cma *cma);
 struct folio *cma_alloc_folio(struct cma *cma, int order, gfp_t gfp);
 bool cma_free_folio(struct cma *cma, const struct folio *folio);
 bool cma_validate_zones(struct cma *cma);
+
+struct cma *cma_create(phys_addr_t base, phys_addr_t size,
+		       unsigned int order_per_bit, const char *name);
+void cma_free(struct cma *cma);
 #else
 static inline struct folio *cma_alloc_folio(struct cma *cma, int order, gfp_t gfp)
 {
@@ -71,9 +75,21 @@ static inline bool cma_free_folio(struct cma *cma, const struct folio *folio)
 {
 	return false;
 }
+
 static inline bool cma_validate_zones(struct cma *cma)
 {
 	return false;
+}
+
+static inline struct cma *cma_create(phys_addr_t base, phys_addr_t size,
+				     unsigned int order_per_bit,
+				     const char *name)
+{
+	return NULL;
+}
+
+static inline void cma_free(struct cma *cma)
+{
 }
 #endif
 
