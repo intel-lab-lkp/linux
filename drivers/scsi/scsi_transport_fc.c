@@ -1712,7 +1712,7 @@ store_fc_vport_disable(struct device *dev, struct device_attribute *attr,
 	} else
 		return -EINVAL;
 
-	stat = i->f->vport_disable(vport, ((*buf == '0') ? false : true));
+	stat = i->f->vport_disable(vport, *buf != '0');
 	return stat ? stat : count;
 }
 static FC_DEVICE_ATTR(vport, vport_disable, S_IWUSR,
