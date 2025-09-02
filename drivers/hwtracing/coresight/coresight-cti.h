@@ -15,6 +15,7 @@
 #include <linux/types.h>
 
 #include "coresight-priv.h"
+#include "qcom-cti.h"
 
 struct fwnode_handle;
 
@@ -57,7 +58,7 @@ struct fwnode_handle;
  * Max of in and out defined in the DEVID register.
  * - pick up actual number used from .dts parameters if present.
  */
-#define CTIINOUTEN_MAX		32
+#define CTIINOUTEN_MAX		128
 
 /**
  * Group of related trigger signals
@@ -68,7 +69,7 @@ struct fwnode_handle;
  */
 struct cti_trig_grp {
 	int nr_sigs;
-	u32 used_mask;
+	DECLARE_BITMAP(used_mask, CTIINOUTEN_MAX);
 	int sig_types[];
 };
 
@@ -147,9 +148,10 @@ struct cti_config {
 	bool hw_powered;
 
 	/* registered triggers and filtering */
-	u32 trig_in_use;
-	u32 trig_out_use;
-	u32 trig_out_filter;
+	DECLARE_BITMAP(trig_in_use, CTIINOUTEN_MAX);
+	DECLARE_BITMAP(trig_out_use, CTIINOUTEN_MAX);
+	DECLARE_BITMAP(trig_out_filter, CTIINOUTEN_MAX);
+
 	bool trig_filter_enable;
 	u8 xtrig_rchan_sel;
 
@@ -160,6 +162,9 @@ struct cti_config {
 	u32 ctiouten[CTIINOUTEN_MAX];
 	u32 ctigate;
 	u32 asicctl;
+
+	/*for qcom_cti, see regs_idx_show*/
+	u32 regs_idx;
 };
 
 /**
@@ -180,6 +185,8 @@ struct cti_drvdata {
 	struct cti_config config;
 	struct list_head node;
 	void (*csdev_release)(struct device *dev);
+	enum cti_subtype subtype;
+	const u32 *offsets;
 };
 
 /*
@@ -232,6 +239,11 @@ int cti_create_cons_sysfs(struct device *dev, struct cti_drvdata *drvdata);
 struct coresight_platform_data *
 coresight_cti_get_platform_data(struct device *dev);
 const char *cti_plat_get_node_name(struct fwnode_handle *fwnode);
+
+static inline u32 cti_offset(struct cti_drvdata *drvdata, int index, int num)
+{
+	return drvdata->offsets[index] + 4 * num;
+}
 
 /* cti powered and enabled */
 static inline bool cti_active(struct cti_config *cfg)
