@@ -4584,14 +4584,14 @@ static bool arcmsr_reset_in_progress(struct AdapterControlBlock *acb)
 	switch(acb->adapter_type) {
 	case ACB_ADAPTER_TYPE_A:{
 		struct MessageUnit_A __iomem *reg = acb->pmuA;
-		rtn = ((readl(&reg->outbound_msgaddr1) &
-			ARCMSR_OUTBOUND_MESG1_FIRMWARE_OK) == 0) ? true : false;
+		rtn = (readl(&reg->outbound_msgaddr1) &
+			ARCMSR_OUTBOUND_MESG1_FIRMWARE_OK) == 0;
 		}
 		break;
 	case ACB_ADAPTER_TYPE_B:{
 		struct MessageUnit_B *reg = acb->pmuB;
-		rtn = ((readl(reg->iop2drv_doorbell) &
-			ARCMSR_MESSAGE_FIRMWARE_OK) == 0) ? true : false;
+		rtn = (readl(reg->iop2drv_doorbell) &
+			ARCMSR_MESSAGE_FIRMWARE_OK) == 0;
 		}
 		break;
 	case ACB_ADAPTER_TYPE_C:{
@@ -4601,8 +4601,7 @@ static bool arcmsr_reset_in_progress(struct AdapterControlBlock *acb)
 		break;
 	case ACB_ADAPTER_TYPE_D:{
 		struct MessageUnit_D *reg = acb->pmuD;
-		rtn = ((readl(reg->sample_at_reset) & 0x80) == 0) ?
-			true : false;
+		rtn = (readl(reg->sample_at_reset) & 0x80) == 0;
 		}
 		break;
 	case ACB_ADAPTER_TYPE_E:
