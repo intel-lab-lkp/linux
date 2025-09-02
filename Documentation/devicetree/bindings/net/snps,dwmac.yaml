@@ -77,6 +77,7 @@ properties:
         - renesas,r9a06g032-gmac
         - renesas,rzn1-gmac
         - renesas,rzv2h-gbeth
+        - renesas,rzt2h-gbeth
         - rockchip,px30-gmac
         - rockchip,rk3128-gmac
         - rockchip,rk3228-gmac
