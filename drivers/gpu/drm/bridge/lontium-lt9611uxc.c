@@ -360,17 +360,24 @@ lt9611uxc_bridge_detect(struct drm_bridge *bridge, struct drm_connector *connect
 	unsigned int reg_val = 0;
 	int ret;
 	bool connected = true;
+	bool edid_read = true;
 
 	lt9611uxc_lock(lt9611uxc);
 
 	if (lt9611uxc->hpd_supported) {
 		ret = regmap_read(lt9611uxc->regmap, 0xb023, &reg_val);
 
-		if (ret)
+		if (ret) {
 			dev_err(lt9611uxc->dev, "failed to read hpd status: %d\n", ret);
-		else
+		} else {
+			dev_dbg(lt9611uxc->dev, "detect() reg[0xb023]=0x%02X\n", reg_val);
 			connected  = reg_val & BIT(1);
+			edid_read = reg_val & BIT(0);
+			if (edid_read)
+				wake_up_all(&lt9611uxc->wq);
+		}
 	}
+	lt9611uxc->edid_read = edid_read;
 	lt9611uxc->hdmi_connected = connected;
 
 	lt9611uxc_unlock(lt9611uxc);
