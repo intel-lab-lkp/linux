@@ -179,6 +179,9 @@ static void lt9611uxc_hpd_work(struct work_struct *work)
 
 static void lt9611uxc_reset(struct lt9611uxc *lt9611uxc)
 {
+	if (!lt9611uxc->reset_gpio)
+		return;
+
 	gpiod_set_value_cansleep(lt9611uxc->reset_gpio, 1);
 	msleep(20);
 
@@ -455,7 +458,7 @@ static int lt9611uxc_gpio_init(struct lt9611uxc *lt9611uxc)
 {
 	struct device *dev = lt9611uxc->dev;
 
-	lt9611uxc->reset_gpio = devm_gpiod_get(dev, "reset", GPIOD_OUT_HIGH);
+	lt9611uxc->reset_gpio = devm_gpiod_get_optional(dev, "reset", GPIOD_OUT_HIGH);
 	if (IS_ERR(lt9611uxc->reset_gpio)) {
 		dev_err(dev, "failed to acquire reset gpio\n");
 		return PTR_ERR(lt9611uxc->reset_gpio);
