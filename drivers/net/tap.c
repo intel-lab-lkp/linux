@@ -753,6 +753,24 @@ done:
 	return ret ? ret : total;
 }
 
+static inline void wake_netdev_queue(struct tap_queue *q)
+{
+	struct netdev_queue *txq;
+	struct net_device *dev;
+
+	rcu_read_lock();
+	dev = rcu_dereference(q->tap)->dev;
+	txq = netdev_get_tx_queue(dev, q->queue_index);
+
+	if (netif_tx_queue_stopped(txq)) {
+		/* Paired with smp_wmb() in tun_net_xmit. */
+		smp_rmb();
+		if (ptr_ring_spare(&q->ring, 1))
+			netif_tx_wake_queue(txq);
+	}
+	rcu_read_unlock();
+}
+
 static ssize_t tap_do_read(struct tap_queue *q,
 			   struct iov_iter *to,
 			   int noblock, struct sk_buff *skb)
@@ -785,11 +803,15 @@ static ssize_t tap_do_read(struct tap_queue *q,
 			ret = -ERESTARTSYS;
 			break;
 		}
+		wake_netdev_queue(q);
+
 		/* Nothing to read, let's sleep */
 		schedule();
 	}
 	if (!noblock)
 		finish_wait(sk_sleep(&q->sk), &wait);
+
+	wake_netdev_queue(q);
 
 put:
 	if (skb) {
