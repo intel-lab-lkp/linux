@@ -393,6 +393,7 @@ static int vexpress_syscfg_probe(struct platform_device *pdev)
 		struct device_node *bridge_np;
 
 		bridge_np = of_parse_phandle(node, "arm,vexpress,config-bridge", 0);
+		of_node_put(bridge_np);
 		if (bridge_np != pdev->dev.parent->of_node)
 			continue;
 
