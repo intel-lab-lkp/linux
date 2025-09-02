@@ -757,7 +757,7 @@ static enum sci_status sci_io_request_construct_basic_sata(struct isci_request *
 
 	ireq->protocol = SAS_PROTOCOL_STP;
 
-	copy = (task->data_dir == DMA_NONE) ? false : true;
+	copy = task->data_dir != DMA_NONE;
 
 	status = sci_io_request_construct_sata(ireq,
 						task->total_xfer_len,
