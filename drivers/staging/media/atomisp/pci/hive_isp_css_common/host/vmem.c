@@ -161,7 +161,7 @@ static void store_vector(const isp_ID_t ID, t_vmem_elem *to, const t_vmem_elem *
 }
 
 void isp_vmem_load(const isp_ID_t ID, const t_vmem_elem *from, t_vmem_elem *to,
-		   unsigned int elems) /* In t_vmem_elem */
+		   unsigned int elems)
 {
 	unsigned int c;
 	const t_vmem_elem *vp = from;
@@ -176,7 +176,7 @@ void isp_vmem_load(const isp_ID_t ID, const t_vmem_elem *from, t_vmem_elem *to,
 }
 
 void isp_vmem_store(const isp_ID_t ID, t_vmem_elem *to, const t_vmem_elem *from,
-		    unsigned int elems) /* In t_vmem_elem */
+		    unsigned int elems)
 {
 	unsigned int c;
 	t_vmem_elem *vp = to;
@@ -192,7 +192,7 @@ void isp_vmem_store(const isp_ID_t ID, t_vmem_elem *to, const t_vmem_elem *from,
 
 void isp_vmem_2d_load(const isp_ID_t ID, const t_vmem_elem *from, t_vmem_elem *to,
 		      unsigned int height, unsigned int width,
-		      unsigned int stride_to, unsigned int stride_from) /* In t_vmem_elem */
+		      unsigned int stride_to, unsigned int stride_from)
 {
 	unsigned int h;
 
@@ -215,7 +215,7 @@ void isp_vmem_2d_load(const isp_ID_t ID, const t_vmem_elem *from, t_vmem_elem *t
 
 void isp_vmem_2d_store(const isp_ID_t ID, t_vmem_elem *to, const t_vmem_elem *from,
 		       unsigned int height, unsigned int width,
-		       unsigned int stride_to, unsigned int stride_from) /* In t_vmem_elem */
+		       unsigned int stride_to, unsigned int stride_from)
 {
 	unsigned int h;
 
