@@ -171,14 +171,14 @@
 static const struct auxiliary_device_id *auxiliary_match_id(const struct auxiliary_device_id *id,
 							    const struct auxiliary_device *auxdev)
 {
+	const char *p = strrchr(dev_name(&auxdev->dev), '.');
+	int match_size;
+
+	if (!p)
+		return NULL;
+	match_size = p - dev_name(&auxdev->dev);
+
 	for (; id->name[0]; id++) {
-		const char *p = strrchr(dev_name(&auxdev->dev), '.');
-		int match_size;
-
-		if (!p)
-			continue;
-		match_size = p - dev_name(&auxdev->dev);
-
 		/* use dev_name(&auxdev->dev) prefix before last '.' char to match to */
 		if (strlen(id->name) == match_size &&
 		    !strncmp(dev_name(&auxdev->dev), id->name, match_size))
