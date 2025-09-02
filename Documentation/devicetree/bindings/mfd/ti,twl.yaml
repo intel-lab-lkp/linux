@@ -11,9 +11,9 @@ maintainers:
 
 description: |
   The TWLs are Integrated Power Management Chips.
-  Some version might contain much more analog function like
+  Some versions might contain much more analog functionality like
   USB transceiver or Audio amplifier.
-  These chips are connected to an i2c bus.
+  These chips are connected to an I2C bus.
 
 allOf:
   - if:
@@ -181,6 +181,12 @@ properties:
   "#clock-cells":
     const: 1
 
+  clocks:
+    maxItems: 1
+
+  clock-names:
+    const: fck
+
   charger:
     type: object
     additionalProperties: true
@@ -197,6 +203,131 @@ properties:
         const: ti,twl4030-rtc
       interrupts:
         maxItems: 1
+
+  audio:
+    type: object
+    additionalProperties: true
+    properties:
+      compatible:
+        const: ti,twl4030-audio
+
+  keypad:
+    type: object
+    additionalProperties: true
+    properties:
+      compatible:
+        const: ti,twl4030-keypad
+
+  pwm:
+    type: object
+    $ref: /schemas/pwm/pwm.yaml#
+    unevaluatedProperties: false
+    description:
+      PWM controllers (PWM1 and PWM2 on TWL4030, PWM0 and PWM1 on TWL6030/32).
+    properties:
+      compatible:
+        enum:
+          - ti,twl4030-pwm
+          - ti,twl6030-pwm
+      '#pwm-cells':
+        const: 2
+    required:
+      - compatible
+      - '#pwm-cells'
+
+  pwmled:
+    type: object
+    $ref: /schemas/pwm/pwm.yaml#
+    unevaluatedProperties: false
+    description:
+      PWM controllers connected to LED terminals (PWMA and PWMB on TWL4030,
+      LED PWM on TWL6030/32, mainly used as charging indicator LED).
+    properties:
+      compatible:
+        enum:
+          - ti,twl4030-pwmled
+          - ti,twl6030-pwmled
+      '#pwm-cells':
+        const: 2
+    required:
+      - compatible
+      - '#pwm-cells'
+
+  twl4030-usb:
+    type: object
+    additionalProperties: true
+    properties:
+      compatible:
+        const: ti,twl4030-usb
+
+  usb-comparator:
+    type: object
+    additionalProperties: true
+    properties:
+      compatible:
+        const: ti,twl6030-usb
+
+  gpio:
+    type: object
+    additionalProperties: true
+    properties:
+      compatible:
+        const: ti,twl4030-gpio
+
+  power:
+    type: object
+    description:
+      The power management module inside the TWL4030 provides several
+      facilities to control the power resources, including power scripts.
+      For now, the binding only supports the complete shutdown of the
+      system after poweroff.
+      Board-specific compatible strings may be used for platform-specific
+      power configurations.
+      A board-specific compatible string (e.g., ti,twl4030-power-n900) may
+      be paired with a generic fallback (generally for power saving mode).
+    additionalProperties: false
+    properties:
+      compatible:
+        oneOf:
+          - enum:
+              - ti,twl4030-power
+              - ti,twl4030-power-reset
+              - ti,twl4030-power-idle
+              - ti,twl4030-power-idle-osc-off
+              # Add all board-specific compatibles for completeness
+              - ti,twl4030-power-omap3-sdp
+              - ti,twl4030-power-omap3-ldp
+              - ti,twl4030-power-omap3-evm
+              - ti,twl4030-power-beagleboard-xm
+              - ti,twl4030-power-n900
+          - items:
+              - enum:
+                  - ti,twl4030-power
+                  - ti,twl4030-power-reset
+                  - ti,twl4030-power-idle
+                  - ti,twl4030-power-idle-osc-off
+                  # Add all board-specific compatibles for completeness
+                  - ti,twl4030-power-omap3-sdp
+                  - ti,twl4030-power-omap3-ldp
+                  - ti,twl4030-power-omap3-evm
+                  - ti,twl4030-power-beagleboard-xm
+                  - ti,twl4030-power-n900
+              - enum:
+                  # Fallback (for power saving mode)
+                  - ti,twl4030-power-idle
+                  - ti,twl4030-power-idle-osc-off
+      ti,system-power-controller:
+        type: boolean
+        deprecated: true
+        description:
+          DEPRECATED. The standard 'system-power-controller'
+          property on the parent node should be used instead.
+      ti,use_poweroff:
+        type: boolean
+        deprecated: true
+        description: DEPRECATED, to be removed.
+    required:
+      - compatible
 
 patternProperties:
   "^regulator-":
@@ -271,6 +402,16 @@ examples:
           compatible = "ti,twl6030-vmmc";
           ti,retain-on-reset;
         };
+
+        pwm {
+          compatible = "ti,twl6030-pwm";
+          #pwm-cells = <2>;
+        };
+
+        pwmled {
+          compatible = "ti,twl6030-pwmled";
+          #pwm-cells = <2>;
+        };
       };
     };
 
@@ -324,6 +465,20 @@ examples:
 
         watchdog {
           compatible = "ti,twl4030-wdt";
+        };
+
+        power {
+          compatible = "ti,twl4030-power";
+        };
+
+        pwm {
+          compatible = "ti,twl4030-pwm";
+          #pwm-cells = <2>;
+        };
+
+        pwmled {
+          compatible = "ti,twl4030-pwmled";
+          #pwm-cells = <2>;
         };
       };
     };
