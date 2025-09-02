@@ -18,6 +18,11 @@
 #define PMIC_GLINK_SEND_TIMEOUT (5 * HZ)
 
 enum {
+	PMIC_GLINK_PDR_UNAVAIL = 0,
+	PMIC_GLINK_PDR_AVAIL,
+};
+
+enum {
 	PMIC_GLINK_CLIENT_BATT = 0,
 	PMIC_GLINK_CLIENT_ALTMODE,
 	PMIC_GLINK_CLIENT_UCSI,
@@ -39,6 +44,7 @@ struct pmic_glink {
 	struct mutex state_lock;
 	unsigned int client_state;
 	unsigned int pdr_state;
+	bool pdr_available;
 
 	/* serializing clients list updates */
 	spinlock_t client_lock;
@@ -203,17 +209,17 @@ static void pmic_glink_del_aux_device(struct pmic_glink *pg,
 	auxiliary_device_uninit(aux);
 }
 
-static void pmic_glink_state_notify_clients(struct pmic_glink *pg)
+static void pmic_glink_state_notify_clients(struct pmic_glink *pg, unsigned int state)
 {
 	struct pmic_glink_client *client;
 	unsigned int new_state = pg->client_state;
 	unsigned long flags;
 
 	if (pg->client_state != SERVREG_SERVICE_STATE_UP) {
-		if (pg->pdr_state == SERVREG_SERVICE_STATE_UP && pg->ept)
+		if (state == SERVREG_SERVICE_STATE_UP && pg->ept)
 			new_state = SERVREG_SERVICE_STATE_UP;
 	} else {
-		if (pg->pdr_state == SERVREG_SERVICE_STATE_DOWN || !pg->ept)
+		if (state == SERVREG_SERVICE_STATE_DOWN || !pg->ept)
 			new_state = SERVREG_SERVICE_STATE_DOWN;
 	}
 
@@ -233,7 +239,7 @@ static void pmic_glink_pdr_callback(int state, char *svc_path, void *priv)
 	guard(mutex)(&pg->state_lock);
 	pg->pdr_state = state;
 
-	pmic_glink_state_notify_clients(pg);
+	pmic_glink_state_notify_clients(pg, state);
 }
 
 static int pmic_glink_rpmsg_probe(struct rpmsg_device *rpdev)
@@ -246,10 +252,14 @@ static int pmic_glink_rpmsg_probe(struct rpmsg_device *rpdev)
 		return dev_err_probe(&rpdev->dev, -ENODEV, "no pmic_glink device to attach to\n");
 
 	dev_set_drvdata(&rpdev->dev, pg);
+	pg->pdr_available = rpdev->id.driver_data;
 
 	guard(mutex)(&pg->state_lock);
 	pg->ept = rpdev->ept;
-	pmic_glink_state_notify_clients(pg);
+	if (pg->pdr_available)
+		pmic_glink_state_notify_clients(pg, pg->pdr_state);
+	else
+		pmic_glink_state_notify_clients(pg, SERVREG_SERVICE_STATE_UP);
 
 	return 0;
 }
@@ -265,11 +275,15 @@ static void pmic_glink_rpmsg_remove(struct rpmsg_device *rpdev)
 
 	guard(mutex)(&pg->state_lock);
 	pg->ept = NULL;
-	pmic_glink_state_notify_clients(pg);
+	if (pg->pdr_available)
+		pmic_glink_state_notify_clients(pg, pg->pdr_state);
+	else
+		pmic_glink_state_notify_clients(pg, SERVREG_SERVICE_STATE_DOWN);
 }
 
 static const struct rpmsg_device_id pmic_glink_rpmsg_id_match[] = {
-	{ "PMIC_RTR_ADSP_APPS" },
+	{.name = "PMIC_RTR_ADSP_APPS", .driver_data = PMIC_GLINK_PDR_AVAIL },
+	{.name = "PMIC_RTR_SOCCP_APPS", .driver_data = PMIC_GLINK_PDR_UNAVAIL },
 	{}
 };
 
