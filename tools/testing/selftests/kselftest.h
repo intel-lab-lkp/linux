@@ -57,6 +57,7 @@
 #include <string.h>
 #include <stdio.h>
 #include <sys/utsname.h>
+#include <sys/syscall.h>
 #endif
 
 #ifndef ARRAY_SIZE
@@ -79,6 +80,24 @@
 			      : "0" (level), "2" (count))
 #endif
 #endif /* end arch */
+
+#ifndef MFD_CLOEXEC
+#define MFD_CLOEXEC 0x0001U
+#endif
+
+#ifndef MFD_HUGETLB
+#define MFD_HUGETLB 0x0004U
+#endif
+
+static inline int memfd_create(const char *name, unsigned int flags)
+{
+#ifdef __NR_memfd_create
+	return syscall(__NR_memfd_create, name, flags);
+#else
+	errno = ENOSYS;
+	return -1;
+#endif
+}
 
 /* define kselftest exit codes */
 #define KSFT_PASS  0
