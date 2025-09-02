@@ -243,6 +243,77 @@ static inline bool ptr_ring_empty_bh(struct ptr_ring *r)
 	return ret;
 }
 
+/*
+ * Check if a spare capacity of cnt is available without taking any locks.
+ *
+ * If cnt==0 or cnt > r->size it acts the same as __ptr_ring_empty.
+ *
+ * The same requirements apply as described for __ptr_ring_empty.
+ */
+static inline bool __ptr_ring_spare(struct ptr_ring *r, int cnt)
+{
+	int size = r->size;
+	int to_check;
+
+	if (unlikely(!size || cnt < 0))
+		return true;
+
+	if (cnt > size)
+		cnt = 0;
+
+	to_check = READ_ONCE(r->consumer_head) - cnt;
+
+	if (to_check < 0)
+		to_check += size;
+
+	return !r->queue[to_check];
+}
+
+static inline bool ptr_ring_spare(struct ptr_ring *r, int cnt)
+{
+	bool ret;
+
+	spin_lock(&r->consumer_lock);
+	ret = __ptr_ring_spare(r, cnt);
+	spin_unlock(&r->consumer_lock);
+
+	return ret;
+}
+
+static inline bool ptr_ring_spare_irq(struct ptr_ring *r, int cnt)
+{
+	bool ret;
+
+	spin_lock_irq(&r->consumer_lock);
+	ret = __ptr_ring_spare(r, cnt);
+	spin_unlock_irq(&r->consumer_lock);
+
+	return ret;
+}
+
+static inline bool ptr_ring_spare_any(struct ptr_ring *r, int cnt)
+{
+	unsigned long flags;
+	bool ret;
+
+	spin_lock_irqsave(&r->consumer_lock, flags);
+	ret = __ptr_ring_spare(r, cnt);
+	spin_unlock_irqrestore(&r->consumer_lock, flags);
+
+	return ret;
+}
+
+static inline bool ptr_ring_spare_bh(struct ptr_ring *r, int cnt)
+{
+	bool ret;
+
+	spin_lock_bh(&r->consumer_lock);
+	ret = __ptr_ring_spare(r, cnt);
+	spin_unlock_bh(&r->consumer_lock);
+
+	return ret;
+}
+
 /* Must only be called after __ptr_ring_peek returned !NULL */
 static inline void __ptr_ring_discard_one(struct ptr_ring *r)
 {
