@@ -556,11 +556,47 @@ Overview
 .. kernel-doc:: drivers/gpu/drm/scheduler/sched_main.c
    :doc: Overview
 
+Job Object
+----------
+
+.. kernel-doc:: drivers/gpu/drm/scheduler/sched_main.c
+   :doc: Job Object
+
+Entity Object
+-------------
+
+.. kernel-doc:: drivers/gpu/drm/scheduler/sched_main.c
+   :doc: Entity Object
+
+Hardware Fence Object
+---------------------
+
+.. kernel-doc:: drivers/gpu/drm/scheduler/sched_main.c
+   :doc: Hardware Fence Object
+
+Scheduler Fence Object
+----------------------
+
+.. kernel-doc:: drivers/gpu/drm/scheduler/sched_main.c
+   :doc: Scheduler Fence Object
+
+Scheduler and Run Queue Objects
+-------------------------------
+
+.. kernel-doc:: drivers/gpu/drm/scheduler/sched_main.c
+   :doc: Scheduler and Run Queue Objects
+
 Flow Control
 ------------
 
 .. kernel-doc:: drivers/gpu/drm/scheduler/sched_main.c
    :doc: Flow Control
+
+Error and Timeout handling
+--------------------------
+
+.. kernel-doc:: drivers/gpu/drm/scheduler/sched_main.c
+   :doc: Error and Timeout handling
 
 Scheduler Function References
 -----------------------------
