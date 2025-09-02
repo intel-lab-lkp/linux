@@ -9525,6 +9525,8 @@ static const struct bpf_sec_def section_defs[] = {
 	SEC_DEF("uprobe.multi+",	KPROBE,	BPF_TRACE_UPROBE_MULTI, SEC_NONE, attach_uprobe_multi),
 	SEC_DEF("uretprobe.multi+",	KPROBE,	BPF_TRACE_UPROBE_MULTI, SEC_NONE, attach_uprobe_multi),
 	SEC_DEF("uprobe.session+",	KPROBE,	BPF_TRACE_UPROBE_SESSION, SEC_NONE, attach_uprobe_multi),
+	SEC_DEF("uprobe.unique+",	KPROBE,	BPF_TRACE_UPROBE_MULTI, SEC_NONE, attach_uprobe_multi),
+	SEC_DEF("uprobe.unique.s+",	KPROBE,	BPF_TRACE_UPROBE_MULTI, SEC_SLEEPABLE, attach_uprobe_multi),
 	SEC_DEF("uprobe.multi.s+",	KPROBE,	BPF_TRACE_UPROBE_MULTI, SEC_SLEEPABLE, attach_uprobe_multi),
 	SEC_DEF("uretprobe.multi.s+",	KPROBE,	BPF_TRACE_UPROBE_MULTI, SEC_SLEEPABLE, attach_uprobe_multi),
 	SEC_DEF("uprobe.session.s+",	KPROBE,	BPF_TRACE_UPROBE_SESSION, SEC_SLEEPABLE, attach_uprobe_multi),
@@ -11880,6 +11882,7 @@ static int attach_uprobe_multi(const struct bpf_program *prog, long cookie, stru
 	case 3:
 		opts.session = str_has_pfx(probe_type, "uprobe.session");
 		opts.retprobe = str_has_pfx(probe_type, "uretprobe.multi");
+		opts.unique = str_has_pfx(probe_type, "uprobe.unique");
 
 		*link = bpf_program__attach_uprobe_multi(prog, -1, binary_path, func_name, &opts);
 		ret = libbpf_get_error(*link);
@@ -12116,10 +12119,10 @@ bpf_program__attach_uprobe_multi(const struct bpf_program *prog,
 	LIBBPF_OPTS(bpf_link_create_opts, lopts);
 	unsigned long *resolved_offsets = NULL;
 	enum bpf_attach_type attach_type;
+	bool retprobe, session, unique;
 	int err = 0, link_fd, prog_fd;
 	struct bpf_link *link = NULL;
 	char full_path[PATH_MAX];
-	bool retprobe, session;
 	const __u64 *cookies;
 	const char **syms;
 	size_t cnt;
@@ -12141,6 +12144,7 @@ bpf_program__attach_uprobe_multi(const struct bpf_program *prog,
 	cnt = OPTS_GET(opts, cnt, 0);
 	retprobe = OPTS_GET(opts, retprobe, false);
 	session  = OPTS_GET(opts, session, false);
+	unique = OPTS_GET(opts, unique, false);
 
 	/*
 	 * User can specify 2 mutually exclusive set of inputs:
@@ -12203,6 +12207,7 @@ bpf_program__attach_uprobe_multi(const struct bpf_program *prog,
 	lopts.uprobe_multi.cookies = cookies;
 	lopts.uprobe_multi.cnt = cnt;
 	lopts.uprobe_multi.flags = retprobe ? BPF_F_UPROBE_MULTI_RETURN : 0;
+	lopts.uprobe_multi.flags |= unique ? BPF_F_UPROBE_MULTI_UNIQUE : 0;
 
 	if (pid == 0)
 		pid = getpid();
