@@ -4019,7 +4019,8 @@ static void cpuset_handle_hotplug(void)
 	if (force_sd_rebuild)
 		rebuild_sched_domains_cpuslocked();
 
-	free_tmpmasks(ptmp);
+	if (on_dfl && ptmp)
+		free_tmpmasks(ptmp);
 }
 
 void cpuset_update_active_cpus(void)
