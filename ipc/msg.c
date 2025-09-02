@@ -791,7 +791,7 @@ COMPAT_SYSCALL_DEFINE3(old_msgctl, int, msqid, int, cmd, void __user *, uptr)
 #endif
 #endif
 
-static int testmsg(struct msg_msg *msg, long type, int mode)
+static int msg_matchs_type(struct msg_msg *msg, long type, int mode)
 {
 	switch (mode) {
 	case SEARCH_ANY:
@@ -819,7 +819,7 @@ static inline int pipelined_send(struct msg_queue *msq, struct msg_msg *msg,
 	struct msg_receiver *msr, *t;
 
 	list_for_each_entry_safe(msr, t, &msq->q_receivers, r_list) {
-		if (testmsg(msg, msr->r_msgtype, msr->r_mode) &&
+		if (msg_matchs_type(msg, msr->r_msgtype, msr->r_mode) &&
 		    !security_msg_queue_msgrcv(&msq->q_perm, msg, msr->r_tsk,
 					       msr->r_msgtype, msr->r_mode)) {
 
@@ -1077,7 +1077,7 @@ static struct msg_msg *find_msg(struct msg_queue *msq, long *msgtyp, int mode)
 	long count = 0;
 
 	list_for_each_entry(msg, &msq->q_messages, m_list) {
-		if (testmsg(msg, *msgtyp, mode) &&
+		if (msg_matchs_type(msg, *msgtyp, mode) &&
 		    !security_msg_queue_msgrcv(&msq->q_perm, msg, current,
 					       *msgtyp, mode)) {
 			if (mode == SEARCH_LESSEQUAL && msg->m_type != 1) {
