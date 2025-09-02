@@ -1,0 +1,38 @@
+# SPDX-License-Identifier: GPL-2.0-only OR BSD-2-Clause
+%YAML 1.2
+---
+$id: http://devicetree.org/schemas/net/ti,rpmsg-eth.yaml#
+$schema: http://devicetree.org/meta-schemas/core.yaml#
+
+title: Texas Instruments RPMsg channel nodes for Ethernet communication
+
+description: |
+  RPMsg Ethernet subnode represents the communication interface between host
+  processor and a remote processor.
+
+maintainers:
+  - MD Danish Anwar <danishanwar@ti.com>
+
+properties:
+  memory-region:
+    $ref: /schemas/types.yaml#/definitions/phandle
+    description: |
+      Phandle to the shared memory region used for communication between the
+      host processor and the remote processor.
+      This shared memory region is used to exchange Ethernet packets.
+
+required:
+  - memory-region
+
+additionalProperties: false
+
+examples:
+  - |
+    main_r5fss0_core0 {
+        mboxes = <&mailbox0_cluster2 &mbox_main_r5fss0_core0>;
+        memory-region = <&main_r5fss0_core0_dma_memory_region>,
+                        <&main_r5fss0_core0_memory_region>;
+        rpmsg-eth {
+            memory-region = <&main_r5fss0_core0_memory_region_shm>;
+        };
+    };
