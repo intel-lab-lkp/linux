@@ -50,8 +50,6 @@
 	 sizeof(struct udphdr) +					\
 	 MAX_UDP_CHUNK)
 
-static void zap_completion_queue(void);
-
 static unsigned int carrier_timeout = 4;
 module_param(carrier_timeout, uint, 0644);
 
@@ -240,7 +238,7 @@ static void refill_skbs(struct netpoll *np)
 	spin_unlock_irqrestore(&skb_pool->lock, flags);
 }
 
-static void zap_completion_queue(void)
+void zap_completion_queue(void)
 {
 	unsigned long flags;
 	struct softnet_data *sd = &get_cpu_var(softnet_data);
@@ -267,6 +265,7 @@ static void zap_completion_queue(void)
 
 	put_cpu_var(softnet_data);
 }
+EXPORT_SYMBOL_GPL(zap_completion_queue);
 
 struct sk_buff *find_skb(struct netpoll *np, int len, int reserve)
 {
