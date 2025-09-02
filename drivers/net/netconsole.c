@@ -57,6 +57,19 @@ MODULE_LICENSE("GPL");
 #define MAX_EXTRADATA_ITEMS		16
 #define MAX_PRINT_CHUNK			1000
 
+/*
+ * We maintain a small pool of fully-sized skbs, to make sure the
+ * message gets out even in extreme OOM situations.
+ */
+
+#define MAX_SKBS 32
+#define MAX_UDP_CHUNK 1460
+#define MAX_SKB_SIZE							\
+	(sizeof(struct ethhdr) +					\
+	 sizeof(struct iphdr) +						\
+	 sizeof(struct udphdr) +					\
+	 MAX_UDP_CHUNK)
+
 static char config[MAX_PARAM_LENGTH];
 module_param_string(netconsole, config, MAX_PARAM_LENGTH, 0);
 MODULE_PARM_DESC(netconsole, " netconsole=[src-port]@[src-ip]/[dev],[tgt-port]@<tgt-ip>/[tgt-macaddr]");
@@ -171,6 +184,33 @@ struct netconsole_target {
 	/* protected by target_list_lock */
 	char			buf[MAX_PRINT_CHUNK];
 };
+
+static void refill_skbs(struct netpoll *np)
+{
+	struct sk_buff_head *skb_pool;
+	struct sk_buff *skb;
+	unsigned long flags;
+
+	skb_pool = &np->skb_pool;
+
+	spin_lock_irqsave(&skb_pool->lock, flags);
+	while (skb_pool->qlen < MAX_SKBS) {
+		skb = alloc_skb(MAX_SKB_SIZE, GFP_ATOMIC);
+		if (!skb)
+			break;
+
+		__skb_queue_tail(skb_pool, skb);
+	}
+	spin_unlock_irqrestore(&skb_pool->lock, flags);
+}
+
+static void refill_skbs_work_handler(struct work_struct *work)
+{
+	struct netpoll *np =
+		container_of(work, struct netpoll, refill_wq);
+
+	refill_skbs(np);
+}
 
 #ifdef	CONFIG_NETCONSOLE_DYNAMIC
 
@@ -339,6 +379,20 @@ static int netpoll_parse_ip_addr(const char *str, union inet_addr *addr)
 		return 1;
 
 	return -1;
+}
+
+static int setup_netpoll(struct netpoll *np)
+{
+	int err;
+
+	err = netpoll_setup(np);
+	if (err)
+		return err;
+
+	refill_skbs(np);
+	INIT_WORK(&np->refill_wq, refill_skbs_work_handler);
+
+	return 0;
 }
 
 #ifdef	CONFIG_NETCONSOLE_DYNAMIC
@@ -615,7 +669,7 @@ static ssize_t enabled_store(struct config_item *item,
 		 */
 		netconsole_print_banner(&nt->np);
 
-		ret = netpoll_setup(&nt->np);
+		ret = setup_netpoll(&nt->np);
 		if (ret)
 			goto out_unlock;
 
@@ -2036,7 +2090,7 @@ static struct netconsole_target *alloc_param_target(char *target_config,
 	if (err)
 		goto fail;
 
-	err = netpoll_setup(&nt->np);
+	err = setup_netpoll(&nt->np);
 	if (err) {
 		pr_err("Not enabling netconsole for %s%d. Netpoll setup failed\n",
 		       NETCONSOLE_PARAM_TARGET_PREFIX, cmdline_count);
