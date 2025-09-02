@@ -1,6 +1,8 @@
 #include <stdlib.h>
 #include <stdio.h>
+#include <stdarg.h>
 #include <inttypes.h>
+#include <locale.h>
 #include <linux/string.h>
 #include <linux/time64.h>
 #include <math.h>
@@ -149,7 +151,38 @@ static const char *json_sep(struct outstate *os)
 	return sep;
 }
 
-#define json_out(os, format, ...) fprintf((os)->fh, "%s" format, json_sep(os), ##__VA_ARGS__)
+/* Print formatted output using the POSIX numeric locale */
+static int clocale_fprintf(FILE *os, const char *fmt, ...)
+{
+	int ret;
+	va_list ap;
+
+	/* Create and temporarily switch to a POSIX numeric locale */
+	locale_t posix_numeric = newlocale(LC_NUMERIC_MASK, "C", (locale_t)0);
+
+	if (posix_numeric) {
+		locale_t prev = uselocale(posix_numeric);
+
+		va_start(ap, fmt);
+		ret = vfprintf(os, fmt, ap);
+		va_end(ap);
+
+		/* restore previous locale */
+		uselocale(prev);
+		freelocale(posix_numeric);
+		return ret;
+	}
+
+	/* If newlocale() failed, just print with the current locale */
+	va_start(ap, fmt);
+	ret = vfprintf(os, fmt, ap);
+	va_end(ap);
+	return ret;
+}
+
+/* use clocale_fprintf so the radix point is always . as required by JSON */
+#define json_out(os, format, ...) \
+	clocale_fprintf((os)->fh, "%s" format, json_sep(os), ##__VA_ARGS__)
 
 static void print_running_json(struct outstate *os, u64 run, u64 ena)
 {
