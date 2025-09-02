@@ -140,6 +140,7 @@ static struct task_info tasks[MAX_TASKS];
 static int task_count;
 static int running = 1;
 static struct container_stats container_stats;
+static int sort_selected;
 
 /* Netlink socket variables */
 static int nl_sd = -1;
@@ -878,6 +879,17 @@ static void display_results(void)
 			container_stats.nr_io_wait);
 	}
 
+	/* Interacive command */
+	suc &= BOOL_FPRINT(out, "[o]sort [M]memverbose [q]quit\n");
+	if (sort_selected) {
+		if (cfg.mem_verbose_mode)
+			suc &= BOOL_FPRINT(out,
+			"sort selection: [c]CPU [i]IO [s]SWAP [r]RCL [t]THR [p]CMP [w]WP [q]IRQ\n");
+		else
+			suc &= BOOL_FPRINT(out,
+			"sort selection: [c]CPU [i]IO [m]MEM [q]IRQ\n");
+	}
+
 	/* Task delay output */
 	suc &= BOOL_FPRINT(out, "Top %d processes (sorted by %s delay):\n",
 			cfg.max_processes, get_sort_field(cfg.sort_field));
@@ -944,11 +956,73 @@ static void display_results(void)
 		perror("Error writing to output");
 }
 
+/* Check for keyboard input with timeout based on cfg.delay */
+static char check_for_keypress(void)
+{
+	struct timeval tv = {cfg.delay, 0};
+	fd_set readfds;
+	char ch = 0;
+
+	FD_ZERO(&readfds);
+	FD_SET(STDIN_FILENO, &readfds);
+	int r = select(STDIN_FILENO + 1, &readfds, NULL, NULL, &tv);
+
+	if (r > 0 && FD_ISSET(STDIN_FILENO, &readfds)) {
+		read(STDIN_FILENO, &ch, 1);
+		return ch;
+	}
+
+	return 0;
+}
+
+/* Handle keyboard input: sorting selection, mode toggle, or quit */
+static void handle_keypress(char ch, int *running)
+{
+	if (sort_selected) {
+		switch (ch) {
+		case 'c':
+		case 'i':
+		case 'q':
+		case 'm':
+			cfg.sort_field = ch;
+			break;
+		/* Only for memory verbose mode */
+		case 's':
+		case 'r':
+		case 't':
+		case 'p':
+		case 'w':
+			if (cfg.mem_verbose_mode)
+				cfg.sort_field = ch;
+			break;
+		default:
+			break;
+		}
+		sort_selected = 0;
+	} else {
+		switch (ch) {
+		case 'o':
+			sort_selected = 1;
+			break;
+		case 'M':
+			cfg.mem_verbose_mode = !cfg.mem_verbose_mode;
+			cfg.sort_field = 'c'; /* Change to default sort mode */
+			break;
+		case 'q':
+		case 'Q':
+			*running = 0;
+			break;
+		default:
+			break;
+		}
+	}
+}
+
 /* Main function */
 int main(int argc, char **argv)
 {
 	int iterations = 0;
-	int use_q_quit = 0;
+	char keypress;
 
 	/* Parse command line arguments */
 	parse_args(argc, argv);
@@ -968,12 +1042,8 @@ int main(int argc, char **argv)
 		exit(1);
 	}
 
-	if (!cfg.output_one_time) {
-		use_q_quit = 1;
-		enable_raw_mode();
-		printf("Press 'q' to quit.\n");
-		fflush(stdout);
-	}
+	/* Set terminal to non-canonical mode for interaction */
+	enable_raw_mode();
 
 	/* Main loop */
 	while (running) {
@@ -1001,32 +1071,14 @@ int main(int argc, char **argv)
 		if (cfg.output_one_time)
 			break;
 
-		/* Check for 'q' key to quit */
-		if (use_q_quit) {
-			struct timeval tv = {cfg.delay, 0};
-			fd_set readfds;
-
-			FD_ZERO(&readfds);
-			FD_SET(STDIN_FILENO, &readfds);
-			int r = select(STDIN_FILENO+1, &readfds, NULL, NULL, &tv);
-
-			if (r > 0 && FD_ISSET(STDIN_FILENO, &readfds)) {
-				char ch = 0;
-
-				read(STDIN_FILENO, &ch, 1);
-				if (ch == 'q' || ch == 'Q') {
-					running = 0;
-					break;
-				}
-			}
-		} else {
-			sleep(cfg.delay);
-		}
+		/* Keypress for interactive usage */
+		keypress = check_for_keypress();
+		if (keypress)
+			handle_keypress(keypress, &running);
 	}
 
 	/* Restore terminal mode */
-	if (use_q_quit)
-		disable_raw_mode();
+	disable_raw_mode();
 
 	/* Cleanup */
 	close(nl_sd);
