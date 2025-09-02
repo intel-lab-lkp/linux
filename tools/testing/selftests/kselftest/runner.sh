@@ -107,7 +107,7 @@ run_one()
 		echo "# Warning: file $TEST is missing!"
 		echo "not ok $test_num $TEST_HDR_MSG"
 	else
-		if [ -x /usr/bin/stdbuf ]; then
+		if [ -x /usr/bin/stdbuf ] && [ -x "$TEST" ] && /usr/bin/stdbuf --output=L ldd "$TEST" >/dev/null 2>&1; then
 			stdbuf="/usr/bin/stdbuf --output=L "
 		fi
 		eval kselftest_cmd_args="\$${kselftest_cmd_args_ref:-}"
