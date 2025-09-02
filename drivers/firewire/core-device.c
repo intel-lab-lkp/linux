@@ -581,6 +581,7 @@ static int read_config_rom(struct fw_device *device, int generation)
 	const u32 *old_rom, *new_rom;
 	u32 *rom, *stack;
 	u32 sp, key;
+	u32 tgt; /* target index for referenced block */
 	int i, end, length, ret;
 
 	rom = kmalloc(sizeof(*rom) * MAX_CONFIG_ROM_SIZE +
@@ -702,7 +703,8 @@ static int read_config_rom(struct fw_device *device, int generation)
 			 * fake immediate entry so that later iterators over
 			 * the ROM don't have to check offsets all the time.
 			 */
-			if (i + (rom[i] & 0xffffff) >= MAX_CONFIG_ROM_SIZE) {
+			tgt = i + (rom[i] & 0xffffff);
+			if (tgt >= MAX_CONFIG_ROM_SIZE) {
 				fw_err(card,
 				       "skipped unsupported ROM entry %x at %llx\n",
 				       rom[i],
@@ -710,7 +712,14 @@ static int read_config_rom(struct fw_device *device, int generation)
 				rom[i] = 0;
 				continue;
 			}
-			stack[sp++] = i + rom[i];
+			/* Bound check to prevent traversal stack overflow
+			 * due to malformed cyclic ROM
+			 */
+			if (sp >= MAX_CONFIG_ROM_SIZE) {
+				ret = -EOVERFLOW;
+				goto out;
+			}
+			stack[sp++] = (rom[i] & 0xc0000000) | tgt;
 		}
 		if (length < i)
 			length = i;
