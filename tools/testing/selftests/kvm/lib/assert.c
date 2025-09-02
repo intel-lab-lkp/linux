@@ -6,10 +6,18 @@
  */
 #include "test_util.h"
 
-#include <execinfo.h>
 #include <sys/syscall.h>
 
+#ifdef __GLIBC__
+#include <execinfo.h> /* backtrace */
+#endif
+
 #include "kselftest.h"
+
+int __attribute__((weak)) backtrace(void **buffer, int size)
+{
+	return 0;
+}
 
 /* Dumps the current stack trace to stderr. */
 static void __attribute__((noinline)) test_dump_stack(void);
