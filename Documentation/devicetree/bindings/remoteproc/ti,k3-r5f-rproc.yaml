@@ -210,6 +210,12 @@ patternProperties:
           should be defined as per the generic bindings in,
           Documentation/devicetree/bindings/sram/sram.yaml
 
+      rpmsg-eth:
+        $ref: /schemas/net/ti,rpmsg-eth.yaml
+        description:
+          RPMsg Ethernet subnode which represents the communication interface
+          between host processor and remote processor.
+
     required:
       - compatible
       - reg
