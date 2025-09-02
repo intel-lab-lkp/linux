@@ -203,9 +203,7 @@ void blk_flush_integrity(void)
 
 static int __init blk_integrity_auto_init(void)
 {
-	bid_slab = kmem_cache_create("bio_integrity_data",
-			sizeof(struct bio_integrity_data), 0,
-			SLAB_HWCACHE_ALIGN | SLAB_PANIC, NULL);
+	bid_slab = KMEM_CACHE(bio_integrity_data, SLAB_HWCACHE_ALIGN | SLAB_PANIC);
 
 	if (mempool_init_slab_pool(&bid_pool, BIO_POOL_SIZE, bid_slab))
 		panic("bio: can't create integrity pool\n");
