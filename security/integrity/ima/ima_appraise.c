@@ -708,7 +708,7 @@ static void ima_reset_appraise_flags(struct inode *inode, int digsig)
 	set_bit(IMA_CHANGE_XATTR, &iint->atomic_flags);
 	if (digsig)
 		set_bit(IMA_DIGSIG, &iint->atomic_flags);
-	else
+	else if (digsig != -1)
 		clear_bit(IMA_DIGSIG, &iint->atomic_flags);
 }
 
@@ -794,6 +794,8 @@ static int ima_inode_setxattr(struct mnt_idmap *idmap, struct dentry *dentry,
 		digsig = (xvalue->type == EVM_IMA_XATTR_DIGSIG);
 	} else if (!strcmp(xattr_name, XATTR_NAME_EVM) && xattr_value_len > 0) {
 		digsig = (xvalue->type == EVM_XATTR_PORTABLE_DIGSIG);
+	} else if (result != 1) {
+		digsig = -1;
 	}
 	if (result == 1 || evm_revalidate_status(xattr_name)) {
 		ima_reset_appraise_flags(d_backing_inode(dentry), digsig);
