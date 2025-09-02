@@ -36,6 +36,14 @@
 #include "../kselftest.h"
 #include "rseq.h"
 
+#ifndef __NR_rseq
+#ifdef __alpha__
+#define __NR_rseq 527
+#else
+#define __NR_rseq 293
+#endif
+#endif
+
 /*
  * Define weak versions to play nice with binaries that are statically linked
  * against a libc that doesn't support registering its own rseq.

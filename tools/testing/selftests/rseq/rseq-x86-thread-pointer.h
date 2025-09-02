@@ -14,6 +14,7 @@
 extern "C" {
 #endif
 
+#ifdef __GLIBC__
 #if __GNUC_PREREQ (11, 1)
 static inline void *rseq_thread_pointer(void)
 {
@@ -32,6 +33,19 @@ static inline void *rseq_thread_pointer(void)
 	return __result;
 }
 #endif /* !GCC 11 */
+#else
+static inline void *rseq_thread_pointer(void)
+{
+	void *__result;
+
+# ifdef __x86_64__
+	__asm__ ("mov %%fs:0, %0" : "=r" (__result));
+# else
+	__asm__ ("mov %%gs:0, %0" : "=r" (__result));
+# endif
+	return __result;
+}
+#endif /* !__GLIBC__ */
 
 #ifdef __cplusplus
 }
