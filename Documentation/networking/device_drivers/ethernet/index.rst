@@ -51,6 +51,7 @@ Contents:
    netronome/nfp
    pensando/ionic
    qualcomm/ppe/ppe
+   rpmsg_eth
    smsc/smc9
    stmicro/stmmac
    ti/cpsw
