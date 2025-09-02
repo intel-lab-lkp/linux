@@ -51,4 +51,6 @@ void nft_meta_inner_eval(const struct nft_expr *expr,
 			 struct nft_regs *regs, const struct nft_pktinfo *pkt,
 			 struct nft_inner_tun_ctx *tun_ctx);
 
+extern const struct nft_expr_ops nft_meta_get_ops;
+
 #endif

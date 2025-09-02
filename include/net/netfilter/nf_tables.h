@@ -403,10 +403,12 @@ struct nft_set_estimate {
  *	struct nft_expr - nf_tables expression
  *
  *	@ops: expression ops
+ *	@rule: rule this expression is contained in
  *	@data: expression private data
  */
 struct nft_expr {
 	const struct nft_expr_ops	*ops;
+	const struct nft_rule *rule;
 	unsigned char			data[]
 		__attribute__((aligned(__alignof__(u64))));
 };

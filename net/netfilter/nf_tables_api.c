@@ -3500,6 +3500,7 @@ out_unlock:
 }
 
 static int nf_tables_newexpr(const struct nft_ctx *ctx,
+			     const struct nft_rule *rule,
 			     const struct nft_expr_info *expr_info,
 			     struct nft_expr *expr)
 {
@@ -3507,6 +3508,7 @@ static int nf_tables_newexpr(const struct nft_ctx *ctx,
 	int err;
 
 	expr->ops = ops;
+	expr->rule = rule;
 	if (ops->init) {
 		err = ops->init(ctx, expr, (const struct nlattr **)expr_info->tb);
 		if (err < 0)
@@ -3516,6 +3518,7 @@ static int nf_tables_newexpr(const struct nft_ctx *ctx,
 	return 0;
 err1:
 	expr->ops = NULL;
+	expr->rule = NULL;
 	return err;
 }
 
@@ -3530,6 +3533,7 @@ static void nf_tables_expr_destroy(const struct nft_ctx *ctx,
 }
 
 static struct nft_expr *nft_expr_init(const struct nft_ctx *ctx,
+				      const struct nft_rule *rule,
 				      const struct nlattr *nla)
 {
 	struct nft_expr_info expr_info;
@@ -3550,7 +3554,7 @@ static struct nft_expr *nft_expr_init(const struct nft_ctx *ctx,
 	if (expr == NULL)
 		goto err_expr_stateful;
 
-	err = nf_tables_newexpr(ctx, &expr_info, expr);
+	err = nf_tables_newexpr(ctx, rule, &expr_info, expr);
 	if (err < 0)
 		goto err_expr_new;
 
@@ -4339,7 +4343,7 @@ static int nf_tables_newrule(struct sk_buff *skb, const struct nfnl_info *info,
 
 	expr = nft_expr_first(rule);
 	for (i = 0; i < n; i++) {
-		err = nf_tables_newexpr(&ctx, &expr_info[i], expr);
+		err = nf_tables_newexpr(&ctx, rule, &expr_info[i], expr);
 		if (err < 0) {
 			NL_SET_BAD_ATTR(extack, expr_info[i].attr);
 			goto err_release_rule;
@@ -6681,7 +6685,7 @@ struct nft_expr *nft_set_elem_expr_alloc(const struct nft_ctx *ctx,
 	struct nft_expr *expr;
 	int err;
 
-	expr = nft_expr_init(ctx, attr);
+	expr = nft_expr_init(ctx, NULL, attr);
 	if (IS_ERR(expr))
 		return expr;
 

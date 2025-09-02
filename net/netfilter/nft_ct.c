@@ -22,6 +22,7 @@
 #include <net/netfilter/nf_conntrack_timeout.h>
 #include <net/netfilter/nf_conntrack_l4proto.h>
 #include <net/netfilter/nf_conntrack_expect.h>
+#include <net/netfilter/nft_meta.h>
 
 struct nft_ct_helper_obj  {
 	struct nf_conntrack_helper *helper4;
@@ -440,6 +441,26 @@ static int nft_ct_get_init(const struct nft_ctx *ctx,
 			break;
 		case NFPROTO_IPV6:
 		case NFPROTO_INET:
+			const struct nft_expr *curr, *last;
+			bool meta_nfproto = false;
+			if (!expr->rule)
+				return -EINVAL;
+
+			nft_rule_for_each_expr(curr, last, expr->rule) {
+				if (curr == expr)
+					break;
+
+				if (curr->ops == &nft_meta_get_ops) {
+					const struct nft_meta *meta = nft_expr_priv(curr);
+					if (meta->key == NFT_META_NFPROTO) {
+						meta_nfproto = true;
+						break;
+					}
+				}
+			}
+			if (!meta_nfproto)
+				return -EINVAL;
+
 			len = sizeof_field(struct nf_conntrack_tuple,
 					   src.u3.ip6);
 			break;

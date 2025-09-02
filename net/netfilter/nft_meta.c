@@ -767,7 +767,7 @@ bool nft_meta_get_reduce(struct nft_regs_track *track,
 }
 EXPORT_SYMBOL_GPL(nft_meta_get_reduce);
 
-static const struct nft_expr_ops nft_meta_get_ops = {
+const struct nft_expr_ops nft_meta_get_ops = {
 	.type		= &nft_meta_type,
 	.size		= NFT_EXPR_SIZE(sizeof(struct nft_meta)),
 	.eval		= nft_meta_get_eval,
@@ -777,6 +777,7 @@ static const struct nft_expr_ops nft_meta_get_ops = {
 	.validate	= nft_meta_get_validate,
 	.offload	= nft_meta_get_offload,
 };
+EXPORT_SYMBOL_GPL(nft_meta_get_ops);
 
 static bool nft_meta_set_reduce(struct nft_regs_track *track,
 				const struct nft_expr *expr)
