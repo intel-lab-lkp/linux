@@ -41,5 +41,13 @@ void intel_vrr_transcoder_enable(const struct intel_crtc_state *crtc_state);
 void intel_vrr_transcoder_disable(const struct intel_crtc_state *crtc_state);
 void intel_vrr_set_fixed_rr_timings(const struct intel_crtc_state *crtc_state);
 bool intel_vrr_always_use_vrr_tg(struct intel_display *display);
+int intel_vrr_guardband_scaler_latency(int num_scaler_users, u64 hscale, u64 vscale,
+				       int chroma_downscaling_factor,
+				       int cdclk_prefill_adjustment,
+				       int linetime);
+int intel_vrr_guardband_dsc_latency(int num_scaler_users, u64 *hscale, u64 *vscale,
+				    int chroma_downscaling_factor,
+				    int cdclk_prefill_adjustment,
+				    int linetime);
 
 #endif /* __INTEL_VRR_H__ */
