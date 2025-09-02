@@ -58,6 +58,11 @@
 #include <stdio.h>
 #include <sys/utsname.h>
 #include <sys/syscall.h>
+#include <sys/types.h>
+#endif
+
+#ifndef ulong
+typedef unsigned long ulong;
 #endif
 
 #ifndef ARRAY_SIZE
