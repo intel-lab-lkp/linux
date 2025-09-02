@@ -169,6 +169,8 @@ static int __init pas_setup_mce_regs(void)
 		dev = pci_get_device(PCI_VENDOR_ID_PASEMI, 0xa00a, dev);
 		reg++;
 	}
+	/* Release the last device reference from the while loop */
+	pci_dev_put(dev);
 
 	dev = pci_get_device(PCI_VENDOR_ID_PASEMI, 0xa001, NULL);
 	if (dev && reg+4 < MAX_MCE_REGS) {
@@ -185,6 +187,7 @@ static int __init pas_setup_mce_regs(void)
 		mce_regs[reg].addr = pasemi_pci_getcfgaddr(dev, 0xc1c);
 		reg++;
 	}
+	pci_dev_put(dev);
 
 	dev = pci_get_device(PCI_VENDOR_ID_PASEMI, 0xa009, NULL);
 	if (dev && reg+2 < MAX_MCE_REGS) {
@@ -195,6 +198,7 @@ static int __init pas_setup_mce_regs(void)
 		mce_regs[reg].addr = pasemi_pci_getcfgaddr(dev, 0x214);
 		reg++;
 	}
+	pci_dev_put(dev);
 
 	num_mce_regs = reg;
 
