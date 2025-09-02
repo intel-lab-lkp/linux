@@ -3373,7 +3373,8 @@ int idpf_vport_init(struct idpf_vport *vport, struct idpf_vport_max_q *max_q)
 		return err == -EOPNOTSUPP ? 0 : err;
 	}
 
-	INIT_WORK(&vport->tstamp_task, idpf_tstamp_task);
+	if (vport->adapter->ptp->tx_tstamp_access == IDPF_PTP_MAILBOX)
+		INIT_WORK(&vport->tstamp_task, idpf_tstamp_task);
 
 	return 0;
 }

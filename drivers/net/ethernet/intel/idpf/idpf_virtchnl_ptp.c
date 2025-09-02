@@ -25,6 +25,7 @@ int idpf_ptp_get_caps(struct idpf_adapter *adapter)
 				    VIRTCHNL2_CAP_PTP_SET_DEVICE_CLK_TIME_MB |
 				    VIRTCHNL2_CAP_PTP_ADJ_DEVICE_CLK |
 				    VIRTCHNL2_CAP_PTP_ADJ_DEVICE_CLK_MB |
+				    VIRTCHNL2_CAP_PTP_TX_TSTAMPS |
 				    VIRTCHNL2_CAP_PTP_TX_TSTAMPS_MB)
 	};
 	struct idpf_vc_xn_params xn_params = {
@@ -342,11 +343,12 @@ int idpf_ptp_get_vport_tstamps_caps(struct idpf_vport *vport)
 		.timeout_ms = IDPF_VC_XN_DEFAULT_TIMEOUT_MSEC,
 	};
 	enum idpf_ptp_access tstamp_access, get_dev_clk_access;
+	struct idpf_adapter *adapter = vport->adapter;
 	struct idpf_ptp *ptp = vport->adapter->ptp;
 	struct list_head *head;
 	int err = 0, reply_sz;
 	u16 num_latches;
-	u32 size;
+	u32 size, temp;
 
 	if (!ptp)
 		return -EOPNOTSUPP;
@@ -395,9 +397,16 @@ int idpf_ptp_get_vport_tstamps_caps(struct idpf_vport *vport)
 
 	tstamp_caps->tstamp_ns_lo_bit = rcv_tx_tstamp_caps->tstamp_ns_lo_bit;
 
-	for (u16 i = 0; i < tstamp_caps->num_entries; i++) {
-		__le32 offset_l, offset_h;
+	if (tstamp_access == IDPF_PTP_DIRECT) {
+		temp = le32_to_cpu(rcv_tx_tstamp_caps->readiness_offset_l);
+		tstamp_caps->readiness_offset_l = idpf_get_reg_addr(adapter,
+								    temp);
+		temp = le32_to_cpu(rcv_tx_tstamp_caps->readiness_offset_h);
+		tstamp_caps->readiness_offset_h = idpf_get_reg_addr(adapter,
+								    temp);
+	}
 
+	for (u16 i = 0; i < tstamp_caps->num_entries; i++) {
 		ptp_tx_tstamp = kzalloc(sizeof(*ptp_tx_tstamp), GFP_KERNEL);
 		if (!ptp_tx_tstamp) {
 			err = -ENOMEM;
@@ -409,10 +418,12 @@ int idpf_ptp_get_vport_tstamps_caps(struct idpf_vport *vport)
 		if (tstamp_access != IDPF_PTP_DIRECT)
 			goto skip_offsets;
 
-		offset_l = tx_tstamp_latch_caps.tx_latch_reg_offset_l;
-		offset_h = tx_tstamp_latch_caps.tx_latch_reg_offset_h;
-		ptp_tx_tstamp->tx_latch_reg_offset_l = le32_to_cpu(offset_l);
-		ptp_tx_tstamp->tx_latch_reg_offset_h = le32_to_cpu(offset_h);
+		temp = le32_to_cpu(tx_tstamp_latch_caps.tx_latch_reg_offset_l);
+		ptp_tx_tstamp->tx_latch_reg_offset_l = idpf_get_reg_addr(adapter,
+									 temp);
+		temp = le32_to_cpu(tx_tstamp_latch_caps.tx_latch_reg_offset_h);
+		ptp_tx_tstamp->tx_latch_reg_offset_h = idpf_get_reg_addr(adapter,
+									 temp);
 
 skip_offsets:
 		ptp_tx_tstamp->idx = tx_tstamp_latch_caps.index;
@@ -423,6 +434,7 @@ skip_offsets:
 		tstamp_caps->tx_tstamp_status[i].state = IDPF_PTP_FREE;
 	}
 
+	tstamp_caps->vport = vport;
 	vport->tx_tstamp_caps = tstamp_caps;
 	kfree(rcv_tx_tstamp_caps);
 
@@ -443,93 +455,57 @@ get_tstamp_caps_out:
 }
 
 /**
- * idpf_ptp_update_tstamp_tracker - Update the Tx timestamp tracker based on
- *				    the skb compatibility.
- * @caps: Tx timestamp capabilities that monitor the latch status
- * @skb: skb for which the tstamp value is returned through virtchnl message
- * @current_state: Current state of the Tx timestamp latch
- * @expected_state: Expected state of the Tx timestamp latch
- *
- * Find a proper skb tracker for which the Tx timestamp is received and change
- * the state to expected value.
- *
- * Return: true if the tracker has been found and updated, false otherwise.
- */
-static bool
-idpf_ptp_update_tstamp_tracker(struct idpf_ptp_vport_tx_tstamp_caps *caps,
-			       struct sk_buff *skb,
-			       enum idpf_ptp_tx_tstamp_state current_state,
-			       enum idpf_ptp_tx_tstamp_state expected_state)
-{
-	bool updated = false;
-
-	spin_lock(&caps->status_lock);
-	for (u16 i = 0; i < caps->num_entries; i++) {
-		struct idpf_ptp_tx_tstamp_status *status;
-
-		status = &caps->tx_tstamp_status[i];
-
-		if (skb == status->skb && status->state == current_state) {
-			status->state = expected_state;
-			updated = true;
-			break;
-		}
-	}
-	spin_unlock(&caps->status_lock);
-
-	return updated;
-}
-
-/**
  * idpf_ptp_get_tstamp_value - Get the Tx timestamp value and provide it
  *			       back to the skb.
  * @vport: Virtual port structure
  * @tstamp_latch: Tx timestamp latch structure fulfilled by the Control Plane
  * @ptp_tx_tstamp: Tx timestamp latch to add to the free list
+ * @update_tracker: Whether to update the timestamp tracker
  *
  * Read the value of the Tx timestamp for a given latch received from the
  * Control Plane, extend it to 64 bit and provide back to the skb.
  *
  * Return: 0 on success, -errno otherwise.
  */
-static int
-idpf_ptp_get_tstamp_value(struct idpf_vport *vport,
-			  struct virtchnl2_ptp_tx_tstamp_latch *tstamp_latch,
-			  struct idpf_ptp_tx_tstamp *ptp_tx_tstamp)
+int idpf_ptp_get_tstamp_value(struct idpf_vport *vport, u64 tstamp_latch,
+			      struct idpf_ptp_tx_tstamp *ptp_tx_tstamp,
+			      bool update_tracker)
 {
 	struct idpf_ptp_vport_tx_tstamp_caps *tx_tstamp_caps;
 	struct skb_shared_hwtstamps shhwtstamps;
-	bool state_upd = false;
 	u8 tstamp_ns_lo_bit;
+	int err = 0;
 	u64 tstamp;
 
 	tx_tstamp_caps = vport->tx_tstamp_caps;
 	tstamp_ns_lo_bit = tx_tstamp_caps->tstamp_ns_lo_bit;
 
-	ptp_tx_tstamp->tstamp = le64_to_cpu(tstamp_latch->tstamp);
+	ptp_tx_tstamp->tstamp = tstamp_latch;
 	ptp_tx_tstamp->tstamp >>= tstamp_ns_lo_bit;
 
-	state_upd = idpf_ptp_update_tstamp_tracker(tx_tstamp_caps,
-						   ptp_tx_tstamp->skb,
-						   IDPF_PTP_READ_VALUE,
-						   IDPF_PTP_FREE);
-	if (!state_upd)
-		return -EINVAL;
+	if (update_tracker) {
+		if (!idpf_ptp_update_tstamp_tracker(tx_tstamp_caps,
+						    ptp_tx_tstamp->skb,
+						    IDPF_PTP_READ_VALUE,
+						    IDPF_PTP_FREE)) {
+			err = -EINVAL;
+			goto exit;
+		}
+	}
 
 	tstamp = idpf_ptp_extend_ts(vport, ptp_tx_tstamp->tstamp);
 	shhwtstamps.hwtstamp = ns_to_ktime(tstamp);
 	skb_tstamp_tx(ptp_tx_tstamp->skb, &shhwtstamps);
-	consume_skb(ptp_tx_tstamp->skb);
-	ptp_tx_tstamp->skb = NULL;
-
-	list_add(&ptp_tx_tstamp->list_member,
-		 &tx_tstamp_caps->latches_free);
-
 	u64_stats_update_begin(&vport->tstamp_stats.stats_sync);
 	u64_stats_inc(&vport->tstamp_stats.packets);
 	u64_stats_update_end(&vport->tstamp_stats.stats_sync);
 
-	return 0;
+exit:
+	consume_skb(ptp_tx_tstamp->skb);
+	list_add(&ptp_tx_tstamp->list_member,
+		 &tx_tstamp_caps->latches_free);
+
+	return err;
 }
 
 /**
@@ -596,8 +572,8 @@ idpf_ptp_get_tx_tstamp_async_handler(struct idpf_adapter *adapter,
 			if (tstamp_latch.index == tx_tstamp->idx) {
 				list_del(&tx_tstamp->list_member);
 				err = idpf_ptp_get_tstamp_value(tstamp_vport,
-								&tstamp_latch,
-								tx_tstamp);
+								le64_to_cpu(tstamp_latch.tstamp),
+								tx_tstamp, true);
 				if (err)
 					goto unlock;
 

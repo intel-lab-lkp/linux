@@ -132,8 +132,8 @@ struct idpf_ptp_tx_tstamp_status {
  */
 struct idpf_ptp_tx_tstamp {
 	struct list_head list_member;
-	u32 tx_latch_reg_offset_l;
-	u32 tx_latch_reg_offset_h;
+	void __iomem *tx_latch_reg_offset_l;
+	void __iomem *tx_latch_reg_offset_h;
 	struct sk_buff *skb;
 	u64 tstamp;
 	u32 idx;
@@ -141,23 +141,27 @@ struct idpf_ptp_tx_tstamp {
 
 /**
  * struct idpf_ptp_vport_tx_tstamp_caps - Tx timestamp capabilities
- * @vport_id: the vport id
+ * @vport: pointer to the virtual port structure
  * @num_entries: the number of negotiated Tx timestamp entries
  * @tstamp_ns_lo_bit: first bit for nanosecond part of the timestamp
+ * @access: indicates an access to Tx timestamp
  * @latches_lock: the lock to the lists of free/used timestamp indexes
  * @status_lock: the lock to the status tracker
- * @access: indicates an access to Tx timestamp
+ * @readiness_offset_l: Tx tstamp readiness bitmap low offset
+ * @readiness_offset_h: Tx tstamp readiness bitmap high offset
  * @latches_free: the list of the free Tx timestamps latches
  * @latches_in_use: the list of the used Tx timestamps latches
  * @tx_tstamp_status: Tx tstamp status tracker
  */
 struct idpf_ptp_vport_tx_tstamp_caps {
-	u32 vport_id;
+	struct idpf_vport *vport;
 	u16 num_entries;
 	u16 tstamp_ns_lo_bit;
+	bool access:1;
 	spinlock_t latches_lock;
 	spinlock_t status_lock;
-	bool access:1;
+	void __iomem *readiness_offset_l;
+	void __iomem *readiness_offset_h;
 	struct list_head latches_free;
 	struct list_head latches_in_use;
 	struct idpf_ptp_tx_tstamp_status tx_tstamp_status[];
@@ -287,13 +291,22 @@ int idpf_ptp_adj_dev_clk_fine_mb(struct idpf_adapter *adapter, u64 incval);
 int idpf_ptp_adj_dev_clk_time_mb(struct idpf_adapter *adapter, s64 delta);
 int idpf_ptp_get_vport_tstamps_caps(struct idpf_vport *vport);
 int idpf_ptp_get_tx_tstamp_mb(struct idpf_vport *vport);
+int idpf_ptp_get_tx_tstamp(struct idpf_vport *vport,
+			   struct idpf_ptp_tx_tstamp *tx_tstamp);
+int idpf_ptp_get_tstamp_value(struct idpf_vport *vport, u64 tstamp_latch,
+			      struct idpf_ptp_tx_tstamp *ptp_tx_tstamp,
+			      bool update_tracker);
 int idpf_ptp_set_timestamp_mode(struct idpf_vport *vport,
 				struct kernel_hwtstamp_config *config);
 u64 idpf_ptp_extend_ts(struct idpf_vport *vport, u64 in_tstamp);
 u64 idpf_ptp_tstamp_extend_32b_to_64b(u64 cached_phc_time, u32 in_timestamp);
 int idpf_ptp_request_ts(struct idpf_tx_queue *tx_q, struct sk_buff *skb,
-			u32 *idx);
+			u32 *idx, struct idpf_tx_splitq_params *params);
 void idpf_tstamp_task(struct work_struct *work);
+bool idpf_ptp_update_tstamp_tracker(struct idpf_ptp_vport_tx_tstamp_caps *caps,
+				    struct sk_buff *skb,
+				    enum idpf_ptp_tx_tstamp_state state_before,
+				    enum idpf_ptp_tx_tstamp_state state_after);
 #else /* CONFIG_PTP_1588_CLOCK */
 static inline int idpf_ptp_init(struct idpf_adapter *adapter)
 {
@@ -358,6 +371,11 @@ static inline int idpf_ptp_get_tx_tstamp_mb(struct idpf_vport *vport)
 	return -EOPNOTSUPP;
 }
 
+static inline int idpf_ptp_get_tx_tstamp(struct idpf_vport *vport)
+{
+	return -EOPNOTSUPP;
+}
+
 static inline int
 idpf_ptp_set_timestamp_mode(struct idpf_vport *vport,
 			    struct kernel_hwtstamp_config *config)
@@ -377,11 +395,22 @@ static inline u64 idpf_ptp_tstamp_extend_32b_to_64b(u64 cached_phc_time,
 }
 
 static inline int idpf_ptp_request_ts(struct idpf_tx_queue *tx_q,
-				      struct sk_buff *skb, u32 *idx)
+				      struct sk_buff *skb, u32 *idx
+				      struct idpf_tx_splitq_params *params)
 {
 	return -EOPNOTSUPP;
 }
 
 static inline void idpf_tstamp_task(struct work_struct *work) { }
+
+static inline bool
+idpf_ptp_update_tstamp_tracker(struct idpf_ptp_vport_tx_tstamp_caps *caps,
+			       struct sk_buff *skb,
+			       enum idpf_ptp_tx_tstamp_state state_before,
+			       enum idpf_ptp_tx_tstamp_state state_after)
+{
+	return false;
+}
+
 #endif /* CONFIG_PTP_1588_CLOCK */
 #endif /* _IDPF_PTP_H */

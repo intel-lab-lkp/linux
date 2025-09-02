@@ -947,6 +947,7 @@ static void idpf_txq_group_rel(struct idpf_vport *vport,
 				txq_grp->txqs[j]->refillq = NULL;
 			}
 
+			xa_destroy(&txq_grp->txqs[j]->ptp_tx_tstamps);
 			kfree(txq_grp->txqs[j]);
 			txq_grp->txqs[j] = NULL;
 		}
@@ -1063,8 +1064,11 @@ static int idpf_vport_init_fast_path_txqs(struct idpf_vport *vport,
 					  struct idpf_q_vec_rsrc *rsrc)
 {
 	struct idpf_ptp_vport_tx_tstamp_caps *caps = vport->tx_tstamp_caps;
-	struct work_struct *tstamp_task = &vport->tstamp_task;
+	struct work_struct *tstamp_task = NULL;
 	int k = 0;
+
+	if (vport->adapter->ptp->tx_tstamp_access == IDPF_PTP_MAILBOX)
+		tstamp_task = &vport->tstamp_task;
 
 	vport->txqs = kcalloc(rsrc->num_txq, sizeof(*vport->txqs),
 			      GFP_KERNEL);
@@ -1370,6 +1374,7 @@ static int idpf_txq_group_alloc(struct idpf_vport *vport,
 			q->tx_min_pkt_len = idpf_get_min_tx_pkt_len(adapter);
 			q->netdev = vport->netdev;
 			q->txq_grp = tx_qgrp;
+			xa_init(&q->ptp_tx_tstamps);
 
 			if (!split) {
 				q->clean_budget = vport->compln_clean_budget;
@@ -1626,34 +1631,54 @@ err_out:
  * idpf_tx_read_tstamp - schedule a work to read Tx timestamp value
  * @txq: queue to read the timestamp from
  * @skb: socket buffer to provide Tx timestamp value
+ * @buf_id: completion tag for this packet
  *
  * Schedule a work to read Tx timestamp value generated once the packet is
  * transmitted.
  */
-static void idpf_tx_read_tstamp(struct idpf_tx_queue *txq, struct sk_buff *skb)
+static void idpf_tx_read_tstamp(struct idpf_tx_queue *txq, struct sk_buff *skb,
+				u32 buf_id)
 {
 	struct idpf_ptp_vport_tx_tstamp_caps *tx_tstamp_caps;
-	struct idpf_ptp_tx_tstamp_status *tx_tstamp_status;
+	struct idpf_ptp_tx_tstamp_status *tx_tstamp_status = NULL;
+	enum idpf_ptp_access access;
+	int err;
 
 	tx_tstamp_caps = txq->cached_tstamp_caps;
-	spin_lock_bh(&tx_tstamp_caps->status_lock);
+	access = tx_tstamp_caps->vport->adapter->ptp->tx_tstamp_access;
+	if (access == IDPF_PTP_MAILBOX) {
+		spin_lock(&tx_tstamp_caps->status_lock);
 
-	for (u32 i = 0; i < tx_tstamp_caps->num_entries; i++) {
-		tx_tstamp_status = &tx_tstamp_caps->tx_tstamp_status[i];
-		if (tx_tstamp_status->state != IDPF_PTP_FREE)
-			continue;
+		for (int i = 0; i < tx_tstamp_caps->num_entries; i++) {
+			struct idpf_ptp_tx_tstamp_status *status;
 
-		tx_tstamp_status->skb = skb;
-		tx_tstamp_status->state = IDPF_PTP_REQUEST;
+			status = &tx_tstamp_caps->tx_tstamp_status[i];
+			if (status->state == IDPF_PTP_FREE) {
+				tx_tstamp_status = status;
+				tx_tstamp_status->skb = skb;
+				tx_tstamp_status->state = IDPF_PTP_REQUEST;
+				break;
+			}
+		}
 
-		/* Fetch timestamp from completion descriptor through
-		 * virtchnl msg to report to stack.
-		 */
+		spin_unlock(&tx_tstamp_caps->status_lock);
+		if (!tx_tstamp_status)
+			return;
+
 		queue_work(system_unbound_wq, txq->tstamp_task);
-		break;
-	}
+	} else if (access == IDPF_PTP_DIRECT) {
+		struct idpf_ptp_tx_tstamp *tx_tstamp = xa_load(&txq->ptp_tx_tstamps, buf_id);
 
-	spin_unlock_bh(&tx_tstamp_caps->status_lock);
+		if (tx_tstamp)
+			err = idpf_ptp_get_tx_tstamp(tx_tstamp_caps->vport, tx_tstamp);
+		else
+			err = -EFAULT;
+
+		if (err)
+			pci_dbg(tx_tstamp_caps->vport->adapter->pdev,
+				"Cannot read Tx timestamp %pe\n",
+				ERR_PTR(err));
+	}
 }
 
 #define idpf_tx_splitq_clean_bump_ntc(txq, ntc, desc, buf)	\
@@ -1765,7 +1790,7 @@ static void idpf_tx_clean_bufs(struct idpf_tx_queue *txq, u32 buf_id,
 	tx_buf = &txq->tx_buf[buf_id];
 	if (tx_buf->type == LIBETH_SQE_SKB) {
 		if (skb_shinfo(tx_buf->skb)->tx_flags & SKBTX_IN_PROGRESS)
-			idpf_tx_read_tstamp(txq, tx_buf->skb);
+			idpf_tx_read_tstamp(txq, tx_buf->skb, buf_id);
 
 		libeth_tx_complete(tx_buf, &cp);
 		idpf_post_buf_refill(txq->refillq, buf_id);
@@ -2555,12 +2580,12 @@ netdev_tx_t idpf_tx_drop_skb(struct idpf_tx_queue *tx_q, struct sk_buff *skb)
  * idpf_tx_tstamp - set up context descriptor for hardware timestamp
  * @tx_q: queue to send buffer on
  * @skb: pointer to the SKB we're sending
- * @off: pointer to the offload struct
+ * @params: pointer to tx params struct
  *
  * Return: Positive index number on success, negative otherwise.
  */
 static int idpf_tx_tstamp(struct idpf_tx_queue *tx_q, struct sk_buff *skb,
-			  struct idpf_tx_offload_params *off)
+			  struct idpf_tx_splitq_params *params)
 {
 	int err, idx;
 
@@ -2572,11 +2597,11 @@ static int idpf_tx_tstamp(struct idpf_tx_queue *tx_q, struct sk_buff *skb,
 		return -1;
 
 	/* Tx timestamps cannot be sampled when doing TSO */
-	if (off->tx_flags & IDPF_TX_FLAGS_TSO)
+	if (params->offload.tx_flags & IDPF_TX_FLAGS_TSO)
 		return -1;
 
 	/* Grab an open timestamp slot */
-	err = idpf_ptp_request_ts(tx_q, skb, &idx);
+	err = idpf_ptp_request_ts(tx_q, skb, &idx, params);
 	if (err) {
 		u64_stats_update_begin(&tx_q->stats_sync);
 		u64_stats_inc(&tx_q->q_stats.tstamp_skipped);
@@ -2585,7 +2610,7 @@ static int idpf_tx_tstamp(struct idpf_tx_queue *tx_q, struct sk_buff *skb,
 		return -1;
 	}
 
-	off->tx_flags |= IDPF_TX_FLAGS_TSYN;
+	params->offload.tx_flags |= IDPF_TX_FLAGS_TSYN;
 
 	return idx;
 }
@@ -2607,7 +2632,7 @@ static void idpf_tx_set_tstamp_desc(union idpf_flex_tx_ctx_desc *ctx_desc,
 }
 #else /* CONFIG_PTP_1588_CLOCK */
 static int idpf_tx_tstamp(struct idpf_tx_queue *tx_q, struct sk_buff *skb,
-			  struct idpf_tx_offload_params *off)
+			  struct idpf_tx_offload_params *params)
 {
 	return -1;
 }
@@ -2687,12 +2712,6 @@ static netdev_tx_t idpf_tx_splitq_frame(struct sk_buff *skb,
 		u64_stats_update_end(&tx_q->stats_sync);
 	}
 
-	idx = idpf_tx_tstamp(tx_q, skb, &tx_params.offload);
-	if (idx != -1) {
-		ctx_desc = idpf_tx_splitq_get_ctx_desc(tx_q);
-		idpf_tx_set_tstamp_desc(ctx_desc, idx);
-	}
-
 	if (idpf_queue_has(FLOW_SCH_EN, tx_q)) {
 		struct idpf_sw_queue *refillq = tx_q->refillq;
 
@@ -2739,6 +2758,12 @@ static netdev_tx_t idpf_tx_splitq_frame(struct sk_buff *skb,
 
 		if (skb->ip_summed == CHECKSUM_PARTIAL)
 			tx_params.offload.td_cmd |= IDPF_TX_FLEX_DESC_CMD_CS_EN;
+	}
+
+	idx = idpf_tx_tstamp(tx_q, skb, &tx_params);
+	if (idx != -1) {
+		ctx_desc = idpf_tx_splitq_get_ctx_desc(tx_q);
+		idpf_tx_set_tstamp_desc(ctx_desc, idx);
 	}
 
 	first = &tx_q->tx_buf[buf_id];

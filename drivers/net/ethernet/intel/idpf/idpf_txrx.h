@@ -180,6 +180,7 @@ struct idpf_tx_offload_params {
  * @compl_tag: Associated tag for completion
  * @td_tag: Descriptor tunneling tag
  * @offload: Offload parameters
+ * @ptp_tx_tstamp: pointer to Tx timestamp latch struct in use by this packet
  * @prev_ntu: stored TxQ next_to_use in case of rollback
  * @prev_refill_ntc: stored refillq next_to_clean in case of packet rollback
  * @prev_refill_gen: stored refillq generation bit in case of packet rollback
@@ -193,6 +194,7 @@ struct idpf_tx_splitq_params {
 	};
 
 	struct idpf_tx_offload_params offload;
+	struct idpf_ptp_tx_tstamp *ptp_tx_tstamp;
 
 	u16 prev_ntu;
 	u16 prev_refill_ntc;
@@ -607,6 +609,7 @@ libeth_cacheline_set_assert(struct idpf_rx_queue,
  * @xdp_lock: lock for XDP Tx queues sharing
  * @cached_tstamp_caps: Tx timestamp capabilities negotiated with the CP
  * @tstamp_task: Work that handles Tx timestamp read
+ * @ptp_tx_tstamps: XArray for storing Tx timestamps
  * @stats_sync: See struct u64_stats_sync
  * @q_stats: See union idpf_tx_queue_stats
  * @q_id: Queue id
@@ -673,6 +676,7 @@ struct idpf_tx_queue {
 
 	struct idpf_ptp_vport_tx_tstamp_caps *cached_tstamp_caps;
 	struct work_struct *tstamp_task;
+	struct xarray ptp_tx_tstamps;
 
 	struct u64_stats_sync stats_sync;
 	struct idpf_tx_queue_stats q_stats;

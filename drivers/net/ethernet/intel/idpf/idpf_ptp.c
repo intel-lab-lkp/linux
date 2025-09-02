@@ -746,6 +746,7 @@ u64 idpf_ptp_extend_ts(struct idpf_vport *vport, u64 in_tstamp)
  * @tx_q: Transmit queue on which the Tx timestamp is requested
  * @skb: The SKB to associate with this timestamp request
  * @idx: Index of the Tx timestamp latch
+ * @params: pointer to tx params struct
  *
  * Request tx timestamp index negotiated during PTP init that will be set into
  * Tx descriptor.
@@ -754,7 +755,7 @@ u64 idpf_ptp_extend_ts(struct idpf_vport *vport, u64 in_tstamp)
  * -errno otherwise.
  */
 int idpf_ptp_request_ts(struct idpf_tx_queue *tx_q, struct sk_buff *skb,
-			u32 *idx)
+			u32 *idx, struct idpf_tx_splitq_params *params)
 {
 	struct idpf_ptp_tx_tstamp *ptp_tx_tstamp;
 	struct list_head *head;
@@ -770,6 +771,13 @@ int idpf_ptp_request_ts(struct idpf_tx_queue *tx_q, struct sk_buff *skb,
 
 	ptp_tx_tstamp = list_first_entry(head, struct idpf_ptp_tx_tstamp,
 					 list_member);
+
+	if (xa_is_err(xa_store(&tx_q->ptp_tx_tstamps, params->compl_tag,
+			       ptp_tx_tstamp, GFP_ATOMIC))) {
+		spin_unlock(&tx_q->cached_tstamp_caps->latches_lock);
+		return -ENOBUFS;
+	}
+
 	list_del(&ptp_tx_tstamp->list_member);
 
 	ptp_tx_tstamp->skb = skb_get(skb);
@@ -781,8 +789,98 @@ int idpf_ptp_request_ts(struct idpf_tx_queue *tx_q, struct sk_buff *skb,
 	spin_unlock(&tx_q->cached_tstamp_caps->latches_lock);
 
 	*idx = ptp_tx_tstamp->idx;
+	params->ptp_tx_tstamp = ptp_tx_tstamp;
 
 	return 0;
+}
+
+/**
+ * idpf_ptp_update_tstamp_tracker - Update the Tx timestamp tracker based on
+ *				    the skb compatibility.
+ * @caps: Tx timestamp capabilities that monitor the latch status
+ * @skb: skb for which the tstamp value is returned through virtchnl message
+ * @state_before: Current state of the Tx timestamp latch
+ * @state_after: Expected state of the Tx timestamp latch
+ *
+ * Find a proper skb tracker for which the Tx timestamp is received and change
+ * the state to expected value.
+ *
+ * Return: true if the tracker has been found and updated, false otherwise.
+ */
+bool idpf_ptp_update_tstamp_tracker(struct idpf_ptp_vport_tx_tstamp_caps *caps,
+				    struct sk_buff *skb,
+				    enum idpf_ptp_tx_tstamp_state state_before,
+				    enum idpf_ptp_tx_tstamp_state state_after)
+{
+	bool updated = false;
+
+	spin_lock_bh(&caps->status_lock);
+	for (u16 i = 0; i < caps->num_entries; i++) {
+		struct idpf_ptp_tx_tstamp_status *status;
+
+		status = &caps->tx_tstamp_status[i];
+		if (skb == status->skb && status->state == state_before) {
+			status->state = state_after;
+			updated = true;
+			break;
+		}
+	}
+	spin_unlock_bh(&caps->status_lock);
+
+	return updated;
+}
+
+/**
+ * idpf_ptp_get_tx_tstamp - Read the Tx timestamp value
+ * @vport: Virtual port structure
+ * @tx_tstamp: Tx timestamp structure that holds the latch register offsets
+ *
+ * Read the Tx timestamp value directly - through BAR registers - and provide
+ * it back to the skb.
+ *
+ * Return: 0 on success, negative error code on failure.
+ */
+int idpf_ptp_get_tx_tstamp(struct idpf_vport *vport,
+			   struct idpf_ptp_tx_tstamp *tx_tstamp)
+{
+	struct idpf_ptp_vport_tx_tstamp_caps *tstamp_caps;
+	u32 tstamp_l, tstamp_h, readiness_h, readiness_l;
+	u64 tstamp, readiness_bitmap;
+	int err = 0;
+
+	tstamp_caps = vport->tx_tstamp_caps;
+
+	readiness_l = readl(tstamp_caps->readiness_offset_l);
+	readiness_h = readl(tstamp_caps->readiness_offset_h);
+	readiness_bitmap = (u64)readiness_h << 32 | readiness_l;
+
+	if (unlikely(!(readiness_bitmap & BIT_ULL(tx_tstamp->idx)))) {
+		err = -EIO;
+		dev_err(&vport->adapter->pdev->dev,
+			"Tx timestamp latch %u is not ready for skb %p\n",
+			tx_tstamp->idx, tx_tstamp->skb);
+		goto error;
+	}
+
+	tstamp_l = readl(tx_tstamp->tx_latch_reg_offset_l);
+	tstamp_h = readl(tx_tstamp->tx_latch_reg_offset_h);
+	tstamp = (u64)tstamp_h << 32 | tstamp_l;
+
+	spin_lock(&tstamp_caps->latches_lock);
+	list_del(&tx_tstamp->list_member);
+	idpf_ptp_get_tstamp_value(vport, tstamp, tx_tstamp, false);
+	spin_unlock(&tstamp_caps->latches_lock);
+
+	return 0;
+
+error:
+	consume_skb(tx_tstamp->skb);
+	spin_lock(&tstamp_caps->latches_lock);
+	list_del(&tx_tstamp->list_member);
+	list_add(&tx_tstamp->list_member,
+		 &tstamp_caps->latches_free);
+	spin_unlock(&tstamp_caps->latches_lock);
+	return err;
 }
 
 /**
@@ -957,7 +1055,8 @@ static void idpf_ptp_release_vport_tstamp(struct idpf_vport *vport)
 	struct idpf_ptp_tx_tstamp *ptp_tx_tstamp, *tmp;
 	struct list_head *head;
 
-	cancel_work_sync(&vport->tstamp_task);
+	if (vport->adapter->ptp->tx_tstamp_access == IDPF_PTP_MAILBOX)
+		cancel_work_sync(&vport->tstamp_task);
 
 	/* Remove list with free latches */
 	spin_lock_bh(&vport->tx_tstamp_caps->latches_lock);
