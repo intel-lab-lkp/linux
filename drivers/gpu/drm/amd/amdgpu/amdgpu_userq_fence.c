@@ -37,11 +37,7 @@ static struct kmem_cache *amdgpu_userq_fence_slab;
 
 int amdgpu_userq_fence_slab_init(void)
 {
-	amdgpu_userq_fence_slab = kmem_cache_create("amdgpu_userq_fence",
-						    sizeof(struct amdgpu_userq_fence),
-						    0,
-						    SLAB_HWCACHE_ALIGN,
-						    NULL);
+	amdgpu_userq_fence_slab = KMEM_CACHE(amdgpu_userq_fence, SLAB_HWCACHE_ALIGN);
 	if (!amdgpu_userq_fence_slab)
 		return -ENOMEM;
 
