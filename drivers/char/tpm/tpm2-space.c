@@ -58,10 +58,9 @@ int tpm2_init_space(struct tpm_space *space, unsigned int buf_size)
 
 void tpm2_del_space(struct tpm_chip *chip, struct tpm_space *space)
 {
-
-	if (tpm_try_get_ops(chip) == 0) {
+	if (tpm_internal_try_get_ops(chip) == 0) {
 		tpm2_flush_sessions(chip, space);
-		tpm_put_ops(chip);
+		tpm_internal_put_ops(chip);
 	}
 
 	kfree(space->context_buf);
