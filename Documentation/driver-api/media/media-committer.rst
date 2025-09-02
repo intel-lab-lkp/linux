@@ -90,9 +90,9 @@ be a part of their maintenance tasks.
 Due to that, to become a committer or a core committer, a consensus between
 all subsystem maintainers is required, as they all need to trust a developer
 well enough to be delegated the responsibility to maintain part of the code
-and to properly review patches from third parties, in a timely manner and
-keeping the status of the reviewed code at https://patchwork.linuxtv.org
-updated.
+and to properly review patches from third parties for the drivers that they
+maintain in a timely manner and keeping the status of the patches at
+https://patchwork.linuxtv.org updated.
 
 .. Note::
 
