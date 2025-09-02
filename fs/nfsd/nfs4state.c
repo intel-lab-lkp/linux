@@ -4326,6 +4326,8 @@ nfsd4_sequence(struct svc_rqst *rqstp, struct nfsd4_compound_state *cstate,
 	int buflen;
 	struct net *net = SVC_NET(rqstp);
 	struct nfsd_net *nn = net_generic(net, nfsd_net_id);
+	struct list_head *pos, *next;
+	struct nfs4_delegation *dp;
 
 	if (resp->opcnt != 1)
 		return nfserr_sequence_pos;
@@ -4469,6 +4471,15 @@ out:
 		break;
 	default:
 		seq->status_flags = 0;
+	}
+	if (!list_empty(&clp->cl_revoked)) {
+		list_for_each_safe(pos, next, &clp->cl_revoked) {
+			dp = list_entry(pos, struct nfs4_delegation, dl_recall_lru);
+			if (dp->dl_time < (ktime_get_boottime_seconds() - 2 * nn->nfsd4_lease)) {
+				list_del_init(&dp->dl_recall_lru);
+				nfs4_put_stid(&dp->dl_stid);
+			}
+		}
 	}
 	if (!list_empty(&clp->cl_revoked))
 		seq->status_flags |= SEQ4_STATUS_RECALLABLE_STATE_REVOKED;
