@@ -280,6 +280,13 @@ If the record decrypted turns out to had been padded or is not a data
 record it will be decrypted again into a kernel buffer without zero copy.
 Such events are counted in the ``TlsDecryptRetry`` statistic.
 
+TLS_TX_RECORD_SIZE_LIM
+~~~~~~~~~~~~~~~~~~~~~~
+
+During a TLS handshake, an endpoint may use the record size limit extension
+to specify a maximum record size. This allows enforcing the specified record
+size limit, such that outgoing records do not exceed the limit specified.
+
 Statistics
 ==========
 

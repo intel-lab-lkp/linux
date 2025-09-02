@@ -1033,6 +1033,7 @@ static int tls_sw_sendmsg_locked(struct sock *sk, struct msghdr *msg,
 	unsigned char record_type = TLS_RECORD_TYPE_DATA;
 	bool is_kvec = iov_iter_is_kvec(&msg->msg_iter);
 	bool eor = !(msg->msg_flags & MSG_MORE);
+	u16 record_size_limit;
 	size_t try_to_copy;
 	ssize_t copied = 0;
 	struct sk_msg *msg_pl, *msg_en;
@@ -1057,6 +1058,9 @@ static int tls_sw_sendmsg_locked(struct sock *sk, struct msghdr *msg,
 				goto send_end;
 		}
 	}
+
+	record_size_limit = tls_ctx->record_size_limit ?
+			    tls_ctx->record_size_limit : TLS_MAX_PAYLOAD_SIZE;
 
 	while (msg_data_left(msg)) {
 		if (sk->sk_err) {
