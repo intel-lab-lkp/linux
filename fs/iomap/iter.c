@@ -27,6 +27,22 @@ int iomap_iter_advance(struct iomap_iter *iter, u64 *count)
 	return 0;
 }
 
+/**
+ * iomap_iter_revert - revert the iterator position
+ * @iter: iteration structure
+ * @count: number of bytes to revert
+ *
+ * Revert the iterator position by the specified number of bytes, undoing
+ * the effect of a previous iomap_iter_advance() call. The count must not
+ * exceed the amount previously advanced in the current iter.
+ */
+static void iomap_iter_revert(struct iomap_iter *iter, u64 count)
+{
+	count = min_t(u64, iter->pos - iter->iter_start_pos, count);
+	iter->pos -= count;
+	iter->len += count;
+}
+
 static inline void iomap_iter_done(struct iomap_iter *iter)
 {
 	WARN_ON_ONCE(iter->iomap.offset > iter->pos);
@@ -80,8 +96,10 @@ int iomap_iter(struct iomap_iter *iter, const struct iomap_ops *ops)
 				iomap_length_trim(iter, iter->iter_start_pos,
 						  olen),
 				advanced, iter->flags, &iter->iomap);
-		if (ret < 0 && !advanced && !iter->status)
+		if (ret < 0 && !iter->status) {
+			iomap_iter_revert(iter, advanced);
 			return ret;
+		}
 	}
 
 	/* detect old return semantics where this would advance */
