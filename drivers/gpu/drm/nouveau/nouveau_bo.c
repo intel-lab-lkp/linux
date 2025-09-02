@@ -1417,7 +1417,9 @@ vm_fault_t nouveau_ttm_fault_reserve_notify(struct ttm_buffer_object *bo)
 
 static int
 nouveau_ttm_tt_populate(struct ttm_device *bdev,
-			struct ttm_tt *ttm, struct ttm_operation_ctx *ctx)
+			struct ttm_tt *ttm,
+			bool memcg_account,
+			struct ttm_operation_ctx *ctx)
 {
 	struct ttm_tt *ttm_dma = (void *)ttm;
 	struct nouveau_drm *drm;
@@ -1434,7 +1436,7 @@ nouveau_ttm_tt_populate(struct ttm_device *bdev,
 
 	drm = nouveau_bdev(bdev);
 
-	return ttm_pool_alloc(&drm->ttm.bdev.pool, ttm, ctx);
+	return ttm_pool_alloc(&drm->ttm.bdev.pool, ttm, memcg_account, ctx);
 }
 
 static void

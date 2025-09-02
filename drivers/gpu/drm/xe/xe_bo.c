@@ -516,6 +516,7 @@ static struct ttm_tt *xe_ttm_tt_create(struct ttm_buffer_object *ttm_bo,
 }
 
 static int xe_ttm_tt_populate(struct ttm_device *ttm_dev, struct ttm_tt *tt,
+			      bool memcg_account,
 			      struct ttm_operation_ctx *ctx)
 {
 	struct xe_ttm_tt *xe_tt = container_of(tt, struct xe_ttm_tt, ttm);
@@ -533,7 +534,7 @@ static int xe_ttm_tt_populate(struct ttm_device *ttm_dev, struct ttm_tt *tt,
 		err = ttm_tt_restore(ttm_dev, tt, ctx);
 	} else {
 		ttm_tt_clear_backed_up(tt);
-		err = ttm_pool_alloc(&ttm_dev->pool, tt, ctx);
+		err = ttm_pool_alloc(&ttm_dev->pool, tt, memcg_account, ctx);
 	}
 	if (err)
 		return err;
