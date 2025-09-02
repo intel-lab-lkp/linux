@@ -1326,6 +1326,9 @@ static void ct_try_receive_message(struct intel_guc_ct *ct)
 {
 	int ret;
 
+	if (!atomic_read(&ct_to_guc(ct)->interrupts.enabled))
+		return;
+
 	if (GEM_WARN_ON(!ct->enabled))
 		return;
 
