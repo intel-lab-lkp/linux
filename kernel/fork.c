@@ -448,14 +448,15 @@ static void account_kernel_stack(struct task_struct *tsk, int account)
 	} else {
 		void *stack = task_stack_page(tsk);
 		struct page *page = virt_to_head_page(stack);
-		int i;
+		int i = 0;
 
 		/* All stack pages are in the same node. */
 		mod_lruvec_kmem_state(stack, NR_KERNEL_STACK_KB,
 				      account * (THREAD_SIZE / 1024));
 
-		for (i = 0; i < THREAD_SIZE / PAGE_SIZE; i++, page++)
-			__SetPageStack(page);
+		do {
+			__SetPageStack(page++);
+		} while (++i < THREAD_SIZE / PAGE_SIZE);
 	}
 }
 
@@ -474,10 +475,11 @@ void exit_task_stack_account(struct task_struct *tsk)
 		}
 	} else {
 		struct page *page = virt_to_head_page(task_stack_page(tsk));
-		int i;
+		int i = 0;
 
-		for (i = 0; i < THREAD_SIZE / PAGE_SIZE; i++, page++)
-			__ClearPageStack(page);
+		do {
+			__ClearPageStack(page++);
+		} while (++i < THREAD_SIZE / PAGE_SIZE);
 	}
 }
 
