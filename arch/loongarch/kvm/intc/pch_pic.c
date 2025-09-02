@@ -352,6 +352,7 @@ static int kvm_pch_pic_regs_access(struct kvm_device *dev,
 	void __user *data;
 	void *p = NULL;
 	struct loongarch_pch_pic *s;
+	char buf[8];
 
 	s = dev->kvm->arch.pch_pic;
 	addr = attr->attr;
@@ -397,16 +398,23 @@ static int kvm_pch_pic_regs_access(struct kvm_device *dev,
 		return -EINVAL;
 	}
 
+	if (is_write) {
+		if (copy_from_user(buf, data, len))
+			return -EFAULT;
+	}
+
 	spin_lock(&s->lock);
 	/* write or read value according to is_write */
-	if (is_write) {
-		if (copy_from_user(p, data, len))
-			ret = -EFAULT;
-	} else {
-		if (copy_to_user(data, p, len))
-			ret = -EFAULT;
-	}
+	if (is_write)
+		memcpy(p, buf, len);
+	else
+		memcpy(buf, p, len);
 	spin_unlock(&s->lock);
+
+	if (!is_write) {
+		if (copy_to_user(data, buf, len))
+			return -EFAULT;
+	}
 
 	return ret;
 }
