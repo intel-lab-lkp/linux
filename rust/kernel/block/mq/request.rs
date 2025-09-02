@@ -236,8 +236,8 @@ fn atomic_relaxed_op_unless(target: &AtomicU64, op: impl Fn(u64) -> u64, pred: u
 // keeps the object alive in memory at least until a matching reference count
 // decrement is executed.
 unsafe impl<T: Operations> AlwaysRefCounted for Request<T> {
-    fn inc_ref(&self) {
-        let refcount = &self.wrapper_ref().refcount();
+    fn inc_ref(obj: &Self) {
+        let refcount = &obj.wrapper_ref().refcount();
 
         #[cfg_attr(not(CONFIG_DEBUG_MISC), allow(unused_variables))]
         let updated = atomic_relaxed_op_unless(refcount, |x| x + 1, 0);

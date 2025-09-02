@@ -56,9 +56,9 @@ pub trait IntoGEMObject: Sized + super::private::Sealed + AlwaysRefCounted {
 
 // SAFETY: All gem objects are refcounted.
 unsafe impl<T: IntoGEMObject> AlwaysRefCounted for T {
-    fn inc_ref(&self) {
+    fn inc_ref(obj: &Self) {
         // SAFETY: The existence of a shared reference guarantees that the refcount is non-zero.
-        unsafe { bindings::drm_gem_object_get(self.as_raw()) };
+        unsafe { bindings::drm_gem_object_get(obj.as_raw()) };
     }
 
     unsafe fn dec_ref(obj: NonNull<Self>) {

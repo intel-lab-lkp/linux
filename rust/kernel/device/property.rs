@@ -359,10 +359,10 @@ impl core::fmt::Debug for FwNodeReferenceArgs {
 
 // SAFETY: Instances of `FwNode` are always reference-counted.
 unsafe impl crate::types::AlwaysRefCounted for FwNode {
-    fn inc_ref(&self) {
+    fn inc_ref(obj: &Self) {
         // SAFETY: The existence of a shared reference guarantees that the
         // refcount is non-zero.
-        unsafe { bindings::fwnode_handle_get(self.as_raw()) };
+        unsafe { bindings::fwnode_handle_get(obj.as_raw()) };
     }
 
     unsafe fn dec_ref(obj: ptr::NonNull<Self>) {
