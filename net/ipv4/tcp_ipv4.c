@@ -87,6 +87,9 @@
 #include <crypto/hash.h>
 #include <linux/scatterlist.h>
 
+#include <linux/dma-buf.h>
+#include "../core/devmem.h"
+
 #include <trace/events/tcp.h>
 
 #ifdef CONFIG_TCP_MD5SIG
@@ -2529,11 +2532,38 @@ static void tcp_md5sig_info_free_rcu(struct rcu_head *head)
 static void tcp_release_user_frags(struct sock *sk)
 {
 #ifdef CONFIG_PAGE_POOL
-	unsigned long index;
-	void *netmem;
+	struct net_devmem_dmabuf_binding *binding;
+	struct net_iov *niov;
+	unsigned int token;
+	netmem_ref netmem;
 
-	xa_for_each(&sk->sk_user_frags, index, netmem)
-		WARN_ON_ONCE(!napi_pp_put_page((__force netmem_ref)netmem));
+	if (!sk->sk_user_frags.urefs)
+		return;
+
+	binding = sk->sk_user_frags.binding;
+	if (!binding || !binding->vec)
+		return;
+
+	for (token = 0; token < binding->dmabuf->size / PAGE_SIZE; token++) {
+		niov = binding->vec[token];
+
+		/* never used by recvmsg() */
+		if (!niov)
+			continue;
+
+		if (!net_is_devmem_iov(niov))
+			continue;
+
+		netmem = net_iov_to_netmem(niov);
+
+		while (atomic_dec_return(&sk->sk_user_frags.urefs[token]) >= 0)
+			WARN_ON_ONCE(!napi_pp_put_page(netmem));
+	}
+
+	net_devmem_dmabuf_binding_put(binding);
+	sk->sk_user_frags.binding = NULL;
+	kvfree(sk->sk_user_frags.urefs);
+	sk->sk_user_frags.urefs = NULL;
 #endif
 }
 
@@ -2542,8 +2572,6 @@ void tcp_v4_destroy_sock(struct sock *sk)
 	struct tcp_sock *tp = tcp_sk(sk);
 
 	tcp_release_user_frags(sk);
-
-	xa_destroy(&sk->sk_user_frags);
 
 	trace_tcp_destroy_sock(sk);
 
