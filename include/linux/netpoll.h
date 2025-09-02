@@ -74,7 +74,6 @@ int netpoll_setup(struct netpoll *np);
 void __netpoll_free(struct netpoll *np);
 void do_netpoll_cleanup(struct netpoll *np);
 netdev_tx_t netpoll_send_skb(struct netpoll *np, struct sk_buff *skb);
-struct sk_buff *find_skb(struct netpoll *np, int len, int reserve);
 void zap_completion_queue(void);
 
 #ifdef CONFIG_NETPOLL
