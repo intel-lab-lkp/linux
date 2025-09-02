@@ -163,14 +163,18 @@ static int __cci_ace_get_port(struct device_node *dn, int type)
 	int i;
 	bool ace_match;
 	struct device_node *cci_portn;
+	int ret = -ENODEV;
 
 	cci_portn = of_parse_phandle(dn, "cci-control-port", 0);
 	for (i = 0; i < nb_cci_ports; i++) {
 		ace_match = ports[i].type == type;
-		if (ace_match && cci_portn == ports[i].dn)
-			return i;
+		if (ace_match && cci_portn == ports[i].dn) {
+			ret = i;
+			break;
+		}
 	}
-	return -ENODEV;
+	of_node_put(cci_portn);
+	return ret;
 }
 
 int cci_ace_get_port(struct device_node *dn)
