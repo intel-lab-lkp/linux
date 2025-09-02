@@ -427,6 +427,8 @@ void __show_mem(unsigned int filter, nodemask_t *nodemask, int max_zone_idx)
 
 		nr = alloc_tag_top_users(tags, ARRAY_SIZE(tags), false);
 		if (nr) {
+			pr_notice("Memory alloction profiling is turned %s\n",
+				mem_alloc_profiling_enabled() ? "on" : "off");
 			pr_notice("Memory allocations:\n");
 			for (i = 0; i < nr; i++) {
 				struct codetag *ct = tags[i].ct;
