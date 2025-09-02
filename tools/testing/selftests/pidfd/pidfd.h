@@ -45,7 +45,11 @@
 #endif
 
 #ifndef __NR_pidfd_open
+#ifdef __alpha__
+#define __NR_pidfd_open 544
+#else
 #define __NR_pidfd_open 434
+#endif
 #endif
 
 #ifndef __NR_pidfd_send_signal
