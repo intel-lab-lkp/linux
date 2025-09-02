@@ -2835,7 +2835,7 @@ megasas_build_ldio_fusion(struct megasas_instance *instance,
 	} else {
 		if (MR_BuildRaidContext(instance, &io_info, rctx,
 					local_map_ptr, &raidLUN))
-			fp_possible = (io_info.fpOkForIo > 0) ? true : false;
+			fp_possible = io_info.fpOkForIo > 0;
 	}
 
 	megasas_get_msix_index(instance, scp, cmd, io_info.data_arms);
@@ -5121,7 +5121,7 @@ int megasas_reset_fusion(struct Scsi_Host *shost, int reason)
 				    (instance->nvme_page_size))
 					ret_target_prop = megasas_get_target_prop(instance, sdev);
 
-				is_target_prop = (ret_target_prop == DCMD_SUCCESS) ? true : false;
+				is_target_prop = ret_target_prop == DCMD_SUCCESS;
 				megasas_set_dynamic_target_properties(sdev, NULL,
 						is_target_prop);
 			}

@@ -2097,7 +2097,7 @@ static int megasas_sdev_configure(struct scsi_device *sdev,
 	if ((instance->tgt_prop) && (instance->nvme_page_size))
 		ret_target_prop = megasas_get_target_prop(instance, sdev);
 
-	is_target_prop = (ret_target_prop == DCMD_SUCCESS) ? true : false;
+	is_target_prop = ret_target_prop == DCMD_SUCCESS;
 	megasas_set_static_target_properties(sdev, lim, is_target_prop);
 
 	/* This sdev property may change post OCR */
@@ -3448,7 +3448,7 @@ enable_sdev_max_qd_store(struct device *cdev,
 
 	shost_for_each_device(sdev, shost) {
 		ret_target_prop = megasas_get_target_prop(instance, sdev);
-		is_target_prop = (ret_target_prop == DCMD_SUCCESS) ? true : false;
+		is_target_prop = ret_target_prop == DCMD_SUCCESS;
 		megasas_set_fw_assisted_qd(sdev, is_target_prop);
 	}
 	mutex_unlock(&instance->reset_mutex);
