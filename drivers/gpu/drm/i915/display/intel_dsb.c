@@ -1020,3 +1020,20 @@ void intel_dsb_irq_handler(struct intel_display *display,
 		drm_err(display->drm, "[CRTC:%d:%s] DSB %d GOSUB programming error\n",
 			crtc->base.base.id, crtc->base.name, dsb_id);
 }
+
+void intel_dsb_wait_for_guardband(struct intel_atomic_state *state,
+				  struct intel_dsb *dsb)
+{
+	struct intel_crtc *crtc = dsb->crtc;
+	const struct intel_crtc_state *crtc_state =
+		intel_pre_commit_crtc_state(state, crtc);
+	int start, end;
+
+	if (crtc_state->vrr.enable)
+		return;
+
+	start = crtc_state->vrr.flipline - crtc_state->vrr.guardband;
+	end = crtc_state->vrr.flipline;
+
+	intel_dsb_wait_scanline_in(state, dsb, start, end);
+}

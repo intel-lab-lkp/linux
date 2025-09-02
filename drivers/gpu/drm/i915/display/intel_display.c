@@ -7449,6 +7449,7 @@ static void intel_atomic_dsb_finish(struct intel_atomic_state *state,
 		intel_dsb_wait_vblank_delay(state, new_crtc_state->dsb_commit);
 		intel_vrr_check_push_sent(new_crtc_state->dsb_commit,
 					  new_crtc_state);
+		intel_dsb_wait_for_guardband(state, new_crtc_state->dsb_commit);
 		intel_dsb_interrupt(new_crtc_state->dsb_commit);
 	}
 
