@@ -173,7 +173,9 @@ static void usage(void)
 	"  -o, --once               Display once and exit\n"
 	"  -p, --pid=PID            Monitor only the specified PID\n"
 	"  -C, --container=PATH     Monitor the container at specified cgroup path\n"
-	"  -M, --memverbose         Display memory detailed information\n");
+	"  -M, --memverbose         Display memory detailed information\n"
+	"  -s, --sort=FIELD         Sort by delay field (default: cpu)\n"
+	"                           Types: cpu|io|irq|mem|swap|reclaim|thrashing|compact|wpcopy\n");
 	exit(0);
 }
 
@@ -188,6 +190,7 @@ static void parse_args(int argc, char **argv)
 		{"pid", required_argument, 0, 'p'},
 		{"once", no_argument, 0, 'o'},
 		{"processes", required_argument, 0, 'P'},
+		{"sort", required_argument, 0, 's'},
 		{"container", required_argument, 0, 'C'},
 		{"memverbose", no_argument, 0, 'M'},
 		{0, 0, 0, 0}
@@ -206,7 +209,7 @@ static void parse_args(int argc, char **argv)
 	while (1) {
 		int option_index = 0;
 
-		c = getopt_long(argc, argv, "hd:n:p:oP:C:M", long_options, &option_index);
+		c = getopt_long(argc, argv, "hd:n:p:oP:C:Ms:", long_options, &option_index);
 		if (c == -1)
 			break;
 
@@ -256,10 +259,52 @@ static void parse_args(int argc, char **argv)
 		case 'M':
 			cfg.mem_verbose_mode = 1;
 			break;
+		case 's':
+			if (strlen(optarg) == 0) {
+				fprintf(stderr, "Error: empty sort field\n");
+				exit(1);
+			}
+
+			if (strncmp(optarg, "cpu", 3) == 0)
+				cfg.sort_field = 'c';
+			else if (strncmp(optarg, "io", 2) == 0)
+				cfg.sort_field = 'i';
+			else if (strncmp(optarg, "irq", 3) == 0)
+				cfg.sort_field = 'q';
+			else if (strncmp(optarg, "mem", 3) == 0)
+				cfg.sort_field = 'm';
+			else if (strncmp(optarg, "swap", 4) == 0)
+				cfg.sort_field = 's';
+			else if (strncmp(optarg, "reclaim", 7) == 0)
+				cfg.sort_field = 'r';
+			else if (strncmp(optarg, "thrashing", 9) == 0)
+				cfg.sort_field = 't';
+			else if (strncmp(optarg, "compact", 7) == 0)
+				cfg.sort_field = 'p';
+			else if (strncmp(optarg, "wpcopy", 7) == 0)
+				cfg.sort_field = 'w';
+			else {
+				fprintf(stderr, "Error: invalid sort field\n");
+				fprintf(stderr, "Try to use cpu|io|irq|mem|");
+				fprintf(stderr, "swap|reclaim|thrashing|compact|wpcopy\n");
+				exit(1);
+			}
+			break;
 		default:
 			fprintf(stderr, "Try 'delaytop --help' for more information.\n");
 			exit(1);
 		}
+	}
+
+	/* Validate sorting field compatibility with memory verbose mode */
+	if (cfg.mem_verbose_mode == 0 &&
+		cfg.sort_field == 's' ||
+		cfg.sort_field == 'r' ||
+		cfg.sort_field == 't' ||
+		cfg.sort_field == 'p' ||
+		cfg.sort_field == 'w') {
+		fprintf(stderr, "Error: mem verbose mode is off, try to use -M\n");
+		exit(1);
 	}
 }
 
@@ -621,12 +666,77 @@ static int compare_tasks(const void *a, const void *b)
 	case 'c': /* CPU */
 		avg1 = average_ms(t1->cpu_delay_total, t1->cpu_count);
 		avg2 = average_ms(t2->cpu_delay_total, t2->cpu_count);
-		if (avg1 != avg2)
-			return avg2 > avg1 ? 1 : -1;
-		return t2->cpu_delay_total > t1->cpu_delay_total ? 1 : -1;
-
+		break;
+	case 'i': /* IO */
+		avg1 = average_ms(t1->blkio_delay_total, t1->blkio_count);
+		avg2 = average_ms(t2->blkio_delay_total, t2->blkio_count);
+		break;
+	case 'q': /* IRQ */
+		avg1 = average_ms(t1->irq_delay_total, t1->irq_count);
+		avg2 = average_ms(t2->irq_delay_total, t2->irq_count);
+		break;
+	case 'm': /* MEM(total) */
+		avg1 = average_ms(task_total_mem_delay(t1), task_total_mem_count(t1));
+		avg2 = average_ms(task_total_mem_delay(t2), task_total_mem_count(t2));
+		break;
+	/* Memory detailed display mode */
+	case 's': /* swapin (SWAP) */
+		avg1 = average_ms(t1->swapin_delay_total, t1->swapin_count);
+		avg2 = average_ms(t2->swapin_delay_total, t2->swapin_count);
+		break;
+	case 'r': /* freepages (RCL) */
+		avg1 = average_ms(t1->freepages_delay_total, t1->freepages_count);
+		avg2 = average_ms(t2->freepages_delay_total, t2->freepages_count);
+		break;
+	case 't': /* thrashing (THR) */
+		avg1 = average_ms(t1->thrashing_delay_total, t1->thrashing_count);
+		avg2 = average_ms(t2->thrashing_delay_total, t2->thrashing_count);
+		break;
+	case 'p': /* compact (CMP) */
+		avg1 = average_ms(t1->compact_delay_total, t1->compact_count);
+		avg2 = average_ms(t2->compact_delay_total, t2->compact_count);
+		break;
+	case 'w': /* wpcopy (WP) */
+		avg1 = average_ms(t1->wpcopy_delay_total, t1->wpcopy_count);
+		avg2 = average_ms(t2->wpcopy_delay_total, t2->wpcopy_count);
+		break;
 	default:
-		return t2->cpu_delay_total > t1->cpu_delay_total ? 1 : -1;
+		avg1 = average_ms(t1->cpu_delay_total, t1->cpu_count);
+		avg2 = average_ms(t2->cpu_delay_total, t2->cpu_count);
+		break;
+	}
+
+	if (avg1 != avg2)
+		return avg2 > avg1 ? 1 : -1;
+
+	return 0;
+}
+
+static const char *get_sort_field(char sort_field)
+{
+	switch (sort_field) {
+	case 'c':
+		return "CPU";
+	case 'i':
+		return "IO";
+	case 'q':
+		return "IRQ";
+	/* MEM(total) */
+	case 'm':
+		return "MEM";
+	/* Memory detailed display mode */
+	case 's':
+		return "SWAP";
+	case 'r':
+		return "RCL";
+	case 't':
+		return "THR";
+	case 'p':
+		return "CMP";
+	case 'w':
+		return "WP";
+	default:
+		return "UNKNOWN"; /* handle error */
 	}
 }
 
@@ -705,6 +815,7 @@ static void display_results(void)
 {
 	time_t now = time(NULL);
 	struct tm *tm_now = localtime(&now);
+	const char *sort_field;
 	FILE *out = stdout;
 	char timestamp[32];
 	bool suc = true;
@@ -766,8 +877,10 @@ static void display_results(void)
 			container_stats.nr_stopped, container_stats.nr_uninterruptible,
 			container_stats.nr_io_wait);
 	}
-	suc &= BOOL_FPRINT(out, "Top %d processes (sorted by CPU delay):\n",
-			cfg.max_processes);
+
+	/* Task delay output */
+	suc &= BOOL_FPRINT(out, "Top %d processes (sorted by %s delay):\n",
+			cfg.max_processes, get_sort_field(cfg.sort_field));
 	suc &= BOOL_FPRINT(out, "%8s  %8s  %-17s", "PID", "TGID", "COMMAND");
 
 	if (!cfg.mem_verbose_mode) {
@@ -786,7 +899,6 @@ static void display_results(void)
 		suc &= BOOL_FPRINT(out, "-----------------------");
 		suc &= BOOL_FPRINT(out, "-------------------------\n");
 	}
-
 
 	count = task_count < cfg.max_processes ? task_count : cfg.max_processes;
 
