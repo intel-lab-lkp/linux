@@ -451,7 +451,6 @@ static int powernow_decode_bios(int maxfid, int startvid)
 	unsigned int i, j;
 	unsigned char *p;
 	unsigned int etuple;
-	unsigned int ret;
 
 	etuple = cpuid_eax(0x80000001);
 
@@ -500,8 +499,7 @@ static int powernow_decode_bios(int maxfid, int startvid)
 				    (startvid == pst->startvid)) {
 					print_pst_entry(pst, j);
 					p = (char *)pst + sizeof(*pst);
-					ret = get_ranges(p);
-					return ret;
+					return get_ranges(p);
 				} else {
 					unsigned int k;
 					p = (char *)pst + sizeof(*pst);
