@@ -148,13 +148,16 @@ static unsigned int nforce2_fsb_read(int bootfsb)
 	/* Check if PLL register is already set */
 	pci_read_config_byte(nforce2_dev, NFORCE2_PLLENABLE, (u8 *)&temp);
 
-	if (bootfsb || !temp)
+	if (bootfsb || !temp) {
+		pci_dev_put(nforce2_sub5);
 		return fsb;
+	}
 
 	/* Use PLL register FSB value */
 	pci_read_config_dword(nforce2_dev, NFORCE2_PLLREG, &temp);
 	fsb = nforce2_calc_fsb(temp);
 
+	pci_dev_put(nforce2_sub5);
 	return fsb;
 }
 
