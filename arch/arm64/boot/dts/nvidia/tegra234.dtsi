@@ -5280,6 +5280,9 @@
 			 <&bpmp TEGRA234_CLK_GPC1CLK>;
 		clock-names = "sys", "gpc0", "gpc1";
 		resets = <&bpmp TEGRA234_RESET_GPU>;
+
+		memory-region-names = "vpr";
+		memory-region = <&vpr>;
 	};
 
 	sram@40000000 {
