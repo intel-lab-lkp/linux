@@ -374,7 +374,7 @@ unsigned long do_mmap(struct file *file, unsigned long addr,
 		return -EOVERFLOW;
 
 	/* Too many mappings? */
-	if (mm->map_count > sysctl_max_map_count)
+	if (exceeds_max_map_count(mm, 0))
 		return -ENOMEM;
 
 	/*
@@ -1503,6 +1503,19 @@ struct vm_area_struct *_install_special_mapping(
 		defined(CONFIG_ARCH_WANT_DEFAULT_TOPDOWN_MMAP_LAYOUT)
 int sysctl_legacy_va_layout;
 #endif
+
+static int sysctl_max_map_count __read_mostly = DEFAULT_MAX_MAP_COUNT;
+
+bool exceeds_max_map_count(struct mm_struct *mm, unsigned int new_vmas)
+{
+	if (unlikely(mm->map_count + new_vmas > sysctl_max_map_count)) {
+		pr_warn_ratelimited("%s (%d): Map count limit %u exceeded\n",
+				    current->comm, current->pid,
+				    sysctl_max_map_count);
+		return true;
+	}
+	return false;
+}
 
 static const struct ctl_table mmap_table[] = {
 		{
