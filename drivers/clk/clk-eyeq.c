@@ -119,17 +119,20 @@ struct eqc_pll {
 };
 
 /*
- * Divider clock. Divider is 2*(v+1), with v the register value.
+ * Divider clock.
+ * If the table is NULL, divider is 2*(v+1), with v the register value.
  * Min divider is 2, max is 2*(2^width).
+ * Otherwise the divider values are looked up in the table.
  */
 struct eqc_div {
-	unsigned int	index;
-	const char	*name;
-	unsigned int	parent_idx;
-	const char	*parent_name;
-	unsigned int	reg;
-	u8		shift;
-	u8		width;
+	unsigned int			index;
+	const char			*name;
+	unsigned int			parent_idx;
+	const char			*parent_name;
+	unsigned int			reg;
+	u8				shift;
+	u8				width;
+	const struct clk_div_table	*table;
 };
 
 struct eqc_fixed_factor {
@@ -433,7 +436,7 @@ static void eqc_probe_init_divs(struct device *dev, const struct eqc_match_data 
 
 		hw = clk_hw_register_divider_table_parent_data(dev, div->name,
 				&parent_data, 0, reg, div->shift, div->width,
-				CLK_DIVIDER_EVEN_INTEGERS, NULL, NULL);
+				div->table ? 0 : CLK_DIVIDER_EVEN_INTEGERS, div->table, NULL);
 		cells->hws[div->index] = hw;
 		if (IS_ERR(hw))
 			dev_warn(dev, "failed registering %s: %pe\n",
