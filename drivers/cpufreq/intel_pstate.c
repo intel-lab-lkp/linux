@@ -1209,6 +1209,17 @@ static bool hybrid_clear_max_perf_cpu(void)
 	return ret;
 }
 
+static struct freq_qos_request *intel_pstate_cpufreq_get_req(int cpu)
+{
+	struct cpufreq_policy *policy __free(put_cpufreq_policy) =
+		cpufreq_cpu_get(cpu);
+
+	if (!policy)
+		return NULL;
+
+	return policy->driver_data;
+}
+
 static void __intel_pstate_get_hwp_cap(struct cpudata *cpu)
 {
 	u64 cap;
@@ -1698,19 +1709,13 @@ unlock_driver:
 static void update_qos_request(enum freq_qos_req_type type)
 {
 	struct freq_qos_request *req;
-	struct cpufreq_policy *policy;
 	int i;
 
 	for_each_possible_cpu(i) {
 		struct cpudata *cpu = all_cpu_data[i];
 		unsigned int freq, perf_pct;
 
-		policy = cpufreq_cpu_get(i);
-		if (!policy)
-			continue;
-
-		req = policy->driver_data;
-		cpufreq_cpu_put(policy);
+		req = intel_pstate_cpufreq_get_req(i);
 
 		if (!req)
 			continue;
