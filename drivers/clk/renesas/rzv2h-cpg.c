@@ -867,7 +867,7 @@ static int __rzv2h_cpg_assert(struct reset_controller_dev *rcdev,
 	mask = BIT(monbit);
 
 	ret = readl_poll_timeout_atomic(priv->base + reg, value,
-					assert ? (value & mask) : !(value & mask),
+					assert == !!(value & mask),
 					10, 200);
 	if (ret && !assert) {
 		value = mask << 16;
