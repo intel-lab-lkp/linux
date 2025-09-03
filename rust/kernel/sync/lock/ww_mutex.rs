@@ -16,6 +16,8 @@ use crate::types::{NotThreadSafe, Opaque};
 use core::cell::UnsafeCell;
 use core::marker::PhantomData;
 
+pub mod exec;
+
 /// Create static [`WwClass`] instances.
 ///
 /// # Examples
