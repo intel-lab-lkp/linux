@@ -1139,3 +1139,83 @@ void xe_exec_queue_jobs_ring_restore(struct xe_exec_queue *q)
 	}
 	spin_unlock(&sched->base.job_list_lock);
 }
+
+#ifdef CONFIG_CGROUP_DRM
+void xe_drm_cgroup_work(struct work_struct *work)
+{
+	struct xe_device *xe = container_of(work, typeof(*xe), cg.work.work);
+	unsigned int weight, min = UINT_MAX, max = 0;
+	struct drm_device *dev = &xe->drm;
+	struct drm_file *file;
+	struct xe_file *xef;
+
+	mutex_lock(&dev->filelist_mutex);
+
+	list_for_each_entry(file, &dev->filelist, lhead) {
+		xef = to_xe_file(file);
+		weight = atomic_read(&xef->cg.weight);
+
+		if (!weight)
+			continue;
+
+		if (weight < min)
+			min = weight;
+
+		if (weight > max)
+			max = weight;
+	}
+
+	list_for_each_entry(file, &dev->filelist, lhead) {
+		enum xe_exec_queue_priority new_prio;
+		struct xe_exec_queue *q;
+		unsigned long i;
+
+		xef = to_xe_file(file);
+		weight = atomic_read(&xef->cg.weight);
+
+		if (max == min)
+			new_prio = XE_EXEC_QUEUE_PRIORITY_NORMAL;
+		else if (weight == max)
+			new_prio = XE_EXEC_QUEUE_PRIORITY_HIGH;
+		else if (weight == min)
+			new_prio = XE_EXEC_QUEUE_PRIORITY_LOW;
+		else
+			new_prio = XE_EXEC_QUEUE_PRIORITY_NORMAL;
+
+		if (new_prio == xef->cg.prio)
+			continue;
+
+		mutex_lock(&xef->exec_queue.lock);
+		xa_for_each(&xef->exec_queue.xa, i, q) {
+			if (q->sched_props.priority !=
+			    XE_EXEC_QUEUE_PRIORITY_NORMAL)
+				continue;
+
+			xe_exec_queue_get(q);
+			mutex_unlock(&xef->exec_queue.lock);
+
+			q->ops->set_priority(q, new_prio);
+
+			mutex_lock(&xef->exec_queue.lock);
+			xe_exec_queue_put(q);
+		}
+		mutex_unlock(&xef->exec_queue.lock);
+
+		xef->cg.prio = new_prio;
+	}
+
+	mutex_unlock(&dev->filelist_mutex);
+}
+
+void xe_drm_cgroup_notify_weight(struct drm_file *file_priv,
+				 unsigned int weight)
+{
+	struct xe_file *xef = to_xe_file(file_priv);
+	struct xe_device *xe = xef->xe;
+
+	atomic_set(&xef->cg.weight, weight);
+
+	queue_delayed_work(system_unbound_wq, &xe->cg.work,
+			   msecs_to_jiffies(100));
+}
+#endif

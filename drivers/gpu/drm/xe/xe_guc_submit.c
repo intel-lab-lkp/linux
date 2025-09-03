@@ -427,12 +427,18 @@ static const int xe_exec_queue_prio_to_guc[] = {
 static void init_policies(struct xe_guc *guc, struct xe_exec_queue *q)
 {
 	struct exec_queue_policy policy;
-	enum xe_exec_queue_priority prio = q->sched_props.priority;
+	enum xe_exec_queue_priority prio;
 	u32 timeslice_us = q->sched_props.timeslice_us;
 	u32 slpc_exec_queue_freq_req = 0;
 	u32 preempt_timeout_us = q->sched_props.preempt_timeout_us;
 
 	xe_gt_assert(guc_to_gt(guc), exec_queue_registered(q));
+
+	prio = q->sched_props.priority;
+#ifdef CONFIG_CGROUP_DRM
+	if (prio == XE_EXEC_QUEUE_PRIORITY_NORMAL && q->xef)
+		prio = q->xef->cg.prio;
+#endif
 
 	if (q->flags & EXEC_QUEUE_FLAG_LOW_LATENCY)
 		slpc_exec_queue_freq_req |= SLPC_CTX_FREQ_REQ_IS_COMPUTE;

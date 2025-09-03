@@ -124,6 +124,10 @@ int xe_pm_suspend(struct xe_device *xe)
 	drm_dbg(&xe->drm, "Suspending device\n");
 	trace_xe_pm_suspend(xe, __builtin_return_address(0));
 
+#ifdef CONFIG_CGROUP_DRM
+	cancel_delayed_work_sync(&xe->cg.work);
+#endif
+
 	err = xe_pxp_pm_suspend(xe->pxp);
 	if (err)
 		goto err;

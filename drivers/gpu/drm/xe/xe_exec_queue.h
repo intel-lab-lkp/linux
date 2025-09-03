@@ -95,4 +95,9 @@ int xe_exec_queue_contexts_hwsp_rebase(struct xe_exec_queue *q, void *scratch);
 void xe_exec_queue_jobs_ring_restore(struct xe_exec_queue *q);
 
 struct xe_lrc *xe_exec_queue_lrc(struct xe_exec_queue *q);
+
+void xe_drm_cgroup_notify_weight(struct drm_file *file_priv,
+				 unsigned int weight);
+void xe_drm_cgroup_work(struct work_struct *work);
+
 #endif

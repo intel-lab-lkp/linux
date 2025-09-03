@@ -112,6 +112,10 @@ static int xe_file_open(struct drm_device *dev, struct drm_file *file)
 		put_task_struct(task);
 	}
 
+#ifdef CONFIG_CGROUP_DRM
+	xef->cg.prio = XE_EXEC_QUEUE_PRIORITY_NORMAL; // TODO: inherit current cgroup priority
+#endif
+
 	return 0;
 }
 
@@ -368,6 +372,12 @@ static const struct file_operations xe_driver_fops = {
 	.fop_flags = FOP_UNSIGNED_OFFSET,
 };
 
+#ifdef CONFIG_CGROUP_DRM
+static const struct drm_cgroup_ops xe_drm_cgroup_ops = {
+	.notify_weight = xe_drm_cgroup_notify_weight,
+};
+#endif
+
 static struct drm_driver driver = {
 	/* Don't use MTRRs here; the Xserver or userspace app should
 	 * deal with them for Intel hardware.
@@ -385,6 +395,10 @@ static struct drm_driver driver = {
 	.dumb_map_offset = drm_gem_ttm_dumb_map_offset,
 #ifdef CONFIG_PROC_FS
 	.show_fdinfo = xe_drm_client_fdinfo,
+#endif
+
+#ifdef CONFIG_CGROUP_DRM
+	.cg_ops = &xe_drm_cgroup_ops,
 #endif
 	.ioctls = xe_ioctls,
 	.num_ioctls = ARRAY_SIZE(xe_ioctls),
@@ -499,6 +513,10 @@ struct xe_device *xe_device_create(struct pci_dev *pdev,
 	err = drmm_mutex_init(&xe->drm, &xe->pmt.lock);
 	if (err)
 		goto err;
+
+#ifdef CONFIG_CGROUP_DRM
+	INIT_DELAYED_WORK(&xe->cg.work, xe_drm_cgroup_work);
+#endif
 
 	return xe;
 

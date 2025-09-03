@@ -19,6 +19,7 @@
 #include "xe_oa_types.h"
 #include "xe_platform_types.h"
 #include "xe_pmu_types.h"
+#include "xe_exec_queue_types.h"
 #include "xe_pt_types.h"
 #include "xe_sriov_pf_types.h"
 #include "xe_sriov_types.h"
@@ -34,6 +35,7 @@
 struct dram_info;
 struct intel_display;
 struct intel_dg_nvm_dev;
+struct xe_file;
 struct xe_ggtt;
 struct xe_i2c;
 struct xe_pat_ops;
@@ -624,6 +626,12 @@ struct xe_device {
 		unsigned int czclk_freq;
 	};
 #endif
+
+#ifdef CONFIG_CGROUP_DRM
+	struct {
+		struct delayed_work	work;
+	} cg;
+#endif
 };
 
 /**
@@ -685,6 +693,13 @@ struct xe_file {
 
 	/** @refcount: ref count of this xe file */
 	struct kref refcount;
+
+#ifdef CONFIG_CGROUP_DRM
+	struct {
+		atomic_t weight;
+		enum xe_exec_queue_priority prio;
+	} cg;
+#endif
 };
 
 #endif
