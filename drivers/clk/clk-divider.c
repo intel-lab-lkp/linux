@@ -181,6 +181,8 @@ static bool _is_valid_div(const struct clk_div_table *table, unsigned int div,
 {
 	if (flags & CLK_DIVIDER_POWER_OF_TWO)
 		return is_power_of_2(div);
+	if (flags & CLK_DIVIDER_EVEN_INTEGERS)
+		return (div % 2) == 0;
 	if (table)
 		return _is_valid_table_div(table, div);
 	return true;
