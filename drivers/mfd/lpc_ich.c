@@ -132,15 +132,12 @@ static struct mfd_cell lpc_ich_gpio_cell = {
 	.ignore_resource_conflicts = true,
 };
 
-#define INTEL_GPIO_RESOURCE_SIZE	0x1000
-
 struct lpc_ich_gpio_info {
 	const char *hid;
 	const struct mfd_cell *devices;
 	size_t nr_devices;
 	struct resource **resources;
 	size_t nr_resources;
-	const resource_size_t *offsets;
 };
 
 #define APL_GPIO_NORTH		0
@@ -151,31 +148,23 @@ struct lpc_ich_gpio_info {
 #define APL_GPIO_NR_DEVICES	4
 #define APL_GPIO_NR_RESOURCES	4
 
-/* Offset data for Apollo Lake GPIO controllers */
-static const resource_size_t apl_gpio_offsets[APL_GPIO_NR_RESOURCES] = {
-	[APL_GPIO_NORTH]	= 0xc50000,
-	[APL_GPIO_NORTHWEST]	= 0xc40000,
-	[APL_GPIO_WEST]		= 0xc70000,
-	[APL_GPIO_SOUTHWEST]	= 0xc00000,
-};
-
 #define APL_GPIO_IRQ			14
 
 static struct resource apl_gpio_resources[APL_GPIO_NR_DEVICES][2] = {
 	[APL_GPIO_NORTH] = {
-		DEFINE_RES_MEM(0, 0),
+		DEFINE_RES_MEM(0xc50000, 0x1000),
 		DEFINE_RES_IRQ(APL_GPIO_IRQ),
 	},
 	[APL_GPIO_NORTHWEST] = {
-		DEFINE_RES_MEM(0, 0),
+		DEFINE_RES_MEM(0xc40000, 0x1000),
 		DEFINE_RES_IRQ(APL_GPIO_IRQ),
 	},
 	[APL_GPIO_WEST] = {
-		DEFINE_RES_MEM(0, 0),
+		DEFINE_RES_MEM(0xc70000, 0x1000),
 		DEFINE_RES_IRQ(APL_GPIO_IRQ),
 	},
 	[APL_GPIO_SOUTHWEST] = {
-		DEFINE_RES_MEM(0, 0),
+		DEFINE_RES_MEM(0xc00000, 0x1000),
 		DEFINE_RES_IRQ(APL_GPIO_IRQ),
 	},
 };
@@ -224,7 +213,6 @@ static const struct lpc_ich_gpio_info apl_gpio_info = {
 	.nr_devices = ARRAY_SIZE(apl_gpio_devices),
 	.resources = apl_gpio_mem_resources,
 	.nr_resources = ARRAY_SIZE(apl_gpio_mem_resources),
-	.offsets = apl_gpio_offsets,
 };
 
 #define DNV_GPIO_NORTH		0
@@ -233,17 +221,11 @@ static const struct lpc_ich_gpio_info apl_gpio_info = {
 #define DNV_GPIO_NR_DEVICES	1
 #define DNV_GPIO_NR_RESOURCES	2
 
-/* Offset data for Denverton GPIO controllers */
-static const resource_size_t dnv_gpio_offsets[DNV_GPIO_NR_RESOURCES] = {
-	[DNV_GPIO_NORTH]	= 0xc20000,
-	[DNV_GPIO_SOUTH]	= 0xc50000,
-};
-
 #define DNV_GPIO_IRQ			14
 
 static struct resource dnv_gpio_resources[DNV_GPIO_NR_RESOURCES + 1] = {
-	[DNV_GPIO_NORTH] = DEFINE_RES_MEM(0, 0),
-	[DNV_GPIO_SOUTH] = DEFINE_RES_MEM(0, 0),
+	[DNV_GPIO_NORTH] = DEFINE_RES_MEM(0xc20000, 0x1000),
+	[DNV_GPIO_SOUTH] = DEFINE_RES_MEM(0xc50000, 0x1000),
 	DEFINE_RES_IRQ(DNV_GPIO_IRQ),
 };
 
@@ -267,7 +249,6 @@ static const struct lpc_ich_gpio_info dnv_gpio_info = {
 	.nr_devices = ARRAY_SIZE(dnv_gpio_devices),
 	.resources = dnv_gpio_mem_resources,
 	.nr_resources = ARRAY_SIZE(dnv_gpio_mem_resources),
-	.offsets = dnv_gpio_offsets,
 };
 
 static struct mfd_cell lpc_ich_spi_cell = {
@@ -1251,12 +1232,9 @@ static int lpc_ich_init_pinctrl(struct pci_dev *dev)
 
 	for (i = 0; i < info->nr_resources; i++) {
 		struct resource *mem = info->resources[i];
-		resource_size_t offset = info->offsets[i];
 
-		/* Fill MEM resource */
-		mem->start = base.start + offset;
-		mem->end = base.start + offset + INTEL_GPIO_RESOURCE_SIZE - 1;
-		mem->flags = base.flags;
+		/* Rebase MEM resource */
+		resource_rebase(mem, base.start);
 	}
 
 	return mfd_add_devices(&dev->dev, 0, info->devices, info->nr_devices,
