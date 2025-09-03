@@ -33,6 +33,32 @@ const efi_guid_t tasdev_fct_efi_guid[] = {
 };
 EXPORT_SYMBOL_NS_GPL(tasdev_fct_efi_guid, "SND_HDA_SCODEC_TAS2781");
 
+/*
+ * The order of calibrated-data writing is a bit different from the order
+ * in UEFI. Here is the conversion to match the order of calibrated-data
+ * writing.
+ */
+static void cali_cnv(unsigned char *data, unsigned int base, int offset)
+{
+	__be32 bedata[TASDEV_CALIB_N];
+	int i;
+
+	/* r0_reg */
+	bedata[0] = cpu_to_be32(*(uint32_t *)&data[base]);
+	/* r0_low_reg */
+	bedata[1] = cpu_to_be32(*(uint32_t *)&data[base + 8]);
+	/* invr0_reg */
+	bedata[2] = cpu_to_be32(*(uint32_t *)&data[base + 4]);
+	/* pow_reg */
+	bedata[3] = cpu_to_be32(*(uint32_t *)&data[base + 12]);
+	/* tlimit_reg */
+	bedata[4] = cpu_to_be32(*(uint32_t *)&data[base + 16]);
+
+	for (i = 0; i < TASDEV_CALIB_N; i++)
+		memcpy(&data[offset + i * 4 + 1], &bedata[i],
+			sizeof(bedata[i]));
+}
+
 static void tas2781_apply_calib(struct tasdevice_priv *p)
 {
 	struct calidata *cali_data = &p->cali_data;
@@ -86,6 +112,7 @@ static void tas2781_apply_calib(struct tasdevice_priv *p)
 
 		for (j = 0, k = 0; j < node_num; j++) {
 			oft = j * 6 + 3;
+			/* Calibration registers address */
 			if (tmp_val[oft] == TASDEV_UEFI_CALI_REG_ADDR_FLG) {
 				for (i = 0; i < TASDEV_CALIB_N; i++) {
 					buf = &data[(oft + i + 1) * 4];
@@ -93,6 +120,7 @@ static void tas2781_apply_calib(struct tasdevice_priv *p)
 						buf[2], buf[3]);
 				}
 			} else {
+				/* Calibrated data */
 				l = j * (cali_data->cali_dat_sz_per_dev + 1);
 				if (k >= p->ndev || l > oft * 4) {
 					dev_err(p->dev, "%s: dev sum error\n",
@@ -103,8 +131,7 @@ static void tas2781_apply_calib(struct tasdevice_priv *p)
 
 				data[l] = k;
 				oft++;
-				for (i = 0; i < TASDEV_CALIB_N * 4; i++)
-					data[l + i + 1] = data[4 * oft + i];
+				cali_cnv(data, 4 * oft, l);
 				k++;
 			}
 		}
@@ -127,12 +154,11 @@ static void tas2781_apply_calib(struct tasdevice_priv *p)
 			dev_err(p->dev, "%s: V1 CRC error\n", __func__);
 			return;
 		}
-
+		/* reverse rearrangement in case of overlap */
 		for (j = p->ndev - 1; j >= 0; j--) {
 			l = j * (cali_data->cali_dat_sz_per_dev + 1);
-			for (i = TASDEV_CALIB_N * 4; i > 0 ; i--)
-				data[l + i] = data[p->index * 5 + i];
-			data[l+i] = j;
+			cali_cnv(data, cali_data->cali_dat_sz_per_dev * j, l);
+			data[l] = j;
 		}
 	}
 
