@@ -17113,6 +17113,7 @@ F:	drivers/clk/clk-eyeq.c
 F:	drivers/pinctrl/pinctrl-eyeq5.c
 F:	drivers/reset/reset-eyeq.c
 F:	include/dt-bindings/clock/mobileye,eyeq-clk.h
+F:	include/dt-bindings/reset/mobileye,eyeq-reset.h
 
 MODULE SUPPORT
 M:	Luis Chamberlain <mcgrof@kernel.org>
