@@ -1336,6 +1336,11 @@ static void destroy_delegation(struct nfs4_delegation *dp)
 
 	spin_lock(&state_lock);
 	unhashed = unhash_delegation_locked(dp, SC_STATUS_CLOSED);
+	/*
+	 * Unconditionally set SC_STATUS_CLOSED, regardless of whether the
+	 * delegation is hashed, to mark the current delegation as invalid.
+	 */
+	dp->dl_stid.sc_status |= SC_STATUS_CLOSED;
 	spin_unlock(&state_lock);
 	if (unhashed)
 		destroy_unhashed_deleg(dp);
@@ -4326,6 +4331,8 @@ nfsd4_sequence(struct svc_rqst *rqstp, struct nfsd4_compound_state *cstate,
 	int buflen;
 	struct net *net = SVC_NET(rqstp);
 	struct nfsd_net *nn = net_generic(net, nfsd_net_id);
+	struct list_head *pos, *next;
+	struct nfs4_delegation *dp;
 
 	if (resp->opcnt != 1)
 		return nfserr_sequence_pos;
@@ -4469,6 +4476,19 @@ out:
 		break;
 	default:
 		seq->status_flags = 0;
+	}
+	if (!list_empty(&clp->cl_revoked)) {
+		spin_lock(&clp->cl_lock);
+		list_for_each_safe(pos, next, &clp->cl_revoked) {
+			dp = list_entry(pos, struct nfs4_delegation, dl_recall_lru);
+			if (dp->dl_stid.sc_status & SC_STATUS_CLOSED) {
+				list_del_init(&dp->dl_recall_lru);
+				spin_unlock(&clp->cl_lock);
+				nfs4_put_stid(&dp->dl_stid);
+				spin_lock(&clp->cl_lock);
+			}
+		}
+		spin_unlock(&clp->cl_lock);
 	}
 	if (!list_empty(&clp->cl_revoked))
 		seq->status_flags |= SEQ4_STATUS_RECALLABLE_STATE_REVOKED;
