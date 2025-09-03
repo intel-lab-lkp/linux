@@ -143,13 +143,6 @@ static int can_validate(struct nlattr *tb[], struct nlattr *data[],
 	u32 flags = 0;
 	int err;
 
-	/* Make sure that valid CAN FD configurations always consist of
-	 * - nominal/arbitration bittiming
-	 * - data bittiming
-	 * - control mode with CAN_CTRLMODE_FD set
-	 * - TDC parameters are coherent (details below)
-	 */
-
 	if (!data)
 		return 0;
 
