@@ -117,6 +117,31 @@ static void pcibios_fixup_final(struct pci_dev *dev)
 }
 DECLARE_PCI_FIXUP_FINAL(PCI_ANY_ID, PCI_ANY_ID, pcibios_fixup_final);
 
+static void tsunami_dac_quirk(struct pci_dev *pdev)
+{
+	unsigned long flags;
+	int i;
+	bool mem64 = false;
+
+	/* If we're not on a Tsunami based system, do nothing */
+	if (hwrpb->sys_type != 34)
+		return;
+
+	for (i = 0; i < PCI_STD_RESOURCE_END + 1; i++) {
+		flags = pci_resource_flags(pdev, i);
+		if (flags & IORESOURCE_MEM)
+			mem64 |= flags & IORESOURCE_MEM_64;
+	}
+
+	/* Limit DMA to 32 bits effectively disabling DAC */
+	if (!mem64) {
+		pdev->dev.bus_dma_limit = DMA_BIT_MASK(32);
+		dev_dbg(&pdev->dev, "disabling DAC for device");
+	}
+}
+DECLARE_PCI_FIXUP_FINAL(PCI_ANY_ID, PCI_ANY_ID, tsunami_dac_quirk);
+
+
 /* Just declaring that the power-of-ten prefixes are actually the
    power-of-two ones doesn't make it true :) */
 #define KB			1024

@@ -208,7 +208,8 @@ static int pci_dac_dma_supported(struct pci_dev *dev, u64 mask)
 		ok = 0;
 
 	/* The device has to be able to address our DAC bit.  */
-	if ((dac_offset & dev->dma_mask) != dac_offset)
+	if ((dac_offset & min_not_zero(mask,
+		dev->dev.bus_dma_limit)) != dac_offset)
 		ok = 0;
 
 	/* If both conditions above are met, we are fine. */
@@ -228,7 +229,8 @@ pci_map_single_1(struct pci_dev *pdev, void *cpu_addr, size_t size,
 		 int dac_allowed)
 {
 	struct pci_controller *hose = pdev ? pdev->sysdata : pci_isa_hose;
-	dma_addr_t max_dma = pdev ? pdev->dma_mask : ISA_DMA_MASK;
+	dma_addr_t max_dma = pdev ? min_not_zero(pdev->dma_mask,
+		pdev->dev.bus_dma_limit) : ISA_DMA_MASK;
 	struct pci_iommu_arena *arena;
 	long npages, dma_ofs, i;
 	unsigned long paddr;
@@ -332,7 +334,8 @@ static dma_addr_t alpha_pci_map_page(struct device *dev, struct page *page,
 
 	BUG_ON(dir == DMA_NONE);
 
-	dac_allowed = pdev ? pci_dac_dma_supported(pdev, pdev->dma_mask) : 0; 
+	dac_allowed = pdev ? pci_dac_dma_supported(pdev,
+		min_not_zero(pdev->dma_mask, pdev->dev.bus_dma_limit)) : 0;
 	return pci_map_single_1(pdev, (char *)page_address(page) + offset, 
 				size, dac_allowed);
 }
@@ -638,7 +641,8 @@ static int alpha_pci_map_sg(struct device *dev, struct scatterlist *sg,
 
 	BUG_ON(dir == DMA_NONE);
 
-	dac_allowed = dev ? pci_dac_dma_supported(pdev, pdev->dma_mask) : 0;
+	dac_allowed = dev ? pci_dac_dma_supported(pdev,
+		min_not_zero(pdev->dma_mask, pdev->dev.bus_dma_limit)) : 0;
 
 	/* Fast path single entry scatterlists.  */
 	if (nents == 1) {
@@ -660,7 +664,8 @@ static int alpha_pci_map_sg(struct device *dev, struct scatterlist *sg,
 	/* Second, figure out where we're going to map things.  */
 	if (alpha_mv.mv_pci_tbi) {
 		hose = pdev ? pdev->sysdata : pci_isa_hose;
-		max_dma = pdev ? pdev->dma_mask : ISA_DMA_MASK;
+		max_dma = pdev ? min_not_zero(pdev->dma_mask,
+			pdev->dev.bus_dma_limit) : ISA_DMA_MASK;
 		arena = hose->sg_pci;
 		if (!arena || arena->dma_base + arena->size - 1 > max_dma)
 			arena = hose->sg_isa;
@@ -725,7 +730,8 @@ static void alpha_pci_unmap_sg(struct device *dev, struct scatterlist *sg,
 		return;
 
 	hose = pdev ? pdev->sysdata : pci_isa_hose;
-	max_dma = pdev ? pdev->dma_mask : ISA_DMA_MASK;
+	max_dma = pdev ? min_not_zero(pdev->dma_mask,
+		pdev->dev.bus_dma_limit) : ISA_DMA_MASK;
 	arena = hose->sg_pci;
 	if (!arena || arena->dma_base + arena->size - 1 > max_dma)
 		arena = hose->sg_isa;
