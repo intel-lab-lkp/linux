@@ -28,6 +28,7 @@ struct panthor_job;
 struct panthor_mmu;
 struct panthor_fw;
 struct panthor_perfcnt;
+struct panthor_soc_data;
 struct panthor_vm;
 struct panthor_vm_pool;
 
@@ -92,6 +93,9 @@ enum panthor_device_profiling_flags {
 struct panthor_device {
 	/** @base: Base drm_device. */
 	struct drm_device base;
+
+	/** @soc_data: Optional SoC data. */
+	const struct panthor_soc_data *soc_data;
 
 	/** @phys_addr: Physical address of the iomem region. */
 	phys_addr_t phys_addr;

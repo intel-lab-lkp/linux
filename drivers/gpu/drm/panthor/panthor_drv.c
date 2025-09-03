@@ -33,6 +33,7 @@
 #include "panthor_mmu.h"
 #include "panthor_regs.h"
 #include "panthor_sched.h"
+#include "panthor_soc.h"
 
 /**
  * DOC: user <-> kernel object copy helpers.
@@ -1683,6 +1684,9 @@ static struct attribute *panthor_attrs[] = {
 ATTRIBUTE_GROUPS(panthor);
 
 static const struct of_device_id dt_match[] = {
+#ifdef CONFIG_DRM_PANTHOR_SOC_MT8196
+	{ .compatible = "mediatek,mt8196-mali", .data = &panthor_soc_data_mediatek_mt8196, },
+#endif
 	{ .compatible = "rockchip,rk3588-mali" },
 	{ .compatible = "arm,mali-valhall-csf" },
 	{}

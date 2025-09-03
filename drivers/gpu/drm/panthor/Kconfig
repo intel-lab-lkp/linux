@@ -21,3 +21,9 @@ config DRM_PANTHOR
 
 	  Note that the Mali-G68 and Mali-G78, while Valhall architecture, will
 	  be supported with the panfrost driver as they are not CSF GPUs.
+
+config DRM_PANTHOR_SOC_MT8196
+	bool "Enable MediaTek MT8196 support"
+	depends on DRM_PANTHOR
+	help
+	  Enable SoC-specific code for MediaTek MT8196.
