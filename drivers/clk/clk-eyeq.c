@@ -83,7 +83,7 @@ struct eqc_pll {
 struct eqc_div {
 	unsigned int	index;
 	const char	*name;
-	unsigned int	parent;
+	unsigned int	parent_idx;
 	unsigned int	reg;
 	u8		shift;
 	u8		width;
@@ -94,7 +94,7 @@ struct eqc_fixed_factor {
 	const char	*name;
 	unsigned int	mult;
 	unsigned int	div;
-	unsigned int	parent;
+	unsigned int	parent_idx;
 };
 
 struct eqc_match_data {
@@ -269,11 +269,11 @@ static void eqc_probe_init_divs(struct device *dev, const struct eqc_match_data 
 	for (i = 0; i < data->div_count; i++) {
 		div = &data->divs[i];
 		reg = base + div->reg;
-		parent = cells->hws[div->parent];
+		parent = cells->hws[div->parent_idx];
 
 		if (IS_ERR(parent)) {
 			/* Parent is in early clk provider. */
-			parent_data.index = div->parent;
+			parent_data.index = div->parent_idx;
 			parent_data.hw = NULL;
 		} else {
 			/* Avoid clock lookup when we already have the hw reference. */
@@ -301,12 +301,12 @@ static void eqc_probe_init_fixed_factors(struct device *dev,
 
 	for (i = 0; i < data->fixed_factor_count; i++) {
 		ff = &data->fixed_factors[i];
-		parent_hw = cells->hws[ff->parent];
+		parent_hw = cells->hws[ff->parent_idx];
 
 		if (IS_ERR(parent_hw)) {
 			/* Parent is in early clk provider. */
 			hw = clk_hw_register_fixed_factor_index(dev, ff->name,
-					ff->parent, 0, ff->mult, ff->div);
+					ff->parent_idx, 0, ff->mult, ff->div);
 		} else {
 			/* Avoid clock lookup when we already have the hw reference. */
 			hw = clk_hw_register_fixed_factor_parent_hw(dev, ff->name,
@@ -522,7 +522,7 @@ static const struct eqc_div eqc_eyeq5_divs[] = {
 	{
 		.index = EQ5C_DIV_OSPI,
 		.name = "div-ospi",
-		.parent = EQ5C_PLL_PER,
+		.parent_idx = EQ5C_PLL_PER,
 		.reg = 0x11C,
 		.shift = 0,
 		.width = 4,
@@ -597,7 +597,7 @@ static const struct eqc_div eqc_eyeq6h_south_divs[] = {
 	{
 		.index = EQ6HC_SOUTH_DIV_EMMC,
 		.name = "div-emmc",
-		.parent = EQ6HC_SOUTH_PLL_PER,
+		.parent_idx = EQ6HC_SOUTH_PLL_PER,
 		.reg = 0x070,
 		.shift = 4,
 		.width = 4,
@@ -605,7 +605,7 @@ static const struct eqc_div eqc_eyeq6h_south_divs[] = {
 	{
 		.index = EQ6HC_SOUTH_DIV_OSPI_REF,
 		.name = "div-ospi-ref",
-		.parent = EQ6HC_SOUTH_PLL_PER,
+		.parent_idx = EQ6HC_SOUTH_PLL_PER,
 		.reg = 0x090,
 		.shift = 4,
 		.width = 4,
@@ -613,7 +613,7 @@ static const struct eqc_div eqc_eyeq6h_south_divs[] = {
 	{
 		.index = EQ6HC_SOUTH_DIV_OSPI_SYS,
 		.name = "div-ospi-sys",
-		.parent = EQ6HC_SOUTH_PLL_PER,
+		.parent_idx = EQ6HC_SOUTH_PLL_PER,
 		.reg = 0x090,
 		.shift = 8,
 		.width = 1,
@@ -621,7 +621,7 @@ static const struct eqc_div eqc_eyeq6h_south_divs[] = {
 	{
 		.index = EQ6HC_SOUTH_DIV_TSU,
 		.name = "div-tsu",
-		.parent = EQ6HC_SOUTH_PLL_PCIE,
+		.parent_idx = EQ6HC_SOUTH_PLL_PCIE,
 		.reg = 0x098,
 		.shift = 4,
 		.width = 8,
@@ -790,7 +790,7 @@ static void __init eqc_early_init(struct device_node *np,
 
 	for (i = 0; i < early_data->early_fixed_factor_count; i++) {
 		const struct eqc_fixed_factor *ff = &early_data->early_fixed_factors[i];
-		struct clk_hw *parent_hw = cells->hws[ff->parent];
+		struct clk_hw *parent_hw = cells->hws[ff->parent_idx];
 		struct clk_hw *hw;
 
 		hw = clk_hw_register_fixed_factor_parent_hw(NULL, ff->name,
