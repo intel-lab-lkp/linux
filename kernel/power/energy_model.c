@@ -451,7 +451,7 @@ static void
 em_cpufreq_update_efficiencies(struct device *dev, struct em_perf_state *table)
 {
 	struct em_perf_domain *pd = dev->em_pd;
-	struct cpufreq_policy *policy;
+	struct cpufreq_policy *policy __free(put_cpufreq_policy) = NULL;
 	int found = 0;
 	int i, cpu;
 
@@ -478,8 +478,6 @@ em_cpufreq_update_efficiencies(struct device *dev, struct em_perf_state *table)
 		if (!cpufreq_table_set_inefficient(policy, table[i].frequency))
 			found++;
 	}
-
-	cpufreq_cpu_put(policy);
 
 	if (!found)
 		return;
@@ -787,7 +785,7 @@ static void em_check_capacity_update(void)
 
 	/* Check if CPUs capacity has changed than update EM */
 	for_each_possible_cpu(cpu) {
-		struct cpufreq_policy *policy;
+		struct cpufreq_policy *policy __free(put_cpufreq_policy) = NULL;
 		struct em_perf_domain *pd;
 		struct device *dev;
 
@@ -801,7 +799,6 @@ static void em_check_capacity_update(void)
 					      msecs_to_jiffies(1000));
 			break;
 		}
-		cpufreq_cpu_put(policy);
 
 		dev = get_cpu_device(cpu);
 		pd = em_pd_get(dev);
