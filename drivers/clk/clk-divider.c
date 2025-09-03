@@ -561,6 +561,13 @@ struct clk_hw *__clk_hw_register_divider(struct device *dev,
 			return ERR_PTR(-EINVAL);
 		}
 	}
+	if (table && (clk_divider_flags & (CLK_DIVIDER_ONE_BASED |
+					   CLK_DIVIDER_POWER_OF_TWO |
+					   CLK_DIVIDER_MAX_AT_ZERO |
+					   CLK_DIVIDER_EVEN_INTEGERS))) {
+		pr_warn("divider table and flags incompatible\n");
+		return ERR_PTR(-EINVAL);
+	}
 
 	/* allocate the divider */
 	div = kzalloc(sizeof(*div), GFP_KERNEL);
