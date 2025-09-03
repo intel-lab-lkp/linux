@@ -824,6 +824,464 @@ static const struct eqc_match_data eqc_eyeq6h_acc_match_data = {
 	.reset_auxdev_name = "reset_acc",
 };
 
+/* Required early as reference for other PLL in OLB south */
+static const struct eqc_pll eqc_eyeq7h_south_early_plls[] = {
+	{ EQ7HC_SOUTH_PLL_100P0, "pll-100p0", 0x40, EQC_PLL_JFRACR },
+};
+
+static const struct eqc_fixed_factor eqc_eyeq7h_south_early_fixed_factors[] = {
+	{ EQ7HC_SOUTH_DIV_REF_100P0, "ref_100p0", 1, 48, EQ7HC_SOUTH_PLL_100P0 },
+};
+
+static const struct eqc_pll eqc_eyeq7h_south_plls[] = {
+	//{index, name, reg, type, parent}
+	{ EQ7HC_SOUTH_PLL_XSPI, "pll-xspi",  0x10, EQC_PLL_AINTP, "ref_100p0" },
+	{ EQ7HC_SOUTH_PLL_VDIO, "pll-vdio",  0x18, EQC_PLL_AINTP, "ref_100p0" },
+	{ EQ7HC_SOUTH_PLL_PER,  "pll-per-s", 0x20, EQC_PLL_AINTP, "ref_100p0" },
+};
+
+static const struct eqc_fixed_factor eqc_eyeq7h_south_fixed_factors[] = {
+	{ EQ7HC_SOUTH_DIV_VDO_DSI_SYS,    "vdo_dsi_sys",      1, 9,   EQ7HC_SOUTH_PLL_100P0,
+	  "pll-100p0" },
+	{ EQ7HC_SOUTH_DIV_PMA_CMN_REF,    "pma_cmn_ref",      1, 48,  EQ7HC_SOUTH_PLL_100P0,
+	  "pll-100p0" },
+	{ EQ7HC_SOUTH_DIV_REF_UFS,        "ref_ufs",          1, 250, EQ7HC_SOUTH_PLL_100P0,
+	  "pll-100p0" },
+	{ EQ7HC_SOUTH_DIV_XSPI_SYS,       "xspi_sys",         1, 8,   EQ7HC_SOUTH_PLL_XSPI },
+	{ EQ7HC_SOUTH_DIV_XSPI_MBITS,     "xspi_mbits",       1, 8,   EQ7HC_SOUTH_PLL_XSPI },
+	{ EQ7HC_SOUTH_DIV_NOC_S,          "noc_s",            1, 2,   EQ7HC_SOUTH_PLL_PER },
+	{ EQ7HC_SOUTH_DIV_PCIE_SYS,       "pcie_sys",         1, 4,   EQ7HC_SOUTH_PLL_PER },
+	{ EQ7HC_SOUTH_DIV_PCIE_SYS_MBITS, "pcie_sys_mbits",   1, 4,   EQ7HC_SOUTH_PLL_PER },
+	{ EQ7HC_SOUTH_DIV_PCIE_GBE_PHY,   "pcie_gbe_phy_apb", 1, 16,  EQ7HC_SOUTH_PLL_PER },
+	{ EQ7HC_SOUTH_DIV_UFS_CORE,       "ufs_core",         1, 8,   EQ7HC_SOUTH_PLL_PER },
+	{ EQ7HC_SOUTH_DIV_UFS_SMS,        "ufs_sms",          1, 5,   EQ7HC_SOUTH_PLL_PER },
+	{ EQ7HC_SOUTH_DIV_UFS_ROM_SMS,    "ufs_rom_sms",      1, 5,   EQ7HC_SOUTH_PLL_PER },
+	{ EQ7HC_SOUTH_DIV_ETH_SYS,        "eth_sys",          1, 8,   EQ7HC_SOUTH_PLL_PER },
+	{ EQ7HC_SOUTH_DIV_ETH_MBITS,      "eth_mbits",        1, 8,   EQ7HC_SOUTH_PLL_PER },
+	{ EQ7HC_SOUTH_DIV_CFG_S,          "cfg_s",            1, 8,   EQ7HC_SOUTH_PLL_PER },
+	{ EQ7HC_SOUTH_DIV_TSU,            "tsu",              1, 64,  EQ7HC_SOUTH_PLL_PER },
+	{ EQ7HC_SOUTH_DIV_VDIO,           "vdio",             1, 4,   EQ7HC_SOUTH_PLL_VDIO },
+	{ EQ7HC_SOUTH_DIV_VDIO_CORE,      "vdio_core",        1, 4,   EQ7HC_SOUTH_PLL_VDIO },
+	{ EQ7HC_SOUTH_DIV_VDIO_CORE_MBIT, "vdio_core_mbit",   1, 4,   EQ7HC_SOUTH_PLL_VDIO },
+	{ EQ7HC_SOUTH_DIV_VDO_CORE_MBITS, "vdo_core_mbits",   1, 4,   EQ7HC_SOUTH_PLL_VDIO },
+	{ EQ7HC_SOUTH_DIV_VDO_P,          "vdo_p",            1, 40,  EQ7HC_SOUTH_PLL_VDIO },
+	{ EQ7HC_SOUTH_DIV_VDIO_CFG,       "vdio_cfg",         1, 150, EQ7HC_SOUTH_PLL_VDIO },
+	{ EQ7HC_SOUTH_DIV_VDIO_TXCLKESC,  "vdio_txclkesc",    1, 8,   EQ7HC_SOUTH_PLL_VDIO },
+};
+
+static const struct eqc_early_match_data eqc_eyeq7h_south_early_match_data __initconst = {
+	.early_pll_count	= ARRAY_SIZE(eqc_eyeq7h_south_early_plls),
+	.early_plls		= eqc_eyeq7h_south_early_plls,
+
+	.early_fixed_factor_count	= ARRAY_SIZE(eqc_eyeq7h_south_early_fixed_factors),
+	.early_fixed_factors		= eqc_eyeq7h_south_early_fixed_factors,
+
+	.late_clk_count		= ARRAY_SIZE(eqc_eyeq7h_south_plls) +
+				  ARRAY_SIZE(eqc_eyeq7h_south_fixed_factors),
+};
+
+static const struct eqc_match_data eqc_eyeq7h_south_match_data = {
+	.pll_count	= ARRAY_SIZE(eqc_eyeq7h_south_plls),
+	.plls		= eqc_eyeq7h_south_plls,
+
+	.fixed_factor_count	= ARRAY_SIZE(eqc_eyeq7h_south_fixed_factors),
+	.fixed_factors		= eqc_eyeq7h_south_fixed_factors,
+
+	.reset_auxdev_name = "reset_south",
+
+	.early_clk_count = ARRAY_SIZE(eqc_eyeq7h_south_early_plls) +
+			   ARRAY_SIZE(eqc_eyeq7h_south_early_fixed_factors),
+};
+
+/* Required early as reference for other PLL in OLB east */
+static const struct eqc_pll eqc_eyeq7h_east_early_plls[] = {
+	{ EQ7HC_EAST_PLL_106P6, "pll-106p6-e", 0x0, EQC_PLL_JFRACR },
+};
+
+static const struct eqc_fixed_factor eqc_eyeq7h_east_early_fixed_factors[] = {
+	{ EQ7HC_EAST_DIV_REF_106P6, "ref_106p6_e", 1, 40, EQ7HC_EAST_PLL_106P6 },
+};
+
+static const struct eqc_pll eqc_eyeq7h_east_plls[] = {
+	//{index, name, reg, type, parent}
+	{ EQ7HC_EAST_PLL_NOC, "pll-noc-e", 0x30, EQC_PLL_AINTP, "ref_106p6_e" },
+	{ EQ7HC_EAST_PLL_ISP, "pll-isp",   0x38, EQC_PLL_AINTP, "ref_100p0" },
+	{ EQ7HC_EAST_PLL_VEU, "pll-veu",   0x40, EQC_PLL_AINTP, "ref_100p0" },
+};
+
+static const struct eqc_fixed_factor eqc_eyeq7h_east_fixed_factors[] = {
+	{ EQ7HC_EAST_DIV_REF_DDR_PHY, "ref_ddr_phy_e", 1, 2,  EQ7HC_EAST_PLL_106P6, "pll-106p6-e" },
+	{ EQ7HC_EAST_DIV_CORE,        "core_e",        1, 2,  EQ7HC_EAST_PLL_NOC },
+	{ EQ7HC_EAST_DIV_CORE_MBITS,  "core_mbits_e",  1, 2,  EQ7HC_EAST_PLL_NOC },
+	{ EQ7HC_EAST_DIV_ISRAM_MBITS, "isram_mbits_e", 1, 2,  EQ7HC_EAST_PLL_NOC },
+	{ EQ7HC_EAST_DIV_CFG,         "cfg_e",         1, 4,  EQ7HC_EAST_PLL_NOC },
+	{ EQ7HC_EAST_DIV_VEU_CORE,    "veu_core",      1, 4,  EQ7HC_EAST_PLL_VEU },
+	{ EQ7HC_EAST_DIV_VEU_MBITS,   "veu_mbits",     1, 4,  EQ7HC_EAST_PLL_VEU },
+	{ EQ7HC_EAST_DIV_VEU_OCP,     "veu_ocp",       1, 16, EQ7HC_EAST_PLL_VEU },
+	{ EQ7HC_EAST_DIV_LBITS,       "lbits_e",       1, 48, EQ7HC_EAST_PLL_ISP },
+	{ EQ7HC_EAST_DIV_ISP0_CORE,   "isp0_core",     1, 2,  EQ7HC_EAST_PLL_ISP },
+};
+
+static const struct eqc_early_match_data eqc_eyeq7h_east_early_match_data __initconst = {
+	.early_pll_count	= ARRAY_SIZE(eqc_eyeq7h_east_early_plls),
+	.early_plls		= eqc_eyeq7h_east_early_plls,
+
+	.early_fixed_factor_count	= ARRAY_SIZE(eqc_eyeq7h_east_early_fixed_factors),
+	.early_fixed_factors		= eqc_eyeq7h_east_early_fixed_factors,
+
+	.late_clk_count		= ARRAY_SIZE(eqc_eyeq7h_east_plls) +
+	ARRAY_SIZE(eqc_eyeq7h_east_fixed_factors),
+};
+
+static const struct eqc_match_data eqc_eyeq7h_east_match_data = {
+	.pll_count	= ARRAY_SIZE(eqc_eyeq7h_east_plls),
+	.plls		= eqc_eyeq7h_east_plls,
+
+	.fixed_factor_count	= ARRAY_SIZE(eqc_eyeq7h_east_fixed_factors),
+	.fixed_factors		= eqc_eyeq7h_east_fixed_factors,
+
+	.reset_auxdev_name = "reset_east",
+
+	.early_clk_count = ARRAY_SIZE(eqc_eyeq7h_east_early_plls) +
+	ARRAY_SIZE(eqc_eyeq7h_east_early_fixed_factors),
+};
+
+/* Required early as reference for other PLL in OLB west */
+static const struct eqc_pll eqc_eyeq7h_west_early_plls[] = {
+	{ EQ7HC_WEST_PLL_106P6, "pll-106p6-w", 0x0, EQC_PLL_JFRACR },
+};
+
+static const struct eqc_fixed_factor eqc_eyeq7h_west_early_fixed_factors[] = {
+	{ EQ7HC_WEST_DIV_REF_106P6, "ref_106p6_w", 1, 40, EQ7HC_WEST_PLL_106P6 },
+};
+
+static const struct eqc_pll eqc_eyeq7h_west_plls[] = {
+	//{index, name, reg, type, parent}
+	{ EQ7HC_WEST_PLL_NOC, "pll-noc-w", 0x30, EQC_PLL_AINTP, "ref_106p6_w" },
+	{ EQ7HC_WEST_PLL_GPU, "pll-gpu",   0x38, EQC_PLL_AINTP, "ref_100p0" },
+	{ EQ7HC_WEST_PLL_SSI, "pll-ssi",   0x40, EQC_PLL_AINTP, "ref_100p0" },
+};
+
+static const struct eqc_fixed_factor eqc_eyeq7h_west_fixed_factors[] = {
+	{ EQ7HC_WEST_DIV_GPU,            "gpu",            1, 2,  EQ7HC_WEST_PLL_GPU },
+	{ EQ7HC_WEST_DIV_GPU_MBITS,      "gpu_mbits",      1, 2,  EQ7HC_WEST_PLL_GPU },
+	{ EQ7HC_WEST_DIV_LBITS,          "lbits_w",        1, 40, EQ7HC_WEST_PLL_GPU },
+	{ EQ7HC_WEST_DIV_MIPS_TIMER,     "mips_timer",     1, 24, EQ7HC_WEST_PLL_SSI },
+	{ EQ7HC_WEST_DIV_SSI_CORE,       "ssi_core",       1, 2,  EQ7HC_WEST_PLL_SSI },
+	{ EQ7HC_WEST_DIV_SSI_CORE_MBITS, "ssi_core_mbits", 1, 2,  EQ7HC_WEST_PLL_SSI },
+	{ EQ7HC_WEST_DIV_SSI_ROM,        "ssi_rom",        1, 8,  EQ7HC_WEST_PLL_SSI },
+	{ EQ7HC_WEST_DIV_SSI_ROM_MBITS,  "ssi_rom_mbits",  1, 8,  EQ7HC_WEST_PLL_SSI },
+	{ EQ7HC_WEST_DIV_REF_DDR_PHY,    "ref_ddr_phy_w",  1, 2,  EQ7HC_WEST_PLL_106P6,
+	  "pll-106p6-w" },
+	{ EQ7HC_WEST_DIV_CORE,           "core_w",         1, 2,  EQ7HC_WEST_PLL_NOC },
+	{ EQ7HC_WEST_DIV_CORE_MBIT,      "core_mbit_w",    1, 2,  EQ7HC_WEST_PLL_NOC },
+	{ EQ7HC_WEST_DIV_CFG,            "cfg_w",          1, 4,  EQ7HC_WEST_PLL_NOC },
+	{ EQ7HC_WEST_DIV_CAU,            "cau_w",          1, 8,  EQ7HC_WEST_PLL_NOC },
+	{ EQ7HC_WEST_DIV_CAU_MBITS,      "cau_mbits_w",    1, 8,  EQ7HC_WEST_PLL_NOC },
+};
+
+static const struct eqc_early_match_data eqc_eyeq7h_west_early_match_data __initconst = {
+	.early_pll_count	= ARRAY_SIZE(eqc_eyeq7h_west_early_plls),
+	.early_plls		= eqc_eyeq7h_west_early_plls,
+
+	.early_fixed_factor_count	= ARRAY_SIZE(eqc_eyeq7h_west_early_fixed_factors),
+	.early_fixed_factors		= eqc_eyeq7h_west_early_fixed_factors,
+
+	.late_clk_count		= ARRAY_SIZE(eqc_eyeq7h_west_plls) +
+				  ARRAY_SIZE(eqc_eyeq7h_west_fixed_factors),
+};
+
+static const struct eqc_match_data eqc_eyeq7h_west_match_data = {
+	.pll_count	= ARRAY_SIZE(eqc_eyeq7h_west_plls),
+	.plls		= eqc_eyeq7h_west_plls,
+
+	.fixed_factor_count	= ARRAY_SIZE(eqc_eyeq7h_west_fixed_factors),
+	.fixed_factors		= eqc_eyeq7h_west_fixed_factors,
+
+	.reset_auxdev_name = "reset_west",
+
+	.early_clk_count = ARRAY_SIZE(eqc_eyeq7h_west_early_plls) +
+			   ARRAY_SIZE(eqc_eyeq7h_west_early_fixed_factors),
+};
+
+static const struct eqc_pll eqc_eyeq7h_periph_east_plls[] = {
+	//{index, name, reg, type, parent}
+	{ EQ7HC_PERIPH_EAST_PLL_PER, "pll-periph_east_per", 0x0, EQC_PLL_AINTP },
+};
+
+static const struct eqc_fixed_factor eqc_eyeq7h_periph_east_fixed_factors[] = {
+	{ EQ7HC_PERIPH_EAST_DIV_PER, "periph_e", 1, 10, EQ7HC_PERIPH_EAST_PLL_PER },
+};
+
+static const struct eqc_match_data eqc_eyeq7h_periph_east_match_data = {
+	.pll_count	= ARRAY_SIZE(eqc_eyeq7h_periph_east_plls),
+	.plls		= eqc_eyeq7h_periph_east_plls,
+
+	.fixed_factor_count	= ARRAY_SIZE(eqc_eyeq7h_periph_east_fixed_factors),
+	.fixed_factors		= eqc_eyeq7h_periph_east_fixed_factors,
+
+	.reset_auxdev_name = "reset_periph_east",
+};
+
+static const struct eqc_pll eqc_eyeq7h_periph_west_plls[] = {
+	//{index, name, reg, type, parent}
+	{ EQ7HC_PERIPH_WEST_PLL_PER, "pll-periph_west_per", 0x0, EQC_PLL_AINTP, "ref_100p0" },
+	{ EQ7HC_PERIPH_WEST_PLL_I2S, "pll-periph_west_i2s", 0x4, EQC_PLL_AINTP, "ref_106p6_w" },
+};
+
+static const struct eqc_fixed_factor eqc_eyeq7h_periph_west_fixed_factors[] = {
+	{ EQ7HC_PERIPH_WEST_DIV_PER, "periph_w",         1, 10, EQ7HC_PERIPH_WEST_PLL_PER },
+	{ EQ7HC_PERIPH_WEST_DIV_I2S, "periph_i2s_ser_w", 1, 100, EQ7HC_PERIPH_WEST_PLL_I2S },
+};
+
+static const struct eqc_match_data eqc_eyeq7h_periph_west_match_data = {
+	.pll_count	= ARRAY_SIZE(eqc_eyeq7h_periph_west_plls),
+	.plls		= eqc_eyeq7h_periph_west_plls,
+
+	.fixed_factor_count	= ARRAY_SIZE(eqc_eyeq7h_periph_west_fixed_factors),
+	.fixed_factors		= eqc_eyeq7h_periph_west_fixed_factors,
+
+	.reset_auxdev_name = "reset_periph_west",
+};
+
+static const struct clk_div_table eqc_eyeq7h_ddr_apb_div_table[] = {
+	{ .val = 0, .div = 8 },
+	{ .val = 1, .div = 128 },
+	{ .val = 0, .div = 0 },
+};
+
+static const struct clk_div_table eqc_eyeq7h_ddr_ref_div_table[] = {
+	{ .val = 0, .div = 2 },
+	{ .val = 1, .div = 8 },
+	{ .val = 0, .div = 0 },
+};
+
+static const struct clk_div_table eqc_eyeq7h_ddr_dfi_div_table[] = {
+	{ .val = 0, .div = 2 },
+	{ .val = 1, .div = 32 },
+	{ .val = 0, .div = 0 },
+};
+
+static const struct eqc_div eqc_eyeq7h_ddr0_divs[] = {
+	{
+		.index = EQ7HC_DDR_DIV_APB,
+		.name = "div-ddr0_apb",
+		.parent_idx = EQ7HC_DDR_PLL,
+		.reg = 0x08,
+		.shift = 10,
+		.width = 1,
+		.table = eqc_eyeq7h_ddr_apb_div_table,
+	},
+	{
+		.index = EQ7HC_DDR_DIV_PLLREF,
+		.name = "div-ddr0_pllref",
+		.parent_idx = EQ7HC_DDR_PLL,
+		.reg = 0x08,
+		.shift = 10,
+		.width = 1,
+		.table = eqc_eyeq7h_ddr_ref_div_table,
+	},
+	{
+		.index = EQ7HC_DDR_DIV_DFI,
+		.name = "div-ddr0-dfi",
+		.parent_idx = EQ7HC_DDR_PLL,
+		.reg = 0x08,
+		.shift = 10,
+		.width = 1,
+		.table = eqc_eyeq7h_ddr_dfi_div_table,
+	},
+};
+
+static const struct eqc_pll eqc_eyeq7h_ddr0_plls[] = {
+	//{index, name, reg, type, parent}
+	{ EQ7HC_DDR_PLL, "pll-ddr0", 0x0, EQC_PLL_AINTP },
+};
+
+static const struct eqc_match_data eqc_eyeq7h_ddr0_match_data = {
+	.pll_count	= ARRAY_SIZE(eqc_eyeq7h_ddr0_plls),
+	.plls		= eqc_eyeq7h_ddr0_plls,
+
+	.div_count	= ARRAY_SIZE(eqc_eyeq7h_ddr0_divs),
+	.divs		= eqc_eyeq7h_ddr0_divs,
+
+	.reset_auxdev_name = "reset_ddr0",
+};
+
+static const struct eqc_div eqc_eyeq7h_ddr1_divs[] = {
+	{
+		.index = EQ7HC_DDR_DIV_APB,
+		.name = "div-ddr1_apb",
+		.parent_idx = EQ7HC_DDR_PLL,
+		.reg = 0x08,
+		.shift = 10,
+		.width = 1,
+		.table = eqc_eyeq7h_ddr_apb_div_table,
+	},
+	{
+		.index = EQ7HC_DDR_DIV_PLLREF,
+		.name = "div-ddr1_pllref",
+		.parent_idx = EQ7HC_DDR_PLL,
+		.reg = 0x08,
+		.shift = 10,
+		.width = 1,
+		.table = eqc_eyeq7h_ddr_ref_div_table,
+	},
+	{
+		.index = EQ7HC_DDR_DIV_DFI,
+		.name = "div-ddr1-dfi",
+		.parent_idx = EQ7HC_DDR_PLL,
+		.reg = 0x08,
+		.shift = 10,
+		.width = 1,
+		.table = eqc_eyeq7h_ddr_dfi_div_table,
+	},
+};
+
+static const struct eqc_pll eqc_eyeq7h_ddr1_plls[] = {
+	//{index, name, reg, type, parent}
+	{ EQ7HC_DDR_PLL, "pll-ddr1", 0x0, EQC_PLL_AINTP },
+};
+
+static const struct eqc_match_data eqc_eyeq7h_ddr1_match_data = {
+	.pll_count	= ARRAY_SIZE(eqc_eyeq7h_ddr1_plls),
+	.plls		= eqc_eyeq7h_ddr1_plls,
+
+	.div_count	= ARRAY_SIZE(eqc_eyeq7h_ddr1_divs),
+	.divs		= eqc_eyeq7h_ddr1_divs,
+
+	.reset_auxdev_name = "reset_ddr1",
+};
+
+static const struct eqc_pll eqc_eyeq7h_mips0_plls[] = {
+	{ EQ7HC_MIPS_PLL_CPU, "pll-cpu0", 0x0, EQC_PLL_AINTP },
+};
+
+static const struct eqc_fixed_factor eqc_eyeq7h_mips0_fixed_factors[] = {
+	{ EQ7HC_MIPS_DIV_CM, "mips0_cm", 1, 2, EQ7HC_MIPS_PLL_CPU },
+};
+
+static const struct eqc_match_data eqc_eyeq7h_mips0_match_data = {
+	.pll_count	= ARRAY_SIZE(eqc_eyeq7h_mips0_plls),
+	.plls		= eqc_eyeq7h_mips0_plls,
+
+	.fixed_factor_count	= ARRAY_SIZE(eqc_eyeq7h_mips0_fixed_factors),
+	.fixed_factors		= eqc_eyeq7h_mips0_fixed_factors,
+};
+
+static const struct eqc_pll eqc_eyeq7h_mips1_plls[] = {
+	{ EQ7HC_MIPS_PLL_CPU, "pll-cpu1", 0x0, EQC_PLL_AINTP },
+};
+
+static const struct eqc_fixed_factor eqc_eyeq7h_mips1_fixed_factors[] = {
+	{ EQ7HC_MIPS_DIV_CM, "mips1_cm", 1, 2, EQ7HC_MIPS_PLL_CPU },
+};
+
+static const struct eqc_match_data eqc_eyeq7h_mips1_match_data = {
+	.pll_count	= ARRAY_SIZE(eqc_eyeq7h_mips1_plls),
+	.plls		= eqc_eyeq7h_mips1_plls,
+
+	.fixed_factor_count	= ARRAY_SIZE(eqc_eyeq7h_mips1_fixed_factors),
+	.fixed_factors		= eqc_eyeq7h_mips1_fixed_factors,
+};
+
+static const struct eqc_pll eqc_eyeq7h_mips2_plls[] = {
+	{ EQ7HC_MIPS_PLL_CPU, "pll-cpu2", 0x0, EQC_PLL_AINTP },
+};
+
+static const struct eqc_fixed_factor eqc_eyeq7h_mips2_fixed_factors[] = {
+	{ EQ7HC_MIPS_DIV_CM, "mips2_cm", 1, 2, EQ7HC_MIPS_PLL_CPU },
+};
+
+static const struct eqc_match_data eqc_eyeq7h_mips2_match_data = {
+	.pll_count	= ARRAY_SIZE(eqc_eyeq7h_mips2_plls),
+	.plls		= eqc_eyeq7h_mips2_plls,
+
+	.fixed_factor_count	= ARRAY_SIZE(eqc_eyeq7h_mips2_fixed_factors),
+	.fixed_factors		= eqc_eyeq7h_mips2_fixed_factors,
+};
+
+static const struct eqc_pll eqc_eyeq7h_acc0_plls[] = {
+	//{index, name, reg, type, parent}
+	{ EQ7HC_ACC_PLL_VMP, "pll-acc0-vmp",     0x400, EQC_PLL_AINTP, "ref_100p0" },
+	{ EQ7HC_ACC_PLL_MPC, "pll-acc0-mpc",     0x404, EQC_PLL_AINTP, "ref_100p0" },
+	{ EQ7HC_ACC_PLL_PMA, "pll-acc0-pma",     0x408, EQC_PLL_AINTP, "ref_100p0" },
+	{ EQ7HC_ACC_PLL_NOC, "pll-acc0-noc-acc", 0x40c, EQC_PLL_AINTP, "ref_106p6_e" },
+};
+
+static const struct eqc_fixed_factor eqc_eyeq7h_acc0_fixed_factors[] = {
+	{ EQ7HC_ACC_DIV_PMA,   "acc0_pma",   1, 2, EQ7HC_ACC_PLL_PMA },
+	{ EQ7HC_ACC_DIV_NCORE, "acc0_ncore", 1, 2, EQ7HC_ACC_PLL_NOC },
+	{ EQ7HC_ACC_DIV_CFG,   "acc0_cfg",   1, 8, EQ7HC_ACC_PLL_NOC },
+};
+
+static const struct eqc_match_data eqc_eyeq7h_acc0_match_data = {
+	.pll_count	= ARRAY_SIZE(eqc_eyeq7h_acc0_plls),
+	.plls		= eqc_eyeq7h_acc0_plls,
+
+	.fixed_factor_count	= ARRAY_SIZE(eqc_eyeq7h_acc0_fixed_factors),
+	.fixed_factors		= eqc_eyeq7h_acc0_fixed_factors,
+
+	.reset_auxdev_name = "reset_acc0",
+};
+
+static const struct eqc_pll eqc_eyeq7h_acc1_plls[] = {
+	//{index, name, reg, type, parent}
+	{ EQ7HC_ACC_PLL_VMP, "pll-acc1-vmp",     0x400, EQC_PLL_AINTP, "ref_100p0" },
+	{ EQ7HC_ACC_PLL_MPC, "pll-acc1-mpc",     0x404, EQC_PLL_AINTP, "ref_100p0" },
+	{ EQ7HC_ACC_PLL_PMA, "pll-acc1-pma",     0x408, EQC_PLL_AINTP, "ref_100p0" },
+	{ EQ7HC_ACC_PLL_NOC, "pll-acc1-noc-acc", 0x40c, EQC_PLL_AINTP, "ref_106p6_e" },
+};
+
+static const struct eqc_match_data eqc_eyeq7h_acc1_match_data = {
+	.pll_count	= ARRAY_SIZE(eqc_eyeq7h_acc1_plls),
+	.plls		= eqc_eyeq7h_acc1_plls,
+
+	.reset_auxdev_name = "reset_acc1",
+};
+
+static const struct eqc_pll eqc_eyeq7h_xnn0_plls[] = {
+	//{index, name, reg, type, parent}
+	{ EQ7HC_XNN_PLL_XNN0,  "pll-xnn0-0",     0x400, EQC_PLL_AINTP, "ref_100p0" },
+	{ EQ7HC_XNN_PLL_XNN1,  "pll-xnn0-1",     0x404, EQC_PLL_AINTP, "ref_100p0" },
+	{ EQ7HC_XNN_PLL_XNN2,  "pll-xnn0-2",     0x408, EQC_PLL_AINTP, "ref_100p0" },
+	{ EQ7HC_XNN_PLL_CLSTR, "pll-xnn0-clstr", 0x410, EQC_PLL_AINTP, "ref_106p6_e" },
+};
+
+static const struct eqc_fixed_factor eqc_eyeq7h_xnn0_fixed_factors[] = {
+	{ EQ7HC_XNN_DIV_XNN0,   "xnn0",        1, 2, EQ7HC_XNN_PLL_XNN0 },
+	{ EQ7HC_XNN_DIV_XNN1,   "xnn1",        1, 2, EQ7HC_XNN_PLL_XNN1 },
+	{ EQ7HC_XNN_DIV_XNN2,   "xnn2",        1, 2, EQ7HC_XNN_PLL_XNN2 },
+	{ EQ7HC_XNN_DIV_CLSTR,  "xnn0_clstr",  1, 2, EQ7HC_XNN_PLL_CLSTR },
+	{ EQ7HC_XNN_DIV_I2,     "xnn0_i2",     1, 4, EQ7HC_XNN_PLL_CLSTR },
+	{ EQ7HC_XNN_DIV_I2_SMS, "xnn0_i2_sms", 1, 4, EQ7HC_XNN_PLL_CLSTR },
+	{ EQ7HC_XNN_DIV_CFG,    "xnn0_cfg",    1, 8, EQ7HC_XNN_PLL_CLSTR },
+};
+
+static const struct eqc_match_data eqc_eyeq7h_xnn0_match_data = {
+	.pll_count	= ARRAY_SIZE(eqc_eyeq7h_xnn0_plls),
+	.plls		= eqc_eyeq7h_xnn0_plls,
+
+	.fixed_factor_count	= ARRAY_SIZE(eqc_eyeq7h_xnn0_fixed_factors),
+	.fixed_factors		= eqc_eyeq7h_xnn0_fixed_factors,
+
+	.reset_auxdev_name = "reset_xnn0",
+};
+
+static const struct eqc_pll eqc_eyeq7h_xnn1_plls[] = {
+	//{index, name, reg, type, parent}
+	{ EQ7HC_XNN_PLL_XNN0,  "pll-xnn1-0",     0x400, EQC_PLL_AINTP, "ref_100p0" },
+	{ EQ7HC_XNN_PLL_XNN1,  "pll-xnn1-1",     0x404, EQC_PLL_AINTP, "ref_100p0" },
+	{ EQ7HC_XNN_PLL_XNN2,  "pll-xnn1-2",     0x408, EQC_PLL_AINTP, "ref_100p0" },
+	{ EQ7HC_XNN_PLL_CLSTR, "pll-xnn1-clstr", 0x410, EQC_PLL_AINTP, "ref_106p6_e" },
+};
+
+static const struct eqc_match_data eqc_eyeq7h_xnn1_match_data = {
+	.pll_count	= ARRAY_SIZE(eqc_eyeq7h_xnn1_plls),
+	.plls		= eqc_eyeq7h_xnn1_plls,
+
+	.reset_auxdev_name = "reset_xnn1",
+};
+
 static const struct of_device_id eqc_match_table[] = {
 	{ .compatible = "mobileye,eyeq5-olb", .data = &eqc_eyeq5_match_data },
 	{ .compatible = "mobileye,eyeq6l-olb", .data = &eqc_eyeq6l_match_data },
@@ -833,6 +1291,22 @@ static const struct of_device_id eqc_match_table[] = {
 	{ .compatible = "mobileye,eyeq6h-ddr0-olb", .data = &eqc_eyeq6h_ddr0_match_data },
 	{ .compatible = "mobileye,eyeq6h-ddr1-olb", .data = &eqc_eyeq6h_ddr1_match_data },
 	{ .compatible = "mobileye,eyeq6h-acc-olb", .data = &eqc_eyeq6h_acc_match_data },
+	{ .compatible = "mobileye,eyeq7h-periph-west-olb",
+	  .data = &eqc_eyeq7h_periph_west_match_data },
+	{ .compatible = "mobileye,eyeq7h-periph-east-olb",
+	  .data = &eqc_eyeq7h_periph_east_match_data },
+	{ .compatible = "mobileye,eyeq7h-west-olb", .data = &eqc_eyeq7h_west_match_data },
+	{ .compatible = "mobileye,eyeq7h-east-olb", .data = &eqc_eyeq7h_east_match_data },
+	{ .compatible = "mobileye,eyeq7h-south-olb", .data = &eqc_eyeq7h_south_match_data },
+	{ .compatible = "mobileye,eyeq7h-mips0-olb", .data = &eqc_eyeq7h_mips0_match_data },
+	{ .compatible = "mobileye,eyeq7h-mips1-olb", .data = &eqc_eyeq7h_mips1_match_data },
+	{ .compatible = "mobileye,eyeq7h-mips2-olb", .data = &eqc_eyeq7h_mips2_match_data },
+	{ .compatible = "mobileye,eyeq7h-ddr0-olb", .data = &eqc_eyeq7h_ddr0_match_data },
+	{ .compatible = "mobileye,eyeq7h-ddr1-olb", .data = &eqc_eyeq7h_ddr1_match_data },
+	{ .compatible = "mobileye,eyeq7h-acc0-olb", .data = &eqc_eyeq7h_acc0_match_data },
+	{ .compatible = "mobileye,eyeq7h-acc1-olb", .data = &eqc_eyeq7h_acc1_match_data },
+	{ .compatible = "mobileye,eyeq7h-xnn0-olb", .data = &eqc_eyeq7h_xnn0_match_data },
+	{ .compatible = "mobileye,eyeq7h-xnn1-olb", .data = &eqc_eyeq7h_xnn1_match_data },
 	{}
 };
 
@@ -1004,3 +1478,24 @@ static void __init eqc_eyeq6h_west_early_init(struct device_node *np)
 }
 CLK_OF_DECLARE_DRIVER(eqc_eyeq6h_west, "mobileye,eyeq6h-west-olb",
 		      eqc_eyeq6h_west_early_init);
+
+static void __init eqc_eyeq7h_south_early_init(struct device_node *np)
+{
+	eqc_early_init(np, &eqc_eyeq7h_south_early_match_data);
+}
+CLK_OF_DECLARE_DRIVER(eqc_eyeq7h_south, "mobileye,eyeq7h-south-olb",
+		      eqc_eyeq7h_south_early_init);
+
+static void __init eqc_eyeq7h_east_early_init(struct device_node *np)
+{
+	eqc_early_init(np, &eqc_eyeq7h_east_early_match_data);
+}
+CLK_OF_DECLARE_DRIVER(eqc_eyeq7h_east, "mobileye,eyeq7h-east-olb",
+		      eqc_eyeq7h_east_early_init);
+
+static void __init eqc_eyeq7h_west_early_init(struct device_node *np)
+{
+	eqc_early_init(np, &eqc_eyeq7h_west_early_match_data);
+}
+CLK_OF_DECLARE_DRIVER(eqc_eyeq7h_west, "mobileye,eyeq7h-west-olb",
+		      eqc_eyeq7h_west_early_init);
