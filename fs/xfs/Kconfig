@@ -137,7 +137,7 @@ config XFS_BTREE_IN_MEM
 
 config XFS_ONLINE_SCRUB
 	bool "XFS online metadata check support"
-	default n
+	default y
 	depends on XFS_FS
 	depends on TMPFS && SHMEM
 	select XFS_LIVE_HOOKS
@@ -149,8 +149,6 @@ config XFS_ONLINE_SCRUB
 	  filesystem downtime by supplementing xfs_repair.  The key
 	  advantage here is to look for problems proactively so that
 	  they can be dealt with in a controlled manner.
-
-	  This feature is considered EXPERIMENTAL.  Use with caution!
 
 	  See the xfs_scrub man page in section 8 for additional information.
 
@@ -175,7 +173,7 @@ config XFS_ONLINE_SCRUB_STATS
 
 config XFS_ONLINE_REPAIR
 	bool "XFS online metadata repair support"
-	default n
+	default y
 	depends on XFS_FS && XFS_ONLINE_SCRUB
 	select XFS_BTREE_IN_MEM
 	help
@@ -185,8 +183,6 @@ config XFS_ONLINE_REPAIR
 	  filesystem to go down.  However, it requires that the filesystem be
 	  formatted with secondary metadata, such as reverse mappings and inode
 	  parent pointers.
-
-	  This feature is considered EXPERIMENTAL.  Use with caution!
 
 	  See the xfs_scrub man page in section 8 for additional information.
 
