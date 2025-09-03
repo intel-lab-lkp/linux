@@ -127,6 +127,17 @@ Use ``v4l2_fwnode_device_parse()`` to obtain rotation and orientation
 information from system firmware and ``v4l2_ctrl_new_fwnode_properties()`` to
 register the appropriate controls.
 
+Media bus codes
+---------------
+
+Supporting the new :ref:`CFA-independent Media bus codes
+<v4l2-mbus-pixelcode-generic-raw>` is required in new drivers on serial
+interfaces and the old Bayer pattern specific Media bus codes are thus
+deprecated. If the rest of the pipeline does not support the new generic raw
+Media bus codes, the preference is to add support for the codes in the entire
+pipeline instead of supporting old Bayer pattern specific mbus codes in a sensor
+driver.
+
 .. _media-camera-sensor-examples:
 
 Example drivers
