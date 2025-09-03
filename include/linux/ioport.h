@@ -290,6 +290,12 @@ static inline resource_size_t resource_size(const struct resource *res)
 {
 	return res->end - res->start + 1;
 }
+
+static inline void resource_rebase(struct resource *res, resource_size_t start)
+{
+	resource_set_range(res, start + res->start, resource_size(res));
+}
+
 static inline unsigned long resource_type(const struct resource *res)
 {
 	return res->flags & IORESOURCE_TYPE_BITS;
