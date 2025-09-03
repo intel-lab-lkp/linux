@@ -143,3 +143,11 @@ own name.
    * - ``clock_id``
      - u64
      - Clock ID used by the device for registering DPLL devices and pins.
+   * - ``max_mac_per_vf``
+     - u32
+     - Controls the maximum number of MAC address filters that can be assigned
+       to a Virtual Function (VF).
+       The exact enforcement may depend on driver capabilities. For example,
+       some drivers may apply this limit only to *trusted* VFs, while others may
+       apply it to all VFs uniformly. This allows a consistent parameter across
+       devices while leaving flexibility for driver-specific behavior.
