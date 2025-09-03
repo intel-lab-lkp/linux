@@ -289,6 +289,16 @@ above in this document: all arguments being read from the tracee's memory
 should be read into the tracer's memory before any policy decisions are made.
 This allows for an atomic decision on syscall arguments.
 
+Cloning an Existing Seccomp Filter
+==================================
+
+Constructing and loading a complex seccomp filter can often take a non-trivial
+amount of time. If a user wants to use the same seccomp filter across more
+than one process, it can be cloned to new processes via the
+``SECCOMP_CLONE_FILTER`` operation. Note that the clone will only succeed if
+the destination process does not have any seccomp filters already applied to
+it. See ``samples/seccomp/clone-filter.c`` for an example.
+
 Sysctls
 =======
 

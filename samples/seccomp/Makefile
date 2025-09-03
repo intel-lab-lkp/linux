@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: GPL-2.0
-userprogs-always-y += bpf-fancy dropper bpf-direct user-trap
+userprogs-always-y += bpf-fancy dropper bpf-direct user-trap clone-filter
 
 bpf-fancy-objs := bpf-fancy.o bpf-helper.o
 

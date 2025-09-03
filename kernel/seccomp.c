@@ -2079,6 +2079,49 @@ static long seccomp_get_notif_sizes(void __user *usizes)
 	return 0;
 }
 
+static long seccomp_clone_filter(void __user *upidfd)
+{
+	struct task_struct *task;
+	unsigned int flags;
+	pid_t pidfd;
+
+	if (!capable(CAP_SYS_ADMIN))
+		return -EPERM;
+
+	if (atomic_read(&current->seccomp.filter_count) > 0)
+		return -EINVAL;
+
+	if (copy_from_user(&pidfd, upidfd, sizeof(pid_t)))
+		return -EFAULT;
+
+	task = pidfd_get_task(pidfd, &flags);
+	if (IS_ERR(task))
+		return -ESRCH;
+
+	spin_lock_irq(&current->sighand->siglock);
+	spin_lock_irq(&task->sighand->siglock);
+
+	if (atomic_read(&task->seccomp.filter_count) == 0) {
+		spin_unlock_irq(&task->sighand->siglock);
+		spin_unlock_irq(&current->sighand->siglock);
+		put_task_struct(task);
+		return -EINVAL;
+	}
+
+	get_seccomp_filter(task);
+	current->seccomp = task->seccomp;
+
+	spin_unlock_irq(&task->sighand->siglock);
+
+	set_task_syscall_work(current, SECCOMP);
+
+	spin_unlock_irq(&current->sighand->siglock);
+
+	put_task_struct(task);
+
+	return 0;
+}
+
 /* Common entry point for both prctl and syscall. */
 static long do_seccomp(unsigned int op, unsigned int flags,
 		       void __user *uargs)
@@ -2100,6 +2143,11 @@ static long do_seccomp(unsigned int op, unsigned int flags,
 			return -EINVAL;
 
 		return seccomp_get_notif_sizes(uargs);
+	case SECCOMP_CLONE_FILTER:
+		if (flags != 0)
+			return -EINVAL;
+
+		return seccomp_clone_filter(uargs);
 	default:
 		return -EINVAL;
 	}

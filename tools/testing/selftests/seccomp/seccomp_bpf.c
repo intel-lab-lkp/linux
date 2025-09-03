@@ -178,6 +178,10 @@ struct seccomp_data {
 #define SECCOMP_GET_NOTIF_SIZES 3
 #endif
 
+#ifndef SECCOMP_CLONE_FILTER
+#define SECCOMP_CLONE_FILTER 4
+#endif
+
 #ifndef SECCOMP_FILTER_FLAG_TSYNC
 #define SECCOMP_FILTER_FLAG_TSYNC (1UL << 0)
 #endif
@@ -5219,6 +5223,73 @@ TEST_F(URETPROBE, uretprobe_default_block_with_uretprobe_syscall)
 	};
 
 	ASSERT_EQ(0, run_probed_with_filter(&prog));
+}
+
+TEST(clone_filter)
+{
+	struct sock_filter deny_filter[] = {
+		BPF_STMT(BPF_LD|BPF_W|BPF_ABS,
+			offsetof(struct seccomp_data, nr)),
+		BPF_JUMP(BPF_JMP|BPF_JEQ|BPF_K, __NR_getppid, 0, 1),
+		BPF_STMT(BPF_RET|BPF_K, SECCOMP_RET_ERRNO | ESRCH),
+		BPF_STMT(BPF_RET|BPF_K, SECCOMP_RET_ALLOW),
+	};
+	struct sock_fprog deny_prog = {
+		.len = (unsigned short)ARRAY_SIZE(deny_filter),
+		.filter = deny_filter,
+	};
+	struct timespec ts = {
+		.tv_sec = 0,
+		.tv_nsec = 100000000,
+	};
+
+	pid_t child_pid, self_pid, res;
+	int child_pidfd, ret;
+
+	/* Only real root can copy a filter. */
+	if (geteuid()) {
+		SKIP(return, "clone_filter requires real root");
+		return;
+	}
+
+	self_pid = getpid();
+
+	child_pid = fork();
+	ASSERT_LE(0, child_pid);
+
+	if (child_pid == 0) {
+		ASSERT_EQ(0, prctl(PR_SET_NO_NEW_PRIVS, 1, 0, 0, 0));
+		ASSERT_EQ(0, prctl(PR_SET_SECCOMP, SECCOMP_MODE_FILTER, &deny_prog));
+
+		while (true)
+			EXPECT_EQ(0, syscall(__NR_nanosleep, &ts, NULL));
+	}
+
+	/* wait for the child pid to create its seccomp filter */
+	ASSERT_EQ(0, syscall(__NR_nanosleep, &ts, NULL));
+
+	child_pidfd = syscall(SYS_pidfd_open, child_pid, 0);
+	EXPECT_LE(0, child_pidfd);
+
+	/* Invalid flag provided */
+	ret = seccomp(SECCOMP_CLONE_FILTER, 1, &child_pidfd);
+	EXPECT_EQ(-1, ret);
+	EXPECT_EQ(errno, EINVAL);
+
+	errno = 0;
+	ret = seccomp(SECCOMP_CLONE_FILTER, 0, &child_pidfd);
+	EXPECT_EQ(0, ret);
+	EXPECT_EQ(errno, 0);
+
+	res = syscall(__NR_getppid);
+	EXPECT_EQ(res, -1);
+	EXPECT_EQ(errno, ESRCH);
+
+	res = syscall(__NR_getpid);
+	EXPECT_EQ(res, self_pid);
+
+	close(child_pidfd);
+	kill(child_pid, SIGKILL);
 }
 
 /*
