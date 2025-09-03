@@ -666,6 +666,31 @@ static void ks_pcie_intx_irq_handler(struct irq_desc *desc)
 	chained_irq_exit(chip, desc);
 }
 
+static void ks_pcie_free_msi_irq(struct keystone_pcie *ks_pcie)
+{
+	struct device_node *np = ks_pcie->np;
+	struct device_node *intc_np;
+	int irq_count, irq, i;
+
+	if (!IS_ENABLED(CONFIG_PCI_MSI))
+		return;
+
+	/* Nothing to do if MSI Interrupt Controller does not exist */
+	intc_np = of_get_child_by_name(np, "msi-interrupt-controller");
+	if (!intc_np)
+		return;
+
+	/* irq_count should be non-zero. Else, ks_pcie_host_init would have failed. */
+	irq_count = of_irq_count(intc_np);
+
+	for (i = 0; i < irq_count; i++) {
+		/* We expect to get an irq since it succeeded during 'config'. */
+		irq = irq_of_parse_and_map(intc_np, i);
+		irq_set_chained_handler(irq, NULL);
+	}
+	of_node_put(intc_np);
+}
+
 static int ks_pcie_config_msi_irq(struct keystone_pcie *ks_pcie)
 {
 	struct device *dev = ks_pcie->pci->dev;
