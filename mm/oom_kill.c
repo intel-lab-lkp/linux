@@ -747,6 +747,19 @@ static inline void queue_oom_reaper(struct task_struct *tsk)
 }
 #endif /* CONFIG_MMU */
 
+static void thaw_oom_process(struct task_struct *tsk)
+{
+	struct task_struct *t;
+
+	/* protects against  __exit_signal() */
+	read_lock(&tasklist_lock);
+	for_each_thread(tsk, t) {
+		set_tsk_thread_flag(t, TIF_MEMDIE);
+		__thaw_task(t);
+	}
+	read_unlock(&tasklist_lock);
+}
+
 /**
  * mark_oom_victim - mark the given task as OOM victim
  * @tsk: task to mark
@@ -772,12 +785,12 @@ static void mark_oom_victim(struct task_struct *tsk)
 		mmgrab(tsk->signal->oom_mm);
 
 	/*
-	 * Make sure that the task is woken up from uninterruptible sleep
+	 * Make sure that the process is woken up from uninterruptible sleep
 	 * if it is frozen because OOM killer wouldn't be able to free
 	 * any memory and livelock. freezing_slow_path will tell the freezer
-	 * that TIF_MEMDIE tasks should be ignored.
+	 * that TIF_MEMDIE threads should be ignored.
 	 */
-	__thaw_task(tsk);
+	thaw_oom_process(tsk);
 	atomic_inc(&oom_victims);
 	cred = get_task_cred(tsk);
 	trace_mark_victim(tsk, cred->uid.val);
