@@ -73,7 +73,7 @@
 struct eqc_pll {
 	unsigned int	index;
 	const char	*name;
-	unsigned int	reg64;
+	unsigned int	reg;
 };
 
 /*
@@ -239,7 +239,7 @@ static void eqc_probe_init_plls(struct device *dev, const struct eqc_match_data 
 	for (i = 0; i < data->pll_count; i++) {
 		pll = &data->plls[i];
 
-		val = readq(base + pll->reg64);
+		val = readq(base + pll->reg);
 		r0 = val;
 		r1 = val >> 32;
 
@@ -422,19 +422,19 @@ static int eqc_probe(struct platform_device *pdev)
 
 /* Required early for GIC timer (pll-cpu) and UARTs (pll-per). */
 static const struct eqc_pll eqc_eyeq5_early_plls[] = {
-	{ .index = EQ5C_PLL_CPU, .name = "pll-cpu",  .reg64 = 0x02C },
-	{ .index = EQ5C_PLL_PER, .name = "pll-per",  .reg64 = 0x05C },
+	{ .index = EQ5C_PLL_CPU, .name = "pll-cpu",  .reg = 0x02C },
+	{ .index = EQ5C_PLL_PER, .name = "pll-per",  .reg = 0x05C },
 };
 
 static const struct eqc_pll eqc_eyeq5_plls[] = {
-	{ .index = EQ5C_PLL_VMP,  .name = "pll-vmp",  .reg64 = 0x034 },
-	{ .index = EQ5C_PLL_PMA,  .name = "pll-pma",  .reg64 = 0x03C },
-	{ .index = EQ5C_PLL_VDI,  .name = "pll-vdi",  .reg64 = 0x044 },
-	{ .index = EQ5C_PLL_DDR0, .name = "pll-ddr0", .reg64 = 0x04C },
-	{ .index = EQ5C_PLL_PCI,  .name = "pll-pci",  .reg64 = 0x054 },
-	{ .index = EQ5C_PLL_PMAC, .name = "pll-pmac", .reg64 = 0x064 },
-	{ .index = EQ5C_PLL_MPC,  .name = "pll-mpc",  .reg64 = 0x06C },
-	{ .index = EQ5C_PLL_DDR1, .name = "pll-ddr1", .reg64 = 0x074 },
+	{ .index = EQ5C_PLL_VMP,  .name = "pll-vmp",  .reg = 0x034 },
+	{ .index = EQ5C_PLL_PMA,  .name = "pll-pma",  .reg = 0x03C },
+	{ .index = EQ5C_PLL_VDI,  .name = "pll-vdi",  .reg = 0x044 },
+	{ .index = EQ5C_PLL_DDR0, .name = "pll-ddr0", .reg = 0x04C },
+	{ .index = EQ5C_PLL_PCI,  .name = "pll-pci",  .reg = 0x054 },
+	{ .index = EQ5C_PLL_PMAC, .name = "pll-pmac", .reg = 0x064 },
+	{ .index = EQ5C_PLL_MPC,  .name = "pll-mpc",  .reg = 0x06C },
+	{ .index = EQ5C_PLL_DDR1, .name = "pll-ddr1", .reg = 0x074 },
 };
 
 enum {
@@ -562,10 +562,10 @@ static const struct eqc_match_data eqc_eyeq5_match_data = {
 };
 
 static const struct eqc_pll eqc_eyeq6l_plls[] = {
-	{ .index = EQ6LC_PLL_DDR, .name = "pll-ddr", .reg64 = 0x02C },
-	{ .index = EQ6LC_PLL_CPU, .name = "pll-cpu", .reg64 = 0x034 }, /* also acc */
-	{ .index = EQ6LC_PLL_PER, .name = "pll-per", .reg64 = 0x03C },
-	{ .index = EQ6LC_PLL_VDI, .name = "pll-vdi", .reg64 = 0x044 },
+	{ .index = EQ6LC_PLL_DDR, .name = "pll-ddr", .reg = 0x02C },
+	{ .index = EQ6LC_PLL_CPU, .name = "pll-cpu", .reg = 0x034 }, /* also acc */
+	{ .index = EQ6LC_PLL_PER, .name = "pll-per", .reg = 0x03C },
+	{ .index = EQ6LC_PLL_VDI, .name = "pll-vdi", .reg = 0x044 },
 };
 
 static const struct eqc_match_data eqc_eyeq6l_match_data = {
@@ -580,7 +580,7 @@ static const struct eqc_match_data eqc_eyeq6h_west_match_data = {
 };
 
 static const struct eqc_pll eqc_eyeq6h_east_plls[] = {
-	{ .index = 0, .name = "pll-east", .reg64 = 0x074 },
+	{ .index = 0, .name = "pll-east", .reg = 0x074 },
 };
 
 static const struct eqc_match_data eqc_eyeq6h_east_match_data = {
@@ -591,10 +591,10 @@ static const struct eqc_match_data eqc_eyeq6h_east_match_data = {
 };
 
 static const struct eqc_pll eqc_eyeq6h_south_plls[] = {
-	{ .index = EQ6HC_SOUTH_PLL_VDI,  .name = "pll-vdi",  .reg64 = 0x000 },
-	{ .index = EQ6HC_SOUTH_PLL_PCIE, .name = "pll-pcie", .reg64 = 0x008 },
-	{ .index = EQ6HC_SOUTH_PLL_PER,  .name = "pll-per",  .reg64 = 0x010 },
-	{ .index = EQ6HC_SOUTH_PLL_ISP,  .name = "pll-isp",  .reg64 = 0x018 },
+	{ .index = EQ6HC_SOUTH_PLL_VDI,  .name = "pll-vdi",  .reg = 0x000 },
+	{ .index = EQ6HC_SOUTH_PLL_PCIE, .name = "pll-pcie", .reg = 0x008 },
+	{ .index = EQ6HC_SOUTH_PLL_PER,  .name = "pll-per",  .reg = 0x010 },
+	{ .index = EQ6HC_SOUTH_PLL_ISP,  .name = "pll-isp",  .reg = 0x018 },
 };
 
 static const struct eqc_div eqc_eyeq6h_south_divs[] = {
@@ -641,7 +641,7 @@ static const struct eqc_match_data eqc_eyeq6h_south_match_data = {
 };
 
 static const struct eqc_pll eqc_eyeq6h_ddr0_plls[] = {
-	{ .index = 0, .name = "pll-ddr0", .reg64 = 0x074 },
+	{ .index = 0, .name = "pll-ddr0", .reg = 0x074 },
 };
 
 static const struct eqc_match_data eqc_eyeq6h_ddr0_match_data = {
@@ -650,7 +650,7 @@ static const struct eqc_match_data eqc_eyeq6h_ddr0_match_data = {
 };
 
 static const struct eqc_pll eqc_eyeq6h_ddr1_plls[] = {
-	{ .index = 0, .name = "pll-ddr1", .reg64 = 0x074 },
+	{ .index = 0, .name = "pll-ddr1", .reg = 0x074 },
 };
 
 static const struct eqc_match_data eqc_eyeq6h_ddr1_match_data = {
@@ -659,11 +659,11 @@ static const struct eqc_match_data eqc_eyeq6h_ddr1_match_data = {
 };
 
 static const struct eqc_pll eqc_eyeq6h_acc_plls[] = {
-	{ .index = EQ6HC_ACC_PLL_XNN, .name = "pll-xnn", .reg64 = 0x040 },
-	{ .index = EQ6HC_ACC_PLL_VMP, .name = "pll-vmp", .reg64 = 0x050 },
-	{ .index = EQ6HC_ACC_PLL_PMA, .name = "pll-pma", .reg64 = 0x05C },
-	{ .index = EQ6HC_ACC_PLL_MPC, .name = "pll-mpc", .reg64 = 0x068 },
-	{ .index = EQ6HC_ACC_PLL_NOC, .name = "pll-noc", .reg64 = 0x070 },
+	{ .index = EQ6HC_ACC_PLL_XNN, .name = "pll-xnn", .reg = 0x040 },
+	{ .index = EQ6HC_ACC_PLL_VMP, .name = "pll-vmp", .reg = 0x050 },
+	{ .index = EQ6HC_ACC_PLL_PMA, .name = "pll-pma", .reg = 0x05C },
+	{ .index = EQ6HC_ACC_PLL_MPC, .name = "pll-mpc", .reg = 0x068 },
+	{ .index = EQ6HC_ACC_PLL_NOC, .name = "pll-noc", .reg = 0x070 },
 };
 
 static const struct eqc_match_data eqc_eyeq6h_acc_match_data = {
@@ -697,7 +697,7 @@ builtin_platform_driver(eqc_driver);
 
 /* Required early for GIC timer. */
 static const struct eqc_pll eqc_eyeq6h_central_early_plls[] = {
-	{ .index = EQ6HC_CENTRAL_PLL_CPU, .name = "pll-cpu", .reg64 = 0x02C },
+	{ .index = EQ6HC_CENTRAL_PLL_CPU, .name = "pll-cpu", .reg = 0x02C },
 };
 
 static const struct eqc_fixed_factor eqc_eyeq6h_central_early_fixed_factors[] = {
@@ -714,7 +714,7 @@ static const struct eqc_early_match_data eqc_eyeq6h_central_early_match_data __i
 
 /* Required early for UART. */
 static const struct eqc_pll eqc_eyeq6h_west_early_plls[] = {
-	{ .index = EQ6HC_WEST_PLL_PER, .name = "pll-west", .reg64 = 0x074 },
+	{ .index = EQ6HC_WEST_PLL_PER, .name = "pll-west", .reg = 0x074 },
 };
 
 static const struct eqc_fixed_factor eqc_eyeq6h_west_early_fixed_factors[] = {
@@ -758,7 +758,7 @@ static void __init eqc_early_init(struct device_node *np,
 	for (i = 0; i < clk_count; i++)
 		cells->hws[i] = ERR_PTR(-EPROBE_DEFER);
 
-	/* Offsets (reg64) of early PLLs are relative to OLB block. */
+	/* Offsets (reg) of early PLLs are relative to OLB block. */
 	base = of_iomap(np, 0);
 	if (!base) {
 		ret = -ENODEV;
@@ -772,7 +772,7 @@ static void __init eqc_early_init(struct device_node *np,
 		u32 r0, r1;
 		u64 val;
 
-		val = readq(base + pll->reg64);
+		val = readq(base + pll->reg);
 		r0 = val;
 		r1 = val >> 32;
 
