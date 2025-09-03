@@ -745,6 +745,35 @@ err:
 	return ret;
 }
 
+static void ks_pcie_free_intx_irq(struct keystone_pcie *ks_pcie)
+{
+	struct device_node *np = ks_pcie->np;
+	struct device_node *intc_np;
+	int irq_count, i;
+	u32 val;
+
+	/* Nothing to do if INTx Interrupt Controller does not exist */
+	intc_np = of_get_child_by_name(np, "legacy-interrupt-controller");
+	if (!intc_np)
+		return;
+
+	/* irq_count should be non-zero. Else, ks_pcie_host_init would have failed. */
+	irq_count = of_irq_count(intc_np);
+
+	/* Disable all legacy interrupts */
+	for (i = 0; i < PCI_NUM_INTX; i++) {
+		val = ks_pcie_app_readl(ks_pcie, IRQ_ENABLE_SET(i));
+		val &= ~INTx_EN;
+		ks_pcie_app_writel(ks_pcie, IRQ_ENABLE_SET(i), val);
+	}
+
+	irq_domain_remove(ks_pcie->intx_irq_domain);
+	for (i = 0; i < irq_count; i++)
+		irq_set_chained_handler(ks_pcie->intx_host_irqs[i], NULL);
+
+	of_node_put(intc_np);
+}
+
 static int ks_pcie_config_intx_irq(struct keystone_pcie *ks_pcie)
 {
 	struct device *dev = ks_pcie->pci->dev;
