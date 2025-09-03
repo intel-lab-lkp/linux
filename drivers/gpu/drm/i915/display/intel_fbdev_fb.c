@@ -10,7 +10,6 @@
 #include "i915_drv.h"
 #include "intel_display_core.h"
 #include "intel_display_types.h"
-#include "intel_fb.h"
 #include "intel_fbdev_fb.h"
 
 u32 intel_fbdev_fb_pitch_align(u32 stride)
@@ -54,34 +53,6 @@ struct drm_gem_object *intel_fbdev_fb_bo_create(struct drm_device *drm, int size
 void intel_fbdev_fb_bo_destroy(struct drm_gem_object *obj)
 {
 	/* nop? */
-}
-
-struct intel_framebuffer *intel_fbdev_fb_alloc(struct drm_device *drm,
-					       struct drm_mode_fb_cmd2 *mode_cmd)
-{
-	struct drm_framebuffer *fb;
-	struct drm_gem_object *obj;
-	int size;
-
-	size = mode_cmd->pitches[0] * mode_cmd->height;
-	size = PAGE_ALIGN(size);
-
-	obj = intel_fbdev_fb_bo_create(drm, size);
-	if (IS_ERR(obj)) {
-		fb = ERR_CAST(obj);
-		goto err;
-	}
-
-	fb = intel_framebuffer_create(obj,
-				      drm_get_format_info(drm,
-							  mode_cmd->pixel_format,
-							  mode_cmd->modifier[0]),
-				      mode_cmd);
-	drm_gem_object_put(obj);
-
-	return to_intel_framebuffer(fb);
-err:
-	return ERR_CAST(fb);
 }
 
 int intel_fbdev_fb_fill_info(struct intel_display *display, struct fb_info *info,
