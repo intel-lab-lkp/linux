@@ -608,7 +608,7 @@ EXPORT_SYMBOL_GPL(rtc_update_irq_enable);
 /**
  * rtc_handle_legacy_irq - AIE, UIE and PIE event hook
  * @rtc: pointer to the rtc device
- * @num: number of occurence of the event
+ * @num: number of occurrence of the event
  * @mode: type of the event, RTC_AF, RTC_UF of RTC_PF
  *
  * This function is called when an AIE, UIE or PIE mode interrupt
