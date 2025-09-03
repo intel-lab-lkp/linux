@@ -329,6 +329,15 @@ static void ks_pcie_handle_intx_irq(struct keystone_pcie *ks_pcie,
 	ks_pcie_app_writel(ks_pcie, IRQ_EOI, offset);
 }
 
+static void ks_pcie_disable_error_irq(struct keystone_pcie *ks_pcie)
+{
+	u32 val;
+
+	val = ks_pcie_app_readl(ks_pcie, ERR_IRQ_ENABLE_SET);
+	val &= ~ERR_IRQ_ALL;
+	ks_pcie_app_writel(ks_pcie, ERR_IRQ_ENABLE_SET, val);
+}
+
 static void ks_pcie_enable_error_irq(struct keystone_pcie *ks_pcie)
 {
 	ks_pcie_app_writel(ks_pcie, ERR_IRQ_ENABLE_SET, ERR_IRQ_ALL);
