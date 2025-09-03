@@ -23,6 +23,7 @@ struct xe_sched_msg {
 	void				*private_data;
 	/** @opcode: opcode of message (backend defined) */
 	unsigned int			opcode;
+	unsigned int			value;
 };
 
 /**

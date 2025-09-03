@@ -448,6 +448,21 @@ static void init_policies(struct xe_guc *guc, struct xe_exec_queue *q)
 		       __guc_exec_queue_policy_action_size(&policy), 0, 0);
 }
 
+static void init_prio(struct xe_guc *guc, struct xe_exec_queue *q,
+		      enum xe_exec_queue_priority prio)
+{
+	struct exec_queue_policy policy;
+
+	xe_gt_assert(guc_to_gt(guc), exec_queue_registered(q));
+
+	__guc_exec_queue_policy_start_klv(&policy, q->guc->id);
+	__guc_exec_queue_policy_add_priority(&policy,
+					     xe_exec_queue_prio_to_guc[prio]);
+
+	xe_guc_ct_send(&guc->ct, (u32 *)&policy.h2g,
+		       __guc_exec_queue_policy_action_size(&policy), 0, 0);
+}
+
 static void set_min_preemption_timeout(struct xe_guc *guc, struct xe_exec_queue *q)
 {
 	struct exec_queue_policy policy;
@@ -1437,6 +1452,16 @@ static void __guc_exec_queue_process_msg_set_sched_props(struct xe_sched_msg *ms
 	kfree(msg);
 }
 
+static void __guc_exec_queue_process_msg_set_sched_prio(struct xe_sched_msg *msg)
+{
+	struct xe_exec_queue *q = msg->private_data;
+	struct xe_guc *guc = exec_queue_to_guc(q);
+
+	if (guc_exec_queue_allowed_to_change_state(q))
+		init_prio(guc, q, msg->value);
+	kfree(msg);
+}
+
 static void __suspend_fence_signal(struct xe_exec_queue *q)
 {
 	if (!q->guc->suspend_pending)
@@ -1503,8 +1528,9 @@ static void __guc_exec_queue_process_msg_resume(struct xe_sched_msg *msg)
 
 #define CLEANUP		1	/* Non-zero values to catch uninitialized msg */
 #define SET_SCHED_PROPS	2
-#define SUSPEND		3
-#define RESUME		4
+#define SET_SCHED_PRIO	3
+#define SUSPEND		4
+#define RESUME		5
 #define OPCODE_MASK	0xf
 #define MSG_LOCKED	BIT(8)
 
@@ -1520,6 +1546,9 @@ static void guc_exec_queue_process_msg(struct xe_sched_msg *msg)
 		break;
 	case SET_SCHED_PROPS:
 		__guc_exec_queue_process_msg_set_sched_props(msg);
+		break;
+	case SET_SCHED_PRIO:
+		__guc_exec_queue_process_msg_set_sched_prio(msg);
 		break;
 	case SUSPEND:
 		__guc_exec_queue_process_msg_suspend(msg);
@@ -1667,16 +1696,16 @@ static int guc_exec_queue_set_priority(struct xe_exec_queue *q,
 {
 	struct xe_sched_msg *msg;
 
-	if (q->sched_props.priority == priority ||
-	    exec_queue_killed_or_banned_or_wedged(q))
+	if (exec_queue_killed_or_banned_or_wedged(q))
 		return 0;
 
 	msg = kmalloc(sizeof(*msg), GFP_KERNEL);
 	if (!msg)
 		return -ENOMEM;
 
-	q->sched_props.priority = priority;
-	guc_exec_queue_add_msg(q, msg, SET_SCHED_PROPS);
+	msg->value = priority;
+
+	guc_exec_queue_add_msg(q, msg, SET_SCHED_PRIO);
 
 	return 0;
 }
