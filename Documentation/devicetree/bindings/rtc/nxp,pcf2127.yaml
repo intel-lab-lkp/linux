@@ -20,6 +20,7 @@ properties:
       - nxp,pcf2127
       - nxp,pcf2129
       - nxp,pcf2131
+      - nxp,rtc-pcf2123
 
   reg:
     maxItems: 1
