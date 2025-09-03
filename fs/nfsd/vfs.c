@@ -1129,6 +1129,12 @@ static bool nfsd_analyze_read_dio(struct svc_rqst *rqstp, struct svc_fh *fhp,
 		return false;
 	}
 
+	/* Show original offset and count, and how it was expanded for DIO */
+	middle_end = read_dio->end - read_dio->end_extra;
+	trace_nfsd_analyze_read_dio(rqstp, fhp, offset, len,
+				    read_dio->start, read_dio->start_extra,
+				    offset, (middle_end - offset),
+				    middle_end, read_dio->end_extra);
 	return true;
 }
 
@@ -1372,7 +1378,7 @@ nfsd_analyze_write_dio(struct svc_rqst *rqstp, struct svc_fh *fhp,
 		/* clear these for the benefit of trace_nfsd_analyze_write_dio */
 		start_offset = 0;
 		start_len = 0;
-		return true;
+		goto out;
 	}
 
 	start_end = round_up(offset, dio_blocksize);
@@ -1385,7 +1391,10 @@ nfsd_analyze_write_dio(struct svc_rqst *rqstp, struct svc_fh *fhp,
 	write_dio->middle_len = middle_end - start_end;
 	write_dio->end_offset = middle_end;
 	write_dio->end_len = orig_end - middle_end;
-
+out:
+	trace_nfsd_analyze_write_dio(rqstp, fhp, offset, len, start_offset, start_len,
+				     write_dio->middle_offset, write_dio->middle_len,
+				     write_dio->end_offset, write_dio->end_len);
 	return true;
 }
 
