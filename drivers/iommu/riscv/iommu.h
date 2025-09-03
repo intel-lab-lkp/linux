@@ -69,18 +69,31 @@ void riscv_iommu_disable(struct riscv_iommu_device *iommu);
 #define riscv_iommu_readl(iommu, addr) \
 	readl_relaxed((iommu)->reg + (addr))
 
-#define riscv_iommu_readq(iommu, addr) \
-	readq_relaxed((iommu)->reg + (addr))
+static inline u64 riscv_iommu_readq(struct riscv_iommu_device *iommu,
+				      u16 addr)
+{
+	u32 val_lo, val_hi;
+
+	val_lo = readl_relaxed((iommu)->reg + (addr));
+	val_hi = readl_relaxed((iommu)->reg + (addr) + 4);
+
+	return (u64) val_lo | ((u64) val_hi << 32);
+}
 
 #define riscv_iommu_writel(iommu, addr, val) \
 	writel_relaxed((val), (iommu)->reg + (addr))
 
-#define riscv_iommu_writeq(iommu, addr, val) \
-	writeq_relaxed((val), (iommu)->reg + (addr))
+static inline void riscv_iommu_writeq(struct riscv_iommu_device *iommu,
+				      u16 addr, u64 val)
+{
+	u32 val_lo, val_hi;
 
-#define riscv_iommu_readq_timeout(iommu, addr, val, cond, delay_us, timeout_us) \
-	readx_poll_timeout(readq_relaxed, (iommu)->reg + (addr), val, cond, \
-			   delay_us, timeout_us)
+	val_hi = (u32) (val >> 32);
+	val_lo = (u32) val;
+
+	writel_relaxed((val_hi), (iommu)->reg + (addr) + 4);
+	writel_relaxed((val_lo), (iommu)->reg + (addr));
+}
 
 #define riscv_iommu_readl_timeout(iommu, addr, val, cond, delay_us, timeout_us) \
 	readx_poll_timeout(readl_relaxed, (iommu)->reg + (addr), val, cond, \
