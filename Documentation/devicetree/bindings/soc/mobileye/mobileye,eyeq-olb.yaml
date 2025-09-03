@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: (GPL-2.0 OR BSD-2-Clause)
 %YAML 1.2
 ---
-$id: http://devicetree.org/schemas/soc/mobileye/mobileye,eyeq5-olb.yaml#
+$id: http://devicetree.org/schemas/soc/mobileye/mobileye,eyeq-olb.yaml#
 $schema: http://devicetree.org/meta-schemas/core.yaml#
 
 title: Mobileye EyeQ SoC system controller
