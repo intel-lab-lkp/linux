@@ -1,0 +1,76 @@
+# SPDX-License-Identifier: (GPL-2.0-only OR BSD-2-Clause)
+%YAML 1.2
+---
+$id: http://devicetree.org/schemas/watchdog/qcom,gh-watchdog.yaml#
+$schema: http://devicetree.org/meta-schemas/core.yaml#
+
+title: Qualcomm Gunyah Virtual Watchdog
+
+maintainers:
+  - Hrishabh Rajput <hrishabh.rajput@oss.qualcomm.com>
+
+description: |+
+  The Gunyah Hypervisor provides an SMC-based watchdog interface for its virtual
+  machines. The virtual machines use this information to determine the
+  pretimeout IRQ which the hypervisor will be using to communicate pretimeout
+  event.
+  See also: [1]
+
+  [1]: https://github.com/quic/gunyah-resource-manager/blob/1b23ceb0dfa010b3b6b5a5f7a4ec1e95b93ab99d/src/vm_creation/dto_construct.c#L519
+
+properties:
+  compatible:
+    allOf:
+      - const: gunyah-hypervisor
+      - const: simple-bus
+
+  "#address-cells":
+    description: Number of cells needed to represent 64-bit capability IDs.
+    const: 2
+
+  "#size-cells":
+    description: must be 0, because capability IDs are not memory address
+                  ranges and do not have a size.
+    const: 0
+
+patternProperties:
+  "^gh-watchdog":
+    type: object
+    description:
+      Watchdog node which provides information about the pretimeout IRQ which
+      will be used to communicate the pretimeout event.
+
+    properties:
+      compatible:
+        const: qcom,gh-watchdog
+
+      interrupts:
+        items:
+          description: Interrupt for the pretimeout.
+
+    additionalProperties: false
+
+    required:
+      - compatible
+      - interrupts
+
+additionalProperties: false
+
+required:
+  - compatible
+  - "#address-cells"
+  - "#size-cells"
+
+examples:
+  - |
+    #include <dt-bindings/interrupt-controller/arm-gic.h>
+
+    hypervisor {
+        compatible = "gunyah-hypervisor", "simple-bus";
+        #address-cells = <2>;
+        #size-cells = <0>;
+
+        gh-watchdog {
+            compatible = "qcom,gh-watchdog";
+            interrupts = <GIC_SPI 0 IRQ_TYPE_EDGE_RISING>; /* Pretimeout IRQ */
+        };
