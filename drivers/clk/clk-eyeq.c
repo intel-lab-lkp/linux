@@ -70,8 +70,44 @@
 #define FRACG_PCSR1_DOWN_SPREAD			BIT(11)
 #define FRACG_PCSR1_FRAC_IN			GENMASK(31, 12)
 
+#define JFRACR_PCSR0_BYPASS			BIT(0)
+#define JFRACR_PCSR0_PLL_EN			BIT(1)
+#define JFRACR_PCSR0_FOUTVCO_EN			BIT(2)
+#define JFRACR_PCSR0_FOUTPOSTDIV_EN		BIT(3)
+#define JFRACR_PCSR0_POST_DIV1			GENMASK(6, 4)
+#define JFRACR_PCSR0_POST_DIV2			GENMASK(9, 7)
+#define JFRACR_PCSR0_REF_DIV			GENMASK(15, 10)
+#define JFRACR_PCSR0_FB_DIV			GENMASK(27, 16)
+#define JFRACR_PCSR0_VCO_SEL			GENMASK(29, 28)
+#define JFRACR_PCSR0_PLL_LOCKED			GENMASK(31, 30)
+
+#define JFRACR_PCSR1_FRAC_IN			GENMASK(23, 0)
+#define JFRACR_PCSR1_FOUT4PHASE_EN		BIT(24)
+#define JFRACR_PCSR1_DAC_EN			BIT(25)
+#define JFRACR_PCSR1_DSM_EN			BIT(26)
+/* Bits 31..27 are reserved */
+#define JFRACR_PCSR2_RESET			BIT(0)
+#define JFRACR_PCSR2_DIS_SSCG			BIT(1)
+#define JFRACR_PCSR2_DOWN_SPREAD		BIT(2)
+#define JFRACR_PCSR2_SSGC_DIV			GENMASK(7, 4)
+#define JFRACR_PCSR2_SPREAD			GENMASK(12, 8)
+/* Bits 31..13 are reserved */
+
+#define AINTP_PCSR_BYPASS			BIT(0)
+#define AINTP_PCSR_PLL_EN			BIT(1)
+#define AINTP_PCSR_FOUTVCO_EN			BIT(2)
+#define AINTP_PCSR_FOUTPOSTDIV_EN		BIT(3)
+#define AINTP_PCSR_POST_DIV1			GENMASK(6, 4)
+#define AINTP_PCSR_POST_DIV2			GENMASK(9, 7)
+#define AINTP_PCSR_REF_DIV			GENMASK(15, 10)
+#define AINTP_PCSR_FB_DIV			GENMASK(27, 16)
+#define AINTP_PCSR_VCO_SEL			GENMASK(29, 28)
+#define AINTP_PCSR_PLL_LOCKED			GENMASK(31, 30)
+
 enum eqc_pll_type {
 	EQC_PLL_FRACG,
+	EQC_PLL_JFRACR,
+	EQC_PLL_AINTP,
 };
 
 struct eqc_pll {
@@ -236,12 +272,93 @@ static int eqc_pll_parse_fracg(void __iomem *base, unsigned long *mult,
 	return 0;
 }
 
+static int eqc_pll_parse_jfracr(void __iomem *base, unsigned long *mult,
+				unsigned long *div, unsigned long *acc)
+{
+	u64 val;
+	u32 r0, r1, r2;
+	u32 spread;
+
+	val = readq(base);
+	r0 = val;
+	r1 = val >> 32;
+	r2 = readl(base + 8);
+
+	if (r0 & JFRACR_PCSR0_BYPASS) {
+		*mult = 1;
+		*div = 1;
+		*acc = 0;
+		return 0;
+	}
+
+	if (!(r0 & JFRACR_PCSR0_PLL_LOCKED))
+		return -EINVAL;
+
+	*mult = FIELD_GET(JFRACR_PCSR0_FB_DIV, r0);
+	*div = FIELD_GET(JFRACR_PCSR0_REF_DIV, r0);
+
+	if (r1 & JFRACR_PCSR1_DSM_EN) {
+		*div *= (1ULL << 20);
+		*mult = *mult * (1ULL << 20) + FIELD_GET(JFRACR_PCSR1_FRAC_IN, r1);
+	}
+
+	if (!*mult || !*div)
+		return -EINVAL;
+
+	if (r2 & (JFRACR_PCSR2_RESET | JFRACR_PCSR2_DIS_SSCG)) {
+		*acc = 0;
+		return 0;
+	}
+
+	spread = FIELD_GET(JFRACR_PCSR2_SPREAD, r2);
+	*acc = spread * 500000;
+
+	if (r2 & JFRACR_PCSR2_DOWN_SPREAD) {
+		*mult *= 2000 - spread;
+		*div *= 2000;
+		eqc_pll_downshift_factors(mult, div);
+	}
+
+	return 0;
+}
+
+static int eqc_pll_parse_aintp(void __iomem *base, unsigned long *mult,
+			       unsigned long *div, unsigned long *acc)
+{
+	u32 r0;
+
+	/* no spread spectrum */
+	*acc = 0;
+
+	r0 = readl(base);
+	if (r0 & AINTP_PCSR_BYPASS) {
+		*mult = 1;
+		*div = 1;
+		return 0;
+	}
+
+	if (!(r0 & AINTP_PCSR_PLL_LOCKED))
+		return -EINVAL;
+
+	*mult = FIELD_GET(AINTP_PCSR_FB_DIV, r0);
+	*div = FIELD_GET(AINTP_PCSR_REF_DIV, r0);
+
+	if (!*mult || !*div)
+		return -EINVAL;
+
+	return 0;
+}
+
 static int eqc_parse_one_pll(void __iomem *base, enum eqc_pll_type type, unsigned long *mult,
 			     unsigned long *div, unsigned long *acc)
 {
 	switch (type) {
 	case EQC_PLL_FRACG:
 		return eqc_pll_parse_fracg(base, mult, div, acc);
+	case EQC_PLL_JFRACR:
+		return eqc_pll_parse_jfracr(base, mult, div, acc);
+	case EQC_PLL_AINTP:
+		return eqc_pll_parse_aintp(base, mult, div, acc);
 	}
 	return -EINVAL;
 }
