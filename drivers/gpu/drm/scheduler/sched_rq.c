@@ -34,7 +34,7 @@ static void drm_sched_rq_update_prio(struct drm_sched_rq *rq)
 	rq->head_prio = prio;
 }
 
-static void drm_sched_rq_remove_fifo_locked(struct drm_sched_entity *entity,
+static void drm_sched_rq_remove_tree_locked(struct drm_sched_entity *entity,
 					    struct drm_sched_rq *rq)
 {
 	lockdep_assert_held(&entity->lock);
@@ -47,7 +47,7 @@ static void drm_sched_rq_remove_fifo_locked(struct drm_sched_entity *entity,
 	}
 }
 
-static void drm_sched_rq_update_fifo_locked(struct drm_sched_entity *entity,
+static void drm_sched_rq_update_tree_locked(struct drm_sched_entity *entity,
 					    struct drm_sched_rq *rq,
 					    ktime_t ts)
 {
@@ -59,7 +59,7 @@ static void drm_sched_rq_update_fifo_locked(struct drm_sched_entity *entity,
 	lockdep_assert_held(&entity->lock);
 	lockdep_assert_held(&rq->lock);
 
-	drm_sched_rq_remove_fifo_locked(entity, rq);
+	drm_sched_rq_remove_tree_locked(entity, rq);
 
 	entity->oldest_job_waiting = ts;
 
@@ -207,17 +207,17 @@ static ktime_t drm_sched_entity_get_job_ts(struct drm_sched_entity *entity)
  * drm_sched_rq_add_entity - add an entity
  *
  * @entity: scheduler entity
- * @ts: submission timestamp
  *
  * Adds a scheduler entity to the run queue.
  *
  * Returns a DRM scheduler pre-selected to handle this entity.
  */
 struct drm_gpu_scheduler *
-drm_sched_rq_add_entity(struct drm_sched_entity *entity, ktime_t ts)
+drm_sched_rq_add_entity(struct drm_sched_entity *entity)
 {
 	struct drm_gpu_scheduler *sched;
 	struct drm_sched_rq *rq;
+	ktime_t ts;
 
 	/* Add the entity to the run queue */
 	spin_lock(&entity->lock);
@@ -237,15 +237,9 @@ drm_sched_rq_add_entity(struct drm_sched_entity *entity, ktime_t ts)
 		list_add_tail(&entity->list, &rq->entities);
 	}
 
-	if (drm_sched_policy == DRM_SCHED_POLICY_FAIR) {
-		ts = drm_sched_rq_get_min_vruntime(rq);
-		ts = drm_sched_entity_restore_vruntime(entity, ts,
-						       rq->head_prio);
-	} else if (drm_sched_policy == DRM_SCHED_POLICY_RR) {
-		ts = entity->rr_ts;
-	}
-
-	drm_sched_rq_update_fifo_locked(entity, rq, ts);
+	ts = drm_sched_rq_get_min_vruntime(rq);
+	ts = drm_sched_entity_restore_vruntime(entity, ts, rq->head_prio);
+	drm_sched_rq_update_tree_locked(entity, rq, ts);
 
 	spin_unlock(&rq->lock);
 	spin_unlock(&entity->lock);
@@ -274,24 +268,9 @@ void drm_sched_rq_remove_entity(struct drm_sched_rq *rq,
 	atomic_dec(rq->sched->score);
 	list_del_init(&entity->list);
 
-	drm_sched_rq_remove_fifo_locked(entity, rq);
+	drm_sched_rq_remove_tree_locked(entity, rq);
 
 	spin_unlock(&rq->lock);
-}
-
-static ktime_t
-drm_sched_rq_get_rr_ts(struct drm_sched_rq *rq, struct drm_sched_entity *entity)
-{
-	ktime_t ts;
-
-	lockdep_assert_held(&entity->lock);
-	lockdep_assert_held(&rq->lock);
-
-	ts = ktime_add_ns(rq->rr_ts, 1);
-	entity->rr_ts = ts;
-	rq->rr_ts = ts;
-
-	return ts;
 }
 
 /**
@@ -317,23 +296,14 @@ void drm_sched_rq_pop_entity(struct drm_sched_entity *entity)
 	if (next_job) {
 		ktime_t ts;
 
-		if (drm_sched_policy == DRM_SCHED_POLICY_FAIR)
-			ts = drm_sched_entity_get_job_ts(entity);
-		else if (drm_sched_policy == DRM_SCHED_POLICY_FIFO)
-			ts = next_job->submit_ts;
-		else
-			ts = drm_sched_rq_get_rr_ts(rq, entity);
-
-		drm_sched_rq_update_fifo_locked(entity, rq, ts);
+		ts = drm_sched_entity_get_job_ts(entity);
+		drm_sched_rq_update_tree_locked(entity, rq, ts);
 	} else {
-		drm_sched_rq_remove_fifo_locked(entity, rq);
+		ktime_t min_vruntime;
 
-		if (drm_sched_policy == DRM_SCHED_POLICY_FAIR) {
-			ktime_t min_vruntime;
-
-			min_vruntime = drm_sched_rq_get_min_vruntime(rq);
-			drm_sched_entity_save_vruntime(entity, min_vruntime);
-		}
+		drm_sched_rq_remove_tree_locked(entity, rq);
+		min_vruntime = drm_sched_rq_get_min_vruntime(rq);
+		drm_sched_entity_save_vruntime(entity, min_vruntime);
 	}
 	spin_unlock(&rq->lock);
 	spin_unlock(&entity->lock);
