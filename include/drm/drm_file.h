@@ -299,6 +299,11 @@ struct drm_file {
 #if IS_ENABLED(CONFIG_CGROUP_DRM)
 	struct cgroup_subsys_state *__css;
 	struct list_head clink;
+
+	struct {
+		spinlock_t		lock;
+		struct list_head	list;
+	} sched_entities;
 #endif
 
 	/**
