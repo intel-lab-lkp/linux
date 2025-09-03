@@ -150,6 +150,16 @@ drm_sched_entity_restore_vruntime(struct drm_sched_entity *entity,
 			 * Higher priority can go first.
 			 */
 			vruntime = -us_to_ktime(rq_prio - prio);
+		} else {
+			static const int shuffle[2] = { -1, 1 };
+			static bool r = 0;
+
+			/*
+			 * For equal priority apply some randomness to break
+			 * latching caused by submission patterns.
+			 */
+			vruntime = shuffle[r];
+			r ^= 1;
 		}
 	}
 
