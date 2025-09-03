@@ -584,6 +584,7 @@ int v4l2_fill_pixfmt_mp(struct v4l2_pix_format_mplane *pixfmt, u32 pixelformat,
 	(pad, mul, div)
 s64 __v4l2_get_link_freq_pad(struct media_pad *pad, unsigned int mul,
 			     unsigned int div);
+unsigned int v4l2_get_active_data_lanes(const struct media_pad *pad, unsigned int dt_lanes);
 #else
 #define v4l2_get_link_freq(handler, mul, div)		\
 	__v4l2_get_link_freq_ctrl(handler, mul, div)
