@@ -1434,6 +1434,7 @@ static void phylink_get_fixed_state(struct phylink *pl,
 static void phylink_mac_initial_config(struct phylink *pl, bool force_restart)
 {
 	struct phylink_link_state link_state;
+	struct phy_device *phy = pl->phydev;
 
 	switch (pl->req_link_an_mode) {
 	case MLO_AN_PHY:
@@ -1457,7 +1458,11 @@ static void phylink_mac_initial_config(struct phylink *pl, bool force_restart)
 	link_state.link = false;
 
 	phylink_apply_manual_flow(pl, &link_state);
+	if (phy)
+		mutex_lock(&phy->lock);
 	phylink_major_config(pl, force_restart, &link_state);
+	if (phy)
+		mutex_unlock(&phy->lock);
 }
 
 static const char *phylink_pause_to_str(int pause)
@@ -1598,6 +1603,8 @@ static void phylink_resolve(struct work_struct *w)
 
 	mutex_lock(&pl->phy_lock);
 	phy = pl->phydev;
+	if (phy)
+		mutex_lock(&phy->lock);
 	mutex_lock(&pl->state_mutex);
 	cur_link_state = phylink_link_is_up(pl);
 
@@ -1631,11 +1638,11 @@ static void phylink_resolve(struct work_struct *w)
 		/* If we have a phy, the "up" state is the union of both the
 		 * PHY and the MAC
 		 */
-		if (pl->phydev)
+		if (phy)
 			link_state.link &= pl->phy_state.link;
 
 		/* Only update if the PHY link is up */
-		if (pl->phydev && pl->phy_state.link) {
+		if (phy && pl->phy_state.link) {
 			/* If the interface has changed, force a link down
 			 * event if the link isn't already down, and re-resolve.
 			 */
@@ -1699,6 +1706,8 @@ static void phylink_resolve(struct work_struct *w)
 		queue_work(system_power_efficient_wq, &pl->resolve);
 	}
 	mutex_unlock(&pl->state_mutex);
+	if (phy)
+		mutex_unlock(&phy->lock);
 	mutex_unlock(&pl->phy_lock);
 }
 
