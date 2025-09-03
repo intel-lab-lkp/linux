@@ -1,0 +1,43 @@
+# SPDX-License-Identifier: (GPL-2.0-only OR BSD-2-Clause)
+%YAML 1.2
+---
+$id: http://devicetree.org/schemas/rtc/st,m41t93.yaml#
+$schema: http://devicetree.org/meta-schemas/core.yaml#
+
+title: ST M41T93 RTC and compatible
+
+maintainers:
+  - Alexandre Belloni <alexandre.belloni@bootlin.com>
+
+properties:
+  compatible:
+    enum:
+      - st,m41t93
+
+  reg:
+    maxItems: 1
+
+  "#clock-cells":
+    const: 1
+
+allOf:
+  - $ref: rtc.yaml
+
+unevaluatedProperties: false
+
+required:
+  - compatible
+  - reg
+
+examples:
+  - |
+    spi {
+      #address-cells = <1>;
+      #size-cells = <0>;
+      rtc@0 {
+        spi-max-frequency = <2000000>;
+        compatible = "st,m41t93";
+        reg = <0>;
+      };
+    };
+
