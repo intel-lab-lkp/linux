@@ -562,11 +562,11 @@ static bool plane_has_modifier(struct intel_display *display,
 		return false;
 
 	if (md->modifier == I915_FORMAT_MOD_4_TILED_BMG_CCS &&
-	    (GRAPHICS_VER(i915) < 20 || !display->platform.dgfx))
+	    (DISPLAY_VER(display) < 14 || !display->platform.dgfx))
 		return false;
 
 	if (md->modifier == I915_FORMAT_MOD_4_TILED_LNL_CCS &&
-	    (GRAPHICS_VER(i915) < 20 || display->platform.dgfx))
+	    (DISPLAY_VER(display) < 20 || display->platform.dgfx))
 		return false;
 
 	return true;
