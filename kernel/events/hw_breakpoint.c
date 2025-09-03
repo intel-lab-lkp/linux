@@ -706,15 +706,13 @@ int register_perf_hw_breakpoint(struct perf_event *bp)
 	struct arch_hw_breakpoint hw = { };
 	int err;
 
-	err = reserve_bp_slot(bp);
+	err = hw_breakpoint_parse(bp, &bp->attr, &hw);
 	if (err)
 		return err;
 
-	err = hw_breakpoint_parse(bp, &bp->attr, &hw);
-	if (err) {
-		release_bp_slot(bp);
+	err = reserve_bp_slot(bp);
+	if (err)
 		return err;
-	}
 
 	bp->hw.info = hw;
 
