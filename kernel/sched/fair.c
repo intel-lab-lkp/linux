@@ -4561,7 +4561,8 @@ static void migrate_se_pelt_lag(struct sched_entity *se) {}
 static inline int
 update_cfs_rq_load_avg(u64 now, struct cfs_rq *cfs_rq)
 {
-	unsigned long removed_load = 0, removed_util = 0, removed_runnable = 0;
+	unsigned long removed_load_sum = 0, removed_load = 0;
+	unsigned long removed_util = 0, removed_runnable = 0;
 	struct sched_avg *sa = &cfs_rq->avg;
 	int decayed = 0;
 
@@ -4572,6 +4573,7 @@ update_cfs_rq_load_avg(u64 now, struct cfs_rq *cfs_rq)
 		raw_spin_lock(&cfs_rq->removed.lock);
 		swap(cfs_rq->removed.util_avg, removed_util);
 		swap(cfs_rq->removed.load_avg, removed_load);
+		swap(cfs_rq->removed.load_sum, removed_load_sum);
 		swap(cfs_rq->removed.runnable_avg, removed_runnable);
 		cfs_rq->removed.nr = 0;
 		raw_spin_unlock(&cfs_rq->removed.lock);
@@ -4609,8 +4611,7 @@ update_cfs_rq_load_avg(u64 now, struct cfs_rq *cfs_rq)
 		 * removed_runnable is the unweighted version of removed_load so we
 		 * can use it to estimate removed_load_sum.
 		 */
-		add_tg_cfs_propagate(cfs_rq,
-			-(long)(removed_runnable * divider) >> SCHED_CAPACITY_SHIFT);
+		add_tg_cfs_propagate(cfs_rq, -(long)removed_load_sum);
 
 		decayed = 1;
 	}
@@ -4792,6 +4793,7 @@ static void remove_entity_load_avg(struct sched_entity *se)
 	++cfs_rq->removed.nr;
 	cfs_rq->removed.util_avg	+= se->avg.util_avg;
 	cfs_rq->removed.load_avg	+= se->avg.load_avg;
+	cfs_rq->removed.load_sum	+= se->avg.load_sum;
 	cfs_rq->removed.runnable_avg	+= se->avg.runnable_avg;
 	raw_spin_unlock_irqrestore(&cfs_rq->removed.lock, flags);
 }
