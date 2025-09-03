@@ -30,6 +30,7 @@
 #define M41T93_BIT_A1IE                 BIT(7)
 #define M41T93_BIT_ABE			BIT(5)
 #define M41T93_FLAG_AF1                 BIT(6)
+#define M41T93_SRAM_BASE		0x19
 
 
 #define M41T93_REG_ALM_HOUR_HT		0xc
@@ -290,16 +291,24 @@ static int m41t93_probe(struct spi_device *spi)
 		return PTR_ERR(m41t93->regmap);
 	}
 
-	ret = regmap_read(m41t93->regmap, M41T93_REG_WDAY, &res);
-	if (ret < 0) {
+	ret = regmap_write(m41t93->regmap, M41T93_SRAM_BASE, 0xA5);
+	if (ret) {
 		dev_err(&spi->dev, "IO error\n");
 		return -EIO;
 	}
 
-	if (res < 0 || (res & 0xf8) != 0) {
-		dev_err(&spi->dev, "not found 0x%x.\n", res);
+	ret = regmap_read(m41t93->regmap, M41T93_SRAM_BASE, &res);
+	if (ret) {
+		dev_err(&spi->dev, "IO error\n");
+		return -EIO;
+	}
+
+	if (res != 0xA5) {
+		dev_err(&spi->dev, "No valid response from device 0x%x.\n", res);
 		return -ENODEV;
 	}
+
+	dev_notice(&spi->dev, "m41t93 device response success\n");
 
 	spi_set_drvdata(spi, m41t93);
 
