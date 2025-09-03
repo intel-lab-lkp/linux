@@ -29,13 +29,11 @@ static struct intel_gt *llc_to_gt(struct intel_llc *llc)
 
 static unsigned int cpu_max_MHz(void)
 {
-	struct cpufreq_policy *policy;
+	struct cpufreq_policy *policy __free(put_cpufreq_policy) = cpufreq_cpu_get(0);
 	unsigned int max_khz;
 
-	policy = cpufreq_cpu_get(0);
 	if (policy) {
 		max_khz = policy->cpuinfo.max_freq;
-		cpufreq_cpu_put(policy);
 	} else {
 		/*
 		 * Default to measured freq if none found, PCU will ensure we
