@@ -38,3 +38,21 @@
 	pinctrl-0 = <&uart0_2_cfg>;
 	status = "okay";
 };
+
+&uart5 {
+	pinctrl-names = "default";
+	pinctrl-0 = <&uart5_3_cfg>;
+	status = "disabled";
+};
+
+&uart8 {
+	pinctrl-names = "default";
+	pinctrl-0 = <&uart8_2_cfg>;
+	status = "disabled";
+};
+
+&uart9 {
+	pinctrl-names = "default";
+	pinctrl-0 = <&uart9_2_cfg>;
+	status = "disabled";
+};
