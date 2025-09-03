@@ -192,7 +192,7 @@ void reset_thread_features(void)
 }
 
 unsigned long shstk_alloc_thread_stack(struct task_struct *tsk, unsigned long clone_flags,
-				       unsigned long stack_size)
+				       bool minimal, unsigned long stack_size)
 {
 	struct thread_shstk *shstk = &tsk->thread.shstk;
 	unsigned long addr, size;
@@ -208,8 +208,13 @@ unsigned long shstk_alloc_thread_stack(struct task_struct *tsk, unsigned long cl
 	 * For CLONE_VFORK the child will share the parents shadow stack.
 	 * Make sure to clear the internal tracking of the thread shadow
 	 * stack so the freeing logic run for child knows to leave it alone.
+	 *
+	 * If minimal == true, the new kernel thread cloned from userspace
+	 * thread will never return to usermode.
 	 */
-	if (clone_flags & CLONE_VFORK) {
+	if ((clone_flags & CLONE_VFORK) || minimal) {
+		if (minimal)
+			tsk->thread.features &= ~ARCH_SHSTK_SHSTK;
 		shstk->base = 0;
 		shstk->size = 0;
 		return 0;
