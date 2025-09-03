@@ -2795,10 +2795,16 @@ static u8 icl_encoder_to_ddc_pin(struct intel_encoder *encoder)
 	struct intel_display *display = to_intel_display(encoder);
 	enum port port = encoder->port;
 
-	if (intel_encoder_is_combo(encoder))
+	if (intel_encoder_is_combo(encoder)) {
 		return GMBUS_PIN_1_BXT + port;
-	else if (intel_encoder_is_tc(encoder))
-		return GMBUS_PIN_9_TC1_ICP + intel_encoder_to_tc(encoder);
+	} else if (intel_encoder_is_tc(encoder)) {
+		enum tc_port tc_port = intel_encoder_to_tc(encoder);
+
+		if (tc_port != TC_PORT_NONE)
+			return GMBUS_PIN_9_TC1_ICP + tc_port;
+
+		drm_WARN(display->drm, 1, "Invalid TC port\n");
+	}
 
 	drm_WARN(display->drm, 1, "Unknown port:%c\n", port_name(port));
 	return GMBUS_PIN_2_BXT;
