@@ -802,6 +802,7 @@ void dw_pcie_free_msi(struct dw_pcie_rp *pp);
 int dw_pcie_setup_rc(struct dw_pcie_rp *pp);
 int dw_pcie_host_init(struct dw_pcie_rp *pp);
 void dw_pcie_host_deinit(struct dw_pcie_rp *pp);
+void dw_pcie_free_domains(struct dw_pcie_rp *pp);
 int dw_pcie_allocate_domains(struct dw_pcie_rp *pp);
 void __iomem *dw_pcie_own_conf_map_bus(struct pci_bus *bus, unsigned int devfn,
 				       int where);
@@ -843,6 +844,10 @@ static inline int dw_pcie_host_init(struct dw_pcie_rp *pp)
 }
 
 static inline void dw_pcie_host_deinit(struct dw_pcie_rp *pp)
+{
+}
+
+static inline void dw_pcie_free_domains(struct dw_pcie_rp *pp)
 {
 }
 
