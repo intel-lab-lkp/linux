@@ -17,6 +17,7 @@
 #include <linux/irqchip/chained_irq.h>
 #include <linux/irqdomain.h>
 #include <linux/mfd/syscon.h>
+#include <linux/module.h>
 #include <linux/msi.h>
 #include <linux/of.h>
 #include <linux/of_irq.h>
@@ -132,6 +133,7 @@ struct keystone_pcie {
 	struct			device_node *msi_intc_np;
 	struct irq_domain	*intx_irq_domain;
 	struct device_node	*np;
+	struct gpio_desc	*reset_gpio;
 
 	/* Application register space */
 	void __iomem		*va_app_base;	/* DT 1st resource */
@@ -862,7 +864,7 @@ static int ks_pcie_fault(unsigned long addr, unsigned int fsr,
 }
 #endif
 
-static int __init ks_pcie_init_id(struct keystone_pcie *ks_pcie)
+static int ks_pcie_init_id(struct keystone_pcie *ks_pcie)
 {
 	int ret;
 	unsigned int id;
@@ -906,7 +908,7 @@ static void ks_pcie_host_deinit(struct dw_pcie_rp *pp)
 		dw_pcie_free_domains(pp);
 }
 
-static int __init ks_pcie_host_init(struct dw_pcie_rp *pp)
+static int ks_pcie_host_init(struct dw_pcie_rp *pp)
 {
 	struct dw_pcie *pci = to_dw_pcie_from_pp(pp);
 	struct keystone_pcie *ks_pcie = to_keystone_pcie(pci);
@@ -1211,6 +1213,7 @@ static const struct of_device_id ks_pcie_of_match[] = {
 	},
 	{ },
 };
+MODULE_DEVICE_TABLE(of, ks_pcie_of_match);
 
 static int ks_pcie_probe(struct platform_device *pdev)
 {
@@ -1329,6 +1332,7 @@ static int ks_pcie_probe(struct platform_device *pdev)
 			dev_err(dev, "Failed to get reset GPIO\n");
 		goto err_link;
 	}
+	ks_pcie->reset_gpio = gpiod;
 
 	/* Obtain references to the PHYs */
 	for (i = 0; i < num_lanes; i++)
@@ -1440,9 +1444,23 @@ static void ks_pcie_remove(struct platform_device *pdev)
 {
 	struct keystone_pcie *ks_pcie = platform_get_drvdata(pdev);
 	struct device_link **link = ks_pcie->link;
+	struct dw_pcie *pci = ks_pcie->pci;
 	int num_lanes = ks_pcie->num_lanes;
+	const struct ks_pcie_of_data *data;
 	struct device *dev = &pdev->dev;
+	enum dw_pcie_device_mode mode;
 
+	ks_pcie_disable_error_irq(ks_pcie);
+	data = of_device_get_match_data(dev);
+	mode = data->mode;
+	if (mode == DW_PCIE_RC_TYPE) {
+		dw_pcie_host_deinit(&pci->pp);
+	} else {
+		pci_epc_deinit_notify(pci->ep.epc);
+		dw_pcie_ep_deinit(&pci->ep);
+	}
+
+	gpiod_set_value_cansleep(ks_pcie->reset_gpio, 0);
 	pm_runtime_put(dev);
 	pm_runtime_disable(dev);
 	ks_pcie_disable_phy(ks_pcie);
@@ -1458,4 +1476,8 @@ static struct platform_driver ks_pcie_driver = {
 		.of_match_table = ks_pcie_of_match,
 	},
 };
-builtin_platform_driver(ks_pcie_driver);
+module_platform_driver(ks_pcie_driver);
+
+MODULE_LICENSE("GPL");
+MODULE_DESCRIPTION("PCIe host controller driver for Texas Instruments Keystone SoCs");
+MODULE_AUTHOR("Murali Karicheri <m-karicheri2@ti.com>");
