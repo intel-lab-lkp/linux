@@ -138,6 +138,75 @@ impl WwClass {
     }
 }
 
+/// Locking kinds used by [`lock_common`] to unify internal FFI locking logic.
+#[derive(Copy, Clone, Debug)]
+enum LockKind {
+    /// Blocks until lock is acquired.
+    Regular,
+    /// Blocks but can be interrupted by signals.
+    Interruptible,
+    /// Used in slow path after deadlock detection.
+    Slow,
+    /// Slow path but interruptible.
+    SlowInterruptible,
+    /// Does not block, returns immediately if busy.
+    Try,
+}
+
+/// Internal helper that unifies the different locking kinds.
+fn lock_common<'a, T: ?Sized>(
+    ww_mutex: &'a WwMutex<'a, T>,
+    ctx: Option<&WwAcquireCtx<'_>>,
+    kind: LockKind,
+) -> Result<WwMutexGuard<'a, T>> {
+    let ctx_ptr = ctx.map_or(core::ptr::null_mut(), |c| c.inner.get());
+
+    match kind {
+        LockKind::Regular => {
+            // SAFETY: `WwMutex` is always pinned. If `WwAcquireCtx` is `Some`, it is pinned,
+            // if `None`, it is set to `core::ptr::null_mut()`. Both cases are safe.
+            let ret = unsafe { bindings::ww_mutex_lock(ww_mutex.mutex.get(), ctx_ptr) };
+
+            to_result(ret)?;
+        }
+        LockKind::Interruptible => {
+            // SAFETY: `WwMutex` is always pinned. If `WwAcquireCtx` is `Some`, it is pinned,
+            // if `None`, it is set to `core::ptr::null_mut()`. Both cases are safe.
+            let ret =
+                unsafe { bindings::ww_mutex_lock_interruptible(ww_mutex.mutex.get(), ctx_ptr) };
+
+            to_result(ret)?;
+        }
+        LockKind::Slow => {
+            // SAFETY: `WwMutex` is always pinned. If `WwAcquireCtx` is `Some`, it is pinned,
+            // if `None`, it is set to `core::ptr::null_mut()`. Both cases are safe.
+            unsafe { bindings::ww_mutex_lock_slow(ww_mutex.mutex.get(), ctx_ptr) };
+        }
+        LockKind::SlowInterruptible => {
+            // SAFETY: `WwMutex` is always pinned. If `WwAcquireCtx` is `Some`, it is pinned,
+            // if `None`, it is set to `core::ptr::null_mut()`. Both cases are safe.
+            let ret = unsafe {
+                bindings::ww_mutex_lock_slow_interruptible(ww_mutex.mutex.get(), ctx_ptr)
+            };
+
+            to_result(ret)?;
+        }
+        LockKind::Try => {
+            // SAFETY: `WwMutex` is always pinned. If `WwAcquireCtx` is `Some`, it is pinned,
+            // if `None`, it is set to `core::ptr::null_mut()`. Both cases are safe.
+            let ret = unsafe { bindings::ww_mutex_trylock(ww_mutex.mutex.get(), ctx_ptr) };
+
+            if ret == 0 {
+                return Err(EBUSY);
+            } else {
+                to_result(ret)?;
+            }
+        }
+    };
+
+    Ok(WwMutexGuard::new(ww_mutex))
+}
+
 /// Groups multiple mutex acquisitions together for deadlock avoidance.
 ///
 /// Must be used when acquiring multiple mutexes of the same class.
@@ -196,14 +265,9 @@ impl<'ww_class> WwAcquireCtx<'ww_class> {
         unsafe { bindings::ww_acquire_done(self.inner.get()) };
     }
 
-    /// Locks the given mutex.
+    /// Locks the given mutex on this acquire context ([`WwAcquireCtx`]).
     pub fn lock<'a, T>(&'a self, ww_mutex: &'a WwMutex<'a, T>) -> Result<WwMutexGuard<'a, T>> {
-        // SAFETY: The mutex is pinned and valid.
-        let ret = unsafe { bindings::ww_mutex_lock(ww_mutex.mutex.get(), self.inner.get()) };
-
-        to_result(ret)?;
-
-        Ok(WwMutexGuard::new(ww_mutex))
+        lock_common(ww_mutex, Some(self), LockKind::Regular)
     }
 
     /// Similar to `lock`, but can be interrupted by signals.
@@ -211,24 +275,14 @@ impl<'ww_class> WwAcquireCtx<'ww_class> {
         &'a self,
         ww_mutex: &'a WwMutex<'a, T>,
     ) -> Result<WwMutexGuard<'a, T>> {
-        // SAFETY: The mutex is pinned and valid.
-        let ret = unsafe {
-            bindings::ww_mutex_lock_interruptible(ww_mutex.mutex.get(), self.inner.get())
-        };
-
-        to_result(ret)?;
-
-        Ok(WwMutexGuard::new(ww_mutex))
+        lock_common(ww_mutex, Some(self), LockKind::Interruptible)
     }
 
-    /// Locks the given mutex using the slow path.
+    /// Locks the given mutex on this acquire context ([`WwAcquireCtx`]) using the slow path.
     ///
     /// This function should be used when `lock` fails (typically due to a potential deadlock).
     pub fn lock_slow<'a, T>(&'a self, ww_mutex: &'a WwMutex<'a, T>) -> Result<WwMutexGuard<'a, T>> {
-        // SAFETY: The mutex is pinned and valid, and we're in the slow path.
-        unsafe { bindings::ww_mutex_lock_slow(ww_mutex.mutex.get(), self.inner.get()) };
-
-        Ok(WwMutexGuard::new(ww_mutex))
+        lock_common(ww_mutex, Some(self), LockKind::Slow)
     }
 
     /// Similar to `lock_slow`, but can be interrupted by signals.
@@ -236,30 +290,14 @@ impl<'ww_class> WwAcquireCtx<'ww_class> {
         &'a self,
         ww_mutex: &'a WwMutex<'a, T>,
     ) -> Result<WwMutexGuard<'a, T>> {
-        // SAFETY: The mutex is pinned and valid, and we are in the slow path.
-        let ret = unsafe {
-            bindings::ww_mutex_lock_slow_interruptible(ww_mutex.mutex.get(), self.inner.get())
-        };
-
-        to_result(ret)?;
-
-        Ok(WwMutexGuard::new(ww_mutex))
+        lock_common(ww_mutex, Some(self), LockKind::SlowInterruptible)
     }
 
-    /// Tries to lock the mutex without blocking.
+    /// Tries to lock the mutex on this acquire context ([`WwAcquireCtx`]) without blocking.
     ///
     /// Unlike `lock`, no deadlock handling is performed.
     pub fn try_lock<'a, T>(&'a self, ww_mutex: &'a WwMutex<'a, T>) -> Result<WwMutexGuard<'a, T>> {
-        // SAFETY: The mutex is pinned and valid.
-        let ret = unsafe { bindings::ww_mutex_trylock(ww_mutex.mutex.get(), self.inner.get()) };
-
-        if ret == 0 {
-            return Err(EBUSY);
-        } else {
-            to_result(ret)?;
-        }
-
-        Ok(WwMutexGuard::new(ww_mutex))
+        lock_common(ww_mutex, Some(self), LockKind::Try)
     }
 }
 
@@ -355,7 +393,7 @@ impl<'ww_class, T> WwMutex<'ww_class, T> {
     }
 }
 
-impl<T: ?Sized> WwMutex<'_, T> {
+impl<'ww_class, T: ?Sized> WwMutex<'ww_class, T> {
     /// Returns a raw pointer to the inner mutex.
     fn as_ptr(&self) -> *mut bindings::ww_mutex {
         self.mutex.get()
@@ -369,6 +407,35 @@ impl<T: ?Sized> WwMutex<'_, T> {
     fn is_locked(&self) -> bool {
         // SAFETY: The mutex is pinned and valid.
         unsafe { bindings::ww_mutex_is_locked(self.mutex.get()) }
+    }
+
+    /// Locks the given mutex without acquire context ([`WwAcquireCtx`]).
+    pub fn lock<'a>(&'a self) -> Result<WwMutexGuard<'a, T>> {
+        lock_common(self, None, LockKind::Regular)
+    }
+
+    /// Similar to `lock`, but can be interrupted by signals.
+    pub fn lock_interruptible<'a>(&'a self) -> Result<WwMutexGuard<'a, T>> {
+        lock_common(self, None, LockKind::Interruptible)
+    }
+
+    /// Locks the given mutex without acquire context ([`WwAcquireCtx`]) using the slow path.
+    ///
+    /// This function should be used when `lock` fails (typically due to a potential deadlock).
+    pub fn lock_slow<'a>(&'a self) -> Result<WwMutexGuard<'a, T>> {
+        lock_common(self, None, LockKind::Slow)
+    }
+
+    /// Similar to `lock_slow`, but can be interrupted by signals.
+    pub fn lock_slow_interruptible<'a>(&'a self) -> Result<WwMutexGuard<'a, T>> {
+        lock_common(self, None, LockKind::SlowInterruptible)
+    }
+
+    /// Tries to lock the mutex without acquire context ([`WwAcquireCtx`]) and without blocking.
+    ///
+    /// Unlike `lock`, no deadlock handling is performed.
+    pub fn try_lock<'a>(&'a self) -> Result<WwMutexGuard<'a, T>> {
+        lock_common(self, None, LockKind::Try)
     }
 }
 
@@ -544,6 +611,21 @@ mod tests {
 
         assert!(!wound_wait_mutex.is_locked());
         assert!(!wait_die_mutex.is_locked());
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_mutex_without_ctx() -> Result {
+        let mutex = Arc::pin_init(WwMutex::new(100, &TEST_WOUND_WAIT_CLASS), GFP_KERNEL)?;
+        let guard = mutex.lock()?;
+
+        assert_eq!(*guard, 100);
+        assert!(mutex.is_locked());
+
+        drop(guard);
+
+        assert!(!mutex.is_locked());
 
         Ok(())
     }
