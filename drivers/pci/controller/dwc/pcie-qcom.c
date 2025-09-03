@@ -302,20 +302,22 @@ static void qcom_perst_assert(struct qcom_pcie *pcie, bool assert)
 	else
 		list_for_each_entry(port, &pcie->ports, list)
 			gpiod_set_value_cansleep(port->reset, val);
-
-	usleep_range(PERST_DELAY_US, PERST_DELAY_US + 500);
 }
 
 static void qcom_ep_reset_assert(struct qcom_pcie *pcie)
 {
 	qcom_perst_assert(pcie, true);
+	usleep_range(PERST_DELAY_US, PERST_DELAY_US + 500);
 }
 
 static void qcom_ep_reset_deassert(struct qcom_pcie *pcie)
 {
-	/* Ensure that PERST has been asserted for at least 100 ms */
+	struct dw_pcie_rp *pp = &pcie->pci->pp;
+
 	msleep(PCIE_T_PVPERL_MS);
 	qcom_perst_assert(pcie, false);
+	if (!pp->use_linkup_irq)
+		msleep(PCIE_RESET_CONFIG_WAIT_MS);
 }
 
 static int qcom_pcie_start_link(struct dw_pcie *pci)
