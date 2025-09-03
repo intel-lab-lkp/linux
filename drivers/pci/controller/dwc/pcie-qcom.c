@@ -276,6 +276,7 @@ struct qcom_pcie_port {
 struct qcom_pcie_perst {
 	struct list_head list;
 	struct gpio_desc *desc;
+	struct device_node *np;
 };
 
 struct qcom_pcie {
@@ -298,10 +299,49 @@ struct qcom_pcie {
 
 #define to_qcom_pcie(x)		dev_get_drvdata((x)->dev)
 
-static void qcom_perst_assert(struct qcom_pcie *pcie, bool assert)
+static struct gpio_desc *qcom_find_perst(struct qcom_pcie *pcie, struct device_node *np)
+{
+	struct qcom_pcie_perst *perst;
+
+	list_for_each_entry(perst, &pcie->perst, list) {
+		if (np == perst->np)
+			return perst->desc;
+	}
+
+	return NULL;
+}
+
+static void qcom_toggle_perst_per_device(struct qcom_pcie *pcie,
+					 struct device_node *np, bool assert)
+{
+	int val = assert ? 1 : 0;
+	struct gpio_desc *perst;
+
+	perst = qcom_find_perst(pcie, np);
+	if (perst)
+		goto toggle_perst;
+
+	/*
+	 * If PERST# is not available in the current node, try the parent. This
+	 * fallback is needed if the current node belongs to an endpoint or
+	 * switch upstream port.
+	 */
+	if (np->parent)
+		perst = qcom_find_perst(pcie, np->parent);
+
+toggle_perst:
+	/* gpiod* APIs handle NULL gpio_desc gracefully. So no need to check. */
+	gpiod_set_value_cansleep(perst, val);
+}
+
+static void qcom_perst_reset(struct qcom_pcie *pcie, struct device_node *np,
+			      bool assert)
 {
 	struct qcom_pcie_perst *perst;
 	int val = assert ? 1 : 0;
+
+	if (np)
+		return qcom_toggle_perst_per_device(pcie, np, assert);
 
 	if (list_empty(&pcie->perst))
 		gpiod_set_value_cansleep(pcie->reset, val);
@@ -310,20 +350,32 @@ static void qcom_perst_assert(struct qcom_pcie *pcie, bool assert)
 		gpiod_set_value_cansleep(perst->desc, val);
 }
 
-static void qcom_ep_reset_assert(struct qcom_pcie *pcie)
+static void qcom_ep_reset_assert(struct qcom_pcie *pcie, struct device_node *np)
 {
-	qcom_perst_assert(pcie, true);
+	qcom_perst_reset(pcie, np, true);
 	usleep_range(PERST_DELAY_US, PERST_DELAY_US + 500);
 }
 
-static void qcom_ep_reset_deassert(struct qcom_pcie *pcie)
+static void qcom_ep_reset_deassert(struct qcom_pcie *pcie,
+				   struct device_node *np)
 {
 	struct dw_pcie_rp *pp = &pcie->pci->pp;
 
 	msleep(PCIE_T_PVPERL_MS);
-	qcom_perst_assert(pcie, false);
+	qcom_perst_reset(pcie, np, false);
 	if (!pp->use_linkup_irq)
 		msleep(PCIE_RESET_CONFIG_WAIT_MS);
+}
+
+static void qcom_pcie_toggle_perst(struct pci_host_bridge *bridge,
+				    struct device_node *np, bool assert)
+{
+	struct qcom_pcie *pcie = dev_get_drvdata(bridge->dev.parent);
+
+	if (assert)
+		qcom_ep_reset_assert(pcie, np);
+	else
+		qcom_ep_reset_deassert(pcie, np);
 }
 
 static int qcom_pcie_start_link(struct dw_pcie *pci)
@@ -1320,7 +1372,7 @@ static int qcom_pcie_host_init(struct dw_pcie_rp *pp)
 	struct qcom_pcie *pcie = to_qcom_pcie(pci);
 	int ret;
 
-	qcom_ep_reset_assert(pcie);
+	qcom_ep_reset_assert(pcie, NULL);
 
 	ret = pcie->cfg->ops->init(pcie);
 	if (ret)
@@ -1336,7 +1388,13 @@ static int qcom_pcie_host_init(struct dw_pcie_rp *pp)
 			goto err_disable_phy;
 	}
 
-	qcom_ep_reset_deassert(pcie);
+	/*
+	 * Only deassert PERST# for all devices here if legacy binding is used.
+	 * For the new binding, pwrctrl driver is expected to toggle PERST# for
+	 * individual devices.
+	 */
+	if (list_empty(&pcie->perst))
+		qcom_ep_reset_deassert(pcie, NULL);
 
 	if (pcie->cfg->ops->config_sid) {
 		ret = pcie->cfg->ops->config_sid(pcie);
@@ -1344,10 +1402,12 @@ static int qcom_pcie_host_init(struct dw_pcie_rp *pp)
 			goto err_assert_reset;
 	}
 
+	pci->pp.bridge->toggle_perst = qcom_pcie_toggle_perst;
+
 	return 0;
 
 err_assert_reset:
-	qcom_ep_reset_assert(pcie);
+	qcom_ep_reset_assert(pcie, NULL);
 err_disable_phy:
 	qcom_pcie_phy_power_off(pcie);
 err_deinit:
@@ -1361,7 +1421,7 @@ static void qcom_pcie_host_deinit(struct dw_pcie_rp *pp)
 	struct dw_pcie *pci = to_dw_pcie_from_pp(pp);
 	struct qcom_pcie *pcie = to_qcom_pcie(pci);
 
-	qcom_ep_reset_assert(pcie);
+	qcom_ep_reset_assert(pcie, NULL);
 	qcom_pcie_phy_power_off(pcie);
 	pcie->cfg->ops->deinit(pcie);
 }
@@ -1740,6 +1800,9 @@ static int qcom_pcie_parse_perst(struct qcom_pcie *pcie,
 		return -ENOMEM;
 
 	perst->desc = reset;
+	/* Increase the refcount to make sure 'np' is valid till it is stored */
+	of_node_get(np);
+	perst->np = np;
 	list_add_tail(&perst->list, &pcie->perst);
 
 parse_child_node:
@@ -1803,8 +1866,10 @@ err_port_del:
 		list_del(&port->list);
 	}
 
-	list_for_each_entry_safe(perst, tmp_perst, &pcie->perst, list)
+	list_for_each_entry_safe(perst, tmp_perst, &pcie->perst, list) {
+		of_node_put(perst->np);
 		list_del(&perst->list);
+	}
 
 	return ret;
 }
@@ -2044,8 +2109,10 @@ err_phy_exit:
 	qcom_pcie_phy_exit(pcie);
 	list_for_each_entry_safe(port, tmp_port, &pcie->ports, list)
 		list_del(&port->list);
-	list_for_each_entry_safe(perst, tmp_perst, &pcie->perst, list)
+	list_for_each_entry_safe(perst, tmp_perst, &pcie->perst, list) {
+		of_node_put(perst->np);
 		list_del(&perst->list);
+	}
 err_pm_runtime_put:
 	pm_runtime_put(dev);
 	pm_runtime_disable(dev);
