@@ -1219,107 +1219,56 @@ static void __delist_rt_entity(struct sched_rt_entity *rt_se, struct rt_prio_arr
 	rt_se->on_list = 0;
 }
 
-static inline struct sched_statistics *
-__schedstats_from_rt_se(struct sched_rt_entity *rt_se)
-{
-	/* schedstats is not supported for rt group. */
-	if (!rt_entity_is_task(rt_se))
-		return NULL;
-
-	return &rt_task_of(rt_se)->stats;
-}
-
 static inline void
-update_stats_wait_start_rt(struct rt_rq *rt_rq, struct sched_rt_entity *rt_se)
-{
-	struct sched_statistics *stats;
-	struct task_struct *p = NULL;
-
-	if (!schedstat_enabled())
-		return;
-
-	if (rt_entity_is_task(rt_se))
-		p = rt_task_of(rt_se);
-
-	stats = __schedstats_from_rt_se(rt_se);
-	if (!stats)
-		return;
-
-	__update_stats_wait_start(rq_of_rt_rq(rt_rq), p, stats);
-}
-
-static inline void
-update_stats_enqueue_sleeper_rt(struct rt_rq *rt_rq, struct sched_rt_entity *rt_se)
-{
-	struct sched_statistics *stats;
-	struct task_struct *p = NULL;
-
-	if (!schedstat_enabled())
-		return;
-
-	if (rt_entity_is_task(rt_se))
-		p = rt_task_of(rt_se);
-
-	stats = __schedstats_from_rt_se(rt_se);
-	if (!stats)
-		return;
-
-	__update_stats_enqueue_sleeper(rq_of_rt_rq(rt_rq), p, stats);
-}
-
-static inline void
-update_stats_enqueue_rt(struct rt_rq *rt_rq, struct sched_rt_entity *rt_se,
-			int flags)
+update_stats_wait_start_rt(struct rq *rq, struct task_struct *p)
 {
 	if (!schedstat_enabled())
 		return;
 
+	__update_stats_wait_start(rq, p, &p->stats);
+}
+
+static inline void
+update_stats_enqueue_sleeper_rt(struct rq *rq, struct task_struct *p)
+{
+	if (!schedstat_enabled())
+		return;
+
+	__update_stats_enqueue_sleeper(rq, p, &p->stats);
+}
+
+static inline void
+update_stats_enqueue_rt(struct rq *rq, struct task_struct *p, int flags)
+{
 	if (flags & ENQUEUE_WAKEUP)
-		update_stats_enqueue_sleeper_rt(rt_rq, rt_se);
+		update_stats_enqueue_sleeper_rt(rq, p);
 }
 
 static inline void
-update_stats_wait_end_rt(struct rt_rq *rt_rq, struct sched_rt_entity *rt_se)
+update_stats_wait_end_rt(struct rq *rq, struct task_struct *p)
 {
-	struct sched_statistics *stats;
-	struct task_struct *p = NULL;
-
 	if (!schedstat_enabled())
 		return;
 
-	if (rt_entity_is_task(rt_se))
-		p = rt_task_of(rt_se);
-
-	stats = __schedstats_from_rt_se(rt_se);
-	if (!stats)
-		return;
-
-	__update_stats_wait_end(rq_of_rt_rq(rt_rq), p, stats);
+	__update_stats_wait_end(rq, p, &p->stats);
 }
 
 static inline void
-update_stats_dequeue_rt(struct rt_rq *rt_rq, struct sched_rt_entity *rt_se,
-			int flags)
+update_stats_dequeue_rt(struct rq *rq, struct task_struct *p, int flags)
 {
-	struct task_struct *p = NULL;
 
 	if (!schedstat_enabled())
 		return;
-
-	if (rt_entity_is_task(rt_se))
-		p = rt_task_of(rt_se);
 
 	if ((flags & DEQUEUE_SLEEP) && p) {
 		unsigned int state;
 
 		state = READ_ONCE(p->__state);
 		if (state & TASK_INTERRUPTIBLE)
-			__schedstat_set(p->stats.sleep_start,
-					rq_clock(rq_of_rt_rq(rt_rq)));
+			__schedstat_set(p->stats.sleep_start, rq_clock(rq));
 
 		if (state & TASK_UNINTERRUPTIBLE)
-			__schedstat_set(p->stats.block_start,
-					rq_clock(rq_of_rt_rq(rt_rq)));
+			__schedstat_set(p->stats.block_start, rq_clock(rq));
 	}
 }
 
@@ -1399,7 +1348,8 @@ static void enqueue_rt_entity(struct sched_rt_entity *rt_se, unsigned int flags)
 {
 	struct rq *rq = rq_of_rt_se(rt_se);
 
-	update_stats_enqueue_rt(rt_rq_of_se(rt_se), rt_se, flags);
+	if (rt_entity_is_task(rt_se))
+		update_stats_enqueue_rt(rq, rt_task_of(rt_se), flags);
 
 	dequeue_rt_stack(rt_se, flags);
 	for_each_sched_rt_entity(rt_se)
@@ -1411,7 +1361,8 @@ static void dequeue_rt_entity(struct sched_rt_entity *rt_se, unsigned int flags)
 {
 	struct rq *rq = rq_of_rt_se(rt_se);
 
-	update_stats_dequeue_rt(rt_rq_of_se(rt_se), rt_se, flags);
+	if (rt_entity_is_task(rt_se))
+		update_stats_dequeue_rt(rq, rt_task_of(rt_se), flags);
 
 	dequeue_rt_stack(rt_se, flags);
 
@@ -1436,7 +1387,7 @@ enqueue_task_rt(struct rq *rq, struct task_struct *p, int flags)
 		rt_se->timeout = 0;
 
 	check_schedstat_required();
-	update_stats_wait_start_rt(rt_rq_of_se(rt_se), rt_se);
+	update_stats_wait_start_rt(rq_of_rt_se(rt_se), p);
 
 	enqueue_rt_entity(rt_se, flags);
 
@@ -1638,12 +1589,9 @@ static void wakeup_preempt_rt(struct rq *rq, struct task_struct *p, int flags)
 
 static inline void set_next_task_rt(struct rq *rq, struct task_struct *p, bool first)
 {
-	struct sched_rt_entity *rt_se = &p->rt;
-	struct rt_rq *rt_rq = &rq->rt;
-
 	p->se.exec_start = rq_clock_task(rq);
 	if (on_rt_rq(&p->rt))
-		update_stats_wait_end_rt(rt_rq, rt_se);
+		update_stats_wait_end_rt(rq, p);
 
 	/* The running task is never eligible for pushing */
 	dequeue_pushable_task(rq, p);
@@ -1709,11 +1657,8 @@ static struct task_struct *pick_task_rt(struct rq *rq)
 
 static void put_prev_task_rt(struct rq *rq, struct task_struct *p, struct task_struct *next)
 {
-	struct sched_rt_entity *rt_se = &p->rt;
-	struct rt_rq *rt_rq = &rq->rt;
-
 	if (on_rt_rq(&p->rt))
-		update_stats_wait_start_rt(rt_rq, rt_se);
+		update_stats_wait_start_rt(rq, p);
 
 	update_curr_rt(rq);
 
