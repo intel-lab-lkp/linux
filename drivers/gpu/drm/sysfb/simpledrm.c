@@ -183,15 +183,16 @@ simplefb_get_memory_of(struct drm_device *dev, struct device_node *of_node)
 	struct resource *res;
 	int err;
 
-	np = of_parse_phandle(of_node, "memory-region", 0);
-	if (!np)
-		return NULL;
-
 	res = devm_kzalloc(dev->dev, sizeof(*res), GFP_KERNEL);
 	if (!res)
 		return ERR_PTR(-ENOMEM);
 
+	np = of_parse_phandle(of_node, "memory-region", 0);
+	if (!np)
+		return NULL;
+
 	err = of_address_to_resource(np, 0, res);
+	of_node_put(np);
 	if (err)
 		return ERR_PTR(err);
 
