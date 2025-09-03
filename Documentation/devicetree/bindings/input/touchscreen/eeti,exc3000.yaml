@@ -9,15 +9,13 @@ title: EETI EXC3000 series touchscreen controller
 maintainers:
   - Dmitry Torokhov <dmitry.torokhov@gmail.com>
 
-allOf:
-  - $ref: touchscreen.yaml#
-
 properties:
   compatible:
     oneOf:
       - const: eeti,exc3000
       - const: eeti,exc80h60
       - const: eeti,exc80h84
+      - const: eeti,egalax_ts # Do NOT use for new binding
       - items:
           - enum:
               - eeti,exc81w32
@@ -27,6 +25,8 @@ properties:
   interrupts:
     maxItems: 1
   reset-gpios:
+    maxItems: 1
+  wakeup-gpios:
     maxItems: 1
   vdd-supply:
     description: Power supply regulator for the chip
@@ -44,6 +44,18 @@ required:
   - touchscreen-size-y
 
 additionalProperties: false
+
+allOf:
+  - $ref: touchscreen.yaml#
+
+  - if:
+      properties:
+        compatible:
+          not:
+            const: eeti,egalax_ts
+    then:
+      properties:
+        wakeup-gpios: false
 
 examples:
   - |
