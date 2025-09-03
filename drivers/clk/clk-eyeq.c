@@ -115,6 +115,7 @@ struct eqc_pll {
 	const char		*name;
 	unsigned int		reg;
 	enum eqc_pll_type	type;
+	const char		*parent_name;
 };
 
 /*
@@ -366,8 +367,10 @@ static int eqc_parse_one_pll(void __iomem *base, enum eqc_pll_type type, unsigne
 static void eqc_probe_init_plls(struct device *dev, const struct eqc_match_data *data,
 				void __iomem *base, struct clk_hw_onecell_data *cells)
 {
+	struct device_node *np = dev->of_node;
 	unsigned long mult, div, acc;
 	const struct eqc_pll *pll;
+	const char *fw_name;
 	struct clk_hw *hw;
 	unsigned int i;
 	int ret;
@@ -382,8 +385,20 @@ static void eqc_probe_init_plls(struct device *dev, const struct eqc_match_data 
 			continue;
 		}
 
-		hw = clk_hw_register_fixed_factor_with_accuracy_fwname(dev,
-				dev->of_node, pll->name, "ref", 0, mult, div, acc);
+		if (!pll->parent_name)
+			fw_name = "ref";
+		else if (of_property_match_string(np, "clock-names", pll->parent_name) >= 0)
+			fw_name = pll->parent_name;
+		else
+			fw_name = NULL;
+
+		if (fw_name)
+			hw = clk_hw_register_fixed_factor_with_accuracy_fwname(dev,
+					np, pll->name, fw_name, 0, mult, div, acc);
+		else
+			hw = clk_hw_register_fixed_factor_with_accuracy(dev,
+					pll->name, pll->parent_name, 0, mult, div, acc);
+
 		cells->hws[pll->index] = hw;
 		if (IS_ERR(hw))
 			dev_warn(dev, "failed registering %s: %pe\n", pll->name, hw);
