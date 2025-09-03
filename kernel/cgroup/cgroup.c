@@ -2503,21 +2503,31 @@ EXPORT_SYMBOL_GPL(cgroup_path_ns);
  * write-locking cgroup_threadgroup_rwsem. This allows ->attach() to assume that
  * CPU hotplug is disabled on entry.
  */
-void cgroup_attach_lock(bool lock_threadgroup)
+void cgroup_attach_lock(struct task_struct *tsk,
+			       bool lock_threadgroup, bool global)
 {
 	cpus_read_lock();
-	if (lock_threadgroup)
-		percpu_down_write(&cgroup_threadgroup_rwsem);
+	if (lock_threadgroup) {
+		if (global)
+			percpu_down_write(&cgroup_threadgroup_rwsem);
+		else
+			down_write(&tsk->signal->group_rwsem);
+	}
 }
 
 /**
  * cgroup_attach_unlock - Undo cgroup_attach_lock()
  * @lock_threadgroup: whether to up_write cgroup_threadgroup_rwsem
  */
-void cgroup_attach_unlock(bool lock_threadgroup)
+void cgroup_attach_unlock(struct task_struct *tsk,
+				 bool lock_threadgroup, bool global)
 {
-	if (lock_threadgroup)
-		percpu_up_write(&cgroup_threadgroup_rwsem);
+	if (lock_threadgroup) {
+		if (global)
+			percpu_up_write(&cgroup_threadgroup_rwsem);
+		else
+			up_write(&tsk->signal->group_rwsem);
+	}
 	cpus_read_unlock();
 }
 
@@ -2993,11 +3003,22 @@ int cgroup_attach_task(struct cgroup *dst_cgrp, struct task_struct *leader,
 struct task_struct *cgroup_procs_write_start(char *buf, bool threadgroup,
 					     bool *threadgroup_locked)
 {
-	struct task_struct *tsk;
+	struct task_struct *tsk, *tmp_tsk;
 	pid_t pid;
 
 	if (kstrtoint(strstrip(buf), 0, &pid) || pid < 0)
 		return ERR_PTR(-EINVAL);
+
+	rcu_read_lock();
+	if (pid) {
+		tsk = find_task_by_vpid(pid);
+		if (!tsk) {
+			tsk = ERR_PTR(-ESRCH);
+			goto out_unlock_rcu;
+		}
+	} else {
+		tsk = current;
+	}
 
 	/*
 	 * If we migrate a single thread, we don't care about threadgroup
@@ -3009,18 +3030,9 @@ struct task_struct *cgroup_procs_write_start(char *buf, bool threadgroup,
 	 */
 	lockdep_assert_held(&cgroup_mutex);
 	*threadgroup_locked = pid || threadgroup;
-	cgroup_attach_lock(*threadgroup_locked);
 
-	rcu_read_lock();
-	if (pid) {
-		tsk = find_task_by_vpid(pid);
-		if (!tsk) {
-			tsk = ERR_PTR(-ESRCH);
-			goto out_unlock_threadgroup;
-		}
-	} else {
-		tsk = current;
-	}
+	tmp_tsk = tsk;
+	cgroup_attach_lock(tmp_tsk, *threadgroup_locked, false);
 
 	if (threadgroup)
 		tsk = tsk->group_leader;
@@ -3040,7 +3052,7 @@ struct task_struct *cgroup_procs_write_start(char *buf, bool threadgroup,
 	goto out_unlock_rcu;
 
 out_unlock_threadgroup:
-	cgroup_attach_unlock(*threadgroup_locked);
+	cgroup_attach_unlock(tmp_tsk, *threadgroup_locked, false);
 	*threadgroup_locked = false;
 out_unlock_rcu:
 	rcu_read_unlock();
@@ -3055,7 +3067,7 @@ void cgroup_procs_write_finish(struct task_struct *task, bool threadgroup_locked
 	/* release reference from cgroup_procs_write_start() */
 	put_task_struct(task);
 
-	cgroup_attach_unlock(threadgroup_locked);
+	cgroup_attach_unlock(task, threadgroup_locked, false);
 
 	for_each_subsys(ss, ssid)
 		if (ss->post_attach)
@@ -3142,7 +3154,7 @@ static int cgroup_update_dfl_csses(struct cgroup *cgrp)
 	 * write-locking can be skipped safely.
 	 */
 	has_tasks = !list_empty(&mgctx.preloaded_src_csets);
-	cgroup_attach_lock(has_tasks);
+	cgroup_attach_lock(NULL, has_tasks, true);
 
 	/* NULL dst indicates self on default hierarchy */
 	ret = cgroup_migrate_prepare_dst(&mgctx);
@@ -3163,7 +3175,7 @@ static int cgroup_update_dfl_csses(struct cgroup *cgrp)
 	ret = cgroup_migrate_execute(&mgctx);
 out_finish:
 	cgroup_migrate_finish(&mgctx);
-	cgroup_attach_unlock(has_tasks);
+	cgroup_attach_unlock(NULL, has_tasks, true);
 	return ret;
 }
 
