@@ -3,6 +3,7 @@
 #ifndef _DRM_GPU_SCHEDULER_INTERNAL_H_
 #define _DRM_GPU_SCHEDULER_INTERNAL_H_
 
+#include <linux/cgroup_drm.h>
 #include <linux/ktime.h>
 #include <linux/kref.h>
 #include <linux/spinlock.h>
