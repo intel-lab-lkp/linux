@@ -3,8 +3,8 @@
  * Copyright (C) 2024 Mobileye Vision Technologies Ltd.
  */
 
-#ifndef _DT_BINDINGS_CLOCK_MOBILEYE_EYEQ5_CLK_H
-#define _DT_BINDINGS_CLOCK_MOBILEYE_EYEQ5_CLK_H
+#ifndef _DT_BINDINGS_CLOCK_MOBILEYE_EYEQ_CLK_H
+#define _DT_BINDINGS_CLOCK_MOBILEYE_EYEQ_CLK_H
 
 #define EQ5C_PLL_CPU		0
 #define EQ5C_PLL_VMP		1
