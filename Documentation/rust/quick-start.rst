@@ -21,6 +21,20 @@ Alternatively, the next two "Requirements" sections explain each component and
 how to install them through ``rustup``, the standalone installers from Rust
 and/or building them.
 
+Additionally, if you want to install a specified version, you can remove the
+exist packages from your Linux distribution first, e.g. for Fedora Linux::
+
+	dnf remove rust
+
+and run the following in your terminal::
+
+	curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
+
+then follow the onscreen instructions to install from the official release
+channels, enabling you to easily switch between stable, beta, and nightly
+compilers and keep them updated. Please see https://rustup.rs/ for more
+information.
+
 The rest of the document explains other aspects on how to get started.
 
 
