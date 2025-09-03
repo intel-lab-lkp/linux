@@ -5950,14 +5950,22 @@ static void prev_balance(struct rq *rq, struct task_struct *prev,
 
 #ifdef CONFIG_SCHED_CLASS_EXT
 	/*
-	 * SCX requires a balance() call before every pick_task() including when
-	 * waking up from SCHED_IDLE. If @start_class is below SCX, start from
-	 * SCX instead. Also, set a flag to detect missing balance() call.
+	 * SCX requires a balance() call before every pick_task() including
+	 * when waking up from SCHED_IDLE.
+	 *
+	 * If @start_class is below SCX, start balancing from SCX. If the
+	 * DL server has any pending work, start from the DL class instead.
+	 * This ensures the DL server is given a chance to trigger its own
+	 * balance() pass on every prev_balance() invocation.
+	 *
+	 * Also, set a flag to detect missing balance() call.
 	 */
 	if (scx_enabled()) {
 		rq->scx.flags |= SCX_RQ_BAL_PENDING;
 		if (sched_class_above(&ext_sched_class, start_class))
 			start_class = &ext_sched_class;
+		if (on_dl_rq(&rq->ext_server))
+			start_class = &dl_sched_class;
 	}
 #endif
 

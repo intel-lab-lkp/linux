@@ -88,11 +88,6 @@ static inline struct dl_rq *dl_rq_of_se(struct sched_dl_entity *dl_se)
 	return &rq_of_dl_se(dl_se)->dl;
 }
 
-static inline int on_dl_rq(struct sched_dl_entity *dl_se)
-{
-	return !RB_EMPTY_NODE(&dl_se->rb_node);
-}
-
 #ifdef CONFIG_RT_MUTEXES
 static inline struct sched_dl_entity *pi_of(struct sched_dl_entity *dl_se)
 {
@@ -1650,11 +1645,13 @@ static bool dl_server_stopped(struct sched_dl_entity *dl_se)
 
 void dl_server_init(struct sched_dl_entity *dl_se, struct rq *rq,
 		    dl_server_has_tasks_f has_tasks,
-		    dl_server_pick_f pick_task)
+		    dl_server_pick_f pick_task,
+		    dl_server_balance_f balance)
 {
 	dl_se->rq = rq;
 	dl_se->server_has_tasks = has_tasks;
 	dl_se->server_pick_task = pick_task;
+	dl_se->server_balance = balance;
 }
 
 void sched_init_dl_servers(void)
@@ -2349,8 +2346,12 @@ static void check_preempt_equal_dl(struct rq *rq, struct task_struct *p)
 	resched_curr(rq);
 }
 
+static struct sched_dl_entity *pick_next_dl_entity(struct dl_rq *dl_rq);
+
 static int balance_dl(struct rq *rq, struct task_struct *p, struct rq_flags *rf)
 {
+	struct sched_dl_entity *dl_se;
+
 	if (!on_dl_rq(&p->dl) && need_pull_dl_task(rq, p)) {
 		/*
 		 * This is OK, because current is on_cpu, which avoids it being
@@ -2363,6 +2364,9 @@ static int balance_dl(struct rq *rq, struct task_struct *p, struct rq_flags *rf)
 		rq_repin_lock(rq, rf);
 	}
 
+	dl_se = pick_next_dl_entity(&rq->dl);
+	if (dl_se && dl_server(dl_se) && dl_se->server_balance)
+		dl_se->server_balance(dl_se, rf);
 	return sched_stop_runnable(rq) || sched_dl_runnable(rq);
 }
 

@@ -7715,16 +7715,19 @@ static bool ext_server_has_tasks(struct sched_dl_entity *dl_se)
 	return !!dl_se->rq->scx.nr_running;
 }
 
-/*
- * Select the next task to run from the ext scheduling class.
- */
-static struct task_struct *ext_server_pick_task(struct sched_dl_entity *dl_se,
-						void *flags)
+static void ext_server_balance(struct sched_dl_entity *dl_se, void *flags)
 {
 	struct rq_flags *rf = flags;
 
 	balance_scx(dl_se->rq, dl_se->rq->curr, rf);
-	return pick_task_scx(dl_se->rq, rf);
+}
+
+/*
+ * Select the next task to run from the ext scheduling class.
+ */
+static struct task_struct *ext_server_pick_task(struct sched_dl_entity *dl_se)
+{
+	return pick_task_scx(dl_se->rq);
 }
 
 /*
@@ -7736,7 +7739,7 @@ void ext_server_init(struct rq *rq)
 
 	init_dl_entity(dl_se);
 
-	dl_server_init(dl_se, rq, ext_server_has_tasks, ext_server_pick_task);
+	dl_server_init(dl_se, rq, ext_server_has_tasks, ext_server_pick_task, ext_server_balance);
 }
 
 static const struct btf_kfunc_id_set scx_kfunc_set_any = {
