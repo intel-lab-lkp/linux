@@ -2125,14 +2125,18 @@ static ssize_t fuse_iomap_writeback_range(struct iomap_writepage_ctx *wpc,
 					  unsigned len, u64 end_pos)
 {
 	struct fuse_fill_wb_data *data = wpc->wb_ctx;
-	struct fuse_writepage_args *wpa = data->wpa;
-	struct fuse_args_pages *ap = &wpa->ia.ap;
+	struct fuse_writepage_args *wpa;
+	struct fuse_args_pages *ap;
 	struct inode *inode = wpc->inode;
 	struct fuse_inode *fi = get_fuse_inode(inode);
 	struct fuse_conn *fc = get_fuse_conn(inode);
 	loff_t offset = offset_in_folio(folio, pos);
 
-	WARN_ON_ONCE(!data);
+	if (WARN_ON_ONCE(!data))
+		return -EIO;
+
+	wpa = data->wpa;
+	ap = &wpa->ia.ap;
 
 	if (!data->ff) {
 		data->ff = fuse_write_file_get(fi);
@@ -2172,7 +2176,8 @@ static int fuse_iomap_writeback_submit(struct iomap_writepage_ctx *wpc,
 {
 	struct fuse_fill_wb_data *data = wpc->wb_ctx;
 
-	WARN_ON_ONCE(!data);
+	if (WARN_ON_ONCE(!data))
+		return error ? error : -EIO;
 
 	if (data->wpa) {
 		WARN_ON(!data->wpa->ia.ap.num_folios);
