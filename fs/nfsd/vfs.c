@@ -1264,7 +1264,7 @@ __be32 nfsd_iter_read(struct svc_rqst *rqstp, struct svc_fh *fhp,
 			if (read_dio.start_extra) {
 				len = read_dio.start_extra;
 				bvec_set_page(&rqstp->rq_bvec[v],
-					      *(rqstp->rq_next_page++),
+					      NULL, /* set below */
 					      len, PAGE_SIZE - len);
 				total -= len;
 				++v;
@@ -1289,6 +1289,11 @@ __be32 nfsd_iter_read(struct svc_rqst *rqstp, struct svc_fh *fhp,
 		base = 0;
 	}
 	WARN_ON_ONCE(v > rqstp->rq_maxpages);
+	/* FIXME: having the start_extra page come from the end of
+	 * rq_pages[] works around what seems to be a flexfiles+rpcrdma bug.
+	 */
+	if ((kiocb.ki_flags & IOCB_DIRECT) && read_dio.start_extra)
+		rqstp->rq_bvec[0].bv_page = *(rqstp->rq_next_page++);
 
 	trace_nfsd_read_vector(rqstp, fhp, offset, in_count);
 	iov_iter_bvec(&iter, ITER_DEST, rqstp->rq_bvec, v, in_count);
