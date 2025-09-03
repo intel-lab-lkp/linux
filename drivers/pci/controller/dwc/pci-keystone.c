@@ -885,6 +885,18 @@ static int __init ks_pcie_init_id(struct keystone_pcie *ks_pcie)
 	return 0;
 }
 
+static void ks_pcie_host_deinit(struct dw_pcie_rp *pp)
+{
+	struct dw_pcie *pci = to_dw_pcie_from_pp(pp);
+	struct keystone_pcie *ks_pcie = to_keystone_pcie(pci);
+
+	ks_pcie_stop_link(pci);
+	ks_pcie_free_msi_irq(ks_pcie);
+	ks_pcie_free_intx_irq(ks_pcie);
+	if (pci->pp.ops->msi_init)
+		dw_pcie_free_domains(pp);
+}
+
 static int __init ks_pcie_host_init(struct dw_pcie_rp *pp)
 {
 	struct dw_pcie *pci = to_dw_pcie_from_pp(pp);
@@ -929,11 +941,13 @@ static int __init ks_pcie_host_init(struct dw_pcie_rp *pp)
 
 static const struct dw_pcie_host_ops ks_pcie_host_ops = {
 	.init = ks_pcie_host_init,
+	.deinit = ks_pcie_host_deinit,
 	.msi_init = ks_pcie_msi_host_init,
 };
 
 static const struct dw_pcie_host_ops ks_pcie_am654_host_ops = {
 	.init = ks_pcie_host_init,
+	.deinit = ks_pcie_host_deinit,
 };
 
 static irqreturn_t ks_pcie_err_irq_handler(int irq, void *priv)
