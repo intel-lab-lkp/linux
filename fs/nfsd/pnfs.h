@@ -30,7 +30,7 @@ struct nfsd4_layout_ops {
 			const struct nfsd4_getdeviceinfo *gdevp);
 
 	__be32 (*proc_layoutget)(struct inode *, const struct svc_fh *fhp,
-			struct nfsd4_layoutget *lgp);
+			struct nfsd4_layoutget *lgp, bool in_grace);
 	__be32 (*encode_layoutget)(struct xdr_stream *xdr,
 			const struct nfsd4_layoutget *lgp);
 

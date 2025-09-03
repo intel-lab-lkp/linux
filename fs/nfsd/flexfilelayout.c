@@ -21,7 +21,7 @@
 
 static __be32
 nfsd4_ff_proc_layoutget(struct inode *inode, const struct svc_fh *fhp,
-		struct nfsd4_layoutget *args)
+		struct nfsd4_layoutget *args, bool in_grace)
 {
 	struct nfsd4_layout_seg *seg = &args->lg_seg;
 	u32 device_generation = 0;

@@ -2385,6 +2385,7 @@ static __be32
 nfsd4_layoutget(struct svc_rqst *rqstp,
 		struct nfsd4_compound_state *cstate, union nfsd4_op_u *u)
 {
+	struct net *net = SVC_NET(rqstp);
 	struct nfsd4_layoutget *lgp = &u->layoutget;
 	struct svc_fh *current_fh = &cstate->current_fh;
 	const struct nfsd4_layout_ops *ops;
@@ -2448,7 +2449,7 @@ nfsd4_layoutget(struct svc_rqst *rqstp,
 		goto out_put_stid;
 
 	nfserr = ops->proc_layoutget(d_inode(current_fh->fh_dentry),
-				     current_fh, lgp);
+				     current_fh, lgp, locks_in_grace(net));
 	if (nfserr)
 		goto out_put_stid;
 

@@ -19,7 +19,7 @@
 
 static __be32
 nfsd4_block_proc_layoutget(struct inode *inode, const struct svc_fh *fhp,
-		struct nfsd4_layoutget *args)
+		struct nfsd4_layoutget *args, bool in_grace)
 {
 	struct nfsd4_layout_seg *seg = &args->lg_seg;
 	struct super_block *sb = inode->i_sb;
@@ -33,6 +33,9 @@ nfsd4_block_proc_layoutget(struct inode *inode, const struct svc_fh *fhp,
 		dprintk("pnfsd: I/O misaligned\n");
 		goto out_layoutunavailable;
 	}
+
+	if (in_grace)
+		goto out_grace;
 
 	/*
 	 * Some clients barf on non-zero block numbers for NONE or INVALID
@@ -111,6 +114,9 @@ out_error:
 out_layoutunavailable:
 	seg->length = 0;
 	return nfserr_layoutunavailable;
+out_grace:
+	seg->length = 0;
+	return nfserr_grace;
 }
 
 static __be32
