@@ -505,6 +505,7 @@ struct sock *__inet_lookup_established(const struct net *net,
 	unsigned int hash = inet_ehashfn(net, daddr, hnum, saddr, sport);
 	unsigned int slot = hash & hashinfo->ehash_mask;
 	struct inet_ehash_bucket *head = &hashinfo->ehash[slot];
+	bool try_lock = true;
 
 begin:
 	sk_nulls_for_each_rcu(sk, node, &head->chain) {
@@ -528,6 +529,17 @@ begin:
 	 */
 	if (get_nulls_value(node) != slot)
 		goto begin;
+
+	if (try_lock) {
+		spinlock_t *lock = inet_ehash_lockp(hashinfo, hash);
+
+		try_lock = false;
+		spin_lock(lock);
+		/* Ensure ehash ops under spinlock complete. */
+		spin_unlock(lock);
+		goto begin;
+	}
+
 out:
 	sk = NULL;
 found:

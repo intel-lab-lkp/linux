@@ -139,13 +139,9 @@ void inet_twsk_hashdance_schedule(struct inet_timewait_sock *tw,
 
 	spin_lock(lock);
 
-	/* Step 2: Hash TW into tcp ehash chain */
-	inet_twsk_add_node_rcu(tw, &ehead->chain);
-
-	/* Step 3: Remove SK from hash chain */
+	/* Step 2: Remove SK from hash chain */
 	if (__sk_nulls_del_node_init_rcu(sk))
 		sock_prot_inuse_add(sock_net(sk), sk->sk_prot, -1);
-
 
 	/* Ensure above writes are committed into memory before updating the
 	 * refcount.
@@ -160,6 +156,9 @@ void inet_twsk_hashdance_schedule(struct inet_timewait_sock *tw,
 	 * so we are not allowed to use tw anymore.
 	 */
 	refcount_set(&tw->tw_refcnt, 3);
+
+	/* Step 3: Hash TW into tcp ehash chain */
+	inet_twsk_add_node_rcu(tw, &ehead->chain);
 
 	inet_twsk_schedule(tw, timeo);
 
