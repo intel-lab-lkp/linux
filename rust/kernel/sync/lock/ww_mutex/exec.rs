@@ -174,3 +174,151 @@ impl<'a> ExecContext<'a> {
         Ok(())
     }
 }
+
+#[kunit_tests(rust_kernel_ww_exec)]
+mod tests {
+    use crate::c_str;
+    use crate::prelude::*;
+    use crate::sync::Arc;
+    use pin_init::stack_pin_init;
+
+    use super::*;
+
+    #[test]
+    fn test_exec_context_basic_lock_unlock() -> Result {
+        stack_pin_init!(let class = WwClass::new_wound_wait(c_str!("exec_ctx_basic")));
+
+        let mutex = Arc::pin_init(WwMutex::new(10, &class), GFP_KERNEL)?;
+        let mut ctx = KBox::pin_init(ExecContext::new(&class)?, GFP_KERNEL)?;
+
+        ctx.lock(&mutex)?;
+        ctx.with_locked(&mutex, |v| {
+            assert_eq!(*v, 10);
+        })?;
+
+        ctx.release_all_locks();
+        assert!(!mutex.is_locked());
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_exec_context_with_locked_mutates_data() -> Result {
+        stack_pin_init!(let class = WwClass::new_wound_wait(c_str!("exec_ctx_with_locked")));
+
+        let mutex = Arc::pin_init(WwMutex::new(5, &class), GFP_KERNEL)?;
+        let mut ctx = KBox::pin_init(ExecContext::new(&class)?, GFP_KERNEL)?;
+
+        ctx.lock(&mutex)?;
+
+        ctx.with_locked(&mutex, |v| {
+            assert_eq!(*v, 5);
+            // Increment the value.
+            *v += 7;
+        })?;
+
+        ctx.with_locked(&mutex, |v| {
+            // Check that mutation took effect.
+            assert_eq!(*v, 12);
+        })?;
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_lock_all_success() -> Result {
+        stack_pin_init!(let class = WwClass::new_wound_wait(c_str!("lock_all_ok")));
+
+        let mutex1 = Arc::pin_init(WwMutex::new(1, &class), GFP_KERNEL)?;
+        let mutex2 = Arc::pin_init(WwMutex::new(2, &class), GFP_KERNEL)?;
+        let mut ctx = KBox::pin_init(ExecContext::new(&class)?, GFP_KERNEL)?;
+
+        let res = ctx.lock_all(
+            |ctx| {
+                let _ = ctx.lock(&mutex1)?;
+                let _ = ctx.lock(&mutex2)?;
+                Ok(())
+            },
+            |ctx| {
+                ctx.with_locked(&mutex1, |v| *v += 10)?;
+                ctx.with_locked(&mutex2, |v| *v += 20)?;
+                Ok((
+                    ctx.with_locked(&mutex1, |v| *v)?,
+                    ctx.with_locked(&mutex2, |v| *v)?,
+                ))
+            },
+        )?;
+
+        assert_eq!(res, (11, 22));
+        assert!(!mutex1.is_locked());
+        assert!(!mutex2.is_locked());
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_with_different_input_type() -> Result {
+        stack_pin_init!(let class = WwClass::new_wound_wait(c_str!("lock_all_ok")));
+
+        let mutex1 = Arc::pin_init(WwMutex::new(1, &class), GFP_KERNEL)?;
+        let mutex2 = Arc::pin_init(WwMutex::new("hello", &class), GFP_KERNEL)?;
+        let mut ctx = KBox::pin_init(ExecContext::new(&class)?, GFP_KERNEL)?;
+
+        ctx.lock_all(
+            |ctx| {
+                ctx.lock(&mutex1)?;
+                ctx.lock(&mutex2)?;
+                Ok(())
+            },
+            |ctx| {
+                ctx.with_locked(&mutex1, |v| assert_eq!(*v, 1))?;
+                ctx.with_locked(&mutex2, |v| assert_eq!(*v, "hello"))?;
+                Ok(())
+            },
+        )?;
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_lock_all_retries_on_deadlock() -> Result {
+        stack_pin_init!(let class = WwClass::new_wound_wait(c_str!("lock_all_retry")));
+
+        let mutex = Arc::pin_init(WwMutex::new(99, &class), GFP_KERNEL)?;
+        let mut ctx = KBox::pin_init(ExecContext::new(&class)?, GFP_KERNEL)?;
+        let mut first_try = true;
+
+        let res = ctx.lock_all(
+            |ctx| {
+                if first_try {
+                    first_try = false;
+                    // Simulate deadlock on first attempt.
+                    return Err(EDEADLK);
+                }
+                ctx.lock(&mutex)
+            },
+            |ctx| {
+                ctx.with_locked(&mutex, |v| {
+                    *v += 1;
+                    *v
+                })
+            },
+        )?;
+
+        assert_eq!(res, 100);
+        Ok(())
+    }
+
+    #[test]
+    fn test_with_locked_on_unlocked_mutex() -> Result {
+        stack_pin_init!(let class = WwClass::new_wound_wait(c_str!("with_unlocked_mutex")));
+
+        let mutex = Arc::pin_init(WwMutex::new(5, &class), GFP_KERNEL)?;
+        let mut ctx = KBox::pin_init(ExecContext::new(&class)?, GFP_KERNEL)?;
+
+        let ecode = ctx.with_locked(&mutex, |_v| {}).unwrap_err();
+        assert_eq!(EINVAL, ecode);
+
+        Ok(())
+    }
+}
