@@ -431,6 +431,10 @@ static inline loff_t exfat_ondisk_size(const struct inode *inode)
 /* super.c */
 int exfat_set_volume_dirty(struct super_block *sb);
 int exfat_clear_volume_dirty(struct super_block *sb);
+int exfat_read_volume_label(struct super_block *sb,
+			    struct exfat_uni_name *label_out);
+int exfat_write_volume_label(struct super_block *sb,
+			     struct exfat_uni_name *label);
 
 /* fatent.c */
 #define exfat_get_next_cluster(sb, pclu) exfat_ent_get(sb, *(pclu), pclu)
@@ -477,6 +481,9 @@ int exfat_force_shutdown(struct super_block *sb, u32 flags);
 /* namei.c */
 extern const struct dentry_operations exfat_dentry_ops;
 extern const struct dentry_operations exfat_utf8_dentry_ops;
+int exfat_find_empty_entry(struct inode *inode,
+		struct exfat_chain *p_dir, int num_entries,
+			   struct exfat_entry_set_cache *es);
 
 /* cache.c */
 int exfat_cache_init(void);
