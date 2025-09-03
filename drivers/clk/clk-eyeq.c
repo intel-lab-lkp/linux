@@ -84,6 +84,7 @@ struct eqc_div {
 	unsigned int	index;
 	const char	*name;
 	unsigned int	parent_idx;
+	const char	*parent_name;
 	unsigned int	reg;
 	u8		shift;
 	u8		width;
@@ -95,6 +96,7 @@ struct eqc_fixed_factor {
 	unsigned int	mult;
 	unsigned int	div;
 	unsigned int	parent_idx;
+	const char	*parent_name;
 };
 
 struct eqc_match_data {
@@ -273,7 +275,8 @@ static void eqc_probe_init_divs(struct device *dev, const struct eqc_match_data 
 
 		if (IS_ERR(parent)) {
 			/* Parent is in early clk provider. */
-			parent_data.index = div->parent_idx;
+			parent_data.index = -1;
+			parent_data.name = div->parent_name;
 			parent_data.hw = NULL;
 		} else {
 			/* Avoid clock lookup when we already have the hw reference. */
@@ -305,8 +308,8 @@ static void eqc_probe_init_fixed_factors(struct device *dev,
 
 		if (IS_ERR(parent_hw)) {
 			/* Parent is in early clk provider. */
-			hw = clk_hw_register_fixed_factor_index(dev, ff->name,
-					ff->parent_idx, 0, ff->mult, ff->div);
+			hw = clk_hw_register_fixed_factor(dev, ff->name,
+					ff->parent_name, 0, ff->mult, ff->div);
 		} else {
 			/* Avoid clock lookup when we already have the hw reference. */
 			hw = clk_hw_register_fixed_factor_parent_hw(dev, ff->name,
@@ -487,35 +490,35 @@ static const struct eqc_fixed_factor eqc_eyeq5_early_fixed_factors[] = {
 
 static const struct eqc_fixed_factor eqc_eyeq5_fixed_factors[] = {
 	/* EQ5C_PLL_CPU children */
-	{ EQ5C_CPU_CPC,		"cpc",		1, 1,	EQ5C_CPU_SI_CSS0 },
-	{ EQ5C_CPU_CM,		"cm",		1, 1,	EQ5C_CPU_SI_CSS0 },
-	{ EQ5C_CPU_MEM,		"mem",		1, 1,	EQ5C_CPU_SI_CSS0 },
-	{ EQ5C_CPU_OCC_ISRAM,	"occ-isram",	1, 2,	EQ5C_PLL_CPU },
+	{ EQ5C_CPU_CPC,		"cpc",		1, 1,	EQ5C_CPU_SI_CSS0,	"si-css0" },
+	{ EQ5C_CPU_CM,		"cm",		1, 1,	EQ5C_CPU_SI_CSS0,	"si-css0" },
+	{ EQ5C_CPU_MEM,		"mem",		1, 1,	EQ5C_CPU_SI_CSS0,	"si-css0" },
+	{ EQ5C_CPU_OCC_ISRAM,	"occ-isram",	1, 2,	EQ5C_PLL_CPU,		"pll-cpu" },
 	{ EQ5C_CPU_ISRAM,	"isram",	1, 1,	EQ5C_CPU_OCC_ISRAM },
-	{ EQ5C_CPU_OCC_DBU,	"occ-dbu",	1, 10,	EQ5C_PLL_CPU },
+	{ EQ5C_CPU_OCC_DBU,	"occ-dbu",	1, 10,	EQ5C_PLL_CPU,		"pll-cpu" },
 	{ EQ5C_CPU_SI_DBU_TP,	"si-dbu-tp",	1, 1,	EQ5C_CPU_OCC_DBU },
 
 	/* EQ5C_PLL_VDI children */
-	{ EQ5C_VDI_OCC_VDI,	"occ-vdi",	1, 2,	EQ5C_PLL_VDI },
+	{ EQ5C_VDI_OCC_VDI,	"occ-vdi",	1, 2,	EQ5C_PLL_VDI,		"pll-vdi" },
 	{ EQ5C_VDI_VDI,		"vdi",		1, 1,	EQ5C_VDI_OCC_VDI },
-	{ EQ5C_VDI_OCC_CAN_SER,	"occ-can-ser",	1, 16,	EQ5C_PLL_VDI },
+	{ EQ5C_VDI_OCC_CAN_SER,	"occ-can-ser",	1, 16,	EQ5C_PLL_VDI,		"pll-vdi" },
 	{ EQ5C_VDI_CAN_SER,	"can-ser",	1, 1,	EQ5C_VDI_OCC_CAN_SER },
-	{ EQ5C_VDI_I2C_SER,	"i2c-ser",	1, 20,	EQ5C_PLL_VDI },
+	{ EQ5C_VDI_I2C_SER,	"i2c-ser",	1, 20,	EQ5C_PLL_VDI,		"pll-vdi" },
 
 	/* EQ5C_PLL_PER children */
-	{ EQ5C_PER_PERIPH,	"periph",	1, 1,	EQ5C_PER_OCC },
-	{ EQ5C_PER_CAN,		"can",		1, 1,	EQ5C_PER_OCC },
-	{ EQ5C_PER_SPI,		"spi",		1, 1,	EQ5C_PER_OCC },
-	{ EQ5C_PER_I2C,		"i2c",		1, 1,	EQ5C_PER_OCC },
-	{ EQ5C_PER_TIMER,	"timer",	1, 1,	EQ5C_PER_OCC },
-	{ EQ5C_PER_GPIO,	"gpio",		1, 1,	EQ5C_PER_OCC },
-	{ EQ5C_PER_EMMC,	"emmc-sys",	1, 10,	EQ5C_PLL_PER },
-	{ EQ5C_PER_CCF,		"ccf-ctrl",	1, 4,	EQ5C_PLL_PER },
-	{ EQ5C_PER_OCC_MJPEG,	"occ-mjpeg",	1, 2,	EQ5C_PLL_PER },
+	{ EQ5C_PER_PERIPH,	"periph",	1, 1,	EQ5C_PER_OCC,		 "occ-periph" },
+	{ EQ5C_PER_CAN,		"can",		1, 1,	EQ5C_PER_OCC,		 "occ-periph" },
+	{ EQ5C_PER_SPI,		"spi",		1, 1,	EQ5C_PER_OCC,		 "occ-periph" },
+	{ EQ5C_PER_I2C,		"i2c",		1, 1,	EQ5C_PER_OCC,		 "occ-periph" },
+	{ EQ5C_PER_TIMER,	"timer",	1, 1,	EQ5C_PER_OCC,		 "occ-periph" },
+	{ EQ5C_PER_GPIO,	"gpio",		1, 1,	EQ5C_PER_OCC,		 "occ-periph" },
+	{ EQ5C_PER_EMMC,	"emmc-sys",	1, 10,	EQ5C_PLL_PER,		 "pll-per" },
+	{ EQ5C_PER_CCF,		"ccf-ctrl",	1, 4,	EQ5C_PLL_PER,		 "pll-per" },
+	{ EQ5C_PER_OCC_MJPEG,	"occ-mjpeg",	1, 2,	EQ5C_PLL_PER,		 "pll-per" },
 	{ EQ5C_PER_HSM,		"hsm",		1, 1,	EQ5C_PER_OCC_MJPEG },
 	{ EQ5C_PER_MJPEG,	"mjpeg",	1, 1,	EQ5C_PER_OCC_MJPEG },
-	{ EQ5C_PER_FCMU_A,	"fcmu-a",	1, 20,	EQ5C_PLL_PER },
-	{ EQ5C_PER_OCC_PCI,	"occ-pci-sys",	1, 8,	EQ5C_PLL_PER },
+	{ EQ5C_PER_FCMU_A,	"fcmu-a",	1, 20,	EQ5C_PLL_PER,		 "pll-per" },
+	{ EQ5C_PER_OCC_PCI,	"occ-pci-sys",	1, 8,	EQ5C_PLL_PER,		 "pll-per" },
 };
 
 static const struct eqc_div eqc_eyeq5_divs[] = {
@@ -523,6 +526,7 @@ static const struct eqc_div eqc_eyeq5_divs[] = {
 		.index = EQ5C_DIV_OSPI,
 		.name = "div-ospi",
 		.parent_idx = EQ5C_PLL_PER,
+		.parent_name = "pll-per",
 		.reg = 0x11C,
 		.shift = 0,
 		.width = 4,
