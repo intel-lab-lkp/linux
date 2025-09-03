@@ -1,0 +1,34 @@
+drm drm-fixes b320789d6883cc00ac78ce83bccbfe7ed58afcf0
+	Linux 6.17-rc4
+drm-misc drm-misc-fixes bdd5a14e660062114bdebaef9ad52adf04970a89
+	drm/bridge: ti-sn65dsi86: fix REFCLK setting
+drm-rust drm-rust-fixes 5c5a41a75452e9eb5810a7d0d9916b61fe9fd1c5
+	gpu: nova-core: depend on CONFIG_64BIT
+drm-intel drm-intel-fixes b320789d6883cc00ac78ce83bccbfe7ed58afcf0
+	Linux 6.17-rc4
+drm-xe drm-xe-fixes 379b3c983fc0257c183052278832ac68e3ccd33b
+	drm/xe: Fix incorrect migration of backed-up object to VRAM
+drm drm-next 4bf83dd6e3b3b2a131e357f035b17edaee6f6766
+	Merge tag 'drm-intel-gt-next-2025-09-01' of https://gitlab.freedesktop.org/drm/i915/kernel into drm-next
+drm-misc drm-misc-next-fixes 54d4f445517fe8350d735624d7f4225e7511d9eb
+	drm/panfrost: Print RSS for tiler heap BO's in debugfs GEMS file
+drm-intel drm-intel-next-fixes 5a569ef4d4ab184a481dd8ecb58f464a89b44d2f
+	drm/i915/display: Set C10_VDR_CTRL_MSGBUS_ACCESS before phy reg read
+drm-xe drm-xe-next-fixes 8f5ae30d69d7543eee0d70083daf4de8fe15d585
+	Linux 6.17-rc1
+drm-misc drm-misc-next 5afa9d2a9bb1410f816e0123846047288b16e4b9
+	drm/panthor: check bo offset alignment in vm bind
+drm-rust drm-rust-next 8f5ae30d69d7543eee0d70083daf4de8fe15d585
+	Linux 6.17-rc1
+drm-intel drm-intel-next e9a1d54ed9233b73737052c42115fe593f82ef84
+	drm/i915/bios: Remove unnecessary checks of PSR idle frames in VBT binary
+drm-intel drm-intel-gt-next 82b13dd5d93d9d170c096f042eb470add22c338c
+	drm/i915: Replace kmalloc() + copy_from_user() with memdup_user()
+drm-xe drm-xe-next 4208fac3dce52d4328007028ec88dd5d0e78dcf2
+	drm/xe: Add more SVM GT stats
+drm-intel topic/core-for-CI 822bdcee36a8e5d8a24aa6ba8e14a86459a78e4f
+	platform/x86: asus-wmi: Only register lps0 dev for Ally devices
+drm-xe topic/xe-for-CI 6916e5fb25c414cb3d4adcfc8f12f55f602c53b2
+	drm/xe/pm: Re-enable D3Cold by default on BMG
+drm topic/drm-next-nouveau-r570 6cc6e08d4542473d79ea83d9123d9d35e9c01c92
+	drm/nouveau/kms: add support for GB20x
