@@ -140,9 +140,9 @@ static irqreturn_t psp_irq_handler(int irq, void *data)
 	return IRQ_HANDLED;
 }
 
-static unsigned int psp_get_capability(struct psp_device *psp)
+static int psp_get_capability(struct psp_device *psp)
 {
-	unsigned int val = ioread32(psp->io_regs + psp->vdata->feature_reg);
+	u32 val = ioread32(psp->io_regs + psp->vdata->feature_reg);
 
 	/*
 	 * Check for a access to the registers.  If this read returns
@@ -152,7 +152,8 @@ static unsigned int psp_get_capability(struct psp_device *psp)
 	 * could get properly initialized).
 	 */
 	if (val == 0xffffffff) {
-		dev_notice(psp->dev, "psp: unable to access the device: you might be running a broken BIOS.\n");
+		dev_notice(psp->dev,
+			"psp: unable to access the device: you might be running a broken BIOS.\n");
 		return -ENODEV;
 	}
 	psp->capability.raw = val;
