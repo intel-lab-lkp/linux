@@ -577,9 +577,8 @@ static const struct vm_operations_struct gfs2_vm_ops = {
 };
 
 /**
- * gfs2_mmap
- * @file: The file to map
- * @vma: The VMA which described the mapping
+ * gfs2_mmap_prepare
+ * @desc: A description of the VMA being mapped
  *
  * There is no need to get a lock here unless we should be updating
  * atime. We ignore any locking errors since the only consequence is
@@ -588,8 +587,9 @@ static const struct vm_operations_struct gfs2_vm_ops = {
  * Returns: 0
  */
 
-static int gfs2_mmap(struct file *file, struct vm_area_struct *vma)
+static int gfs2_mmap_prepare(struct vm_area_desc *desc)
 {
+	struct file *file = desc->file;
 	struct gfs2_inode *ip = GFS2_I(file->f_mapping->host);
 
 	if (!(file->f_flags & O_NOATIME) &&
@@ -605,7 +605,7 @@ static int gfs2_mmap(struct file *file, struct vm_area_struct *vma)
 		gfs2_glock_dq_uninit(&i_gh);
 		file_accessed(file);
 	}
-	vma->vm_ops = &gfs2_vm_ops;
+	desc->vm_ops = &gfs2_vm_ops;
 
 	return 0;
 }
@@ -1578,7 +1578,7 @@ const struct file_operations gfs2_file_fops = {
 	.iopoll		= iocb_bio_iopoll,
 	.unlocked_ioctl	= gfs2_ioctl,
 	.compat_ioctl	= gfs2_compat_ioctl,
-	.mmap		= gfs2_mmap,
+	.mmap_prepare	= gfs2_mmap_prepare,
 	.open		= gfs2_open,
 	.release	= gfs2_release,
 	.fsync		= gfs2_fsync,
@@ -1613,7 +1613,7 @@ const struct file_operations gfs2_file_fops_nolock = {
 	.iopoll		= iocb_bio_iopoll,
 	.unlocked_ioctl	= gfs2_ioctl,
 	.compat_ioctl	= gfs2_compat_ioctl,
-	.mmap		= gfs2_mmap,
+	.mmap_prepare	= gfs2_mmap_prepare,
 	.open		= gfs2_open,
 	.release	= gfs2_release,
 	.fsync		= gfs2_fsync,
@@ -1632,4 +1632,3 @@ const struct file_operations gfs2_dir_fops_nolock = {
 	.fsync		= gfs2_fsync,
 	.llseek		= default_llseek,
 };
-
