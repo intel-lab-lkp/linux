@@ -14,7 +14,7 @@ maintainers:
 description:
   OLB ("Other Logic Block") is a hardware block grouping smaller blocks. Clocks,
   resets, pinctrl are being handled from here. EyeQ5 and EyeQ6L host a single
-  instance. EyeQ6H hosts seven instances.
+  instance. EyeQ6H hosts seven instances. EyeQ7H hosts 14 instances.
 
 properties:
   compatible:
@@ -29,6 +29,20 @@ properties:
           - mobileye,eyeq6h-south-olb
           - mobileye,eyeq6h-ddr0-olb
           - mobileye,eyeq6h-ddr1-olb
+          - mobileye,eyeq7h-south-olb
+          - mobileye,eyeq7h-east-olb
+          - mobileye,eyeq7h-west-olb
+          - mobileye,eyeq7h-periph-east-olb
+          - mobileye,eyeq7h-periph-west-olb
+          - mobileye,eyeq7h-ddr0-olb
+          - mobileye,eyeq7h-ddr1-olb
+          - mobileye,eyeq7h-mips0-olb
+          - mobileye,eyeq7h-mips1-olb
+          - mobileye,eyeq7h-mips2-olb
+          - mobileye,eyeq7h-acc0-olb
+          - mobileye,eyeq7h-acc1-olb
+          - mobileye,eyeq7h-xnn0-olb
+          - mobileye,eyeq7h-xnn1-olb
       - const: syscon
 
   reg:
@@ -44,12 +58,12 @@ properties:
     const: 1
 
   clocks:
-    maxItems: 1
-    description:
-      Input parent clock to all PLLs. Expected to be the main crystal.
+    minItems: 1
+    maxItems: 2
 
   clock-names:
-    const: ref
+    minItems: 1
+    maxItems: 2
 
 patternProperties:
   '-pins?$':
@@ -265,6 +279,88 @@ required:
 additionalProperties: false
 
 allOf:
+  - if:
+      properties:
+        compatible:
+          contains:
+            enum:
+              - mobileye,eyeq5-olb
+              - mobileye,eyeq6l-olb
+              - mobileye,eyeq6h-acc-olb
+              - mobileye,eyeq6h-central-olb
+              - mobileye,eyeq6h-east-olb
+              - mobileye,eyeq6h-west-olb
+              - mobileye,eyeq6h-south-olb
+              - mobileye,eyeq6h-ddr0-olb
+              - mobileye,eyeq6h-ddr1-olb
+              - mobileye,eyeq7h-south-olb
+              - mobileye,eyeq7h-periph-east-olb
+              - mobileye,eyeq7h-ddr0-olb
+              - mobileye,eyeq7h-ddr1-olb
+              - mobileye,eyeq7h-mips0-olb
+              - mobileye,eyeq7h-mips1-olb
+              - mobileye,eyeq7h-mips2-olb
+    then:
+      properties:
+        clocks:
+          minItems: 1
+          maxItems: 1
+        clock-names:
+          items:
+            - const: ref
+
+  - if:
+      properties:
+        compatible:
+          contains:
+            enum:
+              - mobileye,eyeq7h-east-olb
+              - mobileye,eyeq7h-west-olb
+    then:
+      properties:
+        clocks:
+          minItems: 2
+          maxItems: 2
+        clock-names:
+          items:
+            - const: ref
+            - const: ref_100p0
+
+  - if:
+      properties:
+        compatible:
+          contains:
+            enum:
+              - mobileye,eyeq7h-periph-west-olb
+    then:
+      properties:
+        clocks:
+          minItems: 2
+          maxItems: 2
+        clock-names:
+          items:
+            - const: ref_100p0
+            - const: ref_106p6_w
+
+  - if:
+      properties:
+        compatible:
+          contains:
+            enum:
+              - mobileye,eyeq7h-acc0-olb
+              - mobileye,eyeq7h-acc1-olb
+              - mobileye,eyeq7h-xnn0-olb
+              - mobileye,eyeq7h-xnn1-olb
+    then:
+      properties:
+        clocks:
+          minItems: 2
+          maxItems: 2
+        clock-names:
+          items:
+            - const: ref_100p0
+            - const: ref_106p6_e
+
     # Compatibles exposing a single reset domain.
   - if:
       properties:
@@ -274,6 +370,12 @@ allOf:
               - mobileye,eyeq6h-acc-olb
               - mobileye,eyeq6h-east-olb
               - mobileye,eyeq6h-west-olb
+              - mobileye,eyeq7h-east-olb
+              - mobileye,eyeq7h-west-olb
+              - mobileye,eyeq7h-periph-east-olb
+              - mobileye,eyeq7h-periph-west-olb
+              - mobileye,eyeq7h-ddr0-olb
+              - mobileye,eyeq7h-ddr1-olb
     then:
       properties:
         '#reset-cells':
@@ -289,6 +391,11 @@ allOf:
             enum:
               - mobileye,eyeq5-olb
               - mobileye,eyeq6l-olb
+              - mobileye,eyeq7h-south-olb
+              - mobileye,eyeq7h-acc0-olb
+              - mobileye,eyeq7h-acc1-olb
+              - mobileye,eyeq7h-xnn0-olb
+              - mobileye,eyeq7h-xnn1-olb
     then:
       properties:
         '#reset-cells':
@@ -306,6 +413,9 @@ allOf:
               - mobileye,eyeq6h-south-olb
               - mobileye,eyeq6h-ddr0-olb
               - mobileye,eyeq6h-ddr1-olb
+              - mobileye,eyeq7h-mips0-olb
+              - mobileye,eyeq7h-mips1-olb
+              - mobileye,eyeq7h-mips2-olb
     then:
       properties:
         '#reset-cells': false
@@ -348,5 +458,20 @@ examples:
         #clock-cells = <1>;
         clocks = <&xtal>;
         clock-names = "ref";
+      };
+    };
+  - |
+    soc {
+      #address-cells = <2>;
+      #size-cells = <2>;
+
+      system-controller0@45000000 {
+        compatible = "mobileye,eyeq7h-acc0-olb", "syscon";
+        reg = <0x0 0x45000000 0x0 0x1000>;
+        #reset-cells = <2>;
+        #clock-cells = <1>;
+        clocks = <&olb_south 7>,
+                 <&olb_east 5>;
+        clock-names = "ref_100p0", "ref_106p6_e";
       };
     };
