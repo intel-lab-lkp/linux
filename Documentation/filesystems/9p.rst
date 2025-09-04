@@ -238,6 +238,48 @@ Options
   cachetag	cache tag to use the specified persistent cache.
 		cache tags for existing cache sessions can be listed at
 		/sys/fs/9p/caches. (applies only to cache=fscache)
+
+  inodeident	this setting controls how inodes work on this filesystem.
+		More specifically, how they are "reused".  This is most
+		relevant when used with features like Landlock and
+		fanotify (in inode mark mode).  These features rely on
+		holding a specific inode and identifying further access to
+		the same file (as identified by that inode).
+
+		There are 2 possible values:
+			qid
+				This is the default and the only possible
+				option if loose or metadata cache is
+				enabled.  In this mode, 9pfs assumes that
+				the server will not present different
+				files with the same inode number, and will
+				use the presented inode number to lookup
+				inodes.  For QEMU users, this can be
+				ensured by setting multidevs=remap.  If
+				the server does present inode number
+				collisions, this may lead to unpredictable
+				behaviour when both files are accessed.
+			path
+				This is the default if neither loose nor
+				metadata cache bits are enabled.  This
+				option causes 9pfs to internally track the
+				file path that an inode originated from,
+				and will only use an existing inode
+				(instead of allocating a new one) if the
+				path matches, even if the file's inode
+				number matches that of an existing inode.
+
+		.. note::
+			For inodeident=path, when a directory is renamed
+			or moved, inodeident=path mode currently does not
+			update its children's inodes to point to the new
+			path, and thus further access to them via the new
+			location will use newly allocated inodes, and
+			existing inode marks placed by Landlock and
+			fanotify on them will no longer work.
+
+			The inode path for the target being renamed itself
+			(not its children) *is* updated, however.
   ============= ===============================================================
 
 Behavior
