@@ -690,12 +690,13 @@ ecm_bind(struct usb_configuration *c, struct usb_function *f)
 
 	if (!ecm_opts->bound) {
 		status = gether_register_netdev(ecm_opts->net);
-		ecm_opts->bound = true;
 	}
 
 	mutex_unlock(&ecm_opts->lock);
 	if (status)
 		return status;
+
+	ecm_opts->bound = true;
 
 	ecm_string_defs[1].s = ecm->ethaddr;
 
