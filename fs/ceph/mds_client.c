@@ -3058,12 +3058,19 @@ static struct ceph_msg *create_request_message(struct ceph_mds_session *session,
 	 */
 	if (!parent_locked && req->r_parent && path_info1.vino.ino &&
 	    ceph_ino(req->r_parent) != path_info1.vino.ino) {
+		struct inode *old_parent = req->r_parent;
 		struct inode *correct_dir = ceph_get_inode(mdsc->fsc->sb, path_info1.vino, NULL);
 		if (!IS_ERR(correct_dir)) {
 			WARN_ONCE(1, "ceph: r_parent mismatch (had %llx wanted %llx) - updating\n",
-				  ceph_ino(req->r_parent), path_info1.vino.ino);
-			iput(req->r_parent);
+			          ceph_ino(old_parent), path_info1.vino.ino);
+			/*
+			 * Transfer CEPH_CAP_PIN from the old parent to the new one.
+			 * The pin was taken earlier in ceph_mdsc_submit_request().
+			 */
+			ceph_put_cap_refs(ceph_inode(old_parent), CEPH_CAP_PIN);
+			iput(old_parent);
 			req->r_parent = correct_dir;
+			ceph_get_cap_refs(ceph_inode(req->r_parent), CEPH_CAP_PIN);
 		}
 	}
 
