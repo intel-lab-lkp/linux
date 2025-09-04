@@ -1468,30 +1468,23 @@ static int bgx_init_acpi_phy(struct bgx *bgx)
 
 static int bgx_init_of_phy(struct bgx *bgx)
 {
-	struct fwnode_handle *fwn;
-	struct device_node *node = NULL;
+	struct device_node *node = bgx->pdev->dev.of_node;
+	struct device_node *child;
 	u8 lmac = 0;
-	int err;
 
-	device_for_each_child_node(&bgx->pdev->dev, fwn) {
+	for_each_child_of_node(node, child) {
 		struct phy_device *pd;
 		struct device_node *phy_np;
+		int err;
 
-		/* Should always be an OF node.  But if it is not, we
-		 * cannot handle it, so exit the loop.
-		 */
-		node = to_of_node(fwn);
-		if (!node)
-			break;
-
-		err = of_get_mac_address(node, bgx->lmac[lmac].mac);
+		err = of_get_mac_address(child, bgx->lmac[lmac].mac);
 		if (err == -EPROBE_DEFER)
 			goto defer;
 
 		SET_NETDEV_DEV(bgx->lmac[lmac].netdev, &bgx->pdev->dev);
 		bgx->lmac[lmac].lmacid = lmac;
 
-		phy_np = of_parse_phandle(node, "phy-handle", 0);
+		phy_np = of_parse_phandle(child, "phy-handle", 0);
 		/* If there is no phy or defective firmware presents
 		 * this cortina phy, for which there is no driver
 		 * support, ignore it.
@@ -1511,7 +1504,7 @@ static int bgx_init_of_phy(struct bgx *bgx)
 
 		lmac++;
 		if (lmac == bgx->max_lmac) {
-			of_node_put(node);
+			of_node_put(child);
 			break;
 		}
 	}
@@ -1528,7 +1521,7 @@ defer:
 			bgx->lmac[lmac].phydev = NULL;
 		}
 	}
-	of_node_put(node);
+	of_node_put(child);
 	return -EPROBE_DEFER;
 }
 
