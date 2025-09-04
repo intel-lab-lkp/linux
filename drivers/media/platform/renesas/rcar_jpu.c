@@ -1701,7 +1701,6 @@ static void jpu_remove(struct platform_device *pdev)
 	v4l2_device_unregister(&jpu->v4l2_dev);
 }
 
-#ifdef CONFIG_PM_SLEEP
 static int jpu_suspend(struct device *dev)
 {
 	struct jpu *jpu = dev_get_drvdata(dev);
@@ -1725,11 +1724,8 @@ static int jpu_resume(struct device *dev)
 
 	return 0;
 }
-#endif
 
-static const struct dev_pm_ops jpu_pm_ops = {
-	SET_SYSTEM_SLEEP_PM_OPS(jpu_suspend, jpu_resume)
-};
+static DEFINE_SIMPLE_DEV_PM_OPS(jpu_pm_ops, jpu_suspend, jpu_resume);
 
 static struct platform_driver jpu_driver = {
 	.probe = jpu_probe,
@@ -1737,7 +1733,7 @@ static struct platform_driver jpu_driver = {
 	.driver = {
 		.of_match_table = jpu_dt_ids,
 		.name = DRV_NAME,
-		.pm = &jpu_pm_ops,
+		.pm = pm_sleep_ptr(&jpu_pm_ops),
 	},
 };
 
