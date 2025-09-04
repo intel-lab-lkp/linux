@@ -1399,14 +1399,14 @@ static int wait_for_vfork_done(struct task_struct *child,
 }
 
 /* Please note the differences between mmput and mm_release.
- * mmput is called whenever we stop holding onto a mm_struct,
+ * mmput is called whenever we stop holding onto an mm_struct,
  * error success whatever.
  *
- * mm_release is called after a mm_struct has been removed
+ * mm_release is called after an mm_struct has been removed
  * from the current process.
  *
  * This difference is important for error handling, when we
- * only half set up a mm_struct for a new process and need to restore
+ * only half set up an mm_struct for a new process and need to restore
  * the old one.  Because we mmput the new mm_struct before
  * restoring the old one. . .
  * Eric Biederman 10 January 1998
