@@ -2396,43 +2396,49 @@ static inline const char *xhci_decode_portsc(char *str, u32 portsc)
 	if (portsc == ~(u32)0)
 		return str;
 
-	ret += sprintf(str + ret, "%s %s %s Link:%s PortSpeed:%d ",
-		      portsc & PORT_POWER	? "Powered" : "Powered-off",
-		      portsc & PORT_CONNECT	? "Connected" : "Not-connected",
-		      portsc & PORT_PE		? "Enabled" : "Disabled",
+	ret += sprintf(str + ret, "Power:%d Connect:%d Link:%s Speed:%d ",
+		      !!(portsc & PORT_POWER),
+		      !!(portsc & PORT_CONNECT),
 		      xhci_portsc_link_state_string(portsc),
 		      DEV_PORT_SPEED(portsc));
 
-	if (portsc & PORT_OC)
-		ret += sprintf(str + ret, "OverCurrent ");
+	/* Read-Write 1 to Set */
 	if (portsc & PORT_RESET)
 		ret += sprintf(str + ret, "In-Reset ");
 
-	ret += sprintf(str + ret, "Change: ");
-	if (portsc & PORT_CSC)
-		ret += sprintf(str + ret, "CSC ");
-	if (portsc & PORT_PEC)
-		ret += sprintf(str + ret, "PEC ");
-	if (portsc & PORT_WRC)
-		ret += sprintf(str + ret, "WRC ");
-	if (portsc & PORT_OCC)
-		ret += sprintf(str + ret, "OCC ");
-	if (portsc & PORT_RC)
-		ret += sprintf(str + ret, "PRC ");
-	if (portsc & PORT_PLC)
-		ret += sprintf(str + ret, "PLC ");
-	if (portsc & PORT_CEC)
-		ret += sprintf(str + ret, "CEC ");
+	if (portsc & PORT_OC)
+		ret += sprintf(str + ret, "OCA ");
+	if (portsc & PORT_LINK_STROBE)
+		ret += sprintf(str + ret, "LWS ");
 	if (portsc & PORT_CAS)
 		ret += sprintf(str + ret, "CAS ");
-
-	ret += sprintf(str + ret, "Wake: ");
 	if (portsc & PORT_WKCONN_E)
 		ret += sprintf(str + ret, "WCE ");
 	if (portsc & PORT_WKDISC_E)
 		ret += sprintf(str + ret, "WDE ");
 	if (portsc & PORT_WKOC_E)
 		ret += sprintf(str + ret, "WOE ");
+
+	/* Read-Write 1 to Clear */
+	if (portsc & (PORT_PE | PORT_CHANGE_MASK)) {
+		ret += sprintf(str + ret, "RW1C: ");
+		if (portsc & PORT_PE)
+			ret += sprintf(str + ret, "PED ");
+		if (portsc & PORT_CSC)
+			ret += sprintf(str + ret, "CSC ");
+		if (portsc & PORT_PEC)
+			ret += sprintf(str + ret, "PEC ");
+		if (portsc & PORT_WRC)
+			ret += sprintf(str + ret, "WRC ");
+		if (portsc & PORT_OCC)
+			ret += sprintf(str + ret, "OCC ");
+		if (portsc & PORT_RC)
+			ret += sprintf(str + ret, "PRC ");
+		if (portsc & PORT_PLC)
+			ret += sprintf(str + ret, "PLC ");
+		if (portsc & PORT_CEC)
+			ret += sprintf(str + ret, "CEC ");
+	}
 
 	return str;
 }
