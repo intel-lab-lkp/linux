@@ -43,7 +43,10 @@ enum p9_session_flags {
 	V9FS_DIRECT_IO        = 0x100,
 	V9FS_SYNC             = 0x200,
 	V9FS_INODE_IDENT_PATH = 0x400,
+	V9FS_INODE_IDENT_QID  = 0x800,
 };
+
+#define V9FS_INODE_IDENT_MASK (V9FS_INODE_IDENT_PATH | V9FS_INODE_IDENT_QID)
 
 /**
  * enum p9_cache_shortcuts - human readable cache preferences

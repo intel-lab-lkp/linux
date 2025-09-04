@@ -36,7 +36,7 @@ enum {
 	/* Options that take integer arguments */
 	Opt_debug, Opt_dfltuid, Opt_dfltgid, Opt_afid,
 	/* String options */
-	Opt_uname, Opt_remotename, Opt_cache, Opt_cachetag,
+	Opt_uname, Opt_remotename, Opt_cache, Opt_cachetag, Opt_inodeident,
 	/* Options that take no arguments */
 	Opt_nodevmap, Opt_noxattr, Opt_directio, Opt_ignoreqv,
 	/* Access options */
@@ -63,6 +63,7 @@ static const match_table_t tokens = {
 	{Opt_access, "access=%s"},
 	{Opt_posixacl, "posixacl"},
 	{Opt_locktimeout, "locktimeout=%u"},
+	{Opt_inodeident, "inodeident=%s"},
 	{Opt_err, NULL}
 };
 
@@ -148,6 +149,21 @@ int v9fs_show_options(struct seq_file *m, struct dentry *root)
 
 	if (v9ses->flags & V9FS_NO_XATTR)
 		seq_puts(m, ",noxattr");
+
+	switch (v9ses->flags & V9FS_INODE_IDENT_MASK) {
+	case V9FS_INODE_IDENT_QID:
+		seq_puts(m, ",inodeident=qid");
+		break;
+	case V9FS_INODE_IDENT_PATH:
+		seq_puts(m, ",inodeident=path");
+		break;
+	default:
+		/*
+		 * Unspecified, will be set later in v9fs_session_init depending on
+		 * cache setting
+		 */
+		break;
+	}
 
 	return p9_show_client_options(m, v9ses->clnt);
 }
@@ -369,6 +385,26 @@ static int v9fs_parse_options(struct v9fs_session_info *v9ses, char *opts)
 			v9ses->session_lock_timeout = (long)option * HZ;
 			break;
 
+		case Opt_inodeident:
+			s = match_strdup(&args[0]);
+			if (!s) {
+				ret = -ENOMEM;
+				p9_debug(P9_DEBUG_ERROR,
+					 "problem allocating copy of inodeident arg\n");
+				goto free_and_return;
+			}
+			v9ses->flags &= ~V9FS_INODE_IDENT_MASK;
+			if (strcmp(s, "qid") == 0) {
+				v9ses->flags |= V9FS_INODE_IDENT_QID;
+			} else if (strcmp(s, "path") == 0) {
+				v9ses->flags |= V9FS_INODE_IDENT_PATH;
+			} else {
+				ret = -EINVAL;
+				p9_debug(P9_DEBUG_ERROR, "Unknown inodeident argument %s\n", s);
+			}
+			kfree(s);
+			break;
+
 		default:
 			continue;
 		}
@@ -393,6 +429,7 @@ struct p9_fid *v9fs_session_init(struct v9fs_session_info *v9ses,
 {
 	struct p9_fid *fid;
 	int rc = -ENOMEM;
+	bool cached;
 
 	v9ses->uname = kstrdup(V9FS_DEFUSER, GFP_KERNEL);
 	if (!v9ses->uname)
@@ -426,6 +463,26 @@ struct p9_fid *v9fs_session_init(struct v9fs_session_info *v9ses,
 	rc = v9fs_parse_options(v9ses, data);
 	if (rc < 0)
 		goto err_clnt;
+
+	cached = v9ses->cache & (CACHE_META | CACHE_LOOSE);
+
+	if (cached && v9ses->flags & V9FS_INODE_IDENT_PATH) {
+		rc = -EINVAL;
+		p9_debug(P9_DEBUG_ERROR,
+			 "inodeident=path not supported in cached mode\n");
+		goto err_clnt;
+	}
+
+	if (!(v9ses->flags & V9FS_INODE_IDENT_MASK)) {
+		/* Unspecified - use default */
+		if (cached) {
+			/* which is qid in cached mode (path not supported) */
+			v9ses->flags |= V9FS_INODE_IDENT_QID;
+		} else {
+			/* ...or path in uncached mode */
+			v9ses->flags |= V9FS_INODE_IDENT_PATH;
+		}
+	}
 
 	v9ses->maxdata = v9ses->clnt->msize - P9_IOHDRSZ;
 
