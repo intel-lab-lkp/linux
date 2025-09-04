@@ -29,6 +29,10 @@ static int links_per_lgr_min = SMC_LINKS_ADD_LNK_MIN;
 static int links_per_lgr_max = SMC_LINKS_ADD_LNK_MAX;
 static int conns_per_lgr_min = SMC_CONN_PER_LGR_MIN;
 static int conns_per_lgr_max = SMC_CONN_PER_LGR_MAX;
+unsigned int smc_ib_sysctl_max_send_wr = 16;
+unsigned int smc_ib_sysctl_max_recv_wr = 48;
+static unsigned int smc_ib_sysctl_max_wr_min = 2;
+static unsigned int smc_ib_sysctl_max_wr_max = 2048;
 
 static struct ctl_table smc_table[] = {
 	{
@@ -98,6 +102,24 @@ static struct ctl_table smc_table[] = {
 		.proc_handler	= proc_dointvec_minmax,
 		.extra1		= SYSCTL_ZERO,
 		.extra2		= SYSCTL_ONE,
+	},
+	{
+		.procname       = "smcr_max_send_wr",
+		.data		= &smc_ib_sysctl_max_send_wr,
+		.maxlen         = sizeof(int),
+		.mode           = 0644,
+		.proc_handler   = proc_dointvec_minmax,
+		.extra1		= &smc_ib_sysctl_max_wr_min,
+		.extra2		= &smc_ib_sysctl_max_wr_max,
+	},
+	{
+		.procname       = "smcr_max_recv_wr",
+		.data		= &smc_ib_sysctl_max_recv_wr,
+		.maxlen         = sizeof(int),
+		.mode           = 0644,
+		.proc_handler   = proc_dointvec_minmax,
+		.extra1		= &smc_ib_sysctl_max_wr_min,
+		.extra2		= &smc_ib_sysctl_max_wr_max,
 	},
 };
 

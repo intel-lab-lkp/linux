@@ -33,6 +33,8 @@
 
 extern struct proto smc_proto;
 extern struct proto smc_proto6;
+extern unsigned int smc_ib_sysctl_max_send_wr;
+extern unsigned int smc_ib_sysctl_max_recv_wr;
 
 extern struct smc_hashinfo smc_v4_hashinfo;
 extern struct smc_hashinfo smc_v6_hashinfo;
