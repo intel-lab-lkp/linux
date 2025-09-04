@@ -845,6 +845,8 @@ struct cgroup_of_peak {
 	struct list_head	list;
 };
 
+extern bool have_favordynmods;
+
 /**
  * cgroup_threadgroup_change_begin - threadgroup exclusion for cgroups
  * @tsk: target task
@@ -855,6 +857,8 @@ struct cgroup_of_peak {
 static inline void cgroup_threadgroup_change_begin(struct task_struct *tsk)
 {
 	percpu_down_read(&cgroup_threadgroup_rwsem);
+	if (have_favordynmods)
+		down_read(&tsk->signal->group_rwsem);
 }
 
 /**
@@ -865,6 +869,8 @@ static inline void cgroup_threadgroup_change_begin(struct task_struct *tsk)
  */
 static inline void cgroup_threadgroup_change_end(struct task_struct *tsk)
 {
+	if (have_favordynmods)
+		up_read(&tsk->signal->group_rwsem);
 	percpu_up_read(&cgroup_threadgroup_rwsem);
 }
 
