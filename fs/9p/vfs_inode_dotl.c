@@ -164,6 +164,7 @@ static struct inode *v9fs_qid_iget_dotl(struct super_block *sb,
 		.dentry = dentry,
 		.need_double_check = false,
 	};
+	bool cached = v9ses->cache & (CACHE_META | CACHE_LOOSE);
 
 	if (new)
 		test = v9fs_test_new_inode_dotl;
@@ -203,8 +204,21 @@ static struct inode *v9fs_qid_iget_dotl(struct super_block *sb,
 
 	if (!inode)
 		return ERR_PTR(-ENOMEM);
-	if (!(inode->i_state & I_NEW))
+	if (!(inode->i_state & I_NEW)) {
+		/*
+		 * If we're returning an existing inode, we might as well refresh
+		 * it with the metadata we just got.  Refreshing the i_size also
+		 * prevents read errors.
+		 *
+		 * We only do this for uncached mode, since in cached move, any
+		 * change on the inode will bump qid.version, which will result in
+		 * us getting a new inode in the first place.  If we got an old
+		 * inode, let's not touch it for now.
+		 */
+		if (!cached)
+			v9fs_stat2inode_dotl(st, inode, 0);
 		return inode;
+	}
 	/*
 	 * initialize the inode with the stat info
 	 * FIXME!! we may need support for stale inodes
