@@ -330,6 +330,7 @@ static void drv_write(struct acpi_cpufreq_data *data,
 		      const struct cpumask *mask, u32 val)
 {
 	struct acpi_processor_performance *perf = to_perf_data(data);
+	struct cpumask tmp_mask;
 	struct drv_cmd cmd = {
 		.reg = &perf->control_register,
 		.val = val,
@@ -338,10 +339,14 @@ static void drv_write(struct acpi_cpufreq_data *data,
 	int this_cpu;
 
 	this_cpu = get_cpu();
-	if (cpumask_test_cpu(this_cpu, mask))
+	if (cpumask_test_cpu(this_cpu, mask)) {
 		do_drv_write(&cmd);
+		cpumask_andnot(&tmp_mask, mask, cpumask_of(this_cpu));
+		smp_call_function_many(&tmp_mask, do_drv_write, &cmd, 1);
+	} else {
+		smp_call_function_many(mask, do_drv_write, &cmd, 1);
+	}
 
-	smp_call_function_many(mask, do_drv_write, &cmd, 1);
 	put_cpu();
 }
 
