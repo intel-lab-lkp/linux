@@ -116,7 +116,6 @@ int ksw_watch_on(u64 watch_addr, u64 watch_len)
 			ksw_watch_on_local_cpu(&watch_info);
 		} else {
 			call_single_data_t *csd = &per_cpu(watch_csd, cpu);
-
 			smp_call_function_single_async(cpu, csd);
 		}
 	}
@@ -157,4 +156,20 @@ void ksw_watch_exit(void)
 	watch_events = NULL;
 
 	pr_info("KSW: watch exited\n");
+}
+
+/* self debug function */
+void ksw_watch_show(void)
+{
+	pr_info("KSW: watch target bp_addr: 0x%llx len:%llu\n",
+		watch_info.addr, watch_info.len);
+}
+
+/* self debug function */
+void ksw_watch_fire(void)
+{
+	char *ptr = (char *)watch_info.addr;
+
+	pr_warn("KSW: watch triggered immediately\n");
+	*ptr = 0x42; // This should trigger immediately
 }
