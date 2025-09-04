@@ -243,10 +243,14 @@ mt792x_phy_update_channel(struct mt76_phy *mphy, int idx)
 		phy->noise += nf - (phy->noise >> 4);
 
 	state = mphy->chan_state;
+
+	spin_lock_bh(&dev->mt76.cc_lock);
 	state->cc_busy += busy_time;
 	state->cc_tx += tx_time;
 	state->cc_rx += rx_time + obss_time;
 	state->cc_bss_rx += rx_time;
+	spin_unlock_bh(&dev->mt76.cc_lock);
+
 	state->noise = -(phy->noise >> 4);
 }
 
