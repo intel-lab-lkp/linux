@@ -329,7 +329,7 @@ static bool flexrm_is_next_table_desc(void *desc_ptr)
 	u64 desc = flexrm_read_desc(desc_ptr);
 	u32 type = DESC_DEC(desc, DESC_TYPE_SHIFT, DESC_TYPE_MASK);
 
-	return (type == NPTR_TYPE) ? true : false;
+	return type == NPTR_TYPE;
 }
 
 static u64 flexrm_next_table_desc(u32 toggle, dma_addr_t next_addr)
@@ -1217,7 +1217,7 @@ static bool flexrm_peek_data(struct mbox_chan *chan)
 {
 	int cnt = flexrm_process_completions(chan->con_priv);
 
-	return (cnt > 0) ? true : false;
+	return cnt > 0;
 }
 
 static int flexrm_startup(struct mbox_chan *chan)
