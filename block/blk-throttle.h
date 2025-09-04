@@ -156,7 +156,7 @@ void blk_throtl_cancel_bios(struct gendisk *disk);
 
 static inline bool blk_throtl_activated(struct request_queue *q)
 {
-	return q->td != NULL;
+	return q->td != NULL && test_bit(blkcg_policy_throtl.plid, q->blkcg_pols);
 }
 
 static inline bool blk_should_throtl(struct bio *bio)
@@ -164,11 +164,6 @@ static inline bool blk_should_throtl(struct bio *bio)
 	struct throtl_grp *tg;
 	int rw = bio_data_dir(bio);
 
-	/*
-	 * This is called under bio_queue_enter(), and it's synchronized with
-	 * the activation of blk-throtl, which is protected by
-	 * blk_mq_freeze_queue().
-	 */
 	if (!blk_throtl_activated(bio->bi_bdev->bd_queue))
 		return false;
 
