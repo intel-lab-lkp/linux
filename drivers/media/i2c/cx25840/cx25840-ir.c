@@ -1199,8 +1199,10 @@ int cx25840_ir_probe(struct v4l2_subdev *sd)
 
 	spin_lock_init(&ir_state->rx_kfifo_lock);
 	if (kfifo_alloc(&ir_state->rx_kfifo,
-			CX25840_IR_RX_KFIFO_SIZE, GFP_KERNEL))
+			CX25840_IR_RX_KFIFO_SIZE, GFP_KERNEL)) {
+		devm_kfree(&state->c->dev, ir_state);
 		return -ENOMEM;
+	}
 
 	ir_state->c = state->c;
 	state->ir_state = ir_state;
