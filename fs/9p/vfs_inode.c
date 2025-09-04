@@ -532,6 +532,12 @@ static struct inode *v9fs_qid_iget(struct super_block *sb, struct p9_qid *qid,
 
 	v9inode = V9FS_I(inode);
 	if (dentry) {
+		/*
+		 * In order to make_ino_path, we need at least a read lock on the
+		 * rename_sem.  Since we re initializing a new inode, there is no
+		 * risk of races with another task trying to write to
+		 * v9inode->path, so we do not need an actual down_write.
+		 */
 		down_read(&v9ses->rename_sem);
 		v9inode->path = make_ino_path(dentry);
 		up_read(&v9ses->rename_sem);
@@ -983,18 +989,21 @@ v9fs_vfs_rename(struct mnt_idmap *idmap, struct inode *old_dir,
 {
 	int retval;
 	struct inode *old_inode;
+	struct v9fs_inode *old_v9inode;
 	struct inode *new_inode;
 	struct v9fs_session_info *v9ses;
 	struct p9_fid *oldfid = NULL, *dfid = NULL;
 	struct p9_fid *olddirfid = NULL;
 	struct p9_fid *newdirfid = NULL;
 	struct p9_wstat wstat;
+	struct v9fs_ino_path *new_ino_path = NULL;
 
 	if (flags)
 		return -EINVAL;
 
 	p9_debug(P9_DEBUG_VFS, "\n");
 	old_inode = d_inode(old_dentry);
+	old_v9inode = V9FS_I(old_inode);
 	new_inode = d_inode(new_dentry);
 	v9ses = v9fs_inode2v9ses(old_inode);
 	oldfid = v9fs_fid_lookup(old_dentry);
@@ -1022,6 +1031,17 @@ v9fs_vfs_rename(struct mnt_idmap *idmap, struct inode *old_dir,
 	}
 
 	down_write(&v9ses->rename_sem);
+	if (v9fs_inode_ident_path(v9ses)) {
+		/*
+		 * Try to allocate this first, and don't actually do rename if
+		 * allocation fails.
+		 */
+		new_ino_path = make_ino_path(new_dentry);
+		if (!new_ino_path) {
+			retval = -ENOMEM;
+			goto error_locked;
+		}
+	}
 	if (v9fs_proto_dotl(v9ses)) {
 		retval = p9_client_renameat(olddirfid, old_dentry->d_name.name,
 					    newdirfid, new_dentry->d_name.name);
@@ -1061,6 +1081,15 @@ error_locked:
 		v9fs_invalidate_inode_attr(old_inode);
 		v9fs_invalidate_inode_attr(old_dir);
 		v9fs_invalidate_inode_attr(new_dir);
+		if (v9fs_inode_ident_path(v9ses)) {
+			/*
+			 * We currently have rename_sem write lock, which protects all
+			 * v9inode->path in this fs.
+			 */
+			free_ino_path(old_v9inode->path);
+			old_v9inode->path = new_ino_path;
+			new_ino_path = NULL;
+		}
 
 		/* successful rename */
 		d_move(old_dentry, new_dentry);
@@ -1068,6 +1097,7 @@ error_locked:
 	up_write(&v9ses->rename_sem);
 
 error:
+	free_ino_path(new_ino_path);
 	p9_fid_put(newdirfid);
 	p9_fid_put(olddirfid);
 	p9_fid_put(oldfid);

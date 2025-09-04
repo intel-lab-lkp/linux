@@ -27,7 +27,8 @@ struct v9fs_ino_path *make_ino_path(struct dentry *dentry)
 	struct dentry *curr = dentry;
 	ssize_t i;
 
-	lockdep_assert_held_read(&v9fs_dentry2v9ses(dentry)->rename_sem);
+	/* Either read or write lock held is ok */
+	lockdep_assert_held(&v9fs_dentry2v9ses(dentry)->rename_sem);
 	might_sleep(); /* Allocation below might block */
 
 	rcu_read_lock();

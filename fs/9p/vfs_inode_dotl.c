@@ -232,6 +232,12 @@ static struct inode *v9fs_qid_iget_dotl(struct super_block *sb,
 
 	v9inode = V9FS_I(inode);
 	if (dentry) {
+		/*
+		 * In order to make_ino_path, we need at least a read lock on the
+		 * rename_sem.  Since we re initializing a new inode, there is no
+		 * risk of races with another task trying to write to
+		 * v9inode->path, so we do not need an actual down_write.
+		 */
 		down_read(&v9ses->rename_sem);
 		v9inode->path = make_ino_path(dentry);
 		up_read(&v9ses->rename_sem);

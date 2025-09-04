@@ -157,6 +157,9 @@ struct v9fs_inode {
 	/*
 	 * Stores the path of the file this inode is for, only for filesystems
 	 * with inode_ident=path.  Lifetime is the same as this inode.
+	 * Read/write to this pointer should be under the target v9fs's
+	 * rename_sem to protect against races (except when initializing or
+	 * freeing an inode, at which point nobody else has reference to us)
 	 */
 	struct v9fs_ino_path *path;
 };
