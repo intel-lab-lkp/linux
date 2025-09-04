@@ -1413,11 +1413,17 @@ static int rk_gmac_clk_init(struct plat_stmmacenet_data *plat)
 	if (plat->phy_node) {
 		bsp_priv->clk_phy = of_clk_get(plat->phy_node, 0);
 		ret = PTR_ERR_OR_ZERO(bsp_priv->clk_phy);
-		/* If it is not integrated_phy, clk_phy is optional */
+		/*
+		 * If it is not integrated_phy, clk_phy is optional. But we must
+		 * set bsp_priv->clk_phy to NULL if clk_phy isn't proivded, or
+		 * the error code could be wrongly taken as an invalid pointer.
+		 */
 		if (bsp_priv->integrated_phy) {
 			if (ret)
 				return dev_err_probe(dev, ret, "Cannot get PHY clock\n");
 			clk_set_rate(bsp_priv->clk_phy, 50000000);
+		} else if (ret) {
+			bsp_priv->clk_phy = NULL;
 		}
 	}
 
