@@ -64,9 +64,6 @@
 
 static_assert(__AVIC_GATAG(AVIC_VM_ID_MASK, AVIC_VCPU_IDX_MASK) == -1u);
 
-static bool force_avic;
-module_param_unsafe(force_avic, bool, 0444);
-
 /* Note:
  * This hash table is used to map VM_ID to a struct kvm_svm,
  * when handling AMD IOMMU GALOG notification to schedule in
@@ -1096,7 +1093,7 @@ void avic_vcpu_unblocking(struct kvm_vcpu *vcpu)
  * - Hypervisor can support both xAVIC and x2AVIC in the same guest.
  * - The mode can be switched at run-time.
  */
-void avic_hardware_setup(void)
+void avic_hardware_setup(bool force_avic)
 {
 	bool enable = false;
 

@@ -166,6 +166,9 @@ bool avic;
 module_param(avic, bool, 0444);
 module_param(enable_ipiv, bool, 0444);
 
+static bool force_avic;
+module_param_unsafe(force_avic, bool, 0444);
+
 module_param(enable_device_posted_irqs, bool, 0444);
 
 bool __read_mostly dump_invalid_vmcb;
@@ -5406,7 +5409,7 @@ static __init int svm_hardware_setup(void)
 			goto err;
 	}
 
-	avic_hardware_setup();
+	avic_hardware_setup(force_avic);
 
 	if (!enable_apicv) {
 		enable_ipiv = false;
