@@ -592,7 +592,6 @@ out_nodev:
 static struct genl_family genl_family __ro_after_init = {
 	.split_ops = wireguard_nl_ops,
 	.n_split_ops = ARRAY_SIZE(wireguard_nl_ops),
-	.resv_start_op = WG_CMD_SET_DEVICE + 1,
 	.name = WG_GENL_NAME,
 	.version = WG_GENL_VERSION,
 	.module = THIS_MODULE,
