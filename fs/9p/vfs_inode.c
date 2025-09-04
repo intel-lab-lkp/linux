@@ -473,6 +473,7 @@ static struct inode *v9fs_qid_iget(struct super_block *sb, struct p9_qid *qid,
 		.dentry = dentry,
 		.need_double_check = false,
 	};
+	bool cached = v9ses->cache & (CACHE_META | CACHE_LOOSE);
 
 	if (new)
 		test = v9fs_test_new_inode;
@@ -512,8 +513,12 @@ static struct inode *v9fs_qid_iget(struct super_block *sb, struct p9_qid *qid,
 
 	if (!inode)
 		return ERR_PTR(-ENOMEM);
-	if (!(inode->i_state & I_NEW))
+	if (!(inode->i_state & I_NEW)) {
+		/* See explanation in v9fs_qid_iget_dotl */
+		if (!cached)
+			v9fs_stat2inode(st, inode, sb, 0);
 		return inode;
+	}
 	/*
 	 * initialize the inode with the stat info
 	 * FIXME!! we may need support for stale inodes
