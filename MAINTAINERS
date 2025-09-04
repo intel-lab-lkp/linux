@@ -922,6 +922,13 @@ M:	Mun Yew Tham <mun.yew.tham@intel.com>
 S:	Maintained
 F:	drivers/mailbox/mailbox-altera.c
 
+SMARTLOGIC HCC DMA IP CORE DRIVER
+M:	Philipp Zabel <p.zabel@pengutronix.de>
+L:	dmaengine@vger.kernel.org
+S:	Maintained
+F:	drivers/dma/sl-dma.*
+F:	include/linux/dma/sl-dma.h
+
 ALTERA MSGDMA IP CORE DRIVER
 M:	Olivier Dautricourt <olivierdautricourt@gmail.com>
 R:	Stefan Roese <sr@denx.de>

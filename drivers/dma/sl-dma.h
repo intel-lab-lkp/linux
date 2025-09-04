@@ -1,0 +1,109 @@
+/* SPDX-License-Identifier: (GPL-2.0-only OR BSD-2-Clause) */
+/*
+ * Linux DMA Driver for the Smartlogic High Channel Count (HCC) DMA IP Core.
+ *
+ * Copyright (C) 2020 Pengutronix, Philipp Zabel <kernel@pengutronix.de>
+ */
+#ifndef SL_DMA_H
+#define SL_DMA_H
+
+/*
+ * DMA IP Core registers are described in the Smartlogic "High Channel Count
+ * DMA IP Core for PCI-Express User Guide", June 2020.
+ */
+
+/* Chapters 7.1 Version and PCI Status Register, 7.2 Servicing of Interrupts */
+#define REG_VERSION					0x0
+#define		VERSION_CORE_REVISION(x)		FIELD_GET(GENMASK(7, 0), (x))
+#define		VERSION_YEAR(x)				FIELD_GET(GENMASK(15, 8), (x))
+#define		VERSION_MONTH(x)			FIELD_GET(GENMASK(23, 16), (x))
+#define		VERSION_DAY(x)				FIELD_GET(GENMASK(31, 24), (x))
+#define REG_INTERRUPT_CONTROL				0x4
+#define REG_INTERRUPT_STATUS				0x8
+/*
+ * The test interrupt is documented in chapter 5.3.4 as BIT(20), but the
+ * interrupt mapping is project specific. In the demo design, the test
+ * interrupt is mapped to BIT(3).
+ */
+#define		DMA_WRITE_INTERRUPT_BIT			BIT(0)
+#define		DMA_READ_INTERRUPT_BIT			BIT(1)
+#define		TEST_INTERRUPT_BIT			BIT(3)
+#define REG_INTERRUPT_CONTROL2				0xc
+#define		ISSUE_TEST_INTERRUPT_BIT		BIT(0)
+#define REG_TX_CRC_ERROR				0x10
+#define REG_RX_CRC_ERROR				0x14
+#define REG_PCI_STATUS					0x20
+#define		PCI_STATUS_MPS(x)			(128 << FIELD_GET(GENMASK(7, 5), (x)))
+#define		PCI_STATUS_EXTENDED_TAG			BIT(8)
+#define		PCI_STATUS_MRS(x)			(128 << FIELD_GET(GENMASK(14, 12), (x)))
+#define		PCI_STATUS_LINK_SPEED(x)		FIELD_GET(GENMASK(19, 16), (x))
+#define		PCI_STATUS_LINK_WIDTH(x)		FIELD_GET(GENMASK(25, 20), (x))
+#define		PCI_STATUS_MSI				BIT(31)
+#define REG_STALL_TIME					0x30
+#define REG_LAST_DEADLOCK				0x3c
+#define REG_GPO						0x40
+
+/* Chapter 7.3.1 DMA Write Register Layout */
+#define REG_DMA_WRITE_CONTROL				0x800
+#define REG_DMA_WRITE_CONFIG				0x804
+#define REG_DMA_WRITE_STATUS				0x808
+#define		DMA_STATUS_NUM_CHANNELS(x)		(1 << FIELD_GET(GENMASK(26, 24), (x)))
+#define		DMA_STATUS_CORE_TYPE			BIT(27)
+#define REG_DMA_WRITE_PAGE_SIZE				0x810
+#define REG_DMA_WRITE_FIFO_RESETS			0x828
+#define REG_DMA_WRITE_GLOBAL_INTERRUPT_ENABLE		0x82c
+#define		GLOBAL_INTERRUPT_EOF			BIT(2)
+#define REG_DMA_WRITE_GLOBAL_INTERRUPT_STATUS		0x830
+#define REG_DMA_WRITE_INTERRUPT_ENABLE_END_OF_LINE	0x838
+#define REG_DMA_WRITE_INTERRUPT_ENABLE_END_OF_FRAME	0x83c
+#define REG_DMA_WRITE_INTERRUPT_ENABLE_START_OF_FRAME	0x840
+#define REG_DMA_WRITE_INTERRUPT_ENABLE_SG_FIFO_EMPTY	0x844
+#define REG_DMA_WRITE_INTERRUPT_ENABLE_SG_FIFO_OVFL	0x84c
+#define REG_DMA_WRITE_INTERRUPT_STATUS_END_OF_LINE	0x854
+#define REG_DMA_WRITE_INTERRUPT_STATUS_END_OF_FRAME	0x858
+#define REG_DMA_WRITE_INTERRUPT_STATUS_START_OF_FRAME	0x85c
+#define REG_DMA_WRITE_INTERRUPT_STATUS_SG_FIFO_EMPTY	0x860
+#define REG_DMA_WRITE_INTERRUPT_STATUS_SG_FIFO_OVFL	0x868
+#define REG_DMA_WRITE_ALTERNATE_PAGESIZEDEFINITION	0x880
+#define REG_DMA_WRITE_GENERAL_PARAMETER_INFO		0x884
+#define		DMA_WRITE_GPI_NUM_INTERFACES(x)		FIELD_GET(GENMASK(4, 0), (x))
+#define		DMA_WRITE_GPI_SG_MODE			BIT(5)
+#define		DMA_WRITE_GPI_SG_FIFO_RAM_TYPE		BIT(6)
+#define		DMA_WRITE_GPI_SG_FIFO_DEPTH(x)		(1 << FIELD_GET(GENMASK(14, 7), (x)))
+#define REG_DMA_WRITE_BASE_ADDRESS(channel)		(0x900 + 8 * (channel))
+#define REG_DMA_WRITE_INCREMENT_LINE_OFFSET(channel)	(0xb00 + 4 * (channel))
+#define REG_DMA_WRITE_LAST_ADDRESS(channel)		(0xc00 + 4 * (channel))
+#define REG_DMA_WRITE_CURRENT_BUFFER_POINTER(channel)	(0xd00 + 4 * (channel))
+
+/* Chapter 7.4.1 DMA Read Register Layout */
+#define REG_DMA_READ_CONTROL				0x1000
+#define REG_DMA_READ_CONFIG				0x1004
+#define REG_DMA_READ_STATUS_0				0x1008
+#define REG_DMA_READ_STATUS_1				0x100c
+#define REG_DMA_READ_PAGE_SIZE				0x1010
+#define REG_DMA_READ_1D_2D_SELECT			0x1024
+#define REG_DMA_READ_FIFO_RESETS			0x1028
+#define REG_DMA_READ_GLOBAL_INTERRUPT_ENABLE		0x102c
+#define REG_DMA_READ_GLOBAL_INTERRUPT_STATUS		0x1030
+#define REG_DMA_READ_INTERRUPT_ENABLE_END_OF_REQUEST	0x103c
+#define REG_DMA_READ_INTERRUPT_ENABLE_SG_FIFO_EMPTY	0x1044
+#define REG_DMA_READ_INTERRUPT_ENABLE_SG_FIFO_OVFL	0x104c
+#define REG_DMA_READ_INTERRUPT_STATUS_END_OF_REQUEST	0x1058
+#define REG_DMA_READ_INTERRUPT_STATUS_SG_FIFO_EMPTY	0x1060
+#define REG_DMA_READ_INTERRUPT_STATUS_SG_FIFO_OVFL	0x1068
+#define REG_DMA_READ_ALTERNATE_PAGESIZEDEFINITION	0x1080
+#define REG_DMA_READ_GENERAL_PARAMETER_INFO		0x1084
+#define		DMA_READ_GPI_NUM_INTERFACES(x)		FIELD_GET(GENMASK(4, 0), (x))
+#define		DMA_READ_GPI_SG_MODE			BIT(5)
+#define		DMA_READ_GPI_SG_FIFO_RAM_TYPE		BIT(6)
+#define		DMA_READ_GPI_SG_FIFO_DEPTH(x)		(1 << FIELD_GET(GENMASK(14, 7), (x)))
+#define		DMA_READ_GPI_COMPLETION_TIMEOUT_US(x)	(FIELD_GET(GENMASK(26, 15), (x)) * 100)
+#define		DMA_READ_GPI_LENGTH_FIFO_PRESENT	BIT(27)
+#define		DMA_READ_GPI_LENGTH_FIFO_DEPTH(x)	(1 << FIELD_GET(GENMASK(31, 28), (x)))
+#define REG_DMA_READ_BASE_ADDRESS(channel)		(0x1100 + 8 * (channel))
+#define REG_DMA_READ_RELOAD_BUDGET(interface)		(0x1200 + 4 * (interface))
+#define REG_DMA_READ_LAST_ADDRESS(channel)		(0x1280 + 4 * (channel))
+#define REG_DMA_READ_CURRENT_BUFFER_POINTER(channel)	(0x1300 + 4 * (channel))
+#define REG_DMA_READ_IMAGE_FORMAT(channel)		(0x1380 + 4 * (channel))
+
+#endif /* SL_DMA_H */
