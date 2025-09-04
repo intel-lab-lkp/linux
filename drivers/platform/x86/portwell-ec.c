@@ -5,15 +5,13 @@
  * Tested on:
  *  - Portwell NANO-6064
  *
- * This driver provides support for GPIO and Watchdog Timer
- * functionalities of the Portwell boards with ITE embedded controller (EC).
+ * This driver supports Portwell boards with an ITE embedded controller (EC).
  * The EC is accessed through I/O ports and provides:
+ *  - Temperature and voltage readings (hwmon)
  *  - 8 GPIO pins for control and monitoring
  *  - Hardware watchdog with 1-15300 second timeout range
  *
- * It integrates with the Linux GPIO and Watchdog subsystems, allowing
- * userspace interaction with EC GPIO pins and watchdog control,
- * ensuring system stability and configurability.
+ * It integrates with the Linux hwmon, GPIO and Watchdog subsystems.
  *
  * (C) Copyright 2025 Portwell, Inc.
  * Author: Yen-Chi Huang (jesse.huang@portwell.com.tw)
@@ -25,6 +23,7 @@
 #include <linux/bitfield.h>
 #include <linux/dmi.h>
 #include <linux/gpio/driver.h>
+#include <linux/hwmon.h>
 #include <linux/init.h>
 #include <linux/io.h>
 #include <linux/ioport.h>
@@ -32,6 +31,7 @@
 #include <linux/platform_device.h>
 #include <linux/sizes.h>
 #include <linux/string.h>
+#include <linux/units.h>
 #include <linux/watchdog.h>
 
 #define PORTWELL_EC_IOSPACE              0xe300
@@ -51,6 +51,9 @@
 #define PORTWELL_EC_FW_VENDOR_ADDRESS    0x4d
 #define PORTWELL_EC_FW_VENDOR_LENGTH     3
 #define PORTWELL_EC_FW_VENDOR_NAME       "PWG"
+
+#define PORTWELL_EC_ADC_VREF             3000
+#define PORTWELL_EC_ADC_MAX              1023
 
 static bool force;
 module_param(force, bool, 0444);
@@ -77,6 +80,20 @@ static void pwec_write(u8 index, u8 data)
 static u8 pwec_read(u8 address)
 {
 	return inb(PORTWELL_EC_IOSPACE + address);
+}
+
+/* Ensure consistent 16-bit read across potential MSB rollover. */
+static u16 pwec_read16_stable(u8 lsb_reg)
+{
+	u8 lsb, msb, old_msb;
+
+	do {
+		old_msb = pwec_read(lsb_reg + 1);
+		lsb = pwec_read(lsb_reg);
+		msb = pwec_read(lsb_reg + 1);
+	} while (msb != old_msb);
+
+	return (msb << 8) | lsb;
 }
 
 /* GPIO functions */
@@ -204,6 +221,54 @@ static struct watchdog_device ec_wdt_dev = {
 	.max_timeout = PORTWELL_WDT_EC_MAX_COUNT_SECOND,
 };
 
+/* HWMON functions */
+
+static const u8 pwec_hwmon_temp_regs[] = { 0x0, 0x2, 0x4 };
+static const u8 pwec_hwmon_in_regs[] = { 0x20, 0x22, 0x24, 0x30, 0x32 };
+
+static int pwec_hwmon_read(struct device *dev, enum hwmon_sensor_types type,
+			   u32 attr, int channel, long *val)
+{
+	u8 tmp8;
+	u16 tmp16;
+
+	switch (type) {
+	case hwmon_temp:
+		tmp8 = pwec_read(pwec_hwmon_temp_regs[channel]);
+		*val = tmp8 * MILLIDEGREE_PER_DEGREE;
+		return 0;
+	case hwmon_in:
+		tmp16 = pwec_read16_stable(pwec_hwmon_in_regs[channel]);
+		*val = (tmp16 * PORTWELL_EC_ADC_VREF) / PORTWELL_EC_ADC_MAX;
+		return 0;
+	default:
+		return -EOPNOTSUPP;
+	}
+}
+
+static const struct hwmon_channel_info *pwec_hwmon_info[] = {
+	HWMON_CHANNEL_INFO(temp,
+		HWMON_T_INPUT,
+		HWMON_T_INPUT,
+		HWMON_T_INPUT),
+	HWMON_CHANNEL_INFO(in,
+		HWMON_I_INPUT,
+		HWMON_I_INPUT,
+		HWMON_I_INPUT,
+		HWMON_I_INPUT,
+		HWMON_I_INPUT),
+	NULL
+};
+
+static const struct hwmon_ops pwec_hwmon_ops = {
+	.read = pwec_hwmon_read,
+};
+
+static struct hwmon_chip_info pwec_hwmon_chip_info = {
+	.ops = &pwec_hwmon_ops,
+	.info = pwec_hwmon_info,
+};
+
 static int pwec_firmware_vendor_check(void)
 {
 	u8 buf[PORTWELL_EC_FW_VENDOR_LENGTH + 1];
@@ -218,6 +283,7 @@ static int pwec_firmware_vendor_check(void)
 
 static int pwec_probe(struct platform_device *pdev)
 {
+	struct device *hwmon_dev;
 	int ret;
 
 	if (!devm_request_region(&pdev->dev, PORTWELL_EC_IOSPACE,
@@ -234,6 +300,14 @@ static int pwec_probe(struct platform_device *pdev)
 	if (ret < 0) {
 		dev_err(&pdev->dev, "failed to register Portwell EC GPIO\n");
 		return ret;
+	}
+
+	if (IS_REACHABLE(CONFIG_HWMON)) {
+		hwmon_dev = devm_hwmon_device_register_with_info(&pdev->dev,
+				"portwell-ec", NULL, &pwec_hwmon_chip_info, NULL);
+		ret = PTR_ERR_OR_ZERO(hwmon_dev);
+		if (ret)
+			return ret;
 	}
 
 	ec_wdt_dev.parent = &pdev->dev;
