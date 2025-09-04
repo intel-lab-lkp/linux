@@ -770,6 +770,8 @@ int siw_post_send(struct ib_qp *base_qp, const struct ib_send_wr *wr,
 
 	unsigned long flags;
 	int rv = 0;
+	size_t num_queued = 0;
+	int error = 0;
 
 	if (wr && !rdma_is_kernel_res(&qp->base_qp.res)) {
 		siw_dbg_qp(qp, "wr must be empty for user mapped sq\n");
@@ -948,7 +950,22 @@ int siw_post_send(struct ib_qp *base_qp, const struct ib_send_wr *wr,
 		sqe->flags |= SIW_WQE_VALID;
 
 		qp->sq_put++;
+		num_queued++;
 		wr = wr->next;
+	}
+
+	if (unlikely(rv < 0)) {
+		/*
+		 * If at least one was queued
+		 * we should start the tx, but
+		 * still return an error with
+		 * the bad_wr at the end.
+		 */
+		error = rv;
+		if (num_queued == 0) {
+			spin_unlock_irqrestore(&qp->sq_lock, flags);
+			goto skip_direct_sending;
+		}
 	}
 
 	/*
@@ -981,6 +998,9 @@ int siw_post_send(struct ib_qp *base_qp, const struct ib_send_wr *wr,
 skip_direct_sending:
 
 	up_read(&qp->state_lock);
+
+	if (unlikely(error != 0))
+		rv = error;
 
 	if (rv >= 0)
 		return 0;
