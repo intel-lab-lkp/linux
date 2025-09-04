@@ -93,10 +93,13 @@
 #define AD7124_CONFIG_PGA		GENMASK(2, 0)
 
 /* AD7124_FILTER_X */
-#define AD7124_FILTER_FS		GENMASK(10, 0)
 #define AD7124_FILTER_FILTER		GENMASK(23, 21)
 #define AD7124_FILTER_FILTER_SINC4		0
 #define AD7124_FILTER_FILTER_SINC3		2
+#define AD7124_FILTER_FILTER_SINC4_SINC1	4
+#define AD7124_FILTER_FILTER_SINC3_SINC1	5
+#define AD7124_FILTER_SINGLE_CYCLE	BIT(16)
+#define AD7124_FILTER_FS		GENMASK(10, 0)
 
 #define AD7124_MAX_CONFIGS	8
 #define AD7124_MAX_CHANNELS	16
@@ -283,11 +286,36 @@ static u32 ad7124_get_fclk_hz(struct ad7124_state *st)
 	return fclk_hz;
 }
 
+static int ad7124_get_avg(struct ad7124_state *st, unsigned int channel)
+{
+	/*
+	 * The number of averaged samples depends on the selected filter and
+	 * the current power mode.
+	 */
+	switch (st->channels[channel].cfg.filter_type) {
+	case AD7124_FILTER_FILTER_SINC4_SINC1:
+	case AD7124_FILTER_FILTER_SINC3_SINC1: {
+		enum ad7124_power_mode power_mode =
+			FIELD_GET(AD7124_ADC_CONTROL_POWER_MODE, st->adc_control);
+
+		switch (power_mode) {
+		case AD7124_LOW_POWER:
+			return 8;
+		default:
+			return 16;
+		}
+	}
+	default:
+		return 1;
+	}
+}
+
 static void ad7124_set_channel_odr(struct ad7124_state *st, unsigned int channel, unsigned int odr)
 {
-	unsigned int fclk, odr_sel_bits;
+	unsigned int fclk, avg, factor, odr_sel_bits;
 
 	fclk = ad7124_get_fclk_hz(st);
+	avg = ad7124_get_avg(st, channel);
 
 	/*
 	 * FS[10:0] = fCLK / (fADC x 32) where:
@@ -295,8 +323,15 @@ static void ad7124_set_channel_odr(struct ad7124_state *st, unsigned int channel
 	 * fCLK is the master clock frequency
 	 * FS[10:0] are the bits in the filter register
 	 * FS[10:0] can have a value from 1 to 2047
+	 * When multiple channels are enabled in the sequencer, the SINGLE_CYCLE
+	 * bit is set and only one channel is enabled in the sequencer, or when
+	 * a fast settling filter mode is enabled on any channel, there is an
+	 * extra factor of (4 + AVG - 1) on all channels to allow for settling
+	 * time. We ensure that at least one of these is always true so that we
+	 * always use the same factor.
 	 */
-	odr_sel_bits = DIV_ROUND_CLOSEST(fclk, odr * 32);
+	factor = 32 * (4 + avg - 1);
+	odr_sel_bits = DIV_ROUND_CLOSEST(fclk, odr * factor);
 	if (odr_sel_bits < 1)
 		odr_sel_bits = 1;
 	else if (odr_sel_bits > 2047)
@@ -306,7 +341,8 @@ static void ad7124_set_channel_odr(struct ad7124_state *st, unsigned int channel
 		st->channels[channel].cfg.live = false;
 
 	/* fADC = fCLK / (FS[10:0] x 32) */
-	st->channels[channel].cfg.odr = DIV_ROUND_CLOSEST(fclk, odr_sel_bits * 32);
+	st->channels[channel].cfg.odr = DIV_ROUND_CLOSEST(fclk, odr_sel_bits *
+								factor);
 	st->channels[channel].cfg.odr_sel_bits = odr_sel_bits;
 }
 
@@ -440,9 +476,12 @@ static int ad7124_write_config(struct ad7124_state *st, struct ad7124_channel_co
 		return ret;
 
 	tmp = FIELD_PREP(AD7124_FILTER_FILTER, cfg->filter_type) |
+		AD7124_FILTER_SINGLE_CYCLE |
 		FIELD_PREP(AD7124_FILTER_FS, cfg->odr_sel_bits);
 	return ad7124_spi_write_mask(st, AD7124_FILTER(cfg->cfg_slot),
-				     AD7124_FILTER_FILTER | AD7124_FILTER_FS,
+				     AD7124_FILTER_FILTER |
+				     AD7124_FILTER_SINGLE_CYCLE |
+				     AD7124_FILTER_FS,
 				     tmp, 3);
 }
 
