@@ -1933,7 +1933,8 @@ caam_hash_alloc(struct caam_hash_template *template,
 	alg->cra_priority = CAAM_CRA_PRIORITY;
 	alg->cra_blocksize = template->blocksize;
 	alg->cra_alignmask = 0;
-	alg->cra_flags = CRYPTO_ALG_ASYNC | CRYPTO_ALG_ALLOCATES_MEMORY;
+	alg->cra_flags = CRYPTO_ALG_ASYNC | CRYPTO_ALG_ALLOCATES_MEMORY |
+			 CRYPTO_ALG_NO_FALLBACK;
 
 	t_alg->alg_type = template->alg_type;
 	t_alg->ahash_alg.op.do_one_request = ahash_do_one_req;
