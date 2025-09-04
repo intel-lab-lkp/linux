@@ -2047,6 +2047,8 @@ mlx5e_skb_from_cqe_mpwrq_nonlinear(struct mlx5e_rq *rq, struct mlx5e_mpw_info *w
 		dma_sync_single_for_cpu(rq->pdev, addr + head_offset, headlen,
 					rq->buff.map_dir);
 
+		headlen = eth_get_headlen(rq->netdev, head_addr, headlen);
+
 		frag_offset += headlen;
 		byte_cnt -= headlen;
 		linear_hr = skb_headroom(skb);
@@ -2123,6 +2125,9 @@ mlx5e_skb_from_cqe_mpwrq_nonlinear(struct mlx5e_rq *rq, struct mlx5e_mpw_info *w
 				pagep->frags++;
 			while (++pagep < frag_page);
 		}
+
+		headlen = eth_get_headlen(rq->netdev, mxbuf->xdp.data, headlen);
+
 		__pskb_pull_tail(skb, headlen);
 	} else {
 		if (xdp_buff_has_frags(&mxbuf->xdp)) {
