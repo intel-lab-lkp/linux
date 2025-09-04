@@ -596,9 +596,9 @@ intel_ddi_transcoder_func_reg_val_get(struct intel_encoder *encoder,
 			enum transcoder master;
 
 			master = crtc_state->mst_master_transcoder;
-			drm_WARN_ON(display->drm,
-				    master == INVALID_TRANSCODER);
-			temp |= TRANS_DDI_MST_TRANSPORT_SELECT(master);
+			if (!drm_WARN_ON(display->drm,
+					 master == INVALID_TRANSCODER))
+				temp |= TRANS_DDI_MST_TRANSPORT_SELECT(master);
 		}
 	} else {
 		temp |= TRANS_DDI_MODE_SELECT_DP_SST;
