@@ -3256,7 +3256,8 @@ ssize_t cpuset_write_resmask(struct kernfs_open_file *of,
 out_unlock:
 	mutex_unlock(&cpuset_mutex);
 	cpus_read_unlock();
-	flush_workqueue(cpuset_migrate_mm_wq);
+	if (of_cft(of)->private == FILE_MEMLIST)
+		flush_workqueue(cpuset_migrate_mm_wq);
 	return retval ?: nbytes;
 }
 
