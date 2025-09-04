@@ -532,6 +532,16 @@ static int __init exynos4_timer_resources(struct device_node *np)
 	return 0;
 }
 
+/*
+ * For reasons that aren't fully understood IRQF_PERCPU breaks CPU hotplug on
+ * little cores of ARM 32 bit SoCs like Exynos5422 used in OdroidXU3/4 boards.
+ */
+#if defined(CONFIG_ARM64) || defined(CONFIG_COMPILE_TEST)
+#define MCT_IRQ_FLAGS (IRQF_TIMER | IRQF_NOBALANCING | IRQF_PERCPU)
+#elif defined(CONFIG_ARM)
+#define MCT_IRQ_FLAGS (IRQF_TIMER | IRQF_NOBALANCING)
+#endif
+
 /**
  * exynos4_timer_interrupts - initialize MCT interrupts
  * @np: device node for MCT
@@ -602,8 +612,7 @@ static int __init exynos4_timer_interrupts(struct device_node *np,
 			irq_set_status_flags(mct_irq, IRQ_NOAUTOEN);
 			if (request_irq(mct_irq,
 					exynos4_mct_tick_isr,
-					IRQF_TIMER | IRQF_NOBALANCING |
-					IRQF_PERCPU,
+					MCT_IRQ_FLAGS,
 					pcpu_mevt->name, pcpu_mevt)) {
 				pr_err("exynos-mct: cannot register IRQ (cpu%d)\n",
 									cpu);
