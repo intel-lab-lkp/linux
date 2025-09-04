@@ -904,6 +904,11 @@ static struct freq_attr *hwp_cpufreq_attrs[] = {
 	NULL,
 };
 
+static struct freq_attr *hwp_cpufreq_default_attrs[] = {
+	&base_frequency,
+	NULL,
+};
+
 static bool no_cas __ro_after_init;
 
 static struct cpudata *hybrid_max_perf_cpu __read_mostly;
@@ -1369,6 +1374,9 @@ static void intel_pstate_hwp_offline(struct cpudata *cpu)
 
 #define POWER_CTL_EE_ENABLE	1
 #define POWER_CTL_EE_DISABLE	2
+
+/* Enable bit for Dynamic Efficiency Control (DEC) */
+#define POWER_CTL_DEC_ENABLE	27
 
 static int power_ctl_ee_state;
 
@@ -3761,6 +3769,17 @@ static const struct x86_cpu_id intel_hybrid_scaling_factor[] = {
 	{}
 };
 
+static bool dec_enabled(void)
+{
+	u64 power_ctl;
+
+	rdmsrq(MSR_IA32_POWER_CTL, power_ctl);
+	if (power_ctl & BIT(POWER_CTL_DEC_ENABLE))
+		return true;
+
+	return false;
+}
+
 static int __init intel_pstate_init(void)
 {
 	static struct cpudata **_all_cpu_data;
@@ -3793,15 +3812,24 @@ static int __init intel_pstate_init(void)
 		 * Avoid enabling HWP for processors without EPP support,
 		 * because that means incomplete HWP implementation which is a
 		 * corner case and supporting it is generally problematic.
+		 * But when DEC enable bit is set (MSR 0x1FC bit 27), continue
+		 * to enable HWP.
 		 *
 		 * If HWP is enabled already, though, there is no choice but to
 		 * deal with it.
 		 */
-		if ((!no_hwp && boot_cpu_has(X86_FEATURE_HWP_EPP)) || hwp_forced) {
+		if (!no_hwp || hwp_forced) {
+			if (boot_cpu_has(X86_FEATURE_HWP_EPP)) {
+				intel_pstate.attr = hwp_cpufreq_attrs;
+				intel_cpufreq.attr = hwp_cpufreq_attrs;
+			} else if (dec_enabled()) {
+				intel_pstate.attr = hwp_cpufreq_default_attrs;
+				intel_cpufreq.attr = hwp_cpufreq_default_attrs;
+			} else {
+				goto skip_hwp_enable;
+			}
 			hwp_active = true;
 			hwp_mode_bdw = id->driver_data;
-			intel_pstate.attr = hwp_cpufreq_attrs;
-			intel_cpufreq.attr = hwp_cpufreq_attrs;
 			intel_cpufreq.flags |= CPUFREQ_NEED_UPDATE_LIMITS;
 			intel_cpufreq.adjust_perf = intel_cpufreq_adjust_perf;
 			if (!default_driver)
@@ -3811,6 +3839,7 @@ static int __init intel_pstate_init(void)
 
 			goto hwp_cpu_matched;
 		}
+skip_hwp_enable:
 		pr_info("HWP not enabled\n");
 	} else {
 		if (no_load)
