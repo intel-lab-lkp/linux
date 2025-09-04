@@ -244,12 +244,9 @@ static struct io_context *alloc_io_context(gfp_t gfp_flags, int node)
 int set_task_ioprio(struct task_struct *task, int ioprio)
 {
 	int err;
-	const struct cred *cred = current_cred(), *tcred;
 
 	rcu_read_lock();
-	tcred = __task_cred(task);
-	if (!uid_eq(tcred->uid, cred->euid) &&
-	    !uid_eq(tcred->uid, cred->uid) && !capable(CAP_SYS_NICE)) {
+	if (!ptrace_may_access(task, PTRACE_MODE_READ_REALCREDS)) {
 		rcu_read_unlock();
 		return -EPERM;
 	}
