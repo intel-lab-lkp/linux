@@ -29,10 +29,12 @@
 #ifdef CONFIG_CIFS_COMPRESSION
 typedef int (*compress_send_fn)(struct TCP_Server_Info *, int, struct smb_rqst *);
 
-/* PROTOTYPES */
 
-int smb_compress(struct TCP_Server_Info *server, struct smb_rqst *rq, compress_send_fn send_fn);
+/*
+ * compress.c
+ */
 bool should_compress(const struct cifs_tcon *tcon, const struct smb_rqst *rq);
+int smb_compress(struct TCP_Server_Info *server, struct smb_rqst *rq, compress_send_fn send_fn);
 
 /**
  * smb_compress_alg_valid() - Validate a compression algorithm.

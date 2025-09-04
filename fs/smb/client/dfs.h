@@ -151,10 +151,6 @@ static inline void ref_walk_mark_end(struct dfs_ref_walk *rw)
 	ref->tit = ERR_PTR(-ENOENT); /* end marker */
 }
 
-int dfs_parse_target_referral(const char *full_path, const struct dfs_info3_param *ref,
-			      struct smb3_fs_context *ctx);
-int dfs_mount_share(struct cifs_mount_ctx *mnt_ctx);
-
 static inline char *dfs_get_path(struct cifs_sb_info *cifs_sb, const char *path)
 {
 	return dfs_cache_canonical_path(path, cifs_sb->local_nls, cifs_remap(cifs_sb));

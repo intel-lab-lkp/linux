@@ -133,7 +133,6 @@ struct share_redirect_error_context_rsp {
 #define SMB2_LEASE_HANDLE_CACHING_HE	0x02
 #define SMB2_LEASE_WRITE_CACHING_HE	0x04
 
-
 /* See MS-SMB2 2.2.13.2.11 */
 /* Flags */
 #define SMB2_DHANDLE_FLAG_PERSISTENT	0x00000002
@@ -192,7 +191,6 @@ struct crt_sd_ctxt {
 	__u8	Name[8];
 	struct smb3_sd sd;
 } __packed;
-
 
 #define COPY_CHUNK_RES_KEY_SIZE	24
 struct resume_key_req {

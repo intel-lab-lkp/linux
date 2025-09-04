@@ -114,18 +114,11 @@ struct smbd_connection {
 };
 
 /* Create a SMBDirect session */
-struct smbd_connection *smbd_get_connection(
-	struct TCP_Server_Info *server, struct sockaddr *dstaddr);
 
 /* Reconnect SMBDirect session */
-int smbd_reconnect(struct TCP_Server_Info *server);
 /* Destroy SMBDirect session */
-void smbd_destroy(struct TCP_Server_Info *server);
 
 /* Interface for carrying upper layer I/O through send/recv */
-int smbd_recv(struct smbd_connection *info, struct msghdr *msg);
-int smbd_send(struct TCP_Server_Info *server,
-	int num_rqst, struct smb_rqst *rqst);
 
 enum mr_state {
 	MR_READY,
@@ -151,12 +144,22 @@ struct smbd_mr {
 };
 
 /* Interfaces to register and deregister MR for RDMA read/write */
-struct smbd_mr *smbd_register_mr(
-	struct smbd_connection *info, struct iov_iter *iter,
-	bool writing, bool need_invalidate);
-int smbd_deregister_mr(struct smbd_mr *mr);
 
-/* PROTOTYPES */
+
+/*
+ * smbdirect.c
+ */
+void smbd_destroy(struct TCP_Server_Info *server);
+int smbd_reconnect(struct TCP_Server_Info *server);
+struct smbd_connection *smbd_get_connection(
+	struct TCP_Server_Info *server, struct sockaddr *dstaddr);
+int smbd_recv(struct smbd_connection *info, struct msghdr *msg);
+int smbd_send(struct TCP_Server_Info *server,
+	int num_rqst, struct smb_rqst *rqst_array);
+struct smbd_mr *smbd_register_mr(struct smbd_connection *info,
+				 struct iov_iter *iter,
+				 bool writing, bool need_invalidate);
+int smbd_deregister_mr(struct smbd_mr *smbdirect_mr);
 
 #else
 #define cifs_rdma_enabled(server)	0

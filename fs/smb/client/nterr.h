@@ -10,8 +10,6 @@
 
 */
 
-
-
 #ifndef _NTERR_H
 #define _NTERR_H
 

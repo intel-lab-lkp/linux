@@ -1357,9 +1357,6 @@ struct tcon_link {
 	struct cifs_tcon	*tl_tcon;
 };
 
-extern struct tcon_link *cifs_sb_tlink(struct cifs_sb_info *cifs_sb);
-extern void smb3_free_compound_rqst(int num_rqst, struct smb_rqst *rqst);
-
 static inline struct cifs_tcon *
 tlink_tcon(struct tcon_link *tlink)
 {
@@ -1372,8 +1369,6 @@ cifs_sb_master_tlink(struct cifs_sb_info *cifs_sb)
 	return cifs_sb->master_tlink;
 }
 
-extern void cifs_put_tlink(struct tcon_link *tlink);
-
 static inline struct tcon_link *
 cifs_get_tlink(struct tcon_link *tlink)
 {
@@ -1383,7 +1378,6 @@ cifs_get_tlink(struct tcon_link *tlink)
 }
 
 /* This function is always expected to succeed */
-extern struct cifs_tcon *cifs_sb_master_tcon(struct cifs_sb_info *cifs_sb);
 
 #define CIFS_OPLOCK_NO_CHANGE 0xfe
 
@@ -1555,11 +1549,6 @@ cifsFileInfo_get_locked(struct cifsFileInfo *cifs_file)
 	++cifs_file->count;
 }
 
-struct cifsFileInfo *cifsFileInfo_get(struct cifsFileInfo *cifs_file);
-void _cifsFileInfo_put(struct cifsFileInfo *cifs_file, bool wait_oplock_hdlr,
-		       bool offload);
-void cifsFileInfo_put(struct cifsFileInfo *cifs_file);
-
 #define CIFS_CACHE_READ_FLG	1
 #define CIFS_CACHE_HANDLE_FLG	2
 #define CIFS_CACHE_RH_FLG	(CIFS_CACHE_READ_FLG | CIFS_CACHE_HANDLE_FLG)
@@ -1672,7 +1661,6 @@ static inline void cifs_stats_bytes_read(struct cifs_tcon *tcon,
 	tcon->bytes_read += bytes;
 	spin_unlock(&tcon->stat_lock);
 }
-
 
 /*
  * This is the prototype for the mid receive function. This function is for
@@ -1879,7 +1867,6 @@ static inline bool is_replayable_error(int error)
 		return true;
 	return false;
 }
-
 
 /* cifs_get_writable_file() flags */
 #define FIND_WR_ANY         0
@@ -2111,10 +2098,6 @@ extern unsigned int cifs_max_pending; /* MAX requests at once to server*/
 extern unsigned int dir_cache_timeout; /* max time for directory lease caching of dir */
 extern bool disable_legacy_dialects;  /* forbid vers=1.0 and vers=2.0 mounts */
 extern atomic_t mid_count;
-
-void cifs_oplock_break(struct work_struct *work);
-void cifs_queue_oplock_break(struct cifsFileInfo *cfile);
-void smb2_deferred_work_close(struct work_struct *work);
 
 extern const struct slow_work_ops cifs_oplock_break_ops;
 extern struct workqueue_struct *cifsiod_wq;
