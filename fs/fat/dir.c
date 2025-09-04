@@ -337,11 +337,11 @@ parse_long:
 		if (ds->alias_checksum != alias_checksum)
 			goto parse_long;
 	}
-	if ((*de)->name[0] == DELETED_FLAG)
+	if (IS_FREE((*de)->name))
 		return PARSE_INVALID;
 	if ((*de)->attr == ATTR_EXT)
 		goto parse_long;
-	if (IS_FREE((*de)->name) || ((*de)->attr & ATTR_VOLUME))
+	if ((*de)->attr & ATTR_VOLUME)
 		return PARSE_INVALID;
 	if (fat_checksum((*de)->name) != alias_checksum)
 		*nr_slots = 0;
@@ -491,11 +491,9 @@ int fat_search_long(struct inode *inode, const unsigned char *name,
 			goto end_of_dir;
 parse_record:
 		nr_slots = 0;
-		if (de->name[0] == DELETED_FLAG)
+		if (IS_FREE(de->name))
 			continue;
 		if (de->attr != ATTR_EXT && (de->attr & ATTR_VOLUME))
-			continue;
-		if (de->attr != ATTR_EXT && IS_FREE(de->name))
 			continue;
 		if (de->attr == ATTR_EXT) {
 			int status = fat_parse_long(inode, &cpos, &bh, &de,
@@ -608,11 +606,9 @@ parse_record:
 	 * need to parse long filename.
 	 */
 	if (isvfat && !short_only) {
-		if (de->name[0] == DELETED_FLAG)
+		if (IS_FREE(de->name))
 			goto record_end;
 		if (de->attr != ATTR_EXT && (de->attr & ATTR_VOLUME))
-			goto record_end;
-		if (de->attr != ATTR_EXT && IS_FREE(de->name))
 			goto record_end;
 	} else {
 		if ((de->attr & ATTR_VOLUME) || IS_FREE(de->name))

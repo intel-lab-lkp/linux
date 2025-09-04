@@ -335,7 +335,7 @@ int fat_truncate_time(struct inode *inode, struct timespec64 *now, int flags)
 		inode_set_mtime_to_ts(inode,
 				      inode_set_ctime_to_ts(inode, fat_truncate_mtime(sbi, now)));
 
-	return 0;
+	return 1;
 }
 EXPORT_SYMBOL_GPL(fat_truncate_time);
 
@@ -343,18 +343,15 @@ int fat_update_time(struct inode *inode, int flags)
 {
 	int dirty_flags = 0;
 
-	if (inode->i_ino == MSDOS_ROOT_INO)
-		return 0;
-
-	if (flags & (S_ATIME | S_CTIME | S_MTIME)) {
-		fat_truncate_time(inode, NULL, flags);
+	if (fat_truncate_time(inode, NULL, flags)) {
 		if (inode->i_sb->s_flags & SB_LAZYTIME)
 			dirty_flags |= I_DIRTY_TIME;
 		else
 			dirty_flags |= I_DIRTY_SYNC;
+
+		__mark_inode_dirty(inode, dirty_flags);
 	}
 
-	__mark_inode_dirty(inode, dirty_flags);
 	return 0;
 }
 EXPORT_SYMBOL_GPL(fat_update_time);
