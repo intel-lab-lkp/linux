@@ -52,6 +52,7 @@ struct iidc_rdma_priv_dev_info {
 	struct net_device *netdev;
 	struct iidc_rdma_qos_params qos_info;
 	u8 __iomem *hw_addr;
+	u8 rdma_qp_limits_sel;
 };
 
 int ice_add_rdma_qset(struct iidc_rdma_core_dev_info *cdev,

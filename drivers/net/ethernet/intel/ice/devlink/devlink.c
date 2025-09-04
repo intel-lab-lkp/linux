@@ -1461,6 +1461,108 @@ ice_devlink_enable_iw_validate(struct devlink *devlink, u32 id,
 	return 0;
 }
 
+/**
+ * ice_devlink_rdma_qp_limits_get - Get RDMA QP limits select parameter
+ * @devlink: pointer to the devlink instance
+ * @__unused: the parameter ID
+ * @ctx: context to store the parameter value
+ *
+ * Return: zero on success and a negative value on failure.
+ */
+static int ice_devlink_rdma_qp_limits_get(struct devlink *devlink, u32 __unused,
+					   struct devlink_param_gset_ctx *ctx)
+{
+	struct ice_pf *pf = devlink_priv(devlink);
+	struct iidc_rdma_priv_dev_info *privd;
+	struct iidc_rdma_core_dev_info *cdev;
+
+	cdev = pf->cdev_info;
+	if (!cdev)
+		return -ENODEV;
+
+	privd = cdev->iidc_priv;
+	ctx->val.vu32 = 1 << privd->rdma_qp_limits_sel;
+
+	return 0;
+}
+
+/**
+ * ice_devlink_rdma_qp_limits_set - Set RDMA QP limits select parameter
+ * @devlink: pointer to the devlink instance
+ * @__unused: the parameter ID
+ * @ctx: context to get the parameter value
+ * @extack: netlink extended ACK structure
+ *
+ * Return: zero on success and a negative value on failure.
+ */
+static int ice_devlink_rdma_qp_limits_set(struct devlink *devlink, u32 __unused,
+					   struct devlink_param_gset_ctx *ctx,
+					   struct netlink_ext_ack *extack)
+{
+	struct ice_pf *pf = devlink_priv(devlink);
+	struct iidc_rdma_priv_dev_info *privd;
+	struct iidc_rdma_core_dev_info *cdev;
+	u32 qp_limits, prev_qp_limits;
+	int ret;
+
+	cdev = pf->cdev_info;
+	if (!cdev)
+		return -ENODEV;
+
+	privd = cdev->iidc_priv;
+	prev_qp_limits = privd->rdma_qp_limits_sel;
+	qp_limits = ilog2(ctx->val.vu32);
+
+	if (qp_limits == prev_qp_limits)
+		return 0;
+
+	ice_unplug_aux_dev(pf);
+	privd->rdma_qp_limits_sel = qp_limits;
+	ret = ice_plug_aux_dev(pf);
+	if (ret) {
+		int err;
+
+		privd->rdma_qp_limits_sel = prev_qp_limits;
+		NL_SET_ERR_MSG_MOD(extack, "Unable to change rdma_qp_limits_sel value");
+		err = ice_plug_aux_dev(pf);
+		if (err)
+			NL_SET_ERR_MSG_MOD(extack,
+					   "Unable to restore RDMA capabilities for this function");
+	}
+
+	return ret;
+}
+
+/**
+ * ice_devlink_rdma_limits_sel_validate - Validate RDMA QP limits select parameter
+ * @devlink: pointer to devlink instance
+ * @__unused: the parameter ID
+ * @val: value to validate
+ * @extack: netlink extended ACK structure
+ *
+ * Supported values are <= 256 and power of 2
+ *
+ * Return: zero when passed parameter value is supported or a negative value on
+ * error.
+ */
+static int ice_devlink_rdma_qp_limits_validate(struct devlink *devlink, u32 __unused,
+						union devlink_param_value val,
+						struct netlink_ext_ack *extack)
+{
+	struct ice_pf *pf = devlink_priv(devlink);
+
+        if (!test_bit(ICE_FLAG_RDMA_ENA, pf->flags))
+		return -EOPNOTSUPP;
+
+	if (!is_power_of_2(val.vu32) || val.vu32 > 256) {
+		NL_SET_ERR_MSG_MOD(extack,
+				   "RDMA QP Limits Select value should be a power of 2 and <= 256");
+		return -EINVAL;
+	}
+
+	return 0;
+}
+
 #define DEVLINK_LOCAL_FWD_DISABLED_STR "disabled"
 #define DEVLINK_LOCAL_FWD_ENABLED_STR "enabled"
 #define DEVLINK_LOCAL_FWD_PRIORITIZED_STR "prioritized"
@@ -1621,6 +1723,7 @@ enum ice_param_id {
 	ICE_DEVLINK_PARAM_ID_BASE = DEVLINK_PARAM_GENERIC_ID_MAX,
 	ICE_DEVLINK_PARAM_ID_TX_SCHED_LAYERS,
 	ICE_DEVLINK_PARAM_ID_LOCAL_FWD,
+	ICE_DEVLINK_PARAM_ID_RDMA_QP_LIMITS_SEL,
 };
 
 static const struct devlink_param ice_dvl_rdma_params[] = {
@@ -1634,6 +1737,13 @@ static const struct devlink_param ice_dvl_rdma_params[] = {
 			      ice_devlink_enable_iw_validate),
 	DEVLINK_PARAM_GENERIC(ENABLE_RDMA, BIT(DEVLINK_PARAM_CMODE_DRIVERINIT),
 			      NULL, NULL, ice_devlink_enable_rdma_validate),
+	DEVLINK_PARAM_DRIVER(ICE_DEVLINK_PARAM_ID_RDMA_QP_LIMITS_SEL,
+			     "rdma_qp_limits_sel",
+			     DEVLINK_PARAM_TYPE_U32,
+			     BIT(DEVLINK_PARAM_CMODE_RUNTIME),
+			     ice_devlink_rdma_qp_limits_get,
+			     ice_devlink_rdma_qp_limits_set,
+			     ice_devlink_rdma_qp_limits_validate),
 };
 
 static const struct devlink_param ice_dvl_msix_params[] = {

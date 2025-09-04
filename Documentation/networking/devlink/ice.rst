@@ -104,6 +104,35 @@ Parameters
         one port capacity at cost of the another. User needs to disable
         local forwarding on one of the ports in order have increased capacity
         on the ``prioritized`` port.
+    * - ``rdma_qp_limits_sel``
+      - runtime
+      - The RDMA QP limits selector controls the max Queue Pairs (QPs) resources
+        which could be allocated per device. Depending on the available memory in
+        the system the actual allocated QP number could be smaller. QPs are evenly
+        distributed across active ports, so more ports mean fewer QPs per port.
+        Supported values for the QP limits selector are powers of 2, less or equal
+        to 256 and each value denotes a number of thousands QPs.
+
+        ``1`` - 1K QPs
+
+        ``2`` - 2K QPs
+
+        ``4`` - 4K QPs
+
+        ``8`` - 8K QPs
+
+        ``16`` - 16K QPs
+
+        ``32`` - 32K QPs
+
+        ``64`` - 64K QPs
+
+        ``128`` - 128K QPs
+
+        ``256`` - 256K QPs
+
+        Default value of ``rdma_qp_limits_sel`` parameter is ``1`` allowing 1K QPs to
+        maintain a low memory footprint.
 
 Info versions
 =============

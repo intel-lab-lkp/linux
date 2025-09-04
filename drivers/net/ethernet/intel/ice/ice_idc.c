@@ -358,6 +358,8 @@ void ice_unplug_aux_dev(struct ice_pf *pf)
 	}
 }
 
+#define ICE_RDMA_QP_LIMITS_SELECT_DFLT  0
+
 /**
  * ice_init_rdma - initializes PF for RDMA use
  * @pf: ptr to ice_pf
@@ -403,6 +405,8 @@ int ice_init_rdma(struct ice_pf *pf)
 	privd->vport_id = pf->vsi[0]->vsi_num;
 
 	pf->cdev_info->rdma_protocol |= IIDC_RDMA_PROTOCOL_ROCEV2;
+	privd->rdma_qp_limits_sel = ICE_RDMA_QP_LIMITS_SELECT_DFLT;
+
 	ice_setup_dcb_qos_info(pf, &privd->qos_info);
 	ret = ice_plug_aux_dev(pf);
 	if (ret)

@@ -285,7 +285,7 @@ static void irdma_fill_device_info(struct irdma_device *iwdev,
 	rf->rsrc_profile = IRDMA_HMC_PROFILE_DEFAULT;
 	rf->rst_to = IRDMA_RST_TIMEOUT_HZ;
 	rf->gen_ops.request_reset = irdma_request_reset;
-	rf->limits_sel = 7;
+	rf->limits_sel = iidc_priv->rdma_qp_limits_sel;
 	rf->iwdev = iwdev;
 
 	mutex_init(&iwdev->ah_tbl_lock);

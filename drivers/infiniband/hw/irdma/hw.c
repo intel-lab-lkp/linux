@@ -4,27 +4,30 @@
 
 static struct irdma_rsrc_limits rsrc_limits_table[] = {
 	[0] = {
-		.qplimit = SZ_128,
-	},
-	[1] = {
 		.qplimit = SZ_1K,
 	},
-	[2] = {
+	[1] = {
 		.qplimit = SZ_2K,
 	},
-	[3] = {
+	[2] = {
 		.qplimit = SZ_4K,
+	},
+	[3] = {
+		.qplimit = SZ_8K,
 	},
 	[4] = {
 		.qplimit = SZ_16K,
 	},
 	[5] = {
-		.qplimit = SZ_64K,
+		.qplimit = SZ_32K,
 	},
 	[6] = {
-		.qplimit = SZ_128K,
+		.qplimit = SZ_64K,
 	},
 	[7] = {
+		.qplimit = SZ_128K,
+	},
+	[8] = {
 		.qplimit = SZ_256K,
 	},
 };
