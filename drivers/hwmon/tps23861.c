@@ -10,13 +10,26 @@
 #include <linux/bitfield.h>
 #include <linux/debugfs.h>
 #include <linux/delay.h>
+#include <linux/gpio/consumer.h>
 #include <linux/hwmon-sysfs.h>
 #include <linux/hwmon.h>
 #include <linux/i2c.h>
+#include <linux/interrupt.h>
 #include <linux/module.h>
 #include <linux/of.h>
+#include <linux/of_irq.h>
 #include <linux/regmap.h>
 
+#define MAX_SUPPORTED_POE_CLASS		4
+#define INTERRUPT_STATUS		0x0
+#define INTERRUPT_ENABLE		0x1
+#define INTERRUPT_CLASS			BIT(4)
+#define DETECTION_EVENT			0x5
+#define POWER_STATUS			0x10
+#define PORT_1_ICUT			0x2A
+#define PORT_1_ICUT_MASK		GENMASK(2, 0)
+#define RESET				0x1a
+#define RESET_CLRAIN			0x80
 #define TEMPERATURE			0x2c
 #define INPUT_VOLTAGE_LSB		0x2e
 #define INPUT_VOLTAGE_MSB		0x2f
@@ -102,6 +115,12 @@
 #define TPS23861_GENERAL_MASK_1		0x17
 #define TPS23861_CURRENT_SHUNT_MASK	BIT(0)
 
+#define TPS23861_TIME_RESET_US		5
+#define TPS23861_TIME_RESET_US_MAX	1000
+
+#define TPS23861_TIME_POWER_ON_RESET_MS 23
+#define TPS23861_TIME_I2C_MS		20
+
 #define TEMPERATURE_LSB			652 /* 0.652 degrees Celsius */
 #define VOLTAGE_LSB			3662 /* 3.662 mV */
 #define SHUNT_RESISTOR_DEFAULT		255000 /* 255 mOhm */
@@ -110,10 +129,28 @@
 #define RESISTANCE_LSB			110966 /* 11.0966 Ohm*/
 #define RESISTANCE_LSB_LOW		157216 /* 15.7216 Ohm*/
 
+struct tps23861_port_data { // From DT.
+	const char *label;
+	/* Maximum class accepted by the port. The hardware cannot be
+	 * preconfigured to accept certain class only, so classification
+	 * interrupt handler is required to for power-on decision if class is
+	 * not MAX_SUPPORTED_POE_CLASS.
+	 */
+	u32 class;
+	/* true if the port is disabled in the DT */
+	bool fully_disabled;
+	/* true if the port shouldn't be enabled on driver init */
+	bool off_by_default;
+};
+
 struct tps23861_data {
 	struct regmap *regmap;
 	u32 shunt_resistor;
 	struct i2c_client *client;
+	struct gpio_desc *reset_gpio;
+	struct gpio_desc *shutdown_gpio;
+	int irq;
+	struct tps23861_port_data ports[TPS23861_NUM_PORTS];
 };
 
 static const struct regmap_config tps23861_regmap_config = {
@@ -205,13 +242,19 @@ static int tps23861_port_enable(struct tps23861_data *data, int channel)
 	regval |= BIT(channel);
 	regval |= BIT(channel + 4);
 	err = regmap_write(data->regmap, DETECT_CLASS_RESTART, regval);
-
-	return err;
+	if (err)
+		return err;
+	return regmap_write(data->regmap, RESET, RESET_CLRAIN);
 }
 
-static umode_t tps23861_is_visible(const void *data, enum hwmon_sensor_types type,
+static umode_t tps23861_is_visible(const void *input_data, enum hwmon_sensor_types type,
 				   u32 attr, int channel)
 {
+	const struct tps23861_data *data = input_data;
+
+	/* Channel may be >=TPS23861_NUM_PORTS for common Input voltage */
+	if (channel < TPS23861_NUM_PORTS && data->ports[channel].fully_disabled)
+		return 0;
 	switch (type) {
 	case hwmon_temp:
 		switch (attr) {
@@ -325,10 +368,15 @@ static int tps23861_read_string(struct device *dev,
 				enum hwmon_sensor_types type,
 				u32 attr, int channel, const char **str)
 {
+	struct tps23861_data *data = dev_get_drvdata(dev);
+
 	switch (type) {
 	case hwmon_in:
 	case hwmon_curr:
-		*str = tps23861_port_label[channel];
+		if (channel < TPS23861_NUM_PORTS)
+			*str = data->ports[channel].label;
+		else
+			*str = tps23861_port_label[channel];
 		break;
 	case hwmon_temp:
 		*str = "Die";
@@ -502,16 +550,154 @@ static int tps23861_port_status_show(struct seq_file *s, void *data)
 
 DEFINE_SHOW_ATTRIBUTE(tps23861_port_status);
 
+static inline bool tps23861_auto_mode(struct tps23861_port_data *port)
+{
+	return port->class == MAX_SUPPORTED_POE_CLASS;
+}
+
+static irqreturn_t tps23861_irq_handler(int irq, void *dev_id)
+{
+	struct tps23861_data *data = (struct tps23861_data *)dev_id;
+	struct tps23861_port_data *ports = data->ports;
+	struct device *dev = &data->client->dev;
+
+	unsigned int intr_status, status, class, i;
+	unsigned int det_status = 0;
+	int ret;
+
+	ret = regmap_read(data->regmap, INTERRUPT_STATUS, &intr_status);
+	if (ret || intr_status == 0)
+		return IRQ_NONE;
+	if (intr_status & INTERRUPT_CLASS) {
+		regmap_read(data->regmap, DETECTION_EVENT, &det_status);
+		for (i = 0; i < TPS23861_NUM_PORTS; i++) {
+			if (tps23861_auto_mode(ports + i))
+				continue;
+			if (!(det_status & BIT(i + 4)))
+				continue;
+			ret = regmap_read(data->regmap, PORT_1_STATUS + i, &status);
+			if (ret)
+				continue;
+			class = FIELD_GET(PORT_STATUS_CLASS_MASK, status);
+			if (class == PORT_CLASS_0) {
+				/* class 0 is same power as class 3, change 0 to
+				 * 3 for easy comparison
+				 */
+				class = 3;
+			}
+			if (class == PORT_CLASS_UNKNOWN ||
+			    class > MAX_SUPPORTED_POE_CLASS)
+				continue;
+			if (class > ports[i].class) {
+				dev_info(dev, "%s class mismatch: got %d, want <= %d",
+					 ports[i].label, class, ports[i].class);
+				continue;
+			}
+			regmap_read(data->regmap, POWER_STATUS, &status);
+			if (status & BIT(i))
+				continue; /* already enabled */
+			/* Set ICUT and poe+ according to class. Values in ICUT table happen
+			 * to match class values, so just set class.
+			 */
+			regmap_update_bits(data->regmap,
+					   PORT_1_ICUT + i / 2,
+					   PORT_1_ICUT_MASK << ((i % 2) * 4),
+					   class << ((i % 2) * 4));
+			regmap_update_bits(data->regmap, POE_PLUS,
+					   BIT(i + 4),
+					   class > 3 ? BIT(i + 4) : 0);
+			dev_info(dev, "%s class %d, enabling power",
+				 ports[i].label, class);
+			regmap_write(data->regmap, POWER_ENABLE, BIT(i));
+		}
+	}
+	regmap_write(data->regmap, RESET, RESET_CLRAIN);
+	return IRQ_HANDLED;
+}
+
+static int tps23861_reset(struct i2c_client *client)
+{
+	struct tps23861_data *data = i2c_get_clientdata(client);
+	unsigned int val;
+
+	if (data->reset_gpio) {
+		gpiod_direction_output(data->reset_gpio, true);
+		/* If shutdown pin is defined, use it to keep ports off, while
+		 * turning the chip on for i2c configuration.
+		 */
+		if (data->shutdown_gpio)
+			gpiod_direction_output(data->shutdown_gpio, true);
+		usleep_range(TPS23861_TIME_RESET_US, TPS23861_TIME_RESET_US_MAX);
+		gpiod_set_value_cansleep(data->reset_gpio, false);
+		msleep(TPS23861_TIME_POWER_ON_RESET_MS);
+		if (data->shutdown_gpio)
+			gpiod_set_value_cansleep(data->shutdown_gpio, false);
+		msleep(TPS23861_TIME_I2C_MS);
+	}
+
+	/* Check the device is responsive */
+	return regmap_read(data->regmap, OPERATING_MODE, &val);
+}
+
+static void tps23861_init_ports(struct i2c_client *client)
+{
+	struct tps23861_data *data = i2c_get_clientdata(client);
+	struct tps23861_port_data *ports = data->ports;
+	unsigned int i, mode;
+
+	for (i = 0; i < TPS23861_NUM_PORTS; i++) {
+		mode = ports[i].fully_disabled	     ? OPERATING_MODE_OFF :
+		       tps23861_auto_mode(&ports[i]) ? OPERATING_MODE_AUTO :
+						       OPERATING_MODE_SEMI;
+		regmap_update_bits(data->regmap, OPERATING_MODE,
+				   OPERATING_MODE_PORT_1_MASK << (2 * i),
+				   mode << (2 * i));
+		if (ports[i].fully_disabled)
+			continue;
+		if (ports[i].off_by_default)
+			tps23861_port_disable(data, i);
+		else
+			tps23861_port_enable(data, i);
+	}
+}
+
 static int tps23861_probe(struct i2c_client *client)
 {
 	struct device *dev = &client->dev;
 	struct tps23861_data *data;
+	struct tps23861_port_data *ports;
 	struct device *hwmon_dev;
+	struct gpio_desc *gpio;
+	struct device_node *child;
 	u32 shunt_resistor;
+	int ret;
+	unsigned int i;
+	bool need_irq = false;
+	const char *hwmon_name = client->name;
 
 	data = devm_kzalloc(dev, sizeof(*data), GFP_KERNEL);
 	if (!data)
 		return -ENOMEM;
+
+	ports = data->ports;
+	for (i = 0; i < TPS23861_NUM_PORTS; i++) {
+		ports[i].label = tps23861_port_label[i];
+		ports[i].class = MAX_SUPPORTED_POE_CLASS;
+	}
+
+	gpio = devm_gpiod_get_optional(dev, "reset", GPIOD_ASIS);
+	if (IS_ERR(gpio)) {
+		devm_kfree(dev, data);
+		return -EPROBE_DEFER;
+	}
+	data->reset_gpio = gpio;
+
+	gpio = devm_gpiod_get_optional(dev, "ti,ports-shutdown", GPIOD_ASIS);
+	if (IS_ERR(gpio)) {
+		devm_kfree(dev, data);
+		return -EPROBE_DEFER;
+	}
+	data->shutdown_gpio = gpio;
 
 	data->client = client;
 	i2c_set_clientdata(client, data);
@@ -520,6 +706,55 @@ static int tps23861_probe(struct i2c_client *client)
 	if (IS_ERR(data->regmap)) {
 		dev_err(dev, "failed to allocate register map\n");
 		return PTR_ERR(data->regmap);
+	}
+	ret = tps23861_reset(client);
+	if (ret)
+		return -ENODEV;
+	for_each_child_of_node(dev->of_node, child) {
+		ret = of_property_read_u32(child, "reg", &i);
+		if (ret || i >= TPS23861_NUM_PORTS) {
+			dev_err(dev, "node %s must define 'reg' < %d\n",
+				child->name, TPS23861_NUM_PORTS);
+			continue;
+		}
+		if (!of_device_is_available(child)) {
+			ports[i].fully_disabled = true;
+			continue;
+		}
+		ports[i].off_by_default = of_property_read_bool(child, "ti,off-by-default");
+		of_property_read_string(child, "label", &ports[i].label);
+		of_property_read_u32(child, "ti,class", &ports[i].class);
+		if (ports[i].class > MAX_SUPPORTED_POE_CLASS) {
+			dev_err(dev, "%s invalid class, disabling\n", ports[i].label);
+			ports[i].fully_disabled = true;
+			continue;
+		}
+		if (ports[i].class == 0) {
+			/* class 0 is same power as class 3, change 0 to 3 for
+			 * easy comparison
+			 */
+			ports[i].class = 3;
+		}
+		need_irq = need_irq || !tps23861_auto_mode(&ports[i]);
+		dev_info(dev, "%s: max class: %d, %s by default\n",
+			 ports[i].label, ports[i].class,
+			 ports[i].off_by_default ? "off" : "on");
+	}
+	if (need_irq) {
+		data->irq = irq_of_parse_and_map(dev->of_node, 0);
+		if (!data->irq) {
+			dev_err(dev, "failed to configure irq\n");
+			return -EINVAL;
+		}
+		ret = devm_request_threaded_irq(dev, data->irq, NULL,
+						tps23861_irq_handler,
+						IRQF_TRIGGER_FALLING,
+						"tps23861_irq", data);
+		if (ret) {
+			dev_err(dev, "failed to request irq %d\n", data->irq);
+			return ret;
+		}
+		regmap_write(data->regmap, INTERRUPT_ENABLE, INTERRUPT_CLASS);
 	}
 
 	if (!of_property_read_u32(dev->of_node, "shunt-resistor-micro-ohms", &shunt_resistor))
@@ -536,7 +771,11 @@ static int tps23861_probe(struct i2c_client *client)
 				TPS23861_GENERAL_MASK_1,
 				TPS23861_CURRENT_SHUNT_MASK);
 
-	hwmon_dev = devm_hwmon_device_register_with_info(dev, client->name,
+	of_property_read_string(dev->of_node, "label", &hwmon_name);
+
+	tps23861_init_ports(client);
+
+	hwmon_dev = devm_hwmon_device_register_with_info(dev, hwmon_name,
 							 data, &tps23861_chip_info,
 							 NULL);
 	if (IS_ERR(hwmon_dev))
