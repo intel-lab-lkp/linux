@@ -983,6 +983,24 @@ static void hw_breakpoint_del(struct perf_event *bp, int flags)
 	arch_uninstall_hw_breakpoint(bp);
 }
 
+int hw_breakpoint_modify_local(struct perf_event *bp, struct perf_event_attr *attr)
+{
+	int err;
+
+	err = hw_breakpoint_arch_parse(bp, attr, counter_arch_bp(bp));
+	if (err)
+		return err;
+
+	return arch_reinstall_hw_breakpoint(bp);
+}
+EXPORT_SYMBOL(hw_breakpoint_modify_local);
+
+/* weak fallback for arches without support */
+__weak int arch_reinstall_hw_breakpoint(struct perf_event *bp)
+{
+	return -EOPNOTSUPP;
+}
+
 static void hw_breakpoint_start(struct perf_event *bp, int flags)
 {
 	bp->hw.state = 0;
