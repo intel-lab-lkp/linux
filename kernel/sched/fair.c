@@ -5367,6 +5367,12 @@ static inline void finish_delayed_dequeue_entity(struct sched_entity *se)
 	clear_delayed(se);
 	if (sched_feat(DELAY_ZERO) && se->vlag > 0)
 		se->vlag = 0;
+
+	if (entity_is_task(se)) {
+		struct task_struct *p = task_of(se);
+
+		__block_task(task_rq(p), p);
+	}
 }
 
 static bool
@@ -7110,21 +7116,6 @@ static int dequeue_entities(struct rq *rq, struct sched_entity *se, int flags)
 	/* balance early to pull high priority tasks */
 	if (unlikely(!was_sched_idle && sched_idle_rq(rq)))
 		rq->next_balance = jiffies;
-
-	if (p && task_delayed) {
-		WARN_ON_ONCE(!task_sleep);
-		WARN_ON_ONCE(p->on_rq != 1);
-
-		/* Fix-up what dequeue_task_fair() skipped */
-		hrtick_update(rq);
-
-		/*
-		 * Fix-up what block_task() skipped.
-		 *
-		 * Must be last, @p might not be valid after this.
-		 */
-		__block_task(rq, p);
-	}
 
 	return 1;
 }
