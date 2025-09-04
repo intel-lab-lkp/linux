@@ -354,26 +354,30 @@ static __maybe_unused const bool class_##_name##_is_conditional = _is_cond
 			_ptr = NULL;                                        \
 		}                                                           \
 		return _ptr;                                                \
-	}                                                                   \
-	static inline int class_##_name##_lock_err(class_##_name##_t *_T)   \
-	{                                                                   \
-		long _rc = (__force unsigned long)*(_exp);                  \
-		if (!_rc) {                                                 \
-			_rc = -EBUSY;                                       \
-		}                                                           \
-		if (!IS_ERR_VALUE(_rc)) {                                   \
-			_rc = 0;                                            \
-		}                                                           \
-		return _rc;                                                 \
+	}
+
+#define __DEFINE_GUARD_LOCK_ERR(_name, _exp, _attr)                      \
+	static _attr int class_##_name##_lock_err(class_##_name##_t *_T) \
+	{                                                                \
+		long _rc = (__force unsigned long)*(_exp);               \
+		if (!_rc) {                                              \
+			_rc = -EBUSY;                                    \
+		}                                                        \
+		if (!IS_ERR_VALUE(_rc)) {                                \
+			_rc = 0;                                         \
+		}                                                        \
+		return _rc;                                              \
 	}
 
 #define DEFINE_CLASS_IS_GUARD(_name) \
 	__DEFINE_CLASS_IS_CONDITIONAL(_name, false); \
-	__DEFINE_GUARD_LOCK_PTR(_name, _T)
+	__DEFINE_GUARD_LOCK_PTR(_name, _T) \
+	__DEFINE_GUARD_LOCK_ERR(_name, _T, __maybe_unused)
 
 #define DEFINE_CLASS_IS_COND_GUARD(_name) \
 	__DEFINE_CLASS_IS_CONDITIONAL(_name, true); \
-	__DEFINE_GUARD_LOCK_PTR(_name, _T)
+	__DEFINE_GUARD_LOCK_PTR(_name, _T) \
+	__DEFINE_GUARD_LOCK_ERR(_name, _T, inline)
 
 #define DEFINE_GUARD(_name, _type, _lock, _unlock) \
 	DEFINE_CLASS(_name, _type, if (!__GUARD_IS_ERR(_T)) { _unlock; }, ({ _lock; _T; }), _type _T); \
@@ -430,7 +434,8 @@ _label:									\
 
 #define __scoped_cond_guard(_name, _fail, _label, args...)		\
 	for (CLASS(_name, scope)(args); true; ({ goto _label; }))	\
-		if (!__guard_ptr(_name)(&scope)) {			\
+		if (!__guard_ptr(_name)(&scope) ||			\
+		     __guard_err(_name)(&scope)) {			\
 			BUILD_BUG_ON(!__is_cond_ptr(_name));		\
 			_fail;						\
 _label:									\
@@ -471,7 +476,8 @@ static inline void class_##_name##_destructor(class_##_name##_t *_T)	\
 	if (!__GUARD_IS_ERR(_T->lock)) { _unlock; }			\
 }									\
 									\
-__DEFINE_GUARD_LOCK_PTR(_name, &_T->lock)
+__DEFINE_GUARD_LOCK_PTR(_name, &_T->lock) \
+__DEFINE_GUARD_LOCK_ERR(_name, &_T->lock, __maybe_unused)
 
 #define __DEFINE_LOCK_GUARD_1(_name, _type, _lock)			\
 static inline class_##_name##_t class_##_name##_constructor(_type *l)	\
