@@ -349,6 +349,17 @@ static inline u64 snmp_fold_field64(void __percpu *mib, int offt, size_t syncp_o
 	} \
 }
 
+#define snmp_get_cpu_field_batch_cnt(buff, stats_list, cnt, mib_statistic) \
+{ \
+	int i, c; \
+	for_each_possible_cpu(c) { \
+		for (i = 0; i < cnt; i++) \
+			buff[i] += snmp_get_cpu_field( \
+						mib_statistic, \
+						c, stats_list[i].entry); \
+	} \
+}
+
 static inline void inet_get_local_port_range(const struct net *net, int *low, int *high)
 {
 	u32 range = READ_ONCE(net->ipv4.ip_local_ports.range);
