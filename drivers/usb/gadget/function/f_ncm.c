@@ -1459,7 +1459,7 @@ static int ncm_bind(struct usb_configuration *c, struct usb_function *f)
 	mutex_unlock(&ncm_opts->lock);
 
 	if (status)
-		goto fail;
+		goto fail_os_desc;
 
 	ncm_opts->bound = true;
 
@@ -1469,7 +1469,7 @@ static int ncm_bind(struct usb_configuration *c, struct usb_function *f)
 				 ARRAY_SIZE(ncm_string_defs));
 	if (IS_ERR(us)) {
 		status = PTR_ERR(us);
-		goto fail;
+		goto fail_os_desc;
 	}
 	ncm_control_intf.iInterface = us[STRING_CTRL_IDX].id;
 	ncm_data_nop_intf.iInterface = us[STRING_DATA_IDX].id;
@@ -1480,7 +1480,7 @@ static int ncm_bind(struct usb_configuration *c, struct usb_function *f)
 	/* allocate instance-specific interface IDs */
 	status = usb_interface_id(c, f);
 	if (status < 0)
-		goto fail;
+		goto fail_os_desc;
 	ncm->ctrl_id = status;
 	ncm_iad_desc.bFirstInterface = status;
 
@@ -1493,7 +1493,7 @@ static int ncm_bind(struct usb_configuration *c, struct usb_function *f)
 
 	status = usb_interface_id(c, f);
 	if (status < 0)
-		goto fail;
+		goto fail_os_desc;
 	ncm->data_id = status;
 
 	ncm_data_nop_intf.bInterfaceNumber = status;
@@ -1507,17 +1507,17 @@ static int ncm_bind(struct usb_configuration *c, struct usb_function *f)
 	/* allocate instance-specific endpoints */
 	ep = usb_ep_autoconfig(cdev->gadget, &fs_ncm_in_desc);
 	if (!ep)
-		goto fail;
+		goto fail_os_desc;
 	ncm->port.in_ep = ep;
 
 	ep = usb_ep_autoconfig(cdev->gadget, &fs_ncm_out_desc);
 	if (!ep)
-		goto fail;
+		goto fail_os_desc;
 	ncm->port.out_ep = ep;
 
 	ep = usb_ep_autoconfig(cdev->gadget, &fs_ncm_notify_desc);
 	if (!ep)
-		goto fail;
+		goto fail_os_desc;
 	ncm->notify = ep;
 
 	status = -ENOMEM;
@@ -1525,10 +1525,10 @@ static int ncm_bind(struct usb_configuration *c, struct usb_function *f)
 	/* allocate notification request and buffer */
 	ncm->notify_req = usb_ep_alloc_request(ep, GFP_KERNEL);
 	if (!ncm->notify_req)
-		goto fail;
+		goto fail_os_desc;
 	ncm->notify_req->buf = kmalloc(NCM_STATUS_BYTECOUNT, GFP_KERNEL);
 	if (!ncm->notify_req->buf)
-		goto fail;
+		goto fail_notify_req;
 	ncm->notify_req->context = ncm;
 	ncm->notify_req->complete = ncm_notify_complete;
 
@@ -1550,7 +1550,7 @@ static int ncm_bind(struct usb_configuration *c, struct usb_function *f)
 	status = usb_assign_descriptors(f, ncm_fs_function, ncm_hs_function,
 			ncm_ss_function, ncm_ss_function);
 	if (status)
-		goto fail;
+		goto fail_notify_req_buf;
 
 	/*
 	 * NOTE:  all that is done without knowing or caring about
@@ -1568,14 +1568,16 @@ static int ncm_bind(struct usb_configuration *c, struct usb_function *f)
 			ncm->notify->name);
 	return 0;
 
-fail:
+fail_notify_req_buf:
+	kfree(ncm->notify_req->buf);
+	ncm->notify_req->buf = NULL;
+fail_notify_req:
+	usb_ep_free_request(ncm->notify, ncm->notify_req);
+	ncm->notify_req = NULL;
+fail_os_desc:
 	kfree(f->os_desc_table);
+	f->os_desc_table = NULL;
 	f->os_desc_n = 0;
-
-	if (ncm->notify_req) {
-		kfree(ncm->notify_req->buf);
-		usb_ep_free_request(ncm->notify, ncm->notify_req);
-	}
 
 	ERROR(cdev, "%s: can't bind, err %d\n", f->name, status);
 
@@ -1736,6 +1738,7 @@ static void ncm_unbind(struct usb_configuration *c, struct usb_function *f)
 	hrtimer_cancel(&ncm->task_timer);
 
 	kfree(f->os_desc_table);
+	f->os_desc_table = NULL;
 	f->os_desc_n = 0;
 
 	ncm_string_defs[0].id = 0;
@@ -1747,7 +1750,9 @@ static void ncm_unbind(struct usb_configuration *c, struct usb_function *f)
 	}
 
 	kfree(ncm->notify_req->buf);
+	ncm->notify_req->buf = NULL;
 	usb_ep_free_request(ncm->notify, ncm->notify_req);
+	ncm->notify_req = NULL;
 }
 
 static struct usb_function *ncm_alloc(struct usb_function_instance *fi)
