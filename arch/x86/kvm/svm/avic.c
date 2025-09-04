@@ -1101,14 +1101,8 @@ bool avic_hardware_setup(void)
 	if (!npt_enabled)
 		return false;
 
-	/* AVIC is a prerequisite for x2AVIC. */
-	if (!boot_cpu_has(X86_FEATURE_AVIC) && !force_avic) {
-		if (boot_cpu_has(X86_FEATURE_X2AVIC)) {
-			pr_warn(FW_BUG "Cannot support x2AVIC due to AVIC is disabled");
-			pr_warn(FW_BUG "Try enable AVIC using force_avic option");
-		}
+	if (!boot_cpu_has(X86_FEATURE_AVIC) && !force_avic)
 		return false;
-	}
 
 	if (cc_platform_has(CC_ATTR_HOST_SEV_SNP) &&
 	    !boot_cpu_has(X86_FEATURE_HV_INUSE_WR_ALLOWED)) {
