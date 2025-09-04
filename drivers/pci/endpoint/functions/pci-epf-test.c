@@ -1022,7 +1022,8 @@ static int pci_epf_test_alloc_space(struct pci_epf *epf)
 	enum pci_barno test_reg_bar = epf_test->test_reg_bar;
 	enum pci_barno bar;
 	const struct pci_epc_features *epc_features = epf_test->epc_features;
-	size_t test_reg_size;
+	size_t test_reg_size, test_bar_size;
+	u64 bar_fixed_size;
 
 	test_reg_bar_size = ALIGN(sizeof(struct pci_epf_test_reg), 128);
 
@@ -1050,7 +1051,13 @@ static int pci_epf_test_alloc_space(struct pci_epf *epf)
 		if (bar == test_reg_bar)
 			continue;
 
-		base = pci_epf_alloc_space(epf, bar_size[bar], bar,
+		test_bar_size = bar_size[bar];
+
+		bar_fixed_size = epc_features->bar[bar].fixed_size;
+		if (epc_features->bar[bar].type == BAR_FIXED && bar_fixed_size)
+			test_bar_size = min(bar_size[bar], bar_fixed_size);
+
+		base = pci_epf_alloc_space(epf, test_bar_size, bar,
 					   epc_features, PRIMARY_INTERFACE);
 		if (!base)
 			dev_err(dev, "Failed to allocate space for BAR%d\n",
