@@ -1710,6 +1710,12 @@ pad_compress_skb(struct ppp *ppp, struct sk_buff *skb)
 		ppp->xcomp->comp_extra + ppp->dev->hard_header_len;
 	int compressor_skb_size = ppp->dev->mtu +
 		ppp->xcomp->comp_extra + PPP_HDRLEN;
+	/* Until we fix the compressor need to make sure data portion is
+	 * linear.
+	 */
+	if (skb_linearize(skb))
+		return NULL;
+
 	new_skb = alloc_skb(new_skb_size, GFP_ATOMIC);
 	if (!new_skb) {
 		if (net_ratelimit())
@@ -1798,6 +1804,12 @@ ppp_send_frame(struct ppp *ppp, struct sk_buff *skb)
 	case PPP_IP:
 		if (!ppp->vj || (ppp->flags & SC_COMP_TCP) == 0)
 			break;
+		/* Until we fix the compressor need to make sure data portion
+		 * is linear.
+		 */
+		if (skb_linearize(skb))
+			goto drop;
+
 		/* try to do VJ TCP header compression */
 		new_skb = alloc_skb(skb->len + ppp->dev->hard_header_len - 2,
 				    GFP_ATOMIC);
@@ -3516,10 +3528,13 @@ ppp_connect_channel(struct channel *pch, int unit)
 		ret = -ENOTCONN;
 		goto outl;
 	}
-	if (pch->chan->direct_xmit)
+	if (pch->chan->direct_xmit) {
 		ppp->dev->priv_flags |= IFF_NO_QUEUE;
-	else
+		ppp->dev->features |= NETIF_F_SG | NETIF_F_FRAGLIST;
+	} else {
 		ppp->dev->priv_flags &= ~IFF_NO_QUEUE;
+		ppp->dev->features &= ~(NETIF_F_SG | NETIF_F_FRAGLIST);
+	}
 	spin_unlock_bh(&pch->downl);
 	if (pch->file.hdrlen > ppp->file.hdrlen)
 		ppp->file.hdrlen = pch->file.hdrlen;
