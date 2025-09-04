@@ -382,9 +382,14 @@ static inline bool
 mt76_connac_skip_fw_pmctrl(struct mt76_phy *phy, struct mt76_connac_pm *pm)
 {
 	struct mt76_dev *dev = phy->dev;
+	u16 token_count = 0;
 	bool ret;
 
-	if (dev->token_count)
+	spin_lock_bh(&dev->token_lock);
+	token_count = dev->token_count;
+	spin_unlock_bh(&dev->token_lock);
+
+	if (token_count)
 		return true;
 
 	spin_lock_bh(&pm->wake.lock);
