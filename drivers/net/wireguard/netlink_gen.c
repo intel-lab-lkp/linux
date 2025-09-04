@@ -9,13 +9,12 @@
 #include "netlink_gen.h"
 
 #include <uapi/linux/wireguard.h>
-#include <linux/wireguard_params.h>
 #include <linux/time_types.h>
 
 /* Common nested types */
 const struct nla_policy wireguard_wgallowedip_nl_policy[WGALLOWEDIP_A_FLAGS + 1] = {
 	[WGALLOWEDIP_A_FAMILY] = { .type = NLA_U16, },
-	[WGALLOWEDIP_A_IPADDR] = NLA_POLICY_MIN_LEN(__WG_INADDR_SZ),
+	[WGALLOWEDIP_A_IPADDR] = NLA_POLICY_MIN_LEN(4),
 	[WGALLOWEDIP_A_CIDR_MASK] = { .type = NLA_U8, },
 	[WGALLOWEDIP_A_FLAGS] = NLA_POLICY_MASK(NLA_U32, 0x1),
 };
@@ -24,9 +23,9 @@ const struct nla_policy wireguard_wgpeer_nl_policy[WGPEER_A_PROTOCOL_VERSION + 1
 	[WGPEER_A_PUBLIC_KEY] = NLA_POLICY_EXACT_LEN(WG_KEY_LEN),
 	[WGPEER_A_PRESHARED_KEY] = NLA_POLICY_EXACT_LEN(WG_KEY_LEN),
 	[WGPEER_A_FLAGS] = NLA_POLICY_MASK(NLA_U32, 0x7),
-	[WGPEER_A_ENDPOINT] = NLA_POLICY_MIN_LEN(__WG_SOCKADDR_SZ),
+	[WGPEER_A_ENDPOINT] = NLA_POLICY_MIN_LEN(16),
 	[WGPEER_A_PERSISTENT_KEEPALIVE_INTERVAL] = { .type = NLA_U16, },
-	[WGPEER_A_LAST_HANDSHAKE_TIME] = NLA_POLICY_EXACT_LEN(__WG_TIMESPEC_SZ),
+	[WGPEER_A_LAST_HANDSHAKE_TIME] = NLA_POLICY_EXACT_LEN(16),
 	[WGPEER_A_RX_BYTES] = { .type = NLA_U64, },
 	[WGPEER_A_TX_BYTES] = { .type = NLA_U64, },
 	[WGPEER_A_ALLOWEDIPS] = NLA_POLICY_NESTED_ARRAY(wireguard_wgallowedip_nl_policy),
@@ -36,7 +35,7 @@ const struct nla_policy wireguard_wgpeer_nl_policy[WGPEER_A_PROTOCOL_VERSION + 1
 /* WG_CMD_GET_DEVICE - dump */
 static const struct nla_policy wireguard_get_device_nl_policy[WGDEVICE_A_PEERS + 1] = {
 	[WGDEVICE_A_IFINDEX] = { .type = NLA_U32, },
-	[WGDEVICE_A_IFNAME] = { .type = NLA_NUL_STRING, .len = __WG_IFNAMLEN, },
+	[WGDEVICE_A_IFNAME] = { .type = NLA_NUL_STRING, .len = 15, },
 	[WGDEVICE_A_PRIVATE_KEY] = NLA_POLICY_EXACT_LEN(WG_KEY_LEN),
 	[WGDEVICE_A_PUBLIC_KEY] = NLA_POLICY_EXACT_LEN(WG_KEY_LEN),
 	[WGDEVICE_A_FLAGS] = NLA_POLICY_MASK(NLA_U32, 0x1),
@@ -48,7 +47,7 @@ static const struct nla_policy wireguard_get_device_nl_policy[WGDEVICE_A_PEERS +
 /* WG_CMD_SET_DEVICE - do */
 static const struct nla_policy wireguard_set_device_nl_policy[WGDEVICE_A_PEERS + 1] = {
 	[WGDEVICE_A_IFINDEX] = { .type = NLA_U32, },
-	[WGDEVICE_A_IFNAME] = { .type = NLA_NUL_STRING, .len = __WG_IFNAMLEN, },
+	[WGDEVICE_A_IFNAME] = { .type = NLA_NUL_STRING, .len = 15, },
 	[WGDEVICE_A_PRIVATE_KEY] = NLA_POLICY_EXACT_LEN(WG_KEY_LEN),
 	[WGDEVICE_A_PUBLIC_KEY] = NLA_POLICY_EXACT_LEN(WG_KEY_LEN),
 	[WGDEVICE_A_FLAGS] = NLA_POLICY_MASK(NLA_U32, 0x1),

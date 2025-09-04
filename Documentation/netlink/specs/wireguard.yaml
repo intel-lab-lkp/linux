@@ -22,34 +22,6 @@ definitions:
     type: const
     value: 32
   -
-    name-prefix: --wg-
-    name: inaddr-sz
-    type: const
-    doc: Equivalent of ``sizeof(struct in_addr)``.
-    header: linux/wireguard_params.h
-    value: 4
-  -
-    name-prefix: --wg-
-    name: sockaddr-sz
-    type: const
-    doc: Equivalent of ``sizeof(struct sockaddr)``.
-    header: linux/wireguard_params.h
-    value: 16
-  -
-    name-prefix: --wg-
-    name: timespec-sz
-    type: const
-    doc: Equivalent of ``sizeof(struct __kernel_timespec)``.
-    header: linux/wireguard_params.h
-    value: 16
-  -
-    name-prefix: --wg-
-    name: ifnamlen
-    type: const
-    doc: Equivalent of ``IFNAMSIZ - 1``.
-    header: linux/wireguard_params.h
-    value: 15
-  -
     name: --kernel-timespec
     type: struct
     header: linux/time_types.h
@@ -103,7 +75,7 @@ attribute-sets:
         name: ifname
         type: string
         checks:
-          max-len: --wg-ifnamlen
+          max-len: 15
       -
         name: private-key
         type: binary
@@ -179,7 +151,7 @@ attribute-sets:
         doc: struct sockaddr_in or struct sockaddr_in6
         type: binary
         checks:
-          min-len: --wg-sockaddr-sz
+          min-len: 16
       -
         name: persistent-keepalive-interval
         type: u16
@@ -189,7 +161,7 @@ attribute-sets:
         type: binary
         struct: --kernel-timespec
         checks:
-          exact-len: --wg-timespec-sz
+          exact-len: 16
       -
         name: rx-bytes
         type: u64
@@ -226,7 +198,7 @@ attribute-sets:
         doc: struct in_addr or struct in6_add
         display-hint: ipv4-or-v6
         checks:
-          min-len: --wg-inaddr-sz
+          min-len: 4
       -
         name: cidr-mask
         type: u8
