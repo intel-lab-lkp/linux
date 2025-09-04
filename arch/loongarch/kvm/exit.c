@@ -778,9 +778,7 @@ static long kvm_save_notify(struct kvm_vcpu *vcpu)
 		return 0;
 	default:
 		return KVM_HCALL_INVALID_CODE;
-	};
-
-	return KVM_HCALL_INVALID_CODE;
+	}
 };
 
 /*
