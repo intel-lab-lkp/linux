@@ -1096,20 +1096,23 @@ void avic_vcpu_unblocking(struct kvm_vcpu *vcpu)
  * - Hypervisor can support both xAVIC and x2AVIC in the same guest.
  * - The mode can be switched at run-time.
  */
-bool avic_hardware_setup(void)
+void avic_hardware_setup(void)
 {
-	if (!npt_enabled)
-		return false;
+	bool enable = false;
+
+	if (!avic || !npt_enabled)
+		goto out;
 
 	if (!boot_cpu_has(X86_FEATURE_AVIC) && !force_avic)
-		return false;
+		goto out;
 
 	if (cc_platform_has(CC_ATTR_HOST_SEV_SNP) &&
 	    !boot_cpu_has(X86_FEATURE_HV_INUSE_WR_ALLOWED)) {
 		pr_warn("AVIC disabled: missing HvInUseWrAllowed on SNP-enabled system\n");
-		return false;
+		goto out;
 	}
 
+	enable = true;
 	pr_info("AVIC enabled%s\n", cpu_feature_enabled(X86_FEATURE_AVIC) ? "" :
 				    " (forced, your system may crash and burn)");
 
@@ -1128,5 +1131,7 @@ bool avic_hardware_setup(void)
 
 	amd_iommu_register_ga_log_notifier(&avic_ga_log_notifier);
 
-	return true;
+out:
+	avic = enable;
+	enable_apicv = avic;
 }

@@ -162,7 +162,7 @@ module_param(tsc_scaling, int, 0444);
  * enable / disable AVIC.  Because the defaults differ for APICv
  * support between VMX and SVM we cannot use module_param_named.
  */
-static bool avic;
+bool avic;
 module_param(avic, bool, 0444);
 module_param(enable_ipiv, bool, 0444);
 
@@ -5406,7 +5406,7 @@ static __init int svm_hardware_setup(void)
 			goto err;
 	}
 
-	enable_apicv = avic = avic && avic_hardware_setup();
+	avic_hardware_setup();
 
 	if (!enable_apicv) {
 		enable_ipiv = false;
