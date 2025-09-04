@@ -1199,6 +1199,9 @@ static int lan966x_probe(struct platform_device *pdev)
 			continue;
 
 		phy_mode = fwnode_get_phy_mode(portnp);
+		if (phy_mode)
+			goto cleanup_ports;
+
 		err = lan966x_probe_port(lan966x, p, phy_mode, portnp);
 		if (err)
 			goto cleanup_ports;
