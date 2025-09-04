@@ -52,21 +52,27 @@ static kgid_t v9fs_get_fsgid_for_create(struct inode *dir_inode)
 	return current_fsgid();
 }
 
+struct iget_data {
+	struct p9_stat_dotl *st;
+
+	/* May be NULL */
+	struct dentry *dentry;
+
+	bool need_double_check;
+};
+
 static int v9fs_test_inode_dotl(struct inode *inode, void *data)
 {
 	struct v9fs_inode *v9inode = V9FS_I(inode);
-	struct p9_stat_dotl *st = (struct p9_stat_dotl *)data;
+	struct p9_stat_dotl *st = ((struct iget_data *)data)->st;
+	struct dentry *dentry = ((struct iget_data *)data)->dentry;
+	struct v9fs_session_info *v9ses = v9fs_inode2v9ses(inode);
+	bool cached = v9ses->cache & (CACHE_META | CACHE_LOOSE);
 
-	/* don't match inode of different type */
+	/*
+	 * Don't reuse inode of different type, even if path matches.
+	 */
 	if (inode_wrong_type(inode, st->st_mode))
-		return 0;
-
-	if (inode->i_generation != st->st_gen)
-		return 0;
-
-	/* compare qid details */
-	if (memcmp(&v9inode->qid.version,
-		   &st->qid.version, sizeof(v9inode->qid.version)))
 		return 0;
 
 	if (v9inode->qid.type != st->qid.type)
@@ -74,22 +80,70 @@ static int v9fs_test_inode_dotl(struct inode *inode, void *data)
 
 	if (v9inode->qid.path != st->qid.path)
 		return 0;
+
+	if (cached) {
+		/*
+		 * Server side changes are not supposed to happen in cached mode.
+		 * If we fail this generation or version comparison on the inode,
+		 * we don't reuse it.
+		 */
+		if (inode->i_generation != st->st_gen)
+			return 0;
+
+		/* compare qid details */
+		if (memcmp(&v9inode->qid.version,
+			&st->qid.version, sizeof(v9inode->qid.version)))
+			return 0;
+	}
+
+	if (v9fs_inode_ident_path(v9ses) && dentry) {
+		if (v9inode->path) {
+			if (!ino_path_compare(v9inode->path, dentry)) {
+				p9_debug(
+					P9_DEBUG_VFS,
+					"Refusing to reuse inode %p based on path mismatch",
+					inode);
+				return 0;
+			}
+		} else if (inode->i_state & I_NEW) {
+			/*
+			 * iget5_locked may call this function with a still
+			 * initializing (I_NEW) inode, so we're now racing with the
+			 * code in v9fs_qid_iget_dotl that prepares v9inode->path.
+			 * Returning from this test function now with positive result
+			 * will cause us to wait for this inode to be ready, and we
+			 * can then re-check in v9fs_qid_iget_dotl.
+			 */
+			((struct iget_data *)data)->need_double_check = true;
+		} else {
+			WARN_ONCE(
+				1,
+				"Inode %p (ino %lu) does not have v9inode->path even though fs has path-based inode identification enabled?",
+				inode, inode->i_ino);
+		}
+	}
+
 	return 1;
 }
 
-/* Always get a new inode */
 static int v9fs_test_new_inode_dotl(struct inode *inode, void *data)
 {
 	return 0;
 }
 
-static int v9fs_set_inode_dotl(struct inode *inode,  void *data)
+static int v9fs_set_inode_dotl(struct inode *inode, void *data)
 {
 	struct v9fs_inode *v9inode = V9FS_I(inode);
-	struct p9_stat_dotl *st = (struct p9_stat_dotl *)data;
+	struct iget_data *idata = data;
+	struct p9_stat_dotl *st = idata->st;
 
 	memcpy(&v9inode->qid, &st->qid, sizeof(st->qid));
 	inode->i_generation = st->st_gen;
+	/*
+	 * We can't fill v9inode->path here, because allocating an ino_path
+	 * means that we might sleep, and we can't sleep here.
+	 */
+	v9inode->path = NULL;
 	return 0;
 }
 
@@ -97,19 +151,56 @@ static struct inode *v9fs_qid_iget_dotl(struct super_block *sb,
 					struct p9_qid *qid,
 					struct p9_fid *fid,
 					struct p9_stat_dotl *st,
+					struct dentry *dentry,
 					int new)
 {
 	int retval;
 	struct inode *inode;
+	struct v9fs_inode *v9inode;
 	struct v9fs_session_info *v9ses = sb->s_fs_info;
 	int (*test)(struct inode *inode, void *data);
+	struct iget_data data = {
+		.st = st,
+		.dentry = dentry,
+		.need_double_check = false,
+	};
 
 	if (new)
 		test = v9fs_test_new_inode_dotl;
 	else
 		test = v9fs_test_inode_dotl;
 
-	inode = iget5_locked(sb, QID2INO(qid), test, v9fs_set_inode_dotl, st);
+	if (dentry) {
+		/*
+		 * If we need to compare paths to find the inode to reuse, we need
+		 * to take the rename_sem for this FS.  We need to take it here,
+		 * instead of inside ino_path_compare, as iget5_locked has
+		 * spinlock in it (inode_hash_lock)
+		 */
+		down_read(&v9ses->rename_sem);
+	}
+	while (true) {
+		data.need_double_check = false;
+		inode = iget5_locked(sb, QID2INO(qid), test, v9fs_set_inode_dotl, &data);
+		if (!data.need_double_check)
+			break;
+		/*
+		 * Need to double check path as it wasn't initialized yet when we
+		 * tested it
+		 */
+		if (!inode || (inode->i_state & I_NEW)) {
+			WARN_ONCE(
+				1,
+				"Expected iget5_locked to return an existing inode");
+			break;
+		}
+		if (ino_path_compare(V9FS_I(inode)->path, dentry))
+			break;
+		iput(inode);
+	}
+	if (dentry)
+		up_read(&v9ses->rename_sem);
+
 	if (!inode)
 		return ERR_PTR(-ENOMEM);
 	if (!(inode->i_state & I_NEW))
@@ -124,6 +215,17 @@ static struct inode *v9fs_qid_iget_dotl(struct super_block *sb,
 				 st->st_mode, new_decode_dev(st->st_rdev));
 	if (retval)
 		goto error;
+
+	v9inode = V9FS_I(inode);
+	if (dentry) {
+		down_read(&v9ses->rename_sem);
+		v9inode->path = make_ino_path(dentry);
+		up_read(&v9ses->rename_sem);
+		if (!v9inode->path) {
+			retval = -ENOMEM;
+			goto error;
+		}
+	}
 
 	v9fs_stat2inode_dotl(st, inode, 0);
 	v9fs_set_netfs_context(inode);
@@ -140,9 +242,18 @@ error:
 
 }
 
+/**
+ * Issues a getattr request and use the result to look up the inode for
+ * the target pointed to by @fid.
+ * @v9ses: session information
+ * @fid: fid to issue attribute request for
+ * @sb: superblock on which to create inode
+ * @dentry: if not NULL, the path of the provided dentry is compared
+ * against the path stored in the inode, to determine reuse eligibility.
+ */
 struct inode *
 v9fs_inode_from_fid_dotl(struct v9fs_session_info *v9ses, struct p9_fid *fid,
-			 struct super_block *sb, int new)
+			 struct super_block *sb, struct dentry *dentry, int new)
 {
 	struct p9_stat_dotl *st;
 	struct inode *inode = NULL;
@@ -151,7 +262,7 @@ v9fs_inode_from_fid_dotl(struct v9fs_session_info *v9ses, struct p9_fid *fid,
 	if (IS_ERR(st))
 		return ERR_CAST(st);
 
-	inode = v9fs_qid_iget_dotl(sb, &st->qid, fid, st, new);
+	inode = v9fs_qid_iget_dotl(sb, &st->qid, fid, st, dentry, new);
 	kfree(st);
 	return inode;
 }
@@ -305,7 +416,7 @@ v9fs_vfs_atomic_open_dotl(struct inode *dir, struct dentry *dentry,
 		p9_debug(P9_DEBUG_VFS, "p9_client_walk failed %d\n", err);
 		goto out;
 	}
-	inode = v9fs_get_new_inode_from_fid(v9ses, fid, dir->i_sb);
+	inode = v9fs_get_new_inode_from_fid(v9ses, fid, dir->i_sb, dentry);
 	if (IS_ERR(inode)) {
 		err = PTR_ERR(inode);
 		p9_debug(P9_DEBUG_VFS, "inode creation failed %d\n", err);
@@ -400,7 +511,7 @@ static struct dentry *v9fs_vfs_mkdir_dotl(struct mnt_idmap *idmap,
 	}
 
 	/* instantiate inode and assign the unopened fid to the dentry */
-	inode = v9fs_get_new_inode_from_fid(v9ses, fid, dir->i_sb);
+	inode = v9fs_get_new_inode_from_fid(v9ses, fid, dir->i_sb, dentry);
 	if (IS_ERR(inode)) {
 		err = PTR_ERR(inode);
 		p9_debug(P9_DEBUG_VFS, "inode creation failed %d\n",
@@ -838,7 +949,7 @@ v9fs_vfs_mknod_dotl(struct mnt_idmap *idmap, struct inode *dir,
 			 err);
 		goto error;
 	}
-	inode = v9fs_get_new_inode_from_fid(v9ses, fid, dir->i_sb);
+	inode = v9fs_get_new_inode_from_fid(v9ses, fid, dir->i_sb, dentry);
 	if (IS_ERR(inode)) {
 		err = PTR_ERR(inode);
 		p9_debug(P9_DEBUG_VFS, "inode creation failed %d\n",

@@ -10,6 +10,7 @@
 
 #include <linux/backing-dev.h>
 #include <linux/netfs.h>
+#include <linux/dcache.h>
 
 /**
  * enum p9_session_flags - option flags for each 9P session
@@ -31,16 +32,17 @@
 #define V9FS_ACL_MASK V9FS_POSIX_ACL
 
 enum p9_session_flags {
-	V9FS_PROTO_2000U    = 0x01,
-	V9FS_PROTO_2000L    = 0x02,
-	V9FS_ACCESS_SINGLE  = 0x04,
-	V9FS_ACCESS_USER    = 0x08,
-	V9FS_ACCESS_CLIENT  = 0x10,
-	V9FS_POSIX_ACL      = 0x20,
-	V9FS_NO_XATTR       = 0x40,
-	V9FS_IGNORE_QV      = 0x80, /* ignore qid.version for cache hints */
-	V9FS_DIRECT_IO      = 0x100,
-	V9FS_SYNC           = 0x200
+	V9FS_PROTO_2000U      = 0x01,
+	V9FS_PROTO_2000L      = 0x02,
+	V9FS_ACCESS_SINGLE    = 0x04,
+	V9FS_ACCESS_USER      = 0x08,
+	V9FS_ACCESS_CLIENT    = 0x10,
+	V9FS_POSIX_ACL        = 0x20,
+	V9FS_NO_XATTR         = 0x40,
+	V9FS_IGNORE_QV        = 0x80, /* ignore qid.version for cache hints */
+	V9FS_DIRECT_IO        = 0x100,
+	V9FS_SYNC             = 0x200,
+	V9FS_INODE_IDENT_PATH = 0x400,
 };
 
 /**
@@ -133,11 +135,27 @@ struct v9fs_session_info {
 /* cache_validity flags */
 #define V9FS_INO_INVALID_ATTR 0x01
 
+struct v9fs_ino_path {
+	size_t nr_components;
+	struct name_snapshot names[] __counted_by(nr_components);
+};
+
+extern struct v9fs_ino_path *make_ino_path(struct dentry *dentry);
+extern void free_ino_path(struct v9fs_ino_path *path);
+extern bool ino_path_compare(struct v9fs_ino_path *ino_path,
+	struct dentry *dentry);
+
 struct v9fs_inode {
 	struct netfs_inode netfs; /* Netfslib context and vfs inode */
 	struct p9_qid qid;
 	unsigned int cache_validity;
 	struct mutex v_mutex;
+
+	/*
+	 * Stores the path of the file this inode is for, only for filesystems
+	 * with inode_ident=path.  Lifetime is the same as this inode.
+	 */
+	struct v9fs_ino_path *path;
 };
 
 static inline struct v9fs_inode *V9FS_I(const struct inode *inode)
@@ -188,7 +206,8 @@ extern const struct inode_operations v9fs_symlink_inode_operations_dotl;
 extern const struct netfs_request_ops v9fs_req_ops;
 extern struct inode *v9fs_inode_from_fid_dotl(struct v9fs_session_info *v9ses,
 					      struct p9_fid *fid,
-					      struct super_block *sb, int new);
+					      struct super_block *sb,
+					      struct dentry *dentry, int new);
 
 /* other default globals */
 #define V9FS_PORT	564
@@ -217,38 +236,57 @@ static inline int v9fs_proto_dotl(struct v9fs_session_info *v9ses)
 	return v9ses->flags & V9FS_PROTO_2000L;
 }
 
+static inline int v9fs_inode_ident_path(struct v9fs_session_info *v9ses)
+{
+	return v9ses->flags & V9FS_INODE_IDENT_PATH;
+}
+
 /**
- * v9fs_get_inode_from_fid - Helper routine to populate an inode by
- * issuing a attribute request
+ * v9fs_get_inode_from_fid - Find or populate an inode by issuing a
+ * attribute request, reusing existing inode by qid, and additionally
+ * path, if inodeident=path is enabled.
  * @v9ses: session information
  * @fid: fid to issue attribute request for
  * @sb: superblock on which to create inode
+ * @dentry: dentry corresponding to @fid
  *
  */
 static inline struct inode *
 v9fs_get_inode_from_fid(struct v9fs_session_info *v9ses, struct p9_fid *fid,
-			struct super_block *sb)
+			struct super_block *sb, struct dentry *dentry)
 {
+	if (!v9fs_inode_ident_path(v9ses)) {
+		/* Only pass in a dentry if we use qid+path to identify inodes */
+		dentry = NULL;
+	} else {
+		WARN_ON_ONCE(!dentry);
+	}
 	if (v9fs_proto_dotl(v9ses))
-		return v9fs_inode_from_fid_dotl(v9ses, fid, sb, 0);
+		return v9fs_inode_from_fid_dotl(v9ses, fid, sb, dentry, 0);
 	else
 		return v9fs_inode_from_fid(v9ses, fid, sb, 0);
 }
 
 /**
  * v9fs_get_new_inode_from_fid - Helper routine to populate an inode by
- * issuing a attribute request
+ * issuing a attribute request.  Always get a new inode.
  * @v9ses: session information
  * @fid: fid to issue attribute request for
  * @sb: superblock on which to create inode
+ * @dentry: dentry corresponding to @fid.  A reference will be taken and
+ * placed in the inode, if in path identification mode.
  *
  */
 static inline struct inode *
 v9fs_get_new_inode_from_fid(struct v9fs_session_info *v9ses, struct p9_fid *fid,
-			    struct super_block *sb)
+			    struct super_block *sb, struct dentry *dentry)
 {
+	if (!v9fs_inode_ident_path(v9ses)) {
+		/* Only pass in a dentry if we use qid+path to identify inodes */
+		dentry = NULL;
+	}
 	if (v9fs_proto_dotl(v9ses))
-		return v9fs_inode_from_fid_dotl(v9ses, fid, sb, 1);
+		return v9fs_inode_from_fid_dotl(v9ses, fid, sb, dentry, 1);
 	else
 		return v9fs_inode_from_fid(v9ses, fid, sb, 1);
 }
