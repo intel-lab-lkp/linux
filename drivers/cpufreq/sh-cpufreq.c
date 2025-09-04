@@ -90,10 +90,8 @@ static int sh_cpufreq_verify(struct cpufreq_policy_data *policy)
 {
 	struct clk *cpuclk = &per_cpu(sh_cpuclk, policy->cpu);
 
-	if (policy->freq_table)
-		return cpufreq_frequency_table_verify(policy);
-
-	cpufreq_verify_within_cpu_limits(policy);
+	if (!cpufreq_generic_frequency_table_verify(policy))
+		return 0;
 
 	policy->min = (clk_round_rate(cpuclk, 1) + 500) / 1000;
 	policy->max = (clk_round_rate(cpuclk, ~0UL) + 500) / 1000;

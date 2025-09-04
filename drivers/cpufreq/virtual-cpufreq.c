@@ -249,10 +249,7 @@ static int virt_cpufreq_offline(struct cpufreq_policy *policy)
 
 static int virt_cpufreq_verify_policy(struct cpufreq_policy_data *policy)
 {
-	if (policy->freq_table)
-		return cpufreq_frequency_table_verify(policy);
-
-	cpufreq_verify_within_cpu_limits(policy);
+	cpufreq_generic_frequency_table_verify(policy);
 	return 0;
 }
 

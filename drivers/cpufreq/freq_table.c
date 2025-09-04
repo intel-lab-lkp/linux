@@ -64,7 +64,7 @@ int cpufreq_frequency_table_cpuinfo(struct cpufreq_policy *policy)
 		return 0;
 }
 
-int cpufreq_frequency_table_verify(struct cpufreq_policy_data *policy)
+static int cpufreq_frequency_table_verify(struct cpufreq_policy_data *policy)
 {
 	struct cpufreq_frequency_table *pos, *table = policy->freq_table;
 	unsigned int freq, prev_smaller = 0;
@@ -72,8 +72,6 @@ int cpufreq_frequency_table_verify(struct cpufreq_policy_data *policy)
 
 	pr_debug("request for verification of policy (%u - %u kHz) for cpu %u\n",
 					policy->min, policy->max, policy->cpu);
-
-	cpufreq_verify_within_cpu_limits(policy);
 
 	cpufreq_for_each_valid_entry(pos, table) {
 		freq = pos->frequency;
@@ -97,7 +95,6 @@ int cpufreq_frequency_table_verify(struct cpufreq_policy_data *policy)
 
 	return 0;
 }
-EXPORT_SYMBOL_GPL(cpufreq_frequency_table_verify);
 
 /*
  * Generic routine to verify policy & frequency table, requires driver to set
