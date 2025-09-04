@@ -42,6 +42,7 @@
 #include "nterr.h"
 #include "rfc1002pdu.h"
 #include "fscache.h"
+#include "smb1proto.h"
 #include "smb2proto.h"
 #include "smbdirect.h"
 #include "dns_resolve.h"

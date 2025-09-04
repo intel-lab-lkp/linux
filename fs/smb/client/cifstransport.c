@@ -26,6 +26,7 @@
 #include "cifsglob.h"
 #include "cifsproto.h"
 #include "cifs_debug.h"
+#include "smb1proto.h"
 #include "smb2proto.h"
 #include "smbdirect.h"
 #include "compress.h"

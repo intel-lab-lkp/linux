@@ -35,9 +35,7 @@ struct cifs_fscache_inode_coherency_data {
 
 #ifdef CONFIG_CIFS_FSCACHE
 
-/*
- * fscache.c
- */
+/* PROTOTYPES */
 extern int cifs_fscache_get_super_cookie(struct cifs_tcon *);
 extern void cifs_fscache_release_super_cookie(struct cifs_tcon *);
 

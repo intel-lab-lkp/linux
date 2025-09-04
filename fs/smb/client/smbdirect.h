@@ -156,6 +156,8 @@ struct smbd_mr *smbd_register_mr(
 	bool writing, bool need_invalidate);
 int smbd_deregister_mr(struct smbd_mr *mr);
 
+/* PROTOTYPES */
+
 #else
 #define cifs_rdma_enabled(server)	0
 struct smbd_connection {};

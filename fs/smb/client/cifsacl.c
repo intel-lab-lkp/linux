@@ -21,6 +21,7 @@
 #include "cifsglob.h"
 #include "cifsacl.h"
 #include "cifsproto.h"
+#include "smb1proto.h"
 #include "cifs_debug.h"
 #include "fs_context.h"
 #include "cifs_fs_sb.h"

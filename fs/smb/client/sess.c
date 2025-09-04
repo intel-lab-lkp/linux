@@ -20,6 +20,7 @@
 #include <linux/version.h>
 #include "cifsfs.h"
 #include "cifs_spnego.h"
+#include "smb1proto.h"
 #include "smb2proto.h"
 #include "fs_context.h"
 

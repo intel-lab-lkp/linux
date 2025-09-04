@@ -16,6 +16,7 @@
 #include "cifs_debug.h"
 #include "cifs_fs_sb.h"
 #include "cifs_unicode.h"
+#include "smb1proto.h"
 #include "smb2proto.h"
 #include "cifs_ioctl.h"
 #include "fs_context.h"

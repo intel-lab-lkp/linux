@@ -19,6 +19,7 @@
 #include "cifs_debug.h"
 #include "cifsfs.h"
 #include "cifs_ioctl.h"
+#include "smb1proto.h"
 #include "smb2proto.h"
 #include "smb2glob.h"
 #include <linux/btrfs.h>

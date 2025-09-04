@@ -18,6 +18,7 @@
 #include "cifspdu.h"
 #include "cifsglob.h"
 #include "cifsproto.h"
+#include "smb1proto.h"
 #include "smb2proto.h"
 #include "cifs_debug.h"
 #include "cifs_fs_sb.h"

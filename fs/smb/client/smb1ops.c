@@ -10,6 +10,8 @@
 #include <uapi/linux/magic.h>
 #include "cifsglob.h"
 #include "cifsproto.h"
+#include "smb1proto.h"
+#include "smb2proto.h"
 #include "cifs_debug.h"
 #include "cifspdu.h"
 #include "cifs_unicode.h"
