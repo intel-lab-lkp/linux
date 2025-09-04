@@ -9,7 +9,7 @@
 #include <asm/vdso.h>
 
 /*
- * Architecture-specific state for a mm_struct.
+ * Architecture-specific state for an mm_struct.
  * For the Hexagon Virtual Machine, it can be a copy
  * of the pointer to the page table base.
  */
