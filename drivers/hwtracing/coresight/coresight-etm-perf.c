@@ -198,7 +198,7 @@ static void free_sink_buffer(struct etm_event_data *event_data)
 	cpumask_t *mask = &event_data->mask;
 	struct coresight_device *sink;
 
-	if (!event_data->snk_config)
+	if (IS_ERR_OR_NULL(event_data->snk_config))
 		return;
 
 	if (WARN_ON(cpumask_empty(mask)))
@@ -450,7 +450,7 @@ static void *etm_setup_aux(struct perf_event *event, void **pages,
 	event_data->snk_config =
 			sink_ops(sink)->alloc_buffer(sink, event, pages,
 						     nr_pages, overwrite);
-	if (!event_data->snk_config)
+	if (IS_ERR_OR_NULL(event_data->snk_config))
 		goto err;
 
 out:
