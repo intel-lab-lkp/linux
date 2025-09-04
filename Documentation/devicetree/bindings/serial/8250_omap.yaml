@@ -69,7 +69,13 @@ properties:
   clock-frequency: true
   current-speed: true
   overrun-throttle-ms: true
-  wakeup-source: true
+
+  wakeup-source:
+    oneOf:
+      - type: boolean
+      - $ref: /schemas/types.yaml#/definitions/phandle-array
+        description:
+          List of phandles to system idle states in which UARTs can wakeup the system.
 
 required:
   - compatible
