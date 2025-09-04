@@ -48,7 +48,7 @@ extern bool npt_enabled;
 extern int nrips;
 extern int vgif;
 extern bool intercept_smi;
-extern bool avic;
+extern int avic;
 extern bool x2avic_enabled;
 extern bool vnmi;
 extern int lbrv;

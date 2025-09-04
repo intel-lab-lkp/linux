@@ -158,12 +158,17 @@ module_param(lbrv, int, 0444);
 static int tsc_scaling = true;
 module_param(tsc_scaling, int, 0444);
 
-/*
- * enable / disable AVIC.  Because the defaults differ for APICv
- * support between VMX and SVM we cannot use module_param_named.
- */
-bool avic;
-module_param(avic, bool, 0444);
+static const struct kernel_param_ops avic_ops = {
+	.flags = KERNEL_PARAM_OPS_FL_NOARG,
+	.set = param_set_bint,
+	.get = param_get_bool,
+};
+
+/* enable/disable AVIC (-1 = auto) */
+int avic = -1;
+module_param_cb(avic, &avic_ops, &avic, 0444);
+__MODULE_PARM_TYPE(avic, "bool");
+
 module_param(enable_ipiv, bool, 0444);
 
 static bool force_avic;

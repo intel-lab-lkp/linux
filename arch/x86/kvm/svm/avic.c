@@ -1095,7 +1095,12 @@ void avic_vcpu_unblocking(struct kvm_vcpu *vcpu)
  */
 void avic_hardware_setup(bool force_avic)
 {
+	bool default_avic = (avic == -1);
 	bool enable = false;
+
+	/* Enable AVIC by default from Zen 4 */
+	if (default_avic)
+		avic = boot_cpu_data.x86 > 0x19 || cpu_feature_enabled(X86_FEATURE_ZEN4);
 
 	if (!avic || !npt_enabled)
 		goto out;
@@ -1105,7 +1110,8 @@ void avic_hardware_setup(bool force_avic)
 
 	if (cc_platform_has(CC_ATTR_HOST_SEV_SNP) &&
 	    !boot_cpu_has(X86_FEATURE_HV_INUSE_WR_ALLOWED)) {
-		pr_warn("AVIC disabled: missing HvInUseWrAllowed on SNP-enabled system\n");
+		if (!default_avic)
+			pr_warn("AVIC disabled: missing HvInUseWrAllowed on SNP-enabled system\n");
 		goto out;
 	}
 
