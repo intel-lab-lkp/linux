@@ -29,6 +29,7 @@ properties:
     maxItems: 1
 
   backlight: true
+  port: true
   power-supply: true
   reset-gpios: true
   rotation: true
