@@ -12458,6 +12458,7 @@ static void set_cpu_sd_state_busy(int cpu)
 	if (!xchg(&sd->nohz_idle, 0))
 		return;
 
+	cpumask_clear_cpu(cpu, sd->shared->idle_cpus_mask);
 	atomic_dec(&sd->shared->nr_idle_cpus);
 }
 
@@ -12488,6 +12489,7 @@ static void set_cpu_sd_state_idle(int cpu)
 	if (xchg(&sd->nohz_idle, 1))
 		return;
 
+	cpumask_set_cpu(cpu, sd->shared->idle_cpus_mask);
 	atomic_inc(&sd->shared->nr_idle_cpus);
 }
 
