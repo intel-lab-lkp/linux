@@ -105,6 +105,7 @@ EXPORT_SYMBOL_GPL(cpufreq_frequency_table_verify);
  */
 int cpufreq_generic_frequency_table_verify(struct cpufreq_policy_data *policy)
 {
+	cpufreq_verify_within_cpu_limits(policy);
 	if (!policy->freq_table)
 		return -ENODEV;
 
