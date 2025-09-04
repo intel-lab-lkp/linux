@@ -2425,6 +2425,11 @@ def print_dump(ri):
         local_vars += ['size_t hdr_len;',
                        'void *hdr;']
 
+    for _, attr in ri.struct['request'].member_list():
+        if attr.presence_type() == 'count':
+            local_vars += ['unsigned int i;']
+            break
+
     ri.cw.write_func_lvar(local_vars)
 
     ri.cw.p('yds.yarg.ys = ys;')
