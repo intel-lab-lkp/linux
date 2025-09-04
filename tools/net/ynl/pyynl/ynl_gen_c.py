@@ -842,6 +842,9 @@ class TypeArrayNest(Type):
         return get_lines, None, local_vars
 
     def attr_put(self, ri, var):
+        ri.cw.block_start()
+        ri.cw.p('struct nlattr *array;')
+        ri.cw.nl()
         ri.cw.p(f'array = ynl_attr_nest_start(nlh, {self.enum_name});')
         if self.sub_type in scalars:
             put_type = self.sub_type
@@ -857,6 +860,7 @@ class TypeArrayNest(Type):
         else:
             raise Exception(f"Put for ArrayNest sub-type {self.attr['sub-type']} not supported, yet")
         ri.cw.p('ynl_attr_nest_end(nlh, array);')
+        ri.cw.block_end()
 
     def _setter_lines(self, ri, member, presence):
         return [f"{member} = {self.c_name};",
@@ -2063,13 +2067,9 @@ def put_req_nested(ri, struct):
         init_lines.append(f"hdr = ynl_nlmsg_put_extra_header(nlh, {struct_sz});")
         init_lines.append(f"memcpy(hdr, &obj->_hdr, {struct_sz});")
 
-    has_anest = False
     has_count = False
     for _, arg in struct.member_list():
-        has_anest |= arg.type == 'indexed-array'
         has_count |= arg.presence_type() == 'count'
-    if has_anest:
-        local_vars.append('struct nlattr *array;')
     if has_count:
         local_vars.append('unsigned int i;')
 
