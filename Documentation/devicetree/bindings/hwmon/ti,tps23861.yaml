@@ -24,11 +24,59 @@ properties:
   reg:
     maxItems: 1
 
+  '#address-cells':
+    const: 1
+
+  '#size-cells':
+    const: 0
+
   shunt-resistor-micro-ohms:
     description: The value of current sense resistor in microohms.
     default: 255000
     minimum: 250000
     maximum: 255000
+
+  reset-gpios:
+    description: GPIO for the reset pin.
+    maxItems: 1
+
+  ti,ports-shutdown-gpios:
+    description:
+      GPIO for the shutdown pin. Used to prevent PoE activity before the driver
+      had a chance to configure the chip.
+    maxItems: 1
+
+  interrupts:
+    description:
+      Only required if PoE class is restricted to less than class 4 in the
+      device tree.
+    maxItems: 1
+
+patternProperties:
+  "^poe-port@[0-3]$":
+    type: object
+    description: Port specific nodes.
+    unevaluatedProperties: false
+    properties:
+      reg:
+        description: Port index.
+        items:
+          maximum: 3
+
+      ti,class:
+        description: The maximum power class a port should accept.
+        $ref: /schemas/types.yaml#/definitions/uint32
+        maximum: 4
+
+      ti,off-by-default:
+        description: Indicates the port is off by default.
+        type: boolean
+
+      label:
+        description: Port label.
+
+    required:
+      - reg
 
 required:
   - compatible
@@ -45,9 +93,52 @@ examples:
         #address-cells = <1>;
         #size-cells = <0>;
 
-        tps23861@30 {
+        poe_controller@30 {
             compatible = "ti,tps23861";
             reg = <0x30>;
             shunt-resistor-micro-ohms = <255000>;
+        };
+    };
+  - |
+    #include <dt-bindings/gpio/gpio.h>
+    #include <dt-bindings/interrupt-controller/irq.h>
+
+    i2c {
+        #address-cells = <1>;
+        #size-cells = <0>;
+
+        poe_controller@28 {
+            compatible = "ti,tps23861";
+            reg = <0x28>;
+            #address-cells = <1>;
+            #size-cells = <0>;
+            shunt-resistor-micro-ohms = <255000>;
+            interrupt-parent = <&gpio1>;
+            interrupts = <14 IRQ_TYPE_EDGE_FALLING>;
+            label = "cabinet_poe_controller";
+            reset-gpios = <&gpio1 13 GPIO_ACTIVE_LOW>;
+            ti,ports-shutdown-gpios = <&gpio1 12 GPIO_ACTIVE_LOW>;
+
+            poe-port@0 {
+                    reg = <0>;
+                    ti,class = <2>; // Max PoE class allowed.
+                    ti,off-by-default;
+                    label = "cabinet_port_a";
+            };
+
+            poe-port@1 {
+                    reg = <1>;
+                    status = "disabled";
+            };
+
+            poe-port@2 {
+                    reg = <2>;
+                    status = "disabled";
+            };
+
+            poe-port@3 {
+                    reg = <3>;
+                    status = "disabled";
+            };
         };
     };
