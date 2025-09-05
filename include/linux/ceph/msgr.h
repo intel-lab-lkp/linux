@@ -60,11 +60,17 @@ static inline __s32 ceph_seq_cmp(__u32 a, __u32 b)
 
 
 /*
+ * Entity name metadata: Logical identifier for a Ceph process participating
+ * in the cluster network. Combines entity type (monitor, OSD, MDS, client)
+ * with a unique number to create globally unique process identifiers.
+ *
  * entity_name -- logical name for a process participating in the
  * network, e.g. 'mds0' or 'osd3'.
  */
 struct ceph_entity_name {
+	/* Entity type (monitor, OSD, MDS, client, etc.) */
 	__u8 type;      /* CEPH_ENTITY_TYPE_* */
+	/* Unique number within the entity type */
 	__le64 num;
 } __attribute__ ((packed));
 
@@ -79,11 +85,16 @@ struct ceph_entity_name {
 extern const char *ceph_entity_type_name(int type);
 
 /*
- * entity_addr -- network address
+ * Entity address metadata: Network address information for a Ceph entity.
+ * Contains address type, process nonce for disambiguation, and the actual
+ * network socket address for establishing connections.
  */
 struct ceph_entity_addr {
+	/* Address type identifier */
 	__le32 type;  /* CEPH_ENTITY_ADDR_TYPE_* */
-	__le32 nonce;  /* unique id for process (e.g. pid) */
+	/* Unique process identifier (typically PID) */
+	__le32 nonce;
+	/* Socket address (IPv4/IPv6) */
 	struct sockaddr_storage in_addr;
 } __attribute__ ((packed));
 
@@ -94,8 +105,15 @@ static inline bool ceph_addr_equal_no_type(const struct ceph_entity_addr *lhs,
 	       lhs->nonce == rhs->nonce;
 }
 
+/*
+ * Entity instance metadata: Complete identification of a Ceph entity
+ * combining logical name with network address. Uniquely identifies
+ * a specific process instance in the cluster.
+ */
 struct ceph_entity_inst {
+	/* Logical entity name (type + number) */
 	struct ceph_entity_name name;
+	/* Network address for this entity */
 	struct ceph_entity_addr addr;
 } __attribute__ ((packed));
 
@@ -122,26 +140,48 @@ struct ceph_entity_inst {
 #define CEPH_MSGR_TAG_CHALLENGE_AUTHORIZER 16  /* cephx v2 doing server challenge */
 
 /*
- * connection negotiation
+ * Connection negotiation request metadata: Initial message sent to establish
+ * a connection with another Ceph entity. Contains feature negotiation,
+ * authentication details, and connection sequencing information.
  */
 struct ceph_msg_connect {
-	__le64 features;     /* supported feature bits */
+	/* Feature flags supported by this client */
+	__le64 features;
+	/* Entity type of the connecting host */
 	__le32 host_type;    /* CEPH_ENTITY_TYPE_* */
-	__le32 global_seq;   /* count connections initiated by this host */
+	/* Global connection sequence (across all sessions) */
+	__le32 global_seq;
+	/* Connection sequence within current session */
 	__le32 connect_seq;  /* count connections initiated in this session */
+	/* Wire protocol version */
 	__le32 protocol_version;
+	/* Authentication protocol identifier */
 	__le32 authorizer_protocol;
+	/* Length of authentication data */
 	__le32 authorizer_len;
+	/* Connection flags (lossy, etc.) */
 	__u8  flags;         /* CEPH_MSG_CONNECT_* */
 } __attribute__ ((packed));
 
+/*
+ * Connection negotiation reply metadata: Response to connection request
+ * indicating whether connection was accepted, feature set negotiated,
+ * and any authentication challenges or requirements.
+ */
 struct ceph_msg_connect_reply {
+	/* Reply tag (ready, retry, error, etc.) */
 	__u8 tag;
-	__le64 features;     /* feature bits for this session */
+	/* Feature flags enabled for this session */
+	__le64 features;
+	/* Server's global sequence number */
 	__le32 global_seq;
+	/* Server's connection sequence number */
 	__le32 connect_seq;
+	/* Negotiated protocol version */
 	__le32 protocol_version;
+	/* Length of authorization challenge data */
 	__le32 authorizer_len;
+	/* Connection reply flags */
 	__u8 flags;
 } __attribute__ ((packed));
 
@@ -149,60 +189,111 @@ struct ceph_msg_connect_reply {
 
 
 /*
- * message header
+ * Legacy message header metadata: Original wire format for message headers
+ * in older Ceph versions. Contains complete routing information, payload
+ * lengths, and both source and original source for message forwarding.
  */
 struct ceph_msg_header_old {
-	__le64 seq;       /* message seq# for this session */
-	__le64 tid;       /* transaction id */
-	__le16 type;      /* message type */
-	__le16 priority;  /* priority.  higher value == higher priority */
-	__le16 version;   /* version of message encoding */
+	/* Message sequence number for this session */
+	__le64 seq;
+	/* Transaction identifier for request/reply correlation */
+	__le64 tid;
+	/* Message type identifier */
+	__le16 type;
+	/* Message priority (higher value = higher priority) */
+	__le16 priority;
+	/* Version of message encoding/format */
+	__le16 version;
 
+	/* Payload section lengths */
+	/* Length of front payload section */
 	__le32 front_len; /* bytes in main payload */
+	/* Length of middle payload section */
 	__le32 middle_len;/* bytes in middle payload */
+	/* Length of data payload section */
 	__le32 data_len;  /* bytes of data payload */
+	/* Data offset (sender: full offset, receiver: page-masked) */
 	__le16 data_off;  /* sender: include full offset;
 			     receiver: mask against ~PAGE_MASK */
 
+	/* Message routing information */
+	/* Current source and original source entities */
 	struct ceph_entity_inst src, orig_src;
+	/* Reserved field */
 	__le32 reserved;
-	__le32 crc;       /* header crc32c */
+	/* Header CRC32c checksum */
+	__le32 crc;
 } __attribute__ ((packed));
 
+/*
+ * Standard message header metadata: Current wire format for message headers.
+ * Streamlined compared to legacy format, containing essential routing and
+ * payload information with compatibility version support.
+ */
 struct ceph_msg_header {
-	__le64 seq;       /* message seq# for this session */
-	__le64 tid;       /* transaction id */
-	__le16 type;      /* message type */
-	__le16 priority;  /* priority.  higher value == higher priority */
-	__le16 version;   /* version of message encoding */
+	/* Message sequence number for this session */
+	__le64 seq;
+	/* Transaction identifier for request/reply correlation */
+	__le64 tid;
+	/* Message type identifier */
+	__le16 type;
+	/* Message priority (higher value = higher priority) */
+	__le16 priority;
+	/* Version of message encoding/format */
+	__le16 version;
 
+	/* Payload section lengths */
+	/* Length of front payload section */
 	__le32 front_len; /* bytes in main payload */
+	/* Length of middle payload section */
 	__le32 middle_len;/* bytes in middle payload */
+	/* Length of data payload section */
 	__le32 data_len;  /* bytes of data payload */
+	/* Data offset (sender: full offset, receiver: page-masked) */
 	__le16 data_off;  /* sender: include full offset;
 			     receiver: mask against ~PAGE_MASK */
 
+	/* Message source entity name */
 	struct ceph_entity_name src;
+	/* Compatibility version for backward compatibility */
 	__le16 compat_version;
+	/* Reserved field */
 	__le16 reserved;
-	__le32 crc;       /* header crc32c */
+	/* Header CRC32c checksum */
+	__le32 crc;
 } __attribute__ ((packed));
 
+/*
+ * Messenger v2 header metadata: Enhanced message header for messenger v2
+ * protocol with improved padding support, acknowledgment sequencing, and
+ * extended compatibility information.
+ */
 struct ceph_msg_header2 {
-	__le64 seq;       /* message seq# for this session */
-	__le64 tid;       /* transaction id */
-	__le16 type;      /* message type */
-	__le16 priority;  /* priority.  higher value == higher priority */
-	__le16 version;   /* version of message encoding */
+	/* Message sequence number for this session */
+	__le64 seq;
+	/* Transaction identifier for request/reply correlation */
+	__le64 tid;
+	/* Message type identifier */
+	__le16 type;
+	/* Message priority (higher value = higher priority) */
+	__le16 priority;
+	/* Version of message encoding/format */
+	__le16 version;
 
+	/* Data padding and alignment */
+	/* Length of pre-padding before data payload */
 	__le32 data_pre_padding_len;
+	/* Data offset (sender: full offset, receiver: page-masked) */
 	__le16 data_off;  /* sender: include full offset;
 			     receiver: mask against ~PAGE_MASK */
 
+	/* Acknowledgment sequence number */
 	__le64 ack_seq;
+	/* Message flags */
 	__u8 flags;
-	/* oldest code we think can decode this.  unknown if zero. */
+	/* Oldest code version that can decode this message.  unknown if zero. */
 	__le16 compat_version;
+	/* Reserved field */
 	__le16 reserved;
 } __attribute__ ((packed));
 
@@ -212,17 +303,28 @@ struct ceph_msg_header2 {
 #define CEPH_MSG_PRIO_HIGHEST 255
 
 /*
- * follows data payload
+ * Legacy message footer metadata: Integrity validation for older message format.
+ * Contains CRC checksums for each payload section to detect transmission errors
+ * and corruption. Used with legacy message headers for backward compatibility.
  */
 struct ceph_msg_footer_old {
+	/* CRC32c checksums for payload integrity validation */
 	__le32 front_crc, middle_crc, data_crc;
+	/* Message completion and validation flags */
 	__u8 flags;
 } __attribute__ ((packed));
 
+/*
+ * Standard message footer metadata: Enhanced integrity validation with digital
+ * signatures. Includes CRC checksums for each payload section plus optional
+ * cryptographic signature for message authenticity and non-repudiation.
+ */
 struct ceph_msg_footer {
+	/* CRC32c checksums for payload integrity validation */
 	__le32 front_crc, middle_crc, data_crc;
-	// sig holds the 64 bits of the digital signature for the message PLR
+	/* 64-bit digital signature for message authenticity (PLR) */
 	__le64  sig;
+	/* Message completion and validation flags */
 	__u8 flags;
 } __attribute__ ((packed));
 
