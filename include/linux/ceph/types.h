@@ -13,17 +13,27 @@
 #include <linux/ceph/ceph_hash.h>
 
 /*
- * Identify inodes by both their ino AND snapshot id (a u64).
+ * Virtual inode identifier metadata: Uniquely identifies an inode within
+ * the CephFS namespace by combining the inode number with a snapshot ID.
+ * This allows the same inode to exist in multiple snapshots simultaneously.
  */
 struct ceph_vino {
+	/* Inode number within the filesystem */
 	u64 ino;
+	/* Snapshot ID (CEPH_NOSNAP for head/live version) */
 	u64 snap;
 };
 
 
-/* context for the caps reservation mechanism */
+/*
+ * Capability reservation context metadata: Tracks reserved capabilities
+ * for atomic operations that require multiple caps. Prevents deadlocks
+ * by pre-reserving the required capabilities before starting operations.
+ */
 struct ceph_cap_reservation {
+	/* Total number of capabilities reserved */
 	int count;
+	/* Number of reserved capabilities already consumed */
 	int used;
 };
 
