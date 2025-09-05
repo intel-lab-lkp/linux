@@ -1,6 +1,5 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
-/*
- * Module signature checker
+/* Module signature checker
  *
  * Copyright (C) 2012 Red Hat, Inc. All Rights Reserved.
  * Written by David Howells (dhowells@redhat.com)
@@ -21,11 +20,11 @@
 #define MODULE_PARAM_PREFIX "module."
 
 static bool sig_enforce = IS_ENABLED(CONFIG_MODULE_SIG_FORCE);
-module_param(sig_enforce, bool, 0644);
+module_param(sig_enforce, bool_enable_only, 0644);
 
 /*
- * Export sig_enforce kernel cmdline parameter to allow other subsystems to
- * rely on that instead of directly on CONFIG_MODULE_SIG_FORCE config.
+ * Export sig_enforce kernel cmdline parameter to allow other subsystems rely
+ * on that instead of directly to CONFIG_MODULE_SIG_FORCE config.
  */
 bool is_module_sig_enforced(void)
 {
@@ -37,7 +36,6 @@ void set_module_sig_enforced(void)
 {
 	sig_enforce = true;
 }
-EXPORT_SYMBOL(set_module_sig_enforced);
 
 /*
  * Verify the signature on a module.
@@ -47,55 +45,44 @@ int mod_verify_sig(const void *mod, struct load_info *info)
 	struct module_signature ms;
 	size_t sig_len, modlen = info->len;
 	int ret;
-	const unsigned char *data = mod;
 
 	pr_devel("==>%s(,%zu)\n", __func__, modlen);
 
 	if (modlen <= sizeof(ms))
 		return -EBADMSG;
 
-	memcpy(&ms, data + (modlen - sizeof(ms)), sizeof(ms));
+	memcpy(&ms, mod + (modlen - sizeof(ms)), sizeof(ms));
 
 	ret = mod_check_sig(&ms, modlen, "module");
 	if (ret)
 		return ret;
 
 	sig_len = be32_to_cpu(ms.sig_len);
-
-	/* Ensure sig_len is valid to prevent underflow/oob */
-	if (sig_len > modlen - sizeof(ms))
-		return -EBADMSG;
-
 	modlen -= sig_len + sizeof(ms);
 	info->len = modlen;
 
-	return verify_pkcs7_signature(data, modlen, data + modlen, sig_len,
+	return verify_pkcs7_signature(mod, modlen, mod + modlen, sig_len,
 				      VERIFY_USE_SECONDARY_KEYRING,
 				      VERIFYING_MODULE_SIGNATURE,
 				      NULL, NULL);
 }
 
-/*
- * Check signature validity of a module during load.
- */
 int module_sig_check(struct load_info *info, int flags)
 {
 	int err = -ENODATA;
 	const unsigned long markerlen = sizeof(MODULE_SIG_STRING) - 1;
 	const char *reason;
-	const unsigned char *mod = info->hdr;
+	const void *mod = info->hdr;
 	bool mangled_module = flags & (MODULE_INIT_IGNORE_MODVERSIONS |
 				       MODULE_INIT_IGNORE_VERMAGIC);
-
 	/*
-	 * Do not allow mangled modules: a module with version info removed
-	 * is no longer the module that was signed.
+	 * Do not allow mangled modules as a module with version information
+	 * removed is no longer the module that was signed.
 	 */
 	if (!mangled_module &&
 	    info->len > markerlen &&
-	    memcmp(mod + info->len - markerlen,
-		   MODULE_SIG_STRING, markerlen) == 0) {
-		/* Truncate the module to discard the signature marker */
+	    memcmp(mod + info->len - markerlen, MODULE_SIG_STRING, markerlen) == 0) {
+		/* We truncate the module to discard the signature */
 		info->len -= markerlen;
 		err = mod_verify_sig(mod, info);
 		if (!err) {
@@ -105,8 +92,9 @@ int module_sig_check(struct load_info *info, int flags)
 	}
 
 	/*
-	 * Enforced mode: only allow modules with a valid signature.
-	 * Non-enforced mode: certain errors are downgraded to warnings.
+	 * We don't permit modules to be loaded into the trusted kernels
+	 * without a valid signature on them, but if we're not enforcing,
+	 * certain errors are non-fatal.
 	 */
 	switch (err) {
 	case -ENODATA:
@@ -118,12 +106,12 @@ int module_sig_check(struct load_info *info, int flags)
 	case -ENOKEY:
 		reason = "module with unavailable key";
 		break;
+
 	default:
 		/*
-		 * All other errors are fatal, including:
-		 * - OOM
-		 * - unparseable signatures
-		 * - invalid signature failures
+		 * All other errors are fatal, including lack of memory,
+		 * unparseable signatures, and signature check failures --
+		 * even if signatures aren't required.
 		 */
 		return err;
 	}
