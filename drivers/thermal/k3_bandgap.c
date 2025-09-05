@@ -216,7 +216,6 @@ static int k3_bandgap_probe(struct platform_device *pdev)
 					      &data[id],
 					      &k3_of_thermal_ops);
 		if (IS_ERR(data[id].tzd)) {
-			dev_err(dev, "thermal zone device is NULL\n");
 			ret = PTR_ERR(data[id].tzd);
 			goto err_alloc;
 		}

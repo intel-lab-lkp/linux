@@ -142,14 +142,8 @@ static int gadc_thermal_probe(struct platform_device *pdev)
 
 	gti->tz_dev = devm_thermal_of_zone_register(dev, 0, gti,
 						    &gadc_thermal_ops);
-	if (IS_ERR(gti->tz_dev)) {
-		ret = PTR_ERR(gti->tz_dev);
-		if (ret != -EPROBE_DEFER)
-			dev_err(dev,
-				"Thermal zone sensor register failed: %d\n",
-				ret);
-		return ret;
-	}
+	if (IS_ERR(gti->tz_dev))
+		return PTR_ERR(gti->tz_dev);
 
 	devm_thermal_add_hwmon_sysfs(dev, gti->tz_dev);
 

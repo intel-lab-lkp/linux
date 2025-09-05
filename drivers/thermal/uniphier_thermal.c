@@ -308,10 +308,8 @@ static int uniphier_tm_probe(struct platform_device *pdev)
 
 	tdev->tz_dev = devm_thermal_of_zone_register(dev, 0, tdev,
 						     &uniphier_of_thermal_ops);
-	if (IS_ERR(tdev->tz_dev)) {
-		dev_err(dev, "failed to register sensor device\n");
+	if (IS_ERR(tdev->tz_dev))
 		return PTR_ERR(tdev->tz_dev);
-	}
 
 	/* set alert temperatures */
 	twd.tdev = tdev;

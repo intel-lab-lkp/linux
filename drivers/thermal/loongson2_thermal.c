@@ -168,7 +168,7 @@ static int loongson2_thermal_probe(struct platform_device *pdev)
 		if (PTR_ERR(tzd) != -ENODEV)
 			continue;
 
-		return dev_err_probe(dev, PTR_ERR(tzd), "failed to register");
+		return PTR_ERR(tzd);
 	}
 
 	ret = devm_request_threaded_irq(dev, irq, NULL, loongson2_thermal_irq_thread,

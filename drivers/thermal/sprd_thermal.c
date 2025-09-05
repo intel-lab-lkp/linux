@@ -409,8 +409,6 @@ static int sprd_thm_probe(struct platform_device *pdev)
 							 sen,
 							 &sprd_thm_ops);
 		if (IS_ERR(sen->tzd)) {
-			dev_err(&pdev->dev, "register thermal zone failed %d\n",
-				sen->id);
 			ret = PTR_ERR(sen->tzd);
 			goto of_put;
 		}

@@ -333,9 +333,6 @@ static int imx8mm_tmu_probe(struct platform_device *pdev)
 						      &tmu_tz_ops);
 		if (IS_ERR(tmu->sensors[i].tzd)) {
 			ret = PTR_ERR(tmu->sensors[i].tzd);
-			dev_err(&pdev->dev,
-				"failed to register thermal zone sensor[%d]: %d\n",
-				i, ret);
 			goto disable_clk;
 		}
 		tmu->sensors[i].hw_id = i;

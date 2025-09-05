@@ -480,17 +480,12 @@ static int hisi_trip_walk_cb(struct thermal_trip *trip, void *arg)
 static int hisi_thermal_register_sensor(struct platform_device *pdev,
 					struct hisi_thermal_sensor *sensor)
 {
-	int ret;
-
 	sensor->tzd = devm_thermal_of_zone_register(&pdev->dev,
 						    sensor->id, sensor,
 						    &hisi_of_thermal_ops);
 	if (IS_ERR(sensor->tzd)) {
-		ret = PTR_ERR(sensor->tzd);
 		sensor->tzd = NULL;
-		dev_err(&pdev->dev, "failed to register sensor id %d: %d\n",
-			sensor->id, ret);
-		return ret;
+		return PTR_ERR(sensor->tzd);
 	}
 
 	thermal_zone_for_each_trip(sensor->tzd, hisi_trip_walk_cb, sensor);

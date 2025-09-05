@@ -1681,12 +1681,8 @@ rockchip_thermal_register_sensor(struct platform_device *pdev,
 	sensor->id = id;
 	sensor->tzd = devm_thermal_of_zone_register(dev, id, sensor,
 						    &rockchip_of_thermal_ops);
-	if (IS_ERR(sensor->tzd)) {
-		error = PTR_ERR(sensor->tzd);
-		dev_err(dev, "failed to register sensor %d: %d\n",
-			id, error);
-		return error;
-	}
+	if (IS_ERR(sensor->tzd))
+		return PTR_ERR(sensor->tzd);
 
 	return 0;
 }

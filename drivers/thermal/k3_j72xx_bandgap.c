@@ -509,7 +509,6 @@ static int k3_j72xx_bandgap_probe(struct platform_device *pdev)
 		ti_thermal = devm_thermal_of_zone_register(bgp->dev, id, &data[id],
 							   &k3_of_thermal_ops);
 		if (IS_ERR(ti_thermal)) {
-			dev_err(bgp->dev, "thermal zone device is NULL\n");
 			ret = PTR_ERR(ti_thermal);
 			goto err_free_ref_table;
 		}

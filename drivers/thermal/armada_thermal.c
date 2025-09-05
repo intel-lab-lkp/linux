@@ -938,8 +938,6 @@ static int armada_thermal_probe(struct platform_device *pdev)
 						   sensor->id, sensor,
 						   &of_ops);
 		if (IS_ERR(tz)) {
-			dev_info(&pdev->dev, "Thermal sensor %d unavailable\n",
-				 sensor_id);
 			devm_kfree(&pdev->dev, sensor);
 			continue;
 		}

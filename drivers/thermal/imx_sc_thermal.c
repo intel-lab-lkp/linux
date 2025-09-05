@@ -111,7 +111,7 @@ static int imx_sc_thermal_probe(struct platform_device *pdev)
 			if (ret == -ENODEV)
 				continue;
 
-			return dev_err_probe(&pdev->dev, ret, "failed to register thermal zone\n");
+			return ret;
 		}
 
 		devm_thermal_add_hwmon_sysfs(&pdev->dev, sensor->tzd);

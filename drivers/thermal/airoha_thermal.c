@@ -454,10 +454,8 @@ static int airoha_thermal_probe(struct platform_device *pdev)
 
 	/* register of thermal sensor and get info from DT */
 	priv->tz = devm_thermal_of_zone_register(dev, 0, priv, &thdev_ops);
-	if (IS_ERR(priv->tz)) {
-		dev_err(dev, "register thermal zone sensor failed\n");
+	if (IS_ERR(priv->tz))
 		return PTR_ERR(priv->tz);
-	}
 
 	platform_set_drvdata(pdev, priv);
 

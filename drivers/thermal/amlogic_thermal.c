@@ -282,11 +282,8 @@ static int amlogic_thermal_probe(struct platform_device *pdev)
 						   0,
 						   pdata,
 						   &amlogic_thermal_ops);
-	if (IS_ERR(pdata->tzd)) {
-		ret = PTR_ERR(pdata->tzd);
-		dev_err(dev, "Failed to register tsensor: %d\n", ret);
-		return ret;
-	}
+	if (IS_ERR(pdata->tzd))
+		return PTR_ERR(pdata->tzd);
 
 	devm_thermal_add_hwmon_sysfs(&pdev->dev, pdata->tzd);
 
