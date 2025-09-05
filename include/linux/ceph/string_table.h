@@ -7,13 +7,24 @@
 #include <linux/rbtree.h>
 #include <linux/rcupdate.h>
 
+/*
+ * Reference-counted string metadata: Interned string with automatic memory
+ * management and deduplication. Uses red-black tree for efficient lookup and
+ * RCU for safe concurrent access. Strings are immutable and shared across
+ * multiple users to reduce memory usage.
+ */
 struct ceph_string {
+	/* Reference counting for automatic cleanup */
 	struct kref kref;
 	union {
+		/* Red-black tree node for string table lookup */
 		struct rb_node node;
+		/* RCU head for safe deferred cleanup */
 		struct rcu_head rcu;
 	};
+	/* Length of the string in bytes */
 	size_t len;
+	/* Variable-length string data (NUL-terminated) */
 	char str[];
 };
 
