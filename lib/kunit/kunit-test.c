@@ -119,6 +119,8 @@ static void kunit_test_null_dereference(void *data)
 	struct kunit *test = data;
 	int *null = NULL;
 
+	pr_info("Triggering deliberate NULL derefence.\n");
+
 	*null = 0;
 
 	KUNIT_FAIL(test, "This line should never be reached\n");
