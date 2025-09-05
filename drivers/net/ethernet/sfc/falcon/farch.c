@@ -838,16 +838,16 @@ ef4_farch_handle_tx_event(struct ef4_channel *channel, ef4_qword_t *event)
 		/* Transmit completion */
 		tx_ev_desc_ptr = EF4_QWORD_FIELD(*event, FSF_AZ_TX_EV_DESC_PTR);
 		tx_ev_q_label = EF4_QWORD_FIELD(*event, FSF_AZ_TX_EV_Q_LABEL);
-		tx_queue = ef4_channel_get_tx_queue(
-			channel, tx_ev_q_label % EF4_TXQ_TYPES);
+		tx_queue = channel->tx_queue +
+			(tx_ev_q_label % EF4_TXQ_TYPES);
 		tx_packets = ((tx_ev_desc_ptr - tx_queue->read_count) &
 			      tx_queue->ptr_mask);
 		ef4_xmit_done(tx_queue, tx_ev_desc_ptr);
 	} else if (EF4_QWORD_FIELD(*event, FSF_AZ_TX_EV_WQ_FF_FULL)) {
 		/* Rewrite the FIFO write pointer */
 		tx_ev_q_label = EF4_QWORD_FIELD(*event, FSF_AZ_TX_EV_Q_LABEL);
-		tx_queue = ef4_channel_get_tx_queue(
-			channel, tx_ev_q_label % EF4_TXQ_TYPES);
+		tx_queue = channel->tx_queue +
+			(tx_ev_q_label % EF4_TXQ_TYPES);
 
 		netif_tx_lock(efx->net_dev);
 		ef4_farch_notify_tx_desc(tx_queue);
