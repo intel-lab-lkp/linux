@@ -498,9 +498,10 @@ static int rcar_thermal_probe(struct platform_device *pdev)
 				thermal_zone_device_unregister(priv->zone);
 				priv->zone = ERR_PTR(ret);
 			}
+			if (IS_ERR(priv->zone))
+				dev_err(dev, "can't register thermal zone\n");
 		}
 		if (IS_ERR(priv->zone)) {
-			dev_err(dev, "can't register thermal zone\n");
 			ret = PTR_ERR(priv->zone);
 			priv->zone = NULL;
 			goto error_unregister;

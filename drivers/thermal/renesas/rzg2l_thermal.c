@@ -208,7 +208,6 @@ static int rzg2l_thermal_probe(struct platform_device *pdev)
 	zone = devm_thermal_of_zone_register(dev, 0, priv,
 					     &rzg2l_tz_of_ops);
 	if (IS_ERR(zone)) {
-		dev_err(dev, "Can't register thermal zone");
 		ret = PTR_ERR(zone);
 		goto err;
 	}
