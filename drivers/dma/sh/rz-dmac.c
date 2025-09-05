@@ -437,6 +437,24 @@ static int rz_dmac_xfer_desc(struct rz_dmac_chan *chan)
  * DMA engine operations
  */
 
+static int rz_dmac_chan_init_all(struct rz_dmac *dmac)
+{
+	unsigned int i;
+	int ret;
+
+	ret = pm_runtime_resume_and_get(dmac->dev);
+	if (ret < 0)
+		return ret;
+
+	rz_dmac_writel(dmac, DCTRL_DEFAULT, CHANNEL_0_7_COMMON_BASE + DCTRL);
+	rz_dmac_writel(dmac, DCTRL_DEFAULT, CHANNEL_8_15_COMMON_BASE + DCTRL);
+
+	for (i = 0; i < dmac->n_channels; i++)
+		rz_dmac_ch_writel(&dmac->channels[i], CHCTRL_DEFAULT, CHCTRL, 1);
+
+	return pm_runtime_put_sync(dmac->dev);
+}
+
 static int rz_dmac_alloc_chan_resources(struct dma_chan *chan)
 {
 	struct rz_dmac_chan *channel = to_rz_dmac_chan(chan);
@@ -1070,6 +1088,34 @@ static void rz_dmac_remove(struct platform_device *pdev)
 	platform_device_put(dmac->icu.pdev);
 }
 
+static int rz_dmac_suspend(struct device *dev)
+{
+	struct rz_dmac *dmac = dev_get_drvdata(dev);
+
+	return reset_control_assert(dmac->rstc);
+}
+
+static int rz_dmac_resume(struct device *dev)
+{
+	struct rz_dmac *dmac = dev_get_drvdata(dev);
+	int ret;
+
+	ret = reset_control_deassert(dmac->rstc);
+	if (ret)
+		return ret;
+
+	return rz_dmac_chan_init_all(dmac);
+}
+
+static const struct dev_pm_ops rz_dmac_pm_ops = {
+	/*
+	 * TODO for system sleep/resume:
+	 *   - Wait for the current transfer to complete and stop the device,
+	 *   - Resume transfers, if any.
+	 */
+	SYSTEM_SLEEP_PM_OPS(rz_dmac_suspend, rz_dmac_resume)
+};
+
 static const struct of_device_id of_rz_dmac_match[] = {
 	{ .compatible = "renesas,r9a09g057-dmac", },
 	{ .compatible = "renesas,rz-dmac", },
@@ -1079,6 +1125,7 @@ MODULE_DEVICE_TABLE(of, of_rz_dmac_match);
 
 static struct platform_driver rz_dmac_driver = {
 	.driver		= {
+		.pm	= pm_sleep_ptr(&rz_dmac_pm_ops),
 		.name	= "rz-dmac",
 		.of_match_table = of_rz_dmac_match,
 	},
