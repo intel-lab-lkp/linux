@@ -2530,13 +2530,13 @@ const struct drm_edid *drm_edid_alloc(const void *edid, size_t size)
 	if (!edid || !size || size < EDID_LENGTH)
 		return NULL;
 
-	edid = kmemdup(edid, size, GFP_KERNEL);
+	edid = kvmemdup(edid, size, GFP_KERNEL);
 	if (!edid)
 		return NULL;
 
 	drm_edid = _drm_edid_alloc(edid, size);
 	if (!drm_edid)
-		kfree(edid);
+		kvfree(edid);
 
 	return drm_edid;
 }
@@ -2568,7 +2568,7 @@ void drm_edid_free(const struct drm_edid *drm_edid)
 	if (!drm_edid)
 		return;
 
-	kfree(drm_edid->edid);
+	kvfree(drm_edid->edid);
 	kfree(drm_edid);
 }
 EXPORT_SYMBOL(drm_edid_free);
