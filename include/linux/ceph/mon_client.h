@@ -13,12 +13,17 @@ struct ceph_mount_args;
 struct ceph_auth_client;
 
 /*
- * The monitor map enumerates the set of all monitors.
+ * Monitor map metadata: Enumerates the set of all Ceph monitors in the cluster.
+ * Used to track available monitors and their network addresses for failover.
  */
 struct ceph_monmap {
+	/* Unique filesystem identifier for this Ceph cluster */
 	struct ceph_fsid fsid;
+	/* Monitor map version/epoch number */
 	u32 epoch;
+	/* Number of monitors in the cluster */
 	u32 num_mon;
+	/* Array of monitor instances (address + name) */
 	struct ceph_entity_inst mon_inst[] __counted_by(num_mon);
 };
 
@@ -27,79 +32,129 @@ struct ceph_mon_generic_request;
 
 
 /*
- * Generic mechanism for resending monitor requests.
+ * Monitor request callback metadata: Generic mechanism for resending monitor requests.
+ * Called when switching to a new monitor or retrying failed requests.
  */
 typedef void (*ceph_monc_request_func_t)(struct ceph_mon_client *monc,
 					 int newmon);
 
-/* a pending monitor request */
+/*
+ * Pending monitor request metadata: Represents a monitor request that may need
+ * to be retried or resent if the current monitor becomes unavailable.
+ */
 struct ceph_mon_request {
+	/* Monitor client this request belongs to */
 	struct ceph_mon_client *monc;
+	/* Delayed work for request retry/resend */
 	struct delayed_work delayed_work;
+	/* Current retry delay in jiffies */
 	unsigned long delay;
+	/* Callback to execute the request */
 	ceph_monc_request_func_t do_request;
 };
 
+/*
+ * Generic request completion callback metadata: Called when a generic monitor
+ * request completes, allowing the caller to process the response.
+ */
 typedef void (*ceph_monc_callback_t)(struct ceph_mon_generic_request *);
 
 /*
- * ceph_mon_generic_request is being used for the statfs and
- * mon_get_version requests which are being done a bit differently
- * because we need to get data back to the caller
+ * Generic monitor request metadata: Used for statfs and mon_get_version requests
+ * that need to return data to the caller. Provides synchronous and asynchronous
+ * request patterns with proper cleanup and response handling.
  */
 struct ceph_mon_generic_request {
+	/* Monitor client this request belongs to */
 	struct ceph_mon_client *monc;
+	/* Reference counting for safe cleanup */
 	struct kref kref;
+	/* Transaction ID for request tracking */
 	u64 tid;
+	/* Red-black tree node for efficient lookup */
 	struct rb_node node;
+	/* Request completion result code */
 	int result;
 
+	/* Synchronous completion notification */
 	struct completion completion;
+	/* Asynchronous completion callback */
 	ceph_monc_callback_t complete_cb;
-	u64 private_data;          /* r_tid/linger_id */
+	/* Caller-specific data (request ID/linger ID) */
+	u64 private_data;
 
-	struct ceph_msg *request;  /* original request */
-	struct ceph_msg *reply;    /* and reply */
+	/* Original request message sent to monitor */
+	struct ceph_msg *request;
+	/* Reply message received from monitor */
+	struct ceph_msg *reply;
 
+	/* Request-specific response data */
 	union {
+		/* For statfs requests: filesystem statistics */
 		struct ceph_statfs *st;
+		/* For version requests: newest available version */
 		u64 newest;
 	} u;
 };
 
+/*
+ * Monitor client state metadata: Manages communication with Ceph monitor cluster.
+ * Handles monitor discovery, failover, authentication, subscriptions, and request routing.
+ * Provides high availability by automatically switching between available monitors.
+ */
 struct ceph_mon_client {
+	/* Parent Ceph client instance */
 	struct ceph_client *client;
+	/* Current monitor map with available monitors */
 	struct ceph_monmap *monmap;
 
+	/* Serializes monitor client operations */
 	struct mutex mutex;
+	/* Delayed work for periodic operations and retries */
 	struct delayed_work delayed_work;
 
+	/* Authentication client for monitor authentication */
 	struct ceph_auth_client *auth;
+	/* Pre-allocated messages for auth and subscription protocols */
 	struct ceph_msg *m_auth, *m_auth_reply, *m_subscribe, *m_subscribe_ack;
+	/* Authentication request in progress flag */
 	int pending_auth;
 
+	/* Currently searching for available monitors */
 	bool hunting;
-	int cur_mon;                       /* last monitor i contacted */
+	/* Index of last monitor contacted */
+	int cur_mon;
+	/* Time when subscriptions should be renewed */
 	unsigned long sub_renew_after;
+	/* Time when subscription renewal was last sent */
 	unsigned long sub_renew_sent;
+	/* Network connection to current monitor */
 	struct ceph_connection con;
 
+	/* Ever successfully connected to any monitor */
 	bool had_a_connection;
-	int hunt_mult; /* [1..CEPH_MONC_HUNT_MAX_MULT] */
+	/* Hunt backoff multiplier [1..CEPH_MONC_HUNT_MAX_MULT] */
+	int hunt_mult;
 
-	/* pending generic requests */
+	/* Tree of pending generic requests awaiting responses */
 	struct rb_root generic_request_tree;
+	/* Last transaction ID assigned to generic requests */
 	u64 last_tid;
 
-	/* subs, indexed with CEPH_SUB_* */
+	/* Map subscriptions indexed by CEPH_SUB_* constants */
 	struct {
+		/* Subscription request details */
 		struct ceph_mon_subscribe_item item;
+		/* Want to receive updates for this map type */
 		bool want;
-		u32 have; /* epoch */
+		/* Current epoch/version we have */
+		u32 have;
 	} subs[4];
-	int fs_cluster_id; /* "mdsmap.<id>" sub */
+	/* Filesystem cluster ID for "mdsmap.<id>" subscription */
+	int fs_cluster_id;
 
 #ifdef CONFIG_DEBUG_FS
+	/* Debug filesystem entry for monitoring state */
 	struct dentry *debugfs_file;
 #endif
 };
@@ -111,10 +166,18 @@ extern int ceph_monc_init(struct ceph_mon_client *monc, struct ceph_client *cl);
 extern void ceph_monc_stop(struct ceph_mon_client *monc);
 extern void ceph_monc_reopen_session(struct ceph_mon_client *monc);
 
+/*
+ * Map subscription type constants: Indices for different types of cluster maps
+ * that can be subscribed to for receiving updates from monitors.
+ */
 enum {
+	/* Monitor map - tracks available monitors */
 	CEPH_SUB_MONMAP = 0,
+	/* OSD map - tracks available storage daemons and placement groups */
 	CEPH_SUB_OSDMAP,
+	/* Filesystem map - tracks CephFS filesystems */
 	CEPH_SUB_FSMAP,
+	/* MDS map - tracks metadata server daemons */
 	CEPH_SUB_MDSMAP,
 };
 
