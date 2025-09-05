@@ -239,8 +239,7 @@ static int hwmon_thermal_add_sensor(struct device *dev, int index)
 	if (IS_ERR(tzd)) {
 		if (PTR_ERR(tzd) != -ENODEV)
 			return PTR_ERR(tzd);
-		dev_info(dev, "temp%d_input not attached to any thermal zone\n",
-			 index + 1);
+
 		devm_kfree(dev, tdata);
 		return 0;
 	}
