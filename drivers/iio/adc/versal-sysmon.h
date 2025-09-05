@@ -45,6 +45,7 @@
 #define TEMP_EVENT	164
 #define OT_EVENT	165
 #define TEMP_HBM	166
+#define AIE_TEMP_CH	200
 
 /* Register Unlock Code */
 #define NPI_UNLOCK	0xF9E8D7C6
@@ -215,6 +216,7 @@ static const unsigned int sysmon_oversampling_avail[5] = {
  * @oversampling_avail: list of available overampling ratios
  * @oversampling_num: total number of available oversampling ratios
  * @num_supply_chan: number of supply channels that are enabled
+ * @num_aie_temp_chan: number of aie temp channels that are enabled
  * @supply_avg_en_attrs: dynamic array of supply averaging enable attributes
  * @temp_avg_en_attrs: dynamic array of temp. sat. averaging enable attributes
  * @avg_attrs: dynamic array of pointers to averaging attributes
@@ -248,6 +250,7 @@ struct sysmon {
 	const unsigned int *oversampling_avail;
 	unsigned int oversampling_num;
 	unsigned int num_supply_chan;
+	unsigned int num_aie_temp_chan;
 	struct iio_dev_attr *supply_avg_en_attrs;
 	struct iio_dev_attr *temp_avg_en_attrs;
 	struct attribute **avg_attrs;

@@ -108,8 +108,13 @@ static int sysmon_probe(struct platform_device *pdev)
 	struct sysmon *sysmon, *temp_sysmon;
 	struct iio_dev *indio_dev;
 	struct resource *mem;
+	struct iio_map *all_maps;
+	const struct iio_chan_spec *chan;
 	bool exist = false;
 	int ret;
+	int maps_size = 0;
+	int maps_idx = 0;
+	int dyn_idx = 0;
 
 	indio_dev = devm_iio_device_alloc(&pdev->dev, sizeof(*sysmon));
 	if (!indio_dev)
@@ -183,8 +188,36 @@ static int sysmon_probe(struct platform_device *pdev)
 	platform_set_drvdata(pdev, indio_dev);
 
 	if (sysmon->master_slr) {
+		/* Combine static and dynamic iio maps and register */
+		maps_size = ARRAY_SIZE(sysmon_therm_static_maps) - 1
+				+ sysmon->num_aie_temp_chan;
+		all_maps = devm_kzalloc(&pdev->dev,
+					sizeof(*all_maps) * (maps_size), GFP_KERNEL);
+		if (!all_maps)
+			return -ENOMEM;
+
+		for (maps_idx = 0;
+		     maps_idx < ARRAY_SIZE(sysmon_therm_static_maps) - 1;
+		     maps_idx++)
+			all_maps[maps_idx] =
+				sysmon_therm_static_maps[maps_idx];
+
+		for (dyn_idx = 0; dyn_idx < indio_dev->num_channels && maps_idx < maps_size;
+		     dyn_idx++) {
+			chan = &indio_dev->channels[dyn_idx];
+
+			if (chan->channel == AIE_TEMP_CH) {
+				all_maps[maps_idx].adc_channel_label =
+					chan->extend_name;
+				all_maps[maps_idx].consumer_dev_name =
+					"versal-thermal";
+				all_maps[maps_idx].consumer_channel =
+					chan->extend_name;
+				maps_idx++;
+			}
+		}
 		ret = devm_iio_map_array_register(&pdev->dev, indio_dev,
-						  sysmon_therm_static_maps);
+						  all_maps);
 		if (ret < 0)
 			return dev_err_probe(&pdev->dev, ret, "IIO map register failed\n");
 	}
