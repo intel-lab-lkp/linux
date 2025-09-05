@@ -515,6 +515,34 @@ static void __init build_sched_topology(void)
 	set_sched_topology(topology);
 }
 
+int arch_sched_node_distance(int from, int to)
+{
+	int d = node_distance(from, to);
+
+	if (!x86_has_numa_in_package)
+		return d;
+
+	switch (boot_cpu_data.x86_vfm) {
+	case INTEL_GRANITERAPIDS_X:
+	case INTEL_ATOM_DARKMONT_X:
+		if (d < REMOTE_DISTANCE)
+			return d;
+
+		/*
+		 * Trim finer distance tuning for nodes in remote package
+		 * for the purpose of building sched domains.  Put NUMA nodes
+		 * in each remote package in the same sched group.
+		 * Simplify NUMA domains and avoid extra NUMA levels including
+		 * different NUMA nodes in remote packages.
+		 *
+		 * GNR and CWF don't expect systmes with more than 2 packages
+		 * and more than 2 hops between packages.
+		 */
+		d = sched_avg_remote_numa_distance;
+	}
+	return d;
+}
+
 void set_cpu_sibling_map(int cpu)
 {
 	bool has_smt = __max_threads_per_core > 1;
