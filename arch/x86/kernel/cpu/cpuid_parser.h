@@ -145,6 +145,18 @@ struct cpuid_parse_entry {
 	CPUID_PARSE_ENTRY   (	0x80000004,	0,		generic			),	\
 
 /*
+ * CPUID parser tables repository:
+ */
+
+struct cpuid_parser_phase {
+	const struct cpuid_parse_entry	*table;
+	int				nr_entries;
+};
+
+extern const struct cpuid_parser_phase cpuid_parser_phases[];
+extern const int cpuid_parser_nphases;
+
+/*
  * CPUID leaf vendor table:
  */
 
