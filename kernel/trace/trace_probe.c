@@ -968,6 +968,24 @@ static int parse_probe_vars(char *orig_arg, const struct fetch_type *t,
 		goto inval;
 	}
 
+	/* wprobe only support "$addr" and "$value" variable */
+	if (ctx->flags & TPARG_FL_WPROBE) {
+		if (!strcmp(arg, "addr")) {
+			code->op = FETCH_OP_BADDR;
+			return 0;
+		}
+		if (!strcmp(arg, "value")) {
+			code->op = FETCH_OP_BADDR;
+			code++;
+			code->op = FETCH_OP_DEREF;
+			code->offset = 0;
+			*pcode = code;
+			return 0;
+		}
+		err = TP_ERR_BAD_VAR;
+		goto inval;
+	}
+
 	if (str_has_prefix(arg, "retval")) {
 		if (!(ctx->flags & TPARG_FL_RETURN)) {
 			err = TP_ERR_RETVAL_ON_PROBE;
@@ -1098,7 +1116,7 @@ parse_probe_arg(char *arg, const struct fetch_type *type,
 		break;
 
 	case '%':	/* named register */
-		if (ctx->flags & (TPARG_FL_TEVENT | TPARG_FL_FPROBE)) {
+		if (ctx->flags & (TPARG_FL_TEVENT | TPARG_FL_FPROBE | TPARG_FL_WPROBE)) {
 			/* eprobe and fprobe do not handle registers */
 			trace_probe_log_err(ctx->offset, BAD_VAR);
 			break;
