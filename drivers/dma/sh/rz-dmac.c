@@ -963,12 +963,15 @@ static int rz_dmac_probe(struct platform_device *pdev)
 		return dev_err_probe(&pdev->dev, PTR_ERR(dmac->rstc),
 				     "failed to get resets\n");
 
-	pm_runtime_enable(&pdev->dev);
+	ret = devm_pm_runtime_enable(&pdev->dev);
+	if (ret < 0)
+		return dev_err_probe(&pdev->dev, ret,
+				     "Failed to enable runtime PM\n");
+
 	ret = pm_runtime_resume_and_get(&pdev->dev);
-	if (ret < 0) {
-		dev_err(&pdev->dev, "pm_runtime_resume_and_get failed\n");
-		goto err_pm_disable;
-	}
+	if (ret < 0)
+		return dev_err_probe(&pdev->dev, ret,
+				     "pm_runtime_resume_and_get failed\n");
 
 	ret = reset_control_deassert(dmac->rstc);
 	if (ret)
@@ -1031,8 +1034,6 @@ err:
 	reset_control_assert(dmac->rstc);
 err_pm_runtime_put:
 	pm_runtime_put(&pdev->dev);
-err_pm_disable:
-	pm_runtime_disable(&pdev->dev);
 
 	return ret;
 }
@@ -1054,7 +1055,6 @@ static void rz_dmac_remove(struct platform_device *pdev)
 	}
 	reset_control_assert(dmac->rstc);
 	pm_runtime_put(&pdev->dev);
-	pm_runtime_disable(&pdev->dev);
 
 	platform_device_put(dmac->icu.pdev);
 }
