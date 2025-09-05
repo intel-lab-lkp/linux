@@ -80,24 +80,23 @@ static int get_target_freq_with_cpufreq(struct devfreq *devfreq,
 	struct devfreq_passive_data *p_data =
 				(struct devfreq_passive_data *)devfreq->data;
 	struct devfreq_cpu_data *parent_cpu_data;
-	struct cpufreq_policy *policy;
 	unsigned long cpu, cpu_cur, cpu_min, cpu_max, cpu_percent;
 	unsigned long dev_min, dev_max;
 	unsigned long freq = 0;
 	int ret = 0;
 
 	for_each_online_cpu(cpu) {
-		policy = cpufreq_cpu_get(cpu);
+		struct cpufreq_policy *policy __free(put_cpufreq_policy) =
+			cpufreq_cpu_get(cpu);
+
 		if (!policy) {
 			ret = -EINVAL;
 			continue;
 		}
 
 		parent_cpu_data = get_parent_cpu_data(p_data, policy);
-		if (!parent_cpu_data) {
-			cpufreq_cpu_put(policy);
+		if (!parent_cpu_data)
 			continue;
-		}
 
 		/* Get target freq via required opps */
 		cpu_cur = parent_cpu_data->cur_freq * HZ_PER_KHZ;
@@ -106,7 +105,6 @@ static int get_target_freq_with_cpufreq(struct devfreq *devfreq,
 					devfreq->opp_table, &cpu_cur);
 		if (freq) {
 			*target_freq = max(freq, *target_freq);
-			cpufreq_cpu_put(policy);
 			continue;
 		}
 
@@ -121,7 +119,6 @@ static int get_target_freq_with_cpufreq(struct devfreq *devfreq,
 		freq = dev_min + mult_frac(dev_max - dev_min, cpu_percent, 100);
 
 		*target_freq = max(freq, *target_freq);
-		cpufreq_cpu_put(policy);
 	}
 
 	return ret;
@@ -255,8 +252,6 @@ static int cpufreq_passive_register_notifier(struct devfreq *devfreq)
 			= (struct devfreq_passive_data *)devfreq->data;
 	struct device *dev = devfreq->dev.parent;
 	struct opp_table *opp_table = NULL;
-	struct devfreq_cpu_data *parent_cpu_data;
-	struct cpufreq_policy *policy;
 	struct device *cpu_dev;
 	unsigned int cpu;
 	int ret;
@@ -273,37 +268,34 @@ static int cpufreq_passive_register_notifier(struct devfreq *devfreq)
 	}
 
 	for_each_possible_cpu(cpu) {
-		policy = cpufreq_cpu_get(cpu);
-		if (!policy) {
-			ret = -EPROBE_DEFER;
-			goto err;
-		}
+		struct cpufreq_policy *policy __free(put_cpufreq_policy) =
+			cpufreq_cpu_get(cpu);
 
-		parent_cpu_data = get_parent_cpu_data(p_data, policy);
-		if (parent_cpu_data) {
-			cpufreq_cpu_put(policy);
+		if (!policy)
+			return -EPROBE_DEFER;
+
+		struct devfreq_cpu_data *initial_parent_cpu_data =
+			get_parent_cpu_data(p_data, policy);
+
+		if (initial_parent_cpu_data)
 			continue;
-		}
 
-		parent_cpu_data = kzalloc(sizeof(*parent_cpu_data),
-						GFP_KERNEL);
-		if (!parent_cpu_data) {
-			ret = -ENOMEM;
-			goto err_put_policy;
-		}
+		struct devfreq_cpu_data *parent_cpu_data __free(kfree) =
+			kzalloc(sizeof(*parent_cpu_data), GFP_KERNEL);
+
+		if (!parent_cpu_data)
+			return -ENOMEM;
 
 		cpu_dev = get_cpu_device(cpu);
 		if (!cpu_dev) {
 			dev_err(dev, "failed to get cpu device\n");
-			ret = -ENODEV;
-			goto err_free_cpu_data;
+			return -ENODEV;
 		}
 
 		opp_table = dev_pm_opp_get_opp_table(cpu_dev);
 		if (IS_ERR(opp_table)) {
 			dev_err(dev, "failed to get opp_table of cpu%d\n", cpu);
-			ret = PTR_ERR(opp_table);
-			goto err_free_cpu_data;
+			return PTR_ERR(opp_table);
 		}
 
 		parent_cpu_data->dev = cpu_dev;
@@ -313,8 +305,8 @@ static int cpufreq_passive_register_notifier(struct devfreq *devfreq)
 		parent_cpu_data->min_freq = policy->cpuinfo.min_freq;
 		parent_cpu_data->max_freq = policy->cpuinfo.max_freq;
 
-		list_add_tail(&parent_cpu_data->node, &p_data->cpu_data_list);
-		cpufreq_cpu_put(policy);
+		list_add_tail(&(no_free_ptr(parent_cpu_data)->node,
+			&p_data->cpu_data_list);
 	}
 
 	mutex_lock(&devfreq->lock);
@@ -322,14 +314,6 @@ static int cpufreq_passive_register_notifier(struct devfreq *devfreq)
 	mutex_unlock(&devfreq->lock);
 	if (ret)
 		dev_err(dev, "failed to update the frequency\n");
-
-	return ret;
-
-err_free_cpu_data:
-	kfree(parent_cpu_data);
-err_put_policy:
-	cpufreq_cpu_put(policy);
-err:
 
 	return ret;
 }
