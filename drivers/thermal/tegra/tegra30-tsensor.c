@@ -517,8 +517,7 @@ static int tegra_tsensor_register_channel(struct tegra_tsensor *ts,
 	tsc->tzd = devm_thermal_of_zone_register(ts->dev, id, tsc, &ops);
 	if (IS_ERR(tsc->tzd)) {
 		if (PTR_ERR(tsc->tzd) != -ENODEV)
-			return dev_err_probe(ts->dev, PTR_ERR(tsc->tzd),
-					     "failed to register thermal zone\n");
+			return PTR_ERR(tsc->tzd);
 
 		/*
 		 * It's okay if sensor isn't assigned to any thermal zone
