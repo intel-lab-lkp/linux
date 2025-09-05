@@ -6,6 +6,8 @@
 #include <linux/firmware.h>
 #include <linux/usb.h>
 #include <linux/iopoll.h>
+#include <linux/gpio/consumer.h>
+#include <linux/of.h>
 #include <linux/unaligned.h>
 
 #include <net/bluetooth/bluetooth.h>
@@ -359,11 +361,41 @@ int btmtk_set_bdaddr(struct hci_dev *hdev, const bdaddr_t *bdaddr)
 }
 EXPORT_SYMBOL_GPL(btmtk_set_bdaddr);
 
+static int btmtk_hw_gpio_reset(struct hci_dev *hdev, struct btmtk_data *reset_work)
+{
+	struct gpio_desc *reset_gpio;
+
+	/* Find device node*/
+	hdev->dev.of_node = of_find_compatible_node(NULL, NULL, "mediatek,mt7925-bluetooth");
+	reset_gpio = gpiod_get_optional(hdev->dev.of_node, "reset", GPIOD_OUT_HIGH);
+	if (IS_ERR(reset_gpio))
+		return PTR_ERR(reset_gpio);
+
+	if (!reset_gpio)
+		return -ENODEV;
+
+	if (test_and_set_bit(BTMTK_HW_RESET_ACTIVE, &reset_work->flags)) {
+		bt_dev_err(hdev, "last reset failed? Not resetting again");
+		gpiod_put(reset_gpio);
+		return -EBUSY;
+	}
+	gpiod_set_value_cansleep(reset_gpio, 0);
+	msleep(100);
+	gpiod_set_value_cansleep(reset_gpio, 1);
+	gpiod_put(reset_gpio);
+	return 0;
+}
+
 void btmtk_reset_sync(struct hci_dev *hdev)
 {
 	struct btmtk_data *reset_work = hci_get_priv(hdev);
 	int err;
 
+	/* Try hardware GPIO reset*/
+	err = btmtk_hw_gpio_reset(hdev, reset_work);
+	if (!err)
+		return;
+	/* Otherwise, do software reset */
 	hci_dev_lock(hdev);
 
 	err = hci_cmd_sync_queue(hdev, reset_work->reset_sync, NULL, NULL);
