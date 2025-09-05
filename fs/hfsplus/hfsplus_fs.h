@@ -70,7 +70,36 @@ enum hfsplus_btree_mutex_classes {
 	ATTR_BTREE_MUTEX,
 };
 
-/* An HFS+ BTree held in memory */
+/*
+ * struct hfs_btree - In-memory HFS+ B-tree representation
+ *
+ * This structure represents a complete HFS+ B-tree in memory, containing
+ * both metadata from the on-disk B-tree header and runtime state needed
+ * for efficient B-tree operations. HFS+ uses B-trees for the catalog
+ * (directory structure), extents overflow (file extent records), and
+ * attributes (extended attributes).
+ *
+ * @sb: Associated superblock
+ * @inode: Inode representing the B-tree file
+ * @keycmp: Key comparison function pointer
+ * @cnid: Catalog Node ID of this B-tree file
+ * @root: Node number of the root node
+ * @leaf_count: Total number of leaf records
+ * @leaf_head: Node number of first leaf node
+ * @leaf_tail: Node number of last leaf node
+ * @node_count: Total number of nodes in B-tree
+ * @free_nodes: Number of unused/available nodes
+ * @attributes: B-tree attributes flags
+ * @node_size: Size of each B-tree node in bytes
+ * @node_size_shift: log2(node_size) for bit shifting
+ * @max_key_len: Maximum key length for this B-tree
+ * @depth: Height of B-tree (levels from root)
+ * @tree_lock: Mutex protecting B-tree operations
+ * @pages_per_bnode: Memory pages per B-tree node
+ * @hash_lock: Spinlock protecting node hash table
+ * @node_hash: Hash table of cached nodes
+ * @node_hash_cnt: Number of nodes in hash table
+ */
 struct hfs_btree {
 	struct super_block *sb;
 	struct inode *inode;
@@ -100,7 +129,29 @@ struct hfs_btree {
 
 struct page;
 
-/* An HFS+ BTree node in memory */
+/*
+ * struct hfs_bnode - In-memory HFS+ B-tree node
+ *
+ * Represents a single HFS+ B-tree node in memory, containing both the
+ * on-disk node metadata and runtime state for caching, locking,
+ * and reference counting. Nodes are cached in a hash table for
+ * efficient access.
+ *
+ * @tree: Parent B-tree this node belongs to
+ * @prev: Node number of previous node at this level
+ * @this: This node's number
+ * @next: Node number of next node at this level
+ * @parent: Node number of parent node
+ * @num_recs: Number of records in this node
+ * @type: Node type (index, leaf, header, map)
+ * @height: Height in B-tree (1=leaf, >1=internal)
+ * @next_hash: Next node in hash chain
+ * @flags: Node state flags (lock, error, dirty, etc.)
+ * @lock_wq: Wait queue for node locking
+ * @refcnt: Reference count for memory management
+ * @page_offset: Offset within first page
+ * @page: Array of memory pages holding node data
+ */
 struct hfs_bnode {
 	struct hfs_btree *tree;
 
@@ -136,7 +187,52 @@ struct hfs_bnode {
 #define HFSPLUS_FAILED_ATTR_TREE	3
 
 /*
- * HFS+ superblock info (built from Volume Header on disk)
+ * struct hfsplus_sb_info - HFS+ superblock information
+ *
+ * This structure contains all HFS+ filesystem metadata, extending the
+ * Linux VFS superblock. It manages the Volume Header, B-trees, allocation
+ * bitmap, and various filesystem parameters and mount options. Data is
+ * organized by access patterns and protection requirements.
+ *
+ * @s_vhdr_buf: Buffer holding primary Volume Header
+ * @s_vhdr: Pointer to parsed Volume Header
+ * @s_backup_vhdr_buf: Buffer holding backup Volume Header
+ * @s_backup_vhdr: Pointer to backup Volume Header
+ * @ext_tree: Extents overflow B-tree
+ * @cat_tree: Catalog B-tree
+ * @attr_tree: Attributes B-tree (extended attributes)
+ * @attr_tree_state: State of attributes tree creation
+ * @alloc_file: Allocation bitmap file inode
+ * @hidden_dir: Hidden directory for metadata files
+ * @nls: Character set conversion table
+ * @blockoffset: Block offset within device (Runtime variables)
+ * @min_io_size: Minimum I/O size for this device
+ * @part_start: Starting sector of HFS+ partition
+ * @sect_count: Total sectors in partition
+ * @fs_shift: log2(block_size) - log2(sector_size)
+ * @alloc_blksz: Allocation block size in bytes (immutable data from volume header)
+ * @alloc_blksz_shift: log2(alloc_blksz) for bit operations
+ * @total_blocks: Total allocation blocks in filesystem
+ * @data_clump_blocks: Default clump size for data forks
+ * @rsrc_clump_blocks: Default clump size for resource forks
+ * @free_blocks: Number of free allocation blocks (mutable data, protected by alloc_mutex)
+ * @alloc_mutex: Mutex protecting allocation operations
+ * @next_cnid: Next catalog node ID to assign (mutable data, protected by vh_mutex)
+ * @file_count: Total number of files in filesystem
+ * @folder_count: Total number of folders in filesystem
+ * @vh_mutex: Mutex protecting volume header updates
+ * @creator: Default creator for new files (Config options)
+ * @type: Default file type for new files
+ * @umask: Permission mask for new files/directories
+ * @uid: Default user ID for files
+ * @gid: Default group ID for files
+ * @part: Partition info for optical media
+ * @session: Session info for optical media
+ * @flags: Mount flags and filesystem state
+ * @work_queued: Flag indicating delayed work is queued
+ * @sync_work: Delayed work for volume header sync
+ * @work_lock: Lock protecting work queue state
+ * @rcu: RCU head for safe deallocation
  */
 
 struct hfsplus_vh;
@@ -189,9 +285,9 @@ struct hfsplus_sb_info {
 	int part, session;
 	unsigned long flags;
 
-	int work_queued;               /* non-zero delayed work is queued */
-	struct delayed_work sync_work; /* FS sync delayed work */
-	spinlock_t work_lock;          /* protects sync_work and work_queued */
+	int work_queued;
+	struct delayed_work sync_work;
+	spinlock_t work_lock;
 	struct rcu_head rcu;
 };
 
@@ -210,6 +306,36 @@ static inline struct hfsplus_sb_info *HFSPLUS_SB(struct super_block *sb)
 }
 
 
+/*
+ * struct hfsplus_inode_info - HFS+ specific inode information
+ *
+ * This structure contains HFS+ specific metadata for each inode,
+ * extending the standard Linux VFS inode. It handles file extents,
+ * resource forks, hard links, and extended attributes. Fields are
+ * grouped by their protection mechanisms and access patterns.
+ *
+ * @opencnt: Number of open file handles
+ * @first_blocks: Blocks in first (catalog) extents
+ * @clump_blocks: Preferred clump size for allocation
+ * @alloc_blocks: Total allocated blocks for file
+ * @cached_start: Starting block of cached extents
+ * @cached_blocks: Number of blocks in cached extents
+ * @first_extents: First 8 extent records from catalog
+ * @cached_extents: Cached extents from overflow tree
+ * @extent_state: State flags for extent management
+ * @extents_lock: Mutex protecting extent information
+ * @rsrc_inode: Resource fork inode (if any) (Immutable data)
+ * @create_date: File creation date (HFS+ format)
+ * @linkid: Hard link identifier for link tracking (Protected by sbi->vh_mutex)
+ * @flags: Inode state flags (dirty, resource, etc.) (Accessed using atomic bitops)
+ * @fs_blocks: File size in filesystem blocks (Protected by i_mutex)
+ * @userflags: BSD user file flags (immutable, etc.)
+ * @subfolders: Subfolder count (HFSX case-sensitive only)
+ * @open_dir_list: List of open directory handles
+ * @open_dir_lock: Lock protecting open_dir_list
+ * @phys_size: Physical size of file on disk
+ * @vfs_inode: Embedded VFS inode structure
+ */
 struct hfsplus_inode_info {
 	atomic_t opencnt;
 
@@ -285,6 +411,24 @@ static inline void hfsplus_mark_inode_dirty(struct inode *inode,
 	mark_inode_dirty(inode);
 }
 
+/*
+ * struct hfs_find_data - HFS+ B-tree search operation context
+ *
+ * This structure maintains the state of an HFS+ B-tree search operation,
+ * tracking the current position, search parameters, and results.
+ * Used by B-tree search and iteration functions to maintain context
+ * across multiple calls.
+ *
+ * @search_key: Key being searched for (filled by caller)
+ * @key: Buffer for current key
+ * @tree: B-tree being searched (filled by find)
+ * @bnode: Current node in search
+ * @record: Current record index within node (filled by findrec)
+ * @keyoffset: Offset of current key
+ * @keylength: Length of current key
+ * @entryoffset: Offset of current data
+ * @entrylength: Length of current data
+ */
 struct hfs_find_data {
 	/* filled by caller */
 	hfsplus_btree_key *search_key;
@@ -298,6 +442,17 @@ struct hfs_find_data {
 	int entryoffset, entrylength;
 };
 
+/*
+ * struct hfsplus_readdir_data - Directory reading state
+ *
+ * Runtime structure used to track the state of HFS+ directory reading
+ * operations. Maintains position and context for readdir() calls to
+ * ensure consistent directory traversal across multiple system calls.
+ *
+ * @list: List linkage for multiple readers
+ * @file: Associated file descriptor
+ * @key: Current position in directory
+ */
 struct hfsplus_readdir_data {
 	struct list_head list;
 	struct file *file;
