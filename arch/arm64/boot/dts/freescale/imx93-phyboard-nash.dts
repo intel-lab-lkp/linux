@@ -27,8 +27,9 @@
 		stdout-path = &lpuart1;
 	};
 
-	current-sense {
+	curr_sens: current-sense {
 		compatible = "current-sense-amplifier";
+		#io-channel-cells = <0>;
 		io-channels = <&adc1 1>;
 		sense-gain-div = <2>;
 		sense-gain-mult = <50>;
@@ -42,6 +43,11 @@
 		pinctrl-names = "default";
 		pinctrl-0 = <&pinctrl_flexcan1_tc>;
 		standby-gpios = <&gpio4 16 GPIO_ACTIVE_HIGH>;
+	};
+
+	iio-hwmon {
+		compatible = "iio-hwmon";
+		io-channels = <&curr_sens 0>;
 	};
 
 	reg_usdhc2_vmmc: regulator-usdhc2 {
