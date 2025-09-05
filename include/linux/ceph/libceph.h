@@ -44,15 +44,29 @@
 #define ceph_test_opt(client, opt) \
 	(!!((client)->options->flags & CEPH_OPT_##opt))
 
+/*
+ * Ceph client options metadata: Configuration parameters for connecting to
+ * and operating with a Ceph cluster. Contains network settings, timeouts,
+ * authentication details, and cluster topology information.
+ */
 struct ceph_options {
+	/* Feature and behavior flags (CEPH_OPT_*) */
 	int flags;
+	/* Cluster filesystem identifier */
 	struct ceph_fsid fsid;
+	/* Client's network address */
 	struct ceph_entity_addr my_addr;
+	/* Timeout for initial cluster connection */
 	unsigned long mount_timeout;		/* jiffies */
+	/* How long to keep idle OSD connections */
 	unsigned long osd_idle_ttl;		/* jiffies */
+	/* OSD keepalive message interval */
 	unsigned long osd_keepalive_timeout;	/* jiffies */
+	/* Timeout for OSD requests (0 = no timeout) */
 	unsigned long osd_request_timeout;	/* jiffies */
+	/* Read from replica policy flags */
 	u32 read_from_replica;  /* CEPH_OSD_FLAG_BALANCE/LOCALIZE_READS */
+	/* Connection modes for msgr1/msgr2 protocols */
 	int con_modes[2];  /* CEPH_CON_MODE_* */
 
 	/*
@@ -61,11 +75,16 @@ struct ceph_options {
 	 * ceph_compare_options() should be updated accordingly
 	 */
 
+	/* Array of monitor addresses */
 	struct ceph_entity_addr *mon_addr; /* should be the first
 					      pointer type of args */
+	/* Number of monitors configured */
 	int num_mon;
+	/* Client authentication name */
 	char *name;
+	/* Authentication key */
 	struct ceph_crypto_key *key;
+	/* CRUSH map location constraints */
 	struct rb_root crush_locs;
 };
 
@@ -109,31 +128,46 @@ struct ceph_mds_client;
 /*
  * per client state
  *
- * possibly shared by multiple mount points, if they are
- * mounting the same ceph filesystem/cluster.
+ * Ceph client state metadata: Central state for a connection to a Ceph cluster.
+ * Manages authentication, messaging, and communication with monitors and OSDs.
+ * Can be shared by multiple mount points accessing the same cluster.
  */
 struct ceph_client {
+	/* Cluster filesystem identifier */
 	struct ceph_fsid fsid;
+	/* Whether we have received the cluster FSID */
 	bool have_fsid;
 
+	/* Private data for specific client types (RBD, CephFS, etc.) */
 	void *private;
 
+	/* Client configuration options */
 	struct ceph_options *options;
 
-	struct mutex mount_mutex;      /* serialize mount attempts */
+	/* Serializes mount and authentication attempts */
+	struct mutex mount_mutex;
+	/* Wait queue for authentication completion */
 	wait_queue_head_t auth_wq;
+	/* Latest authentication error code */
 	int auth_err;
 
+	/* Optional callback for extra monitor message handling */
 	int (*extra_mon_dispatch)(struct ceph_client *, struct ceph_msg *);
 
+	/* Feature flags supported by this client */
 	u64 supported_features;
+	/* Feature flags required by this client */
 	u64 required_features;
 
+	/* Network messaging subsystem */
 	struct ceph_messenger msgr;   /* messenger instance */
+	/* Monitor client for cluster map updates */
 	struct ceph_mon_client monc;
+	/* OSD client for data operations */
 	struct ceph_osd_client osdc;
 
 #ifdef CONFIG_DEBUG_FS
+	/* Debug filesystem entries */
 	struct dentry *debugfs_dir;
 	struct dentry *debugfs_monmap;
 	struct dentry *debugfs_osdmap;
@@ -153,17 +187,23 @@ static inline bool ceph_msgr2(struct ceph_client *client)
  */
 
 /*
- * A "snap context" is the set of existing snapshots when we
- * write data.  It is used by the OSD to guide its COW behavior.
+ * Snapshot context metadata: Represents the set of existing snapshots at the
+ * time data was written. Used by OSDs to guide copy-on-write (COW) behavior
+ * and ensure snapshot consistency. Reference-counted and attached to dirty
+ * pages to track the snapshot state when data was dirtied.
  *
  * The ceph_snap_context is refcounted, and attached to each dirty
  * page, indicating which context the dirty data belonged when it was
  * dirtied.
  */
 struct ceph_snap_context {
+	/* Reference count for safe sharing */
 	refcount_t nref;
+	/* Snapshot sequence number */
 	u64 seq;
+	/* Number of snapshots in the array */
 	u32 num_snaps;
+	/* Array of snapshot IDs (variable length) */
 	u64 snaps[];
 };
 
