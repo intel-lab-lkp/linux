@@ -395,7 +395,7 @@ vxlan_flood_test()
 	done
 
 	local -a t0s=($(flood_fetch_stats "${counters[@]}"))
-	$MZ $h1 -c 10 -d 100msec -p 64 -b $mac -B $dst -t icmp -q
+	$MZ -c 10 -d 100msec -p 64 -b $mac -B $dst -t icmp -q $h1
 	sleep 1
 	local -a t1s=($(flood_fetch_stats "${counters[@]}"))
 
@@ -567,9 +567,9 @@ vxlan_encapped_ping_do()
 	local inner_tos=$1; shift
 	local outer_tos=$1; shift
 
-	$MZ $dev -c $count -d 100msec -q \
+	$MZ -c $count -d 100msec -q \
 		-b $next_hop_mac -B $dest_ip \
-		-t udp tos=$outer_tos,sp=23456,dp=$VXPORT,p=$(:
+		-t udp $dev tos=$outer_tos,sp=23456,dp=$VXPORT,p=$(:
 		    )"08:"$(                      : VXLAN flags
 		    )"00:00:00:"$(                : VXLAN reserved
 		    )"00:03:e8:"$(                : VXLAN VNI
@@ -705,8 +705,8 @@ test_learning()
 	# a corresponding entry is created in VxLAN device vx1
 	RET=0
 
-	in_ns ns1 $MZ w2 -c 1 -p 64 -a $mac -b ff:ff:ff:ff:ff:ff -B $dst \
-		-t icmp -q
+	in_ns ns1 $MZ -c 1 -p 64 -a $mac -b ff:ff:ff:ff:ff:ff -B $dst \
+		-t icmp -q w2
 	sleep 1
 
 	bridge fdb show brport vx1 | grep $mac | grep -q self
@@ -737,8 +737,8 @@ test_learning()
 	# Re-learn the first FDB entry and check that it is correctly aged-out
 	RET=0
 
-	in_ns ns1 $MZ w2 -c 1 -p 64 -a $mac -b ff:ff:ff:ff:ff:ff -B $dst \
-		-t icmp -q
+	in_ns ns1 $MZ -c 1 -p 64 -a $mac -b ff:ff:ff:ff:ff:ff -B $dst \
+		-t icmp -q w2
 	sleep 1
 
 	bridge fdb show brport vx1 | grep $mac | grep -q self
@@ -749,7 +749,7 @@ test_learning()
 	vxlan_flood_test $mac $dst 0 10 0
 
 	# The entry should age out when it only forwards traffic
-	$MZ $h1 -c 50 -d 1sec -p 64 -b $mac -B $dst -t icmp -q &
+	$MZ -c 50 -d 1sec -p 64 -b $mac -B $dst -t icmp -q $h1 &
 	sleep 60
 
 	bridge fdb show brport vx1 | grep $mac | grep -q self
@@ -767,8 +767,8 @@ test_learning()
 
 	ip link set dev vx1 type bridge_slave learning off
 
-	in_ns ns1 $MZ w2 -c 1 -p 64 -a $mac -b ff:ff:ff:ff:ff:ff -B $dst \
-		-t icmp -q
+	in_ns ns1 $MZ -c 1 -p 64 -a $mac -b ff:ff:ff:ff:ff:ff -B $dst \
+		-t icmp -q w2
 	sleep 1
 
 	bridge fdb show brport vx1 | grep $mac | grep -q -v self
@@ -776,8 +776,8 @@ test_learning()
 
 	ip link set dev vx1 type bridge_slave learning on
 
-	in_ns ns1 $MZ w2 -c 1 -p 64 -a $mac -b ff:ff:ff:ff:ff:ff -B $dst \
-		-t icmp -q
+	in_ns ns1 $MZ -c 1 -p 64 -a $mac -b ff:ff:ff:ff:ff:ff -B $dst \
+		-t icmp -q w2
 	sleep 1
 
 	bridge fdb show brport vx1 | grep $mac | grep -q -v self

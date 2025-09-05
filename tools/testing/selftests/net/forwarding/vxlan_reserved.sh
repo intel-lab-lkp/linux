@@ -167,9 +167,9 @@ vxlan_ping_do()
 
 	local vxlan_header=$(vxlan_header_bytes $vni $reserved_bits)
 
-	$MZ $dev -c $count -d 100msec -q \
+	$MZ -c $count -d 100msec -q \
 		-b $next_hop_mac -B $dest_ip \
-		-t udp sp=23456,dp=$VXPORT,p=$(:
+		-t udp $dev sp=23456,dp=$VXPORT,p=$(:
 		    )"$vxlan_header:"$(              : VXLAN
 		    )"$dest_mac:"$(                  : ETH daddr
 		    )"00:11:22:33:44:55:"$(          : ETH saddr

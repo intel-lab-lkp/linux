@@ -255,15 +255,15 @@ test_mpath_seed()
 test_mpath_seed_ipv4()
 {
 	test_mpath_seed 1000 IPv4 \
-		$MZ $h1 -A 192.0.2.1 -B 192.0.2.34 -q \
-			-p 64 -d 0 -c 10 -t udp
+		$MZ -A 192.0.2.1 -B 192.0.2.34 -q \
+			-p 64 -d 0 -c 10 -t udp $h1
 }
 
 test_mpath_seed_ipv6()
 {
 	test_mpath_seed 2000 IPv6 \
-		$MZ -6 $h1 -A 2001:db8:1::1 -B 2001:db8:3::2 -q \
-			-p 64 -d 0 -c 10 -t udp
+		$MZ -6 -A 2001:db8:1::1 -B 2001:db8:3::2 -q \
+			-p 64 -d 0 -c 10 -t udp $h1
 }
 
 check_mpath_seed_stability()
@@ -311,15 +311,15 @@ test_mpath_seed_stability()
 test_mpath_seed_stability_ipv4()
 {
 	test_mpath_seed_stability 1000 IPv4 \
-		$MZ $h1 -A 192.0.2.1 -B 192.0.2.34 -q \
-			-p 64 -d 0 -c 10 -t udp
+		$MZ -A 192.0.2.1 -B 192.0.2.34 -q \
+			-p 64 -d 0 -c 10 -t udp $h1
 }
 
 test_mpath_seed_stability_ipv6()
 {
 	test_mpath_seed_stability 2000 IPv6 \
-		$MZ -6 $h1 -A 2001:db8:1::1 -B 2001:db8:3::2 -q \
-			-p 64 -d 0 -c 10 -t udp
+		$MZ -6 -A 2001:db8:1::1 -B 2001:db8:3::2 -q \
+			-p 64 -d 0 -c 10 -t udp $h1
 }
 
 trap cleanup EXIT

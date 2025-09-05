@@ -114,11 +114,11 @@ tunnel_key_nofrag_test()
 	# test 'nofrag' set
 	tc filter add dev h1-et egress protocol all pref 1 handle 1 matchall $tcflags \
 		action tunnel_key set src_ip 192.0.2.1 dst_ip 192.0.2.2 id 42 nofrag index 10
-	$MZ h1-et -c 1 -p 930 -a 00:aa:bb:cc:dd:ee -b 00:ee:dd:cc:bb:aa -t ip -q
+	$MZ -c 1 -p 930 -a 00:aa:bb:cc:dd:ee -b 00:ee:dd:cc:bb:aa -t ip -q h1-et
 	tc_check_packets "dev $swp1 ingress" 100 1
 	check_err $? "packet smaller than MTU was not tunneled"
 
-	$MZ h1-et -c 1 -p 931 -a 00:aa:bb:cc:dd:ee -b 00:ee:dd:cc:bb:aa -t ip -q
+	$MZ -c 1 -p 931 -a 00:aa:bb:cc:dd:ee -b 00:ee:dd:cc:bb:aa -t ip -q h1-et
 	tc_check_packets "dev $swp1 ingress" 100 1
 	check_err $? "packet bigger than MTU matched nofrag (nofrag was set)"
 	tc_check_packets "dev $swp1 ingress" 101 0
@@ -128,7 +128,7 @@ tunnel_key_nofrag_test()
 
 	# test 'nofrag' cleared
 	tc actions change action tunnel_key set src_ip 192.0.2.1 dst_ip 192.0.2.2 id 42 index 10
-	$MZ h1-et -c 1 -p 931 -a 00:aa:bb:cc:dd:ee -b 00:ee:dd:cc:bb:aa -t ip -q
+	$MZ -c 1 -p 931 -a 00:aa:bb:cc:dd:ee -b 00:ee:dd:cc:bb:aa -t ip -q h1-et
 	tc_check_packets "dev $swp1  ingress" 100 1
 	check_err $? "packet bigger than MTU matched nofrag (nofrag was unset)"
 	tc_check_packets "dev $swp1  ingress" 101 1

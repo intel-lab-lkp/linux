@@ -158,7 +158,7 @@ v3include_prepare()
 	ip link set dev br0 type bridge mcast_igmp_version 3
 	check_err $? "Could not change bridge IGMP version to 3"
 
-	$MZ $host1_if -b $mac -c 1 -B $group -t ip "proto=2,p=$MZPKT_IS_INC" -q
+	$MZ -b $mac -c 1 -B $group -t ip "proto=2,p=$MZPKT_IS_INC" -q $host1_if
 	sleep 1
 	bridge -j -d -s mdb show dev br0 \
 		| jq -e ".[].mdb[] | \
@@ -183,7 +183,7 @@ v3exclude_prepare()
 
 	v3include_prepare $host1_if $mac $group
 
-	$MZ $host1_if -c 1 -b $mac -B $group -t ip "proto=2,p=$MZPKT_IS_EXC" -q
+	$MZ -c 1 -b $mac -B $group -t ip "proto=2,p=$MZPKT_IS_EXC" -q $host1_if
 	sleep 1
 	bridge -j -d -s mdb show dev br0 \
 		| jq -e ".[].mdb[] | \
@@ -237,7 +237,7 @@ v3inc_allow_test()
 
 	v3include_prepare $h1 $ALL_MAC $ALL_GROUP
 
-	$MZ $h1 -c 1 -b $ALL_MAC -B $ALL_GROUP -t ip "proto=2,p=$MZPKT_ALLOW" -q
+	$MZ -c 1 -b $ALL_MAC -B $ALL_GROUP -t ip "proto=2,p=$MZPKT_ALLOW" -q $h1
 	sleep 1
 	brmcast_check_sg_entries "allow" "${X[@]}"
 
@@ -258,7 +258,7 @@ v3inc_is_include_test()
 
 	v3include_prepare $h1 $ALL_MAC $ALL_GROUP
 
-	$MZ $h1 -c 1 -b $ALL_MAC -B $ALL_GROUP -t ip "proto=2,p=$MZPKT_IS_INC2" -q
+	$MZ -c 1 -b $ALL_MAC -B $ALL_GROUP -t ip "proto=2,p=$MZPKT_IS_INC2" -q $h1
 	sleep 1
 	brmcast_check_sg_entries "is_include" "${X[@]}"
 
@@ -297,7 +297,7 @@ v3inc_to_exclude_test()
 	ip link set dev br0 type bridge mcast_last_member_interval 500
 	check_err $? "Could not change mcast_last_member_interval to 5s"
 
-	$MZ $h1 -c 1 -b $ALL_MAC -B $ALL_GROUP -t ip "proto=2,p=$MZPKT_TO_EXC" -q
+	$MZ -c 1 -b $ALL_MAC -B $ALL_GROUP -t ip "proto=2,p=$MZPKT_TO_EXC" -q $h1
 	sleep 1
 	bridge -j -d -s mdb show dev br0 \
 		| jq -e ".[].mdb[] | \
@@ -341,7 +341,7 @@ v3exc_allow_test()
 
 	v3exclude_prepare $h1 $ALL_MAC $ALL_GROUP
 
-	$MZ $h1 -c 1 -b $ALL_MAC -B $ALL_GROUP -t ip "proto=2,p=$MZPKT_ALLOW2" -q
+	$MZ -c 1 -b $ALL_MAC -B $ALL_GROUP -t ip "proto=2,p=$MZPKT_ALLOW2" -q $h1
 	sleep 1
 	brmcast_check_sg_entries "allow" "${X[@]}" "${Y[@]}"
 
@@ -364,7 +364,7 @@ v3exc_is_include_test()
 
 	v3exclude_prepare $h1 $ALL_MAC $ALL_GROUP
 
-	$MZ $h1 -c 1 -b $ALL_MAC -B $ALL_GROUP -t ip "proto=2,p=$MZPKT_IS_INC3" -q
+	$MZ -c 1 -b $ALL_MAC -B $ALL_GROUP -t ip "proto=2,p=$MZPKT_IS_INC3" -q $h1
 	sleep 1
 	brmcast_check_sg_entries "is_include" "${X[@]}" "${Y[@]}"
 
@@ -387,7 +387,7 @@ v3exc_is_exclude_test()
 
 	v3exclude_prepare $h1 $ALL_MAC $ALL_GROUP
 
-	$MZ $h1 -c 1 -b $ALL_MAC -B $ALL_GROUP -t ip "proto=2,p=$MZPKT_IS_EXC2" -q
+	$MZ -c 1 -b $ALL_MAC -B $ALL_GROUP -t ip "proto=2,p=$MZPKT_IS_EXC2" -q $h1
 	sleep 1
 	brmcast_check_sg_entries "is_exclude" "${X[@]}" "${Y[@]}"
 
@@ -413,7 +413,7 @@ v3exc_to_exclude_test()
 	ip link set dev br0 type bridge mcast_last_member_interval 500
 	check_err $? "Could not change mcast_last_member_interval to 5s"
 
-	$MZ $h1 -c 1 -b $ALL_MAC -B $ALL_GROUP -t ip "proto=2,p=$MZPKT_TO_EXC" -q
+	$MZ -c 1 -b $ALL_MAC -B $ALL_GROUP -t ip "proto=2,p=$MZPKT_TO_EXC" -q $h1
 	sleep 1
 	brmcast_check_sg_entries "to_exclude" "${X[@]}" "${Y[@]}"
 
@@ -437,7 +437,7 @@ v3inc_block_test()
 
 	v3include_prepare $h1 $ALL_MAC $ALL_GROUP
 
-	$MZ $h1 -c 1 -b $ALL_MAC -B $ALL_GROUP -t ip "proto=2,p=$MZPKT_BLOCK" -q
+	$MZ -c 1 -b $ALL_MAC -B $ALL_GROUP -t ip "proto=2,p=$MZPKT_BLOCK" -q $h1
 	# make sure the lowered timers have expired (by default 2 seconds)
 	sleep 3
 	brmcast_check_sg_entries "block" "${X[@]}"
@@ -470,7 +470,7 @@ v3exc_block_test()
 	ip link set dev br0 type bridge mcast_last_member_interval 500
 	check_err $? "Could not change mcast_last_member_interval to 5s"
 
-	$MZ $h1 -c 1 -b $ALL_MAC -B $ALL_GROUP -t ip "proto=2,p=$MZPKT_BLOCK" -q
+	$MZ -c 1 -b $ALL_MAC -B $ALL_GROUP -t ip "proto=2,p=$MZPKT_BLOCK" -q $h1
 	sleep 1
 	brmcast_check_sg_entries "block" "${X[@]}" "${Y[@]}"
 
@@ -502,7 +502,7 @@ v3exc_timeout_test()
 					mcast_query_response_interval 500 \
 					mcast_membership_interval 1500
 
-	$MZ $h1 -c 1 -b $ALL_MAC -B $ALL_GROUP -t ip "proto=2,p=$MZPKT_ALLOW2" -q
+	$MZ -c 1 -b $ALL_MAC -B $ALL_GROUP -t ip "proto=2,p=$MZPKT_ALLOW2" -q $h1
 	sleep 5
 	bridge -j -d -s mdb show dev br0 \
 		| jq -e ".[].mdb[] | \
@@ -545,7 +545,7 @@ v3star_ex_auto_add_test()
 
 	v3exclude_prepare $h1 $ALL_MAC $ALL_GROUP
 
-	$MZ $h2 -c 1 -b $ALL_MAC -B $ALL_GROUP -t ip "proto=2,p=$MZPKT_IS_INC" -q
+	$MZ -c 1 -b $ALL_MAC -B $ALL_GROUP -t ip "proto=2,p=$MZPKT_IS_INC" -q $h2
 	sleep 1
 	bridge -j -d -s mdb show dev br0 \
 		| jq -e ".[].mdb[] | \

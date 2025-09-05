@@ -49,8 +49,8 @@ mirror_test()
 	fi
 
 	local t0=$(tc_rule_stats_get $dev $pref)
-	$MZ $proto $vrf_name ${sip:+-A $sip} -B $dip -a own -b bc -q \
-	    -c 10 -d 100msec -t $type
+	$MZ $proto ${sip:+-A $sip} -B $dip -a own -b bc -q \
+	    -c 10 -d 100msec -t $type $vrf_name
 	sleep 0.5
 	local t1=$(tc_rule_stats_get $dev $pref)
 	local delta=$((t1 - t0))

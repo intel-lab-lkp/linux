@@ -103,22 +103,22 @@ __test_port_range()
 		dst_port $dport_min-$dport_max \
 		action drop
 
-	$MZ $mode $h1 -c 1 -q -p 100 -a $smac -b $dmac -A $sip -B $dip \
-		-t $ip_proto "sp=$sport_min,dp=$dport_min"
+	$MZ $mode -c 1 -q -p 100 -a $smac -b $dmac -A $sip -B $dip \
+		-t $ip_proto $h1 "sp=$sport_min,dp=$dport_min"
 	tc_check_packets "dev $swp1 ingress" 101 1
 	check_err $? "Ingress filter not hit with minimum ports"
 	tc_check_packets "dev $swp2 egress" 101 1
 	check_err $? "Egress filter not hit with minimum ports"
 
-	$MZ $mode $h1 -c 1 -q -p 100 -a $smac -b $dmac -A $sip -B $dip \
-		-t $ip_proto "sp=$sport_mid,dp=$dport_mid"
+	$MZ $mode -c 1 -q -p 100 -a $smac -b $dmac -A $sip -B $dip \
+		-t $ip_proto $h1 "sp=$sport_mid,dp=$dport_mid"
 	tc_check_packets "dev $swp1 ingress" 101 2
 	check_err $? "Ingress filter not hit with middle ports"
 	tc_check_packets "dev $swp2 egress" 101 2
 	check_err $? "Egress filter not hit with middle ports"
 
-	$MZ $mode $h1 -c 1 -q -p 100 -a $smac -b $dmac -A $sip -B $dip \
-		-t $ip_proto "sp=$sport_max,dp=$dport_max"
+	$MZ $mode -c 1 -q -p 100 -a $smac -b $dmac -A $sip -B $dip \
+		-t $ip_proto $h1 "sp=$sport_max,dp=$dport_max"
 	tc_check_packets "dev $swp1 ingress" 101 3
 	check_err $? "Ingress filter not hit with maximum ports"
 	tc_check_packets "dev $swp2 egress" 101 3
@@ -126,16 +126,16 @@ __test_port_range()
 
 	# Send traffic when both ports are out of range and when only one port
 	# is out of range.
-	$MZ $mode $h1 -c 1 -q -p 100 -a $smac -b $dmac -A $sip -B $dip \
-		-t $ip_proto "sp=$((sport_min - 1)),dp=$dport_min"
-	$MZ $mode $h1 -c 1 -q -p 100 -a $smac -b $dmac -A $sip -B $dip \
-		-t $ip_proto "sp=$((sport_max + 1)),dp=$dport_min"
-	$MZ $mode $h1 -c 1 -q -p 100 -a $smac -b $dmac -A $sip -B $dip \
-		-t $ip_proto "sp=$sport_min,dp=$((dport_min - 1))"
-	$MZ $mode $h1 -c 1 -q -p 100 -a $smac -b $dmac -A $sip -B $dip \
-		-t $ip_proto "sp=$sport_min,dp=$((dport_max + 1))"
-	$MZ $mode $h1 -c 1 -q -p 100 -a $smac -b $dmac -A $sip -B $dip \
-		-t $ip_proto "sp=$((sport_max + 1)),dp=$((dport_max + 1))"
+	$MZ $mode -c 1 -q -p 100 -a $smac -b $dmac -A $sip -B $dip \
+		-t $ip_proto $h1 "sp=$((sport_min - 1)),dp=$dport_min"
+	$MZ $mode -c 1 -q -p 100 -a $smac -b $dmac -A $sip -B $dip \
+		-t $ip_proto $h1 "sp=$((sport_max + 1)),dp=$dport_min"
+	$MZ $mode -c 1 -q -p 100 -a $smac -b $dmac -A $sip -B $dip \
+		-t $ip_proto $h1 "sp=$sport_min,dp=$((dport_min - 1))"
+	$MZ $mode -c 1 -q -p 100 -a $smac -b $dmac -A $sip -B $dip \
+		-t $ip_proto $h1 "sp=$sport_min,dp=$((dport_max + 1))"
+	$MZ $mode -c 1 -q -p 100 -a $smac -b $dmac -A $sip -B $dip \
+		-t $ip_proto $h1 "sp=$((sport_max + 1)),dp=$((dport_max + 1))"
 	tc_check_packets "dev $swp1 ingress" 101 3
 	check_err $? "Ingress filter was hit when should not"
 	tc_check_packets "dev $swp2 egress" 101 3
@@ -219,18 +219,18 @@ test_port_range_ipv4_udp_drop()
 		action drop
 
 	# Test ports outside range - should pass
-	$MZ $mode $h1 -c 1 -q -p 100 -a $smac -b $dmac -A $sip -B $dip \
-		-t $ip_proto "sp=$((sport_min - 1)),dp=$dport"
-	$MZ $mode $h1 -c 1 -q -p 100 -a $smac -b $dmac -A $sip -B $dip \
-		-t $ip_proto "sp=$((sport_max + 1)),dp=$dport"
+	$MZ $mode -c 1 -q -p 100 -a $smac -b $dmac -A $sip -B $dip \
+		-t $ip_proto $h1 "sp=$((sport_min - 1)),dp=$dport"
+	$MZ $mode -c 1 -q -p 100 -a $smac -b $dmac -A $sip -B $dip \
+		-t $ip_proto $h1 "sp=$((sport_max + 1)),dp=$dport"
 
 	# Test ports inside range - should be dropped
-	$MZ $mode $h1 -c 1 -q -p 100 -a $smac -b $dmac -A $sip -B $dip \
-		-t $ip_proto "sp=$sport_min,dp=$dport"
-	$MZ $mode $h1 -c 1 -q -p 100 -a $smac -b $dmac -A $sip -B $dip \
-		-t $ip_proto "sp=$sport_mid,dp=$dport"
-	$MZ $mode $h1 -c 1 -q -p 100 -a $smac -b $dmac -A $sip -B $dip \
-		-t $ip_proto "sp=$sport_max,dp=$dport"
+	$MZ $mode -c 1 -q -p 100 -a $smac -b $dmac -A $sip -B $dip \
+		-t $ip_proto $h1 "sp=$sport_min,dp=$dport"
+	$MZ $mode -c 1 -q -p 100 -a $smac -b $dmac -A $sip -B $dip \
+		-t $ip_proto $h1 "sp=$sport_mid,dp=$dport"
+	$MZ $mode -c 1 -q -p 100 -a $smac -b $dmac -A $sip -B $dip \
+		-t $ip_proto $h1 "sp=$sport_max,dp=$dport"
 
 	tc_check_packets "dev $swp1 ingress" 101 3
 	check_err $? "Filter did not drop the expected number of packets"
