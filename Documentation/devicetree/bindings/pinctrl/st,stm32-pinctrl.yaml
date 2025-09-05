@@ -225,11 +225,81 @@ patternProperties:
             $ref: /schemas/types.yaml#/definitions/uint32
             enum: [0, 1, 2, 3]
 
+          skew-delay:
+            description: |
+              IO synchronization delay applied to the input or output path
+              depending on 'skew-delay-direction' property
+              0: No delay
+              1: Delay 0.30 ns
+              2: Delay 0.50 ns
+              3: Delay 0.75 ns
+              4: Delay 1.00 ns
+              5: Delay 1.25 ns
+              6: Delay 1.50 ns
+              7: Delay 1.75 ns
+              8: Delay 2.00 ns
+              9: Delay 2.25 ns
+              10: Delay 2.50 ns
+              11: Delay 2.75 ns
+              12: Delay 3.00 ns
+              13: Delay 3.25 ns
+            minimum: 0
+            maximum: 13
+            default: 0
+
+          skew-delay-direction:
+            description: |
+              IO synchronization delay path location
+              1: Delay on the output path
+              2: Delay on the input path
+            $ref: /schemas/types.yaml#/definitions/uint32
+            enum: [1, 2]
+
+          st,io-sync:
+            description: |
+              IO synchronization through re-sampling or inversion
+              0: data or clock GPIO pass-through
+              1: clock GPIO inverted
+              2: data GPIO re-sampled on clock rising edge
+              3: data GPIO re-sampled on clock falling edge
+              4: data GPIO re-sampled on both clock edges
+            $ref: /schemas/types.yaml#/definitions/uint32
+            enum: [0, 1, 2, 3, 4]
+            default: 0
+
         required:
           - pinmux
 
+        allOf:
+          - if:
+              not:
+                properties:
+                  skew-delay:
+                    const: 0
+            then:
+              required:
+                - skew-delay-direction
+
 allOf:
   - $ref: pinctrl.yaml#
+
+  - if:
+      not:
+        properties:
+          compatible:
+            contains:
+              enum:
+                - st,stm32mp257-pinctrl
+                - st,stm32mp257-z-pinctrl
+    then:
+      patternProperties:
+        '-[0-9]*$':
+          patternProperties:
+            '^pins':
+              properties:
+                skew-delay: false
+                skew-delay-direction: false
+                st,io-sync: false
 
 required:
   - compatible
@@ -310,5 +380,27 @@ examples:
                 pinctrl-0 = <&usart1_pins_a>;
                 pinctrl-names = "default";
     };
+
+  - |
+    #include <dt-bindings/pinctrl/stm32-pinfunc.h>
+    //Example 4 skew-delay and st,io-sync
+      pinctrl: pinctrl@44240000 {
+              compatible = "st,stm32mp257-pinctrl";
+              #address-cells = <1>;
+              #size-cells = <1>;
+              ranges = <0 0x44240000 0xa0400>;
+
+              eth3_rgmii_pins_a: eth3-rgmii-0 {
+                      pins1 {
+                              pinmux = <STM32_PINMUX('A', 6, AF14)>;
+                              st,io-sync = <4>;
+                      };
+                      pins2 {
+                              pinmux = <STM32_PINMUX('H', 2, AF14)>;
+                              skew-delay = <2>;
+                              skew-delay-direction = <1>;
+                      };
+              };
+      };
 
 ...
