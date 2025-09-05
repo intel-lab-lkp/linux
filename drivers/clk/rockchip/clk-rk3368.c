@@ -244,7 +244,7 @@ static struct rockchip_cpuclk_rate_table rk3368_cpuclkl_rates[] __initdata = {
 };
 
 static struct rockchip_clk_branch rk3368_i2s_8ch_fracmux __initdata =
-	MUX(0, "i2s_8ch_pre", mux_i2s_8ch_pre_p, CLK_SET_RATE_PARENT,
+	MUX(CLK_I2S_8CH_PRE, "i2s_8ch_pre", mux_i2s_8ch_pre_p, CLK_SET_RATE_PARENT,
 	    RK3368_CLKSEL_CON(27), 8, 2, MFLAGS);
 
 static struct rockchip_clk_branch rk3368_spdif_8ch_fracmux __initdata =
@@ -367,7 +367,7 @@ static struct rockchip_clk_branch rk3368_clk_branches[] __initdata = {
 	COMPOSITE(0, "i2s_8ch_src", mux_pll_src_cpll_gpll_p, 0,
 			RK3368_CLKSEL_CON(27), 12, 1, MFLAGS, 0, 7, DFLAGS,
 			RK3368_CLKGATE_CON(6), 1, GFLAGS),
-	COMPOSITE_FRACMUX(0, "i2s_8ch_frac", "i2s_8ch_src", CLK_SET_RATE_PARENT,
+	COMPOSITE_FRACMUX(CLK_I2S_8CH_FRAC, "i2s_8ch_frac", "i2s_8ch_src", CLK_SET_RATE_PARENT,
 			  RK3368_CLKSEL_CON(28), 0,
 			  RK3368_CLKGATE_CON(6), 2, GFLAGS,
 			  &rk3368_i2s_8ch_fracmux),
