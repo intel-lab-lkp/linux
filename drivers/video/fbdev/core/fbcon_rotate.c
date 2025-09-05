@@ -70,6 +70,7 @@ static int fbcon_rotate_font(struct fb_info *info, struct vc_data *vc)
 			src += s_cellsize;
 			dst += d_cellsize;
 		}
+		fbcon_rotate_ud(ops);
 		break;
 	case FB_ROTATE_CW:
 		for (i = len; i--; ) {
@@ -78,6 +79,7 @@ static int fbcon_rotate_font(struct fb_info *info, struct vc_data *vc)
 			src += s_cellsize;
 			dst += d_cellsize;
 		}
+		fbcon_rotate_cw(ops);
 		break;
 	case FB_ROTATE_CCW:
 		for (i = len; i--; ) {
@@ -86,6 +88,7 @@ static int fbcon_rotate_font(struct fb_info *info, struct vc_data *vc)
 			src += s_cellsize;
 			dst += d_cellsize;
 		}
+		fbcon_rotate_ccw(ops);
 		break;
 	}
 
@@ -97,7 +100,7 @@ void fbcon_set_rotate(struct fbcon_ops *ops)
 {
 	ops->rotate_font = fbcon_rotate_font;
 
-	switch(ops->rotate) {
+	switch (ops->cur_rotate) {
 	case FB_ROTATE_CW:
 		fbcon_rotate_cw(ops);
 		break;
