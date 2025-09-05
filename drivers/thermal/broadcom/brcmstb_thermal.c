@@ -346,8 +346,7 @@ static int brcmstb_thermal_probe(struct platform_device *pdev)
 	thermal = devm_thermal_of_zone_register(&pdev->dev, 0, priv,
 						of_ops);
 	if (IS_ERR(thermal))
-		return dev_err_probe(&pdev->dev, PTR_ERR(thermal),
-					"could not register sensor\n");
+		return PTR_ERR(thermal);
 
 	priv->thermal = thermal;
 

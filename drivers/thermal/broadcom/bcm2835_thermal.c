@@ -198,7 +198,7 @@ static int bcm2835_thermal_probe(struct platform_device *pdev)
 	/* register of thermal sensor and get info from DT */
 	tz = devm_thermal_of_zone_register(dev, 0, data, &bcm2835_thermal_ops);
 	if (IS_ERR(tz))
-		return dev_err_probe(dev, PTR_ERR(tz), "Failed to register the thermal device\n");
+		return PTR_ERR(tz);
 
 	/*
 	 * right now the FW does set up the HW-block, so we are not
