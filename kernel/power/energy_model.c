@@ -451,7 +451,6 @@ static void
 em_cpufreq_update_efficiencies(struct device *dev, struct em_perf_state *table)
 {
 	struct em_perf_domain *pd = dev->em_pd;
-	struct cpufreq_policy *policy;
 	int found = 0;
 	int i, cpu;
 
@@ -465,7 +464,7 @@ em_cpufreq_update_efficiencies(struct device *dev, struct em_perf_state *table)
 		return;
 	}
 
-	policy = cpufreq_cpu_get(cpu);
+	struct cpufreq_policy *policy __free(put_cpufreq_policy) = cpufreq_cpu_get(cpu);
 	if (!policy) {
 		dev_warn(dev, "EM: Access to CPUFreq policy failed\n");
 		return;
@@ -478,8 +477,6 @@ em_cpufreq_update_efficiencies(struct device *dev, struct em_perf_state *table)
 		if (!cpufreq_table_set_inefficient(policy, table[i].frequency))
 			found++;
 	}
-
-	cpufreq_cpu_put(policy);
 
 	if (!found)
 		return;
@@ -787,21 +784,19 @@ static void em_check_capacity_update(void)
 
 	/* Check if CPUs capacity has changed than update EM */
 	for_each_possible_cpu(cpu) {
-		struct cpufreq_policy *policy;
 		struct em_perf_domain *pd;
 		struct device *dev;
 
 		if (cpumask_test_cpu(cpu, cpu_done_mask))
 			continue;
 
-		policy = cpufreq_cpu_get(cpu);
+		struct cpufreq_policy *policy __free(put_cpufreq_policy) = cpufreq_cpu_get(cpu);
 		if (!policy) {
 			pr_debug("Accessing cpu%d policy failed\n", cpu);
 			schedule_delayed_work(&em_update_work,
 					      msecs_to_jiffies(1000));
 			break;
 		}
-		cpufreq_cpu_put(policy);
 
 		dev = get_cpu_device(cpu);
 		pd = em_pd_get(dev);
