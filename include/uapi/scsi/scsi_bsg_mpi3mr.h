@@ -205,7 +205,7 @@ struct mpi3mr_all_tgt_info {
 	__u16	num_devices;
 	__u16	rsvd1;
 	__u32	rsvd2;
-	struct mpi3mr_device_map_info dmi[1];
+	struct mpi3mr_device_map_info dmi[];
 };
 
 /**
@@ -248,7 +248,7 @@ struct mpi3mr_logdata_entry {
 	__u8	valid_entry;
 	__u8	rsvd1;
 	__u16	rsvd2;
-	__u8	data[1]; /* Variable length Array */
+	__u8	data[]; /* Variable length Array */
 };
 
 /**
@@ -259,7 +259,7 @@ struct mpi3mr_logdata_entry {
  * @entry: Variable length Log data entry array
  */
 struct mpi3mr_bsg_in_log_data {
-	struct mpi3mr_logdata_entry entry[1];
+	__DECLARE_FLEX_ARRAY(struct mpi3mr_logdata_entry, entry);
 };
 
 /**
@@ -307,7 +307,7 @@ struct mpi3mr_bsg_in_hdb_status {
 	__u8    element_trigger_format;
 	__u16	rsvd2;
 	__u32	rsvd3;
-	struct mpi3mr_hdb_entry entry[1];
+	struct mpi3mr_hdb_entry entry[];
 };
 
 /**
@@ -416,7 +416,7 @@ struct mpi3mr_buf_entry_list {
 	__u8	rsvd1;
 	__u16	rsvd2;
 	__u32	rsvd3;
-	struct mpi3mr_buf_entry buf_entry[1];
+	struct mpi3mr_buf_entry buf_entry[];
 };
 /**
  * struct mpi3mr_bsg_mptcmd -  Generic bsg data
