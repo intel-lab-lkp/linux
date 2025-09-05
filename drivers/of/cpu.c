@@ -174,6 +174,54 @@ int of_cpu_node_to_id(struct device_node *cpu_node)
 EXPORT_SYMBOL(of_cpu_node_to_id);
 
 /**
+ * of_cpu_phandle_to_id: Get the logical CPU number for a given device_node
+ *
+ * @node: Pointer to the device_node containing CPU phandle.
+ * @cpu_np: Pointer to the device_node for CPU.
+ * @cpu_idx: The index of the CPU in the list of CPUs.
+ *
+ * *cpu_np is only set when cpu_np is not NULL.  Use of_node_put() to release
+ * the node reference if cpu_np != NULL and this function succeeds.
+ *
+ * Return: This function has three different possible return situations:
+ *	1) returns -EINVAL if the node is NULL.
+ *	2) returns -ENODEV if the CPU node is not found or of_cpu_node_to_id is
+ *	not successful.
+ *	3) returns the logical CPU number if the CPU node is found.
+ */
+int of_cpu_phandle_to_id(const struct device_node *node,
+			 struct device_node **cpu_np,
+			 uint8_t cpu_idx)
+{
+	struct device_node *local_cpu_node = NULL;
+	int cpu;
+
+	if (!node)
+		return -EINVAL;
+
+	if (cpu_idx == 0)
+		local_cpu_node = of_parse_phandle(node, "cpu", 0);
+	if (!local_cpu_node)
+		local_cpu_node = of_parse_phandle(node, "cpus", cpu_idx);
+	if (!local_cpu_node)
+		return -ENODEV;
+
+	cpu = of_cpu_node_to_id(local_cpu_node);
+	if (cpu < 0) {
+		of_node_put(local_cpu_node);
+		return cpu;
+	}
+
+	if (cpu_np)
+		*cpu_np = local_cpu_node;
+	else
+		of_node_put(local_cpu_node);
+
+	return cpu;
+}
+EXPORT_SYMBOL(of_cpu_phandle_to_id);
+
+/**
  * of_get_cpu_state_node - Get CPU's idle state node at the given index
  *
  * @cpu_node: The device node for the CPU
