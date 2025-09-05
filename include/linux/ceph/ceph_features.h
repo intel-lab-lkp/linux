@@ -3,37 +3,60 @@
 #define __CEPH_FEATURES
 
 /*
- * Each time we reclaim bits for reuse we need to specify another bit
+ * Feature incarnation metadata: Each time we reclaim bits for reuse we need to specify another bit
  * that, if present, indicates we have the new incarnation of that
  * feature.  Base case is 1 (first use).
  */
+/* Base incarnation - original feature bit definitions */
 #define CEPH_FEATURE_INCARNATION_1 (0ull)
+/* Second incarnation - requires SERVER_JEWEL support */
 #define CEPH_FEATURE_INCARNATION_2 (1ull<<57)              // SERVER_JEWEL
+/* Third incarnation - requires both SERVER_JEWEL and SERVER_MIMIC */
 #define CEPH_FEATURE_INCARNATION_3 ((1ull<<57)|(1ull<<28)) // SERVER_MIMIC
 
+/*
+ * Feature definition macro: Creates both feature bit and feature mask constants.
+ * @bit: The feature bit position (0-63)
+ * @incarnation: Which incarnation of this bit (1, 2, or 3)
+ * @name: Feature name suffix for CEPH_FEATURE_* constants
+ */
 #define DEFINE_CEPH_FEATURE(bit, incarnation, name)			\
 	static const uint64_t __maybe_unused CEPH_FEATURE_##name = (1ULL<<bit);		\
 	static const uint64_t __maybe_unused CEPH_FEATUREMASK_##name =			\
 		(1ULL<<bit | CEPH_FEATURE_INCARNATION_##incarnation);
 
-/* this bit is ignored but still advertised by release *when* */
+/*
+ * Deprecated feature definition macro: This bit is ignored but still advertised by release *when*
+ * @bit: The feature bit position
+ * @incarnation: Which incarnation of this bit
+ * @name: Feature name suffix
+ * @when: Release version when this feature was deprecated
+ */
 #define DEFINE_CEPH_FEATURE_DEPRECATED(bit, incarnation, name, when) \
 	static const uint64_t __maybe_unused DEPRECATED_CEPH_FEATURE_##name = (1ULL<<bit);	\
 	static const uint64_t __maybe_unused DEPRECATED_CEPH_FEATUREMASK_##name =		\
 		(1ULL<<bit | CEPH_FEATURE_INCARNATION_##incarnation);
 
 /*
- * this bit is ignored by release *unused* and not advertised by
- * release *unadvertised*
+ * Retired feature definition macro: This bit is ignored by release *unused* and not advertised by
+ * release *unadvertised*. The bit can be safely reused in future incarnations.
+ * @bit: The feature bit position
+ * @inc: Which incarnation this bit was retired from
+ * @name: Feature name suffix
+ * @unused: Release version that stopped using this bit
+ * @unadvertised: Release version that stopped advertising this bit
  */
 #define DEFINE_CEPH_FEATURE_RETIRED(bit, inc, name, unused, unadvertised)
 
 
 /*
- * test for a feature.  this test is safer than a typical mask against
- * the bit because it ensures that we have the bit AND the marker for the
- * bit's incarnation.  this must be used in any case where the features
- * bits may include an old meaning of the bit.
+ * Safe feature testing macro: Test for a feature using incarnation-aware comparison.
+ * This test is safer than a typical mask against the bit because it ensures that we have
+ * the bit AND the marker for the bit's incarnation. This must be used in any case where
+ * the features bits may include an old meaning of the bit.
+ * @x: Feature bitmask to test
+ * @name: Feature name suffix to test for
+ * Returns: true if both the feature bit and its incarnation markers are present
  */
 #define CEPH_HAVE_FEATURE(x, name)			\
 	(((x) & (CEPH_FEATUREMASK_##name)) == (CEPH_FEATUREMASK_##name))
@@ -174,7 +197,9 @@ DEFINE_CEPH_FEATURE_DEPRECATED(63, 1, RESERVED_BROKEN, LUMINOUS) // client-facin
 
 
 /*
- * Features supported.
+ * Default supported features bitmask: Defines the complete set of Ceph protocol features
+ * that this kernel client implementation supports. This determines compatibility with
+ * different Ceph server versions and enables various protocol optimizations and capabilities.
  */
 #define CEPH_FEATURES_SUPPORTED_DEFAULT		\
 	(CEPH_FEATURE_NOSRCADDR |		\
@@ -219,6 +244,10 @@ DEFINE_CEPH_FEATURE_DEPRECATED(63, 1, RESERVED_BROKEN, LUMINOUS) // client-facin
 	 CEPH_FEATURE_MSG_ADDR2 |		\
 	 CEPH_FEATURE_CEPHX_V2)
 
+/*
+ * Required features bitmask: Features that must be supported by peers.
+ * Currently set to 0, meaning no features are strictly required.
+ */
 #define CEPH_FEATURES_REQUIRED_DEFAULT	0
 
 #endif
