@@ -531,7 +531,7 @@ search_again:
 			if (extent_type != BTRFS_FILE_EXTENT_INLINE)
 				item_end +=
 				    btrfs_file_extent_num_bytes(leaf, fi);
-			else if (extent_type == BTRFS_FILE_EXTENT_INLINE)
+			else
 				item_end += btrfs_file_extent_ram_bytes(leaf, fi);
 
 			btrfs_trace_truncate(control->inode, leaf, fi,
@@ -586,7 +586,7 @@ search_again:
 					control->sub_bytes += num_dec;
 			}
 			clear_len = num_dec;
-		} else if (extent_type == BTRFS_FILE_EXTENT_INLINE) {
+		} else {
 			/*
 			 * We can't truncate inline items that have had
 			 * special encodings
