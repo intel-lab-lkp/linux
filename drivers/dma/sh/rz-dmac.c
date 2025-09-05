@@ -905,6 +905,11 @@ static int rz_dmac_parse_of(struct device *dev, struct rz_dmac *dmac)
 	return rz_dmac_parse_of_icu(dev, dmac);
 }
 
+static void rz_dmac_reset_control_assert(void *data)
+{
+	reset_control_assert(data);
+}
+
 static int rz_dmac_probe(struct platform_device *pdev)
 {
 	const char *irqname = "error";
@@ -977,6 +982,12 @@ static int rz_dmac_probe(struct platform_device *pdev)
 	if (ret)
 		goto err_pm_runtime_put;
 
+	ret = devm_add_action_or_reset(&pdev->dev,
+				       rz_dmac_reset_control_assert,
+				       dmac->rstc);
+	if (ret)
+		goto err_pm_runtime_put;
+
 	for (i = 0; i < dmac->n_channels; i++) {
 		ret = rz_dmac_chan_probe(dmac, &dmac->channels[i], i);
 		if (ret < 0)
@@ -1031,7 +1042,6 @@ err:
 				  channel->lmdesc.base_dma);
 	}
 
-	reset_control_assert(dmac->rstc);
 err_pm_runtime_put:
 	pm_runtime_put(&pdev->dev);
 
@@ -1053,7 +1063,6 @@ static void rz_dmac_remove(struct platform_device *pdev)
 				  channel->lmdesc.base,
 				  channel->lmdesc.base_dma);
 	}
-	reset_control_assert(dmac->rstc);
 	pm_runtime_put(&pdev->dev);
 
 	platform_device_put(dmac->icu.pdev);
