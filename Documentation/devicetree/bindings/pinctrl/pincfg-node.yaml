@@ -151,6 +151,17 @@ properties:
       this affects the expected clock skew on input pins
       and the delay before latching a value to an output
       pin. Typically indicates how many double-inverters are
-      used to delay the signal.
+      used to delay the signal. The delay is assumed as present
+      on both input and output directions of the pins, unless
+      otherwise specified by the property "skew-delay-direction"
+
+  skew-delay-direction:
+    $ref: /schemas/types.yaml#/definitions/uint32
+    enum: [0, 1, 2]
+    default: 0
+    description: |
+      0: skew-delay applies to both input and output directions
+      1: skew-delay applies only to the output direction
+      2: skew-delay applies only to the input direction
 
 additionalProperties: true
