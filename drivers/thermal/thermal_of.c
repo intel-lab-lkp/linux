@@ -475,11 +475,15 @@ struct thermal_zone_device *devm_thermal_of_zone_register(struct device *dev, in
 
 	ptr = devres_alloc(devm_thermal_of_zone_release, sizeof(*ptr),
 			   GFP_KERNEL);
-	if (!ptr)
+	if (!ptr) {
+		dev_err(dev, "Failed to allocate device resource data\n");
 		return ERR_PTR(-ENOMEM);
+	}
 
 	tzd = thermal_of_zone_register(dev->of_node, sensor_id, data, ops);
 	if (IS_ERR(tzd)) {
+		dev_err_probe(dev, PTR_ERR(tzd),
+			      "Failed to register thermal zone sensor[%d]\n", sensor_id);
 		devres_free(ptr);
 		return tzd;
 	}
