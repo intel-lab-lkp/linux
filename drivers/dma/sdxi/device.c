@@ -18,6 +18,7 @@
 
 #include "context.h"
 #include "descriptor.h"
+#include "dma.h"
 #include "hw.h"
 #include "error.h"
 #include "sdxi.h"
@@ -354,6 +355,8 @@ int sdxi_device_init(struct sdxi_dev *sdxi, const struct sdxi_dev_ops *ops)
 	if (err)
 		goto fn_stop;
 
+	sdxi_dma_register(sdxi->dma_cxt);
+
 	return 0;
 fn_stop:
 	sdxi_stop(sdxi);
@@ -362,6 +365,7 @@ fn_stop:
 
 void sdxi_device_exit(struct sdxi_dev *sdxi)
 {
+	sdxi_dma_unregister(sdxi->dma_cxt);
 	sdxi_working_cxt_exit(sdxi->dma_cxt);
 
 	/* Walk sdxi->cxt_array freeing any allocated rows. */
