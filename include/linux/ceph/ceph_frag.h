@@ -3,20 +3,26 @@
 #define FS_CEPH_FRAG_H
 
 /*
+ * Directory fragment metadata encoding: CephFS uses "frags" to partition
+ * directory namespace for distributed metadata management. Each fragment
+ * represents a contiguous range of the directory's hash space, allowing
+ * directories to be split across multiple metadata servers (MDSs).
+ *
  * "Frags" are a way to describe a subset of a 32-bit number space,
- * using a mask and a value to match against that mask.  Any given frag
+ * using a mask and a value to match against that mask. Any given frag
  * (subset of the number space) can be partitioned into 2^n sub-frags.
  *
  * Frags are encoded into a 32-bit word:
- *   8 upper bits = "bits"
- *  24 lower bits = "value"
+ *   8 upper bits = "bits" (depth of partitioning)
+ *  24 lower bits = "value" (fragment identifier within the partition)
  * (We could go to 5+27 bits, but who cares.)
  *
- * We use the _most_ significant bits of the 24 bit value.  This makes
- * values logically sort.
+ * We use the _most_ significant bits of the 24 bit value. This makes
+ * values logically sort, enabling efficient traversal of the directory
+ * namespace in hash order.
  *
  * Unfortunately, because the "bits" field is still in the high bits, we
- * can't sort encoded frags numerically.  However, it does allow you
+ * can't sort encoded frags numerically. However, it does allow you
  * to feed encoded frags as values into frag_contains_value.
  */
 static inline __u32 ceph_frag_make(__u32 b, __u32 v)
@@ -67,8 +73,10 @@ static inline __u32 ceph_frag_next(__u32 f)
 }
 
 /*
- * comparator to sort frags logically, as when traversing the
- * number space in ascending order...
+ * Fragment comparison function: Comparator to sort frags logically for
+ * ordered traversal of the directory namespace. Since encoded frags cannot
+ * be sorted numerically due to the bit field layout, this function provides
+ * the correct logical ordering for directory fragment processing.
  */
 int ceph_frag_compare(__u32 a, __u32 b);
 
