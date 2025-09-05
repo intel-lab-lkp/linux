@@ -59,6 +59,8 @@ static inline int cpu_numa_flags(void)
 #endif
 
 extern int arch_asym_cpu_priority(int cpu);
+extern int arch_sched_node_distance(int from, int to);
+extern int sched_avg_remote_numa_distance;
 
 struct sched_domain_attr {
 	int relax_domain_level;
