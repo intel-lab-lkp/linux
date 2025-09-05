@@ -4,23 +4,51 @@
 
 #include <linux/ceph/osd_client.h>
 
+/*
+ * Object class lock types: Defines the types of locks that can be acquired
+ * on RADOS objects through the lock object class. Supports both exclusive
+ * and shared locking semantics for distributed coordination.
+ */
 enum ceph_cls_lock_type {
+	/* No lock held */
 	CEPH_CLS_LOCK_NONE = 0,
+	/* Exclusive lock - only one holder allowed */
 	CEPH_CLS_LOCK_EXCLUSIVE = 1,
+	/* Shared lock - multiple readers allowed */
 	CEPH_CLS_LOCK_SHARED = 2,
 };
 
+/*
+ * Lock holder identifier metadata: Uniquely identifies a client that holds
+ * or is requesting a lock on a RADOS object. Combines client entity name
+ * with a session-specific cookie for disambiguation.
+ */
 struct ceph_locker_id {
-	struct ceph_entity_name name;	/* locker's client name */
-	char *cookie;			/* locker's cookie */
+	/* Client entity name (type and number) */
+	struct ceph_entity_name name;
+	/* Unique session cookie for this lock holder */
+	char *cookie;
 };
 
+/*
+ * Lock holder information metadata: Contains additional information about
+ * a lock holder, primarily the network address for client identification
+ * and potential communication.
+ */
 struct ceph_locker_info {
-	struct ceph_entity_addr addr;	/* locker's address */
+	/* Network address of the lock holder */
+	struct ceph_entity_addr addr;
 };
 
+/*
+ * Complete lock holder metadata: Combines lock holder identification and
+ * network information into a complete description of a client that holds
+ * a lock on a RADOS object. Used for lock enumeration and management.
+ */
 struct ceph_locker {
+	/* Lock holder identification (name + cookie) */
 	struct ceph_locker_id id;
+	/* Lock holder network information */
 	struct ceph_locker_info info;
 };
 
