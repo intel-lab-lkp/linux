@@ -58,7 +58,7 @@
  * bio2->bi_endio = foo_endio;
  * bio_submit(bio2);
  *
- * continue_at(cl, complete_some_read, system_wq);
+ * continue_at(cl, complete_some_read, system_percpu_wq);
  *
  * If closure's refcount started at 0, complete_some_read() could run before the
  * second bio was submitted - which is almost always not what you want! More
