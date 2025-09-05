@@ -15,22 +15,40 @@
 struct ceph_auth_client;
 struct ceph_msg;
 
+/*
+ * Abstract authorizer handle used for authentication with Ceph services.
+ * Each authentication protocol provides its own implementation.
+ */
 struct ceph_authorizer {
+	/* Protocol-specific cleanup function */
 	void (*destroy)(struct ceph_authorizer *);
 };
 
+/*
+ * Authentication handshake state for communicating with a specific service.
+ * Contains authorizer data and cryptographic functions for message security.
+ */
 struct ceph_auth_handshake {
+	/* The authorizer token for this service connection */
 	struct ceph_authorizer *authorizer;
+	/* Serialized authorizer data sent to the service */
 	void *authorizer_buf;
 	size_t authorizer_buf_len;
+	/* Buffer for receiving authorizer reply from service */
 	void *authorizer_reply_buf;
 	size_t authorizer_reply_buf_len;
+	/* Sign outgoing messages using session keys */
 	int (*sign_message)(struct ceph_auth_handshake *auth,
 			    struct ceph_msg *msg);
+	/* Verify signatures on incoming messages */
 	int (*check_message_signature)(struct ceph_auth_handshake *auth,
 				       struct ceph_msg *msg);
 };
 
+/*
+ * Protocol-specific operations for authentication with Ceph monitors.
+ * Each authentication method (cephx, etc.) implements these callbacks.
+ */
 struct ceph_auth_client_ops {
 	/*
 	 * true if we are authenticated and can connect to
@@ -87,20 +105,35 @@ struct ceph_auth_client_ops {
 				       struct ceph_msg *msg);
 };
 
+/*
+ * Main authentication client state for communicating with Ceph monitors.
+ * Manages protocol negotiation, credentials, and service authorization.
+ */
 struct ceph_auth_client {
-	u32 protocol;           /* CEPH_AUTH_* */
-	void *private;          /* for use by protocol implementation */
-	const struct ceph_auth_client_ops *ops;  /* null iff protocol==0 */
+	/* Authentication protocol in use (CEPH_AUTH_*) */
+	u32 protocol;
+	/* Protocol-specific private data */
+	void *private;
+	/* Protocol operations vtable (null if protocol==0) */
+	const struct ceph_auth_client_ops *ops;
 
-	bool negotiating;       /* true if negotiating protocol */
-	const char *name;       /* entity name */
-	u64 global_id;          /* our unique id in system */
-	const struct ceph_crypto_key *key;     /* our secret key */
-	unsigned want_keys;     /* which services we want */
+	/* true if currently negotiating authentication protocol */
+	bool negotiating;
+	/* Ceph entity name (e.g., "client.admin") */
+	const char *name;
+	/* Unique identifier assigned by monitor */
+	u64 global_id;
+	/* Secret key for authentication */
+	const struct ceph_crypto_key *key;
+	/* Bitmask of services we want tickets for */
+	unsigned want_keys;
 
-	int preferred_mode;	/* CEPH_CON_MODE_* */
-	int fallback_mode;	/* ditto */
+	/* Preferred connection security mode */
+	int preferred_mode;
+	/* Fallback connection security mode */
+	int fallback_mode;
 
+	/* Protects concurrent access to auth state */
 	struct mutex mutex;
 };
 
