@@ -338,7 +338,7 @@ EXPORT_SYMBOL_GPL(exynos_get_pmu_regmap_by_phandle);
 
 static int gs101_cpuhp_pmu_online(unsigned int cpu)
 {
-	unsigned int cpuhint = smp_processor_id();
+	unsigned int cpuhint = raw_smp_processor_id();
 	u32 reg, mask;
 
 	/* clear cpu inform hint */
@@ -361,7 +361,7 @@ static int gs101_cpuhp_pmu_online(unsigned int cpu)
 static int gs101_cpuhp_pmu_offline(unsigned int cpu)
 {
 	u32 reg, mask;
-	unsigned int cpuhint = smp_processor_id();
+	unsigned int cpuhint = raw_smp_processor_id();
 
 	/* set cpu inform hint */
 	regmap_write(pmu_context->pmureg, GS101_CPU_INFORM(cpuhint),
