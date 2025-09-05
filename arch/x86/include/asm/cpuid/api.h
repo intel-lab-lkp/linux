@@ -5,8 +5,10 @@
 #include <asm/cpuid/types.h>
 
 #include <linux/build_bug.h>
+#include <linux/init.h>
 #include <linux/types.h>
 
+#include <asm/processor.h>
 #include <asm/string.h>
 
 /*
@@ -483,14 +485,14 @@ static inline bool cpuid_amd_hygon_has_l3_cache(void)
 	cpuid_subleaf(_cpuinfo, _leaf, 0)
 
 /**
- * cpuid_leaf_regs() - Access parsed CPUID data in raw format
+ * cpuid_leaf_raw() - Access parsed CPUID data in raw format
  * @_cpuinfo:	CPU capability structure reference ('struct cpuinfo_x86')
  * @_leaf:	CPUID leaf, in compile-time 0xN format
  *
  * Similar to cpuid_leaf(), but returns a raw 'struct cpuid_regs' pointer to
  * the parsed CPUID data instead of a "typed" <asm/cpuid/leaf_types.h> pointer.
  */
-#define cpuid_leaf_regs(_cpuinfo, _leaf)					\
+#define cpuid_leaf_raw(_cpuinfo, _leaf)					\
 	((const struct cpuid_regs *)(cpuid_leaf(_cpuinfo, _leaf)))
 
 /*
@@ -534,7 +536,7 @@ static inline bool cpuid_amd_hygon_has_l3_cache(void)
 })
 
 /**
- * cpuid_subleaf_n_regs() - Access parsed CPUID data for leaf with dynamic subleaf range
+ * cpuid_subleaf_n_raw() - Access parsed CPUID data for leaf with dynamic subleaf range
  * @_cpuinfo:	CPU capability structure reference ('struct cpuinfo_x86')
  * @_leaf:	CPUID leaf, in compile-time 0xN format; e.g. 0x4, 0x8000001d
  * @_subleaf:	Subleaf number, which can be passed dynamically.  It must be smaller
@@ -543,7 +545,7 @@ static inline bool cpuid_amd_hygon_has_l3_cache(void)
  * Similar to cpuid_subleaf_n(), but returns a raw 'struct cpuid_regs' pointer to
  * the parsed CPUID data instead of a "typed" <asm/cpuid/leaf_types.h> pointer.
  */
-#define cpuid_subleaf_n_regs(_cpuinfo, _leaf, _subleaf)				\
+#define cpuid_subleaf_n_raw(_cpuinfo, _leaf, _subleaf)				\
 	((const struct cpuid_regs *)cpuid_subleaf_n(_cpuinfo, _leaf, _subleaf))
 
 /**
@@ -561,5 +563,12 @@ static inline bool cpuid_amd_hygon_has_l3_cache(void)
 	__cpuid_assert_dynamic_subleaves(_cpuinfo, _leaf);			\
 	__cpuid_table_nr_filled_subleaves(&(_cpuinfo)->cpuid, _leaf, n);	\
 })
+
+/*
+ * CPUID parser exported APIs:
+ */
+
+void __init cpuid_parser_early_scan_cpu(struct cpuinfo_x86 *c);
+void cpuid_parser_scan_cpu(struct cpuinfo_x86 *c);
 
 #endif /* _ASM_X86_CPUID_API_H */
