@@ -1339,6 +1339,17 @@ struct intel_crtc_state {
 
 	/* LOBF flag */
 	bool has_lobf;
+
+	struct {
+		u8 io_wake_lines;
+		u8 fast_wake_lines;
+
+		/* LNL and beyond */
+		u8 check_entry_lines;
+		u8 aux_less_wake_lines;
+		u8 silence_period_sym_clocks;
+		u8 lfps_half_cycle_num_of_syms;
+	} alpm_parameters;
 };
 
 enum intel_pipe_crc_source {
@@ -1847,11 +1858,6 @@ struct intel_dp {
 		enum transcoder transcoder;
 		struct mutex lock;
 
-		/* LNL and beyond */
-		u8 check_entry_lines;
-		u8 aux_less_wake_lines;
-		u8 silence_period_sym_clocks;
-		u8 lfps_half_cycle_num_of_syms;
 		bool lobf_disable_debug;
 		bool sink_alpm_error;
 	} alpm_parameters;

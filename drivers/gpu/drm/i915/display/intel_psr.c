@@ -953,15 +953,16 @@ static u32 intel_psr2_get_tp_time(struct intel_dp *intel_dp)
 	return val;
 }
 
-static int psr2_block_count_lines(struct intel_dp *intel_dp)
+static int
+psr2_block_count_lines(u8 io_wake_lines, u8 fast_wake_lines)
 {
-	return intel_dp->alpm_parameters.io_wake_lines < 9 &&
-		intel_dp->alpm_parameters.fast_wake_lines < 9 ? 8 : 12;
+	return io_wake_lines < 9 && fast_wake_lines < 9 ? 8 : 12;
 }
 
 static int psr2_block_count(struct intel_dp *intel_dp)
 {
-	return psr2_block_count_lines(intel_dp) / 4;
+	return psr2_block_count_lines(intel_dp->alpm_parameters.io_wake_lines,
+				      intel_dp->alpm_parameters.fast_wake_lines) / 4;
 }
 
 static u8 frames_before_su_entry(struct intel_dp *intel_dp)
@@ -1367,11 +1368,12 @@ static bool wake_lines_fit_into_vblank(struct intel_dp *intel_dp,
 	int wake_lines;
 
 	if (aux_less)
-		wake_lines = intel_dp->alpm_parameters.aux_less_wake_lines;
+		wake_lines = crtc_state->alpm_parameters.aux_less_wake_lines;
 	else
 		wake_lines = DISPLAY_VER(display) < 20 ?
-			psr2_block_count_lines(intel_dp) :
-			intel_dp->alpm_parameters.io_wake_lines;
+			psr2_block_count_lines(crtc_state->alpm_parameters.io_wake_lines,
+					       crtc_state->alpm_parameters.fast_wake_lines) :
+			crtc_state->alpm_parameters.io_wake_lines;
 
 	if (crtc_state->req_psr2_sdp_prior_scanline)
 		vblank -= 1;
@@ -1384,7 +1386,7 @@ static bool wake_lines_fit_into_vblank(struct intel_dp *intel_dp,
 }
 
 static bool alpm_config_valid(struct intel_dp *intel_dp,
-			      const struct intel_crtc_state *crtc_state,
+			      struct intel_crtc_state *crtc_state,
 			      bool aux_less)
 {
 	struct intel_display *display = to_intel_display(intel_dp);
@@ -1589,7 +1591,7 @@ static bool _psr_compute_config(struct intel_dp *intel_dp,
 
 static bool
 _panel_replay_compute_config(struct intel_dp *intel_dp,
-			     const struct intel_crtc_state *crtc_state,
+			     struct intel_crtc_state *crtc_state,
 			     const struct drm_connector_state *conn_state)
 {
 	struct intel_display *display = to_intel_display(intel_dp);
