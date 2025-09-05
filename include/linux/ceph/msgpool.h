@@ -5,14 +5,21 @@
 #include <linux/mempool.h>
 
 /*
- * we use memory pools for preallocating messages we may receive, to
- * avoid unexpected OOM conditions.
+ * Ceph message pool metadata: Memory pool for preallocating network messages
+ * to avoid out-of-memory conditions during critical operations. Maintains
+ * a reserve of messages with specific types and sizes for reliable operation
+ * under memory pressure.
  */
 struct ceph_msgpool {
+	/* Descriptive name for debugging and identification */
 	const char *name;
+	/* Underlying kernel memory pool */
 	mempool_t *pool;
-	int type;               /* preallocated message type */
-	int front_len;          /* preallocated payload size */
+	/* Message type for preallocated messages */
+	int type;
+	/* Size of preallocated front payload */
+	int front_len;
+	/* Maximum number of data items in preallocated messages */
 	int max_data_items;
 };
 
