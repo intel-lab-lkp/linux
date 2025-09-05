@@ -307,29 +307,26 @@ int arch_freq_get_on_cpu(int cpu)
 		 */
 		if (!housekeeping_cpu(cpu, HK_TYPE_TICK) ||
 		    time_is_before_jiffies(last_update + msecs_to_jiffies(AMU_SAMPLE_EXP_MS))) {
-			struct cpufreq_policy *policy = cpufreq_cpu_get(cpu);
+			struct cpufreq_policy *policy __free(put_cpufreq_policy) =
+				cpufreq_cpu_get(info->opp_cpu);
 			int ref_cpu;
 
 			if (!policy)
 				return -EINVAL;
 
 			if (!cpumask_intersects(policy->related_cpus,
-						housekeeping_cpumask(HK_TYPE_TICK))) {
-				cpufreq_cpu_put(policy);
+						housekeeping_cpumask(HK_TYPE_TICK)))
 				return -EOPNOTSUPP;
-			}
 
 			for_each_cpu_wrap(ref_cpu, policy->cpus, cpu + 1) {
 				if (ref_cpu == start_cpu) {
 					/* Prevent verifying same CPU twice */
 					ref_cpu = nr_cpu_ids;
-					break;
+					return -EAGAIN;
 				}
 				if (!idle_cpu(ref_cpu))
 					break;
 			}
-
-			cpufreq_cpu_put(policy);
 
 			if (ref_cpu >= nr_cpu_ids)
 				/* No alternative to pull info from */
