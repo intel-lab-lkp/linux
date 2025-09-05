@@ -813,6 +813,8 @@
 		compatible = "rockchip,rk3368-i2s", "rockchip,rk3066-i2s";
 		reg = <0x0 0xff898000 0x0 0x1000>;
 		interrupts = <GIC_SPI 53 IRQ_TYPE_LEVEL_HIGH>;
+		assigned-clocks =  <&cru CLK_I2S_8CH_PRE>;
+		assigned-clock-parents = <&cru CLK_I2S_8CH_FRAC>;
 		clock-names = "i2s_clk", "i2s_hclk";
 		clocks = <&cru SCLK_I2S_8CH>, <&cru HCLK_I2S_8CH>;
 		dmas = <&dmac_bus 0>, <&dmac_bus 1>;
