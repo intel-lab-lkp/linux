@@ -1141,6 +1141,7 @@ struct ethtool_ops {
 				 struct ethtool_ringparam *,
 				 struct kernel_ethtool_ringparam *,
 				 struct netlink_ext_ack *);
+	int	(*get_rxrings)(struct net_device *dev);
 	void	(*get_pause_stats)(struct net_device *dev,
 				   struct ethtool_pause_stats *pause_stats);
 	void	(*get_pauseparam)(struct net_device *,
