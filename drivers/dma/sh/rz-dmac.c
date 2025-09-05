@@ -455,7 +455,7 @@ static int rz_dmac_alloc_chan_resources(struct dma_chan *chan)
 	if (!channel->descs_allocated)
 		return -ENOMEM;
 
-	return channel->descs_allocated;
+	return pm_runtime_get_sync(chan->device->dev);
 }
 
 static void rz_dmac_free_chan_resources(struct dma_chan *chan)
@@ -490,6 +490,8 @@ static void rz_dmac_free_chan_resources(struct dma_chan *chan)
 
 	INIT_LIST_HEAD(&channel->ld_free);
 	vchan_free_chan_resources(&channel->vc);
+
+	pm_runtime_put(chan->device->dev);
 }
 
 static struct dma_async_tx_descriptor *
@@ -1027,6 +1029,7 @@ static int rz_dmac_probe(struct platform_device *pdev)
 		dev_err(&pdev->dev, "unable to register\n");
 		goto dma_register_err;
 	}
+	pm_runtime_put(&pdev->dev);
 	return 0;
 
 dma_register_err:
@@ -1063,7 +1066,6 @@ static void rz_dmac_remove(struct platform_device *pdev)
 				  channel->lmdesc.base,
 				  channel->lmdesc.base_dma);
 	}
-	pm_runtime_put(&pdev->dev);
 
 	platform_device_put(dmac->icu.pdev);
 }
