@@ -9,11 +9,16 @@
 #ifdef CONFIG_CEPH_LIB_PRETTYDEBUG
 
 /*
- * wrap pr_debug to include a filename:lineno prefix on each line.
- * this incurs some overhead (kernel size and execution time) due to
- * the extra function call at each call site.
+ * Pretty debug output metadata: Enhanced debugging infrastructure that provides
+ * detailed context information including filenames, line numbers, and client
+ * identification. Incurs additional overhead but significantly improves debugging
+ * capabilities for complex distributed system interactions.
  */
 
+/*
+ * Active debug macros: Full-featured debugging with file/line context.
+ * Format: "MODULE FILE:LINE : message" with optional client identification.
+ */
 # if defined(DEBUG) || defined(CONFIG_DYNAMIC_DEBUG)
 #  define dout(fmt, ...)						\
 	pr_debug("%.*s %12.12s:%-4d : " fmt,				\
@@ -26,7 +31,10 @@
 		 &client->fsid, client->monc.auth->global_id,		\
 		 ##__VA_ARGS__)
 # else
-/* faux printk call just to see any compiler warnings. */
+/*
+ * Compile-time debug validation: No-op macros that preserve format string
+ * checking without generating debug output. Catches format errors at compile time.
+ */
 #  define dout(fmt, ...)					\
 		no_printk(KERN_DEBUG fmt, ##__VA_ARGS__)
 #  define doutc(client, fmt, ...)				\
@@ -39,7 +47,8 @@
 #else
 
 /*
- * or, just wrap pr_debug
+ * Simple debug output metadata: Basic debugging without filename/line context.
+ * Lighter weight alternative that includes client identification and function names.
  */
 # define dout(fmt, ...)	pr_debug(" " fmt, ##__VA_ARGS__)
 # define doutc(client, fmt, ...)					\
@@ -48,6 +57,12 @@
 
 #endif
 
+/*
+ * Client-aware logging macros: Production logging infrastructure that includes
+ * client identification (FSID + global ID) in all messages. Essential for
+ * debugging multi-client scenarios and cluster-wide issues.
+ * Format: "[FSID GLOBAL_ID]: message"
+ */
 #define pr_notice_client(client, fmt, ...)				\
 	pr_notice("[%pU %llu]: " fmt, &client->fsid,			\
 		  client->monc.auth->global_id, ##__VA_ARGS__)
