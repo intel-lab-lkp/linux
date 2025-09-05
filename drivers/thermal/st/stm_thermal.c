@@ -536,12 +536,8 @@ static int stm_thermal_probe(struct platform_device *pdev)
 						       sensor,
 						       &stm_tz_ops);
 
-	if (IS_ERR(sensor->th_dev)) {
-		dev_err(&pdev->dev, "%s: thermal zone sensor registering KO\n",
-			__func__);
-		ret = PTR_ERR(sensor->th_dev);
-		return ret;
-	}
+	if (IS_ERR(sensor->th_dev))
+		return PTR_ERR(sensor->th_dev);
 
 	/* Register IRQ into GIC */
 	ret = stm_register_irq(sensor);
