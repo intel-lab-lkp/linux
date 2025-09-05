@@ -127,6 +127,8 @@ static enum pci_bus_isolation pcie_switch_isolated(struct pci_bus *bus)
 	 * traffic flowing upstream back downstream through another DSP.
 	 *
 	 * Thus any non-permissive DSP spoils the whole bus.
+	 * PCI_ACS_UNCLAIMED_RR is not required since rejecting requests with
+	 * error is still isolation.
 	 */
 	guard(rwsem_read)(&pci_bus_sem);
 	list_for_each_entry(pdev, &bus->devices, bus_list) {
@@ -136,8 +138,14 @@ static enum pci_bus_isolation pcie_switch_isolated(struct pci_bus *bus)
 		    pdev->dma_alias_mask)
 			return PCIE_NON_ISOLATED;
 
-		if (!pci_acs_enabled(pdev, PCI_ACS_ISOLATED))
+		if (!pci_acs_enabled(pdev, PCI_ACS_ISOLATED |
+						   PCI_ACS_DSP_MT_RR |
+						   PCI_ACS_USP_MT_RR)) {
+			/* The USP is isolated from the DSP */
+			if (!pci_acs_enabled(pdev, PCI_ACS_USP_MT_RR))
+				return PCIE_NON_ISOLATED;
 			return PCIE_SWITCH_DSP_NON_ISOLATED;
+		}
 	}
 	return PCIE_ISOLATED;
 }
@@ -232,11 +240,13 @@ enum pci_bus_isolation pci_bus_isolated(struct pci_bus *bus)
 	/*
 	 * Since PCIe links are point to point root ports are isolated if there
 	 * is no internal loopback to the root port's MMIO. Like MFDs assume if
-	 * there is no ACS cap then there is no loopback.
+	 * there is no ACS cap then there is no loopback. The root port uses
+	 * DSP_MT_RR for its own MMIO.
 	 */
 	case PCI_EXP_TYPE_ROOT_PORT:
 		if (bridge->acs_cap &&
-		    !pci_acs_enabled(bridge, PCI_ACS_ISOLATED))
+		    !pci_acs_enabled(bridge,
+				     PCI_ACS_ISOLATED | PCI_ACS_DSP_MT_RR))
 			return PCIE_NON_ISOLATED;
 		return PCIE_ISOLATED;
 
