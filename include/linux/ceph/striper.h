@@ -11,10 +11,19 @@ void ceph_calc_file_object_mapping(struct ceph_file_layout *l,
 				   u64 off, u64 len,
 				   u64 *objno, u64 *objoff, u32 *xlen);
 
+/*
+ * Object extent metadata: Represents a contiguous range within a RADOS object
+ * that maps to part of a file. Used by the striping layer to break file I/O
+ * operations into object-level operations distributed across the cluster.
+ */
 struct ceph_object_extent {
+	/* Linkage for lists of extents */
 	struct list_head oe_item;
+	/* RADOS object number containing this extent */
 	u64 oe_objno;
+	/* Byte offset within the object */
 	u64 oe_off;
+	/* Length of the extent in bytes */
 	u64 oe_len;
 };
 
@@ -44,8 +53,15 @@ int ceph_iterate_extents(struct ceph_file_layout *l, u64 off, u64 len,
 			 ceph_object_extent_fn_t action_fn,
 			 void *action_arg);
 
+/*
+ * File extent metadata: Represents a contiguous range within a file.
+ * Used to describe logical file ranges that correspond to object extents
+ * after stripe mapping calculations.
+ */
 struct ceph_file_extent {
+	/* Byte offset within the file */
 	u64 fe_off;
+	/* Length of the extent in bytes */
 	u64 fe_len;
 };
 
