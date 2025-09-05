@@ -1784,6 +1784,11 @@ static int user_mem_abort(struct kvm_vcpu *vcpu, phys_addr_t fault_ipa,
 		ret = KVM_PGT_FN(kvm_pgtable_stage2_map)(pgt, fault_ipa, vma_pagesize,
 					     __pfn_to_phys(pfn), prot,
 					     memcache, flags);
+
+		/* Add to lookup, if canonical IPA range mapped to shadow mmu */
+		if (nested)
+			add_to_ipa_shadow_ipa_lookup(pgt, ALIGN_DOWN(fault_ipa, PAGE_SIZE),
+					ipa, vma_pagesize);
 	}
 
 out_unlock:
@@ -1995,14 +2000,15 @@ out_unlock:
 
 bool kvm_unmap_gfn_range(struct kvm *kvm, struct kvm_gfn_range *range)
 {
+	gpa_t start = range->start << PAGE_SHIFT;
+	gpa_t end = (range->end - range->start) << PAGE_SHIFT;
+	bool may_block = range->may_block;
+
 	if (!kvm->arch.mmu.pgt)
 		return false;
 
-	__unmap_stage2_range(&kvm->arch.mmu, range->start << PAGE_SHIFT,
-			     (range->end - range->start) << PAGE_SHIFT,
-			     range->may_block);
-
-	kvm_nested_s2_unmap(kvm, range->may_block);
+	__unmap_stage2_range(&kvm->arch.mmu, start, end, may_block);
+	kvm_nested_s2_unmap_range(kvm, start, end, may_block);
 	return false;
 }
 
@@ -2280,7 +2286,7 @@ void kvm_arch_flush_shadow_memslot(struct kvm *kvm,
 
 	write_lock(&kvm->mmu_lock);
 	kvm_stage2_unmap_range(&kvm->arch.mmu, gpa, size, true);
-	kvm_nested_s2_unmap(kvm, true);
+	kvm_nested_s2_unmap_range(kvm, gpa, size, true);
 	write_unlock(&kvm->mmu_lock);
 }
 
