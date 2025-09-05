@@ -27621,6 +27621,12 @@ F:	Documentation/devicetree/bindings/iio/adc/xlnx,versal-sysmon.yaml
 F:	drivers/iio/adc/versal-sysmon*
 F:	include/linux/iio/adc/versal-sysmon-events.h
 
+XILINX VERSAL THERMAL DRIVER
+M:	Salih Erim <salih.erim@amd.com>
+S:	Maintained
+F:	Documentation/devicetree/bindings/thermal/xlnx,versal-thermal.yaml
+F:	drivers/thermal/versal_thermal.c
+
 XILINX UARTLITE SERIAL DRIVER
 M:	Peter Korsgaard <jacmet@sunsite.dk>
 L:	linux-serial@vger.kernel.org
