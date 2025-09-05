@@ -130,6 +130,8 @@ __STRUCT_FRACT(s16)
 __STRUCT_FRACT(u16)
 __STRUCT_FRACT(s32)
 __STRUCT_FRACT(u32)
+__STRUCT_FRACT(s64)
+__STRUCT_FRACT(u64)
 #undef __STRUCT_FRACT
 
 /* Calculate "x * n / d" without unnecessary overflow or loss of precision. */
