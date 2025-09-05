@@ -23,10 +23,10 @@ properties:
       - amlogic,a4-pwrc
       - amlogic,a5-pwrc
       - amlogic,c3-pwrc
-      - amlogic,t7-pwrc
       - amlogic,s6-pwrc
       - amlogic,s7-pwrc
       - amlogic,s7d-pwrc
+      - amlogic,t7-pwrc
 
   "#power-domain-cells":
     const: 1
