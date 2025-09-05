@@ -9,13 +9,16 @@
 #include <linux/uio.h>
 
 /*
- * a simple reference counted buffer.
- *
- * use kmalloc for smaller sizes, vmalloc for larger sizes.
+ * Reference counted buffer metadata: Simple buffer management with automatic
+ * memory allocation strategy. Uses kmalloc for smaller buffers and vmalloc
+ * for larger buffers to optimize memory usage and fragmentation.
  */
 struct ceph_buffer {
+	/* Reference counting for safe shared access */
 	struct kref kref;
+	/* Kernel vector containing buffer pointer and length */
 	struct kvec vec;
+	/* Total allocated buffer size (may be larger than vec.iov_len) */
 	size_t alloc_len;
 };
 
