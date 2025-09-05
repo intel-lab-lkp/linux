@@ -1728,9 +1728,10 @@ static void __init early_identify_cpu(struct cpuinfo_x86 *c)
 
 	/* cyrix could have cpuid enabled via c_identify()*/
 	if (cpuid_feature()) {
-		cpuid_parser_scan_cpu(c);
+		cpuid_parser_early_scan_cpu(c);
 		cpu_detect(c);
 		get_cpu_vendor(c);
+		cpuid_parser_scan_cpu(c);
 		intel_unlock_cpuid_leafs(c);
 		get_cpu_cap(c);
 		setup_force_cpu_cap(X86_FEATURE_CPUID);
