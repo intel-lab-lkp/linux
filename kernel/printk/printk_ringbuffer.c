@@ -397,21 +397,14 @@ static unsigned int to_blk_size(unsigned int size)
  */
 static bool data_check_size(struct prb_data_ring *data_ring, unsigned int size)
 {
-	struct prb_data_block *db = NULL;
-
 	if (size == 0)
 		return true;
 
 	/*
 	 * Ensure the alignment padded size could possibly fit in the data
-	 * array. The largest possible data block must still leave room for
-	 * at least the ID of the next block.
+	 * array.
 	 */
-	size = to_blk_size(size);
-	if (size > DATA_SIZE(data_ring) - sizeof(db->id))
-		return false;
-
-	return true;
+	return (to_blk_size(size) <= DATA_SIZE(data_ring));
 }
 
 /* Query the state of a descriptor. */
