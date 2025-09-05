@@ -1502,9 +1502,8 @@ static void __intel_pstate_update_max_freq(struct cpufreq_policy *policy,
 
 static bool intel_pstate_update_max_freq(struct cpudata *cpudata)
 {
-	struct cpufreq_policy *policy __free(put_cpufreq_policy);
+	struct cpufreq_policy *policy __free(put_cpufreq_policy) = cpufreq_cpu_get(cpudata->cpu);
 
-	policy = cpufreq_cpu_get(cpudata->cpu);
 	if (!policy)
 		return false;
 
@@ -1695,41 +1694,49 @@ unlock_driver:
 	return count;
 }
 
-static void update_qos_request(enum freq_qos_req_type type)
+static bool intel_pstate_cpufreq_update_limits(int cpu, enum freq_qos_req_type type)
 {
 	struct freq_qos_request *req;
-	struct cpufreq_policy *policy;
+	unsigned int freq, perf_pct;
+	struct cpudata *data = all_cpu_data[cpu];
+	struct cpufreq_policy *policy __free(put_cpufreq_policy) = cpufreq_cpu_get(cpu);
+
+	if (!policy)
+		return false;
+
+	req = policy->driver_data;
+
+	if (!req)
+		return false;
+
+	if (hwp_active)
+		intel_pstate_get_hwp_cap(data);
+
+	if (type == FREQ_QOS_MIN) {
+		perf_pct = global.min_perf_pct;
+	} else {
+		req++;
+		perf_pct = global.max_perf_pct;
+	}
+
+	freq = DIV_ROUND_UP(data->pstate.turbo_freq * perf_pct, 100);
+
+	if (freq_qos_update_request(req, freq) < 0)
+		pr_warn("Failed to update freq constraint: CPU%d\n", cpu);
+
+	return true;
+}
+
+
+static void update_qos_request(enum freq_qos_req_type type)
+{
 	int i;
 
 	for_each_possible_cpu(i) {
-		struct cpudata *cpu = all_cpu_data[i];
-		unsigned int freq, perf_pct;
-
-		policy = cpufreq_cpu_get(i);
-		if (!policy)
+		if (!intel_pstate_cpufreq_update_limits(i, type))
 			continue;
-
-		req = policy->driver_data;
-		cpufreq_cpu_put(policy);
-
-		if (!req)
-			continue;
-
-		if (hwp_active)
-			intel_pstate_get_hwp_cap(cpu);
-
-		if (type == FREQ_QOS_MIN) {
-			perf_pct = global.min_perf_pct;
-		} else {
-			req++;
-			perf_pct = global.max_perf_pct;
-		}
-
-		freq = DIV_ROUND_UP(cpu->pstate.turbo_freq * perf_pct, 100);
-
-		if (freq_qos_update_request(req, freq) < 0)
-			pr_warn("Failed to update freq constraint: CPU%d\n", i);
 	}
+
 }
 
 static ssize_t store_max_perf_pct(struct kobject *a, struct kobj_attribute *b,
