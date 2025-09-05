@@ -410,7 +410,7 @@ static int cdrom_get_disc_info(struct cdrom_device_info *cdi,
  */
 #define ENSURE(cdo, call, bits)					\
 do {								\
-	if (cdo->call == NULL)					\
+	if ((cdo)->(call) == NULL)				\
 		WARN_ON_ONCE((cdo)->capability & (bits));	\
 } while (0)
 
