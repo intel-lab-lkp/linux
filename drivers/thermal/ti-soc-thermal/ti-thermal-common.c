@@ -175,10 +175,8 @@ int ti_thermal_expose_sensor(struct ti_bandgap *bgp, int id,
 	/* in case this is specified by DT */
 	data->ti_thermal = devm_thermal_of_zone_register(bgp->dev, id,
 					data, &ti_of_thermal_ops);
-	if (IS_ERR(data->ti_thermal)) {
-		dev_err(bgp->dev, "thermal zone device is NULL\n");
+	if (IS_ERR(data->ti_thermal))
 		return PTR_ERR(data->ti_thermal);
-	}
 
 	ti_bandgap_set_sensor_data(bgp, id, data);
 	ti_bandgap_write_update_interval(bgp, data->sensor_id,
