@@ -121,7 +121,7 @@ static ssize_t proc_bus_pci_write(struct file *file, const char __user *buf,
 	if (ret)
 		return ret;
 
-	if (pos >= size)
+	if (pos < 0 || pos >= size)
 		return 0;
 	if (nbytes >= size)
 		nbytes = size;
