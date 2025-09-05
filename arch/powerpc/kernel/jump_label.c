@@ -12,9 +12,14 @@ void arch_jump_label_transform(struct jump_entry *entry,
 			       enum jump_label_type type)
 {
 	u32 *addr = (u32 *)jump_entry_code(entry);
+	int err;
 
 	if (type == JUMP_LABEL_JMP)
-		patch_branch(addr, jump_entry_target(entry), 0);
+		err = patch_branch(addr, jump_entry_target(entry), 0);
 	else
-		patch_instruction(addr, ppc_inst(PPC_RAW_NOP()));
+		err = patch_instruction(addr, ppc_inst(PPC_RAW_NOP()));
+
+	if (err)
+		panic("%s: patching failed, err %d, type %d, addr %pS, target %pS\n",
+		      __func__, err, type, addr, (void *)jump_entry_target(entry));
 }
