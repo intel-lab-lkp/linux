@@ -7,13 +7,26 @@
 #include <linux/list.h>
 #include <linux/types.h>
 
+/*
+ * Page list container metadata: Manages a list of memory pages for efficient
+ * data serialization and transmission. Provides append-only interface with
+ * automatic page allocation, reference counting, and optimized tail access
+ * for building large data structures without memory copies.
+ */
 struct ceph_pagelist {
+	/* Linked list of allocated pages containing data */
 	struct list_head head;
+	/* Memory mapping of current tail page for efficient appends */
 	void *mapped_tail;
+	/* Total data length across all pages */
 	size_t length;
+	/* Available space remaining in current tail page */
 	size_t room;
+	/* List of pre-allocated pages available for future use */
 	struct list_head free_list;
+	/* Count of pages in the free list */
 	size_t num_pages_free;
+	/* Reference count for safe sharing and cleanup */
 	refcount_t refcnt;
 };
 
