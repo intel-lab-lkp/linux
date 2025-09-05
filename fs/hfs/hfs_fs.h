@@ -54,16 +54,36 @@ do {								\
 
 
 /*
- * struct hfs_inode_info
+ * struct hfs_inode_info - HFS-specific inode information
  *
- * The HFS-specific part of a Linux (struct inode)
+ * This structure contains HFS-specific metadata for each inode,
+ * extending the standard Linux VFS inode with HFS filesystem details.
+ * It handles file extents, resource forks, and catalog information.
+ *
+ * @opencnt: Number of open file handles
+ * @flags: HFS-specific inode flags (HFS_FLG_*)
+ * @tz_secondswest: Timezone offset in seconds west of GMT (to deal with localtime ugliness)
+ * @cat_key: Catalog B-tree key for this inode
+ * @open_dir_list: List of open directory entries
+ * @open_dir_lock: Lock protecting open_dir_list
+ * @rsrc_inode: Resource fork inode (if any)
+ * @extents_lock: Mutex protecting extent information
+ * @alloc_blocks: Number of allocated blocks for file
+ * @clump_blocks: Clump size in allocation blocks
+ * @fs_blocks: File size in filesystem blocks
+ * @first_extents: First 3 extent records from catalog
+ * @first_blocks: Number of blocks in first_extents
+ * @cached_extents: Cached extent records from extents B-tree
+ * @cached_start: Starting allocation block of cached extents
+ * @cached_blocks: Number of blocks in cached_extents
+ * @phys_size: Physical size of file on disk
+ * @vfs_inode: Embedded VFS inode structure
  */
 struct hfs_inode_info {
 	atomic_t opencnt;
 
 	unsigned int flags;
 
-	/* to deal with localtime ugliness */
 	int tz_secondswest;
 
 	struct hfs_cat_key cat_key;
@@ -76,7 +96,6 @@ struct hfs_inode_info {
 
 	u16 alloc_blocks, clump_blocks;
 	sector_t fs_blocks;
-	/* Allocation extents from catlog record or volume header */
 	hfs_extent_rec first_extents;
 	u16 first_blocks;
 	hfs_extent_rec cached_extents;
@@ -93,66 +112,77 @@ struct hfs_inode_info {
 #define HFS_IS_RSRC(inode)	(HFS_I(inode)->flags & HFS_FLG_RSRC)
 
 /*
- * struct hfs_sb_info
+ * struct hfs_sb_info - HFS-specific superblock information
  *
- * The HFS-specific part of a Linux (struct super_block)
+ * This structure contains all HFS-specific filesystem metadata,
+ * extending the Linux VFS superblock. It manages the Master Directory
+ * Block (MDB), allocation bitmap, B-trees, and various filesystem
+ * parameters and mount options.
+ *
+ * @mdb_bh: Buffer holding the Master Directory Block (superblock/VIB/MDB)
+ * @mdb: Pointer to parsed MDB structure
+ * @alt_mdb_bh: Buffer holding the alternate copy of MDB
+ * @alt_mdb: Pointer to alternate MDB
+ * @bitmap: Allocation bitmap for tracking free/used blocks
+ * @ext_tree: Extents overflow B-tree for managing file extents
+ * @cat_tree: Catalog B-tree containing directory structure and metadata
+ * @file_count: Total number of regular files in the filesystem
+ * @folder_count: Total number of directories in the filesystem
+ * @next_id: Next available catalog node ID for new files/directories
+ * @clumpablks: Default clump size in allocation blocks for extending files
+ * @fs_start: First 512-byte block represented in the allocation bitmap
+ * @part_start: Starting block of HFS partition
+ * @root_files: Number of regular files in the root directory
+ * @root_dirs: Number of subdirectories in the root directory
+ * @fs_ablocks: Total allocation blocks in the filesystem
+ * @free_ablocks: Number of free allocation blocks available for allocation
+ * @alloc_blksz: Size in bytes of each allocation block
+ * @s_quiet: Suppress error messages for permission changes
+ * @s_type: Default file type for new files
+ * @s_creator: Default creator for new files
+ * @s_file_umask: Permission mask applied to all regular files
+ * @s_dir_umask: Permission mask applied to all directories
+ * @s_uid: Default user ID for all files
+ * @s_gid: Default group ID for all files
+ * @session: CD-ROM session info
+ * @part: CD-ROM partition info
+ * @nls_io: Character encoding table for I/O
+ * @nls_disk: Character encoding table for disk storage
+ * @bitmap_lock: Mutex protecting bitmap operations
+ * @flags: Filesystem state flags (HFS_FLG_*)
+ * @blockoffset: Block offset within device
+ * @fs_div: Filesystem block size divisor
+ * @sb: Back-pointer to VFS superblock
+ * @work_queued: Flag indicating delayed work is queued
+ * @mdb_work: Delayed work for MDB writeback
+ * @work_lock: Lock protecting work queue state
  */
 struct hfs_sb_info {
-	struct buffer_head *mdb_bh;		/* The hfs_buffer
-						   holding the real
-						   superblock (aka VIB
-						   or MDB) */
+	struct buffer_head *mdb_bh;
 	struct hfs_mdb *mdb;
-	struct buffer_head *alt_mdb_bh;		/* The hfs_buffer holding
-						   the alternate superblock */
+	struct buffer_head *alt_mdb_bh;
 	struct hfs_mdb *alt_mdb;
-	__be32 *bitmap;				/* The page holding the
-						   allocation bitmap */
-	struct hfs_btree *ext_tree;			/* Information about
-						   the extents b-tree */
-	struct hfs_btree *cat_tree;			/* Information about
-						   the catalog b-tree */
-	u32 file_count;				/* The number of
-						   regular files in
-						   the filesystem */
-	u32 folder_count;			/* The number of
-						   directories in the
-						   filesystem */
-	u32 next_id;				/* The next available
-						   file id number */
-	u32 clumpablks;				/* The number of allocation
-						   blocks to try to add when
-						   extending a file */
-	u32 fs_start;				/* The first 512-byte
-						   block represented
-						   in the bitmap */
+	__be32 *bitmap;
+	struct hfs_btree *ext_tree;
+	struct hfs_btree *cat_tree;
+	u32 file_count;
+	u32 folder_count;
+	u32 next_id;
+	u32 clumpablks;
+	u32 fs_start;
 	u32 part_start;
-	u16 root_files;				/* The number of
-						   regular
-						   (non-directory)
-						   files in the root
-						   directory */
-	u16 root_dirs;				/* The number of
-						   directories in the
-						   root directory */
-	u16 fs_ablocks;				/* The number of
-						   allocation blocks
-						   in the filesystem */
-	u16 free_ablocks;			/* the number of unused
-						   allocation blocks
-						   in the filesystem */
-	u32 alloc_blksz;			/* The size of an
-						   "allocation block" */
-	int s_quiet;				/* Silent failure when
-						   changing owner or mode? */
-	__be32 s_type;				/* Type for new files */
-	__be32 s_creator;			/* Creator for new files */
-	umode_t s_file_umask;			/* The umask applied to the
-						   permissions on all files */
-	umode_t s_dir_umask;			/* The umask applied to the
-						   permissions on all dirs */
-	kuid_t s_uid;				/* The uid of all files */
-	kgid_t s_gid;				/* The gid of all files */
+	u16 root_files;
+	u16 root_dirs;
+	u16 fs_ablocks;
+	u16 free_ablocks;
+	u32 alloc_blksz;
+	int s_quiet;
+	__be32 s_type;
+	__be32 s_creator;
+	umode_t s_file_umask;
+	umode_t s_dir_umask;
+	kuid_t s_uid;
+	kgid_t s_gid;
 
 	int session, part;
 	struct nls_table *nls_io, *nls_disk;
@@ -161,9 +191,9 @@ struct hfs_sb_info {
 	u16 blockoffset;
 	int fs_div;
 	struct super_block *sb;
-	int work_queued;		/* non-zero delayed work is queued */
-	struct delayed_work mdb_work;	/* MDB flush delayed work */
-	spinlock_t work_lock;		/* protects mdb_work and work_queued */
+	int work_queued;
+	struct delayed_work mdb_work;
+	spinlock_t work_lock;
 };
 
 #define HFS_FLG_BITMAP_DIRTY	0

@@ -20,7 +20,35 @@ enum hfs_btree_mutex_classes {
 	ATTR_BTREE_MUTEX,
 };
 
-/* A HFS BTree held in memory */
+/*
+ * struct hfs_btree - In-memory B-tree representation
+ *
+ * This structure represents a complete HFS B-tree in memory, containing
+ * both metadata from the on-disk B-tree header and runtime state needed
+ * for efficient B-tree operations. HFS uses B-trees for the catalog
+ * (directory structure) and extents overflow (file extent records).
+ *
+ * @sb: Associated superblock
+ * @inode: Inode representing the B-tree file
+ * @keycmp: Key comparison function pointer
+ * @cnid: Catalog Node ID of this B-tree file
+ * @root: Node number of the root node
+ * @leaf_count: Total number of leaf records
+ * @leaf_head: Node number of first leaf node
+ * @leaf_tail: Node number of last leaf node
+ * @node_count: Total number of nodes in B-tree
+ * @free_nodes: Number of unused/available nodes
+ * @attributes: B-tree attributes flags
+ * @node_size: Size of each B-tree node in bytes
+ * @node_size_shift: log2(node_size) for bit shifting
+ * @max_key_len: Maximum key length for this B-tree
+ * @depth: Height of B-tree (levels from root)
+ * @tree_lock: Mutex protecting B-tree operations
+ * @pages_per_bnode: Memory pages per B-tree node
+ * @hash_lock: Spinlock protecting node hash table
+ * @node_hash: Hash table of cached nodes
+ * @node_hash_cnt: Number of nodes in hash table
+ */
 struct hfs_btree {
 	struct super_block *sb;
 	struct inode *inode;
@@ -49,7 +77,29 @@ struct hfs_btree {
 	int node_hash_cnt;
 };
 
-/* A HFS BTree node in memory */
+/*
+ * struct hfs_bnode - In-memory B-tree node
+ *
+ * Represents a single B-tree node in memory, containing both the
+ * on-disk node metadata and runtime state for caching, locking,
+ * and reference counting. Nodes are cached in a hash table for
+ * efficient access.
+ *
+ * @tree: Parent B-tree this node belongs to
+ * @prev: Node ID of previous node at this level
+ * @this: This node's ID
+ * @next: Node ID of next node at this level
+ * @parent: Node ID of parent node
+ * @num_recs: Number of records in this node
+ * @type: Node type (index, leaf, header, map)
+ * @height: Height in B-tree (1=leaf, >1=internal)
+ * @next_hash: Next node in hash chain
+ * @flags: Node state flags (error, new, deleted)
+ * @lock_wq: Wait queue for node locking
+ * @refcnt: Reference count for memory management
+ * @page_offset: Offset within first page
+ * @page: Array of memory pages holding node data
+ */
 struct hfs_bnode {
 	struct hfs_btree *tree;
 
@@ -74,6 +124,24 @@ struct hfs_bnode {
 #define HFS_BNODE_NEW		1
 #define HFS_BNODE_DELETED	2
 
+/*
+ * struct hfs_find_data - B-tree search operation context
+ *
+ * This structure maintains the state of a B-tree search operation,
+ * tracking the current position, search parameters, and results.
+ * Used by the B-tree search and iteration functions to maintain
+ * context across multiple calls.
+ *
+ * @key: Current key at search position
+ * @search_key: Key being searched for
+ * @tree: B-tree being searched
+ * @bnode: Current node in search
+ * @record: Current record index within node
+ * @keyoffset: Offset of current key
+ * @keylength: Length of current key
+ * @entryoffset: Offset of current data
+ * @entrylength: Length of current data
+ */
 struct hfs_find_data {
 	btree_key *key;
 	btree_key *search_key;
@@ -130,13 +198,21 @@ extern int hfs_brec_read(struct hfs_find_data *, void *, int);
 extern int hfs_brec_goto(struct hfs_find_data *, int);
 
 
+/*
+ * struct hfs_bnode_desc - On-disk B-tree node descriptor
+ *
+ * This structure appears at the beginning of every B-tree node on disk.
+ * It provides essential metadata for navigating the B-tree structure
+ * and understanding the node's contents. Fields marked (V) are variable
+ * and may change; fields marked (F) are fixed at B-tree creation.
+ */
 struct hfs_bnode_desc {
-	__be32 next;		/* (V) Number of the next node at this level */
-	__be32 prev;		/* (V) Number of the prev node at this level */
-	u8 type;		/* (F) The type of node */
-	u8 height;		/* (F) The level of this node (leaves=1) */
-	__be16 num_recs;	/* (V) The number of records in this node */
-	u16 reserved;
+	__be32 next;		/* (V) Node ID of next node at same level */
+	__be32 prev;		/* (V) Node ID of previous node at same level */
+	u8 type;		/* (F) Node type: index/header/map/leaf */
+	u8 height;		/* (F) Distance from leaves (leaves=1) */
+	__be16 num_recs;	/* (V) Number of records stored in this node */
+	u16 reserved;		/* Reserved space for alignment */
 } __packed;
 
 #define HFS_NODE_INDEX	0x00	/* An internal (index) node */
@@ -144,22 +220,31 @@ struct hfs_bnode_desc {
 #define HFS_NODE_MAP	0x02	/* Holds part of the bitmap of used nodes */
 #define HFS_NODE_LEAF	0xFF	/* A leaf (ndNHeight==1) node */
 
+/*
+ * struct hfs_btree_header_rec - B-tree header record
+ *
+ * This structure is stored as the first record in the header node
+ * (node 0) of every HFS B-tree. It contains essential metadata about
+ * the B-tree structure, organization, and current state. Fields marked
+ * (V) are variable and updated during B-tree operations; fields marked
+ * (F) are fixed at B-tree creation time.
+ */
 struct hfs_btree_header_rec {
-	__be16 depth;		/* (V) The number of levels in this B-tree */
-	__be32 root;		/* (V) The node number of the root node */
-	__be32 leaf_count;	/* (V) The number of leaf records */
-	__be32 leaf_head;	/* (V) The number of the first leaf node */
-	__be32 leaf_tail;	/* (V) The number of the last leaf node */
-	__be16 node_size;	/* (F) The number of bytes in a node (=512) */
-	__be16 max_key_len;	/* (F) The length of a key in an index node */
-	__be32 node_count;	/* (V) The total number of nodes */
-	__be32 free_nodes;	/* (V) The number of unused nodes */
-	u16 reserved1;
-	__be32 clump_size;	/* (F) clump size. not usually used. */
-	u8 btree_type;		/* (F) BTree type */
-	u8 reserved2;
-	__be32 attributes;	/* (F) attributes */
-	u32 reserved3[16];
+	__be16 depth;		/* (V) Number of levels in B-tree (root to leaf) */
+	__be32 root;		/* (V) Node ID of the root node */
+	__be32 leaf_count;	/* (V) Total number of data records in leaves */
+	__be32 leaf_head;	/* (V) Node ID of first (leftmost) leaf */
+	__be32 leaf_tail;	/* (V) Node ID of last (rightmost) leaf */
+	__be16 node_size;	/* (F) Size of each B-tree node in bytes (512) */
+	__be16 max_key_len;	/* (F) Maximum key length for index nodes */
+	__be32 node_count;	/* (V) Total number of nodes allocated */
+	__be32 free_nodes;	/* (V) Number of unused nodes available */
+	u16 reserved1;		/* Reserved field for future use */
+	__be32 clump_size;	/* (F) Allocation clump size (rarely used) */
+	u8 btree_type;		/* (F) Type identifier for this B-tree */
+	u8 reserved2;		/* Reserved field for alignment */
+	__be32 attributes;	/* (F) B-tree feature flags and attributes */
+	u32 reserved3[16];	/* Reserved space for future expansion */
 } __packed;
 
 #define BTREE_ATTR_BADCLOSE	0x00000001	/* b-tree not closed properly. not
