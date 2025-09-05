@@ -48,6 +48,7 @@ struct s3c_rtc {
 
 struct s3c_rtc_data {
 	bool needs_src_clk;
+	bool use_s3c2410_ticnt;
 
 	void (*irq_handler) (struct s3c_rtc *info, int mask);
 	void (*enable) (struct s3c_rtc *info);
@@ -369,9 +370,11 @@ static void s3c24xx_rtc_disable(struct s3c_rtc *info)
 	con &= ~S3C2410_RTCCON_RTCEN;
 	writew(con, info->base + S3C2410_RTCCON);
 
-	con = readb(info->base + S3C2410_TICNT);
-	con &= ~S3C2410_TICNT_ENABLE;
-	writeb(con, info->base + S3C2410_TICNT);
+	if (info->data->use_s3c2410_ticnt) {
+		con = readb(info->base + S3C2410_TICNT);
+		con &= ~S3C2410_TICNT_ENABLE;
+		writeb(con, info->base + S3C2410_TICNT);
+	}
 }
 
 static void s3c6410_rtc_disable(struct s3c_rtc *info)
@@ -550,18 +553,21 @@ static void s3c6410_rtc_irq(struct s3c_rtc *info, int mask)
 }
 
 static const struct s3c_rtc_data s3c2410_rtc_data = {
+	.use_s3c2410_ticnt	= true,
 	.irq_handler		= s3c24xx_rtc_irq,
 	.enable			= s3c24xx_rtc_enable,
 	.disable		= s3c24xx_rtc_disable,
 };
 
 static const struct s3c_rtc_data s3c2416_rtc_data = {
+	.use_s3c2410_ticnt	= true,
 	.irq_handler		= s3c24xx_rtc_irq,
 	.enable			= s3c24xx_rtc_enable,
 	.disable		= s3c24xx_rtc_disable,
 };
 
 static const struct s3c_rtc_data s3c2443_rtc_data = {
+	.use_s3c2410_ticnt	= true,
 	.irq_handler		= s3c24xx_rtc_irq,
 	.enable			= s3c24xx_rtc_enable,
 	.disable		= s3c24xx_rtc_disable,
@@ -572,6 +578,12 @@ static const struct s3c_rtc_data s3c6410_rtc_data = {
 	.irq_handler		= s3c6410_rtc_irq,
 	.enable			= s3c24xx_rtc_enable,
 	.disable		= s3c6410_rtc_disable,
+};
+
+static const struct s3c_rtc_data exynosautov9_rtc_data = {
+	.irq_handler		= s3c6410_rtc_irq,
+	.enable			= s3c24xx_rtc_enable,
+	.disable		= s3c24xx_rtc_disable,
 };
 
 static const __maybe_unused struct of_device_id s3c_rtc_dt_match[] = {
@@ -590,6 +602,9 @@ static const __maybe_unused struct of_device_id s3c_rtc_dt_match[] = {
 	}, {
 		.compatible = "samsung,exynos3250-rtc",
 		.data = &s3c6410_rtc_data,
+	}, {
+		.compatible = "samsung,exynosautov9-rtc",
+		.data = &exynosautov9_rtc_data,
 	},
 	{ /* sentinel */ },
 };
