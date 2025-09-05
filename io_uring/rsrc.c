@@ -211,8 +211,8 @@ __cold void io_rsrc_data_free(struct io_ring_ctx *ctx,
 
 __cold int io_rsrc_data_alloc(struct io_rsrc_data *data, unsigned nr)
 {
-	data->nodes = kvmalloc_array(nr, sizeof(struct io_rsrc_node *),
-					GFP_KERNEL_ACCOUNT | __GFP_ZERO);
+	data->nodes = kvcalloc(nr, sizeof(struct io_rsrc_node *),
+			       GFP_KERNEL_ACCOUNT | __GFP_ZERO);
 	if (data->nodes) {
 		data->nr = nr;
 		return 0;
