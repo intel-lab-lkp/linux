@@ -3654,12 +3654,33 @@ static int send_convert(struct dlm_rsb *r, struct dlm_lkb *lkb)
 	return error;
 }
 
-/* FIXME: if this lkb is the only lock we hold on the rsb, then set
-   MASTER_UNCERTAIN to force the next request on the rsb to confirm
-   that the master is still correct. */
-
 static int send_unlock(struct dlm_rsb *r, struct dlm_lkb *lkb)
 {
+	struct dlm_lkb *tmp;
+	int count = 0;
+
+	list_for_each_entry(tmp, &r->res_grantqueue, lkb_statequeue) {
+		if (is_process_copy(tmp))
+			count++;
+	}
+	list_for_each_entry(tmp, &r->res_convertqueue, lkb_statequeue) {
+		if (is_process_copy(tmp))
+			count++;
+	}
+	list_for_each_entry(tmp, &r->res_waitqueue, lkb_statequeue) {
+		if (is_process_copy(tmp))
+			count++;
+	}
+
+	/*
+	 * When releasing the last lock on the rsb, we mark the master as uncertain.
+ 	 * This ensures that the next lock request will verify the master node,
+ 	 * maintaining consistency across the cluster.
+ 	 */
+
+	if (count == 1)
+		rsb_set_flag(r, RSB_MASTER_UNCERTAIN);
+
 	return send_common(r, lkb, DLM_MSG_UNLOCK);
 }
 
@@ -6150,16 +6171,6 @@ static struct dlm_lkb *del_proc_lock(struct dlm_ls *ls,
 	return lkb;
 }
 
-/* The ls_clear_proc_locks mutex protects against dlm_user_add_cb() which
-   1) references lkb->ua which we free here and 2) adds lkbs to proc->asts,
-   which we clear here. */
-
-/* proc CLOSING flag is set so no more device_reads should look at proc->asts
-   list, and no more device_writes should add lkb's to proc->locks list; so we
-   shouldn't need to take asts_spin or locks_spin here.  this assumes that
-   device reads/writes/closes are serialized -- FIXME: we may need to serialize
-   them ourself. */
-
 void dlm_clear_proc_locks(struct dlm_ls *ls, struct dlm_user_proc *proc)
 {
 	struct dlm_callback *cb, *cb_safe;
@@ -6168,36 +6179,45 @@ void dlm_clear_proc_locks(struct dlm_ls *ls, struct dlm_user_proc *proc)
 	dlm_lock_recovery(ls);
 
 	while (1) {
-		lkb = del_proc_lock(ls, proc);
+		lkb = NULL;
+		spin_lock_bh(&proc->locks_spin);
+		if (!list_empty(&proc->locks)) {
+			lkb = list_entry(proc->locks.next, struct dlm_lkb,
+					 lkb_ownqueue);
+			list_del_init(&lkb->lkb_ownqueue);
+		}
+		spin_unlock_bh(&proc->locks_spin);
+
 		if (!lkb)
 			break;
-		if (lkb->lkb_exflags & DLM_LKF_PERSISTENT)
-			orphan_proc_lock(ls, lkb);
-		else
-			unlock_proc_lock(ls, lkb);
 
-		/* this removes the reference for the proc->locks list
-		   added by dlm_user_request, it may result in the lkb
-		   being freed */
+		if (lkb->lkb_exflags & DLM_LKF_PERSISTENT) {
+			set_bit(DLM_DFL_ORPHAN_BIT, &lkb->lkb_dflags);
+			orphan_proc_lock(ls, lkb);
+		} else {
+			set_bit(DLM_IFL_DEAD_BIT, &lkb->lkb_iflags);
+			unlock_proc_lock(ls, lkb);
+		}
 
 		dlm_put_lkb(lkb);
 	}
 
-	spin_lock_bh(&ls->ls_clear_proc_locks);
-
+	spin_lock_bh(&proc->locks_spin);
 	/* in-progress unlocks */
 	list_for_each_entry_safe(lkb, safe, &proc->unlocking, lkb_ownqueue) {
 		list_del_init(&lkb->lkb_ownqueue);
 		set_bit(DLM_IFL_DEAD_BIT, &lkb->lkb_iflags);
 		dlm_put_lkb(lkb);
 	}
+	spin_unlock_bh(&proc->locks_spin);
 
+	spin_lock_bh(&proc->asts_spin);
 	list_for_each_entry_safe(cb, cb_safe, &proc->asts, list) {
 		list_del(&cb->list);
 		dlm_free_cb(cb);
 	}
+	spin_unlock_bh(&proc->asts_spin);
 
-	spin_unlock_bh(&ls->ls_clear_proc_locks);
 	dlm_unlock_recovery(ls);
 }
 
