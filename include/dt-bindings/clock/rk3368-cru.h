@@ -183,6 +183,9 @@
 #define HCLK_BUS		477
 #define HCLK_PERI		478
 
+#define CLK_I2S_8CH_PRE		500
+#define CLK_I2S_8CH_FRAC	501
+
 /* soft-reset indices */
 #define SRST_CORE_B0		0
 #define SRST_CORE_B1		1
