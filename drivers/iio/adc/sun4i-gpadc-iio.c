@@ -640,12 +640,8 @@ static int sun4i_gpadc_probe(struct platform_device *pdev)
 		 * Do not fail driver probing when failing to register in
 		 * thermal because no thermal DT node is found.
 		 */
-		if (IS_ERR(info->tzd) && PTR_ERR(info->tzd) != -ENODEV) {
-			dev_err(&pdev->dev,
-				"could not register thermal sensor: %ld\n",
-				PTR_ERR(info->tzd));
+		if (IS_ERR(info->tzd) && PTR_ERR(info->tzd) != -ENODEV)
 			return PTR_ERR(info->tzd);
-		}
 	}
 
 	ret = devm_iio_device_register(&pdev->dev, indio_dev);
