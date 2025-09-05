@@ -478,12 +478,8 @@ static int max8973_thermal_init(struct max8973_chip *mchip)
 
 	tzd = devm_thermal_of_zone_register(mchip->dev, 0, mchip,
 					    &max77621_tz_ops);
-	if (IS_ERR(tzd)) {
-		ret = PTR_ERR(tzd);
-		dev_err(mchip->dev, "Failed to register thermal sensor: %d\n",
-			ret);
-		return ret;
-	}
+	if (IS_ERR(tzd))
+		return PTR_ERR(tzd);
 
 	if (mchip->irq <= 0)
 		return 0;
