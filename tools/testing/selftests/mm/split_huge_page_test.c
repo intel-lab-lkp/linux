@@ -20,13 +20,15 @@
 #include <stdbool.h>
 #include <time.h>
 #include "vm_util.h"
-#include "../kselftest.h"
+#include "../kselftest_harness.h"
 
 uint64_t pagesize;
-unsigned int pageshift;
 uint64_t pmd_pagesize;
 unsigned int pmd_order;
 int *expected_orders;
+
+char *optional_xfs_path;
+char fs_loc_template[] = "/tmp/thp_fs_XXXXXX";
 
 #define SPLIT_DEBUGFS "/sys/kernel/debug/split_huge_pages"
 #define SMAP_PATH "/proc/self/smaps"
@@ -40,6 +42,20 @@ const char *pagemap_proc = "/proc/self/pagemap";
 const char *kpageflags_proc = "/proc/kpageflags";
 int pagemap_fd;
 int kpageflags_fd;
+
+#define ADD_VARIANT_ORDER(fixture_name, ord)			\
+	FIXTURE_VARIANT_ADD(fixture_name, order_##ord)		\
+	{							\
+		.order = ord,					\
+	}
+
+#define ADD_VARIANT_ORDER_OFFSET(fixture_name, ord, stp)		\
+	FIXTURE_VARIANT_ADD(fixture_name, order_##ord##_stp_##stp)	\
+	{								\
+		.order = ord,						\
+		.step = stp,						\
+	}
+
 
 static bool is_backed_by_folio(char *vaddr, int order, int pagemap_fd,
 		int kpageflags_fd)
@@ -255,6 +271,26 @@ static int check_after_split_folio_orders(char *vaddr_start, size_t len,
 	return status;
 }
 
+void prepare_proc_fd(void)
+{
+	pagemap_fd = open(pagemap_proc, O_RDONLY);
+	if (pagemap_fd == -1)
+		ksft_exit_fail_msg("read pagemap: %s\n", strerror(errno));
+
+	kpageflags_fd = open(kpageflags_proc, O_RDONLY);
+	if (kpageflags_fd == -1)
+		ksft_exit_fail_msg("read kpageflags: %s\n", strerror(errno));
+}
+
+void cleanup_proc_fd(void)
+{
+	if (pagemap_fd != -1)
+		close(pagemap_fd);
+
+	if (kpageflags_fd != -1)
+		close(kpageflags_fd);
+}
+
 static void write_file(const char *path, const char *buf, size_t buflen)
 {
 	int fd;
@@ -292,10 +328,8 @@ static char *allocate_zero_filled_hugepage(size_t len)
 	size_t i;
 
 	result = memalign(pmd_pagesize, len);
-	if (!result) {
-		printf("Fail to allocate memory\n");
-		exit(EXIT_FAILURE);
-	}
+	if (!result)
+		ksft_exit_fail_msg("Fail to allocate memory: %s\n", strerror(errno));
 
 	madvise(result, len, MADV_HUGEPAGE);
 
@@ -334,16 +368,19 @@ static void verify_rss_anon_split_huge_page_all_zeroes(char *one_page, int nr_hp
 		       rss_anon_before, rss_anon_after);
 }
 
-static void split_pmd_zero_pages(void)
+TEST(split_pmd_zero_pages)
 {
 	char *one_page;
 	int nr_hpages = 4;
 	size_t len = nr_hpages * pmd_pagesize;
 
+	prepare_proc_fd();
+
 	one_page = allocate_zero_filled_hugepage(len);
 	verify_rss_anon_split_huge_page_all_zeroes(one_page, nr_hpages, len);
-	ksft_test_result_pass("Split zero filled huge pages successful\n");
 	free(one_page);
+
+	cleanup_proc_fd();
 }
 
 static void split_pmd_thp_to_order(int order)
@@ -383,17 +420,18 @@ static void split_pmd_thp_to_order(int order)
 	if (!check_huge_anon(one_page, 0, pmd_pagesize))
 		ksft_exit_fail_msg("Still AnonHugePages not split\n");
 
-	ksft_test_result_pass("Split huge pages to order %d successful\n", order);
 	free(one_page);
 }
 
-static void split_pte_mapped_thp(void)
+TEST(split_pte_mapped_thp)
 {
 	const size_t nr_thps = 4;
 	const size_t thp_area_size = nr_thps * pmd_pagesize;
 	const size_t page_area_size = nr_thps * pagesize;
 	char *thp_area, *tmp, *page_area = MAP_FAILED;
 	size_t i;
+
+	prepare_proc_fd();
 
 	thp_area = mmap((void *)(1UL << 30), thp_area_size, PROT_READ | PROT_WRITE,
 			MAP_ANONYMOUS | MAP_PRIVATE, -1, 0);
@@ -470,14 +508,43 @@ static void split_pte_mapped_thp(void)
 		ksft_test_result_fail("THP %zu not split\n", i);
 	}
 
-	ksft_test_result_pass("Split PTE-mapped huge pages successful\n");
 out:
 	munmap(thp_area, thp_area_size);
 	if (page_area != MAP_FAILED)
 		munmap(page_area, page_area_size);
+	cleanup_proc_fd();
 }
 
-static void split_file_backed_thp(int order)
+FIXTURE(split_file_backed_thp) {
+};
+
+FIXTURE_VARIANT(split_file_backed_thp) {
+	int order;
+};
+
+FIXTURE_SETUP(split_file_backed_thp)
+{
+	if (variant->order >= pmd_order)
+		SKIP(return, "order %d is not supported", variant->order);
+	prepare_proc_fd();
+}
+
+FIXTURE_TEARDOWN(split_file_backed_thp)
+{
+	cleanup_proc_fd();
+}
+
+ADD_VARIANT_ORDER(split_file_backed_thp, 0);
+ADD_VARIANT_ORDER(split_file_backed_thp, 1);
+ADD_VARIANT_ORDER(split_file_backed_thp, 2);
+ADD_VARIANT_ORDER(split_file_backed_thp, 3);
+ADD_VARIANT_ORDER(split_file_backed_thp, 4);
+ADD_VARIANT_ORDER(split_file_backed_thp, 5);
+ADD_VARIANT_ORDER(split_file_backed_thp, 6);
+ADD_VARIANT_ORDER(split_file_backed_thp, 7);
+ADD_VARIANT_ORDER(split_file_backed_thp, 8);
+
+TEST_F(split_file_backed_thp, orders)
 {
 	int status;
 	int fd;
@@ -487,7 +554,7 @@ static void split_file_backed_thp(int order)
 	ssize_t num_written, num_read;
 	char *file_buf1, *file_buf2;
 	uint64_t pgoff_start = 0, pgoff_end = 1024;
-	int i;
+	int i, order = variant->order;
 
 	ksft_print_msg("Please enable pr_debug in split_huge_pages_in_file() for more info.\n");
 
@@ -567,7 +634,6 @@ static void split_file_backed_thp(int order)
 		ksft_exit_fail_msg("cannot remove tmp dir: %s\n", strerror(errno));
 
 	ksft_print_msg("Please check dmesg for more information\n");
-	ksft_test_result_pass("File-backed THP split to order %d test done\n", order);
 	return;
 
 close_file:
@@ -577,6 +643,45 @@ cleanup:
 	rmdir(tmpfs_loc);
 out:
 	ksft_exit_fail_msg("Error occurred\n");
+}
+
+FIXTURE(split_pmd_thp_to_order) {
+};
+
+FIXTURE_VARIANT(split_pmd_thp_to_order) {
+	int order;
+};
+
+FIXTURE_SETUP(split_pmd_thp_to_order)
+{
+	if (variant->order >= pmd_order)
+		SKIP(return, "order %d is not supported", variant->order);
+
+	expected_orders = (int *)malloc(sizeof(int) * (pmd_order + 1));
+	if (!expected_orders)
+		ksft_exit_fail_msg("Fail to allocate memory: %s\n", strerror(errno));
+
+	prepare_proc_fd();
+}
+
+FIXTURE_TEARDOWN(split_pmd_thp_to_order)
+{
+	free(expected_orders);
+	cleanup_proc_fd();
+}
+
+ADD_VARIANT_ORDER(split_pmd_thp_to_order, 0);
+ADD_VARIANT_ORDER(split_pmd_thp_to_order, 2);
+ADD_VARIANT_ORDER(split_pmd_thp_to_order, 3);
+ADD_VARIANT_ORDER(split_pmd_thp_to_order, 4);
+ADD_VARIANT_ORDER(split_pmd_thp_to_order, 5);
+ADD_VARIANT_ORDER(split_pmd_thp_to_order, 6);
+ADD_VARIANT_ORDER(split_pmd_thp_to_order, 7);
+ADD_VARIANT_ORDER(split_pmd_thp_to_order, 8);
+
+TEST_F(split_pmd_thp_to_order, order)
+{
+	split_pmd_thp_to_order(variant->order);
 }
 
 static bool prepare_thp_fs(const char *xfs_path, char *thp_fs_template,
@@ -757,81 +862,144 @@ out:
 	}
 }
 
+FIXTURE(split_thp_in_pagecache_to_order) {
+	bool created_tmp;
+	const char *fs_loc;
+};
+
+FIXTURE_VARIANT(split_thp_in_pagecache_to_order) {
+	int order;
+};
+
+FIXTURE_SETUP(split_thp_in_pagecache_to_order)
+{
+	/* limit order to less than pmd_order */
+	if (variant->order >= pmd_order)
+		SKIP(return, "order %d is not supported", variant->order);
+	expected_orders = (int *)malloc(sizeof(int) * (pmd_order + 1));
+	if (!expected_orders)
+		ksft_exit_fail_msg("Fail to allocate memory: %s\n", strerror(errno));
+
+	self->created_tmp = prepare_thp_fs(optional_xfs_path, fs_loc_template,
+					&self->fs_loc);
+	prepare_proc_fd();
+}
+
+FIXTURE_TEARDOWN(split_thp_in_pagecache_to_order)
+{
+	cleanup_proc_fd();
+	cleanup_thp_fs(self->fs_loc, self->created_tmp);
+	free(expected_orders);
+}
+
+ADD_VARIANT_ORDER(split_thp_in_pagecache_to_order, 8);
+ADD_VARIANT_ORDER(split_thp_in_pagecache_to_order, 7);
+ADD_VARIANT_ORDER(split_thp_in_pagecache_to_order, 6);
+ADD_VARIANT_ORDER(split_thp_in_pagecache_to_order, 5);
+ADD_VARIANT_ORDER(split_thp_in_pagecache_to_order, 4);
+ADD_VARIANT_ORDER(split_thp_in_pagecache_to_order, 3);
+ADD_VARIANT_ORDER(split_thp_in_pagecache_to_order, 2);
+ADD_VARIANT_ORDER(split_thp_in_pagecache_to_order, 1);
+ADD_VARIANT_ORDER(split_thp_in_pagecache_to_order, 0);
+
+TEST_F(split_thp_in_pagecache_to_order, order)
+{
+	size_t fd_size = 2 * pmd_pagesize;
+
+	split_thp_in_pagecache_to_order_at(fd_size, self->fs_loc, variant->order, -1);
+}
+
+FIXTURE(split_thp_in_pagecache_to_order_offset) {
+	bool created_tmp;
+	const char *fs_loc;
+	int offset;
+};
+
+FIXTURE_VARIANT(split_thp_in_pagecache_to_order_offset) {
+	int order;
+	int step;
+};
+
+FIXTURE_SETUP(split_thp_in_pagecache_to_order_offset)
+{
+	int nr_pages = pmd_pagesize / pagesize;
+	int offset = variant->step * MAX(nr_pages / 4, 1 << variant->order);
+
+	/* limit order to less than pmd_order */
+	if (variant->order >= pmd_order)
+		SKIP(return, "order %d is not supported", variant->order);
+
+	if (offset < nr_pages)
+		self->offset = offset;
+	else
+		SKIP(return, "offset out of thp range");
+
+	expected_orders = (int *)malloc(sizeof(int) * (pmd_order + 1));
+	if (!expected_orders)
+		ksft_exit_fail_msg("Fail to allocate memory: %s\n", strerror(errno));
+
+	self->created_tmp = prepare_thp_fs(optional_xfs_path, fs_loc_template,
+					&self->fs_loc);
+	prepare_proc_fd();
+}
+
+FIXTURE_TEARDOWN(split_thp_in_pagecache_to_order_offset)
+{
+	cleanup_proc_fd();
+	cleanup_thp_fs(self->fs_loc, self->created_tmp);
+	free(expected_orders);
+}
+
+#define SPLIT_IN_PAGECACHE_ORDER_OFFSETS(ord)					 \
+	ADD_VARIANT_ORDER_OFFSET(split_thp_in_pagecache_to_order_offset, ord, 0);\
+	ADD_VARIANT_ORDER_OFFSET(split_thp_in_pagecache_to_order_offset, ord, 1);\
+	ADD_VARIANT_ORDER_OFFSET(split_thp_in_pagecache_to_order_offset, ord, 2);\
+	ADD_VARIANT_ORDER_OFFSET(split_thp_in_pagecache_to_order_offset, ord, 3)\
+
+SPLIT_IN_PAGECACHE_ORDER_OFFSETS(0);
+SPLIT_IN_PAGECACHE_ORDER_OFFSETS(1);
+SPLIT_IN_PAGECACHE_ORDER_OFFSETS(2);
+SPLIT_IN_PAGECACHE_ORDER_OFFSETS(3);
+SPLIT_IN_PAGECACHE_ORDER_OFFSETS(4);
+SPLIT_IN_PAGECACHE_ORDER_OFFSETS(5);
+SPLIT_IN_PAGECACHE_ORDER_OFFSETS(6);
+SPLIT_IN_PAGECACHE_ORDER_OFFSETS(7);
+SPLIT_IN_PAGECACHE_ORDER_OFFSETS(8);
+
+TEST_F(split_thp_in_pagecache_to_order_offset, order_offset)
+{
+	size_t fd_size = 2 * pmd_pagesize;
+
+	split_thp_in_pagecache_to_order_at(fd_size, self->fs_loc,
+			variant->order, self->offset);
+}
+
 int main(int argc, char **argv)
 {
 	int i;
-	size_t fd_size;
-	char *optional_xfs_path = NULL;
-	char fs_loc_template[] = "/tmp/thp_fs_XXXXXX";
-	const char *fs_loc;
-	bool created_tmp;
-	int offset;
-	unsigned int nr_pages;
-	unsigned int tests;
-
-	ksft_print_header();
 
 	if (geteuid() != 0) {
 		ksft_print_msg("Please run the benchmark as root\n");
 		ksft_finished();
 	}
 
-	if (argc > 1)
-		optional_xfs_path = argv[1];
+	for (i = 1; i < argc; i++) {
+		/* only one parameter supported */
+		if (*argv[i] != '-') {
+			optional_xfs_path = argv[i];
+			break;
+		}
+
+		/* option -l/-h has no parameter */
+		if (*(argv[i] + 1) != 'l' && *(argv[i] + 1) != 'h')
+			i++;
+	}
 
 	pagesize = getpagesize();
-	pageshift = ffs(pagesize) - 1;
 	pmd_pagesize = read_pmd_pagesize();
 	if (!pmd_pagesize)
 		ksft_exit_fail_msg("Reading PMD pagesize failed\n");
-
-	nr_pages = pmd_pagesize / pagesize;
 	pmd_order = sz2ord(pmd_pagesize, pagesize);
 
-	expected_orders = (int *)malloc(sizeof(int) * (pmd_order + 1));
-	if (!expected_orders)
-		ksft_exit_fail_msg("Fail to allocate memory: %s\n", strerror(errno));
-
-	tests = 2 + (pmd_order - 1) + (2 * pmd_order) + (pmd_order - 1) * 4 + 2;
-	ksft_set_plan(tests);
-
-	pagemap_fd = open(pagemap_proc, O_RDONLY);
-	if (pagemap_fd == -1)
-		ksft_exit_fail_msg("read pagemap: %s\n", strerror(errno));
-
-	kpageflags_fd = open(kpageflags_proc, O_RDONLY);
-	if (kpageflags_fd == -1)
-		ksft_exit_fail_msg("read kpageflags: %s\n", strerror(errno));
-
-	fd_size = 2 * pmd_pagesize;
-
-	split_pmd_zero_pages();
-
-	for (i = 0; i < pmd_order; i++)
-		if (i != 1)
-			split_pmd_thp_to_order(i);
-
-	split_pte_mapped_thp();
-	for (i = 0; i < pmd_order; i++)
-		split_file_backed_thp(i);
-
-	created_tmp = prepare_thp_fs(optional_xfs_path, fs_loc_template,
-			&fs_loc);
-	for (i = pmd_order - 1; i >= 0; i--)
-		split_thp_in_pagecache_to_order_at(fd_size, fs_loc, i, -1);
-
-	for (i = 0; i < pmd_order; i++)
-		for (offset = 0;
-		     offset < nr_pages;
-		     offset += MAX(nr_pages / 4, 1 << i))
-			split_thp_in_pagecache_to_order_at(fd_size, fs_loc, i, offset);
-	cleanup_thp_fs(fs_loc, created_tmp);
-
-	close(pagemap_fd);
-	close(kpageflags_fd);
-	free(expected_orders);
-
-	ksft_finished();
-
-	return 0;
+	return test_harness_run(argc, argv);
 }
