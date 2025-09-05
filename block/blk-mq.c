@@ -3168,7 +3168,9 @@ void blk_mq_submit_bio(struct bio *bio)
 	if (!bio_integrity_prep(bio))
 		goto queue_exit;
 
-	bio->issue_time_ns = blk_time_get_ns();
+	if (test_bit(QUEUE_FLAG_BIO_ISSUE_TIME, &q->queue_flags))
+		bio->issue_time_ns = blk_time_get_ns();
+
 	if (blk_mq_attempt_bio_merge(q, bio, nr_segs))
 		goto queue_exit;
 
