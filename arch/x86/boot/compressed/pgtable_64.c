@@ -180,7 +180,7 @@ asmlinkage void configure_5level_paging(struct boot_params *bp, void *pgtable)
 		 * We cannot just point to the page table from trampoline as it
 		 * may be above 4G.
 		 */
-		src = *(unsigned long *)__native_read_cr3() & PAGE_MASK;
+		src = *(unsigned long *)__native_read_cr3() & PTE_PFN_MASK;
 		memcpy(trampoline_32bit, (void *)src, PAGE_SIZE);
 	}
 
