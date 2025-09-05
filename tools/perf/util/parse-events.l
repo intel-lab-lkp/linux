@@ -5,16 +5,14 @@
 %option stack
 %option bison-locations
 %option yylineno
-%option reject
+%option noyywrap
 
 %{
 #include <errno.h>
-#include <sys/types.h>
-#include <sys/stat.h>
-#include <unistd.h>
+#include <stdlib.h>
+#include <stdio.h>
 #include "parse-events.h"
 #include "parse-events-bison.h"
-#include "evsel.h"
 
 char *parse_events_get_text(yyscan_t yyscanner);
 YYSTYPE *parse_events_get_lval(yyscan_t yyscanner);
@@ -222,10 +220,6 @@ do {							\
 	yycolumn += yyleng;				\
 } while (0);
 
-#define USER_REJECT		\
-	yycolumn -= yyleng;	\
-	REJECT
-
 %}
 
 %x mem
@@ -423,8 +417,3 @@ r{num_raw_hex}		{ return str(yyscanner, PE_RAW); }
 .			{ }
 
 %%
-
-int parse_events_wrap(void *scanner __maybe_unused)
-{
-	return 1;
-}
