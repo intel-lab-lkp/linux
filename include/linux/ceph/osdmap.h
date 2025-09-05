@@ -19,15 +19,29 @@
  * The map can be updated either via an incremental map (diff) describing
  * the change between two successive epochs, or as a fully encoded map.
  */
+/*
+ * Placement group identifier metadata: Identifies a placement group within
+ * the RADOS system. PGs group objects together for replication and distribution
+ * across OSDs using a deterministic mapping based on pool and placement seed.
+ */
 struct ceph_pg {
+	/* Pool identifier this PG belongs to */
 	uint64_t pool;
+	/* Placement seed for object distribution within the pool */
 	uint32_t seed;
 };
 
 #define CEPH_SPG_NOSHARD	-1
 
+/*
+ * Sharded placement group metadata: Extends placement group identification
+ * with shard information for erasure-coded pools. Each PG can be split
+ * into multiple shards for parallel processing and distribution.
+ */
 struct ceph_spg {
+	/* Base placement group identifier */
 	struct ceph_pg pgid;
+	/* Shard number within the PG (CEPH_SPG_NOSHARD for replicated pools) */
 	s8 shard;
 };
 
@@ -41,22 +55,42 @@ int ceph_spg_compare(const struct ceph_spg *lhs, const struct ceph_spg *rhs);
 							will set FULL too */
 #define CEPH_POOL_FLAG_NEARFULL		(1ULL << 11) /* pool is nearfull */
 
+/*
+ * Pool information metadata: Complete description of a RADOS storage pool
+ * including replication settings, placement group configuration, and tiering
+ * information. Contains all parameters needed for object placement decisions.
+ */
 struct ceph_pg_pool_info {
+	/* Red-black tree node for efficient lookup */
 	struct rb_node node;
+	/* Unique pool identifier */
 	s64 id;
+	/* Pool type (replicated, erasure-coded) */
 	u8 type; /* CEPH_POOL_TYPE_* */
+	/* Number of replicas or erasure coding width */
 	u8 size;
+	/* Minimum replicas required for I/O */
 	u8 min_size;
+	/* CRUSH rule for object placement */
 	u8 crush_ruleset;
+	/* Hash function for object name hashing */
 	u8 object_hash;
+	/* Last epoch when force resend was required */
 	u32 last_force_request_resend;
+	/* Number of placement groups and placement groups for placement */
 	u32 pg_num, pgp_num;
+	/* Bitmasks derived from pg_num and pgp_num */
 	int pg_num_mask, pgp_num_mask;
+	/* Read tier pool (for cache tiering) */
 	s64 read_tier;
+	/* Write tier pool (takes precedence for read+write) */
 	s64 write_tier; /* wins for read+write ops */
+	/* Pool status and behavior flags */
 	u64 flags; /* CEPH_POOL_FLAG_* */
+	/* Human-readable pool name */
 	char *name;
 
+	/* Previous full state (for map change handling) */
 	bool was_full;  /* for handle_one_map() */
 };
 
@@ -72,8 +106,15 @@ static inline bool ceph_can_shift_osds(struct ceph_pg_pool_info *pool)
 	}
 }
 
+/*
+ * Object locator metadata: Specifies the storage location for an object
+ * within the RADOS cluster. Combines pool identification with optional
+ * namespace for fine-grained object organization.
+ */
 struct ceph_object_locator {
+	/* Target pool ID (-1 for unspecified) */
 	s64 pool;
+	/* Optional namespace within the pool */
 	struct ceph_string *pool_ns;
 };
 
@@ -106,10 +147,17 @@ void ceph_oloc_destroy(struct ceph_object_locator *oloc);
  * Both inline and external buffers have space for a NUL-terminator,
  * which is carried around.  It's not required though - RADOS object
  * names don't have to be NUL-terminated and may contain NULs.
+ *
+ * Object identifier metadata: Flexible object naming with inline optimization.
+ * Uses inline storage for short names (common case) and dynamic allocation
+ * for longer names. Supports arbitrary byte sequences including NUL bytes.
  */
 struct ceph_object_id {
+	/* Pointer to object name (may point to inline_name) */
 	char *name;
+	/* Inline storage for short object names */
 	char inline_name[CEPH_OID_INLINE_LEN];
+	/* Length of object name in bytes */
 	int name_len;
 };
 
@@ -137,64 +185,105 @@ int ceph_oid_aprintf(struct ceph_object_id *oid, gfp_t gfp,
 		     const char *fmt, ...);
 void ceph_oid_destroy(struct ceph_object_id *oid);
 
+/*
+ * Workspace manager metadata: Manages a pool of compression workspaces
+ * for CRUSH map processing. Provides efficient allocation and reuse of
+ * workspaces to avoid frequent memory allocation during map calculations.
+ */
 struct workspace_manager {
+	/* List of idle workspaces ready for use */
 	struct list_head idle_ws;
+	/* Spinlock protecting workspace list operations */
 	spinlock_t ws_lock;
-	/* Number of free workspaces */
+	/* Number of free workspaces available */
 	int free_ws;
 	/* Total number of allocated workspaces */
 	atomic_t total_ws;
-	/* Waiters for a free workspace */
+	/* Wait queue for threads waiting for free workspace */
 	wait_queue_head_t ws_wait;
 };
 
+/*
+ * Placement group mapping override metadata: Allows administrators to override
+ * the default CRUSH-generated OSD mappings for specific placement groups.
+ * Supports various override types for operational flexibility.
+ */
 struct ceph_pg_mapping {
+	/* Red-black tree node for efficient lookup */
 	struct rb_node node;
+	/* Placement group this mapping applies to */
 	struct ceph_pg pgid;
 
+	/* Different types of mapping overrides */
 	union {
+		/* Temporary OSD set override */
 		struct {
+			/* Number of OSDs in override set */
 			int len;
+			/* Array of OSD IDs */
 			int osds[];
 		} pg_temp, pg_upmap;
+		/* Temporary primary OSD override */
 		struct {
+			/* Primary OSD ID */
 			int osd;
 		} primary_temp;
+		/* Item-by-item OSD remapping */
 		struct {
+			/* Number of from->to mappings */
 			int len;
+			/* Array of [from_osd, to_osd] pairs */
 			int from_to[][2];
 		} pg_upmap_items;
 	};
 };
 
+/*
+ * OSD cluster map metadata: Complete description of the RADOS cluster topology
+ * and configuration. Contains all information needed to locate objects, determine
+ * OSD health, and route requests. Updated with each cluster state change.
+ */
 struct ceph_osdmap {
+	/* Cluster filesystem identifier */
 	struct ceph_fsid fsid;
+	/* Map version number (monotonically increasing) */
 	u32 epoch;
+	/* Timestamps for map creation and modification */
 	struct ceph_timespec created, modified;
 
+	/* Global cluster flags */
 	u32 flags;         /* CEPH_OSDMAP_* */
 
+	/* OSD array size and state information */
 	u32 max_osd;       /* size of osd_state, _offload, _addr arrays */
+	/* Per-OSD state flags (exists, up, etc.) */
 	u32 *osd_state;    /* CEPH_OSD_* */
-	u32 *osd_weight;   /* 0 = failed, 0x10000 = 100% normal */
+	/* Per-OSD weight (0=failed, 0x10000=100% normal) */
+	u32 *osd_weight;
+	/* Per-OSD network addresses */
 	struct ceph_entity_addr *osd_addr;
 
+	/* Temporary PG to OSD mappings */
 	struct rb_root pg_temp;
 	struct rb_root primary_temp;
 
-	/* remap (post-CRUSH, pre-up) */
+	/* Post-CRUSH, pre-up remappings for load balancing */
 	struct rb_root pg_upmap;	/* PG := raw set */
 	struct rb_root pg_upmap_items;	/* from -> to within raw set */
 
+	/* Per-OSD primary affinity weights */
 	u32 *osd_primary_affinity;
 
+	/* Storage pool definitions */
 	struct rb_root pg_pools;
 	u32 pool_max;
 
-	/* the CRUSH map specifies the mapping of placement groups to
+	/* CRUSH map for object placement calculations.
+	 * The CRUSH map specifies the mapping of placement groups to
 	 * the list of osds that store+replicate them. */
 	struct crush_map *crush;
 
+	/* Workspace manager for CRUSH calculations */
 	struct workspace_manager crush_wsm;
 };
 
@@ -256,9 +345,17 @@ struct ceph_osdmap *osdmap_apply_incremental(void **p, void *end, bool msgr2,
 					     struct ceph_osdmap *map);
 extern void ceph_osdmap_destroy(struct ceph_osdmap *map);
 
+/*
+ * OSD set metadata: Represents a set of OSDs that store replicas of a
+ * placement group. Contains the ordered list of OSDs and identifies
+ * the primary OSD responsible for coordinating operations.
+ */
 struct ceph_osds {
+	/* Array of OSD IDs in preference order */
 	int osds[CEPH_PG_MAX_SIZE];
+	/* Number of OSDs in the set */
 	int size;
+	/* Primary OSD ID (not array index) */
 	int primary; /* id, NOT index */
 };
 
@@ -312,14 +409,29 @@ bool ceph_pg_to_primary_shard(struct ceph_osdmap *osdmap,
 int ceph_pg_to_acting_primary(struct ceph_osdmap *osdmap,
 			      const struct ceph_pg *raw_pgid);
 
+/*
+ * CRUSH location constraint metadata: Specifies a location constraint
+ * for CRUSH map placement. Used to restrict object placement to specific
+ * parts of the cluster hierarchy (e.g., specific racks, hosts).
+ */
 struct crush_loc {
+	/* CRUSH hierarchy level type (e.g., "rack", "host") */
 	char *cl_type_name;
+	/* Name of the specific location within that type */
 	char *cl_name;
 };
 
+/*
+ * CRUSH location node metadata: Red-black tree node for efficient storage
+ * and lookup of CRUSH location constraints. Contains the location data
+ * inline for memory efficiency.
+ */
 struct crush_loc_node {
+	/* Red-black tree linkage */
 	struct rb_node cl_node;
-	struct crush_loc cl_loc;  /* pointers into cl_data */
+	/* Location constraint (pointers into cl_data) */
+	struct crush_loc cl_loc;
+	/* Inline storage for location strings */
 	char cl_data[];
 };
 
