@@ -61,6 +61,7 @@ static int pid_max_cb(void *data)
 	}
 
 	ret = write(fd, "500", sizeof("500") - 1);
+	close(fd);
 	if (ret < 0) {
 		fprintf(stderr, "%m - Failed to write pid_max\n");
 		return -1;
