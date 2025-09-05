@@ -867,8 +867,7 @@ static int qpnp_tm_probe(struct platform_device *pdev)
 	chip->tz_dev = devm_thermal_of_zone_register(
 		&pdev->dev, 0, chip, chip->data->ops);
 	if (IS_ERR(chip->tz_dev))
-		return dev_err_probe(&pdev->dev, PTR_ERR(chip->tz_dev),
-				     "failed to register sensor\n");
+		return PTR_ERR(chip->tz_dev);
 
 	ret = qpnp_tm_init(chip);
 	if (ret < 0)
