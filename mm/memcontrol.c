@@ -2394,7 +2394,7 @@ static int memcg_hotplug_cpu_dead(unsigned int cpu)
 			x = this_cpu_xchg(memcg->vmstats_percpu->stat[i], 0);
 			if (x)
 				for (mi = memcg; mi; mi = parent_mem_cgroup(mi))
-					atomic_long_add(x, &memcg->vmstats[i]);
+					atomic_long_add(x, &mi->vmstats[i]);
 
 			if (i >= NR_VM_NODE_STAT_ITEMS)
 				continue;
@@ -2417,7 +2417,7 @@ static int memcg_hotplug_cpu_dead(unsigned int cpu)
 			x = this_cpu_xchg(memcg->vmstats_percpu->events[i], 0);
 			if (x)
 				for (mi = memcg; mi; mi = parent_mem_cgroup(mi))
-					atomic_long_add(x, &memcg->vmevents[i]);
+					atomic_long_add(x, &mi->vmevents[i]);
 		}
 	}
 
