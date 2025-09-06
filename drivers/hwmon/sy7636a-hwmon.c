@@ -12,6 +12,7 @@
 #include <linux/hwmon.h>
 #include <linux/init.h>
 #include <linux/module.h>
+#include <linux/mod_devicetable.h>
 #include <linux/platform_device.h>
 #include <linux/regmap.h>
 #include <linux/regulator/machine.h>
@@ -94,11 +95,18 @@ static int sy7636a_sensor_probe(struct platform_device *pdev)
 	return 0;
 }
 
+static const struct platform_device_id sy7636a_sensor_idtable[] = {
+	{ "sy7636a-temperature" },
+	{ },
+};
+MODULE_DEVICE_TABLE(platform, sy7636a_sensor_idtable);
+
 static struct platform_driver sy7636a_sensor_driver = {
 	.probe = sy7636a_sensor_probe,
 	.driver = {
 		.name = "sy7636a-temperature",
 	},
+	.id_table = sy7636a_sensor_idtable,
 };
 module_platform_driver(sy7636a_sensor_driver);
 
