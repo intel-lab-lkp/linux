@@ -11,7 +11,7 @@ maintainers:
 
 description: |
   NXP BBNSM serves as non-volatile logic and storage for the system.
-  it Intergrates RTC & ON/OFF control.
+  It integrates RTC & ON/OFF control.
   The RTC can retain its state and continues counting even when the
   main chip is power down. A time alarm is generated once the most
   significant 32 bits of the real-time counter match the value in the
