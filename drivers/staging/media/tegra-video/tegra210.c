@@ -13,8 +13,8 @@
 #include <linux/delay.h>
 #include <linux/host1x.h>
 #include <linux/kthread.h>
+#include <linux/tegra-csi.h>
 
-#include "csi.h"
 #include "vi.h"
 
 #define TEGRA210_MIN_WIDTH	32U

@@ -3,6 +3,8 @@
 #ifndef __TEGRA_MIPI_CAL_H_
 #define __TEGRA_MIPI_CAL_H_
 
+#include <linux/tegra-csi.h>
+
 struct tegra_mipi {
 	const struct tegra_mipi_soc *soc;
 	const struct tegra_mipi_ops *ops;
@@ -17,6 +19,7 @@ struct tegra_mipi {
 struct tegra_mipi_device {
 	struct platform_device *pdev;
 	struct tegra_mipi *mipi;
+	struct tegra_csi *csi;
 	struct device *device;
 	unsigned long pads;
 };
@@ -69,6 +72,14 @@ static inline int tegra_mipi_enable(struct tegra_mipi_device *device)
 		return device->mipi->ops->tegra_mipi_enable(device);
 	}
 
+	/* Tegra20/Tegra30 have MIPI calibration logic inside CSI block */
+	if (device->csi) {
+		if (!device->csi->mipi_ops->tegra_mipi_enable)
+			return 0;
+
+		return device->csi->mipi_ops->tegra_mipi_enable(device);
+	}
+
 	return -ENOSYS;
 }
 
@@ -79,6 +90,13 @@ static inline int tegra_mipi_disable(struct tegra_mipi_device *device)
 			return 0;
 
 		return device->mipi->ops->tegra_mipi_disable(device);
+	}
+
+	if (device->csi) {
+		if (!device->csi->mipi_ops->tegra_mipi_disable)
+			return 0;
+
+		return device->csi->mipi_ops->tegra_mipi_disable(device);
 	}
 
 	return -ENOSYS;
@@ -93,6 +111,13 @@ static inline int tegra_mipi_start_calibration(struct tegra_mipi_device *device)
 		return device->mipi->ops->tegra_mipi_start_calibration(device);
 	}
 
+	if (device->csi) {
+		if (!device->csi->mipi_ops->tegra_mipi_start_calibration)
+			return 0;
+
+		return device->csi->mipi_ops->tegra_mipi_start_calibration(device);
+	}
+
 	return -ENOSYS;
 }
 
@@ -103,6 +128,13 @@ static inline int tegra_mipi_finish_calibration(struct tegra_mipi_device *device
 			return 0;
 
 		return device->mipi->ops->tegra_mipi_finish_calibration(device);
+	}
+
+	if (device->csi) {
+		if (!device->csi->mipi_ops->tegra_mipi_finish_calibration)
+			return 0;
+
+		return device->csi->mipi_ops->tegra_mipi_finish_calibration(device);
 	}
 
 	return -ENOSYS;

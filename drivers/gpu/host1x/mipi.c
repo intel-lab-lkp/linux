@@ -215,10 +215,20 @@ struct tegra_mipi_device *tegra_mipi_request(struct device *device,
 		goto free;
 	}
 
-	dev->mipi = platform_get_drvdata(dev->pdev);
-	if (!dev->mipi) {
-		err = -EPROBE_DEFER;
-		goto put;
+	/* Tegra20/Tegra30 add CSI structure to MIPI device */
+	if (of_machine_is_compatible("nvidia,tegra20") ||
+	    of_machine_is_compatible("nvidia,tegra30")) {
+		dev->csi = platform_get_drvdata(dev->pdev);
+		if (!dev->csi) {
+			err = -EPROBE_DEFER;
+			goto put;
+		}
+	} else {
+		dev->mipi = platform_get_drvdata(dev->pdev);
+		if (!dev->mipi) {
+			err = -EPROBE_DEFER;
+			goto put;
+		}
 	}
 
 	of_node_put(args.np);

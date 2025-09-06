@@ -12,6 +12,7 @@
 #include <linux/mutex.h>
 #include <linux/spinlock.h>
 #include <linux/wait.h>
+#include <linux/tegra-csi.h>
 
 #include <media/media-entity.h>
 #include <media/v4l2-async.h>
@@ -20,8 +21,6 @@
 #include <media/v4l2-dev.h>
 #include <media/v4l2-subdev.h>
 #include <media/videobuf2-v4l2.h>
-
-#include "csi.h"
 
 #define V4L2_CID_TEGRA_SYNCPT_TIMEOUT_RETRY	(V4L2_CTRL_CLASS_CAMERA | 0x1001)
 

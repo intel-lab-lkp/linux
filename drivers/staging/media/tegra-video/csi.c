@@ -12,11 +12,11 @@
 #include <linux/of_graph.h>
 #include <linux/platform_device.h>
 #include <linux/pm_runtime.h>
+#include <linux/tegra-csi.h>
 #include <linux/tegra-mipi-cal.h>
 
 #include <media/v4l2-fwnode.h>
 
-#include "csi.h"
 #include "video.h"
 
 #define MHZ			1000000
@@ -794,6 +794,11 @@ static int tegra_csi_probe(struct platform_device *pdev)
 
 	csi->dev = &pdev->dev;
 	csi->ops = csi->soc->ops;
+	if (csi->soc->mipi_ops)
+		csi->mipi_ops = csi->soc->mipi_ops;
+
+	mutex_init(&csi->mipi_lock);
+
 	platform_set_drvdata(pdev, csi);
 	pm_runtime_enable(&pdev->dev);
 

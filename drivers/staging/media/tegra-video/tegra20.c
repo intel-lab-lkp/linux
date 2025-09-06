@@ -16,6 +16,7 @@
 #include <linux/host1x.h>
 #include <linux/kernel.h>
 #include <linux/kthread.h>
+#include <linux/tegra-csi.h>
 #include <linux/v4l2-mediabus.h>
 
 #include "vip.h"

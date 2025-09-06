@@ -115,6 +115,7 @@ struct tegra_csi_ops {
  * struct tegra_csi_soc - NVIDIA Tegra CSI SoC structure
  *
  * @ops: csi hardware operations
+ * @mipi_ops: MIPI calibration operations
  * @csi_max_channels: supported max streaming channels
  * @clk_names: csi and cil clock names
  * @num_clks: total clocks count
@@ -123,6 +124,7 @@ struct tegra_csi_ops {
  */
 struct tegra_csi_soc {
 	const struct tegra_csi_ops *ops;
+	const struct tegra_mipi_ops *mipi_ops;
 	unsigned int csi_max_channels;
 	const char * const *clk_names;
 	unsigned int num_clks;
@@ -139,6 +141,8 @@ struct tegra_csi_soc {
  * @clks: clock for CSI and CIL
  * @soc: pointer to SoC data structure
  * @ops: csi operations
+ * @mipi_ops: MIPI calibration operations
+ * @mipi_lock: for MIPI calibration operations
  * @csi_chans: list head for CSI channels
  */
 struct tegra_csi {
@@ -148,6 +152,8 @@ struct tegra_csi {
 	struct clk_bulk_data *clks;
 	const struct tegra_csi_soc *soc;
 	const struct tegra_csi_ops *ops;
+	const struct tegra_mipi_ops *mipi_ops;
+	struct mutex mipi_lock;
 	struct list_head csi_chans;
 };
 
