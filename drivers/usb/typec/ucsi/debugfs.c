@@ -35,6 +35,7 @@ static int ucsi_cmd(void *data, u64 val)
 	case UCSI_SET_SINK_PATH:
 	case UCSI_SET_NEW_CAM:
 	case UCSI_SET_USB:
+	case UCSI_SET_PDOS:
 		ucsi->message_in_size = 0;
 		ret = ucsi_send_command(ucsi, val);
 		break;
