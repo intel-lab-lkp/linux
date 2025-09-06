@@ -10,6 +10,7 @@ static inline void ksft_ready(void)
 {
 	const char msg[7] = "ready\n";
 	char *env_str;
+	ssize_t ret;
 	int fd;
 
 	env_str = getenv("KSFT_READY_FD");
@@ -24,7 +25,8 @@ static inline void ksft_ready(void)
 		fd = STDOUT_FILENO;
 	}
 
-	write(fd, msg, sizeof(msg));
+	ret = write(fd, msg, sizeof(msg));
+	(void)ret;
 	if (fd != STDOUT_FILENO)
 		close(fd);
 }
@@ -33,6 +35,7 @@ static inline void ksft_wait(void)
 {
 	char *env_str;
 	char byte;
+	ssize_t ret;
 	int fd;
 
 	env_str = getenv("KSFT_WAIT_FD");
@@ -48,7 +51,8 @@ static inline void ksft_wait(void)
 		fd = STDIN_FILENO;
 	}
 
-	read(fd, &byte, sizeof(byte));
+	ret = read(fd, &byte, sizeof(byte));
+	(void)ret;
 	if (fd != STDIN_FILENO)
 		close(fd);
 }
