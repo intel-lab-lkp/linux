@@ -7336,11 +7336,13 @@ static int igc_probe(struct pci_dev *pdev,
 	if (IS_ENABLED(CONFIG_IGC_LEDS)) {
 		err = igc_led_setup(adapter);
 		if (err)
-			goto err_register;
+			goto err_led_setup;
 	}
 
 	return 0;
 
+err_led_setup:
+	unregister_netdev(netdev);
 err_register:
 	igc_release_hw_control(adapter);
 	igc_ptp_stop(adapter);
