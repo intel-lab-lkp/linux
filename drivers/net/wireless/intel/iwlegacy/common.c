@@ -1735,10 +1735,13 @@ il_cancel_scan_deferred_work(struct il_priv *il)
 EXPORT_SYMBOL(il_cancel_scan_deferred_work);
 
 /* il->sta_lock must be held */
-static void
+static int
 il_sta_ucode_activate(struct il_priv *il, u8 sta_id)
 {
-
+	if (sta_id >= IL_STATION_COUNT) {
+		IL_ERR(il, "invalid sta_id %u", sta_id);
+		return -EINVAL;
+	}
 	if (!(il->stations[sta_id].used & IL_STA_DRIVER_ACTIVE))
 		IL_ERR("ACTIVATE a non DRIVER active station id %u addr %pM\n",
 		       sta_id, il->stations[sta_id].sta.sta.addr);
@@ -1752,6 +1755,7 @@ il_sta_ucode_activate(struct il_priv *il, u8 sta_id)
 		D_ASSOC("Added STA id %u addr %pM to uCode\n", sta_id,
 			il->stations[sta_id].sta.sta.addr);
 	}
+	return 0;
 }
 
 static int
@@ -1774,8 +1778,7 @@ il_process_add_sta_resp(struct il_priv *il, struct il_addsta_cmd *addsta,
 	switch (pkt->u.add_sta.status) {
 	case ADD_STA_SUCCESS_MSK:
 		D_INFO("C_ADD_STA PASSED\n");
-		il_sta_ucode_activate(il, sta_id);
-		ret = 0;
+		ret = il_sta_ucode_activate(il, sta_id);
 		break;
 	case ADD_STA_NO_ROOM_IN_TBL:
 		IL_ERR("Adding station %d failed, no room in table.\n", sta_id);
