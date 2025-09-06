@@ -15,6 +15,11 @@
 / {
 	compatible = "apple,j375d", "apple,t6002", "apple,arm-platform";
 	model = "Apple Mac Studio (M1 Ultra, 2022)";
+
+	aliases {
+		atcphy4 = &atcphy0_die1;
+		atcphy5 = &atcphy1_die1;
+	};
 };
 
 /* USB Type C */
@@ -26,6 +31,30 @@
 		interrupt-parent = <&pinctrl_ap>;
 		interrupts = <174 IRQ_TYPE_LEVEL_LOW>;
 		interrupt-names = "irq";
+
+		typec4: connector {
+			compatible = "usb-c-connector";
+			label = "USB-C Front Right";
+			power-role = "dual";
+			data-role = "dual";
+
+			ports {
+				#address-cells = <1>;
+				#size-cells = <0>;
+				port@0 {
+					reg = <0>;
+					typec4_connector_hs: endpoint {
+						remote-endpoint = <&dwc3_0_die1_hs>;
+					};
+				};
+				port@1 {
+					reg = <1>;
+					typec4_connector_ss: endpoint {
+						remote-endpoint = <&atcphy0_die1_typec_lanes>;
+					};
+				};
+			};
+		};
 	};
 
 	/* front-left */
@@ -35,16 +64,172 @@
 		interrupt-parent = <&pinctrl_ap>;
 		interrupts = <174 IRQ_TYPE_LEVEL_LOW>;
 		interrupt-names = "irq";
+
+		typec5: connector {
+			compatible = "usb-c-connector";
+			label = "USB-C Front Left";
+			power-role = "dual";
+			data-role = "dual";
+
+			ports {
+				#address-cells = <1>;
+				#size-cells = <0>;
+				port@0 {
+					reg = <0>;
+					typec5_connector_hs: endpoint {
+						remote-endpoint = <&dwc3_1_die1_hs>;
+					};
+				};
+				port@1 {
+					reg = <1>;
+					typec5_connector_ss: endpoint {
+						remote-endpoint = <&atcphy1_die1_typec_lanes>;
+					};
+				};
+			};
+		};
 	};
 };
 
+/* USB controllers on die 1 */
+&dwc3_0_die1 {
+	ports {
+		#address-cells = <1>;
+		#size-cells = <0>;
+
+		port@0 {
+			reg = <0>;
+			dwc3_0_die1_hs: endpoint {
+				remote-endpoint = <&typec4_connector_hs>;
+			};
+		};
+
+		port@1 {
+			reg = <1>;
+			dwc3_0_die1_ss: endpoint {
+				remote-endpoint = <&atcphy0_die1_usb3>;
+			};
+		};
+	};
+};
+
+&dwc3_1_die1 {
+	ports {
+		#address-cells = <1>;
+		#size-cells = <0>;
+
+		port@0 {
+			reg = <0>;
+			dwc3_1_die1_hs: endpoint {
+				remote-endpoint = <&typec5_connector_hs>;
+			};
+		};
+
+		port@1 {
+			reg = <1>;
+			dwc3_1_die1_ss: endpoint {
+				remote-endpoint = <&atcphy1_die1_usb3>;
+			};
+		};
+	};
+};
+
+/* Type-C PHYs */
+&atcphy0_die1 {
+	ports {
+		#address-cells = <1>;
+		#size-cells = <0>;
+
+		port@0 {
+			reg = <0>;
+			atcphy0_die1_typec_lanes: endpoint {
+				remote-endpoint = <&typec4_connector_ss>;
+			};
+		};
+
+		port@1 {
+			reg = <1>;
+			atcphy0_die1_usb3: endpoint {
+				remote-endpoint = <&dwc3_0_die1_ss>;
+			};
+		};
+	};
+};
+
+&atcphy1_die1 {
+	ports {
+		#address-cells = <1>;
+		#size-cells = <0>;
+
+		port@0 {
+			reg = <0>;
+			atcphy1_die1_typec_lanes: endpoint {
+				remote-endpoint = <&typec5_connector_ss>;
+			};
+		};
+
+		port@1 {
+			reg = <1>;
+			atcphy1_die1_usb3: endpoint {
+				remote-endpoint = <&dwc3_1_die1_ss>;
+			};
+		};
+	};
+};
+
+
+/* Disable unused dwc3 instandes on the second die. */
+&dwc3_2_dart_0_die1 {
+	status = "disabled";
+};
+
+&dwc3_2_dart_1_die1 {
+	status = "disabled";
+};
+
+&dwc3_2_die1 {
+	status = "disabled";
+};
+
+&dwc3_3_dart_0_die1 {
+	status = "disabled";
+};
+
+&dwc3_3_dart_1_die1 {
+	status = "disabled";
+};
+
+&dwc3_3_die1 {
+	status = "disabled";
+};
+
+/* Disable unused ATC phy instandes on the second die. */
+&atcphy2_die1 {
+	status = "disabled";
+};
+
+&atcphy3_die1 {
+	status = "disabled";
+};
+
+/* Disable unused USB power-domains on the second die. */
+&ps_atc2_usb_aon_die1 {
+	status = "disabled";
+};
+
+&ps_atc2_usb_die1 {
+	status = "disabled";
+};
+
+&ps_atc3_usb_aon_die1 {
+	status = "disabled";
+};
+
+&ps_atc3_usb_die1 {
+	status = "disabled";
+};
+
 /* delete unused always-on power-domains on die 1 */
-
-/delete-node/ &ps_atc2_usb_aon_die1;
-/delete-node/ &ps_atc2_usb_die1;
-
-/delete-node/ &ps_atc3_usb_aon_die1;
-/delete-node/ &ps_atc3_usb_die1;
 
 /delete-node/ &ps_disp0_cpu0_die1;
 /delete-node/ &ps_disp0_fe_die1;
