@@ -129,7 +129,6 @@ static int __init test_gen_kprobe_cmd(void)
 					       "gen_kprobe_test");
 	if (IS_ERR(gen_kprobe_test)) {
 		ret = PTR_ERR(gen_kprobe_test);
-		gen_kprobe_test = NULL;
 		goto delete;
 	}
 
@@ -138,13 +137,14 @@ static int __init test_gen_kprobe_cmd(void)
 					"kprobes", "gen_kprobe_test", true);
 	if (ret) {
 		trace_put_event_file(gen_kprobe_test);
-		gen_kprobe_test = NULL;
 		goto delete;
 	}
  out:
 	kfree(buf);
 	return ret;
  delete:
+	if (trace_event_file_is_valid(gen_kprobe_test))
+		gen_kprobe_test = NULL;
 	/* We got an error after creating the event, delete it */
 	kprobe_event_delete("gen_kprobe_test");
 	goto out;
@@ -194,7 +194,6 @@ static int __init test_gen_kretprobe_cmd(void)
 						  "gen_kretprobe_test");
 	if (IS_ERR(gen_kretprobe_test)) {
 		ret = PTR_ERR(gen_kretprobe_test);
-		gen_kretprobe_test = NULL;
 		goto delete;
 	}
 
@@ -203,13 +202,14 @@ static int __init test_gen_kretprobe_cmd(void)
 					"kprobes", "gen_kretprobe_test", true);
 	if (ret) {
 		trace_put_event_file(gen_kretprobe_test);
-		gen_kretprobe_test = NULL;
 		goto delete;
 	}
  out:
 	kfree(buf);
 	return ret;
  delete:
+	if (trace_event_file_is_valid(gen_kretprobe_test))
+		gen_kretprobe_test = NULL;
 	/* We got an error after creating the event, delete it */
 	kprobe_event_delete("gen_kretprobe_test");
 	goto out;
@@ -220,21 +220,11 @@ static int __init kprobe_event_gen_test_init(void)
 	int ret;
 
 	ret = test_gen_kprobe_cmd();
-	if (ret) {
-		/* Clean up kprobe event if it was partially created */
-		if (trace_event_file_is_valid(gen_kprobe_test)) {
-			WARN_ON(trace_array_set_clr_event(gen_kprobe_test->tr,
-							  "kprobes",
-							  "gen_kprobe_test", false));
-			trace_put_event_file(gen_kprobe_test);
-		}
-		WARN_ON(kprobe_event_delete("gen_kprobe_test"));
+	if (ret)
 		return ret;
-	}
 
 	ret = test_gen_kretprobe_cmd();
 	if (ret) {
-		/* Clean up kretprobe event if it was partially created */
 		if (trace_event_file_is_valid(gen_kretprobe_test)) {
 			WARN_ON(trace_array_set_clr_event(gen_kretprobe_test->tr,
 							  "kprobes",
@@ -242,15 +232,6 @@ static int __init kprobe_event_gen_test_init(void)
 			trace_put_event_file(gen_kretprobe_test);
 		}
 		WARN_ON(kprobe_event_delete("gen_kretprobe_test"));
-		
-		/* Also clean up the successfully created kprobe event */
-		if (trace_event_file_is_valid(gen_kprobe_test)) {
-			WARN_ON(trace_array_set_clr_event(gen_kprobe_test->tr,
-							  "kprobes",
-							  "gen_kprobe_test", false));
-			trace_put_event_file(gen_kprobe_test);
-		}
-		WARN_ON(kprobe_event_delete("gen_kprobe_test"));
 	}
 
 	return ret;
@@ -268,6 +249,7 @@ static void __exit kprobe_event_gen_test_exit(void)
 		trace_put_event_file(gen_kprobe_test);
 	}
 
+
 	/* Now unregister and free the event */
 	WARN_ON(kprobe_event_delete("gen_kprobe_test"));
 
@@ -280,6 +262,7 @@ static void __exit kprobe_event_gen_test_exit(void)
 		/* Now give the file and instance back */
 		trace_put_event_file(gen_kretprobe_test);
 	}
+
 
 	/* Now unregister and free the event */
 	WARN_ON(kprobe_event_delete("gen_kretprobe_test"));
