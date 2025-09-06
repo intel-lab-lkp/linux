@@ -160,18 +160,6 @@ static void tegra_channel_buffer_queue(struct vb2_buffer *vb)
 	wake_up_interruptible(&chan->start_wait);
 }
 
-struct v4l2_subdev *
-tegra_channel_get_remote_csi_subdev(struct tegra_vi_channel *chan)
-{
-	struct media_pad *pad;
-
-	pad = media_pad_remote_pad_first(&chan->pad);
-	if (!pad)
-		return NULL;
-
-	return media_entity_to_v4l2_subdev(pad->entity);
-}
-
 /*
  * Walk up the chain until the initial source (e.g. image sensor)
  */
