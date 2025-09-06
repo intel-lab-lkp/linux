@@ -1285,3 +1285,13 @@ rather than a VMA, as the VMA at this stage is not yet valid.
 The vm_area_desc provides the minimum required information for a filesystem
 to initialise state upon memory mapping of a file-backed region, and output
 parameters for the file system to set this state.
+
+---
+
+**mandatory**
+
+kern_path_locked and user_path_locked_at() are renamed to
+kern_path_removing() and user_path_removing_at() and should only
+be used when removing a name.  done_path_removing() should be called
+after removal.
+

@@ -2765,7 +2765,8 @@ static int filename_parentat(int dfd, struct filename *name,
 }
 
 /* does lookup, returns the object with parent locked */
-static struct dentry *__kern_path_locked(int dfd, struct filename *name, struct path *path)
+static struct dentry *__kern_path_removing(int dfd, struct filename *name,
+					   struct path *path)
 {
 	struct path parent_path __free(path_put) = {};
 	struct dentry *d;
@@ -2823,24 +2824,34 @@ struct dentry *kern_path_parent(const char *name, struct path *path)
 	return d;
 }
 
-struct dentry *kern_path_locked(const char *name, struct path *path)
+struct dentry *kern_path_removing(const char *name, struct path *path)
 {
 	struct filename *filename = getname_kernel(name);
-	struct dentry *res = __kern_path_locked(AT_FDCWD, filename, path);
+	struct dentry *res = __kern_path_removing(AT_FDCWD, filename, path);
 
 	putname(filename);
 	return res;
 }
 
-struct dentry *user_path_locked_at(int dfd, const char __user *name, struct path *path)
+void done_path_removing(struct dentry *dentry, struct path *path)
+{
+	if (!IS_ERR(dentry)) {
+		inode_unlock(path->dentry->d_inode);
+		dput(dentry);
+		path_put(path);
+	}
+}
+EXPORT_SYMBOL(done_path_removing);
+
+struct dentry *user_path_removing_at(int dfd, const char __user *name, struct path *path)
 {
 	struct filename *filename = getname(name);
-	struct dentry *res = __kern_path_locked(dfd, filename, path);
+	struct dentry *res = __kern_path_removing(dfd, filename, path);
 
 	putname(filename);
 	return res;
 }
-EXPORT_SYMBOL(user_path_locked_at);
+EXPORT_SYMBOL(user_path_removing_at);
 
 int kern_path(const char *name, unsigned int flags, struct path *path)
 {
