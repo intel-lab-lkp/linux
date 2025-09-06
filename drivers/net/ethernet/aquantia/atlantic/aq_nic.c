@@ -40,6 +40,10 @@ static unsigned int aq_itr_rx;
 module_param_named(aq_itr_rx, aq_itr_rx, uint, 0644);
 MODULE_PARM_DESC(aq_itr_rx, "RX interrupt throttle rate");
 
+static unsigned int rxpageorder = AQ_CFG_RX_PAGEORDER;
+module_param_named(rxpageorder, rxpageorder, uint, 0644);
+MODULE_PARM_DESC(rxpageorder, "RX page order");
+
 static void aq_nic_update_ndev_stats(struct aq_nic_s *self);
 
 static void aq_nic_rss_init(struct aq_nic_s *self, unsigned int num_rss_queues)
@@ -106,7 +110,7 @@ void aq_nic_cfg_start(struct aq_nic_s *self)
 	cfg->tx_itr = aq_itr_tx;
 	cfg->rx_itr = aq_itr_rx;
 
-	cfg->rxpageorder = AQ_CFG_RX_PAGEORDER;
+	cfg->rxpageorder = rxpageorder;
 	cfg->is_rss = AQ_CFG_IS_RSS_DEF;
 	cfg->aq_rss.base_cpu_number = AQ_CFG_RSS_BASE_CPU_NUM_DEF;
 	cfg->fc.req = AQ_CFG_FC_MODE;
