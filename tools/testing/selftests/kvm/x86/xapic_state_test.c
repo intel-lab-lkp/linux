@@ -56,6 +56,17 @@ static void x2apic_guest_code(void)
 	} while (1);
 }
 
+static unsigned int vm_nr_vcpus(struct kvm_vm *vm)
+{
+	struct kvm_vcpu *vcpu;
+	unsigned int count = 0;
+
+	list_for_each_entry(vcpu, &vm->vcpus, list)
+		count++;
+
+	return count;
+}
+
 static void ____test_icr(struct xapic_vcpu *x, uint64_t val)
 {
 	struct kvm_vcpu *vcpu = x->vcpu;
@@ -124,7 +135,7 @@ static void test_icr(struct xapic_vcpu *x)
 	 * vCPUs, not vcpu.id + 1.  Arbitrarily use vector 0xff.
 	 */
 	icr = APIC_INT_ASSERT | 0xff;
-	for (i = 0; i < 0xff; i++) {
+	for (i = 0; i < vm_nr_vcpus(vcpu->vm); i++) {
 		if (i == vcpu->id)
 			continue;
 		for (j = 0; j < 8; j++)
