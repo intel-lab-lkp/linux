@@ -471,8 +471,8 @@ do_packets_v4()
 	local mac
 
 	mac=$(mac_get "$h2")
-	"$MZ" "$h1" -Q 10 -c 10 -d 100msec -p 64 -a own -b "$mac" \
-	    -A 192.0.2.1 -B 192.0.2.2 -t udp sp=1234,dp=2345 -q
+	"$MZ" -Q 10 -c 10 -d 100msec -p 64 -a own -b "$mac" \
+	    -A 192.0.2.1 -B 192.0.2.2 -t udp -q "$h1" sp=1234,dp=2345
 }
 
 do_packets_v6()
@@ -480,8 +480,8 @@ do_packets_v6()
 	local mac
 
 	mac=$(mac_get "$h2")
-	"$MZ" -6 "$h1" -Q 20 -c 10 -d 100msec -p 64 -a own -b "$mac" \
-	    -A 2001:db8:1::1 -B 2001:db8:1::2 -t udp sp=1234,dp=2345 -q
+	"$MZ" -6 -Q 20 -c 10 -d 100msec -p 64 -a own -b "$mac" \
+	    -A 2001:db8:1::1 -B 2001:db8:1::2 -t udp -q "$h1" sp=1234,dp=2345
 }
 
 do_test()

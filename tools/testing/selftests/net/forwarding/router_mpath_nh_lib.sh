@@ -104,7 +104,7 @@ __nh_stats_test_v4()
 
 	sysctl_set net.ipv4.fib_multipath_hash_policy 1
 	nh_stats_test_dispatch $nhgtype "IPv4" 101 102 103 \
-			       $MZ $h1 -A 192.0.2.2 -B 198.51.100.2
+			       $MZ -A 192.0.2.2 -B 198.51.100.2 $h1
 	sysctl_restore net.ipv4.fib_multipath_hash_policy
 }
 
@@ -114,7 +114,7 @@ __nh_stats_test_v6()
 
 	sysctl_set net.ipv6.fib_multipath_hash_policy 1
 	nh_stats_test_dispatch $nhgtype "IPv6" 104 105 106 \
-			       $MZ -6 $h1 -A 2001:db8:1::2 -B 2001:db8:2::2
+			       $MZ -6 -A 2001:db8:1::2 -B 2001:db8:2::2 $h1
 	sysctl_restore net.ipv6.fib_multipath_hash_policy
 }
 

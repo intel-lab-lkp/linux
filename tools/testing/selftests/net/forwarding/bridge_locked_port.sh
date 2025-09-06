@@ -225,18 +225,18 @@ locked_port_mab_roam()
 
 	bridge link set dev $swp1 learning on locked on mab on
 
-	$MZ $h1 -q -c 5 -d 100msec -t udp -a $mac -b rand
+	$MZ -q -c 5 -d 100msec -t udp -a $mac -b rand $h1
 	bridge fdb get $mac br br0 vlan 1 | grep "dev $swp1" | grep -q "locked"
 	check_err $? "No locked entry on first injection"
 
-	$MZ $h2 -q -c 5 -d 100msec -t udp -a $mac -b rand
+	$MZ -q -c 5 -d 100msec -t udp -a $mac -b rand $h2
 	bridge fdb get $mac br br0 vlan 1 | grep -q "dev $swp2"
 	check_err $? "Entry did not roam to an unlocked port"
 
 	bridge fdb get $mac br br0 vlan 1 | grep -q "locked"
 	check_fail $? "Entry roamed with locked flag on"
 
-	$MZ $h1 -q -c 5 -d 100msec -t udp -a $mac -b rand
+	$MZ -q -c 5 -d 100msec -t udp -a $mac -b rand $h1
 	bridge fdb get $mac br br0 vlan 1 | grep -q "dev $swp1"
 	check_fail $? "Entry roamed back to locked port"
 
@@ -285,12 +285,12 @@ locked_port_mab_flush()
 	bridge fdb add $unlocked_mac1 dev $swp1 vlan 1 master static
 	bridge fdb add $unlocked_mac2 dev $swp2 vlan 1 master static
 
-	$MZ $h1 -q -c 5 -d 100msec -t udp -a $locked_mac1 -b rand
+	$MZ -q -c 5 -d 100msec -t udp -a $locked_mac1 -b rand $h1
 	bridge fdb get $locked_mac1 br br0 vlan 1 | grep "dev $swp1" | \
 		grep -q "locked"
 	check_err $? "Failed to create locked FDB entry on first port"
 
-	$MZ $h2 -q -c 5 -d 100msec -t udp -a $locked_mac2 -b rand
+	$MZ -q -c 5 -d 100msec -t udp -a $locked_mac2 -b rand $h2
 	bridge fdb get $locked_mac2 br br0 vlan 1 | grep "dev $swp2" | \
 		grep -q "locked"
 	check_err $? "Failed to create locked FDB entry on second port"

@@ -222,8 +222,8 @@ mcast_v4()
 	create_mcast_sg $rp1 198.51.100.2 225.1.2.3 $rp2 $rp3
 
 	# Send frames with the corresponding L2 destination address.
-	$MZ $h1 -c 5 -p 128 -t udp -a 00:11:22:33:44:55 -b 01:00:5e:01:02:03 \
-		-A 198.51.100.2 -B 225.1.2.3 -q
+	$MZ -c 5 -p 128 -t udp -a 00:11:22:33:44:55 -b 01:00:5e:01:02:03 \
+		-A 198.51.100.2 -B 225.1.2.3 -q $h1
 
 	tc_check_packets "dev $h2 ingress" 122 5
 	check_err $? "Multicast not received on first host"
@@ -232,8 +232,8 @@ mcast_v4()
 
 	delete_mcast_sg $rp1 198.51.100.2 225.1.2.3 $rp2 $rp3
 
-	$MZ $h1 -c 5 -p 128 -t udp -a 00:11:22:33:44:55 -b 01:00:5e:01:02:03 \
-		-A 198.51.100.2 -B 225.1.2.3 -q
+	$MZ -c 5 -p 128 -t udp -a 00:11:22:33:44:55 -b 01:00:5e:01:02:03 \
+		-A 198.51.100.2 -B 225.1.2.3 -q $h1
 
 	tc_check_packets "dev $h2 ingress" 122 5
 	check_err $? "Multicast received on host although deleted"
@@ -262,8 +262,8 @@ mcast_v6()
 	create_mcast_sg $rp1 2001:db8:1::2 ff0e::3 $rp2 $rp3
 
 	# Send frames with the corresponding L2 destination address.
-	$MZ $h1 -6 -c 5 -p 128 -t udp -a 00:11:22:33:44:55 \
-		-b 33:33:00:00:00:03 -A 2001:db8:1::2 -B ff0e::3 -q
+	$MZ -6 -c 5 -p 128 -t udp -a 00:11:22:33:44:55 \
+		-b 33:33:00:00:00:03 -A 2001:db8:1::2 -B ff0e::3 -q $h1
 
 	tc_check_packets "dev $h2 ingress" 122 5
 	check_err $? "Multicast not received on first host"
@@ -272,8 +272,8 @@ mcast_v6()
 
 	delete_mcast_sg $rp1 2001:db8:1::2 ff0e::3 $rp2 $rp3
 
-	$MZ $h1 -6 -c 5 -p 128 -t udp -a 00:11:22:33:44:55 \
-		-b 33:33:00:00:00:03 -A 2001:db8:1::2 -B ff0e::3 -q
+	$MZ -6 -c 5 -p 128 -t udp -a 00:11:22:33:44:55 \
+		-b 33:33:00:00:00:03 -A 2001:db8:1::2 -B ff0e::3 -q $h1
 
 	tc_check_packets "dev $h2 ingress" 122 5
 	check_err $? "Multicast received on first host although deleted"
@@ -308,18 +308,18 @@ rpf_v4()
 
 	create_mcast_sg $rp1 198.51.100.2 225.1.2.3 $rp2 $rp3
 
-	$MZ $h1 -c 5 -p 128 -t udp "ttl=10,sp=54321,dp=12345" \
+	$MZ -c 5 -p 128 -t udp \
 		-a 00:11:22:33:44:55 -b 01:00:5e:01:02:03 \
-		-A 198.51.100.2 -B 225.1.2.3 -q
+		-A 198.51.100.2 -B 225.1.2.3 -q $h1 "ttl=10,sp=54321,dp=12345"
 
 	tc_check_packets "dev $h2 ingress" 1 5
 	check_err $? "Multicast not received on first host"
 	tc_check_packets "dev $h3 ingress" 1 5
 	check_err $? "Multicast not received on second host"
 
-	$MZ $h3 -c 5 -p 128 -t udp "ttl=10,sp=54321,dp=12345" \
+	$MZ -c 5 -p 128 -t udp \
 		-a 00:11:22:33:44:55 -b 01:00:5e:01:02:03 \
-		-A 198.51.100.2 -B 225.1.2.3 -q
+		-A 198.51.100.2 -B 225.1.2.3 -q $h3 "ttl=10,sp=54321,dp=12345"
 
 	tc_check_packets "dev $h1 ingress" 1 0
 	check_err $? "Multicast received on first host when should not"
@@ -353,18 +353,18 @@ rpf_v6()
 
 	create_mcast_sg $rp1 2001:db8:1::2 ff0e::3 $rp2 $rp3
 
-	$MZ $h1 -6 -c 5 -p 128 -t udp "ttl=10,sp=54321,dp=12345" \
+	$MZ -6 -c 5 -p 128 -t udp \
 		-a 00:11:22:33:44:55 -b 33:33:00:00:00:03 \
-		-A 2001:db8:1::2 -B ff0e::3 -q
+		-A 2001:db8:1::2 -B ff0e::3 -q $h1 "ttl=10,sp=54321,dp=12345"
 
 	tc_check_packets "dev $h2 ingress" 1 5
 	check_err $? "Multicast not received on first host"
 	tc_check_packets "dev $h3 ingress" 1 5
 	check_err $? "Multicast not received on second host"
 
-	$MZ $h3 -6 -c 5 -p 128 -t udp "ttl=10,sp=54321,dp=12345" \
+	$MZ -6 -c 5 -p 128 -t udp \
 		-a 00:11:22:33:44:55 -b 33:33:00:00:00:03 \
-		-A 2001:db8:1::2 -B ff0e::3 -q
+		-A 2001:db8:1::2 -B ff0e::3 -q $h3 "ttl=10,sp=54321,dp=12345"
 
 	tc_check_packets "dev $h1 ingress" 1 0
 	check_err $? "Multicast received on first host when should not"
@@ -399,9 +399,9 @@ unres_v4()
 		dst_ip 225.1.2.3 ip_proto udp dst_port 12345 action drop
 
 	# Forwarding should fail before installing a matching (*, G).
-	$MZ $h1 -c 1 -p 128 -t udp "ttl=10,sp=54321,dp=12345" \
+	$MZ -c 1 -p 128 -t udp \
 		-a 00:11:22:33:44:55 -b 01:00:5e:01:02:03 \
-		-A 198.51.100.2 -B 225.1.2.3 -q
+		-A 198.51.100.2 -B 225.1.2.3 -q $h1 "ttl=10,sp=54321,dp=12345"
 
 	tc_check_packets "dev $h2 ingress" 1 0
 	check_err $? "Multicast received on first host when should not"
@@ -411,9 +411,9 @@ unres_v4()
 	# Create (*, G). Will not be installed in the kernel.
 	create_mcast_sg $rp1 0.0.0.0 225.1.2.3 $rp2 $rp3
 
-	$MZ $h1 -c 1 -p 128 -t udp "ttl=10,sp=54321,dp=12345" \
+	$MZ -c 1 -p 128 -t udp \
 		-a 00:11:22:33:44:55 -b 01:00:5e:01:02:03 \
-		-A 198.51.100.2 -B 225.1.2.3 -q
+		-A 198.51.100.2 -B 225.1.2.3 -q $h1 "ttl=10,sp=54321,dp=12345"
 
 	tc_check_packets "dev $h2 ingress" 1 1
 	check_err $? "Multicast not received on first host"
@@ -444,9 +444,9 @@ unres_v6()
 		dst_ip ff0e::3 ip_proto udp dst_port 12345 action drop
 
 	# Forwarding should fail before installing a matching (*, G).
-	$MZ $h1 -6 -c 1 -p 128 -t udp "ttl=10,sp=54321,dp=12345" \
+	$MZ -6 -c 1 -p 128 -t udp \
 		-a 00:11:22:33:44:55 -b 33:33:00:00:00:03 \
-		-A 2001:db8:1::2 -B ff0e::3 -q
+		-A 2001:db8:1::2 -B ff0e::3 -q $h1 "ttl=10,sp=54321,dp=12345"
 
 	tc_check_packets "dev $h2 ingress" 1 0
 	check_err $? "Multicast received on first host when should not"
@@ -456,9 +456,9 @@ unres_v6()
 	# Create (*, G). Will not be installed in the kernel.
 	create_mcast_sg $rp1 :: ff0e::3 $rp2 $rp3
 
-	$MZ $h1 -6 -c 1 -p 128 -t udp "ttl=10,sp=54321,dp=12345" \
+	$MZ -6 -c 1 -p 128 -t udp \
 		-a 00:11:22:33:44:55 -b 33:33:00:00:00:03 \
-		-A 2001:db8:1::2 -B ff0e::3 -q
+		-A 2001:db8:1::2 -B ff0e::3 -q $h1 "ttl=10,sp=54321,dp=12345"
 
 	tc_check_packets "dev $h2 ingress" 1 1
 	check_err $? "Multicast not received on first host"

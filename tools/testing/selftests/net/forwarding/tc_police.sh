@@ -133,8 +133,8 @@ police_common_test()
 		dst_ip 198.51.100.1 ip_proto udp dst_port 54321 \
 		action drop
 
-	mausezahn $h1 -a own -b $(mac_get $rp1) -A 192.0.2.1 -B 198.51.100.1 \
-		-t udp sp=12345,dp=54321 -p 1000 -c 0 -q &
+	$MZ -a own -b $(mac_get $rp1) -A 192.0.2.1 -B 198.51.100.1 \
+		-t udp -p 1000 -c 0 -q $h1 sp=12345,dp=54321 &
 
 	local t0=$(tc_rule_stats_get $h2 1 ingress .bytes)
 	sleep 10
@@ -183,8 +183,8 @@ police_shared_common_test()
 
 	RET=0
 
-	mausezahn $h1 -a own -b $(mac_get $rp1) -A 192.0.2.1 -B 198.51.100.1 \
-		-t udp sp=12345,dp=$dport -p 1000 -c 0 -q &
+	$MZ -a own -b $(mac_get $rp1) -A 192.0.2.1 -B 198.51.100.1 \
+		-t udp -p 1000 -c 0 -q $h1 sp=12345,dp=$dport &
 
 	local t0=$(tc_rule_stats_get $h2 1 ingress .bytes)
 	sleep 10
@@ -253,8 +253,8 @@ police_mirror_common_test()
 		action police rate 10mbit burst 16k conform-exceed drop/pipe \
 		action mirred egress mirror dev $rp3
 
-	mausezahn $h1 -a own -b $(mac_get $rp1) -A 192.0.2.1 -B 198.51.100.1 \
-		-t udp sp=12345,dp=54321 -p 1000 -c 0 -q &
+	$MZ -a own -b $(mac_get $rp1) -A 192.0.2.1 -B 198.51.100.1 \
+		-t udp -p 1000 -c 0 -q $h1 sp=12345,dp=54321 &
 
 	local t0=$(tc_rule_stats_get $h2 1 ingress .bytes)
 	sleep 10
@@ -305,8 +305,8 @@ police_pps_common_test()
 		dst_ip 198.51.100.1 ip_proto udp dst_port 54321 \
 		action drop
 
-	mausezahn $h1 -a own -b $(mac_get $rp1) -A 192.0.2.1 -B 198.51.100.1 \
-		-t udp sp=12345,dp=54321 -p 1000 -c 0 -q &
+	$MZ -a own -b $(mac_get $rp1) -A 192.0.2.1 -B 198.51.100.1 \
+		-t udp -p 1000 -c 0 -q $h1 sp=12345,dp=54321 &
 
 	local t0=$(tc_rule_stats_get $h2 1 ingress .packets)
 	sleep 10
@@ -364,11 +364,11 @@ police_mtu_common_test() {
 		dst_ip 198.51.100.1 ip_proto udp dst_port 54321 \
 		action drop
 
-	mausezahn $h1 -a own -b $(mac_get $rp1) -A 192.0.2.1 -B 198.51.100.1 \
-		-t udp sp=12345,dp=54321 -p 1001 -c 10 -q
+	$MZ -a own -b $(mac_get $rp1) -A 192.0.2.1 -B 198.51.100.1 \
+		-t udp -p 1001 -c 10 -q $h1 sp=12345,dp=54321
 
-	mausezahn $h1 -a own -b $(mac_get $rp1) -A 192.0.2.1 -B 198.51.100.1 \
-		-t udp sp=12345,dp=54321 -p 1000 -c 3 -q
+	$MZ -a own -b $(mac_get $rp1) -A 192.0.2.1 -B 198.51.100.1 \
+		-t udp -p 1000 -c 3 -q $h1 sp=12345,dp=54321
 
 	tc_check_packets "dev $dev $direction" 101 13
 	check_err $? "wrong packet counter"

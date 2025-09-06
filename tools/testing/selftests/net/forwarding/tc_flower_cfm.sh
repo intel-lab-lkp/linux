@@ -63,9 +63,9 @@ match_cfm_opcode()
 	   flower cfm op 43 action drop
 
 	pkt="$ethtype $(generate_cfm_hdr 7 47 0 32)"
-	$MZ $h1 -c 1 -p 64 -a $h1mac -b $h2mac "$pkt" -q
+	$MZ -c 1 -p 64 -a $h1mac -b $h2mac -q $h1 "$pkt"
 	pkt="$ethtype $(generate_cfm_hdr 6 5 0 4)"
-	$MZ $h1 -c 1 -p 64 -a $h1mac -b $h2mac "$pkt" -q
+	$MZ -c 1 -p 64 -a $h1mac -b $h2mac -q $h1 "$pkt"
 
 	tc_check_packets "dev $h2 ingress" 101 1
 	check_err $? "Did not match on correct opcode"
@@ -74,7 +74,7 @@ match_cfm_opcode()
 	check_err $? "Matched on the wrong opcode"
 
 	pkt="$ethtype $(generate_cfm_hdr 0 43 0 12)"
-	$MZ $h1 -c 1 -p 64 -a $h1mac -b $h2mac "$pkt" -q
+	$MZ -c 1 -p 64 -a $h1mac -b $h2mac -q $h1 "$pkt"
 
 	tc_check_packets "dev $h2 ingress" 101 1
 	check_err $? "Matched on the wrong opcode"
@@ -101,11 +101,11 @@ match_cfm_level()
 	   flower cfm mdl 0 action drop
 
 	pkt="$ethtype $(generate_cfm_hdr 5 42 0 12)"
-	$MZ $h1 -c 1 -p 64 -a $h1mac -b $h2mac "$pkt" -q
+	$MZ -c 1 -p 64 -a $h1mac -b $h2mac -q $h1 "$pkt"
 	pkt="$ethtype $(generate_cfm_hdr 6 1 0 70)"
-	$MZ $h1 -c 1 -p 64 -a $h1mac -b $h2mac "$pkt" -q
+	$MZ -c 1 -p 64 -a $h1mac -b $h2mac -q $h1 "$pkt"
 	pkt="$ethtype $(generate_cfm_hdr 0 1 0 70)"
-	$MZ $h1 -c 1 -p 64 -a $h1mac -b $h2mac "$pkt" -q
+	$MZ -c 1 -p 64 -a $h1mac -b $h2mac -q $h1 "$pkt"
 
 	tc_check_packets "dev $h2 ingress" 101 1
 	check_err $? "Did not match on correct level"
@@ -117,7 +117,7 @@ match_cfm_level()
 	check_err $? "Did not match on correct level"
 
 	pkt="$ethtype $(generate_cfm_hdr 3 0 0 4)"
-	$MZ $h1 -c 1 -p 64 -a $h1mac -b $h2mac "$pkt" -q
+	$MZ -c 1 -p 64 -a $h1mac -b $h2mac -q $h1 "$pkt"
 
 	tc_check_packets "dev $h2 ingress" 101 1
 	check_err $? "Matched on the wrong level"
@@ -146,11 +146,11 @@ match_cfm_level_and_opcode()
 	   flower cfm mdl 7 op 42 action drop
 
 	pkt="$ethtype $(generate_cfm_hdr 5 41 0 4)"
-	$MZ $h1 -c 1 -p 64 -a $h1mac -b $h2mac "$pkt" -q
+	$MZ -c 1 -p 64 -a $h1mac -b $h2mac -q $h1 "$pkt"
 	pkt="$ethtype $(generate_cfm_hdr 7 3 0 4)"
-	$MZ $h1 -c 1 -p 64 -a $h1mac -b $h2mac "$pkt" -q
+	$MZ -c 1 -p 64 -a $h1mac -b $h2mac -q $h1 "$pkt"
 	pkt="$ethtype $(generate_cfm_hdr 3 42 0 12)"
-	$MZ $h1 -c 1 -p 64 -a $h1mac -b $h2mac "$pkt" -q
+	$MZ -c 1 -p 64 -a $h1mac -b $h2mac -q $h1 "$pkt"
 
 	tc_check_packets "dev $h2 ingress" 101 1
 	check_err $? "Did not match on correct level and opcode"
@@ -159,7 +159,7 @@ match_cfm_level_and_opcode()
 	check_err $? "Matched on the wrong level and opcode"
 
 	pkt="$ethtype $(generate_cfm_hdr 7 42 0 12)"
-	$MZ $h1 -c 1 -p 64 -a $h1mac -b $h2mac "$pkt" -q
+	$MZ -c 1 -p 64 -a $h1mac -b $h2mac -q $h1 "$pkt"
 
 	tc_check_packets "dev $h2 ingress" 101 1
 	check_err $? "Matched on the wrong level and opcode"

@@ -508,8 +508,8 @@ vlmc_router_port_test()
 					      mcast_query_response_interval 0
 	bridge vlan add vid 10 dev br0 self
 	sleep 1
-	mausezahn br0 -Q 10 -c 10 -p 128 -b 01:00:5e:01:01:01 -B 239.1.1.1 \
-			-t udp "dp=1024" &>/dev/null
+	$MZ -Q 10 -c 10 -p 128 -b 01:00:5e:01:01:01 -B 239.1.1.1 \
+			-t udp br0 "dp=1024" &>/dev/null
 	local swp1_tcstats=$(tc_rule_stats_get $swp1 10 egress)
 	if [[ $swp1_tcstats != 10 ]]; then
 		check_err 1 "Wrong number of vlan 10 multicast packets flooded"

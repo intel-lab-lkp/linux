@@ -66,8 +66,8 @@ mirred_egress_test()
 	tc filter add dev $h2 ingress protocol ip pref 1 handle 101 flower \
 		dst_ip 192.0.2.2 action drop
 
-	$MZ $h1 -c 1 -p 64 -a $h1mac -b $h2mac -A 192.0.2.1 -B 192.0.2.2 \
-		-t ip -q
+	$MZ -c 1 -p 64 -a $h1mac -b $h2mac -A 192.0.2.1 -B 192.0.2.2 \
+		-t ip -q $h1
 
 	tc_check_packets "dev $h2 ingress" 101 1
 	check_fail $? "Matched without redirect rule inserted"
@@ -76,8 +76,8 @@ mirred_egress_test()
 		$classifier $tcflags $classifier_args \
 		action mirred egress $action dev $swp2
 
-	$MZ $h1 -c 1 -p 64 -a $h1mac -b $h2mac -A 192.0.2.1 -B 192.0.2.2 \
-		-t ip -q
+	$MZ -c 1 -p 64 -a $h1mac -b $h2mac -A 192.0.2.1 -B 192.0.2.2 \
+		-t ip -q $h1
 
 	tc_check_packets "dev $h2 ingress" 101 1
 	check_err $? "Did not match incoming $action packet"
@@ -96,8 +96,8 @@ gact_drop_and_ok_test()
 	tc filter add dev $swp1 ingress protocol ip pref 2 handle 102 flower \
 		$tcflags dst_ip 192.0.2.2 action drop
 
-	$MZ $h1 -c 1 -p 64 -a $h1mac -b $h2mac -A 192.0.2.1 -B 192.0.2.2 \
-		-t ip -q
+	$MZ -c 1 -p 64 -a $h1mac -b $h2mac -A 192.0.2.1 -B 192.0.2.2 \
+		-t ip -q $h1
 
 	tc_check_packets "dev $swp1 ingress" 102 1
 	check_err $? "Packet was not dropped"
@@ -105,8 +105,8 @@ gact_drop_and_ok_test()
 	tc filter add dev $swp1 ingress protocol ip pref 1 handle 101 flower \
 		$tcflags dst_ip 192.0.2.2 action ok
 
-	$MZ $h1 -c 1 -p 64 -a $h1mac -b $h2mac -A 192.0.2.1 -B 192.0.2.2 \
-		-t ip -q
+	$MZ -c 1 -p 64 -a $h1mac -b $h2mac -A 192.0.2.1 -B 192.0.2.2 \
+		-t ip -q $h1
 
 	tc_check_packets "dev $swp1 ingress" 101 1
 	check_err $? "Did not see passed packet"
@@ -134,8 +134,8 @@ gact_trap_test()
 		$tcflags dst_ip 192.0.2.2 action mirred egress redirect \
 		dev $swp2
 
-	$MZ $h1 -c 1 -p 64 -a $h1mac -b $h2mac -A 192.0.2.1 -B 192.0.2.2 \
-		-t ip -q
+	$MZ -c 1 -p 64 -a $h1mac -b $h2mac -A 192.0.2.1 -B 192.0.2.2 \
+		-t ip -q $h1
 
 	tc_check_packets "dev $swp1 ingress" 101 1
 	check_fail $? "Saw packet without trap rule inserted"
@@ -143,8 +143,8 @@ gact_trap_test()
 	tc filter add dev $swp1 ingress protocol ip pref 2 handle 102 flower \
 		$tcflags dst_ip 192.0.2.2 action trap
 
-	$MZ $h1 -c 1 -p 64 -a $h1mac -b $h2mac -A 192.0.2.1 -B 192.0.2.2 \
-		-t ip -q
+	$MZ -c 1 -p 64 -a $h1mac -b $h2mac -A 192.0.2.1 -B 192.0.2.2 \
+		-t ip -q $h1
 
 	tc_check_packets "dev $swp1 ingress" 102 1
 	check_err $? "Packet was not trapped"
@@ -175,8 +175,8 @@ mirred_egress_to_ingress_test()
 	tc filter add dev $swp1 protocol ip pref 12 handle 112 ingress flower \
 		ip_proto icmp src_ip 192.0.2.1 dst_ip 192.0.2.2 type 0 action pass
 
-	$MZ $h1 -c 1 -p 64 -a $h1mac -b $h2mac -A 192.0.2.1 -B 192.0.2.2 \
-		-t icmp "ping,id=42,seq=10" -q
+	$MZ -c 1 -p 64 -a $h1mac -b $h2mac -A 192.0.2.1 -B 192.0.2.2 \
+		-t icmp -q $h1 "ping,id=42,seq=10"
 
 	tc_check_packets "dev $h1 egress" 100 1
 	check_err $? "didn't mirror first packet"
@@ -230,8 +230,8 @@ mirred_egress_to_ingress_tcp_test()
 	cmp -s $mirred_e2i_tf1 $mirred_e2i_tf2
 	check_err $? "server output check failed"
 
-	$MZ $h1 -c 10 -p 64 -a $h1mac -b $h1mac -A 192.0.2.1 -B 192.0.2.1 \
-		-t icmp "ping,id=42,seq=5" -q
+	$MZ -c 10 -p 64 -a $h1mac -b $h1mac -A 192.0.2.1 -B 192.0.2.1 \
+		-t icmp -q $h1 "ping,id=42,seq=5"
 	tc_check_packets "dev $h1 egress" 101 10
 	check_err $? "didn't mirred redirect ICMP"
 	tc_check_packets "dev $h1 ingress" 102 10
@@ -254,8 +254,8 @@ ingress_2nd_vlan_push()
 		$tcflags num_of_vlans 2 \
 		cvlan_ethtype 0x800 action pass
 
-	$MZ $h1 -c 1 -p 64 -a $h1mac -b $h2mac -A 192.0.2.1 -B 192.0.2.2 \
-		-t ip -Q 10 -q
+	$MZ -c 1 -p 64 -a $h1mac -b $h2mac -A 192.0.2.1 -B 192.0.2.2 \
+		-t ip -Q 10 -q $h1
 
 	tc_check_packets "dev $swp1 ingress" 30 1
 	check_err $? "No double-vlan packets received"
@@ -276,8 +276,8 @@ egress_2nd_vlan_push()
 		$tcflags num_of_vlans 2 \
 		cvlan_ethtype 0x800 action pass
 
-	$MZ $h1 -c 1 -p 64 -a $h1mac -b $h2mac -A 192.0.2.1 -B 192.0.2.2 \
-		-t ip -q
+	$MZ -c 1 -p 64 -a $h1mac -b $h2mac -A 192.0.2.1 -B 192.0.2.2 \
+		-t ip -q $h1
 
 	tc_check_packets "dev $h1 egress" 30 1
 	check_err $? "No double-vlan packets received"

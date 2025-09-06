@@ -36,12 +36,15 @@ mirror_test()
 	local pref=$1; shift
 	local expect=$1; shift
 
+	# getopt permutation is a non-POSIX GNU extension
 	if is_ipv6 $dip; then
 		local proto=-6
-		local type="icmp6 type=128" # Echo request.
+		local type="icmp6"
+		local typespec="type=128" # Echo request.
 	else
 		local proto=
-		local type="icmp echoreq"
+		local type="icmp"
+		local typespec="echoreq"
 	fi
 
 	if [[ -z ${expect//[[:digit:]]/} ]]; then
@@ -49,8 +52,8 @@ mirror_test()
 	fi
 
 	local t0=$(tc_rule_stats_get $dev $pref)
-	$MZ $proto $vrf_name ${sip:+-A $sip} -B $dip -a own -b bc -q \
-	    -c 10 -d 100msec -t $type
+	$MZ $proto ${sip:+-A $sip} -B $dip -a own -b bc -q \
+	    -c 10 -d 100msec -t $type $vrf_name $typespec
 	sleep 0.5
 	local t1=$(tc_rule_stats_get $dev $pref)
 	local delta=$((t1 - t0))

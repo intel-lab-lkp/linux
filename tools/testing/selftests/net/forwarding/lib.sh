@@ -1291,8 +1291,8 @@ ping_do()
 
 	vrf_name=$(master_name_get $if_name)
 	ip vrf exec $vrf_name \
-		$PING $args $dip -c $PING_COUNT -i 0.1 \
-		-w $PING_TIMEOUT &> /dev/null
+		$PING $args -c $PING_COUNT -i 0.1 \
+		-w $PING_TIMEOUT $dip &> /dev/null
 }
 
 ping_test()
@@ -1322,8 +1322,8 @@ ping6_do()
 
 	vrf_name=$(master_name_get $if_name)
 	ip vrf exec $vrf_name \
-		$PING6 $args $dip -c $PING_COUNT -i 0.1 \
-		-w $PING_TIMEOUT &> /dev/null
+		$PING6 $args -c $PING_COUNT -i 0.1 \
+		-w $PING_TIMEOUT $dip &> /dev/null
 }
 
 ping6_test()
@@ -1369,7 +1369,7 @@ learning_test()
 	tc filter add dev $host1_if ingress protocol ip pref 1 handle 101 \
 		flower dst_mac $mac action drop
 
-	$MZ $host2_if -c 1 -p 64 -b $mac -t ip -q
+	$MZ -c 1 -p 64 -b $mac -t ip -q $host2_if
 	sleep 1
 
 	tc -j -s filter show dev $host1_if ingress \
@@ -1377,14 +1377,14 @@ learning_test()
 		| select(.options.actions[0].stats.packets == 1)" &> /dev/null
 	check_fail $? "Packet reached first host when should not"
 
-	$MZ $host1_if -c 1 -p 64 -a $mac -t ip -q
+	$MZ -c 1 -p 64 -a $mac -t ip -q $host1_if
 	sleep 1
 
 	bridge -j fdb show br $bridge brport $br_port1 \
 		| jq -e ".[] | select(.mac == \"$mac\")" &> /dev/null
 	check_err $? "Did not find FDB record when should"
 
-	$MZ $host2_if -c 1 -p 64 -b $mac -t ip -q
+	$MZ -c 1 -p 64 -b $mac -t ip -q $host2_if
 	sleep 1
 
 	tc -j -s filter show dev $host1_if ingress \
@@ -1403,7 +1403,7 @@ learning_test()
 
 	bridge link set dev $br_port1 learning off
 
-	$MZ $host1_if -c 1 -p 64 -a $mac -t ip -q
+	$MZ -c 1 -p 64 -a $mac -t ip -q $host1_if
 	sleep 1
 
 	bridge -j fdb show br $bridge brport $br_port1 \
@@ -1437,7 +1437,7 @@ flood_test_do()
 	tc filter add dev $host2_if ingress protocol ip pref 1 handle 101 \
 		flower dst_mac $mac action drop
 
-	$MZ $host1_if -c 1 -p 64 -b $mac -B $ip -t ip -q
+	$MZ -c 1 -p 64 -b $mac -B $ip -t ip -q $host1_if
 	sleep 1
 
 	tc -j -s filter show dev $host2_if ingress \
@@ -1522,8 +1522,8 @@ __start_traffic()
 	local dmac=$1; shift
 	local -a mz_args=("$@")
 
-	$MZ $h_in -p $pktsize -A $sip -B $dip -c 0 \
-		-a own -b $dmac -t "$proto" -q "${mz_args[@]}" &
+	$MZ -p $pktsize -A $sip -B $dip -c 0 \
+		-a own -b $dmac -t "$proto" -q $h_in "${mz_args[@]}" &
 	sleep 1
 }
 
@@ -1663,7 +1663,7 @@ mcast_packet_test()
 	tc filter add dev $host2_if ingress protocol $tc_proto pref 1 handle 101 \
 		flower ip_proto udp dst_mac $mac action drop
 
-	$MZ $host1_if $mz_v6arg -c 1 -p 64 -b $mac -A $src_ip -B $ip -t udp "dp=4096,sp=2048" -q
+	$MZ $mz_v6arg -c 1 -p 64 -b $mac -A $src_ip -B $ip -t udp -q $host1_if "dp=4096,sp=2048"
 	sleep 1
 
 	tc -j -s filter show dev $host2_if ingress \

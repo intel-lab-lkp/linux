@@ -86,7 +86,7 @@ test_l2_miss_unicast()
 	   dst_ip $dip action pass
 
 	# Before adding FDB entry.
-	$MZ $h1 -a own -b $dmac -t ip -A $sip -B $dip -c 1 -p 100 -q
+	$MZ -a own -b $dmac -t ip -A $sip -B $dip -c 1 -p 100 -q $h1
 
 	tc_check_packets "dev $swp2 egress" 101 1
 	check_err $? "Unknown unicast filter was not hit before adding FDB entry"
@@ -97,7 +97,7 @@ test_l2_miss_unicast()
 	# Adding FDB entry.
 	bridge fdb replace $dmac dev $swp2 master static
 
-	$MZ $h1 -a own -b $dmac -t ip -A $sip -B $dip -c 1 -p 100 -q
+	$MZ -a own -b $dmac -t ip -A $sip -B $dip -c 1 -p 100 -q $h1
 
 	tc_check_packets "dev $swp2 egress" 101 1
 	check_err $? "Unknown unicast filter was hit after adding FDB entry"
@@ -108,7 +108,7 @@ test_l2_miss_unicast()
 	# Deleting FDB entry.
 	bridge fdb del $dmac dev $swp2 master static
 
-	$MZ $h1 -a own -b $dmac -t ip -A $sip -B $dip -c 1 -p 100 -q
+	$MZ -a own -b $dmac -t ip -A $sip -B $dip -c 1 -p 100 -q $h1
 
 	tc_check_packets "dev $swp2 egress" 101 2
 	check_err $? "Unknown unicast filter was not hit after deleting FDB entry"
@@ -143,7 +143,7 @@ test_l2_miss_multicast_common()
 	   action pass
 
 	# Before adding MDB entry.
-	$MZ $mode $h1 -a own -b $dmac -t ip -A $sip -B $dip -c 1 -p 100 -q
+	$MZ $mode -a own -b $dmac -t ip -A $sip -B $dip -c 1 -p 100 -q $h1
 
 	tc_check_packets "dev $swp2 egress" 101 1
 	check_err $? "Unregistered multicast filter was not hit before adding MDB entry"
@@ -154,7 +154,7 @@ test_l2_miss_multicast_common()
 	# Adding MDB entry.
 	bridge mdb replace dev br1 port $swp2 grp $dip permanent
 
-	$MZ $mode $h1 -a own -b $dmac -t ip -A $sip -B $dip -c 1 -p 100 -q
+	$MZ $mode -a own -b $dmac -t ip -A $sip -B $dip -c 1 -p 100 -q $h1
 
 	tc_check_packets "dev $swp2 egress" 101 1
 	check_err $? "Unregistered multicast filter was hit after adding MDB entry"
@@ -165,7 +165,7 @@ test_l2_miss_multicast_common()
 	# Deleting MDB entry.
 	bridge mdb del dev br1 port $swp2 grp $dip
 
-	$MZ $mode $h1 -a own -b $dmac -t ip -A $sip -B $dip -c 1 -p 100 -q
+	$MZ $mode -a own -b $dmac -t ip -A $sip -B $dip -c 1 -p 100 -q $h1
 
 	tc_check_packets "dev $swp2 egress" 101 2
 	check_err $? "Unregistered multicast filter was not hit after deleting MDB entry"
@@ -255,7 +255,7 @@ test_l2_miss_ll_multicast_common()
 	   flower indev $swp1 l2_miss 1 dst_mac $dmac src_ip $sip \
 	   dst_ip $dip action pass
 
-	$MZ $mode $h1 -a own -b $dmac -t ip -A $sip -B $dip -c 1 -p 100 -q
+	$MZ $mode -a own -b $dmac -t ip -A $sip -B $dip -c 1 -p 100 -q $h1
 
 	tc_check_packets "dev $swp2 egress" 101 1
 	check_err $? "Filter was not hit"
@@ -309,7 +309,7 @@ test_l2_miss_broadcast()
 	   flower l2_miss 0 dst_mac $dmac src_mac $smac \
 	   action pass
 
-	$MZ $h1 -a $smac -b $dmac -c 1 -p 100 -q
+	$MZ -a $smac -b $dmac -c 1 -p 100 -q $h1
 
 	tc_check_packets "dev $swp2 egress" 101 0
 	check_err $? "L2 miss filter was hit when should not"

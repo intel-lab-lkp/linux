@@ -131,7 +131,7 @@ extern_learn()
 	bridge fdb show brport $swp1 | grep -q de:ad:be:ef:13:37
 	check_err $? "FDB entry was aged out when should not"
 
-	$MZ $h2 -c 1 -p 64 -a $mac -t ip -q
+	$MZ -c 1 -p 64 -a $mac -t ip -q $h2
 
 	bridge fdb show brport $swp2 | grep -q de:ad:be:ef:13:37
 	check_err $? "FDB entry did not roam when should"
@@ -158,7 +158,7 @@ other_tpid()
 	ip link set $h2 promisc on
 	ethtool -K $h2 rx-vlan-filter off rx-vlan-stag-filter off
 
-	$MZ -q $h1 -c 1 -b $mac -a own "88:a8 00:03 81:00 00:05 08:00 aa-aa-aa-aa-aa-aa-aa-aa-aa"
+	$MZ -q -c 1 -b $mac -a own $h1 "88:a8 00:03 81:00 00:05 08:00 aa-aa-aa-aa-aa-aa-aa-aa-aa"
 	sleep 1
 
 	# Match on 'self' addresses as well, for those drivers which
@@ -179,7 +179,7 @@ other_tpid()
 
 	bridge vlan del dev $swp1 vid 1
 
-	$MZ -q $h1 -c 1 -b $mac -a own "88:a8 00:03 81:00 00:05 08:00 aa-aa-aa-aa-aa-aa-aa-aa-aa"
+	$MZ -q -c 1 -b $mac -a own $h1 "88:a8 00:03 81:00 00:05 08:00 aa-aa-aa-aa-aa-aa-aa-aa-aa"
 	sleep 1
 
 	RET=0
@@ -202,7 +202,7 @@ other_tpid()
 	tc filter add dev $h2 ingress protocol all pref 1 handle 101 \
 		flower dst_mac $mac action drop
 
-	$MZ -q $h1 -c 1 -b $mac -a own "81:00 00:00 08:00 aa-aa-aa-aa-aa-aa-aa-aa-aa"
+	$MZ -q -c 1 -b $mac -a own $h1 "81:00 00:00 08:00 aa-aa-aa-aa-aa-aa-aa-aa-aa"
 	sleep 1
 
 	tc -j -s filter show dev $h2 ingress \
