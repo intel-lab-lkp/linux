@@ -27,6 +27,7 @@
 #include <linux/of_platform.h>
 #include <linux/platform_device.h>
 #include <linux/slab.h>
+#include <linux/tegra-mipi-cal.h>
 
 #include "dev.h"
 
@@ -114,23 +115,6 @@ struct tegra_mipi_soc {
 	/* calibration settings for clock lanes */
 	u8 hsclkpdos;
 	u8 hsclkpuos;
-};
-
-struct tegra_mipi {
-	const struct tegra_mipi_soc *soc;
-	struct device *dev;
-	void __iomem *regs;
-	struct mutex lock;
-	struct clk *clk;
-
-	unsigned long usage_count;
-};
-
-struct tegra_mipi_device {
-	struct platform_device *pdev;
-	struct tegra_mipi *mipi;
-	struct device *device;
-	unsigned long pads;
 };
 
 static inline u32 tegra_mipi_readl(struct tegra_mipi *mipi,
@@ -261,7 +245,7 @@ void tegra_mipi_free(struct tegra_mipi_device *device)
 }
 EXPORT_SYMBOL(tegra_mipi_free);
 
-int tegra_mipi_enable(struct tegra_mipi_device *dev)
+static int tegra114_mipi_enable(struct tegra_mipi_device *dev)
 {
 	int err = 0;
 
@@ -273,11 +257,9 @@ int tegra_mipi_enable(struct tegra_mipi_device *dev)
 	mutex_unlock(&dev->mipi->lock);
 
 	return err;
-
 }
-EXPORT_SYMBOL(tegra_mipi_enable);
 
-int tegra_mipi_disable(struct tegra_mipi_device *dev)
+static int tegra114_mipi_disable(struct tegra_mipi_device *dev)
 {
 	int err = 0;
 
@@ -289,11 +271,9 @@ int tegra_mipi_disable(struct tegra_mipi_device *dev)
 	mutex_unlock(&dev->mipi->lock);
 
 	return err;
-
 }
-EXPORT_SYMBOL(tegra_mipi_disable);
 
-int tegra_mipi_finish_calibration(struct tegra_mipi_device *device)
+static int tegra114_mipi_finish_calibration(struct tegra_mipi_device *device)
 {
 	struct tegra_mipi *mipi = device->mipi;
 	void __iomem *status_reg = mipi->regs + (MIPI_CAL_STATUS << 2);
@@ -309,9 +289,8 @@ int tegra_mipi_finish_calibration(struct tegra_mipi_device *device)
 
 	return err;
 }
-EXPORT_SYMBOL(tegra_mipi_finish_calibration);
 
-int tegra_mipi_start_calibration(struct tegra_mipi_device *device)
+static int tegra114_mipi_start_calibration(struct tegra_mipi_device *device)
 {
 	const struct tegra_mipi_soc *soc = device->mipi->soc;
 	unsigned int i;
@@ -384,7 +363,13 @@ int tegra_mipi_start_calibration(struct tegra_mipi_device *device)
 
 	return 0;
 }
-EXPORT_SYMBOL(tegra_mipi_start_calibration);
+
+static const struct tegra_mipi_ops tegra114_mipi_ops = {
+	.tegra_mipi_enable = tegra114_mipi_enable,
+	.tegra_mipi_disable = tegra114_mipi_disable,
+	.tegra_mipi_start_calibration = tegra114_mipi_start_calibration,
+	.tegra_mipi_finish_calibration = tegra114_mipi_finish_calibration,
+};
 
 static const struct tegra_mipi_pad tegra114_mipi_pads[] = {
 	{ .data = MIPI_CAL_CONFIG_CSIA },
@@ -512,6 +497,7 @@ static int tegra_mipi_probe(struct platform_device *pdev)
 
 	mipi->soc = match->data;
 	mipi->dev = &pdev->dev;
+	mipi->ops = &tegra114_mipi_ops;
 
 	mipi->regs = devm_platform_get_and_ioremap_resource(pdev, 0, NULL);
 	if (IS_ERR(mipi->regs))
