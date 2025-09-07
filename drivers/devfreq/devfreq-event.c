@@ -327,6 +327,7 @@ struct devfreq_event_dev *devfreq_event_add_edev(struct device *dev,
 	dev_set_name(&edev->dev, "event%d", atomic_inc_return(&event_no));
 	ret = device_register(&edev->dev);
 	if (ret < 0) {
+		kfree(edev);
 		put_device(&edev->dev);
 		return ERR_PTR(ret);
 	}
