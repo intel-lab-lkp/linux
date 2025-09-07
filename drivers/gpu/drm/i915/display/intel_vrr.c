@@ -11,6 +11,7 @@
 #include "intel_display_regs.h"
 #include "intel_display_types.h"
 #include "intel_dp.h"
+#include "intel_panel.h"
 #include "intel_vrr.h"
 #include "intel_vrr_regs.h"
 #include "skl_scaler.h"
@@ -299,6 +300,16 @@ void intel_vrr_set_fixed_rr_timings(const struct intel_crtc_state *crtc_state)
 	if (!intel_vrr_possible(crtc_state))
 		return;
 
+	if (crtc_state->vrr.use_highest_mode) {
+		intel_de_write(display, TRANS_VRR_VMIN(display, cpu_transcoder),
+			       crtc_state->vrr.vmin - 1);
+		intel_de_write(display, TRANS_VRR_VMAX(display, cpu_transcoder),
+			       crtc_state->vrr.vmax - 1);
+		intel_de_write(display, TRANS_VRR_FLIPLINE(display, cpu_transcoder),
+			       crtc_state->vrr.flipline - 1);
+		return;
+	}
+
 	intel_de_write(display, TRANS_VRR_VMIN(display, cpu_transcoder),
 		       intel_vrr_fixed_rr_vmin(crtc_state) - 1);
 	intel_de_write(display, TRANS_VRR_VMAX(display, cpu_transcoder),
@@ -307,15 +318,69 @@ void intel_vrr_set_fixed_rr_timings(const struct intel_crtc_state *crtc_state)
 		       intel_vrr_fixed_rr_flipline(crtc_state) - 1);
 }
 
-static
-void intel_vrr_compute_fixed_rr_timings(struct intel_crtc_state *crtc_state)
+static bool needs_seamless_m_n_timings(struct intel_crtc_state *crtc_state,
+				       struct intel_connector *connector)
 {
+	if (!has_seamless_m_n(connector) || crtc_state->joiner_pipes)
+		return false;
+
+	return true;
+}
+
+static int intel_vrr_scale_vtotal_for_seamless_m_n(struct intel_crtc_state *crtc_state,
+						   struct intel_connector *connector)
+{
+	const struct drm_display_mode *highest_mode = intel_panel_highest_mode(connector);
+	const struct drm_display_mode *adjusted_mode = &crtc_state->hw.adjusted_mode;
+	int vtotal = adjusted_mode->crtc_vtotal;
+
+	/*
+	 * For panels with seamless_m_n drrs, the user can seamlessly switch to
+	 * a lower mode, which has a lower clock. This works with legacy timing
+	 * generator, but not with the VRR timing generator.
+	 *
+	 * The VRR timing generator requires flipline and vmax to be equal for
+	 * fixed refresh rate operation. The default fixed RR computation sets
+	 * these to the current mode's vtotal. However, when switching to a
+	 * lower clock mode, this would result in a higher refresh rate than
+	 * desired.
+	 *
+	 * To simulate the lower refresh rate correctly, we scale the vtotal
+	 * based on the ratio of the highest mode's clock to the current mode's
+	 * clock.
+	 *
+	 * When switching to a higher clock mode, the current vtotal already
+	 * results in the desired refresh rate, so no scaling is needed.
+	 *
+	 * So compute the scaled vtotal if required, and update vrr.vmin to
+	 * the scaled value. Also, set vrr.use_highest_mode to indicate that
+	 * VRR timings are based on the highest mode.
+	 */
+	if (highest_mode && adjusted_mode->crtc_clock < highest_mode->clock) {
+		vtotal = DIV_ROUND_UP_ULL(vtotal * highest_mode->clock,
+					  adjusted_mode->crtc_clock);
+		crtc_state->vrr.vmin = vtotal;
+		crtc_state->vrr.use_highest_mode = true;
+	}
+
+	return vtotal;
+}
+
+static
+void intel_vrr_compute_fixed_rr_timings(struct intel_crtc_state *crtc_state,
+					struct intel_connector *connector)
+{
+	int vtotal = crtc_state->hw.adjusted_mode.crtc_vtotal;
+
+	if (needs_seamless_m_n_timings(crtc_state, connector))
+		vtotal = intel_vrr_scale_vtotal_for_seamless_m_n(crtc_state, connector);
+
 	/*
 	 * For fixed rr,  vmin = vmax = flipline.
 	 * vmin is already set to crtc_vtotal set vmax and flipline the same.
 	 */
-	crtc_state->vrr.vmax = crtc_state->hw.adjusted_mode.crtc_vtotal;
-	crtc_state->vrr.flipline = crtc_state->hw.adjusted_mode.crtc_vtotal;
+	crtc_state->vrr.vmax = vtotal;
+	crtc_state->vrr.flipline = vtotal;
 }
 
 static
@@ -397,7 +462,7 @@ intel_vrr_compute_config(struct intel_crtc_state *crtc_state,
 	else if (is_cmrr_frac_required(crtc_state) && is_edp)
 		intel_vrr_compute_cmrr_timings(crtc_state);
 	else
-		intel_vrr_compute_fixed_rr_timings(crtc_state);
+		intel_vrr_compute_fixed_rr_timings(crtc_state, connector);
 
 	/*
 	 * flipline determines the min vblank length the hardware will
@@ -478,6 +543,7 @@ int intel_vrr_compute_guardband(struct intel_crtc_state *crtc_state,
 {
 	const struct drm_display_mode *adjusted_mode = &crtc_state->hw.adjusted_mode;
 	struct intel_display *display = to_intel_display(crtc_state);
+	const struct drm_display_mode *highest_mode;
 	int dsc_prefill_time = 0;
 	int psr2_pr_latency = 0;
 	int scaler_prefill_time;
@@ -489,6 +555,22 @@ int intel_vrr_compute_guardband(struct intel_crtc_state *crtc_state,
 	int linetime_us;
 	int guardband;
 	int pm_delay;
+
+	/*
+	 * For seamless m_n the clock is changed while other modeline
+	 * parameters are same. In that case the linetime_us will change,
+	 * causing the guardband to change, and the seamless switch to
+	 * lower mode would not take place.
+	 * To avoid this, take the highest mode where panel supports
+	 * seamless drrs and make guardband equal to the vblank length
+	 * for the highest mode.
+	 */
+	highest_mode = intel_panel_highest_mode(connector);
+	if (needs_seamless_m_n_timings(crtc_state, connector) && highest_mode) {
+		guardband = highest_mode->vtotal - highest_mode->vdisplay;
+
+		return guardband;
+	}
 
 	linetime_us = DIV_ROUND_UP(adjusted_mode->crtc_htotal * 1000,
 				   adjusted_mode->crtc_clock);
