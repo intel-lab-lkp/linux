@@ -3173,7 +3173,7 @@ struct qmp_pcie {
 	int mode;
 
 	struct clk_hw *pipe_clk_hw;
-	struct clk_fixed_rate aux_clk_fixed;
+	struct clk_hw *aux_clk_hw;
 };
 
 static bool qphy_checkbits(const void __iomem *base, u32 offset, u32 val)
@@ -4809,19 +4809,13 @@ static int qmp_pcie_clk_init(struct qmp_pcie *qmp)
  */
 static int phy_aux_clk_register(struct qmp_pcie *qmp, struct device_node *np)
 {
-	struct clk_fixed_rate *fixed = &qmp->aux_clk_fixed;
-	struct clk_init_data init = { };
 	char name[64];
 
 	snprintf(name, sizeof(name), "%s::phy_aux_clk", dev_name(qmp->dev));
 
-	init.name = name;
-	init.ops = &clk_fixed_rate_ops;
-
-	fixed->fixed_rate = qmp->cfg->aux_clock_rate;
-	fixed->hw.init = &init;
-
-	return devm_clk_hw_register(qmp->dev, &fixed->hw);
+	qmp->aux_clk_hw = devm_clk_hw_register_fixed_rate(qmp->dev, name, NULL, 0,
+							  qmp->cfg->aux_clock_rate);
+	return PTR_ERR_OR_ZERO(qmp->aux_clk_hw);
 }
 
 static struct clk_hw *qmp_pcie_clk_hw_get(struct of_phandle_args *clkspec, void *data)
@@ -4836,7 +4830,7 @@ static struct clk_hw *qmp_pcie_clk_hw_get(struct of_phandle_args *clkspec, void 
 	case QMP_PCIE_PIPE_CLK:
 		return qmp->pipe_clk_hw;
 	case QMP_PCIE_PHY_AUX_CLK:
-		return &qmp->aux_clk_fixed.hw;
+		return qmp->aux_clk_hw;
 	}
 
 	return ERR_PTR(-EINVAL);
