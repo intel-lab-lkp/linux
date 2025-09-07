@@ -18,12 +18,19 @@ config PHY_QCOM_APQ8064_SATA
 	depends on OF
 	select GENERIC_PHY
 
+config PHY_QCOM_DP_COMMON
+	tristate
+	help
+	  A library implementation of DP / eDP functions common to all Qualcomm
+	  DisplayPort / eDP PHYs
+
 config PHY_QCOM_EDP
 	tristate "Qualcomm eDP PHY driver"
 	depends on ARCH_QCOM || COMPILE_TEST
 	depends on OF
 	depends on COMMON_CLK
 	select GENERIC_PHY
+	select PHY_QCOM_DP_COMMON
 	help
 	  Enable this driver to support the Qualcomm eDP PHY found in various
 	  Qualcomm chipsets.
@@ -64,6 +71,7 @@ config PHY_QCOM_QMP_COMBO
 	select GENERIC_PHY
 	select MFD_SYSCON
 	select DRM_AUX_BRIDGE if DRM_BRIDGE
+	select PHY_QCOM_DP_COMMON
 	help
 	  Enable this to support the QMP Combo PHY transceiver that is used
 	  with USB3 and DisplayPort controllers on Qualcomm chips.

@@ -26,6 +26,8 @@
 
 #include <dt-bindings/phy/phy-qcom-qmp.h>
 
+#include "phy-qcom-dp-common.h"
+
 #include "phy-qcom-qmp-common.h"
 
 #include "phy-qcom-qmp.h"
@@ -1859,13 +1861,11 @@ struct qmp_combo {
 
 	struct phy *dp_phy;
 	unsigned int dp_aux_cfg;
-	struct phy_configure_opts_dp dp_opts;
 	unsigned int dp_init_count;
 	bool dp_powered_on;
 
 	struct clk_hw *pipe_clk_hw;
-	struct clk_hw dp_link_hw;
-	struct clk_hw dp_pixel_hw;
+	struct qcom_dp_common dp_common;
 
 	struct typec_switch_dev *sw;
 	enum typec_orientation orientation;
@@ -2515,7 +2515,7 @@ static int qmp_combo_dp_serdes_init(struct qmp_combo *qmp)
 {
 	const struct qmp_phy_cfg *cfg = qmp->cfg;
 	void __iomem *serdes = qmp->dp_serdes;
-	const struct phy_configure_opts_dp *dp_opts = &qmp->dp_opts;
+	const struct phy_configure_opts_dp *dp_opts = &qmp->dp_common.dp_opts;
 
 	qmp_configure(qmp->dev, serdes, cfg->dp_serdes_tbl,
 		      cfg->dp_serdes_tbl_num);
@@ -2592,7 +2592,7 @@ static void qmp_v3_dp_aux_init(struct qmp_combo *qmp)
 
 static int qmp_combo_configure_dp_swing(struct qmp_combo *qmp)
 {
-	const struct phy_configure_opts_dp *dp_opts = &qmp->dp_opts;
+	const struct phy_configure_opts_dp *dp_opts = &qmp->dp_common.dp_opts;
 	const struct qmp_phy_cfg *cfg = qmp->cfg;
 	unsigned int v_level = 0, p_level = 0;
 	u8 voltage_swing_cfg, pre_emphasis_cfg;
@@ -2629,7 +2629,7 @@ static int qmp_combo_configure_dp_swing(struct qmp_combo *qmp)
 
 static void qmp_v3_configure_dp_tx(struct qmp_combo *qmp)
 {
-	const struct phy_configure_opts_dp *dp_opts = &qmp->dp_opts;
+	const struct phy_configure_opts_dp *dp_opts = &qmp->dp_common.dp_opts;
 	u32 bias_en, drvr_en;
 
 	if (qmp_combo_configure_dp_swing(qmp) < 0)
@@ -2652,7 +2652,7 @@ static void qmp_v3_configure_dp_tx(struct qmp_combo *qmp)
 static bool qmp_combo_configure_dp_mode(struct qmp_combo *qmp)
 {
 	bool reverse = (qmp->orientation == TYPEC_ORIENTATION_REVERSE);
-	const struct phy_configure_opts_dp *dp_opts = &qmp->dp_opts;
+	const struct phy_configure_opts_dp *dp_opts = &qmp->dp_common.dp_opts;
 	u32 val;
 
 	val = DP_PHY_PD_CTL_PWRDN | DP_PHY_PD_CTL_AUX_PWRDN |
@@ -2675,7 +2675,7 @@ static bool qmp_combo_configure_dp_mode(struct qmp_combo *qmp)
 
 static int qmp_combo_configure_dp_clocks(struct qmp_combo *qmp)
 {
-	const struct phy_configure_opts_dp *dp_opts = &qmp->dp_opts;
+	const struct phy_configure_opts_dp *dp_opts = &qmp->dp_common.dp_opts;
 	u32 phy_vco_div;
 	unsigned long pixel_freq;
 	const struct qmp_phy_cfg *cfg = qmp->cfg;
@@ -2703,8 +2703,8 @@ static int qmp_combo_configure_dp_clocks(struct qmp_combo *qmp)
 	}
 	writel(phy_vco_div, qmp->dp_dp_phy + cfg->regs[QPHY_DP_PHY_VCO_DIV]);
 
-	clk_set_rate(qmp->dp_link_hw.clk, dp_opts->link_rate * 100000);
-	clk_set_rate(qmp->dp_pixel_hw.clk, pixel_freq);
+	clk_set_rate(qmp->dp_common.link_hw.clk, dp_opts->link_rate * 100000);
+	clk_set_rate(qmp->dp_common.pixel_hw.clk, pixel_freq);
 
 	return 0;
 }
@@ -2891,7 +2891,7 @@ static int qmp_v4_configure_dp_phy(struct qmp_combo *qmp)
 {
 	const struct qmp_phy_cfg *cfg = qmp->cfg;
 	bool reverse = (qmp->orientation == TYPEC_ORIENTATION_REVERSE);
-	const struct phy_configure_opts_dp *dp_opts = &qmp->dp_opts;
+	const struct phy_configure_opts_dp *dp_opts = &qmp->dp_common.dp_opts;
 	u32 bias0_en, drvr0_en, bias1_en, drvr1_en;
 	u32 status;
 	int ret;
@@ -2976,10 +2976,10 @@ static int qmp_combo_dp_configure(struct phy *phy, union phy_configure_opts *opt
 
 	mutex_lock(&qmp->phy_mutex);
 
-	memcpy(&qmp->dp_opts, dp_opts, sizeof(*dp_opts));
-	if (qmp->dp_opts.set_voltages) {
+	memcpy(&qmp->dp_common.dp_opts, dp_opts, sizeof(*dp_opts));
+	if (qmp->dp_common.dp_opts.set_voltages) {
 		cfg->configure_dp_tx(qmp);
-		qmp->dp_opts.set_voltages = 0;
+		qmp->dp_common.dp_opts.set_voltages = 0;
 	}
 
 	mutex_unlock(&qmp->phy_mutex);
@@ -3512,131 +3512,6 @@ static int qmp_combo_clk_init(struct qmp_combo *qmp)
 	return devm_clk_bulk_get_optional(dev, num, qmp->clks);
 }
 
-/*
- * Display Port PLL driver block diagram for branch clocks
- *
- *              +------------------------------+
- *              |         DP_VCO_CLK           |
- *              |                              |
- *              |    +-------------------+     |
- *              |    |   (DP PLL/VCO)    |     |
- *              |    +---------+---------+     |
- *              |              v               |
- *              |   +----------+-----------+   |
- *              |   | hsclk_divsel_clk_src |   |
- *              |   +----------+-----------+   |
- *              +------------------------------+
- *                              |
- *          +---------<---------v------------>----------+
- *          |                                           |
- * +--------v----------------+                          |
- * |    dp_phy_pll_link_clk  |                          |
- * |     link_clk            |                          |
- * +--------+----------------+                          |
- *          |                                           |
- *          |                                           |
- *          v                                           v
- * Input to DISPCC block                                |
- * for link clk, crypto clk                             |
- * and interface clock                                  |
- *                                                      |
- *                                                      |
- *      +--------<------------+-----------------+---<---+
- *      |                     |                 |
- * +----v---------+  +--------v-----+  +--------v------+
- * | vco_divided  |  | vco_divided  |  | vco_divided   |
- * |    _clk_src  |  |    _clk_src  |  |    _clk_src   |
- * |              |  |              |  |               |
- * |divsel_six    |  |  divsel_two  |  |  divsel_four  |
- * +-------+------+  +-----+--------+  +--------+------+
- *         |                 |                  |
- *         v---->----------v-------------<------v
- *                         |
- *              +----------+-----------------+
- *              |   dp_phy_pll_vco_div_clk   |
- *              +---------+------------------+
- *                        |
- *                        v
- *              Input to DISPCC block
- *              for DP pixel clock
- *
- */
-static int qmp_dp_pixel_clk_determine_rate(struct clk_hw *hw, struct clk_rate_request *req)
-{
-	switch (req->rate) {
-	case 1620000000UL / 2:
-	case 2700000000UL / 2:
-	/* 5.4 and 8.1 GHz are same link rate as 2.7GHz, i.e. div 4 and div 6 */
-		return 0;
-	default:
-		return -EINVAL;
-	}
-}
-
-static unsigned long qmp_dp_pixel_clk_recalc_rate(struct clk_hw *hw, unsigned long parent_rate)
-{
-	const struct qmp_combo *qmp;
-	const struct phy_configure_opts_dp *dp_opts;
-
-	qmp = container_of(hw, struct qmp_combo, dp_pixel_hw);
-	dp_opts = &qmp->dp_opts;
-
-	switch (dp_opts->link_rate) {
-	case 1620:
-		return 1620000000UL / 2;
-	case 2700:
-		return 2700000000UL / 2;
-	case 5400:
-		return 5400000000UL / 4;
-	case 8100:
-		return 8100000000UL / 6;
-	default:
-		return 0;
-	}
-}
-
-static const struct clk_ops qmp_dp_pixel_clk_ops = {
-	.determine_rate	= qmp_dp_pixel_clk_determine_rate,
-	.recalc_rate	= qmp_dp_pixel_clk_recalc_rate,
-};
-
-static int qmp_dp_link_clk_determine_rate(struct clk_hw *hw, struct clk_rate_request *req)
-{
-	switch (req->rate) {
-	case 162000000:
-	case 270000000:
-	case 540000000:
-	case 810000000:
-		return 0;
-	default:
-		return -EINVAL;
-	}
-}
-
-static unsigned long qmp_dp_link_clk_recalc_rate(struct clk_hw *hw, unsigned long parent_rate)
-{
-	const struct qmp_combo *qmp;
-	const struct phy_configure_opts_dp *dp_opts;
-
-	qmp = container_of(hw, struct qmp_combo, dp_link_hw);
-	dp_opts = &qmp->dp_opts;
-
-	switch (dp_opts->link_rate) {
-	case 1620:
-	case 2700:
-	case 5400:
-	case 8100:
-		return dp_opts->link_rate * 100000;
-	default:
-		return 0;
-	}
-}
-
-static const struct clk_ops qmp_dp_link_clk_ops = {
-	.determine_rate	= qmp_dp_link_clk_determine_rate,
-	.recalc_rate	= qmp_dp_link_clk_recalc_rate,
-};
-
 static struct clk_hw *qmp_dp_clks_hw_get(struct of_phandle_args *clkspec, void *data)
 {
 	struct qmp_combo *qmp = data;
@@ -3648,34 +3523,9 @@ static struct clk_hw *qmp_dp_clks_hw_get(struct of_phandle_args *clkspec, void *
 	}
 
 	if (idx == 0)
-		return &qmp->dp_link_hw;
+		return &qmp->dp_common.link_hw;
 
-	return &qmp->dp_pixel_hw;
-}
-
-static int phy_dp_clks_register(struct qmp_combo *qmp, struct device_node *np)
-{
-	struct clk_init_data init = { };
-	char name[64];
-	int ret;
-
-	snprintf(name, sizeof(name), "%s::link_clk", dev_name(qmp->dev));
-	init.ops = &qmp_dp_link_clk_ops;
-	init.name = name;
-	qmp->dp_link_hw.init = &init;
-	ret = devm_clk_hw_register(qmp->dev, &qmp->dp_link_hw);
-	if (ret)
-		return ret;
-
-	snprintf(name, sizeof(name), "%s::vco_div_clk", dev_name(qmp->dev));
-	init.ops = &qmp_dp_pixel_clk_ops;
-	init.name = name;
-	qmp->dp_pixel_hw.init = &init;
-	ret = devm_clk_hw_register(qmp->dev, &qmp->dp_pixel_hw);
-	if (ret)
-		return ret;
-
-	return 0;
+	return &qmp->dp_common.pixel_hw;
 }
 
 static struct clk_hw *qmp_combo_clk_hw_get(struct of_phandle_args *clkspec, void *data)
@@ -3686,9 +3536,9 @@ static struct clk_hw *qmp_combo_clk_hw_get(struct of_phandle_args *clkspec, void
 	case QMP_USB43DP_USB3_PIPE_CLK:
 		return qmp->pipe_clk_hw;
 	case QMP_USB43DP_DP_LINK_CLK:
-		return &qmp->dp_link_hw;
+		return &qmp->dp_common.link_hw;
 	case QMP_USB43DP_DP_VCO_DIV_CLK:
-		return &qmp->dp_pixel_hw;
+		return &qmp->dp_common.pixel_hw;
 	}
 
 	return ERR_PTR(-EINVAL);
@@ -3703,7 +3553,7 @@ static int qmp_combo_register_clocks(struct qmp_combo *qmp, struct device_node *
 	if (IS_ERR(qmp->pipe_clk_hw))
 		return PTR_ERR(qmp->pipe_clk_hw);
 
-	ret = phy_dp_clks_register(qmp, dp_np);
+	ret = devm_qcom_dp_clks_register(qmp->dev, &qmp->dp_common);
 	if (ret)
 		return ret;
 

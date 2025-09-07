@@ -22,6 +22,8 @@
 
 #include <dt-bindings/phy/phy.h>
 
+#include "phy-qcom-dp-common.h"
+
 #include "phy-qcom-qmp-dp-phy.h"
 #include "phy-qcom-qmp-qserdes-com-v4.h"
 #include "phy-qcom-qmp-qserdes-com-v6.h"
@@ -98,10 +100,7 @@ struct qcom_edp {
 	void __iomem *tx1;
 	void __iomem *pll;
 
-	struct clk_hw dp_link_hw;
-	struct clk_hw dp_pixel_hw;
-
-	struct phy_configure_opts_dp dp_opts;
+	struct qcom_dp_common dp_common;
 
 	struct clk_bulk_data clks[2];
 	struct regulator_bulk_data supplies[2];
@@ -318,7 +317,7 @@ static int qcom_edp_phy_configure(struct phy *phy, union phy_configure_opts *opt
 	struct qcom_edp *edp = phy_get_drvdata(phy);
 	int ret = 0;
 
-	memcpy(&edp->dp_opts, dp_opts, sizeof(*dp_opts));
+	memcpy(&edp->dp_common.dp_opts, dp_opts, sizeof(*dp_opts));
 
 	if (dp_opts->set_voltages)
 		ret = qcom_edp_set_voltages(edp, dp_opts);
@@ -338,7 +337,7 @@ static int qcom_edp_configure_pll(const struct qcom_edp *edp)
 
 static int qcom_edp_set_vco_div(const struct qcom_edp *edp, unsigned long *pixel_freq)
 {
-	const struct phy_configure_opts_dp *dp_opts = &edp->dp_opts;
+	const struct phy_configure_opts_dp *dp_opts = &edp->dp_common.dp_opts;
 	u32 vco_div;
 
 	switch (dp_opts->link_rate) {
@@ -406,7 +405,7 @@ static int qcom_edp_com_bias_en_clkbuflr_v4(const struct qcom_edp *edp)
 
 static int qcom_edp_com_configure_ssc_v4(const struct qcom_edp *edp)
 {
-	const struct phy_configure_opts_dp *dp_opts = &edp->dp_opts;
+	const struct phy_configure_opts_dp *dp_opts = &edp->dp_common.dp_opts;
 	u32 step1;
 	u32 step2;
 
@@ -440,7 +439,7 @@ static int qcom_edp_com_configure_ssc_v4(const struct qcom_edp *edp)
 
 static int qcom_edp_com_configure_pll_v4(const struct qcom_edp *edp)
 {
-	const struct phy_configure_opts_dp *dp_opts = &edp->dp_opts;
+	const struct phy_configure_opts_dp *dp_opts = &edp->dp_common.dp_opts;
 	u32 div_frac_start2_mode0;
 	u32 div_frac_start3_mode0;
 	u32 dec_start_mode0;
@@ -591,7 +590,7 @@ static int qcom_edp_com_bias_en_clkbuflr_v6(const struct qcom_edp *edp)
 
 static int qcom_edp_com_configure_ssc_v6(const struct qcom_edp *edp)
 {
-	const struct phy_configure_opts_dp *dp_opts = &edp->dp_opts;
+	const struct phy_configure_opts_dp *dp_opts = &edp->dp_common.dp_opts;
 	u32 step1;
 	u32 step2;
 
@@ -625,7 +624,7 @@ static int qcom_edp_com_configure_ssc_v6(const struct qcom_edp *edp)
 
 static int qcom_edp_com_configure_pll_v6(const struct qcom_edp *edp)
 {
-	const struct phy_configure_opts_dp *dp_opts = &edp->dp_opts;
+	const struct phy_configure_opts_dp *dp_opts = &edp->dp_common.dp_opts;
 	u32 div_frac_start2_mode0;
 	u32 div_frac_start3_mode0;
 	u32 dec_start_mode0;
@@ -758,7 +757,7 @@ static int qcom_edp_phy_power_on(struct phy *phy)
 	writel(0x00, edp->tx0 + TXn_LANE_MODE_1);
 	writel(0x00, edp->tx1 + TXn_LANE_MODE_1);
 
-	if (edp->dp_opts.ssc) {
+	if (edp->dp_common.dp_opts.ssc) {
 		ret = qcom_edp_configure_ssc(edp);
 		if (ret)
 			return ret;
@@ -818,13 +817,13 @@ static int qcom_edp_phy_power_on(struct phy *phy)
 	writel(0x1f, edp->tx0 + TXn_TX_DRV_LVL);
 	writel(0x1f, edp->tx1 + TXn_TX_DRV_LVL);
 
-	if (edp->dp_opts.lanes == 1) {
+	if (edp->dp_common.dp_opts.lanes == 1) {
 		bias0_en = 0x01;
 		bias1_en = 0x00;
 		drvr0_en = 0x06;
 		drvr1_en = 0x07;
 		cfg1 = 0x1;
-	} else if (edp->dp_opts.lanes == 2) {
+	} else if (edp->dp_common.dp_opts.lanes == 2) {
 		bias0_en = 0x03;
 		bias1_en = 0x00;
 		drvr0_en = 0x04;
@@ -854,8 +853,8 @@ static int qcom_edp_phy_power_on(struct phy *phy)
 	if (ret)
 		return ret;
 
-	clk_set_rate(edp->dp_link_hw.clk, edp->dp_opts.link_rate * 100000);
-	clk_set_rate(edp->dp_pixel_hw.clk, pixel_freq);
+	clk_set_rate(edp->dp_common.link_hw.clk, edp->dp_common.dp_opts.link_rate * 100000);
+	clk_set_rate(edp->dp_common.pixel_hw.clk, pixel_freq);
 
 	return 0;
 }
@@ -901,162 +900,22 @@ static const struct phy_ops qcom_edp_ops = {
 	.owner		= THIS_MODULE,
 };
 
-/*
- * Embedded Display Port PLL driver block diagram for branch clocks
- *
- *              +------------------------------+
- *              |        EDP_VCO_CLK           |
- *              |                              |
- *              |    +-------------------+     |
- *              |    |  (EDP PLL/VCO)    |     |
- *              |    +---------+---------+     |
- *              |              v               |
- *              |   +----------+-----------+   |
- *              |   | hsclk_divsel_clk_src |   |
- *              |   +----------+-----------+   |
- *              +------------------------------+
- *                              |
- *          +---------<---------v------------>----------+
- *          |                                           |
- * +--------v----------------+                          |
- * |   edp_phy_pll_link_clk  |                          |
- * |     link_clk            |                          |
- * +--------+----------------+                          |
- *          |                                           |
- *          |                                           |
- *          v                                           v
- * Input to DISPCC block                                |
- * for link clk, crypto clk                             |
- * and interface clock                                  |
- *                                                      |
- *                                                      |
- *      +--------<------------+-----------------+---<---+
- *      |                     |                 |
- * +----v---------+  +--------v-----+  +--------v------+
- * | vco_divided  |  | vco_divided  |  | vco_divided   |
- * |    _clk_src  |  |    _clk_src  |  |    _clk_src   |
- * |              |  |              |  |               |
- * |divsel_six    |  |  divsel_two  |  |  divsel_four  |
- * +-------+------+  +-----+--------+  +--------+------+
- *         |                 |                  |
- *         v---->----------v-------------<------v
- *                         |
- *              +----------+-----------------+
- *              |   edp_phy_pll_vco_div_clk  |
- *              +---------+------------------+
- *                        |
- *                        v
- *              Input to DISPCC block
- *              for EDP pixel clock
- *
- */
-static int qcom_edp_dp_pixel_clk_determine_rate(struct clk_hw *hw,
-						struct clk_rate_request *req)
-{
-	switch (req->rate) {
-	case 1620000000UL / 2:
-	case 2700000000UL / 2:
-	/* 5.4 and 8.1 GHz are same link rate as 2.7GHz, i.e. div 4 and div 6 */
-		return 0;
-
-	default:
-		return -EINVAL;
-	}
-}
-
-static unsigned long
-qcom_edp_dp_pixel_clk_recalc_rate(struct clk_hw *hw, unsigned long parent_rate)
-{
-	const struct qcom_edp *edp = container_of(hw, struct qcom_edp, dp_pixel_hw);
-	const struct phy_configure_opts_dp *dp_opts = &edp->dp_opts;
-
-	switch (dp_opts->link_rate) {
-	case 1620:
-		return 1620000000UL / 2;
-	case 2700:
-		return 2700000000UL / 2;
-	case 5400:
-		return 5400000000UL / 4;
-	case 8100:
-		return 8100000000UL / 6;
-	default:
-		return 0;
-	}
-}
-
-static const struct clk_ops qcom_edp_dp_pixel_clk_ops = {
-	.determine_rate = qcom_edp_dp_pixel_clk_determine_rate,
-	.recalc_rate = qcom_edp_dp_pixel_clk_recalc_rate,
-};
-
-static int qcom_edp_dp_link_clk_determine_rate(struct clk_hw *hw,
-					       struct clk_rate_request *req)
-{
-	switch (req->rate) {
-	case 162000000:
-	case 270000000:
-	case 540000000:
-	case 810000000:
-		return 0;
-
-	default:
-		return -EINVAL;
-	}
-}
-
-static unsigned long
-qcom_edp_dp_link_clk_recalc_rate(struct clk_hw *hw, unsigned long parent_rate)
-{
-	const struct qcom_edp *edp = container_of(hw, struct qcom_edp, dp_link_hw);
-	const struct phy_configure_opts_dp *dp_opts = &edp->dp_opts;
-
-	switch (dp_opts->link_rate) {
-	case 1620:
-	case 2700:
-	case 5400:
-	case 8100:
-		return dp_opts->link_rate * 100000;
-
-	default:
-		return 0;
-	}
-}
-
-static const struct clk_ops qcom_edp_dp_link_clk_ops = {
-	.determine_rate = qcom_edp_dp_link_clk_determine_rate,
-	.recalc_rate = qcom_edp_dp_link_clk_recalc_rate,
-};
-
 static int qcom_edp_clks_register(struct qcom_edp *edp, struct device_node *np)
 {
 	struct clk_hw_onecell_data *data;
-	struct clk_init_data init = { };
-	char name[64];
 	int ret;
+
+	ret = devm_qcom_dp_clks_register(edp->dev, &edp->dp_common);
+	if (ret)
+		return ret;
 
 	data = devm_kzalloc(edp->dev, struct_size(data, hws, 2), GFP_KERNEL);
 	if (!data)
 		return -ENOMEM;
 	data->num = 2;
 
-	snprintf(name, sizeof(name), "%s::link_clk", dev_name(edp->dev));
-	init.ops = &qcom_edp_dp_link_clk_ops;
-	init.name = name;
-	edp->dp_link_hw.init = &init;
-	ret = devm_clk_hw_register(edp->dev, &edp->dp_link_hw);
-	if (ret)
-		return ret;
-
-	snprintf(name, sizeof(name), "%s::vco_div_clk", dev_name(edp->dev));
-	init.ops = &qcom_edp_dp_pixel_clk_ops;
-	init.name = name;
-	edp->dp_pixel_hw.init = &init;
-	ret = devm_clk_hw_register(edp->dev, &edp->dp_pixel_hw);
-	if (ret)
-		return ret;
-
-	data->hws[0] = &edp->dp_link_hw;
-	data->hws[1] = &edp->dp_pixel_hw;
+	data->hws[0] = &edp->dp_common.link_hw;
+	data->hws[1] = &edp->dp_common.pixel_hw;
 
 	return devm_of_clk_add_hw_provider(edp->dev, of_clk_hw_onecell_get, data);
 }
