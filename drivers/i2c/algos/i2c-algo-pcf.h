@@ -3,8 +3,8 @@
 /* i2c-pcf8584.h: PCF 8584 global defines				*/
 /* -------------------------------------------------------------------- */
 /*   Copyright (C) 1996 Simon G. Vogl
-                   1999 Hans Berglund
-
+ *		   1999 Hans Berglund
+ *
  */
 /* --------------------------------------------------------------------	*/
 
@@ -25,7 +25,7 @@
 
 #define I2C_PCF_START    (I2C_PCF_PIN | I2C_PCF_ESO | I2C_PCF_STA | I2C_PCF_ACK)
 #define I2C_PCF_STOP     (I2C_PCF_PIN | I2C_PCF_ESO | I2C_PCF_STO | I2C_PCF_ACK)
-#define I2C_PCF_REPSTART (              I2C_PCF_ESO | I2C_PCF_STA | I2C_PCF_ACK)
+#define I2C_PCF_REPSTART	       (I2C_PCF_ESO | I2C_PCF_STA | I2C_PCF_ACK)
 #define I2C_PCF_IDLE     (I2C_PCF_PIN | I2C_PCF_ESO               | I2C_PCF_ACK)
 
 /* ----- Status register bits -----------------------------------------	*/
@@ -55,7 +55,7 @@
 
 
 /* ----- Access to internal registers according to ES1,ES2 ------------	*/
-/* they are mapped to the data port ( a0 = 0 ) 				*/
+/* they are mapped to the data port ( a0 = 0 )				*/
 /* available when ESO == 0 :						*/
 
 #define I2C_PCF_OWNADR	0
