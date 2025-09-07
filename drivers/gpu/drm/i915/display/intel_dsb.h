@@ -74,4 +74,7 @@ void intel_dsb_wait(struct intel_dsb *dsb);
 void intel_dsb_irq_handler(struct intel_display *display,
 			   enum pipe pipe, enum intel_dsb_id dsb_id);
 
+void intel_dsb_wait_for_delayed_vblank(struct intel_atomic_state *state,
+				       struct intel_dsb *dsb);
+
 #endif
