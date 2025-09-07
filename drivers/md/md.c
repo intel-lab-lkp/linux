@@ -2538,6 +2538,15 @@ static void export_rdev(struct md_rdev *rdev, struct mddev *mddev)
 	kobject_put(&rdev->kobj);
 }
 
+int md_autodetect_bind_export_rdev(struct md_rdev *rdev, struct mddev *mddev)
+{
+	int err = bind_rdev_to_array(rdev, mddev);
+
+	if (err)
+		export_rdev(rdev, mddev);
+	return err;
+}
+
 static void md_kick_rdev_from_array(struct md_rdev *rdev)
 {
 	struct mddev *mddev = rdev->mddev;
@@ -3703,7 +3712,7 @@ EXPORT_SYMBOL_GPL(md_rdev_init);
  *
  * a faulty rdev _never_ has rdev->sb set.
  */
-static struct md_rdev *md_import_device(dev_t newdev, int super_format, int super_minor)
+struct md_rdev *md_import_device(dev_t newdev, int super_format, int super_minor)
 {
 	struct md_rdev *rdev;
 	sector_t size;
@@ -3757,10 +3766,13 @@ static struct md_rdev *md_import_device(dev_t newdev, int super_format, int supe
 		}
 	}
 
+	rdev->sb_major_version = super_format;
+	rdev->sb_minor_version = super_minor;
+
 	return rdev;
 
 out_blkdev_put:
-	fput(rdev->bdev_file);
+	bdev_fput(rdev->bdev_file);
 out_clear_rdev:
 	md_rdev_clear(rdev);
 out_free_rdev:
@@ -6773,6 +6785,11 @@ static void autorun_devices(int part)
 {
 	struct md_rdev *rdev0, *rdev, *tmp;
 	struct mddev *mddev;
+	/*
+	 * Version 1 superblocks don't store a preferred minor number,
+	 * assign a high one here so we get no conflicts
+	 */
+	int preferred_minor_1 = 0xffff;
 
 	pr_info("md: autorun ...\n");
 	while (!list_empty(&pending_raid_disks)) {
@@ -6784,28 +6801,50 @@ static void autorun_devices(int part)
 
 		pr_debug("md: considering %pg ...\n", rdev0->bdev);
 		INIT_LIST_HEAD(&candidates);
-		rdev_for_each_list(rdev, tmp, &pending_raid_disks)
-			if (super_90_load(rdev, rdev0, 0) >= 0) {
+		rdev_for_each_list(rdev, tmp, &pending_raid_disks) {
+			if (rdev0->sb_major_version != rdev->sb_major_version ||
+			    rdev0->sb_minor_version != rdev->sb_minor_version) {
+				pr_debug("md:  Versions don't match with %pg ...\n",
+					 rdev->bdev);
+				continue;
+			}
+			if (super_types[rdev->sb_major_version].load_super(rdev,
+									  rdev0,
+									  rdev0->sb_minor_version
+									  ) >= 0) {
 				pr_debug("md:  adding %pg ...\n",
 					 rdev->bdev);
 				list_move(&rdev->same_set, &candidates);
 			}
+		}
 		/*
 		 * now we have a set of devices, with all of them having
 		 * mostly sane superblocks. It's time to allocate the
 		 * mddev.
 		 */
+
+		int minor = rdev0->preferred_minor;
+
+		if (rdev0->sb_major_version == 1) {
+			if (preferred_minor_1 < 0) {
+				pr_warn("md: no free minor number left for v1 superblock\n");
+				break;
+			}
+			minor = preferred_minor_1;
+			preferred_minor_1--;
+		}
+
 		if (part) {
 			dev = MKDEV(mdp_major,
-				    rdev0->preferred_minor << MdpMinorShift);
+				    minor << MdpMinorShift);
 			unit = MINOR(dev) >> MdpMinorShift;
 		} else {
-			dev = MKDEV(MD_MAJOR, rdev0->preferred_minor);
+			dev = MKDEV(MD_MAJOR, minor);
 			unit = MINOR(dev);
 		}
-		if (rdev0->preferred_minor != unit) {
+		if (minor != unit) {
 			pr_warn("md: unit number in %pg is bad: %d\n",
-				rdev0->bdev, rdev0->preferred_minor);
+				rdev0->bdev, minor);
 			break;
 		}
 
@@ -6823,6 +6862,10 @@ static void autorun_devices(int part)
 		} else {
 			pr_debug("md: created %s\n", mdname(mddev));
 			mddev->persistent = 1;
+
+			mddev->major_version = rdev0->sb_major_version;
+			mddev->minor_version = rdev0->sb_minor_version;
+
 			rdev_for_each_list(rdev, tmp, &candidates) {
 				list_del_init(&rdev->same_set);
 				if (bind_rdev_to_array(rdev, mddev))
@@ -10355,6 +10398,32 @@ void md_autodetect_dev(dev_t dev)
 	}
 }
 
+struct md_sb_type {
+	int major;
+	int minor;
+};
+
+static const struct md_sb_type super_versions[4] = {
+	{0, 90},
+	{1, 2},
+	{1, 1},
+	{1, 0}
+};
+
+struct md_rdev *md_guess_super_import_device(dev_t dev)
+{
+	const struct md_sb_type *super;
+	struct md_rdev *rdev;
+
+	for (int i = 0; i < ARRAY_SIZE(super_versions); i++) {
+		super = &super_versions[i];
+		rdev = md_import_device(dev, super->major, super->minor);
+		if (!IS_ERR_OR_NULL(rdev))
+			return rdev;
+	}
+	return NULL; /* No valid superblock found */
+}
+
 void md_autostart_arrays(int part)
 {
 	struct md_rdev *rdev;
@@ -10376,9 +10445,9 @@ void md_autostart_arrays(int part)
 		dev = node_detected_dev->dev;
 		kfree(node_detected_dev);
 		mutex_unlock(&detected_devices_mutex);
-		rdev = md_import_device(dev,0, 90);
+		rdev = md_guess_super_import_device(dev);
 		mutex_lock(&detected_devices_mutex);
-		if (IS_ERR(rdev))
+		if (rdev == NULL)
 			continue;
 
 		if (test_bit(Faulty, &rdev->flags))

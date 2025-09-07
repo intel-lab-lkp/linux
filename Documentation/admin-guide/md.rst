@@ -80,8 +80,7 @@ Boot time autodetection of RAID arrays
 When md is compiled into the kernel (not as module), partitions of
 type 0xfd are scanned and automatically assembled into RAID arrays.
 This autodetection may be suppressed with the kernel parameter
-``raid=noautodetect``.  As of kernel 2.6.9, only drives with a type 0
-superblock can be autodetected and run at boot time.
+``raid=noautodetect``.
 
 The kernel parameter ``raid=partitionable`` (or ``raid=part``) means
 that all auto-detected arrays are assembled as partitionable.

@@ -198,22 +198,48 @@ static void __init md_setup_drive(struct md_setup_args *args)
 			ainfo.raid_disks++;
 	}
 
-	err = md_set_array_info(mddev, &ainfo);
+	if (args->level != LEVEL_NONE) {
+		err = md_set_array_info(mddev, &ainfo);
+		for (i = 0; i <= MD_SB_DISKS && devices[i]; i++) {
+			struct mdu_disk_info_s dinfo = {
+				.major	= MAJOR(devices[i]),
+				.minor	= MINOR(devices[i]),
+			};
 
-	for (i = 0; i <= MD_SB_DISKS && devices[i]; i++) {
-		struct mdu_disk_info_s dinfo = {
-			.major	= MAJOR(devices[i]),
-			.minor	= MINOR(devices[i]),
-		};
+			if (args->level != LEVEL_NONE) {
+				dinfo.number = i;
+				dinfo.raid_disk = i;
+				dinfo.state =
+					(1 << MD_DISK_ACTIVE) | (1 << MD_DISK_SYNC);
+			}
 
-		if (args->level != LEVEL_NONE) {
-			dinfo.number = i;
-			dinfo.raid_disk = i;
-			dinfo.state =
-				(1 << MD_DISK_ACTIVE) | (1 << MD_DISK_SYNC);
+			md_add_new_disk(mddev, &dinfo);
 		}
+	} else {
+		ainfo.major_version = -1;
+		ainfo.minor_version = -1;
+		for (i = 0; i <= MD_SB_DISKS && devices[i]; i++) {
+			struct md_rdev *rdev = NULL;
 
-		md_add_new_disk(mddev, &dinfo);
+			if (ainfo.major_version < 0) {
+				rdev = md_guess_super_import_device(devices[i]);
+				if (rdev == NULL)
+					continue;
+				ainfo.major_version = rdev->sb_major_version;
+				ainfo.minor_version = rdev->sb_minor_version;
+				err = md_set_array_info(mddev, &ainfo);
+				if (err) {
+					pr_warn("md: couldn't update array info. %d\n", err);
+					break;
+				}
+			} else {
+				rdev = md_import_device(devices[i],
+							ainfo.major_version, ainfo.minor_version);
+				if (rdev == NULL)
+					continue;
+			}
+			md_autodetect_bind_export_rdev(rdev, mddev);
+		}
 	}
 
 	if (!err)

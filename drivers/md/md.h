@@ -145,6 +145,7 @@ struct md_rdev {
 
 	struct page	*sb_page, *bb_page;
 	int		sb_loaded;
+	int		sb_major_version, sb_minor_version;
 	__u64		sb_events;
 	sector_t	data_offset;	/* start of data in array */
 	sector_t	new_data_offset;/* only relevant while reshaping */
@@ -921,6 +922,7 @@ extern void md_wait_for_blocked_rdev(struct md_rdev *rdev, struct mddev *mddev);
 extern void md_set_array_sectors(struct mddev *mddev, sector_t array_sectors);
 extern int md_check_no_bitmap(struct mddev *mddev);
 extern int md_integrity_register(struct mddev *mddev);
+int md_autodetect_bind_export_rdev(struct md_rdev *rdev, struct mddev *mddev);
 extern int strict_strtoul_scaled(const char *cp, unsigned long *res, int scale);
 
 extern int mddev_init(struct mddev *mddev);
@@ -933,6 +935,7 @@ extern int md_start(struct mddev *mddev);
 extern void md_stop(struct mddev *mddev);
 extern void md_stop_writes(struct mddev *mddev);
 extern int md_rdev_init(struct md_rdev *rdev);
+struct md_rdev *md_import_device(dev_t newdev, int super_format, int super_minor);
 extern void md_rdev_clear(struct md_rdev *rdev);
 
 extern bool md_handle_request(struct mddev *mddev, struct bio *bio);
@@ -1014,6 +1017,7 @@ struct mdu_disk_info_s;
 
 extern int mdp_major;
 extern struct workqueue_struct *md_bitmap_wq;
+struct md_rdev *md_guess_super_import_device(dev_t dev);
 void md_autostart_arrays(int part);
 int md_set_array_info(struct mddev *mddev, struct mdu_array_info_s *info);
 int md_add_new_disk(struct mddev *mddev, struct mdu_disk_info_s *info);
