@@ -348,17 +348,16 @@
 
 	bus-width = <4>;
 	cap-sd-highspeed;
-	sd-uhs-sdr12;
-	sd-uhs-sdr25;
-	sd-uhs-sdr50;
-	sd-uhs-ddr50;
 	max-frequency = <100000000>;
 	disable-wp;
 
 	cd-gpios = <&gpio CARD_6 GPIO_ACTIVE_LOW>;
 
 	vmmc-supply = <&tflash_vdd>;
-	vqmmc-supply = <&tf_io>;
+	/*
+	 * Control of vqmmc-supply is intentionally omitted because it would
+	 * prevent the board from rebooting properly.
+	 */
 };
 
 /* eMMC */
