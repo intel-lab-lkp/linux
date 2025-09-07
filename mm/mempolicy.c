@@ -2530,6 +2530,8 @@ static unsigned long alloc_pages_bulk_interleave(gfp_t gfp,
 	unsigned long total_allocated = 0;
 
 	nodes = nodes_weight(pol->nodes);
+	if (nodes == 0)
+		return 0;
 	nr_pages_per_node = nr_pages / nodes;
 	delta = nr_pages - nodes * nr_pages_per_node;
 
