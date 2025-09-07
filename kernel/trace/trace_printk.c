@@ -358,7 +358,7 @@ static const struct seq_operations show_format_seq_ops = {
 };
 
 static int
-ftrace_formats_open(struct inode *inode, struct file *file)
+ftrace_formats_open(struct inode *inode, const struct file *file)
 {
 	int ret;
 
