@@ -47,6 +47,11 @@ struct proc_ops {
 	long	(*proc_compat_ioctl)(struct file *, unsigned int, unsigned long);
 #endif
 	int	(*proc_mmap)(struct file *, struct vm_area_struct *);
+	int	(*proc_mmap_prepare)(struct vm_area_desc *);
+	int	(*proc_mmap_complete)(struct file *, struct vm_area_struct *,
+				      const void *context);
+	void	(*proc_mmap_abort)(const struct file *, const void *vm_private_data,
+				   const void *context);
 	unsigned long (*proc_get_unmapped_area)(struct file *, unsigned long, unsigned long, unsigned long, unsigned long);
 } __randomize_layout;
 
