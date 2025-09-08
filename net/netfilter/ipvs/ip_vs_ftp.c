@@ -598,22 +598,9 @@ err_unreg:
 	unregister_ip_vs_app(ipvs, &ip_vs_ftp);
 	return ret;
 }
-/*
- *	netns exit
- */
-static void __ip_vs_ftp_exit(struct net *net)
-{
-	struct netns_ipvs *ipvs = net_ipvs(net);
-
-	if (!ipvs)
-		return;
-
-	unregister_ip_vs_app(ipvs, &ip_vs_ftp);
-}
 
 static struct pernet_operations ip_vs_ftp_ops = {
 	.init = __ip_vs_ftp_init,
-	.exit = __ip_vs_ftp_exit,
 };
 
 static int __init ip_vs_ftp_init(void)
