@@ -54,8 +54,8 @@ static void deflate_free_stream(void *ctx)
 }
 
 static struct crypto_acomp_streams deflate_streams = {
-	.alloc_ctx = deflate_alloc_stream,
-	.free_ctx = deflate_free_stream,
+	.alloc_ctx	= deflate_alloc_stream,
+	.free_ctx	= deflate_free_stream,
 };
 
 static int deflate_compress_one(struct acomp_req *req,
