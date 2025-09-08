@@ -2565,7 +2565,7 @@ static int task_numa_migrate(struct task_struct *p)
 				groupweight = group_weight(p, env.src_nid, dist);
 			}
 
-			/* Only consider nodes where both task and groups benefit */
+			/* Consider nodes where either task or groups benefit */
 			taskimp = task_weight(p, nid, dist) - taskweight;
 			groupimp = group_weight(p, nid, dist) - groupweight;
 			if (taskimp < 0 && groupimp < 0)
