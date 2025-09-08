@@ -498,12 +498,14 @@ static int igt_smoke_tiling(void *arg)
 			tile.stride = 0;
 			tile.swizzle = I915_BIT_6_SWIZZLE_NONE;
 			break;
-
 		case I915_TILING_X:
 			tile.swizzle = to_gt(i915)->ggtt->bit_6_swizzle_x;
 			break;
 		case I915_TILING_Y:
 			tile.swizzle = to_gt(i915)->ggtt->bit_6_swizzle_y;
+			break;
+		default:
+			err = -EINVAL;
 			break;
 		}
 
