@@ -747,7 +747,7 @@ static int ndtest_dimm_register(struct ndtest_priv *priv,
 					     &priv->pdev.dev,
 					     0, dimm, dimm_attribute_groups,
 					     "test_dimm%d", id);
-	if (!dimm->dev) {
+	if (IS_ERR(dimm->dev)) {
 		pr_err("Could not create dimm device attributes\n");
 		return -ENOMEM;
 	}
