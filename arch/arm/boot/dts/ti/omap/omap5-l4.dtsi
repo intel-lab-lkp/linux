@@ -1916,7 +1916,6 @@
 				reg = <0x0 0x400>;
 				interrupts = <GIC_SPI 83 IRQ_TYPE_LEVEL_HIGH>;
 				ti,dual-volt;
-				ti,needs-special-reset;
 				dmas = <&sdma 61>, <&sdma 62>;
 				dma-names = "tx", "rx";
 				pbias-supply = <&pbias_mmc_reg>;
@@ -2004,7 +2003,6 @@
 				compatible = "ti,omap4-hsmmc";
 				reg = <0x0 0x400>;
 				interrupts = <GIC_SPI 94 IRQ_TYPE_LEVEL_HIGH>;
-				ti,needs-special-reset;
 				dmas = <&sdma 77>, <&sdma 78>;
 				dma-names = "tx", "rx";
 			};
@@ -2044,7 +2042,6 @@
 				compatible = "ti,omap4-hsmmc";
 				reg = <0x0 0x400>;
 				interrupts = <GIC_SPI 86 IRQ_TYPE_LEVEL_HIGH>;
-				ti,needs-special-reset;
 				dmas = <&sdma 47>, <&sdma 48>;
 				dma-names = "tx", "rx";
 			};
@@ -2136,7 +2133,6 @@
 				compatible = "ti,omap4-hsmmc";
 				reg = <0x0 0x400>;
 				interrupts = <GIC_SPI 96 IRQ_TYPE_LEVEL_HIGH>;
-				ti,needs-special-reset;
 				dmas = <&sdma 57>, <&sdma 58>;
 				dma-names = "tx", "rx";
 			};
@@ -2168,7 +2164,6 @@
 				compatible = "ti,omap4-hsmmc";
 				reg = <0x0 0x400>;
 				interrupts = <GIC_SPI 59 IRQ_TYPE_LEVEL_HIGH>;
-				ti,needs-special-reset;
 				dmas = <&sdma 59>, <&sdma 60>;
 				dma-names = "tx", "rx";
 			};
