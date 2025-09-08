@@ -178,6 +178,8 @@ static int tcpci_apply_rc(struct tcpc_dev *tcpc, enum typec_cc_status cc,
 				  TCPC_ROLE_CTRL_CC_OPEN);
 }
 
+static int tcpci_get_cc(struct tcpc_dev *tcpc,
+			enum typec_cc_status *cc1, enum typec_cc_status *cc2);
 static int tcpci_start_toggling(struct tcpc_dev *tcpc,
 				enum typec_port_type port_type,
 				enum typec_cc_status cc)
@@ -186,8 +188,17 @@ static int tcpci_start_toggling(struct tcpc_dev *tcpc,
 	struct tcpci *tcpci = tcpc_to_tcpci(tcpc);
 	unsigned int reg = TCPC_ROLE_CTRL_DRP;
 
-	if (port_type != TYPEC_PORT_DRP)
+	if (port_type != TYPEC_PORT_DRP) {
+		enum typec_cc_status cc1, cc2;
+
+		ret = tcpci_get_cc(tcpc, &cc1, &cc2);
+		if (ret)
+			return ret;
+
+		tcpm_cc_change(tcpci->port);
+
 		return -EOPNOTSUPP;
+	}
 
 	/* Handle vendor drp toggling */
 	if (tcpci->data->start_drp_toggling) {
