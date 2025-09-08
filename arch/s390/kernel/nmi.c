@@ -321,9 +321,7 @@ static bool notrace nmi_registers_valid(union mci mci)
 	cr2.reg = get_lowcore()->cregs_save_area[2];
 	if (cr2.gse && !mci.gs && !test_cpu_flag(CIF_MCCK_GUEST))
 		return false;
-	if (!mci.ms || !mci.pm || !mci.ia)
-		return false;
-	return true;
+	return mci.ms && mci.pm && mci.ia;
 }
 NOKPROBE_SYMBOL(nmi_registers_valid);
 
