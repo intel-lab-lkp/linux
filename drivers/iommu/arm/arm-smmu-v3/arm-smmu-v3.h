@@ -675,9 +675,15 @@ struct arm_smmu_inv {
 	refcount_t users; /* users=0 to mark as a trash to be purged */
 };
 
+static inline bool arm_smmu_inv_is_ats(struct arm_smmu_inv *inv)
+{
+	return inv->type == INV_TYPE_ATS || inv->type == INV_TYPE_ATS_FULL;
+}
+
 /**
  * struct arm_smmu_invs - Per-domain invalidation array
  * @num_invs: number of invalidations in the flexible array
+ * @has_ats: flag if the array contains an INV_TYPE_ATS or INV_TYPE_ATS_FULL
  * @old: flag to synchronize with reader
  * @rwlock: optional rwlock to fench ATS operations
  * @rcu: rcu head for kfree_rcu()
@@ -706,6 +712,7 @@ struct arm_smmu_inv {
 struct arm_smmu_invs {
 	size_t num_invs;
 	rwlock_t rwlock;
+	u8 has_ats;
 	u8 old;
 	struct rcu_head rcu;
 	struct arm_smmu_inv inv[];
@@ -1071,6 +1078,15 @@ void arm_smmu_tlb_inv_range_asid(unsigned long iova, size_t size, int asid,
 				 struct arm_smmu_domain *smmu_domain);
 int arm_smmu_atc_inv_domain(struct arm_smmu_domain *smmu_domain,
 			    unsigned long iova, size_t size);
+
+void arm_smmu_domain_inv_range(struct arm_smmu_domain *smmu_domain,
+			       unsigned long iova, size_t size,
+			       unsigned int granule, bool leaf);
+
+static inline void arm_smmu_domain_inv(struct arm_smmu_domain *smmu_domain)
+{
+	arm_smmu_domain_inv_range(smmu_domain, 0, 0, 0, false);
+}
 
 void __arm_smmu_cmdq_skip_err(struct arm_smmu_device *smmu,
 			      struct arm_smmu_cmdq *cmdq);
