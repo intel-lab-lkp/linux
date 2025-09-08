@@ -788,6 +788,65 @@ int virtio_device_cap_set(struct virtio_device *vdev,
 }
 EXPORT_SYMBOL_GPL(virtio_device_cap_set);
 
+/**
+ * virtio_device_object_create - Create an object on a virtio device
+ * @vdev: the virtio device
+ * @obj_type: type of object to create
+ * @obj_id: ID for the new object
+ * @obj_specific_data: object-specific data for creation
+ * @obj_specific_data_size: size of the object-specific data in bytes
+ *
+ * Creates a new object on the virtio device with the specified type and ID.
+ * The object may require object-specific data for proper initialization.
+ *
+ * Return: 0 on success, -EOPNOTSUPP if the device doesn't support admin
+ * operations or object creation, or a negative error code on other failures.
+ */
+int virtio_device_object_create(struct virtio_device *vdev,
+				u16 obj_type,
+				u32 obj_id,
+				const void *obj_specific_data,
+				size_t obj_specific_data_size)
+{
+	const struct virtio_admin_ops *admin = vdev->admin_ops;
+
+	if (!admin || !admin->object_create)
+		return -EOPNOTSUPP;
+
+	/* All users of this interface use the self group with member id 0 */
+	return admin->object_create(vdev, obj_type, obj_id,
+				    VIRTIO_ADMIN_GROUP_TYPE_SELF, 0,
+				    obj_specific_data, obj_specific_data_size);
+}
+EXPORT_SYMBOL_GPL(virtio_device_object_create);
+
+/**
+ * virtio_device_object_destroy - Destroy an object on a virtio device
+ * @vdev: the virtio device
+ * @obj_type: type of object to destroy
+ * @obj_id: ID of the object to destroy
+ *
+ * Destroys a existing object on the virtio device with the specified type
+ * and ID.
+ *
+ * Return: 0 on success, -EOPNOTSUPP if the device doesn't support admin
+ * operations or object destruction, or a negative error code on other failures.
+ */
+int virtio_device_object_destroy(struct virtio_device *vdev,
+				 u16 obj_type,
+				 u32 obj_id)
+{
+	const struct virtio_admin_ops *admin = vdev->admin_ops;
+
+	if (!admin || !admin->object_destroy)
+		return -EOPNOTSUPP;
+
+	/* All users of this interface use the self group with member id 0 */
+	return admin->object_destroy(vdev, obj_type, obj_id,
+				     VIRTIO_ADMIN_GROUP_TYPE_SELF, 0);
+}
+EXPORT_SYMBOL_GPL(virtio_device_object_destroy);
+
 static int virtio_init(void)
 {
 	BUILD_BUG_ON(offsetof(struct virtio_device, features) !=

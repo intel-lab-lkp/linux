@@ -152,15 +152,15 @@ static int
 virtiovf_pci_alloc_obj_id(struct virtiovf_pci_core_device *virtvdev, u8 type,
 			  u32 *obj_id)
 {
-	return virtio_pci_admin_obj_create(virtvdev->core_device.pdev,
-					   VIRTIO_RESOURCE_OBJ_DEV_PARTS, type, obj_id);
+	return virtio_pci_admin_dev_parts_obj_create(virtvdev->core_device.pdev,
+						     type, obj_id);
 }
 
 static void
 virtiovf_pci_free_obj_id(struct virtiovf_pci_core_device *virtvdev, u32 obj_id)
 {
-	virtio_pci_admin_obj_destroy(virtvdev->core_device.pdev,
-			VIRTIO_RESOURCE_OBJ_DEV_PARTS, obj_id);
+	virtio_pci_admin_dev_parts_obj_destroy(virtvdev->core_device.pdev,
+					       obj_id);
 }
 
 static struct virtiovf_data_buffer *

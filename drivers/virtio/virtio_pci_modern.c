@@ -967,28 +967,61 @@ int virtio_pci_admin_mode_set(struct pci_dev *pdev, u8 flags)
 }
 EXPORT_SYMBOL_GPL(virtio_pci_admin_mode_set);
 
-/*
- * virtio_pci_admin_obj_create - Creates an object for a given type and operation,
- * following the max objects that can be created for that request.
- * @pdev: VF pci_dev
- * @obj_type: Object type
- * @operation_type: Operation type
- * @obj_id: Output unique object id
+static int vp_modern_admin_cmd_obj_create(struct virtio_device *virtio_dev,
+					  u16 obj_type,
+					  u32 obj_id,
+					  u16 group_type,
+					  u64 group_member_id,
+					  const void *obj_specific_data,
+					  size_t obj_specific_data_size)
+{
+	size_t data_size = sizeof(struct virtio_admin_cmd_resource_obj_create_data);
+	struct virtio_admin_cmd_resource_obj_create_data *obj_create_data;
+	struct virtio_admin_cmd cmd = {};
+	void *data __free(kfree) = NULL;
+	struct scatterlist data_sg;
+
+	data_size += (obj_specific_data_size);
+	data = kzalloc(data_size, GFP_KERNEL);
+	if (!data)
+		return -ENOMEM;
+
+	obj_create_data = data;
+	obj_create_data->hdr.type = cpu_to_le16(obj_type);
+	obj_create_data->hdr.id = cpu_to_le32(obj_id);
+	memcpy(obj_create_data->resource_obj_specific_data, obj_specific_data,
+	       obj_specific_data_size);
+	sg_init_one(&data_sg, data, data_size);
+
+	cmd.opcode = cpu_to_le16(VIRTIO_ADMIN_CMD_RESOURCE_OBJ_CREATE);
+	cmd.group_type = cpu_to_le16(group_type);
+	cmd.group_member_id = cpu_to_le64(group_member_id);
+	cmd.data_sg = &data_sg;
+
+	return vp_modern_admin_cmd_exec(virtio_dev, &cmd);
+}
+
+/**
+ * virtio_pci_admin_dev_parts_obj_create - Create a device parts object
+ * @pdev: VF PCI device
+ * @operation_type: operation type (GET or SET)
+ * @obj_id: pointer to store the output unique object ID
  *
- * Note: caller must serialize access for the given device.
- * Returns 0 on success, or negative on failure.
+ * This function creates a device parts object for the specified VF PCI device.
+ * The object is associated with the SRIOV group and can be used for GET or SET
+ * operations. The caller must serialize access for the given device.
+ *
+ * Return: 0 on success, -ENODEV if the virtio device is not found,
+ * -EINVAL if the operation type is invalid, -EOPNOTSUPP if device parts
+ * objects are not supported, or a negative error code on other failures.
  */
-int virtio_pci_admin_obj_create(struct pci_dev *pdev, u16 obj_type, u8 operation_type,
-				u32 *obj_id)
+int virtio_pci_admin_dev_parts_obj_create(struct pci_dev *pdev,
+					  u8 operation_type,
+					  u32 *obj_id)
 {
 	struct virtio_device *virtio_dev = virtio_pci_vf_get_pf_dev(pdev);
-	u16 data_size = sizeof(struct virtio_admin_cmd_resource_obj_create_data);
-	struct virtio_admin_cmd_resource_obj_create_data *obj_create_data;
 	struct virtio_resource_obj_dev_parts obj_dev_parts = {};
 	struct virtio_pci_admin_vq *avq;
-	struct virtio_admin_cmd cmd = {};
-	struct scatterlist data_sg;
-	void *data;
 	int id = -1;
 	int vf_id;
 	int ret;
@@ -999,9 +1032,6 @@ int virtio_pci_admin_obj_create(struct pci_dev *pdev, u16 obj_type, u8 operation
 	vf_id = pci_iov_vf_id(pdev);
 	if (vf_id < 0)
 		return vf_id;
-
-	if (obj_type != VIRTIO_RESOURCE_OBJ_DEV_PARTS)
-		return -EOPNOTSUPP;
 
 	if (operation_type != VIRTIO_RESOURCE_OBJ_DEV_PARTS_TYPE_GET &&
 	    operation_type != VIRTIO_RESOURCE_OBJ_DEV_PARTS_TYPE_SET)
@@ -1016,52 +1046,66 @@ int virtio_pci_admin_obj_create(struct pci_dev *pdev, u16 obj_type, u8 operation
 	if (id < 0)
 		return id;
 
-	*obj_id = id;
-	data_size += sizeof(obj_dev_parts);
-	data = kzalloc(data_size, GFP_KERNEL);
-	if (!data) {
-		ret = -ENOMEM;
-		goto end;
-	}
-
-	obj_create_data = data;
-	obj_create_data->hdr.type = cpu_to_le16(obj_type);
-	obj_create_data->hdr.id = cpu_to_le32(*obj_id);
 	obj_dev_parts.type = operation_type;
-	memcpy(obj_create_data->resource_obj_specific_data, &obj_dev_parts,
-	       sizeof(obj_dev_parts));
-	sg_init_one(&data_sg, data, data_size);
-	cmd.opcode = cpu_to_le16(VIRTIO_ADMIN_CMD_RESOURCE_OBJ_CREATE);
-	cmd.group_type = cpu_to_le16(VIRTIO_ADMIN_GROUP_TYPE_SRIOV);
-	cmd.group_member_id = cpu_to_le64(vf_id + 1);
-	cmd.data_sg = &data_sg;
-	ret = vp_modern_admin_cmd_exec(virtio_dev, &cmd);
+	ret = vp_modern_admin_cmd_obj_create(virtio_dev,
+					     VIRTIO_RESOURCE_OBJ_DEV_PARTS,
+					     id,
+					     VIRTIO_ADMIN_GROUP_TYPE_SRIOV,
+					     vf_id + 1,
+					     &obj_dev_parts,
+					     sizeof(obj_dev_parts));
 
-	kfree(data);
-end:
 	if (ret)
 		ida_free(&avq->dev_parts_ida, id);
+	else
+		*obj_id = id;
 
 	return ret;
 }
-EXPORT_SYMBOL_GPL(virtio_pci_admin_obj_create);
+EXPORT_SYMBOL_GPL(virtio_pci_admin_dev_parts_obj_create);
 
-/*
- * virtio_pci_admin_obj_destroy - Destroys an object of a given type and id
- * @pdev: VF pci_dev
- * @obj_type: Object type
- * @id: Object id
- *
- * Note: caller must serialize access for the given device.
- * Returns 0 on success, or negative on failure.
- */
-int virtio_pci_admin_obj_destroy(struct pci_dev *pdev, u16 obj_type, u32 id)
+static int vp_modern_admin_cmd_obj_destroy(struct virtio_device *virtio_dev,
+					   u16 obj_type,
+					   u32 obj_id,
+					   u16 group_type,
+					   u64 group_member_id)
 {
-	struct virtio_device *virtio_dev = virtio_pci_vf_get_pf_dev(pdev);
-	struct virtio_admin_cmd_resource_obj_cmd_hdr *data;
-	struct virtio_pci_device *vp_dev;
+	struct virtio_admin_cmd_resource_obj_cmd_hdr *data __free(kfree) = NULL;
 	struct virtio_admin_cmd cmd = {};
 	struct scatterlist data_sg;
+
+	data = kzalloc(sizeof(*data), GFP_KERNEL);
+	if (!data)
+		return -ENOMEM;
+
+	data->type = cpu_to_le16(obj_type);
+	data->id = cpu_to_le32(obj_id);
+	sg_init_one(&data_sg, data, sizeof(*data));
+	cmd.opcode = cpu_to_le16(VIRTIO_ADMIN_CMD_RESOURCE_OBJ_DESTROY);
+	cmd.group_type = cpu_to_le16(group_type);
+	cmd.group_member_id = cpu_to_le64(group_member_id);
+	cmd.data_sg = &data_sg;
+
+	return vp_modern_admin_cmd_exec(virtio_dev, &cmd);
+}
+
+/**
+ * virtio_pci_admin_dev_parts_obj_destroy - Destroy a device parts object
+ * @pdev: VF PCI device
+ * @obj_id: ID of the object to destroy
+ *
+ * This function destroys a device parts object with the specified ID for the
+ * given VF PCI device. The object must have been previously created using
+ * virtio_pci_admin_dev_parts_obj_create(). The caller must serialize access
+ * for the given device.
+ *
+ * Return: 0 on success, -ENODEV if the virtio device is not found,
+ * or a negative error code on other failures.
+ */
+int virtio_pci_admin_dev_parts_obj_destroy(struct pci_dev *pdev, u32 obj_id)
+{
+	struct virtio_device *virtio_dev = virtio_pci_vf_get_pf_dev(pdev);
+	struct virtio_pci_device *vp_dev;
 	int vf_id;
 	int ret;
 
@@ -1072,30 +1116,19 @@ int virtio_pci_admin_obj_destroy(struct pci_dev *pdev, u16 obj_type, u32 id)
 	if (vf_id < 0)
 		return vf_id;
 
-	if (obj_type != VIRTIO_RESOURCE_OBJ_DEV_PARTS)
-		return -EINVAL;
-
-	data = kzalloc(sizeof(*data), GFP_KERNEL);
-	if (!data)
-		return -ENOMEM;
-
-	data->type = cpu_to_le16(obj_type);
-	data->id = cpu_to_le32(id);
-	sg_init_one(&data_sg, data, sizeof(*data));
-	cmd.opcode = cpu_to_le16(VIRTIO_ADMIN_CMD_RESOURCE_OBJ_DESTROY);
-	cmd.group_type = cpu_to_le16(VIRTIO_ADMIN_GROUP_TYPE_SRIOV);
-	cmd.group_member_id = cpu_to_le64(vf_id + 1);
-	cmd.data_sg = &data_sg;
-	ret = vp_modern_admin_cmd_exec(virtio_dev, &cmd);
+	ret = vp_modern_admin_cmd_obj_destroy(virtio_dev,
+					      VIRTIO_RESOURCE_OBJ_DEV_PARTS,
+					      obj_id,
+					      VIRTIO_ADMIN_GROUP_TYPE_SRIOV,
+					      vf_id + 1);
 	if (!ret) {
 		vp_dev = to_vp_device(virtio_dev);
-		ida_free(&vp_dev->admin_vq.dev_parts_ida, id);
+		ida_free(&vp_dev->admin_vq.dev_parts_ida, obj_id);
 	}
 
-	kfree(data);
 	return ret;
 }
-EXPORT_SYMBOL_GPL(virtio_pci_admin_obj_destroy);
+EXPORT_SYMBOL_GPL(virtio_pci_admin_dev_parts_obj_destroy);
 
 /*
  * virtio_pci_admin_dev_parts_metadata_get - Gets the metadata of the device parts
@@ -1289,6 +1322,8 @@ static const struct virtio_admin_ops virtio_pci_admin_ops = {
 	.cap_id_list_query = vp_modern_admin_cap_id_list_query,
 	.cap_get = vp_modern_admin_cmd_cap_get,
 	.cap_set = vp_modern_admin_cmd_cap_set,
+	.object_create = vp_modern_admin_cmd_obj_create,
+	.object_destroy = vp_modern_admin_cmd_obj_destroy,
 };
 /* the PCI probing function */
 int virtio_pci_modern_probe(struct virtio_pci_device *vp_dev)
