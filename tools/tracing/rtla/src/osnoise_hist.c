@@ -543,7 +543,8 @@ static struct osnoise_params
 			params->threshold = 1;
 
 			/* set trace */
-			params->trace_output = "osnoise_trace.txt";
+			if (!params->trace_output)
+				params->trace_output = "osnoise_trace.txt";
 
 			break;
 		case 'b':

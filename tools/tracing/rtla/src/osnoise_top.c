@@ -383,7 +383,8 @@ struct osnoise_params *osnoise_top_parse_args(int argc, char **argv)
 			params->threshold = 1;
 
 			/* set trace */
-			params->trace_output = "osnoise_trace.txt";
+			if (!params->trace_output)
+				params->trace_output = "osnoise_trace.txt";
 
 			break;
 		case 'c':
