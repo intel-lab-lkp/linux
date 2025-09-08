@@ -500,12 +500,7 @@ int iomap_read_folio(struct folio *folio, const struct iomap_ops *ops)
 	if (!ctx.folio_owned)
 		folio_unlock(folio);
 
-	/*
-	 * Just like mpage_readahead and block_read_full_folio, we always
-	 * return 0 and just set the folio error flag on errors.  This
-	 * should be cleaned up throughout the stack eventually.
-	 */
-	return 0;
+	return ret;
 }
 EXPORT_SYMBOL_GPL(iomap_read_folio);
 
