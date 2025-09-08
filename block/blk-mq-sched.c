@@ -192,6 +192,59 @@ static int blk_mq_finish_dispatch(struct sched_dispatch_ctx *ctx)
 	return !!dispatched;
 }
 
+static void blk_mq_dispatch_requests(struct sched_dispatch_ctx *ctx)
+{
+	struct request_queue *q = ctx->hctx->queue;
+	struct elevator_queue *e = q->elevator;
+	bool has_get_budget = q->mq_ops->get_budget != NULL;
+	int budget_token[BUDGET_TOKEN_BATCH];
+	int count = q->nr_requests;
+	int i;
+
+	while (true) {
+		if (!blk_mq_should_dispatch(ctx))
+			return;
+
+		if (has_get_budget) {
+			count = blk_mq_get_dispatch_budgets(q, budget_token);
+			if (count <= 0)
+				return;
+		}
+
+		elevator_dispatch_lock(e);
+		for (i = 0; i < count; ++i) {
+			struct request *rq =
+				e->type->ops.dispatch_request(ctx->hctx);
+
+			if (!rq) {
+				ctx->run_queue = true;
+				goto err_free_budgets;
+			}
+
+			if (has_get_budget)
+				blk_mq_set_rq_budget_token(rq, budget_token[i]);
+
+			list_add_tail(&rq->queuelist, &ctx->rq_list);
+			ctx->count++;
+
+			if (rq->mq_hctx != ctx->hctx)
+				ctx->multi_hctxs = true;
+
+			if (!blk_mq_get_driver_tag(rq)) {
+				i++;
+				goto err_free_budgets;
+			}
+		}
+		elevator_dispatch_unlock(e);
+	}
+
+err_free_budgets:
+	elevator_dispatch_unlock(e);
+	if (has_get_budget)
+		for (; i < count; ++i)
+			blk_mq_put_dispatch_budget(q, budget_token[i]);
+}
+
 /*
  * Only SCSI implements .get_budget and .put_budget, and SCSI restarts
  * its queue by itself in its completion handler, so we don't need to
@@ -212,10 +265,14 @@ static int __blk_mq_do_dispatch_sched(struct blk_mq_hw_ctx *hctx)
 	else
 		max_dispatch = hctx->queue->nr_requests;
 
-	do {
-		if (!blk_mq_dispatch_one_request(&ctx))
-			break;
-	} while (ctx.count < max_dispatch);
+	if (!hctx->dispatch_busy && blk_queue_sq_sched(hctx->queue)) {
+		blk_mq_dispatch_requests(&ctx);
+	} else {
+		do {
+			if (!blk_mq_dispatch_one_request(&ctx))
+				break;
+		} while (ctx.count < max_dispatch);
+	}
 
 	return blk_mq_finish_dispatch(&ctx);
 }
