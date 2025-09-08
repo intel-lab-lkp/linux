@@ -4931,21 +4931,25 @@ int blk_mq_update_nr_requests(struct request_queue *q, unsigned int nr)
 			blk_mq_tag_update_sched_shared_tags(q);
 		else
 			blk_mq_tag_resize_shared_tags(set, nr);
-	} else {
+	} else if (!q->elevator) {
 		queue_for_each_hw_ctx(q, hctx, i) {
 			if (!hctx->tags)
 				continue;
-			/*
-			 * If we're using an MQ scheduler, just update the
-			 * scheduler queue depth. This is similar to what the
-			 * old code would do.
-			 */
-			if (hctx->sched_tags)
-				ret = blk_mq_tag_update_depth(hctx,
-							&hctx->sched_tags, nr);
-			else
-				ret = blk_mq_tag_update_depth(hctx,
-							&hctx->tags, nr);
+			sbitmap_queue_resize(&hctx->tags->bitmap_tags,
+				nr - hctx->tags->nr_reserved_tags);
+		}
+	} else if (nr <= q->elevator->et->nr_requests) {
+		queue_for_each_hw_ctx(q, hctx, i) {
+			if (!hctx->sched_tags)
+				continue;
+			sbitmap_queue_resize(&hctx->sched_tags->bitmap_tags,
+				nr - hctx->sched_tags->nr_reserved_tags);
+		}
+	} else {
+		queue_for_each_hw_ctx(q, hctx, i) {
+			if (!hctx->sched_tags)
+				continue;
+			blk_mq_tag_update_depth(hctx, &hctx->sched_tags, nr);
 			if (ret)
 				goto out;
 		}
