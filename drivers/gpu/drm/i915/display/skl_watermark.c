@@ -1806,25 +1806,14 @@ static bool xe3_auto_min_alloc_capable(struct intel_plane *plane, int level)
 	return DISPLAY_VER(display) >= 30 && level == 0 && plane->id != PLANE_CURSOR;
 }
 
-static void skl_compute_plane_wm(const struct intel_crtc_state *crtc_state,
-				 struct intel_plane *plane,
-				 int level,
-				 unsigned int latency,
-				 const struct skl_wm_params *wp,
-				 const struct skl_wm_level *result_prev,
-				 struct skl_wm_level *result /* out */)
+static uint_fixed_16_16_t
+skl_wm_run_method(struct intel_display *display,
+		  const struct intel_crtc_state *crtc_state,
+		  const struct skl_wm_params *wp,
+		  unsigned int latency)
 {
-	struct intel_display *display = to_intel_display(crtc_state);
 	uint_fixed_16_16_t method1, method2;
 	uint_fixed_16_16_t selected_result;
-	u32 blocks, lines, min_ddb_alloc = 0;
-
-	if (latency == 0 ||
-	    (use_minimal_wm0_only(crtc_state, plane) && level > 0)) {
-		/* reject it */
-		result->min_ddb_alloc = U16_MAX;
-		return;
-	}
 
 	method1 = skl_wm_method1(display, wp->plane_pixel_rate,
 				 wp->cpp, latency, wp->dbuf_block_size);
@@ -1837,7 +1826,9 @@ static void skl_compute_plane_wm(const struct intel_crtc_state *crtc_state,
 	case WM_TILING_Y_FAMILY:
 		selected_result = max_fixed16(method2, wp->y_tile_minimum);
 		break;
-
+	default:
+		MISSING_CASE(wp->tiling);
+		fallthrough;
 	case WM_TILING_LINEAR:
 	case WM_TILING_X_TILED:
 		/*
@@ -1862,11 +1853,31 @@ static void skl_compute_plane_wm(const struct intel_crtc_state *crtc_state,
 			selected_result = method1;
 		}
 		break;
-
-	default:
-		drm_err(display->drm, "Invalid tiling mode\n", wp->tiling);
-		break;
 	}
+
+	return selected_result;
+}
+
+static void skl_compute_plane_wm(const struct intel_crtc_state *crtc_state,
+				 struct intel_plane *plane,
+				 int level,
+				 unsigned int latency,
+				 const struct skl_wm_params *wp,
+				 const struct skl_wm_level *result_prev,
+				 struct skl_wm_level *result /* out */)
+{
+	struct intel_display *display = to_intel_display(crtc_state);
+	uint_fixed_16_16_t selected_result;
+	u32 blocks, lines, min_ddb_alloc = 0;
+
+	if (latency == 0 ||
+	    (use_minimal_wm0_only(crtc_state, plane) && level > 0)) {
+		/* reject it */
+		result->min_ddb_alloc = U16_MAX;
+		return;
+	}
+
+	selected_result = skl_wm_run_method(display, crtc_state, wp, latency);
 
 	blocks = fixed16_to_u32_round_up(selected_result);
 	if (DISPLAY_VER(display) < 30)
