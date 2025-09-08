@@ -1285,3 +1285,12 @@ rather than a VMA, as the VMA at this stage is not yet valid.
 The vm_area_desc provides the minimum required information for a filesystem
 to initialise state upon memory mapping of a file-backed region, and output
 parameters for the file system to set this state.
+
+In nearly all cases, this is all that is required for a filesystem. However,
+should there be a need to operate on the newly inserted VMA, the mmap_complete()
+can be specified to do so.
+
+Additionally, if mmap_prepare() and mmap_complete() are specified, mmap_abort()
+may also be provided which is invoked if the mapping fails between mmap_prepare
+and mmap_complete(). It is only valid to specify mmap_abort() if both other
+hooks are provided.

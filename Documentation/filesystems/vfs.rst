@@ -1114,6 +1114,10 @@ This describes how the VFS can manipulate an open file.  As of kernel
 		int (*uring_cmd_iopoll)(struct io_uring_cmd *, struct io_comp_batch *,
 					unsigned int poll_flags);
 		int (*mmap_prepare)(struct vm_area_desc *);
+		int (*mmap_complete)(struct file *, struct vm_area_struct *,
+				     const void *context);
+		void (*mmap_abort)(const struct file *, const void *vm_private_data,
+				   const void *context);
 	};
 
 Again, all methods are called without any locks being held, unless
@@ -1235,6 +1239,37 @@ otherwise noted.
 	Called by the mmap(2) system call. Allows a VFS to set up a
 	file-backed memory mapping, most notably establishing relevant
 	private state and VMA callbacks.
+
+``mmap_complete``
+	If mmap_prepare is provided, will be invoked after the mapping is fully
+	established, with the mmap and VMA write locks held.
+
+	It is useful for prepopulating VMAs before they may be accessed by
+	users.
+
+	The hook MUST NOT release either the VMA or mmap write locks. This is
+	asserted by the mmap logic.
+
+	If an error is returned by the hook, the VMA is unmapped and the
+	mmap() operation fails with that error.
+
+	It is not valid to specify this hook if mmap_prepare is not also
+	specified, doing so will result in an error upon mapping.
+
+``mmap_abort``
+	If mmap_prepare() and mmap_complete() are provided, then mmap_abort
+	may also be provided, which will be invoked if the mapping operation
+	fails between the two calls.
+
+	This is important, because mmap_prepare may succeed, but some other part
+	of the mapping operation may fail before mmap_complete can be called.
+
+	This allows a caller to acquire locks in mmap_prepare with certainty
+	that the locks will be released by either mmap_abort or mmap_complete no
+	matter what happens.
+
+	It is not valid to specify this unless mmap_prepare and mmap_complete
+	are both specified, doing so will result in an error upon mapping.
 
 Note that the file operations are implemented by the specific
 filesystem in which the inode resides.  When opening a device node
