@@ -189,9 +189,9 @@ int __init rd_load_image(char *from)
 	unsigned long rd_blocks, devblocks;
 	int nblocks, i;
 	char *buf = NULL;
-	unsigned short rotate = 0;
 	decompress_fn decompressor = NULL;
 #if !defined(CONFIG_S390)
+	unsigned short rotate = 0;
 	char rotator[4] = { '|' , '/' , '-' , '\\' };
 #endif
 
@@ -249,7 +249,9 @@ int __init rd_load_image(char *from)
 	for (i = 0; i < nblocks; i++) {
 		if (i && (i % devblocks == 0)) {
 			pr_cont("done disk #1.\n");
+#if !defined(CONFIG_S390)
 			rotate = 0;
+#endif
 			fput(in_file);
 			break;
 		}
