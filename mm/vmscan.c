@@ -3514,6 +3514,7 @@ static void walk_update_folio(struct lru_gen_mm_walk *walk, struct folio *folio,
 static bool walk_pte_range(pmd_t *pmd, unsigned long start, unsigned long end,
 			   struct mm_walk *args)
 {
+	lazy_mmu_state_t lazy_mmu_state;
 	int i;
 	bool dirty;
 	pte_t *pte;
@@ -3543,7 +3544,7 @@ static bool walk_pte_range(pmd_t *pmd, unsigned long start, unsigned long end,
 		return false;
 	}
 
-	arch_enter_lazy_mmu_mode();
+	lazy_mmu_state = arch_enter_lazy_mmu_mode();
 restart:
 	for (i = pte_index(start), addr = start; addr != end; i++, addr += PAGE_SIZE) {
 		unsigned long pfn;
@@ -3584,7 +3585,7 @@ restart:
 	if (i < PTRS_PER_PTE && get_next_vma(PMD_MASK, PAGE_SIZE, args, &start, &end))
 		goto restart;
 
-	arch_leave_lazy_mmu_mode();
+	arch_leave_lazy_mmu_mode(lazy_mmu_state);
 	pte_unmap_unlock(pte, ptl);
 
 	return suitable_to_scan(total, young);
@@ -3593,6 +3594,7 @@ restart:
 static void walk_pmd_range_locked(pud_t *pud, unsigned long addr, struct vm_area_struct *vma,
 				  struct mm_walk *args, unsigned long *bitmap, unsigned long *first)
 {
+	lazy_mmu_state_t lazy_mmu_state;
 	int i;
 	bool dirty;
 	pmd_t *pmd;
@@ -3625,7 +3627,7 @@ static void walk_pmd_range_locked(pud_t *pud, unsigned long addr, struct vm_area
 	if (!spin_trylock(ptl))
 		goto done;
 
-	arch_enter_lazy_mmu_mode();
+	lazy_mmu_state = arch_enter_lazy_mmu_mode();
 
 	do {
 		unsigned long pfn;
@@ -3672,7 +3674,7 @@ next:
 
 	walk_update_folio(walk, last, gen, dirty);
 
-	arch_leave_lazy_mmu_mode();
+	arch_leave_lazy_mmu_mode(lazy_mmu_state);
 	spin_unlock(ptl);
 done:
 	*first = -1;
@@ -4220,6 +4222,7 @@ static void lru_gen_age_node(struct pglist_data *pgdat, struct scan_control *sc)
  */
 bool lru_gen_look_around(struct page_vma_mapped_walk *pvmw)
 {
+	lazy_mmu_state_t lazy_mmu_state;
 	int i;
 	bool dirty;
 	unsigned long start;
@@ -4271,7 +4274,7 @@ bool lru_gen_look_around(struct page_vma_mapped_walk *pvmw)
 		}
 	}
 
-	arch_enter_lazy_mmu_mode();
+	lazy_mmu_state = arch_enter_lazy_mmu_mode();
 
 	pte -= (addr - start) / PAGE_SIZE;
 
@@ -4305,7 +4308,7 @@ bool lru_gen_look_around(struct page_vma_mapped_walk *pvmw)
 
 	walk_update_folio(walk, last, gen, dirty);
 
-	arch_leave_lazy_mmu_mode();
+	arch_leave_lazy_mmu_mode(lazy_mmu_state);
 
 	/* feedback from rmap walkers to page table walkers */
 	if (mm_state && suitable_to_scan(i, young))
