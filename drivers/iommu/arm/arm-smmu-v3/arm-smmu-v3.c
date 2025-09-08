@@ -26,6 +26,7 @@
 #include <linux/pci.h>
 #include <linux/pci-ats.h>
 #include <linux/platform_device.h>
+#include <linux/sort.h>
 #include <linux/string_choices.h>
 #include <kunit/visibility.h>
 #include <uapi/linux/iommufd.h>
@@ -1032,6 +1033,209 @@ void arm_smmu_tlb_inv_asid(struct arm_smmu_device *smmu, u16 asid)
 
 	arm_smmu_cmdq_issue_cmd_with_sync(smmu, &cmd);
 }
+
+static int arm_smmu_invs_cmp(const void *_l, const void *_r)
+{
+	const struct arm_smmu_inv *l = _l;
+	const struct arm_smmu_inv *r = _r;
+
+	if (l->smmu != r->smmu)
+		return cmp_int((uintptr_t)l->smmu, (uintptr_t)r->smmu);
+	if (l->type != r->type)
+		return cmp_int(l->type, r->type);
+	return cmp_int(l->id, r->id);
+}
+
+/*
+ * Merge compare of two sorted arrays items. If one side is past the end of the
+ * array, return the other side to let it run out the iteration.
+ */
+static inline int
+arm_smmu_invs_merge_cmp(const struct arm_smmu_invs *l, size_t l_idx,
+			const struct arm_smmu_invs *r, size_t r_idx)
+{
+	if (l_idx != l->num_invs && r_idx != r->num_invs)
+		return arm_smmu_invs_cmp(&l->inv[l_idx], &r->inv[r_idx]);
+	if (l_idx != l->num_invs)
+		return -1;
+	return 1;
+}
+
+/**
+ * arm_smmu_invs_merge() - Merge @to_merge into @invs and generate a new array
+ * @invs: the base invalidation array
+ * @to_merge: an array of invlidations to merge
+ *
+ * Return: a newly allocated array on success, or ERR_PTR
+ *
+ * This function must be locked and serialized with arm_smmu_invs_unref() and
+ * arm_smmu_invs_purge(), but do not lockdep on any lock for KUNIT test.
+ *
+ * Either @invs or @to_merge must be sorted itself. This ensures the returned
+ * array will be sorted as well.
+ *
+ * Caller is resposible for freeing the @invs and the returned new one.
+ *
+ * Entries marked as trash will be purged in the returned array.
+ */
+VISIBLE_IF_KUNIT
+struct arm_smmu_invs *arm_smmu_invs_merge(struct arm_smmu_invs *invs,
+					  struct arm_smmu_invs *to_merge)
+{
+	struct arm_smmu_invs *new_invs;
+	struct arm_smmu_inv *new;
+	size_t num_adds = 0;
+	size_t num_dels = 0;
+	size_t i, j;
+
+	for (i = j = 0; i != invs->num_invs || j != to_merge->num_invs;) {
+		int cmp = arm_smmu_invs_merge_cmp(invs, i, to_merge, j);
+
+		if (cmp < 0) {
+			/* no found in to_merge, leave alone but delete trash */
+			if (!refcount_read(&invs->inv[i].users))
+				num_dels++;
+			i++;
+		} else if (cmp == 0) {
+			/* same item */
+			i++;
+			j++;
+		} else {
+			/* unique to to_merge */
+			num_adds++;
+			j++;
+		}
+	}
+
+	new_invs = arm_smmu_invs_alloc(invs->num_invs - num_dels + num_adds);
+	if (IS_ERR(new_invs))
+		return new_invs;
+
+	new = new_invs->inv;
+	for (i = j = 0; i != invs->num_invs || j != to_merge->num_invs;) {
+		int cmp = arm_smmu_invs_merge_cmp(invs, i, to_merge, j);
+
+		if (cmp <= 0 && !refcount_read(&invs->inv[i].users)) {
+			i++;
+			continue;
+		}
+
+		if (cmp < 0) {
+			*new = invs->inv[i];
+			i++;
+		} else if (cmp == 0) {
+			*new = invs->inv[i];
+			refcount_inc(&new->users);
+			i++;
+			j++;
+		} else {
+			*new = to_merge->inv[j];
+			refcount_set(&new->users, 1);
+			j++;
+		}
+		new++;
+	}
+
+	WARN_ON(new != new_invs->inv + new_invs->num_invs);
+
+	return new_invs;
+}
+EXPORT_SYMBOL_IF_KUNIT(arm_smmu_invs_merge);
+
+/**
+ * arm_smmu_invs_unref() - Find in @invs for all entries in @to_unref, decrease
+ *                         the user counts without deletions
+ * @invs: the base invalidation array
+ * @to_unref: an array of invlidations to decrease their user counts
+ *
+ * Return: the number of trash entries in the array, for arm_smmu_invs_purge()
+ *
+ * This function will not fail. Any entry with users=0 will be marked as trash.
+ * All trash entries will remain in the @invs until being completely deleted by
+ * the next arm_smmu_invs_merge() or an arm_smmu_invs_purge() function call.
+ *
+ * This function must be locked and serialized with arm_smmu_invs_merge() and
+ * arm_smmu_invs_purge(), but do not lockdep on any lock for KUNIT test.
+ *
+ * Note that the @invs->num_invs will not be updated, even if the actual number
+ * of invalidations are decreased. Readers should take the read lock to iterate
+ * each entry and check its users counter until @inv->num_invs.
+ */
+VISIBLE_IF_KUNIT
+size_t arm_smmu_invs_unref(struct arm_smmu_invs *invs,
+			   struct arm_smmu_invs *to_unref)
+{
+	size_t num_dels = 0;
+	size_t i, j;
+
+	for (i = j = 0; i != invs->num_invs || j != to_unref->num_invs;) {
+		int cmp;
+
+		if (!refcount_read(&invs->inv[i].users)) {
+			num_dels++;
+			i++;
+			continue;
+		}
+
+		cmp = arm_smmu_invs_merge_cmp(invs, i, to_unref, j);
+		if (cmp < 0) {
+			/* not found in to_unref, leave alone */
+			i++;
+		} else if (cmp == 0) {
+			/* same item */
+			if (refcount_dec_and_test(&invs->inv[i].users))
+				num_dels++;
+			i++;
+			j++;
+		} else {
+			/* item in to_unref is not in invs or already a trash */
+			WARN_ON(true);
+			j++;
+		}
+	}
+	return num_dels;
+}
+EXPORT_SYMBOL_IF_KUNIT(arm_smmu_invs_unref);
+
+/**
+ * arm_smmu_invs_purge() - Purge all the trash entries in the @invs
+ * @invs: the base invalidation array
+ * @num_dels: expected number of trash entries, typically the return value from
+ *            a prior arm_smmu_invs_unref() call
+ *
+ * Return: a newly allocated array on success removing all the trash entries, or
+ *         NULL on failure
+ *
+ * This function must be locked and serialized with arm_smmu_invs_merge() and
+ * arm_smmu_invs_unref(), but do not lockdep on any lock for KUNIT test.
+ *
+ * Caller is resposible for freeing the @invs and the returned new one.
+ */
+VISIBLE_IF_KUNIT
+struct arm_smmu_invs *arm_smmu_invs_purge(struct arm_smmu_invs *invs,
+					  size_t num_dels)
+{
+	struct arm_smmu_invs *new_invs;
+	size_t i, j;
+
+	if (WARN_ON(invs->num_invs < num_dels))
+		return NULL;
+
+	new_invs = arm_smmu_invs_alloc(invs->num_invs - num_dels);
+	if (IS_ERR(new_invs))
+		return NULL;
+
+	for (i = j = 0; i != invs->num_invs; i++) {
+		if (!refcount_read(&invs->inv[i].users))
+			continue;
+		new_invs->inv[j] = invs->inv[i];
+		j++;
+	}
+
+	WARN_ON(j != new_invs->num_invs);
+	return new_invs;
+}
+EXPORT_SYMBOL_IF_KUNIT(arm_smmu_invs_purge);
 
 /*
  * Based on the value of ent report which bits of the STE the HW will access. It
@@ -2468,13 +2672,21 @@ static bool arm_smmu_enforce_cache_coherency(struct iommu_domain *domain)
 struct arm_smmu_domain *arm_smmu_domain_alloc(void)
 {
 	struct arm_smmu_domain *smmu_domain;
+	struct arm_smmu_invs *new_invs;
 
 	smmu_domain = kzalloc(sizeof(*smmu_domain), GFP_KERNEL);
 	if (!smmu_domain)
 		return ERR_PTR(-ENOMEM);
 
+	new_invs = arm_smmu_invs_alloc(0);
+	if (IS_ERR(new_invs)) {
+		kfree(smmu_domain);
+		return ERR_CAST(new_invs);
+	}
+
 	INIT_LIST_HEAD(&smmu_domain->devices);
 	spin_lock_init(&smmu_domain->devices_lock);
+	rcu_assign_pointer(smmu_domain->invs, new_invs);
 
 	return smmu_domain;
 }
