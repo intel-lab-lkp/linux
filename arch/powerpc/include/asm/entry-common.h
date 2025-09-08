@@ -3,7 +3,7 @@
 #ifndef _ASM_PPC_ENTRY_COMMON_H
 #define _ASM_PPC_ENTRY_COMMON_H
 
-#ifdef CONFIG_GENERIC_IRQ_ENTRY
+#ifdef CONFIG_GENERIC_ENTRY
 
 #include <asm/cputime.h>
 #include <asm/interrupt.h>
