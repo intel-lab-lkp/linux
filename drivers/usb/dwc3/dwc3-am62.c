@@ -119,6 +119,7 @@ struct dwc3_am62 {
 	struct regmap *syscon;
 	unsigned int offset;
 	unsigned int vbus_divider;
+	unsigned int lane_reverse;
 	u32 wakeup_stat;
 	void __iomem *phy_regs;
 };
@@ -203,6 +204,9 @@ static int dwc3_ti_init(struct dwc3_am62 *am62)
 	if (am62->vbus_divider)
 		reg |= 1 << USBSS_PHY_VBUS_SEL_SHIFT;
 
+	if (am62->lane_reverse)
+		reg |= USBSS_PHY_LANE_REVERSE;
+
 	dwc3_ti_writel(am62, USBSS_PHY_CONFIG, reg);
 
 	clk_prepare_enable(am62->usb2_refclk);
@@ -264,6 +268,7 @@ static int dwc3_ti_probe(struct platform_device *pdev)
 	}
 
 	am62->vbus_divider = device_property_read_bool(dev, "ti,vbus-divider");
+	am62->lane_reverse = device_property_read_bool(dev, "ti,lane-reverse");
 
 	ret = dwc3_ti_init(am62);
 	if (ret)
