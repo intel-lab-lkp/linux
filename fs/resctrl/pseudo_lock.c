@@ -995,13 +995,48 @@ static const struct vm_operations_struct pseudo_mmap_ops = {
 	.mremap = pseudo_lock_dev_mremap,
 };
 
-static int pseudo_lock_dev_mmap(struct file *filp, struct vm_area_struct *vma)
+static int pseudo_lock_dev_mmap_complete(struct file *filp, struct vm_area_struct *vma,
+					 const void *context)
 {
 	unsigned long vsize = vma->vm_end - vma->vm_start;
 	unsigned long off = vma->vm_pgoff << PAGE_SHIFT;
 	struct pseudo_lock_region *plr;
 	struct rdtgroup *rdtgrp;
 	unsigned long physical;
+	unsigned long psize;
+
+	rdtgrp = filp->private_data;
+	plr = rdtgrp->plr;
+
+	physical = __pa(plr->kmem) >> PAGE_SHIFT;
+	psize = plr->size - off;
+
+	memset(plr->kmem + off, 0, vsize);
+
+	if (remap_pfn_range_complete(vma, vma->vm_start, physical + vma->vm_pgoff,
+			    vsize, vma->vm_page_prot)) {
+		mutex_unlock(&rdtgroup_mutex);
+		return -EAGAIN;
+	}
+
+	mutex_unlock(&rdtgroup_mutex);
+	return 0;
+}
+
+static void pseudo_lock_dev_mmap_abort(const struct file *filp,
+				       const void *vm_private_data,
+				       const void *context)
+{
+	mutex_unlock(&rdtgroup_mutex);
+}
+
+static int pseudo_lock_dev_mmap_prepare(struct vm_area_desc *desc)
+{
+	unsigned long vsize = vma_desc_size(desc);
+	unsigned long off = desc->pgoff << PAGE_SHIFT;
+	struct file *filp = desc->file;
+	struct pseudo_lock_region *plr;
+	struct rdtgroup *rdtgrp;
 	unsigned long psize;
 
 	mutex_lock(&rdtgroup_mutex);
@@ -1031,7 +1066,6 @@ static int pseudo_lock_dev_mmap(struct file *filp, struct vm_area_struct *vma)
 		return -EINVAL;
 	}
 
-	physical = __pa(plr->kmem) >> PAGE_SHIFT;
 	psize = plr->size - off;
 
 	if (off > plr->size) {
@@ -1043,7 +1077,7 @@ static int pseudo_lock_dev_mmap(struct file *filp, struct vm_area_struct *vma)
 	 * Ensure changes are carried directly to the memory being mapped,
 	 * do not allow copy-on-write mapping.
 	 */
-	if (!(vma->vm_flags & VM_SHARED)) {
+	if (!(desc->vm_flags & VM_SHARED)) {
 		mutex_unlock(&rdtgroup_mutex);
 		return -EINVAL;
 	}
@@ -1053,15 +1087,11 @@ static int pseudo_lock_dev_mmap(struct file *filp, struct vm_area_struct *vma)
 		return -ENOSPC;
 	}
 
-	memset(plr->kmem + off, 0, vsize);
+	/* No CoW allowed so don't need to specify pfn. */
+	remap_pfn_range_prepare(desc, 0);
+	desc->vm_ops = &pseudo_mmap_ops;
 
-	if (remap_pfn_range(vma, vma->vm_start, physical + vma->vm_pgoff,
-			    vsize, vma->vm_page_prot)) {
-		mutex_unlock(&rdtgroup_mutex);
-		return -EAGAIN;
-	}
-	vma->vm_ops = &pseudo_mmap_ops;
-	mutex_unlock(&rdtgroup_mutex);
+	/* mutex will be release in mmap_complete or mmap_abort. */
 	return 0;
 }
 
@@ -1071,7 +1101,9 @@ static const struct file_operations pseudo_lock_dev_fops = {
 	.write =	NULL,
 	.open =		pseudo_lock_dev_open,
 	.release =	pseudo_lock_dev_release,
-	.mmap =		pseudo_lock_dev_mmap,
+	.mmap_prepare =	pseudo_lock_dev_mmap_prepare,
+	.mmap_complete = pseudo_lock_dev_mmap_complete,
+	.mmap_abort =	pseudo_lock_dev_mmap_abort,
 };
 
 int rdt_pseudo_lock_init(void)
