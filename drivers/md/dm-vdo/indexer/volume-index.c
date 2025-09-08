@@ -832,11 +832,9 @@ static int start_restoring_volume_sub_index(struct volume_sub_index *sub_index,
 		decode_u32_le(buffer, &offset, &header.first_list);
 		decode_u32_le(buffer, &offset, &header.list_count);
 
-		result = VDO_ASSERT(offset == sizeof(buffer),
+		VDO_ASSERT_LOG_ONLY(offset == sizeof(buffer),
 				    "%zu bytes decoded of %zu expected", offset,
 				    sizeof(buffer));
-		if (result != VDO_SUCCESS)
-			result = UDS_CORRUPT_DATA;
 
 		if (memcmp(header.magic, MAGIC_START_5, MAGIC_SIZE) != 0) {
 			return vdo_log_warning_strerror(UDS_CORRUPT_DATA,
@@ -924,11 +922,9 @@ static int start_restoring_volume_index(struct volume_index *volume_index,
 		offset += MAGIC_SIZE;
 		decode_u32_le(buffer, &offset, &header.sparse_sample_rate);
 
-		result = VDO_ASSERT(offset == sizeof(buffer),
+		VDO_ASSERT_LOG_ONLY(offset == sizeof(buffer),
 				    "%zu bytes decoded of %zu expected", offset,
 				    sizeof(buffer));
-		if (result != VDO_SUCCESS)
-			result = UDS_CORRUPT_DATA;
 
 		if (memcmp(header.magic, MAGIC_START_6, MAGIC_SIZE) != 0)
 			return vdo_log_warning_strerror(UDS_CORRUPT_DATA,
