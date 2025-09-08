@@ -847,6 +847,17 @@ void sched_set_fifo(struct task_struct *p)
 EXPORT_SYMBOL_GPL(sched_set_fifo);
 
 /*
+ * For tasks that must be preemptible by a sched_set_fifo() task, such as
+ * to simulate the behavior of a non-PREEMPT_RT system where the
+ * sched_set_fifo() task is a hard interrupt.
+ */
+void sched_set_fifo_minus_one(struct task_struct *p)
+{
+	struct sched_param sp = { .sched_priority = MAX_RT_PRIO / 2 - 1 };
+	WARN_ON_ONCE(sched_setscheduler_nocheck(p, SCHED_FIFO, &sp) != 0);
+}
+
+/*
  * For when you don't much care about FIFO, but want to be above SCHED_NORMAL.
  */
 void sched_set_fifo_low(struct task_struct *p)
