@@ -4090,6 +4090,7 @@ static void sched_tick_remote(struct work_struct *work)
 		goto out_requeue;
 
 	rq_lock_irq(rq, &rf);
+	printk_deferred_enter();
 	curr = rq->curr;
 	if (cpu_is_offline(cpu))
 		goto out_unlock;
@@ -4108,6 +4109,7 @@ static void sched_tick_remote(struct work_struct *work)
 
 	calc_load_nohz_remote(rq);
 out_unlock:
+	printk_deferred_exit();
 	rq_unlock_irq(rq, &rf);
 out_requeue:
 
