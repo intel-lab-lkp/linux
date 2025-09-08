@@ -2005,7 +2005,6 @@ static void qlt_do_tmr_work(struct work_struct *work)
 	struct qla_hw_data *ha = mcmd->vha->hw;
 	int rc;
 	uint32_t tag;
-	unsigned long flags;
 
 	switch (mcmd->tmr_func) {
 	case QLA_TGT_ABTS:
@@ -2020,34 +2019,16 @@ static void qlt_do_tmr_work(struct work_struct *work)
 	    mcmd->tmr_func, tag);
 
 	if (rc != 0) {
-		spin_lock_irqsave(mcmd->qpair->qp_lock_ptr, flags);
-		switch (mcmd->tmr_func) {
-		case QLA_TGT_ABTS:
-			mcmd->fc_tm_rsp = FCP_TMF_REJECTED;
-			qlt_build_abts_resp_iocb(mcmd);
-			break;
-		case QLA_TGT_LUN_RESET:
-		case QLA_TGT_CLEAR_TS:
-		case QLA_TGT_ABORT_TS:
-		case QLA_TGT_CLEAR_ACA:
-		case QLA_TGT_TARGET_RESET:
-			qlt_send_busy(mcmd->qpair, &mcmd->orig_iocb.atio,
-			    qla_sam_status);
-			break;
-
-		case QLA_TGT_ABORT_ALL:
-		case QLA_TGT_NEXUS_LOSS_SESS:
-		case QLA_TGT_NEXUS_LOSS:
-			qlt_send_notify_ack(mcmd->qpair,
-			    &mcmd->orig_iocb.imm_ntfy, 0, 0, 0, 0, 0, 0);
-			break;
-		}
-		spin_unlock_irqrestore(mcmd->qpair->qp_lock_ptr, flags);
-
 		ql_dbg(ql_dbg_tgt_mgt, mcmd->vha, 0xf052,
 		    "qla_target(%d):  tgt_ops->handle_tmr() failed: %d\n",
 		    mcmd->vha->vp_idx, rc);
-		mempool_free(mcmd, qla_tgt_mgmt_cmd_mempool);
+		/*
+		 * SCF_SCSI_TMR_CDB might not have been set on error, but it
+		 * must be set for the mcmd to be freed properly.
+		 */
+		mcmd->se_cmd.se_cmd_flags |= SCF_SCSI_TMR_CDB;
+		mcmd->fc_tm_rsp = FCP_TMF_REJECTED;
+		qlt_xmit_tm_rsp(mcmd);
 	}
 }
 
