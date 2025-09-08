@@ -83,6 +83,8 @@ config DRM_PANIC_DEBUG
 	  Add dri/[device]/drm_panic_plane_x in the kernel debugfs, to force the
 	  panic handler to write the panic message to this plane scanout buffer.
 	  This is unsafe and should not be enabled on a production build.
+	  Also adds a drm_panic/draw_test file in debugfs, to easily test the
+	  panic screen rendering.
 	  If in doubt, say "N".
 
 config DRM_PANIC_SCREEN
