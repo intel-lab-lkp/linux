@@ -484,23 +484,40 @@ void kcov_task_exit(struct task_struct *t)
 	kcov_put(kcov);
 }
 
-static int kcov_mmap(struct file *filep, struct vm_area_struct *vma)
+static int kcov_mmap_prepare(struct vm_area_desc *desc)
 {
-	int res = 0;
-	struct kcov *kcov = vma->vm_file->private_data;
-	unsigned long size, off;
-	struct page *page;
+	struct kcov *kcov = desc->file->private_data;
+	unsigned long size;
 	unsigned long flags;
+	int res = 0;
 
 	spin_lock_irqsave(&kcov->lock, flags);
 	size = kcov->size * sizeof(unsigned long);
-	if (kcov->area == NULL || vma->vm_pgoff != 0 ||
-	    vma->vm_end - vma->vm_start != size) {
+	if (kcov->area == NULL || desc->pgoff != 0 ||
+	    vma_desc_size(desc) != size) {
 		res = -EINVAL;
 		goto exit;
 	}
 	spin_unlock_irqrestore(&kcov->lock, flags);
-	vm_flags_set(vma, VM_DONTEXPAND);
+
+	desc->vm_flags |= VM_DONTEXPAND | VM_MIXEDMAP;
+	desc->mmap_context = (void *)size;
+
+	return 0;
+exit:
+	spin_unlock_irqrestore(&kcov->lock, flags);
+	return res;
+}
+
+static int kcov_mmap_complete(struct file *file, struct vm_area_struct *vma,
+			       const void *context)
+{
+	struct kcov *kcov = file->private_data;
+	unsigned long size = (unsigned long)context;
+	struct page *page;
+	unsigned long off;
+	int res;
+
 	for (off = 0; off < size; off += PAGE_SIZE) {
 		page = vmalloc_to_page(kcov->area + off);
 		res = vm_insert_page(vma, vma->vm_start + off, page);
@@ -509,10 +526,8 @@ static int kcov_mmap(struct file *filep, struct vm_area_struct *vma)
 			return res;
 		}
 	}
+
 	return 0;
-exit:
-	spin_unlock_irqrestore(&kcov->lock, flags);
-	return res;
 }
 
 static int kcov_open(struct inode *inode, struct file *filep)
@@ -761,7 +776,8 @@ static const struct file_operations kcov_fops = {
 	.open		= kcov_open,
 	.unlocked_ioctl	= kcov_ioctl,
 	.compat_ioctl	= kcov_ioctl,
-	.mmap		= kcov_mmap,
+	.mmap_prepare	= kcov_mmap_prepare,
+	.mmap_complete	= kcov_mmap_complete,
 	.release        = kcov_close,
 };
 
