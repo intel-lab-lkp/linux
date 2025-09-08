@@ -2195,6 +2195,10 @@ struct file_operations {
 	int (*uring_cmd_iopoll)(struct io_uring_cmd *, struct io_comp_batch *,
 				unsigned int poll_flags);
 	int (*mmap_prepare)(struct vm_area_desc *);
+	int (*mmap_complete)(struct file *, struct vm_area_struct *,
+			     const void *context);
+	void (*mmap_abort)(const struct file *, const void *vm_private_data,
+			   const void *context);
 } __randomize_layout;
 
 /* Supports async buffered reads */

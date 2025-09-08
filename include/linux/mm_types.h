@@ -793,6 +793,11 @@ struct vm_area_desc {
 	/* Write-only fields. */
 	const struct vm_operations_struct *vm_ops;
 	void *private_data;
+	/*
+	 * A user-defined field, value will be passed to mmap_complete,
+	 * mmap_abort.
+	 */
+	void *mmap_context;
 };
 
 /*

@@ -22,6 +22,7 @@ struct mmap_state {
 	/* User-defined fields, perhaps updated by .mmap_prepare(). */
 	const struct vm_operations_struct *vm_ops;
 	void *vm_private_data;
+	void *mmap_context;
 
 	unsigned long charged;
 
@@ -2343,6 +2344,23 @@ static int __mmap_prelude(struct mmap_state *map, struct list_head *uf)
 	int error;
 	struct vma_iterator *vmi = map->vmi;
 	struct vma_munmap_struct *vms = &map->vms;
+	struct file *file = map->file;
+
+	if (file) {
+		/* f_op->mmap_complete requires f_op->mmap_prepare. */
+		if (file->f_op->mmap_complete && !file->f_op->mmap_prepare)
+			return -EINVAL;
+
+		/*
+		 * It's not valid to provide an f_op->mmap_abort hook without also
+		 * providing the f_op->mmap_prepare and f_op->mmap_complete hooks it is
+		 * used with.
+		 */
+		if (file->f_op->mmap_abort &&
+		     (!file->f_op->mmap_prepare ||
+		      !file->f_op->mmap_complete))
+			return -EINVAL;
+	}
 
 	/* Find the first overlapping VMA and initialise unmap state. */
 	vms->vma = vma_find(vmi, map->end);
@@ -2595,6 +2613,7 @@ static int call_mmap_prepare(struct mmap_state *map)
 	/* User-defined fields. */
 	map->vm_ops = desc.vm_ops;
 	map->vm_private_data = desc.private_data;
+	map->mmap_context = desc.mmap_context;
 
 	return 0;
 }
@@ -2636,16 +2655,61 @@ static bool can_set_ksm_flags_early(struct mmap_state *map)
 	return false;
 }
 
+/*
+ * Invoke the f_op->mmap_complete hook, providing it with a fully initialised
+ * VMA to operate upon.
+ *
+ * The mmap and VMA write locks must be held prior to and after the hook has
+ * been invoked.
+ */
+static int call_mmap_complete(struct mmap_state *map, struct vm_area_struct *vma)
+{
+	struct file *file = map->file;
+	void *context = map->mmap_context;
+	int error;
+	size_t len;
+
+	if (!file || !file->f_op->mmap_complete)
+		return 0;
+
+	error = file->f_op->mmap_complete(file, vma, context);
+	/* The hook must NOT drop the write locks. */
+	vma_assert_write_locked(vma);
+	mmap_assert_write_locked(current->mm);
+	if (!error)
+		return 0;
+
+	/*
+	 * If an error occurs, unmap the VMA altogether and return an error. We
+	 * only clear the newly allocated VMA, since this function is only
+	 * invoked if we do NOT merge, so we only clean up the VMA we created.
+	 */
+	len = vma_pages(vma) << PAGE_SHIFT;
+	do_munmap(current->mm, vma->vm_start, len, NULL);
+	return error;
+}
+
+static void call_mmap_abort(struct mmap_state *map)
+{
+	struct file *file = map->file;
+	void *vm_private_data = map->vm_private_data;
+
+	VM_WARN_ON_ONCE(!file || !file->f_op);
+	file->f_op->mmap_abort(file, vm_private_data, map->mmap_context);
+}
+
 static unsigned long __mmap_region(struct file *file, unsigned long addr,
 		unsigned long len, vm_flags_t vm_flags, unsigned long pgoff,
 		struct list_head *uf)
 {
-	struct mm_struct *mm = current->mm;
-	struct vm_area_struct *vma = NULL;
-	int error;
 	bool have_mmap_prepare = file && file->f_op->mmap_prepare;
+	bool have_mmap_abort = file && file->f_op->mmap_abort;
+	struct mm_struct *mm = current->mm;
 	VMA_ITERATOR(vmi, mm, addr);
 	MMAP_STATE(map, mm, &vmi, addr, len, pgoff, vm_flags, file);
+	struct vm_area_struct *vma = NULL;
+	bool allocated_new = false;
+	int error;
 
 	map.check_ksm_early = can_set_ksm_flags_early(&map);
 
@@ -2668,14 +2732,24 @@ static unsigned long __mmap_region(struct file *file, unsigned long addr,
 	/* ...but if we can't, allocate a new VMA. */
 	if (!vma) {
 		error = __mmap_new_vma(&map, &vma);
-		if (error)
+		if (error) {
+			if (have_mmap_abort)
+				call_mmap_abort(&map);
 			goto unacct_error;
+		}
+		allocated_new = true;
 	}
 
 	if (have_mmap_prepare)
 		set_vma_user_defined_fields(vma, &map);
 
 	__mmap_epilogue(&map, vma);
+
+	if (allocated_new) {
+		error = call_mmap_complete(&map, vma);
+		if (error)
+			return error;
+	}
 
 	return addr;
 

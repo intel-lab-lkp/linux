@@ -297,11 +297,20 @@ struct vm_area_desc {
 	/* Write-only fields. */
 	const struct vm_operations_struct *vm_ops;
 	void *private_data;
+	/*
+	 * A user-defined field, value will be passed to mmap_complete,
+	 * mmap_abort.
+	 */
+	void *mmap_context;
 };
 
 struct file_operations {
 	int (*mmap)(struct file *, struct vm_area_struct *);
 	int (*mmap_prepare)(struct vm_area_desc *);
+	void (*mmap_abort)(const struct file *, const void *vm_private_data,
+			   const void *context);
+	int (*mmap_complete)(struct file *, struct vm_area_struct *,
+			     const void *context);
 };
 
 struct file {
@@ -1471,7 +1480,7 @@ static inline int __compat_vma_mmap_prepare(const struct file_operations *f_op,
 {
 	struct vm_area_desc desc = {
 		.mm = vma->vm_mm,
-		.file = vma->vm_file,
+		.file = file,
 		.start = vma->vm_start,
 		.end = vma->vm_end,
 
@@ -1485,13 +1494,21 @@ static inline int __compat_vma_mmap_prepare(const struct file_operations *f_op,
 	err = f_op->mmap_prepare(&desc);
 	if (err)
 		return err;
+
 	set_vma_from_desc(vma, &desc);
 
-	return 0;
+	/*
+	 * No error can occur between mmap_prepare() and mmap_complete so no
+	 * need to invoke mmap_abort().
+	 */
+
+	if (f_op->mmap_complete)
+		err = f_op->mmap_complete(file, vma, desc.mmap_context);
+
+	return err;
 }
 
-static inline int compat_vma_mmap_prepare(struct file *file,
-		struct vm_area_struct *vma)
+static inline int compat_vma_mmap_prepare(struct file *file, struct vm_area_struct *vma)
 {
 	return __compat_vma_mmap_prepare(file->f_op, file, vma);
 }
@@ -1546,6 +1563,12 @@ static inline vm_flags_t ksm_vma_flags(const struct mm_struct *, const struct fi
 			 vm_flags_t vm_flags)
 {
 	return vm_flags;
+}
+
+static inline int do_munmap(struct mm_struct *mm, unsigned long start, size_t len,
+	      struct list_head *uf)
+{
+	return 0;
 }
 
 #endif	/* __MM_VMA_INTERNAL_H */

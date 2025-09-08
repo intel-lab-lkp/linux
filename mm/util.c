@@ -1161,17 +1161,26 @@ int __compat_vma_mmap_prepare(const struct file_operations *f_op,
 	err = f_op->mmap_prepare(&desc);
 	if (err)
 		return err;
+
 	set_vma_from_desc(vma, &desc);
 
-	return 0;
+	/*
+	 * No error can occur between mmap_prepare() and mmap_complete so no
+	 * need to invoke mmap_abort().
+	 */
+
+	if (f_op->mmap_complete)
+		err = f_op->mmap_complete(file, vma, desc.mmap_context);
+
+	return err;
 }
 EXPORT_SYMBOL(__compat_vma_mmap_prepare);
 
 /**
  * compat_vma_mmap_prepare() - Apply the file's .mmap_prepare() hook to an
- * existing VMA.
+ * existing VMA and invoke .mmap_complete() if provided.
  * @file: The file which possesss an f_op->mmap_prepare() hook.
- * @vma: The VMA to apply the .mmap_prepare() hook to.
+ * @vma: The VMA to apply the hooks to.
  *
  * Ordinarily, .mmap_prepare() is invoked directly upon mmap(). However, certain
  * stacked filesystems invoke a nested mmap hook of an underlying file.
@@ -1187,6 +1196,9 @@ EXPORT_SYMBOL(__compat_vma_mmap_prepare);
  * compat_vma_mmap_prepare() is a compatibility function that takes VMA state,
  * establishes a struct vm_area_desc descriptor, passes to the underlying
  * .mmap_prepare() hook and applies any changes performed by it.
+ *
+ * If the relevant hooks are provided, it also invokes .mmap_complete() upon
+ * successful completion.
  *
  * Once the conversion of filesystems is complete this function will no longer
  * be required and will be removed.
