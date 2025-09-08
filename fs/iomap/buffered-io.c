@@ -329,8 +329,8 @@ void iomap_start_folio_read(struct folio *folio, size_t len)
 }
 EXPORT_SYMBOL_GPL(iomap_start_folio_read);
 
-void iomap_finish_folio_read(struct folio *folio, size_t off, size_t len,
-		int error)
+static void __iomap_finish_folio_read(struct folio *folio, size_t off,
+		size_t len, int error, bool update_bitmap)
 {
 	struct iomap_folio_state *ifs = folio->private;
 	bool uptodate = !error;
@@ -340,7 +340,7 @@ void iomap_finish_folio_read(struct folio *folio, size_t off, size_t len,
 		unsigned long flags;
 
 		spin_lock_irqsave(&ifs->state_lock, flags);
-		if (!error)
+		if (!error && update_bitmap)
 			uptodate = ifs_set_range_uptodate(folio, ifs, off, len);
 		ifs->read_bytes_pending -= len;
 		finished = !ifs->read_bytes_pending;
@@ -349,6 +349,12 @@ void iomap_finish_folio_read(struct folio *folio, size_t off, size_t len,
 
 	if (finished)
 		folio_end_read(folio, uptodate);
+}
+
+void iomap_finish_folio_read(struct folio *folio, size_t off, size_t len,
+		int error)
+{
+	return __iomap_finish_folio_read(folio, off, len, error, true);
 }
 EXPORT_SYMBOL_GPL(iomap_finish_folio_read);
 
@@ -434,9 +440,10 @@ static int iomap_read_folio_iter(struct iomap_iter *iter,
 	loff_t pos = iter->pos;
 	loff_t length = iomap_length(iter);
 	struct folio *folio = ctx->cur_folio;
+	struct iomap_folio_state *ifs;
 	size_t poff, plen;
 	loff_t count;
-	int ret;
+	int ret = 0;
 
 	if (iomap->type == IOMAP_INLINE) {
 		ret = iomap_read_inline_data(iter, folio);
@@ -446,7 +453,14 @@ static int iomap_read_folio_iter(struct iomap_iter *iter,
 	}
 
 	/* zero post-eof blocks as the page may be mapped */
-	ifs_alloc(iter->inode, folio, iter->flags);
+	ifs = ifs_alloc(iter->inode, folio, iter->flags);
+
+	/*
+	 * Add a bias to ifs->read_bytes_pending so that a read is ended only
+	 * after all the ranges have been read in.
+	 */
+	if (ifs)
+		iomap_start_folio_read(folio, 1);
 
 	length = min_t(loff_t, length,
 			folio_size(folio) - offset_in_folio(folio, pos));
@@ -454,8 +468,10 @@ static int iomap_read_folio_iter(struct iomap_iter *iter,
 		iomap_adjust_read_range(iter->inode, folio, &pos,
 				length, &poff, &plen);
 		count = pos - iter->pos + plen;
-		if (plen == 0)
-			return iomap_iter_advance(iter, &count);
+		if (plen == 0) {
+			ret = iomap_iter_advance(iter, &count);
+			break;
+		}
 
 		if (iomap_block_needs_zeroing(iter, pos)) {
 			folio_zero_range(folio, poff, plen);
@@ -465,16 +481,23 @@ static int iomap_read_folio_iter(struct iomap_iter *iter,
 			ret = ctx->ops->read_folio_range(iter, ctx, pos,
 						plen);
 			if (ret)
-				return ret;
+				break;
 		}
 
 		length -= count;
 		ret = iomap_iter_advance(iter, &count);
 		if (ret)
-			return ret;
+			break;
 		pos = iter->pos;
 	}
-	return 0;
+
+	if (ifs) {
+		__iomap_finish_folio_read(folio, 0, 1, ret, false);
+		/* __iomap_finish_folio_read takes care of any unlocking */
+		*cur_folio_owned = true;
+	}
+
+	return ret;
 }
 
 int iomap_read_folio(const struct iomap_ops *ops,
