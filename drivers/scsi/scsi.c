@@ -204,7 +204,7 @@ void scsi_finish_command(struct scsi_cmnd *cmd)
  */
 int scsi_device_max_queue_depth(struct scsi_device *sdev)
 {
-	return min_t(int, sdev->host->can_queue, 4096);
+	return min_t(int, sdev->host->cmd_per_lun, 4096);
 }
 
 /**

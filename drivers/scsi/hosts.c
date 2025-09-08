@@ -232,8 +232,11 @@ int scsi_add_host_with_dma(struct Scsi_Host *shost, struct device *dev,
 	}
 
 	/* Use min_t(int, ...) in case shost->can_queue exceeds SHRT_MAX */
-	shost->cmd_per_lun = min_t(int, shost->cmd_per_lun,
-				   shost->can_queue);
+	if (!shost->cmd_per_lun)
+		shost->cmd_per_lun = shost->can_queue;
+	else
+		shost->cmd_per_lun = min_t(int, shost->cmd_per_lun,
+					   shost->can_queue);
 
 	error = scsi_init_sense_cache(shost);
 	if (error)
