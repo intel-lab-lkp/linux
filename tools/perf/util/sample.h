@@ -106,7 +106,9 @@ struct perf_sample {
 	u16 ins_lat;
 	/** @weight3: On x86 holds retire_lat, on powerpc holds p_stage_cyc. */
 	u16 weight3;
-	bool no_hw_idx;		/* No hw_idx collected in branch_stack */
+	bool no_hw_idx;			/* No hw_idx collected in branch_stack */
+	bool deferred_callchain;	/* Has deferred user callchains */
+	u64 deferred_cookie;
 	char insn[MAX_INSN];
 	void *raw_data;
 	struct ip_callchain *callchain;
