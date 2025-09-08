@@ -297,13 +297,8 @@ notrace unsigned long interrupt_exit_kernel_prepare(struct pt_regs *regs)
 		/* Returning to a kernel context with local irqs enabled. */
 		WARN_ON_ONCE(!(regs->msr & MSR_EE));
 again:
-		if (need_irq_preemption()) {
-			/* Return to preemptible kernel context */
-			if (unlikely(read_thread_flags() & _TIF_NEED_RESCHED)) {
-				if (preempt_count() == 0)
-					preempt_schedule_irq();
-			}
-		}
+		if (need_irq_preemption())
+			irqentry_exit_cond_resched();
 
 		check_return_regs_valid(regs);
 
