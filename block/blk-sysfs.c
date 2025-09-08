@@ -68,13 +68,14 @@ queue_requests_store(struct gendisk *disk, const char *page, size_t count)
 	int ret, err;
 	unsigned int memflags;
 	struct request_queue *q = disk->queue;
+	struct blk_mq_tag_set *set = q->tag_set;
 
 	ret = queue_var_store(&nr, page, count);
 	if (ret < 0)
 		return ret;
 
-	memflags = blk_mq_freeze_queue(q);
-	mutex_lock(&q->elevator_lock);
+	/* serialize updating nr_requests with switching elevator */
+	down_write(&set->update_nr_hwq_lock);
 
 	if (nr == q->nr_requests)
 		goto unlock;
@@ -89,13 +90,18 @@ queue_requests_store(struct gendisk *disk, const char *page, size_t count)
 		goto unlock;
 	}
 
+	memflags = blk_mq_freeze_queue(q);
+	mutex_lock(&q->elevator_lock);
+
 	err = blk_mq_update_nr_requests(disk->queue, nr);
 	if (err)
 		ret = err;
 
-unlock:
 	mutex_unlock(&q->elevator_lock);
 	blk_mq_unfreeze_queue(q, memflags);
+
+unlock:
+	up_write(&set->update_nr_hwq_lock);
 	return ret;
 }
 
