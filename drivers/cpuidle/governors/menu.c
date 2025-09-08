@@ -316,11 +316,13 @@ static int menu_select(struct cpuidle_driver *drv, struct cpuidle_device *dev,
 
 		if (s->target_residency_ns > predicted_ns) {
 			/*
-			 * Use a physical idle state, not busy polling, unless
-			 * a timer is going to trigger soon enough.
+			 * Use a physical idle state instead of busy polling
+			 * if the next timer doesn't expire soon and its
+			 * target residency is below the residency threshold.
 			 */
 			if ((drv->states[idx].flags & CPUIDLE_FLAG_POLLING) &&
-			    s->target_residency_ns <= data->next_timer_ns) {
+			    s->target_residency_ns <= data->next_timer_ns &&
+			    s->target_residency_ns < RESIDENCY_THRESHOLD_NS) {
 				predicted_ns = s->target_residency_ns;
 				idx = i;
 				break;
