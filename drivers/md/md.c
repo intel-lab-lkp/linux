@@ -9257,7 +9257,8 @@ void md_do_sync(struct md_thread *thread)
 			    )) {
 			/* time to update curr_resync_completed */
 			wait_event(mddev->recovery_wait,
-				   atomic_read(&mddev->recovery_active) == 0);
+				   atomic_read(&mddev->recovery_active) == 0 ||
+				   test_bit(MD_RECOVERY_INTR, &mddev->recovery));
 			mddev->curr_resync_completed = j;
 			if (test_bit(MD_RECOVERY_SYNC, &mddev->recovery) &&
 			    j > mddev->resync_offset)
@@ -9356,7 +9357,8 @@ void md_do_sync(struct md_thread *thread)
 				 * The faster the devices, the less we wait.
 				 */
 				wait_event(mddev->recovery_wait,
-					   !atomic_read(&mddev->recovery_active));
+					   !atomic_read(&mddev->recovery_active) ||
+					   test_bit(MD_RECOVERY_INTR, &mddev->recovery));
 			}
 		}
 	}
@@ -9367,7 +9369,8 @@ void md_do_sync(struct md_thread *thread)
 	 * this also signals 'finished resyncing' to md_stop
 	 */
 	blk_finish_plug(&plug);
-	wait_event(mddev->recovery_wait, !atomic_read(&mddev->recovery_active));
+	wait_event(mddev->recovery_wait, !atomic_read(&mddev->recovery_active) ||
+		   test_bit(MD_RECOVERY_INTR, &mddev->recovery));
 
 	if (!test_bit(MD_RECOVERY_RESHAPE, &mddev->recovery) &&
 	    !test_bit(MD_RECOVERY_INTR, &mddev->recovery) &&
