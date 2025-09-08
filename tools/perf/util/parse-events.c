@@ -287,18 +287,18 @@ __add_event(struct list_head *list, int *idx,
 
 	evsel = evsel__new_idx(attr, *idx);
 	if (!evsel)
-		goto out_err;
+		goto out_put_cpus;
 
 	if (name) {
 		evsel->name = strdup(name);
 		if (!evsel->name)
-			goto out_err;
+			goto out_free_evsel;
 	}
 
 	if (metric_id) {
 		evsel->metric_id = strdup(metric_id);
 		if (!evsel->metric_id)
-			goto out_err;
+			goto out_free_evsel;
 	}
 
 	(*idx)++;
@@ -320,12 +320,14 @@ __add_event(struct list_head *list, int *idx,
 		evsel__warn_user_requested_cpus(evsel, user_cpus);
 
 	return evsel;
-out_err:
-	perf_cpu_map__put(cpus);
-	perf_cpu_map__put(pmu_cpus);
+out_free_evsel:
 	zfree(&evsel->name);
 	zfree(&evsel->metric_id);
 	free(evsel);
+out_put_cpus:
+	perf_cpu_map__put(cpus);
+	perf_cpu_map__put(pmu_cpus);
+
 	return NULL;
 }
 
