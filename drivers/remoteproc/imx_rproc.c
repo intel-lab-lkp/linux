@@ -323,14 +323,11 @@ static int imx_rproc_start(struct rproc *rproc)
 	if (ret)
 		return ret;
 
-	if (dcfg->ops && dcfg->ops->start) {
+	if (dcfg->ops && dcfg->ops->start)
 		ret = dcfg->ops->start(rproc);
-		goto start_ret;
-	}
+	else
+		return -EOPNOTSUPP;
 
-	return -EOPNOTSUPP;
-
-start_ret:
 	if (ret)
 		dev_err(dev, "Failed to enable remote core!\n");
 
@@ -380,14 +377,11 @@ static int imx_rproc_stop(struct rproc *rproc)
 	struct device *dev = priv->dev;
 	int ret;
 
-	if (dcfg->ops && dcfg->ops->stop) {
+	if (dcfg->ops && dcfg->ops->stop)
 		ret = dcfg->ops->stop(rproc);
-		goto stop_ret;
-	}
+	else
+		return -EOPNOTSUPP;
 
-	return -EOPNOTSUPP;
-
-stop_ret:
 	if (ret)
 		dev_err(dev, "Failed to stop remote core\n");
 	else
@@ -1000,13 +994,8 @@ static int imx_rproc_detect_mode(struct imx_rproc *priv)
 	if (dcfg->ops && dcfg->ops->detect_mode)
 		return dcfg->ops->detect_mode(priv->rproc);
 
-	switch (dcfg->method) {
-	case IMX_RPROC_NONE:
+	if (dcfg->method == IMX_RPROC_NONE)
 		priv->rproc->state = RPROC_DETACHED;
-		return 0;
-	default:
-		break;
-	}
 
 	return 0;
 }
