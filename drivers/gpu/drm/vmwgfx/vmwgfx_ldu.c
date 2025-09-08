@@ -304,6 +304,49 @@ static int vmw_kms_ldu_do_bo_dirty(struct vmw_private *dev_priv,
 				   struct drm_mode_rect *clips,
 				   unsigned int num_clips);
 
+/* For drm_panic */
+static int vmw_kms_ldu_panic_do_bo_dirty(struct vmw_private *dev_priv,
+					 struct drm_framebuffer *fb)
+{
+	size_t fifo_size;
+	struct {
+		uint32_t header;
+		SVGAFifoCmdUpdate body;
+	} *cmd;
+
+	fifo_size = sizeof(*cmd);
+	cmd = vmw_panic_fifo_reserve(dev_priv, fifo_size);
+	if (IS_ERR_OR_NULL(cmd))
+		return -ENOMEM;
+
+	memset(cmd, 0, fifo_size);
+
+	cmd[0].header = SVGA_CMD_UPDATE;
+	cmd[0].body.x = 0;
+	cmd[0].body.y = 0;
+	cmd[0].body.width = fb->width;
+	cmd[0].body.height = fb->height;
+
+	vmw_panic_fifo_commit(dev_priv, fifo_size);
+	return 0;
+}
+
+/* For drm_panic */
+void vmw_ldu_primary_plane_panic_flush(struct drm_plane *plane)
+{
+	struct drm_plane_state *state = plane->state;
+	struct drm_crtc *crtc = state->crtc;
+	struct vmw_private *dev_priv = vmw_priv(crtc->dev);
+	struct drm_framebuffer *fb = state->fb;
+	int ret;
+
+	vmw_kms_panic_write_svga(dev_priv, fb->width, fb->height, fb->pitches[0]);
+
+	ret = vmw_kms_ldu_panic_do_bo_dirty(dev_priv, fb);
+	if (ret)
+		pr_warn("Failed to vmw_kms_ldu_panic_do_bo_dirty\n");
+}
+
 /*
  * Legacy Display Plane Functions
  */

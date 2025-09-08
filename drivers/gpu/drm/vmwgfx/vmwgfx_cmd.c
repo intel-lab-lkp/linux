@@ -156,6 +156,16 @@ struct vmw_fifo_state *vmw_fifo_create(struct vmw_private *dev_priv)
 	return fifo;
 }
 
+/* For drm_panic */
+void vmw_panic_fifo_ping_host(struct vmw_private *dev_priv, uint32_t reason)
+{
+	u32 *fifo_mem = dev_priv->fifo_mem;
+
+	if (fifo_mem && cmpxchg(fifo_mem + SVGA_FIFO_BUSY, 0, 1) == 0)
+		vmw_panic_write(dev_priv, SVGA_REG_SYNC, reason);
+
+}
+
 void vmw_fifo_ping_host(struct vmw_private *dev_priv, uint32_t reason)
 {
 	u32 *fifo_mem = dev_priv->fifo_mem;
@@ -262,6 +272,46 @@ static int vmw_fifo_wait(struct vmw_private *dev_priv,
 				  &dev_priv->fifo_queue_waiters);
 
 	return ret;
+}
+
+/* For drm_panic */
+void *vmw_panic_fifo_reserve(struct vmw_private *dev_priv, uint32_t bytes)
+{
+	struct vmw_fifo_state *fifo_state = dev_priv->fifo;
+	u32  *fifo_mem = dev_priv->fifo_mem;
+	uint32_t reserveable = fifo_state->capabilities & SVGA_FIFO_CAP_RESERVE;
+
+	/*
+	 * Access to fifo registers without mutex lock because it is only called is
+	 * panic handler
+	 */
+	uint32_t max = vmw_fifo_mem_read(dev_priv, SVGA_FIFO_MAX);
+	uint32_t min = vmw_fifo_mem_read(dev_priv, SVGA_FIFO_MIN);
+	uint32_t stop = vmw_fifo_mem_read(dev_priv, SVGA_FIFO_STOP);
+	uint32_t next_cmd = vmw_fifo_mem_read(dev_priv, SVGA_FIFO_NEXT_CMD);
+
+	if (unlikely(bytes >= (max - min)))
+		return NULL;
+
+	bool has_space;
+
+	if (next_cmd >= stop) {
+		has_space = (next_cmd + bytes < max ||
+			     (next_cmd + bytes == max && stop > min));
+	} else {
+		has_space = (next_cmd + bytes < stop);
+	}
+
+	if (unlikely(!has_space || (!reserveable && bytes > sizeof(uint32_t))))
+		return NULL;
+
+	fifo_state->reserved_size = bytes;
+	fifo_state->using_bounce_buffer = false;
+
+	if (reserveable)
+		vmw_fifo_mem_write(dev_priv, SVGA_FIFO_RESERVED, bytes);
+
+	return (void __force *) (fifo_mem + (next_cmd >> 2));
 }
 
 /*
@@ -422,6 +472,29 @@ static void vmw_fifo_slow_copy(struct vmw_fifo_state *fifo_state,
 		mb();
 		bytes -= sizeof(uint32_t);
 	}
+}
+
+/* For drm_panic */
+void vmw_panic_fifo_commit(struct vmw_private *dev_priv, uint32_t bytes)
+{
+	struct vmw_fifo_state *fifo_state = dev_priv->fifo;
+	uint32_t next_cmd = vmw_fifo_mem_read(dev_priv, SVGA_FIFO_NEXT_CMD);
+	uint32_t max = vmw_fifo_mem_read(dev_priv, SVGA_FIFO_MAX);
+	uint32_t min = vmw_fifo_mem_read(dev_priv, SVGA_FIFO_MIN);
+	bool reserveable = fifo_state->capabilities & SVGA_FIFO_CAP_RESERVE;
+
+	fifo_state->reserved_size = 0;
+
+	if (reserveable) {
+		next_cmd += bytes;
+		if (next_cmd >= max)
+			next_cmd -= max - min;
+		mb();
+		vmw_fifo_mem_write(dev_priv, SVGA_FIFO_NEXT_CMD, next_cmd);
+		vmw_fifo_mem_write(dev_priv, SVGA_FIFO_RESERVED, 0);
+	}
+	mb();
+	vmw_panic_fifo_ping_host(dev_priv, SVGA_SYNC_GENERIC);
 }
 
 static void vmw_local_fifo_commit(struct vmw_private *dev_priv, uint32_t bytes)

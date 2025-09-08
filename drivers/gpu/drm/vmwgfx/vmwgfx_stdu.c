@@ -36,6 +36,7 @@
 #include <drm/drm_atomic_helper.h>
 #include <drm/drm_damage_helper.h>
 #include <drm/drm_fourcc.h>
+#include <drm/drm_panic.h>
 #include <drm/drm_vblank.h>
 
 #define vmw_crtc_to_stdu(x) \
@@ -1458,6 +1459,37 @@ vmw_stdu_primary_plane_atomic_update(struct drm_plane *plane,
 		vmw_fence_obj_unreference(&fence);
 }
 
+static int
+vmw_stdu_primary_plane_get_scanout_buffer(struct drm_plane *plane,
+					  struct drm_scanout_buffer *sb)
+{
+	struct drm_plane_state *state = plane->state;
+	struct drm_crtc *crtc = state->crtc;
+	struct vmw_private *dev_priv = vmw_priv(crtc->dev);
+
+	if (!plane->state || !plane->state->fb || !plane->state->visible)
+		return -ENODEV;
+
+	sb->format = plane->state->fb->format;
+	sb->width = plane->state->fb->width;
+	sb->height = plane->state->fb->height;
+	sb->pitch[0] = plane->state->fb->pitches[0];
+
+	u64 size = sb->height * sb->pitch[0];
+
+	sb->map[0].vaddr = memremap(dev_priv->vram_start, size, MEMREMAP_WT);
+
+	if (!sb->map[0].vaddr)
+		return -ENOMEM;
+
+	return 0;
+}
+
+static void vmw_stdu_primary_plane_panic_flush(struct drm_plane *plane)
+{
+	vmw_ldu_primary_plane_panic_flush(plane);
+}
+
 static void
 vmw_stdu_crtc_atomic_flush(struct drm_crtc *crtc,
 			   struct drm_atomic_state *state)
@@ -1506,6 +1538,8 @@ drm_plane_helper_funcs vmw_stdu_primary_plane_helper_funcs = {
 	.atomic_update = vmw_stdu_primary_plane_atomic_update,
 	.prepare_fb = vmw_stdu_primary_plane_prepare_fb,
 	.cleanup_fb = vmw_stdu_primary_plane_cleanup_fb,
+	.get_scanout_buffer = vmw_stdu_primary_plane_get_scanout_buffer,
+	.panic_flush = vmw_stdu_primary_plane_panic_flush,
 };
 
 static const struct drm_crtc_helper_funcs vmw_stdu_crtc_helper_funcs = {

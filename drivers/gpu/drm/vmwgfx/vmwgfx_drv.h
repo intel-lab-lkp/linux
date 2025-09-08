@@ -636,6 +636,17 @@ static inline bool vmw_is_svga_v3(const struct vmw_private *dev)
 }
 
 /*
+ * For drm_panic
+ * Lockless vmw_write() because drm_panic calls this in panic handler
+ */
+static inline void vmw_panic_write(struct vmw_private *dev_priv,
+				   unsigned int offset, uint32_t value)
+{
+	outl(offset, dev_priv->io_start + SVGA_INDEX_PORT);
+	outl(value, dev_priv->io_start + SVGA_VALUE_PORT);
+}
+
+/*
  * The locking here is fine-grained, so that it is performed once
  * for every read- and write operation. This is of course costly, but we
  * don't perform much register access in the timing critical paths anyway.
@@ -854,16 +865,19 @@ extern void vmw_fifo_destroy(struct vmw_private *dev_priv);
 extern bool vmw_cmd_supported(struct vmw_private *vmw);
 extern void *
 vmw_cmd_ctx_reserve(struct vmw_private *dev_priv, uint32_t bytes, int ctx_id);
+extern void vmw_panic_fifo_commit(struct vmw_private *dev_priv, uint32_t bytes);
 extern void vmw_cmd_commit(struct vmw_private *dev_priv, uint32_t bytes);
 extern void vmw_cmd_commit_flush(struct vmw_private *dev_priv, uint32_t bytes);
 extern int vmw_cmd_send_fence(struct vmw_private *dev_priv, uint32_t *seqno);
 extern bool vmw_supports_3d(struct vmw_private *dev_priv);
+extern void vmw_panic_fifo_ping_host(struct vmw_private *dev_priv, uint32_t reason);
 extern void vmw_fifo_ping_host(struct vmw_private *dev_priv, uint32_t reason);
 extern bool vmw_fifo_have_pitchlock(struct vmw_private *dev_priv);
 extern int vmw_cmd_emit_dummy_query(struct vmw_private *dev_priv,
 				    uint32_t cid);
 extern int vmw_cmd_flush(struct vmw_private *dev_priv,
 			 bool interruptible);
+extern void *vmw_panic_fifo_reserve(struct vmw_private *dev_priv, uint32_t bytes);
 
 #define VMW_CMD_CTX_RESERVE(__priv, __bytes, __ctx_id)                        \
 ({                                                                            \
@@ -1027,6 +1041,8 @@ void vmw_kms_cursor_snoop(struct vmw_surface *srf,
 			  struct ttm_object_file *tfile,
 			  struct ttm_buffer_object *bo,
 			  SVGA3dCmdHeader *header);
+void vmw_kms_panic_write_svga(struct vmw_private *vmw_priv,
+			      unsigned int width, unsigned int height, unsigned int pitch);
 int vmw_kms_write_svga(struct vmw_private *vmw_priv,
 		       unsigned width, unsigned height, unsigned pitch,
 		       unsigned bpp, unsigned depth);
@@ -1348,6 +1364,8 @@ int vmw_mksstat_add_ioctl(struct drm_device *dev, void *data,
 int vmw_mksstat_remove_ioctl(struct drm_device *dev, void *data,
 		      struct drm_file *file_priv);
 int vmw_mksstat_remove_all(struct vmw_private *dev_priv);
+
+void vmw_ldu_primary_plane_panic_flush(struct drm_plane *plane);
 
 /* VMW logging */
 

@@ -499,6 +499,7 @@ int vmw_kms_stdu_readback(struct vmw_private *dev_priv,
 			  struct drm_crtc *crtc);
 
 int vmw_du_helper_plane_update(struct vmw_du_update_plane *update);
+int vmw_du_panic_helper_plane_update(struct vmw_du_update_plane *update);
 
 /**
  * vmw_du_translate_to_crtc - Translate a rect from framebuffer to crtc

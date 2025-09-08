@@ -1203,6 +1203,15 @@ int vmw_kms_close(struct vmw_private *dev_priv)
 	return ret;
 }
 
+/* For drm_panic */
+void vmw_kms_panic_write_svga(struct vmw_private *vmw_priv,
+			      unsigned int width, unsigned int height, unsigned int pitch)
+{
+	vmw_panic_write(vmw_priv, SVGA_REG_PITCHLOCK, pitch);
+	vmw_panic_write(vmw_priv, SVGA_REG_WIDTH, width);
+	vmw_panic_write(vmw_priv, SVGA_REG_HEIGHT, height);
+}
+
 int vmw_kms_write_svga(struct vmw_private *vmw_priv,
 			unsigned width, unsigned height, unsigned pitch,
 			unsigned bpp, unsigned depth)
