@@ -478,37 +478,52 @@
 			status = "disabled";
 		};
 
-		pcie: pcie@28400000 {
-			compatible = "toshiba,visconti-pcie";
-			reg = <0x0 0x28400000 0x0 0x00400000>,
-			      <0x0 0x70000000 0x0 0x10000000>,
-			      <0x0 0x28050000 0x0 0x00010000>,
-			      <0x0 0x24200000 0x0 0x00002000>,
-			      <0x0 0x24162000 0x0 0x00001000>;
-			reg-names = "dbi", "config", "ulreg", "smu", "mpu";
-			device_type = "pci";
-			bus-range = <0x00 0xff>;
-			num-lanes = <2>;
-			num-viewport = <8>;
-
-			#address-cells = <3>;
+		pcie_bus: bus@24000000 {
+			compatible = "simple-bus";
+			#address-cells = <2>;
 			#size-cells = <2>;
-			#interrupt-cells = <1>;
-			ranges = <0x81000000 0 0x40000000 0 0x40000000 0 0x00010000
-				  0x82000000 0 0x50000000 0 0x50000000 0 0x20000000>;
-			interrupts = <GIC_SPI 211 IRQ_TYPE_LEVEL_HIGH>,
-				     <GIC_SPI 215 IRQ_TYPE_LEVEL_HIGH>;
-			interrupt-names = "msi", "intr";
-			interrupt-map-mask = <0 0 0 7>;
-			interrupt-map =
-				<0 0 0 1 &gic GIC_SPI 215 IRQ_TYPE_LEVEL_HIGH
-				 0 0 0 2 &gic GIC_SPI 215 IRQ_TYPE_LEVEL_HIGH
-				 0 0 0 3 &gic GIC_SPI 215 IRQ_TYPE_LEVEL_HIGH
-				 0 0 0 4 &gic GIC_SPI 215 IRQ_TYPE_LEVEL_HIGH>;
-			max-link-speed = <2>;
-			clocks = <&extclk100mhz>, <&pismu TMPV770X_CLK_PCIE_MSTR>, <&pismu TMPV770X_CLK_PCIE_AUX>;
-			clock-names = "ref", "core", "aux";
-			status = "disabled";
+			ranges = /* register 1:1 map */
+				 <0x0 0x24000000 0x0 0x24000000 0x0 0x0C000000>,
+				 /*
+				  * bus fabric mask address bit 30 and 31 to 0
+				  * before send to PCIe controller.
+				  *
+				  * PCIe map address 0 to cpu's 0x40000000
+				  */
+				 <0x0 0x00000000 0x0 0x40000000 0x0 0x40000000>;
+
+			pcie: pcie@28400000 {
+				compatible = "toshiba,visconti-pcie";
+				reg = <0x0 0x28400000 0x0 0x00400000>,
+				      <0x0 0x30000000 0x0 0x10000000>,
+				      <0x0 0x28050000 0x0 0x00010000>,
+				      <0x0 0x24200000 0x0 0x00002000>,
+				      <0x0 0x24162000 0x0 0x00001000>;
+				reg-names = "dbi", "config", "ulreg", "smu", "mpu";
+				device_type = "pci";
+				bus-range = <0x00 0xff>;
+				num-lanes = <2>;
+				num-viewport = <8>;
+
+				#address-cells = <3>;
+				#size-cells = <2>;
+				#interrupt-cells = <1>;
+				ranges = <0x81000000 0 0x00000000 0 0x00000000 0 0x00010000
+					  0x82000000 0 0x10000000 0 0x10000000 0 0x20000000>;
+				interrupts = <GIC_SPI 211 IRQ_TYPE_LEVEL_HIGH>,
+					     <GIC_SPI 215 IRQ_TYPE_LEVEL_HIGH>;
+				interrupt-names = "msi", "intr";
+				interrupt-map-mask = <0 0 0 7>;
+				interrupt-map =
+					<0 0 0 1 &gic GIC_SPI 215 IRQ_TYPE_LEVEL_HIGH
+					 0 0 0 2 &gic GIC_SPI 215 IRQ_TYPE_LEVEL_HIGH
+					 0 0 0 3 &gic GIC_SPI 215 IRQ_TYPE_LEVEL_HIGH
+					 0 0 0 4 &gic GIC_SPI 215 IRQ_TYPE_LEVEL_HIGH>;
+				max-link-speed = <2>;
+				clocks = <&extclk100mhz>, <&pismu TMPV770X_CLK_PCIE_MSTR>, <&pismu TMPV770X_CLK_PCIE_AUX>;
+				clock-names = "ref", "core", "aux";
+				status = "disabled";
+			};
 		};
 	};
 };
