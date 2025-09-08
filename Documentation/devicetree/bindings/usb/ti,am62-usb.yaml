@@ -36,6 +36,11 @@ properties:
     items:
       - const: ref
 
+  ti,lane-reverse:
+    description:
+      Should be present if D+ and D- lanes have to be swapped.
+    type: boolean
+
   ti,vbus-divider:
     description:
       Should be present if USB VBUS line is connected to the
