@@ -164,15 +164,11 @@ static long sgx_ioc_enclave_create(struct sgx_encl *encl, void __user *arg)
 	if (copy_from_user(&create_arg, arg, sizeof(create_arg)))
 		return -EFAULT;
 
-	secs = kmalloc(PAGE_SIZE, GFP_KERNEL);
-	if (!secs)
-		return -ENOMEM;
+	secs = memdup_user((void __user *)create_arg.src, PAGE_SIZE);
+	if (IS_ERR(secs))
+		return PTR_ERR(secs);
 
-	if (copy_from_user(secs, (void __user *)create_arg.src, PAGE_SIZE))
-		ret = -EFAULT;
-	else
-		ret = sgx_encl_create(encl, secs);
-
+	ret = sgx_encl_create(encl, secs);
 	kfree(secs);
 	return ret;
 }
