@@ -428,7 +428,12 @@ static int gfs2_read_folio(struct file *file, struct folio *folio)
 
 	if (!gfs2_is_jdata(ip) ||
 	    (i_blocksize(inode) == PAGE_SIZE && !folio_buffers(folio))) {
-		error = iomap_read_folio(folio, &gfs2_iomap_ops);
+		struct iomap_read_folio_ctx ctx = {
+			.ops = &iomap_read_bios_ops,
+			.cur_folio = folio,
+		};
+
+		error = iomap_read_folio(&gfs2_iomap_ops, &ctx);
 	} else if (gfs2_is_stuffed(ip)) {
 		error = stuffed_read_folio(ip, folio);
 	} else {
@@ -498,12 +503,18 @@ static void gfs2_readahead(struct readahead_control *rac)
 	struct inode *inode = rac->mapping->host;
 	struct gfs2_inode *ip = GFS2_I(inode);
 
-	if (gfs2_is_stuffed(ip))
+	if (gfs2_is_stuffed(ip)) {
 		;
-	else if (gfs2_is_jdata(ip))
+	} else if (gfs2_is_jdata(ip)) {
 		mpage_readahead(rac, gfs2_block_map);
-	else
-		iomap_readahead(rac, &gfs2_iomap_ops);
+	} else {
+		struct iomap_read_folio_ctx ctx = {
+			.ops = &iomap_read_bios_ops,
+			.rac = rac,
+		};
+
+		iomap_readahead(&gfs2_iomap_ops, &ctx);
+	}
 }
 
 /**

@@ -369,17 +369,27 @@ int erofs_fiemap(struct inode *inode, struct fiemap_extent_info *fieinfo,
  */
 static int erofs_read_folio(struct file *file, struct folio *folio)
 {
+	struct iomap_read_folio_ctx ctx = {
+		.ops = &iomap_read_bios_ops,
+		.cur_folio = folio,
+	};
+
 	trace_erofs_read_folio(folio, true);
 
-	return iomap_read_folio(folio, &erofs_iomap_ops);
+	return iomap_read_folio(&erofs_iomap_ops, &ctx);
 }
 
 static void erofs_readahead(struct readahead_control *rac)
 {
+	struct iomap_read_folio_ctx ctx = {
+		.ops = &iomap_read_bios_ops,
+		.rac = rac,
+	};
+
 	trace_erofs_readahead(rac->mapping->host, readahead_index(rac),
 					readahead_count(rac), true);
 
-	return iomap_readahead(rac, &erofs_iomap_ops);
+	return iomap_readahead(&erofs_iomap_ops, &ctx);
 }
 
 static sector_t erofs_bmap(struct address_space *mapping, sector_t block)

@@ -742,14 +742,24 @@ xfs_vm_read_folio(
 	struct file		*unused,
 	struct folio		*folio)
 {
-	return iomap_read_folio(folio, &xfs_read_iomap_ops);
+	struct iomap_read_folio_ctx ctx = {
+		.ops = &iomap_read_bios_ops,
+		.cur_folio = folio,
+	};
+
+	return iomap_read_folio(&xfs_read_iomap_ops, &ctx);
 }
 
 STATIC void
 xfs_vm_readahead(
 	struct readahead_control	*rac)
 {
-	iomap_readahead(rac, &xfs_read_iomap_ops);
+	struct iomap_read_folio_ctx ctx = {
+		.ops = &iomap_read_bios_ops,
+		.rac = rac,
+	};
+
+	iomap_readahead(&xfs_read_iomap_ops, &ctx);
 }
 
 static int

@@ -533,12 +533,22 @@ const struct address_space_operations def_blk_aops = {
 #else /* CONFIG_BUFFER_HEAD */
 static int blkdev_read_folio(struct file *file, struct folio *folio)
 {
-	return iomap_read_folio(folio, &blkdev_iomap_ops);
+	struct iomap_read_folio_ctx ctx = {
+		.ops = &iomap_read_bios_ops,
+		.cur_folio = folio,
+	};
+
+	return iomap_read_folio(&blkdev_iomap_ops, &ctx);
 }
 
 static void blkdev_readahead(struct readahead_control *rac)
 {
-	iomap_readahead(rac, &blkdev_iomap_ops);
+	struct iomap_read_folio_ctx ctx = {
+		.ops = &iomap_read_bios_ops,
+		.rac = rac,
+	};
+
+	iomap_readahead(&blkdev_iomap_ops, &ctx);
 }
 
 static ssize_t blkdev_writeback_range(struct iomap_writepage_ctx *wpc,

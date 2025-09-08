@@ -363,18 +363,14 @@ static void iomap_read_end_io(struct bio *bio)
 	bio_put(bio);
 }
 
-struct iomap_read_folio_ctx {
-	struct folio		*cur_folio;
-	void			*private;
-	struct readahead_control *rac;
-};
-
-static void iomap_submit_read_bio(struct iomap_read_folio_ctx *ctx)
+static int iomap_submit_read_bio(struct iomap_read_folio_ctx *ctx)
 {
 	struct bio *bio = ctx->private;
 
 	if (bio)
 		submit_bio(bio);
+
+	return 0;
 }
 
 /**
@@ -383,7 +379,7 @@ static void iomap_submit_read_bio(struct iomap_read_folio_ctx *ctx)
  * This should only be used for read/readahead, not for buffered writes.
  * Buffered writes must read in the folio synchronously.
  */
-static void iomap_read_folio_range_bio_async(const struct iomap_iter *iter,
+static int iomap_read_folio_range_bio_async(const struct iomap_iter *iter,
 		struct iomap_read_folio_ctx *ctx, loff_t pos, size_t plen)
 {
 	struct folio *folio = ctx->cur_folio;
@@ -422,7 +418,14 @@ static void iomap_read_folio_range_bio_async(const struct iomap_iter *iter,
 		bio_add_folio_nofail(bio, folio, plen, poff);
 		ctx->private = bio;
 	}
+	return 0;
 }
+
+const struct iomap_read_ops iomap_read_bios_ops = {
+	.read_folio_range = iomap_read_folio_range_bio_async,
+	.read_submit = iomap_submit_read_bio,
+};
+EXPORT_SYMBOL_GPL(iomap_read_bios_ops);
 
 static int iomap_read_folio_iter(struct iomap_iter *iter,
 		struct iomap_read_folio_ctx *ctx, bool *cur_folio_owned)
@@ -459,7 +462,10 @@ static int iomap_read_folio_iter(struct iomap_iter *iter,
 			iomap_set_range_uptodate(folio, poff, plen);
 		} else {
 			*cur_folio_owned = true;
-			iomap_read_folio_range_bio_async(iter, ctx, pos, plen);
+			ret = ctx->ops->read_folio_range(iter, ctx, pos,
+						plen);
+			if (ret)
+				return ret;
 		}
 
 		length -= count;
@@ -471,35 +477,35 @@ static int iomap_read_folio_iter(struct iomap_iter *iter,
 	return 0;
 }
 
-int iomap_read_folio(struct folio *folio, const struct iomap_ops *ops)
+int iomap_read_folio(const struct iomap_ops *ops,
+		struct iomap_read_folio_ctx *ctx)
 {
+	struct folio *folio = ctx->cur_folio;
 	struct iomap_iter iter = {
 		.inode		= folio->mapping->host,
 		.pos		= folio_pos(folio),
 		.len		= folio_size(folio),
-	};
-	struct iomap_read_folio_ctx ctx = {
-		.cur_folio	= folio,
 	};
 	/*
 	 * If an external IO helper takes ownership of the folio,
 	 * it is responsible for unlocking it when the read completes.
 	 */
 	bool cur_folio_owned = false;
-	int ret;
+	int ret, submit_ret = 0;
 
 	trace_iomap_readpage(iter.inode, 1);
 
 	while ((ret = iomap_iter(&iter, ops)) > 0)
-		iter.status = iomap_read_folio_iter(&iter, &ctx,
+		iter.status = iomap_read_folio_iter(&iter, ctx,
 				&cur_folio_owned);
 
-	iomap_submit_read_bio(&ctx);
+	if (ctx->ops->read_submit)
+		submit_ret = ctx->ops->read_submit(ctx);
 
 	if (!cur_folio_owned)
 		folio_unlock(folio);
 
-	return ret;
+	return ret ? ret : submit_ret;
 }
 EXPORT_SYMBOL_GPL(iomap_read_folio);
 
@@ -530,8 +536,8 @@ static int iomap_readahead_iter(struct iomap_iter *iter,
 
 /**
  * iomap_readahead - Attempt to read pages from a file.
- * @rac: Describes the pages to be read.
  * @ops: The operations vector for the filesystem.
+ * @ctx: The ctx used for issuing readahead.
  *
  * This function is for filesystems to call to implement their readahead
  * address_space operation.
@@ -543,15 +549,14 @@ static int iomap_readahead_iter(struct iomap_iter *iter,
  * function is called with memalloc_nofs set, so allocations will not cause
  * the filesystem to be reentered.
  */
-void iomap_readahead(struct readahead_control *rac, const struct iomap_ops *ops)
+void iomap_readahead(const struct iomap_ops *ops,
+		struct iomap_read_folio_ctx *ctx)
 {
+	struct readahead_control *rac = ctx->rac;
 	struct iomap_iter iter = {
 		.inode	= rac->mapping->host,
 		.pos	= readahead_pos(rac),
 		.len	= readahead_length(rac),
-	};
-	struct iomap_read_folio_ctx ctx = {
-		.rac	= rac,
 	};
 	/*
 	 * If an external IO helper takes ownership of the folio,
@@ -562,13 +567,14 @@ void iomap_readahead(struct readahead_control *rac, const struct iomap_ops *ops)
 	trace_iomap_readahead(rac->mapping->host, readahead_count(rac));
 
 	while (iomap_iter(&iter, ops) > 0)
-		iter.status = iomap_readahead_iter(&iter, &ctx,
+		iter.status = iomap_readahead_iter(&iter, ctx,
 					&cur_folio_owned);
 
-	iomap_submit_read_bio(&ctx);
+	if (ctx->ops->read_submit)
+		ctx->ops->read_submit(ctx);
 
-	if (ctx.cur_folio && !cur_folio_owned)
-		folio_unlock(ctx.cur_folio);
+	if (ctx->cur_folio && !cur_folio_owned)
+		folio_unlock(ctx->cur_folio);
 }
 EXPORT_SYMBOL_GPL(iomap_readahead);
 
