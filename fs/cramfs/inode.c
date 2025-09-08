@@ -59,6 +59,12 @@ static const struct address_space_operations cramfs_aops;
 
 static DEFINE_MUTEX(read_mutex);
 
+/* How should the mapping be completed? */
+enum cramfs_mmap_state {
+	NO_PREPOPULATE,
+	PREPOPULATE_PFNMAP,
+	PREPOPULATE_MIXEDMAP,
+};
 
 /* These macros may change in future, to provide better st_ino semantics. */
 #define OFFSET(x)	((x)->i_ino)
@@ -342,34 +348,89 @@ static bool cramfs_last_page_is_shared(struct inode *inode)
 	return memchr_inv(tail_data, 0, PAGE_SIZE - partial) ? true : false;
 }
 
-static int cramfs_physmem_mmap(struct file *file, struct vm_area_struct *vma)
+static int cramfs_physmem_mmap_complete(struct file *file, struct vm_area_struct *vma,
+					const void *context)
 {
 	struct inode *inode = file_inode(file);
 	struct cramfs_sb_info *sbi = CRAMFS_SB(inode->i_sb);
-	unsigned int pages, max_pages, offset;
 	unsigned long address, pgoff = vma->vm_pgoff;
-	char *bailout_reason;
-	int ret;
+	unsigned int pages, offset;
+	enum cramfs_mmap_state mmap_state = (enum cramfs_mmap_state)context;
+	int ret = 0;
 
-	ret = generic_file_readonly_mmap(file, vma);
-	if (ret)
-		return ret;
+	if (mmap_state == NO_PREPOPULATE)
+		return 0;
+
+	offset = cramfs_get_block_range(inode, pgoff, &pages);
+	address = sbi->linear_phys_addr + offset;
 
 	/*
 	 * Now try to pre-populate ptes for this vma with a direct
 	 * mapping avoiding memory allocation when possible.
 	 */
 
+	if (mmap_state == PREPOPULATE_PFNMAP) {
+		/*
+		 * The entire vma is mappable. remap_pfn_range() will
+		 * make it distinguishable from a non-direct mapping
+		 * in /proc/<pid>/maps by substituting the file offset
+		 * with the actual physical address.
+		 */
+		ret = remap_pfn_range_complete(vma, vma->vm_start, address >> PAGE_SHIFT,
+				pages * PAGE_SIZE, vma->vm_page_prot);
+	} else {
+		/*
+		 * Let's create a mixed map if we can't map it all.
+		 * The normal paging machinery will take care of the
+		 * unpopulated ptes via cramfs_read_folio().
+		 */
+		int i;
+
+		for (i = 0; i < pages && !ret; i++) {
+			vm_fault_t vmf;
+			unsigned long off = i * PAGE_SIZE;
+
+			vmf = vmf_insert_mixed(vma, vma->vm_start + off,
+					address + off);
+			if (vmf & VM_FAULT_ERROR)
+				ret = vm_fault_to_errno(vmf, 0);
+		}
+	}
+
+	if (!ret)
+		pr_debug("mapped %pD[%lu] at 0x%08lx (%u/%lu pages) "
+			 "to vma 0x%08lx, page_prot 0x%llx\n", file,
+			 pgoff, address, pages, vma_pages(vma), vma->vm_start,
+			 (unsigned long long)pgprot_val(vma->vm_page_prot));
+	return ret;
+}
+
+static int cramfs_physmem_mmap_prepare(struct vm_area_desc *desc)
+{
+	struct file *file = desc->file;
+	struct inode *inode = file_inode(file);
+	struct cramfs_sb_info *sbi = CRAMFS_SB(inode->i_sb);
+	unsigned int pages, max_pages, offset, mapped_pages;
+	unsigned long address, pgoff = desc->pgoff;
+	enum cramfs_mmap_state mmap_state;
+	char *bailout_reason;
+	int ret;
+
+	ret = generic_file_readonly_mmap_prepare(desc);
+	if (ret)
+		return ret;
+
 	/* Could COW work here? */
 	bailout_reason = "vma is writable";
-	if (vma->vm_flags & VM_WRITE)
+	if (desc->vm_flags & VM_WRITE)
 		goto bailout;
 
 	max_pages = (inode->i_size + PAGE_SIZE - 1) >> PAGE_SHIFT;
 	bailout_reason = "beyond file limit";
 	if (pgoff >= max_pages)
 		goto bailout;
-	pages = min(vma_pages(vma), max_pages - pgoff);
+	mapped_pages = vma_desc_pages(desc);
+	pages = min(mapped_pages, max_pages - pgoff);
 
 	offset = cramfs_get_block_range(inode, pgoff, &pages);
 	bailout_reason = "unsuitable block layout";
@@ -391,41 +452,23 @@ static int cramfs_physmem_mmap(struct file *file, struct vm_area_struct *vma)
 		goto bailout;
 	}
 
-	if (pages == vma_pages(vma)) {
-		/*
-		 * The entire vma is mappable. remap_pfn_range() will
-		 * make it distinguishable from a non-direct mapping
-		 * in /proc/<pid>/maps by substituting the file offset
-		 * with the actual physical address.
-		 */
-		ret = remap_pfn_range(vma, vma->vm_start, address >> PAGE_SHIFT,
-				      pages * PAGE_SIZE, vma->vm_page_prot);
+	if (mapped_pages == pages)
+		mmap_state = PREPOPULATE_PFNMAP;
+	else
+		mmap_state = PREPOPULATE_MIXEDMAP;
+	desc->mmap_context = (void *)mmap_state;
+
+	if (mmap_state == PREPOPULATE_PFNMAP) {
+		/* No CoW allowed, so no need to provide PFN. */
+		remap_pfn_range_prepare(desc, 0);
 	} else {
-		/*
-		 * Let's create a mixed map if we can't map it all.
-		 * The normal paging machinery will take care of the
-		 * unpopulated ptes via cramfs_read_folio().
-		 */
-		int i;
-		vm_flags_set(vma, VM_MIXEDMAP);
-		for (i = 0; i < pages && !ret; i++) {
-			vm_fault_t vmf;
-			unsigned long off = i * PAGE_SIZE;
-			vmf = vmf_insert_mixed(vma, vma->vm_start + off,
-					address + off);
-			if (vmf & VM_FAULT_ERROR)
-				ret = vm_fault_to_errno(vmf, 0);
-		}
+		desc->vm_flags |= VM_MIXEDMAP;
 	}
 
-	if (!ret)
-		pr_debug("mapped %pD[%lu] at 0x%08lx (%u/%lu pages) "
-			 "to vma 0x%08lx, page_prot 0x%llx\n", file,
-			 pgoff, address, pages, vma_pages(vma), vma->vm_start,
-			 (unsigned long long)pgprot_val(vma->vm_page_prot));
-	return ret;
+	return 0;
 
 bailout:
+	desc->mmap_context = (void *)NO_PREPOPULATE;
 	pr_debug("%pD[%lu]: direct mmap impossible: %s\n",
 		 file, pgoff, bailout_reason);
 	/* Didn't manage any direct map, but normal paging is still possible */
@@ -434,9 +477,15 @@ bailout:
 
 #else /* CONFIG_MMU */
 
-static int cramfs_physmem_mmap(struct file *file, struct vm_area_struct *vma)
+static int cramfs_physmem_mmap_prepare(struct vm_area_desc *desc)
 {
-	return is_nommu_shared_mapping(vma->vm_flags) ? 0 : -ENOSYS;
+	return is_nommu_shared_mapping(desc->vm_flags) ? 0 : -ENOSYS;
+}
+
+static int cramfs_physmem_mmap_complete(struct file *file,
+					struct vm_area_struct *vma)
+{
+	return 0;
 }
 
 static unsigned long cramfs_physmem_get_unmapped_area(struct file *file,
@@ -474,7 +523,8 @@ static const struct file_operations cramfs_physmem_fops = {
 	.llseek			= generic_file_llseek,
 	.read_iter		= generic_file_read_iter,
 	.splice_read		= filemap_splice_read,
-	.mmap			= cramfs_physmem_mmap,
+	.mmap_prepare		= cramfs_physmem_mmap_prepare,
+	.mmap_complete		= cramfs_physmem_mmap_complete,
 #ifndef CONFIG_MMU
 	.get_unmapped_area	= cramfs_physmem_get_unmapped_area,
 	.mmap_capabilities	= cramfs_physmem_mmap_capabilities,
