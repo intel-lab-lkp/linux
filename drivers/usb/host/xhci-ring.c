@@ -3663,6 +3663,14 @@ int xhci_queue_bulk_tx(struct xhci_hcd *xhci, gfp_t mem_flags,
 		addr = (u64) urb->transfer_dma;
 		block_len = full_len;
 	}
+	/* Deal with URB_ZERO_PACKET - need one more td/trb */
+	if (urb->transfer_flags & URB_ZERO_PACKET &&
+	    usb_endpoint_is_bulk_out(&urb->ep->desc) &&
+	    urb->transfer_buffer_length > 0 &&
+	    !(urb->transfer_buffer_length % usb_endpoint_maxp(&urb->ep->desc))) {
+		need_zero_pkt = true;
+		num_trbs++;
+	}
 	ret = prepare_transfer(xhci, xhci->devs[slot_id],
 			ep_index, urb->stream_id,
 			num_trbs, urb, 0, mem_flags);
@@ -3670,10 +3678,6 @@ int xhci_queue_bulk_tx(struct xhci_hcd *xhci, gfp_t mem_flags,
 		return ret;
 
 	urb_priv = urb->hcpriv;
-
-	/* Deal with URB_ZERO_PACKET - need one more td/trb */
-	if (urb->transfer_flags & URB_ZERO_PACKET && urb_priv->num_tds > 1)
-		need_zero_pkt = true;
 
 	td = &urb_priv->td[0];
 
@@ -3723,7 +3727,9 @@ int xhci_queue_bulk_tx(struct xhci_hcd *xhci, gfp_t mem_flags,
 		}
 		if (enqd_len + trb_buff_len >= full_len) {
 			field &= ~TRB_CHAIN;
-			field |= TRB_IOC;
+			/* zero packet TRB isn't chained, but it steals our IOC */
+			if (!need_zero_pkt)
+				field |= TRB_IOC;
 			more_trbs_coming = false;
 			td->end_trb = ring->enqueue;
 			td->end_seg = ring->enq_seg;
@@ -3771,11 +3777,8 @@ int xhci_queue_bulk_tx(struct xhci_hcd *xhci, gfp_t mem_flags,
 	}
 
 	if (need_zero_pkt) {
-		ret = prepare_transfer(xhci, xhci->devs[slot_id],
-				       ep_index, urb->stream_id,
-				       1, urb, 1, mem_flags);
-		urb_priv->td[1].end_trb = ring->enqueue;
-		urb_priv->td[1].end_seg = ring->enq_seg;
+		td->end_trb = ring->enqueue;
+		td->end_seg = ring->enq_seg;
 		field = TRB_TYPE(TRB_NORMAL) | ring->cycle_state | TRB_IOC;
 		queue_trb(xhci, ring, 0, 0, 0, TRB_INTR_TARGET(0), field);
 	}
