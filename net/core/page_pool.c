@@ -555,6 +555,13 @@ static noinline netmem_ref __page_pool_alloc_netmems_slow(struct page_pool *pool
 	netmem_ref netmem;
 	int i, nr_pages;
 
+	/* Unconditionally set NOWARN if allocating from the datapath.
+	 * Use a single bit from the ATOMIC mask to help compiler optimize.
+	 */
+	BUILD_BUG_ON(!(GFP_ATOMIC & __GFP_HIGH));
+	if (gfp & __GFP_HIGH)
+		gfp |= __GFP_NOWARN;
+
 	/* Don't support bulk alloc for high-order pages */
 	if (unlikely(pp_order))
 		return page_to_netmem(__page_pool_alloc_page_order(pool, gfp));
