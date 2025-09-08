@@ -96,39 +96,14 @@ static const struct fs_parameter_spec hugetlb_fs_parameters[] = {
 #define PGOFF_LOFFT_MAX \
 	(((1UL << (PAGE_SHIFT + 1)) - 1) <<  (BITS_PER_LONG - (PAGE_SHIFT + 1)))
 
-static int hugetlbfs_file_mmap(struct file *file, struct vm_area_struct *vma)
+static int hugetlb_file_mmap_complete(struct file *file, struct vm_area_struct *vma,
+				      const void *context)
 {
 	struct inode *inode = file_inode(file);
-	loff_t len, vma_len;
-	int ret;
 	struct hstate *h = hstate_file(file);
-	vm_flags_t vm_flags;
-
-	/*
-	 * vma address alignment (but not the pgoff alignment) has
-	 * already been checked by prepare_hugepage_range.  If you add
-	 * any error returns here, do so after setting VM_HUGETLB, so
-	 * is_vm_hugetlb_page tests below unmap_region go the right
-	 * way when do_mmap unwinds (may be important on powerpc
-	 * and ia64).
-	 */
-	vm_flags_set(vma, VM_HUGETLB | VM_DONTEXPAND);
-	vma->vm_ops = &hugetlb_vm_ops;
-
-	/*
-	 * page based offset in vm_pgoff could be sufficiently large to
-	 * overflow a loff_t when converted to byte offset.  This can
-	 * only happen on architectures where sizeof(loff_t) ==
-	 * sizeof(unsigned long).  So, only check in those instances.
-	 */
-	if (sizeof(unsigned long) == sizeof(loff_t)) {
-		if (vma->vm_pgoff & PGOFF_LOFFT_MAX)
-			return -EINVAL;
-	}
-
-	/* must be huge page aligned */
-	if (vma->vm_pgoff & (~huge_page_mask(h) >> PAGE_SHIFT))
-		return -EINVAL;
+	vm_flags_t vm_flags = vma->vm_flags;
+	loff_t len, vma_len;
+	int ret = 0;
 
 	vma_len = (loff_t)(vma->vm_end - vma->vm_start);
 	len = vma_len + ((loff_t)vma->vm_pgoff << PAGE_SHIFT);
@@ -139,9 +114,6 @@ static int hugetlbfs_file_mmap(struct file *file, struct vm_area_struct *vma)
 	inode_lock(inode);
 	file_accessed(file);
 
-	ret = -ENOMEM;
-
-	vm_flags = vma->vm_flags;
 	/*
 	 * for SHM_HUGETLB, the pages are reserved in the shmget() call so skip
 	 * reserving here. Note: only for SHM hugetlbfs file, the inode
@@ -151,18 +123,53 @@ static int hugetlbfs_file_mmap(struct file *file, struct vm_area_struct *vma)
 		vm_flags |= VM_NORESERVE;
 
 	if (hugetlb_reserve_pages(inode,
-				vma->vm_pgoff >> huge_page_order(h),
-				len >> huge_page_shift(h), vma,
-				vm_flags) < 0)
+			vma->vm_pgoff >> huge_page_order(h),
+			len >> huge_page_shift(h), vma,
+			vm_flags) < 0) {
+		ret = -ENOMEM;
 		goto out;
+	}
 
-	ret = 0;
 	if (vma->vm_flags & VM_WRITE && inode->i_size < len)
 		i_size_write(inode, len);
+
 out:
 	inode_unlock(inode);
-
 	return ret;
+}
+
+static int hugetlbfs_file_mmap_prepare(struct vm_area_desc *desc)
+{
+	struct file *file = desc->file;
+	struct hstate *h = hstate_file(file);
+
+	/*
+	 * vma address alignment (but not the pgoff alignment) has
+	 * already been checked by prepare_hugepage_range.  If you add
+	 * any error returns here, do so after setting VM_HUGETLB, so
+	 * is_vm_hugetlb_page tests below unmap_region go the right
+	 * way when do_mmap unwinds (may be important on powerpc
+	 * and ia64).
+	 */
+	desc->vm_flags |= VM_HUGETLB | VM_DONTEXPAND;
+	desc->vm_ops = &hugetlb_vm_ops;
+
+	/*
+	 * page based offset in vm_pgoff could be sufficiently large to
+	 * overflow a loff_t when converted to byte offset.  This can
+	 * only happen on architectures where sizeof(loff_t) ==
+	 * sizeof(unsigned long).  So, only check in those instances.
+	 */
+	if (sizeof(unsigned long) == sizeof(loff_t)) {
+		if (desc->pgoff & PGOFF_LOFFT_MAX)
+			return -EINVAL;
+	}
+
+	/* must be huge page aligned */
+	if (desc->pgoff & (~huge_page_mask(h) >> PAGE_SHIFT))
+		return -EINVAL;
+
+	return 0;
 }
 
 /*
@@ -1219,7 +1226,8 @@ static void init_once(void *foo)
 
 static const struct file_operations hugetlbfs_file_operations = {
 	.read_iter		= hugetlbfs_read_iter,
-	.mmap			= hugetlbfs_file_mmap,
+	.mmap_prepare		= hugetlbfs_file_mmap_prepare,
+	.mmap_complete		= hugetlb_file_mmap_complete,
 	.fsync			= noop_fsync,
 	.get_unmapped_area	= hugetlb_get_unmapped_area,
 	.llseek			= default_llseek,
