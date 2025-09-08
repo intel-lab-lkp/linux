@@ -39,10 +39,10 @@ DVB_DEFINE_MOD_OPT_ADAPTER_NR(adapter_nr);
 #define AZ6007_READ_IR		0xb4
 
 struct az6007_device_state {
-	struct mutex		mutex;
 	struct mutex		ca_mutex;
 	struct dvb_ca_en50221	ca;
 	unsigned		warm:1;
+	unsigned		ci_attached:1;
 	int			(*gate_ctrl) (struct dvb_frontend *, int);
 	unsigned char		data[4096];
 };
@@ -97,25 +97,30 @@ static struct mt2063_config az6007_mt2063_config = {
 	.refclock = 36125000,
 };
 
-static int __az6007_read(struct usb_device *udev, struct az6007_device_state *st,
+static int __az6007_read(struct dvb_usb_device *d, struct az6007_device_state *st,
 			    u8 req, u16 value, u16 index, u8 *b, int blen)
 {
 	int ret;
 
+	if (mutex_lock_interruptible(&d->usb_mutex) < 0)
+		return -EAGAIN;
+
 	if (blen > sizeof(st->data)) {
 		pr_err("az6007: tried to read %d bytes, but I2C max size is %lu bytes\n",
 		       blen, sizeof(st->data));
-		return -EOPNOTSUPP;
+		ret = -EOPNOTSUPP;
+		goto end_unlock;
 	}
 
-	ret = usb_control_msg(udev,
-			      usb_rcvctrlpipe(udev, 0),
+	ret = usb_control_msg(d->udev,
+			      usb_rcvctrlpipe(d->udev, 0),
 			      req,
 			      USB_TYPE_VENDOR | USB_DIR_IN,
 			      value, index, b, blen, 5000);
 	if (ret < 0) {
 		pr_warn("usb read operation failed. (%d)\n", ret);
-		return -EIO;
+		ret = -EIO;
+		goto end_unlock;
 	}
 
 	if (az6007_xfer_debug) {
@@ -125,6 +130,8 @@ static int __az6007_read(struct usb_device *udev, struct az6007_device_state *st
 				     DUMP_PREFIX_NONE, b, blen);
 	}
 
+end_unlock:
+	mutex_unlock(&d->usb_mutex);
 	return ret;
 }
 
@@ -134,25 +141,24 @@ static int az6007_read(struct dvb_usb_device *d, u8 req, u16 value,
 	struct az6007_device_state *st = d_to_priv(d);
 	int ret;
 
-	if (mutex_lock_interruptible(&st->mutex) < 0)
-		return -EAGAIN;
-
-	ret = __az6007_read(d->udev, st, req, value, index, b, blen);
-
-	mutex_unlock(&st->mutex);
+	ret = __az6007_read(d, st, req, value, index, b, blen);
 
 	return ret;
 }
 
-static int __az6007_write(struct usb_device *udev, struct az6007_device_state *st,
+static int __az6007_write(struct dvb_usb_device *d, struct az6007_device_state *st,
 			    u8 req, u16 value, u16 index, u8 *b, int blen)
 {
 	int ret;
 
+	if (mutex_lock_interruptible(&d->usb_mutex) < 0)
+		return -EAGAIN;
+
 	if (blen > sizeof(st->data)) {
 		pr_err("az6007: tried to write %d bytes, but I2C max size is %lu bytes\n",
 		       blen, sizeof(st->data));
-		return -EOPNOTSUPP;
+		ret = -EOPNOTSUPP;
+		goto end_unlock;
 	}
 
 	if (az6007_xfer_debug) {
@@ -162,17 +168,21 @@ static int __az6007_write(struct usb_device *udev, struct az6007_device_state *s
 				     DUMP_PREFIX_NONE, b, blen);
 	}
 
-	ret = usb_control_msg(udev,
-			      usb_sndctrlpipe(udev, 0),
+	ret = usb_control_msg(d->udev,
+			      usb_sndctrlpipe(d->udev, 0),
 			      req,
 			      USB_TYPE_VENDOR | USB_DIR_OUT,
 			      value, index, b, blen, 5000);
 	if (ret != blen) {
 		pr_err("usb write operation failed. (%d)\n", ret);
-		return -EIO;
+		ret = -EIO;
+		goto end_unlock;
 	}
 
-	return 0;
+	ret = 0;
+end_unlock:
+	mutex_unlock(&d->usb_mutex);
+	return ret;
 }
 
 static int az6007_write(struct dvb_usb_device *d, u8 req, u16 value,
@@ -181,12 +191,7 @@ static int az6007_write(struct dvb_usb_device *d, u8 req, u16 value,
 	struct az6007_device_state *st = d_to_priv(d);
 	int ret;
 
-	if (mutex_lock_interruptible(&st->mutex) < 0)
-		return -EAGAIN;
-
-	ret = __az6007_write(d->udev, st, req, value, index, b, blen);
-
-	mutex_unlock(&st->mutex);
+	ret = __az6007_write(d, st, req, value, index, b, blen);
 
 	return ret;
 }
@@ -580,10 +585,9 @@ static void az6007_ci_uninit(struct dvb_usb_device *d)
 }
 
 
-static int az6007_ci_init(struct dvb_usb_adapter *adap)
+static int az6007_ci_init(struct dvb_usb_device *d)
 {
-	struct dvb_usb_device *d = adap_to_d(adap);
-	struct az6007_device_state *state = adap_to_priv(adap);
+	struct az6007_device_state *state = d_to_priv(d);
 	int ret;
 
 	pr_debug("%s()\n", __func__);
@@ -600,7 +604,7 @@ static int az6007_ci_init(struct dvb_usb_adapter *adap)
 	state->ca.poll_slot_status	= az6007_ci_poll_slot_status;
 	state->ca.data			= d;
 
-	ret = dvb_ca_en50221_init(&adap->dvb_adap,
+	ret = dvb_ca_en50221_init(&d->adapter[0].dvb_adap,
 				  &state->ca,
 				  0, /* flags */
 				  1);/* n_slots */
@@ -609,6 +613,8 @@ static int az6007_ci_init(struct dvb_usb_adapter *adap)
 		memset(&state->ca, 0, sizeof(state->ca));
 		return ret;
 	}
+
+	state->ci_attached = true;
 
 	pr_debug("CI initialized.\n");
 
@@ -646,8 +652,6 @@ static int az6007_frontend_attach(struct dvb_usb_adapter *adap)
 	st->gate_ctrl = adap->fe[0]->ops.i2c_gate_ctrl;
 	adap->fe[0]->ops.i2c_gate_ctrl = drxk_gate_ctrl;
 
-	az6007_ci_init(adap);
-
 	return 0;
 }
 
@@ -666,8 +670,6 @@ static int az6007_cablestar_hdci_frontend_attach(struct dvb_usb_adapter *adap)
 	adap->fe[0]->sec_priv = adap;
 	st->gate_ctrl = adap->fe[0]->ops.i2c_gate_ctrl;
 	adap->fe[0]->ops.i2c_gate_ctrl = drxk_gate_ctrl;
-
-	az6007_ci_init(adap);
 
 	return 0;
 }
@@ -699,50 +701,55 @@ static int az6007_power_ctrl(struct dvb_usb_device *d, int onoff)
 
 	pr_debug("%s()\n", __func__);
 
-	if (!state->warm) {
-		mutex_init(&state->mutex);
+	mutex_lock(&d->i2c_mutex);
 
+	if (!state->warm) {
 		ret = az6007_write(d, AZ6007_POWER, 0, 2, NULL, 0);
 		if (ret < 0)
-			return ret;
+			goto end_unlock;
 		msleep(60);
 		ret = az6007_write(d, AZ6007_POWER, 1, 4, NULL, 0);
 		if (ret < 0)
-			return ret;
+			goto end_unlock;
 		msleep(100);
 		ret = az6007_write(d, AZ6007_POWER, 1, 3, NULL, 0);
 		if (ret < 0)
-			return ret;
+			goto end_unlock;
 		msleep(20);
 		ret = az6007_write(d, AZ6007_POWER, 1, 4, NULL, 0);
 		if (ret < 0)
-			return ret;
+			goto end_unlock;
 
 		msleep(400);
 		ret = az6007_write(d, FX2_SCON1, 0, 3, NULL, 0);
 		if (ret < 0)
-			return ret;
+			goto end_unlock;
 		msleep(150);
 		ret = az6007_write(d, FX2_SCON1, 1, 3, NULL, 0);
 		if (ret < 0)
-			return ret;
+			goto end_unlock;
 		msleep(430);
 		ret = az6007_write(d, AZ6007_POWER, 0, 0, NULL, 0);
 		if (ret < 0)
-			return ret;
+			goto end_unlock;
 
 		state->warm = true;
 
-		return 0;
+		ret = 0;
+		goto end_unlock;
 	}
 
+	ret = 0;
+
 	if (!onoff)
-		return 0;
+		goto end_unlock;
 
 	az6007_write(d, AZ6007_POWER, 0, 0, NULL, 0);
 	az6007_write(d, AZ6007_TS_THROUGH, 0, 0, NULL, 0);
 
-	return 0;
+end_unlock:
+	mutex_unlock(&d->i2c_mutex);
+	return ret;
 }
 
 /* I2C */
@@ -758,7 +765,7 @@ static int az6007_i2c_xfer(struct i2c_adapter *adap, struct i2c_msg msgs[],
 	int length;
 	u8 req, addr;
 
-	if (mutex_lock_interruptible(&st->mutex) < 0)
+	if (mutex_lock_interruptible(&d->i2c_mutex) < 0)
 		return -EAGAIN;
 
 	for (i = 0; i < num; i++) {
@@ -781,7 +788,7 @@ static int az6007_i2c_xfer(struct i2c_adapter *adap, struct i2c_msg msgs[],
 			value = addr | (1 << 8);
 			length = 6 + msgs[i + 1].len;
 			len = msgs[i + 1].len;
-			ret = __az6007_read(d->udev, st, req, value, index,
+			ret = __az6007_read(d, st, req, value, index,
 					    st->data, length);
 			if (ret >= len) {
 				for (j = 0; j < len; j++)
@@ -802,7 +809,7 @@ static int az6007_i2c_xfer(struct i2c_adapter *adap, struct i2c_msg msgs[],
 			index = msgs[i].buf[0];
 			value = addr | (1 << 8);
 			length = msgs[i].len - 1;
-			ret =  __az6007_write(d->udev, st, req, value, index,
+			ret = __az6007_write(d, st, req, value, index,
 					      &msgs[i].buf[1], length);
 		} else {
 			/* read bytes */
@@ -818,7 +825,7 @@ static int az6007_i2c_xfer(struct i2c_adapter *adap, struct i2c_msg msgs[],
 			value = addr;
 			length = msgs[i].len + 6;
 			len = msgs[i].len;
-			ret = __az6007_read(d->udev, st, req, value, index,
+			ret = __az6007_read(d, st, req, value, index,
 					    st->data, length);
 			if (ret >= len) {
 				for (j = 0; j < len; j++)
@@ -829,7 +836,7 @@ static int az6007_i2c_xfer(struct i2c_adapter *adap, struct i2c_msg msgs[],
 			goto err;
 	}
 err:
-	mutex_unlock(&st->mutex);
+	mutex_unlock(&d->i2c_mutex);
 
 	if (ret < 0) {
 		pr_info("%s ERROR: %i\n", __func__, ret);
@@ -861,7 +868,7 @@ static int az6007_identify_state(struct dvb_usb_device *d, const char **name)
 		return -ENOMEM;
 
 	/* Try to read the mac address */
-	ret = __az6007_read(d->udev, state, AZ6007_READ_DATA, 6, 0, mac, 6);
+	ret = __az6007_read(d, state, AZ6007_READ_DATA, 6, 0, mac, 6);
 	if (ret == 6)
 		ret = WARM;
 	else
@@ -870,21 +877,14 @@ static int az6007_identify_state(struct dvb_usb_device *d, const char **name)
 	kfree(mac);
 
 	if (ret == COLD) {
-		__az6007_write(d->udev, state, 0x09, 1, 0, NULL, 0);
-		__az6007_write(d->udev, state, 0x00, 0, 0, NULL, 0);
-		__az6007_write(d->udev, state, 0x00, 0, 0, NULL, 0);
+		__az6007_write(d, state, 0x09, 1, 0, NULL, 0);
+		__az6007_write(d, state, 0x00, 0, 0, NULL, 0);
+		__az6007_write(d, state, 0x00, 0, 0, NULL, 0);
 	}
 
 	pr_debug("Device is on %s state\n",
 		 ret == WARM ? "warm" : "cold");
 	return ret;
-}
-
-static void az6007_usb_disconnect(struct usb_interface *intf)
-{
-	struct dvb_usb_device *d = usb_get_intfdata(intf);
-	az6007_ci_uninit(d);
-	dvb_usbv2_disconnect(intf);
 }
 
 static int az6007_download_firmware(struct dvb_usb_device *d,
@@ -893,6 +893,19 @@ static int az6007_download_firmware(struct dvb_usb_device *d,
 	pr_debug("Loading az6007 firmware\n");
 
 	return cypress_load_firmware(d->udev, fw, CYPRESS_FX2);
+}
+
+static int az6007_init(struct dvb_usb_device *d)
+{
+	return az6007_ci_init(d);
+}
+
+static void az6007_exit(struct dvb_usb_device *d)
+{
+	struct az6007_device_state *state = d_to_priv(d);
+
+	if (state->ci_attached)
+		az6007_ci_uninit(d);
 }
 
 /* DVB USB Driver stuff */
@@ -912,6 +925,8 @@ static struct dvb_usb_device_properties az6007_props = {
 	.download_firmware   = az6007_download_firmware,
 	.identify_state	     = az6007_identify_state,
 	.power_ctrl          = az6007_power_ctrl,
+	.init                = az6007_init,
+	.exit                = az6007_exit,
 	.num_adapters        = 1,
 	.adapter             = {
 		{ .stream = DVB_USB_STREAM_BULK(0x02, 10, 4096), }
@@ -935,6 +950,8 @@ static struct dvb_usb_device_properties az6007_cablestar_hdci_props = {
 	.download_firmware   = az6007_download_firmware,
 	.identify_state	     = az6007_identify_state,
 	.power_ctrl          = az6007_power_ctrl,
+	.init                = az6007_init,
+	.exit                = az6007_exit,
 	.num_adapters        = 1,
 	.adapter             = {
 		{ .stream = DVB_USB_STREAM_BULK(0x02, 10, 4096), }
@@ -955,37 +972,17 @@ static const struct usb_device_id az6007_usb_table[] = {
 
 MODULE_DEVICE_TABLE(usb, az6007_usb_table);
 
-static int az6007_suspend(struct usb_interface *intf, pm_message_t msg)
-{
-	struct dvb_usb_device *d = usb_get_intfdata(intf);
-
-	az6007_ci_uninit(d);
-	return dvb_usbv2_suspend(intf, msg);
-}
-
-static int az6007_resume(struct usb_interface *intf)
-{
-	struct dvb_usb_device *d = usb_get_intfdata(intf);
-	struct dvb_usb_adapter *adap = &d->adapter[0];
-
-	az6007_ci_init(adap);
-	return dvb_usbv2_resume(intf);
-}
-
 /* usb specific object needed to register this driver with the usb subsystem */
 static struct usb_driver az6007_usb_driver = {
-	.name		= KBUILD_MODNAME,
-	.id_table	= az6007_usb_table,
-	.probe		= dvb_usbv2_probe,
-	.disconnect	= az6007_usb_disconnect,
-	.no_dynamic_id	= 1,
-	.soft_unbind	= 1,
-	/*
-	 * FIXME: need to implement reset_resume, likely with
-	 * dvb-usb-v2 core support
-	 */
-	.suspend	= az6007_suspend,
-	.resume		= az6007_resume,
+	.name = KBUILD_MODNAME,
+	.id_table = az6007_usb_table,
+	.probe = dvb_usbv2_probe,
+	.disconnect = dvb_usbv2_disconnect,
+	.suspend = dvb_usbv2_suspend,
+	.resume = dvb_usbv2_resume,
+	.reset_resume = dvb_usbv2_reset_resume,
+	.no_dynamic_id = 1,
+	.soft_unbind = 1,
 };
 
 module_usb_driver(az6007_usb_driver);
