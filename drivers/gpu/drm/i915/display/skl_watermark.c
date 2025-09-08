@@ -53,8 +53,6 @@ struct intel_dbuf_state {
 #define intel_atomic_get_new_dbuf_state(state) \
 	to_intel_dbuf_state(intel_atomic_get_new_global_obj_state(state, &to_intel_display(state)->dbuf.obj))
 
-static void skl_sagv_disable(struct intel_display *display);
-
 /* Stores plane specific WM parameters */
 struct skl_wm_params {
 	bool x_tiled, y_tiled;
@@ -130,35 +128,6 @@ intel_sagv_block_time(struct intel_display *display)
 	}
 }
 
-static void intel_sagv_init(struct intel_display *display)
-{
-	if (!HAS_SAGV(display))
-		display->sagv.status = I915_SAGV_NOT_CONTROLLED;
-
-	/*
-	 * Probe to see if we have working SAGV control.
-	 * For icl+ this was already determined by intel_bw_init_hw().
-	 */
-	if (DISPLAY_VER(display) < 11)
-		skl_sagv_disable(display);
-
-	drm_WARN_ON(display->drm, display->sagv.status == I915_SAGV_UNKNOWN);
-
-	display->sagv.block_time_us = intel_sagv_block_time(display);
-
-	drm_dbg_kms(display->drm, "SAGV supported: %s, original SAGV block time: %u us\n",
-		    str_yes_no(intel_has_sagv(display)), display->sagv.block_time_us);
-
-	/* avoid overflow when adding with wm0 latency/etc. */
-	if (drm_WARN(display->drm, display->sagv.block_time_us > U16_MAX,
-		     "Excessive SAGV block time %u, ignoring\n",
-		     display->sagv.block_time_us))
-		display->sagv.block_time_us = 0;
-
-	if (!intel_has_sagv(display))
-		display->sagv.block_time_us = 0;
-}
-
 /*
  * SAGV dynamically adjusts the system agent voltage and clock frequencies
  * depending on power and performance requirements. The display engine access
@@ -231,6 +200,35 @@ static void skl_sagv_disable(struct intel_display *display)
 	}
 
 	display->sagv.status = I915_SAGV_DISABLED;
+}
+
+static void intel_sagv_init(struct intel_display *display)
+{
+	if (!HAS_SAGV(display))
+		display->sagv.status = I915_SAGV_NOT_CONTROLLED;
+
+	/*
+	 * Probe to see if we have working SAGV control.
+	 * For icl+ this was already determined by intel_bw_init_hw().
+	 */
+	if (DISPLAY_VER(display) < 11)
+		skl_sagv_disable(display);
+
+	drm_WARN_ON(display->drm, display->sagv.status == I915_SAGV_UNKNOWN);
+
+	display->sagv.block_time_us = intel_sagv_block_time(display);
+
+	drm_dbg_kms(display->drm, "SAGV supported: %s, original SAGV block time: %u us\n",
+		    str_yes_no(intel_has_sagv(display)), display->sagv.block_time_us);
+
+	/* avoid overflow when adding with wm0 latency/etc. */
+	if (drm_WARN(display->drm, display->sagv.block_time_us > U16_MAX,
+		     "Excessive SAGV block time %u, ignoring\n",
+		     display->sagv.block_time_us))
+		display->sagv.block_time_us = 0;
+
+	if (!intel_has_sagv(display))
+		display->sagv.block_time_us = 0;
 }
 
 static void skl_sagv_pre_plane_update(struct intel_atomic_state *state)
