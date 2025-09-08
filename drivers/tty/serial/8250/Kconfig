@@ -162,6 +162,20 @@ config SERIAL_8250_HP300
 	depends on SERIAL_8250 && HP300
 	default SERIAL_8250
 
+config SERIAL_8250_HPDCA
+	tristate "8250 HP DCA serial support"
+	depends on SERIAL_8250 && DIO
+	help
+	  If you want to use the internal "DCA" serial ports on an HP300
+	  machine, say Y here.
+
+config SERIAL_8250_HPAPCI
+	tristate "8250 HP APCI serial support"
+	depends on SERIAL_8250 && HP300
+	help
+	  If you want to use the internal "APCI" serial ports on an HP400
+	  machine, say Y here.
+
 config SERIAL_8250_CS
 	tristate "8250/16550 PCMCIA device support"
 	depends on PCMCIA && SERIAL_8250 && HAS_IOPORT

@@ -20,11 +20,11 @@
 
 #include "8250.h"
 
-#if !defined(CONFIG_HPDCA) && !defined(CONFIG_HPAPCI) && !defined(CONFIG_COMPILE_TEST)
-#warning CONFIG_SERIAL_8250 defined but neither CONFIG_HPDCA nor CONFIG_HPAPCI defined, are you sure?
+#if !defined(CONFIG_SERIAL_8250_HPDCA) && !defined(CONFIG_SERIAL_8250_HPAPCI) && !defined(CONFIG_COMPILE_TEST)
+#warning CONFIG_SERIAL_8250 defined but neither CONFIG_SERIAL_8250_HPDCA nor CONFIG_SERIAL_8250_HPAPCI defined, are you sure?
 #endif
 
-#ifdef CONFIG_HPAPCI
+#ifdef CONFIG_SERIAL_8250_HPAPCI
 struct hp300_port {
 	struct hp300_port *next;	/* next port */
 	int line;			/* line (tty) number */
@@ -33,7 +33,7 @@ struct hp300_port {
 static struct hp300_port *hp300_ports;
 #endif
 
-#ifdef CONFIG_HPDCA
+#ifdef CONFIG_SERIAL_8250_HPDCA
 
 static int hpdca_init_one(struct dio_dev *d,
 					const struct dio_device_id *ent);
@@ -110,7 +110,7 @@ int __init hp300_setup_serial_console(void)
 
 	/* Check for APCI console */
 	if (scode == 256) {
-#ifdef CONFIG_HPAPCI
+#ifdef CONFIG_SERIAL_8250_HPAPCI
 		pr_info("Serial console is HP APCI 1\n");
 
 		port.uartclk = HPAPCI_BAUD_BASE * 16;
@@ -119,11 +119,11 @@ int __init hp300_setup_serial_console(void)
 		port.regshift = 2;
 		add_preferred_console("ttyS", port.line, "9600n8");
 #else
-		pr_warn("Serial console is APCI but support is disabled (CONFIG_HPAPCI)!\n");
+		pr_warn("Serial console is APCI but support is disabled (CONFIG_SERIAL_8250_HPAPCI)!\n");
 		return 0;
 #endif
 	} else {
-#ifdef CONFIG_HPDCA
+#ifdef CONFIG_SERIAL_8250_HPDCA
 		unsigned long pa = dio_scodetophysaddr(scode);
 		if (!pa)
 			return 0;
@@ -142,7 +142,7 @@ int __init hp300_setup_serial_console(void)
 		if (DIO_ID(pa + DIO_VIRADDRBASE) & 0x80)
 			add_preferred_console("ttyS", port.line, "9600n8");
 #else
-		pr_warn("Serial console is DCA but support is disabled (CONFIG_HPDCA)!\n");
+		pr_warn("Serial console is DCA but support is disabled (CONFIG_SERIAL_8250_HPDCA)!\n");
 		return 0;
 #endif
 	}
@@ -153,7 +153,7 @@ int __init hp300_setup_serial_console(void)
 }
 #endif /* CONFIG_SERIAL_8250_CONSOLE */
 
-#ifdef CONFIG_HPDCA
+#ifdef CONFIG_SERIAL_8250_HPDCA
 static int hpdca_init_one(struct dio_dev *d,
 				const struct dio_device_id *ent)
 {
@@ -203,7 +203,7 @@ static int hpdca_init_one(struct dio_dev *d,
 static int __init hp300_8250_init(void)
 {
 	static int called;
-#ifdef CONFIG_HPAPCI
+#ifdef CONFIG_SERIAL_8250_HPAPCI
 	int line;
 	unsigned long base;
 	struct uart_8250_port uart;
@@ -217,10 +217,10 @@ static int __init hp300_8250_init(void)
 	if (!MACH_IS_HP300)
 		return -ENODEV;
 
-#ifdef CONFIG_HPDCA
+#ifdef CONFIG_SERIAL_8250_HPDCA
 	dio_register_driver(&hpdca_driver);
 #endif
-#ifdef CONFIG_HPAPCI
+#ifdef CONFIG_SERIAL_8250_HPAPCI
 	if (hp300_model < HP_400) {
 		if (!num_ports)
 			return -ENODEV;
@@ -284,7 +284,7 @@ static int __init hp300_8250_init(void)
 	return 0;
 }
 
-#ifdef CONFIG_HPDCA
+#ifdef CONFIG_SERIAL_8250_HPDCA
 static void hpdca_remove_one(struct dio_dev *d)
 {
 	int line;
@@ -300,7 +300,7 @@ static void hpdca_remove_one(struct dio_dev *d)
 
 static void __exit hp300_8250_exit(void)
 {
-#ifdef CONFIG_HPAPCI
+#ifdef CONFIG_SERIAL_8250_HPAPCI
 	struct hp300_port *port, *to_free;
 
 	for (port = hp300_ports; port; ) {
@@ -312,7 +312,7 @@ static void __exit hp300_8250_exit(void)
 
 	hp300_ports = NULL;
 #endif
-#ifdef CONFIG_HPDCA
+#ifdef CONFIG_SERIAL_8250_HPDCA
 	dio_unregister_driver(&hpdca_driver);
 #endif
 }
