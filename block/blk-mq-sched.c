@@ -113,7 +113,14 @@ static int __blk_mq_do_dispatch_sched(struct blk_mq_hw_ctx *hctx)
 		if (budget_token < 0)
 			break;
 
-		rq = e->type->ops.dispatch_request(hctx);
+		if (blk_queue_sq_sched(q)) {
+			elevator_dispatch_lock(e);
+			rq = e->type->ops.dispatch_request(hctx);
+			elevator_dispatch_unlock(e);
+		} else {
+			rq = e->type->ops.dispatch_request(hctx);
+		}
+
 		if (!rq) {
 			blk_mq_put_dispatch_budget(q, budget_token);
 			/*

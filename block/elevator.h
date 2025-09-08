@@ -119,13 +119,13 @@ struct request *elv_rqhash_find(struct request_queue *q, sector_t offset);
 /*
  * each queue has an elevator_queue associated with it
  */
-struct elevator_queue
-{
+struct elevator_queue {
 	struct elevator_type *type;
 	struct elevator_tags *et;
 	void *elevator_data;
 	struct kobject kobj;
 	struct mutex sysfs_lock;
+	spinlock_t lock;
 	unsigned long flags;
 	DECLARE_HASHTABLE(hash, ELV_HASH_BITS);
 };
@@ -133,6 +133,33 @@ struct elevator_queue
 #define ELEVATOR_FLAG_REGISTERED	0
 #define ELEVATOR_FLAG_DYING		1
 #define ELEVATOR_FLAG_ENABLE_WBT_ON_EXIT	2
+#define ELEVATOR_FLAG_DISPATCH_IRQ	3
+
+#define elevator_lock(e)		spin_lock(&(e)->lock)
+#define elevator_unlock(e)		spin_unlock(&(e)->lock)
+#define elevator_lock_irq(e)		spin_lock_irq(&(e)->lock)
+#define elevator_unlock_irq(e)		spin_unlock_irq(&(e)->lock)
+#define elevator_lock_irqsave(e, flags) \
+	spin_lock_irqsave(&(e)->lock, flags)
+#define elevator_unlock_irqrestore(e, flags) \
+	spin_unlock_irqrestore(&(e)->lock, flags)
+#define elevator_lock_assert_held(e)	lockdep_assert_held(&(e)->lock)
+
+static inline void elevator_dispatch_lock(struct elevator_queue *eq)
+{
+	if (test_bit(ELEVATOR_FLAG_DISPATCH_IRQ, &eq->flags))
+		elevator_lock_irq(eq);
+	else
+		elevator_lock(eq);
+}
+
+static inline void elevator_dispatch_unlock(struct elevator_queue *eq)
+{
+	if (test_bit(ELEVATOR_FLAG_DISPATCH_IRQ, &eq->flags))
+		elevator_unlock_irq(eq);
+	else
+		elevator_unlock(eq);
+}
 
 /*
  * block elevator interface
