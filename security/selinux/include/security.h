@@ -209,6 +209,11 @@ static inline bool selinux_policycap_netif_wildcard(void)
 		selinux_state.policycap[POLICYDB_CAP_NETIF_WILDCARD]);
 }
 
+static inline bool selinux_policycap_memfd_class(void)
+{
+	return READ_ONCE(selinux_state.policycap[POLICYDB_CAP_MEMFD_CLASS]);
+}
+
 struct selinux_policy_convert_data;
 
 struct selinux_load_state {
