@@ -2773,12 +2773,15 @@ static struct sk_buff *ieee80211_build_hdr(struct ieee80211_sub_if_data *sdata,
 			/* DA SA BSSID */
 			memcpy(hdr.addr1, skb->data, ETH_ALEN);
 			memcpy(hdr.addr2, skb->data + ETH_ALEN, ETH_ALEN);
+			rcu_read_lock();
 			link = rcu_dereference(sdata->link[tdls_link_id]);
 			if (WARN_ON_ONCE(!link)) {
 				ret = -EINVAL;
+				rcu_read_unlock();
 				goto free;
 			}
 			memcpy(hdr.addr3, link->u.mgd.bssid, ETH_ALEN);
+			rcu_read_unlock();
 			hdrlen = 24;
 		}  else if (sdata->u.mgd.use_4addr &&
 			    cpu_to_be16(ethertype) != sdata->control_port_protocol) {
