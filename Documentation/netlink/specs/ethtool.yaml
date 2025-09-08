@@ -708,6 +708,15 @@ attribute-sets:
       -
         name: ext-down-cnt
         type: u32
+      -
+        name: mse-value
+        type: u32
+      -
+        name: mse-max
+        type: u32
+      -
+        name: mse-channel
+        type: u32
   -
     name: debug
     attr-cnt-name: __ethtool-a-debug-cnt
