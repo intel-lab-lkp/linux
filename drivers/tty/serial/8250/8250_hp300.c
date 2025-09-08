@@ -20,10 +20,6 @@
 
 #include "8250.h"
 
-#if !defined(CONFIG_SERIAL_8250_HPDCA) && !defined(CONFIG_SERIAL_8250_HPAPCI) && !defined(CONFIG_COMPILE_TEST)
-#warning CONFIG_SERIAL_8250 defined but neither CONFIG_SERIAL_8250_HPDCA nor CONFIG_SERIAL_8250_HPAPCI defined, are you sure?
-#endif
-
 #ifdef CONFIG_SERIAL_8250_HPAPCI
 struct hp300_port {
 	struct hp300_port *next;	/* next port */
