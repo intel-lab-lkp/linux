@@ -310,4 +310,6 @@ s32 e1000_read_emi_reg_locked(struct e1000_hw *hw, u16 addr, u16 *data);
 s32 e1000_write_emi_reg_locked(struct e1000_hw *hw, u16 addr, u16 data);
 s32 e1000_set_eee_pchlan(struct e1000_hw *hw);
 s32 e1000_enable_ulp_lpt_lp(struct e1000_hw *hw, bool to_sx);
+s32 e1000_reconfigure_k1_params(struct e1000_hw *hw);
+
 #endif /* _E1000E_ICH8LAN_H_ */
