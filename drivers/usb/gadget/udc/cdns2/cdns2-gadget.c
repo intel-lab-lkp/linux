@@ -253,7 +253,7 @@ void cdns2_gadget_giveback(struct cdns2_endpoint *pep,
 
 	trace_cdns2_request_giveback(preq);
 
-	if (request->complete) {
+	if (request->complete && request->buf != pdev->zlp_buf) {
 		spin_unlock(&pdev->lock);
 		usb_gadget_giveback_request(&pep->endpoint, request);
 		spin_lock(&pdev->lock);
