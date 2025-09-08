@@ -1833,21 +1833,39 @@ static void skl_compute_plane_wm(const struct intel_crtc_state *crtc_state,
 				 latency,
 				 wp->plane_blocks_per_line);
 
-	if (wp->tiling == WM_TILING_Y_FAMILY) {
+	switch (wp->tiling) {
+	case WM_TILING_Y_FAMILY:
 		selected_result = max_fixed16(method2, wp->y_tile_minimum);
-	} else {
+		break;
+
+	case WM_TILING_LINEAR:
+	case WM_TILING_X_TILED:
+		/*
+		 * Special case for unrealistically small horizontal
+		 * total with plane downscaling.
+		 */
 		if ((wp->cpp * crtc_state->hw.pipe_mode.crtc_htotal /
 		     wp->dbuf_block_size < 1) &&
-		     (wp->plane_bytes_per_line / wp->dbuf_block_size < 1)) {
+		    (wp->plane_bytes_per_line / wp->dbuf_block_size < 1)) {
 			selected_result = method2;
 		} else if (latency >= wp->linetime_us) {
+			/*
+			 * With display version 9, we use the minimum
+			 * of both methods.
+			 */
 			if (DISPLAY_VER(display) == 9)
 				selected_result = min_fixed16(method1, method2);
 			else
 				selected_result = method2;
 		} else {
+			/* everything else with linear/X-tiled uses method 1 */
 			selected_result = method1;
 		}
+		break;
+
+	default:
+		drm_err(display->drm, "Invalid tiling mode\n", wp->tiling);
+		break;
 	}
 
 	blocks = fixed16_to_u32_round_up(selected_result);
