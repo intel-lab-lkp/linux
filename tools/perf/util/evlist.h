@@ -92,6 +92,7 @@ struct evlist {
 	 * of struct metric_expr.
 	 */
 	struct rblist	metric_events;
+	struct list_head deferred_samples;
 };
 
 struct evsel_str_handler {
