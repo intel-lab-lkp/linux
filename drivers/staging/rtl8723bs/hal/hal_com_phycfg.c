@@ -60,9 +60,7 @@ phy_SetTxPowerByRateBase(struct adapter *Adapter, u8 RfPath,
 }
 
 static void
-phy_StoreTxPowerByRateBase(
-struct adapter *padapter
-	)
+phy_StoreTxPowerByRateBase(struct adapter *padapter)
 {
 	u8 path, base;
 
