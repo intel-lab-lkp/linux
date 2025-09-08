@@ -4,17 +4,20 @@
 Memory Management
 =================
 
+Buffer Objects
+++++++++++++++
+
 .. kernel-doc:: drivers/gpu/drm/xe/xe_bo_doc.h
    :doc: Buffer Objects (BO)
 
 GGTT
-====
+++++
 
 .. kernel-doc:: drivers/gpu/drm/xe/xe_ggtt.c
    :doc: Global Graphics Translation Table (GGTT)
 
 GGTT Internal API
------------------
+=================
 
 .. kernel-doc:: drivers/gpu/drm/xe/xe_ggtt_types.h
    :internal:
@@ -23,7 +26,7 @@ GGTT Internal API
    :internal:
 
 Pagetable building
-==================
+++++++++++++++++++
 
 .. kernel-doc:: drivers/gpu/drm/xe/xe_pt.c
    :doc: Pagetable building
