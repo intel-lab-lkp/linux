@@ -80,9 +80,13 @@ xfs_fsync_seq(
 	struct xfs_inode	*ip,
 	bool			datasync)
 {
+	unsigned int sync_fields;
+
 	if (!xfs_ipincount(ip))
 		return 0;
-	if (datasync && !(ip->i_itemp->ili_fsync_fields & ~XFS_ILOG_TIMESTAMP))
+	sync_fields = ip->i_itemp->ili_fsync_fields |
+		      ip->i_itemp->ili_fsync_flushing_fields;
+	if (datasync && !(sync_fields & ~XFS_ILOG_TIMESTAMP))
 		return 0;
 	return ip->i_itemp->ili_commit_seq;
 }
@@ -92,13 +96,14 @@ xfs_fsync_seq(
  * log up to the latest LSN that touched the inode.
  *
  * If we have concurrent fsync/fdatasync() calls, we need them to all block on
- * the log force before we clear the ili_fsync_fields field. This ensures that
- * we don't get a racing sync operation that does not wait for the metadata to
- * hit the journal before returning.  If we race with clearing ili_fsync_fields,
- * then all that will happen is the log force will do nothing as the lsn will
- * already be on disk.  We can't race with setting ili_fsync_fields because that
- * is done under XFS_ILOCK_EXCL, and that can't happen because we hold the lock
- * shared until after the ili_fsync_fields is cleared.
+ * the log force until it is finished. Thus we clear ili_fsync_fields so that
+ * new modifications since starting log force can accumulate there and just
+ * save old ili_fsync_fields value to ili_fsync_flushing_fields so that
+ * concurrent fsyncs can use that to determine whether they need to wait for
+ * running log force or not. This ensures that we don't get a racing sync
+ * operation that does not wait for the metadata to hit the journal before
+ * returning.  If we race with clearing ili_fsync_fields, then all that will
+ * happen is the log force will do nothing as the lsn will already be on disk.
  */
 static  int
 xfs_fsync_flush_log(
@@ -112,14 +117,20 @@ xfs_fsync_flush_log(
 	xfs_ilock(ip, XFS_ILOCK_SHARED);
 	seq = xfs_fsync_seq(ip, datasync);
 	if (seq) {
-		error = xfs_log_force_seq(ip->i_mount, seq, XFS_LOG_SYNC,
-					  log_flushed);
-
 		spin_lock(&ip->i_itemp->ili_lock);
+		ip->i_itemp->ili_fsync_flushing_fields =
+						ip->i_itemp->ili_fsync_fields;
 		ip->i_itemp->ili_fsync_fields = 0;
 		spin_unlock(&ip->i_itemp->ili_lock);
+		xfs_iunlock(ip, XFS_ILOCK_SHARED);
+		error = xfs_log_force_seq(ip->i_mount, seq, XFS_LOG_SYNC,
+					  log_flushed);
+		spin_lock(&ip->i_itemp->ili_lock);
+		ip->i_itemp->ili_fsync_flushing_fields = 0;
+		spin_unlock(&ip->i_itemp->ili_lock);
+	} else {
+		xfs_iunlock(ip, XFS_ILOCK_SHARED);
 	}
-	xfs_iunlock(ip, XFS_ILOCK_SHARED);
 	return error;
 }
 

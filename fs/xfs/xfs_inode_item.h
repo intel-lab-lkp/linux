@@ -33,6 +33,7 @@ struct xfs_inode_log_item {
 	unsigned int		ili_last_fields;   /* fields when flushed */
 	unsigned int		ili_fields;	   /* fields to be logged */
 	unsigned int		ili_fsync_fields;  /* logged since last fsync */
+	unsigned int		ili_fsync_flushing_fields;  /* fields currently being committed by fsync */
 	xfs_lsn_t		ili_flush_lsn;	   /* lsn at last flush */
 	xfs_csn_t		ili_commit_seq;	   /* last transaction commit */
 };

@@ -1056,6 +1056,7 @@ xfs_iflush_abort_clean(
 	iip->ili_last_fields = 0;
 	iip->ili_fields = 0;
 	iip->ili_fsync_fields = 0;
+	iip->ili_fsync_flushing_fields = 0;
 	iip->ili_flush_lsn = 0;
 	iip->ili_item.li_buf = NULL;
 	list_del_init(&iip->ili_item.li_bio_list);
