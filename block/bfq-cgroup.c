@@ -746,7 +746,7 @@ static void bfq_sync_bfqq_move(struct bfq_data *bfqd,
  * @bic: the bic to move.
  * @bfqg: the group to move to.
  *
- * Move bic to blkcg, assuming that bfqd->lock is held; which makes
+ * Move bic to blkcg, assuming that elevator lock is held; which makes
  * sure that the reference to cgroup is valid across the call (see
  * comments in bfq_bic_update_cgroup on this issue)
  */
@@ -878,7 +878,7 @@ static void bfq_pd_offline(struct blkg_policy_data *pd)
 	unsigned long flags;
 	int i;
 
-	spin_lock_irqsave(&bfqd->lock, flags);
+	elevator_lock_irqsave(bfqd->queue->elevator, flags);
 
 	if (!entity) /* root group */
 		goto put_async_queues;
@@ -923,7 +923,7 @@ static void bfq_pd_offline(struct blkg_policy_data *pd)
 put_async_queues:
 	bfq_put_async_queues(bfqd, bfqg);
 
-	spin_unlock_irqrestore(&bfqd->lock, flags);
+	elevator_unlock_irqrestore(bfqd->queue->elevator, flags);
 	/*
 	 * @blkg is going offline and will be ignored by
 	 * blkg_[rw]stat_recursive_sum().  Transfer stats to the parent so
