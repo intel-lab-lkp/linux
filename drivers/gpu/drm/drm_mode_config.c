@@ -471,7 +471,7 @@ int drmm_mode_config_init(struct drm_device *dev)
 		ret = drm_modeset_lock(&dev->mode_config.connection_mutex,
 				       &modeset_ctx);
 		if (ret == -EDEADLK)
-			ret = drm_modeset_backoff(&modeset_ctx);
+			drm_modeset_backoff(&modeset_ctx);
 
 		might_fault();
 
