@@ -404,7 +404,7 @@ struct devfreq_event_dev *devm_devfreq_event_add_edev(struct device *dev,
 	edev = devfreq_event_add_edev(dev, desc);
 	if (IS_ERR(edev)) {
 		devres_free(ptr);
-		return ERR_PTR(-ENOMEM);
+		return edev;
 	}
 
 	*ptr = edev;
