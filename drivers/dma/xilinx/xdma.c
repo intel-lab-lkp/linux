@@ -1236,7 +1236,7 @@ static int xdma_probe(struct platform_device *pdev)
 
 	xdev->rmap = devm_regmap_init_mmio(&pdev->dev, reg_base,
 					   &xdma_regmap_config);
-	if (!xdev->rmap) {
+	if (IS_ERR(xdev->rmap)) {
 		xdma_err(xdev, "config regmap failed: %d", ret);
 		goto failed;
 	}
