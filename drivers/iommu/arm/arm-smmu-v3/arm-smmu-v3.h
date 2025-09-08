@@ -678,6 +678,8 @@ struct arm_smmu_inv {
 /**
  * struct arm_smmu_invs - Per-domain invalidation array
  * @num_invs: number of invalidations in the flexible array
+ * @old: flag to synchronize with reader
+ * @rwlock: optional rwlock to fench ATS operations
  * @rcu: rcu head for kfree_rcu()
  * @inv: flexible invalidation array
  *
@@ -703,6 +705,8 @@ struct arm_smmu_inv {
  */
 struct arm_smmu_invs {
 	size_t num_invs;
+	rwlock_t rwlock;
+	u8 old;
 	struct rcu_head rcu;
 	struct arm_smmu_inv inv[];
 };
@@ -714,6 +718,7 @@ static inline struct arm_smmu_invs *arm_smmu_invs_alloc(size_t num_invs)
 	new_invs = kzalloc(struct_size(new_invs, inv, num_invs), GFP_KERNEL);
 	if (!new_invs)
 		return ERR_PTR(-ENOMEM);
+	rwlock_init(&new_invs->rwlock);
 	new_invs->num_invs = num_invs;
 	return new_invs;
 }
@@ -1082,6 +1087,21 @@ static inline bool arm_smmu_master_canwbs(struct arm_smmu_master *master)
 	       IOMMU_FWSPEC_PCI_RC_CANWBS;
 }
 
+/**
+ * struct arm_smmu_inv_state - Per-domain invalidation array state
+ * @invs_ptr: points to the domain->invs (unwinding nesting/etc.) or is NULL if
+ *            no change should be made
+ * @old_invs: the original invs array
+ * @new_invs: for new domain, this is the new invs array to update domin->invs;
+ *            for old domain, this is the master->build_invs to pass in as the
+ *            to_unref argument to an arm_smmu_invs_unref() call
+ */
+struct arm_smmu_inv_state {
+	struct arm_smmu_invs **invs_ptr;
+	struct arm_smmu_invs *old_invs;
+	struct arm_smmu_invs *new_invs;
+};
+
 struct arm_smmu_attach_state {
 	/* Inputs */
 	struct iommu_domain *old_domain;
@@ -1091,6 +1111,8 @@ struct arm_smmu_attach_state {
 	ioasid_t ssid;
 	/* Resulting state */
 	struct arm_smmu_vmaster *vmaster;
+	struct arm_smmu_inv_state old_domain_invst;
+	struct arm_smmu_inv_state new_domain_invst;
 	bool ats_enabled;
 };
 
