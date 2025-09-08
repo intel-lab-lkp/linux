@@ -706,6 +706,88 @@ int virtio_device_reset_done(struct virtio_device *dev)
 }
 EXPORT_SYMBOL_GPL(virtio_device_reset_done);
 
+/**
+ * virtio_device_cap_id_list_query - Query the list of available capability IDs
+ * @vdev: the virtio device
+ * @data: pointer to store the capability ID list result
+ *
+ * This function queries the virtio device for the list of available capability
+ * IDs that can be used with virtio_device_cap_get() and virtio_device_cap_set().
+ * The result is stored in the provided data structure.
+ *
+ * Return: 0 on success, -EOPNOTSUPP if the device doesn't support admin
+ * operations or capability queries, or a negative error code on other failures.
+ */
+int
+virtio_device_cap_id_list_query(struct virtio_device *vdev,
+				struct virtio_admin_cmd_query_cap_id_result *data)
+{
+	const struct virtio_admin_ops *admin = vdev->admin_ops;
+
+	if (!admin || !admin->cap_id_list_query)
+		return -EOPNOTSUPP;
+
+	return admin->cap_id_list_query(vdev, data);
+}
+EXPORT_SYMBOL_GPL(virtio_device_cap_id_list_query);
+
+/**
+ * virtio_device_cap_get - Get a capability from a virtio device
+ * @vdev: the virtio device
+ * @id: capability ID to retrieve
+ * @caps: buffer to store the capability data
+ * @cap_size: size of the capability buffer in bytes
+ *
+ * This function retrieves a specific capability from the virtio device.
+ * The capability data is stored in the provided buffer. The caller must
+ * ensure the buffer is large enough to hold the capability data.
+ *
+ * Return: 0 on success, -EOPNOTSUPP if the device doesn't support admin
+ * operations or capability retrieval, or a negative error code on other failures.
+ */
+int virtio_device_cap_get(struct virtio_device *vdev,
+			  u16 id,
+			  void *caps,
+			  size_t cap_size)
+{
+	const struct virtio_admin_ops *admin = vdev->admin_ops;
+
+	if (!admin || !admin->cap_get)
+		return -EOPNOTSUPP;
+
+	return admin->cap_get(vdev, id, caps, cap_size);
+}
+EXPORT_SYMBOL_GPL(virtio_device_cap_get);
+
+/**
+ * virtio_device_cap_set - Set a capability on a virtio device
+ * @vdev: the virtio device
+ * @id: capability ID to set
+ * @caps: buffer containing the capability data to set
+ * @cap_size: size of the capability data in bytes
+ *
+ * This function sets a specific capability on the virtio device.
+ * The capability data is read from the provided buffer and applied
+ * to the device. The device may validate the capability data before
+ * applying it.
+ *
+ * Return: 0 on success, -EOPNOTSUPP if the device doesn't support admin
+ * operations or capability setting, or a negative error code on other failures.
+ */
+int virtio_device_cap_set(struct virtio_device *vdev,
+			  u16 id,
+			  const void *caps,
+			  size_t cap_size)
+{
+	const struct virtio_admin_ops *admin = vdev->admin_ops;
+
+	if (!admin || !admin->cap_set)
+		return -EOPNOTSUPP;
+
+	return admin->cap_set(vdev, id, caps, cap_size);
+}
+EXPORT_SYMBOL_GPL(virtio_device_cap_set);
+
 static int virtio_init(void)
 {
 	BUILD_BUG_ON(offsetof(struct virtio_device, features) !=

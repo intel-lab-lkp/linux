@@ -12,6 +12,7 @@
 #include <linux/dma-mapping.h>
 #include <linux/completion.h>
 #include <linux/virtio_features.h>
+#include <linux/virtio_admin.h>
 
 /**
  * struct virtqueue - a queue to register buffers for sending or receiving.
@@ -161,6 +162,7 @@ struct virtio_device {
 	struct virtio_device_id id;
 	const struct virtio_config_ops *config;
 	const struct vringh_config_ops *vringh_config;
+	const struct virtio_admin_ops *admin_ops;
 	struct list_head vqs;
 	VIRTIO_DECLARE_FEATURES(features);
 	void *priv;
@@ -195,6 +197,17 @@ int virtio_device_restore(struct virtio_device *dev);
 void virtio_reset_device(struct virtio_device *dev);
 int virtio_device_reset_prepare(struct virtio_device *dev);
 int virtio_device_reset_done(struct virtio_device *dev);
+int
+virtio_device_cap_id_list_query(struct virtio_device *vdev,
+				struct virtio_admin_cmd_query_cap_id_result *data);
+int virtio_device_cap_get(struct virtio_device *vdev,
+			  u16 id,
+			  void *caps,
+			  size_t cap_size);
+int virtio_device_cap_set(struct virtio_device *vdev,
+			  u16 id,
+			  const void *caps,
+			  size_t cap_size);
 
 size_t virtio_max_dma_size(const struct virtio_device *vdev);
 

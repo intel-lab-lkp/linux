@@ -19,6 +19,7 @@
 #define VIRTIO_PCI_NO_LEGACY
 #define VIRTIO_RING_NO_LEGACY
 #include "virtio_pci_common.h"
+#include <linux/virtio_admin.h>
 
 #define VIRTIO_AVQ_SGS_MAX	4
 
@@ -232,103 +233,123 @@ end:
 	kfree(data);
 }
 
-static void
-virtio_pci_admin_cmd_dev_parts_objects_enable(struct virtio_device *virtio_dev)
+static int vp_modern_admin_cmd_cap_get(struct virtio_device *virtio_dev,
+				       u16 id,
+				       void *caps,
+				       size_t cap_size)
 {
-	struct virtio_pci_device *vp_dev = to_vp_device(virtio_dev);
-	struct virtio_admin_cmd_cap_get_data *get_data;
-	struct virtio_admin_cmd_cap_set_data *set_data;
-	struct virtio_dev_parts_cap *result;
+	struct virtio_admin_cmd_cap_get_data *data __free(kfree) = NULL;
 	struct virtio_admin_cmd cmd = {};
 	struct scatterlist result_sg;
 	struct scatterlist data_sg;
-	u8 resource_objects_limit;
-	u16 set_data_size;
-	int ret;
 
-	get_data = kzalloc(sizeof(*get_data), GFP_KERNEL);
-	if (!get_data)
-		return;
+	data = kzalloc(sizeof(*data), GFP_KERNEL);
+	if (!data)
+		return -ENOMEM;
 
-	result = kzalloc(sizeof(*result), GFP_KERNEL);
-	if (!result)
-		goto end;
-
-	get_data->id = cpu_to_le16(VIRTIO_DEV_PARTS_CAP);
-	sg_init_one(&data_sg, get_data, sizeof(*get_data));
-	sg_init_one(&result_sg, result, sizeof(*result));
+	data->id = cpu_to_le16(id);
+	sg_init_one(&data_sg, data, sizeof(*data));
+	sg_init_one(&result_sg, caps, cap_size);
 	cmd.opcode = cpu_to_le16(VIRTIO_ADMIN_CMD_DEVICE_CAP_GET);
 	cmd.group_type = cpu_to_le16(VIRTIO_ADMIN_GROUP_TYPE_SELF);
 	cmd.data_sg = &data_sg;
 	cmd.result_sg = &result_sg;
-	ret = vp_modern_admin_cmd_exec(virtio_dev, &cmd);
+
+	return vp_modern_admin_cmd_exec(virtio_dev, &cmd);
+}
+
+static int vp_modern_admin_cmd_cap_set(struct virtio_device *virtio_dev,
+				       u16 id,
+				       const void *caps,
+				       size_t cap_size)
+{
+	struct virtio_admin_cmd_cap_set_data *data  __free(kfree) = NULL;
+	struct virtio_admin_cmd cmd = {};
+	struct scatterlist data_sg;
+	size_t data_size;
+
+	data_size = sizeof(*data) + cap_size;
+	data = kzalloc(data_size, GFP_KERNEL);
+	if (!data)
+		return -ENOMEM;
+
+	data->id = cpu_to_le16(id);
+	memcpy(data->cap_specific_data, caps, cap_size);
+	sg_init_one(&data_sg, data, data_size);
+	cmd.opcode = cpu_to_le16(VIRTIO_ADMIN_CMD_DRIVER_CAP_SET);
+	cmd.group_type = cpu_to_le16(VIRTIO_ADMIN_GROUP_TYPE_SELF);
+	cmd.data_sg = &data_sg;
+	cmd.result_sg = NULL;
+
+	return vp_modern_admin_cmd_exec(virtio_dev, &cmd);
+}
+
+static void
+virtio_pci_admin_cmd_dev_parts_objects_enable(struct virtio_device *virtio_dev)
+{
+	struct virtio_pci_device *vp_dev = to_vp_device(virtio_dev);
+	struct virtio_dev_parts_cap *dev_parts;
+	u8 resource_objects_limit;
+	int ret;
+
+	dev_parts = kzalloc(sizeof(*dev_parts), GFP_KERNEL);
+	if (!dev_parts)
+		return;
+
+	ret = vp_modern_admin_cmd_cap_get(virtio_dev, VIRTIO_DEV_PARTS_CAP,
+					  dev_parts, sizeof(*dev_parts));
 	if (ret)
-		goto err_get;
-
-	set_data_size = sizeof(*set_data) + sizeof(*result);
-	set_data = kzalloc(set_data_size, GFP_KERNEL);
-	if (!set_data)
-		goto err_get;
-
-	set_data->id = cpu_to_le16(VIRTIO_DEV_PARTS_CAP);
+		goto err;
 
 	/* Set the limit to the minimum value between the GET and SET values
 	 * supported by the device. Since the obj_id for VIRTIO_DEV_PARTS_CAP
 	 * is a globally unique value per PF, there is no possibility of
 	 * overlap between GET and SET operations.
 	 */
-	resource_objects_limit = min(result->get_parts_resource_objects_limit,
-				     result->set_parts_resource_objects_limit);
-	result->get_parts_resource_objects_limit = resource_objects_limit;
-	result->set_parts_resource_objects_limit = resource_objects_limit;
-	memcpy(set_data->cap_specific_data, result, sizeof(*result));
-	sg_init_one(&data_sg, set_data, set_data_size);
-	cmd.data_sg = &data_sg;
-	cmd.result_sg = NULL;
-	cmd.opcode = cpu_to_le16(VIRTIO_ADMIN_CMD_DRIVER_CAP_SET);
-	ret = vp_modern_admin_cmd_exec(virtio_dev, &cmd);
+	resource_objects_limit = min(dev_parts->get_parts_resource_objects_limit,
+				     dev_parts->set_parts_resource_objects_limit);
+	dev_parts->get_parts_resource_objects_limit = resource_objects_limit;
+	dev_parts->set_parts_resource_objects_limit = resource_objects_limit;
+
+	ret = vp_modern_admin_cmd_cap_set(virtio_dev, VIRTIO_DEV_PARTS_CAP,
+					  dev_parts, sizeof(*dev_parts));
 	if (ret)
-		goto err_set;
+		goto err;
 
 	/* Allocate IDR to manage the dev caps objects */
 	ida_init(&vp_dev->admin_vq.dev_parts_ida);
 	vp_dev->admin_vq.max_dev_parts_objects = resource_objects_limit;
 
-err_set:
-	kfree(set_data);
-err_get:
-	kfree(result);
-end:
-	kfree(get_data);
+err:
+	kfree(dev_parts);
 }
 
-static void virtio_pci_admin_cmd_cap_init(struct virtio_device *virtio_dev)
+static int vp_modern_admin_cap_id_list_query(struct virtio_device *virtio_dev,
+					     struct virtio_admin_cmd_query_cap_id_result *data)
 {
-	struct virtio_pci_device *vp_dev = to_vp_device(virtio_dev);
-	struct virtio_admin_cmd_query_cap_id_result *data;
 	struct virtio_admin_cmd cmd = {};
 	struct scatterlist result_sg;
-	int ret;
-
-	data = kzalloc(sizeof(*data), GFP_KERNEL);
-	if (!data)
-		return;
 
 	sg_init_one(&result_sg, data, sizeof(*data));
 	cmd.opcode = cpu_to_le16(VIRTIO_ADMIN_CMD_CAP_ID_LIST_QUERY);
 	cmd.group_type = cpu_to_le16(VIRTIO_ADMIN_GROUP_TYPE_SELF);
 	cmd.result_sg = &result_sg;
 
-	ret = vp_modern_admin_cmd_exec(virtio_dev, &cmd);
-	if (ret)
+	return vp_modern_admin_cmd_exec(virtio_dev, &cmd);
+}
+
+static void virtio_pci_admin_cmd_cap_init(struct virtio_device *virtio_dev)
+{
+	struct virtio_admin_cmd_query_cap_id_result *data;
+
+	data = kzalloc(sizeof(*data), GFP_KERNEL);
+	if (!data)
+		return;
+
+	if (vp_modern_admin_cap_id_list_query(virtio_dev, data))
 		goto end;
 
-	/* Max number of caps fits into a single u64 */
-	BUILD_BUG_ON(sizeof(data->supported_caps) > sizeof(u64));
-
-	vp_dev->admin_vq.supported_caps = le64_to_cpu(data->supported_caps[0]);
-
-	if (!(vp_dev->admin_vq.supported_caps & (1 << VIRTIO_DEV_PARTS_CAP)))
+	if (!(VIRTIO_CAP_IN_LIST(data, VIRTIO_DEV_PARTS_CAP)))
 		goto end;
 
 	virtio_pci_admin_cmd_dev_parts_objects_enable(virtio_dev);
@@ -1264,6 +1285,11 @@ static const struct virtio_config_ops virtio_pci_config_ops = {
 	.enable_vq_after_reset = vp_modern_enable_vq_after_reset,
 };
 
+static const struct virtio_admin_ops virtio_pci_admin_ops = {
+	.cap_id_list_query = vp_modern_admin_cap_id_list_query,
+	.cap_get = vp_modern_admin_cmd_cap_get,
+	.cap_set = vp_modern_admin_cmd_cap_set,
+};
 /* the PCI probing function */
 int virtio_pci_modern_probe(struct virtio_pci_device *vp_dev)
 {
@@ -1282,6 +1308,7 @@ int virtio_pci_modern_probe(struct virtio_pci_device *vp_dev)
 	else
 		vp_dev->vdev.config = &virtio_pci_config_nodev_ops;
 
+	vp_dev->vdev.admin_ops = &virtio_pci_admin_ops;
 	vp_dev->config_vector = vp_config_vector;
 	vp_dev->setup_vq = setup_vq;
 	vp_dev->del_vq = del_vq;
