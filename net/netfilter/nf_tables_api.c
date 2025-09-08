@@ -7359,9 +7359,15 @@ static int nft_add_set_elem(struct nft_ctx *ctx, struct nft_set *set,
 			expr_array[i] = expr;
 			num_exprs++;
 
-			if (set->num_exprs && expr->ops != set->exprs[i]->ops) {
-				err = -EOPNOTSUPP;
-				goto err_set_elem_expr;
+			if (set->num_exprs) {
+				if (i >= set->num_exprs) {
+					err = -EINVAL;
+					goto err_set_elem_expr;
+				}
+				if (expr->ops != set->exprs[i]->ops) {
+					err = -EOPNOTSUPP;
+					goto err_set_elem_expr;
+				}
 			}
 			i++;
 		}
