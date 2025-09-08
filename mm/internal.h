@@ -953,6 +953,23 @@ static inline bool free_area_empty(struct free_area *area, int migratetype)
 	return list_empty(&area->free_list[migratetype]);
 }
 
+static inline void vma_attach_anon(struct vm_area_struct *vma,
+				   struct anon_vma *anon_vma)
+{
+	mmap_assert_locked(vma->vm_mm);
+	lockdep_assert_held_write(&anon_vma->root->rwsem);
+	vma->anon_vma = anon_vma;
+	vma->anon_vma->num_active_vmas++;
+}
+
+static inline void vma_detach_anon(struct vm_area_struct *vma)
+{
+	mmap_assert_locked(vma->vm_mm);
+	lockdep_assert_held_write(&vma->anon_vma->root->rwsem);
+	vma->anon_vma->num_active_vmas--;
+	vma->anon_vma = NULL;
+}
+
 /* mm/util.c */
 struct anon_vma *folio_anon_vma(const struct folio *folio);
 
