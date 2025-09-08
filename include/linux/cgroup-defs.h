@@ -88,7 +88,8 @@ enum {
 	/*
 	 * Reduce latencies on dynamic cgroup modifications such as task
 	 * migrations and controller on/offs by disabling percpu operation on
-	 * cgroup_threadgroup_rwsem. This makes hot path operations such as
+	 * cgroup_threadgroup_rwsem and taking per threadgroup rwsem when
+	 * writing to cgroup.procs. This makes hot path operations such as
 	 * forks and exits into the slow path and more expensive.
 	 *
 	 * The static usage pattern of creating a cgroup, enabling controllers,
@@ -828,16 +829,21 @@ struct cgroup_of_peak {
 	struct list_head	list;
 };
 
+extern int take_per_threadgroup_rwsem;
+
 /**
  * cgroup_threadgroup_change_begin - threadgroup exclusion for cgroups
  * @tsk: target task
  *
  * Allows cgroup operations to synchronize against threadgroup changes
- * using a percpu_rw_semaphore.
+ * using a global percpu_rw_semaphore and a per threadgroup rw_semaphore when
+ * favordynmods is on. See the comment above CGRP_ROOT_FAVOR_DYNMODS definition.
  */
 static inline void cgroup_threadgroup_change_begin(struct task_struct *tsk)
 {
 	percpu_down_read(&cgroup_threadgroup_rwsem);
+	if (take_per_threadgroup_rwsem)
+		down_read(&tsk->signal->cgroup_threadgroup_rwsem);
 }
 
 /**
@@ -848,6 +854,8 @@ static inline void cgroup_threadgroup_change_begin(struct task_struct *tsk)
  */
 static inline void cgroup_threadgroup_change_end(struct task_struct *tsk)
 {
+	if (take_per_threadgroup_rwsem)
+		up_read(&tsk->signal->cgroup_threadgroup_rwsem);
 	percpu_up_read(&cgroup_threadgroup_rwsem);
 }
 
