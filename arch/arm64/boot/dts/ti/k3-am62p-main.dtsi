@@ -31,6 +31,12 @@
 			snps,usb2-lpm-disable;
 		};
 	};
+
+	sdhci0: mmc@fa10000 {
+		mmc-hs400-1_8v;
+		ti,strobe-sel = <0x77>;
+		ti,otap-del-sel-hs400 = <0x5>;
+	};
 };
 
 &oc_sram {
