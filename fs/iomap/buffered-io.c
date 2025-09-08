@@ -352,7 +352,12 @@ static void iomap_read_end_io(struct bio *bio)
 
 struct iomap_readpage_ctx {
 	struct folio		*cur_folio;
-	bool			cur_folio_in_bio;
+	/*
+	 * Is the folio owned by this readpage context, or by some
+	 * external IO helper?  Either way, the owner of the folio is
+	 * responsible for unlocking it when the read completes.
+	 */
+	bool			folio_owned;
 	struct bio		*bio;
 	struct readahead_control *rac;
 };
@@ -381,7 +386,7 @@ static void iomap_read_folio_range_bio_async(const struct iomap_iter *iter,
 	loff_t length = iomap_length(iter);
 	sector_t sector;
 
-	ctx->cur_folio_in_bio = true;
+	ctx->folio_owned = true;
 	if (ifs) {
 		spin_lock_irq(&ifs->state_lock);
 		ifs->read_bytes_pending += plen;
@@ -493,7 +498,7 @@ int iomap_read_folio(struct folio *folio, const struct iomap_ops *ops)
 
 	iomap_submit_read_bio(&ctx);
 
-	if (!ctx.cur_folio_in_bio)
+	if (!ctx.folio_owned)
 		folio_unlock(folio);
 
 	/*
@@ -513,13 +518,13 @@ static int iomap_readahead_iter(struct iomap_iter *iter,
 	while (iomap_length(iter)) {
 		if (ctx->cur_folio &&
 		    offset_in_folio(ctx->cur_folio, iter->pos) == 0) {
-			if (!ctx->cur_folio_in_bio)
+			if (!ctx->folio_owned)
 				folio_unlock(ctx->cur_folio);
 			ctx->cur_folio = NULL;
 		}
 		if (!ctx->cur_folio) {
 			ctx->cur_folio = readahead_folio(ctx->rac);
-			ctx->cur_folio_in_bio = false;
+			ctx->folio_owned = false;
 		}
 		ret = iomap_readpage_iter(iter, ctx);
 		if (ret)
@@ -562,7 +567,7 @@ void iomap_readahead(struct readahead_control *rac, const struct iomap_ops *ops)
 
 	iomap_submit_read_bio(&ctx);
 
-	if (ctx.cur_folio && !ctx.cur_folio_in_bio)
+	if (ctx.cur_folio && !ctx.folio_owned)
 		folio_unlock(ctx.cur_folio);
 }
 EXPORT_SYMBOL_GPL(iomap_readahead);
