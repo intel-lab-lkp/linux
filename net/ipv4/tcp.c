@@ -2820,7 +2820,7 @@ found_ok_skb:
 							 used);
 				if (err <= 0) {
 					if (!copied)
-						copied = -EFAULT;
+						copied = err;
 
 					break;
 				}
