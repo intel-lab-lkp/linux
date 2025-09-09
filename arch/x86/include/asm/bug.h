@@ -9,7 +9,7 @@
 /*
  * Despite that some emulators terminate on UD2, we use it for WARN().
  */
-#define ASM_UD2		".byte 0x0f, 0x0b"
+#define ASM_UD2		"ud2"
 #define INSN_UD2	0x0b0f
 #define LEN_UD2		2
 
