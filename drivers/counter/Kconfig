@@ -121,6 +121,19 @@ config STM32_TIMER_CNT
 	  To compile this driver as a module, choose M here: the
 	  module will be called stm32-timer-cnt.
 
+config TI_DMTIMER_CAPTURE
+	tristate "OMAP Dual-Mode Timer Capture support"
+	depends on OMAP_DM_TIMER || COMPILE_TEST
+	help
+	  Select this option to use the Texas Instruments OMAP DM Timer
+	  driver in capture mode.
+
+	  It can be used to timestamp events (falling/rising edges) detected
+	  on Timer input signal.
+
+	  To compile this driver as a module, choose M here: the module
+	  will be called ti-dmtimer-cap.
+
 config TI_ECAP_CAPTURE
 	tristate "TI eCAP capture driver"
 	depends on ARCH_OMAP2PLUS || ARCH_DAVINCI_DA8XX || ARCH_KEYSTONE || ARCH_K3 || COMPILE_TEST
