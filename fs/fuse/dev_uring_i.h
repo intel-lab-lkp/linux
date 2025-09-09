@@ -32,6 +32,9 @@ enum fuse_ring_req_state {
 	/* The ring entry is in teardown */
 	FRRS_TEARDOWN,
 
+	/* The ring entry is canceled */
+	FRRS_CANCELED,
+
 	/* The ring entry is released, but not freed yet */
 	FRRS_RELEASED,
 };
@@ -84,6 +87,9 @@ struct fuse_ring_queue {
 
 	/* entries in userspace */
 	struct list_head ent_in_userspace;
+
+	/* entries that are canceled */
+	struct list_head ent_canceled;
 
 	/* entries that are released */
 	struct list_head ent_released;

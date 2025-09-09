@@ -203,6 +203,12 @@ void fuse_uring_destruct(struct fuse_conn *fc)
 		WARN_ON(!list_empty(&queue->ent_commit_queue));
 		WARN_ON(!list_empty(&queue->ent_in_userspace));
 
+		list_for_each_entry_safe(ent, next, &queue->ent_canceled,
+					 list) {
+			list_del_init(&ent->list);
+			kfree(ent);
+		}
+
 		list_for_each_entry_safe(ent, next, &queue->ent_released,
 					 list) {
 			list_del_init(&ent->list);
@@ -291,6 +297,7 @@ static struct fuse_ring_queue *fuse_uring_create_queue(struct fuse_ring *ring,
 	INIT_LIST_HEAD(&queue->ent_in_userspace);
 	INIT_LIST_HEAD(&queue->fuse_req_queue);
 	INIT_LIST_HEAD(&queue->fuse_req_bg_queue);
+	INIT_LIST_HEAD(&queue->ent_canceled);
 	INIT_LIST_HEAD(&queue->ent_released);
 
 	queue->fpq.processing = pq;
@@ -391,6 +398,8 @@ static void fuse_uring_teardown_entries(struct fuse_ring_queue *queue)
 {
 	fuse_uring_stop_list_entries(&queue->ent_in_userspace, queue,
 				     FRRS_USERSPACE);
+	fuse_uring_stop_list_entries(&queue->ent_canceled, queue,
+				     FRRS_CANCELED);
 	fuse_uring_stop_list_entries(&queue->ent_avail_queue, queue,
 				     FRRS_AVAILABLE);
 }
@@ -509,8 +518,8 @@ static void fuse_uring_cancel(struct io_uring_cmd *cmd,
 	queue = ent->queue;
 	spin_lock(&queue->lock);
 	if (ent->state == FRRS_AVAILABLE) {
-		ent->state = FRRS_USERSPACE;
-		list_move_tail(&ent->list, &queue->ent_in_userspace);
+		ent->state = FRRS_CANCELED;
+		list_move_tail(&ent->list, &queue->ent_canceled);
 		need_cmd_done = true;
 		ent->cmd = NULL;
 	}
