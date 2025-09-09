@@ -2714,7 +2714,7 @@ static void __free_slab(struct kmem_cache *s, struct slab *slab)
 {
 	struct folio *folio = slab_folio(slab);
 	int order = folio_order(folio);
-	int pages = 1 << order;
+	int pages = folio_nr_pages(folio);
 
 	__slab_clear_pfmemalloc(slab);
 	folio->mapping = NULL;
