@@ -261,6 +261,7 @@ impl<T: RegulatorState> Regulator<T> {
                 max_voltage.as_microvolts(),
             )
         })
+        .map(|_| ())
     }
 
     /// Gets the current voltage of the regulator.
@@ -291,12 +292,12 @@ impl<T: RegulatorState> Regulator<T> {
 
     fn enable_internal(&mut self) -> Result {
         // SAFETY: Safe as per the type invariants of `Regulator`.
-        to_result(unsafe { bindings::regulator_enable(self.inner.as_ptr()) })
+        to_result(unsafe { bindings::regulator_enable(self.inner.as_ptr()) }).map(|_| ())
     }
 
     fn disable_internal(&mut self) -> Result {
         // SAFETY: Safe as per the type invariants of `Regulator`.
-        to_result(unsafe { bindings::regulator_disable(self.inner.as_ptr()) })
+        to_result(unsafe { bindings::regulator_disable(self.inner.as_ptr()) }).map(|_| ())
     }
 }
 

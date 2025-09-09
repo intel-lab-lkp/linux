@@ -55,7 +55,7 @@ unsafe impl<T: Driver + 'static> driver::RegistrationOps for Adapter<T> {
         }
 
         // SAFETY: `pdrv` is guaranteed to be a valid `RegType`.
-        to_result(unsafe { bindings::__platform_driver_register(pdrv.get(), module.0) })
+        to_result(unsafe { bindings::__platform_driver_register(pdrv.get(), module.0) }).map(|_| ())
     }
 
     unsafe fn unregister(pdrv: &Opaque<Self::RegType>) {

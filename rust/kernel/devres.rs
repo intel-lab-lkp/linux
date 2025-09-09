@@ -328,6 +328,7 @@ where
         // `ForeignOwnable` is released eventually.
         bindings::devm_add_action_or_reset(dev.as_raw(), Some(callback::<P>), ptr.cast())
     })
+    .map(|_| ())
 }
 
 /// Encapsulate `data` in a [`KBox`] and [`Drop::drop`] `data` once `dev` is unbound.

@@ -34,6 +34,7 @@ pub trait Device: AsRef<device::Device<Core>> {
         // - The safety requirement of this function guarantees that there are no concurrent calls
         //   to DMA allocation and mapping primitives using this mask.
         to_result(unsafe { bindings::dma_set_mask(self.as_ref().as_raw(), mask.value()) })
+            .map(|_| ())
     }
 
     /// Set up the device's DMA coherent addressing capabilities.
@@ -51,6 +52,7 @@ pub trait Device: AsRef<device::Device<Core>> {
         // - The safety requirement of this function guarantees that there are no concurrent calls
         //   to DMA allocation and mapping primitives using this mask.
         to_result(unsafe { bindings::dma_set_coherent_mask(self.as_ref().as_raw(), mask.value()) })
+            .map(|_| ())
     }
 
     /// Set up the device's DMA addressing capabilities.
@@ -72,6 +74,7 @@ pub trait Device: AsRef<device::Device<Core>> {
         to_result(unsafe {
             bindings::dma_set_mask_and_coherent(self.as_ref().as_raw(), mask.value())
         })
+        .map(|_| ())
     }
 }
 

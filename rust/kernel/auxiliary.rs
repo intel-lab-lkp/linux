@@ -43,6 +43,7 @@ unsafe impl<T: Driver + 'static> driver::RegistrationOps for Adapter<T> {
         to_result(unsafe {
             bindings::__auxiliary_driver_register(adrv.get(), module.0, name.as_char_ptr())
         })
+        .map(|_| ())
     }
 
     unsafe fn unregister(adrv: &Opaque<Self::RegType>) {
