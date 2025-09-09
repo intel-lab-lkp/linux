@@ -764,6 +764,9 @@ void native_machine_shutdown(void)
 
 	if (kexec_in_progress)
 		x86_platform.guest.enc_kexec_finish();
+
+	/* Disable virtualization on the last running CPU, usually the BSP */
+	cpu_disable_virtualization();
 }
 
 static void __machine_emergency_restart(int emergency)
@@ -873,13 +876,13 @@ static int crash_nmi_callback(unsigned int val, struct pt_regs *regs)
 	if (shootdown_callback)
 		shootdown_callback(cpu, regs);
 
-	/*
-	 * Prepare the CPU for reboot _after_ invoking the callback so that the
-	 * callback can safely use virtualization instructions, e.g. VMCLEAR.
-	 */
+	/* Kept to VMCLEAR loaded VMCSs */
 	cpu_emergency_disable_virtualization();
 
 	atomic_dec(&waiting_for_crash_ipi);
+
+	/* Disable virtualization, usually this is an AP */
+	cpu_disable_virtualization();
 
 	if (smp_ops.stop_this_cpu) {
 		smp_ops.stop_this_cpu();

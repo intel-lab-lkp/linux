@@ -827,6 +827,9 @@ void __noreturn stop_this_cpu(void *dummy)
 	disable_local_APIC();
 	mcheck_cpu_clear(c);
 
+	/* Disable virtualization, usually this is an AP */
+	cpu_disable_virtualization();
+
 	/*
 	 * Use wbinvd on processors that support SME. This provides support
 	 * for performing a successful kexec when going from SME inactive

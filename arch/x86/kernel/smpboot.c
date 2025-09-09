@@ -1229,6 +1229,12 @@ int native_cpu_disable(void)
          */
 	apic_soft_disable();
 
+	/*
+	 * IPIs have been disabled as mentioned above, so virtualization
+	 * can now be safely shut down.
+	 */
+	cpu_disable_virtualization();
+
 	return 0;
 }
 

@@ -129,6 +129,9 @@ static void __save_processor_state(struct saved_context *ctxt)
 	ctxt->misc_enable_saved = !rdmsrq_safe(MSR_IA32_MISC_ENABLE,
 					       &ctxt->misc_enable);
 	msr_save_context(ctxt);
+
+	/* Now CR4 is saved, disable VMX and clear CR4.VMXE */
+	cpu_disable_virtualization();
 }
 
 /* Needed by apm.c */

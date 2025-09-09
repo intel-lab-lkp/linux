@@ -111,6 +111,7 @@ void native_machine_crash_shutdown(struct pt_regs *regs)
 
 	crash_smp_send_stop();
 
+	/* Kept to VMCLEAR loaded VMCSs */
 	cpu_emergency_disable_virtualization();
 
 	/*
@@ -141,6 +142,9 @@ void native_machine_crash_shutdown(struct pt_regs *regs)
 	x86_platform.guest.enc_kexec_finish();
 
 	crash_save_cpu(regs, smp_processor_id());
+
+	/* Disable virtualization on the last running CPU, usually the BSP */
+	cpu_disable_virtualization();
 }
 
 #if defined(CONFIG_KEXEC_FILE) || defined(CONFIG_CRASH_HOTPLUG)

@@ -2003,6 +2003,43 @@ fault:
 }
 
 /*
+ * Because INIT interrupts are blocked during VMX operation, this function
+ * must be called just before a CPU shuts down to ensure it can be brought
+ * back online later.
+ *
+ * Consequently, VMX instructions are no longer expected to fault.
+ *
+ * Although VMXOFF should not fault, fault handling is retained as a
+ * precaution against any unexpected code paths that might trigger it and
+ * can be removed later if unnecessary.
+ */
+void cpu_disable_virtualization(void)
+{
+	int cpu = raw_smp_processor_id();
+
+	if (!is_vmx_supported())
+		return;
+
+	if (!(cr4_read_shadow() & X86_CR4_VMXE)) {
+		pr_err("VMX not enabled or already disabled on CPU%d\n", cpu);
+		return;
+	}
+
+	asm goto("1: vmxoff\n\t"
+		 _ASM_EXTABLE(1b, %l[fault])
+		 ::: "cc", "memory" : fault);
+
+exit:
+	cr4_clear_bits(X86_CR4_VMXE);
+	intel_pt_handle_vmx(0);
+	return;
+
+fault:
+	pr_err("VMXOFF faulted on CPU%d\n", cpu);
+	goto exit;
+}
+
+/*
  * This does the hard work of actually picking apart the CPU stuff...
  */
 static void identify_cpu(struct cpuinfo_x86 *c)
