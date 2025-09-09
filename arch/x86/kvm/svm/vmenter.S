@@ -145,7 +145,6 @@ SYM_FUNC_START(__svm_vcpu_run)
 	 */
 	mov SVM_vmcb01_pa(%_ASM_DI), %_ASM_AX
 1:	vmload %_ASM_AX
-2:
 
 	/* Get svm->current_vmcb->pa into RAX. */
 	mov SVM_current_vmcb(%_ASM_DI), %_ASM_AX
@@ -173,8 +172,8 @@ SYM_FUNC_START(__svm_vcpu_run)
 	VM_CLEAR_CPU_BUFFERS
 
 	/* Enter guest mode */
-3:	vmrun %_ASM_AX
-4:
+2:	vmrun %_ASM_AX
+
 	/* Pop @svm to RAX while it's the only available register. */
 	pop %_ASM_AX
 
@@ -200,13 +199,11 @@ SYM_FUNC_START(__svm_vcpu_run)
 	mov %_ASM_AX, %_ASM_DI
 
 	mov SVM_vmcb01_pa(%_ASM_DI), %_ASM_AX
-5:	vmsave %_ASM_AX
-6:
+3:	vmsave %_ASM_AX
 
 	/* Restores GSBASE among other things, allowing access to percpu data.  */
 	pop %_ASM_AX
-7:	vmload %_ASM_AX
-8:
+4:	vmload %_ASM_AX
 
 	/* IMPORTANT: Stuff the RSB immediately after VM-Exit, before RET! */
 	FILL_RETURN_BUFFER %_ASM_AX, RSB_CLEAR_LOOPS, X86_FEATURE_RSB_VMEXIT
@@ -269,23 +266,12 @@ SYM_FUNC_START(__svm_vcpu_run)
 	RESTORE_GUEST_SPEC_CTRL_BODY
 	RESTORE_HOST_SPEC_CTRL_BODY (%_ASM_SP)
 
-10:	cmpb $0, _ASM_RIP(kvm_rebooting)
-	jne 2b
-	ud2
-30:	cmpb $0, _ASM_RIP(kvm_rebooting)
-	jne 4b
-	ud2
-50:	cmpb $0, _ASM_RIP(kvm_rebooting)
-	jne 6b
-	ud2
-70:	cmpb $0, _ASM_RIP(kvm_rebooting)
-	jne 8b
-	ud2
+5:	ud2
 
-	_ASM_EXTABLE(1b, 10b)
-	_ASM_EXTABLE(3b, 30b)
-	_ASM_EXTABLE(5b, 50b)
-	_ASM_EXTABLE(7b, 70b)
+	_ASM_EXTABLE(1b, 5b)
+	_ASM_EXTABLE(2b, 5b)
+	_ASM_EXTABLE(3b, 5b)
+	_ASM_EXTABLE(4b, 5b)
 
 SYM_FUNC_END(__svm_vcpu_run)
 
@@ -343,7 +329,7 @@ SYM_FUNC_START(__svm_sev_es_vcpu_run)
 
 	/* Enter guest mode */
 1:	vmrun %rax
-2:
+
 	/* IMPORTANT: Stuff the RSB immediately after VM-Exit, before RET! */
 	FILL_RETURN_BUFFER %rax, RSB_CLEAR_LOOPS, X86_FEATURE_RSB_VMEXIT
 
@@ -365,11 +351,9 @@ SYM_FUNC_START(__svm_sev_es_vcpu_run)
 	RESTORE_GUEST_SPEC_CTRL_BODY
 	RESTORE_HOST_SPEC_CTRL_BODY %sil
 
-3:	cmpb $0, kvm_rebooting(%rip)
-	jne 2b
-	ud2
+2:	ud2
 
-	_ASM_EXTABLE(1b, 3b)
+	_ASM_EXTABLE(1b, 2b)
 
 SYM_FUNC_END(__svm_sev_es_vcpu_run)
 #endif /* CONFIG_KVM_AMD_SEV */

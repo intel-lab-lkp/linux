@@ -5559,9 +5559,6 @@ bool enable_virt_at_load = true;
 module_param(enable_virt_at_load, bool, 0444);
 EXPORT_SYMBOL_GPL(enable_virt_at_load);
 
-__visible bool kvm_rebooting;
-EXPORT_SYMBOL_GPL(kvm_rebooting);
-
 static DEFINE_PER_CPU(bool, virtualization_enabled);
 static DEFINE_MUTEX(kvm_usage_lock);
 static int kvm_usage_count;
@@ -5610,18 +5607,10 @@ static int kvm_offline_cpu(unsigned int cpu)
 static void kvm_shutdown(void)
 {
 	/*
-	 * Disable hardware virtualization and set kvm_rebooting to indicate
-	 * that KVM has asynchronously disabled hardware virtualization, i.e.
-	 * that relevant errors and exceptions aren't entirely unexpected.
-	 * Some flavors of hardware virtualization need to be disabled before
-	 * transferring control to firmware (to perform shutdown/reboot), e.g.
-	 * on x86, virtualization can block INIT interrupts, which are used by
-	 * firmware to pull APs back under firmware control.  Note, this path
-	 * is used for both shutdown and reboot scenarios, i.e. neither name is
-	 * 100% comprehensive.
+	 * Note, this path is used for both shutdown and reboot scenarios, i.e.
+	 * neither name is 100% comprehensive.
 	 */
 	pr_info("kvm: exiting hardware virtualization\n");
-	kvm_rebooting = true;
 	on_each_cpu(kvm_disable_virtualization_cpu, NULL, 1);
 }
 

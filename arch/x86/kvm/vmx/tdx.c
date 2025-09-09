@@ -2052,10 +2052,8 @@ int tdx_handle_exit(struct kvm_vcpu *vcpu, fastpath_t fastpath)
 	 * Handle TDX SW errors, including TDX_SEAMCALL_UD, TDX_SEAMCALL_GP and
 	 * TDX_SEAMCALL_VMFAILINVALID.
 	 */
-	if (unlikely((vp_enter_ret & TDX_SW_ERROR) == TDX_SW_ERROR)) {
-		KVM_BUG_ON(!kvm_rebooting, vcpu->kvm);
+	if (unlikely((vp_enter_ret & TDX_SW_ERROR) == TDX_SW_ERROR))
 		goto unhandled_exit;
-	}
 
 	if (unlikely(tdx_failed_vmentry(vcpu))) {
 		/*
