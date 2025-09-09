@@ -1558,6 +1558,8 @@ static inline void iommu_debugfs_setup(void) {}
 #define MSI_IOVA_BASE2       0xA0000000
 #define MSI_IOVA_LENGTH      0x100000
 
+void iommu_set_sw_msi(struct list_head *head);
+
 /**
  * resv_region_intersects - Check if address range overlaps with reserved regions
  * @msi_base: Start address of the range to check
@@ -1595,6 +1597,10 @@ static inline bool resv_region_intersects(phys_addr_t msi_base, size_t length,
 					  struct list_head *resv_region_list)
 {
 	return false;
+}
+
+static inline void iommu_set_sw_msi(struct list_head *head)
+{
 }
 #endif	/* CONFIG_IOMMU_DMA */
 

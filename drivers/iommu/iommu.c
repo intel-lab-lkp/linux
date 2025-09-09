@@ -3829,3 +3829,40 @@ int iommu_dma_prepare_msi(struct msi_desc *desc, phys_addr_t msi_addr)
 	return ret;
 }
 #endif /* CONFIG_IRQ_MSI_IOMMU */
+
+#if IS_ENABLED(CONFIG_IOMMU_DMA)
+/*
+ * iommu_set_sw_msi - Set up software managed MSI IOVA region
+ * @head: List of reserved IOVA regions for a device
+ *
+ * This creates a software MSI region by selecting a non-conflicting
+ * MSI_IOVA base address.
+ */
+void iommu_set_sw_msi(struct list_head *head)
+{
+	int prot = IOMMU_WRITE | IOMMU_NOEXEC | IOMMU_MMIO;
+
+	static const u64 msi_bases[] = { MSI_IOVA_BASE, MSI_IOVA_BASE2 };
+
+	/*
+	 * Use the first msi_base that does not intersect with a platform
+	 * reserved region. The SW MSI base selection is entirely arbitrary.
+	 */
+	for (int i = 0; i < ARRAY_SIZE(msi_bases); i++) {
+		struct iommu_resv_region *region;
+
+		if (resv_region_intersects(msi_bases[i], MSI_IOVA_LENGTH, head))
+			continue;
+
+		region = iommu_alloc_resv_region(msi_bases[i], MSI_IOVA_LENGTH, prot,
+						 IOMMU_RESV_SW_MSI, GFP_KERNEL);
+		if (!region) {
+			pr_warn("IOMMU: Failed to reserve MSI IOVA: No suitable MSI IOVA range available");
+			return;
+		}
+
+		list_add_tail(&region->list, head);
+		return;
+	}
+}
+#endif /* CONFIG_IOMMU_DMA */
