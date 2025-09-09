@@ -372,12 +372,12 @@ static const struct rcar_gen3_thermal_fuse_default rcar_gen3_thermal_fuse_defaul
 };
 
 static const struct rcar_gen3_thermal_fuse_default rcar_gen3_thermal_fuse_default_info_gen4 = {
-	.ptat = { 3274, 2164, 985 },
-	.thcodes = { /* All four THS units share the same trimming */
-		{ 3218, 2617, 1980 },
-		{ 3218, 2617, 1980 },
-		{ 3218, 2617, 1980 },
-		{ 3218, 2617, 1980 },
+	.ptat = { 3146, 2076, 928 },
+	.thcodes = {
+		{ 3092, 2505, 1881 },
+		{ 2181, 2609, 2001 },
+		{ 3175, 2587, 1962 },
+		{ 3163, 2592, 1986 },
 	}
 };
 
