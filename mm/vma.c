@@ -476,16 +476,13 @@ void remove_vma(struct vm_area_struct *vma)
 void unmap_region(struct unmap_desc *desc)
 {
 	struct mm_struct *mm = desc->first->vm_mm;
-	struct ma_state *mas = desc->mas;
 	struct mmu_gather tlb;
 
 	tlb_gather_mmu(&tlb, mm);
 	update_hiwater_rss(mm);
 	unmap_vmas(&tlb, desc);
-	mas_set(mas, desc->tree_reset);
-	free_pgtables(&tlb, mas, desc->first, desc->first_pgaddr,
-		      desc->last_pgaddr, desc->tree_max,
-		      desc->mm_wr_locked);
+	mas_set(desc->mas, desc->tree_reset);
+	free_pgtables(&tlb, desc);
 	tlb_finish_mmu(&tlb);
 }
 

@@ -387,15 +387,14 @@ void free_pgd_range(struct mmu_gather *tlb,
  * The tree_max differs from the ceiling when a dup_mmap() failed and the tree
  * has unrelated data to the mm_struct being torn down.
  */
-void free_pgtables(struct mmu_gather *tlb, struct ma_state *mas,
-		   struct vm_area_struct *vma, unsigned long floor,
-		   unsigned long ceiling, unsigned long tree_max,
-		   bool mm_wr_locked)
+void free_pgtables(struct mmu_gather *tlb, struct unmap_desc *desc)
 {
 	struct unlink_vma_file_batch vb;
+	struct ma_state *mas = desc->mas;
+	struct vm_area_struct *vma = desc->first;
 
 	/* underflow can happen and is fine */
-	WARN_ON_ONCE(tree_max - 1 > ceiling - 1);
+	WARN_ON_ONCE(desc->tree_max - 1 > desc->last_pgaddr - 1);
 
 	tlb_free_vmas(tlb);
 
@@ -407,13 +406,13 @@ void free_pgtables(struct mmu_gather *tlb, struct ma_state *mas,
 		 * Note: USER_PGTABLES_CEILING may be passed as ceiling and may
 		 * be 0.  This will underflow and is okay.
 		 */
-		next = mas_find(mas, tree_max - 1);
+		next = mas_find(mas, desc->tree_max - 1);
 
 		/*
 		 * Hide vma from rmap and truncate_pagecache before freeing
 		 * pgtables
 		 */
-		if (mm_wr_locked)
+		if (desc->mm_wr_locked)
 			vma_start_write(vma);
 		unlink_anon_vmas(vma);
 
@@ -425,16 +424,16 @@ void free_pgtables(struct mmu_gather *tlb, struct ma_state *mas,
 		 */
 		while (next && next->vm_start <= vma->vm_end + PMD_SIZE) {
 			vma = next;
-			next = mas_find(mas, tree_max - 1);
-			if (mm_wr_locked)
+			next = mas_find(mas, desc->tree_max - 1);
+			if (desc->mm_wr_locked)
 				vma_start_write(vma);
 			unlink_anon_vmas(vma);
 			unlink_file_vma_batch_add(&vb, vma);
 		}
 		unlink_file_vma_batch_final(&vb);
 
-		free_pgd_range(tlb, addr, vma->vm_end,
-			floor, next ? next->vm_start : ceiling);
+		free_pgd_range(tlb, addr, vma->vm_end, desc->first_pgaddr,
+			       next ? next->vm_start : desc->last_pgaddr);
 		vma = next;
 	} while (vma);
 }
