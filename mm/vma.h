@@ -164,6 +164,20 @@ struct unmap_desc {
 	bool mm_wr_locked;            /* If the mmap write lock is held */
 };
 
+static inline void unmap_all_init(struct unmap_desc *desc,
+		struct vma_iterator *vmi, struct vm_area_struct *vma)
+{
+	desc->mas = &vmi->mas;
+	desc->first = vma;
+	desc->first_pgaddr = FIRST_USER_ADDRESS;
+	desc->last_pgaddr = USER_PGTABLES_CEILING;
+	desc->vma_min = 0;
+	desc->vma_max = ULONG_MAX;
+	desc->tree_max = ULONG_MAX;
+	desc->tree_reset = vma->vm_end;
+	desc->mm_wr_locked = false;
+}
+
 #define UNMAP_REGION(name, _vmi, _vma, _vma_min, _vma_max, _prev, _next)      \
 	struct unmap_desc name = {                                          \
 		.mas = &(_vmi)->mas,                                          \

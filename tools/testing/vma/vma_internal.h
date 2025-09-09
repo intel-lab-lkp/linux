@@ -884,18 +884,12 @@ static inline void update_hiwater_vm(struct mm_struct *)
 {
 }
 
-static inline void unmap_vmas(struct mmu_gather *tlb, struct ma_state *mas,
-		      struct vm_area_struct *vma, unsigned long start_addr,
-		      unsigned long end_addr, unsigned long tree_end,
-		      bool mm_wr_locked)
+struct unmap_desc;
+
+static inline void unmap_vmas(struct mmu_gather *tlb, struct unmap_desc *unmap)
 {
 	(void)tlb;
-	(void)mas;
-	(void)vma;
-	(void)start_addr;
-	(void)end_addr;
-	(void)tree_end;
-	(void)mm_wr_locked;
+	(void)unmap;
 }
 
 static inline void free_pgtables(struct mmu_gather *tlb, struct ma_state *mas,
