@@ -124,9 +124,6 @@ static int smp_stop_nmi_callback(unsigned int val, struct pt_regs *regs)
 	if (raw_smp_processor_id() == atomic_read(&stopping_cpu))
 		return NMI_HANDLED;
 
-	/* Kept to VMCLEAR loaded VMCSs */
-	cpu_emergency_disable_virtualization();
-
 	stop_this_cpu(NULL);
 
 	return NMI_HANDLED;
@@ -138,9 +135,6 @@ static int smp_stop_nmi_callback(unsigned int val, struct pt_regs *regs)
 DEFINE_IDTENTRY_SYSVEC(sysvec_reboot)
 {
 	apic_eoi();
-
-	/* Kept to VMCLEAR loaded VMCSs */
-	cpu_emergency_disable_virtualization();
 
 	stop_this_cpu(NULL);
 }

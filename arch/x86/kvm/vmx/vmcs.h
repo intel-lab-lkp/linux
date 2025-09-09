@@ -52,8 +52,12 @@ struct vmcs_controls_shadow {
  * Track a VMCS that may be loaded on a certain CPU. If it is (cpu!=-1), also
  * remember whether it was VMLAUNCHed, and maintain a linked list of all VMCSs
  * loaded on this CPU (so we can clear them if the CPU goes down).
+ *
+ * Note, the first three members must be a list_head and two pointers, please
+ * refer to struct loaded_vmcs_basic defined in arch/x86/kernel/cpu/common.c.
  */
 struct loaded_vmcs {
+	struct list_head loaded_vmcss_on_cpu_link;
 	struct vmcs *vmcs;
 	struct vmcs *shadow_vmcs;
 	int cpu;
@@ -65,7 +69,6 @@ struct loaded_vmcs {
 	ktime_t entry_time;
 	s64 vnmi_blocked_time;
 	unsigned long *msr_bitmap;
-	struct list_head loaded_vmcss_on_cpu_link;
 	struct vmcs_host_state host_state;
 	struct vmcs_controls_shadow controls_shadow;
 };

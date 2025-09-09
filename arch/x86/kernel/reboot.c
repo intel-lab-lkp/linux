@@ -633,7 +633,7 @@ static void native_machine_emergency_restart(void)
 	unsigned short mode;
 
 	if (reboot_emergency)
-		emergency_reboot_disable_virtualization();
+		nmi_shootdown_cpus_on_restart();
 
 	tboot_shutdown(TB_SHUTDOWN_REBOOT);
 
@@ -876,9 +876,6 @@ static int crash_nmi_callback(unsigned int val, struct pt_regs *regs)
 	if (shootdown_callback)
 		shootdown_callback(cpu, regs);
 
-	/* Kept to VMCLEAR loaded VMCSs */
-	cpu_emergency_disable_virtualization();
-
 	atomic_dec(&waiting_for_crash_ipi);
 
 	/* Disable virtualization, usually this is an AP */
@@ -955,6 +952,8 @@ void nmi_shootdown_cpus(nmi_shootdown_cb callback)
 
 static inline void nmi_shootdown_cpus_on_restart(void)
 {
+	local_irq_disable();
+
 	if (!crash_ipi_issued)
 		nmi_shootdown_cpus(NULL);
 }

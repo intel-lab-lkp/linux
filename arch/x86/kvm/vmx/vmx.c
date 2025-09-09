@@ -469,11 +469,6 @@ noinline void invept_error(unsigned long ext, u64 eptp)
 }
 
 DEFINE_PER_CPU(struct vmcs *, current_vmcs);
-/*
- * We maintain a per-CPU linked-list of VMCS loaded on that CPU. This is needed
- * when a CPU is brought down, and we need to VMCLEAR all VMCSs loaded on it.
- */
-static DEFINE_PER_CPU(struct list_head, loaded_vmcss_on_cpu);
 
 static DECLARE_BITMAP(vmx_vpid_bitmap, VMX_NR_VPIDS);
 static DEFINE_SPINLOCK(vmx_vpid_lock);
@@ -676,26 +671,6 @@ static int vmx_set_guest_uret_msr(struct vcpu_vmx *vmx,
 
 void vmx_emergency_disable_virtualization_cpu(void)
 {
-	int cpu = raw_smp_processor_id();
-	struct loaded_vmcs *v;
-
-	kvm_rebooting = true;
-
-	/*
-	 * Note, CR4.VMXE can be _cleared_ in NMI context, but it can only be
-	 * set in task context.  If this races with VMX is disabled by an NMI,
-	 * VMCLEAR and VMXOFF may #UD, but KVM will eat those faults due to
-	 * kvm_rebooting set.
-	 */
-	if (!(__read_cr4() & X86_CR4_VMXE))
-		return;
-
-	list_for_each_entry(v, &per_cpu(loaded_vmcss_on_cpu, cpu),
-			    loaded_vmcss_on_cpu_link) {
-		vmcs_clear(v->vmcs);
-		if (v->shadow_vmcs)
-			vmcs_clear(v->shadow_vmcs);
-	}
 }
 
 static void __loaded_vmcs_clear(void *arg)
@@ -1388,7 +1363,7 @@ void vmx_vcpu_load_vmcs(struct kvm_vcpu *vcpu, int cpu)
 		smp_rmb();
 
 		list_add(&vmx->loaded_vmcs->loaded_vmcss_on_cpu_link,
-			 &per_cpu(loaded_vmcss_on_cpu, cpu));
+			 get_loaded_vmcss_on_cpu(cpu));
 		local_irq_enable();
 	}
 
@@ -2754,7 +2729,7 @@ static void vmclear_local_loaded_vmcss(void)
 	int cpu = raw_smp_processor_id();
 	struct loaded_vmcs *v, *n;
 
-	list_for_each_entry_safe(v, n, &per_cpu(loaded_vmcss_on_cpu, cpu),
+	list_for_each_entry_safe(v, n, get_loaded_vmcss_on_cpu(cpu),
 				 loaded_vmcss_on_cpu_link)
 		__loaded_vmcs_clear(v);
 }
@@ -8441,11 +8416,8 @@ int __init vmx_init(void)
 	if (r)
 		goto err_l1d_flush;
 
-	for_each_possible_cpu(cpu) {
-		INIT_LIST_HEAD(&per_cpu(loaded_vmcss_on_cpu, cpu));
-
+	for_each_possible_cpu(cpu)
 		pi_init_cpu(cpu);
-	}
 
 	vmx_check_vmcs12_offsets();
 

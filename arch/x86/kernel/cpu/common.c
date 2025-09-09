@@ -1950,6 +1950,18 @@ union vmxon_vmcs {
 };
 
 static DEFINE_PER_CPU_PAGE_ALIGNED(union vmxon_vmcs, vmxon_vmcs);
+/*
+ * We maintain a per-CPU linked-list of VMCS loaded on that CPU. This is needed
+ * when a CPU is brought down, and we need to VMCLEAR all VMCSs loaded on it.
+ */
+static DEFINE_PER_CPU(struct list_head, loaded_vmcss_on_cpu);
+
+/* Export an accessor rather than the raw data */
+struct list_head* get_loaded_vmcss_on_cpu(int cpu)
+{
+	return &per_cpu(loaded_vmcss_on_cpu, cpu);
+}
+EXPORT_SYMBOL_GPL(get_loaded_vmcss_on_cpu);
 
 /*
  * Executed during the CPU startup phase to execute VMXON to enable VMX. This
@@ -1974,6 +1986,8 @@ void cpu_enable_virtualization(void)
 		pr_err("VMX already enabled on CPU%d\n", cpu);
 		return;
 	}
+
+	INIT_LIST_HEAD(get_loaded_vmcss_on_cpu(cpu));
 
 	memset(this_cpu_ptr(&vmxon_vmcs), 0, PAGE_SIZE);
 
@@ -2002,6 +2016,18 @@ fault:
 	intel_pt_handle_vmx(0);
 }
 
+static __always_inline void vmclear(void *p)
+{
+	u64 pa = __pa(p);
+	asm volatile ("vmclear %0" : : "m"(pa) : "cc");
+}
+
+struct loaded_vmcs_basic {
+	struct list_head loaded_vmcss_on_cpu_link;
+	struct vmcs_hdr *vmcs;
+	struct vmcs_hdr *shadow_vmcs;
+};
+
 /*
  * Because INIT interrupts are blocked during VMX operation, this function
  * must be called just before a CPU shuts down to ensure it can be brought
@@ -2016,6 +2042,7 @@ fault:
 void cpu_disable_virtualization(void)
 {
 	int cpu = raw_smp_processor_id();
+	struct loaded_vmcs_basic *v;
 
 	if (!is_vmx_supported())
 		return;
@@ -2023,6 +2050,13 @@ void cpu_disable_virtualization(void)
 	if (!(cr4_read_shadow() & X86_CR4_VMXE)) {
 		pr_err("VMX not enabled or already disabled on CPU%d\n", cpu);
 		return;
+	}
+
+	list_for_each_entry(v, get_loaded_vmcss_on_cpu(cpu),
+			    loaded_vmcss_on_cpu_link) {
+		vmclear(v->vmcs);
+		if (v->shadow_vmcs)
+			vmclear(v->shadow_vmcs);
 	}
 
 	asm goto("1: vmxoff\n\t"

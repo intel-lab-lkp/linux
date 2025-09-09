@@ -111,9 +111,6 @@ void native_machine_crash_shutdown(struct pt_regs *regs)
 
 	crash_smp_send_stop();
 
-	/* Kept to VMCLEAR loaded VMCSs */
-	cpu_emergency_disable_virtualization();
-
 	/*
 	 * Disable Intel PT to stop its logging
 	 */
