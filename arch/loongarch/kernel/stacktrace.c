@@ -30,10 +30,15 @@ void arch_stack_walk(stack_trace_consume_fn consume_entry, void *cookie,
 		}
 		regs->regs[1] = 0;
 		regs->regs[22] = 0;
+		regs->csr_prmd = task->thread.csr_prmd;
 	}
 
 	for (unwind_start(&state, task, regs);
 	     !unwind_done(&state); unwind_next_frame(&state)) {
+		/* Success path for user tasks */
+		if (user_mode(regs))
+			return;
+
 		addr = unwind_get_return_address(&state);
 		if (!addr || !consume_entry(cookie, addr))
 			break;
@@ -57,9 +62,14 @@ int arch_stack_walk_reliable(stack_trace_consume_fn consume_entry,
 	}
 	regs->regs[1] = 0;
 	regs->regs[22] = 0;
+	regs->csr_prmd = task->thread.csr_prmd;
 
 	for (unwind_start(&state, task, regs);
 	     !unwind_done(&state) && !unwind_error(&state); unwind_next_frame(&state)) {
+		/* Success path for user tasks */
+		if (user_mode(regs))
+			return 0;
+
 		addr = unwind_get_return_address(&state);
 
 		/*
