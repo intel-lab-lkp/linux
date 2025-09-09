@@ -1046,6 +1046,22 @@ static void blk_add_trace_getrq(void *ignore, struct bio *bio)
 	blk_add_trace_bio(bio->bi_bdev->bd_disk->queue, bio, BLK_TA_GETRQ, 0);
 }
 
+static void blk_add_trace_blkdev_zone_mgmt(void *ignore, struct bio *bio,
+					   sector_t nr_sectors)
+{
+	struct request_queue *q = bio->bi_bdev->bd_disk->queue;
+	struct blk_trace *bt;
+
+	rcu_read_lock();
+	bt = rcu_dereference(q->blk_trace);
+	if (unlikely(!bt) || bt->version < 2) {
+		rcu_read_unlock();
+		return;
+	}
+	rcu_read_unlock();
+	blk_add_trace_bio(q, bio, BLK_TA_ZONE_MGMT, 0);
+}
+
 static void blk_add_trace_plug(void *ignore, struct request_queue *q)
 {
 	struct blk_trace *bt;
@@ -1221,6 +1237,9 @@ static void blk_register_tracepoints(void)
 	ret = register_trace_blk_zone_append_update_request_bio(
 		blk_add_trace_zone_update_request, NULL);
 	WARN_ON(ret);
+	ret = register_trace_blkdev_zone_mgmt(blk_add_trace_blkdev_zone_mgmt,
+					      NULL);
+	WARN_ON(ret);
 	ret = register_trace_block_plug(blk_add_trace_plug, NULL);
 	WARN_ON(ret);
 	ret = register_trace_block_unplug(blk_add_trace_unplug, NULL);
@@ -1240,6 +1259,7 @@ static void blk_unregister_tracepoints(void)
 	unregister_trace_block_split(blk_add_trace_split, NULL);
 	unregister_trace_block_unplug(blk_add_trace_unplug, NULL);
 	unregister_trace_block_plug(blk_add_trace_plug, NULL);
+	unregister_trace_blkdev_zone_mgmt(blk_add_trace_blkdev_zone_mgmt, NULL);
 	unregister_trace_blk_zone_append_update_request_bio(
 		blk_add_trace_zone_update_request, NULL);
 	unregister_trace_block_getrq(blk_add_trace_getrq, NULL);
