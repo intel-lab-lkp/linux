@@ -13550,7 +13550,9 @@ S:	Maintained
 F:	Documentation/admin-guide/mm/kho.rst
 F:	Documentation/core-api/kho/*
 F:	include/linux/kexec_handover.h
+F:	include/linux/kho_array.h
 F:	kernel/kexec_handover.c
+F:	kernel/kho_array.c
 F:	tools/testing/selftests/kho/
 
 KEYS-ENCRYPTED
