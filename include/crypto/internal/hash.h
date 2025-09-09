@@ -23,6 +23,9 @@
 /* This bit is set by the Crypto API if export_core is not supported. */
 #define CRYPTO_AHASH_ALG_NO_EXPORT_CORE	0x08000000
 
+/* This bit is set by the Crypto API if stack requests are supported. */
+#define CRYPTO_AHASH_ALG_STACK_REQ	0x10000000
+
 #define HASH_FBREQ_ON_STACK(name, req) \
         char __##name##_req[sizeof(struct ahash_request) + \
                             MAX_SYNC_HASH_REQSIZE] CRYPTO_MINALIGN_ATTR; \
