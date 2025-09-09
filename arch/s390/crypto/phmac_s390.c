@@ -932,6 +932,7 @@ out:
 				.cra_blocksize = SHA##x##_BLOCK_SIZE,	\
 				.cra_priority = 400,			\
 				.cra_flags = CRYPTO_ALG_ASYNC |		\
+					     CRYPTO_AHASH_ALG_STACK_REQ |\
 					     CRYPTO_ALG_NO_FALLBACK,	\
 				.cra_ctxsize = sizeof(struct phmac_tfm_ctx), \
 				.cra_module = THIS_MODULE,		\
