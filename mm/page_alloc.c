@@ -55,6 +55,7 @@
 #include <linux/delayacct.h>
 #include <linux/cacheinfo.h>
 #include <linux/pgalloc_tag.h>
+#include <linux/swapfile.h>
 #include <asm/div64.h>
 #include "internal.h"
 #include "shuffle.h"
@@ -3977,6 +3978,9 @@ __alloc_pages_may_oom(gfp_t gfp_mask, unsigned int order,
 	struct page *page;
 
 	*did_some_progress = 0;
+
+	/* flash async swap cache pool */
+	flush_cache_if_needed(false);
 
 	/*
 	 * Acquire the oom lock.  If that fails, somebody else is

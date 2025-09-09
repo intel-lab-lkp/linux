@@ -235,7 +235,7 @@ out:
 	kfree(work);
 }
 
-static void flush_cache_if_needed(bool check_cache_count)
+void flush_cache_if_needed(bool check_cache_count)
 {
 	struct work_struct *release_work;
 
