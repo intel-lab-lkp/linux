@@ -1057,6 +1057,7 @@ static int m_can_poll(struct napi_struct *napi, int quota)
 	u32 irqstatus;
 
 	irqstatus = cdev->irqstatus | m_can_read(cdev, M_CAN_IR);
+	irqstatus &= cdev->active_interrupts;
 
 	work_done = m_can_rx_handler(dev, quota, irqstatus);
 
@@ -1243,6 +1244,8 @@ static int m_can_interrupt_handler(struct m_can_classdev *cdev)
 	}
 
 	m_can_coalescing_update(cdev, ir);
+
+	ir &= cdev->active_interrupts;
 	if (!ir)
 		return IRQ_NONE;
 
