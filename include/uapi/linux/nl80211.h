@@ -2936,6 +2936,10 @@ enum nl80211_commands {
  *	indicate that it wants strict checking on the BSS parameters to be
  *	modified.
  *
+ * @NL80211_ATTR_S1G_PRIMARY_2MHZ: flag attribute indicating that the S1G
+ *	primary channel is 2 MHz wide, and the control channel designates
+ *	the 1 MHz primary subchannel within that 2 MHz primary.
+ *
  * @NUM_NL80211_ATTR: total number of nl80211_attrs available
  * @NL80211_ATTR_MAX: highest attribute number currently defined
  * @__NL80211_ATTR_AFTER_LAST: internal use
@@ -3498,6 +3502,7 @@ enum nl80211_attrs {
 	NL80211_ATTR_S1G_LONG_BEACON_PERIOD,
 	NL80211_ATTR_S1G_SHORT_BEACON,
 	NL80211_ATTR_BSS_PARAM,
+	NL80211_ATTR_S1G_PRIMARY_2MHZ,
 
 	/* add attributes here, update the policy in nl80211.c */
 
@@ -4365,15 +4370,11 @@ enum nl80211_wmm_rule {
  * @NL80211_FREQUENCY_ATTR_NO_HE: HE operation is not allowed on this channel
  *	in current regulatory domain.
  * @NL80211_FREQUENCY_ATTR_OFFSET: frequency offset in KHz
- * @NL80211_FREQUENCY_ATTR_1MHZ: 1 MHz operation is allowed
+ * @NL80211_FREQUENCY_ATTR_NO_4MHZ: 4 MHz operation is not allowed
  *	on this channel in current regulatory domain.
- * @NL80211_FREQUENCY_ATTR_2MHZ: 2 MHz operation is allowed
+ * @NL80211_FREQUENCY_ATTR_NO_8MHZ: 8 MHz operation is not allowed
  *	on this channel in current regulatory domain.
- * @NL80211_FREQUENCY_ATTR_4MHZ: 4 MHz operation is allowed
- *	on this channel in current regulatory domain.
- * @NL80211_FREQUENCY_ATTR_8MHZ: 8 MHz operation is allowed
- *	on this channel in current regulatory domain.
- * @NL80211_FREQUENCY_ATTR_16MHZ: 16 MHz operation is allowed
+ * @NL80211_FREQUENCY_ATTR_NO_16MHZ: 16 MHz operation is not allowed
  *	on this channel in current regulatory domain.
  * @NL80211_FREQUENCY_ATTR_NO_320MHZ: any 320 MHz channel using this channel
  *	as the primary or any of the secondary channels isn't possible
@@ -4427,11 +4428,9 @@ enum nl80211_frequency_attr {
 	NL80211_FREQUENCY_ATTR_WMM,
 	NL80211_FREQUENCY_ATTR_NO_HE,
 	NL80211_FREQUENCY_ATTR_OFFSET,
-	NL80211_FREQUENCY_ATTR_1MHZ,
-	NL80211_FREQUENCY_ATTR_2MHZ,
-	NL80211_FREQUENCY_ATTR_4MHZ,
-	NL80211_FREQUENCY_ATTR_8MHZ,
-	NL80211_FREQUENCY_ATTR_16MHZ,
+	NL80211_FREQUENCY_ATTR_NO_4MHZ,
+	NL80211_FREQUENCY_ATTR_NO_8MHZ,
+	NL80211_FREQUENCY_ATTR_NO_16MHZ,
 	NL80211_FREQUENCY_ATTR_NO_320MHZ,
 	NL80211_FREQUENCY_ATTR_NO_EHT,
 	NL80211_FREQUENCY_ATTR_PSD,
