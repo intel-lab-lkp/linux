@@ -2985,6 +2985,13 @@ out:
 		if (txq->count >= txq->tx_stop_threshold)
 			netif_tx_stop_queue(nq);
 
+		/* FIXME: This is not really the true transmit point, since
+		 * we batch up several before hitting the hardware, but is
+		 * the best we can do without more complexity to walk the
+		 * packets in the pending section of the transmit queue.
+		 */
+		skb_tx_timestamp(skb);
+
 		if (!netdev_xmit_more() || netif_xmit_stopped(nq) ||
 		    txq->pending + frags > MVNETA_TXQ_DEC_SENT_MASK)
 			mvneta_txq_pend_desc_add(pp, txq, frags);
