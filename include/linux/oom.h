@@ -56,6 +56,23 @@ struct oom_control {
 extern struct mutex oom_lock;
 extern struct mutex oom_adj_mutex;
 
+extern atomic_t exiting_task_count;  // exiting task counts
+
+static inline int get_exiting_task_count(void)
+{
+	return atomic_read(&exiting_task_count);
+}
+
+static inline void inc_exiting_task_count(void)
+{
+	atomic_inc(&exiting_task_count);
+}
+
+static inline void dec_exiting_task_count(void)
+{
+	atomic_dec(&exiting_task_count);
+}
+
 static inline void set_current_oom_origin(void)
 {
 	current->signal->oom_flag_origin = true;
@@ -74,6 +91,12 @@ static inline bool oom_task_origin(const struct task_struct *p)
 static inline bool tsk_is_oom_victim(struct task_struct * tsk)
 {
 	return tsk->signal->oom_mm;
+}
+
+static inline bool task_is_dying(void)
+{
+	return tsk_is_oom_victim(current) || fatal_signal_pending(current) ||
+		(current->flags & PF_EXITING);
 }
 
 /*

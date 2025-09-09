@@ -902,6 +902,7 @@ void __noreturn do_exit(long code)
 	WARN_ON(irqs_disabled());
 	WARN_ON(tsk->plug);
 
+	inc_exiting_task_count();
 	kcov_task_exit(tsk);
 	kmsan_task_exit(tsk);
 
@@ -1006,6 +1007,7 @@ void __noreturn do_exit(long code)
 	exit_tasks_rcu_finish();
 
 	lockdep_free_task(tsk);
+	dec_exiting_task_count();
 	do_task_dead();
 }
 

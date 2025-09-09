@@ -1496,6 +1496,7 @@ const char * const vmstat_text[] = {
 	[I(KSTACK_REST)]			= "kstack_rest",
 #endif
 #endif
+	[I(ASYNC_SWAP_COUNTS)]			= "async_swap_count",
 #undef I
 #endif /* CONFIG_VM_EVENT_COUNTERS */
 };

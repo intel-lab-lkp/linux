@@ -42,6 +42,10 @@
 #include <linux/suspend.h>
 #include <linux/zswap.h>
 #include <linux/plist.h>
+#include <linux/workqueue.h>
+#include <linux/spinlock.h>
+#include <linux/list.h>
+#include <linux/vmstat.h>
 
 #include <asm/tlbflush.h>
 #include <linux/swapops.h>
@@ -175,6 +179,136 @@ static long swap_usage_in_pages(struct swap_info_struct *si)
 #define TTRS_UNMAPPED		0x2
 /* Reclaim the swap entry if swap is getting full */
 #define TTRS_FULL		0x4
+
+/* Minimum number of exiting processes, adjustable based on system load */
+#define MIN_EXITING_TASKS_THRESHOLD 1
+/* Number of active work items for asynchronously releasing swap cache.
+ * Defaults to zero and is determined by the system itself, it can also
+ * be configured manually based on system load.
+ */
+#define NUM_ASYNC_SWAP_WORK_ITEMS 0
+
+static struct workqueue_struct *release_wq;
+static LIST_HEAD(swap_cache_list);
+static spinlock_t swap_cache_lock;
+static int cache_count;
+static int max_cache_entries = 32;
+static struct kmem_cache *swap_entry_cachep;
+atomic_t exiting_task_count = ATOMIC_INIT(0);
+
+/* Represents a cache entry for swap operations */
+struct swap_entry_cache {
+	swp_entry_t entry;
+	int nr;
+	struct list_head list;
+};
+
+static int async_swap_free_counts_show(struct seq_file *m, void *v)
+{
+	seq_printf(m, "exiting_tasks:%d cache_counts:%d\n",
+		   get_exiting_task_count(), cache_count);
+	return 0;
+}
+
+static void async_release_func(struct work_struct *work)
+{
+	struct swap_entry_cache *sec, *tmp;
+	unsigned int counts = 0;
+	LIST_HEAD(temp_list);
+
+	if (cache_count) {
+		spin_lock_irq(&swap_cache_lock);
+		list_splice_init(&swap_cache_list, &temp_list);
+		cache_count = 0;
+		spin_unlock_irq(&swap_cache_lock);
+	} else {
+		goto out;
+	}
+
+	list_for_each_entry_safe(sec, tmp, &temp_list, list) {
+		free_swap_and_cache_nr(sec->entry, sec->nr);
+		kmem_cache_free(swap_entry_cachep, sec);
+		counts++;
+	}
+	count_vm_events(ASYNC_SWAP_COUNTS, counts);
+out:
+	kfree(work);
+}
+
+static void flush_cache_if_needed(bool check_cache_count)
+{
+	struct work_struct *release_work;
+
+	if ((!check_cache_count && cache_count) ||
+	    cache_count >= max_cache_entries) {
+		release_work = kmalloc(sizeof(*release_work), GFP_ATOMIC);
+		if (release_work) {
+			INIT_WORK(release_work, async_release_func);
+			queue_work(release_wq, release_work);
+		}
+	}
+}
+
+/*
+ * add_to_swap_gather_cache - Add a swap entry to the cache.
+ * @mm: Memory descriptor.
+ * @entry: Swap entry to add.
+ * @nr: Associated number.
+ *
+ * Returns 0 on success, -1 for unmet conditions, -ENOMEM on allocation failure.
+ *
+ * Checks task exiting counts, allocates cache entry, adds it to the swap cache
+ * list, and may trigger a cache flush.
+ */
+int add_to_swap_gather_cache(struct mm_struct *mm, swp_entry_t entry, int nr)
+{
+	struct swap_entry_cache *sec;
+
+	if (!mm || get_exiting_task_count() < MIN_EXITING_TASKS_THRESHOLD)
+		return -1;
+
+	if (!task_is_dying() ||
+	    get_mm_counter(mm, MM_SWAPENTS) < (100 * SWAP_CLUSTER_MAX))
+		return -1;
+
+	sec = kmem_cache_alloc(swap_entry_cachep, GFP_ATOMIC);
+	if (!sec)
+		return -ENOMEM;
+
+	sec->entry = entry;
+	sec->nr = nr;
+	INIT_LIST_HEAD(&sec->list);
+
+	spin_lock_irq(&swap_cache_lock);
+	list_add_tail(&sec->list, &swap_cache_list);
+	cache_count++;
+	spin_unlock_irq(&swap_cache_lock);
+
+	flush_cache_if_needed(true);
+
+	return 0;
+}
+
+static int __init swap_async_free_setup(void)
+{
+	release_wq = alloc_workqueue("async_swap_free",
+				     WQ_UNBOUND | WQ_HIGHPRI | WQ_MEM_RECLAIM,
+				     NUM_ASYNC_SWAP_WORK_ITEMS);
+	if (!release_wq)
+		return -ENOMEM;
+
+	swap_entry_cachep = KMEM_CACHE(swap_entry_cache, SLAB_ACCOUNT);
+	if (!swap_entry_cachep)
+		return -ENOMEM;
+
+	spin_lock_init(&swap_cache_lock);
+	proc_create_single("aswap_free_counts", 0, NULL,
+			   async_swap_free_counts_show);
+
+	return 0;
+}
+
+postcore_initcall(swap_async_free_setup);
 
 static bool swap_only_has_cache(struct swap_info_struct *si,
 			      unsigned long offset, int nr_pages)

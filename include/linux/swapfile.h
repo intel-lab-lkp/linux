@@ -4,6 +4,7 @@
 
 extern unsigned long generic_max_swapfile_size(void);
 unsigned long arch_max_swapfile_size(void);
+int add_to_swap_gather_cache(struct mm_struct *mm, swp_entry_t entry, int nr);
 
 /* Maximum swapfile size supported for the arch (not inclusive). */
 extern unsigned long swapfile_maximum_size;
