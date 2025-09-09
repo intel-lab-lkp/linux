@@ -1374,7 +1374,7 @@ static enum sci_status sci_stp_request_pio_data_out_transmit_data(struct isci_re
 		/* update the current sgl, offset and save for future */
 		sgl = pio_sgl_next(stp_req);
 		offset = 0;
-	} else if (stp_req->pio_len < len) {
+	} else {
 		sci_stp_request_pio_data_out_trasmit_data_frame(ireq, stp_req->pio_len);
 
 		/* Sgl offset will be adjusted and saved for future */
@@ -1511,7 +1511,7 @@ pio_data_out_tx_done_tc_event(struct isci_request *ireq,
 				if (stp_req->pio_len == 0)
 					all_frames_transferred = true;
 			}
-		} else if (stp_req->pio_len == 0) {
+		} else {
 			/*
 			 * this will happen if the all data is written at the
 			 * first time after the pio setup fis is received
