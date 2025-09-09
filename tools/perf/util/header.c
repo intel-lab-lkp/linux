@@ -1621,7 +1621,7 @@ static int write_pmu_caps(struct feat_fd *ff,
 	return 0;
 }
 
-static void free_cpu_domain_info(struct cpu_domain_map **cd_map, u32 schedstat_version, u32 nr)
+void free_cpu_domain_info(struct cpu_domain_map **cd_map, u32 schedstat_version, u32 nr)
 {
 	for (u32 i = 0; i < nr; i++) {
 		if (cd_map[i]->domains) {
@@ -1641,8 +1641,8 @@ static void free_cpu_domain_info(struct cpu_domain_map **cd_map, u32 schedstat_v
 	free(cd_map);
 }
 
-static struct cpu_domain_map  **build_cpu_domain_map(u32 *schedstat_version, u32 *max_sched_domains,
-						     u32 nr)
+struct cpu_domain_map  **build_cpu_domain_map(u32 *schedstat_version, u32 *max_sched_domains,
+					      u32 nr)
 {
 	struct domain_info *domain_info;
 	struct cpu_domain_map **cd_map;
