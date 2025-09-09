@@ -3557,21 +3557,16 @@ static inline void mm_cid_put_lazy(struct task_struct *t)
 static inline int mm_cid_pcpu_unset(struct mm_struct *mm)
 {
 	struct mm_cid __percpu *pcpu_cid = mm->pcpu_cid;
-	int cid, res;
+	int cid;
 
 	lockdep_assert_irqs_disabled();
 	cid = __this_cpu_read(pcpu_cid->cid);
-	for (;;) {
+	do {
 		if (mm_cid_is_unset(cid))
 			return MM_CID_UNSET;
-		/*
-		 * Attempt transition from valid or lazy-put to unset.
-		 */
-		res = cmpxchg(&this_cpu_ptr(pcpu_cid)->cid, cid, MM_CID_UNSET);
-		if (res == cid)
-			break;
-		cid = res;
-	}
+		/* Attempt transition from valid or lazy-put to unset. */
+	} while (!try_cmpxchg(&this_cpu_ptr(pcpu_cid)->cid, &cid, MM_CID_UNSET));
+
 	return cid;
 }
 
