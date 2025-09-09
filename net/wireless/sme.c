@@ -863,7 +863,8 @@ void __cfg80211_connect_result(struct net_device *dev,
 		wdev->links[link].client.current_bss =
 			bss_from_pub(cr->links[link].bss);
 	wdev->connected = true;
-	ether_addr_copy(wdev->u.client.connected_addr, connected_addr);
+	if (connected_addr)
+		ether_addr_copy(wdev->u.client.connected_addr, connected_addr);
 	if (cr->valid_links) {
 		for_each_valid_link(cr, link)
 			memcpy(wdev->links[link].addr, cr->links[link].addr,
