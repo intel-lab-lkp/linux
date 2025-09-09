@@ -1555,13 +1555,46 @@ static inline void iommu_debugfs_setup(void) {}
 
 #ifdef CONFIG_IOMMU_DMA
 #define MSI_IOVA_BASE        0x8000000
+#define MSI_IOVA_BASE2       0xA0000000
 #define MSI_IOVA_LENGTH      0x100000
+
+/**
+ * resv_region_intersects - Check if address range overlaps with reserved regions
+ * @msi_base: Start address of the range to check
+ * @length: Length of the range to check
+ * @resv_region_list: List of reserved regions to check against
+ *
+ * Returns true if the specified address range overlaps with any reserved region
+ * in the list, false otherwise.
+ */
+static inline bool resv_region_intersects(phys_addr_t msi_base, size_t length,
+					  struct list_head *resv_region_list)
+{
+	struct iommu_resv_region *region;
+	phys_addr_t start, end, resv_region_end;
+
+	start = msi_base;
+	end = start + length - 1;
+	list_for_each_entry(region, resv_region_list, list) {
+		resv_region_end = region->start + region->length - 1;
+		if (!(start > resv_region_end || end < region->start))
+			return true; /* overlap detected */
+	}
+
+	return false;
+}
 
 int iommu_get_msi_cookie(struct iommu_domain *domain, dma_addr_t base);
 #else /* CONFIG_IOMMU_DMA */
 static inline int iommu_get_msi_cookie(struct iommu_domain *domain, dma_addr_t base)
 {
 	return -ENODEV;
+}
+
+static inline bool resv_region_intersects(phys_addr_t msi_base, size_t length,
+					  struct list_head *resv_region_list)
+{
+	return false;
 }
 #endif	/* CONFIG_IOMMU_DMA */
 
