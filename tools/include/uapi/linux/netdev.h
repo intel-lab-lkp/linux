@@ -82,6 +82,16 @@ enum netdev_napi_threaded {
 	NETDEV_NAPI_THREADED_ENABLED,
 };
 
+/**
+ * enum netdev_dev
+ * @NETDEV_A_DEV_IFINDEX: netdev ifindex
+ * @NETDEV_A_DEV_XDP_FEATURES: Bitmask of enabled xdp-features.
+ * @NETDEV_A_DEV_XDP_ZC_MAX_SEGS: max fragment count supported by ZC driver
+ * @NETDEV_A_DEV_XDP_RX_METADATA_FEATURES: Bitmask of supported XDP receive
+ *   metadata features. See Documentation/networking/xdp-rx-metadata.rst for
+ *   more details.
+ * @NETDEV_A_DEV_XSK_FEATURES: Bitmask of enabled AF_XDP features.
+ */
 enum {
 	NETDEV_A_DEV_IFINDEX = 1,
 	NETDEV_A_DEV_PAD,
@@ -99,6 +109,29 @@ enum {
 	NETDEV_A_IO_URING_PROVIDER_INFO_MAX = (__NETDEV_A_IO_URING_PROVIDER_INFO_MAX - 1)
 };
 
+/**
+ * enum netdev_page_pool
+ * @NETDEV_A_PAGE_POOL_ID: Unique ID of a Page Pool instance.
+ * @NETDEV_A_PAGE_POOL_IFINDEX: ifindex of the netdev to which the pool
+ *   belongs. May be reported as 0 if the page pool was allocated for a netdev
+ *   which got destroyed already (page pools may outlast their netdevs because
+ *   they wait for all memory to be returned).
+ * @NETDEV_A_PAGE_POOL_NAPI_ID: Id of NAPI using this Page Pool instance.
+ * @NETDEV_A_PAGE_POOL_INFLIGHT: Number of outstanding references to this page
+ *   pool (allocated but yet to be freed pages). Allocated pages may be held in
+ *   socket receive queues, driver receive ring, page pool recycling ring, the
+ *   page pool cache, etc.
+ * @NETDEV_A_PAGE_POOL_INFLIGHT_MEM: Amount of memory held by inflight pages.
+ * @NETDEV_A_PAGE_POOL_DETACH_TIME: Seconds in CLOCK_BOOTTIME of when Page Pool
+ *   was detached by the driver. Once detached Page Pool can no longer be used
+ *   to allocate memory. Page Pools wait for all the memory allocated from them
+ *   to be freed before truly disappearing. "Detached" Page Pools cannot be
+ *   "re-attached", they are just waiting to disappear. Attribute is absent if
+ *   Page Pool has not been detached, and can still be used to allocate new
+ *   memory.
+ * @NETDEV_A_PAGE_POOL_DMABUF: ID of the dmabuf this page-pool is attached to.
+ * @NETDEV_A_PAGE_POOL_IO_URING: io-uring memory provider information.
+ */
 enum {
 	NETDEV_A_PAGE_POOL_ID = 1,
 	NETDEV_A_PAGE_POOL_IFINDEX,
@@ -113,6 +146,11 @@ enum {
 	NETDEV_A_PAGE_POOL_MAX = (__NETDEV_A_PAGE_POOL_MAX - 1)
 };
 
+/**
+ * enum netdev_page_pool_stats - Page pool statistics, see docs for struct
+ *   page_pool_stats for information about individual statistics.
+ * @NETDEV_A_PAGE_POOL_STATS_INFO: Page pool identifying information.
+ */
 enum {
 	NETDEV_A_PAGE_POOL_STATS_INFO = 1,
 	NETDEV_A_PAGE_POOL_STATS_ALLOC_FAST = 8,
@@ -131,6 +169,28 @@ enum {
 	NETDEV_A_PAGE_POOL_STATS_MAX = (__NETDEV_A_PAGE_POOL_STATS_MAX - 1)
 };
 
+/**
+ * enum netdev_napi
+ * @NETDEV_A_NAPI_IFINDEX: ifindex of the netdevice to which NAPI instance
+ *   belongs.
+ * @NETDEV_A_NAPI_ID: ID of the NAPI instance.
+ * @NETDEV_A_NAPI_IRQ: The associated interrupt vector number for the napi
+ * @NETDEV_A_NAPI_PID: PID of the napi thread, if NAPI is configured to operate
+ *   in threaded mode. If NAPI is not in threaded mode (i.e. uses normal
+ *   softirq context), the attribute will be absent.
+ * @NETDEV_A_NAPI_DEFER_HARD_IRQS: The number of consecutive empty polls before
+ *   IRQ deferral ends and hardware IRQs are re-enabled.
+ * @NETDEV_A_NAPI_GRO_FLUSH_TIMEOUT: The timeout, in nanoseconds, of when to
+ *   trigger the NAPI watchdog timer which schedules NAPI processing.
+ *   Additionally, a non-zero value will also prevent GRO from flushing recent
+ *   super-frames at the end of a NAPI cycle. This may add receive latency in
+ *   exchange for reducing the number of frames processed by the network stack.
+ * @NETDEV_A_NAPI_IRQ_SUSPEND_TIMEOUT: The timeout, in nanoseconds, of how long
+ *   to suspend irq processing, if event polling finds events
+ * @NETDEV_A_NAPI_THREADED: Whether the NAPI is configured to operate in
+ *   threaded polling mode. If this is set to enabled then the NAPI context
+ *   operates in threaded polling mode.
+ */
 enum {
 	NETDEV_A_NAPI_IFINDEX = 1,
 	NETDEV_A_NAPI_ID,
@@ -150,6 +210,22 @@ enum {
 	NETDEV_A_XSK_INFO_MAX = (__NETDEV_A_XSK_INFO_MAX - 1)
 };
 
+/**
+ * enum netdev_queue
+ * @NETDEV_A_QUEUE_ID: Queue index; most queue types are indexed like a C
+ *   array, with indexes starting at 0 and ending at queue count - 1. Queue
+ *   indexes are scoped to an interface and queue type.
+ * @NETDEV_A_QUEUE_IFINDEX: ifindex of the netdevice to which the queue
+ *   belongs.
+ * @NETDEV_A_QUEUE_TYPE: Queue type as rx, tx. Each queue type defines a
+ *   separate ID space. XDP TX queues allocated in the kernel are not linked to
+ *   NAPIs and thus not listed. AF_XDP queues will have more information set in
+ *   the xsk attribute.
+ * @NETDEV_A_QUEUE_NAPI_ID: ID of the NAPI instance which services this queue.
+ * @NETDEV_A_QUEUE_DMABUF: ID of the dmabuf attached to this queue, if any.
+ * @NETDEV_A_QUEUE_IO_URING: io_uring memory provider information.
+ * @NETDEV_A_QUEUE_XSK: XSK information for this queue, if any.
+ */
 enum {
 	NETDEV_A_QUEUE_ID = 1,
 	NETDEV_A_QUEUE_IFINDEX,
@@ -163,6 +239,88 @@ enum {
 	NETDEV_A_QUEUE_MAX = (__NETDEV_A_QUEUE_MAX - 1)
 };
 
+/**
+ * enum netdev_qstats - Get device statistics, scoped to a device or a queue.
+ *   These statistics extend (and partially duplicate) statistics available in
+ *   struct rtnl_link_stats64. Value of the `scope` attribute determines how
+ *   statistics are aggregated. When aggregated for the entire device the
+ *   statistics represent the total number of events since last explicit reset
+ *   of the device (i.e. not a reconfiguration like changing queue count). When
+ *   reported per-queue, however, the statistics may not add up to the total
+ *   number of events, will only be reported for currently active objects, and
+ *   will likely report the number of events since last reconfiguration.
+ * @NETDEV_A_QSTATS_IFINDEX: ifindex of the netdevice to which stats belong.
+ * @NETDEV_A_QSTATS_QUEUE_TYPE: Queue type as rx, tx, for queue-id.
+ * @NETDEV_A_QSTATS_QUEUE_ID: Queue ID, if stats are scoped to a single queue
+ *   instance.
+ * @NETDEV_A_QSTATS_SCOPE: What object type should be used to iterate over the
+ *   stats.
+ * @NETDEV_A_QSTATS_RX_PACKETS: Number of wire packets successfully received
+ *   and passed to the stack. For drivers supporting XDP, XDP is considered the
+ *   first layer of the stack, so packets consumed by XDP are still counted
+ *   here.
+ * @NETDEV_A_QSTATS_RX_BYTES: Successfully received bytes, see `rx-packets`.
+ * @NETDEV_A_QSTATS_TX_PACKETS: Number of wire packets successfully sent.
+ *   Packet is considered to be successfully sent once it is in device memory
+ *   (usually this means the device has issued a DMA completion for the
+ *   packet).
+ * @NETDEV_A_QSTATS_TX_BYTES: Successfully sent bytes, see `tx-packets`.
+ * @NETDEV_A_QSTATS_RX_ALLOC_FAIL: Number of times skb or buffer allocation
+ *   failed on the Rx datapath. Allocation failure may, or may not result in a
+ *   packet drop, depending on driver implementation and whether system
+ *   recovers quickly.
+ * @NETDEV_A_QSTATS_RX_HW_DROPS: Number of all packets which entered the
+ *   device, but never left it, including but not limited to: packets dropped
+ *   due to lack of buffer space, processing errors, explicit or implicit
+ *   policies and packet filters.
+ * @NETDEV_A_QSTATS_RX_HW_DROP_OVERRUNS: Number of packets dropped due to
+ *   transient lack of resources, such as buffer space, host descriptors etc.
+ * @NETDEV_A_QSTATS_RX_CSUM_COMPLETE: Number of packets that were marked as
+ *   CHECKSUM_COMPLETE.
+ * @NETDEV_A_QSTATS_RX_CSUM_UNNECESSARY: Number of packets that were marked as
+ *   CHECKSUM_UNNECESSARY.
+ * @NETDEV_A_QSTATS_RX_CSUM_NONE: Number of packets that were not checksummed
+ *   by device.
+ * @NETDEV_A_QSTATS_RX_CSUM_BAD: Number of packets with bad checksum. The
+ *   packets are not discarded, but still delivered to the stack.
+ * @NETDEV_A_QSTATS_RX_HW_GRO_PACKETS: Number of packets that were coalesced
+ *   from smaller packets by the device. Counts only packets coalesced with the
+ *   HW-GRO netdevice feature, LRO-coalesced packets are not counted.
+ * @NETDEV_A_QSTATS_RX_HW_GRO_BYTES: See `rx-hw-gro-packets`.
+ * @NETDEV_A_QSTATS_RX_HW_GRO_WIRE_PACKETS: Number of packets that were
+ *   coalesced to bigger packetss with the HW-GRO netdevice feature.
+ *   LRO-coalesced packets are not counted.
+ * @NETDEV_A_QSTATS_RX_HW_GRO_WIRE_BYTES: See `rx-hw-gro-wire-packets`.
+ * @NETDEV_A_QSTATS_RX_HW_DROP_RATELIMITS: Number of the packets dropped by the
+ *   device due to the received packets bitrate exceeding the device rate
+ *   limit.
+ * @NETDEV_A_QSTATS_TX_HW_DROPS: Number of packets that arrived at the device
+ *   but never left it, encompassing packets dropped for reasons such as
+ *   processing errors, as well as those affected by explicitly defined
+ *   policies and packet filtering criteria.
+ * @NETDEV_A_QSTATS_TX_HW_DROP_ERRORS: Number of packets dropped because they
+ *   were invalid or malformed.
+ * @NETDEV_A_QSTATS_TX_CSUM_NONE: Number of packets that did not require the
+ *   device to calculate the checksum.
+ * @NETDEV_A_QSTATS_TX_NEEDS_CSUM: Number of packets that required the device
+ *   to calculate the checksum. This counter includes the number of GSO wire
+ *   packets for which device calculated the L4 checksum.
+ * @NETDEV_A_QSTATS_TX_HW_GSO_PACKETS: Number of packets that necessitated
+ *   segmentation into smaller packets by the device.
+ * @NETDEV_A_QSTATS_TX_HW_GSO_BYTES: See `tx-hw-gso-packets`.
+ * @NETDEV_A_QSTATS_TX_HW_GSO_WIRE_PACKETS: Number of wire-sized packets
+ *   generated by processing `tx-hw-gso-packets`
+ * @NETDEV_A_QSTATS_TX_HW_GSO_WIRE_BYTES: See `tx-hw-gso-wire-packets`.
+ * @NETDEV_A_QSTATS_TX_HW_DROP_RATELIMITS: Number of the packets dropped by the
+ *   device due to the transmit packets bitrate exceeding the device rate
+ *   limit.
+ * @NETDEV_A_QSTATS_TX_STOP: Number of times driver paused accepting new tx
+ *   packets from the stack to this queue, because the queue was full. Note
+ *   that if BQL is supported and enabled on the device the networking stack
+ *   will avoid queuing a lot of data at once.
+ * @NETDEV_A_QSTATS_TX_WAKE: Number of times driver re-started accepting send
+ *   requests to this queue from the stack.
+ */
 enum {
 	NETDEV_A_QSTATS_IFINDEX = 1,
 	NETDEV_A_QSTATS_QUEUE_TYPE,
@@ -200,6 +358,13 @@ enum {
 	NETDEV_A_QSTATS_MAX = (__NETDEV_A_QSTATS_MAX - 1)
 };
 
+/**
+ * enum netdev_dmabuf
+ * @NETDEV_A_DMABUF_IFINDEX: netdev ifindex to bind the dmabuf to.
+ * @NETDEV_A_DMABUF_QUEUES: receive queues to bind the dmabuf to.
+ * @NETDEV_A_DMABUF_FD: dmabuf file descriptor to bind.
+ * @NETDEV_A_DMABUF_ID: id of the dmabuf binding
+ */
 enum {
 	NETDEV_A_DMABUF_IFINDEX = 1,
 	NETDEV_A_DMABUF_QUEUES,

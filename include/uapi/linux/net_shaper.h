@@ -41,6 +41,28 @@ enum net_shaper_metric {
 	NET_SHAPER_METRIC_PPS,
 };
 
+/**
+ * enum net_shaper_net_shaper
+ * @NET_SHAPER_A_HANDLE: Unique identifier for the given shaper inside the
+ *   owning device.
+ * @NET_SHAPER_A_METRIC: Metric used by the given shaper for bw-min, bw-max and
+ *   burst.
+ * @NET_SHAPER_A_BW_MIN: Guaranteed bandwidth for the given shaper.
+ * @NET_SHAPER_A_BW_MAX: Maximum bandwidth for the given shaper or 0 when
+ *   unlimited.
+ * @NET_SHAPER_A_BURST: Maximum burst-size for shaping. Should not be
+ *   interpreted as a quantum.
+ * @NET_SHAPER_A_PRIORITY: Scheduling priority for the given shaper. The
+ *   priority scheduling is applied to sibling shapers.
+ * @NET_SHAPER_A_WEIGHT: Relative weight for round robin scheduling of the
+ *   given shaper. The scheduling is applied to all sibling shapers with the
+ *   same priority.
+ * @NET_SHAPER_A_IFINDEX: Interface index owning the specified shaper.
+ * @NET_SHAPER_A_PARENT: Identifier for the parent of the affected shaper. Only
+ *   needed for @group operation.
+ * @NET_SHAPER_A_LEAVES: Describes a set of leaves shapers for a @group
+ *   operation.
+ */
 enum {
 	NET_SHAPER_A_HANDLE = 1,
 	NET_SHAPER_A_METRIC,
@@ -57,6 +79,13 @@ enum {
 	NET_SHAPER_A_MAX = (__NET_SHAPER_A_MAX - 1)
 };
 
+/**
+ * enum net_shaper_handle
+ * @NET_SHAPER_A_HANDLE_SCOPE: Defines the shaper @id interpretation.
+ * @NET_SHAPER_A_HANDLE_ID: Numeric identifier of a shaper. The id semantic
+ *   depends on the scope. For @queue scope it's the queue id and for @node
+ *   scope it's the node identifier.
+ */
 enum {
 	NET_SHAPER_A_HANDLE_SCOPE = 1,
 	NET_SHAPER_A_HANDLE_ID,
@@ -65,6 +94,27 @@ enum {
 	NET_SHAPER_A_HANDLE_MAX = (__NET_SHAPER_A_HANDLE_MAX - 1)
 };
 
+/**
+ * enum net_shaper_caps
+ * @NET_SHAPER_A_CAPS_IFINDEX: Interface index queried for shapers
+ *   capabilities.
+ * @NET_SHAPER_A_CAPS_SCOPE: The scope to which the queried capabilities apply.
+ * @NET_SHAPER_A_CAPS_SUPPORT_METRIC_BPS: The device accepts 'bps' metric for
+ *   bw-min, bw-max and burst.
+ * @NET_SHAPER_A_CAPS_SUPPORT_METRIC_PPS: The device accepts 'pps' metric for
+ *   bw-min, bw-max and burst.
+ * @NET_SHAPER_A_CAPS_SUPPORT_NESTING: The device supports nesting shaper
+ *   belonging to this scope below 'node' scoped shapers. Only 'queue' and
+ *   'node' scope can have flag 'support-nesting'.
+ * @NET_SHAPER_A_CAPS_SUPPORT_BW_MIN: The device supports a minimum guaranteed
+ *   B/W.
+ * @NET_SHAPER_A_CAPS_SUPPORT_BW_MAX: The device supports maximum B/W shaping.
+ * @NET_SHAPER_A_CAPS_SUPPORT_BURST: The device supports a maximum burst size.
+ * @NET_SHAPER_A_CAPS_SUPPORT_PRIORITY: The device supports priority
+ *   scheduling.
+ * @NET_SHAPER_A_CAPS_SUPPORT_WEIGHT: The device supports weighted round robin
+ *   scheduling.
+ */
 enum {
 	NET_SHAPER_A_CAPS_IFINDEX = 1,
 	NET_SHAPER_A_CAPS_SCOPE,
