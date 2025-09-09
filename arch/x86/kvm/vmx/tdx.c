@@ -3469,11 +3469,15 @@ static int __init __tdx_bringup(void)
 
 	/* Check TDX module and KVM capabilities */
 	if (!tdx_get_supported_attrs(&tdx_sysinfo->td_conf) ||
-	    !tdx_get_supported_xfam(&tdx_sysinfo->td_conf))
+	    !tdx_get_supported_xfam(&tdx_sysinfo->td_conf)) {
+		r = -EINVAL;
 		goto get_sysinfo_err;
+	}
 
-	if (!(tdx_sysinfo->features.tdx_features0 & MD_FIELD_ID_FEATURES0_TOPOLOGY_ENUM))
+	if (!(tdx_sysinfo->features.tdx_features0 & MD_FIELD_ID_FEATURES0_TOPOLOGY_ENUM)) {
+		r = -EINVAL;
 		goto get_sysinfo_err;
+	}
 
 	/*
 	 * TDX has its own limit of maximum vCPUs it can support for all
