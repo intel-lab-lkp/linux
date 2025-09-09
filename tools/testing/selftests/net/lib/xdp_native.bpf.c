@@ -398,10 +398,11 @@ abort_pkt:
 static int xdp_adjst_head_shrnk_data(struct xdp_md *ctx, __u64 hdr_len,
 				     __u32 offset)
 {
-	char tmp_buff[MAX_ADJST_OFFSET];
+	char tmp_buff[MAX_ADJST_OFFSET] = {0};
+	struct bpf_dynptr ptr;
 	struct udphdr *udph;
-	void *offset_ptr;
 	__u32 udp_csum = 0;
+	void *data = NULL;
 
 	/* Update the length information in the IP and UDP headers before
 	 * adjusting the headroom. This simplifies accessing the relevant
@@ -414,37 +415,25 @@ static int xdp_adjst_head_shrnk_data(struct xdp_md *ctx, __u64 hdr_len,
 	if (!udph)
 		return -1;
 
-	offset = (offset & 0x1ff) >= MAX_ADJST_OFFSET ? MAX_ADJST_OFFSET :
-				     offset & 0xff;
-	if (offset == 0)
+	bpf_dynptr_from_xdp(ctx, 0, &ptr);
+	data = bpf_dynptr_slice(&ptr, hdr_len, tmp_buff, sizeof(tmp_buff));
+	if (!data)
 		return -1;
 
-	if (bpf_xdp_load_bytes(ctx, hdr_len, tmp_buff, offset) < 0)
-		return -1;
-
-	udp_csum = bpf_csum_diff((__be32 *)tmp_buff, offset, 0, 0, udp_csum);
+	udp_csum = bpf_csum_diff(data, offset, 0, 0, udp_csum);
 
 	udph->check = (__u16)csum_fold_helper(udp_csum);
-
-	if (bpf_xdp_load_bytes(ctx, 0, tmp_buff, MAX_ADJST_OFFSET) < 0)
-		return -1;
-
-	if (bpf_xdp_adjust_head(ctx, offset) < 0)
-		return -1;
-
-	if (offset > MAX_ADJST_OFFSET)
-		return -1;
-
-	if (hdr_len > MAX_ADJST_OFFSET || hdr_len == 0)
-		return -1;
 
 	/* Added here to handle clang complain about negative value */
 	hdr_len = hdr_len & 0xff;
 
-	if (hdr_len == 0)
+	if (bpf_dynptr_read(tmp_buff, hdr_len, &ptr, 0, 0) < 0)
 		return -1;
 
-	if (bpf_xdp_store_bytes(ctx, 0, tmp_buff, hdr_len) < 0)
+	if (bpf_dynptr_write(&ptr, offset, tmp_buff, hdr_len, 0) < 0)
+		return -1;
+
+	if (bpf_xdp_adjust_head(ctx, offset) < 0)
 		return -1;
 
 	return 0;
