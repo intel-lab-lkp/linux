@@ -369,11 +369,33 @@ void free_pgd_range(struct mmu_gather *tlb,
 	} while (pgd++, addr = next, addr != end);
 }
 
+/*
+ * free_pgtables() - Free a range of page tables
+ * @tlb: The mmu gather
+ * @mas: The maple state
+ * @vma: The first vma
+ * @floor: The lowest page table address
+ * @ceiling: The highest page table address
+ * @tree_max: The highest tree search address
+ * @mm_wr_locked: boolean indicating if the mm is write locked
+ *
+ * Note: Floor and ceiling are provided to indicate the absolute range of the
+ * page tables that should be removed.  This can differ from the vma mappings on
+ * some archs that may have mappings that need to be removed outside the vmas.
+ * Note that the prev->vm_end and next->vm_start are often used.
+ *
+ * The tree_max differs from the ceiling when a dup_mmap() failed and the tree
+ * has unrelated data to the mm_struct being torn down.
+ */
 void free_pgtables(struct mmu_gather *tlb, struct ma_state *mas,
 		   struct vm_area_struct *vma, unsigned long floor,
-		   unsigned long ceiling, bool mm_wr_locked)
+		   unsigned long ceiling, unsigned long tree_max,
+		   bool mm_wr_locked)
 {
 	struct unlink_vma_file_batch vb;
+
+	/* underflow can happen and is fine */
+	WARN_ON_ONCE(tree_max - 1 > ceiling - 1);
 
 	tlb_free_vmas(tlb);
 
@@ -385,7 +407,7 @@ void free_pgtables(struct mmu_gather *tlb, struct ma_state *mas,
 		 * Note: USER_PGTABLES_CEILING may be passed as ceiling and may
 		 * be 0.  This will underflow and is okay.
 		 */
-		next = mas_find(mas, ceiling - 1);
+		next = mas_find(mas, tree_max - 1);
 		if (unlikely(xa_is_zero(next)))
 			next = NULL;
 
@@ -405,7 +427,7 @@ void free_pgtables(struct mmu_gather *tlb, struct ma_state *mas,
 		 */
 		while (next && next->vm_start <= vma->vm_end + PMD_SIZE) {
 			vma = next;
-			next = mas_find(mas, ceiling - 1);
+			next = mas_find(mas, tree_max - 1);
 			if (unlikely(xa_is_zero(next)))
 				next = NULL;
 			if (mm_wr_locked)
