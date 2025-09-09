@@ -377,10 +377,17 @@ following tag ordering scheme:
 
      Link: https://lore.kernel.org/email-message-id@here
 
-   This URL should be used when referring to relevant mailing list
-   topics, related patch sets, or other notable discussion threads.
+   This URL should be used when referring to relevant mailing list topics,
+   related patch sets, or other notable discussion threads.  Do not add a Link
+   tag to simply point to the mail which became the upstream commit - the Link
+   should contain interesting and otherwise relevant information regardling
+   the evolution of the change or any related side-discussion. See
+   https://lore.kernel.org/r/CAHk-=wh5AyuvEhNY9a57v-vwyr7EkPVRUKMPwj92yF_K0dJHVg@mail.gmail.com
+   for more info.
+
    A convenient way to associate ``Link:`` trailers with the commit
    message is to use markdown-like bracketed notation, for example::
+
 
      A similar approach was attempted before as part of a different
      effort [1], but the initial implementation caused too many
@@ -388,15 +395,6 @@ following tag ordering scheme:
 
      Link: https://lore.kernel.org/some-msgid@here # [1]
      Link: https://bugzilla.example.org/bug/12345  # [2]
-
-   You can also use ``Link:`` trailers to indicate the origin of the
-   patch when applying it to your git tree. In that case, please use the
-   dedicated ``patch.msgid.link`` domain instead of ``lore.kernel.org``.
-   This practice makes it possible for automated tooling to identify
-   which link to use to retrieve the original patch submission. For
-   example::
-
-     Link: https://patch.msgid.link/patch-source-message-id@here
 
 Please do not use combined tags, e.g. ``Reported-and-tested-by``, as
 they just complicate automated extraction of tags.
