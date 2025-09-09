@@ -1369,7 +1369,7 @@ static struct pci_driver tnt4882_pci_driver = {
 	.probe = &tnt4882_pci_probe
 };
 
-#if 0
+#ifdef CONFIG_TNT4882
 /* unused, will be needed when the driver is turned into a pnp_driver */
 static const struct pnp_device_id tnt4882_pnp_table[] = {
 	{.id = "NICC601"},
