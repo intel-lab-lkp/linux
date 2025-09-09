@@ -658,6 +658,8 @@ static void inode_switch_wbs(struct inode *inode, int new_wb_id)
 	if (!isw->new_wb)
 		goto out_free;
 
+	trace_inode_switch_wbs_queue(inode->i_wb, isw->new_wb, 1);
+
 	if (!inode_prepare_wbs_switch(inode, isw->new_wb))
 		goto out_free;
 
@@ -751,6 +753,8 @@ bool cleanup_offline_cgwb(struct bdi_writeback *wb)
 		kfree(isw);
 		return restart;
 	}
+
+	trace_inode_switch_wbs_queue(wb, isw->new_wb, nr);
 
 	/*
 	 * In addition to synchronizing among switchers, I_WB_SWITCH tells
