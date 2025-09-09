@@ -23,7 +23,13 @@ EXPORT_SYMBOL(loongson_sysconf);
 void __init init_environ(void)
 {
 	int efi_boot = fw_arg0;
-	char *cmdline = early_memremap_ro(fw_arg1, COMMAND_LINE_SIZE);
+	char *cmdline;
+
+	cmdline = early_memremap_ro(fw_arg1, COMMAND_LINE_SIZE);
+	if (!cmdline) {
+		pr_err("Failed to map command line memory\n");
+		return;
+	}
 
 	if (efi_boot)
 		set_bit(EFI_BOOT, &efi.flags);
@@ -46,10 +52,18 @@ static int __init init_cpu_fullname(void)
 
 	/* Parsing cpuname from DTS model property */
 	root = of_find_node_by_path("/");
+	if (!root) {
+		pr_warn("Failed to find root device node\n");
+		return -ENODEV;
+	}
 	ret = of_property_read_string(root, "model", &model);
 	if (ret == 0) {
 		cpuname = kstrdup(model, GFP_KERNEL);
-		loongson_sysconf.cpuname = strsep(&cpuname, " ");
+		if (cpuname) {
+			loongson_sysconf.cpuname = strsep(&cpuname, " ");
+		} else {
+			pr_warn("Failed to allocate memory for cpuname\n");
+		}
 	}
 	of_node_put(root);
 
@@ -67,14 +81,18 @@ static int __init fdt_cpu_clk_init(void)
 	struct device_node *np;
 
 	np = of_get_cpu_node(0, NULL);
-	if (!np)
+	if (!np) {
+		pr_warn("Failed to get CPU node\n");
 		return -ENODEV;
+	}
 
 	clk = of_clk_get(np, 0);
 	of_node_put(np);
 
-	if (IS_ERR(clk))
+	if (IS_ERR(clk)) {
+		pr_warn("Failed to get CPU clock\n");
 		return -ENODEV;
+	}
 
 	cpu_clock_freq = clk_get_rate(clk);
 	clk_put(clk);
@@ -109,6 +127,10 @@ static int __init boardinfo_init(void)
 	struct kobject *loongson_kobj;
 
 	loongson_kobj = kobject_create_and_add("loongson", firmware_kobj);
+	if (!loongson_kobj) {
+		pr_warn("loongson: Firmware registration failed.\n");
+		return -ENOMEM;
+	}
 
 	return sysfs_create_file(loongson_kobj, &boardinfo_attr.attr);
 }
