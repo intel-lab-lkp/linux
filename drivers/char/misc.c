@@ -211,6 +211,7 @@ int misc_register(struct miscdevice *misc)
 	dev_t dev;
 	int err = 0;
 	bool is_dynamic = (misc->minor == MISC_DYNAMIC_MINOR);
+	int minor = 0;
 
 	if (misc->minor > MISC_DYNAMIC_MINOR) {
 		pr_err("Invalid fixed minor %d for miscdevice '%s'\n",
@@ -221,32 +222,13 @@ int misc_register(struct miscdevice *misc)
 	INIT_LIST_HEAD(&misc->list);
 
 	mutex_lock(&misc_mtx);
-
-	if (is_dynamic) {
-		int i = misc_minor_alloc(misc->minor);
-
-		if (i < 0) {
-			err = -EBUSY;
-			goto out;
-		}
-		misc->minor = i;
-	} else {
-		struct miscdevice *c;
-		int i;
-
-		list_for_each_entry(c, &misc_list, list) {
-			if (c->minor == misc->minor) {
-				err = -EBUSY;
-				goto out;
-			}
-		}
-
-		i = misc_minor_alloc(misc->minor);
-		if (i < 0) {
-			err = -EBUSY;
-			goto out;
-		}
+	minor = misc_minor_alloc(misc->minor);
+	if (minor < 0) {
+		err = -EBUSY;
+		goto out;
 	}
+	if (is_dynamic)
+		misc->minor = minor;
 
 	dev = MKDEV(MISC_MAJOR, misc->minor);
 
