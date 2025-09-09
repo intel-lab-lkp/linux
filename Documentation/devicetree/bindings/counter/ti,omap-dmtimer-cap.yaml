@@ -1,0 +1,34 @@
+# SPDX-License-Identifier: GPL-2.0-only OR BSD-2-Clause
+%YAML 1.2
+---
+$id: http://devicetree.org/schemas/counter/ti,omap-dmtimer-cap.yaml#
+$schema: http://devicetree.org/meta-schemas/core.yaml#
+
+title: TI dual mode timer Capture Module
+
+maintainers:
+  - Gokul Praveen <g-praveen@ti.com>
+
+description:
+  TI dual mode timer instances have an IO pin for Capture capability.
+
+properties:
+  compatible:
+    const: ti,omap-dmtimer-cap
+
+  ti,timers:
+    description: Timer instance phandle for the Capture
+    $ref: /schemas/types.yaml#/definitions/phandle
+
+required:
+  - compatible
+  - ti,timers
+
+unevaluatedProperties: false
+
+examples:
+  - |
+    main_cap10: dmtimer-main-cap-10 {
+      compatible = "ti,omap-dmtimer-cap";
+      ti,timers = <&main_timer10>;
+    };
