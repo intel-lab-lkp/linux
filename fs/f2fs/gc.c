@@ -936,6 +936,11 @@ next:
 		}
 	}
 
+	if (f2fs_sb_has_blkzoned(sbi) && p.min_cost == UINT_MAX) {
+		ret = -ENODATA;
+		goto out;
+	}
+
 	/* get victim for GC_AT/AT_SSR */
 	if (is_atgc) {
 		lookup_victim_by_age(sbi, &p);
