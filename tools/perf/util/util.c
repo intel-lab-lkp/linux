@@ -257,6 +257,12 @@ static int rm_rf_kcore_dir(const char *path)
 	return 0;
 }
 
+void print_separator(int pre_dash_cnt, const char *s, int post_dash_cnt)
+{
+	printf("%.*s%s%.*s\n", pre_dash_cnt, graph_dotted_line, s, post_dash_cnt,
+	       graph_dotted_line);
+}
+
 int rm_rf_perf_data(const char *path)
 {
 	const char *pat[] = {

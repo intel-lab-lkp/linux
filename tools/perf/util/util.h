@@ -48,6 +48,8 @@ bool sysctl__nmi_watchdog_enabled(void);
 
 int perf_tip(char **strp, const char *dirpath);
 
+void print_separator(int pre_dash_cnt, const char *s, int post_dash_cnt);
+
 #ifndef HAVE_SCHED_GETCPU_SUPPORT
 int sched_getcpu(void);
 #endif

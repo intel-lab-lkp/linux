@@ -1340,11 +1340,6 @@ static struct kwork_class *kwork_class_supported_list[KWORK_CLASS_MAX] = {
 	[KWORK_CLASS_SCHED]     = &kwork_sched,
 };
 
-static void print_separator(int len)
-{
-	printf(" %.*s\n", len, graph_dotted_line);
-}
-
 static int report_print_work(struct perf_kwork *kwork, struct kwork_work *work)
 {
 	int ret = 0;
@@ -1458,7 +1453,7 @@ static int report_print_header(struct perf_kwork *kwork)
 	}
 
 	printf("\n");
-	print_separator(ret);
+	print_separator(ret, "", 0);
 	return ret;
 }
 
@@ -1633,7 +1628,7 @@ static void top_print_header(struct perf_kwork *kwork __maybe_unused)
 		     PRINT_RUNTIME_HEADER_WIDTH + RPINT_DECIMAL_WIDTH, "RUNTIME",
 		     PRINT_TASK_NAME_WIDTH, "COMMAND");
 	printf("\n ");
-	print_separator(ret);
+	print_separator(ret, "", 0);
 }
 
 static int top_print_work(struct perf_kwork *kwork __maybe_unused, struct kwork_work *work)
@@ -1933,11 +1928,11 @@ static int perf_kwork__report(struct perf_kwork *kwork)
 		}
 		next = rb_next(next);
 	}
-	print_separator(ret);
+	print_separator(ret, "", 0);
 
 	if (kwork->summary) {
 		print_summary(kwork);
-		print_separator(ret);
+		print_separator(ret, "", 0);
 	}
 
 	print_bad_events(kwork);
