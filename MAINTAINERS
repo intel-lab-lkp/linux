@@ -14359,6 +14359,7 @@ M:	Binbin Zhou <zhoubinbin@loongson.cn>
 L:	linux-serial@vger.kernel.org
 S:	Maintained
 F:	Documentation/devicetree/bindings/serial/loongson,uart.yaml
+F:	drivers/tty/serial/8250/8250_loongson.c
 
 LOONGSON-2 SOC SERIES CLOCK DRIVER
 M:	Yinbo Zhu <zhuyinbo@loongson.cn>
