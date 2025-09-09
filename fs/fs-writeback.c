@@ -369,6 +369,8 @@ static struct bdi_writeback *inode_to_wb_and_lock_list(struct inode *inode)
 
 struct inode_switch_wbs_context {
 	struct rcu_work		work;
+	/* List of queued switching contexts for new_wb */
+	struct list_head	list;
 
 	/*
 	 * Multiple inodes can be switched at once.  The switching procedure
@@ -486,10 +488,8 @@ skip_switch:
 	return switched;
 }
 
-static void inode_switch_wbs_work_fn(struct work_struct *work)
+static void process_inode_switch_wbs_work(struct inode_switch_wbs_context *isw)
 {
-	struct inode_switch_wbs_context *isw =
-		container_of(to_rcu_work(work), struct inode_switch_wbs_context, work);
 	struct backing_dev_info *bdi = inode_to_bdi(isw->inodes[0]);
 	struct bdi_writeback *old_wb = isw->inodes[0]->i_wb;
 	struct bdi_writeback *new_wb = isw->new_wb;
@@ -539,8 +539,42 @@ static void inode_switch_wbs_work_fn(struct work_struct *work)
 	for (inodep = isw->inodes; *inodep; inodep++)
 		iput(*inodep);
 	wb_put(new_wb);
-	kfree(isw);
 	atomic_dec(&isw_nr_in_flight);
+}
+
+static void inode_switch_wbs_work_fn(struct work_struct *work)
+{
+	struct inode_switch_wbs_context *isw =
+		container_of(to_rcu_work(work), struct inode_switch_wbs_context, work);
+	struct bdi_writeback *new_wb = isw->new_wb;
+	bool switch_running;
+
+	spin_lock_irq(&new_wb->work_lock);
+	switch_running = !list_empty(&new_wb->switch_wbs_ctxs);
+	list_add_tail(&isw->list, &new_wb->switch_wbs_ctxs);
+	spin_unlock_irq(&new_wb->work_lock);
+
+	/*
+	 * Let's leave the real work for the running worker since we'd just
+	 * contend with it on wb->list_lock anyway.
+	 */
+	if (switch_running)
+		return;
+
+	/* OK, we will be doing the switching work */
+	wb_get(new_wb);
+	spin_lock_irq(&new_wb->work_lock);
+	while (!list_empty(&new_wb->switch_wbs_ctxs)) {
+		isw = list_first_entry(&new_wb->switch_wbs_ctxs,
+				       struct inode_switch_wbs_context, list);
+		spin_unlock_irq(&new_wb->work_lock);
+		process_inode_switch_wbs_work(isw);
+		spin_lock_irq(&new_wb->work_lock);
+		list_del(&isw->list);
+		kfree(isw);
+	}
+	spin_unlock_irq(&new_wb->work_lock);
+	wb_put(new_wb);
 }
 
 static bool inode_prepare_wbs_switch(struct inode *inode,

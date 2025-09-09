@@ -136,7 +136,8 @@ struct bdi_writeback {
 	int dirty_exceeded;
 	enum wb_reason start_all_reason;
 
-	spinlock_t work_lock;		/* protects work_list & dwork scheduling */
+	spinlock_t work_lock;		/* protects work_list,
+					   dwork scheduling, and switch_wbs_ctxs */
 	struct list_head work_list;
 	struct delayed_work dwork;	/* work item used for writeback */
 	struct delayed_work bw_dwork;	/* work item used for bandwidth estimate */
@@ -152,6 +153,8 @@ struct bdi_writeback {
 	struct list_head blkcg_node;	/* anchored at blkcg->cgwb_list */
 	struct list_head b_attached;	/* attached inodes, protected by list_lock */
 	struct list_head offline_node;	/* anchored at offline_cgwbs */
+	struct list_head switch_wbs_ctxs;	/* queued contexts for
+						 * writeback switching */
 
 	union {
 		struct work_struct release_work;
