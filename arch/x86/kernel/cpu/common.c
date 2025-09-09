@@ -72,6 +72,7 @@
 #include <asm/tdx.h>
 #include <asm/posted_intr.h>
 #include <asm/runtime-const.h>
+#include <asm/vmx.h>
 
 #include "cpu.h"
 
@@ -1923,6 +1924,84 @@ static void generic_identify(struct cpuinfo_x86 *c)
 #endif
 }
 
+static bool is_vmx_supported(void)
+{
+	int cpu = raw_smp_processor_id();
+
+	if (!(cpuid_ecx(1) & (1 << (X86_FEATURE_VMX & 31)))) {
+		/* May not be an Intel CPU */
+		pr_info("VMX not supported by CPU%d\n", cpu);
+		return false;
+	}
+
+	if (!this_cpu_has(X86_FEATURE_MSR_IA32_FEAT_CTL) ||
+	    !this_cpu_has(X86_FEATURE_VMX)) {
+		pr_err("VMX not enabled (by BIOS) in MSR_IA32_FEAT_CTL on CPU%d\n", cpu);
+		return false;
+	}
+
+	return true;
+}
+
+/* IA-32 SDM Vol 3B: VMCS size is never greater than 4kB. */
+union vmxon_vmcs {
+	struct vmcs_hdr hdr;
+	char data[PAGE_SIZE];
+};
+
+static DEFINE_PER_CPU_PAGE_ALIGNED(union vmxon_vmcs, vmxon_vmcs);
+
+/*
+ * Executed during the CPU startup phase to execute VMXON to enable VMX. This
+ * ensures that KVM, often loaded as a kernel module, no longer needs to worry
+ * about whether or not VMXON has been executed on a CPU (e.g., CPU offline
+ * events or system reboots while KVM is loading).
+ *
+ * VMXON is not expected to fault, but fault handling is kept as a precaution
+ * against any unexpected code paths that might trigger it and can be removed
+ * later if unnecessary.
+ */
+void cpu_enable_virtualization(void)
+{
+	u64 vmxon_pointer = __pa(this_cpu_ptr(&vmxon_vmcs));
+	int cpu = raw_smp_processor_id();
+	u64 basic_msr;
+
+	if (!is_vmx_supported())
+		return;
+
+	if (cr4_read_shadow() & X86_CR4_VMXE) {
+		pr_err("VMX already enabled on CPU%d\n", cpu);
+		return;
+	}
+
+	memset(this_cpu_ptr(&vmxon_vmcs), 0, PAGE_SIZE);
+
+	/*
+	 * Even though not explicitly documented by TLFS, VMXArea passed as
+	 * VMXON argument should still be marked with revision_id reported by
+	 * physical CPU.
+	 */
+	rdmsrq(MSR_IA32_VMX_BASIC, basic_msr);
+	this_cpu_ptr(&vmxon_vmcs)->hdr.revision_id = vmx_basic_vmcs_revision_id(basic_msr);
+
+	intel_pt_handle_vmx(1);
+
+	cr4_set_bits(X86_CR4_VMXE);
+
+	asm goto("1: vmxon %[vmxon_pointer]\n\t"
+		 _ASM_EXTABLE(1b, %l[fault])
+		 : : [vmxon_pointer] "m"(vmxon_pointer)
+		 : : fault);
+
+	return;
+
+fault:
+	pr_err("VMXON faulted on CPU%d\n", cpu);
+	cr4_clear_bits(X86_CR4_VMXE);
+	intel_pt_handle_vmx(0);
+}
+
 /*
  * This does the hard work of actually picking apart the CPU stuff...
  */
@@ -2120,6 +2199,12 @@ void identify_secondary_cpu(unsigned int cpu)
 
 	tsx_ap_init();
 	c->initialized = true;
+
+	/*
+	 * Enable AP virtualization immediately after initializing the per-CPU
+	 * cpuinfo_x86 structure, ensuring that this_cpu_has() operates correctly.
+	 */
+	cpu_enable_virtualization();
 }
 
 void print_cpu_info(struct cpuinfo_x86 *c)
@@ -2550,6 +2635,12 @@ void __init arch_cpu_finalize_init(void)
 	 */
 	*c = boot_cpu_data;
 	c->initialized = true;
+
+	/*
+	 * Enable BSP virtualization right after the BSP cpuinfo_x86 structure
+	 * is initialized to ensure this_cpu_has() works as expected.
+	 */
+	cpu_enable_virtualization();
 
 	alternative_instructions();
 

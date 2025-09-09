@@ -206,11 +206,11 @@ static void notrace __restore_processor_state(struct saved_context *ctxt)
 	/* cr4 was introduced in the Pentium CPU */
 #ifdef CONFIG_X86_32
 	if (ctxt->cr4)
-		__write_cr4(ctxt->cr4);
+		__write_cr4(ctxt->cr4 & ~X86_CR4_VMXE);
 #else
 /* CONFIG X86_64 */
 	wrmsrq(MSR_EFER, ctxt->efer);
-	__write_cr4(ctxt->cr4);
+	__write_cr4(ctxt->cr4 & ~X86_CR4_VMXE);
 #endif
 	write_cr3(ctxt->cr3);
 	write_cr2(ctxt->cr2);
@@ -291,6 +291,9 @@ static void notrace __restore_processor_state(struct saved_context *ctxt)
 	 * because some of the MSRs are "emulated" in microcode.
 	 */
 	msr_restore_context(ctxt);
+
+	if (ctxt->cr4 & X86_CR4_VMXE)
+		cpu_enable_virtualization();
 }
 
 /* Needed by apm.c */
