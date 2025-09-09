@@ -1024,6 +1024,9 @@ void ice_initialize_vf_entry(struct ice_vf *vf)
 	else
 		ice_mbx_init_vf_info(&pf->hw, &vf->mbx_info);
 
+	/* List to store migration TLVs temporarily */
+	INIT_LIST_HEAD(&vf->mig_tlvs);
+
 	mutex_init(&vf->cfg_lock);
 }
 

@@ -55,6 +55,7 @@
 #include <net/vxlan.h>
 #include <net/gtp.h>
 #include <linux/ppp_defs.h>
+#include <linux/net/intel/ice_migration.h>
 #include "ice_devids.h"
 #include "ice_type.h"
 #include "ice_txrx.h"
@@ -1015,6 +1016,7 @@ int ice_vlan_rx_add_vid(struct net_device *netdev, __be16 proto, u16 vid);
 int ice_vlan_rx_kill_vid(struct net_device *netdev, __be16 proto, u16 vid);
 void ice_get_stats64(struct net_device *netdev,
 		     struct rtnl_link_stats64 *stats);
+struct ice_pf *ice_vf_dev_to_pf(struct pci_dev *vf_dev);
 
 /**
  * ice_set_rdma_cap - enable RDMA support

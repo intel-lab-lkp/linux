@@ -9738,3 +9738,19 @@ static const struct net_device_ops ice_netdev_ops = {
 	.ndo_hwtstamp_get = ice_ptp_hwtstamp_get,
 	.ndo_hwtstamp_set = ice_ptp_hwtstamp_set,
 };
+
+/**
+ * ice_vf_dev_to_pf - Get PF private structure from VF PCI device pointer
+ * @vf_dev: pointer to a VF PCI device structure
+ *
+ * Obtain the PF private data structure of the ice PF associated with the
+ * provided VF PCI device.
+ *
+ * Return: pointer to the ice PF private data, or a ERR_PTR on failure.
+ */
+struct ice_pf *ice_vf_dev_to_pf(struct pci_dev *vf_dev)
+{
+	struct ice_pf *pf = pci_iov_get_pf_drvdata(vf_dev, &ice_driver);
+
+	return pf;
+}

@@ -62,3 +62,4 @@ ice-$(CONFIG_XDP_SOCKETS) += ice_xsk.o
 ice-$(CONFIG_ICE_SWITCHDEV) += ice_eswitch.o ice_eswitch_br.o
 ice-$(CONFIG_GNSS) += ice_gnss.o
 ice-$(CONFIG_ICE_HWMON) += ice_hwmon.o
+ice-$(CONFIG_ICE_VFIO_PCI) += virt/migration.o

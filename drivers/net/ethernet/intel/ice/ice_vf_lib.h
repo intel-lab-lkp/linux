@@ -124,6 +124,7 @@ struct ice_vf {
 	u8 link_forced:1;
 	u8 link_up:1;			/* only valid if VF link is forced */
 	u8 lldp_tx_ena:1;
+	u8 migration_enabled:1;
 
 	u16 num_msix;			/* num of MSI-X configured on this VF */
 
@@ -158,6 +159,7 @@ struct ice_vf {
 	u16 lldp_rule_id;
 
 	struct ice_vf_qs_bw qs_bw[ICE_MAX_RSS_QS_PER_VF];
+	struct list_head mig_tlvs;
 };
 
 /* Flags for controlling behavior of ice_reset_vf */
