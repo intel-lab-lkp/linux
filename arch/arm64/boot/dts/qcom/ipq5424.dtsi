@@ -173,6 +173,14 @@
 		reg = <0x0 0x80000000 0x0 0x0>;
 	};
 
+	i2c_opp_table_64mhz: opp-table-qup64mhz {
+		compatible = "operating-points-v2";
+
+		opp-64000000 {
+			opp-hz = /bits/ 64 <64000000>;
+		};
+	};
+
 	pmu-a55 {
 		compatible = "arm,cortex-a55-pmu";
 		interrupts = <GIC_PPI 7 IRQ_TYPE_LEVEL_HIGH>;
@@ -523,6 +531,26 @@
 				clocks = <&gcc GCC_QUPV3_UART1_CLK>;
 				clock-names = "se";
 				interrupts = <GIC_SPI 340 IRQ_TYPE_LEVEL_HIGH>;
+			};
+
+			i2c0: i2c@1a88000 {
+				compatible = "qcom,geni-i2c";
+				reg = <0 0x01a88000 0 0x4000>;
+				clocks = <&gcc GCC_QUPV3_I2C0_CLK>;
+				clock-names = "se";
+				interrupts = <GIC_SPI 341 IRQ_TYPE_LEVEL_HIGH>;
+				operating-points-v2 = <&i2c_opp_table_64mhz>;
+				status = "disabled";
+			};
+
+			i2c1: i2c@1a8c000 {
+				compatible = "qcom,geni-i2c";
+				reg = <0 0x01a8c000 0 0x4000>;
+				clocks = <&gcc GCC_QUPV3_I2C1_CLK>;
+				clock-names = "se";
+				interrupts = <GIC_SPI 342 IRQ_TYPE_LEVEL_HIGH>;
+				operating-points-v2 = <&i2c_opp_table_64mhz>;
+				status = "disabled";
 			};
 
 			spi0: spi@1a90000 {
