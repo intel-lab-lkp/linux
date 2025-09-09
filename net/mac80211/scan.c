@@ -142,6 +142,10 @@ void ieee80211_inform_bss(struct wiphy *wiphy,
 			bss->valid_data |= IEEE80211_BSS_VALID_WMM;
 	}
 
+	if (cbss->channel->band == NL80211_BAND_6GHZ) {
+		bss->wmm_used = true;
+	}
+
 	if (update_data->beacon) {
 		struct ieee80211_supported_band *sband =
 			local->hw.wiphy->bands[rx_status->band];
