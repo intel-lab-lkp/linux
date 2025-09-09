@@ -132,6 +132,27 @@ http://savannah.nongnu.org/projects/quilt
        platform_set_drvdata(), but left the variable "dev" unused,
        delete it.
 
+特定のコミットで導入された不具合を修正するパッチである場合（例えば ``git bisect`` で
+問題の導入コミットを特定した場合など）、そのコミットを指し示すために「Fixes:」タグを
+使用してください。下流の -stable 系列での自動ピックアップにも利用されるため、**正確な**
+コミット ID と **1 行の要約**を記載することが重要です。
+
+書式（SHA-1 は短縮 12 文字に統一）::
+
+        Fixes: e21d2170f366 ("video: remove unnecessary platform_set_drvdata()")
+
+以下の git-config を設定すると、上記スタイルの行を ``git log`` や ``git show`` で
+出力するためのプリティフォーマットを追加できます::
+
+        [core]
+                abbrev = 12
+        [pretty]
+                fixes = Fixes: %h (\"%s\")
+
+呼び出し例::
+
+        $ git log -1 --pretty=fixes e21d2170f366
+        Fixes: e21d2170f366 ("video: remove unnecessary platform_set_drvdata()")
 
 3) パッチの分割
 
