@@ -85,9 +85,103 @@ void ice_migration_uninit_dev(struct pci_dev *vf_dev)
 }
 EXPORT_SYMBOL(ice_migration_uninit_dev);
 
+/**
+ * ice_migration_suspend_dev - suspend device
+ * @vf_dev: pointer to the VF PCI device
+ * @save_state: true if the device may be preparing for live migration
+ *
+ * Suspend the VF device. If save_state is set, first save any state which is
+ * necessary for later migration.
+ *
+ * Return: 0 for success, negative for error
+ */
 int ice_migration_suspend_dev(struct pci_dev *vf_dev, bool save_state)
 {
-	return -EOPNOTSUPP;
+	struct ice_pf *pf = ice_vf_dev_to_pf(vf_dev);
+	struct ice_mig_tlv_entry *entry, *tmp;
+	struct ice_vsi *vsi;
+	struct device *dev;
+	struct ice_vf *vf;
+	int err;
+
+	if (IS_ERR(pf))
+		return PTR_ERR(pf);
+
+	vf = ice_get_vf_by_dev(pf, vf_dev);
+	if (!vf) {
+		dev_err(&vf_dev->dev, "Unable to locate VF from VF device\n");
+		return -EINVAL;
+	}
+
+	dev = ice_pf_to_dev(pf);
+
+	dev_dbg(dev, "Suspending VF %u in preparation for live migration\n",
+		vf->vf_id);
+
+	mutex_lock(&vf->cfg_lock);
+
+	vsi = ice_get_vf_vsi(vf);
+	if (!vsi) {
+		dev_err(dev, "VF %d VSI is NULL\n", vf->vf_id);
+		err = -EINVAL;
+		goto err_release_cfg_lock;
+	}
+
+	if (save_state) {
+		if (!list_empty(&vf->mig_tlvs)) {
+			dev_dbg(dev, "Freeing unused migration TLVs for VF %d\n",
+				vf->vf_id);
+
+			list_for_each_entry_safe(entry, tmp, &vf->mig_tlvs,
+						 list_entry) {
+				list_del(&entry->list_entry);
+				kfree(entry);
+			}
+		}
+	}
+
+	/* Prevent VSI from queuing incoming packets by removing all filters */
+	ice_fltr_remove_all(vsi);
+	/* TODO: there's probably a better way to handle this, or it may be
+	 * unnecessary
+	 */
+	vf->num_mac = 0;
+	vsi->num_vlan = 0;
+
+	/* MAC based filter rule is disabled at this point. Set MAC to zero
+	 * to keep consistency with VF mac address info shown by ip link
+	 */
+	eth_zero_addr(vf->hw_lan_addr);
+	eth_zero_addr(vf->dev_lan_addr);
+
+	err = ice_vsi_stop_lan_tx_rings(vsi, ICE_NO_RESET, vf->vf_id);
+	if (err)
+		dev_warn(dev, "VF %d failed to stop Tx rings. Continuing live migration regardless.\n",
+			 vf->vf_id);
+
+	err = ice_vsi_stop_all_rx_rings(vsi);
+	if (err)
+		dev_warn(dev, "VF %d failed to stop Rx rings. Continuing live migration regardless.\n",
+			 vf->vf_id);
+
+	mutex_unlock(&vf->cfg_lock);
+	ice_put_vf(vf);
+
+	return 0;
+
+err_free_mig_tlvs:
+	if (save_state) {
+		list_for_each_entry_safe(entry, tmp, &vf->mig_tlvs,
+					 list_entry) {
+			list_del(&entry->list_entry);
+			kfree(entry);
+		}
+	}
+
+err_release_cfg_lock:
+	mutex_unlock(&vf->cfg_lock);
+	ice_put_vf(vf);
+	return err;
 }
 EXPORT_SYMBOL(ice_migration_suspend_dev);
 
