@@ -121,6 +121,8 @@ struct rpmb_frame {
 #define RPMB_READ_DATA         0x4    /* Read data from RPMB partition */
 #define RPMB_RESULT_READ       0x5    /* Read result request  (Internal) */
 
+#define RPMB_FRAME_SIZE        sizeof(struct rpmb_frame)
+
 static DEFINE_MUTEX(block_mutex);
 
 /*
@@ -2864,12 +2866,12 @@ static void set_idata(struct mmc_blk_ioc_data *idata, u32 opcode,
 	 * The size of an RPMB frame must match what's expected by the
 	 * hardware.
 	 */
-	BUILD_BUG_ON(sizeof(struct rpmb_frame) != 512);
+	BUILD_BUG_ON(RPMB_FRAME_SIZE != 512);
 
 	idata->ic.opcode = opcode;
 	idata->ic.flags = MMC_RSP_R1 | MMC_CMD_ADTC;
 	idata->ic.write_flag = write_flag;
-	idata->ic.blksz = sizeof(struct rpmb_frame);
+	idata->ic.blksz = RPMB_FRAME_SIZE;
 	idata->ic.blocks = buf_bytes /  idata->ic.blksz;
 	idata->buf = buf;
 	idata->buf_bytes = buf_bytes;
@@ -2893,32 +2895,27 @@ static int mmc_route_rpmb_frames(struct device *dev, u8 *req,
 	if (IS_ERR(md->queue.card))
 		return PTR_ERR(md->queue.card);
 
-	if (req_len < sizeof(*frm))
+	if (req_len < RPMB_FRAME_SIZE)
 		return -EINVAL;
 
 	req_type = be16_to_cpu(frm->req_resp);
 	switch (req_type) {
 	case RPMB_PROGRAM_KEY:
-		if (req_len != sizeof(struct rpmb_frame) ||
-		    resp_len != sizeof(struct rpmb_frame))
-			return -EINVAL;
-		write = true;
-		break;
 	case RPMB_GET_WRITE_COUNTER:
-		if (req_len != sizeof(struct rpmb_frame) ||
-		    resp_len != sizeof(struct rpmb_frame))
+		if (req_len != RPMB_FRAME_SIZE ||
+		    resp_len != RPMB_FRAME_SIZE)
 			return -EINVAL;
-		write = false;
+		write = (req_type == RPMB_PROGRAM_KEY);
 		break;
 	case RPMB_WRITE_DATA:
-		if (req_len % sizeof(struct rpmb_frame) ||
-		    resp_len != sizeof(struct rpmb_frame))
+		if (req_len % RPMB_FRAME_SIZE ||
+		    resp_len != RPMB_FRAME_SIZE)
 			return -EINVAL;
 		write = true;
 		break;
 	case RPMB_READ_DATA:
-		if (req_len != sizeof(struct rpmb_frame) ||
-		    resp_len % sizeof(struct rpmb_frame))
+		if (req_len != RPMB_FRAME_SIZE ||
+		    resp_len % RPMB_FRAME_SIZE)
 			return -EINVAL;
 		write = false;
 		break;
@@ -2926,10 +2923,8 @@ static int mmc_route_rpmb_frames(struct device *dev, u8 *req,
 		return -EINVAL;
 	}
 
-	if (write)
-		cmd_count = 3;
-	else
-		cmd_count = 2;
+	/* Write operations require 3 commands, read operations require 2 */
+	cmd_count = write ? 3 : 2;
 
 	idata = alloc_idata(rpmb, cmd_count);
 	if (!idata)
@@ -2943,7 +2938,7 @@ static int mmc_route_rpmb_frames(struct device *dev, u8 *req,
 			  1 | MMC_CMD23_ARG_REL_WR, req, req_len);
 
 		/* Send result request frame */
-		memset(resp_frm, 0, sizeof(*resp_frm));
+		memset(resp_frm, 0, RPMB_FRAME_SIZE);
 		resp_frm->req_resp = cpu_to_be16(RPMB_RESULT_READ);
 		set_idata(idata[1], MMC_WRITE_MULTIPLE_BLOCK, 1, resp,
 			  resp_len);
