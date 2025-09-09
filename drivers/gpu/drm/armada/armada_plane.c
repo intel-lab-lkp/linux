@@ -86,7 +86,7 @@ int armada_drm_plane_atomic_check(struct drm_plane *plane,
 	struct armada_plane_state *st = to_armada_plane_state(new_plane_state);
 	struct drm_crtc *crtc = new_plane_state->crtc;
 	struct drm_crtc_state *crtc_state =
-		drm_atomic_get_existing_crtc_state(state, crtc);
+		drm_atomic_get_new_crtc_state(state, crtc);
 	bool interlace;
 	int ret;
 
