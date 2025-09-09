@@ -144,6 +144,8 @@ struct dev_ch_attribute {
 static ssize_t csrow_ue_count_show(struct device *dev,
 				   struct device_attribute *mattr, char *data)
 {
+	pr_warn_once("Depcreated interface! Will be removed within two future releases. Please switch to using the new interface!\n");
+
 	struct csrow_info *csrow = to_csrow(dev);
 
 	return sysfs_emit(data, "%u\n", csrow->ue_count);
@@ -152,6 +154,8 @@ static ssize_t csrow_ue_count_show(struct device *dev,
 static ssize_t csrow_ce_count_show(struct device *dev,
 				   struct device_attribute *mattr, char *data)
 {
+	pr_warn_once("Depcreated interface! Will be removed within two future releases. Please switch to using the new interface!\n");
+
 	struct csrow_info *csrow = to_csrow(dev);
 
 	return sysfs_emit(data, "%u\n", csrow->ce_count);
@@ -160,6 +164,8 @@ static ssize_t csrow_ce_count_show(struct device *dev,
 static ssize_t csrow_size_show(struct device *dev,
 			       struct device_attribute *mattr, char *data)
 {
+	pr_warn_once("Depcreated interface! Will be removed within two future releases. Please switch to using the new interface!\n");
+
 	struct csrow_info *csrow = to_csrow(dev);
 	int i;
 	u32 nr_pages = 0;
@@ -172,6 +178,8 @@ static ssize_t csrow_size_show(struct device *dev,
 static ssize_t csrow_mem_type_show(struct device *dev,
 				   struct device_attribute *mattr, char *data)
 {
+	pr_warn_once("Depcreated interface! Will be removed within two future releases. Please switch to using the new interface!\n");
+
 	struct csrow_info *csrow = to_csrow(dev);
 
 	return sysfs_emit(data, "%s\n", edac_mem_types[csrow->channels[0]->dimm->mtype]);
@@ -180,6 +188,8 @@ static ssize_t csrow_mem_type_show(struct device *dev,
 static ssize_t csrow_dev_type_show(struct device *dev,
 				   struct device_attribute *mattr, char *data)
 {
+	pr_warn_once("Depcreated interface! Will be removed within two future releases. Please switch to using the new interface!\n");
+
 	struct csrow_info *csrow = to_csrow(dev);
 
 	return sysfs_emit(data, "%s\n", dev_types[csrow->channels[0]->dimm->dtype]);
@@ -189,6 +199,8 @@ static ssize_t csrow_edac_mode_show(struct device *dev,
 				    struct device_attribute *mattr,
 				    char *data)
 {
+	pr_warn_once("Depcreated interface! Will be removed within two future releases. Please switch to using the new interface!\n");
+
 	struct csrow_info *csrow = to_csrow(dev);
 
 	return sysfs_emit(data, "%s\n", edac_caps[csrow->channels[0]->dimm->edac_mode]);
@@ -199,6 +211,7 @@ static ssize_t channel_dimm_label_show(struct device *dev,
 				       struct device_attribute *mattr,
 				       char *data)
 {
+	pr_warn_once("Depcreated interface! Will be removed within two future releases. Please switch to using the new interface!\n");
 	struct csrow_info *csrow = to_csrow(dev);
 	unsigned int chan = to_channel(mattr);
 	struct rank_info *rank = csrow->channels[chan];
@@ -238,6 +251,7 @@ static ssize_t channel_dimm_label_store(struct device *dev,
 static ssize_t channel_ce_count_show(struct device *dev,
 				     struct device_attribute *mattr, char *data)
 {
+	pr_warn_once("Depcreated interface! Will be removed within two future releases. Please switch to using the new interface!\n");
 	struct csrow_info *csrow = to_csrow(dev);
 	unsigned int chan = to_channel(mattr);
 	struct rank_info *rank = csrow->channels[chan];
