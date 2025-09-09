@@ -49,6 +49,20 @@ static inline bool crypto_ahash_need_fallback(struct crypto_ahash *tfm)
 	       CRYPTO_ALG_NEED_FALLBACK;
 }
 
+static inline bool crypto_ahash_stack_req_ok(struct ahash_request *req)
+{
+	struct crypto_ahash *tfm = crypto_ahash_reqtfm(req);
+
+	if (!ahash_req_on_stack(req))
+		return true;
+
+	if (!ahash_is_async(tfm))
+		return true;
+
+	return crypto_ahash_alg(tfm)->halg.base.cra_flags &
+	       CRYPTO_AHASH_ALG_STACK_REQ;
+}
+
 static inline void ahash_op_done(void *data, int err,
 				 int (*finish)(struct ahash_request *, int))
 {
@@ -376,7 +390,7 @@ int crypto_ahash_init(struct ahash_request *req)
 		return crypto_shash_init(prepare_shash_desc(req, tfm));
 	if (crypto_ahash_get_flags(tfm) & CRYPTO_TFM_NEED_KEY)
 		return -ENOKEY;
-	if (ahash_req_on_stack(req) && ahash_is_async(tfm))
+	if (crypto_ahash_stack_req_ok(req))
 		return -EAGAIN;
 	if (crypto_ahash_block_only(tfm)) {
 		u8 *buf = ahash_request_ctx(req);
@@ -451,7 +465,7 @@ int crypto_ahash_update(struct ahash_request *req)
 
 	if (likely(tfm->using_shash))
 		return shash_ahash_update(req, ahash_request_ctx(req));
-	if (ahash_req_on_stack(req) && ahash_is_async(tfm))
+	if (crypto_ahash_stack_req_ok(req))
 		return -EAGAIN;
 	if (!crypto_ahash_block_only(tfm))
 		return ahash_do_req_chain(req, &crypto_ahash_alg(tfm)->update);
@@ -531,7 +545,7 @@ int crypto_ahash_finup(struct ahash_request *req)
 
 	if (likely(tfm->using_shash))
 		return shash_ahash_finup(req, ahash_request_ctx(req));
-	if (ahash_req_on_stack(req) && ahash_is_async(tfm))
+	if (crypto_ahash_stack_req_ok(req))
 		return -EAGAIN;
 	if (!crypto_ahash_alg(tfm)->finup)
 		return ahash_def_finup(req);
@@ -569,7 +583,7 @@ int crypto_ahash_digest(struct ahash_request *req)
 
 	if (likely(tfm->using_shash))
 		return shash_ahash_digest(req, prepare_shash_desc(req, tfm));
-	if (ahash_req_on_stack(req) && ahash_is_async(tfm))
+	if (crypto_ahash_stack_req_ok(req))
 		return -EAGAIN;
 	if (crypto_ahash_get_flags(tfm) & CRYPTO_TFM_NEED_KEY)
 		return -ENOKEY;
