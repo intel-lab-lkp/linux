@@ -605,7 +605,7 @@ static void __ip_vs_ftp_exit(struct net *net)
 {
 	struct netns_ipvs *ipvs = net_ipvs(net);
 
-	if (!ipvs)
+	if (!ipvs || !READ_ONCE(ipvs->enable))
 		return;
 
 	unregister_ip_vs_app(ipvs, &ip_vs_ftp);
