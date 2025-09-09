@@ -29,8 +29,19 @@ enum blktrace_cat {
 	BLK_TC_END	= 1 << 15,	/* we've run out of bits! */
 };
 
+enum blktrace_cat2 {
+	BLK_TC_ZONE_APPEND	= 1 << 1ull,   	/* zone append */
+	BLK_TC_ZONE_RESET	= 1 << 2ull,	/* zone reset */
+	BLK_TC_ZONE_RESET_ALL	= 1 << 3ull,	/* zone reset all */
+	BLK_TC_ZONE_FINISH	= 1 << 4ull,	/* zone finish */
+	BLK_TC_ZONE_OPEN	= 1 << 5ull,	/* zone open */
+	BLK_TC_ZONE_CLOSE	= 1 << 6ull,	/* zone close */
+};
+
 #define BLK_TC_SHIFT		(16)
 #define BLK_TC_ACT(act)		((act) << BLK_TC_SHIFT)
+#define BLK_TC_SHIFT2		(32)
+#define BLK_TC_ACT2(act)	((u64)(act) << BLK_TC_SHIFT2)
 
 /*
  * Basic trace actions
