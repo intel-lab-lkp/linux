@@ -36,17 +36,21 @@ struct ice_vfio_pci_migration_file {
  * @core_device: The core device being operated on
  * @mig_info: Migration information
  * @state_mutex: mutex protecting the migration state
+ * @reset_lock: spinlock protecting the reset_done flow
  * @resuming_migf: Migration file containing data for the resuming VF
  * @saving_migf: Migration file used to store data from saving VF
  * @mig_state: the current migration state of the device
+ * @needs_reset: if true, reset is required at next unlock of state_mutex
  */
 struct ice_vfio_pci_device {
 	struct vfio_pci_core_device core_device;
 	struct vfio_device_migration_info mig_info;
 	struct mutex state_mutex;
+	spinlock_t reset_lock;
 	struct ice_vfio_pci_migration_file *resuming_migf;
 	struct ice_vfio_pci_migration_file *saving_migf;
 	enum vfio_device_mig_state mig_state;
+	bool needs_reset:1;
 };
 
 #define to_ice_vdev(dev) \
@@ -152,6 +156,65 @@ static void ice_vfio_pci_disable_fds(struct ice_vfio_pci_device *ice_vdev)
 		fput(ice_vdev->saving_migf->filp);
 		ice_vdev->saving_migf = NULL;
 	}
+}
+
+/**
+ * ice_vfio_pci_state_mutex_unlock - Unlock state_mutex
+ * @mutex: pointer to the ice-vfio-pci state_mutex
+ *
+ * ice_vfio_pci_reset_done may defer a reset in the event it fails to acquire
+ * the state_mutex. This is necessary in order to avoid an unconditional
+ * acquire of the state_mutex that could lead to ABBA lock inversion issues
+ * with the mm lock.
+ *
+ * This function is called to unlock the state_mutex, but ensures that any
+ * deferred reset is handled prior to unlocking. It uses the reset_lock to
+ * check if any reset has been deferred.
+ */
+static void ice_vfio_pci_state_mutex_unlock(struct mutex *mutex)
+{
+	struct ice_vfio_pci_device *ice_vdev =
+		container_of(mutex, struct ice_vfio_pci_device,
+			     state_mutex);
+
+again:
+	spin_lock(&ice_vdev->reset_lock);
+	if (ice_vdev->needs_reset) {
+		ice_vdev->needs_reset = false;
+		spin_unlock(&ice_vdev->reset_lock);
+		ice_vdev->mig_state = VFIO_DEVICE_STATE_RUNNING;
+		ice_vfio_pci_disable_fds(ice_vdev);
+		goto again;
+	}
+	/* The state_mutex must be unlocked before the reset_lock, otherwise
+	 * a new deferred reset could occur inbetween. Such a reset then be
+	 * deferred until the next state_mutex critical section.
+	 */
+	mutex_unlock(&ice_vdev->state_mutex);
+	spin_unlock(&ice_vdev->reset_lock);
+}
+
+/**
+ * ice_vfio_pci_reset_done - Handle or defer PCI reset
+ * @pdev: The PCI device structure
+ *
+ * As the higher VFIO layers are holding locks across reset and using those
+ * same locks with the mm_lock we need to prevent ABBA deadlock with the
+ * state_mutex and mm_lock. In case the state_mutex was taken already we defer
+ * the cleanup work to the unlock flow of the other running context.
+ */
+static void ice_vfio_pci_reset_done(struct pci_dev *pdev)
+{
+	struct ice_vfio_pci_device *ice_vdev = dev_get_drvdata(&pdev->dev);
+
+	spin_lock(&ice_vdev->reset_lock);
+	ice_vdev->needs_reset = true;
+	if (!mutex_trylock(&ice_vdev->state_mutex)) {
+		spin_unlock(&ice_vdev->reset_lock);
+		return;
+	}
+	spin_unlock(&ice_vdev->reset_lock);
+	ice_vfio_pci_state_mutex_unlock(&ice_vdev->state_mutex);
 }
 
 /**
@@ -526,7 +589,7 @@ ice_vfio_pci_set_device_state(struct vfio_device *vdev,
 		}
 	}
 
-	mutex_unlock(&ice_vdev->state_mutex);
+	ice_vfio_pci_state_mutex_unlock(&ice_vdev->state_mutex);
 
 	return res;
 }
@@ -547,7 +610,7 @@ static int ice_vfio_pci_get_device_state(struct vfio_device *vdev,
 
 	*curr_state = ice_vdev->mig_state;
 
-	mutex_unlock(&ice_vdev->state_mutex);
+	ice_vfio_pci_state_mutex_unlock(&ice_vdev->state_mutex);
 
 	return 0;
 }
@@ -583,6 +646,7 @@ static int ice_vfio_pci_core_init_dev(struct vfio_device *vdev)
 	struct ice_vfio_pci_device *ice_vdev = to_ice_vdev(vdev);
 
 	mutex_init(&ice_vdev->state_mutex);
+	spin_lock_init(&ice_vdev->reset_lock);
 
 	vdev->migration_flags =
 		VFIO_MIGRATION_STOP_COPY | VFIO_MIGRATION_P2P;
@@ -681,6 +745,7 @@ static const struct pci_device_id ice_vfio_pci_table[] = {
 MODULE_DEVICE_TABLE(pci, ice_vfio_pci_table);
 
 static const struct pci_error_handlers ice_vfio_pci_core_err_handlers = {
+	.reset_done = ice_vfio_pci_reset_done,
 	.error_detected = vfio_pci_core_aer_err_detected,
 };
 
