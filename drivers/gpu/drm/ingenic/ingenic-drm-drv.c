@@ -247,7 +247,7 @@ static void ingenic_drm_crtc_atomic_enable(struct drm_crtc *crtc,
 	struct ingenic_drm_private_state *priv_state;
 	unsigned int next_id;
 
-	priv_state = ingenic_drm_get_priv_state(priv, state);
+	priv_state = ingenic_drm_get_new_priv_state(priv, state);
 	if (WARN_ON(IS_ERR(priv_state)))
 		return;
 
