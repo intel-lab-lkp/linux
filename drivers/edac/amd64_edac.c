@@ -3895,6 +3895,16 @@ static int per_family_init(struct amd64_pvt *pvt)
 		case 0x40 ... 0x4f:
 			pvt->flags.zn_regs_v2   = 1;
 			break;
+		case 0x50 ... 0x57:
+		case 0xc0 ... 0xc7:
+			pvt->max_mcs            = 16;
+			pvt->flags.zn_regs_v2   = 1;
+			break;
+		case 0x90 ... 0x9f:
+		case 0xa0 ... 0xaf:
+			pvt->max_mcs            = 8;
+			pvt->flags.zn_regs_v2   = 1;
+			break;
 		}
 		break;
 
