@@ -135,10 +135,12 @@ enum target_state {
  * @stats:	Packet send stats for the target. Used for debugging.
  * @state:	State of the target.
  *		Visible from userspace (read-write).
- *		We maintain a strict 1:1 correspondence between this and
- *		whether the corresponding netpoll is active or inactive.
+ *		From a userspace perspective, the target is either enabled or
+ *		disabled. Internally, although both STATE_DISABLED and
+ *		STATE_DEACTIVATED correspond to inactive netpoll the latter is
+ *		due to interface state changes and may recover automatically.
  *		Also, other parameters of a target may be modified at
- *		runtime only when it is disabled (state == STATE_DISABLED).
+ *		runtime only when it is disabled (state != STATE_ENABLED).
  * @extended:	Denotes whether console is extended or not.
  * @release:	Denotes whether kernel release version should be prepended
  *		to the message. Depends on extended console.
@@ -172,6 +174,7 @@ struct netconsole_target {
 	struct netpoll		np;
 	/* protected by target_list_lock */
 	char			buf[MAX_PRINT_CHUNK];
+	struct work_struct	resume_wq;
 };
 
 #ifdef	CONFIG_NETCONSOLE_DYNAMIC
@@ -237,6 +240,33 @@ static void populate_configfs_item(struct netconsole_target *nt,
 }
 #endif	/* CONFIG_NETCONSOLE_DYNAMIC */
 
+/* Attempts to resume logging to a deactivated target. */
+static void resume_target(struct netconsole_target *nt)
+{
+	int ret;
+
+	if (nt->state != STATE_DEACTIVATED)
+		return;
+
+	ret = netpoll_setup(&nt->np);
+	if (ret) {
+		/* netpoll fails to register once, do not try again. */
+		nt->state = STATE_DISABLED;
+	} else {
+		pr_info("network logging resumed on interface %s\n",
+			nt->np.dev_name);
+		nt->state = STATE_ENABLED;
+	}
+}
+
+static void resume_work_handler(struct work_struct *work)
+{
+	struct netconsole_target *nt =
+		container_of(work, struct netconsole_target, resume_wq);
+
+	resume_target(nt);
+}
+
 /* Allocate and initialize with defaults.
  * Note that these targets get their config_item fields zeroed-out.
  */
@@ -259,6 +289,8 @@ static struct netconsole_target *alloc_and_init(void)
 	nt->np.remote_port = 6666;
 	eth_broadcast_addr(nt->np.remote_mac);
 	nt->state = STATE_DISABLED;
+
+	INIT_WORK(&nt->resume_wq, resume_work_handler);
 
 	return nt;
 }
@@ -1440,7 +1472,8 @@ static int netconsole_netdev_event(struct notifier_block *this,
 	bool stopped = false;
 
 	if (!(event == NETDEV_CHANGENAME || event == NETDEV_UNREGISTER ||
-	      event == NETDEV_RELEASE || event == NETDEV_JOIN))
+	      event == NETDEV_RELEASE || event == NETDEV_JOIN ||
+	      event == NETDEV_UP))
 		goto done;
 
 	mutex_lock(&target_cleanup_list_lock);
@@ -1459,6 +1492,10 @@ static int netconsole_netdev_event(struct notifier_block *this,
 				list_move(&nt->list, &target_cleanup_list);
 				stopped = true;
 			}
+		}
+		if (nt->state == STATE_DEACTIVATED && event == NETDEV_UP)  {
+			if (!strncmp(nt->np.dev_name, dev->name, IFNAMSIZ))
+				schedule_work(&nt->resume_wq);
 		}
 		netconsole_target_put(nt);
 	}
@@ -1915,6 +1952,7 @@ fail:
 static void free_param_target(struct netconsole_target *nt)
 {
 	netpoll_cleanup(&nt->np);
+	cancel_work_sync(&nt->resume_wq);
 	kfree(nt);
 }
 
