@@ -63,53 +63,49 @@ static void record_stats(struct xdp_md *ctx, __u32 stat_type)
 		__sync_fetch_and_add(count, 1);
 }
 
-static struct udphdr *filter_udphdr(struct xdp_md *ctx, __u16 port)
+static __u32 check_udphdr(struct xdp_md *ctx, __u16 port)
 {
-	void *data_end = (void *)(long)ctx->data_end;
-	void *data = (void *)(long)ctx->data;
 	struct udphdr *udph = NULL;
-	struct ethhdr *eth = data;
+	struct ethhdr *eth = NULL;
+	struct bpf_dynptr ptr;
 
-	if (data + sizeof(*eth) > data_end)
-		return NULL;
+	bpf_dynptr_from_xdp(ctx, 0, &ptr);
+	eth = bpf_dynptr_slice(&ptr, 0, NULL, sizeof(*eth));
+	if (!eth)
+		return 0;
 
 	if (eth->h_proto == bpf_htons(ETH_P_IP)) {
-		struct iphdr *iph = data + sizeof(*eth);
+		struct iphdr *iph = bpf_dynptr_slice(&ptr, sizeof(*eth),
+						     NULL, sizeof(*iph));
 
-		if (iph + 1 > (struct iphdr *)data_end ||
-		    iph->protocol != IPPROTO_UDP)
-			return NULL;
+		if (!iph || iph->protocol != IPPROTO_UDP)
+			return 0;
 
-		udph = (void *)eth + sizeof(*iph) + sizeof(*eth);
-	} else if (eth->h_proto  == bpf_htons(ETH_P_IPV6)) {
-		struct ipv6hdr *ipv6h = data + sizeof(*eth);
+		udph = bpf_dynptr_slice(&ptr, sizeof(*iph) + sizeof(*eth),
+					NULL, sizeof(*udph));
+	} else if (eth->h_proto == bpf_htons(ETH_P_IPV6)) {
+		struct ipv6hdr *ipv6h = bpf_dynptr_slice(&ptr, sizeof(*eth),
+							 NULL, sizeof(*ipv6h));
 
-		if (ipv6h + 1 > (struct ipv6hdr *)data_end ||
-		    ipv6h->nexthdr != IPPROTO_UDP)
-			return NULL;
+		if (!ipv6h || ipv6h->nexthdr != IPPROTO_UDP)
+			return 0;
 
-		udph = (void *)eth + sizeof(*ipv6h) + sizeof(*eth);
+		udph = bpf_dynptr_slice(&ptr, sizeof(*ipv6h) + sizeof(*eth),
+					NULL, sizeof(*udph));
 	} else {
-		return NULL;
+		return 0;
 	}
 
-	if (udph + 1 > (struct udphdr *)data_end)
-		return NULL;
-
-	if (udph->dest != bpf_htons(port))
-		return NULL;
+	if (!udph || udph->dest != bpf_htons(port))
+		return 0;
 
 	record_stats(ctx, STATS_RX);
-
-	return udph;
+	return (void *)udph - (void *)eth + sizeof(*udph);
 }
 
 static int xdp_mode_pass(struct xdp_md *ctx, __u16 port)
 {
-	struct udphdr *udph = NULL;
-
-	udph = filter_udphdr(ctx, port);
-	if (!udph)
+	if (!check_udphdr(ctx, port))
 		return XDP_PASS;
 
 	record_stats(ctx, STATS_PASS);
@@ -119,10 +115,7 @@ static int xdp_mode_pass(struct xdp_md *ctx, __u16 port)
 
 static int xdp_mode_drop_handler(struct xdp_md *ctx, __u16 port)
 {
-	struct udphdr *udph = NULL;
-
-	udph = filter_udphdr(ctx, port);
-	if (!udph)
+	if (!check_udphdr(ctx, port))
 		return XDP_PASS;
 
 	record_stats(ctx, STATS_DROP);
@@ -363,19 +356,14 @@ static int xdp_adjst_tail_grow_data(struct xdp_md *ctx, __u16 offset)
 
 static int xdp_adjst_tail(struct xdp_md *ctx, __u16 port)
 {
-	void *data = (void *)(long)ctx->data;
-	struct udphdr *udph = NULL;
-	__s32 *adjust_offset, *val;
+	__s32 *adjust_offset;
 	__u32 key, hdr_len;
-	void *offset_ptr;
-	__u8 tag;
 	int ret;
 
-	udph = filter_udphdr(ctx, port);
-	if (!udph)
+	hdr_len = check_udphdr(ctx, port);
+	if (!hdr_len)
 		return XDP_PASS;
 
-	hdr_len = (void *)udph - data + sizeof(struct udphdr);
 	key = XDP_ADJST_OFFSET;
 	adjust_offset = bpf_map_lookup_elem(&map_xdp_setup, &key);
 	if (!adjust_offset)
@@ -504,19 +492,13 @@ static int xdp_adjst_head_grow_data(struct xdp_md *ctx, __u64 hdr_len,
 
 static int xdp_head_adjst(struct xdp_md *ctx, __u16 port)
 {
-	void *data_end = (void *)(long)ctx->data_end;
-	void *data = (void *)(long)ctx->data;
-	struct udphdr *udph_ptr = NULL;
 	__u32 key, size, hdr_len;
 	__s32 *val;
 	int res;
 
-	/* Filter packets based on UDP port */
-	udph_ptr = filter_udphdr(ctx, port);
-	if (!udph_ptr)
+	hdr_len = check_udphdr(ctx, port);
+	if (!hdr_len)
 		return XDP_PASS;
-
-	hdr_len = (void *)udph_ptr - data + sizeof(struct udphdr);
 
 	key = XDP_ADJST_OFFSET;
 	val = bpf_map_lookup_elem(&map_xdp_setup, &key);
