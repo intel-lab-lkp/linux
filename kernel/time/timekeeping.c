@@ -1859,7 +1859,6 @@ static void __timekeeping_inject_sleeptime(struct timekeeper *tk,
 	tk_xtime_add(tk, delta);
 	tk_set_wall_to_mono(tk, timespec64_sub(tk->wall_to_monotonic, *delta));
 	tk_update_sleep_time(tk, timespec64_to_ktime(*delta));
-	tk_debug_account_sleep_time(delta);
 }
 
 #if defined(CONFIG_PM_SLEEP) && defined(CONFIG_RTC_HCTOSYS_DEVICE)
@@ -1919,6 +1918,9 @@ void timekeeping_inject_sleeptime64(const struct timespec64 *delta)
 		__timekeeping_inject_sleeptime(tks, delta);
 		timekeeping_update_from_shadow(&tk_core, TK_UPDATE_ALL);
 	}
+
+	if (timespec64_valid_strict(delta))
+		tk_debug_account_sleep_time(delta);
 
 	/* Signal hrtimers about time change */
 	clock_was_set(CLOCK_SET_WALL | CLOCK_SET_BOOT);
@@ -1980,7 +1982,8 @@ void timekeeping_resume(void)
 	timekeeping_update_from_shadow(&tk_core, TK_CLOCK_WAS_SET);
 	raw_spin_unlock_irqrestore(&tk_core.lock, flags);
 
-	touch_softlockup_watchdog();
+	if (inject_sleeptime && timespec64_valid_strict(&ts_delta))
+		tk_debug_account_sleep_time(&ts_delta);
 
 	/* Resume the clockevent device(s) and hrtimers */
 	tick_resume();
