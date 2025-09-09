@@ -5,6 +5,10 @@
  * Copyright (C) 2015-2016 Josh Poimboeuf <jpoimboe@redhat.com>
  */
 
+#ifdef CONFIG_LIVEPATCH_DEBUG
+#define DEBUG
+#endif
+
 #define pr_fmt(fmt) KBUILD_MODNAME ": " fmt
 
 #include <linux/cpu.h>

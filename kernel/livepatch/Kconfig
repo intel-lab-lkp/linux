@@ -18,3 +18,11 @@ config LIVEPATCH
 	  module uses the interface provided by this option to register
 	  a patch, causing calls to patched functions to be redirected
 	  to new function code contained in the patch module.
+
+config LIVEPATCH_DEBUG
+	bool "Kernel Live Patching debug"
+	depends on LIVEPATCH
+	help
+	  Say Y here to print a debug level message with pr_debug() for
+	  the Kernel Live Patching code, it is a easy way to get debug
+	  information without dynamic debugging.
