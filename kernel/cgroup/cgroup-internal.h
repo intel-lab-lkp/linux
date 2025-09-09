@@ -249,12 +249,12 @@ int cgroup_migrate(struct task_struct *leader, bool threadgroup,
 
 int cgroup_attach_task(struct cgroup *dst_cgrp, struct task_struct *leader,
 		       bool threadgroup);
-void cgroup_attach_lock(bool lock_threadgroup, struct task_struct *tsk);
-void cgroup_attach_unlock(bool lock_threadgroup, struct task_struct *tsk);
+void cgroup_attach_lock(int lock_mode, struct task_struct *tsk);
+void cgroup_attach_unlock(int lock_mode, struct task_struct *tsk);
 struct task_struct *cgroup_procs_write_start(char *buf, bool threadgroup,
-					     bool *locked)
+					     int *lock_mode)
 	__acquires(&cgroup_threadgroup_rwsem);
-void cgroup_procs_write_finish(struct task_struct *task, bool locked)
+void cgroup_procs_write_finish(struct task_struct *task, int locke_mode)
 	__releases(&cgroup_threadgroup_rwsem);
 
 void cgroup_lock_and_drain_offline(struct cgroup *cgrp);

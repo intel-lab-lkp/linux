@@ -146,6 +146,17 @@ enum {
 	__CFTYPE_ADDED		= (1 << 18),
 };
 
+enum {
+	/* Default */
+	CGRP_ATTACH_LOCK_GLOBAL,
+
+	/* When pid=0 && threadgroup=false, see comments in cgroup_procs_write_start */
+	CGRP_ATTACH_LOCK_NONE,
+
+	/* When favordynmods is on, see comments above CGRP_ROOT_FAVOR_DYNMODS */
+	CGRP_ATTACH_LOCK_PER_THREADGROUP,
+};
+
 /*
  * cgroup_file is the handle for a file instance created in a cgroup which
  * is used, for example, to generate file changed notifications.  This can

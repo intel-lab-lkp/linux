@@ -2477,7 +2477,7 @@ EXPORT_SYMBOL_GPL(cgroup_path_ns);
 
 /**
  * cgroup_attach_lock - Lock for ->attach()
- * @lock_threadgroup: whether to down_write rwsem
+ * @lock_mode: whether acquire and acquire which rwsem
  * @tsk: thread group to lock
  *
  * cgroup migration sometimes needs to stabilize threadgroups against forks and
@@ -2499,35 +2499,46 @@ EXPORT_SYMBOL_GPL(cgroup_path_ns);
  * write-locking cgroup_threadgroup_rwsem. This allows ->attach() to assume that
  * CPU hotplug is disabled on entry.
  *
- * When favordynmods is enabled, take per threadgroup rwsem to reduce overhead
- * on dynamic cgroup modifications. see the comment above
- * CGRP_ROOT_FAVOR_DYNMODS definition.
- *
  * tsk is not NULL only when writing to cgroup.procs.
  */
-void cgroup_attach_lock(bool lock_threadgroup, struct task_struct *tsk)
+void cgroup_attach_lock(int lock_mode, struct task_struct *tsk)
 {
 	cpus_read_lock();
-	if (lock_threadgroup) {
-		if (tsk && cgroup_enable_per_threadgroup_rwsem)
-			down_write(&tsk->signal->cgroup_threadgroup_rwsem);
-		else
-			percpu_down_write(&cgroup_threadgroup_rwsem);
+
+	switch (lock_mode) {
+	case CGRP_ATTACH_LOCK_NONE:
+		break;
+	case CGRP_ATTACH_LOCK_GLOBAL:
+		percpu_down_write(&cgroup_threadgroup_rwsem);
+		break;
+	case CGRP_ATTACH_LOCK_PER_THREADGROUP:
+		down_write(&tsk->signal->cgroup_threadgroup_rwsem);
+		break;
+	default:
+		pr_warn("cgroup: Unexpected attach lock mode.");
+		break;
 	}
 }
 
 /**
  * cgroup_attach_unlock - Undo cgroup_attach_lock()
- * @lock_threadgroup: whether to up_write rwsem
+ * @lock_mode: whether release and release which rwsem
  * @tsk: thread group to lock
  */
-void cgroup_attach_unlock(bool lock_threadgroup, struct task_struct *tsk)
+void cgroup_attach_unlock(int lock_mode, struct task_struct *tsk)
 {
-	if (lock_threadgroup) {
-		if (tsk && cgroup_enable_per_threadgroup_rwsem)
-			up_write(&tsk->signal->cgroup_threadgroup_rwsem);
-		else
-			percpu_up_write(&cgroup_threadgroup_rwsem);
+	switch (lock_mode) {
+	case CGRP_ATTACH_LOCK_NONE:
+		break;
+	case CGRP_ATTACH_LOCK_GLOBAL:
+		percpu_up_write(&cgroup_threadgroup_rwsem);
+		break;
+	case CGRP_ATTACH_LOCK_PER_THREADGROUP:
+		up_write(&tsk->signal->cgroup_threadgroup_rwsem);
+		break;
+	default:
+		pr_warn("cgroup: Unexpected attach lock mode.");
+		break;
 	}
 	cpus_read_unlock();
 }
@@ -3002,7 +3013,7 @@ int cgroup_attach_task(struct cgroup *dst_cgrp, struct task_struct *leader,
 }
 
 struct task_struct *cgroup_procs_write_start(char *buf, bool threadgroup,
-					     bool *threadgroup_locked)
+					     int *lock_mode)
 {
 	struct task_struct *tsk;
 	pid_t pid;
@@ -3046,11 +3057,24 @@ retry_find_task:
 	 * cgroup_update_dfl_csses and other cgroup_{proc,thread}s_write
 	 * callers by cgroup_mutex.
 	 * Therefore, we can skip the global lock.
+	 *
+	 * When favordynmods is enabled, take per threadgroup rwsem to reduce
+	 * overhead on dynamic cgroup modifications. see the comment above
+	 * CGRP_ROOT_FAVOR_DYNMODS definition.
 	 */
 	lockdep_assert_held(&cgroup_mutex);
-	*threadgroup_locked = pid || threadgroup;
 
-	cgroup_attach_lock(*threadgroup_locked, tsk);
+	if (pid || threadgroup) {
+		if (cgroup_enable_per_threadgroup_rwsem)
+			*lock_mode = CGRP_ATTACH_LOCK_PER_THREADGROUP;
+		else
+			*lock_mode = CGRP_ATTACH_LOCK_GLOBAL;
+
+	} else {
+		*lock_mode = CGRP_ATTACH_LOCK_NONE;
+	}
+
+	cgroup_attach_lock(*lock_mode, tsk);
 
 	if (threadgroup) {
 		if (!thread_group_leader(tsk)) {
@@ -3061,7 +3085,7 @@ retry_find_task:
 			 * try again; this is
 			 * "double-double-toil-and-trouble-check locking".
 			 */
-			cgroup_attach_unlock(*threadgroup_locked, tsk);
+			cgroup_attach_unlock(*lock_mode, tsk);
 			put_task_struct(tsk);
 			goto retry_find_task;
 		}
@@ -3074,7 +3098,7 @@ out_unlock_rcu:
 	return tsk;
 }
 
-void cgroup_procs_write_finish(struct task_struct *task, bool threadgroup_locked)
+void cgroup_procs_write_finish(struct task_struct *task, int lock_mode)
 {
 	struct cgroup_subsys *ss;
 	int ssid;
@@ -3082,7 +3106,7 @@ void cgroup_procs_write_finish(struct task_struct *task, bool threadgroup_locked
 	/* release reference from cgroup_procs_write_start() */
 	put_task_struct(task);
 
-	cgroup_attach_unlock(threadgroup_locked, task);
+	cgroup_attach_unlock(lock_mode, task);
 
 	for_each_subsys(ss, ssid)
 		if (ss->post_attach)
@@ -3139,6 +3163,7 @@ static int cgroup_update_dfl_csses(struct cgroup *cgrp)
 	struct cgroup *dsct;
 	struct css_set *src_cset;
 	bool has_tasks;
+	int lock_mode;
 	int ret;
 
 	lockdep_assert_held(&cgroup_mutex);
@@ -3169,7 +3194,13 @@ static int cgroup_update_dfl_csses(struct cgroup *cgrp)
 	 * write-locking can be skipped safely.
 	 */
 	has_tasks = !list_empty(&mgctx.preloaded_src_csets);
-	cgroup_attach_lock(has_tasks, NULL);
+
+	if (has_tasks)
+		lock_mode = CGRP_ATTACH_LOCK_GLOBAL;
+	else
+		lock_mode = CGRP_ATTACH_LOCK_NONE;
+
+	cgroup_attach_lock(lock_mode, NULL);
 
 	/* NULL dst indicates self on default hierarchy */
 	ret = cgroup_migrate_prepare_dst(&mgctx);
@@ -3190,7 +3221,7 @@ static int cgroup_update_dfl_csses(struct cgroup *cgrp)
 	ret = cgroup_migrate_execute(&mgctx);
 out_finish:
 	cgroup_migrate_finish(&mgctx);
-	cgroup_attach_unlock(has_tasks, NULL);
+	cgroup_attach_unlock(lock_mode, NULL);
 	return ret;
 }
 
@@ -5291,13 +5322,13 @@ static ssize_t __cgroup_procs_write(struct kernfs_open_file *of, char *buf,
 	struct task_struct *task;
 	const struct cred *saved_cred;
 	ssize_t ret;
-	bool threadgroup_locked;
+	int lock_mode;
 
 	dst_cgrp = cgroup_kn_lock_live(of->kn, false);
 	if (!dst_cgrp)
 		return -ENODEV;
 
-	task = cgroup_procs_write_start(buf, threadgroup, &threadgroup_locked);
+	task = cgroup_procs_write_start(buf, threadgroup, &lock_mode);
 	ret = PTR_ERR_OR_ZERO(task);
 	if (ret)
 		goto out_unlock;
@@ -5323,7 +5354,7 @@ static ssize_t __cgroup_procs_write(struct kernfs_open_file *of, char *buf,
 	ret = cgroup_attach_task(dst_cgrp, task, threadgroup);
 
 out_finish:
-	cgroup_procs_write_finish(task, threadgroup_locked);
+	cgroup_procs_write_finish(task, lock_mode);
 out_unlock:
 	cgroup_kn_unlock(of->kn);
 
