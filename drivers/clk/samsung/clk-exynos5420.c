@@ -8,6 +8,7 @@
  */
 
 #include <dt-bindings/clock/exynos5420.h>
+#include <linux/bitfield.h>
 #include <linux/slab.h>
 #include <linux/clk-provider.h>
 #include <linux/mod_devicetable.h>
@@ -29,6 +30,8 @@
 #define CLKOUT_CMU_CPU		0xa00
 #define SRC_MASK_CPERI		0x4300
 #define GATE_IP_G2D		0x8800
+#define PWR_CTRL		0x1020
+#define PWR_CTRL2		0x1024
 #define CPLL_LOCK		0x10020
 #define DPLL_LOCK		0x10030
 #define EPLL_LOCK		0x10040
@@ -139,9 +142,49 @@
 #define KPLL_CON0		0x28100
 #define SRC_KFC			0x28200
 #define DIV_KFC0		0x28500
+#define PWR_CTRL_KFC		0x29020
+#define PWR_CTRL2_KFC		0x29024
 
 /* NOTE: Must be equal to the last clock ID increased by one */
 #define CLKS_NR			(CLK_DOUT_PCLK_DREX1 + 1)
+
+/* Below definitions are used for PWR_CTRL settings */
+#define PWR_CTRL_ARM2_RATIO_MASK       GENMASK(30, 28)
+#define PWR_CTRL_ARM_RATIO_MASK        GENMASK(18, 16)
+#define PWR_CTRL_DIVARM2_DOWN_ENB      BIT(9)
+#define PWR_CTRL_DIVARM_DOWN_ENB       BIT(8)
+#define PWR_CTRL_USE_STANDBYWFE_ARM_CORE3  BIT(7)
+#define PWR_CTRL_USE_STANDBYWFE_ARM_CORE2  BIT(6)
+#define PWR_CTRL_USE_STANDBYWFE_ARM_CORE1  BIT(5)
+#define PWR_CTRL_USE_STANDBYWFE_ARM_CORE0  BIT(4)
+#define PWR_CTRL_USE_STANDBYWFI_ARM_CORE3  BIT(3)
+#define PWR_CTRL_USE_STANDBYWFI_ARM_CORE2  BIT(2)
+#define PWR_CTRL_USE_STANDBYWFI_ARM_CORE1  BIT(1)
+#define PWR_CTRL_USE_STANDBYWFI_ARM_CORE0  BIT(0)
+
+#define PWR_CTRL2_DIVARM2_UP_ENB       BIT(25)
+#define PWR_CTRL2_DIVARM_UP_ENB        BIT(24)
+#define PWR_CTRL2_DUR_STANDBY2_MASK    GENMASK(23, 16)
+#define PWR_CTRL2_DUR_STANDBY1_MASK    GENMASK(15, 8)
+#define PWR_CTRL2_UP_ARM2_RATIO_MASK   GENMASK(6, 4)
+#define PWR_CTRL2_UP_ARM_RATIO_MASK    GENMASK(2, 0)
+
+/* Below definitions are used for PWR_CTRL_KFC settings */
+#define PWR_CTRL_KFC_RATIO_MASK       GENMASK(21, 16)
+#define PWR_CTRL_KFC_DIVKFC_DOWN_ENB       BIT(8)
+#define PWR_CTRL_KFC_USE_STANDBYWFE_ARM_CORE3  BIT(7)
+#define PWR_CTRL_KFC_USE_STANDBYWFE_ARM_CORE2  BIT(6)
+#define PWR_CTRL_KFC_USE_STANDBYWFE_ARM_CORE1  BIT(5)
+#define PWR_CTRL_KFC_USE_STANDBYWFE_ARM_CORE0  BIT(4)
+#define PWR_CTRL_KFC_USE_STANDBYWFI_ARM_CORE3  BIT(3)
+#define PWR_CTRL_KFC_USE_STANDBYWFI_ARM_CORE2  BIT(2)
+#define PWR_CTRL_KFC_USE_STANDBYWFI_ARM_CORE1  BIT(1)
+#define PWR_CTRL_KFC_USE_STANDBYWFI_ARM_CORE0  BIT(0)
+
+#define PWR_CTRL2_KFC_DIVKFC_UP_ENB        BIT(24)
+#define PWR_CTRL2_KFC_DUR_STANDBY2_MASK    GENMASK(23, 16)
+#define PWR_CTRL2_KFC_DUR_STANDBY1_MASK    GENMASK(15, 8)
+#define PWR_CTRL2_KFC_UP_ARM_RATIO_MASK    GENMASK(5, 0)
 
 /* Exynos5x SoC type */
 enum exynos5x_soc {
@@ -1574,6 +1617,72 @@ static const struct of_device_id ext_clk_match[] __initconst = {
 	{ },
 };
 
+static void __init exynos5420_core_down_clock(void)
+{
+	unsigned int tmp;
+
+	/*
+	 * Enable arm clock down (in idle) and set arm divider
+	 * ratios in WFI/WFE state.
+	 */
+	tmp = (FIELD_PREP(PWR_CTRL_ARM2_RATIO_MASK, 7) |
+		FIELD_PREP(PWR_CTRL_ARM_RATIO_MASK, 7) |
+		PWR_CTRL_DIVARM_DOWN_ENB |
+		PWR_CTRL_DIVARM2_DOWN_ENB |
+		PWR_CTRL_USE_STANDBYWFE_ARM_CORE3 |
+		PWR_CTRL_USE_STANDBYWFE_ARM_CORE2 |
+		PWR_CTRL_USE_STANDBYWFE_ARM_CORE1 |
+		PWR_CTRL_USE_STANDBYWFE_ARM_CORE0 |
+		PWR_CTRL_USE_STANDBYWFI_ARM_CORE3 |
+		PWR_CTRL_USE_STANDBYWFI_ARM_CORE2 |
+		PWR_CTRL_USE_STANDBYWFI_ARM_CORE1 |
+		PWR_CTRL_USE_STANDBYWFI_ARM_CORE0);
+
+	writel_relaxed(tmp, reg_base + PWR_CTRL);
+
+	/*
+	 * Enable arm clock up (on exiting idle). Set arm divider
+	 * ratios when not in idle along with the standby duration
+	 * ratios.
+	 */
+	tmp = (PWR_CTRL2_DIVARM2_UP_ENB | PWR_CTRL2_DIVARM_UP_ENB |
+		FIELD_PREP(PWR_CTRL2_DUR_STANDBY2_MASK, 3) |
+		FIELD_PREP(PWR_CTRL2_DUR_STANDBY1_MASK, 3) |
+		FIELD_PREP(PWR_CTRL2_UP_ARM2_RATIO_MASK, 3) |
+		FIELD_PREP(PWR_CTRL2_UP_ARM_RATIO_MASK, 2));
+
+	writel_relaxed(tmp, reg_base + PWR_CTRL2);
+
+	/*
+	 * Enable arm clock down (in idle) and set kfc divider
+	 * ratios in WFI/WFE state.
+	 */
+	tmp = (FIELD_PREP(PWR_CTRL_KFC_RATIO_MASK, 7) |
+		PWR_CTRL_KFC_DIVKFC_DOWN_ENB |
+		PWR_CTRL_KFC_USE_STANDBYWFE_ARM_CORE3 |
+		PWR_CTRL_KFC_USE_STANDBYWFE_ARM_CORE2 |
+		PWR_CTRL_KFC_USE_STANDBYWFE_ARM_CORE1 |
+		PWR_CTRL_KFC_USE_STANDBYWFE_ARM_CORE0 |
+		PWR_CTRL_KFC_USE_STANDBYWFI_ARM_CORE3 |
+		PWR_CTRL_KFC_USE_STANDBYWFI_ARM_CORE2 |
+		PWR_CTRL_KFC_USE_STANDBYWFI_ARM_CORE1 |
+		PWR_CTRL_KFC_USE_STANDBYWFI_ARM_CORE0);
+
+	writel_relaxed(tmp, reg_base + PWR_CTRL_KFC);
+
+	/*
+	 * Enable arm clock up (on exiting idle). Set kfc divider
+	 * ratios when not in idle along with the standby duration
+	 * ratios.
+	 */
+	tmp = (PWR_CTRL2_KFC_DIVKFC_UP_ENB |
+		FIELD_PREP(PWR_CTRL2_KFC_DUR_STANDBY2_MASK, 3) |
+		FIELD_PREP(PWR_CTRL2_KFC_DUR_STANDBY1_MASK, 3) |
+		FIELD_PREP(PWR_CTRL2_KFC_UP_ARM_RATIO_MASK, 2));
+
+	writel_relaxed(tmp, reg_base + PWR_CTRL2_KFC);
+}
+
 /* register exynos5420 clocks */
 static void __init exynos5x_clk_init(struct device_node *np,
 		enum exynos5x_soc soc)
@@ -1648,6 +1757,8 @@ static void __init exynos5x_clk_init(struct device_node *np,
 		samsung_clk_register_cpu(ctx, exynos5800_cpu_clks,
 				ARRAY_SIZE(exynos5800_cpu_clks));
 	}
+
+	exynos5420_core_down_clock();
 
 	samsung_clk_extended_sleep_init(reg_base,
 		exynos5x_clk_regs, ARRAY_SIZE(exynos5x_clk_regs),
