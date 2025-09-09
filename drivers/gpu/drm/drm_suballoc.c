@@ -165,11 +165,13 @@ static bool drm_suballoc_try_alloc(struct drm_suballoc_manager *sa_manager,
 				   struct drm_suballoc *sa,
 				   size_t size, size_t align)
 {
-	size_t soffset, eoffset, wasted;
+	size_t soffset, eoffset, wasted = 0;
 
 	soffset = drm_suballoc_hole_soffset(sa_manager);
 	eoffset = drm_suballoc_hole_eoffset(sa_manager);
-	wasted = round_up(soffset, align) - soffset;
+
+	if (soffset)
+		wasted = round_up(soffset, align) - soffset;
 
 	if ((eoffset - soffset) >= (size + wasted)) {
 		soffset += wasted;
