@@ -70,6 +70,9 @@ struct ice_migration_tlv {
  * @ICE_MIG_TLV_HEADER: Header identifying the migration format. Must be the
  * first TLV in the list.
  *
+ * @ICE_MIG_TLV_VF_INFO: General configuration of the VF, including data
+ * exchanged over virtchnl as well as PF host configuration.
+ *
  * @NUM_ICE_MIG_TLV: Number of known TLV types. Any type equal to or larger
  * than this value is unrecognized by this version.
  *
@@ -81,6 +84,7 @@ enum ice_migration_tlvs {
 	/* Do not change the order or add anything between, this is ABI! */
 	ICE_MIG_TLV_END = 0,
 	ICE_MIG_TLV_HEADER,
+	ICE_MIG_TLV_VF_INFO,
 
 	/* Add new types above here */
 	NUM_ICE_MIG_TLV
@@ -122,6 +126,57 @@ struct ice_mig_tlv_header {
 } __packed;
 
 /**
+ * struct ice_mig_vf_info - Basic VF information
+ * @dev_lan_addr: The current device LAN address
+ * @hw_lan_addr: The HW LAN address
+ * @driver_caps: Driver capabilities reported by the VF
+ * @vlan_v2_caps: The VLAN V2 capabilities of the VF
+ * @vf_ver: The reported virtchnl version of the VF
+ * @min_tx_rate: The programmed minimum Tx rate of the VF
+ * @max_tx_rate: The programmed maximum Tx rate of the VF
+ * @virtchnl_op_max: The largest known virtchnl opcode
+ * @allowlist_size: The size of the opcodes_allowlist
+ * @num_vf_qs: The number of queues assigned to the VF
+ * @num_msix: The number of MSI-X vectors used by the VF
+ * @port_vlan_tpid: port VLAN TPID
+ * @port_vlan_vid: port VLAN VID
+ * @port_vlan_prio: port VLAN priority
+ * @inner_vlan_strip_ena: True if the inner VLAN stripping is enabled
+ * @outer_vlan_strip_ena: True if the outer VLAN stripping is enabled
+ * @pf_set_mac: True if the PF administratively set the MAC address
+ * @trusted: True of the PF set the trusted VF flag for this VF
+ * @spoofchk: True if spoof checking is enabled on this VF
+ * @driver_active: True if the VF driver has initialized over virtchnl.
+ * @link_forced: True if the link status of this VF is forced
+ * @link_up: The forced link status, ignored if link_forced is false
+ * @opcodes_allowlist: The list of currently allowed opcodes as array of u32
+ */
+struct ice_mig_vf_info {
+	u8 dev_lan_addr[ETH_ALEN];
+	u8 hw_lan_addr[ETH_ALEN];
+	u32 driver_caps;
+	struct virtchnl_vlan_caps vlan_v2_caps;
+	struct virtchnl_version_info vf_ver;
+	u32 min_tx_rate;
+	u32 max_tx_rate;
+	u32 virtchnl_op_max;
+	u16 num_vf_qs;
+	u16 num_msix;
+	u16 port_vlan_tpid;
+	u16 port_vlan_vid;
+	u8 port_vlan_prio;
+	u8 inner_vlan_strip_ena:1;
+	u8 outer_vlan_strip_ena:1;
+	u8 pf_set_mac:1;
+	u8 trusted:1;
+	u8 spoofchk:1;
+	u8 driver_active:1;
+	u8 link_forced:1;
+	u8 link_up:1;			/* only valid if VF link is forced */
+	u32 opcodes_allowlist[]; /* __counted_by(virtchnl_op_max), in bits */
+} __packed;
+
+/**
  * ice_mig_tlv_type - Convert a TLV type to its number
  * @p: the TLV structure type
  *
@@ -132,6 +187,7 @@ struct ice_mig_tlv_header {
 #define ice_mig_tlv_type(p)						\
 	_Generic(*(p),							\
 		 struct ice_mig_tlv_header : ICE_MIG_TLV_HEADER,	\
+		 struct ice_mig_vf_info : ICE_MIG_TLV_VF_INFO,		\
 		 default : ICE_MIG_TLV_END)
 
 /**

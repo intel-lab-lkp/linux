@@ -86,6 +86,59 @@ void ice_migration_uninit_dev(struct pci_dev *vf_dev)
 EXPORT_SYMBOL(ice_migration_uninit_dev);
 
 /**
+ * ice_migration_save_vf_info - Save VF information during suspend
+ * @vf: pointer to the VF being migrated
+ * @vsi: pointer to the VSI for this VF
+ *
+ * Save the VF device information when suspending a VF for live migration.
+ *
+ * Return: 0 on success, negative error code on failure.
+ */
+static int ice_migration_save_vf_info(struct ice_vf *vf, struct ice_vsi *vsi)
+{
+	struct ice_mig_vf_info *vf_info;
+
+	lockdep_assert_held(&vf->cfg_lock);
+
+	vf_info = ice_mig_alloc_flex_tlv(vf_info, opcodes_allowlist,
+					 BITS_TO_U32(VIRTCHNL_OP_MAX));
+	if (!vf_info)
+		return -ENOMEM;
+
+	vf_info->driver_caps = vf->driver_caps;
+	vf_info->port_vlan_tpid = vf->port_vlan_info.tpid;
+	vf_info->port_vlan_vid = vf->port_vlan_info.vid;
+	vf_info->port_vlan_prio = vf->port_vlan_info.prio;
+	vf_info->vlan_v2_caps = vf->vlan_v2_caps;
+	vf_info->vf_ver = vf->vf_ver;
+	vf_info->min_tx_rate = vf->min_tx_rate;
+	vf_info->max_tx_rate = vf->max_tx_rate;
+	vf_info->num_vf_qs = vf->num_vf_qs;
+	vf_info->num_msix = vf->num_msix;
+	vf_info->inner_vlan_strip_ena =
+		vf->vlan_strip_ena & ICE_INNER_VLAN_STRIP_ENA ? 1 : 0;
+	vf_info->outer_vlan_strip_ena =
+		vf->vlan_strip_ena & ICE_OUTER_VLAN_STRIP_ENA ? 1 : 0;
+	vf_info->pf_set_mac = vf->pf_set_mac;
+	vf_info->trusted = vf->trusted;
+	vf_info->spoofchk = vf->spoofchk;
+	vf_info->link_forced = vf->link_forced;
+	vf_info->link_up = vf->link_up;
+	vf_info->driver_active = test_bit(ICE_VF_STATE_ACTIVE, vf->vf_states);
+
+	ether_addr_copy(vf_info->dev_lan_addr, vf->dev_lan_addr);
+	ether_addr_copy(vf_info->hw_lan_addr, vf->hw_lan_addr);
+
+	vf_info->virtchnl_op_max = VIRTCHNL_OP_MAX;
+	bitmap_to_arr32(vf_info->opcodes_allowlist, vf->opcodes_allowlist,
+			VIRTCHNL_OP_MAX);
+
+	ice_mig_tlv_add_tail(vf_info, &vf->mig_tlvs);
+
+	return 0;
+}
+
+/**
  * ice_migration_suspend_dev - suspend device
  * @vf_dev: pointer to the VF PCI device
  * @save_state: true if the device may be preparing for live migration
@@ -138,6 +191,10 @@ int ice_migration_suspend_dev(struct pci_dev *vf_dev, bool save_state)
 				kfree(entry);
 			}
 		}
+
+		err = ice_migration_save_vf_info(vf, vsi);
+		if (err)
+			goto err_free_mig_tlvs;
 	}
 
 	/* Prevent VSI from queuing incoming packets by removing all filters */
@@ -434,6 +491,7 @@ static int ice_migration_check_tlv_size(struct device *dev,
  * @dev: pointer to device
  * @buf: pointer to device state buffer
  * @buf_sz: size of buffer
+ * @vf_info: on return, pointer to the VF info TLV
  *
  * Ensure that the TLV data provided is valid, and matches the expected
  * version and format.
@@ -441,7 +499,8 @@ static int ice_migration_check_tlv_size(struct device *dev,
  * Return: 0 for success, negative for error
  */
 static int
-ice_migration_validate_tlvs(struct device *dev, const void *buf, size_t buf_sz)
+ice_migration_validate_tlvs(struct device *dev, const void *buf, size_t buf_sz,
+			    const struct ice_mig_vf_info **vf_info)
 {
 	const struct ice_mig_tlv_header *header;
 	const struct ice_migration_tlv *tlv;
@@ -476,6 +535,8 @@ ice_migration_validate_tlvs(struct device *dev, const void *buf, size_t buf_sz)
 		return -EPROTONOSUPPORT;
 	}
 
+	*vf_info = NULL;
+
 	/* Validate remaining TLVs */
 	do {
 		/* Move to next TLV */
@@ -502,7 +563,139 @@ ice_migration_validate_tlvs(struct device *dev, const void *buf, size_t buf_sz)
 		/* TODO: implement other validation? Check for compatibility
 		 * with queue sizes, vector counts, VLAN capabilities, etc?
 		 */
+
+		/* Save the VF info pointer, as we must process it first */
+		if (tlv->type == ICE_MIG_TLV_VF_INFO)
+			*vf_info = (typeof(*vf_info))tlv->data;
+
 	} while (buf_sz > 0);
+
+	if (!*vf_info) {
+		dev_dbg(dev, "Missing VF information TLV in migration payload\n");
+		return -EINVAL;
+	}
+
+	return 0;
+}
+
+/**
+ * ice_migration_load_vf_info - Load VF information from migration buffer
+ * @vf: pointer to the VF being migrated to
+ * @vsi: the VSI for this VF
+ * @vf_info: VF information from the migration buffer
+ *
+ * Load the VF information from the migration buffer, preparing the VF to
+ * complete migration.
+ *
+ * Return: 0 on success, or a negative error code on failure.
+ */
+static int ice_migration_load_vf_info(struct ice_vf *vf, struct ice_vsi *vsi,
+				      const struct ice_mig_vf_info *vf_info)
+{
+	struct device *dev = ice_pf_to_dev(vf->pf);
+	int err;
+
+	lockdep_assert_held(&vf->cfg_lock);
+
+	dev_dbg(dev, "Loading general VF configuration for VF %u\n",
+		vf->vf_id);
+
+	dev_dbg(dev, "VF %d had %u MSI-X vectors. Requesting %u vectors\n",
+		vf->vf_id, vf->num_msix, vf_info->num_msix);
+
+	/* Change the number of MSI-X vectors first */
+	// TODO: ice_sriov_set_msix_vec_count sets the MSI-X to 1 more than
+	// the value passed in. This should be fixed.
+	err = ice_sriov_set_msix_vec_count(vf->vfdev, vf_info->num_msix - ICE_NONQ_VECS_VF);
+	if (err) {
+		dev_dbg(dev, "Unable to reconfigure MSI-X vectors, err %d\n",
+			err);
+		return err;
+	}
+
+	/* Set values which are configured by VF reset */
+	vf->trusted = vf_info->trusted;
+	vf->num_req_qs = vf_info->num_vf_qs;
+	vf->port_vlan_info.tpid = vf_info->port_vlan_tpid;
+	vf->port_vlan_info.vid = vf_info->port_vlan_vid;
+	vf->port_vlan_info.prio = vf_info->port_vlan_prio;
+	vf->min_tx_rate = vf_info->min_tx_rate;
+	vf->max_tx_rate = vf_info->max_tx_rate;
+	vf->spoofchk = vf_info->spoofchk;
+
+	ether_addr_copy(vf->dev_lan_addr, vf_info->dev_lan_addr);
+	ether_addr_copy(vf->hw_lan_addr, vf_info->hw_lan_addr);
+
+	/* Reset the VF */
+	ice_reset_vf(vf, 0);
+
+	/* Configure the rest of the settings */
+	vf->vlan_v2_caps = vf_info->vlan_v2_caps;
+	vf->vf_ver = vf_info->vf_ver;
+	vf->driver_caps = vf_info->driver_caps;
+
+	if (vf_info->inner_vlan_strip_ena) {
+		err = vsi->inner_vlan_ops.ena_stripping(vsi, ETH_P_8021Q);
+		if (err) {
+			dev_dbg(dev, "Failed to enable inner VLAN stripping, err %d\n",
+				err);
+			return err;
+		}
+		vf->vlan_strip_ena |= ICE_INNER_VLAN_STRIP_ENA;
+	} else {
+		err = vsi->inner_vlan_ops.dis_stripping(vsi);
+		if (err) {
+			dev_dbg(dev, "Failed to enable inner VLAN stripping, err %d\n",
+				err);
+			return err;
+		}
+		vf->vlan_strip_ena &= ~ICE_INNER_VLAN_STRIP_ENA;
+	}
+
+	if (vf_info->outer_vlan_strip_ena) {
+		enum ice_l2tsel l2tsel =
+			ICE_L2TSEL_EXTRACT_FIRST_TAG_L2TAG2_2ND;
+
+		err = vsi->outer_vlan_ops.ena_stripping(vsi, ETH_P_8021Q);
+		if (err) {
+			dev_dbg(dev, "Failed to enable outer VLAN stripping, err %d\n",
+				err);
+			return err;
+		}
+		ice_vsi_update_l2tsel(vsi, l2tsel);
+		vf->vlan_strip_ena |= ICE_OUTER_VLAN_STRIP_ENA;
+	} else {
+		enum ice_l2tsel l2tsel =
+			ICE_L2TSEL_EXTRACT_FIRST_TAG_L2TAG1;
+
+		err = vsi->outer_vlan_ops.dis_stripping(vsi);
+		if (err) {
+			dev_dbg(dev, "Failed to enable outer VLAN stripping, err %d\n",
+				err);
+			return err;
+		}
+		ice_vsi_update_l2tsel(vsi, l2tsel);
+		vf->vlan_strip_ena &= ~ICE_OUTER_VLAN_STRIP_ENA;
+	}
+
+	vf->pf_set_mac = vf_info->pf_set_mac;
+	vf->link_forced = vf_info->link_forced;
+	vf->link_up = vf_info->link_up;
+
+	/* TODO: should we just enforce that virtchnl_op_max matches
+	 * VIRTCHNL_OP_MAX?
+	 */
+	bitmap_from_arr32(vf->opcodes_allowlist, vf_info->opcodes_allowlist,
+			  min(VIRTCHNL_OP_MAX, vf_info->virtchnl_op_max));
+
+	/* Disallow any ops the original VF didn't recognize */
+	if (vf_info->virtchnl_op_max < VIRTCHNL_OP_MAX)
+		bitmap_clear(vf->opcodes_allowlist,
+			     vf_info->virtchnl_op_max,
+			     VIRTCHNL_OP_MAX - vf_info->virtchnl_op_max);
+
+	if (vf_info->driver_active)
+		set_bit(ICE_VF_STATE_ACTIVE, vf->vf_states);
 
 	return 0;
 }
@@ -522,6 +715,7 @@ int ice_migration_load_devstate(struct pci_dev *vf_dev, const void *buf,
 				size_t buf_sz)
 {
 	struct ice_pf *pf = ice_vf_dev_to_pf(vf_dev);
+	const struct ice_mig_vf_info *vf_info;
 	const struct ice_migration_tlv *tlv;
 	struct ice_vsi *vsi;
 	struct device *dev;
@@ -539,7 +733,7 @@ int ice_migration_load_devstate(struct pci_dev *vf_dev, const void *buf,
 	dev_dbg(&vf_dev->dev, "Loading live migration state. Migration buffer is %zu bytes\n",
 		buf_sz);
 
-	err = ice_migration_validate_tlvs(dev, buf, buf_sz);
+	err = ice_migration_validate_tlvs(dev, buf, buf_sz, &vf_info);
 	if (err)
 		return err;
 
@@ -558,6 +752,13 @@ int ice_migration_load_devstate(struct pci_dev *vf_dev, const void *buf,
 		goto err_release_cfg_lock;
 	}
 
+	err = ice_migration_load_vf_info(vf, vsi, vf_info);
+	if (err) {
+		dev_dbg(dev, "Failed to load initial VF information, err %d\n",
+			err);
+		goto err_release_cfg_lock;
+	}
+
 	/* Iterate over TLVs and process migration data */
 	tlv = buf;
 
@@ -567,6 +768,7 @@ int ice_migration_load_devstate(struct pci_dev *vf_dev, const void *buf,
 		switch (tlv->type) {
 		case ICE_MIG_TLV_END:
 		case ICE_MIG_TLV_HEADER:
+		case ICE_MIG_TLV_VF_INFO:
 			/* These are already handled above */
 			break;
 		default:
