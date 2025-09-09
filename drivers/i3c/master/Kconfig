@@ -74,3 +74,17 @@ config RENESAS_I3C
 
 	  This driver can also be built as a module. If so, the module will be
 	  called renesas-i3c.
+
+config SAMA7D65_I3C_HCI_MASTER
+        tristate "Microchip SAMA7D65 I3C HCI Master driver"
+        depends on I3C
+        depends on HAS_IOMEM
+        depends on ARCH_AT91
+        help
+          Support for Microchip SAMA7D65 I3C HCI Master Controller.
+
+          This hardware is an instance of the MIPI I3C HCI controller. This
+          driver adds platform-specific support for SAMA7D65 SoC.
+
+	  This driver can also be built as a module. If so, the module will be
+	  called sama7d65-i3c-hci-master.

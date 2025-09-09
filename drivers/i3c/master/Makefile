@@ -5,3 +5,4 @@ obj-$(CONFIG_AST2600_I3C_MASTER)	+= ast2600-i3c-master.o
 obj-$(CONFIG_SVC_I3C_MASTER)		+= svc-i3c-master.o
 obj-$(CONFIG_MIPI_I3C_HCI)		+= mipi-i3c-hci/
 obj-$(CONFIG_RENESAS_I3C)		+= renesas-i3c.o
+obj-$(CONFIG_SAMA7D65_I3C_HCI_MASTER)	+= sama7d65-i3c-hci-master.o
