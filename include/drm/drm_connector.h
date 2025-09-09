@@ -1256,7 +1256,8 @@ struct drm_connector_hdmi_funcs {
 	 * The @clear_infoframe callback is optional.
 	 *
 	 * Returns:
-	 * 0 on success, a negative error code otherwise
+	 * 0 on success, a negative error code otherwise, it should return
+	 * -EOPNOTSUPP if the frame is not supported
 	 */
 	int (*clear_infoframe)(struct drm_connector *connector,
 			       enum hdmi_infoframe_type type);
@@ -1273,7 +1274,8 @@ struct drm_connector_hdmi_funcs {
 	 * The @write_infoframe callback is mandatory.
 	 *
 	 * Returns:
-	 * 0 on success, a negative error code otherwise
+	 * 0 on success, a negative error code otherwise, it should return
+	 * -EOPNOTSUPP if the frame is not supported
 	 */
 	int (*write_infoframe)(struct drm_connector *connector,
 			       enum hdmi_infoframe_type type,
@@ -1840,6 +1842,14 @@ struct drm_connector_hdmi {
 	unsigned long supported_formats;
 
 	/**
+	 * @supported_infoframes: Bitmask of infoframe types supported by the
+	 * controller and generated AS IS by the software.
+	 * See @DRM_CONNECTOR_INFOFRAME and
+	 * @drm_connector_hdmi_funcs.write_infoframe().
+	 */
+	unsigned long supported_infoframes;
+
+	/**
 	 * @funcs: HDMI connector Control Functions
 	 */
 	const struct drm_connector_hdmi_funcs *funcs;
@@ -2336,6 +2346,7 @@ int drmm_connector_hdmi_init(struct drm_device *dev,
 			     int connector_type,
 			     struct i2c_adapter *ddc,
 			     unsigned long supported_formats,
+			     unsigned long supported_infoframes,
 			     unsigned int max_bpc);
 void drm_connector_attach_edid_property(struct drm_connector *connector);
 int drm_connector_register(struct drm_connector *connector);
@@ -2487,6 +2498,21 @@ void drm_connector_attach_privacy_screen_properties(struct drm_connector *conn);
 void drm_connector_attach_privacy_screen_provider(
 	struct drm_connector *connector, struct drm_privacy_screen *priv);
 void drm_connector_update_privacy_screen(const struct drm_connector_state *connector_state);
+
+#define DRM_CONNECTOR_INFOFRAME(type)		((type) > 0x80 ? BIT((type) - 0x80) : 0)
+
+#define DRM_CONNECTOR_INFOFRAME_AUDIO	DRM_CONNECTOR_INFOFRAME(HDMI_INFOFRAME_TYPE_AUDIO)
+#define DRM_CONNECTOR_INFOFRAME_AVI	DRM_CONNECTOR_INFOFRAME(HDMI_INFOFRAME_TYPE_AVI)
+#define DRM_CONNECTOR_INFOFRAME_DRM	DRM_CONNECTOR_INFOFRAME(HDMI_INFOFRAME_TYPE_DRM)
+#define DRM_CONNECTOR_INFOFRAME_SPD	DRM_CONNECTOR_INFOFRAME(HDMI_INFOFRAME_TYPE_SPD)
+#define DRM_CONNECTOR_INFOFRAME_VENDOR	DRM_CONNECTOR_INFOFRAME(HDMI_INFOFRAME_TYPE_VENDOR)
+
+static inline bool
+drm_hdmi_connector_supported_infoframe(const struct drm_connector *connector,
+				      enum hdmi_infoframe_type type)
+{
+	return connector->hdmi.supported_infoframes & DRM_CONNECTOR_INFOFRAME(type);
+}
 
 /**
  * struct drm_tile_group - Tile group metadata
