@@ -18,6 +18,7 @@
 #include <linux/memblock.h>
 #include <linux/notifier.h>
 #include <linux/page-isolation.h>
+#include <linux/kho_array.h>
 
 #include <asm/early_ioremap.h>
 
@@ -80,15 +81,13 @@ struct kho_mem_track {
 	struct xarray orders;
 };
 
-struct khoser_mem_chunk;
-
 struct kho_serialization {
 	struct page *fdt;
 	struct list_head fdt_list;
 	struct dentry *sub_fdt_dir;
 	struct kho_mem_track track;
-	/* First chunk of serialized preserved memory map */
-	struct khoser_mem_chunk *preserved_mem_map;
+	/* Serialized preserved memory map */
+	struct kho_array *preserved_mem_map;
 };
 
 static void *xa_load_or_alloc(struct xarray *xa, unsigned long index, size_t sz)
@@ -226,11 +225,11 @@ EXPORT_SYMBOL_GPL(kho_restore_folio);
 
 /* Serialize and deserialize struct kho_mem_phys across kexec
  *
- * Record all the bitmaps in a linked list of pages for the next kernel to
- * process. Each chunk holds bitmaps of the same order and each block of bitmaps
- * starts at a given physical address. This allows the bitmaps to be sparse. The
- * xarray is used to store them in a tree while building up the data structure,
- * but the KHO successor kernel only needs to process them once in order.
+ * Record all the bitmaps in a KHO array for the next kernel to process. Each
+ * bitmap stores the order of the folios and starts at a given physical address.
+ * This allows the bitmaps to be sparse. The xarray is used to store them in a
+ * tree while building up the data structure, but the KHO successor kernel only
+ * needs to process them once in order.
  *
  * All of this memory is normal kmalloc() memory and is not marked for
  * preservation. The successor kernel will remain isolated to the scratch space
@@ -240,118 +239,107 @@ EXPORT_SYMBOL_GPL(kho_restore_folio);
 
 struct khoser_mem_bitmap_ptr {
 	phys_addr_t phys_start;
+	unsigned int order;
+	unsigned int __reserved;
 	DECLARE_KHOSER_PTR(bitmap, struct kho_mem_phys_bits *);
 };
 
-struct khoser_mem_chunk_hdr {
-	DECLARE_KHOSER_PTR(next, struct khoser_mem_chunk *);
-	unsigned int order;
-	unsigned int num_elms;
-};
-
-#define KHOSER_BITMAP_SIZE                                   \
-	((PAGE_SIZE - sizeof(struct khoser_mem_chunk_hdr)) / \
-	 sizeof(struct khoser_mem_bitmap_ptr))
-
-struct khoser_mem_chunk {
-	struct khoser_mem_chunk_hdr hdr;
-	struct khoser_mem_bitmap_ptr bitmaps[KHOSER_BITMAP_SIZE];
-};
-
-static_assert(sizeof(struct khoser_mem_chunk) == PAGE_SIZE);
-
-static struct khoser_mem_chunk *new_chunk(struct khoser_mem_chunk *cur_chunk,
-					  unsigned long order)
+static struct khoser_mem_bitmap_ptr *new_bitmap(phys_addr_t start,
+						struct kho_mem_phys_bits *bits,
+						unsigned int order)
 {
-	struct khoser_mem_chunk *chunk;
+	struct khoser_mem_bitmap_ptr *bitmap;
 
-	chunk = kzalloc(PAGE_SIZE, GFP_KERNEL);
-	if (!chunk)
+	bitmap = kzalloc(sizeof(*bitmap), GFP_KERNEL);
+	if (!bitmap)
 		return NULL;
-	chunk->hdr.order = order;
-	if (cur_chunk)
-		KHOSER_STORE_PTR(cur_chunk->hdr.next, chunk);
-	return chunk;
+
+	bitmap->phys_start = start;
+	bitmap->order = order;
+	KHOSER_STORE_PTR(bitmap->bitmap, bits);
+	return bitmap;
 }
 
-static void kho_mem_ser_free(struct khoser_mem_chunk *first_chunk)
+static void kho_mem_ser_free(struct kho_array *ka)
 {
-	struct khoser_mem_chunk *chunk = first_chunk;
+	struct khoser_mem_bitmap_ptr *elm;
+	struct ka_iter iter;
 
-	while (chunk) {
-		struct khoser_mem_chunk *tmp = chunk;
+	if (!ka)
+		return;
 
-		chunk = KHOSER_LOAD_PTR(chunk->hdr.next);
-		kfree(tmp);
-	}
+	ka_iter_init_read(&iter, ka);
+	ka_iter_for_each(&iter, elm)
+		kfree(elm);
+
+	kho_array_destroy(ka);
+	kfree(ka);
 }
 
 static int kho_mem_serialize(struct kho_serialization *ser)
 {
-	struct khoser_mem_chunk *first_chunk = NULL;
-	struct khoser_mem_chunk *chunk = NULL;
 	struct kho_mem_phys *physxa;
-	unsigned long order;
+	unsigned long order, pos = 0;
+	struct kho_array *ka = NULL;
+	struct ka_iter iter;
+
+	ka = kzalloc(sizeof(*ka), GFP_KERNEL);
+	if (!ka)
+		return -ENOMEM;
+	ka_iter_init_write(&iter, ka);
 
 	xa_for_each(&ser->track.orders, order, physxa) {
 		struct kho_mem_phys_bits *bits;
 		unsigned long phys;
 
-		chunk = new_chunk(chunk, order);
-		if (!chunk)
-			goto err_free;
-
-		if (!first_chunk)
-			first_chunk = chunk;
-
 		xa_for_each(&physxa->phys_bits, phys, bits) {
 			struct khoser_mem_bitmap_ptr *elm;
+			phys_addr_t start;
 
-			if (chunk->hdr.num_elms == ARRAY_SIZE(chunk->bitmaps)) {
-				chunk = new_chunk(chunk, order);
-				if (!chunk)
-					goto err_free;
-			}
+			start = (phys * PRESERVE_BITS) << (order + PAGE_SHIFT);
+			elm = new_bitmap(start, bits, order);
+			if (!elm)
+				goto err_free;
 
-			elm = &chunk->bitmaps[chunk->hdr.num_elms];
-			chunk->hdr.num_elms++;
-			elm->phys_start = (phys * PRESERVE_BITS)
-					  << (order + PAGE_SHIFT);
-			KHOSER_STORE_PTR(elm->bitmap, bits);
+			ka_iter_setpos(&iter, pos);
+			if (ka_iter_setentry(&iter, elm))
+				goto err_free;
+			pos++;
 		}
 	}
 
-	ser->preserved_mem_map = first_chunk;
+	ser->preserved_mem_map = ka;
 
 	return 0;
 
 err_free:
-	kho_mem_ser_free(first_chunk);
+	kho_mem_ser_free(ka);
 	return -ENOMEM;
 }
 
-static void __init deserialize_bitmap(unsigned int order,
-				      struct khoser_mem_bitmap_ptr *elm)
+static void __init deserialize_bitmap(struct khoser_mem_bitmap_ptr *elm)
 {
 	struct kho_mem_phys_bits *bitmap = KHOSER_LOAD_PTR(elm->bitmap);
 	unsigned long bit;
 
 	for_each_set_bit(bit, bitmap->preserve, PRESERVE_BITS) {
-		int sz = 1 << (order + PAGE_SHIFT);
+		int sz = 1 << (elm->order + PAGE_SHIFT);
 		phys_addr_t phys =
-			elm->phys_start + (bit << (order + PAGE_SHIFT));
+			elm->phys_start + (bit << (elm->order + PAGE_SHIFT));
 		struct page *page = phys_to_page(phys);
 
 		memblock_reserve(phys, sz);
 		memblock_reserved_mark_noinit(phys, sz);
-		page->private = order;
+		page->private = elm->order;
 	}
 }
 
 static void __init kho_mem_deserialize(const void *fdt)
 {
-	struct khoser_mem_chunk *chunk;
+	struct khoser_mem_bitmap_ptr *elm;
 	const phys_addr_t *mem;
+	struct kho_array *ka;
+	struct ka_iter iter;
 	int len;
 
 	mem = fdt_getprop(fdt, 0, PROP_PRESERVED_MEMORY_MAP, &len);
@@ -361,15 +349,17 @@ static void __init kho_mem_deserialize(const void *fdt)
 		return;
 	}
 
-	chunk = *mem ? phys_to_virt(*mem) : NULL;
-	while (chunk) {
-		unsigned int i;
-
-		for (i = 0; i != chunk->hdr.num_elms; i++)
-			deserialize_bitmap(chunk->hdr.order,
-					   &chunk->bitmaps[i]);
-		chunk = KHOSER_LOAD_PTR(chunk->hdr.next);
+	ka = *mem ? phys_to_virt(*mem) : NULL;
+	if (!ka)
+		return;
+	if (!kho_array_valid(ka)) {
+		pr_err("invalid KHO array for preserved memory bitmaps\n");
+		return;
 	}
+
+	ka_iter_init_read(&iter, ka);
+	ka_iter_for_each(&iter, elm)
+		deserialize_bitmap(elm);
 }
 
 /*
