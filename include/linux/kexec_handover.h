@@ -4,6 +4,7 @@
 
 #include <linux/types.h>
 #include <linux/errno.h>
+#include <linux/kho_array.h>
 
 struct kho_scratch {
 	phys_addr_t addr;
@@ -37,13 +38,23 @@ struct notifier_block;
 	})
 
 struct kho_serialization;
+struct kho_vmalloc;
 
 #ifdef CONFIG_KEXEC_HANDOVER
+struct kho_vmalloc {
+	struct kho_array ka;
+	unsigned int total_pages;
+	unsigned int flags;
+	unsigned short order;
+};
+
 bool kho_is_enabled(void);
 
 int kho_preserve_folio(struct folio *folio);
+int kho_preserve_vmalloc(void *ptr, struct kho_vmalloc *preservation);
 int kho_preserve_phys(phys_addr_t phys, size_t size);
 struct folio *kho_restore_folio(phys_addr_t phys);
+void *kho_restore_vmalloc(struct kho_vmalloc *preservation);
 int kho_add_subtree(struct kho_serialization *ser, const char *name, void *fdt);
 int kho_retrieve_subtree(const char *name, phys_addr_t *phys);
 
@@ -70,7 +81,17 @@ static inline int kho_preserve_phys(phys_addr_t phys, size_t size)
 	return -EOPNOTSUPP;
 }
 
+static inline int kho_preserve_vmalloc(void *ptr, struct kho_vmalloc *preservation)
+{
+	return -EOPNOTSUPP;
+}
+
 static inline struct folio *kho_restore_folio(phys_addr_t phys)
+{
+	return NULL;
+}
+
+static inline void *kho_restore_vmalloc(struct kho_vmalloc *preservation)
 {
 	return NULL;
 }

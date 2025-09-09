@@ -19,6 +19,7 @@
 #include <linux/notifier.h>
 #include <linux/page-isolation.h>
 #include <linux/kho_array.h>
+#include <linux/vmalloc.h>
 
 #include <asm/early_ioremap.h>
 
@@ -722,6 +723,148 @@ int kho_preserve_phys(phys_addr_t phys, size_t size)
 	return err;
 }
 EXPORT_SYMBOL_GPL(kho_preserve_phys);
+
+#define KHO_VMALLOC_FLAGS_MASK	(VM_ALLOC | VM_ALLOW_HUGE_VMAP)
+
+/**
+ * kho_preserve_vmalloc - preserve memory allocated with vmalloc() across kexec
+ * @ptr: pointer to the area in vmalloc address space
+ * @preservation: pointer to metadata for preserved data.
+ *
+ * Instructs KHO to preserve the area in vmalloc address space at @ptr. The
+ * physical pages mapped at @ptr will be preserved and on successful return
+ * @preservation will hold the structure that describes the metadata for the
+ * preserved pages. @preservation itself is not KHO-preserved. The caller must
+ * do that.
+ *
+ * NOTE: The memory allocated with vmalloc_node() variants cannot be reliably
+ * restored on the same node
+ *
+ * Return: 0 on success, error code on failure
+ */
+int kho_preserve_vmalloc(void *ptr, struct kho_vmalloc *preservation)
+{
+	struct kho_mem_track *track = &kho_out.ser.track;
+	struct vm_struct *vm = find_vm_area(ptr);
+	unsigned int order, flags;
+	struct ka_iter iter;
+	int err;
+
+	if (!vm)
+		return -EINVAL;
+
+	if (vm->flags & ~KHO_VMALLOC_FLAGS_MASK)
+		return -EOPNOTSUPP;
+
+	flags = vm->flags & KHO_VMALLOC_FLAGS_MASK;
+	order = get_vm_area_page_order(vm);
+
+	preservation->total_pages = vm->nr_pages;
+	preservation->flags = flags;
+	preservation->order = order;
+
+	ka_iter_init_write(&iter, &preservation->ka);
+
+	for (int i = 0, pos = 0; i < vm->nr_pages; i += (1 << order), pos++) {
+		phys_addr_t phys = page_to_phys(vm->pages[i]);
+
+		err = __kho_preserve_order(track, PHYS_PFN(phys), order);
+		if (err)
+			goto err_free;
+
+		err = ka_iter_setpos(&iter, pos);
+		if (err)
+			goto err_free;
+
+		err = ka_iter_setentry(&iter, ka_mk_value(phys));
+		if (err)
+			goto err_free;
+	}
+
+	err = kho_array_preserve(&preservation->ka);
+	if (err)
+		goto err_free;
+
+	return 0;
+
+err_free:
+	kho_array_destroy(&preservation->ka);
+	return err;
+}
+EXPORT_SYMBOL_GPL(kho_preserve_vmalloc);
+
+/**
+ * kho_restore_vmalloc - recreates and populates an area in vmalloc address
+ * space from the preserved memory.
+ * @preservation: the preservation metadata.
+ *
+ * Recreates an area in vmalloc address space and populates it with memory that
+ * was preserved using kho_preserve_vmalloc().
+ *
+ * Return: pointer to the area in the vmalloc address space, NULL on failure.
+ */
+void *kho_restore_vmalloc(struct kho_vmalloc *preservation)
+{
+	unsigned int align, order, shift, flags;
+	unsigned int idx = 0, nr;
+	unsigned long addr, size;
+	struct vm_struct *area;
+	struct page **pages;
+	struct ka_iter iter;
+	void *entry;
+	int err;
+
+	flags = preservation->flags;
+	if (flags & ~KHO_VMALLOC_FLAGS_MASK)
+		return NULL;
+
+	err = ka_iter_init_restore(&iter, &preservation->ka);
+	if (err)
+		return NULL;
+
+	nr = preservation->total_pages;
+	pages = kvmalloc_array(nr, sizeof(*pages), GFP_KERNEL);
+	if (!pages)
+		goto err_ka_destroy;
+	order = preservation->order;
+	shift = PAGE_SHIFT + order;
+	align = 1 << shift;
+
+	ka_iter_for_each(&iter, entry) {
+		phys_addr_t phys = ka_to_value(entry);
+		struct page *page;
+
+		page = phys_to_page(phys);
+		kho_restore_page(page, 0);
+		pages[idx++] = page;
+		phys += PAGE_SIZE;
+	}
+
+	area = __get_vm_area_node(nr * PAGE_SIZE, align, shift, flags,
+				  VMALLOC_START, VMALLOC_END, NUMA_NO_NODE,
+				  GFP_KERNEL, __builtin_return_address(0));
+	if (!area)
+		goto err_free_pages_array;
+
+	addr = (unsigned long)area->addr;
+	size = get_vm_area_size(area);
+	err = vmap_pages_range(addr, addr + size, PAGE_KERNEL, pages, shift);
+	if (err)
+		goto err_free_vm_area;
+
+	kho_array_destroy(&preservation->ka);
+
+	return area->addr;
+
+err_free_vm_area:
+	free_vm_area(area);
+err_free_pages_array:
+	kvfree(pages);
+err_ka_destroy:
+	kho_array_destroy(&preservation->ka);
+	return NULL;
+}
+EXPORT_SYMBOL_GPL(kho_restore_vmalloc);
 
 /* Handling for debug/kho/out */
 
