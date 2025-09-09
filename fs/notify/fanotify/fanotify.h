@@ -437,11 +437,13 @@ FANOTIFY_ME(struct fanotify_event *event)
 struct fanotify_perm_event {
 	struct fanotify_event fae;
 	struct path path;
-	const loff_t *ppos;		/* optional file range info */
+	const loff_t *ppos;	/* optional file range info */
 	size_t count;
 	u32 response;			/* userspace answer to the event */
 	unsigned short state;		/* state of the event */
+	unsigned short watchdog_cnt;	/* already scanned by watchdog? */
 	int fd;		/* fd we passed to userspace for this event */
+	pid_t recv_pid;	/* pid of task receiving the event */
 	union {
 		struct fanotify_response_info_header hdr;
 		struct fanotify_response_info_audit_rule audit_rule;
