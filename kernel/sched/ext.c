@@ -6403,16 +6403,27 @@ __bpf_kfunc struct rq *scx_bpf_locked_rq(void)
 }
 
 /**
- * scx_bpf_cpu_curr - Return remote CPU's curr task
+ * scx_bpf_cpu_curr - Acquire a reference and return the current task
+ * running on a target CPU
  * @cpu: CPU of interest
  *
- * Callers must hold RCU read lock (KF_RCU).
+ * A task acquired by this kfunc must be released by calling
+ * bpf_task_release().
  */
 __bpf_kfunc struct task_struct *scx_bpf_cpu_curr(s32 cpu)
 {
+	struct task_struct *p;
+
 	if (!kf_cpu_valid(cpu, NULL))
 		return NULL;
-	return rcu_dereference(cpu_rq(cpu)->curr);
+
+	rcu_read_lock();
+	p = rcu_dereference(cpu_rq(cpu)->curr);
+	if (p && !refcount_inc_not_zero(&p->rcu_users))
+		p = NULL;
+	rcu_read_unlock();
+
+	return p;
 }
 
 /**
@@ -6580,7 +6591,7 @@ BTF_ID_FLAGS(func, scx_bpf_task_running, KF_RCU)
 BTF_ID_FLAGS(func, scx_bpf_task_cpu, KF_RCU)
 BTF_ID_FLAGS(func, scx_bpf_cpu_rq)
 BTF_ID_FLAGS(func, scx_bpf_locked_rq, KF_RET_NULL)
-BTF_ID_FLAGS(func, scx_bpf_cpu_curr, KF_RET_NULL | KF_RCU)
+BTF_ID_FLAGS(func, scx_bpf_cpu_curr, KF_RET_NULL | KF_ACQUIRE)
 #ifdef CONFIG_CGROUP_SCHED
 BTF_ID_FLAGS(func, scx_bpf_task_cgroup, KF_RCU | KF_ACQUIRE)
 #endif

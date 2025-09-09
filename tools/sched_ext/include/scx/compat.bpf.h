@@ -238,13 +238,19 @@ static inline bool __COMPAT_is_enq_cpu_selected(u64 enq_flags)
 static inline struct task_struct *__COMPAT_scx_bpf_cpu_curr(int cpu)
 {
 	struct rq *rq;
+	struct task_struct *p;
 
 	if (bpf_ksym_exists(scx_bpf_cpu_curr))
 		return scx_bpf_cpu_curr(cpu);
 
+	bpf_rcu_read_lock();
 	rq = scx_bpf_cpu_rq(cpu);
+	p = rq ? rq->curr : NULL;
+	if (p)
+		p = bpf_task_from_pid(p->pid);
+	bpf_rcu_read_unlock();
 
-	return rq ? rq->curr : NULL;
+	return p;
 }
 
 /*
