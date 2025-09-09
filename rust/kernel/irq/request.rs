@@ -30,6 +30,11 @@ pub enum IrqReturn {
 pub trait Handler: Sync {
     /// The hard IRQ handler.
     ///
+    /// A "hard" handler in the context of the Linux kernel is the part of an
+    /// interrupt handler that runs in interrupt context. The hard handler
+    /// usually defers time consuming processing to run in process context, for
+    /// instance by queuing the work on a work queue for later execution.
+    ///
     /// This is executed in interrupt context, hence all corresponding
     /// limitations do apply.
     ///
@@ -54,9 +59,7 @@ impl<T: ?Sized + Handler, A: Allocator> Handler for Box<T, A> {
 /// # Invariants
 ///
 /// - `self.irq` is the same as the one passed to `request_{threaded}_irq`.
-/// - `cookie` was passed to `request_{threaded}_irq` as the cookie. It is guaranteed to be unique
-///   by the type system, since each call to `new` will return a different instance of
-///   `Registration`.
+/// - `cookie` is unique.
 #[pin_data(PinnedDrop)]
 struct RegistrationInner {
     irq: u32,
@@ -91,7 +94,9 @@ impl PinnedDrop for RegistrationInner {
 // concurrent access.
 unsafe impl Sync for RegistrationInner {}
 
-// SAFETY: It is safe to send `RegistrationInner` across threads.
+// SAFETY: It is safe to transfer ownership of `RegistrationInner` from another
+// thread, because it has no shared mutable state. The IRQ owned by
+// `RegistrationInner` via `cookie` can be dropped from any thread.
 unsafe impl Send for RegistrationInner {}
 
 /// A request for an IRQ line for a given device.
@@ -112,7 +117,7 @@ impl<'a> IrqRequest<'a> {
     ///
     /// - `irq` should be a valid IRQ number for `dev`.
     pub(crate) unsafe fn new(dev: &'a Device<Bound>, irq: u32) -> Self {
-        // INVARIANT: `irq` is a valid IRQ number for `dev`.
+        // By function safety requirement, irq` is a valid IRQ number for `dev`.
         IrqRequest { dev, irq }
     }
 
@@ -183,6 +188,8 @@ impl<'a> IrqRequest<'a> {
 /// * We own an irq handler whose cookie is a pointer to `Self`.
 #[pin_data]
 pub struct Registration<T: Handler + 'static> {
+    /// We need to drop inner before handler, as we must ensure that the handler
+    /// is valid until `free_irq` is called.
     #[pin]
     inner: Devres<RegistrationInner>,
 
@@ -196,7 +203,8 @@ pub struct Registration<T: Handler + 'static> {
 }
 
 impl<T: Handler + 'static> Registration<T> {
-    /// Registers the IRQ handler with the system for the given IRQ number.
+    /// Registers the IRQ handler with the system for the IRQ number represented
+    /// by `request`.
     pub fn new<'a>(
         request: IrqRequest<'a>,
         flags: Flags,
@@ -208,7 +216,11 @@ impl<T: Handler + 'static> Registration<T> {
             inner <- Devres::new(
                 request.dev,
                 try_pin_init!(RegistrationInner {
-                    // INVARIANT: `this` is a valid pointer to the `Registration` instance
+                    // INVARIANT: `this` is a valid pointer to the `Registration` instance.
+                    // INVARIANT: `cookie` is being passed to `request_irq` as
+                    // the cookie. It is guaranteed to be unique by the type
+                    // system, since each call to `new` will return a different
+                    // instance of `Registration`.
                     cookie: this.as_ptr().cast::<c_void>(),
                     irq: {
                         // SAFETY:
@@ -260,7 +272,8 @@ impl<T: Handler + 'static> Registration<T> {
 
 /// # Safety
 ///
-/// This function should be only used as the callback in `request_irq`.
+/// - This function should be only used as the callback in `request_irq`.
+/// - `ptr` must be valid for use as a reference to `T`
 unsafe extern "C" fn handle_irq_callback<T: Handler>(_irq: i32, ptr: *mut c_void) -> c_uint {
     // SAFETY: `ptr` is a pointer to `Registration<T>` set in `Registration::new`
     let registration = unsafe { &*(ptr as *const Registration<T>) };
@@ -287,6 +300,11 @@ pub enum ThreadedIrqReturn {
 /// Callbacks for a threaded IRQ handler.
 pub trait ThreadedHandler: Sync {
     /// The hard IRQ handler.
+    ///
+    /// A "hard" handler in the context of the Linux kernel is the part of an
+    /// interrupt handler that runs in interrupt context. The hard handler
+    /// usually defers time consuming processing to run in process context, for
+    /// instance by queuing the work on a work queue for later execution.
     ///
     /// This is executed in interrupt context, hence all corresponding
     /// limitations do apply. All work that does not necessarily need to be
@@ -427,6 +445,10 @@ impl<T: ThreadedHandler + 'static> ThreadedRegistration<T> {
                 request.dev,
                 try_pin_init!(RegistrationInner {
                     // INVARIANT: `this` is a valid pointer to the `ThreadedRegistration` instance.
+                    // INVARIANT: `cookie` is being passed to
+                    // `request_threaded_irq` as the cookie. It is guaranteed to
+                    // be unique by the type system, since each call to `new`
+                    // will return a different instance of `Registration`.
                     cookie: this.as_ptr().cast::<c_void>(),
                     irq: {
                         // SAFETY:
@@ -479,7 +501,8 @@ impl<T: ThreadedHandler + 'static> ThreadedRegistration<T> {
 
 /// # Safety
 ///
-/// This function should be only used as the callback in `request_threaded_irq`.
+/// - This function should be only used as the callback in `request_threaded_irq`.
+/// - `ptr` must be valid for use as a reference to `T`
 unsafe extern "C" fn handle_threaded_irq_callback<T: ThreadedHandler>(
     _irq: i32,
     ptr: *mut c_void,
@@ -495,7 +518,8 @@ unsafe extern "C" fn handle_threaded_irq_callback<T: ThreadedHandler>(
 
 /// # Safety
 ///
-/// This function should be only used as the callback in `request_threaded_irq`.
+/// - This function should be only used as the callback in `request_threaded_irq`.
+/// - `ptr` must be valid for use as a reference to `T`
 unsafe extern "C" fn thread_fn_callback<T: ThreadedHandler>(_irq: i32, ptr: *mut c_void) -> c_uint {
     // SAFETY: `ptr` is a pointer to `ThreadedRegistration<T>` set in `ThreadedRegistration::new`
     let registration = unsafe { &*(ptr as *const ThreadedRegistration<T>) };
