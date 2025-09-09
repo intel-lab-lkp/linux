@@ -206,6 +206,25 @@ void __thaw_task(struct task_struct *p)
 		wake_up_state(p, TASK_FROZEN);
 }
 
+/*
+ * thaw_oom_process - thaw the OOM victim process
+ * @p: process to be thawed
+ *
+ * Sets TIF_MEMDIE for all threads in the process group and thaws them.
+ * Threads with TIF_MEMDIE are ignored by the freezer.
+ */
+void thaw_oom_process(struct task_struct *p)
+{
+	struct task_struct *t;
+
+	rcu_read_lock();
+	for_each_thread(p, t) {
+		set_tsk_thread_flag(t, TIF_MEMDIE);
+		__thaw_task(t);
+	}
+	rcu_read_unlock();
+}
+
 /**
  * set_freezable - make %current freezable
  *
