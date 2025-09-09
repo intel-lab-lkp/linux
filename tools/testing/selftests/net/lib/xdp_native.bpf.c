@@ -208,38 +208,41 @@ static int xdp_mode_tx_handler(struct xdp_md *ctx, __u16 port)
 
 static void *update_pkt(struct xdp_md *ctx, __s16 offset, __u32 *udp_csum)
 {
-	void *data_end = (void *)(long)ctx->data_end;
-	void *data = (void *)(long)ctx->data;
 	struct udphdr *udph = NULL;
-	struct ethhdr *eth = data;
+	struct ethhdr *eth = NULL;
+	struct bpf_dynptr ptr;
 	__u32 len, len_new;
 
-	if (data + sizeof(*eth) > data_end)
+	bpf_dynptr_from_xdp(ctx, 0, &ptr);
+	eth = bpf_dynptr_slice(&ptr, 0, NULL, sizeof(*eth));
+	if (!eth)
 		return NULL;
 
 	if (eth->h_proto == bpf_htons(ETH_P_IP)) {
-		struct iphdr *iph = data + sizeof(*eth);
-		__u16 total_len;
-
-		if (iph + 1 > (struct iphdr *)data_end)
+		struct iphdr *iph = bpf_dynptr_slice_rdwr(&ptr, sizeof(*eth),
+							  NULL, sizeof(*iph));
+		if (!iph)
 			return NULL;
 
 		iph->tot_len = bpf_htons(bpf_ntohs(iph->tot_len) + offset);
 
-		udph = (void *)eth + sizeof(*iph) + sizeof(*eth);
-		if (!udph || udph + 1 > (struct udphdr *)data_end)
+		udph = bpf_dynptr_slice_rdwr(&ptr, sizeof(*iph) + sizeof(*eth),
+					     NULL, sizeof(*udph));
+		if (!udph)
 			return NULL;
 
 		len_new = bpf_htons(bpf_ntohs(udph->len) + offset);
 	} else if (eth->h_proto  == bpf_htons(ETH_P_IPV6)) {
-		struct ipv6hdr *ipv6h = data + sizeof(*eth);
-		__u16 payload_len;
-
-		if (ipv6h + 1 > (struct ipv6hdr *)data_end)
+		struct ipv6hdr *ipv6h =
+			bpf_dynptr_slice_rdwr(&ptr, sizeof(*eth),
+					      NULL, sizeof(*ipv6h));
+		if (!ipv6h)
 			return NULL;
 
-		udph = (void *)eth + sizeof(*ipv6h) + sizeof(*eth);
-		if (!udph || udph + 1 > (struct udphdr *)data_end)
+		udph = bpf_dynptr_slice_rdwr(&ptr,
+					     sizeof(*ipv6h) + sizeof(*eth),
+					     NULL, sizeof(*udph));
+		if (!udph)
 			return NULL;
 
 		*udp_csum = ~((__u32)udph->check);
