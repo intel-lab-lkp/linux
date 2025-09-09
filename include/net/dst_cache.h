@@ -33,6 +33,17 @@ struct dst_entry *dst_cache_get(struct dst_cache *dst_cache);
 struct rtable *dst_cache_get_ip4(struct dst_cache *dst_cache, __be32 *saddr);
 
 /**
+ *	dst_cache_get_ip4_rcu - perform cache lookup and fetch ipv4 source
+ *	address without taking a reference on the dst
+ *	@dst_cache: the cache
+ *	@saddr: return value for the retrieved source address
+ *
+ *	Must be called with local BH disabled, and within an rcu read side
+ *	critical section
+ */
+struct rtable *dst_cache_get_ip4_rcu(struct dst_cache *dst_cache, __be32 *saddr);
+
+/**
  *	dst_cache_set_ip4 - store the ipv4 dst into the cache
  *	@dst_cache: the cache
  *	@dst: the entry to be cached
@@ -43,6 +54,17 @@ struct rtable *dst_cache_get_ip4(struct dst_cache *dst_cache, __be32 *saddr);
 void dst_cache_set_ip4(struct dst_cache *dst_cache, struct dst_entry *dst,
 		       __be32 saddr);
 
+/**
+ *	dst_cache_steal_ip4 - store the ipv4 dst into the cache and steal its
+ *	reference
+ *	@dst_cache: the cache
+ *	@dst: the entry to be cached whose reference will be stolen
+ *	@saddr: the source address to be stored inside the cache
+ *
+ *	local BH must be disabled
+ */
+void dst_cache_steal_ip4(struct dst_cache *dst_cache, struct dst_entry *dst,
+			 __be32 saddr);
 #if IS_ENABLED(CONFIG_IPV6)
 
 /**
