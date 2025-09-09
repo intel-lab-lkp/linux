@@ -79,7 +79,7 @@ impl<T: MiscDevice> MiscDeviceRegistration<T> {
                 // the destructor of this type deallocates the memory.
                 // INVARIANT: If this returns `Ok(())`, then the `slot` will contain a registered
                 // misc device.
-                to_result(unsafe { bindings::misc_register(slot) })
+                to_result(unsafe { bindings::misc_register(slot) }).map(|_| ())
             }),
             _t: PhantomData,
         })

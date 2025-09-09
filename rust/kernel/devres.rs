@@ -327,7 +327,8 @@ where
         // `devm_add_action_or_reset()` also calls `callback` on failure, such that the
         // `ForeignOwnable` is released eventually.
         bindings::devm_add_action_or_reset(dev.as_raw(), Some(callback::<P>), ptr.cast())
-    })
+    })?;
+    Ok(())
 }
 
 /// Encapsulate `data` in a [`KBox`] and [`Drop::drop`] `data` once `dev` is unbound.

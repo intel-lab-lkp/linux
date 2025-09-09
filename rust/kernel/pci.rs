@@ -47,7 +47,8 @@ unsafe impl<T: Driver + 'static> driver::RegistrationOps for Adapter<T> {
         // SAFETY: `pdrv` is guaranteed to be a valid `RegType`.
         to_result(unsafe {
             bindings::__pci_register_driver(pdrv.get(), module.0, name.as_char_ptr())
-        })
+        })?;
+        Ok(())
     }
 
     unsafe fn unregister(pdrv: &Opaque<Self::RegType>) {
@@ -437,7 +438,8 @@ impl Device<device::Core> {
     /// Enable memory resources for this device.
     pub fn enable_device_mem(&self) -> Result {
         // SAFETY: `self.as_raw` is guaranteed to be a pointer to a valid `struct pci_dev`.
-        to_result(unsafe { bindings::pci_enable_device_mem(self.as_raw()) })
+        to_result(unsafe { bindings::pci_enable_device_mem(self.as_raw()) })?;
+        Ok(())
     }
 
     /// Enable bus-mastering for this device.

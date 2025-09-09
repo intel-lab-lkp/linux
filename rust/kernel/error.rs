@@ -376,12 +376,19 @@ impl From<core::convert::Infallible> for Error {
 pub type Result<T = (), E = Error> = core::result::Result<T, E>;
 
 /// Converts an integer as returned by a C kernel function to an error if it's negative, and
-/// `Ok(())` otherwise.
-pub fn to_result(err: crate::ffi::c_int) -> Result {
-    if err < 0 {
-        Err(Error::from_errno(err))
+/// returns the original value otherwise.
+pub fn to_result<T>(code: T) -> Result<T>
+where
+    T: Copy + TryInto<i32>,
+{
+    // Try casting into `i32`.
+    let casted: crate::ffi::c_int = code.try_into().unwrap_or(0);
+
+    if casted < 0 {
+        Err(Error::from_errno(casted))
     } else {
-        Ok(())
+        // Return the original input value.
+        Ok(code)
     }
 }
 

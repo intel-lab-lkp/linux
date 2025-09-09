@@ -42,7 +42,8 @@ unsafe impl<T: Driver + 'static> driver::RegistrationOps for Adapter<T> {
         // SAFETY: `adrv` is guaranteed to be a valid `RegType`.
         to_result(unsafe {
             bindings::__auxiliary_driver_register(adrv.get(), module.0, name.as_char_ptr())
-        })
+        })?;
+        Ok(())
     }
 
     unsafe fn unregister(adrv: &Opaque<Self::RegType>) {

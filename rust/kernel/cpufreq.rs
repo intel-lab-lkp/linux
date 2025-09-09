@@ -157,7 +157,8 @@ impl PolicyData {
     #[inline]
     pub fn generic_verify(&self) -> Result {
         // SAFETY: By the type invariant, the pointer stored in `self` is valid.
-        to_result(unsafe { bindings::cpufreq_generic_frequency_table_verify(self.as_raw()) })
+        to_result(unsafe { bindings::cpufreq_generic_frequency_table_verify(self.as_raw()) })?;
+        Ok(())
     }
 }
 
@@ -520,7 +521,8 @@ impl Policy {
     #[inline]
     pub fn generic_suspend(&mut self) -> Result {
         // SAFETY: By the type invariant, the pointer stored in `self` is valid.
-        to_result(unsafe { bindings::cpufreq_generic_suspend(self.as_mut_ref()) })
+        to_result(unsafe { bindings::cpufreq_generic_suspend(self.as_mut_ref()) })?;
+        Ok(())
     }
 
     /// Provides a wrapper to the generic get routine.
