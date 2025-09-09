@@ -2,19 +2,21 @@
 //
 // Copyright 2024 Advanced Micro Devices, Inc.
 
+#include <linux/sort.h>
+
 #include "dml2_pmo_factory.h"
 #include "dml2_pmo_dcn3.h"
 
-static void sort(double *list_a, int list_a_size)
+static int cmp_double(const void *a, const void *b)
 {
-	// For all elements b[i] in list_b[]
-	for (int i = 0; i < list_a_size - 1; i++) {
-		// Find the first element of list_a that's larger than b[i]
-		for (int j = i; j < list_a_size - 1; j++) {
-			if (list_a[j] > list_a[j + 1])
-				swap(list_a[j], list_a[j + 1]);
-		}
-	}
+	double da = *(const double *)a;
+	double db = *(const double *)b;
+
+	if (da < db)
+		return -1;
+	if (da > db)
+		return 1;
+	return 0;
 }
 
 static double get_max_reserved_time_on_all_planes_with_stream_index(struct display_configuation_with_meta *config, unsigned int stream_index)
@@ -634,7 +636,8 @@ bool pmo_dcn3_init_for_pstate_support(struct dml2_pmo_init_for_pstate_support_in
 
 		// Finally sort the array of candidates
 		sort(pmo->scratch.pmo_dcn3.reserved_time_candidates[stream_index],
-			pmo->scratch.pmo_dcn3.reserved_time_candidates_count[stream_index]);
+		     pmo->scratch.pmo_dcn3.reserved_time_candidates_count[stream_index],
+		     sizeof(double), cmp_double, NULL);
 
 		remove_duplicates(pmo->scratch.pmo_dcn3.reserved_time_candidates[stream_index],
 			&pmo->scratch.pmo_dcn3.reserved_time_candidates_count[stream_index]);
