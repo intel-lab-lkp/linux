@@ -73,6 +73,15 @@ struct ice_migration_tlv {
  * @ICE_MIG_TLV_VF_INFO: General configuration of the VF, including data
  * exchanged over virtchnl as well as PF host configuration.
  *
+ * @ICE_MIG_TLV_TX_QUEUE: Configuration for a Tx queue. Appears once per Tx
+ * queue.
+ *
+ * @ICE_MIG_TLV_RX_QUEUE: Configuration for an Rx queue. Appears once per Rx
+ * queue.
+ *
+ * @ICE_MIG_TLV_MSIX_REGS: MSI-X register data for the VF. Appears once per
+ * MSI-X interrupt, including the miscellaneous interrupt for the mailbox.
+ *
  * @NUM_ICE_MIG_TLV: Number of known TLV types. Any type equal to or larger
  * than this value is unrecognized by this version.
  *
@@ -85,6 +94,9 @@ enum ice_migration_tlvs {
 	ICE_MIG_TLV_END = 0,
 	ICE_MIG_TLV_HEADER,
 	ICE_MIG_TLV_VF_INFO,
+	ICE_MIG_TLV_TX_QUEUE,
+	ICE_MIG_TLV_RX_QUEUE,
+	ICE_MIG_TLV_MSIX_REGS,
 
 	/* Add new types above here */
 	NUM_ICE_MIG_TLV
@@ -177,6 +189,76 @@ struct ice_mig_vf_info {
 } __packed;
 
 /**
+ * struct ice_mig_tx_queue - Data to migrate a VF Tx queue
+ * @dma: the base DMA address for the queue
+ * @count: size of the Tx ring
+ * @head: the current head position of the Tx ring
+ * @queue_id: the VF relative Tx queue ID
+ * @vector_id: the VF relative MSI-X vector associated with this queue
+ * @vector_valid: if true, an MSI-X vector is associated with this queue
+ * @ena: if true, the Tx queue is currently enabled, false otherwise
+ * @reserved: reservied bitfield which must be zero
+ */
+struct ice_mig_tx_queue {
+	u64 dma;
+	u16 count;
+	u16 head;
+	u16 queue_id;
+	u16 vector_id;
+	u8 vector_valid:1;
+	u8 ena:1;
+	u8 reserved:6;
+} __packed;
+
+/**
+ * struct ice_mig_rx_queue - Data to migrate a VF Rx queue
+ * @dma: the base DMA address for the queue
+ * @max_frame: the maximum frame size of the queue
+ * @rx_buf_len: the length of the Rx buffers associated with the ring
+ * @rxdid: the Rx descriptor format of the ring
+ * @count: the size of the Rx ring
+ * @head: the current head position of the ring
+ * @tail: the current tail position of the ring
+ * @queue_id: the VF relative Rx queue ID
+ * @vector_id: the VF relative MSI-X vector associated with this queue
+ * @vector_valid: if true, an MSI-X vector is associated with this queue
+ * @crc_strip: if true, CRC stripping is enabled, false otherwise
+ * @ena: if true, the Rx queue is currently enabled, false otherwise
+ * @reserved: reserved bitfield which must be zero
+ */
+struct ice_mig_rx_queue {
+	u64 dma;
+	u16 max_frame;
+	u16 rx_buf_len;
+	u32 rxdid;
+	u16 count;
+	u16 head;
+	u16 tail;
+	u16 queue_id;
+	u16 vector_id;
+	u8 vector_valid:1;
+	u8 crc_strip:1;
+	u8 ena:1;
+	u8 reserved:5;
+} __packed;
+
+/**
+ * struct ice_mig_msix_regs - MSI-X register data for migrating VF
+ * @int_dyn_ctl: Contents GLINT_DYN_CTL for this vector
+ * @int_intr: Contents of GLINT_ITR for all ITRs of this vector
+ * @tx_itr_idx: The ITR index used for transmit
+ * @rx_itr_idx: The ITR index used for receive
+ * @vector_id: The MSI-X vector, *including* the miscellaneous non-queue vector
+ */
+struct ice_mig_msix_regs {
+	u32 int_dyn_ctl;
+	u32 int_intr[ICE_MIG_VF_ITR_NUM];
+	u16 tx_itr_idx;
+	u16 rx_itr_idx;
+	u16 vector_id;
+} __packed;
+
+/**
  * ice_mig_tlv_type - Convert a TLV type to its number
  * @p: the TLV structure type
  *
@@ -188,6 +270,9 @@ struct ice_mig_vf_info {
 	_Generic(*(p),							\
 		 struct ice_mig_tlv_header : ICE_MIG_TLV_HEADER,	\
 		 struct ice_mig_vf_info : ICE_MIG_TLV_VF_INFO,		\
+		 struct ice_mig_tx_queue : ICE_MIG_TLV_TX_QUEUE,	\
+		 struct ice_mig_rx_queue : ICE_MIG_TLV_RX_QUEUE,	\
+		 struct ice_mig_msix_regs : ICE_MIG_TLV_MSIX_REGS,	\
 		 default : ICE_MIG_TLV_END)
 
 /**

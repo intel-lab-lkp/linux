@@ -299,6 +299,27 @@ int ice_vc_ena_qs_msg(struct ice_vf *vf, u8 *msg)
 			continue;
 
 		ice_vf_ena_txq_interrupt(vsi, vf_q_id);
+
+		/* The Tx head register is a shadow copy of on-die Tx head
+		 * which maintains the accurate location. The Tx head register
+		 * is only updated after a packet is sent, and is updated to
+		 * the value one behind the actual on-die Tx head value.
+		 *
+		 * Even after queue enable, until a packet is sent the Tx head
+		 * remains whatever value it had before.
+		 *
+		 * QTX_COMM_HEAD.HEAD values from 0x1fe0 to 0x1fff are
+		 * reserved and will never be used by HW. Manually write a
+		 * reserved value into Tx head and use this as a marker to
+		 * indicate that no packets have been sent since the queue was
+		 * enabled.
+		 *
+		 * This marker is used by the live migration logic to
+		 * accurately determine the Tx queue head.
+		 */
+		wr32(&vsi->back->hw, QTX_COMM_HEAD(vsi->txq_map[vf_q_id]),
+		     QTX_COMM_HEAD_HEAD_M);
+
 		set_bit(vf_q_id, vf->txq_ena);
 	}
 
