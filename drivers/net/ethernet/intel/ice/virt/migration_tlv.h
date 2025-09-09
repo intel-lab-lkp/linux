@@ -82,6 +82,16 @@ struct ice_migration_tlv {
  * @ICE_MIG_TLV_MSIX_REGS: MSI-X register data for the VF. Appears once per
  * MSI-X interrupt, including the miscellaneous interrupt for the mailbox.
  *
+ * @ICE_MIG_TLV_MBX_REGS: Mailbox register data for the VF.
+ *
+ * @ICE_MIG_TLV_STATS: Current statistics counts of the VF.
+ *
+ * @ICE_MIG_TLV_RSS: RSS configuration for the VF.
+ *
+ * @ICE_MIG_TLV_VLAN_FILTERS: VLAN filter information.
+ *
+ * @ICE_MIG_TLV_MAC_FILTERS: MAC filter information.
+ *
  * @NUM_ICE_MIG_TLV: Number of known TLV types. Any type equal to or larger
  * than this value is unrecognized by this version.
  *
@@ -97,6 +107,11 @@ enum ice_migration_tlvs {
 	ICE_MIG_TLV_TX_QUEUE,
 	ICE_MIG_TLV_RX_QUEUE,
 	ICE_MIG_TLV_MSIX_REGS,
+	ICE_MIG_TLV_MBX_REGS,
+	ICE_MIG_TLV_STATS,
+	ICE_MIG_TLV_RSS,
+	ICE_MIG_TLV_VLAN_FILTERS,
+	ICE_MIG_TLV_MAC_FILTERS,
 
 	/* Add new types above here */
 	NUM_ICE_MIG_TLV
@@ -259,6 +274,119 @@ struct ice_mig_msix_regs {
 } __packed;
 
 /**
+ * struct ice_mig_stats - Hardware statistics counts from migrating VF
+ * @rx_bytes: total nr received bytes (gorc)
+ * @rx_unicast: total nr received unicast packets (uprc)
+ * @rx_multicast: total nr received multicast packets (mprc)
+ * @rx_broadcast: total nr received broadcast packets (bprc)
+ * @rx_discards: total nr packets discarded on receipt (rdpc)
+ * @rx_unknown_protocol: total nr Rx packets with unrecognized protocol (rupp)
+ * @tx_bytes: total nr transmitted bytes (gotc)
+ * @tx_unicast: total nr transmitted unicast packets (uptc)
+ * @tx_multicast: total nr transmitted multicast packets (mptc)
+ * @tx_broadcast: total nr transmitted broadcast packets (bptc)
+ * @tx_discards: total nr packets discarded on transmit (tdpc)
+ * @tx_errors: total number of transmit errors (tepc)
+ */
+struct ice_mig_stats {
+	u64 rx_bytes;
+	u64 rx_unicast;
+	u64 rx_multicast;
+	u64 rx_broadcast;
+	u64 rx_discards;
+	u64 rx_unknown_protocol;
+	u64 tx_bytes;
+	u64 tx_unicast;
+	u64 tx_multicast;
+	u64 tx_broadcast;
+	u64 tx_discards;
+	u64 tx_errors;
+} __packed;
+
+/**
+ * struct ice_mig_mbx_regs - PF<->VF Mailbox register data for the VF
+ * @atq_head: the head position of the VF AdminQ Tx ring
+ * @atq_tail: the tail position of the VF AdminQ Tx ring
+ * @atq_bal: lower 32-bits of the VF AdminQ Tx ring base address
+ * @atq_bah: upper 32-bits of the VF AdminQ Tx ring base address
+ * @atq_len: length of the VF AdminQ Tx ring
+ * @arq_head: the head position of the VF AdminQ Rx ring
+ * @arq_tail: the tail position of the VF AdminQ Tx ring
+ * @arq_bal: lower 32-bits of the VF AdminQ Rx ring base address
+ * @arq_bah: upper 32-bits of the VF AdminQ Rx ring base address
+ * @arq_len: length of the VF AdminQ Rx ring
+ */
+struct ice_mig_mbx_regs {
+	u32 atq_head;
+	u32 atq_tail;
+	u32 atq_bal;
+	u32 atq_bah;
+	u32 atq_len;
+	u32 arq_head;
+	u32 arq_tail;
+	u32 arq_bal;
+	u32 arq_bah;
+	u32 arq_len;
+} __packed;
+
+/**
+ * struct ice_mig_rss - RSS configuration for the migrating VF
+ * @hashcfg: RSS Hash filter configuration
+ * @key: RSS key
+ * @lut_size: size of the RSS lookup table
+ * @hfunc: RSS hash function selected
+ * @lut: RSS lookup table configuration
+ */
+struct ice_mig_rss {
+	u64 hashcfg;
+	/* TODO: Can this key change size? Should this be a plain buffer
+	 * instead of the struct?
+	 */
+	struct ice_aqc_get_set_rss_keys key;
+	u16 lut_size;
+	u8 hfunc;
+	u8 lut[] __counted_by(lut_size);
+} __packed;
+
+/**
+ * struct ice_mig_vlan_filter - VLAN filter information
+ * @tpid: VLAN TPID
+ * @vid: VLAN ID
+ */
+struct ice_mig_vlan_filter {
+	u16 tpid;
+	u16 vid;
+} __packed;
+
+/**
+ * struct ice_mig_vlan_filters - List of VLAN filters for the VF
+ * @num_vlans: number of VLANs for this VF
+ * @vlans: VLAN data
+ */
+struct ice_mig_vlan_filters {
+	u16 num_vlans;
+	struct ice_mig_vlan_filter vlans[] __counted_by(num_vlans);
+} __packed;
+
+/**
+ * struct ice_mig_mac_filter - MAC address data for a VF filter
+ * @mac_addr: the MAC address
+ */
+struct ice_mig_mac_filter {
+	u8 mac_addr[ETH_ALEN];
+} __packed;
+
+/**
+ * struct ice_mig_mac_filters - List of MAC filters for the VF
+ * @num_macs: number of MAC filters for this VF
+ * @macs: MAC address data
+ */
+struct ice_mig_mac_filters {
+	u16 num_macs;
+	struct ice_mig_mac_filter macs[] __counted_by(num_macs);
+} __packed;
+
+/**
  * ice_mig_tlv_type - Convert a TLV type to its number
  * @p: the TLV structure type
  *
@@ -273,6 +401,11 @@ struct ice_mig_msix_regs {
 		 struct ice_mig_tx_queue : ICE_MIG_TLV_TX_QUEUE,	\
 		 struct ice_mig_rx_queue : ICE_MIG_TLV_RX_QUEUE,	\
 		 struct ice_mig_msix_regs : ICE_MIG_TLV_MSIX_REGS,	\
+		 struct ice_mig_mbx_regs : ICE_MIG_TLV_MBX_REGS,	\
+		 struct ice_mig_stats : ICE_MIG_TLV_STATS,		\
+		 struct ice_mig_rss : ICE_MIG_TLV_RSS,			\
+		 struct ice_mig_vlan_filters : ICE_MIG_TLV_VLAN_FILTERS,\
+		 struct ice_mig_mac_filters : ICE_MIG_TLV_MAC_FILTERS,	\
 		 default : ICE_MIG_TLV_END)
 
 /**
