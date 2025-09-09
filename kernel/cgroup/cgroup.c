@@ -3010,6 +3010,7 @@ struct task_struct *cgroup_procs_write_start(char *buf, bool threadgroup,
 	if (kstrtoint(strstrip(buf), 0, &pid) || pid < 0)
 		return ERR_PTR(-EINVAL);
 
+retry_find_task:
 	rcu_read_lock();
 	if (pid) {
 		tsk = find_task_by_vpid(pid);
@@ -3050,6 +3051,21 @@ struct task_struct *cgroup_procs_write_start(char *buf, bool threadgroup,
 	*threadgroup_locked = pid || threadgroup;
 
 	cgroup_attach_lock(*threadgroup_locked, tsk);
+
+	if (threadgroup) {
+		if (!thread_group_leader(tsk)) {
+			/*
+			 * a race with de_thread from another thread's exec()
+			 * may strip us of our leadership, if this happens,
+			 * there is no choice but to throw this task away and
+			 * try again; this is
+			 * "double-double-toil-and-trouble-check locking".
+			 */
+			cgroup_attach_unlock(*threadgroup_locked, tsk);
+			put_task_struct(tsk);
+			goto retry_find_task;
+		}
+	}
 
 	return tsk;
 
