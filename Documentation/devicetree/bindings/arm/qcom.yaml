@@ -867,6 +867,12 @@ properties:
 
       - items:
           - enum:
+              - qcom,qcs615-iq-615-evk
+          - const: qcom,qcs615
+          - const: qcom,sm6150
+
+      - items:
+          - enum:
               - qcom,sa8155p-adp
           - const: qcom,sa8155p
 
