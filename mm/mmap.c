@@ -1883,11 +1883,15 @@ loop_out:
 		if (max) {
 			vma_iter_set(&vmi, 0);
 			tmp = vma_next(&vmi);
+			UNMAP_REGION(unmap, &vmi, /* first vma = */ tmp,
+				     /* min vma addr = */ 0,
+				     /* max vma addr = */ max,
+				     /* prev = */ NULL, /* next = */ NULL);
+
+			/* Don't free the pgtables higher than the failure */
+			unmap.tree_max = max;
 			flush_cache_mm(mm);
-			unmap_region(&vmi.mas, /* vma = */ tmp,
-				     /*vma_min = */ 0, /* vma_max = */ max,
-				     /* pg_max = */ max, /* prev = */ NULL,
-				     /* next = */ NULL);
+			unmap_region(&unmap);
 			charge = tear_down_vmas(mm, &vmi, tmp, max);
 			vm_unacct_memory(charge);
 		}

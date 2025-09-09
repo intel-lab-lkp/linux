@@ -152,6 +152,37 @@ struct vma_merge_struct {
 
 };
 
+struct unmap_desc {
+	struct  ma_state *mas;        /* the maple state point to the first vma */
+	struct vm_area_struct *first; /* The first vma */
+	unsigned long first_pgaddr;   /* The first pagetable address to free */
+	unsigned long last_pgaddr;    /* The last pagetable address to free */
+	unsigned long vma_min;        /* The min vma address */
+	unsigned long vma_max;        /* The max vma address */
+	unsigned long tree_max;       /* Maximum for the vma tree search */
+	unsigned long tree_reset;     /* Where to reset the vma tree walk */
+	bool mm_wr_locked;            /* If the mmap write lock is held */
+};
+
+#define UNMAP_REGION(name, _vmi, _vma, _vma_min, _vma_max, _prev, _next)      \
+	struct unmap_desc name = {                                          \
+		.mas = &(_vmi)->mas,                                          \
+		.first = _vma,                                                \
+		.first_pgaddr = _prev ?                                       \
+			((struct vm_area_struct *)_prev)->vm_end :            \
+			FIRST_USER_ADDRESS,                                   \
+		.last_pgaddr = _next ?                                        \
+			((struct vm_area_struct *)_next)->vm_start :          \
+			USER_PGTABLES_CEILING,                                \
+		.vma_min = _vma_min,                                          \
+		.vma_max = _vma_max,                                          \
+		.tree_max = _next ?                                           \
+			((struct vm_area_struct *)_next)->vm_start :          \
+			USER_PGTABLES_CEILING,                                \
+		.tree_reset = _vma->vm_end,                                   \
+		.mm_wr_locked = true,                                         \
+	}
+
 static inline bool vmg_nomem(struct vma_merge_struct *vmg)
 {
 	return vmg->state == VMA_MERGE_ERROR_NOMEM;
@@ -260,9 +291,7 @@ int do_vmi_munmap(struct vma_iterator *vmi, struct mm_struct *mm,
 
 void remove_vma(struct vm_area_struct *vma);
 
-void unmap_region(struct ma_state *mas, struct vm_area_struct *vma,
-		unsigned long min, unsigned long max, unsigned long pg_max,
-		struct vm_area_struct *prev, struct vm_area_struct *next);
+void unmap_region(struct unmap_desc *desc);
 
 /* We are about to modify the VMA's flags. */
 __must_check struct vm_area_struct

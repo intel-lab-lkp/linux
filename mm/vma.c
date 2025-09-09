@@ -473,22 +473,20 @@ void remove_vma(struct vm_area_struct *vma)
  *
  * Called with the mm semaphore held.
  */
-void unmap_region(struct ma_state *mas, struct vm_area_struct *vma,
-		unsigned long vma_min, unsigned long vma_max, unsigned long pg_max,
-		struct vm_area_struct *prev, struct vm_area_struct *next)
+void unmap_region(struct unmap_desc *desc)
 {
-	struct mm_struct *mm = vma->vm_mm;
+	struct mm_struct *mm = desc->first->vm_mm;
+	struct ma_state *mas = desc->mas;
 	struct mmu_gather tlb;
 
 	tlb_gather_mmu(&tlb, mm);
 	update_hiwater_rss(mm);
-	unmap_vmas(&tlb, mas, vma, vma_min, vma_max, vma_max,
-		   /* mm_wr_locked = */ true);
-	mas_set(mas, vma->vm_end);
-	free_pgtables(&tlb, mas, vma, prev ? prev->vm_end : FIRST_USER_ADDRESS,
-		      next ? next->vm_start : USER_PGTABLES_CEILING,
-		      pg_max,
-		      /* mm_wr_locked = */ true);
+	unmap_vmas(&tlb, mas, desc->first, desc->vma_min, desc->vma_max,
+		   desc->vma_max, desc->mm_wr_locked);
+	mas_set(mas, desc->tree_reset);
+	free_pgtables(&tlb, mas, desc->first, desc->first_pgaddr,
+		      desc->last_pgaddr, desc->tree_max,
+		      desc->mm_wr_locked);
 	tlb_finish_mmu(&tlb);
 }
 
@@ -2414,15 +2412,14 @@ static int __mmap_new_file_vma(struct mmap_state *map,
 
 	error = mmap_file(vma->vm_file, vma);
 	if (error) {
+		UNMAP_REGION(unmap, vmi, vma, vma->vm_start, vma->vm_end,
+			     map->prev, map->next);
 		fput(vma->vm_file);
 		vma->vm_file = NULL;
 
 		vma_iter_set(vmi, vma->vm_end);
 		/* Undo any partial mapping done by a device driver. */
-		unmap_region(&vmi->mas, vma, vma->vm_start, vma->vm_end,
-			     map->next ? map->next->vm_start : USER_PGTABLES_CEILING,
-			     map->prev, map->next);
-
+		unmap_region(&unmap);
 		return error;
 	}
 
