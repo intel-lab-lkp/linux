@@ -17,6 +17,7 @@ TEST_PROGS := \
 	netcons_fragmented_msg.sh \
 	netcons_overflow.sh \
 	netcons_sysdata.sh \
+	netcons_resume.sh \
 	netpoll_basic.py \
 	ping.py \
 	queues.py \
