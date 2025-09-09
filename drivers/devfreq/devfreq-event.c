@@ -328,7 +328,6 @@ struct devfreq_event_dev *devfreq_event_add_edev(struct device *dev,
 	ret = device_register(&edev->dev);
 	if (ret < 0) {
 		put_device(&edev->dev);
-		kfree(edev);
 		return ERR_PTR(ret);
 	}
 	dev_set_drvdata(&edev->dev, edev);
