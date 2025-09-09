@@ -143,4 +143,18 @@ struct blk_user_trace_setup {
 	__u32 pid;
 };
 
+/*
+ * User setup structure passed with BLKTRACESETUP2
+ */
+struct blk_user_trace_setup2 {
+        char name[32];                  /* output */
+        __u64 act_mask;                 /* input */
+        __u32 buf_size;                 /* input */
+        __u32 buf_nr;                   /* input */
+        __u64 start_lba;
+        __u64 end_lba;
+        __u32 pid;
+        __u32 reserved;                 /* for futute use */
+};
+
 #endif /* _UAPIBLKTRACE_H */
