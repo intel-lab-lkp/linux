@@ -4000,30 +4000,34 @@ static int probe_one_instance(unsigned int nid)
 	if (ret < 0)
 		goto err_enable;
 
+	pvt->csels = kcalloc(pvt->max_mcs, sizeof(*pvt->csels), GFP_KERNEL);
+	if (!pvt->csels)
+		goto err_enable;
+
 	ret = pvt->ops->hw_info_get(pvt);
 	if (ret < 0)
-		goto err_enable;
+		goto err_csels;
 
 	ret = 0;
 	if (!instance_has_memory(pvt)) {
 		amd64_info("Node %d: No DIMMs detected.\n", nid);
-		goto err_enable;
+		goto err_csels;
 	}
 
 	if (!pvt->ops->ecc_enabled(pvt)) {
 		ret = -ENODEV;
 
 		if (!ecc_enable_override)
-			goto err_enable;
+			goto err_csels;
 
 		if (boot_cpu_data.x86 >= 0x17) {
 			amd64_warn("Forcing ECC on is not recommended on newer systems. Please enable ECC in BIOS.");
-			goto err_enable;
+			goto err_csels;
 		} else
 			amd64_warn("Forcing ECC on!\n");
 
 		if (!enable_ecc_error_reporting(s, nid, F3))
-			goto err_enable;
+			goto err_csels;
 	}
 
 	ret = init_one_instance(pvt);
@@ -4033,7 +4037,7 @@ static int probe_one_instance(unsigned int nid)
 		if (boot_cpu_data.x86 < 0x17)
 			restore_ecc_error_reporting(s, nid, F3);
 
-		goto err_enable;
+		goto err_csels;
 	}
 
 	amd64_info("%s detected (node %d).\n", pvt->ctl_name, pvt->mc_node_id);
@@ -4043,6 +4047,8 @@ static int probe_one_instance(unsigned int nid)
 
 	return ret;
 
+err_csels:
+	kfree(pvt->csels);
 err_enable:
 	hw_info_put(pvt);
 	kfree(pvt);
@@ -4077,6 +4083,7 @@ static void remove_one_instance(unsigned int nid)
 	/* Free the EDAC CORE resources */
 	mci->pvt_info = NULL;
 
+	kfree(pvt->csels);
 	hw_info_put(pvt);
 	kfree(pvt);
 	edac_mc_free(mci);
