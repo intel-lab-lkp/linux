@@ -275,7 +275,7 @@ static int snd_at73c213_pcm_trigger(struct snd_pcm_substream *substream,
 	struct snd_at73c213 *chip = snd_pcm_substream_chip(substream);
 	int retval = 0;
 
-	spin_lock(&chip->lock);
+	guard(spinlock)(&chip->lock);
 
 	switch (cmd) {
 	case SNDRV_PCM_TRIGGER_START:
@@ -291,8 +291,6 @@ static int snd_at73c213_pcm_trigger(struct snd_pcm_substream *substream,
 		retval = -EINVAL;
 		break;
 	}
-
-	spin_unlock(&chip->lock);
 
 	return retval;
 }
@@ -358,30 +356,30 @@ static irqreturn_t snd_at73c213_interrupt(int irq, void *dev_id)
 	int next_period;
 	int retval = IRQ_NONE;
 
-	spin_lock(&chip->lock);
+	scoped_guard (spinlock, &chip->lock) {
 
-	block_size = frames_to_bytes(runtime, runtime->period_size);
-	status = ssc_readl(chip->ssc->regs, IMR);
+		block_size = frames_to_bytes(runtime, runtime->period_size);
+		status = ssc_readl(chip->ssc->regs, IMR);
 
-	if (status & SSC_BIT(IMR_ENDTX)) {
-		chip->period++;
-		if (chip->period == runtime->periods)
-			chip->period = 0;
-		next_period = chip->period + 1;
-		if (next_period == runtime->periods)
-			next_period = 0;
+		if (status & SSC_BIT(IMR_ENDTX)) {
+			chip->period++;
+			if (chip->period == runtime->periods)
+				chip->period = 0;
+			next_period = chip->period + 1;
+			if (next_period == runtime->periods)
+				next_period = 0;
 
-		offset = block_size * next_period;
+			offset = block_size * next_period;
 
-		ssc_writel(chip->ssc->regs, PDC_TNPR,
-				(long)runtime->dma_addr + offset);
-		ssc_writel(chip->ssc->regs, PDC_TNCR,
-				runtime->period_size * runtime->channels);
-		retval = IRQ_HANDLED;
+			ssc_writel(chip->ssc->regs, PDC_TNPR,
+					(long)runtime->dma_addr + offset);
+			ssc_writel(chip->ssc->regs, PDC_TNCR,
+					runtime->period_size * runtime->channels);
+			retval = IRQ_HANDLED;
+		}
+
+		ssc_readl(chip->ssc->regs, IMR);
 	}
-
-	ssc_readl(chip->ssc->regs, IMR);
-	spin_unlock(&chip->lock);
 
 	if (status & SSC_BIT(IMR_ENDTX))
 		snd_pcm_period_elapsed(chip->substream);
@@ -401,7 +399,7 @@ static int snd_at73c213_mono_get(struct snd_kcontrol *kcontrol,
 	int mask = (kcontrol->private_value >> 16) & 0xff;
 	int invert = (kcontrol->private_value >> 24) & 0xff;
 
-	mutex_lock(&chip->mixer_lock);
+	guard(mutex)(&chip->mixer_lock);
 
 	ucontrol->value.integer.value[0] =
 		(chip->reg_image[reg] >> shift) & mask;
@@ -409,8 +407,6 @@ static int snd_at73c213_mono_get(struct snd_kcontrol *kcontrol,
 	if (invert)
 		ucontrol->value.integer.value[0] =
 			mask - ucontrol->value.integer.value[0];
-
-	mutex_unlock(&chip->mixer_lock);
 
 	return 0;
 }
@@ -431,13 +427,13 @@ static int snd_at73c213_mono_put(struct snd_kcontrol *kcontrol,
 		val = mask - val;
 	val <<= shift;
 
-	mutex_lock(&chip->mixer_lock);
+	scoped_guard (mutex, &chip->mixer_lock) {
 
-	val = (chip->reg_image[reg] & ~(mask << shift)) | val;
-	change = val != chip->reg_image[reg];
-	retval = snd_at73c213_write_reg(chip, reg, val);
+		val = (chip->reg_image[reg] & ~(mask << shift)) | val;
+		change = val != chip->reg_image[reg];
+		retval = snd_at73c213_write_reg(chip, reg, val);
 
-	mutex_unlock(&chip->mixer_lock);
+	}
 
 	if (retval)
 		return retval;
@@ -473,7 +469,7 @@ static int snd_at73c213_stereo_get(struct snd_kcontrol *kcontrol,
 	int mask = (kcontrol->private_value >> 24) & 0xff;
 	int invert = (kcontrol->private_value >> 22) & 1;
 
-	mutex_lock(&chip->mixer_lock);
+	guard(mutex)(&chip->mixer_lock);
 
 	ucontrol->value.integer.value[0] =
 		(chip->reg_image[left_reg] >> shift_left) & mask;
@@ -486,8 +482,6 @@ static int snd_at73c213_stereo_get(struct snd_kcontrol *kcontrol,
 		ucontrol->value.integer.value[1] =
 			mask - ucontrol->value.integer.value[1];
 	}
-
-	mutex_unlock(&chip->mixer_lock);
 
 	return 0;
 }
@@ -514,29 +508,20 @@ static int snd_at73c213_stereo_put(struct snd_kcontrol *kcontrol,
 	val1 <<= shift_left;
 	val2 <<= shift_right;
 
-	mutex_lock(&chip->mixer_lock);
+	guard(mutex)(&chip->mixer_lock);
 
 	val1 = (chip->reg_image[left_reg] & ~(mask << shift_left)) | val1;
 	val2 = (chip->reg_image[right_reg] & ~(mask << shift_right)) | val2;
 	change = val1 != chip->reg_image[left_reg]
 		|| val2 != chip->reg_image[right_reg];
 	retval = snd_at73c213_write_reg(chip, left_reg, val1);
-	if (retval) {
-		mutex_unlock(&chip->mixer_lock);
-		goto out;
-	}
+	if (retval)
+		return retval;
 	retval = snd_at73c213_write_reg(chip, right_reg, val2);
-	if (retval) {
-		mutex_unlock(&chip->mixer_lock);
-		goto out;
-	}
-
-	mutex_unlock(&chip->mixer_lock);
+	if (retval)
+		return retval;
 
 	return change;
-
-out:
-	return retval;
 }
 
 #define snd_at73c213_mono_switch_info	snd_ctl_boolean_mono_info
@@ -549,7 +534,7 @@ static int snd_at73c213_mono_switch_get(struct snd_kcontrol *kcontrol,
 	int shift = (kcontrol->private_value >> 8) & 0xff;
 	int invert = (kcontrol->private_value >> 24) & 0xff;
 
-	mutex_lock(&chip->mixer_lock);
+	guard(mutex)(&chip->mixer_lock);
 
 	ucontrol->value.integer.value[0] =
 		(chip->reg_image[reg] >> shift) & 0x01;
@@ -557,8 +542,6 @@ static int snd_at73c213_mono_switch_get(struct snd_kcontrol *kcontrol,
 	if (invert)
 		ucontrol->value.integer.value[0] =
 			0x01 - ucontrol->value.integer.value[0];
-
-	mutex_unlock(&chip->mixer_lock);
 
 	return 0;
 }
@@ -583,14 +566,14 @@ static int snd_at73c213_mono_switch_put(struct snd_kcontrol *kcontrol,
 		val = mask - val;
 	val <<= shift;
 
-	mutex_lock(&chip->mixer_lock);
+	scoped_guard (mutex, &chip->mixer_lock) {
 
-	val |= (chip->reg_image[reg] & ~(mask << shift));
-	change = val != chip->reg_image[reg];
+		val |= (chip->reg_image[reg] & ~(mask << shift));
+		change = val != chip->reg_image[reg];
 
-	retval = snd_at73c213_write_reg(chip, reg, val);
+		retval = snd_at73c213_write_reg(chip, reg, val);
 
-	mutex_unlock(&chip->mixer_lock);
+	}
 
 	if (retval)
 		return retval;
