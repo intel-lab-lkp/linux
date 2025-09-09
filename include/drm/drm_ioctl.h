@@ -34,6 +34,7 @@
 
 #include <linux/types.h>
 #include <linux/bitops.h>
+#include <linux/io_uring/cmd.h>
 
 #include <asm/ioctl.h>
 
@@ -170,5 +171,7 @@ int drm_noop(struct drm_device *dev, void *data,
 	     struct drm_file *file_priv);
 int drm_invalid_op(struct drm_device *dev, void *data,
 		   struct drm_file *file_priv);
+
+int drm_uring_cmd(struct io_uring_cmd *cmd, unsigned int issue_flags);
 
 #endif /* _DRM_IOCTL_H_ */

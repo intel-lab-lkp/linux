@@ -39,6 +39,7 @@
 #include <drm/drm_file.h>
 #include <drm/drm_ioctl.h>
 #include <drm/drm_print.h>
+#include <uapi/drm/drm.h>
 
 #include "drm_crtc_internal.h"
 #include "drm_internal.h"
@@ -937,3 +938,32 @@ bool drm_ioctl_flags(unsigned int nr, unsigned int *flags)
 	return true;
 }
 EXPORT_SYMBOL(drm_ioctl_flags);
+
+/**
+ * drm_uring_cmd - Implement uring_cmd callback for io_uring
+ * @cmd: pointer to io_uring_cmd struct
+ * @issue_flags: flags specified by io_uring's issue implementation
+ *
+ * This function implements the uring_cmd file operation to incorporate
+ * arbitrary io_uring functionality for drm. Currently, it acts as a way
+ * for io_uring to issue ioctls to a drm device, so this function
+ * dispatches ioctls to the standard drm ioctl interface.
+ *
+ * Returns:
+ * Zero on success, negative error code on failure.
+ */
+int drm_uring_cmd(struct io_uring_cmd *cmd, unsigned int issue_flags)
+{
+	switch (cmd->cmd_op) {
+	case DRM_URING_CMD_IOCTL:
+		const struct drm_uring_cmd_ioctl *drm_cmd = io_uring_sqe_cmd(cmd->sqe);
+		unsigned int ioctl_cmd = drm_cmd->ioctl_cmd;
+		unsigned long ioctl_arg = drm_cmd->arg;
+		struct file *filp = cmd->file;
+
+		return drm_ioctl(filp, ioctl_cmd, ioctl_arg);
+	default:
+		return -EOPNOTSUPP;
+	}
+}
+EXPORT_SYMBOL(drm_uring_cmd);

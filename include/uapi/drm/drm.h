@@ -1424,6 +1424,28 @@ struct drm_event_crtc_sequence {
 	__u64			sequence;
 };
 
+/**
+ * enum drm_uring_cmd_op - Opcodes for io_uring based drm_uring_cmd callback
+ * DRM_URING_CMD_IOCTL - issue DRM ioctl from drm_uring_cmd
+ */
+enum drm_uring_cmd_op {
+	DRM_URING_CMD_IOCTL = 1,
+};
+
+/**
+ * struct drm_uring_cmd_ioctl - arguments for DRM_URING_CMD_IOCTL
+ */
+struct drm_uring_cmd_ioctl {
+	/* Device specific ioctl number */
+	__u32 ioctl_cmd;
+
+	/* Pad to 16 byte SQE cmd */
+	__u32 pad;
+
+	/* Opaque ioctl argument pointer */
+	__u64 arg;
+};
+
 /* typedef area */
 #ifndef __KERNEL__
 typedef struct drm_clip_rect drm_clip_rect_t;
