@@ -94,26 +94,6 @@ static const struct alvium_pixfmt alvium_csi2_fmts[] = {
 		.bay_fmt_regval = -1,
 		.is_raw = 0,
 	}, {
-		/* RBG888_1X24 */
-		.id = ALVIUM_FMT_RBG888_1X24,
-		.code = MEDIA_BUS_FMT_RBG888_1X24,
-		.colorspace = V4L2_COLORSPACE_SRGB,
-		.fmt_av_bit = ALVIUM_BIT_RGB888,
-		.bay_av_bit = ALVIUM_BIT_BAY_NONE,
-		.mipi_fmt_regval = MIPI_CSI2_DT_RGB888,
-		.bay_fmt_regval = -1,
-		.is_raw = 0,
-	}, {
-		/* BGR888_1X24 */
-		.id = ALVIUM_FMT_BGR888_1X24,
-		.code = MEDIA_BUS_FMT_BGR888_1X24,
-		.colorspace = V4L2_COLORSPACE_SRGB,
-		.fmt_av_bit = ALVIUM_BIT_RGB888,
-		.bay_av_bit = ALVIUM_BIT_BAY_NONE,
-		.mipi_fmt_regval = MIPI_CSI2_DT_RGB888,
-		.bay_fmt_regval = -1,
-		.is_raw = 0,
-	}, {
 		/* RGB888_3X8 */
 		.id = ALVIUM_FMT_RGB888_3X8,
 		.code = MEDIA_BUS_FMT_RGB888_3X8,
@@ -121,6 +101,16 @@ static const struct alvium_pixfmt alvium_csi2_fmts[] = {
 		.fmt_av_bit = ALVIUM_BIT_RGB888,
 		.bay_av_bit = ALVIUM_BIT_BAY_NONE,
 		.mipi_fmt_regval = MIPI_CSI2_DT_RGB888,
+		.bay_fmt_regval = -1,
+		.is_raw = 0,
+	}, {
+		/* RGB565_1X16 */
+		.id = ALVIUM_FMT_RGB565_1X16,
+		.code = MEDIA_BUS_FMT_RGB565_1X16,
+		.colorspace = V4L2_COLORSPACE_SRGB,
+		.fmt_av_bit = ALVIUM_BIT_RGB565,
+		.bay_av_bit = ALVIUM_BIT_BAY_NONE,
+		.mipi_fmt_regval = MIPI_CSI2_DT_RGB565,
 		.bay_fmt_regval = -1,
 		.is_raw = 0,
 	}, {
