@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0
 
 #include <stddef.h>
+#include <stdbool.h>
 #include <linux/bpf.h>
 #include <linux/in.h>
 #include <linux/if_ether.h>
@@ -9,6 +10,7 @@
 #include <linux/udp.h>
 #include <bpf/bpf_endian.h>
 #include <bpf/bpf_helpers.h>
+#include "../../bpf/bpf_kfuncs.h"
 
 #define MAX_ADJST_OFFSET 256
 #define MAX_PAYLOAD_LEN 5000
@@ -50,11 +52,6 @@ struct {
 	__type(key, __u32);
 	__type(value, __u64);
 } map_xdp_stats SEC(".maps");
-
-static __u32 min(__u32 a, __u32 b)
-{
-	return a < b ? a : b;
-}
 
 static void record_stats(struct xdp_md *ctx, __u32 stat_type)
 {
@@ -145,32 +142,33 @@ static void swap_machdr(void *data)
 
 static int xdp_mode_tx_handler(struct xdp_md *ctx, __u16 port)
 {
-	void *data_end = (void *)(long)ctx->data_end;
-	void *data = (void *)(long)ctx->data;
 	struct udphdr *udph = NULL;
-	struct ethhdr *eth = data;
+	struct ethhdr *eth = NULL;
+	struct bpf_dynptr ptr;
 
-	if (data + sizeof(*eth) > data_end)
+	bpf_dynptr_from_xdp(ctx, 0, &ptr);
+	eth = bpf_dynptr_slice_rdwr(&ptr, 0, NULL, sizeof(*eth));
+	if (!eth)
 		return XDP_PASS;
 
 	if (eth->h_proto == bpf_htons(ETH_P_IP)) {
-		struct iphdr *iph = data + sizeof(*eth);
-		__be32 tmp_ip = iph->saddr;
+		struct iphdr *iph = NULL;
+		__be32 tmp_ip;
 
-		if (iph + 1 > (struct iphdr *)data_end ||
-		    iph->protocol != IPPROTO_UDP)
+		iph = bpf_dynptr_slice_rdwr(&ptr, sizeof(*eth), NULL,
+					    sizeof(*iph));
+		if (!iph || iph->protocol != IPPROTO_UDP)
 			return XDP_PASS;
 
-		udph = data + sizeof(*iph) + sizeof(*eth);
-
-		if (udph + 1 > (struct udphdr *)data_end)
-			return XDP_PASS;
-		if (udph->dest != bpf_htons(port))
+		udph = bpf_dynptr_slice(&ptr, sizeof(*iph) + sizeof(*eth), NULL,
+					sizeof(*udph));
+		if (!udph || udph->dest != bpf_htons(port))
 			return XDP_PASS;
 
 		record_stats(ctx, STATS_RX);
 		swap_machdr((void *)eth);
 
+		tmp_ip = iph->saddr;
 		iph->saddr = iph->daddr;
 		iph->daddr = tmp_ip;
 
@@ -179,18 +177,17 @@ static int xdp_mode_tx_handler(struct xdp_md *ctx, __u16 port)
 		return XDP_TX;
 
 	} else if (eth->h_proto  == bpf_htons(ETH_P_IPV6)) {
-		struct ipv6hdr *ipv6h = data + sizeof(*eth);
+		struct ipv6hdr *ipv6h = NULL;
 		struct in6_addr tmp_ipv6;
 
-		if (ipv6h + 1 > (struct ipv6hdr *)data_end ||
-		    ipv6h->nexthdr != IPPROTO_UDP)
+		ipv6h = bpf_dynptr_slice_rdwr(&ptr, sizeof(*eth), NULL,
+					      sizeof(*ipv6h));
+		if (!ipv6h || ipv6h->nexthdr != IPPROTO_UDP)
 			return XDP_PASS;
 
-		udph = data + sizeof(*ipv6h) + sizeof(*eth);
-
-		if (udph + 1 > (struct udphdr *)data_end)
-			return XDP_PASS;
-		if (udph->dest != bpf_htons(port))
+		udph = bpf_dynptr_slice(&ptr, sizeof(*ipv6h) + sizeof(*eth),
+					NULL, sizeof(*udph));
+		if (!udph || udph->dest != bpf_htons(port))
 			return XDP_PASS;
 
 		record_stats(ctx, STATS_RX);
