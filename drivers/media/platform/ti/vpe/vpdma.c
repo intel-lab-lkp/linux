@@ -568,8 +568,9 @@ static void dump_dtd(struct vpdma_dtd *dtd);
  * unmapped before the update and remapped after.
  */
 void vpdma_update_dma_addr(struct vpdma_data *vpdma,
-	struct vpdma_desc_list *list, dma_addr_t dma_addr,
-	void *write_dtd, int drop, int idx)
+			   struct vpdma_desc_list *list,
+			   dma_addr_t dma_addr,
+			   void *write_dtd, int drop, int idx)
 {
 	struct vpdma_dtd *dtd = list->buf.addr;
 	dma_addr_t write_desc_addr;
@@ -597,7 +598,7 @@ void vpdma_update_dma_addr(struct vpdma_data *vpdma,
 
 	dump_dtd(dtd);
 }
-EXPORT_SYMBOL(vpdma_update_dma_addr);
+EXPORT_SYMBOL_GPL(vpdma_update_dma_addr);
 
 void vpdma_set_max_size(struct vpdma_data *vpdma, int reg_addr,
 			u32 width, u32 height)
