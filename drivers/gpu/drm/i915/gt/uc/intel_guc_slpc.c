@@ -495,10 +495,13 @@ int intel_guc_slpc_set_ignore_eff_freq(struct intel_guc_slpc *slpc, bool val)
 		slpc->ignore_eff_freq = val;
 
 		/* Set min to RPn when we disable efficient freq */
-		if (val)
+		if (val) {
 			ret = slpc_set_param(slpc,
 					     SLPC_PARAM_GLOBAL_MIN_GT_UNSLICE_FREQ_MHZ,
 					     slpc->min_freq);
+			if (!ret)
+				slpc->min_freq_softlimit = slpc->min_freq;
+		}
 	}
 
 	intel_runtime_pm_put(&i915->runtime_pm, wakeref);
