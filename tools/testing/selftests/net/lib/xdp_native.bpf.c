@@ -272,10 +272,11 @@ static __u16 csum_fold_helper(__u32 csum)
 static int xdp_adjst_tail_shrnk_data(struct xdp_md *ctx, __u16 offset,
 				     __u32 hdr_len)
 {
-	char tmp_buff[MAX_ADJST_OFFSET];
-	__u32 buff_pos, udp_csum = 0;
+	char tmp_buff[MAX_ADJST_OFFSET] = {0};
+	__u32 buff_len, udp_csum = 0;
 	struct udphdr *udph = NULL;
-	__u32 buff_len;
+	struct bpf_dynptr ptr;
+	void *data = NULL;
 
 	udph = update_pkt(ctx, 0 - offset, &udp_csum);
 	if (!udph)
@@ -285,18 +286,19 @@ static int xdp_adjst_tail_shrnk_data(struct xdp_md *ctx, __u16 offset,
 
 	offset = (offset & 0x1ff) >= MAX_ADJST_OFFSET ? MAX_ADJST_OFFSET :
 				     offset & 0xff;
-	if (offset == 0)
-		return -1;
 
 	/* Make sure we have enough data to avoid eating the header */
-	if (buff_len - offset < hdr_len)
+	if (buff_len - sizeof(tmp_buff) < hdr_len)
 		return -1;
 
-	buff_pos = buff_len - offset;
-	if (bpf_xdp_load_bytes(ctx, buff_pos, tmp_buff, offset) < 0)
+	bpf_dynptr_from_xdp(ctx, 0, &ptr);
+	data = bpf_dynptr_slice(&ptr, buff_len - sizeof(tmp_buff), tmp_buff,
+				sizeof(tmp_buff));
+	if (!data)
 		return -1;
 
-	udp_csum = bpf_csum_diff((__be32 *)tmp_buff, offset, 0, 0, udp_csum);
+	udp_csum = bpf_csum_diff(data, sizeof(tmp_buff), data,
+				 sizeof(tmp_buff) - offset, udp_csum);
 	udph->check = (__u16)csum_fold_helper(udp_csum);
 
 	if (bpf_xdp_adjust_tail(ctx, 0 - offset) < 0)
