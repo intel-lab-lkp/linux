@@ -26477,6 +26477,13 @@ L:	kvm@vger.kernel.org
 S:	Maintained
 F:	drivers/vfio/pci/hisilicon/
 
+VFIO ICE PCI DRIVER
+M:	Jacob Keller <jacob.e.keller@intel.com>
+L:	kvm@vger.kernel.org
+S:	Supported
+F:	drivers/vfio/pci/ice/
+F:	include/linux/net/intel/ice_migration.h
+
 VFIO MEDIATED DEVICE DRIVERS
 M:	Kirti Wankhede <kwankhede@nvidia.com>
 L:	kvm@vger.kernel.org

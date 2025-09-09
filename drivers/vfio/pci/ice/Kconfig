@@ -1,0 +1,8 @@
+# SPDX-License-Identifier: GPL-2.0-only
+config ICE_VFIO_PCI
+	tristate "VFIO support for Intel(R) Ethernet Connection E800 Series"
+	depends on ICE
+	select VFIO_PCI_CORE
+	help
+	  This provides migration support for Intel(R) Ethernet connection E800
+	  series devices using the VFIO framework.
