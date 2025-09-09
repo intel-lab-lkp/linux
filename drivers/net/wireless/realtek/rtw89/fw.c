@@ -109,9 +109,9 @@ int rtw89_fw_check_rdy(struct rtw89_dev *rtwdev, enum rtw89_fwdl_check_type type
 	u8 val;
 	int ret;
 
-	ret = read_poll_timeout_atomic(mac->fwdl_get_status, val,
-				       val == RTW89_FWDL_WCPU_FW_INIT_RDY,
-				       1, FWDL_WAIT_CNT, false, rtwdev, type);
+	ret = read_poll_timeout(mac->fwdl_get_status, val,
+				val == RTW89_FWDL_WCPU_FW_INIT_RDY,
+				1, FWDL_WAIT_CNT, false, rtwdev, type);
 	if (ret) {
 		switch (val) {
 		case RTW89_FWDL_CHECKSUM_FAIL:
