@@ -32,6 +32,22 @@ properties:
       Specifying the power good GPIOs.
     maxItems: 1
 
+  enable-gpios:
+    description:
+      If EN pin is not hardwired, specify it here to have it set up.
+    maxItems: 1
+
+  vcom-en-gpios:
+    description:
+      If VCOM_EN pin is not hardwired, specify it here to have it set up.
+    maxItems: 1
+
+  vin-supply:
+    description:
+      Supply for the chip. Some vendor kernels and devicetrees declare this
+      as a GPIO named "pwrall" which does not exist in the datasheet,
+      disabling it makes the chip disappear on the bus.
+
   regulators:
     type: object
 
