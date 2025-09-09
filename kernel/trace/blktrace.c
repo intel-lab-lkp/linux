@@ -91,6 +91,29 @@ static void record_blktrace_event(struct blk_io_trace *t, pid_t pid, int cpu,
 		memcpy((void *)t + sizeof(*t) + cgid_len, pdu_data, pdu_len);
 }
 
+static void record_blktrace_event2(struct blk_io_trace2 *t2, pid_t pid, int cpu,
+				   sector_t sector, int bytes, u64 what,
+				   dev_t dev, int error, u64 cgid,
+				   ssize_t cgid_len, void *pdu_data,
+				   int pdu_len)
+
+{
+	t2->pid = pid;
+	t2->cpu = cpu;
+
+	t2->sector = sector;
+	t2->bytes = bytes;
+	t2->action = what;
+	t2->device = dev;
+	t2->error = error;
+	t2->pdu_len = pdu_len + cgid_len;
+
+	if (cgid_len)
+		memcpy((void *)t2 + sizeof(*t2), &cgid, cgid_len);
+	if (pdu_len)
+		memcpy((void *)t2 + sizeof(*t2) + cgid_len, pdu_data, pdu_len);
+}
+
 static void relay_blktrace_event(struct blk_trace *bt, unsigned long sequence,
 				 pid_t pid, int cpu, sector_t sector, int bytes,
 				 u32 what, int error, u64 cgid,
@@ -109,6 +132,26 @@ static void relay_blktrace_event(struct blk_trace *bt, unsigned long sequence,
 
 	record_blktrace_event(t, pid, cpu, sector, bytes, what, bt->dev, error,
 			      cgid, cgid_len, pdu_data, pdu_len);
+}
+
+static void relay_blktrace_event2(struct blk_trace *bt, unsigned long sequence,
+				  pid_t pid, int cpu, sector_t sector,
+				  int bytes, u64 what, int error, u64 cgid,
+				  ssize_t cgid_len, void *pdu_data, int pdu_len)
+{
+	struct blk_io_trace2 *t;
+	size_t trace_len = sizeof(struct blk_io_trace2) + pdu_len + cgid_len;
+
+	t = relay_reserve(bt->rchan, trace_len);
+	if (!t)
+		return;
+
+	t->magic = BLK_IO_TRACE_MAGIC | BLK_IO_TRACE2_VERSION;
+	t->sequence = sequence;
+	t->time = ktime_to_ns(ktime_get());
+
+	record_blktrace_event2(t, pid, cpu, sector, bytes, what, bt->dev, error,
+			       cgid, cgid_len, pdu_data, pdu_len);
 }
 
 /*
@@ -146,8 +189,12 @@ static void trace_note(struct blk_trace *bt, pid_t pid, int action,
 	if (!bt->rchan)
 		return;
 
-	relay_blktrace_event(bt, 0, pid, cpu, 0, 0, action, 0, cgid,
-			     cgid_len, (void *)data, len);
+	if (bt->version == 1)
+		relay_blktrace_event(bt, 0, pid, cpu, 0, 0, action, 0, cgid,
+				     cgid_len, (void *)data, len);
+	else
+		relay_blktrace_event2(bt, 0, pid, cpu, 0, 0, action, 0, cgid,
+				      cgid_len, (void *)data, len);
 }
 
 /*
@@ -320,9 +367,14 @@ static void __blk_add_trace(struct blk_trace *bt, sector_t sector, int bytes,
 	local_irq_save(flags);
 	sequence = per_cpu_ptr(bt->sequence, cpu);
 	(*sequence)++;
-	relay_blktrace_event(bt, *sequence, pid, cpu, sector, bytes,
-			     lower_32_bits(what), error, cgid, cgid_len,
-			     pdu_data, pdu_len);
+	if (bt->version == 1)
+		relay_blktrace_event(bt, *sequence, pid, cpu, sector, bytes,
+				     lower_32_bits(what), error, cgid,
+				     cgid_len, pdu_data, pdu_len);
+	else
+		relay_blktrace_event2(bt, *sequence, pid, cpu, sector, bytes,
+				      what, error, cgid, cgid_len, pdu_data,
+				      pdu_len);
 	local_irq_restore(flags);
 }
 
