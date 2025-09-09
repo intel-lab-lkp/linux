@@ -13,6 +13,7 @@
 #include <linux/module.h>
 #include <linux/of.h>
 #include <linux/platform_device.h>
+#include <linux/pm_opp.h>
 #include <linux/pm_runtime.h>
 #include <linux/soc/qcom/geni-se.h>
 #include <linux/spinlock.h>
@@ -779,11 +780,13 @@ err_tx:
 
 static int geni_i2c_probe(struct platform_device *pdev)
 {
-	struct geni_i2c_dev *gi2c;
-	u32 proto, tx_depth, fifo_disable;
-	int ret;
-	struct device *dev = &pdev->dev;
 	const struct geni_i2c_desc *desc = NULL;
+	u32 proto, tx_depth, fifo_disable;
+	struct device *dev = &pdev->dev;
+	unsigned long freq = ULONG_MAX;
+	struct geni_i2c_dev *gi2c;
+	struct dev_pm_opp *opp;
+	int ret;
 
 	gi2c = devm_kzalloc(dev, sizeof(*gi2c), GFP_KERNEL);
 	if (!gi2c)
@@ -812,6 +815,24 @@ static int geni_i2c_probe(struct platform_device *pdev)
 	if (ret) {
 		dev_info(dev, "Bus frequency not specified, default to 100kHz.\n");
 		gi2c->clk_freq_out = I2C_MAX_STANDARD_MODE_FREQ;
+	}
+
+	ret = devm_pm_opp_set_clkname(dev, "se");
+	if (ret)
+		return ret;
+
+	/* OPP table is optional */
+	ret = devm_pm_opp_of_add_table(dev);
+	if (!ret) {
+		opp = dev_pm_opp_find_freq_floor(dev, &freq);
+		if (IS_ERR(opp))
+			return dev_err_probe(dev, PTR_ERR(opp), "failed to find the frequency\n");
+		dev_pm_opp_put(opp);
+		ret = dev_pm_opp_set_rate(dev, freq);
+		if (ret)
+			return dev_err_probe(dev, ret, "failed to set the rate=%lu\n", freq);
+	} else if (ret && ret != -ENODEV) {
+		return dev_err_probe(dev, ret, "invalid OPP table in device tree\n");
 	}
 
 	if (has_acpi_companion(dev))
