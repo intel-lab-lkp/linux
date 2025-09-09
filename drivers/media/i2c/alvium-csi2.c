@@ -443,10 +443,8 @@ static int alvium_is_alive(struct alvium_dev *alvium)
 
 	alvium_read(alvium, REG_BCRM_MINOR_VERSION_R, &bcrm, &ret);
 	alvium_read(alvium, REG_BCRM_HEARTBEAT_RW, &hbeat, &ret);
-	if (ret)
-		return ret;
 
-	return hbeat;
+	return ret;
 }
 
 static void alvium_print_avail_mipi_fmt(struct alvium_dev *alvium)
@@ -2364,8 +2362,25 @@ error_out:
 	return -EINVAL;
 }
 
+static int alvium_check(struct alvium_dev *alvium, u64 *bcrm_major)
+{
+	struct device *dev = &alvium->i2c_client->dev;
+	int ret = 0;
+
+	ret = alvium_read(alvium, REG_BCRM_MAJOR_VERSION_R, bcrm_major, NULL);
+
+	if (ret)
+		return ret;
+
+	if (*bcrm_major != 0)
+		return 0;
+
+	return -ENODEV;
+}
+
 static int alvium_set_power(struct alvium_dev *alvium, bool on)
 {
+	u64 bcrm_major = 0;
 	int ret;
 
 	if (!on)
@@ -2375,9 +2390,12 @@ static int alvium_set_power(struct alvium_dev *alvium, bool on)
 	if (ret)
 		return ret;
 
-	/* alvium boot time 7s */
-	msleep(7000);
-	return 0;
+	/* alvium boot time is up to 7.5s but test if its available already */
+	read_poll_timeout(alvium_check, bcrm_major, (bcrm_major == 0),
+		250000, 7500000, false,
+		alvium, &bcrm_major);
+
+	return ret;
 }
 
 static int alvium_runtime_resume(struct device *dev)
@@ -2442,7 +2460,7 @@ static int alvium_probe(struct i2c_client *client)
 	if (ret)
 		goto err_powerdown;
 
-	if (!alvium_is_alive(alvium)) {
+	if (alvium_is_alive(alvium)) {
 		ret = -ENODEV;
 		dev_err_probe(dev, ret, "Device detection failed\n");
 		goto err_powerdown;
