@@ -120,7 +120,9 @@ static int gc_thread_func(void *data)
 
 		if (f2fs_sb_has_blkzoned(sbi)) {
 			if (has_enough_free_blocks(sbi,
-				gc_th->no_zoned_gc_percent)) {
+				gc_th->no_zoned_gc_percent) ||
+				!has_enough_dirty_blocks(sbi,
+				LIMIT_GC_DIRTY_SECTION_NUM)) {
 				wait_ms = gc_th->no_gc_sleep_time;
 				f2fs_up_write(&sbi->gc_lock);
 				goto next;
@@ -1750,7 +1752,9 @@ static int do_garbage_collect(struct f2fs_sb_info *sbi,
 
 			if (f2fs_sb_has_blkzoned(sbi) &&
 					!has_enough_free_blocks(sbi,
-					sbi->gc_thread->boost_zoned_gc_percent))
+					sbi->gc_thread->boost_zoned_gc_percent) &&
+					has_enough_dirty_blocks(sbi,
+					LIMIT_GC_DIRTY_SECTION_NUM))
 				window_granularity *=
 					sbi->gc_thread->boost_gc_multiple;
 

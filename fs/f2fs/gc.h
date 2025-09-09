@@ -36,6 +36,7 @@
 #define DEF_MIGRATION_WINDOW_GRANULARITY_ZONED	3
 #define BOOST_GC_MULTIPLE	5
 #define ZONED_PIN_SEC_REQUIRED_COUNT	1
+#define LIMIT_GC_DIRTY_SECTION_NUM	3
 
 #define DEF_GC_FAILED_PINNED_FILES	2048
 #define MAX_GC_FAILED_PINNED_FILES	USHRT_MAX
@@ -177,6 +178,12 @@ static inline bool has_enough_free_blocks(struct f2fs_sb_info *sbi,
 	return free_sections(sbi) > ((sbi->total_sections * limit_perc) / 100);
 }
 
+static inline bool has_enough_dirty_blocks(struct f2fs_sb_info *sbi,
+						unsigned int limit_num)
+{
+	return dirty_segments(sbi) > limit_num * SEGS_PER_SEC(sbi);
+}
+
 static inline bool has_enough_invalid_blocks(struct f2fs_sb_info *sbi)
 {
 	block_t user_block_count = sbi->user_block_count;
@@ -197,6 +204,7 @@ static inline bool need_to_boost_gc(struct f2fs_sb_info *sbi)
 {
 	if (f2fs_sb_has_blkzoned(sbi))
 		return !has_enough_free_blocks(sbi,
-				sbi->gc_thread->boost_zoned_gc_percent);
+				sbi->gc_thread->boost_zoned_gc_percent) &&
+				has_enough_dirty_blocks(sbi, LIMIT_GC_DIRTY_SECTION_NUM);
 	return has_enough_invalid_blocks(sbi);
 }
