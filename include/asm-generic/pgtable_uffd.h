@@ -61,6 +61,18 @@ static inline pmd_t pmd_swp_clear_uffd_wp(pmd_t pmd)
 {
 	return pmd;
 }
+#define pte_uffd_wp_available()	(false)
+#else
+/*
+ * Some platforms can customize the PTE uffd_wp bit and make it unavailable
+ * even if the architecture allows providing the PTE resource.
+ * It allows architectures to define their APIs to check if the PTE
+ * uffd_wp bit is available on the specific devices.
+ */
+#ifndef pte_uffd_wp_available
+#define pte_uffd_wp_available()	(true)
+#endif
+
 #endif /* CONFIG_HAVE_ARCH_USERFAULTFD_WP */
 
 #endif /* _ASM_GENERIC_PGTABLE_UFFD_H */
