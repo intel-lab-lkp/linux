@@ -733,8 +733,6 @@ static void *arm_trbe_alloc_buffer(struct coresight_device *csdev,
 				   struct perf_event *event, void **pages,
 				   int nr_pages, bool snapshot)
 {
-	struct trbe_buf *buf;
-	struct page **pglist;
 	int i;
 
 	/*
@@ -746,32 +744,29 @@ static void *arm_trbe_alloc_buffer(struct coresight_device *csdev,
 	if (nr_pages < 2)
 		return NULL;
 
-	buf = kzalloc_node(sizeof(*buf), GFP_KERNEL, trbe_alloc_node(event));
+	struct trbe_buf *buf __free(kfree) = kzalloc_node(sizeof(*buf),
+							  GFP_KERNEL,
+							  trbe_alloc_node(event));
 	if (!buf)
 		return NULL;
 
-	pglist = kcalloc(nr_pages, sizeof(*pglist), GFP_KERNEL);
-	if (!pglist) {
-		kfree(buf);
+	struct page **pglist __free(kfree) = kcalloc(nr_pages, sizeof(*pglist), GFP_KERNEL);
+	if (!pglist)
 		return NULL;
-	}
 
 	for (i = 0; i < nr_pages; i++)
 		pglist[i] = virt_to_page(pages[i]);
 
 	buf->trbe_base = (unsigned long)vmap(pglist, nr_pages, VM_MAP, PAGE_KERNEL);
-	if (!buf->trbe_base) {
-		kfree(pglist);
-		kfree(buf);
+	if (!buf->trbe_base)
 		return NULL;
-	}
+
 	buf->trbe_limit = buf->trbe_base + nr_pages * PAGE_SIZE;
 	buf->trbe_write = buf->trbe_base;
 	buf->snapshot = snapshot;
 	buf->nr_pages = nr_pages;
 	buf->pages = pages;
-	kfree(pglist);
-	return buf;
+	return_ptr(buf);
 }
 
 static void arm_trbe_free_buffer(void *config)
