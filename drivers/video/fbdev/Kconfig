@@ -1772,14 +1772,6 @@ config FB_BROADSHEET
 	  and could also have been called by other names when coupled with
 	  a bridge adapter.
 
-config FB_HYPERV
-	tristate "Microsoft Hyper-V Synthetic Video support"
-	depends on FB && HYPERV
-	select DMA_CMA if HAVE_DMA_CONTIGUOUS && CMA
-	select FB_IOMEM_HELPERS_DEFERRED
-	help
-	  This framebuffer driver supports Microsoft Hyper-V Synthetic Video.
-
 config FB_SIMPLE
 	tristate "Simple framebuffer support"
 	depends on FB
