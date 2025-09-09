@@ -595,12 +595,27 @@ out:
 		integrity_audit_msg(audit_msgno, inode, filename,
 				    op, cause, rc, 0);
 	} else if (status != INTEGRITY_PASS) {
-		/* Fix mode, but don't replace file signatures. */
-		if ((ima_appraise & IMA_APPRAISE_FIX) && !try_modsig &&
-		    (!xattr_value ||
-		     xattr_value->type != EVM_IMA_XATTR_DIGSIG)) {
-			if (!ima_fix_xattr(dentry, iint))
-				status = INTEGRITY_PASS;
+		/*
+		 * Fix mode, but don't replace file signatures.
+		 *
+		 * When EVM fix mode is also enabled, security.evm will be
+		 * fixed automatically when security.ima is set because of
+		 * security_inode_post_setxattr->evm_update_evmxattr.
+		 */
+		if ((ima_appraise & IMA_APPRAISE_FIX) && !try_modsig) {
+			if (!xattr_value ||
+			    xattr_value->type != EVM_IMA_XATTR_DIGSIG) {
+				if (ima_fix_xattr(dentry, iint))
+					status = INTEGRITY_PASS;
+			} else if (xattr_value->type == EVM_IMA_XATTR_DIGSIG &&
+				   evm_revalidate_status(XATTR_NAME_IMA)) {
+				if (!__vfs_setxattr_noperm(&nop_mnt_idmap,
+							   dentry,
+							   XATTR_NAME_IMA,
+							   xattr_value,
+							   xattr_len, 0))
+					status = INTEGRITY_PASS;
+			}
 		}
 
 		/*
