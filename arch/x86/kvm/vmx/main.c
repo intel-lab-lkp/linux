@@ -465,6 +465,14 @@ static void vt_set_dr7(struct kvm_vcpu *vcpu, unsigned long val)
 	vmx_set_dr7(vcpu, val);
 }
 
+static void vt_set_pending_dbg(struct kvm_vcpu *vcpu)
+{
+	if (is_td_vcpu(vcpu))
+		return;
+
+	vmx_set_pending_dbg(vcpu);
+}
+
 static void vt_sync_dirty_debug_regs(struct kvm_vcpu *vcpu)
 {
 	/*
@@ -906,6 +914,7 @@ struct kvm_x86_ops vt_x86_ops __initdata = {
 	.get_gdt = vt_op(get_gdt),
 	.set_gdt = vt_op(set_gdt),
 	.set_dr7 = vt_op(set_dr7),
+	.set_pending_dbg = vt_op(set_pending_dbg),
 	.sync_dirty_debug_regs = vt_op(sync_dirty_debug_regs),
 	.cache_reg = vt_op(cache_reg),
 	.get_rflags = vt_op(get_rflags),
