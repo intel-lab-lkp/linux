@@ -25,17 +25,26 @@
 #include <asm/pgtable-hwdef.h>
 #include <asm/ptdump.h>
 
+#define CONSOLE ((struct seq_file *)-1)
 
-#define pt_dump_seq_printf(m, fmt, args...)	\
-({						\
-	if (m)					\
-		seq_printf(m, fmt, ##args);	\
+#define pt_dump_seq_printf(m, fmt, args...)		\
+({							\
+	if (m) {					\
+		if (m == CONSOLE)			\
+			pr_cont(fmt, ##args);		\
+		else					\
+			seq_printf(m, fmt, ##args);	\
+	}						\
 })
 
-#define pt_dump_seq_puts(m, fmt)	\
-({					\
-	if (m)				\
-		seq_printf(m, fmt);	\
+#define pt_dump_seq_puts(m, fmt)		\
+({						\
+	if (m)	{				\
+		if (m == CONSOLE)		\
+			pr_cont(fmt);		\
+		else				\
+			seq_printf(m, fmt);	\
+	}					\
 })
 
 static const struct ptdump_prot_bits pte_bits[] = {
