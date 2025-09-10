@@ -1026,11 +1026,15 @@ static int acpi_battery_update(struct acpi_battery *battery, bool resume)
 		return result;
 	acpi_battery_quirks(battery);
 
+	mutex_lock(&battery->sysfs_lock);
 	if (!battery->bat) {
 		result = sysfs_add_battery(battery);
-		if (result)
+		if (result) {
+			mutex_unlock(&battery->sysfs_lock);
 			return result;
+		}
 	}
+	mutex_unlock(&battery->sysfs_lock);
 
 	/*
 	 * Wakeup the system if battery is critical low
