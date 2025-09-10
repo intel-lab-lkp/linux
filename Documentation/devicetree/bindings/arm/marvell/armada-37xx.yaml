@@ -17,6 +17,7 @@ properties:
       - description: Armada 3720 SoC boards
         items:
           - enum:
+              - cznic,ripe-atlas
               - cznic,turris-mox
               - glinet,gl-mv1000
               - globalscale,espressobin
