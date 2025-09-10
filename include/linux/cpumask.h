@@ -407,6 +407,28 @@ unsigned int cpumask_random(const struct cpumask *src)
 	for_each_and_bit(cpu, cpumask_bits(mask1), cpumask_bits(mask2), small_cpumask_bits)
 
 /**
+ * for_each_cpu_and_andnot_from - iterate over every cpu in all masks
+ * @cpu: the (optionally unsigned) integer iterator
+ * @mask1: the first cpumask pointer
+ * @mask2: the second cpumask pointer
+ * @mask3: the third cpumask pointer
+ *
+ * This saves a temporary CPU mask in many places.  It is equivalent to:
+ *	struct cpumask tmp;
+ *	cpumask_and(&tmp, &mask1, &mask2);
+ *	cpumask_andnot(&tmp, &tmp, &mask3);
+ *	for_each_cpu_from(cpu, &tmp)
+ *		...
+ *
+ * After the loop, cpu is >= nr_cpu_ids.
+ */
+#define for_each_cpu_and_andnot_from(cpu, mask1, mask2, mask3)				\
+	for_each_and_andnot_bit_from(cpu, cpumask_bits(mask1),				\
+					  cpumask_bits(mask2),				\
+					  cpumask_bits(mask3),				\
+					  small_cpumask_bits)
+
+/**
  * for_each_cpu_andnot - iterate over every cpu present in one mask, excluding
  *			 those present in another.
  * @cpu: the (optionally unsigned) integer iterator
