@@ -1695,6 +1695,10 @@ static int a6xx_gmu_acd_probe(struct a6xx_gmu *gmu)
 		u32 val;
 
 		freq = gmu->gpu_freqs[i];
+		/*
+		 * This is not expected to fail because we are passing back a
+		 * frequency which was retrieved just a bit earlier
+		 */
 		opp = dev_pm_opp_find_freq_exact(&gpu->pdev->dev, freq, true);
 		np = dev_pm_opp_get_of_node(opp);
 
