@@ -330,25 +330,45 @@ static inline int may_decode_fh(struct handle_to_path_ctx *ctx,
 	return 0;
 }
 
-static int handle_to_path(int mountdirfd, struct file_handle __user *ufh,
-		   struct path *path, unsigned int o_flags)
+struct file_handle *get_user_handle(struct file_handle __user *ufh)
 {
-	int retval = 0;
 	struct file_handle f_handle;
-	struct file_handle *handle __free(kfree) = NULL;
-	struct handle_to_path_ctx ctx = {};
-	const struct export_operations *eops;
+	struct file_handle *handle;
 
 	if (copy_from_user(&f_handle, ufh, sizeof(struct file_handle)))
-		return -EFAULT;
+		return ERR_PTR(-EFAULT);
 
 	if ((f_handle.handle_bytes > MAX_HANDLE_SZ) ||
 	    (f_handle.handle_bytes == 0))
-		return -EINVAL;
+		return ERR_PTR(-EINVAL);
 
 	if (f_handle.handle_type < 0 ||
 	    FILEID_USER_FLAGS(f_handle.handle_type) & ~FILEID_VALID_USER_FLAGS)
-		return -EINVAL;
+		return ERR_PTR(-EINVAL);
+
+	handle = kmalloc(struct_size(handle, f_handle, f_handle.handle_bytes),
+			 GFP_KERNEL);
+	if (!handle) {
+		return ERR_PTR(-ENOMEM);
+	}
+
+	/* copy the full handle */
+	*handle = f_handle;
+	if (copy_from_user(&handle->f_handle,
+			   &ufh->f_handle,
+			   f_handle.handle_bytes)) {
+		return ERR_PTR(-EFAULT);
+	}
+
+	return handle;
+}
+
+int handle_to_path(int mountdirfd, struct file_handle *handle,
+		   struct path *path, unsigned int o_flags)
+{
+	int retval = 0;
+	struct handle_to_path_ctx ctx = {};
+	const struct export_operations *eops;
 
 	retval = get_path_anchor(mountdirfd, &ctx.root);
 	if (retval)
@@ -362,31 +382,16 @@ static int handle_to_path(int mountdirfd, struct file_handle __user *ufh,
 	if (retval)
 		goto out_path;
 
-	handle = kmalloc(struct_size(handle, f_handle, f_handle.handle_bytes),
-			 GFP_KERNEL);
-	if (!handle) {
-		retval = -ENOMEM;
-		goto out_path;
-	}
-	/* copy the full handle */
-	*handle = f_handle;
-	if (copy_from_user(&handle->f_handle,
-			   &ufh->f_handle,
-			   f_handle.handle_bytes)) {
-		retval = -EFAULT;
-		goto out_path;
-	}
-
 	/*
 	 * If handle was encoded with AT_HANDLE_CONNECTABLE, verify that we
 	 * are decoding an fd with connected path, which is accessible from
 	 * the mount fd path.
 	 */
-	if (f_handle.handle_type & FILEID_IS_CONNECTABLE) {
+	if (handle->handle_type & FILEID_IS_CONNECTABLE) {
 		ctx.fh_flags |= EXPORT_FH_CONNECTABLE;
 		ctx.flags |= HANDLE_CHECK_SUBTREE;
 	}
-	if (f_handle.handle_type & FILEID_IS_DIR)
+	if (handle->handle_type & FILEID_IS_DIR)
 		ctx.fh_flags |= EXPORT_FH_DIR_ONLY;
 	/* Filesystem code should not be exposed to user flags */
 	handle->handle_type &= ~FILEID_USER_FLAGS_MASK;
@@ -400,12 +405,17 @@ out_path:
 static long do_handle_open(int mountdirfd, struct file_handle __user *ufh,
 			   int open_flag)
 {
+	struct file_handle *handle __free(kfree) = NULL;
 	long retval = 0;
 	struct path path __free(path_put) = {};
 	struct file *file;
 	const struct export_operations *eops;
 
-	retval = handle_to_path(mountdirfd, ufh, &path, open_flag);
+	handle = get_user_handle(ufh);
+	if (IS_ERR(handle))
+		return PTR_ERR(handle);
+
+	retval = handle_to_path(mountdirfd, handle, &path, open_flag);
 	if (retval)
 		return retval;
 

@@ -363,4 +363,7 @@ void pidfs_get_root(struct path *path);
 long do_sys_name_to_handle_at(int dfd, const char __user *name,
 			      struct file_handle __user *handle,
 			      void __user *mnt_id, int flag, int lookup_flags);
+struct file_handle *get_user_handle(struct file_handle __user *ufh);
+int handle_to_path(int mountdirfd, struct file_handle *handle,
+		   struct path *path, unsigned int o_flags);
 #endif /* CONFIG_FHANDLE */
