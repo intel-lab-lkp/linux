@@ -1295,6 +1295,10 @@
 			Enable debug messages in early_ioremap support. This
 			is useful for tracking down temporary early mappings
 			which are not unmapped.
+	early_ptdump[=on]
+			Enable kernel page table dump during boot in current
+			ptdump format. This helps analyze early boot mapping
+			kernel regions.
 
 	earlycon=	[KNL,EARLY] Output early console device and options.
 

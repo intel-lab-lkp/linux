@@ -361,6 +361,7 @@ void __init __no_sanitize_address setup_arch(char **cmdline_p)
 	init_bootcpu_ops();
 	smp_init_cpus();
 	smp_build_mpidr_hash();
+	arm64_kernel_pgtable_dump();
 
 #ifdef CONFIG_ARM64_SW_TTBR0_PAN
 	/*

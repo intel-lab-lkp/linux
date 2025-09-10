@@ -407,6 +407,22 @@ void __init ptdump_init(void)
 	ptdump_initialize();
 }
 
+static bool early_ptdump __initdata;
+
+static int __init parse_early_ptdump(char *arg)
+{
+	if (strcmp(arg, "on") == 0)
+		early_ptdump = true;
+	return 0;
+}
+early_param("early_ptdump", parse_early_ptdump);
+
+void __init arm64_kernel_pgtable_dump(void)
+{
+	if (early_ptdump)
+		ptdump_walk(CONSOLE, &kernel_ptdump_info);
+}
+
 static int __init ptdump_debugfs_init(void)
 {
 	ptdump_debugfs_register(&kernel_ptdump_info, "kernel_page_tables");
