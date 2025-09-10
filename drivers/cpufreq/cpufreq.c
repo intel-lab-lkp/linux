@@ -551,8 +551,13 @@ unsigned int cpufreq_policy_transition_delay_us(struct cpufreq_policy *policy)
 
 	latency = policy->cpuinfo.transition_latency / NSEC_PER_USEC;
 	if (latency)
-		/* Give a 50% breathing room between updates */
-		return latency + (latency >> 1);
+		/*
+		 * Give a 50% breathing room between updates.
+		 * And cap the transition delay to 10 ms for platforms
+		 * where the latency is too high to be reasonable for
+		 * reevaluating frequency.
+		 */
+		return min(latency + (latency >> 1), 10 * MSEC_PER_SEC);
 
 	return USEC_PER_MSEC;
 }
