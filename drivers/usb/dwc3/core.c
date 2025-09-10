@@ -2687,6 +2687,9 @@ int dwc3_pm_resume(struct dwc3 *dwc)
 	struct device *dev = dwc->dev;
 	int		ret = 0;
 
+	if (pm_runtime_suspended(dev))
+		return ret;
+
 	pinctrl_pm_select_default_state(dev);
 
 	pm_runtime_disable(dev);
