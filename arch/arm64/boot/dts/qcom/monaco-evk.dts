@@ -38,7 +38,7 @@
 	};
 
 	sound {
-		compatible = "qcom,qcs8275-sndcard";
+		compatible = "qcom,qcs8300-sndcard";
 		model = "MONACO-EVK";
 
 		pinctrl-0 = <&hs0_mi2s_active>, <&mi2s1_active>;
