@@ -3528,11 +3528,11 @@ static int __init rcu_torture_fwd_prog_init(void)
 	if (fwd_progress_div <= 0)
 		fwd_progress_div = 4;
 	rfp = kcalloc(fwd_progress, sizeof(*rfp), GFP_KERNEL);
+	if (!rfp)
+		return -ENOMEM;
 	fwd_prog_tasks = kcalloc(fwd_progress, sizeof(*fwd_prog_tasks), GFP_KERNEL);
-	if (!rfp || !fwd_prog_tasks) {
+	if (!fwd_prog_tasks) {
 		kfree(rfp);
-		kfree(fwd_prog_tasks);
-		fwd_prog_tasks = NULL;
 		fwd_progress = 0;
 		return -ENOMEM;
 	}
