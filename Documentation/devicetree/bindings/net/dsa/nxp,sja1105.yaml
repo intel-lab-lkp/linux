@@ -32,6 +32,11 @@ properties:
   reg:
     maxItems: 1
 
+  reset-gpios:
+    description:
+      GPIO to be used to reset the whole device
+    maxItems: 1
+
   spi-cpha: true
   spi-cpol: true
 
