@@ -1019,6 +1019,11 @@ enum acpi_backlight_type __acpi_video_get_backlight_type(bool native, bool *auto
 	if (acpi_backlight_dmi != acpi_backlight_undef)
 		return acpi_backlight_dmi;
 
+	/* Use ACPI video if available, except when native should be preferred. */
+	if ((video_caps & ACPI_VIDEO_BACKLIGHT) &&
+	     !(native_available && prefer_native_over_acpi_video()))
+		return acpi_backlight_video;
+
 	if (auto_detect)
 		*auto_detect = true;
 
@@ -1031,11 +1036,6 @@ enum acpi_backlight_type __acpi_video_get_backlight_type(bool native, bool *auto
 
 	if (dell_uart_present)
 		return acpi_backlight_dell_uart;
-
-	/* Use ACPI video if available, except when native should be preferred. */
-	if ((video_caps & ACPI_VIDEO_BACKLIGHT) &&
-	     !(native_available && prefer_native_over_acpi_video()))
-		return acpi_backlight_video;
 
 	/* Use native if available */
 	if (native_available)
