@@ -23,6 +23,59 @@ use core::{
 };
 use kernel::prelude::*;
 
+/// IRQ type flags for PCI interrupt allocation.
+#[derive(Debug, Clone, Copy)]
+pub enum IrqType {
+    /// Legacy INTx interrupts
+    Legacy,
+    /// Message Signaled Interrupts (MSI)
+    Msi,
+    /// Extended Message Signaled Interrupts (MSI-X)
+    MsiX,
+}
+
+impl IrqType {
+    /// Convert to the corresponding kernel flags
+    const fn to_flags(self) -> u32 {
+        match self {
+            IrqType::Legacy => bindings::PCI_IRQ_INTX,
+            IrqType::Msi => bindings::PCI_IRQ_MSI,
+            IrqType::MsiX => bindings::PCI_IRQ_MSIX,
+        }
+    }
+}
+
+/// Set of IRQ types that can be used for PCI interrupt allocation.
+#[derive(Debug, Clone, Copy, Default)]
+pub struct IrqTypes(u32);
+
+impl IrqTypes {
+    /// Create a set containing all IRQ types (MSI-X, MSI, and Legacy)
+    pub const fn all() -> Self {
+        Self(bindings::PCI_IRQ_ALL_TYPES)
+    }
+
+    /// Add a single IRQ type to the set
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// // Create a set with only MSI and MSI-X (no legacy interrupts)
+    /// let msi_only = IrqTypes::default()
+    ///     .with(IrqType::Msi)
+    ///     .with(IrqType::MsiX);
+    /// ```
+    pub const fn with(mut self, irq_type: IrqType) -> Self {
+        self.0 |= irq_type.to_flags();
+        self
+    }
+
+    /// Get the raw flags value
+    const fn raw(self) -> u32 {
+        self.0
+    }
+}
+
 /// An adapter for the registration of PCI drivers.
 pub struct Adapter<T: Driver>(T);
 
@@ -413,6 +466,16 @@ impl Device {
 }
 
 impl Device<device::Bound> {
+    /// Free all allocated IRQ vectors for this device.
+    ///
+    /// This should be called to release interrupt resources when they are no longer needed,
+    /// during driver unbind or removal.
+    pub fn free_irq_vectors(&self) {
+        // SAFETY: `self.as_raw` is guaranteed to be a pointer to a valid `struct pci_dev`.
+        // `pci_free_irq_vectors` is safe to call even if no vectors are currently allocated.
+        unsafe { bindings::pci_free_irq_vectors(self.as_raw()) };
+    }
+
     /// Mapps an entire PCI-BAR after performing a region-request on it. I/O operation bound checks
     /// can be performed on compile time for offsets (plus the requested type size) < SIZE.
     pub fn iomap_region_sized<'a, const SIZE: usize>(
@@ -444,6 +507,74 @@ impl Device<device::Core> {
     pub fn set_master(&self) {
         // SAFETY: `self.as_raw` is guaranteed to be a pointer to a valid `struct pci_dev`.
         unsafe { bindings::pci_set_master(self.as_raw()) };
+    }
+
+    /// Allocate IRQ vectors for this PCI device.
+    ///
+    /// Allocates between `min_vecs` and `max_vecs` interrupt vectors for the device.
+    /// The allocation will use MSI-X, MSI, or legacy interrupts based on the `irq_types`
+    /// parameter and hardware capabilities. When multiple types are specified, the kernel
+    /// will try them in order of preference: MSI-X first, then MSI, then legacy interrupts.
+    /// This is called during driver probe.
+    ///
+    /// # Arguments
+    ///
+    /// * `min_vecs` - Minimum number of vectors required
+    /// * `max_vecs` - Maximum number of vectors to allocate
+    /// * `irq_types` - Types of interrupts that can be used
+    ///
+    /// # Returns
+    ///
+    /// Returns the number of vectors successfully allocated, or an error if the allocation
+    /// fails or cannot meet the minimum requirement.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// // Allocate using any available interrupt type in the order mentioned above.
+    /// let nvecs = dev.alloc_irq_vectors(1, 32, IrqTypes::all())?;
+    ///
+    /// // Allocate MSI or MSI-X only (no legacy interrupts)
+    /// let msi_only = IrqTypes::default()
+    ///     .with(IrqType::Msi)
+    ///     .with(IrqType::MsiX);
+    /// let nvecs = dev.alloc_irq_vectors(4, 16, msi_only)?;
+    /// ```
+    pub fn alloc_irq_vectors(
+        &self,
+        min_vecs: u32,
+        max_vecs: u32,
+        irq_types: IrqTypes,
+    ) -> Result<u32> {
+        // SAFETY: `self.as_raw` is guaranteed to be a pointer to a valid `struct pci_dev`.
+        // `pci_alloc_irq_vectors` internally validates all parameters and returns error codes.
+        let ret = unsafe {
+            bindings::pci_alloc_irq_vectors(self.as_raw(), min_vecs, max_vecs, irq_types.raw())
+        };
+
+        to_result(ret)?;
+        Ok(ret as u32)
+    }
+
+    /// Get the Linux IRQ number for a specific vector.
+    ///
+    /// This is called during driver probe after successful IRQ allocation
+    /// to obtain the IRQ numbers for registering interrupt handlers.
+    ///
+    /// # Arguments
+    ///
+    /// * `vector` - The vector index (0-based)
+    ///
+    /// # Returns
+    ///
+    /// Returns the Linux IRQ number for the specified vector, or an error if the vector
+    /// index is invalid or no vectors are allocated.
+    pub fn irq_vector(&self, vector: u32) -> Result<u32> {
+        // SAFETY: `self.as_raw` is guaranteed to be a pointer to a valid `struct pci_dev`.
+        let irq = unsafe { bindings::pci_irq_vector(self.as_raw(), vector) };
+
+        to_result(irq)?;
+        Ok(irq as u32)
     }
 }
 
