@@ -60,6 +60,8 @@
 #define SPRN_HSRR0	0x13A	/* Hypervisor Save/Restore 0 */
 #define SPRN_HSRR1	0x13B	/* Hypervisor Save/Restore 1 */
 
+#define MSR_SF_LG	63              /* Enable 64 bit mode */
+
 #define MSR_LE		0x0000000000000001
 
 #define FIXUP_ENDIAN						   \
@@ -88,10 +90,6 @@
 #define LOAD_REG_ADDR(reg,name)			\
 	addis	reg,r2,name@toc@ha;		\
 	addi	reg,reg,name@toc@l
-#else
-#define LOAD_REG_ADDR(reg,name)			\
-	lis	reg,name@ha;			\
-	addi	reg,reg,name@l
 #endif
 
 #endif /* _PPC64_PPC_ASM_H */
