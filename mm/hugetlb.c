@@ -3690,6 +3690,9 @@ static void __init report_hugepages(void)
 	for_each_hstate(h) {
 		char buf[32];
 
+		if (!h->max_huge_pages)
+			continue;
+
 		nrinvalid = hstate_boot_nrinvalid[hstate_index(h)];
 		h->max_huge_pages -= nrinvalid;
 
