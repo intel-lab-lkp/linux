@@ -93,8 +93,7 @@ impl<T: ForeignOwnable> MapleTree<T> {
     /// # Errors
     ///
     /// If the maple tree already contains a range using the given index, then this call will
-    /// return an [`InsertError`] with the [`Occupied`] kind. It may also fail if memory
-    /// allocation fails.
+    /// return an [`InsertErrorKind::Occupied`]. It may also fail if memory allocation fails.
     ///
     /// # Examples
     ///
@@ -132,8 +131,8 @@ impl<T: ForeignOwnable> MapleTree<T> {
     /// # Errors
     ///
     /// If the maple tree already contains an overlapping range, then this call will return an
-    /// [`InsertError`] with the [`Occupied`] kind. It may also fail if memory allocation fails
-    /// or if the requested range is invalid (e.g. empty).
+    /// [`InsertErrorKind::Occupied`]. It may also fail if memory allocation fails or if the
+    /// requested range is invalid (e.g. empty).
     ///
     /// # Examples
     ///
