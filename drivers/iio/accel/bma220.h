@@ -12,6 +12,7 @@
 #include <linux/regmap.h>
 
 extern const struct regmap_config bma220_spi_regmap_config;
+extern const struct regmap_config bma220_i2c_regmap_config;
 extern const struct dev_pm_ops bma220_pm_ops;
 
 int bma220_common_probe(struct device *dev, struct regmap *regmap, int irq);
