@@ -2994,6 +2994,35 @@ struct task_struct *cgroup_procs_write_start(char *buf, bool threadgroup,
 	if (kstrtoint(strstrip(buf), 0, &pid) || pid < 0)
 		return ERR_PTR(-EINVAL);
 
+retry_find_task:
+	rcu_read_lock();
+	if (pid) {
+		tsk = find_task_by_vpid(pid);
+		if (!tsk) {
+			tsk = ERR_PTR(-ESRCH);
+			goto out_unlock_rcu;
+		}
+	} else {
+		tsk = current;
+	}
+
+	if (threadgroup)
+		tsk = tsk->group_leader;
+
+	/*
+	 * kthreads may acquire PF_NO_SETAFFINITY during initialization.
+	 * If userland migrates such a kthread to a non-root cgroup, it can
+	 * become trapped in a cpuset, or RT kthread may be born in a
+	 * cgroup with no rt_runtime allocated.  Just say no.
+	 */
+	if (tsk->no_cgroup_migration || (tsk->flags & PF_NO_SETAFFINITY)) {
+		tsk = ERR_PTR(-EINVAL);
+		goto out_unlock_rcu;
+	}
+
+	get_task_struct(tsk);
+	rcu_read_unlock();
+
 	/*
 	 * If we migrate a single thread, we don't care about threadgroup
 	 * stability. If the thread is `current`, it won't exit(2) under our
@@ -3011,37 +3040,23 @@ struct task_struct *cgroup_procs_write_start(char *buf, bool threadgroup,
 
 	cgroup_attach_lock(*lock_mode);
 
-	rcu_read_lock();
-	if (pid) {
-		tsk = find_task_by_vpid(pid);
-		if (!tsk) {
-			tsk = ERR_PTR(-ESRCH);
-			goto out_unlock_threadgroup;
+	if (threadgroup) {
+		if (!thread_group_leader(tsk)) {
+			/*
+			 * a race with de_thread from another thread's exec()
+			 * may strip us of our leadership, if this happens,
+			 * there is no choice but to throw this task away and
+			 * try again; this is
+			 * "double-double-toil-and-trouble-check locking".
+			 */
+			cgroup_attach_unlock(*lock_mode);
+			put_task_struct(tsk);
+			goto retry_find_task;
 		}
-	} else {
-		tsk = current;
 	}
 
-	if (threadgroup)
-		tsk = tsk->group_leader;
+	return tsk;
 
-	/*
-	 * kthreads may acquire PF_NO_SETAFFINITY during initialization.
-	 * If userland migrates such a kthread to a non-root cgroup, it can
-	 * become trapped in a cpuset, or RT kthread may be born in a
-	 * cgroup with no rt_runtime allocated.  Just say no.
-	 */
-	if (tsk->no_cgroup_migration || (tsk->flags & PF_NO_SETAFFINITY)) {
-		tsk = ERR_PTR(-EINVAL);
-		goto out_unlock_threadgroup;
-	}
-
-	get_task_struct(tsk);
-	goto out_unlock_rcu;
-
-out_unlock_threadgroup:
-	cgroup_attach_unlock(*lock_mode);
-	*lock_mode = CGRP_ATTACH_LOCK_NONE;
 out_unlock_rcu:
 	rcu_read_unlock();
 	return tsk;
