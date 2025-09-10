@@ -2881,7 +2881,8 @@ static sector_t raid1_sync_request(struct mddev *mddev, sector_t sector_nr,
 		    test_bit(Faulty, &rdev->flags)) {
 			if (i < conf->raid_disks)
 				still_degraded = true;
-		} else if (!test_bit(In_sync, &rdev->flags)) {
+		} else if (!test_bit(In_sync, &rdev->flags) &&
+			   rdev->recovery_offset <= sector_nr) {
 			bio->bi_opf = REQ_OP_WRITE;
 			bio->bi_end_io = end_sync_write;
 			write_targets ++;
@@ -2890,6 +2891,9 @@ static sector_t raid1_sync_request(struct mddev *mddev, sector_t sector_nr,
 			sector_t first_bad = MaxSector;
 			sector_t bad_sectors;
 
+			if (!test_bit(In_sync, &rdev->flags))
+				good_sectors = min(rdev->recovery_offset - sector_nr,
+						   (u64)good_sectors);
 			if (is_badblock(rdev, sector_nr, good_sectors,
 					&first_bad, &bad_sectors)) {
 				if (first_bad > sector_nr)
