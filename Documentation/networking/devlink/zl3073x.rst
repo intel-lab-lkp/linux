@@ -20,6 +20,10 @@ Parameters
      - driverinit
      - Set the clock ID that is used by the driver for registering DPLL devices
        and pins.
+   * - ``phase_offset_avg_factor``
+     - runtime
+     - Set the factor for the exponential moving average used by DPLL phase
+       measurement block. The value has to be in range <0, 15>.
 
 Info versions
 =============

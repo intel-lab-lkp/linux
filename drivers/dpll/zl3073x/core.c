@@ -915,7 +915,8 @@ zl3073x_dev_phase_meas_setup(struct zl3073x_dev *zldev, int num_channels)
 
 	/* Setup phase measurement averaging factor */
 	dpll_meas_ctrl &= ~ZL_DPLL_MEAS_CTRL_AVG_FACTOR;
-	dpll_meas_ctrl |= FIELD_PREP(ZL_DPLL_MEAS_CTRL_AVG_FACTOR, 3);
+	dpll_meas_ctrl |= FIELD_PREP(ZL_DPLL_MEAS_CTRL_AVG_FACTOR,
+				     zldev->phase_avg_factor);
 
 	/* Enable DPLL measurement block */
 	dpll_meas_ctrl |= ZL_DPLL_MEAS_CTRL_EN;
@@ -990,6 +991,9 @@ int zl3073x_dev_probe(struct zl3073x_dev *zldev,
 	 * using devlink.
 	 */
 	zldev->clock_id = get_random_u64();
+
+	/* Default phase offset averaging factor */
+	zldev->phase_avg_factor = 3;
 
 	/* Initialize mutex for operations where multiple reads, writes
 	 * and/or polls are required to be done atomically.

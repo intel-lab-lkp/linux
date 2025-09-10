@@ -195,10 +195,77 @@ zl3073x_devlink_param_clock_id_validate(struct devlink *devlink, u32 id,
 	return 0;
 }
 
+static int
+zl3073x_devlink_param_phase_avg_factor_get(struct devlink *devlink, u32 id,
+					   struct devlink_param_gset_ctx *ctx)
+{
+	struct zl3073x_dev *zldev = devlink_priv(devlink);
+
+	/* Convert the value to actual factor value */
+	if (zldev->phase_avg_factor > 0)
+		ctx->val.vu8 = zldev->phase_avg_factor - 1;
+	else
+		ctx->val.vu8 = 15;
+
+	return 0;
+}
+
+static int
+zl3073x_devlink_param_phase_avg_factor_set(struct devlink *devlink, u32 id,
+					   struct devlink_param_gset_ctx *ctx,
+					   struct netlink_ext_ack *extack)
+{
+	struct zl3073x_dev *zldev = devlink_priv(devlink);
+	u8 avg_factor, dpll_meas_ctrl;
+	int rc;
+
+	/* Read DPLL phase measurement control register */
+	rc = zl3073x_read_u8(zldev, ZL_REG_DPLL_MEAS_CTRL, &dpll_meas_ctrl);
+	if (rc)
+		return rc;
+
+	/* Convert requested factor to register value */
+	if (ctx->val.vu8 < 15)
+		avg_factor = ctx->val.vu8 + 1;
+	else
+		avg_factor = 0;
+
+	/* Update phase measurement control register */
+	dpll_meas_ctrl &= ~ZL_DPLL_MEAS_CTRL_AVG_FACTOR;
+	dpll_meas_ctrl |= FIELD_PREP(ZL_DPLL_MEAS_CTRL_AVG_FACTOR, avg_factor);
+	rc = zl3073x_write_u8(zldev, ZL_REG_DPLL_MEAS_CTRL, dpll_meas_ctrl);
+	if (rc)
+		return rc;
+
+	/* Save the new factor */
+	zldev->phase_avg_factor = avg_factor;
+
+	return 0;
+}
+
+static int
+zl3073x_devlink_param_phase_avg_factor_validate(struct devlink *devlink, u32 id,
+						union devlink_param_value val,
+						struct netlink_ext_ack *extack)
+{
+	return (val.vu8 < 16) ? 0 : -EINVAL;
+}
+
+enum zl3073x_dl_param_id {
+	ZL3073X_DEVLINK_PARAM_ID_BASE = DEVLINK_PARAM_GENERIC_ID_MAX,
+	ZL3073X_DEVLINK_PARAM_ID_PHASE_OFFSET_AVG_FACTOR,
+};
+
 static const struct devlink_param zl3073x_devlink_params[] = {
 	DEVLINK_PARAM_GENERIC(CLOCK_ID, BIT(DEVLINK_PARAM_CMODE_DRIVERINIT),
 			      NULL, NULL,
 			      zl3073x_devlink_param_clock_id_validate),
+	DEVLINK_PARAM_DRIVER(ZL3073X_DEVLINK_PARAM_ID_PHASE_OFFSET_AVG_FACTOR,
+			     "phase_offset_avg_factor", DEVLINK_PARAM_TYPE_U8,
+			     BIT(DEVLINK_PARAM_CMODE_RUNTIME),
+			     zl3073x_devlink_param_phase_avg_factor_get,
+			     zl3073x_devlink_param_phase_avg_factor_set,
+			     zl3073x_devlink_param_phase_avg_factor_validate),
 };
 
 static void
