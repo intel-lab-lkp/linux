@@ -682,6 +682,7 @@ struct cfs_rq {
 	struct {
 		raw_spinlock_t	lock ____cacheline_aligned;
 		int		nr;
+		unsigned long	load_sum;
 		unsigned long	load_avg;
 		unsigned long	util_avg;
 		unsigned long	runnable_avg;
