@@ -3572,6 +3572,8 @@ static const nfsd4_enc_attr nfsd4_enc_fattr4_encode_ops[] = {
 
 	[FATTR4_MODE_UMASK]		= nfsd4_encode_fattr4__noop,
 	[FATTR4_XATTR_SUPPORT]		= nfsd4_encode_fattr4_xattr_support,
+	[FATTR4_TIME_DELEG_ACCESS]	= nfsd4_encode_fattr4__noop,
+	[FATTR4_TIME_DELEG_MODIFY]	= nfsd4_encode_fattr4__noop,
 	[FATTR4_OPEN_ARGUMENTS]		= nfsd4_encode_fattr4_open_arguments,
 };
 
