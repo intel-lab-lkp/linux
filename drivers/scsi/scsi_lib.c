@@ -396,7 +396,8 @@ void scsi_device_unbusy(struct scsi_device *sdev, struct scsi_cmnd *cmd)
 	if (starget->can_queue > 0)
 		atomic_dec(&starget->target_busy);
 
-	sbitmap_put(&sdev->budget_map, cmd->budget_token);
+	if (sdev->budget_map.map)
+		sbitmap_put(&sdev->budget_map, cmd->budget_token);
 	cmd->budget_token = -1;
 }
 
@@ -444,6 +445,47 @@ static void scsi_single_lun_run(struct scsi_device *current_sdev)
 					  scsi_kick_sdev_queue);
 	spin_unlock_irqrestore(shost->host_lock, flags);
 }
+
+struct sdev_in_flight_data {
+	const struct scsi_device *sdev;
+	int count;
+};
+
+static bool scsi_device_check_in_flight(struct request *rq, void *data)
+{
+	struct scsi_cmnd *cmd = blk_mq_rq_to_pdu(rq);
+	struct sdev_in_flight_data *sifd = data;
+
+	if (cmd->device == sifd->sdev)
+		sifd->count++;
+
+	return true;
+}
+
+/**
+ * scsi_device_busy() - Number of commands allocated for a SCSI device
+ * @sdev: SCSI device.
+ *
+ * Note: There is a subtle difference between this function and
+ * scsi_host_busy(). scsi_host_busy() counts the number of commands that have
+ * been started. This function counts the number of commands that have been
+ * allocated. At least the UFS driver depends on this function counting commands
+ * that have already been allocated but that have not yet been started.
+ */
+int scsi_device_busy(const struct scsi_device *sdev)
+{
+	struct sdev_in_flight_data sifd = { .sdev = sdev };
+	struct blk_mq_tag_set *set = &sdev->host->tag_set;
+
+	if (sdev->budget_map.map)
+		return sbitmap_weight(&sdev->budget_map);
+	if (WARN_ON_ONCE(!set->shared_tags))
+		return 0;
+	blk_mq_all_tag_iter(set->shared_tags, scsi_device_check_in_flight,
+			    &sifd);
+	return sifd.count;
+}
+EXPORT_SYMBOL(scsi_device_busy);
 
 static inline bool scsi_device_is_busy(struct scsi_device *sdev)
 {
@@ -1358,11 +1400,13 @@ scsi_device_state_check(struct scsi_device *sdev, struct request *req)
 static inline int scsi_dev_queue_ready(struct request_queue *q,
 				  struct scsi_device *sdev)
 {
-	int token;
+	int token = INT_MAX;
 
-	token = sbitmap_get(&sdev->budget_map);
-	if (token < 0)
-		return -1;
+	if (sdev->budget_map.map) {
+		token = sbitmap_get(&sdev->budget_map);
+		if (token < 0)
+			return -1;
+	}
 
 	if (!atomic_read(&sdev->device_blocked))
 		return token;
@@ -1373,7 +1417,8 @@ static inline int scsi_dev_queue_ready(struct request_queue *q,
 	 */
 	if (scsi_device_busy(sdev) > 1 ||
 	    atomic_dec_return(&sdev->device_blocked) > 0) {
-		sbitmap_put(&sdev->budget_map, token);
+		if (sdev->budget_map.map)
+			sbitmap_put(&sdev->budget_map, token);
 		return -1;
 	}
 
@@ -1749,7 +1794,8 @@ static void scsi_mq_put_budget(struct request_queue *q, int budget_token)
 {
 	struct scsi_device *sdev = q->queuedata;
 
-	sbitmap_put(&sdev->budget_map, budget_token);
+	if (sdev->budget_map.map)
+		sbitmap_put(&sdev->budget_map, budget_token);
 }
 
 /*
