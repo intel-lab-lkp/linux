@@ -366,5 +366,5 @@ long do_sys_name_to_handle_at(int dfd, const char __user *name,
 struct file_handle *get_user_handle(struct file_handle __user *ufh);
 int handle_to_path(int mountdirfd, struct file_handle *handle,
 		   struct path *path, unsigned int o_flags);
-struct file *do_filp_path_open(struct path *path, int open_flag);
+struct file *do_filp_path_open(struct path *path, struct open_flags *op);
 #endif /* CONFIG_FHANDLE */
