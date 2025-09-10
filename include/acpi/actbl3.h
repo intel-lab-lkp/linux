@@ -284,6 +284,9 @@ struct acpi_srat_gic_its_affinity {
  * 6: ACPI_SRAT_TYPE_GENERIC_PORT_AFFINITY
  */
 
+#define ACPI_SRAT_APCI_DEVICE_HANDLE	(0)
+#define ACPI_SRAT_PCI_DEVICE_HANDLE	(1)
+
 #define ACPI_SRAT_DEVICE_HANDLE_SIZE	16
 
 struct acpi_srat_generic_affinity {
