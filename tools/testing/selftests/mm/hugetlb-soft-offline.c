@@ -1,10 +1,15 @@
 // SPDX-License-Identifier: GPL-2.0
 /*
  * Test soft offline behavior for HugeTLB pages:
- * - if enable_soft_offline = 0, hugepages should stay intact and soft
- *   offlining failed with EOPNOTSUPP.
- * - if enable_soft_offline = 1, a hugepage should be dissolved and
- *   nr_hugepages/free_hugepages should be reduced by 1.
+ *
+ * - if enable_soft_offline = 0 (SOFT_OFFLINE_DISABLED), HugeTLB pages
+ *   should stay intact and soft offlining failed with EOPNOTSUPP.
+ *
+ * - if enable_soft_offline = 1 (SOFT_OFFLINE_ENABLED_SKIP_HUGETLB), HugeTLB pages
+ *   should stay intact and soft offlining failed with EOPNOTSUPP.
+ *
+ * - if enable_soft_offline = 2 (SOFT_OFFLINE_ENABLED), a HugeTLB page should be
+ *   dissolved and nr_hugepages/free_hugepages should be reduced by 1.
  *
  * Before running, make sure more than 2 hugepages of default_hugepagesz
  * are allocated. For example, if /proc/meminfo/Hugepagesize is 2048kB:
@@ -31,6 +36,12 @@
 #endif
 
 #define EPREFIX " !!! "
+
+enum soft_offline {
+	SOFT_OFFLINE_DISABLED = 0,
+	SOFT_OFFLINE_ENABLED_SKIP_HUGETLB,
+	SOFT_OFFLINE_ENABLED
+};
 
 static int do_soft_offline(int fd, size_t len, int expect_errno)
 {
@@ -83,7 +94,7 @@ static int set_enable_soft_offline(int value)
 	char cmd[256] = {0};
 	FILE *cmdfile = NULL;
 
-	if (value != 0 && value != 1)
+	if (value < SOFT_OFFLINE_DISABLED || value > SOFT_OFFLINE_ENABLED)
 		return -EINVAL;
 
 	sprintf(cmd, "echo %d > /proc/sys/vm/enable_soft_offline", value);
@@ -155,7 +166,7 @@ close:
 static void test_soft_offline_common(int enable_soft_offline)
 {
 	int fd;
-	int expect_errno = enable_soft_offline ? 0 : EOPNOTSUPP;
+	int expect_errno = (enable_soft_offline == SOFT_OFFLINE_ENABLED) ? 0 : EOPNOTSUPP;
 	struct statfs file_stat;
 	unsigned long hugepagesize_kb = 0;
 	unsigned long nr_hugepages_before = 0;
@@ -198,7 +209,7 @@ static void test_soft_offline_common(int enable_soft_offline)
 	// No need for the hugetlbfs file from now on.
 	close(fd);
 
-	if (enable_soft_offline) {
+	if (enable_soft_offline == SOFT_OFFLINE_ENABLED) {
 		if (nr_hugepages_before != nr_hugepages_after + 1) {
 			ksft_test_result_fail("MADV_SOFT_OFFLINE should reduced 1 hugepage\n");
 			return;
@@ -219,10 +230,11 @@ static void test_soft_offline_common(int enable_soft_offline)
 int main(int argc, char **argv)
 {
 	ksft_print_header();
-	ksft_set_plan(2);
+	ksft_set_plan(3);
 
-	test_soft_offline_common(1);
-	test_soft_offline_common(0);
+	test_soft_offline_common(SOFT_OFFLINE_ENABLED);
+	test_soft_offline_common(SOFT_OFFLINE_ENABLED_SKIP_HUGETLB);
+	test_soft_offline_common(SOFT_OFFLINE_DISABLED);
 
 	ksft_finished();
 }
