@@ -896,39 +896,45 @@ out:
 	bio_put(&chunk->bio);
 }
 
-static bool
-xfs_zone_gc_prepare_reset(
+static void
+xfs_zone_gc_reset_zone(
 	struct bio		*bio,
-	struct xfs_rtgroup	*rtg)
+	void			*private)
 {
-	trace_xfs_zone_reset(rtg);
+	struct xfs_rtgroup	*rtg = private;
 
 	ASSERT(rtg_rmap(rtg)->i_used_blocks == 0);
+
 	bio->bi_iter.bi_sector = xfs_gbno_to_daddr(&rtg->rtg_group, 0);
 	if (!bdev_zone_is_seq(bio->bi_bdev, bio->bi_iter.bi_sector)) {
-		if (!bdev_max_discard_sectors(bio->bi_bdev))
-			return false;
+		/*
+		 * Also use the bio to drive the state machine when neither
+		 * zone reset nor discard is supported to keep things simple.
+		 */
+		if (!bdev_max_discard_sectors(bio->bi_bdev)) {
+			bio_endio(bio);
+			return;
+		}
 		bio->bi_opf = REQ_OP_DISCARD | REQ_SYNC;
 		bio->bi_iter.bi_size =
 			XFS_FSB_TO_B(rtg_mount(rtg), rtg_blocks(rtg));
 	}
 
-	return true;
+	trace_xfs_zone_reset(rtg);
+	submit_bio(bio);
 }
 
 int
 xfs_zone_gc_reset_sync(
 	struct xfs_rtgroup	*rtg)
 {
-	int			error = 0;
+	int			error;
 	struct bio		bio;
 
 	bio_init(&bio, rtg_mount(rtg)->m_rtdev_targp->bt_bdev, NULL, 0,
 			REQ_OP_ZONE_RESET);
-	if (xfs_zone_gc_prepare_reset(&bio, rtg))
-		error = submit_bio_wait(&bio);
+	error = execute_bio_wait(&bio, rtg, xfs_zone_gc_reset_zone);
 	bio_uninit(&bio);
-
 	return error;
 }
 
@@ -963,15 +969,7 @@ xfs_zone_gc_reset_zones(
 		chunk->data = data;
 		WRITE_ONCE(chunk->state, XFS_GC_BIO_NEW);
 		list_add_tail(&chunk->entry, &data->resetting);
-
-		/*
-		 * Also use the bio to drive the state machine when neither
-		 * zone reset nor discard is supported to keep things simple.
-		 */
-		if (xfs_zone_gc_prepare_reset(bio, rtg))
-			submit_bio(bio);
-		else
-			bio_endio(bio);
+		xfs_zone_gc_reset_zone(bio, rtg);
 	} while (next);
 }
 
