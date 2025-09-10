@@ -1571,6 +1571,22 @@ unsigned long kvm_get_dr(struct kvm_vcpu *vcpu, int dr)
 }
 EXPORT_SYMBOL_GPL(kvm_get_dr);
 
+static unsigned long kvm_get_eff_dr(struct kvm_vcpu *vcpu, int dr)
+{
+	size_t size = ARRAY_SIZE(vcpu->arch.eff_db);
+
+	switch (dr) {
+	case 0 ... 3:
+		return vcpu->arch.eff_db[array_index_nospec(dr, size)];
+	case 4:
+	case 6:
+		return vcpu->arch.dr6;
+	case 5:
+	default: /* 7 */
+		return kvm_get_eff_dr7(vcpu);
+	}
+}
+
 int kvm_emulate_rdpmc(struct kvm_vcpu *vcpu)
 {
 	u32 pmc = kvm_rcx_read(vcpu);
@@ -8207,6 +8223,11 @@ static unsigned long emulator_get_dr(struct x86_emulate_ctxt *ctxt, int dr)
 	return kvm_get_dr(emul_to_vcpu(ctxt), dr);
 }
 
+static unsigned long emulator_get_eff_dr(struct x86_emulate_ctxt *ctxt, int dr)
+{
+	return kvm_get_eff_dr(emul_to_vcpu(ctxt), dr);
+}
+
 static int emulator_set_dr(struct x86_emulate_ctxt *ctxt, int dr,
 			   unsigned long value)
 {
@@ -8563,6 +8584,7 @@ static const struct x86_emulate_ops emulate_ops = {
 	.set_cr              = emulator_set_cr,
 	.cpl                 = emulator_get_cpl,
 	.get_dr              = emulator_get_dr,
+	.get_eff_dr          = emulator_get_eff_dr,
 	.set_dr              = emulator_set_dr,
 	.set_msr_with_filter = emulator_set_msr_with_filter,
 	.get_msr_with_filter = emulator_get_msr_with_filter,
@@ -8606,19 +8628,38 @@ static void toggle_interruptibility(struct kvm_vcpu *vcpu, u32 mask)
 	}
 }
 
-static void inject_emulated_exception(struct kvm_vcpu *vcpu)
+static int kvm_inject_emulated_db(struct kvm_vcpu *vcpu, unsigned long dr6)
 {
+	struct kvm_run *kvm_run = vcpu->run;
+
+	if (vcpu->guest_debug & KVM_GUESTDBG_USE_HW_BP) {
+		kvm_run->debug.arch.dr6 = dr6 | DR6_ACTIVE_LOW;
+		kvm_run->debug.arch.pc = kvm_get_linear_rip(vcpu);
+		kvm_run->debug.arch.exception = DB_VECTOR;
+		kvm_run->exit_reason = KVM_EXIT_DEBUG;
+		return 0;
+	}
+
+	kvm_queue_exception_p(vcpu, DB_VECTOR, dr6);
+	return 1;
+}
+
+static int inject_emulated_exception(struct kvm_vcpu *vcpu)
+{
+	int r = 1;
 	struct x86_emulate_ctxt *ctxt = vcpu->arch.emulate_ctxt;
 
 	if (ctxt->exception.vector == PF_VECTOR)
 		kvm_inject_emulated_page_fault(vcpu, &ctxt->exception);
 	else if (ctxt->exception.vector == DB_VECTOR)
-		kvm_queue_exception_p(vcpu, DB_VECTOR, ctxt->exception.dr6);
+		r = kvm_inject_emulated_db(vcpu, ctxt->exception.dr6);
 	else if (ctxt->exception.error_code_valid)
 		kvm_queue_exception_e(vcpu, ctxt->exception.vector,
 				      ctxt->exception.error_code);
 	else
 		kvm_queue_exception(vcpu, ctxt->exception.vector);
+
+	return r;
 }
 
 static struct x86_emulate_ctxt *alloc_emulate_ctxt(struct kvm_vcpu *vcpu)
@@ -9098,8 +9139,7 @@ int x86_emulate_instruction(struct kvm_vcpu *vcpu, gpa_t cr2_or_gpa,
 				 */
 				WARN_ON_ONCE(ctxt->exception.vector == UD_VECTOR ||
 					     exception_type(ctxt->exception.vector) == EXCPT_TRAP);
-				inject_emulated_exception(vcpu);
-				return 1;
+				return inject_emulated_exception(vcpu);
 			}
 			return handle_emulation_failure(vcpu, emulation_type);
 		}
@@ -9190,8 +9230,7 @@ restart:
 	if (ctxt->have_exception) {
 		WARN_ON_ONCE(vcpu->mmio_needed && !vcpu->mmio_is_write);
 		vcpu->mmio_needed = false;
-		r = 1;
-		inject_emulated_exception(vcpu);
+		r = inject_emulated_exception(vcpu);
 	} else if (vcpu->arch.pio.count) {
 		if (!vcpu->arch.pio.in) {
 			/* FIXME: return into emulator if single-stepping.  */
