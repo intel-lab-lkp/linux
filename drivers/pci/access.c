@@ -25,16 +25,16 @@ DEFINE_RAW_SPINLOCK(pci_lock);
 #define PCI_dword_BAD (pos & 3)
 
 #ifdef CONFIG_PCI_LOCKLESS_CONFIG
-# define pci_lock_config(f)	do { (void)(f); } while (0)
-# define pci_unlock_config(f)	do { (void)(f); } while (0)
+# define pci_lock_config(f) ((void)(f))
+# define pci_unlock_config(f) ((void)(f))
 #else
 # define pci_lock_config(f)	raw_spin_lock_irqsave(&pci_lock, f)
 # define pci_unlock_config(f)	raw_spin_unlock_irqrestore(&pci_lock, f)
 #endif
 
 #define PCI_OP_READ(size, type, len) \
-int noinline pci_bus_read_config_##size \
-	(struct pci_bus *bus, unsigned int devfn, int pos, type *value)	\
+noinline int pci_bus_read_config_##size \
+	(struct pci_bus *bus, unsigned int devfn, int pos, type * value)	\
 {									\
 	unsigned long flags;						\
 	u32 data = 0;							\
@@ -55,7 +55,7 @@ int noinline pci_bus_read_config_##size \
 }
 
 #define PCI_OP_WRITE(size, type, len) \
-int noinline pci_bus_write_config_##size \
+noinline int pci_bus_write_config_##size \
 	(struct pci_bus *bus, unsigned int devfn, int pos, type value)	\
 {									\
 	unsigned long flags;						\
@@ -72,17 +72,16 @@ int noinline pci_bus_write_config_##size \
 }
 
 PCI_OP_READ(byte, u8, 1)
-PCI_OP_READ(word, u16, 2)
-PCI_OP_READ(dword, u32, 4)
-PCI_OP_WRITE(byte, u8, 1)
-PCI_OP_WRITE(word, u16, 2)
-PCI_OP_WRITE(dword, u32, 4)
-
 EXPORT_SYMBOL(pci_bus_read_config_byte);
+PCI_OP_READ(word, u16, 2)
 EXPORT_SYMBOL(pci_bus_read_config_word);
+PCI_OP_READ(dword, u32, 4)
 EXPORT_SYMBOL(pci_bus_read_config_dword);
+PCI_OP_WRITE(byte, u8, 1)
 EXPORT_SYMBOL(pci_bus_write_config_byte);
+PCI_OP_WRITE(word, u16, 2)
 EXPORT_SYMBOL(pci_bus_write_config_word);
+PCI_OP_WRITE(dword, u32, 4)
 EXPORT_SYMBOL(pci_bus_write_config_dword);
 
 int pci_generic_config_read(struct pci_bus *bus, unsigned int devfn,
@@ -226,7 +225,7 @@ static noinline void pci_wait_cfg(struct pci_dev *dev)
 /* Returns 0 on success, negative values indicate error. */
 #define PCI_USER_READ_CONFIG(size, type)				\
 int pci_user_read_config_##size						\
-	(struct pci_dev *dev, int pos, type *val)			\
+	(struct pci_dev *dev, int pos, type * val)			\
 {									\
 	u32 data = -1;							\
 	int ret;							\
@@ -247,7 +246,7 @@ int pci_user_read_config_##size						\
 									\
 	return pcibios_err_to_errno(ret);				\
 }									\
-EXPORT_SYMBOL_GPL(pci_user_read_config_##size);
+EXPORT_SYMBOL_GPL(pci_user_read_config_##size)
 
 /* Returns 0 on success, negative values indicate error. */
 #define PCI_USER_WRITE_CONFIG(size, type)				\
@@ -268,7 +267,7 @@ int pci_user_write_config_##size					\
 									\
 	return pcibios_err_to_errno(ret);				\
 }									\
-EXPORT_SYMBOL_GPL(pci_user_write_config_##size);
+EXPORT_SYMBOL_GPL(pci_user_write_config_##size)
 
 PCI_USER_READ_CONFIG(byte, u8)
 PCI_USER_READ_CONFIG(word, u16)
