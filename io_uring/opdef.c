@@ -574,6 +574,14 @@ const struct io_issue_def io_issue_defs[] = {
 		.prep			= io_pipe_prep,
 		.issue			= io_pipe,
 	},
+	[IORING_OP_NAME_TO_HANDLE_AT] = {
+#if defined(CONFIG_FHANDLE)
+		.prep			= io_name_to_handle_at_prep,
+		.issue			= io_name_to_handle_at,
+#else
+		.prep			= io_eopnotsupp_prep,
+#endif
+	},
 };
 
 const struct io_cold_def io_cold_defs[] = {
@@ -823,6 +831,9 @@ const struct io_cold_def io_cold_defs[] = {
 	},
 	[IORING_OP_PIPE] = {
 		.name			= "PIPE",
+	},
+	[IORING_OP_NAME_TO_HANDLE_AT] = {
+		.name			= "NAME_TO_HANDLE_AT",
 	},
 };
 
