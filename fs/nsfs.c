@@ -13,6 +13,12 @@
 #include <linux/nsfs.h>
 #include <linux/uaccess.h>
 #include <linux/mnt_namespace.h>
+#include <linux/ipc_namespace.h>
+#include <linux/time_namespace.h>
+#include <linux/utsname.h>
+#include <linux/exportfs.h>
+#include <linux/nstree.h>
+#include <net/net_namespace.h>
 
 #include "mount.h"
 #include "internal.h"
@@ -417,12 +423,182 @@ static const struct stashed_operations nsfs_stashed_ops = {
 	.put_data = nsfs_put_data,
 };
 
+struct nsfs_fid {
+	u64 ns_id;
+	u32 ns_type;
+	u32 ns_inum;
+} __attribute__ ((packed));
+
+#define NSFS_FID_SIZE (sizeof(struct nsfs_fid) / sizeof(u32))
+
+static int nsfs_encode_fh(struct inode *inode, u32 *fh, int *max_len,
+			  struct inode *parent)
+{
+	struct nsfs_fid *fid = (struct nsfs_fid *)fh;
+	struct ns_common *ns = inode->i_private;
+	int len = *max_len;
+
+	/*
+	 * TODO:
+	 * For hierarchical namespaces we should start to encode the
+	 * parent namespace. Then userspace can walk a namespace
+	 * hierarchy purely based on file handles.
+	 */
+	if (parent)
+		return FILEID_INVALID;
+
+	if (len < NSFS_FID_SIZE) {
+		*max_len = NSFS_FID_SIZE;
+		return FILEID_INVALID;
+	}
+
+	len  = NSFS_FID_SIZE;
+
+	fid->ns_id = ns->ns_id;
+	fid->ns_type = ns->ops->type;
+	fid->ns_inum = inode->i_ino;
+	*max_len = len;
+	return FILEID_NSFS;
+}
+
+static struct dentry *nsfs_fh_to_dentry(struct super_block *sb, struct fid *fh,
+					int fh_len, int fh_type)
+{
+	struct path path __free(path_put) = {};
+	struct nsfs_fid *fid = (struct nsfs_fid *)fh;
+	struct user_namespace *owning_ns = NULL;
+	struct ns_common *ns;
+	int ret;
+
+	if (fh_len < NSFS_FID_SIZE)
+		return NULL;
+
+	switch (fh_type) {
+	case FILEID_NSFS:
+		break;
+	default:
+		return NULL;
+	}
+
+	scoped_guard(rcu) {
+		ns = ns_tree_lookup_rcu(fid->ns_id, fid->ns_type);
+		if (!ns)
+			return NULL;
+
+		VFS_WARN_ON_ONCE(ns->ns_id != fid->ns_id);
+		VFS_WARN_ON_ONCE(ns->ops->type != fid->ns_type);
+		VFS_WARN_ON_ONCE(ns->inum != fid->ns_inum);
+
+		if (!refcount_inc_not_zero(&ns->count))
+			return NULL;
+	}
+
+	switch (ns->ops->type) {
+#ifdef CONFIG_CGROUPS
+	case CLONE_NEWCGROUP:
+		if (!current_in_namespace(to_cg_ns(ns)))
+			owning_ns = to_cg_ns(ns)->user_ns;
+		break;
+#endif
+#ifdef CONFIG_IPC_NS
+	case CLONE_NEWIPC:
+		if (!current_in_namespace(to_ipc_ns(ns)))
+			owning_ns = to_ipc_ns(ns)->user_ns;
+		break;
+#endif
+	case CLONE_NEWNS:
+		if (!current_in_namespace(to_mnt_ns(ns)))
+			owning_ns = to_mnt_ns(ns)->user_ns;
+		break;
+#ifdef CONFIG_NET_NS
+	case CLONE_NEWNET:
+		if (!current_in_namespace(to_net_ns(ns)))
+			owning_ns = to_net_ns(ns)->user_ns;
+		break;
+#endif
+#ifdef CONFIG_PID_NS
+	case CLONE_NEWPID:
+		if (!current_in_namespace(to_pid_ns(ns))) {
+			owning_ns = to_pid_ns(ns)->user_ns;
+		} else if (!READ_ONCE(to_pid_ns(ns)->child_reaper)) {
+			ns->ops->put(ns);
+			return ERR_PTR(-EPERM);
+		}
+		break;
+#endif
+#ifdef CONFIG_TIME_NS
+	case CLONE_NEWTIME:
+		if (!current_in_namespace(to_time_ns(ns)))
+			owning_ns = to_time_ns(ns)->user_ns;
+		break;
+#endif
+#ifdef CONFIG_USER_NS
+	case CLONE_NEWUSER:
+		if (!current_in_namespace(to_user_ns(ns)))
+			owning_ns = to_user_ns(ns);
+		break;
+#endif
+#ifdef CONFIG_UTS_NS
+	case CLONE_NEWUTS:
+		if (!current_in_namespace(to_uts_ns(ns)))
+			owning_ns = to_uts_ns(ns)->user_ns;
+		break;
+#endif
+	default:
+		return ERR_PTR(-EOPNOTSUPP);
+	}
+
+	if (owning_ns && !ns_capable(owning_ns, CAP_SYS_ADMIN)) {
+		ns->ops->put(ns);
+		return ERR_PTR(-EPERM);
+	}
+
+	/* path_from_stashed() unconditionally consumes the reference. */
+	ret = path_from_stashed(&ns->stashed, nsfs_mnt, ns, &path);
+	if (ret)
+		return ERR_PTR(ret);
+
+	return no_free_ptr(path.dentry);
+}
+
+/*
+ * Make sure that we reject any nonsensical flags that users pass via
+ * open_by_handle_at().
+ */
+#define VALID_FILE_HANDLE_OPEN_FLAGS \
+	(O_RDONLY | O_WRONLY | O_RDWR | O_NONBLOCK | O_CLOEXEC | O_EXCL)
+
+static int nsfs_export_permission(struct handle_to_path_ctx *ctx,
+				   unsigned int oflags)
+{
+	if (oflags & ~(VALID_FILE_HANDLE_OPEN_FLAGS | O_LARGEFILE))
+		return -EINVAL;
+
+	/* nsfs_fh_to_dentry() is performs further permission checks. */
+	return 0;
+}
+
+static struct file *nsfs_export_open(struct path *path, unsigned int oflags)
+{
+	/* Clear O_LARGEFILE as open_by_handle_at() forces it. */
+	oflags &= ~O_LARGEFILE;
+	return file_open_root(path, "", oflags, 0);
+}
+
+static const struct export_operations nsfs_export_operations = {
+	.encode_fh	= nsfs_encode_fh,
+	.fh_to_dentry	= nsfs_fh_to_dentry,
+	.open		= nsfs_export_open,
+	.permission	= nsfs_export_permission,
+};
+
 static int nsfs_init_fs_context(struct fs_context *fc)
 {
 	struct pseudo_fs_context *ctx = init_pseudo(fc, NSFS_MAGIC);
 	if (!ctx)
 		return -ENOMEM;
 	ctx->ops = &nsfs_ops;
+	ctx->eops = &nsfs_export_operations;
 	ctx->dops = &ns_dentry_operations;
 	fc->s_fs_info = (void *)&nsfs_stashed_ops;
 	return 0;
