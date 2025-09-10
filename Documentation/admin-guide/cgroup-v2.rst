@@ -11,7 +11,7 @@ This is the authoritative documentation on the design, interface and
 conventions of cgroup v2.  It describes all userland-visible aspects
 of cgroup including core and specific controller behaviors.  All
 future changes must be reflected in this document.  Documentation for
-v1 is available under :ref:`Documentation/admin-guide/cgroup-v1/index.rst <cgroup-v1>`.
+v1 is available under Documentation/admin-guide/cgroup-v1/index.rst.
 
 .. CONTENTS
 
@@ -1081,7 +1081,7 @@ All cgroup core files are prefixed with "cgroup."
 	A read-write nested-keyed file.
 
 	Shows pressure stall information for IRQ/SOFTIRQ. See
-	:ref:`Documentation/accounting/psi.rst <psi>` for details.
+	Documentation/accounting/psi.rst for details.
 
 Controllers
 ===========
@@ -1132,7 +1132,7 @@ processes can be categorized as follows:
   without the ``cgroup_set_weight`` callback
 
 For details on when a process is under the fair-class scheduler or a BPF scheduler,
-check out :ref:`Documentation/scheduler/sched-ext.rst <sched-ext>`.
+check out Documentation/scheduler/sched-ext.rst.
 
 For each of the following interface files, the above categories
 will be referred to. All time durations are in microseconds.
@@ -1213,7 +1213,7 @@ will be referred to. All time durations are in microseconds.
 	A read-write nested-keyed file.
 
 	Shows pressure stall information for CPU. See
-	:ref:`Documentation/accounting/psi.rst <psi>` for details.
+	Documentation/accounting/psi.rst for details.
 
 	This file accounts for all the processes in the cgroup.
 
@@ -1903,7 +1903,7 @@ The following nested keys are defined.
 	A read-only nested-keyed file.
 
 	Shows pressure stall information for memory. See
-	:ref:`Documentation/accounting/psi.rst <psi>` for details.
+	Documentation/accounting/psi.rst for details.
 
 
 Usage Guidelines
@@ -2142,7 +2142,7 @@ IO Interface Files
 	A read-only nested-keyed file.
 
 	Shows pressure stall information for IO. See
-	:ref:`Documentation/accounting/psi.rst <psi>` for details.
+	Documentation/accounting/psi.rst for details.
 
 
 Writeback
