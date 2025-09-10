@@ -8612,6 +8612,8 @@ static void inject_emulated_exception(struct kvm_vcpu *vcpu)
 
 	if (ctxt->exception.vector == PF_VECTOR)
 		kvm_inject_emulated_page_fault(vcpu, &ctxt->exception);
+	else if (ctxt->exception.vector == DB_VECTOR)
+		kvm_queue_exception_p(vcpu, DB_VECTOR, ctxt->exception.dr6);
 	else if (ctxt->exception.error_code_valid)
 		kvm_queue_exception_e(vcpu, ctxt->exception.vector,
 				      ctxt->exception.error_code);
@@ -8656,6 +8658,7 @@ static void init_emulate_ctxt(struct kvm_vcpu *vcpu)
 	ctxt->interruptibility = 0;
 	ctxt->have_exception = false;
 	ctxt->exception.vector = -1;
+	ctxt->exception.payload = 0;
 	ctxt->perm_ok = false;
 
 	init_decode_cache(ctxt);
