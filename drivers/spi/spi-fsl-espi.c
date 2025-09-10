@@ -379,9 +379,8 @@ static int fsl_espi_bufs(struct spi_device *spi, struct spi_transfer *t)
 	fsl_espi_write_reg(espi, ESPI_SPIM, mask);
 
 	/* Prevent filling the fifo from getting interrupted */
-	spin_lock_irq(&espi->lock);
-	fsl_espi_fill_tx_fifo(espi, 0);
-	spin_unlock_irq(&espi->lock);
+	scoped_guard (spinlock_irq, &espi->lock)
+		fsl_espi_fill_tx_fifo(espi, 0);
 
 	/* Won't hang up forever, SPI bus sometimes got lost interrupts... */
 	ret = wait_for_completion_timeout(&espi->done, 2 * HZ);
@@ -558,15 +557,13 @@ static irqreturn_t fsl_espi_irq(s32 irq, void *context_data)
 	struct fsl_espi *espi = context_data;
 	u32 events, mask;
 
-	spin_lock(&espi->lock);
+	guard(spinlock)(&espi->lock);
 
 	/* Get interrupt events(tx/rx) */
 	events = fsl_espi_read_reg(espi, ESPI_SPIE);
 	mask = fsl_espi_read_reg(espi, ESPI_SPIM);
-	if (!(events & mask)) {
-		spin_unlock(&espi->lock);
+	if (!(events & mask))
 		return IRQ_NONE;
-	}
 
 	dev_vdbg(espi->dev, "%s: events %x\n", __func__, events);
 
@@ -574,8 +571,6 @@ static irqreturn_t fsl_espi_irq(s32 irq, void *context_data)
 
 	/* Clear the events */
 	fsl_espi_write_reg(espi, ESPI_SPIE, events);
-
-	spin_unlock(&espi->lock);
 
 	return IRQ_HANDLED;
 }
