@@ -391,7 +391,7 @@ int exportfs_encode_inode_fh(struct inode *inode, struct fid *fid,
 	else
 		type = nop->encode_fh(inode, fid->raw, max_len, parent);
 
-	if (type > 0 && FILEID_USER_FLAGS(type)) {
+	if (type > 0 && (type & ~FILEID_HANDLE_TYPE_MASK)) {
 		pr_warn_once("%s: unexpected fh type value 0x%x from fstype %s.\n",
 			     __func__, type, inode->i_sb->s_type->name);
 		return -EINVAL;

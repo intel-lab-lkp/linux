@@ -342,7 +342,7 @@ struct file_handle *get_user_handle(struct file_handle __user *ufh)
 	    (f_handle.handle_bytes == 0))
 		return ERR_PTR(-EINVAL);
 
-	if (f_handle.handle_type < 0 ||
+	if (f_handle.handle_type < 0 || FILEID_FS_FLAGS(f_handle.handle_type) ||
 	    FILEID_USER_FLAGS(f_handle.handle_type) & ~FILEID_VALID_USER_FLAGS)
 		return ERR_PTR(-EINVAL);
 

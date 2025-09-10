@@ -173,10 +173,33 @@ struct handle_to_path_ctx {
 #define EXPORT_FH_DIR_ONLY	0x4 /* Only decode file handle for a directory */
 
 /*
- * Filesystems use only lower 8 bits of file_handle type for fid_type.
- * name_to_handle_at() uses upper 16 bits of type as user flags to be
- * interpreted by open_by_handle_at().
+ * The 32 bits of the handle_type field of struct file_handle are used for a few
+ * different purposes:
+ *
+ *   Filesystems use only lower 8 bits of file_handle type for fid_type.
+ *
+ *   VFS uses bits 8..15 of the handle_type to pass flags to the FS
+ *   implementation of fh_to_{dentry,parent}().
+ *
+ *   name_to_handle_at() uses upper 16 bits of type as user flags to be
+ *   interpreted by open_by_handle_at().
+ *
+ *  +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+ *  |           user flags          |   VFS flags   |   fid_type    |
+ *  +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+ *  (MSB)                                                       (LSB)
+ *
+ * Filesystems are expected not to fill in any bits outside of fid_type in
+ * their encode_fh() implementation.
  */
+#define FILEID_HANDLE_TYPE_MASK	0xff
+#define FILEID_TYPE(type)	((type) & FILEID_HANDLE_TYPE_MASK)
+
+/* VFS flags: */
+#define FILEID_FS_FLAGS_MASK	0xff00
+#define FILEID_FS_FLAGS(flags)	((flags) & FILEID_FS_FLAGS_MASK)
+
+/* User flags: */
 #define FILEID_USER_FLAGS_MASK	0xffff0000
 #define FILEID_USER_FLAGS(type) ((type) & FILEID_USER_FLAGS_MASK)
 
