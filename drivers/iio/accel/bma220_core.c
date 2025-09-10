@@ -11,6 +11,7 @@
 #include <linux/module.h>
 #include <linux/mutex.h>
 #include <linux/pm.h>
+#include <linux/regulator/consumer.h>
 #include <linux/types.h>
 #include <linux/spi/spi.h>
 
@@ -205,6 +206,13 @@ static const struct iio_info bma220_info = {
 static int bma220_init(struct spi_device *spi)
 {
 	int ret;
+	static const char * const regulator_names[] = { "vddd", "vddio", "vdda" };
+
+	ret = devm_regulator_bulk_get_enable(&spi->dev,
+					     ARRAY_SIZE(regulator_names),
+					     regulator_names);
+	if (ret)
+		return dev_err_probe(&spi->dev, ret, "Failed to get regulators\n");
 
 	ret = bma220_read_reg(spi, BMA220_REG_ID);
 	if (ret != BMA220_CHIP_ID)
