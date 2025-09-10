@@ -367,6 +367,15 @@ int hv_call_deposit_pages(int node, u64 partition_id, u32 num_pages);
 int hv_call_add_logical_proc(int node, u32 lp_index, u32 acpi_id);
 int hv_call_create_vp(int node, u64 partition_id, u32 vp_index, u32 flags);
 
+#if CONFIG_CRASH_DUMP
+void hv_root_crash_init(void);
+void hv_crash_asm32(void);
+void hv_crash_asm64_lbl(void);
+void hv_crash_asm_end(void);
+#else   /* CONFIG_CRASH_DUMP */
+static inline void hv_root_crash_init(void) {}
+#endif  /* CONFIG_CRASH_DUMP */
+
 #else /* CONFIG_MSHV_ROOT */
 static inline bool hv_root_partition(void) { return false; }
 static inline bool hv_l1vh_partition(void) { return false; }
