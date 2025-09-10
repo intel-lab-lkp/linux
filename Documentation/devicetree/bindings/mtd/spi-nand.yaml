@@ -21,6 +21,10 @@ properties:
     description: Encode the chip-select line on the SPI bus
     maxItems: 1
 
+  enable-randomizer-otp:
+    description: Enable the randomizer feature
+    type: boolean
+
 required:
   - compatible
   - reg
