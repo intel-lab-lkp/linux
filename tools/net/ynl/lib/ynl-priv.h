@@ -107,6 +107,8 @@ struct nlmsghdr *
 ynl_gemsg_start_dump(struct ynl_sock *ys, __u32 id, __u8 cmd, __u8 version);
 
 int ynl_attr_validate(struct ynl_parse_arg *yarg, const struct nlattr *attr);
+int ynl_attr_validate_payload(struct ynl_parse_arg *yarg,
+			      const struct nlattr *attr, unsigned int type);
 int ynl_submsg_failed(struct ynl_parse_arg *yarg, const char *field_name,
 		      const char *sel_name);
 
