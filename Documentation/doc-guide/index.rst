@@ -9,6 +9,7 @@ How to write kernel documentation
 
    sphinx
    kernel-doc
+   code-specifications
    parse-headers
    contributing
    maintainer-profile
