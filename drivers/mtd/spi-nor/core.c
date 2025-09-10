@@ -2749,6 +2749,10 @@ static int spi_nor_setup(struct spi_nor *nor,
 		}
 	}
 
+	/* Some SPI controllers might not support CR read opcode. */
+	if (spi_nor_read_cr(nor, nor->bouncebuf) == -EOPNOTSUPP)
+		nor->flags |= SNOR_F_NO_READ_CR;
+
 	/* Select the (Fast) Read command. */
 	err = spi_nor_select_read(nor, shared_mask);
 	if (err) {
