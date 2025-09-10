@@ -19,6 +19,8 @@ void *kmalloc(size_t size, gfp_t gfp)
 		return NULL;
 
 	ret = malloc(size);
+	if (!ret)
+		return NULL;
 	uatomic_inc(&kmalloc_nr_allocated);
 	if (kmalloc_verbose)
 		printf("Allocating %p from malloc\n", ret);
@@ -45,6 +47,8 @@ void *kmalloc_array(size_t n, size_t size, gfp_t gfp)
 		return NULL;
 
 	ret = calloc(n, size);
+	if (!ret)
+		return NULL;
 	uatomic_inc(&kmalloc_nr_allocated);
 	if (kmalloc_verbose)
 		printf("Allocating %p from calloc\n", ret);
