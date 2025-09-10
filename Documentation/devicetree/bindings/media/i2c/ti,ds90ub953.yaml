@@ -26,6 +26,16 @@ properties:
 
   gpio-controller: true
 
+  ti,gpio-data:
+    $ref: /schemas/types.yaml#/definitions/uint8
+    default: 0
+    minimum: 0
+    maximum: 15
+    description: |
+      Program each gpio pin to output remote data coming from compatible
+      deserializer using the LOCAL_GPIO_DATA[7:4] register. This property
+      has to be a '/bits/ 8' value.
+
   clocks:
     maxItems: 1
     description:
