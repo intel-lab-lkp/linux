@@ -43,6 +43,7 @@
 #include <asm/cpu_ops.h>
 #include <asm/kasan.h>
 #include <asm/numa.h>
+#include <asm/ptdump.h>
 #include <asm/rsi.h>
 #include <asm/scs.h>
 #include <asm/sections.h>
@@ -332,6 +333,7 @@ void __init __no_sanitize_address setup_arch(char **cmdline_p)
 	arm64_memblock_init();
 
 	paging_init();
+	ptdump_init();
 
 	acpi_table_upgrade();
 

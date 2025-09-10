@@ -38,14 +38,14 @@ static struct ptdump_info efi_ptdump_info = {
 	.base_addr	= 0,
 };
 
-static int __init ptdump_init(void)
+static int __init ptdump_debugfs_init(void)
 {
 	if (efi_enabled(EFI_RUNTIME_SERVICES))
 		ptdump_debugfs_register(&efi_ptdump_info, "efi_page_tables");
 
 	return 0;
 }
-device_initcall(ptdump_init);
+device_initcall(ptdump_debugfs_init);
 
 #endif
 

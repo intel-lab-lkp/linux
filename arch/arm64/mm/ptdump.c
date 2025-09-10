@@ -367,7 +367,7 @@ bool ptdump_check_wx(void)
 	}
 }
 
-static int __init ptdump_init(void)
+void __init ptdump_init(void)
 {
 	u64 page_offset = _PAGE_OFFSET(vabits_actual);
 	u64 vmemmap_start = (u64)virt_to_page((void *)page_offset);
@@ -396,7 +396,11 @@ static int __init ptdump_init(void)
 	kernel_ptdump_info.base_addr = page_offset;
 
 	ptdump_initialize();
+}
+
+static int __init ptdump_debugfs_init(void)
+{
 	ptdump_debugfs_register(&kernel_ptdump_info, "kernel_page_tables");
 	return 0;
 }
-device_initcall(ptdump_init);
+device_initcall(ptdump_debugfs_init);
