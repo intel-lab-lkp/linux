@@ -15,11 +15,31 @@
 
 #define IRQ_VECTOR 0xAA
 
+#define  CAST_TO_RIP(v)  ((unsigned long long)&(v))
+
 /* For testing data access debug BP */
 uint32_t guest_value;
 
 extern unsigned char sw_bp, hw_bp, write_data, ss_start, bd_start;
-extern unsigned char fep_bd_start;
+extern unsigned char fep_bd_start, fep_sti_start, fep_sti_end;
+
+static void guest_db_handler(struct ex_regs *regs)
+{
+	static int count;
+	unsigned long target_rips[2] = {
+		CAST_TO_RIP(fep_sti_start),
+		CAST_TO_RIP(fep_sti_end),
+	};
+
+	__GUEST_ASSERT(regs->rip == target_rips[count], "STI: unexpected rip 0x%lx (should be 0x%lx)",
+		       regs->rip, target_rips[count]);
+	regs->rflags &= ~X86_EFLAGS_TF;
+	count++;
+}
+
+static void guest_irq_handler(struct ex_regs *regs)
+{
+}
 
 static void guest_code(void)
 {
@@ -69,12 +89,24 @@ static void guest_code(void)
 	if (is_forced_emulation_enabled) {
 		/* DR6.BD test for emulation */
 		asm volatile(KVM_FEP "fep_bd_start: mov %%dr0, %%rax" : : : "rax");
+
+		/* pending debug exceptions for emulation */
+		asm volatile("pushf\n\t"
+			     "orq $" __stringify(X86_EFLAGS_TF) ", (%rsp)\n\t"
+			     "popf\n\t"
+			     "sti\n\t"
+			     "fep_sti_start:"
+			     "cli\n\t"
+			     "pushf\n\t"
+			     "orq $" __stringify(X86_EFLAGS_TF) ", (%rsp)\n\t"
+			     "popf\n\t"
+			     KVM_FEP "sti\n\t"
+			     "fep_sti_end:"
+			     "cli\n\t");
 	}
 
 	GUEST_DONE();
 }
-
-#define  CAST_TO_RIP(v)  ((unsigned long long)&(v))
 
 static void vcpu_skip_insn(struct kvm_vcpu *vcpu, int insn_len)
 {
@@ -109,6 +141,9 @@ int main(void)
 
 	vm = vm_create_with_one_vcpu(&vcpu, guest_code);
 	run = vcpu->run;
+
+	vm_install_exception_handler(vm, DB_VECTOR, guest_db_handler);
+	vm_install_exception_handler(vm, IRQ_VECTOR, guest_irq_handler);
 
 	/* Test software BPs - int3 */
 	memset(&debug, 0, sizeof(debug));
