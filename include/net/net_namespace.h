@@ -11,6 +11,7 @@
 #include <linux/list.h>
 #include <linux/sysctl.h>
 #include <linux/uidgid.h>
+#include <linux/nstree.h>
 
 #include <net/flow.h>
 #include <net/netns/core.h>
