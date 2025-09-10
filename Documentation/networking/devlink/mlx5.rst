@@ -45,6 +45,14 @@ Parameters
      - The range is between 1 and a device-specific max.
      - Applies to each physical function (PF) independently, if the device
        supports it. Otherwise, it applies symmetrically to all PFs.
+   * - ``num_doorbells``
+     - driverinit
+     - This controls the number of channel doorbells used by the netdev. In all
+       cases, an additional doorbell is allocated and used for non-channel
+       communication (e.g. for PTP, HWS, etc.). Supported values are:
+       - 0: No channel-specific doorbells, use the global one for everything.
+       - [1, max_num_channels]: Spread netdev channels equally across these
+         doorbells.
 
 Note: permanent parameters such as ``enable_sriov`` and ``total_vfs`` require FW reset to take effect
 
