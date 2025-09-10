@@ -335,8 +335,11 @@ void handle_bus_lock(struct pt_regs *regs)
 		/* Warn on the bus lock. */
 		fallthrough;
 	case sld_warn:
-		pr_warn_ratelimited("#DB: %s/%d took a bus_lock trap at address: 0x%lx\n",
+		if (!current->reported_split_lock) {
+			pr_warn_ratelimited("#DB: %s/%d took a bus_lock trap at address: 0x%lx\n",
 				    current->comm, current->pid, regs->ip);
+			current->reported_split_lock = 1;
+		}
 		break;
 	case sld_fatal:
 		force_sig_fault(SIGBUS, BUS_ADRALN, NULL);
