@@ -1009,6 +1009,7 @@ receive_packet (struct net_device *dev)
 			skb = netdev_alloc_skb_ip_align(dev, np->rx_buf_sz);
 			if (skb == NULL) {
 				np->rx_ring[entry].fraginfo = 0;
+				dev->stats.rx_dropped++;
 				printk (KERN_INFO
 					"%s: receive_packet: "
 					"Unable to re-allocate Rx skbuff.#%d\n",
