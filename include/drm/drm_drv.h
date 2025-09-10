@@ -110,7 +110,8 @@ enum drm_driver_feature {
 	/**
 	 * @DRIVER_GEM_GPUVA:
 	 *
-	 * Driver supports user defined GPU VA bindings for GEM objects.
+	 * Driver uses the drm_gpuvm infrastructure for managing GPU virtual
+	 * address mappings of GEM objects.
 	 */
 	DRIVER_GEM_GPUVA		= BIT(8),
 	/**
