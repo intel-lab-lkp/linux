@@ -181,8 +181,7 @@ class Type(SpecAttr):
 
     def free(self, ri, var, ref):
         lines = self._free_lines(ri, var, ref)
-        for line in lines:
-            ri.cw.p(line)
+        ri.cw.p_lines(lines)
 
     def arg_member(self, ri):
         member = self._complex_member_type(ri)
@@ -268,13 +267,9 @@ class Type(SpecAttr):
             if self.presence_type() == 'present':
                 ri.cw.p(f"{var}->_present.{self.c_name} = 1;")
 
-        if init_lines:
-            ri.cw.nl()
-            for line in init_lines:
-                ri.cw.p(line)
+        ri.cw.p_lines(init_lines, nl_before=True)
 
-        for line in lines:
-            ri.cw.p(line)
+        ri.cw.p_lines(lines)
         ri.cw.block_end()
         return True
 
@@ -1789,8 +1784,7 @@ class CodeWriter:
         self.block_start()
         self.write_func_lvar(local_vars=local_vars)
 
-        for line in body:
-            self.p(line)
+        self.p_lines(body)
         self.block_end()
 
     def writes_defines(self, defines):
@@ -1830,6 +1824,12 @@ class CodeWriter:
         if config_option:
             self.p('#ifdef ' + config_option)
         self._ifdef_block = config_option
+
+    def p_lines(self, lines, nl_before=False):
+        if lines and nl_before:
+            self.nl()
+        for line in lines or []:
+            self.p(line)
 
 
 scalars = {'u8', 'u16', 'u32', 'u64', 's8', 's16', 's32', 's64', 'uint', 'sint'}
@@ -2088,8 +2088,7 @@ def put_req_nested(ri, struct):
     ri.cw.block_start()
     ri.cw.write_func_lvar(local_vars)
 
-    for line in init_lines:
-        ri.cw.p(line)
+    ri.cw.p_lines(init_lines)
 
     for _, arg in struct.member_list():
         arg.attr_put(ri, "obj")
@@ -2150,8 +2149,7 @@ def _multi_parse(ri, struct, init_lines, local_vars):
     ri.cw.block_start()
     ri.cw.write_func_lvar(local_vars)
 
-    for line in init_lines:
-        ri.cw.p(line)
+    ri.cw.p_lines(init_lines)
     ri.cw.nl()
 
     for arg in struct.inherited:
@@ -2280,10 +2278,8 @@ def parse_rsp_submsg(ri, struct):
 
         ri.cw.block_start(line=f'{kw} (!strcmp(sel, "{name}"))')
         get_lines, init_lines, _ = arg._attr_get(ri, var)
-        for line in init_lines or []:
-            ri.cw.p(line)
-        for line in get_lines:
-            ri.cw.p(line)
+        ri.cw.p_lines(init_lines)
+        ri.cw.p_lines(get_lines)
         if arg.presence_type() == 'present':
             ri.cw.p(f"{var}->_present.{arg.c_name} = 1;")
         ri.cw.block_end()
