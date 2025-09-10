@@ -359,7 +359,7 @@ static irqreturn_t handle_cpu_based_xfer(struct tegra_sflash_data *tsd)
 {
 	struct spi_transfer *t = tsd->curr_xfer;
 
-	spin_lock(&tsd->lock);
+	guard(spinlock)(&tsd->lock);
 	if (tsd->tx_status || tsd->rx_status || (tsd->status_reg & SPI_BSY)) {
 		dev_err(tsd->dev,
 			"CpuXfer ERROR bit set 0x%x\n", tsd->status_reg);
@@ -370,7 +370,7 @@ static irqreturn_t handle_cpu_based_xfer(struct tegra_sflash_data *tsd)
 		udelay(2);
 		reset_control_deassert(tsd->rst);
 		complete(&tsd->xfer_completion);
-		goto exit;
+		return IRQ_HANDLED;
 	}
 
 	if (tsd->cur_direction & DATA_DIR_RX)
@@ -383,13 +383,11 @@ static irqreturn_t handle_cpu_based_xfer(struct tegra_sflash_data *tsd)
 
 	if (tsd->cur_pos == t->len) {
 		complete(&tsd->xfer_completion);
-		goto exit;
+		return IRQ_HANDLED;
 	}
 
 	tegra_sflash_calculate_curr_xfer_param(tsd->cur_spi, tsd, t);
 	tegra_sflash_start_cpu_based_transfer(tsd, t);
-exit:
-	spin_unlock(&tsd->lock);
 	return IRQ_HANDLED;
 }
 
