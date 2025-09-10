@@ -55,6 +55,22 @@
 #define __always_inline                 inline __attribute__((__always_inline__))
 
 /*
+ * Beware: Code which makes use of __assume must be written as if the compiler
+ * ignores the hint. Otherwise this may lead to subtle bugs if code is compiled
+ * with compilers which do not support the attribute.
+ *
+ * Optional: only supported since GCC >= 13.1, clang >= 12.0
+ *
+ *   gcc: https://gcc.gnu.org/onlinedocs/gcc/Statement-Attributes.html#index-assume-statement-attribute
+ * clang: https://clang.llvm.org/docs/AttributeReference.html#assume
+ */
+#if __has_attribute(assume)
+# define __assume(expr)                 __attribute__((__assume__(expr)))
+#else
+# define __assume(expr)
+#endif
+
+/*
  * The second argument is optional (default 0), so we use a variadic macro
  * to make the shorthand.
  *
