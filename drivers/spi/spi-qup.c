@@ -654,10 +654,10 @@ static irqreturn_t spi_qup_qup_irq(int irq, void *dev_id)
 		error = -EIO;
 	}
 
-	spin_lock(&controller->lock);
-	if (!controller->error)
-		controller->error = error;
-	spin_unlock(&controller->lock);
+	scoped_guard (spinlock, &controller->lock) {
+		if (!controller->error)
+			controller->error = error;
+	}
 
 	if (spi_qup_is_dma_xfer(controller->mode)) {
 		writel_relaxed(opflags, controller->base + QUP_OPERATIONAL);
