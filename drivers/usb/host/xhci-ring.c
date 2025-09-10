@@ -1808,6 +1808,12 @@ static void handle_cmd_completion(struct xhci_hcd *xhci,
 	cmd_dma = le64_to_cpu(event->cmd_trb);
 	cmd_trb = xhci->cmd_ring->dequeue;
 
+	if (sizeof(cmd_dma) < sizeof(u64) && cmd_dma < le64_to_cpu(event->cmd_trb)) {
+		xhci_err(xhci, "slot %d command completion points above DMA space (%#llx)\n",
+				slot_id, le64_to_cpu(event->cmd_trb));
+		return;
+	}
+
 	trace_xhci_handle_command(xhci->cmd_ring, &cmd_trb->generic, cmd_dma);
 
 	cmd_comp_code = GET_COMP_CODE(le32_to_cpu(event->status));
@@ -2671,6 +2677,12 @@ static int handle_tx_event(struct xhci_hcd *xhci,
 	ep_index = TRB_TO_EP_ID(le32_to_cpu(event->flags)) - 1;
 	trb_comp_code = GET_COMP_CODE(le32_to_cpu(event->transfer_len));
 	ep_trb_dma = le64_to_cpu(event->buffer);
+
+	if (sizeof(ep_trb_dma) < sizeof(u64) && ep_trb_dma < le64_to_cpu(event->buffer)) {
+		xhci_err(xhci, "slot %d ep %d transfer event points above DMA space\n",
+				slot_id, ep_index);
+		goto err_out;
+	}
 
 	ep = xhci_get_virt_ep(xhci, slot_id, ep_index);
 	if (!ep) {
