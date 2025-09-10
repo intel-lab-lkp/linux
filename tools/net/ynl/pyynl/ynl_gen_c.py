@@ -1829,7 +1829,10 @@ class CodeWriter:
         if lines and nl_before:
             self.nl()
         for line in lines or []:
-            self.p(line)
+            if line == '':
+                self.nl()
+            else:
+                self.p(line)
 
 
 scalars = {'u8', 'u16', 'u32', 'u64', 's8', 's16', 's32', 's64', 'uint', 'sint'}
@@ -1920,6 +1923,15 @@ def op_prefix(ri, direction, deref=False):
 
 def type_name(ri, direction, deref=False):
     return f"struct {op_prefix(ri, direction, deref=deref)}"
+
+
+def prepare_fixed_header(var, local_vars, init_lines):
+    local_vars += ['size_t hdr_len;',
+                   'void *hdr;']
+    init_lines += [f'hdr_len = sizeof({var}->_hdr);',
+                   'hdr = ynl_nlmsg_put_extra_header(nlh, hdr_len);',
+                   f'memcpy(hdr, &{var}->_hdr, hdr_len);',
+                   '']
 
 
 def print_prototype(ri, direction, terminate=True, doc=None):
@@ -2077,10 +2089,7 @@ def put_req_nested(ri, struct):
         local_vars.append('struct nlattr *nest;')
         init_lines.append("nest = ynl_attr_nest_start(nlh, attr_type);")
     if struct.fixed_header:
-        local_vars.append('void *hdr;')
-        struct_sz = f'sizeof({struct.fixed_header})'
-        init_lines.append(f"hdr = ynl_nlmsg_put_extra_header(nlh, {struct_sz});")
-        init_lines.append(f"memcpy(hdr, &obj->_hdr, {struct_sz});")
+        prepare_fixed_header('obj', local_vars, init_lines)
 
     local_vars += put_local_vars(struct)
 
@@ -2349,6 +2358,7 @@ def print_req(ri):
     ret_ok = '0'
     ret_err = '-1'
     direction = "request"
+    init_lines = []
     local_vars = ['struct ynl_req_state yrs = { .yarg = { .ys = ys, }, };',
                   'struct nlmsghdr *nlh;',
                   'int err;']
@@ -2359,8 +2369,7 @@ def print_req(ri):
         local_vars += [f'{type_name(ri, rdir(direction))} *rsp;']
 
     if ri.struct["request"].fixed_header:
-        local_vars += ['size_t hdr_len;',
-                       'void *hdr;']
+        prepare_fixed_header('req', local_vars, init_lines)
 
     local_vars += put_local_vars(ri.struct["request"])
 
@@ -2379,11 +2388,7 @@ def print_req(ri):
         ri.cw.p(f"yrs.yarg.rsp_policy = &{ri.struct['reply'].render_name}_nest;")
     ri.cw.nl()
 
-    if ri.struct['request'].fixed_header:
-        ri.cw.p("hdr_len = sizeof(req->_hdr);")
-        ri.cw.p("hdr = ynl_nlmsg_put_extra_header(nlh, hdr_len);")
-        ri.cw.p("memcpy(hdr, &req->_hdr, hdr_len);")
-        ri.cw.nl()
+    ri.cw.p_lines(init_lines)
 
     for _, attr in ri.struct["request"].member_list():
         attr.attr_put(ri, "req")
@@ -2421,13 +2426,13 @@ def print_dump(ri):
     direction = "request"
     print_prototype(ri, direction, terminate=False)
     ri.cw.block_start()
+    init_lines = []
     local_vars = ['struct ynl_dump_state yds = {};',
                   'struct nlmsghdr *nlh;',
                   'int err;']
 
     if ri.struct['request'].fixed_header:
-        local_vars += ['size_t hdr_len;',
-                       'void *hdr;']
+        prepare_fixed_header('req', local_vars, init_lines)
 
     if "request" in ri.op[ri.op_mode]:
         local_vars += put_local_vars(ri.struct["request"])
@@ -2449,11 +2454,7 @@ def print_dump(ri):
     else:
         ri.cw.p(f"nlh = ynl_gemsg_start_dump(ys, {ri.nl.get_family_id()}, {ri.op.enum_name}, 1);")
 
-    if ri.struct['request'].fixed_header:
-        ri.cw.p("hdr_len = sizeof(req->_hdr);")
-        ri.cw.p("hdr = ynl_nlmsg_put_extra_header(nlh, hdr_len);")
-        ri.cw.p("memcpy(hdr, &req->_hdr, hdr_len);")
-        ri.cw.nl()
+    ri.cw.p_lines(init_lines)
 
     if "request" in ri.op[ri.op_mode]:
         ri.cw.p(f"ys->req_policy = &{ri.struct['request'].render_name}_nest;")
