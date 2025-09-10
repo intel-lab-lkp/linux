@@ -3649,27 +3649,14 @@ __update_cpu_freelist_fast(struct kmem_cache *s,
  */
 static inline void *get_freelist(struct kmem_cache *s, struct slab *slab)
 {
-	struct slab new;
-	unsigned long counters;
-	void *freelist;
-
 	lockdep_assert_held(this_cpu_ptr(&s->cpu_slab->lock));
 
-	do {
-		freelist = slab->freelist;
-		counters = slab->counters;
-
-		new.counters = counters;
-
-		new.inuse = slab->objects;
-		new.frozen = freelist != NULL;
-
-	} while (!__slab_update_freelist(s, slab,
-		freelist, counters,
-		NULL, new.counters,
+	while (!__slab_update_freelist(s, slab,
+		slab->freelist, slab->counters,
+		NULL, slab->counters,
 		"get_freelist"));
 
-	return freelist;
+	return slab->freelist;
 }
 
 /*
