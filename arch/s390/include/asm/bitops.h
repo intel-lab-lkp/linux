@@ -167,9 +167,8 @@ static __always_inline __attribute_const__ unsigned long __flogr(unsigned long w
 		union register_pair rp __uninitialized;
 
 		rp.even = word;
-		asm volatile(
-			"       flogr   %[rp],%[rp]\n"
-			: [rp] "+d" (rp.pair) : : "cc");
+		asm("flogr	%[rp],%[rp]"
+		    : [rp] "+d" (rp.pair) : : "cc");
 		bit = rp.even;
 		__assume(bit <= 64);
 		return bit & 127;
