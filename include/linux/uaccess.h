@@ -86,6 +86,12 @@
  * as usual) and both source and destination can trigger faults.
  */
 
+/*
+ * __copy_from_user_inatomic() is safe to use in an atomic context but
+ * the user space memory must either be pinned in memory, or page faults
+ * must be disabled, otherwise the page fault handling may cause the function
+ * to schedule.
+ */
 static __always_inline __must_check unsigned long
 __copy_from_user_inatomic(void *to, const void __user *from, unsigned long n)
 {
@@ -124,7 +130,8 @@ __copy_from_user(void *to, const void __user *from, unsigned long n)
  * Copy data from kernel space to user space.  Caller must check
  * the specified block with access_ok() before calling this function.
  * The caller should also make sure he pins the user space address
- * so that we don't result in page fault and sleep.
+ * or call page_fault_disable() so that we don't result in a page fault
+ * and sleep.
  */
 static __always_inline __must_check unsigned long
 __copy_to_user_inatomic(void __user *to, const void *from, unsigned long n)
