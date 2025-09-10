@@ -42,7 +42,7 @@ static int io_copy_regbuf(struct iov_iter *reg_iter, void __user *ubuf)
 
 		if (iov_iter_rw(reg_iter) == ITER_SOURCE) {
 			ret = copy_from_iter(tmp_buf, len, reg_iter);
-			if (ret <= 0)
+			if (ret != len)
 				break;
 			if (copy_to_user(ubuf, tmp_buf, ret))
 				break;
@@ -50,7 +50,7 @@ static int io_copy_regbuf(struct iov_iter *reg_iter, void __user *ubuf)
 			if (copy_from_user(tmp_buf, ubuf, len))
 				break;
 			ret = copy_to_iter(tmp_buf, len, reg_iter);
-			if (ret <= 0)
+			if (ret != len)
 				break;
 		}
 		ubuf += ret;
