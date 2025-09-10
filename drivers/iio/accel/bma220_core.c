@@ -10,6 +10,7 @@
 #include <linux/bitfield.h>
 #include <linux/cleanup.h>
 #include <linux/device.h>
+#include <linux/i2c.h>
 #include <linux/kernel.h>
 #include <linux/mod_devicetable.h>
 #include <linux/module.h>
@@ -359,6 +360,11 @@ static int bma220_power(struct bma220_data *data, bool up)
 	return -EBUSY;
 }
 
+static int bma220_set_wdt(struct bma220_data *data, const u8 val)
+{
+	return regmap_update_bits(data->regmap, BMA220_REG_WDT, BMA220_WDT_MASK,
+				  FIELD_PREP(BMA220_WDT_MASK, val));
+}
 
 static int bma220_init(struct bma220_data *data)
 {
@@ -389,6 +395,13 @@ static int bma220_init(struct bma220_data *data)
 	ret = bma220_reset(data, true);
 	if (ret)
 		return dev_err_probe(dev, ret, "Failed to soft reset chip\n");
+
+	if (i2c_verify_client(dev)) {
+		ret = bma220_set_wdt(data, BMA220_WDT_1MS);
+		if (ret)
+			return dev_err_probe(dev, ret,
+					     "Failed to set i2c watchdog\n");
+	}
 
 	return 0;
 }
