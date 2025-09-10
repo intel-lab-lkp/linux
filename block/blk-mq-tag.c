@@ -419,6 +419,7 @@ void blk_mq_all_tag_iter(struct blk_mq_tags *tags, busy_tag_iter_fn *fn,
 {
 	__blk_mq_all_tag_iter(tags, fn, priv, BT_TAG_ITER_STATIC_RQS);
 }
+EXPORT_SYMBOL(blk_mq_all_tag_iter);
 
 /**
  * blk_mq_tagset_busy_iter - iterate over all started requests in a tag set
