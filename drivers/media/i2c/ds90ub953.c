@@ -86,6 +86,7 @@ struct ub953_data {
 	struct mutex		reg_lock;
 
 	u8			current_indirect_target;
+	u8			gpio_rmten;
 
 	struct clk_hw		clkout_clk_hw;
 
@@ -288,13 +289,17 @@ static int ub953_gpio_direction_out(struct gpio_chip *gc, unsigned int offset,
 				    int value)
 {
 	struct ub953_data *priv = gpiochip_get_data(gc);
+	unsigned int val;
 	int ret;
 
-	ret = regmap_update_bits(priv->regmap, UB953_REG_LOCAL_GPIO_DATA,
-				 UB953_REG_LOCAL_GPIO_DATA_GPIO_OUT_SRC(offset),
-				 value ? UB953_REG_LOCAL_GPIO_DATA_GPIO_OUT_SRC(offset) :
-					 0);
+	val = priv->gpio_rmten & BIT(offset)
+	    ? UB953_REG_LOCAL_GPIO_DATA_GPIO_RMTEN(offset)
+	    : value ? UB953_REG_LOCAL_GPIO_DATA_GPIO_OUT_SRC(offset) : 0;
 
+	ret = regmap_update_bits(priv->regmap, UB953_REG_LOCAL_GPIO_DATA,
+				 UB953_REG_LOCAL_GPIO_DATA_GPIO_OUT_SRC(offset) |
+					UB953_REG_LOCAL_GPIO_DATA_GPIO_RMTEN(offset),
+				 val);
 	if (ret)
 		return ret;
 
@@ -320,6 +325,12 @@ static int ub953_gpio_get(struct gpio_chip *gc, unsigned int offset)
 static int ub953_gpio_set(struct gpio_chip *gc, unsigned int offset, int value)
 {
 	struct ub953_data *priv = gpiochip_get_data(gc);
+	struct device *dev = &priv->client->dev;
+
+	if (priv->gpio_rmten & BIT(offset)) {
+		dev_err(dev, "GPIO%u be programed to output remote data\n", offset);
+		return -EINVAL;
+	}
 
 	return regmap_update_bits(priv->regmap, UB953_REG_LOCAL_GPIO_DATA,
 				  UB953_REG_LOCAL_GPIO_DATA_GPIO_OUT_SRC(offset),
@@ -1133,6 +1144,17 @@ static int ub953_parse_dt(struct ub953_data *priv)
 	struct fwnode_handle *ep_fwnode;
 	unsigned char nlanes;
 	int ret;
+	u8 val;
+
+	/*
+	 * Config ti,gpio-data to program GPIO pin to output remote data
+	 * coming from the compatible deserializer, it's optional.
+	 */
+	ret = of_property_read_u8(dev->of_node, "ti,gpio-data", &val);
+	if (ret == 0 && val > 15)
+		return dev_err_probe(dev, -EINVAL, "Out of range: %u\n", val);
+
+	priv->gpio_rmten = ret ? 0 : val;
 
 	ep_fwnode = fwnode_graph_get_endpoint_by_id(dev_fwnode(dev),
 						    UB953_PAD_SINK, 0, 0);
