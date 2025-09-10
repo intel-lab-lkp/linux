@@ -373,6 +373,9 @@ static __maybe_unused int mdio_bus_phy_resume(struct device *dev)
 	struct phy_device *phydev = to_phy_device(dev);
 	int ret;
 
+	if (!phydev->attached_dev)
+		return 0;
+
 	if (phydev->mac_managed_pm)
 		return 0;
 
