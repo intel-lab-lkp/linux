@@ -2543,7 +2543,7 @@ static void fix_recovery_read_error(struct r10bio *r10_bio)
 
 					conf->mirrors[dw].recovery_disabled
 						= mddev->recovery_disabled;
-					set_bit(MD_RECOVERY_INTR,
+					set_bit(MD_RECOVERY_ERROR,
 						&mddev->recovery);
 					break;
 				}

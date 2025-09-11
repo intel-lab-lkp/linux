@@ -9475,18 +9475,20 @@ void md_do_sync(struct md_thread *thread)
 		     time_after_eq(jiffies, update_time + UPDATE_FREQUENCY) ||
 		     (j - mddev->curr_resync_completed)*2
 		     >= mddev->resync_max - mddev->curr_resync_completed ||
-		     mddev->curr_resync_completed > mddev->resync_max
-			    )) {
+		     mddev->curr_resync_completed > mddev->resync_max)) {
 			/* time to update curr_resync_completed */
 			wait_event(mddev->recovery_wait,
 				   atomic_read(&mddev->recovery_active) == 0);
-			mddev->curr_resync_completed = j;
-			if (test_bit(MD_RECOVERY_SYNC, &mddev->recovery) &&
-			    j > mddev->resync_offset)
-				mddev->resync_offset = j;
-			update_time = jiffies;
-			set_bit(MD_SB_CHANGE_CLEAN, &mddev->sb_flags);
-			sysfs_notify_dirent_safe(mddev->sysfs_completed);
+
+			if (!test_bit(MD_RECOVERY_ERROR, &mddev->recovery)) {
+				mddev->curr_resync_completed = j;
+				if (test_bit(MD_RECOVERY_SYNC, &mddev->recovery) &&
+				    j > mddev->resync_offset)
+					mddev->resync_offset = j;
+				update_time = jiffies;
+				set_bit(MD_SB_CHANGE_CLEAN, &mddev->sb_flags);
+				sysfs_notify_dirent_safe(mddev->sysfs_completed);
+			}
 		}
 
 		while (j >= mddev->resync_max &&
@@ -9599,7 +9601,7 @@ update:
 	wait_event(mddev->recovery_wait, !atomic_read(&mddev->recovery_active));
 
 	if (!test_bit(MD_RECOVERY_RESHAPE, &mddev->recovery) &&
-	    !test_bit(MD_RECOVERY_INTR, &mddev->recovery) &&
+	    !test_bit(MD_RECOVERY_ERROR, &mddev->recovery) &&
 	    mddev->curr_resync >= MD_RESYNC_ACTIVE) {
 		mddev->curr_resync_completed = mddev->curr_resync;
 		sysfs_notify_dirent_safe(mddev->sysfs_completed);
@@ -9607,32 +9609,20 @@ update:
 	mddev->pers->sync_request(mddev, max_sectors, max_sectors, &skipped);
 
 	if (!test_bit(MD_RECOVERY_CHECK, &mddev->recovery) &&
-	    mddev->curr_resync > MD_RESYNC_ACTIVE) {
+	    mddev->curr_resync_completed > MD_RESYNC_ACTIVE) {
+		if (!test_bit(MD_RECOVERY_INTR, &mddev->recovery))
+			mddev->curr_resync_completed = MaxSector;
+
 		if (test_bit(MD_RECOVERY_SYNC, &mddev->recovery)) {
-			if (test_bit(MD_RECOVERY_INTR, &mddev->recovery)) {
-				if (mddev->curr_resync >= mddev->resync_offset) {
-					pr_debug("md: checkpointing %s of %s.\n",
-						 desc, mdname(mddev));
-					if (test_bit(MD_RECOVERY_ERROR,
-						&mddev->recovery))
-						mddev->resync_offset =
-							mddev->curr_resync_completed;
-					else
-						mddev->resync_offset =
-							mddev->curr_resync;
-				}
-			} else
-				mddev->resync_offset = MaxSector;
+			mddev->resync_offset = mddev->curr_resync_completed;
 		} else {
-			if (!test_bit(MD_RECOVERY_INTR, &mddev->recovery))
-				mddev->curr_resync = MaxSector;
 			if (!test_bit(MD_RECOVERY_RESHAPE, &mddev->recovery) &&
 			    test_bit(MD_RECOVERY_RECOVER, &mddev->recovery)) {
 				rcu_read_lock();
 				rdev_for_each_rcu(rdev, mddev)
 					if (mddev->delta_disks >= 0 &&
-					    rdev_needs_recovery(rdev, mddev->curr_resync))
-						rdev->recovery_offset = mddev->curr_resync;
+					    rdev_needs_recovery(rdev, mddev->curr_resync_completed))
+						rdev->recovery_offset = mddev->curr_resync_completed;
 				rcu_read_unlock();
 			}
 		}
