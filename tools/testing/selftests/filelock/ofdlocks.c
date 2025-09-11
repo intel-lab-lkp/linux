@@ -36,6 +36,8 @@ int main(void)
 {
 	int rc;
 	struct flock fl, fl2;
+	memset(&fl, 0, sizeof(fl));
+	memset(&fl2, 0, sizeof(fl2));
 	int fd = open("/tmp/aa", O_RDWR | O_CREAT | O_EXCL, 0600);
 	int fd2 = open("/tmp/aa", O_RDONLY);
 
