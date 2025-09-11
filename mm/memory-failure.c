@@ -2352,8 +2352,10 @@ try_again:
 		 * otherwise it may race with THP split.
 		 * And the flag can't be set in get_hwpoison_page() since
 		 * it is called by soft offline too and it is just called
-		 * for !MF_COUNT_INCREASED.  So here seems to be the best
-		 * place.
+		 * for !MF_COUNT_INCREASED.
+		 * It also tells __split_unmapped_folio() to not bother
+		 * using the shared zeropage -- the all-zeros check would
+		 * consume the poison.  So here seems to be the best place.
 		 *
 		 * Don't need care about the above error handling paths for
 		 * get_hwpoison_page() since they handle either free page
