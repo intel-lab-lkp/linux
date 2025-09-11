@@ -2638,6 +2638,30 @@ transcoder_has_vrr(const struct intel_crtc_state *crtc_state)
 	return HAS_VRR(display) && !transcoder_is_dsi(cpu_transcoder);
 }
 
+static int intel_set_context_latency(const struct intel_crtc_state *crtc_state,
+				     int crtc_vblank_start,
+				     int crtc_vdisplay)
+{
+	struct intel_display *display = to_intel_display(crtc_state);
+
+	/*
+	 * When VRR TG is always on and optimized guardband is used,
+	 * the pipe vblank start is based on the guardband,
+	 * TRANS_SET_CONTEXT_LATENCY cannot be used to configure it.
+	 */
+	if (intel_vrr_always_use_vrr_tg(display))
+		return clamp(crtc_vblank_start - crtc_vdisplay, 0, 1);
+
+	/*
+	 * VBLANK_START no longer works on ADL+, instead we must use
+	 * TRANS_SET_CONTEXT_LATENCY to configure the pipe vblank start.
+	 */
+	if (DISPLAY_VER(display) >= 13)
+		return crtc_vblank_start - crtc_vdisplay;
+
+	return 0;
+}
+
 static void intel_set_transcoder_timings(const struct intel_crtc_state *crtc_state)
 {
 	struct intel_display *display = to_intel_display(crtc_state);
@@ -2671,14 +2695,12 @@ static void intel_set_transcoder_timings(const struct intel_crtc_state *crtc_sta
 			vsyncshift += adjusted_mode->crtc_htotal;
 	}
 
-	/*
-	 * VBLANK_START no longer works on ADL+, instead we must use
-	 * TRANS_SET_CONTEXT_LATENCY to configure the pipe vblank start.
-	 */
 	if (DISPLAY_VER(display) >= 13) {
 		intel_de_write(display,
 			       TRANS_SET_CONTEXT_LATENCY(display, cpu_transcoder),
-			       crtc_vblank_start - crtc_vdisplay);
+			       intel_set_context_latency(crtc_state,
+							 crtc_vblank_start,
+							 crtc_vdisplay));
 
 		/*
 		 * VBLANK_START not used by hw, just clear it
@@ -2768,7 +2790,9 @@ static void intel_set_transcoder_timings_lrr(const struct intel_crtc_state *crtc
 	if (DISPLAY_VER(display) >= 13) {
 		intel_de_write(display,
 			       TRANS_SET_CONTEXT_LATENCY(display, cpu_transcoder),
-			       crtc_vblank_start - crtc_vdisplay);
+			       intel_set_context_latency(crtc_state,
+							 crtc_vblank_start,
+							 crtc_vdisplay));
 
 		/*
 		 * VBLANK_START not used by hw, just clear it

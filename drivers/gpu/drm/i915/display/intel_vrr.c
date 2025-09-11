@@ -749,11 +749,18 @@ void intel_vrr_get_config(struct intel_crtc_state *crtc_state)
 		 * bits are not filled. Since vrr.vsync_start is computed as:
 		 * crtc_vtotal - crtc_vsync_start, we can derive vtotal from
 		 * vrr.vsync_start and crtc_vsync_start.
+		 *
+		 * With Optimized guardband, the vblank start is Vtotal - guardband
 		 */
-		if (intel_vrr_always_use_vrr_tg(display))
+		if (intel_vrr_always_use_vrr_tg(display)) {
 			crtc_state->hw.adjusted_mode.crtc_vtotal =
 				crtc_state->hw.adjusted_mode.crtc_vsync_start +
 				crtc_state->vrr.vsync_start;
+
+			crtc_state->hw.adjusted_mode.crtc_vblank_start =
+				crtc_state->hw.adjusted_mode.crtc_vtotal -
+				crtc_state->vrr.guardband;
+		}
 	}
 
 	vrr_enable = trans_vrr_ctl & VRR_CTL_VRR_ENABLE;
