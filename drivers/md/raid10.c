@@ -2282,7 +2282,7 @@ static void end_sync_request(struct r10bio *r10_bio)
 				reschedule_retry(r10_bio);
 			else
 				put_buf(r10_bio);
-			md_done_sync(mddev, s, 1);
+			md_done_sync(mddev, s);
 			break;
 		} else {
 			struct r10bio *r10_bio2 = (struct r10bio *)r10_bio->master_bio;
@@ -2458,7 +2458,7 @@ static void sync_request_write(struct mddev *mddev, struct r10bio *r10_bio)
 
 done:
 	if (atomic_dec_and_test(&r10_bio->remaining)) {
-		md_done_sync(mddev, r10_bio->sectors, 1);
+		md_done_sync(mddev, r10_bio->sectors);
 		put_buf(r10_bio);
 	}
 }
@@ -3763,7 +3763,7 @@ static sector_t raid10_sync_request(struct mddev *mddev, sector_t sector_nr,
 		/* pretend they weren't skipped, it makes
 		 * no important difference in this case
 		 */
-		md_done_sync(mddev, sectors_skipped, 1);
+		md_done_sync(mddev, sectors_skipped);
 
 	return sectors_skipped + nr_sectors;
  giveup:
@@ -4917,7 +4917,8 @@ static void reshape_request_write(struct mddev *mddev, struct r10bio *r10_bio)
 	if (!test_bit(R10BIO_Uptodate, &r10_bio->state))
 		if (handle_reshape_read_error(mddev, r10_bio) < 0) {
 			/* Reshape has been aborted */
-			md_done_sync(mddev, r10_bio->sectors, 0);
+			set_bit(MD_RECOVERY_ERROR, &mddev->recovery);
+			md_done_sync(mddev, r10_bio->sectors);
 			return;
 		}
 
@@ -5075,7 +5076,7 @@ static void end_reshape_request(struct r10bio *r10_bio)
 {
 	if (!atomic_dec_and_test(&r10_bio->remaining))
 		return;
-	md_done_sync(r10_bio->mddev, r10_bio->sectors, 1);
+	md_done_sync(r10_bio->mddev, r10_bio->sectors);
 	bio_put(r10_bio->master_bio);
 	put_buf(r10_bio);
 }
