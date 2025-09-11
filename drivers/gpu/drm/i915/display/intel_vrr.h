@@ -49,5 +49,7 @@ int intel_vrr_guardband_dsc_latency(int num_scaler_users, u64 *hscale, u64 *vsca
 				    int chroma_downscaling_factor,
 				    int cdclk_prefill_adjustment,
 				    int linetime);
+int intel_vrr_compute_guardband(struct intel_crtc_state *crtc_state,
+				struct intel_connector *connector);
 
 #endif /* __INTEL_VRR_H__ */
