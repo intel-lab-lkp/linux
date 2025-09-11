@@ -2157,6 +2157,25 @@ sk_dst_get(const struct sock *sk)
 	return dst;
 }
 
+static inline struct net_device *sk_dst_dev_rcu(const struct sock *sk)
+{
+	struct dst_entry *dst = __sk_dst_get(sk);
+
+	return dst ? dst_dev_rcu(dst) : NULL;
+}
+
+static inline struct net_device *sk_dst_dev_get(const struct sock *sk)
+{
+	struct net_device *dev;
+
+	rcu_read_lock();
+	dev = sk_dst_dev_rcu(sk);
+	dev_hold(dev);
+	rcu_read_unlock();
+
+	return dev;
+}
+
 static inline void __dst_negative_advice(struct sock *sk)
 {
 	struct dst_entry *dst = __sk_dst_get(sk);
