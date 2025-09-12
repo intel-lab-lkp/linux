@@ -1,0 +1,34 @@
+drm drm-fixes 9a3f210737e958c3f45a4ce0d7f1ff330af3965f
+	Merge tag 'drm-xe-fixes-2025-09-11' of https://gitlab.freedesktop.org/drm/xe/kernel into drm-fixes
+drm-misc drm-misc-fixes 87b90cee22d8658a69c0fbd43633839b75f8f05f
+	MAINTAINERS: drm-misc: fix X: entries for nova/nouveau
+drm-rust drm-rust-fixes 349510052f765b6eb9c2a21d0ffe08ba61fa683c
+	MAINTAINERS: Add drm-rust tree for Rust DRM drivers and infrastructure
+drm-intel drm-intel-fixes cfa7b7659757f8d0fc4914429efa90d0d2577dd7
+	drm/i915/power: fix size for for_each_set_bit() in abox iteration
+drm-xe drm-xe-fixes fd99415ec8a80866e5e19f7835876e7b4f294946
+	drm/xe: Extend Wa_13011645652 to PTL-H, WCL
+drm drm-next cf99b26d3081b1f9961cc213415867706d19a414
+	Merge tag 'amd-drm-next-6.18-2025-09-09' of https://gitlab.freedesktop.org/agd5f/linux into drm-next
+drm-misc drm-misc-next-fixes 54d4f445517fe8350d735624d7f4225e7511d9eb
+	drm/panfrost: Print RSS for tiler heap BO's in debugfs GEMS file
+drm-intel drm-intel-next-fixes 5a569ef4d4ab184a481dd8ecb58f464a89b44d2f
+	drm/i915/display: Set C10_VDR_CTRL_MSGBUS_ACCESS before phy reg read
+drm-xe drm-xe-next-fixes 8f5ae30d69d7543eee0d70083daf4de8fe15d585
+	Linux 6.17-rc1
+drm-misc drm-misc-next 27ed0d64a0f37224ca865fbf8f0aacdc46a3f481
+	drm/bridge: imx8qxp-ldb: Remove dummy Runtime PM callback
+drm-rust drm-rust-next cf4fd52e323604ccfa8390917593e1fb965653ee
+	rust: drm: Introduce the Tyr driver for Arm Mali GPUs
+drm-intel drm-intel-next 72136efb875d8438c20b9c8ab72945d474933471
+	drm/i915/backlight: Honor VESA eDP backlight luminance control capability
+drm-intel drm-intel-gt-next ba391a102ec11ab7f5b249e46dcf61ef836a57e7
+	drm/i915/guc: Include the GuC registers in the error state
+drm-xe drm-xe-next 88434448438e4302e272b2a2b810b42e05ea024b
+	drm/xe/guc: Set RCS/CCS yield policy
+drm-intel topic/core-for-CI e9b01b51c8625afc2f18bf3a91db2b8f2c68a751
+	Revert "lockdep: Enable PROVE_RAW_LOCK_NESTING with PROVE_LOCKING."
+drm-xe topic/xe-for-CI 6916e5fb25c414cb3d4adcfc8f12f55f602c53b2
+	drm/xe/pm: Re-enable D3Cold by default on BMG
+drm topic/drm-next-nouveau-r570 6cc6e08d4542473d79ea83d9123d9d35e9c01c92
+	drm/nouveau/kms: add support for GB20x
