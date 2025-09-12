@@ -1004,9 +1004,13 @@ int kfd_criu_restore_queue(struct kfd_process *p,
 	if (*priv_data_offset + sizeof(*q_data) > max_priv_data_size)
 		return -EINVAL;
 
-	q_data = memdup_user(user_priv_ptr + *priv_data_offset, sizeof(*q_data));
-	if (IS_ERR(q_data)) {
-		ret = PTR_ERR(q_data);
+	q_data = kmalloc(sizeof(*q_data), GFP_KERNEL);
+	if (!q_data)
+		return -ENOMEM;
+
+	ret = copy_from_user(q_data, user_priv_ptr + *priv_data_offset, sizeof(*q_data));
+	if (ret) {
+		ret = -EFAULT;
 		goto exit;
 	}
 
@@ -1018,9 +1022,15 @@ int kfd_criu_restore_queue(struct kfd_process *p,
 		goto exit;
 	}
 
-	q_extra_data = memdup_user(user_priv_ptr + *priv_data_offset, q_extra_data_size);
-	if (IS_ERR(q_extra_data)) {
-		ret = PTR_ERR(q_extra_data);
+	q_extra_data = kmalloc(q_extra_data_size, GFP_KERNEL);
+	if (!q_extra_data) {
+		ret = -ENOMEM;
+		goto exit;
+	}
+
+	ret = copy_from_user(q_extra_data, user_priv_ptr + *priv_data_offset, q_extra_data_size);
+	if (ret) {
+		ret = -EFAULT;
 		goto exit;
 	}
 
