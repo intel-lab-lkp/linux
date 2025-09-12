@@ -2362,7 +2362,7 @@ void amdgpu_vm_adjust_size(struct amdgpu_device *adev, uint32_t min_vm_size,
 	unsigned int vm_size;
 	uint64_t tmp;
 
-#ifdef CONFIG_X86_5LEVEL
+#ifdef CONFIG_X86_64
 	/*
 	 * Refer to function configure_5level_paging() for details.
 	 */
