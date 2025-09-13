@@ -51,7 +51,6 @@ Booting the kernel
    bootconfig
    kernel-parameters
    efi-stub
-   initrd
 
 
 Tracking down and identifying problems

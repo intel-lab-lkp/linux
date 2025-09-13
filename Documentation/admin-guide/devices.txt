@@ -21,12 +21,6 @@
 		  0 = /dev/ram0		First RAM disk
 		  1 = /dev/ram1		Second RAM disk
 		    ...
-		250 = /dev/initrd	Initial RAM disk
-
-		Older kernels had /dev/ramdisk (1, 1) here.
-		/dev/initrd refers to a RAM disk which was preloaded
-		by the boot loader; newer kernels use /dev/ram0 for
-		the initrd.
 
    2 char	Pseudo-TTY masters
 		  0 = /dev/ptyp0	First PTY master

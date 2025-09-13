@@ -16,9 +16,6 @@ ftrace {
 			myevent2 {
 				probes = "vfs_write $arg2 +0($arg2):ustring $arg3";
 			}
-			myevent3 {
-				probes = "initrd_load";
-			}
 			enable
 		}
 	}

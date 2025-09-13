@@ -10,7 +10,7 @@ Some prerequisites:
 You know how dm-crypt works. If not, visit the following web page:
 http://www.saout.de/misc/dm-crypt/
 You have read Documentation/power/swsusp.rst and understand it.
-You did read Documentation/admin-guide/initrd.rst and know how an initrd works.
+You did read Documentation/filesystems/ramfs-rootfs-initramfs.rst and know how an initrd works.
 You know how to create or how to modify an initrd.
 
 Now your system is properly set up, your disk is encrypted except for

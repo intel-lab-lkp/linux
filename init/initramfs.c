@@ -692,28 +692,6 @@ static inline bool kexec_free_initrd(void)
 }
 #endif /* CONFIG_KEXEC_CORE */
 
-#ifdef CONFIG_BLK_DEV_RAM
-static void __init populate_initrd_image(char *err)
-{
-	ssize_t written;
-	struct file *file;
-	loff_t pos = 0;
-
-	printk(KERN_INFO "rootfs image is not initramfs (%s); looks like an initrd\n",
-			err);
-	file = filp_open("/initrd.image", O_WRONLY|O_CREAT|O_LARGEFILE, 0700);
-	if (IS_ERR(file))
-		return;
-
-	written = xwrite(file, (char *)initrd_start, initrd_end - initrd_start,
-			&pos);
-	if (written != initrd_end - initrd_start)
-		pr_err("/initrd.image: incomplete write (%zd != %ld)\n",
-		       written, initrd_end - initrd_start);
-	fput(file);
-}
-#endif /* CONFIG_BLK_DEV_RAM */
-
 static void __init do_populate_rootfs(void *unused, async_cookie_t cookie)
 {
 	/* Load the built in initramfs */
@@ -724,18 +702,11 @@ static void __init do_populate_rootfs(void *unused, async_cookie_t cookie)
 	if (!initrd_start || IS_ENABLED(CONFIG_INITRAMFS_FORCE))
 		goto done;
 
-	if (IS_ENABLED(CONFIG_BLK_DEV_RAM))
-		printk(KERN_INFO "Trying to unpack rootfs image as initramfs...\n");
-	else
-		printk(KERN_INFO "Unpacking initramfs...\n");
+	printk(KERN_INFO "Unpacking initramfs...\n");
 
 	err = unpack_to_rootfs((char *)initrd_start, initrd_end - initrd_start);
 	if (err) {
-#ifdef CONFIG_BLK_DEV_RAM
-		populate_initrd_image(err);
-#else
 		printk(KERN_EMERG "Initramfs unpacking failed: %s\n", err);
-#endif
 	}
 
 done:

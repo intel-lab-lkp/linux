@@ -452,7 +452,7 @@ static dev_t __init parse_root_device(char *root_device_name)
 }
 
 /*
- * Prepare the namespace - decide what/where to mount, load ramdisks, etc.
+ * Prepare the namespace - decide what/where to mount, etc.
  */
 void __init prepare_namespace(void)
 {
@@ -476,13 +476,9 @@ void __init prepare_namespace(void)
 	if (saved_root_name[0])
 		ROOT_DEV = parse_root_device(saved_root_name);
 
-	if (initrd_load(saved_root_name))
-		goto out;
-
 	if (root_wait)
 		wait_for_root(saved_root_name);
 	mount_root(saved_root_name);
-out:
 	devtmpfs_mount();
 	init_mount(".", "/", NULL, MS_MOVE, NULL);
 	init_chroot(".");
