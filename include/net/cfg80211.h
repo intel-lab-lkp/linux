@@ -1485,6 +1485,11 @@ struct cfg80211_s1g_short_beacon {
  * @mbssid_config: AP settings for multiple bssid
  * @s1g_long_beacon_period: S1G long beacon period
  * @s1g_short_beacon: S1G short beacon data
+ * @control_port_vlan_id: if set (nonzero) userspace expect to receive also
+ *	8021Q tagged control port protocol frames. Verification of VLAN id
+ *	should be done in lower layer. Also 8021Q header should be stripped.
+ *	For tx path userspace expect lower layer will add proper 8021Q header
+ *	and setup VLAN id.
  */
 struct cfg80211_ap_settings {
 	struct cfg80211_chan_def chandef;
@@ -1520,6 +1525,7 @@ struct cfg80211_ap_settings {
 	struct cfg80211_mbssid_config mbssid_config;
 	u8 s1g_long_beacon_period;
 	struct cfg80211_s1g_short_beacon s1g_short_beacon;
+	u16 control_port_vlan_id;
 };
 
 
@@ -5091,7 +5097,7 @@ struct cfg80211_ops {
 				   const u8 *buf, size_t len,
 				   const u8 *dest, const __be16 proto,
 				   const bool noencrypt, int link_id,
-				   u64 *cookie);
+				   u64 *cookie, u16 vlan_id);
 
 	int	(*get_ftm_responder_stats)(struct wiphy *wiphy,
 				struct net_device *dev,

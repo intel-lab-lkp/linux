@@ -2680,7 +2680,8 @@ enum nl80211_commands {
  *	Defined by IEEE P802.11ay/D4.0 section 9.4.2.251, Table 13.
  *
  * @NL80211_ATTR_VLAN_ID: VLAN ID (1..4094) for the station and VLAN group key
- *	(u16).
+ *	(u16). For %NL80211_ATTR_CONTROL_PORT_OVER_NL80211_VLAN allow to
+ *	receive and send tagged (8021Q) control port packets.
  *
  * @NL80211_ATTR_HE_BSS_COLOR: nested attribute for BSS Color Settings.
  *
@@ -6692,6 +6693,10 @@ enum nl80211_feature_flags {
  *
  * @NL80211_EXT_FEATURE_BEACON_RATE_EHT: Driver supports beacon rate
  *	configuration (AP/mesh) with EHT rates.
+ * @NL80211_EXT_FEATURE_CONTROL_PORT_OVER_NL80211_VLAN: Driver supports
+ *	sending and receiving control port frames over nl80211 with VLAN
+ *	support. Userspace can provide a VLAN ID in the control port request
+ *	to send packets on that VLAN.
  *
  * @NUM_NL80211_EXT_FEATURES: number of extended features.
  * @MAX_NL80211_EXT_FEATURES: highest extended feature index.
@@ -6769,6 +6774,7 @@ enum nl80211_ext_feature_index {
 	NL80211_EXT_FEATURE_DFS_CONCURRENT,
 	NL80211_EXT_FEATURE_SPP_AMSDU_SUPPORT,
 	NL80211_EXT_FEATURE_BEACON_RATE_EHT,
+	NL80211_EXT_FEATURE_CONTROL_PORT_OVER_NL80211_VLAN,
 
 	/* add new features before the definition below */
 	NUM_NL80211_EXT_FEATURES,
