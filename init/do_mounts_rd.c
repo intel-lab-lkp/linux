@@ -210,7 +210,7 @@ int __init rd_load_image(char *from)
 
 	if (nblocks == 0) {
 		if (crd_load(decompressor) == 0)
-			goto successful_load;
+			res = 1; /* load successful */
 		goto done;
 	}
 
@@ -264,8 +264,6 @@ int __init rd_load_image(char *from)
 	}
 	pr_cont("done.\n");
 
-successful_load:
-	res = 1;
 done:
 	fput(in_file);
 noclose_input:
