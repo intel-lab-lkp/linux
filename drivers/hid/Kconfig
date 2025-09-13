@@ -406,6 +406,14 @@ config HID_GLORIOUS
 	  Support for Glorious PC Gaming Race mice such as
 	  the Glorious Model O, O- and D.
 
+config HID_GLORIOUS_RUST
+	tristate "Glorious O and O- mice Rust reference driver"
+	depends on USB_HID
+	depends on RUST_HID_ABSTRACTIONS
+	help
+	  Support for Glorious PC Gaming Race O and O- mice
+	  in Rust.
+
 config HID_HOLTEK
 	tristate "Holtek HID devices"
 	depends on USB_HID
