@@ -90,8 +90,6 @@ __tagtable(ATAG_VIDEOTEXT, parse_tag_videotext);
 #ifdef CONFIG_BLK_DEV_RAM
 static int __init parse_tag_ramdisk(const struct tag *tag)
 {
-	rd_image_start = tag->u.ramdisk.start;
-
 	if (tag->u.ramdisk.size)
 		rd_size = tag->u.ramdisk.size;
 

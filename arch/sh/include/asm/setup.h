@@ -10,7 +10,6 @@
 #define PARAM	((unsigned char *)empty_zero_page)
 
 #define MOUNT_ROOT_RDONLY (*(unsigned long *) (PARAM+0x000))
-#define RAMDISK_FLAGS (*(unsigned long *) (PARAM+0x004))
 #define ORIG_ROOT_DEV (*(unsigned long *) (PARAM+0x008))
 #define LOADER_TYPE (*(unsigned long *) (PARAM+0x00c))
 #define INITRD_START (*(unsigned long *) (PARAM+0x010))

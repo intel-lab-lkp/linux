@@ -28,7 +28,7 @@
 	.section	.empty_zero_page, "aw"
 ENTRY(empty_zero_page)
 	.long	1		/* MOUNT_ROOT_RDONLY */
-	.long	0		/* RAMDISK_FLAGS */
+	.long	0		/* RAMDISK_FLAGS - used to control initrd, which was removed from Linux in 2025 */
 	.long	0x0200		/* ORIG_ROOT_DEV */
 	.long	1		/* LOADER_TYPE */
 	.long	0x00000000	/* INITRD_START */

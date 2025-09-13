@@ -189,7 +189,7 @@ Offset/Size	Proto		Name			Meaning
 01F1/1		ALL(1)		setup_sects		The size of the setup in sectors
 01F2/2		ALL		root_flags		If set, the root is mounted readonly
 01F4/4		2.04+(2)	syssize			The size of the 32-bit code in 16-byte paras
-01F8/2		ALL		ram_size		DO NOT USE - for bootsect.S use only
+01F8/2		ALL		ram_size		DO NOT USE - for bootsect.S use only - used to control initrd, which was removed from Linux in 2025
 01FA/2		ALL		vid_mode		Video mode control
 01FC/2		ALL		root_dev		Default root device number
 01FE/2		ALL		boot_flag		0xAA55 magic number
@@ -308,7 +308,7 @@ Offset/size:	0x1f8/2
 Protocol:	ALL
 ============	===============
 
-  This field is obsolete.
+  This field is obsolete. Used to control initrd, which was removed from Linux in 2025.
 
 ============	===================
 Field name:	vid_mode

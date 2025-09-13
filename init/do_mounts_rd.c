@@ -17,11 +17,9 @@
 static struct file *in_file, *out_file;
 static loff_t in_pos, out_pos;
 
-int __initdata rd_image_start;		/* starting block # of image */
-
 static int __init ramdisk_start_setup(char *str)
 {
-	rd_image_start = simple_strtol(str,NULL,0);
+	/* will be removed in next commit */
 	return 1;
 }
 __setup("ramdisk_start=", ramdisk_start_setup);
@@ -60,7 +58,7 @@ identify_ramdisk_image(struct file *file, loff_t pos,
 	unsigned char *buf;
 	const char *compress_name;
 	unsigned long n;
-	int start_block = rd_image_start;
+	int start_block = 0;
 
 	buf = kmalloc(size, GFP_KERNEL);
 	if (!buf)
@@ -196,7 +194,7 @@ int __init rd_load_image(char *from)
 	if (IS_ERR(in_file))
 		goto noclose_input;
 
-	in_pos = rd_image_start * BLOCK_SIZE;
+	in_pos = 0;
 	nblocks = identify_ramdisk_image(in_file, in_pos, &decompressor);
 	if (nblocks < 0)
 		goto done;

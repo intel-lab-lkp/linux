@@ -70,8 +70,6 @@ EXPORT_SYMBOL(sh_mv);
 
 extern int root_mountflags;
 
-#define RAMDISK_IMAGE_START_MASK	0x07FF
-
 static char __initdata command_line[COMMAND_LINE_SIZE] = { 0, };
 
 static struct resource code_resource = {
@@ -273,18 +271,13 @@ void __init setup_arch(char **cmdline_p)
 
 	printk(KERN_NOTICE "Boot params:\n"
 			   "... MOUNT_ROOT_RDONLY - %08lx\n"
-			   "... RAMDISK_FLAGS     - %08lx\n"
 			   "... ORIG_ROOT_DEV     - %08lx\n"
 			   "... LOADER_TYPE       - %08lx\n"
 			   "... INITRD_START      - %08lx\n"
 			   "... INITRD_SIZE       - %08lx\n",
-			   MOUNT_ROOT_RDONLY, RAMDISK_FLAGS,
+			   MOUNT_ROOT_RDONLY,
 			   ORIG_ROOT_DEV, LOADER_TYPE,
 			   INITRD_START, INITRD_SIZE);
-
-#ifdef CONFIG_BLK_DEV_RAM
-	rd_image_start = RAMDISK_FLAGS & RAMDISK_IMAGE_START_MASK;
-#endif
 
 	if (!MOUNT_ROOT_RDONLY)
 		root_mountflags &= ~MS_RDONLY;

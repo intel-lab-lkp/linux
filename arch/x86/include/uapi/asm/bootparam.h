@@ -4,9 +4,6 @@
 
 #include <asm/setup_data.h>
 
-/* ram_size flags */
-#define RAMDISK_IMAGE_START_MASK	0x07FF
-
 /* loadflags */
 #define LOADED_HIGH	(1<<0)
 #define KASLR_FLAG	(1<<1)
@@ -37,7 +34,7 @@ struct setup_header {
 	__u8	setup_sects;
 	__u16	root_flags;
 	__u32	syssize;
-	__u16	ram_size;
+	__u16	ram_size; /* used to control initrd, which was removed from Linux in 2025 */
 	__u16	vid_mode;
 	__u16	root_dev;
 	__u16	boot_flag;

@@ -170,8 +170,6 @@ static void __init boot_flags_init(char *commands)
 
 extern unsigned short root_flags;
 extern unsigned short root_dev;
-extern unsigned short ram_flags;
-#define RAMDISK_IMAGE_START_MASK	0x07FF
 
 extern int root_mountflags;
 
@@ -335,9 +333,6 @@ void __init setup_arch(char **cmdline_p)
 	if (!root_flags)
 		root_mountflags &= ~MS_RDONLY;
 	ROOT_DEV = old_decode_dev(root_dev);
-#ifdef CONFIG_BLK_DEV_RAM
-	rd_image_start = ram_flags & RAMDISK_IMAGE_START_MASK;
-#endif
 
 	prom_setsync(prom_sync_me);
 

@@ -235,7 +235,7 @@ hdr:
 		.byte setup_sects - 1
 root_flags:	.word ROOT_RDONLY
 syssize:	.long ZO__edata / 16
-ram_size:	.word 0			/* Obsolete */
+ram_size:	.word 0			/* Used to control initrd, which was removed from Linux in 2025 */
 vid_mode:	.word SVGA_MODE
 root_dev:	.word 0			/* Default to major/minor 0/0 */
 boot_flag:	.word 0xAA55

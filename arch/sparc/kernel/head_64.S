@@ -52,7 +52,9 @@ stext:
  * Fields should be kept upward compatible and whenever any change is made,
  * HdrS version should be incremented.
  */
-        .global root_flags, ram_flags, root_dev
+        .global root_flags
+        .global ram_flags /* used to control initrd, which was removed from Linux in 2025 */
+        .global root_dev
         .global sparc_ramdisk_image, sparc_ramdisk_size
 	.global sparc_ramdisk_image64
 
@@ -71,7 +73,7 @@ root_flags:
         .half   1
 root_dev:
         .half   0
-ram_flags:
+ram_flags: /* used to control initrd, which was removed from Linux in 2025 */
         .half   0
 sparc_ramdisk_image:
         .word   0

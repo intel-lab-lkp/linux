@@ -5,9 +5,6 @@
 
 #define INITRD_MINOR 250 /* shouldn't collide with /dev/ram* too soon ... */
 
-/* starting block # of image */
-extern int rd_image_start;
-
 /* size of a single RAM disk */
 extern unsigned long rd_size;
 

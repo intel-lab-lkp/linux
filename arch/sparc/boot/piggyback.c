@@ -220,8 +220,8 @@ int main(int argc,char **argv)
 
 	/*
 	 * root_flags = 0
-	 * root_dev = 1 (RAMDISK_MAJOR)
-	 * ram_flags = 0
+	 * root_dev = 1 (1 used to mean RAMDISK_MAJOR, i. e. initrd, which was removed from Linux)
+	 * ram_flags = 0 (used to control initrd, which was removed from Linux in 2025)
 	 * sparc_ramdisk_image = "PAGE aligned address after _end")
 	 * sparc_ramdisk_size = size of image
 	 */
