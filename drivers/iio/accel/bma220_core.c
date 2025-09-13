@@ -267,7 +267,7 @@ static int bma220_init(struct spi_device *spi)
 
 	ret = bma220_read_reg(spi, BMA220_REG_ID);
 	if (ret != BMA220_CHIP_ID)
-		return -ENODEV;
+		dev_info(&spi->dev, "Unknown chip found: 0x%02x\n", ret);
 
 	/* Make sure the chip is powered on and config registers are reset */
 	ret = bma220_power(spi, true);
