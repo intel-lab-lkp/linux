@@ -153,7 +153,7 @@ data using the `bmfdec <https://github.com/pali/bmfdec>`_ utility:
     [WmiDataId(1), read, Description("P-State ID.")] uint32 PStateID;
     [WmiDataId(2), read, Description("CLOCK ID.")] uint32 ClockID;
     [WmiDataId(3), read, Description("Default value.")] uint32 defaultvalue;
-    [WmiDataId(4), read, Description("OC Offset freqency.")] uint32 OCOffsetFreq;
+    [WmiDataId(4), read, Description("OC Offset frequency")] uint32 OCOffsetFreq;
     [WmiDataId(5), read, Description("OC Min offset value.")] uint32 OCMinOffset;
     [WmiDataId(6), read, Description("OC Max offset value.")] uint32 OCMaxOffset;
     [WmiDataId(7), read, Description("OC Offset Scale.")] uint32 OCOffsetScale;
