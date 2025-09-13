@@ -51,7 +51,7 @@
 	compatible = "st,stm32746g-eval", "st,stm32f746";
 
 	chosen {
-		bootargs = "root=/dev/ram";
+		bootargs = "";
 		stdout-path = "serial0:115200n8";
 	};
 

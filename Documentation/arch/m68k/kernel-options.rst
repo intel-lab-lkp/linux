@@ -73,7 +73,6 @@ hardcoded name to number mappings. The name must always be a
 combination of two or three letters, followed by a decimal number.
 Valid names are::
 
-  /dev/ram: -> 0x0100 (initial ramdisk)
   /dev/hda: -> 0x0300 (first IDE disk)
   /dev/hdb: -> 0x0340 (second IDE disk)
   /dev/sda: -> 0x0800 (first SCSI disk)
@@ -86,12 +85,8 @@ Valid names are::
 The name must be followed by a decimal number, that stands for the
 partition number. Internally, the value of the number is just
 added to the device number mentioned in the table above. The
-exceptions are /dev/ram and /dev/fd, where /dev/ram refers to an
-initial ramdisk loaded by your bootstrap program (please consult the
-instructions for your bootstrap program to find out how to load an
-initial ramdisk). As of kernel version 2.0.18 you must specify
-/dev/ram as the root device if you want to boot from an initial
-ramdisk. For the floppy devices, /dev/fd, the number stands for the
+exception is /dev/fd.
+For the floppy devices, /dev/fd, the number stands for the
 floppy drive number (there are no partitions on floppy disks). I.e.,
 /dev/fd0 stands for the first drive, /dev/fd1 for the second, and so
 on. Since the number is just added, you can also force the disk format

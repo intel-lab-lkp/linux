@@ -165,6 +165,6 @@
 		};
 	};
 	chosen {
-		bootargs = "debug earlyprintk console=tty0 console=ttyAMA0,115200n8 root=/dev/ram0";
+		bootargs = "debug earlyprintk console=tty0 console=ttyAMA0,115200n8";
 	};
 };

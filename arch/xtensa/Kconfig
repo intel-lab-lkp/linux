@@ -448,7 +448,7 @@ config CMDLINE_BOOL
 config CMDLINE
 	string "Initial kernel command string"
 	depends on CMDLINE_BOOL
-	default "console=ttyS0,38400 root=/dev/ram"
+	default "console=ttyS0,38400"
 	help
 	  On some architectures (EBSA110 and CATS), there is currently no way
 	  for the boot loader to pass arguments to the kernel. For these

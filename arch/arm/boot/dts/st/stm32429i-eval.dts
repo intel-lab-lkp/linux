@@ -57,7 +57,7 @@
 	compatible = "st,stm32429i-eval", "st,stm32f429";
 
 	chosen {
-		bootargs = "root=/dev/ram";
+		bootargs = "";
 		stdout-path = "serial0:115200n8";
 	};
 

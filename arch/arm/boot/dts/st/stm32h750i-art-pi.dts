@@ -54,7 +54,7 @@
 	compatible = "st,stm32h750i-art-pi", "st,stm32h750";
 
 	chosen {
-		bootargs = "root=/dev/ram";
+		bootargs = "";
 		stdout-path = "serial0:2000000n8";
 	};
 

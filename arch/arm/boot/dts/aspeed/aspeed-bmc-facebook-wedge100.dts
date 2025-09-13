@@ -10,7 +10,7 @@
 
 	chosen {
 		stdout-path = &uart3;
-		bootargs = "console=ttyS2,9600n8 root=/dev/ram rw";
+		bootargs = "console=ttyS2,9600n8 rw";
 	};
 
 	ast-adc-hwmon {

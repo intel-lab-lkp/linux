@@ -13,7 +13,7 @@
 	compatible = "calaosystems,usb-s8815";
 
 	chosen {
-		bootargs = "root=/dev/ram0 console=ttyAMA1,115200n8 earlyprintk";
+		bootargs = "console=ttyAMA1,115200n8 earlyprintk";
 	};
 
 	aliases {

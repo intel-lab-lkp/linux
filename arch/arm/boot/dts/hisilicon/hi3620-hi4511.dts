@@ -13,7 +13,7 @@
 	compatible = "hisilicon,hi3620-hi4511";
 
 	chosen {
-		bootargs = "root=/dev/ram0";
+		bootargs = "";
 		stdout-path = "serial0:115200n8";
 	};
 

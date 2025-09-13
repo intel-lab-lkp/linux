@@ -12,7 +12,7 @@
 	};
 
 	chosen {
-		bootargs = "console=ttyS0,9600n8 root=/dev/ram rw vmalloc=640M";
+		bootargs = "console=ttyS0,9600n8 rw vmalloc=640M";
 	};
 
 	memory@80000000 {

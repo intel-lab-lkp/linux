@@ -53,7 +53,7 @@
 	};
 
 	chosen {
-		bootargs = "root=/dev/ram0 console=ttyAM0,38400n8 earlyprintk";
+		bootargs = "console=ttyAM0,38400n8 earlyprintk";
 	};
 
 	/* 24 MHz chrystal on the Integrator/AP development board */

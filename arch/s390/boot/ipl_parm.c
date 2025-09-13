@@ -18,7 +18,7 @@
 struct parmarea parmarea __section(".parmarea") = {
 	.kernel_version		= (unsigned long)kernel_version,
 	.max_command_line_size	= COMMAND_LINE_SIZE,
-	.command_line		= "root=/dev/ram0 ro",
+	.command_line		= "ro",
 };
 
 char __bootdata(early_command_line)[COMMAND_LINE_SIZE];

@@ -49,7 +49,7 @@
 	compatible = "st,stm32h743i-eval", "st,stm32h743";
 
 	chosen {
-		bootargs = "root=/dev/ram";
+		bootargs = "";
 		stdout-path = "serial0:115200n8";
 	};
 

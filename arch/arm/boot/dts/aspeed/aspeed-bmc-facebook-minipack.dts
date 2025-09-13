@@ -230,7 +230,7 @@
 
 	chosen {
 		stdout-path = &uart1;
-		bootargs = "debug console=ttyS1,9600n8 root=/dev/ram rw";
+		bootargs = "debug console=ttyS1,9600n8 rw";
 	};
 };
 

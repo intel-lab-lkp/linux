@@ -11,7 +11,7 @@
 	compatible = "arm,integrator-cp";
 
 	chosen {
-		bootargs = "root=/dev/ram0 console=ttyAMA0,38400n8 earlyprintk";
+		bootargs = "console=ttyAMA0,38400n8 earlyprintk";
 	};
 
 	cpus {

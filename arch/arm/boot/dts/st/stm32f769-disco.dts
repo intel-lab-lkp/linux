@@ -51,7 +51,7 @@
 	compatible = "st,stm32f769-disco", "st,stm32f769";
 
 	chosen {
-		bootargs = "root=/dev/ram";
+		bootargs = "";
 		stdout-path = "serial0:115200n8";
 	};
 
