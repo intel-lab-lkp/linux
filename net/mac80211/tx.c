@@ -2856,7 +2856,8 @@ static struct sk_buff *ieee80211_build_hdr(struct ieee80211_sub_if_data *sdata,
 	if (unlikely(!ieee80211_vif_is_mesh(&sdata->vif) &&
 		     (sdata->vif.type != NL80211_IFTYPE_OCB) &&
 		     !multicast && !authorized &&
-		     (cpu_to_be16(ethertype) != sdata->control_port_protocol ||
+		     ((cpu_to_be16(ethertype) != sdata->control_port_protocol &&
+		       !ieee80211_is_vlan_control(sdata, (void *)skb->data, skb->len)) ||
 		      !ieee80211_is_our_addr(sdata, skb->data + ETH_ALEN, NULL)))) {
 #ifdef CONFIG_MAC80211_VERBOSE_DEBUG
 		net_info_ratelimited("%s: dropped frame to %pM (unauthorized port)\n",
@@ -6316,6 +6317,8 @@ int ieee80211_tx_control_port(struct wiphy *wiphy, struct net_device *dev,
 {
 	struct ieee80211_sub_if_data *sdata = IEEE80211_DEV_TO_SUB_IF(dev);
 	struct ieee80211_local *local = sdata->local;
+	unsigned int hdrlen = sizeof(struct ethhdr);
+	struct vlan_hdr *vhdr;
 	struct sta_info *sta;
 	struct sk_buff *skb;
 	struct ethhdr *ehdr;
@@ -6343,16 +6346,28 @@ int ieee80211_tx_control_port(struct wiphy *wiphy, struct net_device *dev,
 	if (cookie)
 		ctrl_flags |= IEEE80211_TX_CTL_REQ_TX_STATUS;
 
-	flags |= IEEE80211_TX_INTFL_NL80211_FRAME_TX;
+	flags |= IEEE80211_TX_INTFL_NL80211_FRAME_TX |
+		 IEEE80211_TX_CTL_USE_MINRATE;
+
+	if (vlan_id)
+		hdrlen += sizeof(struct vlan_hdr);
 
 	skb = dev_alloc_skb(local->hw.extra_tx_headroom +
-			    sizeof(struct ethhdr) + len);
+			    hdrlen + len);
 	if (!skb)
 		return -ENOMEM;
 
-	skb_reserve(skb, local->hw.extra_tx_headroom + sizeof(struct ethhdr));
+	skb_reserve(skb, local->hw.extra_tx_headroom + hdrlen);
 
 	skb_put_data(skb, buf, len);
+
+	if (vlan_id) {
+		vhdr = skb_push(skb, VLAN_HLEN);
+		vhdr->h_vlan_encapsulated_proto =
+			sdata->control_port_protocol;
+		vhdr->h_vlan_TCI = cpu_to_be16(vlan_id & VLAN_VID_MASK);
+		proto = cpu_to_be16(ETH_P_8021Q);
+	}
 
 	ehdr = skb_push(skb, sizeof(struct ethhdr));
 	memcpy(ehdr->h_dest, dest, ETH_ALEN);

@@ -1298,6 +1298,8 @@ int ieee80211_do_open(struct wireless_dev *wdev, bool coming_up)
 			master->control_port_over_nl80211;
 		sdata->control_port_no_preauth =
 			master->control_port_no_preauth;
+		sdata->control_port_vlan_id =
+			master->control_port_vlan_id;
 		sdata->vif.cab_queue = master->vif.cab_queue;
 		memcpy(sdata->vif.hw_queue, master->vif.hw_queue,
 		       sizeof(sdata->vif.hw_queue));

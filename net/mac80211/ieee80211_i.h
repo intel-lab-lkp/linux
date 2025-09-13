@@ -1160,6 +1160,7 @@ struct ieee80211_sub_if_data {
 	bool control_port_no_encrypt;
 	bool control_port_no_preauth;
 	bool control_port_over_nl80211;
+	u16 control_port_vlan_id;
 
 	atomic_t num_tx_queued;
 	struct mac80211_qos_map __rcu *qos_map;
@@ -1947,6 +1948,8 @@ void ieee80211_clear_fast_rx(struct sta_info *sta);
 
 bool ieee80211_is_our_addr(struct ieee80211_sub_if_data *sdata,
 			   const u8 *addr, int *out_link_id);
+bool ieee80211_is_vlan_control(struct ieee80211_sub_if_data *sdata,
+			       struct ethhdr *ehdr, u32 len);
 
 /* STA code */
 void ieee80211_sta_setup_sdata(struct ieee80211_sub_if_data *sdata);
