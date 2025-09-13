@@ -1,0 +1,14 @@
+// SPDX-License-Identifier: (GPL-2.0 OR MIT)
+/dts-v1/;
+
+#include "blackhole-a0.dtsi"
+
+/ {
+	model = "Tenstorrent Blackhole A0 SoC PCIe card";
+	compatible = "tenstorrent,blackhole-a0-card", "tenstorrent,blackhole-a0";
+
+	memory@0 {
+		device_type = "memory";
+		reg = <0x4000 0x30000000 0x1 0x00000000>;
+	};
+};
