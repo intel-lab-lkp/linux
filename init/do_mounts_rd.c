@@ -55,8 +55,7 @@ static int __init crd_load(decompress_fn deco);
  *	lz4
  */
 static int __init
-identify_ramdisk_image(struct file *file, loff_t pos,
-		decompress_fn *decompressor)
+identify_ramdisk_image(struct file *file, decompress_fn *decompressor)
 {
 	const int size = 512;
 	struct minix_super_block *minixsb;
@@ -68,6 +67,7 @@ identify_ramdisk_image(struct file *file, loff_t pos,
 	const char *compress_name;
 	unsigned long n;
 	int start_block = rd_image_start;
+	loff_t pos;
 
 	buf = kmalloc(size, GFP_KERNEL);
 	if (!buf)
@@ -204,7 +204,7 @@ int __init rd_load_image(char *from)
 		goto noclose_input;
 
 	in_pos = rd_image_start * BLOCK_SIZE;
-	nblocks = identify_ramdisk_image(in_file, in_pos, &decompressor);
+	nblocks = identify_ramdisk_image(in_file, &decompressor);
 	if (nblocks < 0)
 		goto done;
 
