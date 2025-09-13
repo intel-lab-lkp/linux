@@ -360,17 +360,17 @@ const struct seq_operations cpuinfo_op = {
 void __init check_for_initrd(void)
 {
 #ifdef CONFIG_BLK_DEV_INITRD
-	DBG(" -> check_for_initrd()  initrd_start=0x%lx  initrd_end=0x%lx\n",
-	    initrd_start, initrd_end);
+	DBG(" -> check_for_initrd()  virt_external_initramfs_start=0x%lx  virt_external_initramfs_end=0x%lx\n",
+	    virt_external_initramfs_start, virt_external_initramfs_end);
 
 	/* If we were not passed an sensible initramfs, clear initramfs reference.
 	 */
-	if (!(is_kernel_addr(initrd_start) && is_kernel_addr(initrd_end) &&
-	    initrd_end > initrd_start))
-		initrd_start = initrd_end = 0;
+	if (!(is_kernel_addr(virt_external_initramfs_start) && is_kernel_addr(virt_external_initramfs_end) &&
+	    virt_external_initramfs_end > virt_external_initramfs_start))
+		virt_external_initramfs_start = virt_external_initramfs_end = 0;
 
-	if (initrd_start)
-		pr_info("Found initramfs at 0x%lx:0x%lx\n", initrd_start, initrd_end);
+	if (virt_external_initramfs_start)
+		pr_info("Found initramfs at 0x%lx:0x%lx\n", virt_external_initramfs_start, virt_external_initramfs_end);
 
 	DBG(" <- check_for_initrd()\n");
 #endif /* CONFIG_BLK_DEV_INITRD */

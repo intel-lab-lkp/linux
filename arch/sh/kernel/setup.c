@@ -153,16 +153,16 @@ void __init check_for_initrd(void)
 	/*
 	 * Address sanitization
 	 */
-	initrd_start = (unsigned long)__va(start);
-	initrd_end = initrd_start + INITRD_SIZE;
+	virt_external_initramfs_start = (unsigned long)__va(start);
+	virt_external_initramfs_end = virt_external_initramfs_start + INITRD_SIZE;
 
-	memblock_reserve(__pa(initrd_start), INITRD_SIZE);
+	memblock_reserve(__pa(virt_external_initramfs_start), INITRD_SIZE);
 
 	return;
 
 disable:
 	pr_info("initrd disabled\n");
-	initrd_start = initrd_end = 0;
+	virt_external_initramfs_start = virt_external_initramfs_end = 0;
 #endif
 }
 

@@ -611,7 +611,7 @@ void __init reserve_initrd_mem(void)
 	unsigned long size;
 
 	/* Ignore the virtul address computed during device tree parsing */
-	initrd_start = initrd_end = 0;
+	virt_external_initramfs_start = virt_external_initramfs_end = 0;
 
 	if (!phys_external_initramfs_size)
 		return;
@@ -639,15 +639,15 @@ void __init reserve_initrd_mem(void)
 
 	memblock_reserve(start, size);
 	/* Now convert initrd to virtual addresses */
-	initrd_start = (unsigned long)__va(phys_external_initramfs_start);
-	initrd_end = initrd_start + phys_external_initramfs_size;
+	virt_external_initramfs_start = (unsigned long)__va(phys_external_initramfs_start);
+	virt_external_initramfs_end = virt_external_initramfs_start + phys_external_initramfs_size;
 	initrd_below_start_ok = 1;
 
 	return;
 disable:
 	pr_cont(" - disabling initrd\n");
-	initrd_start = 0;
-	initrd_end = 0;
+	virt_external_initramfs_start = 0;
+	virt_external_initramfs_end = 0;
 }
 
 void __weak __init free_initrd_mem(unsigned long start, unsigned long end)
@@ -673,17 +673,17 @@ static bool __init kexec_free_initrd(void)
 	 * If the initrd region is overlapped with crashkernel reserved region,
 	 * free only memory that is not part of crashkernel region.
 	 */
-	if (initrd_start >= crashk_end || initrd_end <= crashk_start)
+	if (virt_external_initramfs_start >= crashk_end || virt_external_initramfs_end <= crashk_start)
 		return false;
 
 	/*
 	 * Initialize initrd memory region since the kexec boot does not do.
 	 */
-	memset((void *)initrd_start, 0, initrd_end - initrd_start);
-	if (initrd_start < crashk_start)
-		free_initrd_mem(initrd_start, crashk_start);
-	if (initrd_end > crashk_end)
-		free_initrd_mem(crashk_end, initrd_end);
+	memset((void *)virt_external_initramfs_start, 0, virt_external_initramfs_end - virt_external_initramfs_start);
+	if (virt_external_initramfs_start < crashk_start)
+		free_initrd_mem(virt_external_initramfs_start, crashk_start);
+	if (virt_external_initramfs_end > crashk_end)
+		free_initrd_mem(crashk_end, virt_external_initramfs_end);
 	return true;
 }
 #else
@@ -700,12 +700,12 @@ static void __init do_populate_rootfs(void *unused, async_cookie_t cookie)
 	if (err)
 		panic_show_mem("%s", err); /* Failed to decompress INTERNAL initramfs */
 
-	if (!initrd_start || IS_ENABLED(CONFIG_INITRAMFS_FORCE))
+	if (!virt_external_initramfs_start || IS_ENABLED(CONFIG_INITRAMFS_FORCE))
 		goto done;
 
 	printk(KERN_INFO "Unpacking initramfs...\n");
 
-	err = unpack_to_rootfs((char *)initrd_start, initrd_end - initrd_start);
+	err = unpack_to_rootfs((char *)virt_external_initramfs_start, virt_external_initramfs_end - virt_external_initramfs_start);
 	if (err) {
 		printk(KERN_EMERG "Initramfs unpacking failed: %s\n", err);
 	}
@@ -717,16 +717,16 @@ done:
 	 * If the initrd region is overlapped with crashkernel reserved region,
 	 * free only memory that is not part of crashkernel region.
 	 */
-	if (!do_retain_initrd && initrd_start && !kexec_free_initrd()) {
-		free_initrd_mem(initrd_start, initrd_end);
-	} else if (do_retain_initrd && initrd_start) {
-		bin_attr_initrd.size = initrd_end - initrd_start;
-		bin_attr_initrd.private = (void *)initrd_start;
+	if (!do_retain_initrd && virt_external_initramfs_start && !kexec_free_initrd()) {
+		free_initrd_mem(virt_external_initramfs_start, virt_external_initramfs_end);
+	} else if (do_retain_initrd && virt_external_initramfs_start) {
+		bin_attr_initrd.size = virt_external_initramfs_end - virt_external_initramfs_start;
+		bin_attr_initrd.private = (void *)virt_external_initramfs_start;
 		if (sysfs_create_bin_file(firmware_kobj, &bin_attr_initrd))
 			pr_err("Failed to create initrd sysfs file");
 	}
-	initrd_start = 0;
-	initrd_end = 0;
+	virt_external_initramfs_start = 0;
+	virt_external_initramfs_end = 0;
 
 	init_flush_fput();
 }

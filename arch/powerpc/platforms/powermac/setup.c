@@ -296,7 +296,7 @@ static void __init pmac_setup_arch(void)
 #endif
 #ifdef CONFIG_PPC32
 #ifdef CONFIG_BLK_DEV_INITRD
-	if (!initrd_start)
+	if (!virt_external_initramfs_start)
 #endif
 		ROOT_DEV = DEFAULT_ROOT_DEVICE;
 #endif

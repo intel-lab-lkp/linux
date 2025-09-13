@@ -202,10 +202,10 @@ asmlinkage void __init mmu_init(void)
 
 #if defined(CONFIG_BLK_DEV_INITRD)
 	/* Remove the init RAM disk from the available memory. */
-	if (initrd_start) {
+	if (virt_external_initramfs_start) {
 		unsigned long size;
-		size = initrd_end - initrd_start;
-		memblock_reserve(__virt_to_phys(initrd_start), size);
+		size = virt_external_initramfs_end - virt_external_initramfs_start;
+		memblock_reserve(__virt_to_phys(virt_external_initramfs_start), size);
 	}
 #endif /* CONFIG_BLK_DEV_INITRD */
 

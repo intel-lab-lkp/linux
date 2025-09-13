@@ -333,9 +333,9 @@ void __init setup_arch(char **cmdline_p)
 	paging_init();
 
 	if (IS_ENABLED(CONFIG_BLK_DEV_INITRD) && m68k_ramdisk.size) {
-		initrd_start = (unsigned long)phys_to_virt(m68k_ramdisk.addr);
-		initrd_end = initrd_start + m68k_ramdisk.size;
-		pr_info("initrd: %08lx - %08lx\n", initrd_start, initrd_end);
+		virt_external_initramfs_start = (unsigned long)phys_to_virt(m68k_ramdisk.addr);
+		virt_external_initramfs_end = virt_external_initramfs_start + m68k_ramdisk.size;
+		pr_info("initrd: %08lx - %08lx\n", virt_external_initramfs_start, virt_external_initramfs_end);
 	}
 
 #ifdef CONFIG_NATFEAT

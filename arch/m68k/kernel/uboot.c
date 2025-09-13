@@ -81,9 +81,9 @@ static void __init parse_uboot_commandline(char *commandp, int size)
 
 	if (uboot_initrd_start && uboot_initrd_end &&
 	    (uboot_initrd_end > uboot_initrd_start)) {
-		initrd_start = uboot_initrd_start;
-		initrd_end = uboot_initrd_end;
-		pr_info("initrd at 0x%lx:0x%lx\n", initrd_start, initrd_end);
+		virt_external_initramfs_start = uboot_initrd_start;
+		virt_external_initramfs_end = uboot_initrd_end;
+		pr_info("initrd at 0x%lx:0x%lx\n", virt_external_initramfs_start, virt_external_initramfs_end);
 	}
 #endif /* if defined(CONFIG_BLK_DEV_INITRD) */
 }

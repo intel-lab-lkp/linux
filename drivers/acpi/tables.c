@@ -432,8 +432,8 @@ void __init acpi_table_upgrade(void)
 		data = __builtin_initramfs_start;
 		size = __builtin_initramfs_size;
 	} else {
-		data = (void *)initrd_start;
-		size = initrd_end - initrd_start;
+		data = (void *)virt_external_initramfs_start;
+		size = virt_external_initramfs_end - virt_external_initramfs_start;
 	}
 
 	if (data == NULL || size == 0)

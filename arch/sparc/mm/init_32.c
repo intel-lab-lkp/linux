@@ -109,20 +109,20 @@ static void __init find_ramdisk(unsigned long end_of_phys_memory)
 	if (sparc_ramdisk_image) {
 		if (sparc_ramdisk_image >= (unsigned long)&_end - 2 * PAGE_SIZE)
 			sparc_ramdisk_image -= KERNBASE;
-		initrd_start = sparc_ramdisk_image + phys_base;
-		initrd_end = initrd_start + sparc_ramdisk_size;
-		if (initrd_end > end_of_phys_memory) {
+		virt_external_initramfs_start = sparc_ramdisk_image + phys_base;
+		virt_external_initramfs_end = virt_external_initramfs_start + sparc_ramdisk_size;
+		if (virt_external_initramfs_end > end_of_phys_memory) {
 			printk(KERN_CRIT "initrd extends beyond end of memory "
 			       "(0x%016lx > 0x%016lx)\ndisabling initrd\n",
-			       initrd_end, end_of_phys_memory);
-			initrd_start = 0;
+			       virt_external_initramfs_end, end_of_phys_memory);
+			virt_external_initramfs_start = 0;
 		} else {
 			/* Reserve the initrd image area. */
-			size = initrd_end - initrd_start;
-			memblock_reserve(initrd_start, size);
+			size = virt_external_initramfs_end - virt_external_initramfs_start;
+			memblock_reserve(virt_external_initramfs_start, size);
 
-			initrd_start = (initrd_start - phys_base) + PAGE_OFFSET;
-			initrd_end = (initrd_end - phys_base) + PAGE_OFFSET;
+			virt_external_initramfs_start = (virt_external_initramfs_start - phys_base) + PAGE_OFFSET;
+			virt_external_initramfs_end = (virt_external_initramfs_end - phys_base) + PAGE_OFFSET;
 		}
 	}
 #endif

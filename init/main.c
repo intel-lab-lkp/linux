@@ -271,10 +271,10 @@ static void * __init get_boot_config_from_initrd(size_t *_size)
 	u32 *hdr;
 	int i;
 
-	if (!initrd_end)
+	if (!virt_external_initramfs_end)
 		return NULL;
 
-	data = (char *)initrd_end - BOOTCONFIG_MAGIC_LEN;
+	data = (char *)virt_external_initramfs_end - BOOTCONFIG_MAGIC_LEN;
 	/*
 	 * Since Grub may align the size of initrd to 4, we must
 	 * check the preceding 3 bytes as well.
@@ -292,9 +292,9 @@ found:
 	csum = le32_to_cpu(hdr[1]);
 
 	data = ((void *)hdr) - size;
-	if ((unsigned long)data < initrd_start) {
+	if ((unsigned long)data < virt_external_initramfs_start) {
 		pr_err("bootconfig size %d is greater than initrd size %ld\n",
-			size, initrd_end - initrd_start);
+			size, virt_external_initramfs_end - virt_external_initramfs_start);
 		return NULL;
 	}
 
@@ -304,7 +304,7 @@ found:
 	}
 
 	/* Remove bootconfig from initramfs/initrd */
-	initrd_end = (unsigned long)data;
+	virt_external_initramfs_end = (unsigned long)data;
 	if (_size)
 		*_size = size;
 
@@ -1047,12 +1047,12 @@ void start_kernel(void)
 	locking_selftest();
 
 #ifdef CONFIG_BLK_DEV_INITRD
-	if (initrd_start && !initrd_below_start_ok &&
-	    page_to_pfn(virt_to_page((void *)initrd_start)) < min_low_pfn) {
+	if (virt_external_initramfs_start && !initrd_below_start_ok &&
+	    page_to_pfn(virt_to_page((void *)virt_external_initramfs_start)) < min_low_pfn) {
 		pr_crit("initrd overwritten (0x%08lx < 0x%08lx) - disabling it.\n",
-		    page_to_pfn(virt_to_page((void *)initrd_start)),
+		    page_to_pfn(virt_to_page((void *)virt_external_initramfs_start)),
 		    min_low_pfn);
-		initrd_start = 0;
+		virt_external_initramfs_start = 0;
 	}
 #endif
 	setup_per_cpu_pageset();

@@ -49,8 +49,8 @@
 #include <asm/traps.h>
 
 #ifdef CONFIG_BLK_DEV_INITRD
-extern unsigned long initrd_start;
-extern unsigned long initrd_end;
+extern unsigned long virt_external_initramfs_start;
+extern unsigned long virt_external_initramfs_end;
 extern int initrd_below_start_ok;
 #endif
 
@@ -106,8 +106,8 @@ static int __init parse_tag_initrd(const bp_tag_t* tag)
 {
 	struct bp_meminfo *mi = (struct bp_meminfo *)(tag->data);
 
-	initrd_start = (unsigned long)__va(mi->start);
-	initrd_end = (unsigned long)__va(mi->end);
+	virt_external_initramfs_start = (unsigned long)__va(mi->start);
+	virt_external_initramfs_end = (unsigned long)__va(mi->end);
 
 	return 0;
 }
@@ -290,11 +290,11 @@ void __init setup_arch(char **cmdline_p)
 	/* Reserve some memory regions */
 
 #ifdef CONFIG_BLK_DEV_INITRD
-	if (initrd_start < initrd_end &&
-	    !mem_reserve(__pa(initrd_start), __pa(initrd_end)))
+	if (virt_external_initramfs_start < virt_external_initramfs_end &&
+	    !mem_reserve(__pa(virt_external_initramfs_start), __pa(virt_external_initramfs_end)))
 		initrd_below_start_ok = 1;
 	else
-		initrd_start = 0;
+		virt_external_initramfs_start = 0;
 #endif
 
 	mem_reserve(__pa(_stext), __pa(_end));

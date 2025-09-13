@@ -126,15 +126,15 @@ static int __init rd_start_early(char *p)
 	if (start < XKPHYS)
 		start = (int)start;
 #endif
-	initrd_start = start;
-	initrd_end += start;
+	virt_external_initramfs_start = start;
+	virt_external_initramfs_end += start;
 	return 0;
 }
 early_param("rd_start", rd_start_early);
 
 static int __init rd_size_early(char *p)
 {
-	initrd_end += memparse(p, &p);
+	virt_external_initramfs_end += memparse(p, &p);
 	return 0;
 }
 early_param("rd_size", rd_size_early);
@@ -146,13 +146,13 @@ static unsigned long __init init_initrd(void)
 
 	/*
 	 * Board specific code or command line parser should have
-	 * already set up initrd_start and initrd_end. In these cases
+	 * already set up virt_external_initramfs_start and virt_external_initramfs_end. In these cases
 	 * perform sanity checks and use them if all looks good.
 	 */
-	if (!initrd_start || initrd_end <= initrd_start)
+	if (!virt_external_initramfs_start || virt_external_initramfs_end <= virt_external_initramfs_start)
 		goto disable;
 
-	if (initrd_start & ~PAGE_MASK) {
+	if (virt_external_initramfs_start & ~PAGE_MASK) {
 		pr_err("initrd start must be page aligned\n");
 		goto disable;
 	}
@@ -164,19 +164,19 @@ static unsigned long __init init_initrd(void)
 	 * 32-bit. We need also to switch from KSEG0 to XKPHYS
 	 * addresses now, so the code can now safely use __pa().
 	 */
-	end = __pa(initrd_end);
-	initrd_end = (unsigned long)__va(end);
-	initrd_start = (unsigned long)__va(__pa(initrd_start));
+	end = __pa(virt_external_initramfs_end);
+	virt_external_initramfs_end = (unsigned long)__va(end);
+	virt_external_initramfs_start = (unsigned long)__va(__pa(virt_external_initramfs_start));
 
-	if (initrd_start < PAGE_OFFSET) {
+	if (virt_external_initramfs_start < PAGE_OFFSET) {
 		pr_err("initrd start < PAGE_OFFSET\n");
 		goto disable;
 	}
 
 	return PFN_UP(end);
 disable:
-	initrd_start = 0;
-	initrd_end = 0;
+	virt_external_initramfs_start = 0;
+	virt_external_initramfs_end = 0;
 	return 0;
 }
 
@@ -189,21 +189,21 @@ static void __init maybe_bswap_initrd(void)
 	u64 buf;
 
 	/* Check for CPIO signature */
-	if (!memcmp((void *)initrd_start, "070701", 6))
+	if (!memcmp((void *)virt_external_initramfs_start, "070701", 6))
 		return;
 
 	/* Check for compressed initrd */
-	if (decompress_method((unsigned char *)initrd_start, 8, NULL))
+	if (decompress_method((unsigned char *)virt_external_initramfs_start, 8, NULL))
 		return;
 
 	/* Try again with a byte swapped header */
-	buf = swab64p((u64 *)initrd_start);
+	buf = swab64p((u64 *)virt_external_initramfs_start);
 	if (!memcmp(&buf, "070701", 6) ||
 	    decompress_method((unsigned char *)(&buf), 8, NULL)) {
 		unsigned long i;
 
 		pr_info("Byteswapped initrd detected\n");
-		for (i = initrd_start; i < ALIGN(initrd_end, 8); i += 8)
+		for (i = virt_external_initramfs_start; i < ALIGN(virt_external_initramfs_end, 8); i += 8)
 			swab64s((u64 *)i);
 	}
 #endif
@@ -211,29 +211,29 @@ static void __init maybe_bswap_initrd(void)
 
 static void __init finalize_initrd(void)
 {
-	unsigned long size = initrd_end - initrd_start;
+	unsigned long size = virt_external_initramfs_end - virt_external_initramfs_start;
 
 	if (size == 0) {
 		printk(KERN_INFO "Initrd not found or empty");
 		goto disable;
 	}
-	if (__pa(initrd_end) > PFN_PHYS(max_low_pfn)) {
+	if (__pa(virt_external_initramfs_end) > PFN_PHYS(max_low_pfn)) {
 		printk(KERN_ERR "Initrd extends beyond end of memory");
 		goto disable;
 	}
 
 	maybe_bswap_initrd();
 
-	memblock_reserve(__pa(initrd_start), size);
+	memblock_reserve(__pa(virt_external_initramfs_start), size);
 	initrd_below_start_ok = 1;
 
 	pr_info("Initial ramdisk at: 0x%lx (%lu bytes)\n",
-		initrd_start, size);
+		virt_external_initramfs_start, size);
 	return;
 disable:
 	printk(KERN_CONT " - disabling initrd\n");
-	initrd_start = 0;
-	initrd_end = 0;
+	virt_external_initramfs_start = 0;
+	virt_external_initramfs_end = 0;
 }
 
 #else  /* !CONFIG_BLK_DEV_INITRD */

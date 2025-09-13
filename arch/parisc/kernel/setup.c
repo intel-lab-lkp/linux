@@ -71,8 +71,8 @@ static void __init setup_cmdline(char **cmdline_p)
 #ifdef CONFIG_BLK_DEV_INITRD
 	/* did palo pass us a ramdisk? */
 	if (boot_args[2] != 0) {
-		initrd_start = (unsigned long)__va(boot_args[2]);
-		initrd_end = (unsigned long)__va(boot_args[3]);
+		virt_external_initramfs_start = (unsigned long)__va(boot_args[2]);
+		virt_external_initramfs_end = (unsigned long)__va(boot_args[3]);
 	}
 #endif
 

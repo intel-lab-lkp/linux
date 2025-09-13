@@ -27,8 +27,8 @@ int __init read_initrd(void)
 	if (!area)
 		return 0;
 
-	initrd_start = (unsigned long) area;
-	initrd_end = initrd_start + size;
+	virt_external_initramfs_start = (unsigned long) area;
+	virt_external_initramfs_end = virt_external_initramfs_start + size;
 	return 0;
 }
 

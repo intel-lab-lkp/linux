@@ -283,8 +283,8 @@ void __init arm64_memblock_init(void)
 	memblock_reserve(__pa_symbol(_stext), _end - _stext);
 	if (IS_ENABLED(CONFIG_BLK_DEV_INITRD) && phys_external_initramfs_size) {
 		/* the generic initrd code expects virtual addresses */
-		initrd_start = __phys_to_virt(phys_external_initramfs_start);
-		initrd_end = initrd_start + phys_external_initramfs_size;
+		virt_external_initramfs_start = __phys_to_virt(phys_external_initramfs_start);
+		virt_external_initramfs_end = virt_external_initramfs_start + phys_external_initramfs_size;
 	}
 
 	early_init_fdt_scan_reserved_mem();

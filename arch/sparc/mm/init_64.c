@@ -901,13 +901,13 @@ static void __init find_ramdisk(unsigned long phys_base)
 		numadbg("Found ramdisk at physical address 0x%lx, size %u\n",
 			ramdisk_image, sparc_ramdisk_size);
 
-		initrd_start = ramdisk_image;
-		initrd_end = ramdisk_image + sparc_ramdisk_size;
+		virt_external_initramfs_start = ramdisk_image;
+		virt_external_initramfs_end = ramdisk_image + sparc_ramdisk_size;
 
-		memblock_reserve(initrd_start, sparc_ramdisk_size);
+		memblock_reserve(virt_external_initramfs_start, sparc_ramdisk_size);
 
-		initrd_start += PAGE_OFFSET;
-		initrd_end += PAGE_OFFSET;
+		virt_external_initramfs_start += PAGE_OFFSET;
+		virt_external_initramfs_end += PAGE_OFFSET;
 	}
 #endif
 }
@@ -2485,8 +2485,8 @@ int page_in_phys_avail(unsigned long paddr)
 	if (paddr >= kern_base && paddr < (kern_base + kern_size))
 		return 1;
 #ifdef CONFIG_BLK_DEV_INITRD
-	if (paddr >= __pa(initrd_start) &&
-	    paddr < __pa(PAGE_ALIGN(initrd_end)))
+	if (paddr >= __pa(virt_external_initramfs_start) &&
+	    paddr < __pa(PAGE_ALIGN(virt_external_initramfs_end)))
 		return 1;
 #endif
 

@@ -439,9 +439,9 @@ void free_initmem(void)
 #ifdef CONFIG_BLK_DEV_INITRD
 void free_initrd_mem(unsigned long start, unsigned long end)
 {
-	if (start == initrd_start)
+	if (start == virt_external_initramfs_start)
 		start = round_down(start, PAGE_SIZE);
-	if (end == initrd_end)
+	if (end == virt_external_initramfs_end)
 		end = round_up(end, PAGE_SIZE);
 
 	poison_init_mem((void *)start, PAGE_ALIGN(end) - start);

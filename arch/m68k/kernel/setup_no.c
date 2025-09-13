@@ -155,9 +155,9 @@ void __init setup_arch(char **cmdline_p)
 	max_pfn = max_low_pfn = PFN_DOWN(memory_end);
 
 #if defined(CONFIG_UBOOT) && defined(CONFIG_BLK_DEV_INITRD)
-	if ((initrd_start > 0) && (initrd_start < initrd_end) &&
-			(initrd_end < memory_end))
-		memblock_reserve(initrd_start, initrd_end - initrd_start);
+	if ((virt_external_initramfs_start > 0) && (virt_external_initramfs_start < virt_external_initramfs_end) &&
+			(virt_external_initramfs_end < memory_end))
+		memblock_reserve(virt_external_initramfs_start, virt_external_initramfs_end - virt_external_initramfs_start);
 #endif /* if defined(CONFIG_BLK_DEV_INITRD) */
 
 	/*

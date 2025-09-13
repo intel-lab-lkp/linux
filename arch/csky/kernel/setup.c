@@ -17,35 +17,35 @@ static void __init setup_initrd(void)
 {
 	unsigned long size;
 
-	if (initrd_start >= initrd_end) {
+	if (virt_external_initramfs_start >= virt_external_initramfs_end) {
 		pr_err("initrd not found or empty");
 		goto disable;
 	}
 
-	if (__pa(initrd_end) > PFN_PHYS(max_low_pfn)) {
+	if (__pa(virt_external_initramfs_end) > PFN_PHYS(max_low_pfn)) {
 		pr_err("initrd extends beyond end of memory");
 		goto disable;
 	}
 
-	size = initrd_end - initrd_start;
+	size = virt_external_initramfs_end - virt_external_initramfs_start;
 
-	if (memblock_is_region_reserved(__pa(initrd_start), size)) {
+	if (memblock_is_region_reserved(__pa(virt_external_initramfs_start), size)) {
 		pr_err("INITRD: 0x%08lx+0x%08lx overlaps in-use memory region",
-		       __pa(initrd_start), size);
+		       __pa(virt_external_initramfs_start), size);
 		goto disable;
 	}
 
-	memblock_reserve(__pa(initrd_start), size);
+	memblock_reserve(__pa(virt_external_initramfs_start), size);
 
 	pr_info("Initial ramdisk at: 0x%p (%lu bytes)\n",
-		(void *)(initrd_start), size);
+		(void *)(virt_external_initramfs_start), size);
 
 	initrd_below_start_ok = 1;
 
 	return;
 
 disable:
-	initrd_start = initrd_end = 0;
+	virt_external_initramfs_start = virt_external_initramfs_end = 0;
 
 	pr_err(" - disabling initrd\n");
 }

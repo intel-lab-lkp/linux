@@ -77,9 +77,9 @@ static void __init setup_memory(void)
 
 #ifdef CONFIG_BLK_DEV_INITRD
 	/* Then reserve the initrd, if any */
-	if (initrd_start && (initrd_end > initrd_start)) {
-		unsigned long aligned_start = ALIGN_DOWN(initrd_start, PAGE_SIZE);
-		unsigned long aligned_end = ALIGN(initrd_end, PAGE_SIZE);
+	if (virt_external_initramfs_start && (virt_external_initramfs_end > virt_external_initramfs_start)) {
+		unsigned long aligned_start = ALIGN_DOWN(virt_external_initramfs_start, PAGE_SIZE);
+		unsigned long aligned_end = ALIGN(virt_external_initramfs_end, PAGE_SIZE);
 
 		memblock_reserve(__pa(aligned_start), aligned_end - aligned_start);
 	}
@@ -239,13 +239,13 @@ void __init setup_arch(char **cmdline_p)
 	setup_initial_init_mm(_stext, _etext, _edata, _end);
 
 #ifdef CONFIG_BLK_DEV_INITRD
-	if (initrd_start == initrd_end) {
+	if (virt_external_initramfs_start == virt_external_initramfs_end) {
 		printk(KERN_INFO "Initial ramdisk not found\n");
-		initrd_start = 0;
-		initrd_end = 0;
+		virt_external_initramfs_start = 0;
+		virt_external_initramfs_end = 0;
 	} else {
 		printk(KERN_INFO "Initial ramdisk at: 0x%p (%lu bytes)\n",
-		       (void *)(initrd_start), initrd_end - initrd_start);
+		       (void *)(virt_external_initramfs_start), virt_external_initramfs_end - virt_external_initramfs_start);
 		initrd_below_start_ok = 1;
 	}
 #endif

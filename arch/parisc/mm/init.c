@@ -298,20 +298,20 @@ static void __init setup_bootmem(void)
 #endif
 
 #ifdef CONFIG_BLK_DEV_INITRD
-	if (initrd_start) {
-		printk(KERN_INFO "initrd: %08lx-%08lx\n", initrd_start, initrd_end);
-		if (__pa(initrd_start) < mem_max) {
+	if (virt_external_initramfs_start) {
+		printk(KERN_INFO "initrd: %08lx-%08lx\n", virt_external_initramfs_start, virt_external_initramfs_end);
+		if (__pa(virt_external_initramfs_start) < mem_max) {
 			unsigned long initrd_reserve;
 
-			if (__pa(initrd_end) > mem_max) {
-				initrd_reserve = mem_max - __pa(initrd_start);
+			if (__pa(virt_external_initramfs_end) > mem_max) {
+				initrd_reserve = mem_max - __pa(virt_external_initramfs_start);
 			} else {
-				initrd_reserve = initrd_end - initrd_start;
+				initrd_reserve = virt_external_initramfs_end - virt_external_initramfs_start;
 			}
 			initrd_below_start_ok = 1;
-			printk(KERN_INFO "initrd: reserving %08lx-%08lx (mem_max %08lx)\n", __pa(initrd_start), __pa(initrd_start) + initrd_reserve, mem_max);
+			printk(KERN_INFO "initrd: reserving %08lx-%08lx (mem_max %08lx)\n", __pa(virt_external_initramfs_start), __pa(virt_external_initramfs_start) + initrd_reserve, mem_max);
 
-			memblock_reserve(__pa(initrd_start), initrd_reserve);
+			memblock_reserve(__pa(virt_external_initramfs_start), initrd_reserve);
 		}
 	}
 #endif
@@ -633,10 +633,10 @@ static void __init pagetable_init(void)
 	}
 
 #ifdef CONFIG_BLK_DEV_INITRD
-	if (initrd_end && initrd_end > mem_limit) {
-		printk(KERN_INFO "initrd: mapping %08lx-%08lx\n", initrd_start, initrd_end);
-		map_pages(initrd_start, __pa(initrd_start),
-			  initrd_end - initrd_start, PAGE_KERNEL, 0);
+	if (virt_external_initramfs_end && virt_external_initramfs_end > mem_limit) {
+		printk(KERN_INFO "initrd: mapping %08lx-%08lx\n", virt_external_initramfs_start, virt_external_initramfs_end);
+		map_pages(virt_external_initramfs_start, __pa(virt_external_initramfs_start),
+			  virt_external_initramfs_end - virt_external_initramfs_start, PAGE_KERNEL, 0);
 	}
 #endif
 

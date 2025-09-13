@@ -226,11 +226,11 @@ albacore_init_arch(void)
 	if (memtop > pci_mem) {
 #ifdef CONFIG_BLK_DEV_INITRD
 		/* Move the initrd out of the way. */
-		if (initrd_end && __pa(initrd_end) > pci_mem) {
+		if (virt_external_initramfs_end && __pa(virt_external_initramfs_end) > pci_mem) {
 			unsigned long size;
 
-			size = initrd_end - initrd_start;
-			memblock_free((void *)initrd_start, PAGE_ALIGN(size));
+			size = virt_external_initramfs_end - virt_external_initramfs_start;
+			memblock_free((void *)virt_external_initramfs_start, PAGE_ALIGN(size));
 			if (!move_initrd(pci_mem))
 				printk("irongate_init_arch: initrd too big "
 				       "(%ldK)\ndisabling initrd\n",

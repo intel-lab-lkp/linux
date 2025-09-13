@@ -672,8 +672,8 @@ static void __init reserve_initrd(void)
 
 	if (!IS_ENABLED(CONFIG_BLK_DEV_INITRD) || !get_physmem_reserved(RR_INITRD, &addr, &size))
 		return;
-	initrd_start = (unsigned long)__va(addr);
-	initrd_end = initrd_start + size;
+	virt_external_initramfs_start = (unsigned long)__va(addr);
+	virt_external_initramfs_end = virt_external_initramfs_start + size;
 	memblock_reserve(addr, size);
 }
 

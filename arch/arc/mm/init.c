@@ -112,8 +112,8 @@ void __init setup_arch_memory(void)
 #ifdef CONFIG_BLK_DEV_INITRD
 	if (phys_external_initramfs_size) {
 		memblock_reserve(phys_external_initramfs_start, phys_external_initramfs_size);
-		initrd_start = (unsigned long)__va(phys_external_initramfs_start);
-		initrd_end = initrd_start + phys_external_initramfs_size;
+		virt_external_initramfs_start = (unsigned long)__va(phys_external_initramfs_start);
+		virt_external_initramfs_end = virt_external_initramfs_start + phys_external_initramfs_size;
 	}
 #endif
 

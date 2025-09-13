@@ -38,7 +38,7 @@
 int cfe_cons_handle;
 
 #ifdef CONFIG_BLK_DEV_INITRD
-extern unsigned long initrd_start, initrd_end;
+extern unsigned long virt_external_initramfs_start, virt_external_initramfs_end;
 #endif
 
 static void __noreturn cfe_linux_exit(void *arg)
@@ -86,9 +86,9 @@ static __init void prom_meminit(void)
 	unsigned long initrd_pstart;
 	unsigned long initrd_pend;
 
-	initrd_pstart = CPHYSADDR(initrd_start);
-	initrd_pend = CPHYSADDR(initrd_end);
-	if (initrd_start &&
+	initrd_pstart = CPHYSADDR(virt_external_initramfs_start);
+	initrd_pend = CPHYSADDR(virt_external_initramfs_end);
+	if (virt_external_initramfs_start &&
 	    ((initrd_pstart > MAX_RAM_SIZE)
 	     || (initrd_pend > MAX_RAM_SIZE))) {
 		panic("initrd out of addressable memory");
@@ -105,7 +105,7 @@ static __init void prom_meminit(void)
 			 * ramdisk
 			 */
 #ifdef CONFIG_BLK_DEV_INITRD
-			if (initrd_start) {
+			if (virt_external_initramfs_start) {
 				if ((initrd_pstart > addr) &&
 				    (initrd_pstart < (addr + size))) {
 					memblock_add(addr,
@@ -139,7 +139,7 @@ static __init void prom_meminit(void)
 		}
 	}
 #ifdef CONFIG_BLK_DEV_INITRD
-	if (initrd_start) {
+	if (virt_external_initramfs_start) {
 		memblock_add(initrd_pstart, initrd_pend - initrd_pstart);
 		memblock_reserve(initrd_pstart, initrd_pend - initrd_pstart);
 	}
@@ -183,17 +183,17 @@ static int __init initrd_setup(char *str)
 		goto fail;
 	}
 	*(tmp-1) = '@';
-	initrd_start = simple_strtoul(tmp, &endptr, 16);
+	virt_external_initramfs_start = simple_strtoul(tmp, &endptr, 16);
 	if (*endptr) {
 		goto fail;
 	}
-	initrd_end = initrd_start + initrd_size;
-	printk("Found initrd of %lx@%lx\n", initrd_size, initrd_start);
+	virt_external_initramfs_end = virt_external_initramfs_start + initrd_size;
+	printk("Found initrd of %lx@%lx\n", initrd_size, virt_external_initramfs_start);
 	return 1;
  fail:
 	printk("Bad initrd argument.  Disabling initrd\n");
-	initrd_start = 0;
-	initrd_end = 0;
+	virt_external_initramfs_start = 0;
+	virt_external_initramfs_end = 0;
 	return 1;
 }
 

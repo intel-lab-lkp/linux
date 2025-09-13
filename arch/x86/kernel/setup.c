@@ -328,12 +328,12 @@ static void __init relocate_initrd(void)
 		panic("Cannot find place for new RAMDISK of size %lld\n",
 		      ramdisk_size);
 
-	initrd_start = relocated_ramdisk + PAGE_OFFSET;
-	initrd_end   = initrd_start + ramdisk_size;
+	virt_external_initramfs_start = relocated_ramdisk + PAGE_OFFSET;
+	virt_external_initramfs_end   = virt_external_initramfs_start + ramdisk_size;
 	printk(KERN_INFO "Allocated new RAMDISK: [mem %#010llx-%#010llx]\n",
 	       relocated_ramdisk, relocated_ramdisk + ramdisk_size - 1);
 
-	ret = copy_from_early_mem((void *)initrd_start, ramdisk_image, ramdisk_size);
+	ret = copy_from_early_mem((void *)virt_external_initramfs_start, ramdisk_image, ramdisk_size);
 	if (ret)
 		panic("Copy RAMDISK failed\n");
 
@@ -368,7 +368,7 @@ static void __init reserve_initrd(void)
 	    !ramdisk_image || !ramdisk_size)
 		return;		/* No initrd provided by bootloader */
 
-	initrd_start = 0;
+	virt_external_initramfs_start = 0;
 
 	printk(KERN_INFO "RAMDISK: [mem %#010llx-%#010llx]\n", ramdisk_image,
 			ramdisk_end - 1);
@@ -376,8 +376,8 @@ static void __init reserve_initrd(void)
 	if (pfn_range_is_mapped(PFN_DOWN(ramdisk_image),
 				PFN_DOWN(ramdisk_end))) {
 		/* All are mapped, easy case */
-		initrd_start = ramdisk_image + PAGE_OFFSET;
-		initrd_end = initrd_start + ramdisk_size;
+		virt_external_initramfs_start = ramdisk_image + PAGE_OFFSET;
+		virt_external_initramfs_end = virt_external_initramfs_start + ramdisk_size;
 		return;
 	}
 

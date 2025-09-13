@@ -765,8 +765,8 @@ static void __early_init_dt_declare_initrd(unsigned long start,
 	 */
 	if (!IS_ENABLED(CONFIG_ARM64) &&
 	    !(IS_ENABLED(CONFIG_RISCV) && IS_ENABLED(CONFIG_64BIT))) {
-		initrd_start = (unsigned long)__va(start);
-		initrd_end = (unsigned long)__va(end);
+		virt_external_initramfs_start = (unsigned long)__va(start);
+		virt_external_initramfs_end = (unsigned long)__va(end);
 		initrd_below_start_ok = 1;
 	}
 }

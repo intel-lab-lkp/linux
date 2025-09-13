@@ -213,13 +213,13 @@ struct cpio_data __init find_microcode_in_initrd(const char *path)
 #endif
 
 	/*
-	 * Fixup the start address: after reserve_initrd() runs, initrd_start
+	 * Fixup the start address: after reserve_initrd() runs, virt_external_initramfs_start
 	 * has the virtual address of the beginning of the initrd. It also
-	 * possibly relocates the ramdisk. In either case, initrd_start contains
+	 * possibly relocates the ramdisk. In either case, virt_external_initramfs_start contains
 	 * the updated address so use that instead.
 	 */
-	if (initrd_start)
-		start = initrd_start;
+	if (virt_external_initramfs_start)
+		start = virt_external_initramfs_start;
 
 	return find_cpio_data(path, (void *)start, size, NULL);
 #else /* !CONFIG_BLK_DEV_INITRD */

@@ -268,15 +268,15 @@ move_initrd(unsigned long mem_limit)
 	void *start;
 	unsigned long size;
 
-	size = initrd_end - initrd_start;
+	size = virt_external_initramfs_end - virt_external_initramfs_start;
 	start = memblock_alloc(PAGE_ALIGN(size), PAGE_SIZE);
 	if (!start || __pa(start) + size > mem_limit) {
-		initrd_start = initrd_end = 0;
+		virt_external_initramfs_start = virt_external_initramfs_end = 0;
 		return NULL;
 	}
-	memmove(start, (void *)initrd_start, size);
-	initrd_start = (unsigned long)start;
-	initrd_end = initrd_start + size;
+	memmove(start, (void *)virt_external_initramfs_start, size);
+	virt_external_initramfs_start = (unsigned long)start;
+	virt_external_initramfs_end = virt_external_initramfs_start + size;
 	printk("initrd moved to %p\n", start);
 	return start;
 }
@@ -347,20 +347,20 @@ setup_memory(void *kernel_end)
 	memblock_reserve(KERNEL_START_PHYS, kernel_size);
 
 #ifdef CONFIG_BLK_DEV_INITRD
-	initrd_start = INITRD_START;
-	if (initrd_start) {
-		initrd_end = initrd_start+INITRD_SIZE;
+	virt_external_initramfs_start = INITRD_START;
+	if (virt_external_initramfs_start) {
+		virt_external_initramfs_end = virt_external_initramfs_start+INITRD_SIZE;
 		printk("Initial ramdisk at: 0x%p (%lu bytes)\n",
-		       (void *) initrd_start, INITRD_SIZE);
+		       (void *) virt_external_initramfs_start, INITRD_SIZE);
 
-		if ((void *)initrd_end > phys_to_virt(PFN_PHYS(max_low_pfn))) {
+		if ((void *)virt_external_initramfs_end > phys_to_virt(PFN_PHYS(max_low_pfn))) {
 			if (!move_initrd(PFN_PHYS(max_low_pfn)))
 				printk("initrd extends beyond end of memory "
 				       "(0x%08lx > 0x%p)\ndisabling initrd\n",
-				       initrd_end,
+				       virt_external_initramfs_end,
 				       phys_to_virt(PFN_PHYS(max_low_pfn)));
 		} else {
-			memblock_reserve(virt_to_phys((void *)initrd_start),
+			memblock_reserve(virt_to_phys((void *)virt_external_initramfs_start),
 					INITRD_SIZE);
 		}
 	}
