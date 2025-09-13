@@ -366,3 +366,6 @@ There are 6 classes of reasons for the reboot:
 This information is read by the kernel at bootup and printed into
 the syslog. When a random reboot occurs this message can be helpful
 to determine the next component to debug.
+
+To prevent unrelated reboot reasons from being retained among boots,
+the kernel clears all reason bits once reading the register.
