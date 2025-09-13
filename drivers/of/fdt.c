@@ -760,8 +760,8 @@ static void __early_init_dt_declare_initrd(unsigned long start,
 {
 	/*
 	 * __va() is not yet available this early on some platforms. In that
-	 * case, the platform uses phys_initrd_start/phys_initrd_size instead
-	 * and does the VA conversion itself.
+	 * case, the platform uses phys_external_initramfs_start/phys_external_initramfs_size
+	 * instead and does the VA conversion itself.
 	 */
 	if (!IS_ENABLED(CONFIG_ARM64) &&
 	    !(IS_ENABLED(CONFIG_RISCV) && IS_ENABLED(CONFIG_64BIT))) {
@@ -799,8 +799,8 @@ static void __init early_init_dt_check_for_initrd(unsigned long node)
 		return;
 
 	__early_init_dt_declare_initrd(start, end);
-	phys_initrd_start = start;
-	phys_initrd_size = end - start;
+	phys_external_initramfs_start = start;
+	phys_external_initramfs_size = end - start;
 
 	pr_debug("initrd_start=0x%llx  initrd_end=0x%llx\n", start, end);
 }

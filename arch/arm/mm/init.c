@@ -55,8 +55,8 @@ static int __init parse_tag_initrd(const struct tag *tag)
 {
 	pr_warn("ATAG_INITRD is deprecated; "
 		"please update your bootloader.\n");
-	phys_initrd_start = __virt_to_phys(tag->u.initrd.start);
-	phys_initrd_size = tag->u.initrd.size;
+	phys_external_initramfs_start = __virt_to_phys(tag->u.initrd.start);
+	phys_external_initramfs_size = tag->u.initrd.size;
 	return 0;
 }
 
@@ -64,8 +64,8 @@ __tagtable(ATAG_INITRD, parse_tag_initrd);
 
 static int __init parse_tag_initrd2(const struct tag *tag)
 {
-	phys_initrd_start = tag->u.initrd.start;
-	phys_initrd_size = tag->u.initrd.size;
+	phys_external_initramfs_start = tag->u.initrd.start;
+	phys_external_initramfs_size = tag->u.initrd.size;
 	return 0;
 }
 

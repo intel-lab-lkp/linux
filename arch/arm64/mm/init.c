@@ -246,14 +246,15 @@ void __init arm64_memblock_init(void)
 		memblock_add(__pa_symbol(_text), (u64)(_end - _text));
 	}
 
-	if (IS_ENABLED(CONFIG_BLK_DEV_INITRD) && phys_initrd_size) {
+	if (IS_ENABLED(CONFIG_BLK_DEV_INITRD) && phys_external_initramfs_size) {
 		/*
 		 * Add back the memory we just removed if it results in the
 		 * initrd to become inaccessible via the linear mapping.
 		 * Otherwise, this is a no-op
 		 */
-		u64 base = phys_initrd_start & PAGE_MASK;
-		u64 size = PAGE_ALIGN(phys_initrd_start + phys_initrd_size) - base;
+		u64 base = phys_external_initramfs_start & PAGE_MASK;
+		u64 size = PAGE_ALIGN(phys_external_initramfs_start +
+			phys_external_initramfs_size) - base;
 
 		/*
 		 * We can only add back the initrd memory if we don't end up
@@ -267,7 +268,7 @@ void __init arm64_memblock_init(void)
 			 base + size > memblock_start_of_DRAM() +
 				       linear_region_size,
 			"initrd not fully accessible via the linear mapping -- please check your bootloader ...\n")) {
-			phys_initrd_size = 0;
+			phys_external_initramfs_size = 0;
 		} else {
 			memblock_add(base, size);
 			memblock_clear_nomap(base, size);
@@ -280,10 +281,10 @@ void __init arm64_memblock_init(void)
 	 * pagetables with memblock.
 	 */
 	memblock_reserve(__pa_symbol(_stext), _end - _stext);
-	if (IS_ENABLED(CONFIG_BLK_DEV_INITRD) && phys_initrd_size) {
+	if (IS_ENABLED(CONFIG_BLK_DEV_INITRD) && phys_external_initramfs_size) {
 		/* the generic initrd code expects virtual addresses */
-		initrd_start = __phys_to_virt(phys_initrd_start);
-		initrd_end = initrd_start + phys_initrd_size;
+		initrd_start = __phys_to_virt(phys_external_initramfs_start);
+		initrd_end = initrd_start + phys_external_initramfs_size;
 	}
 
 	early_init_fdt_scan_reserved_mem();

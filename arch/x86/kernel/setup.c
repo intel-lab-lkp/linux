@@ -297,7 +297,7 @@ static u64 __init get_ramdisk_image(void)
 	ramdisk_image |= (u64)boot_params.ext_ramdisk_image << 32;
 
 	if (ramdisk_image == 0)
-		ramdisk_image = phys_initrd_start;
+		ramdisk_image = phys_external_initramfs_start;
 
 	return ramdisk_image;
 }
@@ -308,7 +308,7 @@ static u64 __init get_ramdisk_size(void)
 	ramdisk_size |= (u64)boot_params.ext_ramdisk_size << 32;
 
 	if (ramdisk_size == 0)
-		ramdisk_size = phys_initrd_size;
+		ramdisk_size = phys_external_initramfs_size;
 
 	return ramdisk_size;
 }

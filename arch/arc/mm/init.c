@@ -110,10 +110,10 @@ void __init setup_arch_memory(void)
 			 __pa(_end) - CONFIG_LINUX_LINK_BASE);
 
 #ifdef CONFIG_BLK_DEV_INITRD
-	if (phys_initrd_size) {
-		memblock_reserve(phys_initrd_start, phys_initrd_size);
-		initrd_start = (unsigned long)__va(phys_initrd_start);
-		initrd_end = initrd_start + phys_initrd_size;
+	if (phys_external_initramfs_size) {
+		memblock_reserve(phys_external_initramfs_start, phys_external_initramfs_size);
+		initrd_start = (unsigned long)__va(phys_external_initramfs_start);
+		initrd_end = initrd_start + phys_external_initramfs_size;
 	}
 #endif
 

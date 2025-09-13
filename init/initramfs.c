@@ -610,7 +610,7 @@ void __init reserve_initrd_mem(void)
 	/* Ignore the virtul address computed during device tree parsing */
 	initrd_start = initrd_end = 0;
 
-	if (!phys_initrd_size)
+	if (!phys_external_initramfs_size)
 		return;
 	/*
 	 * Round the memory region to page boundaries as per free_initrd_mem()
@@ -618,8 +618,8 @@ void __init reserve_initrd_mem(void)
 	 * are in use, but more importantly, reserves the entire set of pages
 	 * as we don't want these pages allocated for other purposes.
 	 */
-	start = round_down(phys_initrd_start, PAGE_SIZE);
-	size = phys_initrd_size + (phys_initrd_start - start);
+	start = round_down(phys_external_initramfs_start, PAGE_SIZE);
+	size = phys_external_initramfs_size + (phys_external_initramfs_start - start);
 	size = round_up(size, PAGE_SIZE);
 
 	if (!memblock_is_region_memory(start, size)) {
@@ -636,8 +636,8 @@ void __init reserve_initrd_mem(void)
 
 	memblock_reserve(start, size);
 	/* Now convert initrd to virtual addresses */
-	initrd_start = (unsigned long)__va(phys_initrd_start);
-	initrd_end = initrd_start + phys_initrd_size;
+	initrd_start = (unsigned long)__va(phys_external_initramfs_start);
+	initrd_end = initrd_start + phys_external_initramfs_size;
 	initrd_below_start_ok = 1;
 
 	return;

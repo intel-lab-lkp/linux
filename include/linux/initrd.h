@@ -17,8 +17,8 @@ static inline void __init reserve_initrd_mem(void) {}
 static inline void wait_for_initramfs(void) {}
 #endif
 
-extern phys_addr_t phys_initrd_start;
-extern unsigned long phys_initrd_size;
+extern phys_addr_t phys_external_initramfs_start;
+extern unsigned long phys_external_initramfs_size;
 
 extern char __builtin_initramfs_start[];
 extern unsigned long __builtin_initramfs_size;

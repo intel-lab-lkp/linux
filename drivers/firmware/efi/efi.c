@@ -808,13 +808,13 @@ int __init efi_config_parse_tables(const efi_config_table_t *config_tables,
 	}
 
 	if (IS_ENABLED(CONFIG_BLK_DEV_INITRD) &&
-	    initrd != EFI_INVALID_TABLE_ADDR && phys_initrd_size == 0) {
+	    initrd != EFI_INVALID_TABLE_ADDR && phys_external_initramfs_size == 0) {
 		struct linux_efi_initrd *tbl;
 
 		tbl = early_memremap(initrd, sizeof(*tbl));
 		if (tbl) {
-			phys_initrd_start = tbl->base;
-			phys_initrd_size = tbl->size;
+			phys_external_initramfs_start = tbl->base;
+			phys_external_initramfs_size = tbl->size;
 			early_memunmap(tbl, sizeof(*tbl));
 		}
 	}

@@ -15,8 +15,8 @@
 unsigned long initrd_start, initrd_end;
 int initrd_below_start_ok;
 
-phys_addr_t phys_initrd_start __initdata;
-unsigned long phys_initrd_size __initdata;
+phys_addr_t phys_external_initramfs_start __initdata;
+unsigned long phys_external_initramfs_size __initdata;
 
 static int __init early_initrdmem(char *p)
 {
@@ -28,8 +28,8 @@ static int __init early_initrdmem(char *p)
 	if (*endp == ',') {
 		size = memparse(endp + 1, NULL);
 
-		phys_initrd_start = start;
-		phys_initrd_size = size;
+		phys_external_initramfs_start = start;
+		phys_external_initramfs_size = size;
 	}
 	return 0;
 }
