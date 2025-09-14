@@ -232,6 +232,12 @@ properties:
               - winlink,e850-96                 # WinLink E850-96
           - const: samsung,exynos850
 
+      - description: Exynos8890 based boards
+        items:
+          - enum:
+              - samsung,herolte                 # Samsung Galaxy S7 (SM-G930F)
+          - const: samsung,exynos8890
+
       - description: Exynos8895 based boards
         items:
           - enum:
