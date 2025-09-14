@@ -1546,6 +1546,47 @@ static void ufshcd_clk_scaling_resume_work(struct work_struct *work)
 	devfreq_resume_device(hba->devfreq);
 }
 
+#ifdef CONFIG_PM
+static void ufshcd_pm_qos_freq_read_value(struct ufs_hba *hba,
+					   unsigned long *freq)
+{
+	struct Scsi_Host *shost = hba->host;
+	struct scsi_device *sdev;
+	struct request_queue *q;
+	struct ufs_clk_info *clki;
+	s32 min_qos_freq;
+
+	if (!shost)
+		return;
+
+	shost_for_each_device(sdev, shost) {
+		if (!sdev)
+			continue;
+
+		q = sdev->request_queue;
+		if (IS_ERR_OR_NULL(q))
+			continue;
+
+		if (q->disk && !IS_ERR_OR_NULL(q->dev)) {
+			if (q->disk->dev_freq_timeout) {
+				min_qos_freq = dev_pm_qos_read_value(q->dev,
+								     DEV_PM_QOS_MIN_FREQUENCY);
+				clki = list_first_entry(&hba->clk_list_head,
+							struct ufs_clk_info, list);
+				if (min_qos_freq > clki->max_freq)
+					*freq = clki->max_freq;
+			}
+		}
+	}
+}
+#else
+static void ufshcd_pm_qos_freq_read_value(struct ufs_hba *hba,
+					   unsigned long *freq)
+{
+	return;
+}
+#endif
+
 static int ufshcd_devfreq_target(struct device *dev,
 				unsigned long *freq, u32 flags)
 {
@@ -1558,6 +1599,9 @@ static int ufshcd_devfreq_target(struct device *dev,
 
 	if (!ufshcd_is_clkscaling_supported(hba))
 		return -EINVAL;
+
+	/* Select the frequency based on the DEV_PM_QOS_MIN_FREQUENCY */
+	ufshcd_pm_qos_freq_read_value(hba, freq);
 
 	if (hba->use_pm_opp) {
 		struct dev_pm_opp *opp;
