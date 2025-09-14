@@ -961,6 +961,8 @@ static bool write_since_sync;
 static bool sdebug_statistics = DEF_STATISTICS;
 static bool sdebug_wp;
 static bool sdebug_allow_restart;
+static bool sdebug_lun_eh;
+static bool sdebug_lun_eh_fallback;
 static enum {
 	BLK_ZONED_NONE	= 0,
 	BLK_ZONED_HA	= 1,
@@ -7385,6 +7387,8 @@ module_param_named(zone_max_open, sdeb_zbc_max_open, int, S_IRUGO);
 module_param_named(zone_nr_conv, sdeb_zbc_nr_conv, int, S_IRUGO);
 module_param_named(zone_size_mb, sdeb_zbc_zone_size_mb, int, S_IRUGO);
 module_param_named(allow_restart, sdebug_allow_restart, bool, S_IRUGO | S_IWUSR);
+module_param_named(lun_eh, sdebug_lun_eh, bool, 0444);
+module_param_named(lun_eh_fallback, sdebug_lun_eh_fallback, bool, 0444);
 
 MODULE_AUTHOR("Eric Youngdale + Douglas Gilbert");
 MODULE_DESCRIPTION("SCSI debug adapter driver");
@@ -7464,6 +7468,8 @@ MODULE_PARM_DESC(zone_max_open, "Maximum number of open zones; [0] for no limit 
 MODULE_PARM_DESC(zone_nr_conv, "Number of conventional zones (def=1)");
 MODULE_PARM_DESC(zone_size_mb, "Zone size in MiB (def=auto)");
 MODULE_PARM_DESC(allow_restart, "Set scsi_device's allow_restart flag(def=0)");
+MODULE_PARM_DESC(lun_eh, "LUN based error handle (def=0)");
+MODULE_PARM_DESC(lun_eh_fallback, "Fallback to further recovery if LUN recovery failed (def=0)");
 
 #define SDEBUG_INFO_LEN 256
 static char sdebug_info[SDEBUG_INFO_LEN];
@@ -8450,6 +8456,7 @@ static struct attribute *sdebug_drv_attrs[] = {
 ATTRIBUTE_GROUPS(sdebug_drv);
 
 static struct device *pseudo_primary;
+static struct scsi_host_template sdebug_driver_template;
 
 static int __init scsi_debug_init(void)
 {
@@ -8457,6 +8464,12 @@ static int __init scsi_debug_init(void)
 	unsigned long sz;
 	int k, ret, hosts_to_add;
 	int idx = -1;
+
+	if (sdebug_lun_eh) {
+		sdebug_driver_template.sdev_setup_eh = scsi_device_setup_eh;
+		sdebug_driver_template.sdev_clear_eh = scsi_device_clear_eh;
+		sdebug_driver_template.sdev_eh_fallback = sdebug_lun_eh_fallback;
+	}
 
 	if (sdebug_ndelay >= 1000 * 1000 * 1000) {
 		pr_warn("ndelay must be less than 1 second, ignored\n");
@@ -9433,7 +9446,7 @@ static int sdebug_init_cmd_priv(struct Scsi_Host *shost, struct scsi_cmnd *cmd)
 	return 0;
 }
 
-static const struct scsi_host_template sdebug_driver_template = {
+static struct scsi_host_template sdebug_driver_template = {
 	.show_info =		scsi_debug_show_info,
 	.write_info =		scsi_debug_write_info,
 	.proc_name =		sdebug_proc_name,
