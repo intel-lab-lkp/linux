@@ -26,6 +26,7 @@
 #include <linux/dmi.h>
 #include <linux/pm_runtime.h>
 #include <linux/serdev.h>
+#include <linux/string_choices.h>
 
 #include <net/bluetooth/bluetooth.h>
 #include <net/bluetooth/hci_core.h>
@@ -1213,7 +1214,7 @@ static int bcm_acpi_probe(struct bcm_device *dev)
 	if (irq_polarity != -1) {
 		dev->irq_active_low = irq_polarity;
 		dev_warn(dev->dev, "Overwriting IRQ polarity to active %s by module-param\n",
-			 dev->irq_active_low ? "low" : "high");
+			 str_low_high(dev->irq_active_low));
 	}
 
 	return 0;
