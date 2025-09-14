@@ -60,7 +60,7 @@ config INITRAMFS_DECOMPRESS_GZIP
 	  Support loading of a gzip encoded initial ramfs.
 	  If unsure, say Y.
 
-config RD_BZIP2
+config INITRAMFS_DECOMPRESS_BZIP2
 	bool "Support initial ramfs compressed using bzip2"
 	default y
 	select DECOMPRESS_BZIP2
@@ -144,7 +144,7 @@ config INITRAMFS_COMPRESSION_GZIP
 
 config INITRAMFS_COMPRESSION_BZIP2
 	bool "Bzip2"
-	depends on RD_BZIP2
+	depends on INITRAMFS_DECOMPRESS_BZIP2
 	help
 	  It's compression ratio and speed is intermediate. Decompression speed
 	  is slowest among the choices. The initramfs size is about 10% smaller
