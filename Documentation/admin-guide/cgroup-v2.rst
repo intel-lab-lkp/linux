@@ -1758,6 +1758,23 @@ The following nested keys are defined.
 		up if hugetlb usage is accounted for in memory.current (i.e.
 		cgroup is mounted with the memory_hugetlb_accounting option).
 
+	  ksm_rmap_items
+		Number of ksm_rmap_item structures in use. The structure
+		ksm_rmap_item stores the reverse mapping information for virtual
+		addresses.  KSM will generate a ksm_rmap_item for each
+		ksm-scanned page of the process.
+
+	  ksm_zero_pages
+		Number of empty pages are merged with kernel zero pages by KSM,
+		which is only useful when /sys/kernel/mm/ksm/use_zero_pages.
+
+	  ksm_merging_pages
+		Number of pages of this process are involved in KSM merging
+		(not including ksm_zero_pages).
+
+	  ksm_profit
+		Amount of profitable memory that KSM brings (Saved bytes).
+
   memory.numa_stat
 	A read-only nested-keyed file which exists on non-root cgroups.
 
