@@ -850,6 +850,10 @@ static void __exit battery_hook_exit(void)
 
 static int sysfs_add_battery(struct acpi_battery *battery)
 {
+	guard(mutex)(&battery->sysfs_lock);
+	if (battery->bat)
+		return 0;
+
 	struct power_supply_config psy_cfg = {
 		.drv_data = battery,
 		.attr_grp = acpi_battery_groups,
@@ -1026,11 +1030,9 @@ static int acpi_battery_update(struct acpi_battery *battery, bool resume)
 		return result;
 	acpi_battery_quirks(battery);
 
-	if (!battery->bat) {
-		result = sysfs_add_battery(battery);
-		if (result)
-			return result;
-	}
+	result = sysfs_add_battery(battery);
+	if (result)
+		return result;
 
 	/*
 	 * Wakeup the system if battery is critical low
@@ -1112,11 +1114,11 @@ static int battery_notify(struct notifier_block *nb,
 			result = acpi_battery_get_info(battery);
 			if (result)
 				return result;
-
-			result = sysfs_add_battery(battery);
-			if (result)
-				return result;
 		}
+
+		result = sysfs_add_battery(battery);
+		if (result)
+			return result;
 
 		acpi_battery_init_alarm(battery);
 		acpi_battery_get_state(battery);
