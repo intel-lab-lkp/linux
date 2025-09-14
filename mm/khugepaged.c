@@ -108,7 +108,7 @@ struct collapse_control {
  * @slot: hash lookup from mm to mm_slot
  */
 struct khugepaged_mm_slot {
-	struct mm_slot slot;
+	struct mm_slot slot;	/* keep it the first element */
 };
 
 /**
@@ -2404,6 +2404,9 @@ static unsigned int khugepaged_scan_mm_slot(unsigned int pages, int *result,
 	struct mm_struct *mm;
 	struct vm_area_struct *vma;
 	int progress = 0;
+
+	BUILD_BUG_ON_MSG(mm_slot_entry(NULL, struct khugepaged_mm_slot, slot),
+			"slot should be the first element");
 
 	VM_BUG_ON(!pages);
 	lockdep_assert_held(&khugepaged_mm_lock);

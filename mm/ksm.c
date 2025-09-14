@@ -124,7 +124,7 @@ typedef u8 rmap_age_t;
  * @rmap_list: head for this mm_slot's singly-linked list of rmap_items
  */
 struct ksm_mm_slot {
-	struct mm_slot slot;
+	struct mm_slot slot;	/* keep it the first element */
 	struct ksm_rmap_item *rmap_list;
 };
 
@@ -3841,6 +3841,9 @@ static int __init ksm_init(void)
 {
 	struct task_struct *ksm_thread;
 	int err;
+
+	BUILD_BUG_ON_MSG(mm_slot_entry(NULL, struct ksm_mm_slot, slot),
+			"slot should be the first element");
 
 	/* The correct value depends on page size and endianness */
 	zero_checksum = calc_checksum(ZERO_PAGE(0));
