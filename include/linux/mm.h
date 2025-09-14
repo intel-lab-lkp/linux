@@ -505,7 +505,11 @@ extern unsigned int kobjsize(const void *objp);
 #define VM_REMAP_FLAGS (VM_IO | VM_PFNMAP | VM_DONTEXPAND | VM_DONTDUMP)
 
 /* This mask prevents VMA from being scanned with khugepaged */
-#define VM_NO_KHUGEPAGED (VM_SPECIAL | VM_HUGETLB)
+#define VM_NO_KHUGEPAGED \
+	(VM_SPECIAL | VM_HUGETLB | VM_LOCKED_MASK | VM_NOHUGEPAGE)
+
+/* This mask prevents VMA from being collapsed by any THP path */
+#define VM_NO_THP_COLLAPSE	(VM_SPECIAL | VM_HUGETLB)
 
 /* This mask defines which mm->def_flags a process can inherit its parent */
 #define VM_INIT_DEF_MASK	VM_NOHUGEPAGE
