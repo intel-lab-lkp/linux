@@ -34,6 +34,7 @@ properties:
               - samsung,exynos5420-mct
               - samsung,exynos5433-mct
               - samsung,exynos850-mct
+              - samsung,exynos8890-mct
               - samsung,exynos8895-mct
               - samsung,exynos990-mct
               - tesla,fsd-mct
@@ -137,6 +138,7 @@ allOf:
               - samsung,exynos5420-mct
               - samsung,exynos5433-mct
               - samsung,exynos850-mct
+              - samsung,exynos8890-mct
               - samsung,exynos8895-mct
               - samsung,exynos990-mct
     then:
