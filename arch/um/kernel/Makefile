@@ -20,7 +20,7 @@ obj-y = config.o exec.o exitcode.o irq.o ksyms.o mem.o \
 	um_arch.o umid.o kmsg_dump.o capflags.o skas/
 obj-y += load_file.o
 
-obj-$(CONFIG_BLK_DEV_INITRD) += initrd.o
+obj-$(CONFIG_INITRAMFS) += initrd.o
 obj-$(CONFIG_GPROF)	+= gprof_syms.o
 obj-$(CONFIG_OF) += dtb.o
 obj-$(CONFIG_EARLY_PRINTK) += early_printk.o

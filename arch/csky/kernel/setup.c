@@ -12,7 +12,7 @@
 #include <asm/mmu_context.h>
 #include <asm/pgalloc.h>
 
-#ifdef CONFIG_BLK_DEV_INITRD
+#ifdef CONFIG_INITRAMFS
 static void __init setup_initrd(void)
 {
 	unsigned long size;
@@ -79,7 +79,7 @@ static void __init csky_memblock_init(void)
 		max_low_pfn = min_low_pfn + sseg_size;
 	}
 
-#ifdef CONFIG_BLK_DEV_INITRD
+#ifdef CONFIG_INITRAMFS
 	setup_initrd();
 #endif
 

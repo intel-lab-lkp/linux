@@ -1434,7 +1434,7 @@ config RELAY
 
 	  If unsure, say N.
 
-config BLK_DEV_INITRD
+config INITRAMFS
 	bool "Initial RAM filesystem (initramfs) support"
 	help
 	  The initial RAM filesystem is a ramfs or tmpfs which is loaded by the
@@ -1445,7 +1445,7 @@ config BLK_DEV_INITRD
 
 	  If unsure say Y.
 
-if BLK_DEV_INITRD
+if INITRAMFS
 
 source "usr/Kconfig"
 
@@ -1453,7 +1453,7 @@ endif
 
 config BOOT_CONFIG
 	bool "Boot config support"
-	select BLK_DEV_INITRD if !BOOT_CONFIG_EMBED
+	select INITRAMFS if !BOOT_CONFIG_EMBED
 	help
 	  Extra boot config allows system admin to pass a config file as
 	  complemental extension of kernel cmdline when booting.
@@ -1507,7 +1507,7 @@ config INITRAMFS_PRESERVE_MTIME
 
 config INITRAMFS_TEST
 	bool "Test initramfs cpio archive extraction" if !KUNIT_ALL_TESTS
-	depends on BLK_DEV_INITRD && KUNIT=y
+	depends on INITRAMFS && KUNIT=y
 	default KUNIT_ALL_TESTS
 	help
 	  Build KUnit tests for initramfs. See Documentation/dev-tools/kunit

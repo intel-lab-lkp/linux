@@ -374,7 +374,7 @@ config ARCH_HAS_ACPI_TABLE_UPGRADE
 
 config ACPI_TABLE_UPGRADE
 	bool "Allow upgrading ACPI tables via initrd"
-	depends on BLK_DEV_INITRD && ARCH_HAS_ACPI_TABLE_UPGRADE
+	depends on INITRAMFS && ARCH_HAS_ACPI_TABLE_UPGRADE
 	default y
 	help
 	  This option provides functionality to upgrade arbitrary ACPI tables

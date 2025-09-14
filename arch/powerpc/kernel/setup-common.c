@@ -359,7 +359,7 @@ const struct seq_operations cpuinfo_op = {
 
 void __init check_for_initrd(void)
 {
-#ifdef CONFIG_BLK_DEV_INITRD
+#ifdef CONFIG_INITRAMFS
 	DBG(" -> check_for_initrd()  virt_external_initramfs_start=0x%lx  virt_external_initramfs_end=0x%lx\n",
 	    virt_external_initramfs_start, virt_external_initramfs_end);
 
@@ -373,7 +373,7 @@ void __init check_for_initrd(void)
 		pr_info("Found initramfs at 0x%lx:0x%lx\n", virt_external_initramfs_start, virt_external_initramfs_end);
 
 	DBG(" <- check_for_initrd()\n");
-#endif /* CONFIG_BLK_DEV_INITRD */
+#endif /* CONFIG_INITRAMFS */
 }
 
 #ifdef CONFIG_SMP

@@ -154,11 +154,11 @@ void __init setup_arch(char **cmdline_p)
 	min_low_pfn = PFN_DOWN(memory_start);
 	max_pfn = max_low_pfn = PFN_DOWN(memory_end);
 
-#if defined(CONFIG_UBOOT) && defined(CONFIG_BLK_DEV_INITRD)
+#if defined(CONFIG_UBOOT) && defined(CONFIG_INITRAMFS)
 	if ((virt_external_initramfs_start > 0) && (virt_external_initramfs_start < virt_external_initramfs_end) &&
 			(virt_external_initramfs_end < memory_end))
 		memblock_reserve(virt_external_initramfs_start, virt_external_initramfs_end - virt_external_initramfs_start);
-#endif /* if defined(CONFIG_BLK_DEV_INITRD) */
+#endif /* if defined(CONFIG_INITRAMFS) */
 
 	/*
 	 * Get kmalloc into gear.

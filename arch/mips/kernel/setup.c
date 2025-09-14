@@ -115,7 +115,7 @@ void __init detect_memory_region(phys_addr_t start, phys_addr_t sz_min, phys_add
 /*
  * Manage initrd
  */
-#ifdef CONFIG_BLK_DEV_INITRD
+#ifdef CONFIG_INITRAMFS
 
 static int __init rd_start_early(char *p)
 {
@@ -236,7 +236,7 @@ disable:
 	virt_external_initramfs_end = 0;
 }
 
-#else  /* !CONFIG_BLK_DEV_INITRD */
+#else  /* !CONFIG_INITRAMFS */
 
 static unsigned long __init init_initrd(void)
 {

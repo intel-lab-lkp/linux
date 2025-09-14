@@ -48,7 +48,7 @@
 #include <asm/timex.h>
 #include <asm/traps.h>
 
-#ifdef CONFIG_BLK_DEV_INITRD
+#ifdef CONFIG_INITRAMFS
 extern unsigned long virt_external_initramfs_start;
 extern unsigned long virt_external_initramfs_end;
 extern int initramfs_below_start_ok;
@@ -100,7 +100,7 @@ static int __init parse_tag_mem(const bp_tag_t *tag)
 
 __tagtable(BP_TAG_MEMORY, parse_tag_mem);
 
-#ifdef CONFIG_BLK_DEV_INITRD
+#ifdef CONFIG_INITRAMFS
 
 static int __init parse_tag_initrd(const bp_tag_t* tag)
 {
@@ -114,7 +114,7 @@ static int __init parse_tag_initrd(const bp_tag_t* tag)
 
 __tagtable(BP_TAG_INITRD, parse_tag_initrd);
 
-#endif /* CONFIG_BLK_DEV_INITRD */
+#endif /* CONFIG_INITRAMFS */
 
 #ifdef CONFIG_USE_OF
 
@@ -289,7 +289,7 @@ void __init setup_arch(char **cmdline_p)
 
 	/* Reserve some memory regions */
 
-#ifdef CONFIG_BLK_DEV_INITRD
+#ifdef CONFIG_INITRAMFS
 	if (virt_external_initramfs_start < virt_external_initramfs_end &&
 	    !mem_reserve(__pa(virt_external_initramfs_start), __pa(virt_external_initramfs_end)))
 		initramfs_below_start_ok = 1;

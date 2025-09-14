@@ -23,7 +23,7 @@ void __init prom_init(void)
 {
 	fw_init_cmdline();
 
-#ifdef CONFIG_BLK_DEV_INITRD
+#ifdef CONFIG_INITRAMFS
 	/* Read the initrd address from the firmware environment */
 	virt_external_initramfs_start = fw_getenvl("initrd_start");
 	if (virt_external_initramfs_start) {

@@ -322,7 +322,7 @@ void __head sme_encrypt_kernel(struct boot_params *bp)
 	initrd_start = 0;
 	initrd_end = 0;
 	initrd_len = 0;
-#ifdef CONFIG_BLK_DEV_INITRD
+#ifdef CONFIG_INITRAMFS
 	initrd_len = (unsigned long)bp->hdr.ramdisk_size |
 		     ((unsigned long)bp->ext_ramdisk_size << 32);
 	if (initrd_len) {

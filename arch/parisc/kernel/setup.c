@@ -68,7 +68,7 @@ static void __init setup_cmdline(char **cmdline_p)
 	if (!strstr(p, "earlycon"))
 		strlcat(p, " earlycon=pdc", COMMAND_LINE_SIZE);
 
-#ifdef CONFIG_BLK_DEV_INITRD
+#ifdef CONFIG_INITRAMFS
 	/* did palo pass us a ramdisk? */
 	if (boot_args[2] != 0) {
 		virt_external_initramfs_start = (unsigned long)__va(boot_args[2]);

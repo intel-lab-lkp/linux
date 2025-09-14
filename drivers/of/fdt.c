@@ -781,7 +781,7 @@ static void __init early_init_dt_check_for_initrd(unsigned long node)
 	int len;
 	const __be32 *prop;
 
-	if (!IS_ENABLED(CONFIG_BLK_DEV_INITRD))
+	if (!IS_ENABLED(CONFIG_INITRAMFS))
 		return;
 
 	pr_debug("Looking for initrd properties... ");

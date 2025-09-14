@@ -6,7 +6,7 @@
 #include <linux/kernel.h>
 #include <linux/mm.h>
 #include <linux/memblock.h>
-#ifdef CONFIG_BLK_DEV_INITRD
+#ifdef CONFIG_INITRAMFS
 #include <linux/initramfs.h>
 #endif
 #include <linux/of_fdt.h>
@@ -109,7 +109,7 @@ void __init setup_arch_memory(void)
 	memblock_reserve(CONFIG_LINUX_LINK_BASE,
 			 __pa(_end) - CONFIG_LINUX_LINK_BASE);
 
-#ifdef CONFIG_BLK_DEV_INITRD
+#ifdef CONFIG_INITRAMFS
 	if (phys_external_initramfs_size) {
 		memblock_reserve(phys_external_initramfs_start, phys_external_initramfs_size);
 		virt_external_initramfs_start = (unsigned long)__va(phys_external_initramfs_start);

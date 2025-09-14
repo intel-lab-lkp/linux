@@ -224,7 +224,7 @@ albacore_init_arch(void)
 	IRONGATE0->pci_mem = pci_mem;
 	alpha_mv.min_mem_address = pci_mem;
 	if (memtop > pci_mem) {
-#ifdef CONFIG_BLK_DEV_INITRD
+#ifdef CONFIG_INITRAMFS
 		/* Move the initrd out of the way. */
 		if (virt_external_initramfs_end && __pa(virt_external_initramfs_end) > pci_mem) {
 			unsigned long size;

@@ -58,7 +58,7 @@ function build_kernel() {
 
 	# enable initrd, KHO and KHO test in kernel configuration
 	tee "$kconfig" > "$kho_config" <<EOF
-CONFIG_BLK_DEV_INITRD=y
+CONFIG_INITRAMFS=y
 CONFIG_KEXEC_HANDOVER=y
 CONFIG_TEST_KEXEC_HANDOVER=y
 CONFIG_DEBUG_KERNEL=y

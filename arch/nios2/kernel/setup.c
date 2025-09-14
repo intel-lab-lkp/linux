@@ -107,12 +107,12 @@ asmlinkage void __init nios2_boot_init(unsigned r4, unsigned r5, unsigned r6,
 
 #if defined(CONFIG_NIOS2_PASS_CMDLINE)
 	if (r4 == 0x534f494e) { /* r4 is magic NIOS */
-#if defined(CONFIG_BLK_DEV_INITRD)
+#if defined(CONFIG_INITRAMFS)
 		if (r5) { /* initramfs */
 			virt_external_initramfs_start = r5;
 			virt_external_initramfs_end = r6;
 		}
-#endif /* CONFIG_BLK_DEV_INITRD */
+#endif /* CONFIG_INITRAMFS */
 		dtb_passed = r6;
 
 		if (r7)
@@ -160,12 +160,12 @@ void __init setup_arch(char **cmdline_p)
 	find_limits(&min_low_pfn, &max_low_pfn, &max_pfn);
 
 	memblock_reserve(__pa_symbol(_stext), _end - _stext);
-#ifdef CONFIG_BLK_DEV_INITRD
+#ifdef CONFIG_INITRAMFS
 	if (virt_external_initramfs_start) {
 		memblock_reserve(virt_to_phys((void *)virt_external_initramfs_start),
 				virt_external_initramfs_end - virt_external_initramfs_start);
 	}
-#endif /* CONFIG_BLK_DEV_INITRD */
+#endif /* CONFIG_INITRAMFS */
 
 	early_init_fdt_reserve_self();
 	early_init_fdt_scan_reserved_mem();

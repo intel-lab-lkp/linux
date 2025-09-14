@@ -100,7 +100,7 @@ static unsigned long calc_max_low_pfn(void)
 
 static void __init find_ramdisk(unsigned long end_of_phys_memory)
 {
-#ifdef CONFIG_BLK_DEV_INITRD
+#ifdef CONFIG_INITRAMFS
 	unsigned long size;
 
 	/* Now have to check initial ramdisk, so that it won't pass

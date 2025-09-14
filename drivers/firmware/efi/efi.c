@@ -807,7 +807,7 @@ int __init efi_config_parse_tables(const efi_config_table_t *config_tables,
 		}
 	}
 
-	if (IS_ENABLED(CONFIG_BLK_DEV_INITRD) &&
+	if (IS_ENABLED(CONFIG_INITRAMFS) &&
 	    initrd != EFI_INVALID_TABLE_ADDR && phys_external_initramfs_size == 0) {
 		struct linux_efi_initrd *tbl;
 

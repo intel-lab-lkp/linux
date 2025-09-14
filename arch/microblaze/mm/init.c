@@ -200,14 +200,14 @@ asmlinkage void __init mmu_init(void)
 	ksize = PAGE_ALIGN(((u32)_end - (u32)CONFIG_KERNEL_START));
 	memblock_reserve(kstart, ksize);
 
-#if defined(CONFIG_BLK_DEV_INITRD)
+#if defined(CONFIG_INITRAMFS)
 	/* Remove the init RAM disk from the available memory. */
 	if (virt_external_initramfs_start) {
 		unsigned long size;
 		size = virt_external_initramfs_end - virt_external_initramfs_start;
 		memblock_reserve(__virt_to_phys(virt_external_initramfs_start), size);
 	}
-#endif /* CONFIG_BLK_DEV_INITRD */
+#endif /* CONFIG_INITRAMFS */
 
 	/* Initialize the MMU hardware */
 	mmu_init_hw();

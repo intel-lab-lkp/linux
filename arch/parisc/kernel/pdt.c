@@ -228,7 +228,7 @@ void __init pdc_pdt_init(void)
 		report_mem_err(pdt_entry[i]);
 
 		addr = pdt_entry[i] & PDT_ADDR_PHYS_MASK;
-		if (IS_ENABLED(CONFIG_BLK_DEV_INITRD) &&
+		if (IS_ENABLED(CONFIG_INITRAMFS) &&
 			addr >= virt_external_initramfs_start && addr < virt_external_initramfs_end)
 			pr_crit("CRITICAL: initrd possibly broken "
 				"due to bad memory!\n");

@@ -323,7 +323,7 @@ asmlinkage unsigned long __visible decompress_kernel(unsigned int started_wide,
 	if (free_mem_end_ptr > ARTIFICIAL_LIMIT)
 		free_mem_end_ptr = ARTIFICIAL_LIMIT;
 
-#ifdef CONFIG_BLK_DEV_INITRD
+#ifdef CONFIG_INITRAMFS
 	/* if we have ramdisk this is at end of memory */
 	if (rd_start && rd_start < free_mem_end_ptr)
 		free_mem_end_ptr = rd_start;

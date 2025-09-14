@@ -75,7 +75,7 @@ static void __init setup_memory(void)
 	 */
 	memblock_reserve(__pa(_stext), _end - _stext);
 
-#ifdef CONFIG_BLK_DEV_INITRD
+#ifdef CONFIG_INITRAMFS
 	/* Then reserve the initrd, if any */
 	if (virt_external_initramfs_start && (virt_external_initramfs_end > virt_external_initramfs_start)) {
 		unsigned long aligned_start = ALIGN_DOWN(virt_external_initramfs_start, PAGE_SIZE);
@@ -83,7 +83,7 @@ static void __init setup_memory(void)
 
 		memblock_reserve(__pa(aligned_start), aligned_end - aligned_start);
 	}
-#endif /* CONFIG_BLK_DEV_INITRD */
+#endif /* CONFIG_INITRAMFS */
 
 	early_init_fdt_reserve_self();
 	early_init_fdt_scan_reserved_mem();
@@ -238,7 +238,7 @@ void __init setup_arch(char **cmdline_p)
 	/* process 1's initial memory region is the kernel code/data */
 	setup_initial_init_mm(_stext, _etext, _edata, _end);
 
-#ifdef CONFIG_BLK_DEV_INITRD
+#ifdef CONFIG_INITRAMFS
 	if (virt_external_initramfs_start == virt_external_initramfs_end) {
 		printk(KERN_INFO "Initial ramdisk not found\n");
 		virt_external_initramfs_start = 0;

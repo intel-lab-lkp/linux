@@ -288,7 +288,7 @@ static void __init reserve_brk(void)
 	_brk_start = 0;
 }
 
-#ifdef CONFIG_BLK_DEV_INITRD
+#ifdef CONFIG_INITRAMFS
 
 static u64 __init get_ramdisk_image(void)
 {
@@ -393,7 +393,7 @@ static void __init early_reserve_initrd(void)
 static void __init reserve_initrd(void)
 {
 }
-#endif /* CONFIG_BLK_DEV_INITRD */
+#endif /* CONFIG_INITRAMFS */
 
 static void __init add_early_ima_buffer(u64 phys_addr)
 {

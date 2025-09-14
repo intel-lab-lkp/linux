@@ -432,7 +432,7 @@ IPE has KUnit Tests for the policy parser. Recommended kunitconfig::
   CONFIG_NET=y
   CONFIG_AUDIT=y
   CONFIG_AUDITSYSCALL=y
-  CONFIG_BLK_DEV_INITRD=y
+  CONFIG_INITRAMFS=y
 
   CONFIG_SECURITY_IPE=y
   CONFIG_IPE_PROP_DM_VERITY=y

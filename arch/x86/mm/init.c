@@ -980,7 +980,7 @@ void __ref free_initmem(void)
 				&__init_begin, &__init_end);
 }
 
-#ifdef CONFIG_BLK_DEV_INITRD
+#ifdef CONFIG_INITRAMFS
 void __init free_initramfs_mem(unsigned long start, unsigned long end)
 {
 	/*

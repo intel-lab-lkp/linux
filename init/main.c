@@ -263,7 +263,7 @@ static int __init loglevel(char *str)
 
 early_param("loglevel", loglevel);
 
-#ifdef CONFIG_BLK_DEV_INITRD
+#ifdef CONFIG_INITRAMFS
 static void * __init get_boot_config_from_initramfs(size_t *_size)
 {
 	u32 size, csum;
@@ -1046,7 +1046,7 @@ void start_kernel(void)
 	 */
 	locking_selftest();
 
-#ifdef CONFIG_BLK_DEV_INITRD
+#ifdef CONFIG_INITRAMFS
 	if (virt_external_initramfs_start && !initramfs_below_start_ok &&
 	    page_to_pfn(virt_to_page((void *)virt_external_initramfs_start)) < min_low_pfn) {
 		pr_crit("initramfs overwritten (0x%08lx < 0x%08lx) - disabling it.\n",

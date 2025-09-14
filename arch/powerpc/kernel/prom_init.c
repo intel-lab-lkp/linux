@@ -3153,7 +3153,7 @@ static void __init prom_find_boot_cpu(void)
 
 static void __init prom_check_initrd(unsigned long r3, unsigned long r4)
 {
-#ifdef CONFIG_BLK_DEV_INITRD
+#ifdef CONFIG_INITRAMFS
 	if (r3 && r4 && r4 != 0xdeadbeef) {
 		__be64 val;
 
@@ -3173,7 +3173,7 @@ static void __init prom_check_initrd(unsigned long r3, unsigned long r4)
 		prom_debug("initrd_start=0x%lx\n", prom_initrd_start);
 		prom_debug("initrd_end=0x%lx\n", prom_initrd_end);
 	}
-#endif /* CONFIG_BLK_DEV_INITRD */
+#endif /* CONFIG_INITRAMFS */
 }
 
 #ifdef CONFIG_PPC_SVM

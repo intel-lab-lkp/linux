@@ -297,7 +297,7 @@ static void __init setup_bootmem(void)
 	}
 #endif
 
-#ifdef CONFIG_BLK_DEV_INITRD
+#ifdef CONFIG_INITRAMFS
 	if (virt_external_initramfs_start) {
 		printk(KERN_INFO "initrd: %08lx-%08lx\n", virt_external_initramfs_start, virt_external_initramfs_end);
 		if (__pa(virt_external_initramfs_start) < mem_max) {
@@ -632,7 +632,7 @@ static void __init pagetable_init(void)
 			  size, PAGE_KERNEL, 0);
 	}
 
-#ifdef CONFIG_BLK_DEV_INITRD
+#ifdef CONFIG_INITRAMFS
 	if (virt_external_initramfs_end && virt_external_initramfs_end > mem_limit) {
 		printk(KERN_INFO "initrd: mapping %08lx-%08lx\n", virt_external_initramfs_start, virt_external_initramfs_end);
 		map_pages(virt_external_initramfs_start, __pa(virt_external_initramfs_start),

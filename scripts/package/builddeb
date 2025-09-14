@@ -88,7 +88,7 @@ install_maint_scripts () {
 		export DEB_MAINT_PARAMS="\$*"
 
 		# Tell initramfs builder whether it's wanted
-		export INITRD=$(if_enabled_echo CONFIG_BLK_DEV_INITRD Yes No)
+		export INITRD=$(if_enabled_echo CONFIG_INITRAMFS Yes No)
 
 		# run-parts will error out if one of its directory arguments does not
 		# exist, so filter the list of hook directories accordingly.

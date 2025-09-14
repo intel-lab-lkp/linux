@@ -37,7 +37,7 @@
 
 int cfe_cons_handle;
 
-#ifdef CONFIG_BLK_DEV_INITRD
+#ifdef CONFIG_INITRAMFS
 extern unsigned long virt_external_initramfs_start, virt_external_initramfs_end;
 #endif
 
@@ -82,7 +82,7 @@ static __init void prom_meminit(void)
 	int mem_flags = 0;
 	unsigned int idx;
 	int rd_flag;
-#ifdef CONFIG_BLK_DEV_INITRD
+#ifdef CONFIG_INITRAMFS
 	unsigned long initrd_pstart;
 	unsigned long initrd_pend;
 
@@ -104,7 +104,7 @@ static __init void prom_meminit(void)
 			 * See if this block contains (any portion of) the
 			 * ramdisk
 			 */
-#ifdef CONFIG_BLK_DEV_INITRD
+#ifdef CONFIG_INITRAMFS
 			if (virt_external_initramfs_start) {
 				if ((initrd_pstart > addr) &&
 				    (initrd_pstart < (addr + size))) {
@@ -138,7 +138,7 @@ static __init void prom_meminit(void)
 			}
 		}
 	}
-#ifdef CONFIG_BLK_DEV_INITRD
+#ifdef CONFIG_INITRAMFS
 	if (virt_external_initramfs_start) {
 		memblock_add(initrd_pstart, initrd_pend - initrd_pstart);
 		memblock_reserve(initrd_pstart, initrd_pend - initrd_pstart);
@@ -146,7 +146,7 @@ static __init void prom_meminit(void)
 #endif
 }
 
-#ifdef CONFIG_BLK_DEV_INITRD
+#ifdef CONFIG_INITRAMFS
 static int __init initrd_setup(char *str)
 {
 	char rdarg[64];
@@ -266,7 +266,7 @@ void __init prom_init(void)
 		}
 	}
 
-#ifdef CONFIG_BLK_DEV_INITRD
+#ifdef CONFIG_INITRAMFS
 	{
 		char *ptr;
 		/* Need to find out early whether we've got an initrd.	So scan
@@ -285,7 +285,7 @@ void __init prom_init(void)
 			}
 		}
 	}
-#endif /* CONFIG_BLK_DEV_INITRD */
+#endif /* CONFIG_INITRAMFS */
 
 	/* Not sure this is needed, but it's the safe way. */
 	arcs_cmdline[COMMAND_LINE_SIZE-1] = 0;

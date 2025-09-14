@@ -224,7 +224,7 @@ use in place of the above config file::
 External initramfs images:
 --------------------------
 
-If the kernel has CONFIG_BLK_DEV_INITRD enabled, an external cpio.gz archive can also
+If the kernel has CONFIG_INITRAMFS enabled, an external cpio.gz archive can also
 be passed into a 2.6 kernel.  In this case, the kernel will extract the external cpio
 archive into rootfs before trying to run /init.
 

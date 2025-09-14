@@ -295,7 +295,7 @@ static void __init pmac_setup_arch(void)
 	pmac_nvram_init();
 #endif
 #ifdef CONFIG_PPC32
-#ifdef CONFIG_BLK_DEV_INITRD
+#ifdef CONFIG_INITRAMFS
 	if (!virt_external_initramfs_start)
 #endif
 		ROOT_DEV = DEFAULT_ROOT_DEVICE;

@@ -112,7 +112,7 @@ early_param("mem", early_parse_mem);
 
 void __init check_for_initrd(void)
 {
-#ifdef CONFIG_BLK_DEV_INITRD
+#ifdef CONFIG_INITRAMFS
 	unsigned long start, end;
 
 	/*

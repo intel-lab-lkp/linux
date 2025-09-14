@@ -64,9 +64,9 @@ static void __init parse_uboot_commandline(char *commandp, int size)
 	extern unsigned long _init_sp;
 	unsigned long *sp;
 	unsigned long uboot_cmd_start, uboot_cmd_end;
-#if defined(CONFIG_BLK_DEV_INITRD)
+#if defined(CONFIG_INITRAMFS)
 	unsigned long uboot_initrd_start, uboot_initrd_end;
-#endif /* if defined(CONFIG_BLK_DEV_INITRD) */
+#endif /* if defined(CONFIG_INITRAMFS) */
 
 	sp = (unsigned long *)_init_sp;
 	uboot_cmd_start = sp[4];
@@ -75,7 +75,7 @@ static void __init parse_uboot_commandline(char *commandp, int size)
 	if (uboot_cmd_start && uboot_cmd_end)
 		strscpy(commandp, (const char *)uboot_cmd_start, size);
 
-#if defined(CONFIG_BLK_DEV_INITRD)
+#if defined(CONFIG_INITRAMFS)
 	uboot_initrd_start = sp[2];
 	uboot_initrd_end = sp[3];
 
@@ -85,7 +85,7 @@ static void __init parse_uboot_commandline(char *commandp, int size)
 		virt_external_initramfs_end = uboot_initrd_end;
 		pr_info("initrd at 0x%lx:0x%lx\n", virt_external_initramfs_start, virt_external_initramfs_end);
 	}
-#endif /* if defined(CONFIG_BLK_DEV_INITRD) */
+#endif /* if defined(CONFIG_INITRAMFS) */
 }
 
 __init void process_uboot_commandline(char *commandp, int size)

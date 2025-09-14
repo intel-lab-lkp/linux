@@ -246,7 +246,7 @@ void __init arm64_memblock_init(void)
 		memblock_add(__pa_symbol(_text), (u64)(_end - _text));
 	}
 
-	if (IS_ENABLED(CONFIG_BLK_DEV_INITRD) && phys_external_initramfs_size) {
+	if (IS_ENABLED(CONFIG_INITRAMFS) && phys_external_initramfs_size) {
 		/*
 		 * Add back the memory we just removed if it results in the
 		 * initrd to become inaccessible via the linear mapping.
@@ -281,7 +281,7 @@ void __init arm64_memblock_init(void)
 	 * pagetables with memblock.
 	 */
 	memblock_reserve(__pa_symbol(_stext), _end - _stext);
-	if (IS_ENABLED(CONFIG_BLK_DEV_INITRD) && phys_external_initramfs_size) {
+	if (IS_ENABLED(CONFIG_INITRAMFS) && phys_external_initramfs_size) {
 		/* the generic initrd code expects virtual addresses */
 		virt_external_initramfs_start = __phys_to_virt(phys_external_initramfs_start);
 		virt_external_initramfs_end = virt_external_initramfs_start + phys_external_initramfs_size;

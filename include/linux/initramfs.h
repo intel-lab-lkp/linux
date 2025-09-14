@@ -9,7 +9,7 @@ extern int initramfs_below_start_ok;
 extern unsigned long virt_external_initramfs_start, virt_external_initramfs_end;
 extern void free_initramfs_mem(unsigned long, unsigned long);
 
-#ifdef CONFIG_BLK_DEV_INITRD
+#ifdef CONFIG_INITRAMFS
 extern void __init reserve_initramfs_mem(void);
 extern void wait_for_initramfs(void);
 #else

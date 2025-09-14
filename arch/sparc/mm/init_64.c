@@ -875,7 +875,7 @@ do {	if (numa_debug) \
 
 static void __init find_ramdisk(unsigned long phys_base)
 {
-#ifdef CONFIG_BLK_DEV_INITRD
+#ifdef CONFIG_INITRAMFS
 	if (sparc_ramdisk_image || sparc_ramdisk_image64) {
 		unsigned long ramdisk_image;
 
@@ -2484,7 +2484,7 @@ int page_in_phys_avail(unsigned long paddr)
 	}
 	if (paddr >= kern_base && paddr < (kern_base + kern_size))
 		return 1;
-#ifdef CONFIG_BLK_DEV_INITRD
+#ifdef CONFIG_INITRAMFS
 	if (paddr >= __pa(virt_external_initramfs_start) &&
 	    paddr < __pa(PAGE_ALIGN(virt_external_initramfs_end)))
 		return 1;

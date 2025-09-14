@@ -96,7 +96,7 @@ early_param("mem", early_parse_mem);
  */
 static inline int overlaps_initrd(unsigned long start, unsigned long size)
 {
-#ifdef CONFIG_BLK_DEV_INITRD
+#ifdef CONFIG_INITRAMFS
 	if (!virt_external_initramfs_start)
 		return 0;
 
@@ -684,14 +684,14 @@ static void __init early_reserve_mem(void)
 	/* Look for the new "reserved-regions" property in the DT */
 	early_reserve_mem_dt();
 
-#ifdef CONFIG_BLK_DEV_INITRD
+#ifdef CONFIG_INITRAMFS
 	/* Then reserve the initrd, if any */
 	if (virt_external_initramfs_start && (virt_external_initramfs_end > virt_external_initramfs_start)) {
 		memblock_reserve(ALIGN_DOWN(__pa(virt_external_initramfs_start), PAGE_SIZE),
 			ALIGN(virt_external_initramfs_end, PAGE_SIZE) -
 			ALIGN_DOWN(virt_external_initramfs_start, PAGE_SIZE));
 	}
-#endif /* CONFIG_BLK_DEV_INITRD */
+#endif /* CONFIG_INITRAMFS */
 
 	if (!IS_ENABLED(CONFIG_PPC32))
 		return;

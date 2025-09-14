@@ -261,7 +261,7 @@ get_mem_size_limit(char *s)
         return end >> PAGE_SHIFT; /* Return the PFN of the limit. */
 }
 
-#ifdef CONFIG_BLK_DEV_INITRD
+#ifdef CONFIG_INITRAMFS
 void * __init
 move_initrd(unsigned long mem_limit)
 {
@@ -346,7 +346,7 @@ setup_memory(void *kernel_end)
 	kernel_size = virt_to_phys(kernel_end) - KERNEL_START_PHYS;
 	memblock_reserve(KERNEL_START_PHYS, kernel_size);
 
-#ifdef CONFIG_BLK_DEV_INITRD
+#ifdef CONFIG_INITRAMFS
 	virt_external_initramfs_start = INITRD_START;
 	if (virt_external_initramfs_start) {
 		virt_external_initramfs_end = virt_external_initramfs_start+INITRD_SIZE;
@@ -364,7 +364,7 @@ setup_memory(void *kernel_end)
 					INITRD_SIZE);
 		}
 	}
-#endif /* CONFIG_BLK_DEV_INITRD */
+#endif /* CONFIG_INITRAMFS */
 }
 
 int page_is_ram(unsigned long pfn)

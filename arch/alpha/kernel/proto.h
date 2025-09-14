@@ -102,7 +102,7 @@ extern int boot_cpuid;
 #ifdef CONFIG_VERBOSE_MCHECK
 extern unsigned long alpha_verbose_mcheck;
 #endif
-#ifdef CONFIG_BLK_DEV_INITRD
+#ifdef CONFIG_INITRAMFS
 extern void * __init move_initrd(unsigned long);
 #endif
 extern struct screen_info vgacon_screen_info;

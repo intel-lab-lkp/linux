@@ -327,12 +327,12 @@ void __init setup_arch(char **cmdline_p)
 		panic("No configuration setup");
 	}
 
-	if (IS_ENABLED(CONFIG_BLK_DEV_INITRD) && m68k_ramdisk.size)
+	if (IS_ENABLED(CONFIG_INITRAMFS) && m68k_ramdisk.size)
 		memblock_reserve(m68k_ramdisk.addr, m68k_ramdisk.size);
 
 	paging_init();
 
-	if (IS_ENABLED(CONFIG_BLK_DEV_INITRD) && m68k_ramdisk.size) {
+	if (IS_ENABLED(CONFIG_INITRAMFS) && m68k_ramdisk.size) {
 		virt_external_initramfs_start = (unsigned long)phys_to_virt(m68k_ramdisk.addr);
 		virt_external_initramfs_end = virt_external_initramfs_start + m68k_ramdisk.size;
 		pr_info("initrd: %08lx - %08lx\n", virt_external_initramfs_start, virt_external_initramfs_end);

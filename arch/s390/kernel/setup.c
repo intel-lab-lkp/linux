@@ -670,7 +670,7 @@ static void __init reserve_initrd(void)
 {
 	unsigned long addr, size;
 
-	if (!IS_ENABLED(CONFIG_BLK_DEV_INITRD) || !get_physmem_reserved(RR_INITRD, &addr, &size))
+	if (!IS_ENABLED(CONFIG_INITRAMFS) || !get_physmem_reserved(RR_INITRD, &addr, &size))
 		return;
 	virt_external_initramfs_start = (unsigned long)__va(addr);
 	virt_external_initramfs_end = virt_external_initramfs_start + size;

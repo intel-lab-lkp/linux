@@ -205,7 +205,7 @@ static void rescue_initrd(unsigned long min, unsigned long max)
 {
 	unsigned long old_addr, addr, size;
 
-	if (!IS_ENABLED(CONFIG_BLK_DEV_INITRD))
+	if (!IS_ENABLED(CONFIG_INITRAMFS))
 		return;
 	if (!get_physmem_reserved(RR_INITRD, &addr, &size))
 		return;
@@ -523,7 +523,7 @@ void startup_kernel(void)
 	 * (if KASLR is off or failed).
 	 */
 	physmem_reserve(RR_DECOMPRESSOR, 0, safe_addr);
-	if (IS_ENABLED(CONFIG_BLK_DEV_INITRD) && parmarea.initrd_size)
+	if (IS_ENABLED(CONFIG_INITRAMFS) && parmarea.initrd_size)
 		physmem_reserve(RR_INITRD, parmarea.initrd_start, parmarea.initrd_size);
 	oldmem_data.start = parmarea.oldmem_base;
 	oldmem_data.size = parmarea.oldmem_size;
