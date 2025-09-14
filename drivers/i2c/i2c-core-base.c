@@ -23,7 +23,6 @@
 #include <linux/gpio/consumer.h>
 #include <linux/i2c.h>
 #include <linux/i2c-smbus.h>
-#include <linux/idr.h>
 #include <linux/init.h>
 #include <linux/interrupt.h>
 #include <linux/irq.h>
@@ -42,6 +41,7 @@
 #include <linux/rwsem.h>
 #include <linux/slab.h>
 #include <linux/string_choices.h>
+#include <linux/xarray.h>
 
 #include "i2c-core.h"
 
@@ -56,12 +56,10 @@
 
 #define I2C_ADDR_DEVICE_ID	0x7c
 
-/*
- * core_lock protects i2c_adapter_idr, and guarantees that device detection,
- * deletion of detected devices are serialized
- */
+/* core_lock guarantees that device detection, deletion of detected devices are serialized */
 static DEFINE_MUTEX(core_lock);
-static DEFINE_IDR(i2c_adapter_idr);
+
+static DEFINE_XARRAY_ALLOC(i2c_adapter_xa);
 
 static int i2c_detect(struct i2c_adapter *adapter, struct i2c_driver *driver);
 
@@ -1610,9 +1608,7 @@ out_reg:
 	device_unregister(&adap->dev);
 	wait_for_completion(&adap->dev_released);
 out_list:
-	mutex_lock(&core_lock);
-	idr_remove(&i2c_adapter_idr, adap->nr);
-	mutex_unlock(&core_lock);
+	xa_erase(&i2c_adapter_xa, adap->nr);
 	return res;
 }
 
@@ -1625,13 +1621,12 @@ out_list:
  */
 static int __i2c_add_numbered_adapter(struct i2c_adapter *adap)
 {
-	int id;
+	int ret;
+	u32 id;
 
-	mutex_lock(&core_lock);
-	id = idr_alloc(&i2c_adapter_idr, adap, adap->nr, adap->nr + 1, GFP_KERNEL);
-	mutex_unlock(&core_lock);
-	if (WARN(id < 0, "couldn't get idr"))
-		return id == -ENOSPC ? -EBUSY : id;
+	ret = xa_alloc(&i2c_adapter_xa, &id, adap, XA_LIMIT(adap->nr, adap->nr), GFP_KERNEL);
+	if (WARN(ret < 0, "couldn't get xa: error %d", ret))
+		return ret;
 
 	return i2c_register_adapter(adap);
 }
@@ -1653,20 +1648,19 @@ static int __i2c_add_numbered_adapter(struct i2c_adapter *adap)
 int i2c_add_adapter(struct i2c_adapter *adapter)
 {
 	struct device *dev = &adapter->dev;
-	int id;
+	int ret;
+	u32 id;
 
-	id = of_alias_get_id(dev->of_node, "i2c");
-	if (id >= 0) {
-		adapter->nr = id;
+	ret = of_alias_get_id(dev->of_node, "i2c");
+	if (ret >= 0) {
+		adapter->nr = ret;
 		return __i2c_add_numbered_adapter(adapter);
 	}
 
-	mutex_lock(&core_lock);
-	id = idr_alloc(&i2c_adapter_idr, adapter,
-		       __i2c_first_dynamic_bus_num, 0, GFP_KERNEL);
-	mutex_unlock(&core_lock);
-	if (WARN(id < 0, "couldn't get idr"))
-		return id;
+	ret = xa_alloc(&i2c_adapter_xa, &id, adapter,
+		       XA_LIMIT(__i2c_first_dynamic_bus_num, UINT_MAX), GFP_KERNEL);
+	if (WARN(ret < 0, "couldn't get xa, error %d", ret))
+		return ret;
 
 	adapter->nr = id;
 
@@ -1758,9 +1752,7 @@ void i2c_del_adapter(struct i2c_adapter *adap)
 	struct i2c_client *client, *next;
 
 	/* First make sure that this adapter was ever added */
-	mutex_lock(&core_lock);
-	found = idr_find(&i2c_adapter_idr, adap->nr);
-	mutex_unlock(&core_lock);
+	found = xa_load(&i2c_adapter_xa, adap->nr);
 	if (found != adap) {
 		pr_debug("attempting to delete unregistered adapter [%s]\n", adap->name);
 		return;
@@ -1814,9 +1806,7 @@ void i2c_del_adapter(struct i2c_adapter *adap)
 	wait_for_completion(&adap->dev_released);
 
 	/* free bus id */
-	mutex_lock(&core_lock);
-	idr_remove(&i2c_adapter_idr, adap->nr);
-	mutex_unlock(&core_lock);
+	xa_erase(&i2c_adapter_xa, adap->nr);
 
 	/* Clear the device structure in case this adapter is ever going to be
 	   added again */
@@ -2604,17 +2594,13 @@ struct i2c_adapter *i2c_get_adapter(int nr)
 	struct i2c_adapter *adapter;
 
 	mutex_lock(&core_lock);
-	adapter = idr_find(&i2c_adapter_idr, nr);
-	if (!adapter)
-		goto exit;
-
-	if (try_module_get(adapter->owner))
+	adapter = xa_load(&i2c_adapter_xa, nr);
+	if (adapter && try_module_get(adapter->owner))
 		get_device(&adapter->dev);
 	else
 		adapter = NULL;
-
- exit:
 	mutex_unlock(&core_lock);
+
 	return adapter;
 }
 EXPORT_SYMBOL(i2c_get_adapter);
