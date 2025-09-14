@@ -191,6 +191,9 @@ enum ieee80211_channel_flags {
  *	on this channel.
  * @dfs_state_entered: timestamp (jiffies) when the dfs state was entered.
  * @dfs_cac_ms: DFS CAC time in milliseconds, this is valid for DFS channels.
+ * @cac_ongoing: true if CAC is currently in progress on this channel
+ * @cac_ongoing_time: timestamp (jiffies) when CAC was started on this channel.
+ *	Only valid when @cac_ongoing is true.
  * @psd: power spectral density (in dBm)
  */
 struct ieee80211_channel {
@@ -208,6 +211,8 @@ struct ieee80211_channel {
 	enum nl80211_dfs_state dfs_state;
 	unsigned long dfs_state_entered;
 	unsigned int dfs_cac_ms;
+	bool cac_ongoing;
+	unsigned long cac_ongoing_time;
 	s8 psd;
 };
 
