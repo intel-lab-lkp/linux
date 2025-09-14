@@ -63,6 +63,7 @@
 #include <linux/seq_buf.h>
 #include <linux/sched/isolation.h>
 #include <linux/kmemleak.h>
+#include <linux/ksm.h>
 #include "internal.h"
 #include <net/sock.h>
 #include <net/ip.h>
@@ -1492,6 +1493,10 @@ static void memcg_stat_format(struct mem_cgroup *memcg, struct seq_buf *s)
 			seq_buf_printf(s, "slab %llu\n", size);
 		}
 	}
+
+#ifdef CONFIG_KSM
+	memcg_stat_ksm_show(memcg, s);
+#endif
 
 	/* Accumulated memory events */
 	seq_buf_printf(s, "pgscan %lu\n",

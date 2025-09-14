@@ -94,6 +94,7 @@ void collect_procs_ksm(const struct folio *folio, const struct page *page,
 		struct list_head *to_kill, int force_early);
 long ksm_process_profit(struct mm_struct *);
 bool ksm_process_mergeable(struct mm_struct *mm);
+void memcg_stat_ksm_show(struct mem_cgroup *memcg, struct seq_buf *s);
 
 #else  /* !CONFIG_KSM */
 
