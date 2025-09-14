@@ -20,6 +20,7 @@
 #include <linux/mfd/samsung/s2mps13.h>
 #include <linux/mfd/samsung/s2mps14.h>
 #include <linux/mfd/samsung/s2mps15.h>
+#include <linux/mfd/samsung/s2mps16.h>
 #include <linux/mfd/samsung/s2mpu02.h>
 #include <linux/mfd/samsung/s2mpu05.h>
 
@@ -828,6 +829,146 @@ static const struct regulator_desc s2mps15_regulators[] = {
 	regulator_desc_s2mps15_buck(10, s2mps15_buck_voltage_ranges2),
 };
 
+static int s2mps16_set_ramp_delay(struct regulator_dev *rdev, int ramp_delay)
+{
+	unsigned int ramp_val, ramp_shift, ramp_reg;
+	int rdev_id = rdev_get_id(rdev);
+
+	switch (rdev_id) {
+	case S2MPS16_BUCK2:
+	case S2MPS16_BUCK4:
+	case S2MPS16_BUCK5:
+		ramp_shift = S2MPS16_BUCK_RAMP_SHIFT1;
+		break;
+	case S2MPS16_BUCK1:
+	case S2MPS16_BUCK3:
+	case S2MPS16_BUCK6:
+		ramp_shift = S2MPS16_BUCK_RAMP_SHIFT2;
+		break;
+	case S2MPS16_BUCK7:
+	case S2MPS16_BUCK11:
+		ramp_shift = S2MPS16_BUCK_RAMP_SHIFT3;
+		break;
+	case S2MPS16_BUCK8:
+	case S2MPS16_BUCK9:
+		ramp_shift = S2MPS16_BUCK_RAMP_SHIFT4;
+		break;
+	default:
+		return 0;
+	}
+	ramp_reg = S2MPS16_REG_BUCK_RAMP;
+	ramp_val = get_ramp_delay(ramp_delay);
+
+	return regmap_update_bits(rdev->regmap, ramp_reg,
+				  S2MPS16_BUCK_RAMP_MASK << ramp_shift,
+				  ramp_val << ramp_shift);
+}
+
+static const struct regulator_ops s2mps16_ldo_ops = {
+	.list_voltage		= regulator_list_voltage_linear,
+	.map_voltage		= regulator_map_voltage_linear,
+	.is_enabled		= regulator_is_enabled_regmap,
+	.enable			= regulator_enable_regmap,
+	.disable		= regulator_disable_regmap,
+	.get_voltage_sel	= regulator_get_voltage_sel_regmap,
+	.set_voltage_sel	= regulator_set_voltage_sel_regmap,
+};
+
+static const struct regulator_ops s2mps16_buck_ops = {
+	.list_voltage		= regulator_list_voltage_linear,
+	.map_voltage		= regulator_map_voltage_linear,
+	.is_enabled		= regulator_is_enabled_regmap,
+	.enable			= regulator_enable_regmap,
+	.disable		= regulator_disable_regmap,
+	.get_voltage_sel	= regulator_get_voltage_sel_regmap,
+	.set_voltage_sel	= regulator_set_voltage_sel_regmap,
+	.set_voltage_time_sel	= regulator_set_voltage_time_sel,
+	.set_ramp_delay		= s2mps16_set_ramp_delay,
+};
+
+#define regulator_desc_s2mps16_ldo(num, min, step) {		\
+	.name		= "ldo"#num,				\
+	.id		= S2MPS16_LDO##num,			\
+	.ops		= &s2mps16_ldo_ops,			\
+	.type		= REGULATOR_VOLTAGE,			\
+	.owner		= THIS_MODULE,				\
+	.min_uV		= S2MPS16_LDO_##min,			\
+	.uV_step	= S2MPS16_LDO_##step,			\
+	.n_voltages	= S2MPS16_LDO_N_VOLTAGES,		\
+	.vsel_reg	= S2MPS16_REG_L##num##CTRL,		\
+	.vsel_mask	= S2MPS16_LDO_VSEL_MASK,		\
+	.enable_reg	= S2MPS16_REG_L##num##CTRL,		\
+	.enable_mask	= S2MPS16_ENABLE_MASK,			\
+	.enable_time	= S2MPS16_ENABLE_TIME_LDO		\
+}
+
+#define regulator_desc_s2mps16_buck(num, min, step, vsel, enable) {	\
+	.name		= "buck"#num,					\
+	.id		= S2MPS16_BUCK##num,				\
+	.ops		= &s2mps16_buck_ops,				\
+	.type		= REGULATOR_VOLTAGE,				\
+	.owner		= THIS_MODULE,					\
+	.min_uV		= S2MPS16_BUCK_##min,				\
+	.uV_step	= S2MPS16_BUCK_##step,				\
+	.n_voltages	= S2MPS16_BUCK_N_VOLTAGES,			\
+	.vsel_reg	= S2MPS16_REG_B##num##vsel,			\
+	.vsel_mask	= S2MPS16_BUCK_VSEL_MASK,			\
+	.enable_reg	= S2MPS16_REG_B##num##enable,			\
+	.enable_mask	= S2MPS16_ENABLE_MASK,				\
+	.enable_time	= S2MPS16_ENABLE_TIME_BUCK##num			\
+}
+
+#define regulator_desc_s2mps16_buck1(num) \
+	regulator_desc_s2mps16_buck(num, MIN1, STEP1, CTRL2, CTRL1)
+
+#define regulator_desc_s2mps16_buck2(num) \
+	regulator_desc_s2mps16_buck(num, MIN1, STEP1, CTRL3, CTRL1)
+
+#define regulator_desc_s2mps16_buck3(num) \
+	regulator_desc_s2mps16_buck(num, MIN2, STEP2, CTRL2, CTRL1)
+
+static const struct regulator_desc s2mps16_regulators[] = {
+	regulator_desc_s2mps16_ldo(1, MIN2, STEP1),
+	regulator_desc_s2mps16_ldo(2, MIN4, STEP2),
+	regulator_desc_s2mps16_ldo(3, MIN3, STEP2),
+	regulator_desc_s2mps16_ldo(4, MIN3, STEP1),
+	regulator_desc_s2mps16_ldo(5, MIN3, STEP2),
+	regulator_desc_s2mps16_ldo(6, MIN4, STEP2),
+	regulator_desc_s2mps16_ldo(7, MIN1, STEP2),
+	regulator_desc_s2mps16_ldo(8, MIN1, STEP2),
+	regulator_desc_s2mps16_ldo(9, MIN1, STEP2),
+	regulator_desc_s2mps16_ldo(10, MIN1, STEP2),
+	regulator_desc_s2mps16_ldo(11, MIN1, STEP2),
+	regulator_desc_s2mps16_ldo(12, MIN3, STEP1),
+	regulator_desc_s2mps16_ldo(13, MIN3, STEP1),
+	/* LDOs 14-24 are used for CP. They aren't documented */
+	regulator_desc_s2mps16_ldo(25, MIN3, STEP1),
+	regulator_desc_s2mps16_ldo(26, MIN3, STEP1),
+	regulator_desc_s2mps16_ldo(27, MIN3, STEP1),
+	regulator_desc_s2mps16_ldo(28, MIN4, STEP2),
+	regulator_desc_s2mps16_ldo(29, MIN4, STEP2),
+	regulator_desc_s2mps16_ldo(30, MIN3, STEP2),
+	regulator_desc_s2mps16_ldo(31, MIN3, STEP1),
+	regulator_desc_s2mps16_ldo(32, MIN3, STEP2),
+	regulator_desc_s2mps16_ldo(33, MIN4, STEP2),
+	regulator_desc_s2mps16_ldo(34, MIN4, STEP2),
+	regulator_desc_s2mps16_ldo(35, MIN4, STEP2),
+	regulator_desc_s2mps16_ldo(36, MIN4, STEP2),
+	regulator_desc_s2mps16_ldo(37, MIN3, STEP2),
+	regulator_desc_s2mps16_ldo(38, MIN3, STEP1),
+	regulator_desc_s2mps16_buck1(1),
+	regulator_desc_s2mps16_buck1(2),
+	regulator_desc_s2mps16_buck1(3),
+	regulator_desc_s2mps16_buck1(4),
+	regulator_desc_s2mps16_buck1(5),
+	regulator_desc_s2mps16_buck2(6),
+	regulator_desc_s2mps16_buck1(7),
+	regulator_desc_s2mps16_buck3(8),
+	regulator_desc_s2mps16_buck3(9),
+	/* BUCK 10 is used for CP. It's not documented */
+	regulator_desc_s2mps16_buck1(11),
+};
+
 static int s2mps14_pmic_enable_ext_control(struct s2mps11_info *s2mps11,
 		struct regulator_dev *rdev)
 {
@@ -1238,6 +1379,11 @@ static int s2mps11_pmic_probe(struct platform_device *pdev)
 		regulators = s2mps15_regulators;
 		BUILD_BUG_ON(S2MPS_REGULATOR_MAX < ARRAY_SIZE(s2mps15_regulators));
 		break;
+	case S2MPS16X:
+		rdev_num = ARRAY_SIZE(s2mps16_regulators);
+		regulators = s2mps16_regulators;
+		BUILD_BUG_ON(S2MPS_REGULATOR_MAX < ARRAY_SIZE(s2mps16_regulators));
+		break;
 	case S2MPU02:
 		rdev_num = ARRAY_SIZE(s2mpu02_regulators);
 		regulators = s2mpu02_regulators;
@@ -1316,6 +1462,7 @@ static const struct platform_device_id s2mps11_pmic_id[] = {
 	{ "s2mps13-regulator", S2MPS13X},
 	{ "s2mps14-regulator", S2MPS14X},
 	{ "s2mps15-regulator", S2MPS15X},
+	{ "s2mps16-regulator", S2MPS16X},
 	{ "s2mpu02-regulator", S2MPU02},
 	{ "s2mpu05-regulator", S2MPU05},
 	{ },
