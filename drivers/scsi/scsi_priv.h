@@ -92,6 +92,7 @@ extern int scsi_error_handler(void *host);
 extern enum scsi_disposition scsi_decide_disposition(struct scsi_cmnd *cmd);
 extern void scsi_eh_wakeup(struct Scsi_Host *shost, unsigned int busy);
 extern void scsi_eh_scmd_add(struct scsi_cmnd *);
+extern void scsi_eh_try_wakeup_sdev(struct scsi_device *sdev);
 void scsi_eh_ready_devs(struct Scsi_Host *shost,
 			struct list_head *work_q,
 			struct list_head *done_q);
@@ -190,6 +191,13 @@ void scsi_dh_release_device(struct scsi_device *sdev);
 static inline void scsi_dh_add_device(struct scsi_device *sdev) { }
 static inline void scsi_dh_release_device(struct scsi_device *sdev) { }
 #endif
+
+static inline bool scsi_device_in_recovery(struct scsi_device *sdev)
+{
+	struct scsi_device_eh *eh = sdev->eh;
+
+	return eh && eh->is_busy && eh->is_busy(sdev);
+}
 
 struct bsg_device *scsi_bsg_register_queue(struct scsi_device *sdev);
 

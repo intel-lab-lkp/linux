@@ -291,11 +291,28 @@ static void scsi_eh_inc_host_failed(struct rcu_head *head)
 	spin_unlock_irqrestore(shost->host_lock, flags);
 }
 
+static bool scsi_eh_scmd_add_sdev(struct scsi_cmnd *scmd)
+{
+	struct scsi_device *sdev = scmd->device;
+	struct scsi_device_eh *eh = sdev->eh;
+
+	if (!eh || !eh->add_cmnd)
+		return true;
+
+	scsi_eh_reset(scmd);
+	eh->add_cmnd(scmd);
+
+	if (eh->wakeup)
+		eh->wakeup(sdev);
+
+	return false;
+}
+
 /**
- * scsi_eh_scmd_add - add scsi cmd to error handling.
- * @scmd:	scmd to run eh on.
+ * Add scsi cmd to error handling of Scsi_Host.
+ * This is default action of error handle.
  */
-void scsi_eh_scmd_add(struct scsi_cmnd *scmd)
+static void scsi_eh_scmd_add_shost(struct scsi_cmnd *scmd)
 {
 	struct Scsi_Host *shost = scmd->device->host;
 	unsigned long flags;
@@ -320,6 +337,25 @@ void scsi_eh_scmd_add(struct scsi_cmnd *scmd)
 	 * host_failed change.
 	 */
 	call_rcu_hurry(&scmd->rcu, scsi_eh_inc_host_failed);
+}
+
+/**
+ * scsi_eh_scmd_add - add scsi cmd to error handling.
+ * @scmd:	scmd to run eh on.
+ */
+void scsi_eh_scmd_add(struct scsi_cmnd *scmd)
+{
+	struct Scsi_Host *shost = scmd->device->host;
+
+	if (unlikely(scsi_host_in_recovery(shost)) ||
+		scsi_eh_scmd_add_sdev(scmd))
+		scsi_eh_scmd_add_shost(scmd);
+}
+
+void scsi_eh_try_wakeup_sdev(struct scsi_device *sdev)
+{
+	if (sdev->eh && sdev->eh->wakeup)
+		sdev->eh->wakeup(sdev);
 }
 
 /**

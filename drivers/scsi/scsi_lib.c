@@ -398,6 +398,8 @@ void scsi_device_unbusy(struct scsi_device *sdev, struct scsi_cmnd *cmd)
 
 	sbitmap_put(&sdev->budget_map, cmd->budget_token);
 	cmd->budget_token = -1;
+
+	scsi_eh_try_wakeup_sdev(sdev);
 }
 
 /*
@@ -1360,6 +1362,9 @@ static inline int scsi_dev_queue_ready(struct request_queue *q,
 {
 	int token;
 
+	if (scsi_device_in_recovery(sdev))
+		return -1;
+
 	token = sbitmap_get(&sdev->budget_map);
 	if (token < 0)
 		return -1;
@@ -1374,6 +1379,7 @@ static inline int scsi_dev_queue_ready(struct request_queue *q,
 	if (scsi_device_busy(sdev) > 1 ||
 	    atomic_dec_return(&sdev->device_blocked) > 0) {
 		sbitmap_put(&sdev->budget_map, token);
+		scsi_eh_try_wakeup_sdev(sdev);
 		return -1;
 	}
 
@@ -1882,6 +1888,7 @@ out_dec_target_busy:
 out_put_budget:
 	scsi_mq_put_budget(q, cmd->budget_token);
 	cmd->budget_token = -1;
+	scsi_eh_try_wakeup_sdev(sdev);
 	switch (ret) {
 	case BLK_STS_OK:
 		break;
