@@ -1513,6 +1513,8 @@ void __scsi_remove_device(struct scsi_device *sdev)
 	kref_put(&sdev->host->tagset_refcnt, scsi_mq_free_tags);
 	cancel_work_sync(&sdev->requeue_work);
 
+	if (sdev->host->hostt->sdev_clear_eh)
+		sdev->host->hostt->sdev_clear_eh(sdev);
 	if (sdev->host->hostt->sdev_destroy)
 		sdev->host->hostt->sdev_destroy(sdev);
 	transport_destroy_device(dev);
