@@ -59,6 +59,7 @@ enum scan_result {
 	SCAN_STORE_FAILED,
 	SCAN_COPY_MC,
 	SCAN_PAGE_FILLED,
+	SCAN_PTE_GUARD,
 };
 
 #define CREATE_TRACE_POINTS
@@ -1315,6 +1316,16 @@ static int hpage_collapse_scan_pmd(struct mm_struct *mm,
 				 */
 				if (pte_swp_uffd_wp_any(pteval)) {
 					result = SCAN_PTE_UFFD_WP;
+					goto out_unmap;
+				}
+				/*
+				 * Guard PTE markers are installed by
+				 * MADV_GUARD_INSTALL. Any collapse path must
+				 * not touch them, so abort the scan immediately
+				 * if one is found.
+				 */
+				if (is_guard_pte_marker(pteval)) {
+					result = SCAN_PTE_GUARD;
 					goto out_unmap;
 				}
 				continue;
@@ -2860,6 +2871,7 @@ handle_result:
 		case SCAN_PAGE_COMPOUND:
 		case SCAN_PAGE_LRU:
 		case SCAN_DEL_PAGE_LRU:
+		case SCAN_PTE_GUARD:
 			last_fail = result;
 			break;
 		default:
