@@ -198,7 +198,7 @@ static int test__checkevent_symbolic_name_config(struct evlist *evlist)
 	TEST_ASSERT_VAL("wrong number of entries", 0 != evlist->core.nr_entries);
 
 	perf_evlist__for_each_evsel(&evlist->core, evsel) {
-		int ret = assert_hw(evsel, PERF_COUNT_HW_CPU_CYCLES, "cycles");
+		int ret = assert_hw(evsel, PERF_COUNT_HW_CPU_CYCLES, HW_CYCLES_STR);
 
 		if (ret)
 			return ret;
@@ -884,7 +884,7 @@ static int test__group1(struct evlist *evlist)
 
 		/* cycles:upp */
 		evsel = evsel__next(evsel);
-		ret = assert_hw(&evsel->core, PERF_COUNT_HW_CPU_CYCLES, "cycles");
+		ret = assert_hw(&evsel->core, PERF_COUNT_HW_CPU_CYCLES, HW_CYCLES_STR);
 		if (ret)
 			return ret;
 
@@ -948,7 +948,7 @@ static int test__group2(struct evlist *evlist)
 			continue;
 		}
 		/* cycles:k */
-		ret = assert_hw(&evsel->core, PERF_COUNT_HW_CPU_CYCLES, "cycles");
+		ret = assert_hw(&evsel->core, PERF_COUNT_HW_CPU_CYCLES, HW_CYCLES_STR);
 		if (ret)
 			return ret;
 
@@ -1085,7 +1085,7 @@ static int test__group4(struct evlist *evlist __maybe_unused)
 
 		/* cycles:u + p */
 		evsel = leader = (i == 0 ? evlist__first(evlist) : evsel__next(evsel));
-		ret = assert_hw(&evsel->core, PERF_COUNT_HW_CPU_CYCLES, "cycles");
+		ret = assert_hw(&evsel->core, PERF_COUNT_HW_CPU_CYCLES, HW_CYCLES_STR);
 		if (ret)
 			return ret;
 
@@ -1133,7 +1133,7 @@ static int test__group5(struct evlist *evlist __maybe_unused)
 	for (int i = 0; i < num_core_entries(); i++) {
 		/* cycles + G */
 		evsel = leader = (i == 0 ? evlist__first(evlist) : evsel__next(evsel));
-		ret = assert_hw(&evsel->core, PERF_COUNT_HW_CPU_CYCLES, "cycles");
+		ret = assert_hw(&evsel->core, PERF_COUNT_HW_CPU_CYCLES, HW_CYCLES_STR);
 		if (ret)
 			return ret;
 
@@ -1168,7 +1168,7 @@ static int test__group5(struct evlist *evlist __maybe_unused)
 	for (int i = 0; i < num_core_entries(); i++) {
 		/* cycles:G */
 		evsel = leader = evsel__next(evsel);
-		ret = assert_hw(&evsel->core, PERF_COUNT_HW_CPU_CYCLES, "cycles");
+		ret = assert_hw(&evsel->core, PERF_COUNT_HW_CPU_CYCLES, HW_CYCLES_STR);
 		if (ret)
 			return ret;
 
@@ -1202,7 +1202,7 @@ static int test__group5(struct evlist *evlist __maybe_unused)
 	for (int i = 0; i < num_core_entries(); i++) {
 		/* cycles */
 		evsel = evsel__next(evsel);
-		ret = assert_hw(&evsel->core, PERF_COUNT_HW_CPU_CYCLES, "cycles");
+		ret = assert_hw(&evsel->core, PERF_COUNT_HW_CPU_CYCLES, HW_CYCLES_STR);
 		if (ret)
 			return ret;
 
@@ -1231,7 +1231,7 @@ static int test__group_gh1(struct evlist *evlist)
 
 		/* cycles + :H group modifier */
 		evsel = leader = (i == 0 ? evlist__first(evlist) : evsel__next(evsel));
-		ret = assert_hw(&evsel->core, PERF_COUNT_HW_CPU_CYCLES, "cycles");
+		ret = assert_hw(&evsel->core, PERF_COUNT_HW_CPU_CYCLES, HW_CYCLES_STR);
 		if (ret)
 			return ret;
 
@@ -1278,7 +1278,7 @@ static int test__group_gh2(struct evlist *evlist)
 
 		/* cycles + :G group modifier */
 		evsel = leader = (i == 0 ? evlist__first(evlist) : evsel__next(evsel));
-		ret = assert_hw(&evsel->core, PERF_COUNT_HW_CPU_CYCLES, "cycles");
+		ret = assert_hw(&evsel->core, PERF_COUNT_HW_CPU_CYCLES, HW_CYCLES_STR);
 		if (ret)
 			return ret;
 
@@ -1325,7 +1325,7 @@ static int test__group_gh3(struct evlist *evlist)
 
 		/* cycles:G + :u group modifier */
 		evsel = leader = (i == 0 ? evlist__first(evlist) : evsel__next(evsel));
-		ret = assert_hw(&evsel->core, PERF_COUNT_HW_CPU_CYCLES, "cycles");
+		ret = assert_hw(&evsel->core, PERF_COUNT_HW_CPU_CYCLES, HW_CYCLES_STR);
 		if (ret)
 			return ret;
 
@@ -1372,7 +1372,7 @@ static int test__group_gh4(struct evlist *evlist)
 
 		/* cycles:G + :uG group modifier */
 		evsel = leader = (i == 0 ? evlist__first(evlist) : evsel__next(evsel));
-		ret = assert_hw(&evsel->core, PERF_COUNT_HW_CPU_CYCLES, "cycles");
+		ret = assert_hw(&evsel->core, PERF_COUNT_HW_CPU_CYCLES, HW_CYCLES_STR);
 		if (ret)
 			return ret;
 
@@ -1417,7 +1417,7 @@ static int test__leader_sample1(struct evlist *evlist)
 
 		/* cycles - sampling group leader */
 		evsel = leader = (i == 0 ? evlist__first(evlist) : evsel__next(evsel));
-		ret = assert_hw(&evsel->core, PERF_COUNT_HW_CPU_CYCLES, "cycles");
+		ret = assert_hw(&evsel->core, PERF_COUNT_HW_CPU_CYCLES, HW_CYCLES_STR);
 		if (ret)
 			return ret;
 
@@ -1540,7 +1540,7 @@ static int test__pinned_group(struct evlist *evlist)
 
 		/* cycles - group leader */
 		evsel = leader = (i == 0 ? evlist__first(evlist) : evsel__next(evsel));
-		ret = assert_hw(&evsel->core, PERF_COUNT_HW_CPU_CYCLES, "cycles");
+		ret = assert_hw(&evsel->core, PERF_COUNT_HW_CPU_CYCLES, HW_CYCLES_STR);
 		if (ret)
 			return ret;
 
@@ -1594,7 +1594,7 @@ static int test__exclusive_group(struct evlist *evlist)
 
 		/* cycles - group leader */
 		evsel = leader = (i == 0 ? evlist__first(evlist) : evsel__next(evsel));
-		ret = assert_hw(&evsel->core, PERF_COUNT_HW_CPU_CYCLES, "cycles");
+		ret = assert_hw(&evsel->core, PERF_COUNT_HW_CPU_CYCLES, HW_CYCLES_STR);
 		if (ret)
 			return ret;
 
@@ -1759,7 +1759,7 @@ static int test__checkevent_raw_pmu(struct evlist *evlist)
 static int test__sym_event_slash(struct evlist *evlist)
 {
 	struct evsel *evsel = evlist__first(evlist);
-	int ret = assert_hw(&evsel->core, PERF_COUNT_HW_CPU_CYCLES, "cycles");
+	int ret = assert_hw(&evsel->core, PERF_COUNT_HW_CPU_CYCLES, HW_CYCLES_STR);
 
 	if (ret)
 		return ret;
@@ -1771,7 +1771,7 @@ static int test__sym_event_slash(struct evlist *evlist)
 static int test__sym_event_dc(struct evlist *evlist)
 {
 	struct evsel *evsel = evlist__first(evlist);
-	int ret = assert_hw(&evsel->core, PERF_COUNT_HW_CPU_CYCLES, "cycles");
+	int ret = assert_hw(&evsel->core, PERF_COUNT_HW_CPU_CYCLES, HW_CYCLES_STR);
 
 	if (ret)
 		return ret;
@@ -1783,7 +1783,7 @@ static int test__sym_event_dc(struct evlist *evlist)
 static int test__term_equal_term(struct evlist *evlist)
 {
 	struct evsel *evsel = evlist__first(evlist);
-	int ret = assert_hw(&evsel->core, PERF_COUNT_HW_CPU_CYCLES, "cycles");
+	int ret = assert_hw(&evsel->core, PERF_COUNT_HW_CPU_CYCLES, HW_CYCLES_STR);
 
 	if (ret)
 		return ret;
@@ -1795,7 +1795,7 @@ static int test__term_equal_term(struct evlist *evlist)
 static int test__term_equal_legacy(struct evlist *evlist)
 {
 	struct evsel *evsel = evlist__first(evlist);
-	int ret = assert_hw(&evsel->core, PERF_COUNT_HW_CPU_CYCLES, "cycles");
+	int ret = assert_hw(&evsel->core, PERF_COUNT_HW_CPU_CYCLES, HW_CYCLES_STR);
 
 	if (ret)
 		return ret;
@@ -2006,27 +2006,27 @@ static const struct evlist_test test__events[] = {
 		/* 7 */
 	},
 	{
-		.name  = "{instructions:k,cycles:upp}",
+		.name  = "{instructions:k," HW_CYCLES_STR ":upp}",
 		.check = test__group1,
 		/* 8 */
 	},
 	{
-		.name  = "{faults:k,branches}:u,cycles:k",
+		.name  = "{faults:k,branches}:u," HW_CYCLES_STR ":k",
 		.check = test__group2,
 		/* 9 */
 	},
 	{
-		.name  = "group1{syscalls:sys_enter_openat:H,cycles:kppp},group2{cycles,1:3}:G,instructions:u",
+		.name  = "group1{syscalls:sys_enter_openat:H," HW_CYCLES_STR ":kppp},group2{" HW_CYCLES_STR ",1:3}:G,instructions:u",
 		.check = test__group3,
 		/* 0 */
 	},
 	{
-		.name  = "{cycles:u,instructions:kp}:p",
+		.name  = "{" HW_CYCLES_STR ":u,instructions:kp}:p",
 		.check = test__group4,
 		/* 1 */
 	},
 	{
-		.name  = "{cycles,instructions}:G,{cycles:G,instructions:G},cycles",
+		.name  = "{" HW_CYCLES_STR ",instructions}:G,{" HW_CYCLES_STR ":G,instructions:G}," HW_CYCLES_STR,
 		.check = test__group5,
 		/* 2 */
 	},
@@ -2036,27 +2036,27 @@ static const struct evlist_test test__events[] = {
 		/* 3 */
 	},
 	{
-		.name  = "{cycles,cache-misses:G}:H",
+		.name  = "{" HW_CYCLES_STR ",cache-misses:G}:H",
 		.check = test__group_gh1,
 		/* 4 */
 	},
 	{
-		.name  = "{cycles,cache-misses:H}:G",
+		.name  = "{" HW_CYCLES_STR ",cache-misses:H}:G",
 		.check = test__group_gh2,
 		/* 5 */
 	},
 	{
-		.name  = "{cycles:G,cache-misses:H}:u",
+		.name  = "{" HW_CYCLES_STR ":G,cache-misses:H}:u",
 		.check = test__group_gh3,
 		/* 6 */
 	},
 	{
-		.name  = "{cycles:G,cache-misses:H}:uG",
+		.name  = "{" HW_CYCLES_STR ":G,cache-misses:H}:uG",
 		.check = test__group_gh4,
 		/* 7 */
 	},
 	{
-		.name  = "{cycles,cache-misses,branch-misses}:S",
+		.name  = "{" HW_CYCLES_STR ",cache-misses,branch-misses}:S",
 		.check = test__leader_sample1,
 		/* 8 */
 	},
@@ -2071,7 +2071,7 @@ static const struct evlist_test test__events[] = {
 		/* 0 */
 	},
 	{
-		.name  = "{cycles,cache-misses,branch-misses}:D",
+		.name  = "{" HW_CYCLES_STR ",cache-misses,branch-misses}:D",
 		.check = test__pinned_group,
 		/* 1 */
 	},
@@ -2109,7 +2109,7 @@ static const struct evlist_test test__events[] = {
 		/* 6 */
 	},
 	{
-		.name  = "task-clock:P,cycles",
+		.name  = "task-clock:P," HW_CYCLES_STR,
 		.check = test__checkevent_precise_max_modifier,
 		/* 7 */
 	},
@@ -2140,17 +2140,17 @@ static const struct evlist_test test__events[] = {
 		/* 2 */
 	},
 	{
-		.name  = "cycles/name='COMPLEX_CYCLES_NAME:orig=cycles,desc=chip-clock-ticks'/Duk",
+		.name  = HW_CYCLES_STR "/name='COMPLEX_CYCLES_NAME:orig=cycles,desc=chip-clock-ticks'/Duk",
 		.check = test__checkevent_complex_name,
 		/* 3 */
 	},
 	{
-		.name  = "cycles//u",
+		.name  = HW_CYCLES_STR "//u",
 		.check = test__sym_event_slash,
 		/* 4 */
 	},
 	{
-		.name  = "cycles:k",
+		.name  = HW_CYCLES_STR ":k",
 		.check = test__sym_event_dc,
 		/* 5 */
 	},
@@ -2160,17 +2160,17 @@ static const struct evlist_test test__events[] = {
 		/* 6 */
 	},
 	{
-		.name  = "{cycles,cache-misses,branch-misses}:e",
+		.name  = "{" HW_CYCLES_STR ",cache-misses,branch-misses}:e",
 		.check = test__exclusive_group,
 		/* 7 */
 	},
 	{
-		.name  = "cycles/name=name/",
+		.name  = HW_CYCLES_STR "/name=name/",
 		.check = test__term_equal_term,
 		/* 8 */
 	},
 	{
-		.name  = "cycles/name=l1d/",
+		.name  = HW_CYCLES_STR "/name=l1d/",
 		.check = test__term_equal_legacy,
 		/* 9 */
 	},
@@ -2311,7 +2311,7 @@ static const struct evlist_test test__events_pmu[] = {
 		/* 9 */
 	},
 	{
-		.name  = "cpu/cycles,period=100000,config2/",
+		.name  = "cpu/" HW_CYCLES_STR ",period=100000,config2/",
 		.valid = test__pmu_cpu_valid,
 		.check = test__checkevent_symbolic_name_config,
 		/* 0 */
@@ -2335,43 +2335,43 @@ static const struct evlist_test test__events_pmu[] = {
 		/* 3 */
 	},
 	{
-		.name  = "{cpu/instructions/k,cpu/cycles/upp}",
+		.name  = "{cpu/instructions/k,cpu/" HW_CYCLES_STR "/upp}",
 		.valid = test__pmu_cpu_valid,
 		.check = test__group1,
 		/* 4 */
 	},
 	{
-		.name  = "{cpu/cycles/u,cpu/instructions/kp}:p",
+		.name  = "{cpu/" HW_CYCLES_STR "/u,cpu/instructions/kp}:p",
 		.valid = test__pmu_cpu_valid,
 		.check = test__group4,
 		/* 5 */
 	},
 	{
-		.name  = "{cpu/cycles/,cpu/cache-misses/G}:H",
+		.name  = "{cpu/" HW_CYCLES_STR "/,cpu/cache-misses/G}:H",
 		.valid = test__pmu_cpu_valid,
 		.check = test__group_gh1,
 		/* 6 */
 	},
 	{
-		.name  = "{cpu/cycles/,cpu/cache-misses/H}:G",
+		.name  = "{cpu/" HW_CYCLES_STR "/,cpu/cache-misses/H}:G",
 		.valid = test__pmu_cpu_valid,
 		.check = test__group_gh2,
 		/* 7 */
 	},
 	{
-		.name  = "{cpu/cycles/G,cpu/cache-misses/H}:u",
+		.name  = "{cpu/" HW_CYCLES_STR "/G,cpu/cache-misses/H}:u",
 		.valid = test__pmu_cpu_valid,
 		.check = test__group_gh3,
 		/* 8 */
 	},
 	{
-		.name  = "{cpu/cycles/G,cpu/cache-misses/H}:uG",
+		.name  = "{cpu/" HW_CYCLES_STR "/G,cpu/cache-misses/H}:uG",
 		.valid = test__pmu_cpu_valid,
 		.check = test__group_gh4,
 		/* 9 */
 	},
 	{
-		.name  = "{cpu/cycles/,cpu/cache-misses/,cpu/branch-misses/}:S",
+		.name  = "{cpu/" HW_CYCLES_STR "/,cpu/cache-misses/,cpu/branch-misses/}:S",
 		.valid = test__pmu_cpu_valid,
 		.check = test__leader_sample1,
 		/* 0 */
@@ -2389,7 +2389,7 @@ static const struct evlist_test test__events_pmu[] = {
 		/* 2 */
 	},
 	{
-		.name  = "{cpu/cycles/,cpu/cache-misses/,cpu/branch-misses/}:D",
+		.name  = "{cpu/" HW_CYCLES_STR "/,cpu/cache-misses/,cpu/branch-misses/}:D",
 		.valid = test__pmu_cpu_valid,
 		.check = test__pinned_group,
 		/* 3 */
@@ -2407,13 +2407,13 @@ static const struct evlist_test test__events_pmu[] = {
 		/* 5 */
 	},
 	{
-		.name  = "cpu/cycles/u",
+		.name  = "cpu/" HW_CYCLES_STR "/u",
 		.valid = test__pmu_cpu_valid,
 		.check = test__sym_event_slash,
 		/* 6 */
 	},
 	{
-		.name  = "cpu/cycles/k",
+		.name  = "cpu/" HW_CYCLES_STR "/k",
 		.valid = test__pmu_cpu_valid,
 		.check = test__sym_event_dc,
 		/* 7 */
@@ -2425,19 +2425,19 @@ static const struct evlist_test test__events_pmu[] = {
 		/* 8 */
 	},
 	{
-		.name  = "{cpu/cycles/,cpu/cache-misses/,cpu/branch-misses/}:e",
+		.name  = "{cpu/" HW_CYCLES_STR "/,cpu/cache-misses/,cpu/branch-misses/}:e",
 		.valid = test__pmu_cpu_valid,
 		.check = test__exclusive_group,
 		/* 9 */
 	},
 	{
-		.name  = "cpu/cycles,name=name/",
+		.name  = "cpu/" HW_CYCLES_STR ",name=name/",
 		.valid = test__pmu_cpu_valid,
 		.check = test__term_equal_term,
 		/* 0 */
 	},
 	{
-		.name  = "cpu/cycles,name=l1d/",
+		.name  = "cpu/" HW_CYCLES_STR ",name=l1d/",
 		.valid = test__pmu_cpu_valid,
 		.check = test__term_equal_legacy,
 		/* 1 */

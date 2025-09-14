@@ -20,6 +20,16 @@ struct option;
 struct perf_pmu;
 struct strbuf;
 
+/*
+ * The name used for the "cycles" event. A different event name is used on ARM
+ * as many ARM PMUs define a "cycles" event.
+ */
+#if defined(__aarch64__) || defined(__arm__)
+#define HW_CYCLES_STR "cpu-cycles"
+#else
+#define HW_CYCLES_STR "cycles"
+#endif
+
 const char *event_type(size_t type);
 
 /* Arguments encoded in opt->value. */

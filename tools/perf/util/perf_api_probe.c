@@ -74,9 +74,9 @@ static bool perf_probe_api(setup_probe_fn_t fn)
 	if (!ret)
 		return true;
 
-	pmu = perf_pmus__scan_core(/*pmu=*/NULL);
+	pmu = perf_pmus__find_core_pmu();
 	if (pmu) {
-		const char *try[] = {"cycles", "instructions", NULL};
+		const char *try[] = {HW_CYCLES_STR, "instructions", NULL};
 		char buf[256];
 		int i = 0;
 

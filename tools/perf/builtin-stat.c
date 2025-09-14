@@ -1957,7 +1957,7 @@ static int add_default_events(void)
 				"cpu-migrations,"
 				"page-faults,"
 				"instructions,"
-				"cycles,"
+				HW_CYCLES_STR ","
 				"stalled-cycles-frontend,"
 				"stalled-cycles-backend,"
 				"branches,"
@@ -2043,7 +2043,7 @@ out:
 			 * Make at least one event non-skippable so fatal errors are visible.
 			 * 'cycles' always used to be default and non-skippable, so use that.
 			 */
-			if (strcmp("cycles", evsel__name(evsel)))
+			if (strcmp(HW_CYCLES_STR, evsel__name(evsel)))
 				evsel->skippable = true;
 		}
 	}

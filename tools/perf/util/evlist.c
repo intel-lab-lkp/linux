@@ -112,7 +112,7 @@ struct evlist *evlist__new_default(void)
 		char buf[256];
 		int err;
 
-		snprintf(buf, sizeof(buf), "%s/cycles/%s", pmu->name,
+		snprintf(buf, sizeof(buf), "%s/%s/%s", pmu->name, HW_CYCLES_STR,
 			 can_profile_kernel ? "P" : "Pu");
 		err = parse_event(evlist, buf);
 		if (err) {
