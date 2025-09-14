@@ -95,6 +95,12 @@ struct freq_qos_request {
 	struct freq_constraints *qos;
 };
 
+enum pm_qos_status {
+	PM_QOS_INVALID = -1,
+	PM_QOS_ACTIVE = 0,
+	PM_QOS_FREQ_SET,
+	PM_QOS_FREQ_REMOV,
+};
 
 enum dev_pm_qos_req_type {
 	DEV_PM_QOS_RESUME_LATENCY = 1,

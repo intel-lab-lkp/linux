@@ -11,6 +11,7 @@
 #include <linux/bio.h>
 #include <linux/blkdev.h>
 #include <linux/blk-integrity.h>
+#include <linux/blk-pm.h>
 #include <linux/kmemleak.h>
 #include <linux/mm.h>
 #include <linux/init.h>
@@ -28,6 +29,7 @@
 #include <linux/prefetch.h>
 #include <linux/blk-crypto.h>
 #include <linux/part_stat.h>
+#include <linux/pm_qos.h>
 #include <linux/sched/isolation.h>
 
 #include <trace/events/block.h>
@@ -3104,6 +3106,54 @@ static bool bio_unaligned(const struct bio *bio, struct request_queue *q)
 	return false;
 }
 
+#ifdef CONFIG_PM
+static void blk_mq_dev_frequency_work(struct work_struct *work)
+{
+	struct request_queue *q =
+			container_of(work, struct request_queue, dev_freq_work.work);
+	unsigned long timeout;
+	struct dev_pm_qos_request *qos = q->dev_freq_qos;
+
+	timeout = msecs_to_jiffies(q->disk->dev_freq_timeout);
+	if (!q || IS_ERR_OR_NULL(q->dev) || IS_ERR_OR_NULL(qos))
+		return;
+
+	if (q->pm_qos_status == PM_QOS_ACTIVE) {
+		q->pm_qos_status = PM_QOS_FREQ_SET;
+		dev_pm_qos_add_request(q->dev, qos, DEV_PM_QOS_MIN_FREQUENCY,
+				       FREQ_QOS_MAX_DEFAULT_VALUE);
+	} else {
+		if (time_after(jiffies, READ_ONCE(q->last_active) + timeout))
+			q->pm_qos_status = PM_QOS_FREQ_REMOV;
+	}
+
+	if (q->pm_qos_status == PM_QOS_FREQ_REMOV) {
+		dev_pm_qos_remove_request(qos);
+		q->pm_qos_status = PM_QOS_ACTIVE;
+	} else {
+		schedule_delayed_work(&q->dev_freq_work,
+				      q->last_active + timeout - jiffies);
+	}
+}
+
+static void blk_pm_qos_dev_freq_update(struct request_queue *q, struct bio *bio)
+{
+	if (IS_ERR_OR_NULL(q->dev) || !q->disk->dev_freq_timeout)
+		return;
+
+	if ((bio->bi_opf & REQ_SYNC || bio_op(bio) == REQ_OP_READ)) {
+		WRITE_ONCE(q->last_active, jiffies);
+		if (q->pm_qos_status == PM_QOS_ACTIVE)
+			schedule_delayed_work(&q->dev_freq_work, 0);
+	}
+}
+#else
+static void blk_pm_qos_dev_freq_update(struct request_queue *q, struct bio *bio)
+{
+	return;
+}
+#endif
+
 /**
  * blk_mq_submit_bio - Create and send a request to block device.
  * @bio: Bio pointer.
@@ -3169,6 +3219,8 @@ void blk_mq_submit_bio(struct bio *bio)
 		bio_endio(bio);
 		goto queue_exit;
 	}
+
+	blk_pm_qos_dev_freq_update(q, bio);
 
 	bio = __bio_split_to_limits(bio, &q->limits, &nr_segs);
 	if (!bio)
@@ -4602,6 +4654,12 @@ int blk_mq_init_allocated_queue(struct blk_mq_tag_set *set,
 	q->queue_flags |= QUEUE_FLAG_MQ_DEFAULT;
 
 	INIT_DELAYED_WORK(&q->requeue_work, blk_mq_requeue_work);
+#ifdef CONFIG_PM
+	INIT_DELAYED_WORK(&q->dev_freq_work, blk_mq_dev_frequency_work);
+	q->dev_freq_qos = kzalloc(sizeof(*q->dev_freq_qos), GFP_KERNEL);
+	if (IS_ERR_OR_NULL(q->dev_freq_qos))
+		goto err_hctxs;
+#endif
 	INIT_LIST_HEAD(&q->flush_list);
 	INIT_LIST_HEAD(&q->requeue_list);
 	spin_lock_init(&q->requeue_lock);

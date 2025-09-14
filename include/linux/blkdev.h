@@ -26,6 +26,7 @@
 #include <linux/xarray.h>
 #include <linux/file.h>
 #include <linux/lockdep.h>
+#include <linux/pm_qos.h>
 
 struct module;
 struct request_queue;
@@ -522,6 +523,14 @@ struct request_queue {
 #ifdef CONFIG_PM
 	struct device		*dev;
 	enum rpm_status		rpm_status;
+	enum pm_qos_status 	pm_qos_status;
+	unsigned long		last_active;
+
+	/** @dev_freq_work: Work to handle dev frequency PM QoS limits. */
+	struct delayed_work	dev_freq_work;
+
+	/** @dev_freq_qos: PM QoS frequency limits for dev. */
+	struct dev_pm_qos_request  *dev_freq_qos;
 #endif
 
 	/*
