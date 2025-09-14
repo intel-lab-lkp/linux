@@ -104,6 +104,24 @@ struct scsi_device;
 
 struct scsi_device_eh {
 	/*
+	 * LUN rebased error handle would mainly do three
+	 * steps to recovery commands which are
+	 *   check sense
+	 *   start unit
+	 *   reset lun
+	 * While we would fallback to host based error handler which would
+	 * do these steps too. Add flags to mark thes steps are done to
+	 * avoid repeating these steps.
+	 *
+	 * The flags should be cleared when LUN based error handler is
+	 * wakedup or when host based error handler finished, set when
+	 * fallback to host based error handle.
+	 */
+	unsigned get_sense_done:1;
+	unsigned stu_done:1;
+	unsigned reset_done:1;
+
+	/*
 	 * add scsi command to error handler so it would be handuled by
 	 * driver's error handle strategy
 	 */
