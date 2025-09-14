@@ -30,7 +30,7 @@
 #include <linux/hardirq.h>
 #include <linux/gfp.h>
 #include <linux/kcore.h>
-#include <linux/initrd.h>
+#include <linux/initramfs.h>
 #include <linux/execmem.h>
 
 #include <asm/bootinfo.h>

@@ -14,7 +14,7 @@
 #include <linux/memblock.h>
 #include <linux/mm.h>
 #include <linux/hugetlb.h>
-#include <linux/initrd.h>
+#include <linux/initramfs.h>
 #include <linux/swap.h>
 #include <linux/pagemap.h>
 #include <linux/poison.h>

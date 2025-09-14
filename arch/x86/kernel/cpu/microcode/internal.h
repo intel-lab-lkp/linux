@@ -3,7 +3,7 @@
 #define _X86_MICROCODE_INTERNAL_H
 
 #include <linux/earlycpio.h>
-#include <linux/initrd.h>
+#include <linux/initramfs.h>
 
 #include <asm/cpu.h>
 #include <asm/microcode.h>

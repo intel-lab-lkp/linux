@@ -17,7 +17,7 @@
 #include <linux/of.h>
 #include <linux/of_address.h>
 #include <linux/root_dev.h>
-#include <linux/initrd.h>
+#include <linux/initramfs.h>
 #include <asm/time.h>
 #include <asm/io.h>
 #include <asm/machdep.h>

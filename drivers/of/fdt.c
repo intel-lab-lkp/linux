@@ -11,7 +11,7 @@
 #include <linux/crash_dump.h>
 #include <linux/crc32.h>
 #include <linux/kernel.h>
-#include <linux/initrd.h>
+#include <linux/initramfs.h>
 #include <linux/memblock.h>
 #include <linux/mutex.h>
 #include <linux/of.h>

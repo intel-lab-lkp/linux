@@ -12,7 +12,7 @@
 #include <linux/stddef.h>
 #include <linux/ioport.h>
 #include <linux/delay.h>
-#include <linux/initrd.h>
+#include <linux/initramfs.h>
 #include <linux/console.h>
 #include <linux/cache.h>
 #include <linux/screen_info.h>

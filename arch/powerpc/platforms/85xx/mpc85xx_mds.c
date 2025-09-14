@@ -24,7 +24,7 @@
 #include <linux/console.h>
 #include <linux/delay.h>
 #include <linux/seq_file.h>
-#include <linux/initrd.h>
+#include <linux/initramfs.h>
 #include <linux/fsl_devices.h>
 #include <linux/of.h>
 #include <linux/of_address.h>

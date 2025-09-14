@@ -19,7 +19,7 @@
 #include <linux/swap.h>
 #include <linux/smp.h>
 #include <linux/init.h>
-#include <linux/initrd.h>
+#include <linux/initramfs.h>
 #include <linux/pagemap.h>
 #include <linux/memblock.h>
 #include <linux/proc_fs.h>

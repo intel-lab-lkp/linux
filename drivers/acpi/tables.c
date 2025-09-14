@@ -19,7 +19,7 @@
 #include <linux/acpi.h>
 #include <linux/memblock.h>
 #include <linux/earlycpio.h>
-#include <linux/initrd.h>
+#include <linux/initramfs.h>
 #include <linux/security.h>
 #include <linux/kmemleak.h>
 #include "internal.h"

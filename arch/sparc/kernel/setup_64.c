@@ -28,7 +28,7 @@
 #include <linux/root_dev.h>
 #include <linux/interrupt.h>
 #include <linux/cpu.h>
-#include <linux/initrd.h>
+#include <linux/initramfs.h>
 #include <linux/module.h>
 #include <linux/start_kernel.h>
 #include <linux/memblock.h>

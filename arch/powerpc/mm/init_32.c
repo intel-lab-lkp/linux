@@ -22,7 +22,7 @@
 #include <linux/stddef.h>
 #include <linux/init.h>
 #include <linux/highmem.h>
-#include <linux/initrd.h>
+#include <linux/initramfs.h>
 #include <linux/pagemap.h>
 #include <linux/memblock.h>
 #include <linux/gfp.h>

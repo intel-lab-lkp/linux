@@ -26,7 +26,7 @@
 #include <linux/ptrace.h>
 #include <linux/async.h>
 #include <linux/uaccess.h>
-#include <linux/initrd.h>
+#include <linux/initramfs.h>
 #include <linux/freezer.h>
 
 #include <trace/events/module.h>

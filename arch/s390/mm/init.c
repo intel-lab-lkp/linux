@@ -27,7 +27,7 @@
 #include <linux/memory.h>
 #include <linux/pfn.h>
 #include <linux/poison.h>
-#include <linux/initrd.h>
+#include <linux/initramfs.h>
 #include <linux/export.h>
 #include <linux/cma.h>
 #include <linux/gfp.h>

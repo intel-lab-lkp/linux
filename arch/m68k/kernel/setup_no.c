@@ -29,7 +29,7 @@
 #include <linux/memblock.h>
 #include <linux/seq_file.h>
 #include <linux/init.h>
-#include <linux/initrd.h>
+#include <linux/initramfs.h>
 #include <linux/root_dev.h>
 #include <linux/rtc.h>
 

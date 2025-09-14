@@ -15,7 +15,7 @@
 #include <linux/kernel.h>
 #include <linux/console.h>
 #include <linux/screen_info.h>
-#include <linux/initrd.h>
+#include <linux/initramfs.h>
 
 #include <asm/irq.h>
 #include <asm/io.h>

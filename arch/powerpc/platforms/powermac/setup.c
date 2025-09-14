@@ -32,7 +32,7 @@
 #include <linux/delay.h>
 #include <linux/ioport.h>
 #include <linux/major.h>
-#include <linux/initrd.h>
+#include <linux/initramfs.h>
 #include <linux/console.h>
 #include <linux/pci.h>
 #include <linux/adb.h>

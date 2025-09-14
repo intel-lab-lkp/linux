@@ -13,7 +13,7 @@
  */
 
 #include <linux/kernel.h>
-#include <linux/initrd.h>
+#include <linux/initramfs.h>
 #include <linux/init.h>
 #include <linux/console.h>
 #include <linux/seq_file.h>

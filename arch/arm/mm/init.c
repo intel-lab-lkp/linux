@@ -13,7 +13,7 @@
 #include <linux/sched/task.h>
 #include <linux/export.h>
 #include <linux/nodemask.h>
-#include <linux/initrd.h>
+#include <linux/initramfs.h>
 #include <linux/of_fdt.h>
 #include <linux/highmem.h>
 #include <linux/gfp.h>

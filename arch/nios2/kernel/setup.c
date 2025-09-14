@@ -17,7 +17,7 @@
 #include <linux/sched/task.h>
 #include <linux/console.h>
 #include <linux/memblock.h>
-#include <linux/initrd.h>
+#include <linux/initramfs.h>
 #include <linux/of_fdt.h>
 
 #include <asm/mmu_context.h>

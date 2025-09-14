@@ -1,7 +1,7 @@
 /* SPDX-License-Identifier: GPL-2.0 */
 
-#ifndef __LINUX_INITRD_H
-#define __LINUX_INITRD_H
+#ifndef __LINUX_INITRAMFS_H
+#define __LINUX_INITRAMFS_H
 
 /* 1 if it is not an error if virt_external_initramfs_start < memory_start */
 extern int initramfs_below_start_ok;
@@ -23,4 +23,4 @@ extern unsigned long phys_external_initramfs_size;
 extern char __builtin_initramfs_start[];
 extern unsigned long __builtin_initramfs_size;
 
-#endif /* __LINUX_INITRD_H */
+#endif /* __LINUX_INITRAMFS_H */

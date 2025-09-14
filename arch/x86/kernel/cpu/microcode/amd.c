@@ -26,7 +26,7 @@
 #include <linux/bsearch.h>
 #include <linux/uaccess.h>
 #include <linux/vmalloc.h>
-#include <linux/initrd.h>
+#include <linux/initramfs.h>
 #include <linux/kernel.h>
 #include <linux/pci.h>
 

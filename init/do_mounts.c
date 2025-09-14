@@ -14,7 +14,7 @@
 #include <linux/init.h>
 #include <linux/init_syscalls.h>
 #include <linux/fs.h>
-#include <linux/initrd.h>
+#include <linux/initramfs.h>
 #include <linux/async.h>
 #include <linux/fs_struct.h>
 #include <linux/slab.h>

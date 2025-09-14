@@ -13,7 +13,7 @@
 #include <linux/kernel.h>
 #include <linux/reboot.h>
 #include <linux/delay.h>
-#include <linux/initrd.h>
+#include <linux/initramfs.h>
 #include <linux/seq_file.h>
 #include <linux/ioport.h>
 #include <linux/console.h>

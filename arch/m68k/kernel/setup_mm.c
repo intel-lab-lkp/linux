@@ -25,7 +25,7 @@
 #include <linux/seq_file.h>
 #include <linux/module.h>
 #include <linux/nvram.h>
-#include <linux/initrd.h>
+#include <linux/initramfs.h>
 #include <linux/random.h>
 
 #include <asm/bootinfo.h>

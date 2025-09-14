@@ -12,7 +12,7 @@
 #include <linux/init.h>
 #include <linux/kernel.h>
 #include <linux/mm.h> /* mem_init */
-#include <linux/initrd.h>
+#include <linux/initramfs.h>
 #include <linux/of_fdt.h>
 #include <linux/pagemap.h>
 #include <linux/pfn.h>

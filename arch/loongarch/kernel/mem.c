@@ -3,7 +3,7 @@
  * Copyright (C) 2020-2022 Loongson Technology Corporation Limited
  */
 #include <linux/efi.h>
-#include <linux/initrd.h>
+#include <linux/initramfs.h>
 #include <linux/memblock.h>
 
 #include <asm/bootinfo.h>

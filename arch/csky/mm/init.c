@@ -19,7 +19,7 @@
 #include <linux/swap.h>
 #include <linux/proc_fs.h>
 #include <linux/pfn.h>
-#include <linux/initrd.h>
+#include <linux/initramfs.h>
 
 #include <asm/setup.h>
 #include <asm/cachectl.h>

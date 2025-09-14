@@ -17,7 +17,7 @@
 #include <linux/seq_file.h>
 #include <linux/kthread.h>
 #include <linux/proc_fs.h>
-#include <linux/initrd.h>
+#include <linux/initramfs.h>
 #include <linux/pgtable.h>
 #include <linux/mm.h>
 

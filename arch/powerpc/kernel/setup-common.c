@@ -16,7 +16,7 @@
 #include <linux/kernel.h>
 #include <linux/reboot.h>
 #include <linux/delay.h>
-#include <linux/initrd.h>
+#include <linux/initramfs.h>
 #include <linux/platform_device.h>
 #include <linux/printk.h>
 #include <linux/seq_file.h>

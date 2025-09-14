@@ -14,7 +14,7 @@
 #include <linux/cache.h>
 #include <linux/mman.h>
 #include <linux/nodemask.h>
-#include <linux/initrd.h>
+#include <linux/initramfs.h>
 #include <linux/gfp.h>
 #include <linux/math.h>
 #include <linux/memblock.h>

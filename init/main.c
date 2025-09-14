@@ -26,7 +26,7 @@
 #include <linux/delay.h>
 #include <linux/ioport.h>
 #include <linux/init.h>
-#include <linux/initrd.h>
+#include <linux/initramfs.h>
 #include <linux/memblock.h>
 #include <linux/acpi.h>
 #include <linux/bootconfig.h>

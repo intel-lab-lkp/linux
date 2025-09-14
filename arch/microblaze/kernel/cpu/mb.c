@@ -13,7 +13,7 @@
 #include <linux/string.h>
 #include <linux/seq_file.h>
 #include <linux/cpu.h>
-#include <linux/initrd.h>
+#include <linux/initramfs.h>
 
 #include <linux/bug.h>
 #include <asm/cpuinfo.h>

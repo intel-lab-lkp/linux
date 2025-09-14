@@ -17,7 +17,7 @@
 #include <linux/efi.h>
 #include <linux/export.h>
 #include <linux/memblock.h>
-#include <linux/initrd.h>
+#include <linux/initramfs.h>
 #include <linux/ioport.h>
 #include <linux/kexec.h>
 #include <linux/crash_dump.h>

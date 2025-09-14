@@ -34,7 +34,7 @@
 #include <linux/pci.h>
 #include <linux/seq_file.h>
 #include <linux/root_dev.h>
-#include <linux/initrd.h>
+#include <linux/initramfs.h>
 #include <linux/eisa.h>
 #include <linux/pfn.h>
 #ifdef CONFIG_MAGIC_SYSRQ

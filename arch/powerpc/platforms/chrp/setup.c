@@ -30,7 +30,7 @@
 #include <linux/console.h>
 #include <linux/seq_file.h>
 #include <linux/root_dev.h>
-#include <linux/initrd.h>
+#include <linux/initramfs.h>
 #include <linux/timer.h>
 #include <linux/of_address.h>
 #include <linux/of_fdt.h>

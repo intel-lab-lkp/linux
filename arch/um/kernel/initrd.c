@@ -5,7 +5,7 @@
 
 #include <linux/init.h>
 #include <linux/memblock.h>
-#include <linux/initrd.h>
+#include <linux/initramfs.h>
 #include <asm/types.h>
 #include <init.h>
 #include <os.h>

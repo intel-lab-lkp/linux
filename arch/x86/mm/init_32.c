@@ -27,7 +27,7 @@
 #include <linux/memblock.h>
 #include <linux/proc_fs.h>
 #include <linux/memory_hotplug.h>
-#include <linux/initrd.h>
+#include <linux/initramfs.h>
 #include <linux/cpumask.h>
 #include <linux/gfp.h>
 

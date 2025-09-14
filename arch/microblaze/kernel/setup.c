@@ -14,7 +14,7 @@
 #include <linux/string.h>
 #include <linux/seq_file.h>
 #include <linux/cpu.h>
-#include <linux/initrd.h>
+#include <linux/initramfs.h>
 #include <linux/console.h>
 #include <linux/debugfs.h>
 #include <linux/of_fdt.h>

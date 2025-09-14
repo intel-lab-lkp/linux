@@ -10,7 +10,7 @@
 #include <linux/kernel.h>
 #include <linux/reboot.h>
 #include <linux/delay.h>
-#include <linux/initrd.h>
+#include <linux/initramfs.h>
 #include <linux/tty.h>
 #include <linux/seq_file.h>
 #include <linux/root_dev.h>

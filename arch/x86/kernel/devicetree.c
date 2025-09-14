@@ -16,7 +16,7 @@
 #include <linux/slab.h>
 #include <linux/pci.h>
 #include <linux/of_pci.h>
-#include <linux/initrd.h>
+#include <linux/initramfs.h>
 
 #include <asm/irqdomain.h>
 #include <asm/hpet.h>

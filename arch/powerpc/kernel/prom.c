@@ -19,7 +19,7 @@
 #include <linux/types.h>
 #include <linux/pci.h>
 #include <linux/delay.h>
-#include <linux/initrd.h>
+#include <linux/initramfs.h>
 #include <linux/bitops.h>
 #include <linux/export.h>
 #include <linux/kexec.h>

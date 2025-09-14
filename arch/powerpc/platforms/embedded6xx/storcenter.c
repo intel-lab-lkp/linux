@@ -13,7 +13,7 @@
 
 #include <linux/kernel.h>
 #include <linux/pci.h>
-#include <linux/initrd.h>
+#include <linux/initramfs.h>
 #include <linux/of_platform.h>
 
 #include <asm/time.h>

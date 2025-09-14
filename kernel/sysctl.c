@@ -12,7 +12,7 @@
 #include <linux/kobject.h>
 #include <linux/highuid.h>
 #include <linux/writeback.h>
-#include <linux/initrd.h>
+#include <linux/initramfs.h>
 #include <linux/times.h>
 #include <linux/limits.h>
 #include <linux/syscalls.h>

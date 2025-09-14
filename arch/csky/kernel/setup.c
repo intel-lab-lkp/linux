@@ -3,7 +3,7 @@
 
 #include <linux/console.h>
 #include <linux/memblock.h>
-#include <linux/initrd.h>
+#include <linux/initramfs.h>
 #include <linux/of.h>
 #include <linux/of_fdt.h>
 #include <linux/start_kernel.h>

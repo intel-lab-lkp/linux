@@ -7,7 +7,7 @@
 #include <linux/mm.h>
 #include <linux/memblock.h>
 #ifdef CONFIG_BLK_DEV_INITRD
-#include <linux/initrd.h>
+#include <linux/initramfs.h>
 #endif
 #include <linux/of_fdt.h>
 #include <linux/swap.h>

@@ -24,7 +24,7 @@
 #include <linux/pci.h>
 #include <linux/proc_fs.h>
 #include <linux/delay.h>
-#include <linux/initrd.h>
+#include <linux/initramfs.h>
 #include <linux/bitops.h>
 #include <linux/pgtable.h>
 #include <linux/printk.h>

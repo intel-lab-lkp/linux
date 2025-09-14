@@ -11,7 +11,7 @@
 #include <linux/init.h>
 #include <linux/io.h>
 #include <linux/string.h>
-#include <linux/initrd.h>
+#include <linux/initramfs.h>
 
 #include <asm/bootinfo.h>
 #include <asm/addrspace.h>

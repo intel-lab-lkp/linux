@@ -19,7 +19,7 @@
 #include <linux/pci.h>
 #include <linux/sched.h>
 #include <linux/init.h>
-#include <linux/initrd.h>
+#include <linux/initramfs.h>
 #include <linux/memblock.h>
 
 #include <asm/ptrace.h>

@@ -19,7 +19,7 @@
 #include <linux/mman.h>
 #include <linux/mm.h>
 #include <linux/swap.h>
-#include <linux/initrd.h>
+#include <linux/initramfs.h>
 #include <linux/init.h>
 #include <linux/highmem.h>
 #include <linux/memblock.h>

@@ -16,7 +16,7 @@
 #include <linux/ioport.h>
 #include <linux/export.h>
 #include <linux/memblock.h>
-#include <linux/initrd.h>
+#include <linux/initramfs.h>
 #include <linux/root_dev.h>
 #include <linux/highmem.h>
 #include <linux/console.h>

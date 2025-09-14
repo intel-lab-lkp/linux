@@ -10,7 +10,7 @@
  */
 
 #include <linux/init.h>
-#include <linux/initrd.h>
+#include <linux/initramfs.h>
 #include <linux/module.h>
 #include <linux/moduleparam.h>
 #include <linux/major.h>
