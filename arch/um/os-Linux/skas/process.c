@@ -553,7 +553,7 @@ extern unsigned long tt_extra_sched_jiffies;
 void userspace(struct uml_pt_regs *regs)
 {
 	int err, status, op;
-	siginfo_t si_ptrace;
+	siginfo_t si_local;
 	siginfo_t *si;
 	int sig;
 
@@ -562,6 +562,13 @@ void userspace(struct uml_pt_regs *regs)
 
 	while (1) {
 		struct mm_id *mm_id = current_mm_id();
+
+		/*
+		 * At any given time, only one CPU thread can enter the
+		 * turnstile to operate on the same stub process, including
+		 * executing stub system calls (mmap and munmap).
+		 */
+		enter_turnstile(mm_id);
 
 		/*
 		 * When we are in time-travel mode, userspace can theoretically
@@ -630,9 +637,10 @@ void userspace(struct uml_pt_regs *regs)
 			}
 
 			if (proc_data->si_offset > sizeof(proc_data->sigstack) - sizeof(*si))
-				panic("%s - Invalid siginfo offset from child",
-				      __func__);
-			si = (void *)&proc_data->sigstack[proc_data->si_offset];
+				panic("%s - Invalid siginfo offset from child", __func__);
+
+			si = &si_local;
+			memcpy(si, &proc_data->sigstack[proc_data->si_offset], sizeof(*si));
 
 			regs->is_user = 1;
 
@@ -728,8 +736,8 @@ void userspace(struct uml_pt_regs *regs)
 				case SIGFPE:
 				case SIGWINCH:
 					ptrace(PTRACE_GETSIGINFO, pid, 0,
-					       (struct siginfo *)&si_ptrace);
-					si = &si_ptrace;
+					       (struct siginfo *)&si_local);
+					si = &si_local;
 					break;
 				default:
 					si = NULL;
@@ -739,6 +747,8 @@ void userspace(struct uml_pt_regs *regs)
 				sig = 0;
 			}
 		}
+
+		exit_turnstile(mm_id);
 
 		UPT_SYSCALL_NR(regs) = -1; /* Assume: It's not a syscall */
 
