@@ -320,13 +320,10 @@ static void print_instructions(struct perf_stat_config *config,
 	double max_stalled = max(find_stat(evsel, aggr_idx, STAT_STALLED_CYCLES_FRONT),
 				find_stat(evsel, aggr_idx, STAT_STALLED_CYCLES_BACK));
 
-	if (cycles) {
-		print_metric(config, ctxp, METRIC_THRESHOLD_UNKNOWN, "%7.2f ",
-			     "insn per cycle", instructions / cycles);
-	} else {
-		print_metric(config, ctxp, METRIC_THRESHOLD_UNKNOWN, /*fmt=*/NULL,
-			     "insn per cycle", 0);
-	}
+        print_metric(config, ctxp, METRIC_THRESHOLD_UNKNOWN, "%7.2f ",
+                     "insn per cycle",
+                     fpclassify(cycles) == FP_ZERO ? 0 : instructions / cycles);
+
 	if (max_stalled && instructions) {
 		if (out->new_line)
 			out->new_line(config, ctxp);
