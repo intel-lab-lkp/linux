@@ -505,6 +505,17 @@ config TOUCHSCREEN_IPROC
 	  To compile this driver as a module, choose M here: the
 	  module will be called bcm_iproc_tsc.
 
+config TOUCHSCREEN_S6SA552
+	tristate "Samsung S6SA552 Touchscreen driver"
+	depends on I2C
+	help
+	  Say Y if you have the Samsung S6SA552 driver
+
+	  If unsure, say N
+
+	  To compile this driver as module, choose M here: the
+	  module will be called s6sa552.
+
 config TOUCHSCREEN_S6SY761
 	tristate "Samsung S6SY761 Touchscreen driver"
 	depends on I2C
