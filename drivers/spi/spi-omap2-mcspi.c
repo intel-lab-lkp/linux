@@ -414,9 +414,8 @@ static void omap2_mcspi_tx_callback(void *data)
 	complete(&mcspi_dma->dma_tx_completion);
 }
 
-static void omap2_mcspi_tx_dma(struct spi_device *spi,
-				struct spi_transfer *xfer,
-				struct dma_slave_config cfg)
+static int omap2_mcspi_tx_dma(struct spi_device *spi, struct spi_transfer *xfer,
+			      struct dma_slave_config cfg)
 {
 	struct omap2_mcspi	*mcspi;
 	struct omap2_mcspi_dma  *mcspi_dma;
@@ -436,13 +435,15 @@ static void omap2_mcspi_tx_dma(struct spi_device *spi,
 		tx->callback_param = spi;
 		dmaengine_submit(tx);
 	} else {
-		/* FIXME: fall back to PIO? */
+		dev_warn(mcspi->dev, "%s: failed to prepare DMA engine\n", __func__);
+		return -EINVAL;
 	}
 	dma_async_issue_pending(mcspi_dma->dma_tx);
 	omap2_mcspi_set_dma_req(spi, 0, 1);
+	return 0;
 }
 
-static unsigned
+static int
 omap2_mcspi_rx_dma(struct spi_device *spi, struct spi_transfer *xfer,
 				struct dma_slave_config cfg,
 				unsigned es)
@@ -522,7 +523,8 @@ omap2_mcspi_rx_dma(struct spi_device *spi, struct spi_transfer *xfer,
 		tx->callback_param = spi;
 		dmaengine_submit(tx);
 	} else {
-		/* FIXME: fall back to PIO? */
+		dev_warn(mcspi->dev, "%s: failed to prepare DMA engine\n", __func__);
+		return -EINVAL;
 	}
 
 	dma_async_issue_pending(mcspi_dma->dma_rx);
@@ -589,13 +591,13 @@ omap2_mcspi_rx_dma(struct spi_device *spi, struct spi_transfer *xfer,
 	return count;
 }
 
-static unsigned
-omap2_mcspi_txrx_dma(struct spi_device *spi, struct spi_transfer *xfer)
+static int omap2_mcspi_txrx_dma(struct spi_device *spi,
+				struct spi_transfer *xfer)
 {
 	struct omap2_mcspi	*mcspi;
 	struct omap2_mcspi_cs	*cs = spi->controller_state;
 	struct omap2_mcspi_dma  *mcspi_dma;
-	unsigned int		count;
+	int		count;
 	u8			*rx;
 	const u8		*tx;
 	struct dma_slave_config	cfg;
@@ -642,13 +644,19 @@ omap2_mcspi_txrx_dma(struct spi_device *spi, struct spi_transfer *xfer)
 			mcspi_write_reg(spi->controller,
 					OMAP2_MCSPI_IRQENABLE,
 					OMAP2_MCSPI_IRQSTATUS_EOW);
-		omap2_mcspi_tx_dma(spi, xfer, cfg);
+		if (omap2_mcspi_tx_dma(spi, xfer, cfg) < 0) {
+			count = -EINVAL;
+			goto pio_fallback;
+		}
 	}
 
-	if (rx != NULL)
+	if (rx) {
 		count = omap2_mcspi_rx_dma(spi, xfer, cfg, es);
+		if (count < 0)
+			goto pio_fallback;
+	}
 
-	if (tx != NULL) {
+	if (tx) {
 		int ret;
 
 		ret = mcspi_wait_for_completion(mcspi, &mcspi_dma->dma_tx_completion);
@@ -695,6 +703,8 @@ omap2_mcspi_txrx_dma(struct spi_device *spi, struct spi_transfer *xfer)
 				dev_err(&spi->dev, "EOT timed out\n");
 		}
 	}
+
+pio_fallback:
 	return count;
 }
 
@@ -1206,7 +1216,7 @@ static int omap2_mcspi_transfer_one(struct spi_controller *ctlr,
 	mcspi_write_chconf0(spi, chconf);
 
 	if (t->len) {
-		unsigned	count;
+		int count;
 
 		if ((mcspi_dma->dma_rx && mcspi_dma->dma_tx) &&
 		    spi_xfer_is_dma_mapped(ctlr, spi, t))
@@ -1220,10 +1230,16 @@ static int omap2_mcspi_transfer_one(struct spi_controller *ctlr,
 					+ OMAP2_MCSPI_TX0);
 
 		if ((mcspi_dma->dma_rx && mcspi_dma->dma_tx) &&
-		    spi_xfer_is_dma_mapped(ctlr, spi, t))
+		    spi_xfer_is_dma_mapped(ctlr, spi, t)) {
 			count = omap2_mcspi_txrx_dma(spi, t);
-		else
+			if (count < 0) {
+				dev_warn(mcspi->dev,
+					 "%s: falling back to PIO\n", __func__);
+				count = omap2_mcspi_txrx_pio(spi, t);
+			}
+		} else {
 			count = omap2_mcspi_txrx_pio(spi, t);
+		}
 
 		if (count != t->len) {
 			status = -EIO;
