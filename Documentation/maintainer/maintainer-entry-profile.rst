@@ -68,7 +68,7 @@ wait for the next -rc. At a minimum:
   submissions should appear before -rc5.
 
 - Last -rc to merge features: Deadline for merge decisions
-  Indicate to contributors the point at which an as yet un-applied patch
+  indicate to contributors the point at which an as yet un-applied patch
   set will need to wait for the NEXT+1 merge window. Of course there is no
   obligation to ever accept any given patchset, but if the review has not
   concluded by this point the expectation is the contributor should wait and
