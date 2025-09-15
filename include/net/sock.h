@@ -854,6 +854,29 @@ static inline bool sk_nulls_del_node_init_rcu(struct sock *sk)
 	return rc;
 }
 
+static inline bool __sk_nulls_replace_node_init_rcu(struct sock *old,
+						    struct sock *new)
+{
+	if (sk_hashed(old) &&
+	    hlist_nulls_replace_init_rcu(&old->sk_nulls_node,
+					 &new->sk_nulls_node))
+		return true;
+
+	return false;
+}
+
+static inline bool sk_nulls_replace_node_init_rcu(struct sock *old,
+						  struct sock *new)
+{
+	bool rc = __sk_nulls_replace_node_init_rcu(old, new);
+
+	if (rc) {
+		WARN_ON(refcount_read(&old->sk_refcnt) == 1);
+		__sock_put(old);
+	}
+	return rc;
+}
+
 static inline void __sk_add_node(struct sock *sk, struct hlist_head *list)
 {
 	hlist_add_head(&sk->sk_node, list);

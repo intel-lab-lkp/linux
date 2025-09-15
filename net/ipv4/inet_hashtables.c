@@ -685,6 +685,12 @@ bool inet_ehash_insert(struct sock *sk, struct sock *osk, bool *found_dup_sk)
 	spin_lock(lock);
 	if (osk) {
 		WARN_ON_ONCE(sk->sk_hash != osk->sk_hash);
+		/* Since osk and sk should be in the same ehash bucket, try
+		 * direct replacement to avoid lookup gaps. On failure, no
+		 * changes. sk_nulls_del_node_init_rcu() will handle the rest.
+		 */
+		if (sk_nulls_replace_node_init_rcu(osk, sk))
+			goto unlock;
 		ret = sk_nulls_del_node_init_rcu(osk);
 	} else if (found_dup_sk) {
 		*found_dup_sk = inet_ehash_lookup_by_sk(sk, list);
@@ -695,6 +701,7 @@ bool inet_ehash_insert(struct sock *sk, struct sock *osk, bool *found_dup_sk)
 	if (ret)
 		__sk_nulls_add_node_rcu(sk, list);
 
+unlock:
 	spin_unlock(lock);
 
 	return ret;
