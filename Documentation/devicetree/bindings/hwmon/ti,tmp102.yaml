@@ -13,6 +13,8 @@ properties:
   compatible:
     enum:
       - ti,tmp102
+      - ti,tmp110
+      - ti,tmp113
 
   interrupts:
     maxItems: 1
