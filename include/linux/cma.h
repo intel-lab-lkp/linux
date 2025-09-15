@@ -25,12 +25,16 @@ enum cma_flags {
 	__CMA_ZONES_VALID,
 	__CMA_ZONES_INVALID,
 	__CMA_ACTIVATED,
+	__CMA_FIXED,
 };
 
 #define CMA_RESERVE_PAGES_ON_ERROR	BIT(__CMA_RESERVE_PAGES_ON_ERROR)
 #define CMA_ZONES_VALID			BIT(__CMA_ZONES_VALID)
 #define CMA_ZONES_INVALID		BIT(__CMA_ZONES_INVALID)
 #define CMA_ACTIVATED			BIT(__CMA_ACTIVATED)
+#define CMA_FIXED			BIT(__CMA_FIXED)
+
+#define CMA_INIT_FLAGS (CMA_FIXED|CMA_RESERVE_PAGES_ON_ERROR)
 
 struct cma;
 
@@ -42,23 +46,25 @@ extern const char *cma_get_name(const struct cma *cma);
 extern int __init cma_declare_contiguous_nid(phys_addr_t base,
 			phys_addr_t size, phys_addr_t limit,
 			phys_addr_t alignment, unsigned int order_per_bit,
-			bool fixed, const char *name, struct cma **res_cma,
-			int nid);
+			unsigned long flags, const char *name,
+			struct cma **res_cma, int nid);
 static inline int __init cma_declare_contiguous(phys_addr_t base,
 			phys_addr_t size, phys_addr_t limit,
 			phys_addr_t alignment, unsigned int order_per_bit,
-			bool fixed, const char *name, struct cma **res_cma)
+			unsigned long flags, const char *name,
+			struct cma **res_cma)
 {
 	return cma_declare_contiguous_nid(base, size, limit, alignment,
-			order_per_bit, fixed, name, res_cma, NUMA_NO_NODE);
+			order_per_bit, flags, name, res_cma, NUMA_NO_NODE);
 }
 extern int __init cma_declare_contiguous_multi(phys_addr_t size,
 			phys_addr_t align, unsigned int order_per_bit,
-			const char *name, struct cma **res_cma, int nid);
+			unsigned long flags, const char *name,
+			struct cma **res_cma, int nid);
 extern int cma_init_reserved_mem(phys_addr_t base, phys_addr_t size,
 					unsigned int order_per_bit,
-					const char *name,
-					struct cma **res_cma);
+					unsigned long flags,
+					const char *name, struct cma **res_cma);
 extern struct page *cma_alloc(struct cma *cma, unsigned long count, unsigned int align,
 			      bool no_warn);
 extern bool cma_pages_valid(struct cma *cma, const struct page *pages, unsigned long count);

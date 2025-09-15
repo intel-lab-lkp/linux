@@ -175,7 +175,7 @@ static void __init dma_numa_cma_reserve(void)
 			cma = &dma_contiguous_pernuma_area[nid];
 			snprintf(name, sizeof(name), "pernuma%d", nid);
 			ret = cma_declare_contiguous_nid(0, pernuma_size_bytes, 0, 0,
-							 0, false, name, cma, nid);
+							 0, 0, name, cma, nid);
 			if (ret)
 				pr_warn("%s: reservation failed: err %d, node %d", __func__,
 					ret, nid);
@@ -185,7 +185,7 @@ static void __init dma_numa_cma_reserve(void)
 
 			cma = &dma_contiguous_numa_area[nid];
 			snprintf(name, sizeof(name), "numa%d", nid);
-			ret = cma_declare_contiguous_nid(0, numa_cma_size[nid], 0, 0, 0, false,
+			ret = cma_declare_contiguous_nid(0, numa_cma_size[nid], 0, 0, 0, 0,
 							 name, cma, nid);
 			if (ret)
 				pr_warn("%s: reservation failed: err %d, node %d", __func__,
@@ -279,7 +279,8 @@ int __init dma_contiguous_reserve_area(phys_addr_t size, phys_addr_t base,
 {
 	int ret;
 
-	ret = cma_declare_contiguous(base, size, limit, 0, 0, fixed,
+	ret = cma_declare_contiguous(base, size, limit, 0, 0,
+					fixed ? CMA_FIXED : 0,
 					"reserved", res_cma);
 	if (ret)
 		return ret;
@@ -478,7 +479,8 @@ static int __init rmem_cma_setup(struct reserved_mem *rmem)
 		return -EINVAL;
 	}
 
-	err = cma_init_reserved_mem(rmem->base, rmem->size, 0, rmem->name, &cma);
+	err = cma_init_reserved_mem(rmem->base, rmem->size, 0, 0, rmem->name,
+				    &cma);
 	if (err) {
 		pr_err("Reserved memory: unable to setup CMA region\n");
 		return err;
