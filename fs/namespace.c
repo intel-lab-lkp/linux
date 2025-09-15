@@ -2853,12 +2853,6 @@ static void do_lock_mount(const struct path *path,
 	} while (err == -EAGAIN);
 }
 
-static inline void lock_mount(const struct path *path,
-			      struct pinned_mountpoint *m)
-{
-	do_lock_mount(path, m, false);
-}
-
 static void __unlock_mount(struct pinned_mountpoint *m)
 {
 	inode_unlock(m->mp->m_dentry->d_inode);
