@@ -7818,15 +7818,11 @@ static __init int fixup_ht_bug(void)
 
 	cpus_read_lock();
 
-	hardlockup_detector_perf_stop();
-
 	x86_pmu.flags &= ~(PMU_FL_EXCL_CNTRS | PMU_FL_EXCL_ENABLED);
 
 	x86_pmu.start_scheduling = NULL;
 	x86_pmu.commit_scheduling = NULL;
 	x86_pmu.stop_scheduling = NULL;
-
-	hardlockup_detector_perf_restart();
 
 	for_each_online_cpu(c)
 		free_excl_cntrs(&per_cpu(cpu_hw_events, c));

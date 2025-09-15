@@ -99,18 +99,6 @@ void watchdog_hardlockup_touch_cpu(unsigned int cpu);
 void watchdog_hardlockup_check(unsigned int cpu, struct pt_regs *regs);
 #endif
 
-#if defined(CONFIG_HARDLOCKUP_DETECTOR_PERF)
-extern void hardlockup_detector_perf_stop(void);
-extern void hardlockup_detector_perf_restart(void);
-extern void hardlockup_config_perf_event(const char *str);
-extern void hardlockup_detector_perf_adjust_period(u64 period);
-#else
-static inline void hardlockup_detector_perf_stop(void) { }
-static inline void hardlockup_detector_perf_restart(void) { }
-static inline void hardlockup_config_perf_event(const char *str) { }
-static inline void hardlockup_detector_perf_adjust_period(u64 period) { }
-#endif
-
 void watchdog_hardlockup_stop(void);
 void watchdog_hardlockup_start(void);
 int watchdog_hardlockup_probe(void);
@@ -202,18 +190,6 @@ static inline bool trigger_single_cpu_backtrace(int cpu)
 {
 	return false;
 }
-#endif
-
-#ifdef CONFIG_HARDLOCKUP_DETECTOR_PERF
-u64 hw_nmi_get_sample_period(int watchdog_thresh);
-bool arch_perf_nmi_is_available(void);
-#endif
-
-#if defined(CONFIG_HARDLOCKUP_CHECK_TIMESTAMP) && \
-    defined(CONFIG_HARDLOCKUP_DETECTOR_PERF)
-void watchdog_update_hrtimer_threshold(u64 period);
-#else
-static inline void watchdog_update_hrtimer_threshold(u64 period) { }
 #endif
 
 #ifdef CONFIG_HAVE_ACPI_APEI_NMI

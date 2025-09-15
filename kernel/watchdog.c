@@ -111,8 +111,6 @@ next:
 		watchdog_hardlockup_user_enabled = 0;
 	else if (!strncmp(str, "1", 1))
 		watchdog_hardlockup_user_enabled = 1;
-	else if (!strncmp(str, "r", 1))
-		hardlockup_config_perf_event(str + 1);
 	while (*(str++)) {
 		if (*str == ',') {
 			str++;
@@ -623,7 +621,6 @@ static void set_sample_period(void)
 	 * hardlockup detector generates a warning
 	 */
 	sample_period = get_softlockup_thresh() * ((u64)NSEC_PER_SEC / NUM_SAMPLE_PERIODS);
-	watchdog_update_hrtimer_threshold(sample_period);
 }
 
 static void update_report_ts(void)

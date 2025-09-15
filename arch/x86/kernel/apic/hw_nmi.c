@@ -23,13 +23,6 @@
 
 #include "local.h"
 
-#ifdef CONFIG_HARDLOCKUP_DETECTOR_PERF
-u64 hw_nmi_get_sample_period(int watchdog_thresh)
-{
-	return (u64)(cpu_khz) * 1000 * watchdog_thresh;
-}
-#endif
-
 #ifdef arch_trigger_cpumask_backtrace
 static void nmi_raise_cpu_backtrace(cpumask_t *mask)
 {
