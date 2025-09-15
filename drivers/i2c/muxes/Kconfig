@@ -19,6 +19,17 @@ config I2C_ARB_GPIO_CHALLENGE
 	  This driver can also be built as a module.  If so, the module
 	  will be called i2c-arb-gpio-challenge.
 
+config I2C_HOTPLUG_GPIO
+	tristate "Hot-plugged I2C bus detected by GPIO"
+	depends on GPIOLIB
+	depends on OF
+	help
+	  Say Y here if you want support for hot-plugging I2C devices
+	  with presence detected by GPIO pin value.
+
+	  This driver can also be built as a module. If so, the module
+	  will be called i2c-hotplug-gpio.
+
 config I2C_MUX_GPIO
 	tristate "GPIO-based I2C multiplexer"
 	depends on GPIOLIB
