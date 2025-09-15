@@ -470,7 +470,7 @@ static void raid1_end_write_request(struct bio *bio)
 		    (bio->bi_opf & MD_FAILFAST) &&
 		    /* We never try FailFast to WriteMostly devices */
 		    !test_bit(WriteMostly, &rdev->flags)) {
-			md_error(r1_bio->mddev, rdev);
+			md_bio_failure_error(r1_bio->mddev, rdev, bio);
 		}
 
 		/*
@@ -2178,8 +2178,7 @@ static int fix_sync_read_error(struct r1bio *r1_bio)
 	if (test_bit(FailFast, &rdev->flags)) {
 		/* Don't try recovering from here - just fail it
 		 * ... unless it is the last working device of course */
-		md_error(mddev, rdev);
-		if (test_bit(Faulty, &rdev->flags))
+		if (md_bio_failure_error(mddev, rdev, bio))
 			/* Don't try to read from here, but make sure
 			 * put_buf does it's thing
 			 */
@@ -2657,9 +2656,8 @@ static void handle_write_finished(struct r1conf *conf, struct r1bio *r1_bio)
 static void handle_read_error(struct r1conf *conf, struct r1bio *r1_bio)
 {
 	struct mddev *mddev = conf->mddev;
-	struct bio *bio;
+	struct bio *bio, *updated_bio;
 	struct md_rdev *rdev;
-	sector_t sector;
 
 	clear_bit(R1BIO_ReadError, &r1_bio->state);
 	/* we got a read error. Maybe the drive is bad.  Maybe just
@@ -2672,29 +2670,30 @@ static void handle_read_error(struct r1conf *conf, struct r1bio *r1_bio)
 	 */
 
 	bio = r1_bio->bios[r1_bio->read_disk];
-	bio_put(bio);
-	r1_bio->bios[r1_bio->read_disk] = NULL;
+	updated_bio = NULL;
 
 	rdev = conf->mirrors[r1_bio->read_disk].rdev;
-	if (mddev->ro == 0
-	    && !test_bit(FailFast, &rdev->flags)) {
-		freeze_array(conf, 1);
-		fix_read_error(conf, r1_bio);
-		unfreeze_array(conf);
-	} else if (mddev->ro == 0 && test_bit(FailFast, &rdev->flags)) {
-		md_error(mddev, rdev);
+	if (mddev->ro == 0) {
+		if (!test_bit(FailFast, &rdev->flags)) {
+			freeze_array(conf, 1);
+			fix_read_error(conf, r1_bio);
+			unfreeze_array(conf);
+		} else {
+			md_bio_failure_error(mddev, rdev, bio);
+		}
 	} else {
-		r1_bio->bios[r1_bio->read_disk] = IO_BLOCKED;
+		updated_bio = IO_BLOCKED;
 	}
 
+	bio_put(bio);
+	r1_bio->bios[r1_bio->read_disk] = updated_bio;
+
 	rdev_dec_pending(rdev, conf->mddev);
-	sector = r1_bio->sector;
-	bio = r1_bio->master_bio;
 
 	/* Reuse the old r1_bio so that the IO_BLOCKED settings are preserved */
 	r1_bio->state = 0;
-	raid1_read_request(mddev, bio, r1_bio->sectors, r1_bio);
-	allow_barrier(conf, sector);
+	raid1_read_request(mddev, r1_bio->master_bio, r1_bio->sectors, r1_bio);
+	allow_barrier(conf, r1_bio->sector);
 }
 
 static void raid1d(struct md_thread *thread)

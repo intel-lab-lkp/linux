@@ -1004,11 +1004,8 @@ static void super_written(struct bio *bio)
 	if (bio->bi_status) {
 		pr_err("md: %s gets error=%d\n", __func__,
 		       blk_status_to_errno(bio->bi_status));
-		md_error(mddev, rdev);
-		if (!test_bit(Faulty, &rdev->flags)
-		    && (bio->bi_opf & MD_FAILFAST)) {
+		if (!md_bio_failure_error(mddev, rdev, bio))
 			set_bit(MD_SB_NEED_REWRITE, &mddev->sb_flags);
-		}
 	}
 
 	bio_put(bio);
