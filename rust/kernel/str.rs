@@ -946,9 +946,10 @@ impl<'a> TryFrom<&'a CStr> for CString {
     type Error = AllocError;
 
     fn try_from(cstr: &'a CStr) -> Result<CString, AllocError> {
-        let mut buf = KVec::new();
+        let bytes = cstr.to_bytes_with_nul();
 
-        buf.extend_from_slice(cstr.to_bytes_with_nul(), GFP_KERNEL)?;
+        let mut buf = KVec::with_capacity(bytes.len(), GFP_KERNEL)?;
+        buf.extend_from_slice(bytes, GFP_KERNEL)?;
 
         // INVARIANT: The `CStr` and `CString` types have the same invariants for
         // the string data, and we copied it over without changes.
