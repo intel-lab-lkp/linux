@@ -504,6 +504,8 @@ struct ttm_bo_evict_walk {
 	/** @evicted: Number of successful evictions. */
 	unsigned long evicted;
 
+	/** @charge_pool: The memory pool the resource is charged to */
+	struct dmem_cgroup_pool_state *charge_pool;
 	/** @limit_pool: Which pool limit we should test against */
 	struct dmem_cgroup_pool_state *limit_pool;
 	/** @try_low: Whether we should attempt to evict BO's with low watermark threshold */
@@ -539,7 +541,7 @@ static s64 ttm_bo_evict_cb(struct ttm_lru_walk *walk, struct ttm_buffer_object *
 	evict_walk->evicted++;
 	if (evict_walk->res)
 		lret = ttm_resource_alloc(evict_walk->evictor, evict_walk->place,
-					  evict_walk->res, NULL);
+					  evict_walk->res, evict_walk->charge_pool);
 	if (lret == 0)
 		return 1;
 out:
@@ -561,6 +563,8 @@ static int ttm_bo_evict_alloc(struct ttm_device *bdev,
 			      struct ttm_operation_ctx *ctx,
 			      struct ww_acquire_ctx *ticket,
 			      struct ttm_resource **res,
+			      bool only_evict_unprotected,
+			      struct dmem_cgroup_pool_state *charge_pool,
 			      struct dmem_cgroup_pool_state *limit_pool)
 {
 	struct ttm_bo_evict_walk evict_walk = {
@@ -574,6 +578,7 @@ static int ttm_bo_evict_alloc(struct ttm_device *bdev,
 		.place = place,
 		.evictor = evictor,
 		.res = res,
+		.charge_pool = charge_pool,
 		.limit_pool = limit_pool,
 	};
 	s64 lret;
@@ -582,7 +587,7 @@ static int ttm_bo_evict_alloc(struct ttm_device *bdev,
 	lret = ttm_lru_walk_for_evict(&evict_walk.walk, bdev, man, 1);
 
 	/* One more attempt if we hit low limit? */
-	if (!lret && evict_walk.hit_low) {
+	if (!lret && evict_walk.hit_low && !only_evict_unprotected) {
 		evict_walk.try_low = true;
 		lret = ttm_lru_walk_for_evict(&evict_walk.walk, bdev, man, 1);
 	}
@@ -603,7 +608,8 @@ retry:
 	} while (!lret && evict_walk.evicted);
 
 	/* We hit the low limit? Try once more */
-	if (!lret && evict_walk.hit_low && !evict_walk.try_low) {
+	if (!lret && evict_walk.hit_low && !evict_walk.try_low &&
+			!only_evict_unprotected) {
 		evict_walk.try_low = true;
 		goto retry;
 	}
@@ -724,9 +730,9 @@ static int ttm_bo_alloc_resource(struct ttm_buffer_object *bo,
 
 	for (i = 0; i < placement->num_placement; ++i) {
 		const struct ttm_place *place = &placement->placement[i];
-		struct dmem_cgroup_pool_state *limit_pool = NULL;
+		struct dmem_cgroup_pool_state *limit_pool = NULL, *charge_pool = NULL;
 		struct ttm_resource_manager *man;
-		bool may_evict;
+		bool may_evict, is_protected = false;
 
 		man = ttm_manager_type(bdev, place->mem_type);
 		if (!man || !ttm_resource_manager_used(man))
@@ -737,24 +743,53 @@ static int ttm_bo_alloc_resource(struct ttm_buffer_object *bo,
 			continue;
 
 		may_evict = (force_space && place->mem_type != TTM_PL_SYSTEM);
-		ret = ttm_resource_alloc(bo, place, res, force_space ? &limit_pool : NULL);
+		ret = ttm_resource_try_charge(bo, place, &charge_pool,
+					      force_space ? &limit_pool : NULL);
+		if (ret) {
+			if (ret != -EAGAIN) {
+				dmem_cgroup_pool_state_put(limit_pool);
+				return ret;
+			} else if (!may_evict) {
+				dmem_cgroup_pool_state_put(limit_pool);
+				continue;
+			}
+		} else {
+			is_protected = dmem_cgroup_below_min(NULL, charge_pool) ||
+				       dmem_cgroup_below_low(NULL, charge_pool);
+			ret = ttm_resource_alloc(bo, place, res, charge_pool);
+		}
+
 		if (ret) {
 			if (ret != -ENOSPC && ret != -EAGAIN) {
 				dmem_cgroup_pool_state_put(limit_pool);
+				if (charge_pool) {
+					dmem_cgroup_uncharge(charge_pool, bo->base.size);
+					dmem_cgroup_pool_state_put(charge_pool);
+				}
 				return ret;
 			}
-			if (!may_evict) {
+			if (!may_evict && !is_protected) {
 				dmem_cgroup_pool_state_put(limit_pool);
+				if (charge_pool) {
+					dmem_cgroup_uncharge(charge_pool, bo->base.size);
+					dmem_cgroup_pool_state_put(charge_pool);
+				}
 				continue;
 			}
 
 			ret = ttm_bo_evict_alloc(bdev, man, place, bo, ctx,
-						 ticket, res, limit_pool);
+						 ticket, res, !may_evict && is_protected,
+						 charge_pool, limit_pool);
 			dmem_cgroup_pool_state_put(limit_pool);
-			if (ret == -EBUSY)
-				continue;
-			if (ret)
+			if (ret) {
+				if (charge_pool) {
+					dmem_cgroup_uncharge(charge_pool, bo->base.size);
+					dmem_cgroup_pool_state_put(charge_pool);
+				}
+				if (ret == -EBUSY)
+					continue;
 				return ret;
+			}
 		}
 
 		ret = ttm_bo_add_move_fence(bo, man, ctx->no_wait_gpu);
