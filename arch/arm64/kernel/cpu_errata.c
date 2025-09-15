@@ -53,6 +53,45 @@ bool is_midr_in_range_list(struct midr_range const *ranges)
 }
 EXPORT_SYMBOL_GPL(is_midr_in_range_list);
 
+bool is_midr_subset_of_range_list(struct midr_range const *ranges)
+{
+	int i;
+	unsigned long midr;
+	struct midr_range const *range_ptr;
+
+	if (!target_impl_cpu_num) {
+		midr = read_cpuid_id();
+		range_ptr = ranges;
+		while (range_ptr->model) {
+			if (midr_is_cpu_model_range(midr, range_ptr->model,
+					range_ptr->rv_min, range_ptr->rv_max))
+				break;
+			range_ptr++;
+		}
+		return range_ptr->model != 0;
+	}
+
+	for (i = 0; i < target_impl_cpu_num; i++) {
+		bool found = false;
+
+		midr = target_impl_cpus[i].midr;
+		range_ptr = ranges;
+
+		while (range_ptr->model) {
+			if (midr_is_cpu_model_range(midr, range_ptr->model,
+					range_ptr->rv_min, range_ptr->rv_max)) {
+				found = true;
+				break;
+			}
+			range_ptr++;
+		}
+		if (!found)
+			return false;
+	}
+	return true;
+}
+EXPORT_SYMBOL_GPL(is_midr_subset_of_range_list);
+
 static bool __maybe_unused
 __is_affected_midr_range(const struct arm64_cpu_capabilities *entry,
 			 u32 midr, u32 revidr)
@@ -276,7 +315,7 @@ static bool has_impdef_pmuv3(const struct arm64_cpu_capabilities *entry, int sco
 	if (pmuver != ID_AA64DFR0_EL1_PMUVer_IMP_DEF)
 		return false;
 
-	return is_midr_in_range_list(impdef_pmuv3_cpus);
+	return is_midr_subset_of_range_list(impdef_pmuv3_cpus);
 }
 
 static void cpu_enable_impdef_pmuv3_traps(const struct arm64_cpu_capabilities *__unused)
