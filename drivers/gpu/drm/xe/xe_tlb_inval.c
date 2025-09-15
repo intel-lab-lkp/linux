@@ -17,7 +17,6 @@
 #include "xe_tlb_inval.h"
 #include "xe_mmio.h"
 #include "xe_pm.h"
-#include "xe_tlb_inval.h"
 #include "xe_trace.h"
 
 /**
