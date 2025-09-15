@@ -655,6 +655,10 @@ otherwise noted.
 	flag should be set in file->f_mode.  In case of O_EXCL the
 	method must only succeed if the file didn't exist and hence
 	FMODE_CREATED shall always be set on success.
+	atomic_open() will always have exclusive access to the dentry
+	as if O_CREAT hasn't caused the directory to be locked exclusively,
+	then the dentry will have DCACHE_PAR_LOOKUP will also
+	provides exclusivity.
 
 ``tmpfile``
 	called in the end of O_TMPFILE open().  Optional, equivalent to
