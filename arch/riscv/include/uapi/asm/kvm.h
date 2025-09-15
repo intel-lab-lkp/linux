@@ -81,6 +81,8 @@ struct kvm_riscv_csr {
 	unsigned long satp;
 	unsigned long scounteren;
 	unsigned long senvcfg;
+	unsigned long ctxsstatus;
+	unsigned long ctxhstatus;
 };
 
 /* AIA CSR registers for KVM_GET_ONE_REG and KVM_SET_ONE_REG */

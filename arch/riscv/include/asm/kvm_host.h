@@ -161,6 +161,8 @@ struct kvm_vcpu_csr {
 	unsigned long vsatp;
 	unsigned long scounteren;
 	unsigned long senvcfg;
+	unsigned long ctxsstatus;
+	unsigned long ctxhstatus;
 };
 
 struct kvm_vcpu_config {

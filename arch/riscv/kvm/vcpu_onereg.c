@@ -489,6 +489,12 @@ static int kvm_riscv_vcpu_general_get_csr(struct kvm_vcpu *vcpu,
 	if (reg_num >= sizeof(struct kvm_riscv_csr) / sizeof(unsigned long))
 		return -ENOENT;
 
+	if (reg_num == KVM_REG_RISCV_CSR_REG(ctxsstatus))
+		csr->ctxsstatus = vcpu->arch.guest_context.sstatus;
+
+	if (reg_num == KVM_REG_RISCV_CSR_REG(ctxhstatus))
+		csr->ctxhstatus = vcpu->arch.guest_context.hstatus;
+
 	if (reg_num == KVM_REG_RISCV_CSR_REG(sip)) {
 		kvm_riscv_vcpu_flush_interrupts(vcpu);
 		*out_val = (csr->hvip >> VSIP_TO_HVIP_SHIFT) & VSIP_VALID_MASK;
@@ -514,6 +520,16 @@ static int kvm_riscv_vcpu_general_set_csr(struct kvm_vcpu *vcpu,
 	}
 
 	((unsigned long *)csr)[reg_num] = reg_val;
+
+	if (reg_num == KVM_REG_RISCV_CSR_REG(ctxsstatus)) {
+		if (csr->ctxsstatus != 0)
+			vcpu->arch.guest_context.sstatus = csr->ctxsstatus;
+	}
+
+	if (reg_num == KVM_REG_RISCV_CSR_REG(ctxhstatus)) {
+		if (csr->ctxhstatus != 0)
+			vcpu->arch.guest_context.hstatus = csr->ctxhstatus;
+	}
 
 	if (reg_num == KVM_REG_RISCV_CSR_REG(sip))
 		WRITE_ONCE(vcpu->arch.irqs_pending_mask[0], 0);
