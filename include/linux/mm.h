@@ -4219,19 +4219,27 @@ static inline bool snapshot_page_is_faithful(const struct page_snapshot *ps)
 
 void snapshot_page(struct page_snapshot *ps, const struct page *page);
 
+int vma_count_remaining(const struct mm_struct *mm);
+
 static inline void vma_count_init(struct mm_struct *mm)
 {
 	ACCESS_PRIVATE(mm, __vma_count) = 0;
 }
 
-static inline void vma_count_add(struct mm_struct *mm, int nr_vmas)
+static inline void __vma_count_add_nocheck(struct mm_struct *mm, int nr_vmas)
 {
 	ACCESS_PRIVATE(mm, __vma_count) += nr_vmas;
 }
 
+static inline void vma_count_add(struct mm_struct *mm, int nr_vmas)
+{
+	VM_WARN_ON_ONCE(!vma_count_remaining(mm));
+	__vma_count_add_nocheck(mm, nr_vmas);
+}
+
 static inline void vma_count_sub(struct mm_struct *mm, int nr_vmas)
 {
-	vma_count_add(mm, -nr_vmas);
+	__vma_count_add_nocheck(mm, -nr_vmas);
 }
 
 static inline void vma_count_inc(struct mm_struct *mm)

@@ -323,15 +323,17 @@ static void vma_prepare(struct vma_prepare *vp)
 }
 
 /*
- * vma_complete- Helper function for handling the unlocking after altering VMAs,
- * or for inserting a VMA.
+ * This is the internal, unsafe version of vma_complete(). Unlike its
+ * wrapper, this function bypasses runtime checks for VMA count limits by
+ * using the _nocheck vma_count* helpers.
  *
- * @vp: The vma_prepare struct
- * @vmi: The vma iterator
- * @mm: The mm_struct
+ * Its use is restricted to __split_vma() where the VMA count can be
+ * temporarily higher than the sysctl_max_map_count limit.
+ *
+ * All other callers must use vma_complete().
  */
-static void vma_complete(struct vma_prepare *vp, struct vma_iterator *vmi,
-			 struct mm_struct *mm)
+static void __vma_complete(struct vma_prepare *vp, struct vma_iterator *vmi,
+			   struct mm_struct *mm)
 {
 	if (vp->file) {
 		if (vp->adj_next)
@@ -352,7 +354,11 @@ static void vma_complete(struct vma_prepare *vp, struct vma_iterator *vmi,
 		 * (it may either follow vma or precede it).
 		 */
 		vma_iter_store_new(vmi, vp->insert);
-		vma_count_inc(mm);
+		/*
+		 * Explicitly allow vma_count to exceed the threshold to prevent,
+		 * blocking munmap() freeing resources.
+		 */
+		__vma_count_add_nocheck(mm, 1);
 	}
 
 	if (vp->anon_vma) {
@@ -401,6 +407,26 @@ again:
 	}
 	if (vp->insert && vp->file)
 		uprobe_mmap(vp->insert);
+}
+
+/*
+ * vma_complete- Helper function for handling the unlocking after altering VMAs,
+ * or for inserting a VMA.
+ *
+ * @vp: The vma_prepare struct
+ * @vmi: The vma iterator
+ * @mm: The mm_struct
+ */
+static void vma_complete(struct vma_prepare *vp, struct vma_iterator *vmi,
+			 struct mm_struct *mm)
+{
+	/*
+	 * __vma_complete() explicitly foregoes checking the new
+	 * vma_count against the sysctl_max_map_count limit, so
+	 * do it here.
+	 */
+	VM_WARN_ON_ONCE(!vma_count_remaining(mm));
+	__vma_complete(vp, vmi, mm);
 }
 
 /*
@@ -564,8 +590,11 @@ __split_vma(struct vma_iterator *vmi, struct vm_area_struct *vma,
 		vma->vm_end = addr;
 	}
 
-	/* vma_complete stores the new vma */
-	vma_complete(&vp, vmi, vma->vm_mm);
+	/*
+	 * __vma_complete stores the new vma without checking against the
+	 * sysctl_max_map_count (vma_count) limit.
+	 */
+	__vma_complete(&vp, vmi, vma->vm_mm);
 	validate_mm(vma->vm_mm);
 
 	/* Success. */
