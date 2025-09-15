@@ -52,6 +52,34 @@ static int ecdh_set_secret(struct crypto_kpp *tfm, const void *buf,
 	return ret;
 }
 
+static int ecdh_set_secret_raw(struct crypto_kpp *tfm, const u8 *key,
+			       unsigned int len)
+{
+	struct ecdh params = {
+		.key = key,
+		.key_size = len,
+	};
+	u8 *buf;
+	unsigned int buf_len;
+	int err;
+
+	buf_len = crypto_ecdh_key_len(&params);
+	buf = kmalloc(buf_len, GFP_KERNEL);
+	if (!buf)
+		return -ENOMEM;
+
+	err = crypto_ecdh_encode_key(buf, buf_len, &params);
+	if (err)
+		goto free_buf;
+
+	err = ecdh_set_secret(tfm, buf, buf_len);
+	fallthrough;
+free_buf:
+	kfree_sensitive(buf);
+
+	return err;
+}
+
 static int ecdh_compute_value(struct kpp_request *req)
 {
 	struct crypto_kpp *tfm = crypto_kpp_reqtfm(req);
@@ -139,6 +167,7 @@ static int ecdh_nist_p192_init_tfm(struct crypto_kpp *tfm)
 }
 
 static struct kpp_alg ecdh_nist_p192 = {
+	.set_secret_raw = ecdh_set_secret_raw,
 	.set_secret = ecdh_set_secret,
 	.generate_public_key = ecdh_compute_value,
 	.compute_shared_secret = ecdh_compute_value,
@@ -164,6 +193,7 @@ static int ecdh_nist_p256_init_tfm(struct crypto_kpp *tfm)
 }
 
 static struct kpp_alg ecdh_nist_p256 = {
+	.set_secret_raw = ecdh_set_secret_raw,
 	.set_secret = ecdh_set_secret,
 	.generate_public_key = ecdh_compute_value,
 	.compute_shared_secret = ecdh_compute_value,
@@ -189,6 +219,7 @@ static int ecdh_nist_p384_init_tfm(struct crypto_kpp *tfm)
 }
 
 static struct kpp_alg ecdh_nist_p384 = {
+	.set_secret_raw = ecdh_set_secret_raw,
 	.set_secret = ecdh_set_secret,
 	.generate_public_key = ecdh_compute_value,
 	.compute_shared_secret = ecdh_compute_value,
