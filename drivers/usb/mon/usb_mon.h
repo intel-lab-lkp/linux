@@ -17,7 +17,7 @@
 
 struct mon_bus {
 	struct list_head bus_link;
-	spinlock_t lock;
+	raw_spinlock_t lock;
 	struct usb_bus *u_bus;
 
 	int text_inited;

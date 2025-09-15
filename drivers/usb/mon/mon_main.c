@@ -38,7 +38,7 @@ void mon_reader_add(struct mon_bus *mbus, struct mon_reader *r)
 	unsigned long flags;
 	struct list_head *p;
 
-	spin_lock_irqsave(&mbus->lock, flags);
+	raw_spin_lock_irqsave(&mbus->lock, flags);
 	if (mbus->nreaders == 0) {
 		if (mbus == &mon_bus0) {
 			list_for_each (p, &mon_buses) {
@@ -52,7 +52,7 @@ void mon_reader_add(struct mon_bus *mbus, struct mon_reader *r)
 	}
 	mbus->nreaders++;
 	list_add_tail(&r->r_link, &mbus->r_list);
-	spin_unlock_irqrestore(&mbus->lock, flags);
+	raw_spin_unlock_irqrestore(&mbus->lock, flags);
 
 	kref_get(&mbus->ref);
 }
@@ -66,12 +66,12 @@ void mon_reader_del(struct mon_bus *mbus, struct mon_reader *r)
 {
 	unsigned long flags;
 
-	spin_lock_irqsave(&mbus->lock, flags);
+	raw_spin_lock_irqsave(&mbus->lock, flags);
 	list_del(&r->r_link);
 	--mbus->nreaders;
 	if (mbus->nreaders == 0)
 		mon_stop(mbus);
-	spin_unlock_irqrestore(&mbus->lock, flags);
+	raw_spin_unlock_irqrestore(&mbus->lock, flags);
 
 	kref_put(&mbus->ref, mon_bus_drop);
 }
@@ -80,14 +80,12 @@ void mon_reader_del(struct mon_bus *mbus, struct mon_reader *r)
  */
 static void mon_bus_submit(struct mon_bus *mbus, struct urb *urb)
 {
-	unsigned long flags;
 	struct mon_reader *r;
 
-	spin_lock_irqsave(&mbus->lock, flags);
+	guard(raw_spinlock_irqsave)(&mbus->lock);
 	mbus->cnt_events++;
 	list_for_each_entry(r, &mbus->r_list, r_link)
 		r->rnf_submit(r->r_data, urb);
-	spin_unlock_irqrestore(&mbus->lock, flags);
 }
 
 static void mon_submit(struct usb_bus *ubus, struct urb *urb)
@@ -104,14 +102,12 @@ static void mon_submit(struct usb_bus *ubus, struct urb *urb)
  */
 static void mon_bus_submit_error(struct mon_bus *mbus, struct urb *urb, int error)
 {
-	unsigned long flags;
 	struct mon_reader *r;
 
-	spin_lock_irqsave(&mbus->lock, flags);
+	guard(raw_spinlock_irqsave)(&mbus->lock);
 	mbus->cnt_events++;
 	list_for_each_entry(r, &mbus->r_list, r_link)
 		r->rnf_error(r->r_data, urb, error);
-	spin_unlock_irqrestore(&mbus->lock, flags);
 }
 
 static void mon_submit_error(struct usb_bus *ubus, struct urb *urb, int error)
@@ -128,14 +124,12 @@ static void mon_submit_error(struct usb_bus *ubus, struct urb *urb, int error)
  */
 static void mon_bus_complete(struct mon_bus *mbus, struct urb *urb, int status)
 {
-	unsigned long flags;
 	struct mon_reader *r;
 
-	spin_lock_irqsave(&mbus->lock, flags);
+	guard(raw_spinlock_irqsave)(&mbus->lock);
 	mbus->cnt_events++;
 	list_for_each_entry(r, &mbus->r_list, r_link)
 		r->rnf_complete(r->r_data, urb, status);
-	spin_unlock_irqrestore(&mbus->lock, flags);
 }
 
 static void mon_complete(struct usb_bus *ubus, struct urb *urb, int status)
@@ -277,7 +271,7 @@ static void mon_bus_init(struct usb_bus *ubus)
 	if (mbus == NULL)
 		goto err_alloc;
 	kref_init(&mbus->ref);
-	spin_lock_init(&mbus->lock);
+	raw_spin_lock_init(&mbus->lock);
 	INIT_LIST_HEAD(&mbus->r_list);
 
 	/*
@@ -304,7 +298,7 @@ static void mon_bus0_init(void)
 	struct mon_bus *mbus = &mon_bus0;
 
 	kref_init(&mbus->ref);
-	spin_lock_init(&mbus->lock);
+	raw_spin_lock_init(&mbus->lock);
 	INIT_LIST_HEAD(&mbus->r_list);
 
 	mbus->text_inited = mon_text_add(mbus, NULL);

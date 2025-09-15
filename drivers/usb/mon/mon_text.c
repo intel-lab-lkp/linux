@@ -307,15 +307,15 @@ static struct mon_event_text *mon_text_fetch(struct mon_reader_text *rp,
 	struct list_head *p;
 	unsigned long flags;
 
-	spin_lock_irqsave(&mbus->lock, flags);
+	raw_spin_lock_irqsave(&mbus->lock, flags);
 	if (list_empty(&rp->e_list)) {
-		spin_unlock_irqrestore(&mbus->lock, flags);
+		raw_spin_unlock_irqrestore(&mbus->lock, flags);
 		return NULL;
 	}
 	p = rp->e_list.next;
 	list_del(p);
 	--rp->nevents;
-	spin_unlock_irqrestore(&mbus->lock, flags);
+	raw_spin_unlock_irqrestore(&mbus->lock, flags);
 	return list_entry(p, struct mon_event_text, e_link);
 }
 
