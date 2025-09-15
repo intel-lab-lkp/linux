@@ -3301,6 +3301,46 @@ static bool console_flush_all(bool do_cond_resched, u64 *next_seq, bool *handove
 	return any_usable;
 }
 
+/*
+ * Print out all remaining records to all consoles.
+ *
+ * @next_seq is set to the sequence number after the last available record.
+ * The value is valid only when this function returns true. It means that all
+ * usable consoles are completely flushed.
+ *
+ * @handover will be set to true if a printk waiter has taken over the
+ * console_lock, in which case the caller is no longer holding the
+ * console_lock. Otherwise it is set to false.
+ *
+ * Returns true when there was at least one usable console and all messages
+ * were flushed to all usable consoles. A returned false informs the caller
+ * that everything was not flushed (either there were no usable consoles or
+ * another context has taken over printing or it is a panic situation and this
+ * is not the panic CPU). Regardless the reason, the caller should assume it
+ * is not useful to immediately try again.
+ */
+static bool console_flush_all_unlocked(u64 *next_seq, bool *handover)
+{
+	bool any_usable;
+	bool any_progress;
+
+	*next_seq = 0;
+	*handover = false;
+
+	do {
+		console_lock();
+		any_progress = console_flush_one_record(true, next_seq, handover, &any_usable);
+
+		if (*handover)
+			return false;
+
+		__console_unlock();
+
+	} while (any_progress);
+
+	return any_usable;
+}
+
 static void __console_flush_and_unlock(void)
 {
 	bool do_cond_resched;
@@ -3344,6 +3384,17 @@ static void __console_flush_and_unlock(void)
 		 * fails, another context is already handling the printing.
 		 */
 	} while (prb_read_valid(prb, next_seq, NULL) && console_trylock());
+}
+
+static void __console_flush_unlocked(void)
+{
+	bool handover;
+	bool flushed;
+	u64 next_seq;
+
+	do {
+		flushed = console_flush_all_unlocked(&next_seq, &handover);
+	} while (flushed && !handover && prb_read_valid(prb, next_seq, NULL));
 }
 
 /**
@@ -3676,8 +3727,7 @@ static int legacy_kthread_func(void *unused)
 		if (kthread_should_stop())
 			break;
 
-		console_lock();
-		__console_flush_and_unlock();
+		__console_flush_unlocked();
 	}
 
 	return 0;
