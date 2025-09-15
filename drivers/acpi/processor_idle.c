@@ -444,6 +444,10 @@ static int acpi_processor_power_verify(struct acpi_processor *pr)
 		case ACPI_STATE_C3:
 			acpi_processor_power_verify_c3(pr, cx);
 			break;
+		case ACPI_STATE_C4:
+			if (!cx->latency || !cx->address)
+				break;
+			cx->valid = 1;
 		}
 		if (!cx->valid)
 			continue;
@@ -685,7 +689,7 @@ static int __cpuidle acpi_idle_enter(struct cpuidle_device *dev,
 		return -EINVAL;
 
 	if (cx->type != ACPI_STATE_C1) {
-		if (cx->type == ACPI_STATE_C3 && pr->flags.bm_check)
+		if (cx->type >= ACPI_STATE_C3 && pr->flags.bm_check)
 			return acpi_idle_enter_bm(drv, pr, cx, index);
 
 		/* C2 to C1 demotion. */
@@ -708,7 +712,7 @@ static int __cpuidle acpi_idle_enter_s2idle(struct cpuidle_device *dev,
 {
 	struct acpi_processor_cx *cx = per_cpu(acpi_cstate[index], dev->cpu);
 
-	if (cx->type == ACPI_STATE_C3) {
+	if (cx->index == drv->state_count - 1) {
 		struct acpi_processor *pr = __this_cpu_read(processors);
 
 		if (unlikely(!pr))
@@ -754,7 +758,7 @@ static int acpi_processor_setup_cpuidle_cx(struct acpi_processor *pr,
 		if (lapic_timer_needs_broadcast(pr, cx))
 			state->flags |= CPUIDLE_FLAG_TIMER_STOP;
 
-		if (cx->type == ACPI_STATE_C3) {
+		if (cx->type >= ACPI_STATE_C3) {
 			state->flags |= CPUIDLE_FLAG_TLB_FLUSHED;
 			if (pr->flags.bm_check)
 				state->flags |= CPUIDLE_FLAG_RCU_IDLE;
