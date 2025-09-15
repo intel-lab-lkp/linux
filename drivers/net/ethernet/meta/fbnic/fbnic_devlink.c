@@ -487,6 +487,18 @@ cmpl_free:
 	return err;
 }
 
+static int
+fbnic_fw_reporter_diagnose(struct devlink_health_reporter *reporter,
+			   struct devlink_fmsg *fmsg,
+			   struct netlink_ext_ack *extack)
+{
+	struct fbnic_dev *fbd = devlink_health_reporter_priv(reporter);
+
+	devlink_fmsg_u32_pair_put(fmsg, "FW uptime", fbd->firmware_time);
+
+	return 0;
+}
+
 void __printf(2, 3)
 fbnic_devlink_fw_report(struct fbnic_dev *fbd, const char *format, ...)
 {
@@ -505,6 +517,7 @@ fbnic_devlink_fw_report(struct fbnic_dev *fbd, const char *format, ...)
 static const struct devlink_health_reporter_ops fbnic_fw_ops = {
 	.name = "fw",
 	.dump = fbnic_fw_reporter_dump,
+	.diagnose = fbnic_fw_reporter_diagnose,
 };
 
 int fbnic_devlink_health_create(struct fbnic_dev *fbd)

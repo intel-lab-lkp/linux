@@ -77,7 +77,9 @@ fw reporter
 
 The ``fw`` health reporter tracks FW crashes. Dumping the reporter will
 show the core dump of the most recent FW crash, and if no FW crash has
-happened since power cycle - a snapshot of the FW memory.
+happened since power cycle - a snapshot of the FW memory. Diagnose callback
+shows current FW uptime (the crashes are detected by checking if uptime
+goes down).
 
 Statistics
 ----------
