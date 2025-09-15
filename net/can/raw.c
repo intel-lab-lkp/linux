@@ -87,19 +87,19 @@ struct raw_sock {
 	struct net_device *dev;
 	netdevice_tracker dev_tracker;
 	struct list_head notifier;
+	struct can_raw_vcid_options raw_vcid_opts;
 	unsigned int loopback:1;
 	unsigned int recv_own_msgs:1;
 	unsigned int fd_frames:1;
 	unsigned int xl_frames:1;
-	struct can_raw_vcid_options raw_vcid_opts;
 	canid_t tx_vcid_shifted;
 	canid_t rx_vcid_shifted;
 	canid_t rx_vcid_mask_shifted;
+	can_err_mask_t err_mask;
 	int join_filters;
 	int count;                 /* number of active filters */
 	struct can_filter dfilter; /* default/single filter */
 	struct can_filter *filter; /* pointer to filter(s) */
-	can_err_mask_t err_mask;
 	struct uniqframe __percpu *uniq;
 };
 
