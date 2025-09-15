@@ -35,6 +35,7 @@
 
 struct cma cma_areas[MAX_CMA_AREAS];
 unsigned int cma_area_count;
+static DEFINE_MUTEX(cma_mutex);
 
 phys_addr_t cma_get_base(const struct cma *cma)
 {
@@ -215,7 +216,7 @@ void __init cma_reserve_pages_on_error(struct cma *cma)
 }
 
 static int __init cma_new_area(const char *name, phys_addr_t size,
-			       unsigned int order_per_bit,
+			       unsigned int order_per_bit, unsigned long flags,
 			       struct cma **res_cma)
 {
 	struct cma *cma;
@@ -239,6 +240,7 @@ static int __init cma_new_area(const char *name, phys_addr_t size,
 
 	cma->available_count = cma->count = size >> PAGE_SHIFT;
 	cma->order_per_bit = order_per_bit;
+	cma->flags = flags;
 	*res_cma = cma;
 	totalcma_pages += cma->count;
 
@@ -265,7 +267,7 @@ static void __init cma_drop_area(struct cma *cma)
  */
 int __init cma_init_reserved_mem(phys_addr_t base, phys_addr_t size,
 				 unsigned int order_per_bit,
-				 const char *name,
+				 unsigned long flags, const char *name,
 				 struct cma **res_cma)
 {
 	struct cma *cma;
@@ -288,7 +290,7 @@ int __init cma_init_reserved_mem(phys_addr_t base, phys_addr_t size,
 	if (!IS_ALIGNED(base | size, CMA_MIN_ALIGNMENT_BYTES))
 		return -EINVAL;
 
-	ret = cma_new_area(name, size, order_per_bit, &cma);
+	ret = cma_new_area(name, size, order_per_bit, flags, &cma);
 	if (ret != 0)
 		return ret;
 
@@ -429,12 +431,18 @@ static phys_addr_t __init cma_alloc_mem(phys_addr_t base, phys_addr_t size,
 static int __init __cma_declare_contiguous_nid(phys_addr_t *basep,
 			phys_addr_t size, phys_addr_t limit,
 			phys_addr_t alignment, unsigned int order_per_bit,
-			bool fixed, const char *name, struct cma **res_cma,
-			int nid)
+			unsigned long flags, const char *name,
+			struct cma **res_cma, int nid)
 {
 	phys_addr_t memblock_end = memblock_end_of_DRAM();
 	phys_addr_t base = *basep;
 	int ret;
+	bool fixed;
+
+	if (flags & ~CMA_INIT_FLAGS)
+		return -EINVAL;
+
+	fixed = (flags & CMA_FIXED);
 
 	pr_debug("%s(size %pa, base %pa, limit %pa alignment %pa)\n",
 		__func__, &size, &base, &limit, &alignment);
@@ -503,7 +511,8 @@ static int __init __cma_declare_contiguous_nid(phys_addr_t *basep,
 		kmemleak_ignore_phys(base);
 	}
 
-	ret = cma_init_reserved_mem(base, size, order_per_bit, name, res_cma);
+	ret = cma_init_reserved_mem(base, size, order_per_bit, flags,
+				    name, res_cma);
 	if (ret) {
 		memblock_phys_free(base, size);
 		return ret;
@@ -526,7 +535,8 @@ static int __init __cma_declare_contiguous_nid(phys_addr_t *basep,
  */
 int __init cma_declare_contiguous_multi(phys_addr_t total_size,
 			phys_addr_t align, unsigned int order_per_bit,
-			const char *name, struct cma **res_cma, int nid)
+			unsigned long flags, const char *name,
+			struct cma **res_cma, int nid)
 {
 	phys_addr_t start = 0, end;
 	phys_addr_t size, sizesum, sizeleft;
@@ -543,7 +553,7 @@ int __init cma_declare_contiguous_multi(phys_addr_t total_size,
 	 * First, try it the normal way, producing just one range.
 	 */
 	ret = __cma_declare_contiguous_nid(&start, total_size, 0, align,
-			order_per_bit, false, name, res_cma, nid);
+			order_per_bit, flags, name, res_cma, nid);
 	if (ret != -ENOMEM)
 		goto out;
 
@@ -567,7 +577,7 @@ int __init cma_declare_contiguous_multi(phys_addr_t total_size,
 	sizesum = 0;
 	failed = NULL;
 
-	ret = cma_new_area(name, total_size, order_per_bit, &cma);
+	ret = cma_new_area(name, total_size, order_per_bit, flags, &cma);
 	if (ret != 0)
 		goto out;
 
@@ -716,7 +726,7 @@ out:
  * @limit: End address of the reserved memory (optional, 0 for any).
  * @alignment: Alignment for the CMA area, should be power of 2 or zero
  * @order_per_bit: Order of pages represented by one bit on bitmap.
- * @fixed: hint about where to place the reserved area
+ * @flags: flags controlling various aspects of the area
  * @name: The name of the area. See function cma_init_reserved_mem()
  * @res_cma: Pointer to store the created cma region.
  * @nid: nid of the free area to find, %NUMA_NO_NODE for any node
@@ -732,13 +742,13 @@ out:
 int __init cma_declare_contiguous_nid(phys_addr_t base,
 			phys_addr_t size, phys_addr_t limit,
 			phys_addr_t alignment, unsigned int order_per_bit,
-			bool fixed, const char *name, struct cma **res_cma,
-			int nid)
+			unsigned long flags, const char *name,
+			struct cma **res_cma, int nid)
 {
 	int ret;
 
 	ret = __cma_declare_contiguous_nid(&base, size, limit, alignment,
-			order_per_bit, fixed, name, res_cma, nid);
+			order_per_bit, flags, name, res_cma, nid);
 	if (ret != 0)
 		pr_err("Failed to reserve %ld MiB\n",
 				(unsigned long)size / SZ_1M);

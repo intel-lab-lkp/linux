@@ -54,7 +54,7 @@ void __init vmcp_cma_reserve(void)
 {
 	if (!machine_is_vm())
 		return;
-	cma_declare_contiguous(0, vmcp_cma_size, 0, 0, 0, false, "vmcp", &vmcp_cma);
+	cma_declare_contiguous(0, vmcp_cma_size, 0, 0, 0, 0, "vmcp", &vmcp_cma);
 }
 
 static void vmcp_response_alloc(struct vmcp_session *session)
