@@ -38,8 +38,10 @@ subarch-$(CONFIG_MODULES) += ../kernel/module.o
 
 USER_OBJS := bugs_$(BITS).o ptrace_user.o fault.o
 
-$(obj)/user-offsets.s: c_flags = -Wp,-MD,$(depfile) $(USER_CFLAGS) \
-	-Iarch/x86/include/generated
+$(obj)/user-offsets.s: c_flags = -Wp,-MD,$(depfile) $(USER_CFLAGS)	\
+	-Iarch/x86/include/generated					\
+	-include include/linux/kbuild.h
+
 targets += user-offsets.s
 
 include/generated/user_constants.h: $(obj)/user-offsets.s FORCE

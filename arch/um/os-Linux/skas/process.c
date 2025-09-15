@@ -29,9 +29,7 @@
 #include <sysdep/stub.h>
 #include <sysdep/mcontext.h>
 #include <linux/futex.h>
-#include <linux/threads.h>
 #include <timetravel.h>
-#include <asm-generic/rwonce.h>
 #include "../internal.h"
 
 int is_skas_winch(int pid, int fd, void *data)
@@ -204,7 +202,7 @@ void wait_stub_done_seccomp(struct mm_id *mm_idp, int running, int wait_sigsys)
 			 * Either way, if PID is negative, then we have no
 			 * choice but to kill the task.
 			 */
-			if (__READ_ONCE(mm_idp->pid) < 0)
+			if (READ_ONCE(mm_idp->pid) < 0)
 				goto out_kill;
 
 			ret = syscall(__NR_futex, &data->futex,
@@ -217,7 +215,7 @@ void wait_stub_done_seccomp(struct mm_id *mm_idp, int running, int wait_sigsys)
 			}
 		} while (data->futex == FUTEX_IN_CHILD);
 
-		if (__READ_ONCE(mm_idp->pid) < 0)
+		if (READ_ONCE(mm_idp->pid) < 0)
 			goto out_kill;
 
 		running = 0;
