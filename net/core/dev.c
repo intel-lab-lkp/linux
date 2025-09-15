@@ -3769,7 +3769,10 @@ static netdev_features_t gso_features_check(const struct sk_buff *skb,
 		features &= ~dev->gso_partial_features;
 
 	/* Make sure to clear the IPv4 ID mangling feature if the
-	 * IPv4 header has the potential to be fragmented.
+	 * IPv4 header has the potential to be fragmented. For
+	 * encapsulated packets, the outer headers are guaranteed to
+	 * have incrementing IDs if DF is not set so there is no need
+	 * to clear the IPv4 ID mangling feature.
 	 */
 	if (skb_shinfo(skb)->gso_type & SKB_GSO_TCPV4) {
 		struct iphdr *iph = skb->encapsulation ?
