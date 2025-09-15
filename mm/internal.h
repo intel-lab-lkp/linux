@@ -857,6 +857,8 @@ void memmap_init_range(unsigned long, int, unsigned long, unsigned long,
 
 #if defined CONFIG_COMPACTION || defined CONFIG_CMA
 
+struct cma;
+
 /*
  * in mm/compaction.c
  */
@@ -887,6 +889,7 @@ struct compact_control {
 	unsigned long migrate_pfn;
 	unsigned long fast_start_pfn;	/* a pfn to start linear scan from */
 	struct zone *zone;
+	struct cma *cma;		/* if moving to a specific CMA area */
 	unsigned long total_migrate_scanned;
 	unsigned long total_free_scanned;
 	unsigned short fast_search_fail;/* failures to use free list searches */
@@ -938,6 +941,7 @@ struct cma;
 #ifdef CONFIG_CMA
 void *cma_reserve_early(struct cma *cma, unsigned long size);
 void init_cma_pageblock(struct page *page);
+void balance_node_cma(int nid, struct cma *cma);
 #else
 static inline void *cma_reserve_early(struct cma *cma, unsigned long size)
 {

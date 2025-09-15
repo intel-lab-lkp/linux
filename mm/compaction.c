@@ -24,6 +24,7 @@
 #include <linux/page_owner.h>
 #include <linux/psi.h>
 #include <linux/cpuset.h>
+#include <linux/cma.h>
 #include "internal.h"
 
 #ifdef CONFIG_COMPACTION
@@ -2511,6 +2512,173 @@ compaction_suit_allocation_order(struct zone *zone, unsigned int order,
 
 	return COMPACT_CONTINUE;
 }
+
+#ifdef CONFIG_CMA
+
+static void
+isolate_free_cma_pages(struct compact_control *cc)
+{
+	unsigned long end_pfn, pfn, next_pfn, start_pfn;
+	int i;
+
+	i = -1;
+	end_pfn = 0;
+
+	next_pfn = end_pfn = cc->free_pfn;
+	start_pfn = 0;
+	while (cc->nr_freepages < cc->nr_migratepages) {
+		if (!cma_next_balance_pagerange(cc->zone, cc->cma, &i,
+						&start_pfn, &end_pfn))
+			break;
+		for (pfn = start_pfn; pfn < end_pfn; pfn = next_pfn) {
+			next_pfn = pfn + pageblock_nr_pages;
+			isolate_freepages_block(cc, &pfn, next_pfn,
+					cc->freepages, 1, false);
+			if (cc->nr_freepages >= cc->nr_migratepages)
+				break;
+		}
+	}
+	cc->free_pfn = next_pfn;
+}
+
+static void balance_zone_cma(struct zone *zone, struct cma *cma)
+{
+	struct compact_control cc = {
+		.zone = zone,
+		.cma = cma,
+		.isolate_freepages = isolate_free_cma_pages,
+		.nr_migratepages = 0,
+		.nr_freepages = 0,
+		.free_pfn = 0,
+		.migrate_pfn = 0,
+		.mode = MIGRATE_SYNC,
+		.ignore_skip_hint = true,
+		.no_set_skip_hint = true,
+		.gfp_mask = GFP_KERNEL,
+		.migrate_large = true,
+		.order = -1,
+	};
+	unsigned long nr_pages;
+	int order;
+	unsigned long free_cma, free_pages, allocated, allocated_noncma;
+	unsigned long target_free_cma;
+	int rindex, ret = 0, n;
+	unsigned long start_pfn, end_pfn, pfn, next_pfn;
+	long nr_migrated;
+
+	if (zone_idx(zone) == ZONE_MOVABLE)
+		return;
+
+	if (!cma && !cma_numranges())
+		return;
+
+	/*
+	 * Try to move allocated pages from non-CMA pageblocks
+	 * to CMA pageblocks (possibly in a specific CMA area), to
+	 * give the kernel more space for unmovable allocations.
+	 *
+	 * cma_first_limit, the percentage of free pages that are
+	 * MIGRATE_CMA, is used to calculcate the target number.
+	 */
+	free_pages = zone_page_state(zone, NR_FREE_PAGES);
+	free_cma = zone_page_state(zone, NR_FREE_CMA_PAGES);
+	if (!free_cma)
+		return;
+
+	target_free_cma = (cma_first_limit * free_pages) / 100;
+	/*
+	 * If we're already below the target, nothing to do.
+	 */
+	if (free_cma <= target_free_cma)
+		return;
+
+	/*
+	 * To try to avoid scanning too much non-CMA memory,
+	 * set the upper bound of pages we want to migrate
+	 * to the minimum of:
+	 * 1. The number of MIGRATE_CMA pages we want to use.
+	 * 2. The space available in the targeted CMA area (if any).
+	 * 3. The number of used non-CMA pages.
+	 *
+	 * This will still likely cause the scanning of more
+	 * pageblocks than is strictly needed, but it's the best
+	 * that can be done without explicit tracking of the number
+	 * of movable allocations in non-CMA memory.
+	 */
+	allocated = zone_managed_pages(zone) - free_pages;
+	allocated_noncma = allocated - (zone_cma_pages(zone) - free_cma);
+
+	nr_pages = free_cma - target_free_cma;
+	if (cma)
+		nr_pages = min(nr_pages, cma_get_available(cma));
+	nr_pages = min(allocated_noncma, nr_pages);
+
+	for (order = 0; order < NR_PAGE_ORDERS; order++)
+		INIT_LIST_HEAD(&cc.freepages[order]);
+	INIT_LIST_HEAD(&cc.migratepages);
+
+	rindex = -1;
+	start_pfn = next_pfn = end_pfn = 0;
+	nr_migrated = 0;
+	while (nr_pages > 0) {
+		ret = 0;
+		if (!cma_next_noncma_pagerange(cc.zone, &rindex,
+					      &start_pfn, &end_pfn))
+			break;
+
+		for (pfn = start_pfn; pfn < end_pfn; pfn = next_pfn) {
+			next_pfn = pfn + pageblock_nr_pages;
+			cc.nr_migratepages = 0;
+
+			if (!pageblock_pfn_to_page(pfn, next_pfn, zone))
+				continue;
+
+			ret = isolate_migratepages_block(&cc, pfn, next_pfn,
+					ISOLATE_UNEVICTABLE);
+			if (ret)
+				continue;
+			ret = migrate_pages(&cc.migratepages, compaction_alloc,
+					    compaction_free, (unsigned long)&cc,
+					    cc.mode, MR_CMA_BALANCE, &n);
+			if (ret)
+				putback_movable_pages(&cc.migratepages);
+			nr_migrated += n;
+			if (nr_migrated >= nr_pages)
+				break;
+		}
+
+		nr_pages -= min_t(unsigned long, nr_migrated, nr_pages);
+	}
+
+	if (cc.nr_freepages > 0)
+		release_free_list(cc.freepages);
+}
+
+void balance_node_cma(int nid, struct cma *cma)
+{
+	pg_data_t *pgdat;
+	int zoneid;
+	struct zone *zone;
+
+	if (!cma && !cma_numranges())
+		return;
+
+	if (nid >= MAX_NUMNODES || !node_online(nid))
+		return;
+
+	pgdat = NODE_DATA(nid);
+
+	for (zoneid = 0; zoneid < MAX_NR_ZONES; zoneid++) {
+
+		zone = &pgdat->node_zones[zoneid];
+		if (!populated_zone(zone))
+			continue;
+
+		balance_zone_cma(zone, cma);
+	}
+}
+
+#endif /* CONFIG_CMA */
 
 static enum compact_result
 compact_zone(struct compact_control *cc, struct capture_control *capc)
