@@ -480,6 +480,9 @@ struct mana_context {
 	struct mana_eq *eqs;
 	struct dentry *mana_eqs_debugfs;
 
+	struct workqueue_struct *gf_stats_wq;
+	struct delayed_work gf_stats_work;
+
 	struct net_device *ports[MAX_PORTS_IN_MANA_DEV];
 };
 
@@ -577,7 +580,7 @@ u32 mana_run_xdp(struct net_device *ndev, struct mana_rxq *rxq,
 struct bpf_prog *mana_xdp_get(struct mana_port_context *apc);
 void mana_chn_setxdp(struct mana_port_context *apc, struct bpf_prog *prog);
 int mana_bpf(struct net_device *ndev, struct netdev_bpf *bpf);
-void mana_query_gf_stats(struct mana_context *ac);
+int mana_query_gf_stats(struct mana_context *ac);
 int mana_query_link_cfg(struct mana_port_context *apc);
 int mana_set_bw_clamp(struct mana_port_context *apc, u32 speed,
 		      int enable_clamping);
