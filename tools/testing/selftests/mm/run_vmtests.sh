@@ -49,6 +49,8 @@ separated by spaces:
 	test madvise(2) MADV_GUARD_INSTALL and MADV_GUARD_REMOVE options
 - madv_populate
 	test memadvise(2) MADV_POPULATE_{READ,WRITE} options
+- max_vma_count
+	tests for max vma_count
 - memfd_secret
 	test memfd_secret(2)
 - process_mrelease
@@ -416,6 +418,9 @@ fi # VADDR64
 
 # vmalloc stability smoke test
 CATEGORY="vmalloc" run_test bash ./test_vmalloc.sh smoke
+
+# test operations against max vma count limit
+CATEGORY="max_vma_count" run_test ./max_vma_count_tests
 
 CATEGORY="mremap" run_test ./mremap_dontunmap
 
