@@ -2446,6 +2446,54 @@ enum rmqueue_mode {
 	RMQUEUE_STEAL,
 };
 
+#ifdef CONFIG_CMA
+/*
+ * The percentage of free CMA pages as part of the total number of free
+ * pages above which CMA is used first.
+ * 0 = always, 100 = never
+ */
+int cma_first_limit __read_mostly = 50;
+EXPORT_SYMBOL_GPL(cma_first_limit);
+
+/*
+ * Return values:
+ *
+ * -1 - never try CMA (!ALLOC_CMA or !IS_ENABLED(CONFIG_CMA))
+ *  0 - don't try CMA first
+ *  1 - try CMA first.
+ */
+static __always_inline int use_cma_first(struct zone *zone,
+					 unsigned int alloc_flags)
+{
+	unsigned long free_cma, free_pages, cma_percentage;
+
+	if (!(alloc_flags & ALLOC_CMA))
+		return -1;
+
+	free_cma = zone_page_state(zone, NR_FREE_CMA_PAGES);
+	if (!free_cma)
+		return -1;
+
+	if (!cma_first_limit)
+		return 1;
+
+	if (cma_first_limit == 100)
+		return 0;
+
+	free_pages = zone_page_state(zone, NR_FREE_PAGES);
+	if (!free_pages)
+		return 0;
+
+	cma_percentage = (free_cma * 100) / free_pages;
+	return (cma_percentage > cma_first_limit) ? 1 : 0;
+}
+#else
+static inline int use_cma_first(struct zone *zone, unsigned int alloc_flags)
+{
+	return -1;
+}
+#endif
+
 /*
  * Do the hard work of removing an element from the buddy allocator.
  * Call me with the zone->lock already held.
@@ -2455,20 +2503,13 @@ __rmqueue(struct zone *zone, unsigned int order, int migratetype,
 	  unsigned int alloc_flags, enum rmqueue_mode *mode)
 {
 	struct page *page;
+	int cma_first;
 
-	if (IS_ENABLED(CONFIG_CMA)) {
-		/*
-		 * Balance movable allocations between regular and CMA areas by
-		 * allocating from CMA when over half of the zone's free memory
-		 * is in the CMA area.
-		 */
-		if (alloc_flags & ALLOC_CMA &&
-		    zone_page_state(zone, NR_FREE_CMA_PAGES) >
-		    zone_page_state(zone, NR_FREE_PAGES) / 2) {
-			page = __rmqueue_cma_fallback(zone, order);
-			if (page)
-				return page;
-		}
+	cma_first = use_cma_first(zone, alloc_flags);
+	if (cma_first > 0) {
+		page = __rmqueue_cma_fallback(zone, order);
+		if (page)
+			return page;
 	}
 
 	/*
@@ -2487,7 +2528,11 @@ __rmqueue(struct zone *zone, unsigned int order, int migratetype,
 			return page;
 		fallthrough;
 	case RMQUEUE_CMA:
-		if (alloc_flags & ALLOC_CMA) {
+		/*
+		 * Try CMA if we should, and haven't done so yet,
+		 * which is indicated by cma_first == 0.
+		 */
+		if (cma_first == 0) {
 			page = __rmqueue_cma_fallback(zone, order);
 			if (page) {
 				*mode = RMQUEUE_CMA;
@@ -6668,6 +6713,17 @@ static const struct ctl_table page_alloc_sysctl_table[] = {
 		.maxlen		= sizeof(sysctl_min_slab_ratio),
 		.mode		= 0644,
 		.proc_handler	= sysctl_min_slab_ratio_sysctl_handler,
+		.extra1		= SYSCTL_ZERO,
+		.extra2		= SYSCTL_ONE_HUNDRED,
+	},
+#endif
+#ifdef CONFIG_CMA
+	{
+		.procname	= "cma_first_limit",
+		.data		= &cma_first_limit,
+		.maxlen		= sizeof(cma_first_limit),
+		.mode		= 0644,
+		.proc_handler	= proc_dointvec_minmax,
 		.extra1		= SYSCTL_ZERO,
 		.extra2		= SYSCTL_ONE_HUNDRED,
 	},
