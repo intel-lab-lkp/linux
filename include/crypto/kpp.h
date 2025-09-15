@@ -54,6 +54,9 @@ struct crypto_kpp {
 /**
  * struct kpp_alg - generic key-agreement protocol primitives
  *
+ * @set_secret_raw:     Function invokes the protocol specific function to
+ *                      encode and set the secret private key in a raw
+ *                      binary format.
  * @set_secret:		Function invokes the protocol specific function to
  *			store the secret private key along with parameters.
  *			The implementation knows how to decode the buffer
@@ -75,6 +78,8 @@ struct crypto_kpp {
  * @base:		Common crypto API algorithm data structure
  */
 struct kpp_alg {
+	int (*set_secret_raw)(struct crypto_kpp *tfm, const u8 *key,
+			  unsigned int len);
 	int (*set_secret)(struct crypto_kpp *tfm, const void *buffer,
 			  unsigned int len);
 	int (*generate_public_key)(struct kpp_request *req);
@@ -291,6 +296,30 @@ static inline int crypto_kpp_set_secret(struct crypto_kpp *tfm,
 					const void *buffer, unsigned int len)
 {
 	return crypto_kpp_alg(tfm)->set_secret(tfm, buffer, len);
+}
+
+/**
+ * crypto_kpp_set_secret_raw() - Invoke kpp operation
+ *
+ * Function that works as crypto_kpp_set_secret() but on a non-encoded key
+ * (aka raw binary data).
+ *
+ * @tfm:	tfm handle
+ * @buffer:	Buffer holding the raw representation of the private
+ *		key as raw binary data.
+ * @len:	Length of the private key buffer.
+ *
+ * Return: zero on success; error code in case of error
+ */
+static inline int crypto_kpp_set_secret_raw(struct crypto_kpp *tfm,
+					const u8 *key, unsigned int len)
+{
+	struct kpp_alg *alg = crypto_kpp_alg(tfm);
+
+	if (!alg->set_secret_raw)
+		return -EOPNOTSUPP;
+
+	return alg->set_secret_raw(tfm, key, len);
 }
 
 /**
