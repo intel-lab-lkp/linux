@@ -312,12 +312,16 @@ static DEFINE_SIMPLE_DEV_PM_OPS(tmp102_dev_pm_ops, tmp102_suspend, tmp102_resume
 
 static const struct i2c_device_id tmp102_id[] = {
 	{ "tmp102" },
+	{ "tmp110" },
+	{ "tmp113" },
 	{ }
 };
 MODULE_DEVICE_TABLE(i2c, tmp102_id);
 
 static const struct of_device_id __maybe_unused tmp102_of_match[] = {
 	{ .compatible = "ti,tmp102" },
+	{ .compatible = "ti,tmp110" },
+	{ .compatible = "ti,tmp113" },
 	{ },
 };
 MODULE_DEVICE_TABLE(of, tmp102_of_match);
