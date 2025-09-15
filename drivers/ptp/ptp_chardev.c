@@ -47,6 +47,19 @@ static int ptp_disable_pinfunc(struct ptp_clock_info *ops,
 	return err;
 }
 
+void ptp_disable_all_pins(struct ptp_clock *ptp)
+{
+	struct ptp_clock_info *info = ptp->info;
+	unsigned int i;
+
+	mutex_lock(&ptp->pincfg_mux);
+	for (i = 0; i < info->n_pins; i++)
+		if (info->pin_config[i].func != PTP_PF_NONE)
+			ptp_disable_pinfunc(info, info->pin_config[i].func,
+					    info->pin_config[i].chan);
+	mutex_unlock(&ptp->pincfg_mux);
+}
+
 int ptp_set_pinfunc(struct ptp_clock *ptp, unsigned int pin,
 		    enum ptp_pin_function func, unsigned int chan)
 {
