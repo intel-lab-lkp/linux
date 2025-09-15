@@ -6640,6 +6640,24 @@ out:
 	return ret;
 }
 
+#ifdef CONFIG_CMA
+static int cma_first_limit_sysctl_handler(const struct ctl_table *table,
+				int write, void *buffer, size_t *length,
+				loff_t *ppos)
+{
+	int ret, nid;
+
+	ret = proc_dointvec_minmax(table, write, buffer, length, ppos);
+	if (ret || !write)
+		return ret;
+
+	for_each_node_state(nid, N_MEMORY)
+		balance_node_cma(nid, NULL);
+
+	return 0;
+}
+#endif
+
 static const struct ctl_table page_alloc_sysctl_table[] = {
 	{
 		.procname	= "min_free_kbytes",
@@ -6723,7 +6741,7 @@ static const struct ctl_table page_alloc_sysctl_table[] = {
 		.data		= &cma_first_limit,
 		.maxlen		= sizeof(cma_first_limit),
 		.mode		= 0644,
-		.proc_handler	= proc_dointvec_minmax,
+		.proc_handler	= cma_first_limit_sysctl_handler,
 		.extra1		= SYSCTL_ZERO,
 		.extra2		= SYSCTL_ONE_HUNDRED,
 	},
