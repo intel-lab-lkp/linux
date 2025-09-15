@@ -37,6 +37,7 @@ enum cma_flags {
 #define CMA_INIT_FLAGS (CMA_FIXED|CMA_RESERVE_PAGES_ON_ERROR)
 
 struct cma;
+struct zone;
 
 extern unsigned long totalcma_pages;
 extern phys_addr_t cma_get_base(const struct cma *cma);
@@ -79,6 +80,12 @@ extern void cma_reserve_pages_on_error(struct cma *cma);
 struct folio *cma_alloc_folio(struct cma *cma, int order, gfp_t gfp);
 bool cma_free_folio(struct cma *cma, const struct folio *folio);
 bool cma_validate_zones(struct cma *cma);
+int cma_numranges(void);
+unsigned long cma_get_available(const struct cma *cma);
+bool cma_next_balance_pagerange(struct zone *zone, struct cma *cma, int *rindex,
+			    unsigned long *startpfn, unsigned long *endpfn);
+bool cma_next_noncma_pagerange(struct zone *zone, int *rindex,
+			       unsigned long *startpfn, unsigned long *endpfn);
 #else
 static inline struct folio *cma_alloc_folio(struct cma *cma, int order, gfp_t gfp)
 {
@@ -90,6 +97,29 @@ static inline bool cma_free_folio(struct cma *cma, const struct folio *folio)
 	return false;
 }
 static inline bool cma_validate_zones(struct cma *cma)
+{
+	return false;
+}
+
+static inline int cma_numranges(void)
+{
+	return 0;
+}
+
+static inline unsigned long cma_get_available(const struct cma *cma)
+{
+	return 0;
+}
+
+static inline bool cma_next_balance_pagerange(struct zone *zone,
+			struct cma *cma, int *rindex, unsigned long *start_pfn,
+			unsigned long *end_pfn)
+{
+	return false;
+}
+
+static inline bool cma_next_noncma_pagerange(struct zone *zone, int *rindex,
+			     unsigned long *start_pfn, unsigned long *end_pfn)
 {
 	return false;
 }

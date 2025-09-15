@@ -54,6 +54,11 @@ const char *cma_get_name(const struct cma *cma)
 	return cma->name;
 }
 
+unsigned long cma_get_available(const struct cma *cma)
+{
+	return cma->available_count;
+}
+
 static unsigned long cma_bitmap_aligned_mask(const struct cma *cma,
 					     unsigned int align_order)
 {
@@ -202,6 +207,11 @@ cleanup:
 static struct cma_memrange **cma_ranges;
 static int cma_nranges;
 
+int cma_numranges(void)
+{
+	return cma_nranges;
+}
+
 static int cmprange(const void *a, const void *b)
 {
 	struct cma_memrange *r1, *r2;
@@ -212,6 +222,157 @@ static int cmprange(const void *a, const void *b)
 	if (r1->base_pfn < r2->base_pfn)
 		return -1;
 	return r1->base_pfn - r2->base_pfn;
+}
+
+/*
+ * Provide the next free range in a cma memory range, as derived
+ * from the bitmap.
+ *
+ * @cmr: memory range to scan
+ * @start_pfn: the beginning of the previous range
+ * @end_pfn: the end of the previous range, zero for the first call
+ *
+ * The caller can adjust *end_pfn end use it as a starting point.
+ */
+static bool cma_next_free_range(struct cma_memrange *cmr,
+			unsigned long *start_pfn, unsigned long *end_pfn)
+{
+	unsigned long zerobit, onebit, start, nbits, offset, base;
+	struct cma *cma = cmr->cma;
+
+	nbits = cma_bitmap_maxno(cmr);
+
+	if (!*end_pfn)
+		offset = start = 0;
+	else {
+		start = ((*end_pfn - cmr->base_pfn) >> cma->order_per_bit);
+		if (start >= nbits)
+			return false;
+
+		offset = *end_pfn -
+			(cmr->base_pfn + (start << cma->order_per_bit));
+	}
+
+	spin_lock_irq(&cma->lock);
+	zerobit = find_next_zero_bit(cmr->bitmap, nbits, start);
+	if (zerobit >= nbits) {
+		spin_unlock_irq(&cma->lock);
+		return false;
+	}
+	onebit = find_next_bit(cmr->bitmap, nbits, zerobit);
+	spin_unlock_irq(&cma->lock);
+
+	base = (zerobit << cma->order_per_bit) + cmr->base_pfn;
+	*start_pfn = base + offset;
+	*end_pfn = base + ((onebit - zerobit) << cma->order_per_bit);
+
+	return true;
+}
+
+static inline bool cma_should_balance_range(struct zone *zone,
+				      struct cma_memrange *cmr)
+{
+	if (page_zone(pfn_to_page(cmr->base_pfn)) != zone)
+		return false;
+
+	return true;
+}
+
+/*
+ * Get the next CMA page range containing pages that have not been
+ * allocated through cma_alloc. This is just a snapshot, and the caller
+ * is expected to deal with the changing circumstances. Used to walk
+ * through CMA pageblocks in a zone in an optimized fashion during
+ * zone CMA balance compaction.
+ *
+ * If @cma is NULL, the global list of ranges is walked, else
+ * the ranges of the area pointed to by @cma are walked.
+ */
+bool cma_next_balance_pagerange(struct zone *zone, struct cma *cma,
+			    int *rindex, unsigned long *start_pfn,
+			    unsigned long *end_pfn)
+{
+	struct cma_memrange *cmr;
+	int i, nranges;
+
+	if (!cma_nranges)
+		return false;
+
+	nranges = cma ? cma->nranges : cma_nranges;
+
+	if (*rindex == -1) {
+		if (*end_pfn != 0) {
+			for (i = nranges - 1; i >= 0; i--) {
+				cmr = cma ? &cma->ranges[i] : cma_ranges[i];
+				if (!cma_should_balance_range(zone, cmr))
+					continue;
+				if (*end_pfn > cmr->base_pfn &&
+				    *end_pfn < (cmr->base_pfn + cmr->count))
+					break;
+			}
+		} else {
+			i = nranges - 1;
+		}
+	} else {
+		i = *rindex;
+	}
+
+	for (; i >= 0; i--) {
+		cmr = cma ? &cma->ranges[i] : cma_ranges[i];
+		if (!cma_should_balance_range(zone, cmr))
+			continue;
+		if (cma_next_free_range(cmr, start_pfn, end_pfn)) {
+			*rindex = i;
+			return true;
+		}
+	}
+
+	return false;
+}
+
+/*
+ * Get the next stretch of memory in a zone that is not MIGRATE_CMA
+ * pageblocks.
+ */
+bool cma_next_noncma_pagerange(struct zone *zone, int *rindex,
+						unsigned long *start_pfn,
+						unsigned long *end_pfn)
+{
+	struct cma_memrange *cmr;
+	unsigned long cma_start, cma_end;
+	int i;
+
+	if (*end_pfn >= zone_end_pfn(zone))
+		return false;
+
+	if (*rindex == -1) {
+		*rindex = 0;
+		if (*start_pfn == 0)
+			*start_pfn = zone->zone_start_pfn;
+	} else {
+		cmr = cma_ranges[*rindex];
+		*start_pfn = cmr->base_pfn + cmr->count;
+	}
+
+	for (i = *rindex; i < cma_nranges; i++) {
+		cmr = cma_ranges[i];
+		cma_start = cmr->base_pfn;
+		cma_end = cmr->base_pfn + cmr->count;
+		if (page_zone(pfn_to_page(cma_start)) != zone)
+			continue;
+		if (*start_pfn == cma_start) {
+			*start_pfn = cma_end;
+		} else if (*start_pfn < cma_start) {
+			*rindex = i;
+			*end_pfn = cma_start;
+			return true;
+		}
+	}
+
+	*rindex = cma_nranges;
+	*end_pfn = zone_end_pfn(zone);
+
+	return true;
 }
 
 static int __init cma_init_reserved_areas(void)
