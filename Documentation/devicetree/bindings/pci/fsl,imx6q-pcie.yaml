@@ -219,7 +219,12 @@ allOf:
             - const: pcie_bus
             - const: pcie_phy
             - const: pcie_aux
-            - const: ref
+            - description: PCIe reference clock.
+              oneOf:
+                - description: The controller has two reference clock
+                    inputs, internal system PLL and external clock
+                    source. Only one needs to be used.
+                  enum: [ref, extref]
 
 unevaluatedProperties: false
 
