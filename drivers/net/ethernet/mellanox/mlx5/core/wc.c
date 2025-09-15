@@ -7,6 +7,11 @@
 #include "mlx5_core.h"
 #include "wq.h"
 
+#ifdef CONFIG_KERNEL_MODE_NEON
+#include "lib/wc_neon_iowrite64_copy.h"
+#include <asm/neon.h>
+#endif
+
 #define TEST_WC_NUM_WQES 255
 #define TEST_WC_LOG_CQ_SZ (order_base_2(TEST_WC_NUM_WQES))
 #define TEST_WC_SQ_LOG_WQ_SZ TEST_WC_LOG_CQ_SZ
@@ -249,6 +254,22 @@ err_create_wq_cyc:
 	return err;
 }
 
+static void mlx5_iowrite64_copy(struct mlx5_wc_sq *sq, __be32 mmio_wqe[16],
+				size_t mmio_wqe_size)
+{
+#ifdef CONFIG_KERNEL_MODE_NEON
+	if (cpu_has_neon()) {
+		kernel_neon_begin();
+		mlx5_wc_neon_iowrite64_copy(sq->bfreg.map + sq->bfreg.offset,
+					    mmio_wqe);
+		kernel_neon_end();
+		return;
+	}
+#endif
+	__iowrite64_copy(sq->bfreg.map + sq->bfreg.offset, mmio_wqe,
+			 mmio_wqe_size / 8);
+}
+
 static void mlx5_wc_destroy_sq(struct mlx5_wc_sq *sq)
 {
 	mlx5_core_destroy_sq(sq->cq.mdev, sq->sqn);
@@ -288,8 +309,7 @@ static void mlx5_wc_post_nop(struct mlx5_wc_sq *sq, bool signaled)
 	 */
 	wmb();
 
-	__iowrite64_copy(sq->bfreg.map + sq->bfreg.offset, mmio_wqe,
-			 sizeof(mmio_wqe) / 8);
+	mlx5_iowrite64_copy(sq, mmio_wqe, sizeof(mmio_wqe));
 
 	sq->bfreg.offset ^= buf_size;
 }
