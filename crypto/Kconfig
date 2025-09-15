@@ -1412,6 +1412,14 @@ config CRYPTO_USER_API_AEAD
 	  See Documentation/crypto/userspace-if.rst and
 	  https://www.chronox.de/libkcapi/html/index.html
 
+config CRYPTO_USER_API_KPP
+	tristate "Key-agreement Protocol Primitive"
+	depends on NET
+	select CRYPTO_KPP
+	select CRYPTO_USER_API
+	help
+	  Enable the userspace interface for Key-agreement Protocol Primitive.
+
 config CRYPTO_USER_API_ENABLE_OBSOLETE
 	bool "Obsolete cryptographic algorithms"
 	depends on CRYPTO_USER_API
