@@ -50,6 +50,7 @@
 #include <linux/unaligned.h>
 
 #include "cdns-mhdp8546-core.h"
+#include "cdns-mhdp8546-dsc.h"
 #include "cdns-mhdp8546-hdcp.h"
 #include "cdns-mhdp8546-j721e.h"
 
@@ -542,6 +543,116 @@ out:
 	if (ret)
 		dev_err(mhdp->dev, "Failed to adjust Link Training.\n");
 
+	return ret;
+}
+
+static int cdns_mhdp_wait_for_fec(struct cdns_mhdp_device *mhdp,
+				  bool expected_status)
+{
+	u32 fec_status;
+	unsigned long timeout = jiffies + msecs_to_jiffies(1000);
+
+	cdns_mhdp_reg_read(mhdp, CDNS_DP_FEC_STATUS, &fec_status);
+	while (((fec_status & CDNS_DP_FEC_BUSY) != expected_status) &&
+	       time_before(jiffies, timeout)) {
+		cdns_mhdp_reg_read(mhdp, CDNS_DP_FEC_STATUS, &fec_status);
+		cpu_relax();
+	}
+
+	if (time_after_eq(jiffies, timeout)) {
+		DRM_DEV_ERROR(mhdp->dev, "Timeout while waiting for FEC\n");
+		return -ETIMEDOUT;
+	}
+
+	return 0;
+}
+
+static int cdns_mhdp_fec_sink_support(struct cdns_mhdp_device *mhdp)
+{
+	int ret;
+	u16 dpcd_buffer;
+
+	ret = drm_dp_dpcd_read(&mhdp->aux, DP_FEC_CAPABILITY, &dpcd_buffer, 1);
+	if (ret < 0)
+		goto err;
+
+	if (!(dpcd_buffer & DP_FEC_CAPABLE)) {
+		ret = -EOPNOTSUPP;
+		DRM_DEV_ERROR(mhdp->dev, "sink does not support FEC: %d\n", ret);
+		goto err;
+	}
+
+	if (ret > 0)
+		return 0;
+err:
+	return ret;
+}
+
+static int cdns_mhdp_fec_sink_set_ready(struct cdns_mhdp_device *mhdp,
+					bool enable)
+{
+	int ret;
+	u8 dpcd_buffer;
+
+	ret = drm_dp_dpcd_read(&mhdp->aux, DP_FEC_CONFIGURATION, &dpcd_buffer, 1);
+	if (ret < 0)
+		goto err;
+
+	if (enable)
+		dpcd_buffer |= DP_FEC_READY;
+	else
+		dpcd_buffer &= ~DP_FEC_READY;
+
+	ret = drm_dp_dpcd_write(&mhdp->aux, DP_FEC_CONFIGURATION, &dpcd_buffer, 1);
+
+	if (ret > 0)
+		return 0;
+err:
+	DRM_DEV_ERROR(mhdp->dev, "cannot set sink FEC ready: %d\n", ret);
+	return  ret;
+}
+
+static int cdns_mhdp_fec_set_ready(struct cdns_mhdp_device *mhdp, bool enable)
+{
+	int ret;
+
+	ret = cdns_mhdp_fec_sink_support(mhdp);
+	if (ret)
+		goto err;
+
+	ret = cdns_mhdp_fec_sink_set_ready(mhdp, enable);
+	if (ret)
+		goto err;
+
+	ret = cdns_mhdp_reg_write_bit(mhdp, CDNS_DP_FEC_CTRL, 1, 1, enable);
+	if (ret)
+		goto err;
+
+err:
+	return ret;
+}
+
+static int cdns_mhdp_fec_enable(struct cdns_mhdp_device *mhdp, bool enable)
+{
+	int ret;
+	u32 resp;
+
+	ret = cdns_mhdp_reg_read(mhdp, CDNS_DP_FRAMER_GLOBAL_CONFIG, &resp);
+	if (ret < 0)
+		goto err;
+
+	if (!(resp & CDNS_DP_NO_VIDEO_MODE)) {
+		ret = -EIO;
+		goto err;
+	}
+
+	ret = cdns_mhdp_reg_write_bit(mhdp, CDNS_DP_FEC_CTRL, 0, 1, enable);
+	if (ret)
+		goto err;
+
+	return cdns_mhdp_wait_for_fec(mhdp, enable);
+err:
+	DRM_DEV_ERROR(mhdp->dev, "set fec enable failed: %d\n", ret);
 	return ret;
 }
 
@@ -1407,6 +1518,13 @@ static int cdns_mhdp_link_up(struct cdns_mhdp_device *mhdp)
 	amp[1] = DP_SET_ANSI_8B10B;
 	drm_dp_dpcd_write(&mhdp->aux, DP_DOWNSPREAD_CTRL, amp, 2);
 
+	if (cdns_mhdp_fec_set_ready(mhdp, true)) {
+		mhdp->fec_enabled = false;
+		dev_info(mhdp->dev, "Cannot set FEC ready.\n");
+	} else {
+		mhdp->fec_enabled = true;
+	}
+
 	if (mhdp->host.fast_link & mhdp->sink.fast_link) {
 		dev_err(mhdp->dev, "fastlink not supported\n");
 		return -EOPNOTSUPP;
@@ -1494,9 +1612,13 @@ static int cdns_mhdp_connector_detect(struct drm_connector *conn,
 	return cdns_mhdp_detect(mhdp);
 }
 
-static u32 cdns_mhdp_get_bpp(struct cdns_mhdp_display_fmt *fmt)
+static u32 cdns_mhdp_get_bpp(struct cdns_mhdp_device *mhdp)
 {
+	struct cdns_mhdp_display_fmt *fmt = &mhdp->display_fmt;
 	u32 bpp;
+
+	if (mhdp->dsc_params.compression_enable)
+		return mhdp->dsc_params.compressed_bpp;
 
 	if (fmt->y_only)
 		return fmt->bpc;
@@ -1533,7 +1655,7 @@ bool cdns_mhdp_bandwidth_ok(struct cdns_mhdp_device *mhdp,
 	 * units of the rate parameter.
 	 */
 
-	bpp = cdns_mhdp_get_bpp(&mhdp->display_fmt);
+	bpp = cdns_mhdp_get_bpp(mhdp);
 	req_bw = mode->clock * bpp / 8;
 	max_bw = lanes * rate;
 	if (req_bw > max_bw) {
@@ -1693,6 +1815,74 @@ aux_unregister:
 	return ret;
 }
 
+static int cdns_mhdp_dsc_set_stream_compressed(struct cdns_mhdp_device *mhdp,
+					       int stream_id, bool compressed)
+{
+	u32 reg_val;
+	int ret;
+
+	ret = cdns_mhdp_reg_read(mhdp, CDNS_DP_VB_ID(stream_id), &reg_val);
+	if (ret < 0)
+		return ret;
+
+	if (compressed)
+		reg_val |= CDNS_DP_VB_ID_COMPRESSED;
+	else
+		reg_val &= ~CDNS_DP_VB_ID_COMPRESSED;
+
+	return cdns_mhdp_reg_write(mhdp, CDNS_DP_VB_ID(stream_id), reg_val);
+}
+
+static int cdns_mhdp_dsc_wait_for_completion(struct cdns_mhdp_device *mhdp,
+					     u8 event_bit, int stream_id)
+{
+	u32 dsc_ctrl;
+	int ret;
+	unsigned long timeout;
+
+	ret = cdns_mhdp_reg_write_bit(mhdp, CDNS_DP_DSC_CTRL(stream_id),
+				      event_bit, 1, true);
+	if (ret)
+		return ret;
+
+	timeout = jiffies + msecs_to_jiffies(1000);
+
+	do {
+		cdns_mhdp_reg_read(mhdp, CDNS_DP_DSC_CTRL(stream_id), &dsc_ctrl);
+		cpu_relax();
+	} while (((dsc_ctrl & (1 << event_bit)) != 0) && time_before(jiffies, timeout));
+
+	if (time_after_eq(jiffies, timeout)) {
+		DRM_DEV_ERROR(mhdp->dev, "Timeout while waiting for event %d\n", event_bit);
+		return -ETIMEDOUT;
+	}
+
+	return 0;
+}
+
+static int cdns_mhdp_dsc_reset(struct cdns_mhdp_device *mhdp)
+{
+	/* Setting reset bit in any stream resets entire DSC. Stream 0 may always be used for it. */
+	return cdns_mhdp_dsc_wait_for_completion(mhdp, CDNS_DP_DSC_CTRL_SW_RST_BIT, 0);
+}
+
+static int cdns_mhdp_dsc_update(struct cdns_mhdp_device *mhdp, int stream_id)
+{
+	return cdns_mhdp_dsc_wait_for_completion(mhdp, CDNS_DP_DSC_CTRL_REG_UPDATE_BIT,
+						 stream_id);
+}
+
+static int cdns_mhdp_dsc_enable(struct cdns_mhdp_device *mhdp, int stream_id, bool enable)
+{
+	return cdns_mhdp_reg_write_bit(mhdp, CDNS_DP_DSC_CTRL(stream_id),
+				       CDNS_DP_DSC_CTRL_EN_BIT, 1, enable ? 1 : 0);
+}
+
+static int cdns_mhdp_dsc_sink_enable(struct cdns_mhdp_device *mhdp, bool enable)
+{
+	return drm_dp_dpcd_writeb(&mhdp->aux, DP_DSC_ENABLE, enable) != 1;
+}
+
 static void cdns_mhdp_configure_video(struct cdns_mhdp_device *mhdp,
 				      const struct drm_display_mode *mode)
 {
@@ -1702,7 +1892,7 @@ static void cdns_mhdp_configure_video(struct cdns_mhdp_device *mhdp,
 		front_porch, back_porch, msa_h0, msa_v0, hsync, vsync,
 		dp_vertical_1;
 	u8 stream_id = mhdp->stream_id;
-	u32 bpp, bpc, pxlfmt, framer;
+	u32 bpp, bpc, pxlfmt, framer, dp_byte_count;
 	int ret;
 
 	pxlfmt = mhdp->display_fmt.color_format;
@@ -1716,7 +1906,7 @@ static void cdns_mhdp_configure_video(struct cdns_mhdp_device *mhdp,
 	     pxlfmt == DRM_COLOR_FORMAT_YCBCR422) && mode->crtc_vdisplay >= 720)
 		misc0 = DP_YCBCR_COEFFICIENTS_ITU709;
 
-	bpp = cdns_mhdp_get_bpp(&mhdp->display_fmt);
+	bpp = cdns_mhdp_get_bpp(mhdp);
 
 	switch (pxlfmt) {
 	case DRM_COLOR_FORMAT_RGB444:
@@ -1765,6 +1955,9 @@ static void cdns_mhdp_configure_video(struct cdns_mhdp_device *mhdp,
 	if (mode->flags & DRM_MODE_FLAG_INTERLACE)
 		bnd_hsync2vsync |= CDNS_IP_DET_INTERLACE_FORMAT;
 
+	if (mhdp->dsc_params.compression_enable)
+		bnd_hsync2vsync |= CDNS_IP_VIF_ALIGNMENT_LSB;
+
 	cdns_mhdp_reg_write(mhdp, CDNS_BND_HSYNC2VSYNC(stream_id),
 			    bnd_hsync2vsync);
 
@@ -1792,8 +1985,14 @@ static void cdns_mhdp_configure_video(struct cdns_mhdp_device *mhdp,
 			    CDNS_DP_FRONT_PORCH(front_porch) |
 			    CDNS_DP_BACK_PORCH(back_porch));
 
-	cdns_mhdp_reg_write(mhdp, CDNS_DP_BYTE_COUNT(stream_id),
-			    mode->crtc_hdisplay * bpp / 8);
+	if (mhdp->dsc_params.compression_enable) {
+		dp_byte_count = (((mhdp->dsc_config.slice_chunk_size / mhdp->link.num_lanes) + 1) <<
+				CDNS_DP_BYTE_COUNT_BYTES_IN_CHUNK_SHIFT) |
+				((mhdp->dsc_config.slice_chunk_size / mhdp->link.num_lanes) + 1);
+	} else {
+		dp_byte_count = (mode->crtc_hdisplay * bpp / 8);
+	}
+	cdns_mhdp_reg_write(mhdp, CDNS_DP_BYTE_COUNT(stream_id), dp_byte_count);
 
 	msa_h0 = mode->crtc_htotal - mode->crtc_hsync_start;
 	cdns_mhdp_reg_write(mhdp, CDNS_DP_MSA_HORIZONTAL_0(stream_id),
@@ -1852,6 +2051,9 @@ static void cdns_mhdp_configure_video(struct cdns_mhdp_device *mhdp,
 				(mode->flags & DRM_MODE_FLAG_INTERLACE) ?
 				CDNS_DP_VB_ID_INTERLACED : 0);
 
+	if (mhdp->dsc_params.compression_enable)
+		cdns_mhdp_dsc_set_stream_compressed(mhdp, stream_id, true);
+
 	ret = cdns_mhdp_reg_read(mhdp, CDNS_DP_FRAMER_GLOBAL_CONFIG, &framer);
 	if (ret < 0) {
 		dev_err(mhdp->dev,
@@ -1860,7 +2062,6 @@ static void cdns_mhdp_configure_video(struct cdns_mhdp_device *mhdp,
 		return;
 	}
 	framer |= CDNS_DP_FRAMER_EN;
-	framer &= ~CDNS_DP_NO_VIDEO_MODE;
 	cdns_mhdp_reg_write(mhdp, CDNS_DP_FRAMER_GLOBAL_CONFIG, framer);
 }
 
@@ -1869,20 +2070,67 @@ static void cdns_mhdp_sst_enable(struct cdns_mhdp_device *mhdp,
 {
 	u32 rate, vs, required_bandwidth, available_bandwidth;
 	s32 line_thresh1, line_thresh2, line_thresh = 0;
-	int pxlclock = mode->crtc_clock;
+	int ret, pxlclock = mode->crtc_clock;
+	u32 vs_f, framer, pxl_repr;
 	u32 tu_size = 64;
 	u32 bpp;
 
 	/* Get rate in MSymbols per second per lane */
 	rate = mhdp->link.rate / 1000;
 
-	bpp = cdns_mhdp_get_bpp(&mhdp->display_fmt);
+	if (mhdp->fec_enabled) {
+		if (cdns_mhdp_fec_enable(mhdp, true))
+			mhdp->fec_enabled = false;
+	} else {
+		cdns_mhdp_fec_enable(mhdp, false);
+	}
+
+	if (mhdp->dsc_supported && !cdns_mhdp_dsc_sink_support(mhdp)) {
+		ret = cdns_mhdp_dsc_reset(mhdp);
+		if (ret)
+			dev_err(mhdp->dev, "DSC reset failed. ret = %d\n", ret);
+
+		mhdp->dsc_params.compressed_bpp = 8;
+		mhdp->dsc_params.slice_count = 10;
+
+		ret = cdns_mhdp_compute_dsc_params(mhdp);
+		if (ret < 0) {
+			mhdp->dsc_params.compression_enable = false;
+			dev_err(mhdp->dev, "DSC params computation failed. ret = %d\n", ret);
+		} else {
+			mhdp->dsc_params.compression_enable = true;
+			/* Write config for stream 0 */
+			cdns_mhdp_dsc_write_enc_config(mhdp, 0, mode);
+			cdns_mhdp_dsc_update(mhdp, 0);
+			cdns_mhdp_dsc_write_config(mhdp);
+		}
+	} else {
+		if (mhdp->dsc_params.compression_enable) {
+			cdns_mhdp_dsc_sink_enable(mhdp, false);
+			cdns_mhdp_dsc_set_stream_compressed(mhdp, 0, false);
+		}
+		mhdp->dsc_params.compression_enable = false;
+	}
+
+	/* Enable DSC for stream 0 */
+	if (mhdp->dsc_params.compression_enable) {
+		cdns_mhdp_dsc_enable(mhdp, 0, true);
+
+		if (cdns_mhdp_dsc_sink_enable(mhdp, true))
+			dev_err(mhdp->dev, "Cannot enable DSC in sink.\n");
+		cdns_mhdp_dsc_send_pps_sdp(mhdp, 0);
+	}
+
+	bpp = cdns_mhdp_get_bpp(mhdp);
 
 	required_bandwidth = pxlclock * bpp / 8;
 	available_bandwidth = mhdp->link.num_lanes * rate;
 
-	vs = tu_size * required_bandwidth / available_bandwidth;
-	vs /= 1000;
+	vs_f = tu_size * required_bandwidth / available_bandwidth;
+	if (mhdp->fec_enabled)
+		vs_f = (vs_f * 1024) / 1000;	//2.4%
+	vs = vs_f / 1000;
+	vs_f = vs_f % 1000;
 
 	if (vs == tu_size)
 		vs = tu_size - 1;
@@ -1907,6 +2155,70 @@ static void cdns_mhdp_sst_enable(struct cdns_mhdp_device *mhdp,
 						   0 : tu_size - vs));
 
 	cdns_mhdp_configure_video(mhdp, mode);
+
+	if (mhdp->dsc_params.compression_enable) {
+		cdns_mhdp_reg_read(mhdp, CDNS_DP_FRAMER_PXL_REPR(0), &pxl_repr);
+		pxl_repr &= ~CDNS_DP_FRAMER_PXL_REPR_M;
+		pxl_repr &= ~CDNS_DP_FRAMER_PXL_REPR_DIFF;
+		pxl_repr |= (((vs_f / 10) << CDNS_DP_FRAMER_PXL_REPR_M_SHIFT)
+				& CDNS_DP_FRAMER_PXL_REPR_M) |
+				(((100 - (vs_f / 10)) << CDNS_DP_FRAMER_PXL_REPR_DIFF_SHIFT)
+				& CDNS_DP_FRAMER_PXL_REPR_DIFF);
+		cdns_mhdp_reg_write(mhdp, CDNS_DP_FRAMER_PXL_REPR(0), pxl_repr);
+	}
+
+	/* Enable video mode */
+	cdns_mhdp_reg_read(mhdp, CDNS_DP_FRAMER_GLOBAL_CONFIG, &framer);
+	framer &= ~CDNS_DP_NO_VIDEO_MODE;
+	cdns_mhdp_reg_write(mhdp, CDNS_DP_FRAMER_GLOBAL_CONFIG, framer);
+}
+
+static int cdns_mhdp_configure_car(struct cdns_mhdp_device *mhdp, bool enable)
+{
+	u32 dptx_car, source_pkt_car;
+	int ret;
+
+	ret = cdns_mhdp_reg_read(mhdp, CDNS_DPTX_CAR, &dptx_car);
+	if (ret < 0) {
+		dev_err(mhdp->dev, "Failed to read CDNS_DPTX_CAR %d\n", ret);
+		goto out;
+	}
+
+	ret = cdns_mhdp_reg_read(mhdp, CDNS_SOURCE_PKT_CAR, &source_pkt_car);
+	if (ret < 0) {
+		dev_err(mhdp->dev, "Failed to read CDNS_SOURCE_PKT_CAR %d\n", ret);
+		goto out;
+	}
+
+	if (enable) {
+		dev_dbg(mhdp->dev, "%s: Enable clocks for VIF and PIF\n", __func__);
+
+		/* Enable VIF clock for stream 0 */
+		cdns_mhdp_reg_write(mhdp, CDNS_DPTX_CAR,
+				    dptx_car | CDNS_VIF_CLK_EN | CDNS_VIF_CLK_RSTN);
+
+		/* Enable PKT clock */
+		cdns_mhdp_reg_write(mhdp, CDNS_SOURCE_PKT_CAR,
+				    source_pkt_car | CDNS_PKT_DATA_CLK_EN
+						   | CDNS_PKT_DATA_RSTN
+						   | CDNS_PKT_SYS_CLK_EN
+						   | CDNS_PKT_SYS_RSTN);
+	} else {
+		dev_dbg(mhdp->dev, "%s: Disable clocks for VIF and PIF\n", __func__);
+
+		/* Disable VIF clock for stream 0 */
+		cdns_mhdp_reg_write(mhdp, CDNS_DPTX_CAR,
+				    dptx_car & ~(CDNS_VIF_CLK_EN | CDNS_VIF_CLK_RSTN));
+
+		/* Disable PKT clock */
+		cdns_mhdp_reg_write(mhdp, CDNS_SOURCE_PKT_CAR,
+				    source_pkt_car & ~(CDNS_PKT_DATA_CLK_EN
+						   | CDNS_PKT_DATA_RSTN
+						   | CDNS_PKT_SYS_CLK_EN
+						   | CDNS_PKT_SYS_RSTN));
+	}
+out:
+	return ret;
 }
 
 static void cdns_mhdp_atomic_enable(struct drm_bridge *bridge,
@@ -1919,8 +2231,7 @@ static void cdns_mhdp_atomic_enable(struct drm_bridge *bridge,
 	struct drm_connector_state *conn_state;
 	struct drm_bridge_state *new_state;
 	const struct drm_display_mode *mode;
-	u32 resp;
-	int ret;
+	int ret = 0;
 
 	dev_dbg(mhdp->dev, "bridge enable\n");
 
@@ -1935,15 +2246,12 @@ static void cdns_mhdp_atomic_enable(struct drm_bridge *bridge,
 	if (mhdp->info && mhdp->info->ops && mhdp->info->ops->enable)
 		mhdp->info->ops->enable(mhdp);
 
-	/* Enable VIF clock for stream 0 */
-	ret = cdns_mhdp_reg_read(mhdp, CDNS_DPTX_CAR, &resp);
+	/* Enable clocks for video and packet interfaces */
+	ret = cdns_mhdp_configure_car(mhdp, true);
 	if (ret < 0) {
-		dev_err(mhdp->dev, "Failed to read CDNS_DPTX_CAR %d\n", ret);
+		dev_err(mhdp->dev, "Failed to enable clocks %d\n", ret);
 		goto out;
 	}
-
-	cdns_mhdp_reg_write(mhdp, CDNS_DPTX_CAR,
-			    resp | CDNS_VIF_CLK_EN | CDNS_VIF_CLK_RSTN);
 
 	connector = drm_atomic_get_new_connector_for_encoder(state,
 							     bridge->encoder);
@@ -2020,10 +2328,8 @@ static void cdns_mhdp_atomic_disable(struct drm_bridge *bridge,
 
 	cdns_mhdp_link_down(mhdp);
 
-	/* Disable VIF clock for stream 0 */
-	cdns_mhdp_reg_read(mhdp, CDNS_DPTX_CAR, &resp);
-	cdns_mhdp_reg_write(mhdp, CDNS_DPTX_CAR,
-			    resp & ~(CDNS_VIF_CLK_EN | CDNS_VIF_CLK_RSTN));
+	/* Disable clocks for video and packet interfaces */
+	cdns_mhdp_configure_car(mhdp, false);
 
 	if (mhdp->info && mhdp->info->ops && mhdp->info->ops->disable)
 		mhdp->info->ops->disable(mhdp);
@@ -2119,7 +2425,7 @@ static int cdns_mhdp_atomic_check(struct drm_bridge *bridge,
 				  struct drm_connector_state *conn_state)
 {
 	struct cdns_mhdp_device *mhdp = bridge_to_mhdp(bridge);
-	const struct drm_display_mode *mode = &crtc_state->adjusted_mode;
+	struct drm_display_mode *mode = &crtc_state->adjusted_mode;
 
 	mutex_lock(&mhdp->link_mutex);
 
@@ -2138,6 +2444,10 @@ static int cdns_mhdp_atomic_check(struct drm_bridge *bridge,
 	 */
 	if (mhdp->info)
 		bridge_state->input_bus_cfg.flags = *mhdp->info->input_bus_flags;
+
+	//TODO For DSC. Might need proper handling. 1920x1080 mode doesn't work without this.
+	mode->flags |= (DRM_MODE_FLAG_PHSYNC | DRM_MODE_FLAG_PVSYNC);
+	mode->flags &= ~(DRM_MODE_FLAG_NHSYNC | DRM_MODE_FLAG_NVSYNC);
 
 	mutex_unlock(&mhdp->link_mutex);
 	return 0;
@@ -2424,6 +2734,15 @@ static int cdns_mhdp_probe(struct platform_device *pdev)
 			 "Failed to get SAPB memory resource, HDCP not supported\n");
 	} else {
 		mhdp->hdcp_supported = true;
+	}
+
+	mhdp->dsc_regs = devm_platform_ioremap_resource_byname(pdev, "dsc");
+	if (IS_ERR(mhdp->dsc_regs)) {
+		mhdp->dsc_supported = false;
+		dev_info(dev,
+			 "Failed to get DSC memory resource, DSC not supported\n");
+	} else {
+		mhdp->dsc_supported = true;
 	}
 
 	mhdp->phy = devm_of_phy_get_by_index(dev, pdev->dev.of_node, 0);

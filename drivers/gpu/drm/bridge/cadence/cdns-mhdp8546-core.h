@@ -16,6 +16,7 @@
 #include <linux/spinlock.h>
 
 #include <drm/display/drm_dp_helper.h>
+#include <drm/display/drm_dsc.h>
 #include <drm/drm_bridge.h>
 #include <drm/drm_connector.h>
 
@@ -66,17 +67,29 @@ struct phy;
 #define CDNS_VIF_CLK_EN				BIT(0)
 #define CDNS_VIF_CLK_RSTN			BIT(1)
 
+#define CDNS_SOURCE_PKT_CAR			0x00918
+#define CDNS_PKT_DATA_CLK_EN			BIT(0)
+#define CDNS_PKT_DATA_RSTN			BIT(1)
+#define CDNS_PKT_SYS_CLK_EN			BIT(2)
+#define CDNS_PKT_SYS_RSTN			BIT(3)
+
 #define CDNS_SOURCE_VIDEO_IF(s)			(0x00b00 + ((s) * 0x20))
 #define CDNS_BND_HSYNC2VSYNC(s)			(CDNS_SOURCE_VIDEO_IF(s) + \
 						 0x00)
 #define CDNS_IP_DTCT_WIN			GENMASK(11, 0)
 #define CDNS_IP_DET_INTERLACE_FORMAT		BIT(12)
 #define CDNS_IP_BYPASS_V_INTERFACE		BIT(13)
+#define CDNS_IP_VIF_ALIGNMENT_LSB		BIT(14)
 
 #define CDNS_HSYNC2VSYNC_POL_CTRL(s)		(CDNS_SOURCE_VIDEO_IF(s) + \
 						 0x10)
 #define CDNS_H2V_HSYNC_POL_ACTIVE_LOW		BIT(1)
 #define CDNS_H2V_VSYNC_POL_ACTIVE_LOW		BIT(2)
+
+#define CDNS_DP_DSC_CTRL(s)		        (CDNS_SOURCE_VIDEO_IF(s) + 0x14)
+#define CDNS_DP_DSC_CTRL_EN_BIT			0
+#define CDNS_DP_DSC_CTRL_SW_RST_BIT		1
+#define CDNS_DP_DSC_CTRL_REG_UPDATE_BIT		2
 
 #define CDNS_DPTX_PHY_CONFIG			0x02000
 #define CDNS_PHY_TRAINING_EN			BIT(0)
@@ -120,6 +133,10 @@ struct phy;
 #define CDNS_DP_LANE_EN_LANES(x)		GENMASK((x) - 1, 0)
 
 #define CDNS_DP_ENHNCD				0x02304
+
+#define CDNS_DP_FEC_CTRL			0x02310
+#define CDNS_DP_FEC_STATUS			0x02314
+#define CDNS_DP_FEC_BUSY			BIT(0)
 
 #define CDNS_DPTX_STREAM(s)			(0x03000 + (s) * 0x80)
 #define CDNS_DP_MSA_HORIZONTAL_0(s)		(CDNS_DPTX_STREAM(s) + 0x00)
@@ -178,6 +195,10 @@ struct phy;
 #define CDNS_DP_FRAMER_YCBCR422			BIT(2)
 #define CDNS_DP_FRAMER_YCBCR420			BIT(3)
 #define CDNS_DP_FRAMER_Y_ONLY			BIT(4)
+#define CDNS_DP_FRAMER_PXL_REPR_M		GENMASK(22, 16)
+#define CDNS_DP_FRAMER_PXL_REPR_DIFF		GENMASK(30, 24)
+#define CDNS_DP_FRAMER_PXL_REPR_M_SHIFT		16
+#define CDNS_DP_FRAMER_PXL_REPR_DIFF_SHIFT	24
 
 #define CDNS_DP_FRAMER_SP(s)			(CDNS_DPTX_STREAM(s) + 0x50)
 #define CDNS_DP_FRAMER_VSYNC_POL_LOW		BIT(0)
@@ -197,6 +218,38 @@ struct phy;
 
 #define CDNS_DP_BYTE_COUNT(s)			(CDNS_DPTX_STREAM(s) + 0x7c)
 #define CDNS_DP_BYTE_COUNT_BYTES_IN_CHUNK_SHIFT	16
+
+#define CDNS_SOURCE_PACKET_IF(s)		(0x30800 + ((s) * 0x40))
+#define CDNS_SOURCE_PIF_WR_ADDR(s)		(CDNS_SOURCE_PACKET_IF(s) + 0x00)
+
+#define CDNS_SOURCE_PIF_WR_REQ(s)		(CDNS_SOURCE_PACKET_IF(s) + 0x04)
+#define SOURCE_PIF_WR_REQ_HOST_WR		BIT(0)
+
+#define CDNS_SOURCE_PIF_RD_ADDR(s)		(CDNS_SOURCE_PACKET_IF(s) + 0x08)
+#define CDNS_SOURCE_PIF_RD_REQ(s)		(CDNS_SOURCE_PACKET_IF(s) + 0x0c)
+#define CDNS_SOURCE_PIF_DATA_WR(s)		(CDNS_SOURCE_PACKET_IF(s) + 0x10)
+#define CDNS_SOURCE_PIF_DATA_RD(s)		(CDNS_SOURCE_PACKET_IF(s) + 0x14)
+#define CDNS_SOURCE_PIF_FIFO1_FLUSH(s)		(CDNS_SOURCE_PACKET_IF(s) + 0x18)
+#define CDNS_SOURCE_PIF_FIFO2_FLUSH(s)		(CDNS_SOURCE_PACKET_IF(s) + 0x1c)
+#define CDNS_SOURCE_PIF_STATUS(s)		(CDNS_SOURCE_PACKET_IF(s) + 0x20)
+#define CDNS_SOURCE_PIF_INT_SOURCE(s)		(CDNS_SOURCE_PACKET_IF(s) + 0x24)
+#define CDNS_SOURCE_PIF_INT_MASK(s)		(CDNS_SOURCE_PACKET_IF(s) + 0x28)
+
+#define CDNS_SOURCE_PIF_PKT_ALLOC_REG(s)	(CDNS_SOURCE_PACKET_IF(s) + 0x2c)
+#define SOURCE_PIF_PKT_ALLOC_REG_ACTIVE_IDLE_TYPE	BIT(17)
+#define SOURCE_PIF_PKT_ALLOC_REG_TYPE_VALID		BIT(16)
+#define SOURCE_PIF_PKT_ALLOC_REG_PACKET_TYPE		GENMASK(15, 8)
+#define SOURCE_PIF_PKT_ALLOC_REG_PACKET_TYPE_SHIFT	8
+#define SOURCE_PIF_PKT_ALLOC_REG_PKT_ALLOC_ADDR		GENMASK(3, 0)
+
+#define CDNS_SOURCE_PIF_PKT_ALLOC_WR_EN(s)	(CDNS_SOURCE_PACKET_IF(s) + 0x30)
+#define SOURCE_PIF_PKT_ALLOC_WR_EN_EN		BIT(0)
+
+#define CDNS_SOURCE_PIF_SW_RST(s)		(CDNS_SOURCE_PACKET_IF(s) + 0x34)
+#define CDNS_SOURCE_PIF_PPS_HEADER(s)		(CDNS_SOURCE_PACKET_IF(s) + 0x38)
+
+#define CDNS_SOURCE_PIF_PPS(s)			(CDNS_SOURCE_PACKET_IF(s) + 0x3c)
+#define SOURCE_PIF_PPS_PPS			BIT(0)
 
 /* mailbox */
 #define MAILBOX_RETRY_US			1000
@@ -354,6 +407,7 @@ struct cdns_mhdp_hdcp {
 struct cdns_mhdp_device {
 	void __iomem *regs;
 	void __iomem *sapb_regs;
+	void __iomem *dsc_regs;
 	void __iomem *j721e_regs;
 
 	struct device *dev;
@@ -412,6 +466,20 @@ struct cdns_mhdp_device {
 
 	struct cdns_mhdp_hdcp hdcp;
 	bool hdcp_supported;
+
+	struct drm_dsc_config dsc_config;
+
+	/* Display Stream Compression state */
+	bool dsc_supported;
+	struct {
+		bool compression_enable;
+		bool dsc_split;
+		u16 compressed_bpp;
+		u8 slice_count;
+		u8 dsc_cap[DP_DSC_RECEIVER_CAP_SIZE];
+	} dsc_params;
+
+	bool fec_enabled;
 };
 
 #define connector_to_mhdp(x) container_of(x, struct cdns_mhdp_device, connector)
