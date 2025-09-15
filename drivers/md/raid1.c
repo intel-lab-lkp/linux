@@ -2517,6 +2517,21 @@ static void fix_read_error(struct r1conf *conf, struct r1bio *r1_bio)
 	}
 }
 
+/**
+ * narrow_write_error() - Retry write and set badblock
+ * @r1_bio:	the r1bio containing the write error
+ * @i:		which device to retry
+ *
+ * Rewrites the bio, splitting it at the least common multiple of the logical
+ * block size and the badblock size. Blocks that fail to be written are marked
+ * as bad. If badblocks are disabled, no write is attempted and false is
+ * returned immediately.
+ *
+ * Return:
+ * * %true	- all blocks were written or marked bad successfully
+ * * %false	- bbl disabled or
+ *		  one or more blocks write failed and could not be marked bad
+ */
 static bool narrow_write_error(struct r1bio *r1_bio, int i)
 {
 	struct mddev *mddev = r1_bio->mddev;
@@ -2614,9 +2629,9 @@ static void handle_write_finished(struct r1conf *conf, struct r1bio *r1_bio)
 	int m, idx;
 	bool fail = false;
 
-	for (m = 0; m < conf->raid_disks * 2 ; m++)
+	for (m = 0; m < conf->raid_disks * 2 ; m++) {
+		struct md_rdev *rdev = conf->mirrors[m].rdev;
 		if (r1_bio->bios[m] == IO_MADE_GOOD) {
-			struct md_rdev *rdev = conf->mirrors[m].rdev;
 			rdev_clear_badblocks(rdev,
 					     r1_bio->sector,
 					     r1_bio->sectors, 0);
@@ -2628,12 +2643,17 @@ static void handle_write_finished(struct r1conf *conf, struct r1bio *r1_bio)
 			 */
 			fail = true;
 			if (!narrow_write_error(r1_bio, m))
-				md_error(conf->mddev,
-					 conf->mirrors[m].rdev);
+				md_error(conf->mddev, rdev);
 				/* an I/O failed, we can't clear the bitmap */
-			rdev_dec_pending(conf->mirrors[m].rdev,
-					 conf->mddev);
+			else if (test_bit(In_sync, &rdev->flags) &&
+				 !test_bit(Faulty, &rdev->flags) &&
+				 rdev_has_badblock(rdev,
+						   r1_bio->sector,
+						   r1_bio->sectors) == 0)
+				set_bit(R1BIO_Uptodate, &r1_bio->state);
+			rdev_dec_pending(rdev, conf->mddev);
 		}
+	}
 	if (fail) {
 		spin_lock_irq(&conf->device_lock);
 		list_add(&r1_bio->retry_list, &conf->bio_end_io_list);

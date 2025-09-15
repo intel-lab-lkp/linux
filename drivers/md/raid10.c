@@ -2809,6 +2809,21 @@ static void fix_read_error(struct r10conf *conf, struct mddev *mddev, struct r10
 	}
 }
 
+/**
+ * narrow_write_error() - Retry write and set badblock
+ * @r10_bio:	the r10bio containing the write error
+ * @i:		which device to retry
+ *
+ * Rewrites the bio, splitting it at the least common multiple of the logical
+ * block size and the badblock size. Blocks that fail to be written are marked
+ * as bad. If badblocks are disabled, no write is attempted and false is
+ * returned immediately.
+ *
+ * Return:
+ * * %true	- all blocks were written or marked bad successfully
+ * * %false	- bbl disabled or
+ *		  one or more blocks write failed and could not be marked bad
+ */
 static bool narrow_write_error(struct r10bio *r10_bio, int i)
 {
 	struct bio *bio = r10_bio->master_bio;
@@ -2975,6 +2990,12 @@ static void handle_write_completed(struct r10conf *conf, struct r10bio *r10_bio)
 				fail = true;
 				if (!narrow_write_error(r10_bio, m))
 					md_error(conf->mddev, rdev);
+				else if (test_bit(In_sync, &rdev->flags) &&
+					 !test_bit(Faulty, &rdev->flags) &&
+					 rdev_has_badblock(rdev,
+							   r10_bio->devs[m].addr,
+							   r10_bio->sectors) == 0)
+					set_bit(R10BIO_Uptodate, &r10_bio->state);
 				rdev_dec_pending(rdev, conf->mddev);
 			}
 			bio = r10_bio->devs[m].repl_bio;
