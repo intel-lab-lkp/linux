@@ -399,6 +399,7 @@ struct err_info {
 	u16 syndrome;
 	u32 page;
 	u32 offset;
+	struct atl_dram_addr *dram_addr;
 };
 
 static inline u32 get_umc_base(u8 channel)
