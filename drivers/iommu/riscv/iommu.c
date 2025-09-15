@@ -23,6 +23,7 @@
 #include "../iommu-pages.h"
 #include "iommu-bits.h"
 #include "iommu.h"
+#include "iommu-perf.h"
 
 /* Timeouts in [us] */
 #define RISCV_IOMMU_QCSR_TIMEOUT	150000
@@ -1604,6 +1605,7 @@ void riscv_iommu_remove(struct riscv_iommu_device *iommu)
 	riscv_iommu_iodir_set_mode(iommu, RISCV_IOMMU_DDTP_IOMMU_MODE_OFF);
 	riscv_iommu_queue_disable(&iommu->cmdq);
 	riscv_iommu_queue_disable(&iommu->fltq);
+	riscv_iommu_pmu_unregister(iommu);
 }
 
 int riscv_iommu_init(struct riscv_iommu_device *iommu)
@@ -1655,6 +1657,14 @@ int riscv_iommu_init(struct riscv_iommu_device *iommu)
 		dev_err_probe(iommu->dev, rc, "cannot register iommu interface\n");
 		goto err_remove_sysfs;
 	}
+
+	rc = riscv_iommu_pmu_alloc(iommu);
+	if (rc) {
+		dev_err(iommu->dev, "cannot alloc iommu pmu (%d)\n", rc);
+		iommu_device_sysfs_remove(&iommu->iommu);
+		goto err_remove_sysfs;
+	}
+	riscv_iommu_pmu_register(iommu);
 
 	return 0;
 
