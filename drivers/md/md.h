@@ -283,7 +283,8 @@ enum flag_bits {
 				 */
 	LastDev,		/* This is the last working rdev.
 				 * so don't use FailFast any more for
-				 * metadata.
+				 * metadata and don't Fail rdev
+				 * when FailFast bio failure.
 				 */
 	CollisionCheck,		/*
 				 * check if there is collision between raid1
@@ -906,6 +907,7 @@ extern void md_write_end(struct mddev *mddev);
 extern void md_done_sync(struct mddev *mddev, int blocks, int ok);
 void _md_error(struct mddev *mddev, struct md_rdev *rdev);
 extern void md_error(struct mddev *mddev, struct md_rdev *rdev);
+extern bool md_bio_failure_error(struct mddev *mddev, struct md_rdev *rdev, struct bio *bio);
 extern void md_finish_reshape(struct mddev *mddev);
 void md_submit_discard_bio(struct mddev *mddev, struct md_rdev *rdev,
 			struct bio *bio, sector_t start, sector_t size);

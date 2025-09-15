@@ -8297,6 +8297,48 @@ void md_error(struct mddev *mddev, struct md_rdev *rdev)
 }
 EXPORT_SYMBOL(md_error);
 
+/** md_bio_failure_error() - md error handler for MD_FAILFAST bios
+ * @mddev: affected md device.
+ * @rdev: member device to fail.
+ * @bio: bio whose triggered device failure.
+ *
+ * This is almost the same as md_error(). That is, it is serialized at
+ * the same level as md_error, marks the rdev as Faulty, and changes
+ * the mddev status.
+ * However, if all of the following conditions are met, it does nothing.
+ * This is because MD_FAILFAST bios must not stopping the array.
+ *  * RAID1 or RAID10
+ *  * LastDev - if rdev becomes Faulty, mddev will stop
+ *  * The failed bio has MD_FAILFAST set
+ *
+ * Returns: true if _md_error() was called, false if not.
+ */
+bool md_bio_failure_error(struct mddev *mddev, struct md_rdev *rdev, struct bio *bio)
+{
+	bool do_md_error = true;
+
+	spin_lock(&mddev->error_handle_lock);
+	if (mddev->pers) {
+		if (mddev->pers->head.id == ID_RAID1 ||
+		    mddev->pers->head.id == ID_RAID10) {
+			if (test_bit(LastDev, &rdev->flags) &&
+			    test_bit(FailFast, &rdev->flags) &&
+			    bio != NULL && (bio->bi_opf & MD_FAILFAST))
+				do_md_error = false;
+		}
+	}
+
+	if (do_md_error)
+		_md_error(mddev, rdev);
+	else
+		pr_warn_ratelimited("md: %s: %s didn't do anything for %pg\n",
+			mdname(mddev), __func__, rdev->bdev);
+
+	spin_unlock(&mddev->error_handle_lock);
+	return do_md_error;
+}
+EXPORT_SYMBOL(md_bio_failure_error);
+
 /* seq_file implementation /proc/mdstat */
 
 static void status_unused(struct seq_file *seq)
