@@ -1020,7 +1020,10 @@ struct mm_struct {
 #ifdef CONFIG_MMU
 		atomic_long_t pgtables_bytes;	/* size of all page tables */
 #endif
-		int vma_count;			/* number of VMAs */
+		union {
+			const int vma_count;		/* number of VMAs */
+			int __private __vma_count;
+		};
 
 		spinlock_t page_table_lock; /* Protects page tables and some
 					     * counters

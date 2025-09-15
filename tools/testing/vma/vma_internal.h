@@ -251,7 +251,10 @@ struct mutex {};
 
 struct mm_struct {
 	struct maple_tree mm_mt;
-	int vma_count;			/* number of VMAs */
+	union {
+		const int vma_count;		/* number of VMAs */
+		int __vma_count;
+	};
 	unsigned long total_vm;	   /* Total pages mapped */
 	unsigned long locked_vm;   /* Pages that have PG_mlocked set */
 	unsigned long data_vm;	   /* VM_WRITE & ~VM_SHARED & ~VM_STACK */
@@ -1524,6 +1527,31 @@ static int vma_count_remaining(const struct mm_struct *mm)
 	const int max_count = sysctl_max_map_count;
 
 	return (max_count > vma_count) ? (max_count - vma_count) : 0;
+}
+
+static inline void vma_count_init(struct mm_struct *mm)
+{
+	mm->__vma_count = 0;
+}
+
+static inline void vma_count_add(struct mm_struct *mm, int nr_vmas)
+{
+	mm->__vma_count += nr_vmas;
+}
+
+static inline void vma_count_sub(struct mm_struct *mm, int nr_vmas)
+{
+	vma_count_add(mm, -nr_vmas);
+}
+
+static inline void vma_count_inc(struct mm_struct *mm)
+{
+	vma_count_add(mm, 1);
+}
+
+static inline void vma_count_dec(struct mm_struct *mm)
+{
+	vma_count_sub(mm, 1);
 }
 
 #endif	/* __MM_VMA_INTERNAL_H */
