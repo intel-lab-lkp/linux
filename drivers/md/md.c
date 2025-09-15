@@ -705,6 +705,7 @@ int mddev_init(struct mddev *mddev)
 	atomic_set(&mddev->openers, 0);
 	atomic_set(&mddev->sync_seq, 0);
 	spin_lock_init(&mddev->lock);
+	spin_lock_init(&mddev->error_handle_lock);
 	init_waitqueue_head(&mddev->sb_wait);
 	init_waitqueue_head(&mddev->recovery_wait);
 	mddev->reshape_position = MaxSector;
@@ -8262,7 +8263,7 @@ void md_unregister_thread(struct mddev *mddev, struct md_thread __rcu **threadp)
 }
 EXPORT_SYMBOL(md_unregister_thread);
 
-void md_error(struct mddev *mddev, struct md_rdev *rdev)
+void _md_error(struct mddev *mddev, struct md_rdev *rdev)
 {
 	if (!rdev || test_bit(Faulty, &rdev->flags))
 		return;
@@ -8286,6 +8287,13 @@ void md_error(struct mddev *mddev, struct md_rdev *rdev)
 	if (mddev->event_work.func)
 		queue_work(md_misc_wq, &mddev->event_work);
 	md_new_event();
+}
+
+void md_error(struct mddev *mddev, struct md_rdev *rdev)
+{
+	spin_lock(&mddev->error_handle_lock);
+	_md_error(mddev, rdev);
+	spin_unlock(&mddev->error_handle_lock);
 }
 EXPORT_SYMBOL(md_error);
 
