@@ -67,7 +67,6 @@
 
 #ifdef CONFIG_NET_DSA_MV88E6XXX_PTP
 
-long mv88e6xxx_hwtstamp_work(struct ptp_clock_info *ptp);
 int mv88e6xxx_ptp_setup(struct mv88e6xxx_chip *chip);
 void mv88e6xxx_ptp_free(struct mv88e6xxx_chip *chip);
 
