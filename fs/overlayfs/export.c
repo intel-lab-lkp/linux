@@ -195,6 +195,8 @@ static int ovl_check_encode_origin(struct inode *inode)
 	if (!ovl_inode_lower(inode))
 		return 0;
 
+	if (!inode->i_sb->s_root)
+		return -ENOENT;
 	/*
 	 * Root is never indexed, so if there's an upper layer, encode upper for
 	 * root.
