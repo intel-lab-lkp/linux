@@ -35,7 +35,7 @@
  * @key_size:	Size of the private ECDH key
  */
 struct ecdh {
-	char *key;
+	const char *key;
 	unsigned short key_size;
 };
 
