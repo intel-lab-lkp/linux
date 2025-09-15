@@ -160,14 +160,23 @@ static long kvm_sbi_fwft_set_pointer_masking_pmlen(struct kvm_vcpu *vcpu,
 	struct kvm_sbi_fwft *fwft = vcpu_to_fwft(vcpu);
 	unsigned long pmm;
 
-	if (value == 0)
+	switch (value) {
+	case 0:
 		pmm = ENVCFG_PMM_PMLEN_0;
-	else if (value <= 7 && fwft->have_vs_pmlen_7)
+		break;
+	case 7:
+		if (!fwft->have_vs_pmlen_7)
+			return SBI_ERR_INVALID_PARAM;
 		pmm = ENVCFG_PMM_PMLEN_7;
-	else if (value <= 16 && fwft->have_vs_pmlen_16)
+		break;
+	case 16:
+		if (!fwft->have_vs_pmlen_16)
+			return SBI_ERR_INVALID_PARAM;
 		pmm = ENVCFG_PMM_PMLEN_16;
-	else
+		break;
+	default:
 		return SBI_ERR_INVALID_PARAM;
+	}
 
 	vcpu->arch.cfg.henvcfg &= ~ENVCFG_PMM;
 	vcpu->arch.cfg.henvcfg |= pmm;
