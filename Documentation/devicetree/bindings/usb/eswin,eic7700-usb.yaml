@@ -1,0 +1,99 @@
+# SPDX-License-Identifier: (GPL-2.0-only OR BSD-2-Clause)
+%YAML 1.2
+---
+$id: http://devicetree.org/schemas/usb/eswin,eic7700-usb.yaml#
+$schema: http://devicetree.org/meta-schemas/core.yaml#
+
+title: ESWIN EIC7700 SoC Usb Controller
+
+maintainers:
+  - Wei Yang <yangwei1@eswincomputing.com>
+  - Senchuan Zhang <zhangsenchuan@eswincomputing.com>
+  - Hang Cao <caohang@eswincomputing.com>
+
+description:
+  The Usb controller on EIC7700 SoC.
+
+allOf:
+  - $ref: snps,dwc3-common.yaml#
+
+properties:
+  compatible:
+    const: eswin,eic7700-dwc3
+
+  reg:
+    maxItems: 1
+
+  interrupts:
+    maxItems: 1
+
+  interrupt-names:
+    items:
+      - const: peripheral
+
+  clocks:
+    maxItems: 2
+
+  clock-names:
+    items:
+      - const: aclk
+      - const: cfg
+
+  resets:
+    maxItems: 1
+
+  reset-names:
+    items:
+      - const: vaux
+
+  eswin,hsp-sp-csr:
+    description:
+      HSP CSR is to control and get status of different high-speed peripherals
+      (such as Ethernet, USB, SATA, etc.) via register, which can close
+      module's clock,reset module independently and tune board-level's
+      parameters of PHY, etc.
+    $ref: /schemas/types.yaml#/definitions/phandle-array
+    items:
+      - items:
+          - description: phandle to HSP Register Controller hsp_sp_csr node.
+          - description: usb bus register offset.
+          - description: axi low power register offset.
+          - description: vbus frequency register offset.
+          - description: mpll register offset.
+
+required:
+  - compatible
+  - reg
+  - clocks
+  - clock-names
+  - interrupts
+  - interrupt-names
+  - resets
+  - reset-names
+  - eswin,hsp-sp-csr
+
+unevaluatedProperties: false
+
+examples:
+  - |
+    usb@50480000 {
+        compatible = "eswin,eic7700-dwc3";
+        reg = <0x50480000 0x10000>;
+        clocks = <&clock 170>,
+                 <&clock 171>;
+        clock-names = "aclk", "cfg";
+        interrupt-parent = <&plic>;
+        interrupts = <85>;
+        interrupt-names = "peripheral";
+        resets = <&reset 84>;
+        reset-names = "vaux";
+        dr_mode = "peripheral";
+        maximum-speed = "high-speed";
+        phy_type = "utmi";
+        snps,dis_enblslpm_quirk;
+        snps,dis-u2-freeclk-exists-quirk;
+        snps,dis_u2_susphy_quirk;
+        snps,dis-del-phy-power-chg-quirk;
+        snps,parkmode-disable-ss-quirk;
+        eswin,hsp-sp-csr = <&hsp_sp_csr 0x800 0x818 0x83c 0x840>;
+    };
