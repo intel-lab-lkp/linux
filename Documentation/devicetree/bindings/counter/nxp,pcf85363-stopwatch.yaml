@@ -1,0 +1,49 @@
+# SPDX-License-Identifier: (GPL-2.0-only OR BSD-2-Clause)
+%YAML 1.2
+---
+$id: http://devicetree.org/schemas/counter/nxp,pcf85363-stopwatch.yaml#
+$schema: http://devicetree.org/meta-schemas/core.yaml#
+
+title: NXP PCF85263ATL/PCF85363ATL Stopwatch (counter) mode
+
+maintainers:
+  - Lakshay Piplani <lakshay.piplani@nxp.com>
+
+description: |
+  Binding for NXP PCF82563ATL/PCF85363ATL devices when used in the
+  stopwatch mode. In this mode, the device provides a centi-seconds
+  (1/100th of a second) resolution operating over i2c.
+
+properties:
+  compatible:
+    enum:
+      - nxp,pcf85263atl
+      - nxp,pcf85363atl
+
+  reg:
+    maxItems: 1
+
+  quartz-load-femtofarads:
+    description:
+      The capacitive load of the quartz(x-tal).
+    enum: [6000, 7000, 12500]
+    default: 7000
+
+required:
+  - compatible
+  - reg
+
+additionalProperties: false
+
+examples:
+  - |
+    i2c {
+      #address-cells = <1>;
+      #size-cells = <0>;
+
+      counter@51 {
+        compatible = "nxp,pcf85363atl";
+        reg = <0x51>;
+        quartz-load-femtofarads = <7000>;
+      };
+    };
