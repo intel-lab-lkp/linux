@@ -1494,6 +1494,27 @@
 				      "switch",
 				      "cluster";
 		};
+
+		sysmmu_dpuf0: sysmmu@18040000 {
+			compatible = "samsung,exynos-sysmmu";
+			reg = <0x18040000 0x10000>;
+			interrupts = <GIC_SPI 269 IRQ_TYPE_LEVEL_HIGH>;
+			#iommu-cells = <0>;
+		};
+
+		sysmmu_dpuf1: sysmmu@18440000 {
+			compatible = "samsung,exynos-sysmmu";
+			reg = <0x18440000 0x10000>;
+			interrupts = <GIC_SPI 332 IRQ_TYPE_LEVEL_HIGH>;
+			#iommu-cells = <0>;
+		};
+
+		sysmmu_dpuf2: sysmmu@18840000 {
+			compatible = "samsung,exynos-sysmmu";
+			reg = <0x18840000 0x10000>;
+			interrupts = <GIC_SPI 395 IRQ_TYPE_LEVEL_HIGH>;
+			#iommu-cells = <0>;
+		};
 	};
 
 	timer {
