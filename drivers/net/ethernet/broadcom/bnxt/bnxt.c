@@ -9098,7 +9098,7 @@ static int bnxt_hwrm_func_backing_store_cfg_v2(struct bnxt *bp,
 {
 	struct hwrm_func_backing_store_cfg_v2_input *req;
 	u32 instance_bmap = ctxm->instance_bmap;
-	int i, j, rc = 0, n = 1;
+	int i, rc = 0, n = 1;
 	__le32 *p;
 
 	if (!(ctxm->flags & BNXT_CTX_MEM_TYPE_VALID) || !ctxm->pg_info)
@@ -9128,20 +9128,20 @@ static int bnxt_hwrm_func_backing_store_cfg_v2(struct bnxt *bp,
 	req->subtype_valid_cnt = ctxm->split_entry_cnt;
 	for (i = 0, p = &req->split_entry_0; i < ctxm->split_entry_cnt; i++)
 		p[i] = cpu_to_le32(ctxm->split[i]);
-	for (i = 0, j = 0; j < n && !rc; i++) {
+	for (i = 0; i < n && !rc; i++) {
 		struct bnxt_ctx_pg_info *ctx_pg;
 
 		if (!(instance_bmap & (1 << i)))
 			continue;
 		req->instance = cpu_to_le16(i);
-		ctx_pg = &ctxm->pg_info[j++];
+		ctx_pg = &ctxm->pg_info[i];
 		if (!ctx_pg->entries)
 			continue;
 		req->num_entries = cpu_to_le32(ctx_pg->entries);
 		bnxt_hwrm_set_pg_attr(&ctx_pg->ring_mem,
 				      &req->page_size_pbl_level,
 				      &req->page_dir);
-		if (last && j == n)
+		if (last && i == n - 1)
 			req->flags =
 				cpu_to_le32(FUNC_BACKING_STORE_CFG_V2_REQ_FLAGS_BS_CFG_ALL_DONE);
 		rc = hwrm_req_send(bp, req);
