@@ -107,6 +107,7 @@ void free(void *ptr)
  * environment variable exists its value is returned otherwise NULL is
  * returned.
  */
+#ifndef NOLIBC_NO_STARTCODE
 static __attribute__((unused))
 char *getenv(const char *name)
 {
@@ -122,6 +123,7 @@ char *getenv(const char *name)
 	}
 	return NULL;
 }
+#endif /* NOLIBC_NO_STARTCODE */
 
 static __attribute__((unused))
 void *malloc(size_t len)

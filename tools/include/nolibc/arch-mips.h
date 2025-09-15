@@ -246,6 +246,7 @@
 #endif /* _ABIO32 */
 
 /* startup code, note that it's called __start on MIPS */
+#ifndef NOLIBC_NO_STARTCODE
 void __start(void);
 void __attribute__((weak, noreturn)) __nolibc_entrypoint __no_stack_protector __start(void)
 {
@@ -266,5 +267,6 @@ void __attribute__((weak, noreturn)) __nolibc_entrypoint __no_stack_protector __
 	);
 	__nolibc_entrypoint_epilogue();
 }
+#endif /* NOLIBC_NO_STARTCODE */
 
 #endif /* _NOLIBC_ARCH_MIPS_H */

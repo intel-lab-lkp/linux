@@ -153,6 +153,7 @@
 })
 
 /* startup code */
+#ifndef NOLIBC_NO_STARTCODE
 void __attribute__((weak, noreturn)) __nolibc_entrypoint __no_stack_protector _start(void)
 {
 	__asm__ volatile (
@@ -169,6 +170,7 @@ void __attribute__((weak, noreturn)) __nolibc_entrypoint __no_stack_protector _s
 	);
 	__nolibc_entrypoint_epilogue();
 }
+#endif /* NOLIBC_NO_STARTCODE */
 
 static pid_t getpid(void);
 

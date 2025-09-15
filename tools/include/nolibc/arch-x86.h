@@ -164,6 +164,7 @@
  * 2) The deepest stack frame should be set to zero
  *
  */
+#ifndef NOLIBC_NO_STARTCODE
 void __attribute__((weak, noreturn)) __nolibc_entrypoint __no_stack_protector _start(void)
 {
 	__asm__ volatile (
@@ -176,6 +177,7 @@ void __attribute__((weak, noreturn)) __nolibc_entrypoint __no_stack_protector _s
 	);
 	__nolibc_entrypoint_epilogue();
 }
+#endif /* NOLIBC_NO_STARTCODE */
 
 #else /* !defined(__x86_64__) */
 
@@ -330,6 +332,7 @@ void __attribute__((weak, noreturn)) __nolibc_entrypoint __no_stack_protector _s
  * 2) The deepest stack frame should be zero (the %rbp).
  *
  */
+#ifndef NOLIBC_NO_STARTCODE
 void __attribute__((weak, noreturn)) __nolibc_entrypoint __no_stack_protector _start(void)
 {
 	__asm__ volatile (
@@ -340,6 +343,7 @@ void __attribute__((weak, noreturn)) __nolibc_entrypoint __no_stack_protector _s
 	);
 	__nolibc_entrypoint_epilogue();
 }
+#endif /* NOLIBC_NO_STARTCODE */
 
 #define NOLIBC_ARCH_HAS_MEMMOVE
 void *memmove(void *dst, const void *src, size_t len);
