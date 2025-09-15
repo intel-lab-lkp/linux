@@ -512,15 +512,34 @@ struct ttm_bo_evict_walk {
 	bool try_low;
 	/** @hit_low: If we cannot evict a bo when @try_low is false (first pass) */
 	bool hit_low;
+	/** @only_evict_unprotected: If eviction should be restricted to unprotected BOs */
+	bool only_evict_unprotected;
 };
 
 static s64 ttm_bo_evict_cb(struct ttm_lru_walk *walk, struct ttm_buffer_object *bo)
 {
+	struct dmem_cgroup_pool_state *limit_pool;
 	struct ttm_bo_evict_walk *evict_walk =
 		container_of(walk, typeof(*evict_walk), walk);
 	s64 lret;
 
-	if (!dmem_cgroup_state_evict_valuable(evict_walk->limit_pool, bo->resource->css,
+	/*
+	 * If only_evict_unprotected is set, then we're trying to evict unprotected
+	 * buffers in favor of a protected allocation for charge_pool. Explicitly skip
+	 * buffers belonging to the same cgroup here - that cgroup is definitely protected,
+	 * even though dmem_cgroup_state_evict_valuable would allow the eviction because a
+	 * cgroup is always allowed to evict from itself even if it is protected.
+	 */
+	if (evict_walk->only_evict_unprotected &&
+			bo->resource->css == evict_walk->charge_pool)
+		return 0;
+
+	limit_pool = evict_walk->limit_pool;
+	if (!limit_pool)
+		limit_pool = dmem_cgroup_common_ancestor(bo->resource->css,
+							 evict_walk->charge_pool);
+
+	if (!dmem_cgroup_state_evict_valuable(limit_pool, bo->resource->css,
 					      evict_walk->try_low, &evict_walk->hit_low))
 		return 0;
 
@@ -580,6 +599,7 @@ static int ttm_bo_evict_alloc(struct ttm_device *bdev,
 		.res = res,
 		.charge_pool = charge_pool,
 		.limit_pool = limit_pool,
+		.only_evict_unprotected = only_evict_unprotected,
 	};
 	s64 lret;
 
