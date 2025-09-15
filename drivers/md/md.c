@@ -1007,10 +1007,8 @@ static void super_written(struct bio *bio)
 		if (!test_bit(Faulty, &rdev->flags)
 		    && (bio->bi_opf & MD_FAILFAST)) {
 			set_bit(MD_SB_NEED_REWRITE, &mddev->sb_flags);
-			set_bit(LastDev, &rdev->flags);
 		}
-	} else
-		clear_bit(LastDev, &rdev->flags);
+	}
 
 	bio_put(bio);
 

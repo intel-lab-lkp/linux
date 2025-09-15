@@ -1984,6 +1984,33 @@ static int enough(struct r10conf *conf, int ignore)
 }
 
 /**
+ * update_lastdev - Set or clear LastDev flag for all rdevs in array
+ * @conf: pointer to r10conf
+ *
+ * Sets LastDev if the device is In_sync and cannot be lost for the array.
+ * Otherwise, clear it.
+ *
+ * Caller must hold ->reconfig_mutex or ->device_lock.
+ */
+static void update_lastdev(struct r10conf *conf)
+{
+	int i;
+	int raid_disks = max(conf->geo.raid_disks, conf->prev.raid_disks);
+
+	for (i = 0; i < raid_disks; i++) {
+		struct md_rdev *rdev = conf->mirrors[i].rdev;
+
+		if (rdev) {
+			if (test_bit(In_sync, &rdev->flags) &&
+			    !enough(conf, i))
+				set_bit(LastDev, &rdev->flags);
+			else
+				clear_bit(LastDev, &rdev->flags);
+		}
+	}
+}
+
+/**
  * raid10_error() - RAID10 error handler.
  * @mddev: affected md device.
  * @rdev: member device to fail.
@@ -2013,8 +2040,10 @@ static void raid10_error(struct mddev *mddev, struct md_rdev *rdev)
 			return;
 		}
 	}
-	if (test_and_clear_bit(In_sync, &rdev->flags))
+	if (test_and_clear_bit(In_sync, &rdev->flags)) {
 		mddev->degraded++;
+		update_lastdev(conf);
+	}
 
 	set_bit(MD_RECOVERY_INTR, &mddev->recovery);
 	set_bit(Blocked, &rdev->flags);
@@ -2102,6 +2131,7 @@ static int raid10_spare_active(struct mddev *mddev)
 	}
 	spin_lock_irqsave(&conf->device_lock, flags);
 	mddev->degraded -= count;
+	update_lastdev(conf);
 	spin_unlock_irqrestore(&conf->device_lock, flags);
 
 	print_conf(conf);
@@ -4159,6 +4189,7 @@ static int raid10_run(struct mddev *mddev)
 	md_set_array_sectors(mddev, size);
 	mddev->resync_max_sectors = size;
 	set_bit(MD_FAILFAST_SUPPORTED, &mddev->flags);
+	update_lastdev(conf);
 
 	if (md_integrity_register(mddev))
 		goto out_free_conf;
@@ -4567,6 +4598,7 @@ out:
 	 */
 	spin_lock_irq(&conf->device_lock);
 	mddev->degraded = calc_degraded(conf);
+	update_lastdev(conf);
 	spin_unlock_irq(&conf->device_lock);
 	mddev->raid_disks = conf->geo.raid_disks;
 	mddev->reshape_position = conf->reshape_progress;

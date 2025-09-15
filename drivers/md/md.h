@@ -281,9 +281,9 @@ enum flag_bits {
 				 * It is expects that no bad block log
 				 * is present.
 				 */
-	LastDev,		/* Seems to be the last working dev as
-				 * it didn't fail, so don't use FailFast
-				 * any more for metadata
+	LastDev,		/* This is the last working rdev.
+				 * so don't use FailFast any more for
+				 * metadata.
 				 */
 	CollisionCheck,		/*
 				 * check if there is collision between raid1

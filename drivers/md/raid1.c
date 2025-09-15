@@ -1734,6 +1734,33 @@ static void raid1_status(struct seq_file *seq, struct mddev *mddev)
 }
 
 /**
+ * update_lastdev - Set or clear LastDev flag for all rdevs in array
+ * @conf: pointer to r1conf
+ *
+ * Sets LastDev if the device is In_sync and cannot be lost for the array.
+ * Otherwise, clear it.
+ *
+ * Caller must hold ->device_lock.
+ */
+static void update_lastdev(struct r1conf *conf)
+{
+	int i;
+	int alive_disks = conf->raid_disks - conf->mddev->degraded;
+
+	for (i = 0; i < conf->raid_disks; i++) {
+		struct md_rdev *rdev = conf->mirrors[i].rdev;
+
+		if (rdev) {
+			if (test_bit(In_sync, &rdev->flags) &&
+			    alive_disks == 1)
+				set_bit(LastDev, &rdev->flags);
+			else
+				clear_bit(LastDev, &rdev->flags);
+		}
+	}
+}
+
+/**
  * raid1_error() - RAID1 error handler.
  * @mddev: affected md device.
  * @rdev: member device to fail.
@@ -1767,8 +1794,10 @@ static void raid1_error(struct mddev *mddev, struct md_rdev *rdev)
 		}
 	}
 	set_bit(Blocked, &rdev->flags);
-	if (test_and_clear_bit(In_sync, &rdev->flags))
+	if (test_and_clear_bit(In_sync, &rdev->flags)) {
 		mddev->degraded++;
+		update_lastdev(conf);
+	}
 	set_bit(Faulty, &rdev->flags);
 	spin_unlock_irqrestore(&conf->device_lock, flags);
 	/*
@@ -1864,6 +1893,7 @@ static int raid1_spare_active(struct mddev *mddev)
 		}
 	}
 	mddev->degraded -= count;
+	update_lastdev(conf);
 	spin_unlock_irqrestore(&conf->device_lock, flags);
 
 	print_conf(conf);
@@ -3290,6 +3320,7 @@ static int raid1_run(struct mddev *mddev)
 	rcu_assign_pointer(conf->thread, NULL);
 	mddev->private = conf;
 	set_bit(MD_FAILFAST_SUPPORTED, &mddev->flags);
+	update_lastdev(conf);
 
 	md_set_array_sectors(mddev, raid1_size(mddev, 0, 0));
 
@@ -3427,6 +3458,7 @@ static int raid1_reshape(struct mddev *mddev)
 
 	spin_lock_irqsave(&conf->device_lock, flags);
 	mddev->degraded += (raid_disks - conf->raid_disks);
+	update_lastdev(conf);
 	spin_unlock_irqrestore(&conf->device_lock, flags);
 	conf->raid_disks = mddev->raid_disks = raid_disks;
 	mddev->delta_disks = 0;
