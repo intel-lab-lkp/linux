@@ -909,7 +909,7 @@ struct compact_control {
 					 * isolation or migration failures to
 					 * ensure forward progress.
 					 */
-	bool alloc_contig;		/* alloc_contig_range allocation */
+	bool migrate_large;             /* Always migrate large/huge pages */
 };
 
 /*

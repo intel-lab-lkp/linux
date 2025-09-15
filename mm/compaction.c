@@ -793,13 +793,15 @@ static bool too_many_isolated(struct compact_control *cc)
 /**
  * skip_isolation_on_order() - determine when to skip folio isolation based on
  *			       folio order and compaction target order
+ * @cc:			compact control structure containing target order
  * @order:		to-be-isolated folio order
- * @target_order:	compaction target order
  *
  * This avoids unnecessary folio isolations during compaction.
  */
-static bool skip_isolation_on_order(int order, int target_order)
+static bool skip_isolation_on_order(struct compact_control *cc, int order)
 {
+	if (cc->migrate_large)
+		return false;
 	/*
 	 * Unless we are performing global compaction (i.e.,
 	 * is_via_compact_memory), skip any folios that are larger than the
@@ -807,7 +809,7 @@ static bool skip_isolation_on_order(int order, int target_order)
 	 * the desired target_order, so migrating this folio would likely fail
 	 * later.
 	 */
-	if (!is_via_compact_memory(target_order) && order >= target_order)
+	if (!is_via_compact_memory(cc->order) && order >= cc->order)
 		return true;
 	/*
 	 * We limit memory compaction to pageblocks and won't try
@@ -850,6 +852,7 @@ isolate_migratepages_block(struct compact_control *cc, unsigned long low_pfn,
 	unsigned long next_skip_pfn = 0;
 	bool skip_updated = false;
 	int ret = 0;
+	unsigned int order;
 
 	cc->migrate_pfn = low_pfn;
 
@@ -948,13 +951,13 @@ isolate_migratepages_block(struct compact_control *cc, unsigned long low_pfn,
 		}
 
 		if (PageHuge(page)) {
-			const unsigned int order = compound_order(page);
 			/*
 			 * skip hugetlbfs if we are not compacting for pages
 			 * bigger than its order. THPs and other compound pages
 			 * are handled below.
 			 */
-			if (!cc->alloc_contig) {
+			if (!cc->migrate_large) {
+				order = compound_order(page);
 
 				if (order <= MAX_PAGE_ORDER) {
 					low_pfn += (1UL << order) - 1;
@@ -962,7 +965,7 @@ isolate_migratepages_block(struct compact_control *cc, unsigned long low_pfn,
 				}
 				goto isolate_fail;
 			}
-			/* for alloc_contig case */
+			/* for migrate_large case */
 			if (locked) {
 				unlock_page_lruvec_irqrestore(locked, flags);
 				locked = NULL;
@@ -1030,11 +1033,11 @@ isolate_migratepages_block(struct compact_control *cc, unsigned long low_pfn,
 		 * skip them at once. The check is racy, but we can consider
 		 * only valid values and the only danger is skipping too much.
 		 */
-		if (PageCompound(page) && !cc->alloc_contig) {
-			const unsigned int order = compound_order(page);
+		if (PageCompound(page)) {
+			order = compound_order(page);
 
 			/* Skip based on page order and compaction target order. */
-			if (skip_isolation_on_order(order, cc->order)) {
+			if (skip_isolation_on_order(cc, order)) {
 				if (order <= MAX_PAGE_ORDER) {
 					low_pfn += (1UL << order) - 1;
 					nr_scanned += (1UL << order) - 1;
@@ -1182,9 +1185,8 @@ isolate_migratepages_block(struct compact_control *cc, unsigned long low_pfn,
 			/*
 			 * Check LRU folio order under the lock
 			 */
-			if (unlikely(skip_isolation_on_order(folio_order(folio),
-							     cc->order) &&
-				     !cc->alloc_contig)) {
+			order = folio_order(folio);
+			if (unlikely(skip_isolation_on_order(cc, order))) {
 				low_pfn += folio_nr_pages(folio) - 1;
 				nr_scanned += folio_nr_pages(folio) - 1;
 				folio_set_lru(folio);
