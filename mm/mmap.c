@@ -374,7 +374,7 @@ unsigned long do_mmap(struct file *file, unsigned long addr,
 		return -EOVERFLOW;
 
 	/* Too many mappings? */
-	if (mm->map_count >= sysctl_max_map_count)
+	if (!vma_count_remaining(mm))
 		return -ENOMEM;
 
 	/*
@@ -1503,6 +1503,25 @@ struct vm_area_struct *_install_special_mapping(
 		defined(CONFIG_ARCH_WANT_DEFAULT_TOPDOWN_MMAP_LAYOUT)
 int sysctl_legacy_va_layout;
 #endif
+
+static int sysctl_max_map_count __read_mostly = DEFAULT_MAX_MAP_COUNT;
+
+/**
+ * vma_count_remaining - Determine available VMA slots
+ * @mm: The memory descriptor for the process.
+ *
+ * Check how many more VMAs can be created for the given @mm
+ * before hitting the sysctl_max_map_count limit.
+ *
+ * Return: The number of new VMAs the process can accommodate.
+ */
+int vma_count_remaining(const struct mm_struct *mm)
+{
+	const int map_count = mm->map_count;
+	const int max_count = sysctl_max_map_count;
+
+	return (max_count > map_count) ? (max_count - map_count) : 0;
+}
 
 static const struct ctl_table mmap_table[] = {
 		{
