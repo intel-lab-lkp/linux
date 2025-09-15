@@ -14,8 +14,10 @@
 #include <linux/iommu.h>
 #include <linux/types.h>
 #include <linux/iopoll.h>
+#include <linux/perf_event.h>
 
 #include "iommu-bits.h"
+#include "iommu-perf.h"
 
 struct riscv_iommu_device;
 
@@ -60,6 +62,12 @@ struct riscv_iommu_device {
 	unsigned int ddt_mode;
 	dma_addr_t ddt_phys;
 	u64 *ddt_root;
+
+	iohpmevt_t iohpmevt[RISCV_IOMMU_IOHPMCTR_CNT];
+	unsigned long iohpmctr_bitmap;
+	struct riscv_iommu_pmu *pmu;
+	int hpm_irq;
+	struct riscv_iommu_perf_event *events[RISCV_IOMMU_IOHPMCTR_CNT];
 };
 
 int riscv_iommu_init(struct riscv_iommu_device *iommu);
