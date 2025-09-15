@@ -152,7 +152,9 @@ static u32 lv2ent_offset(sysmmu_iova_t iova)
 
 #define MMU_MAJ_VER(val)	((val) >> 7)
 #define MMU_MIN_VER(val)	((val) & 0x7F)
-#define MMU_RAW_VER(reg)	(((reg) >> 21) & ((1 << 11) - 1)) /* 11 bits */
+#define MMU_RAW_VER(reg)	(((reg) >> 28 < 7) ? \
+				(((reg) >> 21) & ((1 << 11) - 1)) : \
+				(((reg) >> 24) & ((1 << 8) - 1)))
 
 #define MAKE_MMU_VER(maj, min)	((((maj) & 0xF) << 7) | ((min) & 0x7F))
 
@@ -170,6 +172,17 @@ static u32 lv2ent_offset(sysmmu_iova_t iova)
 #define REG_V7_CAPA0		0x870
 #define REG_V7_CAPA1		0x874
 #define REG_V7_CTRL_VM		0x8000
+
+/* v9.x registers */
+#define REG_V9_CTRL_VM				0x8000
+#define REG_MMU_CONTEXT0_CFG_ATTRIBUTE_VM       0x8408
+
+#define MMU_MAJ_VER_V9(val)		((val) >> 4)
+#define MMU_MIN_VER_V9(val)		((val) & 0xF)
+#define MMU_RAW_VER_V9(reg)		(((reg) >> 24) & ((1 << 8) - 1)) /* 8 bits */
+
+#define MAKE_MMU_VER_V9(maj, min)	((((maj) & 0xF) << 7) | ((min) & 0xF))
+#define MAKE_MMU_VM_OFFSET(vid)		((vid) * 0x1000)
 
 #define has_sysmmu(dev)		(dev_iommu_priv_get(dev) != NULL)
 
@@ -225,6 +238,14 @@ static const char * const sysmmu_v7_fault_names[] = {
 	"PTW",
 	"PAGE",
 	"ACCESS PROTECTION",
+	"RESERVED"
+};
+
+static const char * const sysmmu_v9_fault_names[] = {
+	"PTW",
+	"PAGE",
+	"ACCESS PROTECTION",
+	"CONTEXT_FAULT",
 	"RESERVED"
 };
 
@@ -363,6 +384,19 @@ static int exynos_sysmmu_v7_get_fault_info(struct sysmmu_drvdata *data,
 	return 0;
 }
 
+static int exynos_sysmmu_v9_get_fault_info(struct sysmmu_drvdata *data,
+					   unsigned int itype,
+					   struct sysmmu_fault *fault)
+{
+	u32 info = readl(SYSMMU_REG(data, fault_info));
+
+	fault->addr = readl(SYSMMU_REG(data, fault_va));
+	fault->name = sysmmu_v9_fault_names[itype % 5];
+	fault->type = (info & BIT(20)) ? IOMMU_FAULT_WRITE : IOMMU_FAULT_READ;
+
+	return 0;
+}
+
 /* SysMMU v1..v3 */
 static const struct sysmmu_variant sysmmu_v1_variant = {
 	.flush_all	= 0x0c,
@@ -418,6 +452,21 @@ static const struct sysmmu_variant sysmmu_v7_vm_variant = {
 	.fault_info	= 0x1004,
 
 	.get_fault_info	= exynos_sysmmu_v7_get_fault_info,
+};
+
+/* SysMMU v9: VM capable register layout */
+static const struct sysmmu_variant sysmmu_v9_vm_variant = {
+	.pt_base        = 0x8404,
+	.flush_all      = 0x8010,
+	.flush_entry    = 0x8014,
+	.flush_start    = 0x8020,
+	.flush_end      = 0x8024,
+	.int_status     = 0x8060,
+	.int_clear      = 0x8064,
+	.fault_va       = 0x8070,
+	.fault_info     = 0x8074,
+
+	.get_fault_info = exynos_sysmmu_v9_get_fault_info,
 };
 
 static struct exynos_iommu_domain *to_exynos_domain(struct iommu_domain *dom)
@@ -522,19 +571,26 @@ static void __sysmmu_get_version(struct sysmmu_drvdata *data)
 	ver = readl(data->sfrbase + REG_MMU_VERSION);
 
 	/* controllers on some SoCs don't report proper version */
+
 	if (ver == 0x80000001u)
 		data->version = MAKE_MMU_VER(1, 0);
 	else
 		data->version = MMU_RAW_VER(ver);
 
-	dev_dbg(data->sysmmu, "hardware version: %d.%d\n",
-		MMU_MAJ_VER(data->version), MMU_MIN_VER(data->version));
+	if (data->version != 0x91)
+		dev_err(data->sysmmu, "hardware version: %d.%d\n",
+			MMU_MAJ_VER(data->version), MMU_MIN_VER(data->version));
+	else if (data->version == 0x91)
+		dev_err(data->sysmmu, "hardware version: %d.%d\n",
+			MMU_MAJ_VER_V9(data->version), MMU_MIN_VER_V9(data->version));
 
-	if (MMU_MAJ_VER(data->version) < 5) {
+	if (data->version == 0x91) {
+		data->variant = &sysmmu_v9_vm_variant;
+	} else if (MMU_MAJ_VER(data->version) < 5) {
 		data->variant = &sysmmu_v1_variant;
 	} else if (MMU_MAJ_VER(data->version) < 7) {
 		data->variant = &sysmmu_v5_variant;
-	} else {
+	} else if (MMU_MAJ_VER(data->version) < 9) {
 		if (__sysmmu_has_capa1(data))
 			__sysmmu_get_vcr(data);
 		if (data->has_vcr)
@@ -763,10 +819,9 @@ static int exynos_sysmmu_probe(struct platform_device *pdev)
 	if (IS_ERR(data->pclk))
 		return PTR_ERR(data->pclk);
 
-	if (!data->clk && (!data->aclk || !data->pclk)) {
-		dev_err(dev, "Failed to get device clock(s)!\n");
-		return -ENOSYS;
-	}
+	/* There is no clock information after v9 */
+	if (!data->clk && (!data->aclk || !data->pclk))
+		dev_warn(dev, "Failed to get device clock(s)!\n");
 
 	data->clk_master = devm_clk_get_optional(dev, "master");
 	if (IS_ERR(data->clk_master))
