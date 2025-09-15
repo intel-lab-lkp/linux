@@ -19,6 +19,11 @@
 
 #define INVALID_PHYS_ADDR (~(phys_addr_t)0)
 
+#define BOUNCE_PAGE_SHIFT	12
+#define BOUNCE_PAGE_SIZE	(1 << BOUNCE_PAGE_SHIFT)
+#define BOUNCE_PAGE_MASK	(~(BOUNCE_PAGE_SIZE - 1))
+#define BOUNCE_PAGE_ALIGN(addr)	(((addr) + BOUNCE_PAGE_SIZE - 1) & ~(BOUNCE_PAGE_SIZE - 1))
+
 struct vduse_bounce_map {
 	struct page *bounce_page;
 	struct page *user_bounce_page;
