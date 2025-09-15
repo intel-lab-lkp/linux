@@ -473,6 +473,20 @@ config BATTERY_MAX1721X
 	  Say Y here to enable support for the MAX17211/MAX17215 standalone
 	  battery gas-gauge.
 
+config BATTERY_MAX77759
+	tristate "Maxim Integrated MAX77759 Fuel Gauge"
+	depends on I2C
+	select REGMAP_I2C
+	help
+	  Say yes to enable support for the Fuel gauge of the Maxim Integrated
+	  MAX77759. It is a companion Power Management IC for USB Type-C
+	  applications with Battery Charger, Fuel Gauge, temperature sensors,
+	  USB Type-C Port Controller (TCPC), NVMEM, and additional GPIO
+	  interfaces.
+
+	  To compile this driver as module, choose M here: the
+	  module will be called max77759_fg.
+
 config BATTERY_TWL4030_MADC
 	tristate "TWL4030 MADC battery driver"
 	depends on TWL4030_MADC
