@@ -41,18 +41,16 @@ static const int fifo_batch = 16;       /* # of sequential requests treated as o
 enum dd_data_dir {
 	DD_READ		= READ,
 	DD_WRITE	= WRITE,
+	DD_DIR_COUNT	= 2
 };
 
-enum { DD_DIR_COUNT = 2 };
-
+/* Ensure that "DD_RT_PRIO < DD_BE_PRIO < DD_IDLE_PRIO" */
 enum dd_prio {
-	DD_RT_PRIO	= 0,
-	DD_BE_PRIO	= 1,
-	DD_IDLE_PRIO	= 2,
-	DD_PRIO_MAX	= 2,
+	DD_RT_PRIO,
+	DD_BE_PRIO,
+	DD_IDLE_PRIO,
+	DD_PRIO_COUNT
 };
-
-enum { DD_PRIO_COUNT = 3 };
 
 /*
  * I/O statistics per I/O priority. It is fine if these counters overflow.
@@ -441,7 +439,7 @@ static struct request *dd_dispatch_prio_aged_requests(struct deadline_data *dd,
 	if (prio_cnt < 2)
 		return NULL;
 
-	for (prio = DD_BE_PRIO; prio <= DD_PRIO_MAX; prio++) {
+	for (prio = DD_BE_PRIO; prio < DD_PRIO_COUNT; prio++) {
 		rq = __dd_dispatch_request(dd, &dd->per_prio[prio],
 					   now - dd->prio_aging_expire);
 		if (rq)
@@ -475,7 +473,7 @@ static struct request *dd_dispatch_request(struct blk_mq_hw_ctx *hctx)
 	 * Next, dispatch requests in priority order. Ignore lower priority
 	 * requests if any higher priority requests are pending.
 	 */
-	for (prio = 0; prio <= DD_PRIO_MAX; prio++) {
+	for (prio = 0; prio < DD_PRIO_COUNT; prio++) {
 		rq = __dd_dispatch_request(dd, &dd->per_prio[prio], now);
 		if (rq || dd_queued(dd, prio))
 			break;
@@ -520,7 +518,7 @@ static void dd_exit_sched(struct elevator_queue *e)
 	struct deadline_data *dd = e->elevator_data;
 	enum dd_prio prio;
 
-	for (prio = 0; prio <= DD_PRIO_MAX; prio++) {
+	for (prio = 0; prio < DD_PRIO_COUNT; prio++) {
 		struct dd_per_prio *per_prio = &dd->per_prio[prio];
 		const struct io_stats_per_prio *stats = &per_prio->stats;
 		uint32_t queued;
@@ -555,7 +553,7 @@ static int dd_init_sched(struct request_queue *q, struct elevator_queue *eq)
 
 	eq->elevator_data = dd;
 
-	for (prio = 0; prio <= DD_PRIO_MAX; prio++) {
+	for (prio = 0; prio < DD_PRIO_COUNT; prio++) {
 		struct dd_per_prio *per_prio = &dd->per_prio[prio];
 
 		INIT_LIST_HEAD(&per_prio->dispatch);
@@ -739,7 +737,7 @@ static bool dd_has_work(struct blk_mq_hw_ctx *hctx)
 	struct deadline_data *dd = hctx->queue->elevator->elevator_data;
 	enum dd_prio prio;
 
-	for (prio = 0; prio <= DD_PRIO_MAX; prio++)
+	for (prio = 0; prio < DD_PRIO_COUNT; prio++)
 		if (dd_has_work_for_prio(&dd->per_prio[prio]))
 			return true;
 
