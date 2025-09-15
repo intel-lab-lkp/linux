@@ -16,80 +16,80 @@ v1 is available under :ref:`Documentation/admin-guide/cgroup-v1/index.rst <cgrou
 .. CONTENTS
 
    1. Introduction
-     1-1. Terminology
-     1-2. What is cgroup?
+     1.1. Terminology
+     1.2. What is cgroup?
    2. Basic Operations
-     2-1. Mounting
-     2-2. Organizing Processes and Threads
-       2-2-1. Processes
-       2-2-2. Threads
-     2-3. [Un]populated Notification
-     2-4. Controlling Controllers
-       2-4-1. Enabling and Disabling
-       2-4-2. Top-down Constraint
-       2-4-3. No Internal Process Constraint
-     2-5. Delegation
-       2-5-1. Model of Delegation
-       2-5-2. Delegation Containment
-     2-6. Guidelines
-       2-6-1. Organize Once and Control
-       2-6-2. Avoid Name Collisions
+     2.1. Mounting
+     2.2. Organizing Processes and Threads
+       2.2.1. Processes
+       2.2.2. Threads
+     2.3. [Un]populated Notification
+     2.4. Controlling Controllers
+       2.4.1. Enabling and Disabling
+       2.4.2. Top-down Constraint
+       2.4.3. No Internal Process Constraint
+     2.5. Delegation
+       2.5.1. Model of Delegation
+       2.5.2. Delegation Containment
+     2.6. Guidelines
+       2.6.1. Organize Once and Control
+       2.6.2. Avoid Name Collisions
    3. Resource Distribution Models
-     3-1. Weights
-     3-2. Limits
-     3-3. Protections
-     3-4. Allocations
+     3.1. Weights
+     3.2. Limits
+     3.3. Protections
+     3.4. Allocations
    4. Interface Files
-     4-1. Format
-     4-2. Conventions
-     4-3. Core Interface Files
+     4.1. Format
+     4.2. Conventions
+     4.3. Core Interface Files
    5. Controllers
-     5-1. CPU
-       5-1-1. CPU Interface Files
-     5-2. Memory
-       5-2-1. Memory Interface Files
-       5-2-2. Usage Guidelines
-       5-2-3. Memory Ownership
-     5-3. IO
-       5-3-1. IO Interface Files
-       5-3-2. Writeback
-       5-3-3. IO Latency
-         5-3-3-1. How IO Latency Throttling Works
-         5-3-3-2. IO Latency Interface Files
-       5-3-4. IO Priority
-     5-4. PID
-       5-4-1. PID Interface Files
-     5-5. Cpuset
-       5.5-1. Cpuset Interface Files
-     5-6. Device
-     5-7. RDMA
-       5-7-1. RDMA Interface Files
-     5-8. DMEM
-     5-9. HugeTLB
-       5.9-1. HugeTLB Interface Files
-     5-10. Misc
-       5.10-1 Miscellaneous cgroup Interface Files
-       5.10-2 Migration and Ownership
-     5-11. Others
-       5-11-1. perf_event
-     5-N. Non-normative information
-       5-N-1. CPU controller root cgroup process behaviour
-       5-N-2. IO controller root cgroup process behaviour
+     5.1. CPU
+       5.1.1. CPU Interface Files
+     5.2. Memory
+       5.2.1. Memory Interface Files
+       5.2.2. Usage Guidelines
+       5.2.3. Memory Ownership
+     5.3. IO
+       5.3.1. IO Interface Files
+       5.3.2. Writeback
+       5.3.3. IO Latency
+         5.3.3.1. How IO Latency Throttling Works
+         5.3.3.2. IO Latency Interface Files
+       5.3.4. IO Priority
+     5.4. PID
+       5.4.1. PID Interface Files
+     5.5. Cpuset
+       5.5.1. Cpuset Interface Files
+     5.6. Device
+     5.7. RDMA
+       5.7.1. RDMA Interface Files
+     5.8. DMEM
+     5.9. HugeTLB
+       5.9.1. HugeTLB Interface Files
+     5.10. Misc
+       5.10.1 Miscellaneous cgroup Interface Files
+       5.10.2 Migration and Ownership
+     5.11. Others
+       5.11.1. perf_event
+     5.N. Non-normative information
+       5.N.1. CPU controller root cgroup process behaviour
+       5.N.2. IO controller root cgroup process behaviour
    6. Namespace
-     6-1. Basics
-     6-2. The Root and Views
-     6-3. Migration and setns(2)
-     6-4. Interaction with Other Namespaces
+     6.1. Basics
+     6.2. The Root and Views
+     6.3. Migration and setns(2)
+     6.4. Interaction with Other Namespaces
    P. Information on Kernel Programming
-     P-1. Filesystem Support for Writeback
+     P.1. Filesystem Support for Writeback
    D. Deprecated v1 Core Features
    R. Issues with v1 and Rationales for v2
-     R-1. Multiple Hierarchies
-     R-2. Thread Granularity
-     R-3. Competition Between Inner Nodes and Threads
-     R-4. Other Interface Issues
-     R-5. Controller Issues and Remedies
-       R-5-1. Memory
+     R.1. Multiple Hierarchies
+     R.2. Thread Granularity
+     R.3. Competition Between Inner Nodes and Threads
+     R.4. Other Interface Issues
+     R.5. Controller Issues and Remedies
+       R.5.1. Memory
 
 
 Introduction
