@@ -2144,6 +2144,14 @@ out:
 	count_vm_events(THP_MIGRATION_SUCCESS, stats.nr_thp_succeeded);
 	count_vm_events(THP_MIGRATION_FAIL, stats.nr_thp_failed);
 	count_vm_events(THP_MIGRATION_SPLIT, stats.nr_thp_split);
+
+	if (reason == MR_CMA_BALANCE) {
+		count_vm_events(CMA_BALANCE_MIGRATE_SUCCESS,
+				stats.nr_succeeded);
+		count_vm_events(CMA_BALANCE_MIGRATE_FAIL,
+				stats.nr_failed_pages);
+	}
+
 	trace_mm_migrate_pages(stats.nr_succeeded, stats.nr_failed_pages,
 			       stats.nr_thp_succeeded, stats.nr_thp_failed,
 			       stats.nr_thp_split, stats.nr_split, mode,

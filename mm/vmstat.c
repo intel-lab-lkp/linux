@@ -1392,6 +1392,8 @@ const char * const vmstat_text[] = {
 #ifdef CONFIG_CMA
 	[I(CMA_ALLOC_SUCCESS)]			= "cma_alloc_success",
 	[I(CMA_ALLOC_FAIL)]			= "cma_alloc_fail",
+	[I(CMA_BALANCE_MIGRATE_SUCCESS)]	= "cma_balance_migrate_success",
+	[I(CMA_BALANCE_MIGRATE_FAIL)]		= "cma_balance_migrate_fail",
 #endif
 	[I(UNEVICTABLE_PGCULLED)]		= "unevictable_pgs_culled",
 	[I(UNEVICTABLE_PGSCANNED)]		= "unevictable_pgs_scanned",
