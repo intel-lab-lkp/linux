@@ -543,8 +543,8 @@ static int edt_ft5x06_report_rate_get(struct edt_ft5x06_ts_data *tsdata)
 	return 0;
 }
 
-static ssize_t report_rate_show(struct device *dev,
-				struct device_attribute *dattr, char *buf)
+static ssize_t report_rate_hz_show(struct device *dev,
+				   struct device_attribute *dattr, char *buf)
 {
 	struct i2c_client *client = to_i2c_client(dev);
 	struct edt_ft5x06_ts_data *tsdata = i2c_get_clientdata(client);
@@ -597,9 +597,9 @@ static int edt_ft5x06_report_rate_set(struct edt_ft5x06_ts_data *tsdata,
 			    val);
 }
 
-static ssize_t report_rate_store(struct device *dev,
-				 struct device_attribute *dattr,
-				 const char *buf, size_t count)
+static ssize_t report_rate_hz_store(struct device *dev,
+				    struct device_attribute *dattr,
+				    const char *buf, size_t count)
 {
 	struct i2c_client *client = to_i2c_client(dev);
 	struct edt_ft5x06_ts_data *tsdata = i2c_get_clientdata(client);
@@ -645,7 +645,7 @@ out:
 	return error ?: count;
 }
 
-static DEVICE_ATTR_RW(report_rate);
+static DEVICE_ATTR_RW(report_rate_hz);
 
 static ssize_t model_show(struct device *dev, struct device_attribute *attr,
 			  char *buf)
@@ -699,7 +699,7 @@ static struct attribute *edt_ft5x06_attrs[] = {
 	&edt_ft5x06_attr_offset_x.dattr.attr,
 	&edt_ft5x06_attr_offset_y.dattr.attr,
 	&edt_ft5x06_attr_threshold.dattr.attr,
-	&dev_attr_report_rate.attr,
+	&dev_attr_report_rate_hz.attr,
 	&dev_attr_model.attr,
 	&dev_attr_fw_version.attr,
 	&dev_attr_header_errors.attr,
