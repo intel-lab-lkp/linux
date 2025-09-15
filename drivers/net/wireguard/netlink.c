@@ -453,6 +453,8 @@ static int set_peer(struct wg_device *wg, struct nlattr **attrs)
 			wg_socket_set_peer_endpoint(peer, &endpoint);
 		} else if (len == sizeof(struct sockaddr_in6) && addr->sa_family == AF_INET6) {
 			endpoint.addr6 = *(struct sockaddr_in6 *)addr;
+			if (!__ipv6_addr_needs_scope_id(ipv6_addr_type(&endpoint.addr6.sin6_addr)))
+				endpoint.addr6.sin6_scope_id = 0;
 			wg_socket_set_peer_endpoint(peer, &endpoint);
 		}
 	}
