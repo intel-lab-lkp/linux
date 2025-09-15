@@ -205,13 +205,13 @@ struct tegra_actmon_emc_ratio {
 };
 
 static const struct tegra_actmon_emc_ratio actmon_emc_ratios[] = {
-	{ 1400000,    KHZ_MAX },
-	{ 1200000,    750000 },
-	{ 1100000,    600000 },
-	{ 1000000,    500000 },
-	{  800000,    375000 },
-	{  500000,    200000 },
-	{  250000,    100000 },
+	{ .cpu_freq = 1400000, .emc_freq = KHZ_MAX },
+	{ .cpu_freq = 1200000, .emc_freq = 750000 },
+	{ .cpu_freq = 1100000, .emc_freq = 600000 },
+	{ .cpu_freq = 1000000, .emc_freq = 500000 },
+	{ .cpu_freq =  800000, .emc_freq = 375000 },
+	{ .cpu_freq =  500000, .emc_freq = 200000 },
+	{ .cpu_freq =  250000, .emc_freq = 100000 },
 };
 
 static u32 actmon_readl(struct tegra_devfreq *tegra, u32 offset)
