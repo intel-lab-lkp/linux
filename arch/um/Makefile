@@ -78,6 +78,25 @@ USER_CFLAGS = $(patsubst $(KERNEL_DEFINES),,$(patsubst -I%,,$(KBUILD_CFLAGS))) \
 		-include $(srctree)/include/linux/kern_levels.h \
 		-include $(srctree)/$(ARCH_DIR)/include/shared/user.h
 
+NOLIBC_CFLAGS = $(patsubst $(KERNEL_DEFINES),,$(patsubst -I%,,$(KBUILD_CFLAGS))) \
+		$(ARCH_INCLUDE) $(MODE_INCLUDE) $(filter -I%,$(CFLAGS)) \
+		-I $(srctree)/tools/include \
+		-D__EXPORTED_HEADERS__ \
+		-D__UM_HOST__ -D__UM_NOLIBC__ \
+		-DNOLIBC_NO_STARTCODE \
+		-DNOLIBC_IGNORE_ERRNO \
+		-nostdlib -nostdinc -static \
+		-I$(srctree)/include/uapi \
+		-I$(srctree)/$(HOST_DIR)/include/uapi \
+		-I$(objtree)/$(HOST_DIR)/include/generated/uapi \
+		-I $(srctree)/tools/include/nolibc \
+		-I $(srctree)/usr/include \
+		-include $(srctree)/include/generated/autoconf.h \
+		-include $(srctree)/tools/include/linux/kconfig.h \
+		-include $(srctree)/include/linux/kern_levels.h \
+		-include $(srctree)/tools/include/nolibc/nolibc.h \
+		-include $(srctree)/$(ARCH_DIR)/include/shared/user.h
+
 #This will adjust *FLAGS accordingly to the platform.
 include $(srctree)/$(ARCH_DIR)/Makefile-os-Linux
 
@@ -157,4 +176,4 @@ archclean:
 		-o -name '*.gcov' \) -type f -print | xargs rm -f
 	$(Q)$(MAKE) -f $(srctree)/Makefile ARCH=$(HEADER_ARCH) clean
 
-export HEADER_ARCH SUBARCH USER_CFLAGS CFLAGS_NO_HARDENING DEV_NULL_PATH
+export HEADER_ARCH SUBARCH USER_CFLAGS NOLIBC_CFLAGS CFLAGS_NO_HARDENING DEV_NULL_PATH

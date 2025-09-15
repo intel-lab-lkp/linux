@@ -327,7 +327,9 @@ extern int __ignore_sigio_fd(int fd);
 /* tty.c */
 extern int get_pty(void);
 
+#ifndef syscall
 long syscall(long number, ...);
+#endif
 
 /* irqflags tracing */
 extern void block_signals_trace(void);
