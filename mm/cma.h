@@ -64,13 +64,6 @@ struct cma {
 	int nid;
 };
 
-enum cma_flags {
-	CMA_RESERVE_PAGES_ON_ERROR,
-	CMA_ZONES_VALID,
-	CMA_ZONES_INVALID,
-	CMA_ACTIVATED,
-};
-
 extern struct cma cma_areas[MAX_CMA_AREAS];
 extern unsigned int cma_area_count;
 

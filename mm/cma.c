@@ -111,8 +111,8 @@ bool cma_validate_zones(struct cma *cma)
 	 * check has already been done. If neither is set, the
 	 * check has not been performed yet.
 	 */
-	valid_bit_set = test_bit(CMA_ZONES_VALID, &cma->flags);
-	if (valid_bit_set || test_bit(CMA_ZONES_INVALID, &cma->flags))
+	valid_bit_set = (cma->flags & CMA_ZONES_VALID);
+	if (valid_bit_set || (cma->flags & CMA_ZONES_INVALID))
 		return valid_bit_set;
 
 	for (r = 0; r < cma->nranges; r++) {
@@ -126,12 +126,12 @@ bool cma_validate_zones(struct cma *cma)
 		 */
 		WARN_ON_ONCE(!pfn_valid(base_pfn));
 		if (pfn_range_intersects_zones(cma->nid, base_pfn, cmr->count)) {
-			set_bit(CMA_ZONES_INVALID, &cma->flags);
+			cma->flags |= CMA_ZONES_INVALID;
 			return false;
 		}
 	}
 
-	set_bit(CMA_ZONES_VALID, &cma->flags);
+	cma->flags |= CMA_ZONES_VALID;
 
 	return true;
 }
@@ -176,7 +176,7 @@ static void __init cma_activate_area(struct cma *cma)
 	INIT_HLIST_HEAD(&cma->mem_head);
 	spin_lock_init(&cma->mem_head_lock);
 #endif
-	set_bit(CMA_ACTIVATED, &cma->flags);
+	cma->flags |= CMA_ACTIVATED;
 
 	return;
 
@@ -185,7 +185,7 @@ cleanup:
 		bitmap_free(cma->ranges[r].bitmap);
 
 	/* Expose all pages to the buddy, they are useless for CMA. */
-	if (!test_bit(CMA_RESERVE_PAGES_ON_ERROR, &cma->flags)) {
+	if (!(cma->flags & CMA_RESERVE_PAGES_ON_ERROR)) {
 		for (r = 0; r < allocrange; r++) {
 			cmr = &cma->ranges[r];
 			end_pfn = cmr->base_pfn + cmr->count;
@@ -211,7 +211,7 @@ core_initcall(cma_init_reserved_areas);
 
 void __init cma_reserve_pages_on_error(struct cma *cma)
 {
-	set_bit(CMA_RESERVE_PAGES_ON_ERROR, &cma->flags);
+	cma->flags |= CMA_RESERVE_PAGES_ON_ERROR;
 }
 
 static int __init cma_new_area(const char *name, phys_addr_t size,
@@ -1085,7 +1085,7 @@ void __init *cma_reserve_early(struct cma *cma, unsigned long size)
 	/*
 	 * Can only be called early in init.
 	 */
-	if (test_bit(CMA_ACTIVATED, &cma->flags))
+	if (cma->flags & CMA_ACTIVATED)
 		return NULL;
 
 	if (!IS_ALIGNED(size, CMA_MIN_ALIGNMENT_BYTES))
