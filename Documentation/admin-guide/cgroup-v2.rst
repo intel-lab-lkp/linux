@@ -13,6 +13,8 @@ of cgroup including core and specific controller behaviors.  All
 future changes must be reflected in this document.  Documentation for
 v1 is available under :ref:`Documentation/admin-guide/cgroup-v1/index.rst <cgroup-v1>`.
 
+.. contents::
+
 .. CONTENTS
 
    1. Introduction
