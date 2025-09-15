@@ -867,8 +867,16 @@ int kvm_arch_vcpu_ioctl_run(struct kvm_vcpu *vcpu)
 	struct kvm_cpu_trap trap;
 	struct kvm_run *run = vcpu->run;
 
-	if (!vcpu->arch.ran_atleast_once)
+	if (!vcpu->arch.ran_atleast_once) {
 		kvm_riscv_vcpu_setup_config(vcpu);
+		/*
+		 * For VCPUs that are resuming (e.g., from migration)
+		 * and not starting from the boot address, explicitly
+		 * power them on.
+		 */
+		if (vcpu->arch.guest_context.sepc != 0x80000000)
+			kvm_riscv_vcpu_power_on(vcpu);
+	}
 
 	/* Mark this VCPU ran at least once */
 	vcpu->arch.ran_atleast_once = true;
