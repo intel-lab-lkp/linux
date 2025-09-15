@@ -276,3 +276,19 @@ bool __init hugetlb_early_cma(struct hstate *h)
 
 	return hstate_is_gigantic(h) && hugetlb_cma_only;
 }
+
+void hugetlb_cma_balance(int nid)
+{
+	int node;
+
+	if (nid != NUMA_NO_NODE) {
+		if (hugetlb_cma[nid])
+			balance_node_cma(nid, hugetlb_cma[nid]);
+	} else {
+		for_each_online_node(node) {
+			if (hugetlb_cma[node])
+				balance_node_cma(node,
+						 hugetlb_cma[node]);
+		}
+	}
+}

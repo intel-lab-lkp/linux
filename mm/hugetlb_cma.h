@@ -13,6 +13,7 @@ bool hugetlb_cma_exclusive_alloc(void);
 unsigned long hugetlb_cma_total_size(void);
 void hugetlb_cma_validate_params(void);
 bool hugetlb_early_cma(struct hstate *h);
+void hugetlb_cma_balance(int nid);
 #else
 static inline void hugetlb_cma_free_folio(struct folio *folio)
 {
@@ -52,6 +53,10 @@ static inline void hugetlb_cma_validate_params(void)
 static inline bool hugetlb_early_cma(struct hstate *h)
 {
 	return false;
+}
+
+static inline void hugetlb_cma_balance(int nid)
+{
 }
 #endif
 #endif

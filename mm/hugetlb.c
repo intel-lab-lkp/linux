@@ -3971,12 +3971,14 @@ static int set_max_huge_pages(struct hstate *h, unsigned long count, int nid,
 
 		list_add(&folio->lru, &page_list);
 	}
-	/* free the pages after dropping lock */
-	spin_unlock_irq(&hugetlb_lock);
-	update_and_free_pages_bulk(h, &page_list);
-	flush_free_hpage_work(h);
-	spin_lock_irq(&hugetlb_lock);
-
+	if (!list_empty(&page_list)) {
+		/* free the pages after dropping lock */
+		spin_unlock_irq(&hugetlb_lock);
+		update_and_free_pages_bulk(h, &page_list);
+		flush_free_hpage_work(h);
+		hugetlb_cma_balance(nid);
+		spin_lock_irq(&hugetlb_lock);
+	}
 	while (count < persistent_huge_pages(h)) {
 		if (!adjust_pool_surplus(h, nodes_allowed, 1))
 			break;
