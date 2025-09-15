@@ -2521,18 +2521,19 @@ static void fix_read_error(struct r1conf *conf, struct r1bio *r1_bio)
  * narrow_write_error() - Retry write and set badblock
  * @r1_bio:	the r1bio containing the write error
  * @i:		which device to retry
+ * @force:	Retry writing even if badblock is disabled
  *
  * Rewrites the bio, splitting it at the least common multiple of the logical
  * block size and the badblock size. Blocks that fail to be written are marked
- * as bad. If badblocks are disabled, no write is attempted and false is
- * returned immediately.
+ * as bad. If bbl disabled and @force is not set, no retry is attempted.
+ * If bbl disabled and @force is set, the write is retried in the same way.
  *
  * Return:
  * * %true	- all blocks were written or marked bad successfully
  * * %false	- bbl disabled or
  *		  one or more blocks write failed and could not be marked bad
  */
-static bool narrow_write_error(struct r1bio *r1_bio, int i)
+static bool narrow_write_error(struct r1bio *r1_bio, int i, bool force)
 {
 	struct mddev *mddev = r1_bio->mddev;
 	struct r1conf *conf = mddev->private;
@@ -2553,13 +2554,17 @@ static bool narrow_write_error(struct r1bio *r1_bio, int i)
 	sector_t sector;
 	int sectors;
 	int sect_to_write = r1_bio->sectors;
-	bool ok = true;
+	bool write_ok = true;
+	bool setbad_ok = true;
+	bool bbl_enabled = !(rdev->badblocks.shift < 0);
 
-	if (rdev->badblocks.shift < 0)
+	if (!force && !bbl_enabled)
 		return false;
 
-	block_sectors = roundup(1 << rdev->badblocks.shift,
-				bdev_logical_block_size(rdev->bdev) >> 9);
+	block_sectors = bdev_logical_block_size(rdev->bdev) >> 9;
+	if (bbl_enabled)
+		block_sectors = roundup(1 << rdev->badblocks.shift,
+					block_sectors);
 	sector = r1_bio->sector;
 	sectors = ((sector + block_sectors)
 		   & ~(sector_t)(block_sectors - 1))
@@ -2587,18 +2592,22 @@ static bool narrow_write_error(struct r1bio *r1_bio, int i)
 		bio_trim(wbio, sector - r1_bio->sector, sectors);
 		wbio->bi_iter.bi_sector += rdev->data_offset;
 
-		if (submit_bio_wait(wbio) < 0)
+		if (submit_bio_wait(wbio) < 0) {
 			/* failure! */
-			ok = rdev_set_badblocks(rdev, sector,
-						sectors, 0)
-				&& ok;
+			write_ok = false;
+			if (bbl_enabled)
+				setbad_ok = rdev_set_badblocks(rdev, sector,
+							       sectors, 0)
+					    && setbad_ok;
+		}
 
 		bio_put(wbio);
 		sect_to_write -= sectors;
 		sector += sectors;
 		sectors = block_sectors;
 	}
-	return ok;
+	return (write_ok ||
+		(bbl_enabled && setbad_ok));
 }
 
 static void handle_sync_write_finished(struct r1conf *conf, struct r1bio *r1_bio)
@@ -2631,18 +2640,23 @@ static void handle_write_finished(struct r1conf *conf, struct r1bio *r1_bio)
 
 	for (m = 0; m < conf->raid_disks * 2 ; m++) {
 		struct md_rdev *rdev = conf->mirrors[m].rdev;
-		if (r1_bio->bios[m] == IO_MADE_GOOD) {
+		struct bio *bio = r1_bio->bios[m];
+
+		if (bio == IO_MADE_GOOD) {
 			rdev_clear_badblocks(rdev,
 					     r1_bio->sector,
 					     r1_bio->sectors, 0);
 			rdev_dec_pending(rdev, conf->mddev);
-		} else if (r1_bio->bios[m] != NULL) {
+		} else if (bio != NULL) {
 			/* This drive got a write error.  We need to
 			 * narrow down and record precise write
 			 * errors.
 			 */
 			fail = true;
-			if (!narrow_write_error(r1_bio, m))
+			if (!narrow_write_error(
+					r1_bio, m,
+					test_bit(FailFast, &rdev->flags) &&
+					(bio->bi_opf & MD_FAILFAST)))
 				md_error(conf->mddev, rdev);
 				/* an I/O failed, we can't clear the bitmap */
 			else if (test_bit(In_sync, &rdev->flags) &&
