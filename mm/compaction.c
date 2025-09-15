@@ -1813,7 +1813,10 @@ again:
 	if (start_order == NR_PAGE_ORDERS) {
 		if (has_isolated_pages)
 			return NULL;
-		isolate_freepages(cc);
+		if (cc->isolate_freepages)
+			cc->isolate_freepages(cc);
+		else
+			isolate_freepages(cc);
 		has_isolated_pages = true;
 		goto again;
 	}

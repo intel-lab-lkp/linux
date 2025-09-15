@@ -874,6 +874,11 @@ struct compact_control {
 	unsigned int nr_migratepages;	/* Number of pages to migrate */
 	unsigned long free_pfn;		/* isolate_freepages search base */
 	/*
+	 * Function to use to isolate free pages, if applicable. If NULL,
+	 * default to isolate_freepages().
+	 */
+	void (*isolate_freepages)(struct compact_control *cc);
+	/*
 	 * Acts as an in/out parameter to page isolation for migration.
 	 * isolate_migratepages uses it as a search base.
 	 * isolate_migratepages_block will update the value to the next pfn
