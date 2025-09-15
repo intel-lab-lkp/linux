@@ -272,6 +272,9 @@ static bool cma_next_free_range(struct cma_memrange *cmr,
 static inline bool cma_should_balance_range(struct zone *zone,
 				      struct cma_memrange *cmr)
 {
+	if (!(cmr->cma->flags & CMA_BALANCE))
+		return false;
+
 	if (page_zone(pfn_to_page(cmr->base_pfn)) != zone)
 		return false;
 
@@ -527,6 +530,12 @@ static bool __init basecmp(struct cma_init_memrange *mlp,
 	return mlp->base < mrp->base;
 }
 
+static bool __init revbasecmp(struct cma_init_memrange *mlp,
+			   struct cma_init_memrange *mrp)
+{
+	return mlp->base > mrp->base;
+}
+
 /*
  * Helper function to create sorted lists.
  */
@@ -575,7 +584,8 @@ static int __init cma_fixed_reserve(phys_addr_t base, phys_addr_t size)
 }
 
 static phys_addr_t __init cma_alloc_mem(phys_addr_t base, phys_addr_t size,
-			phys_addr_t align, phys_addr_t limit, int nid)
+			phys_addr_t align, phys_addr_t limit, int nid,
+			unsigned long flags)
 {
 	phys_addr_t addr = 0;
 
@@ -588,7 +598,8 @@ static phys_addr_t __init cma_alloc_mem(phys_addr_t base, phys_addr_t size,
 	 * like DMA/DMA32.
 	 */
 #ifdef CONFIG_PHYS_ADDR_T_64BIT
-	if (!memblock_bottom_up() && limit >= SZ_4G + size) {
+	if (!(flags & CMA_BALANCE) && !memblock_bottom_up()
+			&& limit >= SZ_4G + size) {
 		memblock_set_bottom_up(true);
 		addr = memblock_alloc_range_nid(size, align, SZ_4G, limit,
 						nid, true);
@@ -695,7 +706,7 @@ static int __init __cma_declare_contiguous_nid(phys_addr_t *basep,
 		if (ret)
 			return ret;
 	} else {
-		base = cma_alloc_mem(base, size, alignment, limit, nid);
+		base = cma_alloc_mem(base, size, alignment, limit, nid, flags);
 		if (!base)
 			return -ENOMEM;
 
@@ -851,7 +862,10 @@ int __init cma_declare_contiguous_multi(phys_addr_t total_size,
 	list_for_each_safe(mp, next, &ranges) {
 		mlp = list_entry(mp, struct cma_init_memrange, list);
 		list_del(mp);
-		list_insert_sorted(&final_ranges, mlp, basecmp);
+		if (flags & CMA_BALANCE)
+			list_insert_sorted(&final_ranges, mlp, revbasecmp);
+		else
+			list_insert_sorted(&final_ranges, mlp, basecmp);
 		sizesum += mlp->size;
 		if (sizesum >= total_size)
 			break;
@@ -866,7 +880,12 @@ int __init cma_declare_contiguous_multi(phys_addr_t total_size,
 	list_for_each(mp, &final_ranges) {
 		mlp = list_entry(mp, struct cma_init_memrange, list);
 		size = min(sizeleft, mlp->size);
-		if (memblock_reserve(mlp->base, size)) {
+		if (flags & CMA_BALANCE)
+			start = (mlp->base + mlp->size - size);
+		else
+			start = mlp->base;
+
+		if (memblock_reserve(start, size)) {
 			/*
 			 * Unexpected error. Could go on to
 			 * the next one, but just abort to
@@ -877,9 +896,9 @@ int __init cma_declare_contiguous_multi(phys_addr_t total_size,
 		}
 
 		pr_debug("created region %d: %016llx - %016llx\n",
-		    nr, (u64)mlp->base, (u64)mlp->base + size);
+		    nr, (u64)start, (u64)start + size);
 		cmrp = &cma->ranges[nr++];
-		cmrp->base_pfn = PHYS_PFN(mlp->base);
+		cmrp->base_pfn = PHYS_PFN(start);
 		cmrp->early_pfn = cmrp->base_pfn;
 		cmrp->count = size >> PAGE_SHIFT;
 		cmrp->cma = cma;
