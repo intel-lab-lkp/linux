@@ -733,6 +733,7 @@ static unsigned int central_build_irq(struct device_node *dp,
 	} else if (of_node_name_eq(dp, "clock-board")) {
 		res = &central_op->resource[3];
 	} else {
+		put_device(&central_op->dev);
 		return ino;
 	}
 
@@ -747,6 +748,7 @@ static unsigned int central_build_irq(struct device_node *dp,
 	tmp &= ~0x80000000;
 	upa_writel(tmp, imap);
 
+	put_device(&central_op->dev);
 	return build_irq(0, iclr, imap);
 }
 
