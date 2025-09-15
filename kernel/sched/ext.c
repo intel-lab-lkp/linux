@@ -1362,6 +1362,14 @@ do {										\
 	__ret;									\
 })
 
+#define SCX_CALL_OP_TASK_ANY(sch, mask, op, rq, task, args...)			\
+do {										\
+	BUILD_BUG_ON((mask) & ~__SCX_KF_TERMINAL);				\
+	current->scx.kf_tasks[0] = task;					\
+	SCX_CALL_OP((sch), mask, op, rq, ##args);				\
+	current->scx.kf_tasks[0] = NULL;					\
+} while (0)
+
 /* @mask is constant, always inline to cull unnecessary branches */
 static __always_inline bool scx_kf_allowed(u32 mask)
 {
@@ -3134,8 +3142,9 @@ static int balance_one(struct rq *rq, struct task_struct *prev)
 	do {
 		dspc->nr_tasks = 0;
 
-		SCX_CALL_OP(sch, SCX_KF_DISPATCH, dispatch, rq,
-			    cpu_of(rq), prev_on_scx ? prev : NULL);
+		SCX_CALL_OP_TASK_ANY(sch, SCX_KF_DISPATCH, dispatch, rq,
+				     prev_on_scx ? prev : NULL,
+				     cpu_of(rq), prev_on_scx ? prev : NULL);
 
 		flush_dispatch_buf(sch, rq);
 
