@@ -23,6 +23,7 @@
 #include <linux/sizes.h>
 #include <linux/slab.h>
 #include <linux/string_choices.h>
+#include <linux/sort.h>
 #include <linux/log2.h>
 #include <linux/cma.h>
 #include <linux/highmem.h>
@@ -65,12 +66,11 @@ static unsigned long cma_bitmap_aligned_mask(const struct cma *cma,
  * Find the offset of the base PFN from the specified align_order.
  * The value returned is represented in order_per_bits.
  */
-static unsigned long cma_bitmap_aligned_offset(const struct cma *cma,
-					       const struct cma_memrange *cmr,
+static unsigned long cma_bitmap_aligned_offset(const struct cma_memrange *cmr,
 					       unsigned int align_order)
 {
 	return (cmr->base_pfn & ((1UL << align_order) - 1))
-		>> cma->order_per_bit;
+		>> cmr->cma->order_per_bit;
 }
 
 static unsigned long cma_bitmap_pages_to_bits(const struct cma *cma,
@@ -79,11 +79,12 @@ static unsigned long cma_bitmap_pages_to_bits(const struct cma *cma,
 	return ALIGN(pages, 1UL << cma->order_per_bit) >> cma->order_per_bit;
 }
 
-static void cma_clear_bitmap(struct cma *cma, const struct cma_memrange *cmr,
+static void cma_clear_bitmap(const struct cma_memrange *cmr,
 			     unsigned long pfn, unsigned long count)
 {
 	unsigned long bitmap_no, bitmap_count;
 	unsigned long flags;
+	struct cma *cma = cmr->cma;
 
 	bitmap_no = (pfn - cmr->base_pfn) >> cma->order_per_bit;
 	bitmap_count = cma_bitmap_pages_to_bits(cma, count);
@@ -147,8 +148,7 @@ static void __init cma_activate_area(struct cma *cma)
 	for (allocrange = 0; allocrange < cma->nranges; allocrange++) {
 		cmr = &cma->ranges[allocrange];
 		early_pfn[allocrange] = cmr->early_pfn;
-		cmr->bitmap = bitmap_zalloc(cma_bitmap_maxno(cma, cmr),
-					    GFP_KERNEL);
+		cmr->bitmap = bitmap_zalloc(cma_bitmap_maxno(cmr), GFP_KERNEL);
 		if (!cmr->bitmap)
 			goto cleanup;
 	}
@@ -199,12 +199,45 @@ cleanup:
 	pr_err("CMA area %s could not be activated\n", cma->name);
 }
 
+static struct cma_memrange **cma_ranges;
+static int cma_nranges;
+
+static int cmprange(const void *a, const void *b)
+{
+	struct cma_memrange *r1, *r2;
+
+	r1 = *(struct cma_memrange **)a;
+	r2 = *(struct cma_memrange **)b;
+
+	if (r1->base_pfn < r2->base_pfn)
+		return -1;
+	return r1->base_pfn - r2->base_pfn;
+}
+
 static int __init cma_init_reserved_areas(void)
 {
-	int i;
+	int i, r, nranges;
+	struct cma *cma;
+	struct cma_memrange *cmr;
 
-	for (i = 0; i < cma_area_count; i++)
-		cma_activate_area(&cma_areas[i]);
+	nranges = 0;
+	for (i = 0; i < cma_area_count; i++) {
+		cma = &cma_areas[i];
+		nranges += cma->nranges;
+		cma_activate_area(cma);
+	}
+
+	cma_ranges = kcalloc(nranges, sizeof(*cma_ranges), GFP_KERNEL);
+	cma_nranges = 0;
+	for (i = 0; i < cma_area_count; i++) {
+		cma = &cma_areas[i];
+		for (r = 0; r < cma->nranges; r++) {
+			cmr = &cma->ranges[r];
+			cma_ranges[cma_nranges++] = cmr;
+		}
+	}
+
+	sort(cma_ranges, cma_nranges, sizeof(*cma_ranges), cmprange, NULL);
 
 	return 0;
 }
@@ -297,6 +330,7 @@ int __init cma_init_reserved_mem(phys_addr_t base, phys_addr_t size,
 	cma->ranges[0].base_pfn = PFN_DOWN(base);
 	cma->ranges[0].early_pfn = PFN_DOWN(base);
 	cma->ranges[0].count = cma->count;
+	cma->ranges[0].cma = cma;
 	cma->nranges = 1;
 	cma->nid = NUMA_NO_NODE;
 
@@ -687,6 +721,7 @@ int __init cma_declare_contiguous_multi(phys_addr_t total_size,
 		cmrp->base_pfn = PHYS_PFN(mlp->base);
 		cmrp->early_pfn = cmrp->base_pfn;
 		cmrp->count = size >> PAGE_SHIFT;
+		cmrp->cma = cma;
 
 		sizeleft -= size;
 		if (sizeleft == 0)
@@ -772,7 +807,7 @@ static void cma_debug_show_areas(struct cma *cma)
 	for (r = 0; r < cma->nranges; r++) {
 		cmr = &cma->ranges[r];
 
-		nbits = cma_bitmap_maxno(cma, cmr);
+		nbits = cma_bitmap_maxno(cmr);
 
 		pr_info("range %d: ", r);
 		for_each_clear_bitrange(start, end, cmr->bitmap, nbits) {
@@ -786,9 +821,9 @@ static void cma_debug_show_areas(struct cma *cma)
 	spin_unlock_irq(&cma->lock);
 }
 
-static int cma_range_alloc(struct cma *cma, struct cma_memrange *cmr,
-				unsigned long count, unsigned int align,
-				struct page **pagep, gfp_t gfp)
+static int cma_range_alloc(struct cma_memrange *cmr,
+			   unsigned long count, unsigned int align,
+			   struct page **pagep, gfp_t gfp)
 {
 	unsigned long mask, offset;
 	unsigned long pfn = -1;
@@ -796,10 +831,11 @@ static int cma_range_alloc(struct cma *cma, struct cma_memrange *cmr,
 	unsigned long bitmap_maxno, bitmap_no, bitmap_count;
 	int ret = -EBUSY;
 	struct page *page = NULL;
+	struct cma *cma = cmr->cma;
 
 	mask = cma_bitmap_aligned_mask(cma, align);
-	offset = cma_bitmap_aligned_offset(cma, cmr, align);
-	bitmap_maxno = cma_bitmap_maxno(cma, cmr);
+	offset = cma_bitmap_aligned_offset(cmr, align);
+	bitmap_maxno = cma_bitmap_maxno(cmr);
 	bitmap_count = cma_bitmap_pages_to_bits(cma, count);
 
 	if (bitmap_count > bitmap_maxno)
@@ -840,7 +876,7 @@ static int cma_range_alloc(struct cma *cma, struct cma_memrange *cmr,
 			break;
 		}
 
-		cma_clear_bitmap(cma, cmr, pfn, count);
+		cma_clear_bitmap(cmr, pfn, count);
 		if (ret != -EBUSY)
 			break;
 
@@ -879,7 +915,7 @@ static struct page *__cma_alloc(struct cma *cma, unsigned long count,
 	for (r = 0; r < cma->nranges; r++) {
 		page = NULL;
 
-		ret = cma_range_alloc(cma, &cma->ranges[r], count, align,
+		ret = cma_range_alloc(&cma->ranges[r], count, align,
 				       &page, gfp);
 		if (ret != -EBUSY || page)
 			break;
@@ -1011,7 +1047,7 @@ bool cma_release(struct cma *cma, const struct page *pages,
 		return false;
 
 	free_contig_range(pfn, count);
-	cma_clear_bitmap(cma, cmr, pfn, count);
+	cma_clear_bitmap(cmr, pfn, count);
 	cma_sysfs_account_release_pages(cma, count);
 	trace_cma_release(cma->name, pfn, pages, count);
 

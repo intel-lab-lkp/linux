@@ -30,6 +30,7 @@ struct cma_memrange {
 		unsigned long early_pfn;
 		unsigned long *bitmap;
 	};
+	struct cma *cma;
 #ifdef CONFIG_CMA_DEBUGFS
 	struct debugfs_u32_array dfs_bitmap;
 #endif
@@ -67,10 +68,9 @@ struct cma {
 extern struct cma cma_areas[MAX_CMA_AREAS];
 extern unsigned int cma_area_count;
 
-static inline unsigned long cma_bitmap_maxno(struct cma *cma,
-		struct cma_memrange *cmr)
+static inline unsigned long cma_bitmap_maxno(struct cma_memrange *cmr)
 {
-	return cmr->count >> cma->order_per_bit;
+	return cmr->count >> cmr->cma->order_per_bit;
 }
 
 #ifdef CONFIG_CMA_SYSFS
