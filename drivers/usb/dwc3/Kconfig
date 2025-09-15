@@ -189,4 +189,15 @@ config USB_DWC3_RTK
 	  or dual-role mode.
 	  Say 'Y' or 'M' if you have such device.
 
+config USB_DWC3_EIC7700
+	tristate "Eswin Platforms"
+	depends on ARCH_ESWIN || COMPILE_TEST
+	default USB_DWC3
+	depends on OF
+	help
+	  The usb controller on eic7700 SoC.
+	  support of USB2/3 functionality
+	  in Eswin platforms.
+	  say 'Y' or 'M' if you have one such device.
+
 endif
