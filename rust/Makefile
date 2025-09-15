@@ -265,6 +265,79 @@ rusttest-kernel: $(src)/kernel/lib.rs rusttestlib-ffi rusttestlib-kernel \
     rusttestlib-uapi rusttestlib-pin_init FORCE
 	+$(call if_changed,rustc_test)
 
+## Check-only compilation (similar to `cargo check`)
+quiet_cmd_rustc_check_library = $(RUSTC_OR_CLIPPY_QUIET) CHECK $<
+      cmd_rustc_check_library = \
+        OBJTREE=$(abspath $(objtree)) \
+        $(RUSTC_OR_CLIPPY) $(rust_common_flags) \
+                @$(objtree)/include/generated/rustc_cfg $(rustc_target_flags) \
+                --crate-type $(if $(rustc_check_library_proc),proc-macro,rlib) \
+                $(if $(rustc_check_library_proc),,--emit=metadata) \
+                --out-dir $(objtree)/$(obj)/check -L$(objtree)/$(obj)/check \
+                --crate-name $(if $(rustc_check_crate_name),$(rustc_check_crate_name), \
+				$(subst rustcheck-,,$(subst rustchecklib-,,$@))) $<
+
+rustcheck: rustchecklib-build_error rustchecklib-ffi rustchecklib-macros \
+	rustchecklib-compiler_builtins rustchecklib-pin_init_internal \
+	rustchecklib-pin_init rustchecklib-bindings rustchecklib-uapi \
+	rustchecklib-kernel
+
+rustchecklib-build_error: $(src)/build_error.rs FORCE
+	+$(call if_changed,rustc_check_library)
+
+rustchecklib-ffi: $(src)/ffi.rs FORCE
+	+$(call if_changed,rustc_check_library)
+
+rustchecklib-macros: private rustc_target_flags = --extern proc_macro
+rustchecklib-macros: private rustc_check_library_proc = yes
+rustchecklib-macros: $(src)/macros/lib.rs FORCE
+	+$(call if_changed,rustc_check_library)
+
+rustchecklib-compiler_builtins: private rustc_check_crate_name = compiler_builtins_kernel
+rustchecklib-compiler_builtins: $(src)/compiler_builtins.rs FORCE
+	+$(call if_changed,rustc_check_library)
+
+rustchecklib-pin_init_internal: private rustc_target_flags = --cfg kernel \
+	--extern proc_macro
+rustchecklib-pin_init_internal: private rustc_check_library_proc = yes
+rustchecklib-pin_init_internal: $(src)/pin-init/internal/src/lib.rs FORCE
+	+$(call if_changed,rustc_check_library)
+
+rustchecklib-pin_init: private rustc_target_flags = --extern pin_init_internal \
+	--extern macros --cfg kernel
+rustchecklib-pin_init: $(src)/pin-init/src/lib.rs rustchecklib-macros \
+	rustchecklib-pin_init_internal FORCE
+	+$(call if_changed,rustc_check_library)
+
+rustchecklib-bindings: private rustc_target_flags = --extern ffi
+rustchecklib-bindings: $(src)/bindings/lib.rs \
+	$(obj)/bindings/bindings_generated.rs \
+	$(obj)/bindings/bindings_helpers_generated.rs \
+	rustchecklib-ffi FORCE
+	+$(call if_changed,rustc_check_library)
+
+rustchecklib-uapi: private rustc_target_flags = --extern ffi
+rustchecklib-uapi: $(src)/uapi/lib.rs $(obj)/uapi/uapi_generated.rs \
+	rustchecklib-ffi FORCE
+	+$(call if_changed,rustc_check_library)
+
+ifdef CONFIG_JUMP_LABEL
+rustchecklib-kernel: $(obj)/kernel/generated_arch_static_branch_asm.rs FORCE
+endif
+ifndef CONFIG_UML
+ifdef CONFIG_BUG
+rustchecklib-kernel: $(obj)/kernel/generated_arch_warn_asm.rs \
+	$(obj)/kernel/generated_arch_reachable_asm.rs FORCE
+endif
+endif
+
+rustchecklib-kernel: private rustc_target_flags = --extern ffi --extern pin_init \
+	--extern build_error --extern macros --extern bindings --extern uapi
+rustchecklib-kernel: $(src)/kernel/lib.rs rustchecklib-ffi rustchecklib-pin_init \
+	rustchecklib-build_error rustchecklib-macros rustchecklib-bindings \
+	rustchecklib-uapi FORCE
+	+$(call if_changed,rustc_check_library)
+
 ifdef CONFIG_CC_IS_CLANG
 bindgen_c_flags = $(c_flags)
 else

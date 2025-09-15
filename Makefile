@@ -1716,6 +1716,8 @@ help:
 	@echo  '		    is formatted, printing a diff otherwise.'
 	@echo  '  rustdoc	  - Generate Rust documentation'
 	@echo  '		    (requires kernel .config)'
+	@echo  '  rustcheck       - Check that the Rust code builds'
+	@echo  '                    (requires kernel .config)'
 	@echo  '  rusttest        - Runs the Rust tests'
 	@echo  '                    (requires kernel .config; downloads external repos)'
 	@echo  '  rust-analyzer	  - Generate rust-project.json rust-analyzer support file'
@@ -1819,6 +1821,11 @@ rustavailable:
 # Using the singular to avoid running afoul of `no-dot-config-targets`.
 PHONY += rustdoc
 rustdoc: prepare
+	$(Q)$(MAKE) $(build)=rust $@
+
+# Checking Rust sources.
+PHONY += rustcheck
+rustcheck: prepare0
 	$(Q)$(MAKE) $(build)=rust $@
 
 # Testing target
