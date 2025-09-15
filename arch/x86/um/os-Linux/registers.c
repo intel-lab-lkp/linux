@@ -6,17 +6,19 @@
 
 #include <errno.h>
 #include <stdlib.h>
-#include <sys/ptrace.h>
+#include <linux/ptrace.h>
 #ifdef __i386__
 #include <sys/user.h>
 #endif
 #include <longjmp.h>
 #include <sysdep/ptrace_user.h>
-#include <sys/uio.h>
+#include <linux/uio.h>
 #include <asm/sigcontext.h>
 #include <linux/elf.h>
 #include <registers.h>
 #include <sys/mman.h>
+
+#define my_ptrace(...) my_syscall4(__NR_ptrace, __VA_ARGS__)
 
 static unsigned long ptrace_regset;
 unsigned long host_fp_size;
@@ -28,9 +30,7 @@ int get_fp_registers(int pid, unsigned long *regs)
 		.iov_len = host_fp_size,
 	};
 
-	if (ptrace(PTRACE_GETREGSET, pid, ptrace_regset, &iov) < 0)
-		return -errno;
-	return 0;
+	return my_ptrace(PTRACE_GETREGSET, pid, ptrace_regset, &iov);
 }
 
 int put_fp_registers(int pid, unsigned long *regs)
@@ -40,9 +40,7 @@ int put_fp_registers(int pid, unsigned long *regs)
 		.iov_len = host_fp_size,
 	};
 
-	if (ptrace(PTRACE_SETREGSET, pid, ptrace_regset, &iov) < 0)
-		return -errno;
-	return 0;
+	return my_ptrace(PTRACE_SETREGSET, pid, ptrace_regset, &iov);
 }
 
 int arch_init_registers(int pid)
@@ -60,9 +58,7 @@ int arch_init_registers(int pid)
 
 	/* GDB has x86_xsave_length, which uses x86_cpuid_count */
 	ptrace_regset = NT_X86_XSTATE;
-	ret = ptrace(PTRACE_GETREGSET, pid, ptrace_regset, &iov);
-	if (ret)
-		ret = -errno;
+	ret = my_ptrace(PTRACE_GETREGSET, pid, ptrace_regset, &iov);
 
 	if (ret == -ENODEV) {
 #ifdef CONFIG_X86_32
@@ -71,9 +67,7 @@ int arch_init_registers(int pid)
 		ptrace_regset = NT_PRFPREG;
 #endif
 		iov.iov_len = 2 * 1024 * 1024;
-		ret = ptrace(PTRACE_GETREGSET, pid, ptrace_regset, &iov);
-		if (ret)
-			ret = -errno;
+		ret = my_ptrace(PTRACE_GETREGSET, pid, ptrace_regset, &iov);
 	}
 
 	munmap(iov.iov_base, 2 * 1024 * 1024);

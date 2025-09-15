@@ -3,10 +3,13 @@
 # Licensed under the GPL
 #
 
-obj-y = registers.o mcontext.o
+obj-y = mcontext.o
 
 obj-$(CONFIG_X86_32) += tls.o
 
 USER_OBJS := $(obj-y)
+
+obj-y += registers.o
+NOLIBC_OBJS := registers.o
 
 include $(srctree)/arch/um/scripts/Makefile.rules
