@@ -147,4 +147,16 @@ config TI_EQEP
 	  To compile this driver as a module, choose M here: the module will be
 	  called ti-eqep.
 
+config NXP_PCF85363_STOPWATCH
+	tristate "NXP PCF85263/PCF85363 stopwatch"
+	depends on I2C
+	select REGMAP_I2C
+	help
+	  Say Y to enable support for the NXP PCF85263ATL/PCF85363ATL when operated
+	  in stopwatch (counter) mode. This device exposes a counter over I2C with
+	  centisecond (1/100th of a second) granularity, counting up to 999,999 hours.
+
+	  To compile this driver as a module, choose M here: the
+	  module will be called nxp-pcf85363-stopwatch.
+
 endif # COUNTER
