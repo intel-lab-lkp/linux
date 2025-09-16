@@ -806,10 +806,15 @@ static void nxp_fspi_select_mem(struct nxp_fspi *f, struct spi_device *spi,
 
 	nxp_fspi_select_rx_sample_clk_source(f, op_is_dtr);
 
-	if (op_is_dtr)
+	if (op_is_dtr) {
 		f->flags |= FSPI_DTR_MODE;
-	else
+		/* For DTR mode, flexspi will default div 2 and output to device.
+		 * so here to config the root clock to 2 * device rate.
+		 */
+		rate = rate * 2;
+	} else {
 		f->flags &= ~FSPI_DTR_MODE;
+	}
 
 	nxp_fspi_clk_disable_unprep(f);
 
