@@ -304,7 +304,7 @@ static int rt8515_probe(struct platform_device *pdev)
 		return dev_err_probe(dev, PTR_ERR(rt->enable_torch),
 				     "cannot get ENT (enable torch) GPIO\n");
 
-	child = fwnode_get_next_available_child_node(dev->fwnode, NULL);
+	child = fwnode_get_next_child_node(dev->fwnode, NULL);
 	if (!child) {
 		dev_err(dev,
 			"No fwnode child node found for connected LED.\n");
