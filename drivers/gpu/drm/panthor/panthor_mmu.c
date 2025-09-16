@@ -545,8 +545,17 @@ static int write_cmd(struct panthor_device *ptdev, u32 as_nr, u32 cmd)
 	return status;
 }
 
-static void lock_region(struct panthor_device *ptdev, u32 as_nr,
-			u64 region_start, u64 size)
+/**
+ * mmu_hw_cmd_lock() - Issue a LOCK command
+ * @ptdev: Device.
+ * @as_nr: AS to issue command to.
+ * @region_start: Start of the region.
+ * @size: Size of the region.
+ *
+ * Issue a LOCK command to invalidate MMU caches and block future transactions
+ * for a region.
+ */
+static void mmu_hw_cmd_lock(struct panthor_device *ptdev, u32 as_nr, u64 region_start, u64 size)
 {
 	u8 region_width;
 	u64 region;
@@ -609,7 +618,7 @@ static int mmu_hw_do_operation_locked(struct panthor_device *ptdev, int as_nr,
 	 * power it up
 	 */
 
-	lock_region(ptdev, as_nr, iova, size);
+	mmu_hw_cmd_lock(ptdev, as_nr, iova, size);
 
 	ret = mmu_hw_wait_ready(ptdev, as_nr);
 	if (ret)
