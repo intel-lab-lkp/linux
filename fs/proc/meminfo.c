@@ -71,6 +71,7 @@ static int meminfo_proc_show(struct seq_file *m, void *v)
 	show_val_kb(m, "Inactive(anon): ", pages[LRU_INACTIVE_ANON]);
 	show_val_kb(m, "Active(file):   ", pages[LRU_ACTIVE_FILE]);
 	show_val_kb(m, "Inactive(file): ", pages[LRU_INACTIVE_FILE]);
+	show_val_kb(m, "ReadAhead(file):", pages[LRU_READ_AHEAD_FILE]);
 	show_val_kb(m, "Unevictable:    ", pages[LRU_UNEVICTABLE]);
 	show_val_kb(m, "Mlocked:        ", global_zone_page_state(NR_MLOCK));
 

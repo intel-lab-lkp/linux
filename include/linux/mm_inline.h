@@ -93,6 +93,9 @@ static __always_inline enum lru_list folio_lru_list(const struct folio *folio)
 	if (folio_test_unevictable(folio))
 		return LRU_UNEVICTABLE;
 
+	if (folio_test_readahead_lru(folio))
+		return LRU_READ_AHEAD_FILE;
+
 	lru = folio_is_file_lru(folio) ? LRU_INACTIVE_FILE : LRU_INACTIVE_ANON;
 	if (folio_test_active(folio))
 		lru += LRU_ACTIVE;

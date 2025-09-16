@@ -127,6 +127,7 @@ enum pageflags {
 #ifdef CONFIG_ARCH_USES_PG_ARCH_3
 	PG_arch_3,
 #endif
+	PG_readahead_lru,
 	__NR_PAGEFLAGS,
 
 	PG_readahead = PG_reclaim,
@@ -566,6 +567,10 @@ FOLIO_FLAG(active, FOLIO_HEAD_PAGE)
 PAGEFLAG(Workingset, workingset, PF_HEAD)
 	TESTCLEARFLAG(Workingset, workingset, PF_HEAD)
 PAGEFLAG(Checked, checked, PF_NO_COMPOUND)	   /* Used by some filesystems */
+
+PAGEFLAG(Readahead_lru, readahead_lru, PF_HEAD)
+	__CLEARPAGEFLAG(Readahead_lru, readahead_lru, PF_HEAD)
+	TESTCLEARFLAG(Readahead_lru, readahead_lru, PF_HEAD)
 
 /* Xen */
 PAGEFLAG(Pinned, pinned, PF_NO_COMPOUND)

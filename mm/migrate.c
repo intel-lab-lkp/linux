@@ -765,6 +765,8 @@ void folio_migrate_flags(struct folio *newfolio, struct folio *folio)
 		folio_set_workingset(newfolio);
 	if (folio_test_checked(folio))
 		folio_set_checked(newfolio);
+	if (folio_test_readahead_lru(folio))
+		folio_set_readahead_lru(folio);
 	/*
 	 * PG_anon_exclusive (-> PG_mappedtodisk) is always migrated via
 	 * migration entries. We can still have PG_anon_exclusive set on an

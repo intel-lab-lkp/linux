@@ -201,6 +201,9 @@ struct scan_control {
  */
 int vm_swappiness = 60;
 
+static const unsigned long read_ahead_age_threshold = 240 << (20 - PAGE_SHIFT); // Example threshold
+static const unsigned long read_ahead_weight = 5; // Lower weight for read ahead
+
 #ifdef CONFIG_MEMCG
 
 /* Returns true for reclaim through cgroup limits or cgroup interfaces. */
@@ -2666,6 +2669,40 @@ out:
 		}
 
 		nr[lru] = scan;
+	}
+
+	unsigned long read_ahead_size =
+		lruvec_lru_size(lruvec, LRU_READ_AHEAD_FILE, sc->reclaim_idx);
+	unsigned long nr_inactive_file = nr[LRU_INACTIVE_FILE];
+
+	if (scan_balance == SCAN_FILE) {
+		if (read_ahead_size > read_ahead_age_threshold ||
+		    nr_inactive_file < read_ahead_size) {
+			nr[LRU_READ_AHEAD_FILE] =
+				(unsigned long)(read_ahead_size *
+						read_ahead_weight / 100);
+		} else {
+			nr[LRU_READ_AHEAD_FILE] = 0;
+		}
+	} else if (scan_balance == SCAN_FRACT) {
+		if (read_ahead_size > read_ahead_age_threshold ||
+		    nr_inactive_file < read_ahead_size) {
+			read_ahead_size =
+				mem_cgroup_online(memcg) ?
+					div64_u64(read_ahead_size * fraction[1],
+						  denominator) :
+					DIV64_U64_ROUND_UP(read_ahead_size *
+							   fraction[1],
+							   denominator);
+			nr[LRU_READ_AHEAD_FILE] =
+				(unsigned long)(read_ahead_size *
+						read_ahead_weight / 100);
+		} else {
+			nr[LRU_READ_AHEAD_FILE] = 0;
+		}
+
+	} else {
+		nr[LRU_READ_AHEAD_FILE] = 0;
 	}
 }
 
@@ -5803,6 +5840,87 @@ static void lru_gen_shrink_node(struct pglist_data *pgdat, struct scan_control *
 
 #endif /* CONFIG_LRU_GEN */
 
+static unsigned long shrink_read_ahead_list(unsigned long nr_to_scan,
+					    unsigned long nr_to_reclaim,
+					    struct lruvec *lruvec,
+					    struct scan_control *sc)
+{
+	LIST_HEAD(l_hold);
+	LIST_HEAD(l_reclaim);
+	LIST_HEAD(l_inactive);
+	unsigned long nr_scanned = 0;
+	unsigned long nr_taken = 0;
+	unsigned long nr_reclaimed = 0;
+	unsigned long vm_flags;
+	enum vm_event_item item;
+	struct pglist_data *pgdat = lruvec_pgdat(lruvec);
+	struct reclaim_stat stat = { 0 };
+
+	lru_add_drain();
+
+	spin_lock_irq(&lruvec->lru_lock);
+	nr_taken = isolate_lru_folios(nr_to_scan, lruvec, &l_hold, &nr_scanned,
+				      sc, LRU_READ_AHEAD_FILE);
+
+	__count_vm_events(PGSCAN_READAHEAD_FILE, nr_scanned);
+	__mod_node_page_state(pgdat, NR_ISOLATED_FILE, nr_taken);
+	item = PGSCAN_KSWAPD + reclaimer_offset(sc);
+	if (!cgroup_reclaim(sc))
+		__count_vm_events(item, nr_scanned);
+	count_memcg_events(lruvec_memcg(lruvec), item, nr_scanned);
+	__count_vm_events(PGSCAN_FILE, nr_scanned);
+	spin_unlock_irq(&lruvec->lru_lock);
+
+	if (nr_taken == 0)
+		return 0;
+
+	while (!list_empty(&l_hold)) {
+		struct folio *folio;
+
+		cond_resched();
+		folio = lru_to_folio(&l_hold);
+		list_del(&folio->lru);
+		folio_clear_readahead_lru(folio);
+
+		if (folio_referenced(folio, 0, sc->target_mem_cgroup, &vm_flags)) {
+			list_add(&folio->lru, &l_inactive);
+			continue;
+		}
+		folio_clear_active(folio);
+		list_add(&folio->lru, &l_reclaim);
+	}
+
+	nr_reclaimed = shrink_folio_list(&l_reclaim, pgdat, sc, &stat, true,
+					 lruvec_memcg(lruvec));
+
+	list_splice(&l_reclaim, &l_inactive);
+
+	spin_lock_irq(&lruvec->lru_lock);
+	move_folios_to_lru(lruvec, &l_inactive);
+	__mod_node_page_state(pgdat, NR_ISOLATED_FILE, -nr_taken);
+
+	__count_vm_events(PGSTEAL_READAHEAD_FILE, nr_reclaimed);
+	item = PGSTEAL_KSWAPD + reclaimer_offset(sc);
+	if (!cgroup_reclaim(sc))
+		__count_vm_events(item, nr_reclaimed);
+	count_memcg_events(lruvec_memcg(lruvec), item, nr_reclaimed);
+	__count_vm_events(PGSTEAL_FILE, nr_reclaimed);
+	spin_unlock_irq(&lruvec->lru_lock);
+
+	sc->nr.dirty += stat.nr_dirty;
+	sc->nr.congested += stat.nr_congested;
+	sc->nr.unqueued_dirty += stat.nr_unqueued_dirty;
+	sc->nr.writeback += stat.nr_writeback;
+	sc->nr.immediate += stat.nr_immediate;
+	sc->nr.taken += nr_taken;
+	sc->nr.file_taken += nr_taken;
+
+	trace_mm_vmscan_lru_shrink_readahead(pgdat->node_id, nr_to_scan,
+					     nr_to_reclaim, nr_scanned,
+					     nr_taken, nr_reclaimed);
+	return nr_reclaimed;
+}
+
 static void shrink_lruvec(struct lruvec *lruvec, struct scan_control *sc)
 {
 	unsigned long nr[NR_LRU_LISTS];
@@ -5839,6 +5957,19 @@ static void shrink_lruvec(struct lruvec *lruvec, struct scan_control *sc)
 				sc->priority == DEF_PRIORITY);
 
 	blk_start_plug(&plug);
+
+	while (nr[LRU_READ_AHEAD_FILE] > 0) {
+		nr_to_scan = min(nr[LRU_READ_AHEAD_FILE], SWAP_CLUSTER_MAX);
+		nr[LRU_READ_AHEAD_FILE] -= nr_to_scan;
+
+		nr_reclaimed += shrink_read_ahead_list(nr_to_scan,
+						       nr_to_reclaim,
+						       lruvec, sc);
+
+		if (nr_reclaimed >= nr_to_reclaim)
+			goto out;
+	}
+
 	while (nr[LRU_INACTIVE_ANON] || nr[LRU_ACTIVE_FILE] ||
 					nr[LRU_INACTIVE_FILE]) {
 		unsigned long nr_anon, nr_file, percentage;
@@ -5908,6 +6039,7 @@ static void shrink_lruvec(struct lruvec *lruvec, struct scan_control *sc)
 		nr[lru] = targets[lru] * (100 - percentage) / 100;
 		nr[lru] -= min(nr[lru], nr_scanned);
 	}
+out:
 	blk_finish_plug(&plug);
 	sc->nr_reclaimed += nr_reclaimed;
 

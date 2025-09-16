@@ -391,6 +391,41 @@ TRACE_EVENT(mm_vmscan_reclaim_pages,
 		__entry->nr_ref_keep, __entry->nr_unmap_fail)
 );
 
+TRACE_EVENT(mm_vmscan_lru_shrink_readahead,
+
+	TP_PROTO(int nid, unsigned long nr_to_scan,
+		unsigned long nr_to_reclaim, unsigned long nr_scanned,
+		unsigned long nr_taken, unsigned long nr_reclaimed),
+
+	TP_ARGS(nid, nr_to_scan, nr_to_reclaim, nr_scanned, nr_taken, nr_reclaimed),
+
+	TP_STRUCT__entry(
+		__field(int, nid)
+		__field(unsigned long, nr_to_scan)
+		__field(unsigned long, nr_to_reclaim)
+		__field(unsigned long, nr_scanned)
+		__field(unsigned long, nr_taken)
+		__field(unsigned long, nr_reclaimed)
+	),
+
+	TP_fast_assign(
+		__entry->nid = nid;
+		__entry->nr_to_scan = nr_to_scan;
+		__entry->nr_to_reclaim = nr_to_reclaim;
+		__entry->nr_scanned = nr_scanned;
+		__entry->nr_taken = nr_taken;
+		__entry->nr_reclaimed = nr_reclaimed;
+	),
+
+	TP_printk("nid=%d nr_to_scan=%ld nr_to_reclaim=%ld nr_scanned=%ld nr_taken=%ld nr_reclaimed=%ld",
+		__entry->nid,
+		__entry->nr_to_scan,
+		__entry->nr_to_reclaim,
+		__entry->nr_scanned,
+		__entry->nr_taken,
+		__entry->nr_reclaimed)
+);
+
 TRACE_EVENT(mm_vmscan_lru_shrink_inactive,
 
 	TP_PROTO(int nid,

@@ -1203,6 +1203,7 @@ const char * const vmstat_text[] = {
 	[I(NR_ZONE_ACTIVE_ANON)]		= "nr_zone_active_anon",
 	[I(NR_ZONE_INACTIVE_FILE)]		= "nr_zone_inactive_file",
 	[I(NR_ZONE_ACTIVE_FILE)]		= "nr_zone_active_file",
+	[I(NR_ZONE_READAHEAD_FILE)]		= "nr_zone_readahead_file",
 	[I(NR_ZONE_UNEVICTABLE)]		= "nr_zone_unevictable",
 	[I(NR_ZONE_WRITE_PENDING)]		= "nr_zone_write_pending",
 	[I(NR_MLOCK)]				= "nr_mlock",
@@ -1233,6 +1234,7 @@ const char * const vmstat_text[] = {
 	[I(NR_ACTIVE_ANON)]			= "nr_active_anon",
 	[I(NR_INACTIVE_FILE)]			= "nr_inactive_file",
 	[I(NR_ACTIVE_FILE)]			= "nr_active_file",
+	[I(NR_READAHEAD_FILE)]			= "nr_readahead_file",
 	[I(NR_UNEVICTABLE)]			= "nr_unevictable",
 	[I(NR_SLAB_RECLAIMABLE_B)]		= "nr_slab_reclaimable",
 	[I(NR_SLAB_UNRECLAIMABLE_B)]		= "nr_slab_unreclaimable",
@@ -1341,8 +1343,10 @@ const char * const vmstat_text[] = {
 	[I(PGSCAN_DIRECT_THROTTLE)]		= "pgscan_direct_throttle",
 	[I(PGSCAN_ANON)]			= "pgscan_anon",
 	[I(PGSCAN_FILE)]			= "pgscan_file",
+	[I(PGSCAN_READAHEAD_FILE)]		= "pgscan_readahead_file",
 	[I(PGSTEAL_ANON)]			= "pgsteal_anon",
 	[I(PGSTEAL_FILE)]			= "pgsteal_file",
+	[I(PGSTEAL_READAHEAD_FILE)]		= "pgsteal_readahead_file",
 
 #ifdef CONFIG_NUMA
 	[I(PGSCAN_ZONE_RECLAIM_SUCCESS)]	= "zone_reclaim_success",
