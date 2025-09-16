@@ -669,12 +669,9 @@ static int mmu_hw_flush_caches(struct panthor_device *ptdev, int as_nr, u64 iova
 	 * at the end of the GPU_CONTROL cache flush command, unlike
 	 * AS_COMMAND_FLUSH_MEM or AS_COMMAND_FLUSH_PT.
 	 */
-	ret = mmu_hw_wait_ready(ptdev, as_nr);
-	if (!ret)
-		mmu_hw_cmd_unlock(ptdev, as_nr);
+	mmu_hw_cmd_unlock(ptdev, as_nr);
 
-	/* Wait for the unlock command to complete */
-	return mmu_hw_wait_ready(ptdev, as_nr);
+	return 0;
 }
 
 static int mmu_hw_do_operation(struct panthor_vm *vm,
