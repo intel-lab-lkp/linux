@@ -503,7 +503,17 @@ static void free_pt(void *cookie, void *data, size_t size)
 	kmem_cache_free(pt_cache, data);
 }
 
-static int wait_ready(struct panthor_device *ptdev, u32 as_nr)
+/**
+ * mmu_hw_wait_ready() - Wait until the AS is inactive
+ * @ptdev: Device.
+ * @as_nr: AS to wait.
+ *
+ * An AS can accept one command at a time. This function waits until the AS is
+ * inactive and is ready to accept the next command.
+ *
+ * Return: 0 on success, a negative error code otherwise.
+ */
+static int mmu_hw_wait_ready(struct panthor_device *ptdev, u32 as_nr)
 {
 	int ret;
 	u32 val;
@@ -528,7 +538,7 @@ static int write_cmd(struct panthor_device *ptdev, u32 as_nr, u32 cmd)
 	int status;
 
 	/* write AS_COMMAND when MMU is ready to accept another command */
-	status = wait_ready(ptdev, as_nr);
+	status = mmu_hw_wait_ready(ptdev, as_nr);
 	if (!status)
 		gpu_write(ptdev, AS_COMMAND(as_nr), cmd);
 
@@ -601,7 +611,7 @@ static int mmu_hw_do_operation_locked(struct panthor_device *ptdev, int as_nr,
 
 	lock_region(ptdev, as_nr, iova, size);
 
-	ret = wait_ready(ptdev, as_nr);
+	ret = mmu_hw_wait_ready(ptdev, as_nr);
 	if (ret)
 		return ret;
 
@@ -617,7 +627,7 @@ static int mmu_hw_do_operation_locked(struct panthor_device *ptdev, int as_nr,
 	write_cmd(ptdev, as_nr, AS_COMMAND_UNLOCK);
 
 	/* Wait for the unlock command to complete */
-	return wait_ready(ptdev, as_nr);
+	return mmu_hw_wait_ready(ptdev, as_nr);
 }
 
 static int mmu_hw_do_operation(struct panthor_vm *vm,
