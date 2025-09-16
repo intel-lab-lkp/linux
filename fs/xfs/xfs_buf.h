@@ -281,6 +281,7 @@ void xfs_buf_hold(struct xfs_buf *bp);
 
 /* Releasing Buffers */
 extern void xfs_buf_rele(struct xfs_buf *);
+void xfs_buf_cache_invalidate(struct xfs_perag	*pag);
 
 /* Locking and Unlocking Buffers */
 extern int xfs_buf_trylock(struct xfs_buf *);

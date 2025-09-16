@@ -677,6 +677,36 @@ xfs_extent_busy_wait_all(
 }
 
 /*
+ * Similar to xfs_extent_busy_wait_all() - It waits for all the busy extents to
+ * get resolved for the range of AGs provided. For now, this function is
+ * introduced to be used in online shrink process. Unlike
+ * xfs_extent_busy_wait_all(), this takes a passive reference, because this
+ * function is expected to be called for the AGs whose active reference has
+ * been reduced to 0 i.e, offline AGs.
+ *
+ * @mp - The xfs mount point
+ * @first_agno - The 0 based AG index of the range of AGs from which we will
+ *     start.
+ * @end_agno - The 0 based AG index of the range of AGs from till which we will
+ *     traverse.
+ */
+void
+xfs_extent_busy_wait_ags(
+	struct xfs_mount	*mp,
+	xfs_agnumber_t		first_agno,
+	xfs_agnumber_t		end_agno)
+{
+	xfs_agnumber_t		agno;
+	struct xfs_perag	*pag = NULL;
+
+	for_each_perag_range_reverse(agno, end_agno + 1, first_agno + 1) {
+		pag = xfs_perag_get(mp, agno);
+		xfs_extent_busy_wait_group(pag_group(pag));
+		xfs_perag_put(pag);
+	}
+}
+
+/*
  * Callback for list_sort to sort busy extents by the group they reside in.
  */
 int

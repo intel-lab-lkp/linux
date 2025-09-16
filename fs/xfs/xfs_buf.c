@@ -952,6 +952,84 @@ xfs_buf_rele(
 }
 
 /*
+ * This function populates a list of all the cached buffers of the given AG
+ * in the to_be_free list head.
+ */
+static void
+xfs_buf_cache_grab_all(
+	struct xfs_perag	*pag,
+	struct list_head	*to_be_freed)
+{
+	struct xfs_buf		*bp;
+	struct rhashtable_iter	iter;
+
+	rhashtable_walk_enter(&pag->pag_bcache.bc_hash, &iter);
+	do {
+		rhashtable_walk_start(&iter);
+		while ((bp = rhashtable_walk_next(&iter)) && !IS_ERR(bp)) {
+			ASSERT(list_empty(&bp->b_list));
+			ASSERT(list_empty(&bp->b_li_list));
+			list_add_tail(&bp->b_list, to_be_freed);
+		}
+		rhashtable_walk_stop(&iter);
+	} while (cond_resched(), bp == ERR_PTR(-EAGAIN));
+	rhashtable_walk_exit(&iter);
+}
+
+/*
+ * This function frees all the cached buffers (struct xfs_buf) associated with
+ * the given offline AG. The caller must ensure that the AG which is passed
+ * is offline and completely stabilized on the disk. Also, the caller should
+ * ensure that all the cached buffers are not queued for any pending i/o
+ * i.e, the b_list for all the cached buffers are empty - since we will be using
+ * b_list to get list of all the bufs that need to be freed.
+ */
+void
+xfs_buf_cache_invalidate(struct xfs_perag	*pag)
+{
+	/*
+	 * First get the list of buffers we want to free.
+	 * We need to populate to_be_freed list and cannot directly free
+	 * the buffers during the hashtable walk. rhashtable_walk_start() takes
+	 * an RCU and xfs_buf_rele eventually calls xfs_buf_free (for
+	 * cached buffers). xfs_buf_free() might sleep (depending on the
+	 * whether the buffer was allocated using vmalloc or kmalloc) and
+	 * cannot be called within an RCU context. Hence we first populate
+	 * the buffers within an RCU context and free them outside it.
+	 */
+	struct list_head	to_be_freed;
+	struct xfs_buf		*bp, *tmp;
+
+	ASSERT(!xfs_ag_is_active(pag));
+
+	INIT_LIST_HEAD(&to_be_freed);
+
+	xfs_buf_cache_grab_all(pag, &to_be_freed);
+	list_for_each_entry_safe(bp, tmp, &to_be_freed, b_list) {
+		list_del(&bp->b_list);
+		spin_lock(&bp->b_lock);
+		ASSERT(bp->b_pag == pag);
+		ASSERT(!xfs_buf_is_uncached(bp));
+		/*
+		 * Since we have made sure that this is being called on an
+		 * AG with active refcount = 0, the b_hold value of any cached
+		 * buffer should not exceed 1 (i.e, the default value) and hence
+		 * can be safely removed. Hence, it should also be in an
+		 * unlocked state.
+		 */
+		ASSERT(bp->b_hold == 1);
+		ASSERT(!xfs_buf_islocked(bp));
+		/*
+		 * We should set b_lru_ref to 0 so that it gets deleted from
+		 * the lru during the call to xfs_buf_rele.
+		 */
+		atomic_set(&bp->b_lru_ref, 0);
+		spin_unlock(&bp->b_lock);
+		xfs_buf_rele(bp);
+	}
+}
+
+/*
  *	Lock a buffer object, if it is not already locked.
  *
  *	If we come across a stale, pinned, locked buffer, we know that we are

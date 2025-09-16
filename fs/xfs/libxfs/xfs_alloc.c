@@ -3209,11 +3209,12 @@ xfs_validate_ag_length(
 	if (length != mp->m_sb.sb_agblocks) {
 		/*
 		 * During growfs, the new last AG can get here before we
-		 * have updated the superblock. Give it a pass on the seqno
-		 * check.
+		 * have updated the superblock. During shrink, the new last AG
+		 * will be updated and the AGs from newag to old AG will be
+		 * removed. So seqno here maybe not be equal to
+		 * mp->m_sb.sb_agcount - 1 since the super block is not yet
+		 * updated globally.
 		 */
-		if (bp->b_pag && seqno != mp->m_sb.sb_agcount - 1)
-			return __this_address;
 		if (length < XFS_MIN_AG_BLOCKS)
 			return __this_address;
 		if (length > mp->m_sb.sb_agblocks)

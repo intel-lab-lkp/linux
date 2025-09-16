@@ -193,20 +193,32 @@ xfs_agino_range(
 }
 
 /*
- * Update the perag of the previous tail AG if it has been changed during
- * recovery (i.e. recovery of a growfs).
+ * This function does the following:
+ * - Updates the previous perag tail if prev_agcount < current agcount i.e, the
+ *   filesystem has grown OR
+ * - Updates the current tail AG when prev_agcount > current agcount i.e, the
+ *   filesystem has shrunk beyond 1 AG OR
+ * - Updates the current tail AG when only the last AG was shrunk or grown i.e,
+ *   prev_agcount == mp->m_sb.sb_agcount.
  */
 int
 xfs_update_last_ag_size(
 	struct xfs_mount	*mp,
 	xfs_agnumber_t		prev_agcount)
 {
-	struct xfs_perag	*pag = xfs_perag_grab(mp, prev_agcount - 1);
+	xfs_agnumber_t		agno;
+	struct xfs_perag	*pag;
 
+	if (prev_agcount >= mp->m_sb.sb_agcount)
+		agno = mp->m_sb.sb_agcount - 1;
+	else
+		agno = prev_agcount - 1;
+
+	pag = xfs_perag_grab(mp, agno);
 	if (!pag)
 		return -EFSCORRUPTED;
-	pag_group(pag)->xg_block_count = __xfs_ag_block_count(mp,
-			prev_agcount - 1, mp->m_sb.sb_agcount,
+	pag_group(pag)->xg_block_count = __xfs_ag_block_count(mp, agno,
+			mp->m_sb.sb_agcount,
 			mp->m_sb.sb_dblocks);
 	__xfs_agino_range(mp, pag_group(pag)->xg_block_count, &pag->agino_min,
 			&pag->agino_max);
@@ -288,6 +300,48 @@ xfs_initialize_perag(
 out_unwind_new_pags:
 	xfs_free_perag_range(mp, orig_agcount, index);
 	return error;
+}
+
+void
+xfs_perag_activate(struct xfs_perag	*pag)
+{
+	ASSERT(!xfs_ag_is_active(pag));
+	init_waitqueue_head(&pag_group(pag)->xg_active_wq);
+	atomic_set(&pag_group(pag)->xg_active_ref, 1);
+	xfs_add_fdblocks(pag_mount(pag), pag->pagf_freeblks +
+			pag->pagf_flcount);
+}
+
+bool
+xfs_perag_deactivate(struct xfs_perag	*pag)
+{
+	int	error = 0;
+
+	ASSERT(xfs_ag_is_active(pag));
+	if (!xfs_ag_is_empty(pag))
+		return false;
+	/*
+	 * Manually reduce/reserve (pagf_freeblks + pagf_flcount) worth of
+	 * free datablocks from the global counters. This is necessary
+	 * in order to prevent a race where, some AGs have been temporarily
+	 * offlined but the delayed allocator has already promised some bytes
+	 * and later the real extent/block allocation is failing due to
+	 * the AG(s) being offline.
+	 * If the overall shrink succeeds, we will again
+	 * manually restore these counters just before the shrink transaction
+	 * commits and let these global counters get adjusted automatically
+	 * later.
+	 */
+	error = xfs_dec_fdblocks(pag_mount(pag),
+			pag->pagf_freeblks + pag->pagf_flcount, false);
+	if (error)
+		return false;
+	xfs_perag_rele(pag);
+	do {
+		wait_event(pag_group(pag)->xg_active_wq,
+			!xfs_ag_is_active(pag));
+	} while (xfs_ag_is_active(pag));
+	return true;
 }
 
 static int
@@ -758,7 +812,6 @@ xfs_ag_shrink_space(
 	xfs_agblock_t		aglen;
 	int			error, err2;
 
-	ASSERT(pag_agno(pag) == mp->m_sb.sb_agcount - 1);
 	error = xfs_ialloc_read_agi(pag, *tpp, 0, &agibp);
 	if (error)
 		return error;
@@ -870,6 +923,106 @@ resv_err:
 	xfs_warn(mp, "Error %d reserving per-AG metadata reserve pool.", err2);
 	xfs_force_shutdown(mp, SHUTDOWN_CORRUPT_INCORE);
 	return err2;
+}
+
+/*
+ * This function checks whether an AG is empty. An AG is eligible to be
+ * removed if it is empty.
+ */
+bool
+xfs_ag_is_empty(struct xfs_perag	*pag)
+{
+	struct xfs_buf		*agfbp = NULL;
+	struct xfs_mount	*mp = pag_mount(pag);
+	bool			is_empty = false;
+	int			error = 0;
+	struct xfs_agf		*agf = NULL;
+
+	/*
+	 * Read the on-disk data structures to get the correct length of the AG.
+	 * All the AGs have the same length except the last AG.
+	 */
+	error = xfs_alloc_read_agf(pag, NULL, 0, &agfbp);
+	if (!error) {
+		agf = agfbp->b_addr;
+		/*
+		 * We don't need to check if the log blocks belong here since
+		 * the log blocks are taken from the number of free blocks, and
+		 * if the given AG has log blocks, then those many number of
+		 * blocks will be consumed from the number of free blocks and
+		 * the AG empty condition will not hold true.
+		 */
+		if (pag->pagf_freeblks + pag->pagf_flcount +
+			mp->m_ag_prealloc_blocks ==
+			be32_to_cpu(agf->agf_length)) {
+			is_empty = true;
+		}
+		xfs_buf_relse(agfbp);
+	}
+	return is_empty;
+}
+
+/*
+ * This function removes an entire empty AG. Before removing the struct
+ * xfs_perag reference, it removes the associated data structures. Before
+ * removing an AG, the caller must ensure that the AG has been deactivated with
+ * no active references and it has been fully stabilized on the disk.
+ */
+void
+xfs_shrinkfs_remove_ag(
+	struct xfs_mount	*mp,
+	xfs_agnumber_t		agno)
+{
+	struct xfs_group	*xg = NULL;
+	struct xfs_perag	*cur_pag = NULL;
+
+	/*
+	 * Number of AGs can't be less than 2
+	 */
+	ASSERT(agno >= 2);
+	xg = xa_erase(&mp->m_groups[XG_TYPE_AG].xa, agno);
+	cur_pag = to_perag(xg);
+
+	ASSERT(!xfs_ag_is_active(cur_pag));
+	/*
+	 * Since we are freeing the AG, we should clear the perag reservations
+	 * for the corresponding AGs.
+	 */
+	xfs_ag_resv_free(cur_pag);
+	/*
+	 * We have already ensured in the AG preparation phase that all intents
+	 * for the offlined AGs have been resolved. So it safe to free it here.
+	 */
+	xfs_defer_drain_free(&xg->xg_intents_drain);
+	/*
+	 * We have already ensured in the AG preparation phase that all busy
+	 * extents for the offlined AGs have been resolved. So it safe to free
+	 * it here.
+	 */
+	kfree(xg->xg_busy_extents);
+	cancel_delayed_work_sync(&cur_pag->pag_blockgc_work);
+
+	/*
+	 * Remove all the cached buffers for the given AG.
+	 */
+	xfs_buf_cache_invalidate(cur_pag);
+	/*
+	 * Now that the cached buffers have been released, remove the
+	 * cache/hashtable itself. We should not change the order of the buffer
+	 * removal and cache removal.
+	 */
+	xfs_buf_cache_destroy(&cur_pag->pag_bcache);
+	/*
+	 * One final assert, before we remove the xg. Since the cached buffers
+	 * for the offlined AGs are already removed, their passive references
+	 * should be 0. Also, the active references are 0 too, so no new
+	 * operation can start and race and get new references.
+	 */
+	XFS_IS_CORRUPT(mp, atomic_read(&pag_group(cur_pag)->xg_ref) != 0);
+	/*
+	 * Finally free the struct xfs_perag of the AG.
+	 */
+	kfree_rcu_mightsleep(xg);
 }
 
 void
