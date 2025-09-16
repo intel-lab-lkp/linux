@@ -243,6 +243,11 @@ enum drm_panthor_dev_query_type {
 	 * @DRM_PANTHOR_DEV_QUERY_GROUP_PRIORITIES_INFO: Query allowed group priorities information.
 	 */
 	DRM_PANTHOR_DEV_QUERY_GROUP_PRIORITIES_INFO,
+
+	/** @DRM_PANTHOR_DEV_QUERY_CALIBRATED_TIMESTAMP_INFO: Query calibrated
+	 * timestamp information.
+	 */
+	DRM_PANTHOR_DEV_QUERY_CALIBRATED_TIMESTAMP_INFO,
 };
 
 /**
@@ -400,6 +405,32 @@ struct drm_panthor_group_priorities_info {
 
 	/** @pad: Padding fields, MBZ. */
 	__u8 pad[3];
+};
+
+/**
+ * struct drm_panthor_calibrated_timestamp_info - Calibrated timestamp information
+ *
+ * Structure grouping all queryable information relating to the calibrated timestamp.
+ */
+struct drm_panthor_calibrated_timestamp_info {
+	/** @clockid: The CPU clock id.
+	 *
+	 * Must be one of CLOCK_MONOTONIC, CLOCK_MONOTONIC_RAW,
+	 * CLOCK_REALTIME, CLOCK_BOOTTIME, or CLOCK_TAI.
+	 */
+	__s32 cpu_clockid;
+
+	/** @pad: MBZ. */
+	__u32 pad;
+
+	/** @duration: Duration for querying all timestamps in nanoseconds. */
+	__u64 duration;
+
+	/** @cpu_timestamp: The current CPU timestamp in nanoseconds. */
+	__u64 cpu_timestamp;
+
+	/** @gpu_timestamp: The current GPU timestamp in cycles. */
+	__u64 gpu_timestamp;
 };
 
 /**

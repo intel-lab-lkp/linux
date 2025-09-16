@@ -13,6 +13,7 @@
 #include <linux/pagemap.h>
 #include <linux/platform_device.h>
 #include <linux/pm_runtime.h>
+#include <linux/sched/clock.h>
 #include <linux/time64.h>
 
 #include <drm/drm_auth.h>
@@ -172,6 +173,7 @@ panthor_get_uobj_array(const struct drm_panthor_obj_array *in, u32 min_stride,
 		 PANTHOR_UOBJ_DECL(struct drm_panthor_csif_info, pad), \
 		 PANTHOR_UOBJ_DECL(struct drm_panthor_timestamp_info, current_timestamp), \
 		 PANTHOR_UOBJ_DECL(struct drm_panthor_group_priorities_info, pad), \
+		 PANTHOR_UOBJ_DECL(struct drm_panthor_calibrated_timestamp_info, gpu_timestamp), \
 		 PANTHOR_UOBJ_DECL(struct drm_panthor_sync_op, timeline_value), \
 		 PANTHOR_UOBJ_DECL(struct drm_panthor_queue_submit, syncs), \
 		 PANTHOR_UOBJ_DECL(struct drm_panthor_queue_create, ringbuf_size), \
@@ -779,6 +781,74 @@ static int panthor_query_timestamp_info(struct panthor_device *ptdev,
 	return 0;
 }
 
+static int panthor_query_calibrated_timestamp_info(
+	struct panthor_device *ptdev, const struct drm_panthor_calibrated_timestamp_info __user *in,
+	u32 in_size, struct drm_panthor_calibrated_timestamp_info *out)
+{
+	/* cpu_clockid and pad take up the first 8 bytes */
+	const u32 min_size = 8;
+	u64 (*cpu_timestamp)(void);
+	int ret;
+
+	if (in_size < min_size)
+		return -EINVAL;
+	if (!access_ok(in, min_size))
+		return -EFAULT;
+	ret = __get_user(out->cpu_clockid, &in->cpu_clockid);
+	if (ret)
+		return ret;
+	ret = __get_user(out->pad, &in->pad);
+	if (ret)
+		return ret;
+
+	switch (out->cpu_clockid) {
+	case CLOCK_MONOTONIC:
+		cpu_timestamp = ktime_get_ns;
+		break;
+	case CLOCK_MONOTONIC_RAW:
+		cpu_timestamp = ktime_get_raw_ns;
+		break;
+	case CLOCK_REALTIME:
+		cpu_timestamp = ktime_get_real_ns;
+		break;
+	case CLOCK_BOOTTIME:
+		cpu_timestamp = ktime_get_boottime_ns;
+		break;
+	case CLOCK_TAI:
+		cpu_timestamp = ktime_get_clocktai_ns;
+		break;
+	default:
+		return -EINVAL;
+	}
+
+	if (out->pad)
+		return -EINVAL;
+
+	ret = panthor_device_resume_and_get(ptdev);
+	if (ret)
+		return ret;
+
+	do {
+		const u32 hi = gpu_read(ptdev, GPU_TIMESTAMP + 4);
+
+		/* keep duration minimal */
+		preempt_disable();
+		out->duration = local_clock();
+		out->cpu_timestamp = cpu_timestamp();
+		out->gpu_timestamp = gpu_read(ptdev, GPU_TIMESTAMP);
+		out->duration = local_clock() - out->duration;
+		preempt_enable();
+
+		if (likely(hi == gpu_read(ptdev, GPU_TIMESTAMP + 4))) {
+			out->gpu_timestamp |= (u64)hi << 32;
+			break;
+		}
+	} while (true);
+
+	pm_runtime_put(ptdev->base.dev);
+	return 0;
+}
+
 static int group_priority_permit(struct drm_file *file,
 				 u8 priority)
 {
@@ -815,6 +885,7 @@ static int panthor_ioctl_dev_query(struct drm_device *ddev, void *data, struct d
 	struct drm_panthor_dev_query *args = data;
 	struct drm_panthor_timestamp_info timestamp_info;
 	struct drm_panthor_group_priorities_info priorities_info;
+	struct drm_panthor_calibrated_timestamp_info calibrated_timestamp_info;
 	int ret;
 
 	if (!args->pointer) {
@@ -833,6 +904,10 @@ static int panthor_ioctl_dev_query(struct drm_device *ddev, void *data, struct d
 
 		case DRM_PANTHOR_DEV_QUERY_GROUP_PRIORITIES_INFO:
 			args->size = sizeof(priorities_info);
+			return 0;
+
+		case DRM_PANTHOR_DEV_QUERY_CALIBRATED_TIMESTAMP_INFO:
+			args->size = sizeof(calibrated_timestamp_info);
 			return 0;
 
 		default:
@@ -858,6 +933,16 @@ static int panthor_ioctl_dev_query(struct drm_device *ddev, void *data, struct d
 	case DRM_PANTHOR_DEV_QUERY_GROUP_PRIORITIES_INFO:
 		panthor_query_group_priorities_info(file, &priorities_info);
 		return PANTHOR_UOBJ_SET(args->pointer, args->size, priorities_info);
+
+	case DRM_PANTHOR_DEV_QUERY_CALIBRATED_TIMESTAMP_INFO: {
+		ret = panthor_query_calibrated_timestamp_info(ptdev, u64_to_user_ptr(args->pointer),
+							      args->size,
+							      &calibrated_timestamp_info);
+		if (ret)
+			return ret;
+
+		return PANTHOR_UOBJ_SET(args->pointer, args->size, calibrated_timestamp_info);
+	}
 
 	default:
 		return -EINVAL;
@@ -1601,6 +1686,7 @@ static void panthor_debugfs_init(struct drm_minor *minor)
  * - 1.3 - adds DRM_PANTHOR_GROUP_STATE_INNOCENT flag
  * - 1.4 - adds DRM_IOCTL_PANTHOR_BO_SET_LABEL ioctl
  * - 1.5 - adds DRM_PANTHOR_SET_USER_MMIO_OFFSET ioctl
+ * - 1.6 - adds DRM_PANTHOR_DEV_QUERY_CALIBRATED_TIMESTAMP_INFO query
  */
 static const struct drm_driver panthor_drm_driver = {
 	.driver_features = DRIVER_RENDER | DRIVER_GEM | DRIVER_SYNCOBJ |
@@ -1614,7 +1700,7 @@ static const struct drm_driver panthor_drm_driver = {
 	.name = "panthor",
 	.desc = "Panthor DRM driver",
 	.major = 1,
-	.minor = 5,
+	.minor = 6,
 
 	.gem_create_object = panthor_gem_create_object,
 	.gem_prime_import_sg_table = drm_gem_shmem_prime_import_sg_table,
