@@ -49,6 +49,22 @@ config PCIE_AMD_MDB
 	  DesignWare IP and therefore the driver re-uses the DesignWare
 	  core functions to implement the driver.
 
+config PCIE_ANDES_QILAI
+	bool "ANDES QiLai PCIe controller"
+	depends on OF && (RISCV || COMPILE_TEST)
+	depends on PCI_MSI
+	depends on ARCH_ANDES
+	select PCIE_DW_HOST
+	help
+          Say Y here to enable PCIe controller support on Andes QiLai SoCs,
+	  which operate in Root Complex mode. The Andes QiLai SoCs PCIe
+	  controller is based on DesignWare IP (5.97a version) and therefore
+	  the driver re-uses the DesignWare core functions to implement the
+	  driver. The Andes QiLai SoC has three Root Complexes (RCs): one
+	  operates on PCIe 4.0 with 4 lanes at 0x80000000, while the other
+	  two operate on PCIe 4.0 with 2 lanes at 0xA0000000 and 0xC0000000,
+	  respectively.
+
 config PCI_MESON
 	tristate "Amlogic Meson PCIe controller"
 	default m if ARCH_MESON
