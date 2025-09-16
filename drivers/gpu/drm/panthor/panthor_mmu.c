@@ -546,6 +546,27 @@ static int write_cmd(struct panthor_device *ptdev, u32 as_nr, u32 cmd)
 }
 
 /**
+ * mmu_hw_cmd_update() - Issue an UPDATE command
+ * @ptdev: Device.
+ * @as_nr: AS to issue command to.
+ * @transtab: Addr of the translation table.
+ * @transcfg: Bitmask of AS_TRANSCFG_*.
+ * @memattr: Bitmask of AS_MEMATTR_*.
+ *
+ * Issue an UPDATE command to invalidate MMU caches and update the translation
+ * table.
+ */
+static int mmu_hw_cmd_update(struct panthor_device *ptdev, u32 as_nr, u64 transtab, u64 transcfg,
+			     u64 memattr)
+{
+	gpu_write64(ptdev, AS_TRANSTAB(as_nr), transtab);
+	gpu_write64(ptdev, AS_MEMATTR(as_nr), memattr);
+	gpu_write64(ptdev, AS_TRANSCFG(as_nr), transcfg);
+
+	return write_cmd(ptdev, as_nr, AS_COMMAND_UPDATE);
+}
+
+/**
  * mmu_hw_cmd_lock() - Issue a LOCK command
  * @ptdev: Device.
  * @as_nr: AS to issue command to.
@@ -674,11 +695,7 @@ static int panthor_mmu_as_enable(struct panthor_device *ptdev, u32 as_nr,
 	if (ret)
 		return ret;
 
-	gpu_write64(ptdev, AS_TRANSTAB(as_nr), transtab);
-	gpu_write64(ptdev, AS_MEMATTR(as_nr), memattr);
-	gpu_write64(ptdev, AS_TRANSCFG(as_nr), transcfg);
-
-	return write_cmd(ptdev, as_nr, AS_COMMAND_UPDATE);
+	return mmu_hw_cmd_update(ptdev, as_nr, transtab, transcfg, memattr);
 }
 
 static int panthor_mmu_as_disable(struct panthor_device *ptdev, u32 as_nr)
@@ -689,11 +706,7 @@ static int panthor_mmu_as_disable(struct panthor_device *ptdev, u32 as_nr)
 	if (ret)
 		return ret;
 
-	gpu_write64(ptdev, AS_TRANSTAB(as_nr), 0);
-	gpu_write64(ptdev, AS_MEMATTR(as_nr), 0);
-	gpu_write64(ptdev, AS_TRANSCFG(as_nr), AS_TRANSCFG_ADRMODE_UNMAPPED);
-
-	return write_cmd(ptdev, as_nr, AS_COMMAND_UPDATE);
+	return mmu_hw_cmd_update(ptdev, as_nr, 0, AS_TRANSCFG_ADRMODE_UNMAPPED, 0);
 }
 
 static u32 panthor_mmu_fault_mask(struct panthor_device *ptdev, u32 value)
