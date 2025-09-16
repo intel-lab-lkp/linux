@@ -98,6 +98,11 @@
 		#size-cells = <1>;
 		ranges = <0x0 0x10000000 0xfffffff>;
 
+		reset-controller@1a00000 {
+			compatible = "rda,md-reset";
+			reg = <0x1a00000 0x4>;
+		};
+
 		rtc@1a06000 {
 			compatible = "rda,8810pl-rtc";
 			reg = <0x1a06000 0x1000>;
