@@ -441,7 +441,7 @@ static umode_t uacce_dev_is_visible(struct kobject *kobj,
 		return 0;
 
 	if (attr == &dev_attr_isolate_strategy.attr &&
-	    (!uacce->ops->isolate_err_threshold_read &&
+	    (!uacce->ops->isolate_err_threshold_read ||
 	     !uacce->ops->isolate_err_threshold_write))
 		return 0;
 
