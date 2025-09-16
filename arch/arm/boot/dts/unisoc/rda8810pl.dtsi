@@ -16,6 +16,54 @@
 	#address-cells = <1>;
 	#size-cells = <1>;
 
+	/*
+	 * There are two frequency table for CPU.
+	 *
+	 * "High" table is used when operating in normal mode
+	 * "Low" table is used when operating in power saving mode
+	 */
+	cpu_high_opp_table: opp-table-0 {
+		compatible = "operating-points-v2";
+		opp-shared;
+
+		opp-329333333 {
+			opp-hz = /bits/ 64 <329333333>;
+		};
+
+		opp-395200000 {
+			opp-hz = /bits/ 64 <395200000>;
+		};
+
+		opp-494000000 {
+			opp-hz = /bits/ 64 <494000000>;
+		};
+
+		opp-988000000 {
+			opp-hz = /bits/ 64 <988000000>;
+		};
+	};
+
+	cpu_low_opp_table: opp-table-1 {
+		compatible = "operating-points-v2";
+		opp-shared;
+
+		opp-266666666 {
+			opp-hz = /bits/ 64 <266666666>;
+		};
+
+		opp-320000000 {
+			opp-hz = /bits/ 64 <320000000>;
+		};
+
+		opp-400000000 {
+			opp-hz = /bits/ 64 <400000000>;
+		};
+
+		opp-800000000 {
+			opp-hz = /bits/ 64 <800000000>;
+		};
+	};
+
 	cpus {
 		#address-cells = <1>;
 		#size-cells = <0>;
@@ -24,6 +72,10 @@
 			device_type = "cpu";
 			compatible = "arm,cortex-a5";
 			reg = <0x0>;
+			next-level-cache = <&l2>;
+
+			clocks = <&ap_syscon CLK_CPU>;
+			operating-points-v2 = <&cpu_high_opp_table>;
 		};
 	};
 
