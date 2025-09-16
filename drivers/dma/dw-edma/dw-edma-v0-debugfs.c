@@ -47,7 +47,7 @@
 
 #define WR_REGISTER_LEGACY(dw, name) \
 	{ dw, #name, REGS_ADDR(dw, type.legacy.wr_##name) }
-#define RD_REGISTER_LEGACY(name) \
+#define RD_REGISTER_LEGACY(dw, name) \
 	{ dw, #name, REGS_ADDR(dw, type.legacy.rd_##name) }
 
 #define WR_REGISTER_UNROLL(dw, name) \
