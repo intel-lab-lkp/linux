@@ -3,6 +3,7 @@
 #define _LINUX_MMAP_LOCK_H
 
 /* Avoid a dependency loop by declaring here. */
+struct rcuwait;
 extern int rcuwait_wake_up(struct rcuwait *w);
 
 #include <linux/lockdep.h>
