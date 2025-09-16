@@ -533,18 +533,6 @@ static int mmu_hw_wait_ready(struct panthor_device *ptdev, u32 as_nr)
 	return ret;
 }
 
-static int write_cmd(struct panthor_device *ptdev, u32 as_nr, u32 cmd)
-{
-	int status;
-
-	/* write AS_COMMAND when MMU is ready to accept another command */
-	status = mmu_hw_wait_ready(ptdev, as_nr);
-	if (!status)
-		gpu_write(ptdev, AS_COMMAND(as_nr), cmd);
-
-	return status;
-}
-
 /**
  * mmu_hw_cmd_update() - Issue an UPDATE command
  * @ptdev: Device.
@@ -556,14 +544,14 @@ static int write_cmd(struct panthor_device *ptdev, u32 as_nr, u32 cmd)
  * Issue an UPDATE command to invalidate MMU caches and update the translation
  * table.
  */
-static int mmu_hw_cmd_update(struct panthor_device *ptdev, u32 as_nr, u64 transtab, u64 transcfg,
-			     u64 memattr)
+static void mmu_hw_cmd_update(struct panthor_device *ptdev, u32 as_nr, u64 transtab, u64 transcfg,
+			      u64 memattr)
 {
 	gpu_write64(ptdev, AS_TRANSTAB(as_nr), transtab);
 	gpu_write64(ptdev, AS_MEMATTR(as_nr), memattr);
 	gpu_write64(ptdev, AS_TRANSCFG(as_nr), transcfg);
 
-	return write_cmd(ptdev, as_nr, AS_COMMAND_UPDATE);
+	gpu_write(ptdev, AS_COMMAND(as_nr), AS_COMMAND_UPDATE);
 }
 
 /**
@@ -606,7 +594,7 @@ static void mmu_hw_cmd_lock(struct panthor_device *ptdev, u32 as_nr, u64 region_
 
 	/* Lock the region that needs to be updated */
 	gpu_write64(ptdev, AS_LOCKADDR(as_nr), region);
-	write_cmd(ptdev, as_nr, AS_COMMAND_LOCK);
+	gpu_write(ptdev, AS_COMMAND(as_nr), AS_COMMAND_LOCK);
 }
 
 /**
@@ -619,7 +607,7 @@ static void mmu_hw_cmd_lock(struct panthor_device *ptdev, u32 as_nr, u64 region_
  */
 static void mmu_hw_cmd_unlock(struct panthor_device *ptdev, u32 as_nr)
 {
-	write_cmd(ptdev, as_nr, AS_COMMAND_UNLOCK);
+	gpu_write(ptdev, AS_COMMAND(as_nr), AS_COMMAND_UNLOCK);
 }
 
 /**
@@ -664,7 +652,9 @@ static int mmu_hw_flush_caches(struct panthor_device *ptdev, int as_nr, u64 iova
 	 * power it up
 	 */
 
-	mmu_hw_cmd_lock(ptdev, as_nr, iova, size);
+	ret = mmu_hw_wait_ready(ptdev, as_nr);
+	if (!ret)
+		mmu_hw_cmd_lock(ptdev, as_nr, iova, size);
 
 	ret = mmu_hw_wait_ready(ptdev, as_nr);
 	if (ret)
@@ -679,7 +669,9 @@ static int mmu_hw_flush_caches(struct panthor_device *ptdev, int as_nr, u64 iova
 	 * at the end of the GPU_CONTROL cache flush command, unlike
 	 * AS_COMMAND_FLUSH_MEM or AS_COMMAND_FLUSH_PT.
 	 */
-	mmu_hw_cmd_unlock(ptdev, as_nr);
+	ret = mmu_hw_wait_ready(ptdev, as_nr);
+	if (!ret)
+		mmu_hw_cmd_unlock(ptdev, as_nr);
 
 	/* Wait for the unlock command to complete */
 	return mmu_hw_wait_ready(ptdev, as_nr);
@@ -707,7 +699,13 @@ static int panthor_mmu_as_enable(struct panthor_device *ptdev, u32 as_nr,
 	if (ret)
 		return ret;
 
-	return mmu_hw_cmd_update(ptdev, as_nr, transtab, transcfg, memattr);
+	ret = mmu_hw_wait_ready(ptdev, as_nr);
+	if (ret)
+		return ret;
+
+	mmu_hw_cmd_update(ptdev, as_nr, transtab, transcfg, memattr);
+
+	return 0;
 }
 
 static int panthor_mmu_as_disable(struct panthor_device *ptdev, u32 as_nr)
@@ -718,7 +716,13 @@ static int panthor_mmu_as_disable(struct panthor_device *ptdev, u32 as_nr)
 	if (ret)
 		return ret;
 
-	return mmu_hw_cmd_update(ptdev, as_nr, 0, AS_TRANSCFG_ADRMODE_UNMAPPED, 0);
+	ret = mmu_hw_wait_ready(ptdev, as_nr);
+	if (ret)
+		return ret;
+
+	mmu_hw_cmd_update(ptdev, as_nr, 0, AS_TRANSCFG_ADRMODE_UNMAPPED, 0);
+
+	return 0;
 }
 
 static u32 panthor_mmu_fault_mask(struct panthor_device *ptdev, u32 value)
