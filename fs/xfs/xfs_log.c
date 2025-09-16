@@ -1277,13 +1277,8 @@ xlog_get_iclog_buffer_size(
 
 	log->l_iclog_bufs = mp->m_logbufs;
 	log->l_iclog_size = mp->m_logbsize;
-
-	/*
-	 * # headers = size / 32k - one header holds cycles from 32k of data.
-	 */
-	log->l_iclog_heads =
-		DIV_ROUND_UP(mp->m_logbsize, XLOG_HEADER_CYCLE_SIZE);
-	log->l_iclog_hsize = log->l_iclog_heads << BBSHIFT;
+	/* combined size of the log record headers: */
+	log->l_iclog_hsize = DIV_ROUND_UP(mp->m_logbsize, XLOG_CYCLE_DATA_SIZE);
 }
 
 void
@@ -1534,7 +1529,7 @@ xlog_pack_data(
 		dp += BBSIZE;
 	}
 
-	for (i = 0; i < log->l_iclog_heads - 1; i++)
+	for (i = 0; i < (log->l_iclog_hsize >> BBSHIFT) - 1; i++)
 		rhead->h_ext[i].xh_cycle = cycle_lsn;
 }
 
