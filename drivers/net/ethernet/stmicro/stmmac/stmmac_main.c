@@ -4503,13 +4503,14 @@ dma_map_err:
  */
 static bool stmmac_has_ip_ethertype(struct sk_buff *skb)
 {
-	int depth = 0;
+	int depth = 0, hlen;
 	__be16 proto;
 
-	proto = __vlan_get_protocol(skb, eth_header_parse_protocol(skb),
-				    &depth);
+	proto = __vlan_get_protocol_offset(skb, skb->protocol,
+					   skb_mac_offset(skb), &depth);
+	hlen = eth_type_vlan(skb->protocol) ? VLAN_ETH_HLEN : ETH_HLEN;
 
-	return (depth <= ETH_HLEN) &&
+	return (depth <= hlen) &&
 		(proto == htons(ETH_P_IP) || proto == htons(ETH_P_IPV6));
 }
 
