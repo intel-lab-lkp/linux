@@ -175,6 +175,10 @@ extern int SMB2_ioctl_init(struct cifs_tcon *tcon,
 			   char *in_data, u32 indatalen,
 			   __u32 max_response_size);
 extern void SMB2_ioctl_free(struct smb_rqst *rqst);
+extern int SMB2_notify_init(const unsigned int xid, struct smb_rqst *rqst,
+			    struct cifs_tcon *tcon, struct TCP_Server_Info *server,
+			    u64 persistent_fid, u64 volatile_fid,
+			    u32 completion_filter, bool watch_tree);
 extern int SMB2_change_notify(const unsigned int xid, struct cifs_tcon *tcon,
 			u64 persistent_fid, u64 volatile_fid, bool watch_tree,
 			u32 completion_filter, u32 max_out_data_len,
