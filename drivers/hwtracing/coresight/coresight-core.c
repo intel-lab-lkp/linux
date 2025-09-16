@@ -510,7 +510,7 @@ int coresight_enable_path(struct coresight_path *path, enum cs_mode mode,
 		type = csdev->type;
 
 		/* Enable all helpers adjacent to the path first */
-		ret = coresight_enable_helpers(csdev, mode, path);
+		ret = coresight_enable_helpers(csdev, mode, sink_data);
 		if (ret)
 			goto err_disable_path;
 		/*
