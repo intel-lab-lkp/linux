@@ -51,6 +51,9 @@
 #endif
 #include "fs_context.h"
 #include "cifs_swn.h"
+#ifdef CONFIG_CIFS_DIR_CHANGE_TRACKING
+#include "notify.h"
+#endif
 
 /* FIXME: should these be tunable? */
 #define TLINK_ERROR_EXPIRE	(1 * HZ)
@@ -4154,6 +4157,9 @@ cifs_umount(struct cifs_sb_info *cifs_sb)
 	cancel_delayed_work_sync(&cifs_sb->prune_tlinks);
 
 	if (cifs_sb->master_tlink) {
+#ifdef CONFIG_CIFS_DIR_CHANGE_TRACKING
+		stop_track_sb_dir_changes(cifs_sb);
+#endif
 		tcon = cifs_sb->master_tlink->tl_tcon;
 		if (tcon) {
 			spin_lock(&tcon->sb_list_lock);

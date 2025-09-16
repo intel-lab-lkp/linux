@@ -24,6 +24,9 @@
 #include "fs_context.h"
 #include "cached_dir.h"
 #include "reparse.h"
+#ifdef CONFIG_CIFS_DIR_CHANGE_TRACKING
+#include "notify.h"
+#endif
 
 /*
  * To be safe - for UCS to UTF-8 with strings loaded with the rare long
@@ -1070,6 +1073,9 @@ int cifs_readdir(struct file *file, struct dir_context *ctx)
 	if (rc)
 		goto cache_not_found;
 
+#ifdef CONFIG_CIFS_DIR_CHANGE_TRACKING
+	start_track_dir_changes(full_path, d_inode(file_dentry(file)), cifs_sb);
+#endif
 	mutex_lock(&cfid->dirents.de_mutex);
 	/*
 	 * If this was reading from the start of the directory
@@ -1151,6 +1157,9 @@ int cifs_readdir(struct file *file, struct dir_context *ctx)
 		cifs_dbg(FYI, "Could not find entry\n");
 		goto rddir2_exit;
 	}
+#ifdef CONFIG_CIFS_DIR_CHANGE_TRACKING
+	start_track_dir_changes(full_path, d_inode(file_dentry(file)), cifs_sb);
+#endif
 	cifs_dbg(FYI, "loop through %d times filling dir for net buf %p\n",
 		 num_to_fill, cifsFile->srch_inf.ntwrk_buf_start);
 	max_len = tcon->ses->server->ops->calc_smb_size(

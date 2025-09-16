@@ -218,4 +218,21 @@ config CIFS_COMPRESSION
 	  Say Y here if you want SMB traffic to be compressed.
 	  If unsure, say N.
 
++config CIFS_DIR_CHANGE_TRACKING
+	bool "Directory change tracking (Experimental)"
+	depends on CIFS && FSNOTIFY=y
+	default n
+	help
+          Enables automatic tracking of directory changes for SMB2 or later
+          using the SMB2 Change Notify protocol. File managers and applications
+          monitoring directories via inotify will receive real-time updates
+          when files are created, deleted, or renamed on the server.
+
+          This feature maintains persistent connections to track changes.
+          Each monitored directory consumes server resources and may increase
+          network traffic.
+
+          Say Y here if you want real-time directory monitoring.
+          If unsure, say N.
+
 endif

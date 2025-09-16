@@ -45,6 +45,9 @@
 #include "cached_dir.h"
 #include "compress.h"
 #include "fs_context.h"
+#ifdef CONFIG_CIFS_DIR_CHANGE_TRACKING
+#include "notify.h"
+#endif
 
 /*
  *  The following table defines the expected "StructureSize" of SMB2 requests
@@ -466,6 +469,9 @@ skip_add_channels:
 		mod_delayed_work(cifsiod_wq, &server->reconnect, 0);
 
 	atomic_inc(&tconInfoReconnectCount);
+#ifdef CONFIG_CIFS_DIR_CHANGE_TRACKING
+	resume_track_dir_changes();
+#endif
 out:
 	/*
 	 * Check if handle based operation so we know whether we can continue
