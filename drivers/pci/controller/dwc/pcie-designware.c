@@ -461,6 +461,28 @@ static inline u32 dw_pcie_enable_ecrc(u32 val)
 	return val | PCIE_ATU_TD;
 }
 
+static
+bool dw_pcie_outbound_atu_addr_valid(struct dw_pcie *pci,
+				     const struct dw_pcie_ob_atu_cfg *atu,
+				     u64 *limit_addr)
+{
+	u64 parent_bus_addr = atu->parent_bus_addr;
+
+	if (pci->ops && pci->ops->outbound_atu_addr_valid)
+		return pci->ops->outbound_atu_addr_valid(pci, atu, limit_addr);
+
+	*limit_addr = parent_bus_addr + atu->size - 1;
+
+	if ((*limit_addr & ~pci->region_limit) !=
+	    (parent_bus_addr & ~pci->region_limit) ||
+	    !IS_ALIGNED(parent_bus_addr, pci->region_align) ||
+	    !IS_ALIGNED(atu->pci_addr, pci->region_align) ||
+	    !atu->size)
+		return false;
+
+	return true;
+}
+
 int dw_pcie_prog_outbound_atu(struct dw_pcie *pci,
 			      const struct dw_pcie_ob_atu_cfg *atu)
 {
@@ -468,13 +490,8 @@ int dw_pcie_prog_outbound_atu(struct dw_pcie *pci,
 	u32 retries, val;
 	u64 limit_addr;
 
-	limit_addr = parent_bus_addr + atu->size - 1;
-
-	if ((limit_addr & ~pci->region_limit) != (parent_bus_addr & ~pci->region_limit) ||
-	    !IS_ALIGNED(parent_bus_addr, pci->region_align) ||
-	    !IS_ALIGNED(atu->pci_addr, pci->region_align) || !atu->size) {
+	if (!dw_pcie_outbound_atu_addr_valid(pci, atu, &limit_addr))
 		return -EINVAL;
-	}
 
 	dw_pcie_writel_atu_ob(pci, atu->index, PCIE_ATU_LOWER_BASE,
 			      lower_32_bits(parent_bus_addr));
