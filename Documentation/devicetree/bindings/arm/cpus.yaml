@@ -148,6 +148,7 @@ properties:
       - arm,cortex-a710
       - arm,cortex-a715
       - arm,cortex-a720
+      - arm,cortex-a720ae
       - arm,cortex-a725
       - arm,cortex-m0
       - arm,cortex-m0+
