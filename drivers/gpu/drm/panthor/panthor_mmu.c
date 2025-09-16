@@ -622,8 +622,20 @@ static void mmu_hw_cmd_unlock(struct panthor_device *ptdev, u32 as_nr)
 	write_cmd(ptdev, as_nr, AS_COMMAND_UNLOCK);
 }
 
-static int mmu_hw_do_operation_locked(struct panthor_device *ptdev, int as_nr,
-				      u64 iova, u64 size, u32 op)
+/**
+ * mmu_hw_cmd_flush_caches() - Flush and invalidate L2/MMU/LSC caches
+ * @ptdev: Device.
+ * @as_nr: AS to issue command to.
+ * @iova: Start of the region.
+ * @size: Size of the region.
+ * @op: AS_COMMAND_FLUSH_*
+ *
+ * Issue LOCK/GPU_FLUSH_CACHES/UNLOCK commands in order to flush and
+ * invalidate L2/MMU/LSC caches for a region.
+ *
+ * Return: 0 on success, a negative error code otherwise.
+ */
+static int mmu_hw_flush_caches(struct panthor_device *ptdev, int as_nr, u64 iova, u64 size, u32 op)
 {
 	const u32 l2_flush_op = CACHE_CLEAN | CACHE_INV;
 	u32 lsc_flush_op;
@@ -680,7 +692,7 @@ static int mmu_hw_do_operation(struct panthor_vm *vm,
 	int ret;
 
 	mutex_lock(&ptdev->mmu->as.slots_lock);
-	ret = mmu_hw_do_operation_locked(ptdev, vm->as.id, iova, size, op);
+	ret = mmu_hw_flush_caches(ptdev, vm->as.id, iova, size, op);
 	mutex_unlock(&ptdev->mmu->as.slots_lock);
 
 	return ret;
@@ -691,7 +703,7 @@ static int panthor_mmu_as_enable(struct panthor_device *ptdev, u32 as_nr,
 {
 	int ret;
 
-	ret = mmu_hw_do_operation_locked(ptdev, as_nr, 0, ~0ULL, AS_COMMAND_FLUSH_MEM);
+	ret = mmu_hw_flush_caches(ptdev, as_nr, 0, ~0ULL, AS_COMMAND_FLUSH_MEM);
 	if (ret)
 		return ret;
 
@@ -702,7 +714,7 @@ static int panthor_mmu_as_disable(struct panthor_device *ptdev, u32 as_nr)
 {
 	int ret;
 
-	ret = mmu_hw_do_operation_locked(ptdev, as_nr, 0, ~0ULL, AS_COMMAND_FLUSH_MEM);
+	ret = mmu_hw_flush_caches(ptdev, as_nr, 0, ~0ULL, AS_COMMAND_FLUSH_MEM);
 	if (ret)
 		return ret;
 
