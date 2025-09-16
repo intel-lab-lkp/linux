@@ -5580,6 +5580,8 @@ __weak void kvm_arch_disable_virtualization(void)
 
 static int kvm_enable_virtualization_cpu(void)
 {
+	lockdep_assert_irqs_disabled();
+
 	if (__this_cpu_read(virtualization_enabled))
 		return 0;
 
@@ -5595,6 +5597,8 @@ static int kvm_enable_virtualization_cpu(void)
 
 static int kvm_online_cpu(unsigned int cpu)
 {
+	guard(irqsave)();
+
 	/*
 	 * Abort the CPU online process if hardware virtualization cannot
 	 * be enabled. Otherwise running VMs would encounter unrecoverable
@@ -5605,6 +5609,8 @@ static int kvm_online_cpu(unsigned int cpu)
 
 static void kvm_disable_virtualization_cpu(void *ign)
 {
+	lockdep_assert_irqs_disabled();
+
 	if (!__this_cpu_read(virtualization_enabled))
 		return;
 
@@ -5615,6 +5621,8 @@ static void kvm_disable_virtualization_cpu(void *ign)
 
 static int kvm_offline_cpu(unsigned int cpu)
 {
+	guard(irqsave)();
+
 	kvm_disable_virtualization_cpu(NULL);
 	return 0;
 }
@@ -5648,7 +5656,6 @@ static int kvm_suspend(void)
 	 * dropped all locks (userspace tasks are frozen via a fake signal).
 	 */
 	lockdep_assert_not_held(&kvm_usage_lock);
-	lockdep_assert_irqs_disabled();
 
 	kvm_disable_virtualization_cpu(NULL);
 	return 0;
@@ -5657,7 +5664,6 @@ static int kvm_suspend(void)
 static void kvm_resume(void)
 {
 	lockdep_assert_not_held(&kvm_usage_lock);
-	lockdep_assert_irqs_disabled();
 
 	WARN_ON_ONCE(kvm_enable_virtualization_cpu());
 }
