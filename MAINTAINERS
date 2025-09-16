@@ -21399,6 +21399,12 @@ S:	Maintained
 F:	Documentation/devicetree/bindings/clock/rda,8810pl-apsyscon.yaml
 F:	drivers/clk/rda/clk-rda8810.c
 
+RDA MICRO INTELLIGENT FLOW CONTROLLER DRIVER
+M:	Dang Huynh <dang.huynh@mainlining.org>
+S:	Maintained
+F:	Documentation/devicetree/bindings/dma/rda,ifc.yaml
+F:	drivers/dma/rda-ifc.c
+
 RDA MICRO MODEM RESET DRIVER
 M:	Dang Huynh <dang.huynh@mainlining.org>
 S:	Maintained

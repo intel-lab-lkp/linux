@@ -69,6 +69,7 @@ obj-$(CONFIG_PL330_DMA) += pl330.o
 obj-$(CONFIG_PLX_DMA) += plx_dma.o
 obj-$(CONFIG_PPC_BESTCOMM) += bestcomm/
 obj-$(CONFIG_PXA_DMA) += pxa_dma.o
+obj-$(CONFIG_RDA_IFC) += rda-ifc.o
 obj-$(CONFIG_RENESAS_DMA) += sh/
 obj-$(CONFIG_SF_PDMA) += sf-pdma/
 obj-$(CONFIG_SOPHGO_CV1800B_DMAMUX) += cv1800b-dmamux.o
