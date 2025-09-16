@@ -157,9 +157,11 @@ static int hardlockup_detector_event_create(void)
  * watchdog_hardlockup_enable - Enable the local event
  * @cpu: The CPU to enable hard lockup on.
  */
-void watchdog_hardlockup_enable(unsigned int cpu)
+void watchdog_perf_hardlockup_enable(unsigned int cpu)
 {
 	WARN_ON_ONCE(cpu != smp_processor_id());
+
+	pr_info("ddddd %s\n", __func__);
 
 	if (hardlockup_detector_event_create())
 		return;
@@ -176,7 +178,7 @@ void watchdog_hardlockup_enable(unsigned int cpu)
  * watchdog_hardlockup_disable - Disable the local event
  * @cpu: The CPU to enable hard lockup on.
  */
-void watchdog_hardlockup_disable(unsigned int cpu)
+void watchdog_perf_hardlockup_disable(unsigned int cpu)
 {
 	struct perf_event *event = this_cpu_read(watchdog_ev);
 
@@ -261,9 +263,11 @@ bool __weak __init arch_perf_nmi_is_available(void)
 /**
  * watchdog_hardlockup_probe - Probe whether NMI event is available at all
  */
-int __init watchdog_hardlockup_probe(void)
+int __init watchdog_perf_hardlockup_probe(void)
 {
 	int ret;
+
+	pr_info("ddddd %s\n", __func__);
 
 	if (!arch_perf_nmi_is_available())
 		return -ENODEV;

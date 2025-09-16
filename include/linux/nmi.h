@@ -100,6 +100,9 @@ void watchdog_hardlockup_check(unsigned int cpu, struct pt_regs *regs);
 #endif
 
 #if defined(CONFIG_HARDLOCKUP_DETECTOR_PERF)
+void watchdog_perf_hardlockup_enable(unsigned int cpu);
+void watchdog_perf_hardlockup_disable(unsigned int cpu);
+extern int watchdog_perf_hardlockup_probe(void);
 extern void hardlockup_detector_perf_stop(void);
 extern void hardlockup_detector_perf_restart(void);
 extern void hardlockup_config_perf_event(const char *str);
@@ -120,6 +123,9 @@ void watchdog_hardlockup_disable(unsigned int cpu);
 void lockup_detector_reconfigure(void);
 
 #ifdef CONFIG_HARDLOCKUP_DETECTOR_BUDDY
+void watchdog_buddy_hardlockup_enable(unsigned int cpu);
+void watchdog_buddy_hardlockup_disable(unsigned int cpu);
+int watchdog_buddy_hardlockup_probe(void);
 void watchdog_buddy_check_hardlockup(int hrtimer_interrupts);
 #else
 static inline void watchdog_buddy_check_hardlockup(int hrtimer_interrupts) {}

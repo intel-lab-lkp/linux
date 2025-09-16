@@ -19,15 +19,16 @@ static unsigned int watchdog_next_cpu(unsigned int cpu)
 	return next_cpu;
 }
 
-int __init watchdog_hardlockup_probe(void)
+int __init watchdog_buddy_hardlockup_probe(void)
 {
 	return 0;
 }
 
-void watchdog_hardlockup_enable(unsigned int cpu)
+void watchdog_buddy_hardlockup_enable(unsigned int cpu)
 {
 	unsigned int next_cpu;
 
+	pr_info("ddddd %s\n", __func__);
 	/*
 	 * The new CPU will be marked online before the hrtimer interrupt
 	 * gets a chance to run on it. If another CPU tests for a
@@ -58,7 +59,7 @@ void watchdog_hardlockup_enable(unsigned int cpu)
 	cpumask_set_cpu(cpu, &watchdog_cpus);
 }
 
-void watchdog_hardlockup_disable(unsigned int cpu)
+void watchdog_buddy_hardlockup_disable(unsigned int cpu)
 {
 	unsigned int next_cpu = watchdog_next_cpu(cpu);
 

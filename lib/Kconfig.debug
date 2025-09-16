@@ -1167,36 +1167,33 @@ config HARDLOCKUP_DETECTOR
 #
 # Note that arch-specific variants are always preferred.
 #
-config HARDLOCKUP_DETECTOR_PREFER_BUDDY
-	bool "Prefer the buddy CPU hardlockup detector"
-	depends on HARDLOCKUP_DETECTOR
-	depends on HAVE_HARDLOCKUP_DETECTOR_PERF && HAVE_HARDLOCKUP_DETECTOR_BUDDY
-	depends on !HAVE_HARDLOCKUP_DETECTOR_ARCH
-	help
-	  Say Y here to prefer the buddy hardlockup detector over the perf one.
-
-	  With the buddy detector, each CPU uses its softlockup hrtimer
-	  to check that the next CPU is processing hrtimer interrupts by
-	  verifying that a counter is increasing.
-
-	  This hardlockup detector is useful on systems that don't have
-	  an arch-specific hardlockup detector or if resources needed
-	  for the hardlockup detector are better used for other things.
-
 config HARDLOCKUP_DETECTOR_PERF
-	bool
+	bool "Enable perf-based hard lockup detector (preferred)"
 	depends on HARDLOCKUP_DETECTOR
-	depends on HAVE_HARDLOCKUP_DETECTOR_PERF && !HARDLOCKUP_DETECTOR_PREFER_BUDDY
+	depends on HAVE_HARDLOCKUP_DETECTOR_PERF
 	depends on !HAVE_HARDLOCKUP_DETECTOR_ARCH
 	select HARDLOCKUP_DETECTOR_COUNTS_HRTIMER
+	help
+	  This detector uses a perf event on the CPU to detect when a CPU
+	  has become non-maskable interrupt (NMI) stuck. This is the
+	  preferred method on modern systems as it can detect lockups on
+	  all CPUs at the same time.
 
 config HARDLOCKUP_DETECTOR_BUDDY
-	bool
+	bool "Enable buddy-based hard lockup detector"
 	depends on HARDLOCKUP_DETECTOR
 	depends on HAVE_HARDLOCKUP_DETECTOR_BUDDY
-	depends on !HAVE_HARDLOCKUP_DETECTOR_PERF || HARDLOCKUP_DETECTOR_PREFER_BUDDY
 	depends on !HAVE_HARDLOCKUP_DETECTOR_ARCH
 	select HARDLOCKUP_DETECTOR_COUNTS_HRTIMER
+	help
+	  This is an alternative lockup detector that uses a heartbeat
+	  mechanism between CPUs to detect when one has stopped responding.
+	  It is less precise than the perf-based detector and cannot detect
+	  all-CPU lockups, but it does not require a perf counter.
+
+config CONFIG_HARDLOCKUP_DETECTOR_MULTIPLE
+	bool
+	depends on HARDLOCKUP_DETECTOR_PERF && HARDLOCKUP_DETECTOR_BUDDY
 
 config HARDLOCKUP_DETECTOR_ARCH
 	bool

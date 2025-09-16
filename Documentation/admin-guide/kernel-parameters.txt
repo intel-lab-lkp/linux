@@ -1828,6 +1828,13 @@
 			backtraces on all cpus.
 			Format: 0 | 1
 
+	hardlockup_detector=
+			[perf, buddy] Selects the hard lockup detector to use at
+			boot time.
+			Format: <string>
+			- "perf": Use the perf-based detector.
+			- "buddy": Use the buddy-based detector.
+
 	hash_pointers=
 			[KNL,EARLY]
 			By default, when pointers are printed to the console

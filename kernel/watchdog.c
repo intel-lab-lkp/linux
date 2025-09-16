@@ -55,6 +55,37 @@ unsigned long *watchdog_cpumask_bits = cpumask_bits(&watchdog_cpumask);
 
 #ifdef CONFIG_HARDLOCKUP_DETECTOR
 
+#ifdef CONFIG_HARDLOCKUP_DETECTOR_PERF
+/* The global function pointers */
+void (*watchdog_hardlockup_enable_ptr)(unsigned int cpu) = watchdog_perf_hardlockup_enable;
+void (*watchdog_hardlockup_disable_ptr)(unsigned int cpu) = watchdog_perf_hardlockup_disable;
+int (*watchdog_hardlockup_probe_ptr)(void) = watchdog_perf_hardlockup_probe;
+#elif defined(CONFIG_HARDLOCKUP_DETECTOR_BUDDY)
+void (*watchdog_hardlockup_enable_ptr)(unsigned int cpu) = watchdog_buddy_hardlockup_enable;
+void (*watchdog_hardlockup_disable_ptr)(unsigned int cpu) = watchdog_buddy_hardlockup_disable;
+int (*watchdog_hardlockup_probe_ptr)(void) = watchdog_buddy_hardlockup_probe;
+#endif
+
+#ifdef CONFIG_HARDLOCKUP_DETECTOR_MULTIPLE
+static char *hardlockup_detector_type = "perf"; /* Default to perf */
+static int __init set_hardlockup_detector_type(char *str)
+{
+	if (!strncmp(str, "perf", 4)) {
+		watchdog_hardlockup_enable_ptr = watchdog_perf_hardlockup_enable;
+		watchdog_hardlockup_disable_ptr = watchdog_perf_hardlockup_disable;
+		watchdog_hardlockup_probe_ptr = watchdog_perf_hardlockup_probe;
+	} else if (!strncmp(str, "buddy", 5)) {
+		watchdog_hardlockup_enable_ptr = watchdog_buddy_hardlockup_enable;
+		watchdog_hardlockup_disable_ptr = watchdog_buddy_hardlockup_disable;
+		watchdog_hardlockup_probe_ptr = watchdog_buddy_hardlockup_probe;
+	}
+	return 1;
+}
+
+__setup("hardlockup_detector=", set_hardlockup_detector_type);
+
+#endif
+
 # ifdef CONFIG_SMP
 int __read_mostly sysctl_hardlockup_all_cpu_backtrace;
 # endif /* CONFIG_SMP */
@@ -262,9 +293,17 @@ static inline void watchdog_hardlockup_kick(void) { }
  * softlockup watchdog start and stop. The detector must select the
  * SOFTLOCKUP_DETECTOR Kconfig.
  */
-void __weak watchdog_hardlockup_enable(unsigned int cpu) { }
+void __weak watchdog_hardlockup_enable(unsigned int cpu)
+{
+	if (watchdog_hardlockup_enable_ptr)
+		watchdog_hardlockup_enable_ptr(cpu);
+}
 
-void __weak watchdog_hardlockup_disable(unsigned int cpu) { }
+void __weak watchdog_hardlockup_disable(unsigned int cpu)
+{
+	if (watchdog_hardlockup_disable_ptr)
+		watchdog_hardlockup_disable_ptr(cpu);
+}
 
 /*
  * Watchdog-detector specific API.
@@ -275,6 +314,9 @@ void __weak watchdog_hardlockup_disable(unsigned int cpu) { }
  */
 int __weak __init watchdog_hardlockup_probe(void)
 {
+	if (watchdog_hardlockup_probe_ptr)
+		return watchdog_hardlockup_probe_ptr();
+
 	return -ENODEV;
 }
 
