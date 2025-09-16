@@ -6293,14 +6293,25 @@ static void sysfs_display_ring(void *head, int size, int extend_desc,
 	desc_size = extend_desc ? sizeof(*ep) : sizeof(*p);
 	for (i = 0; i < size; i++) {
 		dma_addr = dma_phy_addr + i * desc_size;
-		seq_printf(seq, "%d [%pad]: 0x%x 0x%x 0x%x 0x%x\n",
-				i, &dma_addr,
-				le32_to_cpu(p->des0), le32_to_cpu(p->des1),
-				le32_to_cpu(p->des2), le32_to_cpu(p->des3));
-		if (extend_desc)
-			p = &(++ep)->basic;
-		else
+		if (extend_desc) {
+			seq_printf(seq, "%d [%pad]: 0x%x 0x%x 0x%x 0x%x 0x%x 0x%x 0x%x 0x%x\n",
+				   i, &dma_addr,
+				   le32_to_cpu(ep->basic.des0),
+				   le32_to_cpu(ep->basic.des1),
+				   le32_to_cpu(ep->basic.des2),
+				   le32_to_cpu(ep->basic.des3),
+				   le32_to_cpu(ep->des4),
+				   le32_to_cpu(ep->des5),
+				   le32_to_cpu(ep->des6),
+				   le32_to_cpu(ep->des7));
+			ep++;
+		} else {
+			seq_printf(seq, "%d [%pad]: 0x%x 0x%x 0x%x 0x%x\n",
+				   i, &dma_addr,
+				   le32_to_cpu(p->des0), le32_to_cpu(p->des1),
+				   le32_to_cpu(p->des2), le32_to_cpu(p->des3));
 			p++;
+		}
 	}
 }
 
@@ -6340,7 +6351,11 @@ static int stmmac_rings_status_show(struct seq_file *seq, void *v)
 			seq_printf(seq, "Extended descriptor ring:\n");
 			sysfs_display_ring((void *)tx_q->dma_etx,
 					   priv->dma_conf.dma_tx_size, 1, seq, tx_q->dma_tx_phy);
-		} else if (!(tx_q->tbs & STMMAC_TBS_AVAIL)) {
+		} else if (tx_q->tbs & STMMAC_TBS_AVAIL) {
+			seq_printf(seq, "Enhanced descriptor ring:\n");
+			sysfs_display_ring((void *)tx_q->dma_entx,
+					   priv->dma_conf.dma_tx_size, 1, seq, tx_q->dma_tx_phy);
+		} else {
 			seq_printf(seq, "Descriptor ring:\n");
 			sysfs_display_ring((void *)tx_q->dma_tx,
 					   priv->dma_conf.dma_tx_size, 0, seq, tx_q->dma_tx_phy);
