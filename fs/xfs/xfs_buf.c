@@ -397,7 +397,7 @@ xfs_buf_map_verify(
 	 * Corrupted block numbers can get through to here, unfortunately, so we
 	 * have to check that the buffer falls within the filesystem bounds.
 	 */
-	eofs = XFS_FSB_TO_BB(btp->bt_mount, btp->bt_mount->m_sb.sb_dblocks);
+	eofs = XFS_FSB_TO_BB(btp->bt_mount, btp->bt_nr_blocks);
 	if (map->bm_bn < 0 || map->bm_bn >= eofs) {
 		xfs_alert(btp->bt_mount,
 			  "%s: daddr 0x%llx out of range, EOFS 0x%llx",
@@ -1720,26 +1720,27 @@ xfs_configure_buftarg_atomic_writes(
 int
 xfs_configure_buftarg(
 	struct xfs_buftarg	*btp,
-	unsigned int		sectorsize)
+	unsigned int		sectorsize,
+	xfs_rfsblock_t		nr_blocks)
 {
-	int			error;
+	if (btp->bt_bdev) {
+		int		error;
 
-	ASSERT(btp->bt_bdev != NULL);
+		error = bdev_validate_blocksize(btp->bt_bdev, sectorsize);
+		if (error) {
+			xfs_warn(btp->bt_mount,
+				"Cannot use blocksize %u on device %pg, err %d",
+				sectorsize, btp->bt_bdev, error);
+			return -EINVAL;
+		}
 
-	/* Set up metadata sector size info */
-	btp->bt_meta_sectorsize = sectorsize;
-	btp->bt_meta_sectormask = sectorsize - 1;
-
-	error = bdev_validate_blocksize(btp->bt_bdev, sectorsize);
-	if (error) {
-		xfs_warn(btp->bt_mount,
-			"Cannot use blocksize %u on device %pg, err %d",
-			sectorsize, btp->bt_bdev, error);
-		return -EINVAL;
+		if (bdev_can_atomic_write(btp->bt_bdev))
+			xfs_configure_buftarg_atomic_writes(btp);
 	}
 
-	if (bdev_can_atomic_write(btp->bt_bdev))
-		xfs_configure_buftarg_atomic_writes(btp);
+	btp->bt_meta_sectorsize = sectorsize;
+	btp->bt_meta_sectormask = sectorsize - 1;
+	btp->bt_nr_blocks = nr_blocks;
 	return 0;
 }
 
@@ -1749,6 +1750,9 @@ xfs_init_buftarg(
 	size_t				logical_sectorsize,
 	const char			*descr)
 {
+	/* The maximum size of the buftarg is only known once the sb is read. */
+	btp->bt_nr_blocks = (xfs_rfsblock_t)-1;
+
 	/* Set up device logical sector size mask */
 	btp->bt_logical_sectorsize = logical_sectorsize;
 	btp->bt_logical_sectormask = logical_sectorsize - 1;
