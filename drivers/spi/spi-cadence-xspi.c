@@ -908,9 +908,6 @@ static int cdns_xspi_of_get_plat_data(struct platform_device *pdev)
 	unsigned int cs;
 
 	device_for_each_child_node(&pdev->dev, fwnode_child) {
-		if (!fwnode_device_is_available(fwnode_child))
-			continue;
-
 		if (fwnode_property_read_u32(fwnode_child, "reg", &cs)) {
 			dev_err(&pdev->dev, "Couldn't get memory chip select\n");
 			fwnode_handle_put(fwnode_child);
