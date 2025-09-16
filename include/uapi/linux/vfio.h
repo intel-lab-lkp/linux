@@ -874,6 +874,88 @@ struct vfio_device_ioeventfd {
 #define VFIO_DEVICE_IOEVENTFD		_IO(VFIO_TYPE, VFIO_BASE + 16)
 
 /**
+ * VFIO_DEVICE_PCI_TPH	- _IO(VFIO_TYPE, VFIO_BASE + 22)
+ *
+ * This command is used to control PCIe TLP Processing Hints (TPH)
+ * capability in a PCIe device.
+ * It supports following operations on a PCIe device with respect to TPH
+ * capability.
+ *
+ * - Enabling/disabling TPH capability in a PCIe device.
+ *
+ *   Setting VFIO_DEVICE_TPH_ENABLE flag enables TPH in no-steering-tag,
+ *   interrupt-vector, or device-specific mode defined in the PCIe specficiation
+ *   when feature flags TPH_ST_NS_MODE, TPH_ST_IV_MODE, and TPH_ST_DS_MODE are
+ *   set respectively. TPH_ST_xx_MODE macros are defined in
+ *   uapi/linux/pci_regs.h.
+ *
+ *   VFIO_DEVICE_TPH_DISABLE disables PCIe TPH on the device.
+ *
+ * - Writing STs to MSI-X or ST table in a PCIe device.
+ *
+ *   VFIO_DEVICE_TPH_SET_ST flag set steering tags on a device at an index in
+ *   MSI-X or ST-table depending on the VFIO_TPH_ST_x_MODE flag used and
+ *   returns the programmed steering tag values. The caller can set one or more
+ *   steering tags by passing an array of vfio_pci_tph_entry objects containing
+ *   cpu_id, cache_level, and MSI-X/ST-table index. The caller can also set the
+ *   intended memory type and the processing hint by setting VFIO_TPH_MEM_TYPE_x
+ *   and VFIO_TPH_HINT_x flags, respectively.
+ *
+ * - Reading Steering Tags (ST) from the host platform.
+ *
+ *   VFIO_DEVICE_TPH_GET_ST flags returns steering tags to the caller. Caller
+ *   can request one or more steering tags by passing an array of
+ *   vfio_pci_tph_entry objects. Steering Tag for each request is returned via
+ *   the st field in vfio_pci_tph_entry.
+ */
+struct vfio_pci_tph_entry {
+	/* in */
+	__u32 cpu_id;			/* CPU logical ID */
+	__u32 cache_level;		/* Cache level. L1 D= 0, L2D = 2, ...*/
+	__u8  flags;
+#define VFIO_TPH_MEM_TYPE_MASK		0x1
+#define VFIO_TPH_MEM_TYPE_SHIFT		0
+#define VFIO_TPH_MEM_TYPE_VMEM		0   /* Request volatile memory ST */
+#define VFIO_TPH_MEM_TYPE_PMEM		1   /* Request persistent memory ST */
+
+#define VFIO_TPH_HINT_SHIFT		1
+#define VFIO_TPH_HINT_MASK		(0x3 << VFIO_TPH_HINT_SHIFT)
+#define VFIO_TPH_HINT_BIDIR		0
+#define VFIO_TPH_HINT_REQSTR		(1 << VFIO_TPH_HINT_SHIFT)
+#define VFIO_TPH_HINT_TARGET		(2 << VFIO_TPH_HINT_SHIFT)
+#define VFIO_TPH_HINT_TARGET_PRIO	(3 << VFIO_TPH_HINT_SHIFT)
+	__u8  pad0;
+	__u16 index;			/* MSI-X/ST-table index to set ST */
+	/* out */
+	__u16 st;			/* Steering-Tag */
+	__u8  ph_ignore;		/* Platform ignored the Processing */
+	__u8  pad1;
+};
+
+struct vfio_pci_tph {
+	__u32 argsz;			/* Size of vfio_pci_tph and ents[] */
+	__u32 flags;
+#define VFIO_TPH_ST_MODE_MASK		0x7
+
+#define VFIO_DEVICE_TPH_OP_SHIFT	3
+#define VFIO_DEVICE_TPH_OP_MASK		(0x7 << VFIO_DEVICE_TPH_OP_SHIFT)
+/* Enable TPH on device */
+#define VFIO_DEVICE_TPH_ENABLE		0
+/* Disable TPH on device */
+#define VFIO_DEVICE_TPH_DISABLE		(1 << VFIO_DEVICE_TPH_OP_SHIFT)
+/* Get steering-tags */
+#define VFIO_DEVICE_TPH_GET_ST		(2 << VFIO_DEVICE_TPH_OP_SHIFT)
+/* Set steering-tags */
+#define VFIO_DEVICE_TPH_SET_ST		(4 << VFIO_DEVICE_TPH_OP_SHIFT)
+	__u32 count;			/* Number of entries in ents[] */
+	struct vfio_pci_tph_entry ents[];
+#define VFIO_TPH_INFO_MAX	2048	/* Max entries in ents[] */
+};
+
+#define VFIO_DEVICE_PCI_TPH	_IO(VFIO_TYPE, VFIO_BASE + 22)
+
+
+/**
  * VFIO_DEVICE_FEATURE - _IOWR(VFIO_TYPE, VFIO_BASE + 17,
  *			       struct vfio_device_feature)
  *
@@ -1477,6 +1559,7 @@ struct vfio_device_feature_bus_master {
 #define		VFIO_DEVICE_FEATURE_SET_MASTER		1	/* Set Bus Master */
 };
 #define VFIO_DEVICE_FEATURE_BUS_MASTER 10
+
 
 /* -------- API for Type1 VFIO IOMMU -------- */
 

@@ -28,6 +28,7 @@
 #include <linux/nospec.h>
 #include <linux/sched/mm.h>
 #include <linux/iommufd.h>
+#include <linux/pci-tph.h>
 #if IS_ENABLED(CONFIG_EEH)
 #include <asm/eeh.h>
 #endif
@@ -1443,6 +1444,156 @@ static int vfio_pci_ioctl_ioeventfd(struct vfio_pci_core_device *vdev,
 				  ioeventfd.fd);
 }
 
+static struct vfio_pci_tph_entry *vfio_pci_tph_get_ents(struct vfio_pci_tph *tph,
+							void __user *tph_ents,
+							size_t *ents_size)
+{
+	unsigned long minsz;
+	size_t size;
+
+	if (!ents_size)
+		return ERR_PTR(-EINVAL);
+
+	minsz = offsetofend(struct vfio_pci_tph, count);
+
+	size = tph->count * sizeof(struct vfio_pci_tph_entry);
+
+	if (tph->argsz - minsz < size)
+		return ERR_PTR(-EINVAL);
+
+	*ents_size = size;
+
+	return memdup_user(tph_ents, size);
+}
+
+static int vfio_pci_tph_set_st(struct vfio_pci_core_device *vdev,
+			       struct vfio_pci_tph_entry *ents, int count)
+{
+	int i, err = 0;
+
+	for (i = 0; i < count && !err; i++)
+		err = pcie_tph_set_st_entry(vdev->pdev, ents[i].index,
+					    ents[i].st);
+
+	return err;
+}
+
+static int vfio_pci_tph_get_st(struct vfio_pci_core_device *vdev,
+			       struct vfio_pci_tph_entry *ents, int count)
+{
+	int i, mtype, err = 0;
+	u32 cpu_uid;
+
+	for (i = 0; i < count && !err; i++) {
+		if (ents[i].cpu_id >= nr_cpu_ids || !cpu_present(ents[i].cpu_id)) {
+			err = -EINVAL;
+			break;
+		}
+
+		cpu_uid = topology_core_id(ents[i].cpu_id);
+		mtype = (ents[i].flags & VFIO_TPH_MEM_TYPE_MASK) >>
+			VFIO_TPH_MEM_TYPE_SHIFT;
+
+		/*
+		 * ph_ignore is always set.
+		 * TPH implementation of the PCI subsystem forces processing
+		 * hint to bi-directional by setting PH bits to 0 when
+		 * acquiring Steering Tags from the platform firmware. It also
+		 * discards the ph_ignore bit returned by firmware.
+		 */
+		ents[i].ph_ignore = 1;
+
+		err = pcie_tph_get_cpu_st(vdev->pdev, mtype, cpu_uid,
+					  &ents[i].st);
+	}
+
+	return err;
+}
+
+static int vfio_pci_tph_st_op(struct vfio_pci_core_device *vdev,
+			      struct vfio_pci_tph *tph, void __user *tph_ents)
+{
+	int err = 0;
+	struct vfio_pci_tph_entry *ents;
+	size_t ents_size;
+
+	if (!tph->count || tph->count > VFIO_TPH_INFO_MAX) {
+		err = -EINVAL;
+		goto out;
+	}
+
+	ents = vfio_pci_tph_get_ents(tph, tph_ents, &ents_size);
+	if (IS_ERR(ents)) {
+		err = PTR_ERR(ents);
+		goto out;
+	}
+
+	err = vfio_pci_tph_get_st(vdev, ents, tph->count);
+	if (err)
+		goto out_free_ents;
+
+	/*
+	 * Set Steering tags. TPH will be disabled on the device by the PCI
+	 * subsystem if there is an error.
+	 */
+	if (tph->flags & VFIO_DEVICE_TPH_SET_ST) {
+		err = vfio_pci_tph_set_st(vdev, ents, tph->count);
+		if (err)
+			goto out_free_ents;
+	}
+
+	if (copy_to_user(tph_ents, ents, ents_size))
+		err = -EFAULT;
+
+out_free_ents:
+	kfree(ents);
+out:
+	return err;
+}
+
+static int vfio_pci_tph_enable(struct vfio_pci_core_device *vdev,
+			       struct vfio_pci_tph *arg)
+{
+	return pcie_enable_tph(vdev->pdev, arg->flags & VFIO_TPH_ST_MODE_MASK);
+}
+
+static int vfio_pci_tph_disable(struct vfio_pci_core_device *vdev)
+{
+	pcie_disable_tph(vdev->pdev);
+	return 0;
+}
+
+static int vfio_pci_ioctl_tph(struct vfio_pci_core_device *vdev,
+			      void __user *uarg)
+{
+	u32 op;
+	struct vfio_pci_tph tph;
+	size_t minsz = offsetofend(struct vfio_pci_tph, count);
+
+	if (copy_from_user(&tph, uarg, minsz))
+		return -EFAULT;
+
+	if (tph.argsz < minsz)
+		return -EINVAL;
+
+	op = tph.flags & VFIO_DEVICE_TPH_OP_MASK;
+
+	switch (op) {
+	case VFIO_DEVICE_TPH_ENABLE:
+		return vfio_pci_tph_enable(vdev, &tph);
+
+	case VFIO_DEVICE_TPH_DISABLE:
+		return vfio_pci_tph_disable(vdev);
+
+	case VFIO_DEVICE_TPH_GET_ST:
+	case VFIO_DEVICE_TPH_SET_ST:
+		return vfio_pci_tph_st_op(vdev, &tph, (u8 *)(uarg) + minsz);
+
+	default:
+		return -EINVAL;
+	}
+}
+
 long vfio_pci_core_ioctl(struct vfio_device *core_vdev, unsigned int cmd,
 			 unsigned long arg)
 {
@@ -1467,6 +1618,8 @@ long vfio_pci_core_ioctl(struct vfio_device *core_vdev, unsigned int cmd,
 		return vfio_pci_ioctl_reset(vdev, uarg);
 	case VFIO_DEVICE_SET_IRQS:
 		return vfio_pci_ioctl_set_irqs(vdev, uarg);
+	case VFIO_DEVICE_PCI_TPH:
+		return vfio_pci_ioctl_tph(vdev, uarg);
 	default:
 		return -ENOTTY;
 	}
