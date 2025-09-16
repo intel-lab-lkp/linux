@@ -2225,6 +2225,26 @@ root_sched_deinit:
 	return err;
 }
 
+static void mshv_init_vmm_caps(struct device *dev)
+{
+	int ret;
+
+	memset(&mshv_root.vmm_caps, 0, sizeof(mshv_root.vmm_caps));
+	ret = hv_call_get_partition_property_ex(HV_PARTITION_ID_SELF,
+						HV_PARTITION_PROPERTY_VMM_CAPABILITIES,
+						0, &mshv_root.vmm_caps,
+						sizeof(mshv_root.vmm_caps));
+
+	/*
+	 * HVCALL_GET_PARTITION_PROPERTY_EX or HV_PARTITION_PROPERTY_VMM_CAPABILITIES
+	 * may not be supported. Leave them as 0 in that case.
+	 */
+	if (ret)
+		dev_warn(dev, "Unable to get VMM capabilities\n");
+
+	dev_dbg(dev, "vmm_caps=0x%llx\n", mshv_root.vmm_caps.as_uint64[0]);
+}
+
 static int __init mshv_parent_partition_init(void)
 {
 	int ret;
@@ -2271,6 +2291,8 @@ static int __init mshv_parent_partition_init(void)
 	ret = mshv_root_partition_init(dev);
 	if (ret)
 		goto remove_cpu_state;
+
+	mshv_init_vmm_caps(dev);
 
 	ret = mshv_irqfd_wq_init();
 	if (ret)
