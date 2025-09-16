@@ -1126,12 +1126,21 @@ static struct mock_dev *mock_dev_create(unsigned long dev_flags)
 		goto err_put;
 	}
 
+	mutex_lock(&iommu_probe_device_lock);
+	rc = iommu_fwspec_init(&mdev->dev, mock_iommu.iommu_dev.fwnode);
+	if (rc) {
+		mutex_unlock(&iommu_probe_device_lock);
+		goto err_put;
+	}
+	mutex_unlock(&iommu_probe_device_lock);
+
 	rc = device_add(&mdev->dev);
 	if (rc)
 		goto err_put;
 	return mdev;
 
 err_put:
+	iommu_fwspec_free(&mdev->dev);
 	put_device(&mdev->dev);
 	return ERR_PTR(rc);
 }
