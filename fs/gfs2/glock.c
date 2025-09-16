@@ -2297,10 +2297,18 @@ static void dump_holder(struct seq_file *seq, const struct gfs2_holder *gh,
 		if (gh_owner)
 			comm = gh_owner->comm;
 	}
-	gfs2_print_dbg(seq, "%s H: s:%s f:%s e:%d p:%ld [%s] %pS\n",
-		       fs_id_buf, state2str(gh->gh_state),
-		       hflags2str(flags_buf, gh->gh_flags, gh->gh_iflags),
-		       gh->gh_error, (long)owner_pid, comm, (void *)gh->gh_ip);
+	if (seq) {
+		gfs2_print_dbg(seq, "%s H: s:%s f:%s e:%d p:%ld [%s] %pS\n",
+			fs_id_buf, state2str(gh->gh_state),
+			hflags2str(flags_buf, gh->gh_flags, gh->gh_iflags),
+			gh->gh_error, (long)owner_pid, comm, (void *)gh->gh_ip);
+	} else {
+		gfs2_print_dbg(seq, "%s H: s:%s f:%s e:%d p:%ld [%s] %p\n",
+			fs_id_buf, state2str(gh->gh_state),
+			hflags2str(flags_buf, gh->gh_flags, gh->gh_iflags),
+			gh->gh_error, (long)owner_pid, comm,
+			(void *)gh->gh_ip);
+	}
 	rcu_read_unlock();
 }
 
