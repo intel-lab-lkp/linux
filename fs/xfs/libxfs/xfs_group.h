@@ -11,6 +11,8 @@ struct xfs_group {
 	enum xfs_group_type	xg_type;
 	atomic_t		xg_ref;		/* passive reference count */
 	atomic_t		xg_active_ref;	/* active reference count */
+	/* woken up when xg_active_ref falls to zero */
+	wait_queue_head_t	xg_active_wq;
 
 	/* Precalculated geometry info */
 	uint32_t		xg_block_count;	/* max usable gbno */
