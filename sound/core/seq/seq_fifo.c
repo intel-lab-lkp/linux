@@ -138,16 +138,18 @@ static struct snd_seq_event_cell *fifo_cell_out(struct snd_seq_fifo *f)
 {
 	struct snd_seq_event_cell *cell;
 
-	cell = f->head;
-	if (cell) {
-		f->head = cell->next;
+	scoped_guard(spinlock_irqsave, &f->lock) {
+		cell = f->head;
+		if (cell) {
+			f->head = cell->next;
 
-		/* reset tail if this was the last element */
-		if (f->tail == cell)
-			f->tail = NULL;
+			/* reset tail if this was the last element */
+			if (f->tail == cell)
+				f->tail = NULL;
 
-		cell->next = NULL;
-		f->cells--;
+			cell->next = NULL;
+			f->cells--;
+		}
 	}
 
 	return cell;
@@ -210,7 +212,9 @@ int snd_seq_fifo_poll_wait(struct snd_seq_fifo *f, struct file *file,
 			   poll_table *wait)
 {
 	poll_wait(file, &f->input_sleep, wait);
-	return (f->cells > 0);
+	guard(spinlock_irqsave)(&f->lock);
+	int isNonzero = (f->cells > 0);
+	return isNonzero;
 }
 
 /* change the size of pool; all old events are removed */
