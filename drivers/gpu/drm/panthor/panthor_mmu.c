@@ -588,6 +588,19 @@ static void mmu_hw_cmd_lock(struct panthor_device *ptdev, u32 as_nr, u64 region_
 	write_cmd(ptdev, as_nr, AS_COMMAND_LOCK);
 }
 
+/**
+ * mmu_hw_cmd_unlock() - Issue an UNLOCK command
+ * @ptdev: Device.
+ * @as_nr: AS to issue command to.
+ *
+ * Issue an UNLOCK command to unblock transactions for a locked region. The
+ * region is implied by the last mmu_hw_cmd_lock call.
+ */
+static void mmu_hw_cmd_unlock(struct panthor_device *ptdev, u32 as_nr)
+{
+	write_cmd(ptdev, as_nr, AS_COMMAND_UNLOCK);
+}
+
 static int mmu_hw_do_operation_locked(struct panthor_device *ptdev, int as_nr,
 				      u64 iova, u64 size, u32 op)
 {
@@ -633,7 +646,7 @@ static int mmu_hw_do_operation_locked(struct panthor_device *ptdev, int as_nr,
 	 * at the end of the GPU_CONTROL cache flush command, unlike
 	 * AS_COMMAND_FLUSH_MEM or AS_COMMAND_FLUSH_PT.
 	 */
-	write_cmd(ptdev, as_nr, AS_COMMAND_UNLOCK);
+	mmu_hw_cmd_unlock(ptdev, as_nr);
 
 	/* Wait for the unlock command to complete */
 	return mmu_hw_wait_ready(ptdev, as_nr);
