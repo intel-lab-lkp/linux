@@ -350,7 +350,11 @@ locked:
 	 *       PENDING will make the uncontended transition fail.
 	 */
 	if ((val & _Q_TAIL_MASK) == tail) {
+#if defined(CONFIG_ARM64)
+		if (atomic_try_cmpxchg(&lock->val, &val, _Q_LOCKED_VAL))
+#else
 		if (atomic_try_cmpxchg_relaxed(&lock->val, &val, _Q_LOCKED_VAL))
+#endif
 			goto release; /* No contention */
 	}
 
