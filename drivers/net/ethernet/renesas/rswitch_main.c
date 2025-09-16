@@ -845,7 +845,7 @@ static bool rswitch_rx(struct net_device *ndev, int *quota)
 		if (!skb)
 			goto out;
 
-		get_ts = rdev->priv->tstamp_rx_ctrl & RCAR_GEN4_RXTSTAMP_TYPE_V2_L2_EVENT;
+		get_ts = rdev->priv->tstamp_rx_ctrl != HWTSTAMP_FILTER_NONE;
 		if (get_ts) {
 			struct skb_shared_hwtstamps *shhwtstamps;
 			struct timespec64 ts;
@@ -1804,19 +1804,8 @@ static int rswitch_hwstamp_get(struct net_device *ndev, struct ifreq *req)
 	struct hwtstamp_config config;
 
 	config.flags = 0;
-	config.tx_type = priv->tstamp_tx_ctrl ? HWTSTAMP_TX_ON :
-		HWTSTAMP_TX_OFF;
-	switch (priv->tstamp_rx_ctrl & RCAR_GEN4_RXTSTAMP_TYPE) {
-	case RCAR_GEN4_RXTSTAMP_TYPE_V2_L2_EVENT:
-		config.rx_filter = HWTSTAMP_FILTER_PTP_V2_L2_EVENT;
-		break;
-	case RCAR_GEN4_RXTSTAMP_TYPE_ALL:
-		config.rx_filter = HWTSTAMP_FILTER_ALL;
-		break;
-	default:
-		config.rx_filter = HWTSTAMP_FILTER_NONE;
-		break;
-	}
+	config.tx_type = priv->tstamp_tx_ctrl;
+	config.rx_filter = priv->tstamp_rx_ctrl;
 
 	return copy_to_user(req->ifr_data, &config, sizeof(config)) ? -EFAULT : 0;
 }
@@ -1824,9 +1813,9 @@ static int rswitch_hwstamp_get(struct net_device *ndev, struct ifreq *req)
 static int rswitch_hwstamp_set(struct net_device *ndev, struct ifreq *req)
 {
 	struct rswitch_device *rdev = netdev_priv(ndev);
-	u32 tstamp_rx_ctrl = RCAR_GEN4_RXTSTAMP_ENABLED;
+	enum hwtstamp_rx_filters tstamp_rx_ctrl;
+	enum hwtstamp_tx_types tstamp_tx_ctrl;
 	struct hwtstamp_config config;
-	u32 tstamp_tx_ctrl;
 
 	if (copy_from_user(&config, req->ifr_data, sizeof(config)))
 		return -EFAULT;
@@ -1836,10 +1825,8 @@ static int rswitch_hwstamp_set(struct net_device *ndev, struct ifreq *req)
 
 	switch (config.tx_type) {
 	case HWTSTAMP_TX_OFF:
-		tstamp_tx_ctrl = 0;
-		break;
 	case HWTSTAMP_TX_ON:
-		tstamp_tx_ctrl = RCAR_GEN4_TXTSTAMP_ENABLED;
+		tstamp_tx_ctrl = config.tx_type;
 		break;
 	default:
 		return -ERANGE;
@@ -1847,14 +1834,12 @@ static int rswitch_hwstamp_set(struct net_device *ndev, struct ifreq *req)
 
 	switch (config.rx_filter) {
 	case HWTSTAMP_FILTER_NONE:
-		tstamp_rx_ctrl = 0;
-		break;
 	case HWTSTAMP_FILTER_PTP_V2_L2_EVENT:
-		tstamp_rx_ctrl |= RCAR_GEN4_RXTSTAMP_TYPE_V2_L2_EVENT;
+		tstamp_rx_ctrl = config.rx_filter;
 		break;
 	default:
 		config.rx_filter = HWTSTAMP_FILTER_ALL;
-		tstamp_rx_ctrl |= RCAR_GEN4_RXTSTAMP_TYPE_ALL;
+		tstamp_rx_ctrl = HWTSTAMP_FILTER_ALL;
 		break;
 	}
 
