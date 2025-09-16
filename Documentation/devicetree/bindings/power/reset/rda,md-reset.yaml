@@ -1,0 +1,36 @@
+# SPDX-License-Identifier: GPL-2.0-only OR BSD-2-Clause
+%YAML 1.2
+---
+$id: http://devicetree.org/schemas/power/reset/rda,md-reset.yaml#
+$schema: http://devicetree.org/meta-schemas/core.yaml#
+
+title: RDA Micro Modem Reset
+
+maintainers:
+  - Dang Huynh <dang.huynh@mainlining.org>
+
+description:
+  The modem has a reset register that can be used to fully reset the board.
+
+  To do that, a magic value needs to be written to unprotect the register,
+  then the soft reset register can be used.
+
+properties:
+  compatible:
+    const: rda,md-reset
+
+  reg:
+    maxItems: 1
+
+required:
+  - compatible
+  - reg
+
+additionalProperties: false
+
+examples:
+  - |
+    reset-controller@1a00000 {
+      compatible = "rda,md-reset";
+      reg = <0x1a00000 0x4>;
+    };
