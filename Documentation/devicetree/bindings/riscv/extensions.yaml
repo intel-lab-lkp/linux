@@ -165,6 +165,12 @@ properties:
             ratified at commit d70011dde6c2 ("Update to ratified state")
             of riscv-j-extension.
 
+        - const: ssqosid
+          description: |
+            The ratified Supervisor-mode Quality of Service ID (Ssqosid)
+            extension v1.0 which adds the Supervisor Resource Management
+            Configuration (srmcfg) CSR.
+
         - const: sstc
           description: |
             The standard Sstc supervisor-level extension for time compare as
