@@ -4524,9 +4524,6 @@
 				operating-points-v2 = <&mdss_dsi_opp_table>;
 				power-domains = <&rpmhpd SA8775P_MMCX>;
 
-				#address-cells = <1>;
-				#size-cells = <0>;
-
 				status = "disabled";
 
 				ports {
@@ -4605,9 +4602,6 @@
 
 				operating-points-v2 = <&mdss_dsi_opp_table>;
 				power-domains = <&rpmhpd SA8775P_MMCX>;
-
-				#address-cells = <1>;
-				#size-cells = <0>;
 
 				status = "disabled";
 
