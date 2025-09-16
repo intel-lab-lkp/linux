@@ -32,7 +32,9 @@
 #define UB953_PAD_SINK			0
 #define UB953_PAD_SOURCE		1
 
-#define UB953_NUM_GPIOS			4
+#define UB953_NUM_LOCAL_GPIOS		4
+#define UB953_NUM_REMOTE_GPIOS		4
+#define UB953_NUM_GPIOS			(UB953_NUM_LOCAL_GPIOS + UB953_NUM_REMOTE_GPIOS)
 
 #define UB953_DEFAULT_CLKOUT_RATE	25000000UL
 
@@ -268,7 +270,7 @@ static int ub953_gpio_get_direction(struct gpio_chip *gc, unsigned int offset)
 	if (ret)
 		return ret;
 
-	if (v & UB953_REG_GPIO_INPUT_CTRL_INPUT_EN(offset))
+	if (v & UB953_REG_GPIO_INPUT_CTRL_INPUT_EN((offset % UB953_NUM_LOCAL_GPIOS)))
 		return GPIO_LINE_DIRECTION_IN;
 	else
 		return GPIO_LINE_DIRECTION_OUT;
@@ -277,6 +279,12 @@ static int ub953_gpio_get_direction(struct gpio_chip *gc, unsigned int offset)
 static int ub953_gpio_direction_in(struct gpio_chip *gc, unsigned int offset)
 {
 	struct ub953_data *priv = gpiochip_get_data(gc);
+	struct device *dev = &priv->client->dev;
+
+	if (offset > UB953_NUM_LOCAL_GPIOS) {
+		dev_err(dev, "GPIO%u can't be programed as input\n", offset);
+		return -EINVAL;
+	}
 
 	return regmap_update_bits(priv->regmap, UB953_REG_GPIO_INPUT_CTRL,
 				  UB953_REG_GPIO_INPUT_CTRL_INPUT_EN(offset) |
@@ -288,10 +296,14 @@ static int ub953_gpio_direction_out(struct gpio_chip *gc, unsigned int offset,
 				    int value)
 {
 	struct ub953_data *priv = gpiochip_get_data(gc);
+	unsigned int pin;
 	int ret;
 
+	pin = offset % UB953_NUM_LOCAL_GPIOS;
+
 	ret = regmap_update_bits(priv->regmap, UB953_REG_LOCAL_GPIO_DATA,
-				 UB953_REG_LOCAL_GPIO_DATA_GPIO_OUT_SRC(offset),
+				 UB953_REG_LOCAL_GPIO_DATA_GPIO_OUT_SRC(pin) |
+				 UB953_REG_LOCAL_GPIO_DATA_GPIO_RMTEN(pin),
 				 value ? UB953_REG_LOCAL_GPIO_DATA_GPIO_OUT_SRC(offset) :
 					 0);
 
@@ -299,9 +311,9 @@ static int ub953_gpio_direction_out(struct gpio_chip *gc, unsigned int offset,
 		return ret;
 
 	return regmap_update_bits(priv->regmap, UB953_REG_GPIO_INPUT_CTRL,
-				  UB953_REG_GPIO_INPUT_CTRL_INPUT_EN(offset) |
-					  UB953_REG_GPIO_INPUT_CTRL_OUT_EN(offset),
-				  UB953_REG_GPIO_INPUT_CTRL_OUT_EN(offset));
+				  UB953_REG_GPIO_INPUT_CTRL_INPUT_EN(pin) |
+					  UB953_REG_GPIO_INPUT_CTRL_OUT_EN(pin),
+				  UB953_REG_GPIO_INPUT_CTRL_OUT_EN(pin));
 }
 
 static int ub953_gpio_get(struct gpio_chip *gc, unsigned int offset)
@@ -314,12 +326,19 @@ static int ub953_gpio_get(struct gpio_chip *gc, unsigned int offset)
 	if (ret)
 		return ret;
 
-	return !!(v & UB953_REG_GPIO_PIN_STS_GPIO_STS(offset));
+	return !!(v & UB953_REG_GPIO_PIN_STS_GPIO_STS((offset % UB953_NUM_LOCAL_GPIOS)));
 }
 
 static int ub953_gpio_set(struct gpio_chip *gc, unsigned int offset, int value)
 {
 	struct ub953_data *priv = gpiochip_get_data(gc);
+	struct device *dev = &priv->client->dev;
+
+	if (offset > UB953_NUM_LOCAL_GPIOS) {
+		dev_err(dev, "GPIO%u be programed to output remote data\n",
+			offset % UB953_NUM_LOCAL_GPIOS);
+		return -EINVAL;
+	}
 
 	return regmap_update_bits(priv->regmap, UB953_REG_LOCAL_GPIO_DATA,
 				  UB953_REG_LOCAL_GPIO_DATA_GPIO_OUT_SRC(offset),
@@ -330,6 +349,9 @@ static int ub953_gpio_of_xlate(struct gpio_chip *gc,
 			       const struct of_phandle_args *gpiospec,
 			       u32 *flags)
 {
+	if (gpiospec->args[0] >= UB953_NUM_GPIOS)
+		return -EINVAL;
+
 	if (flags)
 		*flags = gpiospec->args[1];
 
@@ -633,14 +655,17 @@ static int ub953_log_status(struct v4l2_subdev *sd)
 		return ret;
 
 	for (i = 0; i < UB953_NUM_GPIOS; i++) {
+		unsigned int pin = i % UB953_NUM_LOCAL_GPIOS;
+		bool rmt = (i >= UB953_NUM_LOCAL_GPIOS) ? true : false;
+
 		dev_info(dev,
 			 "GPIO%u: remote: %u is_input: %u is_output: %u val: %u sts: %u\n",
 			 i,
-			 !!(gpio_local_data & UB953_REG_LOCAL_GPIO_DATA_GPIO_RMTEN(i)),
-			 !!(gpio_input_ctrl & UB953_REG_GPIO_INPUT_CTRL_INPUT_EN(i)),
-			 !!(gpio_input_ctrl & UB953_REG_GPIO_INPUT_CTRL_OUT_EN(i)),
+			 rmt ? !!(gpio_local_data & UB953_REG_LOCAL_GPIO_DATA_GPIO_RMTEN(pin)) : 0,
+			 rmt ? 0 : !!(gpio_input_ctrl & UB953_REG_GPIO_INPUT_CTRL_INPUT_EN(pin)),
+			 rmt ? 1 : !!(gpio_input_ctrl & UB953_REG_GPIO_INPUT_CTRL_OUT_EN(pin)),
 			 !!(gpio_local_data & UB953_REG_LOCAL_GPIO_DATA_GPIO_OUT_SRC(i)),
-			 !!(gpio_pin_sts & UB953_REG_GPIO_PIN_STS_GPIO_STS(i)));
+			 !!(gpio_pin_sts & UB953_REG_GPIO_PIN_STS_GPIO_STS(pin)));
 	}
 
 	return 0;
