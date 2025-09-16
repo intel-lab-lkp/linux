@@ -1,0 +1,79 @@
+# SPDX-License-Identifier: (GPL-2.0-only OR BSD-2-Clause)
+
+%YAML 1.2
+---
+$id: "http://devicetree.org/schemas/leds/leds-group-virtualcolor.yaml#"
+$schema: "http://devicetree.org/meta-schemas/core.yaml#"
+title: Virtual LED Group with Priority Control
+
+maintainers:
+  - Radoslav Tsvetkov <rtsvetkov@gradotech.eu>
+
+description: |
+  Virtual LED group driver that combines multiple monochromatic LEDs into logical
+  groups with priority-based control. The driver ensures only the highest-priority
+  LED state is active at any given time.
+
+allOf:
+  - $ref: leds.yaml#
+
+properties:
+  compatible:
+    const: leds-group-virtualcolor
+
+required:
+  - compatible
+
+patternProperties:
+  "^led@[0-9a-f]$":
+    type: object
+    $ref: leds.yaml#
+    properties:
+      reg:
+        maxItems: 1
+      monochromatic-leds:
+        type: array
+        items:
+          maxItems: 1
+          $ref: /schemas/types.yaml#/definitions/phandle
+        minItems: 1
+        description: List of phandles to the monochromatic LEDs to group
+      priority:
+        $ref: /schemas/types.yaml#/definitions/uint32
+        description: Priority level for LED activation (higher value means higher priority)
+      blink-delay-on:
+        $ref: /schemas/types.yaml#/definitions/uint32
+        description: Time in milliseconds the LED is on during blink
+      blink-delay-off:
+        $ref: /schemas/types.yaml#/definitions/uint32
+        description: Time in milliseconds the LED is off during blink
+
+    required:
+      - reg
+      - monochromatic-leds
+
+additionalProperties: false
+
+examples:
+  - |
+    leds {
+        compatible = "leds-group-virtualcolor";
+        #address-cells = <1>;
+        #size-cells = <0>;
+
+        led@0 {
+            reg = <0>;
+            label = "status:red";
+            monochromatic-leds = <&led_red>;
+            priority = <2>;
+            blink-delay-on = <500>;
+            blink-delay-off = <500>;
+        };
+
+        led@1 {
+            reg = <1>;
+            label = "status:green";
+            monochromatic-leds = <&led_green>;
+            priority = <1>;
+        };
+    };
