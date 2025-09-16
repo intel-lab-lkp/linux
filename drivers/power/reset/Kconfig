@@ -205,6 +205,15 @@ config POWER_RESET_QNAP
 
 	  Say Y if you have a QNAP NAS.
 
+config POWER_RESET_RDA
+	bool "RDA Micro Reset Driver"
+	depends on ARCH_RDA
+	help
+	  This driver supports soft resetting RDA Micro boards by writing
+	  magic values to the modem register.
+
+	  Say Y if you have a board with RDA Micro SoC.
+
 config POWER_RESET_REGULATOR
 	bool "Regulator subsystem power-off driver"
 	depends on OF && REGULATOR

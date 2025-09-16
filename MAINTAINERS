@@ -21399,6 +21399,12 @@ S:	Maintained
 F:	Documentation/devicetree/bindings/clock/rda,8810pl-apsyscon.yaml
 F:	drivers/clk/rda/clk-rda8810.c
 
+RDA MICRO MODEM RESET DRIVER
+M:	Dang Huynh <dang.huynh@mainlining.org>
+S:	Maintained
+F:	Documentation/devicetree/bindings/power/reset/rda,md-reset.yaml
+F:	drivers/power/reset/rda-reboot.c
+
 RDA MICRO REAL TIME CLOCK DRIVER
 M:	Dang Huynh <dang.huynh@mainlining.org>
 S:	Maintained
