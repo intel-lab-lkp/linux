@@ -570,9 +570,6 @@ static void mmu_hw_cmd_lock(struct panthor_device *ptdev, u32 as_nr, u64 region_
 	u64 region;
 	u64 region_end = region_start + size;
 
-	if (!size)
-		return;
-
 	/*
 	 * The locked region is a naturally aligned power of 2 block encoded as
 	 * log2 minus(1).
@@ -643,7 +640,7 @@ static int mmu_hw_flush_caches(struct panthor_device *ptdev, int as_nr, u64 iova
 		return -EINVAL;
 	}
 
-	if (as_nr < 0)
+	if (as_nr < 0 || !size)
 		return 0;
 
 	/*
