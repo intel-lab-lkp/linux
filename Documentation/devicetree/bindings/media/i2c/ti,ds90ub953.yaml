@@ -20,9 +20,13 @@ properties:
 
   '#gpio-cells':
     const: 2
-    description:
+    description: |
       First cell is the GPIO pin number, second cell is the flags. The GPIO pin
-      number must be in range of [0, 3].
+      number must be in range of [0, 3] when enabled as an input.
+
+      If enabled as an output, the GPIO pin number must be in range of
+      [0, 7] and [0, 3] for local GPIO data, [4, 7] for GPIO data coming
+      from remote compatible deserializer.
 
   gpio-controller: true
 
