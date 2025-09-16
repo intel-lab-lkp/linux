@@ -653,16 +653,16 @@ static int mmu_hw_flush_caches(struct panthor_device *ptdev, int as_nr, u64 iova
 	 */
 
 	ret = mmu_hw_wait_ready(ptdev, as_nr);
-	if (!ret)
-		mmu_hw_cmd_lock(ptdev, as_nr, iova, size);
+	if (ret)
+		return ret;
+
+	mmu_hw_cmd_lock(ptdev, as_nr, iova, size);
 
 	ret = mmu_hw_wait_ready(ptdev, as_nr);
 	if (ret)
 		return ret;
 
 	ret = panthor_gpu_flush_caches(ptdev, l2_flush_op, lsc_flush_op, 0);
-	if (ret)
-		return ret;
 
 	/*
 	 * Explicitly unlock the region as the AS is not unlocked automatically
@@ -671,7 +671,7 @@ static int mmu_hw_flush_caches(struct panthor_device *ptdev, int as_nr, u64 iova
 	 */
 	mmu_hw_cmd_unlock(ptdev, as_nr);
 
-	return 0;
+	return ret;
 }
 
 static int mmu_hw_do_operation(struct panthor_vm *vm,
