@@ -204,10 +204,7 @@ static void ap_starting(void)
 
 	wmb();
 
-	/*
-	 * This runs the AP through all the cpuhp states to its target
-	 * state CPUHP_ONLINE.
-	 */
+	/* This runs the AP up to the CPUHP_AP_ONLINE state */
 	notify_cpu_starting(cpuid);
 }
 
