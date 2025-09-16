@@ -126,7 +126,7 @@ struct uacce_device {
 	bool is_vf;
 	u32 flags;
 	u32 dev_id;
-	struct cdev *cdev;
+	struct cdev cdev;
 	struct device dev;
 	struct mutex mutex;
 	void *priv;

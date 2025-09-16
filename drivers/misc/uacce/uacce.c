@@ -522,14 +522,10 @@ int uacce_register(struct uacce_device *uacce)
 	if (!uacce)
 		return -ENODEV;
 
-	uacce->cdev = cdev_alloc();
-	if (!uacce->cdev)
-		return -ENOMEM;
+	cdev_init(&uacce->cdev, &uacce_fops);
+	uacce->cdev.owner = THIS_MODULE;
 
-	uacce->cdev->ops = &uacce_fops;
-	uacce->cdev->owner = THIS_MODULE;
-
-	return cdev_device_add(uacce->cdev, &uacce->dev);
+	return cdev_device_add(&uacce->cdev, &uacce->dev);
 }
 EXPORT_SYMBOL_GPL(uacce_register);
 
@@ -568,8 +564,7 @@ void uacce_remove(struct uacce_device *uacce)
 		unmap_mapping_range(q->mapping, 0, 0, 1);
 	}
 
-	if (uacce->cdev)
-		cdev_device_del(uacce->cdev, &uacce->dev);
+	cdev_device_del(&uacce->cdev, &uacce->dev);
 	xa_erase(&uacce_xa, uacce->dev_id);
 	/*
 	 * uacce exists as long as there are open fds, but ops will be freed
