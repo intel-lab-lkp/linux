@@ -1539,8 +1539,8 @@ err_unlock:
 
 void blkcg_exit_disk(struct gendisk *disk)
 {
-	blkg_destroy_all(disk);
 	blk_throtl_exit(disk);
+	blkg_destroy_all(disk);
 }
 
 static void blkcg_exit(struct task_struct *tsk)
