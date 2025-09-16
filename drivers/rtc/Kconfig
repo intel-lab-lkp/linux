@@ -1471,6 +1471,17 @@ config RTC_DRV_OMAP
 	  This driver can also be built as a module, if so, module
 	  will be called rtc-omap.
 
+config RTC_DRV_RDA
+	tristate "RDA Micro RTC"
+	depends on ARCH_RDA || COMPILE_TEST
+	select REGMAP_MMIO
+	help
+	  If you say yes here you get support for the built-in RTC on
+	  RDA Micro SoC.
+
+	  This driver can also be built as a module, if so, the module
+	  will be called rtc-rda.
+
 config RTC_DRV_S3C
 	tristate "Samsung S3C series SoC RTC"
 	depends on ARCH_EXYNOS || ARCH_S3C64XX || ARCH_S5PV210 || \
