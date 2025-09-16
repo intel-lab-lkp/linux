@@ -21393,6 +21393,12 @@ S:	Supported
 T:	git git://git.kernel.org/pub/scm/linux/kernel/git/rcu/linux.git rcu/dev
 F:	tools/testing/selftests/rcutorture
 
+RDA MICRO CLOCK AND RESET DRIVER
+M:	Dang Huynh <dang.huynh@mainlining.org>
+S:	Maintained
+F:	Documentation/devicetree/bindings/clock/rda,8810pl-apsyscon.yaml
+F:	drivers/clk/rda/clk-rda8810.c
+
 RDA MICRO REAL TIME CLOCK DRIVER
 M:	Dang Huynh <dang.huynh@mainlining.org>
 S:	Maintained
