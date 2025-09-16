@@ -9350,8 +9350,18 @@ static int cpu_cgroup_can_attach(struct cgroup_taskset *tset)
 		goto scx_check;
 
 	cgroup_taskset_for_each(task, css, tset) {
-		if (!sched_rt_can_attach(css_tg(css), task))
+		struct task_group *tg = css_tg(css);
+
+		if (!sched_rt_can_attach(tg, task)) {
+			if (tg != &root_task_group) {
+				pr_err_ratelimited("cgroup: cannot attach "
+						"cpu controller. Task "
+						"%s:%d is not in the root "
+						"cgroup.", task->comm,
+						task_pid_nr(task));
+			}
 			return -EINVAL;
+		}
 	}
 scx_check:
 #endif /* CONFIG_RT_GROUP_SCHED */
