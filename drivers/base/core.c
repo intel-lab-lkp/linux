@@ -185,7 +185,7 @@ void fw_devlink_purge_absent_suppliers(struct fwnode_handle *fwnode)
 	fwnode->flags |= FWNODE_FLAG_NOT_DEVICE;
 	fwnode_links_purge_consumers(fwnode);
 
-	fwnode_for_each_available_child_node(fwnode, child)
+	fwnode_for_each_child_node(fwnode, child)
 		fw_devlink_purge_absent_suppliers(child);
 }
 EXPORT_SYMBOL_GPL(fw_devlink_purge_absent_suppliers);
@@ -231,7 +231,7 @@ static void __fw_devlink_pickup_dangling_consumers(struct fwnode_handle *fwnode,
 	fwnode->flags |= FWNODE_FLAG_NOT_DEVICE;
 	__fwnode_links_move_consumers(fwnode, new_sup);
 
-	fwnode_for_each_available_child_node(fwnode, child)
+	fwnode_for_each_child_node(fwnode, child)
 		__fw_devlink_pickup_dangling_consumers(child, new_sup);
 }
 
@@ -1318,7 +1318,7 @@ void device_links_driver_bound(struct device *dev)
 
 		guard(mutex)(&fwnode_link_lock);
 
-		fwnode_for_each_available_child_node(dev->fwnode, child)
+		fwnode_for_each_child_node(dev->fwnode, child)
 			__fw_devlink_pickup_dangling_consumers(child,
 							       dev->fwnode);
 		__fw_devlink_link_to_consumers(dev);
@@ -1736,7 +1736,7 @@ static void fw_devlink_parse_fwtree(struct fwnode_handle *fwnode)
 
 	fw_devlink_parse_fwnode(fwnode);
 
-	while ((child = fwnode_get_next_available_child_node(fwnode, child)))
+	while ((child = fwnode_get_next_child_node(fwnode, child)))
 		fw_devlink_parse_fwtree(child);
 }
 
@@ -2309,7 +2309,7 @@ static void __fw_devlink_link_to_suppliers(struct device *dev,
 	 * case where the supplier is added before the consumer's parent device
 	 * (@dev).
 	 */
-	while ((child = fwnode_get_next_available_child_node(fwnode, child)))
+	while ((child = fwnode_get_next_child_node(fwnode, child)))
 		__fw_devlink_link_to_suppliers(dev, child);
 }
 
