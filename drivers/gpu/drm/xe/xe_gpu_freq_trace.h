@@ -6,7 +6,7 @@
 #ifndef _XE_GPU_FREQ_TRACE_H_
 #define _XE_GPU_FREQ_TRACE_H_
 
-#include "../drm_gpu_frequency_trace.h"
+#include <drm/drm_gpu_frequency_trace.h>
 
 /* Convert MHz to KHz for tracepoint */
 #define MHZ_TO_KHZ(freq_mhz)	((freq_mhz) * 1000)
