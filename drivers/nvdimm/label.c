@@ -441,6 +441,7 @@ int nd_label_reserve_dpa(struct nvdimm_drvdata *ndd)
 		return 0; /* no label, nothing to reserve */
 
 	for_each_clear_bit_le(slot, free, nslot) {
+		union nd_lsa_label *lsa_label;
 		struct nd_namespace_label *nd_label;
 		struct nd_region *nd_region = NULL;
 		struct nd_label_id label_id;
@@ -448,9 +449,14 @@ int nd_label_reserve_dpa(struct nvdimm_drvdata *ndd)
 		uuid_t label_uuid;
 		u32 flags;
 
-		nd_label = to_label(ndd, slot);
+		lsa_label = (union nd_lsa_label *) to_label(ndd, slot);
+		nd_label = &lsa_label->ns_label;
 
-		if (!slot_valid(ndd, (union nd_lsa_label *) nd_label, slot))
+		/* Skip region label. DPA reservation is for NS label only */
+		if (is_region_label(ndd, lsa_label))
+			continue;
+
+		if (!slot_valid(ndd, lsa_label, slot))
 			continue;
 
 		nsl_get_uuid(ndd, nd_label, &label_uuid);
