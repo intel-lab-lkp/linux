@@ -3127,6 +3127,7 @@ static int tb_resume_noirq(struct tb *tb)
 		tb_switch_reset(tb->root_switch);
 
 	tb_switch_resume(tb->root_switch, false);
+	tb_add_dp_resources(tb->root_switch);
 	tb_free_invalid_tunnels(tb);
 	tb_free_unplugged_children(tb->root_switch);
 	tb_restore_children(tb->root_switch);
