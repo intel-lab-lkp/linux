@@ -910,6 +910,7 @@ cxl_create_region(struct cxl_root_decoder *cxlrd,
 bool is_cxl_pmem_region(struct device *dev);
 struct cxl_pmem_region *to_cxl_pmem_region(struct device *dev);
 int devm_cxl_add_pmem_region(struct cxl_region *cxlr);
+void create_pmem_region(struct nvdimm *nvdimm);
 #else
 static inline bool is_cxl_pmem_region(struct device *dev)
 {
@@ -922,6 +923,9 @@ static inline struct cxl_pmem_region *to_cxl_pmem_region(struct device *dev)
 static inline int devm_cxl_add_pmem_region(struct cxl_region *cxlr)
 {
 	return 0;
+}
+static inline void create_pmem_region(struct nvdimm *nvdimm)
+{
 }
 #endif
 

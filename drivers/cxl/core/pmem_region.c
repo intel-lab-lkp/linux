@@ -290,3 +290,56 @@ err_bridge:
 	return rc;
 }
 EXPORT_SYMBOL_NS_GPL(devm_cxl_add_pmem_region, "CXL");
+
+static int match_free_ep_decoder(struct device *dev, const void *data)
+{
+	struct cxl_decoder *cxld = to_cxl_decoder(dev);
+
+	return !cxld->region;
+}
+
+static struct cxl_decoder *cxl_find_free_ep_decoder(struct cxl_port *port)
+{
+	struct device *dev;
+
+	dev = device_find_child(&port->dev, NULL, match_free_ep_decoder);
+	if (!dev)
+		return NULL;
+
+	/* Release device ref taken via device_find_child() */
+	put_device(dev);
+	return to_cxl_decoder(dev);
+}
+
+void create_pmem_region(struct nvdimm *nvdimm)
+{
+	struct cxl_nvdimm *cxl_nvd;
+	struct cxl_memdev *cxlmd;
+	struct cxl_pmem_region_params *params;
+	struct cxl_root_decoder *cxlrd;
+	struct cxl_decoder *cxld;
+	struct cxl_region *cxlr;
+
+	if (!nvdimm_has_cxl_region(nvdimm))
+		return;
+
+	lockdep_assert_held(&cxl_rwsem.region);
+	cxl_nvd = nvdimm_provider_data(nvdimm);
+	params = nvdimm_get_cxl_region_param(nvdimm);
+	cxlmd = cxl_nvd->cxlmd;
+	cxlrd = cxlmd->cxlrd;
+
+	 /* TODO: Region creation support only for interleave way == 1 */
+	if (!(params->nlabel == 1))
+		dev_info(&cxlmd->dev,
+			 "Region Creation is not supported with iw > 1\n");
+	else {
+		cxld = cxl_find_free_ep_decoder(cxlmd->endpoint);
+		cxlr = cxl_create_region(cxlrd, CXL_PARTMODE_PMEM,
+					 atomic_read(&cxlrd->region_id),
+					 params, cxld);
+		if (IS_ERR(cxlr))
+			dev_info(&cxlmd->dev, "Region Creation failed\n");
+	}
+}
+EXPORT_SYMBOL_NS_GPL(create_pmem_region, "CXL");
