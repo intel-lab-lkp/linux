@@ -5907,6 +5907,10 @@ ERR:
 	ia_css_debug_dtrace(IA_CSS_DEBUG_TRACE_PRIVATE,
 			    "ia_css_pipe_create_cas_scaler_desc() leave, err=%d\n",
 			    err);
+
+	if (err)
+		ia_css_pipe_destroy_cas_scaler_desc(descr);
+
 	return err;
 }
 
