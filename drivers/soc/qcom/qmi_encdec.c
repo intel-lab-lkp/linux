@@ -36,18 +36,16 @@
 	*p_length |= ((u8)*p_src) << 8; \
 } while (0)
 
-#define QMI_ENCDEC_ENCODE_N_BYTES(p_dst, p_src, size) \
-do { \
-	memcpy(p_dst, p_src, size); \
-	p_dst = (u8 *)p_dst + size; \
-	p_src = (u8 *)p_src + size; \
+#define QMI_ENCDEC_ENCODE_N_BYTES(p_dst, p_src, type) do { \
+	*(type *)(p_dst) = QMI_ENCDEC_ENCODE(*(type *)(p_src), type); \
+	p_dst = (u8 *)(p_dst) + sizeof(type); \
+	p_src = (u8 *)(p_src) + sizeof(type); \
 } while (0)
 
-#define QMI_ENCDEC_DECODE_N_BYTES(p_dst, p_src, size) \
-do { \
-	memcpy(p_dst, p_src, size); \
-	p_dst = (u8 *)p_dst + size; \
-	p_src = (u8 *)p_src + size; \
+#define QMI_ENCDEC_DECODE_N_BYTES(p_dst, p_src, type) do { \
+	*(type *)(p_dst) = QMI_ENCDEC_DECODE(*(type *)(p_src), type); \
+	p_dst = (u8 *)(p_dst) + sizeof(type); \
+	p_src = (u8 *)(p_src) + sizeof(type); \
 } while (0)
 
 #define UPDATE_ENCODE_VARIABLES(temp_si, buf_dst, \
@@ -182,7 +180,21 @@ static int qmi_encode_basic_elem(void *buf_dst, const void *buf_src,
 	u32 i, rc = 0;
 
 	for (i = 0; i < elem_len; i++) {
-		QMI_ENCDEC_ENCODE_N_BYTES(buf_dst, buf_src, elem_size);
+		switch (elem_size) {
+		case sizeof(u8):
+			QMI_ENCDEC_ENCODE_N_BYTES(buf_dst, buf_src, u8);
+			break;
+		case sizeof(u16):
+			QMI_ENCDEC_ENCODE_N_BYTES(buf_dst, buf_src, u16);
+			break;
+		case sizeof(u32):
+			QMI_ENCDEC_ENCODE_N_BYTES(buf_dst, buf_src, u32);
+			break;
+		case sizeof(u64):
+			QMI_ENCDEC_ENCODE_N_BYTES(buf_dst, buf_src, u64);
+			break;
+		}
+
 		rc += elem_size;
 	}
 
@@ -465,7 +477,21 @@ static int qmi_decode_basic_elem(void *buf_dst, const void *buf_src,
 	u32 i, rc = 0;
 
 	for (i = 0; i < elem_len; i++) {
-		QMI_ENCDEC_DECODE_N_BYTES(buf_dst, buf_src, elem_size);
+		switch (elem_size) {
+		case sizeof(u8):
+			QMI_ENCDEC_DECODE_N_BYTES(buf_dst, buf_src, u8);
+			break;
+		case sizeof(u16):
+			QMI_ENCDEC_DECODE_N_BYTES(buf_dst, buf_src, u16);
+			break;
+		case sizeof(u32):
+			QMI_ENCDEC_DECODE_N_BYTES(buf_dst, buf_src, u32);
+			break;
+		case sizeof(u64):
+			QMI_ENCDEC_DECODE_N_BYTES(buf_dst, buf_src, u64);
+			break;
+		}
+
 		rc += elem_size;
 	}
 
