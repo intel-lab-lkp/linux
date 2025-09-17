@@ -70,6 +70,11 @@ struct cpu_topology {
 	cpumask_t llc_sibling;
 };
 
+struct cpu_smt_info {
+	unsigned int thread_num;
+	int core_id;
+};
+
 #ifdef CONFIG_GENERIC_ARCH_TOPOLOGY
 extern struct cpu_topology cpu_topology[NR_CPUS];
 
@@ -88,6 +93,7 @@ void update_siblings_masks(unsigned int cpu);
 void remove_cpu_topology(unsigned int cpuid);
 void reset_cpu_topology(void);
 int parse_acpi_topology(void);
+bool acpi_cpu_is_threaded(int cpu);
 void freq_inv_set_max_ratio(int cpu, u64 max_rate);
 #endif
 
