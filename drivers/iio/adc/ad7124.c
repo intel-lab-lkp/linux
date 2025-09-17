@@ -199,7 +199,6 @@ struct ad7124_channel_config {
 };
 
 struct ad7124_channel {
-	unsigned int nr;
 	struct ad7124_channel_config cfg;
 	unsigned int ain;
 	unsigned int slot;
@@ -1301,7 +1300,6 @@ static int ad7124_parse_channel_config(struct iio_dev *indio_dev,
 			return dev_err_probe(dev, -EINVAL,
 					     "diff-channels property of %pfwP contains invalid data\n", child);
 
-		st->channels[channel].nr = channel;
 		st->channels[channel].ain = FIELD_PREP(AD7124_CHANNEL_AINP, ain[0]) |
 			FIELD_PREP(AD7124_CHANNEL_AINM, ain[1]);
 
@@ -1328,7 +1326,6 @@ static int ad7124_parse_channel_config(struct iio_dev *indio_dev,
 
 	if (num_channels < AD7124_MAX_CHANNELS) {
 		st->channels[num_channels] = (struct ad7124_channel) {
-			.nr = num_channels,
 			.ain = FIELD_PREP(AD7124_CHANNEL_AINP, AD7124_CHANNEL_AINx_TEMPSENSOR) |
 				FIELD_PREP(AD7124_CHANNEL_AINM, AD7124_CHANNEL_AINx_AVSS),
 			.cfg = {
