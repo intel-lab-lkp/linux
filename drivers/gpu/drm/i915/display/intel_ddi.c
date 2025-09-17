@@ -4764,9 +4764,6 @@ intel_ddi_hotplug(struct intel_encoder *encoder,
 	enum intel_hotplug_state state;
 	int ret;
 
-	if (intel_dp_test_phy(intel_dp))
-		return INTEL_HOTPLUG_UNCHANGED;
-
 	state = intel_encoder_hotplug(encoder, connector);
 
 	if (!intel_tc_port_link_reset(dig_port)) {
