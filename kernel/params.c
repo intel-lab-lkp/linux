@@ -462,7 +462,7 @@ static int param_array(struct module *mod,
 	return 0;
 }
 
-static int param_array_set(const char *val, const struct kernel_param *kp)
+int param_array_set(const char *val, const struct kernel_param *kp)
 {
 	const struct kparam_array *arr = kp->arr;
 	unsigned int temp_num;
@@ -471,8 +471,9 @@ static int param_array_set(const char *val, const struct kernel_param *kp)
 			   arr->elemsize, arr->ops->set, kp->level,
 			   arr->num ?: &temp_num);
 }
+EXPORT_SYMBOL(param_array_set);
 
-static int param_array_get(char *buffer, const struct kernel_param *kp)
+int param_array_get(char *buffer, const struct kernel_param *kp)
 {
 	int i, off, ret;
 	const struct kparam_array *arr = kp->arr;
@@ -492,8 +493,9 @@ static int param_array_get(char *buffer, const struct kernel_param *kp)
 	buffer[off] = '\0';
 	return off;
 }
+EXPORT_SYMBOL(param_array_get);
 
-static void param_array_free(void *arg)
+void param_array_free(void *arg)
 {
 	unsigned int i;
 	const struct kparam_array *arr = arg;
@@ -502,6 +504,7 @@ static void param_array_free(void *arg)
 		for (i = 0; i < (arr->num ? *arr->num : arr->max); i++)
 			arr->ops->free(arr->elem + arr->elemsize * i);
 }
+EXPORT_SYMBOL(param_array_free);
 
 const struct kernel_param_ops param_array_ops = {
 	.set = param_array_set,
