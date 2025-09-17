@@ -25,10 +25,6 @@ struct clocksource_base;
 struct clocksource;
 struct module;
 
-#if defined(CONFIG_GENERIC_GETTIMEOFDAY)
-#include <asm/clocksource.h>
-#endif
-
 #include <vdso/clocksource.h>
 
 /**
