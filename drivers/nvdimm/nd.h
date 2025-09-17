@@ -344,6 +344,11 @@ region_label_uuid_equal(struct cxl_region_label *region_label,
 	return uuid_equal((uuid_t *) region_label->uuid, uuid);
 }
 
+static inline u32 region_label_get_slot(struct cxl_region_label *region_label)
+{
+	return __le32_to_cpu(region_label->slot);
+}
+
 static inline u64
 region_label_get_checksum(struct cxl_region_label *region_label)
 {
