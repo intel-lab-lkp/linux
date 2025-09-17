@@ -42,6 +42,6 @@ static inline void trace_gpu_frequency(unsigned int state, unsigned int gpu_id) 
 
 #ifdef CONFIG_DRM_GPU_FREQUENCY_TRACE
 #undef TRACE_INCLUDE_PATH
-#define TRACE_INCLUDE_PATH ../../drivers/gpu/drm
+#define TRACE_INCLUDE_PATH ../../include/drm
 #include <trace/define_trace.h>
 #endif

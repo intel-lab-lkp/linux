@@ -9,7 +9,7 @@
 #ifdef CONFIG_DRM_GPU_FREQUENCY_TRACE
 
 #define CREATE_TRACE_POINTS
-#include "drm_gpu_frequency_trace.h"
+#include <drm/drm_gpu_frequency_trace.h>
 
 EXPORT_TRACEPOINT_SYMBOL_GPL(gpu_frequency);
 
