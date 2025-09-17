@@ -53,7 +53,7 @@ static int cxl_device_id(const struct device *dev)
 		return CXL_DEVICE_NVDIMM_BRIDGE;
 	if (dev->type == &cxl_nvdimm_type)
 		return CXL_DEVICE_NVDIMM;
-	if (dev->type == CXL_PMEM_REGION_TYPE())
+	if (dev->type == CXL_PMEM_REGION_TYPE)
 		return CXL_DEVICE_PMEM_REGION;
 	if (dev->type == CXL_DAX_REGION_TYPE())
 		return CXL_DEVICE_DAX_REGION;
