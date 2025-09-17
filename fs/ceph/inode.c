@@ -2217,6 +2217,40 @@ void ceph_queue_inode_work(struct inode *inode, int work_bit)
 	}
 }
 
+/**
+ * Queue an asynchronous iput() call in a worker thread.  Use this
+ * instead of iput() in contexts where evicting the inode is unsafe.
+ * For example, inode eviction may cause deadlocks in
+ * inode_wait_for_writeback() (when called from within writeback) or
+ * in netfs_wait_for_outstanding_io() (when called from within the
+ * Ceph messenger).
+ */
+void ceph_iput_async(struct inode *inode)
+{
+	if (unlikely(!inode))
+		return;
+
+	if (likely(atomic_add_unless(&inode->i_count, -1, 1)))
+		/* somebody else is holding another reference -
+		 * nothing left to do for us
+		 */
+		return;
+
+	doutc(ceph_inode_to_fs_client(inode)->client, "%p %llx.%llx\n", inode, ceph_vinop(inode));
+
+	/* simply queue a ceph_inode_work() (donating the remaining
+	 * reference) without setting i_work_mask bit; other than
+	 * putting the reference, there is nothing to do
+	 */
+	WARN_ON_ONCE(!queue_work(ceph_inode_to_fs_client(inode)->inode_wq,
+				 &ceph_inode(inode)->i_work));
+
+	/* note: queue_work() cannot fail; it i_work were already
+	 * queued, then it would be holding another reference, but no
+	 * such reference exists
+	 */
+}
+
 static void ceph_do_invalidate_pages(struct inode *inode)
 {
 	struct ceph_client *cl = ceph_inode_to_client(inode);

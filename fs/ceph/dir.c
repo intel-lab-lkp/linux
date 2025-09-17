@@ -1289,7 +1289,7 @@ static void ceph_async_unlink_cb(struct ceph_mds_client *mdsc,
 		ceph_mdsc_free_path_info(&path_info);
 	}
 out:
-	iput(req->r_old_inode);
+	ceph_iput_async(req->r_old_inode);
 	ceph_mdsc_release_dir_caps(req);
 }
 

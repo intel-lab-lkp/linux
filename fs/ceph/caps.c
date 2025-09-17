@@ -1810,7 +1810,7 @@ out:
 	spin_unlock(&mdsc->snap_flush_lock);
 
 	if (need_put)
-		iput(inode);
+		ceph_iput_async(inode);
 }
 
 /*
@@ -3390,7 +3390,7 @@ static void __ceph_put_cap_refs(struct ceph_inode_info *ci, int had,
 	if (wake)
 		wake_up_all(&ci->i_cap_wq);
 	while (put-- > 0)
-		iput(inode);
+		ceph_iput_async(inode);
 }
 
 void ceph_put_cap_refs(struct ceph_inode_info *ci, int had)
@@ -3493,7 +3493,7 @@ unlock:
 	if (complete_capsnap)
 		wake_up_all(&ci->i_cap_wq);
 	while (put-- > 0) {
-		iput(inode);
+		ceph_iput_async(inode);
 	}
 }
 
@@ -3998,7 +3998,7 @@ out:
 	if (wake_mdsc)
 		wake_up_all(&mdsc->cap_flushing_wq);
 	if (drop)
-		iput(inode);
+		ceph_iput_async(inode);
 }
 
 void __ceph_remove_capsnap(struct inode *inode, struct ceph_cap_snap *capsnap,
@@ -4091,7 +4091,7 @@ static void handle_cap_flushsnap_ack(struct inode *inode, u64 flush_tid,
 			wake_up_all(&ci->i_cap_wq);
 		if (wake_mdsc)
 			wake_up_all(&mdsc->cap_flushing_wq);
-		iput(inode);
+		ceph_iput_async(inode);
 	}
 }
 
@@ -4654,7 +4654,7 @@ void ceph_handle_caps(struct ceph_mds_session *session,
 done:
 	mutex_unlock(&session->s_mutex);
 done_unlocked:
-	iput(inode);
+	ceph_iput_async(inode);
 out:
 	ceph_dec_mds_stopping_blocker(mdsc);
 
@@ -4747,7 +4747,7 @@ unsigned long ceph_check_delayed_caps(struct ceph_mds_client *mdsc)
 			doutc(cl, "on %p %llx.%llx\n", inode,
 			      ceph_vinop(inode));
 			ceph_check_caps(ci, 0);
-			iput(inode);
+			ceph_iput_async(inode);
 			spin_lock(&mdsc->cap_delay_lock);
 		}
 
@@ -4786,7 +4786,7 @@ static void flush_dirty_session_caps(struct ceph_mds_session *s)
 		spin_unlock(&mdsc->cap_dirty_lock);
 		ceph_wait_on_async_create(inode);
 		ceph_check_caps(ci, CHECK_CAPS_FLUSH);
-		iput(inode);
+		ceph_iput_async(inode);
 		spin_lock(&mdsc->cap_dirty_lock);
 	}
 	spin_unlock(&mdsc->cap_dirty_lock);
