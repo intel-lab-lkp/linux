@@ -151,6 +151,13 @@ extern void __cpu_copy_user_highpage(struct page *to, struct page *from,
 #define clear_user_highpage(page,vaddr)		\
 	 __cpu_clear_user_highpage(page, vaddr)
 
+#define clear_user_highpages(page, vaddr, npages)	\
+do {							\
+	clear_user_highpage(page, vaddr);		\
+	vaddr += PAGE_SIZE;				\
+	page++;						\
+} while (--npages)
+
 #define __HAVE_ARCH_COPY_USER_HIGHPAGE
 #define copy_user_highpage(to,from,vaddr,vma)	\
 	__cpu_copy_user_highpage(to, from, vaddr, vma)
