@@ -318,6 +318,39 @@ static inline void nsl_set_region_uuid(struct nvdimm_drvdata *ndd,
 		export_uuid(ns_label->cxl.region_uuid, uuid);
 }
 
+static inline bool is_region_label(struct nvdimm_drvdata *ndd,
+				   union nd_lsa_label *nd_label)
+{
+	uuid_t region_type, *ns_type;
+
+	if (!ndd->cxl || !nd_label)
+		return false;
+
+	uuid_parse(CXL_REGION_UUID, &region_type);
+	ns_type = (uuid_t *) nd_label->ns_label.cxl.type;
+	return uuid_equal(&region_type, ns_type);
+}
+
+static inline bool
+region_label_uuid_equal(struct cxl_region_label *region_label,
+			const uuid_t *uuid)
+{
+	return uuid_equal((uuid_t *) region_label->uuid, uuid);
+}
+
+static inline u64
+region_label_get_checksum(struct cxl_region_label *region_label)
+{
+	return __le64_to_cpu(region_label->checksum);
+}
+
+static inline void
+region_label_set_checksum(struct cxl_region_label *region_label,
+			  u64 checksum)
+{
+	region_label->checksum = __cpu_to_le64(checksum);
+}
+
 bool nsl_validate_type_guid(struct nvdimm_drvdata *ndd,
 			    struct nd_namespace_label *nd_label, guid_t *guid);
 enum nvdimm_claim_class nsl_get_claim_class(struct nvdimm_drvdata *ndd,
@@ -399,7 +432,10 @@ enum nd_label_flags {
 struct nd_label_ent {
 	struct list_head list;
 	unsigned long flags;
-	struct nd_namespace_label *label;
+	union {
+		struct nd_namespace_label *label;
+		struct cxl_region_label *region_label;
+	};
 };
 
 enum nd_mapping_lock_class {

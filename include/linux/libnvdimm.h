@@ -117,6 +117,13 @@ struct nd_interleave_set {
 	u64 altcookie;
 
 	guid_t type_guid;
+
+	/* v2.1 region label info */
+	uuid_t uuid;
+	int interleave_ways;
+	int interleave_granularity;
+	struct resource *res;
+	int nr_targets;
 };
 
 struct nd_mapping_desc {
@@ -307,6 +314,7 @@ int nvdimm_has_flush(struct nd_region *nd_region);
 int nvdimm_has_cache(struct nd_region *nd_region);
 int nvdimm_in_overwrite(struct nvdimm *nvdimm);
 bool is_nvdimm_sync(struct nd_region *nd_region);
+int nd_region_label_update(struct nd_region *nd_region);
 
 static inline int nvdimm_ctl(struct nvdimm *nvdimm, unsigned int cmd, void *buf,
 		unsigned int buf_len, int *cmd_rc)
