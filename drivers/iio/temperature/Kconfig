@@ -4,6 +4,16 @@
 #
 menu "Temperature sensors"
 
+config EMC1812
+	tristate "Microchip Technology EMC1812 driver"
+	depends on I2C
+	help
+	  Say yes here to build support for Microchip Technology's EMC181X/33
+	  Multichannel Low-Voltage Remote Diode Sensor Family.
+
+	  This driver can also be built as a module. If so, the module
+	  will be called emc1812.
+
 config IQS620AT_TEMP
 	tristate "Azoteq IQS620AT temperature sensor"
 	depends on MFD_IQS62X || COMPILE_TEST
