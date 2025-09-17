@@ -2053,8 +2053,6 @@
 			pwm@52 {
 				compatible = "maxim,max31785a";
 				reg = <0x52>;
-				#address-cells = <1>;
-				#size-cells = <0>;
 			};
 
 			led-controller@60 {
