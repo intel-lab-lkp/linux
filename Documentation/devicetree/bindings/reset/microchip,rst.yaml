@@ -23,6 +23,7 @@ properties:
     enum:
       - microchip,sparx5-switch-reset
       - microchip,lan966x-switch-reset
+      - microchip,lan969x-switch-reset
 
   reg:
     items:
