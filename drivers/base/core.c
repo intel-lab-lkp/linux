@@ -3876,7 +3876,13 @@ void device_del(struct device *dev)
 	device_remove_file(dev, &dev_attr_uevent);
 	device_remove_attrs(dev);
 	bus_remove_device(dev);
+	/* We need to forbid and then proceed with a barrier here,
+	 * so that any pending work is flushed 
+	*/
+	pm_runtime_forbid(dev);
+	pm_runtime_barrier(dev);
 	device_pm_remove(dev);
+	pm_runtime_allow(dev);
 	driver_deferred_probe_del(dev);
 	device_platform_notify_remove(dev);
 	device_links_purge(dev);
