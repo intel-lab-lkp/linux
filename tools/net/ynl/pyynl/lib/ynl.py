@@ -9,7 +9,6 @@ import socket
 import struct
 from struct import Struct
 import sys
-import yaml
 import ipaddress
 import uuid
 import queue
@@ -575,7 +574,9 @@ class YnlFamily(SpecFamily):
         elif attr["type"] == 'string':
             attr_payload = str(value).encode('ascii') + b'\x00'
         elif attr["type"] == 'binary':
-            if isinstance(value, bytes):
+            if value is None:
+                attr_payload = b''
+            elif isinstance(value, bytes):
                 attr_payload = value
             elif isinstance(value, str):
                 if attr.display_hint:
@@ -584,6 +585,9 @@ class YnlFamily(SpecFamily):
                     attr_payload = bytes.fromhex(value)
             elif isinstance(value, dict) and attr.struct_name:
                 attr_payload = self._encode_struct(attr.struct_name, value)
+            elif isinstance(value, list) and attr.sub_type in NlAttr.type_formats:
+                format = NlAttr.get_format(attr.sub_type)
+                attr_payload = b''.join([format.pack(x) for x in value])
             else:
                 raise Exception(f'Unknown type for binary attribute, value: {value}')
         elif attr['type'] in NlAttr.type_formats or attr.is_auto_scalar:
@@ -618,6 +622,16 @@ class YnlFamily(SpecFamily):
         pad = b'\x00' * ((4 - len(attr_payload) % 4) % 4)
         return struct.pack('HH', len(attr_payload) + 4, nl_type) + attr_payload + pad
 
+    def _get_enum_or_unknown(self, enum, raw):
+        try:
+            name = enum.entries_by_val[raw].name
+        except KeyError as error:
+            if self.process_unknown:
+                name = f"Unknown({raw})"
+            else:
+                raise error
+        return name
+
     def _decode_enum(self, raw, attr_spec):
         enum = self.consts[attr_spec['enum']]
         if enum.type == 'flags' or attr_spec.get('enum-as-flags', False):
@@ -625,11 +639,11 @@ class YnlFamily(SpecFamily):
             value = set()
             while raw:
                 if raw & 1:
-                    value.add(enum.entries_by_val[i].name)
+                    value.add(self._get_enum_or_unknown(enum, i))
                 raw >>= 1
                 i += 1
         else:
-            value = enum.entries_by_val[raw].name
+            value = self._get_enum_or_unknown(enum, raw)
         return value
 
     def _decode_binary(self, attr, attr_spec):
@@ -691,7 +705,7 @@ class YnlFamily(SpecFamily):
             return attr.as_bin()
 
     def _rsp_add(self, rsp, name, is_multi, decoded):
-        if is_multi == None:
+        if is_multi is None:
             if name in rsp and type(rsp[name]) is not list:
                 rsp[name] = [rsp[name]]
                 is_multi = True
@@ -724,14 +738,14 @@ class YnlFamily(SpecFamily):
         decoded = {}
         offset = 0
         if msg_format.fixed_header:
-            decoded.update(self._decode_struct(attr.raw, msg_format.fixed_header));
+            decoded.update(self._decode_struct(attr.raw, msg_format.fixed_header))
             offset = self._struct_size(msg_format.fixed_header)
         if msg_format.attr_set:
             if msg_format.attr_set in self.attr_sets:
                 subdict = self._decode(NlAttrs(attr.raw, offset), msg_format.attr_set)
                 decoded.update(subdict)
             else:
-                raise Exception(f"Unknown attribute-set '{attr_space}' when decoding '{attr_spec.name}'")
+                raise Exception(f"Unknown attribute-set '{msg_format.attr_set}' when decoding '{attr_spec.name}'")
         return decoded
 
     def _decode(self, attrs, space, outer_attrs = None):
@@ -762,6 +776,8 @@ class YnlFamily(SpecFamily):
                     decoded = True
                 elif attr_spec.is_auto_scalar:
                     decoded = attr.as_auto_scalar(attr_spec['type'], attr_spec.byte_order)
+                    if 'enum' in attr_spec:
+                        decoded = self._decode_enum(decoded, attr_spec)
                 elif attr_spec["type"] in NlAttr.type_formats:
                     decoded = attr.as_scalar(attr_spec['type'], attr_spec.byte_order)
                     if 'enum' in attr_spec:

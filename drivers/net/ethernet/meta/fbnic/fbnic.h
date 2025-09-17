@@ -12,6 +12,7 @@
 
 #include "fbnic_csr.h"
 #include "fbnic_fw.h"
+#include "fbnic_fw_log.h"
 #include "fbnic_hw_stats.h"
 #include "fbnic_mac.h"
 #include "fbnic_rpc.h"
@@ -83,8 +84,7 @@ struct fbnic_dev {
 	/* Local copy of hardware statistics */
 	struct fbnic_hw_stats hw_stats;
 
-	/* Lock protecting access to hw_stats */
-	spinlock_t hw_stats_lock;
+	struct fbnic_fw_log fw_log;
 };
 
 /* Reserve entry 0 in the MSI-X "others" array until we have filled all

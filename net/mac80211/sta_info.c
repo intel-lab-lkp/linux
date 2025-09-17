@@ -4,7 +4,7 @@
  * Copyright 2006-2007	Jiri Benc <jbenc@suse.cz>
  * Copyright 2013-2014  Intel Mobile Communications GmbH
  * Copyright (C) 2015 - 2017 Intel Deutschland GmbH
- * Copyright (C) 2018-2024 Intel Corporation
+ * Copyright (C) 2018-2025 Intel Corporation
  */
 
 #include <linux/module.h>
@@ -729,6 +729,7 @@ __sta_info_alloc(struct ieee80211_sub_if_data *sdata,
 				    IEEE80211_RATE_MANDATORY_G;
 			break;
 		case NL80211_BAND_5GHZ:
+		case NL80211_BAND_6GHZ:
 			mandatory = IEEE80211_RATE_MANDATORY_A;
 			break;
 		case NL80211_BAND_60GHZ:
@@ -2961,7 +2962,7 @@ void sta_set_sinfo(struct sta_info *sta, struct station_info *sinfo,
 	struct ieee80211_sub_if_data *sdata = sta->sdata;
 	struct ieee80211_local *local = sdata->local;
 	u32 thr = 0;
-	int i, ac, cpu, link_id;
+	int i, ac, cpu;
 	struct ieee80211_sta_rx_stats *last_rxstats;
 
 	last_rxstats = sta_get_last_rx_stats(sta, -1);
@@ -3203,18 +3204,23 @@ void sta_set_sinfo(struct sta_info *sta, struct station_info *sinfo,
 	if (sta->sta.valid_links) {
 		struct ieee80211_link_data *link;
 		struct link_sta_info *link_sta;
+		int link_id;
 
 		ether_addr_copy(sinfo->mld_addr, sta->addr);
+
+		/* assign valid links first for iteration */
+		sinfo->valid_links = sta->sta.valid_links;
+
 		for_each_valid_link(sinfo, link_id) {
 			link_sta = wiphy_dereference(sta->local->hw.wiphy,
 						     sta->link[link_id]);
 			link = wiphy_dereference(sdata->local->hw.wiphy,
 						 sdata->link[link_id]);
 
-			if (!link_sta || !sinfo->links[link_id] || !link)
+			if (!link_sta || !sinfo->links[link_id] || !link) {
+				sinfo->valid_links &= ~BIT(link_id);
 				continue;
-
-			sinfo->valid_links = sta->sta.valid_links;
+			}
 			sta_set_link_sinfo(sta, sinfo->links[link_id],
 					   link, tidstats);
 		}
