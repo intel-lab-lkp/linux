@@ -577,6 +577,14 @@ config SPI_KSPI2
 	  This driver can also be built as a module. If so, the module
 	  will be called spi-kspi2.
 
+config SPI_SPACEMIT_K1
+	tristate "K1 SPI Controller"
+	depends on ARCH_SPACEMIT || COMPILE_TEST
+	depends on OF
+	default ARCH_SPACEMIT
+	help
+	  Enable support for the SpacemiT K1 SPI controller.
+
 config SPI_LM70_LLP
 	tristate "Parallel port adapter for LM70 eval board (DEVELOPMENT)"
 	depends on PARPORT
