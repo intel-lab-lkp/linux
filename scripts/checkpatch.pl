@@ -3339,6 +3339,15 @@ sub process {
 				$fixed[$fixlinenr] =~ s/^/ /;
 			}
 		}
+# Check for unhandled placeholder text in cover letters
+		if ($filename =~ /cover-letter\.patch$/) {
+			if ($rawline =~ /^\+Subject:.*\*\*\* SUBJECT HERE \*\*\*/ ||
+				$rawline =~ /^\+\*\*\* BLURB HERE \*\*\*/) {
+				my $placeholder = $1 || $2;
+				WARN("COVER_LETTER_PLACEHOLDER",
+					 "Incomplete cover letter: placeholder text detected\n" . $herecurr);
+			}
+		}
 
 # Check for git id commit length and improperly formed commit descriptions
 # A correctly formed commit description is:
