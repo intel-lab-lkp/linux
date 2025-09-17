@@ -76,7 +76,7 @@ void ceph_handle_quota(struct ceph_mds_client *mdsc,
 		            le64_to_cpu(h->max_files));
 	spin_unlock(&ci->i_ceph_lock);
 
-	iput(inode);
+	ceph_iput_async(inode);
 out:
 	ceph_dec_mds_stopping_blocker(mdsc);
 }
@@ -190,7 +190,7 @@ void ceph_cleanup_quotarealms_inodes(struct ceph_mds_client *mdsc)
 		node = rb_first(&mdsc->quotarealms_inodes);
 		qri = rb_entry(node, struct ceph_quotarealm_inode, node);
 		rb_erase(node, &mdsc->quotarealms_inodes);
-		iput(qri->inode);
+		ceph_iput_async(qri->inode);
 		kfree(qri);
 	}
 	mutex_unlock(&mdsc->quotarealms_inodes_mutex);

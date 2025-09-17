@@ -265,7 +265,7 @@ static void finish_netfs_read(struct ceph_osd_request *req)
 	subreq->error = err;
 	trace_netfs_sreq(subreq, netfs_sreq_trace_io_progress);
 	netfs_read_subreq_terminated(subreq);
-	iput(req->r_inode);
+	ceph_iput_async(req->r_inode);
 	ceph_dec_osd_stopping_blocker(fsc->mdsc);
 }
 

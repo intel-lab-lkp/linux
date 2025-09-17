@@ -740,7 +740,7 @@ static void queue_realm_cap_snaps(struct ceph_mds_client *mdsc,
 		if (!inode)
 			continue;
 		spin_unlock(&realm->inodes_with_caps_lock);
-		iput(lastinode);
+		ceph_iput_async(lastinode);
 		lastinode = inode;
 
 		/*
@@ -767,7 +767,7 @@ static void queue_realm_cap_snaps(struct ceph_mds_client *mdsc,
 		spin_lock(&realm->inodes_with_caps_lock);
 	}
 	spin_unlock(&realm->inodes_with_caps_lock);
-	iput(lastinode);
+	ceph_iput_async(lastinode);
 
 	if (capsnap)
 		kmem_cache_free(ceph_cap_snap_cachep, capsnap);
@@ -960,7 +960,7 @@ static void flush_snaps(struct ceph_mds_client *mdsc)
 		ihold(inode);
 		spin_unlock(&mdsc->snap_flush_lock);
 		ceph_flush_snaps(ci, &session);
-		iput(inode);
+		ceph_iput_async(inode);
 		spin_lock(&mdsc->snap_flush_lock);
 	}
 	spin_unlock(&mdsc->snap_flush_lock);
@@ -1121,12 +1121,12 @@ void ceph_handle_snap(struct ceph_mds_client *mdsc,
 			ceph_get_snap_realm(mdsc, realm);
 			ceph_change_snap_realm(inode, realm);
 			spin_unlock(&ci->i_ceph_lock);
-			iput(inode);
+			ceph_iput_async(inode);
 			continue;
 
 skip_inode:
 			spin_unlock(&ci->i_ceph_lock);
-			iput(inode);
+			ceph_iput_async(inode);
 		}
 
 		/* we may have taken some of the old realm's children. */
