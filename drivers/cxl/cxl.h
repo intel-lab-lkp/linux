@@ -874,6 +874,10 @@ int cxl_add_to_region(struct cxl_endpoint_decoder *cxled);
 struct cxl_dax_region *to_cxl_dax_region(struct device *dev);
 u64 cxl_port_get_spa_cache_alias(struct cxl_port *endpoint, u64 spa);
 void cxl_region_discovery(struct cxl_port *port);
+struct cxl_region *cxl_create_region(struct cxl_root_decoder *cxlrd,
+				     enum cxl_partition_mode mode, int id,
+				     struct cxl_pmem_region_params *params,
+				     struct cxl_decoder *cxld);
 #else
 static inline bool is_cxl_pmem_region(struct device *dev)
 {
@@ -898,6 +902,14 @@ static inline u64 cxl_port_get_spa_cache_alias(struct cxl_port *endpoint,
 }
 static inline void cxl_region_discovery(struct cxl_port *port)
 {
+}
+static inline struct cxl_region *
+cxl_create_region(struct cxl_root_decoder *cxlrd,
+		  enum cxl_partition_mode mode, int id,
+		  struct cxl_pmem_region_params *params,
+		  struct cxl_decoder *cxld)
+{
+	return ERR_PTR(-EOPNOTSUPP);
 }
 #endif
 
