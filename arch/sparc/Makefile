@@ -80,7 +80,7 @@ vdso-install-$(CONFIG_SPARC64)	+= arch/sparc/vdso/vdso64.so.dbg
 vdso-install-$(CONFIG_COMPAT)	+= arch/sparc/vdso/vdso32.so.dbg
 
 # This is the image used for packaging
-KBUILD_IMAGE := $(boot)/zImage
+KBUILD_IMAGE := $(boot)/image
 
 # Don't use tabs in echo arguments.
 define archhelp
