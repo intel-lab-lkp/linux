@@ -222,46 +222,6 @@ Description: Linux kernel, version ${KERNELRELEASE}
  files, version: ${KERNELRELEASE}.
 EOF
 
-if [ "${SRCARCH}" != um ]; then
-cat <<EOF >> debian/control
-
-Package: linux-libc-dev
-Section: devel
-Provides: linux-kernel-headers
-Architecture: $debarch
-Description: Linux support headers for userspace development
- This package provides userspaces headers from the Linux kernel.  These headers
- are used by the installed headers for GNU glibc and other system libraries.
-Multi-Arch: same
-EOF
-
-if is_enabled CONFIG_MODULES; then
-cat <<EOF >> debian/control
-
-Package: linux-headers-${KERNELRELEASE}
-Architecture: $debarch
-Build-Profiles: <!pkg.${sourcename}.nokernelheaders>
-Description: Linux kernel headers for ${KERNELRELEASE} on $debarch
- This package provides kernel header files for ${KERNELRELEASE} on $debarch
- .
- This is useful for people who need to build external modules
-EOF
-fi
-fi
-
-if is_enabled CONFIG_DEBUG_INFO; then
-cat <<EOF >> debian/control
-
-Package: linux-image-${KERNELRELEASE}-dbg
-Section: debug
-Architecture: $debarch
-Build-Profiles: <!pkg.${sourcename}.nokerneldbg>
-Description: Linux kernel debugging symbols for ${KERNELRELEASE}
- This package will come in handy if you need to debug the kernel. It provides
- all the necessary debug symbols for the kernel and its modules.
-EOF
-fi
-
 cat <<EOF > debian/rules.vars
 ARCH := ${ARCH}
 KERNELRELEASE := ${KERNELRELEASE}
