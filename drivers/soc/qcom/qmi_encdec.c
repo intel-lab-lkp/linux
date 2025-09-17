@@ -11,6 +11,19 @@
 #include <linux/string.h>
 #include <linux/soc/qcom/qmi.h>
 
+#define QMI_ENCDEC_ENCODE_u8(x)			(x)
+#define QMI_ENCDEC_ENCODE_u16(x)		__cpu_to_le16(x)
+#define QMI_ENCDEC_ENCODE_u32(x)		__cpu_to_le32(x)
+#define QMI_ENCDEC_ENCODE_u64(x)		__cpu_to_le64(x)
+
+#define QMI_ENCDEC_DECODE_u8(x)			(x)
+#define QMI_ENCDEC_DECODE_u16(x)		__le16_to_cpu(x)
+#define QMI_ENCDEC_DECODE_u32(x)		__le32_to_cpu(x)
+#define QMI_ENCDEC_DECODE_u64(x)		__le64_to_cpu(x)
+
+#define QMI_ENCDEC_ENCODE(val, type)		QMI_ENCDEC_ENCODE_##type(val)
+#define QMI_ENCDEC_DECODE(val, type)		QMI_ENCDEC_DECODE_##type(val)
+
 #define QMI_ENCDEC_ENCODE_TLV(type, length, p_dst) do { \
 	*p_dst++ = type; \
 	*p_dst++ = ((u8)((length) & 0xFF)); \
