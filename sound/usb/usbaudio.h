@@ -7,6 +7,8 @@
  *   Copyright (c) 2002 by Takashi Iwai <tiwai@suse.de>
  */
 
+ #include <sound/core.h>
+
 /* handling of USB vendor/product ID pairs as 32-bit numbers */
 #define USB_ID(vendor, product) (((unsigned int)(vendor) << 16) | (product))
 #define USB_ID_VENDOR(id) ((id) >> 16)
@@ -162,8 +164,12 @@ DEFINE_CLASS(snd_usb_lock, struct __snd_usb_lock,
 	     __snd_usb_unlock_shutdown(&(_T)), __snd_usb_lock_shutdown(chip),
 	     struct snd_usb_audio *chip)
 
+extern char *quirk_flags[SNDRV_CARDS];
 extern bool snd_usb_use_vmalloc;
 extern bool snd_usb_skip_validation;
+
+extern struct mutex device_quirk_mutex;
+extern struct list_head device_quirk_list;
 
 /*
  * Driver behavior quirk flags, stored in chip->quirk_flags
@@ -253,5 +259,13 @@ extern bool snd_usb_skip_validation;
 #define QUIRK_FLAG_MIXER_PLAYBACK_MIN_MUTE	(1U << 24)
 #define QUIRK_FLAG_MIXER_CAPTURE_MIN_MUTE	(1U << 25)
 /* Please also edit snd_usb_audio_quirk_flag_names */
+
+struct device_quirk_entry {
+	struct list_head list;
+	u16 vid;
+	u16 pid;
+	u32 mask_flags;
+	u32 unmask_flags;
+};
 
 #endif /* __USBAUDIO_H */

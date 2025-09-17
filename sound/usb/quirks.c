@@ -2537,3 +2537,44 @@ void snd_usb_init_quirk_flags(struct snd_usb_audio *chip)
 		}
 	}
 }
+
+void snd_usb_init_dynamic_quirks(int idx, struct snd_usb_audio *chip)
+{
+	u16 vid = USB_ID_VENDOR(chip->usb_id);
+	u16 pid = USB_ID_PRODUCT(chip->usb_id);
+	struct device_quirk_entry *pos;
+
+	mutex_lock(&device_quirk_mutex);
+
+	/* old style option found: the position-based integer value */
+	if (quirk_flags[idx] &&
+	    !kstrtou32(quirk_flags[idx], 0, &chip->quirk_flags)) {
+		usb_audio_dbg(chip,
+			      "Set quirk flags 0x%x from param based on position %d for device %04x:%04x\n",
+			      chip->quirk_flags, idx,
+			      USB_ID_VENDOR(chip->usb_id),
+			      USB_ID_PRODUCT(chip->usb_id));
+
+		mutex_unlock(&device_quirk_mutex);
+		return;
+	}
+
+	/* take the default quirk from the quirk table */
+	snd_usb_init_quirk_flags(chip);
+
+	/* add or correct quirk bits from options */
+	list_for_each_entry(pos, &device_quirk_list, list) {
+		if (pos->vid == 0 || (vid == pos->vid && pos->pid == 0) ||
+		    (vid == pos->vid && pid == pos->pid)) {
+			chip->quirk_flags |= pos->mask_flags;
+			chip->quirk_flags &= ~pos->unmask_flags;
+			usb_audio_dbg(chip,
+				      "Set mask quirk flag 0x%x and unmask quirk flag 0x%x from param for device %04x:%04x\n",
+				      pos->mask_flags, pos->unmask_flags,
+				      USB_ID_VENDOR(chip->usb_id),
+				      USB_ID_PRODUCT(chip->usb_id));
+		}
+	}
+
+	mutex_unlock(&device_quirk_mutex);
+}
