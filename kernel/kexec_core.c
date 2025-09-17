@@ -1147,6 +1147,10 @@ int kernel_kexec(void)
 		goto Unlock;
 	}
 
+	error = kho_commit_fdt();
+	if (error)
+		goto Unlock;
+
 #ifdef CONFIG_KEXEC_JUMP
 	if (kexec_image->preserve_context) {
 		/*

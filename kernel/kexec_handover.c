@@ -682,9 +682,21 @@ static int kho_debugfs_fdt_add(struct list_head *list, struct dentry *dir,
 	return 0;
 }
 
+struct kho_out {
+	struct blocking_notifier_head chain_head;
+	struct dentry *dir;
+	struct kho_serialization ser;
+};
+
+static struct kho_out kho_out = {
+	.chain_head = BLOCKING_NOTIFIER_INIT(kho_out.chain_head),
+	.ser = {
+		.fdt_list = LIST_HEAD_INIT(kho_out.ser.fdt_list),
+	},
+};
+
 /**
  * kho_add_subtree - record the physical address of a sub FDT in KHO root tree.
- * @ser: serialization control object passed by KHO notifiers.
  * @name: name of the sub tree.
  * @fdt: the sub tree blob.
  *
@@ -697,8 +709,9 @@ static int kho_debugfs_fdt_add(struct list_head *list, struct dentry *dir,
  *
  * Return: 0 on success, error code on failure
  */
-int kho_add_subtree(struct kho_serialization *ser, const char *name, void *fdt)
+int kho_add_subtree(const char *name, void *fdt)
 {
+	struct kho_serialization *ser = &kho_out.ser;
 	int err = 0;
 	u64 phys = (u64)virt_to_phys(fdt);
 	void *root = page_to_virt(ser->fdt);
@@ -713,19 +726,6 @@ int kho_add_subtree(struct kho_serialization *ser, const char *name, void *fdt)
 	return kho_debugfs_fdt_add(&ser->fdt_list, ser->sub_fdt_dir, name, fdt);
 }
 EXPORT_SYMBOL_GPL(kho_add_subtree);
-
-struct kho_out {
-	struct blocking_notifier_head chain_head;
-	struct dentry *dir;
-	struct kho_serialization ser;
-};
-
-static struct kho_out kho_out = {
-	.chain_head = BLOCKING_NOTIFIER_INIT(kho_out.chain_head),
-	.ser = {
-		.fdt_list = LIST_HEAD_INIT(kho_out.ser.fdt_list),
-	},
-};
 
 int register_kho_notifier(struct notifier_block *nb)
 {
@@ -952,6 +952,7 @@ static int kho_out_fdt_init(void)
 	void *fdt = page_to_virt(kho_out.ser.fdt);
 	u64 *preserved_order_table;
 
+	/* Do not close the root node and FDT until kho_commit_fdt() */
 	err |= fdt_create(fdt, PAGE_SIZE);
 	err |= fdt_finish_reservemap(fdt);
 	err |= fdt_begin_node(fdt, "");
@@ -964,9 +965,6 @@ static int kho_out_fdt_init(void)
 		goto abort;
 
 	*preserved_order_table = (u64)virt_to_phys(kho_order_table);
-
-	err |= fdt_end_node(fdt);
-	err |= fdt_finish(fdt);
 
 abort:
 	if (err)
@@ -1209,6 +1207,18 @@ int kho_fill_kimage(struct kimage *image)
 	image->kho.scratch = &image->segment[image->nr_segments - 1];
 
 	return 0;
+}
+
+int kho_commit_fdt(void)
+{
+	int err = 0;
+	void *fdt = page_to_virt(kho_out.ser.fdt);
+
+	/* Close the root node and commit the FDT */
+	err = fdt_end_node(fdt);
+	err |= fdt_finish(fdt);
+
+	return err;
 }
 
 static int kho_walk_scratch(struct kexec_buf *kbuf,
