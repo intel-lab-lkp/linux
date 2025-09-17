@@ -525,12 +525,12 @@ retry:
 			} else if (stack->kind == TSR_KIND_POINTER) {
 				tsr->type = stack->type;
 				tsr->kind = stack->kind;
-				tsr->offset = 0;
+				tsr->offset = stack->ptr_offset;
 				tsr->ok = true;
 			} else if (!stack->compound) {
 				tsr->type = stack->type;
 				tsr->kind = stack->kind;
-				tsr->offset = 0;
+				tsr->offset = stack->ptr_offset;
 				tsr->ok = true;
 			} else if (die_get_member_type(&stack->type,
 						       offset - stack->offset,
@@ -713,10 +713,10 @@ retry:
 				 */
 				if (!stack->compound)
 					set_stack_state(stack, offset, tsr->kind,
-							&tsr->type);
+							&tsr->type, tsr->offset);
 			} else {
 				findnew_stack_state(state, offset, tsr->kind,
-						    &tsr->type);
+						    &tsr->type, tsr->offset);
 			}
 
 			if (dst->reg1 == fbreg) {
