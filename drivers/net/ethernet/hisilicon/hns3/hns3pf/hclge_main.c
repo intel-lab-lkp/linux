@@ -7844,7 +7844,14 @@ static int hclge_cfg_common_loopback(struct hclge_dev *hdev, bool en,
 static int hclge_set_common_loopback(struct hclge_dev *hdev, bool en,
 				     enum hnae3_loop loop_mode)
 {
+	u8 duplex;
 	int ret;
+
+	duplex = en ? DUPLEX_FULL : hdev->hw.mac.duplex;
+	ret = hclge_cfg_mac_speed_dup_hw(hdev, hdev->hw.mac.speed, duplex,
+					 hdev->hw.mac.lane_num);
+	if (ret)
+		return ret;
 
 	ret = hclge_cfg_common_loopback(hdev, en, loop_mode);
 	if (ret)
@@ -7871,6 +7878,12 @@ static int hclge_enable_phy_loopback(struct hclge_dev *hdev,
 			return ret;
 	}
 
+	hdev->hw.mac.duplex_last = phydev->duplex;
+
+	ret = phy_set_bits(phydev, MII_BMCR, BMCR_FULLDPLX);
+	if (ret)
+		return ret;
+
 	ret = phy_resume(phydev);
 	if (ret)
 		return ret;
@@ -7887,12 +7900,19 @@ static int hclge_disable_phy_loopback(struct hclge_dev *hdev,
 	if (ret)
 		return ret;
 
+	if (hdev->hw.mac.duplex_last == DUPLEX_HALF) {
+		ret = phy_clear_bits(phydev, MII_BMCR, BMCR_FULLDPLX);
+		if (ret)
+			return ret;
+	}
+
 	return phy_suspend(phydev);
 }
 
 static int hclge_set_phy_loopback(struct hclge_dev *hdev, bool en)
 {
 	struct phy_device *phydev = hdev->hw.mac.phydev;
+	u8 duplex;
 	int ret;
 
 	if (!phydev) {
@@ -7901,6 +7921,12 @@ static int hclge_set_phy_loopback(struct hclge_dev *hdev, bool en)
 							 HNAE3_LOOP_PHY);
 		return -ENOTSUPP;
 	}
+
+	duplex = en ? DUPLEX_FULL : hdev->hw.mac.duplex;
+	ret = hclge_cfg_mac_speed_dup_hw(hdev, hdev->hw.mac.speed, duplex,
+					 hdev->hw.mac.lane_num);
+	if (ret)
+		return ret;
 
 	if (en)
 		ret = hclge_enable_phy_loopback(hdev, phydev);
