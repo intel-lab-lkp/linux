@@ -198,6 +198,9 @@ static const struct of_device_id mchp_sparx5_reset_of_match[] = {
 	}, {
 		.compatible = "microchip,lan966x-switch-reset",
 		.data = &reset_props_lan966x,
+	}, {
+		.compatible = "microchip,lan969x-switch-reset",
+		.data = &reset_props_lan966x,
 	},
 	{ }
 };
