@@ -271,11 +271,11 @@ static void nd_label_copy(struct nvdimm_drvdata *ndd,
 	memcpy(dst, src, sizeof_namespace_index(ndd));
 }
 
-static struct nd_namespace_label *nd_label_base(struct nvdimm_drvdata *ndd)
+static unsigned long nd_label_base(struct nvdimm_drvdata *ndd)
 {
 	void *base = to_namespace_index(ndd, 0);
 
-	return base + 2 * sizeof_namespace_index(ndd);
+	return (unsigned long) (base + 2 * sizeof_namespace_index(ndd));
 }
 
 static int to_slot(struct nvdimm_drvdata *ndd,
@@ -284,7 +284,7 @@ static int to_slot(struct nvdimm_drvdata *ndd,
 	unsigned long label, base;
 
 	label = (unsigned long) nd_label;
-	base = (unsigned long) nd_label_base(ndd);
+	base = nd_label_base(ndd);
 
 	return (label - base) / sizeof_namespace_label(ndd);
 }
@@ -293,7 +293,7 @@ static struct nd_namespace_label *to_label(struct nvdimm_drvdata *ndd, int slot)
 {
 	unsigned long label, base;
 
-	base = (unsigned long) nd_label_base(ndd);
+	base = nd_label_base(ndd);
 	label = base + sizeof_namespace_label(ndd) * slot;
 
 	return (struct nd_namespace_label *) label;
@@ -684,7 +684,7 @@ static int nd_label_write_index(struct nvdimm_drvdata *ndd, int index, u32 seq,
 			nd_label_next_nsindex(index))
 		- (unsigned long) to_namespace_index(ndd, 0);
 	nsindex->otheroff = __cpu_to_le64(offset);
-	offset = (unsigned long) nd_label_base(ndd)
+	offset = nd_label_base(ndd)
 		- (unsigned long) to_namespace_index(ndd, 0);
 	nsindex->labeloff = __cpu_to_le64(offset);
 	nsindex->nslot = __cpu_to_le32(nslot);
