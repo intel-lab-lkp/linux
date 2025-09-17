@@ -537,12 +537,65 @@ static int lan874x_set_wol(struct phy_device *phydev,
 		}
 	}
 
-	rc = phy_write_mmd(phydev, MDIO_MMD_PCS, MII_LAN874X_PHY_MMD_WOL_WUCSR,
-			   val_wucsr);
+	/* Enable wakeup on PHY device if at least one WoL feature is configured */
+	device_set_wakeup_enable(&phydev->mdio.dev, !!(val_wucsr & MII_LAN874X_PHY_WOL_MASK));
+
+	rc = phy_write_mmd(phydev, MDIO_MMD_PCS, MII_LAN874X_PHY_MMD_WOL_WUCSR, val_wucsr);
 	if (rc < 0)
 		return rc;
 
 	return 0;
+}
+
+static int smsc_phy_suspend(struct phy_device *phydev)
+{
+	int rc;
+
+	if (!device_may_wakeup(&phydev->mdio.dev))
+		return 0;
+
+	if (!phydev->wol_enabled)
+		return genphy_suspend(phydev);
+
+	/* Handle pending WoL events */
+	rc = phy_read_mmd(phydev, MDIO_MMD_PCS, MII_LAN874X_PHY_MMD_WOL_WUCSR);
+	if (rc < 0) {
+		phy_error(phydev);
+		return -EINVAL;
+	}
+
+	if (!(rc & MII_LAN874X_PHY_WOL_STATUS_MASK))
+		return 0;
+
+	rc = phy_write_mmd(phydev, MDIO_MMD_PCS, MII_LAN874X_PHY_MMD_WOL_WUCSR,
+			   rc | MII_LAN874X_PHY_WOL_STATUS_MASK);
+	if (rc < 0) {
+		phy_error(phydev);
+		return -EINVAL;
+	}
+
+	return 0;
+}
+
+static int smsc_phy_resume(struct phy_device *phydev)
+{
+	int rc;
+
+	if (!phydev->wol_enabled)
+		return genphy_resume(phydev);
+
+	rc = phy_read_mmd(phydev, MDIO_MMD_PCS, MII_LAN874X_PHY_MMD_WOL_WUCSR);
+	if (rc < 0)
+		return rc;
+
+	if (!(rc & MII_LAN874X_PHY_WOL_STATUS_MASK))
+		return 0;
+
+	phydev_dbg(phydev, "Woke up from LAN event.\n");
+	rc = phy_write_mmd(phydev, MDIO_MMD_PCS, MII_LAN874X_PHY_MMD_WOL_WUCSR,
+			   rc | MII_LAN874X_PHY_WOL_STATUS_MASK);
+
+	return rc;
 }
 
 static int smsc_get_sset_count(struct phy_device *phydev)
@@ -672,6 +725,9 @@ int smsc_phy_probe(struct phy_device *phydev)
 		priv->edpd_enable = false;
 
 	phydev->priv = priv;
+
+	if (phydev->drv->set_wol)
+		device_set_wakeup_capable(&phydev->mdio.dev, true);
 
 	/* Make clk optional to keep DTB backward compatibility. */
 	refclk = devm_clk_get_optional_enabled_with_rate(dev, NULL,
@@ -851,7 +907,7 @@ static struct phy_driver smsc_phy_driver[] = {
 	.name		= "Microchip LAN8742",
 
 	/* PHY_BASIC_FEATURES */
-	.flags		= PHY_RST_AFTER_CLK_EN,
+	.flags		= PHY_RST_AFTER_CLK_EN | PHY_ALWAYS_CALL_SUSPEND,
 
 	.probe		= smsc_phy_probe,
 
@@ -876,8 +932,8 @@ static struct phy_driver smsc_phy_driver[] = {
 	.set_wol	= lan874x_set_wol,
 	.get_wol	= lan874x_get_wol,
 
-	.suspend	= genphy_suspend,
-	.resume		= genphy_resume,
+	.suspend	= smsc_phy_suspend,
+	.resume		= smsc_phy_resume,
 } };
 
 module_phy_driver(smsc_phy_driver);
