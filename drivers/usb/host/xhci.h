@@ -1959,6 +1959,7 @@ void xhci_update_erst_dequeue(struct xhci_hcd *xhci,
 			      bool clear_ehb);
 void xhci_add_interrupter(struct xhci_hcd *xhci, unsigned int intr_num);
 void xhci_set_portsc(struct xhci_port *port, u32 val);
+u32 xhci_get_portsc(struct xhci_port *port);
 
 /* xHCI roothub code */
 void xhci_set_link_state(struct xhci_hcd *xhci, struct xhci_port *port,
