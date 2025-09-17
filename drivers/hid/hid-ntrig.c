@@ -142,11 +142,12 @@ static void ntrig_report_version(struct hid_device *hdev)
 	int ret;
 	char buf[20];
 	struct usb_device *usb_dev = hid_to_usb_dev(hdev);
-	unsigned char *data = kmalloc(8, GFP_KERNEL);
+	unsigned char *data = NULL;
 
 	if (!hid_is_usb(hdev))
 		return;
 
+	data = kmalloc(8, GFP_KERNEL);
 	if (!data)
 		goto err_free;
 
