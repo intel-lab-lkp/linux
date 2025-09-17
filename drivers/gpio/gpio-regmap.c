@@ -31,6 +31,7 @@ struct gpio_regmap {
 	unsigned int reg_clr_base;
 	unsigned int reg_dir_in_base;
 	unsigned int reg_dir_out_base;
+	unsigned long *fixed_direction_output;
 
 	int (*reg_mask_xlate)(struct gpio_regmap *gpio, unsigned int base,
 			      unsigned int offset, unsigned int *reg,
@@ -128,6 +129,13 @@ static int gpio_regmap_get_direction(struct gpio_chip *chip,
 	struct gpio_regmap *gpio = gpiochip_get_data(chip);
 	unsigned int base, val, reg, mask;
 	int invert, ret;
+
+	if (gpio->fixed_direction_output) {
+		if (test_bit(offset, gpio->fixed_direction_output))
+			return GPIO_LINE_DIRECTION_OUT;
+		else
+			return GPIO_LINE_DIRECTION_IN;
+	}
 
 	if (gpio->reg_dat_base && !gpio->reg_set_base)
 		return GPIO_LINE_DIRECTION_IN;
@@ -275,6 +283,16 @@ struct gpio_regmap *gpio_regmap_register(const struct gpio_regmap_config *config
 		ret = gpiochip_get_ngpios(chip, chip->parent);
 		if (ret)
 			return ERR_PTR(ret);
+	}
+
+	if (config->fixed_direction_output) {
+		gpio->fixed_direction_output = devm_bitmap_alloc(config->parent,
+								 chip->ngpio,
+								 GFP_KERNEL);
+		if (!gpio->fixed_direction_output)
+			return ERR_PTR(-ENOMEM);
+		bitmap_copy(gpio->fixed_direction_output,
+			    config->fixed_direction_output, chip->ngpio);
 	}
 
 	/* if not set, assume there is only one register */
