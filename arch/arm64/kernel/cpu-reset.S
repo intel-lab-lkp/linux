@@ -30,6 +30,9 @@
  * flat identity mapping.
  */
 SYM_TYPED_FUNC_START(cpu_soft_restart)
+	mov_q	x12, INIT_SCTLR2_EL1
+	set_sctlr2_elx	1, x12, x8
+
 	mov_q	x12, INIT_SCTLR_EL1_MMU_OFF
 	pre_disable_mmu_workaround
 	/*

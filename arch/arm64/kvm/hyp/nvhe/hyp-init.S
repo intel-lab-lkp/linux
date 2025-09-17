@@ -255,6 +255,9 @@ SYM_CODE_START(__kvm_handle_stub_hvc)
 	mov	x0, xzr
 reset:
 	/* Reset kvm back to the hyp stub. */
+	mov_q 	x5, INIT_SCTLR2_EL2
+	set_sctlr2_elx	2, x5, x4
+
 	mov_q	x5, INIT_SCTLR_EL2_MMU_OFF
 	pre_disable_mmu_workaround
 	msr	sctlr_el2, x5
