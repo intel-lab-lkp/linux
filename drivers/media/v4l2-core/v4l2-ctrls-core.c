@@ -441,6 +441,9 @@ void v4l2_ctrl_type_op_log(const struct v4l2_ctrl *ctrl)
 			ptr.p_rect->left, ptr.p_rect->top,
 			ptr.p_rect->width, ptr.p_rect->height);
 		break;
+	case V4L2_CTRL_TYPE_HDCP_KSV:
+		pr_cont("%*phN", V4L2_HDCP_KSV_SIZE, ptr.p_hdcp_ksv->ksv);
+		break;
 	default:
 		pr_cont("unknown type %d", ctrl->type);
 		break;
@@ -886,6 +889,7 @@ static int std_validate_compound(const struct v4l2_ctrl *ctrl, u32 idx,
 	struct v4l2_ctrl_hevc_decode_params *p_hevc_decode_params;
 	struct v4l2_area *area;
 	struct v4l2_rect *rect;
+	struct v4l2_hdcp_ksv *hdcp_ksv;
 	void *p = ptr.p + idx * ctrl->elem_size;
 	unsigned int i;
 
@@ -1246,6 +1250,16 @@ static int std_validate_compound(const struct v4l2_ctrl *ctrl, u32 idx,
 	case V4L2_CTRL_TYPE_RECT:
 		rect = p;
 		if (!rect->width || !rect->height)
+			return -EINVAL;
+		break;
+
+	case V4L2_CTRL_TYPE_HDCP_KSV:
+		hdcp_ksv = p;
+		if (hweight8(hdcp_ksv->ksv[0]) +
+		    hweight8(hdcp_ksv->ksv[1]) +
+		    hweight8(hdcp_ksv->ksv[2]) +
+		    hweight8(hdcp_ksv->ksv[3]) +
+		    hweight8(hdcp_ksv->ksv[4]) != 20)
 			return -EINVAL;
 		break;
 
@@ -1960,6 +1974,9 @@ static struct v4l2_ctrl *v4l2_ctrl_new(struct v4l2_ctrl_handler *hdl,
 		break;
 	case V4L2_CTRL_TYPE_RECT:
 		elem_size = sizeof(struct v4l2_rect);
+		break;
+	case V4L2_CTRL_TYPE_HDCP_KSV:
+		elem_size = sizeof(struct v4l2_hdcp_ksv);
 		break;
 	default:
 		if (type < V4L2_CTRL_COMPOUND_TYPES)

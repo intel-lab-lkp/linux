@@ -1542,7 +1542,8 @@ void v4l2_ctrl_fill(u32 id, const char **name, enum v4l2_ctrl_type *type,
 		break;
 	case V4L2_CID_DV_TX_HDCP_REP_KSV_FIFO:
 	case V4L2_CID_DV_RX_HDCP_REP_KSV_FIFO:
-		*type = V4L2_CTRL_TYPE_U8;
+		*type = V4L2_CTRL_TYPE_HDCP_KSV;
+		*flags |= V4L2_CTRL_FLAG_DYNAMIC_ARRAY;
 		break;
 	case V4L2_CID_DETECT_MD_REGION_GRID:
 		*type = V4L2_CTRL_TYPE_U8;

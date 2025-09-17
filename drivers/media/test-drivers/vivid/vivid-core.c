@@ -948,7 +948,8 @@ static int vivid_create_queue(struct vivid_dev *dev,
 	return vb2_queue_init(q);
 }
 
-static void vivid_set_bksv(u8 *bksv, unsigned int inst, bool is_output)
+static void vivid_set_bksv(struct v4l2_hdcp_ksv *bksv, unsigned int inst,
+			   bool is_output)
 {
 	u32 mask = is_output | (inst << 1);
 
@@ -956,7 +957,7 @@ static void vivid_set_bksv(u8 *bksv, unsigned int inst, bool is_output)
 	// BKSV based on the vivid instance number and whether this
 	// is an input or output.
 	for (unsigned int i = 0; i < V4L2_HDCP_KSV_SIZE * 4; i++)
-		bksv[i / 4] |= ((mask & (1 << i)) ? 1 : 2) << (i & 3) * 2;
+		bksv->ksv[i / 4] |= ((mask & (1 << i)) ? 1 : 2) << (i & 3) * 2;
 }
 
 static int vivid_detect_feature_set(struct vivid_dev *dev, int inst,
@@ -998,7 +999,7 @@ static int vivid_detect_feature_set(struct vivid_dev *dev, int inst,
 	dev->num_hdmi_inputs = in_type_counter[HDMI];
 	if (input_hdcp <= HDCP2_REP)
 		dev->input_hdcp = input_hdcp;
-	vivid_set_bksv(dev->rx_hdcp_bksv, dev->inst, false);
+	vivid_set_bksv(&dev->rx_hdcp_bksv, dev->inst, false);
 	dev->num_svid_inputs = in_type_counter[SVID];
 
 	/* how many outputs do we have and of what type? */
@@ -1028,7 +1029,7 @@ static int vivid_detect_feature_set(struct vivid_dev *dev, int inst,
 	dev->num_hdmi_outputs = out_type_counter[HDMI];
 	if (output_hdcp <= HDCP2)
 		dev->output_hdcp = output_hdcp;
-	vivid_set_bksv(dev->tx_hdcp_bksv, dev->inst, true);
+	vivid_set_bksv(&dev->tx_hdcp_bksv, dev->inst, true);
 
 	/* do we create a video capture device? */
 	dev->has_vid_cap = node_type & 0x0001;

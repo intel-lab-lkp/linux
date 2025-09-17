@@ -1606,22 +1606,26 @@ void vivid_update_outputs(struct vivid_dev *dev)
 			bool rx_is_hdcp1 = dev_rx->input_hdcp == HDCP1_REP;
 			int rx_max_dev_cnt = rx_is_hdcp1 ? 127 : 31;
 			int max_dev_cnt = min(rx_max_dev_cnt, tx_max_dev_cnt);
+			int elems_rx;
 
-			memcpy(dev->tx_hdcp_bksv_scratch,
-			       dev_rx->rx_hdcp_bksv, V4L2_HDCP_KSV_SIZE);
+			dev->tx_hdcp_bksv_scratch[0] = dev_rx->rx_hdcp_bksv;
 			v4l2_ctrl_lock(dev_rx->ctrl_dv_rx_hdcp_rep_ksv_fifo);
+			elems_rx = dev_rx->ctrl_dv_rx_hdcp_rep_ksv_fifo->elems;
+			if (elems_rx >= max_dev_cnt)
+				elems_rx = max_dev_cnt - 1;
 			memcpy(dev->tx_hdcp_bksv_scratch + 1,
-			       dev_rx->ctrl_dv_rx_hdcp_rep_ksv_fifo->p_cur.p_u8,
-			       (max_dev_cnt - 1) * V4L2_HDCP_KSV_SIZE);
+			       dev_rx->ctrl_dv_rx_hdcp_rep_ksv_fifo->p_cur.p_hdcp_ksv,
+			       elems_rx * dev_rx->ctrl_dv_rx_hdcp_rep_ksv_fifo->elem_size);
 			v4l2_ctrl_unlock(dev_rx->ctrl_dv_rx_hdcp_rep_ksv_fifo);
 
-			v4l2_ctrl_s_ctrl_compound(dev->ctrl_dv_tx_hdcp_rep_ksv_fifo,
-						  V4L2_CTRL_TYPE_U8,
-						  dev->tx_hdcp_bksv_scratch);
+			v4l2_ctrl_s_ctrl_dyn_array(dev->ctrl_dv_tx_hdcp_rep_ksv_fifo,
+						   V4L2_CTRL_TYPE_HDCP_KSV,
+						   elems_rx + 1,
+						   dev->tx_hdcp_bksv_scratch);
 		} else {
-			v4l2_ctrl_s_ctrl_compound(dev->ctrl_dv_tx_hdcp_rep_ksv_fifo,
-						  V4L2_CTRL_TYPE_U8,
-						  dev->tx_hdcp_bksv_scratch);
+			v4l2_ctrl_s_ctrl_dyn_array(dev->ctrl_dv_tx_hdcp_rep_ksv_fifo,
+						   V4L2_CTRL_TYPE_HDCP_KSV, 0,
+						   dev->tx_hdcp_bksv_scratch);
 		}
 	}
 	v4l2_ctrl_s_ctrl(dev->ctrl_tx_edid_present, edid_present);

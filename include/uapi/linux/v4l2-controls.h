@@ -1275,6 +1275,10 @@ enum v4l2_dv_tx_hdcp_mode {
 };
 
 #define V4L2_HDCP_KSV_SIZE 5
+struct v4l2_hdcp_ksv {
+	__u8 ksv[V4L2_HDCP_KSV_SIZE];
+};
+
 #define V4L2_CID_DV_TX_HDCP_REP_KSV_FIFO	(V4L2_CID_DV_CLASS_BASE + 8)
 
 #define V4L2_CID_DV_RX_POWER_PRESENT		(V4L2_CID_DV_CLASS_BASE + 100)

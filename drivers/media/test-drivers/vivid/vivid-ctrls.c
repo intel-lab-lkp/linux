@@ -580,6 +580,19 @@ static int vivid_vid_cap_s_ctrl(struct v4l2_ctrl *ctrl)
 		if (update_hdmi_ctrls_workqueue)
 			queue_work(update_hdmi_ctrls_workqueue, &dev->update_hdmi_ctrl_work);
 		break;
+	case V4L2_CID_DV_RX_HDCP_REP_KSV_FIFO:
+	case V4L2_CID_DV_RX_HDCP_REP_DEVICE_COUNT:
+	case V4L2_CID_DV_RX_HDCP_REP_DEPTH:
+	case V4L2_CID_DV_RX_HDCP_REP_MAX_DEVS_EXCEEDED:
+	case V4L2_CID_DV_RX_HDCP_REP_MAX_CASCADE_EXCEEDED:
+		spin_lock(&hdmi_output_skip_mask_lock);
+		hdmi_input_update_outputs_mask |= 1 << dev->inst;
+		spin_unlock(&hdmi_output_skip_mask_lock);
+		if (update_hdmi_ctrls_workqueue)
+			queue_work(update_hdmi_ctrls_workqueue, &dev->update_hdmi_ctrl_work);
+		break;
+	case V4L2_CID_DV_RX_HDCP_REP_READY:
+		break;
 	case VIVID_CID_LIMITED_RGB_RANGE:
 		tpg_s_real_rgb_range(&dev->tpg, ctrl->val ?
 				V4L2_DV_RGB_RANGE_LIMITED : V4L2_DV_RGB_RANGE_FULL);
@@ -1097,13 +1110,9 @@ static const struct v4l2_ctrl_config vivid_ctrl_limited_rgb_range = {
 static const struct v4l2_ctrl_config vivid_ctrl_dv_rx_hdcp_rep_ksv_fifo = {
 	.ops = &vivid_vid_cap_ctrl_ops,
 	.id = V4L2_CID_DV_RX_HDCP_REP_KSV_FIFO,
-	.type = V4L2_CTRL_TYPE_U8,
+	.type = V4L2_CTRL_TYPE_HDCP_KSV,
 	.flags = V4L2_CTRL_FLAG_DYNAMIC_ARRAY,
-	.def = 0,
-	.min = 0,
-	.max = 255,
-	.step = 1,
-	.dims = { 127, 5 },
+	.dims = { 127 },
 };
 
 
@@ -1240,11 +1249,7 @@ static const struct v4l2_ctrl_config vivid_ctrl_dv_tx_hdcp_rep_ksv_fifo = {
 	.id = V4L2_CID_DV_TX_HDCP_REP_KSV_FIFO,
 	.type = V4L2_CTRL_TYPE_U8,
 	.flags = V4L2_CTRL_FLAG_DYNAMIC_ARRAY,
-	.def = 0,
-	.min = 0,
-	.max = 255,
-	.step = 1,
-	.dims = { 127, 5 },
+	.dims = { 127 },
 };
 
 /* Streaming Controls */
@@ -1966,6 +1971,9 @@ int vivid_create_controls(struct vivid_dev *dev, bool show_ccs_cap,
 				NULL, V4L2_CID_DV_RX_HDCP_REP_MAX_CASCADE_EXCEEDED, 0, 1, 1, 0);
 			dev->ctrl_dv_rx_hdcp_rep_ksv_fifo = v4l2_ctrl_new_custom(hdl_vid_cap,
 				&cfg, NULL);
+			if (dev->ctrl_dv_rx_hdcp_rep_ksv_fifo)
+				dev->ctrl_dv_rx_hdcp_rep_ksv_fifo->elems =
+					dev->ctrl_dv_rx_hdcp_rep_ksv_fifo->new_elems = 0;
 			dev->ctrl_dv_rx_hdcp_rep_ready = v4l2_ctrl_new_std(hdl_vid_cap,
 				NULL, V4L2_CID_DV_RX_HDCP_REP_READY, 0, 1, 1, 0);
 		}
@@ -2001,6 +2009,9 @@ int vivid_create_controls(struct vivid_dev *dev, bool show_ccs_cap,
 				V4L2_DV_TX_HDCP_DISABLED);
 			dev->ctrl_dv_tx_hdcp_rep_ksv_fifo = v4l2_ctrl_new_custom(hdl_vid_out,
 				&cfg, NULL);
+			if (dev->ctrl_dv_tx_hdcp_rep_ksv_fifo)
+				dev->ctrl_dv_tx_hdcp_rep_ksv_fifo->elems =
+					dev->ctrl_dv_tx_hdcp_rep_ksv_fifo->new_elems = 0;
 		}
 	}
 
