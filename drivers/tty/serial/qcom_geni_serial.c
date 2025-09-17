@@ -1160,6 +1160,7 @@ static int setup_fifos(struct qcom_geni_serial_port *port)
 
 static void qcom_geni_serial_shutdown(struct uart_port *uport)
 {
+	struct qcom_geni_serial_port *port = to_dev_port(uport);
 	disable_irq(uport->irq);
 
 	uart_port_lock_irq(uport);
@@ -1168,6 +1169,8 @@ static void qcom_geni_serial_shutdown(struct uart_port *uport)
 
 	qcom_geni_serial_cancel_tx_cmd(uport);
 	uart_port_unlock_irq(uport);
+	if (port->wakeup_irq > 0)
+		dev_pm_clear_wake_irq(uport->dev);
 }
 
 static void qcom_geni_serial_flush_buffer(struct uart_port *uport)
@@ -1232,6 +1235,13 @@ static int qcom_geni_serial_startup(struct uart_port *uport)
 
 	if (!port->setup) {
 		ret = qcom_geni_serial_port_setup(uport);
+		if (ret)
+			return ret;
+	}
+
+	if (port->wakeup_irq > 0) {
+		ret = dev_pm_set_dedicated_wake_irq(uport->dev,
+						    port->wakeup_irq);
 		if (ret)
 			return ret;
 	}
@@ -1888,17 +1898,8 @@ static int qcom_geni_serial_probe(struct platform_device *pdev)
 	if (ret)
 		goto error;
 
-	if (port->wakeup_irq > 0) {
+	if (port->wakeup_irq > 0)
 		device_init_wakeup(&pdev->dev, true);
-		ret = dev_pm_set_dedicated_wake_irq(&pdev->dev,
-						port->wakeup_irq);
-		if (ret) {
-			device_init_wakeup(&pdev->dev, false);
-			ida_free(&port_ida, uport->line);
-			uart_remove_one_port(drv, uport);
-			goto error;
-		}
-	}
 
 	return 0;
 
@@ -1913,7 +1914,6 @@ static void qcom_geni_serial_remove(struct platform_device *pdev)
 	struct uart_port *uport = &port->uport;
 	struct uart_driver *drv = port->private_data.drv;
 
-	dev_pm_clear_wake_irq(&pdev->dev);
 	device_init_wakeup(&pdev->dev, false);
 	ida_free(&port_ida, uport->line);
 	uart_remove_one_port(drv, &port->uport);
