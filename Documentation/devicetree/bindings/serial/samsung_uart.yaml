@@ -48,6 +48,7 @@ properties:
           - const: samsung,exynos850-uart
       - items:
           - enum:
+              - axis,artpec9-uart
               - samsung,exynos7870-uart
           - const: samsung,exynos8895-uart
 
@@ -168,6 +169,7 @@ allOf:
         compatible:
           contains:
             enum:
+              - axis,artpec9-uart
               - google,gs101-uart
               - samsung,exynos8895-uart
     then:
