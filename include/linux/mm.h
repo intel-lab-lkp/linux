@@ -3986,6 +3986,44 @@ static inline void clear_page_guard(struct zone *zone, struct page *page,
 				unsigned int order) {}
 #endif	/* CONFIG_DEBUG_PAGEALLOC */
 
+#ifndef clear_pages
+/**
+ * clear_pages() - clear a page range using a kernel virtual address.
+ * @addr: start address
+ * @npages: number of pages
+ *
+ * Assumes that (@addr, +@npages) references a kernel region.
+ * Does absolutely no exception handling.
+ */
+static inline void clear_pages(void *addr, unsigned int npages)
+{
+	do {
+		clear_page(addr);
+		addr += PAGE_SIZE;
+	} while (--npages);
+}
+#endif
+
+#ifndef clear_user_pages
+/**
+ * clear_user_pages() - clear a page range mapped by the user.
+ * @addr: kernel mapped address
+ * @vaddr: user mapped address
+ * @pg: start page
+ * @npages: number of pages
+ *
+ * Assumes that the region (@addr, +@npages) has been validated
+ * already so this does no exception handling.
+ */
+#define clear_user_pages(addr, vaddr, pg, npages)	\
+do {							\
+	clear_user_page(addr, vaddr, pg);		\
+	addr += PAGE_SIZE;				\
+	vaddr += PAGE_SIZE;				\
+	pg++;						\
+} while (--npages)
+#endif
+
 #ifdef __HAVE_ARCH_GATE_AREA
 extern struct vm_area_struct *get_gate_vma(struct mm_struct *mm);
 extern int in_gate_area_no_mm(unsigned long addr);
