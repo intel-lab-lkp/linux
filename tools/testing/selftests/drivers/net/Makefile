@@ -15,6 +15,7 @@ TEST_PROGS := \
 	netcons_basic.sh \
 	netcons_cmdline.sh \
 	netcons_fragmented_msg.sh \
+	netcons_over_bonding.sh \
 	netcons_overflow.sh \
 	netcons_sysdata.sh \
 	netcons_torture.sh \
