@@ -809,34 +809,52 @@ void nci_ntf_packet(struct nci_dev *ndev, struct sk_buff *skb)
 
 	switch (ntf_opcode) {
 	case NCI_OP_CORE_RESET_NTF:
+		if (skb->len < sizeof(struct nci_core_reset_ntf))
+			return;
 		nci_core_reset_ntf_packet(ndev, skb);
 		break;
 
 	case NCI_OP_CORE_CONN_CREDITS_NTF:
+		if (skb->len < sizeof(struct nci_core_conn_credit_ntf))
+			return;
 		nci_core_conn_credits_ntf_packet(ndev, skb);
 		break;
 
 	case NCI_OP_CORE_GENERIC_ERROR_NTF:
+		if (skb->len < 1)
+			return;
 		nci_core_generic_error_ntf_packet(ndev, skb);
 		break;
 
 	case NCI_OP_CORE_INTF_ERROR_NTF:
+		if (skb->len < sizeof(struct nci_core_intf_error_ntf))
+			return;
 		nci_core_conn_intf_error_ntf_packet(ndev, skb);
 		break;
 
 	case NCI_OP_RF_DISCOVER_NTF:
+		// tech specific params are included as unions
+		if (skb->len < sizeof(struct nci_rf_discover_ntf))
+			return;
 		nci_rf_discover_ntf_packet(ndev, skb);
 		break;
 
 	case NCI_OP_RF_INTF_ACTIVATED_NTF:
+		// tech specific params are included as unions
+		if (skb->len < sizeof(struct nci_rf_intf_activated_ntf))
+			return;
 		nci_rf_intf_activated_ntf_packet(ndev, skb);
 		break;
 
 	case NCI_OP_RF_DEACTIVATE_NTF:
+		if (skb->len < sizeof(struct nci_rf_deactivate_ntf))
+			return;
 		nci_rf_deactivate_ntf_packet(ndev, skb);
 		break;
 
 	case NCI_OP_NFCEE_DISCOVER_NTF:
+		if (skb->len < sizeof(struct nci_nfcee_discover_ntf))
+			return;
 		nci_nfcee_discover_ntf_packet(ndev, skb);
 		break;
 
