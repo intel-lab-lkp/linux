@@ -178,6 +178,19 @@ SYM_CODE_START_LOCAL(enter_vhe)
 	mov_q	x0, INIT_SCTLR_EL1_MMU_OFF
 	msr_s	SYS_SCTLR_EL12, x0
 
+	mrs_s	x0, SYS_ID_AA64MMFR3_EL1
+	ubfx	x0, x0, #ID_AA64MMFR3_EL1_SCTLRX_SHIFT, #4
+	cbz	x0, .Lskip_sctlr2
+
+	// setup SCTLR2_EL2 from EL1
+	mrs_s	x0, SYS_SCTLR2_EL12
+	msr_s	SYS_SCTLR2_EL1, x0
+
+	// clean SCTLR2_EL1
+	mov_q	x0, INIT_SCTLR2_EL1
+	msr_s	SYS_SCTLR2_EL12, x0
+
+.Lskip_sctlr2:
 	mov	x0, xzr
 
 	eret
