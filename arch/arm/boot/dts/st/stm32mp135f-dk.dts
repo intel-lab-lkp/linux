@@ -193,6 +193,7 @@
 	pinctrl-names = "default", "sleep";
 	phy-mode = "rmii";
 	phy-handle = <&phy0_eth1>;
+	st,phy-wol;
 
 	mdio {
 		#address-cells = <1>;
