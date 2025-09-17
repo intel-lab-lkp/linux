@@ -9,7 +9,7 @@ use crate::{
     bindings,
     block::mq::{Operations, TagSet},
     error::{self, from_err_ptr, Result},
-    fmt::{self, Write};
+    fmt::{self, Write},
     prelude::*,
     static_lock_class,
     str::NullTerminatedFormatter,
