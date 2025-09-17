@@ -1078,7 +1078,7 @@ struct drm_gpuva_ops {
  */
 struct drm_gpuvm_map_req {
 	/**
-	 * @op_map: struct drm_gpuva_op_map
+	 * @map: The GPUVA map operation and its arguments
 	 */
 	struct drm_gpuva_op_map map;
 };
