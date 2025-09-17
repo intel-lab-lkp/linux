@@ -9,7 +9,6 @@
 #include <trace/events/tlb.h>
 
 #include <asm/tlbflush.h>
-#include <asm/paravirt.h>
 #include <asm/debugreg.h>
 #include <asm/gsseg.h>
 #include <asm/desc.h>
