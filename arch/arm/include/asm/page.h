@@ -167,7 +167,8 @@ extern void copy_page(void *to, const void *from);
 #else
 #include <asm/pgtable-2level-types.h>
 #ifdef CONFIG_VMAP_STACK
-#define ARCH_PAGE_TABLE_SYNC_MASK	PGTBL_PMD_MODIFIED
+#define ARCH_PAGE_TABLE_SYNC_MASK		PGTBL_PMD_MODIFIED
+#define ARCH_PAGE_TABLE_SYNC_MASK_VMALLOC	ARCH_PAGE_TABLE_SYNC_MASK
 #endif
 #endif
 

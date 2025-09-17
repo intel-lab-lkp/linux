@@ -27,7 +27,8 @@ typedef union {
 } pmd_t;
 #endif	/* !__ASSEMBLER__ */
 
-#define ARCH_PAGE_TABLE_SYNC_MASK	PGTBL_PMD_MODIFIED
+#define ARCH_PAGE_TABLE_SYNC_MASK		PGTBL_PMD_MODIFIED
+#define ARCH_PAGE_TABLE_SYNC_MASK_VMALLOC	ARCH_PAGE_TABLE_SYNC_MASK
 
 /*
  * PGDIR_SHIFT determines what a top-level page table entry can map

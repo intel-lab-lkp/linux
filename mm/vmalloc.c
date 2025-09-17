@@ -311,7 +311,7 @@ static int vmap_range_noflush(unsigned long addr, unsigned long end,
 			break;
 	} while (pgd++, phys_addr += (next - addr), addr = next, addr != end);
 
-	if (mask & ARCH_PAGE_TABLE_SYNC_MASK)
+	if (mask & ARCH_PAGE_TABLE_SYNC_MASK_VMALLOC)
 		arch_sync_kernel_mappings(start, end);
 
 	return err;
@@ -484,7 +484,7 @@ void __vunmap_range_noflush(unsigned long start, unsigned long end)
 		vunmap_p4d_range(pgd, addr, next, &mask);
 	} while (pgd++, addr = next, addr != end);
 
-	if (mask & ARCH_PAGE_TABLE_SYNC_MASK)
+	if (mask & ARCH_PAGE_TABLE_SYNC_MASK_VMALLOC)
 		arch_sync_kernel_mappings(start, end);
 }
 
@@ -629,7 +629,7 @@ static int vmap_small_pages_range_noflush(unsigned long addr, unsigned long end,
 			break;
 	} while (pgd++, addr = next, addr != end);
 
-	if (mask & ARCH_PAGE_TABLE_SYNC_MASK)
+	if (mask & ARCH_PAGE_TABLE_SYNC_MASK_VMALLOC)
 		arch_sync_kernel_mappings(start, end);
 
 	return err;

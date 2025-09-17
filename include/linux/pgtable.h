@@ -1476,6 +1476,10 @@ static inline void modify_prot_commit_ptes(struct vm_area_struct *vma, unsigned 
 #define ARCH_PAGE_TABLE_SYNC_MASK 0
 #endif
 
+#ifndef ARCH_PAGE_TABLE_SYNC_MASK_VMALLOC
+#define ARCH_PAGE_TABLE_SYNC_MASK_VMALLOC 0
+#endif
+
 /*
  * There is no default implementation for arch_sync_kernel_mappings(). It is
  * relied upon the compiler to optimize calls out if ARCH_PAGE_TABLE_SYNC_MASK
