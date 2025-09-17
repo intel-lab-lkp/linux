@@ -581,7 +581,7 @@ static const struct gc2145_format supported_formats[] = {
 		.output_fmt	= 0x03,
 	},
 	{
-		.code		= MEDIA_BUS_FMT_RGB565_1X16,
+		.code		= MEDIA_BUS_FMT_BGR565_1X16,
 		.colorspace	= V4L2_COLORSPACE_SRGB,
 		.datatype	= MIPI_CSI2_DT_RGB565,
 		.output_fmt	= 0x06,
@@ -614,6 +614,21 @@ static const struct gc2145_format supported_formats[] = {
 		.datatype       = MIPI_CSI2_DT_RAW8,
 		.output_fmt     = 0x17,
 		.row_col_switch = GC2145_SYNC_MODE_ROW_SWITCH,
+	},
+	{
+	/*
+	 * The driver was initially introduced with RGB565 support, but
+	 * CSI really means BGR.
+	 *
+	 * Since we might have applications that would have hard-coded
+	 * the RGB565, let's support both, with RGB being last to make
+	 * sure it's only a last resort.
+	 */
+		.code		= MEDIA_BUS_FMT_RGB565_1X16,
+		.colorspace	= V4L2_COLORSPACE_SRGB,
+		.datatype	= MIPI_CSI2_DT_RGB565,
+		.output_fmt	= 0x06,
+		.switch_bit	= true,
 	},
 };
 
@@ -660,7 +675,12 @@ static inline struct v4l2_subdev *gc2145_ctrl_to_sd(struct v4l2_ctrl *ctrl)
 static const struct gc2145_format *
 gc2145_get_format_code(struct gc2145 *gc2145, u32 code)
 {
+	struct i2c_client *client = v4l2_get_subdevdata(&gc2145->sd);
 	unsigned int i;
+
+	if (code == MEDIA_BUS_FMT_RGB565_1X16)
+		dev_warn_once(&client->dev,
+			      "RGB format isn't actually supported by the hardware. The application should be fixed to use BGR.");
 
 	for (i = 0; i < ARRAY_SIZE(supported_formats); i++) {
 		if (supported_formats[i].code == code)
@@ -698,7 +718,7 @@ static int gc2145_init_state(struct v4l2_subdev *sd,
 	/* Initialize pad format */
 	format = v4l2_subdev_state_get_format(state, 0);
 	gc2145_update_pad_format(gc2145, &supported_modes[0], format,
-				 MEDIA_BUS_FMT_RGB565_1X16,
+				 MEDIA_BUS_FMT_BGR565_1X16,
 				 V4L2_COLORSPACE_SRGB);
 
 	/* Initialize crop rectangle. */
