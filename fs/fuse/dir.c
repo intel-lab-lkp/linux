@@ -235,9 +235,18 @@ static int fuse_dentry_revalidate(struct inode *dir, const struct qstr *name,
 
 		attr_version = fuse_get_attr_version(fm->fc);
 
+		inode_lock_shared(inode);
+		if (entry->d_parent->d_inode != dir ||
+		    !d_same_name(entry, entry, name)) {
+			/* raced with rename, assume revalidated */
+			inode_unlock_shared(inode);
+			return 1;
+		}
+
 		fuse_lookup_init(fm->fc, &args, get_node_id(dir),
 				 name, &outarg);
 		ret = fuse_simple_request(fm, &args);
+		inode_unlock_shared(inode);
 		/* Zero nodeid is same as -ENOENT */
 		if (!ret && !outarg.nodeid)
 			ret = -ENOENT;
