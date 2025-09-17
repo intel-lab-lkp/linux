@@ -10,13 +10,12 @@
 #include <linux/types.h>
 #include <linux/cpumask.h>
 #include <linux/jump_label.h>
+#include <uapi/asm/sbi.h>
 
 #ifdef CONFIG_RISCV_SBI
 enum sbi_ext_id {
 #ifdef CONFIG_RISCV_SBI_V01
 	SBI_EXT_0_1_SET_TIMER = 0x0,
-	SBI_EXT_0_1_CONSOLE_PUTCHAR = 0x1,
-	SBI_EXT_0_1_CONSOLE_GETCHAR = 0x2,
 	SBI_EXT_0_1_CLEAR_IPI = 0x3,
 	SBI_EXT_0_1_SEND_IPI = 0x4,
 	SBI_EXT_0_1_REMOTE_FENCE_I = 0x5,
@@ -37,13 +36,6 @@ enum sbi_ext_id {
 	SBI_EXT_NACL = 0x4E41434C,
 	SBI_EXT_FWFT = 0x46574654,
 
-	/* Experimentals extensions must lie within this range */
-	SBI_EXT_EXPERIMENTAL_START = 0x08000000,
-	SBI_EXT_EXPERIMENTAL_END = 0x08FFFFFF,
-
-	/* Vendor extensions must lie within this range */
-	SBI_EXT_VENDOR_START = 0x09000000,
-	SBI_EXT_VENDOR_END = 0x09FFFFFF,
 };
 
 enum sbi_ext_base_fid {
@@ -262,12 +254,6 @@ enum sbi_pmu_ctr_type {
 /* Flags defined for counter stop function */
 #define SBI_PMU_STOP_FLAG_RESET BIT(0)
 #define SBI_PMU_STOP_FLAG_TAKE_SNAPSHOT BIT(1)
-
-enum sbi_ext_dbcn_fid {
-	SBI_EXT_DBCN_CONSOLE_WRITE = 0,
-	SBI_EXT_DBCN_CONSOLE_READ = 1,
-	SBI_EXT_DBCN_CONSOLE_WRITE_BYTE = 2,
-};
 
 /* SBI STA (steal-time accounting) extension */
 enum sbi_ext_sta_fid {
