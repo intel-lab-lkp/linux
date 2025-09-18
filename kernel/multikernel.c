@@ -150,7 +150,7 @@ int multikernel_send_ipi_data(int cpu, void *data, size_t data_size, unsigned lo
 
 	/* Set header information */
 	target->data_size = data_size;
-	target->sender_cpu = smp_processor_id();
+	target->sender_cpu = arch_cpu_physical_id(smp_processor_id());
 	target->type = type;
 
 	/* Copy the actual data into the buffer */
@@ -175,6 +175,7 @@ static void multikernel_interrupt_handler(void)
 	struct mk_ipi_data *data;
 	struct mk_ipi_handler *handler;
 	int current_cpu = smp_processor_id();
+	int current_physical_id = arch_cpu_physical_id(current_cpu);
 
 	/* Ensure shared memory is initialized */
 	if (!mk_shared_mem) {
@@ -183,10 +184,10 @@ static void multikernel_interrupt_handler(void)
 	}
 
 	/* Get this CPU's data area from shared memory */
-	data = &mk_shared_mem->cpu_data[current_cpu];
+	data = &mk_shared_mem->cpu_data[current_physical_id];
 
-	pr_debug("Multikernel IPI received on CPU %d from CPU %d, type=%u\n",
-		 current_cpu, data->sender_cpu, data->type);
+	pr_info("Multikernel IPI received on CPU %d (physical id %d) from CPU %d type=%u\n",
+		 current_cpu, current_physical_id, data->sender_cpu, data->type);
 
     raw_spin_lock(&mk_handlers_lock);
     for (handler = mk_handlers; handler; handler = handler->next) {
