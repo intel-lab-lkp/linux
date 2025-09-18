@@ -127,6 +127,10 @@ static void parse_filter_attr_test(struct kunit *test)
 
 	parsed_filters = kunit_kcalloc(test, filter_count, sizeof(*parsed_filters),
 			GFP_KERNEL);
+
+	/* Abort test if allocation failed. */
+	KUNIT_ASSERT_NOT_ERR_OR_NULL(test, parsed_filters);
+
 	for (j = 0; j < filter_count; j++) {
 		parsed_filters[j] = kunit_next_attr_filter(&filter, &err);
 		KUNIT_ASSERT_EQ_MSG(test, err, 0, "failed to parse filter from '%s'", filters);
