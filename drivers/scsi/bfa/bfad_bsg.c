@@ -3392,21 +3392,10 @@ bfad_im_bsg_els_ct_request(struct bsg_job *job)
 	if (bsg_data == NULL)
 		goto out;
 
-	/*
-	 * Allocate buffer for bsg_fcpt and do a copy_from_user op for payload
-	 * buffer of size bsg_data->payload_len
-	 */
-	bsg_fcpt = kzalloc(bsg_data->payload_len, GFP_KERNEL);
-	if (!bsg_fcpt) {
-		rc = -ENOMEM;
-		goto out;
-	}
-
-	if (copy_from_user((uint8_t *)bsg_fcpt,
-				(void *)(unsigned long)bsg_data->payload,
-				bsg_data->payload_len)) {
-		kfree(bsg_fcpt);
-		rc = -EIO;
+	bsg_fcpt = memdup_user(u64_to_user_ptr(bsg_data->payload),
+			       bsg_data->payload_len);
+	if (IS_ERR(bsg_fcpt)) {
+		rc = PTR_ERR(bsg_fcpt);
 		goto out;
 	}
 
