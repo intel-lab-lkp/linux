@@ -761,6 +761,33 @@ static bool page_pool_recycle_in_ring(struct page_pool *pool, netmem_ref netmem)
 	return ret;
 }
 
+static bool page_pool_napi_local(const struct page_pool *pool)
+{
+	const struct napi_struct *napi;
+	u32 cpuid;
+
+	/* On PREEMPT_RT the softirq can be preempted by the consumer */
+	if (IS_ENABLED(CONFIG_PREEMPT_RT))
+		return false;
+
+	if (unlikely(!in_softirq()))
+		return false;
+
+	/* Allow direct recycle if we have reasons to believe that we are
+	 * in the same context as the consumer would run, so there's
+	 * no possible race.
+	 * __page_pool_put_page() makes sure we're not in hardirq context
+	 * and interrupts are enabled prior to accessing the cache.
+	 */
+	cpuid = smp_processor_id();
+	if (READ_ONCE(pool->cpuid) == cpuid)
+		return true;
+
+	napi = READ_ONCE(pool->p.napi);
+
+	return napi && READ_ONCE(napi->list_owner) == cpuid;
+}
+
 /* Only allow direct recycling in special circumstances, into the
  * alloc side cache.  E.g. during RX-NAPI processing for XDP_DROP use-case.
  *
@@ -773,6 +800,18 @@ static bool page_pool_recycle_in_cache(netmem_ref netmem,
 		recycle_stat_inc(pool, cache_full);
 		return false;
 	}
+
+#ifdef CONFIG_DEBUG_PAGE_POOL_CACHE_RELEASE
+	if (unlikely(!page_pool_napi_local(pool))) {
+		u32 pp_cpuid = READ_ONCE(pool->cpuid);
+		u32 cpuid = smp_processor_id();
+
+		WARN_RATELIMIT(1, "page_pool %d: direct page release from wrong CPU %d, expected CPU %d",
+			       pool->user.id, cpuid, pp_cpuid);
+
+		return false;
+	}
+#endif
 
 	/* Caller MUST have verified/know (page_ref_count(page) == 1) */
 	pool->alloc.cache[pool->alloc.count++] = netmem;
@@ -837,33 +876,6 @@ __page_pool_put_page(struct page_pool *pool, netmem_ref netmem,
 	page_pool_return_netmem(pool, netmem);
 
 	return 0;
-}
-
-static bool page_pool_napi_local(const struct page_pool *pool)
-{
-	const struct napi_struct *napi;
-	u32 cpuid;
-
-	/* On PREEMPT_RT the softirq can be preempted by the consumer */
-	if (IS_ENABLED(CONFIG_PREEMPT_RT))
-		return false;
-
-	if (unlikely(!in_softirq()))
-		return false;
-
-	/* Allow direct recycle if we have reasons to believe that we are
-	 * in the same context as the consumer would run, so there's
-	 * no possible race.
-	 * __page_pool_put_page() makes sure we're not in hardirq context
-	 * and interrupts are enabled prior to accessing the cache.
-	 */
-	cpuid = smp_processor_id();
-	if (READ_ONCE(pool->cpuid) == cpuid)
-		return true;
-
-	napi = READ_ONCE(pool->p.napi);
-
-	return napi && READ_ONCE(napi->list_owner) == cpuid;
 }
 
 void page_pool_put_unrefed_netmem(struct page_pool *pool, netmem_ref netmem,

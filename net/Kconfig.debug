@@ -39,3 +39,13 @@ config DEBUG_NET_SMALL_RTNL
 
 	  Once the conversion completes, rtnl_lock() will be removed
 	  and rtnetlink will gain per-netns scalability.
+
+config DEBUG_PAGE_POOL_CACHE_RELEASE
+	bool "Debug page releases into page_pool cache"
+	depends on DEBUG_KERNEL && NET && PAGE_POOL
+	help
+	  Enable debugging feature to track page releases to the
+	  page_pool cache from incorrect CPUs.
+
+	  This makes it easier to track races related to this incorrect
+	  usage of the page_pool API.
