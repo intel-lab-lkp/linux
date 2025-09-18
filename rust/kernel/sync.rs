@@ -12,6 +12,7 @@ use pin_init;
 mod arc;
 pub mod aref;
 pub mod completion;
+pub mod dma_fence;
 mod condvar;
 pub mod lock;
 mod locked_by;
@@ -20,6 +21,7 @@ pub mod rcu;
 
 pub use arc::{Arc, ArcBorrow, UniqueArc};
 pub use completion::Completion;
+pub use dma_fence::{DmaFence, DmaFenceCtx, DmaFenceNames, DmaFenceCb, DmaFenceCbFunc};
 pub use condvar::{new_condvar, CondVar, CondVarTimeoutResult};
 pub use lock::global::{global_lock, GlobalGuard, GlobalLock, GlobalLockBackend, GlobalLockedBy};
 pub use lock::mutex::{new_mutex, Mutex, MutexGuard};
