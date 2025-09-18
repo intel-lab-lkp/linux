@@ -7012,6 +7012,7 @@ static bool pfn_range_valid_contig(struct zone *z, unsigned long start_pfn,
 {
 	unsigned long i, end_pfn = start_pfn + nr_pages;
 	struct page *page;
+	struct folio *folio;
 
 	for (i = start_pfn; i < end_pfn; i++) {
 		page = pfn_to_online_page(i);
@@ -7021,11 +7022,26 @@ static bool pfn_range_valid_contig(struct zone *z, unsigned long start_pfn,
 		if (page_zone(page) != z)
 			return false;
 
-		if (PageReserved(page))
+		folio = page_folio(page);
+		if (folio_test_reserved(folio))
 			return false;
 
-		if (PageHuge(page))
+		if (folio_test_hugetlb(folio))
 			return false;
+
+		/* The following type of folios aren't migrated */
+		if (folio_test_pgtable(folio) | folio_test_stack(folio))
+			return false;
+
+		/*
+		 * For compound pages such as THP and non-compound high
+		 * order buddy pages, save potentially a lot of iterations
+		 * if we can skip them at once.
+		 */
+		if (PageCompound(page))
+			i += (1UL << compound_order(page)) - 1;
+		else if (PageBuddy(page))
+			i += (1UL << buddy_order(page)) - 1;
 	}
 	return true;
 }
