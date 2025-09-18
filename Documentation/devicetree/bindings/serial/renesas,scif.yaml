@@ -181,7 +181,6 @@ allOf:
               - renesas,rcar-gen2-scif
               - renesas,rcar-gen3-scif
               - renesas,rcar-gen4-scif
-              - renesas,rcar-gen5-scif
               - renesas,scif-r9a07g044
               - renesas,scif-r9a09g057
     then:

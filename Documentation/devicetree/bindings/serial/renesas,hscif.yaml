@@ -126,7 +126,6 @@ if:
           - renesas,rcar-gen2-hscif
           - renesas,rcar-gen3-hscif
           - renesas,rcar-gen4-hscif
-          - renesas,rcar-gen5-hscif
 then:
   required:
     - resets
