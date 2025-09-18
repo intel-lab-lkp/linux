@@ -115,6 +115,7 @@ msm-y += \
 	msm_gem_shrinker.o \
 	msm_gem_submit.o \
 	msm_gem_vma.o \
+	msm_gem_vm_bind.o \
 	msm_gpu.o \
 	msm_gpu_devfreq.o \
 	msm_io_utils.o \
