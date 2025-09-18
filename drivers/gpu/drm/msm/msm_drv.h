@@ -436,7 +436,8 @@ static inline void msm_mdss_unregister(void) {}
 
 #ifdef CONFIG_DEBUG_FS
 void msm_framebuffer_describe(struct drm_framebuffer *fb, struct seq_file *m);
-int msm_debugfs_late_init(struct drm_device *dev);
+void msm_gpu_debugfs_init(struct drm_minor *minor);
+void msm_gpu_debugfs_late_init(struct drm_device *dev);
 int msm_rd_debugfs_init(struct drm_minor *minor);
 void msm_rd_debugfs_cleanup(struct msm_drm_private *priv);
 __printf(3, 4)
@@ -445,7 +446,6 @@ void msm_rd_dump_submit(struct msm_rd_state *rd, struct msm_gem_submit *submit,
 int msm_perf_debugfs_init(struct drm_minor *minor);
 void msm_perf_debugfs_cleanup(struct msm_drm_private *priv);
 #else
-static inline int msm_debugfs_late_init(struct drm_device *dev) { return 0; }
 __printf(3, 4)
 static inline void msm_rd_dump_submit(struct msm_rd_state *rd,
 			struct msm_gem_submit *submit,

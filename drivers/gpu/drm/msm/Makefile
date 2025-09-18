@@ -107,10 +107,10 @@ msm-display-$(CONFIG_DRM_MSM_KMS) += \
 	disp/msm_disp_snapshot_util.o \
 
 msm-y += \
-	msm_debugfs.o \
 	msm_drv.o \
 	msm_fence.o \
 	msm_gem.o \
+	msm_gem_debugfs.o \
 	msm_gem_prime.o \
 	msm_gem_shrinker.o \
 	msm_gem_submit.o \
@@ -118,6 +118,7 @@ msm-y += \
 	msm_gem_vm_bind.o \
 	msm_gpu.o \
 	msm_gpu_devfreq.o \
+	msm_gpu_debugfs.o \
 	msm_io_utils.o \
 	msm_ioctl.o \
 	msm_iommu.o \
@@ -133,6 +134,7 @@ msm-$(CONFIG_DRM_MSM_KMS) += \
 	msm_atomic_tracepoints.o \
 	msm_fb.o \
 	msm_kms.o \
+	msm_kms_debugfs.o \
 
 msm-$(CONFIG_DRM_MSM_KMS_FBDEV) += msm_fbdev.o
 

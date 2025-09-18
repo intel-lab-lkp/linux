@@ -15,7 +15,6 @@
 #include <drm/drm_of.h>
 
 #include "msm_drv.h"
-#include "msm_debugfs.h"
 #include "msm_gpu.h"
 #include "msm_ioctl.h"
 #include "msm_kms.h"
@@ -63,6 +62,22 @@ bool msm_gpu_no_components(void)
 {
 	return separate_gpu_kms;
 }
+
+#ifdef CONFIG_DEBUG_FS
+static void msm_debugfs_late_init(struct drm_device *dev)
+{
+	msm_gpu_debugfs_late_init(dev);
+}
+
+static void msm_debugfs_init(struct drm_minor *minor)
+{
+	msm_gpu_debugfs_init(minor);
+
+	msm_kms_debugfs_init(minor);
+
+	msm_gem_debugfs_init(minor);
+}
+#endif
 
 static int msm_drm_uninit(struct device *dev, const struct component_ops *gpu_ops)
 {
@@ -171,9 +186,7 @@ static int msm_drm_init(struct device *dev, const struct drm_driver *drv,
 	if (ret)
 		goto err_msm_uninit;
 
-	ret = msm_debugfs_late_init(ddev);
-	if (ret)
-		goto err_msm_uninit;
+	msm_debugfs_late_init(ddev);
 
 	if (priv->kms_init)
 		msm_drm_kms_post_init(dev);

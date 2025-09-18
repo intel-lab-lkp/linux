@@ -240,4 +240,12 @@ static inline void msm_drm_kms_uninit(struct device *dev)
 
 #endif
 
+#if defined(CONFIG_DEBUG_FS) && defined(CONFIG_DRM_MSM_KMS)
+void msm_kms_debugfs_init(struct drm_minor *minor);
+#else
+static inline void msm_kms_debugfs_init(struct drm_minor *minor)
+{
+}
+#endif
+
 #endif /* __MSM_KMS_H__ */

@@ -498,4 +498,12 @@ static inline void msm_gem_submit_put(struct msm_gem_submit *submit)
 
 void msm_submit_retire(struct msm_gem_submit *submit);
 
+#ifdef CONFIG_DEBUG_FS
+void msm_gem_debugfs_init(struct drm_minor *minor);
+#else
+static inline void msm_gem_debugfs_init(struct drm_minor *minor)
+{
+}
+#endif
+
 #endif /* __MSM_GEM_H__ */
