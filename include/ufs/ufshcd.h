@@ -1502,5 +1502,6 @@ int ufshcd_update_ee_control(struct ufs_hba *hba, u16 *mask,
 void ufshcd_force_error_recovery(struct ufs_hba *hba);
 void ufshcd_pm_qos_update(struct ufs_hba *hba, bool on);
 void ufshcd_enable_intr(struct ufs_hba *hba, u32 intrs);
+u32 ufshcd_us_to_ahit(unsigned int timer);
 
 #endif /* End of Header */
