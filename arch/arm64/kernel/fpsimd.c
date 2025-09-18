@@ -1833,7 +1833,7 @@ void fpsimd_save_and_flush_cpu_state(void)
  * The caller may freely use the FPSIMD registers until kernel_neon_end() is
  * called.
  */
-void kernel_neon_begin(void)
+void __kernel_neon_begin(void)
 {
 	if (WARN_ON(!system_supports_fpsimd()))
 		return;
@@ -1875,7 +1875,7 @@ void kernel_neon_begin(void)
 
 	put_cpu_fpsimd_context();
 }
-EXPORT_SYMBOL_GPL(kernel_neon_begin);
+EXPORT_SYMBOL_GPL(__kernel_neon_begin);
 
 /*
  * kernel_neon_end(): give the CPU FPSIMD registers back to the current task
@@ -1886,7 +1886,7 @@ EXPORT_SYMBOL_GPL(kernel_neon_begin);
  * The caller must not use the FPSIMD registers after this function is called,
  * unless kernel_neon_begin() is called again in the meantime.
  */
-void kernel_neon_end(void)
+void __kernel_neon_end(void)
 {
 	if (!system_supports_fpsimd())
 		return;
@@ -1902,7 +1902,7 @@ void kernel_neon_end(void)
 	else
 		clear_thread_flag(TIF_KERNEL_FPSTATE);
 }
-EXPORT_SYMBOL_GPL(kernel_neon_end);
+EXPORT_SYMBOL_GPL(__kernel_neon_end);
 
 #ifdef CONFIG_EFI
 
@@ -1936,7 +1936,7 @@ void __efi_fpsimd_begin(void)
 	WARN_ON(preemptible());
 
 	if (may_use_simd()) {
-		kernel_neon_begin();
+		__kernel_neon_begin();
 	} else {
 		/*
 		 * If !efi_sve_state, SVE can't be in use yet and doesn't need
@@ -1985,7 +1985,7 @@ void __efi_fpsimd_end(void)
 		return;
 
 	if (!efi_fpsimd_state_used) {
-		kernel_neon_end();
+		__kernel_neon_end();
 	} else {
 		if (system_supports_sve() && efi_sve_state_used) {
 			bool ffr = true;
