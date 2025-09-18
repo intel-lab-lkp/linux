@@ -571,6 +571,16 @@ config PLX_DMA
 	  These are exposed via extra functions on the switch's
 	  upstream port. Each function exposes one DMA channel.
 
+config RDA_IFC
+	bool "RDA IFC support"
+	depends on ARCH_RDA || COMPILE_TEST
+	select DMA_ENGINE
+	help
+	  Support RDA Intelligent Flow Controller for RDA Micro SoC.
+	  The Intelligent Flow Controller is a scatter/gather DMA controller.
+
+	  If unsure, say N.
+
 config SOPHGO_CV1800B_DMAMUX
 	tristate "Sophgo CV1800/SG2000 series SoC DMA multiplexer support"
 	depends on MFD_SYSCON
