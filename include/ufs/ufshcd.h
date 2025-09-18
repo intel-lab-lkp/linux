@@ -97,6 +97,11 @@ enum uic_link_state {
 	UIC_LINK_BROKEN_STATE	= 3, /* Link is in broken state */
 };
 
+/* UFSHCD error handling flags */
+enum {
+	UFSHCD_EH_IN_PROGRESS = (1 << 0),
+};
+
 #define ufshcd_is_link_off(hba) ((hba)->uic_link_state == UIC_LINK_OFF_STATE)
 #define ufshcd_is_link_active(hba) ((hba)->uic_link_state == \
 				    UIC_LINK_ACTIVE_STATE)
@@ -128,6 +133,13 @@ enum uic_link_state {
 	((h)->curr_dev_pwr_mode == UFS_POWERDOWN_PWR_MODE)
 #define ufshcd_is_ufs_dev_deepsleep(h) \
 	((h)->curr_dev_pwr_mode == UFS_DEEPSLEEP_PWR_MODE)
+
+#define ufshcd_set_eh_in_progress(h) \
+	((h)->eh_flags |= UFSHCD_EH_IN_PROGRESS)
+#define ufshcd_eh_in_progress(h) \
+	((h)->eh_flags & UFSHCD_EH_IN_PROGRESS)
+#define ufshcd_clear_eh_in_progress(h) \
+	((h)->eh_flags &= ~UFSHCD_EH_IN_PROGRESS)
 
 /*
  * UFS Power management levels.

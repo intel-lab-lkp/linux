@@ -214,11 +214,6 @@ static const char *const ufshcd_state_name[] = {
 	[UFSHCD_STATE_EH_SCHEDULED_NON_FATAL]	= "eh_non_fatal",
 };
 
-/* UFSHCD error handling flags */
-enum {
-	UFSHCD_EH_IN_PROGRESS = (1 << 0),
-};
-
 /* UFSHCD UIC layer error flags */
 enum {
 	UFSHCD_UIC_DL_PA_INIT_ERROR = (1 << 0), /* Data link layer error */
@@ -229,13 +224,6 @@ enum {
 	UFSHCD_UIC_DME_ERROR = (1 << 5), /* DME error */
 	UFSHCD_UIC_PA_GENERIC_ERROR = (1 << 6), /* Generic PA error */
 };
-
-#define ufshcd_set_eh_in_progress(h) \
-	((h)->eh_flags |= UFSHCD_EH_IN_PROGRESS)
-#define ufshcd_eh_in_progress(h) \
-	((h)->eh_flags & UFSHCD_EH_IN_PROGRESS)
-#define ufshcd_clear_eh_in_progress(h) \
-	((h)->eh_flags &= ~UFSHCD_EH_IN_PROGRESS)
 
 const struct ufs_pm_lvl_states ufs_pm_lvl_states[] = {
 	[UFS_PM_LVL_0] = {UFS_ACTIVE_PWR_MODE, UIC_LINK_ACTIVE_STATE},
