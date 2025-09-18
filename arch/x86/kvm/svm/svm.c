@@ -577,18 +577,6 @@ static int svm_enable_virtualization_cpu(void)
 
 	amd_pmu_enable_virt();
 
-	/*
-	 * If TSC_AUX virtualization is supported, TSC_AUX becomes a swap type
-	 * "B" field (see sev_es_prepare_switch_to_guest()) for SEV-ES guests.
-	 * Since Linux does not change the value of TSC_AUX once set, prime the
-	 * TSC_AUX field now to avoid a RDMSR on every vCPU run.
-	 */
-	if (boot_cpu_has(X86_FEATURE_V_TSC_AUX)) {
-		u32 __maybe_unused msr_hi;
-
-		rdmsr(MSR_TSC_AUX, sev_es_host_save_area(sd)->tsc_aux, msr_hi);
-	}
-
 	return 0;
 }
 
@@ -1408,12 +1396,19 @@ static void svm_prepare_switch_to_guest(struct kvm_vcpu *vcpu)
 	/*
 	 * TSC_AUX is always virtualized for SEV-ES guests when the feature is
 	 * available. The user return MSR support is not required in this case
-	 * because TSC_AUX is restored on #VMEXIT from the host save area
-	 * (which has been initialized in svm_enable_virtualization_cpu()).
+	 * because TSC_AUX is restored on #VMEXIT from the host save area.
+	 * However, user return MSR could change the value of TSC_AUX in the
+	 * kernel. Therefore, to maintain the logic of user return MSR, set the
+	 * restore value to the cached value of user return MSR, which should
+	 * always reflect the current hardware value.
 	 */
-	if (likely(tsc_aux_uret_slot >= 0) &&
-	    (!boot_cpu_has(X86_FEATURE_V_TSC_AUX) || !sev_es_guest(vcpu->kvm)))
-		kvm_set_user_return_msr(tsc_aux_uret_slot, svm->tsc_aux, -1ull);
+	if (likely(tsc_aux_uret_slot >= 0)) {
+		if (!boot_cpu_has(X86_FEATURE_V_TSC_AUX) || !sev_es_guest(vcpu->kvm))
+			kvm_set_user_return_msr(tsc_aux_uret_slot, svm->tsc_aux, -1ull);
+		else
+			sev_es_host_save_area(sd)->tsc_aux =
+				(u32)kvm_get_user_return_msr_cache(tsc_aux_uret_slot);
+	}
 
 	if (cpu_feature_enabled(X86_FEATURE_SRSO_BP_SPEC_REDUCE) &&
 	    !sd->bp_spec_reduce_set) {
@@ -3004,8 +2999,8 @@ static int svm_set_msr(struct kvm_vcpu *vcpu, struct msr_data *msr)
 		 * TSC_AUX is always virtualized for SEV-ES guests when the
 		 * feature is available. The user return MSR support is not
 		 * required in this case because TSC_AUX is restored on #VMEXIT
-		 * from the host save area (which has been initialized in
-		 * svm_enable_virtualization_cpu()).
+		 * from the host save area (which has been set in
+		 * svm_prepare_switch_to_guest()).
 		 */
 		if (boot_cpu_has(X86_FEATURE_V_TSC_AUX) && sev_es_guest(vcpu->kvm))
 			break;
