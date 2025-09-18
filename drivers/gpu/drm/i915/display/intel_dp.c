@@ -1011,6 +1011,26 @@ u16 intel_dp_dsc_get_max_compressed_bpp(struct intel_display *display,
 	return bits_per_pixel;
 }
 
+static int dsc_per_slice_throughput(struct intel_display *display, int mode_clock, int bw_code)
+{
+	switch (bw_code) {
+	case 0:
+		if (mode_clock <= DP_DSC_PEAK_PIXEL_RATE)
+			return DP_DSC_MAX_ENC_THROUGHPUT_0;
+		else
+			return DP_DSC_MAX_ENC_THROUGHPUT_1;
+	case 1:
+		return 340000;
+	case 2 ... 14:
+		return 400000 + 50000 * (bw_code - 2);
+	case 15:
+		return 170000;
+	default:
+		drm_err(display->drm, "Invalid DSC peak throughput code\n");
+		return 340000;
+	}
+}
+
 u8 intel_dp_dsc_get_slice_count(const struct intel_connector *connector,
 				int mode_clock, int mode_hdisplay,
 				int num_joined_pipes)
@@ -1018,13 +1038,28 @@ u8 intel_dp_dsc_get_slice_count(const struct intel_connector *connector,
 	struct intel_display *display = to_intel_display(connector);
 	u8 min_slice_count, i;
 	int max_slice_width;
+	int tp_rgb_yuv444;
+	int tp_yuv422_420;
+	u8 val;
 
-	if (mode_clock <= DP_DSC_PEAK_PIXEL_RATE)
-		min_slice_count = DIV_ROUND_UP(mode_clock,
-					       DP_DSC_MAX_ENC_THROUGHPUT_0);
-	else
-		min_slice_count = DIV_ROUND_UP(mode_clock,
-					       DP_DSC_MAX_ENC_THROUGHPUT_1);
+	val = connector->dp.dsc_dpcd[DP_DSC_PEAK_THROUGHPUT - DP_DSC_SUPPORT];
+	tp_rgb_yuv444 = dsc_per_slice_throughput(display, mode_clock,
+						 REG_FIELD_GET8(DP_DSC_THROUGHPUT_MODE_0_MASK,
+								val));
+	tp_yuv422_420 = dsc_per_slice_throughput(display, mode_clock,
+						 REG_FIELD_GET8(DP_DSC_THROUGHPUT_MODE_1_MASK,
+								val));
+
+	/*
+	 * TODO: Use the throughput value specific to the actual RGB/YUV
+	 * format of the output.
+	 * For now use the smaller of these, which is ok, potentially
+	 * resulting in a higher than required minimum slice count.
+	 * The RGB/YUV444 throughput value should be always either equal
+	 * or smaller than the YUV422/420 value, but let's not depend on
+	 * this assumption.
+	 */
+	min_slice_count = DIV_ROUND_UP(mode_clock, min(tp_rgb_yuv444, tp_yuv422_420));
 
 	/*
 	 * Due to some DSC engine BW limitations, we need to enable second
