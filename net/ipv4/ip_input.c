@@ -325,13 +325,13 @@ static int ip_rcv_finish_core(struct net *net,
 			      const struct sk_buff *hint)
 {
 	const struct iphdr *iph = ip_hdr(skb);
+	enum skb_drop_reason drop_reason;
 	struct rtable *rt;
-	int drop_reason;
 
 	if (ip_can_use_hint(skb, iph, hint)) {
 		drop_reason = ip_route_use_hint(skb, iph->daddr, iph->saddr,
 						ip4h_dscp(iph), dev, hint);
-		if (unlikely(drop_reason))
+		if (unlikely(drop_reason != SKB_NOT_DROPPED_YET))
 			goto drop_error;
 	}
 
@@ -351,7 +351,7 @@ static int ip_rcv_finish_core(struct net *net,
 		case IPPROTO_UDP:
 			if (READ_ONCE(net->ipv4.sysctl_udp_early_demux)) {
 				drop_reason = udp_v4_early_demux(skb);
-				if (unlikely(drop_reason))
+				if (unlikely(drop_reason != SKB_NOT_DROPPED_YET))
 					goto drop_error;
 
 				/* must reload iph, skb->head might have changed */
@@ -368,7 +368,7 @@ static int ip_rcv_finish_core(struct net *net,
 	if (!skb_valid_dst(skb)) {
 		drop_reason = ip_route_input_noref(skb, iph->daddr, iph->saddr,
 						   ip4h_dscp(iph), dev);
-		if (unlikely(drop_reason))
+		if (unlikely(drop_reason != SKB_NOT_DROPPED_YET))
 			goto drop_error;
 	} else {
 		struct in_device *in_dev = __in_dev_get_rcu(dev);
