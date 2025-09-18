@@ -21430,6 +21430,12 @@ S:	Maintained
 F:	Documentation/devicetree/bindings/dma/rda,ifc.yaml
 F:	drivers/dma/rda-ifc.c
 
+RDA MICRO SECURE DIGITAL AND MULTIMEDIA CARD DRIVER
+M:	Dang Huynh <dang.huynh@mainlining.org>
+S:	Maintained
+F:	Documentation/devicetree/bindings/mmc/rda,mmc.yaml
+F:	drivers/mmc/host/rda-mmc.c
+
 RDACM20 Camera Sensor
 M:	Jacopo Mondi <jacopo+renesas@jmondi.org>
 M:	Kieran Bingham <kieran.bingham+renesas@ideasonboard.com>

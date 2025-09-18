@@ -1040,6 +1040,18 @@ config MMC_MTK
 	  This is needed if support for any SD/SDIO/MMC devices is required.
 	  If unsure, say N.
 
+config MMC_RDA
+	tristate "RDA Micro SD/MMC Card Interface support"
+	depends on ARCH_RDA || COMPILE_TEST
+	depends on COMMON_CLK
+	depends on HAS_DMA
+	help
+	  This selects the RDA Micro Secure digital and Multimedia card interface. The
+	  controller supports SD/SDIO/MMC interface.
+	  If you have a board with RDA SoC and it uses this interface, say Y or M here.
+
+	  If unsure, say N.
+
 config MMC_SDHCI_MICROCHIP_PIC32
 	tristate "Microchip PIC32MZDA SDHCI support"
 	depends on MMC_SDHCI && PIC32MZDA && MMC_SDHCI_PLTFM
