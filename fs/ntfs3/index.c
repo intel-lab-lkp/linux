@@ -718,7 +718,7 @@ static struct NTFS_DE *hdr_find_e(const struct ntfs_index *indx,
 				  const struct INDEX_HDR *hdr, const void *key,
 				  size_t key_len, const void *ctx, int *diff)
 {
-	struct NTFS_DE *e, *found = NULL;
+	struct NTFS_DE *e = NULL, *found = NULL;
 	NTFS_CMP_FUNC cmp = indx->cmp;
 	int min_idx = 0, mid_idx, max_idx = 0;
 	int diff2;
