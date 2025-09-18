@@ -443,6 +443,11 @@ static bool range_is_memory(u64 start, u64 end)
 	return is_in_mem_range(end - 1, &r);
 }
 
+static bool range_is_valid(u64 start, u64 end)
+{
+	return start < end;
+}
+
 static inline int __host_stage2_idmap(u64 start, u64 end,
 				      enum kvm_pgtable_prot prot)
 {
@@ -776,6 +781,9 @@ int __pkvm_host_donate_hyp(u64 pfn, u64 nr_pages)
 	void *virt = __hyp_va(phys);
 	int ret;
 
+	if (!range_is_valid(phys, phys + size))
+		return -EINVAL;
+
 	host_lock_component();
 	hyp_lock_component();
 
@@ -803,6 +811,9 @@ int __pkvm_hyp_donate_host(u64 pfn, u64 nr_pages)
 	u64 size = PAGE_SIZE * nr_pages;
 	u64 virt = (u64)__hyp_va(phys);
 	int ret;
+
+	if (!range_is_valid(phys, phys + size))
+		return -EINVAL;
 
 	host_lock_component();
 	hyp_lock_component();
@@ -887,6 +898,9 @@ int __pkvm_host_share_ffa(u64 pfn, u64 nr_pages)
 	u64 size = PAGE_SIZE * nr_pages;
 	int ret;
 
+	if (!range_is_valid(phys, phys + size))
+		return -EINVAL;
+
 	host_lock_component();
 	ret = __host_check_page_state_range(phys, size, PKVM_PAGE_OWNED);
 	if (!ret)
@@ -901,6 +915,9 @@ int __pkvm_host_unshare_ffa(u64 pfn, u64 nr_pages)
 	u64 phys = hyp_pfn_to_phys(pfn);
 	u64 size = PAGE_SIZE * nr_pages;
 	int ret;
+
+	if (!range_is_valid(phys, phys + size))
+		return -EINVAL;
 
 	host_lock_component();
 	ret = __host_check_page_state_range(phys, size, PKVM_PAGE_SHARED_OWNED);
@@ -948,6 +965,9 @@ int __pkvm_host_share_guest(u64 pfn, u64 gfn, u64 nr_pages, struct pkvm_hyp_vcpu
 	ret = __guest_check_transition_size(phys, ipa, nr_pages, &size);
 	if (ret)
 		return ret;
+
+	if (!range_is_valid(phys, phys + size))
+		return -EINVAL;
 
 	ret = check_range_allowed_memory(phys, phys + size);
 	if (ret)
