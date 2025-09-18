@@ -10,6 +10,7 @@ SYNOPSIS
 [verse]
 'perf check' [<options>]
 'perf check' {feature <feature_list>} [<options>]
+'perf check' {system <setting_list>} [<options>]
 
 DESCRIPTION
 -----------
@@ -21,6 +22,9 @@ on the standard output (unless '-q' is also passed), ie. whether it is
 compiled-in/built-in or not.
 Also, 'perf check feature' returns with exit status 0 if the feature
 is built-in, otherwise returns with exit status 1.
+
+If the subcommand 'system' is used, then system settins are printed on
+the standard output with explanation.
 
 SUBCOMMANDS
 -----------
@@ -68,6 +72,22 @@ feature::
                 numa_num_possible_cpus  /  HAVE_LIBNUMA_SUPPORT
                 zlib                    /  HAVE_ZLIB_SUPPORT
                 zstd                    /  HAVE_ZSTD_SUPPORT
+
+system::
+
+	Print system settings (sysctl) that affect perf behaviors.
+
+	Example Usage:
+		perf check system
+		perf check system watchdog
+
+	Supported settings:
+		perf_event_paranoid
+		perf_event_max_stack
+		perf_event_mlock_kb
+		nmi_watchdog
+		kptr_restrict
+
 
 OPTIONS
 -------

@@ -3,22 +3,28 @@
 #include "color.h"
 #include "util/debug.h"
 #include "util/header.h"
+#include <api/fs/fs.h>
 #include <tools/config.h>
 #include <stdbool.h>
 #include <stdio.h>
 #include <string.h>
 #include <subcmd/parse-options.h>
 
-static const char * const check_subcommands[] = { "feature", NULL };
+static const char * const check_subcommands[] = { "feature", "system", NULL };
 static struct option check_options[] = {
 	OPT_BOOLEAN('q', "quiet", &quiet, "do not show any warnings or messages"),
 	OPT_END()
 };
 static struct option check_feature_options[] = { OPT_PARENT(check_options) };
+static struct option check_system_options[] = { OPT_PARENT(check_options) };
 
 static const char *check_usage[] = { NULL, NULL };
 static const char *check_feature_usage[] = {
 	"perf check feature <feature_list>",
+	NULL
+};
+static const char *check_system_usage[] = {
+	"perf check system",
 	NULL
 };
 
@@ -166,6 +172,112 @@ static int subcommand_feature(int argc, const char **argv)
 	return !feature_enabled;
 }
 
+static int read_sysctl_kernel_int(const char *name)
+{
+	char path[128];
+	int value;
+
+	scnprintf(path, sizeof(path), "kernel/%s", name);
+	if (sysctl__read_int(path, &value))
+		return INT_MAX;
+
+	return value;
+}
+
+static const char *system_help_perf_event_paranoid(int value)
+{
+	if (value == 2)
+		return "non-root can profile user code only";
+	if (value == 1)
+		return "non-root can profile kernel and user code";
+	if (value == 0)
+		return "non-root can profile system-wide w/o tracepoints data";
+	if (value < 0)
+		return "no restrictions";
+
+	return "non-root cannot use perf event";
+}
+
+static const char *system_help_perf_event_max_stack(int value __maybe_unused)
+{
+	return "maximum callchain length";
+}
+
+static const char *system_help_perf_event_mlock_kb(int value __maybe_unused)
+{
+	return "maximum ring buffer size (including a header page) for non-root";
+}
+
+static const char *system_help_nmi_watchdog(int value)
+{
+	if (value)
+		return "a hardware PMU counter may be used by the kernel";
+
+	return "perf can use full PMU counters";
+}
+
+static const char *system_help_kptr_restrict(int value)
+{
+	if (value == 0)
+		return "kernel pointers are printed as-is";
+	if (value == 1)
+		return "non-root cannot see the kernel pointers";
+	if (value == 2)
+		return "root may not see some kernel pointers";
+
+	return "unknown value";
+}
+
+/**
+ * Usage: 'perf check system <settings>'
+ *
+ * Show system settings that affect perf behavior.
+ */
+static int subcommand_system(int argc, const char **argv)
+{
+#define PERF_SYSCTL(name) { #name, system_help_##name }
+	struct {
+		const char *name;
+		const char *(*help)(int value);
+	} sysctls[] = {
+		PERF_SYSCTL(perf_event_paranoid),
+		PERF_SYSCTL(perf_event_max_stack),
+		PERF_SYSCTL(perf_event_mlock_kb),
+		PERF_SYSCTL(nmi_watchdog),
+		PERF_SYSCTL(kptr_restrict),
+	};
+#undef PERF_SYSCTL
+
+	argc = parse_options(argc, argv, check_system_options,
+			     check_system_usage, 0);
+
+	for (size_t i = 0; i < ARRAY_SIZE(sysctls); i++) {
+		int value;
+
+		if (argc) {
+			bool found = false;
+
+			/* only show entries match to command line arguments */
+			for (int k = 0; k < argc; k++) {
+				if (strstr(sysctls[i].name, argv[k])) {
+					found = true;
+					break;
+				}
+			}
+			if (!found)
+				continue;
+		}
+
+		value = read_sysctl_kernel_int(sysctls[i].name);
+		printf("%-20s = %d", sysctls[i].name, value);
+		if (!quiet)
+			printf("\t# %s", sysctls[i].help(value));
+		printf("\n");
+	}
+
+	return 0;
+}
+
 int cmd_check(int argc, const char **argv)
 {
 	argc = parse_options_subcommand(argc, argv, check_options,
@@ -176,6 +288,8 @@ int cmd_check(int argc, const char **argv)
 
 	if (strcmp(argv[0], "feature") == 0)
 		return subcommand_feature(argc, argv);
+	if (strcmp(argv[0], "system") == 0)
+		return subcommand_system(argc, argv);
 
 	/* If no subcommand matched above, print usage help */
 	pr_err("Unknown subcommand: %s\n", argv[0]);
