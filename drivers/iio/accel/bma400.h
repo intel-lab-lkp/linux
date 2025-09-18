@@ -68,7 +68,19 @@
 #define BMA400_CMD_REG              0x7e
 
 /* Interrupt registers */
-#define BMA400_INT_CONFIG0_REG	    0x1f
+#define BMA400_INT_CONFIG0_REG			0x1f
+#define BMA400_INT_CONFIG0_ORTN_CHG_MASK	BIT(1)
+#define BMA400_INT_CONFIG0_GEN1_MASK		BIT(2)
+#define BMA400_INT_CONFIG0_GEN2_MASK		BIT(3)
+#define BMA400_INT_CONFIG0_FIFO_FULL_MASK	BIT(5)
+#define BMA400_INT_CONFIG0_FIFO_WTRMRK_MASK	BIT(6)
+#define BMA400_INT_CONFIG0_DRDY_MASK		BIT(7)
+
+enum generic_intr {
+	GEN1_INTR,
+	GEN2_INTR
+};
+
 #define BMA400_INT_CONFIG1_REG	    0x20
 #define BMA400_INT1_MAP_REG	    0x21
 #define BMA400_INT_IO_CTRL_REG	    0x24
@@ -96,15 +108,53 @@
 #define BMA400_ACC_ODR_MIN_HZ       12
 
 /* Generic interrupts register */
-#define BMA400_GEN1INT_CONFIG0      0x3f
-#define BMA400_GEN2INT_CONFIG0      0x4A
-#define BMA400_GEN_CONFIG1_OFF      0x01
-#define BMA400_GEN_CONFIG2_OFF      0x02
-#define BMA400_GEN_CONFIG3_OFF      0x03
-#define BMA400_GEN_CONFIG31_OFF     0x04
-#define BMA400_INT_GEN1_MSK         BIT(2)
-#define BMA400_INT_GEN2_MSK         BIT(3)
-#define BMA400_GEN_HYST_MSK         GENMASK(1, 0)
+#define BMA400_GENINT_CONFIG_REG_BASE	0x3f
+#define BMA400_NUM_GENINT_CONFIG_REGS	11
+#define BMA400_GENINT_CONFIG_REG(gen_intr, config_idx)	\
+	(BMA400_GENINT_CONFIG_REG_BASE +		\
+	(gen_intr) * BMA400_NUM_GENINT_CONFIG_REGS +	\
+	(config_idx))
+
+/* Generic Interrupt Config0 register */
+#define BMA400_GENINT_CONFIG0_HYST_MASK			GENMASK(1, 0)
+#define BMA400_GENINT_CONFIG0_REF_UPD_MODE_MASK		GENMASK(3, 2)
+#define BMA400_GENINT_CONFIG0_DATA_SRC_MASK		BIT(4)
+#define BMA400_GENINT_CONFIG0_X_EN_MASK			BIT(5)
+#define BMA400_GENINT_CONFIG0_Y_EN_MASK			BIT(6)
+#define BMA400_GENINT_CONFIG0_Z_EN_MASK			BIT(7)
+
+enum bma400_hysteresis_config {
+	NO_HYSTERESIS,
+	HYSTERESIS_24MG,
+	HYSTERESIS_48MG,
+	HYSTERESIS_96MG
+};
+
+enum bma400_accel_data_src {
+	ACCEL_FILT1,
+	ACCEL_FILT2
+};
+
+enum bma400_ref_updt_mode {
+	BMA400_REF_MANUAL_UPDT_MODE,
+	BMA400_REF_ONETIME_UPDT_MODE,
+	BMA400_REF_EVERYTIME_UPDT_MODE,
+	BMA400_REF_EVERYTIME_LP_UPDT_MODE
+};
+
+/* Generic Interrupt Config1 register */
+#define BMA400_GENINT_CONFIG1_AXES_COMB_MASK		BIT(0)
+#define BMA400_GENINT_CONFIG1_DETCT_CRIT_MASK		BIT(1)
+
+enum bma400_genintr_acceleval_axescomb {
+	BMA400_EVAL_X_OR_Y_OR_Z,
+	BMA400_EVAL_X_AND_Y_AND_Z,
+};
+
+enum bma400_detect_criterion {
+	BMA400_DETECT_INACTIVITY,
+	BMA400_DETECT_ACTIVITY,
+};
 
 /* TAP config registers */
 #define BMA400_TAP_CONFIG           0x57
@@ -118,6 +168,7 @@
 #define BMA400_TAP_QUIET_MSK        GENMASK(3, 2)
 #define BMA400_TAP_QUIETDT_MSK      GENMASK(5, 4)
 #define BMA400_TAP_TIM_LIST_LEN     4
+
 
 /*
  * BMA400_SCALE_MIN macro value represents m/s^2 for 1 LSB before
