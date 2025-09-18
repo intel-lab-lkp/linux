@@ -5138,15 +5138,15 @@ int mas_empty_area_rev(struct ma_state *mas, unsigned long min,
 
 	if (mas_is_start(mas))
 		mas_start(mas);
-	else if ((mas->offset < 2) && (!mas_rewind_node(mas)))
-		return -EBUSY;
 
 	if (unlikely(mas_is_none(mas) || mas_is_ptr(mas)))
 		return mas_sparse_area(mas, min, max, size, false);
-	else if (mas->offset >= 2)
-		mas->offset -= 2;
-	else
+	else if (!mas->offset)
 		mas->offset = mas_data_end(mas);
+	else if (mas->offset <= mas_data_end(mas) - 2)
+		mas->offset = mas->offset + 2;
+	else if (!mas_skip_node(mas))
+		return -EBUSY;
 
 
 	/* The start of the window can only be within these values. */
