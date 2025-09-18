@@ -116,7 +116,6 @@ required:
   - interrupts
   - clocks
   - clock-names
-  - power-domains
 
 if:
   properties:

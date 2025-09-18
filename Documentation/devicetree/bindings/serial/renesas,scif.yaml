@@ -168,7 +168,6 @@ required:
   - interrupts
   - clocks
   - clock-names
-  - power-domains
 
 allOf:
   - $ref: serial.yaml#
