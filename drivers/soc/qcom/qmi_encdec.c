@@ -23,13 +23,6 @@
 	*p_length |= ((u8)*p_src) << 8; \
 } while (0)
 
-#define QMI_ENCDEC_ENCODE_N_BYTES(p_dst, p_src, size) \
-do { \
-	memcpy(p_dst, p_src, size); \
-	p_dst = (u8 *)p_dst + size; \
-	p_src = (u8 *)p_src + size; \
-} while (0)
-
 #define QMI_ENCDEC_ENCODE_U8(p_dst, p_src) \
 do { \
 	memcpy(p_dst, p_src, sizeof(u8)); \
@@ -56,13 +49,6 @@ do { \
 	*(__le64 *)p_dst = __cpu_to_le64(*(u64 *)p_src); \
 	p_dst = (u8 *)p_dst + sizeof(u64); \
 	p_src = (u8 *)p_src + sizeof(u64); \
-} while (0)
-
-#define QMI_ENCDEC_DECODE_N_BYTES(p_dst, p_src, size) \
-do { \
-	memcpy(p_dst, p_src, size); \
-	p_dst = (u8 *)p_dst + size; \
-	p_src = (u8 *)p_src + size; \
 } while (0)
 
 #define QMI_ENCDEC_DECODE_U8(p_dst, p_src) \
@@ -225,7 +211,21 @@ static int qmi_encode_basic_elem(void *buf_dst, const void *buf_src,
 	u32 i, rc = 0;
 
 	for (i = 0; i < elem_len; i++) {
-		QMI_ENCDEC_ENCODE_N_BYTES(buf_dst, buf_src, elem_size);
+		switch (elem_size) {
+		case sizeof(u8):
+			QMI_ENCDEC_ENCODE_U8(buf_dst, buf_src);
+			break;
+		case sizeof(u16):
+			QMI_ENCDEC_ENCODE_U16(buf_dst, buf_src);
+			break;
+		case sizeof(u32):
+			QMI_ENCDEC_ENCODE_U32(buf_dst, buf_src);
+			break;
+		case sizeof(u64):
+			QMI_ENCDEC_ENCODE_U64(buf_dst, buf_src);
+			break;
+		}
+
 		rc += elem_size;
 	}
 
@@ -508,7 +508,21 @@ static int qmi_decode_basic_elem(void *buf_dst, const void *buf_src,
 	u32 i, rc = 0;
 
 	for (i = 0; i < elem_len; i++) {
-		QMI_ENCDEC_DECODE_N_BYTES(buf_dst, buf_src, elem_size);
+		switch (elem_size) {
+		case sizeof(u8):
+			QMI_ENCDEC_DECODE_U8(buf_dst, buf_src);
+			break;
+		case sizeof(u16):
+			QMI_ENCDEC_DECODE_U16(buf_dst, buf_src);
+			break;
+		case sizeof(u32):
+			QMI_ENCDEC_DECODE_U32(buf_dst, buf_src);
+			break;
+		case sizeof(u64):
+			QMI_ENCDEC_DECODE_U64(buf_dst, buf_src);
+			break;
+		}
+
 		rc += elem_size;
 	}
 
