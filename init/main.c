@@ -103,6 +103,7 @@
 #include <linux/randomize_kstack.h>
 #include <linux/pidfs.h>
 #include <linux/ptdump.h>
+#include <linux/multikernel.h>
 #include <net/net_namespace.h>
 
 #include <asm/io.h>
@@ -967,6 +968,7 @@ void start_kernel(void)
 	vfs_caches_init_early();
 	sort_main_extable();
 	trap_init();
+	multikernel_init();
 	mm_core_init();
 	maple_tree_init();
 	poking_init();

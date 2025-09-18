@@ -272,10 +272,7 @@ DEFINE_IDTENTRY_SYSVEC(sysvec_call_function_single)
 	trace_call_function_single_exit(CALL_FUNCTION_SINGLE_VECTOR);
 }
 
-static void generic_multikernel_interrupt(void)
-{
-	pr_info("Multikernel interrupt\n");
-}
+void generic_multikernel_interrupt(void);
 
 DEFINE_IDTENTRY_SYSVEC(sysvec_multikernel)
 {
