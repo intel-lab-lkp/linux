@@ -303,6 +303,7 @@ static int autofs_fill_super(struct super_block *s, struct fs_context *fc)
 	struct autofs_sb_info *sbi = s->s_fs_info;
 	struct inode *root_inode;
 	struct autofs_info *ino;
+	int ret = -ENOMEM;
 
 	pr_debug("starting up, sbi = %p\n", sbi);
 
@@ -319,11 +320,11 @@ static int autofs_fill_super(struct super_block *s, struct fs_context *fc)
 	 */
 	ino = autofs_new_ino(sbi);
 	if (!ino)
-		return -ENOMEM;
+		goto out;
 
 	root_inode = autofs_get_inode(s, S_IFDIR | 0755);
 	if (!root_inode)
-		return -ENOMEM;
+		goto out_free_ino;
 
 	root_inode->i_uid = ctx->uid;
 	root_inode->i_gid = ctx->gid;
@@ -332,16 +333,17 @@ static int autofs_fill_super(struct super_block *s, struct fs_context *fc)
 
 	s->s_root = d_make_root(root_inode);
 	if (unlikely(!s->s_root)) {
-		autofs_free_ino(ino);
-		return -ENOMEM;
+		goto out_free_ino;
 	}
 	s->s_root->d_fsdata = ino;
 
 	if (ctx->pgrp_set) {
 		sbi->oz_pgrp = find_get_pid(ctx->pgrp);
-		if (!sbi->oz_pgrp)
-			return invalf(fc, "Could not find process group %d",
+		if (!sbi->oz_pgrp) {
+			ret = invalf(fc, "Could not find process group %d",
 				      ctx->pgrp);
+			goto out;
+		}
 	} else
 		sbi->oz_pgrp = get_task_pid(current, PIDTYPE_PGID);
 
@@ -357,6 +359,16 @@ static int autofs_fill_super(struct super_block *s, struct fs_context *fc)
 
 	sbi->flags &= ~AUTOFS_SBI_CATATONIC;
 	return 0;
+
+out_free_ino:
+	autofs_free_ino(ino);
+out:
+	if (sbi->pipe) {
+		fput(sbi->pipe);
+		sbi->pipe = NULL;
+		sbi->pipefd = -1;
+	}
+	return ret;
 }
 
 /*
