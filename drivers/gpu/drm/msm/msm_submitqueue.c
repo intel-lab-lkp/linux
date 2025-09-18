@@ -49,10 +49,8 @@ int msm_context_set_sysprof(struct msm_context *ctx, struct msm_gpu *gpu, int sy
 	return 0;
 }
 
-void __msm_context_destroy(struct kref *kref)
+void msm_submitqueue_fini(struct msm_context *ctx)
 {
-	struct msm_context *ctx = container_of(kref,
-		struct msm_context, ref);
 	int i;
 
 	for (i = 0; i < ARRAY_SIZE(ctx->entities); i++) {
@@ -62,11 +60,6 @@ void __msm_context_destroy(struct kref *kref)
 		drm_sched_entity_destroy(ctx->entities[i]);
 		kfree(ctx->entities[i]);
 	}
-
-	drm_gpuvm_put(ctx->vm);
-	kfree(ctx->comm);
-	kfree(ctx->cmdline);
-	kfree(ctx);
 }
 
 void msm_submitqueue_destroy(struct kref *kref)
@@ -263,6 +256,9 @@ int msm_submitqueue_init(struct drm_device *drm, struct msm_context *ctx)
 {
 	struct msm_drm_private *priv = drm->dev_private;
 	int default_prio, max_priority;
+
+	INIT_LIST_HEAD(&ctx->submitqueues);
+	rwlock_init(&ctx->queuelock);
 
 	if (!priv->gpu)
 		return -ENODEV;

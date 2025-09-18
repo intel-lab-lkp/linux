@@ -95,11 +95,25 @@ vm_map_op(struct msm_gem_vm *vm, const struct msm_vm_map_op *op)
 				   op->range, op->prot);
 }
 
+#ifdef CONFIG_DRM_MSM_ADRENO
 int msm_gem_vm_sm_step_map(struct drm_gpuva_op *op, void *_arg);
 int msm_gem_vm_sm_step_remap(struct drm_gpuva_op *op, void *arg);
 int msm_gem_vm_sm_step_unmap(struct drm_gpuva_op *op, void *_arg);
 
 int msm_gem_vm_sched_init(struct msm_gem_vm *vm, struct drm_device *drm);
 void msm_gem_vm_sched_fini(struct msm_gem_vm *vm);
+#else
+
+#define msm_gem_vm_sm_step_map   NULL
+#define msm_gem_vm_sm_step_remap NULL
+#define msm_gem_vm_sm_step_unmap NULL
+
+static inline int msm_gem_vm_sched_init(struct msm_gem_vm *vm, struct drm_device *drm)
+{
+	return -EINVAL;
+}
+
+static inline void msm_gem_vm_sched_fini(struct msm_gem_vm *vm) {}
+#endif
 
 #endif

@@ -1146,3 +1146,48 @@ void msm_gpu_cleanup(struct msm_gpu *gpu)
 
 	platform_set_drvdata(gpu->pdev, NULL);
 }
+
+void msm_gpu_load(struct drm_device *dev)
+{
+	static DEFINE_MUTEX(init_lock);
+	struct msm_drm_private *priv = dev->dev_private;
+
+	mutex_lock(&init_lock);
+
+	if (!priv->gpu)
+		priv->gpu = adreno_load_gpu(dev);
+
+	mutex_unlock(&init_lock);
+}
+
+/**
+ * msm_context_vm - lazily create the context's VM
+ *
+ * @dev: the drm device
+ * @ctx: the context
+ *
+ * The VM is lazily created, so that userspace has a chance to opt-in to having
+ * a userspace managed VM before the VM is created.
+ *
+ * Note that this does not return a reference to the VM.  Once the VM is created,
+ * it exists for the lifetime of the context.
+ */
+struct drm_gpuvm *msm_context_vm(struct drm_device *dev, struct msm_context *ctx)
+{
+	static DEFINE_MUTEX(init_lock);
+	struct msm_drm_private *priv = dev->dev_private;
+
+	/* Once ctx->vm is created it is valid for the lifetime of the context: */
+	if (ctx->vm)
+		return ctx->vm;
+
+	mutex_lock(&init_lock);
+	if (!ctx->vm) {
+		ctx->vm = msm_gpu_create_private_vm(
+			priv->gpu, current, !ctx->userspace_managed_vm);
+
+	}
+	mutex_unlock(&init_lock);
+
+	return ctx->vm;
+}

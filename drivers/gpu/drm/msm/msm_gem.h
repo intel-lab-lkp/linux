@@ -68,6 +68,7 @@ struct msm_gem_vm {
 	/** @base: Inherit from drm_gpuvm. */
 	struct drm_gpuvm base;
 
+#ifdef CONFIG_DRM_MSM_ADRENO
 	/**
 	 * @sched: Scheduler used for asynchronous VM_BIND request.
 	 *
@@ -94,6 +95,7 @@ struct msm_gem_vm {
 		 */
 		atomic_t in_flight;
 	} prealloc_throttle;
+#endif
 
 	/**
 	 * @mm: Memory management for kernel managed VA allocations

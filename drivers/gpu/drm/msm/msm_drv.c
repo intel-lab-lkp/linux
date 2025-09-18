@@ -51,7 +51,11 @@ static bool modeset = true;
 MODULE_PARM_DESC(modeset, "Use kernel modesetting [KMS] (1=on (default), 0=disable)");
 module_param(modeset, bool, 0600);
 
+#ifndef CONFIG_DRM_MSM_ADRENO
+static bool separate_gpu_kms = true;
+#else
 static bool separate_gpu_kms;
+#endif
 MODULE_PARM_DESC(separate_gpu_kms, "Use separate DRM device for the GPU (0=single DRM device for both GPU and display (default), 1=two DRM devices)");
 module_param(separate_gpu_kms, bool, 0400);
 
@@ -204,53 +208,20 @@ err_put_dev:
 	return ret;
 }
 
-/*
- * DRM operations:
- */
-
-static void load_gpu(struct drm_device *dev)
+void __msm_context_destroy(struct kref *kref)
 {
-	static DEFINE_MUTEX(init_lock);
-	struct msm_drm_private *priv = dev->dev_private;
+	struct msm_context *ctx = container_of(kref, struct msm_context, ref);
 
-	mutex_lock(&init_lock);
+	msm_submitqueue_fini(ctx);
 
-	if (!priv->gpu)
-		priv->gpu = adreno_load_gpu(dev);
+	drm_gpuvm_put(ctx->vm);
 
-	mutex_unlock(&init_lock);
-}
+#ifdef CONFIG_DRM_MSM_ADRENO
+	kfree(ctx->comm);
+	kfree(ctx->cmdline);
+#endif
 
-/**
- * msm_context_vm - lazily create the context's VM
- *
- * @dev: the drm device
- * @ctx: the context
- *
- * The VM is lazily created, so that userspace has a chance to opt-in to having
- * a userspace managed VM before the VM is created.
- *
- * Note that this does not return a reference to the VM.  Once the VM is created,
- * it exists for the lifetime of the context.
- */
-struct drm_gpuvm *msm_context_vm(struct drm_device *dev, struct msm_context *ctx)
-{
-	static DEFINE_MUTEX(init_lock);
-	struct msm_drm_private *priv = dev->dev_private;
-
-	/* Once ctx->vm is created it is valid for the lifetime of the context: */
-	if (ctx->vm)
-		return ctx->vm;
-
-	mutex_lock(&init_lock);
-	if (!ctx->vm) {
-		ctx->vm = msm_gpu_create_private_vm(
-			priv->gpu, current, !ctx->userspace_managed_vm);
-
-	}
-	mutex_unlock(&init_lock);
-
-	return ctx->vm;
+	kfree(ctx);
 }
 
 static int context_init(struct drm_device *dev, struct drm_file *file)
@@ -261,9 +232,6 @@ static int context_init(struct drm_device *dev, struct drm_file *file)
 	ctx = kzalloc(sizeof(*ctx), GFP_KERNEL);
 	if (!ctx)
 		return -ENOMEM;
-
-	INIT_LIST_HEAD(&ctx->submitqueues);
-	rwlock_init(&ctx->queuelock);
 
 	kref_init(&ctx->ref);
 	msm_submitqueue_init(dev, ctx);
@@ -280,7 +248,7 @@ static int msm_open(struct drm_device *dev, struct drm_file *file)
 	/* For now, load gpu on open.. to avoid the requirement of having
 	 * firmware in the initrd.
 	 */
-	load_gpu(dev);
+	msm_gpu_load(dev);
 
 	return context_init(dev, file);
 }
@@ -307,31 +275,13 @@ static void msm_postclose(struct drm_device *dev, struct drm_file *file)
 	context_close(ctx);
 }
 
-static const struct drm_ioctl_desc msm_ioctls[] = {
-	DRM_IOCTL_DEF_DRV(MSM_GET_PARAM,    msm_ioctl_get_param,    DRM_RENDER_ALLOW),
-	DRM_IOCTL_DEF_DRV(MSM_SET_PARAM,    msm_ioctl_set_param,    DRM_RENDER_ALLOW),
-	DRM_IOCTL_DEF_DRV(MSM_GEM_NEW,      msm_ioctl_gem_new,      DRM_RENDER_ALLOW),
-	DRM_IOCTL_DEF_DRV(MSM_GEM_INFO,     msm_ioctl_gem_info,     DRM_RENDER_ALLOW),
-	DRM_IOCTL_DEF_DRV(MSM_GEM_CPU_PREP, msm_ioctl_gem_cpu_prep, DRM_RENDER_ALLOW),
-	DRM_IOCTL_DEF_DRV(MSM_GEM_CPU_FINI, msm_ioctl_gem_cpu_fini, DRM_RENDER_ALLOW),
-	DRM_IOCTL_DEF_DRV(MSM_GEM_SUBMIT,   msm_ioctl_gem_submit,   DRM_RENDER_ALLOW),
-	DRM_IOCTL_DEF_DRV(MSM_WAIT_FENCE,   msm_ioctl_wait_fence,   DRM_RENDER_ALLOW),
-	DRM_IOCTL_DEF_DRV(MSM_GEM_MADVISE,  msm_ioctl_gem_madvise,  DRM_RENDER_ALLOW),
-	DRM_IOCTL_DEF_DRV(MSM_SUBMITQUEUE_NEW,   msm_ioctl_submitqueue_new,   DRM_RENDER_ALLOW),
-	DRM_IOCTL_DEF_DRV(MSM_SUBMITQUEUE_CLOSE, msm_ioctl_submitqueue_close, DRM_RENDER_ALLOW),
-	DRM_IOCTL_DEF_DRV(MSM_SUBMITQUEUE_QUERY, msm_ioctl_submitqueue_query, DRM_RENDER_ALLOW),
-	DRM_IOCTL_DEF_DRV(MSM_VM_BIND,      msm_ioctl_vm_bind,      DRM_RENDER_ALLOW),
-};
-
 static void msm_show_fdinfo(struct drm_printer *p, struct drm_file *file)
 {
 	struct drm_device *dev = file->minor->dev;
 	struct msm_drm_private *priv = dev->dev_private;
 
-	if (!priv->gpu)
-		return;
-
-	msm_gpu_show_fdinfo(priv->gpu, file->driver_priv, p);
+	if (priv->gpu)
+		msm_gpu_show_fdinfo(priv->gpu, file->driver_priv, p);
 
 	drm_show_memory_stats(p, file);
 }
@@ -357,6 +307,23 @@ static const struct file_operations fops = {
 		DRIVER_MODESET | \
 		0 )
 
+#ifdef CONFIG_DRM_MSM_ADRENO
+static const struct drm_ioctl_desc msm_ioctls[] = {
+	DRM_IOCTL_DEF_DRV(MSM_GET_PARAM,    msm_ioctl_get_param,    DRM_RENDER_ALLOW),
+	DRM_IOCTL_DEF_DRV(MSM_SET_PARAM,    msm_ioctl_set_param,    DRM_RENDER_ALLOW),
+	DRM_IOCTL_DEF_DRV(MSM_GEM_NEW,      msm_ioctl_gem_new,      DRM_RENDER_ALLOW),
+	DRM_IOCTL_DEF_DRV(MSM_GEM_INFO,     msm_ioctl_gem_info,     DRM_RENDER_ALLOW),
+	DRM_IOCTL_DEF_DRV(MSM_GEM_CPU_PREP, msm_ioctl_gem_cpu_prep, DRM_RENDER_ALLOW),
+	DRM_IOCTL_DEF_DRV(MSM_GEM_CPU_FINI, msm_ioctl_gem_cpu_fini, DRM_RENDER_ALLOW),
+	DRM_IOCTL_DEF_DRV(MSM_GEM_SUBMIT,   msm_ioctl_gem_submit,   DRM_RENDER_ALLOW),
+	DRM_IOCTL_DEF_DRV(MSM_WAIT_FENCE,   msm_ioctl_wait_fence,   DRM_RENDER_ALLOW),
+	DRM_IOCTL_DEF_DRV(MSM_GEM_MADVISE,  msm_ioctl_gem_madvise,  DRM_RENDER_ALLOW),
+	DRM_IOCTL_DEF_DRV(MSM_SUBMITQUEUE_NEW,   msm_ioctl_submitqueue_new,   DRM_RENDER_ALLOW),
+	DRM_IOCTL_DEF_DRV(MSM_SUBMITQUEUE_CLOSE, msm_ioctl_submitqueue_close, DRM_RENDER_ALLOW),
+	DRM_IOCTL_DEF_DRV(MSM_SUBMITQUEUE_QUERY, msm_ioctl_submitqueue_query, DRM_RENDER_ALLOW),
+	DRM_IOCTL_DEF_DRV(MSM_VM_BIND,      msm_ioctl_vm_bind,      DRM_RENDER_ALLOW),
+};
+
 static const struct drm_driver msm_driver = {
 	.driver_features    = DRIVER_FEATURES_GPU | DRIVER_FEATURES_KMS,
 	.open               = msm_open,
@@ -380,6 +347,26 @@ static const struct drm_driver msm_driver = {
 	.patchlevel         = MSM_VERSION_PATCHLEVEL,
 };
 
+static const struct drm_driver msm_gpu_driver = {
+	.driver_features    = DRIVER_FEATURES_GPU,
+	.open               = msm_open,
+	.postclose          = msm_postclose,
+	.gem_prime_import_sg_table = msm_gem_prime_import_sg_table,
+#ifdef CONFIG_DEBUG_FS
+	.debugfs_init       = msm_debugfs_init,
+#endif
+	.show_fdinfo        = msm_show_fdinfo,
+	.ioctls             = msm_ioctls,
+	.num_ioctls         = ARRAY_SIZE(msm_ioctls),
+	.fops               = &fops,
+	.name               = "msm",
+	.desc               = "MSM Snapdragon DRM",
+	.major              = MSM_VERSION_MAJOR,
+	.minor              = MSM_VERSION_MINOR,
+	.patchlevel         = MSM_VERSION_PATCHLEVEL,
+};
+#endif
+
 static const struct drm_driver msm_kms_driver = {
 	.driver_features    = DRIVER_FEATURES_KMS,
 	.open               = msm_open,
@@ -394,25 +381,6 @@ static const struct drm_driver msm_kms_driver = {
 	.show_fdinfo        = msm_show_fdinfo,
 	.fops               = &fops,
 	.name               = "msm-kms",
-	.desc               = "MSM Snapdragon DRM",
-	.major              = MSM_VERSION_MAJOR,
-	.minor              = MSM_VERSION_MINOR,
-	.patchlevel         = MSM_VERSION_PATCHLEVEL,
-};
-
-static const struct drm_driver msm_gpu_driver = {
-	.driver_features    = DRIVER_FEATURES_GPU,
-	.open               = msm_open,
-	.postclose          = msm_postclose,
-	.gem_prime_import_sg_table = msm_gem_prime_import_sg_table,
-#ifdef CONFIG_DEBUG_FS
-	.debugfs_init       = msm_debugfs_init,
-#endif
-	.show_fdinfo        = msm_show_fdinfo,
-	.ioctls             = msm_ioctls,
-	.num_ioctls         = ARRAY_SIZE(msm_ioctls),
-	.fops               = &fops,
-	.name               = "msm",
 	.desc               = "MSM Snapdragon DRM",
 	.major              = MSM_VERSION_MAJOR,
 	.minor              = MSM_VERSION_MINOR,
@@ -511,6 +479,7 @@ bool msm_disp_drv_should_bind(struct device *dev, bool dpu_driver)
 }
 #endif
 
+#ifdef CONFIG_DRM_MSM_ADRENO
 /*
  * We don't know what's the best binding to link the gpu with the drm device.
  * Fow now, we just hunt for all the possible gpus that we support, and add them
@@ -549,6 +518,12 @@ static int msm_drm_bind(struct device *dev)
 				    &msm_driver,
 			    NULL);
 }
+#else
+static int msm_drm_bind(struct device *dev)
+{
+	return msm_drm_init(dev, &msm_kms_driver, NULL);
+}
+#endif
 
 static void msm_drm_unbind(struct device *dev)
 {
@@ -583,11 +558,13 @@ int msm_drv_probe(struct device *master_dev,
 			return ret;
 	}
 
+#ifdef CONFIG_DRM_MSM_ADRENO
 	if (!msm_gpu_no_components()) {
 		ret = add_gpu_components(master_dev, &match);
 		if (ret)
 			return ret;
 	}
+#endif
 
 	/* on all devices that I am aware of, iommu's which can map
 	 * any address the cpu can see are used:
@@ -603,6 +580,7 @@ int msm_drv_probe(struct device *master_dev,
 	return 0;
 }
 
+#ifdef CONFIG_DRM_MSM_ADRENO
 int msm_gpu_probe(struct platform_device *pdev,
 		  const struct component_ops *ops)
 {
@@ -630,6 +608,7 @@ void msm_gpu_remove(struct platform_device *pdev,
 {
 	msm_drm_uninit(&pdev->dev, ops);
 }
+#endif
 
 static int __init msm_drm_register(void)
 {

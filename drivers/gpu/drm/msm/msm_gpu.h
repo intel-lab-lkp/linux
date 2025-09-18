@@ -345,20 +345,6 @@ struct msm_gpu_perfcntr {
  * struct msm_context - per-drm_file context
  */
 struct msm_context {
-	/** @queuelock: synchronizes access to submitqueues list */
-	rwlock_t queuelock;
-
-	/** @submitqueues: list of &msm_gpu_submitqueue created by userspace */
-	struct list_head submitqueues;
-
-	/**
-	 * @queueid:
-	 *
-	 * Counter incremented each time a submitqueue is created, used to
-	 * assign &msm_gpu_submitqueue.id
-	 */
-	int queueid;
-
 	/**
 	 * @closed: The device file associated with this context has been closed.
 	 *
@@ -394,6 +380,20 @@ struct msm_context {
 	 * pointer to the previous context.
 	 */
 	int seqno;
+#ifdef CONFIG_DRM_MSM_ADRENO
+	/** @queuelock: synchronizes access to submitqueues list */
+	rwlock_t queuelock;
+
+	/** @submitqueues: list of &msm_gpu_submitqueue created by userspace */
+	struct list_head submitqueues;
+
+	/**
+	 * @queueid:
+	 *
+	 * Counter incremented each time a submitqueue is created, used to
+	 * assign &msm_gpu_submitqueue.id
+	 */
+	int queueid;
 
 	/**
 	 * @sysprof:
@@ -455,6 +455,7 @@ struct msm_context {
 	 * level.
 	 */
 	struct drm_sched_entity *entities[NR_SCHED_PRIORITIES * MSM_GPU_MAX_RINGS];
+#endif
 
 	/**
 	 * @ctx_mem:
@@ -613,6 +614,7 @@ struct msm_gpu_state {
 	struct msm_gpu_state_bo *bos;
 };
 
+#ifdef CONFIG_DRM_MSM_ADRENO
 static inline void gpu_write(struct msm_gpu *gpu, u32 reg, u32 data)
 {
 	trace_msm_gpu_regaccess(reg);
@@ -673,6 +675,7 @@ void msm_gpu_show_fdinfo(struct msm_gpu *gpu, struct msm_context *ctx,
 			 struct drm_printer *p);
 
 int msm_submitqueue_init(struct drm_device *drm, struct msm_context *ctx);
+void msm_submitqueue_fini(struct msm_context *ctx);
 struct msm_gpu_submitqueue *msm_submitqueue_get(struct msm_context *ctx,
 		u32 id);
 int msm_submitqueue_create(struct drm_device *drm,
@@ -688,6 +691,44 @@ void msm_submitqueue_destroy(struct kref *kref);
 int msm_context_set_sysprof(struct msm_context *ctx, struct msm_gpu *gpu, int sysprof);
 void __msm_context_destroy(struct kref *kref);
 
+static inline void msm_submitqueue_put(struct msm_gpu_submitqueue *queue)
+{
+	if (queue)
+		kref_put(&queue->ref, msm_submitqueue_destroy);
+}
+
+int msm_context_set_sysprof(struct msm_context *ctx,
+				 struct msm_gpu *gpu, int sysprof);
+#else
+static inline void msm_gpu_show_fdinfo(struct msm_gpu *gpu,
+				       struct msm_context *ctx,
+				       struct drm_printer *p)
+{
+}
+
+static inline int msm_submitqueue_init(struct drm_device *drm, struct msm_context *ctx)
+{
+	return -ENXIO;
+}
+
+static inline void msm_submitqueue_fini(struct msm_context *ctx)
+{
+}
+
+static inline void msm_submitqueue_close(struct msm_context *ctx)
+{
+}
+
+static inline int msm_context_set_sysprof(struct msm_context *ctx,
+					       struct msm_gpu *gpu,
+					       int sysprof)
+{
+	return 0;
+}
+#endif
+
+void __msm_context_destroy(struct kref *kref);
+
 static inline void msm_context_put(struct msm_context *ctx)
 {
 	kref_put(&ctx->ref, __msm_context_destroy);
@@ -700,6 +741,7 @@ static inline struct msm_context *msm_context_get(
 	return ctx;
 }
 
+#ifdef CONFIG_DRM_MSM_ADRENO
 void msm_devfreq_init(struct msm_gpu *gpu);
 void msm_devfreq_cleanup(struct msm_gpu *gpu);
 void msm_devfreq_resume(struct msm_gpu *gpu);
@@ -726,18 +768,13 @@ struct drm_gpuvm *
 msm_gpu_create_private_vm(struct msm_gpu *gpu, struct task_struct *task,
 			  bool kernel_managed);
 
+void msm_gpu_load(struct drm_device *dev);
 void msm_gpu_cleanup(struct msm_gpu *gpu);
 
 struct msm_gpu *adreno_load_gpu(struct drm_device *dev);
 bool adreno_has_gpu(struct device_node *node);
 void __init adreno_register(void);
 void __exit adreno_unregister(void);
-
-static inline void msm_submitqueue_put(struct msm_gpu_submitqueue *queue)
-{
-	if (queue)
-		kref_put(&queue->ref, msm_submitqueue_destroy);
-}
 
 static inline struct msm_gpu_state *msm_gpu_crashstate_get(struct msm_gpu *gpu)
 {
@@ -776,5 +813,39 @@ void msm_gpu_fault_crashstate_capture(struct msm_gpu *gpu, struct msm_gpu_fault_
 #define check_apriv(gpu, flags) \
 	(((gpu)->hw_apriv ? MSM_BO_MAP_PRIV : 0) | (flags))
 
+#else /* ! CONFIG_DRM_MSM_ADRENO */
+static inline void __init adreno_register(void)
+{
+}
+
+static inline void __exit adreno_unregister(void)
+{
+}
+
+static inline void msm_gpu_load(struct drm_device *dev)
+{
+}
+#endif /* ! CONFIG_DRM_MSM_ADRENO */
+
+#if defined(CONFIG_DEBUG_FS) && defined(CONFIG_DRM_MSM_ADRENO)
+void msm_gpu_debugfs_init(struct drm_minor *minor);
+void msm_gpu_debugfs_late_init(struct drm_device *dev);
+int msm_rd_debugfs_init(struct drm_minor *minor);
+void msm_rd_debugfs_cleanup(struct msm_drm_private *priv);
+__printf(3, 4)
+void msm_rd_dump_submit(struct msm_rd_state *rd, struct msm_gem_submit *submit,
+		const char *fmt, ...);
+int msm_perf_debugfs_init(struct drm_minor *minor);
+void msm_perf_debugfs_cleanup(struct msm_drm_private *priv);
+#else
+static inline void msm_gpu_debugfs_init(struct drm_minor *minor) {}
+static inline void msm_gpu_debugfs_late_init(struct drm_device *dev) {}
+__printf(3, 4)
+static inline void msm_rd_dump_submit(struct msm_rd_state *rd,
+			struct msm_gem_submit *submit,
+			const char *fmt, ...) {}
+static inline void msm_rd_debugfs_cleanup(struct msm_drm_private *priv) {}
+static inline void msm_perf_debugfs_cleanup(struct msm_drm_private *priv) {}
+#endif
 
 #endif /* __MSM_GPU_H__ */
