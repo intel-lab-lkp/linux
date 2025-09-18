@@ -625,6 +625,8 @@ static void sbdma_initctx(struct sbmacdma *d, struct sbmac_softc *s, int chan,
 	d->sbdma_dscrtable_unaligned = kcalloc(d->sbdma_maxdescr + 1,
 					       sizeof(*d->sbdma_dscrtable),
 					       GFP_KERNEL);
+	if (!d->sbdma_dscrtable_unaligned)
+		return;		/* avoid NULL deref in ALIGN/phys conversion */
 
 	/*
 	 * The descriptor table must be aligned to at least 16 bytes or the
@@ -644,7 +646,11 @@ static void sbdma_initctx(struct sbmacdma *d, struct sbmac_softc *s, int chan,
 
 	d->sbdma_ctxtable = kcalloc(d->sbdma_maxdescr,
 				    sizeof(*d->sbdma_ctxtable), GFP_KERNEL);
-
+	if (!d->sbdma_ctxtable) {
+		kfree(d->sbdma_dscrtable_unaligned);
+		d->sbdma_dscrtable_unaligned = NULL;
+		return;
+	}
 #ifdef CONFIG_SBMAC_COALESCE
 	/*
 	 * Setup Rx/Tx DMA coalescing defaults
