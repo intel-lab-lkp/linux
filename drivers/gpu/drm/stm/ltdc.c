@@ -779,7 +779,8 @@ static void ltdc_crtc_atomic_enable(struct drm_crtc *crtc,
 
 	drm_dbg_driver(crtc->dev, "\n");
 
-	pm_runtime_get_sync(ddev->dev);
+	if (pm_runtime_resume_and_get(ddev->dev))
+		return;
 
 	/* Sets the background color value */
 	regmap_write(ldev->regmap, LTDC_BCCR, BCCR_BCBLACK);
@@ -941,7 +942,7 @@ static void ltdc_crtc_mode_set_nofb(struct drm_crtc *crtc)
 	}
 
 	if (!pm_runtime_active(ddev->dev)) {
-		ret = pm_runtime_get_sync(ddev->dev);
+		ret = pm_runtime_resume_and_get(ddev->dev);
 		if (ret) {
 			drm_err(crtc->dev, "Failed to set mode, cannot get sync\n");
 			return;
