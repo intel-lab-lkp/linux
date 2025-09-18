@@ -180,6 +180,15 @@ extern "C" {
 /* Set PTE.D and recompress during GTT->VRAM moves according to TILING flags. */
 #define AMDGPU_GEM_CREATE_GFX12_DCC		(1 << 16)
 
+/* Prioritize allocation latency or high-order allocations that favor
+ * throughput */
+#define AMDGPU_GEM_OVERRIDE_ALLOCATION_SHIFT	(17)
+#define AMDGPU_GEM_ALLOCATION_DEFAULT		(0 << AMDGPU_GEM_OVERRIDE_ALLOCATION_SHIFT)
+#define AMDGPU_GEM_ALLOCATION_LATENCY		(2 << AMDGPU_GEM_OVERRIDE_ALLOCATION_SHIFT)
+#define AMDGPU_GEM_ALLOCATION_THROUGHPUT	(3 << AMDGPU_GEM_OVERRIDE_ALLOCATION_SHIFT)
+#define AMDGPU_GEM_ALLOCATION_MASK		(3 << AMDGPU_GEM_OVERRIDE_ALLOCATION_SHIFT)
+#define AMDGPU_GEM_ALLOCATION(flags)		((flags & AMDGPU_GEM_ALLOCATION_MASK) >> AMDGPU_GEM_OVERRIDE_ALLOCATION_SHIFT)
+
 struct drm_amdgpu_gem_create_in  {
 	/** the requested memory size */
 	__u64 bo_size;

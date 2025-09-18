@@ -632,7 +632,8 @@ int amdgpu_bo_create(struct amdgpu_device *adev,
 		/* We opt to avoid OOM on system pages allocations */
 		.gfp_retry_mayfail = true,
 		.allow_res_evict = bp->type != ttm_bo_type_kernel,
-		.resv = bp->resv
+		.resv = bp->resv,
+		.alloc_method = AMDGPU_GEM_ALLOCATION(bp->flags)
 	};
 	struct amdgpu_bo *bo;
 	unsigned long page_align, size = bp->size;
