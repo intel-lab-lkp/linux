@@ -386,6 +386,12 @@ static noinline int i2cdev_ioctl_smbus(struct i2c_client *client,
 		if (read_write == I2C_SMBUS_READ)
 			temp.block[0] = I2C_SMBUS_BLOCK_MAX;
 	}
+
+	if (temp.block[0] > I2C_SMBUS_BLOCK_MAX) {
+		dev_dbg(&client->adapter->dev, "block[0] out of range in ioctl I2C_SMBUS.\n");
+		return -EINVAL;
+	}
+
 	res = i2c_smbus_xfer(client->adapter, client->addr, client->flags,
 	      read_write, command, size, &temp);
 	if (!res && ((size == I2C_SMBUS_PROC_CALL) ||
