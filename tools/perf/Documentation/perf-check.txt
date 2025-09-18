@@ -11,6 +11,7 @@ SYNOPSIS
 'perf check' [<options>]
 'perf check' {feature <feature_list>} [<options>]
 'perf check' {system <setting_list>} [<options>]
+'perf check' {pmu <name_list>} [<options>]
 
 DESCRIPTION
 -----------
@@ -25,6 +26,9 @@ is built-in, otherwise returns with exit status 1.
 
 If the subcommand 'system' is used, then system settins are printed on
 the standard output with explanation.
+
+If the subcommand 'pmu' is used, then available PMU information is printed
+on the standard output with explanation.
 
 SUBCOMMANDS
 -----------
@@ -87,6 +91,14 @@ system::
 		perf_event_mlock_kb
 		nmi_watchdog
 		kptr_restrict
+
+pmu::
+
+	Print PMU information available in the system.
+
+	Example Usage:
+		perf check pmu
+		perf check pmu <name>
 
 
 OPTIONS

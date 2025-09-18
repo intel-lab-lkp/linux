@@ -3,6 +3,8 @@
 #include "color.h"
 #include "util/debug.h"
 #include "util/header.h"
+#include "util/pmu.h"
+#include "util/pmus.h"
 #include <api/fs/fs.h>
 #include <tools/config.h>
 #include <stdbool.h>
@@ -10,13 +12,14 @@
 #include <string.h>
 #include <subcmd/parse-options.h>
 
-static const char * const check_subcommands[] = { "feature", "system", NULL };
+static const char * const check_subcommands[] = { "feature", "system", "pmu", NULL };
 static struct option check_options[] = {
 	OPT_BOOLEAN('q', "quiet", &quiet, "do not show any warnings or messages"),
 	OPT_END()
 };
 static struct option check_feature_options[] = { OPT_PARENT(check_options) };
 static struct option check_system_options[] = { OPT_PARENT(check_options) };
+static struct option check_pmu_options[] = { OPT_PARENT(check_options) };
 
 static const char *check_usage[] = { NULL, NULL };
 static const char *check_feature_usage[] = {
@@ -25,6 +28,10 @@ static const char *check_feature_usage[] = {
 };
 static const char *check_system_usage[] = {
 	"perf check system",
+	NULL
+};
+static const char *check_pmu_usage[] = {
+	"perf check pmu",
 	NULL
 };
 
@@ -278,6 +285,55 @@ static int subcommand_system(int argc, const char **argv)
 	return 0;
 }
 
+/**
+ * Usage: 'perf check pmu <names>'
+ *
+ * Show PMU information.
+ */
+static int subcommand_pmu(int argc, const char **argv)
+{
+	struct perf_pmu *pmu = NULL;
+	struct perf_pmu_caps *caps;
+
+	argc = parse_options(argc, argv, check_pmu_options, check_pmu_usage, 0);
+
+	while ((pmu = perf_pmus__scan(pmu)) != NULL) {
+		if (argc) {
+			bool found = false;
+
+			/* only show entries match to command line arguments */
+			for (int k = 0; k < argc; k++) {
+				if (strstr(pmu->name, argv[k])) {
+					found = true;
+					break;
+				}
+			}
+			if (!found)
+				continue;
+		}
+
+		printf("%s: type = %u\n", pmu->name, pmu->type);
+		if (quiet)
+			continue;
+
+		if (pmu->is_core || pmu->is_uncore) {
+			printf("  %score PMU", pmu->is_uncore ? "un" : "");
+			if (!perf_cpu_map__is_empty(pmu->cpus)) {
+				printf(": %s = ", pmu->is_core ? "cpus" : "cpumask");
+				cpu_map__fprintf(pmu->cpus, stdout);
+			} else {
+				printf("\n");
+			}
+		}
+
+		perf_pmu__caps_parse(pmu);
+		list_for_each_entry(caps, &pmu->caps, list) {
+			printf("  caps: %s = %s\n", caps->name, caps->value);
+		}
+	}
+	return 0;
+}
+
 int cmd_check(int argc, const char **argv)
 {
 	argc = parse_options_subcommand(argc, argv, check_options,
@@ -290,6 +346,8 @@ int cmd_check(int argc, const char **argv)
 		return subcommand_feature(argc, argv);
 	if (strcmp(argv[0], "system") == 0)
 		return subcommand_system(argc, argv);
+	if (strcmp(argv[0], "pmu") == 0)
+		return subcommand_pmu(argc, argv);
 
 	/* If no subcommand matched above, print usage help */
 	pr_err("Unknown subcommand: %s\n", argv[0]);
