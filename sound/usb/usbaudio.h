@@ -168,6 +168,8 @@ extern char *quirk_flags[SNDRV_CARDS];
 extern bool snd_usb_use_vmalloc;
 extern bool snd_usb_skip_validation;
 
+extern struct mutex quirk_flags_mutex;
+
 /*
  * Driver behavior quirk flags, stored in chip->quirk_flags
  *

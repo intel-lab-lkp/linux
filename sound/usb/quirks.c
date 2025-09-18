@@ -2548,6 +2548,8 @@ void snd_usb_init_quirk_flags(int idx, struct snd_usb_audio *chip)
 	u16 vid, pid;
 	size_t i;
 
+	mutex_lock(&quirk_flags_mutex);
+
 	/* old style option found: the position-based integer value */
 	if (quirk_flags[idx] &&
 	    !kstrtou32(quirk_flags[idx], 0, &chip->quirk_flags)) {
@@ -2556,7 +2558,7 @@ void snd_usb_init_quirk_flags(int idx, struct snd_usb_audio *chip)
 			      chip->quirk_flags, idx,
 			      USB_ID_VENDOR(chip->usb_id),
 			      USB_ID_PRODUCT(chip->usb_id));
-		return;
+		goto unlock;
 	}
 
 	/* take the default quirk from the quirk table */
@@ -2571,7 +2573,7 @@ void snd_usb_init_quirk_flags(int idx, struct snd_usb_audio *chip)
 
 		if (!val) {
 			pr_err("snd_usb_audio: Error allocating memory while parsing quirk_flags\n");
-			return;
+			goto unlock;
 		}
 
 		for (p = val; p && *p;) {
@@ -2653,4 +2655,7 @@ void snd_usb_init_quirk_flags(int idx, struct snd_usb_audio *chip)
 
 		kfree(val);
 	}
+
+unlock:
+	mutex_unlock(&quirk_flags_mutex);
 }
