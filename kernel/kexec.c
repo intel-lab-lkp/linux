@@ -16,6 +16,7 @@
 #include <linux/syscalls.h>
 #include <linux/vmalloc.h>
 #include <linux/slab.h>
+#include <linux/memblock.h>
 
 #include "kexec_internal.h"
 
@@ -27,6 +28,7 @@ static int kimage_alloc_init(struct kimage **rimage, unsigned long entry,
 	int ret;
 	struct kimage *image;
 	bool kexec_on_panic = flags & KEXEC_ON_CRASH;
+	bool multikernel_load = flags & KEXEC_MULTIKERNEL;
 
 #ifdef CONFIG_CRASH_DUMP
 	if (kexec_on_panic) {
@@ -34,6 +36,30 @@ static int kimage_alloc_init(struct kimage **rimage, unsigned long entry,
 		if ((entry < phys_to_boot_phys(crashk_res.start)) ||
 		    (entry > phys_to_boot_phys(crashk_res.end)))
 			return -EADDRNOTAVAIL;
+	}
+#endif
+
+#if 0
+	if (multikernel_load) {
+		// Check if entry is in a reserved memory region
+		bool in_reserved_region = false;
+		phys_addr_t start, end;
+		u64 i;
+
+		for_each_reserved_mem_range(i, &start, &end) {
+			if (entry >= start && entry < end) {
+				in_reserved_region = true;
+				break;
+			}
+		}
+
+		if (!in_reserved_region) {
+			pr_err("Entry point 0x%lx is not in a reserved memory region\n", entry);
+			return -EADDRNOTAVAIL; // Return an error if not in a reserved region
+		}
+
+		pr_info("multikernel load: got to multikernel_load syscall, entry 0x%lx, nr_segments %lu, flags 0x%lx\n",
+			entry, nr_segments, flags);
 	}
 #endif
 
@@ -54,10 +80,16 @@ static int kimage_alloc_init(struct kimage **rimage, unsigned long entry,
 	}
 #endif
 
+	if (multikernel_load) {
+		image->type = KEXEC_TYPE_MULTIKERNEL;
+	}
+
 	ret = sanity_check_segment_list(image);
 	if (ret)
 		goto out_free_image;
 
+	if (multikernel_load)
+		goto done;
 	/*
 	 * Find a location for the control code buffer, and add it
 	 * the vector of segments so that it's pages will also be
@@ -79,6 +111,7 @@ static int kimage_alloc_init(struct kimage **rimage, unsigned long entry,
 		}
 	}
 
+done:
 	*rimage = image;
 	return 0;
 out_free_control_pages:
@@ -139,9 +172,11 @@ static int do_kexec_load(unsigned long entry, unsigned long nr_segments,
 		image->hotplug_support = 1;
 #endif
 
-	ret = machine_kexec_prepare(image);
-	if (ret)
-		goto out;
+	if (!(flags & KEXEC_MULTIKERNEL)) {
+		ret = machine_kexec_prepare(image);
+		if (ret)
+			goto out;
+	}
 
 	/*
 	 * Some architecture(like S390) may touch the crash memory before
