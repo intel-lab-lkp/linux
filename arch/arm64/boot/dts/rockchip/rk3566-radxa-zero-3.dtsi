@@ -488,21 +488,29 @@
 	status = "okay";
 };
 
+&uart1 {
+	dma-names = "tx", "rx";
+};
+
 &uart2 {
+	dma-names = "tx", "rx";
 	status = "okay";
 };
 
 &uart4{
+	dma-names = "tx", "rx";
 	pinctrl-names = "default";
 	pinctrl-0 = <&uart4m1_xfer>;
 };
 
 &uart5 {
+	dma-names = "tx", "rx";
 	pinctrl-names = "default";
 	pinctrl-0 = <&uart5m1_xfer>;
 };
 
 &uart9 {
+	dma-names = "tx", "rx";
 	pinctrl-names = "default";
 	pinctrl-0 = <&uart9m1_xfer>;
 };
