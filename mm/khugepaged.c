@@ -1306,6 +1306,16 @@ static int hpage_collapse_scan_pmd(struct mm_struct *mm,
 					result = SCAN_PTE_UFFD_WP;
 					goto out_unmap;
 				}
+				/*
+				 * Guard PTE markers are installed by
+				 * MADV_GUARD_INSTALL. Any collapse path must
+				 * not touch them, so abort the scan immediately
+				 * if one is found.
+				 */
+				if (is_guard_pte_marker(pteval)) {
+					result = SCAN_PTE_NON_PRESENT;
+					goto out_unmap;
+				}
 				continue;
 			} else {
 				result = SCAN_EXCEED_SWAP_PTE;
