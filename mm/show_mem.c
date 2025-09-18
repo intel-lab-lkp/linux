@@ -26,7 +26,7 @@ unsigned long totalcma_pages __read_mostly;
 static inline void show_node(struct zone *zone)
 {
 	if (IS_ENABLED(CONFIG_NUMA))
-		printk("Node %d ", zone_to_nid(zone));
+		pr_info("Node %d ", zone_to_nid(zone));
 }
 
 long si_mem_available(void)
@@ -156,7 +156,7 @@ static void show_migration_types(unsigned char type)
 	}
 
 	*p = '\0';
-	printk(KERN_CONT "(%s) ", tmp);
+	pr_cont("(%s) ", tmp);
 }
 
 static bool node_has_managed_zones(pg_data_t *pgdat, int max_zone_idx)
