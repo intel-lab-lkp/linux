@@ -1,0 +1,14 @@
+# SPDX-License-Identifier: GPL-2.0-only
+config CLK_RDA8810
+	bool "RDA Micro RDA8810PL Clock and Reset Controller"
+	depends on ARCH_RDA || COMPILE_TEST
+	select MFD_SYSCON
+	select REGMAP_MMIO
+	select RESET_CONTROLLER
+	help
+	  This driver supports clock and reset for RDA Micro RDA8810 platform.
+	  If you have a board with the RDA8810PL SoC, say Y to use most of the
+	  board peripherals.
+
+	  If unsure, say N.
+
