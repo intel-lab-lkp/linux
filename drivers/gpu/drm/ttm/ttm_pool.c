@@ -133,7 +133,8 @@ static DECLARE_RWSEM(pool_shrink_rwsem);
 
 /* Allocate pages of size 1 << order with the given gfp_flags */
 static struct page *ttm_pool_alloc_page(struct ttm_pool *pool, gfp_t gfp_flags,
-					unsigned int order)
+					unsigned int order,
+					const struct ttm_operation_ctx *ctx)
 {
 	unsigned long attr = DMA_ATTR_FORCE_CONTIGUOUS;
 	struct ttm_pool_dma *dma;
@@ -144,9 +145,12 @@ static struct page *ttm_pool_alloc_page(struct ttm_pool *pool, gfp_t gfp_flags,
 	 * Mapping pages directly into an userspace process and calling
 	 * put_page() on a TTM allocated page is illegal.
 	 */
-	if (order)
+	if (order) {
 		gfp_flags |= __GFP_NOMEMALLOC | __GFP_NORETRY | __GFP_NOWARN |
 			__GFP_THISNODE;
+		if (ctx->alloc_method == ttm_op_alloc_latency)
+			gfp_flags &= ~__GFP_DIRECT_RECLAIM;
+	}
 
 	if (!pool->use_dma_alloc) {
 		p = alloc_pages_node(pool->nid, gfp_flags, order);
@@ -745,7 +749,7 @@ static int __ttm_pool_alloc(struct ttm_pool *pool, struct ttm_tt *tt,
 		if (!p) {
 			page_caching = ttm_cached;
 			allow_pools = false;
-			p = ttm_pool_alloc_page(pool, gfp_flags, order);
+			p = ttm_pool_alloc_page(pool, gfp_flags, order, ctx);
 		}
 		/* If that fails, lower the order if possible and retry. */
 		if (!p) {
@@ -815,7 +819,6 @@ int ttm_pool_alloc(struct ttm_pool *pool, struct ttm_tt *tt,
 		return -EINVAL;
 
 	ttm_pool_alloc_state_init(tt, &alloc);
-
 	return __ttm_pool_alloc(pool, tt, ctx, &alloc, NULL);
 }
 EXPORT_SYMBOL(ttm_pool_alloc);

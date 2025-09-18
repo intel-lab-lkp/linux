@@ -184,6 +184,11 @@ struct ttm_operation_ctx {
 	bool no_wait_gpu;
 	bool gfp_retry_mayfail;
 	bool allow_res_evict;
+	enum {
+		ttm_op_alloc_default = 0,
+		ttm_op_alloc_latency = 2,
+		ttm_op_alloc_throughput = 3,
+	} alloc_method;
 	struct dma_resv *resv;
 	uint64_t bytes_moved;
 };
