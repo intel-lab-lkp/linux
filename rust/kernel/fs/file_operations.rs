@@ -14,7 +14,7 @@ use crate::{
     miscdevice::MiscDeviceRegistration,
     mm::virt::VmaNew,
     seq_file::SeqFile,
-    types::ForeignOwnable,
+    types::ForeignOwnable, uaccess::{UserSliceReader, UserSliceWriter},
 };
 
 /// Trait implemented by the private data of an open misc device.
@@ -22,6 +22,24 @@ use crate::{
 pub trait FileOperations: Sized {
     /// What kind of pointer should `Self` be wrapped in.
     type Ptr: ForeignOwnable + Send + Sync;
+
+    /// Handler for read.
+    fn read(
+        _device: <Self::Ptr as ForeignOwnable>::Borrowed<'_>,
+        _buf: UserSliceWriter,
+        _offset: &mut i64,
+    ) -> Result<i64> {
+        build_error!(VTABLE_DEFAULT_ERROR)
+    }
+
+    /// Handler for write.
+    fn write(
+        _device: <Self::Ptr as ForeignOwnable>::Borrowed<'_>,
+        mut _buf: UserSliceReader,
+        _offset: &mut i64,
+    ) -> Result<i64> {
+        build_error!(VTABLE_DEFAULT_ERROR)
+    }
 
     /// Called when the misc device is opened.
     ///
