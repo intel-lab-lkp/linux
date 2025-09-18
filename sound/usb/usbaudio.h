@@ -7,6 +7,8 @@
  *   Copyright (c) 2002 by Takashi Iwai <tiwai@suse.de>
  */
 
+ #include <sound/core.h>
+
 /* handling of USB vendor/product ID pairs as 32-bit numbers */
 #define USB_ID(vendor, product) (((unsigned int)(vendor) << 16) | (product))
 #define USB_ID_VENDOR(id) ((id) >> 16)
@@ -162,6 +164,7 @@ DEFINE_CLASS(snd_usb_lock, struct __snd_usb_lock,
 	     __snd_usb_unlock_shutdown(&(_T)), __snd_usb_lock_shutdown(chip),
 	     struct snd_usb_audio *chip)
 
+extern char *quirk_flags[SNDRV_CARDS];
 extern bool snd_usb_use_vmalloc;
 extern bool snd_usb_skip_validation;
 

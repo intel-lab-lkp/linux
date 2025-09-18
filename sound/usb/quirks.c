@@ -2502,7 +2502,7 @@ u32 snd_usb_quirk_flags_from_name(char *name)
 	return flag;
 }
 
-void snd_usb_init_quirk_flags(struct snd_usb_audio *chip)
+void snd_usb_init_quirk_flags_table(struct snd_usb_audio *chip)
 {
 	const struct usb_audio_quirk_flags_table *p;
 
@@ -2535,5 +2535,122 @@ void snd_usb_init_quirk_flags(struct snd_usb_audio *chip)
 			chip->quirk_flags |= p->flags;
 			return;
 		}
+	}
+}
+
+void snd_usb_init_quirk_flags(int idx, struct snd_usb_audio *chip)
+{
+	u16 chip_vid = USB_ID_VENDOR(chip->usb_id);
+	u16 chip_pid = USB_ID_PRODUCT(chip->usb_id);
+	u32 mask_flags, unmask_flags, bit;
+	char *val, *p, *field, *flag;
+	bool is_unmask;
+	u16 vid, pid;
+	size_t i;
+
+	/* old style option found: the position-based integer value */
+	if (quirk_flags[idx] &&
+	    !kstrtou32(quirk_flags[idx], 0, &chip->quirk_flags)) {
+		usb_audio_dbg(chip,
+			      "Set quirk flags 0x%x from param based on position %d for device %04x:%04x\n",
+			      chip->quirk_flags, idx,
+			      USB_ID_VENDOR(chip->usb_id),
+			      USB_ID_PRODUCT(chip->usb_id));
+		return;
+	}
+
+	/* take the default quirk from the quirk table */
+	snd_usb_init_quirk_flags_table(chip);
+
+	/* add or correct quirk bits from options */
+	for (i = 0; i < ARRAY_SIZE(quirk_flags); i++) {
+		if (!quirk_flags[i] || !*quirk_flags[i])
+			break;
+
+		val = kstrdup(quirk_flags[i], GFP_KERNEL);
+
+		if (!val) {
+			pr_err("snd_usb_audio: Error allocating memory while parsing quirk_flags\n");
+			return;
+		}
+
+		for (p = val; p && *p;) {
+			/* Each entry consists of VID:PID:flags */
+			field = strsep(&p, ":");
+			if (!field)
+				break;
+
+			if (strcmp(field, "*") == 0)
+				vid = 0;
+			else if (kstrtou16(field, 16, &vid))
+				break;
+
+			field = strsep(&p, ":");
+			if (!field)
+				break;
+
+			if (strcmp(field, "*") == 0)
+				pid = 0;
+			else if (kstrtou16(field, 16, &pid))
+				break;
+
+			field = strsep(&p, ";");
+			if (!field || !*field)
+				break;
+
+			if ((vid != 0 && vid != chip_vid) ||
+			    (pid != 0 && pid != chip_pid))
+				continue;
+
+			/* Collect the flags */
+			mask_flags = 0;
+			unmask_flags = 0;
+			while (field && *field) {
+				flag = strsep(&field, "|");
+
+				if (!flag)
+					break;
+
+				if (*flag == '!') {
+					is_unmask = true;
+					flag++;
+				} else {
+					is_unmask = false;
+				}
+
+				if (!kstrtou32(flag, 16, &bit)) {
+					if (is_unmask)
+						unmask_flags |= bit;
+					else
+						mask_flags |= bit;
+
+					break;
+				}
+
+				bit = snd_usb_quirk_flags_from_name(flag);
+
+				if (bit) {
+					if (is_unmask)
+						unmask_flags |= bit;
+					else
+						mask_flags |= bit;
+				} else {
+					pr_warn("snd_usb_audio: unknown flag %s while parsing param quirk_flags\n",
+						field);
+				}
+			}
+
+			chip->quirk_flags &= ~unmask_flags;
+			chip->quirk_flags |= mask_flags;
+			usb_audio_dbg(chip,
+				      "Set quirk flags (mask 0x%x, unmask 0x%x, finally 0x%x) from param for device %04x:%04x\n",
+				      mask_flags,
+				      unmask_flags,
+				      chip->quirk_flags,
+				      USB_ID_VENDOR(chip->usb_id),
+				      USB_ID_PRODUCT(chip->usb_id));
+		}
+
+		kfree(val);
 	}
 }
