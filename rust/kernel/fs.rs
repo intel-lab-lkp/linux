@@ -5,4 +5,5 @@
 //! C headers: [`include/linux/fs.h`](srctree/include/linux/fs.h)
 
 pub mod file;
+pub mod file_operations;
 pub use self::file::{File, LocalFile};

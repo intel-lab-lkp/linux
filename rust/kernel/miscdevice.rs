@@ -11,9 +11,9 @@
 use crate::{
     bindings,
     device::Device,
-    error::{to_result, Error, Result, VTABLE_DEFAULT_ERROR},
+    error::{to_result, Error},
     ffi::{c_int, c_long, c_uint, c_ulong},
-    fs::File,
+    fs::{file_operations::FileOperations, File},
     mm::virt::VmaNew,
     prelude::*,
     seq_file::SeqFile,
@@ -30,7 +30,7 @@ pub struct MiscDeviceOptions {
 
 impl MiscDeviceOptions {
     /// Create a raw `struct miscdev` ready for registration.
-    pub const fn into_raw<T: MiscDevice>(self) -> bindings::miscdevice {
+    pub const fn into_raw<T: FileOperations>(self) -> bindings::miscdevice {
         // SAFETY: All zeros is valid for this C type.
         let mut result: bindings::miscdevice = unsafe { MaybeUninit::zeroed().assume_init() };
         result.minor = bindings::MISC_DYNAMIC_MINOR as ffi::c_int;
@@ -66,7 +66,7 @@ unsafe impl<T> Send for MiscDeviceRegistration<T> {}
 // parallel.
 unsafe impl<T> Sync for MiscDeviceRegistration<T> {}
 
-impl<T: MiscDevice> MiscDeviceRegistration<T> {
+impl<T: FileOperations> MiscDeviceRegistration<T> {
     /// Register a misc device.
     pub fn register(opts: MiscDeviceOptions) -> impl PinInit<Self, Error> {
         try_pin_init!(Self {
@@ -108,84 +108,10 @@ impl<T> PinnedDrop for MiscDeviceRegistration<T> {
         unsafe { bindings::misc_deregister(self.inner.get()) };
     }
 }
-
-/// Trait implemented by the private data of an open misc device.
-#[vtable]
-pub trait MiscDevice: Sized {
-    /// What kind of pointer should `Self` be wrapped in.
-    type Ptr: ForeignOwnable + Send + Sync;
-
-    /// Called when the misc device is opened.
-    ///
-    /// The returned pointer will be stored as the private data for the file.
-    fn open(_file: &File, _misc: &MiscDeviceRegistration<Self>) -> Result<Self::Ptr>;
-
-    /// Called when the misc device is released.
-    fn release(device: Self::Ptr, _file: &File) {
-        drop(device);
-    }
-
-    /// Handle for mmap.
-    ///
-    /// This function is invoked when a user space process invokes the `mmap` system call on
-    /// `file`. The function is a callback that is part of the VMA initializer. The kernel will do
-    /// initial setup of the VMA before calling this function. The function can then interact with
-    /// the VMA initialization by calling methods of `vma`. If the function does not return an
-    /// error, the kernel will complete initialization of the VMA according to the properties of
-    /// `vma`.
-    fn mmap(
-        _device: <Self::Ptr as ForeignOwnable>::Borrowed<'_>,
-        _file: &File,
-        _vma: &VmaNew,
-    ) -> Result {
-        build_error!(VTABLE_DEFAULT_ERROR)
-    }
-
-    /// Handler for ioctls.
-    ///
-    /// The `cmd` argument is usually manipulated using the utilities in [`kernel::ioctl`].
-    ///
-    /// [`kernel::ioctl`]: mod@crate::ioctl
-    fn ioctl(
-        _device: <Self::Ptr as ForeignOwnable>::Borrowed<'_>,
-        _file: &File,
-        _cmd: u32,
-        _arg: usize,
-    ) -> Result<isize> {
-        build_error!(VTABLE_DEFAULT_ERROR)
-    }
-
-    /// Handler for ioctls.
-    ///
-    /// Used for 32-bit userspace on 64-bit platforms.
-    ///
-    /// This method is optional and only needs to be provided if the ioctl relies on structures
-    /// that have different layout on 32-bit and 64-bit userspace. If no implementation is
-    /// provided, then `compat_ptr_ioctl` will be used instead.
-    #[cfg(CONFIG_COMPAT)]
-    fn compat_ioctl(
-        _device: <Self::Ptr as ForeignOwnable>::Borrowed<'_>,
-        _file: &File,
-        _cmd: u32,
-        _arg: usize,
-    ) -> Result<isize> {
-        build_error!(VTABLE_DEFAULT_ERROR)
-    }
-
-    /// Show info for this fd.
-    fn show_fdinfo(
-        _device: <Self::Ptr as ForeignOwnable>::Borrowed<'_>,
-        _m: &SeqFile,
-        _file: &File,
-    ) {
-        build_error!(VTABLE_DEFAULT_ERROR)
-    }
-}
-
 /// A vtable for the file operations of a Rust miscdevice.
-struct MiscdeviceVTable<T: MiscDevice>(PhantomData<T>);
+struct MiscdeviceVTable<T: FileOperations>(PhantomData<T>);
 
-impl<T: MiscDevice> MiscdeviceVTable<T> {
+impl<T: FileOperations> MiscdeviceVTable<T> {
     /// # Safety
     ///
     /// `file` and `inode` must be the file and inode for a file that is undergoing initialization.

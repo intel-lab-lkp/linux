@@ -100,9 +100,9 @@ use core::pin::Pin;
 use kernel::{
     c_str,
     device::Device,
-    fs::File,
+    fs::{file_operations::FileOperations, File},
     ioctl::{_IO, _IOC_SIZE, _IOR, _IOW},
-    miscdevice::{MiscDevice, MiscDeviceOptions, MiscDeviceRegistration},
+    miscdevice::{MiscDeviceOptions, MiscDeviceRegistration},
     new_mutex,
     prelude::*,
     sync::Mutex,
@@ -154,7 +154,7 @@ struct RustMiscDevice {
 }
 
 #[vtable]
-impl MiscDevice for RustMiscDevice {
+impl FileOperations for RustMiscDevice {
     type Ptr = Pin<KBox<Self>>;
 
     fn open(_file: &File, misc: &MiscDeviceRegistration<Self>) -> Result<Pin<KBox<Self>>> {
