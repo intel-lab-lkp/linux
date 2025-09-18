@@ -1683,6 +1683,8 @@ static int ufs_mtk_link_set_hpm(struct ufs_hba *hba)
 
 	if (hba->mcq_enabled) {
 		ufs_mtk_config_mcq(hba, false);
+		/* Enable required interrupts */
+		ufshcd_enable_intr(hba, UFSHCD_ENABLE_MTK_MCQ_INTRS);
 		ufshcd_mcq_make_queues_operational(hba);
 		ufshcd_mcq_config_mac(hba, hba->nutrs);
 		ufshcd_mcq_enable(hba);

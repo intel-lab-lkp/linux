@@ -14,6 +14,9 @@
 #define UFSHCD_MAX_Q_NR 8
 #define MTK_MCQ_INVALID_IRQ	0xFFFF
 
+#define UFSHCD_ENABLE_MTK_MCQ_INTRS	\
+				(UTP_TASK_REQ_COMPL | UFSHCD_ERROR_MASK)
+
 /* REG_UFS_MMIO_OPT_CTRL_0 160h */
 #define EHS_EN                  BIT(0)
 #define PFM_IMPV                BIT(1)
