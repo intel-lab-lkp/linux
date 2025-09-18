@@ -711,9 +711,13 @@ static bool intel_dp_link_max_vswing_reached(struct intel_dp *intel_dp,
 
 void intel_dp_link_training_set_mode(struct intel_dp *intel_dp, int link_rate, bool is_vrr)
 {
+	struct intel_display *display = to_intel_display(intel_dp);
 	u8 link_config[2];
+	bool ssc_enabled = intel_panel_use_ssc(display) &&
+			(intel_dp->dpcd[DP_MAX_DOWNSPREAD] & DP_MAX_DOWNSPREAD_0_5);
 
-	link_config[0] = is_vrr ? DP_MSA_TIMING_PAR_IGNORE_EN : 0;
+	link_config[0] = (is_vrr ? DP_MSA_TIMING_PAR_IGNORE_EN : 0) |
+		(ssc_enabled ? DP_SPREAD_AMP_0_5 : 0);
 	link_config[1] = drm_dp_is_uhbr_rate(link_rate) ?
 			 DP_SET_ANSI_128B132B : DP_SET_ANSI_8B10B;
 	drm_dp_dpcd_write(&intel_dp->aux, DP_DOWNSPREAD_CTRL, link_config, 2);
