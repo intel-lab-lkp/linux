@@ -2274,10 +2274,9 @@ static int ublk_check_fetch_buf(const struct ublk_device *ub, __u64 buf_addr)
 	return 0;
 }
 
-static int ublk_fetch(struct io_uring_cmd *cmd, struct ublk_queue *ubq,
+static int ublk_fetch(struct io_uring_cmd *cmd, struct ublk_device *ub,
 		      struct ublk_io *io, __u64 buf_addr)
 {
-	struct ublk_device *ub = ubq->dev;
 	int ret = 0;
 
 	/*
@@ -2411,7 +2410,7 @@ static int ublk_ch_uring_cmd_local(struct io_uring_cmd *cmd,
 		ret = ublk_check_fetch_buf(ub, addr);
 		if (ret)
 			goto out;
-		ret = ublk_fetch(cmd, ubq, io, addr);
+		ret = ublk_fetch(cmd, ub, io, addr);
 		if (ret)
 			goto out;
 
