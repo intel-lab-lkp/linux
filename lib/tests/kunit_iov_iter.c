@@ -566,8 +566,8 @@ static struct xarray *iov_kunit_create_xarray(struct kunit *test)
 	struct xarray *xarray;
 
 	xarray = kzalloc(sizeof(struct xarray), GFP_KERNEL);
-	xa_init(xarray);
 	KUNIT_ASSERT_NOT_ERR_OR_NULL(test, xarray);
+	xa_init(xarray);
 	kunit_add_action_or_reset(test, iov_kunit_destroy_xarray, xarray);
 	return xarray;
 }
