@@ -59,6 +59,17 @@ static inline int min_free(struct jffs2_sb_info *c)
 
 }
 
+static inline uint32_t jffs2_calc_node_hdr_crc(const struct jffs2_unknown_node *node)
+{
+	struct jffs2_unknown_node crcnode;
+
+	crcnode.magic = node->magic;
+	crcnode.nodetype = cpu_to_je16(je16_to_cpu(node->nodetype) | JFFS2_NODE_ACCURATE);
+	crcnode.totlen = node->totlen;
+
+	return crc32(0, &crcnode, sizeof(crcnode) - 4);
+}
+
 static inline uint32_t EMPTY_SCAN_SIZE(uint32_t sector_size) {
 	if (sector_size < DEFAULT_EMPTY_SCAN_SIZE)
 		return sector_size;
@@ -447,7 +458,6 @@ static int jffs2_scan_xref_node(struct jffs2_sb_info *c, struct jffs2_eraseblock
 static int jffs2_scan_eraseblock (struct jffs2_sb_info *c, struct jffs2_eraseblock *jeb,
 				  unsigned char *buf, uint32_t buf_size, struct jffs2_summary *s) {
 	struct jffs2_unknown_node *node;
-	struct jffs2_unknown_node crcnode;
 	uint32_t ofs, prevofs, max_ofs;
 	uint32_t hdr_crc, buf_ofs, buf_len;
 	int err;
@@ -757,11 +767,9 @@ scan_more:
 			ofs += 4;
 			continue;
 		}
+
 		/* We seem to have a node of sorts. Check the CRC */
-		crcnode.magic = node->magic;
-		crcnode.nodetype = cpu_to_je16( je16_to_cpu(node->nodetype) | JFFS2_NODE_ACCURATE);
-		crcnode.totlen = node->totlen;
-		hdr_crc = crc32(0, &crcnode, sizeof(crcnode)-4);
+		hdr_crc = jffs2_calc_node_hdr_crc(node);
 
 		if (hdr_crc != je32_to_cpu(node->hdr_crc)) {
 			noisy_printk(&noise, "%s(): Node at 0x%08x {0x%04x, 0x%04x, 0x%08x) has invalid CRC 0x%08x (calculated 0x%08x)\n",
@@ -810,6 +818,18 @@ scan_more:
 					return err;
 				buf_ofs = ofs;
 				node = (void *)buf;
+				hdr_crc = jffs2_calc_node_hdr_crc(node);
+				if (hdr_crc != je32_to_cpu(node->hdr_crc)) {
+					noisy_printk(&noise,
+								"%s(): Inode Second CRC check failed at 0x%08x (expected 0x%08x, calculated 0x%08x)\n",
+								__func__, ofs,
+								je32_to_cpu(node->hdr_crc),
+								hdr_crc);
+					if ((err = jffs2_scan_dirty_space(c, jeb, 4)))
+						return err;
+					ofs += 4;
+					continue;
+				}
 			}
 			err = jffs2_scan_inode_node(c, jeb, (void *)node, ofs, s);
 			if (err) return err;
@@ -827,6 +847,18 @@ scan_more:
 					return err;
 				buf_ofs = ofs;
 				node = (void *)buf;
+				hdr_crc = jffs2_calc_node_hdr_crc(node);
+				if (hdr_crc != je32_to_cpu(node->hdr_crc)) {
+					noisy_printk(&noise,
+								"%s(): Dirent Second CRC check failed at 0x%08x (expected 0x%08x, calculated 0x%08x)\n",
+								__func__, ofs,
+								je32_to_cpu(node->hdr_crc),
+								hdr_crc);
+					if ((err = jffs2_scan_dirty_space(c, jeb, 4)))
+						return err;
+					ofs += 4;
+					continue;
+				}
 			}
 			err = jffs2_scan_dirent_node(c, jeb, (void *)node, ofs, s);
 			if (err) return err;
@@ -845,6 +877,18 @@ scan_more:
 					return err;
 				buf_ofs = ofs;
 				node = (void *)buf;
+				hdr_crc = jffs2_calc_node_hdr_crc(node);
+				if (hdr_crc != je32_to_cpu(node->hdr_crc)) {
+					noisy_printk(&noise,
+								"%s(): Xattr Second CRC check failed at 0x%08x (expected 0x%08x, calculated 0x%08x)\n",
+								__func__, ofs,
+								je32_to_cpu(node->hdr_crc),
+								hdr_crc);
+					if ((err = jffs2_scan_dirty_space(c, jeb, 4)))
+						return err;
+					ofs += 4;
+					continue;
+				}
 			}
 			err = jffs2_scan_xattr_node(c, jeb, (void *)node, ofs, s);
 			if (err)
@@ -862,6 +906,18 @@ scan_more:
 					return err;
 				buf_ofs = ofs;
 				node = (void *)buf;
+				hdr_crc = jffs2_calc_node_hdr_crc(node);
+				if (hdr_crc != je32_to_cpu(node->hdr_crc)) {
+					noisy_printk(&noise,
+								"%s(): Xref Second CRC check failed at 0x%08x (expected 0x%08x, calculated 0x%08x)\n",
+								__func__, ofs,
+								je32_to_cpu(node->hdr_crc),
+								hdr_crc);
+					if ((err = jffs2_scan_dirty_space(c, jeb, 4)))
+						return err;
+					ofs += 4;
+					continue;
+				}
 			}
 			err = jffs2_scan_xref_node(c, jeb, (void *)node, ofs, s);
 			if (err)
