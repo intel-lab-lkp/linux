@@ -294,7 +294,7 @@ long ttm_tt_backup(struct ttm_device *bdev, struct ttm_tt *tt,
 }
 
 int ttm_tt_restore(struct ttm_device *bdev, struct ttm_tt *tt,
-		   const struct ttm_operation_ctx *ctx)
+		   struct ttm_operation_ctx *ctx)
 {
 	int ret = ttm_pool_restore_and_alloc(&bdev->pool, tt, ctx);
 

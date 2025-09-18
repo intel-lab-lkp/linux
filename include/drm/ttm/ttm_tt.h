@@ -296,7 +296,7 @@ long ttm_tt_backup(struct ttm_device *bdev, struct ttm_tt *tt,
 		   const struct ttm_backup_flags flags);
 
 int ttm_tt_restore(struct ttm_device *bdev, struct ttm_tt *tt,
-		   const struct ttm_operation_ctx *ctx);
+		   struct ttm_operation_ctx *ctx);
 
 int ttm_tt_setup_backup(struct ttm_tt *tt);
 

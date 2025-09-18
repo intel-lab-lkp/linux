@@ -56,6 +56,11 @@ static DECLARE_FAULT_ATTR(backup_fault_inject);
 #define should_fail(...) false
 #endif
 
+static unsigned int ttm_alloc_method;
+
+MODULE_PARM_DESC(alloc_method, "TTM allocation method (0 - throughput, 1 - latency");
+module_param_named(alloc_method, ttm_alloc_method, uint, 0644);
+
 /**
  * struct ttm_pool_dma - Helper object for coherent DMA mappings
  *
@@ -702,7 +707,7 @@ static unsigned int ttm_pool_alloc_find_order(unsigned int highest,
 }
 
 static int __ttm_pool_alloc(struct ttm_pool *pool, struct ttm_tt *tt,
-			    const struct ttm_operation_ctx *ctx,
+			    struct ttm_operation_ctx *ctx,
 			    struct ttm_pool_alloc_state *alloc,
 			    struct ttm_pool_tt_restore *restore)
 {
@@ -716,6 +721,9 @@ static int __ttm_pool_alloc(struct ttm_pool *pool, struct ttm_tt *tt,
 
 	WARN_ON(!alloc->remaining_pages || ttm_tt_is_populated(tt));
 	WARN_ON(alloc->dma_addr && !pool->dev);
+
+	if (ctx->alloc_method == ttm_op_alloc_default && ttm_alloc_method == 1)
+		ctx->alloc_method = ttm_op_alloc_latency;
 
 	if (tt->page_flags & TTM_TT_FLAG_ZERO_ALLOC)
 		gfp_flags |= __GFP_ZERO;
@@ -837,7 +845,7 @@ EXPORT_SYMBOL(ttm_pool_alloc);
  * Returns: 0 on successe, negative error code otherwise.
  */
 int ttm_pool_restore_and_alloc(struct ttm_pool *pool, struct ttm_tt *tt,
-			       const struct ttm_operation_ctx *ctx)
+			       struct ttm_operation_ctx *ctx)
 {
 	struct ttm_pool_alloc_state alloc;
 
