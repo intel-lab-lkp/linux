@@ -424,8 +424,10 @@ static bool spectre_v4_mitigations_off(void)
 	bool ret = cpu_mitigations_off() ||
 		   __spectre_v4_policy == SPECTRE_V4_POLICY_MITIGATION_DISABLED;
 
-	if (ret)
-		pr_info_once("spectre-v4 mitigation disabled by command-line option\n");
+	static atomic_t __printk_once = ATOMIC_INIT(0);
+
+	if (ret && !atomic_cmpxchg(&__printk_once, 0, 1))
+		pr_info("spectre-v4 mitigation disabled by command-line option\n");
 
 	return ret;
 }
