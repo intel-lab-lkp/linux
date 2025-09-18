@@ -244,6 +244,17 @@ static int octep_vf_get_link_ksettings(struct net_device *netdev,
 	return 0;
 }
 
+static void octep_vf_get_channels(struct net_device *dev,
+				  struct ethtool_channels *channel)
+{
+	struct octep_vf_device *oct = netdev_priv(dev);
+
+	channel->max_rx = CFG_GET_PORTS_MAX_IO_RINGS(oct->conf);
+	channel->max_tx = CFG_GET_PORTS_MAX_IO_RINGS(oct->conf);
+	channel->rx_count = CFG_GET_PORTS_ACTIVE_IO_RINGS(oct->conf);
+	channel->tx_count = CFG_GET_PORTS_ACTIVE_IO_RINGS(oct->conf);
+}
+
 static const struct ethtool_ops octep_vf_ethtool_ops = {
 	.get_drvinfo = octep_vf_get_drvinfo,
 	.get_link = ethtool_op_get_link,
@@ -251,6 +262,7 @@ static const struct ethtool_ops octep_vf_ethtool_ops = {
 	.get_sset_count = octep_vf_get_sset_count,
 	.get_ethtool_stats = octep_vf_get_ethtool_stats,
 	.get_link_ksettings = octep_vf_get_link_ksettings,
+	.get_channels = octep_vf_get_channels,
 };
 
 void octep_vf_set_ethtool_ops(struct net_device *netdev)
