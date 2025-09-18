@@ -496,6 +496,18 @@ int kvm_arch_vcpu_ioctl_get_mpstate(struct kvm_vcpu *vcpu,
 	return 0;
 }
 
+static void kvm_riscv_vcpu_suspend(struct kvm_vcpu *vcpu)
+{
+	WRITE_ONCE(vcpu->arch.mp_state.mp_state, KVM_MP_STATE_SUSPENDED);
+	kvm_make_request(KVM_REQ_SUSPEND, vcpu);
+	kvm_vcpu_kick(vcpu);
+}
+
+static bool kvm_riscv_vcpu_suspended(struct kvm_vcpu *vcpu)
+{
+	return READ_ONCE(vcpu->arch.mp_state.mp_state) == KVM_MP_STATE_SUSPENDED;
+}
+
 int kvm_arch_vcpu_ioctl_set_mpstate(struct kvm_vcpu *vcpu,
 				    struct kvm_mp_state *mp_state)
 {
@@ -515,6 +527,9 @@ int kvm_arch_vcpu_ioctl_set_mpstate(struct kvm_vcpu *vcpu,
 			kvm_riscv_reset_vcpu(vcpu, false);
 		else
 			ret = -EINVAL;
+		break;
+	case KVM_MP_STATE_SUSPENDED:
+		kvm_riscv_vcpu_suspend(vcpu);
 		break;
 	default:
 		ret = -EINVAL;
@@ -682,6 +697,25 @@ void kvm_arch_vcpu_put(struct kvm_vcpu *vcpu)
 	}
 }
 
+static int kvm_riscv_handle_suspend(struct kvm_vcpu *vcpu)
+{
+	if (!kvm_riscv_vcpu_suspended(vcpu))
+		return 1;
+
+	kvm_riscv_vcpu_wfi(vcpu);
+
+	kvm_make_request(KVM_REQ_SUSPEND, vcpu);
+
+	if (kvm_arch_vcpu_runnable(vcpu)) {
+		memset(&vcpu->run->system_event, 0, sizeof(vcpu->run->system_event));
+		vcpu->run->system_event.type = KVM_SYSTEM_EVENT_WAKEUP;
+		vcpu->run->exit_reason = KVM_EXIT_SYSTEM_EVENT;
+		return 0;
+	}
+
+	return 1;
+}
+
 /**
  * kvm_riscv_check_vcpu_requests - check and handle pending vCPU requests
  * @vcpu:	the VCPU pointer
@@ -730,6 +764,9 @@ static int kvm_riscv_check_vcpu_requests(struct kvm_vcpu *vcpu)
 
 		if (kvm_check_request(KVM_REQ_STEAL_UPDATE, vcpu))
 			kvm_riscv_vcpu_record_steal_time(vcpu);
+
+		if (kvm_check_request(KVM_REQ_SUSPEND, vcpu))
+			kvm_riscv_handle_suspend(vcpu);
 
 		if (kvm_dirty_ring_check_request(vcpu))
 			return 0;
