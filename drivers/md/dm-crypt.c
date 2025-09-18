@@ -1429,17 +1429,13 @@ static int crypt_convert_block_skcipher(struct crypt_config *cc,
 					struct skcipher_request *req,
 					unsigned int tag_offset)
 {
-	struct bio_vec bv_in = bio_iter_iovec(ctx->bio_in, ctx->iter_in);
 	struct bio_vec bv_out = bio_iter_iovec(ctx->bio_out, ctx->iter_out);
+	unsigned int bytes = cc->sector_size;
 	struct scatterlist *sg_in, *sg_out;
 	struct dm_crypt_request *dmreq;
 	u8 *iv, *org_iv, *tag_iv;
 	__le64 *sector;
 	int r = 0;
-
-	/* Reject unexpected unaligned bio. */
-	if (unlikely(bv_in.bv_len & (cc->sector_size - 1)))
-		return -EIO;
 
 	dmreq = dmreq_of_req(cc, req);
 	dmreq->iv_sector = ctx->cc_sector;
@@ -1457,11 +1453,24 @@ static int crypt_convert_block_skcipher(struct crypt_config *cc,
 	*sector = cpu_to_le64(ctx->cc_sector - cc->iv_offset);
 
 	/* For skcipher we use only the first sg item */
-	sg_in  = &dmreq->sg_in[0];
 	sg_out = &dmreq->sg_out[0];
 
-	sg_init_table(sg_in, 1);
-	sg_set_page(sg_in, bv_in.bv_page, cc->sector_size, bv_in.bv_offset);
+	do {
+		struct bio_vec bv_in = bio_iter_iovec(ctx->bio_in, ctx->iter_in);
+		int len = min(bytes, bv_in.bv_len);
+
+		if (r >= ARRAY_SIZE(dmreq->sg_in))
+			return -EINVAL;
+
+		sg_in = &dmreq->sg_in[r++];
+		memset(sg_in, 0, sizeof(*sg_in));
+		sg_set_page(sg_in, bv_in.bv_page, len, bv_in.bv_offset);
+		bio_advance_iter_single(ctx->bio_in, &ctx->iter_in, len);
+		bytes -= len;
+	} while (bytes);
+
+	sg_mark_end(sg_in);
+	sg_in = dmreq->sg_in[0];
 
 	sg_init_table(sg_out, 1);
 	sg_set_page(sg_out, bv_out.bv_page, cc->sector_size, bv_out.bv_offset);
@@ -1495,7 +1504,6 @@ static int crypt_convert_block_skcipher(struct crypt_config *cc,
 	if (!r && cc->iv_gen_ops && cc->iv_gen_ops->post)
 		r = cc->iv_gen_ops->post(cc, org_iv, dmreq);
 
-	bio_advance_iter(ctx->bio_in, &ctx->iter_in, cc->sector_size);
 	bio_advance_iter(ctx->bio_out, &ctx->iter_out, cc->sector_size);
 
 	return r;
@@ -3750,7 +3758,8 @@ static void crypt_io_hints(struct dm_target *ti, struct queue_limits *limits)
 	limits->physical_block_size =
 		max_t(unsigned int, limits->physical_block_size, cc->sector_size);
 	limits->io_min = max_t(unsigned int, limits->io_min, cc->sector_size);
-	limits->dma_alignment = limits->logical_block_size - 1;
+	if (crypt_integrity_aead(cc))
+		limits->dma_alignment = limits->logical_block_size - 1;
 
 	/*
 	 * For zoned dm-crypt targets, there will be no internal splitting of
