@@ -308,8 +308,13 @@ static void hid_irq_in(struct urb *urb)
 	case -ESHUTDOWN:	/* unplug */
 		clear_bit(HID_IN_RUNNING, &usbhid->iofl);
 		return;
-	case -EILSEQ:		/* protocol error or unplug */
 	case -EPROTO:		/* protocol error or unplug */
+		usbhid_mark_busy(usbhid);
+		clear_bit(HID_IN_RUNNING, &usbhid->iofl);
+		set_bit(HID_CLEAR_HALT, &usbhid->iofl);
+		usb_queue_reset_device(usbhid->intf);
+		return;
+	case -EILSEQ:		/* protocol error or unplug */
 	case -ETIME:		/* protocol error or unplug */
 	case -ETIMEDOUT:	/* Should never happen, but... */
 		usbhid_mark_busy(usbhid);
