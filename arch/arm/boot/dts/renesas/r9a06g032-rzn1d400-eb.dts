@@ -8,11 +8,30 @@
 
 #include <dt-bindings/leds/common.h>
 #include "r9a06g032-rzn1d400-db.dts"
+#include "r9a06g032-rzn1d400-db-switches.h"
 
 / {
 	model = "RZN1D-EB Board";
 	compatible = "renesas,rzn1d400-eb", "renesas,rzn1d400-db",
 		     "renesas,r9a06g032";
+
+#if SW2_2 == SW_OFF
+	leds {
+		compatible = "gpio-leds";
+
+		led-prog0 {
+			gpios = <&gpio1b 23 GPIO_ACTIVE_HIGH>;
+			color = <LED_COLOR_ID_GREEN>;
+			function = LED_FUNCTION_PROGRAMMING;
+		};
+
+		led-prog1 {
+			gpios = <&gpio1b 24 GPIO_ACTIVE_HIGH>;
+			color = <LED_COLOR_ID_RED>;
+			function = LED_FUNCTION_PROGRAMMING;
+		};
+	};
+#endif
 };
 
 &gmac1 {
