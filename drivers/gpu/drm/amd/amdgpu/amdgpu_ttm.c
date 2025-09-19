@@ -1812,6 +1812,9 @@ static int amdgpu_ttm_pools_init(struct amdgpu_device *adev)
 {
 	int i;
 
+	ttm_pool_set_max_beneficial_order(&adev->mman.bdev.pool,
+					  get_order(2 * SZ_1M));
+
 	if (!adev->gmc.is_app_apu || !adev->gmc.num_mem_partitions)
 		return 0;
 
@@ -1825,6 +1828,8 @@ static int amdgpu_ttm_pools_init(struct amdgpu_device *adev)
 		ttm_pool_init(&adev->mman.ttm_pools[i], adev->dev,
 			      adev->gmc.mem_partitions[i].numa.node,
 			      false, false);
+		ttm_pool_set_max_beneficial_order(&adev->mman.ttm_pools[i],
+						  get_order(2 * SZ_1M));
 	}
 	return 0;
 }
