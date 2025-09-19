@@ -17,6 +17,7 @@
 #include <linux/types.h>
 
 #include "mlxbf_pka_dev.h"
+#include "mlxbf_pka_ring.h"
 
 struct mlxbf_pka_dev_gbl_config_t mlxbf_pka_gbl_config;
 
@@ -192,6 +193,18 @@ static int mlxbf_pka_dev_create_shim(struct device *dev,
 	else
 		shim->window_ram_split = MLXBF_PKA_SHIM_WINDOW_RAM_SPLIT_DISABLED;
 
+	shim->ring_type = MLXBF_PKA_RING_TYPE_IN_ORDER;
+	shim->ring_priority = MLXBF_PKA_RING_OPTIONS_PRIORITY;
+	shim->rings_num = MLXBF_PKA_MAX_NUM_IO_BLOCK_RINGS;
+	shim->rings = devm_kcalloc(dev,
+				   shim->rings_num,
+				   sizeof(struct mlxbf_pka_dev_ring_t),
+				   GFP_KERNEL);
+	if (!shim->rings) {
+		dev_err(dev, "unable to allocate memory for ring\n");
+		return -ENOMEM;
+	}
+
 	/* Set PKA device Buffer RAM config. */
 	ret = mlxbf_pka_dev_set_resource_config(dev,
 						shim,
@@ -288,10 +301,21 @@ static int mlxbf_pka_dev_init_shim(struct device *dev, struct mlxbf_pka_dev_shim
 		return -EPERM;
 	}
 
+	/* Configure PKA Ring options control word. */
+	ret = mlxbf_pka_dev_config_ring_options(dev,
+						&shim->resources.buffer_ram,
+						shim->rings_num,
+						shim->ring_priority);
+	if (ret) {
+		dev_err(dev, "failed to configure ring options\n");
+		return ret;
+	}
+
 	ret = devm_mutex_init(dev, &shim->mutex);
 	if (ret)
 		return ret;
 
+	shim->busy_ring_num = 0;
 	shim->status = MLXBF_PKA_SHIM_STATUS_INITIALIZED;
 
 	return ret;
@@ -300,6 +324,7 @@ static int mlxbf_pka_dev_init_shim(struct device *dev, struct mlxbf_pka_dev_shim
 /* Release a given shim. */
 static int mlxbf_pka_dev_release_shim(struct device *dev, struct mlxbf_pka_dev_shim_s *shim)
 {
+	u32 ring_idx;
 	int ret = 0;
 
 	if (shim->status != MLXBF_PKA_SHIM_STATUS_INITIALIZED &&
@@ -308,6 +333,21 @@ static int mlxbf_pka_dev_release_shim(struct device *dev, struct mlxbf_pka_dev_s
 		return -EPERM;
 	}
 
+	/*
+	 * Release rings which belong to the shim. The operating system might
+	 * release ring devices before shim devices. The global configuration
+	 * must be checked before proceeding to the release of ring devices.
+	 */
+	if (mlxbf_pka_gbl_config.dev_rings_cnt) {
+		for (ring_idx = 0; ring_idx < shim->rings_num; ring_idx++) {
+			ret = mlxbf_pka_dev_release_ring(dev, shim->rings[ring_idx]);
+			if (ret) {
+				dev_err(dev, "failed to release ring %d\n", ring_idx);
+				return ret;
+			}
+		}
+	}
+	shim->busy_ring_num = 0;
 	shim->status = MLXBF_PKA_SHIM_STATUS_FINALIZED;
 
 	return ret;

@@ -14,3 +14,21 @@ Description:
 		BlueField-2  MLNXBF20:xx, where xx ranges from '00' to '07'
 		BlueField-3  MLNXBF51:xx, where xx ranges from '00' to '17'
 		===========  ==============================================
+
+		Each PKA device supports four PKA ring devices. The PKA ring device IDs are:
+
+		===========  ==============================================
+		BlueField-1  MLNXBF11:xx, where xx ranges from '00' to '0F'
+		BlueField-2  MLNXBF21:xx, where xx ranges from '00' to '20'
+		BlueField-3  MLNXBF52:xx, where xx ranges from '00' to '60'
+		===========  ==============================================
+
+		For each PKA ring device, the following operation interfaces:
+
+		- open(): open the PKA ring device specified by the device ID, and initiate the
+		  related RAM regions.
+		- release(): close the PKA ring device specified by the device ID, and release the
+		  related RAM regions.
+		- unlocked_ioctl(): make PKA related system calls, including getting ring device or
+		  RAM region information, clearing PKA ring counter.
+		- mmap(): map the PKA ring device to the virtual memory region.

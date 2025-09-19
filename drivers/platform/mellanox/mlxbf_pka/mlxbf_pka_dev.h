@@ -14,11 +14,14 @@
 
 #include <linux/bitfield.h>
 #include <linux/bits.h>
+#include <linux/io.h>
 #include <linux/ioctl.h>
 #include <linux/mutex.h>
 #include <linux/sizes.h>
 #include <linux/types.h>
 #include <linux/units.h>
+
+#include <uapi/linux/mlxbf-pka.h>
 
 #define MASTER_CONTROLLER_OUT_OF_RESET 0
 
@@ -59,6 +62,11 @@
 
 /* The maximum number of PKA shims referred to as IO blocks. */
 #define MLXBF_PKA_MAX_NUM_IO_BLOCKS 24
+
+/* The maximum number of rings supported by the IO block (shim). */
+#define MLXBF_PKA_MAX_NUM_IO_BLOCK_RINGS 4
+
+#define MLXBF_PKA_MAX_NUM_RINGS (MLXBF_PKA_MAX_NUM_IO_BLOCK_RINGS * MLXBF_PKA_MAX_NUM_IO_BLOCKS)
 
 /*
  * PKA Window RAM parameters.
@@ -173,16 +181,26 @@ struct mlxbf_pka_dev_mem_res {
  * struct mlxbf_pka_dev_shim_s - PKA Shim structure
  * @mem_res: Memory resources
  * @shim_id: Shim identifier
+ * @rings_num: Number of supported rings (hardware specific)
+ * @rings: Pointer to rings which belong to the shim
+ * @ring_priority: Specify the priority in which rings are handled
+ * @ring_type: Indicates whether the result ring delivers results strictly in-order
  * @resources: Shim resources
  * @window_ram_split: If non-zero, the split window RAM scheme is used
+ * @busy_ring_num: Number of active rings (rings in busy state)
  * @status: Status of the shim
  * @mutex: Mutex lock for sharing shim
  */
 struct mlxbf_pka_dev_shim_s {
 	struct mlxbf_pka_dev_mem_res mem_res;
 	u32 shim_id;
+	u32 rings_num;
+	struct mlxbf_pka_dev_ring_t **rings;
+	u8 ring_priority;
+	u8 ring_type;
 	struct mlxbf_pka_dev_shim_res_t resources;
 	u8 window_ram_split;
+	u32 busy_ring_num;
 	s8 status;
 	struct mutex mutex;
 };
@@ -205,11 +223,15 @@ struct mlxbf_pka_dev_shim_s {
 /**
  * struct mlxbf_pka_dev_gbl_config_t - Platform global configuration structure
  * @dev_shims_cnt: Number of registered PKA shims
+ * @dev_rings_cnt: Number of registered Rings
  * @dev_shims: Table of registered PKA shims
+ * @dev_rings: Table of registered Rings
  */
 struct mlxbf_pka_dev_gbl_config_t {
 	u32 dev_shims_cnt;
+	u32 dev_rings_cnt;
 	struct mlxbf_pka_dev_shim_s *dev_shims[MLXBF_PKA_MAX_NUM_IO_BLOCKS];
+	struct mlxbf_pka_dev_ring_t *dev_rings[MLXBF_PKA_MAX_NUM_RINGS];
 };
 
 extern struct mlxbf_pka_dev_gbl_config_t mlxbf_pka_gbl_config;
@@ -279,6 +301,7 @@ static inline void mlxbf_pka_dev_io_write(void __iomem *mem_ptr, u64 mem_off, u6
  */
 struct mlxbf_pka_dev_shim_s *mlxbf_pka_dev_get_shim(u32 shim_id);
 
+/* Unset PKA device resource config - unmap io memory if needed. */
 void mlxbf_pka_dev_unset_resource_config(struct device *dev,
 					 struct mlxbf_pka_dev_shim_s *shim,
 					 struct mlxbf_pka_dev_res_t *res_ptr);
