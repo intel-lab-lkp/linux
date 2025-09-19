@@ -1357,6 +1357,7 @@ static int set_powered_sync(struct hci_dev *hdev, void *data)
 {
 	struct mgmt_pending_cmd *cmd = data;
 	struct mgmt_mode *cp;
+	int err;
 
 	/* Make sure cmd still outstanding. */
 	if (!mgmt_pending_valid(hdev, cmd, false))
@@ -1366,7 +1367,11 @@ static int set_powered_sync(struct hci_dev *hdev, void *data)
 
 	BT_DBG("%s", hdev->name);
 
-	return hci_set_powered_sync(hdev, cp->val);
+	err = hci_set_powered_sync(hdev, cp->val);
+
+	mutex_unlock(&hdev->mgmt_pending_lock);
+
+	return err;
 }
 
 static int set_powered(struct sock *sk, struct hci_dev *hdev, void *data,
@@ -1545,6 +1550,8 @@ static int set_discoverable_sync(struct hci_dev *hdev, void *data)
 {
 	if (!mgmt_pending_valid(hdev, data, false))
 		return -ECANCELED;
+
+	mutex_unlock(&hdev->mgmt_pending_lock);
 
 	BT_DBG("%s", hdev->name);
 
@@ -1745,6 +1752,8 @@ static int set_connectable_sync(struct hci_dev *hdev, void *data)
 {
 	if (!mgmt_pending_valid(hdev, data, false))
 		return -ECANCELED;
+
+	mutex_unlock(&hdev->mgmt_pending_lock);
 
 	BT_DBG("%s", hdev->name);
 
@@ -1979,6 +1988,8 @@ static int set_ssp_sync(struct hci_dev *hdev, void *data)
 
 	err = hci_write_ssp_mode_sync(hdev, cp->val);
 
+	mutex_unlock(&hdev->mgmt_pending_lock);
+
 	if (!err && changed)
 		hci_dev_clear_flag(hdev, HCI_SSP_ENABLED);
 
@@ -2108,6 +2119,8 @@ static int set_le_sync(struct hci_dev *hdev, void *data)
 	cp = cmd->param;
 	val = !!cp->val;
 
+	mutex_unlock(&hdev->mgmt_pending_lock);
+
 	if (!val) {
 		hci_clear_adv_instance_sync(hdev, NULL, 0x00, true);
 
@@ -2189,6 +2202,8 @@ static int set_mesh_sync(struct hci_dev *hdev, void *data)
 	hdev->le_scan_window = __le16_to_cpu(cp->window);
 
 	len -= sizeof(*cp);
+
+	mutex_unlock(&hdev->mgmt_pending_lock);
 
 	/* If filters don't fit, forward all adv pkts */
 	if (len <= sizeof(hdev->mesh_ad_types))
@@ -3939,6 +3954,8 @@ static int set_name_sync(struct hci_dev *hdev, void *data)
 		hci_update_eir_sync(hdev);
 	}
 
+	mutex_unlock(&hdev->mgmt_pending_lock);
+
 	/* The name is stored in the scan response data and so
 	 * no need to update the advertising data here.
 	 */
@@ -4161,6 +4178,8 @@ static int set_default_phy_sync(struct hci_dev *hdev, void *data)
 
 	if (selected_phys & MGMT_PHY_LE_CODED_RX)
 		cp_phy.rx_phys |= HCI_LE_SET_PHY_CODED;
+
+	mutex_unlock(&hdev->mgmt_pending_lock);
 
 	cmd->skb =  __hci_cmd_sync(hdev, HCI_OP_LE_SET_DEFAULT_PHY,
 				   sizeof(cp_phy), &cp_phy, HCI_CMD_TIMEOUT);
@@ -5273,6 +5292,8 @@ static int mgmt_add_adv_patterns_monitor_sync(struct hci_dev *hdev, void *data)
 	if (!mgmt_pending_valid(hdev, cmd, false))
 		return -ECANCELED;
 
+	mutex_unlock(&hdev->mgmt_pending_lock);
+
 	return hci_add_adv_monitor(hdev, cmd->user_data);
 }
 
@@ -5860,6 +5881,8 @@ static int start_discovery_sync(struct hci_dev *hdev, void *data)
 	if (!mgmt_pending_valid(hdev, data, false))
 		return -ECANCELED;
 
+	mutex_unlock(&hdev->mgmt_pending_lock);
+
 	return hci_start_discovery_sync(hdev);
 }
 
@@ -6082,6 +6105,8 @@ static int stop_discovery_sync(struct hci_dev *hdev, void *data)
 {
 	if (!mgmt_pending_valid(hdev, data, false))
 		return -ECANCELED;
+
+	mutex_unlock(&hdev->mgmt_pending_lock);
 
 	return hci_stop_discovery_sync(hdev);
 }
@@ -6357,6 +6382,8 @@ static int set_adv_sync(struct hci_dev *hdev, void *data)
 		hci_dev_set_flag(hdev, HCI_ADVERTISING_CONNECTABLE);
 	else
 		hci_dev_clear_flag(hdev, HCI_ADVERTISING_CONNECTABLE);
+
+	mutex_unlock(&hdev->mgmt_pending_lock);
 
 	cancel_adv_timeout(hdev);
 

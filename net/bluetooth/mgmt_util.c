@@ -321,7 +321,7 @@ void mgmt_pending_remove(struct mgmt_pending_cmd *cmd)
 }
 
 bool mgmt_pending_valid(struct hci_dev *hdev, struct mgmt_pending_cmd *cmd,
-			bool remove)
+			bool remove_unlock)
 {
 	struct mgmt_pending_cmd *tmp;
 
@@ -332,9 +332,10 @@ bool mgmt_pending_valid(struct hci_dev *hdev, struct mgmt_pending_cmd *cmd,
 
 	list_for_each_entry(tmp, &hdev->mgmt_pending, list) {
 		if (cmd == tmp) {
-			if (remove)
+			if (remove_unlock) {
 				list_del(&cmd->list);
-			mutex_unlock(&hdev->mgmt_pending_lock);
+				mutex_unlock(&hdev->mgmt_pending_lock);
+			}
 			return true;
 		}
 	}
