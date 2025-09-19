@@ -186,6 +186,21 @@
 	};
 };
 
+&gpioirqmux {
+	/*
+	 * interrupt-map has to be updated according to GPIO
+	 * usage. The order has to be kept. Only the src irq
+	 * (0 field) has to be updated with the needed GPIO
+	 * interrupt number.
+	 */
+	interrupt-map = <92 &gic GIC_SPI 103 IRQ_TYPE_LEVEL_HIGH>,
+			<93 &gic GIC_SPI 104 IRQ_TYPE_LEVEL_HIGH>,
+			<94 &gic GIC_SPI 105 IRQ_TYPE_LEVEL_HIGH>,
+			<95 &gic GIC_SPI 106 IRQ_TYPE_LEVEL_HIGH>;
+
+	status = "okay";
+};
+
 #if SW2_2 == SW_OFF
 &gpio1 {
 	pinctrl-0 = <&pins_gpio1>;
@@ -194,6 +209,11 @@
 };
 #endif
 
+&gpio2 {
+	pinctrl-0 = <&pins_gpio2>;
+	pinctrl-names = "default";
+	status = "okay";
+};
 &i2c2 {
 	pinctrl-0 = <&pins_i2c2>;
 	pinctrl-names = "default";
@@ -285,6 +305,15 @@
 		bias-disable;
 	};
 #endif
+
+	pins_gpio2: pins-gpio2 {
+		pinmux = <RZN1_PINMUX(156, RZN1_FUNC_GPIO)>,
+			 <RZN1_PINMUX(157, RZN1_FUNC_GPIO)>,
+			 <RZN1_PINMUX(158, RZN1_FUNC_GPIO)>,
+			 <RZN1_PINMUX(159, RZN1_FUNC_GPIO)>;
+		drive-strength = <12>;
+		bias-disable;
+	};
 
 	pins_eth3: pins_eth3 {
 		pinmux = <RZN1_PINMUX(36, RZN1_FUNC_CLK_ETH_MII_RGMII_RMII)>,
