@@ -414,7 +414,7 @@ long get_mte_ctrl(struct task_struct *task)
 /*
  * Access MTE tags in another process' address space as given in mm. Update
  * the number of tags copied. Return 0 if any tags copied, error otherwise.
- * Inspired by __access_remote_vm().
+ * Inspired by access_remote_vm().
  */
 static int __access_remote_tags(struct mm_struct *mm, unsigned long addr,
 				struct iovec *kiov, unsigned int gup_flags)

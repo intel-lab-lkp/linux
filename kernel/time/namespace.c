@@ -202,7 +202,7 @@ struct page *find_timens_vvar_page(struct vm_area_struct *vma)
 	 * through interfaces like /proc/$pid/mem or
 	 * process_vm_{readv,writev}() as long as there's no .access()
 	 * in special_mapping_vmops().
-	 * For more details check_vma_flags() and __access_remote_vm()
+	 * For more details check_vma_flags() and access_remote_vm()
 	 */
 
 	WARN(1, "vvar_page accessed remotely");
