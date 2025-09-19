@@ -533,6 +533,30 @@ static inline int pm_runtime_resume_and_get(struct device *dev)
 }
 
 /**
+ * pm_runtime_resume_and_get_dev - Resume device and bump up its usage counter.
+ * @dev: Target device.
+ *
+ * Resume @dev synchronously and if that is successful, increment its runtime
+ * PM usage counter.
+ *
+ * Return:
+ * * 0 if the runtime PM usage counter of @dev has been incremented.
+ * * Negative error code otherwise.
+ */
+static inline struct device *pm_runtime_resume_and_get_dev(struct device *dev)
+{
+	int ret;
+
+	ret = __pm_runtime_resume(dev, RPM_GET_PUT);
+	if (ret < 0) {
+		pm_runtime_put_noidle(dev);
+		return ERR_PTR(ret);
+	}
+
+	return dev;
+}
+
+/**
  * pm_runtime_put - Drop device usage counter and queue up "idle check" if 0.
  * @dev: Target device.
  *
@@ -605,6 +629,25 @@ static inline int pm_runtime_put_autosuspend(struct device *dev)
 	pm_runtime_mark_last_busy(dev);
 	return __pm_runtime_put_autosuspend(dev);
 }
+
+/*
+ * The way to use the classes defined below is to define a class variable and
+ * use it going forward for representing the target device until it goes out of
+ * the scope.  For example:
+ *
+ * CLASS(pm_runtime_resume_and_get, active_dev)(dev);
+ * if (IS_ERR(active_dev))
+ *         return PTR_ERR(active_dev);
+ *
+ * ... do something with active_dev (which is guaranteed to never suspend) ...
+ */
+DEFINE_CLASS(pm_runtime_resume_and_get, struct device *,
+	     if (!IS_ERR_OR_NULL(_T)) pm_runtime_put(_T),
+	     pm_runtime_resume_and_get_dev(dev), struct device *dev)
+
+DEFINE_CLASS(pm_runtime_resume_and_get_auto, struct device *,
+	     if (!IS_ERR_OR_NULL(_T)) pm_runtime_put_autosuspend(_T),
+	     pm_runtime_resume_and_get_dev(dev), struct device *dev)
 
 /**
  * pm_runtime_put_sync - Drop device usage counter and run "idle check" if 0.
