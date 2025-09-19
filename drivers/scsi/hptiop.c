@@ -812,6 +812,11 @@ static void hptiop_iop_request_callback_itl(struct hptiop_hba *hba, u32 tag)
 		(readl(&req->context) |
 			((u64)readl(&req->context_hi32)<<32));
 
+	if (!arg) {
+		writel(tag, &hba->u.itl.iop->outbound_queue);
+		return;
+	}
+
 	if (readl(&req->result) == IOP_RESULT_SUCCESS) {
 		arg->result = HPT_IOCTL_RESULT_OK;
 
