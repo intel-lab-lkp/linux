@@ -90,4 +90,23 @@ struct mlxbf_pka_dev_hw_ring_info {
  */
 #define MLXBF_PKA_CLEAR_RING_COUNTERS _IO(MLXBF_PKA_IOC_TYPE, 0x2)
 
+/**
+ * struct mlxbf_pka_dev_trng_info - TRNG information
+ * @count: Number of random bytes in the buffer or length of the buffer
+ * @data: Data buffer to hold the random bytes
+ *
+ * MLXBF_PKA_GET_RANDOM_BYTES:
+ * _IOWR(MLXBF_PKA_IOC_TYPE, 0x3, mlxbf_pka_dev_trng_info).
+ *
+ * Get random bytes from True Random Number Generator(TRNG).
+ *
+ * Return: 0 on success, -errno on failure.
+ */
+struct mlxbf_pka_dev_trng_info {
+	__u32 count;
+	__u8 *data;
+};
+
+#define MLXBF_PKA_GET_RANDOM_BYTES _IOWR(MLXBF_PKA_IOC_TYPE, 0x3, struct mlxbf_pka_dev_trng_info)
+
 #endif /* _UAPI_LINUX_MLXBF_PKA_H */

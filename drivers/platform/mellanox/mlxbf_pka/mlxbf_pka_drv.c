@@ -6,6 +6,7 @@
 #include <linux/cdev.h>
 #include <linux/cleanup.h>
 #include <linux/device.h>
+#include <linux/hw_random.h>
 #include <linux/idr.h>
 #include <linux/interrupt.h>
 #include <linux/iommu.h>
@@ -22,6 +23,7 @@
 
 #include "mlxbf_pka_dev.h"
 #include "mlxbf_pka_ring.h"
+#include "mlxbf_pka_trng.h"
 
 #define MLXBF_PKA_DRIVER_DESCRIPTION		"BlueField PKA driver"
 
@@ -187,6 +189,7 @@ struct mlxbf_pka_device {
 	u32 device_id;
 	struct resource *resource[MLXBF_PKA_DEVICE_RES_CNT];
 	struct mlxbf_pka_dev_shim_s *shim;
+	struct hwrng rng;
 };
 
 static int mlxbf_pka_drv_verify_bootup_status(struct device *dev)
@@ -435,6 +438,44 @@ static long mlxbf_pka_drv_ring_ioctl(void *device_data, unsigned int cmd, unsign
 
 	} else if (cmd == MLXBF_PKA_CLEAR_RING_COUNTERS) {
 		return mlxbf_pka_dev_clear_ring_counters(ring_dev->ring);
+	} else if (cmd == MLXBF_PKA_GET_RANDOM_BYTES) {
+		struct mlxbf_pka_dev_trng_info trng_data;
+		struct mlxbf_pka_dev_shim_s *shim;
+		bool trng_present;
+		u32 byte_cnt;
+		int ret;
+
+		shim = ring_dev->ring->shim;
+		ret = copy_from_user(&trng_data,
+				     (void __user *)(arg),
+				     sizeof(struct mlxbf_pka_dev_trng_info));
+		if (ret) {
+			dev_dbg(ring_dev->device, "failed to copy user request.\n");
+			return -EFAULT;
+		}
+
+		/*
+		 * Need byte count which is multiple of 4 as required by the
+		 * mlxbf_pka_dev_trng_read() interface.
+		 */
+		byte_cnt = round_up(trng_data.count, MLXBF_PKA_TRNG_OUTPUT_CNT);
+
+		u32 *data __free(kfree) = kzalloc(byte_cnt, GFP_KERNEL);
+		if (!data)
+			return -ENOMEM;
+
+		trng_present = mlxbf_pka_dev_has_trng(shim);
+		if (!trng_present)
+			return -EAGAIN;
+
+		ret = mlxbf_pka_dev_trng_read(ring_dev->device, shim, data, byte_cnt);
+		if (ret) {
+			dev_dbg(ring_dev->device, "TRNG failed %d\n", ret);
+			return ret;
+		}
+
+		ret = copy_to_user((void __user *)(trng_data.data), data, trng_data.count);
+		return ret ? -EFAULT : 0;
 	}
 
 	return -ENOTTY;
@@ -659,6 +700,23 @@ static void mlxbf_pka_drv_unregister_ring_device(struct mlxbf_pka_ring_device *r
 	mlxbf_pka_dev_unregister_ring(ring_dev->device, ring_dev->ring);
 }
 
+static int mlxbf_pka_drv_rng_read(struct hwrng *rng, void *data, size_t max, bool wait)
+{
+	struct mlxbf_pka_device *mlxbf_pka_dev = container_of(rng, struct mlxbf_pka_device, rng);
+	u32 *buffer = data;
+	int ret;
+
+	ret = mlxbf_pka_dev_trng_read(mlxbf_pka_dev->device, mlxbf_pka_dev->shim, buffer, max);
+	if (ret) {
+		dev_dbg(mlxbf_pka_dev->device,
+			"%s: failed to read random bytes ret=%d",
+			rng->name, ret);
+		return 0;
+	}
+
+	return max;
+}
+
 static int mlxbf_pka_drv_probe_device(struct mlxbf_pka_info *info)
 {
 	struct mlxbf_pka_drv_plat_info *plat_info;
@@ -667,6 +725,7 @@ static int mlxbf_pka_drv_probe_device(struct mlxbf_pka_info *info)
 	const struct acpi_device_id *aid;
 	struct platform_device *pdev;
 	u64 wndw_ram_off_mask;
+	struct hwrng *trng;
 	struct device *dev;
 	int ret;
 
@@ -727,6 +786,19 @@ static int mlxbf_pka_drv_probe_device(struct mlxbf_pka_info *info)
 		}
 	}
 
+	/* Setup the TRNG if needed. */
+	if (mlxbf_pka_dev_has_trng(mlxbf_pka_dev->shim)) {
+		trng = &mlxbf_pka_dev->rng;
+		trng->name = pdev->name;
+		trng->read = mlxbf_pka_drv_rng_read;
+
+		ret = hwrng_register(&mlxbf_pka_dev->rng);
+		if (ret) {
+			dev_err(dev, "failed to register trng\n");
+			return ret;
+		}
+	}
+
 	info->priv = mlxbf_pka_dev;
 
 	return 0;
@@ -740,6 +812,9 @@ static void mlxbf_pka_drv_remove_device(struct platform_device *pdev)
 
 	if (!mlxbf_pka_dev)
 		return;
+
+	if (mlxbf_pka_dev_has_trng(mlxbf_pka_dev->shim))
+		hwrng_unregister(&mlxbf_pka_dev->rng);
 
 	mlxbf_pka_drv_unregister_device(mlxbf_pka_dev);
 }

@@ -9,3 +9,4 @@ obj-$(CONFIG_MLXBF_PKA) += mlxbf-pka.o
 mlxbf-pka-objs := mlxbf_pka_drv.o
 mlxbf-pka-objs += mlxbf_pka_dev.o
 mlxbf-pka-objs += mlxbf_pka_ring.o
+mlxbf-pka-objs += mlxbf_pka_trng.o

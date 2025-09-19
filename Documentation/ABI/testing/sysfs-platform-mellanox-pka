@@ -30,5 +30,6 @@ Description:
 		- release(): close the PKA ring device specified by the device ID, and release the
 		  related RAM regions.
 		- unlocked_ioctl(): make PKA related system calls, including getting ring device or
-		  RAM region information, clearing PKA ring counter.
+		  RAM region information, clearing PKA ring counter and getting random bytes from
+		  the TRNG module from the PKA device.
 		- mmap(): map the PKA ring device to the virtual memory region.

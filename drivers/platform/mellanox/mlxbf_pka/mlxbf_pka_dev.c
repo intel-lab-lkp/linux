@@ -18,6 +18,7 @@
 
 #include "mlxbf_pka_dev.h"
 #include "mlxbf_pka_ring.h"
+#include "mlxbf_pka_trng.h"
 
 struct mlxbf_pka_dev_gbl_config_t mlxbf_pka_gbl_config;
 
@@ -250,6 +251,22 @@ static int mlxbf_pka_dev_create_shim(struct device *dev,
 		return ret;
 	}
 
+	/* Set PKA device TRNG registers. */
+	reg_size = PAGE_SIZE;
+	reg_base = mlxbf_pka_dev_get_register_base(shim->mem_res.eip154_base,
+						   MLXBF_PKA_TRNG_OUTPUT_0_ADDR);
+	ret = mlxbf_pka_dev_set_resource_config(dev,
+						shim,
+						&shim->resources.trng_csr,
+						reg_base,
+						reg_size,
+						MLXBF_PKA_DEV_RES_TYPE_REG,
+						"MLXBF_PKA_TRNG_CSR");
+	if (ret) {
+		dev_err(dev, "unable to setup the TRNG\n");
+		return ret;
+	}
+
 	shim->status = MLXBF_PKA_SHIM_STATUS_CREATED;
 
 	return ret;
@@ -258,7 +275,7 @@ static int mlxbf_pka_dev_create_shim(struct device *dev,
 /* Delete shim and unset shim resources. */
 static int mlxbf_pka_dev_delete_shim(struct device *dev, struct mlxbf_pka_dev_shim_s *shim)
 {
-	struct mlxbf_pka_dev_res_t *res_master_seq_ctrl, *res_aic_csr;
+	struct mlxbf_pka_dev_res_t *res_master_seq_ctrl, *res_aic_csr, *res_trng_csr;
 	struct mlxbf_pka_dev_res_t *res_buffer_ram;
 
 	dev_dbg(dev, "PKA device delete shim\n");
@@ -275,10 +292,12 @@ static int mlxbf_pka_dev_delete_shim(struct device *dev, struct mlxbf_pka_dev_sh
 	res_buffer_ram = &shim->resources.buffer_ram;
 	res_master_seq_ctrl = &shim->resources.master_seq_ctrl;
 	res_aic_csr = &shim->resources.aic_csr;
+	res_trng_csr = &shim->resources.trng_csr;
 
 	mlxbf_pka_dev_unset_resource_config(dev, shim, res_buffer_ram);
 	mlxbf_pka_dev_unset_resource_config(dev, shim, res_master_seq_ctrl);
 	mlxbf_pka_dev_unset_resource_config(dev, shim, res_aic_csr);
+	mlxbf_pka_dev_unset_resource_config(dev, shim, res_trng_csr);
 
 	shim->status = MLXBF_PKA_SHIM_STATUS_UNDEFINED;
 
@@ -294,7 +313,9 @@ static int mlxbf_pka_dev_delete_shim(struct device *dev, struct mlxbf_pka_dev_sh
  */
 static int mlxbf_pka_dev_init_shim(struct device *dev, struct mlxbf_pka_dev_shim_s *shim)
 {
+	u32 data[MLXBF_PKA_TRNG_OUTPUT_CNT];
 	int ret;
+	u8 i;
 
 	if (shim->status != MLXBF_PKA_SHIM_STATUS_CREATED) {
 		dev_err(dev, "PKA device must be created\n");
@@ -309,6 +330,31 @@ static int mlxbf_pka_dev_init_shim(struct device *dev, struct mlxbf_pka_dev_shim
 	if (ret) {
 		dev_err(dev, "failed to configure ring options\n");
 		return ret;
+	}
+
+	shim->trng_enabled   = MLXBF_PKA_SHIM_TRNG_ENABLED;
+	shim->trng_err_cycle = 0;
+
+	/* Configure the TRNG. */
+	ret = mlxbf_pka_dev_config_trng_drbg(dev,
+					     &shim->resources.aic_csr,
+					     &shim->resources.trng_csr);
+
+	/*
+	 * Pull out data from the content of the TRNG buffer RAM and start the
+	 * regeneration of new numbers; read and drop 512 words. The read must
+	 * be done over the 4 TRNG_OUTPUT_X registers at a time.
+	 */
+	for (i = 0; i < MLXBF_PKA_TRNG_NUM_OF_FOUR_WORD; i++)
+		mlxbf_pka_dev_trng_read(dev, shim, data, sizeof(data));
+
+	if (ret) {
+		/*
+		 * Keep running without TRNG since it does not hurt, but notify
+		 * users.
+		 */
+		dev_err(dev, "failed to configure TRNG\n");
+		shim->trng_enabled = MLXBF_PKA_SHIM_TRNG_DISABLED;
 	}
 
 	ret = devm_mutex_init(dev, &shim->mutex);

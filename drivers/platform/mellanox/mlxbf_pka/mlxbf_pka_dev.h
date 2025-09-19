@@ -128,11 +128,13 @@ struct mlxbf_pka_dev_res_t {
  * @buffer_ram: Buffer RAM
  * @master_seq_ctrl: Master sequencer controller CSR
  * @aic_csr: Interrupt controller CSRs
+ * @trng_csr: TRNG module CSRs
  */
 struct mlxbf_pka_dev_shim_res_t {
 	struct mlxbf_pka_dev_res_t buffer_ram;
 	struct mlxbf_pka_dev_res_t master_seq_ctrl;
 	struct mlxbf_pka_dev_res_t aic_csr;
+	struct mlxbf_pka_dev_res_t trng_csr;
 };
 
 /* Number of PKA device resources. */
@@ -180,6 +182,7 @@ struct mlxbf_pka_dev_mem_res {
 /**
  * struct mlxbf_pka_dev_shim_s - PKA Shim structure
  * @mem_res: Memory resources
+ * @trng_err_cycle: TRNG error cycle
  * @shim_id: Shim identifier
  * @rings_num: Number of supported rings (hardware specific)
  * @rings: Pointer to rings which belong to the shim
@@ -188,11 +191,13 @@ struct mlxbf_pka_dev_mem_res {
  * @resources: Shim resources
  * @window_ram_split: If non-zero, the split window RAM scheme is used
  * @busy_ring_num: Number of active rings (rings in busy state)
+ * @trng_enabled: Whether the TRNG engine is enabled
  * @status: Status of the shim
  * @mutex: Mutex lock for sharing shim
  */
 struct mlxbf_pka_dev_shim_s {
 	struct mlxbf_pka_dev_mem_res mem_res;
+	u64 trng_err_cycle;
 	u32 shim_id;
 	u32 rings_num;
 	struct mlxbf_pka_dev_ring_t **rings;
@@ -201,6 +206,7 @@ struct mlxbf_pka_dev_shim_s {
 	struct mlxbf_pka_dev_shim_res_t resources;
 	u8 window_ram_split;
 	u32 busy_ring_num;
+	u8 trng_enabled;
 	s8 status;
 	struct mutex mutex;
 };
