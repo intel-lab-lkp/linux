@@ -24,6 +24,33 @@
 static struct rv_monitor rv_this;
 
 /*
+ * Hook to allow the implementation of hybrid automata: define it with a
+ * function that takes curr_state, event and next_state and returns true if the
+ * environment constraints (e.g. timing) are satisfied, false otherwise.
+ */
+#ifndef da_monitor_event_hook
+#define da_monitor_event_hook(...) true
+#endif
+
+/*
+ * Hook to allow the implementation of hybrid automata: define it with a
+ * function that takes the da_monitor and performs further initialisation
+ * (e.g. reset set up timers).
+ */
+#ifndef da_monitor_init_hook
+#define da_monitor_init_hook(da_mon)
+#endif
+
+/*
+ * Hook to allow the implementation of hybrid automata: define it with a
+ * function that takes the da_monitor and performs further reset (e.g. reset
+ * all clocks).
+ */
+#ifndef da_monitor_reset_hook
+#define da_monitor_reset_hook(da_mon)
+#endif
+
+/*
  * Type for the target id, default to int but can be overridden.
  */
 #ifndef da_id_type
@@ -51,6 +78,7 @@ static void cond_react(enum states curr_state, enum events event) { }
  */
 static inline void da_monitor_reset(struct da_monitor *da_mon)
 {
+	da_monitor_reset_hook(da_mon);
 	da_mon->monitoring = 0;
 	da_mon->curr_state = model_get_initial_state();
 }
@@ -65,6 +93,7 @@ static inline void da_monitor_start(struct da_monitor *da_mon)
 {
 	da_mon->curr_state = model_get_initial_state();
 	da_mon->monitoring = 1;
+	da_monitor_init_hook(da_mon);
 }
 
 /*
@@ -114,14 +143,14 @@ static inline bool da_monitor_handling_event(struct da_monitor *da_mon)
 /*
  * global monitor (a single variable)
  */
-static struct da_monitor RV_DA_MON_NAME;
+static union rv_task_monitor RV_DA_MON_NAME;
 
 /*
  * da_get_monitor - return the global monitor address
  */
 static struct da_monitor *da_get_monitor(void)
 {
-	return &RV_DA_MON_NAME;
+	return &(RV_DA_MON_NAME.da_mon);
 }
 
 /*
@@ -154,14 +183,14 @@ static inline void da_monitor_destroy(void) { }
 /*
  * per-cpu monitor variables
  */
-static DEFINE_PER_CPU(struct da_monitor, RV_DA_MON_NAME);
+static DEFINE_PER_CPU(union rv_task_monitor, RV_DA_MON_NAME);
 
 /*
  * da_get_monitor - return current CPU monitor address
  */
 static struct da_monitor *da_get_monitor(void)
 {
-	return this_cpu_ptr(&RV_DA_MON_NAME);
+	return &this_cpu_ptr(&RV_DA_MON_NAME)->da_mon;
 }
 
 /*
@@ -173,7 +202,7 @@ static void da_monitor_reset_all(void)
 	int cpu;
 
 	for_each_cpu(cpu, cpu_online_mask) {
-		da_mon = per_cpu_ptr(&RV_DA_MON_NAME, cpu);
+		da_mon = &per_cpu_ptr(&RV_DA_MON_NAME, cpu)->da_mon;
 		da_monitor_reset(da_mon);
 	}
 }
@@ -217,6 +246,16 @@ static inline struct da_monitor *da_get_monitor(struct task_struct *tsk)
 static inline struct task_struct *da_get_task(struct da_monitor *da_mon)
 {
 	return container_of(da_mon, struct task_struct, rv[task_mon_slot].da_mon);
+}
+
+/*
+ * da_get_id - return the id associated to the monitor
+ *
+ * For per-task monitors, the id is the task's PID.
+ */
+static inline da_id_type da_get_id(struct da_monitor *da_mon)
+{
+	return da_get_task(da_mon)->pid;
 }
 
 static void da_monitor_reset_all(void)
@@ -289,6 +328,14 @@ static inline void da_trace_error(struct da_monitor *da_mon,
 	CONCATENATE(trace_error_, MONITOR_NAME)(curr_state, event);
 }
 
+/*
+ * da_get_id - unused for implicit monitors
+ */
+static inline da_id_type da_get_id(struct da_monitor *da_mon)
+{
+	return 0;
+}
+
 #elif RV_MON_TYPE == RV_MON_PER_TASK
 /*
  * Trace events for per_task monitors, report the PID of the task.
@@ -333,6 +380,8 @@ static inline bool da_event(struct da_monitor *da_mon, enum events event, da_id_
 			return false;
 		}
 		if (likely(try_cmpxchg(&da_mon->curr_state, &curr_state, next_state))) {
+			if (!da_monitor_event_hook(da_mon, curr_state, event, next_state, id))
+				return false;
 			da_trace_event(da_mon, model_get_state_name(curr_state),
 				       model_get_event_name(event),
 				       model_get_state_name(next_state),
