@@ -224,13 +224,12 @@ static void sync_timeline_signal(struct sync_timeline *obj, unsigned int inc)
 
 		list_move_tail(&pt->link, &signalled);
 		rb_erase(&pt->node, &obj->pt_tree);
-
-		dma_fence_signal_locked(&pt->base);
 	}
 
 	spin_unlock_irq(&obj->lock);
 
 	list_for_each_entry_safe(pt, next, &signalled, link) {
+		dma_fence_signal(&pt->base);
 		list_del_init(&pt->link);
 		dma_fence_put(&pt->base);
 	}
