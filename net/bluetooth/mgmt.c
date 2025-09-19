@@ -1356,17 +1356,19 @@ static void mgmt_set_powered_complete(struct hci_dev *hdev, void *data, int err)
 static int set_powered_sync(struct hci_dev *hdev, void *data)
 {
 	struct mgmt_pending_cmd *cmd = data;
-	struct mgmt_mode *cp;
+	struct mgmt_mode cp;
 
 	/* Make sure cmd still outstanding. */
 	if (!mgmt_pending_valid(hdev, cmd, false))
 		return -ECANCELED;
 
-	cp = cmd->param;
+	memcpy(&cp, cmd->param, sizeof(cp));
+
+	mutex_unlock(&hdev->mgmt_pending_lock);
 
 	BT_DBG("%s", hdev->name);
 
-	return hci_set_powered_sync(hdev, cp->val);
+	return hci_set_powered_sync(hdev, cp.val);
 }
 
 static int set_powered(struct sock *sk, struct hci_dev *hdev, void *data,
@@ -1545,6 +1547,8 @@ static int set_discoverable_sync(struct hci_dev *hdev, void *data)
 {
 	if (!mgmt_pending_valid(hdev, data, false))
 		return -ECANCELED;
+
+	mutex_unlock(&hdev->mgmt_pending_lock);
 
 	BT_DBG("%s", hdev->name);
 
@@ -1745,6 +1749,8 @@ static int set_connectable_sync(struct hci_dev *hdev, void *data)
 {
 	if (!mgmt_pending_valid(hdev, data, false))
 		return -ECANCELED;
+
+	mutex_unlock(&hdev->mgmt_pending_lock);
 
 	BT_DBG("%s", hdev->name);
 
@@ -1965,19 +1971,21 @@ static void set_ssp_complete(struct hci_dev *hdev, void *data, int err)
 static int set_ssp_sync(struct hci_dev *hdev, void *data)
 {
 	struct mgmt_pending_cmd *cmd = data;
-	struct mgmt_mode *cp;
+	struct mgmt_mode cp;
 	bool changed = false;
 	int err;
 
 	if (!mgmt_pending_valid(hdev, cmd, false))
 		return -ECANCELED;
 
-	cp = cmd->param;
+	memcpy(&cp, cmd->param, sizeof(cp));
 
-	if (cp->val)
+	mutex_unlock(&hdev->mgmt_pending_lock);
+
+	if (cp.val)
 		changed = !hci_dev_test_and_set_flag(hdev, HCI_SSP_ENABLED);
 
-	err = hci_write_ssp_mode_sync(hdev, cp->val);
+	err = hci_write_ssp_mode_sync(hdev, cp.val);
 
 	if (!err && changed)
 		hci_dev_clear_flag(hdev, HCI_SSP_ENABLED);
@@ -2098,15 +2106,17 @@ done:
 static int set_le_sync(struct hci_dev *hdev, void *data)
 {
 	struct mgmt_pending_cmd *cmd = data;
-	struct mgmt_mode *cp;
+	struct mgmt_mode cp;
 	u8 val;
 	int err;
 
 	if (!mgmt_pending_valid(hdev, cmd, false))
 		return -ECANCELED;
 
-	cp = cmd->param;
-	val = !!cp->val;
+	memcpy(&cp, cmd->param, sizeof(cp));
+	val = !!cp.val;
+
+	mutex_unlock(&hdev->mgmt_pending_lock);
 
 	if (!val) {
 		hci_clear_adv_instance_sync(hdev, NULL, 0x00, true);
@@ -2169,30 +2179,33 @@ static void set_mesh_complete(struct hci_dev *hdev, void *data, int err)
 static int set_mesh_sync(struct hci_dev *hdev, void *data)
 {
 	struct mgmt_pending_cmd *cmd = data;
-	struct mgmt_cp_set_mesh *cp;
+	struct mgmt_cp_set_mesh cp;
 	size_t len;
 
 	if (!mgmt_pending_valid(hdev, cmd, false))
 		return -ECANCELED;
 
-	cp = cmd->param;
+	memcpy(&cp, cmd->param, sizeof(cp));
+
+	mutex_unlock(&hdev->mgmt_pending_lock);
+
 	len = cmd->param_len;
 
 	memset(hdev->mesh_ad_types, 0, sizeof(hdev->mesh_ad_types));
 
-	if (cp->enable)
+	if (cp.enable)
 		hci_dev_set_flag(hdev, HCI_MESH);
 	else
 		hci_dev_clear_flag(hdev, HCI_MESH);
 
-	hdev->le_scan_interval = __le16_to_cpu(cp->period);
-	hdev->le_scan_window = __le16_to_cpu(cp->window);
+	hdev->le_scan_interval = __le16_to_cpu(cp.period);
+	hdev->le_scan_window = __le16_to_cpu(cp.window);
 
-	len -= sizeof(*cp);
+	len -= sizeof(cp);
 
 	/* If filters don't fit, forward all adv pkts */
 	if (len <= sizeof(hdev->mesh_ad_types))
-		memcpy(hdev->mesh_ad_types, cp->ad_types, len);
+		memcpy(hdev->mesh_ad_types, cp.ad_types, len);
 
 	hci_update_passive_scan_sync(hdev);
 	return 0;
@@ -3927,15 +3940,17 @@ static void set_name_complete(struct hci_dev *hdev, void *data, int err)
 static int set_name_sync(struct hci_dev *hdev, void *data)
 {
 	struct mgmt_pending_cmd *cmd = data;
-	struct mgmt_cp_set_local_name *cp;
+	struct mgmt_cp_set_local_name cp;
 
 	if (!mgmt_pending_valid(hdev, cmd, false))
 		return -ECANCELED;
 
-	cp = cmd->param;
+	memcpy(&cp, cmd->param, sizeof(cp));
+
+	mutex_unlock(&hdev->mgmt_pending_lock);
 
 	if (lmp_bredr_capable(hdev)) {
-		hci_update_name_sync(hdev, cp->name);
+		hci_update_name_sync(hdev, cp.name);
 		hci_update_eir_sync(hdev);
 	}
 
@@ -4126,15 +4141,18 @@ static void set_default_phy_complete(struct hci_dev *hdev, void *data, int err)
 static int set_default_phy_sync(struct hci_dev *hdev, void *data)
 {
 	struct mgmt_pending_cmd *cmd = data;
-	struct mgmt_cp_set_phy_configuration *cp;
+	struct mgmt_cp_set_phy_configuration cp;
 	struct hci_cp_le_set_default_phy cp_phy;
 	u32 selected_phys;
 
 	if (!mgmt_pending_valid(hdev, cmd, false))
 		return -ECANCELED;
 
-	cp = cmd->param;
-	selected_phys = __le32_to_cpu(cp->selected_phys);
+	memcpy(&cp, cmd->param, sizeof(cp));
+
+	mutex_unlock(&hdev->mgmt_pending_lock);
+
+	selected_phys = __le32_to_cpu(cp.selected_phys);
 
 	memset(&cp_phy, 0, sizeof(cp_phy));
 
@@ -5273,6 +5291,8 @@ static int mgmt_add_adv_patterns_monitor_sync(struct hci_dev *hdev, void *data)
 	if (!mgmt_pending_valid(hdev, cmd, false))
 		return -ECANCELED;
 
+	mutex_unlock(&hdev->mgmt_pending_lock);
+
 	return hci_add_adv_monitor(hdev, cmd->user_data);
 }
 
@@ -5860,6 +5880,8 @@ static int start_discovery_sync(struct hci_dev *hdev, void *data)
 	if (!mgmt_pending_valid(hdev, data, false))
 		return -ECANCELED;
 
+	mutex_unlock(&hdev->mgmt_pending_lock);
+
 	return hci_start_discovery_sync(hdev);
 }
 
@@ -6082,6 +6104,8 @@ static int stop_discovery_sync(struct hci_dev *hdev, void *data)
 {
 	if (!mgmt_pending_valid(hdev, data, false))
 		return -ECANCELED;
+
+	mutex_unlock(&hdev->mgmt_pending_lock);
 
 	return hci_stop_discovery_sync(hdev);
 }
@@ -6344,16 +6368,19 @@ static void set_advertising_complete(struct hci_dev *hdev, void *data, int err)
 static int set_adv_sync(struct hci_dev *hdev, void *data)
 {
 	struct mgmt_pending_cmd *cmd = data;
-	struct mgmt_mode *cp;
+	struct mgmt_mode cp;
 	u8 val;
 
 	if (!mgmt_pending_valid(hdev, cmd, false))
 		return -ECANCELED;
 
-	cp = cmd->param;
-	val = !!cp->val;
+	memcpy(&cp, cmd->param, sizeof(cp));
 
-	if (cp->val == 0x02)
+	mutex_unlock(&hdev->mgmt_pending_lock);
+
+	val = !!cp.val;
+
+	if (cp.val == 0x02)
 		hci_dev_set_flag(hdev, HCI_ADVERTISING_CONNECTABLE);
 	else
 		hci_dev_clear_flag(hdev, HCI_ADVERTISING_CONNECTABLE);
