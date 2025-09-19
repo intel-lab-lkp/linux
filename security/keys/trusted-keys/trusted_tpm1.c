@@ -312,21 +312,23 @@ static int TSS_checkhmac2(unsigned char *buffer,
  */
 static int trusted_tpm_send(unsigned char *cmd, size_t buflen)
 {
-	struct tpm_buf buf;
 	int rc;
 
 	if (!chip)
 		return -ENODEV;
 
+	struct tpm_buf *buf __free(kfree) = kzalloc(PAGE_SIZE, GFP_KERNEL);
+	if (!buf)
+		return -ENOMEM;
+
 	rc = tpm_try_get_ops(chip);
 	if (rc)
 		return rc;
 
-	buf.flags = 0;
-	buf.length = buflen;
-	buf.data = cmd;
+	tpm_buf_append(buf, cmd, buflen);
+
 	dump_tpm_buf(cmd);
-	rc = tpm_transmit_cmd(chip, &buf, 4, "sending data");
+	rc = tpm_transmit_cmd(chip, buf, 4, "sending data");
 	dump_tpm_buf(cmd);
 
 	if (rc > 0)
@@ -368,7 +370,7 @@ static int osap(struct tpm_buf *tb, struct osapsess *s,
 	if (ret != TPM_NONCE_SIZE)
 		return -EIO;
 
-	tpm_buf_reset(tb, TPM_TAG_RQU_COMMAND, TPM_ORD_OSAP);
+	tpm_buf_reset(tb, PAGE_SIZE, TPM_TAG_RQU_COMMAND, TPM_ORD_OSAP);
 	tpm_buf_append_u16(tb, type);
 	tpm_buf_append_u32(tb, handle);
 	tpm_buf_append(tb, ononce, TPM_NONCE_SIZE);
@@ -396,7 +398,7 @@ static int oiap(struct tpm_buf *tb, uint32_t *handle, unsigned char *nonce)
 	if (!chip)
 		return -ENODEV;
 
-	tpm_buf_reset(tb, TPM_TAG_RQU_COMMAND, TPM_ORD_OIAP);
+	tpm_buf_reset(tb, PAGE_SIZE, TPM_TAG_RQU_COMMAND, TPM_ORD_OIAP);
 	ret = trusted_tpm_send(tb->data, tb->length);
 	if (ret < 0)
 		return ret;
@@ -494,7 +496,7 @@ static int tpm_seal(struct tpm_buf *tb, uint16_t keytype,
 		goto out;
 
 	/* build and send the TPM request packet */
-	tpm_buf_reset(tb, TPM_TAG_RQU_AUTH1_COMMAND, TPM_ORD_SEAL);
+	tpm_buf_reset(tb, PAGE_SIZE, TPM_TAG_RQU_AUTH1_COMMAND, TPM_ORD_SEAL);
 	tpm_buf_append_u32(tb, keyhandle);
 	tpm_buf_append(tb, td->encauth, SHA1_DIGEST_SIZE);
 	tpm_buf_append_u32(tb, pcrinfosize);
@@ -585,7 +587,7 @@ static int tpm_unseal(struct tpm_buf *tb,
 		return ret;
 
 	/* build and send TPM request packet */
-	tpm_buf_reset(tb, TPM_TAG_RQU_AUTH2_COMMAND, TPM_ORD_UNSEAL);
+	tpm_buf_reset(tb, PAGE_SIZE, TPM_TAG_RQU_AUTH2_COMMAND, TPM_ORD_UNSEAL);
 	tpm_buf_append_u32(tb, keyhandle);
 	tpm_buf_append(tb, blob, bloblen);
 	tpm_buf_append_u32(tb, authhandle1);
@@ -624,23 +626,21 @@ static int tpm_unseal(struct tpm_buf *tb,
 static int key_seal(struct trusted_key_payload *p,
 		    struct trusted_key_options *o)
 {
-	struct tpm_buf tb;
 	int ret;
 
-	ret = tpm_buf_init(&tb, 0, 0);
-	if (ret)
-		return ret;
+	struct tpm_buf *tb __free(kfree) = kzalloc(PAGE_SIZE, GFP_KERNEL);
+	if (!tb)
+		return -ENOMEM;
 
 	/* include migratable flag at end of sealed key */
 	p->key[p->key_len] = p->migratable;
 
-	ret = tpm_seal(&tb, o->keytype, o->keyhandle, o->keyauth,
+	ret = tpm_seal(tb, o->keytype, o->keyhandle, o->keyauth,
 		       p->key, p->key_len + 1, p->blob, &p->blob_len,
 		       o->blobauth, o->pcrinfo, o->pcrinfo_len);
 	if (ret < 0)
 		pr_info("srkseal failed (%d)\n", ret);
 
-	tpm_buf_destroy(&tb);
 	return ret;
 }
 
@@ -650,14 +650,13 @@ static int key_seal(struct trusted_key_payload *p,
 static int key_unseal(struct trusted_key_payload *p,
 		      struct trusted_key_options *o)
 {
-	struct tpm_buf tb;
 	int ret;
 
-	ret = tpm_buf_init(&tb, 0, 0);
-	if (ret)
-		return ret;
+	struct tpm_buf *tb __free(kfree) = kzalloc(PAGE_SIZE, GFP_KERNEL);
+	if (!tb)
+		return -ENOMEM;
 
-	ret = tpm_unseal(&tb, o->keyhandle, o->keyauth, p->blob, p->blob_len,
+	ret = tpm_unseal(tb, o->keyhandle, o->keyauth, p->blob, p->blob_len,
 			 o->blobauth, p->key, &p->key_len);
 	if (ret < 0)
 		pr_info("srkunseal failed (%d)\n", ret);
@@ -665,7 +664,6 @@ static int key_unseal(struct trusted_key_payload *p,
 		/* pull migratable flag out of sealed key */
 		p->migratable = p->key[--p->key_len];
 
-	tpm_buf_destroy(&tb);
 	return ret;
 }
 
