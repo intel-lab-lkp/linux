@@ -15755,6 +15755,14 @@ L:	linux-i2c@vger.kernel.org
 S:	Supported
 F:	drivers/i2c/busses/i2c-mlxbf.c
 
+MELLANOX BLUEFIELD PKA DRIVER
+M:	Ron Li <xiangrongl@nvidia.com>
+M:	Khalil Blaiech <kblaiech@nvidia.com>
+L:	platform-driver-x86@vger.kernel.org
+S:	Supported
+F:	Documentation/ABI/testing/sysfs-platform-mellanox-pka
+F:	drivers/platform/mellanox/mlxbf_pka/mlxbf_pka_*
+
 MELLANOX ETHERNET DRIVER (mlx4_en)
 M:	Tariq Toukan <tariqt@nvidia.com>
 L:	netdev@vger.kernel.org

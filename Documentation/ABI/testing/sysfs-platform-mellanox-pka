@@ -1,0 +1,16 @@
+What:		/sys/devices/platform/<pka-device-id>/<pka-ring-device-id>
+Date:		Oct 2025
+KernelVersion:	6.18
+Contact:	"Ron Li <xiangrongl@nvidia.com>"
+Description:
+		The mlxbf_pka driver to support the BlueField SoC Public Key Acceleration (PKA)
+		hardware. It supports direct access to the public key hardware resources from the
+		user space.
+
+		There are three PKA device IDs that support different BlueField product:
+
+		===========  ==============================================
+		BlueField-1  MLNXBF10:xx, where xx ranges from '00' to '03'
+		BlueField-2  MLNXBF20:xx, where xx ranges from '00' to '07'
+		BlueField-3  MLNXBF51:xx, where xx ranges from '00' to '17'
+		===========  ==============================================
