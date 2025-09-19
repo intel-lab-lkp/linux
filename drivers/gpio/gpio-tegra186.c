@@ -21,6 +21,7 @@
 #include <dt-bindings/gpio/tegra234-gpio.h>
 #include <dt-bindings/gpio/tegra241-gpio.h>
 #include <dt-bindings/gpio/tegra256-gpio.h>
+#include <dt-bindings/gpio/tegra410-gpio.h>
 
 /* security registers */
 #define TEGRA186_GPIO_CTL_SCR 0x0c
@@ -1304,6 +1305,40 @@ static const struct tegra_gpio_soc tegra256_main_soc = {
 	.has_vm_support = true,
 };
 
+#define TEGRA410_MAIN_GPIO_PORT(_name, _bank, _port, _pins)	\
+	[TEGRA410_MAIN_GPIO_PORT_##_name] = {			\
+		.name = #_name,					\
+		.bank = _bank,					\
+		.port = _port,					\
+		.pins = _pins,					\
+	}
+
+static const struct tegra_gpio_port tegra410_main_ports[] = {
+	TEGRA410_MAIN_GPIO_PORT(A, 0, 0, 7),
+	TEGRA410_MAIN_GPIO_PORT(B, 0, 1, 8),
+	TEGRA410_MAIN_GPIO_PORT(C, 0, 2, 8),
+	TEGRA410_MAIN_GPIO_PORT(D, 0, 3, 8),
+	TEGRA410_MAIN_GPIO_PORT(E, 0, 4, 6),
+	TEGRA410_MAIN_GPIO_PORT(I, 1, 0, 8),
+	TEGRA410_MAIN_GPIO_PORT(J, 1, 1, 7),
+	TEGRA410_MAIN_GPIO_PORT(K, 1, 2, 7),
+	TEGRA410_MAIN_GPIO_PORT(L, 1, 3, 7),
+	TEGRA410_MAIN_GPIO_PORT(M, 2, 0, 7),
+	TEGRA410_MAIN_GPIO_PORT(N, 2, 1, 6),
+	TEGRA410_MAIN_GPIO_PORT(P, 2, 2, 8),
+	TEGRA410_MAIN_GPIO_PORT(Q, 2, 3, 3),
+	TEGRA410_MAIN_GPIO_PORT(R, 2, 4, 2),
+};
+
+static const struct tegra_gpio_soc tegra410_main_soc = {
+	.num_ports = ARRAY_SIZE(tegra410_main_ports),
+	.ports = tegra410_main_ports,
+	.name = "tegra410-gpio-main",
+	.instance = 1,
+	.num_irqs_per_bank = 8,
+	.has_vm_support = false,
+};
+
 static const struct of_device_id tegra186_gpio_of_match[] = {
 	{
 		.compatible = "nvidia,tegra186-gpio",
@@ -1339,6 +1374,7 @@ static const struct acpi_device_id  tegra186_gpio_acpi_match[] = {
 	{ .id = "NVDA0408", .driver_data = (kernel_ulong_t)&tegra194_aon_soc },
 	{ .id = "NVDA0508", .driver_data = (kernel_ulong_t)&tegra241_main_soc },
 	{ .id = "NVDA0608", .driver_data = (kernel_ulong_t)&tegra241_aon_soc },
+	{ .id = "NVDA0409", .driver_data = (kernel_ulong_t)&tegra410_main_soc },
 	{}
 };
 MODULE_DEVICE_TABLE(acpi, tegra186_gpio_acpi_match);
