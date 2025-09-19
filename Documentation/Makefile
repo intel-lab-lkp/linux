@@ -24,7 +24,6 @@ SPHINXDIRS    = .
 DOCS_THEME    =
 DOCS_CSS      =
 RUSTDOC       =
-SPHINX_CONF   = conf.py
 PAPER         =
 BUILDDIR      = $(obj)/output
 PDFLATEX      = xelatex
@@ -107,9 +106,6 @@ dochelp:
 	@echo
 	@echo  '  make SPHINXDIRS="s1 s2" [target] Generate only docs of folder s1, s2'
 	@echo  '  valid values for SPHINXDIRS are: $(_SPHINXDIRS)'
-	@echo
-	@echo  '  make SPHINX_CONF={conf-file} [target] use *additional* sphinx-build'
-	@echo  '  configuration. This is e.g. useful to build with nit-picking config.'
 	@echo
 	@echo  '  make DOCS_THEME={sphinx-theme} selects a different Sphinx theme.'
 	@echo
