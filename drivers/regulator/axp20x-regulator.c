@@ -1481,70 +1481,69 @@ static int axp20x_set_dcdc_workmode(struct regulator_dev *rdev, int id, u32 work
 	return regmap_update_bits(rdev->regmap, reg, mask, workmode);
 }
 
+struct dualphase_regulator {
+	int axp_id;
+	int reg1, reg2;
+	unsigned int polyphase_reg;
+	unsigned int bitmask;
+} dualphase_regulators[] = {
+	{ AXP323_ID, AXP313A_DCDC1, AXP313A_DCDC2,
+		AXP323_DCDC_MODE_CTRL2, BIT(1), },
+	{ AXP803_ID, AXP803_DCDC2, AXP803_DCDC3, AXP803_POLYPHASE_CTRL,
+		AXP803_DCDC23_POLYPHASE_DUAL, },
+	{ AXP803_ID, AXP803_DCDC5, AXP803_DCDC6, AXP803_POLYPHASE_CTRL,
+		AXP803_DCDC56_POLYPHASE_DUAL, },
+	/* AXP806's DCDC-A/B/C is a tri-phase regulator */
+	{ AXP806_ID, AXP806_DCDCD, AXP806_DCDCE, AXP806_DCDC_MODE_CTRL2,
+		AXP806_DCDCDE_POLYPHASE_DUAL, },
+	{ AXP813_ID, AXP803_DCDC2, AXP803_DCDC3, AXP803_POLYPHASE_CTRL,
+		AXP803_DCDC23_POLYPHASE_DUAL, },
+	{ AXP813_ID, AXP803_DCDC5, AXP803_DCDC6, AXP803_POLYPHASE_CTRL,
+		AXP803_DCDC56_POLYPHASE_DUAL, },
+	{ AXP15060_ID, AXP15060_DCDC2, AXP15060_DCDC3, AXP15060_DCDC_MODE_CTRL1,
+		AXP15060_DCDC23_POLYPHASE_DUAL_MASK, },
+	{ AXP15060_ID, AXP15060_DCDC4, AXP15060_DCDC6, AXP15060_DCDC_MODE_CTRL1,
+		AXP15060_DCDC46_POLYPHASE_DUAL_MASK, },
+};
+
 /*
  * This function checks whether a regulator is part of a poly-phase
  * output setup based on the registers settings. Returns true if it is.
  */
 static bool axp20x_is_polyphase_slave(struct axp20x_dev *axp20x, int id)
 {
+	struct dualphase_regulator *dpreg;
 	u32 reg = 0;
+	int i;
+
+	for (i = 0; i < ARRAY_SIZE(dualphase_regulators); i++) {
+		dpreg = &dualphase_regulators[i];
+
+		if (axp20x->variant != dpreg->axp_id)
+			continue;
+		/* Is this the second regulator from a dual-phase pair? */
+		if (id == dpreg->reg2) {
+			regmap_read(axp20x->regmap, dpreg->polyphase_reg, &reg);
+
+			return !!(reg & dpreg->bitmask);
+		}
+	}
 
 	/*
-	 * Currently in our supported AXP variants, only AXP803, AXP806,
-	 * AXP813 and AXP15060 have polyphase regulators.
+	 * DCDC-A/B/C can be configured either as a dual-phase (A+B) or
+	 * as a triple-phase regulator (A+B+C), but not in any other
+	 * combination. Treat this as a special case here.
 	 */
-	switch (axp20x->variant) {
-	case AXP803_ID:
-	case AXP813_ID:
-		regmap_read(axp20x->regmap, AXP803_POLYPHASE_CTRL, &reg);
-
-		switch (id) {
-		case AXP803_DCDC3:
-			return !!(reg & AXP803_DCDC23_POLYPHASE_DUAL);
-		case AXP803_DCDC6:
-			return !!(reg & AXP803_DCDC56_POLYPHASE_DUAL);
-		}
-		break;
-
-	case AXP806_ID:
+	if (axp20x->variant == AXP806_ID) {
 		regmap_read(axp20x->regmap, AXP806_DCDC_MODE_CTRL2, &reg);
-
-		switch (id) {
-		case AXP806_DCDCB:
+		if (id == AXP806_DCDCB)
 			return (((reg & AXP806_DCDCABC_POLYPHASE_MASK) ==
 				AXP806_DCDCAB_POLYPHASE_DUAL) ||
 				((reg & AXP806_DCDCABC_POLYPHASE_MASK) ==
 				AXP806_DCDCABC_POLYPHASE_TRI));
-		case AXP806_DCDCC:
+		if (id == AXP806_DCDCC)
 			return ((reg & AXP806_DCDCABC_POLYPHASE_MASK) ==
 				AXP806_DCDCABC_POLYPHASE_TRI);
-		case AXP806_DCDCE:
-			return !!(reg & AXP806_DCDCDE_POLYPHASE_DUAL);
-		}
-		break;
-
-	case AXP15060_ID:
-		regmap_read(axp20x->regmap, AXP15060_DCDC_MODE_CTRL1, &reg);
-
-		switch (id) {
-		case AXP15060_DCDC3:
-			return !!(reg & AXP15060_DCDC23_POLYPHASE_DUAL_MASK);
-		case AXP15060_DCDC6:
-			return !!(reg & AXP15060_DCDC46_POLYPHASE_DUAL_MASK);
-		}
-		break;
-
-	case AXP323_ID:
-		regmap_read(axp20x->regmap, AXP323_DCDC_MODE_CTRL2, &reg);
-
-		switch (id) {
-		case AXP313A_DCDC2:
-			return !!(reg & BIT(1));
-		}
-		break;
-
-	default:
-		return false;
 	}
 
 	return false;
