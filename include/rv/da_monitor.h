@@ -11,6 +11,9 @@
  *   Documentation/trace/rv/da_monitor_synthesis.rst
  */
 
+#ifndef _RV_DA_MONITOR_H
+#define _RV_DA_MONITOR_H
+
 #include <rv/automata.h>
 #include <linux/rv.h>
 #include <linux/stringify.h>
@@ -22,32 +25,19 @@ static struct rv_monitor rv_this;
 
 #ifdef CONFIG_RV_REACTORS
 
-#define DECLARE_RV_REACTING_HELPERS(name, type)
-static void cond_react(type curr_state, type event)
+static void cond_react(enum states curr_state, enum events event)
 {
 	if (!rv_reacting_on() || !rv_this.react)
 		return;
 	rv_this.react("rv: monitor %s does not allow event %s on state %s\n",
-			__stringify(MONITOR_NAME),
-			model_get_event_name(event),
-			model_get_state_name(curr_state));
+		      __stringify(MONITOR_NAME), model_get_event_name(event),
+		      model_get_state_name(curr_state));
 }
 
 #else /* CONFIG_RV_REACTOR */
 
-#define DECLARE_RV_REACTING_HELPERS(name, type)
-static void cond_react(type curr_state, type event)
-{
-	return;
-}
+static void cond_react(enum states curr_state, enum events event) { }
 #endif
-
-/*
- * Generic helpers for all types of deterministic automata monitors.
- */
-#define DECLARE_DA_MON_GENERIC_HELPERS(name, type)
-
-DECLARE_RV_REACTING_HELPERS(name, type)
 
 /*
  * da_monitor_reset - reset a monitor and setting it to init state
@@ -99,7 +89,6 @@ static inline bool da_monitor_enabled(void)
  */
 static inline bool da_monitor_handling_event(struct da_monitor *da_mon)
 {
-
 	if (!da_monitor_enabled())
 		return 0;
 
@@ -110,6 +99,7 @@ static inline bool da_monitor_handling_event(struct da_monitor *da_mon)
 	return 1;
 }
 
+#if RV_MON_TYPE == RV_MON_GLOBAL || RV_MON_TYPE == RV_MON_PER_CPU
 /*
  * Event handler for implicit monitors. Implicit monitor is the one which the
  * handler does not need to specify which da_monitor to manipulate. Examples
@@ -119,10 +109,8 @@ static inline bool da_monitor_handling_event(struct da_monitor *da_mon)
  * warn and reset the monitor if it runs out of retries. The monitor should be
  * able to handle various orders.
  */
-#if RV_MON_TYPE == RV_MON_GLOBAL || RV_MON_TYPE == RV_MON_PER_CPU
 
-static inline bool
-da_event(struct da_monitor *da_mon, enum events event)
+static inline bool da_event(struct da_monitor *da_mon, enum events event)
 {
 	enum states curr_state, next_state;
 
@@ -131,15 +119,17 @@ da_event(struct da_monitor *da_mon, enum events event)
 		next_state = model_get_next_state(curr_state, event);
 		if (next_state == INVALID_STATE) {
 			cond_react(curr_state, event);
-			CONCATENATE(trace_error_, MONITOR_NAME)(model_get_state_name(curr_state),
-					   model_get_event_name(event));
+			CONCATENATE(trace_error_, MONITOR_NAME)(
+				    model_get_state_name(curr_state),
+				    model_get_event_name(event));
 			return false;
 		}
 		if (likely(try_cmpxchg(&da_mon->curr_state, &curr_state, next_state))) {
-			CONCATENATE(trace_event_, MONITOR_NAME)(model_get_state_name(curr_state),
-					   model_get_event_name(event),
-					   model_get_state_name(next_state),
-					   model_is_final_state(next_state));
+			CONCATENATE(trace_event_, MONITOR_NAME)(
+				    model_get_state_name(curr_state),
+				    model_get_event_name(event),
+				    model_get_state_name(next_state),
+				    model_is_final_state(next_state));
 			return true;
 		}
 	}
@@ -151,6 +141,7 @@ da_event(struct da_monitor *da_mon, enum events event)
 	return false;
 }
 
+#elif RV_MON_TYPE == RV_MON_PER_TASK
 /*
  * Event handler for per_task monitors.
  *
@@ -158,10 +149,9 @@ da_event(struct da_monitor *da_mon, enum events event)
  * warn and reset the monitor if it runs out of retries. The monitor should be
  * able to handle various orders.
  */
-#elif RV_MON_TYPE == RV_MON_PER_TASK
 
 static inline bool da_event(struct da_monitor *da_mon, struct task_struct *tsk,
-				   enum events event)
+			    enum events event)
 {
 	enum states curr_state, next_state;
 
@@ -171,16 +161,16 @@ static inline bool da_event(struct da_monitor *da_mon, struct task_struct *tsk,
 		if (next_state == INVALID_STATE) {
 			cond_react(curr_state, event);
 			CONCATENATE(trace_error_, MONITOR_NAME)(tsk->pid,
-					   model_get_state_name(curr_state),
-					   model_get_event_name(event));
+				    model_get_state_name(curr_state),
+				    model_get_event_name(event));
 			return false;
 		}
 		if (likely(try_cmpxchg(&da_mon->curr_state, &curr_state, next_state))) {
 			CONCATENATE(trace_event_, MONITOR_NAME)(tsk->pid,
-					   model_get_state_name(curr_state),
-					   model_get_event_name(event),
-					   model_get_state_name(next_state),
-					   model_is_final_state(next_state));
+				    model_get_state_name(curr_state),
+				    model_get_event_name(event),
+				    model_get_state_name(next_state),
+				    model_is_final_state(next_state));
 			return true;
 		}
 	}
@@ -191,12 +181,12 @@ static inline bool da_event(struct da_monitor *da_mon, struct task_struct *tsk,
 		model_get_event_name(event), __stringify(MONITOR_NAME));
 	return false;
 }
-#endif
+#endif /* RV_MON_TYPE */
 
+#if RV_MON_TYPE == RV_MON_GLOBAL
 /*
  * Functions to define, init and get a global monitor.
  */
-#if RV_MON_TYPE == RV_MON_GLOBAL
 
 /*
  * global monitor (a single variable)
@@ -231,15 +221,12 @@ static inline int da_monitor_init(void)
 /*
  * da_monitor_destroy - destroy the monitor
  */
-static inline void da_monitor_destroy(void)
-{
-	return;
-}
+static inline void da_monitor_destroy(void) { }
 
+#elif RV_MON_TYPE == RV_MON_PER_CPU
 /*
  * Functions to define, init and get a per-cpu monitor.
  */
-#elif RV_MON_TYPE == RV_MON_PER_CPU
 
 /*
  * per-cpu monitor variables
@@ -261,6 +248,7 @@ static void da_monitor_reset_all(void)
 {
 	struct da_monitor *da_mon;
 	int cpu;
+
 	for_each_cpu(cpu, cpu_online_mask) {
 		da_mon = per_cpu_ptr(&RV_DA_MON_NAME, cpu);
 		da_monitor_reset(da_mon);
@@ -279,15 +267,12 @@ static inline int da_monitor_init(void)
 /*
  * da_monitor_destroy - destroy the monitor
  */
-static inline void da_monitor_destroy(void)
-{
-	return;
-}
+static inline void da_monitor_destroy(void) { }
 
+#elif RV_MON_TYPE == RV_MON_PER_TASK
 /*
  * Functions to define, init and get a per-task monitor.
  */
-#elif RV_MON_TYPE == RV_MON_PER_TASK
 
 /*
  * The per-task monitor is stored a vector in the task struct. This variable
@@ -347,18 +332,17 @@ static inline void da_monitor_destroy(void)
 	}
 	rv_put_task_monitor_slot(task_mon_slot);
 	task_mon_slot = RV_PER_TASK_MONITOR_INIT;
-	return;
 }
-#endif
+#endif /* RV_MON_TYPE */
 
+#if RV_MON_TYPE == RV_MON_GLOBAL || RV_MON_TYPE == RV_MON_PER_CPU
 /*
  * Handle event for implicit monitor: da_get_monitor() will figure out
  * the monitor.
  */
-#if RV_MON_TYPE == RV_MON_GLOBAL || RV_MON_TYPE == RV_MON_PER_CPU
 
 static inline void __da_handle_event(struct da_monitor *da_mon,
-					    enum events event)
+				     enum events event)
 {
 	bool retval;
 
@@ -434,14 +418,13 @@ static inline bool da_handle_start_run_event(enum events event)
 	return 1;
 }
 
+#elif RV_MON_TYPE == RV_MON_PER_TASK
 /*
  * Handle event for per task.
  */
-#elif RV_MON_TYPE == RV_MON_PER_TASK
 
-static inline void
-__da_handle_event(struct da_monitor *da_mon, struct task_struct *tsk,
-			 enum events event)
+static inline void __da_handle_event(struct da_monitor *da_mon,
+				     struct task_struct *tsk, enum events event)
 {
 	bool retval;
 
@@ -453,8 +436,7 @@ __da_handle_event(struct da_monitor *da_mon, struct task_struct *tsk,
 /*
  * da_handle_event - handle an event
  */
-static inline void
-da_handle_event(struct task_struct *tsk, enum events event)
+static inline void da_handle_event(struct task_struct *tsk, enum events event)
 {
 	struct da_monitor *da_mon = da_get_monitor(tsk);
 	bool retval;
@@ -476,8 +458,8 @@ da_handle_event(struct task_struct *tsk, enum events event)
  * If the monitor already started, handle the event.
  * If the monitor did not start yet, start the monitor but skip the event.
  */
-static inline bool
-da_handle_start_event(struct task_struct *tsk, enum events event)
+static inline bool da_handle_start_event(struct task_struct *tsk,
+					 enum events event)
 {
 	struct da_monitor *da_mon;
 
@@ -502,8 +484,8 @@ da_handle_start_event(struct task_struct *tsk, enum events event)
  * This function is used to notify the monitor that the system is in the
  * initial state, so the monitor can start monitoring and handling event.
  */
-static inline bool
-da_handle_start_run_event(struct task_struct *tsk, enum events event)
+static inline bool da_handle_start_run_event(struct task_struct *tsk,
+					     enum events event)
 {
 	struct da_monitor *da_mon;
 
@@ -519,19 +501,6 @@ da_handle_start_run_event(struct task_struct *tsk, enum events event)
 
 	return 1;
 }
+#endif /* RV_MON_TYPE */
+
 #endif
-
-/*
- * Entry point for the global monitor.
- */
-#define DECLARE_DA_MON_GLOBAL(name, type)
-
-/*
- * Entry point for the per-cpu monitor.
- */
-#define DECLARE_DA_MON_PER_CPU(name, type)
-
-/*
- * Entry point for the per-task monitor.
- */
-#define DECLARE_DA_MON_PER_TASK(name, type)
