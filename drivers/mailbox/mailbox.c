@@ -476,7 +476,7 @@ of_mbox_index_xlate(struct mbox_controller *mbox,
 {
 	int ind = sp->args[0];
 
-	if (ind >= mbox->num_chans)
+	if (sp->args_count < 1 || ind >= mbox->num_chans)
 		return ERR_PTR(-EINVAL);
 
 	return &mbox->chans[ind];
