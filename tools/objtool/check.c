@@ -322,7 +322,10 @@ static bool __dead_end_function(struct objtool_file *file, struct symbol *func,
 
 static bool dead_end_function(struct objtool_file *file, struct symbol *func)
 {
-	return __dead_end_function(file, func, 0);
+	if (func->functype == UNKNOWN)
+		func->functype = (__dead_end_function(file, func, 0)
+				  ? NORETURN : REGULAR);
+	return func->functype == NORETURN;
 }
 
 static void init_cfi_state(struct cfi_state *cfi)
