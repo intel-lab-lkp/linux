@@ -225,7 +225,7 @@ static int scs_handle_fde_frame(const struct eh_frame *frame,
 	return 0;
 }
 
-int scs_patch(const u8 eh_frame[], int size)
+int scs_patch(const u8 eh_frame[], int size, bool is_module)
 {
 	int code_alignment_factor = 1;
 	bool fde_use_sdata8 = false;
@@ -276,12 +276,19 @@ int scs_patch(const u8 eh_frame[], int size)
 				return EDYNSCS_INVALID_CIE_SDATA_SIZE;
 			}
 		} else {
+			/*
+			 * For loadable module instead of running a dry run try
+			 * to patch scs instruction in place and trigger error
+			 * if failed, to prevent module loading.
+			 */
 			ret = scs_handle_fde_frame(frame, code_alignment_factor,
-						   fde_use_sdata8, true);
+						   fde_use_sdata8, !is_module);
 			if (ret)
 				return ret;
-			scs_handle_fde_frame(frame, code_alignment_factor,
-					     fde_use_sdata8, false);
+
+			if (!is_module)
+				scs_handle_fde_frame(frame, code_alignment_factor,
+						     fde_use_sdata8, false);
 		}
 
 		p += sizeof(frame->size) + frame->size;
