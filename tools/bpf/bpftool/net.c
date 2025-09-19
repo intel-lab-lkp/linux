@@ -816,7 +816,11 @@ static int netfilter_link_compar(const void *a, const void *b)
 	if (nfa->netfilter.priority > nfb->netfilter.priority)
 		return 1;
 
-	return nfa->netfilter.flags - nfb->netfilter.flags;
+	if (nfa->netfilter.flags < nfb->netfilter.flags)
+		return -1;
+	if (nfa->netfilter.flags > nfb->netfilter.flags)
+		return 1;
+	return 0;
 }
 
 static void show_link_netfilter(void)
