@@ -318,7 +318,16 @@ register_shm_helper(struct tee_context *ctx, struct iov_iter *iter, u32 flags,
 
 	len = iov_iter_extract_pages(iter, &shm->pages, LONG_MAX, num_pages, 0,
 				     &off);
-	if (unlikely(len <= 0)) {
+	if (DIV_ROUND_UP(len + off, PAGE_SIZE) != num_pages) {
+		if (len > 0) {
+			/*
+			 * If we only got a few pages, update to release
+			 * the correct amount below.
+			 */
+			shm->num_pages = len / PAGE_SIZE;
+			ret = ERR_PTR(-ENOMEM);
+			goto err_put_shm_pages;
+		}
 		ret = len ? ERR_PTR(len) : ERR_PTR(-ENOMEM);
 		goto err_free_shm_pages;
 	}
