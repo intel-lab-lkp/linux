@@ -8,81 +8,55 @@
 #include <linux/tpm.h>
 
 /**
- * tpm_buf_init() - Allocate and initialize a TPM command
+ * tpm_buf_reset() - Initialize a TPM command
  * @buf:	A &tpm_buf
+ * @buf_size:	Size of the buffer.
  * @tag:	TPM_TAG_RQU_COMMAND, TPM2_ST_NO_SESSIONS or TPM2_ST_SESSIONS
  * @ordinal:	A command ordinal
  *
- * Return: 0 or -ENOMEM
+ * 1. Expects that on the first run the passed buffer is zeroed by the caller.
+ * 2. Old buffer can be reused. On the second and subsequent resets @buf_size is
+ *    verified to be equal to the previous value.
  */
-int tpm_buf_init(struct tpm_buf *buf, u16 tag, u32 ordinal)
-{
-	buf->data = (u8 *)__get_free_page(GFP_KERNEL);
-	if (!buf->data)
-		return -ENOMEM;
-
-	tpm_buf_reset(buf, tag, ordinal);
-	return 0;
-}
-EXPORT_SYMBOL_GPL(tpm_buf_init);
-
-/**
- * tpm_buf_reset() - Initialize a TPM command
- * @buf:	A &tpm_buf
- * @tag:	TPM_TAG_RQU_COMMAND, TPM2_ST_NO_SESSIONS or TPM2_ST_SESSIONS
- * @ordinal:	A command ordinal
- */
-void tpm_buf_reset(struct tpm_buf *buf, u16 tag, u32 ordinal)
+void tpm_buf_reset(struct tpm_buf *buf, u16 buf_size, u16 tag, u32 ordinal)
 {
 	struct tpm_header *head = (struct tpm_header *)buf->data;
 
+	WARN_ON(buf->capacity != 0 && buf_size != (buf->capacity + sizeof(*buf)));
 	WARN_ON(tag != TPM_TAG_RQU_COMMAND && tag != TPM2_ST_NO_SESSIONS &&
 		tag != TPM2_ST_SESSIONS && tag != 0);
 
 	buf->flags = 0;
 	buf->length = sizeof(*head);
+	buf->capacity = buf_size - sizeof(*buf);
+	buf->handles = 0;
 	head->tag = cpu_to_be16(tag);
 	head->length = cpu_to_be32(sizeof(*head));
 	head->ordinal = cpu_to_be32(ordinal);
-	buf->handles = 0;
 }
 EXPORT_SYMBOL_GPL(tpm_buf_reset);
 
 /**
- * tpm_buf_init_sized() - Allocate and initialize a sized (TPM2B) buffer
- * @buf:	A @tpm_buf
- *
- * Return: 0 or -ENOMEM
- */
-int tpm_buf_init_sized(struct tpm_buf *buf)
-{
-	buf->data = (u8 *)__get_free_page(GFP_KERNEL);
-	if (!buf->data)
-		return -ENOMEM;
-
-	tpm_buf_reset_sized(buf);
-	return 0;
-}
-EXPORT_SYMBOL_GPL(tpm_buf_init_sized);
-
-/**
  * tpm_buf_reset_sized() - Initialize a sized buffer
  * @buf:	A &tpm_buf
+ * @buf_size:	Size of the buffer.
+ *
+ * 1. Expects that on the first run the passed buffer is zeroed by the caller.
+ * 2. Old buffer can be reused. On the second and subsequent resets @buf_size is
+ *    verified to be equal to the previous value.
  */
-void tpm_buf_reset_sized(struct tpm_buf *buf)
+void tpm_buf_reset_sized(struct tpm_buf *buf, u16 buf_size)
 {
+	WARN_ON(buf->capacity != 0 && buf_size != (buf->capacity + sizeof(*buf)));
+
 	buf->flags = TPM_BUF_TPM2B;
 	buf->length = 2;
+	buf->capacity = buf_size - sizeof(*buf);
+	buf->handles = 0;
 	buf->data[0] = 0;
 	buf->data[1] = 0;
 }
 EXPORT_SYMBOL_GPL(tpm_buf_reset_sized);
-
-void tpm_buf_destroy(struct tpm_buf *buf)
-{
-	free_page((unsigned long)buf->data);
-}
-EXPORT_SYMBOL_GPL(tpm_buf_destroy);
 
 /**
  * tpm_buf_length() - Return the number of bytes consumed by the data
@@ -108,7 +82,7 @@ void tpm_buf_append(struct tpm_buf *buf, const u8 *new_data, u16 new_length)
 	if (buf->flags & TPM_BUF_OVERFLOW)
 		return;
 
-	if ((buf->length + new_length) > PAGE_SIZE) {
+	if ((buf->length + new_length) > buf->capacity) {
 		WARN(1, "tpm_buf: write overflow\n");
 		buf->flags |= TPM_BUF_OVERFLOW;
 		return;
@@ -242,5 +216,3 @@ u32 tpm_buf_read_u32(struct tpm_buf *buf, off_t *offset)
 	return be32_to_cpu(value);
 }
 EXPORT_SYMBOL_GPL(tpm_buf_read_u32);
-
-
