@@ -304,6 +304,15 @@ properties:
               noise. This probably makes sense for HiFi audio related
               applications that aren't battery constrained.
 
+          x-powers,polyphased:
+            $ref: /schemas/types.yaml#/definitions/phandle-array
+            description:
+              A list of phandles pointing to other regulators that should be
+              polyphased with this regulator. The linked regulators will be
+              synchronised with this regulator, within the PMIC, but only if
+              supported by the PMIC. An empty list means this regulator
+              should be configured in a single-phase setup.
+
     additionalProperties: false
 
 required:
@@ -377,6 +386,7 @@ examples:
                     regulator-min-microvolt = <1000000>;
                     regulator-max-microvolt = <1450000>;
                     regulator-name = "vdd-cpu";
+                    x-powers,polyphased = <&reg_dcdc4>;
                 };
 
                 reg_dcdc3: dcdc3 {
@@ -384,6 +394,10 @@ examples:
                     regulator-min-microvolt = <1000000>;
                     regulator-max-microvolt = <1400000>;
                     regulator-name = "vdd-int-dll";
+                };
+
+                reg_dcdc4: dcdc4 {
+                    /* dual-phased with DCDC2 */
                 };
 
                 reg_ldo1: ldo1 {
