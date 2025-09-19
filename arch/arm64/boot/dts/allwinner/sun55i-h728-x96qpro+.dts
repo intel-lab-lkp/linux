@@ -252,9 +252,12 @@
 				regulator-min-microvolt = <900000>;
 				regulator-max-microvolt = <1160000>;
 				regulator-name = "vdd-cpub";
+				x-powers,polyphased = <&reg_dcdc2_323>;
 			};
 
-			/* DCDC2 is polyphased with DCDC1 */
+			reg_dcdc2_323: dcdc2 {
+				/* dual-phased with DCDC1 */
+			};
 
 			reg_dcdc3_323: dcdc3 {
 				regulator-always-on;
