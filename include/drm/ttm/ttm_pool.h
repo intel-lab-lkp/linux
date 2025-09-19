@@ -66,6 +66,7 @@ struct ttm_pool_type {
  * @nid: which numa node to use
  * @use_dma_alloc: if coherent DMA allocations should be used
  * @use_dma32: if GFP_DMA32 should be used
+ * @max_beneficial_order: allocations above this order do not bring performance gains
  * @caching: pools for each caching/order
  */
 struct ttm_pool {
@@ -74,6 +75,7 @@ struct ttm_pool {
 
 	bool use_dma_alloc;
 	bool use_dma32;
+	unsigned int max_beneficial_order;
 
 	struct {
 		struct ttm_pool_type orders[NR_PAGE_ORDERS];
@@ -87,6 +89,14 @@ void ttm_pool_free(struct ttm_pool *pool, struct ttm_tt *tt);
 void ttm_pool_init(struct ttm_pool *pool, struct device *dev,
 		   int nid, bool use_dma_alloc, bool use_dma32);
 void ttm_pool_fini(struct ttm_pool *pool);
+
+static inline unsigned int
+ttm_pool_set_max_beneficial_order(struct ttm_pool *pool, unsigned int order)
+{
+	pool->max_beneficial_order = min(MAX_PAGE_ORDER, order);
+
+	return pool->max_beneficial_order;
+}
 
 int ttm_pool_debugfs(struct ttm_pool *pool, struct seq_file *m);
 

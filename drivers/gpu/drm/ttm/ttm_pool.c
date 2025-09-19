@@ -726,8 +726,16 @@ static int __ttm_pool_alloc(struct ttm_pool *pool, struct ttm_tt *tt,
 
 	page_caching = tt->caching;
 	allow_pools = true;
-	for (order = ttm_pool_alloc_find_order(MAX_PAGE_ORDER, alloc);
-	     alloc->remaining_pages;
+
+	order = ttm_pool_alloc_find_order(MAX_PAGE_ORDER, alloc);
+	/*
+	 * Do not add latency to the allocation path for allocations orders
+	 * device tolds us do not bring additional performance gains.
+	 */
+	if (order > pool->max_beneficial_order)
+		gfp_flags &= ~__GFP_DIRECT_RECLAIM;
+
+	for (; alloc->remaining_pages;
 	     order = ttm_pool_alloc_find_order(order, alloc)) {
 		struct ttm_pool_type *pt;
 
@@ -745,6 +753,8 @@ static int __ttm_pool_alloc(struct ttm_pool *pool, struct ttm_tt *tt,
 		if (!p) {
 			page_caching = ttm_cached;
 			allow_pools = false;
+			if (order <= pool->max_beneficial_order)
+				gfp_flags |= __GFP_DIRECT_RECLAIM;
 			p = ttm_pool_alloc_page(pool, gfp_flags, order);
 		}
 		/* If that fails, lower the order if possible and retry. */
@@ -1074,6 +1084,7 @@ void ttm_pool_init(struct ttm_pool *pool, struct device *dev,
 	pool->nid = nid;
 	pool->use_dma_alloc = use_dma_alloc;
 	pool->use_dma32 = use_dma32;
+	pool->max_beneficial_order = MAX_PAGE_ORDER;
 
 	for (i = 0; i < TTM_NUM_CACHING_TYPES; ++i) {
 		for (j = 0; j < NR_PAGE_ORDERS; ++j) {
