@@ -3083,7 +3083,8 @@ out:
 			sev_snp_supported = is_sev_snp_initialized();
 
 		if (sev_snp_supported) {
-			snp_supported_policy_bits = KVM_SNP_POLICY_MASK_VALID;
+			snp_supported_policy_bits = sev_get_snp_policy_bits();
+			snp_supported_policy_bits &= KVM_SNP_POLICY_MASK_VALID;
 			nr_ciphertext_hiding_asids = init_args.max_snp_asid;
 		}
 
