@@ -1670,13 +1670,9 @@ static int proc_do_submiturb(struct usb_dev_state *ps, struct usbdevfs_urb *uurb
 		/* min 8 byte setup packet */
 		if (uurb->buffer_length < 8)
 			return -EINVAL;
-		dr = kmalloc(sizeof(struct usb_ctrlrequest), GFP_KERNEL);
-		if (!dr)
-			return -ENOMEM;
-		if (copy_from_user(dr, uurb->buffer, 8)) {
-			ret = -EFAULT;
-			goto error;
-		}
+		dr = memdup_user(uurb->buffer, sizeof(struct usb_ctrlrequest));
+		if (IS_ERR(dr))
+			return PTR_ERR(dr);
 		if (uurb->buffer_length < (le16_to_cpu(dr->wLength) + 8)) {
 			ret = -EINVAL;
 			goto error;
