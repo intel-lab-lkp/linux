@@ -597,11 +597,13 @@ int sscanf(const char *str, const char *format, ...)
 	return ret;
 }
 
+#ifndef NOLIBC_IGNORE_ERRNO
 static __attribute__((unused))
 void perror(const char *msg)
 {
 	fprintf(stderr, "%s%serrno=%d\n", (msg && *msg) ? msg : "", (msg && *msg) ? ": " : "", errno);
 }
+#endif
 
 static __attribute__((unused))
 int setvbuf(FILE *stream __attribute__((unused)),
