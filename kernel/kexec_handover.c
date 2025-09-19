@@ -931,7 +931,7 @@ void *kho_restore_vmalloc(const struct kho_vmalloc *preservation)
 
 			for (int j = 0; j < (1 << order); j++) {
 				page = phys_to_page(phys);
-				kho_restore_page(page, 0);
+				kho_restore_page(phys);
 				pages[idx++] = page;
 				phys += PAGE_SIZE;
 			}
@@ -939,7 +939,7 @@ void *kho_restore_vmalloc(const struct kho_vmalloc *preservation)
 
 		page = virt_to_page(chunk);
 		chunk = KHOSER_LOAD_PTR(chunk->hdr.next);
-		kho_restore_page(page, 0);
+		kho_restore_page(page_to_phys(page));
 		__free_page(page);
 	}
 
