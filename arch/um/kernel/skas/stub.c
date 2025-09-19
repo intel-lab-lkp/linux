@@ -5,6 +5,7 @@
 
 #include <sysdep/stub.h>
 
+#include <linux/init.h>
 #include <linux/futex.h>
 #include <sys/socket.h>
 #include <errno.h>

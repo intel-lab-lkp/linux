@@ -8,7 +8,6 @@
 #define __FRAME_OFFSETS
 #include <linux/ptrace.h>
 #include <asm/types.h>
-#include <linux/kbuild.h>
 
 #define DEFINE_LONGS(sym, val)	\
 	COMMENT(#val " / sizeof(unsigned long)");	\

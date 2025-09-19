@@ -42,7 +42,7 @@ include $(srctree)/$(HOST_DIR)/Makefile.um
 core-y += $(HOST_DIR)/um/
 
 SHARED_HEADERS	:= $(ARCH_DIR)/include/shared
-ARCH_INCLUDE	:= -I$(srctree)/$(SHARED_HEADERS)
+ARCH_INCLUDE	:= -I$(srctree)/$(SHARED_HEADERS) -I$(objtree)/$(SHARED_HEADERS)
 ARCH_INCLUDE	+= -I$(srctree)/$(HOST_DIR)/um/shared
 KBUILD_CPPFLAGS += -I$(srctree)/$(HOST_DIR)/um
 
@@ -70,10 +70,13 @@ KBUILD_AFLAGS += $(ARCH_INCLUDE)
 
 USER_CFLAGS = $(patsubst $(KERNEL_DEFINES),,$(patsubst -I%,,$(KBUILD_CFLAGS))) \
 		$(ARCH_INCLUDE) $(MODE_INCLUDE) $(filter -I%,$(CFLAGS)) \
-		-D_FILE_OFFSET_BITS=64 -idirafter $(srctree)/include \
-		-idirafter $(objtree)/include -D__KERNEL__ -D__UM_HOST__ \
-		-include $(srctree)/include/linux/compiler-version.h \
-		-include $(srctree)/include/linux/kconfig.h
+		-idirafter $(srctree)/tools/include \
+		-D__UM_HOST__ \
+		-include $(srctree)/tools/include/linux/compiler.h \
+		-include $(srctree)/tools/include/linux/kconfig.h \
+		-include $(objtree)/include/generated/autoconf.h \
+		-include $(srctree)/include/linux/kern_levels.h \
+		-include $(srctree)/$(ARCH_DIR)/include/shared/user.h
 
 #This will adjust *FLAGS accordingly to the platform.
 include $(srctree)/$(ARCH_DIR)/Makefile-os-Linux
@@ -116,6 +119,9 @@ archheaders:
 
 archprepare:
 	$(Q)$(MAKE) $(build)=$(HOST_DIR)/um include/generated/user_constants.h
+	$(Q)mkdir -p $(ARCH_DIR)/include/shared/generated
+	$(Q)ln -fs ../../../../../include/generated/user_constants.h $(ARCH_DIR)/include/shared/generated/
+	$(Q)ln -fs ../../../../../include/generated/asm-offsets.h $(ARCH_DIR)/include/shared/generated/
 
 LINK-$(CONFIG_LD_SCRIPT_STATIC) += -static
 LINK-$(CONFIG_LD_SCRIPT_DYN) += -no-pie
@@ -147,7 +153,7 @@ export CFLAGS_vmlinux := $(LINK-y) $(LINK_WRAPS) $(LD_FLAGS_CMDLINE) $(CC_FLAGS_
 # When cleaning we don't include .config, so we don't include
 # TT or skas makefiles and don't clean skas_ptregs.h.
 CLEAN_FILES += linux x.i gmon.out
-MRPROPER_FILES += $(HOST_DIR)/include/generated
+MRPROPER_FILES += $(HOST_DIR)/include/generated $(ARCH_DIR)/include/shared/generated
 
 archclean:
 	@find . \( -name '*.bb' -o -name '*.bbg' -o -name '*.da' \

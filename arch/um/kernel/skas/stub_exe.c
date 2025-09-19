@@ -4,8 +4,8 @@
 #include <asm/unistd.h>
 #include <sysdep/stub.h>
 #include <stub-data.h>
-#include <linux/filter.h>
-#include <linux/seccomp.h>
+#include <uapi/linux/filter.h>
+#include <uapi/linux/seccomp.h>
 #include <generated/asm-offsets.h>
 
 void _start(void);
