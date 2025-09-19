@@ -222,6 +222,7 @@ enum dentry_flags {
 	DCACHE_PAR_LOOKUP		= BIT(24),	/* being looked up (with parent locked shared) */
 	DCACHE_DENTRY_CURSOR		= BIT(25),
 	DCACHE_NORCU			= BIT(26),	/* No RCU delay for freeing */
+	DCACHE_RENAMING			= BIT(27),	/* dentry is being renamed */
 };
 
 #define DCACHE_MANAGED_DENTRY \
@@ -243,6 +244,8 @@ extern struct dentry * d_alloc(struct dentry *, const struct qstr *);
 extern struct dentry * d_alloc_anon(struct super_block *);
 extern struct dentry * d_alloc_parallel(struct dentry *, const struct qstr *,
 					wait_queue_head_t *);
+extern struct dentry * __d_alloc_parallel(struct dentry *, const struct qstr *,
+					wait_queue_head_t *, unsigned int *);
 extern struct dentry * d_splice_alias(struct inode *, struct dentry *);
 /* weird procfs mess; *NOT* exported */
 extern struct dentry * d_splice_alias_ops(struct inode *, struct dentry *,
@@ -256,6 +259,7 @@ extern struct dentry * d_obtain_root(struct inode *);
 extern void shrink_dcache_sb(struct super_block *);
 extern void shrink_dcache_parent(struct dentry *);
 extern void d_invalidate(struct dentry *);
+extern void d_invalidate_reval(struct dentry *, unsigned int);
 
 /* only used at mount-time */
 extern struct dentry * d_make_root(struct inode *);
@@ -284,6 +288,7 @@ extern void d_exchange(struct dentry *, struct dentry *);
 extern struct dentry *d_ancestor(struct dentry *, struct dentry *);
 
 extern struct dentry *d_lookup(const struct dentry *, const struct qstr *);
+extern struct dentry *d_lookup_seq(const struct dentry *parent, const struct qstr *name, unsigned int *d_seq);
 
 static inline unsigned d_count(const struct dentry *dentry)
 {

@@ -1636,14 +1636,10 @@ static enum d_walk_ret find_submount(void *_data, struct dentry *dentry)
 	return D_WALK_CONTINUE;
 }
 
-/**
- * d_invalidate - detach submounts, prune dcache, and drop
- * @dentry: dentry to invalidate (aka detach, prune and drop)
- */
-void d_invalidate(struct dentry *dentry)
+static void d_invalidate_locked(struct dentry *dentry)
 {
 	bool had_submounts = false;
-	spin_lock(&dentry->d_lock);
+
 	if (d_unhashed(dentry)) {
 		spin_unlock(&dentry->d_lock);
 		return;
@@ -1669,7 +1665,46 @@ void d_invalidate(struct dentry *dentry)
 		dput(victim);
 	}
 }
+
+/**
+ * d_invalidate - detach submounts, prune dcache, and drop
+ * @dentry: dentry to invalidate (aka detach, prune and drop)
+ */
+void d_invalidate(struct dentry *dentry)
+{
+	spin_lock(&dentry->d_lock);
+	d_invalidate_locked(dentry);
+}
 EXPORT_SYMBOL(d_invalidate);
+
+/**
+ * d_invalidate_reval - conditionally invalidate a dentry for revalidation
+ * @dentry: dentry to conditionally invalidate
+ * @seq: sequence number sampled during dentry lookup
+ *
+ * Check if the dentry has been renamed since the sequence number was sampled
+ * or if it's currently being renamed. If either condition is true, skip the
+ * invalidation to avoid the race between dentry revalidation and renames.
+ */
+void d_invalidate_reval(struct dentry *dentry, unsigned int seq)
+{
+	spin_lock(&dentry->d_lock);
+
+	/* Check if dentry is currently being renamed */
+	if (dentry->d_flags & DCACHE_RENAMING) {
+		spin_unlock(&dentry->d_lock);
+		return;
+	}
+
+	/* Check if dentry sequence has changed since sampling */
+	if (read_seqcount_retry(&dentry->d_seq, seq)) {
+		spin_unlock(&dentry->d_lock);
+		return;
+	}
+
+	/* Safe to invalidate - no rename race detected */
+	d_invalidate_locked(dentry);
+}
 
 /**
  * __d_alloc	-	allocate a dcache entry
@@ -2329,18 +2364,23 @@ struct dentry *__d_lookup_rcu(const struct dentry *parent,
  * dentry is returned. The caller must use dput to free the entry when it has
  * finished using it. %NULL is returned if the dentry does not exist.
  */
-struct dentry *d_lookup(const struct dentry *parent, const struct qstr *name)
+struct dentry *d_lookup_seq(const struct dentry *parent, const struct qstr *name, unsigned int *d_seq)
 {
 	struct dentry *dentry;
 	unsigned seq;
 
 	do {
 		seq = read_seqbegin(&rename_lock);
-		dentry = __d_lookup(parent, name);
+		dentry = __d_lookup(parent, name, d_seq);
 		if (dentry)
 			break;
 	} while (read_seqretry(&rename_lock, seq));
 	return dentry;
+}
+
+struct dentry *d_lookup(const struct dentry *parent, const struct qstr *name)
+{
+	return d_lookup_seq(parent, name, NULL);
 }
 EXPORT_SYMBOL(d_lookup);
 
@@ -2359,7 +2399,8 @@ EXPORT_SYMBOL(d_lookup);
  *
  * __d_lookup callers must be commented.
  */
-struct dentry *__d_lookup(const struct dentry *parent, const struct qstr *name)
+struct dentry *__d_lookup(const struct dentry *parent, const struct qstr *name,
+			  unsigned int *seq)
 {
 	unsigned int hash = name->hash;
 	struct hlist_bl_head *b = d_hash(hash);
@@ -2404,6 +2445,8 @@ struct dentry *__d_lookup(const struct dentry *parent, const struct qstr *name)
 			goto next;
 
 		dentry->d_lockref.count++;
+		if (seq)
+			*seq = raw_seqcount_begin(&dentry->d_seq);
 		found = dentry;
 		spin_unlock(&dentry->d_lock);
 		break;
@@ -2539,9 +2582,10 @@ static void d_wait_lookup(struct dentry *dentry)
 	}
 }
 
-struct dentry *d_alloc_parallel(struct dentry *parent,
-				const struct qstr *name,
-				wait_queue_head_t *wq)
+struct dentry *__d_alloc_parallel(struct dentry *parent,
+				  const struct qstr *name,
+				  wait_queue_head_t *wq,
+				  unsigned int *seqp)
 {
 	unsigned int hash = name->hash;
 	struct hlist_bl_head *b = in_lookup_hash(parent, hash);
@@ -2575,6 +2619,8 @@ retry:
 			goto retry;
 		}
 		rcu_read_unlock();
+		if (seqp)
+			*seqp = d_seq;
 		dput(new);
 		return dentry;
 	}
@@ -2637,6 +2683,8 @@ retry:
 		if (unlikely(!d_same_name(dentry, parent, name)))
 			goto mismatch;
 		/* OK, it *is* a hashed match; return it */
+		if (seqp)
+			*seqp = read_seqcount_begin(&dentry->d_seq);
 		spin_unlock(&dentry->d_lock);
 		dput(new);
 		return dentry;
@@ -2645,11 +2693,20 @@ retry:
 	new->d_wait = wq;
 	hlist_bl_add_head(&new->d_u.d_in_lookup_hash, b);
 	hlist_bl_unlock(b);
+	if (seqp)
+		*seqp = read_seqcount_begin(&new->d_seq);
 	return new;
 mismatch:
 	spin_unlock(&dentry->d_lock);
 	dput(dentry);
 	goto retry;
+}
+
+struct dentry *d_alloc_parallel(struct dentry *parent,
+				const struct qstr *name,
+				wait_queue_head_t *wq)
+{
+	return __d_alloc_parallel(parent, name, wq, NULL);
 }
 EXPORT_SYMBOL(d_alloc_parallel);
 

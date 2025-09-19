@@ -1660,12 +1660,15 @@ static struct dentry *lookup_dcache(const struct qstr *name,
 				    struct dentry *dir,
 				    unsigned int flags)
 {
-	struct dentry *dentry = d_lookup(dir, name);
+	struct dentry *dentry;
+	unsigned int seq;
+
+	dentry = d_lookup_seq(dir, name, &seq);
 	if (dentry) {
 		int error = d_revalidate(dir->d_inode, name, dentry, flags);
 		if (unlikely(error <= 0)) {
 			if (!error)
-				d_invalidate(dentry);
+				d_invalidate_reval(dentry, seq);
 			dput(dentry);
 			return ERR_PTR(error);
 		}
@@ -1771,14 +1774,14 @@ static struct dentry *lookup_fast(struct nameidata *nd)
 			status = d_revalidate(nd->inode, &nd->last,
 					      dentry, nd->flags);
 	} else {
-		dentry = __d_lookup(parent, &nd->last);
+		dentry = __d_lookup(parent, &nd->last, &nd->next_seq);
 		if (unlikely(!dentry))
 			return NULL;
 		status = d_revalidate(nd->inode, &nd->last, dentry, nd->flags);
 	}
 	if (unlikely(status <= 0)) {
 		if (!status)
-			d_invalidate(dentry);
+			d_invalidate_reval(dentry, nd->next_seq);
 		dput(dentry);
 		return ERR_PTR(status);
 	}
@@ -1792,20 +1795,21 @@ static struct dentry *__lookup_slow(const struct qstr *name,
 {
 	struct dentry *dentry, *old;
 	struct inode *inode = dir->d_inode;
+	unsigned int seq;
 	DECLARE_WAIT_QUEUE_HEAD_ONSTACK(wq);
 
 	/* Don't go there if it's already dead */
 	if (unlikely(IS_DEADDIR(inode)))
 		return ERR_PTR(-ENOENT);
 again:
-	dentry = d_alloc_parallel(dir, name, &wq);
+	dentry = __d_alloc_parallel(dir, name, &wq, &seq);
 	if (IS_ERR(dentry))
 		return dentry;
 	if (unlikely(!d_in_lookup(dentry))) {
 		int error = d_revalidate(inode, name, dentry, flags);
 		if (unlikely(error <= 0)) {
 			if (!error) {
-				d_invalidate(dentry);
+				d_invalidate_reval(dentry, seq);
 				dput(dentry);
 				goto again;
 			}
@@ -4966,6 +4970,20 @@ SYSCALL_DEFINE2(link, const char __user *, oldname, const char __user *, newname
 	return do_linkat(AT_FDCWD, getname(oldname), AT_FDCWD, getname(newname), 0);
 }
 
+static void dentry_set_renaming(struct dentry *dentry)
+{
+	spin_lock(&dentry->d_lock);
+	dentry->d_flags |= DCACHE_RENAMING;
+	spin_unlock(&dentry->d_lock);
+}
+
+static void dentry_clear_renaming(struct dentry *dentry)
+{
+	spin_lock(&dentry->d_lock);
+	dentry->d_flags &= ~DCACHE_RENAMING;
+	spin_unlock(&dentry->d_lock);
+}
+
 /**
  * vfs_rename - rename a filesystem object
  * @rd:		pointer to &struct renamedata info
@@ -5134,10 +5152,15 @@ int vfs_rename(struct renamedata *rd)
 		if (error)
 			goto out;
 	}
+
+	dentry_set_renaming(old_dentry);
+	if (flags & RENAME_EXCHANGE)
+		dentry_set_renaming(new_dentry);
+
 	error = old_dir->i_op->rename(rd->new_mnt_idmap, old_dir, old_dentry,
 				      new_dir, new_dentry, flags);
 	if (error)
-		goto out;
+		goto out_clear_renaming;
 
 	if (!(flags & RENAME_EXCHANGE) && target) {
 		if (is_dir) {
@@ -5153,6 +5176,10 @@ int vfs_rename(struct renamedata *rd)
 		else
 			d_exchange(old_dentry, new_dentry);
 	}
+out_clear_renaming:
+	dentry_clear_renaming(old_dentry);
+	if (flags & RENAME_EXCHANGE)
+		dentry_clear_renaming(new_dentry);
 out:
 	if (!is_dir || lock_old_subdir)
 		inode_unlock(source);
