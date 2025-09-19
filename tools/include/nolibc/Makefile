@@ -53,6 +53,7 @@ all_files := \
 		sys/mman.h \
 		sys/mount.h \
 		sys/prctl.h \
+		sys/ptrace.h \
 		sys/random.h \
 		sys/reboot.h \
 		sys/resource.h \
