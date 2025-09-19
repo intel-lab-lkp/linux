@@ -3302,7 +3302,7 @@ static inline void btrfs_remove_log_ctx(struct btrfs_root *root,
 	mutex_unlock(&root->log_mutex);
 }
 
-/* 
+/*
  * Invoked in log mutex context, or be sure there is no other task which
  * can access the list.
  */
@@ -4038,7 +4038,7 @@ static int flush_dir_items_batch(struct btrfs_trans_handle *trans,
 				 int count)
 {
 	struct btrfs_root *log = inode->root->log_root;
-	char *ins_data = NULL;
+	char *ins_data __free(kfree) = NULL;
 	struct btrfs_item_batch batch;
 	struct extent_buffer *dst;
 	unsigned long src_offset;
@@ -4083,7 +4083,7 @@ static int flush_dir_items_batch(struct btrfs_trans_handle *trans,
 
 	ret = btrfs_insert_empty_items(trans, log, dst_path, &batch);
 	if (ret)
-		goto out;
+		return ret;
 
 	dst = dst_path->nodes[0];
 	/*
@@ -4115,8 +4115,6 @@ static int flush_dir_items_batch(struct btrfs_trans_handle *trans,
 
 	if (btrfs_get_first_dir_index_to_log(inode) == 0)
 		btrfs_set_first_dir_index_to_log(inode, batch.keys[0].offset);
-out:
-	kfree(ins_data);
 
 	return ret;
 }
@@ -4786,7 +4784,7 @@ static noinline int copy_items(struct btrfs_trans_handle *trans,
 	struct btrfs_key *ins_keys;
 	u32 *ins_sizes;
 	struct btrfs_item_batch batch;
-	char *ins_data;
+	char *ins_data __free(kfree) = NULL;
 	int dst_index;
 	const bool skip_csum = (inode->flags & BTRFS_INODE_NODATASUM);
 	const u64 i_size = i_size_read(&inode->vfs_inode);
@@ -4914,7 +4912,7 @@ static noinline int copy_items(struct btrfs_trans_handle *trans,
 					      disk_bytenr + extent_num_bytes - 1,
 					      &ordered_sums, false);
 		if (ret < 0)
-			goto out;
+			return ret;
 		ret = 0;
 
 		list_for_each_entry_safe(sums, sums_next, &ordered_sums, list) {
@@ -4924,7 +4922,7 @@ static noinline int copy_items(struct btrfs_trans_handle *trans,
 			kfree(sums);
 		}
 		if (ret)
-			goto out;
+			return ret;
 
 add_to_batch:
 		ins_sizes[dst_index] = btrfs_item_size(src, src_slot);
@@ -4938,11 +4936,11 @@ add_to_batch:
 	 * so we don't need to do anything.
 	 */
 	if (batch.nr == 0)
-		goto out;
+		return 0;
 
 	ret = btrfs_insert_empty_items(trans, log, dst_path, &batch);
 	if (ret)
-		goto out;
+		return ret;
 
 	dst_index = 0;
 	for (int i = 0; i < nr; i++) {
@@ -4995,8 +4993,6 @@ copy_item:
 	}
 
 	btrfs_release_path(dst_path);
-out:
-	kfree(ins_data);
 
 	return ret;
 }
@@ -8082,4 +8078,3 @@ out:
 		btrfs_end_log_trans(root);
 	free_extent_buffer(ctx.scratch_eb);
 }
-
