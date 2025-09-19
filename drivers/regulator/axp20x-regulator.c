@@ -1569,6 +1569,39 @@ static int axp20x_find_polyphased_reg(const struct regulator_desc *regs,
 	return -ENODEV;
 }
 
+static int axp20x_handle_triphase(struct axp20x_dev *axp20x,
+				  int reg1, int reg2, int reg3)
+{
+	if (axp20x->variant == AXP806_ID && reg1 == AXP806_DCDCA) {
+		/* no other regulator listed: single phase setup */
+		if (reg2 == -ENOENT && reg3 == -ENOENT) {
+			regmap_update_bits(axp20x->regmap,
+					   AXP806_DCDC_MODE_CTRL2,
+					   AXP806_DCDCABC_POLYPHASE_MASK, 0);
+			return 0;
+		}
+		/* only regulator listed is DCDC-B: dual phase setup */
+		if (reg2 == AXP806_DCDCB && reg3 == -ENOENT) {
+			regmap_update_bits(axp20x->regmap,
+					   AXP806_DCDC_MODE_CTRL2,
+					   AXP806_DCDCABC_POLYPHASE_MASK,
+					   AXP806_DCDCAB_POLYPHASE_DUAL);
+			return 0;
+		}
+		/* both DCDC-B+C regulators listed: tri phase setup */
+		if ((reg2 == AXP806_DCDCB && reg3 == AXP806_DCDCC) ||
+		    (reg2 == AXP806_DCDCC && reg3 == AXP806_DCDCB)) {
+			regmap_update_bits(axp20x->regmap,
+					   AXP806_DCDC_MODE_CTRL2,
+					   AXP806_DCDCABC_POLYPHASE_MASK,
+					   AXP806_DCDCABC_POLYPHASE_TRI);
+			return 0;
+		}
+	}
+
+	return 0;
+}
+
 static int axp20x_parse_polyphase(struct axp20x_dev *axp20x, int primary_reg_id,
 				  const struct regulator_desc *regs,
 				  int nregulators, const struct device_node *np)
@@ -1608,6 +1641,18 @@ static int axp20x_parse_polyphase(struct axp20x_dev *axp20x, int primary_reg_id,
 
 			return 0;
 		}
+	}
+
+	/* Special handling for the AXP806 DCDC-A/B/C tri-phase regulator. */
+	if (axp20x->variant == AXP806_ID && primary_reg_id == AXP806_DCDCA) {
+		int reg3_id;
+
+		reg3_id = axp20x_find_polyphased_reg(regs, nregulators, np, 1);
+		if (reg3_id < 0 && reg3_id != -ENOENT)
+			return reg_id;
+
+		return axp20x_handle_triphase(axp20x, primary_reg_id,
+					      reg_id, reg3_id);
 	}
 
 	return 0;
