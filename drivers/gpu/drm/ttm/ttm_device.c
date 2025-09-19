@@ -134,10 +134,7 @@ out:
  */
 int ttm_device_prepare_hibernation(struct ttm_device *bdev)
 {
-	struct ttm_operation_ctx ctx = {
-		.interruptible = false,
-		.no_wait_gpu = false,
-	};
+	struct ttm_operation_ctx ctx = { };
 	int ret;
 
 	do {
