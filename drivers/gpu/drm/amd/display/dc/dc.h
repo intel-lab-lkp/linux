@@ -231,12 +231,12 @@ struct lut3d_caps {
  * plane combined blocks
  *
  * @gamut_remap: color transformation matrix
- * @ogam_ram: programmable out gamma LUT
+ * @ogam_ram: programmable output gamma (oGAM) LUT
  * @ocsc: output color space conversion matrix
  * @num_3dluts: MPC 3D LUT; always assumes a preceding shaper LUT
- * @shared_3d_lut: shared 3D LUT flag. Can be either DPP or MPC, but single
- * instance
- * @ogam_rom_caps: pre-definied curve caps for regamma 1D LUT
+ * @num_rmcm_3dluts: number of RMCM 3D LUT instances supported by MPC (0 if unsupported)
+ * @shared_3d_lut: shared 3D LUT flag. Can be either DPP or MPC, but single instance
+ * @ogam_rom_caps: pre-defined curve caps for regamma 1D LUT
  * @mcm_3d_lut_caps: HW support cap for MCM LUT memory
  * @rmcm_3d_lut_caps: HW support cap for RMCM LUT memory
  * @preblend: whether color manager supports preblend with MPC
