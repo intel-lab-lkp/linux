@@ -1549,6 +1549,70 @@ static bool axp20x_is_polyphase_slave(struct axp20x_dev *axp20x, int id)
 	return false;
 }
 
+static int axp20x_find_polyphased_reg(const struct regulator_desc *regs,
+				      int nregulators,
+				      const struct device_node *np, int index)
+{
+	struct of_phandle_args args;
+	int ret, i;
+
+	ret = of_parse_phandle_with_fixed_args(np, "x-powers,polyphased",
+						   0, index, &args);
+	if (ret)
+		return ret;
+
+	for (i = 0; i < nregulators; i++) {
+		if (!strcmp(regs[i].name, args.np->name))
+			return i;
+	}
+
+	return -ENODEV;
+}
+
+static int axp20x_parse_polyphase(struct axp20x_dev *axp20x, int primary_reg_id,
+				  const struct regulator_desc *regs,
+				  int nregulators, const struct device_node *np)
+{
+	struct dualphase_regulator *dpreg;
+	int reg_id, i;
+
+	if (!of_property_present(np, "x-powers,polyphased"))
+		return 0;
+
+	reg_id = axp20x_find_polyphased_reg(regs, nregulators, np, 0);
+	if (reg_id < 0 && reg_id != -ENOENT)	/* not just empty property */
+		return reg_id;
+
+	for (i = 0; i < ARRAY_SIZE(dualphase_regulators); i++) {
+		dpreg = &dualphase_regulators[i];
+
+		if (axp20x->variant != dpreg->axp_id)
+			continue;
+
+		if (dpreg->reg1 != primary_reg_id &&
+		    dpreg->reg2 != primary_reg_id)
+			continue;
+
+		/* Empty property means breaking any polyphase setup. */
+		if (reg_id == -ENOENT) {
+			regmap_update_bits(axp20x->regmap, dpreg->polyphase_reg,
+					   dpreg->bitmask, 0);
+
+			return 0;
+		}
+
+		if ((dpreg->reg1 == primary_reg_id && dpreg->reg2 == reg_id) ||
+		    (dpreg->reg2 == primary_reg_id && dpreg->reg1 == reg_id)) {
+			regmap_update_bits(axp20x->regmap, dpreg->polyphase_reg,
+					   dpreg->bitmask, dpreg->bitmask);
+
+			return 0;
+		}
+	}
+
+	return 0;
+}
+
 static int axp20x_regulator_probe(struct platform_device *pdev)
 {
 	struct regulator_dev *rdev;
@@ -1702,6 +1766,10 @@ static int axp20x_regulator_probe(struct platform_device *pdev)
 				dev_err(&pdev->dev, "Failed to set workmode on %s\n",
 					rdev->desc->name);
 		}
+
+		if (rdev->dev.of_node)
+			axp20x_parse_polyphase(axp20x, i, regulators,
+					       nregulators, rdev->dev.of_node);
 
 		/*
 		 * Save AXP22X DCDC1 / DCDC5 / AXP15060 ALDO1 regulator names for later.
