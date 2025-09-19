@@ -195,7 +195,7 @@ int ceph_parse_fsid(const char *str, struct ceph_fsid *fsid)
 	int i = 0;
 	char tmp[3];
 	int err = -EINVAL;
-	int d;
+	unsigned int d;
 
 	dout("%s '%s'\n", __func__, str);
 	tmp[2] = 0;
