@@ -211,7 +211,8 @@ struct vdpa_map_file {
  *				virtqueue (optional)
  *				@vdev: vdpa device
  *				@idx: virtqueue index
- *				Returns u32: group id for this virtqueue
+ *				Returns i64: (32 bits wide) group id for this
+ *				virtqueue if >0. If <0, errno.
  * @get_vq_desc_group:		Get the group id for the descriptor table of
  *				a specific virtqueue (optional)
  *				@vdev: vdpa device
@@ -398,7 +399,7 @@ struct vdpa_config_ops {
 
 	/* Device ops */
 	u32 (*get_vq_align)(struct vdpa_device *vdev);
-	u32 (*get_vq_group)(struct vdpa_device *vdev, u16 idx);
+	s64 (*get_vq_group)(struct vdpa_device *vdev, u16 idx);
 	u32 (*get_vq_desc_group)(struct vdpa_device *vdev, u16 idx);
 	u64 (*get_device_features)(struct vdpa_device *vdev);
 	u64 (*get_backend_features)(const struct vdpa_device *vdev);

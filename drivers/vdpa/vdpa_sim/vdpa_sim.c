@@ -412,7 +412,7 @@ static u32 vdpasim_get_vq_align(struct vdpa_device *vdpa)
 	return VDPASIM_QUEUE_ALIGN;
 }
 
-static u32 vdpasim_get_vq_group(struct vdpa_device *vdpa, u16 idx)
+static s64 vdpasim_get_vq_group(struct vdpa_device *vdpa, u16 idx)
 {
 	/* RX and TX belongs to group 0, CVQ belongs to group 1 */
 	if (idx == 2)

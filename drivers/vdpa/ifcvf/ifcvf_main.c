@@ -559,7 +559,7 @@ static size_t ifcvf_vdpa_get_config_size(struct vdpa_device *vdpa_dev)
 	return  vf->config_size;
 }
 
-static u32 ifcvf_vdpa_get_vq_group(struct vdpa_device *vdpa, u16 idx)
+static s64 ifcvf_vdpa_get_vq_group(struct vdpa_device *vdpa, u16 idx)
 {
 	return 0;
 }
