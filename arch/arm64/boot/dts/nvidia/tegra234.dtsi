@@ -9,6 +9,7 @@
 #include <dt-bindings/power/tegra234-powergate.h>
 #include <dt-bindings/reset/tegra234-reset.h>
 #include <dt-bindings/thermal/tegra234-bpmp-thermal.h>
+#include <dt-bindings/pinctrl/pinctrl-tegra.h>
 
 / {
 	compatible = "nvidia,tegra234";
@@ -127,6 +128,16 @@
 		pinmux: pinmux@2430000 {
 			compatible = "nvidia,tegra234-pinmux";
 			reg = <0x0 0x2430000 0x0 0x19100>;
+
+			pex_rst_c4_in_state: pinmux-pex-rst-c4-in {
+				pex_rst {
+					nvidia,pins = "pex_l4_rst_n_pl1";
+					nvidia,function = "rsvd1";
+					nvidia,pull = <TEGRA_PIN_PULL_NONE>;
+					nvidia,tristate = <TEGRA_PIN_ENABLE>;
+					nvidia,enable-input = <TEGRA_PIN_ENABLE>;
+				};
+			};
 		};
 
 		gpcdma: dma-controller@2600000 {
@@ -4881,6 +4892,8 @@
 			       <&bpmp TEGRA234_RESET_PEX0_CORE_4>;
 			reset-names = "apb", "core";
 
+			pinctrl-names = "default";
+			pinctrl-0 = <&pex_rst_c4_in_state>;
 			interrupts = <GIC_SPI 51 IRQ_TYPE_LEVEL_HIGH>;  /* controller interrupt */
 			interrupt-names = "intr";
 			nvidia,bpmp = <&bpmp 4>;
