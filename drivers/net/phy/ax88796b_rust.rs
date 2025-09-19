@@ -56,18 +56,17 @@ impl Driver for PhyAX88772A {
         // linkmode so use MII_BMCR as default values.
         let ret = dev.read(C22::BMCR)?;
 
-        if ret & BMCR_SPEED100 != 0 {
-            dev.set_speed(uapi::SPEED_100);
+        dev.set_speed(if ret & BMCR_SPEED100 != 0 {
+            uapi::SPEED_100
         } else {
-            dev.set_speed(uapi::SPEED_10);
-        }
+            uapi::SPEED_10
+        });
 
-        let duplex = if ret & BMCR_FULLDPLX != 0 {
+        dev.set_duplex(if ret & BMCR_FULLDPLX != 0 {
             phy::DuplexMode::Full
         } else {
             phy::DuplexMode::Half
-        };
-        dev.set_duplex(duplex);
+        });
 
         dev.genphy_read_lpa()?;
 
