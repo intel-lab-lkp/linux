@@ -1352,7 +1352,7 @@ struct coresight_device *coresight_register(struct coresight_desc *desc)
 		raw_spin_lock_init(&csdev->perf_sink_id_map.lock);
 		csdev->perf_sink_id_map.cpu_map = alloc_percpu(atomic_t);
 		if (!csdev->perf_sink_id_map.cpu_map) {
-			kfree(csdev);
+			coresight_device_release(&csdev->dev);
 			ret = -ENOMEM;
 			goto err_out;
 		}
