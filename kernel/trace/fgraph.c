@@ -815,6 +815,7 @@ __ftrace_return_to_handler(struct ftrace_regs *fregs, unsigned long frame_pointe
 	unsigned long bitmap;
 	unsigned long ret;
 	int offset;
+	int bit;
 	int i;
 
 	ret_stack = ftrace_pop_return_trace(&trace, &ret, frame_pointer, &offset);
@@ -828,6 +829,15 @@ __ftrace_return_to_handler(struct ftrace_regs *fregs, unsigned long frame_pointe
 
 	if (fregs)
 		ftrace_regs_set_instruction_pointer(fregs, ret);
+
+	bit = ftrace_test_recursion_trylock(trace.func, ret);
+	/*
+	 * This must be succeeded because the entry handler returns before
+	 * modifying the return address if it is nested. Anyway, we need to
+	 * avoid calling user callbacks if it is nested.
+	 */
+	if (WARN_ON_ONCE(bit < 0))
+		goto out;
 
 #ifdef CONFIG_FUNCTION_GRAPH_RETVAL
 	trace.retval = ftrace_regs_get_return_value(fregs);
@@ -852,6 +862,8 @@ __ftrace_return_to_handler(struct ftrace_regs *fregs, unsigned long frame_pointe
 		}
 	}
 
+	ftrace_test_recursion_unlock(bit);
+out:
 	/*
 	 * The ftrace_graph_return() may still access the current
 	 * ret_stack structure, we need to make sure the update of
