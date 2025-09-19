@@ -16,6 +16,7 @@
 #include <drm/drm_auth.h>
 #include <drm/drm_device.h>
 #include <drm/drm_file.h>
+#include <drm/drm_panic.h>
 #include <drm/drm_rect.h>
 
 #include <drm/ttm/ttm_execbuf_util.h>
@@ -1046,6 +1047,9 @@ void vmw_kms_lost_device(struct drm_device *dev);
 extern int vmw_resource_pin(struct vmw_resource *res, bool interruptible);
 extern void vmw_resource_unpin(struct vmw_resource *res);
 extern enum vmw_res_type vmw_res_type(const struct vmw_resource *res);
+int vmw_primary_plane_get_scanout_buffer(struct drm_plane *plane,
+					 struct drm_scanout_buffer *sb);
+void vmw_primary_plane_panic_flush(struct drm_plane *plane);
 
 /**
  * Overlay control - vmwgfx_overlay.c
