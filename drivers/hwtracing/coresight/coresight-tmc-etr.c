@@ -1325,9 +1325,9 @@ out:
 }
 
 struct etr_buf *tmc_etr_get_buffer(struct coresight_device *csdev,
-				   enum cs_mode mode, void *data)
+				   enum cs_mode mode,
+				   struct perf_output_handle *handle)
 {
-	struct perf_output_handle *handle = data;
 	struct etr_perf_buffer *etr_perf;
 
 	switch (mode) {
