@@ -18,14 +18,26 @@
 
 #include <linux/mfd/sy7636a.h>
 
+struct sy7636a_hwmon_data {
+	struct regmap *regmap;
+	struct regulator *regulator;
+};
+
+
 static int sy7636a_read(struct device *dev, enum hwmon_sensor_types type,
 			u32 attr, int channel, long *temp)
 {
-	struct regmap *regmap = dev_get_drvdata(dev);
+	struct sy7636a_hwmon_data *drvdata = dev_get_drvdata(dev);
 	int ret, reg_val;
 
-	ret = regmap_read(regmap,
+	ret = regulator_enable(drvdata->regulator);
+	if (ret)
+		return ret;
+
+	ret = regmap_read(drvdata->regmap,
 			  SY7636A_REG_TERMISTOR_READOUT, &reg_val);
+	regulator_disable(drvdata->regulator);
+
 	if (ret)
 		return ret;
 
@@ -66,23 +78,24 @@ static const struct hwmon_chip_info sy7636a_chip_info = {
 static int sy7636a_sensor_probe(struct platform_device *pdev)
 {
 	struct regmap *regmap = dev_get_regmap(pdev->dev.parent, NULL);
-	struct regulator *regulator;
+	struct sy7636a_hwmon_data *drvdata;
 	struct device *hwmon_dev;
 	int err;
 
 	if (!regmap)
 		return -EPROBE_DEFER;
 
-	regulator = devm_regulator_get_optional(&pdev->dev, "vcom");
-	if (IS_ERR_OR_NULL(regulator))
+	drvdata = devm_kzalloc(&pdev->dev, sizeof(*drvdata), GFP_KERNEL);
+	if (!drvdata)
+		return -ENOMEM;
+
+	drvdata->regmap = regmap;
+	drvdata->regulator = devm_regulator_get_optional(&pdev->dev, "vcom");
+	if (IS_ERR_OR_NULL(drvdata->regulator))
 		return -EPROBE_DEFER;
 
-	err = regulator_enable(regulator);
-	if (err)
-		return err;
-
 	hwmon_dev = devm_hwmon_device_register_with_info(&pdev->dev,
-							 "sy7636a_temperature", regmap,
+							 "sy7636a_temperature", drvdata,
 							 &sy7636a_chip_info, NULL);
 
 	if (IS_ERR(hwmon_dev)) {
@@ -102,6 +115,7 @@ static struct platform_driver sy7636a_sensor_driver = {
 };
 module_platform_driver(sy7636a_sensor_driver);
 
+MODULE_ALIAS("platform:sy7636a-temperature");
 MODULE_DESCRIPTION("SY7636A sensor driver");
 MODULE_LICENSE("GPL");
 MODULE_ALIAS("platform:sy7636a-temperature");
