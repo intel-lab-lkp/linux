@@ -598,7 +598,6 @@ vmxnet3_get_regs(struct net_device *netdev, struct ethtool_regs *regs, void *p)
 
 		buf[j++] = VMXNET3_GET_ADDR_LO(rq->data_ring.basePA);
 		buf[j++] = VMXNET3_GET_ADDR_HI(rq->data_ring.basePA);
-		buf[j++] = rq->rx_ring[0].size;
 		buf[j++] = rq->data_ring.desc_size;
 
 		buf[j++] = VMXNET3_GET_ADDR_LO(rq->comp_ring.basePA);
