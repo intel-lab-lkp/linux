@@ -73,9 +73,9 @@ static int sy7636a_sensor_probe(struct platform_device *pdev)
 	if (!regmap)
 		return -EPROBE_DEFER;
 
-	regulator = devm_regulator_get(&pdev->dev, "vcom");
-	if (IS_ERR(regulator))
-		return PTR_ERR(regulator);
+	regulator = devm_regulator_get_optional(&pdev->dev, "vcom");
+	if (IS_ERR_OR_NULL(regulator))
+		return -EPROBE_DEFER;
 
 	err = regulator_enable(regulator);
 	if (err)
