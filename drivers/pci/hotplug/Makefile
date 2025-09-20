@@ -65,7 +65,8 @@ rpadlpar_io-objs	:=	rpadlpar_core.o \
 pciehp-objs		:=	pciehp_core.o	\
 				pciehp_ctrl.o	\
 				pciehp_pci.o	\
-				pciehp_hpc.o
+				pciehp_hpc.o	\
+				../trace.o
 
 shpchp-objs		:=	shpchp_core.o	\
 				shpchp_ctrl.o	\
