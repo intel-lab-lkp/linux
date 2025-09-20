@@ -591,6 +591,13 @@ static void *kmalloc_reserve(unsigned int *size, gfp_t flags, int node,
 	/* The following cast might truncate high-order bits of obj_size, this
 	 * is harmless because kmalloc(obj_size >= 2^32) will fail anyway.
 	 */
+	if (unlikely(obj_size > KMALLOC_MAX_SIZE)) {
+		WARN_ONCE(1,
+			  "%s: request size %zu exceeds KMALLOC_MAX_SIZE (%lu)\n",
+			  __func__, obj_size, KMALLOC_MAX_SIZE);
+		return NULL;
+	}
+
 	*size = (unsigned int)obj_size;
 
 	/*
