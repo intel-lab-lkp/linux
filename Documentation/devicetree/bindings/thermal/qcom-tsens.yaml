@@ -50,6 +50,7 @@ properties:
         items:
           - enum:
               - qcom,milos-tsens
+              - qcom,glymur-tsens
               - qcom,msm8953-tsens
               - qcom,msm8996-tsens
               - qcom,msm8998-tsens
