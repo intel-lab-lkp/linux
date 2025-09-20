@@ -147,7 +147,7 @@ ssize_t tpm_common_read(struct file *file, char __user *buf,
 
 		rc = copy_to_user(buf, priv->data_buffer + *off, ret_size);
 		if (rc) {
-			memset(priv->data_buffer, 0, TPM_BUFSIZE);
+			memset(priv->data_buffer, 0, TPM_BUF_MAX_SIZE);
 			priv->response_length = 0;
 			ret_size = -EFAULT;
 		} else {
@@ -173,7 +173,7 @@ ssize_t tpm_common_write(struct file *file, const char __user *buf,
 	struct file_priv *priv = file->private_data;
 	int ret = 0;
 
-	if (size > TPM_BUFSIZE)
+	if (size > TPM_BUF_MAX_SIZE)
 		return -E2BIG;
 
 	mutex_lock(&priv->buffer_mutex);

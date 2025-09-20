@@ -18,7 +18,7 @@ struct file_priv {
 	bool response_read;
 	bool command_enqueued;
 
-	u8 data_buffer[TPM_BUFSIZE];
+	u8 data_buffer[TPM_BUF_MAX_SIZE];
 };
 
 void tpm_common_open(struct file *file, struct tpm_chip *chip,
