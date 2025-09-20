@@ -166,6 +166,9 @@ struct erofs_sb_info {
 	struct erofs_domain *domain;
 	char *fsid;
 	char *domain_id;
+
+	/* volume name */
+	char *volume_name;
 };
 
 #define EROFS_SB(sb) ((struct erofs_sb_info *)(sb)->s_fs_info)
@@ -535,6 +538,10 @@ static inline void erofs_fscache_unregister_cookie(struct erofs_fscache *fscache
 static inline struct bio *erofs_fscache_bio_alloc(struct erofs_map_dev *mdev) { return NULL; }
 static inline void erofs_fscache_submit_bio(struct bio *bio) {}
 #endif
+
+long erofs_ioctl(struct file *filp, unsigned int cmd, unsigned long arg);
+long erofs_compat_ioctl(struct file *filp, unsigned int cmd,
+			unsigned long arg);
 
 #define EFSCORRUPTED    EUCLEAN         /* Filesystem is corrupted */
 
