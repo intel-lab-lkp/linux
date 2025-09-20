@@ -118,14 +118,12 @@ static void fbnic_service_task_start(struct fbnic_net *fbn)
 	struct fbnic_dev *fbd = fbn->fbd;
 
 	schedule_delayed_work(&fbd->service_task, HZ);
-	phylink_resume(fbn->phylink);
 }
 
 static void fbnic_service_task_stop(struct fbnic_net *fbn)
 {
 	struct fbnic_dev *fbd = fbn->fbd;
 
-	phylink_suspend(fbn->phylink, fbnic_bmc_present(fbd));
 	cancel_delayed_work(&fbd->service_task);
 }
 
@@ -137,7 +135,7 @@ void fbnic_up(struct fbnic_net *fbn)
 
 	fbnic_rss_reinit_hw(fbn->fbd, fbn);
 
-	__fbnic_set_rx_mode(fbn->netdev);
+	__fbnic_set_rx_mode(fbn->fbd);
 
 	/* Enable Tx/Rx processing */
 	fbnic_napi_enable(fbn);
@@ -154,7 +152,7 @@ void fbnic_down_noidle(struct fbnic_net *fbn)
 	fbnic_napi_disable(fbn);
 	netif_tx_disable(fbn->netdev);
 
-	fbnic_clear_rx_mode(fbn->netdev);
+	fbnic_clear_rx_mode(fbn->fbd);
 	fbnic_clear_rules(fbn->fbd);
 	fbnic_rss_disable_hw(fbn->fbd);
 	fbnic_disable(fbn);
@@ -206,8 +204,13 @@ static void fbnic_service_task(struct work_struct *work)
 
 	fbnic_health_check(fbd);
 
-	if (netif_carrier_ok(fbd->netdev))
+	fbnic_bmc_rpc_check(fbd);
+
+	if (netif_carrier_ok(fbd->netdev)) {
+		netdev_lock(fbd->netdev);
 		fbnic_napi_depletion_check(fbd->netdev);
+		netdev_unlock(fbd->netdev);
+	}
 
 	if (netif_running(fbd->netdev))
 		schedule_delayed_work(&fbd->service_task, HZ);
@@ -291,12 +294,22 @@ static int fbnic_probe(struct pci_dev *pdev, const struct pci_device_id *ent)
 		goto free_irqs;
 	}
 
+	/* Send the request to enable the FW logging to host. Note if this
+	 * fails we ignore the error and just display a message as it is
+	 * possible the FW is just too old to support the logging and needs
+	 * to be updated.
+	 */
+	err = fbnic_fw_log_init(fbd);
+	if (err)
+		dev_warn(fbd->dev,
+			 "Unable to initialize firmware log buffer: %d\n",
+			 err);
+
 	fbnic_devlink_register(fbd);
 	fbnic_dbg_fbd_init(fbd);
-	spin_lock_init(&fbd->hw_stats_lock);
 
 	/* Capture snapshot of hardware stats so netdev can calculate delta */
-	fbnic_reset_hw_stats(fbd);
+	fbnic_init_hw_stats(fbd);
 
 	fbnic_hwmon_register(fbd);
 
@@ -365,6 +378,7 @@ static void fbnic_remove(struct pci_dev *pdev)
 	fbnic_hwmon_unregister(fbd);
 	fbnic_dbg_fbd_exit(fbd);
 	fbnic_devlink_unregister(fbd);
+	fbnic_fw_log_free(fbd);
 	fbnic_fw_free_mbx(fbd);
 	fbnic_free_irqs(fbd);
 
@@ -380,15 +394,19 @@ static int fbnic_pm_suspend(struct device *dev)
 		goto null_uc_addr;
 
 	rtnl_lock();
+	netdev_lock(netdev);
 
 	netif_device_detach(netdev);
 
 	if (netif_running(netdev))
 		netdev->netdev_ops->ndo_stop(netdev);
 
+	netdev_unlock(netdev);
 	rtnl_unlock();
 
 null_uc_addr:
+	fbnic_fw_log_disable(fbd);
+
 	devl_lock(priv_to_devlink(fbd));
 
 	fbnic_fw_free_mbx(fbd);
@@ -429,10 +447,14 @@ static int __fbnic_pm_resume(struct device *dev)
 
 	/* Re-enable mailbox */
 	err = fbnic_fw_request_mbx(fbd);
+	devl_unlock(priv_to_devlink(fbd));
 	if (err)
 		goto err_free_irqs;
 
-	devl_unlock(priv_to_devlink(fbd));
+	/* Only send log history if log buffer is empty to prevent duplicate
+	 * log entries.
+	 */
+	fbnic_fw_log_enable(fbd, list_empty(&fbd->fw_log.entries));
 
 	/* No netdev means there isn't a network interface to bring up */
 	if (fbnic_init_failure(fbd))
@@ -444,19 +466,23 @@ static int __fbnic_pm_resume(struct device *dev)
 	fbnic_reset_queues(fbn, fbn->num_tx_queues, fbn->num_rx_queues);
 
 	rtnl_lock();
+	netdev_lock(netdev);
 
-	if (netif_running(netdev)) {
+	if (netif_running(netdev))
 		err = __fbnic_open(fbn);
-		if (err)
-			goto err_free_mbx;
-	}
 
+	netdev_unlock(netdev);
 	rtnl_unlock();
+	if (err)
+		goto err_free_mbx;
 
 	return 0;
 err_free_mbx:
-	rtnl_unlock();
+	fbnic_fw_log_disable(fbd);
+
+	devl_lock(priv_to_devlink(fbd));
 	fbnic_fw_free_mbx(fbd);
+	devl_unlock(priv_to_devlink(fbd));
 err_free_irqs:
 	fbnic_free_irqs(fbd);
 err_invalidate_uc_addr:
@@ -470,6 +496,10 @@ static void __fbnic_pm_attach(struct device *dev)
 	struct fbnic_dev *fbd = dev_get_drvdata(dev);
 	struct net_device *netdev = fbd->netdev;
 	struct fbnic_net *fbn;
+
+	rtnl_lock();
+	fbnic_reset_hw_stats(fbd);
+	rtnl_unlock();
 
 	if (fbnic_init_failure(fbd))
 		return;

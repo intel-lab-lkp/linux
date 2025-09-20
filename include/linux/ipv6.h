@@ -17,6 +17,7 @@ struct ipv6_devconf {
 	__s32		hop_limit;
 	__s32		mtu6;
 	__s32		forwarding;
+	__s32		force_forwarding;
 	__s32		disable_policy;
 	__s32		proxy_ndp;
 	__cacheline_group_end(ipv6_devconf_read_txrx);
@@ -294,7 +295,7 @@ struct raw6_sock {
 	__u32			offset;		/* checksum offset  */
 	struct icmp6_filter	filter;
 	__u32			ip6mr_table;
-
+	struct socket_drop_counters drop_counters;
 	struct ipv6_pinfo	inet6;
 };
 

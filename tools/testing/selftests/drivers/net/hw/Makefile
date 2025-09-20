@@ -16,7 +16,9 @@ TEST_PROGS = \
 	irq.py \
 	loopback.sh \
 	pp_alloc_fail.py \
+	rss_api.py \
 	rss_ctx.py \
+	rss_flow_label.py \
 	rss_input_xfrm.py \
 	tso.py \
 	xsk_reconfig.py \
