@@ -437,6 +437,8 @@ static inline unsigned int bio_add_max_vecs(void *kaddr, unsigned int len)
 unsigned int bio_add_vmalloc_chunk(struct bio *bio, void *vaddr, unsigned len);
 bool bio_add_vmalloc(struct bio *bio, void *vaddr, unsigned int len);
 
+int execute_bio_wait(struct bio *bio, void *private,
+		void (*execute)(struct bio *bio, void *private));
 int submit_bio_wait(struct bio *bio);
 int bdev_rw_virt(struct block_device *bdev, sector_t sector, void *data,
 		size_t len, enum req_op op);
