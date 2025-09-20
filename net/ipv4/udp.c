@@ -1685,25 +1685,6 @@ static void udp_skb_dtor_locked(struct sock *sk, struct sk_buff *skb)
 	udp_rmem_release(sk, udp_skb_truesize(skb), 1, true);
 }
 
-/* Idea of busylocks is to let producers grab an extra spinlock
- * to relieve pressure on the receive_queue spinlock shared by consumer.
- * Under flood, this means that only one producer can be in line
- * trying to acquire the receive_queue spinlock.
- */
-static spinlock_t *busylock_acquire(struct sock *sk)
-{
-	spinlock_t *busy = &udp_sk(sk)->busylock;
-
-	spin_lock(busy);
-	return busy;
-}
-
-static void busylock_release(spinlock_t *busy)
-{
-	if (busy)
-		spin_unlock(busy);
-}
-
 static int udp_rmem_schedule(struct sock *sk, int size)
 {
 	int delta;
@@ -1718,13 +1699,22 @@ static int udp_rmem_schedule(struct sock *sk, int size)
 int __udp_enqueue_schedule_skb(struct sock *sk, struct sk_buff *skb)
 {
 	struct sk_buff_head *list = &sk->sk_receive_queue;
+	struct udp_prod_queue *udp_prod_queue;
+	struct llist_node *ll_list;
 	unsigned int rmem, rcvbuf;
-	spinlock_t *busy = NULL;
 	int size, err = -ENOMEM;
+	struct sk_buff *next;
+	int total_size = 0;
+	int q_size = 0;
+	int nb = 0;
 
 	rmem = atomic_read(&sk->sk_rmem_alloc);
 	rcvbuf = READ_ONCE(sk->sk_rcvbuf);
 	size = skb->truesize;
+
+	udp_prod_queue = &udp_sk(sk)->udp_prod_queue[numa_node_id()];
+
+	rmem += atomic_read(&udp_prod_queue->rmem_alloc);
 
 	/* Immediately drop when the receive queue is full.
 	 * Cast to unsigned int performs the boundary check for INT_MAX.
@@ -1747,45 +1737,60 @@ int __udp_enqueue_schedule_skb(struct sock *sk, struct sk_buff *skb)
 	if (rmem > (rcvbuf >> 1)) {
 		skb_condense(skb);
 		size = skb->truesize;
-		rmem = atomic_add_return(size, &sk->sk_rmem_alloc);
-		if (rmem > rcvbuf)
-			goto uncharge_drop;
-		busy = busylock_acquire(sk);
-	} else {
-		atomic_add(size, &sk->sk_rmem_alloc);
 	}
 
 	udp_set_dev_scratch(skb);
 
+	atomic_add(size, &udp_prod_queue->rmem_alloc);
+
+	if (!llist_add(&skb->ll_node, &udp_prod_queue->ll_root))
+		return 0;
+
 	spin_lock(&list->lock);
-	err = udp_rmem_schedule(sk, size);
-	if (err) {
-		spin_unlock(&list->lock);
-		goto uncharge_drop;
+
+	ll_list = llist_del_all(&udp_prod_queue->ll_root);
+
+	ll_list = llist_reverse_order(ll_list);
+
+	llist_for_each_entry_safe(skb, next, ll_list, ll_node) {
+		size = udp_skb_truesize(skb);
+		total_size += size;
+		err = udp_rmem_schedule(sk, size);
+		if (err) {
+			udp_drops_inc(sk);
+			// TODO update SNMP values.
+			sk_skb_reason_drop(sk, skb, SKB_DROP_REASON_PROTO_MEM);
+			continue;
+		}
+
+		q_size += size;
+		sk_forward_alloc_add(sk, -size);
+
+		/* no need to setup a destructor, we will explicitly release the
+		 * forward allocated memory on dequeue
+		 */
+		sock_skb_set_dropcount(sk, skb);
+		nb++;
+		__skb_queue_tail(list, skb);
 	}
 
-	sk_forward_alloc_add(sk, -size);
+	atomic_add(q_size, &sk->sk_rmem_alloc);
 
-	/* no need to setup a destructor, we will explicitly release the
-	 * forward allocated memory on dequeue
-	 */
-	sock_skb_set_dropcount(sk, skb);
-
-	__skb_queue_tail(list, skb);
 	spin_unlock(&list->lock);
 
-	if (!sock_flag(sk, SOCK_DEAD))
-		INDIRECT_CALL_1(sk->sk_data_ready, sock_def_readable, sk);
+	atomic_sub(total_size, &udp_prod_queue->rmem_alloc);
 
-	busylock_release(busy);
+	if (!sock_flag(sk, SOCK_DEAD)) {
+		while (nb) {
+			INDIRECT_CALL_1(sk->sk_data_ready, sock_def_readable, sk);
+			nb--;
+		}
+	}
+
 	return 0;
-
-uncharge_drop:
-	atomic_sub(skb->truesize, &sk->sk_rmem_alloc);
 
 drop:
 	udp_drops_inc(sk);
-	busylock_release(busy);
 	return err;
 }
 EXPORT_IPV6_MOD_GPL(__udp_enqueue_schedule_skb);
@@ -1814,10 +1819,11 @@ static void udp_destruct_sock(struct sock *sk)
 
 int udp_init_sock(struct sock *sk)
 {
-	udp_lib_init_sock(sk);
+	int res = udp_lib_init_sock(sk);
+
 	sk->sk_destruct = udp_destruct_sock;
 	set_bit(SOCK_SUPPORT_ZC, &sk->sk_socket->flags);
-	return 0;
+	return res;
 }
 
 void skb_consume_udp(struct sock *sk, struct sk_buff *skb, int len)
@@ -2906,6 +2912,7 @@ void udp_destroy_sock(struct sock *sk)
 			udp_tunnel_cleanup_gro(sk);
 		}
 	}
+	kfree(up->udp_prod_queue);
 }
 
 typedef struct sk_buff *(*udp_gro_receive_t)(struct sock *sk,
