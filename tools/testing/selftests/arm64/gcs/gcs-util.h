@@ -36,7 +36,8 @@ struct user_gcs {
 # define PR_SHADOW_STACK_PUSH		(1UL << 2)
 
 #define PR_SHADOW_STACK_ALL_MODES \
-	PR_SHADOW_STACK_ENABLE | PR_SHADOW_STACK_WRITE | PR_SHADOW_STACK_PUSH
+	PR_SHADOW_STACK_ENABLE | PR_SHADOW_STACK_WRITE | \
+	PR_SHADOW_STACK_PUSH | PR_SHADOW_STACK_EXIT_TOKEN
 
 #define SHADOW_STACK_SET_TOKEN (1ULL << 0)     /* Set up a restore token in the shadow stack */
 #define SHADOW_STACK_SET_MARKER (1ULL << 1)     /* Set up a top of stack merker in the shadow stack */

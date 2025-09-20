@@ -77,6 +77,29 @@ FIXTURE_VARIANT_ADD(valid_modes, enable_write_push)
 		PR_SHADOW_STACK_PUSH,
 };
 
+FIXTURE_VARIANT_ADD(valid_modes, enable_token)
+{
+	.mode = PR_SHADOW_STACK_ENABLE | PR_SHADOW_STACK_EXIT_TOKEN,
+};
+
+FIXTURE_VARIANT_ADD(valid_modes, enable_write_exit)
+{
+	.mode = PR_SHADOW_STACK_ENABLE | PR_SHADOW_STACK_WRITE |
+		PR_SHADOW_STACK_EXIT_TOKEN,
+};
+
+FIXTURE_VARIANT_ADD(valid_modes, enable_push_exit)
+{
+	.mode = PR_SHADOW_STACK_ENABLE | PR_SHADOW_STACK_PUSH |
+		PR_SHADOW_STACK_EXIT_TOKEN,
+};
+
+FIXTURE_VARIANT_ADD(valid_modes, enable_write_push_exit)
+{
+	.mode = PR_SHADOW_STACK_ENABLE | PR_SHADOW_STACK_WRITE |
+		PR_SHADOW_STACK_PUSH | PR_SHADOW_STACK_EXIT_TOKEN,
+};
+
 FIXTURE_SETUP(valid_modes)
 {
 }
