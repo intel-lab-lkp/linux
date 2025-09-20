@@ -370,6 +370,17 @@ config TOUCHSCREEN_EXC3000
 	  To compile this driver as a module, choose M here: the
 	  module will be called exc3000.
 
+config TOUCHSCREEN_FTS2BA61Y
+	tristate "ST-Microelectronics FTS2BA61Y touchscreen"
+	depends on SPI
+	help
+	  Say Y here if you have the ST-Microelectronics FTS2BA61Y touchscreen
+
+	  If unsure, say N.
+
+	  To compile this driver as a module, choose M here: the
+	  module will be called fts2ba61y.
+
 config TOUCHSCREEN_FUJITSU
 	tristate "Fujitsu serial touchscreen"
 	select SERIO
