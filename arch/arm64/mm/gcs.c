@@ -199,14 +199,37 @@ void gcs_set_el0_mode(struct task_struct *task)
 
 void gcs_free(struct task_struct *task)
 {
+	unsigned long __user *cap_ptr;
+	unsigned long cap_val;
+	int ret;
+
 	if (!system_supports_gcs())
 		return;
 
 	if (!task->mm || task->mm != current->mm)
 		return;
 
-	if (task->thread.gcs_base)
+	if (task->thread.gcs_base) {
 		vm_munmap(task->thread.gcs_base, task->thread.gcs_size);
+	} else if (task == current &&
+		   task->thread.gcs_el0_mode & PR_SHADOW_STACK_EXIT_TOKEN) {
+		cap_ptr = (unsigned long __user *)read_sysreg_s(SYS_GCSPR_EL0);
+		cap_ptr--;
+		cap_val = GCS_CAP(cap_ptr);
+
+		/*
+		 * We can't do anything constructive if this fails,
+		 * and the thread might be exiting due to being in a
+		 * bad state anyway.
+		 */
+		put_user_gcs(cap_val, cap_ptr, &ret);
+
+		/*
+		 * Ensure the new cap is ordered before standard
+		 * memory accesses to the same location.
+		 */
+		gcsb_dsync();
+	}
 
 	task->thread.gcspr_el0 = 0;
 	task->thread.gcs_base = 0;
