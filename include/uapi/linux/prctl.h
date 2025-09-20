@@ -352,6 +352,7 @@ struct prctl_mm_map {
 # define PR_SHADOW_STACK_ENABLE         (1UL << 0)
 # define PR_SHADOW_STACK_WRITE		(1UL << 1)
 # define PR_SHADOW_STACK_PUSH		(1UL << 2)
+# define PR_SHADOW_STACK_EXIT_TOKEN	(1UL << 3)
 
 /*
  * Prevent further changes to the specified shadow stack
