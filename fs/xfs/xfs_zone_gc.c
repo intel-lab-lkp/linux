@@ -20,6 +20,8 @@
 #include "xfs_zone_priv.h"
 #include "xfs_zones.h"
 #include "xfs_trace.h"
+#include "xfs_error.h"
+#include "xfs_errortag.h"
 
 /*
  * Implement Garbage Collection (GC) of partially used zoned.
@@ -902,10 +904,18 @@ xfs_zone_gc_reset_zone(
 	void			*private)
 {
 	struct xfs_rtgroup	*rtg = private;
+	struct xfs_mount	*mp = rtg_mount(rtg);
 
 	ASSERT(rtg_rmap(rtg)->i_used_blocks == 0);
 
 	bio->bi_iter.bi_sector = xfs_gbno_to_daddr(&rtg->rtg_group, 0);
+
+	if (XFS_TEST_ERROR(mp, XFS_ERRTAG_ZONE_RESET)) {
+		bio->bi_status = BLK_STS_IOERR;
+		bio_endio(bio);
+		return;
+	}
+
 	if (!bdev_zone_is_seq(bio->bi_bdev, bio->bi_iter.bi_sector)) {
 		/*
 		 * Also use the bio to drive the state machine when neither
@@ -916,8 +926,7 @@ xfs_zone_gc_reset_zone(
 			return;
 		}
 		bio->bi_opf = REQ_OP_DISCARD | REQ_SYNC;
-		bio->bi_iter.bi_size =
-			XFS_FSB_TO_B(rtg_mount(rtg), rtg_blocks(rtg));
+		bio->bi_iter.bi_size = XFS_FSB_TO_B(mp, rtg_blocks(rtg));
 	}
 
 	trace_xfs_zone_reset(rtg);
