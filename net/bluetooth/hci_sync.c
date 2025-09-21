@@ -7153,14 +7153,22 @@ static int hci_le_pa_create_sync(struct hci_dev *hdev, void *data)
 	struct bt_iso_qos *qos = &conn->iso_qos;
 	int err;
 
-	if (!hci_conn_valid(hdev, conn))
+	hci_dev_lock_sync(hdev);
+
+	if (!hci_conn_valid(hdev, conn)) {
+		hci_dev_unlock_sync(hdev);
 		return -ECANCELED;
+	}
 
-	if (conn->sync_handle != HCI_SYNC_HANDLE_INVALID)
+	if (conn->sync_handle != HCI_SYNC_HANDLE_INVALID) {
+		hci_dev_unlock_sync(hdev);
 		return -EINVAL;
+	}
 
-	if (hci_dev_test_and_set_flag(hdev, HCI_PA_SYNC))
+	if (hci_dev_test_and_set_flag(hdev, HCI_PA_SYNC)) {
+		hci_dev_unlock_sync(hdev);
 		return -EBUSY;
+	}
 
 	/* Stop scanning if SID has not been set and active scanning is enabled
 	 * so we use passive scanning which will be scanning using the allow
@@ -7173,6 +7181,11 @@ static int hci_le_pa_create_sync(struct hci_dev *hdev, void *data)
 		hci_discovery_set_state(hdev, DISCOVERY_STOPPED);
 	}
 
+	if (!hci_conn_valid(hdev, conn)) {
+		err = -ECANCELED;
+		goto done;
+	}
+
 	/* Mark HCI_CONN_CREATE_PA_SYNC so hci_update_passive_scan_sync can
 	 * program the address in the allow list so PA advertisements can be
 	 * received.
@@ -7180,6 +7193,11 @@ static int hci_le_pa_create_sync(struct hci_dev *hdev, void *data)
 	set_bit(HCI_CONN_CREATE_PA_SYNC, &conn->flags);
 
 	hci_update_passive_scan_sync(hdev);
+
+	if (!hci_conn_valid(hdev, conn)) {
+		err = -ECANCELED;
+		goto done;
+	}
 
 	/* SID has not been set listen for HCI_EV_LE_EXT_ADV_REPORT to update
 	 * it.
@@ -7190,6 +7208,11 @@ static int hci_le_pa_create_sync(struct hci_dev *hdev, void *data)
 					       conn->conn_timeout, NULL);
 		if (err == -ETIMEDOUT)
 			goto done;
+	}
+
+	if (!hci_conn_valid(hdev, conn)) {
+		err = -ECANCELED;
+		goto done;
 	}
 
 	memset(&cp, 0, sizeof(cp));
@@ -7221,6 +7244,8 @@ static int hci_le_pa_create_sync(struct hci_dev *hdev, void *data)
 				      0, NULL, HCI_CMD_TIMEOUT);
 
 done:
+	hci_dev_unlock_sync(hdev);
+
 	hci_dev_clear_flag(hdev, HCI_PA_SYNC);
 
 	/* Update passive scan since HCI_PA_SYNC flag has been cleared */
@@ -7268,8 +7293,12 @@ static int hci_le_big_create_sync(struct hci_dev *hdev, void *data)
 	struct bt_iso_qos *qos = &conn->iso_qos;
 	int err;
 
-	if (!hci_conn_valid(hdev, conn))
+	hci_dev_lock_sync(hdev);
+
+	if (!hci_conn_valid(hdev, conn)) {
+		hci_dev_unlock_sync(hdev);
 		return -ECANCELED;
+	}
 
 	set_bit(HCI_CONN_CREATE_BIG_SYNC, &conn->flags);
 
@@ -7301,6 +7330,8 @@ static int hci_le_big_create_sync(struct hci_dev *hdev, void *data)
 				       conn->conn_timeout, NULL);
 	if (err == -ETIMEDOUT)
 		hci_le_big_terminate_sync(hdev, cp->handle);
+
+	hci_dev_unlock_sync(hdev);
 
 	return err;
 }
