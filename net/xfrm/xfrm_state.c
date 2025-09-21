@@ -2566,7 +2566,9 @@ int xfrm_alloc_spi(struct xfrm_state *x, u32 low, u32 high,
 	unsigned int h;
 	struct xfrm_state *x0;
 	int err = -ENOENT;
-	u32 range = high - low + 1;
+	if (low == 0)
+		low = 1;
+	u32 range = high + 1 - low;
 	__be32 newspi = 0;
 
 	spin_lock_bh(&x->lock);
