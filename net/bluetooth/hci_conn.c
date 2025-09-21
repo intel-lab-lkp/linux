@@ -2926,11 +2926,20 @@ u32 hci_conn_get_phy(struct hci_conn *conn)
 static int abort_conn_sync(struct hci_dev *hdev, void *data)
 {
 	struct hci_conn *conn = data;
+	int err;
 
-	if (!hci_conn_valid(hdev, conn))
+	hci_dev_lock_sync(hdev);
+
+	if (!hci_conn_valid(hdev, conn)) {
+		hci_dev_unlock_sync(hdev);
 		return -ECANCELED;
+	}
 
-	return hci_abort_conn_sync(hdev, conn, conn->abort_reason);
+	err = hci_abort_conn_sync(hdev, conn, conn->abort_reason);
+
+	hci_dev_unlock_sync(hdev);
+
+	return err;
 }
 
 static void abort_conn_destroy(struct hci_dev *hdev, void *data, int err)
