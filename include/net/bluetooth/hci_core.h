@@ -1114,6 +1114,8 @@ static inline bool hci_conn_valid(struct hci_dev *hdev, struct hci_conn *conn)
 	struct hci_conn_hash *h = &hdev->conn_hash;
 	struct hci_conn  *c;
 
+	HCI_CONN_HASH_LOCKDEP_CHECK(hdev);
+
 	rcu_read_lock();
 
 	list_for_each_entry_rcu(c, &h->list, list) {
