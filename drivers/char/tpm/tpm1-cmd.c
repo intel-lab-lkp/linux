@@ -323,19 +323,15 @@ unsigned long tpm1_calc_ordinal_duration(struct tpm_chip *chip, u32 ordinal)
  */
 static int tpm1_startup(struct tpm_chip *chip)
 {
+	u8 buf_data[TPM_BUF_MIN_SIZE];
+	struct tpm_buf *buf = (struct tpm_buf *)buf_data;
 	int rc;
 
-	struct tpm_buf *buf __free(kfree) = kzalloc(PAGE_SIZE, GFP_KERNEL);
-	if (!buf)
-		return -ENOMEM;
-
-	dev_info(&chip->dev, "starting up the TPM manually\n");
-
-	tpm_buf_init(buf, TPM_BUF_MAX_SIZE);
+	dev_info(&chip->dev, "TPM_Startup\n");
+	tpm_buf_init(buf, TPM_BUF_INT_SIZE);
 	tpm_buf_reset(buf, TPM_TAG_RQU_COMMAND, TPM_ORD_STARTUP);
 	tpm_buf_append_u16(buf, TPM_ST_CLEAR);
-
-	rc = tpm_transmit_cmd(chip, buf, 0, "attempting to start the TPM");
+	rc = tpm_transmit_cmd(chip, buf, 0, "TPM_Startup");
 	return rc;
 }
 
