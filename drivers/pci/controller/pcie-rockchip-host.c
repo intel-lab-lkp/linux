@@ -934,8 +934,8 @@ static int rockchip_pcie_probe(struct platform_device *pdev)
 		return -ENODEV;
 
 	bridge = devm_pci_alloc_host_bridge(dev, sizeof(*rockchip));
-	if (!bridge)
-		return -ENOMEM;
+	if (IS_ERR_OR_NULL(bridge))
+		return PTR_ERR(bridge);
 
 	rockchip = pci_host_bridge_priv(bridge);
 

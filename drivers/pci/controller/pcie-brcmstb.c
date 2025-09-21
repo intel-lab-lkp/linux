@@ -1874,8 +1874,8 @@ static int brcm_pcie_probe(struct platform_device *pdev)
 	int ret;
 
 	bridge = devm_pci_alloc_host_bridge(&pdev->dev, sizeof(*pcie));
-	if (!bridge)
-		return -ENOMEM;
+	if (IS_ERR_OR_NULL(bridge))
+		return PTR_ERR(bridge);
 
 	data = of_device_get_match_data(&pdev->dev);
 	if (!data) {

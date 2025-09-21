@@ -326,8 +326,8 @@ static int loongson_pci_probe(struct platform_device *pdev)
 		return -ENODEV;
 
 	bridge = devm_pci_alloc_host_bridge(dev, sizeof(*priv));
-	if (!bridge)
-		return -ENODEV;
+	if (IS_ERR_OR_NULL(bridge))
+		return PTR_ERR(bridge);
 
 	priv = pci_host_bridge_priv(bridge);
 	priv->pdev = pdev;

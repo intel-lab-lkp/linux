@@ -622,8 +622,8 @@ static int xgene_pcie_probe(struct platform_device *pdev)
 				     "MSI driver not ready\n");
 
 	bridge = devm_pci_alloc_host_bridge(dev, sizeof(*port));
-	if (!bridge)
-		return -ENOMEM;
+	if (IS_ERR_OR_NULL(bridge))
+		return PTR_ERR(bridge);
 
 	port = pci_host_bridge_priv(bridge);
 

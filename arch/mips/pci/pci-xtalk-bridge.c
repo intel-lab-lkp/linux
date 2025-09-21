@@ -636,8 +636,8 @@ static int bridge_probe(struct platform_device *pdev)
 	pci_set_flags(PCI_PROBE_ONLY);
 
 	host = devm_pci_alloc_host_bridge(dev, sizeof(*bc));
-	if (!host) {
-		err = -ENOMEM;
+	if (IS_ERR_OR_NULL(host)) {
+		err = PTR_ERR(host);
 		goto err_remove_domain;
 	}
 

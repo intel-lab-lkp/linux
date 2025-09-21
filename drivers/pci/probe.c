@@ -686,18 +686,18 @@ struct pci_host_bridge *devm_pci_alloc_host_bridge(struct device *dev,
 
 	bridge = pci_alloc_host_bridge(priv);
 	if (!bridge)
-		return NULL;
+		return ERR_PTR(-ENOMEM);
 
 	bridge->dev.parent = dev;
 
 	ret = devm_add_action_or_reset(dev, devm_pci_alloc_host_bridge_release,
 				       bridge);
 	if (ret)
-		return NULL;
+		return ERR_PTR(ret);
 
 	ret = devm_of_pci_bridge_init(dev, bridge);
 	if (ret)
-		return NULL;
+		return ERR_PTR(ret);
 
 	return bridge;
 }
@@ -3198,7 +3198,7 @@ struct pci_bus *pci_create_root_bus(struct device *parent, int bus,
 
 	bridge = pci_alloc_host_bridge(0);
 	if (!bridge)
-		return NULL;
+		return ERR_PTR(-ENOMEM);
 
 	bridge->dev.parent = parent;
 

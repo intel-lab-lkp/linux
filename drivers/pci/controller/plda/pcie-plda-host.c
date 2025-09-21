@@ -598,8 +598,8 @@ int plda_pcie_host_init(struct plda_pcie_rp *port, struct pci_ops *ops,
 				     "failed to map config memory\n");
 
 	bridge = devm_pci_alloc_host_bridge(dev, 0);
-	if (!bridge)
-		return dev_err_probe(dev, -ENOMEM,
+	if (IS_ERR_OR_NULL(bridge))
+		return dev_err_probe(dev, PTR_ERR(bridge),
 				     "failed to alloc bridge\n");
 
 	if (port->host_ops && port->host_ops->host_init) {

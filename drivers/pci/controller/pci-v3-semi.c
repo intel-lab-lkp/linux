@@ -715,8 +715,8 @@ static int v3_pci_probe(struct platform_device *pdev)
 	int ret;
 
 	host = devm_pci_alloc_host_bridge(dev, sizeof(*v3));
-	if (!host)
-		return -ENOMEM;
+	if (IS_ERR_OR_NULL(bridge))
+		return PTR_ERR(bridge);
 
 	host->ops = &v3_pci_ops;
 	v3 = pci_host_bridge_priv(host);

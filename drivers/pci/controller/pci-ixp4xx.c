@@ -528,8 +528,8 @@ static int __init ixp4xx_pci_probe(struct platform_device *pdev)
 	int i;
 
 	host = devm_pci_alloc_host_bridge(dev, sizeof(*p));
-	if (!host)
-		return -ENOMEM;
+	if (IS_ERR_OR_NULL(bridge))
+		return PTR_ERR(bridge);
 
 	host->ops = &ixp4xx_pci_ops;
 	p = pci_host_bridge_priv(host);

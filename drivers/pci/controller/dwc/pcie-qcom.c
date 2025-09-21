@@ -1809,8 +1809,8 @@ static int qcom_pcie_probe(struct platform_device *pdev)
 		struct pci_config_window *cfg;
 
 		bridge = devm_pci_alloc_host_bridge(dev, 0);
-		if (!bridge) {
-			ret = -ENOMEM;
+		if (IS_ERR_OR_NULL(bridge)) {
+			ret = PTR_ERR(bridge);
 			goto err_pm_runtime_put;
 		}
 

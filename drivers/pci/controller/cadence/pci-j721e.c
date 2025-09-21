@@ -475,8 +475,8 @@ static int j721e_pcie_probe(struct platform_device *pdev)
 			return -ENODEV;
 
 		bridge = devm_pci_alloc_host_bridge(dev, sizeof(*rc));
-		if (!bridge)
-			return -ENOMEM;
+		if (IS_ERR_OR_NULL(bridge))
+			return PTR_ERR(bridge);
 
 		if (!data->byte_access_allowed)
 			bridge->ops = &cdns_ti_pcie_host_ops;

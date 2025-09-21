@@ -284,8 +284,8 @@ static int rcar_pci_probe(struct platform_device *pdev)
 	void __iomem *reg;
 
 	bridge = devm_pci_alloc_host_bridge(dev, sizeof(*priv));
-	if (!bridge)
-		return -ENOMEM;
+	if (IS_ERR_OR_NULL(bridge))
+		return PTR_ERR(bridge);
 
 	priv = pci_host_bridge_priv(bridge);
 	bridge->sysdata = priv;

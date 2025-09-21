@@ -1740,8 +1740,8 @@ static int advk_pcie_probe(struct platform_device *pdev)
 	int ret, irq;
 
 	bridge = devm_pci_alloc_host_bridge(dev, sizeof(struct advk_pcie));
-	if (!bridge)
-		return -ENOMEM;
+	if (IS_ERR_OR_NULL(bridge))
+		return PTR_ERR(bridge);
 
 	pcie = pci_host_bridge_priv(bridge);
 	pcie->pdev = pdev;

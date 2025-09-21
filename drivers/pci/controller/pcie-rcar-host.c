@@ -952,8 +952,8 @@ static int rcar_pcie_probe(struct platform_device *pdev)
 	int err;
 
 	bridge = devm_pci_alloc_host_bridge(dev, sizeof(*host));
-	if (!bridge)
-		return -ENOMEM;
+	if (IS_ERR_OR_NULL(bridge))
+		return PTR_ERR(bridge);
 
 	host = pci_host_bridge_priv(bridge);
 	pcie = &host->pcie;

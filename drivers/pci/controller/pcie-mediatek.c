@@ -1083,8 +1083,8 @@ static int mtk_pcie_probe(struct platform_device *pdev)
 	int err;
 
 	host = devm_pci_alloc_host_bridge(dev, sizeof(*pcie));
-	if (!host)
-		return -ENOMEM;
+	if (IS_ERR_OR_NULL(bridge))
+		return PTR_ERR(bridge);
 
 	pcie = pci_host_bridge_priv(host);
 

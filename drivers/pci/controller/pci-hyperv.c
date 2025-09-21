@@ -3759,8 +3759,8 @@ static int hv_pci_probe(struct hv_device *hdev,
 	int ret;
 
 	bridge = devm_pci_alloc_host_bridge(&hdev->device, 0);
-	if (!bridge)
-		return -ENOMEM;
+	if (IS_ERR_OR_NULL(bridge))
+		return PTR_ERR(bridge);
 
 	hbus = kzalloc(sizeof(*hbus), GFP_KERNEL);
 	if (!hbus)

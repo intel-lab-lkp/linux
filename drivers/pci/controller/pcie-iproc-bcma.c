@@ -39,8 +39,8 @@ static int iproc_bcma_pcie_probe(struct bcma_device *bdev)
 	int ret;
 
 	bridge = devm_pci_alloc_host_bridge(dev, sizeof(*pcie));
-	if (!bridge)
-		return -ENOMEM;
+	if (IS_ERR_OR_NULL(bridge))
+		return PTR_ERR(bridge);
 
 	pcie = pci_host_bridge_priv(bridge);
 

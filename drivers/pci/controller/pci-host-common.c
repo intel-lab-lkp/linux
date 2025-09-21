@@ -60,8 +60,8 @@ int pci_host_common_init(struct platform_device *pdev,
 	struct pci_config_window *cfg;
 
 	bridge = devm_pci_alloc_host_bridge(dev, 0);
-	if (!bridge)
-		return -ENOMEM;
+	if (IS_ERR_OR_NULL(bridge))
+		return PTR_ERR(bridge);
 
 	of_pci_check_probe_only();
 

@@ -66,8 +66,8 @@ static int cdns_plat_pcie_probe(struct platform_device *pdev)
 			return -ENODEV;
 
 		bridge = devm_pci_alloc_host_bridge(dev, sizeof(*rc));
-		if (!bridge)
-			return -ENOMEM;
+		if (IS_ERR_OR_NULL(bridge))
+			return PTR_ERR(bridge);
 
 		rc = pci_host_bridge_priv(bridge);
 		rc->pcie.dev = dev;

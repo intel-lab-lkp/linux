@@ -467,8 +467,8 @@ int dw_pcie_host_init(struct dw_pcie_rp *pp)
 	raw_spin_lock_init(&pp->lock);
 
 	bridge = devm_pci_alloc_host_bridge(dev, 0);
-	if (!bridge)
-		return -ENOMEM;
+	if (IS_ERR_OR_NULL(bridge))
+		return PTR_ERR(bridge);
 
 	pp->bridge = bridge;
 

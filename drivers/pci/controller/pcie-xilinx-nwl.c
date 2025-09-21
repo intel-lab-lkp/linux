@@ -834,8 +834,8 @@ static int nwl_pcie_probe(struct platform_device *pdev)
 	int err;
 
 	bridge = devm_pci_alloc_host_bridge(dev, sizeof(*pcie));
-	if (!bridge)
-		return -ENODEV;
+	if (IS_ERR_OR_NULL(bridge))
+		return PTR_ERR(bridge);
 
 	pcie = pci_host_bridge_priv(bridge);
 	platform_set_drvdata(pdev, pcie);
