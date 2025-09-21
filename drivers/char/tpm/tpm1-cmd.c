@@ -328,7 +328,7 @@ static int tpm1_startup(struct tpm_chip *chip)
 	int rc;
 
 	dev_info(&chip->dev, "TPM_Startup\n");
-	tpm_buf_init(buf, TPM_BUF_INT_SIZE);
+	tpm_buf_init(buf, TPM_BUF_MIN_SIZE);
 	tpm_buf_reset(buf, TPM_TAG_RQU_COMMAND, TPM_ORD_STARTUP);
 	tpm_buf_append_u16(buf, TPM_ST_CLEAR);
 	rc = tpm_transmit_cmd(chip, buf, 0, "TPM_Startup");
