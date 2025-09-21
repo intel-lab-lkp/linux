@@ -42,6 +42,7 @@
 #define VFF_EN_CLR_B		0
 #define VFF_INT_EN_CLR_B	0
 #define VFF_4G_SUPPORT_CLR_B	0
+#define VFF_ORI_ADDR_BITS_NUM	32
 
 /*
  * interrupt trigger level for tx
@@ -74,10 +75,14 @@
 #define VFF_DEBUG_STATUS	0x50
 #define VFF_4G_SUPPORT		0x54
 
+struct mtk_uart_apdma_data {
+	unsigned int dma_bits;
+};
+
 struct mtk_uart_apdmadev {
 	struct dma_device ddev;
 	struct clk *clk;
-	bool support_33bits;
+	unsigned int support_bits;
 	unsigned int dma_requests;
 };
 
@@ -148,7 +153,7 @@ static void mtk_uart_apdma_start_tx(struct mtk_chan *c)
 		mtk_uart_apdma_write(c, VFF_WPT, 0);
 		mtk_uart_apdma_write(c, VFF_INT_FLAG, VFF_TX_INT_CLR_B);
 
-		if (mtkd->support_33bits)
+		if (mtkd->support_bits > VFF_ORI_ADDR_BITS_NUM)
 			mtk_uart_apdma_write(c, VFF_4G_SUPPORT, VFF_4G_EN_B);
 	}
 
@@ -191,7 +196,7 @@ static void mtk_uart_apdma_start_rx(struct mtk_chan *c)
 		mtk_uart_apdma_write(c, VFF_RPT, 0);
 		mtk_uart_apdma_write(c, VFF_INT_FLAG, VFF_RX_INT_CLR_B);
 
-		if (mtkd->support_33bits)
+		if (mtkd->support_bits > VFF_ORI_ADDR_BITS_NUM)
 			mtk_uart_apdma_write(c, VFF_4G_SUPPORT, VFF_4G_EN_B);
 	}
 
@@ -297,7 +302,7 @@ static int mtk_uart_apdma_alloc_chan_resources(struct dma_chan *chan)
 		goto err_pm;
 	}
 
-	if (mtkd->support_33bits)
+	if (mtkd->support_bits > VFF_ORI_ADDR_BITS_NUM)
 		mtk_uart_apdma_write(c, VFF_4G_SUPPORT, VFF_4G_SUPPORT_CLR_B);
 
 err_pm:
@@ -467,8 +472,27 @@ static void mtk_uart_apdma_free(struct mtk_uart_apdmadev *mtkd)
 	}
 }
 
+static const struct mtk_uart_apdma_data mt6577_data = {
+	.dma_bits = 32
+};
+
+static const struct mtk_uart_apdma_data mt6795_data = {
+	.dma_bits = 33
+};
+
+static const struct mtk_uart_apdma_data mt6779_data = {
+	.dma_bits = 34
+};
+
+static const struct mtk_uart_apdma_data mt6985_data = {
+	.dma_bits = 35
+};
+
 static const struct of_device_id mtk_uart_apdma_match[] = {
-	{ .compatible = "mediatek,mt6577-uart-dma", },
+	{ .compatible = "mediatek,mt6577-uart-dma", .data = &mt6577_data },
+	{ .compatible = "mediatek,mt6795-uart-dma", .data = &mt6795_data },
+	{ .compatible = "mediatek,mt6779-uart-dma", .data = &mt6779_data },
+	{ .compatible = "mediatek,mt6985-uart-dma", .data = &mt6985_data },
 	{ /* sentinel */ },
 };
 MODULE_DEVICE_TABLE(of, mtk_uart_apdma_match);
@@ -477,7 +501,8 @@ static int mtk_uart_apdma_probe(struct platform_device *pdev)
 {
 	struct device_node *np = pdev->dev.of_node;
 	struct mtk_uart_apdmadev *mtkd;
-	int bit_mask = 32, rc;
+	const struct mtk_uart_apdma_data *data;
+	int rc;
 	struct mtk_chan *c;
 	unsigned int i;
 
@@ -492,13 +517,9 @@ static int mtk_uart_apdma_probe(struct platform_device *pdev)
 		return rc;
 	}
 
-	if (of_property_read_bool(np, "mediatek,dma-33bits"))
-		mtkd->support_33bits = true;
-
-	if (mtkd->support_33bits)
-		bit_mask = 33;
-
-	rc = dma_set_mask_and_coherent(&pdev->dev, DMA_BIT_MASK(bit_mask));
+	data = of_device_get_match_data(&pdev->dev);
+	mtkd->support_bits = data->dma_bits;
+	rc = dma_set_mask_and_coherent(&pdev->dev, DMA_BIT_MASK(data->dma_bits));
 	if (rc)
 		return rc;
 
