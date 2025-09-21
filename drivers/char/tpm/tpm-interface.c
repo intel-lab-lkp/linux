@@ -100,8 +100,8 @@ static ssize_t tpm_try_transmit(struct tpm_chip *chip, void *buf, size_t bufsiz)
 	if (bufsiz < TPM_HEADER_SIZE)
 		return -EINVAL;
 
-	if (bufsiz > TPM_BUFSIZE)
-		bufsiz = TPM_BUFSIZE;
+	if (bufsiz > TPM_BUF_MAX_SIZE)
+		bufsiz = TPM_BUF_MAX_SIZE;
 
 	count = be32_to_cpu(header->length);
 	ordinal = be32_to_cpu(header->ordinal);
