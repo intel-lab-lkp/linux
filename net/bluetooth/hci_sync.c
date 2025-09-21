@@ -5575,6 +5575,8 @@ static int hci_disconnect_sync(struct hci_dev *hdev, struct hci_conn *conn,
 {
 	struct hci_cp_disconnect cp;
 
+	hci_assert_lock_sync_held(hdev);
+
 	if (conn->type == BIS_LINK || conn->type == PA_LINK) {
 		/* This is a BIS connection, hci_conn_del will
 		 * do the necessary cleanup.
@@ -5608,6 +5610,8 @@ static int hci_disconnect_sync(struct hci_dev *hdev, struct hci_conn *conn,
 static int hci_le_connect_cancel_sync(struct hci_dev *hdev,
 				      struct hci_conn *conn, u8 reason)
 {
+	hci_assert_lock_sync_held(hdev);
+
 	/* Return reason if scanning since the connection shall probably be
 	 * cleanup directly.
 	 */
@@ -5625,6 +5629,8 @@ static int hci_le_connect_cancel_sync(struct hci_dev *hdev,
 static int hci_connect_cancel_sync(struct hci_dev *hdev, struct hci_conn *conn,
 				   u8 reason)
 {
+	hci_assert_lock_sync_held(hdev);
+
 	if (conn->type == LE_LINK)
 		return hci_le_connect_cancel_sync(hdev, conn, reason);
 
@@ -5674,6 +5680,8 @@ static int hci_reject_sco_sync(struct hci_dev *hdev, struct hci_conn *conn,
 {
 	struct hci_cp_reject_sync_conn_req cp;
 
+	hci_assert_lock_sync_held(hdev);
+
 	memset(&cp, 0, sizeof(cp));
 	bacpy(&cp.bdaddr, &conn->dst);
 	cp.reason = reason;
@@ -5693,6 +5701,8 @@ static int hci_le_reject_cis_sync(struct hci_dev *hdev, struct hci_conn *conn,
 {
 	struct hci_cp_le_reject_cis cp;
 
+	hci_assert_lock_sync_held(hdev);
+
 	memset(&cp, 0, sizeof(cp));
 	cp.handle = cpu_to_le16(conn->handle);
 	cp.reason = reason;
@@ -5705,6 +5715,8 @@ static int hci_reject_conn_sync(struct hci_dev *hdev, struct hci_conn *conn,
 				u8 reason)
 {
 	struct hci_cp_reject_conn_req cp;
+
+	hci_assert_lock_sync_held(hdev);
 
 	if (conn->type == CIS_LINK)
 		return hci_le_reject_cis_sync(hdev, conn, reason);
@@ -5729,6 +5741,8 @@ int hci_abort_conn_sync(struct hci_dev *hdev, struct hci_conn *conn, u8 reason)
 	u16 handle = conn->handle;
 	bool disconnect = false;
 	struct hci_conn *c;
+
+	hci_assert_lock_sync_held(hdev);
 
 	switch (conn->state) {
 	case BT_CONNECTED:
@@ -6407,6 +6421,8 @@ static int hci_le_ext_directed_advertising_sync(struct hci_dev *hdev,
 	bdaddr_t random_addr;
 	u8 own_addr_type;
 
+	hci_assert_lock_sync_held(hdev);
+
 	err = hci_update_random_address_sync(hdev, false, conn_use_rpa(conn),
 					     &own_addr_type);
 	if (err)
@@ -6473,6 +6489,8 @@ static int hci_le_directed_advertising_sync(struct hci_dev *hdev,
 	u8 status;
 	u8 own_addr_type;
 	u8 enable;
+
+	hci_assert_lock_sync_held(hdev);
 
 	if (ext_adv_capable(hdev))
 		return hci_le_ext_directed_advertising_sync(hdev, conn);
@@ -6542,6 +6560,8 @@ static int hci_le_ext_create_conn_sync(struct hci_dev *hdev,
 	struct hci_cp_le_ext_conn_param *p;
 	u8 data[sizeof(*cp) + sizeof(*p) * 3];
 	u32 plen;
+
+	hci_assert_lock_sync_held(hdev);
 
 	cp = (void *)data;
 	p = (void *)cp->data;
