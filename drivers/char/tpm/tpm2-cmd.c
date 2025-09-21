@@ -445,14 +445,13 @@ EXPORT_SYMBOL_GPL(tpm2_get_tpm_pt);
  */
 void tpm2_shutdown(struct tpm_chip *chip, u16 shutdown_type)
 {
-	struct tpm_buf *buf __free(kfree) = kzalloc(PAGE_SIZE, GFP_KERNEL);
-	if (!buf)
-		return;
+	u8 buf_data[TPM_BUF_MIN_SIZE];
+	struct tpm_buf *buf = (struct tpm_buf *)buf_data;
 
-	tpm_buf_init(buf, TPM_BUF_MAX_SIZE);
+	tpm_buf_init(buf, TPM_BUF_MIN_SIZE);
 	tpm_buf_reset(buf, TPM2_ST_NO_SESSIONS, TPM2_CC_SHUTDOWN);
 	tpm_buf_append_u16(buf, shutdown_type);
-	tpm_transmit_cmd(chip, buf, 0, "stopping the TPM");
+	tpm_transmit_cmd(chip, buf, 0, "TPM2_Shutdown");
 }
 
 /**
@@ -470,58 +469,49 @@ void tpm2_shutdown(struct tpm_chip *chip, u16 shutdown_type)
  */
 static int tpm2_do_selftest(struct tpm_chip *chip)
 {
+	u8 buf_data[TPM_BUF_MIN_SIZE];
+	struct tpm_buf *buf = (struct tpm_buf *)buf_data;
 	int full;
 	int rc;
 
-	struct tpm_buf *buf __free(kfree) = kzalloc(PAGE_SIZE, GFP_KERNEL);
-	if (!buf)
-		return -ENOMEM;
-
-	tpm_buf_init(buf, TPM_BUF_MAX_SIZE);
-	tpm_buf_reset(buf, TPM2_ST_NO_SESSIONS, TPM2_CC_SELF_TEST);
+	tpm_buf_init(buf, TPM_BUF_MIN_SIZE);
 	for (full = 0; full < 2; full++) {
 		tpm_buf_reset(buf, TPM2_ST_NO_SESSIONS, TPM2_CC_SELF_TEST);
 		tpm_buf_append_u8(buf, full);
-		rc = tpm_transmit_cmd(chip, buf, 0,
-				      "attempting the self test");
-
+		rc = tpm_transmit_cmd(chip, buf, 0, "TPM2_SelfTest");
 		if (rc == TPM2_RC_TESTING)
 			rc = TPM2_RC_SUCCESS;
 		if (rc == TPM2_RC_INITIALIZE || rc == TPM2_RC_SUCCESS)
 			return rc;
 	}
-
 	return rc;
 }
 
 /**
- * tpm2_probe() - probe for the TPM 2.0 protocol
+ * tpm2_probe() - Probe for the TPM 2.0 protocol
  * @chip:	a &tpm_chip instance
  *
- * Send an idempotent TPM 2.0 command and see whether there is TPM2 chip in the
- * other end based on the response tag. The flag TPM_CHIP_FLAG_TPM2 is set by
- * this function if this is the case.
+ * Sends an idempotent TPM 2.0 command, and based on the response tag deduces
+ * whether a functional TPM2 chip is on the other side. When the result is
+ * positive, TPM_CHIP_FLAG_TPM2 is append to the chip's flags.
  *
  * Return:
- *   0 on success,
- *   -errno otherwise
+ * * 0 on success,
+ * * -errno otherwise
  */
 int tpm2_probe(struct tpm_chip *chip)
 {
+	u8 buf_data[TPM_BUF_MIN_SIZE];
+	struct tpm_buf *buf = (struct tpm_buf *)buf_data;
 	struct tpm_header *out;
 	int rc;
 
-	struct tpm_buf *buf __free(kfree) = kzalloc(PAGE_SIZE, GFP_KERNEL);
-	if (!buf)
-		return -ENOMEM;
-
-	tpm_buf_init(buf, TPM_BUF_MAX_SIZE);
+	tpm_buf_init(buf, TPM_BUF_MIN_SIZE);
 	tpm_buf_reset(buf, TPM2_ST_NO_SESSIONS, TPM2_CC_GET_CAPABILITY);
 	tpm_buf_append_u32(buf, TPM2_CAP_TPM_PROPERTIES);
 	tpm_buf_append_u32(buf, TPM_PT_TOTAL_COMMANDS);
 	tpm_buf_append_u32(buf, 1);
 	rc = tpm_transmit_cmd(chip, buf, 0, NULL);
-	/* We ignore TPM return codes on purpose. */
 	if (rc >=  0) {
 		out = (struct tpm_header *)buf->data;
 		if (be16_to_cpu(out->tag) == TPM2_ST_NO_SESSIONS)
@@ -714,17 +704,14 @@ EXPORT_SYMBOL_GPL(tpm2_get_cc_attrs_tbl);
 
 static int tpm2_startup(struct tpm_chip *chip)
 {
-	struct tpm_buf *buf __free(kfree) = kzalloc(PAGE_SIZE, GFP_KERNEL);
-	if (!buf)
-		return -ENOMEM;
+	u8 buf_data[TPM_BUF_MIN_SIZE];
+	struct tpm_buf *buf = (struct tpm_buf *)buf_data;
 
-	dev_info(&chip->dev, "starting up the TPM manually\n");
-
-	tpm_buf_init(buf, TPM_BUF_MAX_SIZE);
+	dev_info(&chip->dev, "TPM2_Startup\n");
+	tpm_buf_init(buf, TPM_BUF_MIN_SIZE);
 	tpm_buf_reset(buf, TPM2_ST_NO_SESSIONS, TPM2_CC_STARTUP);
 	tpm_buf_append_u16(buf, TPM2_SU_CLEAR);
-
-	return tpm_transmit_cmd(chip, buf, 0, "attempting to start the TPM");
+	return tpm_transmit_cmd(chip, buf, 0, "TPM2_Startup");
 }
 
 /**
