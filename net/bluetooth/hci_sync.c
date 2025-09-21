@@ -6923,10 +6923,15 @@ static int hci_acl_create_conn_sync(struct hci_dev *hdev, void *data)
 	struct hci_conn *conn = data;
 	struct inquiry_entry *ie;
 	struct hci_cp_create_conn cp;
+	u32 timeout;
 	int err;
 
-	if (!hci_conn_valid(hdev, conn))
+	hci_dev_lock_sync(hdev);
+
+	if (!hci_conn_valid(hdev, conn)) {
+		hci_dev_unlock_sync(hdev);
 		return -ECANCELED;
+	}
 
 	/* Many controllers disallow HCI Create Connection while it is doing
 	 * HCI Inquiry. So we cancel the Inquiry first before issuing HCI Create
@@ -6941,6 +6946,11 @@ static int hci_acl_create_conn_sync(struct hci_dev *hdev, void *data)
 					    NULL, HCI_CMD_TIMEOUT);
 		if (err)
 			bt_dev_warn(hdev, "Failed to cancel inquiry %d", err);
+
+		if (!hci_conn_valid(hdev, conn)) {
+			hci_dev_unlock_sync(hdev);
+			return -ECANCELED;
+		}
 	}
 
 	conn->state = BT_CONNECT;
@@ -6973,10 +6983,14 @@ static int hci_acl_create_conn_sync(struct hci_dev *hdev, void *data)
 	else
 		cp.role_switch = 0x00;
 
+	timeout = conn->conn_timeout;
+
+	hci_dev_unlock_sync(hdev);
+
 	return __hci_cmd_sync_status_sk(hdev, HCI_OP_CREATE_CONN,
 					sizeof(cp), &cp,
 					HCI_EV_CONN_COMPLETE,
-					conn->conn_timeout, NULL);
+					timeout, NULL);
 }
 
 static void hci_acl_create_conn_sync_complete(struct hci_dev *hdev, void *data,
