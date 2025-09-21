@@ -3307,11 +3307,18 @@ long ksm_process_profit(struct mm_struct *mm)
 		mm->ksm_rmap_items * sizeof(struct ksm_rmap_item);
 }
 
+static inline long ksm_general_profit(void)
+{
+	return (ksm_pages_sharing + atomic_long_read(&ksm_zero_pages)) * PAGE_SIZE -
+		ksm_rmap_items * sizeof(struct ksm_rmap_item);
+}
+
 #ifdef CONFIG_MEMCG
 struct memcg_ksm_stat {
 	unsigned long ksm_rmap_items;
 	long ksm_zero_pages;
 	unsigned long ksm_merging_pages;
+	long ksm_profit;
 };
 
 static int evaluate_memcg_ksm_stat(struct task_struct *task, void *arg)
@@ -3324,6 +3331,7 @@ static int evaluate_memcg_ksm_stat(struct task_struct *task, void *arg)
 		ksm_stat->ksm_rmap_items += mm->ksm_rmap_items;
 		ksm_stat->ksm_zero_pages += mm_ksm_zero_pages(mm);
 		ksm_stat->ksm_merging_pages += mm->ksm_merging_pages;
+		ksm_stat->ksm_profit += ksm_process_profit(mm);
 		mmput(mm);
 	}
 
@@ -3341,11 +3349,13 @@ void memcg_stat_ksm_show(struct mem_cgroup *memcg, struct seq_buf *s)
 		ksm_stat.ksm_zero_pages = atomic_long_read(&ksm_zero_pages);
 		ksm_stat.ksm_merging_pages = ksm_pages_shared +
 					     ksm_pages_sharing;
+		ksm_stat.ksm_profit = ksm_general_profit();
 	} else {
 		/* Initialization */
 		ksm_stat.ksm_rmap_items = 0;
 		ksm_stat.ksm_zero_pages = 0;
 		ksm_stat.ksm_merging_pages = 0;
+		ksm_stat.ksm_profit = 0;
 		/* Summing all processes'ksm statistic items */
 		mem_cgroup_scan_tasks(memcg, evaluate_memcg_ksm_stat, &ksm_stat);
 	}
@@ -3353,6 +3363,7 @@ void memcg_stat_ksm_show(struct mem_cgroup *memcg, struct seq_buf *s)
 	seq_buf_printf(s, "ksm_rmap_items %lu\n", ksm_stat.ksm_rmap_items);
 	seq_buf_printf(s, "ksm_zero_pages %lu\n", ksm_stat.ksm_zero_pages);
 	seq_buf_printf(s, "ksm_merging_pages %lu\n", ksm_stat.ksm_merging_pages);
+	seq_buf_printf(s, "ksm_profit %lu\n", ksm_stat.ksm_profit);
 }
 #endif
 
@@ -3647,12 +3658,7 @@ KSM_ATTR_RO(ksm_zero_pages);
 static ssize_t general_profit_show(struct kobject *kobj,
 				   struct kobj_attribute *attr, char *buf)
 {
-	long general_profit;
-
-	general_profit = (ksm_pages_sharing + atomic_long_read(&ksm_zero_pages)) * PAGE_SIZE -
-				ksm_rmap_items * sizeof(struct ksm_rmap_item);
-
-	return sysfs_emit(buf, "%ld\n", general_profit);
+	return sysfs_emit(buf, "%ld\n", ksm_general_profit());
 }
 KSM_ATTR_RO(general_profit);
 
