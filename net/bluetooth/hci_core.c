@@ -3428,9 +3428,8 @@ static struct hci_conn *hci_low_sent(struct hci_dev *hdev, __u8 type,
 	/* We don't have to lock device here. Connections are always
 	 * added and removed with TX task disabled. */
 
-	rcu_read_lock();
-
-	list_for_each_entry_rcu(c, &h->list, list) {
+	list_for_each_entry_rcu(c, &h->list, list,
+				lockdep_is_held(&hdev->lock)) {
 		if (c->type != type ||
 		    skb_queue_empty(&c->data_q))
 			continue;
@@ -3453,8 +3452,6 @@ static struct hci_conn *hci_low_sent(struct hci_dev *hdev, __u8 type,
 			break;
 	}
 
-	rcu_read_unlock();
-
 	hci_quote_sent(conn, num, quote);
 
 	BT_DBG("conn %p quote %d", conn, *quote);
@@ -3468,18 +3465,15 @@ static void hci_link_tx_to(struct hci_dev *hdev, __u8 type)
 
 	bt_dev_err(hdev, "link tx timeout");
 
-	hci_dev_lock(hdev);
-
 	/* Kill stalled connections */
-	list_for_each_entry(c, &h->list, list) {
+	list_for_each_entry_rcu(c, &h->list, list,
+				lockdep_is_held(&hdev->lock)) {
 		if (c->type == type && c->sent) {
 			bt_dev_err(hdev, "killing stalled connection %pMR",
 				   &c->dst);
 			hci_disconnect(c, HCI_ERROR_REMOTE_USER_TERM);
 		}
 	}
-
-	hci_dev_unlock(hdev);
 }
 
 static struct hci_chan *hci_chan_sent(struct hci_dev *hdev, __u8 type,
@@ -3493,9 +3487,8 @@ static struct hci_chan *hci_chan_sent(struct hci_dev *hdev, __u8 type,
 
 	BT_DBG("%s", hdev->name);
 
-	rcu_read_lock();
-
-	list_for_each_entry_rcu(conn, &h->list, list) {
+	list_for_each_entry_rcu(conn, &h->list, list,
+				lockdep_is_held(&hdev->lock)) {
 		struct hci_chan *tmp;
 
 		if (conn->type != type)
@@ -3533,8 +3526,6 @@ static struct hci_chan *hci_chan_sent(struct hci_dev *hdev, __u8 type,
 		if (hci_conn_num(hdev, type) == conn_num)
 			break;
 	}
-
-	rcu_read_unlock();
 
 	if (!chan)
 		return NULL;
@@ -3632,7 +3623,7 @@ static void __check_timeout(struct hci_dev *hdev, unsigned int cnt, u8 type)
 }
 
 /* Schedule SCO */
-static void hci_sched_sco(struct hci_dev *hdev, __u8 type)
+static void __hci_sched_sco(struct hci_dev *hdev, __u8 type)
 {
 	struct hci_conn *conn;
 	struct sk_buff *skb;
@@ -3673,12 +3664,21 @@ static void hci_sched_sco(struct hci_dev *hdev, __u8 type)
 		queue_work(hdev->workqueue, &hdev->tx_work);
 }
 
+static void hci_sched_sco(struct hci_dev *hdev, __u8 type)
+{
+	hci_dev_lock(hdev);
+	__hci_sched_sco(hdev, type);
+	hci_dev_unlock(hdev);
+}
+
 static void hci_sched_acl_pkt(struct hci_dev *hdev)
 {
 	unsigned int cnt = hdev->acl_cnt;
 	struct hci_chan *chan;
 	struct sk_buff *skb;
 	int quote;
+
+	hci_dev_lock(hdev);
 
 	__check_timeout(hdev, cnt, ACL_LINK);
 
@@ -3706,10 +3706,12 @@ static void hci_sched_acl_pkt(struct hci_dev *hdev)
 			chan->conn->sent++;
 
 			/* Send pending SCO packets right away */
-			hci_sched_sco(hdev, SCO_LINK);
-			hci_sched_sco(hdev, ESCO_LINK);
+			__hci_sched_sco(hdev, SCO_LINK);
+			__hci_sched_sco(hdev, ESCO_LINK);
 		}
 	}
+
+	hci_dev_unlock(hdev);
 
 	if (cnt != hdev->acl_cnt)
 		hci_prio_recalculate(hdev, ACL_LINK);
@@ -3739,6 +3741,8 @@ static void hci_sched_le(struct hci_dev *hdev)
 
 	cnt = hdev->le_pkts ? &hdev->le_cnt : &hdev->acl_cnt;
 
+	hci_dev_lock(hdev);
+
 	__check_timeout(hdev, *cnt, LE_LINK);
 
 	tmp = *cnt;
@@ -3762,10 +3766,12 @@ static void hci_sched_le(struct hci_dev *hdev)
 			chan->conn->sent++;
 
 			/* Send pending SCO packets right away */
-			hci_sched_sco(hdev, SCO_LINK);
-			hci_sched_sco(hdev, ESCO_LINK);
+			__hci_sched_sco(hdev, SCO_LINK);
+			__hci_sched_sco(hdev, ESCO_LINK);
 		}
 	}
+
+	hci_dev_unlock(hdev);
 
 	if (*cnt != tmp)
 		hci_prio_recalculate(hdev, LE_LINK);
@@ -3785,6 +3791,8 @@ static void hci_sched_iso(struct hci_dev *hdev, __u8 type)
 
 	cnt = &hdev->iso_cnt;
 
+	hci_dev_lock(hdev);
+
 	__check_timeout(hdev, *cnt, type);
 
 	while (*cnt && (conn = hci_low_sent(hdev, type, &quote))) {
@@ -3800,6 +3808,8 @@ static void hci_sched_iso(struct hci_dev *hdev, __u8 type)
 			(*cnt)--;
 		}
 	}
+
+	hci_dev_unlock(hdev);
 }
 
 static void hci_tx_work(struct work_struct *work)
