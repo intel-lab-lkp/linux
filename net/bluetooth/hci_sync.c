@@ -5581,10 +5581,7 @@ static int hci_disconnect_sync(struct hci_dev *hdev, struct hci_conn *conn,
 		/* This is a BIS connection, hci_conn_del will
 		 * do the necessary cleanup.
 		 */
-		hci_dev_lock(hdev);
 		hci_conn_failed(conn, reason);
-		hci_dev_unlock(hdev);
-
 		return 0;
 	}
 
