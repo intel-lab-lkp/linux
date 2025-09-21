@@ -40,6 +40,7 @@
 #include <linux/oom.h>
 #include <linux/numa.h>
 #include <linux/pagewalk.h>
+#include <linux/seq_buf.h>
 
 #include <asm/tlbflush.h>
 #include "internal.h"
@@ -3307,6 +3308,44 @@ long ksm_process_profit(struct mm_struct *mm)
 		mm->ksm_rmap_items * sizeof(struct ksm_rmap_item);
 }
 #endif /* CONFIG_PROC_FS */
+
+#ifdef CONFIG_MEMCG
+struct memcg_ksm_stat {
+	unsigned long ksm_rmap_items;
+};
+
+static int evaluate_memcg_ksm_stat(struct task_struct *task, void *arg)
+{
+	struct mm_struct *mm;
+	struct memcg_ksm_stat *ksm_stat = arg;
+
+	mm = get_task_mm(task);
+	if (mm) {
+		ksm_stat->ksm_rmap_items += mm->ksm_rmap_items;
+		mmput(mm);
+	}
+
+	return 0;
+}
+
+/* Show the ksm statistic count at memory.stat under cgroup mountpoint */
+void memcg_stat_ksm_show(struct mem_cgroup *memcg, struct seq_buf *s)
+{
+	struct memcg_ksm_stat ksm_stat;
+
+	if (mem_cgroup_is_root(memcg)) {
+		/* Just use the global counters when root memcg */
+		ksm_stat.ksm_rmap_items = ksm_rmap_items;
+	} else {
+		/* Initialization */
+		ksm_stat.ksm_rmap_items = 0;
+		/* Summing all processes'ksm statistic items */
+		mem_cgroup_scan_tasks(memcg, evaluate_memcg_ksm_stat, &ksm_stat);
+	}
+	/* Print memcg ksm statistic items */
+	seq_buf_printf(s, "ksm_rmap_items %lu\n", ksm_stat.ksm_rmap_items);
+}
+#endif
 
 #ifdef CONFIG_SYSFS
 /*
