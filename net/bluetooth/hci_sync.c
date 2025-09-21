@@ -6594,8 +6594,12 @@ static int hci_le_create_conn_sync(struct hci_dev *hdev, void *data)
 	int err;
 	struct hci_conn *conn = data;
 
-	if (!hci_conn_valid(hdev, conn))
+	hci_dev_lock_sync(hdev);
+
+	if (!hci_conn_valid(hdev, conn)) {
+		hci_dev_unlock_sync(hdev);
 		return -ECANCELED;
+	}
 
 	bt_dev_dbg(hdev, "conn %p", conn);
 
@@ -6610,10 +6614,8 @@ static int hci_le_create_conn_sync(struct hci_dev *hdev, void *data)
 		if (hci_dev_test_flag(hdev, HCI_LE_SCAN) &&
 		    hdev->le_scan_type == LE_SCAN_ACTIVE &&
 		    !hci_dev_test_flag(hdev, HCI_LE_SIMULTANEOUS_ROLES)) {
-			hci_dev_lock(hdev);
-			if (hci_conn_valid(hdev, conn))
-				hci_conn_del(conn);
-			hci_dev_unlock(hdev);
+			hci_conn_del(conn);
+			hci_dev_unlock_sync(hdev);
 			return -EBUSY;
 		}
 
@@ -6657,6 +6659,8 @@ static int hci_le_create_conn_sync(struct hci_dev *hdev, void *data)
 	 */
 	err = hci_update_random_address_sync(hdev, false, conn_use_rpa(conn),
 					     &own_addr_type);
+	if (!err && !hci_conn_valid(hdev, conn))
+		err = -ECANCELED;
 	if (err)
 		goto done;
 	/* Send command LE Extended Create Connection if supported */
@@ -6694,11 +6698,13 @@ static int hci_le_create_conn_sync(struct hci_dev *hdev, void *data)
 				       conn->conn_timeout, NULL);
 
 done:
-	if (err == -ETIMEDOUT)
+	if (err == -ETIMEDOUT && hci_conn_valid(hdev, conn))
 		hci_le_connect_cancel_sync(hdev, conn, 0x00);
 
 	/* Re-enable advertising after the connection attempt is finished. */
 	hci_resume_advertising_sync(hdev);
+
+	hci_dev_unlock_sync(hdev);
 	return err;
 }
 
