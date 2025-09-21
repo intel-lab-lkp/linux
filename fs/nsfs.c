@@ -461,8 +461,17 @@ static int nsfs_encode_fh(struct inode *inode, u32 *fh, int *max_len,
 static struct dentry *nsfs_fh_to_dentry(struct super_block *sb, struct fid *fh,
 					int fh_len, int fh_type)
 {
+	if (fh_type != FILEID_NSFS)
+		return ERR_PTR(-EINVAL);
+	if (fh_len < sizeof(struct nsfs_file_handle) / sizeof(u32))
+		return ERR_PTR(-EINVAL);
 	struct path path __free(path_put) = {};
 	struct nsfs_file_handle *fid = (struct nsfs_file_handle *)fh;
+	if (fid->ns_type != CLONE_NEWNS && fid->ns_type != CLONE_NEWCGROUP &&
+	    fid->ns_type != CLONE_NEWUTS && fid->ns_type != CLONE_NEWIPC &&
+	    fid->ns_type != CLONE_NEWUSER && fid->ns_type != CLONE_NEWPID &&
+	    fid->ns_type != CLONE_NEWNET)
+		return ERR_PTR(-EINVAL);
 	struct user_namespace *owning_ns = NULL;
 	struct ns_common *ns;
 	int ret;
