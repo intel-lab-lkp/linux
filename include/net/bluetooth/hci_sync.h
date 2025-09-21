@@ -188,3 +188,7 @@ int hci_le_conn_update_sync(struct hci_dev *hdev, struct hci_conn *conn,
 
 int hci_connect_pa_sync(struct hci_dev *hdev, struct hci_conn *conn);
 int hci_connect_big_sync(struct hci_dev *hdev, struct hci_conn *conn);
+
+void hci_dev_lock_sync(struct hci_dev *hdev);
+void hci_dev_unlock_sync(struct hci_dev *hdev);
+void hci_assert_lock_sync_held(struct hci_dev *hdev);

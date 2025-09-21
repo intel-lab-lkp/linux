@@ -20,6 +20,25 @@
 #include "aosp.h"
 #include "leds.h"
 
+void hci_dev_lock_sync(struct hci_dev *hdev)
+{
+	hci_dev_lock(hdev);
+	lockdep_assert(!hdev->req_hdev_locked);
+	hdev->req_hdev_locked = true;
+}
+
+void hci_dev_unlock_sync(struct hci_dev *hdev)
+{
+	lockdep_assert(hdev->req_hdev_locked);
+	hdev->req_hdev_locked = false;
+	hci_dev_unlock(hdev);
+}
+
+void hci_assert_lock_sync_held(struct hci_dev *hdev)
+{
+	lockdep_assert(lockdep_is_held(&hdev->lock) && hdev->req_hdev_locked);
+}
+
 static void hci_cmd_sync_complete(struct hci_dev *hdev, u8 result, u16 opcode,
 				  struct sk_buff *skb)
 {
@@ -159,6 +178,7 @@ struct sk_buff *__hci_cmd_sync_sk(struct hci_dev *hdev, u16 opcode, u32 plen,
 {
 	struct hci_request req;
 	struct sk_buff *skb;
+	bool locked = READ_ONCE(hdev->req_hdev_locked);
 	int err = 0;
 
 	bt_dev_dbg(hdev, "Opcode 0x%4.4x", opcode);
@@ -173,9 +193,15 @@ struct sk_buff *__hci_cmd_sync_sk(struct hci_dev *hdev, u16 opcode, u32 plen,
 	if (err < 0)
 		return ERR_PTR(err);
 
+	if (locked)
+		hci_dev_unlock(hdev);
+
 	err = wait_event_interruptible_timeout(hdev->req_wait_q,
 					       hdev->req_status != HCI_REQ_PEND,
 					       timeout);
+
+	if (locked)
+		hci_dev_lock(hdev);
 
 	if (err == -ERESTARTSYS)
 		return ERR_PTR(-EINTR);

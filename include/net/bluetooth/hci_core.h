@@ -533,6 +533,8 @@ struct hci_dev {
 	struct sk_buff		*req_skb;
 	struct sk_buff		*req_rsp;
 
+	bool			req_hdev_locked;
+
 	void			*smp_data;
 	void			*smp_bredr_data;
 
