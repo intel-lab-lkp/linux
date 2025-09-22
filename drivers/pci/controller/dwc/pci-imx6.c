@@ -685,7 +685,7 @@ static int imx6q_pcie_enable_ref_clk(struct imx_pcie *imx_pcie, bool enable)
 	return 0;
 }
 
-static int imx8mm_pcie_enable_ref_clk(struct imx_pcie *imx_pcie, bool enable)
+static int imx8mm_pcie_clkreq_override(struct imx_pcie *imx_pcie, bool enable)
 {
 	int offset = imx_pcie_grp_offset(imx_pcie);
 
@@ -1872,7 +1872,7 @@ static const struct imx_pcie_drvdata drvdata[] = {
 		.mode_off[1] = IOMUXC_GPR12,
 		.mode_mask[1] = IMX8MQ_GPR12_PCIE2_CTRL_DEVICE_TYPE,
 		.init_phy = imx8mq_pcie_init_phy,
-		.enable_ref_clk = imx8mm_pcie_enable_ref_clk,
+		.enable_ref_clk = imx8mm_pcie_clkreq_override,
 	},
 	[IMX8MM] = {
 		.variant = IMX8MM,
@@ -1882,7 +1882,7 @@ static const struct imx_pcie_drvdata drvdata[] = {
 		.gpr = "fsl,imx8mm-iomuxc-gpr",
 		.mode_off[0] = IOMUXC_GPR12,
 		.mode_mask[0] = IMX6Q_GPR12_DEVICE_TYPE,
-		.enable_ref_clk = imx8mm_pcie_enable_ref_clk,
+		.enable_ref_clk = imx8mm_pcie_clkreq_override,
 	},
 	[IMX8MP] = {
 		.variant = IMX8MP,
@@ -1892,7 +1892,7 @@ static const struct imx_pcie_drvdata drvdata[] = {
 		.gpr = "fsl,imx8mp-iomuxc-gpr",
 		.mode_off[0] = IOMUXC_GPR12,
 		.mode_mask[0] = IMX6Q_GPR12_DEVICE_TYPE,
-		.enable_ref_clk = imx8mm_pcie_enable_ref_clk,
+		.enable_ref_clk = imx8mm_pcie_clkreq_override,
 	},
 	[IMX8Q] = {
 		.variant = IMX8Q,
@@ -1926,7 +1926,7 @@ static const struct imx_pcie_drvdata drvdata[] = {
 		.mode_mask[1] = IMX8MQ_GPR12_PCIE2_CTRL_DEVICE_TYPE,
 		.epc_features = &imx8q_pcie_epc_features,
 		.init_phy = imx8mq_pcie_init_phy,
-		.enable_ref_clk = imx8mm_pcie_enable_ref_clk,
+		.enable_ref_clk = imx8mm_pcie_clkreq_override,
 	},
 	[IMX8MM_EP] = {
 		.variant = IMX8MM_EP,
@@ -1937,7 +1937,7 @@ static const struct imx_pcie_drvdata drvdata[] = {
 		.mode_off[0] = IOMUXC_GPR12,
 		.mode_mask[0] = IMX6Q_GPR12_DEVICE_TYPE,
 		.epc_features = &imx8m_pcie_epc_features,
-		.enable_ref_clk = imx8mm_pcie_enable_ref_clk,
+		.enable_ref_clk = imx8mm_pcie_clkreq_override,
 	},
 	[IMX8MP_EP] = {
 		.variant = IMX8MP_EP,
@@ -1948,7 +1948,7 @@ static const struct imx_pcie_drvdata drvdata[] = {
 		.mode_off[0] = IOMUXC_GPR12,
 		.mode_mask[0] = IMX6Q_GPR12_DEVICE_TYPE,
 		.epc_features = &imx8m_pcie_epc_features,
-		.enable_ref_clk = imx8mm_pcie_enable_ref_clk,
+		.enable_ref_clk = imx8mm_pcie_clkreq_override,
 	},
 	[IMX8Q_EP] = {
 		.variant = IMX8Q_EP,
