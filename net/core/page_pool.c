@@ -214,7 +214,7 @@ static int page_pool_init(struct page_pool *pool,
 		ring_qsize = pool->p.pool_size;
 
 	/* Sanity limit mem that can be pinned down */
-	if (ring_qsize > 32768)
+	if (ring_qsize > PAGE_POOL_SIZE_LIMIT)
 		return -E2BIG;
 
 	/* DMA direction is either DMA_FROM_DEVICE or DMA_BIDIRECTIONAL.

@@ -163,6 +163,8 @@ struct pp_memory_provider_params {
 	const struct memory_provider_ops *mp_ops;
 };
 
+#define PAGE_POOL_SIZE_LIMIT 32768
+
 struct page_pool {
 	struct page_pool_params_fast p;
 
