@@ -98,7 +98,7 @@ static int erofs_fileio_scan_folio(struct erofs_fileio *io, struct folio *folio)
 	loff_t pos = folio_pos(folio), ofs;
 	int err = 0;
 
-	erofs_onlinefolio_init(folio);
+	erofs_onlinefolio_init(folio, false);
 	while (cur < end) {
 		if (!in_range(pos + cur, map->m_la, map->m_llen)) {
 			map->m_la = pos + cur;

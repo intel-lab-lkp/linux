@@ -407,6 +407,7 @@ extern const struct file_operations erofs_file_fops;
 extern const struct file_operations erofs_dir_fops;
 
 extern const struct iomap_ops z_erofs_iomap_report_ops;
+extern const struct file_operations z_erofs_file_fops;
 
 /* flags for erofs_fscache_register_cookie() */
 #define EROFS_REG_COOKIE_SHARE		0x0001
@@ -425,9 +426,9 @@ int erofs_map_dev(struct super_block *sb, struct erofs_map_dev *dev);
 int erofs_fiemap(struct inode *inode, struct fiemap_extent_info *fieinfo,
 		 u64 start, u64 len);
 int erofs_map_blocks(struct inode *inode, struct erofs_map_blocks *map);
-void erofs_onlinefolio_init(struct folio *folio);
+void erofs_onlinefolio_init(struct folio *folio, bool dio);
 void erofs_onlinefolio_split(struct folio *folio);
-void erofs_onlinefolio_end(struct folio *folio, int err, bool dirty);
+bool erofs_onlinefolio_end(struct folio *folio, int err, bool dirty);
 struct inode *erofs_iget(struct super_block *sb, erofs_nid_t nid);
 int erofs_getattr(struct mnt_idmap *idmap, const struct path *path,
 		  struct kstat *stat, u32 request_mask,
@@ -466,6 +467,16 @@ static inline void erofs_pagepool_add(struct page **pagepool, struct page *page)
 	*pagepool = page;
 }
 void erofs_release_pages(struct page **pagepool);
+
+/*
+ * bit 30: I/O error occurred on this folio
+ * bit 29: CPU has dirty data in D-cache (needs aliasing handling);
+ * bit 28: FOLIO is read by direct I/O
+ * bit 0 - 27: remaining parts to complete this folio
+ */
+#define EROFS_ONLINEFOLIO_EIO		30
+#define EROFS_ONLINEFOLIO_DIRTY		29
+#define EROFS_ONLINEFOLIO_DIO	        28
 
 #ifdef CONFIG_EROFS_FS_ZIP
 #define MNGD_MAPPING(sbi)	((sbi)->managed_cache->i_mapping)
