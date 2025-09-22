@@ -303,6 +303,10 @@ static void snd_usbmidi_do_output(struct snd_usb_midi_out_endpoint *ep)
 	for (;;) {
 		if (!(ep->active_urbs & (1 << urb_index))) {
 			urb = ep->urbs[urb_index].urb;
+			if (!urb) {
+				// Skip this urb
+				goto next_urb;
+			}
 			urb->transfer_buffer_length = 0;
 			ep->umidi->usb_protocol_ops->output(ep, urb);
 			if (urb->transfer_buffer_length == 0)
@@ -315,6 +319,7 @@ static void snd_usbmidi_do_output(struct snd_usb_midi_out_endpoint *ep)
 				break;
 			ep->active_urbs |= 1 << urb_index;
 		}
+next_urb:
 		if (++urb_index >= OUTPUT_URBS)
 			urb_index = 0;
 		if (urb_index == ep->next_urb)
