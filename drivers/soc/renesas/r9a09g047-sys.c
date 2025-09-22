@@ -29,6 +29,9 @@
 #define SYS_LSI_PRR_CA55_DIS		BIT(8)
 #define SYS_LSI_PRR_NPU_DIS		BIT(1)
 
+#define SYS_LSI_OTPTSU1TRMVAL0		0x330
+#define SYS_LSI_OTPTSU1TRMVAL1		0x334
+
 static void rzg3e_sys_print_id(struct device *dev,
 				void __iomem *sysc_base,
 				struct soc_device_attribute *soc_dev_attr)
@@ -62,7 +65,25 @@ static const struct rz_sysc_soc_id_init_data rzg3e_sys_soc_id_init_data __initco
 	.print_id = rzg3e_sys_print_id,
 };
 
+static bool rzg3e_regmap_readable_reg(struct device *dev, unsigned int reg)
+{
+	switch (reg) {
+	case SYS_LSI_OTPTSU1TRMVAL0:
+	case SYS_LSI_OTPTSU1TRMVAL1:
+		return true;
+	default:
+		return false;
+	}
+}
+
+static bool rzg3e_regmap_writeable_reg(struct device *dev, unsigned int reg)
+{
+	return false;
+}
+
 const struct rz_sysc_init_data rzg3e_sys_init_data = {
 	.soc_id_init_data = &rzg3e_sys_soc_id_init_data,
+	.readable_reg = rzg3e_regmap_readable_reg,
+	.writeable_reg = rzg3e_regmap_writeable_reg,
 	.max_register = 0x170c,
 };
