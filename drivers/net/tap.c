@@ -753,6 +753,46 @@ done:
 	return ret ? ret : total;
 }
 
+static struct sk_buff *tap_ring_consume(struct tap_queue *q)
+{
+	struct netdev_queue *txq;
+	struct net_device *dev;
+	bool will_invalidate;
+	bool stopped;
+	void *ptr;
+
+	spin_lock(&q->ring.consumer_lock);
+	ptr = __ptr_ring_peek(&q->ring);
+	if (!ptr) {
+		spin_unlock(&q->ring.consumer_lock);
+		return ptr;
+	}
+
+	/* Check if the queue stopped before zeroing out, so no ptr get
+	 * produced in the meantime, because this could result in waking
+	 * even though the ptr_ring is full. The order of the operations
+	 * is ensured by barrier().
+	 */
+	will_invalidate = __ptr_ring_will_invalidate(&q->ring);
+	if (unlikely(will_invalidate)) {
+		rcu_read_lock();
+		dev = rcu_dereference(q->tap)->dev;
+		txq = netdev_get_tx_queue(dev, q->queue_index);
+		stopped = netif_tx_queue_stopped(txq);
+	}
+	barrier();
+	__ptr_ring_discard_one(&q->ring, will_invalidate);
+
+	if (unlikely(will_invalidate)) {
+		if (stopped)
+			netif_tx_wake_queue(txq);
+		rcu_read_unlock();
+	}
+	spin_unlock(&q->ring.consumer_lock);
+
+	return ptr;
+}
+
 static ssize_t tap_do_read(struct tap_queue *q,
 			   struct iov_iter *to,
 			   int noblock, struct sk_buff *skb)
@@ -774,7 +814,7 @@ static ssize_t tap_do_read(struct tap_queue *q,
 					TASK_INTERRUPTIBLE);
 
 		/* Read frames from the queue */
-		skb = ptr_ring_consume(&q->ring);
+		skb = tap_ring_consume(q);
 		if (skb)
 			break;
 		if (noblock) {
@@ -1207,6 +1247,8 @@ int tap_queue_resize(struct tap_dev *tap)
 	ret = ptr_ring_resize_multiple_bh(rings, n,
 					  dev->tx_queue_len, GFP_KERNEL,
 					  __skb_array_destroy_skb);
+	if (netif_running(dev))
+		netif_tx_wake_all_queues(dev);
 
 	kfree(rings);
 	return ret;
