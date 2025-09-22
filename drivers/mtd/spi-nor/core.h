@@ -61,8 +61,8 @@
 		   SPI_MEM_OP_NO_DUMMY,					\
 		   SPI_MEM_OP_DATA_OUT(1, buf, 0))
 
-#define SPI_NOR_RDCR_OP(buf)						\
-	SPI_MEM_OP(SPI_MEM_OP_CMD(SPINOR_OP_RDCR, 0),			\
+#define SPI_NOR_RDCR_OP(opcode, buf)					\
+	SPI_MEM_OP(SPI_MEM_OP_CMD(opcode, 0),				\
 		   SPI_MEM_OP_NO_ADDR,					\
 		   SPI_MEM_OP_NO_DUMMY,					\
 		   SPI_MEM_OP_DATA_IN(1, buf, 0))
@@ -351,6 +351,7 @@ struct spi_nor_otp {
  *			in octal DTR mode.
  * @rdsr_addr_nbytes:	dummy address bytes needed for Read Status Register
  *			command in octal DTR mode.
+ * @rdcr_opcode:	opcode needed to read the Configuration Register
  * @n_banks:		number of banks.
  * @n_dice:		number of dice in the flash memory.
  * @die_erase_opcode:	die erase opcode. Defaults to SPINOR_OP_CHIP_ERASE.
@@ -384,6 +385,7 @@ struct spi_nor_flash_parameter {
 	u8				rdsr_addr_nbytes;
 	u8				n_banks;
 	u8				n_dice;
+	u8				rdcr_opcode;
 	u8				die_erase_opcode;
 	u32				*vreg_offset;
 
