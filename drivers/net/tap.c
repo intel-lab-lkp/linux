@@ -1277,18 +1277,18 @@ void tap_ring_unconsume(struct file *file, void **batch, int n,
 }
 EXPORT_SYMBOL_GPL(tap_ring_unconsume);
 
-struct ptr_ring *tap_get_ptr_ring(struct file *file)
+bool is_tap_file(struct file *file)
 {
 	struct tap_queue *q;
 
 	if (file->f_op != &tap_fops)
-		return ERR_PTR(-EINVAL);
+		return false;
 	q = file->private_data;
 	if (!q)
-		return ERR_PTR(-EBADFD);
-	return &q->ring;
+		return false;
+	return true;
 }
-EXPORT_SYMBOL_GPL(tap_get_ptr_ring);
+EXPORT_SYMBOL_GPL(is_tap_file);
 
 int tap_queue_resize(struct tap_dev *tap)
 {
