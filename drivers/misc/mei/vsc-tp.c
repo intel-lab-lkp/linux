@@ -571,7 +571,7 @@ static struct spi_driver vsc_tp_driver = {
 };
 module_spi_driver(vsc_tp_driver);
 
-MODULE_AUTHOR("Wentong Wu <wentong.wu@intel.com>");
+MODULE_AUTHOR("Wentong Wu");
 MODULE_AUTHOR("Zhifeng Wang <zhifeng.wang@intel.com>");
 MODULE_DESCRIPTION("Intel Visual Sensing Controller Transport Layer");
 MODULE_LICENSE("GPL");

@@ -453,7 +453,7 @@ static struct platform_driver mei_vsc_drv = {
 };
 module_platform_driver(mei_vsc_drv);
 
-MODULE_AUTHOR("Wentong Wu <wentong.wu@intel.com>");
+MODULE_AUTHOR("Wentong Wu");
 MODULE_AUTHOR("Zhifeng Wang <zhifeng.wang@intel.com>");
 MODULE_DESCRIPTION("Intel Visual Sensing Controller Interface");
 MODULE_LICENSE("GPL");
