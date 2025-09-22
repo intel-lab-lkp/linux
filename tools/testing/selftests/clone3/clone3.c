@@ -71,7 +71,7 @@ static void test_shadow_stack_supported(void)
 	} else if ((void *)ret == MAP_FAILED) {
 		ksft_print_msg("Failed to map shadow stack\n");
 	} else {
-		ksft_print_msg("Shadow stack supportd\n");
+		ksft_print_msg("Shadow stack supported\n");
 		shadow_stack_supported = true;
 
 		if (!shadow_stack_enabled)
