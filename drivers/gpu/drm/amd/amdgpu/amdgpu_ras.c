@@ -2566,7 +2566,7 @@ static int amdgpu_ras_badpages_read(struct amdgpu_device *adev,
 		goto out;
 	}
 
-	*bps = kmalloc(sizeof(struct ras_badpage) * data->count, GFP_KERNEL);
+	*bps = kmalloc_array(data->count, sizeof(struct ras_badpage), GFP_KERNEL);
 	if (!*bps) {
 		ret = -ENOMEM;
 		goto out;
