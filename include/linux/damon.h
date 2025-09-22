@@ -102,6 +102,8 @@ struct damon_target {
 	unsigned int nr_regions;
 	struct list_head regions_list;
 	struct list_head list;
+	unsigned int priority;
+	struct list_head pr_list;
 };
 
 /**

@@ -15,6 +15,7 @@
 #include <linux/slab.h>
 #include <linux/string.h>
 #include <linux/string_choices.h>
+#include <linux/list_sort.h>
 
 #define CREATE_TRACE_POINTS
 #include <trace/events/damon.h>
@@ -27,6 +28,11 @@
 static DEFINE_MUTEX(damon_lock);
 static int nr_running_ctxs;
 static bool running_exclusive_ctxs;
+
+static LIST_HEAD(priority_list);
+static bool init_priority_list;
+static int priority_level;
+static int priority_tick;
 
 static DEFINE_MUTEX(damon_ops_lock);
 static struct damon_operations damon_registered_ops[NR_DAMON_OPS];
@@ -474,6 +480,7 @@ struct damon_target *damon_new_target(void)
 	t->nr_regions = 0;
 	INIT_LIST_HEAD(&t->regions_list);
 	INIT_LIST_HEAD(&t->list);
+	t->priority = 0;
 
 	return t;
 }
@@ -2158,6 +2165,72 @@ static void damos_adjust_quota(struct damon_ctx *c, struct damos *s)
 	quota->min_score = score;
 }
 
+static int damon_priority_head(void)
+{
+	struct damon_target *t = list_first_entry_or_null(&priority_list,
+						struct damon_target, pr_list);
+
+	return t->priority;
+}
+
+static int damon_priority_find_next(void)
+{
+	struct damon_target *t;
+
+	list_for_each_entry(t, &priority_list, pr_list)
+		if (priority_level > t->priority) {
+			priority_level = t->priority;
+			return t->priority;
+		}
+	return damon_priority_head();
+}
+
+static bool kdamond_targets_priority_enabled(struct damon_ctx *c)
+{
+	struct damon_target *t;
+
+	damon_for_each_target(t, c)
+		if (t->priority > 0)
+			return true;
+	return false;
+}
+
+static int damon_priority_cmp(void *priv, const struct list_head *a,
+			      const struct list_head *b)
+{
+	struct damon_target *ta = container_of(a, struct damon_target, pr_list);
+	struct damon_target *tb = container_of(b, struct damon_target, pr_list);
+
+	if (ta->priority < tb->priority)
+		return 1;
+	else
+		return 0;
+}
+
+static bool kdamond_targets_priority_init(struct damon_ctx *c)
+{
+	struct damon_target *t;
+
+	damon_for_each_target(t, c)
+		list_add_tail(&t->pr_list, &priority_list);
+
+	list_for_each_entry(t, &priority_list, pr_list)
+		pr_debug("damon target priority %d %p\n", t->priority, t->pid);
+
+	list_sort(NULL, &priority_list, damon_priority_cmp);
+
+	list_for_each_entry(t, &priority_list, pr_list)
+		pr_debug("damon target priority after sort %d %p\n",
+			 t->priority, t->pid);
+
+	init_priority_list = true;
+	priority_level = damon_priority_head();
+	priority_tick = priority_level;
+	pr_debug("damon target priority init level=%d tick=%d\n",
+		 priority_level, priority_tick);
+	return true;
+}
+
 static void kdamond_apply_schemes(struct damon_ctx *c)
 {
 	struct damon_target *t;
@@ -2166,6 +2239,7 @@ static void kdamond_apply_schemes(struct damon_ctx *c)
 	unsigned long sample_interval = c->attrs.sample_interval ?
 		c->attrs.sample_interval : 1;
 	bool has_schemes_to_apply = false;
+	bool priority_enabled = false;
 
 	damon_for_each_scheme(s, c) {
 		if (c->passed_sample_intervals < s->next_apply_sis)
@@ -2182,10 +2256,23 @@ static void kdamond_apply_schemes(struct damon_ctx *c)
 	if (!has_schemes_to_apply)
 		return;
 
+	priority_enabled = kdamond_targets_priority_enabled(c);
+	if (priority_enabled && !init_priority_list)
+		kdamond_targets_priority_init(c);
+
 	mutex_lock(&c->walk_control_lock);
 	damon_for_each_target(t, c) {
-		damon_for_each_region_safe(r, next_r, t)
-			damon_do_apply_schemes(c, t, r);
+		if (priority_enabled == false ||
+		    (priority_enabled == true && t->priority == priority_level &&
+		     priority_tick-- > 0)) {
+			if (priority_enabled == true && priority_tick <= 0) {
+				priority_level = damon_priority_find_next();
+				priority_tick = priority_level;
+			}
+			pr_debug("tick() %d(%d)\n", priority_level, priority_tick);
+			damon_for_each_region_safe(r, next_r, t)
+				damon_do_apply_schemes(c, t, r);
+		}
 	}
 
 	damon_for_each_scheme(s, c) {
