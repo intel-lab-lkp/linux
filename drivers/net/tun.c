@@ -3759,6 +3759,60 @@ struct socket *tun_get_socket(struct file *file)
 }
 EXPORT_SYMBOL_GPL(tun_get_socket);
 
+int tun_ring_consume_batched(struct file *file,
+			     void **array, int n)
+{
+	struct tun_file *tfile = file->private_data;
+	struct netdev_queue *txq;
+	struct net_device *dev;
+	bool will_invalidate;
+	bool stopped;
+	void *ptr;
+	int i;
+
+	spin_lock(&tfile->tx_ring.consumer_lock);
+	ptr = __ptr_ring_peek(&tfile->tx_ring);
+
+	if (!ptr) {
+		spin_unlock(&tfile->tx_ring.consumer_lock);
+		return 0;
+	}
+
+	i = 0;
+	do {
+		/* Check if the queue stopped before zeroing out, so no
+		 * ptr get produced in the meantime, because this could
+		 * result in waking even though the ptr_ring is full.
+		 * The order of the operations is ensured by barrier().
+		 */
+		will_invalidate =
+			__ptr_ring_will_invalidate(&tfile->tx_ring);
+		if (unlikely(will_invalidate)) {
+			rcu_read_lock();
+			dev = rcu_dereference(tfile->tun)->dev;
+			txq = netdev_get_tx_queue(dev,
+						  tfile->queue_index);
+			stopped = netif_tx_queue_stopped(txq);
+		}
+		barrier();
+		__ptr_ring_discard_one(&tfile->tx_ring, will_invalidate);
+
+		if (unlikely(will_invalidate)) {
+			if (stopped)
+				netif_tx_wake_queue(txq);
+			rcu_read_unlock();
+		}
+
+		array[i++] = ptr;
+		if (i >= n)
+			break;
+	} while ((ptr = __ptr_ring_peek(&tfile->tx_ring)));
+	spin_unlock(&tfile->tx_ring.consumer_lock);
+
+	return i;
+}
+EXPORT_SYMBOL_GPL(tun_ring_consume_batched);
+
 struct ptr_ring *tun_get_tx_ring(struct file *file)
 {
 	struct tun_file *tfile;
