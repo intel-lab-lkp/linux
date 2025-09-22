@@ -330,6 +330,21 @@ __out:	__ret;									\
 	(void)___wait_event(wq_head, condition, TASK_UNINTERRUPTIBLE, 0, 0,	\
 			    schedule())
 
+#define __wait_event_no_hung(wq_head, condition)					\
+	(void)___wait_event(wq_head, condition, TASK_UNINTERRUPTIBLE, 0, 0,	\
+			    current_set_flags(PF_DONT_HUNG);	\
+			    schedule();						\
+			    current_clear_flags(PF_DONT_HUNG))
+
+#define wait_event_no_hung(wq_head, condition)						\
+do {										\
+	might_sleep();								\
+	if (condition)								\
+		break;								\
+	__wait_event_no_hung(wq_head, condition);					\
+} while (0)
+
+
 /**
  * wait_event - sleep until a condition gets true
  * @wq_head: the waitqueue to wait on

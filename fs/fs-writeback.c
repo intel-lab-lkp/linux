@@ -216,6 +216,21 @@ void wb_wait_for_completion(struct wb_completion *done)
 	wait_event(*done->waitq, !atomic_read(&done->cnt));
 }
 
+/*
+ * Same as wb_wait_for_completion() but hung task warning will not be
+ * triggered if it wait for a long time. Use this function with caution
+ * unless you are sure that the hung task is undesirable.
+ * When is this undesirable? From the kernel code perspective, there is
+ * no misbehavior and it has no impact on user behavior. For example, a
+ * *background* kthread/kworker used to clean resources while waiting a
+ * long time for writeback to finish.
+ */
+ void wb_wait_for_completion_no_hung(struct wb_completion *done)
+ {
+	atomic_dec(&done->cnt);		/* put down the initial count */
+	wait_event_no_hung(*done->waitq, !atomic_read(&done->cnt));
+ }
+
 #ifdef CONFIG_CGROUP_WRITEBACK
 
 /*
