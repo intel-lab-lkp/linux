@@ -573,6 +573,15 @@ static void handle___pkvm_teardown_vm(struct kvm_cpu_context *host_ctxt)
 	cpu_reg(host_ctxt, 1) = __pkvm_teardown_vm(handle);
 }
 
+static void handle___kvm_hyp_translate(struct kvm_cpu_context *host_ctxt)
+{
+	DECLARE_REG(struct kvm_vcpu *, host_vcpu, host_ctxt, 1);
+	DECLARE_REG(u64, gva, host_ctxt, 2);
+
+	host_vcpu = kern_hyp_va(host_vcpu);
+	cpu_reg(host_ctxt, 1) = __kvm_hyp_translate(host_vcpu, gva);
+}
+
 typedef void (*hcall_t)(struct kvm_cpu_context *);
 
 #define HANDLE_FUNC(x)	[__KVM_HOST_SMCCC_FUNC_##x] = (hcall_t)handle_##x
@@ -612,6 +621,7 @@ static const hcall_t host_hcall[] = {
 	HANDLE_FUNC(__pkvm_vcpu_load),
 	HANDLE_FUNC(__pkvm_vcpu_put),
 	HANDLE_FUNC(__pkvm_tlb_flush_vmid),
+	HANDLE_FUNC(__kvm_hyp_translate),
 };
 
 static void handle_host_hcall(struct kvm_cpu_context *host_ctxt)

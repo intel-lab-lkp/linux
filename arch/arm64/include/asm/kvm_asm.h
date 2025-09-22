@@ -87,6 +87,7 @@ enum __kvm_host_smccc_func {
 	__KVM_HOST_SMCCC_FUNC___pkvm_vcpu_load,
 	__KVM_HOST_SMCCC_FUNC___pkvm_vcpu_put,
 	__KVM_HOST_SMCCC_FUNC___pkvm_tlb_flush_vmid,
+	__KVM_HOST_SMCCC_FUNC___kvm_hyp_translate,
 };
 
 #define DECLARE_KVM_VHE_SYM(sym)	extern char sym[]
@@ -289,6 +290,7 @@ asmlinkage void __noreturn hyp_panic_bad_stack(void);
 asmlinkage void kvm_unexpected_el2_exception(void);
 struct kvm_cpu_context;
 void handle_trap(struct kvm_cpu_context *host_ctxt);
+extern u64 __kvm_hyp_translate(struct kvm_vcpu *vcpu, u64 gva);
 asmlinkage void __noreturn __kvm_host_psci_cpu_entry(bool is_cpu_on);
 void __noreturn __pkvm_init_finalise(void);
 void kvm_nvhe_prepare_backtrace(unsigned long fp, unsigned long pc);

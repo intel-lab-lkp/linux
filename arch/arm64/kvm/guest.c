@@ -23,6 +23,7 @@
 #include <linux/uaccess.h>
 #include <asm/fpsimd.h>
 #include <asm/kvm.h>
+#include <asm/kvm_asm.h>
 #include <asm/kvm_emulate.h>
 #include <asm/kvm_nested.h>
 #include <asm/sigcontext.h>
@@ -932,10 +933,92 @@ int kvm_arch_vcpu_ioctl_set_fpu(struct kvm_vcpu *vcpu, struct kvm_fpu *fpu)
 	return -EINVAL;
 }
 
-int kvm_arch_vcpu_ioctl_translate(struct kvm_vcpu *vcpu,
-				  struct kvm_translation *tr)
+static inline uint64_t par_to_ipa(uint64_t par, uint64_t va)
 {
-	return -EINVAL;
+	uint64_t offset = va & ((1ULL << PAGE_SHIFT) - 1);
+
+	return (par & GENMASK_ULL(51, 12)) | offset;
+}
+
+static int kvm_translate_vhe(struct kvm_vcpu *vcpu, struct kvm_translation *tr)
+{
+	unsigned long flags;
+	uint64_t hcr_old, hcr_new, par;
+	const uint64_t gva = tr->linear_address;
+
+	preempt_disable();
+	local_irq_save(flags);
+
+	/* Ensure we're in the expected VHE regime and enable S2 so PAR returns IPA. */
+	hcr_old = read_sysreg(hcr_el2);
+	hcr_new = hcr_old | HCR_E2H | HCR_VM;
+	hcr_new &= ~HCR_TGE;
+	write_sysreg(hcr_new, hcr_el2);
+	isb();
+
+	/* Load guest EL1 S1 context into *_EL12 (do not write into _EL1). */
+	write_sysreg_s(vcpu_read_sys_reg(vcpu, TTBR0_EL1), SYS_TTBR0_EL12);
+	write_sysreg_s(vcpu_read_sys_reg(vcpu, TTBR1_EL1), SYS_TTBR1_EL12);
+	write_sysreg_s(vcpu_read_sys_reg(vcpu, TCR_EL1), SYS_TCR_EL12);
+	write_sysreg_s(vcpu_read_sys_reg(vcpu, MAIR_EL1), SYS_MAIR_EL12);
+	write_sysreg_s(vcpu_read_sys_reg(vcpu, SCTLR_EL1), SYS_SCTLR_EL12);
+
+	/* Check address read */
+	asm volatile("at s1e1r, %0" :: "r"(gva));
+	isb();
+
+	par = read_sysreg(par_el1);
+	if (!(par & 1)) {
+		tr->valid = true;
+		tr->physical_address = par_to_ipa(par, gva);
+	}
+
+	/* Check address write */
+	asm volatile("at s1e1w, %0" :: "r"(gva));
+	isb();
+
+	par = read_sysreg(par_el1);
+
+	if (!(par & 1)) {
+		tr->valid = true;
+		tr->writeable = true;
+		tr->physical_address = par_to_ipa(par, gva);
+	}
+
+	/* Restore HCR_EL2 and exit */
+	write_sysreg(hcr_old, hcr_el2);
+	isb();
+	local_irq_restore(flags);
+	preempt_enable();
+
+	return 0;
+}
+
+static int kvm_translate_nvhe(struct kvm_vcpu *vcpu, struct kvm_translation *tr)
+{
+	u64 ret;
+
+	preempt_disable();
+	local_irq_disable();
+	ret = kvm_call_hyp_nvhe(__kvm_hyp_translate, vcpu, tr->linear_address);
+	local_irq_enable();
+	preempt_enable();
+
+	/* Unpack result: IPA in bits 63:8, valid in bit 4, writeable in bit 0 */
+	tr->physical_address = ret >> 8;
+	tr->valid = !!(ret & (1ULL << 4));
+	tr->writeable = !!(ret & 1ULL);
+	tr->usermode = 0;
+
+	return 0;
+}
+
+int kvm_arch_vcpu_ioctl_translate(struct kvm_vcpu *vcpu, struct kvm_translation *tr)
+{
+	if (has_vhe())
+		return kvm_translate_vhe(vcpu, tr);
+	else
+		return kvm_translate_nvhe(vcpu, tr);
 }
 
 /**
