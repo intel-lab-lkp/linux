@@ -549,6 +549,9 @@ unsigned int cpufreq_policy_transition_delay_us(struct cpufreq_policy *policy)
 	if (policy->transition_delay_us)
 		return policy->transition_delay_us;
 
+	if (policy->cpuinfo.transition_latency == CPUFREQ_ETERNAL)
+		policy->cpuinfo.transition_latency = CPUFREQ_DEFAULT_TANSITION_LATENCY_NS;
+
 	latency = policy->cpuinfo.transition_latency / NSEC_PER_USEC;
 	if (latency)
 		/* Give a 50% breathing room between updates */

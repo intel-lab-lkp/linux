@@ -36,6 +36,8 @@
 /* Print length for names. Extra 1 space for accommodating '\n' in prints */
 #define CPUFREQ_NAME_PLEN		(CPUFREQ_NAME_LEN + 1)
 
+#define CPUFREQ_DEFAULT_TANSITION_LATENCY_NS	NSEC_PER_MSEC
+
 struct cpufreq_governor;
 
 enum cpufreq_table_sorting {
