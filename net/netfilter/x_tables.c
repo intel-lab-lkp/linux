@@ -1190,7 +1190,7 @@ struct xt_table_info *xt_alloc_table_info(unsigned int size)
 	if (sz < sizeof(*info) || sz >= XT_MAX_TABLE_SIZE)
 		return NULL;
 
-	info = kvmalloc(sz, GFP_KERNEL_ACCOUNT);
+	info = __vmalloc(sz, GFP_KERNEL_ACCOUNT);
 	if (!info)
 		return NULL;
 
@@ -1210,7 +1210,7 @@ void xt_free_table_info(struct xt_table_info *info)
 		kvfree(info->jumpstack);
 	}
 
-	kvfree(info);
+	vfree(info);
 }
 EXPORT_SYMBOL(xt_free_table_info);
 
