@@ -1373,6 +1373,11 @@ static void destroy_delegation(struct nfs4_delegation *dp)
 
 	spin_lock(&state_lock);
 	unhashed = unhash_delegation_locked(dp, SC_STATUS_CLOSED);
+	/*
+	 * Unconditionally set SC_STATUS_CLOSED, regardless of whether the
+	 * delegation is hashed, to mark the current delegation as invalid.
+	 */
+	dp->dl_stid.sc_status |= SC_STATUS_CLOSED;
 	spin_unlock(&state_lock);
 	if (unhashed)
 		destroy_unhashed_deleg(dp);
@@ -4507,8 +4512,34 @@ out:
 	default:
 		seq->status_flags = 0;
 	}
-	if (!list_empty(&clp->cl_revoked))
-		seq->status_flags |= SEQ4_STATUS_RECALLABLE_STATE_REVOKED;
+	if (!list_empty(&clp->cl_revoked)) {
+		struct list_head *pos, *next;
+		struct nfs4_delegation *dp;
+
+		/*
+		 * Concurrent nfs4_laundromat() and nfsd4_delegreturn()
+		 * may add a delegation to cl_revoked even after the
+		 * client has returned it, causing persistent
+		 * SEQ4_STATUS_RECALLABLE_STATE_REVOKED, disrupting normal
+		 * operations.
+		 * Remove delegations with SC_STATUS_CLOSED from cl_revoked
+		 * to resolve.
+		 */
+		spin_lock(&clp->cl_lock);
+		list_for_each_safe(pos, next, &clp->cl_revoked) {
+			dp = list_entry(pos, struct nfs4_delegation, dl_recall_lru);
+			if (dp->dl_stid.sc_status & SC_STATUS_CLOSED) {
+				list_del_init(&dp->dl_recall_lru);
+				spin_unlock(&clp->cl_lock);
+				nfs4_put_stid(&dp->dl_stid);
+				spin_lock(&clp->cl_lock);
+			}
+		}
+		spin_unlock(&clp->cl_lock);
+
+		if (!list_empty(&clp->cl_revoked))
+			seq->status_flags |= SEQ4_STATUS_RECALLABLE_STATE_REVOKED;
+	}
 	if (atomic_read(&clp->cl_admin_revoked))
 		seq->status_flags |= SEQ4_STATUS_ADMIN_STATE_REVOKED;
 	trace_nfsd_seq4_status(rqstp, seq);
@@ -8770,9 +8801,6 @@ nfs4_has_reclaimed_state(struct xdr_netobj name, struct nfsd_net *nn)
 
 /*
  * failure => all reset bets are off, nfserr_no_grace...
- *
- * The caller is responsible for freeing name.data if NULL is returned (it
- * will be freed in nfs4_remove_reclaim_record in the normal case).
  */
 struct nfs4_client_reclaim *
 nfs4_client_to_reclaim(struct xdr_netobj name, struct xdr_netobj princhash,
@@ -8781,6 +8809,22 @@ nfs4_client_to_reclaim(struct xdr_netobj name, struct xdr_netobj princhash,
 	unsigned int strhashval;
 	struct nfs4_client_reclaim *crp;
 
+	name.data = kmemdup(name.data, name.len, GFP_KERNEL);
+	if (!name.data) {
+		dprintk("%s: failed to allocate memory for name.data!\n",
+			__func__);
+		return NULL;
+	}
+	if (princhash.len) {
+		princhash.data = kmemdup(princhash.data, princhash.len, GFP_KERNEL);
+		if (!princhash.data) {
+			dprintk("%s: failed to allocate memory for princhash.data!\n",
+				__func__);
+			kfree(name.data);
+			return NULL;
+		}
+	} else
+		princhash.data = NULL;
 	crp = alloc_reclaim();
 	if (crp) {
 		strhashval = clientstr_hashval(name);
@@ -8792,6 +8836,9 @@ nfs4_client_to_reclaim(struct xdr_netobj name, struct xdr_netobj princhash,
 		crp->cr_princhash.len = princhash.len;
 		crp->cr_clp = NULL;
 		nn->reclaim_str_hashtbl_size++;
+	} else {
+		kfree(name.data);
+		kfree(princhash.data);
 	}
 	return crp;
 }
