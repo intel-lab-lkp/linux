@@ -965,14 +965,14 @@ unsigned int *xt_alloc_entry_offsets(unsigned int size)
 	if (size > XT_MAX_TABLE_SIZE / sizeof(unsigned int))
 		return NULL;
 
-	return kvcalloc(size, sizeof(unsigned int), GFP_KERNEL);
+	return __vcalloc(size, sizeof(unsigned int), GFP_KERNEL);
 
 }
 EXPORT_SYMBOL(xt_alloc_entry_offsets);
 
 void xt_free_entry_offsets(unsigned int *offsets)
 {
-	kvfree(offsets);
+	vfree(offsets);
 }
 EXPORT_SYMBOL(xt_free_entry_offsets);
 
