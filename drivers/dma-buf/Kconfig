@@ -18,7 +18,7 @@ config SYNC_FILE
 	  Documentation/driver-api/sync_file.rst.
 
 config SW_SYNC
-	bool "Sync File Validation Framework"
+	bool "Sync File Validation Framework" if EXPERT
 	default n
 	depends on SYNC_FILE
 	depends on DEBUG_FS
