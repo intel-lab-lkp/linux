@@ -778,13 +778,14 @@ void ieee80211_stop_mbssid(struct ieee80211_sub_if_data *sdata)
 			 * removal can be supported.
 			 */
 			cfg80211_stop_iface(link_sdata->wdev.wiphy, &link_sdata->wdev,
-					    GFP_KERNEL);
+					    -1, GFP_KERNEL);
 		}
 
 		/* If we are not tx sdata, remove links of tx sdata and proceed */
 		if (sdata != tx_sdata && ieee80211_sdata_running(tx_sdata))
 			cfg80211_stop_iface(tx_sdata->wdev.wiphy,
-					    &tx_sdata->wdev, GFP_KERNEL);
+					    &tx_sdata->wdev, -1,
+					    GFP_KERNEL);
 	}
 }
 

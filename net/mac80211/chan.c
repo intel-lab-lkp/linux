@@ -1820,7 +1820,7 @@ static int ieee80211_vif_use_reserved_switch(struct ieee80211_local *local)
 				ieee80211_link_unreserve_chanctx(link);
 				cfg80211_stop_iface(local->hw.wiphy,
 						    &link->sdata->wdev,
-						    GFP_KERNEL);
+						    -1, GFP_KERNEL);
 			}
 		}
 	}

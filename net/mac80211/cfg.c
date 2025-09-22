@@ -4036,7 +4036,7 @@ static void ieee80211_csa_finalize(struct ieee80211_link_data *link_data)
 		sdata_info(sdata, "failed to finalize CSA on link %d, disconnecting\n",
 			   link_data->link_id);
 		cfg80211_stop_iface(sdata->local->hw.wiphy, &sdata->wdev,
-				    GFP_KERNEL);
+				    -1, GFP_KERNEL);
 	}
 }
 
