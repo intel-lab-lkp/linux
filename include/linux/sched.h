@@ -1723,6 +1723,16 @@ static inline char task_state_to_char(struct task_struct *tsk)
 	return task_index_to_char(task_state_index(tsk));
 }
 
+static inline void current_set_flags(unsigned int flags)
+{
+	current->flags |= flags;
+}
+
+static inline void current_clear_flags(unsigned int flags)
+{
+	current->flags &= ~flags;
+}
+
 extern struct pid *cad_pid;
 
 /*
@@ -1752,7 +1762,7 @@ extern struct pid *cad_pid;
 						 * I am cleaning dirty pages from some other bdi. */
 #define PF_KTHREAD		0x00200000	/* I am a kernel thread */
 #define PF_RANDOMIZE		0x00400000	/* Randomize virtual address space */
-#define PF__HOLE__00800000	0x00800000
+#define PF_DONT_HUNG		0x00800000	/* Don't trigger hung task warning when waiting for something */
 #define PF__HOLE__01000000	0x01000000
 #define PF__HOLE__02000000	0x02000000
 #define PF_NO_SETAFFINITY	0x04000000	/* Userland is not allowed to meddle with cpus_mask */

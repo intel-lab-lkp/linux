@@ -208,6 +208,12 @@ static void check_hung_task(struct task_struct *t, unsigned long timeout)
 		t->last_switch_time = jiffies;
 		return;
 	}
+
+	if (t->flags & PF_DONT_HUNG) {
+		t->last_switch_time = jiffies;
+		return;
+	}
+
 	if (time_is_after_jiffies(t->last_switch_time + timeout * HZ))
 		return;
 
