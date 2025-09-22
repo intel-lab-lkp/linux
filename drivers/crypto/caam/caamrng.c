@@ -182,6 +182,9 @@ static inline void test_len(struct hwrng *rng, size_t len, bool wait)
 
 	buf = kcalloc(CAAM_RNG_MAX_FIFO_STORE_SIZE, sizeof(u8), GFP_KERNEL);
 
+	if (!buf) {
+		return -ENOMEM;
+	}
 	while (len > 0) {
 		read_len = rng->read(rng, buf, len, wait);
 
