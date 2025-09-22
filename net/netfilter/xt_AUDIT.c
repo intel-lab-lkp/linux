@@ -32,6 +32,7 @@ static bool audit_ip4(struct audit_buffer *ab, struct sk_buff *skb)
 {
 	struct iphdr _iph;
 	const struct iphdr *ih;
+	__be16 dport, sport;
 
 	ih = skb_header_pointer(skb, skb_network_offset(skb), sizeof(_iph), &_iph);
 	if (!ih)
@@ -39,6 +40,19 @@ static bool audit_ip4(struct audit_buffer *ab, struct sk_buff *skb)
 
 	audit_log_format(ab, " saddr=%pI4 daddr=%pI4 proto=%hhu",
 			 &ih->saddr, &ih->daddr, ih->protocol);
+
+	switch (ih->protocol) {
+	case IPPROTO_TCP:
+		sport = tcp_hdr(skb)->source;
+		dport = tcp_hdr(skb)->dest;
+		break;
+	case IPPROTO_UDP:
+		sport = udp_hdr(skb)->source;
+		dport = udp_hdr(skb)->dest;
+	}
+
+	if (ih->protocol == IPPROTO_TCP || ih->protocol == IPPROTO_UDP)
+		audit_log_format(ab, " sport=%hu dport=%hu", ntohs(sport), ntohs(dport));
 
 	return true;
 }
@@ -48,7 +62,7 @@ static bool audit_ip6(struct audit_buffer *ab, struct sk_buff *skb)
 	struct ipv6hdr _ip6h;
 	const struct ipv6hdr *ih;
 	u8 nexthdr;
-	__be16 frag_off;
+	__be16 frag_off, dport, sport;
 
 	ih = skb_header_pointer(skb, skb_network_offset(skb), sizeof(_ip6h), &_ip6h);
 	if (!ih)
@@ -59,6 +73,19 @@ static bool audit_ip6(struct audit_buffer *ab, struct sk_buff *skb)
 
 	audit_log_format(ab, " saddr=%pI6c daddr=%pI6c proto=%hhu",
 			 &ih->saddr, &ih->daddr, nexthdr);
+
+	switch (ih->nexthdr) {
+	case IPPROTO_TCP:
+		sport = tcp_hdr(skb)->source;
+		dport = tcp_hdr(skb)->dest;
+		break;
+	case IPPROTO_UDP:
+		sport = udp_hdr(skb)->source;
+		dport = udp_hdr(skb)->dest;
+	}
+
+	if (ih->nexthdr == IPPROTO_TCP || ih->nexthdr == IPPROTO_UDP)
+		audit_log_format(ab, " sport=%hu dport=%hu", ntohs(sport), ntohs(dport));
 
 	return true;
 }
