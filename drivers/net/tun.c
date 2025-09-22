@@ -2114,13 +2114,53 @@ done:
 	return total;
 }
 
+static void *tun_ring_consume(struct tun_file *tfile)
+{
+	struct netdev_queue *txq;
+	struct net_device *dev;
+	bool will_invalidate;
+	bool stopped;
+	void *ptr;
+
+	spin_lock(&tfile->tx_ring.consumer_lock);
+	ptr = __ptr_ring_peek(&tfile->tx_ring);
+	if (!ptr) {
+		spin_unlock(&tfile->tx_ring.consumer_lock);
+		return ptr;
+	}
+
+	/* Check if the queue stopped before zeroing out, so no ptr get
+	 * produced in the meantime, because this could result in waking
+	 * even though the ptr_ring is full. The order of the operations
+	 * is ensured by barrier().
+	 */
+	will_invalidate = __ptr_ring_will_invalidate(&tfile->tx_ring);
+	if (unlikely(will_invalidate)) {
+		rcu_read_lock();
+		dev = rcu_dereference(tfile->tun)->dev;
+		txq = netdev_get_tx_queue(dev, tfile->queue_index);
+		stopped = netif_tx_queue_stopped(txq);
+	}
+	barrier();
+	__ptr_ring_discard_one(&tfile->tx_ring, will_invalidate);
+
+	if (unlikely(will_invalidate)) {
+		if (stopped)
+			netif_tx_wake_queue(txq);
+		rcu_read_unlock();
+	}
+	spin_unlock(&tfile->tx_ring.consumer_lock);
+
+	return ptr;
+}
+
 static void *tun_ring_recv(struct tun_file *tfile, int noblock, int *err)
 {
 	DECLARE_WAITQUEUE(wait, current);
 	void *ptr = NULL;
 	int error = 0;
 
-	ptr = ptr_ring_consume(&tfile->tx_ring);
+	ptr = tun_ring_consume(tfile);
 	if (ptr)
 		goto out;
 	if (noblock) {
@@ -2132,7 +2172,7 @@ static void *tun_ring_recv(struct tun_file *tfile, int noblock, int *err)
 
 	while (1) {
 		set_current_state(TASK_INTERRUPTIBLE);
-		ptr = ptr_ring_consume(&tfile->tx_ring);
+		ptr = tun_ring_consume(tfile);
 		if (ptr)
 			break;
 		if (signal_pending(current)) {
@@ -3620,6 +3660,9 @@ static int tun_queue_resize(struct tun_struct *tun)
 	ret = ptr_ring_resize_multiple_bh(rings, n,
 					  dev->tx_queue_len, GFP_KERNEL,
 					  tun_ptr_free);
+
+	if (netif_running(dev))
+		netif_tx_wake_all_queues(dev);
 
 	kfree(rings);
 	return ret;
