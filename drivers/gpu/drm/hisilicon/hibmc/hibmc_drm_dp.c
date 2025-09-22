@@ -34,9 +34,16 @@ static int hibmc_dp_connector_get_modes(struct drm_connector *connector)
 static int hibmc_dp_detect(struct drm_connector *connector,
 			   struct drm_modeset_acquire_ctx *ctx, bool force)
 {
-	mdelay(200);
+	struct hibmc_dp *dp = to_hibmc_dp(connector);
 
-	return drm_connector_helper_detect_from_ddc(connector, ctx, force);
+	/* if no HPD just probe DDC */
+	if (!dp->irq_status)
+		return drm_connector_helper_detect_from_ddc(connector, ctx, force);
+
+	if (dp->hpd_status == HIBMC_HPD_IN)
+		return connector_status_connected;
+
+	return connector_status_disconnected;
 }
 
 static const struct drm_connector_helper_funcs hibmc_dp_conn_helper_funcs = {
@@ -127,6 +134,8 @@ irqreturn_t hibmc_dp_hpd_isr(int irq, void *arg)
 		drm_dbg_dp(&priv->dev, "HPD OUT isr occur!\n");
 		hibmc_dp_reset_link(&priv->dp);
 	}
+
+	hibmc_dp_update_hpd_status(&priv->dp);
 
 	if (dev->registered)
 		drm_connector_helper_hpd_irq_event(&priv->dp.connector);
