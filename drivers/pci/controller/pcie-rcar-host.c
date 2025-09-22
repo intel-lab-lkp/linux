@@ -34,6 +34,14 @@
 
 #include "pcie-rcar.h"
 
+/*
+ * This driver can not function correctly without PCIe subsystem level
+ * config space access serialization. In case PCI_LOCKLESS_CONFIG is
+ * ever enabled on ARM, complain loudly so the driver can be updated
+ * accordingly.
+ */
+static_assert(!IS_ENABLED(CONFIG_PCI_LOCKLESS_CONFIG));
+
 struct rcar_msi {
 	DECLARE_BITMAP(used, INT_PCI_MSI_NR);
 	struct irq_domain *domain;
