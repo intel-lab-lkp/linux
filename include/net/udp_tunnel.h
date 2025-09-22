@@ -135,6 +135,10 @@ void udp_tunnel_xmit_skb(struct rtable *rt, struct sock *sk, struct sk_buff *skb
 			 __be32 src, __be32 dst, __u8 tos, __u8 ttl,
 			 __be16 df, __be16 src_port, __be16 dst_port,
 			 bool xnet, bool nocheck, u16 ipcb_flags);
+void udp_tunnel_xmit_skb_noref(struct rtable *rt, struct sock *sk, struct sk_buff *skb,
+			       __be32 src, __be32 dst, __u8 tos, __u8 ttl,
+			       __be16 df, __be16 src_port, __be16 dst_port,
+			       bool xnet, bool nocheck, u16 ipcb_flags);
 
 void udp_tunnel6_xmit_skb(struct dst_entry *dst, struct sock *sk,
 			  struct sk_buff *skb,
@@ -144,6 +148,15 @@ void udp_tunnel6_xmit_skb(struct dst_entry *dst, struct sock *sk,
 			  __u8 prio, __u8 ttl, __be32 label,
 			  __be16 src_port, __be16 dst_port, bool nocheck,
 			  u16 ip6cb_flags);
+
+void udp_tunnel6_xmit_skb_noref(struct dst_entry *dst,
+				struct sock *sk, struct sk_buff *skb,
+				struct net_device *dev,
+				const struct in6_addr *saddr,
+				const struct in6_addr *daddr,
+				__u8 prio, __u8 ttl, __be32 label,
+				__be16 src_port, __be16 dst_port,
+				bool nocheck, u16 ip6cb_flags);
 
 void udp_tunnel_sock_release(struct socket *sock);
 

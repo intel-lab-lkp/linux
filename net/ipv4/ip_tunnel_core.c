@@ -47,10 +47,10 @@ const struct ip6_tnl_encap_ops __rcu *
 		ip6tun_encaps[MAX_IPTUN_ENCAP_OPS] __read_mostly;
 EXPORT_SYMBOL(ip6tun_encaps);
 
-void iptunnel_xmit(struct sock *sk, struct rtable *rt, struct sk_buff *skb,
-		   __be32 src, __be32 dst, __u8 proto,
-		   __u8 tos, __u8 ttl, __be16 df, bool xnet,
-		   u16 ipcb_flags)
+static void __iptunnel_xmit(struct sock *sk, struct rtable *rt,
+			    struct sk_buff *skb, __be32 src, __be32 dst,
+			    __u8 proto, __u8 tos, __u8 ttl, __be16 df,
+			    u16 ipcb_flags)
 {
 	int pkt_len = skb->len - skb_inner_network_offset(skb);
 	struct net *net = dev_net(rt->dst.dev);
@@ -58,10 +58,7 @@ void iptunnel_xmit(struct sock *sk, struct rtable *rt, struct sk_buff *skb,
 	struct iphdr *iph;
 	int err;
 
-	skb_scrub_packet(skb, xnet);
-
 	skb_clear_hash_if_not_l4(skb);
-	skb_dst_set(skb, &rt->dst);
 	memset(IPCB(skb), 0, sizeof(*IPCB(skb)));
 	IPCB(skb)->flags = ipcb_flags;
 
@@ -89,7 +86,30 @@ void iptunnel_xmit(struct sock *sk, struct rtable *rt, struct sk_buff *skb,
 		iptunnel_xmit_stats(dev, pkt_len);
 	}
 }
+
+void iptunnel_xmit(struct sock *sk, struct rtable *rt, struct sk_buff *skb,
+		   __be32 src, __be32 dst, __u8 proto,
+		   __u8 tos, __u8 ttl, __be16 df, bool xnet,
+		   u16 ipcb_flags)
+{
+	skb_scrub_packet(skb, xnet);
+	skb_dst_set(skb, &rt->dst);
+
+	__iptunnel_xmit(sk, rt, skb, src, dst, proto, tos, ttl, df, ipcb_flags);
+}
 EXPORT_SYMBOL_GPL(iptunnel_xmit);
+
+void iptunnel_xmit_noref(struct sock *sk, struct rtable *rt, struct sk_buff *skb,
+			 __be32 src, __be32 dst, __u8 proto,
+			 __u8 tos, __u8 ttl, __be16 df, bool xnet,
+			 u16 ipcb_flags)
+{
+	skb_scrub_packet(skb, xnet);
+	skb_dst_set_noref(skb, &rt->dst);
+
+	__iptunnel_xmit(sk, rt, skb, src, dst, proto, tos, ttl, df, ipcb_flags);
+}
+EXPORT_SYMBOL_GPL(iptunnel_xmit_noref);
 
 int __iptunnel_pull_header(struct sk_buff *skb, int hdr_len,
 			   __be16 inner_proto, bool raw_proto, bool xnet)

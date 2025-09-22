@@ -74,14 +74,16 @@ error:
 }
 EXPORT_SYMBOL_GPL(udp_sock_create6);
 
-void udp_tunnel6_xmit_skb(struct dst_entry *dst, struct sock *sk,
-			  struct sk_buff *skb,
-			  struct net_device *dev,
-			  const struct in6_addr *saddr,
-			  const struct in6_addr *daddr,
-			  __u8 prio, __u8 ttl, __be32 label,
-			  __be16 src_port, __be16 dst_port, bool nocheck,
-			  u16 ip6cb_flags)
+static void __udp_tunnel6_xmit_skb(struct dst_entry *dst,
+				   struct sock *sk,
+				   struct sk_buff *skb,
+				   struct net_device *dev,
+				   const struct in6_addr *saddr,
+				   const struct in6_addr *daddr,
+				   __u8 prio, __u8 ttl, __be32 label,
+				   __be16 src_port, __be16 dst_port,
+				   bool nocheck,
+				   u16 ip6cb_flags)
 {
 	struct udphdr *uh;
 	struct ipv6hdr *ip6h;
@@ -94,8 +96,6 @@ void udp_tunnel6_xmit_skb(struct dst_entry *dst, struct sock *sk,
 	uh->source = src_port;
 
 	uh->len = htons(skb->len);
-
-	skb_dst_set(skb, dst);
 
 	udp6_set_csum(nocheck, skb, saddr, daddr, skb->len);
 
@@ -111,7 +111,38 @@ void udp_tunnel6_xmit_skb(struct dst_entry *dst, struct sock *sk,
 
 	ip6tunnel_xmit(sk, skb, dev, ip6cb_flags);
 }
+
+void udp_tunnel6_xmit_skb(struct dst_entry *dst, struct sock *sk,
+			  struct sk_buff *skb,
+			  struct net_device *dev,
+			  const struct in6_addr *saddr,
+			  const struct in6_addr *daddr,
+			  __u8 prio, __u8 ttl, __be32 label,
+			  __be16 src_port, __be16 dst_port, bool nocheck,
+			  u16 ip6cb_flags)
+{
+	skb_dst_set(skb, dst);
+	__udp_tunnel6_xmit_skb(dst, sk, skb, dev, saddr, daddr,
+			       prio, ttl, label, src_port, dst_port,
+			       nocheck, ip6cb_flags);
+}
 EXPORT_SYMBOL_GPL(udp_tunnel6_xmit_skb);
+
+void udp_tunnel6_xmit_skb_noref(struct dst_entry *dst,
+				struct sock *sk, struct sk_buff *skb,
+				struct net_device *dev,
+				const struct in6_addr *saddr,
+				const struct in6_addr *daddr,
+				__u8 prio, __u8 ttl, __be32 label,
+				__be16 src_port, __be16 dst_port,
+				bool nocheck, u16 ip6cb_flags)
+{
+	skb_dst_set_noref(skb, dst);
+	__udp_tunnel6_xmit_skb(dst, sk, skb, dev, saddr, daddr,
+			       prio, ttl, label, src_port, dst_port,
+			       nocheck, ip6cb_flags);
+}
+EXPORT_SYMBOL_GPL(udp_tunnel6_xmit_skb_noref);
 
 /**
  *      udp_tunnel6_dst_lookup - perform route lookup on UDP tunnel
