@@ -1268,6 +1268,15 @@ int tap_ring_consume_batched(struct file *file,
 }
 EXPORT_SYMBOL_GPL(tap_ring_consume_batched);
 
+void tap_ring_unconsume(struct file *file, void **batch, int n,
+			void (*destroy)(void *))
+{
+	struct tap_queue *q = file->private_data;
+
+	ptr_ring_unconsume(&q->ring, batch, n, destroy);
+}
+EXPORT_SYMBOL_GPL(tap_ring_unconsume);
+
 struct ptr_ring *tap_get_ptr_ring(struct file *file)
 {
 	struct tap_queue *q;

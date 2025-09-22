@@ -3813,6 +3813,15 @@ int tun_ring_consume_batched(struct file *file,
 }
 EXPORT_SYMBOL_GPL(tun_ring_consume_batched);
 
+void tun_ring_unconsume(struct file *file, void **batch, int n,
+			void (*destroy)(void *))
+{
+	struct tun_file *tfile = file->private_data;
+
+	ptr_ring_unconsume(&tfile->tx_ring, batch, n, destroy);
+}
+EXPORT_SYMBOL_GPL(tun_ring_unconsume);
+
 struct ptr_ring *tun_get_tx_ring(struct file *file)
 {
 	struct tun_file *tfile;
