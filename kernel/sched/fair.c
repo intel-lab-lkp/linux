@@ -7532,7 +7532,7 @@ static inline int sched_balance_find_dst_cpu(struct sched_domain *sd, struct tas
 static inline int __select_idle_cpu(int cpu, struct task_struct *p)
 {
 	if ((available_idle_cpu(cpu) || sched_idle_cpu(cpu)) &&
-	    sched_cpu_cookie_match(cpu_rq(cpu), p))
+	    sched_core_cookie_match(cpu_rq(cpu), p))
 		return cpu;
 
 	return -1;
@@ -7630,6 +7630,9 @@ static int select_idle_core(struct task_struct *p, int core, struct cpumask *cpu
 static int select_idle_smt(struct task_struct *p, struct sched_domain *sd, int target)
 {
 	int cpu;
+
+	if (!sched_core_cookie_match(cpu_rq(target), p))
+		return -1;
 
 	for_each_cpu_and(cpu, cpu_smt_mask(target), p->cpus_ptr) {
 		if (cpu == target)
