@@ -931,7 +931,7 @@ static int tun_net_init(struct net_device *dev)
 	dev->vlan_features = dev->features &
 			     ~(NETIF_F_HW_VLAN_CTAG_TX |
 			       NETIF_F_HW_VLAN_STAG_TX);
-	dev->lltx = true;
+	dev->lltx = false;
 
 	tun->flags = (tun->flags & ~TUN_FEATURES) |
 		      (ifr->ifr_flags & TUN_FEATURES);
@@ -1060,14 +1060,18 @@ static netdev_tx_t tun_net_xmit(struct sk_buff *skb, struct net_device *dev)
 
 	nf_reset_ct(skb);
 
-	if (ptr_ring_produce(&tfile->tx_ring, skb)) {
+	queue = netdev_get_tx_queue(dev, txq);
+
+	spin_lock(&tfile->tx_ring.producer_lock);
+	if (__ptr_ring_full_next(&tfile->tx_ring))
+		netif_tx_stop_queue(queue);
+
+	if (unlikely(__ptr_ring_produce(&tfile->tx_ring, skb))) {
+		spin_unlock(&tfile->tx_ring.producer_lock);
 		drop_reason = SKB_DROP_REASON_FULL_RING;
 		goto drop;
 	}
-
-	/* dev->lltx requires to do our own update of trans_start */
-	queue = netdev_get_tx_queue(dev, txq);
-	txq_trans_cond_update(queue);
+	spin_unlock(&tfile->tx_ring.producer_lock);
 
 	/* Notify and wake up reader process */
 	if (tfile->flags & TUN_FASYNC)
