@@ -593,12 +593,15 @@ out:
  */
 static void reregister_snapshot(struct dm_snapshot *s)
 {
+	struct origin *o;
 	struct block_device *bdev = s->origin->bdev;
 
 	down_write(&_origins_lock);
+	o = __lookup_origin(s->origin->bdev);
 
 	list_del(&s->list);
-	__insert_snapshot(__lookup_origin(bdev), s);
+	if (o)
+		__insert_snapshot(o, s);
 
 	up_write(&_origins_lock);
 }
