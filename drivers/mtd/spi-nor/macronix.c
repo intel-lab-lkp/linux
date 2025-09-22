@@ -322,6 +322,7 @@ static int macronix_nor_late_init(struct spi_nor *nor)
 	if (!nor->params->set_4byte_addr_mode)
 		nor->params->set_4byte_addr_mode = spi_nor_set_4byte_addr_mode_en4b_ex4b;
 	nor->params->set_octal_dtr = macronix_nor_set_octal_dtr;
+	nor->params->rdcr_opcode = SPINOR_OP_RDCR_MX;
 
 	return 0;
 }
