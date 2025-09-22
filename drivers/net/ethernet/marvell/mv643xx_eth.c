@@ -3263,6 +3263,8 @@ static int mv643xx_eth_probe(struct platform_device *pdev)
 	return 0;
 
 out:
+	if (dev->phydev)
+		phy_disconnect(dev->phydev);
 	if (!IS_ERR(mp->clk))
 		clk_disable_unprepare(mp->clk);
 	free_netdev(dev);
