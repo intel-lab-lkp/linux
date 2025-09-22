@@ -859,6 +859,8 @@ elf_create_prefix_symbol(struct elf *elf, struct symbol *orig, long size)
 
 	if (!sym || !name) {
 		ERROR_GLIBC("malloc");
+		free(sym);
+		free(name);
 		return NULL;
 	}
 
