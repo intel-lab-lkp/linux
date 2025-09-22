@@ -7420,7 +7420,8 @@ sched_balance_find_dst_group(struct sched_domain *sd, struct task_struct *p, int
  * sched_balance_find_dst_group_cpu - find the idlest CPU among the CPUs in the group.
  */
 static int
-sched_balance_find_dst_group_cpu(struct sched_group *group, struct task_struct *p, int this_cpu)
+__sched_balance_find_dst_group_cpu(struct sched_group *group, struct task_struct *p,
+				   int this_cpu, bool cookie_match)
 {
 	unsigned long load, min_load = ULONG_MAX;
 	unsigned int min_exit_latency = UINT_MAX;
@@ -7437,7 +7438,8 @@ sched_balance_find_dst_group_cpu(struct sched_group *group, struct task_struct *
 	for_each_cpu_and(i, sched_group_span(group), p->cpus_ptr) {
 		struct rq *rq = cpu_rq(i);
 
-		if (!sched_core_cookie_match(rq, p))
+		/* Only matching tasks if cookie_match, else only unmatching tasks */
+		if (cookie_match ^ sched_core_cookie_match(rq, p))
 			continue;
 
 		if (sched_idle_cpu(i))
@@ -7474,6 +7476,17 @@ sched_balance_find_dst_group_cpu(struct sched_group *group, struct task_struct *
 	}
 
 	return shallowest_idle_cpu != -1 ? shallowest_idle_cpu : least_loaded_cpu;
+}
+
+/*
+ * sched_balance_find_dst_group_cpu - find the idlest CPU among the CPUs in the group.
+ */
+static inline int
+sched_balance_find_dst_group_cpu(struct sched_group *group, struct task_struct *p, int this_cpu)
+{
+	int cpu = __sched_balance_find_dst_group_cpu(group, p, this_cpu, true);
+
+	return cpu >= 0 ? cpu : __sched_balance_find_dst_group_cpu(group, p, this_cpu, false);
 }
 
 static inline int sched_balance_find_dst_cpu(struct sched_domain *sd, struct task_struct *p,
