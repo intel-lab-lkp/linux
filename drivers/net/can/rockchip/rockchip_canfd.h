@@ -11,6 +11,8 @@
 #include <linux/can/dev.h>
 #include <linux/can/rx-offload.h>
 #include <linux/clk.h>
+#include <linux/dma-mapping.h>
+#include <linux/dmaengine.h>
 #include <linux/io.h>
 #include <linux/netdevice.h>
 #include <linux/reset.h>
@@ -532,6 +534,7 @@
 #define RK3576CANFD_ISM_WATERMASK_CANFD 0x6c /* word */
 
 #define RK3576CANFD_SRAM_MAX_DEPTH 256 /* word */
+#define RK3576CANFD_SRAM_MAX_FIFO_CNT (RK3576CANFD_SRAM_MAX_DEPTH / RK3576CANFD_SRAM_MAX_DEPTH)
 
 #define RK3576CANFD_CANFD_FILTER GENMASK(28, 0)
 
@@ -749,6 +752,12 @@ struct rkcanfd_priv {
 	struct reset_control *reset;
 	struct clk_bulk_data *clks;
 	int clks_num;
+	u32 dma_size;
+	u32 dma_thr;
+	int quota;
+	struct dma_chan *rxchan;
+	u32 *rxbuf;
+	dma_addr_t rx_dma_dst_addr;
 };
 
 static inline u32
