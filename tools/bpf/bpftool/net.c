@@ -801,22 +801,27 @@ static int netfilter_link_compar(const void *a, const void *b)
 {
 	const struct bpf_link_info *nfa = a;
 	const struct bpf_link_info *nfb = b;
-	int delta;
 
-	delta = nfa->netfilter.pf - nfb->netfilter.pf;
-	if (delta)
-		return delta;
+	if (nfa->netfilter.pf < nfb->netfilter.pf)
+		return -1;
+	if (nfa->netfilter.pf > nfb->netfilter.pf)
+		return 1;
 
-	delta = nfa->netfilter.hooknum - nfb->netfilter.hooknum;
-	if (delta)
-		return delta;
+	if (nfa->netfilter.hooknum < nfb->netfilter.hooknum)
+		return -1;
+	if (nfa->netfilter.hooknum > nfb->netfilter.hooknum)
+		return 1;
 
 	if (nfa->netfilter.priority < nfb->netfilter.priority)
 		return -1;
 	if (nfa->netfilter.priority > nfb->netfilter.priority)
 		return 1;
 
-	return nfa->netfilter.flags - nfb->netfilter.flags;
+	if (nfa->netfilter.flags < nfb->netfilter.flags)
+		return -1;
+	if (nfa->netfilter.flags > nfb->netfilter.flags)
+		return 1;
+	return 0;
 }
 
 static void show_link_netfilter(void)
