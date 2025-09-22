@@ -970,6 +970,12 @@ unsigned int *xt_alloc_entry_offsets(unsigned int size)
 }
 EXPORT_SYMBOL(xt_alloc_entry_offsets);
 
+void xt_free_entry_offsets(unsigned int *offsets)
+{
+	kvfree(offsets);
+}
+EXPORT_SYMBOL(xt_free_entry_offsets);
+
 /**
  * xt_find_jump_offset - check if target is a valid jump offset
  *

@@ -570,7 +570,7 @@ static int translate_table(struct net *net,
 		ret = -ELOOP;
 		goto out_free;
 	}
-	kvfree(offsets);
+	xt_free_entry_offsets(offsets);
 
 	/* Finally, each sanity check must pass */
 	i = 0;
@@ -593,7 +593,7 @@ static int translate_table(struct net *net,
 
 	return ret;
  out_free:
-	kvfree(offsets);
+	xt_free_entry_offsets(offsets);
 	return ret;
 }
 
