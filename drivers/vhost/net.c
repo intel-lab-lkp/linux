@@ -127,10 +127,10 @@ struct vhost_net_virtqueue {
 	/* Reference counting for outstanding ubufs.
 	 * Protected by vq mutex. Writers must also take device mutex. */
 	struct vhost_net_ubuf_ref *ubufs;
-	struct ptr_ring *rx_ring;
 	struct vhost_net_buf rxq;
 	/* Batched XDP buffs */
 	struct xdp_buff *xdp;
+	enum if_type {IF_NONE = 0, TUN, TAP} type;
 };
 
 struct vhost_net {
@@ -176,24 +176,54 @@ static void *vhost_net_buf_consume(struct vhost_net_buf *rxq)
 	return ret;
 }
 
-static int vhost_net_buf_produce(struct vhost_net_virtqueue *nvq)
+static int vhost_net_buf_produce(struct vhost_net_virtqueue *nvq,
+		struct sock *sk)
 {
+	struct file *file = sk->sk_socket->file;
 	struct vhost_net_buf *rxq = &nvq->rxq;
 
 	rxq->head = 0;
-	rxq->tail = ptr_ring_consume_batched(nvq->rx_ring, rxq->queue,
-					      VHOST_NET_BATCH);
+
+	switch (nvq->type) {
+	case TUN:
+		rxq->tail = tun_ring_consume_batched(file,
+				rxq->queue, VHOST_NET_BATCH);
+		break;
+	case TAP:
+		rxq->tail = tap_ring_consume_batched(file,
+				rxq->queue, VHOST_NET_BATCH);
+		break;
+	case IF_NONE:
+		WARN_ON_ONCE();
+	}
+
 	return rxq->tail;
 }
 
-static void vhost_net_buf_unproduce(struct vhost_net_virtqueue *nvq)
+static void vhost_net_buf_unproduce(struct vhost_net_virtqueue *nvq,
+				struct socket *sk)
 {
 	struct vhost_net_buf *rxq = &nvq->rxq;
+	struct file *file;
 
-	if (nvq->rx_ring && !vhost_net_buf_is_empty(rxq)) {
-		ptr_ring_unconsume(nvq->rx_ring, rxq->queue + rxq->head,
-				   vhost_net_buf_get_size(rxq),
-				   tun_ptr_free);
+	if (sk && !vhost_net_buf_is_empty(rxq)) {
+		file = sk->file;
+		switch (nvq->type) {
+		case TUN:
+			tun_ring_unconsume(file,
+					   rxq->queue + rxq->head,
+					   vhost_net_buf_get_size(rxq),
+					   tun_ptr_free);
+			break;
+		case TAP:
+			tap_ring_unconsume(file,
+					   rxq->queue + rxq->head,
+					   vhost_net_buf_get_size(rxq),
+					   tun_ptr_free);
+			break;
+		case IF_NONE:
+			return;
+		}
 		rxq->head = rxq->tail = 0;
 	}
 }
@@ -209,14 +239,15 @@ static int vhost_net_buf_peek_len(void *ptr)
 	return __skb_array_len_with_tag(ptr);
 }
 
-static int vhost_net_buf_peek(struct vhost_net_virtqueue *nvq)
+static int vhost_net_buf_peek(struct vhost_net_virtqueue *nvq,
+							  struct sock *sk)
 {
 	struct vhost_net_buf *rxq = &nvq->rxq;
 
 	if (!vhost_net_buf_is_empty(rxq))
 		goto out;
 
-	if (!vhost_net_buf_produce(nvq))
+	if (!vhost_net_buf_produce(nvq, sk))
 		return 0;
 
 out:
@@ -998,8 +1029,8 @@ static int peek_head_len(struct vhost_net_virtqueue *rvq, struct sock *sk)
 	int len = 0;
 	unsigned long flags;
 
-	if (rvq->rx_ring)
-		return vhost_net_buf_peek(rvq);
+	if (rvq->type)
+		return vhost_net_buf_peek(rvq, sk);
 
 	spin_lock_irqsave(&sk->sk_receive_queue.lock, flags);
 	head = skb_peek(&sk->sk_receive_queue);
@@ -1207,7 +1238,7 @@ static void handle_rx(struct vhost_net *net)
 			goto out;
 		}
 		busyloop_intr = false;
-		if (nvq->rx_ring)
+		if (nvq->type)
 			msg.msg_control = vhost_net_buf_consume(&nvq->rxq);
 		/* On overrun, truncate and discard */
 		if (unlikely(headcount > UIO_MAXIOV)) {
@@ -1363,7 +1394,7 @@ static int vhost_net_open(struct inode *inode, struct file *f)
 		n->vqs[i].batched_xdp = 0;
 		n->vqs[i].vhost_hlen = 0;
 		n->vqs[i].sock_hlen = 0;
-		n->vqs[i].rx_ring = NULL;
+		n->vqs[i].type = IF_NONE;
 		vhost_net_buf_init(&n->vqs[i].rxq);
 	}
 	vhost_dev_init(dev, vqs, VHOST_NET_VQ_MAX,
@@ -1393,8 +1424,8 @@ static struct socket *vhost_net_stop_vq(struct vhost_net *n,
 	sock = vhost_vq_get_backend(vq);
 	vhost_net_disable_vq(n, vq);
 	vhost_vq_set_backend(vq, NULL);
-	vhost_net_buf_unproduce(nvq);
-	nvq->rx_ring = NULL;
+	vhost_net_buf_unproduce(nvq, sock);
+	nvq->type = IF_NONE;
 	mutex_unlock(&vq->mutex);
 	return sock;
 }
@@ -1474,18 +1505,13 @@ err:
 	return ERR_PTR(r);
 }
 
-static struct ptr_ring *get_tap_ptr_ring(struct file *file)
+static enum if_type get_if_type(struct file *file)
 {
-	struct ptr_ring *ring;
-	ring = tun_get_tx_ring(file);
-	if (!IS_ERR(ring))
-		goto out;
-	ring = tap_get_ptr_ring(file);
-	if (!IS_ERR(ring))
-		goto out;
-	ring = NULL;
-out:
-	return ring;
+	if (is_tap_file(file))
+		return TAP;
+	if (is_tun_file(file))
+		return TUN;
+	return IF_NONE;
 }
 
 static struct socket *get_tap_socket(int fd)
@@ -1567,7 +1593,7 @@ static long vhost_net_set_backend(struct vhost_net *n, unsigned index, int fd)
 
 		vhost_net_disable_vq(n, vq);
 		vhost_vq_set_backend(vq, sock);
-		vhost_net_buf_unproduce(nvq);
+		vhost_net_buf_unproduce(nvq, sock);
 		r = vhost_vq_init_access(vq);
 		if (r)
 			goto err_used;
@@ -1576,9 +1602,9 @@ static long vhost_net_set_backend(struct vhost_net *n, unsigned index, int fd)
 			goto err_used;
 		if (index == VHOST_NET_VQ_RX) {
 			if (sock)
-				nvq->rx_ring = get_tap_ptr_ring(sock->file);
+				nvq->type = get_if_type(sock->file);
 			else
-				nvq->rx_ring = NULL;
+				nvq->type = IF_NONE;
 		}
 
 		oldubufs = nvq->ubufs;
