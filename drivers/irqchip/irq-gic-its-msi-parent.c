@@ -101,6 +101,33 @@ static int its_pci_msi_prepare(struct irq_domain *domain, struct device *dev,
 	return msi_info->ops->msi_prepare(domain->parent, dev, nvec, info);
 }
 
+static int its_v5_get_msi_parent(struct device *dev, struct device_node **msi_np)
+{
+	struct of_phandle_args out_msi;
+	struct device *parent_dev;
+	int ret;
+
+	/*
+	 * Walk up the device parent links looking for one with a
+	 *  "msi-parent" property.
+	 */
+	for (parent_dev = dev; parent_dev; parent_dev = parent_dev->parent) {
+		ret = of_parse_phandle_with_optional_args(parent_dev->of_node, "msi-parent",
+							  "#msi-cells",
+							  0, &out_msi);
+		if (!ret) {
+			if (!out_msi.args_count) {
+				/* Return with a node reference held */
+				*msi_np = out_msi.np;
+				return 0;
+			}
+			of_node_put(out_msi.np);
+		}
+	}
+
+	return -ENODEV;
+}
+
 static int its_v5_pci_msi_prepare(struct irq_domain *domain, struct device *dev,
 				  int nvec, msi_alloc_info_t *info)
 {
@@ -117,8 +144,11 @@ static int its_v5_pci_msi_prepare(struct irq_domain *domain, struct device *dev,
 	pdev = to_pci_dev(dev);
 
 	rid = pci_msi_map_rid_ctlr_node(pdev, &msi_node);
-	if (!msi_node)
-		return -ENODEV;
+	if (!msi_node) {
+		ret = its_v5_get_msi_parent(&pdev->dev, &msi_node);
+		if (ret)
+			return ret;
+	}
 
 	ret = its_translate_frame_address(msi_node, &pa);
 	if (ret)
