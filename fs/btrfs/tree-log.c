@@ -1184,7 +1184,7 @@ static noinline int backref_in_log(struct btrfs_root *log,
 				   u64 ref_objectid,
 				   const struct fscrypt_str *name)
 {
-	struct btrfs_path *path;
+	BTRFS_PATH_AUTO_FREE(path);
 	int ret;
 
 	path = btrfs_alloc_path();
@@ -1192,12 +1192,10 @@ static noinline int backref_in_log(struct btrfs_root *log,
 		return -ENOMEM;
 
 	ret = btrfs_search_slot(NULL, log, key, path, 0, 0);
-	if (ret < 0) {
-		goto out;
-	} else if (ret == 1) {
-		ret = 0;
-		goto out;
-	}
+	if (ret < 0)
+		return ret;
+	if (ret == 1)
+		return 0;
 
 	if (key->type == BTRFS_INODE_EXTREF_KEY)
 		ret = !!btrfs_find_name_in_ext_backref(path->nodes[0],
@@ -1206,8 +1204,6 @@ static noinline int backref_in_log(struct btrfs_root *log,
 	else
 		ret = !!btrfs_find_name_in_backref(path->nodes[0],
 						   path->slots[0], name);
-out:
-	btrfs_free_path(path);
 	return ret;
 }
 
@@ -2520,7 +2516,7 @@ static int replay_xattr_deletes(struct walk_control *wc)
 	struct btrfs_root *root = wc->root;
 	struct btrfs_root *log = wc->log;
 	struct btrfs_key search_key;
-	struct btrfs_path *log_path;
+	BTRFS_PATH_AUTO_FREE(log_path);
 	const u64 ino = wc->log_key.objectid;
 	int nritems;
 	int ret;
@@ -2634,7 +2630,6 @@ process_leaf:
 			       "failed to get next leaf in subvolume root %llu",
 				       btrfs_root_id(root));
 out:
-	btrfs_free_path(log_path);
 	btrfs_release_path(wc->subvol_path);
 	return ret;
 }
@@ -3137,7 +3132,7 @@ static int walk_log_tree(struct walk_control *wc)
 	int ret = 0;
 	int wret;
 	int level;
-	struct btrfs_path *path;
+	BTRFS_PATH_AUTO_FREE(path);
 	int orig_level;
 
 	path = btrfs_alloc_path();
@@ -3154,18 +3149,14 @@ static int walk_log_tree(struct walk_control *wc)
 		wret = walk_down_log_tree(path, &level, wc);
 		if (wret > 0)
 			break;
-		if (wret < 0) {
-			ret = wret;
-			goto out;
-		}
+		if (wret < 0)
+			return wret;
 
 		wret = walk_up_log_tree(path, &level, wc);
 		if (wret > 0)
 			break;
-		if (wret < 0) {
-			ret = wret;
-			goto out;
-		}
+		if (wret < 0)
+			return wret;
 	}
 
 	/* was the root node processed? if not, catch it here */
@@ -3174,13 +3165,11 @@ static int walk_log_tree(struct walk_control *wc)
 			 btrfs_header_generation(path->nodes[orig_level]),
 			 orig_level);
 		if (ret)
-			goto out;
+			return ret;
 		if (wc->free)
 			ret = clean_log_buffer(wc->trans, path->nodes[orig_level]);
 	}
 
-out:
-	btrfs_free_path(path);
 	return ret;
 }
 
@@ -3918,13 +3907,13 @@ void btrfs_del_dir_entries_in_log(struct btrfs_trans_handle *trans,
 				  const struct fscrypt_str *name,
 				  struct btrfs_inode *dir, u64 index)
 {
-	struct btrfs_path *path;
+	BTRFS_PATH_AUTO_FREE(path);
 	int ret;
 
 	ret = inode_logged(trans, dir, NULL);
 	if (ret == 0)
 		return;
-	else if (ret < 0) {
+	if (ret < 0) {
 		btrfs_set_log_full_commit(trans);
 		return;
 	}
@@ -3938,7 +3927,7 @@ void btrfs_del_dir_entries_in_log(struct btrfs_trans_handle *trans,
 	ret = join_running_log_trans(root);
 	ASSERT(ret == 0, "join_running_log_trans() ret=%d", ret);
 	if (WARN_ON(ret))
-		goto out;
+		return;
 
 	mutex_lock(&dir->log_mutex);
 
@@ -3948,8 +3937,6 @@ void btrfs_del_dir_entries_in_log(struct btrfs_trans_handle *trans,
 	if (ret < 0)
 		btrfs_set_log_full_commit(trans);
 	btrfs_end_log_trans(root);
-out:
-	btrfs_free_path(path);
 }
 
 /* see comments for btrfs_del_dir_entries_in_log */
@@ -5228,7 +5215,7 @@ static int btrfs_log_prealloc_extents(struct btrfs_trans_handle *trans,
 	struct btrfs_key key;
 	const u64 i_size = i_size_read(&inode->vfs_inode);
 	const u64 ino = btrfs_ino(inode);
-	struct btrfs_path *dst_path = NULL;
+	BTRFS_PATH_AUTO_FREE(dst_path);
 	bool dropped_extents = false;
 	u64 truncate_offset = i_size;
 	struct extent_buffer *leaf;
@@ -5346,7 +5333,6 @@ static int btrfs_log_prealloc_extents(struct btrfs_trans_handle *trans,
 				 start_slot, ins_nr, 1, 0, ctx);
 out:
 	btrfs_release_path(path);
-	btrfs_free_path(dst_path);
 	return ret;
 }
 
@@ -5719,7 +5705,7 @@ static int btrfs_check_ref_name_override(struct extent_buffer *eb,
 					 u64 *other_ino, u64 *other_parent)
 {
 	int ret;
-	struct btrfs_path *search_path;
+	BTRFS_PATH_AUTO_FREE(search_path);
 	char *name = NULL;
 	u32 name_len = 0;
 	u32 item_size = btrfs_item_size(eb, slot);
@@ -5804,7 +5790,6 @@ static int btrfs_check_ref_name_override(struct extent_buffer *eb,
 	}
 	ret = 0;
 out:
-	btrfs_free_path(search_path);
 	kfree(name);
 	return ret;
 }
@@ -7187,7 +7172,7 @@ static int btrfs_log_all_parents(struct btrfs_trans_handle *trans,
 				 struct btrfs_log_ctx *ctx)
 {
 	int ret;
-	struct btrfs_path *path;
+	BTRFS_PATH_AUTO_FREE(path);
 	struct btrfs_key key;
 	struct btrfs_root *root = inode->root;
 	const u64 ino = btrfs_ino(inode);
@@ -7203,7 +7188,7 @@ static int btrfs_log_all_parents(struct btrfs_trans_handle *trans,
 	key.offset = 0;
 	ret = btrfs_search_slot(NULL, root, &key, path, 0, 0);
 	if (ret < 0)
-		goto out;
+		return ret;
 
 	while (true) {
 		struct extent_buffer *leaf = path->nodes[0];
@@ -7215,8 +7200,8 @@ static int btrfs_log_all_parents(struct btrfs_trans_handle *trans,
 		if (slot >= btrfs_header_nritems(leaf)) {
 			ret = btrfs_next_leaf(root, path);
 			if (ret < 0)
-				goto out;
-			else if (ret > 0)
+				return ret;
+			if (ret > 0)
 				break;
 			continue;
 		}
@@ -7274,10 +7259,8 @@ static int btrfs_log_all_parents(struct btrfs_trans_handle *trans,
 			 * at both parents and the old parent B would still
 			 * exist.
 			 */
-			if (IS_ERR(dir_inode)) {
-				ret = PTR_ERR(dir_inode);
-				goto out;
-			}
+			if (IS_ERR(dir_inode))
+				return PTR_ERR(dir_inode);
 
 			if (!need_log_inode(trans, dir_inode)) {
 				btrfs_add_delayed_iput(dir_inode);
@@ -7290,14 +7273,11 @@ static int btrfs_log_all_parents(struct btrfs_trans_handle *trans,
 				ret = log_new_dir_dentries(trans, dir_inode, ctx);
 			btrfs_add_delayed_iput(dir_inode);
 			if (ret)
-				goto out;
+				return ret;
 		}
 		path->slots[0]++;
 	}
-	ret = 0;
-out:
-	btrfs_free_path(path);
-	return ret;
+	return 0;
 }
 
 static int log_new_ancestors(struct btrfs_trans_handle *trans,
@@ -7408,7 +7388,7 @@ static int log_all_new_ancestors(struct btrfs_trans_handle *trans,
 {
 	struct btrfs_root *root = inode->root;
 	const u64 ino = btrfs_ino(inode);
-	struct btrfs_path *path;
+	BTRFS_PATH_AUTO_FREE(path);
 	struct btrfs_key search_key;
 	int ret;
 
@@ -7429,7 +7409,7 @@ static int log_all_new_ancestors(struct btrfs_trans_handle *trans,
 again:
 	ret = btrfs_search_slot(NULL, root, &search_key, path, 0, 0);
 	if (ret < 0)
-		goto out;
+		return ret;
 	if (ret == 0)
 		path->slots[0]++;
 
@@ -7441,8 +7421,8 @@ again:
 		if (slot >= btrfs_header_nritems(leaf)) {
 			ret = btrfs_next_leaf(root, path);
 			if (ret < 0)
-				goto out;
-			else if (ret > 0)
+				return ret;
+			if (ret > 0)
 				break;
 			continue;
 		}
@@ -7459,10 +7439,8 @@ again:
 		 * this loop, etc). So just return some error to fallback to
 		 * a transaction commit.
 		 */
-		if (found_key.type == BTRFS_INODE_EXTREF_KEY) {
-			ret = -EMLINK;
-			goto out;
-		}
+		if (found_key.type == BTRFS_INODE_EXTREF_KEY)
+			return -EMLINK;
 
 		/*
 		 * Logging ancestors needs to do more searches on the fs/subvol
@@ -7474,14 +7452,11 @@ again:
 
 		ret = log_new_ancestors(trans, root, path, ctx);
 		if (ret)
-			goto out;
+			return ret;
 		btrfs_release_path(path);
 		goto again;
 	}
-	ret = 0;
-out:
-	btrfs_free_path(path);
-	return ret;
+	return 0;
 }
 
 /*
