@@ -96,6 +96,28 @@ static inline bool ptr_ring_full_bh(struct ptr_ring *r)
 	return ret;
 }
 
+/* Returns if the ptr_ring will be full after inserting the next ptr.
+ */
+static inline bool __ptr_ring_full_next(struct ptr_ring *r)
+{
+	int p;
+
+	/* Since __ptr_ring_discard_one invalidates in reverse order, the
+	 * next producer entry might be NULL even though the current one
+	 * is not. Therefore, also check the current producer entry with
+	 * __ptr_ring_full.
+	 */
+	if (unlikely(r->size <= 1 || __ptr_ring_full(r)))
+		return true;
+
+	p = r->producer + 1;
+
+	if (unlikely(p >= r->size))
+		p = 0;
+
+	return r->queue[p];
+}
+
 /* Note: callers invoking this in a loop must use a compiler barrier,
  * for example cpu_relax(). Callers must hold producer_lock.
  * Callers are responsible for making sure pointer that is being queued
