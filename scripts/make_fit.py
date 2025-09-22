@@ -13,11 +13,17 @@ Usage:
         -r /boot/initrd.img-6.14.0-27-generic @arch/arm64/boot/dts/dtbs-list
         -E -c gzip
 
+    # Build with modules ramdisk instead of external ramdisk:
+    make_fit.py -A arm64 -n 'Linux-6.17' -O linux
+        -o arch/arm64/boot/image.fit -k /tmp/kern/arch/arm64/boot/image.itk
+        -m -B /path/to/build/dir @arch/arm64/boot/dts/dtbs-list
+
 Creates a FIT containing the supplied kernel, an optional ramdisk, and a set of
 devicetree files, either specified individually or listed in a file (with an
 '@' prefix).
 
 Use -r to specify an existing ramdisk/initrd file.
+Use -m to build a ramdisk from kernel modules (similar to mkinitramfs).
 
 Use -E to generate an external FIT (where the data is placed after the
 FIT data structure). This allows parsing of the data without loading
@@ -38,6 +44,7 @@ as U-Boot, Linuxboot, Tianocore, etc.
 import argparse
 import collections
 import os
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -83,8 +90,18 @@ def parse_args():
           help='Specifies the operating system')
     parser.add_argument('-k', '--kernel', type=str, required=True,
           help='Specifies the (uncompressed) kernel input file (.itk)')
-    parser.add_argument('-r', '--ramdisk', type=str,
+
+    # Create mutually exclusive group for ramdisk options
+    rd_group = parser.add_mutually_exclusive_group()
+    rd_group.add_argument('-r', '--ramdisk', type=str,
           help='Specifies the ramdisk/initrd input file')
+    rd_group.add_argument('-m', '--modules-ramdisk', action='store_true',
+          help='Build ramdisk from kernel modules (like mkinitramfs)')
+
+    parser.add_argument('-p', '--path', type=str,
+          help='Path where modules are installed (default: temp directory)')
+    parser.add_argument('-B', '--build-dir', type=str,
+          help='Build directory for out-of-tree builds (O= parameter to make)')
     parser.add_argument('-v', '--verbose', action='store_true',
                         help='Enable verbose output')
     parser.add_argument('dtbs', type=str, nargs='*',
@@ -240,6 +257,85 @@ def output_dtb(fsw, seq, fname, arch, compress):
         fsw.property('data', compressed)
 
 
+def build_ramdisk(args, tmpdir):
+    """Build a cpio ramdisk containing kernel modules
+
+    Similar to mkinitramfs, this creates a compressed cpio-archive containing
+    the kernel modules for the current kernel version.
+
+    Args:
+        args (Namespace): Program arguments
+        tmpdir (str): Temporary directory to use for modules installation
+
+    Returns:
+        tuple:
+            bytes: Compressed cpio data containing modules
+            int: total uncompressed size
+    """
+    suppress = None if args.verbose else subprocess.DEVNULL
+    # Use provided tmpdir or custom install path
+    if args.path:
+        mod_path = args.path
+    else:
+        mod_path = os.path.join(tmpdir, 'modules_install')
+        os.makedirs(mod_path, exist_ok=True)
+
+    if args.verbose:
+        print(f'Installing modules to {mod_path}')
+
+    cmd = ['make', '-s', '-j']
+
+    # It seems that the only way to prevent a 'jobserver unavailable' warning
+    # is to remove it from the makeflags
+    env = os.environ.copy()
+    makeflags = env.get('MAKEFLAGS', '')
+    env['MAKEFLAGS'] = ' '.join(f for f in makeflags.split()
+                                if not f.startswith('--jobserver-auth'))
+
+    if args.build_dir:
+        cmd.append(f'O={args.build_dir}')
+    cmd.extend(['INSTALL_MOD_PATH=' + mod_path, 'modules_install'])
+    subprocess.check_call(cmd, cwd=os.getcwd(), stdout=suppress, env=env)
+
+    # Find the modules directory that was created (e.g. due to dirty tree)
+    base_dir = os.path.join(mod_path, 'lib', 'modules')
+    if not os.path.exists(base_dir):
+        raise ValueError(f'Modules base directory {base_dir} not found')
+    dirs = [d for d in os.listdir(base_dir)
+            if os.path.isdir(os.path.join(base_dir, d))]
+    if not dirs:
+        raise ValueError(f'No module directories found in {base_dir}')
+    if len(dirs) > 1:
+        raise ValueError(f'Must have only one module directory in {base_dir}')
+
+    # Create initramfs-style directory structure (usr/lib/modules instead of
+    # lib/modules) and move modules into it
+    outdir = os.path.join(tmpdir, 'initramfs')
+    new_dir = os.path.join(outdir, 'usr', 'lib', 'modules')
+    os.makedirs(new_dir, exist_ok=True)
+    shutil.move(os.path.join(base_dir, dirs[0]), os.path.join(new_dir, dirs[0]))
+
+    if args.verbose:
+        print(f'Creating cpio archive from {outdir}')
+
+    with tempfile.NamedTemporaryFile() as cpio_file:
+        # Change to initramfs directory and create cpio archive
+        with subprocess.Popen(['find', '.', '-print0'], cwd=outdir,
+                              stdout=subprocess.PIPE) as find:
+            with subprocess.Popen(['cpio', '-o', '-0', '-H', 'newc'],
+                                  stdin=find.stdout, stdout=cpio_file,
+                                  stderr=suppress, cwd=outdir) as cpio:
+                find.stdout.close()
+                cpio.wait()
+                find.wait()
+
+                if cpio.returncode != 0:
+                    raise RuntimeError('Failed to create cpio archive')
+
+        cpio_file.seek(0)  # Reset to beginning for reading
+        return compress_data(cpio_file, args.compress), cpio_file.tell()
+
+
 def process_dtb(fname, args):
     """Process an input DTB, decomposing it if requested and is possible
 
@@ -318,11 +414,12 @@ def _process_dtbs(args, fsw, entries, fdts):
     return seq, size
 
 
-def build_fit(args):
+def build_fit(args, tmpdir):
     """Build the FIT from the provided files and arguments
 
     Args:
         args (Namespace): Program arguments
+        tmpdir (str): Temporary directory for any temporary files
 
     Returns:
         tuple:
@@ -344,20 +441,29 @@ def build_fit(args):
 
     # Handle the ramdisk if provided. Compression is not supported as it is
     # already compressed.
+    ramdisk_data = None
     if args.ramdisk:
         with open(args.ramdisk, 'rb') as inf:
-            data = inf.read()
-        size += len(data)
-        write_ramdisk(fsw, data, args)
+            ramdisk_data = inf.read()
+        size += len(ramdisk_data)
+    elif args.modules_ramdisk:
+        if args.verbose:
+            print('Building modules ramdisk...')
+        ramdisk_data, uncomp_size = build_ramdisk(args, tmpdir)
+        size += uncomp_size
+
+    if ramdisk_data:
+        write_ramdisk(fsw, ramdisk_data, args)
 
     count, fdt_size = _process_dtbs(args, fsw, entries, fdts)
     size += fdt_size
 
-    finish_fit(fsw, entries, bool(args.ramdisk))
+    finish_fit(fsw, entries, has_ramdisk=bool(ramdisk_data))
 
-    # Include the kernel itself in the returned file count
     fdt = fsw.as_fdt()
     fdt.pack()
+
+    # Count FDT files, kernel, plus ramdisk if present
     return fdt.as_bytearray(), count + 1 + bool(args.ramdisk), size
 
 
@@ -365,7 +471,12 @@ def run_make_fit():
     """Run the tool's main logic"""
     args = parse_args()
 
-    out_data, count, size = build_fit(args)
+    tmpdir = tempfile.mkdtemp(prefix='make_fit_')
+    try:
+        out_data, count, size = build_fit(args, tmpdir)
+    finally:
+        shutil.rmtree(tmpdir)
+
     with open(args.output, 'wb') as outf:
         outf.write(out_data)
 
