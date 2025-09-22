@@ -4031,12 +4031,18 @@ static int __ieee80211_csa_finalize(struct ieee80211_link_data *link_data)
 static void ieee80211_csa_finalize(struct ieee80211_link_data *link_data)
 {
 	struct ieee80211_sub_if_data *sdata = link_data->sdata;
+	u8 link_id = -1;
 
 	if (__ieee80211_csa_finalize(link_data)) {
 		sdata_info(sdata, "failed to finalize CSA on link %d, disconnecting\n",
 			   link_data->link_id);
+		/* link_id is expected only for AP/P2P_GO type currently */
+		if (sdata->vif.type == NL80211_IFTYPE_AP ||
+		    sdata->vif.type == NL80211_IFTYPE_P2P_GO)
+			link_id = link_data->link_id;
+
 		cfg80211_stop_iface(sdata->local->hw.wiphy, &sdata->wdev,
-				    -1, GFP_KERNEL);
+				    link_id, GFP_KERNEL);
 	}
 }
 
