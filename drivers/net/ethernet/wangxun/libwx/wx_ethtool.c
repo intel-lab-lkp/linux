@@ -472,6 +472,12 @@ int wx_set_channels(struct net_device *dev,
 	if (count > wx_max_channels(wx))
 		return -EINVAL;
 
+	if (netif_is_rxfh_configured(wx->netdev)) {
+		wx_err(wx, "Cannot change channels while RXFH is configured\n");
+		wx_err(wx, "Run 'ethtool -X <if> default' to reset RSS table\n");
+		return -EBUSY;
+	}
+
 	if (test_bit(WX_FLAG_FDIR_CAPABLE, wx->flags))
 		wx->ring_feature[RING_F_FDIR].limit = count;
 
