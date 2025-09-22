@@ -52,7 +52,8 @@ static const struct net_device_ops mlx5i_netdev_ops = {
 	.ndo_init                = mlx5i_dev_init,
 	.ndo_uninit              = mlx5i_dev_cleanup,
 	.ndo_change_mtu          = mlx5i_change_mtu,
-	.ndo_eth_ioctl            = mlx5i_ioctl,
+	.ndo_hwtstamp_get        = mlx5e_hwstamp_get,
+	.ndo_hwtstamp_set        = mlx5e_hwstamp_set,
 };
 
 /* IPoIB mlx5 netdev profile */
@@ -555,20 +556,6 @@ int mlx5i_dev_init(struct net_device *dev)
 	mlx5i_pkey_add_qpn(dev, ipriv->qpn);
 
 	return 0;
-}
-
-int mlx5i_ioctl(struct net_device *dev, struct ifreq *ifr, int cmd)
-{
-	struct mlx5e_priv *priv = mlx5i_epriv(dev);
-
-	switch (cmd) {
-	case SIOCSHWTSTAMP:
-		return mlx5e_hwstamp_set(priv, ifr);
-	case SIOCGHWTSTAMP:
-		return mlx5e_hwstamp_get(priv, ifr);
-	default:
-		return -EOPNOTSUPP;
-	}
 }
 
 void mlx5i_dev_cleanup(struct net_device *dev)

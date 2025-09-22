@@ -2609,7 +2609,7 @@ static inline void mlx5i_complete_rx_cqe(struct mlx5e_rq *rq,
 					 u32 cqe_bcnt,
 					 struct sk_buff *skb)
 {
-	struct hwtstamp_config *tstamp;
+	struct kernel_hwtstamp_config *tstamp;
 	struct mlx5e_rq_stats *stats;
 	struct net_device *netdev;
 	struct mlx5e_priv *priv;
