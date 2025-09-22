@@ -1884,7 +1884,27 @@ static blk_status_t loop_queue_rq(struct blk_mq_hw_ctx *hctx,
 #endif
 	}
 #endif
-	loop_queue_work(lo, cmd);
+#ifdef CONFIG_LOOP_SYNC_READ
+	if (req_op(rq) == REQ_OP_READ && cmd->use_aio && current->plug) {
+		struct blk_plug *plug = current->plug;
+
+		current->plug = NULL;
+		/* iterate through the plug->mq_list and launch the requests to real device */
+		while (rq) {
+			loff_t pos;
+
+			cmd = blk_mq_rq_to_pdu(rq);
+			pos = ((loff_t) blk_rq_pos(rq) << 9) + lo->lo_offset;
+			lo_rw_aio(lo, cmd, pos, ITER_DEST);
+			rq = rq_list_pop(&plug->mq_list);
+		}
+		plug->rq_count = 0;
+		current->plug = plug;
+	} else
+		loop_queue_work(lo, cmd);
+#else
+		loop_queue_work(lo, cmd);
+#endif
 
 	return BLK_STS_OK;
 }

@@ -375,4 +375,14 @@ config BLK_DEV_ZONED_LOOP
 
 	  If unsure, say N.
 
+config LOOP_SYNC_READ
+	bool "enable synchronized read for loop device"
+	default n
+	help
+	  provide a way of synchronized read for loop device which could be
+	  helpful when you are concerned with the schedule latency affection
+	  over the requests of loop device especially when plenty of blkcgs
+	  setup within the system. The loop device should be configured as
+	  LO_FLAGS_DIRECT_IO when applying this config.
+
 endif # BLK_DEV
