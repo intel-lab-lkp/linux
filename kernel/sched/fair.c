@@ -7320,7 +7320,7 @@ static int wake_wide(struct task_struct *p)
  *			  for the overloaded case.
  */
 static int
-wake_affine_idle(int this_cpu, int prev_cpu, int sync)
+wake_affine_idle(struct task_struct *p, int this_cpu, int prev_cpu, int sync)
 {
 	/*
 	 * If this_cpu is idle, it implies the wakeup is from interrupt
@@ -7334,17 +7334,24 @@ wake_affine_idle(int this_cpu, int prev_cpu, int sync)
 	 * a cpufreq perspective, it's better to have higher utilisation
 	 * on one CPU.
 	 */
-	if (available_idle_cpu(this_cpu) && cpus_share_cache(this_cpu, prev_cpu))
-		return available_idle_cpu(prev_cpu) ? prev_cpu : this_cpu;
+	if (available_idle_cpu(this_cpu) &&
+		cpus_share_cache(this_cpu, prev_cpu) &&
+		sched_core_cookie_match(cpu_rq(this_cpu), p)) {
+		return available_idle_cpu(prev_cpu) &&
+			sched_core_cookie_match(cpu_rq(prev_cpu), p) ?
+			prev_cpu : this_cpu;
+	}
 
 	if (sync) {
 		struct rq *rq = cpu_rq(this_cpu);
 
-		if ((rq->nr_running - cfs_h_nr_delayed(rq)) == 1)
+		if (((rq->nr_running - cfs_h_nr_delayed(rq)) == 1) &&
+		    sched_core_cookie_match_sync(rq, p))
 			return this_cpu;
 	}
 
-	if (available_idle_cpu(prev_cpu))
+	if (available_idle_cpu(prev_cpu) &&
+		sched_core_cookie_match(cpu_rq(prev_cpu), p))
 		return prev_cpu;
 
 	return nr_cpumask_bits;
@@ -7399,7 +7406,7 @@ static int wake_affine(struct sched_domain *sd, struct task_struct *p,
 	int target = nr_cpumask_bits;
 
 	if (sched_feat(WA_IDLE))
-		target = wake_affine_idle(this_cpu, prev_cpu, sync);
+		target = wake_affine_idle(p, this_cpu, prev_cpu, sync);
 
 	if (sched_feat(WA_WEIGHT) && target == nr_cpumask_bits)
 		target = wake_affine_weight(sd, p, this_cpu, prev_cpu, sync);

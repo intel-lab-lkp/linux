@@ -1388,27 +1388,41 @@ extern void task_vruntime_update(struct rq *rq, struct task_struct *p, bool in_f
  * A special case is that the task's cookie always matches with CPU's core
  * cookie if the CPU is in an idle core.
  */
-static inline bool sched_core_cookie_match(struct rq *rq, struct task_struct *p)
+static inline bool __sched_core_cookie_match(struct rq *rq,
+					     struct task_struct *p,
+					     bool sync)
 {
-	bool idle_core = true;
 	int cpu;
 
 	/* Ignore cookie match if core scheduler is not enabled on the CPU. */
 	if (!sched_core_enabled(rq))
 		return true;
 
+	if (rq->core->core_cookie == p->core_cookie)
+		return true;
+
 	for_each_cpu(cpu, cpu_smt_mask(cpu_of(rq))) {
-		if (!available_idle_cpu(cpu)) {
-			idle_core = false;
-			break;
-		}
+		if (sync && cpu_of(rq) == cpu)
+			continue;
+		if (!available_idle_cpu(cpu))
+			return false;
 	}
 
 	/*
 	 * A CPU in an idle core is always the best choice for tasks with
 	 * cookies.
 	 */
-	return idle_core || rq->core->core_cookie == p->core_cookie;
+	return true;
+}
+
+static inline bool sched_core_cookie_match(struct rq *rq, struct task_struct *p)
+{
+	return __sched_core_cookie_match(rq, p, false);
+}
+
+static inline bool sched_core_cookie_match_sync(struct rq *rq, struct task_struct *p)
+{
+	return __sched_core_cookie_match(rq, p, true);
 }
 
 static inline bool sched_group_cookie_match(struct rq *rq,
@@ -1462,6 +1476,11 @@ static inline raw_spinlock_t *__rq_lockp(struct rq *rq)
 }
 
 static inline bool sched_core_cookie_match(struct rq *rq, struct task_struct *p)
+{
+	return true;
+}
+
+static inline bool sched_core_cookie_match_sync(struct rq *rq, struct task_struct *p)
 {
 	return true;
 }
