@@ -14,6 +14,7 @@
 #include <linux/property.h>
 #include <linux/usb/pd_vdo.h>
 #include <linux/usb/typec_dp.h>
+#include <drm/bridge/aux-bridge.h>
 #include <drm/drm_connector.h>
 #include "displayport.h"
 
@@ -182,6 +183,10 @@ static int dp_altmode_status_update(struct dp_altmode *dp)
 				dp->pending_irq_hpd = true;
 		}
 	} else {
+		if (dp->port->hpd_dev)
+			drm_aux_hpd_bridge_notify(dp->port->hpd_dev,
+						  hpd ? connector_status_connected :
+							connector_status_disconnected);
 		drm_connector_oob_hotplug_event(dp->connector_fwnode,
 						hpd ? connector_status_connected :
 						      connector_status_disconnected);
@@ -206,6 +211,9 @@ static int dp_altmode_configured(struct dp_altmode *dp)
 	 * configuration is complete to signal HPD.
 	 */
 	if (dp->pending_hpd) {
+		if (dp->port->hpd_dev)
+			drm_aux_hpd_bridge_notify(dp->port->hpd_dev,
+						  connector_status_connected);
 		drm_connector_oob_hotplug_event(dp->connector_fwnode,
 						connector_status_connected);
 		sysfs_notify(&dp->alt->dev.kobj, "displayport", "hpd");
@@ -391,6 +399,9 @@ static int dp_altmode_vdm(struct typec_altmode *alt,
 			dp->data.status = 0;
 			dp->data.conf = 0;
 			if (dp->hpd) {
+				if (dp->port->hpd_dev)
+					drm_aux_hpd_bridge_notify(dp->port->hpd_dev,
+								  connector_status_disconnected);
 				drm_connector_oob_hotplug_event(dp->connector_fwnode,
 								connector_status_disconnected);
 				dp->hpd = false;
@@ -751,6 +762,18 @@ static const struct attribute_group *displayport_groups[] = {
 	NULL,
 };
 
+void dp_altmode_hpd_device_register(struct typec_altmode *alt)
+{
+	if (alt->svid != USB_TYPEC_DP_SID)
+		return;
+
+	alt->hpd_dev = drm_dp_hpd_bridge_register(alt->dev.parent->parent,
+						  dev_of_node(alt->dev.parent->parent));
+	if (IS_ERR(alt->hpd_dev))
+		alt->hpd_dev = NULL;
+}
+EXPORT_SYMBOL_GPL(dp_altmode_hpd_device_register);
+
 int dp_altmode_probe(struct typec_altmode *alt)
 {
 	const struct typec_altmode *port = typec_altmode_get_partner(alt);
@@ -811,6 +834,10 @@ void dp_altmode_remove(struct typec_altmode *alt)
 
 	cancel_work_sync(&dp->work);
 	typec_altmode_put_plug(dp->plug_prime);
+
+	if (dp->port->hpd_dev)
+		drm_aux_hpd_bridge_notify(dp->port->hpd_dev,
+					  connector_status_disconnected);
 
 	if (dp->connector_fwnode) {
 		drm_connector_oob_hotplug_event(dp->connector_fwnode,

@@ -15,6 +15,7 @@
 #include <linux/usb/typec_mux.h>
 #include <linux/usb/typec_retimer.h>
 #include <linux/usb.h>
+#include "altmodes/displayport.h"
 
 #include "bus.h"
 #include "class.h"
@@ -599,6 +600,13 @@ typec_register_altmode(struct device *parent,
 		put_device(&alt->adev.dev);
 		return ERR_PTR(ret);
 	}
+
+	/*
+	 * It is too late to register the HPD device when the DisplayPort
+	 * altmode device becomes ready. If the current altmode is DP,
+	 * register a static HPD device.
+	 */
+	dp_altmode_hpd_device_register(&alt->adev);
 
 	return &alt->adev;
 }
