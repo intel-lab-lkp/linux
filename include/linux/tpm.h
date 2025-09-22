@@ -448,13 +448,16 @@ static inline ssize_t tpm_ret_to_err(ssize_t ret)
 	if (ret < 0)
 		return ret;
 
-	switch (tpm2_rc_value(ret)) {
-	case TPM2_RC_SUCCESS:
+	if (!ret)
 		return 0;
+
+	switch (tpm2_rc_value(ret)) {
 	case TPM2_RC_SESSION_MEMORY:
 		return -ENOMEM;
+	case TPM2_RC_HASH:
+		return -EINVAL;
 	default:
-		return -EFAULT;
+		return -EPERM;
 	}
 }
 
