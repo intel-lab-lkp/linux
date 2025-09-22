@@ -251,6 +251,7 @@ static const struct drm_connector_funcs virtio_gpu_connector_funcs = {
 
 static int vgdev_output_init(struct virtio_gpu_device *vgdev, int index)
 {
+	int ret;
 	struct drm_device *dev = vgdev->ddev;
 	struct virtio_gpu_output *output = vgdev->outputs + index;
 	struct drm_connector *connector = &output->conn;
@@ -271,8 +272,10 @@ static int vgdev_output_init(struct virtio_gpu_device *vgdev, int index)
 	cursor = virtio_gpu_plane_init(vgdev, DRM_PLANE_TYPE_CURSOR, index);
 	if (IS_ERR(cursor))
 		return PTR_ERR(cursor);
-	drm_crtc_init_with_planes(dev, crtc, primary, cursor,
+	ret = drm_crtc_init_with_planes(dev, crtc, primary, cursor,
 				  &virtio_gpu_crtc_funcs, NULL);
+	if (ret)
+		return ret;
 	drm_crtc_helper_add(crtc, &virtio_gpu_crtc_helper_funcs);
 
 	drm_connector_init(dev, connector, &virtio_gpu_connector_funcs,
