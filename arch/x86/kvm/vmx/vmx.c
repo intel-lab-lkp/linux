@@ -8479,6 +8479,14 @@ __init int vmx_hardware_setup(void)
 		return -EOPNOTSUPP;
 	}
 
+	/*
+	 * Shadow paging doesn't have a (further) performance penalty
+	 * from GUEST_MAXPHYADDR < HOST_MAXPHYADDR so enable it
+	 * by default
+	 */
+	if (!enable_ept)
+		allow_smaller_maxphyaddr = true;
+
 	if (!cpu_has_vmx_ept_ad_bits() || !enable_ept)
 		enable_ept_ad_bits = 0;
 
@@ -8714,14 +8722,6 @@ int __init vmx_init(void)
 	}
 
 	vmx_check_vmcs12_offsets();
-
-	/*
-	 * Shadow paging doesn't have a (further) performance penalty
-	 * from GUEST_MAXPHYADDR < HOST_MAXPHYADDR so enable it
-	 * by default
-	 */
-	if (!enable_ept)
-		allow_smaller_maxphyaddr = true;
 
 	return 0;
 
