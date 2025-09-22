@@ -458,13 +458,16 @@ static void rcar_mipi_dsi_set_display_timing(struct rcar_mipi_dsi *dsi,
 	u32 vprmset4r;
 
 	/* Configuration for Pixel Stream and Packet Header */
-	if (dsibpp == 24)
-		rcar_mipi_dsi_write(dsi, TXVMPSPHSETR, TXVMPSPHSETR_DT_RGB24);
-	else if (dsibpp == 18)
-		rcar_mipi_dsi_write(dsi, TXVMPSPHSETR, TXVMPSPHSETR_DT_RGB18);
-	else if (dsibpp == 16)
-		rcar_mipi_dsi_write(dsi, TXVMPSPHSETR, TXVMPSPHSETR_DT_RGB16);
-	else {
+	if (dsibpp == 24) {
+		rcar_mipi_dsi_write(dsi, TXVMPSPHSETR,
+				    FIELD_PREP(TXVMPSPHSETR_DT_MASK, TXVMPSPHSETR_DT_RGB24));
+	} else if (dsibpp == 18) {
+		rcar_mipi_dsi_write(dsi, TXVMPSPHSETR,
+				    FIELD_PREP(TXVMPSPHSETR_DT_MASK, TXVMPSPHSETR_DT_RGB18));
+	} else if (dsibpp == 16) {
+		rcar_mipi_dsi_write(dsi, TXVMPSPHSETR,
+				    FIELD_PREP(TXVMPSPHSETR_DT_MASK, TXVMPSPHSETR_DT_RGB16));
+	} else {
 		dev_warn(dsi->dev, "unsupported format");
 		return;
 	}
