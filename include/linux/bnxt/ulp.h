@@ -22,6 +22,7 @@ struct bnxt;
 
 enum bnxt_ulp_auxdev_type {
 	BNXT_AUXDEV_RDMA = 0,
+	BNXT_AUXDEV_FWCTL,
 	__BNXT_AUXDEV_MAX,
 };
 

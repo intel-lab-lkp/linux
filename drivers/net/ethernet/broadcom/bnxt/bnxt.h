@@ -2340,6 +2340,8 @@ struct bnxt {
 
 	struct bnxt_napi	**bnapi;
 
+	struct bnxt_en_dev	*edev_fwctl;
+	struct bnxt_aux_priv	*aux_priv_fwctl;
 	struct bnxt_rx_ring_info	*rx_ring;
 	struct bnxt_tx_ring_info	*tx_ring;
 	u16			*tx_ring_map;
