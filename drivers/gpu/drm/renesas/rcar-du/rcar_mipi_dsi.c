@@ -621,18 +621,19 @@ static int rcar_mipi_dsi_startup(struct rcar_mipi_dsi *dsi,
 	vclkset = VCLKSET_CKEN;
 	rcar_mipi_dsi_write(dsi, VCLKSET, vclkset);
 
+	/* Output is always RGB, never YCbCr */
 	if (dsi_format == 24)
-		vclkset |= VCLKSET_BPP_24;
+		vclkset |= FIELD_PREP(VCLKSET_BPP_MASK, VCLKSET_BPP_24);
 	else if (dsi_format == 18)
-		vclkset |= VCLKSET_BPP_18;
+		vclkset |= FIELD_PREP(VCLKSET_BPP_MASK, VCLKSET_BPP_18);
 	else if (dsi_format == 16)
-		vclkset |= VCLKSET_BPP_16;
+		vclkset |= FIELD_PREP(VCLKSET_BPP_MASK, VCLKSET_BPP_16);
 	else {
 		dev_warn(dsi->dev, "unsupported format");
 		return -EINVAL;
 	}
 
-	vclkset |= VCLKSET_COLOR_RGB | VCLKSET_LANE(dsi->lanes - 1);
+	vclkset |= VCLKSET_LANE(dsi->lanes - 1);
 
 	switch (dsi->info->model) {
 	case RCAR_DSI_V3U:
