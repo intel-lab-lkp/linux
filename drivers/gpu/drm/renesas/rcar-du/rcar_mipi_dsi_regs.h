@@ -40,18 +40,18 @@
 #define TXCMADDRSET0R			0x140
 #define TXCMPHDR			0x150
 #define TXCMPHDR_FMT			BIT(24)	/* 0:SP 1:LP */
-#define TXCMPHDR_VC(n)			(((n) & 0x3) << 22)
-#define TXCMPHDR_DT(n)			(((n) & 0x3f) << 16)
-#define TXCMPHDR_DATA1(n)		(((n) & 0xff) << 8)
-#define TXCMPHDR_DATA0(n)		(((n) & 0xff) << 0)
+#define TXCMPHDR_VC_MASK		GENMASK(23, 22)
+#define TXCMPHDR_DT_MASK		GENMASK(21, 16)
+#define TXCMPHDR_DATA1_MASK		GENMASK(15, 8)
+#define TXCMPHDR_DATA0_MASK		GENMASK(7, 0)
 #define TXCMPPD0R			0x160
 #define TXCMPPD1R			0x164
 #define TXCMPPD2R			0x168
 #define TXCMPPD3R			0x16c
 
 #define RXSETR				0x200
-#define RXSETR_CRCEN(n)			(((n) & 0xf) << 24)
-#define RXSETR_ECCEN(n)			(((n) & 0xf) << 16)
+#define RXSETR_CRCEN_MASK		GENMASK(27, 24)
+#define RXSETR_ECCEN_MASK		GENMASK(19, 16)
 #define RXPSETR				0x210
 #define RXPSETR_LPPDACC			BIT(0)
 #define RXPSR				0x220
@@ -107,21 +107,21 @@
 #define RXPIER_BTAREQEND		BIT(0)
 #define RXPADDRSET0R			0x230
 #define RXPSIZESETR			0x238
-#define RXPSIZESETR_SIZE(n)		(((n) & 0xf) << 3)
+#define RXPSIZESETR_SIZE_MASK		GENMASK(6, 3)
 #define RXPHDR				0x240
 #define RXPHDR_FMT			BIT(24)	/* 0:SP 1:LP */
-#define RXPHDR_VC(n)			(((n) & 0x3) << 22)
-#define RXPHDR_DT(n)			(((n) & 0x3f) << 16)
-#define RXPHDR_DATA1(n)			(((n) & 0xff) << 8)
-#define RXPHDR_DATA0(n)			(((n) & 0xff) << 0)
+#define RXPHDR_VC_MASK			GENMASK(23, 22)
+#define RXPHDR_DT_MASK			GENMASK(21, 16)
+#define RXPHDR_DATA1_MASK		GENMASK(15, 8)
+#define RXPHDR_DATA0_MASK		GENMASK(7, 0)
 #define RXPPD0R				0x250
 #define RXPPD1R				0x254
 #define RXPPD2R				0x258
 #define RXPPD3R				0x25c
 #define AKEPR				0x300
-#define AKEPR_VC(n)			(((n) & 0x3) << 22)
-#define AKEPR_DT(n)			(((n) & 0x3f) << 16)
-#define AKEPR_ERRRPT(n)			(((n) & 0xffff) << 0)
+#define AKEPR_VC_MASK			GENMASK(23, 22)
+#define AKEPR_DT_MASK			GENMASK(21, 16)
+#define AKEPR_ERRRPT_MASK		GENMASK(15, 0)
 #define RXRESPTOSETR			0x400
 #define TACR				0x500
 #define TASR				0x510
@@ -179,20 +179,20 @@
 #define TXVMVPRMSET0R_BPP_24		2
 
 #define TXVMVPRMSET1R			0x1d4
-#define TXVMVPRMSET1R_VACTIVE(x)	(((x) & 0x7fff) << 16)
-#define TXVMVPRMSET1R_VSA(x)		(((x) & 0xfff) << 0)
+#define TXVMVPRMSET1R_VACTIVE_MASK	GENMASK(30, 16)
+#define TXVMVPRMSET1R_VSA_MASK		GENMASK(11, 0)
 
 #define TXVMVPRMSET2R			0x1d8
-#define TXVMVPRMSET2R_VFP(x)		(((x) & 0x1fff) << 16)
-#define TXVMVPRMSET2R_VBP(x)		(((x) & 0x1fff) << 0)
+#define TXVMVPRMSET2R_VFP_MASK		GENMASK(28, 16)
+#define TXVMVPRMSET2R_VBP_MASK		GENMASK(12, 0)
 
 #define TXVMVPRMSET3R			0x1dc
-#define TXVMVPRMSET3R_HACTIVE(x)	(((x) & 0x7fff) << 16)
-#define TXVMVPRMSET3R_HSA(x)		(((x) & 0xfff) << 0)
+#define TXVMVPRMSET3R_HACTIVE_MASK	GENMASK(30, 16)
+#define TXVMVPRMSET3R_HSA_MASK		GENMASK(11, 0)
 
 #define TXVMVPRMSET4R			0x1e0
-#define TXVMVPRMSET4R_HFP(x)		(((x) & 0x1fff) << 16)
-#define TXVMVPRMSET4R_HBP(x)		(((x) & 0x1fff) << 0)
+#define TXVMVPRMSET4R_HFP_MASK		GENMASK(28, 16)
+#define TXVMVPRMSET4R_HBP_MASK		GENMASK(12, 0)
 
 /*
  * PHY-Protocol Interface (PPI) Registers
@@ -227,35 +227,34 @@
  */
 #define LPCLKSET			0x1000
 #define LPCLKSET_CKEN			BIT(8)
-#define LPCLKSET_LPCLKDIV(x)		(((x) & 0x3f) << 0)
+#define LPCLKSET_LPCLKDIV_MASK		GENMASK(5, 0)
 
 #define CFGCLKSET			0x1004
 #define CFGCLKSET_CKEN			BIT(8)
-#define CFGCLKSET_CFGCLKDIV(x)		(((x) & 0x3f) << 0)
+#define CFGCLKSET_CFGCLKDIV_MASK	GENMASK(5, 0)
 
 #define DOTCLKDIV			0x1008
 #define DOTCLKDIV_CKEN			BIT(8)
-#define DOTCLKDIV_DOTCLKDIV(x)		(((x) & 0x3f) << 0)
+#define DOTCLKDIV_DOTCLKDIV_MASK	GENMASK(5, 0)
 
 #define VCLKSET				0x100c
 #define VCLKSET_CKEN			BIT(16)
 #define VCLKSET_COLOR_YCC		BIT(8) /* 0:RGB 1:YCbCr */
-#define VCLKSET_DIV_V3U(x)		(((x) & 0x3) << 4)
-#define VCLKSET_DIV_V4H(x)		(((x) & 0x7) << 4)
+#define VCLKSET_DIV_V3U_MASK		GENMASK(5, 4)
+#define VCLKSET_DIV_V4H_MASK		GENMASK(6, 4)
 #define VCLKSET_BPP_MASK		GENMASK(3, 2)
 #define VCLKSET_BPP_16			0
 #define VCLKSET_BPP_18			1
 #define VCLKSET_BPP_18L			2
 #define VCLKSET_BPP_24			3
-#define VCLKSET_LANE(x)			(((x) & 0x3) << 0)
+#define VCLKSET_LANE_MASK		GENMASK(1, 0)
 
 #define VCLKEN				0x1010
 #define VCLKEN_CKEN			BIT(0)
 
 #define PHYSETUP			0x1014
-#define PHYSETUP_HSFREQRANGE(x)		(((x) & 0x7f) << 16)
 #define PHYSETUP_HSFREQRANGE_MASK	GENMASK(22, 16)
-#define PHYSETUP_CFGCLKFREQRANGE(x)	(((x) & 0x3f) << 8)
+#define PHYSETUP_CFGCLKFREQRANGE_MASK	GENMASK(13, 8)
 #define PHYSETUP_SHUTDOWNZ		BIT(1)
 #define PHYSETUP_RSTZ			BIT(0)
 
@@ -270,21 +269,21 @@
 #define CLOCKSET1_UPDATEPLL		BIT(0)
 
 #define CLOCKSET2			0x1020
-#define CLOCKSET2_M(x)			(((x) & 0xfff) << 16)
-#define CLOCKSET2_VCO_CNTRL(x)		(((x) & 0x3f) << 8)
-#define CLOCKSET2_N(x)			(((x) & 0xf) << 0)
+#define CLOCKSET2_M_MASK		GENMASK(27, 16)
+#define CLOCKSET2_VCO_CNTRL_MASK	GENMASK(13, 8)
+#define CLOCKSET2_N_MASK		GENMASK(3, 0)
 
 #define CLOCKSET3			0x1024
-#define CLOCKSET3_PROP_CNTRL(x)		(((x) & 0x3f) << 24)
-#define CLOCKSET3_INT_CNTRL(x)		(((x) & 0x3f) << 16)
-#define CLOCKSET3_CPBIAS_CNTRL(x)	(((x) & 0x7f) << 8)
-#define CLOCKSET3_GMP_CNTRL(x)		(((x) & 0x3) << 0)
+#define CLOCKSET3_PROP_CNTRL_MASK	GENMASK(29, 24)
+#define CLOCKSET3_INT_CNTRL_MASK	GENMASK(21, 16)
+#define CLOCKSET3_CPBIAS_CNTRL_MASK	GENMASK(14, 8)
+#define CLOCKSET3_GMP_CNTRL_MASK	GENMASK(1, 0)
 
 #define PHTW				0x1034
 #define PHTW_DWEN			BIT(24)
-#define PHTW_TESTDIN_DATA(x)		(((x) & 0xff) << 16)
+#define PHTW_TESTDIN_DATA_MASK		GENMASK(23, 16)
 #define PHTW_CWEN			BIT(8)
-#define PHTW_TESTDIN_CODE(x)		(((x) & 0xff) << 0)
+#define PHTW_TESTDIN_CODE_MASK		GENMASK(15, 0)
 
 #define PHTR				0x1038
 #define PHTR_TEST			BIT(16)
