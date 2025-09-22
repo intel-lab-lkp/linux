@@ -266,7 +266,22 @@ static inline bool ptr_ring_empty_bh(struct ptr_ring *r)
 }
 
 /* Must only be called after __ptr_ring_peek returned !NULL */
-static inline void __ptr_ring_discard_one(struct ptr_ring *r)
+static inline bool __ptr_ring_will_invalidate(struct ptr_ring *r)
+{
+	/* Once we have processed enough entries invalidate them in
+	 * the ring all at once so producer can reuse their space in the ring.
+	 * We also do this when we reach end of the ring - not mandatory
+	 * but helps keep the implementation simple.
+	 */
+	int consumer_head = r->consumer_head + 1;
+
+	return consumer_head - r->consumer_tail >= r->batch ||
+		consumer_head >= r->size;
+}
+
+/* Must only be called after __ptr_ring_peek returned !NULL */
+static inline void __ptr_ring_discard_one(struct ptr_ring *r,
+					  bool invalidate)
 {
 	/* Fundamentally, what we want to do is update consumer
 	 * index and zero out the entry so producer can reuse it.
@@ -286,13 +301,7 @@ static inline void __ptr_ring_discard_one(struct ptr_ring *r)
 	int consumer_head = r->consumer_head;
 	int head = consumer_head++;
 
-	/* Once we have processed enough entries invalidate them in
-	 * the ring all at once so producer can reuse their space in the ring.
-	 * We also do this when we reach end of the ring - not mandatory
-	 * but helps keep the implementation simple.
-	 */
-	if (unlikely(consumer_head - r->consumer_tail >= r->batch ||
-		     consumer_head >= r->size)) {
+	if (unlikely(invalidate)) {
 		/* Zero out entries in the reverse order: this way we touch the
 		 * cache line that producer might currently be reading the last;
 		 * producer won't make progress and touch other cache lines
@@ -312,6 +321,7 @@ static inline void __ptr_ring_discard_one(struct ptr_ring *r)
 
 static inline void *__ptr_ring_consume(struct ptr_ring *r)
 {
+	bool invalidate;
 	void *ptr;
 
 	/* The READ_ONCE in __ptr_ring_peek guarantees that anyone
@@ -319,8 +329,10 @@ static inline void *__ptr_ring_consume(struct ptr_ring *r)
 	 * with smp_wmb in __ptr_ring_produce.
 	 */
 	ptr = __ptr_ring_peek(r);
-	if (ptr)
-		__ptr_ring_discard_one(r);
+	if (ptr) {
+		invalidate = __ptr_ring_will_invalidate(r);
+		__ptr_ring_discard_one(r, invalidate);
+	}
 
 	return ptr;
 }
