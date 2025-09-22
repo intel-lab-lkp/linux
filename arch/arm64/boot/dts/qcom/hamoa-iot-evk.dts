@@ -832,6 +832,10 @@
 	status = "okay";
 };
 
+&pcie5 {
+	vddpe-3v3-supply = <&vreg_wwan>;
+};
+
 &pcie6a {
 	vddpe-3v3-supply = <&vreg_nvme>;
 };
