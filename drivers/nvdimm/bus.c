@@ -64,17 +64,15 @@ static struct module *to_bus_provider(struct device *dev)
 
 static void nvdimm_bus_probe_start(struct nvdimm_bus *nvdimm_bus)
 {
-	nvdimm_bus_lock(&nvdimm_bus->dev);
+	guard(nvdimm_bus)(&nvdimm_bus->dev);
 	nvdimm_bus->probe_active++;
-	nvdimm_bus_unlock(&nvdimm_bus->dev);
 }
 
 static void nvdimm_bus_probe_end(struct nvdimm_bus *nvdimm_bus)
 {
-	nvdimm_bus_lock(&nvdimm_bus->dev);
+	guard(nvdimm_bus)(&nvdimm_bus->dev);
 	if (--nvdimm_bus->probe_active == 0)
 		wake_up(&nvdimm_bus->wait);
-	nvdimm_bus_unlock(&nvdimm_bus->dev);
 }
 
 static int nvdimm_bus_probe(struct device *dev)
@@ -1177,15 +1175,15 @@ static int __nd_ioctl(struct nvdimm_bus *nvdimm_bus, struct nvdimm *nvdimm,
 		goto out;
 	}
 
-	device_lock(dev);
-	nvdimm_bus_lock(dev);
+	guard(device)(dev);
+	guard(nvdimm_bus)(dev);
 	rc = nd_cmd_clear_to_send(nvdimm_bus, nvdimm, func, buf);
 	if (rc)
-		goto out_unlock;
+		goto out;
 
 	rc = nd_desc->ndctl(nd_desc, nvdimm, cmd, buf, buf_len, &cmd_rc);
 	if (rc < 0)
-		goto out_unlock;
+		goto out;
 
 	if (!nvdimm && cmd == ND_CMD_CLEAR_ERROR && cmd_rc >= 0) {
 		struct nd_cmd_clear_error *clear_err = buf;
@@ -1197,9 +1195,6 @@ static int __nd_ioctl(struct nvdimm_bus *nvdimm_bus, struct nvdimm *nvdimm,
 	if (copy_to_user(p, buf, buf_len))
 		rc = -EFAULT;
 
-out_unlock:
-	nvdimm_bus_unlock(dev);
-	device_unlock(dev);
 out:
 	kfree(in_env);
 	kfree(out_env);

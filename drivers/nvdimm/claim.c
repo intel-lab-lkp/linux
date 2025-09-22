@@ -35,9 +35,8 @@ void nd_detach_ndns(struct device *dev,
 	if (!ndns)
 		return;
 	get_device(&ndns->dev);
-	nvdimm_bus_lock(&ndns->dev);
-	__nd_detach_ndns(dev, _ndns);
-	nvdimm_bus_unlock(&ndns->dev);
+	scoped_guard(nvdimm_bus, &ndns->dev)
+		__nd_detach_ndns(dev, _ndns);
 	put_device(&ndns->dev);
 }
 

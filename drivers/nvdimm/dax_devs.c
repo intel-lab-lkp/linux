@@ -104,10 +104,10 @@ int nd_dax_probe(struct device *dev, struct nd_namespace_common *ndns)
 		return -ENODEV;
 	}
 
-	nvdimm_bus_lock(&ndns->dev);
-	nd_dax = nd_dax_alloc(nd_region);
-	dax_dev = nd_dax_devinit(nd_dax, ndns);
-	nvdimm_bus_unlock(&ndns->dev);
+	scoped_guard(nvdimm_bus, &ndns->dev) {
+		nd_dax = nd_dax_alloc(nd_region);
+		dax_dev = nd_dax_devinit(nd_dax, ndns);
+	}
 	if (!dax_dev)
 		return -ENOMEM;
 	pfn_sb = devm_kmalloc(dev, sizeof(*pfn_sb), GFP_KERNEL);

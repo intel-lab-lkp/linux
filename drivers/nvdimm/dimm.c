@@ -95,13 +95,13 @@ static int nvdimm_probe(struct device *dev)
 
 	dev_dbg(dev, "config data size: %d\n", ndd->nsarea.config_size);
 
-	nvdimm_bus_lock(dev);
-	if (ndd->ns_current >= 0) {
-		rc = nd_label_reserve_dpa(ndd);
-		if (rc == 0)
-			nvdimm_set_labeling(dev);
+	scoped_guard(nvdimm_bus, dev) {
+		if (ndd->ns_current >= 0) {
+			rc = nd_label_reserve_dpa(ndd);
+			if (rc == 0)
+				nvdimm_set_labeling(dev);
+		}
 	}
-	nvdimm_bus_unlock(dev);
 
 	if (rc)
 		goto err;
@@ -117,9 +117,8 @@ static void nvdimm_remove(struct device *dev)
 {
 	struct nvdimm_drvdata *ndd = dev_get_drvdata(dev);
 
-	nvdimm_bus_lock(dev);
-	dev_set_drvdata(dev, NULL);
-	nvdimm_bus_unlock(dev);
+	scoped_guard(nvdimm_bus, dev)
+		dev_set_drvdata(dev, NULL);
 	put_ndd(ndd);
 }
 

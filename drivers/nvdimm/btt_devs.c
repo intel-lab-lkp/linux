@@ -50,14 +50,12 @@ static ssize_t sector_size_store(struct device *dev,
 	struct nd_btt *nd_btt = to_nd_btt(dev);
 	ssize_t rc;
 
-	device_lock(dev);
-	nvdimm_bus_lock(dev);
+	guard(device)(dev);
+	guard(nvdimm_bus)(dev);
 	rc = nd_size_select_store(dev, buf, &nd_btt->lbasize,
 			btt_lbasize_supported);
 	dev_dbg(dev, "result: %zd wrote: %s%s", rc, buf,
 			buf[len - 1] == '\n' ? "" : "\n");
-	nvdimm_bus_unlock(dev);
-	device_unlock(dev);
 
 	return rc ? rc : len;
 }
@@ -95,10 +93,9 @@ static ssize_t namespace_show(struct device *dev,
 	struct nd_btt *nd_btt = to_nd_btt(dev);
 	ssize_t rc;
 
-	nvdimm_bus_lock(dev);
+	guard(nvdimm_bus)(dev);
 	rc = sprintf(buf, "%s\n", nd_btt->ndns
 			? dev_name(&nd_btt->ndns->dev) : "");
-	nvdimm_bus_unlock(dev);
 	return rc;
 }
 
@@ -108,13 +105,11 @@ static ssize_t namespace_store(struct device *dev,
 	struct nd_btt *nd_btt = to_nd_btt(dev);
 	ssize_t rc;
 
-	device_lock(dev);
-	nvdimm_bus_lock(dev);
+	guard(device)(dev);
+	guard(nvdimm_bus)(dev);
 	rc = nd_namespace_store(dev, &nd_btt->ndns, buf, len);
 	dev_dbg(dev, "result: %zd wrote: %s%s", rc, buf,
 			buf[len - 1] == '\n' ? "" : "\n");
-	nvdimm_bus_unlock(dev);
-	device_unlock(dev);
 
 	return rc;
 }
@@ -351,9 +346,8 @@ int nd_btt_probe(struct device *dev, struct nd_namespace_common *ndns)
 		return -ENODEV;
 	}
 
-	nvdimm_bus_lock(&ndns->dev);
-	btt_dev = __nd_btt_create(nd_region, 0, NULL, ndns);
-	nvdimm_bus_unlock(&ndns->dev);
+	scoped_guard(nvdimm_bus, &ndns->dev)
+		btt_dev = __nd_btt_create(nd_region, 0, NULL, ndns);
 	if (!btt_dev)
 		return -ENOMEM;
 	btt_sb = devm_kzalloc(dev, sizeof(*btt_sb), GFP_KERNEL);
