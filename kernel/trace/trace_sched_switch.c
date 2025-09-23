@@ -243,6 +243,8 @@ int trace_create_savedcmd(void)
 int trace_save_cmdline(struct task_struct *tsk)
 {
 	unsigned tpid, idx;
+	/* so that map_pid_to_cmdline indexing is efficient */
+	BUILD_BUG_ON(!is_power_of_2(PID_MAX_DEFAULT));
 
 	/* treat recording of idle task as a success */
 	if (!tsk->pid)
