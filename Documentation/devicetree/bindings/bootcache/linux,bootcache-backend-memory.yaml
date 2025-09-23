@@ -1,0 +1,67 @@
+# SPDX-License-Identifier: (GPL-2.0-only OR BSD-2-Clause)
+%YAML 1.2
+---
+$id: http://devicetree.org/schemas/bootcache/linux,bootcache-backend-memory.yaml#
+$schema: http://devicetree.org/meta-schemas/core.yaml#
+
+title: Bootcache Framework reserved memory backend
+
+maintainers:
+  - Marc Kelly <mkelly@thegoodpenguin.co.uk>
+  - Andrea Campenella <acampenella@thegoodpenguin.co.uk>
+
+description:
+  This bootcache backend adds support for using reserved memory
+  for the storage location for bootcache data. On initialization this
+  memory is read and any bootcache entries found are added to the
+  bootcache framework.
+  Data is inserted into these memory locations via the bootloader
+  or other means before the kernel boots.
+
+properties:
+  compatible:
+    enum:
+      - linux,backend-backend-memory
+
+  reg:
+    maxItems: 2
+
+  memory-region:
+    maxItems: 1
+    description:
+      Contains the bootcache reserved memory.
+      Data format is a binary block of packed cache data consisting
+      of a selection of key and value pairs, along with size indicators.
+      The format should be considered private to the driver and should
+      not be interpreted outside of the drivers context.
+
+required:
+  - compatible
+  - reg
+  - memory-region
+
+unevaluatedProperties: false
+
+examples:
+  - |
+    /*
+     * The bootcache-backend is placed in the in the main domain
+     * of the SOC, with the reserved memory location defined as
+     * follows.
+     * This defines 64kBytes in the upper 2GBytes.
+     *
+     * The size
+     * reserved-memory {
+     *     bootcache_reserved: bootcache-reserved@BFFF0000 {
+     *         no-map;
+     *         reg = <0x00 0xBFFF0000 0x00 0x10000>;
+     *         label = "bootcache_backend_memory";
+     *     };
+     * }
+     */
+
+    bootcache-backend@BFFF0000 {
+        compatible = "linux,backend-backend-memory";
+        reg = <0x00 0xBFFF0000 0x00 0x10000>;
+        memory-region = <&bootcache_reserved>;
+    };

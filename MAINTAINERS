@@ -4422,6 +4422,7 @@ BOOT CACHE
 M:	Andrea Campanella <acampanella@thegoodpenguin.co.uk>
 M:	Marc Kelly <mkelly@thegoodpenguin.co.uk>
 S:	Maintained
+F:	Documentation/devicetree/bindings/bootcache/linux,bootcache-backend-memory.yaml
 F:	drivers/base/bootcache.c
 F:	drivers/base/bootcache_*
 F:	include/linux/bootcache.h
