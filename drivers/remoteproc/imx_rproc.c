@@ -1046,6 +1046,13 @@ static int imx_rproc_sys_off_handler(struct sys_off_data *data)
 	return NOTIFY_DONE;
 }
 
+static void imx_rproc_pm_runtime_put(void *data)
+{
+	struct device *dev = data;
+
+	pm_runtime_put(dev);
+}
+
 static int imx_rproc_probe(struct platform_device *pdev)
 {
 	struct device *dev = &pdev->dev;
@@ -1125,10 +1132,21 @@ static int imx_rproc_probe(struct platform_device *pdev)
 	}
 
 	if (dcfg->method == IMX_RPROC_SCU_API) {
-		pm_runtime_enable(dev);
+		ret = devm_pm_runtime_enable(dev);
+		if (ret) {
+			dev_err(dev, "Failed to enable runtime PM, %d\n", ret);
+			goto err_put_clk;
+		}
+
 		ret = pm_runtime_resume_and_get(dev);
 		if (ret) {
 			dev_err(dev, "pm_runtime get failed: %d\n", ret);
+			goto err_put_clk;
+		}
+
+		ret = devm_add_action_or_reset(dev, imx_rproc_pm_runtime_put, dev);
+		if (ret) {
+			dev_err(dev, "Failed to add devm disable pm action: %d\n", ret);
 			goto err_put_clk;
 		}
 	}
@@ -1158,10 +1176,6 @@ static void imx_rproc_remove(struct platform_device *pdev)
 	struct rproc *rproc = platform_get_drvdata(pdev);
 	struct imx_rproc *priv = rproc->priv;
 
-	if (priv->dcfg->method == IMX_RPROC_SCU_API) {
-		pm_runtime_disable(priv->dev);
-		pm_runtime_put(priv->dev);
-	}
 	clk_disable_unprepare(priv->clk);
 	rproc_del(rproc);
 	imx_rproc_put_scu(rproc);
