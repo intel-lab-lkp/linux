@@ -130,6 +130,8 @@ pub mod types;
 pub mod uaccess;
 pub mod workqueue;
 pub mod xarray;
+#[cfg(CONFIG_ZPOOL_ALLOCATOR)]
+pub mod zpool;
 
 #[doc(hidden)]
 pub use bindings;
