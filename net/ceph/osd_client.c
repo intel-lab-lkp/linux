@@ -1280,8 +1280,9 @@ static struct ceph_osd *create_osd(struct ceph_osd_client *osdc, int onum)
 static struct ceph_osd *get_osd(struct ceph_osd *osd)
 {
 	if (refcount_inc_not_zero(&osd->o_ref)) {
-		dout("get_osd %p %d -> %d\n", osd, refcount_read(&osd->o_ref)-1,
-		     refcount_read(&osd->o_ref));
+		unsigned int refcount = refcount_read(&osd->o_ref);
+
+		dout("get_osd %p %d -> %d\n", osd, refcount - 1, refcount);
 		return osd;
 	} else {
 		dout("get_osd %p FAIL\n", osd);
@@ -1291,8 +1292,9 @@ static struct ceph_osd *get_osd(struct ceph_osd *osd)
 
 static void put_osd(struct ceph_osd *osd)
 {
-	dout("put_osd %p %d -> %d\n", osd, refcount_read(&osd->o_ref),
-	     refcount_read(&osd->o_ref) - 1);
+	unsigned int refcount = refcount_read(&osd->o_ref);
+
+	dout("put_osd %p %d -> %d\n", osd, refcount, refcount - 1);
 	if (refcount_dec_and_test(&osd->o_ref)) {
 		osd_cleanup(osd);
 		kfree(osd);
