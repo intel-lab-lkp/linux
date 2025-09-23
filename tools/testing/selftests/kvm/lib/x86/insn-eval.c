@@ -3,18 +3,17 @@
  *
  * Copyright (C) Intel Corporation 2017
  */
-#include <linux/kernel.h>
-#include <linux/string.h>
-#include <linux/ratelimit.h>
-#include <linux/mmu_context.h>
-#include <asm/desc_defs.h>
-#include <asm/desc.h>
+#include <stdio.h>
+#include <stdbool.h>
+#include <string.h>
+#include <errno.h>
+
 #include <asm/inat.h>
 #include <asm/insn.h>
-#include <asm/insn-eval.h>
-#include <asm/ldt.h>
-#include <asm/msr.h>
-#include <asm/vm86.h>
+
+#include "insn-eval.h"
+#include "kselftest.h"
+#include "ucall_common.h"
 
 #undef pr_fmt
 #define pr_fmt(fmt) "insn: " fmt
@@ -509,12 +508,12 @@ static int get_regno(struct insn *insn, enum reg_type type)
 		break;
 
 	default:
-		pr_err_ratelimited("invalid register type: %d\n", type);
+		__GUEST_ASSERT(false, "invalid register type: %d\n", type);
 		return -EINVAL;
 	}
 
 	if (regno >= nr_registers) {
-		WARN_ONCE(1, "decoded an instruction with an invalid register");
+		__GUEST_ASSERT(false, "decoded an instruction with an invalid register");
 		return -EINVAL;
 	}
 	return regno;
@@ -842,7 +841,6 @@ int insn_get_code_seg_params(struct pt_regs *regs)
 		 */
 		return INSN_CODE_SEG_PARAMS(4, 8);
 	case 3: /* Invalid setting. CS.L=1, CS.D=1 */
-		fallthrough;
 	default:
 		return -EINVAL;
 	}
@@ -1617,7 +1615,6 @@ enum insn_mmio_type insn_decode_mmio(struct insn *insn, int *bytes)
 	switch (insn->opcode.bytes[0]) {
 	case 0x88: /* MOV m8,r8 */
 		*bytes = 1;
-		fallthrough;
 	case 0x89: /* MOV m16/m32/m64, r16/m32/m64 */
 		if (!*bytes)
 			*bytes = insn->opnd_bytes;
@@ -1626,7 +1623,6 @@ enum insn_mmio_type insn_decode_mmio(struct insn *insn, int *bytes)
 
 	case 0xc6: /* MOV m8, imm8 */
 		*bytes = 1;
-		fallthrough;
 	case 0xc7: /* MOV m16/m32/m64, imm16/imm32/imm64 */
 		if (!*bytes)
 			*bytes = insn->opnd_bytes;
@@ -1635,7 +1631,6 @@ enum insn_mmio_type insn_decode_mmio(struct insn *insn, int *bytes)
 
 	case 0x8a: /* MOV r8, m8 */
 		*bytes = 1;
-		fallthrough;
 	case 0x8b: /* MOV r16/r32/r64, m16/m32/m64 */
 		if (!*bytes)
 			*bytes = insn->opnd_bytes;
@@ -1644,7 +1639,6 @@ enum insn_mmio_type insn_decode_mmio(struct insn *insn, int *bytes)
 
 	case 0xa4: /* MOVS m8, m8 */
 		*bytes = 1;
-		fallthrough;
 	case 0xa5: /* MOVS m16/m32/m64, m16/m32/m64 */
 		if (!*bytes)
 			*bytes = insn->opnd_bytes;
@@ -1655,7 +1649,6 @@ enum insn_mmio_type insn_decode_mmio(struct insn *insn, int *bytes)
 		switch (insn->opcode.bytes[1]) {
 		case 0xb6: /* MOVZX r16/r32/r64, m8 */
 			*bytes = 1;
-			fallthrough;
 		case 0xb7: /* MOVZX r32/r64, m16 */
 			if (!*bytes)
 				*bytes = 2;
@@ -1664,7 +1657,6 @@ enum insn_mmio_type insn_decode_mmio(struct insn *insn, int *bytes)
 
 		case 0xbe: /* MOVSX r16/r32/r64, m8 */
 			*bytes = 1;
-			fallthrough;
 		case 0xbf: /* MOVSX r32/r64, m16 */
 			if (!*bytes)
 				*bytes = 2;
