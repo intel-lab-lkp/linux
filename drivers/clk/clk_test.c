@@ -29,6 +29,7 @@ static const struct clk_ops empty_clk_ops = { };
 struct clk_dummy_context {
 	struct clk_hw hw;
 	unsigned long rate;
+	unsigned long negotiate_step_size;
 };
 
 static unsigned long clk_dummy_recalc_rate(struct clk_hw *hw,
@@ -97,10 +98,31 @@ static u8 clk_dummy_single_get_parent(struct clk_hw *hw)
 	return 0;
 }
 
+static bool clk_dummy_negotiate_rates(struct clk_hw *hw,
+				      struct clk_rate_request *req,
+				      bool (*check_rate)(struct clk_core *, unsigned long))
+{
+	struct clk_dummy_context *ctx =
+		container_of(hw, struct clk_dummy_context, hw);
+
+	if (WARN_ON_ONCE(!ctx->negotiate_step_size))
+		return false;
+
+	for (unsigned long rate = req->min_rate;
+	     rate <= req->max_rate;
+	     rate += ctx->negotiate_step_size) {
+		if (check_rate(req->core, rate))
+			return true;
+	}
+
+	return false;
+}
+
 static const struct clk_ops clk_dummy_rate_ops = {
 	.recalc_rate = clk_dummy_recalc_rate,
 	.determine_rate = clk_dummy_determine_rate,
 	.set_rate = clk_dummy_set_rate,
+	.negotiate_rates = clk_dummy_negotiate_rates,
 };
 
 static const struct clk_ops clk_dummy_maximize_rate_ops = {
@@ -175,10 +197,28 @@ static int clk_dummy_div_set_rate(struct clk_hw *hw, unsigned long rate,
 	return 0;
 }
 
+static bool clk_dummy_div_negotiate_rates(struct clk_hw *hw,
+					  struct clk_rate_request *req,
+					  bool (*check_rate)(struct clk_core *, unsigned long))
+{
+	unsigned long rate;
+
+	for (int i = 0; i < BIT(CLK_DUMMY_DIV_WIDTH + 1); i++) {
+		rate = divider_recalc_rate(hw, req->best_parent_rate, i, NULL,
+					   CLK_DIVIDER_ROUND_CLOSEST,
+					   CLK_DUMMY_DIV_WIDTH);
+		if (check_rate(req->core, rate))
+			return true;
+	}
+
+	return false;
+}
+
 static const struct clk_ops clk_dummy_div_ops = {
 	.recalc_rate = clk_dummy_div_recalc_rate,
 	.determine_rate = clk_dummy_div_determine_rate,
 	.set_rate = clk_dummy_div_set_rate,
+	.negotiate_rates = clk_dummy_div_negotiate_rates,
 };
 
 struct clk_dummy_gate {
