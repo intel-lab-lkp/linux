@@ -6350,6 +6350,15 @@ static int __ext4_expand_extra_isize(struct inode *inode,
 	unsigned int inode_size = EXT4_INODE_SIZE(inode->i_sb);
 	struct ext4_inode_info *ei = EXT4_I(inode);
 	int error;
+	if (sb_rdonly(inode->i_sb)) {
+	    printk(KERN_ERR "ext4: READONLY CHECK TRIGGERED - skipping expansion\n");
+	return 0;
+	}
+
+	if (IS_RDONLY(inode)) {
+	     printk(KERN_ERR "ext4: READONLY CHECK TRIGGERED IS_RDONLY - skipping expansion\n");
+	return 0;
+	}
 
 	/* this was checked at iget time, but double check for good measure */
 	if ((EXT4_GOOD_OLD_INODE_SIZE + ei->i_extra_isize > inode_size) ||
