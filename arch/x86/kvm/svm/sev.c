@@ -4474,7 +4474,9 @@ static void savic_handle_icr_write(struct kvm_vcpu *kvm_vcpu, u64 icr)
 
 static bool savic_handle_msr_exit(struct kvm_vcpu *vcpu)
 {
+	struct kvm_lapic *apic;
 	u32 msr, reg;
+	int vec;
 
 	msr = kvm_rcx_read(vcpu);
 	reg = (msr - APIC_BASE_MSR) << 4;
@@ -4492,6 +4494,12 @@ static bool savic_handle_msr_exit(struct kvm_vcpu *vcpu)
 			return true;
 		}
 		break;
+	case APIC_EOI:
+		apic = vcpu->arch.apic;
+		vec = apic_find_highest_vector(apic->regs + APIC_ISR);
+		apic_clear_vector(vec, apic->regs + APIC_ISR);
+		kvm_apic_set_eoi_accelerated(vcpu, vec);
+		return true;
 	default:
 		break;
 	}
@@ -5379,6 +5387,8 @@ void sev_savic_set_requested_irr(struct vcpu_svm *svm, bool reinjected)
 			vec = vec_start + vec_pos;
 			apic_clear_vector(vec, apic->regs + APIC_IRR);
 			val = val & ~BIT(vec_pos);
+			if (apic_test_vector(vec, apic->regs + APIC_TMR))
+				apic_set_vector(vec, apic->regs + APIC_ISR);
 		} while (val);
 	}
 
