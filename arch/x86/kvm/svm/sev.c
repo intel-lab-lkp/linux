@@ -3511,6 +3511,89 @@ int pre_sev_run(struct vcpu_svm *svm, int cpu)
 	if (!cpumask_test_cpu(cpu, to_kvm_sev_info(kvm)->have_run_cpus))
 		cpumask_set_cpu(cpu, to_kvm_sev_info(kvm)->have_run_cpus);
 
+	/*
+	 * It should be safe to clear sev_savic_has_pending_ipi here.
+	 *
+	 * Following are the scenarios possible:
+	 *
+	 * Scenario 1: sev_savic_has_pending_ipi is set before hlt exit of the
+	 * target vCPU.
+	 *
+	 * Source vCPU                     Target vCPU
+	 *
+	 * 1. Set APIC_IRR of target
+	 *    vCPU.
+	 *
+	 * 2. VMGEXIT
+	 *
+	 * 3. Set ...has_pending_ipi
+	 *
+	 * savic_handle_icr_write()
+	 *   ..._has_pending_ipi = true
+	 *
+	 * 4. avic_ring_doorbell()
+	 *                            - VS -
+	 *
+	 *				   4. VMEXIT
+	 *
+	 *                                 5. ..._has_pending_ipi = false
+	 *
+	 *                                 6. VM entry
+	 *
+	 *                                 7. hlt exit
+	 *
+	 * In this case, any VM exit taken by target vCPU before hlt exit
+	 * clears sev_savic_has_pending_ipi. On hlt exit, idle halt intercept
+	 * would find the V_INTR set and skip hlt exit.
+	 *
+	 * Scenario 2: sev_savic_has_pending_ipi is set when target vCPU
+	 * has taken hlt exit.
+	 *
+	 * Source vCPU                     Target vCPU
+	 *
+	 *                                 1. hlt exit
+	 *
+	 * 2. Set ...has_pending_ipi
+	 *                                 3. kvm_vcpu_has_events() returns true
+	 *                                    and VM is reentered.
+	 *
+	 *                                    vcpu_block()
+	 *                                      kvm_arch_vcpu_runnable()
+	 *                                        kvm_vcpu_has_events()
+	 *                                          <return true as ..._has_pending_ipi
+	 *                                           is set>
+	 *
+	 *                                 4. On VM entry, APIC_IRR state is re-evaluated
+	 *                                    and V_INTR is set and interrupt is delivered
+	 *                                    to vCPU.
+	 *
+	 *
+	 * Scenario 3: sev_savic_has_pending_ipi is set while halt exit is happening:
+	 *
+	 *
+	 * Source vCPU                        Target vCPU
+	 *
+	 *                                  1. hlt
+	 *                                       Hardware check V_INTR to determine
+	 *                                       if hlt exit need to be taken. No other
+	 *                                       exit such as intr exit can be taken
+	 *                                       while this sequence is being executed.
+	 *
+	 * 2. Set APIC_IRR of target vCPU.
+	 *
+	 * 3. Set ...has_pending_ipi
+	 *                                  4. hlt exit taken.
+	 *
+	 *                                  5. ...has_pending_ipi being set is observed
+	 *                                     by target vCPU and the vCPU is resumed.
+	 *
+	 * In this scenario, hardware ensures that target vCPU does not take any exit
+	 * between checking V_INTR state and halt exit. So, sev_savic_has_pending_ipi
+	 * remains set when vCPU takes hlt exit.
+	 */
+	if (READ_ONCE(svm->sev_savic_has_pending_ipi))
+		WRITE_ONCE(svm->sev_savic_has_pending_ipi, false);
+
 	/* Assign the asid allocated with this SEV guest */
 	svm->asid = asid;
 
@@ -4281,6 +4364,129 @@ out_terminate:
 	return 0;
 }
 
+static void savic_handle_icr_write(struct kvm_vcpu *kvm_vcpu, u64 icr)
+{
+	struct kvm *kvm = kvm_vcpu->kvm;
+	struct kvm_vcpu *vcpu;
+	u32 icr_low, icr_high;
+	bool in_guest_mode;
+	unsigned long i;
+
+	icr_low = lower_32_bits(icr);
+	icr_high = upper_32_bits(icr);
+
+	/*
+	 * TODO: Instead of scanning all the vCPUS, get fastpath working which should
+	 * look similar to avic_kick_target_vcpus_fast().
+	 */
+	kvm_for_each_vcpu(i, vcpu, kvm) {
+		if (!kvm_apic_match_dest(vcpu, kvm_vcpu->arch.apic, icr_low & APIC_SHORT_MASK,
+					 icr_high, icr_low & APIC_DEST_MASK))
+			continue;
+
+		/*
+		 * Setting sev_savic_has_pending_ipi could result in a spurious
+		 * return from hlt (as kvm_cpu_has_interrupt() would return true)
+		 * if destination CPU is in guest mode and the guest takes a hlt
+		 * exit after handling the IPI. sev_savic_has_pending_ipi gets cleared
+		 * on VM entry, so there can be at most one spurious return per IPI.
+		 * For vcpu->mode == IN_GUEST_MODE, sev_savic_has_pending_ipi need
+		 * to be set to handle the case where the destination vCPU has taken
+		 * hlt exit and the source CPU has not observed (target)vcpu->mode !=
+		 * IN_GUEST_MODE.
+		 */
+		WRITE_ONCE(to_svm(vcpu)->sev_savic_has_pending_ipi, true);
+		/* Order sev_savic_has_pending_ipi write and vcpu->mode read. */
+		smp_mb();
+		/* Pairs with smp_store_release in vcpu_enter_guest. */
+		in_guest_mode = (smp_load_acquire(&vcpu->mode) == IN_GUEST_MODE);
+		if (in_guest_mode) {
+			/*
+			 * Signal the doorbell to tell hardware to inject the IRQ.
+			 *
+			 * If the vCPU exits the guest before the doorbell chimes,
+			 * below memory ordering guarantees that the destination vCPU
+			 * observes sev_savic_has_pending_ipi == true before
+			 * blocking.
+			 *
+			 *   Src-CPU                       Dest-CPU
+			 *
+			 *  savic_handle_icr_write()
+			 *    sev_savic_has_pending_ipi = true
+			 *    smp_mb()
+			 *    smp_load_acquire(&vcpu->mode)
+			 *
+			 *                    - VS -
+			 *                              vcpu->mode = OUTSIDE_GUEST_MODE
+			 *                              __kvm_emulate_halt()
+			 *                                kvm_cpu_has_interrupt()
+			 *                                  smp_mb()
+			 *                                  if (sev_savic_has_pending_ipi)
+			 *                                      return true;
+			 *
+			 *   [S1]
+			 *     sev_savic_has_pending_ipi = true
+			 *
+			 *     SMP_MB
+			 *
+			 *   [L1]
+			 *     vcpu->mode
+			 *                                  [S2]
+			 *                                  vcpu->mode = OUTSIDE_GUEST_MODE
+			 *
+			 *
+			 *                                  SMP_MB
+			 *
+			 *                                  [L2] sev_savic_has_pending_ipi == true
+			 *
+			 *   exists (L1=IN_GUEST_MODE /\ L2=false)
+			 *
+			 *   Above condition does not exit. So, if the source CPU observes
+			 *   vcpu->mode = IN_GUEST_MODE (L1), sev_savic_has_pending_ipi load by
+			 *   the destination CPU (L2) should observe the store (S1) from the
+			 *   source CPU.
+			 */
+			avic_ring_doorbell(vcpu);
+		} else {
+			/*
+			 * Wakeup the vCPU if it was blocking.
+			 *
+			 * Memory ordering is provided by smp_mb() in rcuwait_wake_up() on the
+			 * source CPU and smp_mb() in set_current_state() inside kvm_vcpu_block()
+			 * on the destination CPU.
+			 */
+			kvm_vcpu_kick(vcpu);
+		}
+	}
+}
+
+static bool savic_handle_msr_exit(struct kvm_vcpu *vcpu)
+{
+	u32 msr, reg;
+
+	msr = kvm_rcx_read(vcpu);
+	reg = (msr - APIC_BASE_MSR) << 4;
+
+	switch (reg) {
+	case APIC_ICR:
+		/*
+		 * Only APIC_ICR WRMSR requires special handling for Secure AVIC
+		 * guests to wake up destination vCPUs.
+		 */
+		if (to_svm(vcpu)->vmcb->control.exit_info_1) {
+			u64 data = kvm_read_edx_eax(vcpu);
+
+			savic_handle_icr_write(vcpu, data);
+			return true;
+		}
+		break;
+	default:
+		break;
+	}
+
+	return false;
+}
+
 int sev_handle_vmgexit(struct kvm_vcpu *vcpu)
 {
 	struct vcpu_svm *svm = to_svm(vcpu);
@@ -4419,6 +4625,11 @@ int sev_handle_vmgexit(struct kvm_vcpu *vcpu)
 			    control->exit_info_1, control->exit_info_2);
 		ret = -EINVAL;
 		break;
+	case SVM_EXIT_MSR:
+		if (sev_savic_active(vcpu->kvm) && savic_handle_msr_exit(vcpu))
+			return 1;
+
+		fallthrough;
 	default:
 		ret = svm_invoke_exit_handler(vcpu, exit_code);
 	}
@@ -5106,5 +5317,10 @@ void sev_savic_set_requested_irr(struct vcpu_svm *svm, bool reinjected)
 
 bool sev_savic_has_pending_interrupt(struct kvm_vcpu *vcpu)
 {
-	return kvm_apic_has_interrupt(vcpu) != -1;
+	/*
+	 * See memory ordering description in savic_handle_icr_write().
+	 */
+	smp_mb();
+	return READ_ONCE(to_svm(vcpu)->sev_savic_has_pending_ipi) ||
+		kvm_apic_has_interrupt(vcpu) != -1;
 }
