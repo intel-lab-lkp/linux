@@ -6350,7 +6350,8 @@ static int __ext4_expand_extra_isize(struct inode *inode,
 	unsigned int inode_size = EXT4_INODE_SIZE(inode->i_sb);
 	struct ext4_inode_info *ei = EXT4_I(inode);
 	int error;
-
+	if (sb_rdonly(inode->i_sb))
+		return 0;
 	/* this was checked at iget time, but double check for good measure */
 	if ((EXT4_GOOD_OLD_INODE_SIZE + ei->i_extra_isize > inode_size) ||
 	    (ei->i_extra_isize & 3)) {
@@ -6408,6 +6409,8 @@ static int ext4_try_to_expand_extra_isize(struct inode *inode,
 					  struct ext4_iloc iloc,
 					  handle_t *handle)
 {
+	if (sb_rdonly(inode->i_sb))
+		return 0;
 	int no_expand;
 	int error;
 
