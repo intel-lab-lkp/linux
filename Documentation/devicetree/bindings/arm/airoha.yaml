@@ -20,6 +20,10 @@ properties:
     oneOf:
       - items:
           - enum:
+              - airoha,an7583-evb
+          - const: airoha,an7583
+      - items:
+          - enum:
               - airoha,en7523-evb
           - const: airoha,en7523
       - items:
