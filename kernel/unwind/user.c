@@ -15,6 +15,20 @@ static const struct unwind_user_frame fp_frame = {
 #define for_each_user_frame(state) \
 	for (unwind_user_start(state); !(state)->done; unwind_user_next(state))
 
+static __always_inline int
+get_user_word(unsigned long *word, unsigned long __user *addr, int size)
+{
+#ifdef CONFIG_COMPAT
+	if (size == sizeof(int)) {
+		unsigned int data;
+		int ret = get_user(data, (unsigned int __user *)addr);
+		*word = data;
+		return ret;
+	}
+#endif
+	return get_user(*word, addr);
+}
+
 static int unwind_user_next_fp(struct unwind_user_state *state)
 {
 	const struct unwind_user_frame *frame = &fp_frame;
@@ -29,21 +43,23 @@ static int unwind_user_next_fp(struct unwind_user_state *state)
 	}
 
 	/* Get the Canonical Frame Address (CFA) */
-	cfa += frame->cfa_off;
+	cfa += state->ws * frame->cfa_off;
 
 	/* stack going in wrong direction? */
 	if (cfa <= state->sp)
 		return -EINVAL;
 
 	/* Make sure that the address is word aligned */
-	if (cfa & (sizeof(long) - 1))
+	if (cfa & (state->ws - 1))
 		return -EINVAL;
 
 	/* Find the Return Address (RA) */
-	if (get_user(ra, (unsigned long *)(cfa + frame->ra_off)))
+	if (get_user_word(&ra, (void __user *)cfa + (state->ws * frame->ra_off),
+			  state->ws))
 		return -EINVAL;
 
-	if (frame->fp_off && get_user(fp, (unsigned long __user *)(cfa + frame->fp_off)))
+	if (frame->fp_off && get_user_word(&fp, (void __user *)cfa +
+					        (state->ws * frame->fp_off), state->ws))
 		return -EINVAL;
 
 	state->ip = ra;
@@ -100,6 +116,7 @@ static int unwind_user_start(struct unwind_user_state *state)
 	state->ip = instruction_pointer(regs);
 	state->sp = user_stack_pointer(regs);
 	state->fp = frame_pointer(regs);
+	state->ws = compat_user_mode(regs) ? sizeof(int) : sizeof(long);
 
 	return 0;
 }
