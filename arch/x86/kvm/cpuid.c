@@ -245,6 +245,10 @@ static u32 kvm_apply_cpuid_pv_features_quirk(struct kvm_vcpu *vcpu)
 	if (kvm_hlt_in_guest(vcpu->kvm))
 		best->eax &= ~(1 << KVM_FEATURE_PV_UNHALT);
 
+	if (vcpu->arch.apic->guest_apic_protected)
+		best->eax &= ~((1 << KVM_FEATURE_PV_EOI) |
+			       (1 << KVM_FEATURE_PV_SEND_IPI));
+
 	return best->eax;
 }
 
