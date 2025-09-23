@@ -763,6 +763,7 @@ static int clk_rate_change_sibling_div_div_test_init(struct kunit *test)
 	test->priv = ctx;
 
 	ctx->parent.hw.init = CLK_HW_INIT_NO_PARENT("parent", &clk_dummy_rate_ops, 0);
+	ctx->parent.negotiate_step_size = 1 * HZ_PER_MHZ;
 	ctx->parent.rate = 24 * HZ_PER_MHZ;
 	ret = clk_hw_register_kunit(test, NULL, &ctx->parent.hw);
 	if (ret)
@@ -791,6 +792,20 @@ static int clk_rate_change_sibling_div_div_test_init(struct kunit *test)
 	KUNIT_EXPECT_EQ(test, clk_get_rate(ctx->child2_clk), 24 * HZ_PER_MHZ);
 
 	return 0;
+}
+
+static int clk_rate_change_sibling_div_div_v1_test_init(struct kunit *test)
+{
+	clk_enable_v1_rate_negotiation();
+
+	return clk_rate_change_sibling_div_div_test_init(test);
+}
+
+static int clk_rate_change_sibling_div_div_v2_test_init(struct kunit *test)
+{
+	clk_enable_v2_rate_negotiation();
+
+	return clk_rate_change_sibling_div_div_test_init(test);
 }
 
 static void clk_rate_change_sibling_div_div_test_exit(struct kunit *test)
@@ -833,16 +848,21 @@ static void clk_test_rate_change_sibling_div_div_2(struct kunit *test)
 	struct clk_rate_change_sibling_div_div_context *ctx = test->priv;
 	int ret;
 
-	kunit_skip(test, "This needs to be fixed in the core.");
-
 	ret = clk_set_rate(ctx->child1_clk, 48 * HZ_PER_MHZ);
 	KUNIT_ASSERT_EQ(test, ret, 0);
 
 	KUNIT_EXPECT_EQ(test, clk_get_rate(ctx->parent_clk), 48 * HZ_PER_MHZ);
 	KUNIT_EXPECT_EQ(test, clk_get_rate(ctx->child1_clk), 48 * HZ_PER_MHZ);
 	KUNIT_EXPECT_EQ(test, ctx->child1.div, 1);
-	KUNIT_EXPECT_EQ(test, clk_get_rate(ctx->child2_clk), 24 * HZ_PER_MHZ);
-	KUNIT_EXPECT_EQ(test, ctx->child2.div, 2);
+
+	if (clk_use_v2_rate_negotiation(ctx->child1_clk)) {
+		KUNIT_EXPECT_EQ(test, clk_get_rate(ctx->child2_clk), 24 * HZ_PER_MHZ);
+		KUNIT_EXPECT_EQ(test, ctx->child2.div, 2);
+	} else {
+		// Legacy behavior in v1 logic where sibling clks are expectedly changed.
+		KUNIT_EXPECT_EQ(test, clk_get_rate(ctx->child2_clk), 48 * HZ_PER_MHZ);
+		KUNIT_EXPECT_EQ(test, ctx->child2.div, 1);
+	}
 }
 
 /*
@@ -856,19 +876,26 @@ static void clk_test_rate_change_sibling_div_div_3(struct kunit *test)
 	struct clk_rate_change_sibling_div_div_context *ctx = test->priv;
 	int ret;
 
-	kunit_skip(test, "This needs to be fixed in the core.");
-
 	ret = clk_set_rate(ctx->child1_clk, 32 * HZ_PER_MHZ);
 	KUNIT_ASSERT_EQ(test, ret, 0);
 
 	ret = clk_set_rate(ctx->child2_clk, 48 * HZ_PER_MHZ);
 	KUNIT_ASSERT_EQ(test, ret, 0);
 
-	KUNIT_EXPECT_EQ(test, clk_get_rate(ctx->parent_clk), 96 * HZ_PER_MHZ);
-	KUNIT_EXPECT_EQ(test, clk_get_rate(ctx->child1_clk), 32 * HZ_PER_MHZ);
-	KUNIT_EXPECT_EQ(test, ctx->child1.div, 3);
-	KUNIT_EXPECT_EQ(test, clk_get_rate(ctx->child2_clk), 48 * HZ_PER_MHZ);
-	KUNIT_EXPECT_EQ(test, ctx->child2.div, 2);
+	if (clk_use_v2_rate_negotiation(ctx->child1_clk)) {
+		KUNIT_EXPECT_EQ(test, clk_get_rate(ctx->parent_clk), 96 * HZ_PER_MHZ);
+		KUNIT_EXPECT_EQ(test, clk_get_rate(ctx->child1_clk), 32 * HZ_PER_MHZ);
+		KUNIT_EXPECT_EQ(test, ctx->child1.div, 3);
+		KUNIT_EXPECT_EQ(test, clk_get_rate(ctx->child2_clk), 48 * HZ_PER_MHZ);
+		KUNIT_EXPECT_EQ(test, ctx->child2.div, 2);
+	} else {
+		// Legacy behavior in v1 logic where sibling clks are expectedly changed.
+		KUNIT_EXPECT_EQ(test, clk_get_rate(ctx->parent_clk), 48 * HZ_PER_MHZ);
+		KUNIT_EXPECT_EQ(test, clk_get_rate(ctx->child1_clk), 48 * HZ_PER_MHZ);
+		KUNIT_EXPECT_EQ(test, ctx->child1.div, 1);
+		KUNIT_EXPECT_EQ(test, clk_get_rate(ctx->child2_clk), 48 * HZ_PER_MHZ);
+		KUNIT_EXPECT_EQ(test, ctx->child2.div, 1);
+	}
 }
 
 static struct kunit_case clk_rate_change_sibling_div_div_cases[] = {
@@ -879,13 +906,25 @@ static struct kunit_case clk_rate_change_sibling_div_div_cases[] = {
 };
 
 /*
- * Test suite that creates a parent with two divider-only children, and
- * ensures that changing the rate of one child does not affect the rate
- * of the other child.
+ * Test suite with v1 rate negotiation logic that creates a parent with two
+ * divider-only children, and ensures that changing the rate of one child
+ * does not affect the rate of the other child.
  */
-static struct kunit_suite clk_rate_change_sibling_div_div_test_suite = {
-	.name = "clk-rate-change-sibling-div-div",
-	.init = clk_rate_change_sibling_div_div_test_init,
+static struct kunit_suite clk_rate_change_sibling_div_div_v1_test_suite = {
+	.name = "clk-rate-change-sibling-div-div-v1",
+	.init = clk_rate_change_sibling_div_div_v1_test_init,
+	.exit = clk_rate_change_sibling_div_div_test_exit,
+	.test_cases = clk_rate_change_sibling_div_div_cases,
+};
+
+/*
+ * Test suite with v2 rate negotiation logic that creates a parent with two
+ * divider-only children, and ensures that changing the rate of one child
+ * does not affect the rate of the other child.
+ */
+static struct kunit_suite clk_rate_change_sibling_div_div_v2_test_suite = {
+	.name = "clk-rate-change-sibling-div-div-v2",
+	.init = clk_rate_change_sibling_div_div_v2_test_init,
 	.exit = clk_rate_change_sibling_div_div_test_exit,
 	.test_cases = clk_rate_change_sibling_div_div_cases,
 };
@@ -4017,7 +4056,8 @@ kunit_test_suites(
 	&clk_leaf_mux_set_rate_parent_test_suite,
 	&clk_test_suite,
 	&clk_multiple_parents_mux_test_suite,
-	&clk_rate_change_sibling_div_div_test_suite,
+	&clk_rate_change_sibling_div_div_v1_test_suite,
+	&clk_rate_change_sibling_div_div_v2_test_suite,
 	&clk_rate_change_sibling_test_suite,
 	&clk_mux_no_reparent_test_suite,
 	&clk_mux_notifier_test_suite,
@@ -4033,4 +4073,5 @@ kunit_test_suites(
 	&clk_uncached_test_suite,
 );
 MODULE_DESCRIPTION("Kunit tests for clk framework");
+MODULE_IMPORT_NS("EXPORTED_FOR_KUNIT_TESTING");
 MODULE_LICENSE("GPL v2");
