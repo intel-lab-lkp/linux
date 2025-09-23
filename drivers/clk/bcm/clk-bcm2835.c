@@ -345,7 +345,7 @@ static inline u32 cprman_read(struct bcm2835_cprman *cprman, u32 reg)
 /* Does a cycle of measuring a clock through the TCNT clock, which may
  * source from many other clocks in the system.
  */
-static unsigned long bcm2835_measure_tcnt_mux(struct bcm2835_cprman *cprman,
+static u64 bcm2835_measure_tcnt_mux(struct bcm2835_cprman *cprman,
 					      u32 tcnt_mux)
 {
 	u32 osccount = 19200; /* 1ms */
@@ -394,7 +394,7 @@ static unsigned long bcm2835_measure_tcnt_mux(struct bcm2835_cprman *cprman,
 out:
 	spin_unlock(&cprman->regs_lock);
 
-	return count * 1000;
+	return (u64)count * 1000;
 }
 
 static void bcm2835_debugfs_regset(struct bcm2835_cprman *cprman, u32 base,
@@ -1093,7 +1093,7 @@ static int bcm2835_clock_on(struct clk_hw *hw)
 	 */
 	if (data->tcnt_mux && false) {
 		dev_info(cprman->dev,
-			 "clk %s: rate %ld, measure %ld\n",
+			 "clk %s: rate %ld, measure %llu\n",
 			 data->name,
 			 clk_hw_get_rate(hw),
 			 bcm2835_measure_tcnt_mux(cprman, data->tcnt_mux));
