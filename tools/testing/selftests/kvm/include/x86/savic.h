@@ -21,4 +21,5 @@ void savic_enable(void);
 int savic_nr_pages_required(uint64_t page_size);
 void savic_vc_handler(struct ex_regs *regs);
 struct guest_apic_page *get_guest_apic_page(void);
+void savic_allow_vector(int vec);
 #endif

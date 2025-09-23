@@ -952,6 +952,7 @@ void *vcpu_map_dirty_ring(struct kvm_vcpu *vcpu);
 void vcpu_args_set(struct kvm_vcpu *vcpu, unsigned int num, ...);
 
 void kvm_irq_line(struct kvm_vm *vm, uint32_t irq, int level);
+void kvm_irq_line_status(struct kvm_vm *vm, uint32_t irq, int level);
 int _kvm_irq_line(struct kvm_vm *vm, uint32_t irq, int level);
 
 #define KVM_MAX_IRQ_ROUTES		4096

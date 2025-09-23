@@ -45,6 +45,7 @@ enum lapic_lvt_entry {
 #define SVM_EXIT_AVIC_UNACCELERATED_ACCESS      0x402
 #define SVM_EXIT_AVIC_INCOMPLETE_IPI            0x401
 
+#define SAVIC_ALLOWED_IRR               (APIC_IRR + 0x4)
 #define SAVIC_NMI_REQ_OFFSET            0x278
 
 /*
@@ -105,6 +106,16 @@ void set_savic_control_msr(struct guest_apic_page *apic_page, bool enable, bool 
 struct guest_apic_page *get_guest_apic_page(void)
 {
 	return &apic_page_pool->guest_apic_page[x2apic_read_reg(APIC_ID)];
+}
+
+void savic_allow_vector(int vec)
+{
+	struct guest_apic_page *apage = get_guest_apic_page();
+
+	savic_write_reg(apage, SAVIC_ALLOWED_IRR + APIC_REG_OFF(vec),
+			savic_read_reg(apage, SAVIC_ALLOWED_IRR + APIC_REG_OFF(vec)) |
+			BIT_ULL(APIC_VEC_POS(vec)));
+
 }
 
 /*

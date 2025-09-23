@@ -1964,6 +1964,23 @@ void kvm_irq_line(struct kvm_vm *vm, uint32_t irq, int level)
 	TEST_ASSERT(ret >= 0, KVM_IOCTL_ERROR(KVM_IRQ_LINE, ret));
 }
 
+int _kvm_irq_line_status(struct kvm_vm *vm, uint32_t irq, int level)
+{
+	struct kvm_irq_level irq_level = {
+		.irq    = irq,
+		.level  = level,
+	};
+
+	return __vm_ioctl(vm, KVM_IRQ_LINE_STATUS, &irq_level);
+}
+
+void kvm_irq_line_status(struct kvm_vm *vm, uint32_t irq, int level)
+{
+	int ret = _kvm_irq_line_status(vm, irq, level);
+
+	TEST_ASSERT(ret >= 0, KVM_IOCTL_ERROR(KVM_IRQ_LINE_STATUS, ret));
+}
+
 struct kvm_irq_routing *kvm_gsi_routing_create(void)
 {
 	struct kvm_irq_routing *routing;

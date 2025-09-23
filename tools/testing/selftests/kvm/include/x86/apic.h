@@ -12,6 +12,7 @@
 #include "ucall_common.h"
 
 #define APIC_DEFAULT_GPA		0xfee00000ULL
+#define IOAPIC_DEFAULT_GPA		0xfec00000ULL
 
 /* APIC base address MSR and fields */
 #define MSR_IA32_APICBASE		0x0000001b
@@ -122,5 +123,53 @@ static inline void x2apic_write_reg_fault(unsigned int reg, uint64_t value)
 		       APIC_BASE_MSR + (reg >> 4), value, fault);
 }
 
+struct ioapic_redirect_entry {
+	uint8_t vector;
+	uint8_t delivery_mode:3;
+	uint8_t dest_mode:1;
+	uint8_t delivery_status:1;
+	uint8_t polarity:1;
+	uint8_t remote_irr:1;
+	uint8_t trig_mode:1;
+	uint8_t mask:1;
+	uint8_t reserve:7;
+	uint8_t reserved[4];
+	uint8_t dest_id;
+};
 
+enum trigger_mode {
+	TRIGGER_EDGE = 0,
+	TRIGGER_LEVEL,
+	TRIGGER_MAX,
+};
+
+static void *ioapic_addr = (void *)IOAPIC_DEFAULT_GPA;
+
+static inline void ioapic_write_reg(uint32_t reg, uint32_t val)
+{
+	*(volatile uint32_t *)ioapic_addr = reg;
+	*(volatile u32 *)(ioapic_addr + 0x10) = val;
+}
+
+static inline void ioapic_write_redir(unsigned int line, struct ioapic_redirect_entry e)
+{
+	ioapic_write_reg(0x10 + line * 2 + 0, ((uint32_t *)&e)[0]);
+	ioapic_write_reg(0x10 + line * 2 + 1, ((uint32_t *)&e)[1]);
+}
+
+static inline uint32_t ioapic_read_reg(unsigned int reg)
+{
+	*(volatile uint32_t *)ioapic_addr = reg;
+	return *(volatile uint32_t *)(ioapic_addr + 0x10);
+}
+
+static inline struct ioapic_redirect_entry ioapic_read_redir(unsigned int line)
+{
+	struct ioapic_redirect_entry e;
+
+	((u32 *)&e)[0] = ioapic_read_reg(0x10 + line * 2 + 0);
+	((u32 *)&e)[1] = ioapic_read_reg(0x10 + line * 2 + 1);
+
+	return e;
+}
 #endif /* SELFTEST_KVM_APIC_H */

@@ -229,7 +229,7 @@ void __virt_pg_map(struct kvm_vm *vm, uint64_t vaddr, uint64_t paddr, int level)
 		    "PTE already present for 4k page at vaddr: 0x%lx", vaddr);
 	*pte = PTE_PRESENT_MASK | PTE_WRITABLE_MASK | (paddr & PHYSICAL_PAGE_MASK);
 
-	if (paddr == APIC_DEFAULT_GPA) {
+	if (paddr == APIC_DEFAULT_GPA || paddr == IOAPIC_DEFAULT_GPA) {
 		*pte |= vm->arch.s_bit;
 		return;
 	}
