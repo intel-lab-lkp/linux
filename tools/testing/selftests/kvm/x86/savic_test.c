@@ -22,6 +22,7 @@
 #define IOAPIC_NUM_LEVEL_VECTORS 2
 #define RTC_GSI	8
 #define RTC_GSI_IRQ 0x85
+#define MSI_VECTOR 0x40
 #define FIXED_IPI_VEC     0x31
 #define FIXED_LOGICAL_IPI_VEC     0x32
 #define BROADCAST_ALL_IPI_VEC     0x33
@@ -40,6 +41,7 @@ enum savic_test_state {
 	SAVIC_TEST_STATE(SAVIC_IDLE_HALT),
 	SAVIC_TEST_STATE(SAVIC_IOAPIC),
 	SAVIC_TEST_STATE(SAVIC_IOAPIC2),
+	SAVIC_TEST_STATE(SAVIC_MSI),
 	SAVIC_TEST_STATE(SAVIC_IPI),
 	SAVIC_TEST_STATE(SAVIC_NMI),
 	SAVIC_TEST_STATE(SAVIC_NMI2),
@@ -57,6 +59,7 @@ struct test_data_page {
 	uint64_t ioapic_lirq1_count;
 	uint64_t ioapic_lirq2_count;
 	uint64_t ioapic_rtc_gsi_irq_count;
+	uint64_t msi_irq_count;
 	uint64_t fixed_phys_ipi_wake_count;
 	uint64_t fixed_phys_ipi_hlt_count;
 	uint64_t fixed_logical_ipi_hlt_count;
@@ -807,6 +810,34 @@ static void guest_nmi_handler(struct ex_regs *regs)
 		sev_es_nmi_complete();
 }
 
+static void savic_msi_not_allowed(int id)
+{
+	struct test_data_page *data = get_test_data();
+
+	savic_allow_vector(MSI_VECTOR);
+
+	__GUEST_ASSERT(READ_ONCE(data->msi_irq_count) == 0,
+			"Invalid MSI IRQ count: %ld, should be 0",
+			READ_ONCE(data->msi_irq_count));
+}
+
+static void savic_msi_allowed(int id)
+{
+	struct test_data_page *data = get_test_data();
+
+	__GUEST_ASSERT(READ_ONCE(data->msi_irq_count) == 1,
+			"Invalid MSI IRQ count: %ld",
+			READ_ONCE(data->msi_irq_count));
+}
+
+static void msi_intr_handler(struct ex_regs *regs)
+{
+	struct test_data_page *data = get_test_data();
+
+	 WRITE_ONCE(data->msi_irq_count, data->msi_irq_count + 1);
+	 x2apic_write_reg(APIC_EOI, 0x00);
+}
+
 static void ipi_guest_code(int id)
 {
 	struct test_data_page *data;
@@ -901,6 +932,9 @@ static void guest_code(int id)
 	SAVIC_GUEST_SYNC(SAVIC_IOAPIC, savic_ioapic);
 	SAVIC_GUEST_SYNC(SAVIC_IOAPIC2, savic_ioapic2);
 
+	SAVIC_GUEST_SYNC(SAVIC_MSI, savic_msi_not_allowed);
+	SAVIC_GUEST_SYNC(SAVIC_MSI, savic_msi_allowed);
+
 	SAVIC_GUEST_SYNC(SAVIC_IPI, savic_ipi);
 
 	/* Disable host NMI injection in control MSR. */
@@ -953,6 +987,17 @@ static void host_send_ioapic_irq(struct kvm_vm *vm, int id)
 	kvm_irq_line_status(vm, RTC_GSI, 0);
 }
 
+static void host_send_msi(struct kvm_vm *vm)
+{
+	struct kvm_msi msi = {
+		.address_lo = 0,
+		.address_hi = 0,
+		.data = MSI_VECTOR,
+	};
+
+	__vm_ioctl(vm, KVM_SIGNAL_MSI, &msi);
+}
+
 static void host_send_nmi(int id)
 {
 	vcpu_nmi(vcpus[id]);
@@ -967,6 +1012,9 @@ static void host_test_savic(struct kvm_vm *vm, int id, enum savic_test_state tes
 		break;
 	case SAVIC_IOAPIC2_START:
 		host_send_ioapic_irq(vm, id);
+		break;
+	case SAVIC_MSI_START:
+		host_send_msi(vm);
 		break;
 	case SAVIC_NMI_START:
 	case SAVIC_NMI2_START:
@@ -1021,6 +1069,7 @@ static void install_exception_handlers(struct kvm_vm *vm)
 	vm_install_exception_handler(vm, BROADCAST_NOSELF_IPI_VEC,
 			guest_broadcast_noself_ipi_handler);
 	vm_install_exception_handler(vm, NMI_VECTOR, guest_nmi_handler);
+	vm_install_exception_handler(vm, MSI_VECTOR, msi_intr_handler);
 }
 
 int main(int argc, char *argv[])
