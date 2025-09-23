@@ -21,6 +21,12 @@
 #define savesegment(seg, value)				\
 	asm("mov %%" #seg ",%0":"=r" (value) : : "memory")
 
+static inline unsigned long regs_get_register(struct ex_regs *regs,
+					      unsigned int offset)
+{
+	return *(unsigned long *)((unsigned long)regs + offset);
+}
+
 enum reg_type {
 	REG_TYPE_RM = 0,
 	REG_TYPE_REG,
@@ -28,7 +34,7 @@ enum reg_type {
 	REG_TYPE_BASE,
 };
 
-static __always_inline int user_mode(struct pt_regs *regs)
+static __always_inline int user_mode(struct ex_regs *regs)
 {
 	return !!(regs->cs & 3);
 }
@@ -148,7 +154,7 @@ static int get_seg_reg_override_idx(struct insn *insn)
 /*
  * check_seg_overrides() - check if segment override prefixes are allowed
  * @insn:	Valid instruction with segment override prefixes
- * @regoff:	Operand offset, in pt_regs, for which the check is performed
+ * @regoff:	Operand offset, in ex_regs, for which the check is performed
  *
  * For a particular register used in register-indirect addressing, determine if
  * segment override prefixes can be used. Specifically, no overrides are allowed
@@ -161,7 +167,7 @@ static int get_seg_reg_override_idx(struct insn *insn)
  */
 static bool check_seg_overrides(struct insn *insn, int regoff)
 {
-	if (regoff == offsetof(struct pt_regs, di) && is_string_insn(insn))
+	if (regoff == offsetof(struct ex_regs, rdi) && is_string_insn(insn))
 		return false;
 
 	return true;
@@ -171,7 +177,7 @@ static bool check_seg_overrides(struct insn *insn, int regoff)
  * resolve_default_seg() - resolve default segment register index for an operand
  * @insn:	Instruction with opcode and address size. Must be valid.
  * @regs:	Register values as seen when entering kernel mode
- * @off:	Operand offset, in pt_regs, for which resolution is needed
+ * @off:	Operand offset, in ex_regs, for which resolution is needed
  *
  * Resolve the default segment register index associated with the instruction
  * operand register indicated by @off. Such index is resolved based on defaults
@@ -184,7 +190,7 @@ static bool check_seg_overrides(struct insn *insn, int regoff)
  *
  * -EINVAL in case of error.
  */
-static int resolve_default_seg(struct insn *insn, struct pt_regs *regs, int off)
+static int resolve_default_seg(struct insn *insn, struct ex_regs *regs, int off)
 {
 	return INAT_SEG_REG_IGNORE;
 }
@@ -193,7 +199,7 @@ static int resolve_default_seg(struct insn *insn, struct pt_regs *regs, int off)
  * resolve_seg_reg() - obtain segment register index
  * @insn:	Instruction with operands
  * @regs:	Register values as seen when entering kernel mode
- * @regoff:	Operand offset, in pt_regs, used to determine segment register
+ * @regoff:	Operand offset, in ex_regs, used to determine segment register
  *
  * Determine the segment register associated with the operands and, if
  * applicable, prefixes and the instruction pointed by @insn.
@@ -221,7 +227,7 @@ static int resolve_default_seg(struct insn *insn, struct pt_regs *regs, int off)
  * are done using helper functions.
  *
  * The operand register, @regoff, is represented as the offset from the base of
- * pt_regs.
+ * ex_regs.
  *
  * As stated, the main use of this function is to determine the segment register
  * index based on the instruction, its operands and prefixes. Hence, @insn
@@ -241,7 +247,7 @@ static int resolve_default_seg(struct insn *insn, struct pt_regs *regs, int off)
  *
  * -EINVAL in case of error.
  */
-static int resolve_seg_reg(struct insn *insn, struct pt_regs *regs, int regoff)
+static int resolve_seg_reg(struct insn *insn, struct ex_regs *regs, int regoff)
 {
 	int idx;
 
@@ -251,7 +257,7 @@ static int resolve_seg_reg(struct insn *insn, struct pt_regs *regs, int regoff)
 	 * be used. Hence, it is not necessary to inspect the instruction,
 	 * which may be invalid at this point.
 	 */
-	if (regoff == offsetof(struct pt_regs, ip))
+	if (regoff == offsetof(struct ex_regs, rip))
 		return INAT_SEG_REG_IGNORE;
 
 	if (!insn)
@@ -282,7 +288,7 @@ static int resolve_seg_reg(struct insn *insn, struct pt_regs *regs, int regoff)
  * @seg_reg_idx:	Segment register index to use
  *
  * Obtain the segment selector from any of the CS, SS, DS, ES, FS, GS segment
- * registers. CS and SS are obtained from pt_regs. DS, ES, FS and GS are
+ * registers. CS and SS are obtained from ex_regs. DS, ES, FS and GS are
  * obtained by reading the actual CPU registers. This done for only for
  * completeness as in X86_64 segment registers are ignored.
  *
@@ -293,7 +299,7 @@ static int resolve_seg_reg(struct insn *insn, struct pt_regs *regs, int regoff)
  *
  * -EINVAL on error.
  */
-static short get_segment_selector(struct pt_regs *regs, int seg_reg_idx)
+static short get_segment_selector(struct ex_regs *regs, int seg_reg_idx)
 {
 	unsigned short sel;
 
@@ -321,35 +327,35 @@ static short get_segment_selector(struct pt_regs *regs, int seg_reg_idx)
 	}
 }
 
-static const int pt_regoff[] = {
-	offsetof(struct pt_regs, ax),
-	offsetof(struct pt_regs, cx),
-	offsetof(struct pt_regs, dx),
-	offsetof(struct pt_regs, bx),
-	offsetof(struct pt_regs, sp),
-	offsetof(struct pt_regs, bp),
-	offsetof(struct pt_regs, si),
-	offsetof(struct pt_regs, di),
-	offsetof(struct pt_regs, r8),
-	offsetof(struct pt_regs, r9),
-	offsetof(struct pt_regs, r10),
-	offsetof(struct pt_regs, r11),
-	offsetof(struct pt_regs, r12),
-	offsetof(struct pt_regs, r13),
-	offsetof(struct pt_regs, r14),
-	offsetof(struct pt_regs, r15),
+static const int ex_regoff[] = {
+	offsetof(struct ex_regs, rax),
+	offsetof(struct ex_regs, rcx),
+	offsetof(struct ex_regs, rdx),
+	offsetof(struct ex_regs, rbx),
+	offsetof(struct ex_regs, rsp),
+	offsetof(struct ex_regs, rbp),
+	offsetof(struct ex_regs, rsi),
+	offsetof(struct ex_regs, rdi),
+	offsetof(struct ex_regs, r8),
+	offsetof(struct ex_regs, r9),
+	offsetof(struct ex_regs, r10),
+	offsetof(struct ex_regs, r11),
+	offsetof(struct ex_regs, r12),
+	offsetof(struct ex_regs, r13),
+	offsetof(struct ex_regs, r14),
+	offsetof(struct ex_regs, r15),
 };
 
-int pt_regs_offset(struct pt_regs *regs, int regno)
+int ex_regs_offset(struct ex_regs *regs, int regno)
 {
-	if ((unsigned)regno < ARRAY_SIZE(pt_regoff))
-		return pt_regoff[regno];
+	if ((unsigned)regno < ARRAY_SIZE(ex_regoff))
+		return ex_regoff[regno];
 	return -EDOM;
 }
 
 static int get_regno(struct insn *insn, enum reg_type type)
 {
-	int nr_registers = ARRAY_SIZE(pt_regoff);
+	int nr_registers = ARRAY_SIZE(ex_regoff);
 	int regno = 0;
 
 	/*
@@ -419,7 +425,7 @@ static int get_regno(struct insn *insn, enum reg_type type)
 	return regno;
 }
 
-static int get_reg_offset(struct insn *insn, struct pt_regs *regs,
+static int get_reg_offset(struct insn *insn, struct ex_regs *regs,
 			  enum reg_type type)
 {
 	int regno = get_regno(insn, type);
@@ -427,7 +433,7 @@ static int get_reg_offset(struct insn *insn, struct pt_regs *regs,
 	if (regno < 0)
 		return regno;
 
-	return pt_regs_offset(regs, regno);
+	return ex_regs_offset(regs, regno);
 }
 
 /*
@@ -437,7 +443,7 @@ static int get_reg_offset(struct insn *insn, struct pt_regs *regs,
  * @offs1:	Offset of the first operand register
  * @offs2:	Offset of the second operand register, if applicable
  *
- * Obtain the offset, in pt_regs, of the registers indicated by the ModRM byte
+ * Obtain the offset, in ex_regs, of the registers indicated by the ModRM byte
  * in @insn. This function is to be used with 16-bit address encodings. The
  * @offs1 and @offs2 will be written with the offset of the two registers
  * indicated by the instruction. In cases where any of the registers is not
@@ -447,7 +453,7 @@ static int get_reg_offset(struct insn *insn, struct pt_regs *regs,
  *
  * 0 on success, -EINVAL on error.
  */
-static int get_reg_offset_16(struct insn *insn, struct pt_regs *regs,
+static int get_reg_offset_16(struct insn *insn, struct ex_regs *regs,
 			     int *offs1, int *offs2)
 {
 	/*
@@ -456,21 +462,21 @@ static int get_reg_offset_16(struct insn *insn, struct pt_regs *regs,
 	 * ModR/M Byte" of the Intel Software Development Manual.
 	 */
 	static const int regoff1[] = {
-		offsetof(struct pt_regs, bx),
-		offsetof(struct pt_regs, bx),
-		offsetof(struct pt_regs, bp),
-		offsetof(struct pt_regs, bp),
-		offsetof(struct pt_regs, si),
-		offsetof(struct pt_regs, di),
-		offsetof(struct pt_regs, bp),
-		offsetof(struct pt_regs, bx),
+		offsetof(struct ex_regs, rbx),
+		offsetof(struct ex_regs, rbx),
+		offsetof(struct ex_regs, rbp),
+		offsetof(struct ex_regs, rbp),
+		offsetof(struct ex_regs, rsi),
+		offsetof(struct ex_regs, rdi),
+		offsetof(struct ex_regs, rbp),
+		offsetof(struct ex_regs, rbx),
 	};
 
 	static const int regoff2[] = {
-		offsetof(struct pt_regs, si),
-		offsetof(struct pt_regs, di),
-		offsetof(struct pt_regs, si),
-		offsetof(struct pt_regs, di),
+		offsetof(struct ex_regs, rsi),
+		offsetof(struct ex_regs, rdi),
+		offsetof(struct ex_regs, rsi),
+		offsetof(struct ex_regs, rdi),
 		-EDOM,
 		-EDOM,
 		-EDOM,
@@ -521,7 +527,7 @@ static int get_reg_offset_16(struct insn *insn, struct pt_regs *regs,
  *
  * -1L in case of error.
  */
-unsigned long insn_get_seg_base(struct pt_regs *regs, int seg_reg_idx)
+unsigned long insn_get_seg_base(struct ex_regs *regs, int seg_reg_idx)
 {
 	unsigned long base;
 	short sel;
@@ -542,10 +548,7 @@ unsigned long insn_get_seg_base(struct pt_regs *regs, int seg_reg_idx)
 		 * swapgs was called at the kernel entry point. Thus,
 		 * MSR_KERNEL_GS_BASE will have the user-space GS base.
 		 */
-		if (user_mode(regs))
-			base = rdmsr(MSR_KERNEL_GS_BASE);
-		else
-			base = rdmsr(MSR_GS_BASE);
+		base = rdmsr(MSR_GS_BASE);
 	} else {
 		base = 0;
 	}
@@ -569,7 +572,7 @@ unsigned long insn_get_seg_base(struct pt_regs *regs, int seg_reg_idx)
  *
  * Zero is returned on error.
  */
-static unsigned long get_seg_limit(struct pt_regs *regs, int seg_reg_idx)
+static unsigned long get_seg_limit(struct ex_regs *regs, int seg_reg_idx)
 {
 	short sel;
 
@@ -588,9 +591,9 @@ static unsigned long get_seg_limit(struct pt_regs *regs, int seg_reg_idx)
  * Returns:
  *
  * The register indicated by the reg part of the ModRM byte. The
- * register is obtained as an offset from the base of pt_regs.
+ * register is obtained as an offset from the base of ex_regs.
  */
-int insn_get_modrm_reg_off(struct insn *insn, struct pt_regs *regs)
+int insn_get_modrm_reg_off(struct insn *insn, struct ex_regs *regs)
 {
 	return get_reg_offset(insn, regs, REG_TYPE_REG);
 }
@@ -603,9 +606,9 @@ int insn_get_modrm_reg_off(struct insn *insn, struct pt_regs *regs)
  * Returns:
  *
  * The register indicated by the reg part of the ModRM byte.
- * The register is obtained as a pointer within pt_regs.
+ * The register is obtained as a pointer within ex_regs.
  */
-unsigned long *insn_get_modrm_reg_ptr(struct insn *insn, struct pt_regs *regs)
+unsigned long *insn_get_modrm_reg_ptr(struct insn *insn, struct ex_regs *regs)
 {
 	int offset;
 
@@ -619,7 +622,7 @@ unsigned long *insn_get_modrm_reg_ptr(struct insn *insn, struct pt_regs *regs)
  * get_seg_base_limit() - obtain base address and limit of a segment
  * @insn:	Instruction. Must be valid.
  * @regs:	Register values as seen when entering kernel mode
- * @regoff:	Operand offset, in pt_regs, used to resolve segment descriptor
+ * @regoff:	Operand offset, in ex_regs, used to resolve segment descriptor
  * @base:	Obtained segment base
  * @limit:	Obtained segment limit
  *
@@ -636,7 +639,7 @@ unsigned long *insn_get_modrm_reg_ptr(struct insn *insn, struct pt_regs *regs)
  *
  * -EINVAL on error.
  */
-static int get_seg_base_limit(struct insn *insn, struct pt_regs *regs,
+static int get_seg_base_limit(struct insn *insn, struct ex_regs *regs,
 			      int regoff, unsigned long *base,
 			      unsigned long *limit)
 {
@@ -667,13 +670,13 @@ static int get_seg_base_limit(struct insn *insn, struct pt_regs *regs,
  * get_eff_addr_reg() - Obtain effective address from register operand
  * @insn:	Instruction. Must be valid.
  * @regs:	Register values as seen when entering kernel mode
- * @regoff:	Obtained operand offset, in pt_regs, with the effective address
+ * @regoff:	Obtained operand offset, in ex_regs, with the effective address
  * @eff_addr:	Obtained effective address
  *
  * Obtain the effective address stored in the register operand as indicated by
  * the ModRM byte. This function is to be used only with register addressing
  * (i.e.,  ModRM.mod is 3). The effective address is saved in @eff_addr. The
- * register operand, as an offset from the base of pt_regs, is saved in @regoff;
+ * register operand, as an offset from the base of ex_regs, is saved in @regoff;
  * such offset can then be used to resolve the segment associated with the
  * operand. This function can be used with any of the supported address sizes
  * in x86.
@@ -682,11 +685,11 @@ static int get_seg_base_limit(struct insn *insn, struct pt_regs *regs,
  *
  * 0 on success. @eff_addr will have the effective address stored in the
  * operand indicated by ModRM. @regoff will have such operand as an offset from
- * the base of pt_regs.
+ * the base of ex_regs.
  *
  * -EINVAL on error.
  */
-static int get_eff_addr_reg(struct insn *insn, struct pt_regs *regs,
+static int get_eff_addr_reg(struct insn *insn, struct ex_regs *regs,
 			    int *regoff, long *eff_addr)
 {
 	int ret;
@@ -717,7 +720,7 @@ static int get_eff_addr_reg(struct insn *insn, struct pt_regs *regs,
  * get_eff_addr_modrm() - Obtain referenced effective address via ModRM
  * @insn:	Instruction. Must be valid.
  * @regs:	Register values as seen when entering kernel mode
- * @regoff:	Obtained operand offset, in pt_regs, associated with segment
+ * @regoff:	Obtained operand offset, in ex_regs, associated with segment
  * @eff_addr:	Obtained effective address
  *
  * Obtain the effective address referenced by the ModRM byte of @insn. After
@@ -730,12 +733,12 @@ static int get_eff_addr_reg(struct insn *insn, struct pt_regs *regs,
  * Returns:
  *
  * 0 on success. @eff_addr will have the referenced effective address. @regoff
- * will have a register, as an offset from the base of pt_regs, that can be used
+ * will have a register, as an offset from the base of ex_regs, that can be used
  * to resolve the associated segment.
  *
  * -EINVAL on error.
  */
-static int get_eff_addr_modrm(struct insn *insn, struct pt_regs *regs,
+static int get_eff_addr_modrm(struct insn *insn, struct ex_regs *regs,
 			      int *regoff, long *eff_addr)
 {
 	long tmp;
@@ -759,7 +762,7 @@ static int get_eff_addr_modrm(struct insn *insn, struct pt_regs *regs,
 	 * following instruction.
 	 */
 	if (*regoff == -EDOM) {
-		tmp = regs->ip + insn->length;
+		tmp = regs->rip + insn->length;
 	} else if (*regoff < 0) {
 		return -EINVAL;
 	} else {
@@ -781,7 +784,7 @@ static int get_eff_addr_modrm(struct insn *insn, struct pt_regs *regs,
  * get_eff_addr_modrm_16() - Obtain referenced effective address via ModRM
  * @insn:	Instruction. Must be valid.
  * @regs:	Register values as seen when entering kernel mode
- * @regoff:	Obtained operand offset, in pt_regs, associated with segment
+ * @regoff:	Obtained operand offset, in ex_regs, associated with segment
  * @eff_addr:	Obtained effective address
  *
  * Obtain the 16-bit effective address referenced by the ModRM byte of @insn.
@@ -794,12 +797,12 @@ static int get_eff_addr_modrm(struct insn *insn, struct pt_regs *regs,
  * Returns:
  *
  * 0 on success. @eff_addr will have the referenced effective address. @regoff
- * will have a register, as an offset from the base of pt_regs, that can be used
+ * will have a register, as an offset from the base of ex_regs, that can be used
  * to resolve the associated segment.
  *
  * -EINVAL on error.
  */
-static int get_eff_addr_modrm_16(struct insn *insn, struct pt_regs *regs,
+static int get_eff_addr_modrm_16(struct insn *insn, struct ex_regs *regs,
 				 int *regoff, short *eff_addr)
 {
 	int addr_offset1, addr_offset2, ret;
@@ -849,7 +852,7 @@ static int get_eff_addr_modrm_16(struct insn *insn, struct pt_regs *regs,
  * get_eff_addr_sib() - Obtain referenced effective address via SIB
  * @insn:	Instruction. Must be valid.
  * @regs:	Register values as seen when entering kernel mode
- * @base_offset: Obtained operand offset, in pt_regs, associated with segment
+ * @base_offset: Obtained operand offset, in ex_regs, associated with segment
  * @eff_addr:	Obtained effective address
  *
  * Obtain the effective address referenced by the SIB byte of @insn. After
@@ -862,12 +865,12 @@ static int get_eff_addr_modrm_16(struct insn *insn, struct pt_regs *regs,
  * Returns:
  *
  * 0 on success. @eff_addr will have the referenced effective address.
- * @base_offset will have a register, as an offset from the base of pt_regs,
+ * @base_offset will have a register, as an offset from the base of ex_regs,
  * that can be used to resolve the associated segment.
  *
  * Negative value on error.
  */
-static int get_eff_addr_sib(struct insn *insn, struct pt_regs *regs,
+static int get_eff_addr_sib(struct insn *insn, struct ex_regs *regs,
 			    int *base_offset, long *eff_addr)
 {
 	long base, indx;
@@ -951,7 +954,7 @@ static int get_eff_addr_sib(struct insn *insn, struct pt_regs *regs,
  *
  * -1L on error.
  */
-static void __user *get_addr_ref_16(struct insn *insn, struct pt_regs *regs)
+static void __user *get_addr_ref_16(struct insn *insn, struct ex_regs *regs)
 {
 	unsigned long linear_addr = -1L, seg_base, seg_limit;
 	int ret, regoff;
@@ -1012,7 +1015,7 @@ out:
  *
  * -1L on error.
  */
-static void __user *get_addr_ref_32(struct insn *insn, struct pt_regs *regs)
+static void __user *get_addr_ref_32(struct insn *insn, struct ex_regs *regs)
 {
 	unsigned long linear_addr = -1L, seg_base, seg_limit;
 	int eff_addr, regoff;
@@ -1076,7 +1079,7 @@ out:
  *
  * -1L on error.
  */
-static void __user *get_addr_ref_64(struct insn *insn, struct pt_regs *regs)
+static void __user *get_addr_ref_64(struct insn *insn, struct ex_regs *regs)
 {
 	unsigned long linear_addr = -1L, seg_base;
 	int regoff, ret;
@@ -1128,7 +1131,7 @@ out:
  *
  * -1L on error.
  */
-void __user *insn_get_addr_ref(struct insn *insn, struct pt_regs *regs)
+void __user *insn_get_addr_ref(struct insn *insn, struct ex_regs *regs)
 {
 	if (!insn || !regs)
 		return (void __user *)-1L;
