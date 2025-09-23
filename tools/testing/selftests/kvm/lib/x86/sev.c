@@ -276,6 +276,18 @@ struct kvm_vm *vm_sev_create_with_one_vcpu(uint32_t type, void *guest_code,
 	return vm;
 }
 
+static bool is_savic_enabled(void)
+{
+	u64 supported_vmsa_features;
+	int kvm_fd = open_kvm_dev_path_or_exit();
+
+	kvm_device_attr_get(kvm_fd, KVM_X86_GRP_SEV,
+			    KVM_X86_SEV_VMSA_FEATURES,
+			    &supported_vmsa_features);
+
+	return supported_vmsa_features & BIT_ULL(SVM_FEAT_SECURE_AVIC);
+}
+
 void vm_sev_launch(struct kvm_vm *vm, uint64_t policy, uint8_t *measurement)
 {
 	if (is_sev_es_vm(vm))
@@ -283,6 +295,9 @@ void vm_sev_launch(struct kvm_vm *vm, uint64_t policy, uint8_t *measurement)
 
 	if (is_sev_snp_vm(vm)) {
 		vm_enable_cap(vm, KVM_CAP_EXIT_HYPERCALL, BIT(KVM_HC_MAP_GPA_RANGE));
+
+		if (is_savic_enabled())
+			guest_apic_pages_init(vm);
 
 		snp_vm_launch_start(vm, policy);
 

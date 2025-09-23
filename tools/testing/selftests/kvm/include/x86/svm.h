@@ -179,6 +179,9 @@ struct __attribute__ ((__packed__)) vmcb_control_area {
 #define SVM_NESTED_CTL_NP_ENABLE	BIT(0)
 #define SVM_NESTED_CTL_SEV_ENABLE	BIT(1)
 
+#define SVM_FEAT_SECURE_AVIC		16
+#define SVM_FEAT_ALLOWED_SEV_FEATURES_VALID	63
+
 struct __attribute__ ((__packed__)) vmcb_seg {
 	u16 selector;
 	u16 attrib;

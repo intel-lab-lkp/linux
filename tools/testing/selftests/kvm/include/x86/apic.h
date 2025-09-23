@@ -29,6 +29,7 @@
 #define	APIC_TASKPRI	0x80
 #define	APIC_PROCPRI	0xA0
 #define	APIC_EOI	0xB0
+#define APIC_LDR	0xD0
 #define	APIC_SPIV	0xF0
 #define		APIC_SPIV_FOCUS_DISABLED	(1 << 9)
 #define		APIC_SPIV_APIC_ENABLED		(1 << 8)
@@ -60,10 +61,15 @@
 #define	APIC_ICR2	0x310
 #define		SET_APIC_DEST_FIELD(x)	((x) << 24)
 #define APIC_LVTT	0x320
+#define APIC_LVTTHMR    0x330
+#define APIC_LVTPC      0x340
+#define APIC_LVT0       0x350
 #define		APIC_LVT_TIMER_ONESHOT		(0 << 17)
 #define		APIC_LVT_TIMER_PERIODIC		(1 << 17)
 #define		APIC_LVT_TIMER_TSCDEADLINE	(2 << 17)
 #define		APIC_LVT_MASKED			(1 << 16)
+#define APIC_LVT1       0x360
+#define APIC_LVTERR     0x370
 #define	APIC_TMICT	0x380
 #define	APIC_TMCCT	0x390
 #define	APIC_TDCR	0x3E0

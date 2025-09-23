@@ -659,9 +659,12 @@ void kvm_arch_vm_post_create(struct kvm_vm *vm)
 
 int kvm_arch_vm_additional_pages_required(struct vm_shape shape, uint64_t page_size)
 {
-	if (shape.type == KVM_X86_SEV_ES_VM ||
-	    shape.type == KVM_X86_SNP_VM)
+	if (shape.type == KVM_X86_SEV_ES_VM)
 		return  ghcb_nr_pages_required(page_size);
+
+	if (shape.type == KVM_X86_SNP_VM)
+		return ghcb_nr_pages_required(page_size) +
+			savic_nr_pages_required(page_size);
 
 	return 0;
 }
