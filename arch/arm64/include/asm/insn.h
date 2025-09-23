@@ -520,6 +520,23 @@ static __always_inline bool aarch64_insn_is_barrier(u32 insn)
 	       aarch64_insn_is_pssbb(insn);
 }
 
+#ifdef CONFIG_ARM64_LSE_ATOMICS
+static __always_inline bool aarch64_insn_is_lse_atomic(u32 insn)
+{
+	return aarch64_insn_is_ldadd(insn) ||
+	       aarch64_insn_is_ldclr(insn) ||
+	       aarch64_insn_is_ldeor(insn) ||
+		   aarch64_insn_is_ldset(insn) ||
+		   aarch64_insn_is_swp(insn) ||
+		   aarch64_insn_is_cas(insn);
+}
+#else /* CONFIG_ARM64_LSE_ATOMICS */
+static __always_inline bool aarch64_insn_is_lse_atomic(u32 insn)
+{
+	return false;
+}
+#endif /* CONFIG_ARM64_LSE_ATOMICS */
+
 static __always_inline bool aarch64_insn_is_store_single(u32 insn)
 {
 	return aarch64_insn_is_store_imm(insn) ||
@@ -534,6 +551,21 @@ static __always_inline bool aarch64_insn_is_store_pair(u32 insn)
 	       aarch64_insn_is_stp_post(insn);
 }
 
+static __always_inline bool aarch64_insn_is_store_ex_or_rel(u32 insn)
+{
+	return aarch64_insn_is_store_ex(insn) ||
+	       aarch64_insn_is_store_ex(insn & (~BIT(15))) ||
+		   aarch64_insn_is_store_rel(insn);
+}
+
+static __always_inline bool aarch64_insn_is_store(u32 insn)
+{
+	return aarch64_insn_is_store_single(insn) ||
+	       aarch64_insn_is_store_pair(insn) ||
+		   aarch64_insn_is_store_ex_or_rel(insn) ||
+		   aarch64_insn_is_lse_atomic(insn);
+}
+
 static __always_inline bool aarch64_insn_is_load_single(u32 insn)
 {
 	return aarch64_insn_is_load_imm(insn) ||
@@ -546,6 +578,27 @@ static __always_inline bool aarch64_insn_is_load_pair(u32 insn)
 	return aarch64_insn_is_ldp(insn) ||
 	       aarch64_insn_is_ldp_pre(insn) ||
 	       aarch64_insn_is_ldp_post(insn);
+}
+
+static __always_inline bool aarch64_insn_is_load_ex_or_acq(u32 insn)
+{
+	return aarch64_insn_is_load_ex(insn) ||
+	       aarch64_insn_is_load_ex(insn & (~BIT(15))) ||
+		   aarch64_insn_is_load_acq(insn);
+}
+
+static __always_inline bool aarch64_insn_is_load(u32 insn)
+{
+	return aarch64_insn_is_load_single(insn) ||
+	       aarch64_insn_is_load_pair(insn) ||
+		   aarch64_insn_is_load_ex_or_acq(insn) ||
+		   aarch64_insn_is_lse_atomic(insn);
+}
+
+static __always_inline bool aarch64_insn_is_ldst(u32 insn)
+{
+	return aarch64_insn_is_load(insn) ||
+		   aarch64_insn_is_store(insn);
 }
 
 static __always_inline bool aarch64_insn_uses_literal(u32 insn)
