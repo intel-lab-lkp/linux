@@ -1,4 +1,7 @@
 /* SPDX-License-Identifier: GPL-2.0 */
+#ifndef __SH_SCI_H__
+#define __SH_SCI_H__
+
 #include <linux/bitops.h>
 #include <linux/serial_core.h>
 #include <linux/io.h>
@@ -176,3 +179,5 @@ enum {
 	(((port)->type == PORT_SCI) ? SCI_TDxE_CLEAR : SCIF_TDxE_CLEAR)
 #define SCxSR_BREAK_CLEAR(port) \
 	(((port)->type == PORT_SCI) ? SCI_BREAK_CLEAR : SCIF_BREAK_CLEAR)
+
+#endif /* __SH_SCI_H__ */
