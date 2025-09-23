@@ -239,6 +239,7 @@ static void mte_update_gcr_excl(struct task_struct *task)
 void __init kasan_hw_tags_enable(struct alt_instr *alt, __le32 *origptr,
 				 __le32 *updptr, int nr_inst);
 
+__noinstr_section(".init.text")
 void __init kasan_hw_tags_enable(struct alt_instr *alt, __le32 *origptr,
 				 __le32 *updptr, int nr_inst)
 {
