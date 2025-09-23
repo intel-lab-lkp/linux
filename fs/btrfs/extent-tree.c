@@ -4425,8 +4425,11 @@ static noinline int find_free_extent(struct btrfs_root *root,
 	}
 
 	ret = prepare_allocation(fs_info, ffe_ctl, space_info, ins);
-	if (ret < 0)
+	if (ret < 0) {
+		trace_btrfs_find_free_extent_skip(root, ffe_ctl, NULL,
+						  FFE_SKIP_PREPARE_ALLOC_FAILED, ret);
 		return ret;
+	}
 
 	ffe_ctl->search_start = max(ffe_ctl->search_start,
 				    first_logical_byte(fs_info));
@@ -4453,6 +4456,8 @@ static noinline int find_free_extent(struct btrfs_root *root,
 				 * target because our list pointers are not
 				 * valid
 				 */
+				trace_btrfs_find_free_extent_skip(root, ffe_ctl, block_group,
+								  FFE_SKIP_HINTED_BG_INVALID, 0);
 				btrfs_put_block_group(block_group);
 				up_read(&space_info->groups_sem);
 			} else {
@@ -4464,6 +4469,8 @@ static noinline int find_free_extent(struct btrfs_root *root,
 				goto have_block_group;
 			}
 		} else if (block_group) {
+			trace_btrfs_find_free_extent_skip(root, ffe_ctl, block_group,
+							  FFE_SKIP_HINTED_BG_INVALID, 0);
 			btrfs_put_block_group(block_group);
 		}
 	}
@@ -4478,6 +4485,8 @@ search:
 		ffe_ctl->hinted = false;
 		/* If the block group is read-only, we can skip it entirely. */
 		if (unlikely(block_group->ro)) {
+			trace_btrfs_find_free_extent_skip(root, ffe_ctl, block_group,
+							  FFE_SKIP_BG_READ_ONLY, 0);
 			if (ffe_ctl->for_treelog)
 				btrfs_clear_treelog_bg(block_group);
 			if (ffe_ctl->for_data_reloc)
@@ -4489,6 +4498,8 @@ search:
 		ffe_ctl->search_start = block_group->start;
 
 		if (!block_group_bits(block_group, ffe_ctl->flags)) {
+			trace_btrfs_find_free_extent_skip(root, ffe_ctl, block_group,
+							  FFE_SKIP_BG_WRONG_FLAGS, 0);
 			btrfs_release_block_group(block_group, ffe_ctl->delalloc);
 			continue;
 		}
@@ -4508,6 +4519,8 @@ have_block_group:
 			 * error that caused problems, not ENOSPC.
 			 */
 			if (ret < 0) {
+				trace_btrfs_find_free_extent_skip(root, ffe_ctl, block_group,
+								  FFE_SKIP_BG_CACHE_ERROR, ret);
 				if (!cache_block_group_error)
 					cache_block_group_error = ret;
 				ret = 0;
@@ -4517,18 +4530,26 @@ have_block_group:
 		}
 
 		if (unlikely(block_group->cached == BTRFS_CACHE_ERROR)) {
+			trace_btrfs_find_free_extent_skip(root, ffe_ctl, block_group,
+							  FFE_SKIP_BG_CACHE_ERROR, -EIO);
 			if (!cache_block_group_error)
 				cache_block_group_error = -EIO;
 			goto loop;
 		}
 
-		if (!find_free_extent_check_size_class(ffe_ctl, block_group))
+		if (!find_free_extent_check_size_class(ffe_ctl, block_group)) {
+			trace_btrfs_find_free_extent_skip(root, ffe_ctl, block_group,
+							  FFE_SKIP_SIZE_CLASS_MISMATCH, 0);
 			goto loop;
+		}
 
 		bg_ret = NULL;
 		ret = do_allocation(block_group, ffe_ctl, &bg_ret);
-		if (ret > 0)
+		if (ret > 0) {
+			trace_btrfs_find_free_extent_skip(root, ffe_ctl, block_group,
+							  FFE_SKIP_DO_ALLOCATION_FAILED, ret);
 			goto loop;
+		}
 
 		if (bg_ret && bg_ret != block_group) {
 			btrfs_release_block_group(block_group, ffe_ctl->delalloc);
@@ -4542,22 +4563,29 @@ have_block_group:
 		/* move on to the next group */
 		if (ffe_ctl->search_start + ffe_ctl->num_bytes >
 		    block_group->start + block_group->length) {
+			trace_btrfs_find_free_extent_skip(root, ffe_ctl, block_group,
+							  FFE_SKIP_EXTENDS_BEYOND_BG, 0);
 			btrfs_add_free_space_unused(block_group,
 					    ffe_ctl->found_offset,
 					    ffe_ctl->num_bytes);
 			goto loop;
 		}
 
-		if (ffe_ctl->found_offset < ffe_ctl->search_start)
+		if (ffe_ctl->found_offset < ffe_ctl->search_start) {
+			trace_btrfs_find_free_extent_skip(root, ffe_ctl, block_group,
+							  FFE_SKIP_FOUND_BEFORE_SEARCH_START, 0);
 			btrfs_add_free_space_unused(block_group,
 					ffe_ctl->found_offset,
 					ffe_ctl->search_start - ffe_ctl->found_offset);
+		}
 
 		ret = btrfs_add_reserved_bytes(block_group, ffe_ctl->ram_bytes,
 					       ffe_ctl->num_bytes,
 					       ffe_ctl->delalloc,
 					       ffe_ctl->loop >= LOOP_WRONG_SIZE_CLASS);
 		if (ret == -EAGAIN) {
+			trace_btrfs_find_free_extent_skip(root, ffe_ctl, block_group,
+							  FFE_SKIP_ADD_RESERVED_FAILED, -EAGAIN);
 			btrfs_add_free_space_unused(block_group,
 					ffe_ctl->found_offset,
 					ffe_ctl->num_bytes);

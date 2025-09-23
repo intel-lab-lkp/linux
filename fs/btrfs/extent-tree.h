@@ -23,6 +23,24 @@ enum btrfs_extent_allocation_policy {
 	BTRFS_EXTENT_ALLOC_ZONED,
 };
 
+/*
+ * Enum for find_free_extent skip reasons used in trace events.
+ * Each enum corresponds to a specific unhappy path in the allocator.
+ */
+enum {
+	FFE_SKIP_PREPARE_ALLOC_FAILED,
+	FFE_SKIP_HINTED_BG_INVALID,
+	FFE_SKIP_BG_READ_ONLY,
+	FFE_SKIP_BG_WRONG_FLAGS,
+	FFE_SKIP_BG_CACHE_FAILED,
+	FFE_SKIP_BG_CACHE_ERROR,
+	FFE_SKIP_SIZE_CLASS_MISMATCH,
+	FFE_SKIP_DO_ALLOCATION_FAILED,
+	FFE_SKIP_EXTENDS_BEYOND_BG,
+	FFE_SKIP_FOUND_BEFORE_SEARCH_START,
+	FFE_SKIP_ADD_RESERVED_FAILED,
+};
+
 struct find_free_extent_ctl {
 	/* Basic allocation info */
 	u64 ram_bytes;
