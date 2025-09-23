@@ -53,13 +53,13 @@ struct mlx5_timer {
 };
 
 struct mlx5_clock {
-	seqlock_t                  lock;
-	struct hwtstamp_config     hwtstamp_config;
-	struct ptp_clock          *ptp;
-	struct ptp_clock_info      ptp_info;
-	struct mlx5_pps            pps_info;
-	struct mlx5_timer          timer;
-	bool                       shared;
+	seqlock_t                     lock;
+	struct kernel_hwtstamp_config hwtstamp_config;
+	struct ptp_clock             *ptp;
+	struct ptp_clock_info         ptp_info;
+	struct mlx5_pps               pps_info;
+	struct mlx5_timer             timer;
+	bool                          shared;
 };
 
 static inline bool mlx5_is_real_time_rq(struct mlx5_core_dev *mdev)
