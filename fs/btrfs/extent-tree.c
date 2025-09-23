@@ -4153,8 +4153,7 @@ static int can_allocate_chunk(struct btrfs_fs_info *fs_info,
 static int find_free_extent_update_loop(struct btrfs_fs_info *fs_info,
 					struct btrfs_key *ins,
 					struct find_free_extent_ctl *ffe_ctl,
-					struct btrfs_space_info *space_info,
-					bool full_search)
+					struct btrfs_space_info *space_info)
 {
 	struct btrfs_root *root = fs_info->chunk_root;
 	int ret;
@@ -4171,20 +4170,15 @@ static int find_free_extent_update_loop(struct btrfs_fs_info *fs_info,
 	if (ffe_ctl->loop >= LOOP_CACHING_WAIT && ffe_ctl->have_caching_bg)
 		return 1;
 
-	ffe_ctl->index++;
-	if (ffe_ctl->index < BTRFS_NR_RAID_TYPES)
-		return 1;
-
 	/* See the comments for btrfs_loop_type for an explanation of the phases. */
 	if (ffe_ctl->loop < LOOP_NO_EMPTY_SIZE) {
-		ffe_ctl->index = 0;
 		/*
 		 * We want to skip the LOOP_CACHING_WAIT step if we don't have
 		 * any uncached bgs and we've already done a full search
 		 * through.
 		 */
 		if (ffe_ctl->loop == LOOP_CACHING_NOWAIT &&
-		    (!ffe_ctl->orig_have_caching_bg && full_search))
+		    (!ffe_ctl->orig_have_caching_bg))
 			ffe_ctl->loop++;
 		ffe_ctl->loop++;
 
@@ -4384,7 +4378,6 @@ static noinline int find_free_extent(struct btrfs_root *root,
 	int cache_block_group_error = 0;
 	struct btrfs_block_group *block_group = NULL;
 	struct btrfs_space_info *space_info;
-	bool full_search = false;
 
 	WARN_ON(ffe_ctl->num_bytes < fs_info->sectorsize);
 
@@ -4477,9 +4470,6 @@ static noinline int find_free_extent(struct btrfs_root *root,
 search:
 	trace_btrfs_find_free_extent_search_loop(root, ffe_ctl);
 	ffe_ctl->have_caching_bg = false;
-	if (ffe_ctl->index == btrfs_bg_flags_to_raid_index(ffe_ctl->flags) ||
-	    ffe_ctl->index == 0)
-		full_search = true;
 	down_read(&space_info->groups_sem);
 	list_for_each_entry(block_group,
 			    &space_info->block_groups[ffe_ctl->index], list) {
@@ -4498,30 +4488,7 @@ search:
 		btrfs_grab_block_group(block_group, ffe_ctl->delalloc);
 		ffe_ctl->search_start = block_group->start;
 
-		/*
-		 * this can happen if we end up cycling through all the
-		 * raid types, but we want to make sure we only allocate
-		 * for the proper type.
-		 */
 		if (!block_group_bits(block_group, ffe_ctl->flags)) {
-			u64 extra = BTRFS_BLOCK_GROUP_DUP |
-				BTRFS_BLOCK_GROUP_RAID1_MASK |
-				BTRFS_BLOCK_GROUP_RAID56_MASK |
-				BTRFS_BLOCK_GROUP_RAID10;
-
-			/*
-			 * if they asked for extra copies and this block group
-			 * doesn't provide them, bail.  This does allow us to
-			 * fill raid0 from raid1.
-			 */
-			if ((ffe_ctl->flags & extra) && !(block_group->flags & extra))
-				goto loop;
-
-			/*
-			 * This block group has different flags than we want.
-			 * It's possible that we have MIXED_GROUP flag but no
-			 * block group is mixed.  Just skip such block group.
-			 */
 			btrfs_release_block_group(block_group, ffe_ctl->delalloc);
 			continue;
 		}
@@ -4620,8 +4587,7 @@ loop:
 	}
 	up_read(&space_info->groups_sem);
 
-	ret = find_free_extent_update_loop(fs_info, ins, ffe_ctl, space_info,
-					   full_search);
+	ret = find_free_extent_update_loop(fs_info, ins, ffe_ctl, space_info);
 	if (ret > 0)
 		goto search;
 
