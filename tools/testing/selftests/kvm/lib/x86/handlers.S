@@ -76,6 +76,8 @@ idt_handler_code:
 	HANDLERS has_error=1 from=10 to=14
 	HANDLERS has_error=0 from=15 to=16
 	HANDLERS has_error=1 from=17 to=17
-	HANDLERS has_error=0 from=18 to=255
+	HANDLERS has_error=0 from=18 to=28
+	HANDLERS has_error=1 from=29 to=29
+	HANDLERS has_error=0 from=30 to=255
 
 .section        .note.GNU-stack, "", %progbits
