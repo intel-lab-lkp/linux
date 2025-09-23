@@ -209,6 +209,14 @@ int virtio_device_cap_set(struct virtio_device *vdev,
 			  u16 id,
 			  const void *caps,
 			  size_t cap_size);
+int virtio_device_object_create(struct virtio_device *virtio_dev,
+				u16 obj_type,
+				u32 obj_id,
+				const void *obj_specific_data,
+				size_t obj_specific_data_size);
+int virtio_device_object_destroy(struct virtio_device *virtio_dev,
+				 u16 obj_type,
+				 u32 obj_id);
 
 size_t virtio_max_dma_size(const struct virtio_device *vdev);
 
