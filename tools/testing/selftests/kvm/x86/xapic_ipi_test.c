@@ -31,6 +31,7 @@
 #include "test_util.h"
 #include "vmx.h"
 #include "sev.h"
+#include "savic.h"
 
 /* Default running time for the test */
 #define DEFAULT_RUN_SECS 3
@@ -45,30 +46,44 @@
  */
 #define IPI_VECTOR	 0xa5
 
+enum apic_mode {
+	XAPIC,
+	X2APIC,
+	SAVIC,
+};
+
 /*
  * Incremented in the IPI handler. Provides evidence to the sender that the IPI
  * arrived at the destination
  */
 static volatile uint64_t *ipis_rcvd;
 
-static bool x2apic;
+static int apic_mode;
 
 static void apic_enable(void)
 {
-	if (x2apic)
-		x2apic_enable();
-	else
+	switch (apic_mode) {
+	case XAPIC:
 		xapic_enable();
+		break;
+	case X2APIC:
+		x2apic_enable();
+		break;
+	case SAVIC:
+		x2apic_enable();
+		savic_enable();
+		break;
+	}
 }
 
 static uint32_t apic_read_reg(unsigned int reg)
 {
-	return x2apic ? x2apic_read_reg(reg) : xapic_read_reg(reg);
+	return apic_mode != XAPIC ? x2apic_read_reg(reg) : xapic_read_reg(reg);
 }
 
 static void apic_write_reg(unsigned int reg, uint64_t val)
 {
-	if (x2apic)
+	if (apic_mode != XAPIC)
 		x2apic_write_reg(reg, val);
 	else
 		xapic_write_reg(reg, (uint32_t)val);
@@ -145,7 +160,7 @@ static void halter_guest_code(struct test_data_page *data)
 static void guest_ipi_handler(struct ex_regs *regs)
 {
 	(*ipis_rcvd)++;
-	apic_write_reg(APIC_EOI, 77);
+	apic_write_reg(APIC_EOI, 0);
 }
 
 static void sender_guest_code(struct test_data_page *data)
@@ -185,7 +200,7 @@ static void sender_guest_code(struct test_data_page *data)
 		 * First IPI can be sent unconditionally because halter vCPU
 		 * starts earlier.
 		 */
-		if (!x2apic) {
+		if (apic_mode == XAPIC) {
 			apic_write_reg(APIC_ICR2, icr2_val);
 			apic_write_reg(APIC_ICR, icr_val);
 		} else {
@@ -386,10 +401,10 @@ void do_migrations(struct test_data_page *data, int run_secs, int delay_usecs,
 }
 
 void get_cmdline_args(int argc, char *argv[], int *run_secs,
-		      bool *migrate, int *delay_usecs, bool *x2apic, int *vm_type)
+		      bool *migrate, int *delay_usecs, int *apic_mode, int *vm_type)
 {
 	for (;;) {
-		int opt = getopt(argc, argv, "s:d:v:me:t:");
+		int opt = getopt(argc, argv, "s:d:v:me:t:g");
 
 		if (opt == -1)
 			break;
@@ -404,7 +419,7 @@ void get_cmdline_args(int argc, char *argv[], int *run_secs,
 			*delay_usecs = parse_size(optarg);
 			break;
 		case 'e':
-			*x2apic = parse_size(optarg) == 1;
+			*apic_mode = parse_size(optarg);
 			break;
 		case 't':
 			*vm_type = parse_size(optarg);
@@ -418,7 +433,7 @@ void get_cmdline_args(int argc, char *argv[], int *run_secs,
 				TEST_REQUIRE(kvm_cpu_has(X86_FEATURE_SEV_ES));
 				break;
 			case KVM_X86_SNP_VM:
-				TEST_REQUIRE(kvm_cpu_has(X86_FEATURE_SNP));
+				TEST_REQUIRE(kvm_cpu_has(X86_FEATURE_SEV_SNP));
 				break;
 			default:
 				TEST_ASSERT(false, "Unsupported VM type :%d",
@@ -432,7 +447,7 @@ void get_cmdline_args(int argc, char *argv[], int *run_secs,
 				    " Default is no migrations.\n"
 				    "-d <delay microseconds> - delay between migrate_pages() calls."
 				    " Default is %d microseconds.\n"
-				    "-e <apic mode> - APIC mode 0 - xapic , 1 - x2apic"
+				    "-e <apic mode> - APIC mode 0 - xapic , 1 - x2apic, 3 - Secure AVIC"
 				    " Default is xAPIC.\n"
 				    "-t <vm type>. Default is %d.\n"
 				    "Supported values:\n"
@@ -484,10 +499,17 @@ int main(int argc, char *argv[])
 	bool is_sev;
 
 	get_cmdline_args(argc, argv, &run_secs, &migrate, &delay_usecs,
-			 &x2apic, &vm_type);
+			 &apic_mode, &vm_type);
+	if (apic_mode == SAVIC) {
+		vm_type = KVM_X86_SNP_VM;
+		TEST_REQUIRE(kvm_cpu_has(X86_FEATURE_SEV_SNP));
+		TEST_REQUIRE(kvm_cpu_has(X86_FEATURE_IDLE_HLT));
+		TEST_REQUIRE(kvm_cpu_has(X86_FEATURE_SECURE_AVIC));
+	}
+
 	is_sev = is_sev_vm_type(vm_type);
 
-	if (x2apic)
+	if (apic_mode != XAPIC)
 		migrate = 0;
 
 	if (run_secs <= 0)
@@ -495,18 +517,28 @@ int main(int argc, char *argv[])
 	if (delay_usecs <= 0)
 		delay_usecs = DEFAULT_DELAY_USECS;
 
-	if (is_sev)
+	if (apic_mode == SAVIC) {
+		struct kvm_sev_init args = {
+			.vmsa_features = BIT_ULL(SVM_FEAT_SECURE_AVIC)
+		};
+
+		vm = _vm_sev_create_with_one_vcpu(vm_type, halter_guest_code,
+				&params[0].vcpu, &args);
+	} else if (is_sev) {
 		vm = vm_sev_create_with_one_vcpu(vm_type, halter_guest_code,
 				&params[0].vcpu);
-	else
+	} else {
 		vm = vm_create_with_one_vcpu(&params[0].vcpu, halter_guest_code);
+	}
 
 	vm_install_exception_handler(vm, IPI_VECTOR, guest_ipi_handler);
-	if (is_sev_es_vm(vm))
+	if (apic_mode == SAVIC)
+		vm_install_exception_handler(vm, 29, savic_vc_handler);
+	else if (is_sev_es_vm(vm))
 		vm_install_exception_handler(vm, 29, sev_es_vc_handler);
 
-	sync_global_to_guest(vm, x2apic);
-	if (!x2apic)
+	sync_global_to_guest(vm, apic_mode);
+	if (apic_mode == XAPIC)
 		virt_pg_map(vm, APIC_DEFAULT_GPA, APIC_DEFAULT_GPA);
 
 	params[1].vcpu = vm_vcpu_add(vm, 1, sender_guest_code);
