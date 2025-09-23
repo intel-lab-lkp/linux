@@ -214,7 +214,11 @@ static int erofs_fill_inode(struct inode *inode)
 	case S_IFREG:
 		inode->i_op = &erofs_generic_iops;
 		if (erofs_inode_is_data_compressed(vi->datalayout))
+#ifdef CONFIG_EROFS_FS_ZIP
+			inode->i_fop = &z_erofs_file_fops;
+#else
 			inode->i_fop = &generic_ro_fops;
+#endif
 		else
 			inode->i_fop = &erofs_file_fops;
 		break;
