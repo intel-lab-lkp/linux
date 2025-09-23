@@ -27,15 +27,18 @@
 
 #include "nv50_display.h"
 
+#include <nvif/class.h>
 #include <nvif/push906f.h>
 
 #include <nvhw/class/cl906f.h>
+#include <nvhw/class/clb06f.h>
+#include <nvhw/class/clc06f.h>
 
 static int
 nvc0_fence_emit32(struct nouveau_channel *chan, u64 virtual, u32 sequence)
 {
 	struct nvif_push *push = &chan->chan.push;
-	int ret = PUSH_WAIT(push, 6);
+	int ret = PUSH_WAIT(push, 12);
 	if (ret == 0) {
 		PUSH_MTHD(push, NV906F, SEMAPHOREA,
 			  NVVAL(NV906F, SEMAPHOREA, OFFSET_UPPER, upper_32_bits(virtual)),
@@ -46,9 +49,31 @@ nvc0_fence_emit32(struct nouveau_channel *chan, u64 virtual, u32 sequence)
 					SEMAPHORED,
 			  NVDEF(NV906F, SEMAPHORED, OPERATION, RELEASE) |
 			  NVDEF(NV906F, SEMAPHORED, RELEASE_WFI, EN) |
-			  NVDEF(NV906F, SEMAPHORED, RELEASE_SIZE, 16BYTE),
+			  NVDEF(NV906F, SEMAPHORED, RELEASE_SIZE, 16BYTE));
 
-					NON_STALL_INTERRUPT, 0);
+		if (chan->user.oclass >= PASCAL_CHANNEL_GPFIFO_A) {
+			PUSH_MTHD(push, NVC06F, MEM_OP_A, 0,
+						MEM_OP_B, 0,
+
+						MEM_OP_C,
+				  NVDEF(NVC06F, MEM_OP_C, MEMBAR_TYPE, SYS_MEMBAR),
+
+						MEM_OP_D,
+				  NVDEF(NVC06F, MEM_OP_D, OPERATION, MEMBAR));
+		} else if (chan->user.oclass >= MAXWELL_CHANNEL_GPFIFO_A) {
+			PUSH_MTHD(push, NVB06F, MEM_OP_C, 0,
+
+						MEM_OP_D,
+				  NVDEF(NVC06F, MEM_OP_D, OPERATION, MEMBAR));
+		} else {
+			PUSH_MTHD(push, NV906F, MEM_OP_A, 0,
+
+						MEM_OP_B,
+				  NVDEF(NV906F, MEM_OP_B, OPERATION, SYSMEMBAR_FLUSH));
+		}
+
+		PUSH_MTHD(push, NV906F, NON_STALL_INTERRUPT, 0);
+
 		PUSH_KICK(push);
 	}
 	return ret;
