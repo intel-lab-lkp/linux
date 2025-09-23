@@ -8,6 +8,7 @@
 #include "linux/bitmap.h"
 #include "svm.h"
 #include "svm_util.h"
+#include "savic.h"
 
 #define IOIO_TYPE_STR (1 << 2)
 #define IOIO_SEG_DS (1 << 11 | 1 << 10)
@@ -17,7 +18,8 @@
 #define SW_EXIT_CODE_IOIO	0x7b
 #define SW_EXIT_CODE_MSR	0x7c
 #define SVM_VMGEXIT_MMIO_READ		   0x80000001
-#define SVM_VMGEXIT_MMIO_WRITE		  0x80000002
+#define SVM_VMGEXIT_MMIO_WRITE		   0x80000002
+#define SVM_VMGEXIT_SECURE_AVIC	   0x8000001a
 
 struct ghcb_entry {
 	struct ghcb ghcb;
@@ -726,4 +728,25 @@ void sev_es_vc_handler(struct ex_regs *regs)
 	default:
 		__GUEST_ASSERT(0, "No VC handler\n");
 	}
+}
+
+void sev_es_savic_notify_gpa(uint64_t gpa)
+{
+	struct ghcb_entry *entry;
+	struct ghcb *ghcb;
+	int ret;
+
+	entry = ghcb_alloc();
+	ghcb = &entry->ghcb;
+
+	register_ghcb_page(entry->gpa);
+	ghcb_set_sw_exit_code(ghcb, SVM_VMGEXIT_SECURE_AVIC);
+	ghcb_set_rax(ghcb, -1ULL);
+	ghcb_set_rbx(ghcb, gpa);
+	ghcb_set_sw_exit_info_1(ghcb, 0);
+	ghcb_set_sw_exit_info_2(ghcb, 0);
+	do_vmg_exit(entry->gpa);
+	ret = ghcb->save.sw_exit_info_1 & 0xffffffff;
+	__GUEST_ASSERT(!ret, "Secure AVIC GPA notification failed, ret: %d", ret);
+	ghcb_free(entry);
 }

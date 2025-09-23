@@ -203,6 +203,7 @@ void savic_enable(void)
 	apic_page = &apic_page_pool->guest_apic_page[apic_id];
 
 	savic_init_backing_page(apic_page, apic_id);
+	sev_es_savic_notify_gpa(apic_page->gpa);
 	set_savic_control_msr(apic_page, true, true);
 	savic_ctrl_msr_val = rdmsr(MSR_AMD64_SECURE_AVIC_CONTROL);
 	exp_msr_val = apic_page->gpa | BIT_ULL(MSR_AMD64_SECURE_AVIC_EN_BIT) |
