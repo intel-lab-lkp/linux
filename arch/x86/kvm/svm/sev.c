@@ -59,6 +59,10 @@ static bool sev_es_debug_swap_enabled = true;
 module_param_named(debug_swap, sev_es_debug_swap_enabled, bool, 0444);
 static u64 sev_supported_vmsa_features;
 
+/* enable/disable SEV-SNP Secure AVIC support */
+bool sev_snp_savic_enabled = true;
+module_param_named(secure_avic, sev_snp_savic_enabled, bool, 0444);
+
 #define AP_RESET_HOLD_NONE		0
 #define AP_RESET_HOLD_NAE_EVENT		1
 #define AP_RESET_HOLD_MSR_PROTO		2
@@ -2911,6 +2915,8 @@ void __init sev_set_cpu_caps(void)
 		kvm_cpu_cap_set(X86_FEATURE_SEV_SNP);
 		kvm_caps.supported_vm_types |= BIT(KVM_X86_SNP_VM);
 	}
+	if (sev_snp_savic_enabled)
+		kvm_cpu_cap_set(X86_FEATURE_SECURE_AVIC);
 }
 
 static bool is_sev_snp_initialized(void)
@@ -3074,6 +3080,9 @@ out:
 	if (!sev_es_enabled || !cpu_feature_enabled(X86_FEATURE_DEBUG_SWAP) ||
 	    !cpu_feature_enabled(X86_FEATURE_NO_NESTED_DATA_BP))
 		sev_es_debug_swap_enabled = false;
+
+	if (!sev_snp_supported || !cpu_feature_enabled(X86_FEATURE_SECURE_AVIC))
+		sev_snp_savic_enabled = false;
 
 	sev_supported_vmsa_features = 0;
 	if (sev_es_debug_swap_enabled)
