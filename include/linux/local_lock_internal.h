@@ -96,18 +96,18 @@ do {								\
 
 #define __local_lock_acquire(lock)					\
 	do {								\
-		local_trylock_t *tl;					\
-		local_lock_t *l;					\
+		local_trylock_t *__trylock;				\
+		local_lock_t *__lock;					\
 									\
-		l = (local_lock_t *)(lock);				\
-		tl = (local_trylock_t *)l;				\
+		__lock = (local_lock_t *)(lock);			\
+		__trylock = (local_trylock_t *)__lock;			\
 		_Generic((lock),					\
 			local_trylock_t *: ({				\
-				lockdep_assert(tl->acquired == 0);	\
-				WRITE_ONCE(tl->acquired, 1);		\
+				lockdep_assert(__trylock->acquired == 0);\
+				WRITE_ONCE(__trylock->acquired, 1);	\
 			}),						\
 			local_lock_t *: (void)0);			\
-		local_lock_acquire(l);					\
+		local_lock_acquire(__lock);				\
 	} while (0)
 
 #define __local_lock(lock)					\
