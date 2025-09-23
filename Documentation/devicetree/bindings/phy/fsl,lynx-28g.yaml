@@ -9,21 +9,113 @@ title: Freescale Lynx 28G SerDes PHY
 maintainers:
   - Ioana Ciornei <ioana.ciornei@nxp.com>
 
+description: |
+  The Lynx 28G is a multi-lane, multi-protocol SerDes (PCIe, SATA, Ethernet)
+  present in multiple instances on NXP LX2160A and LX2162A SoCs. All instances
+  share a common register map and programming model, however they differ in
+  supported protocols per lane in a way that is not detectable by said
+  programming model without prior knowledge. The distinction is made through
+  the compatible string.
+
 properties:
   compatible:
-    enum:
-      - fsl,lynx-28g
+    oneOf:
+      - const: fsl,lynx-28g
+        deprecated: true
+        description: |
+          Legacy compatibility string for Lynx 28G SerDes. The capabilities
+          of managed lanes are limited to 1GbE and 10GbE (depending on the
+          availability of an adequate PLL clock net frequency). Deprecated, use
+          device-specific strings instead.
+      - enum:
+          - fsl,lx2160a-serdes1
+          - fsl,lx2160a-serdes2
+          - fsl,lx2160a-serdes3
+          - fsl,lx2162a-serdes1
+          - fsl,lx2162a-serdes2
 
   reg:
     maxItems: 1
 
-  "#phy-cells":
+  "#address-cells":
     const: 1
+    description: "Address cells for child lane nodes"
+
+  "#size-cells":
+    const: 0
+    description: "Size cells for child lane nodes"
+
+  "#phy-cells":
+    description: "Number of cells in PHY specifier (legacy binding only)"
+    const: 1
+
+patternProperties:
+  "^phy@[0-9a-f]+$":
+    type: object
+    description: Individual SerDes lane acting as PHY provider
+
+    properties:
+      reg:
+        description: Lane number
+        maxItems: 1
+
+      "#phy-cells":
+        description: Number of cells in PHY specifier for this lane
+        const: 0
+
+    required:
+      - reg
+      - "#phy-cells"
+
+    additionalProperties: false
 
 required:
   - compatible
   - reg
-  - "#phy-cells"
+
+allOf:
+  - if:
+      properties:
+        compatible:
+          const: fsl,lynx-28g
+    then:
+      # Legacy case: parent is PHY provider
+      properties:
+        "#phy-cells":
+          const: 1
+        "#address-cells": false
+        "#size-cells": false
+      required:
+        - "#phy-cells"
+      patternProperties:
+        "^phy@[0-9a-f]+$": false
+    else:
+      # Modern case: children are PHY providers
+      properties:
+        "#phy-cells": false
+      required:
+        - "#address-cells"
+        - "#size-cells"
+
+  # LX2162A SerDes 1 has fewer lanes than the others
+  - if:
+      properties:
+        compatible:
+          const: fsl,lx2162a-serdes1
+    then:
+      patternProperties:
+        "^phy@[0-9a-f]+$":
+          properties:
+            reg:
+              description: Lane number (lanes 4-7 only for LX2162A SerDes 1)
+              enum: [4, 5, 6, 7]
+    else:
+      patternProperties:
+        "^phy@[0-9a-f]+$":
+          properties:
+            reg:
+              description: Lane number (lanes 0-7)
+              enum: [0, 1, 2, 3, 4, 5, 6, 7]
 
 additionalProperties: false
 
@@ -32,9 +124,51 @@ examples:
     soc {
       #address-cells = <2>;
       #size-cells = <2>;
-      serdes_1: phy@1ea0000 {
-        compatible = "fsl,lynx-28g";
+
+      serdes_1: serdes@1ea0000 {
+        compatible = "fsl,lx2160a-serdes1";
         reg = <0x0 0x1ea0000 0x0 0x1e30>;
-        #phy-cells = <1>;
+        #address-cells = <1>;
+        #size-cells = <0>;
+
+        phy@0 {
+          reg = <0>;
+          #phy-cells = <0>;
+        };
+
+        phy@1 {
+          reg = <1>;
+          #phy-cells = <0>;
+        };
+
+        phy@2 {
+          reg = <2>;
+          #phy-cells = <0>;
+        };
+
+        phy@3 {
+          reg = <3>;
+          #phy-cells = <0>;
+        };
+
+        phy@4 {
+          reg = <4>;
+          #phy-cells = <0>;
+        };
+
+        phy@5 {
+          reg = <5>;
+          #phy-cells = <0>;
+        };
+
+        phy@6 {
+          reg = <6>;
+          #phy-cells = <0>;
+        };
+
+        phy@7 {
+          reg = <7>;
+          #phy-cells = <0>;
+        };
       };
     };
