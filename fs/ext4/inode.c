@@ -6408,6 +6408,8 @@ static int ext4_try_to_expand_extra_isize(struct inode *inode,
 					  struct ext4_iloc iloc,
 					  handle_t *handle)
 {
+	if (sb_rdonly(inode->i_sb))
+		return 0;
 	int no_expand;
 	int error;
 
