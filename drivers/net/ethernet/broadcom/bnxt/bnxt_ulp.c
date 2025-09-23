@@ -27,11 +27,11 @@
 #include "bnxt.h"
 #include "bnxt_hwrm.h"
 
-static DEFINE_IDA(bnxt_aux_dev_ids);
+static DEFINE_IDA(bnxt_rdma_aux_dev_ids);
 
 static void bnxt_fill_msix_vecs(struct bnxt *bp, struct bnxt_msix_entry *ent)
 {
-	struct bnxt_en_dev *edev = bp->edev;
+	struct bnxt_en_dev *edev = bp->edev_rdma;
 	int num_msix, i;
 
 	if (!edev->ulp_tbl->msix_requested) {
@@ -51,55 +51,55 @@ static void bnxt_fill_msix_vecs(struct bnxt *bp, struct bnxt_msix_entry *ent)
 
 int bnxt_get_ulp_msix_num(struct bnxt *bp)
 {
-	if (bp->edev)
-		return bp->edev->ulp_num_msix_vec;
+	if (bp->edev_rdma)
+		return bp->edev_rdma->ulp_num_msix_vec;
 	return 0;
 }
 
 void bnxt_set_ulp_msix_num(struct bnxt *bp, int num)
 {
-	if (bp->edev)
-		bp->edev->ulp_num_msix_vec = num;
+	if (bp->edev_rdma)
+		bp->edev_rdma->ulp_num_msix_vec = num;
 }
 
 int bnxt_get_ulp_msix_num_in_use(struct bnxt *bp)
 {
-	if (bnxt_ulp_registered(bp->edev))
-		return bp->edev->ulp_num_msix_vec;
+	if (bnxt_ulp_registered(bp->edev_rdma))
+		return bp->edev_rdma->ulp_num_msix_vec;
 	return 0;
 }
 
 int bnxt_get_ulp_stat_ctxs(struct bnxt *bp)
 {
-	if (bp->edev)
-		return bp->edev->ulp_num_ctxs;
+	if (bp->edev_rdma)
+		return bp->edev_rdma->ulp_num_ctxs;
 	return 0;
 }
 
 void bnxt_set_ulp_stat_ctxs(struct bnxt *bp, int num_ulp_ctx)
 {
-	if (bp->edev)
-		bp->edev->ulp_num_ctxs = num_ulp_ctx;
+	if (bp->edev_rdma)
+		bp->edev_rdma->ulp_num_ctxs = num_ulp_ctx;
 }
 
 int bnxt_get_ulp_stat_ctxs_in_use(struct bnxt *bp)
 {
-	if (bnxt_ulp_registered(bp->edev))
-		return bp->edev->ulp_num_ctxs;
+	if (bnxt_ulp_registered(bp->edev_rdma))
+		return bp->edev_rdma->ulp_num_ctxs;
 	return 0;
 }
 
 void bnxt_set_dflt_ulp_stat_ctxs(struct bnxt *bp)
 {
-	if (bp->edev) {
-		bp->edev->ulp_num_ctxs = BNXT_MIN_ROCE_STAT_CTXS;
+	if (bp->edev_rdma) {
+		bp->edev_rdma->ulp_num_ctxs = BNXT_MIN_ROCE_STAT_CTXS;
 		/* Reserve one additional stat_ctx for PF0 (except
 		 * on 1-port NICs) as it also creates one stat_ctx
 		 * for PF1 in case of RoCE bonding.
 		 */
 		if (BNXT_PF(bp) && !bp->pf.port_id &&
 		    bp->port_count > 1)
-			bp->edev->ulp_num_ctxs++;
+			bp->edev_rdma->ulp_num_ctxs++;
 	}
 }
 
@@ -135,7 +135,7 @@ int bnxt_register_dev(struct bnxt_en_dev *edev,
 
 	edev->ulp_tbl->msix_requested = bnxt_get_ulp_msix_num(bp);
 
-	bnxt_fill_msix_vecs(bp, bp->edev->msix_entries);
+	bnxt_fill_msix_vecs(bp, bp->edev_rdma->msix_entries);
 	edev->flags |= BNXT_EN_FLAG_MSIX_REQUESTED;
 exit:
 	mutex_unlock(&edev->en_dev_lock);
@@ -224,8 +224,8 @@ EXPORT_SYMBOL(bnxt_send_msg);
 
 void bnxt_ulp_stop(struct bnxt *bp)
 {
-	struct bnxt_aux_priv *aux_priv = bp->aux_priv;
-	struct bnxt_en_dev *edev = bp->edev;
+	struct bnxt_aux_priv *aux_priv = bp->aux_priv_rdma;
+	struct bnxt_en_dev *edev = bp->edev_rdma;
 
 	if (!edev)
 		return;
@@ -255,8 +255,8 @@ ulp_stop_exit:
 
 void bnxt_ulp_start(struct bnxt *bp, int err)
 {
-	struct bnxt_aux_priv *aux_priv = bp->aux_priv;
-	struct bnxt_en_dev *edev = bp->edev;
+	struct bnxt_aux_priv *aux_priv = bp->aux_priv_rdma;
+	struct bnxt_en_dev *edev = bp->edev_rdma;
 
 	if (!edev || err)
 		return;
@@ -288,14 +288,14 @@ ulp_start_exit:
 
 void bnxt_ulp_irq_stop(struct bnxt *bp)
 {
-	struct bnxt_en_dev *edev = bp->edev;
+	struct bnxt_en_dev *edev = bp->edev_rdma;
 	struct bnxt_ulp_ops *ops;
 	bool reset = false;
 
 	if (!edev || !(edev->flags & BNXT_EN_FLAG_MSIX_REQUESTED))
 		return;
 
-	if (bnxt_ulp_registered(bp->edev)) {
+	if (bnxt_ulp_registered(bp->edev_rdma)) {
 		struct bnxt_ulp *ulp = edev->ulp_tbl;
 
 		if (!ulp->msix_requested)
@@ -312,13 +312,13 @@ void bnxt_ulp_irq_stop(struct bnxt *bp)
 
 void bnxt_ulp_irq_restart(struct bnxt *bp, int err)
 {
-	struct bnxt_en_dev *edev = bp->edev;
+	struct bnxt_en_dev *edev = bp->edev_rdma;
 	struct bnxt_ulp_ops *ops;
 
 	if (!edev || !(edev->flags & BNXT_EN_FLAG_MSIX_REQUESTED))
 		return;
 
-	if (bnxt_ulp_registered(bp->edev)) {
+	if (bnxt_ulp_registered(bp->edev_rdma)) {
 		struct bnxt_ulp *ulp = edev->ulp_tbl;
 		struct bnxt_msix_entry *ent = NULL;
 
@@ -344,7 +344,7 @@ void bnxt_ulp_irq_restart(struct bnxt *bp, int err)
 void bnxt_ulp_async_events(struct bnxt *bp, struct hwrm_async_event_cmpl *cmpl)
 {
 	u16 event_id = le16_to_cpu(cmpl->event_id);
-	struct bnxt_en_dev *edev = bp->edev;
+	struct bnxt_en_dev *edev = bp->edev_rdma;
 	struct bnxt_ulp_ops *ops;
 	struct bnxt_ulp *ulp;
 
@@ -385,40 +385,41 @@ void bnxt_register_async_events(struct bnxt_en_dev *edev,
 }
 EXPORT_SYMBOL(bnxt_register_async_events);
 
-void bnxt_rdma_aux_device_uninit(struct bnxt *bp)
+void bnxt_aux_device_uninit(struct bnxt *bp,
+			    enum bnxt_ulp_auxdev_type auxdev_type)
 {
 	struct bnxt_aux_priv *aux_priv;
 	struct auxiliary_device *adev;
 
 	/* Skip if no auxiliary device init was done. */
-	if (!bp->aux_priv)
+	if (!bp->aux_priv_rdma)
 		return;
 
-	aux_priv = bp->aux_priv;
+	aux_priv = bp->aux_priv_rdma;
 	adev = &aux_priv->aux_dev;
 	auxiliary_device_uninit(adev);
 }
 
-static void bnxt_aux_dev_release(struct device *dev)
+static void bnxt_rdma_aux_dev_release(struct device *dev)
 {
 	struct bnxt_aux_priv *aux_priv =
 		container_of(dev, struct bnxt_aux_priv, aux_dev.dev);
 	struct bnxt *bp = netdev_priv(aux_priv->edev->net);
 
-	ida_free(&bnxt_aux_dev_ids, aux_priv->id);
+	ida_free(&bnxt_rdma_aux_dev_ids, aux_priv->id);
 	kfree(aux_priv->edev->ulp_tbl);
-	bp->edev = NULL;
+	bp->edev_rdma = NULL;
 	kfree(aux_priv->edev);
 	kfree(aux_priv);
-	bp->aux_priv = NULL;
+	bp->aux_priv_rdma = NULL;
 }
 
-void bnxt_rdma_aux_device_del(struct bnxt *bp)
+void bnxt_aux_device_del(struct bnxt *bp, enum bnxt_ulp_auxdev_type auxdev_type)
 {
-	if (!bp->edev)
+	if (!bp->edev_rdma)
 		return;
 
-	auxiliary_device_delete(&bp->aux_priv->aux_dev);
+	auxiliary_device_delete(&bp->aux_priv_rdma->aux_dev);
 }
 
 static void bnxt_set_edev_info(struct bnxt_en_dev *edev, struct bnxt *bp)
@@ -448,15 +449,15 @@ static void bnxt_set_edev_info(struct bnxt_en_dev *edev, struct bnxt *bp)
 	edev->bar0 = bp->bar0;
 }
 
-void bnxt_rdma_aux_device_add(struct bnxt *bp)
+void bnxt_aux_device_add(struct bnxt *bp, enum bnxt_ulp_auxdev_type auxdev_type)
 {
 	struct auxiliary_device *aux_dev;
 	int rc;
 
-	if (!bp->edev)
+	if (!bp->edev_rdma)
 		return;
 
-	aux_dev = &bp->aux_priv->aux_dev;
+	aux_dev = &bp->aux_priv_rdma->aux_dev;
 	rc = auxiliary_device_add(aux_dev);
 	if (rc) {
 		netdev_warn(bp->dev, "Failed to add auxiliary device for ROCE\n");
@@ -465,7 +466,8 @@ void bnxt_rdma_aux_device_add(struct bnxt *bp)
 	}
 }
 
-void bnxt_rdma_aux_device_init(struct bnxt *bp)
+void bnxt_aux_device_init(struct bnxt *bp,
+			  enum bnxt_ulp_auxdev_type auxdev_type)
 {
 	struct auxiliary_device *aux_dev;
 	struct bnxt_aux_priv *aux_priv;
@@ -473,14 +475,15 @@ void bnxt_rdma_aux_device_init(struct bnxt *bp)
 	struct bnxt_ulp *ulp;
 	int rc;
 
-	if (!(bp->flags & BNXT_FLAG_ROCE_CAP))
+	if (auxdev_type == BNXT_AUXDEV_RDMA &&
+	    !(bp->flags & BNXT_FLAG_ROCE_CAP))
 		return;
 
-	aux_priv = kzalloc(sizeof(*bp->aux_priv), GFP_KERNEL);
+	aux_priv = kzalloc(sizeof(*bp->aux_priv_rdma), GFP_KERNEL);
 	if (!aux_priv)
 		goto exit;
 
-	aux_priv->id = ida_alloc(&bnxt_aux_dev_ids, GFP_KERNEL);
+	aux_priv->id = ida_alloc(&bnxt_rdma_aux_dev_ids, GFP_KERNEL);
 	if (aux_priv->id < 0) {
 		netdev_warn(bp->dev,
 			    "ida alloc failed for ROCE auxiliary device\n");
@@ -492,15 +495,15 @@ void bnxt_rdma_aux_device_init(struct bnxt *bp)
 	aux_dev->id = aux_priv->id;
 	aux_dev->name = "rdma";
 	aux_dev->dev.parent = &bp->pdev->dev;
-	aux_dev->dev.release = bnxt_aux_dev_release;
+	aux_dev->dev.release = bnxt_rdma_aux_dev_release;
 
 	rc = auxiliary_device_init(aux_dev);
 	if (rc) {
-		ida_free(&bnxt_aux_dev_ids, aux_priv->id);
+		ida_free(&bnxt_rdma_aux_dev_ids, aux_priv->id);
 		kfree(aux_priv);
 		goto exit;
 	}
-	bp->aux_priv = aux_priv;
+	bp->aux_priv_rdma = aux_priv;
 
 	/* From this point, all cleanup will happen via the .release callback &
 	 * any error unwinding will need to include a call to
@@ -517,9 +520,10 @@ void bnxt_rdma_aux_device_init(struct bnxt *bp)
 		goto aux_dev_uninit;
 
 	edev->ulp_tbl = ulp;
-	bp->edev = edev;
+	bp->edev_rdma = edev;
 	bnxt_set_edev_info(edev, bp);
-	bp->ulp_num_msix_want = bnxt_set_dflt_ulp_msix(bp);
+	if (auxdev_type == BNXT_AUXDEV_RDMA)
+		bp->ulp_num_msix_want = bnxt_set_dflt_ulp_msix(bp);
 
 	return;
 
