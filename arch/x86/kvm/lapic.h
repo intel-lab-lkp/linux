@@ -70,7 +70,10 @@ struct kvm_lapic {
 	bool irr_pending;
 	bool lvt0_in_nmi_mode;
 	/* Select registers in the vAPIC cannot be read/written. */
-	bool guest_apic_protected;
+	struct {
+		bool guest_apic_protected;
+		bool prot_apic_intr_inject;
+	};
 	/* Number of bits set in ISR. */
 	s16 isr_count;
 	/* The highest vector set in ISR; if -1 - invalid, must scan ISR. */
