@@ -376,6 +376,17 @@ config PCI_EXYNOS
 	  hardware and therefore the driver re-uses the DesignWare core
 	  functions to implement the driver.
 
+config PCIE_EIC7700
+	bool "ESWIN PCIe controller"
+	depends on ARCH_ESWIN || COMPILE_TEST
+	depends on PCI_MSI
+	select PCIE_DW_HOST
+	help
+	  Say Y here if you want PCIe controller support for the ESWIN.
+	  The PCIe controller on Eswin is based on DesignWare hardware,
+	  enables support for the PCIe controller in the Eswin SoC to
+	  work in host mode.
+
 config PCIE_FU740
 	bool "SiFive FU740 PCIe controller"
 	depends on PCI_MSI
