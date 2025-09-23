@@ -167,4 +167,5 @@ void sev_es_ucall_port_write(uint32_t port, uint64_t data);
 
 void sev_es_vc_handler(struct ex_regs *regs);
 void sev_es_pv_msr_rw(uint64_t msr, uint64_t *data, bool write);
+void sev_es_pv_mmio_rw(uint32_t *reg_gpa, uint32_t *data, bool write);
 #endif /* SELFTEST_KVM_SEV_H */

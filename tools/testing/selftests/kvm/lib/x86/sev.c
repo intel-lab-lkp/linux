@@ -1,7 +1,9 @@
 // SPDX-License-Identifier: GPL-2.0-only
 #include <stdint.h>
 #include <stdbool.h>
+#include <asm/insn.h>
 
+#include "insn-eval.h"
 #include "sev.h"
 #include "linux/bitmap.h"
 #include "svm.h"
@@ -14,6 +16,8 @@
 
 #define SW_EXIT_CODE_IOIO	0x7b
 #define SW_EXIT_CODE_MSR	0x7c
+#define SVM_VMGEXIT_MMIO_READ		   0x80000001
+#define SVM_VMGEXIT_MMIO_WRITE		  0x80000002
 
 struct ghcb_entry {
 	struct ghcb ghcb;
@@ -314,10 +318,10 @@ static uint64_t setup_exitinfo1_portio(uint32_t port)
 
 #define GHCB_MSR_REG_GPA_REQ		0x012
 #define GHCB_MSR_REG_GPA_REQ_VAL(v)			\
-        /* GHCBData[63:12] */				\
-        (((u64)((v) & GENMASK_ULL(51, 0)) << 12) |	\
-        /* GHCBData[11:0] */				\
-        GHCB_MSR_REG_GPA_REQ)
+	/* GHCBData[63:12] */				\
+	(((u64)((v) & GENMASK_ULL(51, 0)) << 12) |	\
+	/* GHCBData[11:0] */				\
+	GHCB_MSR_REG_GPA_REQ)
 
 static void register_ghcb_page(uint64_t ghcb_gpa)
 {
@@ -423,6 +427,250 @@ static void sev_es_vc_msr_handler(struct ex_regs *regs)
 	ghcb_free(entry);
 }
 
+static void __sev_es_hv_mmio_rw(struct ghcb_entry *entry, uint32_t *reg_gpa,
+				unsigned int bytes, bool write)
+{
+	uint64_t exitinfo1 = (uint64_t)reg_gpa;
+	struct ghcb *ghcb = &entry->ghcb;
+	int ret;
+
+	if (write)
+		ghcb_set_sw_exit_code(ghcb, SVM_VMGEXIT_MMIO_WRITE);
+	else
+		ghcb_set_sw_exit_code(ghcb, SVM_VMGEXIT_MMIO_READ);
+	ghcb_set_sw_exit_info_1(ghcb, exitinfo1);
+	ghcb_set_sw_exit_info_2(ghcb, bytes);
+	ghcb_set_sw_scratch(ghcb, entry->gpa + offsetof(struct ghcb, shared_buffer));
+	do_vmg_exit(entry->gpa);
+	ret = ghcb->save.sw_exit_info_1 & 0xffffffff;
+	__GUEST_ASSERT(!ret, "mmio %s failed, ret: %d",
+			write ? "write" : "read", ret);
+}
+
+void sev_es_pv_mmio_rw(uint32_t *reg_gpa, uint32_t *data, bool write)
+{
+	struct ghcb_entry *entry;
+	struct ghcb *ghcb;
+
+	entry = ghcb_alloc();
+	ghcb = &entry->ghcb;
+
+	register_ghcb_page(entry->gpa);
+
+	if (write)
+		memcpy(&ghcb->shared_buffer, data, sizeof(*data));
+
+	__sev_es_hv_mmio_rw(entry, reg_gpa, sizeof(*data), write);
+
+	if (!write)
+		memcpy(data, &ghcb->shared_buffer, sizeof(*data));
+
+	ghcb_free(entry);
+}
+
+static void do_mmio(struct ghcb_entry *entry, struct ex_regs *regs,
+		struct insn *insn, unsigned int bytes, bool read)
+{
+	void *ref = insn_get_addr_ref(insn, regs);
+
+	register_ghcb_page(entry->gpa);
+	__sev_es_hv_mmio_rw(entry, ref, bytes, !read);
+}
+
+static int vc_write_mem(struct ex_regs *regs, struct insn *insn,
+			unsigned char *dst, unsigned char *buf, size_t size)
+{
+	uint8_t *buffer = (uint8_t *)buf;
+
+	switch (size) {
+	case 1: {
+		uint8_t *target = (uint8_t *)dst;
+
+		memcpy(target, buffer, 1);
+		break;
+	}
+	case 2: {
+		uint16_t *target = (uint16_t *)dst;
+
+		memcpy(target, buffer, 2);
+		break;
+	}
+	case 4: {
+		uint32_t *target = (uint32_t *)dst;
+
+		memcpy(target, buffer, 4);
+		break;
+	}
+	case 8: {
+		uint64_t *target = (uint64_t *)dst;
+
+		memcpy(target, buffer, 8);
+		break;
+	}
+	default:
+		return -1;
+	}
+
+	return 0;
+}
+
+static int vc_read_mem(struct ex_regs *regs, struct insn *insn,
+		       unsigned char *src, unsigned char *buf, size_t size)
+{
+	switch (size) {
+	case 1: {
+		uint8_t *s = (uint8_t  *)src;
+
+		memcpy(buf, s, 1);
+		break;
+	}
+	case 2: {
+		uint16_t *s = (uint16_t  *)src;
+
+		memcpy(buf, s, 1);
+		break;
+	}
+	case 4: {
+		uint32_t *s = (uint32_t  *)src;
+
+		memcpy(buf, s, 1);
+		break;
+	}
+	case 8: {
+		uint64_t *s = (uint64_t  *)src;
+
+		memcpy(buf, s, 1);
+		break;
+	}
+	default:
+		return -1;
+	}
+
+	return 0;
+}
+
+
+static int vc_handle_mmio_movs(struct ex_regs *regs, struct insn *insn, unsigned int bytes)
+{
+	unsigned long ds_base, es_base;
+	unsigned char *src, *dst;
+	unsigned char buffer[8];
+	int ret;
+	bool rep;
+	int off;
+
+	ds_base = insn_get_seg_base(regs, INAT_SEG_REG_DS);
+	es_base = insn_get_seg_base(regs, INAT_SEG_REG_ES);
+
+	if (ds_base == -1L || es_base == -1L)
+		return -1;
+
+	src = ds_base + (unsigned char *)regs->rsi;
+	dst = es_base + (unsigned char *)regs->rdi;
+
+	ret = vc_read_mem(regs, insn, src, buffer, bytes);
+	if (ret != 0)
+		return ret;
+
+	ret = vc_write_mem(regs, insn, dst, buffer, bytes);
+	if (ret != 0)
+		return ret;
+
+#define X86_EFLAGS_DF   (1UL << 10)
+	if (regs->rflags & X86_EFLAGS_DF)
+		off = -bytes;
+	else
+		off =  bytes;
+
+	regs->rsi += off;
+	regs->rdi += off;
+
+	rep = insn_has_rep_prefix(insn);
+	if (rep)
+		regs->rcx -= 1;
+
+	if (!rep || regs->rcx == 0)
+		return 0;
+	else
+		return 1;
+}
+
+static void sev_es_vc_mmio_handler(struct ex_regs *regs)
+{
+	char buffer[MAX_INSN_SIZE];
+	struct ghcb_entry *entry;
+	enum insn_mmio_type mmio;
+	unsigned long *reg_data;
+	unsigned int bytes;
+	struct ghcb *ghcb;
+	uint8_t sign_byte;
+	struct insn insn;
+	int ret;
+
+	memcpy(buffer, (uint8_t *)regs->rip, MAX_INSN_SIZE);
+	ret = insn_decode(&insn, buffer, MAX_INSN_SIZE, INSN_MODE_64);
+
+	if (ret < 0)
+		__GUEST_ASSERT(0, "Instruction decode failed, ret: %d\n", ret);
+
+	mmio = insn_decode_mmio(&insn, (int *)&bytes);
+	__GUEST_ASSERT(!(mmio == INSN_MMIO_DECODE_FAILED), " MMIO decode failed\n");
+
+	if (mmio != INSN_MMIO_WRITE_IMM && mmio != INSN_MMIO_MOVS) {
+		reg_data = insn_get_modrm_reg_ptr(&insn, regs);
+		__GUEST_ASSERT(reg_data, "insn_get_modrm_reg_ptr failed\n");
+	}
+
+	entry = ghcb_alloc();
+	ghcb = &entry->ghcb;
+
+	switch (mmio) {
+	case INSN_MMIO_WRITE:
+		memcpy(ghcb->shared_buffer, reg_data, bytes);
+		do_mmio(entry, regs, &insn, bytes, false);
+		break;
+	case INSN_MMIO_WRITE_IMM:
+		memcpy(ghcb->shared_buffer, insn.immediate1.bytes, bytes);
+		do_mmio(entry, regs, &insn, bytes, false);
+		break;
+	case INSN_MMIO_READ:
+		do_mmio(entry, regs, &insn, bytes, true);
+		if (bytes == 4)
+			*reg_data = 0;
+		memcpy(reg_data, ghcb->shared_buffer, bytes);
+		break;
+	case INSN_MMIO_READ_ZERO_EXTEND:
+		do_mmio(entry, regs, &insn, bytes, true);
+		memset(reg_data, 0, insn.opnd_bytes);
+		memcpy(reg_data, ghcb->shared_buffer, bytes);
+		break;
+	case INSN_MMIO_READ_SIGN_EXTEND:
+		do_mmio(entry, regs, &insn, bytes, true);
+		if (bytes == 1) {
+			uint8_t *val = (uint8_t *)ghcb->shared_buffer;
+
+			sign_byte = (*val & 0x80) ? 0xff : 0x00;
+		} else {
+			uint16_t *val = (uint16_t *)ghcb->shared_buffer;
+
+			sign_byte = (*val & 0x8000) ? 0xff : 0x00;
+		}
+
+		/* Sign extend based on operand size */
+		memset(reg_data, sign_byte, insn.opnd_bytes);
+		memcpy(reg_data, ghcb->shared_buffer, bytes);
+		break;
+	case INSN_MMIO_MOVS:
+		ret = vc_handle_mmio_movs(regs, &insn, bytes);
+		break;
+	default:
+		break;
+	}
+
+	ghcb_free(entry);
+	regs->rip += insn.length;
+}
+
 void sev_es_vc_handler(struct ex_regs *regs)
 {
 	uint64_t exit_code = regs->error_code;
@@ -432,6 +680,9 @@ void sev_es_vc_handler(struct ex_regs *regs)
 		sev_es_vc_msr_handler(regs);
 		/* rdmsr/wrmsr instruction size = 2 */
 		regs->rip += 2;
+		break;
+	case SVM_EXIT_NPF:
+		sev_es_vc_mmio_handler(regs);
 		break;
 	default:
 		__GUEST_ASSERT(0, "No VC handler\n");
