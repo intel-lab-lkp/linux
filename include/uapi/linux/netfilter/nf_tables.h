@@ -1931,4 +1931,38 @@ enum nft_tunnel_attributes {
 };
 #define NFTA_TUNNEL_MAX	(__NFTA_TUNNEL_MAX - 1)
 
+/**
+ * enum nft_math_attributes - nftables math expression netlink attributes
+ *
+ * @NFTA_MATH_SREG: source register (NLA_U32: nft_registers)
+ * @NFTA_MATH_DREG: destination register (NLA_U32: nft_registers)
+ * @NFTA_MATH_OP: operation to be performed (NLA_U8)
+ * @NFTA_MATH_LEN: value length in bits (NLA_U8)
+ * @NFTA_MATH_BYTEORDER: byteorder of the value passed to the SREG (NLA_U8)
+ */
+enum nft_math_attributes {
+	NFTA_MATH_UNSPEC,
+	NFTA_MATH_SREG,
+	NFTA_MATH_DREG,
+	NFTA_MATH_OP,
+	NFTA_MATH_LEN,
+	NFTA_MATH_BYTEORDER,
+	__NFTA_MATH_MAX,
+};
+#define NFTA_MATH_MAX (__NFTA_MATH_MAX - 1)
+
+enum nft_math_op {
+	NFT_MATH_OP_INC,
+	NFT_MATH_OP_DEC,
+	__NFT_MATH_OP_MAX,
+};
+#define NFT_MATH_OP_MAX (__NFT_MATH_OP_MAX - 1)
+
+enum nft_math_byteorder {
+	NFT_MATH_BYTEORDER_HOST,
+	NFT_MATH_BYTEORDER_BIG,
+	__NFT_MATH_BYTEORDER_MAX,
+};
+#define NFT_MATH_BYTEORDER_MAX (__NFT_MATH_BYTEORDER_MAX - 1)
+
 #endif /* _LINUX_NF_TABLES_H */
