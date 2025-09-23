@@ -22,7 +22,7 @@ struct ghcb_entry {
 
 	/* Host virtual address of this struct. */
 	struct ghcb_entry *hva;
-};
+} __aligned(PAGE_SIZE);
 
 struct ghcb_header {
 	struct ghcb_entry ghcbs[KVM_MAX_VCPUS];
