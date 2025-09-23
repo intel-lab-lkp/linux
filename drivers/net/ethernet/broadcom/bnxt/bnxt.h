@@ -33,6 +33,7 @@
 #ifdef CONFIG_TEE_BNXT_FW
 #include <linux/firmware/broadcom/tee_bnxt_fw.h>
 #endif
+#include <linux/bnxt/common.h>
 
 #define BNXT_DEFAULT_RX_COPYBREAK 256
 #define BNXT_MAX_RX_COPYBREAK 1024
@@ -2074,12 +2075,6 @@ struct bnxt_fw_health {
 #define BNXT_FW_RETRY			5
 #define BNXT_FW_IF_RETRY		10
 #define BNXT_FW_SLOT_RESET_RETRY	4
-
-struct bnxt_aux_priv {
-	struct auxiliary_device aux_dev;
-	struct bnxt_en_dev *edev;
-	int id;
-};
 
 enum board_idx {
 	BCM57301,
