@@ -18,12 +18,20 @@
 #undef pr_fmt
 #define pr_fmt(fmt) "insn: " fmt
 
+#define savesegment(seg, value)				\
+	asm("mov %%" #seg ",%0":"=r" (value) : : "memory")
+
 enum reg_type {
 	REG_TYPE_RM = 0,
 	REG_TYPE_REG,
 	REG_TYPE_INDEX,
 	REG_TYPE_BASE,
 };
+
+static __always_inline int user_mode(struct pt_regs *regs)
+{
+	return !!(regs->cs & 3);
+}
 
 /*
  * is_string_insn() - Determine if instruction is a string instruction
@@ -528,16 +536,16 @@ unsigned long insn_get_seg_base(struct pt_regs *regs, int seg_reg_idx)
 	 */
 
 	if (seg_reg_idx == INAT_SEG_REG_FS) {
-		rdmsrq(MSR_FS_BASE, base);
+		base = rdmsr(MSR_FS_BASE);
 	} else if (seg_reg_idx == INAT_SEG_REG_GS) {
 		/*
 		 * swapgs was called at the kernel entry point. Thus,
 		 * MSR_KERNEL_GS_BASE will have the user-space GS base.
 		 */
 		if (user_mode(regs))
-			rdmsrq(MSR_KERNEL_GS_BASE, base);
+			base = rdmsr(MSR_KERNEL_GS_BASE);
 		else
-			rdmsrq(MSR_GS_BASE, base);
+			base = rdmsr(MSR_GS_BASE);
 	} else {
 		base = 0;
 	}
