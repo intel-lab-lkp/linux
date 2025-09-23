@@ -26162,15 +26162,6 @@ F:	Documentation/usb/raw-gadget.rst
 F:	drivers/usb/gadget/legacy/raw_gadget.c
 F:	include/uapi/linux/usb/raw_gadget.h
 
-USB RTL8150 DRIVER
-M:	Petko Manolov <petkan@nucleusys.com>
-L:	linux-usb@vger.kernel.org
-L:	netdev@vger.kernel.org
-S:	Maintained
-W:	https://github.com/petkan/rtl8150
-T:	git https://github.com/petkan/rtl8150.git
-F:	drivers/net/usb/rtl8150.c
-
 USB SERIAL SUBSYSTEM
 M:	Johan Hovold <johan@kernel.org>
 L:	linux-usb@vger.kernel.org
