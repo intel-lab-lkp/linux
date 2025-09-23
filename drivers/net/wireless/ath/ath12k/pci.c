@@ -319,8 +319,6 @@ static void ath12k_pci_free_irq(struct ath12k_base *ab)
 		irq_idx = ATH12K_PCI_IRQ_CE0_OFFSET + i;
 		free_irq(ab->irq_num[irq_idx], &ab->ce.ce_pipe[i]);
 	}
-
-	ath12k_pci_free_ext_irq(ab);
 }
 
 static void ath12k_pci_ce_irq_enable(struct ath12k_base *ab, u16 ce_id)
@@ -478,11 +476,10 @@ static int ath12k_pci_ext_grp_napi_poll(struct napi_struct *napi, int budget)
 	struct ath12k_ext_irq_grp *irq_grp = container_of(napi,
 						struct ath12k_ext_irq_grp,
 						napi);
-	struct ath12k_base *ab = irq_grp->ab;
 	int work_done;
 	int i;
 
-	work_done = ath12k_wifi7_dp_service_srng(ab, irq_grp, budget);
+	work_done = irq_grp->irq_handler(irq_grp->dp, irq_grp, budget);
 	if (work_done < budget) {
 		napi_complete_done(napi, work_done);
 		for (i = 0; i < irq_grp->num_irq; i++)
@@ -517,7 +514,12 @@ static irqreturn_t ath12k_pci_ext_interrupt_handler(int irq, void *arg)
 	return IRQ_HANDLED;
 }
 
-static int ath12k_pci_ext_irq_config(struct ath12k_base *ab)
+static
+int ath12k_pci_ext_irq_config(struct ath12k_base *ab,
+			      int (*irq_handler)(struct ath12k_dp *dp,
+						 struct ath12k_ext_irq_grp *irq_grp,
+						 int budget),
+			      struct ath12k_dp *dp)
 {
 	struct ath12k_pci *ab_pci = ath12k_pci_priv(ab);
 	int i, j, n, ret, num_vectors = 0;
@@ -538,6 +540,8 @@ static int ath12k_pci_ext_irq_config(struct ath12k_base *ab)
 
 		irq_grp->ab = ab;
 		irq_grp->grp_id = i;
+		irq_grp->irq_handler = irq_handler;
+		irq_grp->dp = dp;
 		irq_grp->napi_ndev = alloc_netdev_dummy(0);
 		if (!irq_grp->napi_ndev) {
 			ret = -ENOMEM;
@@ -650,10 +654,6 @@ static int ath12k_pci_config_irq(struct ath12k_base *ab)
 
 		ath12k_pci_ce_irq_disable(ab, i);
 	}
-
-	ret = ath12k_pci_ext_irq_config(ab);
-	if (ret)
-		return ret;
 
 	return 0;
 }
@@ -1483,6 +1483,8 @@ static const struct ath12k_hif_ops ath12k_pci_hif_ops = {
 #ifdef CONFIG_ATH12K_COREDUMP
 	.coredump_download = ath12k_pci_coredump_download,
 #endif
+	.ext_irq_setup = ath12k_pci_ext_irq_config,
+	.ext_irq_cleanup = ath12k_pci_free_ext_irq,
 };
 
 static enum ath12k_device_family

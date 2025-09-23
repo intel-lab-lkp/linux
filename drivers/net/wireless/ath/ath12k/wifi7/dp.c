@@ -10,13 +10,15 @@
 #include "../dp_mon.h"
 #include "../dp_cmn.h"
 #include "dp_rx.h"
+#include "../hif.h"
 #include "dp.h"
 #include "dp_tx.h"
 
-int ath12k_wifi7_dp_service_srng(struct ath12k_base *ab,
-				 struct ath12k_ext_irq_grp *irq_grp,
-				 int budget)
+static int ath12k_wifi7_dp_service_srng(struct ath12k_dp *dp,
+					struct ath12k_ext_irq_grp *irq_grp,
+					int budget)
 {
+	struct ath12k_base *ab = dp->ab;
 	struct napi_struct *napi = &irq_grp->napi;
 	int grp_id = irq_grp->grp_id;
 	int work_done = 0;
@@ -134,6 +136,25 @@ done:
 	return tot_work_done;
 }
 
+static int ath12k_wifi7_dp_op_device_init(struct ath12k_dp *dp)
+{
+	int ret;
+
+	ret = ath12k_hif_ext_irq_setup(dp->ab, ath12k_wifi7_dp_service_srng, dp);
+
+	return ret;
+}
+
+static void ath12k_wifi7_dp_op_device_deinit(struct ath12k_dp *dp)
+{
+	ath12k_hif_ext_irq_cleanup(dp->ab);
+}
+
+static struct ath12k_dp_arch_ops ath12k_wifi7_dp_arch_ops = {
+	.dp_device_init = ath12k_wifi7_dp_op_device_init,
+	.dp_device_deinit = ath12k_wifi7_dp_op_device_deinit,
+};
+
 /* TODO: remove export once this file is built with wifi7 ko */
 struct ath12k_dp *ath12k_wifi7_dp_device_alloc(struct ath12k_base *ab)
 {
@@ -143,6 +164,8 @@ struct ath12k_dp *ath12k_wifi7_dp_device_alloc(struct ath12k_base *ab)
 	dp = kzalloc(sizeof(*dp), GFP_KERNEL);
 	if (!dp)
 		return NULL;
+
+	dp->ops = &ath12k_wifi7_dp_arch_ops;
 
 	dp->ab = ab;
 	dp->dev = ab->dev;

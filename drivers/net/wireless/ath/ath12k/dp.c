@@ -1672,12 +1672,17 @@ fail_link_desc_cleanup:
 
 void ath12k_dp_cmn_device_deinit(struct ath12k_dp *dp)
 {
+	dp->ops->dp_device_deinit(dp);
 	ath12k_dp_cleanup(dp->ab);
 }
 
 int ath12k_dp_cmn_device_init(struct ath12k_dp *dp)
 {
 	int ret;
+
+	ret = dp->ops->dp_device_init(dp);
+	if (ret)
+		return ret;
 
 	ret = ath12k_dp_setup(dp->ab);
 	if (ret)
