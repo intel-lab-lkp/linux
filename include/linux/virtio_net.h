@@ -374,6 +374,46 @@ static inline int virtio_net_handle_csum_offload(struct sk_buff *skb,
 	return 0;
 }
 
+static inline int
+virtio_net_out_net_header_to_skb(struct sk_buff *skb,
+				 struct virtio_net_hdr_v1_hash_tunnel_out_net_hdr *vhdr,
+				 bool out_net_hdr_negotiated,
+				 bool little_endian)
+{
+	unsigned int out_net_hdr_off;
+
+	if (!out_net_hdr_negotiated)
+		return 0;
+
+	if (vhdr->outer_nh_offset) {
+		out_net_hdr_off = __virtio16_to_cpu(little_endian, vhdr->outer_nh_offset);
+		skb_set_network_header(skb, out_net_hdr_off);
+	}
+
+	return 0;
+}
+
+static inline int
+virtio_net_out_net_header_from_skb(const struct sk_buff *skb,
+				   struct virtio_net_hdr_v1_hash_tunnel_out_net_hdr *vhdr,
+				   bool out_net_hdr_negotiated,
+				   bool little_endian)
+{
+	unsigned int out_net_hdr_off;
+
+	if (!out_net_hdr_negotiated) {
+		vhdr->outer_nh_offset = 0;
+		return 0;
+	}
+
+	out_net_hdr_off = skb_network_offset(skb);
+	if (out_net_hdr_off && skb->protocol == htons(ETH_P_IP))
+		vhdr->outer_nh_offset = __cpu_to_virtio16(little_endian,
+							  out_net_hdr_off);
+
+	return 0;
+}
+
 /*
  * vlan_hlen always refers to the outermost MAC header. That also
  * means it refers to the only MAC header, if the packet does not carry
