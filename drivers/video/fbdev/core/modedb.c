@@ -16,6 +16,7 @@
 #include <linux/slab.h>
 #include <linux/fb.h>
 #include <linux/kernel.h>
+#include <linux/fbcon.h>
 
 #undef DEBUG
 
@@ -1100,6 +1101,7 @@ void fb_delete_videomode(const struct fb_videomode *mode,
 		modelist = list_entry(pos, struct fb_modelist, list);
 		m = &modelist->mode;
 		if (fb_mode_is_equal(m, mode)) {
+			fb_display_clean_videomode(m);
 			list_del(pos);
 			kfree(pos);
 		}
@@ -1113,8 +1115,13 @@ void fb_delete_videomode(const struct fb_videomode *mode,
 void fb_destroy_modelist(struct list_head *head)
 {
 	struct list_head *pos, *n;
+	struct fb_modelist *modelist;
+	struct fb_videomode *m;
 
 	list_for_each_safe(pos, n, head) {
+		modelist = list_entry(pos, struct fb_modelist, list);
+		m = &modelist->mode;
+		fb_display_clean_videomode(m);
 		list_del(pos);
 		kfree(pos);
 	}
