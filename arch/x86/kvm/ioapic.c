@@ -113,6 +113,9 @@ static void __rtc_irq_eoi_tracking_restore_one(struct kvm_vcpu *vcpu)
 	struct dest_map *dest_map = &ioapic->rtc_status.dest_map;
 	union kvm_ioapic_redirect_entry *e;
 
+	if (vcpu->arch.apic->guest_apic_protected)
+		return;
+
 	e = &ioapic->redirtbl[RTC_GSI];
 	if (!kvm_apic_match_dest(vcpu, NULL, APIC_DEST_NOSHORT,
 				 e->fields.dest_id,
@@ -476,6 +479,7 @@ static int ioapic_service(struct kvm_ioapic *ioapic, int irq, bool line_status)
 {
 	union kvm_ioapic_redirect_entry *entry = &ioapic->redirtbl[irq];
 	struct kvm_lapic_irq irqe;
+	struct kvm_vcpu *vcpu;
 	int ret;
 
 	if (entry->fields.mask ||
@@ -505,7 +509,9 @@ static int ioapic_service(struct kvm_ioapic *ioapic, int irq, bool line_status)
 		BUG_ON(ioapic->rtc_status.pending_eoi != 0);
 		ret = kvm_irq_delivery_to_apic(ioapic->kvm, NULL, &irqe,
 					       &ioapic->rtc_status.dest_map);
-		ioapic->rtc_status.pending_eoi = (ret < 0 ? 0 : ret);
+		vcpu = kvm_get_vcpu(ioapic->kvm, 0);
+		if (!vcpu->arch.apic->guest_apic_protected)
+			ioapic->rtc_status.pending_eoi = (ret < 0 ? 0 : ret);
 	} else
 		ret = kvm_irq_delivery_to_apic(ioapic->kvm, NULL, &irqe, NULL);
 
