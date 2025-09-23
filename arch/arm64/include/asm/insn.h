@@ -717,6 +717,30 @@ static __always_inline u32 aarch64_insn_encode_immediate(
 
 	return insn;
 }
+
+extern const u32 aarch64_insn_ldst_size[];
+static __always_inline u32 aarch64_insn_encode_ldst_size(
+					 enum aarch64_insn_size_type type,
+					 u32 insn)
+{
+	u32 size;
+
+	if (type < AARCH64_INSN_SIZE_8 || type > AARCH64_INSN_SIZE_64) {
+		return AARCH64_BREAK_FAULT;
+	}
+
+	/* Don't corrput the top bits of other instructions which aren't a size. */
+	if (!aarch64_insn_is_ldst(insn)) {
+		return AARCH64_BREAK_FAULT;
+	}
+
+	size = aarch64_insn_ldst_size[type];
+	insn &= ~GENMASK(31, 30);
+	insn |= size << 30;
+
+	return insn;
+}
+
 static __always_inline u32 aarch64_insn_encode_register(
 				 enum aarch64_insn_register_type type,
 				 u32 insn,

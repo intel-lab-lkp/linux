@@ -42,29 +42,12 @@ u64 aarch64_insn_decode_immediate(enum aarch64_insn_imm_type type, u32 insn)
 	return (insn >> shift) & mask;
 }
 
-static const u32 aarch64_insn_ldst_size[] = {
+const u32 aarch64_insn_ldst_size[] = {
 	[AARCH64_INSN_SIZE_8] = 0,
 	[AARCH64_INSN_SIZE_16] = 1,
 	[AARCH64_INSN_SIZE_32] = 2,
 	[AARCH64_INSN_SIZE_64] = 3,
 };
-
-static u32 aarch64_insn_encode_ldst_size(enum aarch64_insn_size_type type,
-					 u32 insn)
-{
-	u32 size;
-
-	if (type < AARCH64_INSN_SIZE_8 || type > AARCH64_INSN_SIZE_64) {
-		pr_err("%s: unknown size encoding %d\n", __func__, type);
-		return AARCH64_BREAK_FAULT;
-	}
-
-	size = aarch64_insn_ldst_size[type];
-	insn &= ~GENMASK(31, 30);
-	insn |= size << 30;
-
-	return insn;
-}
 
 static inline long label_imm_common(unsigned long pc, unsigned long addr,
 				     long range)
