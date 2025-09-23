@@ -14,6 +14,7 @@
 #include <linux/raid/xor.h>
 #include <linux/jiffies.h>
 #include <linux/preempt.h>
+#include <linux/bootcache.h>
 #include <asm/xor.h>
 
 #ifndef XOR_SELECT_TEMPLATE
@@ -54,13 +55,13 @@ EXPORT_SYMBOL(xor_blocks);
 /* Set of all registered templates.  */
 static struct xor_block_template *__initdata template_list;
 
-#ifndef MODULE
 static void __init do_xor_register(struct xor_block_template *tmpl)
 {
 	tmpl->next = template_list;
 	template_list = tmpl;
 }
 
+#ifndef MODULE
 static int __init register_xor_blocks(void)
 {
 	active_template = XOR_SELECT_TEMPLATE(NULL);
@@ -78,6 +79,21 @@ static int __init register_xor_blocks(void)
 
 #define BENCH_SIZE	4096
 #define REPS		800U
+
+static struct xor_block_template * __init
+xor_get_template_by_name(char *fastest_name)
+{
+	struct xor_block_template *f;
+
+#define xor_speed	do_xor_register
+	// build a list of templates
+	XOR_TRY_TEMPLATES;
+#undef xor_speed
+	for (f = template_list; f; f = f->next)
+		if (!strcmp(f->name, fastest_name))
+			return f;
+	return NULL;
+}
 
 static void __init
 do_xor_speed(struct xor_block_template *tmpl, void *b1, void *b2)
@@ -117,8 +133,17 @@ calibrate_xor_blocks(void)
 {
 	void *b1, *b2;
 	struct xor_block_template *f, *fastest;
+	char cached_name[32];
+	int ret;
 
 	fastest = XOR_SELECT_TEMPLATE(NULL);
+
+	if (!fastest) {
+		ret = bootcache_get_string("xor_blocks_fastest",
+				cached_name, sizeof(cached_name));
+		if (!ret)
+			fastest = xor_get_template_by_name(cached_name);
+	}
 
 	if (fastest) {
 		printk(KERN_INFO "xor: automatically using best "
@@ -148,6 +173,8 @@ calibrate_xor_blocks(void)
 	for (f = fastest; f; f = f->next)
 		if (f->speed > fastest->speed)
 			fastest = f;
+
+	bootcache_set_string("xor_blocks_fastest", fastest->name);
 
 	pr_info("xor: using function: %s (%d MB/sec)\n",
 	       fastest->name, fastest->speed);
