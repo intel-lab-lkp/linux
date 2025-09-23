@@ -1053,12 +1053,19 @@ void __btrfs_set_fs_compat_ro(struct btrfs_fs_info *fs_info, u64 flag,
 			      const char *name);
 void __btrfs_clear_fs_compat_ro(struct btrfs_fs_info *fs_info, u64 flag,
 				const char *name);
+void __btrfs_set_fs_compat(struct btrfs_fs_info *fs_info, u64 flag,
+			   const char *name);
+void __btrfs_clear_fs_compat(struct btrfs_fs_info *fs_info, u64 flag,
+			     const char *name);
 
 #define __btrfs_fs_incompat(fs_info, flags)				\
 	(!!(btrfs_super_incompat_flags((fs_info)->super_copy) & (flags)))
 
 #define __btrfs_fs_compat_ro(fs_info, flags)				\
 	(!!(btrfs_super_compat_ro_flags((fs_info)->super_copy) & (flags)))
+
+#define __btrfs_fs_compat(fs_info, flags)				\
+	(!!(btrfs_super_compat_flags((fs_info)->super_copy) & (flags)))
 
 #define btrfs_set_fs_incompat(__fs_info, opt)				\
 	__btrfs_set_fs_incompat((__fs_info), BTRFS_FEATURE_INCOMPAT_##opt, #opt)
@@ -1077,6 +1084,12 @@ void __btrfs_clear_fs_compat_ro(struct btrfs_fs_info *fs_info, u64 flag,
 
 #define btrfs_fs_compat_ro(fs_info, opt)				\
 	__btrfs_fs_compat_ro((fs_info), BTRFS_FEATURE_COMPAT_RO_##opt)
+
+#define btrfs_fs_compat(fs_info, opt)				\
+	__btrfs_fs_compat((fs_info), BTRFS_FEATURE_COMPAT_##opt)
+
+#define btrfs_set_fs_compat(__fs_info, opt)				\
+	__btrfs_set_fs_compat((__fs_info), BTRFS_FEATURE_COMPAT_##opt, #opt)
 
 #define btrfs_clear_opt(o, opt)		((o) &= ~BTRFS_MOUNT_##opt)
 #define btrfs_set_opt(o, opt)		((o) |= BTRFS_MOUNT_##opt)
