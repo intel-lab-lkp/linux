@@ -1154,6 +1154,36 @@ static int hwsim_write_simulate_radar(void *dat, u64 val)
 DEFINE_DEBUGFS_ATTRIBUTE(hwsim_simulate_radar, NULL,
 			 hwsim_write_simulate_radar, "%llu\n");
 
+static void hwsim_6ghz_chanctx_iter(struct ieee80211_hw *hw,
+				    struct ieee80211_chanctx_conf *conf,
+				    void *data)
+{
+	struct hwsim_get_any_chanctx_conf_arg *arg = data;
+
+	if (conf->def.chan && conf->def.chan->band == NL80211_BAND_6GHZ)
+		arg->chanctx_conf = conf;
+}
+
+static int hwsim_write_simulate_incumbent_signal(void *dat, u64 val)
+{
+	struct mac80211_hwsim_data *data = dat;
+	struct hwsim_get_any_chanctx_conf_arg arg = { .chanctx_conf = NULL };
+
+	ieee80211_iter_chan_contexts_atomic(data->hw,
+					    hwsim_6ghz_chanctx_iter,
+					    &arg);
+
+	if (!arg.chanctx_conf)
+		return -EINVAL;
+
+	ieee80211_incumbent_signal_detected(data->hw, arg.chanctx_conf, (u32)val);
+
+	return 0;
+}
+
+DEFINE_DEBUGFS_ATTRIBUTE(hwsim_simulate_incumbent_signal, NULL,
+			 hwsim_write_simulate_incumbent_signal, "%llu\n");
+
 static int hwsim_fops_group_read(void *dat, u64 *val)
 {
 	struct mac80211_hwsim_data *data = dat;
@@ -5590,6 +5620,9 @@ static int mac80211_hwsim_new_radio(struct genl_info *info,
 		debugfs_create_file("dfs_simulate_radar", 0222,
 				    data->debugfs,
 				    data, &hwsim_simulate_radar);
+	debugfs_create_file("simulate_incumbent_signal_interference", 0200,
+			    data->debugfs,
+			    data, &hwsim_simulate_incumbent_signal);
 
 	if (param->pmsr_capa) {
 		data->pmsr_capa = *param->pmsr_capa;

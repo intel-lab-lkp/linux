@@ -341,4 +341,8 @@ enum hwsim_rate_info_attributes {
 	HWSIM_RATE_INFO_ATTR_MAX = NUM_HWSIM_RATE_INFO_ATTRS - 1
 };
 
+struct hwsim_get_any_chanctx_conf_arg {
+	struct ieee80211_chanctx_conf *chanctx_conf;
+};
+
 #endif /* __MAC80211_HWSIM_H */
