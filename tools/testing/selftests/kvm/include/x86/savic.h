@@ -16,4 +16,5 @@ void savic_hv_write_reg(uint32_t reg, uint64_t val);
 uint64_t savic_hv_read_reg(uint32_t reg);
 void savic_enable(void);
 int savic_nr_pages_required(uint64_t page_size);
+void savic_vc_handler(struct ex_regs *regs);
 #endif

@@ -41,6 +41,8 @@ enum lapic_lvt_entry {
 #define MSR_AMD64_SECURE_AVIC_EN_BIT       0
 #define MSR_AMD64_SECURE_AVIC_ALLOWED_NMI_BIT       1
 
+#define SVM_EXIT_AVIC_UNACCELERATED_ACCESS      0x402
+
 /*
  * Initial pool of guest apic backing page.
  */
@@ -202,4 +204,147 @@ void savic_enable(void)
 	__GUEST_ASSERT(savic_ctrl_msr_val == exp_msr_val,
 			"SAVIC Control msr unexpected val : 0x%lx, expected : 0x%lx",
 			savic_ctrl_msr_val, exp_msr_val);
+}
+
+static bool savic_reg_access_is_trapped(uint32_t reg)
+{
+	switch (reg) {
+	case APIC_ID:
+	case APIC_TASKPRI:
+	case APIC_EOI:
+	case APIC_LDR:
+	case APIC_SPIV:
+	case APIC_ICR:
+	case APIC_ICR2:
+	case APIC_LVTT:
+	case APIC_LVTTHMR:
+	case APIC_LVTPC:
+	case APIC_LVT0:
+	case APIC_LVT1:
+	case APIC_LVTERR:
+	case APIC_TMICT:
+	case APIC_TDCR:
+		return true;
+	case APIC_LVR:
+	case APIC_PROCPRI:
+	case APIC_TMR:
+	case APIC_IRR ... APIC_IRR + 0x70:
+	case APIC_TMCCT:
+		return false;
+	default:
+		return false;
+	}
+}
+
+static void savic_unaccel_apic_msrs_read(struct guest_apic_page *apic_page,
+		uint32_t reg, uint64_t *val)
+{
+	switch (reg) {
+	case APIC_TMICT:
+	case APIC_TMCCT:
+	case APIC_TDCR:
+	case APIC_LVTT:
+	case APIC_LVTTHMR:
+	case APIC_LVTPC:
+	case APIC_LVT0:
+	case APIC_LVT1:
+	case APIC_LVTERR:
+		*val = savic_hv_read_reg(reg);
+		break;
+	default:
+		__GUEST_ASSERT(0, "Unexpected unaccelerated read trap for reg: %x\n", reg);
+	}
+}
+
+static void savic_unaccel_apic_msrs_write(struct guest_apic_page *apic_page,
+		uint32_t reg, uint64_t val)
+{
+	switch (reg) {
+	/*
+	 * APIC_ID value is in sync between guest apic backing page and
+	 * hv.
+	 * LVT* registers and APIC timer register updates are propagated to hv.
+	 */
+	case APIC_ID:
+	case APIC_LVTT:
+	case APIC_LVTTHMR:
+	case APIC_LVTPC:
+	case APIC_LVT0:
+	case APIC_LVT1:
+	case APIC_LVTERR:
+	case APIC_SPIV:
+	case APIC_TMICT:
+	case APIC_TMCCT:
+	case APIC_TDCR:
+		savic_write_reg(apic_page, reg, val);
+		savic_hv_write_reg(reg, val);
+		break;
+	/*
+	 * LDR is derived in hv from APIC_ID.
+	 * TPR, IRR information is not propagated to hv.
+	 */
+	case APIC_LDR:
+	case APIC_TASKPRI:
+	case APIC_IRR:
+		savic_write_reg(apic_page, reg, val);
+		break;
+	/*
+	 * EOI write need to be propagated to hv for level-triggered
+	 * interrupts.
+	 */
+	case APIC_EOI:
+		savic_hv_write_reg(reg, val);
+		break;
+	default:
+		__GUEST_ASSERT(0, "Write not permitted for reg: %x\n", reg);
+	}
+}
+
+static void handle_savic_unaccel_access(struct ex_regs *regs)
+{
+	bool write;;
+	uint64_t msr = regs->rcx;
+	uint32_t reg = (msr - APIC_BASE_MSR) << 4;
+	struct guest_apic_page *apic_page;
+	uint64_t low = regs->rax;
+	uint64_t high = regs->rdx;
+	uint64_t val = 0;
+
+	apic_page = &apic_page_pool->guest_apic_page[x2apic_read_reg(APIC_ID)];
+
+	switch (msr) {
+	case APIC_BASE_MSR ... APIC_BASE_MSR + 0xff:
+		if (savic_reg_access_is_trapped(reg))
+			write = *((uint8_t *)regs->rip - 1) == 0x30;
+		else
+			write = *((uint8_t *)regs->rip + 1) == 0x30;
+		if (write) {
+			savic_unaccel_apic_msrs_write(apic_page, reg,
+						      high << 32 | low);
+		} else {
+			savic_unaccel_apic_msrs_read(apic_page, reg, &val);
+			regs->rax = val & ((1ULL << 32) - 1);
+			regs->rdx = val >> 32;
+		}
+		if (!savic_reg_access_is_trapped(reg))
+			regs->rip += 2;
+		break;
+	default:
+		__GUEST_ASSERT(0, "Unknown unaccelerated msr: %lx\n", msr);
+		break;
+	}
+}
+
+void savic_vc_handler(struct ex_regs *regs)
+{
+	uint64_t exit_code = regs->error_code;
+
+	switch (exit_code) {
+	case SVM_EXIT_AVIC_UNACCELERATED_ACCESS:
+		handle_savic_unaccel_access(regs);
+		break;
+	default:
+		sev_es_vc_handler(regs);
+		break;
+	}
 }
