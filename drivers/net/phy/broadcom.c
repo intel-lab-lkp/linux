@@ -434,6 +434,16 @@ static int bcm54811_config_init(struct phy_device *phydev)
 	if (err < 0)
 		return err;
 
+	if (!phy_interface_is_rgmii(phydev)) {
+		/* Misc Control: GMII/MII/MII-Lite Mode (not RGMII) */
+		err = bcm54xx_auxctl_write(phydev, MII_BCM54XX_AUXCTL_SHDWSEL_MISC,
+					   MII_BCM54XX_AUXCTL_MISC_WREN |
+					   MII_BCM54XX_AUXCTL_SHDWSEL_MISC_RGMII_SKEW_EN |
+					   MII_BCM54XX_AUXCTL_SHDWSEL_MISC_RSVD);
+		if (err < 0)
+			return err;
+	}
+
 	return bcm5481x_set_brrmode(phydev, priv->brr_mode);
 }
 
