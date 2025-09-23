@@ -17,7 +17,6 @@
 #include <asm/kprobes.h>
 
 #define AARCH64_INSN_N_BIT	BIT(22)
-#define AARCH64_INSN_LSL_12	BIT(22)
 
 u64 aarch64_insn_decode_immediate(enum aarch64_insn_imm_type type, u32 insn)
 {
@@ -584,67 +583,6 @@ u32 aarch64_insn_gen_cas(enum aarch64_insn_register result,
 					    value);
 }
 #endif
-
-u32 aarch64_insn_gen_add_sub_imm(enum aarch64_insn_register dst,
-				 enum aarch64_insn_register src,
-				 int imm, enum aarch64_insn_variant variant,
-				 enum aarch64_insn_adsb_type type)
-{
-	u32 insn;
-
-	switch (type) {
-	case AARCH64_INSN_ADSB_ADD:
-		insn = aarch64_insn_get_add_imm_value();
-		break;
-	case AARCH64_INSN_ADSB_SUB:
-		insn = aarch64_insn_get_sub_imm_value();
-		break;
-	case AARCH64_INSN_ADSB_ADD_SETFLAGS:
-		insn = aarch64_insn_get_adds_imm_value();
-		break;
-	case AARCH64_INSN_ADSB_SUB_SETFLAGS:
-		insn = aarch64_insn_get_subs_imm_value();
-		break;
-	default:
-		pr_err("%s: unknown add/sub encoding %d\n", __func__, type);
-		return AARCH64_BREAK_FAULT;
-	}
-
-	switch (variant) {
-	case AARCH64_INSN_VARIANT_32BIT:
-		break;
-	case AARCH64_INSN_VARIANT_64BIT:
-		insn |= AARCH64_INSN_SF_BIT;
-		break;
-	default:
-		pr_err("%s: unknown variant encoding %d\n", __func__, variant);
-		return AARCH64_BREAK_FAULT;
-	}
-
-	/* We can't encode more than a 24bit value (12bit + 12bit shift) */
-	if (imm & ~(BIT(24) - 1))
-		goto out;
-
-	/* If we have something in the top 12 bits... */
-	if (imm & ~(SZ_4K - 1)) {
-		/* ... and in the low 12 bits -> error */
-		if (imm & (SZ_4K - 1))
-			goto out;
-
-		imm >>= 12;
-		insn |= AARCH64_INSN_LSL_12;
-	}
-
-	insn = aarch64_insn_encode_register(AARCH64_INSN_REGTYPE_RD, insn, dst);
-
-	insn = aarch64_insn_encode_register(AARCH64_INSN_REGTYPE_RN, insn, src);
-
-	return aarch64_insn_encode_immediate(AARCH64_INSN_IMM_12, insn, imm);
-
-out:
-	pr_err("%s: invalid immediate encoding %d\n", __func__, imm);
-	return AARCH64_BREAK_FAULT;
-}
 
 u32 aarch64_insn_gen_bitfield(enum aarch64_insn_register dst,
 			      enum aarch64_insn_register src,
