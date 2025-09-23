@@ -46,6 +46,23 @@ static inline bool is_sev_vm(struct kvm_vm *vm)
 	return is_sev_es_vm(vm) || vm->type == KVM_X86_SEV_VM;
 }
 
+static inline bool is_sev_enabled(void)
+{
+	return rdmsr(MSR_AMD64_SEV) & MSR_AMD64_SEV_ENABLED;
+}
+
+static inline bool is_sev_es_enabled(void)
+{
+	return is_sev_enabled() &&
+	       rdmsr(MSR_AMD64_SEV) & MSR_AMD64_SEV_ES_ENABLED;
+}
+
+static inline bool is_sev_snp_enabled(void)
+{
+	return is_sev_es_enabled() &&
+		rdmsr(MSR_AMD64_SEV) & MSR_AMD64_SEV_SNP_ENABLED;
+}
+
 int ghcb_nr_pages_required(uint64_t page_size);
 
 void sev_vm_launch(struct kvm_vm *vm, uint32_t policy);
