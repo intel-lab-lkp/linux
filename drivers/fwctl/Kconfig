@@ -30,4 +30,15 @@ config FWCTL_PDS
 	  DSC hardware family.
 
 	  If you don't know what to do here, say N.
+
+config FWCTL_BNXT
+	tristate "bnxt control fwctl driver"
+	depends on BNXT
+	help
+	  BNXT provides interface for the user process to access the debug and
+	  configuration registers of the Broadcom NIC hardware family
+	  This will allow configuration and debug tools to work out of the box on
+	  mainstream kernel.
+
+	  If you don't know what to do here, say N.
 endif
