@@ -92,7 +92,7 @@ static int intel_vrr_extra_vblank_delay(struct intel_display *display)
 	return DISPLAY_VER(display) < 13 ? 1 : 0;
 }
 
-int intel_vrr_vblank_delay(const struct intel_crtc_state *crtc_state)
+int intel_vrr_scl_delay(const struct intel_crtc_state *crtc_state)
 {
 	struct intel_display *display = to_intel_display(crtc_state);
 
