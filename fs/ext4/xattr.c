@@ -2607,7 +2607,10 @@ static int ext4_xattr_move_to_block(handle_t *handle, struct inode *inode,
 	struct ext4_xattr_ibody_header *header = IHDR(inode, raw_inode);
 	int needs_kvfree = 0;
 	int error;
-
+	if (value_size == 0 && entry->e_value_inum != 0) {
+		error = -EFSCORRUPTED;
+		goto out;
+	}
 	is = kzalloc(sizeof(struct ext4_xattr_ibody_find), GFP_NOFS);
 	bs = kzalloc(sizeof(struct ext4_xattr_block_find), GFP_NOFS);
 	b_entry_name = kmalloc(entry->e_name_len + 1, GFP_NOFS);
