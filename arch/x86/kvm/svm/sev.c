@@ -4487,7 +4487,8 @@ void sev_vcpu_after_set_cpuid(struct vcpu_svm *svm)
 
 static void sev_es_init_vmcb(struct vcpu_svm *svm)
 {
-	struct kvm_sev_info *sev = to_kvm_sev_info(svm->vcpu.kvm);
+	struct kvm_vcpu *vcpu = &svm->vcpu;
+	struct kvm_sev_info *sev = to_kvm_sev_info(vcpu->kvm);
 	struct vmcb *vmcb = svm->vmcb01.ptr;
 
 	svm->vmcb->control.nested_ctl |= SVM_NESTED_CTL_SEV_ES_ENABLE;
@@ -4546,6 +4547,9 @@ static void sev_es_init_vmcb(struct vcpu_svm *svm)
 
 	/* Can't intercept XSETBV, HV can't modify XCR0 directly */
 	svm_clr_intercept(svm, INTERCEPT_XSETBV);
+
+	if (sev_savic_active(vcpu->kvm))
+		svm_set_intercept_for_msr(vcpu, MSR_AMD64_SAVIC_CONTROL, MSR_TYPE_RW, false);
 }
 
 void sev_init_vmcb(struct vcpu_svm *svm)
