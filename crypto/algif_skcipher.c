@@ -70,6 +70,7 @@ static int algif_skcipher_export(struct sock *sk, struct skcipher_request *req)
 	if (!ctx->state)
 		return -ENOMEM;
 
+	memset(ctx->state, 0, statesize);
 	err = crypto_skcipher_export(req, ctx->state);
 	if (err) {
 		sock_kzfree_s(sk, ctx->state, statesize);
