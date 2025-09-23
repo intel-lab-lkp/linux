@@ -3092,6 +3092,9 @@ out:
 	sev_supported_vmsa_features = 0;
 	if (sev_es_debug_swap_enabled)
 		sev_supported_vmsa_features |= SVM_SEV_FEAT_DEBUG_SWAP;
+
+	if (sev_snp_savic_enabled)
+		sev_supported_vmsa_features |= SVM_SEV_FEAT_SECURE_AVIC;
 }
 
 void sev_hardware_unsetup(void)
