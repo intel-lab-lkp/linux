@@ -30,6 +30,7 @@
 #include "processor.h"
 #include "test_util.h"
 #include "vmx.h"
+#include "sev.h"
 
 /* Default running time for the test */
 #define DEFAULT_RUN_SECS 3
@@ -48,7 +49,7 @@
  * Incremented in the IPI handler. Provides evidence to the sender that the IPI
  * arrived at the destination
  */
-static volatile uint64_t ipis_rcvd;
+static volatile uint64_t *ipis_rcvd;
 
 static bool x2apic;
 
@@ -93,6 +94,7 @@ struct test_data_page {
 	 *  to determine whether APIC access exits are working.
 	 */
 	uint32_t halter_lvr;
+	uint64_t ipis_rcvd;
 };
 
 struct thread_params {
@@ -142,7 +144,7 @@ static void halter_guest_code(struct test_data_page *data)
  */
 static void guest_ipi_handler(struct ex_regs *regs)
 {
-	ipis_rcvd++;
+	(*ipis_rcvd)++;
 	apic_write_reg(APIC_EOI, 77);
 }
 
@@ -176,7 +178,7 @@ static void sender_guest_code(struct test_data_page *data)
 
 	last_wake_count = data->wake_count;
 	last_hlt_count = data->hlt_count;
-	last_ipis_rcvd_count = ipis_rcvd;
+	last_ipis_rcvd_count = *ipis_rcvd;
 	for (;;) {
 		/*
 		 * Send IPI to halter vCPU.
@@ -201,19 +203,19 @@ static void sender_guest_code(struct test_data_page *data)
 		 */
 		tsc_start = rdtsc();
 		while (rdtsc() - tsc_start < 2000000000) {
-			if ((ipis_rcvd != last_ipis_rcvd_count) &&
+			if ((*ipis_rcvd != last_ipis_rcvd_count) &&
 			    (data->wake_count != last_wake_count) &&
 			    (data->hlt_count != last_hlt_count))
 				break;
 		}
 
-		GUEST_ASSERT((ipis_rcvd != last_ipis_rcvd_count) &&
+		GUEST_ASSERT((*ipis_rcvd != last_ipis_rcvd_count) &&
 			     (data->wake_count != last_wake_count) &&
 			     (data->hlt_count != last_hlt_count));
 
 		last_wake_count = data->wake_count;
 		last_hlt_count = data->hlt_count;
-		last_ipis_rcvd_count = ipis_rcvd;
+		last_ipis_rcvd_count = *ipis_rcvd;
 	}
 }
 
@@ -384,10 +386,10 @@ void do_migrations(struct test_data_page *data, int run_secs, int delay_usecs,
 }
 
 void get_cmdline_args(int argc, char *argv[], int *run_secs,
-		      bool *migrate, int *delay_usecs, bool *x2apic)
+		      bool *migrate, int *delay_usecs, bool *x2apic, int *vm_type)
 {
 	for (;;) {
-		int opt = getopt(argc, argv, "s:d:v:me:");
+		int opt = getopt(argc, argv, "s:d:v:me:t:");
 
 		if (opt == -1)
 			break;
@@ -404,6 +406,25 @@ void get_cmdline_args(int argc, char *argv[], int *run_secs,
 		case 'e':
 			*x2apic = parse_size(optarg) == 1;
 			break;
+		case 't':
+			*vm_type = parse_size(optarg);
+			switch (*vm_type) {
+			case KVM_X86_DEFAULT_VM:
+				break;
+			case KVM_X86_SEV_VM:
+				TEST_REQUIRE(kvm_cpu_has(X86_FEATURE_SEV));
+				break;
+			case KVM_X86_SEV_ES_VM:
+				TEST_REQUIRE(kvm_cpu_has(X86_FEATURE_SEV_ES));
+				break;
+			case KVM_X86_SNP_VM:
+				TEST_REQUIRE(kvm_cpu_has(X86_FEATURE_SNP));
+				break;
+			default:
+				TEST_ASSERT(false, "Unsupported VM type :%d",
+					    *vm_type);
+			}
+			break;
 		default:
 			TEST_ASSERT(false,
 				    "Usage: -s <runtime seconds>. Default is %d seconds.\n"
@@ -412,9 +433,36 @@ void get_cmdline_args(int argc, char *argv[], int *run_secs,
 				    "-d <delay microseconds> - delay between migrate_pages() calls."
 				    " Default is %d microseconds.\n"
 				    "-e <apic mode> - APIC mode 0 - xapic , 1 - x2apic"
-				    " Default is xAPIC.\n",
-				    DEFAULT_RUN_SECS, DEFAULT_DELAY_USECS);
+				    " Default is xAPIC.\n"
+				    "-t <vm type>. Default is %d.\n"
+				    "Supported values:\n"
+				    "0 - default\n"
+				    "2 - SEV\n"
+				    "3 - SEV-ES\n"
+				    "4 - SNP",
+				    DEFAULT_RUN_SECS, DEFAULT_DELAY_USECS, KVM_X86_DEFAULT_VM);
 		}
+	}
+}
+
+static inline bool is_sev_vm_type(int type)
+{
+	return type == KVM_X86_SEV_VM ||
+		type == KVM_X86_SEV_ES_VM ||
+		type == KVM_X86_SNP_VM;
+}
+
+static inline uint64_t get_sev_policy(int vm_type)
+{
+	switch (vm_type) {
+	case KVM_X86_SEV_VM:
+		return SEV_POLICY_NO_DBG;
+	case KVM_X86_SEV_ES_VM:
+		return SEV_POLICY_ES;
+	case KVM_X86_SNP_VM:
+		return snp_default_policy();
+	default:
+		return 0;
 	}
 }
 
@@ -432,8 +480,13 @@ int main(int argc, char *argv[])
 	struct thread_params params[2];
 	struct kvm_vm *vm;
 	uint64_t *pipis_rcvd;
+	int vm_type = KVM_X86_DEFAULT_VM;
+	bool is_sev;
 
-	get_cmdline_args(argc, argv, &run_secs, &migrate, &delay_usecs, &x2apic);
+	get_cmdline_args(argc, argv, &run_secs, &migrate, &delay_usecs,
+			 &x2apic, &vm_type);
+	is_sev = is_sev_vm_type(vm_type);
+
 	if (x2apic)
 		migrate = 0;
 
@@ -442,9 +495,15 @@ int main(int argc, char *argv[])
 	if (delay_usecs <= 0)
 		delay_usecs = DEFAULT_DELAY_USECS;
 
-	vm = vm_create_with_one_vcpu(&params[0].vcpu, halter_guest_code);
+	if (is_sev)
+		vm = vm_sev_create_with_one_vcpu(vm_type, halter_guest_code,
+				&params[0].vcpu);
+	else
+		vm = vm_create_with_one_vcpu(&params[0].vcpu, halter_guest_code);
 
 	vm_install_exception_handler(vm, IPI_VECTOR, guest_ipi_handler);
+	if (is_sev_es_vm(vm))
+		vm_install_exception_handler(vm, 29, sev_es_vc_handler);
 
 	sync_global_to_guest(vm, x2apic);
 	if (!x2apic)
@@ -452,8 +511,10 @@ int main(int argc, char *argv[])
 
 	params[1].vcpu = vm_vcpu_add(vm, 1, sender_guest_code);
 
-	test_data_page_vaddr = vm_vaddr_alloc_page(vm);
+	test_data_page_vaddr = vm_vaddr_alloc_page_shared(vm);
 	data = addr_gva2hva(vm, test_data_page_vaddr);
+	if (is_sev_snp_vm(vm))
+		vm_mem_set_shared(vm, addr_hva2gpa(vm, data), getpagesize());
 	memset(data, 0, sizeof(*data));
 	params[0].data = data;
 	params[1].data = data;
@@ -461,9 +522,14 @@ int main(int argc, char *argv[])
 	vcpu_args_set(params[0].vcpu, 1, test_data_page_vaddr);
 	vcpu_args_set(params[1].vcpu, 1, test_data_page_vaddr);
 
-	pipis_rcvd = (uint64_t *)addr_gva2hva(vm, (uint64_t)&ipis_rcvd);
+	ipis_rcvd = &((struct test_data_page *)test_data_page_vaddr)->ipis_rcvd;
+	sync_global_to_guest(vm, ipis_rcvd);
+	pipis_rcvd = (uint64_t *)addr_gva2hva(vm, (uint64_t)ipis_rcvd);
 	params[0].pipis_rcvd = pipis_rcvd;
 	params[1].pipis_rcvd = pipis_rcvd;
+
+	if (is_sev)
+		vm_sev_launch(vm, get_sev_policy(vm_type), NULL);
 
 	/* Start halter vCPU thread and wait for it to execute first HLT. */
 	r = pthread_create(&threads[0], NULL, vcpu_thread, &params[0]);

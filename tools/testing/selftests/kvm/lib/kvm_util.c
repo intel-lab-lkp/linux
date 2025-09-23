@@ -1593,6 +1593,25 @@ vm_vaddr_t vm_vaddr_alloc_page(struct kvm_vm *vm)
 }
 
 /*
+ * VM Virtual Address Allocate shared Page
+ *
+ * Input Args:
+ *   vm - Virtual Machine
+ *
+ * Output Args: None
+ *
+ * Return:
+ *   Starting guest virtual address
+ *
+ * Allocates at least one system page (in shared state) worth of bytes within the
+ * virtual address space of the vm.
+ */
+vm_vaddr_t vm_vaddr_alloc_page_shared(struct kvm_vm *vm)
+{
+	return vm_vaddr_alloc_pages_shared(vm, 1);
+}
+
+/*
  * Map a range of VM virtual address to the VM's physical address
  *
  * Input Args:
