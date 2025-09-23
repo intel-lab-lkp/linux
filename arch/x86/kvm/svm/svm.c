@@ -1300,6 +1300,11 @@ static int svm_vcpu_create(struct kvm_vcpu *vcpu)
 	if (err)
 		goto error_free_vmsa_page;
 
+	if (sev_savic_active(vcpu->kvm)) {
+		vcpu->arch.apic->guest_apic_protected = true;
+		vcpu->arch.apic->prot_apic_intr_inject = true;
+	}
+
 	svm->msrpm = svm_vcpu_alloc_msrpm();
 	if (!svm->msrpm) {
 		err = -ENOMEM;
