@@ -1600,9 +1600,12 @@ static bool hwpoison_user_mappings(struct folio *folio, struct page *p,
 	collect_procs(folio, p, &tokill, flags & MF_ACTION_REQUIRED);
 
 	unmap_success = !unmap_poisoned_folio(folio, pfn, flags & MF_MUST_KILL);
-	if (!unmap_success)
+	if (!unmap_success) {
 		pr_err("%#lx: failed to unmap page (folio mapcount=%d)\n",
 		       pfn, folio_mapcount(folio));
+		if (list_empty(&tokill))
+			collect_procs(folio, p, &tokill, 1);
+	}
 
 	/*
 	 * try_to_unmap() might put mlocked page in lru cache, so call
