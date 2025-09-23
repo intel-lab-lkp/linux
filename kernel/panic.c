@@ -422,13 +422,6 @@ void vpanic(const char *fmt, va_list args)
 		buf[len - 1] = '\0';
 
 	pr_emerg("Kernel panic - not syncing: %s\n", buf);
-#ifdef CONFIG_DEBUG_BUGVERBOSE
-	/*
-	 * Avoid nested stack-dumping if a panic occurs during oops processing
-	 */
-	if (!test_taint(TAINT_DIE) && oops_in_progress <= 1)
-		dump_stack();
-#endif
 
 	/*
 	 * If kgdb is enabled, give it a chance to run before we stop all
@@ -459,6 +452,14 @@ void vpanic(const char *fmt, va_list args)
 	atomic_notifier_call_chain(&panic_notifier_list, 0, buf);
 
 	sys_info(panic_print);
+
+#ifdef CONFIG_DEBUG_BUGVERBOSE
+	/*
+	 * Avoid nested stack-dumping if a panic occurs during oops processing
+	 */
+	if (!test_taint(TAINT_DIE) && oops_in_progress <= 1)
+		dump_stack();
+#endif
 
 	kmsg_dump_desc(KMSG_DUMP_PANIC, buf);
 
