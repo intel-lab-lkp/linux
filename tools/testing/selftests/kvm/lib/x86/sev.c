@@ -68,7 +68,6 @@ static void sev_es_terminate(void)
 
 static struct ghcb_entry *ghcb_alloc(void)
 {
-	return &ghcb_pool->ghcbs[0];
 	struct ghcb_entry *entry;
 	struct ghcb *ghcb;
 	int i;
@@ -81,7 +80,7 @@ static struct ghcb_entry *ghcb_alloc(void)
 			entry = &ghcb_pool->ghcbs[i];
 			ghcb = &entry->ghcb;
 
-			memset(&ghcb, 0, sizeof(*ghcb));
+			memset(ghcb, 0, sizeof(*ghcb));
 			ghcb->ghcb_usage = 0;
 			ghcb->protocol_version = 1;
 
