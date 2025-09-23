@@ -342,7 +342,7 @@ void force_page_cache_ra(struct readahead_control *ractl,
 	struct address_space *mapping = ractl->mapping;
 	struct file_ra_state *ra = ractl->ra;
 	struct backing_dev_info *bdi = inode_to_bdi(mapping->host);
-	unsigned long max_pages;
+	unsigned long max_pages, index;
 
 	if (unlikely(!mapping->a_ops->read_folio && !mapping->a_ops->readahead))
 		return;
@@ -353,6 +353,19 @@ void force_page_cache_ra(struct readahead_control *ractl,
 	 */
 	max_pages = max_t(unsigned long, bdi->io_pages, ra->ra_pages);
 	nr_to_read = min_t(unsigned long, nr_to_read, max_pages);
+
+	index = readahead_index(ractl);
+	/*
+	 * Skip this readahead if the requested range is fully covered
+	 * by the ongoing readahead range. This typically occurs in
+	 * concurrent scenarios.
+	 */
+	if (index >= ra->start && index + nr_to_read  <= ra->start + ra->size)
+		return;
+
+	ra->start = index;
+	ra->size = nr_to_read;
+
 	while (nr_to_read) {
 		unsigned long this_chunk = (2 * 1024 * 1024) / PAGE_SIZE;
 
@@ -362,6 +375,10 @@ void force_page_cache_ra(struct readahead_control *ractl,
 
 		nr_to_read -= this_chunk;
 	}
+
+	/* Reset readahead state to allow the next readahead */
+	ra->start = 0;
+	ra->size = 0;
 }
 
 /*
