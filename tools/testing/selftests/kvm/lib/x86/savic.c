@@ -90,12 +90,14 @@ int savic_nr_pages_required(uint64_t page_size)
  */
 void set_savic_control_msr(struct guest_apic_page *apic_page, bool enable, bool enable_nmi)
 {
-	uint64_t val = apic_page->gpa | BIT_ULL(MSR_AMD64_SECURE_AVIC_EN_BIT);
+	uint64_t val;
 
 	if (!enable) {
 		wrmsr(MSR_AMD64_SECURE_AVIC_CONTROL, 0);
 		return;
 	}
+
+	val = apic_page->gpa | BIT_ULL(MSR_AMD64_SECURE_AVIC_EN_BIT);
 
 	if (enable_nmi)
 		val |= BIT_ULL(MSR_AMD64_SECURE_AVIC_ALLOWED_NMI_BIT);
@@ -440,15 +442,18 @@ static void savic_handle_icr_write(uint64_t icr_data)
 	bool logical           = icr_data & APIC_DEST_LOGICAL;
 	bool nmi               = (icr_data & APIC_DM_FIXED_MASK) == APIC_DM_NMI;
 	uint64_t self_icr_data = APIC_DEST_SELF | APIC_INT_ASSERT | vector;
-
-	if (nmi)
-		self_icr_data |= APIC_DM_NMI;
+	struct guest_apic_page *apic_page;
 
 	switch (dsh) {
 	case APIC_DEST_ALLINC:
 		savic_send_ipi_all_but(vector, nmi);
 		savic_hv_write_reg(APIC_ICR, icr_data);
-		x2apic_write_reg(APIC_ICR, self_icr_data);
+		if (nmi) {
+			apic_page = &apic_page_pool->guest_apic_page[x2apic_read_reg(APIC_ID)];
+			savic_write_reg(apic_page, SAVIC_NMI_REQ_OFFSET, 1);
+		} else {
+			x2apic_write_reg(APIC_ICR, self_icr_data);
+		}
 		break;
 	case APIC_DEST_ALLBUT:
 		savic_send_ipi_all_but(vector, nmi);
