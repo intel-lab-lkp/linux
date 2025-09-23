@@ -1692,6 +1692,17 @@ static int veth_xdp_rx_vlan_tag(const struct xdp_md *ctx, __be16 *vlan_proto,
 	return err;
 }
 
+static int veth_xdp_rx_queue_index(const struct xdp_md *ctx, u32 *queue_index)
+{
+	const struct veth_xdp_buff *_ctx = (void *)ctx;
+
+	if (!_ctx->xdp.rxq)
+		return -ENODATA;
+
+	*queue_index = _ctx->xdp.rxq->queue_index;
+	return 0;
+}
+
 static const struct net_device_ops veth_netdev_ops = {
 	.ndo_init            = veth_dev_init,
 	.ndo_open            = veth_open,
@@ -1717,6 +1728,7 @@ static const struct xdp_metadata_ops veth_xdp_metadata_ops = {
 	.xmo_rx_timestamp		= veth_xdp_rx_timestamp,
 	.xmo_rx_hash			= veth_xdp_rx_hash,
 	.xmo_rx_vlan_tag		= veth_xdp_rx_vlan_tag,
+	.xmo_rx_queue_index		= veth_xdp_rx_queue_index,
 };
 
 #define VETH_FEATURES (NETIF_F_SG | NETIF_F_FRAGLIST | NETIF_F_HW_CSUM | \
