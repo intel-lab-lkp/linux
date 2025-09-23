@@ -3635,27 +3635,6 @@ static int pre_svm_run(struct kvm_vcpu *vcpu)
 	return 0;
 }
 
-static void svm_inject_nmi(struct kvm_vcpu *vcpu)
-{
-	struct vcpu_svm *svm = to_svm(vcpu);
-
-	svm->vmcb->control.event_inj = SVM_EVTINJ_VALID | SVM_EVTINJ_TYPE_NMI;
-
-	if (svm->nmi_l1_to_l2)
-		return;
-
-	/*
-	 * No need to manually track NMI masking when vNMI is enabled, hardware
-	 * automatically sets V_NMI_BLOCKING_MASK as appropriate, including the
-	 * case where software directly injects an NMI.
-	 */
-	if (!is_vnmi_enabled(svm)) {
-		svm->nmi_masked = true;
-		svm_set_iret_intercept(svm);
-	}
-	++vcpu->stat.nmi_injections;
-}
-
 static bool svm_is_vnmi_pending(struct kvm_vcpu *vcpu)
 {
 	struct vcpu_svm *svm = to_svm(vcpu);
@@ -3687,6 +3666,33 @@ static bool svm_set_vnmi_pending(struct kvm_vcpu *vcpu)
 	++vcpu->stat.nmi_injections;
 
 	return true;
+}
+
+static void svm_inject_nmi(struct kvm_vcpu *vcpu)
+{
+	struct vcpu_svm *svm = to_svm(vcpu);
+
+	if (sev_savic_active(vcpu->kvm)) {
+		svm_set_vnmi_pending(vcpu);
+		++vcpu->stat.nmi_injections;
+		return;
+	}
+
+	svm->vmcb->control.event_inj = SVM_EVTINJ_VALID | SVM_EVTINJ_TYPE_NMI;
+
+	if (svm->nmi_l1_to_l2)
+		return;
+
+	/*
+	 * No need to manually track NMI masking when vNMI is enabled, hardware
+	 * automatically sets V_NMI_BLOCKING_MASK as appropriate, including the
+	 * case where software directly injects an NMI.
+	 */
+	if (!is_vnmi_enabled(svm)) {
+		svm->nmi_masked = true;
+		svm_set_iret_intercept(svm);
+	}
+	++vcpu->stat.nmi_injections;
 }
 
 static void svm_inject_irq(struct kvm_vcpu *vcpu, bool reinjected)
@@ -3836,6 +3842,14 @@ bool svm_nmi_blocked(struct kvm_vcpu *vcpu)
 static int svm_nmi_allowed(struct kvm_vcpu *vcpu, bool for_injection)
 {
 	struct vcpu_svm *svm = to_svm(vcpu);
+
+	/* Secure AVIC only support V_NMI based NMI injection. */
+	if (sev_savic_active(vcpu->kvm)) {
+		if (svm->vmcb->control.int_ctl & V_NMI_PENDING_MASK)
+			return 0;
+		return 1;
+	}
+
 	if (svm->nested.nested_run_pending)
 		return -EBUSY;
 

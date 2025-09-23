@@ -885,7 +885,7 @@ static int sev_es_sync_vmsa(struct vcpu_svm *svm)
 	save->sev_features = sev->vmsa_features;
 
 	if (sev_savic_active(vcpu->kvm))
-		save->vintr_ctrl |= V_GIF_MASK;
+		save->vintr_ctrl |= V_GIF_MASK | V_NMI_ENABLE_MASK;
 
 	/*
 	 * Skip FPU and AVX setup with KVM_SEV_ES_INIT to avoid
