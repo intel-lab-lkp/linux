@@ -16,7 +16,6 @@
 #include <asm/insn.h>
 #include <asm/kprobes.h>
 
-#define AARCH64_INSN_SF_BIT	BIT(31)
 #define AARCH64_INSN_N_BIT	BIT(22)
 #define AARCH64_INSN_LSL_12	BIT(22)
 
@@ -700,61 +699,6 @@ u32 aarch64_insn_gen_bitfield(enum aarch64_insn_register dst,
 	insn = aarch64_insn_encode_immediate(AARCH64_INSN_IMM_R, insn, immr);
 
 	return aarch64_insn_encode_immediate(AARCH64_INSN_IMM_S, insn, imms);
-}
-
-u32 aarch64_insn_gen_movewide(enum aarch64_insn_register dst,
-			      int imm, int shift,
-			      enum aarch64_insn_variant variant,
-			      enum aarch64_insn_movewide_type type)
-{
-	u32 insn;
-
-	switch (type) {
-	case AARCH64_INSN_MOVEWIDE_ZERO:
-		insn = aarch64_insn_get_movz_value();
-		break;
-	case AARCH64_INSN_MOVEWIDE_KEEP:
-		insn = aarch64_insn_get_movk_value();
-		break;
-	case AARCH64_INSN_MOVEWIDE_INVERSE:
-		insn = aarch64_insn_get_movn_value();
-		break;
-	default:
-		pr_err("%s: unknown movewide encoding %d\n", __func__, type);
-		return AARCH64_BREAK_FAULT;
-	}
-
-	if (imm & ~(SZ_64K - 1)) {
-		pr_err("%s: invalid immediate encoding %d\n", __func__, imm);
-		return AARCH64_BREAK_FAULT;
-	}
-
-	switch (variant) {
-	case AARCH64_INSN_VARIANT_32BIT:
-		if (shift != 0 && shift != 16) {
-			pr_err("%s: invalid shift encoding %d\n", __func__,
-			       shift);
-			return AARCH64_BREAK_FAULT;
-		}
-		break;
-	case AARCH64_INSN_VARIANT_64BIT:
-		insn |= AARCH64_INSN_SF_BIT;
-		if (shift != 0 && shift != 16 && shift != 32 && shift != 48) {
-			pr_err("%s: invalid shift encoding %d\n", __func__,
-			       shift);
-			return AARCH64_BREAK_FAULT;
-		}
-		break;
-	default:
-		pr_err("%s: unknown variant encoding %d\n", __func__, variant);
-		return AARCH64_BREAK_FAULT;
-	}
-
-	insn |= (shift >> 4) << 21;
-
-	insn = aarch64_insn_encode_register(AARCH64_INSN_REGTYPE_RD, insn, dst);
-
-	return aarch64_insn_encode_immediate(AARCH64_INSN_IMM_16, insn, imm);
 }
 
 u32 aarch64_insn_gen_add_sub_shifted_reg(enum aarch64_insn_register dst,

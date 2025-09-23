@@ -624,6 +624,8 @@ static __always_inline bool aarch64_get_imm_shift_mask(
 #define ADR_IMM_LOSHIFT		29
 #define ADR_IMM_HISHIFT		5
 
+#define AARCH64_INSN_SF_BIT	BIT(31)
+
 enum aarch64_insn_encoding_class aarch64_get_insn_class(u32 insn);
 u64 aarch64_insn_decode_immediate(enum aarch64_insn_imm_type type, u32 insn);
 
@@ -796,10 +798,58 @@ u32 aarch64_insn_gen_bitfield(enum aarch64_insn_register dst,
 			      int immr, int imms,
 			      enum aarch64_insn_variant variant,
 			      enum aarch64_insn_bitfield_type type);
-u32 aarch64_insn_gen_movewide(enum aarch64_insn_register dst,
-			      int imm, int shift,
-			      enum aarch64_insn_variant variant,
-			      enum aarch64_insn_movewide_type type);
+
+static __always_inline u32 aarch64_insn_gen_movewide(
+				 enum aarch64_insn_register dst,
+				 int imm, int shift,
+				 enum aarch64_insn_variant variant,
+				 enum aarch64_insn_movewide_type type)
+{
+	compiletime_assert(type >=  AARCH64_INSN_MOVEWIDE_ZERO &&
+		type <= AARCH64_INSN_MOVEWIDE_INVERSE, "unknown movewide encoding");
+	u32 insn;
+
+	switch (type) {
+	case AARCH64_INSN_MOVEWIDE_ZERO:
+		insn = aarch64_insn_get_movz_value();
+		break;
+	case AARCH64_INSN_MOVEWIDE_KEEP:
+		insn = aarch64_insn_get_movk_value();
+		break;
+	case AARCH64_INSN_MOVEWIDE_INVERSE:
+		insn = aarch64_insn_get_movn_value();
+		break;
+	default:
+		return AARCH64_BREAK_FAULT;
+	}
+
+	if (imm & ~(SZ_64K - 1)) {
+		return AARCH64_BREAK_FAULT;
+	}
+
+	switch (variant) {
+	case AARCH64_INSN_VARIANT_32BIT:
+		if (shift != 0 && shift != 16) {
+			return AARCH64_BREAK_FAULT;
+		}
+		break;
+	case AARCH64_INSN_VARIANT_64BIT:
+		insn |= AARCH64_INSN_SF_BIT;
+		if (shift != 0 && shift != 16 && shift != 32 && shift != 48) {
+			return AARCH64_BREAK_FAULT;
+		}
+		break;
+	default:
+		return AARCH64_BREAK_FAULT;
+	}
+
+	insn |= (shift >> 4) << 21;
+
+	insn = aarch64_insn_encode_register(AARCH64_INSN_REGTYPE_RD, insn, dst);
+
+	return aarch64_insn_encode_immediate(AARCH64_INSN_IMM_16, insn, imm);
+}
+
 u32 aarch64_insn_gen_add_sub_shifted_reg(enum aarch64_insn_register dst,
 					 enum aarch64_insn_register src,
 					 enum aarch64_insn_register reg,
