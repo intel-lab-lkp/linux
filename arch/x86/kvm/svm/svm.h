@@ -873,6 +873,8 @@ static inline bool sev_savic_active(struct kvm *kvm)
 {
 	return to_kvm_sev_info(kvm)->vmsa_features & SVM_SEV_FEAT_SECURE_AVIC;
 }
+void sev_savic_set_requested_irr(struct vcpu_svm *svm, bool reinjected);
+bool sev_savic_has_pending_interrupt(struct kvm_vcpu *vcpu);
 #else
 static inline struct page *snp_safe_alloc_page_node(int node, gfp_t gfp)
 {
@@ -910,6 +912,8 @@ static inline struct vmcb_save_area *sev_decrypt_vmsa(struct kvm_vcpu *vcpu)
 	return NULL;
 }
 static inline void sev_free_decrypted_vmsa(struct kvm_vcpu *vcpu, struct vmcb_save_area *vmsa) {}
+static inline void sev_savic_set_requested_irr(struct vcpu_svm *svm, bool reinjected) {}
+static inline bool sev_savic_has_pending_interrupt(struct kvm_vcpu *vcpu) { return false; }
 #endif
 
 /* vmenter.S */

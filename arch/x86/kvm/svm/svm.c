@@ -52,6 +52,8 @@
 #include "svm.h"
 #include "svm_ops.h"
 
+#include "lapic.h"
+
 #include "kvm_onhyperv.h"
 #include "svm_onhyperv.h"
 
@@ -3689,6 +3691,9 @@ static void svm_inject_irq(struct kvm_vcpu *vcpu, bool reinjected)
 	struct vcpu_svm *svm = to_svm(vcpu);
 	u32 type;
 
+	if (sev_savic_active(vcpu->kvm))
+		return sev_savic_set_requested_irr(svm, reinjected);
+
 	if (vcpu->arch.interrupt.soft) {
 		if (svm_update_soft_interrupt_rip(vcpu))
 			return;
@@ -3870,6 +3875,9 @@ static int svm_interrupt_allowed(struct kvm_vcpu *vcpu, bool for_injection)
 {
 	struct vcpu_svm *svm = to_svm(vcpu);
 
+	if (sev_savic_active(vcpu->kvm))
+		return 1;
+
 	if (svm->nested.nested_run_pending)
 		return -EBUSY;
 
@@ -3889,6 +3897,9 @@ static int svm_interrupt_allowed(struct kvm_vcpu *vcpu, bool for_injection)
 static void svm_enable_irq_window(struct kvm_vcpu *vcpu)
 {
 	struct vcpu_svm *svm = to_svm(vcpu);
+
+	if (sev_savic_active(vcpu->kvm))
+		return;
 
 	/*
 	 * In case GIF=0 we can't rely on the CPU to tell us when GIF becomes
@@ -5131,6 +5142,8 @@ static struct kvm_x86_ops svm_x86_ops __initdata = {
 	.refresh_apicv_exec_ctrl = avic_refresh_apicv_exec_ctrl,
 	.apicv_post_state_restore = avic_apicv_post_state_restore,
 	.required_apicv_inhibits = AVIC_REQUIRED_APICV_INHIBITS,
+
+	.protected_apic_has_interrupt = sev_savic_has_pending_interrupt,
 
 	.get_exit_info = svm_get_exit_info,
 	.get_entry_info = svm_get_entry_info,

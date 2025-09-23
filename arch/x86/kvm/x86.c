@@ -10369,7 +10369,20 @@ static int kvm_check_and_inject_events(struct kvm_vcpu *vcpu,
 		if (r < 0)
 			goto out;
 		if (r) {
-			int irq = kvm_cpu_get_interrupt(vcpu);
+			int irq;
+
+			/*
+			 * Do not ack the interrupt here for guest-protected VAPIC
+			 * which requires interrupt injection to the guest.
+			 *
+			 * ->inject_irq reads the KVM's VAPIC's APIC_IRR state and
+			 * clears it.
+			 */
+			if (vcpu->arch.apic->guest_apic_protected &&
+			    vcpu->arch.apic->prot_apic_intr_inject)
+				irq = kvm_apic_has_interrupt(vcpu);
+			else
+				irq = kvm_cpu_get_interrupt(vcpu);
 
 			if (!WARN_ON_ONCE(irq == -1)) {
 				kvm_queue_interrupt(vcpu, irq, false);

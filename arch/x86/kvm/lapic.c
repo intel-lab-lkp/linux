@@ -2938,11 +2938,22 @@ int kvm_apic_has_interrupt(struct kvm_vcpu *vcpu)
 	if (!kvm_apic_present(vcpu))
 		return -1;
 
-	if (apic->guest_apic_protected)
+	if (!apic->guest_apic_protected) {
+		__apic_update_ppr(apic, &ppr);
+		return apic_has_interrupt_for_ppr(apic, ppr);
+	}
+
+	if (!apic->prot_apic_intr_inject)
 		return -1;
 
-	__apic_update_ppr(apic, &ppr);
-	return apic_has_interrupt_for_ppr(apic, ppr);
+	/*
+	 * For guest-protected virtual APIC, hardware manages the virtual
+	 * PPR and interrupt delivery to the guest. So, checking the KVM
+	 * managed virtual APIC's APIC_IRR state for any pending vectors
+	 * is the only thing required here.
+	 */
+	return apic_search_irr(apic);
+
 }
 EXPORT_SYMBOL_GPL(kvm_apic_has_interrupt);
 

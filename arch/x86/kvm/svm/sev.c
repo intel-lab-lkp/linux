@@ -28,6 +28,7 @@
 #include <asm/debugreg.h>
 #include <asm/msr.h>
 #include <asm/sev.h>
+#include <asm/apic.h>
 
 #include "mmu.h"
 #include "x86.h"
@@ -35,6 +36,7 @@
 #include "svm_ops.h"
 #include "cpuid.h"
 #include "trace.h"
+#include "lapic.h"
 
 #define GHCB_VERSION_MAX	2ULL
 #define GHCB_VERSION_DEFAULT	2ULL
@@ -5063,4 +5065,46 @@ void sev_free_decrypted_vmsa(struct kvm_vcpu *vcpu, struct vmcb_save_area *vmsa)
 		return;
 
 	free_page((unsigned long)vmsa);
+}
+
+void sev_savic_set_requested_irr(struct vcpu_svm *svm, bool reinjected)
+{
+	unsigned int i, vec, vec_pos, vec_start;
+	struct kvm_lapic *apic;
+	bool has_interrupts;
+	u32 val;
+
+	/* Secure AVIC HW takes care of re-injection */
+	if (reinjected)
+		return;
+
+	apic = svm->vcpu.arch.apic;
+	has_interrupts = false;
+
+	for (i = 0; i < ARRAY_SIZE(svm->vmcb->control.requested_irr); i++) {
+		val = apic_get_reg(apic->regs, APIC_IRR + i * 0x10);
+		if (!val)
+			continue;
+		has_interrupts = true;
+		svm->vmcb->control.requested_irr[i] |= val;
+		vec_start = i * 32;
+		/*
+		 * Clear each vector one by one to avoid race with concurrent
+		 * APIC_IRR updates from the deliver_interrupt() path.
+		 */
+		do {
+			vec_pos = __ffs(val);
+			vec = vec_start + vec_pos;
+			apic_clear_vector(vec, apic->regs + APIC_IRR);
+			val = val & ~BIT(vec_pos);
+		} while (val);
+	}
+
+	if (has_interrupts)
+		svm->vmcb->control.update_irr |= BIT(0);
+}
+
+bool sev_savic_has_pending_interrupt(struct kvm_vcpu *vcpu)
+{
+	return kvm_apic_has_interrupt(vcpu) != -1;
 }

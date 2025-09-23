@@ -162,10 +162,14 @@ struct __attribute__ ((__packed__)) vmcb_control_area {
 	u64 vmsa_pa;		/* Used for an SEV-ES guest */
 	u8 reserved_8[16];
 	u16 bus_lock_counter;		/* Offset 0x120 */
-	u8 reserved_9[22];
+	u8 reserved_9[18];
+	u8 update_irr;			/* Offset 0x134 */
+	u8 reserved_10[3];
 	u64 allowed_sev_features;	/* Offset 0x138 */
 	u64 guest_sev_features;		/* Offset 0x140 */
-	u8 reserved_10[664];
+	u8 reserved_11[8];
+	u32 requested_irr[8];		/* Offset 0x150 */
+	u8 reserved_12[624];
 	/*
 	 * Offset 0x3e0, 32 bytes reserved
 	 * for use by hypervisor/software.
