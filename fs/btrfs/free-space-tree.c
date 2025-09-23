@@ -1722,3 +1722,118 @@ int btrfs_load_free_space_tree(struct btrfs_caching_control *caching_ctl)
 	else
 		return load_free_space_extents(caching_ctl, path, extent_count);
 }
+
+/*
+ * Earlier versions of mkfs.btrfs created spurious entries at the beginning of
+ * the free-space tree, before the start of any block group.
+ * If the compat flag NO_SPURIOUS_FREE_SPACE is not set, clean these up and
+ * set the flag so we know we don't have to check again.
+ */
+int btrfs_remove_spurious_free_space(struct btrfs_fs_info *fs_info)
+{
+	struct btrfs_root *fst;
+	struct btrfs_trans_handle *trans;
+	struct btrfs_key key;
+	struct extent_buffer *leaf;
+	struct btrfs_block_group *bg;
+	u64 bg_start;
+	BTRFS_PATH_AUTO_FREE(path);
+	int ret, ret2;
+	unsigned int entries_to_remove = 0;
+
+	struct btrfs_key root_key = {
+		.objectid = BTRFS_FREE_SPACE_TREE_OBJECTID,
+		.type = BTRFS_ROOT_ITEM_KEY,
+		.offset = 0,
+	};
+
+	path = btrfs_alloc_path();
+	if (!path)
+		return -ENOMEM;
+
+	fst = btrfs_grab_root(btrfs_global_root(fs_info, &root_key));
+	if (!fst)
+		return -EINVAL;
+
+	trans = btrfs_start_transaction(fst, 0);
+	if (IS_ERR(trans)) {
+		ret = PTR_ERR(trans);
+		goto end;
+	}
+
+	key.objectid = 0;
+	key.type = 0;
+	key.offset = 0;
+
+	ret = btrfs_search_slot(trans, fst, &key, path, 0, 0);
+	if (ret < 0)
+		goto end_trans;
+
+	while (true) {
+		leaf = path->nodes[0];
+		if (path->slots[0] >= btrfs_header_nritems(leaf)) {
+			ret = btrfs_next_leaf(fst, path);
+			if (ret < 0)
+				goto end_trans;
+			if (ret > 0)
+				break;
+			leaf = path->nodes[0];
+		}
+
+		btrfs_item_key_to_cpu(leaf, &key, path->slots[0]);
+
+		bg = btrfs_lookup_first_block_group(fs_info, key.objectid);
+		if (!bg)
+			break;
+
+		bg_start = bg->start;
+
+		btrfs_put_block_group(bg);
+
+		if (key.objectid >= bg_start)
+			break;
+
+		entries_to_remove++;
+
+		path->slots[0]++;
+	}
+
+	if (entries_to_remove == 0) {
+		ret = 0;
+		goto end_trans;
+	}
+
+	btrfs_release_path(path);
+
+	key.objectid = 0;
+	key.type = 0;
+	key.offset = 0;
+
+	ret = btrfs_search_slot(trans, fst, &key, path, -1, 1);
+	if (ret < 0)
+		goto end_trans;
+
+	ret = btrfs_del_items(trans, fst, path, 0, entries_to_remove);
+	if (ret)
+		btrfs_abort_transaction(trans, ret);
+
+end_trans:
+	btrfs_release_path(path);
+
+	if (!ret)
+		btrfs_set_fs_compat(fs_info, NO_SPURIOUS_FREE_SPACE);
+
+	ret2 = btrfs_commit_transaction(trans);
+	if (!ret)
+		ret = ret2;
+
+	if (!ret && entries_to_remove > 0) {
+		btrfs_info(fs_info, "removed %u spurious free-space entries",
+			   entries_to_remove);
+	}
+
+end:
+	btrfs_put_root(fst);
+
+	return ret;
+}

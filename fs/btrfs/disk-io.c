@@ -3077,6 +3077,16 @@ int btrfs_start_pre_rw_mount(struct btrfs_fs_info *fs_info)
 		}
 	}
 
+	if (btrfs_fs_compat_ro(fs_info, FREE_SPACE_TREE) &&
+	    !btrfs_fs_compat(fs_info, NO_SPURIOUS_FREE_SPACE)) {
+		ret = btrfs_remove_spurious_free_space(fs_info);
+		if (ret) {
+			btrfs_warn(fs_info,
+				   "failed to remove spurious free space: %d",
+				   ret);
+		}
+	}
+
 	/*
 	 * btrfs_find_orphan_roots() is responsible for finding all the dead
 	 * roots (with 0 refs), flag them with BTRFS_ROOT_DEAD_TREE and load
