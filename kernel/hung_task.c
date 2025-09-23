@@ -231,7 +231,8 @@ static void check_hung_task(struct task_struct *t, unsigned long timeout)
 
 	trace_sched_process_hang(t);
 
-	if (sysctl_hung_task_panic) {
+	if ((sysctl_hung_task_panic == 1) ||
+		(!sysctl_hung_task_warnings && sysctl_hung_task_panic == 2)) {
 		console_verbose();
 		hung_task_show_lock = true;
 		hung_task_call_panic = true;
@@ -389,7 +390,7 @@ static const struct ctl_table hung_task_sysctls[] = {
 		.mode		= 0644,
 		.proc_handler	= proc_dointvec_minmax,
 		.extra1		= SYSCTL_ZERO,
-		.extra2		= SYSCTL_ONE,
+		.extra2		= SYSCTL_TWO,
 	},
 	{
 		.procname	= "hung_task_check_count",

@@ -403,6 +403,7 @@ This file shows up if ``CONFIG_DETECT_HUNG_TASK`` is enabled.
 = =================================================
 0 Continue operation. This is the default behavior.
 1 Panic immediately.
+2 Panic when hung_task_warnings is decreased to 0.
 = =================================================
 
 

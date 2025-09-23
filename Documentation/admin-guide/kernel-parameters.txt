@@ -1993,13 +1993,14 @@
 
 	hung_task_panic=
 			[KNL] Should the hung task detector generate panics.
-			Format: 0 | 1
+			Format: 0 | 1 | 2
 
-			A value of 1 instructs the kernel to panic when a
-			hung task is detected. The default value is controlled
-			by the CONFIG_BOOTPARAM_HUNG_TASK_PANIC build-time
-			option. The value selected by this boot parameter can
-			be changed later by the kernel.hung_task_panic sysctl.
+			A value of 1 instructs the kernel to panic when a hung task is detected.
+			A value of 2 instructs the kernel to panic when hung_task_warnings is
+			decreased to 0.  The default value is controlled by the
+			CONFIG_BOOTPARAM_HUNG_TASK_PANIC build-time option. The value selected
+			by this boot parameter can be changed later by the kernel.hung_task_panic
+			sysctl.
 
 	hvc_iucv=	[S390]	Number of z/VM IUCV hypervisor console (HVC)
 				terminal devices. Valid values: 0..8

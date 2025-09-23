@@ -1264,10 +1264,10 @@ config DEFAULT_HUNG_TASK_TIMEOUT
 	  Keeping the default should be fine in most cases.
 
 config BOOTPARAM_HUNG_TASK_PANIC
-	bool "Panic (Reboot) On Hung Tasks"
+	int "Panic (Reboot) On Hung Tasks"
 	depends on DETECT_HUNG_TASK
 	help
-	  Say Y here to enable the kernel to panic on "hung tasks",
+	  Say 1|2 here to enable the kernel to panic on "hung tasks",
 	  which are bugs that cause the kernel to leave a task stuck
 	  in uninterruptible "D" state.
 
