@@ -14,7 +14,10 @@
 #include "savic.h"
 
 #define NR_SAVIC_VCPUS	1
+#define IDLE_HLT_INTR_VECTOR     0x30
+#define NUM_ITERATIONS 2000
 
+static bool irq_received;
 static struct kvm_vcpu *vcpus[NR_SAVIC_VCPUS];
 static pthread_t threads[NR_SAVIC_VCPUS];
 
@@ -24,6 +27,7 @@ static pthread_t threads[NR_SAVIC_VCPUS];
 
 enum savic_test_state {
 	SAVIC_TEST_STATE(SAVIC_APIC_MSR_ACCESSES),
+	SAVIC_TEST_STATE(SAVIC_IDLE_HALT),
 };
 
 #define SAVIC_GUEST_SYNC(sync, func) ({\
@@ -89,7 +93,8 @@ static void guest_verify_host_guest_reg(struct guest_apic_page *apage, uint32_t 
 	hval = savic_hv_read_reg(reg);
 	__GUEST_ASSERT(gval == val, "Unexpected Guest %s 0x%lx, expected val:0x%lx\n",
 			regname, gval, val);
-	__GUEST_ASSERT(gval == gval2, "Unexpected Guest %s backing page value : 0x%lx, msr read val:0x%lx\n",
+	__GUEST_ASSERT(gval == gval2,
+			"Unexpected %s Guest backing page value : 0x%lx, msr read val:0x%lx\n",
 			regname, gval, gval2);
 
 	switch (reg) {
@@ -161,6 +166,7 @@ static void guest_savic_apic_msr_accesses(int id)
 	val = savic_read_reg(apage, APIC_IRR + APIC_REG_OFF(vec));
 	GUEST_ASSERT((val & BIT_ULL(APIC_VEC_POS(vec))) == BIT_ULL(APIC_VEC_POS(vec)));
 	savic_wrmsr(APIC_TASKPRI, 0x0);
+	savic_write_reg(apage, APIC_IRR + APIC_REG_OFF(vec), 0);
 
 	/* Triggers GP fault */
 	savic_rdmsr(APIC_EOI);
@@ -219,6 +225,43 @@ static void guest_savic_apic_msr_accesses(int id)
 	}
 }
 
+static void guest_idle_hlt_intr_handler(struct ex_regs *regs)
+{
+	struct guest_apic_page *apage = get_guest_apic_page();
+	uint32_t isr, reg;
+
+	WRITE_ONCE(irq_received, true);
+	reg = APIC_ISR + APIC_REG_OFF(IDLE_HLT_INTR_VECTOR);
+	isr = savic_read_reg(apage, reg);
+	__GUEST_ASSERT(isr & BIT(APIC_VEC_POS(IDLE_HLT_INTR_VECTOR)),
+				"Idle halt vector not set in APIC_ISR");
+	x2apic_write_reg(APIC_EOI, 0);
+	isr = savic_read_reg(apage, reg);
+	__GUEST_ASSERT(!(isr & BIT(APIC_VEC_POS(IDLE_HLT_INTR_VECTOR))),
+				"Idle halt vector set in APIC_ISR after EOI");
+}
+
+static void guest_savic_idle_halt(int id)
+{
+	uint32_t icr_val;
+	uint32_t irr;
+	int i;
+
+	x2apic_write_reg(APIC_TASKPRI, 0);
+	icr_val = (APIC_DEST_SELF | APIC_INT_ASSERT | IDLE_HLT_INTR_VECTOR);
+
+	for (i = 0; i < NUM_ITERATIONS; i++) {
+		asm volatile("cli");
+		x2apic_write_reg(APIC_ICR, icr_val);
+		irr = x2apic_read_reg(APIC_IRR + APIC_REG_OFF(IDLE_HLT_INTR_VECTOR));
+		__GUEST_ASSERT(irr & BIT(APIC_VEC_POS(IDLE_HLT_INTR_VECTOR)),
+				"Idle halt vector not set in APIC_IRR");
+		asm volatile("sti; hlt;" : : : "memory");
+		GUEST_ASSERT(READ_ONCE(irq_received));
+		WRITE_ONCE(irq_received, false);
+	}
+}
+
 static void guest_code(int id)
 {
 	GUEST_ASSERT(rdmsr(MSR_AMD64_SEV) & MSR_AMD64_SNP_SECURE_AVIC);
@@ -228,6 +271,8 @@ static void guest_code(int id)
 	savic_enable();
 
 	SAVIC_GUEST_SYNC(SAVIC_APIC_MSR_ACCESSES, guest_savic_apic_msr_accesses);
+
+	SAVIC_GUEST_SYNC(SAVIC_IDLE_HALT, guest_savic_idle_halt);
 
 	GUEST_DONE();
 }
@@ -260,6 +305,12 @@ static void *vcpu_thread(void *arg)
 	return NULL;
 }
 
+static void install_exception_handlers(struct kvm_vm *vm)
+{
+	vm_install_exception_handler(vm, IDLE_HLT_INTR_VECTOR, guest_idle_hlt_intr_handler);
+	vm_install_exception_handler(vm, 29, savic_vc_handler);
+}
+
 int main(int argc, char *argv[])
 {
 	struct kvm_sev_init args = {
@@ -270,14 +321,16 @@ int main(int argc, char *argv[])
 
 	TEST_REQUIRE(kvm_cpu_has(X86_FEATURE_SEV_SNP));
 	TEST_REQUIRE(kvm_cpu_has(X86_FEATURE_SECURE_AVIC));
+	TEST_REQUIRE(this_cpu_has(X86_FEATURE_IDLE_HLT));
 
 	vm = _vm_sev_create_with_one_vcpu(KVM_X86_SNP_VM, guest_code, &vcpus[0], &args);
 
 	virt_pg_map(vm, APIC_DEFAULT_GPA, APIC_DEFAULT_GPA);
 
+	install_exception_handlers(vm);
+
 	vcpu_args_set(vcpus[0], 1, vcpus[0]->id);
 
-	vm_install_exception_handler(vm, 29, savic_vc_handler);
 	vm_sev_launch(vm, snp_default_policy(), NULL);
 
 	r = pthread_create(&threads[0], NULL, vcpu_thread, vcpus[0]);
