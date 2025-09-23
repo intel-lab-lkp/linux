@@ -337,6 +337,7 @@ struct vcpu_svm {
 	bool guest_gif;
 
 	bool sev_savic_has_pending_ipi;
+	gpa_t sev_savic_gpa;
 };
 
 struct svm_cpu_data {

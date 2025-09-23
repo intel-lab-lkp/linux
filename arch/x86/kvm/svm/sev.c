@@ -3399,6 +3399,15 @@ static int sev_es_validate_vmgexit(struct vcpu_svm *svm)
 		    !kvm_ghcb_rcx_is_valid(svm))
 			goto vmgexit_err;
 		break;
+	case SVM_VMGEXIT_SECURE_AVIC:
+		if (!sev_savic_active(vcpu->kvm))
+			goto vmgexit_err;
+		if (!kvm_ghcb_rax_is_valid(svm))
+			goto vmgexit_err;
+		if (svm->vmcb->control.exit_info_1 == SVM_VMGEXIT_SAVIC_REGISTER_BACKING_PAGE)
+			if (!kvm_ghcb_rbx_is_valid(svm))
+				goto vmgexit_err;
+		break;
 	case SVM_VMGEXIT_MMIO_READ:
 	case SVM_VMGEXIT_MMIO_WRITE:
 		if (!kvm_ghcb_sw_scratch_is_valid(svm))
@@ -4490,6 +4499,53 @@ static bool savic_handle_msr_exit(struct kvm_vcpu *vcpu)
 	return false;
 }
 
+static int sev_handle_savic_vmgexit(struct vcpu_svm *svm)
+{
+	struct kvm_vcpu *vcpu = NULL;
+	u64 apic_id;
+
+	apic_id = kvm_rax_read(&svm->vcpu);
+
+	if (apic_id == -1ULL) {
+		vcpu = &svm->vcpu;
+	} else {
+		vcpu = kvm_get_vcpu_by_id(vcpu->kvm, apic_id);
+		if (!vcpu)
+			goto savic_request_invalid;
+	}
+
+	switch (svm->vmcb->control.exit_info_1) {
+	case SVM_VMGEXIT_SAVIC_REGISTER_BACKING_PAGE:
+		gpa_t gpa;
+
+		gpa = kvm_rbx_read(&svm->vcpu);
+		if (!PAGE_ALIGNED(gpa))
+			goto savic_request_invalid;
+
+		/*
+		 * sev_handle_rmp_fault() invocation would result in PSMASH if
+		 * NPTE size is 2M.
+		 */
+		sev_handle_rmp_fault(vcpu, gpa, 0);
+		to_svm(vcpu)->sev_savic_gpa = gpa;
+		break;
+	case SVM_VMGEXIT_SAVIC_UNREGISTER_BACKING_PAGE:
+		kvm_rbx_write(&svm->vcpu, to_svm(vcpu)->sev_savic_gpa);
+		to_svm(vcpu)->sev_savic_gpa = 0;
+		break;
+	default:
+		goto savic_request_invalid;
+	}
+
+	return 1;
+
+savic_request_invalid:
+	ghcb_set_sw_exit_info_1(svm->sev_es.ghcb, 2);
+	ghcb_set_sw_exit_info_2(svm->sev_es.ghcb, GHCB_ERR_INVALID_INPUT);
+
+	return 1;
+}
+
 int sev_handle_vmgexit(struct kvm_vcpu *vcpu)
 {
 	struct vcpu_svm *svm = to_svm(vcpu);
@@ -4627,6 +4683,9 @@ int sev_handle_vmgexit(struct kvm_vcpu *vcpu)
 			    "vmgexit: unsupported event - exit_info_1=%#llx, exit_info_2=%#llx\n",
 			    control->exit_info_1, control->exit_info_2);
 		ret = -EINVAL;
+		break;
+	case SVM_VMGEXIT_SECURE_AVIC:
+		ret = sev_handle_savic_vmgexit(svm);
 		break;
 	case SVM_EXIT_MSR:
 		if (sev_savic_active(vcpu->kvm) && savic_handle_msr_exit(vcpu))
