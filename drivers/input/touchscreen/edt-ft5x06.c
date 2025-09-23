@@ -57,6 +57,9 @@
 #define EV_REGISTER_OFFSET_Y		0x45
 #define EV_REGISTER_OFFSET_X		0x46
 
+#define EV_REGISTER_CHIP_ID_H		0xA3
+#define EV_REGISTER_CHIP_ID_L		0x9F
+
 #define NO_REGISTER			0xff
 
 #define WORK_REGISTER_OPMODE		0x3c
@@ -849,6 +852,18 @@ static void edt_ft5x06_ts_teardown_debugfs(struct edt_ft5x06_ts_data *tsdata)
 
 #endif /* CONFIG_DEBUGFS */
 
+static int edt_ft5x06_ts_check_chip_id(struct edt_ft5x06_ts_data *tsdata)
+{
+	int val, id;
+
+	regmap_read(tsdata->regmap, EV_REGISTER_CHIP_ID_H, &val);
+	id = val << 8;
+	regmap_read(tsdata->regmap, EV_REGISTER_CHIP_ID_L, &val);
+	id |= val;
+
+	return id;
+}
+
 static int edt_ft5x06_ts_identify(struct i2c_client *client,
 				  struct edt_ft5x06_ts_data *tsdata)
 {
@@ -857,6 +872,7 @@ static int edt_ft5x06_ts_identify(struct i2c_client *client,
 	int error;
 	char *model_name = tsdata->name;
 	char *fw_version = tsdata->fw_version;
+	int chipid;
 
 	/* see what we find if we assume it is a M06 *
 	 * if we get less than EDT_NAME_LEN, we don't want
@@ -962,9 +978,18 @@ static int edt_ft5x06_ts_identify(struct i2c_client *client,
 				 "EVERVISION-FT5726NEi");
 			break;
 		default:
-			snprintf(model_name, EDT_NAME_LEN,
-				 "generic ft5x06 (%02x)",
-				 rdbuf[0]);
+			chipid = edt_ft5x06_ts_check_chip_id(tsdata);
+			dev_dbg(&client->dev, "Chip ID = 0x%x", chipid);
+			switch (chipid) {
+			case 0x5452:
+				snprintf(model_name, EDT_NAME_LEN,
+					 "ft%04x", chipid);
+				break;
+			default:
+				snprintf(model_name, EDT_NAME_LEN,
+					 "generic ft5x06 (%02x)",
+					 rdbuf[0]);
+			}
 			break;
 		}
 	}
