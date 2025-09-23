@@ -183,6 +183,7 @@ Hardware Monitoring Kernel Drivers
    mp5023
    mp5920
    mp5990
+   mp5998
    mp9941
    mpq8785
    nct6683
