@@ -405,10 +405,19 @@ static inline void task_context_switch_counts(struct seq_file *m,
 
 static void task_cpus_allowed(struct seq_file *m, struct task_struct *task)
 {
+	cpumask_t *user_cpus = task->user_cpus_ptr;
+
 	seq_printf(m, "Cpus_allowed:\t%*pb\n",
 		   cpumask_pr_args(&task->cpus_mask));
 	seq_printf(m, "Cpus_allowed_list:\t%*pbl\n",
 		   cpumask_pr_args(&task->cpus_mask));
+
+	if (user_cpus) {
+		seq_printf(m, "Cpus_user:\t%*pb\n", cpumask_pr_args(user_cpus));
+		seq_printf(m, "Cpus_user_list:\t%*pbl\n", cpumask_pr_args(user_cpus));
+	} else {
+		seq_puts(m, "Cpus_user:\nCpus_user_list:\n");
+	}
 }
 
 static inline void task_core_dumping(struct seq_file *m, struct task_struct *task)
