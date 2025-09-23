@@ -358,9 +358,10 @@ static inline void rht_unlock(struct bucket_table *tbl,
 static inline struct rhash_head *__rht_ptr(
 	struct rhash_lock_head *p, struct rhash_lock_head __rcu *const *bkt)
 {
+	unsigned long p_val = (unsigned long)p & ~BIT(0);
+
 	return (struct rhash_head *)
-		((unsigned long)p & ~BIT(0) ?:
-		 (unsigned long)RHT_NULLS_MARKER(bkt));
+		(likely(p_val) ? p_val : (unsigned long)RHT_NULLS_MARKER(bkt));
 }
 
 /*
