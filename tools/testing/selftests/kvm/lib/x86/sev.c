@@ -12,7 +12,8 @@
 #define IOIO_DATA_8 (1 << 4)
 #define IOIO_REP (1 << 3)
 
-#define SW_EXIT_CODE_IOIO 0x7b
+#define SW_EXIT_CODE_IOIO	0x7b
+#define SW_EXIT_CODE_MSR	0x7c
 
 struct ghcb_entry {
 	struct ghcb ghcb;
@@ -355,4 +356,84 @@ void sev_es_ucall_port_write(uint32_t port, uint64_t data)
 	do_vmg_exit(entry->gpa);
 
 	ghcb_free(entry);
+}
+
+static void __sev_es_msr_rw(struct ghcb_entry *entry, uint64_t msr,
+		uint32_t *low, uint32_t *high, bool write)
+{
+	uint64_t exitinfo1 = write ? 1 : 0;
+	struct ghcb *ghcb = &entry->ghcb;
+	uint32_t ret;
+
+	ghcb_set_sw_exit_code(ghcb, SW_EXIT_CODE_MSR);
+	ghcb_set_sw_exit_info_1(ghcb, exitinfo1);
+	ghcb_set_sw_exit_info_2(ghcb, 0);
+
+	ghcb_set_rcx(ghcb, msr);
+	if (write) {
+		ghcb_set_rax(ghcb, *low);
+		ghcb_set_rdx(ghcb, *high);
+	}
+
+	do_vmg_exit(entry->gpa);
+
+	ret = ghcb->save.sw_exit_info_1 & 0xffffffff;
+	__GUEST_ASSERT(!ret, "%smsr failed, ret: %u", write ? "wr" : "rd", ret);
+
+	if (!write) {
+		*low = ghcb->save.rax;
+		*high = ghcb->save.rdx;
+	}
+}
+
+void sev_es_pv_msr_rw(uint64_t msr, uint64_t *data, bool write)
+{
+	struct ghcb_entry *entry;
+	uint32_t low, high;
+
+	entry = ghcb_alloc();
+	register_ghcb_page(entry->gpa);
+
+	if (write) {
+		low = *data & ((1ULL << 32) - 1);
+		high = *data >> 32;
+	}
+	__sev_es_msr_rw(entry, msr, &low, &high, write);
+
+	if (!write)
+		*data = low | (uint64_t)high << 32;
+
+	ghcb_free(entry);
+}
+
+static void sev_es_vc_msr_handler(struct ex_regs *regs)
+{
+	struct ghcb_entry *entry;
+	bool write;
+
+	/* wrmsr encoding has second byte = 0x30 */
+	write = (*((char *)regs->rip + 1) == 0x30);
+
+	entry = ghcb_alloc();
+	register_ghcb_page(entry->gpa);
+
+	__sev_es_msr_rw(entry, regs->rcx, (uint32_t *)&regs->rax,
+			(uint32_t *)&regs->rdx, write);
+
+	ghcb_free(entry);
+}
+
+void sev_es_vc_handler(struct ex_regs *regs)
+{
+	uint64_t exit_code = regs->error_code;
+
+	switch (exit_code) {
+	case SVM_EXIT_MSR:
+		sev_es_vc_msr_handler(regs);
+		/* rdmsr/wrmsr instruction size = 2 */
+		regs->rip += 2;
+		break;
+	default:
+		__GUEST_ASSERT(0, "No VC handler\n");
+	}
 }
