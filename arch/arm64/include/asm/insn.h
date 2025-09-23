@@ -760,8 +760,32 @@ static __always_inline bool aarch64_insn_is_nop(u32 insn)
 	return insn == aarch64_insn_gen_nop();
 }
 
-u32 aarch64_insn_gen_branch_reg(enum aarch64_insn_register reg,
-				enum aarch64_insn_branch_type type);
+static __always_inline u32 aarch64_insn_gen_branch_reg(
+			 enum aarch64_insn_register reg,
+			 enum aarch64_insn_branch_type type)
+{
+	compiletime_assert(type >= AARCH64_INSN_BRANCH_NOLINK &&
+		type <= AARCH64_INSN_BRANCH_RETURN,
+		"unknown branch encoding");
+	u32 insn;
+
+	switch (type) {
+	case AARCH64_INSN_BRANCH_NOLINK:
+		insn = aarch64_insn_get_br_value();
+		break;
+	case AARCH64_INSN_BRANCH_LINK:
+		insn = aarch64_insn_get_blr_value();
+		break;
+	case AARCH64_INSN_BRANCH_RETURN:
+		insn = aarch64_insn_get_ret_value();
+		break;
+	default:
+		return AARCH64_BREAK_FAULT;
+	}
+
+	return aarch64_insn_encode_register(AARCH64_INSN_REGTYPE_RN, insn, reg);
+}
+
 u32 aarch64_insn_gen_load_store_reg(enum aarch64_insn_register reg,
 				    enum aarch64_insn_register base,
 				    enum aarch64_insn_register offset,
