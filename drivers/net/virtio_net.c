@@ -451,6 +451,9 @@ struct virtnet_info {
 
 	bool rx_tnl_csum;
 
+	/* Outer network header support */
+	bool out_net_hdr_negotiated;
+
 	/* Is delayed refill enabled? */
 	bool refill_enabled;
 
@@ -511,6 +514,7 @@ struct virtio_net_common_hdr {
 		struct virtio_net_hdr_mrg_rxbuf	mrg_hdr;
 		struct virtio_net_hdr_v1_hash hash_v1_hdr;
 		struct virtio_net_hdr_v1_hash_tunnel tnl_hdr;
+		struct virtio_net_hdr_v1_hash_tunnel_out_net_hdr out_net_hdr;
 	};
 };
 
@@ -2576,8 +2580,8 @@ static void virtnet_receive_done(struct virtnet_info *vi, struct receive_queue *
 	hdr->hdr.flags = flags;
 	if (virtio_net_handle_csum_offload(skb, &hdr->hdr, vi->rx_tnl_csum)) {
 		net_warn_ratelimited("%s: bad csum: flags: %x, gso_type: %x rx_tnl_csum %d\n",
-				     dev->name, hdr->hdr.flags,
-				     hdr->hdr.gso_type, vi->rx_tnl_csum);
+				dev->name, hdr->hdr.flags,
+				hdr->hdr.gso_type, vi->rx_tnl_csum);
 		goto frame_err;
 	}
 
@@ -2591,6 +2595,8 @@ static void virtnet_receive_done(struct virtnet_info *vi, struct receive_queue *
 		goto frame_err;
 	}
 
+	virtio_net_out_net_header_to_skb(skb, &hdr->out_net_hdr, vi->out_net_hdr_negotiated,
+					 virtio_is_little_endian(vi->vdev));
 	skb_record_rx_queue(skb, vq2rxq(rq->vq));
 	skb->protocol = eth_type_trans(skb, dev);
 	pr_debug("Receiving skb proto 0x%04x len %i type %i\n",
@@ -3317,6 +3323,9 @@ static int xmit_skb(struct send_queue *sq, struct sk_buff *skb, bool orphan)
 	else
 		hdr = &skb_vnet_common_hdr(skb)->tnl_hdr;
 
+	virtio_net_out_net_header_from_skb(skb, &skb_vnet_common_hdr(skb)->out_net_hdr,
+					   vi->out_net_hdr_negotiated,
+					   virtio_is_little_endian(vi->vdev));
 	if (virtio_net_hdr_tnl_from_skb(skb, hdr, vi->tx_tnl,
 					virtio_is_little_endian(vi->vdev), 0))
 		return -EPROTO;
@@ -6915,8 +6924,10 @@ static int virtnet_probe(struct virtio_device *vdev)
 		dev->xdp_metadata_ops = &virtnet_xdp_metadata_ops;
 	}
 
-	if (virtio_has_feature(vdev, VIRTIO_NET_F_GUEST_UDP_TUNNEL_GSO) ||
-	    virtio_has_feature(vdev, VIRTIO_NET_F_HOST_UDP_TUNNEL_GSO))
+	if (virtio_has_feature(vdev, VIRTIO_NET_F_OUT_NET_HEADER))
+		vi->hdr_len = sizeof(struct virtio_net_hdr_v1_hash_tunnel_out_net_hdr);
+	else if (virtio_has_feature(vdev, VIRTIO_NET_F_GUEST_UDP_TUNNEL_GSO) ||
+		 virtio_has_feature(vdev, VIRTIO_NET_F_HOST_UDP_TUNNEL_GSO))
 		vi->hdr_len = sizeof(struct virtio_net_hdr_v1_hash_tunnel);
 	else if (vi->has_rss_hash_report)
 		vi->hdr_len = sizeof(struct virtio_net_hdr_v1_hash);
@@ -6932,6 +6943,9 @@ static int virtnet_probe(struct virtio_device *vdev)
 		vi->rx_tnl = true;
 	if (virtio_has_feature(vdev, VIRTIO_NET_F_HOST_UDP_TUNNEL_GSO))
 		vi->tx_tnl = true;
+
+	if (virtio_has_feature(vdev, VIRTIO_NET_F_OUT_NET_HEADER))
+		vi->out_net_hdr_negotiated = true;
 
 	if (virtio_has_feature(vdev, VIRTIO_F_ANY_LAYOUT) ||
 	    virtio_has_feature(vdev, VIRTIO_F_VERSION_1))
@@ -7247,6 +7261,7 @@ static unsigned int features[] = {
 	VIRTIO_NET_F_GUEST_UDP_TUNNEL_GSO_CSUM,
 	VIRTIO_NET_F_HOST_UDP_TUNNEL_GSO,
 	VIRTIO_NET_F_HOST_UDP_TUNNEL_GSO_CSUM,
+	VIRTIO_NET_F_OUT_NET_HEADER,
 };
 
 static unsigned int features_legacy[] = {
