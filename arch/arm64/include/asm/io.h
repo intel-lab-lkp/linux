@@ -50,13 +50,16 @@ static __always_inline void __raw_writeq(u64 val, volatile void __iomem *addr)
 	asm volatile("str %x0, %1" : : "rZ" (val), "Qo" (*ptr));
 }
 
+void noinstr alt_cb_patch_ldr_to_ldar(struct alt_instr *alt,
+			       __le32 *origptr, __le32 *updptr, int nr_inst);
+
 #define __raw_readb __raw_readb
 static __always_inline u8 __raw_readb(const volatile void __iomem *addr)
 {
 	u8 val;
-	asm volatile(ALTERNATIVE("ldrb %w0, [%1]",
-				 "ldarb %w0, [%1]",
-				 ARM64_WORKAROUND_DEVICE_LOAD_ACQUIRE)
+	asm volatile(ALTERNATIVE_CB("ldrb %w0, [%1]",
+				 ARM64_WORKAROUND_DEVICE_LOAD_ACQUIRE,
+				 alt_cb_patch_ldr_to_ldar)
 		     : "=r" (val) : "r" (addr));
 	return val;
 }
@@ -66,9 +69,9 @@ static __always_inline u16 __raw_readw(const volatile void __iomem *addr)
 {
 	u16 val;
 
-	asm volatile(ALTERNATIVE("ldrh %w0, [%1]",
-				 "ldarh %w0, [%1]",
-				 ARM64_WORKAROUND_DEVICE_LOAD_ACQUIRE)
+	asm volatile(ALTERNATIVE_CB("ldrh %w0, [%1]",
+				 ARM64_WORKAROUND_DEVICE_LOAD_ACQUIRE,
+				 alt_cb_patch_ldr_to_ldar)
 		     : "=r" (val) : "r" (addr));
 	return val;
 }
@@ -77,9 +80,9 @@ static __always_inline u16 __raw_readw(const volatile void __iomem *addr)
 static __always_inline u32 __raw_readl(const volatile void __iomem *addr)
 {
 	u32 val;
-	asm volatile(ALTERNATIVE("ldr %w0, [%1]",
-				 "ldar %w0, [%1]",
-				 ARM64_WORKAROUND_DEVICE_LOAD_ACQUIRE)
+	asm volatile(ALTERNATIVE_CB("ldr %w0, [%1]",
+				 ARM64_WORKAROUND_DEVICE_LOAD_ACQUIRE,
+				 alt_cb_patch_ldr_to_ldar)
 		     : "=r" (val) : "r" (addr));
 	return val;
 }
@@ -88,9 +91,9 @@ static __always_inline u32 __raw_readl(const volatile void __iomem *addr)
 static __always_inline u64 __raw_readq(const volatile void __iomem *addr)
 {
 	u64 val;
-	asm volatile(ALTERNATIVE("ldr %0, [%1]",
-				 "ldar %0, [%1]",
-				 ARM64_WORKAROUND_DEVICE_LOAD_ACQUIRE)
+	asm volatile(ALTERNATIVE_CB("ldr %0, [%1]",
+				 ARM64_WORKAROUND_DEVICE_LOAD_ACQUIRE,
+				 alt_cb_patch_ldr_to_ldar)
 		     : "=r" (val) : "r" (addr));
 	return val;
 }

@@ -9,6 +9,27 @@
 #include <linux/types.h>
 #include <linux/io.h>
 
+noinstr void alt_cb_patch_ldr_to_ldar(struct alt_instr *alt,
+			       __le32 *origptr, __le32 *updptr, int nr_inst)
+{
+	u32 rt, rn, size, orinst, altinst;
+
+	BUG_ON(nr_inst != 1);
+
+	orinst = le32_to_cpu(origptr[0]);
+
+	rt = aarch64_insn_decode_register(AARCH64_INSN_REGTYPE_RT, orinst);
+	rn = aarch64_insn_decode_register(AARCH64_INSN_REGTYPE_RN, orinst);
+	/* The size field (31,30) matches the enum used in gen_load_acq below. */
+	size = orinst >> 30;
+
+	altinst = aarch64_insn_gen_load_acq_store_rel(rt, rn, size,
+		AARCH64_INSN_LDST_LOAD_ACQ);
+
+	updptr[0] = cpu_to_le32(altinst);
+}
+EXPORT_SYMBOL(alt_cb_patch_ldr_to_ldar);
+
 /*
  * This generates a memcpy that works on a from/to address which is aligned to
  * bits. Count is in terms of the number of bits sized quantities to copy. It
