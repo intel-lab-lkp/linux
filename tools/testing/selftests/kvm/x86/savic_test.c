@@ -13,7 +13,7 @@
 #include "test_util.h"
 #include "savic.h"
 
-#define NR_SAVIC_VCPUS	1
+#define NR_SAVIC_VCPUS	2
 #define NUM_ITERATIONS 2000
 
 #define IDLE_HLT_INTR_VECTOR     0x30
@@ -22,6 +22,10 @@
 #define IOAPIC_NUM_LEVEL_VECTORS 2
 #define RTC_GSI	8
 #define RTC_GSI_IRQ 0x85
+#define FIXED_IPI_VEC     0x31
+#define FIXED_LOGICAL_IPI_VEC     0x32
+#define BROADCAST_ALL_IPI_VEC     0x33
+#define BROADCAST_NOSELF_IPI_VEC     0x34
 
 static bool irq_received;
 static struct kvm_vcpu *vcpus[NR_SAVIC_VCPUS];
@@ -36,6 +40,7 @@ enum savic_test_state {
 	SAVIC_TEST_STATE(SAVIC_IDLE_HALT),
 	SAVIC_TEST_STATE(SAVIC_IOAPIC),
 	SAVIC_TEST_STATE(SAVIC_IOAPIC2),
+	SAVIC_TEST_STATE(SAVIC_IPI),
 };
 
 /* Data struct shared between host main thread and vCPUs */
@@ -45,6 +50,18 @@ struct test_data_page {
 	uint64_t ioapic_lirq1_count;
 	uint64_t ioapic_lirq2_count;
 	uint64_t ioapic_rtc_gsi_irq_count;
+	uint64_t fixed_ipi_wake_count;
+	uint64_t fixed_ipi_hlt_count;
+	uint64_t fixed_logical_ipi_hlt_count;
+	uint64_t fixed_logical_ipi_wake_count;
+	uint64_t broadcast_ipi_hlt_count;
+	uint64_t broadcast_ipi_wake_count;
+	uint64_t broadcast_noself_ipi_hlt_count;
+	uint64_t broadcast_noself_ipi_wake_count;
+	uint64_t fixed_ipi_count;
+	uint64_t fixed_logical_ipi_count;
+	uint64_t broadcast_ipi_count;
+	uint64_t broadcast_noself_ipi_count;
 };
 
 static struct test_data_page *test_data[NR_SAVIC_VCPUS];
@@ -452,6 +469,247 @@ static void guest_setup_ioapic(int id)
 	savic_allow_vector(vec);
 }
 
+static void savic_fixed_ipi(bool logical)
+{
+	uint64_t last_wake_cnt, last_hlt_cnt;
+	uint64_t last_fixed_ipi_cnt;
+	uint64_t tsc_start;
+	uint64_t *fixed_ipi_p;
+	uint64_t *fixed_ipi_hlt_cnt_p;
+	uint64_t *fixed_ipi_wake_cnt_p;
+	int vec;
+	int i, j;
+
+	for (i = 1; i < NR_SAVIC_VCPUS; i++) {
+		struct test_data_page *data = test_data[i];
+		uint64_t dst_apic_id = i;
+
+		if (logical) {
+			fixed_ipi_p = &data->fixed_logical_ipi_count;
+			fixed_ipi_hlt_cnt_p = &data->fixed_logical_ipi_hlt_count;
+			fixed_ipi_wake_cnt_p = &data->fixed_logical_ipi_wake_count;
+			vec = FIXED_LOGICAL_IPI_VEC | APIC_DEST_LOGICAL;
+			dst_apic_id = 1 << i;
+		} else {
+			fixed_ipi_p = &data->fixed_ipi_count;
+			fixed_ipi_hlt_cnt_p = &data->fixed_ipi_hlt_count;
+			fixed_ipi_wake_cnt_p = &data->fixed_ipi_wake_count;
+			vec = FIXED_IPI_VEC;
+			dst_apic_id = i;
+		}
+
+		last_wake_cnt = READ_ONCE(*fixed_ipi_wake_cnt_p);
+		while (!READ_ONCE(*fixed_ipi_hlt_cnt_p))
+			;
+
+		last_hlt_cnt = READ_ONCE(*fixed_ipi_hlt_cnt_p);
+		last_fixed_ipi_cnt = READ_ONCE(*fixed_ipi_p);
+
+		for (j = 0; j < NUM_ITERATIONS; j++) {
+			tsc_start = rdtsc();
+			x2apic_write_reg(APIC_ICR, dst_apic_id << 32 |
+					APIC_INT_ASSERT | vec);
+			while (rdtsc() - tsc_start < 1000000000) {
+				if (READ_ONCE(*fixed_ipi_wake_cnt_p) != last_wake_cnt &&
+				    READ_ONCE(*fixed_ipi_hlt_cnt_p) != last_hlt_cnt &&
+				    READ_ONCE(*fixed_ipi_p) != last_fixed_ipi_cnt)
+					break;
+			}
+
+			__GUEST_ASSERT(READ_ONCE(*fixed_ipi_wake_cnt_p) != last_wake_cnt &&
+				       READ_ONCE(*fixed_ipi_hlt_cnt_p) != last_hlt_cnt &&
+				       READ_ONCE(*fixed_ipi_p) != last_fixed_ipi_cnt,
+				       "wakeup_cnt: %ld last_wake_cnt: %ld hlt_count: %ld last_hlt_cnt: %ld d_ipi_count: %ld last_d_ipi_count: %ld",
+				       READ_ONCE(*fixed_ipi_wake_cnt_p), last_wake_cnt,
+				       READ_ONCE(*fixed_ipi_hlt_cnt_p), last_hlt_cnt,
+				       READ_ONCE(*fixed_ipi_p), last_fixed_ipi_cnt);
+
+			last_wake_cnt = READ_ONCE(*fixed_ipi_wake_cnt_p);
+			last_hlt_cnt = READ_ONCE(*fixed_ipi_hlt_cnt_p);
+			last_fixed_ipi_cnt = READ_ONCE(*fixed_ipi_p);
+		}
+	}
+}
+
+static void savic_send_broadcast(int dsh)
+{
+	uint64_t last_wake_cnt[NR_SAVIC_VCPUS], last_hlt_cnt[NR_SAVIC_VCPUS];
+	uint64_t last_ipi_cnt[NR_SAVIC_VCPUS];
+	uint64_t tsc_start;
+	uint64_t *broadcast_ipi_p;
+	uint64_t *broadcast_ipi_hlt_cnt_p;
+	uint64_t *broadcast_ipi_wake_cnt_p;
+	struct test_data_page *data;
+	int i, j;
+	int vec;
+
+	if (dsh == APIC_DEST_ALLINC)
+		vec = BROADCAST_ALL_IPI_VEC;
+	else
+		vec = BROADCAST_NOSELF_IPI_VEC;
+
+	for (i = 1; i < NR_SAVIC_VCPUS; i++) {
+		data = test_data[i];
+
+		if (dsh == APIC_DEST_ALLINC)
+			broadcast_ipi_hlt_cnt_p = &data->broadcast_ipi_hlt_count;
+		else
+			broadcast_ipi_hlt_cnt_p = &data->broadcast_noself_ipi_hlt_count;
+
+		while (!READ_ONCE(*broadcast_ipi_hlt_cnt_p))
+			;
+	}
+
+	for (j = 0; j < NUM_ITERATIONS; j++) {
+		for (i = 1; i < NR_SAVIC_VCPUS; i++) {
+			data = test_data[i];
+
+			if (dsh == APIC_DEST_ALLINC) {
+				last_hlt_cnt[i] = READ_ONCE(data->broadcast_ipi_hlt_count);
+				last_ipi_cnt[i] = READ_ONCE(data->broadcast_ipi_count);
+				last_wake_cnt[i] = READ_ONCE(data->broadcast_ipi_wake_count);
+			} else {
+				last_hlt_cnt[i] = READ_ONCE(data->broadcast_noself_ipi_hlt_count);
+				last_ipi_cnt[i] = READ_ONCE(data->broadcast_noself_ipi_count);
+				last_wake_cnt[i] = READ_ONCE(data->broadcast_noself_ipi_wake_count);
+			}
+		}
+
+		x2apic_write_reg(APIC_ICR, APIC_INT_ASSERT | dsh | vec);
+
+		tsc_start = rdtsc();
+
+		for (i = 1; i < NR_SAVIC_VCPUS; i++) {
+			data = test_data[i];
+
+			if (dsh == APIC_DEST_ALLINC) {
+				broadcast_ipi_p = &data->broadcast_ipi_count;
+				broadcast_ipi_hlt_cnt_p = &data->broadcast_ipi_hlt_count;
+				broadcast_ipi_wake_cnt_p = &data->broadcast_ipi_wake_count;
+			} else {
+				broadcast_ipi_p = &data->broadcast_noself_ipi_count;
+				broadcast_ipi_hlt_cnt_p = &data->broadcast_noself_ipi_hlt_count;
+				broadcast_ipi_wake_cnt_p = &data->broadcast_noself_ipi_wake_count;
+			}
+
+			while (rdtsc() - tsc_start < 1000000000) {
+				if (READ_ONCE(*broadcast_ipi_wake_cnt_p) != last_wake_cnt[i] &&
+				    READ_ONCE(*broadcast_ipi_hlt_cnt_p) != last_hlt_cnt[i] &&
+				    READ_ONCE(*broadcast_ipi_p) != last_ipi_cnt[i])
+					break;
+			}
+
+			__GUEST_ASSERT(READ_ONCE(*broadcast_ipi_wake_cnt_p) != last_wake_cnt[i] &&
+				       READ_ONCE(*broadcast_ipi_hlt_cnt_p) != last_hlt_cnt[i] &&
+				       READ_ONCE(*broadcast_ipi_p) != last_ipi_cnt[i],
+				       "wakeup_cnt: %ld last_wake_cnt: %ld hlt_count: %ld last_hlt_cnt: %ld b_ipi_count: %ld last_b_ipi_count: %ld",
+				       READ_ONCE(*broadcast_ipi_wake_cnt_p), last_wake_cnt[i],
+				       READ_ONCE(*broadcast_ipi_hlt_cnt_p), last_hlt_cnt[i],
+				       READ_ONCE(*broadcast_ipi_p), last_ipi_cnt[i]);
+
+			last_wake_cnt[i] = READ_ONCE(*broadcast_ipi_wake_cnt_p);
+			last_hlt_cnt[i] = READ_ONCE(*broadcast_ipi_hlt_cnt_p);
+			last_ipi_cnt[i] = READ_ONCE(*broadcast_ipi_p);
+		}
+	}
+}
+
+void savic_ipi(int id)
+{
+	savic_fixed_ipi(false);
+	savic_fixed_ipi(true);
+
+	asm volatile("sti;":::"memory");
+	x2apic_write_reg(APIC_TASKPRI, 0);
+	savic_send_broadcast(APIC_DEST_ALLINC);
+	savic_send_broadcast(APIC_DEST_ALLBUT);
+}
+
+void guest_fixed_ipi_handler(struct ex_regs *regs)
+{
+	struct test_data_page *data = test_data[x2apic_read_reg(APIC_ID)];
+
+	WRITE_ONCE(data->fixed_ipi_count, data->fixed_ipi_count + 1);
+	x2apic_write_reg(APIC_EOI, 0x00);
+}
+
+void guest_fixed_logical_ipi_handler(struct ex_regs *regs)
+{
+	struct test_data_page *data = test_data[x2apic_read_reg(APIC_ID)];
+
+	WRITE_ONCE(data->fixed_logical_ipi_count, data->fixed_logical_ipi_count + 1);
+	x2apic_write_reg(APIC_EOI, 0x00);
+}
+
+void guest_broadcast_ipi_handler(struct ex_regs *regs)
+{
+	struct test_data_page *data = test_data[x2apic_read_reg(APIC_ID)];
+
+	WRITE_ONCE(data->broadcast_ipi_count, data->broadcast_ipi_count + 1);
+	x2apic_write_reg(APIC_EOI, 0x00);
+}
+
+void guest_broadcast_noself_ipi_handler(struct ex_regs *regs)
+{
+	struct test_data_page *data = test_data[x2apic_read_reg(APIC_ID)];
+
+	WRITE_ONCE(data->broadcast_noself_ipi_count, data->broadcast_noself_ipi_count + 1);
+	x2apic_write_reg(APIC_EOI, 0x00);
+}
+
+static void ipi_guest_code(int id, unsigned long secondary_entry)
+{
+	struct test_data_page *data;
+	uint64_t *ipi_count_p, *hlt_count_p, *wake_count_p;
+	int i;
+
+	x2apic_enable();
+	id = x2apic_read_reg(APIC_ID);
+	data = test_data[id];
+	savic_enable();
+	x2apic_write_reg(APIC_TASKPRI, 0);
+
+	uint64_t *ipi_count_types[][3] = {
+		{
+			&data->fixed_ipi_hlt_count,
+			&data->fixed_ipi_count,
+			&data->fixed_ipi_wake_count
+		},
+		{
+			&data->fixed_logical_ipi_hlt_count,
+			&data->fixed_logical_ipi_count,
+			&data->fixed_logical_ipi_wake_count
+		},
+		{
+			&data->broadcast_ipi_hlt_count,
+			&data->broadcast_ipi_count,
+			&data->broadcast_ipi_wake_count
+		},
+		{
+			&data->broadcast_noself_ipi_hlt_count,
+			&data->broadcast_noself_ipi_count,
+			&data->broadcast_noself_ipi_wake_count
+		},
+	};
+
+	for (i = 0; i < ARRAY_SIZE(ipi_count_types); i++) {
+		hlt_count_p = ipi_count_types[i][0];
+		ipi_count_p = ipi_count_types[i][1];
+		wake_count_p = ipi_count_types[i][2];
+
+		while (READ_ONCE(*ipi_count_p) != NUM_ITERATIONS) {
+			asm volatile("cli");
+			WRITE_ONCE(*hlt_count_p, *hlt_count_p + 1);
+			asm volatile("sti; hlt" : : : "memory");
+			WRITE_ONCE(*wake_count_p, *wake_count_p + 1);
+		}
+
+		WRITE_ONCE(*hlt_count_p, *hlt_count_p + 1);
+	}
+
+	GUEST_DONE();
+}
+
 static void guest_code(int id)
 {
 	GUEST_ASSERT(rdmsr(MSR_AMD64_SEV) & MSR_AMD64_SNP_SECURE_AVIC);
@@ -467,6 +725,8 @@ static void guest_code(int id)
 	guest_setup_ioapic(id);
 	SAVIC_GUEST_SYNC(SAVIC_IOAPIC, savic_ioapic);
 	SAVIC_GUEST_SYNC(SAVIC_IOAPIC2, savic_ioapic2);
+
+	SAVIC_GUEST_SYNC(SAVIC_IPI, savic_ipi);
 
 	GUEST_DONE();
 }
@@ -536,6 +796,11 @@ static void install_exception_handlers(struct kvm_vm *vm)
 	vm_install_exception_handler(vm, IOAPIC_VECTOR_START + 2, ioapic_level_irq1_intr_handler);
 	vm_install_exception_handler(vm, IOAPIC_VECTOR_START + 3, ioapic_level_irq2_intr_handler);
 	vm_install_exception_handler(vm, RTC_GSI_IRQ, ioapic_rtc_gsi_intr_handler);
+	vm_install_exception_handler(vm, FIXED_IPI_VEC, guest_fixed_ipi_handler);
+	vm_install_exception_handler(vm, FIXED_LOGICAL_IPI_VEC, guest_fixed_logical_ipi_handler);
+	vm_install_exception_handler(vm, BROADCAST_ALL_IPI_VEC, guest_broadcast_ipi_handler);
+	vm_install_exception_handler(vm, BROADCAST_NOSELF_IPI_VEC,
+			guest_broadcast_noself_ipi_handler);
 }
 
 int main(int argc, char *argv[])
@@ -547,19 +812,28 @@ int main(int argc, char *argv[])
 	vm_vaddr_t test_data_page_vaddr;
 	struct kvm_vm *vm;
 	int i, r;
+	struct vm_shape shape = {
+		.mode = VM_MODE_DEFAULT,
+		.type = KVM_X86_SNP_VM,
+	};
 
 	TEST_REQUIRE(kvm_cpu_has(X86_FEATURE_SEV_SNP));
 	TEST_REQUIRE(kvm_cpu_has(X86_FEATURE_SECURE_AVIC));
 	TEST_REQUIRE(this_cpu_has(X86_FEATURE_IDLE_HLT));
 
-	vm = _vm_sev_create_with_one_vcpu(KVM_X86_SNP_VM, guest_code, &vcpus[0], &args);
+	vm = __vm_create_with_args(shape, NR_SAVIC_VCPUS, 0, &args);
+
+	vcpus[0] = vm_vcpu_add(vm, 0, guest_code);
+	for (i = 1; i < NR_SAVIC_VCPUS; ++i)
+		vcpus[i] = vm_vcpu_add(vm, i, ipi_guest_code);
 
 	virt_pg_map(vm, APIC_DEFAULT_GPA, APIC_DEFAULT_GPA);
 	virt_pg_map(vm, IOAPIC_DEFAULT_GPA, IOAPIC_DEFAULT_GPA);
 
 	install_exception_handlers(vm);
 
-	vcpu_args_set(vcpus[0], 1, vcpus[0]->id);
+	for (i = 0; i < NR_SAVIC_VCPUS; i++)
+		vcpu_args_set(vcpus[i], 1, vcpus[i]->id);
 
 	for (i = 0; i < NR_SAVIC_VCPUS; i++) {
 		test_data_page_vaddr = vm_vaddr_alloc_page_shared(vm);
@@ -572,10 +846,13 @@ int main(int argc, char *argv[])
 
 	vm_sev_launch(vm, snp_default_policy(), NULL);
 
-	r = pthread_create(&threads[0], NULL, vcpu_thread, vcpus[0]);
-	TEST_ASSERT(r == 0, "pthread_create failed errno=%d", errno);
+	for (i = 0; i < NR_SAVIC_VCPUS; i++) {
+		r = pthread_create(&threads[i], NULL, vcpu_thread, vcpus[i]);
+		TEST_ASSERT(r == 0, "pthread_create failed errno=%d", errno);
+	}
 
-	pthread_join(threads[0], NULL);
+	for (i = 0; i < NR_SAVIC_VCPUS; i++)
+		pthread_join(threads[i], NULL);
 
 	for (i = 0; i < NR_SAVIC_VCPUS; i++) {
 		struct test_data_page *shared_state = shared_data[i];
@@ -583,6 +860,22 @@ int main(int argc, char *argv[])
 		fprintf(stderr, "VCPU %d ioapic edge irq1 count: %ld edge irq2 count: %ld\n", i, shared_state->ioapic_eirq1_count, shared_state->ioapic_eirq2_count);
 		fprintf(stderr, "VCPU %d ioapic level irq1 count: %ld level irq2 count: %ld\n", i, shared_state->ioapic_lirq1_count, shared_state->ioapic_lirq2_count);
 		fprintf(stderr, "VCPU %d ioapic RTC GSI irq1 count: %ld\n", i, shared_state->ioapic_rtc_gsi_irq_count);
+		fprintf(stderr, "vCPU %d fixed IPI counts wake: %ld hlt: %ld num-IPI: %ld\n",
+			i, shared_state->fixed_ipi_wake_count,
+			shared_state->fixed_ipi_hlt_count,
+			shared_state->fixed_ipi_count);
+		fprintf(stderr, "vCPU %d fixed-logical IPI counts wake: %ld hlt: %ld num-IPI: %ld\n",
+			i, shared_state->fixed_logical_ipi_wake_count,
+			shared_state->fixed_logical_ipi_hlt_count,
+			shared_state->fixed_logical_ipi_count);
+		fprintf(stderr, "vCPU %d broadcast IPI counts wake: %ld hlt: %ld num-IPI: %ld\n",
+			i, shared_state->broadcast_ipi_wake_count,
+			shared_state->broadcast_ipi_hlt_count,
+			shared_state->broadcast_ipi_count);
+		fprintf(stderr, "vCPU %d broadcast exluding self IPI counts wake: %ld hlt: %ld num-IPI: %ld\n",
+			i, shared_state->broadcast_noself_ipi_wake_count,
+			shared_state->broadcast_noself_ipi_hlt_count,
+			shared_state->broadcast_noself_ipi_count);
 	}
 
 	kvm_vm_free(vm);
