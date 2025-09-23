@@ -9,6 +9,7 @@
 #include "kvm_util.h"
 #include "processor.h"
 #include "test_util.h"
+#include "sev.h"
 
 struct xapic_vcpu {
 	struct kvm_vcpu *vcpu;
@@ -160,6 +161,27 @@ static void __test_apic_id(struct kvm_vcpu *vcpu, uint64_t apic_base)
 		    expected, apic_id);
 }
 
+static inline bool is_sev_vm_type(int type)
+{
+	return type == KVM_X86_SEV_VM ||
+		type == KVM_X86_SEV_ES_VM ||
+		type == KVM_X86_SNP_VM;
+}
+
+static inline uint64_t get_sev_policy(int vm_type)
+{
+	switch (vm_type) {
+	case KVM_X86_SEV_VM:
+		return SEV_POLICY_NO_DBG;
+	case KVM_X86_SEV_ES_VM:
+		return SEV_POLICY_ES;
+	case KVM_X86_SNP_VM:
+		return snp_default_policy();
+	default:
+		return 0;
+	}
+}
+
 /*
  * Verify that KVM switches the APIC_ID between xAPIC and x2APIC when userspace
  * stuffs MSR_IA32_APICBASE.  Setting the APIC_ID when x2APIC is enabled and
@@ -168,16 +190,22 @@ static void __test_apic_id(struct kvm_vcpu *vcpu, uint64_t apic_base)
  * attempted to transition from x2APIC to xAPIC without disabling the APIC is
  * architecturally disallowed.
  */
-static void test_apic_id(void)
+static void test_apic_id(int vm_type)
 {
 	const uint32_t NR_VCPUS = 3;
 	struct kvm_vcpu *vcpus[NR_VCPUS];
 	uint64_t apic_base;
 	struct kvm_vm *vm;
 	int i;
+	struct vm_shape shape = {
+		.mode = VM_MODE_DEFAULT,
+		.type = vm_type,
+	};
 
-	vm = vm_create_with_vcpus(NR_VCPUS, NULL, vcpus);
+	vm = __vm_create_with_vcpus(shape, NR_VCPUS, 0, NULL, vcpus);
 	vm_enable_cap(vm, KVM_CAP_X2APIC_API, KVM_X2APIC_API_USE_32BIT_IDS);
+	if (is_sev_vm(vm))
+		vm_sev_launch(vm, get_sev_policy(vm_type), NULL);
 
 	for (i = 0; i < NR_VCPUS; i++) {
 		apic_base = vcpu_get_msr(vcpus[i], MSR_IA32_APICBASE);
@@ -195,15 +223,21 @@ static void test_apic_id(void)
 	kvm_vm_free(vm);
 }
 
-static void test_x2apic_id(void)
+static void test_x2apic_id(int vm_type)
 {
 	struct kvm_lapic_state lapic = {};
 	struct kvm_vcpu *vcpu;
 	struct kvm_vm *vm;
 	int i;
+	bool is_sev = is_sev_vm_type(vm_type);
 
-	vm = vm_create_with_one_vcpu(&vcpu, NULL);
+	if (is_sev)
+		vm = vm_sev_create_with_one_vcpu(vm_type, NULL, &vcpu);
+	else
+		vm = vm_create_with_one_vcpu(&vcpu, NULL);
 	vcpu_set_msr(vcpu, MSR_IA32_APICBASE, MSR_IA32_APICBASE_ENABLE | X2APIC_ENABLE);
+	if (is_sev)
+		vm_sev_launch(vm, get_sev_policy(vm_type), NULL);
 
 	/*
 	 * Try stuffing a modified x2APIC ID, KVM should ignore the value and
@@ -222,6 +256,46 @@ static void test_x2apic_id(void)
 	kvm_vm_free(vm);
 }
 
+void get_cmdline_args(int argc, char *argv[], int *vm_type)
+{
+	for (;;) {
+		int opt = getopt(argc, argv, "t:");
+
+		if (opt == -1)
+			break;
+		switch (opt) {
+		case 't':
+			*vm_type = parse_size(optarg);
+			switch (*vm_type) {
+			case KVM_X86_DEFAULT_VM:
+				break;
+			case KVM_X86_SEV_VM:
+				TEST_REQUIRE(kvm_cpu_has(X86_FEATURE_SEV));
+				break;
+			case KVM_X86_SEV_ES_VM:
+				TEST_REQUIRE(kvm_cpu_has(X86_FEATURE_SEV_ES));
+				break;
+			case KVM_X86_SNP_VM:
+				TEST_REQUIRE(kvm_cpu_has(X86_FEATURE_SEV_SNP));
+				break;
+			default:
+				TEST_ASSERT(false, "Unsupported VM type :%d",
+					    *vm_type);
+			}
+			break;
+		default:
+			TEST_ASSERT(false,
+				    "Usage: -t <vm type>. Default is %d.\n"
+				    "Supported values:\n"
+				    "0 - default\n"
+				    "2 - SEV\n"
+				    "3 - SEV-ES\n"
+				    "4 - SNP",
+				    KVM_X86_DEFAULT_VM);
+		}
+	}
+}
+
 int main(int argc, char *argv[])
 {
 	struct xapic_vcpu x = {
@@ -229,8 +303,24 @@ int main(int argc, char *argv[])
 		.is_x2apic = true,
 	};
 	struct kvm_vm *vm;
+	int vm_type = KVM_X86_DEFAULT_VM;
+	bool is_sev;
 
-	vm = vm_create_with_one_vcpu(&x.vcpu, x2apic_guest_code);
+	get_cmdline_args(argc, argv, &vm_type);
+	is_sev = is_sev_vm_type(vm_type);
+
+	if (is_sev)
+		vm = vm_sev_create_with_one_vcpu(vm_type, x2apic_guest_code,
+				&x.vcpu);
+	else
+		vm = vm_create_with_one_vcpu(&x.vcpu, x2apic_guest_code);
+
+	if (is_sev_es_vm(vm))
+		vm_install_exception_handler(vm, 29, sev_es_vc_handler);
+
+	if (is_sev)
+		vm_sev_launch(vm, get_sev_policy(vm_type), NULL);
+
 	test_icr(&x);
 	kvm_vm_free(vm);
 
@@ -239,7 +329,15 @@ int main(int argc, char *argv[])
 	 * the guest in order to test AVIC.  KVM disallows changing CPUID after
 	 * KVM_RUN and AVIC is disabled if _any_ vCPU is allowed to use x2APIC.
 	 */
-	vm = vm_create_with_one_vcpu(&x.vcpu, xapic_guest_code);
+	if (is_sev)
+		vm = vm_sev_create_with_one_vcpu(vm_type, xapic_guest_code,
+				&x.vcpu);
+	else
+		vm = vm_create_with_one_vcpu(&x.vcpu, xapic_guest_code);
+
+	if (is_sev_es_vm(vm))
+		vm_install_exception_handler(vm, 29, sev_es_vc_handler);
+
 	x.is_x2apic = false;
 
 	/*
@@ -254,9 +352,12 @@ int main(int argc, char *argv[])
 	vcpu_clear_cpuid_feature(x.vcpu, X86_FEATURE_X2APIC);
 
 	virt_pg_map(vm, APIC_DEFAULT_GPA, APIC_DEFAULT_GPA);
+	if (is_sev)
+		vm_sev_launch(vm, get_sev_policy(vm_type), NULL);
+
 	test_icr(&x);
 	kvm_vm_free(vm);
 
-	test_apic_id();
-	test_x2apic_id();
+	test_apic_id(vm_type);
+	test_x2apic_id(vm_type);
 }
