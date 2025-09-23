@@ -6,6 +6,7 @@
  * Standard functionality for the common clock API.  See Documentation/driver-api/clk.rst
  */
 
+#include <kunit/visibility.h>
 #include <linux/clk.h>
 #include <linux/clk-provider.h>
 #include <linux/clk/clk-conf.h>
@@ -92,6 +93,8 @@ struct clk_parent_map {
  *                     clk_core->rate every time the clock is reparented, and
  *                     when we're doing the orphan -> !orphan transition.
  * @new_rate:          New rate to be set during a rate change operation.
+ * @validate_rate:     Temporary rate that's used when various clk nodes are
+ *                     negotiating a rate with the v2 rate negotiation logic.
  * @new_parent:        Pointer to new parent during parent change. This is also
  *                     used when a clk's rate is changed.
  * @new_child:         Pointer to new child during reparenting. This is also
@@ -130,6 +133,7 @@ struct clk_core {
 	unsigned long		rate;
 	unsigned long		req_rate;
 	unsigned long		new_rate;
+	unsigned long		validate_rate;
 	struct clk_core		*new_parent;
 	struct clk_core		*new_child;
 	unsigned long		flags;
@@ -410,6 +414,44 @@ done:
 }
 
 /***    helper functions   ***/
+
+static bool clk_v2_rate_negotiation = 1;
+static int __init clk_v2_rate_negotiation_setup(char *str)
+{
+	unsigned long enabled;
+
+	if (!kstrtoul(str, 0, &enabled))
+		clk_v2_rate_negotiation = enabled ? 1 : 0;
+
+	return 1;
+}
+__setup("clk_v2_rate_negotiation", clk_v2_rate_negotiation_setup);
+
+static int clk_core_use_v2_rate_negotiation(struct clk_core *core)
+{
+	bool has_v2_ops = core->ops->negotiate_rates ||
+		(core->parent && core->parent->ops->negotiate_rates);
+
+	return has_v2_ops && clk_v2_rate_negotiation;
+}
+
+void clk_enable_v1_rate_negotiation(void)
+{
+	clk_v2_rate_negotiation = false;
+}
+EXPORT_SYMBOL_IF_KUNIT(clk_enable_v1_rate_negotiation);
+
+void clk_enable_v2_rate_negotiation(void)
+{
+	clk_v2_rate_negotiation = true;
+}
+EXPORT_SYMBOL_IF_KUNIT(clk_enable_v2_rate_negotiation);
+
+int clk_use_v2_rate_negotiation(struct clk *clk)
+{
+	return clk_core_use_v2_rate_negotiation(clk->core);
+}
+EXPORT_SYMBOL_IF_KUNIT(clk_use_v2_rate_negotiation);
 
 const char *__clk_get_name(const struct clk *clk)
 {
@@ -2321,7 +2363,8 @@ out:
 }
 
 static void clk_calc_subtree(struct clk_core *core, unsigned long new_rate,
-			     struct clk_core *new_parent, u8 p_index)
+			     struct clk_core *new_parent, u8 p_index,
+			     struct clk_core *initiating_clk)
 {
 	struct clk_core *child;
 
@@ -2334,8 +2377,66 @@ static void clk_calc_subtree(struct clk_core *core, unsigned long new_rate,
 		new_parent->new_child = core;
 
 	hlist_for_each_entry(child, &core->children, child_node) {
-		child->new_rate = clk_recalc(child, new_rate);
-		clk_calc_subtree(child, child->new_rate, NULL, 0);
+		if (child == initiating_clk || !clk_core_use_v2_rate_negotiation(child))
+			child->new_rate = clk_recalc(child, new_rate);
+		else
+			child->new_rate = child->rate;
+
+		clk_calc_subtree(child, child->new_rate, NULL, 0, initiating_clk);
+	}
+}
+
+static bool clk_check_rate(struct clk_core *core, unsigned long validate_rate)
+{
+	struct clk_rate_request req;
+	struct clk_hw *orig_parent;
+	struct clk_core *child;
+	int ret, old_flags;
+
+	hlist_for_each_entry(child, &core->children, child_node) {
+		clk_core_init_rate_req(child, &req, child->new_rate);
+		req.best_parent_rate = validate_rate;
+		orig_parent = req.best_parent_hw;
+
+		/*
+		 * Round the existing child rate based on the new proposed
+		 * parent rate. Don't allow the parent rate to be changed.
+		 */
+		old_flags = child->flags;
+		child->flags &= ~CLK_SET_RATE_PARENT;
+		ret = clk_core_determine_round_nolock(child, &req);
+		child->flags = old_flags;
+
+		if (ret < 0)
+			return false;
+
+		if (WARN_ON_ONCE(req.best_parent_rate != validate_rate))
+			return false;
+
+		// FIXME - muxes not supported at the moment
+		if (req.best_parent_hw != orig_parent)
+			return false;
+
+		if (req.rate < child->new_rate || req.rate > child->new_rate)
+			return false;
+
+		// Check the child's children (if present)
+		if (!clk_check_rate(child, req.rate))
+			return false;
+	}
+
+	core->validate_rate = validate_rate;
+
+	return true;
+}
+
+static void clk_accept_rate_negotiations(struct clk_core *core)
+{
+	struct clk_core *child;
+
+	core->new_rate = core->validate_rate;
+	hlist_for_each_entry(child, &core->children, child_node) {
+		clk_accept_rate_negotiations(child);
 	}
 }
 
@@ -2344,11 +2445,13 @@ static void clk_calc_subtree(struct clk_core *core, unsigned long new_rate,
  * changed.
  */
 static struct clk_core *clk_calc_new_rates(struct clk_core *core,
-					   unsigned long rate)
+					   unsigned long rate,
+					   struct clk_core *initiating_clk)
 {
 	struct clk_core *top = core;
 	struct clk_core *old_parent, *parent;
 	unsigned long best_parent_rate = 0;
+	bool fine_tune_rates = false;
 	unsigned long new_rate;
 	unsigned long min_rate;
 	unsigned long max_rate;
@@ -2392,7 +2495,7 @@ static struct clk_core *clk_calc_new_rates(struct clk_core *core,
 		return NULL;
 	} else {
 		/* pass-through clock with adjustable parent */
-		top = clk_calc_new_rates(parent, rate);
+		top = clk_calc_new_rates(parent, rate, initiating_clk);
 		new_rate = parent->new_rate;
 		goto out;
 	}
@@ -2416,11 +2519,23 @@ static struct clk_core *clk_calc_new_rates(struct clk_core *core,
 	}
 
 	if ((core->flags & CLK_SET_RATE_PARENT) && parent &&
-	    best_parent_rate != parent->rate)
-		top = clk_calc_new_rates(parent, best_parent_rate);
+	    best_parent_rate != parent->rate) {
+		top = clk_calc_new_rates(parent, best_parent_rate, initiating_clk);
+		fine_tune_rates = true;
+	}
 
 out:
-	clk_calc_subtree(core, new_rate, parent, p_index);
+	clk_calc_subtree(core, new_rate, parent, p_index, initiating_clk);
+
+	if (fine_tune_rates && clk_core_use_v2_rate_negotiation(top)) {
+		struct clk_rate_request req;
+
+		clk_core_init_rate_req(top, &req, top->new_rate);
+		if (!top->ops->negotiate_rates(top->hw, &req, clk_check_rate))
+			return NULL;
+
+		clk_accept_rate_negotiations(top);
+	}
 
 	return top;
 }
@@ -2468,7 +2583,7 @@ static struct clk_core *clk_propagate_rate_change(struct clk_core *core,
  * walk down a subtree and set the new rates notifying the rate
  * change on the way
  */
-static void clk_change_rate(struct clk_core *core)
+static void clk_change_rate(struct clk_core *core, struct clk_core *initiating_clk)
 {
 	struct clk_core *child;
 	struct hlist_node *tmp;
@@ -2537,7 +2652,7 @@ static void clk_change_rate(struct clk_core *core)
 		__clk_notify(core, POST_RATE_CHANGE, old_rate, core->rate);
 
 	if (core->flags & CLK_RECALC_NEW_RATES)
-		(void)clk_calc_new_rates(core, core->new_rate);
+		(void)clk_calc_new_rates(core, core->new_rate, initiating_clk);
 
 	/*
 	 * Use safe iteration, as change_rate can actually swap parents
@@ -2547,12 +2662,12 @@ static void clk_change_rate(struct clk_core *core)
 		/* Skip children who will be reparented to another clock */
 		if (child->new_parent && child->new_parent != core)
 			continue;
-		clk_change_rate(child);
+		clk_change_rate(child, initiating_clk);
 	}
 
 	/* handle the new child who might not be in core->children yet */
 	if (core->new_child)
-		clk_change_rate(core->new_child);
+		clk_change_rate(core->new_child, initiating_clk);
 
 	clk_pm_runtime_put(core);
 }
@@ -2608,7 +2723,7 @@ static int clk_core_set_rate_nolock(struct clk_core *core,
 		return -EBUSY;
 
 	/* calculate new rates and get the topmost changed clock */
-	top = clk_calc_new_rates(core, req_rate);
+	top = clk_calc_new_rates(core, req_rate, core);
 	if (!top)
 		return -EINVAL;
 
@@ -2627,7 +2742,7 @@ static int clk_core_set_rate_nolock(struct clk_core *core,
 	}
 
 	/* change the rates */
-	clk_change_rate(top);
+	clk_change_rate(top, core);
 
 	core->req_rate = req_rate;
 err:

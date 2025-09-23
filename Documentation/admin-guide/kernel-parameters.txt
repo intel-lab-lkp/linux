@@ -695,6 +695,21 @@
 			platform with proper driver support.  For more
 			information, see Documentation/driver-api/clk.rst.
 
+	clk_v2_rate_negotiation
+			[CLK]
+			Use the v2 common clk rate negotiation logic. In some
+			cases when a child needs to change the rate of it's
+			parent clk, the rate of a sibling clk can be
+			unexpectedly changed with the v1 rate negotiation logic,
+			and some platforms are unknowingly dependent on this
+			behavior.
+
+			This defaults to 1 where the v2 interface is used when
+			supported by the clk providers. If it is 0, then the v1
+			interface will be used. This is useful for debugging when
+			you suspect your board is unknowingly dependent the
+			legacy behavior.
+
 	clock=		[BUGS=X86-32, HW] gettimeofday clocksource override.
 			[Deprecated]
 			Forces specified clocksource (if available) to be used

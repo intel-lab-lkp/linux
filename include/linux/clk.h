@@ -91,6 +91,26 @@ struct clk_bulk_data {
 
 #ifdef CONFIG_COMMON_CLK
 
+void clk_enable_v1_rate_negotiation(void);
+
+void clk_enable_v2_rate_negotiation(void);
+
+/**
+ * clk_use_v2_rate_negotiation - Use the v2 common clk rate negotiation logic.
+ * In some cases when a child needs to change the rate of it's parent clk, the
+ * rate of a sibling clk can be unexpectedly changed by the v1 negotiation
+ * logic. Some platforms are unknowingly dependent on this behavior.
+ *
+ * This function is only exported for the kunit tests, and this is not to be
+ * used outside of the clk core.
+ *
+ * @clk: clock to check
+ *
+ * Returns 1 if the v2 negotiation logic is used, or 0 if the v1 negotiation
+ * logic is used.
+ */
+int clk_use_v2_rate_negotiation(struct clk *clk);
+
 /**
  * clk_notifier_register - register a clock rate-change notifier callback
  * @clk: clock whose rate we are interested in

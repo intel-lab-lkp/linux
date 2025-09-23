@@ -129,6 +129,10 @@ struct clk_duty {
  * @restore_context: Restore the context of the clock after a restoration
  *		of power.
  *
+ * @negotiate_rates: When a child clk requests a new rate that requires a rate
+ *		change from the parent, this negotiates a new parent rate that's
+ *		acceptable to all of the children.
+ *
  * @recalc_rate: Recalculate the rate of this clock, by querying hardware. The
  *		parent rate is an input parameter.  It is up to the caller to
  *		ensure that the prepare_mutex is held across this call. If the
@@ -242,6 +246,9 @@ struct clk_ops {
 	void		(*disable_unused)(struct clk_hw *hw);
 	int		(*save_context)(struct clk_hw *hw);
 	void		(*restore_context)(struct clk_hw *hw);
+	bool		(*negotiate_rates)(struct clk_hw *hw,
+					   struct clk_rate_request *req,
+					   bool (*check_rate)(struct clk_core *, unsigned long));
 	unsigned long	(*recalc_rate)(struct clk_hw *hw,
 					unsigned long parent_rate);
 	long		(*round_rate)(struct clk_hw *hw, unsigned long rate,

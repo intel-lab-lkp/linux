@@ -75,6 +75,9 @@ the operations defined in clk-provider.h::
 		void		(*disable)(struct clk_hw *hw);
 		int		(*is_enabled)(struct clk_hw *hw);
 		void		(*disable_unused)(struct clk_hw *hw);
+		bool            (*negotiate_rates)(struct clk_hw *hw,
+					           struct clk_rate_request *req,
+					           bool (*check_rate)(struct clk_core *, unsigned long));
 		unsigned long	(*recalc_rate)(struct clk_hw *hw,
 						unsigned long parent_rate);
 		long		(*round_rate)(struct clk_hw *hw,
