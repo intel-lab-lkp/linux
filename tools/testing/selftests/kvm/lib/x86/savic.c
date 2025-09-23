@@ -8,6 +8,7 @@
 #include "apic.h"
 #include "kvm_util.h"
 #include "sev.h"
+#include "savic.h"
 
 struct apic_page {
 	u8 apic_regs[PAGE_SIZE];
@@ -43,9 +44,6 @@ enum lapic_lvt_entry {
 
 #define SVM_EXIT_AVIC_UNACCELERATED_ACCESS      0x402
 #define SVM_EXIT_AVIC_INCOMPLETE_IPI            0x401
-
-#define REG_OFF(VEC)		(VEC / 32 * 16)
-#define VEC_POS(VEC)		(VEC % 32)
 
 #define SAVIC_NMI_REQ_OFFSET            0x278
 
@@ -102,6 +100,11 @@ void set_savic_control_msr(struct guest_apic_page *apic_page, bool enable, bool 
 		val |= BIT_ULL(MSR_AMD64_SECURE_AVIC_ALLOWED_NMI_BIT);
 
 	wrmsr(MSR_AMD64_SECURE_AVIC_CONTROL, val);
+}
+
+struct guest_apic_page *get_guest_apic_page(void)
+{
+	return &apic_page_pool->guest_apic_page[x2apic_read_reg(APIC_ID)];
 }
 
 /*
@@ -175,10 +178,16 @@ static void savic_init_backing_page(struct guest_apic_page *apic_page, uint32_t 
 	regval = savic_hv_read_reg(APIC_LDR);
 	savic_write_reg(apic_page, APIC_LDR, regval);
 
-	for (i = LVT_THERMAL_MONITOR; i < APIC_MAX_NR_LVT_ENTRIES; i++) {
+	for (i = LVT_TIMER; i < APIC_MAX_NR_LVT_ENTRIES; i++) {
 		regval = savic_hv_read_reg(APIC_LVTx(i));
 		savic_write_reg(apic_page, APIC_LVTx(i), regval);
 	}
+
+	regval = savic_hv_read_reg(APIC_TMICT);
+	savic_write_reg(apic_page, APIC_TMICT, regval);
+
+	regval = savic_hv_read_reg(APIC_TDCR);
+	savic_write_reg(apic_page, APIC_TDCR, regval);
 
 	regval = savic_hv_read_reg(APIC_LVT0);
 	savic_write_reg(apic_page, APIC_LVT0, regval);
@@ -351,7 +360,8 @@ static void send_ipi(int cpu, int vector, bool nmi)
 	if (nmi)
 		savic_write_reg(apic_page, SAVIC_NMI_REQ_OFFSET, 1);
 	else
-		savic_write_reg(apic_page, APIC_IRR + REG_OFF(vector), BIT(VEC_POS(vector)));
+		savic_write_reg(apic_page, APIC_IRR + APIC_REG_OFF(vector),
+				BIT(APIC_VEC_POS(vector)));
 }
 
 static bool is_cpu_present(int cpu)
