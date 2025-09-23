@@ -11,6 +11,7 @@
 #include <linux/hwmon-sysfs.h>
 #include <linux/i2c.h>
 #include <linux/interrupt.h>
+#include <linux/jiffies.h>
 #include <linux/module.h>
 #include <linux/platform_data/mlxreg.h>
 #include <linux/platform_device.h>
@@ -29,6 +30,11 @@
 
 #define MLXREG_HOTPLUG_ATTRS_MAX	128
 #define MLXREG_HOTPLUG_NOT_ASSERT	3
+
+/* Interrupt storm definitions */
+#define MLXREG_HOTPLUG_WM_COUNTER	100
+/* Time window in milliseconds */
+#define MLXREG_HOTPLUG_WM_WINDOW_MS	3000
 
 /**
  * struct mlxreg_hotplug_priv_data - platform private data:
@@ -366,11 +372,34 @@ mlxreg_hotplug_work_helper(struct mlxreg_hotplug_priv_data *priv,
 	for_each_set_bit(bit, &asserted, 8) {
 		int pos;
 
+		/* Skip already marked storming bit. */
+		if (item->storming_bits & BIT(bit))
+			continue;
+
 		pos = mlxreg_hotplug_item_label_index_get(item->mask, bit);
 		if (pos < 0)
 			goto out;
 
 		data = item->data + pos;
+
+		/* Interrupt storm handling logic. */
+		if (data->wmark_cntr == 0) {
+			data->wmark_window = jiffies +
+				msecs_to_jiffies(MLXREG_HOTPLUG_WM_WINDOW_MS);
+		}
+		if (data->wmark_cntr >= MLXREG_HOTPLUG_WM_COUNTER - 1) {
+			if (time_after(data->wmark_window, jiffies)) {
+				dev_err(priv->dev,
+					"Storming bit %d (label: %s) - interrupt masked permanently. Replace broken HW.",
+					bit, data->label);
+				/* Mark bit as storming. */
+				item->storming_bits |= BIT(bit);
+				continue;
+			}
+			data->wmark_cntr = 0;
+		} else {
+			data->wmark_cntr++;
+		}
 		if (regval & BIT(bit)) {
 			if (item->inversed)
 				mlxreg_hotplug_device_destroy(priv, data, item->kind);
@@ -390,9 +419,9 @@ mlxreg_hotplug_work_helper(struct mlxreg_hotplug_priv_data *priv,
 	if (ret)
 		goto out;
 
-	/* Unmask event. */
+	/* Unmask event, exclude storming bits. */
 	ret = regmap_write(priv->regmap, item->reg + MLXREG_HOTPLUG_MASK_OFF,
-			   item->mask);
+			   item->mask & ~item->storming_bits);
 
  out:
 	if (ret)
