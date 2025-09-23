@@ -473,8 +473,8 @@ static bool is_guest_memfd_required(struct vm_shape shape)
 #endif
 }
 
-struct kvm_vm *__vm_create(struct vm_shape shape, uint32_t nr_runnable_vcpus,
-			   uint64_t nr_extra_pages)
+static struct kvm_vm *___vm_create(struct vm_shape shape, uint32_t nr_runnable_vcpus,
+			   uint64_t nr_extra_pages, void *args)
 {
 	uint64_t nr_pages = vm_nr_pages_required(shape, nr_runnable_vcpus,
 						 nr_extra_pages);
@@ -519,7 +519,37 @@ struct kvm_vm *__vm_create(struct vm_shape shape, uint32_t nr_runnable_vcpus,
 	guest_rng = new_guest_random_state(guest_random_seed);
 	sync_global_to_guest(vm, guest_rng);
 
-	kvm_arch_vm_post_create(vm);
+	kvm_arch_vm_post_create(vm, args);
+
+	return vm;
+}
+
+struct kvm_vm *__vm_create(struct vm_shape shape, uint32_t nr_runnable_vcpus,
+			   uint64_t nr_extra_pages)
+{
+	return ___vm_create(shape, nr_runnable_vcpus, nr_extra_pages, NULL);
+}
+
+struct kvm_vm *__vm_create_with_args(struct vm_shape shape, uint32_t nr_runnable_vcpus,
+			   uint64_t nr_extra_pages, void *args)
+{
+	return ___vm_create(shape, nr_runnable_vcpus, nr_extra_pages, args);
+}
+
+struct kvm_vm *___vm_create_with_vcpus(struct vm_shape shape,
+		uint32_t nr_vcpus, uint64_t extra_mem_pages,
+		void *guest_code, struct kvm_vcpu *vcpus[],
+		void *args)
+{
+	struct kvm_vm *vm;
+	int i;
+
+	TEST_ASSERT(!nr_vcpus || vcpus, "Must provide vCPU array");
+
+	vm = ___vm_create(shape, nr_vcpus, extra_mem_pages, args);
+
+	for (i = 0; i < nr_vcpus; ++i)
+		vcpus[i] = vm_vcpu_add(vm, i, guest_code);
 
 	return vm;
 }
@@ -547,17 +577,8 @@ struct kvm_vm *__vm_create_with_vcpus(struct vm_shape shape, uint32_t nr_vcpus,
 				      uint64_t extra_mem_pages,
 				      void *guest_code, struct kvm_vcpu *vcpus[])
 {
-	struct kvm_vm *vm;
-	int i;
-
-	TEST_ASSERT(!nr_vcpus || vcpus, "Must provide vCPU array");
-
-	vm = __vm_create(shape, nr_vcpus, extra_mem_pages);
-
-	for (i = 0; i < nr_vcpus; ++i)
-		vcpus[i] = vm_vcpu_add(vm, i, guest_code);
-
-	return vm;
+	return ___vm_create_with_vcpus(shape, nr_vcpus, extra_mem_pages, guest_code,
+			vcpus, NULL);
 }
 
 struct kvm_vm *__vm_create_shape_with_one_vcpu(struct vm_shape shape,
@@ -2357,7 +2378,7 @@ void kvm_get_stat(struct kvm_binary_stats *stats, const char *name,
 	TEST_FAIL("Unable to find stat '%s'", name);
 }
 
-__weak void kvm_arch_vm_post_create(struct kvm_vm *vm)
+__weak void kvm_arch_vm_post_create(struct kvm_vm *vm, void *args)
 {
 }
 

@@ -992,6 +992,9 @@ static inline vm_paddr_t vm_phy_pages_alloc(struct kvm_vm *vm, size_t num,
 struct kvm_vm *____vm_create(struct vm_shape shape);
 struct kvm_vm *__vm_create(struct vm_shape shape, uint32_t nr_runnable_vcpus,
 			   uint64_t nr_extra_pages);
+struct kvm_vm *__vm_create_with_args(struct vm_shape shape,
+		uint32_t nr_runnable_vcpus,  uint64_t nr_extra_pages,
+		void *args);
 
 static inline struct kvm_vm *vm_create_barebones(void)
 {
@@ -1016,6 +1019,10 @@ static inline struct kvm_vm *vm_create(uint32_t nr_runnable_vcpus)
 struct kvm_vm *__vm_create_with_vcpus(struct vm_shape shape, uint32_t nr_vcpus,
 				      uint64_t extra_mem_pages,
 				      void *guest_code, struct kvm_vcpu *vcpus[]);
+struct kvm_vm *___vm_create_with_vcpus(struct vm_shape shape,
+				       uint32_t nr_vcpus, uint64_t extra_mem_pages,
+				       void *guest_code, struct kvm_vcpu *vcpus[],
+				       void *args);
 
 static inline struct kvm_vm *vm_create_with_vcpus(uint32_t nr_vcpus,
 						  void *guest_code,
@@ -1261,7 +1268,7 @@ static inline int __vm_disable_nx_huge_pages(struct kvm_vm *vm)
  */
 void kvm_selftest_arch_init(void);
 
-void kvm_arch_vm_post_create(struct kvm_vm *vm);
+void kvm_arch_vm_post_create(struct kvm_vm *vm, void *args);
 
 bool vm_is_gpa_protected(struct kvm_vm *vm, vm_paddr_t paddr);
 

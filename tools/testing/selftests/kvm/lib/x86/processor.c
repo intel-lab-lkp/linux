@@ -9,6 +9,7 @@
 #include "processor.h"
 #include "sev.h"
 #include "apic.h"
+#include "savic.h"
 
 #ifndef NUM_INTERRUPTS
 #define NUM_INTERRUPTS 256
@@ -631,7 +632,7 @@ void assert_on_unhandled_exception(struct kvm_vcpu *vcpu)
 		REPORT_GUEST_ASSERT(uc);
 }
 
-void kvm_arch_vm_post_create(struct kvm_vm *vm)
+void kvm_arch_vm_post_create(struct kvm_vm *vm, void *sev_init_args)
 {
 	int r;
 
@@ -648,7 +649,8 @@ void kvm_arch_vm_post_create(struct kvm_vm *vm)
 	if (is_sev_vm(vm)) {
 		struct kvm_sev_init init = { 0 };
 
-		vm_sev_ioctl(vm, KVM_SEV_INIT2, &init);
+		vm_sev_ioctl(vm, KVM_SEV_INIT2, sev_init_args ?
+				(struct kvm_sev_init *)sev_init_args : &init);
 	}
 
 	r = __vm_ioctl(vm, KVM_GET_TSC_KHZ, NULL);

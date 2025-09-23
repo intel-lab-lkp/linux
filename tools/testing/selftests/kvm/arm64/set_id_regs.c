@@ -749,7 +749,7 @@ static void test_reset_preserves_id_regs(struct kvm_vcpu *vcpu)
 	ksft_test_result_pass("%s\n", __func__);
 }
 
-void kvm_arch_vm_post_create(struct kvm_vm *vm)
+void kvm_arch_vm_post_create(struct kvm_vm *vm, void *args)
 {
 	if (vm_check_cap(vm, KVM_CAP_ARM_MTE)) {
 		vm_enable_cap(vm, KVM_CAP_ARM_MTE, 0);
