@@ -409,6 +409,35 @@ intel_vrr_compute_config(struct intel_crtc_state *crtc_state,
 	}
 }
 
+static int
+intel_vrr_max_hw_guardband(const struct intel_crtc_state *crtc_state)
+{
+	struct intel_display *display = to_intel_display(crtc_state);
+
+	if (DISPLAY_VER(display) >= 13)
+		return REG_FIELD_MAX(XELPD_VRR_CTL_VRR_GUARDBAND_MASK);
+
+	return intel_vrr_pipeline_full_to_guardband(crtc_state,
+						    REG_FIELD_MAX(VRR_CTL_PIPELINE_FULL_MASK));
+}
+
+static int
+intel_vrr_max_vblank_guardband(const struct intel_crtc_state *crtc_state)
+{
+	struct intel_display *display = to_intel_display(crtc_state);
+
+	return crtc_state->vrr.vmin -
+	       crtc_state->set_context_latency -
+	       intel_vrr_extra_vblank_delay(display);
+}
+
+static int
+intel_vrr_max_guardband(struct intel_crtc_state *crtc_state)
+{
+	return min(intel_vrr_max_hw_guardband(crtc_state),
+		   intel_vrr_max_vblank_guardband(crtc_state));
+}
+
 void intel_vrr_compute_config_late(struct intel_crtc_state *crtc_state)
 {
 	struct intel_display *display = to_intel_display(crtc_state);
@@ -417,22 +446,13 @@ void intel_vrr_compute_config_late(struct intel_crtc_state *crtc_state)
 	if (!intel_vrr_possible(crtc_state))
 		return;
 
-	crtc_state->vrr.guardband =
-		crtc_state->vrr.vmin -
-		adjusted_mode->vdisplay -
-		crtc_state->set_context_latency -
-		intel_vrr_extra_vblank_delay(display);
+	crtc_state->vrr.guardband = min(crtc_state->vrr.vmin - adjusted_mode->crtc_vdisplay,
+					intel_vrr_max_guardband(crtc_state));
 
-	if (DISPLAY_VER(display) < 13) {
-		/* FIXME handle the limit in a proper way */
-		crtc_state->vrr.guardband =
-			min(crtc_state->vrr.guardband,
-			    intel_vrr_pipeline_full_to_guardband(crtc_state, 255));
-
+	if (DISPLAY_VER(display) < 13)
 		crtc_state->vrr.pipeline_full =
 			intel_vrr_guardband_to_pipeline_full(crtc_state,
 							     crtc_state->vrr.guardband);
-	}
 }
 
 static u32 trans_vrr_ctl(const struct intel_crtc_state *crtc_state)
