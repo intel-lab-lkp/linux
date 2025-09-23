@@ -1630,7 +1630,7 @@ retry:
 		if (!pd) {
 			/*
 			 * GFP_NOWAIT failed.  Free the existing one and
-			 * prealloc for @blkg w/ GFP_KERNEL.
+			 * prealloc for @blkg w/ GFP_NOIO.
 			 */
 			if (pinned_blkg)
 				blkg_put(pinned_blkg);
@@ -1642,7 +1642,7 @@ retry:
 			if (pd_prealloc)
 				pol->pd_free_fn(pd_prealloc);
 			pd_prealloc = pol->pd_alloc_fn(disk, blkg->blkcg,
-						       GFP_KERNEL);
+						       GFP_NOIO);
 			if (pd_prealloc)
 				goto retry;
 			else
