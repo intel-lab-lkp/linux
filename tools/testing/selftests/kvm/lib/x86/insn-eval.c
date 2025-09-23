@@ -1224,6 +1224,14 @@ enum insn_mmio_type insn_decode_mmio(struct insn *insn, int *bytes)
 			break;
 		}
 		break;
+	case 0xa1:
+		type = INSN_MMIO_READ_MOV_ABS;
+		*bytes = insn->opnd_bytes;
+		break;
+	case 0xa3:
+		type = INSN_MMIO_WRITE_MOV_ABS;
+		*bytes = insn->opnd_bytes;
+		break;
 	}
 
 	return type;

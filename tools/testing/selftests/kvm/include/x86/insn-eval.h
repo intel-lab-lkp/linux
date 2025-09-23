@@ -35,10 +35,12 @@ enum insn_mmio_type {
 	INSN_MMIO_DECODE_FAILED,
 	INSN_MMIO_WRITE,
 	INSN_MMIO_WRITE_IMM,
+	INSN_MMIO_WRITE_MOV_ABS,
 	INSN_MMIO_READ,
 	INSN_MMIO_READ_ZERO_EXTEND,
 	INSN_MMIO_READ_SIGN_EXTEND,
 	INSN_MMIO_MOVS,
+	INSN_MMIO_READ_MOV_ABS,
 };
 
 enum insn_mmio_type insn_decode_mmio(struct insn *insn, int *bytes);

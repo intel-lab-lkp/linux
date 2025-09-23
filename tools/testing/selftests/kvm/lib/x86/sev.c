@@ -469,9 +469,11 @@ void sev_es_pv_mmio_rw(uint32_t *reg_gpa, uint32_t *data, bool write)
 }
 
 static void do_mmio(struct ghcb_entry *entry, struct ex_regs *regs,
-		struct insn *insn, unsigned int bytes, bool read)
+		struct insn *insn, unsigned int bytes, bool read,
+		void *ref)
 {
-	void *ref = insn_get_addr_ref(insn, regs);
+	if (!ref)
+		ref = insn_get_addr_ref(insn, regs);
 
 	register_ghcb_page(entry->gpa);
 	__sev_es_hv_mmio_rw(entry, ref, bytes, !read);
@@ -600,11 +602,12 @@ static void sev_es_vc_mmio_handler(struct ex_regs *regs)
 	char buffer[MAX_INSN_SIZE];
 	struct ghcb_entry *entry;
 	enum insn_mmio_type mmio;
-	unsigned long *reg_data;
+	unsigned long *reg_data = NULL;
 	unsigned int bytes;
 	struct ghcb *ghcb;
 	uint8_t sign_byte;
 	struct insn insn;
+	void *abs_ref;
 	int ret;
 
 	memcpy(buffer, (uint8_t *)regs->rip, MAX_INSN_SIZE);
@@ -616,7 +619,9 @@ static void sev_es_vc_mmio_handler(struct ex_regs *regs)
 	mmio = insn_decode_mmio(&insn, (int *)&bytes);
 	__GUEST_ASSERT(!(mmio == INSN_MMIO_DECODE_FAILED), " MMIO decode failed\n");
 
-	if (mmio != INSN_MMIO_WRITE_IMM && mmio != INSN_MMIO_MOVS) {
+	if (mmio == INSN_MMIO_WRITE_MOV_ABS || mmio == INSN_MMIO_READ_MOV_ABS) {
+		reg_data = &regs->rax;
+	} else if (mmio != INSN_MMIO_WRITE_IMM && mmio != INSN_MMIO_MOVS) {
 		reg_data = insn_get_modrm_reg_ptr(&insn, regs);
 		__GUEST_ASSERT(reg_data, "insn_get_modrm_reg_ptr failed\n");
 	}
@@ -627,25 +632,37 @@ static void sev_es_vc_mmio_handler(struct ex_regs *regs)
 	switch (mmio) {
 	case INSN_MMIO_WRITE:
 		memcpy(ghcb->shared_buffer, reg_data, bytes);
-		do_mmio(entry, regs, &insn, bytes, false);
+		do_mmio(entry, regs, &insn, bytes, false, NULL);
 		break;
 	case INSN_MMIO_WRITE_IMM:
 		memcpy(ghcb->shared_buffer, insn.immediate1.bytes, bytes);
-		do_mmio(entry, regs, &insn, bytes, false);
+		do_mmio(entry, regs, &insn, bytes, false, NULL);
+		break;
+	case INSN_MMIO_WRITE_MOV_ABS:
+		abs_ref = (void *)*(uint64_t *)((uint8_t *)regs->rip + 1);
+		memcpy(ghcb->shared_buffer, reg_data, bytes);
+		do_mmio(entry, regs, &insn, bytes, false, abs_ref);
 		break;
 	case INSN_MMIO_READ:
-		do_mmio(entry, regs, &insn, bytes, true);
+		do_mmio(entry, regs, &insn, bytes, true, NULL);
+		if (bytes == 4)
+			*reg_data = 0;
+		memcpy(reg_data, ghcb->shared_buffer, bytes);
+		break;
+	case INSN_MMIO_READ_MOV_ABS:
+		abs_ref = (void *)*(uint64_t *)((char *)regs->rip + 1);
+		do_mmio(entry, regs, &insn, bytes, true, abs_ref);
 		if (bytes == 4)
 			*reg_data = 0;
 		memcpy(reg_data, ghcb->shared_buffer, bytes);
 		break;
 	case INSN_MMIO_READ_ZERO_EXTEND:
-		do_mmio(entry, regs, &insn, bytes, true);
+		do_mmio(entry, regs, &insn, bytes, true, NULL);
 		memset(reg_data, 0, insn.opnd_bytes);
 		memcpy(reg_data, ghcb->shared_buffer, bytes);
 		break;
 	case INSN_MMIO_READ_SIGN_EXTEND:
-		do_mmio(entry, regs, &insn, bytes, true);
+		do_mmio(entry, regs, &insn, bytes, true, NULL);
 		if (bytes == 1) {
 			uint8_t *val = (uint8_t *)ghcb->shared_buffer;
 
