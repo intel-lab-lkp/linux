@@ -42,6 +42,12 @@ enum lapic_lvt_entry {
 #define MSR_AMD64_SECURE_AVIC_ALLOWED_NMI_BIT       1
 
 #define SVM_EXIT_AVIC_UNACCELERATED_ACCESS      0x402
+#define SVM_EXIT_AVIC_INCOMPLETE_IPI            0x401
+
+#define REG_OFF(VEC)		(VEC / 32 * 16)
+#define VEC_POS(VEC)		(VEC % 32)
+
+#define SAVIC_NMI_REQ_OFFSET            0x278
 
 /*
  * Initial pool of guest apic backing page.
@@ -335,6 +341,104 @@ static void handle_savic_unaccel_access(struct ex_regs *regs)
 	}
 }
 
+static void send_ipi(int cpu, int vector, bool nmi)
+{
+	struct guest_apic_page *apic_page;
+
+	apic_page = &apic_page_pool->guest_apic_page[cpu];
+
+	if (nmi)
+		savic_write_reg(apic_page, SAVIC_NMI_REQ_OFFSET, 1);
+	else
+		savic_write_reg(apic_page, APIC_IRR + REG_OFF(vector), BIT(VEC_POS(vector)));
+}
+
+static bool is_cpu_present(int cpu)
+{
+	struct guest_apic_page *apic_page;
+
+	if (cpu >= KVM_MAX_VCPUS)
+		return false;
+
+	apic_page = &apic_page_pool->guest_apic_page[cpu];
+
+	return savic_read_reg(apic_page, APIC_ID) != 0;
+}
+
+static void savic_send_ipi_all_but(int vector, bool nmi)
+{
+	int cpu;
+	int mycpu = x2apic_read_reg(APIC_ID);
+
+	for (cpu = 0; cpu < KVM_MAX_VCPUS; cpu++) {
+		if (cpu == mycpu)
+			continue;
+		if (!(cpu == 0 || is_cpu_present(cpu)))
+			break;
+		send_ipi(cpu, vector, nmi);
+	}
+}
+
+static bool ipi_match_dest(uint32_t dest, bool logical, int dest_cpu)
+{
+	struct guest_apic_page *apic_page;
+
+	apic_page = &apic_page_pool->guest_apic_page[dest_cpu];
+	uint32_t ldr;
+
+	if (logical) {
+		ldr = savic_read_reg(apic_page, APIC_LDR);
+		return ((ldr >> 16) == (dest >> 16)) &&
+			(ldr & dest & 0xffff) != 0;
+	} else {
+		return dest == savic_read_reg(apic_page, APIC_ID);
+	}
+}
+
+static void savic_send_ipi_target(uint32_t dest, int vector, bool logical,
+				  bool nmi)
+{
+	int cpu;
+	int mycpu = x2apic_read_reg(APIC_ID);
+
+	for (cpu = 0; cpu < KVM_MAX_VCPUS; cpu++) {
+		if (cpu == mycpu)
+			continue;
+		if (!(cpu == 0 || is_cpu_present(cpu)))
+			break;
+		if (ipi_match_dest(dest, logical, cpu))
+			send_ipi(cpu, vector, nmi);
+	}
+}
+
+static void savic_handle_icr_write(uint64_t icr_data)
+{
+	int dsh                = icr_data & APIC_DEST_ALLBUT;
+	int vector             = icr_data & APIC_VECTOR_MASK;
+	bool logical           = icr_data & APIC_DEST_LOGICAL;
+	bool nmi               = (icr_data & APIC_DM_FIXED_MASK) == APIC_DM_NMI;
+	uint64_t self_icr_data = APIC_DEST_SELF | APIC_INT_ASSERT | vector;
+
+	if (nmi)
+		self_icr_data |= APIC_DM_NMI;
+
+	switch (dsh) {
+	case APIC_DEST_ALLINC:
+		savic_send_ipi_all_but(vector, nmi);
+		savic_hv_write_reg(APIC_ICR, icr_data);
+		x2apic_write_reg(APIC_ICR, self_icr_data);
+		break;
+	case APIC_DEST_ALLBUT:
+		savic_send_ipi_all_but(vector, nmi);
+		savic_hv_write_reg(APIC_ICR, icr_data);
+		break;
+	default:
+		savic_send_ipi_target(icr_data >> 32, vector, logical, nmi);
+		savic_hv_write_reg(APIC_ICR, icr_data);
+		break;
+	}
+}
+
 void savic_vc_handler(struct ex_regs *regs)
 {
 	uint64_t exit_code = regs->error_code;
@@ -342,6 +446,13 @@ void savic_vc_handler(struct ex_regs *regs)
 	switch (exit_code) {
 	case SVM_EXIT_AVIC_UNACCELERATED_ACCESS:
 		handle_savic_unaccel_access(regs);
+		break;
+	case SVM_EXIT_AVIC_INCOMPLETE_IPI:
+		uint64_t icr_data = regs->rax | (regs->rdx << 32);
+		uint32_t reg = (regs->rcx - APIC_BASE_MSR) << 4;
+
+		GUEST_ASSERT(reg == APIC_ICR);
+		savic_handle_icr_write(icr_data);
 		break;
 	default:
 		sev_es_vc_handler(regs);
