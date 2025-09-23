@@ -22,6 +22,7 @@ LIBKVM_STRING += lib/string_override.c
 LIBKVM_x86 += lib/x86/apic.c
 LIBKVM_x86 += lib/x86/handlers.S
 LIBKVM_x86 += lib/x86/hyperv.c
+LIBKVM_x86 += lib/x86/insn-eval.c
 LIBKVM_x86 += lib/x86/memstress.c
 LIBKVM_x86 += lib/x86/pmu.c
 LIBKVM_x86 += lib/x86/processor.c
@@ -249,6 +250,15 @@ ifeq ($(ARCH),x86)
 ifeq ($(shell echo "void foo(void) { }" | $(CC) -march=x86-64-v2 -x c - -c -o /dev/null 2>/dev/null; echo "$$?"),0)
 	CFLAGS += -march=x86-64-v2
 endif
+tools_lib_dir := $(top_srcdir)/tools/arch/x86/lib
+inat_tables_script = $(top_srcdir)/tools/arch/x86/tools/gen-insn-attr-x86.awk
+inat_tables_maps = $(top_srcdir)/tools/arch/x86/lib/x86-opcode-map.txt
+$(shell awk -f $(inat_tables_script) $(inat_tables_maps) > $(tools_lib_dir)/inat-tables.c)
+LIBKVM_x86 += $(tools_lib_dir)/insn.c
+LIBKVM_x86 += $(tools_lib_dir)/inat.c
+EXTRA_CLEAN += $(tools_lib_dir)/inat-tables.c
+EXTRA_CLEAN += $(tools_lib_dir)/insn.o
+EXTRA_CLEAN += $(tools_lib_dir)/inat.o
 endif
 ifeq ($(ARCH),arm64)
 tools_dir := $(top_srcdir)/tools
