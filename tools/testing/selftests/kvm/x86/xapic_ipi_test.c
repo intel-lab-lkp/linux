@@ -50,6 +50,29 @@
  */
 static volatile uint64_t ipis_rcvd;
 
+static bool x2apic;
+
+static void apic_enable(void)
+{
+	if (x2apic)
+		x2apic_enable();
+	else
+		xapic_enable();
+}
+
+static uint32_t apic_read_reg(unsigned int reg)
+{
+	return x2apic ? x2apic_read_reg(reg) : xapic_read_reg(reg);
+}
+
+static void apic_write_reg(unsigned int reg, uint64_t val)
+{
+	if (x2apic)
+		x2apic_write_reg(reg, val);
+	else
+		xapic_write_reg(reg, (uint32_t)val);
+}
+
 /* Data struct shared between host main thread and vCPUs */
 struct test_data_page {
 	uint32_t halter_apic_id;
@@ -89,10 +112,10 @@ void verify_apic_base_addr(void)
 static void halter_guest_code(struct test_data_page *data)
 {
 	verify_apic_base_addr();
-	xapic_enable();
+	apic_enable();
 
-	data->halter_apic_id = GET_APIC_ID_FIELD(xapic_read_reg(APIC_ID));
-	data->halter_lvr = xapic_read_reg(APIC_LVR);
+	data->halter_apic_id = GET_APIC_ID_FIELD(apic_read_reg(APIC_ID));
+	data->halter_lvr = apic_read_reg(APIC_LVR);
 
 	/*
 	 * Loop forever HLTing and recording halts & wakes. Disable interrupts
@@ -103,8 +126,8 @@ static void halter_guest_code(struct test_data_page *data)
 	 * TPR and PPR for diagnostic purposes in case the test fails.
 	 */
 	for (;;) {
-		data->halter_tpr = xapic_read_reg(APIC_TASKPRI);
-		data->halter_ppr = xapic_read_reg(APIC_PROCPRI);
+		data->halter_tpr = apic_read_reg(APIC_TASKPRI);
+		data->halter_ppr = apic_read_reg(APIC_PROCPRI);
 		data->hlt_count++;
 		safe_halt();
 		cli();
@@ -120,7 +143,7 @@ static void halter_guest_code(struct test_data_page *data)
 static void guest_ipi_handler(struct ex_regs *regs)
 {
 	ipis_rcvd++;
-	xapic_write_reg(APIC_EOI, 77);
+	apic_write_reg(APIC_EOI, 77);
 }
 
 static void sender_guest_code(struct test_data_page *data)
@@ -133,7 +156,7 @@ static void sender_guest_code(struct test_data_page *data)
 	uint64_t tsc_start;
 
 	verify_apic_base_addr();
-	xapic_enable();
+	apic_enable();
 
 	/*
 	 * Init interrupt command register for sending IPIs
@@ -160,8 +183,12 @@ static void sender_guest_code(struct test_data_page *data)
 		 * First IPI can be sent unconditionally because halter vCPU
 		 * starts earlier.
 		 */
-		xapic_write_reg(APIC_ICR2, icr2_val);
-		xapic_write_reg(APIC_ICR, icr_val);
+		if (!x2apic) {
+			apic_write_reg(APIC_ICR2, icr2_val);
+			apic_write_reg(APIC_ICR, icr_val);
+		} else {
+			apic_write_reg(APIC_ICR, (uint64_t)icr2_val << 32 | icr_val);
+		}
 		data->ipis_sent++;
 
 		/*
@@ -357,10 +384,10 @@ void do_migrations(struct test_data_page *data, int run_secs, int delay_usecs,
 }
 
 void get_cmdline_args(int argc, char *argv[], int *run_secs,
-		      bool *migrate, int *delay_usecs)
+		      bool *migrate, int *delay_usecs, bool *x2apic)
 {
 	for (;;) {
-		int opt = getopt(argc, argv, "s:d:m");
+		int opt = getopt(argc, argv, "s:d:v:me:");
 
 		if (opt == -1)
 			break;
@@ -374,13 +401,18 @@ void get_cmdline_args(int argc, char *argv[], int *run_secs,
 		case 'd':
 			*delay_usecs = parse_size(optarg);
 			break;
+		case 'e':
+			*x2apic = parse_size(optarg) == 1;
+			break;
 		default:
 			TEST_ASSERT(false,
 				    "Usage: -s <runtime seconds>. Default is %d seconds.\n"
 				    "-m adds calls to migrate_pages while vCPUs are running."
 				    " Default is no migrations.\n"
 				    "-d <delay microseconds> - delay between migrate_pages() calls."
-				    " Default is %d microseconds.",
+				    " Default is %d microseconds.\n"
+				    "-e <apic mode> - APIC mode 0 - xapic , 1 - x2apic"
+				    " Default is xAPIC.\n",
 				    DEFAULT_RUN_SECS, DEFAULT_DELAY_USECS);
 		}
 	}
@@ -401,7 +433,10 @@ int main(int argc, char *argv[])
 	struct kvm_vm *vm;
 	uint64_t *pipis_rcvd;
 
-	get_cmdline_args(argc, argv, &run_secs, &migrate, &delay_usecs);
+	get_cmdline_args(argc, argv, &run_secs, &migrate, &delay_usecs, &x2apic);
+	if (x2apic)
+		migrate = 0;
+
 	if (run_secs <= 0)
 		run_secs = DEFAULT_RUN_SECS;
 	if (delay_usecs <= 0)
@@ -411,7 +446,9 @@ int main(int argc, char *argv[])
 
 	vm_install_exception_handler(vm, IPI_VECTOR, guest_ipi_handler);
 
-	virt_pg_map(vm, APIC_DEFAULT_GPA, APIC_DEFAULT_GPA);
+	sync_global_to_guest(vm, x2apic);
+	if (!x2apic)
+		virt_pg_map(vm, APIC_DEFAULT_GPA, APIC_DEFAULT_GPA);
 
 	params[1].vcpu = vm_vcpu_add(vm, 1, sender_guest_code);
 
