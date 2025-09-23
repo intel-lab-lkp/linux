@@ -25,7 +25,7 @@ enum reg_type {
 	REG_TYPE_BASE,
 };
 
-/**
+/*
  * is_string_insn() - Determine if instruction is a string instruction
  * @insn:	Instruction containing the opcode to inspect
  *
@@ -51,7 +51,7 @@ static bool is_string_insn(struct insn *insn)
 	}
 }
 
-/**
+/*
  * insn_has_rep_prefix() - Determine if instruction has a REP prefix
  * @insn:	Instruction containing the prefix to inspect
  *
@@ -74,7 +74,7 @@ bool insn_has_rep_prefix(struct insn *insn)
 	return false;
 }
 
-/**
+/*
  * get_seg_reg_override_idx() - obtain segment register override index
  * @insn:	Valid instruction with segment override prefixes
  *
@@ -137,7 +137,7 @@ static int get_seg_reg_override_idx(struct insn *insn)
 	return idx;
 }
 
-/**
+/*
  * check_seg_overrides() - check if segment override prefixes are allowed
  * @insn:	Valid instruction with segment override prefixes
  * @regoff:	Operand offset, in pt_regs, for which the check is performed
@@ -159,7 +159,7 @@ static bool check_seg_overrides(struct insn *insn, int regoff)
 	return true;
 }
 
-/**
+/*
  * resolve_default_seg() - resolve default segment register index for an operand
  * @insn:	Instruction with opcode and address size. Must be valid.
  * @regs:	Register values as seen when entering kernel mode
@@ -181,7 +181,7 @@ static int resolve_default_seg(struct insn *insn, struct pt_regs *regs, int off)
 	return INAT_SEG_REG_IGNORE;
 }
 
-/**
+/*
  * resolve_seg_reg() - obtain segment register index
  * @insn:	Instruction with operands
  * @regs:	Register values as seen when entering kernel mode
@@ -268,8 +268,7 @@ static int resolve_seg_reg(struct insn *insn, struct pt_regs *regs, int regoff)
 
 	return idx;
 }
-
-/**
+/*
  * get_segment_selector() - obtain segment selector
  * @regs:		Register values as seen when entering kernel mode
  * @seg_reg_idx:	Segment register index to use
@@ -423,7 +422,7 @@ static int get_reg_offset(struct insn *insn, struct pt_regs *regs,
 	return pt_regs_offset(regs, regno);
 }
 
-/**
+/*
  * get_reg_offset_16() - Obtain offset of register indicated by instruction
  * @insn:	Instruction containing ModRM byte
  * @regs:	Register values as seen when entering kernel mode
@@ -497,71 +496,7 @@ static int get_reg_offset_16(struct insn *insn, struct pt_regs *regs,
 	return 0;
 }
 
-/**
- * get_desc() - Obtain contents of a segment descriptor
- * @out:	Segment descriptor contents on success
- * @sel:	Segment selector
- *
- * Given a segment selector, obtain a pointer to the segment descriptor.
- * Both global and local descriptor tables are supported.
- *
- * Returns:
- *
- * True on success, false on failure.
- *
- * NULL on error.
- */
-static bool get_desc(struct desc_struct *out, unsigned short sel)
-{
-	struct desc_ptr gdt_desc = {0, 0};
-	unsigned long desc_base;
-
-#ifdef CONFIG_MODIFY_LDT_SYSCALL
-	if ((sel & SEGMENT_TI_MASK) == SEGMENT_LDT) {
-		bool success = false;
-		struct ldt_struct *ldt;
-
-		/* Bits [15:3] contain the index of the desired entry. */
-		sel >>= 3;
-
-		/*
-		 * If we're not in a valid context with a real (not just lazy)
-		 * user mm, then don't even try.
-		 */
-		if (!nmi_uaccess_okay())
-			return false;
-
-		mutex_lock(&current->mm->context.lock);
-		ldt = current->mm->context.ldt;
-		if (ldt && sel < ldt->nr_entries) {
-			*out = ldt->entries[sel];
-			success = true;
-		}
-
-		mutex_unlock(&current->mm->context.lock);
-
-		return success;
-	}
-#endif
-	native_store_gdt(&gdt_desc);
-
-	/*
-	 * Segment descriptors have a size of 8 bytes. Thus, the index is
-	 * multiplied by 8 to obtain the memory offset of the desired descriptor
-	 * from the base of the GDT. As bits [15:3] of the segment selector
-	 * contain the index, it can be regarded as multiplied by 8 already.
-	 * All that remains is to clear bits [2:0].
-	 */
-	desc_base = sel & ~(SEGMENT_RPL_MASK | SEGMENT_TI_MASK);
-
-	if (desc_base > gdt_desc.size)
-		return false;
-
-	*out = *(struct desc_struct *)(gdt_desc.address + desc_base);
-	return true;
-}
-
-/**
+/*
  * insn_get_seg_base() - Obtain base address of segment descriptor.
  * @regs:		Register values as seen when entering kernel mode
  * @seg_reg_idx:	Index of the segment register pointing to seg descriptor
@@ -609,7 +544,7 @@ unsigned long insn_get_seg_base(struct pt_regs *regs, int seg_reg_idx)
 	return base;
 }
 
-/**
+/*
  * get_seg_limit() - Obtain the limit of a segment descriptor
  * @regs:		Register values as seen when entering kernel mode
  * @seg_reg_idx:	Index of the segment register pointing to seg descriptor
@@ -628,8 +563,6 @@ unsigned long insn_get_seg_base(struct pt_regs *regs, int seg_reg_idx)
  */
 static unsigned long get_seg_limit(struct pt_regs *regs, int seg_reg_idx)
 {
-	struct desc_struct desc;
-	unsigned long limit;
 	short sel;
 
 	sel = get_segment_selector(regs, seg_reg_idx);
@@ -639,82 +572,7 @@ static unsigned long get_seg_limit(struct pt_regs *regs, int seg_reg_idx)
 	return -1L;
 }
 
-/**
- * insn_get_code_seg_params() - Obtain code segment parameters
- * @regs:	Structure with register values as seen when entering kernel mode
- *
- * Obtain address and operand sizes of the code segment. It is obtained from the
- * selector contained in the CS register in regs. In protected mode, the default
- * address is determined by inspecting the L and D bits of the segment
- * descriptor. In virtual-8086 mode, the default is always two bytes for both
- * address and operand sizes.
- *
- * Returns:
- *
- * An int containing ORed-in default parameters on success.
- *
- * -EINVAL on error.
- */
-int insn_get_code_seg_params(struct pt_regs *regs)
-{
-	struct desc_struct desc;
-	short sel;
-
-	sel = get_segment_selector(regs, INAT_SEG_REG_CS);
-	if (sel < 0)
-		return sel;
-
-	if (!get_desc(&desc, sel))
-		return -EINVAL;
-
-	/*
-	 * The most significant byte of the Type field of the segment descriptor
-	 * determines whether a segment contains data or code. If this is a data
-	 * segment, return error.
-	 */
-	if (!(desc.type & BIT(3)))
-		return -EINVAL;
-
-	switch ((desc.l << 1) | desc.d) {
-	case 0: /*
-		 * Legacy mode. CS.L=0, CS.D=0. Address and operand size are
-		 * both 16-bit.
-		 */
-		return INSN_CODE_SEG_PARAMS(2, 2);
-	case 1: /*
-		 * Legacy mode. CS.L=0, CS.D=1. Address and operand size are
-		 * both 32-bit.
-		 */
-		return INSN_CODE_SEG_PARAMS(4, 4);
-	case 2: /*
-		 * IA-32e 64-bit mode. CS.L=1, CS.D=0. Address size is 64-bit;
-		 * operand size is 32-bit.
-		 */
-		return INSN_CODE_SEG_PARAMS(4, 8);
-	case 3: /* Invalid setting. CS.L=1, CS.D=1 */
-	default:
-		return -EINVAL;
-	}
-}
-
-/**
- * insn_get_modrm_rm_off() - Obtain register in r/m part of the ModRM byte
- * @insn:	Instruction containing the ModRM byte
- * @regs:	Register values as seen when entering kernel mode
- *
- * Returns:
- *
- * The register indicated by the r/m part of the ModRM byte. The
- * register is obtained as an offset from the base of pt_regs. In specific
- * cases, the returned value can be -EDOM to indicate that the particular value
- * of ModRM does not refer to a register and shall be ignored.
- */
-int insn_get_modrm_rm_off(struct insn *insn, struct pt_regs *regs)
-{
-	return get_reg_offset(insn, regs, REG_TYPE_RM);
-}
-
-/**
+/*
  * insn_get_modrm_reg_off() - Obtain register in reg part of the ModRM byte
  * @insn:	Instruction containing the ModRM byte
  * @regs:	Register values as seen when entering kernel mode
@@ -729,7 +587,7 @@ int insn_get_modrm_reg_off(struct insn *insn, struct pt_regs *regs)
 	return get_reg_offset(insn, regs, REG_TYPE_REG);
 }
 
-/**
+/*
  * insn_get_modrm_reg_ptr() - Obtain register pointer based on ModRM byte
  * @insn:	Instruction containing the ModRM byte
  * @regs:	Register values as seen when entering kernel mode
@@ -749,7 +607,7 @@ unsigned long *insn_get_modrm_reg_ptr(struct insn *insn, struct pt_regs *regs)
 	return (void *)regs + offset;
 }
 
-/**
+/*
  * get_seg_base_limit() - obtain base address and limit of a segment
  * @insn:	Instruction. Must be valid.
  * @regs:	Register values as seen when entering kernel mode
@@ -797,7 +655,7 @@ static int get_seg_base_limit(struct insn *insn, struct pt_regs *regs,
 	return 0;
 }
 
-/**
+/*
  * get_eff_addr_reg() - Obtain effective address from register operand
  * @insn:	Instruction. Must be valid.
  * @regs:	Register values as seen when entering kernel mode
@@ -847,7 +705,7 @@ static int get_eff_addr_reg(struct insn *insn, struct pt_regs *regs,
 	return 0;
 }
 
-/**
+/*
  * get_eff_addr_modrm() - Obtain referenced effective address via ModRM
  * @insn:	Instruction. Must be valid.
  * @regs:	Register values as seen when entering kernel mode
@@ -911,7 +769,7 @@ static int get_eff_addr_modrm(struct insn *insn, struct pt_regs *regs,
 	return 0;
 }
 
-/**
+/*
  * get_eff_addr_modrm_16() - Obtain referenced effective address via ModRM
  * @insn:	Instruction. Must be valid.
  * @regs:	Register values as seen when entering kernel mode
@@ -979,7 +837,7 @@ static int get_eff_addr_modrm_16(struct insn *insn, struct pt_regs *regs,
 	return 0;
 }
 
-/**
+/*
  * get_eff_addr_sib() - Obtain referenced effective address via SIB
  * @insn:	Instruction. Must be valid.
  * @regs:	Register values as seen when entering kernel mode
@@ -1068,7 +926,7 @@ static int get_eff_addr_sib(struct insn *insn, struct pt_regs *regs,
 	return 0;
 }
 
-/**
+/*
  * get_addr_ref_16() - Obtain the 16-bit address referred by instruction
  * @insn:	Instruction containing ModRM byte and displacement
  * @regs:	Register values as seen when entering kernel mode
@@ -1130,7 +988,7 @@ out:
 	return (void __user *)linear_addr;
 }
 
-/**
+/*
  * get_addr_ref_32() - Obtain a 32-bit linear address
  * @insn:	Instruction with ModRM, SIB bytes and displacement
  * @regs:	Register values as seen when entering kernel mode
@@ -1195,7 +1053,7 @@ out:
 	return (void __user *)linear_addr;
 }
 
-/**
+/*
  * get_addr_ref_64() - Obtain a 64-bit linear address
  * @insn:	Instruction struct with ModRM and SIB bytes and displacement
  * @regs:	Structure with register values as seen when entering kernel mode
@@ -1247,7 +1105,7 @@ out:
 	return (void __user *)linear_addr;
 }
 
-/**
+/*
  * insn_get_addr_ref() - Obtain the linear address referred by instruction
  * @insn:	Instruction structure containing ModRM byte and displacement
  * @regs:	Structure with register values as seen when entering kernel mode
@@ -1282,118 +1140,7 @@ void __user *insn_get_addr_ref(struct insn *insn, struct pt_regs *regs)
 	}
 }
 
-int insn_get_effective_ip(struct pt_regs *regs, unsigned long *ip)
-{
-	unsigned long seg_base = 0;
-
-	*ip = seg_base + regs->ip;
-
-	return 0;
-}
-
-/**
- * insn_fetch_from_user() - Copy instruction bytes from user-space memory
- * @regs:	Structure with register values as seen when entering kernel mode
- * @buf:	Array to store the fetched instruction
- *
- * Gets the linear address of the instruction and copies the instruction bytes
- * to the buf.
- *
- * Returns:
- *
- * - number of instruction bytes copied.
- * - 0 if nothing was copied.
- * - -EINVAL if the linear address of the instruction could not be calculated
- */
-int insn_fetch_from_user(struct pt_regs *regs, unsigned char buf[MAX_INSN_SIZE])
-{
-	unsigned long ip;
-	int not_copied;
-
-	if (insn_get_effective_ip(regs, &ip))
-		return -EINVAL;
-
-	not_copied = copy_from_user(buf, (void __user *)ip, MAX_INSN_SIZE);
-
-	return MAX_INSN_SIZE - not_copied;
-}
-
-/**
- * insn_fetch_from_user_inatomic() - Copy instruction bytes from user-space memory
- *                                   while in atomic code
- * @regs:	Structure with register values as seen when entering kernel mode
- * @buf:	Array to store the fetched instruction
- *
- * Gets the linear address of the instruction and copies the instruction bytes
- * to the buf. This function must be used in atomic context.
- *
- * Returns:
- *
- *  - number of instruction bytes copied.
- *  - 0 if nothing was copied.
- *  - -EINVAL if the linear address of the instruction could not be calculated.
- */
-int insn_fetch_from_user_inatomic(struct pt_regs *regs, unsigned char buf[MAX_INSN_SIZE])
-{
-	unsigned long ip;
-	int not_copied;
-
-	if (insn_get_effective_ip(regs, &ip))
-		return -EINVAL;
-
-	not_copied = __copy_from_user_inatomic(buf, (void __user *)ip, MAX_INSN_SIZE);
-
-	return MAX_INSN_SIZE - not_copied;
-}
-
-/**
- * insn_decode_from_regs() - Decode an instruction
- * @insn:	Structure to store decoded instruction
- * @regs:	Structure with register values as seen when entering kernel mode
- * @buf:	Buffer containing the instruction bytes
- * @buf_size:   Number of instruction bytes available in buf
- *
- * Decodes the instruction provided in buf and stores the decoding results in
- * insn. Also determines the correct address and operand sizes.
- *
- * Returns:
- *
- * True if instruction was decoded, False otherwise.
- */
-bool insn_decode_from_regs(struct insn *insn, struct pt_regs *regs,
-			   unsigned char buf[MAX_INSN_SIZE], int buf_size)
-{
-	int seg_defs;
-
-	insn_init(insn, buf, buf_size, true);
-
-	/*
-	 * Override the default operand and address sizes with what is specified
-	 * in the code segment descriptor. The instruction decoder only sets
-	 * the address size it to either 4 or 8 address bytes and does nothing
-	 * for the operand bytes. This OK for most of the cases, but we could
-	 * have special cases where, for instance, a 16-bit code segment
-	 * descriptor is used.
-	 * If there is an address override prefix, the instruction decoder
-	 * correctly updates these values, even for 16-bit defaults.
-	 */
-	seg_defs = insn_get_code_seg_params(regs);
-	if (seg_defs == -EINVAL)
-		return false;
-
-	insn->addr_bytes = INSN_CODE_SEG_ADDR_SZ(seg_defs);
-	insn->opnd_bytes = INSN_CODE_SEG_OPND_SZ(seg_defs);
-
-	if (insn_get_length(insn))
-		return false;
-
-	if (buf_size < insn->length)
-		return false;
-
-	return true;
-}
-
-/**
+/*
  * insn_decode_mmio() - Decode a MMIO instruction
  * @insn:	Structure to store decoded instruction
  * @bytes:	Returns size of memory operand
