@@ -95,6 +95,13 @@ config BOOTCACHE
 		  A simple backend for testing and development.
 		  It does not persist any data externally.
 
+	config BOOTCACHE_BACKEND_MEMORY
+		bool "Memory backend"
+		help
+		  A backend that reads the cache data from reserved system memory.
+		  The reserved memory block is defined in the device tree and is
+		  assumed to be populated by the bootloader.
+
 	endchoice
 	endif
 

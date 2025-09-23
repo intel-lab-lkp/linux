@@ -10,6 +10,7 @@ obj-y			:= component.o core.o bus.o dd.o syscore.o \
 obj-$(CONFIG_AUXILIARY_BUS) += auxiliary.o
 obj-$(CONFIG_BOOTCACHE)    += bootcache.o
 obj-$(CONFIG_BOOTCACHE_BACKEND_TEST)    += bootcache_backend_test.o
+obj-$(CONFIG_BOOTCACHE_BACKEND_MEMORY)    += bootcache_backend_memory.o
 obj-$(CONFIG_DEVTMPFS)	+= devtmpfs.o
 obj-y			+= power/
 obj-$(CONFIG_ISA_BUS_API)	+= isa.o
