@@ -3592,6 +3592,21 @@ void ieee80211_radar_detected(struct ieee80211_hw *hw,
 }
 EXPORT_SYMBOL(ieee80211_radar_detected);
 
+void ieee80211_incumbent_signal_detected(struct ieee80211_hw *hw,
+					 struct ieee80211_chanctx_conf *chanctx_conf,
+					 u32 incumbt_sig_intf_bmap)
+{
+	struct ieee80211_local *local = hw_to_local(hw);
+
+	chanctx_conf->incumbt_sig_intf_bmap = incumbt_sig_intf_bmap;
+
+	trace_api_incumbent_signal_detected(local, chanctx_conf);
+	cfg80211_incumbent_signal_notify(hw->wiphy,
+					 &chanctx_conf->def,
+					 chanctx_conf->incumbt_sig_intf_bmap);
+}
+EXPORT_SYMBOL(ieee80211_incumbent_signal_detected);
+
 void ieee80211_chandef_downgrade(struct cfg80211_chan_def *c,
 				 struct ieee80211_conn_settings *conn)
 {

@@ -257,6 +257,8 @@ struct ieee80211_chan_req {
  *	after RTS/CTS handshake to receive SMPS MIMO transmissions;
  *	this will always be >= @rx_chains_static.
  * @radar_enabled: whether radar detection is enabled on this channel.
+ * @incumbt_sig_intf_bmap: Bitmap indicating the sub-channels where an
+ *	incumbent signal's interference was detected.
  * @drv_priv: data area for driver use, will always be aligned to
  *	sizeof(void *), size is determined in hw information.
  */
@@ -269,6 +271,8 @@ struct ieee80211_chanctx_conf {
 	u8 rx_chains_static, rx_chains_dynamic;
 
 	bool radar_enabled;
+
+	u32 incumbt_sig_intf_bmap;
 
 	u8 drv_priv[] __aligned(sizeof(void *));
 };
@@ -7833,5 +7837,19 @@ int ieee80211_emulate_switch_vif_chanctx(struct ieee80211_hw *hw,
 					 struct ieee80211_vif_chanctx_switch *vifs,
 					 int n_vifs,
 					 enum ieee80211_chanctx_switch_mode mode);
+
+/**
+ * ieee80211_incumbent_signal_detected - inform that an incumbent signal
+ *	interference was detected
+ * @hw: pointer as obtained from ieee80211_alloc_hw()
+ * @chanctx_conf: Channel context on which the signal interference was detected.
+ *	Mandatory to pass a valid pointer for MLO. For non-MLO %NULL can be
+ *	passed
+ * @incumbt_sig_intf_bmap: Bitmap indicating where the incumbent signal was
+ *	detected.
+ */
+void ieee80211_incumbent_signal_detected(struct ieee80211_hw *hw,
+					 struct ieee80211_chanctx_conf *chanctx_conf,
+					 u32 incumbt_sig_intf_bmap);
 
 #endif /* MAC80211_H */
