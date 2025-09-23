@@ -19,6 +19,7 @@
 #include <linux/module.h>
 #include <linux/gfp.h>
 #endif
+#include <linux/bootcache.h>
 
 struct raid6_calls raid6_call;
 EXPORT_SYMBOL_GPL(raid6_call);
@@ -159,6 +160,24 @@ static inline const struct raid6_calls *raid6_choose_gen(
 	int start = (disks>>1)-1, stop = disks-3;	/* work on the second half of the disks */
 	const struct raid6_calls *const *algo;
 	const struct raid6_calls *best;
+	char cached_algo_name[32];
+
+	/* Try to get cached algorithm by name */
+	if (bootcache_get_string("raid6_best_algo", cached_algo_name,
+		sizeof(cached_algo_name)) == 0) {
+		/* Find algorithm by name */
+		for (algo = raid6_algos; *algo; algo++) {
+			if (strcmp((*algo)->name, cached_algo_name) == 0) {
+				if (!(*algo)->valid || (*algo)->valid()) {
+					raid6_call = *algo;
+					pr_info("raid6: using algorithm %s (from cache)\n",
+						(*algo)->name);
+					return best;
+				}
+				break;
+			}
+		}
+	}
 
 	for (bestgenperf = 0, best = NULL, algo = raid6_algos; *algo; algo++) {
 		if (!best || (*algo)->priority >= best->priority) {
@@ -197,6 +216,8 @@ static inline const struct raid6_calls *raid6_choose_gen(
 		pr_err("raid6: Yikes! No algorithm found!\n");
 		goto out;
 	}
+
+	bootcache_set_string("raid6_best_algo", best->name);
 
 	raid6_call = *best;
 
