@@ -4761,8 +4761,17 @@ static void sev_es_init_vmcb(struct vcpu_svm *svm)
 	/* Can't intercept XSETBV, HV can't modify XCR0 directly */
 	svm_clr_intercept(svm, INTERCEPT_XSETBV);
 
-	if (sev_savic_active(vcpu->kvm))
+	if (sev_savic_active(vcpu->kvm)) {
 		svm_set_intercept_for_msr(vcpu, MSR_AMD64_SAVIC_CONTROL, MSR_TYPE_RW, false);
+
+		/* Clear all exception intercepts. */
+		clr_exception_intercept(svm, PF_VECTOR);
+		clr_exception_intercept(svm, UD_VECTOR);
+		clr_exception_intercept(svm, MC_VECTOR);
+		clr_exception_intercept(svm, AC_VECTOR);
+		clr_exception_intercept(svm, DB_VECTOR);
+		clr_exception_intercept(svm, GP_VECTOR);
+	}
 }
 
 void sev_init_vmcb(struct vcpu_svm *svm)
