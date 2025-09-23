@@ -73,6 +73,17 @@ config DEVTMPFS_SAFE
 	  with the PROT_EXEC flag. This can break, for example, non-KMS
 	  video drivers.
 
+config BOOTCACHE
+	bool "Boot-time cache for the kernel"
+	help
+	  Enable a simple key-value cache subsystem for storing boot-time
+	  configuration data. This allows drivers and kernel subsystems to
+	  cache expensive computations during boot, potentially improving
+	  boot performance on subsequent reboots by avoiding redundant
+	  hardware detection and initialization work
+
+	  If unsure, say N.
+
 config STANDALONE
 	bool "Select only drivers that don't need compile-time external firmware"
 	default y

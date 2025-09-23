@@ -4418,6 +4418,12 @@ S:	Maintained
 F:	Documentation/devicetree/bindings/iio/imu/bosch,bmi323.yaml
 F:	drivers/iio/imu/bmi323/
 
+BOOT CACHE
+M:	Andrea Campanella <acampanella@thegoodpenguin.co.uk>
+S:	Maintained
+F:	drivers/base/bootcache.c
+F:	include/linux/bootcache.h
+
 BPF JIT for ARC
 M:	Shahab Vahedi <list+bpf@vahedi.org>
 L:	bpf@vger.kernel.org
