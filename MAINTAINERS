@@ -4420,8 +4420,10 @@ F:	drivers/iio/imu/bmi323/
 
 BOOT CACHE
 M:	Andrea Campanella <acampanella@thegoodpenguin.co.uk>
+M:	Marc Kelly <mkelly@thegoodpenguin.co.uk>
 S:	Maintained
 F:	drivers/base/bootcache.c
+F:	drivers/base/bootcache_*
 F:	include/linux/bootcache.h
 
 BPF JIT for ARC

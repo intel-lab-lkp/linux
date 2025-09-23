@@ -84,6 +84,20 @@ config BOOTCACHE
 
 	  If unsure, say N.
 
+	if BOOTCACHE
+	choice
+		prompt "Boot-time cache backend"
+		depends on BOOTCACHE
+
+	config BOOTCACHE_BACKEND_TEST
+		bool "Test backend"
+		help
+		  A simple backend for testing and development.
+		  It does not persist any data externally.
+
+	endchoice
+	endif
+
 config STANDALONE
 	bool "Select only drivers that don't need compile-time external firmware"
 	default y
