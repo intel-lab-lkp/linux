@@ -20,8 +20,7 @@ static void guest_snp_code(void)
 {
 	GUEST_ASSERT(is_sev_snp_enabled());
 
-	wrmsr(MSR_AMD64_SEV_ES_GHCB, GHCB_MSR_TERM_REQ);
-	vmgexit();
+	GUEST_DONE();
 }
 
 static void guest_sev_es_code(void)
@@ -29,12 +28,7 @@ static void guest_sev_es_code(void)
 	/* TODO: Check CPUID after GHCB-based hypercall support is added. */
 	GUEST_ASSERT(is_sev_es_enabled());
 
-	/*
-	 * TODO: Add GHCB and ucall support for SEV-ES guests.  For now, simply
-	 * force "termination" to signal "done" via the GHCB MSR protocol.
-	 */
-	wrmsr(MSR_AMD64_SEV_ES_GHCB, GHCB_MSR_TERM_REQ);
-	vmgexit();
+	GUEST_DONE();
 }
 
 static void guest_sev_code(void)
@@ -103,12 +97,7 @@ static void test_sync_vmsa(uint32_t type, uint64_t policy)
 
 	vcpu_run(vcpu);
 
-	TEST_ASSERT(vcpu->run->exit_reason == KVM_EXIT_SYSTEM_EVENT,
-		    "Wanted SYSTEM_EVENT, got %s",
-		    exit_reason_str(vcpu->run->exit_reason));
-	TEST_ASSERT_EQ(vcpu->run->system_event.type, KVM_SYSTEM_EVENT_SEV_TERM);
-	TEST_ASSERT_EQ(vcpu->run->system_event.ndata, 1);
-	TEST_ASSERT_EQ(vcpu->run->system_event.data[0], GHCB_MSR_TERM_REQ);
+	TEST_ASSERT_KVM_EXIT_REASON(vcpu, KVM_EXIT_IO);
 
 	compare_xsave((u8 *)&xsave, (u8 *)hva);
 
@@ -128,16 +117,6 @@ static void test_sev(void *guest_code, uint32_t type, uint64_t policy)
 
 	for (;;) {
 		vcpu_run(vcpu);
-
-		if (is_sev_es_vm(vm)) {
-			TEST_ASSERT(vcpu->run->exit_reason == KVM_EXIT_SYSTEM_EVENT,
-				    "Wanted SYSTEM_EVENT, got %s",
-				    exit_reason_str(vcpu->run->exit_reason));
-			TEST_ASSERT_EQ(vcpu->run->system_event.type, KVM_SYSTEM_EVENT_SEV_TERM);
-			TEST_ASSERT_EQ(vcpu->run->system_event.ndata, 1);
-			TEST_ASSERT_EQ(vcpu->run->system_event.data[0], GHCB_MSR_TERM_REQ);
-			break;
-		}
 
 		switch (get_ucall(vcpu, &uc)) {
 		case UCALL_SYNC:

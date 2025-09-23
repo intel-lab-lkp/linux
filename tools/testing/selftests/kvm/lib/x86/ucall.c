@@ -5,6 +5,8 @@
  * Copyright (C) 2018, Red Hat, Inc.
  */
 #include "kvm_util.h"
+#include "processor.h"
+#include "sev.h"
 
 #define UCALL_PIO_PORT ((uint16_t)0x1000)
 
@@ -20,6 +22,11 @@ void ucall_arch_do_ucall(vm_vaddr_t uc)
 	 */
 #define HORRIFIC_L2_UCALL_CLOBBER_HACK	\
 	"rcx", "rsi", "r8", "r9", "r10", "r11"
+
+	if (is_sev_es_enabled()) {
+		sev_es_ucall_port_write(UCALL_PIO_PORT, uc);
+		return;
+	}
 
 	asm volatile("push %%rbp\n\t"
 		     "push %%r15\n\t"
@@ -48,8 +55,19 @@ void *ucall_arch_get_ucall(struct kvm_vcpu *vcpu)
 
 	if (run->exit_reason == KVM_EXIT_IO && run->io.port == UCALL_PIO_PORT) {
 		struct kvm_regs regs;
+		uint64_t addr;
+
+		if (is_sev_es_vm(vcpu->vm)) {
+			TEST_ASSERT(
+				run->io.count == 8 && run->io.size == 1,
+				"SEV-ES ucall exit requires 8 byte string out\n");
+
+			addr = *(uint64_t *)((uint8_t *)(run) + run->io.data_offset);
+			return (void *)addr;
+		}
 
 		vcpu_regs_get(vcpu, &regs);
+
 		return (void *)regs.rdi;
 	}
 	return NULL;
