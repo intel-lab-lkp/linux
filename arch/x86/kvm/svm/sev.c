@@ -5405,3 +5405,11 @@ bool sev_savic_has_pending_interrupt(struct kvm_vcpu *vcpu)
 	return READ_ONCE(to_svm(vcpu)->sev_savic_has_pending_ipi) ||
 		kvm_apic_has_interrupt(vcpu) != -1;
 }
+
+bool sev_savic_timer_int_injected(struct kvm_vcpu *vcpu)
+{
+	u32 reg  = kvm_lapic_get_reg(vcpu->arch.apic, APIC_LVTT);
+	int vec = reg & APIC_VECTOR_MASK;
+
+	return to_svm(vcpu)->vmcb->control.requested_irr[vec / 32] & BIT(vec % 32);
+}
