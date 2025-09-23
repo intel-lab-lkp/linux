@@ -815,6 +815,23 @@ void intel_dsb_chain(struct intel_atomic_state *state,
 			 wait_for_vblank ? DSB_WAIT_FOR_VBLANK : 0);
 }
 
+static
+void intel_dsb_wait_for_scl_start(struct intel_atomic_state *state,
+				  struct intel_dsb *dsb)
+{
+	struct intel_crtc *crtc = dsb->crtc;
+	const struct intel_crtc_state *crtc_state =
+		intel_pre_commit_crtc_state(state, crtc);
+	int start, end;
+
+	if (!pre_commit_is_vrr_active(state, crtc))
+		return;
+
+	start = intel_vrr_safe_window_start(crtc_state);
+	end = intel_vrr_safe_window_end(crtc_state);
+	intel_dsb_wait_scanline_out(state, dsb, start, end);
+}
+
 void intel_dsb_wait_for_delayed_vblank(struct intel_atomic_state *state,
 				       struct intel_dsb *dsb)
 {
@@ -824,6 +841,7 @@ void intel_dsb_wait_for_delayed_vblank(struct intel_atomic_state *state,
 	int usecs = intel_scanlines_to_usecs(&crtc_state->hw.adjusted_mode,
 					     dsb_vblank_delay(state, crtc));
 
+	intel_dsb_wait_for_scl_start(state, dsb);
 	intel_dsb_wait_usec(dsb, usecs);
 }
 
