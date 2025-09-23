@@ -268,6 +268,8 @@ int get_kvm_param_integer(const char *param);
 int get_kvm_intel_param_integer(const char *param);
 int get_kvm_amd_param_integer(const char *param);
 
+int kvm_arch_vm_additional_pages_required(struct vm_shape shape,
+                                         uint64_t page_size);
 unsigned int kvm_check_cap(long cap);
 
 static inline bool kvm_has_cap(long cap)
