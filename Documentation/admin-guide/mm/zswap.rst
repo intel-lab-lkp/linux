@@ -53,16 +53,20 @@ Zswap receives pages for compression from the swap subsystem and is able to
 evict pages from its own compressed pool on an LRU basis and write them back to
 the backing swap device in the case that the compressed pool is full.
 
-Zswap makes use of zsmalloc for the managing the compressed memory pool.  Each
-allocation in zsmalloc is not directly accessible by address.  Rather, a handle is
+Zswap makes use of zpool API for the managing the compressed memory pool. Each
+allocation in zpool is not directly accessible by address. Rather, a handle is
 returned by the allocation routine and that handle must be mapped before being
 accessed.  The compressed memory pool grows on demand and shrinks as compressed
-pages are freed.  The pool is not preallocated.
+pages are freed. The pool is not preallocated.
+
+An allocator backend implementing zpool API can be selected during the build
+time as a kernel configuration option. Currently only one backend (zsmalloc) is
+supported and it is selected automatically.
 
 When a swap page is passed from swapout to zswap, zswap maintains a mapping
 of the swap entry, a combination of the swap type and swap offset, to the
-zsmalloc handle that references that compressed swap page.  This mapping is
-achieved with a red-black tree per swap type.  The swap offset is the search
+zpool handle that references that compressed swap page.  This mapping is
+achieved with a red-black tree per swap type. The swap offset is the search
 key for the tree nodes.
 
 During a page fault on a PTE that is a swap entry, the swapin code calls the

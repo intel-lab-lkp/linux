@@ -23,7 +23,7 @@ config ZSWAP
 	bool "Compressed cache for swap pages"
 	depends on SWAP
 	select CRYPTO
-	select ZSMALLOC
+	select ZPOOL_ALLOCATOR
 	help
 	  A lightweight compressed cache for swap pages.  It takes
 	  pages that are in the process of being swapped out and attempts to
@@ -122,8 +122,26 @@ config ZSWAP_COMPRESSOR_DEFAULT
        default "zstd" if ZSWAP_COMPRESSOR_DEFAULT_ZSTD
        default ""
 
+config ZPOOL_ALLOCATOR
+	bool
+
+choice
+	prompt "Allocator for zswap"
+	default ZSMALLOC
+	help
+	  Allocator to be used for compressed object storage in zswap.
+	  Currently only zsmalloc is supported.
+
 config ZSMALLOC
-	tristate
+	bool "N:1 compression allocator (zsmalloc)"
+	select ZPOOL_ALLOCATOR
+	depends on MMU
+	help
+	  zsmalloc is a slab-based memory allocator designed to store
+	  pages of various compression levels efficiently. It achieves
+	  the highest storage density with the least amount of fragmentation.
+
+endchoice
 
 if ZSMALLOC
 

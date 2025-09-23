@@ -36,6 +36,7 @@
 #include <linux/types.h>
 #include <linux/debugfs.h>
 #include <linux/zsmalloc.h>
+#include <linux/zpool.h>
 #include <linux/fs.h>
 #include <linux/workqueue.h>
 #include "zpdesc.h"
@@ -431,6 +432,8 @@ static void record_obj(unsigned long handle, unsigned long obj)
 {
 	*(unsigned long *)handle = obj;
 }
+
+DECLARE_ZPOOL(zs);
 
 static inline bool __maybe_unused is_first_zpdesc(struct zpdesc *zpdesc)
 {
