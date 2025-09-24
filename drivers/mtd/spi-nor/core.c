@@ -484,7 +484,7 @@ int spi_nor_read_sr(struct spi_nor *nor, u8 *sr)
 
 /**
  * spi_nor_read_cr() - Read the Configuration Register using the
- * SPINOR_OP_RDCR (35h) command.
+ * SPINOR_OP_RDCR command.
  * @nor:	pointer to 'struct spi_nor'
  * @cr:		pointer to a DMA-able buffer where the value of the
  *              Configuration Register will be written.
@@ -496,13 +496,16 @@ int spi_nor_read_cr(struct spi_nor *nor, u8 *cr)
 	int ret;
 
 	if (nor->spimem) {
-		struct spi_mem_op op = SPI_NOR_RDCR_OP(cr);
+		struct spi_mem_op op = SPI_NOR_RDCR_OP(nor->params->rdcr_opcode,
+						       cr);
 
 		spi_nor_spimem_setup_op(nor, &op, nor->reg_proto);
 
 		ret = spi_mem_exec_op(nor->spimem, &op);
 	} else {
-		ret = spi_nor_controller_ops_read_reg(nor, SPINOR_OP_RDCR, cr,
+		ret = spi_nor_controller_ops_read_reg(nor,
+						      nor->params->rdcr_opcode,
+						      cr,
 						      1);
 	}
 
@@ -2892,6 +2895,9 @@ static void spi_nor_init_default_params(struct spi_nor *nor)
 
 	/* Default to 16-bit Write Status (01h) Command */
 	nor->flags |= SNOR_F_HAS_16BIT_SR;
+
+	/* Default to 0x35 to read configuration register */
+	params->rdcr_opcode = SPINOR_OP_RDCR;
 
 	/* Set SPI NOR sizes. */
 	params->writesize = 1;
