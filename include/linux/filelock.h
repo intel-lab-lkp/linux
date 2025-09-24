@@ -4,19 +4,22 @@
 
 #include <linux/fs.h>
 
-#define FL_POSIX	1
-#define FL_FLOCK	2
-#define FL_DELEG	4	/* NFSv4 delegation */
-#define FL_ACCESS	8	/* not trying to lock, just looking */
-#define FL_EXISTS	16	/* when unlocking, test for existence */
-#define FL_LEASE	32	/* lease held on this file */
-#define FL_CLOSE	64	/* unlock on close */
-#define FL_SLEEP	128	/* A blocking lock */
-#define FL_DOWNGRADE_PENDING	256 /* Lease is being downgraded */
-#define FL_UNLOCK_PENDING	512 /* Lease is being broken */
-#define FL_OFDLCK	1024	/* lock is "owned" by struct file */
-#define FL_LAYOUT	2048	/* outstanding pNFS layout */
-#define FL_RECLAIM	4096	/* reclaiming from a reboot server */
+#define FL_POSIX		BIT(0)	/* POSIX lock */
+#define FL_FLOCK		BIT(1)	/* BSD lock */
+#define FL_LEASE		BIT(2)	/* file lease */
+#define FL_DELEG		BIT(3)	/* NFSv4 delegation */
+#define FL_LAYOUT		BIT(4)	/* outstanding pNFS layout */
+#define FL_ACCESS		BIT(5)	/* not trying to lock, just looking */
+#define FL_EXISTS		BIT(6)	/* when unlocking, test for existence */
+#define FL_CLOSE		BIT(7)	/* unlock on close */
+#define FL_SLEEP		BIT(8)	/* A blocking lock */
+#define FL_DOWNGRADE_PENDING	BIT(9)	/* Lease is being downgraded */
+#define FL_UNLOCK_PENDING	BIT(10) /* Lease is being broken */
+#define FL_OFDLCK		BIT(11) /* POSIX lock "owned" by struct file */
+#define FL_RECLAIM		BIT(12) /* reclaiming from a reboot server */
+#define FL_IGN_DIR_CREATE	BIT(13) /* ignore DIR_CREATE events */
+#define FL_IGN_DIR_DELETE	BIT(14) /* ignore DIR_DELETE events */
+#define FL_IGN_DIR_RENAME	BIT(15) /* ignore DIR_RENAME events */
 
 #define FL_CLOSE_POSIX (FL_POSIX | FL_CLOSE)
 
