@@ -887,6 +887,7 @@ static void *stack_next(struct seq_file *m, void *v, loff_t *ppos)
 }
 
 static unsigned long page_owner_pages_threshold;
+static bool page_owner_print_handle;
 
 static int stack_print(struct seq_file *m, void *v)
 {
@@ -908,6 +909,8 @@ static int stack_print(struct seq_file *m, void *v)
 
 	for (i = 0; i < nr_entries; i++)
 		seq_printf(m, " %pS\n", (void *)entries[i]);
+	if (page_owner_print_handle)
+		seq_printf(m, "handle: %d\n", stack_record->handle.handle);
 	seq_printf(m, "nr_base_pages: %d\n\n", nr_base_pages);
 
 	return 0;
@@ -968,6 +971,8 @@ static int __init pageowner_init(void)
 			    &page_owner_stack_operations);
 	debugfs_create_file("count_threshold", 0600, dir, NULL,
 			    &proc_page_owner_threshold);
+	debugfs_create_bool("print_handle", 0600, dir,
+			    &page_owner_print_handle);
 
 	return 0;
 }
