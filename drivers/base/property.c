@@ -785,7 +785,7 @@ struct fwnode_handle *fwnode_get_nth_parent(struct fwnode_handle *fwnode,
 EXPORT_SYMBOL_GPL(fwnode_get_nth_parent);
 
 /**
- * fwnode_get_next_child_node - Return the next child node handle for a node
+ * fwnode_get_next_child_node - Return the next available child node handle
  * @fwnode: Firmware node to find the next child node for.
  * @child: Handle to one of the node's child nodes or a %NULL handle.
  *
@@ -802,35 +802,7 @@ fwnode_get_next_child_node(const struct fwnode_handle *fwnode,
 EXPORT_SYMBOL_GPL(fwnode_get_next_child_node);
 
 /**
- * fwnode_get_next_available_child_node - Return the next available child node handle for a node
- * @fwnode: Firmware node to find the next child node for.
- * @child: Handle to one of the node's child nodes or a %NULL handle.
- *
- * The caller is responsible for calling fwnode_handle_put() on the returned
- * fwnode pointer. Note that this function also puts a reference to @child
- * unconditionally.
- */
-struct fwnode_handle *
-fwnode_get_next_available_child_node(const struct fwnode_handle *fwnode,
-				     struct fwnode_handle *child)
-{
-	struct fwnode_handle *next_child = child;
-
-	if (IS_ERR_OR_NULL(fwnode))
-		return NULL;
-
-	do {
-		next_child = fwnode_get_next_child_node(fwnode, next_child);
-		if (!next_child)
-			return NULL;
-	} while (!fwnode_device_is_available(next_child));
-
-	return next_child;
-}
-EXPORT_SYMBOL_GPL(fwnode_get_next_available_child_node);
-
-/**
- * device_get_next_child_node - Return the next child node handle for a device
+ * device_get_next_child_node - Return the next available child node handle
  * @dev: Device to find the next child node for.
  * @child: Handle to one of the device's child nodes or a %NULL handle.
  *
@@ -858,7 +830,7 @@ struct fwnode_handle *device_get_next_child_node(const struct device *dev,
 EXPORT_SYMBOL_GPL(device_get_next_child_node);
 
 /**
- * fwnode_get_named_child_node - Return first matching named child node handle
+ * fwnode_get_named_child_node - Return first available matching named child node handle
  * @fwnode: Firmware node to find the named child node for.
  * @childname: String to match child node name against.
  *
@@ -874,7 +846,7 @@ fwnode_get_named_child_node(const struct fwnode_handle *fwnode,
 EXPORT_SYMBOL_GPL(fwnode_get_named_child_node);
 
 /**
- * device_get_named_child_node - Return first matching named child node handle
+ * device_get_named_child_node - Return first available matching named child node handle for a device
  * @dev: Device to find the named child node for.
  * @childname: String to match child node name against.
  *
@@ -928,7 +900,7 @@ bool fwnode_device_is_available(const struct fwnode_handle *fwnode)
 EXPORT_SYMBOL_GPL(fwnode_device_is_available);
 
 /**
- * fwnode_get_child_node_count - return the number of child nodes for a given firmware node
+ * fwnode_get_child_node_count - Return the number of available child nodes for a given firmware node
  * @fwnode: Pointer to the parent firmware node
  *
  * Return: the number of child nodes for a given firmware node.
@@ -946,7 +918,7 @@ unsigned int fwnode_get_child_node_count(const struct fwnode_handle *fwnode)
 EXPORT_SYMBOL_GPL(fwnode_get_child_node_count);
 
 /**
- * fwnode_get_named_child_node_count - number of child nodes with given name
+ * fwnode_get_named_child_node_count - Return the number of available child nodes with given name
  * @fwnode: Node which child nodes are counted.
  * @name: String to match child node name against.
  *
@@ -1235,15 +1207,12 @@ static bool fwnode_graph_remote_available(struct fwnode_handle *ep)
  * The caller is responsible for calling fwnode_handle_put() on the returned
  * fwnode pointer.
  *
- * Return: the fwnode handle of the local endpoint corresponding the port and
- * endpoint IDs or %NULL if not found.
- *
  * If FWNODE_GRAPH_ENDPOINT_NEXT is passed in @flags and the specified endpoint
  * has not been found, look for the closest endpoint ID greater than the
  * specified one and return the endpoint that corresponds to it, if present.
  *
- * Does not return endpoints that belong to disabled devices or endpoints that
- * are unconnected, unless FWNODE_GRAPH_DEVICE_DISABLED is passed in @flags.
+ * Return: the fwnode handle of the local endpoint corresponding the port and
+ * endpoint IDs or %NULL if not found.
  */
 struct fwnode_handle *
 fwnode_graph_get_endpoint_by_id(const struct fwnode_handle *fwnode,
@@ -1252,13 +1221,12 @@ fwnode_graph_get_endpoint_by_id(const struct fwnode_handle *fwnode,
 	struct fwnode_handle *ep, *best_ep = NULL;
 	unsigned int best_ep_id = 0;
 	bool endpoint_next = flags & FWNODE_GRAPH_ENDPOINT_NEXT;
-	bool enabled_only = !(flags & FWNODE_GRAPH_DEVICE_DISABLED);
 
 	fwnode_graph_for_each_endpoint(fwnode, ep) {
 		struct fwnode_endpoint fwnode_ep = { 0 };
 		int ret;
 
-		if (enabled_only && !fwnode_graph_remote_available(ep))
+		if (!fwnode_graph_remote_available(ep))
 			continue;
 
 		ret = fwnode_graph_parse_endpoint(ep, &fwnode_ep);
@@ -1295,21 +1263,15 @@ EXPORT_SYMBOL_GPL(fwnode_graph_get_endpoint_by_id);
 /**
  * fwnode_graph_get_endpoint_count - Count endpoints on a device node
  * @fwnode: The node related to a device
- * @flags: fwnode lookup flags
  * Count endpoints in a device node.
- *
- * If FWNODE_GRAPH_DEVICE_DISABLED flag is specified, also unconnected endpoints
- * and endpoints connected to disabled devices are counted.
  */
-unsigned int fwnode_graph_get_endpoint_count(const struct fwnode_handle *fwnode,
-					     unsigned long flags)
+unsigned int fwnode_graph_get_endpoint_count(const struct fwnode_handle *fwnode)
 {
 	struct fwnode_handle *ep;
 	unsigned int count = 0;
 
 	fwnode_graph_for_each_endpoint(fwnode, ep) {
-		if (flags & FWNODE_GRAPH_DEVICE_DISABLED ||
-		    fwnode_graph_remote_available(ep))
+		if (fwnode_graph_remote_available(ep))
 			count++;
 	}
 

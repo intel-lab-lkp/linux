@@ -161,8 +161,6 @@ struct fwnode_handle *fwnode_get_nth_parent(struct fwnode_handle *fwn,
 					    unsigned int depth);
 struct fwnode_handle *fwnode_get_next_child_node(
 	const struct fwnode_handle *fwnode, struct fwnode_handle *child);
-struct fwnode_handle *fwnode_get_next_available_child_node(
-	const struct fwnode_handle *fwnode, struct fwnode_handle *child);
 
 #define fwnode_for_each_child_node(fwnode, child)			\
 	for (child = fwnode_get_next_child_node(fwnode, NULL); child;	\
@@ -171,10 +169,6 @@ struct fwnode_handle *fwnode_get_next_available_child_node(
 #define fwnode_for_each_named_child_node(fwnode, child, name)		\
 	fwnode_for_each_child_node(fwnode, child)			\
 		for_each_if(fwnode_name_eq(child, name))
-
-#define fwnode_for_each_available_child_node(fwnode, child)		       \
-	for (child = fwnode_get_next_available_child_node(fwnode, NULL); child;\
-	     child = fwnode_get_next_available_child_node(fwnode, child))
 
 struct fwnode_handle *device_get_next_child_node(const struct device *dev,
 						 struct fwnode_handle *child);
@@ -503,19 +497,13 @@ static inline bool fwnode_graph_is_endpoint(const struct fwnode_handle *fwnode)
  * @FWNODE_GRAPH_ENDPOINT_NEXT: In the case of no exact match, look for the
  *				closest endpoint ID greater than the specified
  *				one.
- * @FWNODE_GRAPH_DEVICE_DISABLED: That the device to which the remote
- *				  endpoint of the given endpoint belongs to,
- *				  may be disabled, or that the endpoint is not
- *				  connected.
  */
 #define FWNODE_GRAPH_ENDPOINT_NEXT	BIT(0)
-#define FWNODE_GRAPH_DEVICE_DISABLED	BIT(1)
 
 struct fwnode_handle *
 fwnode_graph_get_endpoint_by_id(const struct fwnode_handle *fwnode,
 				u32 port, u32 endpoint, unsigned long flags);
-unsigned int fwnode_graph_get_endpoint_count(const struct fwnode_handle *fwnode,
-					     unsigned long flags);
+unsigned int fwnode_graph_get_endpoint_count(const struct fwnode_handle *fwnode);
 
 #define fwnode_graph_for_each_endpoint(fwnode, child)				\
 	for (child = fwnode_graph_get_next_endpoint(fwnode, NULL); child;	\
