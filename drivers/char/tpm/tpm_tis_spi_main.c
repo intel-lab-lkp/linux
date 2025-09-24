@@ -85,7 +85,7 @@ static int tpm_tis_spi_transfer_half(struct tpm_tis_data *data,	u32 addr,
 	struct spi_transfer spi_xfer[3];
 	struct spi_message m;
 	u8 transfer_len;
-	int ret;
+	int ret = 0;
 
 	while (len) {
 		transfer_len = min_t(u16, len, MAX_SPI_FRAMESIZE);
