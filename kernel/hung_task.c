@@ -184,6 +184,11 @@ static inline void debug_show_blocker(struct task_struct *task)
 }
 #endif
 
+void touch_hung_task_detector(struct task_struct *t)
+{
+	t->last_switch_count = ULONG_MAX;
+}
+
 static void check_hung_task(struct task_struct *t, unsigned long timeout)
 {
 	unsigned long switch_count = t->nvcsw + t->nivcsw;
@@ -201,6 +206,10 @@ static void check_hung_task(struct task_struct *t, unsigned long timeout)
 	 * musn't be checked.
 	 */
 	if (unlikely(!switch_count))
+		return;
+
+	/* The task doesn't want to trigger the hung task warning. */
+	if (unlikely(t->last_switch_count == ULONG_MAX))
 		return;
 
 	if (switch_count != t->last_switch_count) {
@@ -317,6 +326,10 @@ static void check_hung_uninterruptible_tasks(unsigned long timeout)
 		    !(state & TASK_WAKEKILL) &&
 		    !(state & TASK_NOLOAD))
 			check_hung_task(t, timeout);
+		else if (unlikely(t->last_switch_count == ULONG_MAX)) {
+			t->last_switch_count = t->nvcsw + t->nivcsw;
+			t->last_switch_time = jiffies;
+		}
 	}
  unlock:
 	rcu_read_unlock();

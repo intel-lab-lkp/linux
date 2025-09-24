@@ -59,8 +59,10 @@ static inline void touch_all_softlockup_watchdogs(void) { }
 
 #ifdef CONFIG_DETECT_HUNG_TASK
 void reset_hung_task_detector(void);
+void touch_hung_task_detector(struct task_struct *t);
 #else
 static inline void reset_hung_task_detector(void) { }
+static inline void touch_hung_task_detector(struct task_struct *t) { }
 #endif
 
 /*
