@@ -2318,6 +2318,13 @@ static int at91_adc_probe(struct platform_device *pdev)
 	else
 		num_channels = st->soc_info.platform->max_channels;
 
+	/*
+	 * The device name is supposed to be the "part number", not the kobject
+	 * name. Do not copy this code for new drivers. We can't "fix" this
+	 * without breaking userspace, so we have to live with it. However, if
+	 * any new compatible IDs are added, please do something similar to
+	 * adc/ltc2497-core.c so that at least the new part numbers are correct.
+	 */
 	indio_dev->name = dev_name(&pdev->dev);
 	indio_dev->modes = INDIO_DIRECT_MODE | INDIO_BUFFER_SOFTWARE;
 	indio_dev->info = &at91_adc_info;
