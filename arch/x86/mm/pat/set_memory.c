@@ -3,6 +3,7 @@
  * Copyright 2002 Andi Kleen, SuSE Labs.
  * Thanks to Ben LaHaise for precious feedback.
  */
+#include <linux/asi.h>
 #include <linux/highmem.h>
 #include <linux/memblock.h>
 #include <linux/sched.h>
@@ -1780,6 +1781,11 @@ static int populate_pgd(struct cpa_data *cpa, unsigned long addr)
 	cpa->numpages = ret;
 	return 0;
 }
+static inline bool is_direct_map(unsigned long vaddr)
+{
+	return within(vaddr, PAGE_OFFSET,
+		      PAGE_OFFSET + (max_pfn_mapped << PAGE_SHIFT));
+}
 
 static int __cpa_process_fault(struct cpa_data *cpa, unsigned long vaddr,
 			       int primary)
@@ -1808,8 +1814,7 @@ static int __cpa_process_fault(struct cpa_data *cpa, unsigned long vaddr,
 	 * one virtual address page and its pfn. TBD: numpages can be set based
 	 * on the initial value and the level returned by lookup_address().
 	 */
-	if (within(vaddr, PAGE_OFFSET,
-		   PAGE_OFFSET + (max_pfn_mapped << PAGE_SHIFT))) {
+	if (is_direct_map(vaddr)) {
 		cpa->numpages = 1;
 		cpa->pfn = __pa(vaddr) >> PAGE_SHIFT;
 		return 0;
@@ -1981,6 +1986,27 @@ static int cpa_process_alias(struct cpa_data *cpa)
 	return 0;
 }
 
+/*
+ * Having updated the unrestricted PGD, reflect this change in the ASI
+ * restricted address space too.
+ */
+static inline int mirror_asi_direct_map(struct cpa_data *cpa, int primary)
+{
+	struct cpa_data asi_cpa = *cpa;
+
+	if (!asi_enabled_static())
+		return 0;
+
+	/* Only need to do this for the real unrestricted direct map. */
+	if ((cpa->pgd && cpa->pgd != init_mm.pgd) || !is_direct_map(*cpa->vaddr))
+		return 0;
+	VM_WARN_ON_ONCE(!is_direct_map(*cpa->vaddr + (cpa->numpages * PAGE_SIZE)));
+
+	asi_cpa.pgd = asi_nonsensitive_pgd;
+	asi_cpa.curpage = 0;
+	return __change_page_attr(cpa, primary);
+}
+
 static int __change_page_attr_set_clr(struct cpa_data *cpa, int primary)
 {
 	unsigned long numpages = cpa->numpages;
@@ -2007,6 +2033,8 @@ static int __change_page_attr_set_clr(struct cpa_data *cpa, int primary)
 		if (!debug_pagealloc_enabled())
 			spin_lock(&cpa_lock);
 		ret = __change_page_attr(cpa, primary);
+		if (!ret)
+			ret = mirror_asi_direct_map(cpa, primary);
 		if (!debug_pagealloc_enabled())
 			spin_unlock(&cpa_lock);
 		if (ret)
