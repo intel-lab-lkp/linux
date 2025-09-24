@@ -27,7 +27,10 @@ enabled. Other usages are more than welcome.
 It can also be used to show all the stacks and their current number of
 allocated base pages, which gives us a quick overview of where the memory
 is going without the need to screen through all the pages and match the
-allocation and free operation.
+allocation and free operation. It's also possible to show only a numeric
+identifier of all the stacks (without stack traces) and their number of
+allocated base pages (faster to read and parse, eg, for monitoring) that
+can be matched with stacks later (options print_handle and print_stack).
 
 page owner is disabled by default. So, if you'd like to use it, you need
 to add "page_owner=on" to your boot cmdline. If the kernel is built
@@ -95,6 +98,7 @@ Usage
 	...
 	...
 	echo 7000 > /sys/kernel/debug/page_owner_stacks/count_threshold
+	echo 1 > /sys/kernel/debug/page_owner_stacks/print_handle
 	cat /sys/kernel/debug/page_owner_stacks/show_stacks> stacks_7000.txt
 	cat stacks_7000.txt
 	 post_alloc_hook+0x177/0x1a0
@@ -113,6 +117,15 @@ Usage
 	 __do_sys_finit_module+0x381/0x730
 	 do_syscall_64+0x8d/0x150
 	 entry_SYSCALL_64_after_hwframe+0x62/0x6a
+	handle: 42
+	nr_base_pages: 20824
+	...
+
+	echo 1 > /sys/kernel/debug/page_owner_stacks/print_handle
+	echo 0 > /sys/kernel/debug/page_owner_stacks/print_stack
+	cat /sys/kernel/debug/page_owner_stacks/show_stacks > handles_7000.txt
+	cat handles_7000.txt
+	handle: 42
 	nr_base_pages: 20824
 	...
 
