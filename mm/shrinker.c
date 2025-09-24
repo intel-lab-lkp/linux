@@ -1,8 +1,9 @@
 // SPDX-License-Identifier: GPL-2.0
 #include <linux/memcontrol.h>
-#include <linux/rwsem.h>
-#include <linux/shrinker.h>
 #include <linux/rculist.h>
+#include <linux/rwsem.h>
+#include <linux/seq_buf.h>
+#include <linux/shrinker.h>
 #include <trace/events/vmscan.h>
 
 #include "internal.h"
@@ -411,6 +412,7 @@ static unsigned long do_shrink_slab(struct shrink_control *shrinkctl,
 
 	trace_mm_shrink_slab_start(shrinker, shrinkctl, nr,
 				   freeable, delta, total_scan, priority);
+	u64 start_time = ktime_get_ns();
 
 	/*
 	 * Normally, we should not scan less than batch_size objects in one
@@ -460,6 +462,17 @@ static unsigned long do_shrink_slab(struct shrink_control *shrinkctl,
 	 * manner that handles concurrent updates.
 	 */
 	new_nr = add_nr_deferred(next_deferred, shrinker, shrinkctl);
+
+	unsigned long now = jiffies;
+	if (freed) {
+		atomic_long_add(freed, &shrinker->objects_freed);
+		shrinker->last_freed = now;
+	}
+	shrinker->last_scanned = now;
+	atomic_long_add(scanned, &shrinker->objects_requested_to_free);
+
+	atomic64_add(ktime_get_ns() - start_time, &shrinker->ns_run);
+
 
 	trace_mm_shrink_slab_end(shrinker, shrinkctl->nid, freed, nr, new_nr, total_scan);
 	return freed;
@@ -809,3 +822,95 @@ void shrinker_free(struct shrinker *shrinker)
 	call_rcu(&shrinker->rcu, shrinker_free_rcu_cb);
 }
 EXPORT_SYMBOL_GPL(shrinker_free);
+
+void shrinker_to_text(struct seq_buf *out, struct shrinker *shrinker)
+{
+	struct shrink_control sc = {
+		.gfp_mask = GFP_KERNEL,
+#ifdef CONFIG_MEMCG
+		.memcg = root_mem_cgroup,
+#endif
+	};
+	unsigned long nr_freed = atomic_long_read(&shrinker->objects_freed);
+
+	seq_buf_printf(out, "%ps", shrinker->scan_objects);
+	if (shrinker->name)
+		seq_buf_printf(out, ": %s", shrinker->name);
+	seq_buf_putc(out, '\n');
+
+	seq_buf_printf(out, "objects:             %lu\n", shrinker->count_objects(shrinker, &sc));
+	seq_buf_printf(out, "requested to free:   %lu\n", atomic_long_read(&shrinker->objects_requested_to_free));
+	seq_buf_printf(out, "objects freed:       %lu\n", nr_freed);
+	seq_buf_printf(out, "last scanned:        %li sec ago\n", (jiffies - shrinker->last_scanned) / HZ);
+	seq_buf_printf(out, "last freed:          %li sec ago\n", (jiffies - shrinker->last_freed) / HZ);
+	seq_buf_printf(out, "ns per object freed: %llu\n", nr_freed
+		       ? div64_ul(atomic64_read(&shrinker->ns_run), nr_freed)
+		       : 0);
+
+	if (shrinker->to_text) {
+		shrinker->to_text(out, shrinker);
+		seq_buf_puts(out, "\n");
+	}
+}
+
+/**
+ * shrinkers_to_text - Report on shrinkers with highest usage
+ *
+ * This reports on the top 10 shrinkers, by object counts, in sorted order:
+ * intended to be used for OOM reporting.
+ */
+void shrinkers_to_text(struct seq_buf *out)
+{
+	struct shrinker *shrinker;
+	struct shrinker_by_mem {
+		struct shrinker	*shrinker;
+		unsigned long	mem;
+	} shrinkers_by_mem[4];
+	int i, nr = 0;
+
+	if (!mutex_trylock(&shrinker_mutex)) {
+		seq_buf_puts(out, "(couldn't take shrinker lock)");
+		return;
+	}
+
+	list_for_each_entry(shrinker, &shrinker_list, list) {
+		struct shrink_control sc = {
+			.gfp_mask = GFP_KERNEL,
+#ifdef CONFIG_MEMCG
+			.memcg = root_mem_cgroup,
+#endif
+		};
+		unsigned long mem = shrinker->count_objects(shrinker, &sc);
+
+		if (!mem || mem == SHRINK_STOP || mem == SHRINK_EMPTY)
+			continue;
+
+		for (i = 0; i < nr; i++)
+			if (mem < shrinkers_by_mem[i].mem)
+				break;
+
+		if (nr < ARRAY_SIZE(shrinkers_by_mem)) {
+			memmove(&shrinkers_by_mem[i + 1],
+				&shrinkers_by_mem[i],
+				sizeof(shrinkers_by_mem[0]) * (nr - i));
+			nr++;
+		} else if (i) {
+			i--;
+			memmove(&shrinkers_by_mem[0],
+				&shrinkers_by_mem[1],
+				sizeof(shrinkers_by_mem[0]) * i);
+		} else {
+			continue;
+		}
+
+		shrinkers_by_mem[i] = (struct shrinker_by_mem) {
+			.shrinker = shrinker,
+			.mem = mem,
+		};
+	}
+
+	for (i = nr - 1; i >= 0; --i)
+		shrinker_to_text(out, shrinkers_by_mem[i].shrinker);
+
+	mutex_unlock(&shrinker_mutex);
+}

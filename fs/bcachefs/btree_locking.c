@@ -69,6 +69,7 @@ struct trans_waiting_for_lock {
 struct lock_graph {
 	struct trans_waiting_for_lock	g[8];
 	unsigned			nr;
+	bool				printed_chain;
 };
 
 static noinline void print_cycle(struct printbuf *out, struct lock_graph *g)
@@ -89,6 +90,10 @@ static noinline void print_cycle(struct printbuf *out, struct lock_graph *g)
 
 static noinline void print_chain(struct printbuf *out, struct lock_graph *g)
 {
+	if (g->printed_chain || g->nr <= 1)
+		return;
+	g->printed_chain = true;
+
 	struct trans_waiting_for_lock *i;
 
 	for (i = g->g; i != g->g + g->nr; i++) {
@@ -124,6 +129,7 @@ static void __lock_graph_down(struct lock_graph *g, struct btree_trans *trans)
 		.node_want	= trans->locking,
 		.lock_want	= trans->locking_wait.lock_want,
 	};
+	g->printed_chain = false;
 }
 
 static void lock_graph_down(struct lock_graph *g, struct btree_trans *trans)
@@ -159,13 +165,11 @@ static void trace_would_deadlock(struct lock_graph *g, struct btree_trans *trans
 	count_event(c, trans_restart_would_deadlock);
 
 	if (trace_trans_restart_would_deadlock_enabled()) {
-		struct printbuf buf = PRINTBUF;
+		CLASS(printbuf, buf)();
+		guard(printbuf_atomic)(&buf);
 
-		buf.atomic++;
 		print_cycle(&buf, g);
-
 		trace_trans_restart_would_deadlock(trans, buf.buf);
-		printbuf_exit(&buf);
 	}
 }
 
@@ -196,8 +200,8 @@ static int btree_trans_abort_preference(struct btree_trans *trans)
 
 static noinline __noreturn void break_cycle_fail(struct lock_graph *g)
 {
-	struct printbuf buf = PRINTBUF;
-	buf.atomic++;
+	CLASS(printbuf, buf)();
+	guard(printbuf_atomic)(&buf);
 
 	prt_printf(&buf, bch2_fmt(g->g->trans->c, "cycle of nofail locks"));
 
@@ -207,14 +211,12 @@ static noinline __noreturn void break_cycle_fail(struct lock_graph *g)
 		bch2_btree_trans_to_text(&buf, trans);
 
 		prt_printf(&buf, "backtrace:\n");
-		printbuf_indent_add(&buf, 2);
-		bch2_prt_task_backtrace(&buf, trans->locking_wait.task, 2, GFP_NOWAIT);
-		printbuf_indent_sub(&buf, 2);
+		scoped_guard(printbuf_indent, &buf)
+			bch2_prt_task_backtrace(&buf, trans->locking_wait.task, 2, GFP_NOWAIT);
 		prt_newline(&buf);
 	}
 
 	bch2_print_str(g->g->trans->c, KERN_ERR, buf.buf);
-	printbuf_exit(&buf);
 	BUG();
 }
 
@@ -269,8 +271,12 @@ static int lock_graph_descend(struct lock_graph *g, struct btree_trans *trans,
 	if (unlikely(g->nr == ARRAY_SIZE(g->g))) {
 		closure_put(&trans->ref);
 
-		if (orig_trans->lock_may_not_fail)
+		if (orig_trans->lock_may_not_fail) {
+			/* Other threads will have to rerun the cycle detector: */
+			for (struct trans_waiting_for_lock *i = g->g + 1; i < g->g + g->nr; i++)
+				wake_up_process(i->trans->locking_wait.task);
 			return 0;
+		}
 
 		lock_graph_pop_all(g);
 
@@ -402,7 +408,7 @@ next:
 		}
 	}
 up:
-	if (g.nr > 1 && cycle)
+	if (cycle)
 		print_chain(cycle, &g);
 	lock_graph_up(&g);
 	goto next;
@@ -692,7 +698,7 @@ int __bch2_btree_path_upgrade(struct btree_trans *trans,
 
 	count_event(trans->c, trans_restart_upgrade);
 	if (trace_trans_restart_upgrade_enabled()) {
-		struct printbuf buf = PRINTBUF;
+		CLASS(printbuf, buf)();
 
 		prt_printf(&buf, "%s %pS\n", trans->fn, (void *) _RET_IP_);
 		prt_printf(&buf, "btree %s pos\n", bch2_btree_id_str(path->btree_id));
@@ -708,7 +714,6 @@ int __bch2_btree_path_upgrade(struct btree_trans *trans,
 			   path->l[f.l].lock_seq);
 
 		trace_trans_restart_upgrade(trans->c, buf.buf);
-		printbuf_exit(&buf);
 	}
 out:
 	bch2_trans_verify_locks(trans);
@@ -777,7 +782,7 @@ static noinline __cold void bch2_trans_relock_fail(struct btree_trans *trans, st
 		goto out;
 
 	if (trace_trans_restart_relock_enabled()) {
-		struct printbuf buf = PRINTBUF;
+		CLASS(printbuf, buf)();
 
 		bch2_bpos_to_text(&buf, path->pos);
 		prt_printf(&buf, " %s l=%u seq=%u node seq=",
@@ -797,7 +802,6 @@ static noinline __cold void bch2_trans_relock_fail(struct btree_trans *trans, st
 		}
 
 		trace_trans_restart_relock(trans, ip, buf.buf);
-		printbuf_exit(&buf);
 	}
 
 	count_event(trans->c, trans_restart_relock);

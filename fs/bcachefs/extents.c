@@ -12,6 +12,7 @@
 #include "btree_gc.h"
 #include "btree_io.h"
 #include "btree_iter.h"
+#include "btree_update.h"
 #include "buckets.h"
 #include "checksum.h"
 #include "compress.h"
@@ -63,15 +64,14 @@ void bch2_io_failures_to_text(struct printbuf *out,
 			((!!f->failed_ec)		<< 3);
 
 		bch2_printbuf_make_room(out, 1024);
-		out->atomic++;
 		scoped_guard(rcu) {
+			guard(printbuf_atomic)(out);
 			struct bch_dev *ca = bch2_dev_rcu_noerror(c, f->dev);
 			if (ca)
 				prt_str(out, ca->name);
 			else
 				prt_printf(out, "(invalid device %u)", f->dev);
 		}
-		--out->atomic;
 
 		prt_char(out, ' ');
 
@@ -158,7 +158,7 @@ static inline bool ptr_better(struct bch_fs *c,
 			      const struct extent_ptr_decoded p2,
 			      u64 p2_latency)
 {
-	struct bch_dev *ca2 = bch2_dev_rcu(c, p2.ptr.dev);
+	struct bch_dev *ca2 = bch2_dev_rcu_noerror(c, p2.ptr.dev);
 
 	int failed_delta = dev_failed(ca1) - dev_failed(ca2);
 	if (unlikely(failed_delta))
@@ -283,9 +283,9 @@ int bch2_bkey_pick_read_device(struct bch_fs *c, struct bkey_s_c k,
 
 	if (have_pick)
 		return 1;
-	if (!have_dirty_ptrs)
+	if (!have_dirty_ptrs && !bkey_is_btree_ptr(k.k))
 		return 0;
-	if (have_missing_devs)
+	if (have_missing_devs || !have_dirty_ptrs)
 		return bch_err_throw(c, no_device_to_read_from);
 	if (have_csum_errors)
 		return bch_err_throw(c, data_read_csum_err);
@@ -420,7 +420,7 @@ bool bch2_extent_merge(struct bch_fs *c, struct bkey_s l, struct bkey_s_c r)
 			return false;
 
 		/* Extents may not straddle buckets: */
-		struct bch_dev *ca = bch2_dev_rcu(c, lp.ptr.dev);
+		struct bch_dev *ca = bch2_dev_rcu_noerror(c, lp.ptr.dev);
 		bool same_bucket = ca && PTR_BUCKET_NR(ca, &lp.ptr) == PTR_BUCKET_NR(ca, &rp.ptr);
 
 		if (!same_bucket)
@@ -816,14 +816,14 @@ static inline unsigned __extent_ptr_durability(struct bch_dev *ca, struct extent
 
 unsigned bch2_extent_ptr_desired_durability(struct bch_fs *c, struct extent_ptr_decoded *p)
 {
-	struct bch_dev *ca = bch2_dev_rcu(c, p->ptr.dev);
+	struct bch_dev *ca = bch2_dev_rcu_noerror(c, p->ptr.dev);
 
 	return ca ? __extent_ptr_durability(ca, p) : 0;
 }
 
 unsigned bch2_extent_ptr_durability(struct bch_fs *c, struct extent_ptr_decoded *p)
 {
-	struct bch_dev *ca = bch2_dev_rcu(c, p->ptr.dev);
+	struct bch_dev *ca = bch2_dev_rcu_noerror(c, p->ptr.dev);
 
 	if (!ca || ca->mi.state == BCH_MEMBER_STATE_failed)
 		return 0;
@@ -996,6 +996,22 @@ void bch2_bkey_drop_device_noerror(struct bkey_s k, unsigned dev)
 	bch2_bkey_drop_ptrs_noerror(k, ptr, ptr->dev == dev);
 }
 
+void bch2_bkey_drop_ec(struct bkey_i *k, unsigned dev)
+{
+	struct bkey_ptrs ptrs = bch2_bkey_ptrs(bkey_i_to_s(k));
+	union bch_extent_entry *entry, *ec = NULL;
+
+	bkey_extent_entry_for_each(ptrs, entry) {
+		if (extent_entry_type(entry) == BCH_EXTENT_ENTRY_stripe_ptr)
+			ec = entry;
+		else if (extent_entry_type(entry) == BCH_EXTENT_ENTRY_ptr &&
+			 entry->ptr.dev == dev) {
+			bch2_bkey_extent_entry_drop(k, ec);
+			return;
+		}
+	}
+}
+
 const struct bch_extent_ptr *bch2_bkey_has_device_c(struct bkey_s_c k, unsigned dev)
 {
 	struct bkey_ptrs_c ptrs = bch2_bkey_ptrs_c(k);
@@ -1007,6 +1023,20 @@ const struct bch_extent_ptr *bch2_bkey_has_device_c(struct bkey_s_c k, unsigned 
 	return NULL;
 }
 
+bool bch2_bkey_devs_rw(struct bch_fs *c, struct bkey_s_c k)
+{
+	struct bkey_ptrs_c ptrs = bch2_bkey_ptrs_c(k);
+
+	guard(rcu)();
+	bkey_for_each_ptr(ptrs, ptr) {
+		CLASS(bch2_dev_tryget, ca)(c, ptr->dev);
+		if (!ca || ca->mi.state != BCH_MEMBER_STATE_rw)
+			return false;
+	}
+
+	return true;
+}
+
 bool bch2_bkey_has_target(struct bch_fs *c, struct bkey_s_c k, unsigned target)
 {
 	struct bkey_ptrs_c ptrs = bch2_bkey_ptrs_c(k);
@@ -1015,12 +1045,24 @@ bool bch2_bkey_has_target(struct bch_fs *c, struct bkey_s_c k, unsigned target)
 	guard(rcu)();
 	bkey_for_each_ptr(ptrs, ptr)
 		if (bch2_dev_in_target(c, ptr->dev, target) &&
-		    (ca = bch2_dev_rcu(c, ptr->dev)) &&
+		    (ca = bch2_dev_rcu_noerror(c, ptr->dev)) &&
 		    (!ptr->cached ||
 		     !dev_ptr_stale_rcu(ca, ptr)))
 			return true;
 
 	return false;
+}
+
+bool bch2_bkey_in_target(struct bch_fs *c, struct bkey_s_c k, unsigned target)
+{
+	struct bkey_ptrs_c ptrs = bch2_bkey_ptrs_c(k);
+
+	guard(rcu)();
+	bkey_for_each_ptr(ptrs, ptr)
+		if (!bch2_dev_in_target(c, ptr->dev, target))
+			return false;
+
+	return true;
 }
 
 bool bch2_bkey_matches_ptr(struct bch_fs *c, struct bkey_s_c k,
@@ -1110,7 +1152,7 @@ bch2_extent_has_ptr(struct bkey_s_c k1, struct extent_ptr_decoded p1, struct bke
 	return NULL;
 }
 
-static bool want_cached_ptr(struct bch_fs *c, struct bch_io_opts *opts,
+static bool want_cached_ptr(struct bch_fs *c, struct bch_inode_opts *opts,
 			    struct bch_extent_ptr *ptr)
 {
 	unsigned target = opts->promote_target ?: opts->foreground_target;
@@ -1124,7 +1166,7 @@ static bool want_cached_ptr(struct bch_fs *c, struct bch_io_opts *opts,
 }
 
 void bch2_extent_ptr_set_cached(struct bch_fs *c,
-				struct bch_io_opts *opts,
+				struct bch_inode_opts *opts,
 				struct bkey_s k,
 				struct bch_extent_ptr *ptr)
 {
@@ -1172,6 +1214,21 @@ drop:
 	bch2_bkey_drop_ptr_noerror(k, ptr);
 }
 
+static bool bch2_bkey_has_stale_ptrs(struct bch_fs *c, struct bkey_s_c k)
+{
+	struct bkey_ptrs_c ptrs = bch2_bkey_ptrs_c(k);
+	struct bch_dev *ca;
+
+	guard(rcu)();
+	bkey_for_each_ptr(ptrs, ptr)
+		if (ptr->cached &&
+		    (ca = bch2_dev_rcu_noerror(c, ptr->dev)) &&
+		    dev_ptr_stale_rcu(ca, ptr) > 0)
+			return true;
+
+	return false;
+}
+
 /*
  * bch2_extent_normalize - clean up an extent, dropping stale pointers etc.
  *
@@ -1180,28 +1237,35 @@ drop:
  * For existing keys, only called when btree nodes are being rewritten, not when
  * they're merely being compacted/resorted in memory.
  */
-bool bch2_extent_normalize(struct bch_fs *c, struct bkey_s k)
+static void __bch2_bkey_drop_stale_ptrs(struct bch_fs *c, struct bkey_s k)
 {
 	struct bch_dev *ca;
 
 	guard(rcu)();
 	bch2_bkey_drop_ptrs(k, ptr,
 		ptr->cached &&
-		(!(ca = bch2_dev_rcu(c, ptr->dev)) ||
+		(!(ca = bch2_dev_rcu_noerror(c, ptr->dev)) ||
 		 dev_ptr_stale_rcu(ca, ptr) > 0));
-
-	return bkey_deleted(k.k);
 }
 
-/*
- * bch2_extent_normalize_by_opts - clean up an extent, dropping stale pointers etc.
- *
- * Like bch2_extent_normalize(), but also only keeps a single cached pointer on
- * the promote target.
- */
-bool bch2_extent_normalize_by_opts(struct bch_fs *c,
-				   struct bch_io_opts *opts,
-				   struct bkey_s k)
+int bch2_bkey_drop_stale_ptrs(struct btree_trans *trans, struct btree_iter *iter, struct bkey_s_c k)
+{
+	if (bch2_bkey_has_stale_ptrs(trans->c, k)) {
+		struct bkey_i *u = bch2_bkey_make_mut(trans, iter, &k,
+						      BTREE_UPDATE_internal_snapshot_node);
+		int ret = PTR_ERR_OR_ZERO(u);
+		if (ret)
+			return ret;
+
+		__bch2_bkey_drop_stale_ptrs(trans->c, bkey_i_to_s(u));
+	}
+
+	return 0;
+}
+
+void bch2_bkey_drop_extra_cached_ptrs(struct bch_fs *c,
+				      struct bch_inode_opts *opts,
+				      struct bkey_s k)
 {
 	struct bkey_ptrs ptrs;
 	bool have_cached_ptr;
@@ -1219,24 +1283,22 @@ restart_drop_ptrs:
 			}
 			have_cached_ptr = true;
 		}
-
-	return bkey_deleted(k.k);
 }
 
 void bch2_extent_ptr_to_text(struct printbuf *out, struct bch_fs *c, const struct bch_extent_ptr *ptr)
 {
-	out->atomic++;
+	guard(printbuf_atomic)(out);
 	guard(rcu)();
 	struct bch_dev *ca = bch2_dev_rcu_noerror(c, ptr->dev);
 	if (!ca) {
-		prt_printf(out, "ptr: %u:%llu gen %u%s", ptr->dev,
+		prt_printf(out, "%u:%llu gen %u%s", ptr->dev,
 			   (u64) ptr->offset, ptr->gen,
 			   ptr->cached ? " cached" : "");
 	} else {
 		u32 offset;
 		u64 b = sector_to_bucket_and_offset(ca, ptr->offset, &offset);
 
-		prt_printf(out, "ptr: %u:%llu:%u gen %u",
+		prt_printf(out, "%u:%llu:%u gen %u",
 			   ptr->dev, b, offset, ptr->gen);
 		if (ca->mi.durability != 1)
 			prt_printf(out, " d=%u", ca->mi.durability);
@@ -1250,12 +1312,11 @@ void bch2_extent_ptr_to_text(struct printbuf *out, struct bch_fs *c, const struc
 		else if (stale)
 			prt_printf(out, " invalid");
 	}
-	--out->atomic;
 }
 
 void bch2_extent_crc_unpacked_to_text(struct printbuf *out, struct bch_extent_crc_unpacked *crc)
 {
-	prt_printf(out, "crc: c_size %u size %u offset %u nonce %u csum ",
+	prt_printf(out, "c_size %u size %u offset %u nonce %u csum ",
 		   crc->compressed_size,
 		   crc->uncompressed_size,
 		   crc->offset, crc->nonce);
@@ -1265,72 +1326,34 @@ void bch2_extent_crc_unpacked_to_text(struct printbuf *out, struct bch_extent_cr
 	bch2_prt_compression_type(out, crc->compression_type);
 }
 
-static void bch2_extent_rebalance_to_text(struct printbuf *out, struct bch_fs *c,
-					  const struct bch_extent_rebalance *r)
-{
-	prt_str(out, "rebalance:");
-
-	prt_printf(out, " replicas=%u", r->data_replicas);
-	if (r->data_replicas_from_inode)
-		prt_str(out, " (inode)");
-
-	prt_str(out, " checksum=");
-	bch2_prt_csum_opt(out, r->data_checksum);
-	if (r->data_checksum_from_inode)
-		prt_str(out, " (inode)");
-
-	if (r->background_compression || r->background_compression_from_inode) {
-		prt_str(out, " background_compression=");
-		bch2_compression_opt_to_text(out, r->background_compression);
-
-		if (r->background_compression_from_inode)
-			prt_str(out, " (inode)");
-	}
-
-	if (r->background_target || r->background_target_from_inode) {
-		prt_str(out, " background_target=");
-		if (c)
-			bch2_target_to_text(out, c, r->background_target);
-		else
-			prt_printf(out, "%u", r->background_target);
-
-		if (r->background_target_from_inode)
-			prt_str(out, " (inode)");
-	}
-
-	if (r->promote_target || r->promote_target_from_inode) {
-		prt_str(out, " promote_target=");
-		if (c)
-			bch2_target_to_text(out, c, r->promote_target);
-		else
-			prt_printf(out, "%u", r->promote_target);
-
-		if (r->promote_target_from_inode)
-			prt_str(out, " (inode)");
-	}
-
-	if (r->erasure_code || r->erasure_code_from_inode) {
-		prt_printf(out, " ec=%u", r->erasure_code);
-		if (r->erasure_code_from_inode)
-			prt_str(out, " (inode)");
-	}
-}
+static const char * const extent_entry_types[] = {
+#define x(t, n, ...) [n] = #t,
+	BCH_EXTENT_ENTRY_TYPES()
+#undef x
+	NULL
+};
 
 void bch2_bkey_ptrs_to_text(struct printbuf *out, struct bch_fs *c,
 			    struct bkey_s_c k)
 {
 	struct bkey_ptrs_c ptrs = bch2_bkey_ptrs_c(k);
 	const union bch_extent_entry *entry;
-	bool first = true;
 
 	if (c)
 		prt_printf(out, "durability: %u ", bch2_bkey_durability_safe(c, k));
 
-	bkey_extent_entry_for_each(ptrs, entry) {
-		if (!first)
-			prt_printf(out, " ");
+	guard(printbuf_indent)(out);
 
-		switch (__extent_entry_type(entry)) {
+	bkey_extent_entry_for_each(ptrs, entry) {
+		prt_newline(out);
+
+		unsigned type = __extent_entry_type(entry);
+		if (type < BCH_EXTENT_ENTRY_MAX) {
+			prt_str(out, extent_entry_types[__extent_entry_type(entry)]);
+			prt_str(out, ": ");
+		}
+
+		switch (type) {
 		case BCH_EXTENT_ENTRY_ptr:
 			bch2_extent_ptr_to_text(out, c, entry_to_ptr(entry));
 			break;
@@ -1347,8 +1370,7 @@ void bch2_bkey_ptrs_to_text(struct printbuf *out, struct bch_fs *c,
 		case BCH_EXTENT_ENTRY_stripe_ptr: {
 			const struct bch_extent_stripe_ptr *ec = &entry->stripe_ptr;
 
-			prt_printf(out, "ec: idx %llu block %u",
-			       (u64) ec->idx, ec->block);
+			prt_printf(out, "idx %llu block %u", (u64) ec->idx, ec->block);
 			break;
 		}
 		case BCH_EXTENT_ENTRY_rebalance:
@@ -1363,8 +1385,6 @@ void bch2_bkey_ptrs_to_text(struct printbuf *out, struct bch_fs *c,
 			prt_printf(out, "(invalid extent entry %.16llx)", *((u64 *) entry));
 			return;
 		}
-
-		first = false;
 	}
 }
 
@@ -1512,7 +1532,7 @@ int bch2_bkey_ptrs_validate(struct bch_fs *c, struct bkey_s_c k,
 			const struct bch_extent_rebalance *r = &entry->rebalance;
 
 			if (!bch2_compression_opt_valid(r->compression)) {
-				struct bch_compression_opt opt = __bch2_compression_decode(r->compression);
+				union bch_compression_opt opt = { .value = r->compression };
 				prt_printf(err, "invalid compression opt %u:%u",
 					   opt.type, opt.level);
 				return bch_err_throw(c, invalid_bkey);
@@ -1733,3 +1753,4 @@ int bch2_cut_back_s(struct bpos where, struct bkey_s k)
 	memset(bkey_val_end(k), 0, val_u64s_delta * sizeof(u64));
 	return -val_u64s_delta;
 }
+

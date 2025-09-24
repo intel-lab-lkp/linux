@@ -41,6 +41,10 @@ static int deleted_key_validate(struct bch_fs *c, struct bkey_s_c k,
 	.key_validate	= deleted_key_validate,		\
 })
 
+#define bch2_bkey_ops_extent_whiteout ((struct bkey_ops) {	\
+	.key_validate	= deleted_key_validate,		\
+})
+
 static int empty_val_key_validate(struct bch_fs *c, struct bkey_s_c k,
 				  struct bkey_validate_context from)
 {
@@ -203,7 +207,7 @@ int __bch2_bkey_validate(struct bch_fs *c, struct bkey_s_c k,
 			 ? bch2_bkey_types[k.k->type]
 			 : "(unknown)");
 
-	if (btree_node_type_is_extents(type) && !bkey_whiteout(k.k)) {
+	if (btree_node_type_is_extents(type) && !bkey_extent_whiteout(k.k)) {
 		bkey_fsck_err_on(k.k->size == 0,
 				 c, bkey_extent_size_zero,
 				 "size == 0");
@@ -338,15 +342,6 @@ void bch2_bkey_swab_val(struct bkey_s k)
 
 	if (ops->swab)
 		ops->swab(k);
-}
-
-bool bch2_bkey_normalize(struct bch_fs *c, struct bkey_s k)
-{
-	const struct bkey_ops *ops = bch2_bkey_type_ops(k.k->type);
-
-	return ops->key_normalize
-		? ops->key_normalize(c, k)
-		: false;
 }
 
 bool bch2_bkey_merge(struct bch_fs *c, struct bkey_s l, struct bkey_s_c r)

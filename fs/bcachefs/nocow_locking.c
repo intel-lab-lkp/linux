@@ -2,10 +2,9 @@
 
 #include "bcachefs.h"
 #include "bkey_methods.h"
+#include "closure.h"
 #include "nocow_locking.h"
 #include "util.h"
-
-#include <linux/closure.h>
 
 bool bch2_bucket_nocow_is_locked(struct bucket_nocow_lock_table *t, struct bpos bucket)
 {
@@ -47,7 +46,7 @@ bool __bch2_bucket_nocow_trylock(struct nocow_lock_bucket *l,
 	int v, lock_val = flags ? 1 : -1;
 	unsigned i;
 
-	spin_lock(&l->lock);
+	guard(spinlock)(&l->lock);
 
 	for (i = 0; i < ARRAY_SIZE(l->b); i++)
 		if (l->b[i] == dev_bucket)
@@ -58,21 +57,19 @@ bool __bch2_bucket_nocow_trylock(struct nocow_lock_bucket *l,
 			l->b[i] = dev_bucket;
 			goto take_lock;
 		}
-fail:
-	spin_unlock(&l->lock);
+
 	return false;
 got_entry:
 	v = atomic_read(&l->l[i]);
 	if (lock_val > 0 ? v < 0 : v > 0)
-		goto fail;
+		return false;
 take_lock:
 	v = atomic_read(&l->l[i]);
 	/* Overflow? */
 	if (v && sign(v + lock_val) != sign(v))
-		goto fail;
+		return false;
 
 	atomic_add(lock_val, &l->l[i]);
-	spin_unlock(&l->lock);
 	return true;
 }
 

@@ -29,6 +29,7 @@
 	x(stripes_read,				 1, 0)					\
 	x(initialize_subvolumes,		 2, 0)					\
 	x(snapshots_read,			 3, PASS_ALWAYS)			\
+	x(delete_dead_interior_snapshots,	44, 0)					\
 	x(check_allocations,			 5, PASS_FSCK_ALLOC)			\
 	x(trans_mark_dev_sbs,			 6, PASS_ALWAYS|PASS_SILENT|PASS_ALLOC)	\
 	x(fs_journal_alloc,			 7, PASS_ALWAYS|PASS_SILENT|PASS_ALLOC)	\
@@ -37,7 +38,7 @@
 	x(check_alloc_info,			10, PASS_ONLINE|PASS_FSCK_ALLOC)	\
 	x(check_lrus,				11, PASS_ONLINE|PASS_FSCK_ALLOC)	\
 	x(check_btree_backpointers,		12, PASS_ONLINE|PASS_FSCK_ALLOC)	\
-	x(check_backpointers_to_extents,	13, PASS_ONLINE|PASS_FSCK_DEBUG)	\
+	x(check_backpointers_to_extents,	13, PASS_ONLINE)			\
 	x(check_extents_to_backpointers,	14, PASS_ONLINE|PASS_FSCK_ALLOC)	\
 	x(check_alloc_to_lru_refs,		15, PASS_ONLINE|PASS_FSCK_ALLOC)	\
 	x(fs_freespace_init,			16, PASS_ALWAYS|PASS_SILENT)		\

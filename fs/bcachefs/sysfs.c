@@ -18,6 +18,7 @@
 #include "btree_key_cache.h"
 #include "btree_update.h"
 #include "btree_update_interior.h"
+#include "btree_write_buffer.h"
 #include "btree_gc.h"
 #include "buckets.h"
 #include "clock.h"
@@ -44,6 +45,7 @@
 
 #include <linux/blkdev.h>
 #include <linux/sort.h>
+#include <linux/string_choices.h>
 #include <linux/sched/clock.h>
 
 #include "util.h"
@@ -61,7 +63,7 @@ static ssize_t fn ## _to_text(struct printbuf *,			\
 static ssize_t fn ## _show(struct kobject *kobj, struct attribute *attr,\
 			   char *buf)					\
 {									\
-	struct printbuf out = PRINTBUF;					\
+	CLASS(printbuf, out)();						\
 	ssize_t ret = fn ## _to_text(&out, kobj, attr);			\
 									\
 	if (out.pos && out.buf[out.pos - 1] != '\n')			\
@@ -74,7 +76,6 @@ static ssize_t fn ## _show(struct kobject *kobj, struct attribute *attr,\
 		ret = min_t(size_t, out.pos, PAGE_SIZE - 1);		\
 		memcpy(buf, out.buf, ret);				\
 	}								\
-	printbuf_exit(&out);						\
 	return bch2_err_class(ret);					\
 }									\
 									\
@@ -150,12 +151,14 @@ write_attribute(trigger_journal_flush);
 write_attribute(trigger_journal_writes);
 write_attribute(trigger_btree_cache_shrink);
 write_attribute(trigger_btree_key_cache_shrink);
+write_attribute(trigger_btree_write_buffer_flush);
 write_attribute(trigger_btree_updates);
 write_attribute(trigger_freelist_wakeup);
 write_attribute(trigger_recalc_capacity);
 write_attribute(trigger_delete_dead_snapshots);
 write_attribute(trigger_emergency_read_only);
 read_attribute(gc_gens_pos);
+__sysfs_attribute(read_fua_test, 0400);
 
 read_attribute(uuid);
 read_attribute(minor);
@@ -170,7 +173,9 @@ read_attribute(io_latency_read);
 read_attribute(io_latency_write);
 read_attribute(io_latency_stats_read);
 read_attribute(io_latency_stats_write);
+#ifndef CONFIG_BCACHEFS_NO_LATENCY_ACCT
 read_attribute(congested);
+#endif
 
 read_attribute(btree_write_stats);
 
@@ -231,14 +236,13 @@ static size_t bch2_btree_cache_size(struct bch_fs *c)
 	size_t ret = 0;
 	struct btree *b;
 
-	mutex_lock(&bc->lock);
+	guard(mutex)(&bc->lock);
 	list_for_each_entry(b, &bc->live[0].list, list)
 		ret += btree_buf_bytes(b);
 	list_for_each_entry(b, &bc->live[1].list, list)
 		ret += btree_buf_bytes(b);
 	list_for_each_entry(b, &bc->freeable, list)
 		ret += btree_buf_bytes(b);
-	mutex_unlock(&bc->lock);
 	return ret;
 }
 
@@ -300,7 +304,116 @@ static void bch2_fs_usage_base_to_text(struct printbuf *out, struct bch_fs *c)
 	prt_printf(out, "data:\t\t%llu\n",	b.data);
 	prt_printf(out, "cached:\t%llu\n",	b.cached);
 	prt_printf(out, "reserved:\t\t%llu\n",	b.reserved);
-	prt_printf(out, "nr_inodes:\t%llu\n",	b.nr_inodes);
+}
+
+static int bch2_read_fua_test(struct printbuf *out, struct bch_dev *ca)
+{
+	struct bch_fs *c = ca->fs;
+	struct bio *bio = NULL;
+	void *buf = NULL;
+	unsigned bs = c->opts.block_size, iters;
+	u64 end, test_duration = NSEC_PER_SEC * 2;
+	struct bch2_time_stats stats_nofua, stats_fua, stats_random;
+	int ret = 0;
+
+	bch2_time_stats_init_no_pcpu(&stats_nofua);
+	bch2_time_stats_init_no_pcpu(&stats_fua);
+	bch2_time_stats_init_no_pcpu(&stats_random);
+
+	if (!bch2_dev_get_ioref(c, ca->dev_idx, READ, BCH_DEV_READ_REF_read_fua_test)) {
+		prt_str(out, "offline\n");
+		return 0;
+	}
+
+	struct block_device *bdev = ca->disk_sb.bdev;
+
+	bio = bio_kmalloc(1, GFP_KERNEL);
+	if (!bio) {
+		ret = -ENOMEM;
+		goto err;
+	}
+
+	buf = kmalloc(bs, GFP_KERNEL);
+	if (!buf)
+		goto err;
+
+	end = ktime_get_ns() + test_duration;
+	for (iters = 0; iters < 1000 && time_before64(ktime_get_ns(), end); iters++) {
+		bio_init(bio, bdev, bio->bi_inline_vecs, 1, READ);
+		bch2_bio_map(bio, buf, bs);
+
+		u64 submit_time = ktime_get_ns();
+		ret = submit_bio_wait(bio);
+		bch2_time_stats_update(&stats_nofua, submit_time);
+
+		if (ret)
+			goto err;
+	}
+
+	end = ktime_get_ns() + test_duration;
+	for (iters = 0; iters < 1000 && time_before64(ktime_get_ns(), end); iters++) {
+		bio_init(bio, bdev, bio->bi_inline_vecs, 1, REQ_FUA|READ);
+		bch2_bio_map(bio, buf, bs);
+
+		u64 submit_time = ktime_get_ns();
+		ret = submit_bio_wait(bio);
+		bch2_time_stats_update(&stats_fua, submit_time);
+
+		if (ret)
+			goto err;
+	}
+
+	u64 dev_size = ca->mi.nbuckets * bucket_bytes(ca);
+
+	end = ktime_get_ns() + test_duration;
+	for (iters = 0; iters < 1000 && time_before64(ktime_get_ns(), end); iters++) {
+		bio_init(bio, bdev, bio->bi_inline_vecs, 1, READ);
+		bio->bi_iter.bi_sector = (bch2_get_random_u64_below(dev_size) & ~((u64) bs - 1)) >> 9;
+		bch2_bio_map(bio, buf, bs);
+
+		u64 submit_time = ktime_get_ns();
+		ret = submit_bio_wait(bio);
+		bch2_time_stats_update(&stats_random, submit_time);
+
+		if (ret)
+			goto err;
+	}
+
+	u64 ns_nofua		= mean_and_variance_get_mean(stats_nofua.duration_stats);
+	u64 ns_fua		= mean_and_variance_get_mean(stats_fua.duration_stats);
+	u64 ns_rand		= mean_and_variance_get_mean(stats_random.duration_stats);
+
+	u64 stddev_nofua	= mean_and_variance_get_stddev(stats_nofua.duration_stats);
+	u64 stddev_fua		= mean_and_variance_get_stddev(stats_fua.duration_stats);
+	u64 stddev_rand		= mean_and_variance_get_stddev(stats_random.duration_stats);
+
+	printbuf_tabstop_push(out, 8);
+	printbuf_tabstop_push(out, 12);
+	printbuf_tabstop_push(out, 12);
+	prt_printf(out, "This test must be run on an idle drive for accurate results\n");
+	prt_printf(out, "%s\n", dev_name(&ca->disk_sb.bdev->bd_device));
+	prt_printf(out, "fua support advertized: %s\n", str_yes_no(bdev_fua(bdev)));
+	prt_newline(out);
+	prt_printf(out, "ns:\tlatency\rstddev\r\n");
+	prt_printf(out, "nofua\t%llu\r%llu\r\n",	ns_nofua,	stddev_nofua);
+	prt_printf(out, "fua\t%llu\r%llu\r\n",		ns_fua,		stddev_fua);
+	prt_printf(out, "random\t%llu\r%llu\r\n",	ns_rand,	stddev_rand);
+
+	bool read_cache = ns_nofua * 2 < ns_rand;
+	bool fua_cached	= read_cache && ns_fua < (ns_nofua + ns_rand) / 2;
+
+	if (!read_cache)
+		prt_str(out, "reads don't appear to be cached - safe\n");
+	else if (!fua_cached)
+		prt_str(out, "fua reads don't appear to be cached - safe\n");
+	else
+		prt_str(out, "fua reads appear to be cached - unsafe\n");
+err:
+	kfree(buf);
+	kfree(bio);
+	enumerated_ref_put(&ca->io_ref[READ], BCH_DEV_READ_REF_read_fua_test);
+	bch_err_fn(c, ret);
+	return ret;
 }
 
 SHOW(bch2_fs)
@@ -427,6 +540,11 @@ STORE(bch2_fs)
 		c->btree_key_cache.shrink->scan_objects(c->btree_key_cache.shrink, &sc);
 	}
 
+	if (attr == &sysfs_trigger_btree_write_buffer_flush)
+		bch2_trans_do(c,
+			      (bch2_btree_write_buffer_flush_sync(trans),
+			       bch2_trans_begin(trans)));
+
 	if (attr == &sysfs_trigger_gc)
 		bch2_gc_gens(c);
 
@@ -451,9 +569,8 @@ STORE(bch2_fs)
 		closure_wake_up(&c->freelist_wait);
 
 	if (attr == &sysfs_trigger_recalc_capacity) {
-		down_read(&c->state_lock);
+		guard(rwsem_read)(&c->state_lock);
 		bch2_recalc_capacity(c);
-		up_read(&c->state_lock);
 	}
 
 	if (attr == &sysfs_trigger_delete_dead_snapshots)
@@ -598,6 +715,7 @@ struct attribute *bch2_fs_internal_files[] = {
 	&sysfs_trigger_journal_writes,
 	&sysfs_trigger_btree_cache_shrink,
 	&sysfs_trigger_btree_key_cache_shrink,
+	&sysfs_trigger_btree_write_buffer_flush,
 	&sysfs_trigger_btree_updates,
 	&sysfs_trigger_freelist_wakeup,
 	&sysfs_trigger_recalc_capacity,
@@ -666,7 +784,7 @@ static ssize_t sysfs_opt_store(struct bch_fs *c,
 
 	u64 v;
 	ret =   bch2_opt_parse(c, opt, strim(tmp), &v, NULL) ?:
-		bch2_opt_hook_pre_set(c, ca, id, v);
+		bch2_opt_hook_pre_set(c, ca, 0, id, v, true);
 	kfree(tmp);
 
 	if (ret < 0)
@@ -689,7 +807,7 @@ static ssize_t sysfs_opt_store(struct bch_fs *c,
 		bch2_opt_set_by_id(&c->opts, id, v);
 
 	if (changed)
-		bch2_opt_hook_post_set(c, ca, 0, &c->opts, id);
+		bch2_opt_hook_post_set(c, ca, 0, id, v);
 
 	ret = size;
 err:
@@ -830,15 +948,19 @@ SHOW(bch2_dev)
 	if (attr == &sysfs_io_latency_stats_write)
 		bch2_time_stats_to_text(out, &ca->io_latency[WRITE].stats);
 
-	sysfs_printf(congested,			"%u%%",
-		     clamp(atomic_read(&ca->congested), 0, CONGESTED_MAX)
-		     * 100 / CONGESTED_MAX);
+#ifndef CONFIG_BCACHEFS_NO_LATENCY_ACCT
+	if (attr == &sysfs_congested)
+		bch2_dev_congested_to_text(out, ca);
+#endif
 
 	if (attr == &sysfs_alloc_debug)
 		bch2_dev_alloc_debug_to_text(out, ca);
 
 	if (attr == &sysfs_open_buckets)
 		bch2_open_buckets_to_text(out, c, ca);
+
+	if (attr == &sysfs_read_fua_test)
+		return bch2_read_fua_test(out, ca);
 
 	int opt_id = bch2_opt_lookup(attr->name);
 	if (opt_id >= 0)
@@ -900,7 +1022,11 @@ struct attribute *bch2_dev_files[] = {
 	&sysfs_io_latency_write,
 	&sysfs_io_latency_stats_read,
 	&sysfs_io_latency_stats_write,
+#ifndef CONFIG_BCACHEFS_NO_LATENCY_ACCT
 	&sysfs_congested,
+#endif
+
+	&sysfs_read_fua_test,
 
 	/* debug: */
 	&sysfs_alloc_debug,

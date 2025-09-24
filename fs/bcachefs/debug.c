@@ -141,7 +141,7 @@ void __bch2_btree_verify(struct bch_fs *c, struct btree *b)
 		return;
 
 	bch2_btree_node_io_lock(b);
-	mutex_lock(&c->verify_lock);
+	guard(mutex)(&c->verify_lock);
 
 	if (!c->verify_ondisk) {
 		c->verify_ondisk = kvmalloc(btree_buf_bytes(b), GFP_KERNEL);
@@ -172,14 +172,11 @@ void __bch2_btree_verify(struct bch_fs *c, struct btree *b)
 		failed |= bch2_btree_verify_replica(c, b, p);
 
 	if (failed) {
-		struct printbuf buf = PRINTBUF;
-
+		CLASS(printbuf, buf)();
 		bch2_bkey_val_to_text(&buf, c, bkey_i_to_s_c(&b->key));
 		bch2_fs_fatal_error(c, ": btree node verify failed for: %s\n", buf.buf);
-		printbuf_exit(&buf);
 	}
 out:
-	mutex_unlock(&c->verify_lock);
 	bch2_btree_node_io_unlock(b);
 }
 
@@ -285,16 +282,13 @@ void bch2_btree_node_ondisk_to_text(struct printbuf *out, struct bch_fs *c,
 			   le64_to_cpu(i->journal_seq));
 		offset += sectors;
 
-		printbuf_indent_add(out, 4);
+		scoped_guard(printbuf_indent, out)
+			for (k = i->start; k != vstruct_last(i); k = bkey_p_next(k)) {
+				struct bkey u;
 
-		for (k = i->start; k != vstruct_last(i); k = bkey_p_next(k)) {
-			struct bkey u;
-
-			bch2_bkey_val_to_text(out, c, bkey_disassemble(b, k, &u));
-			prt_newline(out);
-		}
-
-		printbuf_indent_sub(out, 4);
+				bch2_bkey_val_to_text(out, c, bkey_disassemble(b, k, &u));
+				prt_newline(out);
+			}
 	}
 out:
 	if (bio)
@@ -367,17 +361,17 @@ static ssize_t bch2_read_btree(struct file *file, char __user *buf,
 	i->size	= size;
 	i->ret	= 0;
 
+	CLASS(btree_trans, trans)(i->c);
 	return bch2_debugfs_flush_buf(i) ?:
-		bch2_trans_run(i->c,
-			for_each_btree_key(trans, iter, i->id, i->from,
-					   BTREE_ITER_prefetch|
-					   BTREE_ITER_all_snapshots, k, ({
-				bch2_bkey_val_to_text(&i->buf, i->c, k);
-				prt_newline(&i->buf);
-				bch2_trans_unlock(trans);
-				i->from = bpos_successor(iter.pos);
-				bch2_debugfs_flush_buf(i);
-			}))) ?:
+		for_each_btree_key(trans, iter, i->id, i->from,
+				   BTREE_ITER_prefetch|
+				   BTREE_ITER_all_snapshots, k, ({
+			bch2_bkey_val_to_text(&i->buf, i->c, k);
+			prt_newline(&i->buf);
+			bch2_trans_unlock(trans);
+			i->from = bpos_successor(iter.pos);
+			bch2_debugfs_flush_buf(i);
+		})) ?:
 		i->ret;
 }
 
@@ -404,15 +398,15 @@ static ssize_t bch2_read_btree_formats(struct file *file, char __user *buf,
 	if (bpos_eq(SPOS_MAX, i->from))
 		return i->ret;
 
-	return bch2_trans_run(i->c,
-		for_each_btree_node(trans, iter, i->id, i->from, 0, b, ({
-			bch2_btree_node_to_text(&i->buf, i->c, b);
-			i->from = !bpos_eq(SPOS_MAX, b->key.k.p)
-				? bpos_successor(b->key.k.p)
-				: b->key.k.p;
+	CLASS(btree_trans, trans)(i->c);
+	return for_each_btree_node(trans, iter, i->id, i->from, 0, b, ({
+		bch2_btree_node_to_text(&i->buf, i->c, b);
+		i->from = !bpos_eq(SPOS_MAX, b->key.k.p)
+			? bpos_successor(b->key.k.p)
+			: b->key.k.p;
 
-			drop_locks_do(trans, bch2_debugfs_flush_buf(i));
-		}))) ?: i->ret;
+		drop_locks_do(trans, bch2_debugfs_flush_buf(i));
+	})) ?: i->ret;
 }
 
 static const struct file_operations btree_format_debug_ops = {
@@ -431,27 +425,27 @@ static ssize_t bch2_read_bfloat_failed(struct file *file, char __user *buf,
 	i->size	= size;
 	i->ret	= 0;
 
+	CLASS(btree_trans, trans)(i->c);
 	return bch2_debugfs_flush_buf(i) ?:
-		bch2_trans_run(i->c,
-			for_each_btree_key(trans, iter, i->id, i->from,
-					   BTREE_ITER_prefetch|
-					   BTREE_ITER_all_snapshots, k, ({
-				struct btree_path_level *l =
-					&btree_iter_path(trans, &iter)->l[0];
-				struct bkey_packed *_k =
-					bch2_btree_node_iter_peek(&l->iter, l->b);
+		for_each_btree_key(trans, iter, i->id, i->from,
+				   BTREE_ITER_prefetch|
+				   BTREE_ITER_all_snapshots, k, ({
+			struct btree_path_level *l =
+				&btree_iter_path(trans, &iter)->l[0];
+			struct bkey_packed *_k =
+				bch2_btree_node_iter_peek(&l->iter, l->b);
 
-				if (bpos_gt(l->b->key.k.p, i->prev_node)) {
-					bch2_btree_node_to_text(&i->buf, i->c, l->b);
-					i->prev_node = l->b->key.k.p;
-				}
+			if (bpos_gt(l->b->key.k.p, i->prev_node)) {
+				bch2_btree_node_to_text(&i->buf, i->c, l->b);
+				i->prev_node = l->b->key.k.p;
+			}
 
-				bch2_bfloat_to_text(&i->buf, l->b, _k);
-				bch2_trans_unlock(trans);
-				i->from = bpos_successor(iter.pos);
-				bch2_debugfs_flush_buf(i);
-			}))) ?:
-		i->ret;
+			bch2_bfloat_to_text(&i->buf, l->b, _k);
+			bch2_trans_unlock(trans);
+			i->from = bpos_successor(iter.pos);
+			bch2_debugfs_flush_buf(i);
+		})) ?:
+	i->ret;
 }
 
 static const struct file_operations bfloat_failed_debug_ops = {
@@ -465,13 +459,13 @@ static void bch2_cached_btree_node_to_text(struct printbuf *out, struct bch_fs *
 					   struct btree *b)
 {
 	if (!out->nr_tabstops)
-		printbuf_tabstop_push(out, 32);
+		printbuf_tabstop_push(out, 36);
 
 	prt_printf(out, "%px ", b);
 	bch2_btree_id_level_to_text(out, b->c.btree_id, b->c.level);
 	prt_printf(out, "\n");
 
-	printbuf_indent_add(out, 2);
+	guard(printbuf_indent)(out);
 
 	bch2_bkey_val_to_text(out, c, bkey_i_to_s_c(&b->key));
 	prt_newline(out);
@@ -491,8 +485,6 @@ static void bch2_cached_btree_node_to_text(struct printbuf *out, struct bch_fs *
 		   &b->writes[1].journal, b->writes[1].journal.seq);
 
 	prt_printf(out, "ob:\t%u\n", b->ob.nr);
-
-	printbuf_indent_sub(out, 2);
 }
 
 static ssize_t bch2_cached_btree_nodes_read(struct file *file, char __user *buf,
@@ -512,8 +504,8 @@ static ssize_t bch2_cached_btree_nodes_read(struct file *file, char __user *buf,
 		if (ret)
 			return ret;
 
-		i->buf.atomic++;
 		scoped_guard(rcu) {
+			guard(printbuf_atomic)(&i->buf);
 			struct bucket_table *tbl =
 				rht_dereference_rcu(c->btree_cache.table.tbl,
 						    &c->btree_cache.table);
@@ -528,7 +520,6 @@ static ssize_t bch2_cached_btree_nodes_read(struct file *file, char __user *buf,
 				done = true;
 			}
 		}
-		--i->buf.atomic;
 	} while (!done);
 
 	if (i->buf.allocation_failure)
@@ -609,9 +600,8 @@ restart:
 		bch2_btree_trans_to_text(&i->buf, trans);
 
 		prt_printf(&i->buf, "backtrace:\n");
-		printbuf_indent_add(&i->buf, 2);
-		bch2_prt_task_backtrace(&i->buf, trans->locking_wait.task, 0, GFP_KERNEL);
-		printbuf_indent_sub(&i->buf, 2);
+		scoped_guard(printbuf_indent, &i->buf)
+			bch2_prt_task_backtrace(&i->buf, trans->locking_wait.task, 0, GFP_KERNEL);
 		prt_newline(&i->buf);
 
 		closure_put(&trans->ref);
@@ -769,42 +759,35 @@ static ssize_t btree_transaction_stats_read(struct file *file, char __user *buf,
 			break;
 
 		prt_printf(&i->buf, "%s:\n", bch2_btree_transaction_fns[i->iter]);
-		printbuf_indent_add(&i->buf, 2);
+		guard(printbuf_indent)(&i->buf);
 
-		mutex_lock(&s->lock);
+		guard(mutex)(&s->lock);
 
 		prt_printf(&i->buf, "Max mem used: %u\n", s->max_mem);
 #ifdef CONFIG_BCACHEFS_TRANS_KMALLOC_TRACE
-		printbuf_indent_add(&i->buf, 2);
-		bch2_trans_kmalloc_trace_to_text(&i->buf, &s->trans_kmalloc_trace);
-		printbuf_indent_sub(&i->buf, 2);
+		scoped_guard(printbuf_indent, &i->buf)
+			bch2_trans_kmalloc_trace_to_text(&i->buf, &s->trans_kmalloc_trace);
 #endif
 
 		prt_printf(&i->buf, "Transaction duration:\n");
 
-		printbuf_indent_add(&i->buf, 2);
-		bch2_time_stats_to_text(&i->buf, &s->duration);
-		printbuf_indent_sub(&i->buf, 2);
+		scoped_guard(printbuf_indent, &i->buf)
+			bch2_time_stats_to_text(&i->buf, &s->duration);
 
 		if (IS_ENABLED(CONFIG_BCACHEFS_LOCK_TIME_STATS)) {
 			prt_printf(&i->buf, "Lock hold times:\n");
 
-			printbuf_indent_add(&i->buf, 2);
-			bch2_time_stats_to_text(&i->buf, &s->lock_hold_times);
-			printbuf_indent_sub(&i->buf, 2);
+			scoped_guard(printbuf_indent, &i->buf)
+				bch2_time_stats_to_text(&i->buf, &s->lock_hold_times);
 		}
 
 		if (s->max_paths_text) {
 			prt_printf(&i->buf, "Maximum allocated btree paths (%u):\n", s->nr_max_paths);
 
-			printbuf_indent_add(&i->buf, 2);
-			prt_str_indented(&i->buf, s->max_paths_text);
-			printbuf_indent_sub(&i->buf, 2);
+			scoped_guard(printbuf_indent, &i->buf)
+				prt_str_indented(&i->buf, s->max_paths_text);
 		}
 
-		mutex_unlock(&s->lock);
-
-		printbuf_indent_sub(&i->buf, 2);
 		prt_newline(&i->buf);
 		i->iter++;
 	}

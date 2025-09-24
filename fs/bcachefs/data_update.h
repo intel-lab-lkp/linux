@@ -12,6 +12,7 @@ struct moving_context;
 struct data_update_opts {
 	unsigned	rewrite_ptrs;
 	unsigned	kill_ptrs;
+	unsigned	kill_ec_ptrs;
 	u16		target;
 	u8		extra_replicas;
 	unsigned	btree_insert_flags;
@@ -22,7 +23,7 @@ struct data_update_opts {
 };
 
 void bch2_data_update_opts_to_text(struct printbuf *, struct bch_fs *,
-				   struct bch_io_opts *, struct data_update_opts *);
+				   struct bch_inode_opts *, struct data_update_opts *);
 
 #define BCH_DATA_UPDATE_TYPES()		\
 	x(copygc,	0)		\
@@ -42,6 +43,11 @@ struct data_update {
 	enum btree_id		btree_id;
 	struct bkey_buf		k;
 	struct data_update_opts	data_opts;
+
+	/* associated with @ctxt */
+	struct list_head	read_list;
+	struct list_head	io_list;
+	struct move_bucket	*b;
 	struct moving_context	*ctxt;
 	struct bch_move_stats	*stats;
 
@@ -75,18 +81,18 @@ void bch2_data_update_read_done(struct data_update *);
 int bch2_extent_drop_ptrs(struct btree_trans *,
 			  struct btree_iter *,
 			  struct bkey_s_c,
-			  struct bch_io_opts *,
+			  struct bch_inode_opts *,
 			  struct data_update_opts *);
 
 int bch2_data_update_bios_init(struct data_update *, struct bch_fs *,
-			       struct bch_io_opts *);
+			       struct bch_inode_opts *);
 
 void bch2_data_update_exit(struct data_update *);
 int bch2_data_update_init(struct btree_trans *, struct btree_iter *,
 			  struct moving_context *,
 			  struct data_update *,
 			  struct write_point_specifier,
-			  struct bch_io_opts *, struct data_update_opts,
+			  struct bch_inode_opts *, struct data_update_opts,
 			  enum btree_id, struct bkey_s_c);
 void bch2_data_update_opts_normalize(struct bkey_s_c, struct data_update_opts *);
 

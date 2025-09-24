@@ -24,6 +24,8 @@ struct shrinker_info {
 	struct shrinker_info_unit *unit[];
 };
 
+struct seq_buf;
+
 /*
  * This struct is used to pass information from page reclaim to the shrinkers.
  * We consolidate the values for easier extension later.
@@ -80,10 +82,12 @@ struct shrink_control {
  * @flags determine the shrinker abilities, like numa awareness
  */
 struct shrinker {
+	const char *name;
 	unsigned long (*count_objects)(struct shrinker *,
 				       struct shrink_control *sc);
 	unsigned long (*scan_objects)(struct shrinker *,
 				      struct shrink_control *sc);
+	void (*to_text)(struct seq_buf *, struct shrinker *);
 
 	long batch;	/* reclaim batch size, 0 = default */
 	int seeks;	/* seeks to recreate an obj */
@@ -110,11 +114,16 @@ struct shrinker {
 #endif
 #ifdef CONFIG_SHRINKER_DEBUG
 	int debugfs_id;
-	const char *name;
 	struct dentry *debugfs_entry;
 #endif
 	/* objs pending delete, per node */
 	atomic_long_t *nr_deferred;
+
+	atomic_long_t	objects_requested_to_free;
+	atomic_long_t	objects_freed;
+	unsigned long	last_freed;	/* timestamp, in jiffies */
+	unsigned long	last_scanned;	/* timestamp, in jiffies */
+	atomic64_t	ns_run;
 };
 #define DEFAULT_SEEKS 2 /* A good number if you don't know better. */
 
@@ -135,6 +144,8 @@ __printf(2, 3)
 struct shrinker *shrinker_alloc(unsigned int flags, const char *fmt, ...);
 void shrinker_register(struct shrinker *shrinker);
 void shrinker_free(struct shrinker *shrinker);
+void shrinker_to_text(struct seq_buf *, struct shrinker *);
+void shrinkers_to_text(struct seq_buf *);
 
 static inline bool shrinker_try_get(struct shrinker *shrinker)
 {

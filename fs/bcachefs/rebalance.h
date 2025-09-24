@@ -8,7 +8,7 @@
 #include "rebalance_types.h"
 
 static inline struct bch_extent_rebalance io_opts_to_rebalance_opts(struct bch_fs *c,
-								    struct bch_io_opts *opts)
+								    struct bch_inode_opts *opts)
 {
 	struct bch_extent_rebalance r = {
 		.type = BIT(BCH_EXTENT_ENTRY_rebalance),
@@ -26,12 +26,59 @@ static inline struct bch_extent_rebalance io_opts_to_rebalance_opts(struct bch_f
 	return r;
 };
 
+void bch2_extent_rebalance_to_text(struct printbuf *, struct bch_fs *,
+				   const struct bch_extent_rebalance *);
+
+int bch2_trigger_extent_rebalance(struct btree_trans *,
+				  struct bkey_s_c, struct bkey_s_c,
+				  enum btree_iter_update_trigger_flags);
+
 u64 bch2_bkey_sectors_need_rebalance(struct bch_fs *, struct bkey_s_c);
-int bch2_bkey_set_needs_rebalance(struct bch_fs *, struct bch_io_opts *, struct bkey_i *);
-int bch2_get_update_rebalance_opts(struct btree_trans *,
-				   struct bch_io_opts *,
-				   struct btree_iter *,
-				   struct bkey_s_c);
+
+enum set_needs_rebalance_ctx {
+	SET_NEEDS_REBALANCE_opt_change,
+	SET_NEEDS_REBALANCE_opt_change_indirect,
+	SET_NEEDS_REBALANCE_foreground,
+	SET_NEEDS_REBALANCE_other,
+};
+
+int bch2_bkey_set_needs_rebalance(struct bch_fs *, struct bch_inode_opts *,
+				  struct bkey_i *, enum set_needs_rebalance_ctx, u32);
+
+/* Inodes in different snapshots may have different IO options: */
+struct snapshot_io_opts_entry {
+	u32			snapshot;
+	struct bch_inode_opts	io_opts;
+};
+
+struct per_snapshot_io_opts {
+	u64			cur_inum;
+	struct bch_inode_opts	fs_io_opts;
+	DARRAY(struct snapshot_io_opts_entry) d;
+};
+
+static inline void per_snapshot_io_opts_init(struct per_snapshot_io_opts *io_opts, struct bch_fs *c)
+{
+	memset(io_opts, 0, sizeof(*io_opts));
+	bch2_inode_opts_get(c, &io_opts->fs_io_opts);
+}
+
+static inline void per_snapshot_io_opts_exit(struct per_snapshot_io_opts *io_opts)
+{
+	darray_exit(&io_opts->d);
+}
+
+struct bch_inode_opts *bch2_extent_get_apply_io_opts(struct btree_trans *,
+			  struct per_snapshot_io_opts *, struct bpos,
+			  struct btree_iter *, struct bkey_s_c,
+			  enum set_needs_rebalance_ctx);
+
+int bch2_extent_get_io_opts_one(struct btree_trans *, struct bch_inode_opts *,
+				struct btree_iter *, struct bkey_s_c,
+				enum set_needs_rebalance_ctx);
+int bch2_extent_get_apply_io_opts_one(struct btree_trans *, struct bch_inode_opts *,
+				      struct btree_iter *, struct bkey_s_c,
+				      enum set_needs_rebalance_ctx);
 
 int bch2_set_rebalance_needs_scan_trans(struct btree_trans *, u64);
 int bch2_set_rebalance_needs_scan(struct bch_fs *, u64 inum);

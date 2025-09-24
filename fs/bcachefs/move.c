@@ -46,39 +46,37 @@ struct evacuate_bucket_arg {
 
 static bool evacuate_bucket_pred(struct bch_fs *, void *,
 				 enum btree_id, struct bkey_s_c,
-				 struct bch_io_opts *,
+				 struct bch_inode_opts *,
 				 struct data_update_opts *);
 
 static noinline void
 trace_io_move2(struct bch_fs *c, struct bkey_s_c k,
-	       struct bch_io_opts *io_opts,
+	       struct bch_inode_opts *io_opts,
 	       struct data_update_opts *data_opts)
 {
-	struct printbuf buf = PRINTBUF;
+	CLASS(printbuf, buf)();
 
 	bch2_bkey_val_to_text(&buf, c, k);
 	prt_newline(&buf);
 	bch2_data_update_opts_to_text(&buf, c, io_opts, data_opts);
 	trace_io_move(c, buf.buf);
-	printbuf_exit(&buf);
 }
 
 static noinline void trace_io_move_read2(struct bch_fs *c, struct bkey_s_c k)
 {
-	struct printbuf buf = PRINTBUF;
+	CLASS(printbuf, buf)();
 
 	bch2_bkey_val_to_text(&buf, c, k);
 	trace_io_move_read(c, buf.buf);
-	printbuf_exit(&buf);
 }
 
 static noinline void
 trace_io_move_pred2(struct bch_fs *c, struct bkey_s_c k,
-		    struct bch_io_opts *io_opts,
+		    struct bch_inode_opts *io_opts,
 		    struct data_update_opts *data_opts,
 		    move_pred_fn pred, void *_arg, bool p)
 {
-	struct printbuf buf = PRINTBUF;
+	CLASS(printbuf, buf)();
 
 	prt_printf(&buf, "%ps: %u", pred, p);
 
@@ -92,7 +90,6 @@ trace_io_move_pred2(struct bch_fs *c, struct bkey_s_c k,
 	prt_newline(&buf);
 	bch2_data_update_opts_to_text(&buf, c, io_opts, data_opts);
 	trace_io_move_pred(c, buf.buf);
-	printbuf_exit(&buf);
 }
 
 static noinline void
@@ -108,77 +105,42 @@ trace_io_move_evacuate_bucket2(struct bch_fs *c, struct bpos bucket, int gen)
 	printbuf_exit(&buf);
 }
 
-struct moving_io {
-	struct list_head		read_list;
-	struct list_head		io_list;
-	struct move_bucket		*b;
-	struct closure			cl;
-	bool				read_completed;
-
-	unsigned			read_sectors;
-	unsigned			write_sectors;
-
-	struct data_update		write;
-};
-
-static void move_free(struct moving_io *io)
-{
-	struct moving_context *ctxt = io->write.ctxt;
-
-	if (io->b)
-		atomic_dec(&io->b->count);
-
-	mutex_lock(&ctxt->lock);
-	list_del(&io->io_list);
-	wake_up(&ctxt->wait);
-	mutex_unlock(&ctxt->lock);
-
-	if (!io->write.data_opts.scrub) {
-		bch2_data_update_exit(&io->write);
-	} else {
-		bch2_bio_free_pages_pool(io->write.op.c, &io->write.op.wbio.bio);
-		kfree(io->write.bvecs);
-	}
-	kfree(io);
-}
-
 static void move_write_done(struct bch_write_op *op)
 {
-	struct moving_io *io = container_of(op, struct moving_io, write.op);
+	struct data_update *u = container_of(op, struct data_update, op);
 	struct bch_fs *c = op->c;
-	struct moving_context *ctxt = io->write.ctxt;
+	struct moving_context *ctxt = u->ctxt;
 
 	if (op->error) {
 		if (trace_io_move_write_fail_enabled()) {
-			struct printbuf buf = PRINTBUF;
-
+			CLASS(printbuf, buf)();
 			bch2_write_op_to_text(&buf, op);
 			trace_io_move_write_fail(c, buf.buf);
-			printbuf_exit(&buf);
 		}
-		this_cpu_inc(c->counters[BCH_COUNTER_io_move_write_fail]);
+		count_event(c, io_move_write_fail);
 
 		ctxt->write_error = true;
 	}
 
-	atomic_sub(io->write_sectors, &ctxt->write_sectors);
+	atomic_sub(u->k.k->k.size, &ctxt->write_sectors);
 	atomic_dec(&ctxt->write_ios);
-	move_free(io);
+	bch2_data_update_exit(u);
+	kfree(u);
 	closure_put(&ctxt->cl);
 }
 
-static void move_write(struct moving_io *io)
+static void move_write(struct data_update *u)
 {
-	struct bch_fs *c = io->write.op.c;
-	struct moving_context *ctxt = io->write.ctxt;
-	struct bch_read_bio *rbio = &io->write.rbio;
+	struct bch_fs *c = u->op.c;
+	struct moving_context *ctxt = u->ctxt;
+	struct bch_read_bio *rbio = &u->rbio;
 
 	if (ctxt->stats) {
 		if (rbio->bio.bi_status)
-			atomic64_add(io->write.rbio.bvec_iter.bi_size >> 9,
+			atomic64_add(u->rbio.bvec_iter.bi_size >> 9,
 				     &ctxt->stats->sectors_error_uncorrected);
 		else if (rbio->saw_error)
-			atomic64_add(io->write.rbio.bvec_iter.bi_size >> 9,
+			atomic64_add(u->rbio.bvec_iter.bi_size >> 9,
 				     &ctxt->stats->sectors_error_corrected);
 	}
 
@@ -188,7 +150,7 @@ static void move_write(struct moving_io *io)
 	 * that userspace still gets the appropriate error.
 	 */
 	if (unlikely(rbio->ret == -BCH_ERR_data_read_csum_err &&
-		     (bch2_bkey_extent_flags(bkey_i_to_s_c(io->write.k.k)) & BIT_ULL(BCH_EXTENT_FLAG_poisoned)))) {
+		     (bch2_bkey_extent_flags(bkey_i_to_s_c(u->k.k)) & BIT_ULL(BCH_EXTENT_FLAG_poisoned)))) {
 		struct bch_extent_crc_unpacked crc = rbio->pick.crc;
 		struct nonce nonce = extent_nonce(rbio->version, crc);
 
@@ -197,42 +159,41 @@ static void move_write(struct moving_io *io)
 		rbio->ret		= 0;
 	}
 
-	if (unlikely(rbio->ret || io->write.data_opts.scrub)) {
-		move_free(io);
+	if (unlikely(rbio->ret || u->data_opts.scrub)) {
+		bch2_data_update_exit(u);
+		kfree(u);
 		return;
 	}
 
 	if (trace_io_move_write_enabled()) {
-		struct printbuf buf = PRINTBUF;
-
-		bch2_bkey_val_to_text(&buf, c, bkey_i_to_s_c(io->write.k.k));
+		CLASS(printbuf, buf)();
+		bch2_bkey_val_to_text(&buf, c, bkey_i_to_s_c(u->k.k));
 		trace_io_move_write(c, buf.buf);
-		printbuf_exit(&buf);
 	}
 
-	closure_get(&io->write.ctxt->cl);
-	atomic_add(io->write_sectors, &io->write.ctxt->write_sectors);
-	atomic_inc(&io->write.ctxt->write_ios);
+	closure_get(&ctxt->cl);
+	atomic_add(u->k.k->k.size, &ctxt->write_sectors);
+	atomic_inc(&ctxt->write_ios);
 
-	bch2_data_update_read_done(&io->write);
+	bch2_data_update_read_done(u);
 }
 
-struct moving_io *bch2_moving_ctxt_next_pending_write(struct moving_context *ctxt)
+struct data_update *bch2_moving_ctxt_next_pending_write(struct moving_context *ctxt)
 {
-	struct moving_io *io =
-		list_first_entry_or_null(&ctxt->reads, struct moving_io, read_list);
+	struct data_update *u =
+		list_first_entry_or_null(&ctxt->reads, struct data_update, read_list);
 
-	return io && io->read_completed ? io : NULL;
+	return u && u->read_done ? u : NULL;
 }
 
 static void move_read_endio(struct bio *bio)
 {
-	struct moving_io *io = container_of(bio, struct moving_io, write.rbio.bio);
-	struct moving_context *ctxt = io->write.ctxt;
+	struct data_update *u = container_of(bio, struct data_update, rbio.bio);
+	struct moving_context *ctxt = u->ctxt;
 
-	atomic_sub(io->read_sectors, &ctxt->read_sectors);
+	atomic_sub(u->k.k->k.size, &ctxt->read_sectors);
 	atomic_dec(&ctxt->read_ios);
-	io->read_completed = true;
+	u->read_done = true;
 
 	wake_up(&ctxt->wait);
 	closure_put(&ctxt->cl);
@@ -240,12 +201,12 @@ static void move_read_endio(struct bio *bio)
 
 void bch2_moving_ctxt_do_pending_writes(struct moving_context *ctxt)
 {
-	struct moving_io *io;
+	struct data_update *u;
 
-	while ((io = bch2_moving_ctxt_next_pending_write(ctxt))) {
+	while ((u = bch2_moving_ctxt_next_pending_write(ctxt))) {
 		bch2_trans_unlock_long(ctxt->trans);
-		list_del(&io->read_list);
-		move_write(io);
+		list_del(&u->read_list);
+		move_write(u);
 	}
 }
 
@@ -276,9 +237,8 @@ void bch2_moving_ctxt_exit(struct moving_context *ctxt)
 	EBUG_ON(atomic_read(&ctxt->read_sectors));
 	EBUG_ON(atomic_read(&ctxt->read_ios));
 
-	mutex_lock(&c->moving_context_lock);
-	list_del(&ctxt->list);
-	mutex_unlock(&c->moving_context_lock);
+	scoped_guard(mutex, &c->moving_context_lock)
+		list_del(&ctxt->list);
 
 	/*
 	 * Generally, releasing a transaction within a transaction restart means
@@ -314,9 +274,8 @@ void bch2_moving_ctxt_init(struct moving_context *ctxt,
 	INIT_LIST_HEAD(&ctxt->ios);
 	init_waitqueue_head(&ctxt->wait);
 
-	mutex_lock(&c->moving_context_lock);
-	list_add(&ctxt->list, &c->moving_context_list);
-	mutex_unlock(&c->moving_context_lock);
+	scoped_guard(mutex, &c->moving_context_lock)
+		list_add(&ctxt->list, &c->moving_context_list);
 }
 
 void bch2_move_stats_exit(struct bch_move_stats *stats, struct bch_fs *c)
@@ -335,12 +294,12 @@ int bch2_move_extent(struct moving_context *ctxt,
 		     struct move_bucket *bucket_in_flight,
 		     struct btree_iter *iter,
 		     struct bkey_s_c k,
-		     struct bch_io_opts io_opts,
+		     struct bch_inode_opts io_opts,
 		     struct data_update_opts data_opts)
 {
 	struct btree_trans *trans = ctxt->trans;
 	struct bch_fs *c = trans->c;
-	int ret = -ENOMEM;
+	int ret = 0;
 
 	if (trace_io_move_enabled())
 		trace_io_move2(c, k, &io_opts, &data_opts);
@@ -354,197 +313,88 @@ int bch2_move_extent(struct moving_context *ctxt,
 	if (!data_opts.rewrite_ptrs &&
 	    !data_opts.extra_replicas &&
 	    !data_opts.scrub) {
-		if (data_opts.kill_ptrs)
+		if (data_opts.kill_ptrs|data_opts.kill_ec_ptrs) {
+			this_cpu_add(c->counters[BCH_COUNTER_io_move_drop_only], k.k->size);
 			return bch2_extent_drop_ptrs(trans, iter, k, &io_opts, &data_opts);
-		return 0;
+		} else {
+			this_cpu_add(c->counters[BCH_COUNTER_io_move_noop], k.k->size);
+			return 0;
+		}
 	}
 
-	struct moving_io *io = allocate_dropping_locks(trans, ret,
-				kzalloc(sizeof(struct moving_io), _gfp));
-	if (!io)
+	struct data_update *u = allocate_dropping_locks(trans, ret,
+				kzalloc(sizeof(struct data_update), _gfp));
+	if (!u && !ret)
+		ret = bch_err_throw(c, ENOMEM_move_extent);
+	if (ret)
 		goto err;
 
+	ret = bch2_data_update_init(trans, iter, ctxt, u, ctxt->wp,
+				    &io_opts, data_opts, iter->btree_id, k);
 	if (ret)
-		goto err_free;
+		goto err;
 
-	INIT_LIST_HEAD(&io->io_list);
-	io->write.ctxt		= ctxt;
-	io->read_sectors	= k.k->size;
-	io->write_sectors	= k.k->size;
-
-	if (!data_opts.scrub) {
-		ret = bch2_data_update_init(trans, iter, ctxt, &io->write, ctxt->wp,
-					    &io_opts, data_opts, iter->btree_id, k);
-		if (ret)
-			goto err_free;
-
-		io->write.op.end_io	= move_write_done;
-	} else {
-		bch2_bkey_buf_init(&io->write.k);
-		bch2_bkey_buf_reassemble(&io->write.k, c, k);
-
-		io->write.op.c		= c;
-		io->write.data_opts	= data_opts;
-
-		bch2_trans_unlock(trans);
-
-		ret = bch2_data_update_bios_init(&io->write, c, &io_opts);
-		if (ret)
-			goto err_free;
-	}
-
-	io->write.rbio.bio.bi_end_io = move_read_endio;
-	io->write.rbio.bio.bi_ioprio = IOPRIO_PRIO_VALUE(IOPRIO_CLASS_IDLE, 0);
+	u->op.end_io		= move_write_done;
+	u->rbio.bio.bi_end_io	= move_read_endio;
+	u->rbio.bio.bi_ioprio	= IOPRIO_PRIO_VALUE(IOPRIO_CLASS_IDLE, 0);
 
 	if (ctxt->rate)
 		bch2_ratelimit_increment(ctxt->rate, k.k->size);
 
 	if (ctxt->stats) {
 		atomic64_inc(&ctxt->stats->keys_moved);
-		atomic64_add(k.k->size, &ctxt->stats->sectors_moved);
+		atomic64_add(u->k.k->k.size, &ctxt->stats->sectors_moved);
 	}
 
 	if (bucket_in_flight) {
-		io->b = bucket_in_flight;
-		atomic_inc(&io->b->count);
+		u->b = bucket_in_flight;
+		atomic_inc(&u->b->count);
 	}
 
 	if (trace_io_move_read_enabled())
 		trace_io_move_read2(c, k);
 
-	mutex_lock(&ctxt->lock);
-	atomic_add(io->read_sectors, &ctxt->read_sectors);
-	atomic_inc(&ctxt->read_ios);
+	scoped_guard(mutex, &ctxt->lock) {
+		atomic_add(u->k.k->k.size, &ctxt->read_sectors);
+		atomic_inc(&ctxt->read_ios);
 
-	list_add_tail(&io->read_list, &ctxt->reads);
-	list_add_tail(&io->io_list, &ctxt->ios);
-	mutex_unlock(&ctxt->lock);
+		list_add_tail(&u->read_list, &ctxt->reads);
+		list_add_tail(&u->io_list, &ctxt->ios);
+	}
 
 	/*
 	 * dropped by move_read_endio() - guards against use after free of
 	 * ctxt when doing wakeup
 	 */
 	closure_get(&ctxt->cl);
-	__bch2_read_extent(trans, &io->write.rbio,
-			   io->write.rbio.bio.bi_iter,
+	__bch2_read_extent(trans, &u->rbio,
+			   u->rbio.bio.bi_iter,
 			   bkey_start_pos(k.k),
 			   iter->btree_id, k, 0,
 			   NULL,
 			   BCH_READ_last_fragment,
 			   data_opts.scrub ?  data_opts.read_dev : -1);
 	return 0;
-err_free:
-	kfree(io);
 err:
-	if (bch2_err_matches(ret, EROFS) ||
-	    bch2_err_matches(ret, BCH_ERR_transaction_restart))
-		return ret;
+	if (!bch2_err_matches(ret, EROFS) &&
+	    !bch2_err_matches(ret, BCH_ERR_transaction_restart)) {
+		count_event(c, io_move_start_fail);
 
-	count_event(c, io_move_start_fail);
-
-	if (trace_io_move_start_fail_enabled()) {
-		struct printbuf buf = PRINTBUF;
-
-		bch2_bkey_val_to_text(&buf, c, k);
-		prt_str(&buf, ": ");
-		prt_str(&buf, bch2_err_str(ret));
-		trace_io_move_start_fail(c, buf.buf);
-		printbuf_exit(&buf);
+		if (trace_io_move_start_fail_enabled()) {
+			CLASS(printbuf, buf)();
+			bch2_bkey_val_to_text(&buf, c, bkey_i_to_s_c(u->k.k));
+			prt_str(&buf, ": ");
+			prt_str(&buf, bch2_err_str(ret));
+			trace_io_move_start_fail(c, buf.buf);
+		}
 	}
+
+	bch2_bkey_buf_exit(&u->k, c);
+	kfree(u);
 
 	if (bch2_err_matches(ret, BCH_ERR_data_update_done))
 		return 0;
 	return ret;
-}
-
-struct bch_io_opts *bch2_move_get_io_opts(struct btree_trans *trans,
-			  struct per_snapshot_io_opts *io_opts,
-			  struct bpos extent_pos, /* extent_iter, extent_k may be in reflink btree */
-			  struct btree_iter *extent_iter,
-			  struct bkey_s_c extent_k)
-{
-	struct bch_fs *c = trans->c;
-	u32 restart_count = trans->restart_count;
-	struct bch_io_opts *opts_ret = &io_opts->fs_io_opts;
-	int ret = 0;
-
-	if (extent_iter->min_depth)
-		return opts_ret;
-
-	if (extent_k.k->type == KEY_TYPE_reflink_v)
-		goto out;
-
-	if (io_opts->cur_inum != extent_pos.inode) {
-		io_opts->d.nr = 0;
-
-		ret = for_each_btree_key(trans, iter, BTREE_ID_inodes, POS(0, extent_pos.inode),
-					 BTREE_ITER_all_snapshots, k, ({
-			if (k.k->p.offset != extent_pos.inode)
-				break;
-
-			if (!bkey_is_inode(k.k))
-				continue;
-
-			struct bch_inode_unpacked inode;
-			_ret3 = bch2_inode_unpack(k, &inode);
-			if (_ret3)
-				break;
-
-			struct snapshot_io_opts_entry e = { .snapshot = k.k->p.snapshot };
-			bch2_inode_opts_get(&e.io_opts, trans->c, &inode);
-
-			darray_push(&io_opts->d, e);
-		}));
-		io_opts->cur_inum = extent_pos.inode;
-	}
-
-	ret = ret ?: trans_was_restarted(trans, restart_count);
-	if (ret)
-		return ERR_PTR(ret);
-
-	if (extent_k.k->p.snapshot)
-		darray_for_each(io_opts->d, i)
-			if (bch2_snapshot_is_ancestor(c, extent_k.k->p.snapshot, i->snapshot)) {
-				opts_ret = &i->io_opts;
-				break;
-			}
-out:
-	ret = bch2_get_update_rebalance_opts(trans, opts_ret, extent_iter, extent_k);
-	if (ret)
-		return ERR_PTR(ret);
-	return opts_ret;
-}
-
-int bch2_move_get_io_opts_one(struct btree_trans *trans,
-			      struct bch_io_opts *io_opts,
-			      struct btree_iter *extent_iter,
-			      struct bkey_s_c extent_k)
-{
-	struct bch_fs *c = trans->c;
-
-	*io_opts = bch2_opts_to_inode_opts(c->opts);
-
-	/* reflink btree? */
-	if (!extent_k.k->p.inode)
-		goto out;
-
-	struct btree_iter inode_iter;
-	struct bkey_s_c inode_k = bch2_bkey_get_iter(trans, &inode_iter, BTREE_ID_inodes,
-			       SPOS(0, extent_k.k->p.inode, extent_k.k->p.snapshot),
-			       BTREE_ITER_cached);
-	int ret = bkey_err(inode_k);
-	if (bch2_err_matches(ret, BCH_ERR_transaction_restart))
-		return ret;
-
-	if (!ret && bkey_is_inode(inode_k.k)) {
-		struct bch_inode_unpacked inode;
-		bch2_inode_unpack(inode_k, &inode);
-		bch2_inode_opts_get(io_opts, c, &inode);
-	}
-	bch2_trans_iter_exit(trans, &inode_iter);
-	/* seem to be spinning here? */
-out:
-	return bch2_get_update_rebalance_opts(trans, io_opts, extent_iter, extent_k);
 }
 
 int bch2_move_ratelimit(struct moving_context *ctxt)
@@ -555,7 +405,7 @@ int bch2_move_ratelimit(struct moving_context *ctxt)
 
 	if (ctxt->wait_on_copygc && c->copygc_running) {
 		bch2_moving_ctxt_flush_all(ctxt);
-		wait_event_killable(c->copygc_running_wq,
+		wait_event_freezable(c->copygc_running_wq,
 				    !c->copygc_running ||
 				    (is_kthread && kthread_should_stop()));
 	}
@@ -591,37 +441,6 @@ int bch2_move_ratelimit(struct moving_context *ctxt)
 	return 0;
 }
 
-/*
- * Move requires non extents iterators, and there's also no need for it to
- * signal indirect_extent_missing_error:
- */
-static struct bkey_s_c bch2_lookup_indirect_extent_for_move(struct btree_trans *trans,
-					    struct btree_iter *iter,
-					    struct bkey_s_c_reflink_p p)
-{
-	if (unlikely(REFLINK_P_ERROR(p.v)))
-		return bkey_s_c_null;
-
-	struct bpos reflink_pos = POS(0, REFLINK_P_IDX(p.v));
-
-	bch2_trans_iter_init(trans, iter,
-			     BTREE_ID_reflink, reflink_pos,
-			     BTREE_ITER_not_extents);
-
-	struct bkey_s_c k = bch2_btree_iter_peek(trans, iter);
-	if (!k.k || bkey_err(k)) {
-		bch2_trans_iter_exit(trans, iter);
-		return k;
-	}
-
-	if (bkey_lt(reflink_pos, bkey_start_pos(k.k))) {
-		bch2_trans_iter_exit(trans, iter);
-		return bkey_s_c_null;
-	}
-
-	return k;
-}
-
 int bch2_move_data_btree(struct moving_context *ctxt,
 			 struct bpos start,
 			 struct bpos end,
@@ -631,17 +450,11 @@ int bch2_move_data_btree(struct moving_context *ctxt,
 	struct btree_trans *trans = ctxt->trans;
 	struct bch_fs *c = trans->c;
 	struct per_snapshot_io_opts snapshot_io_opts;
-	struct bch_io_opts *io_opts;
+	struct bch_inode_opts *io_opts;
 	struct bkey_buf sk;
 	struct btree_iter iter, reflink_iter = {};
 	struct bkey_s_c k;
 	struct data_update_opts data_opts;
-	/*
-	 * If we're moving a single file, also process reflinked data it points
-	 * to (this includes propagating changed io_opts from the inode to the
-	 * extent):
-	 */
-	bool walk_indirect = start.inode == end.inode;
 	int ret = 0, ret2;
 
 	per_snapshot_io_opts_init(&snapshot_io_opts, c);
@@ -660,20 +473,19 @@ retry_root:
 					  BTREE_ITER_prefetch|
 					  BTREE_ITER_not_extents|
 					  BTREE_ITER_all_snapshots);
-		struct btree *b = bch2_btree_iter_peek_node(trans, &iter);
+		struct btree *b = bch2_btree_iter_peek_node(&iter);
 		ret = PTR_ERR_OR_ZERO(b);
 		if (ret)
 			goto root_err;
 
 		if (b != btree_node_root(c, b)) {
-			bch2_trans_iter_exit(trans, &iter);
+			bch2_trans_iter_exit(&iter);
 			goto retry_root;
 		}
 
 		k = bkey_i_to_s_c(&b->key);
 
-		io_opts = bch2_move_get_io_opts(trans, &snapshot_io_opts,
-						iter.pos, &iter, k);
+		io_opts = &snapshot_io_opts.fs_io_opts;
 		ret = PTR_ERR_OR_ZERO(io_opts);
 		if (ret)
 			goto root_err;
@@ -691,7 +503,7 @@ retry_root:
 
 root_err:
 		if (bch2_err_matches(ret, BCH_ERR_transaction_restart)) {
-			bch2_trans_iter_exit(trans, &iter);
+			bch2_trans_iter_exit(&iter);
 			goto retry_root;
 		}
 
@@ -707,11 +519,9 @@ root_err:
 		bch2_ratelimit_reset(ctxt->rate);
 
 	while (!bch2_move_ratelimit(ctxt)) {
-		struct btree_iter *extent_iter = &iter;
-
 		bch2_trans_begin(trans);
 
-		k = bch2_btree_iter_peek(trans, &iter);
+		k = bch2_btree_iter_peek(&iter);
 		if (!k.k)
 			break;
 
@@ -727,41 +537,18 @@ root_err:
 		if (ctxt->stats)
 			ctxt->stats->pos = BBPOS(iter.btree_id, iter.pos);
 
-		if (walk_indirect &&
-		    k.k->type == KEY_TYPE_reflink_p &&
-		    REFLINK_P_MAY_UPDATE_OPTIONS(bkey_s_c_to_reflink_p(k).v)) {
-			struct bkey_s_c_reflink_p p = bkey_s_c_to_reflink_p(k);
-
-			bch2_trans_iter_exit(trans, &reflink_iter);
-			k = bch2_lookup_indirect_extent_for_move(trans, &reflink_iter, p);
-			ret = bkey_err(k);
-			if (bch2_err_matches(ret, BCH_ERR_transaction_restart))
-				continue;
-			if (ret)
-				break;
-
-			if (!k.k)
-				goto next_nondata;
-
-			/*
-			 * XXX: reflink pointers may point to multiple indirect
-			 * extents, so don't advance past the entire reflink
-			 * pointer - need to fixup iter->k
-			 */
-			extent_iter = &reflink_iter;
-		}
-
 		if (!bkey_extent_is_direct_data(k.k))
 			goto next_nondata;
 
-		io_opts = bch2_move_get_io_opts(trans, &snapshot_io_opts,
-						iter.pos, extent_iter, k);
+		io_opts = bch2_extent_get_apply_io_opts(trans, &snapshot_io_opts,
+						iter.pos, &iter, k,
+						SET_NEEDS_REBALANCE_other);
 		ret = PTR_ERR_OR_ZERO(io_opts);
 		if (ret)
 			continue;
 
 		memset(&data_opts, 0, sizeof(data_opts));
-		if (!pred(c, arg, extent_iter->btree_id, k, io_opts, &data_opts))
+		if (!pred(c, arg, iter.btree_id, k, io_opts, &data_opts))
 			goto next;
 
 		/*
@@ -772,7 +559,7 @@ root_err:
 		k = bkey_i_to_s_c(sk.k);
 
 		if (!level)
-			ret2 = bch2_move_extent(ctxt, NULL, extent_iter, k, *io_opts, data_opts);
+			ret2 = bch2_move_extent(ctxt, NULL, &iter, k, *io_opts, data_opts);
 		else if (!data_opts.scrub)
 			ret2 = bch2_btree_node_rewrite_pos(trans, btree_id, level,
 							  k.k->p, data_opts.target, 0);
@@ -796,62 +583,64 @@ next:
 		if (ctxt->stats)
 			atomic64_add(k.k->size, &ctxt->stats->sectors_seen);
 next_nondata:
-		if (!bch2_btree_iter_advance(trans, &iter))
+		if (!bch2_btree_iter_advance(&iter))
 			break;
 	}
 out:
-	bch2_trans_iter_exit(trans, &reflink_iter);
-	bch2_trans_iter_exit(trans, &iter);
+	bch2_trans_iter_exit(&reflink_iter);
+	bch2_trans_iter_exit(&iter);
 	bch2_bkey_buf_exit(&sk, c);
 	per_snapshot_io_opts_exit(&snapshot_io_opts);
 
 	return ret;
 }
 
-int __bch2_move_data(struct moving_context *ctxt,
-		     struct bbpos start,
-		     struct bbpos end,
-		     move_pred_fn pred, void *arg)
+static int bch2_move_data(struct bch_fs *c,
+			  struct bbpos start,
+			  struct bbpos end,
+			  unsigned min_depth,
+			  struct bch_ratelimit *rate,
+			  struct bch_move_stats *stats,
+			  struct write_point_specifier wp,
+			  bool wait_on_copygc,
+			  move_pred_fn pred, void *arg)
 {
-	struct bch_fs *c = ctxt->trans->c;
-	enum btree_id id;
 	int ret = 0;
 
-	for (id = start.btree;
+	struct moving_context ctxt;
+	bch2_moving_ctxt_init(&ctxt, c, rate, stats, wp, wait_on_copygc);
+
+	for (enum btree_id id = start.btree;
 	     id <= min_t(unsigned, end.btree, btree_id_nr_alive(c) - 1);
 	     id++) {
-		ctxt->stats->pos = BBPOS(id, POS_MIN);
+		ctxt.stats->pos = BBPOS(id, POS_MIN);
 
-		if (!btree_type_has_ptrs(id) ||
-		    !bch2_btree_id_root(c, id)->b)
+		if (!bch2_btree_id_root(c, id)->b)
 			continue;
 
-		ret = bch2_move_data_btree(ctxt,
-				       id == start.btree ? start.pos : POS_MIN,
-				       id == end.btree   ? end.pos   : POS_MAX,
-				       pred, arg, id, 0);
+		unsigned min_depth_this_btree = min_depth;
+
+		/* Stripe keys have pointers, but are handled separately */
+		if (!btree_type_has_data_ptrs(id) ||
+		    id == BTREE_ID_stripes)
+			min_depth_this_btree = max(min_depth_this_btree, 1);
+
+		for (unsigned level = min_depth_this_btree;
+		     level < BTREE_MAX_DEPTH;
+		     level++) {
+			ret = bch2_move_data_btree(&ctxt,
+						   id == start.btree ? start.pos : POS_MIN,
+						   id == end.btree   ? end.pos   : POS_MAX,
+						   pred, arg, id, level);
+			if (ret)
+				break;
+		}
+
 		if (ret)
 			break;
 	}
 
-	return ret;
-}
-
-int bch2_move_data(struct bch_fs *c,
-		   struct bbpos start,
-		   struct bbpos end,
-		   struct bch_ratelimit *rate,
-		   struct bch_move_stats *stats,
-		   struct write_point_specifier wp,
-		   bool wait_on_copygc,
-		   move_pred_fn pred, void *arg)
-{
-	struct moving_context ctxt;
-
-	bch2_moving_ctxt_init(&ctxt, c, rate, stats, wp, wait_on_copygc);
-	int ret = __bch2_move_data(&ctxt, start, end, pred, arg);
 	bch2_moving_ctxt_exit(&ctxt);
-
 	return ret;
 }
 
@@ -867,15 +656,18 @@ static int __bch2_move_data_phys(struct moving_context *ctxt,
 	struct btree_trans *trans = ctxt->trans;
 	struct bch_fs *c = trans->c;
 	bool is_kthread = current->flags & PF_KTHREAD;
-	struct bch_io_opts io_opts = bch2_opts_to_inode_opts(c->opts);
-	struct btree_iter iter = {}, bp_iter = {};
+	struct btree_iter iter = {};
 	struct bkey_buf sk;
 	struct bkey_s_c k;
 	struct bkey_buf last_flushed;
 	u64 check_mismatch_done = bucket_start;
 	int ret = 0;
 
-	struct bch_dev *ca = bch2_dev_tryget(c, dev);
+	struct bch_inode_opts io_opts;
+	bch2_inode_opts_get(c, &io_opts);
+
+	/* Userspace might have supplied @dev: */
+	CLASS(bch2_dev_tryget_noerror, ca)(c, dev);
 	if (!ca)
 		return 0;
 
@@ -893,7 +685,7 @@ static int __bch2_move_data_phys(struct moving_context *ctxt,
 	 */
 	bch2_trans_begin(trans);
 
-	bch2_trans_iter_init(trans, &bp_iter, BTREE_ID_backpointers, bp_start, 0);
+	CLASS(btree_iter, bp_iter)(trans, BTREE_ID_backpointers, bp_start, 0);
 
 	ret = bch2_btree_write_buffer_tryflush(trans);
 	if (!bch2_err_matches(ret, EROFS))
@@ -907,7 +699,7 @@ static int __bch2_move_data_phys(struct moving_context *ctxt,
 
 		bch2_trans_begin(trans);
 
-		k = bch2_btree_iter_peek(trans, &bp_iter);
+		k = bch2_btree_iter_peek(&bp_iter);
 		ret = bkey_err(k);
 		if (bch2_err_matches(ret, BCH_ERR_transaction_restart))
 			continue;
@@ -949,9 +741,10 @@ static int __bch2_move_data_phys(struct moving_context *ctxt,
 			goto next;
 
 		if (!bp.v->level) {
-			ret = bch2_move_get_io_opts_one(trans, &io_opts, &iter, k);
+			ret = bch2_extent_get_apply_io_opts_one(trans, &io_opts, &iter, k,
+								SET_NEEDS_REBALANCE_other);
 			if (ret) {
-				bch2_trans_iter_exit(trans, &iter);
+				bch2_trans_iter_exit(&iter);
 				continue;
 			}
 		}
@@ -964,13 +757,13 @@ static int __bch2_move_data_phys(struct moving_context *ctxt,
 					    pred, arg, p);
 
 		if (!p) {
-			bch2_trans_iter_exit(trans, &iter);
+			bch2_trans_iter_exit(&iter);
 			goto next;
 		}
 
 		if (data_opts.scrub &&
 		    !bch2_dev_idx_is_online(c, data_opts.read_dev)) {
-			bch2_trans_iter_exit(trans, &iter);
+			bch2_trans_iter_exit(&iter);
 			ret = bch_err_throw(c, device_offline);
 			break;
 		}
@@ -989,7 +782,7 @@ static int __bch2_move_data_phys(struct moving_context *ctxt,
 		else
 			ret = bch2_btree_node_scrub(trans, bp.v->btree_id, bp.v->level, k, data_opts.read_dev);
 
-		bch2_trans_iter_exit(trans, &iter);
+		bch2_trans_iter_exit(&iter);
 
 		if (bch2_err_matches(ret, BCH_ERR_transaction_restart))
 			continue;
@@ -1004,17 +797,15 @@ static int __bch2_move_data_phys(struct moving_context *ctxt,
 		if (ctxt->stats)
 			atomic64_add(sectors, &ctxt->stats->sectors_seen);
 next:
-		bch2_btree_iter_advance(trans, &bp_iter);
+		bch2_btree_iter_advance(&bp_iter);
 	}
 
 	while (check_mismatch_done < bucket_end)
 		bch2_check_bucket_backpointer_mismatch(trans, ca, check_mismatch_done++,
 						       copygc, &last_flushed);
 err:
-	bch2_trans_iter_exit(trans, &bp_iter);
 	bch2_bkey_buf_exit(&sk, c);
 	bch2_bkey_buf_exit(&last_flushed, c);
-	bch2_dev_put(ca);
 	return ret;
 }
 
@@ -1031,9 +822,9 @@ int bch2_move_data_phys(struct bch_fs *c,
 {
 	struct moving_context ctxt;
 
-	bch2_trans_run(c, bch2_btree_write_buffer_flush_sync(trans));
-
 	bch2_moving_ctxt_init(&ctxt, c, rate, stats, wp, wait_on_copygc);
+	bch2_btree_write_buffer_flush_sync(ctxt.trans);
+
 	if (ctxt.stats) {
 		ctxt.stats->phys = true;
 		ctxt.stats->data_type = (int) DATA_PROGRESS_DATA_TYPE_phys;
@@ -1048,7 +839,7 @@ int bch2_move_data_phys(struct bch_fs *c,
 
 static bool evacuate_bucket_pred(struct bch_fs *c, void *_arg,
 				 enum btree_id btree, struct bkey_s_c k,
-				 struct bch_io_opts *io_opts,
+				 struct bch_inode_opts *io_opts,
 				 struct data_update_opts *data_opts)
 {
 	struct evacuate_bucket_arg *arg = _arg;
@@ -1089,7 +880,7 @@ int bch2_evacuate_bucket(struct moving_context *ctxt,
 }
 
 typedef bool (*move_btree_pred)(struct bch_fs *, void *,
-				struct btree *, struct bch_io_opts *,
+				struct btree *, struct bch_inode_opts *,
 				struct data_update_opts *);
 
 static int bch2_move_btree(struct bch_fs *c,
@@ -1099,7 +890,6 @@ static int bch2_move_btree(struct bch_fs *c,
 			   struct bch_move_stats *stats)
 {
 	bool kthread = (current->flags & PF_KTHREAD) != 0;
-	struct bch_io_opts io_opts = bch2_opts_to_inode_opts(c->opts);
 	struct moving_context ctxt;
 	struct btree_trans *trans;
 	struct btree_iter iter;
@@ -1107,6 +897,9 @@ static int bch2_move_btree(struct bch_fs *c,
 	enum btree_id btree;
 	struct data_update_opts data_opts;
 	int ret = 0;
+
+	struct bch_inode_opts io_opts;
+	bch2_inode_opts_get(c, &io_opts);
 
 	bch2_moving_ctxt_init(&ctxt, c, NULL, stats,
 			      writepoint_ptr(&c->btree_write_point),
@@ -1128,7 +921,7 @@ static int bch2_move_btree(struct bch_fs *c,
 retry:
 		ret = 0;
 		while (bch2_trans_begin(trans),
-		       (b = bch2_btree_iter_peek_node(trans, &iter)) &&
+		       (b = bch2_btree_iter_peek_node(&iter)) &&
 		       !(ret = PTR_ERR_OR_ZERO(b))) {
 			if (kthread && kthread_should_stop())
 				break;
@@ -1148,12 +941,12 @@ retry:
 			if (ret)
 				break;
 next:
-			bch2_btree_iter_next_node(trans, &iter);
+			bch2_btree_iter_next_node(&iter);
 		}
 		if (bch2_err_matches(ret, BCH_ERR_transaction_restart))
 			goto retry;
 
-		bch2_trans_iter_exit(trans, &iter);
+		bch2_trans_iter_exit(&iter);
 
 		if (kthread && kthread_should_stop())
 			break;
@@ -1168,7 +961,7 @@ next:
 
 static bool rereplicate_pred(struct bch_fs *c, void *arg,
 			     enum btree_id btree, struct bkey_s_c k,
-			     struct bch_io_opts *io_opts,
+			     struct bch_inode_opts *io_opts,
 			     struct data_update_opts *data_opts)
 {
 	unsigned nr_good = bch2_bkey_durability(c, k);
@@ -1199,7 +992,7 @@ static bool rereplicate_pred(struct bch_fs *c, void *arg,
 
 static bool migrate_pred(struct bch_fs *c, void *arg,
 			 enum btree_id btree, struct bkey_s_c k,
-			 struct bch_io_opts *io_opts,
+			 struct bch_inode_opts *io_opts,
 			 struct data_update_opts *data_opts)
 {
 	struct bkey_ptrs_c ptrs = bch2_bkey_ptrs_c(k);
@@ -1220,14 +1013,6 @@ static bool migrate_pred(struct bch_fs *c, void *arg,
 	return data_opts->rewrite_ptrs != 0;
 }
 
-static bool rereplicate_btree_pred(struct bch_fs *c, void *arg,
-				   struct btree *b,
-				   struct bch_io_opts *io_opts,
-				   struct data_update_opts *data_opts)
-{
-	return rereplicate_pred(c, arg, b->c.btree_id, bkey_i_to_s_c(&b->key), io_opts, data_opts);
-}
-
 /*
  * Ancient versions of bcachefs produced packed formats which could represent
  * keys that the in memory format cannot represent; this checks for those
@@ -1244,7 +1029,7 @@ static bool bformat_needs_redo(struct bkey_format *f)
 
 static bool rewrite_old_nodes_pred(struct bch_fs *c, void *arg,
 				   struct btree *b,
-				   struct bch_io_opts *io_opts,
+				   struct bch_inode_opts *io_opts,
 				   struct data_update_opts *data_opts)
 {
 	if (b->version_ondisk != c->sb.version ||
@@ -1268,12 +1053,11 @@ int bch2_scan_old_btree_nodes(struct bch_fs *c, struct bch_move_stats *stats)
 			      BBPOS_MAX,
 			      rewrite_old_nodes_pred, c, stats);
 	if (!ret) {
-		mutex_lock(&c->sb_lock);
+		guard(mutex)(&c->sb_lock);
 		c->disk_sb.sb->compat[0] |= cpu_to_le64(1ULL << BCH_COMPAT_extents_above_btree_updates_done);
 		c->disk_sb.sb->compat[0] |= cpu_to_le64(1ULL << BCH_COMPAT_bformat_overflow_done);
 		c->disk_sb.sb->version_min = c->disk_sb.sb->version;
 		bch2_write_super(c);
-		mutex_unlock(&c->sb_lock);
 	}
 
 	bch_err_fn(c, ret);
@@ -1282,7 +1066,7 @@ int bch2_scan_old_btree_nodes(struct bch_fs *c, struct bch_move_stats *stats)
 
 static bool drop_extra_replicas_pred(struct bch_fs *c, void *arg,
 			     enum btree_id btree, struct bkey_s_c k,
-			     struct bch_io_opts *io_opts,
+			     struct bch_inode_opts *io_opts,
 			     struct data_update_opts *data_opts)
 {
 	unsigned durability = bch2_bkey_durability(c, k);
@@ -1305,21 +1089,22 @@ static bool drop_extra_replicas_pred(struct bch_fs *c, void *arg,
 		i++;
 	}
 
-	return data_opts->kill_ptrs != 0;
-}
+	i = 0;
+	bkey_for_each_ptr_decode(k.k, bch2_bkey_ptrs_c(k), p, entry) {
+		if (p.has_ec && durability - p.ec.redundancy >= replicas) {
+			data_opts->kill_ec_ptrs |= BIT(i);
+			durability -= p.ec.redundancy;
+		}
 
-static bool drop_extra_replicas_btree_pred(struct bch_fs *c, void *arg,
-				   struct btree *b,
-				   struct bch_io_opts *io_opts,
-				   struct data_update_opts *data_opts)
-{
-	return drop_extra_replicas_pred(c, arg, b->c.btree_id, bkey_i_to_s_c(&b->key),
-					io_opts, data_opts);
+		i++;
+	}
+
+	return (data_opts->kill_ptrs|data_opts->kill_ec_ptrs) != 0;
 }
 
 static bool scrub_pred(struct bch_fs *c, void *_arg,
 		       enum btree_id btree, struct bkey_s_c k,
-		       struct bch_io_opts *io_opts,
+		       struct bch_inode_opts *io_opts,
 		       struct data_update_opts *data_opts)
 {
 	struct bch_ioctl_data *arg = _arg;
@@ -1343,18 +1128,18 @@ static bool scrub_pred(struct bch_fs *c, void *_arg,
 
 int bch2_data_job(struct bch_fs *c,
 		  struct bch_move_stats *stats,
-		  struct bch_ioctl_data op)
+		  struct bch_ioctl_data *op)
 {
-	struct bbpos start	= BBPOS(op.start_btree, op.start_pos);
-	struct bbpos end	= BBPOS(op.end_btree, op.end_pos);
+	struct bbpos start	= BBPOS(op->start_btree, op->start_pos);
+	struct bbpos end	= BBPOS(op->end_btree, op->end_pos);
 	int ret = 0;
 
-	if (op.op >= BCH_DATA_OP_NR)
+	if (op->op >= BCH_DATA_OP_NR)
 		return -EINVAL;
 
-	bch2_move_stats_init(stats, bch2_data_ops_strs[op.op]);
+	bch2_move_stats_init(stats, bch2_data_ops_strs[op->op]);
 
-	switch (op.op) {
+	switch (op->op) {
 	case BCH_DATA_OP_scrub:
 		/*
 		 * prevent tests from spuriously failing, make sure we see all
@@ -1362,41 +1147,38 @@ int bch2_data_job(struct bch_fs *c,
 		 */
 		bch2_btree_interior_updates_flush(c);
 
-		ret = bch2_move_data_phys(c, op.scrub.dev, 0, U64_MAX,
-					  op.scrub.data_types,
+		ret = bch2_move_data_phys(c, op->scrub.dev, 0, U64_MAX,
+					  op->scrub.data_types,
 					  NULL,
 					  stats,
 					  writepoint_hashed((unsigned long) current),
 					  false,
-					  scrub_pred, &op) ?: ret;
+					  scrub_pred, op) ?: ret;
 		break;
 
 	case BCH_DATA_OP_rereplicate:
 		stats->data_type = BCH_DATA_journal;
 		ret = bch2_journal_flush_device_pins(&c->journal, -1);
-		ret = bch2_move_btree(c, start, end,
-				      rereplicate_btree_pred, c, stats) ?: ret;
-		ret = bch2_move_data(c, start, end,
-				     NULL,
-				     stats,
+		ret = bch2_move_data(c, start, end, 0, NULL, stats,
 				     writepoint_hashed((unsigned long) current),
 				     true,
 				     rereplicate_pred, c) ?: ret;
+		bch2_btree_interior_updates_flush(c);
 		ret = bch2_replicas_gc2(c) ?: ret;
 		break;
 	case BCH_DATA_OP_migrate:
-		if (op.migrate.dev >= c->sb.nr_devices)
+		if (op->migrate.dev >= c->sb.nr_devices)
 			return -EINVAL;
 
 		stats->data_type = BCH_DATA_journal;
-		ret = bch2_journal_flush_device_pins(&c->journal, op.migrate.dev);
-		ret = bch2_move_data_phys(c, op.migrate.dev, 0, U64_MAX,
+		ret = bch2_journal_flush_device_pins(&c->journal, op->migrate.dev);
+		ret = bch2_move_data_phys(c, op->migrate.dev, 0, U64_MAX,
 					  ~0,
 					  NULL,
 					  stats,
 					  writepoint_hashed((unsigned long) current),
 					  true,
-					  migrate_pred, &op) ?: ret;
+					  migrate_pred, op) ?: ret;
 		bch2_btree_interior_updates_flush(c);
 		ret = bch2_replicas_gc2(c) ?: ret;
 		break;
@@ -1404,12 +1186,10 @@ int bch2_data_job(struct bch_fs *c,
 		ret = bch2_scan_old_btree_nodes(c, stats);
 		break;
 	case BCH_DATA_OP_drop_extra_replicas:
-		ret = bch2_move_btree(c, start, end,
-				drop_extra_replicas_btree_pred, c, stats) ?: ret;
-		ret = bch2_move_data(c, start, end, NULL, stats,
-				writepoint_hashed((unsigned long) current),
-				true,
-				drop_extra_replicas_pred, c) ?: ret;
+		ret = bch2_move_data(c, start, end, 0, NULL, stats,
+				     writepoint_hashed((unsigned long) current),
+				     true,
+				     drop_extra_replicas_pred, c) ?: ret;
 		ret = bch2_replicas_gc2(c) ?: ret;
 		break;
 	default:
@@ -1427,7 +1207,7 @@ void bch2_move_stats_to_text(struct printbuf *out, struct bch_move_stats *stats)
 	prt_str(out, " pos=");
 	bch2_bbpos_to_text(out, stats->pos);
 	prt_newline(out);
-	printbuf_indent_add(out, 2);
+	guard(printbuf_indent)(out);
 
 	prt_printf(out, "keys moved:\t%llu\n",	atomic64_read(&stats->keys_moved));
 	prt_printf(out, "keys raced:\t%llu\n",	atomic64_read(&stats->keys_raced));
@@ -1442,8 +1222,6 @@ void bch2_move_stats_to_text(struct printbuf *out, struct bch_move_stats *stats)
 	prt_printf(out, "bytes raced:\t");
 	prt_human_readable_u64(out, atomic64_read(&stats->sectors_raced) << 9);
 	prt_newline(out);
-
-	printbuf_indent_sub(out, 2);
 }
 
 static void bch2_moving_ctxt_to_text(struct printbuf *out, struct bch_fs *c, struct moving_context *ctxt)
@@ -1452,7 +1230,7 @@ static void bch2_moving_ctxt_to_text(struct printbuf *out, struct bch_fs *c, str
 		printbuf_tabstop_push(out, 32);
 
 	bch2_move_stats_to_text(out, ctxt->stats);
-	printbuf_indent_add(out, 2);
+	guard(printbuf_indent)(out);
 
 	prt_printf(out, "reads: ios %u/%u sectors %u/%u\n",
 		   atomic_read(&ctxt->read_ios),
@@ -1466,25 +1244,22 @@ static void bch2_moving_ctxt_to_text(struct printbuf *out, struct bch_fs *c, str
 		   atomic_read(&ctxt->write_sectors),
 		   c->opts.move_bytes_in_flight >> 9);
 
-	printbuf_indent_add(out, 2);
+	guard(printbuf_indent)(out);
 
-	mutex_lock(&ctxt->lock);
-	struct moving_io *io;
-	list_for_each_entry(io, &ctxt->ios, io_list)
-		bch2_data_update_inflight_to_text(out, &io->write);
-	mutex_unlock(&ctxt->lock);
-
-	printbuf_indent_sub(out, 4);
+	scoped_guard(mutex, &ctxt->lock) {
+		struct data_update *u;
+		list_for_each_entry(u, &ctxt->ios, io_list)
+			bch2_data_update_inflight_to_text(out, u);
+	}
 }
 
 void bch2_fs_moving_ctxts_to_text(struct printbuf *out, struct bch_fs *c)
 {
 	struct moving_context *ctxt;
 
-	mutex_lock(&c->moving_context_lock);
-	list_for_each_entry(ctxt, &c->moving_context_list, list)
-		bch2_moving_ctxt_to_text(out, c, ctxt);
-	mutex_unlock(&c->moving_context_lock);
+	scoped_guard(mutex, &c->moving_context_lock)
+		list_for_each_entry(ctxt, &c->moving_context_list, list)
+			bch2_moving_ctxt_to_text(out, c, ctxt);
 }
 
 void bch2_fs_move_init(struct bch_fs *c)

@@ -518,19 +518,22 @@ void bch2_opts_to_text(struct printbuf *out,
 	}
 }
 
-int bch2_opt_hook_pre_set(struct bch_fs *c, struct bch_dev *ca, enum bch_opt_id id, u64 v)
+int bch2_opt_hook_pre_set(struct bch_fs *c, struct bch_dev *ca, u64 inum, enum bch_opt_id id, u64 v,
+			  bool change)
 {
 	int ret = 0;
 
 	switch (id) {
 	case Opt_state:
 		if (ca)
-			return bch2_dev_set_state(c, ca, v, BCH_FORCE_IF_DEGRADED);
+			return bch2_dev_set_state(c, ca, v, BCH_FORCE_IF_DEGRADED, NULL);
 		break;
 
 	case Opt_compression:
 	case Opt_background_compression:
 		ret = bch2_check_set_has_compressed_data(c, v);
+		if (ret)
+			return ret;
 		break;
 	case Opt_erasure_code:
 		if (v)
@@ -540,13 +543,26 @@ int bch2_opt_hook_pre_set(struct bch_fs *c, struct bch_dev *ca, enum bch_opt_id 
 		break;
 	}
 
+	if (change &&
+	    (id == Opt_foreground_target ||
+	     id == Opt_background_target ||
+	     id == Opt_promote_target ||
+	     id == Opt_compression ||
+	     id == Opt_background_compression ||
+	     id == Opt_data_checksum ||
+	     id == Opt_data_replicas)) {
+		ret = bch2_set_rebalance_needs_scan(c, inum);
+		if (ret)
+			return ret;
+	}
+
 	return ret;
 }
 
 int bch2_opts_hooks_pre_set(struct bch_fs *c)
 {
 	for (unsigned i = 0; i < bch2_opts_nr; i++) {
-		int ret = bch2_opt_hook_pre_set(c, NULL, i, bch2_opt_get_by_id(&c->opts, i));
+		int ret = bch2_opt_hook_pre_set(c, NULL, 0, i, bch2_opt_get_by_id(&c->opts, i), false);
 		if (ret)
 			return ret;
 	}
@@ -555,27 +571,20 @@ int bch2_opts_hooks_pre_set(struct bch_fs *c)
 }
 
 void bch2_opt_hook_post_set(struct bch_fs *c, struct bch_dev *ca, u64 inum,
-			    struct bch_opts *new_opts, enum bch_opt_id id)
+			    enum bch_opt_id id, u64 v)
 {
+	if (id == Opt_foreground_target ||
+	    id == Opt_background_target ||
+	    id == Opt_promote_target ||
+	    id == Opt_compression ||
+	    id == Opt_background_compression ||
+	    id == Opt_data_checksum ||
+	    id == Opt_data_replicas) {
+		bch2_set_rebalance_needs_scan(c, inum);
+		bch2_rebalance_wakeup(c);
+	}
+
 	switch (id) {
-	case Opt_foreground_target:
-		if (new_opts->foreground_target &&
-		    !new_opts->background_target)
-			bch2_set_rebalance_needs_scan(c, inum);
-		break;
-	case Opt_compression:
-		if (new_opts->compression &&
-		    !new_opts->background_compression)
-			bch2_set_rebalance_needs_scan(c, inum);
-		break;
-	case Opt_background_target:
-		if (new_opts->background_target)
-			bch2_set_rebalance_needs_scan(c, inum);
-		break;
-	case Opt_background_compression:
-		if (new_opts->background_compression)
-			bch2_set_rebalance_needs_scan(c, inum);
-		break;
 	case Opt_rebalance_enabled:
 		bch2_rebalance_wakeup(c);
 		break;
@@ -584,7 +593,7 @@ void bch2_opt_hook_post_set(struct bch_fs *c, struct bch_dev *ca, u64 inum,
 		break;
 	case Opt_discard:
 		if (!ca) {
-			mutex_lock(&c->sb_lock);
+			guard(mutex)(&c->sb_lock);
 			for_each_member_device(c, ca) {
 				struct bch_member *m =
 					bch2_members_v2_get_mut(ca->disk_sb.sb, ca->dev_idx);
@@ -592,7 +601,6 @@ void bch2_opt_hook_post_set(struct bch_fs *c, struct bch_dev *ca, u64 inum,
 			}
 
 			bch2_write_super(c);
-			mutex_unlock(&c->sb_lock);
 		}
 		break;
 	case Opt_version_upgrade:
@@ -601,19 +609,20 @@ void bch2_opt_hook_post_set(struct bch_fs *c, struct bch_dev *ca, u64 inum,
 		 * upgrades at runtime as well, but right now there's nothing
 		 * that does that:
 		 */
-		if (new_opts->version_upgrade == BCH_VERSION_UPGRADE_incompatible)
+		if (v == BCH_VERSION_UPGRADE_incompatible)
 			bch2_sb_upgrade_incompat(c);
 		break;
 	default:
 		break;
 	}
+
+	atomic_inc(&c->opt_change_cookie);
 }
 
 int bch2_parse_one_mount_opt(struct bch_fs *c, struct bch_opts *opts,
 			     struct printbuf *parse_later,
 			     const char *name, const char *val)
 {
-	struct printbuf err = PRINTBUF;
 	u64 v;
 	int ret, id;
 
@@ -638,46 +647,32 @@ int bch2_parse_one_mount_opt(struct bch_fs *c, struct bch_opts *opts,
 	val = bch2_opt_val_synonym_lookup(name, val);
 
 	if (!(bch2_opt_table[id].flags & OPT_MOUNT))
-		goto bad_opt;
-
-	if (id == Opt_acl &&
-	    !IS_ENABLED(CONFIG_BCACHEFS_POSIX_ACL))
-		goto bad_opt;
+		return -BCH_ERR_option_name;
 
 	if ((id == Opt_usrquota ||
 	     id == Opt_grpquota) &&
 	    !IS_ENABLED(CONFIG_BCACHEFS_QUOTA))
-		goto bad_opt;
+		return -BCH_ERR_option_name;
 
+	CLASS(printbuf, err)();
 	ret = bch2_opt_parse(c, &bch2_opt_table[id], val, &v, &err);
 	if (ret == -BCH_ERR_option_needs_open_fs) {
-		ret = 0;
-
 		if (parse_later) {
 			prt_printf(parse_later, "%s=%s,", name, val);
 			if (parse_later->allocation_failure)
-				ret = -ENOMEM;
+				return -ENOMEM;
 		}
 
-		goto out;
+		return 0;
 	}
 
 	if (ret < 0)
-		goto bad_val;
+		return -BCH_ERR_option_value;
 
 	if (opts)
 		bch2_opt_set_by_id(opts, id, v);
 
-	ret = 0;
-out:
-	printbuf_exit(&err);
-	return ret;
-bad_opt:
-	ret = -BCH_ERR_option_name;
-	goto out;
-bad_val:
-	ret = -BCH_ERR_option_value;
-	goto out;
+	return 0;
 }
 
 int bch2_parse_mount_opts(struct bch_fs *c, struct bch_opts *opts,
@@ -805,26 +800,26 @@ bool __bch2_opt_set_sb(struct bch_sb *sb, int dev_idx,
 bool bch2_opt_set_sb(struct bch_fs *c, struct bch_dev *ca,
 		     const struct bch_option *opt, u64 v)
 {
-	mutex_lock(&c->sb_lock);
+	guard(mutex)(&c->sb_lock);
 	bool changed = __bch2_opt_set_sb(c->disk_sb.sb, ca ? ca->dev_idx : -1, opt, v);
 	if (changed)
 		bch2_write_super(c);
-	mutex_unlock(&c->sb_lock);
 	return changed;
 }
 
 /* io opts: */
 
-struct bch_io_opts bch2_opts_to_inode_opts(struct bch_opts src)
+void bch2_inode_opts_get(struct bch_fs *c, struct bch_inode_opts *ret)
 {
-	struct bch_io_opts opts = {
-#define x(_name, _bits)	._name = src._name,
+	memset(ret, 0, sizeof(*ret));
+
+#define x(_name, _bits)	ret->_name = c->opts._name,
 	BCH_INODE_OPTS()
 #undef x
-	};
 
-	bch2_io_opts_fixups(&opts);
-	return opts;
+	ret->change_cookie = atomic_read(&c->opt_change_cookie);
+
+	bch2_io_opts_fixups(ret);
 }
 
 bool bch2_opt_is_inode_opt(enum bch_opt_id id)
