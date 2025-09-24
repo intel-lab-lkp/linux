@@ -629,6 +629,9 @@ retry:
 			mod_delayed_work(system_wq,
 					 &dev->mode_config.output_poll_work,
 					 0);
+		mutex_lock(&dev->mode_config.mutex);
+		connector->status_changed = true;
+		mutex_unlock(&dev->mode_config.mutex);
 	}
 
 	/*
@@ -732,6 +735,17 @@ EXPORT_SYMBOL(drm_helper_probe_single_connector_modes);
  */
 void drm_kms_helper_hotplug_event(struct drm_device *dev)
 {
+	struct drm_connector *connector;
+	struct drm_connector_list_iter conn_iter;
+
+	drm_connector_list_iter_begin(dev, &conn_iter);
+	drm_for_each_connector_iter(connector, &conn_iter) {
+		mutex_lock(&dev->mode_config.mutex);
+		connector->status_changed = false;
+		mutex_unlock(&dev->mode_config.mutex);
+	}
+	drm_connector_list_iter_end(&conn_iter);
+
 	drm_sysfs_hotplug_event(dev);
 	drm_client_dev_hotplug(dev);
 }
@@ -747,6 +761,10 @@ EXPORT_SYMBOL(drm_kms_helper_hotplug_event);
 void drm_kms_helper_connector_hotplug_event(struct drm_connector *connector)
 {
 	struct drm_device *dev = connector->dev;
+
+	mutex_lock(&dev->mode_config.mutex);
+	connector->status_changed = false;
+	mutex_unlock(&dev->mode_config.mutex);
 
 	drm_sysfs_connector_hotplug_event(connector);
 	drm_client_dev_hotplug(dev);
@@ -844,8 +862,14 @@ static void output_poll_execute(struct work_struct *work)
 	mutex_unlock(&dev->mode_config.mutex);
 
 out:
-	if (changed)
-		drm_kms_helper_hotplug_event(dev);
+	if (changed) {
+		drm_connector_list_iter_begin(dev, &conn_iter);
+		drm_for_each_connector_iter(connector, &conn_iter) {
+			if (connector->status_changed)
+				drm_kms_helper_connector_hotplug_event(connector);
+		}
+		drm_connector_list_iter_end(&conn_iter);
+	}
 
 	if (repoll)
 		schedule_delayed_work(delayed_work, DRM_OUTPUT_POLL_PERIOD);
@@ -1107,10 +1131,16 @@ bool drm_helper_hpd_irq_event(struct drm_device *dev)
 	drm_connector_list_iter_end(&conn_iter);
 	mutex_unlock(&dev->mode_config.mutex);
 
-	if (changed == 1)
+	if (changed == 1) {
 		drm_kms_helper_connector_hotplug_event(first_changed_connector);
-	else if (changed > 0)
-		drm_kms_helper_hotplug_event(dev);
+	} else if (changed > 0) {
+		drm_connector_list_iter_begin(dev, &conn_iter);
+		drm_for_each_connector_iter(connector, &conn_iter) {
+			if (connector->status_changed)
+				drm_kms_helper_connector_hotplug_event(connector);
+		}
+		drm_connector_list_iter_end(&conn_iter);
+	}
 
 	if (first_changed_connector)
 		drm_connector_put(first_changed_connector);
