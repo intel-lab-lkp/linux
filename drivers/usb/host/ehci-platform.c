@@ -27,6 +27,7 @@
 #include <linux/io.h>
 #include <linux/module.h>
 #include <linux/of.h>
+#include <linux/of_device.h>
 #include <linux/platform_device.h>
 #include <linux/reset.h>
 #include <linux/sys_soc.h>
@@ -122,10 +123,18 @@ static const struct ehci_driver_overrides platform_overrides __initconst = {
 	.extra_priv_size =	sizeof(struct ehci_platform_priv),
 };
 
+#define EHCI_PDATA_COMMON        \
+	.power_on		= ehci_platform_power_on,	\
+	.power_suspend	= ehci_platform_power_off,	\
+	.power_off		= ehci_platform_power_off
+
 static struct usb_ehci_pdata ehci_platform_defaults = {
-	.power_on =		ehci_platform_power_on,
-	.power_suspend =	ehci_platform_power_off,
-	.power_off =		ehci_platform_power_off,
+	EHCI_PDATA_COMMON,
+};
+
+static const struct usb_ehci_pdata ehci_ast2700_platform = {
+	EHCI_PDATA_COMMON,
+	.dma_mask_64 = 1,
 };
 
 /**
@@ -239,6 +248,7 @@ static int ehci_platform_probe(struct platform_device *dev)
 	struct usb_hcd *hcd;
 	struct resource *res_mem;
 	struct usb_ehci_pdata *pdata = dev_get_platdata(&dev->dev);
+	const struct of_device_id *match;
 	struct ehci_platform_priv *priv;
 	struct ehci_hcd *ehci;
 	int err, irq, clk = 0;
@@ -250,7 +260,10 @@ static int ehci_platform_probe(struct platform_device *dev)
 	 * Use reasonable defaults so platforms don't have to provide these
 	 * with DT probing on ARM.
 	 */
-	if (!pdata)
+	match = of_match_device(dev->dev.driver->of_match_table, &dev->dev);
+	if (match && match->data)
+		pdata = (struct usb_ehci_pdata *)match->data;
+	else if (!pdata)
 		pdata = &ehci_platform_defaults;
 
 	err = dma_coerce_mask_and_coherent(&dev->dev,
@@ -298,7 +311,9 @@ static int ehci_platform_probe(struct platform_device *dev)
 		if (of_device_is_compatible(dev->dev.of_node,
 					    "aspeed,ast2500-ehci") ||
 		    of_device_is_compatible(dev->dev.of_node,
-					    "aspeed,ast2600-ehci"))
+					    "aspeed,ast2600-ehci") ||
+		    of_device_is_compatible(dev->dev.of_node,
+					    "aspeed,ast2700-ehci"))
 			ehci->is_aspeed = 1;
 
 		if (soc_device_match(quirk_poll_match))
@@ -485,6 +500,7 @@ static const struct of_device_id vt8500_ehci_ids[] = {
 	{ .compatible = "wm,prizm-ehci", },
 	{ .compatible = "generic-ehci", },
 	{ .compatible = "cavium,octeon-6335-ehci", },
+	{ .compatible = "aspeed,ast2700-ehci",	.data = &ehci_ast2700_platform },
 	{}
 };
 MODULE_DEVICE_TABLE(of, vt8500_ehci_ids);
