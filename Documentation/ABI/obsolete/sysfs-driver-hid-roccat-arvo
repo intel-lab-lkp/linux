@@ -1,5 +1,5 @@
 What:		/sys/bus/usb/devices/<busnum>-<devnum>:<config num>.<interface num>/<hid-bus>:<vendor-id>:<product-id>.<num>/arvo/roccatarvo<minor>/actual_profile
-Date:		Januar 2011
+Date:		January 2011
 Contact:	Stefan Achatz <erazor_de@users.sourceforge.net>
 Description:	The integer value of this attribute ranges from 1-5.
 		When read, this attribute returns the number of the actual
@@ -9,7 +9,7 @@ Description:	The integer value of this attribute ranges from 1-5.
 Users:		http://roccat.sourceforge.net
 
 What:		/sys/bus/usb/devices/<busnum>-<devnum>:<config num>.<interface num>/<hid-bus>:<vendor-id>:<product-id>.<num>/arvo/roccatarvo<minor>/button
-Date:		Januar 2011
+Date:		January 2011
 Contact:	Stefan Achatz <erazor_de@users.sourceforge.net>
 Description:	The keyboard can store short macros with consist of 1 button with
 		several modifier keys internally.
@@ -20,7 +20,7 @@ Description:	The keyboard can store short macros with consist of 1 button with
 Users:		http://roccat.sourceforge.net
 
 What:		/sys/bus/usb/devices/<busnum>-<devnum>:<config num>.<interface num>/<hid-bus>:<vendor-id>:<product-id>.<num>/arvo/roccatarvo<minor>/info
-Date:		Januar 2011
+Date:		January 2011
 Contact:	Stefan Achatz <erazor_de@users.sourceforge.net>
 Description:	When read, this file returns some info about the device like the
 		installed firmware version.
@@ -29,7 +29,7 @@ Description:	When read, this file returns some info about the device like the
 Users:		http://roccat.sourceforge.net
 
 What:		/sys/bus/usb/devices/<busnum>-<devnum>:<config num>.<interface num>/<hid-bus>:<vendor-id>:<product-id>.<num>/arvo/roccatarvo<minor>/key_mask
-Date:		Januar 2011
+Date:		January 2011
 Contact:	Stefan Achatz <erazor_de@users.sourceforge.net>
 Description:	The keyboard lets the user deactivate 5 certain keys like the
 		windows and application keys, to protect the user from the outcome
@@ -42,7 +42,7 @@ Description:	The keyboard lets the user deactivate 5 certain keys like the
 Users:		http://roccat.sourceforge.net
 
 What:		/sys/bus/usb/devices/<busnum>-<devnum>:<config num>.<interface num>/<hid-bus>:<vendor-id>:<product-id>.<num>/arvo/roccatarvo<minor>/mode_key
-Date:		Januar 2011
+Date:		January 2011
 Contact:	Stefan Achatz <erazor_de@users.sourceforge.net>
 Description:	The keyboard has a condensed layout without num-lock key.
 		Instead it uses a mode-key which activates a gaming mode where
