@@ -496,17 +496,17 @@ static void rcar_mipi_dsi_set_display_timing(struct rcar_mipi_dsi *dsi,
 	if (mode->flags & DRM_MODE_FLAG_NHSYNC)
 		vprmset0r |= TXVMVPRMSET0R_HSPOL_LOW;
 
-	vprmset1r = TXVMVPRMSET1R_VACTIVE(mode->vdisplay)
-		  | TXVMVPRMSET1R_VSA(mode->vsync_end - mode->vsync_start);
+	vprmset1r = FIELD_PREP(TXVMVPRMSET1R_VACTIVE_MASK, mode->vdisplay)
+		  | FIELD_PREP(TXVMVPRMSET1R_VSA_MASK, mode->vsync_end - mode->vsync_start);
 
-	vprmset2r = TXVMVPRMSET2R_VFP(mode->vsync_start - mode->vdisplay)
-		  | TXVMVPRMSET2R_VBP(mode->vtotal - mode->vsync_end);
+	vprmset2r = FIELD_PREP(TXVMVPRMSET2R_VFP_MASK, mode->vsync_start - mode->vdisplay)
+		  | FIELD_PREP(TXVMVPRMSET2R_VBP_MASK, mode->vtotal - mode->vsync_end);
 
-	vprmset3r = TXVMVPRMSET3R_HACTIVE(mode->hdisplay)
-		  | TXVMVPRMSET3R_HSA(mode->hsync_end - mode->hsync_start);
+	vprmset3r = FIELD_PREP(TXVMVPRMSET3R_HACTIVE_MASK, mode->hdisplay)
+		  | FIELD_PREP(TXVMVPRMSET3R_HSA_MASK, mode->hsync_end - mode->hsync_start);
 
-	vprmset4r = TXVMVPRMSET4R_HFP(mode->hsync_start - mode->hdisplay)
-		  | TXVMVPRMSET4R_HBP(mode->htotal - mode->hsync_end);
+	vprmset4r = FIELD_PREP(TXVMVPRMSET4R_HFP_MASK, mode->hsync_start - mode->hdisplay)
+		  | FIELD_PREP(TXVMVPRMSET4R_HBP_MASK, mode->htotal - mode->hsync_end);
 
 	rcar_mipi_dsi_write(dsi, TXVMVPRMSET0R, vprmset0r);
 	rcar_mipi_dsi_write(dsi, TXVMVPRMSET1R, vprmset1r);
@@ -553,7 +553,7 @@ static int rcar_mipi_dsi_startup(struct rcar_mipi_dsi *dsi,
 	/* PHY setting */
 	phy_setup = rcar_mipi_dsi_read(dsi, PHYSETUP);
 	phy_setup &= ~PHYSETUP_HSFREQRANGE_MASK;
-	phy_setup |= PHYSETUP_HSFREQRANGE(setup_info.hsfreqrange);
+	phy_setup |= FIELD_PREP(PHYSETUP_HSFREQRANGE_MASK, setup_info.hsfreqrange);
 	rcar_mipi_dsi_write(dsi, PHYSETUP, phy_setup);
 
 	switch (dsi->info->model) {
@@ -576,13 +576,13 @@ static int rcar_mipi_dsi_startup(struct rcar_mipi_dsi *dsi,
 	rcar_mipi_dsi_set(dsi, CLOCKSET1, CLOCKSET1_SHADOW_CLEAR);
 	rcar_mipi_dsi_clr(dsi, CLOCKSET1, CLOCKSET1_SHADOW_CLEAR);
 
-	clockset2 = CLOCKSET2_M(setup_info.m - dsi->info->clockset2_m_offset)
-		  | CLOCKSET2_N(setup_info.n - 1)
-		  | CLOCKSET2_VCO_CNTRL(setup_info.clkset->vco_cntrl);
-	clockset3 = CLOCKSET3_PROP_CNTRL(setup_info.clkset->prop_cntrl)
-		  | CLOCKSET3_INT_CNTRL(setup_info.clkset->int_cntrl)
-		  | CLOCKSET3_CPBIAS_CNTRL(setup_info.clkset->cpbias_cntrl)
-		  | CLOCKSET3_GMP_CNTRL(setup_info.clkset->gmp_cntrl);
+	clockset2 = FIELD_PREP(CLOCKSET2_M_MASK, setup_info.m - dsi->info->clockset2_m_offset)
+		  | FIELD_PREP(CLOCKSET2_N_MASK, setup_info.n - 1)
+		  | FIELD_PREP(CLOCKSET2_VCO_CNTRL_MASK, setup_info.clkset->vco_cntrl);
+	clockset3 = FIELD_PREP(CLOCKSET3_PROP_CNTRL_MASK, setup_info.clkset->prop_cntrl)
+		  | FIELD_PREP(CLOCKSET3_INT_CNTRL_MASK, setup_info.clkset->int_cntrl)
+		  | FIELD_PREP(CLOCKSET3_CPBIAS_CNTRL_MASK, setup_info.clkset->cpbias_cntrl)
+		  | FIELD_PREP(CLOCKSET3_GMP_CNTRL_MASK, setup_info.clkset->gmp_cntrl);
 	rcar_mipi_dsi_write(dsi, CLOCKSET2, clockset2);
 	rcar_mipi_dsi_write(dsi, CLOCKSET3, clockset3);
 
@@ -647,16 +647,16 @@ static int rcar_mipi_dsi_startup(struct rcar_mipi_dsi *dsi,
 		return -EINVAL;
 	}
 
-	vclkset |= VCLKSET_LANE(dsi->lanes - 1);
+	vclkset |= FIELD_PREP(VCLKSET_LANE_MASK, dsi->lanes - 1);
 
 	switch (dsi->info->model) {
 	case RCAR_DSI_V3U:
 	default:
-		vclkset |= VCLKSET_DIV_V3U(__ffs(setup_info.vclk_divider));
+		vclkset |= FIELD_PREP(VCLKSET_DIV_V3U_MASK, __ffs(setup_info.vclk_divider));
 		break;
 
 	case RCAR_DSI_V4H:
-		vclkset |= VCLKSET_DIV_V4H(__ffs(setup_info.vclk_divider) - 1);
+		vclkset |= FIELD_PREP(VCLKSET_DIV_V4H_MASK, __ffs(setup_info.vclk_divider) - 1);
 		break;
 	}
 
@@ -988,10 +988,10 @@ static ssize_t rcar_mipi_dsi_host_tx_transfer(struct mipi_dsi_host *host,
 	 */
 	rcar_mipi_dsi_write(dsi, TXCMPHDR,
 			    (is_tx_long ? TXCMPHDR_FMT : 0) |
-			    TXCMPHDR_VC(msg->channel) |
-			    TXCMPHDR_DT(msg->type) |
-			    TXCMPHDR_DATA1(packet.header[2]) |
-			    TXCMPHDR_DATA0(packet.header[1]));
+			    FIELD_PREP(TXCMPHDR_VC_MASK, msg->channel) |
+			    FIELD_PREP(TXCMPHDR_DT_MASK, msg->type) |
+			    FIELD_PREP(TXCMPHDR_DATA1_MASK, packet.header[2]) |
+			    FIELD_PREP(TXCMPHDR_DATA0_MASK, packet.header[1]));
 
 	if (is_tx_long) {
 		memcpy(payload, packet.payload,
