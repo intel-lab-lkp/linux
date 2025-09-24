@@ -216,7 +216,7 @@ struct array_buffer {
 	int				cpu;
 };
 
-#define TRACE_FLAGS_MAX_SIZE		32
+#define TRACE_FLAGS_MAX_SIZE		64
 
 struct trace_options {
 	struct tracer			*tracer;
@@ -390,7 +390,7 @@ struct trace_array {
 	int			buffer_percent;
 	unsigned int		n_err_log_entries;
 	struct tracer		*current_trace;
-	unsigned int		trace_flags;
+	u64			trace_flags;
 	unsigned char		trace_flags_index[TRACE_FLAGS_MAX_SIZE];
 	unsigned int		flags;
 	raw_spinlock_t		start_lock;
@@ -631,7 +631,7 @@ struct tracer {
 					    u32 old_flags, u32 bit, int set);
 	/* Return 0 if OK with change, else return non-zero */
 	int			(*flag_changed)(struct trace_array *tr,
-						u32 mask, int set);
+						u64 mask, int set);
 	struct tracer		*next;
 	struct tracer_flags	*flags;
 	int			enabled;
@@ -1321,22 +1321,22 @@ extern int trace_get_user(struct trace_parser *parser, const char __user *ubuf,
  */
 #ifdef CONFIG_FUNCTION_GRAPH_TRACER
 # define FGRAPH_FLAGS						\
-		C(DISPLAY_GRAPH,	"display-graph"),
+		C(DISPLAY_GRAPH,	"display-graph")
 #else
 # define FGRAPH_FLAGS
 #endif
 
 #ifdef CONFIG_BRANCH_TRACER
 # define BRANCH_FLAGS					\
-		C(BRANCH,		"branch"),
+		C(BRANCH,		"branch")
 #else
 # define BRANCH_FLAGS
 #endif
 
 #ifdef CONFIG_FUNCTION_TRACER
 # define FUNCTION_FLAGS						\
-		C(FUNCTION,		"function-trace"),	\
-		C(FUNC_FORK,		"function-fork"),
+		C(FUNCTION,		"function-trace")	\
+		C(FUNC_FORK,		"function-fork")
 # define FUNCTION_DEFAULT_FLAGS		TRACE_ITER_FUNCTION
 #else
 # define FUNCTION_FLAGS
@@ -1346,9 +1346,17 @@ extern int trace_get_user(struct trace_parser *parser, const char __user *ubuf,
 
 #ifdef CONFIG_STACKTRACE
 # define STACK_FLAGS				\
-		C(STACKTRACE,		"stacktrace"),
+		C(STACKTRACE,		"stacktrace")
 #else
 # define STACK_FLAGS
+#endif
+
+#ifdef CONFIG_FUNCTION_PROFILER
+# define PROFILER_FLAGS					\
+		C(PROF_TEXT_OFFSET,	"prof-text-offset")
+#else
+# define PROFILER_FLAGS
+# define TRACE_ITER_PROF_TEXT_OFFSET	0UL
 #endif
 
 /*
@@ -1359,44 +1367,45 @@ extern int trace_get_user(struct trace_parser *parser, const char __user *ubuf,
  *       trace.c (this macro guarantees it).
  */
 #define TRACE_FLAGS						\
-		C(PRINT_PARENT,		"print-parent"),	\
-		C(SYM_OFFSET,		"sym-offset"),		\
-		C(SYM_ADDR,		"sym-addr"),		\
-		C(VERBOSE,		"verbose"),		\
-		C(RAW,			"raw"),			\
-		C(HEX,			"hex"),			\
-		C(BIN,			"bin"),			\
-		C(BLOCK,		"block"),		\
-		C(FIELDS,		"fields"),		\
-		C(PRINTK,		"trace_printk"),	\
-		C(ANNOTATE,		"annotate"),		\
-		C(USERSTACKTRACE,	"userstacktrace"),	\
-		C(SYM_USEROBJ,		"sym-userobj"),		\
-		C(PRINTK_MSGONLY,	"printk-msg-only"),	\
-		C(CONTEXT_INFO,		"context-info"),   /* Print pid/cpu/time */ \
-		C(LATENCY_FMT,		"latency-format"),	\
-		C(RECORD_CMD,		"record-cmd"),		\
-		C(RECORD_TGID,		"record-tgid"),		\
-		C(OVERWRITE,		"overwrite"),		\
-		C(STOP_ON_FREE,		"disable_on_free"),	\
-		C(IRQ_INFO,		"irq-info"),		\
-		C(MARKERS,		"markers"),		\
-		C(EVENT_FORK,		"event-fork"),		\
-		C(TRACE_PRINTK,		"trace_printk_dest"),	\
-		C(COPY_MARKER,		"copy_trace_marker"),\
-		C(PAUSE_ON_TRACE,	"pause-on-trace"),	\
-		C(HASH_PTR,		"hash-ptr"),	/* Print hashed pointer */ \
+		C(PRINT_PARENT,		"print-parent")		\
+		C(SYM_OFFSET,		"sym-offset")		\
+		C(SYM_ADDR,		"sym-addr")		\
+		C(VERBOSE,		"verbose")		\
+		C(RAW,			"raw")			\
+		C(HEX,			"hex")			\
+		C(BIN,			"bin")			\
+		C(BLOCK,		"block")		\
+		C(FIELDS,		"fields")		\
+		C(PRINTK,		"trace_printk")	\
+		C(ANNOTATE,		"annotate")		\
+		C(USERSTACKTRACE,	"userstacktrace")	\
+		C(SYM_USEROBJ,		"sym-userobj")		\
+		C(PRINTK_MSGONLY,	"printk-msg-only")	\
+		C(CONTEXT_INFO,		"context-info")   /* Print pid/cpu/time */ \
+		C(LATENCY_FMT,		"latency-format")	\
+		C(RECORD_CMD,		"record-cmd")		\
+		C(RECORD_TGID,		"record-tgid")		\
+		C(OVERWRITE,		"overwrite")		\
+		C(STOP_ON_FREE,		"disable_on_free")	\
+		C(IRQ_INFO,		"irq-info")		\
+		C(MARKERS,		"markers")		\
+		C(EVENT_FORK,		"event-fork")		\
+		C(TRACE_PRINTK,		"trace_printk_dest")	\
+		C(COPY_MARKER,		"copy_trace_marker")\
+		C(PAUSE_ON_TRACE,	"pause-on-trace")	\
+		C(HASH_PTR,		"hash-ptr")	/* Print hashed pointer */ \
 		FUNCTION_FLAGS					\
 		FGRAPH_FLAGS					\
 		STACK_FLAGS					\
-		BRANCH_FLAGS
+		BRANCH_FLAGS					\
+		PROFILER_FLAGS
 
 /*
  * By defining C, we can make TRACE_FLAGS a list of bit names
  * that will define the bits for the flag masks.
  */
 #undef C
-#define C(a, b) TRACE_ITER_##a##_BIT
+#define C(a, b) TRACE_ITER_##a##_BIT,
 
 enum trace_iterator_bits {
 	TRACE_FLAGS
@@ -1409,9 +1418,10 @@ enum trace_iterator_bits {
  * use the bits as defined above.
  */
 #undef C
-#define C(a, b) TRACE_ITER_##a = (1 << TRACE_ITER_##a##_BIT)
+#define C(a, b) static const u64 TRACE_ITER_##a = (1ULL << TRACE_ITER_##a##_BIT);
 
-enum trace_iterator_flags { TRACE_FLAGS };
+TRACE_FLAGS
+#undef C
 
 /*
  * TRACE_ITER_SYM_MASK masks the options in trace_flags that
@@ -2056,8 +2066,8 @@ extern const char *__stop___tracepoint_str[];
 
 void trace_printk_control(bool enabled);
 void trace_printk_start_comm(void);
-int trace_keep_overwrite(struct tracer *tracer, u32 mask, int set);
-int set_tracer_flag(struct trace_array *tr, unsigned int mask, int enabled);
+int trace_keep_overwrite(struct tracer *tracer, u64 mask, int set);
+int set_tracer_flag(struct trace_array *tr, u64 mask, int enabled);
 
 /* Used from boot time tracer */
 extern int trace_set_options(struct trace_array *tr, char *option);
