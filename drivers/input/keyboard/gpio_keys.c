@@ -584,7 +584,7 @@ static int gpio_keys_setup_key(struct platform_device *pdev,
 				error = irq;
 				dev_err_probe(dev, error,
 					      "Unable to get irq number for GPIO %d\n",
-					      button->gpio);
+					      desc_to_gpio(bdata->gpiod));
 				return error;
 			}
 			bdata->irq = irq;
