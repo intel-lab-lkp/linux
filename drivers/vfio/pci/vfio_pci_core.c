@@ -1003,6 +1003,7 @@ static int vfio_pci_ioctl_get_region_info(struct vfio_pci_core_device *vdev,
 	struct pci_dev *pdev = vdev->pdev;
 	struct vfio_region_info info;
 	struct vfio_info_cap caps = { .buf = NULL, .size = 0 };
+	struct vfio_pci_region *region;
 	int i, ret;
 
 	if (copy_from_user(&info, arg, minsz))
@@ -1091,22 +1092,23 @@ static int vfio_pci_ioctl_get_region_info(struct vfio_pci_core_device *vdev,
 			info.index, VFIO_PCI_NUM_REGIONS + vdev->num_regions);
 
 		i = info.index - VFIO_PCI_NUM_REGIONS;
+		region = &vdev->region[i];
 
 		info.offset = VFIO_PCI_INDEX_TO_OFFSET(info.index);
-		info.size = vdev->region[i].size;
-		info.flags = vdev->region[i].flags;
+		info.size = region->size;
+		info.flags = region->flags;
 
-		cap_type.type = vdev->region[i].type;
-		cap_type.subtype = vdev->region[i].subtype;
+		cap_type.type = region->type;
+		cap_type.subtype = region->subtype;
 
 		ret = vfio_info_add_capability(&caps, &cap_type.header,
 					       sizeof(cap_type));
 		if (ret)
 			return ret;
 
-		if (vdev->region[i].ops->add_capability) {
-			ret = vdev->region[i].ops->add_capability(
-				vdev, &vdev->region[i], &caps);
+		if (region->ops->add_capability) {
+			ret = region->ops->add_capability(
+				vdev, region, &caps);
 			if (ret)
 				return ret;
 		}
@@ -1726,10 +1728,11 @@ int vfio_pci_core_mmap(struct vfio_device *core_vdev, struct vm_area_struct *vma
 		int regnum = index - VFIO_PCI_NUM_REGIONS;
 		struct vfio_pci_region *region = vdev->region + regnum;
 
+		ret = -EINVAL;
 		if (region->ops && region->ops->mmap &&
 		    (region->flags & VFIO_REGION_INFO_FLAG_MMAP))
-			return region->ops->mmap(vdev, region, vma);
-		return -EINVAL;
+			ret = region->ops->mmap(vdev, region, vma);
+		return ret;
 	}
 	if (index >= VFIO_PCI_ROM_REGION_INDEX)
 		return -EINVAL;
