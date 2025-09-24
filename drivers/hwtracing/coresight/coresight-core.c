@@ -353,14 +353,17 @@ static bool coresight_is_helper(struct coresight_device *csdev)
 }
 
 static int coresight_enable_helper(struct coresight_device *csdev,
-				   enum cs_mode mode, void *data)
+				   enum cs_mode mode,
+				   struct coresight_path *path,
+				   struct perf_output_handle *handle)
 {
-	return helper_ops(csdev)->enable(csdev, mode, data);
+	return helper_ops(csdev)->enable(csdev, mode, path, handle);
 }
 
-static void coresight_disable_helper(struct coresight_device *csdev, void *data)
+static void coresight_disable_helper(struct coresight_device *csdev,
+				     struct coresight_path *path)
 {
-	helper_ops(csdev)->disable(csdev, data);
+	helper_ops(csdev)->disable(csdev, path);
 }
 
 static void coresight_disable_helpers(struct coresight_device *csdev, void *data)
@@ -477,7 +480,9 @@ void coresight_disable_path(struct coresight_path *path)
 EXPORT_SYMBOL_GPL(coresight_disable_path);
 
 static int coresight_enable_helpers(struct coresight_device *csdev,
-				    enum cs_mode mode, void *data)
+				    enum cs_mode mode,
+				    struct coresight_path *path,
+				    struct perf_output_handle *handle)
 {
 	int i, ret = 0;
 	struct coresight_device *helper;
@@ -487,7 +492,7 @@ static int coresight_enable_helpers(struct coresight_device *csdev,
 		if (!helper || !coresight_is_helper(helper))
 			continue;
 
-		ret = coresight_enable_helper(helper, mode, data);
+		ret = coresight_enable_helper(helper, mode, path, handle);
 		if (ret)
 			return ret;
 	}
@@ -496,7 +501,7 @@ static int coresight_enable_helpers(struct coresight_device *csdev,
 }
 
 int coresight_enable_path(struct coresight_path *path, enum cs_mode mode,
-			  void *sink_data)
+			  struct perf_output_handle *handle)
 {
 	int ret = 0;
 	u32 type;
@@ -510,7 +515,7 @@ int coresight_enable_path(struct coresight_path *path, enum cs_mode mode,
 		type = csdev->type;
 
 		/* Enable all helpers adjacent to the path first */
-		ret = coresight_enable_helpers(csdev, mode, path);
+		ret = coresight_enable_helpers(csdev, mode, path, handle);
 		if (ret)
 			goto err_disable_path;
 		/*
@@ -526,7 +531,7 @@ int coresight_enable_path(struct coresight_path *path, enum cs_mode mode,
 
 		switch (type) {
 		case CORESIGHT_DEV_TYPE_SINK:
-			ret = coresight_enable_sink(csdev, mode, sink_data);
+			ret = coresight_enable_sink(csdev, mode, handle);
 			/*
 			 * Sink is the first component turned on. If we
 			 * failed to enable the sink, there are no components
