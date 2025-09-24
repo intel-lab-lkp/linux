@@ -96,18 +96,18 @@ do {								\
 
 #define __local_lock_acquire(lock)					\
 	do {								\
-		local_trylock_t *tl;					\
-		local_lock_t *l;					\
+		local_trylock_t *__tl;					\
+		local_lock_t *__l;					\
 									\
-		l = (local_lock_t *)(lock);				\
-		tl = (local_trylock_t *)l;				\
+		__l = (local_lock_t *)(lock);				\
+		__tl = (local_trylock_t *)__l;				\
 		_Generic((lock),					\
 			local_trylock_t *: ({				\
-				lockdep_assert(tl->acquired == 0);	\
-				WRITE_ONCE(tl->acquired, 1);		\
+				lockdep_assert(__tl->acquired == 0);	\
+				WRITE_ONCE(__tl->acquired, 1);		\
 			}),						\
 			local_lock_t *: (void)0);			\
-		local_lock_acquire(l);					\
+		local_lock_acquire(__l);				\
 	} while (0)
 
 #define __local_lock(lock)					\
@@ -130,50 +130,50 @@ do {								\
 
 #define __local_trylock(lock)					\
 	({							\
-		local_trylock_t *tl;				\
+		local_trylock_t *__tl;				\
 								\
 		preempt_disable();				\
-		tl = (lock);					\
-		if (READ_ONCE(tl->acquired)) {			\
+		__tl = (lock);					\
+		if (READ_ONCE(__tl->acquired)) {		\
 			preempt_enable();			\
-			tl = NULL;				\
+			__tl = NULL;				\
 		} else {					\
-			WRITE_ONCE(tl->acquired, 1);		\
+			WRITE_ONCE(__tl->acquired, 1);		\
 			local_trylock_acquire(			\
-				(local_lock_t *)tl);		\
+				(local_lock_t *)__tl);		\
 		}						\
-		!!tl;						\
+		!!__tl;						\
 	})
 
 #define __local_trylock_irqsave(lock, flags)			\
 	({							\
-		local_trylock_t *tl;				\
+		local_trylock_t *__tl;				\
 								\
 		local_irq_save(flags);				\
-		tl = (lock);					\
-		if (READ_ONCE(tl->acquired)) {			\
+		__tl = (lock);					\
+		if (READ_ONCE(__tl->acquired)) {		\
 			local_irq_restore(flags);		\
-			tl = NULL;				\
+			__tl = NULL;				\
 		} else {					\
-			WRITE_ONCE(tl->acquired, 1);		\
+			WRITE_ONCE(__tl->acquired, 1);		\
 			local_trylock_acquire(			\
-				(local_lock_t *)tl);		\
+				(local_lock_t *)__tl);		\
 		}						\
-		!!tl;						\
+		!!__tl;						\
 	})
 
 #define __local_lock_release(lock)					\
 	do {								\
-		local_trylock_t *tl;					\
-		local_lock_t *l;					\
+		local_trylock_t *__tl;					\
+		local_lock_t *__l;					\
 									\
-		l = (local_lock_t *)(lock);				\
-		tl = (local_trylock_t *)l;				\
-		local_lock_release(l);					\
+		__l = (local_lock_t *)(lock);				\
+		__tl = (local_trylock_t *)__l;				\
+		local_lock_release(__l);				\
 		_Generic((lock),					\
 			local_trylock_t *: ({				\
-				lockdep_assert(tl->acquired == 1);	\
-				WRITE_ONCE(tl->acquired, 0);		\
+				lockdep_assert(__tl->acquired == 1);	\
+				WRITE_ONCE(__tl->acquired, 0);		\
 			}),						\
 			local_lock_t *: (void)0);			\
 	} while (0)
