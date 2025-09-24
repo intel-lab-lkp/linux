@@ -1291,21 +1291,15 @@ EXPORT_SYMBOL_GPL(fwnode_graph_get_endpoint_by_id);
 /**
  * fwnode_graph_get_endpoint_count - Count endpoints on a device node
  * @fwnode: The node related to a device
- * @flags: fwnode lookup flags
  * Count endpoints in a device node.
- *
- * If FWNODE_GRAPH_DEVICE_DISABLED flag is specified, also unconnected endpoints
- * and endpoints connected to disabled devices are counted.
  */
-unsigned int fwnode_graph_get_endpoint_count(const struct fwnode_handle *fwnode,
-					     unsigned long flags)
+unsigned int fwnode_graph_get_endpoint_count(const struct fwnode_handle *fwnode)
 {
 	struct fwnode_handle *ep;
 	unsigned int count = 0;
 
 	fwnode_graph_for_each_endpoint(fwnode, ep) {
-		if (flags & FWNODE_GRAPH_DEVICE_DISABLED ||
-		    fwnode_graph_remote_available(ep))
+		if (fwnode_graph_remote_available(ep))
 			count++;
 	}
 
