@@ -1285,16 +1285,19 @@ static int hpage_collapse_scan_pmd(struct mm_struct *mm,
 	     _pte++, addr += PAGE_SIZE) {
 		pte_t pteval = ptep_get(_pte);
 		if (is_swap_pte(pteval)) {
+			swp_entry_t swp = pte_to_swp_entry(pteval);
 			++unmapped;
 			if (!cc->is_khugepaged ||
 			    unmapped <= khugepaged_max_ptes_swap) {
 				/*
-				 * Always be strict with uffd-wp
-				 * enabled swap entries.  Please see
-				 * comment below for pte_uffd_wp().
+				 * Always be strict with PTE markers, which are
+				 * special non-swap entries (e.g., for UFFD_WP,
+				 * POISONED, GUARD). We cannot collapse over
+				 * them, so just abort the scan here.
 				 */
-				if (pte_swp_uffd_wp_any(pteval)) {
-					result = SCAN_PTE_UFFD_WP;
+				if (is_pte_marker_entry(swp) &&
+				    pte_marker_get(swp)) {
+					result = SCAN_PTE_NON_PRESENT;
 					goto out_unmap;
 				}
 				continue;
