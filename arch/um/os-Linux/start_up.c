@@ -28,8 +28,8 @@
 #include <stdbool.h>
 #include <stub-data.h>
 #include <sys/prctl.h>
-#include <linux/seccomp.h>
-#include <linux/filter.h>
+#include <uapi/linux/seccomp.h>
+#include <uapi/linux/filter.h>
 #include <sysdep/mcontext.h>
 #include <sysdep/stub.h>
 #include <registers.h>
