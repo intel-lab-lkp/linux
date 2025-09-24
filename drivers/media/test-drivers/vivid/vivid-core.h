@@ -194,6 +194,14 @@ enum vivid_colorspace {
 	VIVID_CS_SYS_BG,
 };
 
+enum vivid_hdcp {
+	NO_HDCP,
+	HDCP1,
+	HDCP2,
+	HDCP1_REP,
+	HDCP2_REP
+};
+
 #define VIVID_INVALID_SIGNAL(mode) \
 	((mode) == NO_SIGNAL || (mode) == NO_LOCK || (mode) == OUT_OF_RANGE)
 
@@ -270,10 +278,12 @@ struct vivid_dev {
 	u8				num_svid_inputs;
 	u8				input_type[MAX_INPUTS];
 	u8				input_name_counter[MAX_INPUTS];
+	enum vivid_hdcp			input_hdcp;
 	u8				num_outputs;
 	u8				num_hdmi_outputs;
 	u8				output_type[MAX_OUTPUTS];
 	u8				output_name_counter[MAX_OUTPUTS];
+	enum vivid_hdcp			output_hdcp;
 	bool				has_audio_inputs;
 	bool				has_audio_outputs;
 	bool				has_vid_cap;
@@ -345,6 +355,17 @@ struct vivid_dev {
 		struct v4l2_ctrl	*ctrl_dv_timings_signal_mode;
 		struct v4l2_ctrl	*ctrl_dv_timings;
 	};
+	struct v4l2_ctrl		*ctrl_dv_tx_hdcp_mode;
+	struct v4l2_ctrl		*ctrl_dv_tx_hdcp_rep_ksv_fifo;
+	struct v4l2_ctrl		*ctrl_dv_rx_hdcp_detected;
+	struct v4l2_ctrl		*ctrl_dv_rx_hdcp_enable;
+	struct v4l2_ctrl		*ctrl_dv_rx_hdcp_rep_device_count;
+	struct v4l2_ctrl		*ctrl_dv_rx_hdcp_rep_depth;
+	struct v4l2_ctrl		*ctrl_dv_rx_hdcp_rep_max_devs_exceeded;
+	struct v4l2_ctrl		*ctrl_dv_rx_hdcp_rep_max_cascade_exceeded;
+	struct v4l2_ctrl		*ctrl_dv_rx_hdcp_rep_ksv_fifo;
+	struct v4l2_ctrl		*ctrl_dv_rx_hdcp_rep_ready;
+
 	struct v4l2_ctrl		*ctrl_has_crop_cap;
 	struct v4l2_ctrl		*ctrl_has_compose_cap;
 	struct v4l2_ctrl		*ctrl_has_scaler_cap;
@@ -440,6 +461,9 @@ struct vivid_dev {
 	int				dv_timings_cap_sel[MAX_INPUTS];
 	u32				service_set_cap;
 	struct vivid_vbi_gen_data	vbi_gen;
+	bool				rx_hdcp_detected;
+	bool				rx_hdcp_enabled;
+	struct v4l2_hdcp_ksv		rx_hdcp_bksv;
 	u8				*edid;
 	unsigned			edid_blocks;
 	unsigned			edid_max_blocks;
@@ -470,6 +494,9 @@ struct vivid_dev {
 	bool				vbi_out_have_cc[2];
 	u8				vbi_out_cc[2][2];
 	bool				dvi_d_out;
+	u8				tx_hdcp_mode;
+	struct v4l2_hdcp_ksv		tx_hdcp_bksv;
+	struct v4l2_hdcp_ksv		tx_hdcp_bksv_scratch[127];
 	u8				*scaled_line;
 	u8				*blended_line;
 	unsigned			cur_scaled_line;

@@ -144,6 +144,12 @@ MODULE_PARM_DESC(input_types, " input types, default is 0xe4. Two bits per input
 			      "\t\t    bits 0-1 == input 0, bits 31-30 == input 15.\n"
 			      "\t\t    Type 0 == webcam, 1 == TV, 2 == S-Video, 3 == HDMI");
 
+/* Default: no HDCP */
+static unsigned input_hdcp;
+module_param(input_hdcp, uint, 0444);
+MODULE_PARM_DESC(input_hdcp, " input HDCP type, default is 0.\n"
+			     "\t\t    Type 0 == no HDCP, 1 == HDCP 1.x, 2 == HDCP 2.x, 3 == HDCP 1.x Repeater, 4 == HDCP 2.x Repeater");
+
 /* Default: 2 outputs */
 static unsigned num_outputs[VIVID_MAX_DEVS] = { [0 ... (VIVID_MAX_DEVS - 1)] = 2 };
 module_param_array(num_outputs, uint, NULL, 0444);
@@ -155,6 +161,12 @@ module_param_array(output_types, uint, NULL, 0444);
 MODULE_PARM_DESC(output_types, " output types, default is 0x02. One bit per output,\n"
 			      "\t\t    bit 0 == output 0, bit 15 == output 15.\n"
 			      "\t\t    Type 0 == S-Video, 1 == HDMI");
+
+/* Default: no HDCP */
+static unsigned output_hdcp;
+module_param(output_hdcp, uint, 0444);
+MODULE_PARM_DESC(output_hdcp, " output HDCP type, default is 0.\n"
+			     "\t\t    Type 0 == no HDCP, 1 == HDCP 1.x, 2 == HDCP 2.x");
 
 unsigned vivid_debug;
 module_param(vivid_debug, uint, 0644);
@@ -936,6 +948,18 @@ static int vivid_create_queue(struct vivid_dev *dev,
 	return vb2_queue_init(q);
 }
 
+static void vivid_set_bksv(struct v4l2_hdcp_ksv *bksv, unsigned int inst,
+			   bool is_output)
+{
+	u32 mask = is_output | (inst << 1);
+
+	// A BKSV has 20 1 bits and 20 0 bits. Construct a unique
+	// BKSV based on the vivid instance number and whether this
+	// is an input or output.
+	for (unsigned int i = 0; i < V4L2_HDCP_KSV_SIZE * 4; i++)
+		bksv->ksv[i / 4] |= ((mask & (1 << i)) ? 1 : 2) << (i & 3) * 2;
+}
+
 static int vivid_detect_feature_set(struct vivid_dev *dev, int inst,
 				    unsigned node_type,
 				    bool *has_tuner,
@@ -973,6 +997,9 @@ static int vivid_detect_feature_set(struct vivid_dev *dev, int inst,
 		dev->num_inputs--;
 	}
 	dev->num_hdmi_inputs = in_type_counter[HDMI];
+	if (input_hdcp <= HDCP2_REP)
+		dev->input_hdcp = input_hdcp;
+	vivid_set_bksv(&dev->rx_hdcp_bksv, dev->inst, false);
 	dev->num_svid_inputs = in_type_counter[SVID];
 
 	/* how many outputs do we have and of what type? */
@@ -1000,6 +1027,9 @@ static int vivid_detect_feature_set(struct vivid_dev *dev, int inst,
 		dev->num_outputs--;
 	}
 	dev->num_hdmi_outputs = out_type_counter[HDMI];
+	if (output_hdcp <= HDCP2)
+		dev->output_hdcp = output_hdcp;
+	vivid_set_bksv(&dev->tx_hdcp_bksv, dev->inst, true);
 
 	/* do we create a video capture device? */
 	dev->has_vid_cap = node_type & 0x0001;

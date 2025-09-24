@@ -309,8 +309,8 @@ static int prepare_ext_ctrls(struct v4l2_ctrl_handler *hdl,
 					c->size = max_size;
 					return -ENOSPC;
 				}
-				if (!c->size)
-					return -EFAULT;
+				//if (!c->size)
+				//	return -EFAULT;
 			}
 		} else if (ctrl->is_ptr && !ctrl->is_string) {
 			unsigned int tot_size = ctrl->elems * ctrl->elem_size;
@@ -952,13 +952,35 @@ int __v4l2_ctrl_s_ctrl_compound(struct v4l2_ctrl *ctrl,
 	/* It's a driver bug if this happens. */
 	if (WARN_ON(ctrl->type != type))
 		return -EINVAL;
-	/* Setting dynamic arrays is not (yet?) supported. */
+	/*
+	 * Setting dynamic arrays is not supported.
+	 * Use __v4l2_ctrl_s_ctrl_dyn_array instead.
+	 */
 	if (WARN_ON(ctrl->is_dyn_array))
 		return -EINVAL;
 	memcpy(ctrl->p_new.p, p, ctrl->elems * ctrl->elem_size);
 	return set_ctrl(NULL, ctrl, 0);
 }
 EXPORT_SYMBOL(__v4l2_ctrl_s_ctrl_compound);
+
+int __v4l2_ctrl_s_ctrl_dyn_array(struct v4l2_ctrl *ctrl,
+				 enum v4l2_ctrl_type type,
+				 unsigned int elems, const void *p)
+{
+	lockdep_assert_held(ctrl->handler->lock);
+
+	/* It's a driver bug if this happens. */
+	if (WARN_ON(ctrl->type != type))
+		return -EINVAL;
+	if (WARN_ON(!ctrl->is_dyn_array))
+		return -EINVAL;
+	if (elems > ctrl->p_array_alloc_elems)
+		return -EINVAL;
+	memcpy(ctrl->p_new.p, p, elems * ctrl->elem_size);
+	ctrl->new_elems = elems;
+	return set_ctrl(NULL, ctrl, 0);
+}
+EXPORT_SYMBOL(__v4l2_ctrl_s_ctrl_dyn_array);
 
 /*
  * Modify the range of a control.

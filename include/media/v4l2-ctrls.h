@@ -57,6 +57,7 @@ struct video_device;
  * @p_av1_frame:		Pointer to an AV1 frame structure.
  * @p_av1_film_grain:		Pointer to an AV1 film grain structure.
  * @p_rect:			Pointer to a rectangle.
+ * @p_hdcp_ksv:			Pointer to an HDCP KSV vector.
  * @p:				Pointer to a compound value.
  * @p_const:			Pointer to a constant compound value.
  */
@@ -91,6 +92,7 @@ union v4l2_ctrl_ptr {
 	struct v4l2_ctrl_av1_frame *p_av1_frame;
 	struct v4l2_ctrl_av1_film_grain *p_av1_film_grain;
 	struct v4l2_rect *p_rect;
+	struct v4l2_hdcp_ksv *p_hdcp_ksv;
 	void *p;
 	const void *p_const;
 };
@@ -1283,6 +1285,53 @@ static inline int v4l2_ctrl_s_ctrl_compound(struct v4l2_ctrl *ctrl,
 	__v4l2_ctrl_s_ctrl_compound((ctrl), V4L2_CTRL_TYPE_AREA, (area))
 #define v4l2_ctrl_s_ctrl_area(ctrl, area) \
 	v4l2_ctrl_s_ctrl_compound((ctrl), V4L2_CTRL_TYPE_AREA, (area))
+
+/**
+ * __v4l2_ctrl_s_ctrl_dyn_array() - Unlocked variant to set a dynamic array control
+ *
+ * @ctrl: The control.
+ * @type: The type of the data.
+ * @elems: The number of elements.
+ * @p:    The new dynamic array payload.
+ *
+ * This sets the control's new payload safely by going through the
+ * control framework. This function assumes the control's handler is already
+ * locked, allowing it to be used from within the &v4l2_ctrl_ops functions.
+ *
+ * This function is for dynamic control type controls only.
+ */
+int __v4l2_ctrl_s_ctrl_dyn_array(struct v4l2_ctrl *ctrl,
+				 enum v4l2_ctrl_type type,
+				 unsigned int elems, const void *p);
+
+/**
+ * v4l2_ctrl_s_ctrl_dyn_array() - Helper function to set a dynamic array
+ *	control from within a driver.
+ *
+ * @ctrl: The control.
+ * @type: The type of the data.
+ * @elems: The number of elements.
+ * @p:    The new compound payload.
+ *
+ * This sets the control's new payload safely by going through the
+ * control framework. This function will lock the control's handler, so it
+ * cannot be used from within the &v4l2_ctrl_ops functions.
+ *
+ * This function is for compound type controls only.
+ */
+static inline int v4l2_ctrl_s_ctrl_dyn_array(struct v4l2_ctrl *ctrl,
+					     enum v4l2_ctrl_type type,
+					     unsigned int elems,
+					     const void *p)
+{
+	int rval;
+
+	v4l2_ctrl_lock(ctrl);
+	rval = __v4l2_ctrl_s_ctrl_dyn_array(ctrl, type, elems, p);
+	v4l2_ctrl_unlock(ctrl);
+
+	return rval;
+}
 
 /* Internal helper functions that deal with control events. */
 extern const struct v4l2_subscribed_event_ops v4l2_ctrl_sub_ev_ops;

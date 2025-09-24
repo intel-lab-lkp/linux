@@ -262,6 +262,28 @@ const struct vb2_ops vivid_vid_cap_qops = {
 	.buf_request_complete	= vid_cap_buf_request_complete,
 };
 
+/* Update the HDCP status */
+void vivid_update_hdcp(struct vivid_dev *dev)
+{
+	struct vivid_dev *dev_tx;
+	unsigned int menu_idx;
+
+	dev->rx_hdcp_detected = false;
+
+	if (!dev->input_hdcp || !dev->rx_hdcp_enabled)
+		return;
+
+	menu_idx = dev->input_is_connected_to_output[dev->input];
+
+	if (menu_idx < FIXED_MENU_ITEMS)
+		return;
+
+	dev_tx = vivid_ctrl_hdmi_to_output_instance[menu_idx];
+
+	if (dev_tx->tx_hdcp_mode)
+		dev->rx_hdcp_detected = true;
+}
+
 /*
  * Determine the 'picture' quality based on the current TV frequency: either
  * COLOR for a good 'signal', GRAY (grayscale picture) for a slightly off
@@ -1162,6 +1184,15 @@ int vidioc_s_input(struct file *file, void *priv, unsigned i)
 	dev->vbi_cap_dev.tvnorms = dev->vid_cap_dev.tvnorms;
 	dev->meta_cap_dev.tvnorms = dev->vid_cap_dev.tvnorms;
 	vivid_update_format_cap(dev, false);
+	vivid_update_hdcp(dev);
+	if (dev->ctrl_dv_rx_hdcp_detected)
+		v4l2_ctrl_s_ctrl(dev->ctrl_dv_rx_hdcp_detected, dev->rx_hdcp_detected);
+	spin_lock(&hdmi_output_skip_mask_lock);
+	hdmi_input_update_outputs_mask |= 1 << dev->inst;
+	spin_unlock(&hdmi_output_skip_mask_lock);
+	if (update_hdmi_ctrls_workqueue)
+		queue_work(update_hdmi_ctrls_workqueue,
+			   &dev->update_hdmi_ctrl_work);
 
 	if (dev->colorspace) {
 		switch (dev->input_type[i]) {
@@ -1561,6 +1592,41 @@ void vivid_update_outputs(struct vivid_dev *dev)
 		if (dev_rx && dev_rx->edid_blocks)
 			edid_present |= 1 << j;
 		j++;
+
+		if (i != dev->output)
+			continue;
+
+		memset(dev->tx_hdcp_bksv_scratch, 0,
+		       sizeof(dev->tx_hdcp_bksv_scratch));
+
+		if (dev_rx && dev_rx->rx_hdcp_enabled &&
+		    dev_rx->input_hdcp >= HDCP1_REP && dev->tx_hdcp_mode) {
+			bool tx_is_hdcp1 = dev->tx_hdcp_mode == HDCP1;
+			int tx_max_dev_cnt = tx_is_hdcp1 ? 127 : 31;
+			bool rx_is_hdcp1 = dev_rx->input_hdcp == HDCP1_REP;
+			int rx_max_dev_cnt = rx_is_hdcp1 ? 127 : 31;
+			int max_dev_cnt = min(rx_max_dev_cnt, tx_max_dev_cnt);
+			int elems_rx;
+
+			dev->tx_hdcp_bksv_scratch[0] = dev_rx->rx_hdcp_bksv;
+			v4l2_ctrl_lock(dev_rx->ctrl_dv_rx_hdcp_rep_ksv_fifo);
+			elems_rx = dev_rx->ctrl_dv_rx_hdcp_rep_ksv_fifo->elems;
+			if (elems_rx >= max_dev_cnt)
+				elems_rx = max_dev_cnt - 1;
+			memcpy(dev->tx_hdcp_bksv_scratch + 1,
+			       dev_rx->ctrl_dv_rx_hdcp_rep_ksv_fifo->p_cur.p_hdcp_ksv,
+			       elems_rx * dev_rx->ctrl_dv_rx_hdcp_rep_ksv_fifo->elem_size);
+			v4l2_ctrl_unlock(dev_rx->ctrl_dv_rx_hdcp_rep_ksv_fifo);
+
+			v4l2_ctrl_s_ctrl_dyn_array(dev->ctrl_dv_tx_hdcp_rep_ksv_fifo,
+						   V4L2_CTRL_TYPE_HDCP_KSV,
+						   elems_rx + 1,
+						   dev->tx_hdcp_bksv_scratch);
+		} else {
+			v4l2_ctrl_s_ctrl_dyn_array(dev->ctrl_dv_tx_hdcp_rep_ksv_fifo,
+						   V4L2_CTRL_TYPE_HDCP_KSV, 0,
+						   dev->tx_hdcp_bksv_scratch);
+		}
 	}
 	v4l2_ctrl_s_ctrl(dev->ctrl_tx_edid_present, edid_present);
 	v4l2_ctrl_s_ctrl(dev->ctrl_tx_hotplug, edid_present);

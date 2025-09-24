@@ -29,6 +29,20 @@ These pads appear in several of the controls in this section as
 bitmasks, one bit for each pad. Bit 0 corresponds to pad 0, bit 1 to pad
 1, etc. The maximum value of the control is the set of valid pads.
 
+Notes on HDCP
+=============
+
+Support for HDCP (video encryption/decryption) is part of the DV controls.
+
+The HDCP protocol is public and available here: :ref:`hdcp`.
+
+The HDCP controls do not deal with any secret keys, those are typically
+fused inside the video receivers and transmitters.
+
+It is the responsibility as HDCP licensee to ensure that decrypted video
+cannot be obtained. Typically this is done by capturing the video into
+protected memory. This is unrelated to these HDCP controls, they just
+configure HDCP.
 
 .. _dv-control-id:
 
@@ -157,3 +171,53 @@ enum v4l2_dv_it_content_type -
     from a computer as opposed to content from a TV broadcast or an
     analog source. See ``V4L2_CID_DV_TX_IT_CONTENT_TYPE`` for the
     available content types.
+
+``V4L2_CID_DV_RX_HDCP_DETECTED (bool)``
+    This control shall only be present if HDCP is supported by the receiver.
+    This read-only control returns 1 if the incoming video stream is being
+    decrypted, or 0 otherwise.
+
+``V4L2_CID_DV_RX_HDCP_ENABLE (bool)``
+    This control shall only be present if HDCP is supported by the receiver.
+    Set to 1 to enable HDCP support, or 0 to disable HDCP support. If the
+    receiver is not capable of disabling HDCP support, then this control
+    must still be present, but the minimum value of the control shall be 1
+    instead of 0.
+
+``V4L2_CID_DV_RX_HDCP_REP_DEVICE_COUNT (int)``
+    This control shall only be present if HDCP is supported by the receiver
+    and the receiver is configured as an HDCP repeater.
+
+    Set to the total number of downstream HDCP devices.
+
+``V4L2_CID_DV_RX_HDCP_REP_DEPTH (int)``
+    This control shall only be present if HDCP is supported by the receiver
+    and the receiver is configured as an HDCP repeater.
+
+    Set to the total depth of the HDCP topology.
+
+``V4L2_CID_DV_RX_HDCP_REP_MAX_DEVS_EXCEEDED (bool)``
+    This control shall only be present if HDCP is supported by the receiver
+    and the receiver is configured as an HDCP repeater.
+
+    Set to 1 to indicate that the total number of downstream HDCP devices
+    exceeds 127 or the maximum number of devices supported by the KSV FIFO
+    in receiver.
+
+``V4L2_CID_DV_RX_HDCP_REP_MAX_CASCADE_EXCEEDED (bool)``
+    This control shall only be present if HDCP is supported by the receiver
+    and the receiver is configured as an HDCP repeater.
+
+    Set to 1 to indicate that the depth of the HDCP topology is larger than 7.
+
+``V4L2_CID_DV_RX_HDCP_REP_KSV_FIFO (array of u8[5])``
+    This control shall only be present if HDCP is supported by the receiver
+    and the receiver is configured as an HDCP repeater.
+
+    Set to 1 to indicate that the depth of the HDCP topology is larger than 7.
+
+``V4L2_CID_DV_RX_HDCP_REP_READY (bool)``
+    This control shall only be present if HDCP is supported by the receiver
+    and the receiver is configured as an HDCP repeater.
+
+    Set to 1 to indicate that all the repeater-related data has been set.
