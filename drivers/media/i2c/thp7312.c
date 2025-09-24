@@ -2067,7 +2067,7 @@ static int thp7312_parse_dt(struct thp7312_device *thp7312)
 		return -EINVAL;
 	}
 
-	fwnode_for_each_available_child_node(sensors, node) {
+	fwnode_for_each_child_node(sensors, node) {
 		if (fwnode_name_eq(node, "sensor")) {
 			if (!thp7312_sensor_parse_dt(thp7312, node))
 				num_sensors++;
