@@ -1077,6 +1077,7 @@ static void mock_dev_release(struct device *dev)
 {
 	struct mock_dev *mdev = to_mock_dev(dev);
 
+	iommu_mock_device_abort(&mdev->dev);
 	ida_free(&mock_dev_ida, mdev->id);
 	kfree(mdev);
 }
@@ -1125,6 +1126,10 @@ static struct mock_dev *mock_dev_create(unsigned long dev_flags)
 		dev_err(&mdev->dev, "add pasid-num-bits property failed, rc: %d", rc);
 		goto err_put;
 	}
+
+	rc = iommu_mock_device_init(&mdev->dev, &mock_iommu.iommu_dev);
+	if (rc)
+		goto err_put;
 
 	rc = device_add(&mdev->dev);
 	if (rc)

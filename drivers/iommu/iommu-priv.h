@@ -37,6 +37,9 @@ void iommu_device_unregister_bus(struct iommu_device *iommu,
 				 const struct bus_type *bus,
 				 struct notifier_block *nb);
 
+int iommu_mock_device_init(struct device *dev, struct iommu_device *iommu);
+void iommu_mock_device_abort(struct device *dev);
+
 struct iommu_attach_handle *iommu_attach_handle_get(struct iommu_group *group,
 						    ioasid_t pasid,
 						    unsigned int type);
