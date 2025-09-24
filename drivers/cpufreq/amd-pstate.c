@@ -1157,15 +1157,10 @@ static ssize_t store_energy_performance_preference(
 		struct cpufreq_policy *policy, const char *buf, size_t count)
 {
 	struct amd_cpudata *cpudata = policy->driver_data;
-	char str_preference[21];
 	ssize_t ret;
 	u8 epp;
 
-	ret = sscanf(buf, "%20s", str_preference);
-	if (ret != 1)
-		return -EINVAL;
-
-	ret = match_string(energy_perf_strings, -1, str_preference);
+	ret = sysfs_match_string(energy_perf_strings, buf);
 	if (ret < 0)
 		return -EINVAL;
 
