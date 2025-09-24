@@ -881,30 +881,38 @@ static int msix_mmappable_cap(struct vfio_pci_core_device *vdev,
 	return vfio_info_add_capability(caps, &header, sizeof(header));
 }
 
+/*
+ * Registers a new region to vfio_pci_core_device.
+ * Returns region index on success or a negative errno.
+ */
 int vfio_pci_core_register_dev_region(struct vfio_pci_core_device *vdev,
 				      unsigned int type, unsigned int subtype,
 				      const struct vfio_pci_regops *ops,
 				      size_t size, u32 flags, void *data)
 {
-	struct vfio_pci_region *region;
+	int num_regions = vdev->num_regions;
+	struct vfio_pci_region *region, *old_region;
 
-	region = krealloc(vdev->region,
-			  (vdev->num_regions + 1) * sizeof(*region),
-			  GFP_KERNEL_ACCOUNT);
+	region = kmalloc((num_regions + 1) * sizeof(*region),
+			 GFP_KERNEL_ACCOUNT);
 	if (!region)
 		return -ENOMEM;
 
+	old_region = vdev->region;
+	if (old_region)
+		memcpy(region, old_region, num_regions * sizeof(*region));
+
+	region[num_regions].type = type;
+	region[num_regions].subtype = subtype;
+	region[num_regions].ops = ops;
+	region[num_regions].size = size;
+	region[num_regions].flags = flags;
+	region[num_regions].data = data;
+
 	vdev->region = region;
-	vdev->region[vdev->num_regions].type = type;
-	vdev->region[vdev->num_regions].subtype = subtype;
-	vdev->region[vdev->num_regions].ops = ops;
-	vdev->region[vdev->num_regions].size = size;
-	vdev->region[vdev->num_regions].flags = flags;
-	vdev->region[vdev->num_regions].data = data;
-
 	vdev->num_regions++;
-
-	return 0;
+	kfree(old_region);
+	return num_regions;
 }
 EXPORT_SYMBOL_GPL(vfio_pci_core_register_dev_region);
 

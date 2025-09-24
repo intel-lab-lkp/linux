@@ -265,7 +265,7 @@ static int vfio_pci_igd_opregion_init(struct vfio_pci_core_device *vdev)
 		PCI_VENDOR_ID_INTEL | VFIO_REGION_TYPE_PCI_VENDOR_TYPE,
 		VFIO_REGION_SUBTYPE_INTEL_IGD_OPREGION, &vfio_pci_igd_regops,
 		size, VFIO_REGION_INFO_FLAG_READ, opregionvbt);
-	if (ret) {
+	if (ret < 0) {
 		if (opregionvbt->vbt_ex)
 			memunmap(opregionvbt->vbt_ex);
 
@@ -415,7 +415,7 @@ static int vfio_pci_igd_cfg_init(struct vfio_pci_core_device *vdev)
 		VFIO_REGION_SUBTYPE_INTEL_IGD_HOST_CFG,
 		&vfio_pci_igd_cfg_regops, host_bridge->cfg_size,
 		VFIO_REGION_INFO_FLAG_READ, host_bridge);
-	if (ret) {
+	if (ret < 0) {
 		pci_dev_put(host_bridge);
 		return ret;
 	}
@@ -435,7 +435,7 @@ static int vfio_pci_igd_cfg_init(struct vfio_pci_core_device *vdev)
 		VFIO_REGION_SUBTYPE_INTEL_IGD_LPC_CFG,
 		&vfio_pci_igd_cfg_regops, lpc_bridge->cfg_size,
 		VFIO_REGION_INFO_FLAG_READ, lpc_bridge);
-	if (ret) {
+	if (ret < 0) {
 		pci_dev_put(lpc_bridge);
 		return ret;
 	}
