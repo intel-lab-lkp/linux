@@ -88,6 +88,7 @@ void nfsd4_end_grace(struct nfsd_net *nn);
 static void _free_cpntf_state_locked(struct nfsd_net *nn, struct nfs4_cpntf_state *cps);
 static void nfsd4_file_hash_remove(struct nfs4_file *fi);
 static void deleg_reaper(struct nfsd_net *nn);
+static bool nfsd_dir_may_setlease(struct file_lease *new, struct file_lease *old);
 
 /* Locking: */
 
@@ -5580,6 +5581,31 @@ static const struct lease_manager_operations nfsd_lease_mng_ops = {
 	.lm_change = nfsd_change_deleg_cb,
 };
 
+static const struct lease_manager_operations nfsd_dir_lease_mng_ops = {
+	.lm_breaker_owns_lease = nfsd_breaker_owns_lease,
+	.lm_break = nfsd_break_deleg_cb,
+	.lm_change = nfsd_change_deleg_cb,
+	.lm_may_setlease = nfsd_dir_may_setlease,
+};
+
+static bool
+nfsd_dir_may_setlease(struct file_lease *new, struct file_lease *old)
+{
+	struct nfs4_delegation *od, *nd;
+
+	/* Only conflicts with other nfsd dir delegs */
+	if (old->fl_lmops != &nfsd_dir_lease_mng_ops)
+		return true;
+
+	od = old->c.flc_owner;
+	nd = new->c.flc_owner;
+
+	/* Are these for the same client? No bueno if so */
+	if (od->dl_stid.sc_client == nd->dl_stid.sc_client)
+		return false;
+	return true;
+}
+
 static __be32 nfsd4_check_seqid(struct nfsd4_compound_state *cstate, struct nfs4_stateowner *so, u32 seqid)
 {
 	if (nfsd4_has_session(cstate))
@@ -5918,12 +5944,13 @@ static struct file_lease *nfs4_alloc_init_lease(struct nfs4_delegation *dp)
 	fl = locks_alloc_lease();
 	if (!fl)
 		return NULL;
-	fl->fl_lmops = &nfsd_lease_mng_ops;
 	fl->c.flc_flags = FL_DELEG;
 	fl->c.flc_type = deleg_is_read(dp->dl_type) ? F_RDLCK : F_WRLCK;
 	fl->c.flc_owner = (fl_owner_t)dp;
 	fl->c.flc_pid = current->tgid;
 	fl->c.flc_file = dp->dl_stid.sc_file->fi_deleg_file->nf_file;
+	fl->fl_lmops = S_ISDIR(file_inode(fl->c.flc_file)->i_mode) ?
+				&nfsd_dir_lease_mng_ops : &nfsd_lease_mng_ops;
 	return fl;
 }
 
