@@ -5335,13 +5335,18 @@ static int
 netif_skb_check_for_xdp(struct sk_buff **pskb, const struct bpf_prog *prog)
 {
 	struct sk_buff *skb = *pskb;
+	struct netdev_rx_queue *rxq;
 	int err, hroom, troom;
 
-	local_lock_nested_bh(&system_page_pool.bh_lock);
-	err = skb_cow_data_for_xdp(this_cpu_read(system_page_pool.pool), pskb, prog);
-	local_unlock_nested_bh(&system_page_pool.bh_lock);
-	if (!err)
-		return 0;
+	rxq = netif_get_rxqueue(skb);
+	if (rxq->xdp_rxq.mem.type == MEM_TYPE_PAGE_POOL) {
+		local_lock_nested_bh(&system_page_pool.bh_lock);
+		err = skb_cow_data_for_xdp(this_cpu_read(system_page_pool.pool),
+					   pskb, prog);
+		local_unlock_nested_bh(&system_page_pool.bh_lock);
+		if (!err)
+			return 0;
+	}
 
 	/* In case we have to go down the path and also linearize,
 	 * then lets do the pskb_expand_head() work just once here.
