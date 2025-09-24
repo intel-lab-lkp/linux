@@ -1,0 +1,51 @@
+// SPDX-License-Identifier: GPL-2.0
+/dts-v1/;
+
+/ {
+	model = "Freescale MCF5475EVB";
+	compatible = "fsl,mcf5475evb";
+	#address-cells = <1>;
+	#size-cells = <1>;
+	interrupt-parent = <&intc>;
+
+	coreclk: clock-266000000 {
+		#clock-cells = <0>;
+		compatible = "fixed-clock";
+		clock-frequency = <266000000>;
+	};
+
+	intc: interrupt-controller@ff000700 {
+		compatible = "fsl,intc-2";
+		interrupt-controller;
+		#interrupt-cells = <1>;
+		reg = <0xff000700 0x80>;
+	};
+
+	uart0: serial@ff008600 {
+		compatible = "fsl,mcfuart";
+		reg = <0xff008600 0x80>;
+		interrupts = <99>;
+		clocks = <&coreclk>;
+	};
+
+	uart1: serial@ff008700 {
+		compatible = "fsl,mcfuart";
+		reg = <0xff008700 0x80>;
+		interrupts = <98>;
+		clocks = <&coreclk>;
+	};
+
+	uart2: serial@ff008800 {
+		compatible = "fsl,mcfuart";
+		reg = <0xff008800 0x80>;
+		interrupts = <97>;
+		clocks = <&coreclk>;
+	};
+
+	uart3: serial@ff008900 {
+		compatible = "fsl,mcfuart";
+		reg = <0xff008900 0x80>;
+		interrupts = <96>;
+		clocks = <&coreclk>;
+	};
+};

@@ -12,8 +12,11 @@
 #include <linux/init.h>
 #include <linux/kernel.h>
 #include <linux/interrupt.h>
-#include <linux/irq.h>
 #include <linux/io.h>
+#include <linux/irq.h>
+#include <linux/irqchip.h>
+#include <linux/of.h>
+#include <linux/of_irq.h>
 #include <asm/traps.h>
 #include <asm/coldfire.h>
 #include <asm/mcfsim.h>
@@ -113,14 +116,14 @@ void mcf_autovector(int irq)
 
 static void intc_irq_mask(struct irq_data *d)
 {
-	if (mcf_irq2imr[d->irq])
-		mcf_setimr(mcf_irq2imr[d->irq]);
+	if (mcf_irq2imr[d->hwirq])
+		mcf_setimr(mcf_irq2imr[d->hwirq]);
 }
 
 static void intc_irq_unmask(struct irq_data *d)
 {
-	if (mcf_irq2imr[d->irq])
-		mcf_clrimr(mcf_irq2imr[d->irq]);
+	if (mcf_irq2imr[d->hwirq])
+		mcf_clrimr(mcf_irq2imr[d->hwirq]);
 }
 
 static int intc_irq_set_type(struct irq_data *d, unsigned int type)
@@ -137,14 +140,47 @@ static struct irq_chip intc_irq_chip = {
 
 void __init init_IRQ(void)
 {
-	int irq;
-
 	mcf_maskimr(0xffffffff);
 
+#ifdef CONFIG_IRQCHIP
+	irqchip_init();
+#else
+	int irq;
 	for (irq = 0; (irq < NR_IRQS); irq++) {
 		irq_set_chip(irq, &intc_irq_chip);
 		irq_set_irq_type(irq, IRQ_TYPE_LEVEL_HIGH);
 		irq_set_handler(irq, handle_level_irq);
 	}
+#endif
 }
 
+#ifdef CONFIG_IRQ_DOMAIN
+static int intc_domain_map(struct irq_domain *d,
+			   unsigned int irq,
+			   irq_hw_number_t hw)
+{
+	irq_set_chip_and_handler(irq, &intc_irq_chip, handle_level_irq);
+	return 0;
+}
+
+static const struct irq_domain_ops intc_irqdomain_ops = {
+	.map = intc_domain_map,
+};
+
+static int __init intc_of_init(struct device_node *np,
+			       struct device_node *parent)
+{
+	const unsigned int num = MCFINT_VECBASE + 64;
+	struct irq_domain *domain;
+	int irq;
+
+	domain = irq_domain_add_linear(np, num, &intc_irqdomain_ops, NULL);
+
+	for (irq = MCFINT_VECBASE; irq < num; irq++)
+		irq_create_mapping(domain, irq);
+
+	return 0;
+}
+
+IRQCHIP_DECLARE(intc, "fsl,intc", intc_of_init);
+#endif /* CONFIG_IRQ_DOMAIN */

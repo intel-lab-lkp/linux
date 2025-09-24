@@ -1,0 +1,53 @@
+// SPDX-License-Identifier: GPL-2.0
+/dts-v1/;
+
+/ {
+	model = "Freescale MCF5208EVB";
+	compatible = "fsl,mcf5208evb";
+	#address-cells = <1>;
+	#size-cells = <1>;
+	interrupt-parent = <&intc_simr>;
+
+	coreclk: clock-166000000 {
+		#clock-cells = <0>;
+		compatible = "fixed-clock";
+		clock-frequency = <166000000>;
+	};
+
+	intc_simr: interrupt-controller@fc048000 {
+		compatible = "fsl,intc-simr";
+		interrupt-controller;
+		#interrupt-cells = <1>;
+		reg = <0xfc048000 0x80>;
+	};
+
+	uart0: serial@fc060000 {
+		compatible = "fsl,mcfuart";
+		reg = <0xfc060000 0x80>;
+		interrupts = <90>;
+		clocks = <&coreclk>;
+	};
+
+	uart1: serial@fc064000 {
+		compatible = "fsl,mcfuart";
+		reg = <0xfc064000 0x80>;
+		interrupts = <91>;
+		clocks = <&coreclk>;
+	};
+
+	uart2: serial@fc068000 {
+		compatible = "fsl,mcfuart";
+		reg = <0xfc068000 0x80>;
+		interrupts = <92>;
+		clocks = <&coreclk>;
+	};
+
+	fec: ethernet@fc030000 {
+		compatible = "fsl,m5208-fec";
+		reg = <0xfc030000 0x800>;
+		interrupts = <100>, <104>, <106>;
+		interrupt-names = "int0", "int1", "int2";
+		clocks = <&coreclk>, <&coreclk>;
+		clock-names = "ipg", "ahb";
+	};
+};

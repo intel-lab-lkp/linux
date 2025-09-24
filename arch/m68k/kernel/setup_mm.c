@@ -27,6 +27,8 @@
 #include <linux/nvram.h>
 #include <linux/initrd.h>
 #include <linux/random.h>
+#include <linux/of.h>
+#include <linux/of_fdt.h>
 
 #include <asm/bootinfo.h>
 #include <asm/byteorder.h>
@@ -203,6 +205,32 @@ static void __init m68k_parse_bootinfo(const struct bi_record *record)
 #endif
 }
 
+#ifdef CONFIG_BUILTIN_DTB
+static void __init m68k_setup_fdt(void)
+{
+	phys_addr_t fdt = (phys_addr_t) &__dtb_start;
+
+	pr_info("m68k generic DT machine support, FDT blob at 0x%08x\n", fdt);
+	if (!early_init_dt_verify(__va(fdt), fdt)) {
+		pr_err("FDT blob is bad?!\n");
+		return;
+	}
+	early_init_dt_scan_nodes();
+	unflatten_device_tree();
+}
+
+static void __init m68k_dtb_model(void)
+{
+	const char *model;
+
+	model = of_flat_dt_get_machine_name();
+	if (model)
+		pr_info("DTB reports model \"%s\"\n", model);
+	else
+		pr_warn("DTB has no model type?\n");
+}
+#endif /* CONFIG_BUILTIN_DTB */
+
 void __init setup_arch(char **cmdline_p)
 {
 	/* The bootinfo is located right after the kernel */
@@ -331,6 +359,11 @@ void __init setup_arch(char **cmdline_p)
 		memblock_reserve(m68k_ramdisk.addr, m68k_ramdisk.size);
 
 	paging_init();
+
+#ifdef CONFIG_BUILTIN_DTB
+	m68k_setup_fdt();
+	m68k_dtb_model();
+#endif
 
 	if (IS_ENABLED(CONFIG_BLK_DEV_INITRD) && m68k_ramdisk.size) {
 		initrd_start = (unsigned long)phys_to_virt(m68k_ramdisk.addr);

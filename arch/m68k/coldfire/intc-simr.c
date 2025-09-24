@@ -14,8 +14,11 @@
 #include <linux/init.h>
 #include <linux/kernel.h>
 #include <linux/interrupt.h>
-#include <linux/irq.h>
 #include <linux/io.h>
+#include <linux/irq.h>
+#include <linux/irqchip.h>
+#include <linux/of.h>
+#include <linux/of_irq.h>
 #include <asm/coldfire.h>
 #include <asm/mcfsim.h>
 #include <asm/traps.h>
@@ -66,7 +69,7 @@ static inline unsigned int irq2ebit(unsigned int irq)
 
 static void intc_irq_mask(struct irq_data *d)
 {
-	unsigned int irq = d->irq - MCFINT_VECBASE;
+	unsigned int irq = d->hwirq - MCFINT_VECBASE;
 
 	if (MCFINTC2_SIMR && (irq > 127))
 		__raw_writeb(irq - 128, MCFINTC2_SIMR);
@@ -78,7 +81,7 @@ static void intc_irq_mask(struct irq_data *d)
 
 static void intc_irq_unmask(struct irq_data *d)
 {
-	unsigned int irq = d->irq - MCFINT_VECBASE;
+	unsigned int irq = d->hwirq - MCFINT_VECBASE;
 
 	if (MCFINTC2_CIMR && (irq > 127))
 		__raw_writeb(irq - 128, MCFINTC2_CIMR);
@@ -90,14 +93,16 @@ static void intc_irq_unmask(struct irq_data *d)
 
 static void intc_irq_ack(struct irq_data *d)
 {
-	unsigned int ebit = irq2ebit(d->irq);
+	unsigned int irq = d->hwirq;
+	unsigned int ebit;
 
+	ebit = irq2ebit(irq);
 	__raw_writeb(0x1 << ebit, MCFEPORT_EPFR);
 }
 
 static unsigned int intc_irq_startup(struct irq_data *d)
 {
-	unsigned int irq = d->irq;
+	unsigned int irq = d->hwirq;
 
 	if ((irq >= EINT1) && (irq <= EINT7)) {
 		unsigned int ebit = irq2ebit(irq);
@@ -128,7 +133,7 @@ static unsigned int intc_irq_startup(struct irq_data *d)
 
 static int intc_irq_set_type(struct irq_data *d, unsigned int type)
 {
-	unsigned int ebit, irq = d->irq;
+	unsigned int ebit, irq = d->hwirq;
 	u16 pa, tb;
 
 	switch (type) {
@@ -176,8 +181,6 @@ static struct irq_chip intc_irq_chip_edge_port = {
 
 void __init init_IRQ(void)
 {
-	int irq, eirq;
-
 	/* Mask all interrupt sources */
 	__raw_writeb(0xff, MCFINTC0_SIMR);
 	if (MCFINTC1_SIMR)
@@ -185,8 +188,14 @@ void __init init_IRQ(void)
 	if (MCFINTC2_SIMR)
 		__raw_writeb(0xff, MCFINTC2_SIMR);
 
+#ifdef CONFIG_IRQCHIP
+	irqchip_init();
+#else
+	int irq, eirq;
+
 	eirq = MCFINT_VECBASE + 64 + (MCFINTC1_ICR0 ? 64 : 0) +
-						(MCFINTC2_ICR0 ? 64 : 0);
+		(MCFINTC2_ICR0 ? 64 : 0);
+
 	for (irq = MCFINT_VECBASE; (irq < eirq); irq++) {
 		if ((irq >= EINT1) && (irq <= EINT7))
 			irq_set_chip(irq, &intc_irq_chip_edge_port);
@@ -195,5 +204,39 @@ void __init init_IRQ(void)
 		irq_set_irq_type(irq, IRQ_TYPE_LEVEL_HIGH);
 		irq_set_handler(irq, handle_level_irq);
 	}
+#endif
 }
 
+#ifdef CONFIG_IRQ_DOMAIN
+static int intc_domain_map(struct irq_domain *d,
+			   unsigned int irq,
+			   irq_hw_number_t hw)
+{
+	if ((irq >= EINT1) && (irq <= EINT7))
+		irq_set_chip_and_handler(irq, &intc_irq_chip_edge_port, handle_level_irq);
+	else
+		irq_set_chip_and_handler(irq, &intc_irq_chip, handle_level_irq);
+	return 0;
+}
+
+static const struct irq_domain_ops intc_irqdomain_ops = {
+	.map = intc_domain_map,
+};
+
+static int __init intc_of_init(struct device_node *np,
+			       struct device_node *parent)
+{
+	const unsigned int num = MCFINT_VECBASE + 64 + (MCFINTC1_ICR0 ? 64 : 0) + (MCFINTC2_ICR0 ? 64 : 0);
+	struct irq_domain *domain;
+	int irq;
+
+	domain = irq_domain_add_linear(np, num, &intc_irqdomain_ops, NULL);
+
+	for (irq = MCFINT_VECBASE; irq < num; irq++)
+		irq_create_mapping(domain, irq);
+
+	return 0;
+}
+
+IRQCHIP_DECLARE(intc_simr, "fsl,intc-simr", intc_of_init);
+#endif /* CONFIG_IRQ_DOMAIN */

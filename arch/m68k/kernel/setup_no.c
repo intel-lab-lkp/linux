@@ -32,6 +32,8 @@
 #include <linux/initrd.h>
 #include <linux/root_dev.h>
 #include <linux/rtc.h>
+#include <linux/of.h>
+#include <linux/of_fdt.h>
 
 #include <asm/setup.h>
 #include <asm/bootinfo.h>
@@ -68,6 +70,32 @@ void (*mach_halt)(void);
 #ifndef CPU_NAME
 #define	CPU_NAME	"UNKNOWN"
 #endif
+
+#ifdef CONFIG_BUILTIN_DTB
+static void __init m68k_setup_fdt(void)
+{
+	phys_addr_t fdt = (phys_addr_t) &__dtb_start;
+
+	pr_info("m68k generic DT machine support, FDT blob at 0x%08x\n", fdt);
+	if (!early_init_dt_verify(__va(fdt), fdt)) {
+		pr_err("FDT blob is bad?!\n");
+		return;
+	}
+	early_init_dt_scan_nodes();
+	unflatten_device_tree();
+}
+
+static void __init m68k_dtb_model(void)
+{
+	const char *model;
+
+	model = of_flat_dt_get_machine_name();
+	if (model)
+		pr_info("DTB reports model \"%s\"\n", model);
+	else
+		pr_warn("DTB has no model type?\n");
+}
+#endif /* CONFIG_BUILTIN_DTB */
 
 /*
  * Different cores have different instruction execution timings.
@@ -164,6 +192,11 @@ void __init setup_arch(char **cmdline_p)
 	 * Get kmalloc into gear.
 	 */
 	paging_init();
+
+#ifdef CONFIG_BUILTIN_DTB
+	m68k_setup_fdt();
+	m68k_dtb_model();
+#endif
 }
 
 /*
