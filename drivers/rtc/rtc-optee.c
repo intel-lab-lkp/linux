@@ -299,7 +299,7 @@ static int optee_rtc_read_alarm(struct device *dev, struct rtc_wkalrm *alarm)
 
 	optee_alarm = tee_shm_get_va(priv->shm, 0);
 	if (IS_ERR(optee_alarm))
-		return PTR_ERR(alarm);
+		return PTR_ERR(optee_alarm);
 
 	if (param[0].u.memref.size != sizeof(*optee_alarm))
 		return -EPROTO;
@@ -614,6 +614,7 @@ static int optee_rtc_probe(struct device *dev)
 						  priv, "rtc_alarm_evt");
 		if (IS_ERR(priv->alarm_task)) {
 			dev_err(dev, "Failed to create alarm thread\n");
+			err = PTR_ERR(priv->alarm_task);
 			goto out_shm;
 		}
 
