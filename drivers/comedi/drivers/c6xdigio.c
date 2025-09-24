@@ -242,8 +242,10 @@ static int c6xdigio_attach(struct comedi_device *dev,
 	int ret;
 
 	ret = comedi_request_region(dev, it->options[0], 0x03);
-	if (ret)
+	if (ret) {
+		dev->driver = NULL;
 		return ret;
+	}
 
 	ret = comedi_alloc_subdevices(dev, 2);
 	if (ret)
