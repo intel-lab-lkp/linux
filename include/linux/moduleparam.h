@@ -593,6 +593,9 @@ enum hwparam_type {
 
 
 extern const struct kernel_param_ops param_array_ops;
+extern int param_array_set(const char *val, const struct kernel_param *kp);
+extern int param_array_get(char *buffer, const struct kernel_param *kp);
+extern void param_array_free(void *arg);
 
 extern const struct kernel_param_ops param_ops_string;
 extern int param_set_copystring(const char *val, const struct kernel_param *);
