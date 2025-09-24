@@ -7,6 +7,7 @@ from lib.py import KsftSkipEx, KsftXfailEx
 from lib.py import ksft_setup, wait_file
 from lib.py import cmd, ethtool, ip, CmdExitFailure
 from lib.py import NetNS, NetdevSimDev
+from lib.py import KsftXfailEx
 from .remote import Remote
 
 
@@ -244,6 +245,10 @@ class NetDrvEpEnv(NetDrvEnvBase):
     def require_ipver(self, ipver):
         if not self.addr_v[ipver] or not self.remote_addr_v[ipver]:
             raise KsftSkipEx(f"Test requires IPv{ipver} connectivity")
+
+    def require_nsim(self):
+        if self._ns is None:
+            raise KsftXfailEx("Test only works on netdevsim")
 
     def _require_cmd(self, comm, key, host=None):
         cached = self._required_cmd.get(comm, {})
