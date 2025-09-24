@@ -2458,6 +2458,13 @@ config MITIGATION_PAGE_TABLE_ISOLATION
 
 	  See Documentation/arch/x86/pti.rst for more details.
 
+config ASI_KUNIT_TESTS
+	tristate "KUnit tests for ASI" if !KUNIT_ALL_TESTS
+	depends on MITIGATION_ADDRESS_SPACE_ISOLATION && KUNIT
+	default KUNIT_ALL_TESTS
+	help
+	  Builds the KUnit tests for ASI.
+
 config MITIGATION_RETPOLINE
 	bool "Avoid speculative indirect branches in kernel"
 	select OBJTOOL if HAVE_OBJTOOL
