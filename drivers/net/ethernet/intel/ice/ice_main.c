@@ -5140,6 +5140,13 @@ int ice_load(struct ice_pf *pf)
 
 	devl_assert_locked(priv_to_devlink(pf));
 
+	if (pf->hw.fwlog_cfg.options & ICE_FWLOG_OPTION_IS_REGISTERED) {
+		err = ice_fwlog_register(&pf->hw);
+		if (err)
+			pf->hw.fwlog_cfg.options &=
+				~ICE_FWLOG_OPTION_IS_REGISTERED;
+	}
+
 	vsi = ice_get_main_vsi(pf);
 
 	/* init channel list */
@@ -5691,12 +5698,6 @@ static int ice_resume(struct device *dev)
 	if (!pci_device_is_present(pdev))
 		return -ENODEV;
 
-	ret = pci_enable_device_mem(pdev);
-	if (ret) {
-		dev_err(dev, "Cannot enable device after suspend\n");
-		return ret;
-	}
-
 	pf = pci_get_drvdata(pdev);
 	hw = &pf->hw;
 
@@ -5774,30 +5775,20 @@ ice_pci_err_detected(struct pci_dev *pdev, pci_channel_state_t err)
 static pci_ers_result_t ice_pci_err_slot_reset(struct pci_dev *pdev)
 {
 	struct ice_pf *pf = pci_get_drvdata(pdev);
-	pci_ers_result_t result;
-	int err;
 	u32 reg;
 
-	err = pci_enable_device_mem(pdev);
-	if (err) {
-		dev_err(&pdev->dev, "Cannot re-enable PCI device after reset, error %d\n",
-			err);
-		result = PCI_ERS_RESULT_DISCONNECT;
-	} else {
-		pci_set_master(pdev);
-		pci_restore_state(pdev);
-		pci_save_state(pdev);
-		pci_wake_from_d3(pdev, false);
+	pdev->current_state = PCI_D0;
+	pci_set_master(pdev);
+	pci_restore_state(pdev);
+	pci_save_state(pdev);
+	pci_wake_from_d3(pdev, false);
 
-		/* Check for life */
-		reg = rd32(&pf->hw, GLGEN_RTRIG);
-		if (!reg)
-			result = PCI_ERS_RESULT_RECOVERED;
-		else
-			result = PCI_ERS_RESULT_DISCONNECT;
-	}
-
-	return result;
+	/* Check for life */
+	reg = rd32(&pf->hw, GLGEN_RTRIG);
+	if (!reg)
+		return PCI_ERS_RESULT_RECOVERED;
+	else
+		return PCI_ERS_RESULT_DISCONNECT;
 }
 
 /**
@@ -7697,6 +7688,13 @@ static void ice_rebuild(struct ice_pf *pf, enum ice_reset_req reset_type)
 	if (err) {
 		dev_err(dev, "control queues init failed %d\n", err);
 		goto err_init_ctrlq;
+	}
+
+	if (hw->fwlog_cfg.options & ICE_FWLOG_OPTION_IS_REGISTERED) {
+		err = ice_fwlog_register(hw);
+		if (err)
+			hw->fwlog_cfg.options &=
+				~ICE_FWLOG_OPTION_IS_REGISTERED;
 	}
 
 	/* if DDP was previously loaded successfully */
