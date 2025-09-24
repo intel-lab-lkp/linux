@@ -479,6 +479,7 @@ extern void unlock_system_sleep(unsigned int);
 
 extern bool pm_sleep_transition_in_progress(void);
 bool pm_hibernate_is_recovering(void);
+bool pm_hibernation_mode_is_suspend(void);
 
 #else /* !CONFIG_PM_SLEEP */
 
@@ -513,6 +514,7 @@ static inline void unlock_system_sleep(unsigned int flags) {}
 
 static inline bool pm_sleep_transition_in_progress(void) { return false; }
 static inline bool pm_hibernate_is_recovering(void) { return false; }
+static inline bool pm_hibernation_mode_is_suspend(void) { return false; }
 
 #endif /* !CONFIG_PM_SLEEP */
 
