@@ -226,6 +226,12 @@
 			clock-frequency = <1000000>;
 		};
 
+		random: rng@7d208000 {
+			compatible = "brcm,bcm2711-rng200";
+			reg = <0x7d208000 0x28>;
+			status = "okay";
+		};
+
 		mailbox: mailbox@7c013880 {
 			compatible = "brcm,bcm2835-mbox";
 			reg = <0x7c013880 0x40>;
