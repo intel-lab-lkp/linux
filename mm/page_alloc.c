@@ -1752,13 +1752,14 @@ static bool check_new_page(struct page *page)
 
 static inline bool check_new_pages(struct page *page, unsigned int order)
 {
-	if (is_check_pages_enabled()) {
-		for (int i = 0; i < (1 << order); i++) {
-			struct page *p = page + i;
+	if (!is_check_pages_enabled())
+		return false;
 
-			if (check_new_page(p))
-				return true;
-		}
+	for (int i = 0; i < (1 << order); i++) {
+		struct page *p = page + i;
+
+		if (check_new_page(p))
+			return true;
 	}
 
 	return false;
