@@ -92,6 +92,16 @@ int set_direct_map_default_noflush(struct page *page);
 int set_direct_map_valid_noflush(struct page *page, unsigned nr, bool valid);
 bool kernel_page_present(struct page *page);
 
+#ifdef CONFIG_MITIGATION_ADDRESS_SPACE_ISOLATION
+int set_direct_map_sensitive(struct page *page, int num_pageblocks, bool sensitive);
+#else /* CONFIG_MITIGATION_ADDRESS_SPACE_ISOLATION */
+static inline
+int set_direct_map_sensitive(struct page *page, int num_pageblocks, bool sensitive)
+{
+	return 0;
+}
+#endif /* CONFIG_MITIGATION_ADDRESS_SPACE_ISOLATION */
+
 extern int kernel_set_to_readonly;
 
 #endif /* _ASM_X86_SET_MEMORY_H */

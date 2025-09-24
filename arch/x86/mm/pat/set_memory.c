@@ -4,6 +4,7 @@
  * Thanks to Ben LaHaise for precious feedback.
  */
 #include <linux/asi.h>
+#include <linux/align.h>
 #include <linux/highmem.h>
 #include <linux/memblock.h>
 #include <linux/sched.h>
@@ -2694,6 +2695,33 @@ int set_direct_map_valid_noflush(struct page *page, unsigned nr, bool valid)
 
 	return __set_pages_np(page, nr);
 }
+
+#ifdef CONFIG_MITIGATION_ADDRESS_SPACE_ISOLATION
+/*
+ * Map/unmap a set of contiguous pageblocks into all ASI restricted address
+ * spaces. All pagetables are pre-allocated so this can be called anywhere.
+ * This should not be called on pages that may be mapped elsewhere.
+ */
+int set_direct_map_sensitive(struct page *page, int num_pageblocks, bool sensitive)
+{
+	if (WARN_ON_ONCE(!IS_ALIGNED(page_to_pfn(page), 1 << pageblock_order)))
+		return -EINVAL;
+
+	unsigned long tempaddr = (unsigned long)page_address(page);
+	struct cpa_data cpa = { .vaddr = &tempaddr,
+				.pgd = asi_nonsensitive_pgd,
+				.numpages = num_pageblocks << pageblock_order,
+				.flags = CPA_NO_CHECK_ALIAS,
+				.on_fault = CPA_FAULT_ERROR, };
+
+	if (sensitive)
+		cpa.mask_clr = __pgprot(_PAGE_PRESENT);
+	else
+		cpa.mask_set = __pgprot(_PAGE_PRESENT);
+
+	return __change_page_attr_set_clr(&cpa, 1);
+}
+#endif /* CONFIG_MITIGATION_ADDRESS_SPACE_ISOLATION */
 
 #ifdef CONFIG_DEBUG_PAGEALLOC
 void __kernel_map_pages(struct page *page, int numpages, int enable)

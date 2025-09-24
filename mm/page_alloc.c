@@ -44,6 +44,7 @@
 #include <linux/mm_inline.h>
 #include <linux/mmu_notifier.h>
 #include <linux/migrate.h>
+#include <linux/set_memory.h>
 #include <linux/sched/mm.h>
 #include <linux/page_owner.h>
 #include <linux/page_table_check.h>
@@ -583,6 +584,13 @@ static void set_pageblock_migratetype(struct page *page,
 	__set_pfnblock_flags_mask(page, page_to_pfn(page),
 				  (unsigned long)migratetype,
 				  PAGEBLOCK_MIGRATETYPE_MASK | PAGEBLOCK_ISO_MASK);
+}
+
+static inline void set_pageblock_sensitive(struct page *page, bool sensitive)
+{
+	__set_pfnblock_flags_mask(page, page_to_pfn(page),
+				  sensitive ? 0 : PAGEBLOCK_NONSENSITIVE_MASK,
+				  PAGEBLOCK_NONSENSITIVE_MASK);
 }
 
 void __meminit init_pageblock_migratetype(struct page *page,
@@ -3264,6 +3272,85 @@ static inline void zone_statistics(struct zone *preferred_zone, struct zone *z,
 #endif
 }
 
+#ifdef CONFIG_MITIGATION_ADDRESS_SPACE_ISOLATION
+static inline struct page *__rmqueue_asi(struct zone *zone, unsigned int request_order,
+				unsigned int alloc_flags, freetype_t freetype)
+{
+	freetype_t freetype_other = migrate_to_freetype(
+		free_to_migratetype(freetype), !freetype_sensitive(freetype));
+	unsigned long flags;
+	struct page *page;
+	int alloc_order;
+	enum rmqueue_mode rmqm = RMQUEUE_NORMAL;
+	int nr_pageblocks;
+
+	if (!asi_enabled_static())
+		return NULL;
+
+	/*
+	 * Might need a TLB shootdown. Even if IRQs are on this isn't
+	 * safe if the caller holds a lock (in case the other CPUs need that
+	 * lock to handle the shootdown IPI).
+	 */
+	if (alloc_flags & ALLOC_NOBLOCK)
+		return NULL;
+	lockdep_assert(!irqs_disabled() || unlikely(early_boot_irqs_disabled));
+
+	/*
+	 * Need to [un]map a whole pageblock (otherwise it might require
+	 * allocating pagetables). First allocate it.
+	 */
+	alloc_order = max(request_order, pageblock_order);
+	nr_pageblocks = 1 << (alloc_order - pageblock_order);
+	spin_lock_irqsave(&zone->lock, flags);
+	page = __rmqueue(zone, alloc_order, freetype_other, alloc_flags, &rmqm);
+	spin_unlock_irqrestore(&zone->lock, flags);
+	if (!page)
+		return NULL;
+
+	if (!freetype_sensitive(freetype)) {
+		/*
+		 * These pages were formerly sensitive so we need to clear them
+		 * out before exposing them to CPU attacks. Doing this with the
+		 * zone lock held would have been undesirable.
+		 */
+		kernel_init_pages(page, 1 << alloc_order);
+	}
+
+	/*
+	 * Now that IRQs are on it's safe to do a TLB shootdown, so change
+	 * mapping and update pageblock flags.
+	 */
+	set_direct_map_sensitive(page, nr_pageblocks, freetype_sensitive(freetype));
+	for (int i = 0; i < nr_pageblocks; i++) {
+		struct page *block_page = page + (pageblock_nr_pages * i);
+
+		set_pageblock_sensitive(block_page, freetype_sensitive(freetype));
+	}
+
+	if (request_order >= alloc_order)
+		return page;
+
+	/* Free any remaining pages in the block. */
+	spin_lock_irqsave(&zone->lock, flags);
+	for (unsigned int i = request_order; i < alloc_order; i++) {
+		struct page *page_to_free = page + (1 << i);
+
+		__free_one_page(page_to_free, page_to_pfn(page_to_free), zone,
+			i, freetype, FPI_SKIP_REPORT_NOTIFY);
+	}
+	spin_unlock_irqrestore(&zone->lock, flags);
+
+	return page;
+}
+#else /* CONFIG_MITIGATION_ADDRESS_SPACE_ISOLATION */
+static inline struct page *__rmqueue_asi(struct zone *zone, unsigned int request_order,
+				 unsigned int alloc_flags, freetype_t freetype)
+{
+	return NULL;
+}
+#endif /* CONFIG_MITIGATION_ADDRESS_SPACE_ISOLATION */
+
 static __always_inline
 struct page *rmqueue_buddy(struct zone *preferred_zone, struct zone *zone,
 			   unsigned int order, unsigned int alloc_flags,
@@ -3297,13 +3384,15 @@ struct page *rmqueue_buddy(struct zone *preferred_zone, struct zone *zone,
 			 */
 			if (!page && (alloc_flags & (ALLOC_OOM|ALLOC_HARDER)))
 				page = __rmqueue_smallest(zone, order, ft_high);
-
-			if (!page) {
-				spin_unlock_irqrestore(&zone->lock, flags);
-				return NULL;
-			}
 		}
 		spin_unlock_irqrestore(&zone->lock, flags);
+
+		/* Try changing sensitivity, now we've released the zone lock */
+		if (!page)
+			page = __rmqueue_asi(zone, order, alloc_flags, freetype);
+		if (!page)
+			return NULL;
+
 	} while (check_new_pages(page, order));
 
 	__count_zid_vm_events(PGALLOC, page_zonenum(page), 1 << order);
@@ -5284,13 +5373,6 @@ struct page *__alloc_frozen_pages_noprof(gfp_t gfp, unsigned int order,
 	unsigned int alloc_flags = init_alloc_flags(gfp, ALLOC_WMARK_LOW);
 	gfp_t alloc_gfp; /* The gfp_t that was actually used for allocation */
 	struct alloc_context ac = { };
-
-	/*
-	 * Temporary hack: Allocation of nonsensitive pages is not possible yet,
-	 * allocate everything sensitive. The restricted address space is never
-	 * actually entered yet so this is fine.
-	 */
-	gfp |= __GFP_SENSITIVE;
 
 	/*
 	 * There are several places where we assume that the order value is sane
