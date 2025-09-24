@@ -126,14 +126,20 @@ static const struct hotplug_slot_ops s390_hotplug_slot_ops = {
 
 int zpci_init_slot(struct zpci_dev *zdev)
 {
+	int ret;
 	char name[SLOT_NAME_SIZE];
 	struct zpci_bus *zbus = zdev->zbus;
 
 	zdev->hotplug_slot.ops = &s390_hotplug_slot_ops;
 
 	snprintf(name, SLOT_NAME_SIZE, "%08x", zdev->fid);
-	return pci_hp_register(&zdev->hotplug_slot, zbus->bus,
-			       zdev->devfn, name);
+	ret = pci_hp_register(&zdev->hotplug_slot, zbus->bus,
+				zdev->devfn, name);
+	if (ret)
+		return ret;
+
+	zdev->hotplug_slot.pci_slot->per_func_slot = 1;
+	return 0;
 }
 
 void zpci_exit_slot(struct zpci_dev *zdev)
