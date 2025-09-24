@@ -17,6 +17,8 @@ properties:
   compatible:
     oneOf:
       - enum:
+          # Kaanapali
+          - qcom,bam-crypto-v6
           # APQ8064, IPQ8064 and MSM8960
           - qcom,bam-v1.3.0
           # MSM8974, APQ8074 and APQ8084
