@@ -6675,11 +6675,20 @@ out_unmap:
 EXPORT_SYMBOL_GPL(generic_access_phys);
 #endif
 
-/*
- * Access another process' address space as given in mm.
+/**
+ * access_remote_vm - access another process' address space
+ * @mm:		the mm_struct of the target address space
+ * @addr:	start address to access
+ * @buf:	source or destination buffer
+ * @len:	number of bytes to transfer
+ * @gup_flags:	flags modifying lookup behaviour
+ *
+ * The caller must hold a reference on @mm.
+ *
+ * Return: number of bytes copied from source to destination.
  */
-static int __access_remote_vm(struct mm_struct *mm, unsigned long addr,
-			      void *buf, int len, unsigned int gup_flags)
+int access_remote_vm(struct mm_struct *mm, unsigned long addr,
+		     void *buf, int len, unsigned int gup_flags)
 {
 	void *old_buf = buf;
 	int write = gup_flags & FOLL_WRITE;
@@ -6756,24 +6765,6 @@ static int __access_remote_vm(struct mm_struct *mm, unsigned long addr,
 	return buf - old_buf;
 }
 
-/**
- * access_remote_vm - access another process' address space
- * @mm:		the mm_struct of the target address space
- * @addr:	start address to access
- * @buf:	source or destination buffer
- * @len:	number of bytes to transfer
- * @gup_flags:	flags modifying lookup behaviour
- *
- * The caller must hold a reference on @mm.
- *
- * Return: number of bytes copied from source to destination.
- */
-int access_remote_vm(struct mm_struct *mm, unsigned long addr,
-		void *buf, int len, unsigned int gup_flags)
-{
-	return __access_remote_vm(mm, addr, buf, len, gup_flags);
-}
-
 /*
  * Access another process' address space.
  * Source/target buffer must be kernel space,
@@ -6789,7 +6780,7 @@ int access_process_vm(struct task_struct *tsk, unsigned long addr,
 	if (!mm)
 		return 0;
 
-	ret = __access_remote_vm(mm, addr, buf, len, gup_flags);
+	ret = access_remote_vm(mm, addr, buf, len, gup_flags);
 
 	mmput(mm);
 

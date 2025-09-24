@@ -1637,8 +1637,18 @@ vm_fault_t filemap_map_pages(struct vm_fault *vmf,
 }
 EXPORT_SYMBOL(filemap_map_pages);
 
-static int __access_remote_vm(struct mm_struct *mm, unsigned long addr,
-			      void *buf, int len, unsigned int gup_flags)
+/**
+ * access_remote_vm - access another process' address space
+ * @mm:		the mm_struct of the target address space
+ * @addr:	start address to access
+ * @buf:	source or destination buffer
+ * @len:	number of bytes to transfer
+ * @gup_flags:	flags modifying lookup behaviour
+ *
+ * The caller must hold a reference on @mm.
+ */
+int access_remote_vm(struct mm_struct *mm, unsigned long addr,
+		     void *buf, int len, unsigned int gup_flags)
 {
 	struct vm_area_struct *vma;
 	int write = gup_flags & FOLL_WRITE;
@@ -1671,22 +1681,6 @@ static int __access_remote_vm(struct mm_struct *mm, unsigned long addr,
 	return len;
 }
 
-/**
- * access_remote_vm - access another process' address space
- * @mm:		the mm_struct of the target address space
- * @addr:	start address to access
- * @buf:	source or destination buffer
- * @len:	number of bytes to transfer
- * @gup_flags:	flags modifying lookup behaviour
- *
- * The caller must hold a reference on @mm.
- */
-int access_remote_vm(struct mm_struct *mm, unsigned long addr,
-		void *buf, int len, unsigned int gup_flags)
-{
-	return __access_remote_vm(mm, addr, buf, len, gup_flags);
-}
-
 /*
  * Access another process' address space.
  * - source/target buffer must be kernel space
@@ -1703,7 +1697,7 @@ int access_process_vm(struct task_struct *tsk, unsigned long addr, void *buf, in
 	if (!mm)
 		return 0;
 
-	len = __access_remote_vm(mm, addr, buf, len, gup_flags);
+	len = access_remote_vm(mm, addr, buf, len, gup_flags);
 
 	mmput(mm);
 	return len;
