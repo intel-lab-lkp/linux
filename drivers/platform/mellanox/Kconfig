@@ -121,4 +121,14 @@ config NVSW_SN2201
 	  C3338R which is one of the Denverton product families.
 	  System equipped with Nvidia®Spectrum-1 32x100GbE Ethernet switch.
 
+config MLXBF_PKA
+        tristate "Mellanox BlueField Public Key Accelerator driver"
+        depends on ARM64 && ACPI
+        help
+          If you say yes to this option, support will be included for the
+          Public Key Accelerator device on Mellanox BlueField SoCs.
+
+          This driver can also be built as a module. If so, the module will
+          be called pka-mlxbf.
+
 endif # MELLANOX_PLATFORM
