@@ -44,6 +44,7 @@ fi
 ncpus="`getconf _NPROCESSORS_ONLN`"
 make -j$((2 * ncpus)) $TORTURE_KMAKE_ARG > $resdir/Make.out 2>&1
 retval=$?
+grep '^CONFIG_CC_VERSION_TEXT=' .config > $resdir/cc-version.txt
 if test $retval -ne 0 || grep "rcu[^/]*": < $resdir/Make.out | grep -E -q "Stop|ERROR|Error|error:|warning:" || grep -E -q "Stop|ERROR|Error|error:" < $resdir/Make.out
 then
 	echo Kernel build error

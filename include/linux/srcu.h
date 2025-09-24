@@ -25,8 +25,10 @@ struct srcu_struct;
 
 #ifdef CONFIG_DEBUG_LOCK_ALLOC
 
-int __init_srcu_struct(struct srcu_struct *ssp, const char *name,
-		       struct lock_class_key *key);
+int __init_srcu_struct(struct srcu_struct *ssp, const char *name, struct lock_class_key *key);
+#ifndef CONFIG_TINY_SRCU
+int __init_srcu_struct_fast(struct srcu_struct *ssp, const char *name, struct lock_class_key *key);
+#endif // #ifndef CONFIG_TINY_SRCU
 
 #define init_srcu_struct(ssp) \
 ({ \
@@ -35,10 +37,20 @@ int __init_srcu_struct(struct srcu_struct *ssp, const char *name,
 	__init_srcu_struct((ssp), #ssp, &__srcu_key); \
 })
 
+#define init_srcu_struct_fast(ssp) \
+({ \
+	static struct lock_class_key __srcu_key; \
+	\
+	__init_srcu_struct_fast((ssp), #ssp, &__srcu_key); \
+})
+
 #define __SRCU_DEP_MAP_INIT(srcu_name)	.dep_map = { .name = #srcu_name },
 #else /* #ifdef CONFIG_DEBUG_LOCK_ALLOC */
 
 int init_srcu_struct(struct srcu_struct *ssp);
+#ifndef CONFIG_TINY_SRCU
+int init_srcu_struct_fast(struct srcu_struct *ssp);
+#endif // #ifndef CONFIG_TINY_SRCU
 
 #define __SRCU_DEP_MAP_INIT(srcu_name)
 #endif /* #else #ifdef CONFIG_DEBUG_LOCK_ALLOC */
@@ -259,24 +271,33 @@ static inline int srcu_read_lock(struct srcu_struct *ssp) __acquires(ssp)
  * @ssp: srcu_struct in which to register the new reader.
  *
  * Enter an SRCU read-side critical section, but for a light-weight
- * smp_mb()-free reader.  See srcu_read_lock() for more information.
+ * smp_mb()-free reader.  See srcu_read_lock() for more information.  This
+ * function is NMI-safe, in a manner similar to srcu_read_lock_nmisafe().
  *
- * If srcu_read_lock_fast() is ever used on an srcu_struct structure,
- * then none of the other flavors may be used, whether before, during,
- * or after.  Note that grace-period auto-expediting is disabled for _fast
- * srcu_struct structures because auto-expedited grace periods invoke
- * synchronize_rcu_expedited(), IPIs and all.
+ * For srcu_read_lock_fast() to be used on an srcu_struct structure,
+ * that structure must have been defined using either DEFINE_SRCU_FAST()
+ * or DEFINE_STATIC_SRCU_FAST() on the one hand or initialized with
+ * init_srcu_struct_fast() on the other.  Such an srcu_struct structure
+ * cannot be passed to any non-fast variant of srcu_read_{,un}lock() or
+ * srcu_{down,up}_read().  In kernels built with CONFIG_PROVE_RCU=y,
+ * __srcu_check_read_flavor() will complain bitterly if you ignore this
+ * restriction.
  *
- * Note that srcu_read_lock_fast() can be invoked only from those contexts
- * where RCU is watching, that is, from contexts where it would be legal
- * to invoke rcu_read_lock().  Otherwise, lockdep will complain.
+ * Grace-period auto-expediting is disabled for SRCU-fast srcu_struct
+ * structures because SRCU-fast expedited grace periods invoke
+ * synchronize_rcu_expedited(), IPIs and all.  If you need expedited
+ * SRCU-fast grace periods, use synchronize_srcu_expedited().
+ *
+ * The srcu_read_lock_fast() function can be invoked only from those
+ * contexts where RCU is watching, that is, from contexts where it would
+ * be legal to invoke rcu_read_lock().  Otherwise, lockdep will complain.
  */
 static inline struct srcu_ctr __percpu *srcu_read_lock_fast(struct srcu_struct *ssp) __acquires(ssp)
 {
 	struct srcu_ctr __percpu *retval;
 
 	RCU_LOCKDEP_WARN(!rcu_is_watching(), "RCU must be watching srcu_read_lock_fast().");
-	srcu_check_read_flavor_force(ssp, SRCU_READ_FLAVOR_FAST);
+	srcu_check_read_flavor(ssp, SRCU_READ_FLAVOR_FAST);
 	retval = __srcu_read_lock_fast(ssp);
 	rcu_try_lock_acquire(&ssp->dep_map);
 	return retval;
@@ -291,7 +312,7 @@ static inline struct srcu_ctr __percpu *srcu_read_lock_fast_notrace(struct srcu_
 {
 	struct srcu_ctr __percpu *retval;
 
-	srcu_check_read_flavor_force(ssp, SRCU_READ_FLAVOR_FAST);
+	srcu_check_read_flavor(ssp, SRCU_READ_FLAVOR_FAST);
 	retval = __srcu_read_lock_fast(ssp);
 	return retval;
 }
@@ -305,13 +326,14 @@ static inline struct srcu_ctr __percpu *srcu_read_lock_fast_notrace(struct srcu_
  * srcu_down_read() for more information.
  *
  * The same srcu_struct may be used concurrently by srcu_down_read_fast()
- * and srcu_read_lock_fast().
+ * and srcu_read_lock_fast().  However, the same definition/initialization
+ * requirements called out for srcu_read_lock_safe() apply.
  */
 static inline struct srcu_ctr __percpu *srcu_down_read_fast(struct srcu_struct *ssp) __acquires(ssp)
 {
 	WARN_ON_ONCE(IS_ENABLED(CONFIG_PROVE_RCU) && in_nmi());
 	RCU_LOCKDEP_WARN(!rcu_is_watching(), "RCU must be watching srcu_down_read_fast().");
-	srcu_check_read_flavor_force(ssp, SRCU_READ_FLAVOR_FAST);
+	srcu_check_read_flavor(ssp, SRCU_READ_FLAVOR_FAST);
 	return __srcu_read_lock_fast(ssp);
 }
 
