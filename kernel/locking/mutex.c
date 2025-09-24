@@ -42,6 +42,16 @@
 #else
 # define MUTEX_WARN_ON(cond)
 #endif
+#define MUTEX_CHCEK_INIT(lock)  mutex_check_waitlist(lock)
+static void mutex_check_waitlist(struct mutex *lock)
+{
+	struct list_head *list = &lock->wait_list;
+
+	if ((unsigned long)list->next < PAGE_OFFSET) {
+		pr_err("BUG: mutex lock is uninitialized，wait_list is Error\n");
+		MUTEX_WARN_ON("mutex lock is uninitialized");
+	}
+}
 
 void
 __mutex_init(struct mutex *lock, const char *name, struct lock_class_key *key)
@@ -269,6 +279,7 @@ static void __sched __mutex_lock_slowpath(struct mutex *lock);
 void __sched mutex_lock(struct mutex *lock)
 {
 	might_sleep();
+	MUTEX_CHCEK_INIT(lock);
 
 	if (!__mutex_trylock_fast(lock))
 		__mutex_lock_slowpath(lock);
@@ -991,6 +1002,7 @@ __mutex_lock_interruptible_slowpath(struct mutex *lock);
 int __sched mutex_lock_interruptible(struct mutex *lock)
 {
 	might_sleep();
+	MUTEX_CHCEK_INIT(lock);
 
 	if (__mutex_trylock_fast(lock))
 		return 0;
@@ -1015,6 +1027,7 @@ EXPORT_SYMBOL(mutex_lock_interruptible);
 int __sched mutex_lock_killable(struct mutex *lock)
 {
 	might_sleep();
+	MUTEX_CHCEK_INIT(lock);
 
 	if (__mutex_trylock_fast(lock))
 		return 0;
