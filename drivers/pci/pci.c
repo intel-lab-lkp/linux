@@ -1669,6 +1669,9 @@ static void pci_restore_pcie_state(struct pci_dev *dev)
 	struct pci_cap_saved_state *save_state;
 	u16 *cap;
 
+	if (!dev->state_saved)
+		return;
+
 	/*
 	 * Restore max latencies (in the LTR capability) before enabling
 	 * LTR itself in PCI_EXP_DEVCTL2.
@@ -1724,6 +1727,9 @@ static void pci_restore_pcix_state(struct pci_dev *dev)
 	struct pci_cap_saved_state *save_state;
 	u16 *cap;
 
+	if (!dev->state_saved)
+		return;
+
 	save_state = pci_find_saved_cap(dev, PCI_CAP_ID_PCIX);
 	pos = pci_find_capability(dev, PCI_CAP_ID_PCIX);
 	if (!save_state || !pos)
@@ -1741,6 +1747,14 @@ static void pci_restore_pcix_state(struct pci_dev *dev)
 int pci_save_state(struct pci_dev *dev)
 {
 	int i;
+	u32 val;
+
+	pci_read_config_dword(dev, PCI_COMMAND, &val);
+	if (PCI_POSSIBLE_ERROR(val)) {
+		pci_warn(dev, "Device config space inaccessible, will only be partially restored\n");
+		return -EIO;
+	}
+
 	/* XXX: 100% dword access ok here? */
 	for (i = 0; i < 16; i++) {
 		pci_read_config_dword(dev, i * 4, &dev->saved_config_space[i]);
@@ -1803,6 +1817,14 @@ static void pci_restore_config_space_range(struct pci_dev *pdev,
 
 static void pci_restore_config_space(struct pci_dev *pdev)
 {
+	if (!pdev->state_saved) {
+		pci_warn(pdev, "No saved config space, restoring BARs\n");
+		pci_restore_bars(pdev);
+		pci_write_config_word(pdev, PCI_COMMAND,
+				PCI_COMMAND_MEMORY | PCI_COMMAND_IO);
+		return;
+	}
+
 	if (pdev->hdr_type == PCI_HEADER_TYPE_NORMAL) {
 		pci_restore_config_space_range(pdev, 10, 15, 0, false);
 		/* Restore BARs before the command register. */
@@ -1855,9 +1877,6 @@ static void pci_restore_rebar_state(struct pci_dev *pdev)
  */
 void pci_restore_state(struct pci_dev *dev)
 {
-	if (!dev->state_saved)
-		return;
-
 	pci_restore_pcie_state(dev);
 	pci_restore_pasid_state(dev);
 	pci_restore_pri_state(dev);

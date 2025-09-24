@@ -435,6 +435,9 @@ void pci_restore_tph_state(struct pci_dev *pdev)
 	if (!pdev->tph_enabled)
 		return;
 
+	if (!pdev->state_saved)
+		return;
+
 	save_state = pci_find_saved_ext_cap(pdev, PCI_EXT_CAP_ID_TPH);
 	if (!save_state)
 		return;

@@ -391,6 +391,9 @@ void pci_restore_vc_state(struct pci_dev *dev)
 {
 	int i;
 
+	if (!dev->state_saved)
+		return;
+
 	for (i = 0; i < ARRAY_SIZE(vc_caps); i++) {
 		int pos;
 		struct pci_cap_saved_state *save_state;
