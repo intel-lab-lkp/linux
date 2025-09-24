@@ -1745,6 +1745,7 @@ struct r600_audio_pin {
 	u32			offset;
 	bool			connected;
 	u32			id;
+	u8			enable_mask;
 };
 
 struct r600_audio {
