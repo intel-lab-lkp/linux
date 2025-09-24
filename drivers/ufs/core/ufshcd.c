@@ -1078,13 +1078,14 @@ void ufshcd_pm_qos_exit(struct ufs_hba *hba)
  * @hba: per adapter instance
  * @on: If True, vote for perf PM QoS mode otherwise power save mode
  */
-static void ufshcd_pm_qos_update(struct ufs_hba *hba, bool on)
+void ufshcd_pm_qos_update(struct ufs_hba *hba, bool on)
 {
 	if (!hba->pm_qos_enabled)
 		return;
 
 	cpu_latency_qos_update_request(&hba->pm_qos_req, on ? 0 : PM_QOS_DEFAULT_VALUE);
 }
+EXPORT_SYMBOL_GPL(ufshcd_pm_qos_update);
 
 /**
  * ufshcd_set_clk_freq - set UFS controller clock frequencies
