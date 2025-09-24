@@ -192,45 +192,47 @@ static void rzg2l_cru_set_slot_addr(struct rzg2l_cru_dev *cru,
 }
 
 /*
- * Moves a buffer from the queue to the HW slot. If no buffer is
- * available use the scratch buffer. The scratch buffer is never
- * returned to userspace, its only function is to enable the capture
- * loop to keep running.
+ * Move as many buffers as possible from the queue to HW slots. If no buffer is
+ * available and the next slot currently lacks one then use the scratch buffer.
+ * The scratch buffer is never returned to userspace, its only function is to
+ * enable the capture loop to keep running.
  */
-static void rzg2l_cru_fill_hw_slot(struct rzg2l_cru_dev *cru, int slot)
+static void rzg2l_cru_fill_hw_slots(struct rzg2l_cru_dev *cru, int slot)
 {
-	struct vb2_v4l2_buffer *vbuf;
+	unsigned int from_slot = slot;
 	struct rzg2l_cru_buffer *buf;
+	struct vb2_v4l2_buffer *vbuf;
 	dma_addr_t phys_addr;
 
-	/* A already populated slot shall never be overwritten. */
-	if (WARN_ON(cru->queue_buf[slot]))
-		return;
+	do {
+		if (cru->queue_buf[slot]) {
+			slot = (slot + 1) % cru->num_buf;
+			continue;
+		}
 
-	dev_dbg(cru->dev, "Filling HW slot: %d\n", slot);
+		if (list_empty(&cru->buf_list)) {
+			if (slot == from_slot)
+				phys_addr = cru->scratch_phys;
+			else
+				return;
+		} else {
+			buf = list_first_entry(&cru->buf_list,
+					       struct rzg2l_cru_buffer, list);
+			vbuf = &buf->vb;
+			list_del_init(&buf->list);
+			cru->queue_buf[slot] = vbuf;
+			phys_addr = vb2_dma_contig_plane_dma_addr(&vbuf->vb2_buf, 0);
+		}
 
-	if (list_empty(&cru->buf_list)) {
-		cru->queue_buf[slot] = NULL;
-		phys_addr = cru->scratch_phys;
-	} else {
-		/* Keep track of buffer we give to HW */
-		buf = list_entry(cru->buf_list.next,
-				 struct rzg2l_cru_buffer, list);
-		vbuf = &buf->vb;
-		list_del_init(to_buf_list(vbuf));
-		cru->queue_buf[slot] = vbuf;
-
-		/* Setup DMA */
-		phys_addr = vb2_dma_contig_plane_dma_addr(&vbuf->vb2_buf, 0);
-	}
-
-	rzg2l_cru_set_slot_addr(cru, slot, phys_addr);
+		dev_dbg(cru->dev, "Filling HW slot: %d\n", slot);
+		rzg2l_cru_set_slot_addr(cru, slot, phys_addr);
+		slot = (slot + 1) % cru->num_buf;
+	} while (slot != from_slot);
 }
 
 static void rzg2l_cru_initialize_axi(struct rzg2l_cru_dev *cru)
 {
 	const struct rzg2l_cru_info *info = cru->info;
-	unsigned int slot;
 	u32 amnaxiattr;
 
 	/*
@@ -239,8 +241,7 @@ static void rzg2l_cru_initialize_axi(struct rzg2l_cru_dev *cru)
 	 */
 	rzg2l_cru_write(cru, AMnMBVALID, AMnMBVALID_MBVALID(cru->num_buf - 1));
 
-	for (slot = 0; slot < cru->num_buf; slot++)
-		rzg2l_cru_fill_hw_slot(cru, slot);
+	rzg2l_cru_fill_hw_slots(cru, 0);
 
 	if (info->has_stride) {
 		u32 stride = cru->format.bytesperline;
@@ -640,7 +641,7 @@ irqreturn_t rzg2l_cru_irq(int irq, void *data)
 	cru->sequence++;
 
 	/* Prepare for next frame */
-	rzg2l_cru_fill_hw_slot(cru, slot);
+	rzg2l_cru_fill_hw_slots(cru, (slot + 1) % cru->num_buf);
 
 done:
 	spin_unlock_irqrestore(&cru->qlock, flags);
@@ -740,7 +741,7 @@ irqreturn_t rzg3e_cru_irq(int irq, void *data)
 		cru->sequence++;
 
 		/* Prepare for next frame */
-		rzg2l_cru_fill_hw_slot(cru, slot);
+		rzg2l_cru_fill_hw_slots(cru, (slot + 1) % cru->num_buf);
 	}
 
 	return IRQ_HANDLED;
