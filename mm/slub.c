@@ -3177,8 +3177,6 @@ static struct slab *allocate_slab(struct kmem_cache *s, gfp_t flags, int node)
 	int idx;
 	bool shuffle;
 
-	flags &= gfp_allowed_mask;
-
 	flags |= s->allocflags;
 
 	/*
@@ -3212,7 +3210,7 @@ static struct slab *allocate_slab(struct kmem_cache *s, gfp_t flags, int node)
 	slab->frozen = 0;
 	init_slab_obj_exts(slab);
 
-	account_slab(slab, oo_order(oo), s, flags);
+	account_slab(slab, oo_order(oo), s, flags & gfp_allowed_mask);
 
 	slab->slab_cache = s;
 
