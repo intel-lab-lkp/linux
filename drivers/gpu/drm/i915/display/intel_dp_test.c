@@ -17,6 +17,7 @@
 #include "intel_dp_link_training.h"
 #include "intel_dp_mst.h"
 #include "intel_dp_test.h"
+#include "intel_hotplug.h"
 
 void intel_dp_test_reset(struct intel_dp *intel_dp)
 {
@@ -45,26 +46,6 @@ void intel_dp_test_compute_config(struct intel_dp *intel_dp,
 		drm_dbg_kms(display->drm, "Setting pipe_bpp to %d\n", bpp);
 	}
 
-	/* Use values requested by Compliance Test Request */
-	if (intel_dp->compliance.test_type == DP_TEST_LINK_TRAINING) {
-		int index;
-
-		/* Validate the compliance test data since max values
-		 * might have changed due to link train fallback.
-		 */
-		if (intel_dp_link_params_valid(intel_dp, intel_dp->compliance.test_link_rate,
-					       intel_dp->compliance.test_lane_count)) {
-			index = intel_dp_rate_index(intel_dp->common_rates,
-						    intel_dp->num_common_rates,
-						    intel_dp->compliance.test_link_rate);
-			if (index >= 0) {
-				limits->min_rate = intel_dp->compliance.test_link_rate;
-				limits->max_rate = intel_dp->compliance.test_link_rate;
-			}
-			limits->min_lane_count = intel_dp->compliance.test_lane_count;
-			limits->max_lane_count = intel_dp->compliance.test_lane_count;
-		}
-	}
 }
 
 /* Compliance test status bits  */
@@ -104,8 +85,8 @@ static u8 intel_dp_autotest_link_training(struct intel_dp *intel_dp)
 					test_lane_count))
 		return DP_TEST_NAK;
 
-	intel_dp->compliance.test_lane_count = test_lane_count;
-	intel_dp->compliance.test_link_rate = test_link_rate;
+	intel_dp->link.force_lane_count = test_lane_count;
+	intel_dp->link.force_rate = test_link_rate;
 
 	return DP_TEST_ACK;
 }
@@ -344,9 +325,6 @@ static u8 intel_dp_autotest_phy_pattern(struct intel_dp *intel_dp)
 		return DP_TEST_NAK;
 	}
 
-	/* Set test active flag here so userspace doesn't interrupt things */
-	intel_dp->compliance.test_active = true;
-
 	return DP_TEST_ACK;
 }
 
@@ -363,6 +341,8 @@ void intel_dp_test_request(struct intel_dp *intel_dp)
 			    "Could not read test request from sink\n");
 		goto update_status;
 	}
+	intel_dp->link.force_lane_count = 0;
+	intel_dp->link.force_rate =  0;
 
 	switch (request) {
 	case DP_TEST_LINK_TRAINING:
@@ -495,10 +475,6 @@ bool intel_dp_test_phy(struct intel_dp *intel_dp)
 	struct drm_modeset_acquire_ctx ctx;
 	int ret;
 
-	if (!intel_dp->compliance.test_active ||
-	    intel_dp->compliance.test_type != DP_TEST_LINK_PHY_TEST_PATTERN)
-		return false;
-
 	drm_modeset_acquire_init(&ctx, 0);
 
 	for (;;) {
@@ -530,18 +506,14 @@ bool intel_dp_test_short_pulse(struct intel_dp *intel_dp)
 		drm_dbg_kms(display->drm,
 			    "Link Training Compliance Test requested\n");
 		/* Send a Hotplug Uevent to userspace to start modeset */
-		drm_kms_helper_hotplug_event(display->drm);
+		intel_dp->link.force_retrain = 1;
+		intel_hpd_trigger_irq(dp_to_dig_port(intel_dp));
 		break;
 	case DP_TEST_LINK_PHY_TEST_PATTERN:
 		drm_dbg_kms(display->drm,
 			    "PHY test pattern Compliance Test requested\n");
-		/*
-		 * Schedule long hpd to do the test
-		 *
-		 * FIXME get rid of the ad-hoc phy test modeset code
-		 * and properly incorporate it into the normal modeset.
-		 */
-		reprobe_needed = true;
+		intel_dp_test_phy(intel_dp);
+		break;
 	}
 
 	return reprobe_needed;
