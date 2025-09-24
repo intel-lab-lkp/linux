@@ -360,6 +360,126 @@ out:
 	return pass;
 }
 
+/* We can reuse a shadow stack with an exit token */
+static bool test_exit_token(void)
+{
+	struct clone_args clone_args;
+	int ret, status;
+	static bool pass = true; /* These will be used in the thread */
+	static uint64_t expected_cap;
+	static int elem;
+	static uint64_t *buf;
+
+	/* Ensure we've got exit tokens enabled here */
+	ret = my_syscall5(__NR_prctl, PR_SET_SHADOW_STACK_STATUS,
+			  PR_SHADOW_STACK_ENABLE | PR_SHADOW_STACK_EXIT_TOKEN,
+			  0, 0, 0);
+	if (ret != 0)
+		ksft_exit_fail_msg("Failed to enable exit token: %d\n", ret);
+
+	buf = (void *)my_syscall3(__NR_map_shadow_stack, 0, page_size,
+				  SHADOW_STACK_SET_TOKEN);
+	if (buf == MAP_FAILED) {
+		ksft_print_msg("Failed to map %lu byte GCS: %d\n",
+			       page_size, errno);
+		return false;
+	}
+	ksft_print_msg("Mapped GCS at %p-%p\n", buf,
+		       (void *)((uint64_t)buf + page_size));
+
+	/* We should have a cap token */
+	elem = (page_size / sizeof(uint64_t)) - 1;
+	expected_cap = ((uint64_t)buf + page_size - 8);
+	expected_cap &= GCS_CAP_ADDR_MASK;
+	expected_cap |= GCS_CAP_VALID_TOKEN;
+	if (buf[elem] != expected_cap) {
+		ksft_print_msg("Cap entry is 0x%llx not 0x%llx\n",
+			       buf[elem], expected_cap);
+		pass = false;
+	}
+	ksft_print_msg("cap token is 0x%llx\n", buf[elem]);
+
+	memset(&clone_args, 0, sizeof(clone_args));
+	clone_args.exit_signal = SIGCHLD;
+	clone_args.flags = CLONE_VM;
+	clone_args.shstk_token = (uint64_t)&(buf[elem]);
+	clone_args.stack = (uint64_t)malloc(page_size);
+	clone_args.stack_size = page_size;
+
+	if (!clone_args.stack) {
+		ksft_print_msg("Failed to allocate stack\n");
+		pass = false;
+	}
+
+	/* Don't try to clone if we're failing, we might hang */
+	if (!pass)
+		goto out;
+
+	/* There is no wrapper for clone3() in nolibc (or glibc) */
+	ret = my_syscall2(__NR_clone3, &clone_args, sizeof(clone_args));
+	if (ret == -1) {
+		ksft_print_msg("clone3() failed: %d\n", errno);
+		pass = false;
+		goto out;
+	}
+
+	if (ret == 0) {
+		/* In the child, make sure the token is gone */
+		if (buf[elem]) {
+			ksft_print_msg("GCS token was not consumed: %llx\n",
+				       buf[elem]);
+			pass = false;
+		}
+
+		/* Make sure we're using the right stack */
+		if ((uint64_t)get_gcspr() != (uint64_t)&buf[elem + 1]) {
+			ksft_print_msg("Child GCSPR_EL0 is %llx not %llx\n",
+				       (uint64_t)get_gcspr(),
+				       (uint64_t)&buf[elem + 1]);
+			pass = false;
+		}
+
+		/* We want to exit with *exactly* the same GCS pointer */
+		my_syscall1(__NR_exit, 0);
+	}
+
+	ksft_print_msg("Waiting for child %d\n", ret);
+
+	ret = waitpid(ret, &status, 0);
+	if (ret == -1) {
+		ksft_print_msg("Failed to wait for child: %d\n",
+			       errno);
+		pass = false;
+		goto out;
+	}
+
+	if (!WIFEXITED(status)) {
+		ksft_print_msg("Child exited due to signal %d\n",
+			       WTERMSIG(status));
+		pass = false;
+	} else {
+		if (WEXITSTATUS(status)) {
+			ksft_print_msg("Child exited with status %d\n",
+				       WEXITSTATUS(status));
+			pass = false;
+		}
+	}
+
+	/* The token should have been restored */
+	if (buf[elem] == expected_cap) {
+		ksft_print_msg("Cap entry restored\n");
+	} else {
+		ksft_print_msg("Cap entry is 0x%llx not 0x%llx\n",
+			       buf[elem], expected_cap);
+		pass = false;
+	}
+
+out:
+	free((void*)clone_args.stack);
+	munmap(buf, page_size);
+	return pass;
+}
+
 typedef bool (*gcs_test)(void);
 
 static struct {
@@ -377,6 +497,7 @@ static struct {
 	{ "map_guarded_stack", map_guarded_stack },
 	{ "fork", test_fork },
 	{ "vfork", test_vfork },
+	{ "exit_token", test_exit_token },
 };
 
 int main(void)
