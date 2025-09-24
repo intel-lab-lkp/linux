@@ -49,6 +49,20 @@ struct lease_manager_operations {
 	int (*lm_change)(struct file_lease *, int, struct list_head *);
 	void (*lm_setup)(struct file_lease *, void **);
 	bool (*lm_breaker_owns_lease)(struct file_lease *);
+
+	/**
+	 * lm_may_setlease - extra conditions for setlease
+	 * @new: new file_lease being set
+	 * @old: old (extant) file_lease
+	 *
+	 * This allows the lease manager to add extra conditions when
+	 * setting a lease, based on the presence of an existing lease.
+	 *
+	 * Return values:
+	 *   %false: @new and @old conflict
+	 *   %true: No conflict detected
+	 */
+	bool (*lm_may_setlease)(struct file_lease *new, struct file_lease *old);
 };
 
 struct lock_manager {

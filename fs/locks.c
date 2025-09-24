@@ -1826,6 +1826,11 @@ generic_add_lease(struct file *filp, int arg, struct file_lease **flp, void **pr
 			continue;
 		}
 
+		/* Allow the lease manager to veto the setlease */
+		if (lease->fl_lmops->lm_may_setlease &&
+		    !lease->fl_lmops->lm_may_setlease(lease, fl))
+			goto out;
+
 		/*
 		 * No exclusive leases if someone else has a lease on
 		 * this file:
