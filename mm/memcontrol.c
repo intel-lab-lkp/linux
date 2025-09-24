@@ -63,6 +63,7 @@
 #include <linux/seq_buf.h>
 #include <linux/sched/isolation.h>
 #include <linux/kmemleak.h>
+#include <linux/nmi.h>
 #include "internal.h"
 #include <net/sock.h>
 #include <net/ip.h>
@@ -3912,8 +3913,15 @@ static void mem_cgroup_css_free(struct cgroup_subsys_state *css)
 	int __maybe_unused i;
 
 #ifdef CONFIG_CGROUP_WRITEBACK
-	for (i = 0; i < MEMCG_CGWB_FRN_CNT; i++)
+	for (i = 0; i < MEMCG_CGWB_FRN_CNT; i++) {
+		/*
+		 * We don't want the hung task detector to report warnings
+		 * here since there's nothing wrong if the writeback work
+		 * lasts for a long time.
+		 */
+		touch_hung_task_detector(current);
 		wb_wait_for_completion(&memcg->cgwb_frn[i].done);
+	}
 #endif
 	if (cgroup_subsys_on_dfl(memory_cgrp_subsys) && !cgroup_memory_nosocket)
 		static_branch_dec(&memcg_sockets_enabled_key);
