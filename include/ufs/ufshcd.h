@@ -336,6 +336,7 @@ struct ufs_pwr_mode_info {
  * @config_esi: called to config Event Specific Interrupt
  * @config_scsi_dev: called to configure SCSI device parameters
  * @freq_to_gear_speed: called to map clock frequency to the max supported gear speed
+ * @isr: called to handle vendor specific interrupts
  */
 struct ufs_hba_variant_ops {
 	const char *name;
@@ -385,6 +386,7 @@ struct ufs_hba_variant_ops {
 	int	(*config_esi)(struct ufs_hba *hba);
 	void	(*config_scsi_dev)(struct scsi_device *sdev);
 	u32	(*freq_to_gear_speed)(struct ufs_hba *hba, unsigned long freq);
+	irqreturn_t	(*isr)(struct ufs_hba *hba, u32 intr_status);
 };
 
 /* clock gating state  */
