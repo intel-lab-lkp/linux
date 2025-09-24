@@ -1528,6 +1528,33 @@ static int vfio_pci_core_feature_token(struct vfio_device *device, u32 flags,
 	return 0;
 }
 
+static int vfio_pci_alias_region_mmap(struct vfio_pci_core_device *vdev,
+				      struct vfio_pci_region *region,
+				      struct vm_area_struct *vma)
+{
+	unsigned int alias_index = (uintptr_t) region->data;
+	unsigned long vm_pgoff;
+	int ret;
+
+	/* change the pgoff to the corresponding alias */
+	vm_pgoff = alias_index << (VFIO_PCI_OFFSET_SHIFT - PAGE_SHIFT);
+	vm_pgoff |= vma->vm_pgoff &
+		    ((1U << (VFIO_PCI_OFFSET_SHIFT - PAGE_SHIFT)) - 1);
+	vma->vm_pgoff = vm_pgoff;
+
+	ret = vdev->vdev.ops->mmap(&vdev->vdev, vma);
+
+	/* overwrite prot with the alias flags */
+	if (region->flags & VFIO_REGION_INFO_FLAG_WC)
+		vma->vm_page_prot = pgprot_writecombine(vma->vm_page_prot);
+
+	return ret;
+}
+
+struct vfio_pci_regops vfio_pci_alias_region_ops = {
+	.mmap = vfio_pci_alias_region_mmap,
+};
+
 int vfio_pci_core_ioctl_feature(struct vfio_device *device, u32 flags,
 				void __user *arg, size_t argsz)
 {
