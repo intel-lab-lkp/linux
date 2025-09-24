@@ -100,21 +100,51 @@ static const struct regmap_config tcsr_cc_sm8750_regmap_config = {
 	.fast_io = true,
 };
 
+static const struct regmap_config tcsr_cc_kaanapali_regmap_config = {
+	.reg_bits = 32,
+	.reg_stride = 4,
+	.val_bits = 32,
+	.max_register = 0x18,
+	.fast_io = true,
+};
+
 static const struct qcom_cc_desc tcsr_cc_sm8750_desc = {
 	.config = &tcsr_cc_sm8750_regmap_config,
 	.clks = tcsr_cc_sm8750_clocks,
 	.num_clks = ARRAY_SIZE(tcsr_cc_sm8750_clocks),
 };
 
+static const struct qcom_cc_desc tcsr_cc_kaanapali_desc = {
+	.config = &tcsr_cc_kaanapali_regmap_config,
+	.clks = tcsr_cc_sm8750_clocks,
+	.num_clks = ARRAY_SIZE(tcsr_cc_sm8750_clocks),
+};
+
 static const struct of_device_id tcsr_cc_sm8750_match_table[] = {
-	{ .compatible = "qcom,sm8750-tcsr" },
+	{ .compatible = "qcom,kaanapali-tcsr", .data = &tcsr_cc_kaanapali_desc},
+	{ .compatible = "qcom,sm8750-tcsr", .data = &tcsr_cc_sm8750_desc},
 	{ }
 };
 MODULE_DEVICE_TABLE(of, tcsr_cc_sm8750_match_table);
 
 static int tcsr_cc_sm8750_probe(struct platform_device *pdev)
 {
-	return qcom_cc_probe(pdev, &tcsr_cc_sm8750_desc);
+	const struct qcom_cc_desc *desc;
+
+	desc = device_get_match_data(&pdev->dev);
+
+	if (device_is_compatible(&pdev->dev, "qcom,kaanapali-tcsr")) {
+		tcsr_ufs_clkref_en.halt_reg = 0x10;
+		tcsr_ufs_clkref_en.clkr.enable_reg = 0x10;
+
+		tcsr_usb2_clkref_en.halt_reg = 0x18;
+		tcsr_usb2_clkref_en.clkr.enable_reg = 0x18;
+
+		tcsr_usb3_clkref_en.halt_reg = 0x8;
+		tcsr_usb3_clkref_en.clkr.enable_reg = 0x8;
+	}
+
+	return qcom_cc_probe(pdev, desc);
 }
 
 static struct platform_driver tcsr_cc_sm8750_driver = {
