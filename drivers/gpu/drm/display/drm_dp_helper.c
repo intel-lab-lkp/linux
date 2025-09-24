@@ -2836,6 +2836,139 @@ int drm_dp_dsc_sink_supported_input_bpcs(const u8 dsc_dpcd[DP_DSC_RECEIVER_CAP_S
 }
 EXPORT_SYMBOL(drm_dp_dsc_sink_supported_input_bpcs);
 
+/*
+ * See DP Standard v2.1a 2.8.4 Minimum Slices/Display, Table 2-159 and
+ * Appendix L.1 Derivation of Slice Count Requirements.
+ */
+static int dsc_branch_min_slice_throughput(int pixel_clock)
+{
+	if (pixel_clock >= 4800000)
+		return 600000;
+	else if (pixel_clock >= 2700000)
+		return 400000;
+	else
+		return 340000;
+}
+
+/**
+ * drm_dp_dsc_branch_max_slice_throughput() - Branch device's max DSC pixel throughput per slice
+ * @dsc_dpcd: DSC capabilities from DPCD
+ * @pixel_clock: Pixel clock of mode in kHz
+ * @is_rgb_yuv444: The mode is either RGB or YUV444
+ *
+ * Return the branch device's maximum per slice DSC pixel throughput, based on
+ * the device's DPCD DSC capabilities, @pixel_clock and whether the output
+ * format @is_rgb_yuv444 or yuv422/yuv420.
+ *
+ * Returns:
+ * The maximum DSC pixel throughput per slice supported by the branch device
+ * in kPixels/sec.
+ */
+int drm_dp_dsc_branch_max_slice_throughput(const u8 dsc_dpcd[DP_DSC_RECEIVER_CAP_SIZE],
+					   int pixel_clock, bool is_rgb_yuv444)
+{
+	int throughput;
+
+	throughput = dsc_dpcd[DP_DSC_PEAK_THROUGHPUT - DP_DSC_SUPPORT];
+
+	if (is_rgb_yuv444)
+		throughput = (throughput & DP_DSC_THROUGHPUT_MODE_0_MASK) >>
+			     DP_DSC_THROUGHPUT_MODE_0_SHIFT;
+	else
+		throughput = (throughput & DP_DSC_THROUGHPUT_MODE_1_MASK) >>
+			     DP_DSC_THROUGHPUT_MODE_1_SHIFT;
+
+	switch (throughput) {
+	case 0:
+		return dsc_branch_min_slice_throughput(pixel_clock);
+	case 1:
+		return 340000;
+	case 2 ... 14:
+		return 400000 + 50000 * (throughput - 2);
+	case 15:
+		return 170000;
+	default:
+		WARN(1, "Missing case %d\n", throughput);
+		return 340000;
+	}
+}
+EXPORT_SYMBOL(drm_dp_dsc_branch_max_slice_throughput);
+
+static u8 dsc_branch_dpcd_cap(const u8 dpcd[DP_DSC_BRANCH_CAP_SIZE], int reg)
+{
+	return dpcd[reg - DP_DSC_BRANCH_OVERALL_THROUGHPUT_0];
+}
+
+/**
+ * drm_dp_dsc_branch_max_overall_throughput() - Branch device's max overall DSC pixel throughput
+ * @dsc_branch_dpcd: DSC branch capabilities from DPCD
+ * @is_rgb_yuv444: The mode is either RGB or YUV444
+ *
+ * Return the branch device's maximum overall DSC pixel throughput, based on
+ * the device's DPCD DSC branch capabilities, and whether the output
+ * format @is_rgb_yuv444 or yuv422/yuv420.
+ *
+ * Returns:
+ * - 0:   The maximum overall throughput capability is not indicated by
+ *        the device separately and it must be determined from the per-slice
+ *        max throughput (see @drm_dp_dsc_branch_slice_max_throughput())
+ *        and the maximum slice count supported by the device.
+ * - > 0: The maximum overall DSC pixel throughput supported by the branch
+ *        device in kPixels/sec.
+ */
+int drm_dp_dsc_branch_max_overall_throughput(const u8 dsc_branch_dpcd[DP_DSC_BRANCH_CAP_SIZE],
+					     bool is_rgb_yuv444)
+{
+	int throughput;
+
+	if (is_rgb_yuv444)
+		throughput = dsc_branch_dpcd_cap(dsc_branch_dpcd,
+						 DP_DSC_BRANCH_OVERALL_THROUGHPUT_0);
+	else
+		throughput = dsc_branch_dpcd_cap(dsc_branch_dpcd,
+						 DP_DSC_BRANCH_OVERALL_THROUGHPUT_1);
+
+	switch (throughput) {
+	case 0:
+		return 0;
+	case 1:
+		return 680000;
+	default:
+		return 600000 + 50000 * throughput;
+	}
+}
+EXPORT_SYMBOL(drm_dp_dsc_branch_max_overall_throughput);
+
+/**
+ * drm_dp_dsc_branch_max_line_width() - Branch device's max DSC line width
+ * @dsc_branch_dpcd: DSC branch capabilities from DPCD
+ *
+ * Return the branch device's maximum overall DSC line width, based on
+ * the device's @dsc_branch_dpcd capabilities.
+ *
+ * Returns:
+ * - 0:        The maximum line width is not indicated by the device
+ *             separately and it must be determined from the maximum
+ *             slice count and slice-width supported by the device.
+ * - %-EINVAL: The device indicates an invalid maximum line width
+ *             (< 2560 pixels).
+ * - >= 2560:  The maximum line width in pixels.
+ */
+int drm_dp_dsc_branch_max_line_width(const u8 dsc_branch_dpcd[DP_DSC_BRANCH_CAP_SIZE])
+{
+	int line_width = dsc_branch_dpcd_cap(dsc_branch_dpcd, DP_DSC_BRANCH_MAX_LINE_WIDTH);
+
+	switch (line_width) {
+	case 0:
+		return 0;
+	case 1 ... 7:
+		return -EINVAL;
+	default:
+		return line_width * 320;
+	}
+}
+EXPORT_SYMBOL(drm_dp_dsc_branch_max_line_width);
+
 static int drm_dp_read_lttpr_regs(struct drm_dp_aux *aux,
 				  const u8 dpcd[DP_RECEIVER_CAP_SIZE], int address,
 				  u8 *buf, int buf_size)
