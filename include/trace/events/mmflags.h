@@ -100,6 +100,7 @@ TRACE_DEFINE_ENUM(___GFP_LAST_BIT);
 	gfpflag_string(GFP_DMA),		\
 	gfpflag_string(GFP_DMA32),		\
 	gfpflag_string(__GFP_RECLAIM),		\
+	gfpflag_string(__GFP_SENSITIVE),	\
 	TRACE_GFP_FLAGS				\
 	{ 0, NULL }
 

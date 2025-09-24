@@ -5153,6 +5153,13 @@ struct page *__alloc_frozen_pages_noprof(gfp_t gfp, unsigned int order,
 	struct alloc_context ac = { };
 
 	/*
+	 * Temporary hack: Allocation of nonsensitive pages is not possible yet,
+	 * allocate everything sensitive. The restricted address space is never
+	 * actually entered yet so this is fine.
+	 */
+	gfp |= __GFP_SENSITIVE;
+
+	/*
 	 * There are several places where we assume that the order value is sane
 	 * so bail out early if the request is out of bound.
 	 */
