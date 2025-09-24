@@ -29,3 +29,10 @@ config MHI_BUS_PCI_GENERIC
 	  This driver provides MHI PCI controller driver for devices such as
 	  Qualcomm SDX55 based PCIe modems.
 
+config MHI_BUS_LOOPBACK
+	tristate "MHI loopback driver"
+	depends on MHI_BUS
+	help
+	  MHI loopback driver for data path testing. This driver
+	  provides a mechanism to test MHI data transfer functionality
+	  by implementing an echo service between host and endpoint.
