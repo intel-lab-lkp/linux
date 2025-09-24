@@ -1345,6 +1345,25 @@ static void submit_bio_wait_endio(struct bio *bio)
 	complete(bio->bi_private);
 }
 
+int execute_bio_wait(struct bio *bio, void *private,
+		void (*execute)(struct bio *bio, void *private))
+{
+	DECLARE_COMPLETION_ONSTACK_MAP(done,
+			bio->bi_bdev->bd_disk->lockdep_map);
+
+	bio->bi_private = &done;
+	bio->bi_end_io = submit_bio_wait_endio;
+	bio->bi_opf |= REQ_SYNC;
+	if (execute)
+		execute(bio, private);
+	else
+		submit_bio(bio);
+	blk_wait_io(&done);
+
+	return blk_status_to_errno(bio->bi_status);
+}
+EXPORT_SYMBOL_GPL(execute_bio_wait);
+
 /**
  * submit_bio_wait - submit a bio, and wait until it completes
  * @bio: The &struct bio which describes the I/O
@@ -1358,16 +1377,7 @@ static void submit_bio_wait_endio(struct bio *bio)
  */
 int submit_bio_wait(struct bio *bio)
 {
-	DECLARE_COMPLETION_ONSTACK_MAP(done,
-			bio->bi_bdev->bd_disk->lockdep_map);
-
-	bio->bi_private = &done;
-	bio->bi_end_io = submit_bio_wait_endio;
-	bio->bi_opf |= REQ_SYNC;
-	submit_bio(bio);
-	blk_wait_io(&done);
-
-	return blk_status_to_errno(bio->bi_status);
+	return execute_bio_wait(bio, NULL, NULL);
 }
 EXPORT_SYMBOL(submit_bio_wait);
 
