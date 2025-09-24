@@ -91,6 +91,47 @@ rkcanfd_fifo_header_to_cfd_header(const struct rkcanfd_priv *priv,
 	return len + cfd->len;
 }
 
+static unsigned int
+rk3576canfd_fifo_header_to_cfd_header(const struct rkcanfd_priv *priv,
+				      const struct rk3576canfd_fifo_header *header,
+				      struct canfd_frame *cfd)
+{
+	unsigned int len = sizeof(*cfd) - sizeof(cfd->data);
+	u8 dlc;
+
+	if (header->frameinfo & RK3576CANFD_REG_RXFRD_FRAMEINFO_FRAME_FORMAT)
+		cfd->can_id = FIELD_GET(RKCANFD_REG_FD_ID_EFF, header->id) |
+			CAN_EFF_FLAG;
+	else
+		cfd->can_id = FIELD_GET(RKCANFD_REG_FD_ID_SFF, header->id);
+
+	dlc = FIELD_GET(RK3576CANFD_REG_RXFRD_FRAMEINFO_DATA_LENGTH,
+			header->frameinfo);
+
+	/* CAN-FD */
+	if (header->frameinfo & RK3576CANFD_REG_RXFRD_FRAMEINFO_FDF) {
+		cfd->len = can_fd_dlc2len(dlc);
+
+		/* The cfd is not allocated by alloc_canfd_skb(), so
+		 * set CANFD_FDF here.
+		 */
+		cfd->flags |= CANFD_FDF;
+
+		if (header->frameinfo & RK3576CANFD_REG_RXFRD_FRAMEINFO_BRS)
+			cfd->flags |= CANFD_BRS;
+	} else {
+		cfd->len = can_cc_dlc2len(dlc);
+
+		if (header->frameinfo & RK3576CANFD_REG_RXFRD_FRAMEINFO_RTR) {
+			cfd->can_id |= CAN_RTR_FLAG;
+
+			return len;
+		}
+	}
+
+	return len + cfd->len;
+}
+
 static int rkcanfd_rxstx_filter(struct rkcanfd_priv *priv,
 				const struct canfd_frame *cfd_rx, const u32 ts,
 				bool *tx_done)
@@ -198,6 +239,109 @@ rkcanfd_fifo_header_empty(const struct rkcanfd_fifo_header *header)
 		header->frameinfo == header->ts;
 }
 
+static int rk3576canfd_handle_rx_int_one(struct rkcanfd_priv *priv)
+{
+	struct net_device_stats *stats = &priv->ndev->stats;
+	struct canfd_frame cfd[1] = { }, *skb_cfd;
+	struct rk3576canfd_fifo_header header[1] = { };
+	struct sk_buff *skb;
+	unsigned int len;
+	int err;
+
+	/* read header into separate struct and convert it later */
+	rkcanfd_read_rep(priv, RKCANFD_REG_RX_FIFO_RDATA,
+			 header, sizeof(*header));
+	/* read data directly into cfd */
+	rkcanfd_read_rep(priv, RKCANFD_REG_RX_FIFO_RDATA,
+			 cfd->data, sizeof(cfd->data));
+
+	len = rk3576canfd_fifo_header_to_cfd_header(priv, header, cfd);
+
+	if (header->frameinfo & RK3576CANFD_REG_RXFRD_FRAMEINFO_FDF)
+		skb = alloc_canfd_skb(priv->ndev, &skb_cfd);
+	else
+		skb = alloc_can_skb(priv->ndev, (struct can_frame **)&skb_cfd);
+
+	if (!skb) {
+		stats->rx_dropped++;
+
+		return 0;
+	}
+
+	memcpy(skb_cfd, cfd, len);
+
+	err = can_rx_offload_queue_tail(&priv->offload, skb);
+	if (err)
+		stats->rx_fifo_errors++;
+
+	return 0;
+}
+
+static int rk3576canfd_handle_rx_dma(struct rkcanfd_priv *priv, u32 addr)
+{
+	struct net_device_stats *stats = &priv->ndev->stats;
+	struct canfd_frame *skb_cfd;
+	struct sk_buff *skb;
+	u32 frameinfo, id, data[16] = {0};
+	u8 dlc;
+	int i;
+
+	frameinfo = *(u32 *)(priv->rxbuf + addr * RK3576CANFD_REG_STR_STATE_INTM_LEFT_CNT_UNIT);
+	id = *(u32 *)(priv->rxbuf + 1 + addr * RK3576CANFD_REG_STR_STATE_INTM_LEFT_CNT_UNIT);
+	for (i = 0; i < (RK3576CANFD_REG_STR_STATE_INTM_LEFT_CNT_UNIT - 2); i++)
+		data[i] = *(u32 *)(priv->rxbuf + 2 + i +
+				   addr * RK3576CANFD_REG_STR_STATE_INTM_LEFT_CNT_UNIT);
+
+	if (frameinfo & RK3576CANFD_REG_RXFRD_FRAMEINFO_FDF)
+		skb = alloc_canfd_skb(priv->ndev, &skb_cfd);
+	else
+		skb = alloc_can_skb(priv->ndev, (struct can_frame **)&skb_cfd);
+
+	if (!skb) {
+		stats->rx_dropped++;
+
+		return 0;
+	}
+
+	if (frameinfo & RK3576CANFD_REG_RXFRD_FRAMEINFO_FRAME_FORMAT)
+		skb_cfd->can_id = FIELD_GET(RKCANFD_REG_FD_ID_EFF, id) |
+			CAN_EFF_FLAG;
+	else
+		skb_cfd->can_id = FIELD_GET(RKCANFD_REG_FD_ID_SFF, id);
+
+	dlc = FIELD_GET(RK3576CANFD_REG_RXFRD_FRAMEINFO_DATA_LENGTH,
+			frameinfo);
+
+	/* CAN-FD */
+	if (frameinfo & RK3576CANFD_REG_RXFRD_FRAMEINFO_FDF) {
+		skb_cfd->len = can_fd_dlc2len(dlc);
+
+		/* The cfd is not allocated by alloc_canfd_skb(), so
+		 * set CANFD_FDF here.
+		 */
+		skb_cfd->flags |= CANFD_FDF;
+
+		if (frameinfo & RK3576CANFD_REG_RXFRD_FRAMEINFO_BRS)
+			skb_cfd->flags |= CANFD_BRS;
+	} else {
+		skb_cfd->len = can_cc_dlc2len(dlc);
+
+		if (frameinfo & RK3576CANFD_REG_RXFRD_FRAMEINFO_RTR)
+			skb_cfd->can_id |= CAN_RTR_FLAG;
+	}
+	if (!(skb_cfd->can_id & CAN_RTR_FLAG)) {
+		/* Change CANFD data format to SocketCAN data format */
+		for (i = 0; i < skb_cfd->len; i += 4)
+			*(u32 *)(skb_cfd->data + i) = data[i / 4];
+	}
+
+	stats->rx_packets++;
+	stats->rx_bytes += skb_cfd->len;
+	netif_rx(skb);
+
+	return 0;
+}
+
 static int rkcanfd_handle_rx_int_one(struct rkcanfd_priv *priv)
 {
 	struct net_device_stats *stats = &priv->ndev->stats;
@@ -284,6 +428,52 @@ rkcanfd_rx_fifo_get_len(const struct rkcanfd_priv *priv)
 	return FIELD_GET(RKCANFD_REG_RX_FIFO_CTRL_RX_FIFO_CNT, reg);
 }
 
+static inline unsigned int
+rk3576canfd_rx_fifo_get_len(const struct rkcanfd_priv *priv)
+{
+	const u32 reg = rkcanfd_read(priv, RK3576CANFD_REG_STR_STATE);
+	int val = FIELD_GET(RK3576CANFD_REG_STR_STATE_INTM_LEFT_CNT, reg);
+
+	return DIV_ROUND_UP(val, RK3576CANFD_REG_STR_STATE_INTM_LEFT_CNT_UNIT);
+}
+
+static void rk3576_canfd_rx_dma_callback(void *data)
+{
+	struct rkcanfd_priv *priv = data;
+	int i;
+
+	for (i = 0; i < priv->quota; i++)
+		rk3576canfd_handle_rx_dma(priv, i);
+
+	rkcanfd_write(priv, RK3576CANFD_REG_INT_MASK, priv->reg_int_mask_default);
+}
+
+static int rk3576_canfd_rx_dma(struct rkcanfd_priv *priv)
+{
+	struct dma_async_tx_descriptor *rxdesc = NULL;
+	const u32 reg = rkcanfd_read(priv, RK3576CANFD_REG_STR_STATE);
+	int quota = FIELD_GET(RK3576CANFD_REG_STR_STATE_INTM_LEFT_CNT, reg);
+
+	quota = DIV_ROUND_UP(quota, RK3576CANFD_REG_STR_STATE_INTM_LEFT_CNT_UNIT);
+	priv->quota = quota;
+	if (priv->quota == 0) {
+		rkcanfd_write(priv, RK3576CANFD_REG_INT_MASK, priv->reg_int_mask_default);
+		return 0;
+	}
+
+	rxdesc = dmaengine_prep_slave_single(priv->rxchan, priv->rx_dma_dst_addr,
+					     priv->dma_size * priv->quota, DMA_DEV_TO_MEM, 0);
+	if (!rxdesc)
+		return -ENOMSG;
+
+	rxdesc->callback = rk3576_canfd_rx_dma_callback;
+	rxdesc->callback_param = priv;
+
+	dmaengine_submit(rxdesc);
+	dma_async_issue_pending(priv->rxchan);
+	return 0;
+}
+
 int rkcanfd_handle_rx_int(struct rkcanfd_priv *priv)
 {
 	unsigned int len;
@@ -297,3 +487,25 @@ int rkcanfd_handle_rx_int(struct rkcanfd_priv *priv)
 
 	return 0;
 }
+
+int rkcanfd_handle_rk3576_rx_int(struct rkcanfd_priv *priv)
+{
+	unsigned int len;
+	int err;
+
+	if (priv->rxchan) {
+		err = rk3576_canfd_rx_dma(priv);
+		if (err)
+			return err;
+		else
+			return 0;
+	}
+	while ((len = rk3576canfd_rx_fifo_get_len(priv))) {
+		err = rk3576canfd_handle_rx_int_one(priv);
+		if (err)
+			return err;
+	}
+	rkcanfd_write(priv, RK3576CANFD_REG_INT_MASK, priv->reg_int_mask_default);
+	return 0;
+}
+
