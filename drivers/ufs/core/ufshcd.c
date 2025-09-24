@@ -2995,6 +2995,15 @@ static void ufshcd_map_queues(struct Scsi_Host *shost)
 	}
 }
 
+/*
+ * The only purpose of this function is to make the SCSI core skip the memset()
+ * call for the private command data.
+ */
+static int ufshcd_init_cmd_priv(struct Scsi_Host *host, struct scsi_cmnd *cmd)
+{
+	return 0;
+}
+
 /**
  * ufshcd_queuecommand - main entry point for SCSI requests
  * @host: SCSI host pointer
@@ -9157,6 +9166,7 @@ static const struct scsi_host_template ufshcd_driver_template = {
 	.name			= UFSHCD,
 	.proc_name		= UFSHCD,
 	.map_queues		= ufshcd_map_queues,
+	.init_cmd_priv		= ufshcd_init_cmd_priv,
 	.queuecommand		= ufshcd_queuecommand,
 	.mq_poll		= ufshcd_poll,
 	.sdev_init		= ufshcd_sdev_init,
