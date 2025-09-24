@@ -785,7 +785,7 @@ struct fwnode_handle *fwnode_get_nth_parent(struct fwnode_handle *fwnode,
 EXPORT_SYMBOL_GPL(fwnode_get_nth_parent);
 
 /**
- * fwnode_get_next_child_node - Return the next child node handle for a node
+ * fwnode_get_next_child_node - Return the next available child node handle
  * @fwnode: Firmware node to find the next child node for.
  * @child: Handle to one of the node's child nodes or a %NULL handle.
  *
@@ -830,7 +830,7 @@ fwnode_get_next_available_child_node(const struct fwnode_handle *fwnode,
 EXPORT_SYMBOL_GPL(fwnode_get_next_available_child_node);
 
 /**
- * device_get_next_child_node - Return the next child node handle for a device
+ * device_get_next_child_node - Return the next available child node handle for a device
  * @dev: Device to find the next child node for.
  * @child: Handle to one of the device's child nodes or a %NULL handle.
  *
@@ -858,7 +858,7 @@ struct fwnode_handle *device_get_next_child_node(const struct device *dev,
 EXPORT_SYMBOL_GPL(device_get_next_child_node);
 
 /**
- * fwnode_get_named_child_node - Return first matching named child node handle
+ * fwnode_get_named_child_node - Return first available matching named child node handle
  * @fwnode: Firmware node to find the named child node for.
  * @childname: String to match child node name against.
  *
@@ -874,7 +874,7 @@ fwnode_get_named_child_node(const struct fwnode_handle *fwnode,
 EXPORT_SYMBOL_GPL(fwnode_get_named_child_node);
 
 /**
- * device_get_named_child_node - Return first matching named child node handle
+ * device_get_named_child_node - Return first available matching named child node handle for a device
  * @dev: Device to find the named child node for.
  * @childname: String to match child node name against.
  *
@@ -928,7 +928,7 @@ bool fwnode_device_is_available(const struct fwnode_handle *fwnode)
 EXPORT_SYMBOL_GPL(fwnode_device_is_available);
 
 /**
- * fwnode_get_child_node_count - return the number of child nodes for a given firmware node
+ * fwnode_get_child_node_count - Return the number of available child nodes for a given firmware node
  * @fwnode: Pointer to the parent firmware node
  *
  * Return: the number of child nodes for a given firmware node.
@@ -946,7 +946,7 @@ unsigned int fwnode_get_child_node_count(const struct fwnode_handle *fwnode)
 EXPORT_SYMBOL_GPL(fwnode_get_child_node_count);
 
 /**
- * fwnode_get_named_child_node_count - number of child nodes with given name
+ * fwnode_get_named_child_node_count - Return the number of available child nodes with given name
  * @fwnode: Node which child nodes are counted.
  * @name: String to match child node name against.
  *
