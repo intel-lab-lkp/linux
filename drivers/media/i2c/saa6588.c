@@ -50,7 +50,7 @@ MODULE_LICENSE("GPL");
 
 #define UNSET       (-1U)
 #define PREFIX      "saa6588: "
-#define dprintk     if (debug) printk
+#define dprintk(fmt, args...)  do { if (debug) printk(fmt, ##args); } while (0)
 
 struct saa6588 {
 	struct v4l2_subdev sd;
