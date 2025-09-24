@@ -613,8 +613,8 @@ struct hisi_sas_command_table_ssp {
 	struct ssp_frame_hdr hdr;
 	union {
 		struct {
-			struct ssp_command_iu task;
 			u32 prot[PROT_BUF_SIZE];
+			struct ssp_command_iu task;
 		};
 		struct ssp_tmf_iu ssp_task;
 		struct xfer_rdy_iu xfer_rdy;
@@ -636,13 +636,17 @@ struct hisi_sas_status_buffer {
 
 struct hisi_sas_slot_buf_table {
 	struct hisi_sas_status_buffer status_buffer;
-	union hisi_sas_command_table command_header;
 	struct hisi_sas_sge_page sge_page;
+
+	/* Must be last --ends in a flexible-array member. */
+	union hisi_sas_command_table command_header;
 };
 
 struct hisi_sas_slot_dif_buf_table {
-	struct hisi_sas_slot_buf_table slot_buf;
 	struct hisi_sas_sge_dif_page sge_dif_page;
+
+	/* Must be last --ends in a flexible-array member. */
+	struct hisi_sas_slot_buf_table slot_buf;
 };
 
 extern struct scsi_transport_template *hisi_sas_stt;
