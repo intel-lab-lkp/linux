@@ -26,6 +26,7 @@
 #include <linux/mfd/syscon.h>
 #include <linux/usb/of.h>
 #include <linux/usb/otg.h>
+#include <linux/usb/role.h>
 
 #define BIT_WRITEABLE_SHIFT	16
 #define SCHEDULE_DELAY		(60 * HZ)
@@ -190,6 +191,7 @@ struct rockchip_usb2phy_cfg {
  * @suspended: phy suspended flag.
  * @vbus_attached: otg device vbus status.
  * @host_disconnect: usb host disconnect status.
+ * @data_role_dfp: dual role dfp/ufp status.
  * @bvalid_irq: IRQ number assigned for vbus valid rise detection.
  * @id_irq: IRQ number assigned for ID pin detection.
  * @ls_irq: IRQ number assigned for linestate detection.
@@ -210,6 +212,7 @@ struct rockchip_usb2phy_port {
 	bool		suspended;
 	bool		vbus_attached;
 	bool            host_disconnect;
+	bool		data_role_dfp;
 	int		bvalid_irq;
 	int		id_irq;
 	int		ls_irq;
@@ -648,11 +651,37 @@ static int rockchip_usb2phy_exit(struct phy *phy)
 	return 0;
 }
 
+static int rockchip_usb2phy_set_mode(struct phy *phy,
+				     enum phy_mode mode, int submode)
+{
+	struct rockchip_usb2phy_port *rport = phy_get_drvdata(phy);
+
+	dev_dbg(&rport->phy->dev, "%s: mode=%d\n", __func__, (int)mode);
+
+	if (rport->port_id != USB2PHY_PORT_OTG)
+		return 0;
+
+	switch (mode) {
+	case PHY_MODE_USB_DEVICE:
+		rport->data_role_dfp = false;
+		break;
+	case PHY_MODE_USB_HOST:
+		rport->data_role_dfp = true;
+		break;
+	default:
+		dev_info(&rport->phy->dev, "illegal mode\n");
+		return -EINVAL;
+	}
+
+	return 0;
+}
+
 static const struct phy_ops rockchip_usb2phy_ops = {
 	.init		= rockchip_usb2phy_init,
 	.exit		= rockchip_usb2phy_exit,
 	.power_on	= rockchip_usb2phy_power_on,
 	.power_off	= rockchip_usb2phy_power_off,
+	.set_mode	= rockchip_usb2phy_set_mode,
 	.owner		= THIS_MODULE,
 };
 
@@ -682,9 +711,12 @@ static void rockchip_usb2phy_otg_sm_work(struct work_struct *work)
 			rockchip_usb2phy_power_off(rport->phy);
 		fallthrough;
 	case OTG_STATE_B_IDLE:
-		if (extcon_get_state(rphy->edev, EXTCON_USB_HOST) > 0) {
+		if (extcon_get_state(rphy->edev, EXTCON_USB_HOST) > 0 ||
+			rport->data_role_dfp) {
 			dev_dbg(&rport->phy->dev, "usb otg host connect\n");
 			rport->state = OTG_STATE_A_HOST;
+			rphy->chg_state = USB_CHG_STATE_UNDEFINED;
+			rphy->chg_type = POWER_SUPPLY_TYPE_UNKNOWN;
 			rockchip_usb2phy_power_on(rport->phy);
 			return;
 		} else if (vbus_attach) {
@@ -729,6 +761,7 @@ static void rockchip_usb2phy_otg_sm_work(struct work_struct *work)
 			notify_charger = true;
 			rphy->chg_state = USB_CHG_STATE_UNDEFINED;
 			rphy->chg_type = POWER_SUPPLY_TYPE_UNKNOWN;
+			rockchip_usb2phy_power_off(rport->phy);
 		}
 
 		if (rport->vbus_attached != vbus_attach) {
@@ -759,7 +792,7 @@ static void rockchip_usb2phy_otg_sm_work(struct work_struct *work)
 		if (extcon_get_state(rphy->edev, EXTCON_USB_HOST) == 0) {
 			dev_dbg(&rport->phy->dev, "usb otg host disconnect\n");
 			rport->state = OTG_STATE_B_IDLE;
-			rockchip_usb2phy_power_off(rport->phy);
+			sch_work = true;
 		}
 		break;
 	default:
@@ -1294,6 +1327,7 @@ static int rockchip_usb2phy_otg_port_init(struct rockchip_usb2phy *rphy,
 	 */
 	rport->suspended = true;
 	rport->vbus_attached = false;
+	rport->data_role_dfp = false;
 
 	mutex_init(&rport->mutex);
 
@@ -1878,7 +1912,7 @@ static const struct rockchip_usb2phy_cfg rk3399_phy_cfgs[] = {
 			}
 		},
 		.chg_det = {
-			.opmode		= { 0xe454, 3, 0, 5, 1 },
+			.opmode		= { 0xe454, 8, 0, 0, 0x1d7 },
 			.cp_det		= { 0xe2ac, 2, 2, 0, 1 },
 			.dcp_det	= { 0xe2ac, 1, 1, 0, 1 },
 			.dp_det		= { 0xe2ac, 0, 0, 0, 1 },
