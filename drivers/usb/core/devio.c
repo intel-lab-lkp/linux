@@ -1624,7 +1624,7 @@ static int proc_do_submiturb(struct usb_dev_state *ps, struct usbdevfs_urb *uurb
 	struct usb_host_endpoint *ep;
 	struct async *as = NULL;
 	struct usb_ctrlrequest *dr = NULL;
-	unsigned int u, totlen, isofrmlen;
+	unsigned int u, totlen;
 	int i, ret, num_sgs = 0, ifnum = -1;
 	int number_of_packets = 0;
 	unsigned int stream_id = 0;
@@ -1745,14 +1745,10 @@ static int proc_do_submiturb(struct usb_dev_state *ps, struct usbdevfs_urb *uurb
 		if (!usb_endpoint_xfer_isoc(&ep->desc))
 			return -EINVAL;
 		number_of_packets = uurb->number_of_packets;
-		isofrmlen = sizeof(struct usbdevfs_iso_packet_desc) *
-				   number_of_packets;
-		isopkt = memdup_user(iso_frame_desc, isofrmlen);
-		if (IS_ERR(isopkt)) {
-			ret = PTR_ERR(isopkt);
-			isopkt = NULL;
-			goto error;
-		}
+		isopkt = memdup_array_user(iso_frame_desc, number_of_packets,
+				sizeof(struct usbdevfs_iso_packet_desc));
+		if (IS_ERR(isopkt))
+			return PTR_ERR(isopkt);
 		for (totlen = u = 0; u < number_of_packets; u++) {
 			/*
 			 * arbitrary limit need for USB 3.1 Gen2
