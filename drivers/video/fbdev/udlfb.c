@@ -1382,6 +1382,7 @@ error:
 	return result;
 }
 
+#ifdef CONFIG_FB_DEVICE
 static ssize_t metrics_bytes_rendered_show(struct device *fbdev,
 				   struct device_attribute *a, char *buf) {
 	struct fb_info *fb_info = dev_get_drvdata(fbdev);
@@ -1413,6 +1414,7 @@ static ssize_t metrics_cpu_kcycles_used_show(struct device *fbdev,
 	return sysfs_emit(buf, "%u\n",
 			atomic_read(&dlfb->cpu_kcycles_used));
 }
+#endif
 
 static ssize_t edid_show(
 			struct file *filp,
@@ -1486,6 +1488,7 @@ static const struct bin_attribute edid_attr = {
 	.write = edid_store
 };
 
+#ifdef CONFIG_FB_DEVICE
 static const struct device_attribute fb_device_attrs[] = {
 	__ATTR_RO(metrics_bytes_rendered),
 	__ATTR_RO(metrics_bytes_identical),
@@ -1493,6 +1496,7 @@ static const struct device_attribute fb_device_attrs[] = {
 	__ATTR_RO(metrics_cpu_kcycles_used),
 	__ATTR(metrics_reset, S_IWUSR, NULL, metrics_reset_store),
 };
+#endif
 
 /*
  * This is necessary before we can communicate with the display controller.
@@ -1702,6 +1706,7 @@ static int dlfb_usb_probe(struct usb_interface *intf,
 		goto error;
 	}
 
+#ifdef CONFIG_FB_DEVICE
 	for (i = 0; i < ARRAY_SIZE(fb_device_attrs); i++) {
 		attr = &fb_device_attrs[i];
 		retval = device_create_file(info->dev, attr);
@@ -1710,6 +1715,7 @@ static int dlfb_usb_probe(struct usb_interface *intf,
 				 "failed to create '%s' attribute: %d\n",
 				 attr->attr.name, retval);
 	}
+#endif
 
 	retval = device_create_bin_file(info->dev, &edid_attr);
 	if (retval)
@@ -1753,9 +1759,11 @@ static void dlfb_usb_disconnect(struct usb_interface *intf)
 	/* this function will wait for all in-flight urbs to complete */
 	dlfb_free_urb_list(dlfb);
 
+#ifdef CONFIG_FB_DEVICE
 	/* remove udlfb's sysfs interfaces */
 	for (i = 0; i < ARRAY_SIZE(fb_device_attrs); i++)
 		device_remove_file(info->dev, &fb_device_attrs[i]);
+#endif
 	device_remove_bin_file(info->dev, &edid_attr);
 
 	unregister_framebuffer(info);
