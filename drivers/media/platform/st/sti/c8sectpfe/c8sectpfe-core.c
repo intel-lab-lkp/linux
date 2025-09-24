@@ -655,6 +655,13 @@ static irqreturn_t c8sectpfe_error_irq_handler(int irq, void *priv)
 	return IRQ_HANDLED;
 }
 
+static void c8sectpfe_put_device(void *_dev)
+{
+	struct device *dev = _dev;
+
+	put_device(dev);
+}
+
 static int c8sectpfe_probe(struct platform_device *pdev)
 {
 	struct device *dev = &pdev->dev;
@@ -798,6 +805,11 @@ static int c8sectpfe_probe(struct platform_device *pdev)
 			dev_err(&pdev->dev, "No i2c adapter found\n");
 			return -ENODEV;
 		}
+
+		ret = devm_add_action_or_reset(dev, c8sectpfe_put_device,
+					       &tsin->i2c_adapter->dev);
+		if (ret)
+			return ret;
 
 		/* Acquire reset GPIO and activate it */
 		tsin->rst_gpio = devm_fwnode_gpiod_get(dev,
