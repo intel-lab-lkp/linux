@@ -125,6 +125,8 @@
 		regulator-boot-on;
 		enable-active-high;
 		gpio = <&gpio0 RK_PC6 GPIO_ACTIVE_HIGH>;
+		pinctrl-names = "default";
+		pinctrl-0 = <&vcc3v3_lcd_s0_en>;
 		vin-supply = <&vcc_3v3_s0>;
 	};
 
@@ -264,6 +266,43 @@
 	status = "okay";
 };
 
+&dsi {
+	#address-cells = <1>;
+	#size-cells = <0>;
+	pinctrl-0 = <&mipim1_pins>;
+	pinctrl-names = "default";
+	status = "okay";
+
+	panel@0 {
+		compatible = "wanchanglong,w552793baa", "raydium,rm67200";
+		reg = <0>;
+
+		iovcc-supply = <&vcc3v3_lcd_n>;
+		reset-gpios = <&gpio3 RK_PB5 GPIO_ACTIVE_LOW>;
+		vdd-supply = <&vcc3v3_lcd_n>;
+		vsn-supply = <&vcc5v0_device>;
+		vsp-supply = <&vcc5v0_device>;
+
+		port {
+			mipi_panel_in: endpoint {
+				remote-endpoint = <&dsi_out_panel>;
+			};
+		};
+	};
+};
+
+&dsi_in {
+	dsi_in_vp1: endpoint {
+		remote-endpoint = <&vp1_out_dsi>;
+	};
+};
+
+&dsi_out {
+	dsi_out_panel: endpoint {
+		remote-endpoint = <&mipi_panel_in>;
+	};
+};
+
 &gmac0 {
 	clock_in_out = "output";
 	phy-mode = "rgmii-rxid";
@@ -317,6 +356,28 @@
 
 &hdptxphy {
 	status = "okay";
+};
+
+&i2c0 {
+	pinctrl-names = "default";
+	pinctrl-0 = <&i2c0m1_xfer>;
+	#address-cells = <1>;
+	#size-cells = <0>;
+	status = "okay";
+
+	touchscreen@14 {
+		compatible = "goodix,gt1158";
+		reg = <0x14>;
+		interrupt-parent = <&gpio0>;
+		interrupts = <RK_PC5 IRQ_TYPE_LEVEL_LOW>;
+		irq-gpios = <&gpio0 RK_PC5 GPIO_ACTIVE_HIGH>;
+		pinctrl-names = "default";
+		pinctrl-0 = <&tp_int>, <&tp_rst>;
+		reset-gpios = <&gpio0 RK_PD0 GPIO_ACTIVE_HIGH>;
+		touchscreen-size-x = <720>;
+		touchscreen-size-y = <1280>;
+		VDDIO-supply = <&vcc3v3_lcd_n>;
+	};
 };
 
 &i2c1 {
@@ -738,6 +799,10 @@
 	};
 };
 
+&mipidcphy {
+	status = "okay";
+};
+
 &pcie0 {
 	pinctrl-names = "default";
 	pinctrl-0 = <&pcie0_rst>;
@@ -785,6 +850,20 @@
 
 		host_wake_bt: host-wake-bt {
 			rockchip,pins = <1 RK_PD4 RK_FUNC_GPIO &pcfg_pull_up>;
+		};
+	};
+
+	display {
+		vcc3v3_lcd_s0_en: vcc3v3-lcd-s0-en {
+			rockchip,pins = <0 RK_PC6 0 &pcfg_pull_none>;
+		};
+
+		tp_int: tp-int {
+			rockchip,pins = <0 RK_PC5 0 &pcfg_pull_none>;
+		};
+
+		tp_rst: tp-rst {
+			rockchip,pins = <0 RK_PD0 0 &pcfg_pull_none>;
 		};
 	};
 
@@ -939,5 +1018,15 @@
 	vp0_out_hdmi: endpoint@ROCKCHIP_VOP2_EP_HDMI0 {
 		reg = <ROCKCHIP_VOP2_EP_HDMI0>;
 		remote-endpoint = <&hdmi_in_vp0>;
+	};
+};
+
+&vp1 {
+	#address-cells = <1>;
+	#size-cells = <0>;
+
+	vp1_out_dsi: endpoint@ROCKCHIP_VOP2_EP_MIPI0 {
+		reg = <ROCKCHIP_VOP2_EP_MIPI0>;
+		remote-endpoint = <&dsi_in_vp1>;
 	};
 };
