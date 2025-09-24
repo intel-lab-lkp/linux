@@ -9796,6 +9796,8 @@ nfsd_handle_dir_event(u32 mask, const struct inode *dir, const void *data,
 	struct file_lock_core *flc;
 	struct nfsd_notify_event *evt;
 
+	trace_nfsd_file_fsnotify_handle_dir_event(mask, dir, name);
+
 	ctx = locks_inode_context(dir);
 	if (!ctx || list_empty(&ctx->flc_lease))
 		return 0;
