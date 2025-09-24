@@ -1108,7 +1108,7 @@ void __init_or_module noinline apply_returns(s32 *start, s32 *end) { }
 
 #ifdef CONFIG_X86_KERNEL_IBT
 
-__noendbr bool is_endbr(u32 *val)
+__noendbr notrace bool is_endbr(u32 *val)
 {
 	u32 endbr;
 
