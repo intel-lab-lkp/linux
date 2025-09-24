@@ -5324,6 +5324,14 @@
 
 			Not specifying this option is equivalent to pti=auto.
 
+	asi=		[X86-64] Control Address Space Isolation (ASI), a
+			technology for mitigating CPU vulnerabilities. ASI is
+			not yet ready to provide security guarantees but can be
+			enabled for evaluation.
+
+			on   - unconditionally enable
+			off  - unconditionally disable
+
 	pty.legacy_count=
 			[KNL] Number of legacy pty's. Overwrites compiled-in
 			default number.

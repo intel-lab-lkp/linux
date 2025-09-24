@@ -6,5 +6,10 @@
 #include <asm/asi.h>
 #else
 
+#include <linux/types.h>
+
+static inline void asi_check_boottime_disable(void) { }
+static inline bool asi_enabled_static(void) { return false; }
+
 #endif /* CONFIG_MITIGATION_ADDRESS_SPACE_ISOLATION */
 #endif /* _INCLUDE_ASI_H */

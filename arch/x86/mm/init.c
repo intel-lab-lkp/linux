@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-2.0
+#include <linux/asi.h>
 #include <linux/gfp.h>
 #include <linux/initrd.h>
 #include <linux/ioport.h>
@@ -761,6 +763,7 @@ void __init init_mem_mapping(void)
 	unsigned long end;
 
 	pti_check_boottime_disable();
+	asi_check_boottime_disable();
 	probe_page_size_mask();
 	setup_pcid();
 
