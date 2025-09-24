@@ -760,7 +760,7 @@ static int compute_bitstructs(struct gfs2_rgrpd *rgd)
 	u32 bytes_left, bytes;
 	int x;
 
-	if (!length)
+	if (!length || length > KMALLOC_MAX_SIZE / sizeof(struct gfs2_bitmap))
 		return -EINVAL;
 
 	rgd->rd_bits = kcalloc(length, sizeof(struct gfs2_bitmap), GFP_NOFS);
