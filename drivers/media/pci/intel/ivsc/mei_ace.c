@@ -422,6 +422,7 @@ static int mei_ace_setup_dev_link(struct mei_ace *ace)
 	}
 
 	ace->csi_dev = csi_dev;
+	put_device(csi_dev);
 
 	return 0;
 
