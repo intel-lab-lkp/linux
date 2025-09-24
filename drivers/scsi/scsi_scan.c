@@ -225,6 +225,9 @@ static int scsi_realloc_sdev_budget_map(struct scsi_device *sdev,
 	int ret;
 	struct sbitmap sb_backup;
 
+	if (WARN_ON_ONCE(!sdev->budget_map.map))
+		return -EINVAL;
+
 	depth = min_t(unsigned int, depth, scsi_device_max_queue_depth(sdev));
 
 	/*
