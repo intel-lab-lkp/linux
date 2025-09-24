@@ -1239,9 +1239,6 @@ static bool fwnode_graph_remote_available(struct fwnode_handle *ep)
  * has not been found, look for the closest endpoint ID greater than the
  * specified one and return the endpoint that corresponds to it, if present.
  *
- * Does not return endpoints that belong to disabled devices or endpoints that
- * are unconnected, unless FWNODE_GRAPH_DEVICE_DISABLED is passed in @flags.
- *
  * Return: the fwnode handle of the local endpoint corresponding the port and
  * endpoint IDs or %NULL if not found.
  */
@@ -1252,13 +1249,12 @@ fwnode_graph_get_endpoint_by_id(const struct fwnode_handle *fwnode,
 	struct fwnode_handle *ep, *best_ep = NULL;
 	unsigned int best_ep_id = 0;
 	bool endpoint_next = flags & FWNODE_GRAPH_ENDPOINT_NEXT;
-	bool enabled_only = !(flags & FWNODE_GRAPH_DEVICE_DISABLED);
 
 	fwnode_graph_for_each_endpoint(fwnode, ep) {
 		struct fwnode_endpoint fwnode_ep = { 0 };
 		int ret;
 
-		if (enabled_only && !fwnode_graph_remote_available(ep))
+		if (!fwnode_graph_remote_available(ep))
 			continue;
 
 		ret = fwnode_graph_parse_endpoint(ep, &fwnode_ep);
