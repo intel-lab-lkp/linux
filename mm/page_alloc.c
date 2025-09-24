@@ -365,11 +365,8 @@ get_pfnblock_bitmap_bitidx(const struct page *page, unsigned long pfn,
 	unsigned long *bitmap;
 	unsigned long word_bitidx;
 
-#ifdef CONFIG_MEMORY_ISOLATION
-	BUILD_BUG_ON(NR_PAGEBLOCK_BITS != 8);
-#else
-	BUILD_BUG_ON(NR_PAGEBLOCK_BITS != 4);
-#endif
+	/* NR_PAGEBLOCK_BITS must divide word size. */
+	BUILD_BUG_ON(NR_PAGEBLOCK_BITS != 4 && NR_PAGEBLOCK_BITS != 8);
 	BUILD_BUG_ON(__MIGRATE_TYPE_END > PAGEBLOCK_MIGRATETYPE_MASK);
 	VM_BUG_ON_PAGE(!zone_spans_pfn(page_zone(page), pfn), page);
 
@@ -442,9 +439,18 @@ __always_inline freetype_t
 __get_pfnblock_freetype(const struct page *page, unsigned long pfn,
 			bool ignore_iso)
 {
-	int mt = get_pfnblock_migratetype(page, pfn);
+	unsigned long mask = PAGEBLOCK_FREETYPE_MASK;
+	enum migratetype migratetype;
+	unsigned long flags;
 
-	return migrate_to_freetype(mt, false);
+	flags = __get_pfnblock_flags_mask(page, pfn, mask);
+
+	migratetype = flags & PAGEBLOCK_MIGRATETYPE_MASK;
+#ifdef CONFIG_MEMORY_ISOLATION
+	if (!ignore_iso && flags & BIT(PB_migrate_isolate))
+		migratetype = MIGRATE_ISOLATE;
+#endif
+	return migrate_to_freetype(migratetype, !(flags & PAGEBLOCK_NONSENSITIVE_MASK));
 }
 
 /**
@@ -601,7 +607,7 @@ void __meminit init_pageblock_migratetype(struct page *page,
 		flags |= BIT(PB_migrate_isolate);
 #endif
 	__set_pfnblock_flags_mask(page, page_to_pfn(page), flags,
-				  PAGEBLOCK_MIGRATETYPE_MASK | PAGEBLOCK_ISO_MASK);
+				  PAGEBLOCK_FREETYPE_MASK);
 }
 
 #ifdef CONFIG_DEBUG_VM
@@ -685,29 +691,39 @@ out:
 	add_taint(TAINT_BAD_PAGE, LOCKDEP_NOW_UNRELIABLE);
 }
 
-static inline unsigned int order_to_pindex(int migratetype, int order)
+static inline unsigned int order_to_pindex(freetype_t freetype, int order)
 {
-	if (IS_ENABLED(CONFIG_TRANSPARENT_HUGEPAGE)) {
+	int migratetype = free_to_migratetype(freetype);
+	/* pindex if the freetype is nonsensitive */
+	int pindex_ns;
+
+	VM_BUG_ON(!IS_ENABLED(CONFIG_TRANSPARENT_HUGEPAGE) &&
+		  order > PAGE_ALLOC_COSTLY_ORDER);
+
+	if (IS_ENABLED(CONFIG_TRANSPARENT_HUGEPAGE) &&
+	    order > PAGE_ALLOC_COSTLY_ORDER) {
 		bool movable = migratetype == MIGRATE_MOVABLE;
 
-		if (order > PAGE_ALLOC_COSTLY_ORDER) {
-			VM_BUG_ON(order != HPAGE_PMD_ORDER);
-
-			return NR_LOWORDER_PCP_LISTS + movable;
-		}
+		VM_BUG_ON(order != HPAGE_PMD_ORDER);
+		pindex_ns = NR_LOWORDER_PCP_LISTS + movable;
 	} else {
-		VM_BUG_ON(order > PAGE_ALLOC_COSTLY_ORDER);
+		pindex_ns = (MIGRATE_PCPTYPES * order) + migratetype;
 	}
 
-	return (MIGRATE_PCPTYPES * order) + migratetype;
+	return (NR_PCP_LISTS_PER_SENSITIVITY * freetype_sensitive(freetype))
+		+ pindex_ns;
 }
 
-static inline int pindex_to_order(unsigned int pindex)
+inline int pindex_to_order(unsigned int pindex)
 {
-	int order = pindex / MIGRATE_PCPTYPES;
+	/* pindex if the freetype is nonsensitive */
+	int pindex_ns = (pindex % NR_PCP_LISTS_PER_SENSITIVITY);
+	int order = pindex_ns / MIGRATE_PCPTYPES;
+
+	VM_BUG_ON(pindex >= NR_PCP_LISTS);
 
 	if (IS_ENABLED(CONFIG_TRANSPARENT_HUGEPAGE)) {
-		if (pindex >= NR_LOWORDER_PCP_LISTS)
+		if (pindex_ns >= NR_LOWORDER_PCP_LISTS)
 			order = HPAGE_PMD_ORDER;
 	} else {
 		VM_BUG_ON(order > PAGE_ALLOC_COSTLY_ORDER);
@@ -951,6 +967,26 @@ buddy_merge_likely(unsigned long pfn, unsigned long buddy_pfn,
 }
 
 /*
+ * Can pages of these two freetypes be combined into a single higher-order free
+ * page?
+ */
+static inline bool can_merge_freetypes(freetype_t a, freetype_t b)
+{
+	if (freetypes_equal(a, b))
+		return true;
+
+	if (!migratetype_is_mergeable(free_to_migratetype(a)) ||
+	    !migratetype_is_mergeable(free_to_migratetype(b)))
+		return false;
+
+	/*
+	 * Mustn't merge differing sensitivities, changing the sensitivity
+	 * requires changing pagetables.
+	 */
+	return freetype_sensitive(a) == freetype_sensitive(b);
+}
+
+/*
  * Freeing function for a buddy system allocator.
  *
  * The concept of a buddy system is to maintain direct-mapped table
@@ -1018,9 +1054,7 @@ static inline void __free_one_page(struct page *page,
 			buddy_ft = get_pfnblock_freetype(buddy, buddy_pfn);
 			buddy_mt = free_to_migratetype(buddy_ft);
 
-			if (migratetype != buddy_mt &&
-			    (!migratetype_is_mergeable(migratetype) ||
-			     !migratetype_is_mergeable(buddy_mt)))
+			if (!can_merge_freetypes(freetype, buddy_ft))
 				goto done_merging;
 		}
 
@@ -1037,7 +1071,9 @@ static inline void __free_one_page(struct page *page,
 			/*
 			 * Match buddy type. This ensures that an
 			 * expand() down the line puts the sub-blocks
-			 * on the right freelists.
+			 * on the right freelists. Sensitivity is
+			 * already set correctly because of
+			 * can_merge_freetypes().
 			 */
 			set_pageblock_migratetype(buddy, migratetype);
 		}
@@ -2174,18 +2210,16 @@ static bool __move_freepages_block_isolate(struct zone *zone,
 	}
 
 move:
-	/* Use PAGEBLOCK_MIGRATETYPE_MASK to get non-isolate migratetype */
+	block_ft = __get_pfnblock_freetype(page, page_to_pfn(page), true);
 	if (isolate) {
-		from_mt = __get_pfnblock_flags_mask(page, page_to_pfn(page),
-						    PAGEBLOCK_MIGRATETYPE_MASK);
-		to_mt = MIGRATE_ISOLATE;
+		from_ft = block_ft;
+		to_ft = freetype_with_migrate(block_ft, MIGRATE_ISOLATE);
 	} else {
-		from_mt = MIGRATE_ISOLATE;
-		to_mt = __get_pfnblock_flags_mask(page, page_to_pfn(page),
-						  PAGEBLOCK_MIGRATETYPE_MASK);
+		from_ft = freetype_with_migrate(block_ft, MIGRATE_ISOLATE);
+		to_ft = block_ft;
 	}
 
-	__move_freepages_block(zone, start_pfn, from_mt, to_mt);
+	__move_freepages_block(zone, start_pfn, from_ft, to_ft);
 	toggle_pageblock_isolate(pfn_to_page(start_pfn), isolate);
 
 	return true;
@@ -2895,7 +2929,7 @@ static void free_frozen_page_commit(struct zone *zone,
 	 */
 	pcp->alloc_factor >>= 1;
 	__count_vm_events(PGFREE, 1 << order);
-	pindex = order_to_pindex(free_to_migratetype(freetype), order);
+	pindex = order_to_pindex(freetype, order);
 	list_add(&page->pcp_list, &pcp->lists[pindex]);
 	pcp->count += 1 << order;
 
@@ -3380,7 +3414,7 @@ static struct page *rmqueue_pcplist(struct zone *preferred_zone,
 	 * frees.
 	 */
 	pcp->free_count >>= 1;
-	list = &pcp->lists[order_to_pindex(free_to_migratetype(freetype), order)];
+	list = &pcp->lists[order_to_pindex(freetype, order)];
 	page = __rmqueue_pcplist(zone, order, freetype, alloc_flags, pcp, list);
 	pcp_spin_unlock(pcp);
 	pcp_trylock_finish(UP_flags);
@@ -5176,7 +5210,7 @@ retry_this_zone:
 		goto failed_irq;
 
 	/* Attempt the batch allocation */
-	pcp_list = &pcp->lists[order_to_pindex(free_to_migratetype(ac.freetype), 0)];
+	pcp_list = &pcp->lists[order_to_pindex(ac.freetype, 0)];
 	while (nr_populated < nr_pages) {
 
 		/* Skip existing pages */

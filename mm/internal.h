@@ -960,7 +960,15 @@ static inline bool free_area_empty(struct free_area *area, freetype_t freetype)
 
 static inline bool free_areas_empty(struct free_area *area, int migratetype)
 {
-	return free_area_empty(area, migrate_to_freetype(migratetype, false));
+	bool sensitive;
+
+	for_each_sensitivity(sensitive) {
+		freetype_t ft = migrate_to_freetype(migratetype, sensitive);
+
+		if (!free_area_empty(area, ft))
+			return false;
+	}
+	return true;
 }
 
 /* mm/util.c */

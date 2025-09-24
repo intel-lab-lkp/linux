@@ -18,6 +18,14 @@ enum pageblock_bits {
 	PB_migrate_0,
 	PB_migrate_1,
 	PB_migrate_2,
+#ifdef CONFIG_MITIGATION_ADDRESS_SPACE_ISOLATION
+	/*
+	 * Block is mapped into restricted address spaces. Having a
+	 * "nonsensitive" flag instead of a "sensitive" flag is convenient
+	 * so that the initial value of 0 is correct at boot.
+	 */
+	PB_nonsensitive,
+#endif
 	PB_compact_skip,/* If set the block is skipped by compaction */
 
 #ifdef CONFIG_MEMORY_ISOLATION
@@ -43,6 +51,16 @@ enum pageblock_bits {
 #else
 #define PAGEBLOCK_ISO_MASK		0
 #endif
+
+#ifdef CONFIG_MITIGATION_ADDRESS_SPACE_ISOLATION
+#define PAGEBLOCK_NONSENSITIVE_MASK	BIT(PB_nonsensitive)
+#else
+#define PAGEBLOCK_NONSENSITIVE_MASK	0
+#endif
+
+#define PAGEBLOCK_FREETYPE_MASK (PAGEBLOCK_MIGRATETYPE_MASK | \
+				 PAGEBLOCK_ISO_MASK | \
+				 PAGEBLOCK_NONSENSITIVE_MASK)
 
 #if defined(CONFIG_HUGETLB_PAGE)
 

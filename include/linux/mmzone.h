@@ -5,6 +5,7 @@
 #ifndef __ASSEMBLY__
 #ifndef __GENERATING_BOUNDS_H
 
+#include <linux/asi.h>
 #include <linux/spinlock.h>
 #include <linux/list.h>
 #include <linux/list_nulls.h>
@@ -123,7 +124,11 @@ static inline bool migratetype_is_mergeable(int mt)
 	return mt < MIGRATE_PCPTYPES;
 }
 
+#ifdef CONFIG_MITIGATION_ADDRESS_SPACE_ISOLATION
+#define NR_SENSITIVITIES 2
+#else
 #define NR_SENSITIVITIES 1
+#endif
 
 /*
  * A freetype is the index used to identify free lists (free area lists and
@@ -141,18 +146,30 @@ static inline freetype_t migrate_to_freetype(enum migratetype mt, bool sensitive
 {
 	freetype_t freetype;
 
-	freetype.type = mt;
+	/*
+	 * When ASI is off, .sensitive is meaningless. Set it to false so that
+	 * freetype values are the same when asi=off as when ASI is
+	 * compiled out.
+	 */
+	if (!asi_enabled_static())
+		sensitive = false;
+
+	freetype.type = (MIGRATE_TYPES * sensitive) + mt;
 	return freetype;
 }
 
 static inline enum migratetype free_to_migratetype(freetype_t freetype)
 {
-	return freetype.type;
+	VM_WARN_ON_ONCE(!asi_enabled_static() && freetype.type >= MIGRATE_TYPES);
+	return freetype.type % MIGRATE_TYPES;
 }
 
 static inline bool freetype_sensitive(freetype_t freetype)
 {
-	return false;
+	bool sensitive = freetype.type / MIGRATE_TYPES;
+
+	VM_WARN_ON_ONCE(!asi_enabled_static() && sensitive);
+	return sensitive;
 }
 
 /* Convenience helper, return the freetype modified to have the migratetype. */
@@ -174,10 +191,14 @@ static inline bool freetypes_equal(freetype_t a, freetype_t b)
 
 #define for_each_free_list(list, zone) \
 	for (unsigned int order = 0; order < NR_PAGE_ORDERS; order++) \
-		for (unsigned int type = 0; \
-		     list = &zone->free_area[order].free_list[type], \
+		for (unsigned int type = 0;\
 		     type < MIGRATE_TYPES; \
 		     type++) \
+			for (int sensitive = 0; \
+			     list = free_area_list(&zone->free_area[order], \
+						   migrate_to_freetype(type, sensitive)), \
+			     sensitive < NR_SENSITIVITIES; \
+			     sensitive++)
 
 extern int page_group_by_mobility_disabled;
 
