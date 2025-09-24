@@ -882,20 +882,14 @@ static int msix_mmappable_cap(struct vfio_pci_core_device *vdev,
 	return vfio_info_add_capability(caps, &header, sizeof(header));
 }
 
-/*
- * Registers a new region to vfio_pci_core_device. region_lock should
- * be held when multiple registers could happen.
- * Returns region index on success or a negative errno.
- */
-int vfio_pci_core_register_dev_region(struct vfio_pci_core_device *vdev,
-				      unsigned int type, unsigned int subtype,
-				      const struct vfio_pci_regops *ops,
-				      size_t size, u32 flags, void *data)
+static int vfio_pci_core_register_dev_region_locked(
+	struct vfio_pci_core_device *vdev,
+	unsigned int type, unsigned int subtype,
+	const struct vfio_pci_regops *ops,
+	size_t size, u32 flags, void *data)
 {
 	struct vfio_pci_region *region, *old_region;
 	int num_regions;
-
-	mutex_lock(&vdev->region_lock);
 	num_regions = READ_ONCE(vdev->num_regions);
 
 	region = kmalloc((num_regions + 1) * sizeof(*region),
@@ -919,9 +913,28 @@ int vfio_pci_core_register_dev_region(struct vfio_pci_core_device *vdev,
 	rcu_assign_pointer(vdev->region, region);
 	synchronize_rcu();
 	WRITE_ONCE(vdev->num_regions, READ_ONCE(vdev->num_regions) + 1);
-	mutex_unlock(&vdev->region_lock);
 	kfree(old_region);
 	return num_regions;
+}
+
+/*
+ * Registers a new region to vfio_pci_core_device. region_lock should
+ * be held when multiple registers could happen.
+ * Returns region index on success or a negative errno.
+ */
+int vfio_pci_core_register_dev_region(struct vfio_pci_core_device *vdev,
+				      unsigned int type, unsigned int subtype,
+				      const struct vfio_pci_regops *ops,
+				      size_t size, u32 flags, void *data)
+{
+	int index;
+
+	mutex_lock(&vdev->region_lock);
+	index = vfio_pci_core_register_dev_region_locked(vdev, type, subtype,
+							 ops,
+							 size, flags, data);
+	mutex_unlock(&vdev->region_lock);
+	return index;
 }
 EXPORT_SYMBOL_GPL(vfio_pci_core_register_dev_region);
 
@@ -1528,6 +1541,48 @@ static int vfio_pci_core_feature_token(struct vfio_device *device, u32 flags,
 	return 0;
 }
 
+static bool vfio_pci_region_is_mmap_supported(struct vfio_pci_core_device *vdev,
+					      int index)
+{
+	if (index <= VFIO_PCI_BAR5_REGION_INDEX)
+		return vdev->bar_mmap_supported[index];
+
+	if (index >= VFIO_PCI_NUM_REGIONS) {
+		int i = index - VFIO_PCI_NUM_REGIONS;
+		bool is_mmap;
+		struct vfio_pci_region *region;
+
+		rcu_read_lock();
+		region = &rcu_dereference(vdev->region)[i];
+		is_mmap = (region->flags & VFIO_REGION_INFO_FLAG_MMAP) &&
+			region->ops && region->ops->mmap;
+		rcu_read_unlock();
+		return is_mmap;
+	}
+	return false;
+}
+
+static bool vfio_pci_region_alias_exists(struct vfio_pci_core_device *vdev,
+					 u32 flags, int index, int *alias_index)
+{
+	int i;
+
+	for (i = 0; i < READ_ONCE(vdev->num_regions); i++) {
+		struct vfio_pci_region *region;
+
+		region = &rcu_dereference_protected(
+			vdev->region, lockdep_is_held(&vdev->region_lock))[i];
+		if (!(region->flags & VFIO_REGION_INFO_FLAG_ALIAS))
+			continue;
+		if ((int)(uintptr_t) region->data == index &&
+		    region->flags == flags) {
+			*alias_index = i + VFIO_PCI_NUM_REGIONS;
+			return true;
+		}
+	}
+	return false;
+}
+
 static int vfio_pci_alias_region_mmap(struct vfio_pci_core_device *vdev,
 				      struct vfio_pci_region *region,
 				      struct vm_area_struct *vma)
@@ -1555,6 +1610,97 @@ struct vfio_pci_regops vfio_pci_alias_region_ops = {
 	.mmap = vfio_pci_alias_region_mmap,
 };
 
+static int vfio_pci_core_feature_alias_region(
+	struct vfio_device *device, u32 flags,
+	struct vfio_device_feature_alias_region __user *arg,
+	size_t argsz)
+{
+	struct vfio_pci_core_device *vdev =
+		container_of(device, struct vfio_pci_core_device, vdev);
+	struct pci_dev *pdev = vdev->pdev;
+	bool is_probe = false;
+	u32 region_flags;
+	struct vfio_device_feature_alias_region request_region;
+	int ret, index, new_index;
+	size_t size;
+
+	ret = vfio_check_feature(flags, argsz, VFIO_DEVICE_FEATURE_SET,
+				 sizeof(request_region));
+	if (ret < 0)
+		return ret;
+
+	if (ret == 0) /* probing only */
+		is_probe = true;
+
+	if (copy_from_user(&request_region, arg, sizeof(request_region)))
+		return -EFAULT;
+
+	if (request_region.index >= VFIO_PCI_NUM_REGIONS +
+					    READ_ONCE(vdev->num_regions))
+		return -EINVAL;
+
+	index = array_index_nospec(request_region.index,
+				   VFIO_PCI_NUM_REGIONS +
+				   READ_ONCE(vdev->num_regions));
+
+	/* make sure we are not aliasing an alias region */
+	if (index >= VFIO_PCI_NUM_REGIONS) {
+		int i;
+
+		rcu_read_lock();
+		i = index - VFIO_PCI_NUM_REGIONS;
+		if (rcu_dereference(vdev->region)[i].flags &
+		    VFIO_REGION_INFO_FLAG_ALIAS) {
+			rcu_read_unlock();
+			return -EINVAL;
+		}
+		rcu_read_unlock();
+	}
+
+	/* For now we only allow aliasing mmap supported regions. */
+	if (!vfio_pci_region_is_mmap_supported(vdev, index))
+		return -EINVAL;
+
+	if (is_probe) {
+		request_region.flags = VFIO_REGION_INFO_FLAG_WC;
+		goto out_copy;
+	}
+
+	if (request_region.flags & ~VFIO_REGION_INFO_FLAG_WC)
+		return -EINVAL;
+
+	region_flags = VFIO_REGION_INFO_FLAG_ALIAS |
+		       VFIO_REGION_INFO_FLAG_MMAP | VFIO_REGION_INFO_FLAG_WC;
+
+	mutex_lock(&vdev->region_lock);
+	if (vfio_pci_region_alias_exists(vdev, region_flags,
+					 index, &new_index)) {
+		request_region.alias_index = new_index;
+		goto out_copy_unlock;
+	}
+
+	if (index <= VFIO_PCI_BAR5_REGION_INDEX)
+		size = pci_resource_len(pdev, index);
+	else
+		size = vdev->region[index].size;
+
+	new_index = vfio_pci_core_register_dev_region_locked(
+		vdev, 0, 0, &vfio_pci_alias_region_ops, size, region_flags,
+		(void *)(uintptr_t)index);
+
+	if (new_index < 0) {
+		mutex_unlock(&vdev->region_lock);
+		return new_index;
+	}
+	request_region.alias_index = new_index + VFIO_PCI_NUM_REGIONS;
+
+out_copy_unlock:
+	mutex_unlock(&vdev->region_lock);
+out_copy:
+	ret = copy_to_user(arg, &request_region, sizeof(request_region));
+	return ret ? -EFAULT : 0;
+}
+
 int vfio_pci_core_ioctl_feature(struct vfio_device *device, u32 flags,
 				void __user *arg, size_t argsz)
 {
@@ -1568,6 +1714,9 @@ int vfio_pci_core_ioctl_feature(struct vfio_device *device, u32 flags,
 		return vfio_pci_core_pm_exit(device, flags, arg, argsz);
 	case VFIO_DEVICE_FEATURE_PCI_VF_TOKEN:
 		return vfio_pci_core_feature_token(device, flags, arg, argsz);
+	case VFIO_DEVICE_FEATURE_ALIAS_REGION:
+		return vfio_pci_core_feature_alias_region(device, flags,
+							  arg, argsz);
 	default:
 		return -ENOTTY;
 	}
