@@ -391,7 +391,7 @@ struct cx88_core {
 
 	/* I2C remote data */
 	struct IR_i2c_init_data    init_data;
-	struct wm8775_platform_data wm8775_data;
+	struct wm8775_platform_data *wm8775_data;
 
 	struct mutex               lock;
 	/* various v4l controls */
