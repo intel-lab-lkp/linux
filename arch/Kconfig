@@ -17,6 +17,19 @@ config CPU_MITIGATIONS
 	def_bool y
 endif
 
+config ARCH_HAS_MITIGATION_ADDRESS_SPACE_ISOLATION
+	bool
+
+config MITIGATION_ADDRESS_SPACE_ISOLATION
+	bool "Allow code to run with a reduced kernel address space"
+	default n
+	depends on ARCH_HAS_MITIGATION_ADDRESS_SPACE_ISOLATION
+	help
+	  This feature provides the ability to run some kernel code
+	  with a reduced kernel address space. This can be used to
+	  mitigate some speculative execution attacks.
+
+	  ASI is not yet ready for use.
 #
 # Selected by architectures that need custom DMA operations for e.g. legacy
 # IOMMUs not handled by dma-iommu.  Drivers must never select this symbol.
