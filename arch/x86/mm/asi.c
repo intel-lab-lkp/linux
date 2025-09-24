@@ -1,10 +1,19 @@
 // SPDX-License-Identifier: GPL-2.0
 #include <linux/asi.h>
 #include <linux/init.h>
+#include <linux/memblock.h>
 #include <linux/string.h>
 
 #include <asm/cmdline.h>
 #include <asm/cpufeature.h>
+
+#include "mm_internal.h"
+
+/*
+ * This is a bit like init_mm.pgd, it holds mappings shared among all ASI
+ * domains.
+ */
+pgd_t *asi_nonsensitive_pgd;
 
 void __init asi_check_boottime_disable(void)
 {
@@ -25,4 +34,14 @@ void __init asi_check_boottime_disable(void)
 
 	if (enabled)
 		setup_force_cpu_cap(X86_FEATURE_ASI);
+}
+
+void __init asi_init(void)
+{
+	if (!cpu_feature_enabled(X86_FEATURE_ASI))
+		return;
+
+	asi_nonsensitive_pgd = alloc_low_page();
+	if (WARN_ON(!asi_nonsensitive_pgd))
+		setup_clear_cpu_cap(X86_FEATURE_ASI);
 }

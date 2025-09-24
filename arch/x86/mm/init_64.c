@@ -7,6 +7,7 @@
  *  Copyright (C) 2002,2003 Andi Kleen <ak@suse.de>
  */
 
+#include <linux/asi.h>
 #include <linux/signal.h>
 #include <linux/sched.h>
 #include <linux/kernel.h>
@@ -746,7 +747,8 @@ phys_pgd_init(pgd_t *pgd_page, unsigned long paddr_start, unsigned long paddr_en
 {
 	unsigned long vaddr, vaddr_start, vaddr_end, vaddr_next, paddr_last;
 
-	*pgd_changed = false;
+	if (pgd_changed)
+		*pgd_changed = false;
 
 	paddr_last = paddr_end;
 	vaddr = (unsigned long)__va(paddr_start);
@@ -780,7 +782,8 @@ phys_pgd_init(pgd_t *pgd_page, unsigned long paddr_start, unsigned long paddr_en
 					  (pud_t *) p4d, init);
 
 		spin_unlock(&init_mm.page_table_lock);
-		*pgd_changed = true;
+		if (pgd_changed)
+			*pgd_changed = true;
 	}
 
 	return paddr_last;
@@ -797,6 +800,24 @@ __kernel_physical_mapping_init(unsigned long paddr_start,
 
 	paddr_last = phys_pgd_init(init_mm.pgd, paddr_start, paddr_end, page_size_mask,
 				   prot, init, &pgd_changed);
+
+	/*
+	 * Set up ASI's unrestricted physmap. This needs to mapped at minimum 2M
+	 * size so that regions can be mapped and unmapped at pageblock
+	 * granularity without requiring allocations.
+	 */
+	if (asi_nonsensitive_pgd) {
+		/*
+		 * Since most memory is expected to end up sensitive, start with
+		 * everything unmapped in this pagetable.
+		 */
+		pgprot_t prot_np = __pgprot(pgprot_val(prot) & ~_PAGE_PRESENT);
+
+		VM_BUG_ON((PAGE_SHIFT + pageblock_order) < page_level_shift(PG_LEVEL_2M));
+		phys_pgd_init(asi_nonsensitive_pgd, paddr_start, paddr_end, 1 << PG_LEVEL_2M,
+			      prot_np, init, NULL);
+	}
+
 	if (pgd_changed)
 		sync_global_pgds((unsigned long)__va(paddr_start),
 				 (unsigned long)__va(paddr_end) - 1);

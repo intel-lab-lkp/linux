@@ -12,4 +12,8 @@ static inline bool asi_enabled_static(void)
 	return cpu_feature_enabled(X86_FEATURE_ASI);
 }
 
+void asi_init(void);
+
+extern pgd_t *asi_nonsensitive_pgd;
+
 #endif /* _ASM_X86_ASI_H */

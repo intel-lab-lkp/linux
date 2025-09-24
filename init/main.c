@@ -12,6 +12,7 @@
 
 #define DEBUG		/* Enable initcall_debug */
 
+#include <linux/asi.h>
 #include <linux/types.h>
 #include <linux/export.h>
 #include <linux/extable.h>
