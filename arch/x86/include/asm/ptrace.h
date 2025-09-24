@@ -255,6 +255,15 @@ static inline bool any_64bit_mode(struct pt_regs *regs)
 #endif
 }
 
+static inline bool compat_user_mode(struct pt_regs *regs)
+{
+#ifdef CONFIG_X86_64
+	return !user_64bit_mode(regs);
+#else
+	return false;
+#endif
+}
+
 #ifdef CONFIG_X86_64
 #define current_user_stack_pointer()	current_pt_regs()->sp
 #define compat_user_stack_pointer()	current_pt_regs()->sp
