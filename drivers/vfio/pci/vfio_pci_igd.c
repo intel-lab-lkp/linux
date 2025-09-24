@@ -71,13 +71,17 @@ static ssize_t vfio_pci_igd_rw(struct vfio_pci_core_device *vdev,
 	struct vfio_pci_region *region;
 	struct igd_opregion_vbt *opregionvbt;
 
-	region = &vdev->region[i];
+	rcu_read_lock();
+	region = &rcu_dereference(vdev->region)[i];
 	opregionvbt = region->data;
 
-	if (pos >= region->size || iswrite)
+	if (pos >= region->size || iswrite) {
+		rcu_read_unlock();
 		return -EINVAL;
+	}
 
 	count = min_t(size_t, count, region->size - pos);
+	rcu_read_unlock();
 	remaining = count;
 
 	/* Copy until OpRegion version */
@@ -293,13 +297,17 @@ static ssize_t vfio_pci_igd_cfg_rw(struct vfio_pci_core_device *vdev,
 	struct vfio_pci_region *region;
 	struct pci_dev *pdev;
 
-	region = &vdev->region[i];
+	rcu_read_lock();
+	region = &rcu_dereference(vdev->region)[i];
 	pdev = region->data;
 
-	if (pos >= region->size || iswrite)
+	if (pos >= region->size || iswrite) {
+		rcu_read_unlock();
 		return -EINVAL;
+	}
 
 	size = count = min(count, (size_t)(region->size - pos));
+	rcu_read_unlock();
 
 	if ((pos & 1) && size) {
 		u8 val;
