@@ -275,6 +275,8 @@ struct vfio_region_info {
 #define VFIO_REGION_INFO_FLAG_WRITE	(1 << 1) /* Region supports write */
 #define VFIO_REGION_INFO_FLAG_MMAP	(1 << 2) /* Region supports mmap */
 #define VFIO_REGION_INFO_FLAG_CAPS	(1 << 3) /* Info supports caps */
+#define VFIO_REGION_INFO_FLAG_ALIAS	(1 << 4) /* This is an Alias Region */
+#define VFIO_REGION_INFO_FLAG_WC	(1 << 5) /* Region supports write combine */
 	__u32	index;		/* Region index */
 	__u32	cap_offset;	/* Offset within info struct of first cap */
 	__aligned_u64	size;	/* Region size (bytes) */
@@ -1478,6 +1480,28 @@ struct vfio_device_feature_bus_master {
 };
 #define VFIO_DEVICE_FEATURE_BUS_MASTER 10
 
+
+/**
+ * Upon VFIO_DEVICE_FEATURE_SET, creates a new region with the specified flags set.
+ * VFIO_DEVICE_FEATURE_PROBE can be used to return the supported flags for this region.
+ *
+ * Alias a region with certain region flags set. For example this
+ * could be used to alias a region with Write Combine or similar
+ * attributes set for mmap. The new region index is returned on
+ * alias_index with the flags specified set. GET_REGION_INFO could then
+ * be used with the new index. By probing a region index the supported
+ * region flags are returned.
+ * Region flags follows the same flags from REGION_GET_REGION_INFO.
+ */
+struct vfio_device_feature_alias_region {
+	__u32	flags;		/* Region flags to be used */
+	__u32	index;		/* Region index */
+	__u32	alias_index;	/* New region index */
+	__u32	_resv1;
+	__u64	_resv2;
+};
+
+#define VFIO_DEVICE_FEATURE_ALIAS_REGION 11
 /* -------- API for Type1 VFIO IOMMU -------- */
 
 /**
