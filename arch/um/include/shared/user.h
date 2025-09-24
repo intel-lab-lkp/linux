@@ -16,7 +16,6 @@
  */
 #define ARRAY_SIZE(x) (sizeof(x) / sizeof((x)[0]))
 
-#include <linux/types.h>
 #include <stddef.h>
 
 extern void panic(const char *fmt, ...)
