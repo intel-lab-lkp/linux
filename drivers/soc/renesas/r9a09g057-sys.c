@@ -62,7 +62,14 @@ static const struct rz_sysc_soc_id_init_data rzv2h_sys_soc_id_init_data __initco
 	.print_id = rzv2h_sys_print_id,
 };
 
+static bool rzv2h_regmap_readable_reg(struct device *dev, unsigned int reg)
+{
+	return false;
+}
+
 const struct rz_sysc_init_data rzv2h_sys_init_data = {
 	.soc_id_init_data = &rzv2h_sys_soc_id_init_data,
+	.readable_reg = rzv2h_regmap_readable_reg,
+	.writeable_reg = rzv2h_regmap_readable_reg,
 	.max_register = 0x170c,
 };
