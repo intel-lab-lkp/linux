@@ -8,7 +8,7 @@
 #define __DMA_XDMA_REGS_H
 
 /* The length of register space exposed to host */
-#define XDMA_REG_SPACE_LEN	65536
+#define XDMA_REG_SPACE_LEN	0xffff
 
 /*
  * maximum number of DMA channels for each direction:
