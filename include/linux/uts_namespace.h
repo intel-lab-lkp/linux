@@ -28,7 +28,7 @@ static inline void get_uts_ns(struct uts_namespace *ns)
 	ns_ref_inc(ns);
 }
 
-extern struct uts_namespace *copy_utsname(unsigned long flags,
+extern struct uts_namespace *copy_utsname(u64 flags,
 	struct user_namespace *user_ns, struct uts_namespace *old_ns);
 extern void free_uts_ns(struct uts_namespace *ns);
 
@@ -48,7 +48,7 @@ static inline void put_uts_ns(struct uts_namespace *ns)
 {
 }
 
-static inline struct uts_namespace *copy_utsname(unsigned long flags,
+static inline struct uts_namespace *copy_utsname(u64 flags,
 	struct user_namespace *user_ns, struct uts_namespace *old_ns)
 {
 	if (flags & CLONE_NEWUTS)

@@ -48,7 +48,7 @@ static inline struct time_namespace *get_time_ns(struct time_namespace *ns)
 	return ns;
 }
 
-struct time_namespace *copy_time_ns(unsigned long flags,
+struct time_namespace *copy_time_ns(u64 flags,
 				    struct user_namespace *user_ns,
 				    struct time_namespace *old_ns);
 void free_time_ns(struct time_namespace *ns);
@@ -138,7 +138,7 @@ static inline void put_time_ns(struct time_namespace *ns)
 }
 
 static inline
-struct time_namespace *copy_time_ns(unsigned long flags,
+struct time_namespace *copy_time_ns(u64 flags,
 				    struct user_namespace *user_ns,
 				    struct time_namespace *old_ns)
 {

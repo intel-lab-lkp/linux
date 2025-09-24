@@ -22,7 +22,7 @@ static inline struct cgroup_namespace *to_cg_ns(struct ns_common *ns)
 
 void free_cgroup_ns(struct cgroup_namespace *ns);
 
-struct cgroup_namespace *copy_cgroup_ns(unsigned long flags,
+struct cgroup_namespace *copy_cgroup_ns(u64 flags,
 					struct user_namespace *user_ns,
 					struct cgroup_namespace *old_ns);
 
@@ -44,7 +44,7 @@ static inline void put_cgroup_ns(struct cgroup_namespace *ns)
 
 static inline void free_cgroup_ns(struct cgroup_namespace *ns) { }
 static inline struct cgroup_namespace *
-copy_cgroup_ns(unsigned long flags, struct user_namespace *user_ns,
+copy_cgroup_ns(u64 flags, struct user_namespace *user_ns,
 	       struct cgroup_namespace *old_ns)
 {
 	return old_ns;

@@ -790,7 +790,6 @@ static inline void cgroup_sk_free(struct sock_cgroup_data *skcd) {}
 
 #endif	/* CONFIG_CGROUP_DATA */
 
-
 #ifdef CONFIG_CGROUPS
 
 void cgroup_enter_frozen(void);

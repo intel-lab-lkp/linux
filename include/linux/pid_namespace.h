@@ -83,11 +83,14 @@ static inline int pidns_memfd_noexec_scope(struct pid_namespace *ns)
 }
 #endif
 
-extern struct pid_namespace *copy_pid_ns(unsigned long flags,
+extern struct pid_namespace *copy_pid_ns(u64 flags,
 	struct user_namespace *user_ns, struct pid_namespace *ns);
 extern void zap_pid_ns_processes(struct pid_namespace *pid_ns);
 extern int reboot_pid_ns(struct pid_namespace *pid_ns, int cmd);
 extern void put_pid_ns(struct pid_namespace *ns);
+
+extern bool pidns_is_ancestor(struct pid_namespace *child,
+			      struct pid_namespace *ancestor);
 
 #else /* !CONFIG_PID_NS */
 #include <linux/err.h>
@@ -102,7 +105,7 @@ static inline int pidns_memfd_noexec_scope(struct pid_namespace *ns)
 	return 0;
 }
 
-static inline struct pid_namespace *copy_pid_ns(unsigned long flags,
+static inline struct pid_namespace *copy_pid_ns(u64 flags,
 	struct user_namespace *user_ns, struct pid_namespace *ns)
 {
 	if (flags & CLONE_NEWPID)
@@ -122,6 +125,12 @@ static inline void zap_pid_ns_processes(struct pid_namespace *ns)
 static inline int reboot_pid_ns(struct pid_namespace *pid_ns, int cmd)
 {
 	return 0;
+}
+
+static inline bool pidns_is_ancestor(struct pid_namespace *child,
+				     struct pid_namespace *ancestor)
+{
+	return false;
 }
 #endif /* CONFIG_PID_NS */
 
