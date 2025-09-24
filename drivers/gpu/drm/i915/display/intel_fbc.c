@@ -934,7 +934,8 @@ static void intel_fbc_program_workarounds(struct intel_fbc *fbc)
 			     0, DPFC_CHICKEN_COMP_DUMMY_PIXEL);
 
 	/* Wa_22014263786:icl,jsl,tgl,dg1,rkl,adls,adlp,mtl */
-	if (DISPLAY_VER(display) >= 11 && !display->platform.dg2)
+	if (DISPLAY_VER(display) >= 11 && !display->platform.dg2 &&
+	    !display->platform.battlemage)
 		intel_de_rmw(display, ILK_DPFC_CHICKEN(fbc->id),
 			     0, DPFC_CHICKEN_FORCE_SLB_INVALIDATION);
 
