@@ -1375,4 +1375,9 @@ config FIND_NORMAL_PAGE
 
 source "mm/damon/Kconfig"
 
+config PAGE_ALLOC_KUNIT_TEST
+	tristate "KUnit Tests for page_alloc code" if !KUNIT_ALL_TESTS
+	depends on KUNIT
+	default KUNIT_ALL_TESTS
+
 endmenu
