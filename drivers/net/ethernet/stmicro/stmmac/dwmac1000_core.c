@@ -484,7 +484,7 @@ int dwmac1000_setup(struct stmmac_priv *priv)
 	mac->mii.clk_csr_shift = 2;
 	mac->mii.clk_csr_mask = GENMASK(5, 2);
 
-	return 0;
+	return stmmac_integrated_pcs_init(priv, GMAC_PCS_BASE);
 }
 
 /* DWMAC 1000 HW Timestaming ops */

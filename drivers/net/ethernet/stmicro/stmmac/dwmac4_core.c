@@ -1017,5 +1017,5 @@ int dwmac4_setup(struct stmmac_priv *priv)
 	mac->mii.clk_csr_mask = GENMASK(11, 8);
 	mac->num_vlan = stmmac_get_num_vlan(priv->ioaddr);
 
-	return 0;
+	return stmmac_integrated_pcs_init(priv, GMAC_PCS_BASE);
 }
