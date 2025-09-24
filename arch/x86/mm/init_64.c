@@ -741,13 +741,12 @@ phys_p4d_init(p4d_t *p4d_page, unsigned long paddr, unsigned long paddr_end,
 }
 
 static unsigned long __meminit
-__kernel_physical_mapping_init(unsigned long paddr_start,
-			       unsigned long paddr_end,
-			       unsigned long page_size_mask,
-			       pgprot_t prot, bool init)
+phys_pgd_init(pgd_t *pgd_page, unsigned long paddr_start, unsigned long paddr_end,
+	      unsigned long page_size_mask, pgprot_t prot, bool init, bool *pgd_changed)
 {
-	bool pgd_changed = false;
 	unsigned long vaddr, vaddr_start, vaddr_end, vaddr_next, paddr_last;
+
+	*pgd_changed = false;
 
 	paddr_last = paddr_end;
 	vaddr = (unsigned long)__va(paddr_start);
@@ -755,7 +754,7 @@ __kernel_physical_mapping_init(unsigned long paddr_start,
 	vaddr_start = vaddr;
 
 	for (; vaddr < vaddr_end; vaddr = vaddr_next) {
-		pgd_t *pgd = pgd_offset_k(vaddr);
+		pgd_t *pgd = pgd_offset_pgd(pgd_page, vaddr);
 		p4d_t *p4d;
 
 		vaddr_next = (vaddr & PGDIR_MASK) + PGDIR_SIZE;
@@ -781,15 +780,29 @@ __kernel_physical_mapping_init(unsigned long paddr_start,
 					  (pud_t *) p4d, init);
 
 		spin_unlock(&init_mm.page_table_lock);
-		pgd_changed = true;
+		*pgd_changed = true;
 	}
-
-	if (pgd_changed)
-		sync_global_pgds(vaddr_start, vaddr_end - 1);
 
 	return paddr_last;
 }
 
+static unsigned long __meminit
+__kernel_physical_mapping_init(unsigned long paddr_start,
+			       unsigned long paddr_end,
+			       unsigned long page_size_mask,
+			       pgprot_t prot, bool init)
+{
+	bool pgd_changed;
+	unsigned long paddr_last;
+
+	paddr_last = phys_pgd_init(init_mm.pgd, paddr_start, paddr_end, page_size_mask,
+				   prot, init, &pgd_changed);
+	if (pgd_changed)
+		sync_global_pgds((unsigned long)__va(paddr_start),
+				 (unsigned long)__va(paddr_end) - 1);
+
+	return paddr_last;
+}
 
 /*
  * Create page table mapping for the physical memory for specific physical
