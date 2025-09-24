@@ -114,8 +114,7 @@ struct i915_gem_mm {
 	struct intel_memory_region *stolen_region;
 	/** Memory allocator for GTT stolen memory */
 	struct drm_mm stolen;
-	/** Protects the usage of the GTT stolen memory allocator. This is
-	 * always the inner lock when overlapping with struct_mutex. */
+	/** Protects the usage of the GTT stolen memory allocator */
 	struct mutex stolen_lock;
 
 	/* Protects bound_list/unbound_list and #drm_i915_gem_object.mm.link */
@@ -222,6 +221,9 @@ struct drm_i915_private {
 
 	bool irqs_enabled;
 
+	/* LPT/WPT IOSF sideband protection */
+	struct mutex sbi_lock;
+
 	/* VLV/CHV IOSF sideband */
 	struct {
 		struct mutex lock; /* protect sideband access */
@@ -232,15 +234,10 @@ struct drm_i915_private {
 	/* Sideband mailbox protection */
 	struct mutex sb_lock;
 
-	/** Cached value of IMR to avoid reads in updating the bitfield */
-	u32 irq_mask;
+	/* Cached value of gen 2-4 IMR to avoid reads in updating the bitfield */
+	u32 gen2_imr_mask;
 
 	bool preserve_bios_swizzle;
-
-	unsigned int fsb_freq, mem_freq, is_ddr3;
-
-	unsigned int hpll_freq;
-	unsigned int czclk_freq;
 
 	/**
 	 * wq - Driver workqueue for GEM.

@@ -18,6 +18,7 @@
 #include <drm/drm_vblank.h>
 
 #include "i915_drv.h"
+#include "i915_utils.h"
 #include "i9xx_wm.h"
 #include "intel_acpi.h"
 #include "intel_atomic.h"
@@ -481,7 +482,6 @@ int intel_display_driver_probe_nogem(struct intel_display *display)
 	intel_dpll_init(display);
 	intel_fdi_pll_freq_update(display);
 
-	intel_update_czclk(display);
 	intel_display_driver_init_hw(display);
 	intel_dpll_update_ref_clks(display);
 

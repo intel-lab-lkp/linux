@@ -1141,7 +1141,7 @@ parse_dmc_fw_package(struct intel_dmc *dmc,
 	}
 
 	num_entries = package_header->num_entries;
-	if (WARN_ON(package_header->num_entries > max_entries))
+	if (WARN_ON(num_entries > max_entries))
 		num_entries = max_entries;
 
 	fw_info = (const struct intel_fw_info *)
@@ -1603,9 +1603,7 @@ DEFINE_SHOW_ATTRIBUTE(intel_dmc_debugfs_status);
 
 void intel_dmc_debugfs_register(struct intel_display *display)
 {
-	struct drm_minor *minor = display->drm->primary;
-
-	debugfs_create_file("i915_dmc_info", 0444, minor->debugfs_root,
+	debugfs_create_file("i915_dmc_info", 0444, display->drm->debugfs_root,
 			    display, &intel_dmc_debugfs_status_fops);
 }
 

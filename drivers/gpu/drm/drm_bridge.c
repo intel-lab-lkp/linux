@@ -941,11 +941,11 @@ static int select_bus_fmt_recursive(struct drm_bridge *first_bridge,
 {
 	unsigned int i, num_in_bus_fmts = 0;
 	struct drm_bridge_state *cur_state;
-	struct drm_bridge *prev_bridge;
+	struct drm_bridge *prev_bridge __free(drm_bridge_put) =
+		drm_bridge_get_prev_bridge(cur_bridge);
 	u32 *in_bus_fmts;
 	int ret;
 
-	prev_bridge = drm_bridge_get_prev_bridge(cur_bridge);
 	cur_state = drm_atomic_get_new_bridge_state(crtc_state->state,
 						    cur_bridge);
 
@@ -1121,7 +1121,6 @@ drm_atomic_bridge_propagate_bus_flags(struct drm_bridge *bridge,
 				      struct drm_atomic_state *state)
 {
 	struct drm_bridge_state *bridge_state, *next_bridge_state;
-	struct drm_bridge *next_bridge;
 	u32 output_flags = 0;
 
 	bridge_state = drm_atomic_get_new_bridge_state(state, bridge);
@@ -1130,7 +1129,7 @@ drm_atomic_bridge_propagate_bus_flags(struct drm_bridge *bridge,
 	if (!bridge_state)
 		return;
 
-	next_bridge = drm_bridge_get_next_bridge(bridge);
+	struct drm_bridge *next_bridge __free(drm_bridge_put) = drm_bridge_get_next_bridge(bridge);
 
 	/*
 	 * Let's try to apply the most common case here, that is, propagate
@@ -1435,6 +1434,9 @@ static void drm_bridge_debugfs_show_bridge(struct drm_printer *p,
 					   unsigned int idx)
 {
 	drm_printf(p, "bridge[%u]: %ps\n", idx, bridge->funcs);
+
+	drm_printf(p, "\trefcount: %u\n", kref_read(&bridge->refcount));
+
 	drm_printf(p, "\ttype: [%d] %s\n",
 		   bridge->type,
 		   drm_get_connector_type_name(bridge->type));
@@ -1477,10 +1479,9 @@ static int encoder_bridges_show(struct seq_file *m, void *data)
 {
 	struct drm_encoder *encoder = m->private;
 	struct drm_printer p = drm_seq_file_printer(m);
-	struct drm_bridge *bridge;
 	unsigned int idx = 0;
 
-	drm_for_each_bridge_in_chain(encoder, bridge)
+	drm_for_each_bridge_in_chain_scoped(encoder, bridge)
 		drm_bridge_debugfs_show_bridge(&p, bridge, idx++);
 
 	return 0;

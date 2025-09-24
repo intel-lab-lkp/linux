@@ -6,7 +6,6 @@
 #include <linux/debugfs.h>
 
 #include <drm/drm_blend.h>
-#include <drm/drm_file.h>
 #include <drm/drm_print.h>
 
 #include "soc/intel_dram.h"
@@ -1389,7 +1388,7 @@ skl_allocate_plane_ddb(struct skl_plane_ddb_iter *iter,
 {
 	u16 size, extra = 0;
 
-	if (data_rate) {
+	if (data_rate && iter->data_rate) {
 		extra = min_t(u16, iter->size,
 			      DIV64_U64_ROUND_UP(iter->size * data_rate,
 						 iter->data_rate));
@@ -1879,17 +1878,20 @@ static void skl_compute_plane_wm(const struct intel_crtc_state *crtc_state,
 			} else {
 				blocks++;
 			}
-
-			/*
-			 * Make sure result blocks for higher latency levels are
-			 * at least as high as level below the current level.
-			 * Assumption in DDB algorithm optimization for special
-			 * cases. Also covers Display WA #1125 for RC.
-			 */
-			if (result_prev->blocks > blocks)
-				blocks = result_prev->blocks;
 		}
 	}
+
+	/*
+	 * Make sure result blocks for higher latency levels are
+	 * at least as high as level below the current level.
+	 * Assumption in DDB algorithm optimization for special
+	 * cases. Also covers Display WA #1125 for RC.
+	 *
+	 * Let's always do this as the algorithm can give non
+	 * monotonic results on any platform.
+	 */
+	blocks = max_t(u32, blocks, result_prev->blocks);
+	lines = max_t(u32, lines, result_prev->lines);
 
 	if (DISPLAY_VER(display) >= 11) {
 		if (wp->y_tiled) {
@@ -2273,6 +2275,11 @@ static int skl_max_wm0_lines(const struct intel_crtc_state *crtc_state)
 	return wm0_lines;
 }
 
+/*
+ * TODO: In case we use PKG_C_LATENCY to allow C-states when the delayed vblank
+ * size is too small for the package C exit latency we need to notify PSR about
+ * the scenario to apply Wa_16025596647.
+ */
 static int skl_max_wm_level_for_vblank(struct intel_crtc_state *crtc_state,
 				       int wm0_lines)
 {
@@ -3170,12 +3177,53 @@ void skl_watermark_ipc_init(struct intel_display *display)
 	skl_watermark_ipc_update(display);
 }
 
-static void
-adjust_wm_latency(struct intel_display *display,
-		  u16 wm[], int num_levels, int read_latency)
+static void multiply_wm_latency(struct intel_display *display, int mult)
+{
+	u16 *wm = display->wm.skl_latency;
+	int level, num_levels = display->wm.num_levels;
+
+	for (level = 0; level < num_levels; level++)
+		wm[level] *= mult;
+}
+
+static void increase_wm_latency(struct intel_display *display, int inc)
+{
+	u16 *wm = display->wm.skl_latency;
+	int level, num_levels = display->wm.num_levels;
+
+	wm[0] += inc;
+
+	for (level = 1; level < num_levels; level++) {
+		if (wm[level] == 0)
+			break;
+
+		wm[level] += inc;
+	}
+}
+
+static bool need_16gb_dimm_wa(struct intel_display *display)
 {
 	const struct dram_info *dram_info = intel_dram_info(display->drm);
-	int i, level;
+
+	return (display->platform.skylake || display->platform.kabylake ||
+		display->platform.coffeelake || display->platform.cometlake ||
+		DISPLAY_VER(display) == 11) && dram_info->has_16gb_dimms;
+}
+
+static int wm_read_latency(struct intel_display *display)
+{
+	if (DISPLAY_VER(display) >= 14)
+		return 6;
+	else if (DISPLAY_VER(display) >= 12)
+		return 3;
+	else
+		return 2;
+}
+
+static void sanitize_wm_latency(struct intel_display *display)
+{
+	u16 *wm = display->wm.skl_latency;
+	int level, num_levels = display->wm.num_levels;
 
 	/*
 	 * If a level n (n > 1) has a 0us latency, all levels m (m >= n)
@@ -3183,14 +3231,38 @@ adjust_wm_latency(struct intel_display *display,
 	 * of the punit to satisfy this requirement.
 	 */
 	for (level = 1; level < num_levels; level++) {
-		if (wm[level] == 0) {
-			for (i = level + 1; i < num_levels; i++)
-				wm[i] = 0;
-
-			num_levels = level;
+		if (wm[level] == 0)
 			break;
-		}
 	}
+
+	for (level = level + 1; level < num_levels; level++)
+		wm[level] = 0;
+}
+
+static void make_wm_latency_monotonic(struct intel_display *display)
+{
+	u16 *wm = display->wm.skl_latency;
+	int level, num_levels = display->wm.num_levels;
+
+	for (level = 1; level < num_levels; level++) {
+		if (wm[level] == 0)
+			break;
+
+		wm[level] = max(wm[level], wm[level-1]);
+	}
+}
+
+static void
+adjust_wm_latency(struct intel_display *display)
+{
+	u16 *wm = display->wm.skl_latency;
+
+	if (display->platform.dg2)
+		multiply_wm_latency(display, 2);
+
+	sanitize_wm_latency(display);
+
+	make_wm_latency_monotonic(display);
 
 	/*
 	 * WaWmMemoryReadLatency
@@ -3199,24 +3271,22 @@ adjust_wm_latency(struct intel_display *display,
 	 * to add proper adjustment to each valid level we retrieve
 	 * from the punit when level 0 response data is 0us.
 	 */
-	if (wm[0] == 0) {
-		for (level = 0; level < num_levels; level++)
-			wm[level] += read_latency;
-	}
+	if (wm[0] == 0)
+		increase_wm_latency(display, wm_read_latency(display));
 
 	/*
-	 * WA Level-0 adjustment for 16GB DIMMs: SKL+
+	 * WA Level-0 adjustment for 16Gb+ DIMMs: SKL+
 	 * If we could not get dimm info enable this WA to prevent from
-	 * any underrun. If not able to get Dimm info assume 16GB dimm
+	 * any underrun. If not able to get DIMM info assume 16Gb+ DIMM
 	 * to avoid any underrun.
 	 */
-	if (!display->platform.dg2 && dram_info->wm_lv_0_adjust_needed)
-		wm[0] += 1;
+	if (need_16gb_dimm_wa(display))
+		increase_wm_latency(display, 1);
 }
 
-static void mtl_read_wm_latency(struct intel_display *display, u16 wm[])
+static void mtl_read_wm_latency(struct intel_display *display)
 {
-	int num_levels = display->wm.num_levels;
+	u16 *wm = display->wm.skl_latency;
 	u32 val;
 
 	val = intel_de_read(display, MTL_LATENCY_LP0_LP1);
@@ -3230,15 +3300,11 @@ static void mtl_read_wm_latency(struct intel_display *display, u16 wm[])
 	val = intel_de_read(display, MTL_LATENCY_LP4_LP5);
 	wm[4] = REG_FIELD_GET(MTL_LATENCY_LEVEL_EVEN_MASK, val);
 	wm[5] = REG_FIELD_GET(MTL_LATENCY_LEVEL_ODD_MASK, val);
-
-	adjust_wm_latency(display, wm, num_levels, 6);
 }
 
-static void skl_read_wm_latency(struct intel_display *display, u16 wm[])
+static void skl_read_wm_latency(struct intel_display *display)
 {
-	int num_levels = display->wm.num_levels;
-	int read_latency = DISPLAY_VER(display) >= 12 ? 3 : 2;
-	int mult = display->platform.dg2 ? 2 : 1;
+	u16 *wm = display->wm.skl_latency;
 	u32 val;
 	int ret;
 
@@ -3250,10 +3316,10 @@ static void skl_read_wm_latency(struct intel_display *display, u16 wm[])
 		return;
 	}
 
-	wm[0] = REG_FIELD_GET(GEN9_MEM_LATENCY_LEVEL_0_4_MASK, val) * mult;
-	wm[1] = REG_FIELD_GET(GEN9_MEM_LATENCY_LEVEL_1_5_MASK, val) * mult;
-	wm[2] = REG_FIELD_GET(GEN9_MEM_LATENCY_LEVEL_2_6_MASK, val) * mult;
-	wm[3] = REG_FIELD_GET(GEN9_MEM_LATENCY_LEVEL_3_7_MASK, val) * mult;
+	wm[0] = REG_FIELD_GET(GEN9_MEM_LATENCY_LEVEL_0_4_MASK, val);
+	wm[1] = REG_FIELD_GET(GEN9_MEM_LATENCY_LEVEL_1_5_MASK, val);
+	wm[2] = REG_FIELD_GET(GEN9_MEM_LATENCY_LEVEL_2_6_MASK, val);
+	wm[3] = REG_FIELD_GET(GEN9_MEM_LATENCY_LEVEL_3_7_MASK, val);
 
 	/* read the second set of memory latencies[4:7] */
 	val = 1; /* data0 to be programmed to 1 for second set */
@@ -3263,12 +3329,10 @@ static void skl_read_wm_latency(struct intel_display *display, u16 wm[])
 		return;
 	}
 
-	wm[4] = REG_FIELD_GET(GEN9_MEM_LATENCY_LEVEL_0_4_MASK, val) * mult;
-	wm[5] = REG_FIELD_GET(GEN9_MEM_LATENCY_LEVEL_1_5_MASK, val) * mult;
-	wm[6] = REG_FIELD_GET(GEN9_MEM_LATENCY_LEVEL_2_6_MASK, val) * mult;
-	wm[7] = REG_FIELD_GET(GEN9_MEM_LATENCY_LEVEL_3_7_MASK, val) * mult;
-
-	adjust_wm_latency(display, wm, num_levels, read_latency);
+	wm[4] = REG_FIELD_GET(GEN9_MEM_LATENCY_LEVEL_0_4_MASK, val);
+	wm[5] = REG_FIELD_GET(GEN9_MEM_LATENCY_LEVEL_1_5_MASK, val);
+	wm[6] = REG_FIELD_GET(GEN9_MEM_LATENCY_LEVEL_2_6_MASK, val);
+	wm[7] = REG_FIELD_GET(GEN9_MEM_LATENCY_LEVEL_3_7_MASK, val);
 }
 
 static void skl_setup_wm_latency(struct intel_display *display)
@@ -3279,11 +3343,15 @@ static void skl_setup_wm_latency(struct intel_display *display)
 		display->wm.num_levels = 8;
 
 	if (DISPLAY_VER(display) >= 14)
-		mtl_read_wm_latency(display, display->wm.skl_latency);
+		mtl_read_wm_latency(display);
 	else
-		skl_read_wm_latency(display, display->wm.skl_latency);
+		skl_read_wm_latency(display);
 
-	intel_print_wm_latency(display, "Gen9 Plane", display->wm.skl_latency);
+	intel_print_wm_latency(display, "original", display->wm.skl_latency);
+
+	adjust_wm_latency(display);
+
+	intel_print_wm_latency(display, "adjusted", display->wm.skl_latency);
 }
 
 static struct intel_global_state *intel_dbuf_duplicate_state(struct intel_global_obj *obj)
@@ -4033,14 +4101,14 @@ DEFINE_SHOW_ATTRIBUTE(intel_sagv_status);
 
 void skl_watermark_debugfs_register(struct intel_display *display)
 {
-	struct drm_minor *minor = display->drm->primary;
+	struct dentry *debugfs_root = display->drm->debugfs_root;
 
 	if (HAS_IPC(display))
-		debugfs_create_file("i915_ipc_status", 0644, minor->debugfs_root,
+		debugfs_create_file("i915_ipc_status", 0644, debugfs_root,
 				    display, &skl_watermark_ipc_status_fops);
 
 	if (HAS_SAGV(display))
-		debugfs_create_file("i915_sagv_status", 0444, minor->debugfs_root,
+		debugfs_create_file("i915_sagv_status", 0444, debugfs_root,
 				    display, &intel_sagv_status_fops);
 }
 

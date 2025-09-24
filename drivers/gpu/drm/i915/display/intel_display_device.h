@@ -9,7 +9,6 @@
 #include <linux/bitops.h>
 #include <linux/types.h>
 
-#include "intel_display_conversion.h"
 #include "intel_display_limits.h"
 
 struct drm_printer;
@@ -102,7 +101,9 @@ struct pci_dev;
 	/* Display ver 14.1 (based on GMD ID) */ \
 	func(battlemage) \
 	/* Display ver 30 (based on GMD ID) */ \
-	func(pantherlake)
+	func(pantherlake) \
+	func(pantherlake_wildcatlake)
+
 
 #define __MEMBER(name) unsigned long name:1;
 #define __COUNT(x) 1 +
@@ -156,7 +157,7 @@ struct intel_display_platforms {
 #define HAS_DISPLAY(__display)		(DISPLAY_RUNTIME_INFO(__display)->pipe_mask != 0)
 #define HAS_DMC(__display)		(DISPLAY_RUNTIME_INFO(__display)->has_dmc)
 #define HAS_DMC_WAKELOCK(__display)	(DISPLAY_VER(__display) >= 20)
-#define HAS_DOUBLE_BUFFERED_M_N(__display)	(DISPLAY_VER(__display) >= 9 || (__display)->platform.broadwell)
+#define HAS_DOUBLE_BUFFERED_M_N(__display)	(IS_DISPLAY_VER((__display), 9, 14) || (__display)->platform.broadwell)
 #define HAS_DOUBLE_BUFFERED_LUT(__display)	(DISPLAY_VER(__display) >= 30)
 #define HAS_DOUBLE_WIDE(__display)	(DISPLAY_VER(__display) < 4)
 #define HAS_DP20(__display)		((__display)->platform.dg2 || DISPLAY_VER(__display) >= 14)
@@ -224,8 +225,8 @@ struct intel_display_platforms {
 	(IS_DISPLAY_VERx100((__display), (ipver), (ipver)) && \
 	 IS_DISPLAY_STEP((__display), (from), (until)))
 
-#define DISPLAY_INFO(__display)		(__to_intel_display(__display)->info.__device_info)
-#define DISPLAY_RUNTIME_INFO(__display)	(&__to_intel_display(__display)->info.__runtime_info)
+#define DISPLAY_INFO(__display)		((__display)->info.__device_info)
+#define DISPLAY_RUNTIME_INFO(__display)	(&(__display)->info.__runtime_info)
 
 #define DISPLAY_VER(__display)		(DISPLAY_RUNTIME_INFO(__display)->ip.ver)
 #define DISPLAY_VERx100(__display)	(DISPLAY_RUNTIME_INFO(__display)->ip.ver * 100 + \
@@ -236,7 +237,7 @@ struct intel_display_platforms {
 #define INTEL_DISPLAY_STEP(__display)	(DISPLAY_RUNTIME_INFO(__display)->step)
 
 #define IS_DISPLAY_STEP(__display, since, until) \
-	(drm_WARN_ON(__to_intel_display(__display)->drm, INTEL_DISPLAY_STEP(__display) == STEP_NONE), \
+	(drm_WARN_ON((__display)->drm, INTEL_DISPLAY_STEP(__display) == STEP_NONE), \
 	 INTEL_DISPLAY_STEP(__display) >= (since) && INTEL_DISPLAY_STEP(__display) < (until))
 
 #define ARLS_HOST_BRIDGE_PCI_ID1 0x7D1C
@@ -307,6 +308,7 @@ struct intel_display_device_info {
 	} color;
 };
 
+bool intel_display_device_present(struct intel_display *display);
 bool intel_display_device_enabled(struct intel_display *display);
 struct intel_display *intel_display_device_probe(struct pci_dev *pdev);
 void intel_display_device_remove(struct intel_display *display);
