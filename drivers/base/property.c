@@ -1235,15 +1235,15 @@ static bool fwnode_graph_remote_available(struct fwnode_handle *ep)
  * The caller is responsible for calling fwnode_handle_put() on the returned
  * fwnode pointer.
  *
- * Return: the fwnode handle of the local endpoint corresponding the port and
- * endpoint IDs or %NULL if not found.
- *
  * If FWNODE_GRAPH_ENDPOINT_NEXT is passed in @flags and the specified endpoint
  * has not been found, look for the closest endpoint ID greater than the
  * specified one and return the endpoint that corresponds to it, if present.
  *
  * Does not return endpoints that belong to disabled devices or endpoints that
  * are unconnected, unless FWNODE_GRAPH_DEVICE_DISABLED is passed in @flags.
+ *
+ * Return: the fwnode handle of the local endpoint corresponding the port and
+ * endpoint IDs or %NULL if not found.
  */
 struct fwnode_handle *
 fwnode_graph_get_endpoint_by_id(const struct fwnode_handle *fwnode,
