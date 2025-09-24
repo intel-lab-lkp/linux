@@ -11,6 +11,9 @@
 
 #include <linux/types.h>
 #include <linux/nls.h>
+
+#include <kunit/visibility.h>
+
 #include "hfsplus_fs.h"
 #include "hfsplus_raw.h"
 
@@ -72,6 +75,7 @@ int hfsplus_strcasecmp(const struct hfsplus_unistr *s1,
 			return 0;
 	}
 }
+EXPORT_SYMBOL_IF_KUNIT(hfsplus_strcasecmp);
 
 /* Compare names as a sequence of 16-bit unsigned integers */
 int hfsplus_strcmp(const struct hfsplus_unistr *s1,
@@ -110,7 +114,7 @@ int hfsplus_strcmp(const struct hfsplus_unistr *s1,
 	return len1 < len2 ? -1 :
 	       len1 > len2 ? 1 : 0;
 }
-
+EXPORT_SYMBOL_IF_KUNIT(hfsplus_strcmp);
 
 #define Hangul_SBase	0xac00
 #define Hangul_LBase	0x1100
@@ -279,6 +283,7 @@ out:
 	*len_p = (char *)op - astr;
 	return res;
 }
+EXPORT_SYMBOL_IF_KUNIT(hfsplus_uni2asc);
 
 /*
  * Convert one or more ASCII characters into a single unicode character.
@@ -406,6 +411,7 @@ int hfsplus_asc2uni(struct super_block *sb,
 		return -ENAMETOOLONG;
 	return 0;
 }
+EXPORT_SYMBOL_IF_KUNIT(hfsplus_asc2uni);
 
 /*
  * Hash a string to an integer as appropriate for the HFS+ filesystem.
@@ -458,6 +464,7 @@ int hfsplus_hash_dentry(const struct dentry *dentry, struct qstr *str)
 
 	return 0;
 }
+EXPORT_SYMBOL_IF_KUNIT(hfsplus_hash_dentry);
 
 /*
  * Compare strings with HFS+ filename ordering.
@@ -549,3 +556,4 @@ int hfsplus_compare_dentry(const struct dentry *dentry,
 		return 1;
 	return 0;
 }
+EXPORT_SYMBOL_IF_KUNIT(hfsplus_compare_dentry);
