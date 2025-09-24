@@ -477,15 +477,16 @@ hugetlb_vmdelete_list(struct rb_root_cached *root, pgoff_t start, pgoff_t end,
 		      zap_flags_t zap_flags)
 {
 	struct vm_area_struct *vma;
-
 	/*
 	 * end == 0 indicates that the entire range after start should be
 	 * unmapped.  Note, end is exclusive, whereas the interval tree takes
 	 * an inclusive "last".
 	 */
 	vma_interval_tree_foreach(vma, root, start, end ? end - 1 : ULONG_MAX) {
+		struct hugetlb_vma_lock *vma_lock;
 		unsigned long v_start;
 		unsigned long v_end;
+		vma_lock = vma->vm_private_data;
 
 		if (!hugetlb_vma_trylock_write(vma))
 			continue;
@@ -500,7 +501,8 @@ hugetlb_vmdelete_list(struct rb_root_cached *root, pgoff_t start, pgoff_t end,
 		 * vmas.  Therefore, lock is not held when calling
 		 * unmap_hugepage_range for private vmas.
 		 */
-		hugetlb_vma_unlock_write(vma);
+		if (vma_lock)
+			hugetlb_vma_unlock_write(vma);
 	}
 }
 
