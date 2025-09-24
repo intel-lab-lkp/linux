@@ -23,6 +23,7 @@
 #include <linux/ptp_mock.h>
 #include <linux/u64_stats_sync.h>
 #include <net/devlink.h>
+#include <net/psp.h>
 #include <net/udp_tunnel.h>
 #include <net/xdp.h>
 #include <net/macsec.h>
@@ -107,6 +108,12 @@ struct netdevsim {
 	struct nsim_rq **rq;
 
 	int rq_reset_mode;
+
+	struct {
+		struct psp_dev *dev;
+		u32 spi;
+		u32 assoc_cnt;
+	} psp;
 
 	struct nsim_bus_dev *nsim_bus_dev;
 
@@ -418,6 +425,37 @@ static inline void nsim_macsec_init(struct netdevsim *ns)
 
 static inline void nsim_macsec_teardown(struct netdevsim *ns)
 {
+}
+#endif
+
+#if IS_ENABLED(CONFIG_INET_PSP)
+int nsim_psp_init(struct netdevsim *ns);
+void nsim_psp_uninit(struct netdevsim *ns);
+enum skb_drop_reason
+nsim_do_psp(struct sk_buff *skb, struct netdevsim *ns,
+	    struct netdevsim *peer_ns, struct skb_ext **psp_ext);
+static inline bool nsim_tx_skb_is_psp(struct sk_buff *skb)
+{
+	bool ret;
+
+	rcu_read_lock();
+	ret = !!psp_skb_get_assoc_rcu(skb);
+	rcu_read_unlock();
+	return ret;
+}
+#else
+static inline int nsim_psp_init(struct netdevsim *ns) { return 0; }
+static inline void nsim_psp_uninit(struct netdevsim *ns) {}
+static inline enum skb_drop_reason
+nsim_do_psp(struct sk_buff *skb, struct netdevsim *ns,
+	    struct netdevsim *peer_ns, struct skb_ext **psp_ext)
+{
+	return 0;
+}
+
+static inline bool nsim_tx_skb_is_psp(struct sk_buff *skb)
+{
+	return false;
 }
 #endif
 
