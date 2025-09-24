@@ -756,7 +756,7 @@ static int dw_pcie_iatu_setup(struct dw_pcie_rp *pp)
 		if (resource_type(entry->res) != IORESOURCE_MEM)
 			continue;
 
-		if (pci->num_ob_windows <= ++i)
+		if (pci->num_ob_windows <= i)
 			break;
 
 		atu.index = i;
@@ -773,9 +773,10 @@ static int dw_pcie_iatu_setup(struct dw_pcie_rp *pp)
 
 		ret = dw_pcie_prog_outbound_atu(pci, &atu);
 		if (ret) {
-			dev_err(pci->dev, "Failed to set MEM range %pr\n",
-				entry->res);
-			return ret;
+			dev_warn(pci->dev, "Failed to set MEM range %pr\n",
+				 entry->res);
+		} else {
+			i++;
 		}
 	}
 
