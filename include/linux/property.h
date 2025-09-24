@@ -161,8 +161,6 @@ struct fwnode_handle *fwnode_get_nth_parent(struct fwnode_handle *fwn,
 					    unsigned int depth);
 struct fwnode_handle *fwnode_get_next_child_node(
 	const struct fwnode_handle *fwnode, struct fwnode_handle *child);
-struct fwnode_handle *fwnode_get_next_available_child_node(
-	const struct fwnode_handle *fwnode, struct fwnode_handle *child);
 
 #define fwnode_for_each_child_node(fwnode, child)			\
 	for (child = fwnode_get_next_child_node(fwnode, NULL); child;	\
@@ -171,10 +169,6 @@ struct fwnode_handle *fwnode_get_next_available_child_node(
 #define fwnode_for_each_named_child_node(fwnode, child, name)		\
 	fwnode_for_each_child_node(fwnode, child)			\
 		for_each_if(fwnode_name_eq(child, name))
-
-#define fwnode_for_each_available_child_node(fwnode, child)		       \
-	for (child = fwnode_get_next_available_child_node(fwnode, NULL); child;\
-	     child = fwnode_get_next_available_child_node(fwnode, child))
 
 struct fwnode_handle *device_get_next_child_node(const struct device *dev,
 						 struct fwnode_handle *child);
