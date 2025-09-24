@@ -5633,6 +5633,23 @@ static int hsw_mode_set_planes_workaround(struct intel_atomic_state *state)
 	return 0;
 }
 
+u8 intel_calc_enabled_pipes(struct intel_atomic_state *state,
+			    u8 enabled_pipes)
+{
+	const struct intel_crtc_state *crtc_state;
+	struct intel_crtc *crtc;
+	int i;
+
+	for_each_new_intel_crtc_in_state(state, crtc, crtc_state, i) {
+		if (crtc_state->hw.enable)
+			enabled_pipes |= BIT(crtc->pipe);
+		else
+			enabled_pipes &= ~BIT(crtc->pipe);
+	}
+
+	return enabled_pipes;
+}
+
 u8 intel_calc_active_pipes(struct intel_atomic_state *state,
 			   u8 active_pipes)
 {
@@ -6286,7 +6303,6 @@ int intel_atomic_check(struct drm_device *dev,
 	struct intel_crtc_state *old_crtc_state, *new_crtc_state;
 	struct intel_crtc *crtc;
 	int ret, i;
-	bool any_ms = false;
 
 	if (!intel_display_driver_check_access(display))
 		return -ENODEV;
@@ -6394,14 +6410,11 @@ int intel_atomic_check(struct drm_device *dev,
 		if (!intel_crtc_needs_modeset(new_crtc_state))
 			continue;
 
-		any_ms = true;
-
 		intel_dpll_release(state, crtc);
 	}
 
-	if (any_ms && !check_digital_port_conflicts(state)) {
-		drm_dbg_kms(display->drm,
-			    "rejecting conflicting digital port configuration\n");
+	if (intel_any_crtc_needs_modeset(state) && !check_digital_port_conflicts(state)) {
+		drm_dbg_kms(display->drm, "rejecting conflicting digital port configuration\n");
 		ret = -EINVAL;
 		goto fail;
 	}
@@ -6414,25 +6427,18 @@ int intel_atomic_check(struct drm_device *dev,
 	if (ret)
 		goto fail;
 
-	ret = intel_bw_atomic_check(state, any_ms);
+	ret = intel_bw_atomic_check(state);
 	if (ret)
 		goto fail;
 
-	ret = intel_cdclk_atomic_check(state, &any_ms);
+	ret = intel_cdclk_atomic_check(state);
 	if (ret)
 		goto fail;
 
-	if (intel_any_crtc_needs_modeset(state))
-		any_ms = true;
-
-	if (any_ms) {
+	if (intel_any_crtc_needs_modeset(state)) {
 		ret = intel_modeset_checks(state);
 		if (ret)
 			goto fail;
-
-		ret = intel_modeset_calc_cdclk(state);
-		if (ret)
-			return ret;
 	}
 
 	ret = intel_pmdemand_atomic_check(state);
@@ -7341,13 +7347,13 @@ static void intel_atomic_commit_tail(struct intel_atomic_state *state)
 	 */
 	intel_pmdemand_pre_plane_update(state);
 
-	if (state->modeset) {
+	if (state->modeset)
 		drm_atomic_helper_update_legacy_modeset_state(display->drm, &state->base);
 
-		intel_set_cdclk_pre_plane_update(state);
+	intel_set_cdclk_pre_plane_update(state);
 
+	if (state->modeset)
 		intel_modeset_verify_disabled(state);
-	}
 
 	intel_sagv_pre_plane_update(state);
 
@@ -7460,8 +7466,7 @@ static void intel_atomic_commit_tail(struct intel_atomic_state *state)
 		intel_verify_planes(state);
 
 	intel_sagv_post_plane_update(state);
-	if (state->modeset)
-		intel_set_cdclk_post_plane_update(state);
+	intel_set_cdclk_post_plane_update(state);
 	intel_pmdemand_post_plane_update(state);
 
 	drm_atomic_helper_commit_hw_done(&state->base);

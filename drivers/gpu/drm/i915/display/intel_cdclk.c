@@ -146,6 +146,9 @@ struct intel_cdclk_state {
 	/* forced minimum cdclk for glk+ audio w/a */
 	int force_min_cdclk;
 
+	/* bitmask of enabled pipes */
+	u8 enabled_pipes;
+
 	/* bitmask of active pipes */
 	u8 active_pipes;
 
@@ -2591,6 +2594,12 @@ static void intel_set_cdclk(struct intel_display *display,
 	}
 }
 
+static bool dg2_power_well_count(struct intel_display *display,
+				 const struct intel_cdclk_state *cdclk_state)
+{
+	return display->platform.dg2 ? hweight8(cdclk_state->active_pipes) : 0;
+}
+
 static void intel_cdclk_pcode_pre_notify(struct intel_atomic_state *state)
 {
 	struct intel_display *display = to_intel_display(state);
@@ -2603,16 +2612,15 @@ static void intel_cdclk_pcode_pre_notify(struct intel_atomic_state *state)
 
 	if (!intel_cdclk_changed(&old_cdclk_state->actual,
 				 &new_cdclk_state->actual) &&
-				 new_cdclk_state->active_pipes ==
-				 old_cdclk_state->active_pipes)
-		return;
+	    dg2_power_well_count(display, old_cdclk_state) ==
+	    dg2_power_well_count(display, old_cdclk_state))
 
 	/* According to "Sequence Before Frequency Change", voltage level set to 0x3 */
 	voltage_level = DISPLAY_TO_PCODE_VOLTAGE_MAX;
 
 	change_cdclk = new_cdclk_state->actual.cdclk != old_cdclk_state->actual.cdclk;
-	update_pipe_count = hweight8(new_cdclk_state->active_pipes) >
-			    hweight8(old_cdclk_state->active_pipes);
+	update_pipe_count = dg2_power_well_count(display, new_cdclk_state) >
+		dg2_power_well_count(display, old_cdclk_state);
 
 	/*
 	 * According to "Sequence Before Frequency Change",
@@ -2630,7 +2638,7 @@ static void intel_cdclk_pcode_pre_notify(struct intel_atomic_state *state)
 	 * no action if it is decreasing, before the change
 	 */
 	if (update_pipe_count)
-		num_active_pipes = hweight8(new_cdclk_state->active_pipes);
+		num_active_pipes = dg2_power_well_count(display, new_cdclk_state);
 
 	intel_pcode_notify(display, voltage_level, num_active_pipes, cdclk,
 			   change_cdclk, update_pipe_count);
@@ -2650,8 +2658,8 @@ static void intel_cdclk_pcode_post_notify(struct intel_atomic_state *state)
 	voltage_level = new_cdclk_state->actual.voltage_level;
 
 	update_cdclk = new_cdclk_state->actual.cdclk != old_cdclk_state->actual.cdclk;
-	update_pipe_count = hweight8(new_cdclk_state->active_pipes) <
-			    hweight8(old_cdclk_state->active_pipes);
+	update_pipe_count = dg2_power_well_count(display, new_cdclk_state) <
+		dg2_power_well_count(display, old_cdclk_state);
 
 	/*
 	 * According to "Sequence After Frequency Change",
@@ -2667,7 +2675,7 @@ static void intel_cdclk_pcode_post_notify(struct intel_atomic_state *state)
 	 * no action if it is increasing, after the change
 	 */
 	if (update_pipe_count)
-		num_active_pipes = hweight8(new_cdclk_state->active_pipes);
+		num_active_pipes = dg2_power_well_count(display, new_cdclk_state);
 
 	intel_pcode_notify(display, voltage_level, num_active_pipes, cdclk,
 			   update_cdclk, update_pipe_count);
@@ -2701,6 +2709,9 @@ intel_set_cdclk_pre_plane_update(struct intel_atomic_state *state)
 		intel_atomic_get_new_cdclk_state(state);
 	struct intel_cdclk_config cdclk_config;
 	enum pipe pipe;
+
+	if (!new_cdclk_state)
+		return;
 
 	if (!intel_cdclk_changed(&old_cdclk_state->actual,
 				 &new_cdclk_state->actual))
@@ -2753,6 +2764,9 @@ intel_set_cdclk_post_plane_update(struct intel_atomic_state *state)
 	const struct intel_cdclk_state *new_cdclk_state =
 		intel_atomic_get_new_cdclk_state(state);
 	enum pipe pipe;
+
+	if (!new_cdclk_state)
+		return;
 
 	if (!intel_cdclk_changed(&old_cdclk_state->actual,
 				 &new_cdclk_state->actual))
@@ -2822,6 +2836,7 @@ static int intel_crtc_compute_min_cdclk(const struct intel_crtc_state *crtc_stat
 		return 0;
 
 	min_cdclk = intel_pixel_rate_to_cdclk(crtc_state);
+	min_cdclk = max(min_cdclk, intel_bw_crtc_min_cdclk(crtc_state));
 	min_cdclk = max(min_cdclk, hsw_ips_min_cdclk(crtc_state));
 	min_cdclk = max(min_cdclk, intel_audio_min_cdclk(crtc_state));
 	min_cdclk = max(min_cdclk, vlv_dsi_min_cdclk(crtc_state));
@@ -2831,51 +2846,110 @@ static int intel_crtc_compute_min_cdclk(const struct intel_crtc_state *crtc_stat
 	return min_cdclk;
 }
 
+static int intel_cdclk_update_crtc_min_cdclk(struct intel_atomic_state *state,
+					     struct intel_crtc *crtc,
+					     int old_min_cdclk, int new_min_cdclk,
+					     bool *need_cdclk_calc)
+{
+	struct intel_display *display = to_intel_display(state);
+	struct intel_cdclk_state *cdclk_state;
+	bool allow_cdclk_decrease = intel_any_crtc_needs_modeset(state);
+	int ret;
+
+	if (new_min_cdclk == old_min_cdclk)
+		return 0;
+
+	if (!allow_cdclk_decrease && new_min_cdclk < old_min_cdclk)
+		return 0;
+
+	cdclk_state = intel_atomic_get_cdclk_state(state);
+	if (IS_ERR(cdclk_state))
+		return PTR_ERR(cdclk_state);
+
+	old_min_cdclk = cdclk_state->min_cdclk[crtc->pipe];
+
+	if (new_min_cdclk == old_min_cdclk)
+		return 0;
+
+	if (!allow_cdclk_decrease && new_min_cdclk < old_min_cdclk)
+		return 0;
+
+	cdclk_state->min_cdclk[crtc->pipe] = new_min_cdclk;
+
+	ret = intel_atomic_lock_global_state(&cdclk_state->base);
+	if (ret)
+		return ret;
+
+	*need_cdclk_calc = true;
+
+	drm_dbg_kms(display->drm,
+		    "[CRTC:%d:%s] min cdclk: %d kHz -> %d kHz\n",
+		    crtc->base.base.id, crtc->base.name,
+		    old_min_cdclk, new_min_cdclk);
+
+	return 0;
+}
+
+int intel_cdclk_update_bw_min_cdclk(struct intel_atomic_state *state,
+				    int old_min_cdclk, int new_min_cdclk,
+				    bool *need_cdclk_calc)
+{
+	struct intel_display *display = to_intel_display(state);
+	struct intel_cdclk_state *cdclk_state;
+	bool allow_cdclk_decrease = intel_any_crtc_needs_modeset(state);
+	int ret;
+
+	if (new_min_cdclk == old_min_cdclk)
+		return 0;
+
+	if (!allow_cdclk_decrease && new_min_cdclk < old_min_cdclk)
+		return 0;
+
+	cdclk_state = intel_atomic_get_cdclk_state(state);
+	if (IS_ERR(cdclk_state))
+		return PTR_ERR(cdclk_state);
+
+	old_min_cdclk = cdclk_state->bw_min_cdclk;
+
+	if (new_min_cdclk == old_min_cdclk)
+		return 0;
+
+	if (!allow_cdclk_decrease && new_min_cdclk < old_min_cdclk)
+		return 0;
+
+	cdclk_state->bw_min_cdclk = new_min_cdclk;
+
+	ret = intel_atomic_lock_global_state(&cdclk_state->base);
+	if (ret)
+		return ret;
+
+	*need_cdclk_calc = true;
+
+	drm_dbg_kms(display->drm,
+		    "bandwidth min cdclk: %d kHz -> %d kHz\n",
+		    old_min_cdclk, new_min_cdclk);
+
+	return 0;
+}
+
+static bool glk_cdclk_audio_wa_needed(struct intel_display *display,
+				      const struct intel_cdclk_state *cdclk_state)
+{
+	return display->platform.geminilake &&
+		cdclk_state->enabled_pipes &&
+		!is_power_of_2(cdclk_state->enabled_pipes);
+}
+
 static int intel_compute_min_cdclk(struct intel_atomic_state *state)
 {
 	struct intel_display *display = to_intel_display(state);
 	struct intel_cdclk_state *cdclk_state =
 		intel_atomic_get_new_cdclk_state(state);
-	const struct intel_bw_state *bw_state;
-	struct intel_crtc *crtc;
-	struct intel_crtc_state *crtc_state;
-	int min_cdclk, i;
 	enum pipe pipe;
+	int min_cdclk;
 
-	for_each_new_intel_crtc_in_state(state, crtc, crtc_state, i) {
-		int ret;
-
-		min_cdclk = intel_crtc_compute_min_cdclk(crtc_state);
-		if (min_cdclk < 0)
-			return min_cdclk;
-
-		if (cdclk_state->min_cdclk[crtc->pipe] == min_cdclk)
-			continue;
-
-		cdclk_state->min_cdclk[crtc->pipe] = min_cdclk;
-
-		ret = intel_atomic_lock_global_state(&cdclk_state->base);
-		if (ret)
-			return ret;
-	}
-
-	bw_state = intel_atomic_get_new_bw_state(state);
-	if (bw_state) {
-		min_cdclk = intel_bw_min_cdclk(display, bw_state);
-
-		if (cdclk_state->bw_min_cdclk != min_cdclk) {
-			int ret;
-
-			cdclk_state->bw_min_cdclk = min_cdclk;
-
-			ret = intel_atomic_lock_global_state(&cdclk_state->base);
-			if (ret)
-				return ret;
-		}
-	}
-
-	min_cdclk = max(cdclk_state->force_min_cdclk,
-			cdclk_state->bw_min_cdclk);
+	min_cdclk = cdclk_state->force_min_cdclk;
+	min_cdclk = max(min_cdclk, cdclk_state->bw_min_cdclk);
 	for_each_pipe(display, pipe)
 		min_cdclk = max(min_cdclk, cdclk_state->min_cdclk[pipe]);
 
@@ -2887,8 +2961,7 @@ static int intel_compute_min_cdclk(struct intel_atomic_state *state)
 	 * by changing the cd2x divider (see glk_cdclk_table[]) and
 	 * thus a full modeset won't be needed then.
 	 */
-	if (display->platform.geminilake && cdclk_state->active_pipes &&
-	    !is_power_of_2(cdclk_state->active_pipes))
+	if (glk_cdclk_audio_wa_needed(display, cdclk_state))
 		min_cdclk = max(min_cdclk, 2 * 96000);
 
 	if (min_cdclk > display->cdclk.max_cdclk_freq) {
@@ -3174,37 +3247,65 @@ intel_atomic_get_cdclk_state(struct intel_atomic_state *state)
 	return to_intel_cdclk_state(cdclk_state);
 }
 
-int intel_cdclk_atomic_check(struct intel_atomic_state *state,
-			     bool *need_cdclk_calc)
+static int intel_cdclk_modeset_checks(struct intel_atomic_state *state,
+				      bool *need_cdclk_calc)
 {
+	struct intel_display *display = to_intel_display(state);
 	const struct intel_cdclk_state *old_cdclk_state;
-	const struct intel_cdclk_state *new_cdclk_state;
-	struct intel_plane_state __maybe_unused *plane_state;
-	struct intel_plane *plane;
+	struct intel_cdclk_state *new_cdclk_state;
 	int ret;
-	int i;
 
-	/*
-	 * active_planes bitmask has been updated, and potentially affected
-	 * planes are part of the state. We can now compute the minimum cdclk
-	 * for each plane.
-	 */
-	for_each_new_intel_plane_in_state(state, plane, plane_state, i) {
-		ret = intel_plane_calc_min_cdclk(state, plane, need_cdclk_calc);
-		if (ret)
-			return ret;
-	}
+	if (!intel_any_crtc_enable_changed(state) &&
+	    !intel_any_crtc_active_changed(state))
+		return 0;
 
-	ret = intel_bw_calc_min_cdclk(state, need_cdclk_calc);
+	new_cdclk_state = intel_atomic_get_cdclk_state(state);
+	if (IS_ERR(new_cdclk_state))
+		return PTR_ERR(new_cdclk_state);
+
+	old_cdclk_state = intel_atomic_get_old_cdclk_state(state);
+
+	new_cdclk_state->enabled_pipes =
+		intel_calc_enabled_pipes(state, old_cdclk_state->enabled_pipes);
+
+	new_cdclk_state->active_pipes =
+		intel_calc_active_pipes(state, old_cdclk_state->active_pipes);
+
+	ret = intel_atomic_lock_global_state(&new_cdclk_state->base);
 	if (ret)
 		return ret;
 
-	old_cdclk_state = intel_atomic_get_old_cdclk_state(state);
-	new_cdclk_state = intel_atomic_get_new_cdclk_state(state);
-
-	if (new_cdclk_state &&
-	    old_cdclk_state->force_min_cdclk != new_cdclk_state->force_min_cdclk)
+	if (!old_cdclk_state->active_pipes != !new_cdclk_state->active_pipes)
 		*need_cdclk_calc = true;
+
+	if (glk_cdclk_audio_wa_needed(display, old_cdclk_state) !=
+	    glk_cdclk_audio_wa_needed(display, new_cdclk_state))
+		*need_cdclk_calc = true;
+
+	if (dg2_power_well_count(display, old_cdclk_state) !=
+	    dg2_power_well_count(display, new_cdclk_state))
+		*need_cdclk_calc = true;
+
+	return 0;
+}
+
+static int intel_crtcs_calc_min_cdclk(struct intel_atomic_state *state,
+				      bool *need_cdclk_calc)
+{
+	const struct intel_crtc_state *old_crtc_state;
+	const struct intel_crtc_state *new_crtc_state;
+	struct intel_crtc *crtc;
+	int i, ret;
+
+	for_each_oldnew_intel_crtc_in_state(state, crtc, old_crtc_state,
+					    new_crtc_state, i) {
+		ret = intel_cdclk_update_crtc_min_cdclk(state, crtc,
+							intel_crtc_compute_min_cdclk(old_crtc_state),
+							intel_crtc_compute_min_cdclk(new_crtc_state),
+							need_cdclk_calc);
+		if (ret)
+			return ret;
+	}
 
 	return 0;
 }
@@ -3241,18 +3342,17 @@ static bool intel_cdclk_need_serialize(struct intel_display *display,
 				       const struct intel_cdclk_state *old_cdclk_state,
 				       const struct intel_cdclk_state *new_cdclk_state)
 {
-	bool power_well_cnt_changed = hweight8(old_cdclk_state->active_pipes) !=
-				      hweight8(new_cdclk_state->active_pipes);
-	bool cdclk_changed = intel_cdclk_changed(&old_cdclk_state->actual,
-						 &new_cdclk_state->actual);
 	/*
-	 * We need to poke hw for gen >= 12, because we notify PCode if
+	 * We need to poke hw for DG2, because we notify PCode if
 	 * pipe power well count changes.
 	 */
-	return cdclk_changed || (display->platform.dg2 && power_well_cnt_changed);
+	return intel_cdclk_changed(&old_cdclk_state->actual,
+				   &new_cdclk_state->actual) ||
+		dg2_power_well_count(display, old_cdclk_state) !=
+		dg2_power_well_count(display, new_cdclk_state);
 }
 
-int intel_modeset_calc_cdclk(struct intel_atomic_state *state)
+static int intel_modeset_calc_cdclk(struct intel_atomic_state *state)
 {
 	struct intel_display *display = to_intel_display(state);
 	const struct intel_cdclk_state *old_cdclk_state;
@@ -3266,9 +3366,6 @@ int intel_modeset_calc_cdclk(struct intel_atomic_state *state)
 
 	old_cdclk_state = intel_atomic_get_old_cdclk_state(state);
 
-	new_cdclk_state->active_pipes =
-		intel_calc_active_pipes(state, old_cdclk_state->active_pipes);
-
 	ret = intel_cdclk_modeset_calc_cdclk(state);
 	if (ret)
 		return ret;
@@ -3281,9 +3378,7 @@ int intel_modeset_calc_cdclk(struct intel_atomic_state *state)
 		ret = intel_atomic_serialize_global_state(&new_cdclk_state->base);
 		if (ret)
 			return ret;
-	} else if (old_cdclk_state->active_pipes != new_cdclk_state->active_pipes ||
-		   old_cdclk_state->force_min_cdclk != new_cdclk_state->force_min_cdclk ||
-		   intel_cdclk_changed(&old_cdclk_state->logical,
+	} else if (intel_cdclk_changed(&old_cdclk_state->logical,
 				       &new_cdclk_state->logical)) {
 		ret = intel_atomic_lock_global_state(&new_cdclk_state->base);
 		if (ret)
@@ -3365,6 +3460,46 @@ int intel_modeset_calc_cdclk(struct intel_atomic_state *state)
 	return 0;
 }
 
+int intel_cdclk_atomic_check(struct intel_atomic_state *state)
+{
+	const struct intel_cdclk_state *old_cdclk_state;
+	struct intel_cdclk_state *new_cdclk_state;
+	bool need_cdclk_calc = false;
+	int ret;
+
+	ret = intel_cdclk_modeset_checks(state, &need_cdclk_calc);
+	if (ret)
+		return ret;
+
+	ret = intel_crtcs_calc_min_cdclk(state, &need_cdclk_calc);
+	if (ret)
+		return ret;
+
+	ret = intel_bw_calc_min_cdclk(state, &need_cdclk_calc);
+	if (ret)
+		return ret;
+
+	old_cdclk_state = intel_atomic_get_old_cdclk_state(state);
+	new_cdclk_state = intel_atomic_get_new_cdclk_state(state);
+
+	if (new_cdclk_state &&
+	    old_cdclk_state->force_min_cdclk != new_cdclk_state->force_min_cdclk) {
+		ret = intel_atomic_lock_global_state(&new_cdclk_state->base);
+		if (ret)
+			return ret;
+
+		need_cdclk_calc = true;
+	}
+
+	if (need_cdclk_calc) {
+		ret = intel_modeset_calc_cdclk(state);
+		if (ret)
+			return ret;
+	}
+
+	return 0;
+}
+
 void intel_cdclk_update_hw_state(struct intel_display *display)
 {
 	const struct intel_bw_state *bw_state =
@@ -3373,6 +3508,7 @@ void intel_cdclk_update_hw_state(struct intel_display *display)
 		to_intel_cdclk_state(display->cdclk.obj.state);
 	struct intel_crtc *crtc;
 
+	cdclk_state->enabled_pipes = 0;
 	cdclk_state->active_pipes = 0;
 
 	for_each_intel_crtc(display->drm, crtc) {
@@ -3380,6 +3516,8 @@ void intel_cdclk_update_hw_state(struct intel_display *display)
 			to_intel_crtc_state(crtc->base.state);
 		enum pipe pipe = crtc->pipe;
 
+		if (crtc_state->hw.enable)
+			cdclk_state->enabled_pipes |= BIT(pipe);
 		if (crtc_state->hw.active)
 			cdclk_state->active_pipes |= BIT(pipe);
 
