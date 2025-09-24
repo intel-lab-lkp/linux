@@ -468,6 +468,17 @@ static inline void memalloc_pin_restore(unsigned int flags)
 	memalloc_flags_restore(flags);
 }
 
+/**
+ * in_reclaim - Is the current task doing reclaim?
+ *
+ * This is true if the current task is kswapd or if we've entered
+ * direct reclaim.
+ */
+static inline bool in_reclaim(void)
+{
+	return current->flags & PF_MEMALLOC;
+}
+
 #ifdef CONFIG_MEMCG
 DECLARE_PER_CPU(struct mem_cgroup *, int_active_memcg);
 /**

@@ -4220,7 +4220,7 @@ static bool __need_reclaim(gfp_t gfp_mask)
 		return false;
 
 	/* this guy won't enter reclaim */
-	if (current->flags & PF_MEMALLOC)
+	if (in_reclaim())
 		return false;
 
 	if (gfp_mask & __GFP_NOLOCKDEP)
@@ -4455,10 +4455,10 @@ static inline int __gfp_pfmemalloc_flags(gfp_t gfp_mask)
 		return 0;
 	if (gfp_mask & __GFP_MEMALLOC)
 		return ALLOC_NO_WATERMARKS;
-	if (in_serving_softirq() && (current->flags & PF_MEMALLOC))
+	if (in_serving_softirq() && in_reclaim())
 		return ALLOC_NO_WATERMARKS;
 	if (!in_interrupt()) {
-		if (current->flags & PF_MEMALLOC)
+		if (in_reclaim())
 			return ALLOC_NO_WATERMARKS;
 		else if (oom_reserves_allowed(current))
 			return ALLOC_OOM;
@@ -4627,7 +4627,7 @@ __alloc_pages_slowpath(gfp_t gfp_mask, unsigned int order,
 		 * because we cannot reclaim anything and only can loop waiting
 		 * for somebody to do a work for us.
 		 */
-		WARN_ON_ONCE(current->flags & PF_MEMALLOC);
+		WARN_ON_ONCE(in_reclaim());
 	}
 
 restart:
@@ -4774,7 +4774,7 @@ retry:
 		goto nopage;
 
 	/* Avoid recursion of direct reclaim */
-	if (current->flags & PF_MEMALLOC)
+	if (in_reclaim())
 		goto nopage;
 
 	/* Try direct reclaim and then allocating */
