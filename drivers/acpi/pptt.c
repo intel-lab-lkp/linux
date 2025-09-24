@@ -21,6 +21,15 @@
 #include <linux/cacheinfo.h>
 #include <acpi/processor.h>
 
+#define for_each_acpi_pptt_entry(table, entry)				\
+	for ((entry = ACPI_ADD_PTR(struct acpi_subtable_header, table,	\
+				  sizeof(struct acpi_table_pptt)));       \
+	     ((unsigned long)entry + sizeof(struct acpi_subtable_header)) \
+	     <= ((unsigned long)table + table->length);                   \
+	     (entry = ACPI_ADD_PTR(struct acpi_subtable_header, entry,    \
+				  (entry)->length)))
+
+
 static struct acpi_subtable_header *fetch_pptt_subtable(struct acpi_table_header *table_hdr,
 							u32 pptt_ref)
 {
@@ -177,14 +186,14 @@ acpi_find_cache_level(struct acpi_table_header *table_hdr,
 }
 
 /**
- * acpi_count_levels() - Given a PPTT table, and a CPU node, count the cache
- * levels and split cache levels (data/instruction).
+ * acpi_count_levels() - Given a PPTT table, and a CPU node, count the
+ * total number of levels and split cache levels (data/instruction).
  * @table_hdr: Pointer to the head of the PPTT table
  * @cpu_node: processor node we wish to count caches for
- * @levels: Number of levels if success.
  * @split_levels:	Number of split cache levels (data/instruction) if
  *			success. Can by NULL.
  *
+ * Return: number of levels.
  * Given a processor node containing a processing unit, walk into it and count
  * how many levels exist solely for it, and then walk up each level until we hit
  * the root node (ignore the package level because it may be possible to have
@@ -192,14 +201,18 @@ acpi_find_cache_level(struct acpi_table_header *table_hdr,
  * split cache levels (data/instruction) that exist at each level on the way
  * up.
  */
-static void acpi_count_levels(struct acpi_table_header *table_hdr,
-			      struct acpi_pptt_processor *cpu_node,
-			      unsigned int *levels, unsigned int *split_levels)
+static int acpi_count_levels(struct acpi_table_header *table_hdr,
+			     struct acpi_pptt_processor *cpu_node,
+			     unsigned int *split_levels)
 {
+	int starting_level = 0;
+
 	do {
-		acpi_find_cache_level(table_hdr, cpu_node, levels, split_levels, 0, 0);
+		acpi_find_cache_level(table_hdr, cpu_node, &starting_level, split_levels, 0, 0);
 		cpu_node = fetch_pptt_node(table_hdr, cpu_node->parent);
 	} while (cpu_node);
+
+	return starting_level;
 }
 
 /**
@@ -217,22 +230,16 @@ static int acpi_pptt_leaf_node(struct acpi_table_header *table_hdr,
 			       struct acpi_pptt_processor *node)
 {
 	struct acpi_subtable_header *entry;
-	unsigned long table_end;
 	u32 node_entry;
 	struct acpi_pptt_processor *cpu_node;
-	u32 proc_sz;
 
 	if (table_hdr->revision > 1)
 		return (node->flags & ACPI_PPTT_ACPI_LEAF_NODE);
 
-	table_end = (unsigned long)table_hdr + table_hdr->length;
 	node_entry = ACPI_PTR_DIFF(node, table_hdr);
-	entry = ACPI_ADD_PTR(struct acpi_subtable_header, table_hdr,
-			     sizeof(struct acpi_table_pptt));
-	proc_sz = sizeof(struct acpi_pptt_processor);
 
 	/* ignore subtable types that are smaller than a processor node */
-	while ((unsigned long)entry + proc_sz <= table_end) {
+	for_each_acpi_pptt_entry(table_hdr, entry) {
 		cpu_node = (struct acpi_pptt_processor *)entry;
 
 		if (entry->type == ACPI_PPTT_TYPE_PROCESSOR &&
@@ -240,9 +247,6 @@ static int acpi_pptt_leaf_node(struct acpi_table_header *table_hdr,
 			return 0;
 		if (entry->length == 0)
 			return 0;
-
-		entry = ACPI_ADD_PTR(struct acpi_subtable_header, entry,
-				     entry->length);
 	}
 	return 1;
 }
@@ -270,12 +274,10 @@ static struct acpi_pptt_processor *acpi_find_processor_node(struct acpi_table_he
 	u32 proc_sz;
 
 	table_end = (unsigned long)table_hdr + table_hdr->length;
-	entry = ACPI_ADD_PTR(struct acpi_subtable_header, table_hdr,
-			     sizeof(struct acpi_table_pptt));
 	proc_sz = sizeof(struct acpi_pptt_processor);
 
 	/* find the processor structure associated with this cpuid */
-	while ((unsigned long)entry + proc_sz <= table_end) {
+	for_each_acpi_pptt_entry(table_hdr, entry) {
 		cpu_node = (struct acpi_pptt_processor *)entry;
 
 		if (entry->length == 0) {
@@ -290,9 +292,6 @@ static struct acpi_pptt_processor *acpi_find_processor_node(struct acpi_table_he
 		     acpi_pptt_leaf_node(table_hdr, cpu_node)) {
 			return (struct acpi_pptt_processor *)entry;
 		}
-
-		entry = ACPI_ADD_PTR(struct acpi_subtable_header, entry,
-				     entry->length);
 	}
 
 	return NULL;
@@ -344,6 +343,27 @@ static struct acpi_pptt_cache *acpi_find_cache_node(struct acpi_table_header *ta
 	}
 
 	return found;
+}
+
+static struct acpi_pptt_cache *
+acpi_find_any_type_cache_node(struct acpi_table_header *table_hdr,
+			      u32 acpi_cpu_id, unsigned int level,
+			      struct acpi_pptt_processor **node)
+{
+	struct acpi_pptt_cache *cache;
+
+	cache = acpi_find_cache_node(table_hdr, acpi_cpu_id, CACHE_TYPE_UNIFIED,
+				     level, node);
+	if (cache)
+		return cache;
+
+	cache = acpi_find_cache_node(table_hdr, acpi_cpu_id, CACHE_TYPE_DATA,
+				     level, node);
+	if (cache)
+		return cache;
+
+	return acpi_find_cache_node(table_hdr, acpi_cpu_id, CACHE_TYPE_INST,
+				    level, node);
 }
 
 /**
@@ -645,7 +665,7 @@ int acpi_get_cache_info(unsigned int cpu, unsigned int *levels,
 	if (!cpu_node)
 		return -ENOENT;
 
-	acpi_count_levels(table, cpu_node, levels, split_levels);
+	*levels = acpi_count_levels(table, cpu_node, split_levels);
 
 	pr_debug("Cache Setup: last_level=%d split_levels=%d\n",
 		 *levels, split_levels ? *split_levels : -1);
@@ -816,4 +836,204 @@ int find_acpi_cpu_topology_hetero_id(unsigned int cpu)
 {
 	return find_acpi_cpu_topology_tag(cpu, PPTT_ABORT_PACKAGE,
 					  ACPI_PPTT_ACPI_IDENTICAL);
+}
+
+/**
+ * acpi_pptt_get_child_cpus() - Find all the CPUs below a PPTT processor node
+ * @table_hdr:		A reference to the PPTT table.
+ * @parent_node:	A pointer to the processor node in the @table_hdr.
+ * @cpus:		A cpumask to fill with the CPUs below @parent_node.
+ *
+ * Walks up the PPTT from every possible CPU to find if the provided
+ * @parent_node is a parent of this CPU.
+ */
+static void acpi_pptt_get_child_cpus(struct acpi_table_header *table_hdr,
+				     struct acpi_pptt_processor *parent_node,
+				     cpumask_t *cpus)
+{
+	struct acpi_pptt_processor *cpu_node;
+	u32 acpi_id;
+	int cpu;
+
+	cpumask_clear(cpus);
+
+	for_each_possible_cpu(cpu) {
+		acpi_id = get_acpi_id_for_cpu(cpu);
+		cpu_node = acpi_find_processor_node(table_hdr, acpi_id);
+
+		while (cpu_node) {
+			if (cpu_node == parent_node) {
+				cpumask_set_cpu(cpu, cpus);
+				break;
+			}
+			cpu_node = fetch_pptt_node(table_hdr, cpu_node->parent);
+		}
+	}
+}
+
+/**
+ * acpi_pptt_get_cpus_from_container() - Populate a cpumask with all CPUs in a
+ *                                       processor container
+ * @acpi_cpu_id:	The UID of the processor container.
+ * @cpus:		The resulting CPU mask.
+ *
+ * Find the specified Processor Container, and fill @cpus with all the cpus
+ * below it.
+ *
+ * Not all 'Processor' entries in the PPTT are either a CPU or a Processor
+ * Container, they may exist purely to describe a Private resource. CPUs
+ * have to be leaves, so a Processor Container is a non-leaf that has the
+ * 'ACPI Processor ID valid' flag set.
+ *
+ * Return: 0 for a complete walk, or an error if the mask is incomplete.
+ */
+void acpi_pptt_get_cpus_from_container(u32 acpi_cpu_id, cpumask_t *cpus)
+{
+	struct acpi_table_header *table_hdr;
+	struct acpi_subtable_header *entry;
+
+	cpumask_clear(cpus);
+
+	table_hdr = acpi_get_pptt();
+	if (!table_hdr)
+		return;
+
+	for_each_acpi_pptt_entry(table_hdr, entry) {
+		if (entry->type == ACPI_PPTT_TYPE_PROCESSOR) {
+			struct acpi_pptt_processor *cpu_node;
+
+			cpu_node = (struct acpi_pptt_processor *)entry;
+			if (cpu_node->flags & ACPI_PPTT_ACPI_PROCESSOR_ID_VALID &&
+			    !acpi_pptt_leaf_node(table_hdr, cpu_node) &&
+			    cpu_node->acpi_processor_id == acpi_cpu_id) {
+					acpi_pptt_get_child_cpus(table_hdr, cpu_node, cpus);
+					break;
+			}
+		}
+	}
+}
+
+/*
+ * find_acpi_cache_level_from_id() - Get the level of the specified cache
+ * @cache_id: The id field of the cache
+ *
+ * Determine the level relative to any CPU for the cache identified by
+ * cache_id. This allows the property to be found even if the CPUs are offline.
+ *
+ * The returned level can be used to group caches that are peers.
+ *
+ * The PPTT table must be rev 3 or later.
+ *
+ * If one CPUs L2 is shared with another as L3, this function will return
+ * an unpredictable value.
+ *
+ * Return: -ENOENT if the PPTT doesn't exist, the revision isn't supported or
+ * the cache cannot be found.
+ * Otherwise returns a value which represents the level of the specified cache.
+ */
+int find_acpi_cache_level_from_id(u32 cache_id)
+{
+	int level, cpu;
+	u32 acpi_cpu_id;
+	struct acpi_pptt_cache *cache;
+	struct acpi_table_header *table;
+	struct acpi_pptt_cache_v1 *cache_v1;
+	struct acpi_pptt_processor *cpu_node;
+
+	table = acpi_get_pptt();
+	if (!table)
+		return -ENOENT;
+
+	if (table->revision < 3)
+		return -ENOENT;
+
+	for_each_possible_cpu(cpu) {
+		acpi_cpu_id = get_acpi_id_for_cpu(cpu);
+		cpu_node = acpi_find_processor_node(table, acpi_cpu_id);
+		if (!cpu_node)
+			continue;
+
+		/* Start at 1 for L1 */
+		level = 1;
+		cache = acpi_find_any_type_cache_node(table, acpi_cpu_id, level,
+						      &cpu_node);
+		while (cache) {
+			cache_v1 = ACPI_ADD_PTR(struct acpi_pptt_cache_v1,
+						cache, sizeof(*cache));
+
+			if (cache->flags & ACPI_PPTT_CACHE_ID_VALID &&
+			    cache_v1->cache_id == cache_id)
+				return level;
+
+			level++;
+			cache = acpi_find_any_type_cache_node(table, acpi_cpu_id,
+							      level, &cpu_node);
+		}
+	}
+
+	return -ENOENT;
+}
+
+/**
+ * acpi_pptt_get_cpumask_from_cache_id() - Get the cpus associated with the
+ *					   specified cache
+ * @cache_id: The id field of the cache
+ * @cpus: Where to build the cpumask
+ *
+ * Determine which CPUs are below this cache in the PPTT. This allows the property
+ * to be found even if the CPUs are offline.
+ *
+ * The PPTT table must be rev 3 or later,
+ *
+ * Return: -ENOENT if the PPTT doesn't exist, or the cache cannot be found.
+ * Otherwise returns 0 and sets the cpus in the provided cpumask.
+ */
+int acpi_pptt_get_cpumask_from_cache_id(u32 cache_id, cpumask_t *cpus)
+{
+	int level, cpu;
+	u32 acpi_cpu_id;
+	struct acpi_pptt_cache *cache;
+	struct acpi_table_header *table;
+	struct acpi_pptt_cache_v1 *cache_v1;
+	struct acpi_pptt_processor *cpu_node;
+
+	cpumask_clear(cpus);
+
+	table = acpi_get_pptt();
+	if (!table)
+		return -ENOENT;
+
+	if (table->revision < 3)
+		return -ENOENT;
+
+	for_each_possible_cpu(cpu) {
+		acpi_cpu_id = get_acpi_id_for_cpu(cpu);
+		cpu_node = acpi_find_processor_node(table, acpi_cpu_id);
+		if (!cpu_node)
+			continue;
+
+		/* Start at 1 for L1 */
+		level = 1;
+		cache = acpi_find_any_type_cache_node(table, acpi_cpu_id, level,
+						      &cpu_node);
+		while (cache) {
+			cache_v1 = ACPI_ADD_PTR(struct acpi_pptt_cache_v1,
+						cache, sizeof(*cache));
+			if (!cache)
+				continue;
+
+			cache_v1 = ACPI_ADD_PTR(struct acpi_pptt_cache_v1,
+						cache, sizeof(*cache));
+
+			if (cache->flags & ACPI_PPTT_CACHE_ID_VALID &&
+			    cache_v1->cache_id == cache_id)
+				cpumask_set_cpu(cpu, cpus);
+
+			level++;
+			cache = acpi_find_any_type_cache_node(table, acpi_cpu_id,
+							      level, &cpu_node);
+		}
+	}
+
+	return 0;
 }
