@@ -274,6 +274,7 @@ int xt_check_entry_offsets(const void *base, const char *elems,
 int xt_check_table_hooks(const struct xt_table_info *info, unsigned int valid_hooks);
 
 unsigned int *xt_alloc_entry_offsets(unsigned int size);
+void xt_free_entry_offsets(unsigned int *offsets);
 bool xt_find_jump_offset(const unsigned int *offsets,
 			 unsigned int target, unsigned int size);
 

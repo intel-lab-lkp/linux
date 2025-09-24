@@ -965,10 +965,16 @@ unsigned int *xt_alloc_entry_offsets(unsigned int size)
 	if (size > XT_MAX_TABLE_SIZE / sizeof(unsigned int))
 		return NULL;
 
-	return kvcalloc(size, sizeof(unsigned int), GFP_KERNEL);
+	return __vcalloc(size, sizeof(unsigned int), GFP_KERNEL);
 
 }
 EXPORT_SYMBOL(xt_alloc_entry_offsets);
+
+void xt_free_entry_offsets(unsigned int *offsets)
+{
+	vfree(offsets);
+}
+EXPORT_SYMBOL(xt_free_entry_offsets);
 
 /**
  * xt_find_jump_offset - check if target is a valid jump offset
@@ -1190,7 +1196,7 @@ struct xt_table_info *xt_alloc_table_info(unsigned int size)
 	if (sz < sizeof(*info) || sz >= XT_MAX_TABLE_SIZE)
 		return NULL;
 
-	info = kvmalloc(sz, GFP_KERNEL_ACCOUNT);
+	info = __vmalloc(sz, GFP_KERNEL_ACCOUNT);
 	if (!info)
 		return NULL;
 
@@ -1210,7 +1216,7 @@ void xt_free_table_info(struct xt_table_info *info)
 		kvfree(info->jumpstack);
 	}
 
-	kvfree(info);
+	vfree(info);
 }
 EXPORT_SYMBOL(xt_free_table_info);
 
