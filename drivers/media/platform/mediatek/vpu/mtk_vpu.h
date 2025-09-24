@@ -120,7 +120,7 @@ int vpu_ipi_send(struct platform_device *pdev,
  *		device for using VPU API.
  *
  * Return: Return NULL if it is failed.
- * otherwise it is VPU's platform device
+ * otherwise it is VPU's platform device with incremented reference count
  **/
 struct platform_device *vpu_get_plat_device(struct platform_device *pdev);
 
