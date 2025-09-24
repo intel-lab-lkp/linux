@@ -322,6 +322,11 @@ static unsigned int comedi_buf_munge(struct comedi_subdevice *s,
 		return num_bytes;
 	}
 
+	if (async->cmd.chanlist_len == 0) {
+		async->munge_count += num_bytes;
+		return num_bytes;
+	}
+
 	/* don't munge partial samples */
 	num_bytes -= num_bytes % num_sample_bytes;
 	while (count < num_bytes) {
