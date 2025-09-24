@@ -15,11 +15,15 @@
 
 #include <linux/usb/composite.h>
 
+#define F_MIDI_OPT_STRING_DECLARE(name) \
+	char *name; \
+	bool name##_allocated; \
+
 struct f_midi_opts {
 	struct usb_function_instance	func_inst;
 	int				index;
-	char				*id;
-	bool				id_allocated;
+	F_MIDI_OPT_STRING_DECLARE(id);
+	F_MIDI_OPT_STRING_DECLARE(interface_string);
 	unsigned int			in_ports;
 	unsigned int			out_ports;
 	unsigned int			buflen;
