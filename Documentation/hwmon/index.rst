@@ -82,6 +82,7 @@ Hardware Monitoring Kernel Drivers
    gigabyte_waterforce
    gsc-hwmon
    gl518sm
+   gpd-fan
    gxp-fan-ctrl
    hih6130
    hp-wmi-sensors
@@ -173,13 +174,16 @@ Hardware Monitoring Kernel Drivers
    menf21bmc
    mlxreg-fan
    mp2856
+   mp2869
    mp2888
    mp2891
+   mp29502
    mp2975
    mp2993
    mp5023
    mp5920
    mp5990
+   mp5998
    mp9941
    mpq8785
    nct6683
