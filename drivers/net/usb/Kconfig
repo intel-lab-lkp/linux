@@ -85,17 +85,6 @@ config USB_PEGASUS
 	  To compile this driver as a module, choose M here: the
 	  module will be called pegasus.
 
-config USB_RTL8150
-	tristate "USB RTL8150 based ethernet device support"
-	select MII
-	help
-	  Say Y here if you have RTL8150 based usb-ethernet adapter.
-	  Send me <petkan@users.sourceforge.net> any comments you may have.
-	  You can also check for updates at <http://pegasus2.sourceforge.net/>.
-
-	  To compile this driver as a module, choose M here: the
-	  module will be called rtl8150.
-
 config USB_RTL8152
 	tristate "Realtek RTL8152/RTL8153 Based USB Ethernet Adapters"
 	select MII
