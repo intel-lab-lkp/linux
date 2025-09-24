@@ -712,6 +712,14 @@ static int __guest_check_page_state_range(struct pkvm_hyp_vm *vm, u64 addr,
 	return check_page_state_range(&vm->pgt, addr, size, &d);
 }
 
+static bool check_range_args(u64 start, u64 nr_pages, u64 *size)
+{
+	if (check_mul_overflow(nr_pages, PAGE_SIZE, size))
+		return false;
+
+	return start < (start + *size);
+}
+
 int __pkvm_host_share_hyp(u64 pfn)
 {
 	u64 phys = hyp_pfn_to_phys(pfn);
@@ -772,9 +780,12 @@ unlock:
 int __pkvm_host_donate_hyp(u64 pfn, u64 nr_pages)
 {
 	u64 phys = hyp_pfn_to_phys(pfn);
-	u64 size = PAGE_SIZE * nr_pages;
 	void *virt = __hyp_va(phys);
+	u64 size;
 	int ret;
+
+	if (!check_range_args(phys, nr_pages, &size))
+		return -EINVAL;
 
 	host_lock_component();
 	hyp_lock_component();
@@ -800,9 +811,12 @@ unlock:
 int __pkvm_hyp_donate_host(u64 pfn, u64 nr_pages)
 {
 	u64 phys = hyp_pfn_to_phys(pfn);
-	u64 size = PAGE_SIZE * nr_pages;
 	u64 virt = (u64)__hyp_va(phys);
+	u64 size;
 	int ret;
+
+	if (!check_range_args(phys, nr_pages, &size))
+		return -EINVAL;
 
 	host_lock_component();
 	hyp_lock_component();
@@ -884,8 +898,11 @@ void hyp_unpin_shared_mem(void *from, void *to)
 int __pkvm_host_share_ffa(u64 pfn, u64 nr_pages)
 {
 	u64 phys = hyp_pfn_to_phys(pfn);
-	u64 size = PAGE_SIZE * nr_pages;
+	u64 size;
 	int ret;
+
+	if (!check_range_args(phys, nr_pages, &size))
+		return -EINVAL;
 
 	host_lock_component();
 	ret = __host_check_page_state_range(phys, size, PKVM_PAGE_OWNED);
@@ -899,8 +916,11 @@ int __pkvm_host_share_ffa(u64 pfn, u64 nr_pages)
 int __pkvm_host_unshare_ffa(u64 pfn, u64 nr_pages)
 {
 	u64 phys = hyp_pfn_to_phys(pfn);
-	u64 size = PAGE_SIZE * nr_pages;
+	u64 size;
 	int ret;
+
+	if (!check_range_args(phys, nr_pages, &size))
+		return -EINVAL;
 
 	host_lock_component();
 	ret = __host_check_page_state_range(phys, size, PKVM_PAGE_SHARED_OWNED);
@@ -943,6 +963,9 @@ int __pkvm_host_share_guest(u64 pfn, u64 gfn, u64 nr_pages, struct pkvm_hyp_vcpu
 	int ret;
 
 	if (prot & ~KVM_PGTABLE_PROT_RWX)
+		return -EINVAL;
+
+	if (!check_range_args(phys, nr_pages, &size))
 		return -EINVAL;
 
 	ret = __guest_check_transition_size(phys, ipa, nr_pages, &size);
