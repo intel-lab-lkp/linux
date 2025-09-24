@@ -374,7 +374,7 @@ static void show_free_areas(unsigned int filter, nodemask_t *nodemask, int max_z
 
 			types[order] = 0;
 			for (type = 0; type < MIGRATE_TYPES; type++) {
-				if (!free_area_empty(area, type))
+				if (!free_areas_empty(area, type))
 					types[order] |= 1 << type;
 			}
 		}

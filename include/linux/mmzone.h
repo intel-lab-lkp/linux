@@ -123,6 +123,55 @@ static inline bool migratetype_is_mergeable(int mt)
 	return mt < MIGRATE_PCPTYPES;
 }
 
+#define NR_SENSITIVITIES 1
+
+/*
+ * A freetype is the index used to identify free lists (free area lists and
+ * pcplists). On non-ASI this is the same thing as a migratetype, on ASI it also
+ * encodes sensitivity. To avoid accidentally mixing the two identifiers,
+ * freetypes are a struct in the style of atomic_t.
+ */
+typedef struct {
+	int type;
+} freetype_t;
+
+#define NR_FREETYPES (MIGRATE_TYPES * NR_SENSITIVITIES)
+
+static inline freetype_t migrate_to_freetype(enum migratetype mt, bool sensitive)
+{
+	freetype_t freetype;
+
+	freetype.type = mt;
+	return freetype;
+}
+
+static inline enum migratetype free_to_migratetype(freetype_t freetype)
+{
+	return freetype.type;
+}
+
+static inline bool freetype_sensitive(freetype_t freetype)
+{
+	return false;
+}
+
+/* Convenience helper, return the freetype modified to have the migratetype. */
+static inline freetype_t freetype_with_migrate(freetype_t freetype,
+						   enum migratetype migratetype)
+{
+	return migrate_to_freetype(migratetype, freetype_sensitive(freetype));
+}
+
+static inline bool freetypes_equal(freetype_t a, freetype_t b)
+{
+	return a.type == b.type;
+}
+
+#define for_each_sensitivity(sensitive) \
+	for (int _s = 0; \
+	     sensitive = (bool)_s, _s < NR_SENSITIVITIES; \
+	     _s++)
+
 #define for_each_free_list(list, zone) \
 	for (unsigned int order = 0; order < NR_PAGE_ORDERS; order++) \
 		for (unsigned int type = 0; \
@@ -132,16 +181,29 @@ static inline bool migratetype_is_mergeable(int mt)
 
 extern int page_group_by_mobility_disabled;
 
+freetype_t get_pfnblock_freetype(const struct page *page, unsigned long pfn);
+
 #define get_pageblock_migratetype(page) \
 	get_pfnblock_migratetype(page, page_to_pfn(page))
+
+#define get_pageblock_freetype(page) \
+	get_pfnblock_freetype(page, page_to_pfn(page))
 
 #define folio_migratetype(folio) \
 	get_pageblock_migratetype(&folio->page)
 
 struct free_area {
-	struct list_head	free_list[MIGRATE_TYPES];
+	struct list_head	free_list[NR_FREETYPES];
 	unsigned long		nr_free;
 };
+
+static inline
+struct list_head *free_area_list(struct free_area *area, freetype_t type)
+{
+	VM_BUG_ON(type.type < 0 || type.type >= ARRAY_SIZE(area->free_list));
+	VM_BUG_ON(!area);
+	return &area->free_list[type.type];
+}
 
 struct pglist_data;
 
@@ -726,8 +788,10 @@ enum zone_watermarks {
 #else
 #define NR_PCP_THP 0
 #endif
+/* Note this is the number per sensitivity. */
 #define NR_LOWORDER_PCP_LISTS (MIGRATE_PCPTYPES * (PAGE_ALLOC_COSTLY_ORDER + 1))
-#define NR_PCP_LISTS (NR_LOWORDER_PCP_LISTS + NR_PCP_THP)
+#define NR_PCP_LISTS_PER_SENSITIVITY (NR_LOWORDER_PCP_LISTS + NR_PCP_THP)
+#define NR_PCP_LISTS (NR_PCP_LISTS_PER_SENSITIVITY * NR_SENSITIVITIES)
 
 /*
  * Flags used in pcp->flags field.

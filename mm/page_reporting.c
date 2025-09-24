@@ -113,10 +113,10 @@ page_reporting_drain(struct page_reporting_dev_info *prdev,
 	 */
 	do {
 		struct page *page = sg_page(sg);
-		int mt = get_pageblock_migratetype(page);
+		freetype_t ft = get_pageblock_freetype(page);
 		unsigned int order = get_order(sg->length);
 
-		__putback_isolated_page(page, order, mt);
+		__putback_isolated_page(page, order, ft);
 
 		/* If the pages were not reported due to error skip flagging */
 		if (!reported)

@@ -265,7 +265,7 @@ static void unset_migratetype_isolate(struct page *page)
 		WARN_ON_ONCE(!pageblock_unisolate_and_move_free_pages(zone, page));
 	} else {
 		clear_pageblock_isolate(page);
-		__putback_isolated_page(page, order, get_pageblock_migratetype(page));
+		__putback_isolated_page(page, order, get_pageblock_freetype(page));
 	}
 	zone->nr_isolate_pageblock--;
 out:
