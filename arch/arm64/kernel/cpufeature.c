@@ -95,6 +95,7 @@
 #include <asm/traps.h>
 #include <asm/vectors.h>
 #include <asm/virt.h>
+#include <asm/spectre.h>
 
 /* Kernel representation of AT_HWCAP and AT_HWCAP2 */
 static DECLARE_BITMAP(elf_hwcap, MAX_CPU_FEATURES) __read_mostly;
@@ -3931,6 +3932,14 @@ static void __init setup_system_capabilities(void)
 	 */
 	if (system_uses_ttbr0_pan())
 		pr_info("emulated: Privileged Access Never (PAN) using TTBR0_EL1 switching\n");
+
+	/*
+	 * Report Spectre mitigations status.
+	 */
+	if (spectre_v2_mitigations_off())
+		pr_info("spectre-v2 mitigation disabled by command line option\n");
+	if (spectre_v4_mitigations_off())
+		pr_info("spectre-v4 mitigation disabled by command-line option\n");
 }
 
 void __init setup_system_features(void)

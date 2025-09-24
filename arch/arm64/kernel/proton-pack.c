@@ -89,14 +89,9 @@ static int __init parse_spectre_v2_param(char *str)
 }
 early_param("nospectre_v2", parse_spectre_v2_param);
 
-static bool spectre_v2_mitigations_off(void)
+bool spectre_v2_mitigations_off(void)
 {
-	bool ret = __nospectre_v2 || cpu_mitigations_off();
-
-	if (ret)
-		pr_info_once("spectre-v2 mitigation disabled by command line option\n");
-
-	return ret;
+	return __nospectre_v2 || cpu_mitigations_off();
 }
 
 static const char *get_bhb_affected_string(enum mitigation_state bhb_state)
@@ -419,15 +414,10 @@ early_param("ssbd", parse_spectre_v4_param);
  * with contradictory parameters. The mitigation is always either "off",
  * "dynamic" or "on".
  */
-static bool spectre_v4_mitigations_off(void)
+bool spectre_v4_mitigations_off(void)
 {
-	bool ret = cpu_mitigations_off() ||
+	return cpu_mitigations_off() ||
 		   __spectre_v4_policy == SPECTRE_V4_POLICY_MITIGATION_DISABLED;
-
-	if (ret)
-		pr_info_once("spectre-v4 mitigation disabled by command-line option\n");
-
-	return ret;
 }
 
 /* Do we need to toggle the mitigation state on entry to/exit from the kernel? */
