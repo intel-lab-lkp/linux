@@ -1173,6 +1173,13 @@
 			};
 		};
 
+		ocotp: efuse@47510000 {
+			compatible = "fsl,imx94-ocotp";
+			reg = <0x0 0x47510000 0x0 0x10000>;
+			#address-cells = <1>;
+			#size-cells = <1>;
+		};
+
 		aips4: bus@49000000 {
 			compatible = "fsl,aips-bus", "simple-bus";
 			reg = <0x0 0x49000000 0x0 0x800000>;
