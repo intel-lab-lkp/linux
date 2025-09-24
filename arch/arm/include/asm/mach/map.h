@@ -60,6 +60,7 @@ extern int ioremap_page(unsigned long virt, unsigned long phys,
 #else
 #define iotable_init(map,num)	do { } while (0)
 #define vm_reserve_area_early(a,s,c)	do { } while (0)
+#define debug_ll_io_init()	do { } while (0)
 #endif
 
 #endif

@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: GPL-2.0
 config ARCH_VERSATILE
 	bool "ARM Ltd. Versatile family"
-	depends on ARCH_MULTI_V5
+	depends on ARCH_MULTI_V5 || ARM_SINGLE_VERSATILE
 	depends on CPU_LITTLE_ENDIAN
 	select ARM_AMBA
 	select ARM_TIMER_SP804
