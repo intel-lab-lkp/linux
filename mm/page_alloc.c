@@ -15,6 +15,7 @@
  *          (lots of bits borrowed from Ingo Molnar & Andrew Morton)
  */
 
+#include <linux/asi.h>
 #include <linux/stddef.h>
 #include <linux/mm.h>
 #include <linux/highmem.h>
@@ -1161,6 +1162,33 @@ static const char *page_bad_reason(struct page *page, unsigned long flags)
 	return bad_reason;
 }
 
+static bool page_asi_mapping_bad(struct page *page, unsigned int order, bool sensitive)
+{
+#ifdef CONFIG_MITIGATION_ADDRESS_SPACE_ISOLATION
+	if (asi_enabled_static()) {
+		struct page *block_page = page;
+
+		/*
+		 * ASI mappings are at pageblock granularity. Check they match
+		 * the requested sensitivity.
+		 */
+		while (block_page < page + (1 << order)) {
+			if (direct_map_sensitive(block_page) != sensitive) {
+				bad_page(page,
+					sensitive ?
+					"page unexpectedly nonsensitive" :
+					"page unexpectedly sensitive");
+				return true;
+			}
+
+			block_page += pageblock_nr_pages;
+		}
+	}
+#endif /* CONFIG_MITIGATION_ADDRESS_SPACE_ISOLATION */
+
+	return false;
+}
+
 static inline bool free_page_is_bad(struct page *page)
 {
 	if (likely(page_expected_state(page, PAGE_FLAGS_CHECK_AT_FREE)))
@@ -1471,8 +1499,14 @@ __always_inline bool free_pages_prepare(struct page *page,
 		page->page_type = UINT_MAX;
 
 	if (is_check_pages_enabled()) {
+		freetype_t ft = get_pageblock_freetype(page);
+
 		if (free_page_is_bad(page))
 			bad++;
+
+		if (!bad)
+			bad += page_asi_mapping_bad(page, order,
+						    freetype_sensitive(ft));
 		if (bad)
 			return false;
 	}
@@ -1840,7 +1874,8 @@ static bool check_new_page(struct page *page)
 	return true;
 }
 
-static inline bool check_new_pages(struct page *page, unsigned int order)
+static inline bool check_new_pages(struct page *page, unsigned int order,
+				   bool sensitive)
 {
 	if (!is_check_pages_enabled())
 		return false;
@@ -1852,7 +1887,7 @@ static inline bool check_new_pages(struct page *page, unsigned int order)
 			return true;
 	}
 
-	return false;
+	return page_asi_mapping_bad(page, order, sensitive);
 }
 
 static inline bool should_skip_kasan_unpoison(gfp_t flags)
@@ -3393,7 +3428,7 @@ struct page *rmqueue_buddy(struct zone *preferred_zone, struct zone *zone,
 		if (!page)
 			return NULL;
 
-	} while (check_new_pages(page, order));
+	} while (check_new_pages(page, order, freetype_sensitive(freetype)));
 
 	__count_zid_vm_events(PGALLOC, page_zonenum(page), 1 << order);
 	zone_statistics(preferred_zone, zone, 1);
@@ -3478,7 +3513,7 @@ struct page *__rmqueue_pcplist(struct zone *zone, unsigned int order,
 		page = list_first_entry(list, struct page, pcp_list);
 		list_del(&page->pcp_list);
 		pcp->count -= 1 << order;
-	} while (check_new_pages(page, order));
+	} while (check_new_pages(page, order, freetype_sensitive(freetype)));
 
 	return page;
 }
@@ -7231,7 +7266,7 @@ int alloc_contig_range_noprof(unsigned long start, unsigned long end,
 	} else if (start == outer_start && end == outer_end && is_power_of_2(end - start)) {
 		struct page *head = pfn_to_page(start);
 
-		check_new_pages(head, order);
+		check_new_pages(head, order, gfp_mask & __GFP_SENSITIVE);
 		prep_new_page(head, order, gfp_mask, 0);
 		set_page_refcounted(head);
 	} else {

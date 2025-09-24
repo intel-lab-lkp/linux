@@ -94,12 +94,15 @@ bool kernel_page_present(struct page *page);
 
 #ifdef CONFIG_MITIGATION_ADDRESS_SPACE_ISOLATION
 int set_direct_map_sensitive(struct page *page, int num_pageblocks, bool sensitive);
+bool direct_map_sensitive(struct page *page);
 #else /* CONFIG_MITIGATION_ADDRESS_SPACE_ISOLATION */
 static inline
 int set_direct_map_sensitive(struct page *page, int num_pageblocks, bool sensitive)
 {
 	return 0;
 }
+
+static inline bool direct_map_sensitive(struct page *page) { return false; }
 #endif /* CONFIG_MITIGATION_ADDRESS_SPACE_ISOLATION */
 
 extern int kernel_set_to_readonly;

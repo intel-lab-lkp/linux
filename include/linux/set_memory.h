@@ -50,6 +50,8 @@ static inline int set_direct_map_sensitive(struct page *page,
 	return 0;
 }
 
+static inline bool direct_map_sensitive(struct page *page) { return false; }
+
 #else /* CONFIG_ARCH_HAS_SET_DIRECT_MAP */
 /*
  * Some architectures, e.g. ARM64 can disable direct map modifications at

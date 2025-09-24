@@ -2721,6 +2721,37 @@ int set_direct_map_sensitive(struct page *page, int num_pageblocks, bool sensiti
 
 	return __change_page_attr_set_clr(&cpa, 1);
 }
+
+/*
+ * Walk the pagetable to check if the page is mapped into all ASI restricted
+ * address spaces.
+ */
+bool direct_map_sensitive(struct page *page)
+{
+	unsigned long addr = (unsigned long)page_address(page);
+	pgd_t *pgd = pgd_offset_pgd(asi_nonsensitive_pgd, addr);
+	unsigned int level;
+	bool nx, rw;
+	pte_t *pte = lookup_address_in_pgd_attr(pgd, addr, &level, &nx, &rw);
+
+	switch (level) {
+	case PG_LEVEL_4K:
+		/*
+		 * lookup_address_in_pgd_attr() still returns the PTE for
+		 * non-present 4K pages.
+		 */
+		return !pte_present(*pte);
+	case PG_LEVEL_2M:
+		/*
+		 * pmd_present() checks PSE to deal with some hugetlb
+		 * logic. That's not relevant for the direct map so just
+		 * explicitly check the real P bit.
+		 */
+		return !(pmd_flags(*(pmd_t *)pte) & _PAGE_PRESENT);
+	default:
+		return !pte;
+	}
+}
 #endif /* CONFIG_MITIGATION_ADDRESS_SPACE_ISOLATION */
 
 #ifdef CONFIG_DEBUG_PAGEALLOC
