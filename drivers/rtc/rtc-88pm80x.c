@@ -173,7 +173,7 @@ static int pm80x_rtc_set_alarm(struct device *dev, struct rtc_wkalrm *alrm)
 	struct rtc_time now_tm, alarm_tm;
 	unsigned long ticks, base, data;
 	unsigned char buf[4];
-	int mask;
+	int mask, ret;
 
 	regmap_update_bits(info->map, PM800_RTC_CONTROL, PM800_ALARM1_EN, 0);
 
@@ -202,7 +202,9 @@ static int pm80x_rtc_set_alarm(struct device *dev, struct rtc_wkalrm *alrm)
 	buf[1] = (data >> 8) & 0xff;
 	buf[2] = (data >> 16) & 0xff;
 	buf[3] = (data >> 24) & 0xff;
-	regmap_raw_write(info->map, PM800_RTC_EXPIRE1_1, buf, 4);
+	ret = regmap_raw_write(info->map, PM800_RTC_EXPIRE1_1, buf, 4);
+	if (ret)
+		return ret;
 	if (alrm->enabled) {
 		mask = PM800_ALARM | PM800_ALARM_WAKEUP | PM800_ALARM1_EN;
 		regmap_update_bits(info->map, PM800_RTC_CONTROL, mask, mask);
