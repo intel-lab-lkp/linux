@@ -5434,28 +5434,42 @@ static int decide_stripe_size(struct btrfs_fs_devices *fs_devices,
 	}
 }
 
-static void chunk_map_device_set_bits(struct btrfs_chunk_map *map, unsigned int bits)
+static int chunk_map_device_set_bits(struct btrfs_chunk_map *map, unsigned int bits)
 {
+	int ret;
+
 	for (int i = 0; i < map->num_stripes; i++) {
 		struct btrfs_io_stripe *stripe = &map->stripes[i];
 		struct btrfs_device *device = stripe->dev;
 
-		btrfs_set_extent_bit(&device->alloc_state, stripe->physical,
-				     stripe->physical + map->stripe_size - 1,
-				     bits | EXTENT_NOWAIT, NULL);
+		ret = btrfs_set_extent_bit(
+			&device->alloc_state, stripe->physical,
+			stripe->physical + map->stripe_size - 1,
+			bits | EXTENT_NOWAIT, NULL);
+		if (ret)
+			return ret;
 	}
+	ret = 0;
+	return ret;
 }
 
-static void chunk_map_device_clear_bits(struct btrfs_chunk_map *map, unsigned int bits)
+static int chunk_map_device_clear_bits(struct btrfs_chunk_map *map, unsigned int bits)
 {
+	int ret;
+
 	for (int i = 0; i < map->num_stripes; i++) {
 		struct btrfs_io_stripe *stripe = &map->stripes[i];
 		struct btrfs_device *device = stripe->dev;
 
-		btrfs_clear_extent_bit(&device->alloc_state, stripe->physical,
-				       stripe->physical + map->stripe_size - 1,
-				       bits | EXTENT_NOWAIT, NULL);
+		ret = btrfs_clear_extent_bit(
+			&device->alloc_state, stripe->physical,
+			stripe->physical + map->stripe_size - 1,
+			bits | EXTENT_NOWAIT, NULL);
+		if (ret)
+			return ret;
 	}
+	ret = 0;
+	return ret;
 }
 
 void btrfs_remove_chunk_map(struct btrfs_fs_info *fs_info, struct btrfs_chunk_map *map)
@@ -5488,6 +5502,7 @@ static int btrfs_chunk_map_cmp(const struct rb_node *new,
 EXPORT_FOR_TESTS
 int btrfs_add_chunk_map(struct btrfs_fs_info *fs_info, struct btrfs_chunk_map *map)
 {
+	int ret;
 	struct rb_node *exist;
 
 	write_lock(&fs_info->mapping_tree_lock);
@@ -5498,11 +5513,19 @@ int btrfs_add_chunk_map(struct btrfs_fs_info *fs_info, struct btrfs_chunk_map *m
 		write_unlock(&fs_info->mapping_tree_lock);
 		return -EEXIST;
 	}
-	chunk_map_device_set_bits(map, CHUNK_ALLOCATED);
-	chunk_map_device_clear_bits(map, CHUNK_TRIMMED);
-	write_unlock(&fs_info->mapping_tree_lock);
 
-	return 0;
+	ret = chunk_map_device_set_bits(map, CHUNK_ALLOCATED);
+	if (ret)
+		goto out;
+	ret = chunk_map_device_clear_bits(map, CHUNK_TRIMMED);
+
+out:
+	if (ret) {
+		rb_erase_cached(&map->rb_node, &fs_info->mapping_tree);
+		RB_CLEAR_NODE(&map->rb_node);
+	}
+	write_unlock(&fs_info->mapping_tree_lock);
+	return ret;
 }
 
 EXPORT_FOR_TESTS
