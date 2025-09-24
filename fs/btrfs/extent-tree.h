@@ -23,6 +23,24 @@ enum btrfs_extent_allocation_policy {
 	BTRFS_EXTENT_ALLOC_ZONED,
 };
 
+/*
+ * Enum for find_free_extent skip reasons used in trace events.
+ * Each enum corresponds to a specific unhappy path in the allocator.
+ */
+enum {
+	FFE_SKIP_PREPARE_ALLOC_FAILED,
+	FFE_SKIP_HINTED_BG_INVALID,
+	FFE_SKIP_BG_READ_ONLY,
+	FFE_SKIP_BG_WRONG_FLAGS,
+	FFE_SKIP_BG_CACHE_FAILED,
+	FFE_SKIP_BG_CACHE_ERROR,
+	FFE_SKIP_SIZE_CLASS_MISMATCH,
+	FFE_SKIP_DO_ALLOCATION_FAILED,
+	FFE_SKIP_EXTENDS_BEYOND_BG,
+	FFE_SKIP_FOUND_BEFORE_SEARCH_START,
+	FFE_SKIP_ADD_RESERVED_FAILED,
+};
+
 struct find_free_extent_ctl {
 	/* Basic allocation info */
 	u64 ram_bytes;
@@ -140,9 +158,9 @@ int btrfs_reserve_extent(struct btrfs_root *root, u64 ram_bytes, u64 num_bytes,
 			 u64 min_alloc_size, u64 empty_size, u64 hint_byte,
 			 struct btrfs_key *ins, int is_data, int delalloc);
 int btrfs_inc_ref(struct btrfs_trans_handle *trans, struct btrfs_root *root,
-		  struct extent_buffer *buf, int full_backref);
+		  struct extent_buffer *buf, bool full_backref);
 int btrfs_dec_ref(struct btrfs_trans_handle *trans, struct btrfs_root *root,
-		  struct extent_buffer *buf, int full_backref);
+		  struct extent_buffer *buf, bool full_backref);
 int btrfs_set_disk_extent_flags(struct btrfs_trans_handle *trans,
 				struct extent_buffer *eb, u64 flags);
 int btrfs_free_extent(struct btrfs_trans_handle *trans, struct btrfs_ref *ref);
@@ -155,8 +173,7 @@ int btrfs_pin_reserved_extent(struct btrfs_trans_handle *trans,
 			      const struct extent_buffer *eb);
 int btrfs_finish_extent_commit(struct btrfs_trans_handle *trans);
 int btrfs_inc_extent_ref(struct btrfs_trans_handle *trans, struct btrfs_ref *generic_ref);
-int btrfs_drop_snapshot(struct btrfs_root *root, int update_ref,
-				     int for_reloc);
+int btrfs_drop_snapshot(struct btrfs_root *root, bool update_ref, bool for_reloc);
 int btrfs_drop_subtree(struct btrfs_trans_handle *trans,
 			struct btrfs_root *root,
 			struct extent_buffer *node,

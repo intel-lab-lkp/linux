@@ -103,6 +103,18 @@ struct find_free_extent_ctl;
 	EM( COMMIT_TRANS,		"COMMIT_TRANS")			\
 	EMe(RESET_ZONES,		"RESET_ZONES")
 
+#define FIND_FREE_EXTENT_SKIP_REASONS						\
+	EM( FFE_SKIP_PREPARE_ALLOC_FAILED,	"PREPARE_ALLOC_FAILED")		\
+	EM( FFE_SKIP_HINTED_BG_INVALID,		"HINTED_BG_INVALID")		\
+	EM( FFE_SKIP_BG_READ_ONLY,		"BG_READ_ONLY")			\
+	EM( FFE_SKIP_BG_WRONG_FLAGS,		"BG_WRONG_FLAGS")		\
+	EM( FFE_SKIP_BG_CACHE_ERROR,		"BG_CACHE_ERROR")		\
+	EM( FFE_SKIP_SIZE_CLASS_MISMATCH,	"SIZE_CLASS_MISMATCH")		\
+	EM( FFE_SKIP_DO_ALLOCATION_FAILED,	"DO_ALLOCATION_FAILED")		\
+	EM( FFE_SKIP_EXTENDS_BEYOND_BG,		"EXTENDS_BEYOND_BG")		\
+	EM( FFE_SKIP_FOUND_BEFORE_SEARCH_START,	"FOUND_BEFORE_SEARCH_START")	\
+	EMe(FFE_SKIP_ADD_RESERVED_FAILED,	"ADD_RESERVED_FAILED")
+
 /*
  * First define the enums in the above macros to be exported to userspace via
  * TRACE_DEFINE_ENUM().
@@ -118,6 +130,7 @@ FI_TYPES
 QGROUP_RSV_TYPES
 IO_TREE_OWNER
 FLUSH_STATES
+FIND_FREE_EXTENT_SKIP_REASONS
 
 /*
  * Now redefine the EM and EMe macros to map the enums to the strings that will
@@ -1386,6 +1399,58 @@ DEFINE_EVENT(btrfs__reserve_extent, btrfs_reserve_extent_cluster,
 		 const struct find_free_extent_ctl *ffe_ctl),
 
 	TP_ARGS(block_group, ffe_ctl)
+);
+
+TRACE_EVENT(btrfs_find_free_extent_skip,
+
+	TP_PROTO(const struct btrfs_root *root,
+		 const struct find_free_extent_ctl *ffe_ctl,
+		 const struct btrfs_block_group *block_group,
+		 int reason,
+		 s64 error_or_value),
+
+	TP_ARGS(root, ffe_ctl, block_group, reason, error_or_value),
+
+	TP_STRUCT__entry_btrfs(
+		__field(	u64,	root_objectid		)
+		__field(	u64,	num_bytes		)
+		__field(	u64,	empty_size		)
+		__field(	u64,	flags			)
+		__field(	int,	loop			)
+		__field(	bool,	hinted			)
+		__field(	int,	size_class		)
+		__field(	u64,	bg_start		)
+		__field(	u64,	bg_length		)
+		__field(	u64,	bg_flags		)
+		__field(	int,	reason			)
+		__field(	s64,	error_or_value		)
+	),
+
+	TP_fast_assign_btrfs(root->fs_info,
+		__entry->root_objectid	= btrfs_root_id(root);
+		__entry->num_bytes	= ffe_ctl->num_bytes;
+		__entry->empty_size	= ffe_ctl->empty_size;
+		__entry->flags		= ffe_ctl->flags;
+		__entry->loop		= ffe_ctl->loop;
+		__entry->hinted		= ffe_ctl->hinted;
+		__entry->size_class	= ffe_ctl->size_class;
+		__entry->bg_start	= block_group ? block_group->start : 0;
+		__entry->bg_length	= block_group ? block_group->length : 0;
+		__entry->bg_flags	= block_group ? block_group->flags : 0;
+		__entry->reason		= reason;
+		__entry->error_or_value	= error_or_value;
+	),
+
+	TP_printk_btrfs(
+"root=%llu(%s) len=%llu empty_size=%llu flags=%llu(%s) loop=%d hinted=%d size_class=%d bg=[%llu+%llu] bg_flags=%llu(%s) reason=%s error_or_value=%lld",
+		  show_root_type(__entry->root_objectid),
+		  __entry->num_bytes, __entry->empty_size, __entry->flags,
+		  __print_flags((unsigned long)__entry->flags, "|", BTRFS_GROUP_FLAGS),
+		  __entry->loop, __entry->hinted, __entry->size_class,
+		  __entry->bg_start, __entry->bg_length, __entry->bg_flags,
+		  __print_flags((unsigned long)__entry->bg_flags, "|", BTRFS_GROUP_FLAGS),
+		  __print_symbolic(__entry->reason, FIND_FREE_EXTENT_SKIP_REASONS),
+		  __entry->error_or_value)
 );
 
 TRACE_EVENT(btrfs_find_cluster,
