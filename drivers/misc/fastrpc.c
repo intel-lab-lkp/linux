@@ -275,6 +275,7 @@ struct fastrpc_session_ctx {
 	bool used;
 	bool valid;
 	u32 sid_pos;
+	u32 pa_bits;
 };
 
 struct fastrpc_channel_ctx {
@@ -2179,9 +2180,9 @@ static int fastrpc_cb_probe(struct platform_device *pdev)
 	sess->used = false;
 	sess->valid = true;
 	sess->dev = dev;
+	sess->pa_bits = cctx->dma_mask;
 	/* Configure where sid will be prepended to pa */
-	sess->sid_pos =
-		(cctx->iova_format ? SID_POS_IN_IOVA : DSP_DEFAULT_BUS_WIDTH);
+	sess->sid_pos = (cctx->iova_format ? SID_POS_IN_IOVA : sess->pa_bits);
 
 	if (of_property_read_u32(dev->of_node, "reg", &sess->sid))
 		dev_info(dev, "FastRPC Session ID not specified in DT\n");
@@ -2198,9 +2199,9 @@ static int fastrpc_cb_probe(struct platform_device *pdev)
 		}
 	}
 	spin_unlock_irqrestore(&cctx->lock, flags);
-	rc = dma_set_mask(dev, DMA_BIT_MASK(32));
+	rc = dma_set_mask(dev, DMA_BIT_MASK(sess->pa_bits));
 	if (rc) {
-		dev_err(dev, "32-bit DMA enable failed\n");
+		dev_err(dev, "%u-bit DMA enable failed\n", sess->pa_bits);
 		return rc;
 	}
 
@@ -2287,10 +2288,12 @@ static int fastrpc_get_domain_id(const char *domain)
 
 struct fastrpc_soc_data {
 	u32 dsp_iova_format;
+	u32 cdsp_dma_mask;
 };
 
 static const struct fastrpc_soc_data kaanapali_soc_data = {
 	.dsp_iova_format = 1,
+	.cdsp_dma_mask = 34,
 };
 
 static const struct of_device_id qcom_soc_match_table[] = {
@@ -2310,6 +2313,7 @@ static int fastrpc_rpmsg_probe(struct rpmsg_device *rpdev)
 	const struct of_device_id *match;
 	const struct fastrpc_soc_data *soc_data = NULL;
 	u32 iova_format = 0;
+	u32 ubs = DSP_DEFAULT_BUS_WIDTH;
 
 	root = of_find_node_by_path("/");
 	if (!root)
@@ -2322,6 +2326,7 @@ static int fastrpc_rpmsg_probe(struct rpmsg_device *rpdev)
 	} else {
 		soc_data = match->data;
 		iova_format = soc_data->dsp_iova_format;
+		ubs = soc_data->cdsp_dma_mask;
 	}
 
 	err = of_property_read_string(rdev->of_node, "label", &domain);
@@ -2404,6 +2409,7 @@ static int fastrpc_rpmsg_probe(struct rpmsg_device *rpdev)
 	}
 	/* determine where sid needs to be prepended to pa based on iova_format */
 	data->iova_format = iova_format;
+	data->dma_mask = (domain_id == CDSP_DOMAIN_ID ? ubs : DSP_DEFAULT_BUS_WIDTH);
 	kref_init(&data->refcount);
 
 	dev_set_drvdata(&rpdev->dev, data);
