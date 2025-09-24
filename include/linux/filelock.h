@@ -160,6 +160,19 @@ struct file_lock_context {
 	struct list_head	flc_lease;
 };
 
+#define LEASE_BREAK_LEASE		BIT(0)	// break leases and delegations
+#define LEASE_BREAK_DELEG		BIT(1)	// break delegations only
+#define LEASE_BREAK_LAYOUT		BIT(2)	// break layouts only
+#define LEASE_BREAK_NONBLOCK		BIT(3)	// non-blocking break
+#define LEASE_BREAK_OPEN_RDONLY		BIT(4)	// readonly open event
+#define LEASE_BREAK_DIR_CREATE		BIT(6)	// dir deleg create event
+#define LEASE_BREAK_DIR_DELETE		BIT(7)	// dir deleg delete event
+#define LEASE_BREAK_DIR_RENAME		BIT(8)	// dir deleg rename event
+
+#define LEASE_BREAK_DIR_REASON_MASK	(LEASE_BREAK_DIR_CREATE | \
+					 LEASE_BREAK_DIR_DELETE | \
+					 LEASE_BREAK_DIR_RENAME)
+
 #ifdef CONFIG_FILE_LOCKING
 int fcntl_getlk(struct file *, unsigned int, struct flock *);
 int fcntl_setlk(unsigned int, struct file *, unsigned int,
@@ -226,12 +239,6 @@ int locks_lock_inode_wait(struct inode *inode, struct file_lock *fl);
 void locks_init_lease(struct file_lease *);
 void locks_free_lease(struct file_lease *fl);
 struct file_lease *locks_alloc_lease(void);
-
-#define LEASE_BREAK_LEASE		BIT(0)	// break leases and delegations
-#define LEASE_BREAK_DELEG		BIT(1)	// break delegations only
-#define LEASE_BREAK_LAYOUT		BIT(2)	// break layouts only
-#define LEASE_BREAK_NONBLOCK		BIT(3)	// non-blocking break
-#define LEASE_BREAK_OPEN_RDONLY		BIT(4)	// readonly open event
 
 int __break_lease(struct inode *inode, unsigned int flags);
 void lease_get_mtime(struct inode *, struct timespec64 *time);
@@ -500,25 +507,41 @@ static inline int break_deleg(struct inode *inode, unsigned int flags)
 	return 0;
 }
 
-static inline int try_break_deleg(struct inode *inode, struct inode **delegated_inode)
+struct delegated_inode {
+	struct inode *di_inode;
+	unsigned int di_reason; // LEASE_BREAK_* flags
+};
+
+static inline struct inode *deleg_inode(struct delegated_inode *di)
+{
+	return di->di_inode;
+}
+
+static inline int try_break_deleg(struct inode *inode, unsigned int reason,
+				  struct delegated_inode *di)
 {
 	int ret;
 
-	ret = break_deleg(inode, LEASE_BREAK_NONBLOCK);
-	if (ret == -EWOULDBLOCK && delegated_inode) {
-		*delegated_inode = inode;
+	/* Clear any extraneous reason bits, after warning if any are set */
+	WARN_ON_ONCE(reason & ~LEASE_BREAK_DIR_REASON_MASK);
+	reason &= LEASE_BREAK_DIR_REASON_MASK;
+
+	ret = break_deleg(inode, reason | LEASE_BREAK_NONBLOCK);
+	if (ret == -EWOULDBLOCK && di) {
+		di->di_inode = inode;
+		di->di_reason = reason;
 		ihold(inode);
 	}
 	return ret;
 }
 
-static inline int break_deleg_wait(struct inode **delegated_inode)
+static inline int break_deleg_wait(struct delegated_inode *di)
 {
 	int ret;
 
-	ret = break_deleg(*delegated_inode, 0);
-	iput(*delegated_inode);
-	*delegated_inode = NULL;
+	ret = break_deleg(di->di_inode, di->di_reason);
+	iput(di->di_inode);
+	di->di_inode = NULL;
 	return ret;
 }
 
@@ -537,6 +560,13 @@ static inline int break_layout(struct inode *inode, bool wait)
 }
 
 #else /* !CONFIG_FILE_LOCKING */
+struct delegated_inode { };
+
+static inline struct inode *deleg_inode(struct delegated_inode *di)
+{
+	return NULL;
+}
+
 static inline int break_lease(struct inode *inode, bool wait)
 {
 	return 0;
@@ -547,12 +577,13 @@ static inline int break_deleg(struct inode *inode, unsigned int flags)
 	return 0;
 }
 
-static inline int try_break_deleg(struct inode *inode, struct inode **delegated_inode)
+static inline int try_break_deleg(struct inode *inode, unsigned int reason,
+				  struct delegated_inode *delegated_inode)
 {
 	return 0;
 }
 
-static inline int break_deleg_wait(struct inode **delegated_inode)
+static inline int break_deleg_wait(struct delegated_inode *delegated_inode)
 {
 	BUG();
 	return 0;

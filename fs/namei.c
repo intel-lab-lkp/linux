@@ -3372,7 +3372,7 @@ static inline umode_t vfs_prepare_mode(struct mnt_idmap *idmap,
 
 static int __vfs_create(struct mnt_idmap *idmap, struct inode *dir,
 			struct dentry *dentry, umode_t mode, bool want_excl,
-			struct inode **delegated_inode)
+			struct delegated_inode *delegated_inode)
 {
 	int error;
 
@@ -3387,7 +3387,7 @@ static int __vfs_create(struct mnt_idmap *idmap, struct inode *dir,
 	error = security_inode_create(dir, dentry, mode);
 	if (error)
 		return error;
-	error = try_break_deleg(dir, delegated_inode);
+	error = try_break_deleg(dir, LEASE_BREAK_DIR_CREATE, delegated_inode);
 	if (error)
 		return error;
 	error = dir->i_op->create(idmap, dir, dentry, mode, want_excl);
@@ -3618,8 +3618,8 @@ static struct dentry *atomic_open(struct nameidata *nd, struct dentry *dentry,
  * An error code is returned on failure.
  */
 static struct dentry *lookup_open(struct nameidata *nd, struct file *file,
-				  const struct open_flags *op,
-				  bool got_write, struct inode **delegated_inode)
+				  const struct open_flags *op, bool got_write,
+				  struct delegated_inode *delegated_inode)
 {
 	struct mnt_idmap *idmap;
 	struct dentry *dir = nd->path.dentry;
@@ -3709,7 +3709,7 @@ static struct dentry *lookup_open(struct nameidata *nd, struct file *file,
 	/* Negative dentry, just create the file */
 	if (!dentry->d_inode && (open_flag & O_CREAT)) {
 		/* but break the directory lease first! */
-		error = try_break_deleg(dir_inode, delegated_inode);
+		error = try_break_deleg(dir_inode, LEASE_BREAK_DIR_CREATE, delegated_inode);
 		if (error)
 			goto out_dput;
 
@@ -3776,7 +3776,7 @@ static const char *open_last_lookups(struct nameidata *nd,
 		   struct file *file, const struct open_flags *op)
 {
 	struct dentry *dir = nd->path.dentry;
-	struct inode *delegated_inode = NULL;
+	struct delegated_inode delegated_inode = { };
 	int open_flag = op->open_flag;
 	bool got_write = false;
 	struct dentry *dentry;
@@ -3836,7 +3836,7 @@ retry:
 		mnt_drop_write(nd->path.mnt);
 
 	if (IS_ERR(dentry)) {
-		if (delegated_inode) {
+		if (deleg_inode(&delegated_inode)) {
 			int error = break_deleg_wait(&delegated_inode);
 
 			if (!error)
@@ -4217,7 +4217,7 @@ EXPORT_SYMBOL(user_path_create);
 
 static int __vfs_mknod(struct mnt_idmap *idmap, struct inode *dir,
 		       struct dentry *dentry, umode_t mode, dev_t dev,
-		       struct inode **delegated_inode)
+		       struct delegated_inode *delegated_inode)
 {
 	bool is_whiteout = S_ISCHR(mode) && dev == WHITEOUT_DEV;
 	int error = may_create(idmap, dir, dentry);
@@ -4241,7 +4241,7 @@ static int __vfs_mknod(struct mnt_idmap *idmap, struct inode *dir,
 	if (error)
 		return error;
 
-	error = try_break_deleg(dir, delegated_inode);
+	error = try_break_deleg(dir, LEASE_BREAK_DIR_CREATE, delegated_inode);
 	if (error)
 		return error;
 
@@ -4299,7 +4299,7 @@ static int do_mknodat(int dfd, struct filename *name, umode_t mode,
 	struct path path;
 	int error;
 	unsigned int lookup_flags = 0;
-	struct inode *delegated_inode = NULL;
+	struct delegated_inode delegated_inode = { };
 
 	error = may_mknod(mode);
 	if (error)
@@ -4337,7 +4337,7 @@ retry:
 	}
 out2:
 	done_path_create(&path, dentry);
-	if (delegated_inode) {
+	if (deleg_inode(&delegated_inode)) {
 		error = break_deleg_wait(&delegated_inode);
 		if (!error)
 			goto retry;
@@ -4386,7 +4386,7 @@ SYSCALL_DEFINE3(mknod, const char __user *, filename, umode_t, mode, unsigned, d
  */
 struct dentry *vfs_mkdir(struct mnt_idmap *idmap, struct inode *dir,
 			 struct dentry *dentry, umode_t mode,
-			 struct inode **delegated_inode)
+			 struct delegated_inode *delegated_inode)
 {
 	int error;
 	unsigned max_links = dir->i_sb->s_max_links;
@@ -4409,7 +4409,7 @@ struct dentry *vfs_mkdir(struct mnt_idmap *idmap, struct inode *dir,
 	if (max_links && dir->i_nlink >= max_links)
 		goto err;
 
-	error = try_break_deleg(dir, delegated_inode);
+	error = try_break_deleg(dir, LEASE_BREAK_DIR_CREATE, delegated_inode);
 	if (error)
 		goto err;
 
@@ -4436,7 +4436,7 @@ int do_mkdirat(int dfd, struct filename *name, umode_t mode)
 	struct path path;
 	int error;
 	unsigned int lookup_flags = LOOKUP_DIRECTORY;
-	struct inode *delegated_inode = NULL;
+	struct delegated_inode delegated_inode = { };
 
 retry:
 	dentry = filename_create(dfd, name, &path, lookup_flags);
@@ -4453,7 +4453,7 @@ retry:
 			error = PTR_ERR(dentry);
 	}
 	done_path_create(&path, dentry);
-	if (delegated_inode) {
+	if (deleg_inode(&delegated_inode)) {
 		error = break_deleg_wait(&delegated_inode);
 		if (!error)
 			goto retry;
@@ -4478,7 +4478,7 @@ SYSCALL_DEFINE2(mkdir, const char __user *, pathname, umode_t, mode)
 }
 
 static int __vfs_rmdir(struct mnt_idmap *idmap, struct inode *dir,
-		       struct dentry *dentry, struct inode **delegated_inode)
+		       struct dentry *dentry, struct delegated_inode *delegated_inode)
 {
 	int error = may_delete(idmap, dir, dentry, 1);
 
@@ -4500,7 +4500,7 @@ static int __vfs_rmdir(struct mnt_idmap *idmap, struct inode *dir,
 	if (error)
 		goto out;
 
-	error = try_break_deleg(dir, delegated_inode);
+	error = try_break_deleg(dir, LEASE_BREAK_DIR_DELETE, delegated_inode);
 	if (error)
 		goto out;
 
@@ -4550,7 +4550,7 @@ int do_rmdir(int dfd, struct filename *name)
 	struct qstr last;
 	int type;
 	unsigned int lookup_flags = 0;
-	struct inode *delegated_inode = NULL;
+	struct delegated_inode delegated_inode = { };
 retry:
 	error = filename_parentat(dfd, name, lookup_flags, &path, &last, &type);
 	if (error)
@@ -4589,7 +4589,7 @@ exit3:
 	mnt_drop_write(path.mnt);
 exit2:
 	path_put(&path);
-	if (delegated_inode) {
+	if (deleg_inode(&delegated_inode)) {
 		error = break_deleg_wait(&delegated_inode);
 		if (!error)
 			goto retry;
@@ -4634,7 +4634,7 @@ SYSCALL_DEFINE1(rmdir, const char __user *, pathname)
  * raw inode simply pass @nop_mnt_idmap.
  */
 int vfs_unlink(struct mnt_idmap *idmap, struct inode *dir,
-	       struct dentry *dentry, struct inode **delegated_inode)
+	       struct dentry *dentry, struct delegated_inode *delegated_inode)
 {
 	struct inode *target = dentry->d_inode;
 	int error = may_delete(idmap, dir, dentry, 0);
@@ -4653,10 +4653,10 @@ int vfs_unlink(struct mnt_idmap *idmap, struct inode *dir,
 	else {
 		error = security_inode_unlink(dir, dentry);
 		if (!error) {
-			error = try_break_deleg(dir, delegated_inode);
+			error = try_break_deleg(dir, LEASE_BREAK_DIR_DELETE, delegated_inode);
 			if (error)
 				goto out;
-			error = try_break_deleg(target, delegated_inode);
+			error = try_break_deleg(target, 0, delegated_inode);
 			if (error)
 				goto out;
 			error = dir->i_op->unlink(dir, dentry);
@@ -4695,7 +4695,7 @@ int do_unlinkat(int dfd, struct filename *name)
 	struct qstr last;
 	int type;
 	struct inode *inode = NULL;
-	struct inode *delegated_inode = NULL;
+	struct delegated_inode delegated_inode = { };
 	unsigned int lookup_flags = 0;
 retry:
 	error = filename_parentat(dfd, name, lookup_flags, &path, &last, &type);
@@ -4732,7 +4732,7 @@ exit3:
 	if (inode)
 		iput(inode);	/* truncate the inode here */
 	inode = NULL;
-	if (delegated_inode) {
+	if (deleg_inode(&delegated_inode)) {
 		error = break_deleg_wait(&delegated_inode);
 		if (!error)
 			goto retry_deleg;
@@ -4881,7 +4881,7 @@ SYSCALL_DEFINE2(symlink, const char __user *, oldname, const char __user *, newn
  */
 int vfs_link(struct dentry *old_dentry, struct mnt_idmap *idmap,
 	     struct inode *dir, struct dentry *new_dentry,
-	     struct inode **delegated_inode)
+	     struct delegated_inode *delegated_inode)
 {
 	struct inode *inode = old_dentry->d_inode;
 	unsigned max_links = dir->i_sb->s_max_links;
@@ -4925,9 +4925,9 @@ int vfs_link(struct dentry *old_dentry, struct mnt_idmap *idmap,
 	else if (max_links && inode->i_nlink >= max_links)
 		error = -EMLINK;
 	else {
-		error = try_break_deleg(dir, delegated_inode);
+		error = try_break_deleg(dir, LEASE_BREAK_DIR_CREATE, delegated_inode);
 		if (!error)
-			error = try_break_deleg(inode, delegated_inode);
+			error = try_break_deleg(inode, 0, delegated_inode);
 		if (!error)
 			error = dir->i_op->link(old_dentry, dir, new_dentry);
 	}
@@ -4959,7 +4959,7 @@ int do_linkat(int olddfd, struct filename *old, int newdfd,
 	struct mnt_idmap *idmap;
 	struct dentry *new_dentry;
 	struct path old_path, new_path;
-	struct inode *delegated_inode = NULL;
+	struct delegated_inode delegated_inode = { };
 	int how = 0;
 	int error;
 
@@ -5003,7 +5003,7 @@ retry:
 			 new_dentry, &delegated_inode);
 out_dput:
 	done_path_create(&new_path, new_dentry);
-	if (delegated_inode) {
+	if (deleg_inode(&delegated_inode)) {
 		error = break_deleg_wait(&delegated_inode);
 		if (!error) {
 			path_put(&old_path);
@@ -5089,7 +5089,7 @@ int vfs_rename(struct renamedata *rd)
 	struct inode *new_dir = d_inode(rd->new_parent);
 	struct dentry *old_dentry = rd->old_dentry;
 	struct dentry *new_dentry = rd->new_dentry;
-	struct inode **delegated_inode = rd->delegated_inode;
+	struct delegated_inode *delegated_inode = rd->delegated_inode;
 	unsigned int flags = rd->flags;
 	bool is_dir = d_is_dir(old_dentry);
 	struct inode *source = old_dentry->d_inode;
@@ -5194,21 +5194,24 @@ int vfs_rename(struct renamedata *rd)
 		    old_dir->i_nlink >= max_links)
 			goto out;
 	}
-	error = try_break_deleg(old_dir, delegated_inode);
+	error = try_break_deleg(old_dir,
+				old_dir == new_dir ? LEASE_BREAK_DIR_RENAME :
+						     LEASE_BREAK_DIR_DELETE,
+				delegated_inode);
 	if (error)
 		goto out;
 	if (new_dir != old_dir) {
-		error = try_break_deleg(new_dir, delegated_inode);
+		error = try_break_deleg(new_dir, LEASE_BREAK_DIR_CREATE, delegated_inode);
 		if (error)
 			goto out;
 	}
 	if (!is_dir) {
-		error = try_break_deleg(source, delegated_inode);
+		error = try_break_deleg(source, 0, delegated_inode);
 		if (error)
 			goto out;
 	}
 	if (target && !new_is_dir) {
-		error = try_break_deleg(target, delegated_inode);
+		error = try_break_deleg(target, 0, delegated_inode);
 		if (error)
 			goto out;
 	}
@@ -5260,7 +5263,7 @@ int do_renameat2(int olddfd, struct filename *from, int newdfd,
 	struct path old_path, new_path;
 	struct qstr old_last, new_last;
 	int old_type, new_type;
-	struct inode *delegated_inode = NULL;
+	struct delegated_inode delegated_inode = { };
 	unsigned int lookup_flags = 0, target_flags =
 		LOOKUP_RENAME_TARGET | LOOKUP_CREATE;
 	bool should_retry = false;
@@ -5369,7 +5372,7 @@ exit4:
 exit3:
 	unlock_rename(new_path.dentry, old_path.dentry);
 exit_lock_rename:
-	if (delegated_inode) {
+	if (deleg_inode(&delegated_inode)) {
 		error = break_deleg_wait(&delegated_inode);
 		if (!error)
 			goto retry_deleg;

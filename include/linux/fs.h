@@ -82,6 +82,7 @@ struct fs_context;
 struct fs_parameter_spec;
 struct file_kattr;
 struct iomap_ops;
+struct delegated_inode;
 
 extern void __init inode_init(void);
 extern void __init inode_init_early(void);
@@ -1997,16 +1998,16 @@ bool inode_owner_or_capable(struct mnt_idmap *idmap,
 int vfs_create(struct mnt_idmap *, struct inode *,
 	       struct dentry *, umode_t, bool);
 struct dentry *vfs_mkdir(struct mnt_idmap *, struct inode *,
-			 struct dentry *, umode_t, struct inode **);
+			 struct dentry *, umode_t, struct delegated_inode *);
 int vfs_mknod(struct mnt_idmap *, struct inode *, struct dentry *,
               umode_t, dev_t);
 int vfs_symlink(struct mnt_idmap *, struct inode *,
 		struct dentry *, const char *);
 int vfs_link(struct dentry *, struct mnt_idmap *, struct inode *,
-	     struct dentry *, struct inode **);
+	     struct dentry *, struct delegated_inode *);
 int vfs_rmdir(struct mnt_idmap *, struct inode *, struct dentry *);
 int vfs_unlink(struct mnt_idmap *, struct inode *, struct dentry *,
-	       struct inode **);
+	       struct delegated_inode *);
 
 /**
  * struct renamedata - contains all information required for renaming
@@ -2026,7 +2027,7 @@ struct renamedata {
 	struct mnt_idmap *new_mnt_idmap;
 	struct dentry *new_parent;
 	struct dentry *new_dentry;
-	struct inode **delegated_inode;
+	struct delegated_inode *delegated_inode;
 	unsigned int flags;
 } __randomize_layout;
 
@@ -3069,7 +3070,7 @@ static inline int bmap(struct inode *inode,  sector_t *block)
 #endif
 
 int notify_change(struct mnt_idmap *, struct dentry *,
-		  struct iattr *, struct inode **);
+		  struct iattr *, struct delegated_inode *);
 int inode_permission(struct mnt_idmap *, struct inode *, int);
 int generic_permission(struct mnt_idmap *, struct inode *, int);
 static inline int file_permission(struct file *file, int mask)
