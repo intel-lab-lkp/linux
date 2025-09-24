@@ -83,12 +83,20 @@ static const struct mtk_vcodec_fw_ops mtk_vcodec_vpu_msg = {
 	.release = mtk_vcodec_vpu_release,
 };
 
+static void mtk_vcodec_vpu_put_device(void *_dev)
+{
+	struct device *dev = _dev;
+
+	put_device(dev);
+}
+
 struct mtk_vcodec_fw *mtk_vcodec_fw_vpu_init(void *priv, enum mtk_vcodec_fw_use fw_use)
 {
 	struct platform_device *fw_pdev;
 	struct platform_device *plat_dev;
 	struct mtk_vcodec_fw *fw;
 	enum rst_id rst_id;
+	int ret;
 
 	if (fw_use == ENCODER) {
 		struct mtk_vcodec_enc_dev *enc_dev = priv;
@@ -110,6 +118,11 @@ struct mtk_vcodec_fw *mtk_vcodec_fw_vpu_init(void *priv, enum mtk_vcodec_fw_use 
 		dev_err(&plat_dev->dev, "firmware device is not ready");
 		return ERR_PTR(-EINVAL);
 	}
+
+	ret = devm_add_action_or_reset(&plat_dev->dev, mtk_vcodec_vpu_put_device,
+				       &fw_pdev->dev);
+	if (ret)
+		return ERR_PTR(ret);
 
 	if (fw_use == DECODER)
 		vpu_wdt_reg_handler(fw_pdev, mtk_vcodec_vpu_reset_dec_handler, priv, rst_id);
