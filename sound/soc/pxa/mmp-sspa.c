@@ -111,7 +111,7 @@ static int mmp_sspa_set_dai_sysclk(struct snd_soc_dai *cpu_dai,
 	int ret = 0;
 
 	if (dev->of_node)
-		return -ENOTSUPP;
+		return -EOPNOTSUPP;
 
 	switch (clk_id) {
 	case MMP_SSPA_CLK_AUDIO:
@@ -121,8 +121,7 @@ static int mmp_sspa_set_dai_sysclk(struct snd_soc_dai *cpu_dai,
 		break;
 	case MMP_SSPA_CLK_PLL:
 	case MMP_SSPA_CLK_VCXO:
-		/* not support yet */
-		return -EINVAL;
+		return -EOPNOTSUPP;
 	default:
 		return -EINVAL;
 	}
@@ -139,7 +138,7 @@ static int mmp_sspa_set_dai_pll(struct snd_soc_dai *cpu_dai, int pll_id,
 	int ret = 0;
 
 	if (dev->of_node)
-		return -ENOTSUPP;
+		return -EOPNOTSUPP;
 
 	switch (pll_id) {
 	case MMP_SYSCLK:
