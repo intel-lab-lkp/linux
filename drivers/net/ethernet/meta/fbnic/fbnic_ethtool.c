@@ -1804,6 +1804,7 @@ fbnic_get_rmon_stats(struct net_device *netdev,
 }
 
 static const struct ethtool_ops fbnic_ethtool_ops = {
+	.cap_link_lanes_supported	= true,
 	.supported_coalesce_params	= ETHTOOL_COALESCE_USECS |
 					  ETHTOOL_COALESCE_RX_MAX_FRAMES,
 	.supported_ring_params		= ETHTOOL_RING_USE_TCP_DATA_SPLIT |
