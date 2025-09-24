@@ -27,6 +27,9 @@ struct resource {
 	struct resource *parent, *sibling, *child;
 };
 
+#define for_each_child_resource(parent, res) \
+	for (res = (parent)->child; res; res = res->sibling)
+
 /*
  * IO resources have these defined flags.
  *
