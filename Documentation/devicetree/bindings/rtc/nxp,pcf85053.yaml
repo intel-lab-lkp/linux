@@ -1,0 +1,128 @@
+# SPDX-License-Identifier: (GPL-2.0-only OR BSD-2-Clause)
+# Copyright 2025 NXP
+%YAML 1.2
+---
+$id: http://devicetree.org/schemas/rtc/nxp,pcf85053.yaml#
+$schema: http://devicetree.org/meta-schemas/core.yaml#
+
+title: NXP PCF85053 Real Time Clock
+
+maintainers:
+  - Pankit Garg <pankit.garg@nxp.com>
+  - Lakshay Piplani <lakshay.piplani@nxp.com>
+
+properties:
+  compatible:
+    enum:
+      - nxp,pcf85053
+
+  reg:
+    maxItems: 1
+
+  interrupts:
+    maxItems: 1
+
+  nxp,interface:
+    $ref: /schemas/types.yaml#/definitions/string
+    enum: [ primary, secondary ]
+    description: |
+      Identifies this host's logical role in a multi-host topology for the
+      PCF85053 RTC. The device exposes a "TWO" ownership bit in the CTRL
+      register that gates which host may write time/alarm registers.
+        - "primary": Designated host that *may* claim write ownership (set
+          CTRL.TWO=1) **if** write-access is explicitly requested.
+        - "secondary": Peer host that writes only when CTRL.TWO=0 (default).
+
+  nxp,write-access:
+    type: boolean
+    description: |
+      Request the driver to claim write ownership at probe time by setting
+      CTRL.TWO=1. This property is only valid when nxp,interface="primary".
+      The driver will not modify any other CTRL bits (HF/DM/etc.) and will not
+      clear any status/interrupt flags at probe.
+
+required:
+  - compatible
+  - reg
+  - nxp,interface
+
+additionalProperties: false
+
+# Schema constraints matching driver:
+# 1) If nxp,write-access is present, nxp,interface must be "primary".
+#    Rationale: only the primary may claim ownership; driver will set TWO=1.
+# 2) If nxp,interface is "secondary", nxp,write-access must not be present.
+#    Rationale: secondary never claims ownership and cannot write CTRL/ST/alarm.
+#
+# Practical effect:
+# - Primary without 'nxp,write-access'; primary is read only; secondary may
+#   write time registers.
+# - Primary with 'nxp,write-access'; primary owns writes, secondary is read only.
+allOf:
+  - $ref: rtc.yaml#
+  - oneOf:
+      # Case 1: primary with write-access
+      - required: [ "nxp,write-access" ]
+        properties:
+          nxp,interface:
+            const: primary
+
+      # Case 2: primary without write-access
+      - properties:
+          nxp,interface:
+            const: primary
+        not:
+          required: [ "nxp,write-access" ]
+
+      # Case 3: secondary (must not have write-access)
+      - properties:
+          nxp,interface:
+            const: secondary
+        not:
+          required: [ "nxp,write-access" ]
+
+examples:
+  # Single host example.
+  - |
+    #include <dt-bindings/interrupt-controller/irq.h>
+    i2c {
+      #address-cells = <1>;
+      #size-cells = <0>;
+
+      rtc@6f {
+        compatible = "nxp,pcf85053";
+        reg = <0x6f>;
+        nxp,interface = "primary";
+        nxp,write-access;
+        interrupt-parent = <&gpio2>;
+        interrupts = <3 IRQ_TYPE_EDGE_FALLING>;
+      };
+    };
+
+  # Dual-host example: one primary that claims writes; one secondary that never claims writes.
+  - |
+    #include <dt-bindings/interrupt-controller/irq.h>
+    i2c0 {
+      #address-cells = <1>;
+      #size-cells = <0>;
+
+      rtc@6f {
+        compatible = "nxp,pcf85053";
+        reg = <0x6f>;
+        nxp,interface = "primary";
+        nxp,write-access;
+        interrupt-parent = <&gpio2>;
+        interrupts = <3 IRQ_TYPE_EDGE_FALLING>;
+      };
+    };
+
+    i2c1 {
+      #address-cells = <1>;
+      #size-cells = <0>;
+
+      rtc@6f {
+        compatible = "nxp,pcf85053";
+        reg = <0x6f>;
+        nxp,interface = "secondary";
+      };
+    };
