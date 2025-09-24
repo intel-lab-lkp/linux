@@ -854,6 +854,34 @@ static void dispose_list(struct list_head *head)
 	}
 }
 
+static DEFINE_SPINLOCK(deferred_inode_lock);
+static LIST_HEAD(deferred_inode_list);
+
+static void dispose_inodes_wq(struct work_struct *work)
+{
+	LIST_HEAD(dispose);
+
+	spin_lock_irq(&deferred_inode_lock);
+	list_splice_init(&deferred_inode_list, &dispose);
+	spin_unlock_irq(&deferred_inode_lock);
+
+	dispose_list(&dispose);
+}
+
+static DECLARE_WORK(dispose_inode_work, dispose_inodes_wq);
+
+static void deferred_dispose_inodes(struct list_head *inodes)
+{
+	unsigned long flags;
+
+	spin_lock_irqsave(&deferred_inode_lock, flags);
+	list_splice_tail(inodes, &deferred_inode_list);
+	spin_unlock_irqrestore(&deferred_inode_lock, flags);
+
+	printk("deferring some inodes\n");
+	schedule_work(&dispose_inode_work);
+}
+
 /**
  * evict_inodes	- evict all evictable inodes for a superblock
  * @sb:		superblock to operate on
@@ -897,13 +925,17 @@ again:
 		if (need_resched()) {
 			spin_unlock(&sb->s_inode_list_lock);
 			cond_resched();
-			dispose_list(&dispose);
+			if (!in_reclaim())
+				dispose_list(&dispose);
 			goto again;
 		}
 	}
 	spin_unlock(&sb->s_inode_list_lock);
 
-	dispose_list(&dispose);
+	if (!in_reclaim())
+		dispose_list(&dispose);
+	else
+		deferred_dispose_inodes(&dispose);
 }
 EXPORT_SYMBOL_GPL(evict_inodes);
 
