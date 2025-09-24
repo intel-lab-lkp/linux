@@ -210,7 +210,7 @@ def _ksft_intr(signum, frame):
         ksft_pr(f"Ignoring SIGTERM (cnt: {term_cnt}), already exiting...")
 
 
-def ksft_run(cases=None, globs=None, case_pfx=None, args=()):
+def ksft_run(cases=None, globs=None, case_pfx=None, args=(), skip_all=None):
     cases = cases or []
 
     if globs and case_pfx:
@@ -241,6 +241,8 @@ def ksft_run(cases=None, globs=None, case_pfx=None, args=()):
         cnt_key = ""
 
         try:
+            if skip_all:
+                raise KsftSkipEx()
             case(*args)
         except KsftSkipEx as e:
             comment = "SKIP " + str(e)
