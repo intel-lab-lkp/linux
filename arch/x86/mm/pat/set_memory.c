@@ -36,6 +36,16 @@
 
 #include "../mm_internal.h"
 
+/* What should CPA do if encountering an unmapped address? */
+enum cpa_fault {
+	/* Default depending on address. */
+	CPA_FAULT_DEFAULT = 0,
+	/* Populate cpa_data.pgd using cpa_data.pfn. */
+	CPA_FAULT_POPULATE,
+	/* Warn and return an error. */
+	CPA_FAULT_ERROR,
+};
+
 /*
  * The current flushing context - we pass it instead of 5 arguments:
  */
@@ -51,6 +61,7 @@ struct cpa_data {
 	unsigned int	force_split		: 1,
 			force_static_prot	: 1,
 			force_flush_all		: 1;
+	enum cpa_fault	on_fault		: 2;
 	struct page	**pages;
 };
 
@@ -1790,14 +1801,13 @@ static inline bool is_direct_map(unsigned long vaddr)
 static int __cpa_process_fault(struct cpa_data *cpa, unsigned long vaddr,
 			       int primary)
 {
-	if (cpa->pgd) {
-		/*
-		 * Right now, we only execute this code path when mapping
-		 * the EFI virtual memory map regions, no other users
-		 * provide a ->pgd value. This may change in the future.
-		 */
+	if (cpa->on_fault == CPA_FAULT_POPULATE)
 		return populate_pgd(cpa, vaddr);
-	}
+
+	if (WARN_ON(cpa->on_fault == CPA_FAULT_ERROR))
+		return -EFAULT;
+
+	/* CPA_FAULT_DEFAULT: */
 
 	/*
 	 * Ignore all non primary paths.
@@ -2417,6 +2427,7 @@ static int __set_memory_enc_pgtable(unsigned long addr, int numpages, bool enc)
 	cpa.mask_set = enc ? pgprot_encrypted(empty) : pgprot_decrypted(empty);
 	cpa.mask_clr = enc ? pgprot_decrypted(empty) : pgprot_encrypted(empty);
 	cpa.pgd = init_mm.pgd;
+	cpa.on_fault = CPA_FAULT_POPULATE;
 
 	/* Must avoid aliasing mappings in the highmem code */
 	kmap_flush_unused();
@@ -2743,6 +2754,7 @@ int __init kernel_map_pages_in_pgd(pgd_t *pgd, u64 pfn, unsigned long address,
 		.mask_set = __pgprot(0),
 		.mask_clr = __pgprot(~page_flags & (_PAGE_NX|_PAGE_RW|_PAGE_DIRTY)),
 		.flags = CPA_NO_CHECK_ALIAS,
+		.on_fault = CPA_FAULT_POPULATE,
 	};
 
 	WARN_ONCE(num_online_cpus() > 1, "Don't call after initializing SMP");
@@ -2786,6 +2798,7 @@ int __init kernel_unmap_pages_in_pgd(pgd_t *pgd, unsigned long address,
 		.mask_set	= __pgprot(0),
 		.mask_clr	= __pgprot(_PAGE_PRESENT | _PAGE_RW | _PAGE_DIRTY),
 		.flags		= CPA_NO_CHECK_ALIAS,
+		.on_fault	= CPA_FAULT_POPULATE,
 	};
 
 	WARN_ONCE(num_online_cpus() > 1, "Don't call after initializing SMP");
