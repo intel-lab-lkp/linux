@@ -46,6 +46,8 @@
 #include <kvm/arm_pmu.h>
 #include <kvm/arm_psci.h>
 
+#include <vgic/vgic.h>
+
 #include "sys_regs.h"
 
 static enum kvm_mode kvm_mode = KVM_MODE_DEFAULT;
@@ -1926,6 +1928,41 @@ int kvm_arch_vm_ioctl(struct file *filp, unsigned int ioctl, unsigned long arg)
 		if (copy_from_user(&range, argp, sizeof(range)))
 			return -EFAULT;
 		return kvm_vm_ioctl_get_reg_writable_masks(kvm, &range);
+	}
+	case KVM_DEBUG_GIC_MSI_SETUP: {
+		/* Define interrupt ID boundaries for input validation */
+		#define GIC_LPI_OFFSET    8192
+		#define GIC_LPI_MAX       65535
+		#define SPI_INTID_MIN     32
+		#define SPI_INTID_MAX     1019
+
+		struct kvm_debug_gic_msi_setup params;
+		struct kvm_vcpu *vcpu;
+
+		if (copy_from_user(&params, argp, sizeof(params)))
+			return -EFAULT;
+
+		/* validate vcpu_id is in range and exists */
+		if (params.vcpu_id >= atomic_read(&kvm->online_vcpus))
+			return -EINVAL;
+
+		vcpu = kvm_get_vcpu(kvm, params.vcpu_id);
+		if (!vcpu)
+			return -EINVAL;
+
+		/* validate vintid is in LPI range */
+		if (params.vintid < GIC_LPI_OFFSET || params.vintid > GIC_LPI_MAX)
+			return -EINVAL;
+
+		/*
+		 * Validate host_irq is in safe range -- we use SPI range since
+		 * selftests guests will have no shared peripheral devices
+		 */
+		if (params.host_irq < SPI_INTID_MIN || params.host_irq > SPI_INTID_MAX)
+			return -EINVAL;
+
+		/* Mock single MSI for testing */
+		return debug_gic_msi_setup_mock_msi(kvm, &params);
 	}
 	default:
 		return -EINVAL;

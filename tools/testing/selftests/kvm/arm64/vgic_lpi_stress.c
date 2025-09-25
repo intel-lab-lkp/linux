@@ -18,9 +18,13 @@
 #include "ucall.h"
 #include "vgic.h"
 
+#define KVM_DEBUG_GIC_MSI_SETUP    _IOW(KVMIO, 0xf0, struct kvm_debug_gic_msi_setup)
+
 #define TEST_MEMSLOT_INDEX	1
 
 #define GIC_LPI_OFFSET	8192
+
+static bool vlpi_enabled;
 
 static size_t nr_iterations = 1000;
 static vm_paddr_t gpa_base;
@@ -220,6 +224,21 @@ static void setup_gic(void)
 	its_fd = vgic_its_setup(vm);
 }
 
+static int enable_msi_vlpi_injection(u32 device_id, u32 event_id,
+		u32 vcpu_id, u32 vintid, u32 host_irq)
+{
+	struct kvm_debug_gic_msi_setup params = {
+		.device_id	= device_id,
+		.event_id	= event_id,
+		.vcpu_id	= vcpu_id,
+		.vintid		= vintid,
+		.host_irq	= host_irq,
+		.itt_addr	= test_data.itt_tables + (device_id * SZ_64K)
+	};
+
+	return __vm_ioctl(vm, KVM_DEBUG_GIC_MSI_SETUP, &params);
+}
+
 static void signal_lpi(u32 device_id, u32 event_id)
 {
 	vm_paddr_t db_addr = GITS_BASE_GPA + GITS_TRANSLATER;
@@ -267,6 +286,30 @@ static void *vcpu_worker_thread(void *data)
 
 		switch (get_ucall(vcpu, &uc)) {
 		case UCALL_SYNC:
+			/* if flag is set, set direct injection mappings for MSIs */
+			if (vlpi_enabled) {
+				u32 intid = GIC_LPI_OFFSET;
+
+				for (u32 device_id = 0; device_id < test_data.nr_devices;
+						device_id++) {
+					for (u32 event_id = 0; event_id < test_data.nr_event_ids;
+							event_id++) {
+
+						/* we mock host_irqs in the SPI interrupt range of
+						 * 100-1020 since selftest guests have no hardware
+						 * devices
+						 */
+						int ret = enable_msi_vlpi_injection(device_id,
+								event_id, vcpu->id, intid,
+								intid - GIC_LPI_OFFSET + 100);
+						TEST_ASSERT(ret == 0, "KVM_DEBUG_GIC_MSI_SETUP failed: %d",
+								ret);
+
+						intid++;
+					}
+				}
+			}
+
 			pthread_barrier_wait(&test_setup_barrier);
 			continue;
 		case UCALL_DONE:
@@ -362,7 +405,9 @@ static void destroy_vm(void)
 
 static void pr_usage(const char *name)
 {
-	pr_info("%s [-v NR_VCPUS] [-d NR_DEVICES] [-e NR_EVENTS] [-i ITERS] -h\n", name);
+	pr_info("%s -D [-v NR_VCPUS] [-d NR_DEVICES] [-e NR_EVENTS] [-i ITERS] -h\n", name);
+	pr_info("  -D:\tenable direct vLPI injection (default: %s)\n",
+			vlpi_enabled ? "true" : "false");
 	pr_info("  -v:\tnumber of vCPUs (default: %u)\n", test_data.nr_cpus);
 	pr_info("  -d:\tnumber of devices (default: %u)\n", test_data.nr_devices);
 	pr_info("  -e:\tnumber of event IDs per device (default: %u)\n", test_data.nr_event_ids);
@@ -374,8 +419,11 @@ int main(int argc, char **argv)
 	u32 nr_threads;
 	int c;
 
-	while ((c = getopt(argc, argv, "hv:d:e:i:")) != -1) {
+	while ((c = getopt(argc, argv, "hDv:d:e:i:")) != -1) {
 		switch (c) {
+		case 'D':
+			vlpi_enabled = true;
+			break;
 		case 'v':
 			test_data.nr_cpus = atoi(optarg);
 			break;
