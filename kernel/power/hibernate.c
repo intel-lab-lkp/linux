@@ -695,6 +695,7 @@ static void power_down(void)
 
 #ifdef CONFIG_SUSPEND
 	if (hibernation_mode == HIBERNATION_SUSPEND) {
+		pm_restore_gfp_mask();
 		error = suspend_devices_and_enter(mem_sleep_current);
 		if (error) {
 			hibernation_mode = hibernation_ops ?
@@ -862,7 +863,15 @@ int hibernate(void)
 				power_down();
 		}
 		in_suspend = 0;
-		pm_restore_gfp_mask();
+		switch (hibernation_mode) {
+#ifdef CONFIG_SUSPEND
+		case HIBERNATION_SUSPEND:
+			break;
+#endif
+		default:
+			pm_restore_gfp_mask();
+			break;
+		}
 	} else {
 		pm_pr_dbg("Hibernation image restored successfully.\n");
 	}
