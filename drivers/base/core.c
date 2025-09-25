@@ -1784,7 +1784,7 @@ static int fw_devlink_dev_sync_state(struct device *dev, void *data)
 		return 0;
 
 	if (fw_devlink_sync_state == FW_DEVLINK_SYNC_STATE_STRICT) {
-		dev_warn(sup, "sync_state() pending due to %s\n",
+		dev_info(sup, "sync_state() pending due to %s\n",
 			 dev_name(link->consumer));
 		return 0;
 	}
@@ -1792,7 +1792,7 @@ static int fw_devlink_dev_sync_state(struct device *dev, void *data)
 	if (!list_empty(&sup->links.defer_sync))
 		return 0;
 
-	dev_warn(sup, "Timed out. Forcing sync_state()\n");
+	dev_info(sup, "Timed out. Forcing sync_state()\n");
 	sup->state_synced = true;
 	get_device(sup);
 	list_add_tail(&sup->links.defer_sync, data);
