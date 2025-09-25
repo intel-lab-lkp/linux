@@ -926,7 +926,10 @@ enum scmi_std_protocol {
 	SCMI_PROTOCOL_VOLTAGE = 0x17,
 	SCMI_PROTOCOL_POWERCAP = 0x18,
 	SCMI_PROTOCOL_PINCTRL = 0x19,
+	SCMI_PROTOCOL_LAST = 0x7f,
 };
+
+#define SCMI_MAX_PROTOCOLS	256
 
 enum scmi_system_events {
 	SCMI_SYSTEM_SHUTDOWN,
