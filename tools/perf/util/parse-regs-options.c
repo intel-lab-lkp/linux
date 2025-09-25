@@ -4,19 +4,104 @@
 #include <stdint.h>
 #include <string.h>
 #include <stdio.h>
+#include <linux/bitops.h>
 #include "util/debug.h"
 #include <subcmd/parse-options.h>
 #include "util/perf_regs.h"
 #include "util/parse-regs-options.h"
+#include "record.h"
+
+static void __print_simd_regs(bool intr, uint64_t simd_mask, uint64_t pred_mask)
+{
+	const struct sample_reg *r = NULL;
+	uint64_t bitmap = 0;
+	u16 qwords = 0;
+	int idx;
+
+	for (r = arch__sample_simd_reg_masks(); r->name; r++) {
+		if (r->mask & simd_mask) {
+			idx = fls64(r->mask) - 1;
+			if (intr)
+				bitmap = arch__intr_simd_reg_bitmap_qwords(idx, &qwords);
+			else
+				bitmap = arch__user_simd_reg_bitmap_qwords(idx, &qwords);
+			if (bitmap)
+				fprintf(stderr, "%s0-%d ", r->name, fls64(bitmap) - 1);
+		}
+	}
+
+	for (r = arch__sample_pred_reg_masks(); r->name; r++) {
+		if (r->mask & pred_mask) {
+			idx = fls64(r->mask) - 1;
+			if (intr)
+				bitmap = arch__intr_pred_reg_bitmap_qwords(idx, &qwords);
+			else
+				bitmap = arch__user_pred_reg_bitmap_qwords(idx, &qwords);
+			if (bitmap)
+				fprintf(stderr, "%s0-%d ", r->name, fls64(bitmap) - 1);
+		}
+	}
+}
+
+static uint64_t __get_simd_reg_bitmask_qwords(bool intr, char *reg_name, u16 *qwords)
+{
+	const struct sample_reg *r = NULL;
+	uint64_t bitmap = 0;
+	int idx;
+
+	*qwords = 0;
+	for (r = arch__sample_simd_reg_masks(); r->name; r++) {
+		if (!strcasecmp(reg_name, r->name)) {
+			if (!fls64(r->mask))
+				continue;
+			idx = fls64(r->mask) - 1;
+			if (intr)
+				bitmap = arch__intr_simd_reg_bitmap_qwords(idx, qwords);
+			else
+				bitmap = arch__user_simd_reg_bitmap_qwords(idx, qwords);
+			break;
+		}
+	}
+
+	return bitmap;
+}
+
+static uint64_t __get_pred_reg_bitmask_qwords(bool intr, char *reg_name, u16 *qwords)
+{
+	const struct sample_reg *r = NULL;
+	uint64_t bitmap = 0;
+	int idx;
+
+	*qwords = 0;
+	for (r = arch__sample_pred_reg_masks(); r->name; r++) {
+		if (!strcasecmp(reg_name, r->name)) {
+			if (!fls64(r->mask))
+				continue;
+			idx = fls64(r->mask) - 1;
+			if (intr)
+				bitmap = arch__intr_pred_reg_bitmap_qwords(idx, qwords);
+			else
+				bitmap = arch__user_pred_reg_bitmap_qwords(idx, qwords);
+			break;
+		}
+	}
+
+	return bitmap;
+}
 
 static int
 __parse_regs(const struct option *opt, const char *str, int unset, bool intr)
 {
 	uint64_t *mode = (uint64_t *)opt->value;
 	const struct sample_reg *r = NULL;
+	struct record_opts *opts;
 	char *s, *os = NULL, *p;
 	int ret = -1;
 	uint64_t mask;
+	uint64_t simd_mask;
+	uint64_t pred_mask;
+	uint64_t bitmap = 0;
+	u16 qwords = 0;
 
 	if (unset)
 		return 0;
@@ -27,10 +112,17 @@ __parse_regs(const struct option *opt, const char *str, int unset, bool intr)
 	if (*mode)
 		return -1;
 
-	if (intr)
+	if (intr) {
+		opts = container_of(opt->value, struct record_opts, sample_intr_regs);
 		mask = arch__intr_reg_mask();
-	else
+		simd_mask = arch__intr_simd_reg_mask();
+		pred_mask = arch__intr_pred_reg_mask();
+	} else {
+		opts = container_of(opt->value, struct record_opts, sample_user_regs);
 		mask = arch__user_reg_mask();
+		simd_mask = arch__user_simd_reg_mask();
+		pred_mask = arch__user_pred_reg_mask();
+	}
 
 	/* str may be NULL in case no arg is passed to -I */
 	if (str) {
@@ -50,10 +142,45 @@ __parse_regs(const struct option *opt, const char *str, int unset, bool intr)
 					if (r->mask & mask)
 						fprintf(stderr, "%s ", r->name);
 				}
+				if (simd_mask || pred_mask)
+					__print_simd_regs(intr, simd_mask, pred_mask);
+
 				fputc('\n', stderr);
 				/* just printing available regs */
 				goto error;
 			}
+
+			if (simd_mask) {
+				bitmap = __get_simd_reg_bitmask_qwords(intr, s, &qwords);
+
+				/* Just need the highest qwords */
+				if (qwords > opts->sample_vec_regs_qwords) {
+					opts->sample_vec_regs_qwords = qwords;
+					if (intr)
+						opts->sample_intr_vec_regs = bitmap;
+					else
+						opts->sample_user_vec_regs = bitmap;
+				}
+
+				if (bitmap)
+					goto next;
+			}
+			if (pred_mask) {
+				bitmap = __get_pred_reg_bitmask_qwords(intr, s, &qwords);
+
+				/* Just need the highest qwords */
+				if (qwords > opts->sample_pred_regs_qwords) {
+					opts->sample_pred_regs_qwords = qwords;
+					if (intr)
+						opts->sample_intr_pred_regs = bitmap;
+					else
+						opts->sample_user_pred_regs = bitmap;
+				}
+
+				if (bitmap)
+					goto next;
+			}
+
 			for (r = arch__sample_reg_masks(); r->name; r++) {
 				if ((r->mask & mask) && !strcasecmp(s, r->name))
 					break;
@@ -65,7 +192,7 @@ __parse_regs(const struct option *opt, const char *str, int unset, bool intr)
 			}
 
 			*mode |= r->mask;
-
+next:
 			if (!p)
 				break;
 
