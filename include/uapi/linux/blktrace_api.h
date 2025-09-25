@@ -26,11 +26,22 @@ enum blktrace_cat {
 	BLK_TC_DRV_DATA	= 1 << 14,	/* binary per-driver data */
 	BLK_TC_FUA	= 1 << 15,	/* fua requests */
 
-	BLK_TC_END	= 1 << 15,	/* we've run out of bits! */
+	BLK_TC_END_V1	= 1 << 15,	/* we've run out of bits! */
+
+	BLK_TC_ZONE_APPEND	= 1 << 16ull,  	/* zone append */
+	BLK_TC_ZONE_RESET	= 1 << 17ull,	/* zone reset */
+	BLK_TC_ZONE_RESET_ALL	= 1 << 18ull,	/* zone reset all */
+	BLK_TC_ZONE_FINISH	= 1 << 19ull,	/* zone finish */
+	BLK_TC_ZONE_OPEN	= 1 << 20ull,	/* zone open */
+	BLK_TC_ZONE_CLOSE	= 1 << 21ull,	/* zone close */
+
+	BLK_TC_END_V2		= 1 << 21ull,
 };
 
 #define BLK_TC_SHIFT		(16)
 #define BLK_TC_ACT(act)		((act) << BLK_TC_SHIFT)
+#define BLK_TC_SHIFT2		(32)
+#define BLK_TC_ACT2(act)	((u64)(act) << BLK_TC_SHIFT2)
 
 /*
  * Basic trace actions
