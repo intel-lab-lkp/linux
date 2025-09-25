@@ -1668,23 +1668,20 @@ static struct iommu_device *omap_iommu_probe_device(struct device *dev)
 		}
 
 		pdev = of_find_device_by_node(np);
+		of_node_put(np);
 		if (!pdev) {
-			of_node_put(np);
 			ret = -ENODEV;
 			goto err_put_iommus;
 		}
 
 		oiommu = platform_get_drvdata(pdev);
 		if (!oiommu) {
-			of_node_put(np);
 			ret = -EINVAL;
 			goto err_put_iommus;
 		}
 
 		tmp->iommu_dev = oiommu;
 		tmp->dev = &pdev->dev;
-
-		of_node_put(np);
 	}
 
 	dev_iommu_priv_set(dev, arch_data);
