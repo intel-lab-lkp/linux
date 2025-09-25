@@ -309,17 +309,20 @@ static void pcc_chan_acknowledge(struct pcc_chan_info *pchan)
 static void *write_response(struct pcc_chan_info *pchan)
 {
 	struct pcc_header pcc_header;
+	struct mbox_client *cl;
+	void *handle;
 	void *buffer;
 	int data_len;
 
+	cl = pchan->chan.mchan->cl;
 	memcpy_fromio(&pcc_header, pchan->chan.shmem,
 		      sizeof(pcc_header));
 	data_len = pcc_header.length - sizeof(u32) + sizeof(struct pcc_header);
 
-	buffer = pchan->chan.rx_alloc(pchan->chan.mchan->cl, data_len);
+	cl->rx_alloc(cl, &handle, &buffer, data_len);
 	if (buffer != NULL)
 		memcpy_fromio(buffer, pchan->chan.shmem, data_len);
-	return buffer;
+	return handle;
 }
 
 /**
@@ -359,7 +362,7 @@ static irqreturn_t pcc_mbox_irq(int irq, void *p)
 	 */
 	pchan->chan_in_use = false;
 
-	if (pchan->chan.rx_alloc)
+	if (pchan->chan.mchan->cl->rx_alloc)
 		handle = write_response(pchan);
 
 	if (chan->active_req) {
@@ -415,8 +418,6 @@ pcc_mbox_request_channel(struct mbox_client *cl, int subspace_id)
 	if (!pcc_mchan->shmem)
 		goto err;
 
-	pcc_mchan->manage_writes = false;
-
 	/* This indicates that the channel is ready to accept messages.
 	 * This needs to happen after the channel has registered
 	 * its callback. There is no access point to do that in
@@ -466,7 +467,10 @@ static int pcc_write_to_buffer(struct mbox_chan *chan, void *data)
 	struct pcc_mbox_chan *pcc_mbox_chan = &pchan->chan;
 	struct pcc_header *pcc_header = data;
 
-	if (!pchan->chan.manage_writes)
+	if (data == NULL)
+		return 0;
+	if (pchan->type < ACPI_PCCT_TYPE_EXT_PCC_MASTER_SUBSPACE ||
+	    pchan->type > ACPI_PCCT_TYPE_EXT_PCC_SLAVE_SUBSPACE)
 		return 0;
 
 	/* The PCC header length includes the command field
