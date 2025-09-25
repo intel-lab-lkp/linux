@@ -867,7 +867,6 @@ static inline void __del_page_from_free_list(struct page *page, struct zone *zon
 
 	list_del(&page->buddy_list);
 	__ClearPageBuddy(page);
-	set_page_private(page, 0);
 	zone->free_area[order].nr_free--;
 
 	if (order >= pageblock_order && !is_migrate_isolate(migratetype))
