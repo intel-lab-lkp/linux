@@ -1457,8 +1457,11 @@ int ieee80211_tdls_oper(struct wiphy *wiphy, struct net_device *dev,
 
 		set_sta_flag(sta, WLAN_STA_TDLS_PEER_AUTH);
 
-		WARN_ON_ONCE(is_zero_ether_addr(sdata->u.mgd.tdls_peer) ||
-			     !ether_addr_equal(sdata->u.mgd.tdls_peer, peer));
+		if (is_zero_ether_addr(sdata->u.mgd.tdls_peer) || !ether_addr_equal(sdata->u.mgd.tdls_peer, peer)) {
+			sdata_err(sdata, "Invalid/missing peer (%pM vs %pM)\n",
+				sdata->u.mgd.tdls_peer, peer);
+			return -EINVAL;
+		}
 		break;
 	case NL80211_TDLS_DISABLE_LINK:
 		/*
