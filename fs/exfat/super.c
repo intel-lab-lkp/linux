@@ -293,6 +293,12 @@ static int exfat_parse_param(struct fs_context *fc, struct fs_parameter *param)
 	case Opt_charset:
 		exfat_free_iocharset(sbi);
 		opts->iocharset = param->string;
+
+		if (!strcmp(opts->iocharset, "utf8"))
+			opts->utf8 = 1;
+		else
+			opts->utf8 = 0;
+
 		param->string = NULL;
 		break;
 	case Opt_errors:
@@ -664,8 +670,8 @@ static int exfat_fill_super(struct super_block *sb, struct fs_context *fc)
 	/* set up enough so that it can read an inode */
 	exfat_hash_init(sb);
 
-	if (!strcmp(sbi->options.iocharset, "utf8"))
-		opts->utf8 = 1;
+	if (sbi->options.utf8)
+		set_default_d_op(sb, &exfat_utf8_dentry_ops);
 	else {
 		sbi->nls_io = load_nls(sbi->options.iocharset);
 		if (!sbi->nls_io) {
@@ -674,12 +680,8 @@ static int exfat_fill_super(struct super_block *sb, struct fs_context *fc)
 			err = -EINVAL;
 			goto free_table;
 		}
-	}
-
-	if (sbi->options.utf8)
-		set_default_d_op(sb, &exfat_utf8_dentry_ops);
-	else
 		set_default_d_op(sb, &exfat_dentry_ops);
+	}
 
 	root_inode = new_inode(sb);
 	if (!root_inode) {
