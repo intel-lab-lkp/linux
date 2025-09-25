@@ -253,6 +253,13 @@ static void cxl_unmask_proto_interrupts(struct device *dev)
 	pci_aer_unmask_internal_errors(pdev);
 }
 
+void cxl_mask_proto_interrupts(struct device *dev)
+{
+	struct pci_dev *pdev = to_pci_dev(dev);
+
+	pci_aer_mask_internal_errors(pdev);
+}
+
 static void cxl_dport_map_ras(struct cxl_dport *dport)
 {
 	struct cxl_register_map *map = &dport->reg_map;
