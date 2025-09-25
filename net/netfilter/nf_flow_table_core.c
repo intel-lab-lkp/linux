@@ -13,6 +13,7 @@
 #include <net/netfilter/nf_conntrack_core.h>
 #include <net/netfilter/nf_conntrack_l4proto.h>
 #include <net/netfilter/nf_conntrack_tuple.h>
+#include <net/switchdev.h>
 
 static DEFINE_MUTEX(flowtable_lock);
 static LIST_HEAD(flowtables);
@@ -745,6 +746,86 @@ void nf_flow_table_cleanup(struct net_device *dev)
 }
 EXPORT_SYMBOL_GPL(nf_flow_table_cleanup);
 
+struct flow_cleanup_data {
+	int ifindex;
+	u16 vid;
+	char addr[ETH_ALEN];
+	bool found;
+};
+
+struct flow_switchdev_event_work {
+	struct work_struct work;
+	struct flow_cleanup_data cud;
+};
+
+static void nf_flow_table_do_cleanup_addr(struct nf_flowtable *flow_table,
+					  struct flow_offload *flow, void *data)
+{
+	struct flow_cleanup_data *cud = data;
+
+	if ((flow->tuplehash[0].tuple.xmit_type == FLOW_OFFLOAD_XMIT_DIRECT &&
+	     flow->tuplehash[0].tuple.out.ifidx == cud->ifindex &&
+	     flow->tuplehash[0].tuple.out.bridge_vid == cud->vid &&
+	     ether_addr_equal(flow->tuplehash[0].tuple.out.h_dest, cud->addr)) ||
+	    (flow->tuplehash[1].tuple.xmit_type == FLOW_OFFLOAD_XMIT_DIRECT &&
+	     flow->tuplehash[1].tuple.out.ifidx == cud->ifindex &&
+	     flow->tuplehash[1].tuple.out.bridge_vid == cud->vid &&
+	     ether_addr_equal(flow->tuplehash[1].tuple.out.h_dest, cud->addr))) {
+		flow_offload_teardown(flow);
+		cud->found = true;
+	}
+}
+
+static void nf_flow_table_switchdev_event_work(struct work_struct *work)
+{
+	struct flow_switchdev_event_work *switchdev_work =
+		container_of(work, struct flow_switchdev_event_work, work);
+	struct nf_flowtable *flowtable;
+
+	mutex_lock(&flowtable_lock);
+
+	list_for_each_entry(flowtable, &flowtables, list) {
+		switchdev_work->cud.found = false;
+		nf_flow_table_iterate(flowtable, nf_flow_table_do_cleanup_addr,
+				      &switchdev_work->cud);
+		if (switchdev_work->cud.found)
+			mod_delayed_work(system_power_efficient_wq,
+					 &flowtable->gc_work, 0);
+	}
+
+	mutex_unlock(&flowtable_lock);
+
+	kfree(switchdev_work);
+}
+
+static int nf_flow_table_switchdev_event(struct notifier_block *unused,
+					 unsigned long event, void *ptr)
+{
+	struct flow_switchdev_event_work *switchdev_work;
+	struct switchdev_notifier_fdb_info *fdb_info;
+
+	if (event != SWITCHDEV_FDB_DEL_TO_DEVICE)
+		return NOTIFY_DONE;
+
+	switchdev_work = kzalloc(sizeof(*switchdev_work), GFP_ATOMIC);
+	if (WARN_ON(!switchdev_work))
+		return NOTIFY_BAD;
+
+	INIT_WORK(&switchdev_work->work, nf_flow_table_switchdev_event_work);
+	fdb_info = ptr;
+	switchdev_work->cud.ifindex = fdb_info->info.dev->ifindex;
+	switchdev_work->cud.vid = fdb_info->vid;
+	ether_addr_copy(switchdev_work->cud.addr, fdb_info->addr);
+
+	queue_work(system_long_wq, &switchdev_work->work);
+
+	return NOTIFY_DONE;
+}
+
+static struct notifier_block nf_flow_table_switchdev_nb __read_mostly = {
+	.notifier_call = nf_flow_table_switchdev_event,
+};
+
 void nf_flow_table_free(struct nf_flowtable *flow_table)
 {
 	mutex_lock(&flowtable_lock);
@@ -818,6 +899,10 @@ static int __init nf_flow_table_module_init(void)
 	if (ret)
 		goto out_offload;
 
+	ret = register_switchdev_notifier(&nf_flow_table_switchdev_nb);
+	if (ret < 0)
+		goto out_sw_noti;
+
 	ret = nf_flow_register_bpf();
 	if (ret)
 		goto out_bpf;
@@ -825,6 +910,8 @@ static int __init nf_flow_table_module_init(void)
 	return 0;
 
 out_bpf:
+	unregister_switchdev_notifier(&nf_flow_table_switchdev_nb);
+out_sw_noti:
 	nf_flow_table_offload_exit();
 out_offload:
 	unregister_pernet_subsys(&nf_flow_table_net_ops);
@@ -833,6 +920,7 @@ out_offload:
 
 static void __exit nf_flow_table_module_exit(void)
 {
+	unregister_switchdev_notifier(&nf_flow_table_switchdev_nb);
 	nf_flow_table_offload_exit();
 	unregister_pernet_subsys(&nf_flow_table_net_ops);
 }
