@@ -893,6 +893,7 @@ static void fuse_readpages_end(struct fuse_mount *fm, struct fuse_args *args,
 	if (ia->ff)
 		fuse_file_put(ia->ff, false);
 
+	iput(inode);
 	fuse_io_free(ia);
 }
 
@@ -973,6 +974,12 @@ static void fuse_readahead(struct readahead_control *rac)
 		ia = fuse_io_alloc(NULL, cur_pages);
 		if (!ia)
 			break;
+		/*
+		 *  Acquire the inode ref here to prevent reclaim from
+		 *  deadlocking. The ref gets dropped in fuse_readpages_end().
+		 */
+		igrab(inode);
+
 		ap = &ia->ap;
 
 		while (pages < cur_pages) {
