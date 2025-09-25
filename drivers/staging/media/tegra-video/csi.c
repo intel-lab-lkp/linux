@@ -827,6 +827,13 @@ static int tegra_csi_probe(struct platform_device *pdev)
 
 	csi->dev = &pdev->dev;
 	csi->ops = csi->soc->ops;
+
+	if (csi->soc->mipi_ops)
+		tegra_mipi_add_provider(pdev->dev.of_node,
+					csi->soc->mipi_ops);
+
+	mutex_init(&csi->mipi_lock);
+
 	platform_set_drvdata(pdev, csi);
 	pm_runtime_enable(&pdev->dev);
 
@@ -858,11 +865,23 @@ static void tegra_csi_remove(struct platform_device *pdev)
 	pm_runtime_disable(&pdev->dev);
 }
 
+#if defined(CONFIG_ARCH_TEGRA_2x_SOC)
+extern const struct tegra_csi_soc tegra20_csi_soc;
+#endif
+#if defined(CONFIG_ARCH_TEGRA_3x_SOC)
+extern const struct tegra_csi_soc tegra30_csi_soc;
+#endif
 #if defined(CONFIG_ARCH_TEGRA_210_SOC)
 extern const struct tegra_csi_soc tegra210_csi_soc;
 #endif
 
 static const struct of_device_id tegra_csi_of_id_table[] = {
+#if defined(CONFIG_ARCH_TEGRA_2x_SOC)
+	{ .compatible = "nvidia,tegra20-csi", .data = &tegra20_csi_soc },
+#endif
+#if defined(CONFIG_ARCH_TEGRA_3x_SOC)
+	{ .compatible = "nvidia,tegra30-csi", .data = &tegra30_csi_soc },
+#endif
 #if defined(CONFIG_ARCH_TEGRA_210_SOC)
 	{ .compatible = "nvidia,tegra210-csi", .data = &tegra210_csi_soc },
 #endif
