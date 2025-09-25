@@ -1460,6 +1460,14 @@ static void samsung_dsim_atomic_pre_enable(struct drm_bridge *bridge,
 	}
 
 	dsi->state |= DSIM_STATE_ENABLED;
+}
+
+static void samsung_dsim_atomic_enable(struct drm_bridge *bridge,
+				       struct drm_atomic_state *state)
+{
+	pr_debug("%s called from %pS\n", __func__, __builtin_return_address(0));
+	struct samsung_dsim *dsi = bridge_to_dsi(bridge);
+	int ret;
 
 	/*
 	 * For Exynos-DSIM the downstream bridge, or panel are expecting
@@ -1470,12 +1478,6 @@ static void samsung_dsim_atomic_pre_enable(struct drm_bridge *bridge,
 		if (ret)
 			return;
 	}
-}
-
-static void samsung_dsim_atomic_enable(struct drm_bridge *bridge,
-				       struct drm_atomic_state *state)
-{
-	struct samsung_dsim *dsi = bridge_to_dsi(bridge);
 
 	samsung_dsim_set_display_mode(dsi);
 	samsung_dsim_set_display_enable(dsi, true);
