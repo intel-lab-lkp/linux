@@ -23,6 +23,8 @@
 #include "protocols.h"
 #include "notify.h"
 
+#include <trace/events/scmi.h>
+
 /* Updated only after ALL the mandatory features for that version are merged */
 #define SCMI_PROTOCOL_SUPPORTED_VERSION		0x10000
 
@@ -1021,8 +1023,10 @@ static void scmi_telemetry_tdcf_blkts_parse(struct telemetry_info *ti,
 
 	/* Check for spec compliance */
 	if (USE_LINE_TS(payld) || USE_BLK_TS(payld) ||
-	    DATA_INVALID(payld) || (PAYLD_ID(payld) != 0))
+	    DATA_INVALID(payld) || (PAYLD_ID(payld) != 0)) {
+		trace_scmi_tlm_access(0, "BLK_TS_INVALID", 0, 0);
 		return;
+	}
 
 	/* A BLK_TS descriptor MUST be returned: it is found or it is crated */
 	bts = scmi_telemetry_blkts_lookup(ti->dev, &ti->xa_bts, payld);
@@ -1031,6 +1035,9 @@ static void scmi_telemetry_tdcf_blkts_parse(struct telemetry_info *ti,
 
 	/* Update the descriptor with the lastest TS*/
 	scmi_telemetry_blkts_update(shmti->last_magic, bts);
+
+	trace_scmi_tlm_collect(bts->last_ts, (u64)payld,
+			       bts->last_magic, "SHMTI_BLK_TS");
 }
 
 static void scmi_telemetry_tdcf_data_parse(struct telemetry_info *ti,
@@ -1046,8 +1053,10 @@ static void scmi_telemetry_tdcf_data_parse(struct telemetry_info *ti,
 
 	id = PAYLD_ID(payld);
 	de = xa_load(&ti->xa_des, id);
-	if (!de)
+	if (!de) {
+		trace_scmi_tlm_access(id, "DE_INVALID", 0, 0);
 		return;
+	}
 
 	tde = to_tde(de);
 	/* Update DE location refs if requested: normally done only on enable */
@@ -1094,6 +1103,8 @@ static void scmi_telemetry_tdcf_data_parse(struct telemetry_info *ti,
 		tde->last_ts = tstamp;
 	else
 		tde->last_ts = 0;
+
+	trace_scmi_tlm_collect(0, de->info->id, tde->last_val, "SHMTI_DE_UPDT");
 }
 
 static int scmi_telemetry_tdcf_line_parse(struct telemetry_info *ti,
@@ -1139,8 +1150,10 @@ static int scmi_telemetry_shmti_scan(struct telemetry_info *ti,
 		fsleep((SCMI_TLM_TDCF_MAX_RETRIES - retries) * 1000);
 
 		startm = TDCF_START_SEQ_GET(tdcf);
-		if (IS_BAD_START_SEQ(startm))
+		if (IS_BAD_START_SEQ(startm)) {
+			trace_scmi_tlm_access(0, "MSEQ_BADSTART", startm, 0);
 			continue;
+		}
 
 		/* On a BAD_SEQ this will be updated on the next attempt */
 		shmti->last_magic = startm;
@@ -1152,18 +1165,25 @@ static int scmi_telemetry_shmti_scan(struct telemetry_info *ti,
 
 			used_qwords = scmi_telemetry_tdcf_line_parse(ti, next,
 								     shmti, update);
-			if (qwords < used_qwords)
+			if (qwords < used_qwords) {
+				trace_scmi_tlm_access(PAYLD_ID(next),
+						      "BAD_QWORDS", startm, 0);
 				return -EINVAL;
+			}
 
 			next += used_qwords * 8;
 			qwords -= used_qwords;
 		}
 
 		endm = TDCF_END_SEQ_GET(eplg);
+		if (startm != endm)
+			trace_scmi_tlm_access(0, "MSEQ_MISMATCH", startm, endm);
 	} while (startm != endm && --retries);
 
-	if (startm != endm)
+	if (startm != endm) {
+		trace_scmi_tlm_access(0, "TDCF_SCAN_FAIL", startm, endm);
 		return -EPROTO;
+	}
 
 	return 0;
 }
@@ -1544,6 +1564,8 @@ static void scmi_telemetry_scan_update(struct telemetry_info *ti, u64 ts)
 			tde->last_ts = tstamp;
 		else
 			tde->last_ts = 0;
+
+		trace_scmi_tlm_collect(ts, de->info->id, tde->last_val, "FC_UPDATE");
 	}
 }
 
@@ -1622,8 +1644,11 @@ static int scmi_telemetry_tdcf_de_parse(struct telemetry_de *tde,
 		fsleep((SCMI_TLM_TDCF_MAX_RETRIES - retries) * 1000);
 
 		startm = TDCF_START_SEQ_GET(tdcf);
-		if (IS_BAD_START_SEQ(startm))
+		if (IS_BAD_START_SEQ(startm)) {
+			trace_scmi_tlm_access(tde->de.info->id, "MSEQ_BADSTART",
+					      startm, 0);
 			continue;
+		}
 
 		/* Has anything changed at all at the SHMTI level ? */
 		scoped_guard(mutex, &tde->mtx) {
@@ -1639,11 +1664,16 @@ static int scmi_telemetry_tdcf_de_parse(struct telemetry_de *tde,
 		if (DATA_INVALID(payld))
 			return -EINVAL;
 
-		if (IS_BLK_TS(payld))
+		if (IS_BLK_TS(payld)) {
+			trace_scmi_tlm_access(tde->de.info->id,
+					      "BAD_DE_META", 0, 0);
 			return -EINVAL;
+		}
 
-		if (le32_to_cpu(payld->id) != tde->de.info->id)
+		if (le32_to_cpu(payld->id) != tde->de.info->id) {
+			trace_scmi_tlm_access(tde->de.info->id, "DE_INVALID", 0, 0);
 			return -EINVAL;
+		}
 
 		/* Data is always valid since NOT handling BLK TS lines here */
 		*val = LINE_DATA_GET(&payld->l);
@@ -1667,10 +1697,16 @@ static int scmi_telemetry_tdcf_de_parse(struct telemetry_de *tde,
 		}
 
 		endm = TDCF_END_SEQ_GET(tde->eplg);
+		if (startm != endm)
+			trace_scmi_tlm_access(tde->de.info->id, "MSEQ_MISMATCH",
+					      startm, endm);
 	} while (startm != endm && --retries);
 
-	if (startm != endm)
+	if (startm != endm) {
+		trace_scmi_tlm_access(tde->de.info->id, "TDCF_DE_FAIL",
+				      startm, endm);
 		return -EPROTO;
+	}
 
 	guard(mutex)(&tde->mtx);
 	tde->last_magic = startm;
@@ -1840,6 +1876,9 @@ scmi_telemetry_msg_payld_process(struct telemetry_info *ti,
 			tde->last_ts = LINE_TSTAMP_GET(&payld->tsl);
 		else
 			tde->last_ts = 0;
+
+		trace_scmi_tlm_collect(timestamp, tde->de.info->id, tde->last_val,
+				       "MESSAGE");
 	}
 }
 
