@@ -1319,7 +1319,12 @@ static int lan887x_phy_init(struct phy_device *phydev)
 		return ret;
 
 	/* PHY interface setup */
-	return lan887x_config_phy_interface(phydev);
+	ret = lan887x_config_phy_interface(phydev);
+	if (ret < 0)
+		return ret;
+
+	/* Make configuration visible for ethtool. */
+	return genphy_c45_pma_baset1_read_master_slave(phydev);
 }
 
 static int lan887x_phy_config(struct phy_device *phydev,
@@ -1489,7 +1494,12 @@ static int lan887x_config_aneg(struct phy_device *phydev)
 	if (ret < 0)
 		return ret;
 
-	return lan887x_phy_reconfig(phydev);
+	ret = lan887x_phy_reconfig(phydev);
+	if (ret < 0)
+		return ret;
+
+	/* Make configuration changes visible for ethtool. */
+	return genphy_c45_pma_baset1_read_master_slave(phydev);
 }
 
 static int lan887x_probe(struct phy_device *phydev)
@@ -1502,6 +1512,10 @@ static int lan887x_probe(struct phy_device *phydev)
 
 	priv->init_done = false;
 	phydev->priv = priv;
+
+	/* Set default link parameters. */
+	phydev->duplex = DUPLEX_FULL;
+	phydev->speed = SPEED_1000;
 
 	return lan887x_phy_setup(phydev);
 }
