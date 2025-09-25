@@ -4014,6 +4014,11 @@ static bool __wp_can_reuse_large_anon_folio(struct folio *folio,
 	 * an additional folio reference and never ended up here.
 	 */
 	exclusive = true;
+
+	if (folio_trylock(folio)) {
+		folio_move_anon_rmap(folio, vma);
+		folio_unlock(folio);
+	}
 unlock:
 	folio_unlock_large_mapcount(folio);
 	return exclusive;
