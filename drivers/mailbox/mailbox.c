@@ -218,6 +218,30 @@ bool mbox_client_peek_data(struct mbox_chan *chan)
 EXPORT_SYMBOL_GPL(mbox_client_peek_data);
 
 /**
+ * mbox_queue_full - check if mailbox queue is full or not
+ * @chan: Mailbox channel assigned to this client.
+ *
+ * Clients can choose not to send new msg if mbox queue is full.
+ *
+ * Return: true if queue is full else false. < 0 for error
+ */
+int mbox_queue_full(struct mbox_chan *chan)
+{
+	unsigned long flags;
+	int res;
+
+	if (!chan)
+		return -EINVAL;
+
+	spin_lock_irqsave(&chan->lock, flags);
+	res = (chan->msg_count == (MBOX_TX_QUEUE_LEN - 1));
+	spin_unlock_irqrestore(&chan->lock, flags);
+
+	return res;
+}
+EXPORT_SYMBOL_GPL(mbox_queue_full);
+
+/**
  * mbox_send_message -	For client to submit a message to be
  *				sent to the remote.
  * @chan: Mailbox channel assigned to this client.

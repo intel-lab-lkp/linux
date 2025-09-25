@@ -335,6 +335,10 @@ static void zynqmp_r5_rproc_kick(struct rproc *rproc, int vqid)
 	if (!ipi)
 		return;
 
+	/* Do not need new kick as already many kick interrupts are pending. */
+	if (mbox_queue_full(ipi->tx_chan) == true)
+		return;
+
 	mb_msg = (struct zynqmp_ipi_message *)ipi->tx_mc_buf;
 	memcpy(mb_msg->data, &vqid, sizeof(vqid));
 	mb_msg->len = sizeof(vqid);
