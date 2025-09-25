@@ -1263,6 +1263,14 @@
 	status = "okay";
 };
 
+&remoteproc_mpss {
+	firmware-name = "qcom/kaanapali/modem.mbn",
+			"qcom/kaanapali/modem_dtb.mbn";
+
+	/* Modem crashes after some time for OEMPD load failure */
+	status = "fail";
+};
+
 &remoteproc_soccp {
 	firmware-name = "qcom/kaanapali/soccp.mbn",
 			"qcom/kaanapali/soccp_dtb.mbn";
