@@ -804,7 +804,7 @@ static int atm_mpoa_mpoad_attach(struct atm_vcc *vcc, int arg)
 		/* This lets us now how our LECs are doing */
 		err = register_netdevice_notifier(&mpoa_notifier);
 		if (err < 0) {
-			timer_delete(&mpc_timer);
+			timer_delete_sync(&mpc_timer);
 			return err;
 		}
 	}
@@ -813,8 +813,10 @@ static int atm_mpoa_mpoad_attach(struct atm_vcc *vcc, int arg)
 	if (mpc == NULL) {
 		dprintk("allocating new mpc for itf %d\n", arg);
 		mpc = alloc_mpc();
-		if (mpc == NULL)
+		if (!mpcs) {
+			timer_delete_sync(&mpc_timer);
 			return -ENOMEM;
+		}
 		mpc->dev_num = arg;
 		mpc->dev = find_lec_by_itfnum(arg);
 					/* NULL if there was no lec */
