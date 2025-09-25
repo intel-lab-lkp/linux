@@ -456,7 +456,7 @@
 		vci-supply = <&panel_vci_3v3>;
 		poc-supply = <&panel_vddi_poc_1p8>;
 
-		reset-gpios = <&tlmm 6 GPIO_ACTIVE_LOW>;
+		reset-gpios = <&tlmm 6 GPIO_ACTIVE_HIGH>;
 
 		pinctrl-names = "default";
 		pinctrl-0 = <&panel_reset_pins &panel_te_pin &panel_esd_pin>;
