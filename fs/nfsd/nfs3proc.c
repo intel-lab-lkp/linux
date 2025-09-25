@@ -697,6 +697,31 @@ nfsd3_proc_fsinfo(struct svc_rqst *rqstp)
 	return rpc_success;
 }
 
+static __be32
+nfsd3_proc_case(struct svc_fh *fhp, struct nfsd3_pathconfres *resp)
+{
+	struct path p = {
+		.mnt		= fhp->fh_export->ex_path.mnt,
+		.dentry		= fhp->fh_dentry,
+	};
+	u32 request_mask = STATX_CASE_INFO;
+	struct kstat stat;
+	__be32 nfserr;
+
+	nfserr = nfserrno(vfs_getattr(&p, &stat, request_mask,
+				      AT_STATX_SYNC_AS_STAT));
+	if (nfserr != nfs_ok)
+		return nfserr;
+	if (!(stat.result_mask & STATX_CASE_INFO))
+		return nfs_ok;
+
+	resp->p_case_insensitive =
+		stat.case_info & STATX_CASE_FOLDING_TYPE ? 0 : 1;
+	resp->p_case_preserving =
+		stat.case_info & STATX_CASE_PRESERVING ? 1 : 0;
+	return nfs_ok;
+}
+
 /*
  * Get pathconf info for the specified file
  */
@@ -722,17 +747,11 @@ nfsd3_proc_pathconf(struct svc_rqst *rqstp)
 	if (resp->status == nfs_ok) {
 		struct super_block *sb = argp->fh.fh_dentry->d_sb;
 
-		/* Note that we don't care for remote fs's here */
-		switch (sb->s_magic) {
-		case EXT2_SUPER_MAGIC:
+		if (sb->s_magic == EXT2_SUPER_MAGIC) {
 			resp->p_link_max = EXT2_LINK_MAX;
 			resp->p_name_max = EXT2_NAME_LEN;
-			break;
-		case MSDOS_SUPER_MAGIC:
-			resp->p_case_insensitive = 1;
-			resp->p_case_preserving  = 0;
-			break;
 		}
+		resp->status = nfsd3_proc_case(&argp->fh, resp);
 	}
 
 	fh_put(&argp->fh);

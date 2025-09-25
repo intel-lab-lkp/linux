@@ -413,6 +413,11 @@ int fat_getattr(struct mnt_idmap *idmap, const struct path *path,
 		stat->result_mask |= STATX_BTIME;
 		stat->btime = MSDOS_I(inode)->i_crtime;
 	}
+	if (request_mask & STATX_CASE_INFO) {
+		stat->result_mask |= STATX_CASE_INFO;
+		/* STATX_CASE_PRESERVING is cleared */
+		stat->case_info = statx_case_ascii;
+	}
 
 	return 0;
 }

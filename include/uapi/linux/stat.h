@@ -219,6 +219,7 @@ struct statx {
 #define STATX_SUBVOL		0x00008000U	/* Want/got stx_subvol */
 #define STATX_WRITE_ATOMIC	0x00010000U	/* Want/got atomic_write_* fields */
 #define STATX_DIO_READ_ALIGN	0x00020000U	/* Want/got dio read alignment info */
+#define STATX_CASE_INFO		0x00040000U	/* Want/got case folding info */
 
 #define STATX__RESERVED		0x80000000U	/* Reserved for future struct statx expansion */
 
@@ -256,5 +257,19 @@ struct statx {
 #define STATX_ATTR_DAX			0x00200000 /* File is currently in DAX state */
 #define STATX_ATTR_WRITE_ATOMIC		0x00400000 /* File supports atomic write operations */
 
+
+/*
+ * File system support for case folding is available via a bitmap.
+ */
+#define STATX_CASE_PRESERVING		0x80000000 /* File name case is preserved */
+
+/* Values stored in the low-order byte of .case_info */
+enum {
+	statx_case_sensitive = 0,
+	statx_case_ascii,
+	statx_case_utf8,
+	statx_case_utf16,
+};
+#define STATX_CASE_FOLDING_TYPE		0x000000ff
 
 #endif /* _UAPI_LINUX_STAT_H */
