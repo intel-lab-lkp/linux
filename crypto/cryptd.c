@@ -216,12 +216,11 @@ static void cryptd_type_and_mask(struct crypto_attr_type *algt,
 static int cryptd_init_instance(struct crypto_instance *inst,
 				struct crypto_alg *alg)
 {
-	if (snprintf(inst->alg.cra_driver_name, CRYPTO_MAX_ALG_NAME,
-		     "cryptd(%s)",
-		     alg->cra_driver_name) >= CRYPTO_MAX_ALG_NAME)
-		return -ENAMETOOLONG;
+	int err;
 
-	memcpy(inst->alg.cra_name, alg->cra_name, CRYPTO_MAX_ALG_NAME);
+	err = crypto_inst_setname(inst, "cryptd", alg);
+	if (err)
+		return err;
 
 	inst->alg.cra_priority = alg->cra_priority + 50;
 	inst->alg.cra_blocksize = alg->cra_blocksize;
