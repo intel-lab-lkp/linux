@@ -21,6 +21,12 @@ struct mbox_chan;
  * @knows_txdone:	If the client could run the TX state machine. Usually
  *			if the client receives some ACK packet for transmission.
  *			Unused if the controller already has TX_Done/RTR IRQ.
+ * @rx_alloc		Optional callback that allows the driver
+ *			to allocate the memory used for receiving
+ *			messages.  The handle parameter is the value to return
+ *			to the client,buffer is the location the mailbox should
+ *			write to, and size it the size of the buffer to allocate.
+ *			inside the buffer where the mailbox should write the data.
  * @rx_callback:	Atomic callback to provide client the data received
  * @tx_prepare: 	Atomic callback to ask client to prepare the payload
  *			before initiating the transmission if required.
@@ -32,6 +38,7 @@ struct mbox_client {
 	unsigned long tx_tout;
 	bool knows_txdone;
 
+	void (*rx_alloc)(struct mbox_client *cl, void **handle, void **buffer, int size);
 	void (*rx_callback)(struct mbox_client *cl, void *mssg);
 	void (*tx_prepare)(struct mbox_client *cl, void *mssg);
 	void (*tx_done)(struct mbox_client *cl, void *mssg, int r);
