@@ -21,6 +21,7 @@
 
 #define SMBUS_MAST_CORE_ADDR_BASE		0x00000
 #define SMBUS_MAST_SYS_REG_ADDR_BASE		0x01000
+#define CONFIG_REG_ADDR_BASE			0x00000
 
 /* SMB register space. */
 #define SMB_CORE_CTRL_REG_OFF	(SMBUS_MAST_CORE_ADDR_BASE + 0x00)
@@ -300,6 +301,7 @@
 #define SMBUS_RESET_REG		(SMBUS_MAST_CORE_ADDR_BASE + 0x248)
 
 #define PERI_SMBUS_D3_RESET_DIS		BIT(16)
+#define PERI_SMBUS_HOT_RESET_DIS	BIT(17)
 
 #define SMBUS_MST_BUF		(SMBUS_MAST_CORE_ADDR_BASE + 0x280)
 
@@ -316,6 +318,14 @@
 #define SMB_GPR_REG		(SMBUS_MAST_CORE_ADDR_BASE + 0x1000 + 0x0c00 + \
 				0x00)
 
+/* Device Revision Register. */
+#define SMB_GPR_DEV_REV_REG	(SMBUS_MAST_CORE_ADDR_BASE + \
+				 SMBUS_MAST_SYS_REG_ADDR_BASE + \
+				 CONFIG_REG_ADDR_BASE + \
+				 0x0000)
+
+#define SMB_GPR_DEV_REV_MASK	GENMASK(7, 0)
+
 /* Lock Register. */
 #define SMB_GPR_LOCK_REG	(SMBUS_MAST_CORE_ADDR_BASE + 0x1000 + 0x0000 + \
 				0x00A0)
@@ -327,6 +337,7 @@ struct pci1xxxx_i2c {
 	bool i2c_xfer_in_progress;
 	struct i2c_adapter adap;
 	void __iomem *i2c_base;
+	u32 dev_rev;
 	u32 freq;
 	u32 flags;
 };
@@ -1086,6 +1097,8 @@ static int pci1xxxx_i2c_suspend(struct device *dev)
 	 * registers.
 	 */
 	regval = readl(p);
+	if (i2c->dev_rev >= 0xC0)
+		regval |= PERI_SMBUS_HOT_RESET_DIS;
 	regval |= PERI_SMBUS_D3_RESET_DIS;
 	writel(regval, p);
 
@@ -1108,6 +1121,8 @@ static int pci1xxxx_i2c_resume(struct device *dev)
 	writew(regval, p1);
 	pci1xxxx_i2c_config_high_level_intr(i2c, SMBALERT_WAKE_INTR_MASK, false);
 	regval = readl(p2);
+	if (i2c->dev_rev >= 0xC0)
+		regval &= ~PERI_SMBUS_HOT_RESET_DIS;
 	regval &= ~PERI_SMBUS_D3_RESET_DIS;
 	writel(regval, p2);
 	i2c_mark_adapter_resumed(&i2c->adap);
@@ -1124,6 +1139,25 @@ static void pci1xxxx_i2c_shutdown(void *data)
 
 	pci1xxxx_i2c_config_padctrl(i2c, false);
 	pci1xxxx_i2c_configure_core_reg(i2c, false);
+}
+
+static int pci1xxxx_i2c_get_device_revision(struct pci1xxxx_i2c *i2c)
+{
+	void __iomem *p = i2c->i2c_base + SMB_GPR_DEV_REV_REG;
+	u32 regval;
+	int ret;
+
+	ret = set_sys_lock(i2c);
+
+	if (ret)
+		return ret;
+
+	regval = readl(p);
+	i2c->dev_rev = regval & SMB_GPR_DEV_REV_MASK;
+
+	release_sys_lock(i2c);
+
+	return ret;
 }
 
 static int pci1xxxx_i2c_probe_pci(struct pci_dev *pdev,
@@ -1157,6 +1191,10 @@ static int pci1xxxx_i2c_probe_pci(struct pci_dev *pdev,
 	i2c->i2c_base =	pcim_iomap_table(pdev)[0];
 	init_completion(&i2c->i2c_xfer_done);
 	pci1xxxx_i2c_init(i2c);
+
+	ret = pci1xxxx_i2c_get_device_revision(i2c);
+	if (ret)
+		return ret;
 
 	ret = devm_add_action(dev, pci1xxxx_i2c_shutdown, i2c);
 	if (ret)
