@@ -190,9 +190,9 @@
  * Bus Idle Minimum time = BUS_IDLE_MIN[7:0] x Baud_Clock_Period x
  * (BUS_IDLE_MIN_XK_TICKS[7] ? 4,1)
  */
-#define BUS_IDLE_MIN_100K_TICKS		36UL
-#define BUS_IDLE_MIN_400K_TICKS		10UL
-#define BUS_IDLE_MIN_1000K_TICKS	4UL
+#define BUS_IDLE_MIN_100K_TICKS		165
+#define BUS_IDLE_MIN_400K_TICKS		40
+#define BUS_IDLE_MIN_1000K_TICKS	16
 
 /*
  * CTRL_CUM_TIME_OUT_XK_TICKS defines SMBus Controller Cumulative Time-Out.
