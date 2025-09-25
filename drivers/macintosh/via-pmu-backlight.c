@@ -11,7 +11,9 @@
 #include <asm/ptrace.h>
 #include <linux/adb.h>
 #include <linux/backlight.h>
+#include <linux/of.h>
 #include <linux/pmu.h>
+#include <uapi/linux/fb.h>
 #include <asm/backlight.h>
 
 #define MAX_PMU_LEVEL 0xFF
