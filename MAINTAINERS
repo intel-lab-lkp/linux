@@ -27764,6 +27764,11 @@ S:	Maintained
 F:	Documentation/input/devices/yealink.rst
 F:	drivers/input/misc/yealink.*
 
+YHGC DRM DRIVER
+M:	chuguangqing <chuguangqing@inspur.com>
+S:	Maintained
+F:	drivers/gpu/drm/yhgch
+
 Z8530 DRIVER FOR AX.25
 M:	Joerg Reuter <jreuter@yaina.de>
 L:	linux-hams@vger.kernel.org
