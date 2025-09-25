@@ -1046,8 +1046,8 @@ static void coresight_device_release(struct device *dev)
 {
 	struct coresight_device *csdev = to_coresight_device(dev);
 
-	fwnode_handle_put(csdev->dev.fwnode);
 	free_percpu(csdev->perf_sink_id_map.cpu_map);
+	fwnode_handle_put(csdev->dev.fwnode);
 	kfree(csdev);
 }
 
