@@ -364,10 +364,9 @@ out_free_blkg:
  * If @new_blkg is %NULL, this function tries to allocate a new one as
  * necessary using %GFP_NOWAIT.  @new_blkg is always consumed on return.
  */
-static struct blkcg_gq *blkg_create(struct blkcg *blkcg, struct gendisk *disk,
-				    struct blkcg_gq *new_blkg)
+static struct blkcg_gq *blkg_create(struct blkcg *blkcg, struct gendisk *disk)
 {
-	struct blkcg_gq *blkg;
+	struct blkcg_gq *blkg = NULL;
 	int i, ret;
 
 	lockdep_assert_held(&disk->queue->blkcg_mutex);
@@ -384,15 +383,11 @@ static struct blkcg_gq *blkg_create(struct blkcg *blkcg, struct gendisk *disk,
 		goto err_free_blkg;
 	}
 
-	/* allocate */
-	if (!new_blkg) {
-		new_blkg = blkg_alloc(blkcg, disk, GFP_NOWAIT);
-		if (unlikely(!new_blkg)) {
-			ret = -ENOMEM;
-			goto err_put_css;
-		}
+	blkg = blkg_alloc(blkcg, disk, GFP_NOIO);
+	if (unlikely(!blkg)) {
+		ret = -ENOMEM;
+		goto err_put_css;
 	}
-	blkg = new_blkg;
 
 	/* link parent */
 	if (blkcg_parent(blkcg)) {
@@ -415,35 +410,34 @@ static struct blkcg_gq *blkg_create(struct blkcg *blkcg, struct gendisk *disk,
 	/* insert */
 	spin_lock(&blkcg->lock);
 	ret = radix_tree_insert(&blkcg->blkg_tree, disk->queue->id, blkg);
-	if (likely(!ret)) {
-		hlist_add_head_rcu(&blkg->blkcg_node, &blkcg->blkg_list);
-		list_add(&blkg->q_node, &disk->queue->blkg_list);
+	if (unlikely(ret)) {
+		spin_unlock(&blkcg->lock);
+		blkg_put(blkg);
+		return ERR_PTR(ret);
+	}
 
-		for (i = 0; i < BLKCG_MAX_POLS; i++) {
-			struct blkcg_policy *pol = blkcg_policy[i];
+	hlist_add_head_rcu(&blkg->blkcg_node, &blkcg->blkg_list);
+	list_add(&blkg->q_node, &disk->queue->blkg_list);
 
-			if (blkg->pd[i]) {
-				if (pol->pd_online_fn)
-					pol->pd_online_fn(blkg->pd[i]);
-				blkg->pd[i]->online = true;
-			}
+	for (i = 0; i < BLKCG_MAX_POLS; i++) {
+		struct blkcg_policy *pol = blkcg_policy[i];
+
+		if (blkg->pd[i]) {
+			if (pol->pd_online_fn)
+				pol->pd_online_fn(blkg->pd[i]);
+			blkg->pd[i]->online = true;
 		}
 	}
+
 	blkg->online = true;
 	spin_unlock(&blkcg->lock);
-
-	if (!ret)
-		return blkg;
-
-	/* @blkg failed fully initialized, use the usual release path */
-	blkg_put(blkg);
-	return ERR_PTR(ret);
+	return blkg;
 
 err_put_css:
 	css_put(&blkcg->css);
 err_free_blkg:
-	if (new_blkg)
-		blkg_free(new_blkg);
+	if (blkg)
+		blkg_free(blkg);
 	return ERR_PTR(ret);
 }
 
@@ -498,7 +492,7 @@ static struct blkcg_gq *blkg_lookup_create(struct blkcg *blkcg,
 			parent = blkcg_parent(parent);
 		}
 
-		blkg = blkg_create(pos, disk, NULL);
+		blkg = blkg_create(pos, disk);
 		if (IS_ERR(blkg)) {
 			blkg = ret_blkg;
 			break;
@@ -879,7 +873,6 @@ int blkg_conf_prep(struct blkcg *blkcg, const struct blkcg_policy *pol,
 	while (true) {
 		struct blkcg *pos = blkcg;
 		struct blkcg *parent;
-		struct blkcg_gq *new_blkg;
 
 		parent = blkcg_parent(blkcg);
 		while (parent && !blkg_lookup(parent, q)) {
@@ -887,23 +880,14 @@ int blkg_conf_prep(struct blkcg *blkcg, const struct blkcg_policy *pol,
 			parent = blkcg_parent(parent);
 		}
 
-		new_blkg = blkg_alloc(pos, disk, GFP_NOIO);
-		if (unlikely(!new_blkg)) {
-			ret = -ENOMEM;
-			goto fail_unlock;
-		}
-
 		if (!blkcg_policy_enabled(q, pol)) {
-			blkg_free(new_blkg);
 			ret = -EOPNOTSUPP;
 			goto fail_unlock;
 		}
 
 		blkg = blkg_lookup(pos, q);
-		if (blkg) {
-			blkg_free(new_blkg);
-		} else {
-			blkg = blkg_create(pos, disk, new_blkg);
+		if (!blkg) {
+			blkg = blkg_create(pos, disk);
 			if (IS_ERR(blkg)) {
 				ret = PTR_ERR(blkg);
 				goto fail_unlock;
@@ -1468,27 +1452,18 @@ void blkg_init_queue(struct request_queue *q)
 int blkcg_init_disk(struct gendisk *disk)
 {
 	struct request_queue *q = disk->queue;
-	struct blkcg_gq *new_blkg, *blkg;
-
-	new_blkg = blkg_alloc(&blkcg_root, disk, GFP_KERNEL);
-	if (!new_blkg)
-		return -ENOMEM;
-
-	mutex_lock(&q->blkcg_mutex);
+	struct blkcg_gq *blkg;
 
 	/* Make sure the root blkg exists. */
-	blkg = blkg_create(&blkcg_root, disk, new_blkg);
+	mutex_lock(&q->blkcg_mutex);
+	blkg = blkg_create(&blkcg_root, disk);
+	mutex_unlock(&q->blkcg_mutex);
+
 	if (IS_ERR(blkg))
-		goto err_unlock;
+		return PTR_ERR(blkg);
+
 	q->root_blkg = blkg;
-
-	mutex_unlock(&q->blkcg_mutex);
-
 	return 0;
-
-err_unlock:
-	mutex_unlock(&q->blkcg_mutex);
-	return PTR_ERR(blkg);
 }
 
 void blkcg_exit_disk(struct gendisk *disk)
