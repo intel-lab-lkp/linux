@@ -11,7 +11,9 @@ maintainers:
 
 properties:
   compatible:
-    const: maxim,max11801
+    enum:
+      - maxim,max11801
+      - microchip,ar1021-i2c
 
   reg:
     maxItems: 1
