@@ -216,6 +216,9 @@ struct svm_nested_state {
 	 * on its side.
 	 */
 	bool force_msr_bitmap_recalc;
+
+	/* Indicates whether dirty logging changed while nested guest ran */
+	bool update_vmcb01_cpu_dirty_logging;
 };
 
 struct vcpu_sev_es_state {
@@ -716,6 +719,8 @@ static inline void svm_enable_intercept_for_msr(struct kvm_vcpu *vcpu,
 {
 	svm_set_intercept_for_msr(vcpu, msr, type, true);
 }
+
+void svm_update_cpu_dirty_logging(struct kvm_vcpu *vcpu);
 
 /* nested.c */
 

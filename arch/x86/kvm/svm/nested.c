@@ -740,8 +740,11 @@ static void nested_vmcb02_prepare_control(struct vcpu_svm *svm,
 						V_NMI_BLOCKING_MASK);
 	}
 
-	/* Copied from vmcb01.  msrpm_base can be overwritten later.  */
-	vmcb02->control.nested_ctl = vmcb01->control.nested_ctl;
+	/*
+	 * Copied from vmcb01.  msrpm_base can be overwritten later.
+	 * Disable PML for nested guest.
+	 */
+	vmcb02->control.nested_ctl = vmcb01->control.nested_ctl & ~SVM_NESTED_CTL_PML_ENABLE;
 	vmcb02->control.iopm_base_pa = vmcb01->control.iopm_base_pa;
 	vmcb02->control.msrpm_base_pa = vmcb01->control.msrpm_base_pa;
 
@@ -1175,6 +1178,12 @@ int nested_svm_vmexit(struct vcpu_svm *svm)
 	} else if (unlikely(vmcb01->control.virt_ext & LBR_CTL_ENABLE_MASK)) {
 		svm_copy_lbrs(vmcb01, vmcb02);
 		svm_update_lbrv(vcpu);
+	}
+
+	/* Update dirty logging that might have changed while L2 ran */
+	if (svm->nested.update_vmcb01_cpu_dirty_logging) {
+		svm->nested.update_vmcb01_cpu_dirty_logging = false;
+		svm_update_cpu_dirty_logging(vcpu);
 	}
 
 	if (vnmi) {
