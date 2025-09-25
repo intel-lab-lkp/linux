@@ -513,7 +513,8 @@ static void drm_connector_cleanup_action(struct drm_device *dev,
  *
  * The connector structure should be allocated with drmm_kzalloc().
  *
- * The @drm_connector_funcs.destroy hook must be NULL.
+ * The @drm_connector_funcs.destroy hook must only do connector-specific
+ * cleanups if any is needed, not dealloacte the connector.
  *
  * Returns:
  * Zero on success, error code on failure.
@@ -525,9 +526,6 @@ int drmm_connector_init(struct drm_device *dev,
 			struct i2c_adapter *ddc)
 {
 	int ret;
-
-	if (drm_WARN_ON(dev, funcs && funcs->destroy))
-		return -EINVAL;
 
 	ret = drm_connector_init_and_add(dev, connector, funcs, connector_type, ddc);
 	if (ret)
