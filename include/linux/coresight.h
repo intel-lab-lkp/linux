@@ -280,6 +280,7 @@ struct coresight_trace_id_map {
  * @config_csdev_list:  List of system configurations added to the device.
  * @cscfg_csdev_lock:	Protect the lists of configurations and features.
  * @active_cscfg_ctxt:  Context information for current active system configuration.
+ * @panic_notifier: Notifier block used to clean up during a panic
  */
 struct coresight_device {
 	struct coresight_platform_data *pdata;
@@ -304,6 +305,7 @@ struct coresight_device {
 	struct list_head config_csdev_list;
 	raw_spinlock_t cscfg_csdev_lock;
 	void *active_cscfg_ctxt;
+	struct notifier_block panic_notifier;
 };
 
 /*
