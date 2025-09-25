@@ -870,6 +870,7 @@ static int cxl_port_add(struct cxl_port *port,
 			return rc;
 
 		port->component_reg_phys = component_reg_phys;
+		cxl_port_setup_regs(port, port->component_reg_phys);
 	} else {
 		rc = dev_set_name(dev, "root%d", port->id);
 		if (rc)

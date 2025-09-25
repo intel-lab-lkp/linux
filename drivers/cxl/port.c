@@ -6,6 +6,7 @@
 
 #include "cxlmem.h"
 #include "cxlpci.h"
+#include "core/core.h"
 
 /**
  * DOC: cxl port
@@ -65,6 +66,8 @@ static int cxl_switch_port_probe(struct cxl_port *port)
 	/* Cache the data early to ensure is_visible() works */
 	read_cdat_data(port);
 
+	cxl_switch_port_init_ras(port);
+
 	return 0;
 }
 
@@ -85,6 +88,8 @@ static int cxl_endpoint_port_probe(struct cxl_port *port)
 	rc = devm_cxl_endpoint_decoders_setup(port);
 	if (rc)
 		return rc;
+
+	cxl_endpoint_port_init_ras(port);
 
 	/*
 	 * Now that all endpoint decoders are successfully enumerated, try to
