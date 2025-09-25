@@ -782,7 +782,9 @@ static struct platform_driver tegra_host1x_driver = {
 
 static struct platform_driver * const drivers[] = {
 	&tegra_host1x_driver,
+#if !defined(CONFIG_ARCH_TEGRA_2x_SOC) && !defined(CONFIG_ARCH_TEGRA_3x_SOC)
 	&tegra_mipi_driver,
+#endif
 };
 
 static int __init tegra_host1x_init(void)
