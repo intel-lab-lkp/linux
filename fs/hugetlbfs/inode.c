@@ -42,6 +42,10 @@
 #define CREATE_TRACE_POINTS
 #include <trace/events/hugetlbfs.h>
 
+#define HPAGE_RESV_OWNER    (1UL << 0)
+#define HPAGE_RESV_UNMAPPED (1UL << 1)
+#define HPAGE_RESV_MASK (HPAGE_RESV_OWNER | HPAGE_RESV_UNMAPPED)
+
 static const struct address_space_operations hugetlbfs_aops;
 static const struct file_operations hugetlbfs_file_operations;
 static const struct inode_operations hugetlbfs_dir_inode_operations;
@@ -477,6 +481,9 @@ hugetlb_vmdelete_list(struct rb_root_cached *root, pgoff_t start, pgoff_t end,
 		      zap_flags_t zap_flags)
 {
 	struct vm_area_struct *vma;
+	struct hugetlb_vma_lock *vma_lock;
+	struct resv_map *resv_map;
+	bool locked;
 
 	/*
 	 * end == 0 indicates that the entire range after start should be
@@ -486,8 +493,24 @@ hugetlb_vmdelete_list(struct rb_root_cached *root, pgoff_t start, pgoff_t end,
 	vma_interval_tree_foreach(vma, root, start, end ? end - 1 : ULONG_MAX) {
 		unsigned long v_start;
 		unsigned long v_end;
+		vma_lock = NULL;
+		resv_map = NULL;
+		locked = false;
 
-		if (!hugetlb_vma_trylock_write(vma))
+		if (__vma_shareable_lock(vma)) {
+			vma_lock = vma->vm_private_data;
+			if (vma_lock && down_write_trylock(&vma_lock->rw_sema))
+				locked = true;
+		} else if (__vma_private_lock(vma)) {
+			resv_map = (struct resv_map *)((unsigned long)vma->vm_private_data & ~HPAGE_RESV_MASK);
+			if (resv_map && down_write_trylock(&resv_map->rw_sema))
+				locked = true;
+		} else {
+			/* No lock needed for this VMA */
+			locked = true;
+		}
+
+		if (!locked)
 			continue;
 
 		v_start = vma_offset_start(vma, start);
@@ -500,7 +523,10 @@ hugetlb_vmdelete_list(struct rb_root_cached *root, pgoff_t start, pgoff_t end,
 		 * vmas.  Therefore, lock is not held when calling
 		 * unmap_hugepage_range for private vmas.
 		 */
-		hugetlb_vma_unlock_write(vma);
+		if (vma_lock)
+			up_write(&vma_lock->rw_sema);
+		else if (resv_map)
+			up_write(&resv_map->rw_sema);
 	}
 }
 
