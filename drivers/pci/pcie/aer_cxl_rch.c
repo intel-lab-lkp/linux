@@ -17,10 +17,10 @@ static bool is_cxl_mem_dev(struct pci_dev *dev)
 		return false;
 
 	/*
-	 * CXL Memory Devices must have the 502h class code set (CXL
-	 * 3.0, 8.1.12.1).
+	 * CXL Memory Devices must have the 502h class code set
+	 * (CXL 3.2, 8.1.12.1).
 	 */
-	if ((dev->class >> 8) != PCI_CLASS_MEMORY_CXL)
+	if (FIELD_GET(PCI_CLASS_CODE_MASK, dev->class) != PCI_CLASS_MEMORY_CXL)
 		return false;
 
 	return true;
