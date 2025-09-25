@@ -2640,7 +2640,7 @@ static __be32 nfsd4_encode_components_esc(struct xdr_stream *xdr, char sep,
 	__be32 *p;
 	__be32 pathlen;
 	int pathlen_offset;
-	int strlen, count=0;
+	int count=0;
 	char *str, *end, *next;
 
 	dprintk("nfsd4_encode_components(%s)\n", components);
@@ -2654,6 +2654,7 @@ static __be32 nfsd4_encode_components_esc(struct xdr_stream *xdr, char sep,
 	end = str = components;
 	while (*end) {
 		bool found_esc = false;
+		int strlen;
 
 		/* try to parse as esc_start, ..., esc_end, sep */
 		if (*str == esc_enter) {
