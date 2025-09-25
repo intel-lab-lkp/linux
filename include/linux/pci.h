@@ -1894,6 +1894,8 @@ static inline void pci_hp_unignore_link_change(struct pci_dev *pdev) { }
 
 #ifdef CONFIG_PCIEAER
 bool pci_aer_available(void);
+pci_ers_result_t pci_ers_merge_result(enum pci_ers_result orig,
+				      enum pci_ers_result new);
 #else
 static inline bool pci_aer_available(void) { return false; }
 #endif
