@@ -164,4 +164,9 @@ config UIO_DFL
 	    opae-sdk/tools/libopaeuio/
 
 	  If you compile this as a module, it will be called uio_dfl.
+
+config UIO_PCI_GENERIC_SVA
+	tristate "Generic driver for PCI Express that supports sva"
+	depends on PCI && IOMMU_SVA
+
 endif
