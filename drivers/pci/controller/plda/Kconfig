@@ -10,6 +10,7 @@ config PCIE_PLDA_HOST
 config PCIE_MICROCHIP_HOST
 	tristate "Microchip AXI PCIe controller"
 	depends on PCI_MSI && OF
+	depends on !PCI_LOCKLESS_CONFIG
 	select PCI_HOST_COMMON
 	select PCIE_PLDA_HOST
 	help
