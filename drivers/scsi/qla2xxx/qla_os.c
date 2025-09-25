@@ -7620,12 +7620,6 @@ qla2x00_timer(struct timer_list *t)
 #define FW_FILE_ISP2322	"ql2322_fw.bin"
 #define FW_FILE_ISP24XX	"ql2400_fw.bin"
 #define FW_FILE_ISP25XX	"ql2500_fw.bin"
-#define FW_FILE_ISP81XX	"ql8100_fw.bin"
-#define FW_FILE_ISP82XX	"ql8200_fw.bin"
-#define FW_FILE_ISP2031	"ql2600_fw.bin"
-#define FW_FILE_ISP8031	"ql8300_fw.bin"
-#define FW_FILE_ISP27XX	"ql2700_fw.bin"
-#define FW_FILE_ISP28XX	"ql2800_fw.bin"
 
 
 static DEFINE_MUTEX(qla_fw_lock);
@@ -7637,12 +7631,6 @@ static struct fw_blob qla_fw_blobs[] = {
 	{ .name = FW_FILE_ISP2322, .segs = { 0x800, 0x1c000, 0x1e000, 0 }, },
 	{ .name = FW_FILE_ISP24XX, },
 	{ .name = FW_FILE_ISP25XX, },
-	{ .name = FW_FILE_ISP81XX, },
-	{ .name = FW_FILE_ISP82XX, },
-	{ .name = FW_FILE_ISP2031, },
-	{ .name = FW_FILE_ISP8031, },
-	{ .name = FW_FILE_ISP27XX, },
-	{ .name = FW_FILE_ISP28XX, },
 	{ .name = NULL, },
 };
 
