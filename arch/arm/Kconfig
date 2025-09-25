@@ -324,7 +324,7 @@ config MMU
 	  support by paged memory management. If unsure, say 'Y'.
 
 config ARM_SINGLE_ARMV7M
-	def_bool !MMU
+	def_bool !MMU && !CPU_ARM940T
 	select ARM_NVIC
 	select CPU_V7M
 	select NO_IOPORT_MAP
