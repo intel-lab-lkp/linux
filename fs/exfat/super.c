@@ -757,6 +757,11 @@ static int exfat_reconfigure(struct fs_context *fc)
 	if (new_opts->allow_utime == (unsigned short)-1)
 		new_opts->allow_utime = ~new_opts->fs_dmask & 0022;
 
+	if (!strcmp(new_opts->iocharset, "utf8"))
+		new_opts->utf8 = 1;
+	else
+		new_opts->utf8 = 0;
+
 	/*
 	 * Since the old settings of these mount options are cached in
 	 * inodes or dentries, they cannot be modified dynamically.
