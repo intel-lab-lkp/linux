@@ -32,11 +32,11 @@ struct sofef00_panel *to_sofef00_panel(struct drm_panel *panel)
 
 static void sofef00_panel_reset(struct sofef00_panel *ctx)
 {
-	gpiod_set_value_cansleep(ctx->reset_gpio, 0);
-	usleep_range(5000, 6000);
 	gpiod_set_value_cansleep(ctx->reset_gpio, 1);
-	usleep_range(2000, 3000);
+	usleep_range(5000, 6000);
 	gpiod_set_value_cansleep(ctx->reset_gpio, 0);
+	usleep_range(2000, 3000);
+	gpiod_set_value_cansleep(ctx->reset_gpio, 1);
 	usleep_range(12000, 13000);
 }
 
@@ -99,7 +99,7 @@ static int sofef00_panel_prepare(struct drm_panel *panel)
 
 	ret = sofef00_panel_on(ctx);
 	if (ret < 0) {
-		gpiod_set_value_cansleep(ctx->reset_gpio, 1);
+		gpiod_set_value_cansleep(ctx->reset_gpio, 0);
 		return ret;
 	}
 
@@ -202,7 +202,7 @@ static int sofef00_panel_probe(struct mipi_dsi_device *dsi)
 		return dev_err_probe(dev, PTR_ERR(ctx->supply),
 				     "Failed to get vddio regulator\n");
 
-	ctx->reset_gpio = devm_gpiod_get(dev, "reset", GPIOD_OUT_HIGH);
+	ctx->reset_gpio = devm_gpiod_get(dev, "reset", GPIOD_OUT_LOW);
 	if (IS_ERR(ctx->reset_gpio))
 		return dev_err_probe(dev, PTR_ERR(ctx->reset_gpio),
 				     "Failed to get reset-gpios\n");
