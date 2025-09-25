@@ -2745,6 +2745,62 @@ static const struct camss_subdev_resources csiphy_res_8775p[] = {
 	},
 };
 
+static const struct camss_subdev_resources tpg_res_8775p[] = {
+	/* TPG0 */
+	{
+		.regulators = {  },
+		.clock = { "csiphy_rx", "camnoc_axi" },
+		.clock_rate = {
+			{ 400000000 },
+			{ 400000000 },
+		},
+		.reg = { "tpg0" },
+		.interrupt = { "tpg0" },
+		.tpg = {
+			.lane_cnt = 4,
+			.vc_cnt = 1,
+			.formats = &tpg_formats_gen1,
+			.hw_ops = &tpg_ops_gen1
+		}
+	},
+
+	/* TPG1 */
+	{
+		.regulators = {  },
+		.clock = { "csiphy_rx", "camnoc_axi" },
+		.clock_rate = {
+			{ 400000000 },
+			{ 400000000 },
+		},
+		.reg = { "tpg1" },
+		.interrupt = { "tpg1" },
+		.tpg = {
+			.lane_cnt = 4,
+			.vc_cnt = 1,
+			.formats = &tpg_formats_gen1,
+			.hw_ops = &tpg_ops_gen1
+		}
+	},
+
+	/* TPG2 */
+	{
+		.regulators = {  },
+		.clock = { "csiphy_rx", "camnoc_axi" },
+		.clock_rate = {
+			{ 400000000 },
+			{ 400000000 },
+		},
+		.reg = { "tpg2" },
+		.interrupt = { "tpg2" },
+		.tpg = {
+			.lane_cnt = 4,
+			.vc_cnt = 1,
+			.formats = &tpg_formats_gen1,
+			.hw_ops = &tpg_ops_gen1
+		}
+	},
+};
+
 static const struct camss_subdev_resources csid_res_8775p[] = {
 	/* CSID0 */
 	{
@@ -4217,6 +4273,13 @@ static int camss_probe(struct platform_device *pdev)
 	if (!camss->csiphy)
 		return -ENOMEM;
 
+	if (camss->res->tpg_num > 0) {
+		camss->tpg = devm_kcalloc(dev, camss->res->tpg_num,
+					  sizeof(*camss->tpg), GFP_KERNEL);
+		if (!camss->tpg)
+			return -ENOMEM;
+	}
+
 	camss->csid = devm_kcalloc(dev, camss->res->csid_num, sizeof(*camss->csid),
 				   GFP_KERNEL);
 	if (!camss->csid)
@@ -4350,6 +4413,7 @@ static const struct camss_resources msm8916_resources = {
 	.ispif_res = &ispif_res_8x16,
 	.vfe_res = vfe_res_8x16,
 	.csiphy_num = ARRAY_SIZE(csiphy_res_8x16),
+	.tpg_num = 0,
 	.csid_num = ARRAY_SIZE(csid_res_8x16),
 	.vfe_num = ARRAY_SIZE(vfe_res_8x16),
 };
@@ -4363,6 +4427,7 @@ static const struct camss_resources msm8953_resources = {
 	.ispif_res = &ispif_res_8x53,
 	.vfe_res = vfe_res_8x53,
 	.csiphy_num = ARRAY_SIZE(csiphy_res_8x96),
+	.tpg_num = 0,
 	.csid_num = ARRAY_SIZE(csid_res_8x53),
 	.vfe_num = ARRAY_SIZE(vfe_res_8x53),
 };
@@ -4374,6 +4439,7 @@ static const struct camss_resources msm8996_resources = {
 	.ispif_res = &ispif_res_8x96,
 	.vfe_res = vfe_res_8x96,
 	.csiphy_num = ARRAY_SIZE(csiphy_res_8x96),
+	.tpg_num = 0,
 	.csid_num = ARRAY_SIZE(csid_res_8x96),
 	.vfe_num = ARRAY_SIZE(vfe_res_8x96),
 };
@@ -4386,6 +4452,7 @@ static const struct camss_resources qcm2290_resources = {
 	.icc_res = icc_res_2290,
 	.icc_path_num = ARRAY_SIZE(icc_res_2290),
 	.csiphy_num = ARRAY_SIZE(csiphy_res_2290),
+	.tpg_num = 0,
 	.csid_num = ARRAY_SIZE(csid_res_2290),
 	.vfe_num = ARRAY_SIZE(vfe_res_2290),
 };
@@ -4394,11 +4461,13 @@ static const struct camss_resources qcs8300_resources = {
 	.version = CAMSS_8300,
 	.pd_name = "top",
 	.csiphy_res = csiphy_res_8300,
+	.tpg_res = tpg_res_8775p,
 	.csid_res = csid_res_8775p,
 	.csid_wrapper_res = &csid_wrapper_res_sm8550,
 	.vfe_res = vfe_res_8775p,
 	.icc_res = icc_res_qcs8300,
 	.csiphy_num = ARRAY_SIZE(csiphy_res_8300),
+	.tpg_num = ARRAY_SIZE(tpg_res_8775p),
 	.csid_num = ARRAY_SIZE(csid_res_8775p),
 	.vfe_num = ARRAY_SIZE(vfe_res_8775p),
 	.icc_path_num = ARRAY_SIZE(icc_res_qcs8300),
@@ -4408,11 +4477,13 @@ static const struct camss_resources sa8775p_resources = {
 	.version = CAMSS_8775P,
 	.pd_name = "top",
 	.csiphy_res = csiphy_res_8775p,
+	.tpg_res = tpg_res_8775p,
 	.csid_res = csid_res_8775p,
 	.csid_wrapper_res = &csid_wrapper_res_sm8550,
 	.vfe_res = vfe_res_8775p,
 	.icc_res = icc_res_sa8775p,
 	.csiphy_num = ARRAY_SIZE(csiphy_res_8775p),
+	.tpg_num = ARRAY_SIZE(tpg_res_8775p),
 	.csid_num = ARRAY_SIZE(csid_res_8775p),
 	.vfe_num = ARRAY_SIZE(vfe_res_8775p),
 	.icc_path_num = ARRAY_SIZE(icc_res_sa8775p),
@@ -4425,6 +4496,7 @@ static const struct camss_resources sdm660_resources = {
 	.ispif_res = &ispif_res_660,
 	.vfe_res = vfe_res_660,
 	.csiphy_num = ARRAY_SIZE(csiphy_res_660),
+	.tpg_num = 0,
 	.csid_num = ARRAY_SIZE(csid_res_660),
 	.vfe_num = ARRAY_SIZE(vfe_res_660),
 };
@@ -4435,6 +4507,7 @@ static const struct camss_resources sdm670_resources = {
 	.csid_res = csid_res_670,
 	.vfe_res = vfe_res_670,
 	.csiphy_num = ARRAY_SIZE(csiphy_res_670),
+	.tpg_num = 0,
 	.csid_num = ARRAY_SIZE(csid_res_670),
 	.vfe_num = ARRAY_SIZE(vfe_res_670),
 };
@@ -4446,6 +4519,7 @@ static const struct camss_resources sdm845_resources = {
 	.csid_res = csid_res_845,
 	.vfe_res = vfe_res_845,
 	.csiphy_num = ARRAY_SIZE(csiphy_res_845),
+	.tpg_num = 0,
 	.csid_num = ARRAY_SIZE(csid_res_845),
 	.vfe_num = ARRAY_SIZE(vfe_res_845),
 };
@@ -4459,6 +4533,7 @@ static const struct camss_resources sm8250_resources = {
 	.icc_res = icc_res_sm8250,
 	.icc_path_num = ARRAY_SIZE(icc_res_sm8250),
 	.csiphy_num = ARRAY_SIZE(csiphy_res_8250),
+	.tpg_num = 0,
 	.csid_num = ARRAY_SIZE(csid_res_8250),
 	.vfe_num = ARRAY_SIZE(vfe_res_8250),
 };
@@ -4473,6 +4548,7 @@ static const struct camss_resources sc8280xp_resources = {
 	.icc_res = icc_res_sc8280xp,
 	.icc_path_num = ARRAY_SIZE(icc_res_sc8280xp),
 	.csiphy_num = ARRAY_SIZE(csiphy_res_sc8280xp),
+	.tpg_num = 0,
 	.csid_num = ARRAY_SIZE(csid_res_sc8280xp),
 	.vfe_num = ARRAY_SIZE(vfe_res_sc8280xp),
 };
@@ -4486,6 +4562,7 @@ static const struct camss_resources sc7280_resources = {
 	.icc_res = icc_res_sc7280,
 	.icc_path_num = ARRAY_SIZE(icc_res_sc7280),
 	.csiphy_num = ARRAY_SIZE(csiphy_res_7280),
+	.tpg_num = 0,
 	.csid_num = ARRAY_SIZE(csid_res_7280),
 	.vfe_num = ARRAY_SIZE(vfe_res_7280),
 };
@@ -4500,6 +4577,7 @@ static const struct camss_resources sm8550_resources = {
 	.icc_res = icc_res_sm8550,
 	.icc_path_num = ARRAY_SIZE(icc_res_sm8550),
 	.csiphy_num = ARRAY_SIZE(csiphy_res_8550),
+	.tpg_num = 0,
 	.csid_num = ARRAY_SIZE(csid_res_8550),
 	.vfe_num = ARRAY_SIZE(vfe_res_8550),
 };
@@ -4514,6 +4592,7 @@ static const struct camss_resources x1e80100_resources = {
 	.icc_res = icc_res_x1e80100,
 	.icc_path_num = ARRAY_SIZE(icc_res_x1e80100),
 	.csiphy_num = ARRAY_SIZE(csiphy_res_x1e80100),
+	.tpg_num = 0,
 	.csid_num = ARRAY_SIZE(csid_res_x1e80100),
 	.vfe_num = ARRAY_SIZE(vfe_res_x1e80100),
 };
