@@ -33,6 +33,7 @@ static struct workqueue_struct *kthrotld_workqueue;
 
 struct throtl_data
 {
+	spinlock_t lock;
 	/* service tree for active throtl groups */
 	struct throtl_service_queue service_queue;
 
@@ -1140,7 +1141,7 @@ static void throtl_pending_timer_fn(struct timer_list *t)
 	else
 		q = td->queue;
 
-	spin_lock_irq(&q->queue_lock);
+	spin_lock(&td->lock);
 
 	if (!q->root_blkg)
 		goto out_unlock;
@@ -1166,9 +1167,9 @@ again:
 			break;
 
 		/* this dispatch windows is still open, relax and repeat */
-		spin_unlock_irq(&q->queue_lock);
+		spin_unlock(&td->lock);
 		cpu_relax();
-		spin_lock_irq(&q->queue_lock);
+		spin_lock(&td->lock);
 	}
 
 	if (!dispatched)
@@ -1191,7 +1192,7 @@ again:
 		queue_work(kthrotld_workqueue, &td->dispatch_work);
 	}
 out_unlock:
-	spin_unlock_irq(&q->queue_lock);
+	spin_unlock(&td->lock);
 }
 
 /**
@@ -1207,7 +1208,6 @@ static void blk_throtl_dispatch_work_fn(struct work_struct *work)
 	struct throtl_data *td = container_of(work, struct throtl_data,
 					      dispatch_work);
 	struct throtl_service_queue *td_sq = &td->service_queue;
-	struct request_queue *q = td->queue;
 	struct bio_list bio_list_on_stack;
 	struct bio *bio;
 	struct blk_plug plug;
@@ -1215,11 +1215,11 @@ static void blk_throtl_dispatch_work_fn(struct work_struct *work)
 
 	bio_list_init(&bio_list_on_stack);
 
-	spin_lock_irq(&q->queue_lock);
+	spin_lock_bh(&td->lock);
 	for (rw = READ; rw <= WRITE; rw++)
 		while ((bio = throtl_pop_queued(td_sq, NULL, rw)))
 			bio_list_add(&bio_list_on_stack, bio);
-	spin_unlock_irq(&q->queue_lock);
+	spin_unlock_bh(&td->lock);
 
 	if (!bio_list_empty(&bio_list_on_stack)) {
 		blk_start_plug(&plug);
@@ -1297,7 +1297,7 @@ static void tg_conf_updated(struct throtl_grp *tg, bool global)
 	rcu_read_unlock();
 
 	/*
-	 * We're already holding queue_lock and know @tg is valid.  Let's
+	 * We're already holding td->lock and know @tg is valid.  Let's
 	 * apply the new config directly.
 	 *
 	 * Restart the slices for both READ and WRITES. It might happen
@@ -1324,6 +1324,7 @@ static int blk_throtl_init(struct gendisk *disk)
 	if (!td)
 		return -ENOMEM;
 
+	spin_lock_init(&td->lock);
 	INIT_WORK(&td->dispatch_work, blk_throtl_dispatch_work_fn);
 	throtl_service_queue_init(&td->service_queue);
 
@@ -1694,12 +1695,7 @@ void blk_throtl_cancel_bios(struct gendisk *disk)
 	if (!blk_throtl_activated(q))
 		return;
 
-	spin_lock_irq(&q->queue_lock);
-	/*
-	 * queue_lock is held, rcu lock is not needed here technically.
-	 * However, rcu lock is still held to emphasize that following
-	 * path need RCU protection and to prevent warning from lockdep.
-	 */
+	spin_lock_bh(&q->td->lock);
 	rcu_read_lock();
 	blkg_for_each_descendant_post(blkg, pos_css, q->root_blkg) {
 		/*
@@ -1713,7 +1709,7 @@ void blk_throtl_cancel_bios(struct gendisk *disk)
 		tg_flush_bios(blkg_to_tg(blkg));
 	}
 	rcu_read_unlock();
-	spin_unlock_irq(&q->queue_lock);
+	spin_unlock_bh(&q->td->lock);
 }
 
 static bool tg_within_limit(struct throtl_grp *tg, struct bio *bio, bool rw)
@@ -1746,7 +1742,6 @@ static bool tg_within_limit(struct throtl_grp *tg, struct bio *bio, bool rw)
 
 bool __blk_throtl_bio(struct bio *bio)
 {
-	struct request_queue *q = bdev_get_queue(bio->bi_bdev);
 	struct blkcg_gq *blkg = bio->bi_blkg;
 	struct throtl_qnode *qn = NULL;
 	struct throtl_grp *tg = blkg_to_tg(blkg);
@@ -1756,7 +1751,7 @@ bool __blk_throtl_bio(struct bio *bio)
 	struct throtl_data *td = tg->td;
 
 	rcu_read_lock();
-	spin_lock_irq(&q->queue_lock);
+	spin_lock_bh(&td->lock);
 	sq = &tg->service_queue;
 
 	while (true) {
@@ -1832,7 +1827,7 @@ bool __blk_throtl_bio(struct bio *bio)
 	}
 
 out_unlock:
-	spin_unlock_irq(&q->queue_lock);
+	spin_unlock_bh(&td->lock);
 
 	rcu_read_unlock();
 	return throttled;
