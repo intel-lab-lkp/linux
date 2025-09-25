@@ -1540,7 +1540,7 @@ static struct sock *tcp_v6_syn_recv_sock(const struct sock *sk, struct sk_buff *
 	if (__inet_inherit_port(sk, newsk) < 0)
 		goto put_and_exit;
 	*own_req = inet_ehash_nolisten(newsk, req_to_sk(req_unhash),
-				       &found_dup_sk);
+				       &found_dup_sk, true);
 	if (*own_req) {
 		tcp_move_syn(newtp, req);
 

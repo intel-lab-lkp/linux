@@ -702,7 +702,7 @@ static bool inet_ehash_lookup_by_sk(struct sock *sk,
  * If an existing socket already exists, socket sk is not inserted,
  * and sets found_dup_sk parameter to true.
  */
-bool inet_ehash_insert(struct sock *sk, struct sock *osk, bool *found_dup_sk)
+bool inet_ehash_insert(struct sock *sk, struct sock *osk, bool *found_dup_sk, bool add_first)
 {
 	struct inet_hashinfo *hashinfo = tcp_get_hashinfo(sk);
 	struct inet_ehash_bucket *head;
@@ -720,6 +720,26 @@ bool inet_ehash_insert(struct sock *sk, struct sock *osk, bool *found_dup_sk)
 	spin_lock(lock);
 	if (osk) {
 		WARN_ON_ONCE(sk->sk_hash != osk->sk_hash);
+
+		if (add_first) {
+			ret = false;
+			if (sk_hashed(osk)) {
+				/* Add the sk to the hashtable before removing
+				 * osk to prevent a transient empty state in
+				 * the hash table during the TCP state
+				 * transition from SYN_RECV to ESTABLISHED.
+				 */
+				__sk_nulls_add_node_rcu(sk, list);
+				ret = sk_nulls_del_node_init_rcu(osk);
+				WARN_ON_ONCE(!ret);
+			}
+			/* If osk is unhashed, it means two requests are
+			 * holding the same osk and another thread has
+			 * successfully inserted its sk into ehash. We do
+			 * nothing and the caller will free the sk.
+			 */
+			goto unlock;
+		}
 		ret = sk_nulls_del_node_init_rcu(osk);
 	} else if (found_dup_sk) {
 		*found_dup_sk = inet_ehash_lookup_by_sk(sk, list);
@@ -730,14 +750,15 @@ bool inet_ehash_insert(struct sock *sk, struct sock *osk, bool *found_dup_sk)
 	if (ret)
 		__sk_nulls_add_node_rcu(sk, list);
 
+unlock:
 	spin_unlock(lock);
 
 	return ret;
 }
 
-bool inet_ehash_nolisten(struct sock *sk, struct sock *osk, bool *found_dup_sk)
+bool inet_ehash_nolisten(struct sock *sk, struct sock *osk, bool *found_dup_sk, bool add_first)
 {
-	bool ok = inet_ehash_insert(sk, osk, found_dup_sk);
+	bool ok = inet_ehash_insert(sk, osk, found_dup_sk, add_first);
 
 	if (ok) {
 		sock_prot_inuse_add(sock_net(sk), sk->sk_prot, 1);
@@ -785,7 +806,7 @@ int inet_hash(struct sock *sk)
 
 	if (sk->sk_state != TCP_LISTEN) {
 		local_bh_disable();
-		inet_ehash_nolisten(sk, NULL, NULL);
+		inet_ehash_nolisten(sk, NULL, NULL, false);
 		local_bh_enable();
 		return 0;
 	}
@@ -1177,7 +1198,7 @@ ok:
 
 	if (sk_unhashed(sk)) {
 		inet_sk(sk)->inet_sport = htons(port);
-		inet_ehash_nolisten(sk, (struct sock *)tw, NULL);
+		inet_ehash_nolisten(sk, (struct sock *)tw, NULL, false);
 	}
 	if (tw)
 		inet_twsk_bind_unhash(tw, hinfo);

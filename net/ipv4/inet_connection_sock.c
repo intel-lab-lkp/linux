@@ -1135,7 +1135,7 @@ static void reqsk_timer_handler(struct timer_list *t)
 		if (!nreq)
 			return;
 
-		if (!inet_ehash_insert(req_to_sk(nreq), req_to_sk(oreq), NULL)) {
+		if (!inet_ehash_insert(req_to_sk(nreq), req_to_sk(oreq), NULL, false)) {
 			/* delete timer */
 			__inet_csk_reqsk_queue_drop(sk_listener, nreq, true);
 			goto no_ownership;
@@ -1172,7 +1172,7 @@ static bool reqsk_queue_hash_req(struct request_sock *req,
 {
 	bool found_dup_sk = false;
 
-	if (!inet_ehash_insert(req_to_sk(req), NULL, &found_dup_sk))
+	if (!inet_ehash_insert(req_to_sk(req), NULL, &found_dup_sk, false))
 		return false;
 
 	/* The timer needs to be setup after a successful insertion. */
