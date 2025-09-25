@@ -1636,7 +1636,7 @@ static struct iommu_device *omap_iommu_probe_device(struct device *dev)
 	struct platform_device *pdev;
 	struct omap_iommu *oiommu;
 	struct device_node *np;
-	int num_iommus, i;
+	int num_iommus, i, ret;
 
 	/*
 	 * Allocate the per-device iommu structure for DT-based devices.
@@ -1663,22 +1663,22 @@ static struct iommu_device *omap_iommu_probe_device(struct device *dev)
 	for (i = 0, tmp = arch_data; i < num_iommus; i++, tmp++) {
 		np = of_parse_phandle(dev->of_node, "iommus", i);
 		if (!np) {
-			kfree(arch_data);
-			return ERR_PTR(-EINVAL);
+			ret = -EINVAL;
+			goto err_put_iommus;
 		}
 
 		pdev = of_find_device_by_node(np);
 		if (!pdev) {
 			of_node_put(np);
-			kfree(arch_data);
-			return ERR_PTR(-ENODEV);
+			ret = -ENODEV;
+			goto err_put_iommus;
 		}
 
 		oiommu = platform_get_drvdata(pdev);
 		if (!oiommu) {
 			of_node_put(np);
-			kfree(arch_data);
-			return ERR_PTR(-EINVAL);
+			ret = -EINVAL;
+			goto err_put_iommus;
 		}
 
 		tmp->iommu_dev = oiommu;
@@ -1697,17 +1697,28 @@ static struct iommu_device *omap_iommu_probe_device(struct device *dev)
 	oiommu = arch_data->iommu_dev;
 
 	return &oiommu->iommu;
+
+err_put_iommus:
+	for (tmp = arch_data; tmp->dev; tmp++)
+		put_device(tmp->dev);
+
+	kfree(arch_data);
+
+	return ERR_PTR(ret);
 }
 
 static void omap_iommu_release_device(struct device *dev)
 {
 	struct omap_iommu_arch_data *arch_data = dev_iommu_priv_get(dev);
+	struct omap_iommu_arch_data *tmp;
 
 	if (!dev->of_node || !arch_data)
 		return;
 
-	kfree(arch_data);
+	for (tmp = arch_data; tmp->dev; tmp++)
+		put_device(tmp->dev);
 
+	kfree(arch_data);
 }
 
 static int omap_iommu_of_xlate(struct device *dev, const struct of_phandle_args *args)
