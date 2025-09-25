@@ -103,12 +103,31 @@ module_param_array(delayed_register, charp, NULL, 0444);
 MODULE_PARM_DESC(delayed_register, "Quirk for delayed registration, given by id:iface, e.g. 0123abcd:4.");
 module_param_array(implicit_fb, bool, NULL, 0444);
 MODULE_PARM_DESC(implicit_fb, "Apply generic implicit feedback sync mode.");
-module_param_array(quirk_flags, charp, NULL, 0444);
-MODULE_PARM_DESC(quirk_flags, "Driver quirk bit flags.");
 module_param_named(use_vmalloc, snd_usb_use_vmalloc, bool, 0444);
 MODULE_PARM_DESC(use_vmalloc, "Use vmalloc for PCM intermediate buffers (default: yes).");
 module_param_named(skip_validation, snd_usb_skip_validation, bool, 0444);
 MODULE_PARM_DESC(skip_validation, "Skip unit descriptor validation (default: no).");
+
+/* protects quirk_flags */
+DEFINE_MUTEX(quirk_flags_mutex);
+
+static int param_set_quirkp(const char *val,
+			    const struct kernel_param *kp)
+{
+	guard(mutex)(&quirk_flags_mutex);
+	return param_set_charp(val, kp);
+}
+
+static const struct kernel_param_ops param_ops_quirkp = {
+	.set = param_set_quirkp,
+	.get = param_get_charp,
+	.free = param_free_charp,
+};
+
+#define param_check_quirkp param_check_charp
+
+module_param_array(quirk_flags, quirkp, NULL, 0644);
+MODULE_PARM_DESC(quirk_flags, "Add/modify USB audio quirks");
 
 /*
  * we keep the snd_usb_audio_t instances by ourselves for merging
@@ -697,15 +716,13 @@ static void snd_usb_init_quirk_flags(int idx, struct snd_usb_audio *chip)
 	char *val;
 	size_t i;
 
+	mutex_lock(&quirk_flags_mutex);
+
 	/* old style option found: the position-based integer value */
 	if (quirk_flags[idx] &&
 	    !kstrtou32(quirk_flags[idx], 0, &chip->quirk_flags)) {
-		usb_audio_dbg(chip,
-			      "Set quirk flags 0x%x from param based on position %d for device %04x:%04x\n",
-			      chip->quirk_flags, idx,
-			      USB_ID_VENDOR(chip->usb_id),
-			      USB_ID_PRODUCT(chip->usb_id));
-		return;
+		snd_usb_apply_flag_dbg("module param", chip, chip->quirk_flags);
+		goto unlock;
 	}
 
 	/* take the default quirk from the quirk table */
@@ -725,6 +742,9 @@ static void snd_usb_init_quirk_flags(int idx, struct snd_usb_audio *chip)
 
 		kfree(val);
 	}
+
+unlock:
+	mutex_unlock(&quirk_flags_mutex);
 }
 
 /*
