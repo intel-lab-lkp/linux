@@ -1037,6 +1037,13 @@ ssize_t btrfs_direct_read(struct kiocb *iocb, struct iov_iter *to)
 	if (check_direct_read(inode_to_fs_info(inode), to, iocb->ki_pos))
 		return 0;
 
+	/*
+	 * To keep the behavior consistent with direct write, fall back to
+	 * buffered IO if the inode has data checksum.
+	 */
+	if (!(BTRFS_I(inode)->flags & BTRFS_INODE_NODATASUM))
+		return 0;
+
 	btrfs_inode_lock(BTRFS_I(inode), BTRFS_ILOCK_SHARED);
 again:
 	/*
