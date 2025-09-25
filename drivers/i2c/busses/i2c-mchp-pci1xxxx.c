@@ -880,7 +880,22 @@ static int pci1xxxx_i2c_read(struct pci1xxxx_i2c *i2c, u8 slaveaddr,
 		}
 
 		if (i2c->flags & I2C_FLAGS_SMB_BLK_READ) {
-			buf[0] = readb(p3);
+			u8 cnt = readb(p3);
+
+			if (!cnt || cnt > I2C_SMBUS_BLOCK_MAX) {
+				retval = -EPROTO;
+				goto cleanup;
+			}
+			if (cnt > total_len - 1) {
+				retval = -EMSGSIZE;
+				goto cleanup;
+			}
+			if (cnt > (SMBUS_BUF_MAX_SIZE - 1)) {
+				retval = -EOVERFLOW;
+				goto cleanup;
+			}
+
+			buf[0] = cnt;
 			read_count = buf[0];
 			memcpy_fromio(&buf[1], p3 + 1, read_count);
 		} else {
