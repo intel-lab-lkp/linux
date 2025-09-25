@@ -3647,6 +3647,15 @@ static struct dentry *lookup_open(struct nameidata *nd, struct file *file,
 		/* Cached positive dentry: will open in f_op->open */
 		return dentry;
 	}
+	if ((open_flag & O_CREAT) == 0 && !d_in_lookup(dentry)) {
+		/* Cached negative dentry and no create requested.
+		 * If a filesystem wants to be called in this case
+		 * it should trigger dentry invalidation in
+		 * ->d_revalidate(.., LOOKUP_OPEN).
+		 */
+		error = -ENOENT;
+		goto out_dput;
+	}
 
 	if (open_flag & O_CREAT)
 		audit_inode(nd->name, dir, AUDIT_INODE_PARENT);

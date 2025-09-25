@@ -1297,3 +1297,13 @@ a different length, use
 	vfs_parse_fs_qstr(fc, key, &QSTR_LEN(value, len))
 
 instead.
+
+---
+
+**mandatory**
+
+If a filesystem provides ->atomic_open and needs to handle non-creating
+open of a cached-negative dentry, it should provide a ->d_revalidate
+that returns zero for a negative dentry when LOOKUP_OPEN is set.
+In return it is guaranteed exclusive access to any dentry passed to
+->atomic_open.
