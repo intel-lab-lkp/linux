@@ -762,6 +762,7 @@ static int exfat_reconfigure(struct fs_context *fc)
 	 * inodes or dentries, they cannot be modified dynamically.
 	 */
 	if (strcmp(new_opts->iocharset, cur_opts->iocharset) ||
+	    new_opts->utf8 != cur_opts->utf8 ||
 	    new_opts->keep_last_dots != cur_opts->keep_last_dots ||
 	    new_opts->sys_tz != cur_opts->sys_tz ||
 	    new_opts->time_offset != cur_opts->time_offset ||
