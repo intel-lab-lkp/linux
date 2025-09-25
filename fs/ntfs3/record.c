@@ -431,13 +431,18 @@ int mi_format_new(struct mft_inode *mi, struct ntfs_sb_info *sbi, CLST rno,
 		seq = rno;
 	} else if (rno >= sbi->mft.used) {
 		;
-	} else if (mi_read(mi, is_mft)) {
-		;
-	} else if (rec->rhdr.sign == NTFS_FILE_SIGNATURE) {
-		/* Record is reused. Update its sequence number. */
-		seq = le16_to_cpu(rec->seq) + 1;
-		if (!seq)
-			seq = 1;
+	} else {
+		err = mi_read(mi, is_mft);
+		if (err) {
+			return err;
+		}
+
+		if (rec->rhdr.sign == NTFS_FILE_SIGNATURE) {
+			/* Record is reused. Update its sequence number. */
+			seq = le16_to_cpu(rec->seq) + 1;
+			if (!seq)
+				seq = 1;
+		}
 	}
 
 	memcpy(rec, sbi->new_rec, sbi->record_size);
