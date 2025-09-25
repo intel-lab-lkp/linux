@@ -405,6 +405,12 @@ This file shows up if ``CONFIG_DETECT_HUNG_TASK`` is enabled.
 1 Panic immediately.
 = =================================================
 
+hung_task_count_to_panic
+=====================
+
+When set to a non-zero value, after the number of consecutive hung task
+occur, the kernel will triggers a panic
+
 
 hung_task_check_count
 =====================
