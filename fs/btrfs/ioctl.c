@@ -3740,7 +3740,7 @@ static long btrfs_ioctl_qgroup_assign(struct file *file, void __user *arg)
 		prealloc = kzalloc(sizeof(*prealloc), GFP_KERNEL);
 		if (!prealloc) {
 			ret = -ENOMEM;
-			goto drop_write;
+			goto out_sa_drop_write;
 		}
 	}
 
@@ -3775,6 +3775,7 @@ static long btrfs_ioctl_qgroup_assign(struct file *file, void __user *arg)
 
 out:
 	kfree(prealloc);
+out_sa_drop_write:
 	kfree(sa);
 drop_write:
 	mnt_drop_write_file(file);
