@@ -7,6 +7,7 @@
 #define __INTEL_TC_H__
 
 #include <linux/types.h>
+#include <linux/seq_file.h>
 
 struct intel_crtc_state;
 struct intel_digital_port;
@@ -112,5 +113,7 @@ int intel_tc_port_init(struct intel_digital_port *dig_port, bool is_legacy);
 void intel_tc_port_cleanup(struct intel_digital_port *dig_port);
 
 bool intel_tc_cold_requires_aux_pw(struct intel_digital_port *dig_port);
+
+void intel_tc_info(struct seq_file *m,  struct intel_digital_port *dig_port);
 
 #endif /* __INTEL_TC_H__ */
