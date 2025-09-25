@@ -24,7 +24,7 @@ description: |
   Instruments Smart Amp speaker protection algorithm. The
   integrated speaker voltage and current sense provides for real time
   monitoring of loudspeaker behavior.
-  The TAS5825/TAS5827 is a stereo, digital input Class-D audio
+  The TAS5825/TAS5827/TAS5828 is a stereo, digital input Class-D audio
   amplifier optimized for efficiently driving high peak power into
   small loudspeakers. An integrated on-chip DSP supports Texas
   Instruments Smart Amp speaker protection algorithm.
@@ -37,6 +37,7 @@ description: |
     https://www.ti.com/lit/gpn/tas2781
     https://www.ti.com/lit/gpn/tas5825m
     https://www.ti.com/lit/gpn/tas5827
+    https://www.ti.com/lit/gpn/tas5828m
 
 properties:
   compatible:
@@ -70,6 +71,9 @@ properties:
 
       ti,tas5827: 47-W Stereo, Digital Input, High Efficiency Closed-Loop Class-D
       Amplifier with Class-H Algorithm
+
+      ti,tas5828: 50-W Stereo, Digital Input, High Efficiency Closed-Loop Class-D
+      Amplifier with Hybrid-Pro Algorithm
     oneOf:
       - items:
           - enum:
@@ -82,6 +86,7 @@ properties:
               - ti,tas2572
               - ti,tas5825
               - ti,tas5827
+              - ti,tas5828
           - const: ti,tas2781
       - enum:
           - ti,tas2781
@@ -183,6 +188,7 @@ allOf:
           contains:
             enum:
               - ti,tas5827
+              - ti,tas5828
     then:
       properties:
         reg:
