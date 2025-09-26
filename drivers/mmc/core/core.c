@@ -2335,6 +2335,20 @@ void __mmc_stop_host(struct mmc_host *host)
 	cancel_delayed_work_sync(&host->detect);
 }
 
+void __mmc_stop_host_no_sync(struct mmc_host *host)
+{
+	if (host->rescan_disable)
+		return;
+
+	if (host->slot.cd_irq >= 0) {
+		mmc_gpio_set_cd_wake(host, false);
+		disable_irq(host->slot.cd_irq);
+	}
+
+	host->rescan_disable = 1;
+	/* Skip cancel_delayed_work_sync to avoid potential blocking */
+}
+
 void mmc_stop_host(struct mmc_host *host)
 {
 	__mmc_stop_host(host);
