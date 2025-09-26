@@ -1229,6 +1229,7 @@ struct super_type  {
 						sector_t num_sectors);
 	int		    (*allow_new_offset)(struct md_rdev *rdev,
 						unsigned long long new_offset);
+	bool		    (*has_bb)(struct md_rdev *rdev);
 };
 
 /*
@@ -2348,6 +2349,13 @@ super_1_allow_new_offset(struct md_rdev *rdev,
 	return 1;
 }
 
+static bool super_1_has_bb(struct md_rdev *rdev)
+{
+	struct mdp_superblock_1 *sb = page_address(rdev->sb_page);
+
+	return le32_to_cpu(sb->feature_map) & MD_FEATURE_BAD_BLOCKS;
+}
+
 static struct super_type super_types[] = {
 	[0] = {
 		.name	= "0.90.0",
@@ -2366,8 +2374,29 @@ static struct super_type super_types[] = {
 		.sync_super	    = super_1_sync,
 		.rdev_size_change   = super_1_rdev_size_change,
 		.allow_new_offset   = super_1_allow_new_offset,
+		.has_bb		    = super_1_has_bb,
 	},
 };
+
+static bool super_has_bb(struct mddev *mddev, struct md_rdev *rdev)
+{
+	if (!super_types[mddev->major_version].has_bb)
+		return false;
+	return super_types[mddev->major_version].has_bb(rdev);
+}
+
+bool md_atomic_writes_possible(struct mddev *mddev)
+{
+	struct md_rdev *rdev;
+
+	rdev_for_each(rdev, mddev) {
+		if (super_has_bb(mddev, rdev))
+			return false;
+	}
+
+	return true;
+}
+EXPORT_SYMBOL_GPL(md_atomic_writes_possible);
 
 static void sync_super(struct mddev *mddev, struct md_rdev *rdev)
 {
@@ -2844,6 +2873,21 @@ rewrite:
 	wake_up(&mddev->sb_wait);
 	if (test_bit(MD_RECOVERY_RUNNING, &mddev->recovery))
 		sysfs_notify_dirent_safe(mddev->sysfs_completed);
+
+
+	if (any_badblocks_changed) {
+		struct queue_limits lim;
+
+		lim = queue_limits_start_update(mddev->gendisk->queue);
+		if (lim.features & BLK_FEAT_ATOMIC_WRITES) {
+			lim.features &= ~BLK_FEAT_ATOMIC_WRITES;
+			if (queue_limits_commit_update_frozen(
+					mddev->gendisk->queue, &lim))
+				pr_warn("could not disable atomic writes after finding bad blocks\n");
+		} else {
+			queue_limits_cancel_update(mddev->gendisk->queue);
+		}
+	}
 
 	rdev_for_each(rdev, mddev) {
 		if (test_and_clear_bit(FaultRecorded, &rdev->flags))

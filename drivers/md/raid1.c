@@ -3208,11 +3208,10 @@ static int raid1_set_limits(struct mddev *mddev)
 {
 	struct queue_limits lim;
 	int err;
-
 	md_init_stacking_limits(&lim);
 	lim.max_write_zeroes_sectors = 0;
-	lim.max_hw_wzeroes_unmap_sectors = 0;
-	lim.features |= BLK_FEAT_ATOMIC_WRITES;
+	if (md_atomic_writes_possible(mddev))
+		lim.features |= BLK_FEAT_ATOMIC_WRITES;
 	err = mddev_stack_rdev_limits(mddev, &lim, MDDEV_STACK_INTEGRITY);
 	if (err)
 		return err;
