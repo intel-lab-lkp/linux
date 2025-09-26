@@ -332,6 +332,7 @@ struct printk_message {
 	unsigned long		dropped;
 };
 
+bool panic_in_progress(void);
 bool other_cpu_in_panic(void);
 bool printk_get_next_message(struct printk_message *pmsg, u64 seq,
 			     bool is_extended, bool may_supress);
