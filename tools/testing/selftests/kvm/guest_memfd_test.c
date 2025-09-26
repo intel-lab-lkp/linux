@@ -26,7 +26,7 @@
 
 static size_t page_size;
 
-static void test_file_read_write(int fd)
+static void test_file_read_write(int fd, size_t total_size)
 {
 	char buf[64];
 
@@ -259,14 +259,18 @@ static void test_guest_memfd_flags(struct kvm_vm *vm, uint64_t valid_flags)
 	}
 }
 
+#define gmem_test(__test, __vm, __flags)				\
+do {									\
+	int fd = vm_create_guest_memfd(__vm, page_size * 4, __flags);	\
+									\
+	test_##__test(fd, page_size * 4);				\
+	close(fd);							\
+} while (0)
+
 static void test_guest_memfd(unsigned long vm_type)
 {
 	uint64_t flags = 0;
 	struct kvm_vm *vm;
-	size_t total_size;
-	int fd;
-
-	total_size = page_size * 4;
 
 	vm = vm_create_barebones_type(vm_type);
 
@@ -276,24 +280,21 @@ static void test_guest_memfd(unsigned long vm_type)
 	test_create_guest_memfd_multiple(vm);
 	test_create_guest_memfd_invalid_sizes(vm, flags);
 
-	fd = vm_create_guest_memfd(vm, total_size, flags);
-
-	test_file_read_write(fd);
+	gmem_test(file_read_write, vm, flags);
 
 	if (flags & GUEST_MEMFD_FLAG_MMAP) {
-		test_mmap_supported(fd, total_size);
-		test_fault_overflow(fd, total_size);
+		gmem_test(mmap_supported, vm, flags);
+		gmem_test(fault_overflow, vm, flags);
 	} else {
-		test_mmap_not_supported(fd, total_size);
+		gmem_test(mmap_not_supported, vm, flags);
 	}
 
-	test_file_size(fd, total_size);
-	test_fallocate(fd, total_size);
-	test_invalid_punch_hole(fd, total_size);
+	gmem_test(file_size, vm, flags);
+	gmem_test(fallocate, vm, flags);
+	gmem_test(invalid_punch_hole, vm, flags);
 
 	test_guest_memfd_flags(vm, flags);
 
-	close(fd);
 	kvm_vm_free(vm);
 }
 
