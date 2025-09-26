@@ -25,6 +25,7 @@
 
 #include <linux/list.h>
 #include <linux/ctype.h>
+#include <linux/mutex.h>
 #include <drm/drm_crtc.h>
 #include <drm/drm_mode.h>
 #include <drm/drm_mode_object.h>
@@ -189,6 +190,9 @@ struct drm_encoder {
 	 */
 	struct list_head bridge_chain;
 
+	/** @bridge_chain_mutex: protect bridge_chain from changes while iterating */
+	struct mutex bridge_chain_mutex;
+
 	const struct drm_encoder_funcs *funcs;
 	const struct drm_encoder_helper_funcs *helper_private;
 
@@ -317,6 +321,20 @@ static inline struct drm_encoder *drm_encoder_find(struct drm_device *dev,
 	mo = drm_mode_object_find(dev, file_priv, id, DRM_MODE_OBJECT_ENCODER);
 
 	return mo ? obj_to_encoder(mo) : NULL;
+}
+
+static inline struct drm_encoder *drm_encoder_chain_lock(struct drm_encoder *encoder)
+{
+	if (!WARN_ON_ONCE(!encoder))
+		mutex_lock(&encoder->bridge_chain_mutex);
+
+	return encoder;
+}
+
+static inline void drm_encoder_chain_unlock(struct drm_encoder *encoder)
+{
+	if (!WARN_ON_ONCE(!encoder))
+		mutex_unlock(&encoder->bridge_chain_mutex);
 }
 
 void drm_encoder_cleanup(struct drm_encoder *encoder);
