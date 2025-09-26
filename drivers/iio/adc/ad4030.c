@@ -102,7 +102,7 @@
 #define AD4030_VREF_MAX_UV		(5000 * MILLI)
 #define AD4030_VIO_THRESHOLD_UV		(1400 * MILLI)
 #define AD4030_SPI_MAX_XFER_LEN		8
-#define AD4030_SPI_MAX_REG_XFER_SPEED	(80 * MEGA)
+#define AD4030_SPI_REG_XFER_SPEED	(10 * MEGA)
 #define AD4030_TCNVH_NS			10
 #define AD4030_TCNVL_NS			20
 #define AD4030_TCYC_NS			500
@@ -245,7 +245,7 @@ static int ad4030_enter_config_mode(struct ad4030_state *st)
 	struct spi_transfer xfer = {
 		.tx_buf = st->tx_data,
 		.len = 1,
-		.speed_hz = AD4030_SPI_MAX_REG_XFER_SPEED,
+		.speed_hz = AD4030_SPI_REG_XFER_SPEED,
 	};
 
 	return spi_sync_transfer(st->spi, &xfer, 1);
@@ -260,7 +260,7 @@ static int ad4030_exit_config_mode(struct ad4030_state *st)
 	struct spi_transfer xfer = {
 		.tx_buf = st->tx_data,
 		.len = 3,
-		.speed_hz = AD4030_SPI_MAX_REG_XFER_SPEED,
+		.speed_hz = AD4030_SPI_REG_XFER_SPEED,
 	};
 
 	return spi_sync_transfer(st->spi, &xfer, 1);
@@ -275,7 +275,7 @@ static int ad4030_spi_read(void *context, const void *reg, size_t reg_size,
 		.tx_buf = st->tx_data,
 		.rx_buf = st->rx_data.raw,
 		.len = reg_size + val_size,
-		.speed_hz = AD4030_SPI_MAX_REG_XFER_SPEED,
+		.speed_hz = AD4030_SPI_REG_XFER_SPEED,
 	};
 
 	if (xfer.len > sizeof(st->tx_data) ||
@@ -309,7 +309,7 @@ static int ad4030_spi_write(void *context, const void *data, size_t count)
 	struct spi_transfer xfer = {
 		.tx_buf = st->tx_data,
 		.len = count,
-		.speed_hz = AD4030_SPI_MAX_REG_XFER_SPEED,
+		.speed_hz = AD4030_SPI_REG_XFER_SPEED,
 	};
 
 	if (count > sizeof(st->tx_data))
