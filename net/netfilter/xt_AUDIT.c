@@ -19,6 +19,7 @@
 #include <linux/netfilter_bridge/ebtables.h>
 #include <net/ipv6.h>
 #include <net/ip.h>
+#include <linux/sctp.h>
 
 MODULE_LICENSE("GPL");
 MODULE_AUTHOR("Thomas Graf <tgraf@redhat.com>");
@@ -37,8 +38,27 @@ static bool audit_ip4(struct audit_buffer *ab, struct sk_buff *skb)
 	if (!ih)
 		return false;
 
-	audit_log_format(ab, " saddr=%pI4 daddr=%pI4 proto=%hhu",
-			 &ih->saddr, &ih->daddr, ih->protocol);
+	switch (ih->protocol) {
+	case IPPROTO_TCP:
+		audit_log_format(ab, " saddr=%pI4 daddr=%pI4 proto=%hhu sport=%hu dport=%hu",
+				 &ih->saddr, &ih->daddr, ih->protocol,
+				 ntohs(tcp_hdr(skb)->source), ntohs(tcp_hdr(skb)->dest));
+		break;
+	case IPPROTO_UDP:
+	case IPPROTO_UDPLITE:
+		audit_log_format(ab, " saddr=%pI4 daddr=%pI4 proto=%hhu sport=%hu dport=%hu",
+				 &ih->saddr, &ih->daddr, ih->protocol,
+				 ntohs(udp_hdr(skb)->source), ntohs(udp_hdr(skb)->dest));
+		break;
+	case IPPROTO_SCTP:
+		audit_log_format(ab, " saddr=%pI4 daddr=%pI4 proto=%hhu sport=%hu dport=%hu",
+				 &ih->saddr, &ih->daddr, ih->protocol,
+				 ntohs(sctp_hdr(skb)->source), ntohs(sctp_hdr(skb)->dest));
+		break;
+	default:
+		audit_log_format(ab, " saddr=%pI4 daddr=%pI4 proto=%hhu",
+				 &ih->saddr, &ih->daddr, ih->protocol);
+	}
 
 	return true;
 }
@@ -57,8 +77,27 @@ static bool audit_ip6(struct audit_buffer *ab, struct sk_buff *skb)
 	nexthdr = ih->nexthdr;
 	ipv6_skip_exthdr(skb, skb_network_offset(skb) + sizeof(_ip6h), &nexthdr, &frag_off);
 
-	audit_log_format(ab, " saddr=%pI6c daddr=%pI6c proto=%hhu",
-			 &ih->saddr, &ih->daddr, nexthdr);
+	switch (nexthdr) {
+	case IPPROTO_TCP:
+		audit_log_format(ab, " saddr=%pI6c daddr=%pI6c proto=%hhu sport=%hu dport=%hu",
+				 &ih->saddr, &ih->daddr, nexthdr,
+				 ntohs(tcp_hdr(skb)->source), ntohs(tcp_hdr(skb)->dest));
+		break;
+	case IPPROTO_UDP:
+	case IPPROTO_UDPLITE:
+		audit_log_format(ab, " saddr=%pI6c daddr=%pI6c proto=%hhu sport=%hu dport=%hu",
+				 &ih->saddr, &ih->daddr, nexthdr,
+				 ntohs(udp_hdr(skb)->source), ntohs(udp_hdr(skb)->dest));
+		break;
+	case IPPROTO_SCTP:
+		audit_log_format(ab, " saddr=%pI6c daddr=%pI6c proto=%hhu sport=%hu dport=%hu",
+				 &ih->saddr, &ih->daddr, nexthdr,
+				 ntohs(sctp_hdr(skb)->source), ntohs(sctp_hdr(skb)->dest));
+		break;
+	default:
+		audit_log_format(ab, " saddr=%pI6c daddr=%pI6c proto=%hhu",
+				 &ih->saddr, &ih->daddr, nexthdr);
+	}
 
 	return true;
 }
