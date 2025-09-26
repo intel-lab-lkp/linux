@@ -99,19 +99,23 @@ struct ice_dpll {
  * @lock: locks access to configuration of a dpll
  * @eec: pointer to EEC dpll dev
  * @pps: pointer to PPS dpll dev
+ * @tspll: pointer to TSPLL dpll dev
  * @inputs: input pins pointer
  * @outputs: output pins pointer
  * @pin_1588: pin controlling clock 1588 pointer
  * @rclk: recovered pins pointer
+ * @tspll_in: TSPLL input pin
+ * @tspll_out: TSPLL output pin
  * @num_inputs: number of input pins available on dpll
  * @num_outputs: number of output pins available on dpll
- * @cgu_state_acq_err_num: number of errors returned during periodic work
+ * @cgu_state_err_num: number of errors returned during periodic work
  * @base_rclk_idx: idx of first pin used for clock revocery pins
  * @base_1588_idx: idx of first pin used for 1588 clock control pin
  * @clock_id: clock_id of dplls
  * @input_phase_adj_max: max phase adjust value for an input pins
  * @output_phase_adj_max: max phase adjust value for an output pins
  * @periodic_counter: counter of periodic work executions
+ * @periodic_work: callback for periodic work thread to register
  */
 struct ice_dplls {
 	struct kthread_worker *kworker;
@@ -119,23 +123,27 @@ struct ice_dplls {
 	struct mutex lock;
 	struct ice_dpll eec;
 	struct ice_dpll pps;
+	struct ice_dpll tspll;
 	struct ice_dpll_pin *inputs;
 	struct ice_dpll_pin *outputs;
 	struct ice_dpll_pin pin_1588;
 	struct ice_dpll_pin sma[ICE_DPLL_PIN_SW_NUM];
 	struct ice_dpll_pin ufl[ICE_DPLL_PIN_SW_NUM];
 	struct ice_dpll_pin rclk;
+	struct ice_dpll_pin tspll_in;
+	struct ice_dpll_pin tspll_out;
 	u8 num_inputs;
 	u8 num_outputs;
 	u8 sma_data;
 	u8 base_rclk_idx;
 	u8 base_1588_idx;
-	int cgu_state_acq_err_num;
+	int cgu_state_err_num;
 	u64 clock_id;
 	s32 input_phase_adj_max;
 	s32 output_phase_adj_max;
 	u32 periodic_counter;
 	bool generic;
+	void (*periodic_work)(struct kthread_work *work);
 };
 
 static inline void
