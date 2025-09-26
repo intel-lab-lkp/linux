@@ -1549,7 +1549,7 @@ static void netcp_free_navigator_resources(struct netcp_intf *netcp)
 {
 	int i;
 
-	if (netcp->rx_channel) {
+	if (!IS_ERR(netcp->rx_channel)) {
 		knav_dma_close_channel(netcp->rx_channel);
 		netcp->rx_channel = NULL;
 	}
