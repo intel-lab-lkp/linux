@@ -240,6 +240,29 @@ create_netdevsim() {
     echo nsim$id
 }
 
+create_netdevsim_port() {
+    local nsim_id="$1"
+    local ns="$2"
+    local port_id="$3"
+    local perm_addr="$4"
+    local orig_dev
+    local new_dev
+    local nsim_path
+
+    nsim_path="/sys/bus/netdevsim/devices/netdevsim$nsim_id"
+
+    echo "$port_id $perm_addr" | ip netns exec "$ns" tee "$nsim_path"/new_port > /dev/null || return 1
+
+    orig_dev=$(ip netns exec "$ns" find "$nsim_path"/net/ -maxdepth 1 -name 'e*' | tail -n 1)
+    orig_dev=$(basename "$orig_dev")
+    new_dev="nsim${nsim_id}p$port_id"
+
+    ip -netns "$ns" link set dev "$orig_dev" name "$new_dev"
+    ip -netns "$ns" link set dev "$new_dev" up
+
+    echo "$new_dev"
+}
+
 # Remove netdevsim with given id.
 cleanup_netdevsim() {
     local id="$1"
@@ -312,7 +335,7 @@ log_test_result()
 	local test_name=$1; shift
 	local opt_str=$1; shift
 	local result=$1; shift
-	local retmsg=$1; shift
+	local retmsg=$1
 
 	printf "TEST: %-60s  [%s]\n" "$test_name $opt_str" "$result"
 	if [[ $retmsg ]]; then
@@ -524,8 +547,8 @@ ip_link_add()
 {
 	local name=$1; shift
 
-	ip link add name "$name" "$@"
-	defer ip link del dev "$name"
+	ip link add name "$name" "$@" && \
+		defer ip link del dev "$name"
 }
 
 ip_link_set_master()
@@ -533,8 +556,8 @@ ip_link_set_master()
 	local member=$1; shift
 	local master=$1; shift
 
-	ip link set dev "$member" master "$master"
-	defer ip link set dev "$member" nomaster
+	ip link set dev "$member" master "$master" && \
+		defer ip link set dev "$member" nomaster
 }
 
 ip_link_set_addr()
@@ -543,8 +566,8 @@ ip_link_set_addr()
 	local addr=$1; shift
 
 	local old_addr=$(mac_get "$name")
-	ip link set dev "$name" address "$addr"
-	defer ip link set dev "$name" address "$old_addr"
+	ip link set dev "$name" address "$addr" && \
+		defer ip link set dev "$name" address "$old_addr"
 }
 
 ip_link_has_flag()
@@ -567,8 +590,8 @@ ip_link_set_up()
 	local name=$1; shift
 
 	if ! ip_link_is_up "$name"; then
-		ip link set dev "$name" up
-		defer ip link set dev "$name" down
+		ip link set dev "$name" up && \
+			defer ip link set dev "$name" down
 	fi
 }
 
@@ -577,8 +600,8 @@ ip_link_set_down()
 	local name=$1; shift
 
 	if ip_link_is_up "$name"; then
-		ip link set dev "$name" down
-		defer ip link set dev "$name" up
+		ip link set dev "$name" down && \
+			defer ip link set dev "$name" up
 	fi
 }
 
@@ -586,20 +609,20 @@ ip_addr_add()
 {
 	local name=$1; shift
 
-	ip addr add dev "$name" "$@"
-	defer ip addr del dev "$name" "$@"
+	ip addr add dev "$name" "$@" && \
+		defer ip addr del dev "$name" "$@"
 }
 
 ip_route_add()
 {
-	ip route add "$@"
-	defer ip route del "$@"
+	ip route add "$@" && \
+		defer ip route del "$@"
 }
 
 bridge_vlan_add()
 {
-	bridge vlan add "$@"
-	defer bridge vlan del "$@"
+	bridge vlan add "$@" && \
+		defer bridge vlan del "$@"
 }
 
 wait_local_port_listen()
@@ -621,4 +644,28 @@ wait_local_port_listen()
 		fi
 		sleep 0.1
 	done
+}
+
+cmd_jq()
+{
+	local cmd=$1
+	local jq_exp=$2
+	local jq_opts=$3
+	local ret
+	local output
+
+	output="$($cmd)"
+	# it the command fails, return error right away
+	ret=$?
+	if [[ $ret -ne 0 ]]; then
+		return $ret
+	fi
+	output=$(echo $output | jq -r $jq_opts "$jq_exp")
+	ret=$?
+	if [[ $ret -ne 0 ]]; then
+		return $ret
+	fi
+	echo $output
+	# return success only in case of non-empty output
+	[ ! -z "$output" ]
 }

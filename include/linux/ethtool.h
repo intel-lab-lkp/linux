@@ -856,8 +856,8 @@ struct kernel_ethtool_ts_info {
 	enum hwtstamp_provider_qualifier phc_qualifier;
 	enum hwtstamp_source phc_source;
 	int phc_phyindex;
-	enum hwtstamp_tx_types tx_types;
-	enum hwtstamp_rx_filters rx_filters;
+	u32 tx_types;
+	u32 rx_filters;
 };
 
 /**
@@ -865,9 +865,6 @@ struct kernel_ethtool_ts_info {
  * @supported_input_xfrm: supported types of input xfrm from %RXH_XFRM_*.
  * @cap_link_lanes_supported: indicates if the driver supports lanes
  *	parameter.
- * @cap_rss_ctx_supported: indicates if the driver supports RSS
- *	contexts via legacy API, drivers implementing @create_rxfh_context
- *	do not have to set this bit.
  * @rxfh_per_ctx_fields: device supports selecting different header fields
  *	for Rx hash calculation and RSS for each additional context.
  * @rxfh_per_ctx_key: device supports setting different RSS key for each
@@ -971,6 +968,7 @@ struct kernel_ethtool_ts_info {
  * @reset: Reset (part of) the device, as specified by a bitmask of
  *	flags from &enum ethtool_reset_flags.  Returns a negative
  *	error code or zero.
+ * @get_rx_ring_count: Return the number of RX rings
  * @get_rxfh_key_size: Get the size of the RX flow hash key.
  *	Returns zero if not supported for this specific device.
  * @get_rxfh_indir_size: Get the size of the RX flow hash indirection table.
@@ -1100,7 +1098,6 @@ struct kernel_ethtool_ts_info {
 struct ethtool_ops {
 	u32     supported_input_xfrm:8;
 	u32     cap_link_lanes_supported:1;
-	u32     cap_rss_ctx_supported:1;
 	u32	rxfh_per_ctx_fields:1;
 	u32	rxfh_per_ctx_key:1;
 	u32	cap_rss_rxnfc_adds:1;
@@ -1166,6 +1163,7 @@ struct ethtool_ops {
 	int	(*set_rxnfc)(struct net_device *, struct ethtool_rxnfc *);
 	int	(*flash_device)(struct net_device *, struct ethtool_flash *);
 	int	(*reset)(struct net_device *, u32 *);
+	u32	(*get_rx_ring_count)(struct net_device *dev);
 	u32	(*get_rxfh_key_size)(struct net_device *);
 	u32	(*get_rxfh_indir_size)(struct net_device *);
 	int	(*get_rxfh)(struct net_device *, struct ethtool_rxfh_param *);
