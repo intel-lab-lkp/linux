@@ -1064,5 +1064,5 @@ int ynl_exec_dump(struct ynl_sock *ys, struct nlmsghdr *req_nlh,
 
 err_close_list:
 	yds->first = ynl_dump_end(yds);
-	return -1;
+	return err;
 }
