@@ -87,6 +87,7 @@
 
 #include <linux/unaligned.h>
 #include <linux/capability.h>
+#include <linux/dma-buf.h>
 #include <linux/errno.h>
 #include <linux/errqueue.h>
 #include <linux/types.h>
@@ -151,6 +152,7 @@
 #include <uapi/linux/pidfd.h>
 
 #include "dev.h"
+#include "devmem.h"
 
 static DEFINE_MUTEX(proto_list_mutex);
 static LIST_HEAD(proto_list);
@@ -1082,6 +1084,7 @@ sock_devmem_dontneed(struct sock *sk, sockptr_t optval, unsigned int optlen)
 	struct dmabuf_token *tokens;
 	int ret = 0, num_frags = 0;
 	netmem_ref netmems[16];
+	struct net_iov *niov;
 
 	if (!sk_is_tcp(sk))
 		return -EBADF;
@@ -1100,34 +1103,43 @@ sock_devmem_dontneed(struct sock *sk, sockptr_t optval, unsigned int optlen)
 		return -EFAULT;
 	}
 
-	xa_lock_bh(&sk->sk_user_frags);
 	for (i = 0; i < num_tokens; i++) {
 		for (j = 0; j < tokens[i].token_count; j++) {
+			struct net_iov *niov;
+			unsigned int token;
+			netmem_ref netmem;
+
+			token = tokens[i].token_start + j;
+			if (token >= sk->sk_devmem_binding->dmabuf->size / PAGE_SIZE)
+				break;
+
 			if (++num_frags > MAX_DONTNEED_FRAGS)
 				goto frag_limit_reached;
-
-			netmem_ref netmem = (__force netmem_ref)__xa_erase(
-				&sk->sk_user_frags, tokens[i].token_start + j);
+			niov = sk->sk_devmem_binding->vec[token];
+			netmem = net_iov_to_netmem(niov);
 
 			if (!netmem || WARN_ON_ONCE(!netmem_is_net_iov(netmem)))
 				continue;
 
 			netmems[netmem_num++] = netmem;
 			if (netmem_num == ARRAY_SIZE(netmems)) {
-				xa_unlock_bh(&sk->sk_user_frags);
-				for (k = 0; k < netmem_num; k++)
-					WARN_ON_ONCE(!napi_pp_put_page(netmems[k]));
+				for (k = 0; k < netmem_num; k++) {
+					niov = netmem_to_net_iov(netmems[k]);
+					if (atomic_dec_and_test(&niov->uref))
+						WARN_ON_ONCE(!napi_pp_put_page(netmems[k]));
+				}
 				netmem_num = 0;
-				xa_lock_bh(&sk->sk_user_frags);
 			}
 			ret++;
 		}
 	}
 
 frag_limit_reached:
-	xa_unlock_bh(&sk->sk_user_frags);
-	for (k = 0; k < netmem_num; k++)
-		WARN_ON_ONCE(!napi_pp_put_page(netmems[k]));
+	for (k = 0; k < netmem_num; k++) {
+		niov = netmem_to_net_iov(netmems[k]);
+		if (atomic_dec_and_test(&niov->uref))
+			WARN_ON_ONCE(!napi_pp_put_page(netmems[k]));
+	}
 
 	kvfree(tokens);
 	return ret;
