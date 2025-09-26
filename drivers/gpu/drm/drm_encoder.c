@@ -195,9 +195,11 @@ void drm_encoder_cleanup(struct drm_encoder *encoder)
 	 * the indices on the drm_encoder after us in the encoder_list.
 	 */
 
+	mutex_lock(&encoder->bridge_chain_mutex);
 	list_for_each_entry_safe(bridge, next, &encoder->bridge_chain,
 				 chain_node)
 		drm_bridge_detach(bridge);
+	mutex_unlock(&encoder->bridge_chain_mutex);
 
 	drm_mode_object_unregister(dev, &encoder->base);
 	kfree(encoder->name);
