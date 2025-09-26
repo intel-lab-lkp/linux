@@ -835,7 +835,8 @@ static int renesas_i3c_priv_xfers(struct i3c_dev_desc *dev, struct i3c_priv_xfer
 		}
 
 		if (!i3c_xfers[i].rnw && i3c_xfers[i].len > 4) {
-			i3c_writel_fifo(i3c->regs + NTDTBP0, cmd->tx_buf, cmd->len);
+			i3c_writel_fifo(i3c->regs + NTDTBP0, cmd->tx_buf, cmd->len,
+					I3C_FIFO_LITTLE_ENDIAN);
 			if (cmd->len > NTDTBP0_DEPTH * sizeof(u32))
 				renesas_set_bit(i3c->regs, NTIE, NTIE_TDBEIE0);
 		}
@@ -1021,7 +1022,8 @@ static irqreturn_t renesas_i3c_tx_isr(int irq, void *data)
 			/* Clear the Transmit Buffer Empty status flag. */
 			renesas_clear_bit(i3c->regs, NTST, NTST_TDBEF0);
 		} else {
-			i3c_writel_fifo(i3c->regs + NTDTBP0, cmd->tx_buf, cmd->len);
+			i3c_writel_fifo(i3c->regs + NTDTBP0, cmd->tx_buf, cmd->len,
+					I3C_FIFO_LITTLE_ENDIAN);
 		}
 	}
 
@@ -1061,7 +1063,8 @@ static irqreturn_t renesas_i3c_resp_isr(int irq, void *data)
 			if (NDBSTLV0_RDBLV(renesas_readl(i3c->regs, NDBSTLV0)) && !cmd->err)
 				bytes_remaining = data_len - cmd->rx_count;
 
-			i3c_readl_fifo(i3c->regs + NTDTBP0, cmd->rx_buf, bytes_remaining);
+			i3c_readl_fifo(i3c->regs + NTDTBP0, cmd->rx_buf, bytes_remaining,
+				       I3C_FIFO_LITTLE_ENDIAN);
 			renesas_clear_bit(i3c->regs, NTIE, NTIE_RDBFIE0);
 			break;
 		default:
@@ -1203,7 +1206,8 @@ static irqreturn_t renesas_i3c_rx_isr(int irq, void *data)
 			cmd->i2c_bytes_left--;
 		} else {
 			read_bytes = NDBSTLV0_RDBLV(renesas_readl(i3c->regs, NDBSTLV0)) * sizeof(u32);
-			i3c_readl_fifo(i3c->regs + NTDTBP0, cmd->rx_buf, read_bytes);
+			i3c_readl_fifo(i3c->regs + NTDTBP0, cmd->rx_buf, read_bytes,
+				       I3C_FIFO_LITTLE_ENDIAN);
 			cmd->rx_count = read_bytes;
 		}
 
