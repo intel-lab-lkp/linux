@@ -116,6 +116,10 @@ static DEFINE_IDA(sd_index_ida);
 static mempool_t *sd_page_pool;
 static struct lock_class_key sd_bio_compl_lkclass;
 
+static bool sd_stop_on_restart;
+module_param(sd_stop_on_restart, bool, 0644);
+MODULE_PARM_DESC(sd_stop_on_restart, "Issue STOP UNIT command on system restart (default: false)");
+
 static const char *sd_cache_types[] = {
 	"write through", "none", "write back",
 	"write back, no read (daft)"
@@ -4174,6 +4178,9 @@ static void sd_shutdown(struct device *dev)
 
 	if ((system_state != SYSTEM_RESTART &&
 	     sdkp->device->manage_system_start_stop) ||
+	    (system_state == SYSTEM_RESTART &&
+	     sdkp->device->manage_system_start_stop &&
+	     sd_stop_on_restart) ||
 	    (system_state == SYSTEM_POWER_OFF &&
 	     sdkp->device->manage_shutdown) ||
 	    (system_state == SYSTEM_RUNNING &&
