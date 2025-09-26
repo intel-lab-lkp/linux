@@ -2399,7 +2399,7 @@ static struct sched_domain *build_sched_domain(struct sched_domain_topology_leve
 
 		if (!cpumask_subset(sched_domain_span(child),
 				    sched_domain_span(sd))) {
-			pr_err("BUG: arch topology borken\n");
+			pr_err("BUG: arch topology broken\n");
 			pr_err("     the %s domain not a subset of the %s domain\n",
 					child->name, sd->name);
 			/* Fixup, ensure @sd has at least @child CPUs. */
