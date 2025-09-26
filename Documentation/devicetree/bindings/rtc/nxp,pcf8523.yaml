@@ -25,6 +25,11 @@ properties:
     enum: [ 7000, 12500 ]
     default: 12500
 
+  clockout-disable:
+    type: boolean
+    description:
+      Disable the clock generation on CLKOUT pin.
+
 required:
   - compatible
   - reg
