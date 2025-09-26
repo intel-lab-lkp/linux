@@ -18,6 +18,7 @@ enum {
 };
 
 #define GFS2_FAST_NAME_SIZE 8
+#define GFS2_LINK_MAX	0xffffffff
 
 #endif /* __GFS2_DOT_H__ */
 

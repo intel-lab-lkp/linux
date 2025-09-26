@@ -1152,6 +1152,7 @@ static int gfs2_fill_super(struct super_block *sb, struct fs_context *fc)
 	sb_dqopt(sb)->flags |= DQUOT_QUOTA_SYS_FILE;
 	sb->s_time_gran = 1;
 	sb->s_maxbytes = MAX_LFS_FILESIZE;
+	sb->s_max_links = GFS2_LINK_MAX;
 
 	/* Set up the buffer cache and fill in some fake block size values
 	   to allow us to read-in the on-disk superblock. */

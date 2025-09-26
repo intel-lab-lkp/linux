@@ -373,8 +373,6 @@ static int create_ok(struct gfs2_inode *dip, const struct qstr *name,
 
 	if (dip->i_entries == (u32)-1)
 		return -EFBIG;
-	if (S_ISDIR(mode) && dip->i_inode.i_nlink == (u32)-1)
-		return -EMLINK;
 
 	return 0;
 }
@@ -1079,9 +1077,6 @@ static int gfs2_link(struct dentry *old_dentry, struct inode *dir,
 	error = -EPERM;
 	if (IS_IMMUTABLE(inode) || IS_APPEND(inode))
 		goto out_gunlock;
-	error = -EMLINK;
-	if (ip->i_inode.i_nlink == (u32)-1)
-		goto out_gunlock;
 
 	error = gfs2_diradd_alloc_required(dir, &dentry->d_name, &da);
 	if (error < 0)
@@ -1621,11 +1616,6 @@ static int gfs2_rename(struct inode *odir, struct dentry *odentry,
 			}
 			if (ndip->i_entries == (u32)-1) {
 				error = -EFBIG;
-				goto out_gunlock;
-			}
-			if (S_ISDIR(ip->i_inode.i_mode) &&
-			    ndip->i_inode.i_nlink == (u32)-1) {
-				error = -EMLINK;
 				goto out_gunlock;
 			}
 		}
