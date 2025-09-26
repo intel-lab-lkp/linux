@@ -76,6 +76,34 @@ static int __init emu_setup_memblk(struct numa_meminfo *ei,
 	return 0;
 }
 
+static void __init __calc_split_params(u64 addr, u64 max_addr,
+		int nr_nodes, u64 *psize, int *pbig)
+{
+	u64 size, usable_size;
+	int big;
+
+	/* total usable memory (skip holes) */
+	usable_size  = max_addr - addr - mem_hole_size(addr, max_addr);
+
+	/*
+	 * Calculate target node size.  x86_32 freaks on __udivdi3() so do
+	 * the division in ulong number of pages and convert back.
+	 */
+	size = PFN_PHYS((unsigned long)(usable_size >> PAGE_SHIFT) / nr_nodes);
+
+	/*
+	 * Calculate the number of big nodes that can be allocated as a result
+	 * of consolidating the remainder.
+	 */
+	big = ((size & (FAKE_NODE_MIN_SIZE - 1UL)) * nr_nodes) / FAKE_NODE_MIN_SIZE;
+
+	/* Align the base size down to the minimum granularity */
+	size = ALIGN_DOWN(size, FAKE_NODE_MIN_SIZE);
+
+	*psize = size;
+	*pbig  = big;
+}
+
 /*
  * Sets up nr_nodes fake nodes interleaved over physical nodes ranging from addr
  * to max_addr.
@@ -100,21 +128,7 @@ static int __init split_nodes_interleave(struct numa_meminfo *ei,
 		nr_nodes = MAX_NUMNODES;
 	}
 
-	/*
-	 * Calculate target node size.  x86_32 freaks on __udivdi3() so do
-	 * the division in ulong number of pages and convert back.
-	 */
-	size = max_addr - addr - mem_hole_size(addr, max_addr);
-	size = PFN_PHYS((unsigned long)(size >> PAGE_SHIFT) / nr_nodes);
-
-	/*
-	 * Calculate the number of big nodes that can be allocated as a result
-	 * of consolidating the remainder.
-	 */
-	big = ((size & (FAKE_NODE_MIN_SIZE - 1UL)) * nr_nodes) /
-		FAKE_NODE_MIN_SIZE;
-
-	size = ALIGN_DOWN(size, FAKE_NODE_MIN_SIZE);
+	__calc_split_params(addr, max_addr, nr_nodes, &size, &big);
 	if (!size) {
 		pr_err("Not enough memory for each node.  "
 			"NUMA emulation disabled.\n");
