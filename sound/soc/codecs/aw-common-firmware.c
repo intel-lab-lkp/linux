@@ -1,22 +1,21 @@
 // SPDX-License-Identifier: GPL-2.0-only
 //
-// aw88395_lib.c  -- ACF bin parsing and check library file for aw88395
+// aw-common-firmware.h --  awinic amp common firmware interface
 //
-// Copyright (c) 2022-2023 AWINIC Technology CO., LTD
+// Copyright (c) 2025 AWINIC Technology CO., LTD
 //
-// Author: Bruce zhao <zhaolei@awinic.com>
+// Author: Weidong Wang <wangweidong.a@awinic.com>
 //
 
 #include <linux/cleanup.h>
 #include <linux/crc8.h>
 #include <linux/i2c.h>
-#include "aw88395_lib.h"
-#include "aw88395_device.h"
+#include "aw-common-firmware.h"
 
-#define AW88395_CRC8_POLYNOMIAL 0x8C
+#define AW_CRC8_POLYNOMIAL 0x8C
 DECLARE_CRC8_TABLE(aw_crc8_table);
 
-static char *profile_name[AW88395_PROFILE_MAX] = {
+static char *profile_name[AW_PROFILE_MAX] = {
 	"Music", "Voice", "Voip", "Ringtone",
 	"Ringtone_hs", "Lowpower", "Bypass",
 	"Mmi", "Fm", "Notification", "Receiver"
@@ -319,10 +318,10 @@ static int aw_parsing_bin_file(struct aw_device *aw_dev, struct aw_bin *bin)
 static int aw_dev_parse_raw_reg(unsigned char *data, unsigned int data_len,
 		struct aw_prof_desc *prof_desc)
 {
-	prof_desc->sec_desc[AW88395_DATA_TYPE_REG].data = data;
-	prof_desc->sec_desc[AW88395_DATA_TYPE_REG].len = data_len;
+	prof_desc->sec_desc[AW_DATA_TYPE_REG].data = data;
+	prof_desc->sec_desc[AW_DATA_TYPE_REG].len = data_len;
 
-	prof_desc->prof_st = AW88395_PROFILE_OK;
+	prof_desc->prof_st = AW_PROFILE_OK;
 
 	return 0;
 }
@@ -335,10 +334,10 @@ static int aw_dev_parse_raw_dsp_cfg(unsigned char *data, unsigned int data_len,
 
 	swab16_array((u16 *)data, data_len >> 1);
 
-	prof_desc->sec_desc[AW88395_DATA_TYPE_DSP_CFG].data = data;
-	prof_desc->sec_desc[AW88395_DATA_TYPE_DSP_CFG].len = data_len;
+	prof_desc->sec_desc[AW_DATA_TYPE_DSP_CFG].data = data;
+	prof_desc->sec_desc[AW_DATA_TYPE_DSP_CFG].len = data_len;
 
-	prof_desc->prof_st = AW88395_PROFILE_OK;
+	prof_desc->prof_st = AW_PROFILE_OK;
 
 	return 0;
 }
@@ -351,10 +350,10 @@ static int aw_dev_parse_raw_dsp_fw(unsigned char *data,	unsigned int data_len,
 
 	swab16_array((u16 *)data, data_len >> 1);
 
-	prof_desc->sec_desc[AW88395_DATA_TYPE_DSP_FW].data = data;
-	prof_desc->sec_desc[AW88395_DATA_TYPE_DSP_FW].len = data_len;
+	prof_desc->sec_desc[AW_DATA_TYPE_DSP_FW].data = data;
+	prof_desc->sec_desc[AW_DATA_TYPE_DSP_FW].len = data_len;
 
-	prof_desc->prof_st = AW88395_PROFILE_OK;
+	prof_desc->prof_st = AW_PROFILE_OK;
 
 	return 0;
 }
@@ -362,8 +361,7 @@ static int aw_dev_parse_raw_dsp_fw(unsigned char *data,	unsigned int data_len,
 static int aw_dev_prof_parse_multi_bin(struct aw_device *aw_dev, unsigned char *data,
 				unsigned int data_len, struct aw_prof_desc *prof_desc)
 {
-	int ret;
-	int i;
+	int ret, i;
 
 	struct aw_bin *aw_bin __free(kfree) = kzalloc(data_len + sizeof(struct aw_bin),
 						     GFP_KERNEL);
@@ -382,9 +380,9 @@ static int aw_dev_prof_parse_multi_bin(struct aw_device *aw_dev, unsigned char *
 	for (i = 0; i < aw_bin->all_bin_parse_num; i++) {
 		switch (aw_bin->header_info[i].bin_data_type) {
 		case DATA_TYPE_REGISTER:
-			prof_desc->sec_desc[AW88395_DATA_TYPE_REG].len =
+			prof_desc->sec_desc[AW_DATA_TYPE_REG].len =
 					aw_bin->header_info[i].valid_data_len;
-			prof_desc->sec_desc[AW88395_DATA_TYPE_REG].data =
+			prof_desc->sec_desc[AW_DATA_TYPE_REG].data =
 					data + aw_bin->header_info[i].valid_data_addr;
 			break;
 		case DATA_TYPE_DSP_REG:
@@ -394,10 +392,12 @@ static int aw_dev_prof_parse_multi_bin(struct aw_device *aw_dev, unsigned char *
 			swab16_array((u16 *)(data + aw_bin->header_info[i].valid_data_addr),
 					aw_bin->header_info[i].valid_data_len >> 1);
 
-			prof_desc->sec_desc[AW88395_DATA_TYPE_DSP_CFG].len =
+			prof_desc->sec_desc[AW_DATA_TYPE_DSP_CFG].len =
 					aw_bin->header_info[i].valid_data_len;
-			prof_desc->sec_desc[AW88395_DATA_TYPE_DSP_CFG].data =
+			prof_desc->sec_desc[AW_DATA_TYPE_DSP_CFG].data =
 					data + aw_bin->header_info[i].valid_data_addr;
+			prof_desc->sec_desc[AW_DATA_TYPE_DSP_CFG].addr =
+					aw_bin->header_info[i].download_addr;
 			break;
 		case DATA_TYPE_DSP_FW:
 		case DATA_TYPE_SOC_APP:
@@ -408,17 +408,19 @@ static int aw_dev_prof_parse_multi_bin(struct aw_device *aw_dev, unsigned char *
 					aw_bin->header_info[i].valid_data_len >> 1);
 
 			prof_desc->fw_ver = aw_bin->header_info[i].app_version;
-			prof_desc->sec_desc[AW88395_DATA_TYPE_DSP_FW].len =
+			prof_desc->sec_desc[AW_DATA_TYPE_DSP_FW].len =
 					aw_bin->header_info[i].valid_data_len;
-			prof_desc->sec_desc[AW88395_DATA_TYPE_DSP_FW].data =
+			prof_desc->sec_desc[AW_DATA_TYPE_DSP_FW].data =
 					data + aw_bin->header_info[i].valid_data_addr;
+			prof_desc->sec_desc[AW_DATA_TYPE_DSP_FW].addr =
+					aw_bin->header_info[i].download_addr;
 			break;
 		default:
 			dev_dbg(aw_dev->dev, "bin_data_type not found");
 			break;
 		}
 	}
-	prof_desc->prof_st = AW88395_PROFILE_OK;
+	prof_desc->prof_st = AW_PROFILE_OK;
 
 	return 0;
 }
@@ -448,11 +450,11 @@ static int aw_dev_parse_reg_bin_with_hdr(struct aw_device *aw_dev,
 		return -EINVAL;
 	}
 
-	prof_desc->sec_desc[AW88395_DATA_TYPE_REG].data =
+	prof_desc->sec_desc[AW_DATA_TYPE_REG].data =
 				data + aw_bin->header_info[0].valid_data_addr;
-	prof_desc->sec_desc[AW88395_DATA_TYPE_REG].len =
+	prof_desc->sec_desc[AW_DATA_TYPE_REG].len =
 				aw_bin->header_info[0].valid_data_len;
-	prof_desc->prof_st = AW88395_PROFILE_OK;
+	prof_desc->prof_st = AW_PROFILE_OK;
 
 	return 0;
 }
@@ -497,9 +499,9 @@ static int aw_dev_parse_dev_type(struct aw_device *aw_dev,
 	for (i = 0; i < prof_hdr->ddt_num; i++) {
 		if ((aw_dev->i2c->adapter->nr == cfg_dde[i].dev_bus) &&
 		    (aw_dev->i2c->addr == cfg_dde[i].dev_addr) &&
-		    (cfg_dde[i].type == AW88395_DEV_TYPE_ID) &&
+		    (cfg_dde[i].type == AW_DEV_TYPE_ID) &&
 		    (cfg_dde[i].data_type != ACF_SEC_TYPE_MONITOR)) {
-			if (cfg_dde[i].dev_profile >= AW88395_PROFILE_MAX) {
+			if (cfg_dde[i].dev_profile >= AW_PROFILE_MAX) {
 				dev_err(aw_dev->dev, "dev_profile [%d] overflow",
 							cfg_dde[i].dev_profile);
 				return -EINVAL;
@@ -517,10 +519,10 @@ static int aw_dev_parse_dev_type(struct aw_device *aw_dev,
 
 	if (sec_num == 0) {
 		dev_dbg(aw_dev->dev, "get dev type num is %d, please use default", sec_num);
-		return AW88395_DEV_TYPE_NONE;
+		return AW_DEV_TYPE_NONE;
 	}
 
-	return AW88395_DEV_TYPE_OK;
+	return AW_DEV_TYPE_OK;
 }
 
 static int aw_dev_parse_dev_default_type(struct aw_device *aw_dev,
@@ -533,9 +535,9 @@ static int aw_dev_parse_dev_default_type(struct aw_device *aw_dev,
 
 	for (i = 0; i < prof_hdr->ddt_num; i++) {
 		if ((aw_dev->channel == cfg_dde[i].dev_index) &&
-		    (cfg_dde[i].type == AW88395_DEV_DEFAULT_TYPE_ID) &&
+		    (cfg_dde[i].type == AW_DEV_DEFAULT_TYPE_ID) &&
 		    (cfg_dde[i].data_type != ACF_SEC_TYPE_MONITOR)) {
-			if (cfg_dde[i].dev_profile >= AW88395_PROFILE_MAX) {
+			if (cfg_dde[i].dev_profile >= AW_PROFILE_MAX) {
 				dev_err(aw_dev->dev, "dev_profile [%d] overflow",
 					cfg_dde[i].dev_profile);
 				return -EINVAL;
@@ -567,8 +569,8 @@ static int aw_dev_cfg_get_reg_valid_prof(struct aw_device *aw_dev,
 	int num = 0;
 	int i;
 
-	for (i = 0; i < AW88395_PROFILE_MAX; i++) {
-		if (prof_desc[i].prof_st == AW88395_PROFILE_OK)
+	for (i = 0; i < AW_PROFILE_MAX; i++) {
+		if (prof_desc[i].prof_st == AW_PROFILE_OK)
 			prof_info->count++;
 	}
 
@@ -585,8 +587,8 @@ static int aw_dev_cfg_get_reg_valid_prof(struct aw_device *aw_dev,
 	if (!prof_info->prof_desc)
 		return -ENOMEM;
 
-	for (i = 0; i < AW88395_PROFILE_MAX; i++) {
-		if (prof_desc[i].prof_st == AW88395_PROFILE_OK) {
+	for (i = 0; i < AW_PROFILE_MAX; i++) {
+		if (prof_desc[i].prof_st == AW_PROFILE_OK) {
 			if (num >= prof_info->count) {
 				dev_err(aw_dev->dev, "overflow count[%d]",
 						prof_info->count);
@@ -610,15 +612,15 @@ static int aw_dev_cfg_get_multiple_valid_prof(struct aw_device *aw_dev,
 	int num = 0;
 	int i;
 
-	for (i = 0; i < AW88395_PROFILE_MAX; i++) {
-		if (prof_desc[i].prof_st == AW88395_PROFILE_OK) {
+	for (i = 0; i < AW_PROFILE_MAX; i++) {
+		if (prof_desc[i].prof_st == AW_PROFILE_OK) {
 			sec_desc = prof_desc[i].sec_desc;
-			if ((sec_desc[AW88395_DATA_TYPE_REG].data != NULL) &&
-			    (sec_desc[AW88395_DATA_TYPE_REG].len != 0) &&
-			    (sec_desc[AW88395_DATA_TYPE_DSP_CFG].data != NULL) &&
-			    (sec_desc[AW88395_DATA_TYPE_DSP_CFG].len != 0) &&
-			    (sec_desc[AW88395_DATA_TYPE_DSP_FW].data != NULL) &&
-			    (sec_desc[AW88395_DATA_TYPE_DSP_FW].len != 0))
+			if ((sec_desc[AW_DATA_TYPE_REG].data != NULL) &&
+			    (sec_desc[AW_DATA_TYPE_REG].len != 0) &&
+			    (sec_desc[AW_DATA_TYPE_DSP_CFG].data != NULL) &&
+			    (sec_desc[AW_DATA_TYPE_DSP_CFG].len != 0) &&
+			    (sec_desc[AW_DATA_TYPE_DSP_FW].data != NULL) &&
+			    (sec_desc[AW_DATA_TYPE_DSP_FW].len != 0))
 				prof_info->count++;
 		}
 	}
@@ -636,15 +638,15 @@ static int aw_dev_cfg_get_multiple_valid_prof(struct aw_device *aw_dev,
 	if (!prof_info->prof_desc)
 		return -ENOMEM;
 
-	for (i = 0; i < AW88395_PROFILE_MAX; i++) {
-		if (prof_desc[i].prof_st == AW88395_PROFILE_OK) {
+	for (i = 0; i < AW_PROFILE_MAX; i++) {
+		if (prof_desc[i].prof_st == AW_PROFILE_OK) {
 			sec_desc = prof_desc[i].sec_desc;
-			if ((sec_desc[AW88395_DATA_TYPE_REG].data != NULL) &&
-			    (sec_desc[AW88395_DATA_TYPE_REG].len != 0) &&
-			    (sec_desc[AW88395_DATA_TYPE_DSP_CFG].data != NULL) &&
-			    (sec_desc[AW88395_DATA_TYPE_DSP_CFG].len != 0) &&
-			    (sec_desc[AW88395_DATA_TYPE_DSP_FW].data != NULL) &&
-			    (sec_desc[AW88395_DATA_TYPE_DSP_FW].len != 0)) {
+			if ((sec_desc[AW_DATA_TYPE_REG].data != NULL) &&
+			    (sec_desc[AW_DATA_TYPE_REG].len != 0) &&
+			    (sec_desc[AW_DATA_TYPE_DSP_CFG].data != NULL) &&
+			    (sec_desc[AW_DATA_TYPE_DSP_CFG].len != 0) &&
+			    (sec_desc[AW_DATA_TYPE_DSP_FW].data != NULL) &&
+			    (sec_desc[AW_DATA_TYPE_DSP_FW].len != 0)) {
 				if (num >= prof_info->count) {
 					dev_err(aw_dev->dev, "overflow count[%d]",
 							prof_info->count);
@@ -673,7 +675,7 @@ static int aw_dev_load_cfg_by_hdr(struct aw_device *aw_dev,
 	ret = aw_dev_parse_dev_type(aw_dev, prof_hdr, all_prof_info);
 	if (ret < 0) {
 		return ret;
-	} else if (ret == AW88395_DEV_TYPE_NONE) {
+	} else if (ret == AW_DEV_TYPE_NONE) {
 		dev_dbg(aw_dev->dev, "get dev type num is 0, parse default dev");
 		ret = aw_dev_parse_dev_default_type(aw_dev, prof_hdr, all_prof_info);
 		if (ret < 0)
@@ -734,17 +736,17 @@ static int aw_get_dde_type_info(struct aw_device *aw_dev, struct aw_container *a
 	unsigned int i;
 
 	for (i = 0; i < cfg_hdr->ddt_num; i++) {
-		if (cfg_dde[i].type == AW88395_DEV_TYPE_ID)
+		if (cfg_dde[i].type == AW_DEV_TYPE_ID)
 			dev_num++;
 
-		if (cfg_dde[i].type == AW88395_DEV_DEFAULT_TYPE_ID)
+		if (cfg_dde[i].type == AW_DEV_DEFAULT_TYPE_ID)
 			default_num++;
 	}
 
 	if (dev_num != 0) {
-		aw_dev->prof_info.prof_type = AW88395_DEV_TYPE_ID;
+		aw_dev->prof_info.prof_type = AW_DEV_TYPE_ID;
 	} else if (default_num != 0) {
-		aw_dev->prof_info.prof_type = AW88395_DEV_DEFAULT_TYPE_ID;
+		aw_dev->prof_info.prof_type = AW_DEV_DEFAULT_TYPE_ID;
 	} else {
 		dev_err(aw_dev->dev, "can't find scene");
 		return -EINVAL;
@@ -817,10 +819,10 @@ static int aw_dev_parse_scene_count_v1(struct aw_device *aw_dev,
 		return ret;
 
 	switch (aw_dev->prof_info.prof_type) {
-	case AW88395_DEV_TYPE_ID:
+	case AW_DEV_TYPE_ID:
 		ret = aw_get_dev_scene_count_v1(aw_dev, aw_cfg, count);
 		break;
-	case AW88395_DEV_DEFAULT_TYPE_ID:
+	case AW_DEV_DEFAULT_TYPE_ID:
 		ret = aw_get_default_scene_count_v1(aw_dev, aw_cfg, count);
 		break;
 	default:
@@ -937,10 +939,10 @@ static int aw_dev_parse_by_hdr_v1(struct aw_device *aw_dev,
 	int ret;
 
 	switch (aw_dev->prof_info.prof_type) {
-	case AW88395_DEV_TYPE_ID:
+	case AW_DEV_TYPE_ID:
 		ret = aw_dev_parse_dev_type_v1(aw_dev, cfg_hdr);
 		break;
-	case AW88395_DEV_DEFAULT_TYPE_ID:
+	case AW_DEV_DEFAULT_TYPE_ID:
 		ret = aw_dev_parse_default_type_v1(aw_dev, cfg_hdr);
 		break;
 	default:
@@ -987,7 +989,7 @@ static int aw_dev_load_cfg_by_hdr_v1(struct aw_device *aw_dev,
 	return 0;
 }
 
-int aw88395_dev_cfg_load(struct aw_device *aw_dev, struct aw_container *aw_cfg)
+int aw_dev_cfg_load(struct aw_device *aw_dev, struct aw_container *aw_cfg)
 {
 	struct aw_cfg_hdr *cfg_hdr;
 	int ret;
@@ -995,7 +997,7 @@ int aw88395_dev_cfg_load(struct aw_device *aw_dev, struct aw_container *aw_cfg)
 	cfg_hdr = (struct aw_cfg_hdr *)aw_cfg->data;
 
 	switch (cfg_hdr->hdr_version) {
-	case AW88395_CFG_HDR_VER:
+	case AW_CFG_HDR_VER:
 		ret = aw_dev_load_cfg_by_hdr(aw_dev, cfg_hdr);
 		if (ret < 0) {
 			dev_err(aw_dev->dev, "hdr_version[0x%x] parse failed",
@@ -1003,7 +1005,7 @@ int aw88395_dev_cfg_load(struct aw_device *aw_dev, struct aw_container *aw_cfg)
 			return ret;
 		}
 		break;
-	case AW88395_CFG_HDR_VER_V1:
+	case AW_CFG_HDR_VER_V1:
 		ret = aw_dev_load_cfg_by_hdr_v1(aw_dev, aw_cfg);
 		if (ret < 0) {
 			dev_err(aw_dev->dev, "hdr_version[0x%x] parse failed",
@@ -1015,11 +1017,11 @@ int aw88395_dev_cfg_load(struct aw_device *aw_dev, struct aw_container *aw_cfg)
 		dev_err(aw_dev->dev, "unsupported hdr_version [0x%x]", cfg_hdr->hdr_version);
 		return -EINVAL;
 	}
-	aw_dev->fw_status = AW88395_DEV_FW_OK;
+	aw_dev->fw_status = AW_DEV_FW_OK;
 
 	return 0;
 }
-EXPORT_SYMBOL_GPL(aw88395_dev_cfg_load);
+EXPORT_SYMBOL_GPL(aw_dev_cfg_load);
 
 static int aw_dev_check_cfg_by_hdr(struct aw_device *aw_dev, struct aw_container *aw_cfg)
 {
@@ -1138,7 +1140,7 @@ static int aw_dev_check_acf_by_hdr_v1(struct aw_device *aw_dev, struct aw_contai
 	return 0;
 }
 
-int aw88395_dev_load_acf_check(struct aw_device *aw_dev, struct aw_container *aw_cfg)
+int aw_dev_load_acf_check(struct aw_device *aw_dev, struct aw_container *aw_cfg)
 {
 	struct aw_cfg_hdr *cfg_hdr;
 
@@ -1153,13 +1155,13 @@ int aw88395_dev_load_acf_check(struct aw_device *aw_dev, struct aw_container *aw
 		return -EINVAL;
 	}
 
-	crc8_populate_lsb(aw_crc8_table, AW88395_CRC8_POLYNOMIAL);
+	crc8_populate_lsb(aw_crc8_table, AW_CRC8_POLYNOMIAL);
 
 	cfg_hdr = (struct aw_cfg_hdr *)aw_cfg->data;
 	switch (cfg_hdr->hdr_version) {
-	case AW88395_CFG_HDR_VER:
+	case AW_CFG_HDR_VER:
 		return aw_dev_check_cfg_by_hdr(aw_dev, aw_cfg);
-	case AW88395_CFG_HDR_VER_V1:
+	case AW_CFG_HDR_VER_V1:
 		return aw_dev_check_acf_by_hdr_v1(aw_dev, aw_cfg);
 	default:
 		dev_err(aw_dev->dev, "unsupported hdr_version [0x%x]", cfg_hdr->hdr_version);
@@ -1168,7 +1170,7 @@ int aw88395_dev_load_acf_check(struct aw_device *aw_dev, struct aw_container *aw
 
 	return 0;
 }
-EXPORT_SYMBOL_GPL(aw88395_dev_load_acf_check);
+EXPORT_SYMBOL_GPL(aw_dev_load_acf_check);
 
-MODULE_DESCRIPTION("AW88395 ACF File Parsing Lib");
+MODULE_DESCRIPTION("awinic firmware lib");
 MODULE_LICENSE("GPL v2");
