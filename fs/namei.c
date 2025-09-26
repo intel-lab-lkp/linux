@@ -3419,6 +3419,39 @@ struct dentry *start_removing_noperm(struct dentry *parent,
 EXPORT_SYMBOL(start_removing_noperm);
 
 /**
+ * start_creating_dentry - prepare to create a given dentry
+ * @parent - directory from which dentry should be removed
+ * @child - the dentry to be removed
+ *
+ * A lock is taken to protect the dentry again other dirops and
+ * the validity of the dentry is checked: correct parent and still hashed.
+ *
+ * If the dentry is valid and negative a reference is taken and
+ * returned.  If not an error is returned.
+ *
+ * end_creating() should be called when creation is complete, or aborted.
+ *
+ * Returns: the valid dentry, or an error.
+ */
+struct dentry *start_creating_dentry(struct dentry *parent,
+				     struct dentry *child)
+{
+	inode_lock_nested(parent->d_inode, I_MUTEX_PARENT);
+	if (unlikely(IS_DEADDIR(parent->d_inode) ||
+		     child->d_parent != parent ||
+		     d_unhashed(child))) {
+		inode_unlock(parent->d_inode);
+		return ERR_PTR(-EINVAL);
+	}
+	if (d_is_positive(child)) {
+		inode_unlock(parent->d_inode);
+		return ERR_PTR(-EEXIST);
+	}
+	return dget(child);
+}
+EXPORT_SYMBOL(start_creating_dentry);
+
+/**
  * start_removing_dentry - prepare to remove a given dentry
  * @parent - directory from which dentry should be removed
  * @child - the dentry to be removed
@@ -3426,8 +3459,8 @@ EXPORT_SYMBOL(start_removing_noperm);
  * A lock is taken to protect the dentry again other dirops and
  * the validity of the dentry is checked: correct parent and still hashed.
  *
- * If the dentry is valid a reference is taken and returned.  If not
- * an error is returned.
+ * If the dentry is valid and positive a reference is taken and
+ * returned.  If not an error is returned.
  *
  * end_removing() should be called when removal is complete, or aborted.
  *
@@ -3442,6 +3475,10 @@ struct dentry *start_removing_dentry(struct dentry *parent,
 		     d_unhashed(child))) {
 		inode_unlock(parent->d_inode);
 		return ERR_PTR(-EINVAL);
+	}
+	if (d_is_negative(child)) {
+		inode_unlock(parent->d_inode);
+		return ERR_PTR(-ENOENT);
 	}
 	return dget(child);
 }
