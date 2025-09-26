@@ -401,14 +401,14 @@ static int t14s_kbd_audio_led_probe(struct t14s_ec *ec)
 	int ret;
 
 	ec->led_mic_mute.name = "platform::micmute";
-	ec->led_mic_mute.max_brightness = 1,
-	ec->led_mic_mute.default_trigger = "audio-micmute",
+	ec->led_mic_mute.max_brightness = 1;
+	ec->led_mic_mute.default_trigger = "audio-micmute";
 	ec->led_mic_mute.brightness_set_blocking = t14s_mic_mute_led_set;
 	ec->led_mic_mute.brightness_get = t14s_mic_mute_led_get;
 
 	ec->led_spk_mute.name = "platform::mute";
-	ec->led_spk_mute.max_brightness = 1,
-	ec->led_spk_mute.default_trigger = "audio-mute",
+	ec->led_spk_mute.max_brightness = 1;
+	ec->led_spk_mute.default_trigger = "audio-mute";
 	ec->led_spk_mute.brightness_set_blocking = t14s_spk_mute_led_set;
 	ec->led_spk_mute.brightness_get = t14s_spk_mute_led_get;
 
