@@ -221,9 +221,7 @@ int bch2_link_trans(struct btree_trans *trans,
 		return ret;
 
 	inode_u->bi_ctime = now;
-	ret = bch2_inode_nlink_inc(inode_u);
-	if (ret)
-		goto err;
+	bch2_inode_nlink_inc(inode_u);
 
 	ret = bch2_inode_peek(trans, &dir_iter, dir_u, dir, BTREE_ITER_intent);
 	if (ret)
