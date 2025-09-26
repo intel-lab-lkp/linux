@@ -18,11 +18,13 @@ enum iaa_mode {
 struct iaa_req {
 	struct scatterlist *src;
 	struct scatterlist *dst;
+	struct scatterlist sg_src;
 	unsigned int slen;
 	unsigned int dlen;
 	u32 flags;
 	u32 compression_crc;
 	void *drv_data; /* for driver internal use */
+	int **dlens;
 };
 
 extern bool iaa_comp_enabled(void);
@@ -35,9 +37,21 @@ extern u8 iaa_comp_get_modes(char **iaa_mode_names, enum iaa_mode *iaa_modes);
 
 extern void iaa_comp_put_modes(char **iaa_mode_names, enum iaa_mode *iaa_modes, u8 nr_modes);
 
+extern unsigned int iaa_comp_get_max_batch_size(void);
+
 extern int iaa_comp_compress(enum iaa_mode mode, struct iaa_req *req);
 
 extern int iaa_comp_decompress(enum iaa_mode mode, struct iaa_req *req);
+
+extern int iaa_comp_compress_batch(
+	enum iaa_mode mode,
+	struct iaa_req *parent_req,
+	unsigned int unit_size);
+
+extern int iaa_comp_decompress_batch(
+	enum iaa_mode mode,
+	struct iaa_req *parent_req,
+	unsigned int unit_size);
 
 #else /* CONFIG_CRYPTO_DEV_IAA_CRYPTO */
 
@@ -71,12 +85,33 @@ static inline void iaa_comp_put_modes(char **iaa_mode_names, enum iaa_mode *iaa_
 {
 }
 
+static inline unsigned int iaa_comp_get_max_batch_size(void)
+{
+	return 0;
+}
+
 static inline int iaa_comp_compress(enum iaa_mode mode, struct iaa_req *req)
 {
 	return -EINVAL;
 }
 
 static inline int iaa_comp_decompress(enum iaa_mode mode, struct iaa_req *req)
+{
+	return -EINVAL;
+}
+
+static inline int iaa_comp_compress_batch(
+	enum iaa_mode mode,
+	struct iaa_req *parent_req,
+	unsigned int unit_size)
+{
+	return -EINVAL;
+}
+
+static inline int iaa_comp_decompress_batch(
+	enum iaa_mode mode,
+	struct iaa_req *parent_req,
+	unsigned int unit_size)
 {
 	return -EINVAL;
 }
