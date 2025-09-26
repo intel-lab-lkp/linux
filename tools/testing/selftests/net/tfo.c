@@ -50,6 +50,7 @@ static void run_server(void)
 	socklen_t len;
 	char buf[64];
 	FILE *outfile;
+	int ret;
 
 	outfile = fopen(cfg_outfile, "w");
 	if (!outfile)
@@ -81,7 +82,9 @@ static void run_server(void)
 	if (getsockopt(connfd, SOL_SOCKET, SO_INCOMING_NAPI_ID, &opt, &len) < 0)
 		error(1, errno, "getsockopt(SO_INCOMING_NAPI_ID)");
 
-	read(connfd, buf, 64);
+	ret = read(connfd, buf, 64);
+	if (ret < 0)
+		error(1, errno, "read()");
 	fprintf(outfile, "%d\n", opt);
 
 	fclose(outfile);
