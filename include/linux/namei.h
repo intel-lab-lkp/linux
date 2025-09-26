@@ -88,6 +88,24 @@ struct dentry *lookup_one_positive_killable(struct mnt_idmap *idmap,
 					    struct qstr *name,
 					    struct dentry *base);
 
+struct dentry *start_creating(struct mnt_idmap *idmap, struct dentry *parent,
+			      struct qstr *name);
+
+/* end_creating - finish action started with start_creating
+ * @child - dentry returned by start_creating()
+ * @parent - dentry given to start_creating()
+ *
+ * Unlock and release the child.
+ *
+ * Unlike end_dirop() this can only be called if start_creating() succeeded.
+ * It handles @child being and error as vfs_mkdir() might have converted the
+ * dentry to an error - in that case the parent still needs to be unlocked.
+ */
+static inline void end_creating(struct dentry *child, struct dentry *parent)
+{
+	end_dirop_mkdir(child, parent);
+}
+
 extern int follow_down_one(struct path *);
 extern int follow_down(struct path *path, unsigned int flags);
 extern int follow_up(struct path *);
