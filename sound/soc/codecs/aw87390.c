@@ -12,8 +12,14 @@
 #include <linux/regmap.h>
 #include <sound/soc.h>
 #include "aw87390.h"
-#include "aw88395/aw88395_data_type.h"
-#include "aw88395/aw88395_device.h"
+#include "aw-common-device.h"
+#include "aw-common-firmware.h"
+
+struct aw87390 {
+	struct aw_device *aw_pa;
+	struct mutex lock;
+	struct regmap *regmap;
+};
 
 static const struct regmap_config aw87390_remap_config = {
 	.val_bits = 8,
@@ -47,38 +53,6 @@ static int aw87390_dev_reg_update(struct aw_device *aw_dev,
 	return 0;
 }
 
-static int aw87390_dev_get_prof_name(struct aw_device *aw_dev, int index, char **prof_name)
-{
-	struct aw_prof_info *prof_info = &aw_dev->prof_info;
-	struct aw_prof_desc *prof_desc;
-
-	if ((index >= aw_dev->prof_info.count) || (index < 0)) {
-		dev_err(aw_dev->dev, "index[%d] overflow count[%d]\n",
-			index, aw_dev->prof_info.count);
-		return -EINVAL;
-	}
-
-	prof_desc = &aw_dev->prof_info.prof_desc[index];
-
-	*prof_name = prof_info->prof_name_list[prof_desc->id];
-
-	return 0;
-}
-
-static int aw87390_dev_get_prof_data(struct aw_device *aw_dev, int index,
-			struct aw_prof_desc **prof_desc)
-{
-	if ((index >= aw_dev->prof_info.count) || (index < 0)) {
-		dev_err(aw_dev->dev, "%s: index[%d] overflow count[%d]\n",
-				__func__, index, aw_dev->prof_info.count);
-		return -EINVAL;
-	}
-
-	*prof_desc = &aw_dev->prof_info.prof_desc[index];
-
-	return 0;
-}
-
 static int aw87390_dev_fw_update(struct aw_device *aw_dev)
 {
 	struct aw_prof_desc *prof_index_desc;
@@ -86,7 +60,7 @@ static int aw87390_dev_fw_update(struct aw_device *aw_dev)
 	char *prof_name;
 	int ret;
 
-	ret = aw87390_dev_get_prof_name(aw_dev, aw_dev->prof_index, &prof_name);
+	ret = aw_dev_get_prof_name(aw_dev, aw_dev->prof_index, &prof_name);
 	if (ret) {
 		dev_err(aw_dev->dev, "get prof name failed\n");
 		return -EINVAL;
@@ -94,7 +68,7 @@ static int aw87390_dev_fw_update(struct aw_device *aw_dev)
 
 	dev_dbg(aw_dev->dev, "start update %s", prof_name);
 
-	ret = aw87390_dev_get_prof_data(aw_dev, aw_dev->prof_index, &prof_index_desc);
+	ret = aw_dev_get_prof_data(aw_dev, aw_dev->prof_index, &prof_index_desc);
 	if (ret) {
 		dev_err(aw_dev->dev, "aw87390_dev_get_prof_data failed\n");
 		return ret;
@@ -102,8 +76,8 @@ static int aw87390_dev_fw_update(struct aw_device *aw_dev)
 
 	/* update reg */
 	sec_desc = prof_index_desc->sec_desc;
-	ret = aw87390_dev_reg_update(aw_dev, sec_desc[AW88395_DATA_TYPE_REG].data,
-					sec_desc[AW88395_DATA_TYPE_REG].len);
+	ret = aw87390_dev_reg_update(aw_dev, sec_desc[AW_DATA_TYPE_REG].data,
+					sec_desc[AW_DATA_TYPE_REG].len);
 	if (ret) {
 		dev_err(aw_dev->dev, "update reg failed\n");
 		return ret;
@@ -159,19 +133,6 @@ static int aw87390_power_on(struct aw_device *aw_dev)
 	return 0;
 }
 
-static int aw87390_dev_set_profile_index(struct aw_device *aw_dev, int index)
-{
-	if ((index >= aw_dev->prof_info.count) || (index < 0))
-		return -EINVAL;
-
-	if (aw_dev->prof_index == index)
-		return -EPERM;
-
-	aw_dev->prof_index = index;
-
-	return 0;
-}
-
 static int aw87390_profile_info(struct snd_kcontrol *kcontrol,
 			 struct snd_ctl_elem_info *uinfo)
 {
@@ -196,7 +157,7 @@ static int aw87390_profile_info(struct snd_kcontrol *kcontrol,
 
 	count = uinfo->value.enumerated.item;
 
-	ret = aw87390_dev_get_prof_name(aw87390->aw_pa, count, &prof_name);
+	ret = aw_dev_get_prof_name(aw87390->aw_pa, count, &prof_name);
 	if (ret) {
 		strscpy(uinfo->value.enumerated.name, "null");
 		return 0;
@@ -226,7 +187,7 @@ static int aw87390_profile_set(struct snd_kcontrol *kcontrol,
 	int ret;
 
 	mutex_lock(&aw87390->lock);
-	ret = aw87390_dev_set_profile_index(aw87390->aw_pa, ucontrol->value.integer.value[0]);
+	ret = aw_dev_set_profile_index(aw87390->aw_pa, ucontrol->value.integer.value[0]);
 	if (ret) {
 		dev_dbg(codec->dev, "profile index does not change\n");
 		mutex_unlock(&aw87390->lock);
@@ -244,52 +205,9 @@ static int aw87390_profile_set(struct snd_kcontrol *kcontrol,
 }
 
 static const struct snd_kcontrol_new aw87390_controls[] = {
-	AW87390_PROFILE_EXT("AW87390 Profile Set", aw87390_profile_info,
+	AW_PROFILE_EXT("AW87390 Profile Set", aw87390_profile_info,
 		aw87390_profile_get, aw87390_profile_set),
 };
-
-static int aw87390_request_firmware_file(struct aw87390 *aw87390)
-{
-	const struct firmware *cont = NULL;
-	int ret;
-
-	aw87390->aw_pa->fw_status = AW87390_DEV_FW_FAILED;
-
-	ret = request_firmware(&cont, AW87390_ACF_FILE, aw87390->aw_pa->dev);
-	if (ret)
-		return dev_err_probe(aw87390->aw_pa->dev, ret,
-					"load [%s] failed!\n", AW87390_ACF_FILE);
-
-	dev_dbg(aw87390->aw_pa->dev, "loaded %s - size: %zu\n",
-			AW87390_ACF_FILE, cont ? cont->size : 0);
-
-	aw87390->aw_cfg = devm_kzalloc(aw87390->aw_pa->dev,
-				struct_size(aw87390->aw_cfg, data, cont->size), GFP_KERNEL);
-	if (!aw87390->aw_cfg) {
-		release_firmware(cont);
-		return -ENOMEM;
-	}
-
-	aw87390->aw_cfg->len = cont->size;
-	memcpy(aw87390->aw_cfg->data, cont->data, cont->size);
-	release_firmware(cont);
-
-	ret = aw88395_dev_load_acf_check(aw87390->aw_pa, aw87390->aw_cfg);
-	if (ret) {
-		dev_err(aw87390->aw_pa->dev, "load [%s] failed!\n", AW87390_ACF_FILE);
-		return ret;
-	}
-
-	mutex_lock(&aw87390->lock);
-
-	ret = aw88395_dev_cfg_load(aw87390->aw_pa, aw87390->aw_cfg);
-	if (ret)
-		dev_err(aw87390->aw_pa->dev, "aw_dev acf parse failed\n");
-
-	mutex_unlock(&aw87390->lock);
-
-	return ret;
-}
 
 static int aw87390_drv_event(struct snd_soc_dapm_widget *w,
 				struct snd_kcontrol *kcontrol, int event)
@@ -331,10 +249,10 @@ static int aw87390_codec_probe(struct snd_soc_component *component)
 	struct aw87390 *aw87390 = snd_soc_component_get_drvdata(component);
 	int ret;
 
-	ret = aw87390_request_firmware_file(aw87390);
+	ret = aw_dev_request_firmware_file(aw87390->aw_pa, AW87390_ACF_FILE);
 	if (ret)
 		return dev_err_probe(aw87390->aw_pa->dev, ret,
-				"aw87390_request_firmware_file failed\n");
+				"aw_request_firmware_file failed\n");
 
 	return 0;
 }
@@ -392,7 +310,7 @@ static int aw87390_init(struct aw87390 **aw87390, struct i2c_client *i2c, struct
 	aw_dev->acf = NULL;
 	aw_dev->prof_info.prof_desc = NULL;
 	aw_dev->prof_info.count = 0;
-	aw_dev->prof_info.prof_type = AW88395_DEV_NONE_TYPE_ID;
+	aw_dev->prof_info.prof_type = AW_DEV_NONE_TYPE_ID;
 	aw_dev->channel = AW87390_DEV_DEFAULT_CH;
 	aw_dev->fw_status = AW87390_DEV_FW_FAILED;
 	aw_dev->prof_index = AW87390_INIT_PROFILE;
