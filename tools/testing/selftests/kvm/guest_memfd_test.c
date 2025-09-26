@@ -40,6 +40,18 @@ static void test_file_read_write(int fd, size_t total_size)
 		    "pwrite on a guest_mem fd should fail");
 }
 
+static void *test_mmap_common(int fd, size_t size)
+{
+	void *mem;
+
+	mem = mmap(NULL, size, PROT_READ | PROT_WRITE, MAP_PRIVATE, fd, 0);
+	TEST_ASSERT(mem == MAP_FAILED, "Copy-on-write not allowed by guest_memfd.");
+
+	mem = kvm_mmap(size, PROT_READ | PROT_WRITE, MAP_SHARED, fd);
+
+	return mem;
+}
+
 static void test_mmap_supported(int fd, size_t total_size)
 {
 	const char val = 0xaa;
@@ -47,10 +59,7 @@ static void test_mmap_supported(int fd, size_t total_size)
 	size_t i;
 	int ret;
 
-	mem = mmap(NULL, total_size, PROT_READ | PROT_WRITE, MAP_PRIVATE, fd, 0);
-	TEST_ASSERT(mem == MAP_FAILED, "Copy-on-write not allowed by guest_memfd.");
-
-	mem = kvm_mmap(total_size, PROT_READ | PROT_WRITE, MAP_SHARED, fd);
+	mem = test_mmap_common(fd, total_size);
 
 	memset(mem, val, total_size);
 	for (i = 0; i < total_size; i++)
@@ -78,29 +87,45 @@ void fault_sigbus_handler(int signum)
 	siglongjmp(jmpbuf, 1);
 }
 
-static void test_fault_overflow(int fd, size_t total_size)
+static void *test_fault_sigbus(int fd, size_t size)
 {
 	struct sigaction sa_old, sa_new = {
 		.sa_handler = fault_sigbus_handler,
 	};
+	void *mem;
+
+	mem = test_mmap_common(fd, size);
+
+	sigaction(SIGBUS, &sa_new, &sa_old);
+	if (sigsetjmp(jmpbuf, 1) == 0) {
+		memset(mem, 0xaa, size);
+		TEST_ASSERT(false, "memset() should have triggered SIGBUS.");
+	}
+	sigaction(SIGBUS, &sa_old, NULL);
+
+	return mem;
+}
+
+static void test_fault_overflow(int fd, size_t total_size)
+{
 	size_t map_size = total_size * 4;
 	const char val = 0xaa;
 	char *mem;
 	size_t i;
 
-	mem = kvm_mmap(map_size, PROT_READ | PROT_WRITE, MAP_SHARED, fd);
-
-	sigaction(SIGBUS, &sa_new, &sa_old);
-	if (sigsetjmp(jmpbuf, 1) == 0) {
-		memset(mem, 0xaa, map_size);
-		TEST_ASSERT(false, "memset() should have triggered SIGBUS.");
-	}
-	sigaction(SIGBUS, &sa_old, NULL);
+	mem = test_fault_sigbus(fd, map_size);
 
 	for (i = 0; i < total_size; i++)
 		TEST_ASSERT_EQ(READ_ONCE(mem[i]), val);
 
 	kvm_munmap(mem, map_size);
+}
+
+static void test_fault_private(int fd, size_t total_size)
+{
+	void *mem = test_fault_sigbus(fd, total_size);
+
+	kvm_munmap(mem, total_size);
 }
 
 static void test_mmap_not_supported(int fd, size_t total_size)
@@ -274,9 +299,12 @@ static void __test_guest_memfd(struct kvm_vm *vm, uint64_t flags)
 
 	gmem_test(file_read_write, vm, flags);
 
-	if (flags & GUEST_MEMFD_FLAG_MMAP) {
+	if (flags & GUEST_MEMFD_FLAG_MMAP &&
+	    flags & GUEST_MEMFD_FLAG_DEFAULT_SHARED) {
 		gmem_test(mmap_supported, vm, flags);
 		gmem_test(fault_overflow, vm, flags);
+	} else if (flags & GUEST_MEMFD_FLAG_MMAP) {
+		gmem_test(fault_private, vm, flags);
 	} else {
 		gmem_test(mmap_not_supported, vm, flags);
 	}
@@ -294,9 +322,11 @@ static void test_guest_memfd(unsigned long vm_type)
 
 	__test_guest_memfd(vm, 0);
 
-	if (vm_check_cap(vm, KVM_CAP_GUEST_MEMFD_MMAP))
+	if (vm_check_cap(vm, KVM_CAP_GUEST_MEMFD_MMAP)) {
+		__test_guest_memfd(vm, GUEST_MEMFD_FLAG_MMAP);
 		__test_guest_memfd(vm, GUEST_MEMFD_FLAG_MMAP |
 				       GUEST_MEMFD_FLAG_DEFAULT_SHARED);
+	}
 
 	kvm_vm_free(vm);
 }
