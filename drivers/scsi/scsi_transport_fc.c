@@ -25,6 +25,10 @@
 #include <uapi/scsi/fc/fc_els.h>
 #include "scsi_priv.h"
 
+#if (IS_ENABLED(CONFIG_NVME_FC))
+void nvme_fc_modify_rport_fpin_state(u64 local_wwpn, u64 remote_wwpn, bool marginal);
+#endif
+
 static int fc_queue_work(struct Scsi_Host *, struct work_struct *);
 static void fc_vport_sched_delete(struct work_struct *work);
 static int fc_vport_setup(struct Scsi_Host *shost, int channel,
@@ -879,6 +883,83 @@ fc_fpin_congn_stats_update(struct Scsi_Host *shost,
 	fc_cn_stats_update(be16_to_cpu(congn->event_type),
 			   &fc_host->fpin_stats);
 }
+
+/**
+ * fc_host_fpin_set_nvme_rport_marginal
+ * - Set FC_PORTSTATE_MARGINAL for nvme rports in FPIN
+ * @shost:		host the FPIN was received on
+ * @fpin_len:		length of FPIN payload, in bytes
+ * @fpin_buf:		pointer to FPIN payload
+ *
+ * This function processes a received FPIN and sets FC_PORTSTATE_MARGINAL on
+ * all remote ports that have FC_PORT_ROLE_NVME_TARGET set identified in the
+ * FPIN descriptors.
+ *
+ * Notes:
+ *	This routine assumes no locks are held on entry.
+ */
+void
+fc_host_fpin_set_nvme_rport_marginal(struct Scsi_Host *shost, u32 fpin_len, char *fpin_buf)
+{
+	struct fc_els_fpin *fpin = (struct fc_els_fpin *)fpin_buf;
+	struct fc_rport *rport;
+	union fc_tlv_desc *tlv;
+	u64 local_wwpn = fc_host_port_name(shost);
+	u64 wwpn, attached_wwpn;
+	u32 bytes_remain;
+	u32 dtag;
+	u8 i;
+	unsigned long flags;
+
+	/* Parse FPIN descriptors */
+	tlv = &fpin->fpin_desc[0];
+	bytes_remain = fpin_len - offsetof(struct fc_els_fpin, fpin_desc);
+	bytes_remain = min_t(u32, bytes_remain, be32_to_cpu(fpin->desc_len));
+
+	while (bytes_remain >= FC_TLV_DESC_HDR_SZ &&
+	       bytes_remain >= FC_TLV_DESC_SZ_FROM_LENGTH(tlv)) {
+		dtag = be32_to_cpu(tlv->hdr.desc_tag);
+		switch (dtag) {
+		case ELS_DTAG_LNK_INTEGRITY:
+			struct fc_fn_li_desc *li_desc = &tlv->li;
+
+			attached_wwpn = be64_to_cpu(li_desc->attached_wwpn);
+
+			/* Set marginal state for WWPNs in pname_list */
+			if (be32_to_cpu(li_desc->pname_count) > 0) {
+				for (i = 0; i < be32_to_cpu(li_desc->pname_count); i++) {
+					wwpn = be64_to_cpu(li_desc->pname_list[i]);
+					if (wwpn == attached_wwpn)
+						continue;
+
+					rport = fc_find_rport_by_wwpn(shost, wwpn);
+					if (!rport)
+						continue;
+
+					spin_lock_irqsave(shost->host_lock, flags);
+
+					if (rport->port_state == FC_PORTSTATE_ONLINE &&
+							rport->roles & FC_PORT_ROLE_NVME_TARGET) {
+						rport->port_state = FC_PORTSTATE_MARGINAL;
+						spin_unlock_irqrestore(shost->host_lock, flags);
+#if (IS_ENABLED(CONFIG_NVME_FC))
+						nvme_fc_modify_rport_fpin_state(local_wwpn,
+								wwpn, true);
+#endif
+					} else
+						spin_unlock_irqrestore(shost->host_lock, flags);
+
+				}
+			}
+			break;
+		default:
+			break;
+		}
+		bytes_remain -= FC_TLV_DESC_SZ_FROM_LENGTH(tlv);
+		tlv = fc_tlv_next_desc(tlv);
+	}
+}
+EXPORT_SYMBOL(fc_host_fpin_set_nvme_rport_marginal);
 
 /**
  * fc_host_fpin_rcv - routine to process a received FPIN.
