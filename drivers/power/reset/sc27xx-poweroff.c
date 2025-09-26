@@ -7,16 +7,33 @@
 #include <linux/cpu.h>
 #include <linux/kernel.h>
 #include <linux/module.h>
+#include <linux/of.h>
 #include <linux/platform_device.h>
 #include <linux/pm.h>
 #include <linux/reboot.h>
 #include <linux/regmap.h>
 #include <linux/syscore_ops.h>
 
-#define SC27XX_PWR_PD_HW	0xc2c
+#define SC2730_PWR_PD_HW	0x1820
+#define SC2730_SLP_CTRL		0x1a48
+#define SC2730_LDO_XTL_EN	BIT(2)
+
+#define SC2731_PWR_PD_HW	0xc2c
+#define SC2731_SLP_CTRL		0xdf0
+#define SC2731_LDO_XTL_EN	BIT(3)
+
 #define SC27XX_PWR_OFF_EN	BIT(0)
-#define SC27XX_SLP_CTRL		0xdf0
-#define SC27XX_LDO_XTL_EN	BIT(3)
+
+struct sc27xx_poweroff_reg_info {
+	u32 poweroff_reg;
+	u32 slp_ctrl_reg;
+	u32 ldo_xtl_en;
+};
+
+struct sc27xx_poweroff_data {
+	struct regmap *regmap;
+	const struct sc27xx_poweroff_reg_info *regs;
+};
 
 /*
  * On Spreadtrum platform, we need power off system through external SC27xx
@@ -45,12 +62,14 @@ static struct syscore_ops poweroff_syscore_ops = {
 
 static int sc27xx_poweroff_do_poweroff(struct sys_off_data *off_data)
 {
-	struct regmap *regmap = off_data->cb_data;
+	struct sc27xx_poweroff_data *data = off_data->cb_data;
 
 	/* Disable the external subsys connection's power firstly */
-	regmap_write(regmap, SC27XX_SLP_CTRL, SC27XX_LDO_XTL_EN);
+	regmap_write(data->regmap, data->regs->slp_ctrl_reg,
+		     data->regs->ldo_xtl_en);
 
-	regmap_write(regmap, SC27XX_PWR_PD_HW, SC27XX_PWR_OFF_EN);
+	regmap_write(data->regmap, data->regs->poweroff_reg,
+		     SC27XX_PWR_OFF_EN);
 
 	mdelay(1000);
 
@@ -61,10 +80,18 @@ static int sc27xx_poweroff_do_poweroff(struct sys_off_data *off_data)
 
 static int sc27xx_poweroff_probe(struct platform_device *pdev)
 {
-	struct regmap *regmap;
+	struct sc27xx_poweroff_data *data;
 
-	regmap = dev_get_regmap(pdev->dev.parent, NULL);
-	if (!regmap)
+	data = devm_kzalloc(&pdev->dev, sizeof(*data), GFP_KERNEL);
+	if (!data)
+		return -ENOMEM;
+
+	data->regs = of_device_get_match_data(&pdev->dev);
+	if (!data->regs)
+		return -EINVAL;
+
+	data->regmap = dev_get_regmap(pdev->dev.parent, NULL);
+	if (!data->regmap)
 		return -ENODEV;
 
 	register_syscore_ops(&poweroff_syscore_ops);
@@ -73,13 +100,33 @@ static int sc27xx_poweroff_probe(struct platform_device *pdev)
 					     SYS_OFF_MODE_POWER_OFF,
 					     SYS_OFF_PRIO_DEFAULT,
 					     sc27xx_poweroff_do_poweroff,
-					     regmap);
+					     data);
 }
+
+static const struct sc27xx_poweroff_reg_info sc2730_pwr_regs = {
+	.poweroff_reg = SC2730_PWR_PD_HW,
+	.slp_ctrl_reg = SC2730_SLP_CTRL,
+	.ldo_xtl_en = SC2730_LDO_XTL_EN,
+};
+
+static const struct sc27xx_poweroff_reg_info sc2731_pwr_regs = {
+	.poweroff_reg = SC2731_PWR_PD_HW,
+	.slp_ctrl_reg = SC2731_SLP_CTRL,
+	.ldo_xtl_en = SC2731_LDO_XTL_EN,
+};
+
+static const struct of_device_id sc27xx_poweroff_of_match[] = {
+	{ .compatible = "sprd,sc2730-poweroff", .data = &sc2730_pwr_regs },
+	{ .compatible = "sprd,sc2731-poweroff", .data = &sc2731_pwr_regs },
+	{ }
+};
+MODULE_DEVICE_TABLE(of, sc27xx_poweroff_of_match);
 
 static struct platform_driver sc27xx_poweroff_driver = {
 	.probe = sc27xx_poweroff_probe,
 	.driver = {
 		.name = "sc27xx-poweroff",
+		.of_match_table = sc27xx_poweroff_of_match,
 	},
 };
 module_platform_driver(sc27xx_poweroff_driver);
