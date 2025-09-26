@@ -93,26 +93,43 @@ static const s8 base64_rev_tables[][256] = {
 int base64_encode(const u8 *src, int srclen, char *dst, bool padding, enum base64_variant variant)
 {
 	u32 ac = 0;
-	int bits = 0;
-	int i;
 	char *cp = dst;
 	const char *base64_table = base64_tables[variant];
 
-	for (i = 0; i < srclen; i++) {
-		ac = (ac << 8) | src[i];
-		bits += 8;
-		do {
-			bits -= 6;
-			*cp++ = base64_table[(ac >> bits) & 0x3f];
-		} while (bits >= 6);
+	while (srclen >= 3) {
+		ac = ((u32)src[0] << 16) |
+			 ((u32)src[1] << 8) |
+			 (u32)src[2];
+
+		*cp++ = base64_table[ac >> 18];
+		*cp++ = base64_table[(ac >> 12) & 0x3f];
+		*cp++ = base64_table[(ac >> 6) & 0x3f];
+		*cp++ = base64_table[ac & 0x3f];
+
+		src += 3;
+		srclen -= 3;
 	}
-	if (bits) {
-		*cp++ = base64_table[(ac << (6 - bits)) & 0x3f];
-		bits -= 6;
-	}
-	while (bits < 0) {
-		*cp++ = '=';
-		bits += 2;
+
+	switch (srclen) {
+	case 2:
+		ac = ((u32)src[0] << 16) |
+		     ((u32)src[1] << 8);
+
+		*cp++ = base64_table[ac >> 18];
+		*cp++ = base64_table[(ac >> 12) & 0x3f];
+		*cp++ = base64_table[(ac >> 6) & 0x3f];
+		if (padding)
+			*cp++ = '=';
+		break;
+	case 1:
+		ac = ((u32)src[0] << 16);
+		*cp++ = base64_table[ac >> 18];
+		*cp++ = base64_table[(ac >> 12) & 0x3f];
+		if (padding) {
+			*cp++ = '=';
+			*cp++ = '=';
+		}
+		break;
 	}
 	return cp - dst;
 }
@@ -128,39 +145,92 @@ EXPORT_SYMBOL_GPL(base64_encode);
  *
  * Decodes a string using the selected Base64 variant.
  *
- * This implementation hasn't been optimized for performance.
- *
  * Return: the length of the resulting decoded binary data in bytes,
  *	   or -1 if the string isn't a valid Base64 string.
  */
 int base64_decode(const char *src, int srclen, u8 *dst, bool padding, enum base64_variant variant)
 {
-	u32 ac = 0;
-	int bits = 0;
-	int i;
 	u8 *bp = dst;
-	s8 ch;
+	s8 input1, input2, input3, input4;
+	u32 val;
 
-	for (i = 0; i < srclen; i++) {
-		if (src[i] == '=') {
-			ac = (ac << 6);
-			bits += 6;
-			if (bits >= 8)
-				bits -= 8;
-			continue;
-		}
-		ch = base64_rev_tables[variant][(u8)src[i]];
-		if (ch == -1)
+	if (srclen == 0)
+		return 0;
+
+	/* Validate the input length for padding */
+	if (unlikely(padding && (srclen & 0x03) != 0))
+		return -1;
+
+	while (srclen >= 4) {
+		/* Decode the next 4 characters */
+		input1 = base64_rev_tables[variant][(u8)src[0]];
+		input2 = base64_rev_tables[variant][(u8)src[1]];
+		input3 = base64_rev_tables[variant][(u8)src[2]];
+		input4 = base64_rev_tables[variant][(u8)src[3]];
+
+		/* Return error if any Base64 character is invalid */
+		if (unlikely(input1 < 0 || input2 < 0 || (!padding && (input3 < 0 || input4 < 0))))
 			return -1;
-		ac = (ac << 6) | ch;
-		bits += 6;
-		if (bits >= 8) {
-			bits -= 8;
-			*bp++ = (u8)(ac >> bits);
+
+		/* Handle padding */
+		if (unlikely(padding && ((input3 < 0 && input4 >= 0) ||
+					 (input3 < 0 && src[2] != '=') ||
+					 (input4 < 0 && src[3] != '=') ||
+					 (srclen > 4 && (input3 < 0 || input4 < 0)))))
+			return -1;
+		val = ((u32)input1 << 18) |
+		      ((u32)input2 << 12) |
+		      ((u32)((input3 < 0) ? 0 : input3) << 6) |
+		      (u32)((input4 < 0) ? 0 : input4);
+
+		*bp++ = (u8)(val >> 16);
+
+		if (input3 >= 0)
+			*bp++ = (u8)(val >> 8);
+		if (input4 >= 0)
+			*bp++ = (u8)val;
+
+		src += 4;
+		srclen -= 4;
+	}
+
+	/* Handle leftover characters when padding is not used */
+	if (!padding && srclen > 0) {
+		switch (srclen) {
+		case 2:
+			input1 = base64_rev_tables[variant][(u8)src[0]];
+			input2 = base64_rev_tables[variant][(u8)src[1]];
+			if (unlikely(input1 < 0 || input2 < 0))
+				return -1;
+
+			val = ((u32)input1 << 6) | (u32)input2; /* 12 bits */
+			if (unlikely(val & 0x0F))
+				return -1; /* low 4 bits must be zero */
+
+			*bp++ = (u8)(val >> 4);
+			break;
+		case 3:
+			input1 = base64_rev_tables[variant][(u8)src[0]];
+			input2 = base64_rev_tables[variant][(u8)src[1]];
+			input3 = base64_rev_tables[variant][(u8)src[2]];
+			if (unlikely(input1 < 0 || input2 < 0 || input3 < 0))
+				return -1;
+
+			val = ((u32)input1 << 12) |
+			      ((u32)input2 << 6) |
+			      (u32)input3; /* 18 bits */
+
+			if (unlikely(val & 0x03))
+				return -1; /* low 2 bits must be zero */
+
+			*bp++ = (u8)(val >> 10);
+			*bp++ = (u8)((val >> 2) & 0xFF);
+			break;
+		default:
+			return -1;
 		}
 	}
-	if (ac & ((1 << bits) - 1))
-		return -1;
+
 	return bp - dst;
 }
 EXPORT_SYMBOL_GPL(base64_decode);
