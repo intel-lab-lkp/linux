@@ -1510,7 +1510,9 @@ static __always_inline void acomp_to_iaa(struct acomp_req *areq,
 	req->slen = areq->slen;
 	req->dlen = areq->dlen;
 	req->flags = areq->base.flags;
-	if (unlikely(ctx->use_irq))
+	if (likely(!ctx->use_irq))
+		req->dlens = (int **)&areq->__ctx[0];
+	else
 		req->drv_data = areq;
 }
 

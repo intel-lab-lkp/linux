@@ -143,6 +143,7 @@ struct crypto_acomp_ctx {
 	struct acomp_req *req;
 	struct crypto_wait wait;
 	u8 **buffers;
+	struct sg_table *sg_outputs;
 	struct mutex mutex;
 	bool is_sleepable;
 };
@@ -274,6 +275,11 @@ static void acomp_ctx_dealloc(struct crypto_acomp_ctx *acomp_ctx, u8 nr_buffers)
 		for (i = 0; i < nr_buffers; ++i)
 			kfree(acomp_ctx->buffers[i]);
 		kfree(acomp_ctx->buffers);
+	}
+
+	if (acomp_ctx->sg_outputs) {
+		sg_free_table(acomp_ctx->sg_outputs);
+		kfree(acomp_ctx->sg_outputs);
 	}
 }
 
@@ -836,6 +842,7 @@ static int zswap_cpu_comp_prepare(unsigned int cpu, struct hlist_node *node)
 	struct zswap_pool *pool = hlist_entry(node, struct zswap_pool, node);
 	struct crypto_acomp_ctx *acomp_ctx = per_cpu_ptr(pool->acomp_ctx, cpu);
 	int cpu_node = cpu_to_node(cpu);
+	struct scatterlist *sg;
 	int ret = -ENOMEM;
 	u8 i;
 
@@ -866,7 +873,28 @@ static int zswap_cpu_comp_prepare(unsigned int cpu, struct hlist_node *node)
 	pool->compr_batch_size = min(ZSWAP_MAX_BATCH_SIZE,
 				     crypto_acomp_batch_size(acomp_ctx->acomp));
 
-	acomp_ctx->req = acomp_request_alloc(acomp_ctx->acomp);
+	/*
+	 * For batching compressors, we allocate extra memory for "batch-size"
+	 * int pointers that will be statically set to track the output
+	 * SG lists' lengths later in this procedure. This optimization was
+	 * required to avoid the latency cost of SG lists traversal in
+	 * zswap_compress().
+	 *
+	 * Consequently, batching compressors can use the memory allocated in
+	 * acomp_ctx->req->__ctx[] to internally manage updates to the output
+	 * @sg->lengths for the batch. zswap_compress() does not need to
+	 * traverse ZSWAP_MAX_BATCH_SIZE number of output SG list elements to
+	 * get the compressed output length/error for each page in the batch.
+	 * This is readily available in the per-CPU acomp_ctx->req->__ctx[].
+	 * This optimization's per-CPU memory cost for a batching compressor
+	 * with batch-size of 8 is 64 bytes.
+	 */
+	if (pool->compr_batch_size > 1)
+		acomp_ctx->req = acomp_request_alloc_extra(acomp_ctx->acomp,
+					pool->compr_batch_size * sizeof(int *),
+					GFP_KERNEL | __GFP_ZERO);
+	else
+		acomp_ctx->req = acomp_request_alloc(acomp_ctx->acomp);
 
 	if (IS_ERR_OR_NULL(acomp_ctx->req)) {
 		pr_err("could not alloc crypto acomp_request %s\n",
@@ -886,6 +914,37 @@ static int zswap_cpu_comp_prepare(unsigned int cpu, struct hlist_node *node)
 			goto fail;
 	}
 
+	acomp_ctx->sg_outputs = kmalloc(sizeof(*acomp_ctx->sg_outputs),
+					GFP_KERNEL);
+	if (!acomp_ctx->sg_outputs)
+		goto fail;
+
+	if (sg_alloc_table(acomp_ctx->sg_outputs, pool->compr_batch_size,
+			   GFP_KERNEL))
+		goto fail;
+
+	/*
+	 * Map the per-CPU destination buffers to the per-CPU SG list.
+	 * This only needs to be done once.
+	 */
+	for_each_sg(acomp_ctx->sg_outputs->sgl, sg, pool->compr_batch_size, i)
+		sg_set_buf(sg, acomp_ctx->buffers[i], PAGE_SIZE);
+
+	/*
+	 * Use the @pool->compr_batch_size number of int pointers for
+	 * which we allocated extra memory in the @acomp_ctx->req above, to
+	 * track the addresses of the @sg->length members of the individual
+	 * SG lists in @acomp_ctx->sg_outputs->sgl. This is a static mapping
+	 * that needs to be done only once, and saves latency by avoiding
+	 * traversing the SG lists in zswap_compress().
+	 */
+	if (pool->compr_batch_size > 1) {
+		for_each_sg(acomp_ctx->sg_outputs->sgl, sg, pool->compr_batch_size, i)
+			acomp_ctx->req->__ctx[i] = &sg->length;
+	} else {
+		acomp_ctx->req->dlen = PAGE_SIZE;
+	}
+
 	/*
 	 * if the backend of acomp is async zip, crypto_req_done() will wakeup
 	 * crypto_wait_req(); if the backend of acomp is scomp, the callback
@@ -896,6 +955,8 @@ static int zswap_cpu_comp_prepare(unsigned int cpu, struct hlist_node *node)
 	acomp_request_set_callback(acomp_ctx->req, CRYPTO_TFM_REQ_MAY_BACKLOG,
 				   crypto_req_done, &acomp_ctx->wait);
 
+	acomp_request_set_unit_size(acomp_ctx->req, PAGE_SIZE);
+
 	mutex_init(&acomp_ctx->mutex);
 	return 0;
 
@@ -904,84 +965,203 @@ fail:
 	return ret;
 }
 
-static bool zswap_compress(struct page *page, struct zswap_entry *entry,
-			   struct zswap_pool *pool, bool folio_wb)
+/*
+ * Unified code path for compressors that do and do not support batching. This
+ * procedure will compress multiple @nr_pages in @folio starting from the
+ * @start index.
+ *
+ * It is assumed that @nr_pages <= ZSWAP_MAX_BATCH_SIZE. zswap_store() makes
+ * sure of this by design and zswap_store_pages() warns once if this is not
+ * true.
+ *
+ * @nr_pages can be in (1, ZSWAP_MAX_BATCH_SIZE] even if the compressor does not
+ * support batching.
+ *
+ * If @pool->compr_batch_size is 1, each page is processed sequentially.
+ *
+ * If @pool->compr_batch_size is > 1, compression batching is invoked within
+ * the algorithm's driver, except if @nr_pages is 1: if so, the driver can
+ * choose to call the sequential/non-batching compress API.
+ *
+ * In both cases, if all compressions are successful, the compressed buffers
+ * are stored in zsmalloc.
+ *
+ * Traversing multiple SG lists when @nr_comps is > 1 is expensive, and impacts
+ * batching performance if we were to repeat this operation multiple times,
+ * such as:
+ *   - to map destination buffers to each SG list in the @acomp_ctx->sg_outputs
+ *     sg_table.
+ *   - to initialize each output SG list @sg->length to PAGE_SIZE.
+ *   - to get the compressed output length in each @sg->length.
+ *
+ * These are some design choices made to optimize batching with SG lists:
+ *
+ * 1) The source folio pages in the batch are directly submitted to
+ *    crypto_acomp via acomp_request_set_src_folio().
+ *
+ * 2) The per-CPU @acomp_ctx->sg_outputs scatterlists are used to set up
+ *    destination buffers for interfacing with crypto_acomp.
+ *
+ * 3) To optimize performance, we map the per-CPU @acomp_ctx->buffers to the
+ *    @acomp_ctx->sg_outputs->sgl SG lists at pool creation time. The only task
+ *    remaining to be done for the output SG lists in zswap_compress() is to
+ *    set the @sg->length to PAGE_SIZE. This is done in zswap_compress()
+ *    for non-batching compressors. This needs to be done within the compress
+ *    batching driver procedure as part of iterating through the SG lists for
+ *    batch setup, so as to minimize traversals through the SG lists.
+ *
+ * 4) For batching compressors, we allocate extra memory in the
+ *    @acomp_ctx->req->__ctx[] to store @pool->compr_batch_size number of
+ *    int pointers (the @dlens). These pointers are initialized to the
+ *    individual @sg->lengths' addresses in @acomp_ctx->sg_outputs->sgl at pool
+ *    creation time. zswap_compress() has this readily available without having
+ *    to re-traverse @acomp_ctx->sg_outputs->sgl to get the compressed output
+ *    lengths after batch compression.
+ *
+ * 5) An important requirement for compression errors and batching compressors:
+ *    the individual @sg->lengths in @acomp_ctx->req->sg_outputs->sgl should be
+ *    set to the error value for the respective batch page.
+ *
+ * A few important changes made to not regress and in fact improve
+ * compression performance with non-batching software compressors, using this
+ * new batching code:
+ *
+ * 1) acomp_ctx mutex locking:
+ *    Earlier, the mutex was held per page compression. With the new code,
+ *    [un]locking the mutex per page caused regressions for software
+ *    compressors. We now lock the mutex once per batch, which resolves the
+ *    regression.
+ *
+ * 2) The likely()/unlikely() annotations prevent regressions with software
+ *    compressors like zstd, and generally improve non-batching compressors'
+ *    performance with the batching code by ~3%.
+ */
+static bool zswap_compress(struct folio *folio, long start, unsigned int nr_pages,
+			   struct zswap_entry *entries[], struct zswap_pool *pool,
+			   int node_id, bool folio_wb)
 {
+	unsigned int nr_comps = min(nr_pages, pool->compr_batch_size);
 	struct crypto_acomp_ctx *acomp_ctx;
-	struct scatterlist input, output;
-	int comp_ret = 0, alloc_ret = 0;
-	unsigned int dlen = PAGE_SIZE;
+	int *dstlen[1], **dlens;
+	struct scatterlist *sg;
 	unsigned long handle;
+	unsigned int i, j, k;
+	void *dst;
 	gfp_t gfp;
-	u8 *dst;
-	bool mapped = false;
+	int err;
+
+	gfp = GFP_NOWAIT | __GFP_NORETRY | __GFP_HIGHMEM | __GFP_MOVABLE;
 
 	acomp_ctx = raw_cpu_ptr(pool->acomp_ctx);
 	mutex_lock(&acomp_ctx->mutex);
 
-	dst = acomp_ctx->buffers[0];
-	sg_init_table(&input, 1);
-	sg_set_page(&input, page, PAGE_SIZE, 0);
-
-	sg_init_one(&output, dst, PAGE_SIZE);
-	acomp_request_set_params(acomp_ctx->req, &input, &output, PAGE_SIZE, dlen);
-
-	/*
-	 * it maybe looks a little bit silly that we send an asynchronous request,
-	 * then wait for its completion synchronously. This makes the process look
-	 * synchronous in fact.
-	 * Theoretically, acomp supports users send multiple acomp requests in one
-	 * acomp instance, then get those requests done simultaneously. but in this
-	 * case, zswap actually does store and load page by page, there is no
-	 * existing method to send the second page before the first page is done
-	 * in one thread doing zwap.
-	 * but in different threads running on different cpu, we have different
-	 * acomp instance, so multiple threads can do (de)compression in parallel.
-	 */
-	comp_ret = crypto_wait_req(crypto_acomp_compress(acomp_ctx->req), &acomp_ctx->wait);
-	dlen = acomp_ctx->req->dlen;
+	dstlen[0] = &acomp_ctx->req->dlen;
+	if (pool->compr_batch_size == 1)
+		dlens = &dstlen[0];
+	else
+		dlens = (int **)&acomp_ctx->req->__ctx[0];
 
 	/*
-	 * If a page cannot be compressed into a size smaller than PAGE_SIZE,
-	 * save the content as is without a compression, to keep the LRU order
-	 * of writebacks.  If writeback is disabled, reject the page since it
-	 * only adds metadata overhead.  swap_writeout() will put the page back
-	 * to the active LRU list in the case.
+	 * [i] refers to the incoming batch space and is used to
+	 *     index into the folio pages.
+	 *
+	 * [j] refers to the incoming batch space and is used to
+	 *     index into the @entries for the folio's pages in this
+	 *     batch, per compress call while iterating over the output SG
+	 *     lists. Also used to index into the folio's pages from @start, in
+	 *     case of compress errors.
+	 *
+	 * [k] refers to the @acomp_ctx space, as determined by
+	 *     @pool->compr_batch_size, and is used to index into
+	 *     @acomp_ctx->sg_outputs->sgl, @acomp_ctx->buffers and @dlens.
 	 */
-	if (comp_ret || !dlen || dlen >= PAGE_SIZE) {
-		dlen = PAGE_SIZE;
-		if (!folio_wb) {
-			comp_ret = comp_ret ? comp_ret : -EINVAL;
-			goto unlock;
+	for (i = 0; i < nr_pages; i += nr_comps) {
+		acomp_request_set_src_folio(acomp_ctx->req, folio,
+					    (start + i) * PAGE_SIZE,
+					    nr_comps * PAGE_SIZE);
+
+		acomp_ctx->sg_outputs->sgl->length = nr_comps * PAGE_SIZE;
+
+		acomp_request_set_dst_sg(acomp_ctx->req,
+					 acomp_ctx->sg_outputs->sgl,
+					 nr_comps * PAGE_SIZE);
+
+		err = crypto_wait_req(crypto_acomp_compress(acomp_ctx->req),
+				      &acomp_ctx->wait);
+
+		/*
+		 * If a page cannot be compressed into a size smaller than
+		 * PAGE_SIZE, save the content as is without a compression, to
+		 * keep the LRU order of writebacks.  If writeback is disabled,
+		 * reject the page since it only adds metadata overhead.
+		 * swap_writeout() will put the page back to the active LRU list
+		 * in the case.
+		 *
+		 * It is assumed that any compressor that sets the output length
+		 * to 0 or a value >= PAGE_SIZE will also return a negative
+		 * error status in @err; i.e, will not return a successful
+		 * compression status in @err in this case.
+		 */
+		if (unlikely(err)) {
+			*dstlen[0] = err;
+			if (!folio_wb)
+				goto compress_error;
 		}
-		comp_ret = 0;
-		dst = kmap_local_page(page);
-		mapped = true;
-	}
 
-	gfp = GFP_NOWAIT | __GFP_NORETRY | __GFP_HIGHMEM | __GFP_MOVABLE;
-	handle = zs_malloc(pool->zs_pool, dlen, gfp, page_to_nid(page));
-	if (IS_ERR_VALUE(handle)) {
-		alloc_ret = PTR_ERR((void *)handle);
-		goto unlock;
-	}
+		/*
+		 * All @nr_comps pages were either successfully compressed, or,
+		 * writeback is enabled for the folio's memcg and there were
+		 * compression errors. In either case, store the pages in
+		 * zsmalloc:
+		 *
+		 * - For successful compressions, store the compressed outputs.
+		 * - For errors, store the page uncompressed.
+		 */
+		for_each_sg(acomp_ctx->sg_outputs->sgl, sg, nr_comps, k) {
+			j = k + i;
 
-	zs_obj_write(pool->zs_pool, handle, dst, dlen);
-	entry->handle = handle;
-	entry->length = dlen;
+			dst = acomp_ctx->buffers[k];
 
-unlock:
-	if (mapped)
-		kunmap_local(dst);
-	if (comp_ret == -ENOSPC || alloc_ret == -ENOSPC)
-		zswap_reject_compress_poor++;
-	else if (comp_ret)
-		zswap_reject_compress_fail++;
-	else if (alloc_ret)
-		zswap_reject_alloc_fail++;
+			if (unlikely(*dlens[k] < 0)) {
+				*dlens[k] = PAGE_SIZE;
+				dst = kmap_local_page(folio_page(folio, start + j));
+			}
+
+			handle = zs_malloc(pool->zs_pool, *dlens[k], gfp, node_id);
+
+			if (unlikely(IS_ERR_VALUE(handle))) {
+				if (PTR_ERR((void *)handle) == -ENOSPC)
+					zswap_reject_compress_poor++;
+				else
+					zswap_reject_alloc_fail++;
+
+				goto err_unlock;
+			}
+
+			zs_obj_write(pool->zs_pool, handle, dst, *dlens[k]);
+			entries[j]->handle = handle;
+			entries[j]->length = *dlens[k];
+			if (unlikely(dst != acomp_ctx->buffers[k]))
+				kunmap_local(dst);
+		}
+	} /* finished compress and store nr_pages. */
 
 	mutex_unlock(&acomp_ctx->mutex);
-	return comp_ret == 0 && alloc_ret == 0;
+	return true;
+
+compress_error:
+	for (k = 0; k < nr_comps; ++k) {
+		if (*dlens[k] < 0) {
+			if (*dlens[k] == -ENOSPC)
+				zswap_reject_compress_poor++;
+			else
+				zswap_reject_compress_fail++;
+		}
+	}
+
+err_unlock:
+	mutex_unlock(&acomp_ctx->mutex);
+	return false;
 }
 
 static bool zswap_decompress(struct zswap_entry *entry, struct folio *folio)
@@ -1529,12 +1709,9 @@ static bool zswap_store_pages(struct folio *folio,
 		INIT_LIST_HEAD(&entries[i]->lru);
 	}
 
-	for (i = 0; i < nr_pages; ++i) {
-		struct page *page = folio_page(folio, start + i);
-
-		if (!zswap_compress(page, entries[i], pool, folio_wb))
-			goto store_pages_failed;
-	}
+	if (unlikely(!zswap_compress(folio, start, nr_pages, entries, pool,
+				     node_id, folio_wb)))
+		goto store_pages_failed;
 
 	for (i = 0; i < nr_pages; ++i) {
 		struct zswap_entry *old, *entry = entries[i];
