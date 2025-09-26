@@ -52,6 +52,10 @@ properties:
   '#size-cells':
     const: 0
 
+  poweroff:
+    type: object
+    $ref: /schemas/power/reset/sprd,sc2731-poweroff.yaml#
+
   regulators:
     type: object
     $ref: /schemas/regulator/sprd,sc2731-regulator.yaml#
@@ -219,6 +223,10 @@ examples:
         vibrator@ec8 {
           compatible = "sprd,sc2731-vibrator";
           reg = <0xec8>;
+        };
+
+        poweroff {
+          compatible = "sprd,sc2731-poweroff";
         };
 
         regulators {
