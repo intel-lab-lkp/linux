@@ -7,6 +7,7 @@
 #include <linux/dpll.h>
 
 #define ICE_CGU_STATE_ACQ_ERR_THRESHOLD		50
+#define ICE_TSPLL_STATE_ERR_THRESHOLD		50
 #define ICE_DPLL_PIN_IDX_INVALID		0xff
 #define ICE_DPLL_RCLK_NUM_PER_PF		1
 #define ICE_DPLL_PIN_1588_NUM			1
@@ -18,6 +19,9 @@
 #define ICE_DPLL_SW_PIN_INPUT_BASE_SFP		4
 #define ICE_DPLL_SW_PIN_INPUT_BASE_QSFP		6
 #define ICE_DPLL_SW_PIN_OUTPUT_BASE		0
+#define ICE_DPLL_TSPLL_INPUT_NUM_E825		1
+#define ICE_DPLL_TSPLL_OUTPUT_NUM_E825		1
+#define ICE_DPLL_TSPLL_IDX_E825			1
 
 #define ICE_DPLL_PIN_SW_INPUT_ABS(in_idx) \
 	(ICE_DPLL_SW_PIN_INPUT_BASE_SFP + (in_idx))
@@ -57,6 +61,10 @@
  * @ICE_DPLL_PIN_TYPE_OUTPUT: output pin
  * @ICE_DPLL_PIN_TYPE_RCLK_INPUT: recovery clock input pin
  * @ICE_DPLL_PIN_TYPE_SOFTWARE: software controlled SMA/U.FL pins
+ * @ICE_DPLL_PIN_TYPE_INPUT_E825: input pin on E825 device
+ * @ICE_DPLL_PIN_TYPE_OUTPUT_E825: output pin on E825 device
+ * @ICE_DPLL_PIN_TYPE_INPUT_TSPLL_E825: TSPLL input pin on E825 device
+ * @ICE_DPLL_PIN_TYPE_OUTPUT_TSPLL_E825: TSPLL output pin on E825 device
  */
 enum ice_dpll_pin_type {
 	ICE_DPLL_PIN_INVALID,
@@ -64,6 +72,10 @@ enum ice_dpll_pin_type {
 	ICE_DPLL_PIN_TYPE_OUTPUT,
 	ICE_DPLL_PIN_TYPE_RCLK_INPUT,
 	ICE_DPLL_PIN_TYPE_SOFTWARE,
+	ICE_DPLL_PIN_TYPE_INPUT_E825,
+	ICE_DPLL_PIN_TYPE_OUTPUT_E825,
+	ICE_DPLL_PIN_TYPE_INPUT_TSPLL_E825,
+	ICE_DPLL_PIN_TYPE_OUTPUT_TSPLL_E825,
 };
 
 static const char * const pin_type_name[] = {
@@ -71,14 +83,24 @@ static const char * const pin_type_name[] = {
 	[ICE_DPLL_PIN_TYPE_OUTPUT] = "output",
 	[ICE_DPLL_PIN_TYPE_RCLK_INPUT] = "rclk-input",
 	[ICE_DPLL_PIN_TYPE_SOFTWARE] = "software",
+	[ICE_DPLL_PIN_TYPE_INPUT_E825] = "input-e825",
+	[ICE_DPLL_PIN_TYPE_OUTPUT_E825] = "output-e825",
+	[ICE_DPLL_PIN_TYPE_INPUT_TSPLL_E825] = "input-tspll-e825",
+	[ICE_DPLL_PIN_TYPE_OUTPUT_TSPLL_E825] = "output-tspll-e825",
 };
 
 static const char * const ice_dpll_sw_pin_sma[] = { "SMA1", "SMA2" };
 static const char * const ice_dpll_sw_pin_ufl[] = { "U.FL1", "U.FL2" };
 static const char ice_dpll_pin_1588[] = "pin_1588";
+static const char ice_dpll_pin_time_ref_e825[] = "TIME_REF";
+static const char ice_dpll_pin_time_sync_e825[] = "TIME_SYNC";
 
 static const struct dpll_pin_frequency ice_esync_range[] = {
 	DPLL_PIN_FREQUENCY_RANGE(0, DPLL_PIN_FREQUENCY_1_HZ),
+};
+
+static struct dpll_pin_frequency ice_cgu_pin_freq_156_25mhz[] = {
+	DPLL_PIN_FREQUENCY_RANGE(156250000, 156250000),
 };
 
 /**
@@ -473,6 +495,16 @@ ice_dpll_pin_enable(struct ice_hw *hw, struct ice_dpll_pin *pin,
 		ret = ice_aq_set_output_pin_cfg(hw, pin->idx, flags, dpll_idx,
 						0, 0);
 		break;
+	case ICE_DPLL_PIN_TYPE_INPUT_TSPLL_E825:
+		ret = ice_tspll_set_cfg(hw,
+					ICE_TSPLL_FREQ_156_250,
+					ICE_CLK_SRC_TIME_REF);
+		/* Don't treat -EBUSY as an error. TSPLL lock status is
+		 * tracked and restored (if possible) in DPLL periodic thread.
+		 */
+		if (ret == -EBUSY)
+			ret = 0;
+		break;
 	default:
 		return -EINVAL;
 	}
@@ -517,6 +549,16 @@ ice_dpll_pin_disable(struct ice_hw *hw, struct ice_dpll_pin *pin,
 		if (pin->flags[0] & ICE_AQC_GET_CGU_OUT_CFG_ESYNC_EN)
 			flags |= ICE_AQC_SET_CGU_OUT_CFG_ESYNC_EN;
 		ret = ice_aq_set_output_pin_cfg(hw, pin->idx, flags, 0, 0, 0);
+		break;
+	case ICE_DPLL_PIN_TYPE_INPUT_TSPLL_E825:
+		ret = ice_tspll_set_cfg(hw,
+					ICE_TSPLL_FREQ_156_250,
+					ICE_CLK_SRC_TCXO);
+		/* Don't treat -EBUSY as an error. TSPLL lock status is
+		 * tracked and restored (if possible) in DPLL periodic thread.
+		 */
+		if (ret == -EBUSY)
+			ret = 0;
 		break;
 	default:
 		return -EINVAL;
@@ -638,6 +680,36 @@ static int ice_dpll_update_pin_1588_e825c(struct ice_hw *hw,
 	}
 	ice_dpll_pin_store_state(pin, parent, bits_clk == ICE_CGU_NCOCLK);
 
+	return 0;
+}
+
+/**
+ * ice_dpll_input_tspll_update_e825c - updates input TSPLL pin state on E825
+ * @pf: private board struct
+ * @pin: pointer to a pin
+ *
+ * Update struct holding pin states info.
+ *
+ * Context: Called under pf->dplls.lock
+ * Return:
+ * * 0 - OK
+ * * negative - error
+ */
+static int ice_dpll_input_tspll_update_e825c(struct ice_pf *pf,
+					     struct ice_dpll_pin *pin)
+{
+	enum ice_clk_src clk_src;
+	struct ice_hw *hw;
+	int err;
+
+	hw = &pf->hw;
+	err = ice_tspll_get_clk_src(hw, &clk_src);
+	if (err)
+		return err;
+
+	pin->state[pf->dplls.tspll.dpll_idx] = clk_src == ICE_CLK_SRC_TIME_REF ?
+					DPLL_PIN_STATE_CONNECTED :
+					DPLL_PIN_STATE_DISCONNECTED;
 	return 0;
 }
 
@@ -796,6 +868,11 @@ ice_dpll_pin_state_update(struct ice_pf *pf, struct ice_dpll_pin *pin,
 		if (ret)
 			goto err;
 		break;
+	case ICE_DPLL_PIN_TYPE_INPUT_TSPLL_E825:
+		ret = ice_dpll_input_tspll_update_e825c(pf, pin);
+		if (ret)
+			goto err;
+		return 0;
 	default:
 		return -EINVAL;
 	}
@@ -1117,7 +1194,8 @@ ice_dpll_pin_state_get(const struct dpll_pin *pin, void *pin_priv,
 	if (ret)
 		goto unlock;
 	if (pin_type == ICE_DPLL_PIN_TYPE_INPUT ||
-	    pin_type == ICE_DPLL_PIN_TYPE_OUTPUT)
+	    pin_type == ICE_DPLL_PIN_TYPE_OUTPUT ||
+	    pin_type == ICE_DPLL_PIN_TYPE_INPUT_TSPLL_E825)
 		*state = p->state[d->dpll_idx];
 	ret = 0;
 unlock:
@@ -1203,6 +1281,72 @@ ice_dpll_input_state_get(const struct dpll_pin *pin, void *pin_priv,
 {
 	return ice_dpll_pin_state_get(pin, pin_priv, dpll, dpll_priv, state,
 				      extack, ICE_DPLL_PIN_TYPE_INPUT);
+}
+
+/**
+ * ice_dpll_input_tspll_state_get_e825 - get E825 TSPLL input pin state on DPLL
+ * @pin: pointer to a pin
+ * @pin_priv: private data pointer passed on pin registration
+ * @dpll: registered DPLL pointer
+ * @dpll_priv: private data pointer passed on DPLL registration
+ * @state: on success holds state of the pin
+ * @extack: error reporting
+ *
+ * DPLL subsystem callback. Check state of a input pin.
+ *
+ * Context: Calls a function which acquires and releases pf->dplls.lock
+ * Return:
+ * * 0 - success
+ * * negative - failed to get state
+ */
+
+static int
+ice_dpll_input_tspll_state_get_e825(const struct dpll_pin *pin, void *pin_priv,
+				    const struct dpll_device *dpll,
+				    void *dpll_priv,
+				    enum dpll_pin_state *state,
+				    struct netlink_ext_ack *extack)
+{
+	return ice_dpll_pin_state_get(pin, pin_priv, dpll, dpll_priv, state,
+				      extack,
+				      ICE_DPLL_PIN_TYPE_INPUT_TSPLL_E825);
+}
+
+/**
+ * ice_dpll_input_tspll_state_set_e825 - set E825 TSPLL input pin state on DPLL
+ * @pin: pointer to a pin
+ * @pin_priv: private data pointer passed on pin registration
+ * @dpll: registered DPLL pointer
+ * @dpll_priv: private data pointer passed on DPLL registration
+ * @state: requested state of the pin
+ * @extack: error reporting
+ *
+ * DPLL subsystem callback. Set the state of a pin.
+ *
+ * Context: Acquires and releases pf->dplls.lock
+ * Return:
+ * * 0 - success
+ * * negative - error
+ */
+static int
+ice_dpll_input_tspll_state_set_e825(const struct dpll_pin *pin, void *pin_priv,
+				    const struct dpll_device *dpll,
+				    void *dpll_priv, enum dpll_pin_state state,
+				    struct netlink_ext_ack *extack)
+{
+	bool enable = state == DPLL_PIN_STATE_CONNECTED;
+	struct ice_dpll_pin *p = pin_priv;
+	struct ice_dpll *d = dpll_priv;
+
+	if (state == DPLL_PIN_STATE_SELECTABLE)
+		return -EINVAL;
+
+	if (!enable && p->state[d->dpll_idx] == DPLL_PIN_STATE_DISCONNECTED)
+		return 0;
+
+	return ice_dpll_pin_state_set(pin, pin_priv, dpll, dpll_priv, enable,
+				      extack,
+				      ICE_DPLL_PIN_TYPE_INPUT_TSPLL_E825);
 }
 
 /**
@@ -2662,6 +2806,18 @@ static const struct dpll_pin_ops ice_dpll_input_ops_e825c = {
 	.state_on_dpll_get = ice_dpll_pin_state_get_e825c,
 };
 
+static const struct dpll_pin_ops ice_dpll_input_tspll_ops_e825 = {
+	.direction_get = ice_dpll_input_direction,
+	.state_on_dpll_get = ice_dpll_input_tspll_state_get_e825,
+	.state_on_dpll_set = ice_dpll_input_tspll_state_set_e825,
+	.frequency_get = ice_dpll_input_frequency_get,
+};
+
+static const struct dpll_pin_ops ice_dpll_output_tspll_ops_e825 = {
+	.direction_get = ice_dpll_output_direction,
+	.state_on_dpll_get = ice_dpll_pin_state_get_e825c,
+};
+
 static const struct dpll_pin_ops ice_dpll_pin_sma_ops = {
 	.state_on_dpll_set = ice_dpll_sma_pin_state_set,
 	.state_on_dpll_get = ice_dpll_sw_pin_state_get,
@@ -2982,9 +3138,9 @@ static void ice_dpll_periodic_work(struct kthread_work *work)
 	    d->periodic_counter % dp->phase_offset_monitor_period == 0)
 		ret = ice_dpll_pps_update_phase_offsets(pf, &phase_offset_ntf);
 	if (ret) {
-		d->cgu_state_acq_err_num++;
+		d->cgu_state_err_num++;
 		/* stop rescheduling this worker */
-		if (d->cgu_state_acq_err_num >
+		if (d->cgu_state_err_num >
 		    ICE_CGU_STATE_ACQ_ERR_THRESHOLD) {
 			dev_err(ice_pf_to_dev(pf),
 				"EEC/PPS DPLLs periodic work disabled\n");
@@ -3004,6 +3160,65 @@ resched:
 	kthread_queue_delayed_work(d->kworker, &d->work,
 				   ret ? msecs_to_jiffies(10) :
 				   msecs_to_jiffies(500));
+}
+
+/**
+ * ice_dpll_periodic_work_e825 - DPLL periodic worker for E825 device
+ * @work: pointer to kthread_work structure
+ *
+ * DPLL periodic worker is responsible for polling state of TSPLL.
+ * Context: Holds pf->dplls.lock
+ */
+static void ice_dpll_periodic_work_e825(struct kthread_work *work)
+{
+	struct ice_dplls *d = container_of(work, struct ice_dplls, work.work);
+	struct ice_pf *pf = container_of(d, struct ice_pf, dplls);
+	struct ice_dpll *tp = &pf->dplls.tspll;
+	bool lock_lost;
+	int err = 0;
+
+	if (ice_is_reset_in_progress(pf->state))
+		goto resched;
+
+	mutex_lock(&pf->dplls.lock);
+
+	err = ice_tspll_lost_lock_e825c(&pf->hw, &lock_lost);
+	if (err) {
+		dev_err(ice_pf_to_dev(pf),
+			"Failed reading TimeSync PLL lock status (err: %d). Retrying.\n",
+			err);
+	} else if (lock_lost) {
+		tp->dpll_state = DPLL_LOCK_STATUS_UNLOCKED;
+		err = ice_tspll_restart_e825c(&pf->hw);
+		if (err)
+			dev_err(ice_pf_to_dev(pf), "Failed to restart TimeSync PLL (err: %d).\n",
+				err);
+	} else {
+		tp->dpll_state = DPLL_LOCK_STATUS_LOCKED;
+	}
+
+	mutex_unlock(&pf->dplls.lock);
+
+	if (tp->prev_dpll_state != tp->dpll_state) {
+		tp->prev_dpll_state = tp->dpll_state;
+		dpll_device_change_ntf(tp->dpll);
+	}
+
+	if (err) {
+		d->cgu_state_err_num++;
+		/* stop rescheduling this worker */
+		if (d->cgu_state_err_num > ICE_TSPLL_STATE_ERR_THRESHOLD) {
+			dev_err(ice_pf_to_dev(pf),
+				"TSPLL DPLL periodic work disabled\n");
+			return;
+		}
+	}
+	d->cgu_state_err_num = 0;
+resched:
+	/* Run twice a second or reschedule if update failed */
+	kthread_queue_delayed_work(d->kworker, &d->work,
+				   err ? msecs_to_jiffies(10) :
+				   msecs_to_jiffies(MSEC_PER_SEC / 2));
 }
 
 /**
@@ -3484,6 +3699,7 @@ static void ice_dpll_deinit_pins(struct ice_pf *pf, bool cgu)
 	struct ice_dplls *d = &pf->dplls;
 	struct ice_dpll *de = &d->eec;
 	struct ice_dpll *dp = &d->pps;
+	struct ice_dpll *dt = &d->tspll;
 
 	ice_dpll_deinit_rclk_pin(pf);
 	if (cgu) {
@@ -3492,9 +3708,20 @@ static void ice_dpll_deinit_pins(struct ice_pf *pf, bool cgu)
 		ice_dpll_unregister_pins(de->dpll, inputs, &ice_dpll_input_ops,
 					 num_inputs);
 	}
-	if (pf->hw.mac_type == ICE_MAC_GENERIC_3K_E825)
+	if (pf->hw.mac_type == ICE_MAC_GENERIC_3K_E825) {
 		ice_dpll_unregister_pins(de->dpll, inputs,
 					 &ice_dpll_input_ops_e825c, num_inputs);
+		ice_dpll_unregister_pins(dt->dpll, &pf->dplls.tspll_in,
+					 &ice_dpll_input_tspll_ops_e825,
+					 ICE_DPLL_TSPLL_INPUT_NUM_E825);
+		ice_dpll_unregister_pins(dt->dpll, &pf->dplls.tspll_out,
+					 &ice_dpll_output_tspll_ops_e825,
+					 ICE_DPLL_TSPLL_OUTPUT_NUM_E825);
+		ice_dpll_release_pins(&pf->dplls.tspll_in,
+				      ICE_DPLL_TSPLL_INPUT_NUM_E825);
+		ice_dpll_release_pins(&pf->dplls.tspll_out,
+				      ICE_DPLL_TSPLL_OUTPUT_NUM_E825);
+	}
 	ice_dpll_release_pins(inputs, num_inputs);
 	if (cgu) {
 		ice_dpll_unregister_pins(dp->dpll, outputs,
@@ -3587,6 +3814,26 @@ static int ice_dpll_init_pins(struct ice_pf *pf, bool cgu)
 						     ICE_DPLL_PIN_SW_NUM);
 		if (ret)
 			goto deinit_ufl;
+	} else if (pf->hw.mac_type == ICE_MAC_GENERIC_3K_E825) {
+		ret = ice_dpll_init_direct_pins(pf, cgu, &pf->dplls.tspll_in,
+						count,
+						ICE_DPLL_TSPLL_INPUT_NUM_E825,
+						&ice_dpll_input_tspll_ops_e825,
+						pf->dplls.tspll.dpll,
+						NULL);
+		if (ret)
+			goto deinit_inputs;
+		count += ICE_DPLL_TSPLL_INPUT_NUM_E825;
+
+		ret = ice_dpll_init_direct_pins(pf, cgu, &pf->dplls.tspll_out,
+						count,
+						ICE_DPLL_TSPLL_OUTPUT_NUM_E825,
+						&ice_dpll_output_tspll_ops_e825,
+						pf->dplls.tspll.dpll,
+						NULL);
+		if (ret)
+			goto deinit_tspll_in;
+		count += ICE_DPLL_TSPLL_OUTPUT_NUM_E825;
 	} else {
 		count += pf->dplls.num_outputs + 2 * ICE_DPLL_PIN_SW_NUM;
 	}
@@ -3596,7 +3843,7 @@ static int ice_dpll_init_pins(struct ice_pf *pf, bool cgu)
 						     count,
 						     &ice_dpll_pin_1588_ops);
 			if (ret)
-				goto deinit_inputs;
+				goto deinit_tspll_out;
 		}
 		count += ICE_DPLL_PIN_1588_NUM;
 	}
@@ -3624,6 +3871,26 @@ deinit_outputs:
 				    pf->dplls.num_outputs,
 				    output_ops, pf->dplls.pps.dpll,
 				    pf->dplls.eec.dpll);
+deinit_tspll_out:
+	if (pf->hw.mac_type == ICE_MAC_GENERIC_3K_E825) {
+		ice_dpll_unregister_pins(pf->dplls.tspll.dpll,
+					 &pf->dplls.tspll_out,
+					 &ice_dpll_output_tspll_ops_e825,
+					 ICE_DPLL_TSPLL_OUTPUT_NUM_E825);
+		ice_dpll_release_pins(&pf->dplls.tspll_out,
+				      ICE_DPLL_TSPLL_OUTPUT_NUM_E825);
+	}
+
+deinit_tspll_in:
+	if (pf->hw.mac_type == ICE_MAC_GENERIC_3K_E825) {
+		ice_dpll_unregister_pins(pf->dplls.tspll.dpll,
+					 &pf->dplls.tspll_in,
+					 &ice_dpll_input_tspll_ops_e825,
+					 ICE_DPLL_TSPLL_INPUT_NUM_E825);
+		ice_dpll_release_pins(&pf->dplls.tspll_in,
+				      ICE_DPLL_TSPLL_INPUT_NUM_E825);
+	}
+
 deinit_inputs:
 	ice_dpll_deinit_direct_pins(pf, cgu, pf->dplls.inputs,
 				    pf->dplls.num_inputs,
@@ -3729,13 +3996,13 @@ static int ice_dpll_init_worker(struct ice_pf *pf)
 	struct ice_dplls *d = &pf->dplls;
 	struct kthread_worker *kworker;
 
-	kthread_init_delayed_work(&d->work, ice_dpll_periodic_work);
+	kthread_init_delayed_work(&d->work, d->periodic_work);
 	kworker = kthread_run_worker(0, "ice-dplls-%s",
 					dev_name(ice_pf_to_dev(pf)));
 	if (IS_ERR(kworker))
 		return PTR_ERR(kworker);
 	d->kworker = kworker;
-	d->cgu_state_acq_err_num = 0;
+	d->cgu_state_err_num = 0;
 	kthread_queue_delayed_work(d->kworker, &d->work, 0);
 
 	return 0;
@@ -3842,12 +4109,12 @@ static int ice_dpll_init_info_direct_pins_e825c(struct ice_pf *pf,
 	bool input;
 
 	switch (pin_type) {
-	case ICE_DPLL_PIN_TYPE_INPUT:
+	case ICE_DPLL_PIN_TYPE_INPUT_E825:
 		pins = pf->dplls.inputs;
 		num_pins = pf->dplls.num_inputs;
 		input = true;
 		break;
-	case ICE_DPLL_PIN_TYPE_OUTPUT:
+	case ICE_DPLL_PIN_TYPE_OUTPUT_E825:
 		pins = pf->dplls.outputs;
 		num_pins = pf->dplls.num_outputs;
 		input = false;
@@ -3863,6 +4130,49 @@ static int ice_dpll_init_info_direct_pins_e825c(struct ice_pf *pf,
 		pins[i].prop.capabilities = caps;
 		pins[i].pf = pf;
 	}
+	return 0;
+}
+
+/**
+ * ice_dpll_init_info_tspll_pins_e825 - initializes E825 TSPLL pins info
+ * @pf: board private structure
+ * @pin_type: type of pins being initialized
+ *
+ * Init information for E825 device TSPLL pins, cache them in pf's pins
+ * structures.
+ *
+ * Return:
+ * * 0 - success
+ * * negative - init failure reason
+ */
+static int ice_dpll_init_info_tspll_pins_e825(struct ice_pf *pf,
+					      enum ice_dpll_pin_type pin_type)
+{
+	struct ice_dpll_pin *pin;
+
+	switch (pin_type) {
+	case ICE_DPLL_PIN_TYPE_INPUT_TSPLL_E825:
+		pin = &pf->dplls.tspll_in;
+		pin->prop.board_label = ice_dpll_pin_time_ref_e825;
+		pin->prop.type = DPLL_PIN_TYPE_EXT;
+		pin->prop.capabilities |=
+			DPLL_PIN_CAPABILITIES_STATE_CAN_CHANGE;
+		pin->prop.freq_supported = ice_cgu_pin_freq_156_25mhz;
+		pin->prop.freq_supported_num =
+			ARRAY_SIZE(ice_cgu_pin_freq_156_25mhz);
+		pin->freq = pin->prop.freq_supported[0].min;
+		pin->pf = pf;
+		break;
+	case ICE_DPLL_PIN_TYPE_OUTPUT_TSPLL_E825:
+		pin = &pf->dplls.tspll_out;
+		pin->prop.board_label = ice_dpll_pin_time_sync_e825;
+		pin->prop.type = DPLL_PIN_TYPE_INT_OSCILLATOR;
+		pin->pf = pf;
+		break;
+	default:
+		return -EINVAL;
+	}
+
 	return 0;
 }
 
@@ -4104,11 +4414,7 @@ ice_dpll_init_pins_info(struct ice_pf *pf, enum ice_dpll_pin_type pin_type)
 	switch (pin_type) {
 	case ICE_DPLL_PIN_TYPE_INPUT:
 	case ICE_DPLL_PIN_TYPE_OUTPUT:
-		if (pf->hw.mac_type == ICE_MAC_GENERIC_3K_E825)
-			return ice_dpll_init_info_direct_pins_e825c(pf,
-								    pin_type);
-		else
-			return ice_dpll_init_info_direct_pins(pf, pin_type);
+		return ice_dpll_init_info_direct_pins(pf, pin_type);
 	case ICE_DPLL_PIN_TYPE_RCLK_INPUT:
 		if (pf->hw.mac_type == ICE_MAC_GENERIC_3K_E825)
 			return ice_dpll_init_info_pin_on_pin_e825c(pf);
@@ -4116,6 +4422,12 @@ ice_dpll_init_pins_info(struct ice_pf *pf, enum ice_dpll_pin_type pin_type)
 			return ice_dpll_init_info_rclk_pin(pf);
 	case ICE_DPLL_PIN_TYPE_SOFTWARE:
 		return ice_dpll_init_info_sw_pins(pf);
+	case ICE_DPLL_PIN_TYPE_INPUT_E825:
+	case ICE_DPLL_PIN_TYPE_OUTPUT_E825:
+		return ice_dpll_init_info_direct_pins_e825c(pf, pin_type);
+	case ICE_DPLL_PIN_TYPE_INPUT_TSPLL_E825:
+	case ICE_DPLL_PIN_TYPE_OUTPUT_TSPLL_E825:
+		return ice_dpll_init_info_tspll_pins_e825(pf, pin_type);
 	default:
 		return -EINVAL;
 	}
@@ -4150,18 +4462,28 @@ static int ice_dpll_init_info_e825c(struct ice_pf *pf)
 {
 	struct ice_dplls *d = &pf->dplls;
 	struct ice_dpll *de = &d->eec;
+	struct ice_dpll *dt = &d->tspll;
 	int ret = 0;
 	int i;
 
 	d->clock_id = ice_generate_clock_id(pf);
 	d->num_inputs = ICE_SYNCE_CLK_NUM;
 	de->dpll_state = DPLL_LOCK_STATUS_LOCKED;
+	dt->dpll_state = DPLL_LOCK_STATUS_LOCKED;
 
 	d->inputs = kcalloc(d->num_inputs, sizeof(*d->inputs), GFP_KERNEL);
 	if (!d->inputs)
 		return -ENOMEM;
 
-	ret = ice_dpll_init_pins_info(pf, ICE_DPLL_PIN_TYPE_INPUT);
+	ret = ice_dpll_init_pins_info(pf, ICE_DPLL_PIN_TYPE_INPUT_E825);
+	if (ret)
+		goto deinit_info;
+
+	ret = ice_dpll_init_pins_info(pf, ICE_DPLL_PIN_TYPE_INPUT_TSPLL_E825);
+	if (ret)
+		goto deinit_info;
+
+	ret = ice_dpll_init_pins_info(pf, ICE_DPLL_PIN_TYPE_OUTPUT_TSPLL_E825);
 	if (ret)
 		goto deinit_info;
 
@@ -4183,7 +4505,14 @@ static int ice_dpll_init_info_e825c(struct ice_pf *pf)
 	ret = ice_dpll_init_pins_info(pf, ICE_DPLL_PIN_TYPE_RCLK_INPUT);
 	if (ret)
 		return ret;
+
+	if (ice_pf_src_tmr_owned(pf))
+		d->periodic_work = ice_dpll_periodic_work_e825;
+
 	de->mode = DPLL_MODE_MANUAL;
+	dt->mode = DPLL_MODE_MANUAL;
+	dt->dpll_idx = ICE_DPLL_TSPLL_IDX_E825;
+
 	dev_dbg(ice_pf_to_dev(pf),
 		"%s - success, inputs: %u, outputs: %u, rclk-parents: %u, pin_1588-parents: %u\n",
 		 __func__, d->num_inputs, d->num_outputs, d->rclk.num_parents,
@@ -4267,6 +4596,8 @@ static int ice_dpll_init_info(struct ice_pf *pf, bool cgu)
 		ret = ice_dpll_init_pins_info(pf, ICE_DPLL_PIN_TYPE_SOFTWARE);
 		if (ret)
 			goto deinit_info;
+
+		d->periodic_work = ice_dpll_periodic_work;
 	}
 
 	ret = ice_get_cgu_rclk_pin_info(&pf->hw, &d->base_rclk_idx,
@@ -4312,12 +4643,14 @@ void ice_dpll_deinit(struct ice_pf *pf)
 	bool cgu = ice_is_feature_supported(pf, ICE_F_CGU);
 
 	clear_bit(ICE_FLAG_DPLL, pf->flags);
-	if (cgu)
+	if (pf->dplls.periodic_work)
 		ice_dpll_deinit_worker(pf);
 
 	ice_dpll_deinit_pins(pf, cgu);
 	if (pf->hw.mac_type != ICE_MAC_GENERIC_3K_E825)
 		ice_dpll_deinit_dpll(pf, &pf->dplls.pps, cgu);
+	else
+		ice_dpll_deinit_dpll(pf, &pf->dplls.tspll, cgu);
 	ice_dpll_deinit_dpll(pf, &pf->dplls.eec, cgu);
 	ice_dpll_deinit_info(pf);
 	mutex_destroy(&pf->dplls.lock);
@@ -4350,16 +4683,20 @@ void ice_dpll_init(struct ice_pf *pf)
 	err = ice_dpll_init_dpll(pf, &pf->dplls.eec, cgu, DPLL_TYPE_EEC);
 	if (err)
 		goto deinit_info;
-	if (pf->hw.mac_type != ICE_MAC_GENERIC_3K_E825) {
+
+	if (pf->hw.mac_type == ICE_MAC_GENERIC_3K_E825)
+		err = ice_dpll_init_dpll(pf, &pf->dplls.tspll, cgu,
+					 DPLL_TYPE_PPS);
+	else
 		err = ice_dpll_init_dpll(pf, &pf->dplls.pps, cgu,
 					 DPLL_TYPE_PPS);
-		if (err)
-			goto deinit_eec;
-	}
+	if (err)
+		goto deinit_eec;
+
 	err = ice_dpll_init_pins(pf, cgu);
 	if (err)
 		goto deinit_pps;
-	if (cgu && pf->hw.mac_type != ICE_MAC_GENERIC_3K_E825) {
+	if (d->periodic_work) {
 		err = ice_dpll_init_worker(pf);
 		if (err)
 			goto deinit_pins;
@@ -4371,7 +4708,10 @@ void ice_dpll_init(struct ice_pf *pf)
 deinit_pins:
 	ice_dpll_deinit_pins(pf, cgu);
 deinit_pps:
-	ice_dpll_deinit_dpll(pf, &pf->dplls.pps, cgu);
+	if (pf->hw.mac_type == ICE_MAC_GENERIC_3K_E825)
+		ice_dpll_deinit_dpll(pf, &pf->dplls.tspll, cgu);
+	else
+		ice_dpll_deinit_dpll(pf, &pf->dplls.pps, cgu);
 deinit_eec:
 	ice_dpll_deinit_dpll(pf, &pf->dplls.eec, cgu);
 deinit_info:
