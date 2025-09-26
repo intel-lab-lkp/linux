@@ -442,6 +442,39 @@ struct dma_buf {
 #endif
 };
 
+/* RFC: Separate header for the interconnect defines? */
+
+/**
+ * struct dma_buf_interconnect - Private interconnect
+ * @name: The name of the interconnect
+ */
+struct dma_buf_interconnect {
+	const char *name;
+};
+
+/**
+ * struct dma_buf_interconnect_attach_ops - Interconnect attach ops base-class
+ *
+ * Declared for type-safety. Interconnect implementations should subclass to
+ * implement negotiation-specific ops.
+ */
+struct dma_buf_interconnect_attach_ops {
+};
+
+/**
+ * struct dma_buf_interconnect_attach - Interconnect state
+ * @interconnect: The struct dma_buf_interconnect identifying the interconnect
+ *
+ * Interconnect implementations subclass as needed for attachment state
+ * that can't be stored elsewhere. It could, for example, hold a pointer
+ * to a replacement of the sg-list after the attachment has been mapped.
+ * If no additional state is needed, an exporter could define a single
+ * static instance of this struct.
+ */
+struct dma_buf_interconnect_attach {
+	const struct dma_buf_interconnect *interconnect;
+};
+
 /**
  * struct dma_buf_attach_ops - importer operations for an attachment
  *
@@ -475,6 +508,21 @@ struct dma_buf_attach_ops {
 	 * point to the new location of the DMA-buf.
 	 */
 	void (*move_notify)(struct dma_buf_attachment *attach);
+
+	/**
+	 * @supports_interconnect: [optional] - Does the driver support a local interconnect?
+	 *
+	 * Does the importer support a private interconnect? The interconnect is
+	 * identified using a unique address defined instantiated either by the driver
+	 * if the interconnect is driver-private or globally
+	 * (RFC added to the dma-buf-interconnect.c file) if cross-driver.
+	 *
+	 * Return: A pointer to the interconnect-private attach_ops structure if supported,
+	 * %NULL otherwise.
+	 */
+	const struct dma_buf_interconnect_attach_ops *
+	(*supports_interconnect)(struct dma_buf_attachment *attach,
+				 const struct dma_buf_interconnect *interconnect);
 };
 
 /**
@@ -484,6 +532,8 @@ struct dma_buf_attach_ops {
  * @node: list of dma_buf_attachment, protected by dma_resv lock of the dmabuf.
  * @peer2peer: true if the importer can handle peer resources without pages.
  * @priv: exporter specific attachment data.
+ * @interconnect_attach: Private interconnect state for the connection if used,
+ * NULL otherwise.
  * @importer_ops: importer operations for this attachment, if provided
  * dma_buf_map/unmap_attachment() must be called with the dma_resv lock held.
  * @importer_priv: importer specific attachment data.
@@ -503,6 +553,7 @@ struct dma_buf_attachment {
 	struct list_head node;
 	bool peer2peer;
 	const struct dma_buf_attach_ops *importer_ops;
+	struct dma_buf_interconnect_attach *interconnect_attach;
 	void *importer_priv;
 	void *priv;
 };
