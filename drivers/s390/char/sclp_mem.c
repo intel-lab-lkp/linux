@@ -267,7 +267,7 @@ static ssize_t config_mblock_store(struct kobject *kobj, struct kobj_attribute *
 		__arch_set_page_nodat((void *)__va(addr), block_size >> PAGE_SHIFT);
 		rc = __add_memory(0, addr, block_size,
 				  mblock->memmap_on_memory ?
-				  MHP_MEMMAP_ON_MEMORY | MHP_OFFLINE_INACCESSIBLE : MHP_NONE);
+				  MHP_MEMMAP_ON_MEMORY : MHP_NONE);
 		if (rc)
 			goto out_unlock;
 		mem = find_memory_block(pfn_to_section_nr(PFN_DOWN(addr)));
