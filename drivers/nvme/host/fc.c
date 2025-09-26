@@ -3717,6 +3717,82 @@ static struct nvmf_transport_ops nvme_fc_transport = {
 	.create_ctrl	= nvme_fc_create_ctrl,
 };
 
+static struct nvme_fc_rport *nvme_fc_rport_from_wwpn(struct nvme_fc_lport *lport,
+		u64 rport_wwpn)
+{
+	struct nvme_fc_rport *rport;
+	unsigned long flags;
+
+	spin_lock_irqsave(&nvme_fc_lock, flags);
+	list_for_each_entry(rport, &lport->endp_list, endp_list) {
+		if (!nvme_fc_rport_get(rport))
+			continue;
+		if (rport->remoteport.port_name == rport_wwpn &&
+		    rport->remoteport.port_role & FC_PORT_ROLE_NVME_TARGET) {
+			spin_unlock_irqrestore(&nvme_fc_lock, flags);
+			return rport;
+		}
+		nvme_fc_rport_put(rport);
+	}
+	spin_unlock_irqrestore(&nvme_fc_lock, flags);
+	return NULL;
+}
+
+static struct nvme_fc_lport *
+nvme_fc_lport_from_wwpn(u64 wwpn)
+{
+	struct nvme_fc_lport *lport;
+	unsigned long flags;
+
+	spin_lock_irqsave(&nvme_fc_lock, flags);
+	list_for_each_entry(lport, &nvme_fc_lport_list, port_list) {
+		if (lport->localport.port_name == wwpn &&
+		    lport->localport.port_state == FC_OBJSTATE_ONLINE) {
+			if (nvme_fc_lport_get(lport)) {
+				spin_unlock_irqrestore(&nvme_fc_lock, flags);
+				return lport;
+			}
+		}
+	}
+	spin_unlock_irqrestore(&nvme_fc_lock, flags);
+	return NULL;
+}
+
+static void
+nvme_fc_fpin_set_state(struct nvme_fc_lport *lport, u64 wwpn, bool marginal)
+{
+	struct nvme_fc_rport *rport;
+	struct nvme_fc_ctrl *ctrl;
+
+	rport = nvme_fc_rport_from_wwpn(lport, wwpn);
+	if (!rport)
+		return;
+
+	spin_lock_irq(&rport->lock);
+	list_for_each_entry(ctrl, &rport->ctrl_list, ctrl_list) {
+		if (marginal)
+			set_bit(NVME_CTRL_MARGINAL, &ctrl->ctrl.flags);
+		else
+			clear_bit(NVME_CTRL_MARGINAL, &ctrl->ctrl.flags);
+	}
+	spin_unlock_irq(&rport->lock);
+	nvme_fc_rport_put(rport);
+}
+
+void
+nvme_fc_modify_rport_fpin_state(u64 local_wwpn, u64 remote_wwpn, bool marginal)
+{
+	struct nvme_fc_lport *lport;
+
+	lport = nvme_fc_lport_from_wwpn(local_wwpn);
+	if (!lport)
+		return;
+
+	nvme_fc_fpin_set_state(lport, remote_wwpn, marginal);
+	nvme_fc_lport_put(lport);
+}
+EXPORT_SYMBOL_GPL(nvme_fc_modify_rport_fpin_state);
+
 /* Arbitrary successive failures max. With lots of subsystems could be high */
 #define DISCOVERY_MAX_FAIL	20
 
