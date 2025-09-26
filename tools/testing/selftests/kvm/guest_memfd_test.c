@@ -239,10 +239,15 @@ static void test_create_guest_memfd_multiple(struct kvm_vm *vm)
 	close(fd1);
 }
 
-static void test_guest_memfd_flags(struct kvm_vm *vm, uint64_t valid_flags)
+static void test_guest_memfd_flags(struct kvm_vm *vm)
 {
+	uint64_t valid_flags = 0;
 	uint64_t flag;
 	int fd;
+
+	if (vm_check_cap(vm, KVM_CAP_GUEST_MEMFD_MMAP))
+		valid_flags |= GUEST_MEMFD_FLAG_MMAP |
+			       GUEST_MEMFD_FLAG_DEFAULT_SHARED;
 
 	for (flag = BIT(0); flag; flag <<= 1) {
 		fd = __vm_create_guest_memfd(vm, page_size, flag);
@@ -267,16 +272,8 @@ do {									\
 	close(fd);							\
 } while (0)
 
-static void test_guest_memfd(unsigned long vm_type)
+static void __test_guest_memfd(struct kvm_vm *vm, uint64_t flags)
 {
-	uint64_t flags = 0;
-	struct kvm_vm *vm;
-
-	vm = vm_create_barebones_type(vm_type);
-
-	if (vm_check_cap(vm, KVM_CAP_GUEST_MEMFD_MMAP))
-		flags |= GUEST_MEMFD_FLAG_MMAP | GUEST_MEMFD_FLAG_DEFAULT_SHARED;
-
 	test_create_guest_memfd_multiple(vm);
 	test_create_guest_memfd_invalid_sizes(vm, flags);
 
@@ -292,8 +289,19 @@ static void test_guest_memfd(unsigned long vm_type)
 	gmem_test(file_size, vm, flags);
 	gmem_test(fallocate, vm, flags);
 	gmem_test(invalid_punch_hole, vm, flags);
+}
 
-	test_guest_memfd_flags(vm, flags);
+static void test_guest_memfd(unsigned long vm_type)
+{
+	struct kvm_vm *vm = vm_create_barebones_type(vm_type);
+
+	test_guest_memfd_flags(vm);
+
+	__test_guest_memfd(vm, 0);
+
+	if (vm_check_cap(vm, KVM_CAP_GUEST_MEMFD_MMAP))
+		__test_guest_memfd(vm, GUEST_MEMFD_FLAG_MMAP |
+				       GUEST_MEMFD_FLAG_DEFAULT_SHARED);
 
 	kvm_vm_free(vm);
 }
