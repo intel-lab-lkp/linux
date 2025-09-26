@@ -97,8 +97,8 @@ static int pxa1908_apmu_probe(struct platform_device *pdev)
 		return PTR_ERR(pxa_unit->base);
 
 	adev = devm_auxiliary_device_create(&pdev->dev, "power", NULL);
-	if (IS_ERR(adev))
-		return dev_err_probe(&pdev->dev, PTR_ERR(adev),
+	if (!adev)
+		return dev_err_probe(&pdev->dev, -ENODEV,
 				     "Failed to register power controller\n");
 
 	mmp_clk_init(pdev->dev.of_node, &pxa_unit->unit, APMU_NR_CLKS);
