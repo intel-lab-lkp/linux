@@ -270,7 +270,9 @@
 struct tegra_msi {
 	DECLARE_BITMAP(used, INT_PCI_MSI_NR);
 	struct irq_domain *domain;
+	/* Protects mapping operations */
 	struct mutex map_lock;
+	/* Guards interrupt mask updates */
 	spinlock_t mask_lock;
 	void *virt;
 	dma_addr_t phys;
