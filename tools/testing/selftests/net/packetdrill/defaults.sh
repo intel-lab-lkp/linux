@@ -51,6 +51,7 @@ sysctl -q net.ipv4.tcp_pacing_ss_ratio=200
 sysctl -q net.ipv4.tcp_pacing_ca_ratio=120
 sysctl -q net.ipv4.tcp_notsent_lowat=4294967295 > /dev/null 2>&1
 
+# Use TFO_COOKIE in ksft_runner.sh for this key.
 sysctl -q net.ipv4.tcp_fastopen=0x2
 sysctl -q net.ipv4.tcp_fastopen_key=a1a1a1a1-b2b2b2b2-c3c3c3c3-d4d4d4d4
 
