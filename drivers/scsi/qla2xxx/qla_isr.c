@@ -46,6 +46,7 @@ qla27xx_process_purex_fpin(struct scsi_qla_host *vha, struct purex_item *item)
 		       pkt, pkt_size);
 
 	fc_host_fpin_rcv(vha->host, pkt_size, (char *)pkt, 0);
+	fc_host_fpin_set_nvme_rport_marginal(vha->host, pkt_size, (char *)pkt);
 }
 
 const char *const port_state_str[] = {
