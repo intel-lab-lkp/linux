@@ -210,9 +210,9 @@ static const struct dma_buf_attach_ops nop2p_attach_ops = {
  */
 static const struct dma_buf_test_params test_params[] = {
 	{.mem_mask = XE_BO_FLAG_VRAM0,
-	 .attach_ops = &xe_dma_buf_attach_ops},
+	 .attach_ops = &xe_dma_buf_attach_ops.dma_ops},
 	{.mem_mask = XE_BO_FLAG_VRAM0 | XE_BO_FLAG_NEEDS_CPU_ACCESS,
-	 .attach_ops = &xe_dma_buf_attach_ops,
+	 .attach_ops = &xe_dma_buf_attach_ops.dma_ops,
 	 .force_different_devices = true},
 
 	{.mem_mask = XE_BO_FLAG_VRAM0,
@@ -226,9 +226,9 @@ static const struct dma_buf_test_params test_params[] = {
 	 .force_different_devices = true},
 
 	{.mem_mask = XE_BO_FLAG_SYSTEM,
-	 .attach_ops = &xe_dma_buf_attach_ops},
+	 .attach_ops = &xe_dma_buf_attach_ops.dma_ops},
 	{.mem_mask = XE_BO_FLAG_SYSTEM,
-	 .attach_ops = &xe_dma_buf_attach_ops,
+	 .attach_ops = &xe_dma_buf_attach_ops.dma_ops,
 	 .force_different_devices = true},
 
 	{.mem_mask = XE_BO_FLAG_SYSTEM,
@@ -242,10 +242,10 @@ static const struct dma_buf_test_params test_params[] = {
 	 .force_different_devices = true},
 
 	{.mem_mask = XE_BO_FLAG_SYSTEM | XE_BO_FLAG_VRAM0,
-	 .attach_ops = &xe_dma_buf_attach_ops},
+	 .attach_ops = &xe_dma_buf_attach_ops.dma_ops},
 	{.mem_mask = XE_BO_FLAG_SYSTEM | XE_BO_FLAG_VRAM0 |
 		     XE_BO_FLAG_NEEDS_CPU_ACCESS,
-	 .attach_ops = &xe_dma_buf_attach_ops,
+	 .attach_ops = &xe_dma_buf_attach_ops.dma_ops,
 	 .force_different_devices = true},
 
 	{.mem_mask = XE_BO_FLAG_SYSTEM | XE_BO_FLAG_VRAM0,

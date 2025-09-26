@@ -16,18 +16,49 @@
 #include "tests/xe_test.h"
 #include "xe_bo.h"
 #include "xe_device.h"
+#include "xe_interconnect.h"
 #include "xe_pm.h"
 #include "xe_ttm_vram_mgr.h"
 #include "xe_vm.h"
 
 MODULE_IMPORT_NS("DMA_BUF");
 
+struct xe_dma_buf_attach_ops {
+	struct dma_buf_attach_ops dma_ops;
+	struct xe_interconnect_attach_ops ic_ops;
+};
+
+static const struct xe_dma_buf_attach_ops *
+to_xe_dma_buf_attach_ops(struct dma_buf_attachment *attach)
+{
+	const struct dma_buf_attach_ops *aops = attach->importer_ops;
+	const struct dma_buf_interconnect_attach_ops *iaops;
+
+	if (!aops || !aops->supports_interconnect)
+		return NULL;
+
+	iaops = aops->supports_interconnect(attach, xe_interconnect);
+	return iaops ? container_of(iaops, struct xe_dma_buf_attach_ops, ic_ops.base) : NULL;
+}
+
 static int xe_dma_buf_attach(struct dma_buf *dmabuf,
 			     struct dma_buf_attachment *attach)
 {
 	struct drm_gem_object *obj = attach->dmabuf->priv;
+	const struct xe_dma_buf_attach_ops *xe_attach_ops =
+		to_xe_dma_buf_attach_ops(attach);
 
-	if (attach->peer2peer &&
+	if (xe_attach_ops && xe_attach_ops->ic_ops.allow_ic) {
+		struct xe_interconnect_attach *xe_attach = kzalloc(sizeof(*attach), GFP_KERNEL);
+
+		if (xe_attach) {
+			xe_attach->base.interconnect = xe_interconnect;
+			xe_attach->sg_list_replacement = NULL;
+			attach->interconnect_attach = &xe_attach->base;
+		}
+	}
+
+	if (!attach->interconnect_attach && attach->peer2peer &&
 	    pci_p2pdma_distance(to_pci_dev(obj->dev->dev), attach->dev, false) < 0)
 		attach->peer2peer = false;
 
@@ -43,6 +74,7 @@ static void xe_dma_buf_detach(struct dma_buf *dmabuf,
 {
 	struct drm_gem_object *obj = attach->dmabuf->priv;
 
+	kfree(attach->interconnect_attach);
 	xe_pm_runtime_put(to_xe_device(obj->dev));
 }
 
@@ -135,6 +167,11 @@ static struct sg_table *xe_dma_buf_map(struct dma_buf_attachment *attach,
 
 	case XE_PL_VRAM0:
 	case XE_PL_VRAM1:
+		if (attach->interconnect_attach &&
+		    attach->interconnect_attach->interconnect == xe_interconnect) {
+			/* Map using something else than sglist */
+			;
+		}
 		r = xe_ttm_vram_mgr_alloc_sgt(xe_bo_device(bo),
 					      bo->ttm.resource, 0,
 					      bo->ttm.base.size, attach->dev,
@@ -285,9 +322,28 @@ static void xe_dma_buf_move_notify(struct dma_buf_attachment *attach)
 	XE_WARN_ON(xe_bo_evict(bo, exec));
 }
 
-static const struct dma_buf_attach_ops xe_dma_buf_attach_ops = {
-	.allow_peer2peer = true,
-	.move_notify = xe_dma_buf_move_notify
+static const struct dma_buf_interconnect_attach_ops *
+xe_dma_buf_supports_interconnect(struct dma_buf_attachment *attach,
+				 const struct dma_buf_interconnect *interconnect)
+{
+	if (interconnect == xe_interconnect) {
+		return &container_of(attach->importer_ops,
+				     const struct xe_dma_buf_attach_ops,
+				     dma_ops)->ic_ops.base;
+	}
+
+	return NULL;
+}
+
+static const struct xe_dma_buf_attach_ops xe_dma_buf_attach_ops = {
+	.dma_ops = {
+		.allow_peer2peer = true,
+		.move_notify = xe_dma_buf_move_notify,
+		.supports_interconnect = xe_dma_buf_supports_interconnect,
+	},
+	.ic_ops = {
+		.allow_ic = true,
+	}
 };
 
 #if IS_ENABLED(CONFIG_DRM_XE_KUNIT_TEST)
@@ -336,12 +392,11 @@ struct drm_gem_object *xe_gem_prime_import(struct drm_device *dev,
 	if (IS_ERR(bo))
 		return ERR_CAST(bo);
 
-	attach_ops = &xe_dma_buf_attach_ops;
+	attach_ops = &xe_dma_buf_attach_ops.dma_ops;
 #if IS_ENABLED(CONFIG_DRM_XE_KUNIT_TEST)
 	if (test)
 		attach_ops = test->attach_ops;
 #endif
-
 	attach = dma_buf_dynamic_attach(dma_buf, dev->dev, attach_ops, &bo->ttm.base);
 	if (IS_ERR(attach)) {
 		obj = ERR_CAST(attach);
@@ -363,6 +418,12 @@ out_err:
 
 	return obj;
 }
+
+static const struct dma_buf_interconnect _xe_interconnect = {
+	.name = "xe_interconnect",
+};
+
+const struct dma_buf_interconnect *xe_interconnect = &_xe_interconnect;
 
 #if IS_ENABLED(CONFIG_DRM_XE_KUNIT_TEST)
 #include "tests/xe_dma_buf.c"
