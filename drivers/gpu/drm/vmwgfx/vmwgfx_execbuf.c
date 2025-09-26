@@ -4172,8 +4172,6 @@ int vmw_execbuf_process(struct drm_file *file_priv,
 	if (unlikely(ret != 0))
 		goto out_err;
 
-	vmw_validation_drop_ht(&val_ctx);
-
 	ret = mutex_lock_interruptible(&dev_priv->binding_mutex);
 	if (unlikely(ret != 0)) {
 		ret = -ERESTARTSYS;
@@ -4282,7 +4280,6 @@ out_err_nores:
 		__vmw_execbuf_release_pinned_bo(dev_priv, NULL);
 out_unlock:
 	vmw_cmdbuf_res_revert(&sw_context->staged_cmd_res);
-	vmw_validation_drop_ht(&val_ctx);
 	WARN_ON(!list_empty(&sw_context->ctx_list));
 	mutex_unlock(&dev_priv->cmdbuf_mutex);
 

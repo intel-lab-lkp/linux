@@ -166,7 +166,7 @@ vmw_validation_find_bo_dup(struct vmw_validation_context *ctx,
 		struct vmwgfx_hash_item *hash;
 		unsigned long key = (unsigned long) vbo;
 
-		hash_for_each_possible_rcu(ctx->sw_context->res_ht, hash, head, key) {
+		hash_for_each_possible(ctx->res_ht, hash, head, key) {
 			if (hash->key == key) {
 				bo_node = container_of(hash, typeof(*bo_node), hash);
 				break;
@@ -208,7 +208,7 @@ vmw_validation_find_res_dup(struct vmw_validation_context *ctx,
 		struct vmwgfx_hash_item *hash;
 		unsigned long key = (unsigned long) res;
 
-		hash_for_each_possible_rcu(ctx->sw_context->res_ht, hash, head, key) {
+		hash_for_each_possible(ctx->res_ht, hash, head, key) {
 			if (hash->key == key) {
 				res_node = container_of(hash, typeof(*res_node), hash);
 				break;
@@ -258,8 +258,7 @@ int vmw_validation_add_bo(struct vmw_validation_context *ctx,
 
 		if (ctx->sw_context) {
 			bo_node->hash.key = (unsigned long) vbo;
-			hash_add_rcu(ctx->sw_context->res_ht, &bo_node->hash.head,
-				bo_node->hash.key);
+			hash_add(ctx->res_ht, &bo_node->hash.head, bo_node->hash.key);
 		}
 		val_buf = &bo_node->base;
 		vmw_bo_reference(vbo);
@@ -305,11 +304,11 @@ int vmw_validation_add_resource(struct vmw_validation_context *ctx,
 
 	if (ctx->sw_context) {
 		node->hash.key = (unsigned long) res;
-		hash_add_rcu(ctx->sw_context->res_ht, &node->hash.head, node->hash.key);
+		hash_add(ctx->res_ht, &node->hash.head, node->hash.key);
 	}
 	node->res = vmw_resource_reference_unless_doomed(res);
 	if (!node->res) {
-		hash_del_rcu(&node->hash.head);
+		hash_del(&node->hash.head);
 		return -ESRCH;
 	}
 
@@ -609,38 +608,6 @@ int vmw_validation_res_validate(struct vmw_validation_context *ctx, bool intr)
 		}
 	}
 	return 0;
-}
-
-/**
- * vmw_validation_drop_ht - Reset the hash table used for duplicate finding
- * and unregister it from this validation context.
- * @ctx: The validation context.
- *
- * The hash table used for duplicate finding is an expensive resource and
- * may be protected by mutexes that may cause deadlocks during resource
- * unreferencing if held. After resource- and buffer object registering,
- * there is no longer any use for this hash table, so allow freeing it
- * either to shorten any mutex locking time, or before resources- and
- * buffer objects are freed during validation context cleanup.
- */
-void vmw_validation_drop_ht(struct vmw_validation_context *ctx)
-{
-	struct vmw_validation_bo_node *entry;
-	struct vmw_validation_res_node *val;
-
-	if (!ctx->sw_context)
-		return;
-
-	list_for_each_entry(entry, &ctx->bo_list, base.head)
-		hash_del_rcu(&entry->hash.head);
-
-	list_for_each_entry(val, &ctx->resource_list, head)
-		hash_del_rcu(&val->hash.head);
-
-	list_for_each_entry(val, &ctx->resource_ctx_list, head)
-		hash_del_rcu(&val->hash.head);
-
-	ctx->sw_context = NULL;
 }
 
 /**

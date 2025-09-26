@@ -37,10 +37,11 @@
 #define VMW_RES_DIRTY_NONE 0
 #define VMW_RES_DIRTY_SET BIT(0)
 #define VMW_RES_DIRTY_CLEAR BIT(1)
+#define VMW_RES_HT_ORDER 7
 
 /**
  * struct vmw_validation_context - Per command submission validation context
- * @ht: Hash table used to find resource- or buffer object duplicates
+ * @res_ht: Hash table used to find resource- or buffer object duplicates
  * @resource_list: List head for resource validation metadata
  * @resource_ctx_list: List head for resource validation metadata for
  * resources that need to be validated before those in @resource_list
@@ -55,6 +56,7 @@
  */
 struct vmw_validation_context {
 	struct vmw_sw_context *sw_context;
+	DECLARE_HASHTABLE(res_ht, VMW_RES_HT_ORDER);
 	struct list_head resource_list;
 	struct list_head resource_ctx_list;
 	struct list_head bo_list;
@@ -84,6 +86,7 @@ struct vmw_fence_obj;
 #define DECLARE_VAL_CONTEXT(_name, _sw_context, _merge_dups)		\
 	struct vmw_validation_context _name =				\
 	{ .sw_context = _sw_context,					\
+	  .res_ht = {},							\
 	  .resource_list = LIST_HEAD_INIT((_name).resource_list),	\
 	  .resource_ctx_list = LIST_HEAD_INIT((_name).resource_ctx_list), \
 	  .bo_list = LIST_HEAD_INIT((_name).bo_list),			\

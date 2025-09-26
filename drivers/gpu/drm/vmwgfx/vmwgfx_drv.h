@@ -78,7 +78,6 @@
 #define VMW_RES_STREAM ttm_driver_type2
 #define VMW_RES_FENCE ttm_driver_type3
 #define VMW_RES_SHADER ttm_driver_type4
-#define VMW_RES_HT_ORDER 12
 
 #define MKSSTAT_CAPACITY_LOG2 5U
 #define MKSSTAT_CAPACITY (1U << MKSSTAT_CAPACITY_LOG2)
@@ -347,7 +346,6 @@ struct vmw_ctx_validation_info;
 
 /**
  * struct vmw_sw_context - Command submission context
- * @res_ht: Pointer hash table used to find validation duplicates
  * @kernel: Whether the command buffer originates from kernel code rather
  * than from user-space
  * @fp: If @kernel is false, points to the file of the client. Otherwise
@@ -377,7 +375,6 @@ struct vmw_ctx_validation_info;
  * @ctx: The validation context
  */
 struct vmw_sw_context{
-	DECLARE_HASHTABLE(res_ht, VMW_RES_HT_ORDER);
 	bool kernel;
 	struct vmw_fpriv *fp;
 	struct drm_file *filp;
