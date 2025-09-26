@@ -160,6 +160,8 @@ __ref_tracker_dir_pr_ostream(struct ref_tracker_dir *dir,
 	}
 
 	sbuf = kmalloc(STACK_BUF_SIZE, GFP_NOWAIT | __GFP_NOWARN);
+	if (!sbuf)
+		goto end;
 
 	for (i = 0, skipped = stats->total; i < stats->count; ++i) {
 		stack = stats->stacks[i].stack_handle;
@@ -176,7 +178,7 @@ __ref_tracker_dir_pr_ostream(struct ref_tracker_dir *dir,
 			   s->prefix, dir->class, dir, skipped, stats->total);
 
 	kfree(sbuf);
-
+end:
 	kfree(stats);
 }
 
