@@ -10,13 +10,15 @@
 #include "../dp_mon.h"
 #include "../dp_cmn.h"
 #include "dp_rx.h"
+#include "../hif.h"
 #include "dp.h"
 #include "dp_tx.h"
 
-int ath12k_wifi7_dp_service_srng(struct ath12k_base *ab,
-				 struct ath12k_ext_irq_grp *irq_grp,
-				 int budget)
+static int ath12k_wifi7_dp_service_srng(struct ath12k_dp *dp,
+					struct ath12k_ext_irq_grp *irq_grp,
+					int budget)
 {
+	struct ath12k_base *ab = dp->ab;
 	struct napi_struct *napi = &irq_grp->napi;
 	int grp_id = irq_grp->grp_id;
 	int work_done = 0;
@@ -138,6 +140,7 @@ done:
 struct ath12k_dp *ath12k_wifi7_dp_device_alloc(struct ath12k_base *ab)
 {
 	struct ath12k_dp *dp;
+	int ret;
 
 	/* TODO: align dp later if cache alignment becomes a bottleneck */
 	dp = kzalloc(sizeof(*dp), GFP_KERNEL);
@@ -148,12 +151,23 @@ struct ath12k_dp *ath12k_wifi7_dp_device_alloc(struct ath12k_base *ab)
 	dp->dev = ab->dev;
 	dp->hw_params = ab->hw_params;
 
+	ret = ath12k_hif_ext_irq_setup(dp->ab, ath12k_wifi7_dp_service_srng, dp);
+	if (ret) {
+		ath12k_err(ab, "failed to setup ext irq, ret %d", ret);
+		goto free_dp;
+	}
+
 	return dp;
+
+free_dp:
+	kfree(dp);
+	return NULL;
 }
 EXPORT_SYMBOL(ath12k_wifi7_dp_device_alloc);
 
 void ath12k_wifi7_dp_device_free(struct ath12k_dp *dp)
 {
+	ath12k_hif_ext_irq_cleanup(dp->ab);
 	kfree(dp);
 }
 EXPORT_SYMBOL(ath12k_wifi7_dp_device_free);

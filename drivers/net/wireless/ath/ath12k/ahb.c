@@ -524,10 +524,9 @@ static int ath12k_ahb_ext_grp_napi_poll(struct napi_struct *napi, int budget)
 	struct ath12k_ext_irq_grp *irq_grp = container_of(napi,
 						struct ath12k_ext_irq_grp,
 						napi);
-	struct ath12k_base *ab = irq_grp->ab;
 	int work_done;
 
-	work_done = ath12k_wifi7_dp_service_srng(ab, irq_grp, budget);
+	work_done = irq_grp->irq_handler(irq_grp->dp, irq_grp, budget);
 	if (work_done < budget) {
 		napi_complete_done(napi, work_done);
 		ath12k_ahb_ext_grp_enable(irq_grp);
@@ -553,7 +552,12 @@ static irqreturn_t ath12k_ahb_ext_interrupt_handler(int irq, void *arg)
 	return IRQ_HANDLED;
 }
 
-static int ath12k_ahb_config_ext_irq(struct ath12k_base *ab)
+static int
+ath12k_ahb_config_ext_irq(struct ath12k_base *ab,
+			  int (*irq_handler)(struct ath12k_dp *dp,
+					     struct ath12k_ext_irq_grp *irq_grp,
+					     int budget),
+			  struct ath12k_dp *dp)
 {
 	const struct ath12k_hw_ring_mask *ring_mask;
 	struct ath12k_ext_irq_grp *irq_grp;
@@ -569,6 +573,8 @@ static int ath12k_ahb_config_ext_irq(struct ath12k_base *ab)
 
 		irq_grp->ab = ab;
 		irq_grp->grp_id = i;
+		irq_grp->irq_handler = irq_handler;
+		irq_grp->dp = dp;
 
 		irq_grp->napi_ndev = alloc_netdev_dummy(0);
 		if (!irq_grp->napi_ndev)
@@ -652,9 +658,6 @@ static int ath12k_ahb_config_irq(struct ath12k_base *ab)
 		ab->irq_num[irq_idx] = irq;
 	}
 
-	/* Configure external interrupts */
-	ret = ath12k_ahb_config_ext_irq(ab);
-
 	return ret;
 }
 
@@ -702,6 +705,7 @@ static const struct ath12k_hif_ops ath12k_ahb_hif_ops = {
 	.map_service_to_pipe = ath12k_ahb_map_service_to_pipe,
 	.power_up = ath12k_ahb_power_up,
 	.power_down = ath12k_ahb_power_down,
+	.ext_irq_setup = ath12k_ahb_config_ext_irq,
 };
 
 static irqreturn_t ath12k_userpd_irq_handler(int irq, void *data)
