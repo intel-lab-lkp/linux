@@ -12,7 +12,8 @@
 
 enum iaa_mode {
 	IAA_MODE_FIXED = 0,
-	IAA_MODE_NONE = 1,
+	IAA_MODE_DYNAMIC = 1,
+	IAA_MODE_NONE = 2,
 };
 
 struct iaa_req {
@@ -56,7 +57,7 @@ extern int iaa_comp_decompress_batch(
 #else /* CONFIG_CRYPTO_DEV_IAA_CRYPTO */
 
 enum iaa_mode {
-	IAA_MODE_NONE = 1,
+	IAA_MODE_NONE = 2,
 };
 
 struct iaa_req {};
