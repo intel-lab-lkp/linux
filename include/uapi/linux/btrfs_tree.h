@@ -876,6 +876,7 @@ struct btrfs_inode_item {
 	__le64 size;
 	__le64 nbytes;
 	__le64 block_group;
+	/* nlink in directories is fixed at 1 */
 	__le32 nlink;
 	__le32 uid;
 	__le32 gid;
