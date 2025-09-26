@@ -231,8 +231,22 @@ static struct severity {
 
 #define mc_recoverable(mcg) (((mcg) & (MCG_STATUS_RIPV|MCG_STATUS_EIPV)) == \
 				(MCG_STATUS_RIPV|MCG_STATUS_EIPV))
+static bool is_clean_pagecache(unsigned long addr)
+{
+	if (virt_addr_valid(addr)) {
+		struct page *page;
 
-static bool is_copy_from_user(struct pt_regs *regs)
+		page = virt_to_page(addr);
+		if (page) {
+			if (!PageSlab(page) && !PageAnon(page)) {
+				if (!PageDirty(page))
+					return true;
+			}
+		}
+	}
+	return false;
+}
+static bool is_copy_user(struct pt_regs *regs)
 {
 	u8 insn_buf[MAX_INSN_SIZE];
 	unsigned long addr;
@@ -264,8 +278,14 @@ static bool is_copy_from_user(struct pt_regs *regs)
 		return false;
 	}
 
-	if (fault_in_kernel_space(addr))
-		return false;
+	if (fault_in_kernel_space(addr)) {
+		if (is_clean_pagecache(addr) && !fault_in_kernel_space(regs->di)) {
+			//is copying clean pagecache to user space
+			addr = regs->di;
+		} else {
+			return false;
+		}
+	}
 
 	current->mce_vaddr = (void __user *)addr;
 
@@ -297,7 +317,7 @@ static noinstr int error_context(struct mce *m, struct pt_regs *regs)
 	/* Allow instrumentation around external facilities usage. */
 	instrumentation_begin();
 	fixup_type = ex_get_fixup_type(m->ip);
-	copy_user  = is_copy_from_user(regs);
+	copy_user  = is_copy_user(regs);
 	instrumentation_end();
 
 	if (copy_user) {
