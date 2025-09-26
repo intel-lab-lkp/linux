@@ -10,8 +10,7 @@
 #include <asm/numa.h>
 #include <acpi/acpi_numa.h>
 
-#define FAKE_NODE_MIN_SIZE	((u64)32 << 20)
-#define FAKE_NODE_MIN_HASH_MASK	(~(FAKE_NODE_MIN_SIZE - 1UL))
+#define FAKE_NODE_MIN_SIZE	SZ_32M
 
 int emu_nid_to_phys[MAX_NUMNODES];
 static char *emu_cmdline __initdata;
@@ -112,10 +111,10 @@ static int __init split_nodes_interleave(struct numa_meminfo *ei,
 	 * Calculate the number of big nodes that can be allocated as a result
 	 * of consolidating the remainder.
 	 */
-	big = ((size & ~FAKE_NODE_MIN_HASH_MASK) * nr_nodes) /
+	big = ((size & (FAKE_NODE_MIN_SIZE - 1UL)) * nr_nodes) /
 		FAKE_NODE_MIN_SIZE;
 
-	size &= FAKE_NODE_MIN_HASH_MASK;
+	size = ALIGN_DOWN(size, FAKE_NODE_MIN_SIZE);
 	if (!size) {
 		pr_err("Not enough memory for each node.  "
 			"NUMA emulation disabled.\n");
