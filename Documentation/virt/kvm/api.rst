@@ -6415,8 +6415,14 @@ guest_memfd range is not allowed (any number of memory regions can be bound to
 a single guest_memfd file, but the bound ranges must not overlap).
 
 When the capability KVM_CAP_GUEST_MEMFD_MMAP is supported, the 'flags' field
-supports GUEST_MEMFD_FLAG_MMAP.  Setting this flag on guest_memfd creation
-enables mmap() and faulting of guest_memfd memory to host userspace.
+supports GUEST_MEMFD_FLAG_MMAP and  GUEST_MEMFD_FLAG_DEFAULT_SHARED.  Setting
+the MMAP flag on guest_memfd creation enables mmap() and faulting of guest_memfd
+memory to host userspace (so long as the memory is currently shared).  Setting
+DEFAULT_SHARED makes all guest_memfd memory shared by default (versus private
+by default).  Note!  Because KVM doesn't yet support in-place private<=>shared
+conversions, DEFAULT_SHARED must be specified in order to fault memory into
+userspace page tables.  This limitation will go away when in-place conversions
+are supported.
 
 When the KVM MMU performs a PFN lookup to service a guest fault and the backing
 guest_memfd has the GUEST_MEMFD_FLAG_MMAP set, then the fault will always be

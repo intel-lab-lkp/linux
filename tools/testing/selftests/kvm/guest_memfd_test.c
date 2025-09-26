@@ -274,7 +274,7 @@ static void test_guest_memfd(unsigned long vm_type)
 	vm = vm_create_barebones_type(vm_type);
 
 	if (vm_check_cap(vm, KVM_CAP_GUEST_MEMFD_MMAP))
-		flags |= GUEST_MEMFD_FLAG_MMAP;
+		flags |= GUEST_MEMFD_FLAG_MMAP | GUEST_MEMFD_FLAG_DEFAULT_SHARED;
 
 	test_create_guest_memfd_multiple(vm);
 	test_create_guest_memfd_invalid_sizes(vm, flags, page_size);
@@ -337,7 +337,8 @@ static void test_guest_memfd_guest(void)
 		    "Default VM type should always support guest_memfd mmap()");
 
 	size = vm->page_size;
-	fd = vm_create_guest_memfd(vm, size, GUEST_MEMFD_FLAG_MMAP);
+	fd = vm_create_guest_memfd(vm, size, GUEST_MEMFD_FLAG_MMAP |
+					     GUEST_MEMFD_FLAG_DEFAULT_SHARED);
 	vm_set_user_memory_region2(vm, slot, KVM_MEM_GUEST_MEMFD, gpa, size, NULL, fd, 0);
 
 	mem = mmap(NULL, size, PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0);
