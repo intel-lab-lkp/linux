@@ -453,8 +453,6 @@
 #define AW88166_DEV_SYSST_CHECK_MAX		(10)
 #define AW88166_START_RETRIES			(5)
 #define AW88166_START_WORK_DELAY_MS		(0)
-#define FADE_TIME_MAX				100000
-#define FADE_TIME_MIN				0
 #define AW88166_CHIP_ID			(0x2066)
 #define AW88166_I2C_NAME			"aw88166"
 #define AW88166_ACF_FILE			"aw88166_acf.bin"
@@ -465,65 +463,9 @@
 			SNDRV_PCM_FMTBIT_S24_LE | \
 			SNDRV_PCM_FMTBIT_S32_LE)
 
-#define AW88166_PROFILE_EXT(xname, profile_info, profile_get, profile_set) \
-{ \
-	.iface = SNDRV_CTL_ELEM_IFACE_MIXER, \
-	.name = xname, \
-	.info = profile_info, \
-	.get = profile_get, \
-	.put = profile_set, \
-}
-
 enum {
 	AW_EF_AND_CHECK = 0,
 	AW_EF_OR_CHECK,
-};
-
-enum {
-	AW88166_DSP_FW_UPDATE_OFF = 0,
-	AW88166_DSP_FW_UPDATE_ON = 1,
-};
-
-enum {
-	AW88166_FORCE_UPDATE_OFF = 0,
-	AW88166_FORCE_UPDATE_ON = 1,
-};
-
-enum {
-	AW88166_1000_US = 1000,
-	AW88166_2000_US = 2000,
-	AW88166_3000_US = 3000,
-	AW88166_4000_US = 4000,
-};
-
-enum AW88166_DEV_STATUS {
-	AW88166_DEV_PW_OFF = 0,
-	AW88166_DEV_PW_ON,
-};
-
-enum AW88166_DEV_FW_STATUS {
-	AW88166_DEV_FW_FAILED = 0,
-	AW88166_DEV_FW_OK,
-};
-
-enum AW88166_DEV_MEMCLK {
-	AW88166_DEV_MEMCLK_OSC = 0,
-	AW88166_DEV_MEMCLK_PLL = 1,
-};
-
-enum AW88166_DEV_DSP_CFG {
-	AW88166_DEV_DSP_WORK = 0,
-	AW88166_DEV_DSP_BYPASS = 1,
-};
-
-enum {
-	AW88166_DSP_16_DATA = 0,
-	AW88166_DSP_32_DATA = 1,
-};
-
-enum {
-	AW88166_SYNC_START = 0,
-	AW88166_ASYNC_START,
 };
 
 enum {
