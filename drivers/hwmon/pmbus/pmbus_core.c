@@ -1929,6 +1929,20 @@ static const struct pmbus_sensor_attr current_attributes[] = {
 		.gbit = PB_STATUS_IOUT_OC,
 		.limit = iout_limit_attrs,
 		.nlimit = ARRAY_SIZE(iout_limit_attrs),
+#if IS_ENABLED(CONFIG_SENSORS_RAA229141)
+	}, {
+		.reg = PMBUS_VIRT_READ_ISYSIN,
+		.class = PSC_ISYS,
+		.label = "isysin",
+		.paged = true,
+		.func = PMBUS_HAVE_ISYSIN,
+	}, {
+		.reg = PMBUS_VIRT_READ_ISYSOUT,
+		.class = PSC_ISYS,
+		.label = "isysout",
+		.paged = true,
+		.func = PMBUS_HAVE_ISYSOUT,
+#endif /* CONFIG_SENSORS_RAA229141 */
 	}
 };
 
@@ -2501,6 +2515,12 @@ static const struct pmbus_class_attr_map class_attr_map[] = {
 		.class = PSC_TEMPERATURE,
 		.attr = temp_attributes,
 		.nattr = ARRAY_SIZE(temp_attributes),
+#if IS_ENABLED(CONFIG_SENSORS_RAA229141)
+	}, {
+		.class = PSC_ISYS,
+		.attr = current_attributes,
+		.nattr = ARRAY_SIZE(current_attributes),
+#endif /* CONFIG_SENSORS_RAA229141 */
 	}
 };
 

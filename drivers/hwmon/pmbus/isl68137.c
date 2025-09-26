@@ -63,6 +63,9 @@ enum chips {
 	raa228228,
 	raa229001,
 	raa229004,
++#if IS_ENABLED(CONFIG_SENSORS_RAA229141)
++	raa229141,
++#endif /* CONFIG_SENSORS_RAA229141 */
 	raa229621,
 };
 
@@ -71,6 +74,9 @@ enum variants {
 	raa_dmpvr2_1rail,
 	raa_dmpvr2_2rail,
 	raa_dmpvr2_2rail_nontc,
+#if IS_ENABLED(CONFIG_SENSORS_RAA229141)
+	raa_dmpvr2_2rail_isys,
+#endif /* CONFIG_SENSORS_RAA229141 */
 	raa_dmpvr2_3rail,
 	raa_dmpvr2_hv,
 };
@@ -174,6 +180,34 @@ static const struct attribute_group *isl68137_attribute_groups[] = {
 	NULL,
 };
 
+#if IS_ENABLED(CONFIG_SENSORS_RAA229141)
+#define RAA_READ_DMA_DATA	0xc5
+#define RAA_WRITE_DMA_ADDRESS 0xc7
+
+/* DMA address for input and output */
+static const unsigned char dma_address_in[] = { 0xD3, 0xE0 };
+static const unsigned char dma_address_out[] = { 0x42, 0xEE };
+int read_isys_route_dma(struct i2c_client *client, const char *addr)
+{
+	int ret;
+
+	ret = i2c_smbus_write_i2c_block_data(client, RAA_WRITE_DMA_ADDRESS, 2, addr);
+	if (ret < 0) {
+		dev_err(&client->dev, "Set DMA address failed for address 0x%02x 0x%02x\n",
+			addr[0], addr[1]);
+		return ret;
+	}
+	// DIRECT ISYS format 10mA/LSB
+	u8 buf[2];
+
+	ret = i2c_smbus_read_i2c_block_data(client, RAA_READ_DMA_DATA, 2, buf);
+	if (ret < 0)
+		return ret;
+	u16 value = ((u16)buf[1]<<8) | buf[0];
+	return value;
+};
+#endif /* CONFIG_SENSORS_RAA229141 */
+
 static int raa_dmpvr2_read_word_data(struct i2c_client *client, int page,
 				     int phase, int reg)
 {
@@ -183,6 +217,14 @@ static int raa_dmpvr2_read_word_data(struct i2c_client *client, int page,
 	u64 temp;
 
 	switch (reg) {
+#if IS_ENABLED(CONFIG_SENSORS_RAA229141)
+	case PMBUS_VIRT_READ_ISYSIN:
+		ret = read_isys_route_dma(client, dma_address_in);
+		break;
+	case PMBUS_VIRT_READ_ISYSOUT:
+		ret = read_isys_route_dma(client, dma_address_out);
+		break;
+#endif /* CONFIG_SENSORS_RAA229141 */
 	case PMBUS_VIRT_READ_VMON:
 		ret = pmbus_read_word_data(client, page, phase,
 					   RAA_DMPVR2_READ_VMON);
@@ -253,6 +295,12 @@ static struct pmbus_driver_info raa_dmpvr_info = {
 	.format[PSC_CURRENT_OUT] = direct,
 	.format[PSC_POWER] = direct,
 	.format[PSC_TEMPERATURE] = direct,
+#if IS_ENABLED(CONFIG_SENSORS_RAA229141)
+	.format[PSC_ISYS] = direct,
+	.m[PSC_ISYS] = 1,
+	.b[PSC_ISYS] = 0,
+	.R[PSC_ISYS] = 2,
+#endif /* CONFIG_SENSORS_RAA229141 */
 	.m[PSC_VOLTAGE_IN] = 1,
 	.b[PSC_VOLTAGE_IN] = 0,
 	.R[PSC_VOLTAGE_IN] = 2,
@@ -398,6 +446,20 @@ static int isl68137_probe(struct i2c_client *client)
 		info->read_word_data = raa_dmpvr2_read_word_data;
 		info->write_word_data = raa_dmpvr2_write_word_data;
 		break;
+#if IS_ENABLED(CONFIG_SENSORS_RAA229141)
+	case raa_dmpvr2_2rail_isys:
+		info->format[PSC_VOLTAGE_IN] = linear,
+		info->format[PSC_VOLTAGE_OUT] = linear,
+		info->format[PSC_CURRENT_IN] = linear;
+		info->format[PSC_CURRENT_OUT] = linear;
+		info->format[PSC_POWER] = linear;
+		info->format[PSC_TEMPERATURE] = linear;
+		info->func[0] |= PMBUS_HAVE_ISYSIN;
+		info->func[0] |= PMBUS_HAVE_ISYSOUT;
+		info->pages = 2;
+		info->read_word_data = raa_dmpvr2_read_word_data;
+		break;
+#endif /* CONFIG_SENSORS_RAA229141 */
 	case raa_dmpvr2_3rail:
 		info->read_word_data = raa_dmpvr2_read_word_data;
 		info->write_word_data = raa_dmpvr2_write_word_data;
@@ -466,6 +528,9 @@ static const struct i2c_device_id raa_dmpvr_id[] = {
 	{"raa228228", raa_dmpvr2_2rail_nontc},
 	{"raa229001", raa_dmpvr2_2rail},
 	{"raa229004", raa_dmpvr2_2rail},
+#if IS_ENABLED(CONFIG_SENSORS_RAA229141)
+	{"raa229141", raa_dmpvr2_2rail_isys},
+#endif /* CONFIG_SENSORS_RAA229141 */
 	{"raa229621", raa_dmpvr2_2rail},
 	{}
 };
