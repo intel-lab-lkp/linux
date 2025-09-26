@@ -199,6 +199,12 @@ static inline void sca_rx(card_t *card, port_t *port, pkt_desc __iomem *desc,
 	u32 buff;
 
 	len = readw(&desc->len);
+
+	if (unlikely(!len || len > HDLC_MAX_MRU)) {
+		dev->stats.rx_length_errors++;
+		return;
+	}
+
 	skb = dev_alloc_skb(len);
 	if (!skb) {
 		dev->stats.rx_dropped++;
