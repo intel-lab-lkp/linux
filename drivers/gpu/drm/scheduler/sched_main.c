@@ -1030,7 +1030,7 @@ EXPORT_SYMBOL(drm_sched_job_has_dependency);
  *
  * Cleans up the resources allocated with drm_sched_job_init().
  *
- * Drivers should call this from their error unwind code if @job is aborted
+ * Drivers need to call this from their error unwind code if @job is aborted
  * before drm_sched_job_arm() is called.
  *
  * drm_sched_job_arm() is a point of no return since it initializes the fences
@@ -1038,7 +1038,7 @@ EXPORT_SYMBOL(drm_sched_job_has_dependency);
  * submit it with drm_sched_entity_push_job() and cannot simply abort it by
  * calling drm_sched_job_cleanup().
  *
- * This function should be called in the &drm_sched_backend_ops.free_job callback.
+ * This function must be called in the &drm_sched_backend_ops.free_job callback.
  */
 void drm_sched_job_cleanup(struct drm_sched_job *job)
 {
