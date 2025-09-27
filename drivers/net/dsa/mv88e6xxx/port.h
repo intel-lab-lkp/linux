@@ -527,6 +527,8 @@ int mv88e6xxx_port_set_8021q_mode(struct mv88e6xxx_chip *chip, int port,
 				  u16 mode);
 int mv88e6095_port_tag_remap(struct mv88e6xxx_chip *chip, int port);
 int mv88e6390_port_tag_remap(struct mv88e6xxx_chip *chip, int port);
+int mv88e6390_port_set_ieeepmt_ingress_pcp(struct mv88e6xxx_chip *chip, int port,
+					   u8 pcp, u8 fpri, u8 qpri);
 int mv88e6xxx_port_set_egress_mode(struct mv88e6xxx_chip *chip, int port,
 				   enum mv88e6xxx_egress_mode mode);
 int mv88e6085_port_set_frame_mode(struct mv88e6xxx_chip *chip, int port,

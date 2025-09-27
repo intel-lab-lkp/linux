@@ -14,6 +14,7 @@ struct dsa_mv88e6xxx_pdata {
 	struct net_device *netdev;
 	u32 eeprom_len;
 	int irq;
+	int avb_mode;
 };
 
 #endif

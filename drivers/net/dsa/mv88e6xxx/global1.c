@@ -356,16 +356,21 @@ int mv88e6085_g1_ip_pri_map(struct mv88e6xxx_chip *chip)
 
 /* Offset 0x18: IEEE-PRI Register */
 
+int mv88e6xxx_g1_set_ieee_pri_map(struct mv88e6xxx_chip *chip, u16 map)
+{
+	return mv88e6xxx_g1_write(chip, MV88E6XXX_G1_IEEE_PRI, map);
+}
+
 int mv88e6085_g1_ieee_pri_map(struct mv88e6xxx_chip *chip)
 {
 	/* Reset the IEEE Tag priorities to defaults */
-	return mv88e6xxx_g1_write(chip, MV88E6XXX_G1_IEEE_PRI, 0xfa41);
+	return mv88e6xxx_g1_set_ieee_pri_map(chip, 0xfa41);
 }
 
 int mv88e6250_g1_ieee_pri_map(struct mv88e6xxx_chip *chip)
 {
 	/* Reset the IEEE Tag priorities to defaults */
-	return mv88e6xxx_g1_write(chip, MV88E6XXX_G1_IEEE_PRI, 0xfa50);
+	return mv88e6xxx_g1_set_ieee_pri_map(chip, 0xfa50);
 }
 
 /* Offset 0x1a: Monitor Control */

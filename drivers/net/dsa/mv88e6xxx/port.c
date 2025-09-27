@@ -1605,6 +1605,15 @@ int mv88e6390_port_tag_remap(struct mv88e6xxx_chip *chip, int port)
 	return 0;
 }
 
+int mv88e6390_port_set_ieeepmt_ingress_pcp(struct mv88e6xxx_chip *chip, int port,
+					   u8 pcp, u8 fpri, u8 qpri)
+{
+	return mv88e6xxx_port_ieeepmt_write(chip, port,
+					    MV88E6390_PORT_IEEE_PRIO_MAP_TABLE_INGRESS_PCP,
+					    pcp,
+					    (fpri | qpri << 4));
+}
+
 /* Offset 0x0E: Policy Control Register */
 
 static int

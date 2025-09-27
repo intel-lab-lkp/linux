@@ -2,7 +2,7 @@
 /*
  * Marvell 88E6xxx Switch Global (1) Registers support
  *
- * Copyright (c) 2008 Marvell Semiconductor
+ * Copyright (c) 2008-2021 Marvell Semiconductor
  *
  * Copyright (c) 2016-2017 Savoir-faire Linux Inc.
  *	Vivien Didelot <vivien.didelot@savoirfairelinux.com>
@@ -62,6 +62,7 @@
 #define MV88E6185_G1_CTL1_MAX_FRAME_1632	0x0400
 #define MV88E6185_G1_CTL1_RELOAD_EEPROM		0x0200
 #define MV88E6393X_G1_CTL1_DEVICE2_EN		0x0200
+#define MV88E6XXX_G1_CTL1_AVB_EN		0x0100
 #define MV88E6XXX_G1_CTL1_DEVICE_EN		0x0080
 #define MV88E6XXX_G1_CTL1_STATS_DONE_EN		0x0040
 #define MV88E6XXX_G1_CTL1_VTU_PROBLEM_EN	0x0020
@@ -193,6 +194,47 @@
 /* Offset 0x18: IEEE-PRI Register */
 #define MV88E6XXX_G1_IEEE_PRI	0x18
 
+/* Switches supporting 4 TX queues pack FPri to QPri mappings into a single
+ * register value.
+ *
+ * Extract QPri for a given FPri from the provided register value.
+ *
+ * @param val	register value
+ * @param fpri	frame priority
+ *
+ * @return	queue priority
+ */
+static inline u16 mv88e6352_g1_ieee_pri_get(u16 val, u8 fpri)
+{
+	u16 mask;
+
+	fpri &= 0x7;
+	fpri <<= 1;
+	mask = GENMASK(fpri + 1, fpri);
+
+	return (val & mask) >> fpri;
+}
+
+/* Add a FPri to QPri mapping to the register value argument.
+ *
+ * @param fpri	frame priority
+ * @param qpri	queue priority
+ * @param reg	register value, should be 0 on first call
+ */
+static inline void mv88e6352_g1_ieee_pri_set(u8 fpri, u8 qpri, u16 *reg)
+{
+	u16 mask;
+
+	fpri &= 0x7;
+	fpri <<= 1;
+	mask = GENMASK(fpri + 1, fpri);
+
+	*reg &= ~(mask);
+	*reg |= (qpri & 0x3) << fpri;
+}
+
+#define MV88E6390_G1_IEEE_PRI_UPDATE	0x80
+
 /* Offset 0x19: Core Tag Type */
 #define MV88E6185_G1_CORE_TAG_TYPE	0x19
 
@@ -311,6 +353,7 @@ int mv88e6390_g1_mgmt_rsvd2cpu(struct mv88e6xxx_chip *chip);
 
 int mv88e6085_g1_ip_pri_map(struct mv88e6xxx_chip *chip);
 
+int mv88e6xxx_g1_set_ieee_pri_map(struct mv88e6xxx_chip *chip, u16 map);
 int mv88e6085_g1_ieee_pri_map(struct mv88e6xxx_chip *chip);
 int mv88e6250_g1_ieee_pri_map(struct mv88e6xxx_chip *chip);
 
