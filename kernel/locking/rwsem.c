@@ -75,7 +75,17 @@
 		list_empty(&(sem)->wait_list) ? "" : "not "))	\
 			debug_locks_off();			\
 	} while (0)
+
+/*
+ * list_invalid - check whether sem->waitlist is invalid
+ * @head: the list to test.
+ */
+static inline int rwsem_waitlist_invalid(const struct list_head *head)
+{
+	return (unsigned long) READ_ONCE(head->next) < PAGE_OFFSET;
+}
 #else
+# define rwsem_waitlist_invalid(sem)
 # define DEBUG_RWSEMS_WARN_ON(c, sem)
 #endif
 
@@ -1034,6 +1044,9 @@ queue:
 	waiter.timeout = jiffies + RWSEM_WAIT_TIMEOUT;
 	waiter.handoff_set = false;
 
+	/* In case the rwsem is uninitiated, add more warning */
+	DEBUG_RWSEMS_WARN_ON(rwsem_waitlist_invalid(&sem->wait_list), sem);
+
 	raw_spin_lock_irq(&sem->wait_lock);
 	if (list_empty(&sem->wait_list)) {
 		/*
@@ -1127,6 +1140,9 @@ rwsem_down_write_slowpath(struct rw_semaphore *sem, int state)
 	waiter.type = RWSEM_WAITING_FOR_WRITE;
 	waiter.timeout = jiffies + RWSEM_WAIT_TIMEOUT;
 	waiter.handoff_set = false;
+
+	/* In case the rwsem is uninitiated, add more warning */
+	DEBUG_RWSEMS_WARN_ON(rwsem_waitlist_invalid(&sem->wait_list), sem);
 
 	raw_spin_lock_irq(&sem->wait_lock);
 	rwsem_add_waiter(sem, &waiter);
