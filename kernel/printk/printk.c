@@ -3175,7 +3175,8 @@ static inline void printk_kthreads_check_locked(void) { }
  * console_lock, in which case the caller is no longer holding the
  * console_lock. Otherwise it is set to false.
  *
- * @any_usable will be set to true if there are any usable consoles.
+ * @any_usable will be set to true if there are any usable consoles
+ * in this context.
  *
  * Returns true when there was at least one usable console and a record was
  * flushed. A returned false indicates there were no records to flush for any
@@ -3193,6 +3194,7 @@ static bool console_flush_one_record(bool do_cond_resched, u64 *next_seq, bool *
 	bool any_progress;
 	int cookie;
 
+	*any_usable = false;
 	any_progress = false;
 
 	printk_get_console_flush_type(&ft);
@@ -3229,7 +3231,7 @@ static bool console_flush_one_record(bool do_cond_resched, u64 *next_seq, bool *
 		 * is already released.
 		 */
 		if (*handover)
-			return false;
+			goto unusable;
 
 		/* Track the next of the highest seq flushed. */
 		if (printk_seq > *next_seq)
@@ -3241,7 +3243,7 @@ static bool console_flush_one_record(bool do_cond_resched, u64 *next_seq, bool *
 
 		/* Allow panic_cpu to take over the consoles safely. */
 		if (other_cpu_in_panic())
-			goto abandon;
+			goto unusable_srcu;
 
 		if (do_cond_resched)
 			cond_resched();
@@ -3250,8 +3252,10 @@ static bool console_flush_one_record(bool do_cond_resched, u64 *next_seq, bool *
 
 	return any_progress;
 
-abandon:
+unusable_srcu:
 	console_srcu_read_unlock(cookie);
+unusable:
+	*any_usable = false;
 	return false;
 }
 
@@ -3280,21 +3284,16 @@ abandon:
  */
 static bool console_flush_all(bool do_cond_resched, u64 *next_seq, bool *handover)
 {
-	bool any_usable = false;
+	bool any_usable;
 	bool any_progress;
 
 	*next_seq = 0;
 	*handover = false;
 
 	do {
-		any_progress = console_flush_one_record(do_cond_resched, next_seq, handover,
-							&any_usable);
+		any_progress = console_flush_one_record(do_cond_resched, next_seq,
+							handover, &any_usable);
 
-		if (*handover)
-			return false;
-
-		if (other_cpu_in_panic())
-			return false;
 	} while (any_progress);
 
 	return any_usable;
