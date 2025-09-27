@@ -833,6 +833,8 @@ struct mv88e6xxx_tc_ops {
 	int (*tc_enable)(struct mv88e6xxx_chip *chip,
 			 const struct mv88e6xxx_avb_tc_policy *policy);
 	int (*tc_disable)(struct mv88e6xxx_chip *chip);
+	int (*set_port_cbs_qopt)(struct mv88e6xxx_chip *chip, int port,
+				 const struct tc_cbs_qopt_offload *cbs_qopt);
 };
 
 static inline bool mv88e6xxx_has_stu(struct mv88e6xxx_chip *chip)

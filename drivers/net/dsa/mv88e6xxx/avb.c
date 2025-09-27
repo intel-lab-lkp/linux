@@ -107,7 +107,16 @@ static int mv88e6xxx_tc_disable(struct mv88e6xxx_chip *chip)
 	return chip->info->ops->tc_ops->tc_disable(chip);
 }
 
-/* MQPRIO helpers */
+/* MQPRIO and CBS helpers */
+
+int mv88e6xxx_qav_set_port_cbs_qopt(struct mv88e6xxx_chip *chip, int port,
+				    const struct tc_cbs_qopt_offload *cbs_qopt)
+{
+	if (!chip->info->ops->tc_ops->set_port_cbs_qopt)
+		return -EOPNOTSUPP;
+
+	return chip->info->ops->tc_ops->set_port_cbs_qopt(chip, port, cbs_qopt);
+}
 
 /* Set the AVB global policy limit registers. Caller must acquired register
  * lock.
@@ -330,6 +339,26 @@ int mv88e6xxx_avb_tc_disable(struct mv88e6xxx_chip *chip)
 	return 0;
 }
 
+static int mv88e6xxx_qav_set_port_config(struct mv88e6xxx_chip *chip, int port,
+					 int queue, u16 rate, u16 hilimit)
+{
+	int err;
+
+	err = mv88e6xxx_port_qav_write(chip, port,
+				       MV88E6XXX_PORT_QAV_CFG_RATE(queue),
+				       rate);
+	if (err)
+		return err;
+
+	err = mv88e6xxx_port_qav_write(chip, port,
+				       MV88E6XXX_PORT_QAV_CFG_HI_LIMIT(queue),
+				       hilimit);
+	if (err)
+		return err;
+
+	return 0;
+}
+
 /* Assign FPri to QPri mappings for each traffic class
  *
  * @param chip		Marvell switch chip instance
@@ -456,14 +485,77 @@ static int mv88e6352_tc_disable(struct mv88e6xxx_chip *chip)
 	return 0;
 }
 
+static int mv88e6341_set_port_cbs_qopt(struct mv88e6xxx_chip *chip, int port,
+				       const struct tc_cbs_qopt_offload *cbs_qopt)
+{
+	u16 rate, hilimit;
+
+	if (cbs_qopt->enable) {
+		rate = DIV_ROUND_UP(cbs_qopt->idleslope, MV88E6341_AVB_CFG_RATE_UNITS);
+		rate = clamp_t(u16, rate, 1, MV88E6341_AVB_CFG_RATE_MASK);
+
+		hilimit = cbs_qopt->hicredit;
+		hilimit = clamp_t(u16, hilimit, 1, MV88E6341_AVB_CFG_HI_LIMIT_MASK);
+	} else {
+		rate = 0;
+		hilimit = MV88E6341_AVB_CFG_HI_LIMIT_MASK;
+	}
+
+	return mv88e6xxx_qav_set_port_config(chip, port, cbs_qopt->queue,
+					     rate, hilimit);
+}
+
 const struct mv88e6xxx_tc_ops mv88e6341_tc_ops = {
 	.tc_enable		= mv88e6352_tc_enable,
 	.tc_disable		= mv88e6352_tc_disable,
+	.set_port_cbs_qopt	= mv88e6341_set_port_cbs_qopt,
 };
+
+static int mv88e6352_set_port_cbs_qopt(struct mv88e6xxx_chip *chip, int port,
+				       const struct tc_cbs_qopt_offload *cbs_qopt)
+{
+	u16 rate, hilimit;
+	u16 cfg;
+	int err;
+
+	if (cbs_qopt->enable) {
+		rate = DIV_ROUND_UP(cbs_qopt->idleslope, MV88E6352_AVB_CFG_RATE_UNITS);
+		rate = clamp_t(u16, rate, 1, MV88E6352_AVB_CFG_RATE_MASK);
+
+		hilimit = cbs_qopt->hicredit;
+		hilimit = clamp_t(u16, hilimit, 1, MV88E6352_AVB_CFG_HI_LIMIT_MASK);
+	} else {
+		rate = 0;
+		hilimit = MV88E6352_AVB_CFG_HI_LIMIT_MASK;
+	}
+
+	err = mv88e6xxx_qav_set_port_config(chip, port, cbs_qopt->queue,
+					    rate, hilimit);
+	if (err)
+		return err;
+
+	/* Set undocumented enable register */
+
+	err = mv88e6xxx_port_qav_read(chip, port, MV88E6352_PORT_QAV_CFG, &cfg, 1);
+	if (err)
+		return err;
+
+	if (cbs_qopt->enable)
+		cfg |= MV88E6352_PORT_QAV_CFG_ENABLE;
+	else
+		cfg &= ~(MV88E6352_PORT_QAV_CFG_ENABLE);
+
+	err = mv88e6xxx_port_qav_write(chip, port, MV88E6352_PORT_QAV_CFG, cfg);
+	if (err)
+		return err;
+
+	return 0;
+}
 
 const struct mv88e6xxx_tc_ops mv88e6352_tc_ops = {
 	.tc_enable		= mv88e6352_tc_enable,
 	.tc_disable		= mv88e6352_tc_disable,
+	.set_port_cbs_qopt	= mv88e6352_set_port_cbs_qopt,
 };
 
 static inline u16 mv88e6390_avb_pri_map_to_reg(const struct mv88e6xxx_avb_priority_map map[])
@@ -544,7 +636,28 @@ static int mv88e6390_tc_disable(struct mv88e6xxx_chip *chip)
 	return err;
 }
 
+static int mv88e6390_set_port_cbs_qopt(struct mv88e6xxx_chip *chip, int port,
+				       const struct tc_cbs_qopt_offload *cbs_qopt)
+{
+	u16 rate, hilimit;
+
+	if (cbs_qopt->enable) {
+		rate = DIV_ROUND_UP(cbs_qopt->idleslope, MV88E6390_AVB_CFG_RATE_UNITS);
+		rate = clamp_t(u16, rate, 1, MV88E6390_AVB_CFG_RATE_MASK);
+
+		hilimit = cbs_qopt->hicredit;
+		hilimit = clamp_t(u16, hilimit, 1, MV88E6390_AVB_CFG_HI_LIMIT_MASK);
+	} else {
+		rate = 0;
+		hilimit = MV88E6390_AVB_CFG_HI_LIMIT_MASK;
+	}
+
+	return mv88e6xxx_qav_set_port_config(chip, port, cbs_qopt->queue,
+					     rate, hilimit);
+}
+
 const struct mv88e6xxx_tc_ops mv88e6390_tc_ops = {
 	.tc_enable		= mv88e6390_tc_enable,
 	.tc_disable		= mv88e6390_tc_disable,
+	.set_port_cbs_qopt	= mv88e6390_set_port_cbs_qopt,
 };

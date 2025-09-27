@@ -7003,6 +7003,31 @@ err_reset_tc:
 	return err;
 }
 
+static int mv88e6xxx_qos_port_cbs_set(struct dsa_switch *ds, int port,
+				      struct tc_cbs_qopt_offload *cbs_qopt)
+{
+	struct mv88e6xxx_chip *chip = ds->priv;
+	int err;
+
+	if (cbs_qopt->queue >= chip->info->num_tx_queues) {
+		dev_info(ds->dev, "p%d: invalid AVB queue %d\n", port, cbs_qopt->queue);
+		return -EINVAL;
+	}
+
+	mutex_lock(&chip->reg_lock);
+
+	err = mv88e6xxx_qav_set_port_cbs_qopt(chip, port, cbs_qopt);
+
+	mutex_unlock(&chip->reg_lock);
+
+	if (err) {
+		dev_info(ds->dev, "p%d: failed to %s AVB CBS policy: %d\n",
+			 port, cbs_qopt->enable ? "enable" : "disable", err);
+	}
+
+	return err;
+}
+
 static int mv88e6xxx_port_setup_tc(struct dsa_switch *ds, int port,
 				   enum tc_setup_type type,
 				   void *type_data)
@@ -7017,6 +7042,8 @@ static int mv88e6xxx_port_setup_tc(struct dsa_switch *ds, int port,
 		return mv88e6xxx_qos_query_caps(type_data);
 	case TC_SETUP_QDISC_MQPRIO:
 		return mv88e6xxx_qos_port_mqprio(ds, port, type_data);
+	case TC_SETUP_QDISC_CBS:
+		return mv88e6xxx_qos_port_cbs_set(ds, port, type_data);
 	default:
 		return -EOPNOTSUPP;
 	}

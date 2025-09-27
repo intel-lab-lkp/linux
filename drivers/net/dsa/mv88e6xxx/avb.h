@@ -94,6 +94,9 @@
 #define MV88E6XXX_AVB_CFG_OUI_HI		0x0C
 #define MV88E6XXX_AVB_CFG_OUI_LO		0x0D
 
+#define MV88E6XXX_PORT_QAV_CFG_RATE(queue)	(((queue) & 0x7) << 1)
+#define MV88E6XXX_PORT_QAV_CFG_HI_LIMIT(queue)	((((queue) & 0x7) << 1) + 1)
+
 /* 6352 Family AVB Global Config (4 TX queues) */
 
 #define MV88E6352_AVB_CFG_AVB_HI_FPRI_GET(p)	MV88E6XXX_AVB_CFG_AVB_HI_FPRI_GET(p)
@@ -110,6 +113,18 @@
 #define MV88E6352_AVB_CFG_AVB_LO_QPRI_GET(p)	FIELD_GET(MV88E6352_AVB_CFG_AVB_LO_QPRI_MASK, p)
 #define MV88E6352_AVB_CFG_AVB_LO_QPRI_SET(p)	FIELD_PREP(MV88E6352_AVB_CFG_AVB_LO_QPRI_MASK, p)
 
+#define MV88E6352_AVB_CFG_RATE_UNITS		32 /* 32Kbps */
+#define MV88E6352_AVB_CFG_RATE_MASK		GENMASK(14, 0) /* 1Gbps */
+#define MV88E6352_AVB_CFG_HI_LIMIT_MASK		GENMASK(14, 0) /* 32k */
+
+#define MV88E6352_PORT_QAV_CFG			0x08
+#define MV88E6352_PORT_QAV_CFG_ENABLE		0x8000
+
+/* 6341 Family AVB Global Config (4 TX queues) */
+#define MV88E6341_AVB_CFG_RATE_UNITS		64 /* 64Kbps */
+#define MV88E6341_AVB_CFG_RATE_MASK		GENMASK(15, 0) /* 4Gbps */
+#define MV88E6341_AVB_CFG_HI_LIMIT_MASK		GENMASK(13, 0) /* 16k */
+
 /* 6390 Family AVB Global Config (8 TX queues) */
 
 #define MV88E6390_AVB_CFG_AVB_HI_FPRI_GET(p)	MV88E6XXX_AVB_CFG_AVB_HI_FPRI_GET(p)
@@ -125,6 +140,10 @@
 #define MV88E6390_AVB_CFG_AVB_LO_QPRI_MASK	GENMASK(2, 0)
 #define MV88E6390_AVB_CFG_AVB_LO_QPRI_GET(p)	FIELD_GET(MV88E6390_AVB_CFG_AVB_LO_QPRI_MASK, p)
 #define MV88E6390_AVB_CFG_AVB_LO_QPRI_SET(p)	FIELD_PREP(MV88E6390_AVB_CFG_AVB_LO_QPRI_MASK, p)
+
+#define MV88E6390_AVB_CFG_RATE_UNITS		64 /* 64Kbps */
+#define MV88E6390_AVB_CFG_RATE_MASK		GENMASK(15, 0) /* 4Gbps */
+#define MV88E6390_AVB_CFG_HI_LIMIT_MASK		GENMASK(13, 0) /* 16k */
 
 #define MV88E6352_AVB_QUEUE_MIN(tc)		(tc)
 #define MV88E6352_AVB_QUEUE_MAX(tc)		((tc) + 1)
@@ -193,6 +212,20 @@ int mv88e6xxx_avb_tc_enable(struct mv88e6xxx_chip *chip,
  * @return		0 on success, or a negative error value otherwise
  */
 int mv88e6xxx_avb_tc_disable(struct mv88e6xxx_chip *chip);
+
+struct tc_cbs_qopt_offload;
+
+/* Set AVB credit based shaper policy. Caller must acquire register lock.
+ *
+ * @param chip		Marvell switch chip instance
+ * @param port		Switch port
+ * @param cbs_qopt	CBS policy to apply
+ *
+ * @return		0 on success, or a negative error value otherwise
+ */
+int mv88e6xxx_qav_set_port_cbs_qopt(struct mv88e6xxx_chip *chip,
+				    int port,
+				    const struct tc_cbs_qopt_offload *cbs_qopt);
 
 /* The MAAP address range is 91:E0:F0:00:00:00 thru 91:E0:F0:00:FF:FF
  * (IEEE 1722 Annex D)
