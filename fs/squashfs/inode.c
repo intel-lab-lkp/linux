@@ -399,6 +399,12 @@ int squashfs_read_inode(struct inode *inode, long long ino)
 		return -EINVAL;
 	}
 
+	if (unlikely(inode->i_size < 0)) {
+		ERROR("Negative i_size %lld inode 0x%llx\n",
+			inode->i_size, ino);
+		return -EINVAL;
+	}
+
 	if (xattr_id != SQUASHFS_INVALID_XATTR && msblk->xattr_id_table) {
 		err = squashfs_xattr_lookup(sb, xattr_id,
 					&squashfs_i(inode)->xattr_count,
