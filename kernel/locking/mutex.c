@@ -574,6 +574,8 @@ __mutex_lock_common(struct mutex *lock, unsigned int state, unsigned int subclas
 
 	might_sleep();
 
+	/* In case the mutex is uninitiated, add more warning */
+	MUTEX_WARN_ON(mutex_waitlist_invalid(&lock->wait_list));
 	MUTEX_WARN_ON(lock->magic != lock);
 
 	ww = container_of(lock, struct ww_mutex, base);
