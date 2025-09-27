@@ -3668,17 +3668,29 @@ static bool legacy_kthread_should_wakeup(void)
 
 static int legacy_kthread_func(void *unused)
 {
-	for (;;) {
-		wait_event_interruptible(legacy_wait, legacy_kthread_should_wakeup());
+	bool any_progress;
+
+wait_for_event:
+	wait_event_interruptible(legacy_wait,
+				 legacy_kthread_should_wakeup());
+
+	do {
+		bool any_usable;
+		bool handover = false;
+		u64 next_seq;
 
 		if (kthread_should_stop())
-			break;
+			return 0;
 
 		console_lock();
-		__console_flush_and_unlock();
-	}
+		any_progress = console_flush_one_record(true, &next_seq,
+						&handover, &any_usable);
+		if (!handover)
+			__console_unlock();
 
-	return 0;
+	} while (any_progress);
+
+	goto wait_for_event;
 }
 
 static bool legacy_kthread_create(void)
