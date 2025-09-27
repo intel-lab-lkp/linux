@@ -57,6 +57,9 @@ struct iommu_flush_ops {
  * @oas:           Output address (paddr) size, in bits.
  * @coherent_walk  A flag to indicate whether or not page table walks made
  *                 by the IOMMU are coherent with the CPU caches.
+ * @defer_sync_pte A flag to indicate whether pte sync operations for leaf
+ *                 entries shall be skipped during calls to .map_pages. A
+ *                 subsequent call to .iotlb_sync_map is required.
  * @tlb:           TLB management callbacks for this set of tables.
  * @iommu_dev:     The device representing the DMA configuration for the
  *                 page table walker.
@@ -110,6 +113,7 @@ struct io_pgtable_cfg {
 	unsigned int			ias;
 	unsigned int			oas;
 	bool				coherent_walk;
+	bool				defer_sync_pte;
 	const struct iommu_flush_ops	*tlb;
 	struct device			*iommu_dev;
 
@@ -204,6 +208,7 @@ struct arm_lpae_io_pgtable_walk_data {
  * @unmap_pages:  Unmap a range of virtually contiguous pages of the same size.
  * @iova_to_phys: Translate iova to physical address.
  * @pgtable_walk: (optional) Perform a page table walk for a given iova.
+ * @iotlb_sync_map: Sync ptes (Required for non-coherent page table walks)
  *
  * These functions map directly onto the iommu_ops member functions with
  * the same names.
@@ -222,6 +227,8 @@ struct io_pgtable_ops {
 				    unsigned long iova, size_t size,
 				    unsigned long flags,
 				    struct iommu_dirty_bitmap *dirty);
+	int (*iotlb_sync_map)(struct io_pgtable_ops *ops, unsigned long iova,
+			      size_t size);
 };
 
 /**

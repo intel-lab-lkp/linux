@@ -353,7 +353,7 @@ static void __arm_lpae_init_pte(struct arm_lpae_io_pgtable *data,
 	for (i = 0; i < num_entries; i++)
 		ptep[i] = pte | paddr_to_iopte(paddr + i * sz, data);
 
-	if (!cfg->coherent_walk)
+	if (!cfg->coherent_walk && !cfg->defer_sync_pte)
 		__arm_lpae_sync_pte(ptep, num_entries, cfg);
 }
 
@@ -580,6 +580,69 @@ static int arm_lpae_map_pages(struct io_pgtable_ops *ops, unsigned long iova,
 	wmb();
 
 	return ret;
+}
+
+static int __arm_lpae_iotlb_sync_map(struct arm_lpae_io_pgtable *data, unsigned long iova,
+			      size_t size, int lvl, arm_lpae_iopte *ptep)
+{
+	struct io_pgtable *iop = &data->iop;
+	size_t block_size = ARM_LPAE_BLOCK_SIZE(lvl, data);
+	int ret = 0, num_entries, max_entries;
+	unsigned long iova_offset, sync_idx_start, sync_idx_end;
+	int i, shift, synced_entries = 0;
+
+	shift = (ARM_LPAE_LVL_SHIFT(lvl - 1, data) + ARM_LPAE_PGD_IDX(lvl - 1, data));
+	iova_offset = iova & ((1ULL << shift) - 1);
+	sync_idx_start = ARM_LPAE_LVL_IDX(iova, lvl, data);
+	sync_idx_end = (iova_offset + size + block_size - ARM_LPAE_GRANULE(data)) >>
+		ARM_LPAE_LVL_SHIFT(lvl, data);
+	max_entries = arm_lpae_max_entries(sync_idx_start, data);
+	num_entries = min_t(unsigned long, sync_idx_end - sync_idx_start, max_entries);
+	ptep += sync_idx_start;
+
+	if (lvl < (ARM_LPAE_MAX_LEVELS - 1)) {
+		for (i = 0; i < num_entries; i++) {
+			arm_lpae_iopte pte = READ_ONCE(ptep[i]);
+			unsigned long synced;
+
+			WARN_ON(!pte);
+
+			if (iopte_type(pte) == ARM_LPAE_PTE_TYPE_TABLE) {
+				int n = i - synced_entries;
+
+				if (n) {
+					__arm_lpae_sync_pte(&ptep[synced_entries], n, &iop->cfg);
+					synced_entries += n;
+				}
+				ret = __arm_lpae_iotlb_sync_map(data, iova, size, lvl + 1,
+								iopte_deref(pte, data));
+				synced_entries++;
+			}
+			synced = block_size - (iova & (block_size - 1));
+			size -= synced;
+			iova += synced;
+		}
+	}
+
+	if (synced_entries != num_entries)
+		__arm_lpae_sync_pte(&ptep[synced_entries], num_entries - synced_entries, &iop->cfg);
+
+	return ret;
+}
+
+static int arm_lpae_iotlb_sync_map(struct io_pgtable_ops *ops, unsigned long iova,
+			    size_t size)
+{
+	struct arm_lpae_io_pgtable *data = io_pgtable_ops_to_data(ops);
+	struct io_pgtable_cfg *cfg = &data->iop.cfg;
+	arm_lpae_iopte *ptep = data->pgd;
+	int lvl = data->start_level;
+	long iaext = (s64)iova >> cfg->ias;
+
+	WARN_ON(!size);
+	WARN_ON(iaext);
+
+	return __arm_lpae_iotlb_sync_map(data, iova, size, lvl, ptep);
 }
 
 static void __arm_lpae_free_pgtable(struct arm_lpae_io_pgtable *data, int lvl,
@@ -949,6 +1012,7 @@ arm_lpae_alloc_pgtable(struct io_pgtable_cfg *cfg)
 	data->iop.ops = (struct io_pgtable_ops) {
 		.map_pages	= arm_lpae_map_pages,
 		.unmap_pages	= arm_lpae_unmap_pages,
+		.iotlb_sync_map	= cfg->coherent_walk ? NULL : arm_lpae_iotlb_sync_map,
 		.iova_to_phys	= arm_lpae_iova_to_phys,
 		.read_and_clear_dirty = arm_lpae_read_and_clear_dirty,
 		.pgtable_walk	= arm_lpae_pgtable_walk,
