@@ -708,7 +708,7 @@ void tmigr_cpu_activate(void)
 /*
  * Returns true, if there is nothing to be propagated to the next level
  *
- * @data->firstexp is set to expiry of first gobal event of the (top level of
+ * @data->firstexp is set to expiry of first global event of the (top level of
  * the) hierarchy, but only when hierarchy is completely idle.
  *
  * The child and group states need to be read under the lock, to prevent a race
@@ -1621,7 +1621,7 @@ static void tmigr_connect_child_parent(struct tmigr_group *child,
 	 *   created group (parent).
 	 *
 	 * * It is ensured that the child is active, as this setup path is
-	 *   executed in hotplug prepare callback. This is exectued by an
+	 *   executed in hotplug prepare callback. This is executed by an
 	 *   already connected and !idle CPU. Even if all other CPUs go idle,
 	 *   the CPU executing the setup will be responsible up to current top
 	 *   level group. And the next time it goes inactive, it will release
