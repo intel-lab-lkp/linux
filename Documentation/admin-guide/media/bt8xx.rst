@@ -19,7 +19,7 @@ This class of cards has a bt878a as the PCI interface, and require the bttv
 driver for accessing the i2c bus and the gpio pins of the bt8xx chipset.
 
 Please see Documentation/admin-guide/media/bttv-cardlist.rst for a complete
-list of Cards based on the Conexant Bt8xx PCI bridge supported by the
+list of Cards based on the Connexant Bt8xx PCI bridge supported by the
 Linux Kernel.
 
 In order to be able to compile the kernel, some config options should be
