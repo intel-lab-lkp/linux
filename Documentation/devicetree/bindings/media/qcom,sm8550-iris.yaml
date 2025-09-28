@@ -75,7 +75,7 @@ properties:
       - const: core
 
   iommus:
-    maxItems: 2
+    maxItems: 1
 
   dma-coherent: true
 
@@ -87,6 +87,20 @@ properties:
   opp-table:
     type: object
 
+  iommu-map-masked:
+    $ref: /schemas/types.yaml#/definitions/uint32-array
+    description:
+      Maps function IDs to IOMMU specifiers for multi-functional devices,
+      and each function requires its own address space/translation context.
+
+      Each entry contains:-
+        a) Function - ID Identifier for the device function.
+        b) IOMMU phandle - Identifier for iommu.
+        c) Arguments - arguments representing iommu handle.
+
+    items:
+      maxItems: 4
+
 required:
   - compatible
   - power-domain-names
@@ -96,6 +110,7 @@ required:
   - reset-names
   - iommus
   - dma-coherent
+  - iommu-map-masked
 
 allOf:
   - if:
@@ -115,6 +130,16 @@ allOf:
           maxItems: 1
         reset-names:
           maxItems: 1
+
+  - if:
+      properties:
+        iommu-map-masked: true
+    then:
+      not:
+        anyOf:
+          - required: [iommu-map]
+    description:
+      iommu-map-masked is mutually exclusive with iommu-map property.
 
 unevaluatedProperties: false
 
@@ -156,8 +181,8 @@ examples:
         resets = <&gcc GCC_VIDEO_AXI0_CLK_ARES>;
         reset-names = "bus";
 
-        iommus = <&apps_smmu 0x1940 0x0000>,
-                 <&apps_smmu 0x1947 0x0000>;
+        iommus = <&apps_smmu 0x1940 0x0000>;
+        iommu-map-masked = <0x0 &apps_smmu 0x1947 0x0000>;
         dma-coherent;
 
         operating-points-v2 = <&iris_opp_table>;
