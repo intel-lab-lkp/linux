@@ -418,6 +418,10 @@ static int ext4_valid_extent_entries(struct inode *inode,
 
 			/* Check for overlapping extents */
 			lblock = le32_to_cpu(ext->ee_block);
+			ext4_lblk_t len = ext4_ext_get_actual_len(ext);
+			ext4_lblk_t end = lblock + len - 1;
+			if (end < lblock)
+				return 0;
 			if (lblock < cur) {
 				*pblk = ext4_ext_pblock(ext);
 				return 0;
