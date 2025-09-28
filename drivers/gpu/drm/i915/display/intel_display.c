@@ -5097,7 +5097,7 @@ pipe_config_cx0pll_mismatch(struct drm_printer *p, bool fastset,
 	intel_cx0pll_dump_hw_state(display, b);
 }
 
-static bool allow_vblank_delay_fastset(const struct intel_crtc_state *old_crtc_state)
+static bool allow_vblank_delay_fastset_lrr(const struct intel_crtc_state *old_crtc_state)
 {
 	struct intel_display *display = to_intel_display(old_crtc_state);
 
@@ -5242,7 +5242,7 @@ intel_pipe_config_compare(const struct intel_crtc_state *current_config,
 	PIPE_CONF_CHECK_I(name.crtc_hsync_start); \
 	PIPE_CONF_CHECK_I(name.crtc_hsync_end); \
 	PIPE_CONF_CHECK_I(name.crtc_vdisplay); \
-	if (!fastset || !allow_vblank_delay_fastset(current_config)) \
+	if (!fastset || !allow_vblank_delay_fastset_lrr(current_config)) \
 		PIPE_CONF_CHECK_I(name.crtc_vblank_start); \
 	PIPE_CONF_CHECK_I(name.crtc_vsync_start); \
 	PIPE_CONF_CHECK_I(name.crtc_vsync_end); \
@@ -5851,7 +5851,7 @@ static void intel_crtc_check_fastset(const struct intel_crtc_state *old_crtc_sta
 		drm_dbg_kms(display->drm, "[CRTC:%d:%s] fastset requirement not met, forcing full modeset\n",
 			    crtc->base.base.id, crtc->base.name);
 	} else {
-		if (allow_vblank_delay_fastset(old_crtc_state))
+		if (allow_vblank_delay_fastset_lrr(old_crtc_state))
 			new_crtc_state->update_lrr = true;
 		new_crtc_state->uapi.mode_changed = false;
 	}
