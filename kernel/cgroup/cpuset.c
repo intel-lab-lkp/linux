@@ -1873,6 +1873,7 @@ static int local_partition_enable(struct cpuset *cs,
 {
 	struct cpuset *parent = parent_cs(cs);
 	enum prs_errcode part_error;
+	bool cpumask_updated = false;
 
 	lockdep_assert_held(&cpuset_mutex);
 	WARN_ON_ONCE(is_remote_partition(cs));	/* For local partition only */
@@ -1899,22 +1900,14 @@ static int local_partition_enable(struct cpuset *cs,
 	if (part_error)
 		return part_error;
 
-	/*
-	 * This function will only be called when all the preliminary
-	 * checks have passed. At this point, the following condition
-	 * should hold.
-	 *
-	 * (cs->effective_xcpus & cpu_active_mask) ⊆ parent->effective_cpus
-	 *
-	 * Warn if it is not the case.
-	 * addmask is used as temporary variable.
-	 */
-	cpumask_and(tmp->addmask, tmp->new_cpus, cpu_active_mask);
-	WARN_ON_ONCE(!cpumask_subset(tmp->addmask, parent->effective_cpus));
+	cpumask_updated = cpumask_andnot(tmp->addmask, tmp->new_cpus,
+					 parent->effective_cpus);
 	partition_enable(cs, parent, new_prs, tmp->new_cpus);
 
-	cpuset_update_tasks_cpumask(parent, tmp->addmask);
-	update_sibling_cpumasks(parent, cs, tmp);
+	if (cpumask_updated) {
+		cpuset_update_tasks_cpumask(parent, tmp->addmask);
+		update_sibling_cpumasks(parent, cs, tmp);
+	}
 	return 0;
 }
 
@@ -2902,7 +2895,6 @@ static int update_prstate(struct cpuset *cs, int new_prs)
 	int err = PERR_NONE, old_prs = cs->partition_root_state;
 	struct cpuset *parent = parent_cs(cs);
 	struct tmpmasks tmpmask;
-	bool isolcpus_updated = false;
 
 	if (old_prs == new_prs)
 		return 0;
@@ -2920,7 +2912,7 @@ static int update_prstate(struct cpuset *cs, int new_prs)
 	if (err)
 		goto out;
 
-	if (!old_prs) {
+	if (new_prs > 0) {
 		/*
 		 * cpus_allowed and exclusive_cpus cannot be both empty.
 		 */
@@ -2950,12 +2942,6 @@ static int update_prstate(struct cpuset *cs, int new_prs)
 			err = local_partition_enable(cs, new_prs, &tmpmask);
 		else
 			err = remote_partition_enable(cs, new_prs, &tmpmask);
-	} else if (old_prs && new_prs) {
-		/*
-		 * A change in load balance state only, no change in cpumasks.
-		 * Need to update isolated_cpus.
-		 */
-		isolcpus_updated = true;
 	} else {
 		/*
 		 * Switching back to member is always allowed even if it
@@ -2985,16 +2971,13 @@ out:
 	WRITE_ONCE(cs->prs_err, err);
 	if (!is_partition_valid(cs))
 		reset_partition_data(cs);
-	else if (isolcpus_updated)
-		isolated_cpus_update(old_prs, new_prs, cs->effective_xcpus);
 	spin_unlock_irq(&callback_lock);
-	update_unbound_workqueue_cpumask(isolcpus_updated);
 
 	/* Force update if switching back to member & update effective_xcpus */
 	update_cpumasks_hier(cs, &tmpmask, !new_prs);
 
 	/* A newly created partition must have effective_xcpus set */
-	WARN_ON_ONCE(!old_prs && (new_prs > 0)
+	WARN_ON_ONCE(!old_prs && (cs->partition_root_state > 0)
 			      && cpumask_empty(cs->effective_xcpus));
 
 	/* Update sched domains and load balance flag */
