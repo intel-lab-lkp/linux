@@ -2053,6 +2053,9 @@ int of_find_last_cache_level(unsigned int cpu)
  * @map_mask_name: optional property name of the mask to use.
  * @target: optional pointer to a target device node.
  * @id_out: optional pointer to receive the translated ID.
+ * @dev: TODO
+ * @data: optional param that to be passed to fn.
+ * @fn: custom function to get implementation defined platform/device id.
  *
  * Look at the documentation of of_map_id().
  *
@@ -2060,10 +2063,13 @@ int of_find_last_cache_level(unsigned int cpu)
  */
 int of_map_id_and_mask(const struct device_node *np, u32 id,
 	       const char *map_name, const char *map_mask_name,
-	       struct device_node **target, u32 *id_out)
+	       struct device_node **target, u32 *id_out,
+	       struct device *dev, void *data,
+	       int (*fn)(const __be32 *map, u32 id, struct device *dev, void *data))
 {
 	u32 map_mask, masked_id;
 	int map_len;
+	int ret;
 	const __be32 *map = NULL;
 
 	if (!np || !map_name || (!target && !id_out))
@@ -2109,6 +2115,13 @@ int of_map_id_and_mask(const struct device_node *np, u32 id,
 			return -EFAULT;
 		}
 
+		if (fn) {
+			ret = fn(map, id, dev, data);
+			if (ret != -EAGAIN)
+				break;
+			continue;
+		}
+
 		if (masked_id < id_base || masked_id >= id_base + id_len)
 			continue;
 
@@ -2135,12 +2148,16 @@ int of_map_id_and_mask(const struct device_node *np, u32 id,
 		return 0;
 	}
 
+	if (fn)
+		return ret;
+
 	pr_info("%pOF: no %s translation for id 0x%x on %pOF\n", np, map_name,
 		id, target && *target ? *target : NULL);
 
 	/* Bypasses translation */
 	if (id_out)
 		*id_out = id;
+
 	return 0;
 }
 
@@ -2167,6 +2184,6 @@ int of_map_id(const struct device_node *np, u32 id,
 	       struct device_node **target, u32 *id_out)
 {
 	return of_map_id_and_mask(np, id, map_name, map_mask_name,
-			target, id_out);
+			target, id_out, NULL, NULL, NULL);
 }
 EXPORT_SYMBOL_GPL(of_map_id);

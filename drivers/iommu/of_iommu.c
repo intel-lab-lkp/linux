@@ -41,12 +41,56 @@ static int of_iommu_xlate(struct device *dev,
 	return ret;
 }
 
+static int of_iommu_map_id(const __be32 *map, u32 id,
+				struct device *dev, void *data)
+{
+	struct device_node *phandle_node;
+	struct of_phandle_args *iommu_spec = data;
+	u32 id_base = be32_to_cpup(map + 0);
+	u32 phandle = be32_to_cpup(map + 1);
+	u32 master_id0 = be32_to_cpup(map + 2);
+	u32 master_id1 = be32_to_cpup(map + 3);
+	int err;
+
+	phandle_node = of_find_node_by_phandle(phandle);
+	if (!phandle_node)
+		return -ENODEV;
+
+	if (id != id_base)
+		return -EAGAIN;
+
+	iommu_spec->np = phandle_node;
+	iommu_spec->args[0] = master_id0;
+	iommu_spec->args[1] = master_id1;
+
+	err = of_iommu_xlate(dev, iommu_spec);
+	of_node_put(iommu_spec->np);
+
+	return err;
+}
+
+static int of_iommu_configure_map_id_and_mask(struct device_node *master_np,
+					      struct device *dev,
+					      const u32 *id)
+{
+	struct of_phandle_args iommu_spec = { .args_count = 2 };
+
+	return of_map_id_and_mask(master_np, *id,
+		 "iommu-map-masked", NULL,
+		 &iommu_spec.np, NULL,
+		 dev, (void *)&iommu_spec, of_iommu_map_id);
+}
+
 static int of_iommu_configure_dev_id(struct device_node *master_np,
 				     struct device *dev,
 				     const u32 *id)
 {
 	struct of_phandle_args iommu_spec = { .args_count = 1 };
 	int err;
+	bool iommu_map_masked = !!of_find_property(master_np, "iommu-map-masked", NULL);
+
+	if (iommu_map_masked)
+		return of_iommu_configure_map_id_and_mask(master_np, dev, id);
 
 	err = of_map_id(master_np, *id, "iommu-map",
 			 "iommu-map-mask", &iommu_spec.np,

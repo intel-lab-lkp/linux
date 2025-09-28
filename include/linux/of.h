@@ -462,7 +462,9 @@ int of_map_id(const struct device_node *np, u32 id,
 
 int of_map_id_and_mask(const struct device_node *np, u32 id,
 		const char *map_name, const char *map_mask_name,
-		struct device_node **target, u32 *id_out);
+		struct device_node **target, u32 *id_out,
+		struct device *dev, void *data,
+		int (*fn)(const __be32 *map, u32 id, struct device *dev, void *data));
 
 phys_addr_t of_dma_get_max_cpu_address(struct device_node *np);
 
@@ -911,7 +913,9 @@ static inline int of_map_id(const struct device_node *np, u32 id,
 
 static inline int of_map_id_and_mask(const struct device_node *np, u32 id,
 		const char *map_name, const char *map_mask_name,
-		struct device_node **target, u32 *id_out)
+		struct device_node **target, u32 *id_out,
+		struct device *dev, void *data,
+		int (*fn)(const __be32 *map, u32 id, void *data))
 {
 	return -EINVAL;
 }
