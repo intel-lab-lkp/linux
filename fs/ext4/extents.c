@@ -924,8 +924,18 @@ ext4_find_extent(struct inode *inode, ext4_lblk_t block,
 	path[0].p_bh = NULL;
 
 	i = depth;
-	if (!(flags & EXT4_EX_NOCACHE) && depth == 0)
+	if (!(flags & EXT4_EX_NOCACHE) && depth == 0) {
+		ext4_fsblk_t pblk = 0;
+
+		if (!ext4_valid_extent_entries(inode, eh, 0, &pblk, 0)) {
+			EXT4_ERROR_INODE(inode,
+				"invalid extent entries, pblk %llu",
+				pblk);
+			ret = -EFSCORRUPTED;
+			goto err;
+		}
 		ext4_cache_extents(inode, eh);
+	}
 	/* walk through the tree */
 	while (i) {
 		ext_debug(inode, "depth %d: num %d, max %d\n",
