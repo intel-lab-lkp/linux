@@ -535,10 +535,17 @@ static void ext4_cache_extents(struct inode *inode,
 		ext4_lblk_t lblk = le32_to_cpu(ex->ee_block);
 		int len = ext4_ext_get_actual_len(ex);
 
-		if (prev && (prev != lblk))
-			ext4_es_cache_extent(inode, prev, lblk - prev, ~0,
-					     EXTENT_STATUS_HOLE);
-
+		if (prev && (prev != lblk)) {
+			if (lblk > prev) {
+				ext4_es_cache_extent(inode, prev, lblk - prev, ~0,
+				     EXTENT_STATUS_HOLE);
+			} else {
+				/* Extents out of order - corrupted? */
+				EXT4_ERROR_INODE(inode, "corrupted extent tree: lblk %u < prev %u",
+					 lblk, prev);
+				return;
+			}
+		}
 		if (ext4_ext_is_unwritten(ex))
 			status = EXTENT_STATUS_UNWRITTEN;
 		ext4_es_cache_extent(inode, lblk, len,
