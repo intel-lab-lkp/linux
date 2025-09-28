@@ -202,16 +202,12 @@ int vmw_fallback_wait(struct vmw_private *dev_priv,
 		if (lazy)
 			schedule_timeout(1);
 		else if ((++count & 0x0F) == 0) {
-			/**
-			 * FIXME: Use schedule_hr_timeout here for
-			 * newer kernels and lower CPU utilization.
-			 */
+			ktime_t delta = ktime_set(0, NSEC_PER_MSEC);
 
-			__set_current_state(TASK_RUNNING);
-			schedule();
-			__set_current_state((interruptible) ?
-					    TASK_INTERRUPTIBLE :
-					    TASK_UNINTERRUPTIBLE);
+			if (interruptible)
+				schedule_hrtimeout(&delta, HRTIMER_MODE_REL);
+			else
+				schedule_timeout_uninterruptible(delta);
 		}
 		if (interruptible && signal_pending(current)) {
 			ret = -ERESTARTSYS;
