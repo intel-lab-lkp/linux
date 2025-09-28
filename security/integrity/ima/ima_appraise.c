@@ -502,9 +502,10 @@ int ima_appraise_measurement(enum ima_hooks func, struct ima_iint_cache *iint,
 	enum integrity_status status = INTEGRITY_UNKNOWN;
 	int rc = xattr_len;
 	bool try_modsig = iint->flags & IMA_MODSIG_ALLOWED && modsig;
+	bool enforce_module_sig = iint->flags & IMA_DIGSIG_REQUIRED && func == MODULE_CHECK;
 
-	/* If not appraising a modsig, we need an xattr. */
-	if (!(inode->i_opflags & IOP_XATTR) && !try_modsig)
+	/* If not appraising a modsig or using default module verification, we need an xattr. */
+	if (!(inode->i_opflags & IOP_XATTR) && !try_modsig && !enforce_module_sig)
 		return INTEGRITY_UNKNOWN;
 
 	/*
@@ -517,8 +518,8 @@ int ima_appraise_measurement(enum ima_hooks func, struct ima_iint_cache *iint,
 	if (is_bprm_creds_for_exec(func, file))
 		audit_msgno = AUDIT_INTEGRITY_USERSPACE;
 
-	/* If reading the xattr failed and there's no modsig, error out. */
-	if (rc <= 0 && !try_modsig) {
+	/* If reading the xattr failed and there's no modsig or module verification, error out. */
+	if (rc <= 0 && !try_modsig && !enforce_module_sig) {
 		if (rc && rc != -ENODATA)
 			goto out;
 
@@ -549,8 +550,8 @@ int ima_appraise_measurement(enum ima_hooks func, struct ima_iint_cache *iint,
 	case INTEGRITY_UNKNOWN:
 		break;
 	case INTEGRITY_NOXATTRS:	/* No EVM protected xattrs. */
-		/* It's fine not to have xattrs when using a modsig. */
-		if (try_modsig)
+		/* Fine to not have xattrs when using a modsig or default module verification. */
+		if (try_modsig || enforce_module_sig)
 			break;
 		fallthrough;
 	case INTEGRITY_NOLABEL:		/* No security.evm xattr. */
@@ -579,6 +580,18 @@ int ima_appraise_measurement(enum ima_hooks func, struct ima_iint_cache *iint,
 	    (!xattr_value || xattr_value->type == IMA_XATTR_DIGEST_NG ||
 	     rc == -ENOKEY))
 		rc = modsig_verify(func, modsig, &status, &cause);
+
+	/* Fall back to default kernel module signature verification */
+	if (rc && enforce_module_sig) {
+		rc = 0;
+		set_module_sig_enforced();
+		/* CONFIG_MODULE_SIG may be disabled */
+		if (is_module_sig_enforced()) {
+			rc = 0;
+			status = INTEGRITY_PASS;
+			pr_debug("Fall back to default kernel module verification for %s\n", filename);
+		}
+	}
 
 out:
 	/*
