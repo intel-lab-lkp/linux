@@ -2961,17 +2961,8 @@ out:
 	 * Make partition invalid & disable CS_CPU_EXCLUSIVE if an error
 	 * happens.
 	 */
-	if (err) {
-		new_prs = -new_prs;
-		update_partition_exclusive_flag(cs, new_prs);
-	}
-
-	spin_lock_irq(&callback_lock);
-	cs->partition_root_state = new_prs;
-	WRITE_ONCE(cs->prs_err, err);
-	if (!is_partition_valid(cs))
-		reset_partition_data(cs);
-	spin_unlock_irq(&callback_lock);
+	if (err)
+		partition_disable(cs, parent, -new_prs, err);
 
 	/* Force update if switching back to member & update effective_xcpus */
 	update_cpumasks_hier(cs, &tmpmask, !new_prs);
@@ -2983,7 +2974,6 @@ out:
 	/* Update sched domains and load balance flag */
 	update_partition_sd_lb(cs, old_prs);
 
-	notify_partition_change(cs, old_prs);
 	if (force_sd_rebuild)
 		rebuild_sched_domains_locked();
 	free_tmpmasks(&tmpmask);
