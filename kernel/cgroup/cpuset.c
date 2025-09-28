@@ -1257,6 +1257,8 @@ static void update_partition_sd_lb(struct cpuset *cs, int old_prs)
 	bool rebuild_domains = (new_prs > 0) || (old_prs > 0);
 	bool new_lb;
 
+	if (!cpuset_v2())
+		return;
 	/*
 	 * If cs is not a valid partition root, the load balance state
 	 * will follow its parent.
@@ -2276,19 +2278,7 @@ get_css:
 			!cpumask_equal(cp->cpus_allowed, cp->effective_cpus));
 
 		cpuset_update_tasks_cpumask(cp, cp->effective_cpus);
-
-		/*
-		 * On default hierarchy, inherit the CS_SCHED_LOAD_BALANCE
-		 * from parent if current cpuset isn't a valid partition root
-		 * and their load balance states differ.
-		 */
-		if (cpuset_v2() && !is_partition_valid(cp) &&
-		    (is_sched_load_balance(parent) != is_sched_load_balance(cp))) {
-			if (is_sched_load_balance(parent))
-				set_bit(CS_SCHED_LOAD_BALANCE, &cp->flags);
-			else
-				clear_bit(CS_SCHED_LOAD_BALANCE, &cp->flags);
-		}
+		update_partition_sd_lb(cp, old_prs);
 
 		/*
 		 * On legacy hierarchy, if the effective cpumask of any non-
