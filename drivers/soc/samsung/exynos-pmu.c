@@ -323,6 +323,7 @@ struct regmap *exynos_get_pmu_regmap_by_phandle(struct device_node *np,
 {
 	struct device_node *pmu_np;
 	struct device *dev;
+	struct regmap *regmap;
 
 	if (propname)
 		pmu_np = of_parse_phandle(np, propname, 0);
@@ -346,7 +347,10 @@ struct regmap *exynos_get_pmu_regmap_by_phandle(struct device_node *np,
 	if (!dev)
 		return ERR_PTR(-EPROBE_DEFER);
 
-	return syscon_node_to_regmap(pmu_np);
+	regmap = syscon_node_to_regmap(pmu_np);
+	put_device(regmap);
+
+	return regmap;
 }
 EXPORT_SYMBOL_GPL(exynos_get_pmu_regmap_by_phandle);
 
