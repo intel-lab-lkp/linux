@@ -609,4 +609,5 @@ void regmap_mmio_detach_clk(struct regmap *map)
 }
 EXPORT_SYMBOL_GPL(regmap_mmio_detach_clk);
 
+MODULE_DESCRIPTION("Register map access for memory-mapped I/O");
 MODULE_LICENSE("GPL v2");
