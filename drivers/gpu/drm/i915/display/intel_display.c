@@ -2361,6 +2361,67 @@ static int intel_crtc_compute_pipe_mode(struct intel_crtc_state *crtc_state)
 	return 0;
 }
 
+static
+int intel_crtc_min_guardband_delay(struct intel_atomic_state *state,
+				   struct intel_crtc *crtc)
+{
+	struct intel_display *display = to_intel_display(state);
+	struct intel_crtc_state *crtc_state =
+		intel_atomic_get_new_crtc_state(state, crtc);
+	const struct drm_display_mode *adjusted_mode =
+		&crtc_state->hw.adjusted_mode;
+	struct drm_connector_state *conn_state;
+	struct drm_connector *drm_connector;
+	int vblank_length;
+	int i;
+
+	if (!intel_vrr_use_optimized_guardband(crtc_state))
+		return 0;
+
+	vblank_length = crtc_state->vrr.vmin -
+			adjusted_mode->crtc_vdisplay;
+
+	for_each_new_connector_in_state(&state->base,
+					drm_connector,
+					conn_state, i) {
+		int guardband;
+		struct intel_connector *connector;
+
+		if (conn_state->crtc != &crtc->base)
+			continue;
+
+		connector = to_intel_connector(drm_connector);
+		guardband = intel_vrr_compute_guardband(crtc_state,
+							connector);
+		if (guardband > vblank_length) {
+			drm_dbg_kms(display->drm,
+				    "[CRTC:%d:%s] Cannot optimize guardband (%d) exceeds max (%d)\n",
+				    crtc->base.base.id, crtc->base.name,
+				    guardband,
+				    vblank_length);
+			return 0;
+		}
+
+		return vblank_length - guardband;
+	}
+
+	return 0;
+}
+
+static void intel_crtc_vblank_delay(struct intel_atomic_state *state,
+				    struct intel_crtc *crtc)
+{
+	struct intel_crtc_state *crtc_state =
+		intel_atomic_get_new_crtc_state(state, crtc);
+	struct drm_display_mode *adjusted_mode =
+		&crtc_state->hw.adjusted_mode;
+	int vblank_delay = 0;
+
+	vblank_delay = intel_crtc_min_guardband_delay(state, crtc);
+
+	adjusted_mode->crtc_vblank_start += vblank_delay;
+}
+
 static int intel_crtc_set_context_latency(struct intel_crtc_state *crtc_state)
 {
 	struct intel_display *display = to_intel_display(crtc_state);
@@ -2413,6 +2474,7 @@ static int intel_crtc_compute_config(struct intel_atomic_state *state,
 	ret = intel_crtc_compute_set_context_latency(state, crtc);
 	if (ret)
 		return ret;
+	intel_crtc_vblank_delay(state, crtc);
 
 	ret = intel_dpll_crtc_compute_clock(state, crtc);
 	if (ret)
@@ -5101,13 +5163,24 @@ static bool allow_vblank_delay_fastset_lrr(const struct intel_crtc_state *old_cr
 {
 	struct intel_display *display = to_intel_display(old_crtc_state);
 
+	return HAS_LRR(display) && old_crtc_state->inherited &&
+		!intel_crtc_has_type(old_crtc_state, INTEL_OUTPUT_DSI);
+}
+
+static bool allow_vblank_delay_fastset(const struct intel_crtc_state *old_crtc_state,
+				       const struct intel_crtc_state *new_crtc_state)
+{
 	/*
 	 * Allow fastboot to fix up vblank delay (handled via LRR
 	 * codepaths), a bit dodgy as the registers aren't
 	 * double buffered but seems to be working more or less...
+	 *
+	 * Additionally, with the optimized guardband the vblank start
+	 * is moved further away from the undelayed vblank. Allow this
+	 * vblank delay when optimized guardband is used.
 	 */
-	return HAS_LRR(display) && old_crtc_state->inherited &&
-		!intel_crtc_has_type(old_crtc_state, INTEL_OUTPUT_DSI);
+	return allow_vblank_delay_fastset_lrr(old_crtc_state) ||
+	       intel_vrr_use_optimized_guardband(new_crtc_state);
 }
 
 bool
@@ -5242,7 +5315,7 @@ intel_pipe_config_compare(const struct intel_crtc_state *current_config,
 	PIPE_CONF_CHECK_I(name.crtc_hsync_start); \
 	PIPE_CONF_CHECK_I(name.crtc_hsync_end); \
 	PIPE_CONF_CHECK_I(name.crtc_vdisplay); \
-	if (!fastset || !allow_vblank_delay_fastset_lrr(current_config)) \
+	if (!fastset || !allow_vblank_delay_fastset(current_config, pipe_config)) \
 		PIPE_CONF_CHECK_I(name.crtc_vblank_start); \
 	PIPE_CONF_CHECK_I(name.crtc_vsync_start); \
 	PIPE_CONF_CHECK_I(name.crtc_vsync_end); \
