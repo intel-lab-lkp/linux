@@ -44,5 +44,6 @@ int intel_vrr_safe_window_start(const struct intel_crtc_state *crtc_state);
 int intel_vrr_vmin_safe_window_end(const struct intel_crtc_state *crtc_state);
 int intel_vrr_compute_guardband(struct intel_crtc_state *crtc_state,
 				struct intel_connector *connector);
+bool intel_vrr_use_optimized_guardband(const struct intel_crtc_state *crtc_state);
 
 #endif /* __INTEL_VRR_H__ */

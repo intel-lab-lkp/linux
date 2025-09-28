@@ -956,3 +956,10 @@ int intel_vrr_compute_guardband(struct intel_crtc_state *crtc_state,
 
 	return guardband;
 }
+
+bool intel_vrr_use_optimized_guardband(const struct intel_crtc_state *crtc_state)
+{
+	struct intel_display *display = to_intel_display(crtc_state);
+
+	return intel_vrr_always_use_vrr_tg(display) || crtc_state->vrr.enable;
+}
