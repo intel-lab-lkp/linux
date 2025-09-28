@@ -862,12 +862,13 @@ bool hci_cmd_sync_dequeue_once(struct hci_dev *hdev,
 			       void *data, hci_cmd_sync_work_destroy_t destroy)
 {
 	struct hci_cmd_sync_work_entry *entry;
-
-	entry = hci_cmd_sync_lookup_entry(hdev, func, data, destroy);
+	mutex_lock(&hdev->cmd_sync_work_lock);
+	entry = _hci_cmd_sync_lookup_entry(hdev, func, data, destroy);
 	if (!entry)
 		return false;
 
-	hci_cmd_sync_cancel_entry(hdev, entry);
+	_hci_cmd_sync_cancel_entry(hdev, entry, -ECANCELED);
+	mutex_unlock(&hdev->cmd_sync_work_lock);
 
 	return true;
 }
