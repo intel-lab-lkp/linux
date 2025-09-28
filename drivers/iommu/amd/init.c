@@ -3212,8 +3212,10 @@ static bool __init detect_ivrs(void)
 	}
 
 out:
-	/* Make sure ACS will be enabled during PCI probe */
-	pci_request_acs();
+	if (!amd_iommu_disabled || amd_iommu_force_enable) {
+		/* Make sure ACS will be enabled during PCI probe */
+		pci_request_acs();
+	}
 
 	return true;
 }
