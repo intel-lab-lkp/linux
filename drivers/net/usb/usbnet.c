@@ -31,6 +31,7 @@
 #include <linux/kernel.h>
 #include <linux/pm_runtime.h>
 
+#include "usbnet_quirks.h"
 /*-------------------------------------------------------------------------*/
 
 /*
@@ -1696,6 +1697,19 @@ static const struct device_type wlan_type = {
 static const struct device_type wwan_type = {
 	.name	= "wwan",
 };
+
+int usbnet_probe_quirks(struct usb_interface *udev,
+			const struct usb_device_id *prod)
+{
+	/* Should it be ignored? */
+	if (unlikely(usbnet_ignore(udev))) {
+		dev_dbg(&udev->dev, "usbnet ignore this device!\n");
+		return -ENODEV;
+	}
+
+	return usbnet_probe(udev, prod);
+}
+EXPORT_SYMBOL_GPL(usbnet_probe_quirks);
 
 int
 usbnet_probe (struct usb_interface *udev, const struct usb_device_id *prod)
