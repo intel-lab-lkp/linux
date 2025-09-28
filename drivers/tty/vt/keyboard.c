@@ -131,8 +131,8 @@ static const unsigned char max_vals[] = {
 
 static const int NR_TYPES = ARRAY_SIZE(max_vals);
 
-static void kbd_bh(struct tasklet_struct *unused);
-static DECLARE_TASKLET_DISABLED(keyboard_tasklet, kbd_bh);
+static void kbd_bh(struct work_struct *unused);
+static DECLARE_WORK(keyboard_work, kbd_bh);
 
 static struct input_handler kbd_handler;
 static DEFINE_SPINLOCK(kbd_event_lock);
@@ -264,23 +264,23 @@ static int kd_sound_helper(struct input_handle *handle, void *data)
 	return 0;
 }
 
-static void kd_nosound(struct timer_list *unused)
+static void kd_nosound(struct work_struct *unused)
 {
 	static unsigned int zero;
 
 	input_handler_for_each_handle(&kbd_handler, &zero, kd_sound_helper);
 }
 
-static DEFINE_TIMER(kd_mksound_timer, kd_nosound);
+static DECLARE_DELAYED_WORK(kd_mksound_worker, kd_nosound);
 
 void kd_mksound(unsigned int hz, unsigned int ticks)
 {
-	timer_delete_sync(&kd_mksound_timer);
+	cancel_delayed_work_sync(&kd_mksound_worker);
 
 	input_handler_for_each_handle(&kbd_handler, &hz, kd_sound_helper);
 
 	if (hz && ticks)
-		mod_timer(&kd_mksound_timer, jiffies + ticks);
+		schedule_delayed_work(&kd_mksound_worker, ticks);
 }
 EXPORT_SYMBOL(kd_mksound);
 
@@ -390,7 +390,7 @@ static void put_queue_utf8(struct vc_data *vc, u32 value)
 /* FIXME: review locking for vt.c callers */
 static void set_leds(void)
 {
-	tasklet_schedule(&keyboard_tasklet);
+	schedule_work(&keyboard_work);
 }
 
 /*
@@ -1024,10 +1024,10 @@ static int kbd_led_trigger_activate(struct led_classdev *cdev)
 	struct kbd_led_trigger *trigger =
 		container_of(cdev->trigger, struct kbd_led_trigger, trigger);
 
-	tasklet_disable(&keyboard_tasklet);
+	cancel_work_sync(&keyboard_work);
 	if (ledstate != -1U)
 		led_set_brightness(cdev, ledstate & trigger->mask ? LED_FULL : LED_OFF);
-	tasklet_enable(&keyboard_tasklet);
+	enable_work(&keyboard_work);
 
 	return 0;
 }
@@ -1243,7 +1243,7 @@ void vt_kbd_con_stop(unsigned int console)
  * handle the scenario when keyboard handler is not registered yet
  * but we already getting updates from the VT to update led state.
  */
-static void kbd_bh(struct tasklet_struct *unused)
+static void kbd_bh(struct work_struct *unused)
 {
 	unsigned int leds;
 	unsigned long flags;
@@ -1535,7 +1535,7 @@ static void kbd_event(struct input_handle *handle, unsigned int event_type,
 
 	spin_unlock(&kbd_event_lock);
 
-	tasklet_schedule(&keyboard_tasklet);
+	schedule_work(&keyboard_work);
 	do_poke_blanked_console = 1;
 	schedule_console_callback();
 }
@@ -1607,12 +1607,12 @@ static void kbd_disconnect(struct input_handle *handle)
  */
 static void kbd_start(struct input_handle *handle)
 {
-	tasklet_disable(&keyboard_tasklet);
+	cancel_work_sync(&keyboard_work);
 
 	if (ledstate != -1U)
 		kbd_update_leds_helper(handle, &ledstate);
 
-	tasklet_enable(&keyboard_tasklet);
+	enable_work(&keyboard_work);
 }
 
 static const struct input_device_id kbd_ids[] = {
@@ -1662,8 +1662,8 @@ int __init kbd_init(void)
 	if (error)
 		return error;
 
-	tasklet_enable(&keyboard_tasklet);
-	tasklet_schedule(&keyboard_tasklet);
+	enable_work(&keyboard_work);
+	schedule_work(&keyboard_work);
 
 	return 0;
 }
