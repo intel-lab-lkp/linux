@@ -1576,13 +1576,20 @@ static void partition_disable(struct cpuset *cs, struct cpuset *parent,
 				    int new_prs, enum prs_errcode prs_err)
 {
 	bool isolcpus_updated;
+	int old_prs;
 
 	lockdep_assert_held(&cpuset_mutex);
 	WARN_ON_ONCE(new_prs > 0);
 	WARN_ON_ONCE(!cpuset_v2());
 
+	old_prs = cs->partition_root_state;
 	spin_lock_irq(&callback_lock);
 	list_del_init(&cs->remote_sibling);
+	if (parent && is_partition_valid(parent) &&
+	    is_partition_valid(cs)) {
+		parent->nr_subparts -= 1;
+		WARN_ON_ONCE(parent->nr_subparts < 0);
+	}
 	/* disable a partition should only delete exclusive cpus */
 	isolcpus_updated = partition_xcpus_del(cs->partition_root_state,
 						parent, cs->effective_xcpus);
@@ -1592,6 +1599,9 @@ static void partition_disable(struct cpuset *cs, struct cpuset *parent,
 	spin_unlock_irq(&callback_lock);
 	update_unbound_workqueue_cpumask(isolcpus_updated);
 	cpuset_force_rebuild();
+	/* Clear exclusive flag; no errors are expected */
+	update_partition_exclusive_flag(cs, new_prs);
+	notify_partition_change(cs, old_prs);
 }
 
 /**
@@ -1871,6 +1881,37 @@ static int local_partition_enable(struct cpuset *cs,
 }
 
 /**
+ * local_partition_disable - Disable a local partition
+ * @cs: Target cpuset (local partition root) to disable
+ * @tmp: Temporary masks for CPU calculations
+ */
+static void local_partition_disable(struct cpuset *cs, struct tmpmasks *tmp)
+{
+	struct cpuset *parent = parent_cs(cs);
+	bool cpumask_updated = false;
+
+	lockdep_assert_held(&cpuset_mutex);
+	WARN_ON_ONCE(is_remote_partition(cs));	/* For local partition only */
+
+	if (!is_partition_valid(cs))
+		return;
+
+	/*
+	 * May need to add cpus back to parent's effective_cpus
+	 * (and maybe removed from subpartitions_cpus/isolated_cpus)
+	 * for valid partition root. xcpus may contain CPUs that
+	 * shouldn't be removed from the two global cpumasks.
+	 */
+	cpumask_updated = !cpumask_empty(cs->effective_xcpus);
+	partition_disable(cs, parent, PRS_MEMBER, PERR_NONE);
+
+	if (cpumask_updated) {
+		cpuset_update_tasks_cpumask(parent, tmp->addmask);
+		update_sibling_cpumasks(parent, cs, tmp);
+	}
+}
+
+/**
  * update_parent_effective_cpumask - update effective_cpus mask of parent cpuset
  * @cs:      The cpuset that requests change in partition root state
  * @cmd:     Partition root state change command
@@ -1962,20 +2003,7 @@ static int update_parent_effective_cpumask(struct cpuset *cs, int cmd,
 
 	nocpu = tasks_nocpu_error(parent, cs, xcpus);
 
-	if (cmd == partcmd_disable) {
-		/*
-		 * May need to add cpus back to parent's effective_cpus
-		 * (and maybe removed from subpartitions_cpus/isolated_cpus)
-		 * for valid partition root. xcpus may contain CPUs that
-		 * shouldn't be removed from the two global cpumasks.
-		 */
-		if (is_partition_valid(cs)) {
-			cpumask_copy(tmp->addmask, cs->effective_xcpus);
-			adding = true;
-			subparts_delta--;
-		}
-		new_prs = PRS_MEMBER;
-	} else if (newmask) {
+	if (newmask) {
 		/*
 		 * Empty cpumask is not allowed
 		 */
@@ -3104,9 +3132,7 @@ static int update_prstate(struct cpuset *cs, int new_prs)
 		if (is_remote_partition(cs))
 			remote_partition_disable(cs, &tmpmask);
 		else
-			update_parent_effective_cpumask(cs, partcmd_disable,
-							NULL, &tmpmask);
-
+			local_partition_disable(cs, &tmpmask);
 		/*
 		 * Invalidation of child partitions will be done in
 		 * update_cpumasks_hier().
