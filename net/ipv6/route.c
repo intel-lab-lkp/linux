@@ -5456,6 +5456,14 @@ static int ip6_route_multipath_add(struct fib6_config *cfg,
 			goto cleanup;
 		}
 
+		if (rt->fib6_nh->fib_nh_gw_family == AF_UNSPEC) {
+			err = -EINVAL;
+			NL_SET_ERR_MSG(extack,
+				       "Device only routes can not be added for IPv6 using the multipath API.");
+			fib6_info_release(rt);
+			goto cleanup;
+		}
+
 		rt->fib6_nh->fib_nh_weight = rtnh->rtnh_hops + 1;
 
 		err = ip6_route_info_append(&rt6_nh_list, rt, &r_cfg);
