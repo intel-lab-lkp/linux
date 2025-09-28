@@ -2640,10 +2640,8 @@ static __be32 nfsd4_encode_components_esc(struct xdr_stream *xdr, char sep,
 	__be32 *p;
 	__be32 pathlen;
 	int pathlen_offset;
-	int strlen, count=0;
+	int str_len, count=0;
 	char *str, *end, *next;
-
-	dprintk("nfsd4_encode_components(%s)\n", components);
 
 	pathlen_offset = xdr->buf->len;
 	p = xdr_reserve_space(xdr, 4);
@@ -2670,9 +2668,9 @@ static __be32 nfsd4_encode_components_esc(struct xdr_stream *xdr, char sep,
 			for (; *end && (*end != sep); end++)
 				/* find sep or end of string */;
 
-		strlen = end - str;
-		if (strlen) {
-			if (xdr_stream_encode_opaque(xdr, str, strlen) < 0)
+		str_len = end - str;
+		if (str_len) {
+			if (xdr_stream_encode_opaque(xdr, str, str_len) < 0)
 				return nfserr_resource;
 			count++;
 		} else
