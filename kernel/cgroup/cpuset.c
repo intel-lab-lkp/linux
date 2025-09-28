@@ -1539,6 +1539,7 @@ static void partition_enable(struct cpuset *cs, struct cpuset *parent,
 				 int new_prs, struct cpumask *new_excpus)
 {
 	bool isolcpus_updated;
+	int old_prs;
 
 	lockdep_assert_held(&cpuset_mutex);
 	WARN_ON_ONCE(new_prs <= 0);
@@ -1547,15 +1548,21 @@ static void partition_enable(struct cpuset *cs, struct cpuset *parent,
 	if (cs->partition_root_state == new_prs)
 		return;
 
+	old_prs = cs->partition_root_state;
 	spin_lock_irq(&callback_lock);
 	/* enable partition should only add exclusive cpus */
 	isolcpus_updated = partition_xcpus_add(new_prs, parent, new_excpus);
-	list_add(&cs->remote_sibling, &remote_children);
+	/* enable remote partition */
+	if (!parent)
+		list_add(&cs->remote_sibling, &remote_children);
+	else if (!is_partition_valid(cs))
+		parent->nr_subparts += 1;
 	cpumask_copy(cs->effective_xcpus, new_excpus);
 	partition_state_update(cs, new_prs, PERR_NONE);
 	spin_unlock_irq(&callback_lock);
 	update_unbound_workqueue_cpumask(isolcpus_updated);
 	cpuset_force_rebuild();
+	notify_partition_change(cs, old_prs);
 }
 
 /**
@@ -1802,6 +1809,68 @@ static enum prs_errcode validate_partition(struct cpuset *cs, int new_prs,
 }
 
 /**
+ * local_partition_enable - Enable local partition for a cpuset
+ * @cs: Target cpuset to become a local partition root
+ * @new_prs: New partition root state to apply
+ * @tmp: Temporary masks for CPU calculations
+ *
+ * This function enables local partition root capability for a cpuset by
+ * validating prerequisites, computing exclusive CPUs, and updating the
+ * partition hierarchy.
+ *
+ * Return: 0 on success, error code on failure
+ */
+static int local_partition_enable(struct cpuset *cs,
+				int new_prs, struct tmpmasks *tmp)
+{
+	struct cpuset *parent = parent_cs(cs);
+	enum prs_errcode part_error;
+
+	lockdep_assert_held(&cpuset_mutex);
+	WARN_ON_ONCE(is_remote_partition(cs));	/* For local partition only */
+
+	/*
+	 * The parent must be a partition root.
+	 * The new cpumask, if present, or the current cpus_allowed must
+	 * not be empty.
+	 */
+	if (!is_partition_valid(parent)) {
+		return is_partition_invalid(parent)
+			? PERR_INVPARENT : PERR_NOTPART;
+	}
+
+	/*
+	 * Need to call compute_excpus() in case
+	 * exclusive_cpus not set. Sibling conflict should only happen
+	 * if exclusive_cpus isn't set.
+	 */
+	if (compute_excpus(cs, tmp->new_cpus))
+		WARN_ON_ONCE(!cpumask_empty(cs->exclusive_cpus));
+
+	part_error = validate_partition(cs, new_prs, tmp->new_cpus);
+	if (part_error)
+		return part_error;
+
+	/*
+	 * This function will only be called when all the preliminary
+	 * checks have passed. At this point, the following condition
+	 * should hold.
+	 *
+	 * (cs->effective_xcpus & cpu_active_mask) ⊆ parent->effective_cpus
+	 *
+	 * Warn if it is not the case.
+	 * addmask is used as temporary variable.
+	 */
+	cpumask_and(tmp->addmask, tmp->new_cpus, cpu_active_mask);
+	WARN_ON_ONCE(!cpumask_subset(tmp->addmask, parent->effective_cpus));
+	partition_enable(cs, parent, new_prs, tmp->new_cpus);
+
+	cpuset_update_tasks_cpumask(parent, tmp->addmask);
+	update_sibling_cpumasks(parent, cs, tmp);
+	return 0;
+}
+
+/**
  * update_parent_effective_cpumask - update effective_cpus mask of parent cpuset
  * @cs:      The cpuset that requests change in partition root state
  * @cmd:     Partition root state change command
@@ -1893,35 +1962,7 @@ static int update_parent_effective_cpumask(struct cpuset *cs, int cmd,
 
 	nocpu = tasks_nocpu_error(parent, cs, xcpus);
 
-	if ((cmd == partcmd_enable) || (cmd == partcmd_enablei)) {
-		/*
-		 * Need to call compute_excpus() in case
-		 * exclusive_cpus not set. Sibling conflict should only happen
-		 * if exclusive_cpus isn't set.
-		 */
-		xcpus = tmp->delmask;
-		if (compute_excpus(cs, xcpus))
-			WARN_ON_ONCE(!cpumask_empty(cs->exclusive_cpus));
-		new_prs = (cmd == partcmd_enable) ? PRS_ROOT : PRS_ISOLATED;
-
-		part_error = validate_partition(cs, new_prs, xcpus);
-		if (part_error)
-			return part_error;
-		/*
-		 * This function will only be called when all the preliminary
-		 * checks have passed. At this point, the following condition
-		 * should hold.
-		 *
-		 * (cs->effective_xcpus & cpu_active_mask) ⊆ parent->effective_cpus
-		 *
-		 * Warn if it is not the case.
-		 */
-		cpumask_and(tmp->new_cpus, xcpus, cpu_active_mask);
-		WARN_ON_ONCE(!cpumask_subset(tmp->new_cpus, parent->effective_cpus));
-
-		deleting = true;
-		subparts_delta++;
-	} else if (cmd == partcmd_disable) {
+	if (cmd == partcmd_disable) {
 		/*
 		 * May need to add cpus back to parent's effective_cpus
 		 * (and maybe removed from subpartitions_cpus/isolated_cpus)
@@ -3045,14 +3086,10 @@ static int update_prstate(struct cpuset *cs, int new_prs)
 		 * If parent is valid partition, enable local partiion.
 		 * Otherwise, enable a remote partition.
 		 */
-		if (is_partition_valid(parent)) {
-			enum partition_cmd cmd = (new_prs == PRS_ROOT)
-					       ? partcmd_enable : partcmd_enablei;
-
-			err = update_parent_effective_cpumask(cs, cmd, NULL, &tmpmask);
-		} else {
+		if (is_partition_valid(parent))
+			err = local_partition_enable(cs, new_prs, &tmpmask);
+		else
 			err = remote_partition_enable(cs, new_prs, &tmpmask);
-		}
 	} else if (old_prs && new_prs) {
 		/*
 		 * A change in load balance state only, no change in cpumasks.
