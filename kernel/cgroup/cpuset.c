@@ -1932,10 +1932,12 @@ static int local_partition_enable(struct cpuset *cs,
  * @cs: Target cpuset (local partition root) to disable
  * @tmp: Temporary masks for CPU calculations
  */
-static void local_partition_disable(struct cpuset *cs, struct tmpmasks *tmp)
+static void local_partition_disable(struct cpuset *cs, enum prs_errcode part_error,
+				    struct tmpmasks *tmp)
 {
 	struct cpuset *parent = parent_cs(cs);
 	bool cpumask_updated = false;
+	int new_prs;
 
 	lockdep_assert_held(&cpuset_mutex);
 	WARN_ON_ONCE(is_remote_partition(cs));	/* For local partition only */
@@ -1943,48 +1945,21 @@ static void local_partition_disable(struct cpuset *cs, struct tmpmasks *tmp)
 	if (!is_partition_valid(cs))
 		return;
 
+	if (part_error)
+		new_prs = -cs->partition_root_state;
+	else
+		new_prs = 0;
 	/*
 	 * May need to add cpus back to parent's effective_cpus
 	 * (and maybe removed from subpartitions_cpus/isolated_cpus)
 	 * for valid partition root. xcpus may contain CPUs that
 	 * shouldn't be removed from the two global cpumasks.
 	 */
-	cpumask_updated = !cpumask_empty(cs->effective_xcpus);
-	partition_disable(cs, parent, PRS_MEMBER, PERR_NONE);
-
-	if (cpumask_updated) {
-		cpuset_update_tasks_cpumask(parent, tmp->addmask);
-		update_sibling_cpumasks(parent, cs, tmp);
-	}
-}
-
-/**
- * local_partition_invalidate - Invalidate a local partition
- * @cs: Target cpuset (local partition root) to invalidate
- * @tmp: Temporary masks
- */
-static void local_partition_invalidate(struct cpuset *cs, struct tmpmasks *tmp)
-{
-	struct cpumask *xcpus = user_xcpus(cs);
-	struct cpuset *parent = parent_cs(cs);
-	int new_prs = cs->partition_root_state;
-	bool cpumask_updated = false;
-
-	lockdep_assert_held(&cpuset_mutex);
-	WARN_ON_ONCE(is_remote_partition(cs));	/* For local partition only */
-
-	if (is_partition_invalid(cs))
-		return;
-	/*
-	 * Make the current partition invalid.
-	 */
 	if (is_partition_valid(parent))
-		cpumask_updated = cpumask_and(tmp->addmask,
-					      xcpus, parent->effective_xcpus);
-	if (cs->partition_root_state > 0)
-		new_prs = -cs->partition_root_state;
+		cpumask_updated = !cpumask_empty(cs->effective_xcpus);
 
-	partition_disable(cs, parent, new_prs, cs->prs_err);
+	partition_disable(cs, parent, new_prs, part_error);
+
 	if (cpumask_updated) {
 		cpuset_update_tasks_cpumask(parent, tmp->addmask);
 		update_sibling_cpumasks(parent, cs, tmp);
@@ -2033,7 +2008,7 @@ static int __local_partition_update(struct cpuset *cs, struct cpumask *xcpus,
 	new_prs = old_prs < 0 ? -old_prs : old_prs;
 	part_error = local_partition_check(cs, new_prs, excpus, excl_check);
 	if (part_error) {
-		local_partition_invalidate(cs, tmp);
+		local_partition_disable(cs, part_error, tmp);
 		return part_error;
 	}
 
@@ -2429,7 +2404,7 @@ static int cpus_allowed_validate_change(struct cpuset *cs, struct cpuset *trialc
 			if (is_partition_valid(cp) &&
 			    cpumask_intersects(xcpus, cp->effective_xcpus)) {
 				rcu_read_unlock();
-				local_partition_invalidate(cp, tmp);
+				local_partition_disable(cp, PERR_NOTEXCL, tmp);
 				rcu_read_lock();
 			}
 		}
@@ -2469,7 +2444,7 @@ static void partition_cpus_change(struct cpuset *cs, struct cpuset *trialcs,
 					   trialcs->effective_xcpus, tmp);
 	} else {
 		if (trialcs->prs_err)
-			local_partition_invalidate(cs, tmp);
+			local_partition_disable(cs, trialcs->prs_err, tmp);
 		else
 			__local_partition_update(cs, trialcs->exclusive_cpus,
 						trialcs->effective_xcpus, tmp, false);
@@ -3003,7 +2978,7 @@ static int update_prstate(struct cpuset *cs, int new_prs)
 		if (is_remote_partition(cs))
 			remote_partition_disable(cs, &tmpmask);
 		else
-			local_partition_disable(cs, &tmpmask);
+			local_partition_disable(cs, PERR_NONE, &tmpmask);
 		/*
 		 * Invalidation of child partitions will be done in
 		 * update_cpumasks_hier().
