@@ -33,17 +33,14 @@ struct cached_fid {
 	struct list_head entry;
 	struct cached_fids *cfids;
 	const char *path;
-	bool has_lease:1;
-	bool is_open:1;
-	bool file_all_info_is_valid:1;
-	unsigned long time; /* jiffies of when lease was taken */
-	unsigned long last_access_time; /* jiffies of when last accessed */
+	unsigned long ctime; /* (jiffies) creation time, when cfid was created (cached) */
+	unsigned long atime; /* (jiffies) access time, when it was last used */
 	struct kref refcount;
 	struct cifs_fid fid;
 	spinlock_t fid_lock;
 	struct cifs_tcon *tcon;
 	struct dentry *dentry;
-	struct smb2_file_all_info file_all_info;
+	struct smb2_file_all_info *file_all_info;
 	struct cached_dirents dirents;
 };
 
@@ -68,13 +65,12 @@ enum {
 
 static inline bool cfid_expired(const struct cached_fid *cfid)
 {
-	return (cfid->last_access_time &&
-		time_is_before_jiffies(cfid->last_access_time + HZ * dir_cache_timeout));
+	return (cfid->atime && time_is_before_jiffies(cfid->atime + HZ * dir_cache_timeout));
 }
 
 static inline bool cfid_is_valid(const struct cached_fid *cfid)
 {
-	return (cfid->has_lease && cfid->time && !cfid_expired(cfid));
+	return (cfid->fid.persistent_fid && cfid->ctime && !cfid_expired(cfid));
 }
 
 extern struct cached_fids *init_cached_dirs(void);
