@@ -3413,11 +3413,8 @@ channel_handler(struct ipmi_smi *intf, struct ipmi_recv_msg *msg)
 			intf->channel_list = intf->wchannels + set;
 			intf->channels_ready = true;
 			wake_up(&intf->waitq);
-		} else {
-			intf->channel_list = intf->wchannels + set;
-			intf->channels_ready = true;
+		} else
 			rv = send_channel_info_cmd(intf, intf->curr_channel);
-		}
 
 		if (rv) {
 			/* Got an error somehow, just give up. */
@@ -3440,6 +3437,9 @@ channel_handler(struct ipmi_smi *intf, struct ipmi_recv_msg *msg)
 static int __scan_channels(struct ipmi_smi *intf, struct ipmi_device_id *id)
 {
 	int rv;
+
+	/* Clear channels_ready to force channels rescan. */
+	intf->channels_ready = false;
 
 	if (ipmi_version_major(id) > 1
 			|| (ipmi_version_major(id) == 1
@@ -3653,12 +3653,6 @@ int ipmi_add_smi(struct module         *owner,
 		dev_err(si_dev, "Unable to get the device id: %d\n", rv);
 		goto out_err_started;
 	}
-
-	mutex_lock(&intf->bmc_reg_mutex);
-	rv = __scan_channels(intf, &id);
-	mutex_unlock(&intf->bmc_reg_mutex);
-	if (rv)
-		goto out_err_bmc_reg;
 
 	intf->nr_users_devattr = dev_attr_nr_users;
 	sysfs_attr_init(&intf->nr_users_devattr.attr);
