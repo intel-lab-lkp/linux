@@ -736,7 +736,7 @@ static int clk_mt6765_apmixed_probe(struct platform_device *pdev)
 	if (IS_ERR(base))
 		return PTR_ERR(base);
 
-	clk_data = mtk_alloc_clk_data(CLK_APMIXED_NR_CLK);
+	clk_data = mtk_devm_alloc_clk_data(CLK_APMIXED_NR_CLK);
 	if (!clk_data)
 		return -ENOMEM;
 
@@ -770,7 +770,7 @@ static int clk_mt6765_top_probe(struct platform_device *pdev)
 	if (IS_ERR(base))
 		return PTR_ERR(base);
 
-	clk_data = mtk_alloc_clk_data(CLK_TOP_NR_CLK);
+	clk_data = mtk_devm_alloc_clk_data(CLK_TOP_NR_CLK);
 	if (!clk_data)
 		return -ENOMEM;
 
@@ -810,7 +810,7 @@ static int clk_mt6765_ifr_probe(struct platform_device *pdev)
 	if (IS_ERR(base))
 		return PTR_ERR(base);
 
-	clk_data = mtk_alloc_clk_data(CLK_IFR_NR_CLK);
+	clk_data = mtk_devm_alloc_clk_data(CLK_IFR_NR_CLK);
 	if (!clk_data)
 		return -ENOMEM;
 
