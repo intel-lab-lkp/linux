@@ -277,11 +277,8 @@ replay_again:
 	}
 
 	cfid->cfids = cfids;
-	cfids->num_entries++;
-	list_add(&cfid->entry, &cfids->entries);
+	cfid->tcon = tcon;
 	spin_unlock(&cfids->cfid_list_lock);
-
-	pfid = &cfid->fid;
 
 	/*
 	 * Skip any prefix paths in @path as lookup_noperm_positive_unlocked() ends up
@@ -309,6 +306,13 @@ replay_again:
 	cfid->dentry = dentry;
 	cfid->tcon = tcon;
 	dentry = NULL;
+
+	spin_lock(&cfids->cfid_list_lock);
+	cfids->num_entries++;
+	list_add(&cfid->entry, &cfids->entries);
+	spin_unlock(&cfids->cfid_list_lock);
+
+	pfid = &cfid->fid;
 
 	/*
 	 * We do not hold the lock for the open because in case

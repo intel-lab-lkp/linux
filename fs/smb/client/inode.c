@@ -1283,8 +1283,13 @@ static int cifs_get_fattr(struct cifs_open_info_data *data,
 	 */
 
 	if (!data) {
+		bool is_dir = false;
+
+		if (inode && *inode)
+			is_dir = S_ISDIR((*inode)->i_mode);
+
 		rc = server->ops->query_path_info(xid, tcon, cifs_sb,
-						  full_path, &tmp_data);
+						  full_path, &tmp_data, is_dir);
 		data = &tmp_data;
 	}
 
@@ -1470,7 +1475,7 @@ static int smb311_posix_get_fattr(struct cifs_open_info_data *data,
 	 */
 	if (!data) {
 		rc = server->ops->query_path_info(xid, tcon, cifs_sb,
-						  full_path, &tmp_data);
+						  full_path, &tmp_data, false);
 		data = &tmp_data;
 	}
 
