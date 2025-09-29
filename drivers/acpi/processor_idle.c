@@ -958,7 +958,9 @@ static int acpi_processor_evaluate_lpi(acpi_handle handle,
 			lpi_state->entry_method = ACPI_CSTATE_INTEGER;
 			lpi_state->address = obj->integer.value;
 		} else {
-			continue;
+			pr_err("Entry method in LPI sub-package must be buffer or integer.\n");
+			ret = -EINVAL;
+			goto end;
 		}
 
 		/* elements[7,8] skipped for now i.e. Residency/Usage counter*/
