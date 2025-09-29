@@ -113,6 +113,11 @@ static int perf_trace_event_reg(struct trace_event_call *tp_event,
 
 	tp_event->perf_events = list;
 
+	/* Ensure perf_events assignment is visible to all CPUs before enabling
+	 * profile functionality
+	 */
+	smp_mb();
+
 	if (!total_ref_count) {
 		char __percpu *buf;
 		int i;
