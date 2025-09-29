@@ -226,7 +226,6 @@ int open_cached_dir(unsigned int xid, struct cifs_tcon *tcon, const char *path,
 	struct cached_fids *cfids;
 	const char *npath;
 	int retries = 0, cur_sleep = 1;
-	__le32 lease_flags = 0;
 
 	if (cifs_sb->root == NULL)
 		return -ENOENT;
@@ -236,9 +235,9 @@ int open_cached_dir(unsigned int xid, struct cifs_tcon *tcon, const char *path,
 
 	ses = tcon->ses;
 	cfids = tcon->cfids;
-
 	if (!cfids)
 		return -EOPNOTSUPP;
+
 replay_again:
 	/* reinitialize for possible replay */
 	flags = 0;
@@ -306,24 +305,6 @@ replay_again:
 			rc = -ENOENT;
 			goto out;
 		}
-		if (dentry->d_parent && server->dialect >= SMB30_PROT_ID) {
-			struct cached_fid *parent_cfid;
-
-			spin_lock(&cfids->cfid_list_lock);
-			list_for_each_entry(parent_cfid, &cfids->entries, entry) {
-				if (parent_cfid->dentry == dentry->d_parent) {
-					if (!cfid_is_valid(parent_cfid))
-						break;
-
-					cifs_dbg(FYI, "found a parent cached file handle\n");
-					lease_flags |= SMB2_LEASE_FLAG_PARENT_LEASE_KEY_SET_LE;
-					memcpy(pfid->parent_lease_key, parent_cfid->fid.lease_key,
-					       SMB2_LEASE_KEY_SIZE);
-					break;
-				}
-			}
-			spin_unlock(&cfids->cfid_list_lock);
-		}
 	}
 	cfid->dentry = dentry;
 	cfid->tcon = tcon;
@@ -350,20 +331,13 @@ replay_again:
 	rqst[0].rq_iov = open_iov;
 	rqst[0].rq_nvec = SMB2_CREATE_IOV_SIZE;
 
-	oparms = (struct cifs_open_parms) {
-		.tcon = tcon,
-		.path = path,
-		.create_options = cifs_create_options(cifs_sb, CREATE_NOT_FILE),
-		.desired_access =  FILE_READ_DATA | FILE_READ_ATTRIBUTES |
-				   FILE_READ_EA,
-		.disposition = FILE_OPEN,
-		.fid = pfid,
-		.lease_flags = lease_flags,
-		.replay = !!(retries),
-	};
+	oparms = CIFS_OPARMS(cifs_sb, tcon, path,
+			     FILE_READ_DATA | FILE_READ_ATTRIBUTES | FILE_READ_EA, FILE_OPEN,
+			     cifs_create_options(cifs_sb, CREATE_NOT_FILE), 0);
+	oparms.fid = pfid;
+	oparms.replay = !!retries;
 
-	rc = SMB2_open_init(tcon, server,
-			    &rqst[0], &oplock, &oparms, utf16_path);
+	rc = SMB2_open_init(tcon, server, &rqst[0], &oplock, &oparms, utf16_path);
 	if (rc)
 		goto oshr_free;
 	smb2_set_next_command(tcon, &rqst[0]);
