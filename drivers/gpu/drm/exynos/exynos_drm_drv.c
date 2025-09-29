@@ -257,7 +257,7 @@ static int exynos_drm_bind(struct device *dev)
 	dev_set_drvdata(dev, drm);
 	drm->dev_private = (void *)private;
 
-	drm_mode_config_init(drm);
+	drmm_mode_config_init(drm);
 
 	exynos_drm_mode_config_init(drm);
 
@@ -297,7 +297,6 @@ err_cleanup_poll:
 err_unbind_all:
 	component_unbind_all(drm->dev, drm);
 err_mode_config_cleanup:
-	drm_mode_config_cleanup(drm);
 	exynos_drm_cleanup_dma(drm);
 	kfree(private);
 	dev_set_drvdata(dev, NULL);
@@ -317,7 +316,6 @@ static void exynos_drm_unbind(struct device *dev)
 	drm_atomic_helper_shutdown(drm);
 
 	component_unbind_all(drm->dev, drm);
-	drm_mode_config_cleanup(drm);
 	exynos_drm_cleanup_dma(drm);
 
 	kfree(drm->dev_private);
