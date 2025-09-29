@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0
 /* Copyright 2019 Linaro, Ltd, Rob Herring <robh@kernel.org> */
+/* Copyright 2025 Amazon.com, Inc. or its affiliates */
 
 #include <linux/cleanup.h>
 #include <linux/err.h>
@@ -9,8 +10,33 @@
 
 #include <drm/panfrost_drm.h>
 #include "panfrost_device.h"
+#include "panfrost_drv.h"
 #include "panfrost_gem.h"
 #include "panfrost_mmu.h"
+
+void panfrost_gem_init(struct panfrost_device *pfdev)
+{
+	struct vfsmount *huge_mnt;
+
+	if (!panfrost_transparent_hugepage)
+		return;
+
+	huge_mnt = drm_gem_shmem_huge_mnt_create("within_size");
+	if (IS_ERR(huge_mnt)) {
+		drm_warn(pfdev->ddev, "Can't use Transparent Hugepage (%ld)\n",
+			 PTR_ERR(huge_mnt));
+		return;
+	}
+
+	pfdev->huge_mnt = huge_mnt;
+
+	drm_info(pfdev->ddev, "Using Transparent Hugepage\n");
+}
+
+void panfrost_gem_fini(struct panfrost_device *pfdev)
+{
+	drm_gem_shmem_huge_mnt_free(pfdev->huge_mnt);
+}
 
 #ifdef CONFIG_DEBUG_FS
 static void panfrost_gem_debugfs_bo_add(struct panfrost_device *pfdev,
@@ -305,6 +331,7 @@ struct drm_gem_object *panfrost_gem_create_object(struct drm_device *dev, size_t
 struct panfrost_gem_object *
 panfrost_gem_create(struct drm_device *dev, size_t size, u32 flags)
 {
+	struct panfrost_device *pfdev = dev->dev_private;
 	struct drm_gem_shmem_object *shmem;
 	struct panfrost_gem_object *bo;
 
@@ -312,7 +339,7 @@ panfrost_gem_create(struct drm_device *dev, size_t size, u32 flags)
 	if (flags & PANFROST_BO_HEAP)
 		size = roundup(size, SZ_2M);
 
-	shmem = drm_gem_shmem_create(dev, size);
+	shmem = drm_gem_shmem_create_with_mnt(dev, size, pfdev->huge_mnt);
 	if (IS_ERR(shmem))
 		return ERR_CAST(shmem);
 

@@ -177,6 +177,8 @@ struct panfrost_device {
 		spinlock_t lock;
 	} cycle_counter;
 
+	struct vfsmount *huge_mnt;
+
 #ifdef CONFIG_DEBUG_FS
 	struct panfrost_device_debugfs debugfs;
 #endif
