@@ -604,6 +604,34 @@ static inline u8 * instr_va(struct alt_instr *i)
 	return (u8 *)&i->instr_offset + i->instr_offset;
 }
 
+static void __init_or_module apply_one_alternative(u8 *instr, u8 *insn_buff,
+						   struct alt_instr *a)
+{
+	u8 *replacement = (u8 *)&a->repl_offset + a->repl_offset;
+	unsigned int insn_buff_sz;
+
+	DPRINTK(ALT, "feat: %d*32+%d, old: (%pS (%px) len: %d), repl: (%px, len: %d) flags: 0x%x",
+		a->cpuid >> 5,
+		a->cpuid & 0x1f,
+		instr, instr, a->instrlen,
+		replacement, a->replacementlen, a->flags);
+
+	memcpy(insn_buff, replacement, a->replacementlen);
+	insn_buff_sz = a->replacementlen;
+
+	if (a->flags & ALT_FLAG_DIRECT_CALL)
+		insn_buff_sz = alt_replace_call(instr, insn_buff, a);
+
+	for (; insn_buff_sz < a->instrlen; insn_buff_sz++)
+		insn_buff[insn_buff_sz] = 0x90;
+
+	text_poke_apply_relocation(insn_buff, instr, a->instrlen, replacement, a->replacementlen);
+
+	DUMP_BYTES(ALT, instr, a->instrlen, "%px:   old_insn: ", instr);
+	DUMP_BYTES(ALT, replacement, a->replacementlen, "%px:   rpl_insn: ", replacement);
+	DUMP_BYTES(ALT, insn_buff, insn_buff_sz, "%px: final_insn: ", instr);
+}
+
 /*
  * Replace instructions with better alternatives for this CPU type. This runs
  * before SMP is initialized to avoid SMP problems with self modifying code.
@@ -618,7 +646,7 @@ void __init_or_module noinline apply_alternatives(struct alt_instr *start,
 						  struct alt_instr *end)
 {
 	u8 insn_buff[MAX_PATCH_LEN];
-	u8 *instr, *replacement;
+	u8 *instr;
 	struct alt_instr *a, *b;
 
 	DPRINTK(ALT, "alt table %px, -> %px", start, end);
@@ -643,8 +671,6 @@ void __init_or_module noinline apply_alternatives(struct alt_instr *start,
 	 * order.
 	 */
 	for (a = start; a < end; a++) {
-		unsigned int insn_buff_sz = 0;
-
 		/*
 		 * In case of nested ALTERNATIVE()s the outer alternative might
 		 * add more padding. To ensure consistent patching find the max
@@ -657,7 +683,6 @@ void __init_or_module noinline apply_alternatives(struct alt_instr *start,
 		}
 
 		instr = instr_va(a);
-		replacement = (u8 *)&a->repl_offset + a->repl_offset;
 		BUG_ON(a->instrlen > sizeof(insn_buff));
 		BUG_ON(a->cpuid >= (NCAPINTS + NBUGINTS) * 32);
 
@@ -670,32 +695,11 @@ void __init_or_module noinline apply_alternatives(struct alt_instr *start,
 		if (!boot_cpu_has(a->cpuid) == !(a->flags & ALT_FLAG_NOT)) {
 			memcpy(insn_buff, instr, a->instrlen);
 			optimize_nops(instr, insn_buff, a->instrlen);
-			text_poke_early(instr, insn_buff, a->instrlen);
-			continue;
+		} else {
+			apply_one_alternative(instr, insn_buff, a);
 		}
 
-		DPRINTK(ALT, "feat: %d*32+%d, old: (%pS (%px) len: %d), repl: (%px, len: %d) flags: 0x%x",
-			a->cpuid >> 5,
-			a->cpuid & 0x1f,
-			instr, instr, a->instrlen,
-			replacement, a->replacementlen, a->flags);
-
-		memcpy(insn_buff, replacement, a->replacementlen);
-		insn_buff_sz = a->replacementlen;
-
-		if (a->flags & ALT_FLAG_DIRECT_CALL)
-			insn_buff_sz = alt_replace_call(instr, insn_buff, a);
-
-		for (; insn_buff_sz < a->instrlen; insn_buff_sz++)
-			insn_buff[insn_buff_sz] = 0x90;
-
-		text_poke_apply_relocation(insn_buff, instr, a->instrlen, replacement, a->replacementlen);
-
-		DUMP_BYTES(ALT, instr, a->instrlen, "%px:   old_insn: ", instr);
-		DUMP_BYTES(ALT, replacement, a->replacementlen, "%px:   rpl_insn: ", replacement);
-		DUMP_BYTES(ALT, insn_buff, insn_buff_sz, "%px: final_insn: ", instr);
-
-		text_poke_early(instr, insn_buff, insn_buff_sz);
+		text_poke_early(instr, insn_buff, a->instrlen);
 	}
 
 	kasan_enable_current();
