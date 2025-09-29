@@ -52,12 +52,11 @@ struct cached_fid {
 struct cached_fids {
 	/* Must be held when:
 	 * - accessing the cfids->entries list
-	 * - accessing the cfids->dying list
+	 * - accessing cfids->num_entries
 	 */
 	spinlock_t cfid_list_lock;
 	int num_entries;
 	struct list_head entries;
-	struct list_head dying;
 	struct delayed_work laundromat_work;
 };
 
