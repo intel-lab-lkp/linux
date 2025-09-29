@@ -70,6 +70,7 @@ static int mt6360_adc_read_channel(struct mt6360_adc_data *mad, int channel, int
 	ktime_t predict_end_t, timeout;
 	unsigned int pre_wait_time;
 	int ret;
+	int cleanup_ret;
 
 	mutex_lock(&mad->adc_lock);
 
@@ -130,11 +131,16 @@ static int mt6360_adc_read_channel(struct mt6360_adc_data *mad, int channel, int
 out_adc_conv:
 	/* Only keep ADC enable */
 	adc_enable = cpu_to_be16(MT6360_ADCEN_MASK);
-	regmap_raw_write(mad->regmap, MT6360_REG_PMUADCCFG, &adc_enable, sizeof(adc_enable));
+	cleanup_ret = regmap_raw_write(mad->regmap, MT6360_REG_PMUADCCFG,
+				&adc_enable, sizeof(adc_enable));
+	if (cleanup_ret)
+		dev_warn(mad->dev, "Failed to reset ADC config: %d\n", cleanup_ret);
 	mad->last_off_timestamps[channel] = ktime_get();
 	/* Config prefer channel to NO_PREFER */
-	regmap_update_bits(mad->regmap, MT6360_REG_PMUADCRPT1, MT6360_PREFERCH_MASK,
+	cleanup_ret = regmap_update_bits(mad->regmap, MT6360_REG_PMUADCRPT1, MT6360_PREFERCH_MASK,
 			   MT6360_NO_PREFER << MT6360_PREFERCH_SHFT);
+	if (cleanup_ret)
+		dev_warn(mad->dev, "Failed to reset prefer channel: %d\n", cleanup_ret);
 out_adc_lock:
 	mutex_unlock(&mad->adc_lock);
 
