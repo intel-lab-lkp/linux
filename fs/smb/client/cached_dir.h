@@ -35,7 +35,6 @@ struct cached_fid {
 	const char *path;
 	bool has_lease:1;
 	bool is_open:1;
-	bool on_list:1;
 	bool file_all_info_is_valid:1;
 	unsigned long time; /* jiffies of when lease was taken */
 	unsigned long last_access_time; /* jiffies of when last accessed */
@@ -59,6 +58,17 @@ struct cached_fids {
 	struct list_head entries;
 	struct delayed_work laundromat_work;
 };
+
+static inline bool cfid_expired(const struct cached_fid *cfid)
+{
+	return (cfid->last_access_time &&
+		time_is_before_jiffies(cfid->last_access_time + HZ * dir_cache_timeout));
+}
+
+static inline bool cfid_is_valid(const struct cached_fid *cfid)
+{
+	return (cfid->has_lease && cfid->time && !cfid_expired(cfid));
+}
 
 extern struct cached_fids *init_cached_dirs(void);
 extern void free_cached_dirs(struct cached_fids *cfids);

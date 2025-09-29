@@ -321,15 +321,14 @@ retry_open:
 		spin_lock(&tcon->cfids->cfid_list_lock);
 		list_for_each_entry(parent_cfid, &tcon->cfids->entries, entry) {
 			if (parent_cfid->dentry == direntry->d_parent) {
+				if (!cfid_is_valid(parent_cfid))
+					break;
+
 				cifs_dbg(FYI, "found a parent cached file handle\n");
-				if (parent_cfid->has_lease && parent_cfid->time) {
-					lease_flags
-						|= SMB2_LEASE_FLAG_PARENT_LEASE_KEY_SET_LE;
-					memcpy(fid->parent_lease_key,
-					       parent_cfid->fid.lease_key,
-					       SMB2_LEASE_KEY_SIZE);
-					parent_cfid->dirents.is_valid = false;
-				}
+				lease_flags |= SMB2_LEASE_FLAG_PARENT_LEASE_KEY_SET_LE;
+				memcpy(fid->parent_lease_key, parent_cfid->fid.lease_key,
+				       SMB2_LEASE_KEY_SIZE);
+				parent_cfid->dirents.is_valid = false;
 				break;
 			}
 		}
