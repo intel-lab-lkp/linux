@@ -47,8 +47,6 @@ static ssize_t proc_bus_pci_read(struct file *file, char __user *buf,
 
 	if (pos >= size)
 		return 0;
-	if (nbytes >= size)
-		nbytes = size;
 	if (pos + nbytes > size)
 		nbytes = size - pos;
 	cnt = nbytes;
@@ -123,8 +121,6 @@ static ssize_t proc_bus_pci_write(struct file *file, const char __user *buf,
 
 	if (pos >= size)
 		return 0;
-	if (nbytes >= size)
-		nbytes = size;
 	if (pos + nbytes > size)
 		nbytes = size - pos;
 	cnt = nbytes;
