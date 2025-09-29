@@ -64,10 +64,12 @@ struct wb_completion {
 	atomic_t		cnt;
 	wait_queue_head_t	*waitq;
 	unsigned long stamp;
+	unsigned long start; /* jiffies when writeback work is issued */
 };
 
 #define __WB_COMPLETION_INIT(_waitq)	\
-	(struct wb_completion){ .cnt = ATOMIC_INIT(1), .waitq = (_waitq) }
+	(struct wb_completion)		\
+	{ .cnt = ATOMIC_INIT(1), .waitq = (_waitq), .start = jiffies }
 
 /*
  * If one wants to wait for one or more wb_writeback_works, each work's

@@ -2020,8 +2020,17 @@ static long writeback_sb_inodes(struct super_block *sb,
 
 		/* Report progress to inform the hung task detector of the progress. */
 		if (work->done && (jiffies - work->done->stamp) >
-		    HZ * sysctl_hung_task_timeout_secs / 2)
+		    HZ * sysctl_hung_task_timeout_secs / 2) {
+			unsigned long lasted_secs = (jiffies - work->done->start) / HZ;
+
+			if (lasted_secs >= sysctl_hung_task_timeout_secs)
+				pr_info("The writeback work for bdi(%s) has lasted "
+					"for more than %lu seconds with agv_bw %ld\n",
+					wb->bdi->dev_name, lasted_secs,
+					READ_ONCE(wb->avg_write_bandwidth));
+
 			wake_up_all(work->done->waitq);
+		}
 
 		wbc_detach_inode(&wbc);
 		work->nr_pages -= write_chunk - wbc.nr_to_write;
