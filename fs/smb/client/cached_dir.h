@@ -60,7 +60,6 @@ struct cached_fids {
 	int num_entries;
 	struct list_head entries;
 	struct list_head dying;
-	struct work_struct invalidation_work;
 	struct delayed_work laundromat_work;
 };
 
