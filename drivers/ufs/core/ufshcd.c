@@ -6746,6 +6746,14 @@ again:
 		goto do_reset;
 	}
 
+	if ((hba->dev_quirks & UFSHCD_QUIRK_UTP_ERROR) && (hba->errors & UTP_ERROR)) {
+		ufshcd_print_host_state(hba);
+		ufshcd_print_evt_hist(hba);
+
+		needs_reset = true;
+		goto do_reset;
+	}
+
 	/*
 	 * If LINERESET was caught, UFS might have been put to PWM mode,
 	 * check if power mode restore is needed.
@@ -6951,6 +6959,9 @@ static irqreturn_t ufshcd_check_errors(struct ufs_hba *hba, u32 intr_status)
 				       hba->errors);
 		queue_eh_work = true;
 	}
+
+	if ((hba->quirks & UFSHCD_QUIRK_UTP_ERROR) && (hba->errors & UTP_ERROR))
+		queue_eh_work = true;
 
 	if (hba->errors & UIC_ERROR) {
 		hba->uic_error = 0;

@@ -688,6 +688,12 @@ enum ufshcd_quirks {
 	 * single doorbell mode.
 	 */
 	UFSHCD_QUIRK_BROKEN_LSDBS_CAP			= 1 << 25,
+
+	/*
+	 * This quirk indicated that report the error when UTP error occurs.
+	 * Enable this quirk will the error handler allows the ufs to be reocvery.
+	 */
+	UFSHCD_QUIRK_UTP_ERROR				= 1 << 26,
 };
 
 enum ufshcd_caps {
