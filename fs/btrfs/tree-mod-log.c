@@ -267,9 +267,8 @@ int btrfs_tree_mod_log_insert_key(const struct extent_buffer *eb, int slot,
 	if (!tree_mod_need_log(eb->fs_info, eb))
 		return 0;
 
+	/* Allocation error is handled later. */
 	tm = alloc_tree_mod_elem(eb, slot, op);
-	if (!tm)
-		ret = -ENOMEM;
 
 	if (tree_mod_dont_log(eb->fs_info, eb)) {
 		kfree(tm);
@@ -278,16 +277,14 @@ int btrfs_tree_mod_log_insert_key(const struct extent_buffer *eb, int slot,
 		 * need to log.
 		 */
 		return 0;
-	} else if (ret != 0) {
-		/*
-		 * We previously failed to allocate memory and we need to log,
-		 * so we have to fail.
-		 */
-		goto out_unlock;
 	}
 
-	ret = tree_mod_log_insert(eb->fs_info, tm);
-out_unlock:
+	/* Deal with allocation error. */
+	if (tm)
+		ret = tree_mod_log_insert(eb->fs_info, tm);
+	else
+		ret = -ENOMEM;
+
 	write_unlock(&eb->fs_info->tree_mod_log_lock);
 	if (ret)
 		kfree(tm);
