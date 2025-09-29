@@ -2170,7 +2170,7 @@ static inline void set_task_rq(struct task_struct *p, unsigned int cpu)
 	if (!rt_group_sched_enabled())
 		tg = &root_task_group;
 	p->rt.rt_rq  = tg->rt_rq[cpu];
-	p->rt.parent = tg->rt_se[cpu];
+	p->dl.dl_rq  = &cpu_rq(cpu)->dl;
 #endif /* CONFIG_RT_GROUP_SCHED */
 }
 
@@ -2726,6 +2726,7 @@ static inline void add_nr_running(struct rq *rq, unsigned count)
 
 static inline void sub_nr_running(struct rq *rq, unsigned count)
 {
+	BUG_ON(rq->nr_running < count);
 	rq->nr_running -= count;
 	if (trace_sched_update_nr_running_tp_enabled()) {
 		call_trace_sched_update_nr_running(rq, -count);
