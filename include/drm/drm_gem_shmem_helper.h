@@ -107,6 +107,20 @@ struct drm_gem_shmem_object {
 #define to_drm_gem_shmem_obj(obj) \
 	container_of(obj, struct drm_gem_shmem_object, base)
 
+struct vfsmount *drm_gem_shmem_huge_mnt_create(const char *value);
+
+/**
+ * drm_gem_shmem_huge_mnt_free - Release a huge tmpfs mountpoint.
+ * @mnt: struct vfsmount * to release
+ *
+ * This function unmounts and releases an internal huge tmpfs mountpoint. If
+ * @mnt is NULL, no operation is performed.
+ */
+static inline void drm_gem_shmem_huge_mnt_free(struct vfsmount *mnt)
+{
+	kern_unmount(mnt);
+}
+
 int drm_gem_shmem_init(struct drm_device *dev, struct drm_gem_shmem_object *shmem, size_t size);
 struct drm_gem_shmem_object *drm_gem_shmem_create(struct drm_device *dev, size_t size);
 struct drm_gem_shmem_object *drm_gem_shmem_create_with_mnt(struct drm_device *dev,

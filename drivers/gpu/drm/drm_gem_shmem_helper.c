@@ -5,7 +5,9 @@
 
 #include <linux/dma-buf.h>
 #include <linux/export.h>
+#include <linux/fs_context.h>
 #include <linux/module.h>
+#include <linux/mount.h>
 #include <linux/mutex.h>
 #include <linux/shmem_fs.h>
 #include <linux/slab.h>
@@ -36,6 +38,60 @@ MODULE_IMPORT_NS("DMA_BUF");
  * named functions with an _object_ infix (e.g., drm_gem_shmem_object_vmap() wraps
  * drm_gem_shmem_vmap()). These helpers perform the necessary type conversion.
  */
+
+static int drm_gem_shmem_add_fc_param(struct fs_context *fc, const char *key,
+				      const char *value)
+{
+	return vfs_parse_fs_string(fc, key, value, strlen(value));
+}
+
+/**
+ * drm_gem_shmem_huge_mnt_create - Create a huge tmpfs mountpoint
+ * @value: huge tmpfs mount option value
+ *
+ * This function creates and mounts an internal huge tmpfs mountpoint for use
+ * with the drm_gem_shmem_create_with_mnt() function.
+ *
+ * The most common option value is "within_size" which only allocates huge pages
+ * if the page will be fully within the GEM object size. "always", "advise" and
+ * "never" are supported too but the latter would just create a mountpoint
+ * similar to default "shm_mnt" one. See shmemfs and Transparent Hugepage for
+ * more information.
+ *
+ * Returns:
+ * A struct vfsmount * on success or an ERR_PTR()-encoded negative error code on
+ * failure.
+ */
+struct vfsmount *drm_gem_shmem_huge_mnt_create(const char *value)
+{
+	struct file_system_type *type;
+	struct fs_context *fc;
+	struct vfsmount *mnt;
+	int ret;
+
+	if (!IS_ENABLED(CONFIG_TRANSPARENT_HUGEPAGE))
+		return ERR_PTR(-EOPNOTSUPP);
+
+	type = get_fs_type("tmpfs");
+	if (!type)
+		return ERR_PTR(-EOPNOTSUPP);
+
+	fc = fs_context_for_mount(type, SB_KERNMOUNT);
+	if (IS_ERR(fc))
+		return ERR_CAST(fc);
+	ret = drm_gem_shmem_add_fc_param(fc, "source", "tmpfs");
+	if (ret)
+		return ERR_PTR(-ENOPARAM);
+	ret = drm_gem_shmem_add_fc_param(fc, "huge", value);
+	if (ret)
+		return ERR_PTR(-ENOPARAM);
+
+	mnt = fc_mount_longterm(fc);
+	put_fs_context(fc);
+
+	return mnt;
+}
+EXPORT_SYMBOL_GPL(drm_gem_shmem_huge_mnt_create);
 
 static const struct drm_gem_object_funcs drm_gem_shmem_funcs = {
 	.free = drm_gem_shmem_object_free,
