@@ -44,7 +44,6 @@ struct cached_fid {
 	spinlock_t fid_lock;
 	struct cifs_tcon *tcon;
 	struct dentry *dentry;
-	struct work_struct put_work;
 	struct smb2_file_all_info file_all_info;
 	struct cached_dirents dirents;
 };
