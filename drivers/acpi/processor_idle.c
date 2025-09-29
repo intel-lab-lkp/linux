@@ -908,7 +908,7 @@ static int acpi_processor_evaluate_lpi(acpi_handle handle,
 	/* There must be at least 4 elements = 3 elements + 1 package */
 	if (!lpi_data || lpi_data->type != ACPI_TYPE_PACKAGE ||
 	    lpi_data->package.count < 4) {
-		pr_debug("not enough elements in _LPI\n");
+		pr_err("not enough elements in _LPI\n");
 		ret = -ENODATA;
 		goto end;
 	}
@@ -917,7 +917,7 @@ static int acpi_processor_evaluate_lpi(acpi_handle handle,
 
 	/* Validate number of power states. */
 	if (pkg_count < 1 || pkg_count != lpi_data->package.count - 3) {
-		pr_debug("count given by _LPI is not valid\n");
+		pr_err("count given by _LPI is not valid\n");
 		ret = -ENODATA;
 		goto end;
 	}
