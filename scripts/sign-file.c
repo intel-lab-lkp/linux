@@ -80,7 +80,7 @@ static __attribute__((noreturn))
 void format(void)
 {
 	fprintf(stderr,
-		"Usage: scripts/sign-file [-dp] <hash algo> <key> <x509> <module> [<dest>]\n");
+		"Usage: scripts/sign-file [-dpi] <hash algo> <key> <x509> <module> [<dest>]\n");
 	fprintf(stderr,
 		"       scripts/sign-file -s <raw sig> <hash algo> <x509> <module> [<dest>]\n");
 	exit(2);
@@ -228,14 +228,16 @@ int main(int argc, char **argv)
 	bool raw_sig = false;
 	unsigned char buf[4096];
 	unsigned long module_size, sig_size;
-	unsigned int use_signed_attrs;
+	unsigned int use_signed_attrs, include_cert;
 	const EVP_MD *digest_algo;
 	EVP_PKEY *private_key;
 #ifndef USE_PKCS7
 	CMS_ContentInfo *cms = NULL;
 	unsigned int use_keyid = 0;
+	include_cert = CMS_NOCERTS;
 #else
 	PKCS7 *pkcs7 = NULL;
+	include_cert = PKCS7_NOCERTS;
 #endif
 	X509 *x509;
 	BIO *bd, *bm;
@@ -253,11 +255,12 @@ int main(int argc, char **argv)
 #endif
 
 	do {
-		opt = getopt(argc, argv, "sdpk");
+		opt = getopt(argc, argv, "sdpki");
 		switch (opt) {
 		case 's': raw_sig = true; break;
 		case 'p': save_sig = true; break;
 		case 'd': sign_only = true; save_sig = true; break;
+		case 'i': include_cert = 0; break;
 #ifndef USE_PKCS7
 		case 'k': use_keyid = CMS_USE_KEYID; break;
 #endif
@@ -317,21 +320,21 @@ int main(int argc, char **argv)
 #ifndef USE_PKCS7
 		/* Load the signature message from the digest buffer. */
 		cms = CMS_sign(NULL, NULL, NULL, NULL,
-			       CMS_NOCERTS | CMS_PARTIAL | CMS_BINARY |
+			       include_cert | CMS_PARTIAL | CMS_BINARY |                              
 			       CMS_DETACHED | CMS_STREAM);
 		ERR(!cms, "CMS_sign");
 
 		ERR(!CMS_add1_signer(cms, x509, private_key, digest_algo,
-				     CMS_NOCERTS | CMS_BINARY |
+				     include_cert | CMS_BINARY |
 				     CMS_NOSMIMECAP | use_keyid |
 				     use_signed_attrs),
 		    "CMS_add1_signer");
-		ERR(CMS_final(cms, bm, NULL, CMS_NOCERTS | CMS_BINARY) != 1,
+		ERR(CMS_final(cms, bm, NULL, include_cert | CMS_BINARY) != 1,
 		    "CMS_final");
 
 #else
 		pkcs7 = PKCS7_sign(x509, private_key, NULL, bm,
-				   PKCS7_NOCERTS | PKCS7_BINARY |
+				   include_cert | PKCS7_BINARY |
 				   PKCS7_DETACHED | use_signed_attrs);
 		ERR(!pkcs7, "PKCS7_sign");
 #endif
