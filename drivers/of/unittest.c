@@ -4271,7 +4271,7 @@ static struct platform_driver unittest_pci_driver = {
 static int of_unittest_pci_node_verify(struct pci_dev *pdev, bool add)
 {
 	struct device_node *pnp, *np = NULL;
-	struct device *child_dev;
+	struct device *child_dev = NULL;
 	char *path = NULL;
 	const __be32 *reg;
 	int rc = 0;
@@ -4306,6 +4306,8 @@ failed:
 	kfree(path);
 	if (np)
 		of_node_put(np);
+	if (child_dev)
+		put_device(child_dev);
 
 	return rc;
 }
