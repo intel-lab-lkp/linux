@@ -53,6 +53,8 @@ struct mtk_pll_data {
 	u8 pll_en_bit; /* Assume 0, indicates BIT(0) by default */
 	u8 pcw_chg_bit;
 	u8 fenc_sta_bit;
+	const char * const *rpm_clk_names;
+	unsigned int num_rpm_clks;
 };
 
 /*
