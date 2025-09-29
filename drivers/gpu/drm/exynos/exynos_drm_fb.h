@@ -19,8 +19,11 @@ exynos_drm_framebuffer_init(struct drm_device *dev,
 			    struct exynos_drm_gem **exynos_gem,
 			    int count);
 
-dma_addr_t exynos_drm_fb_dma_addr(struct drm_framebuffer *fb, int index);
+struct drm_framebuffer *
+exynos_user_fb_create(struct drm_device *dev, struct drm_file *file_priv,
+		      const struct drm_format_info *info,
+		      const struct drm_mode_fb_cmd2 *mode_cmd);
 
-void exynos_drm_mode_config_init(struct drm_device *dev);
+dma_addr_t exynos_drm_fb_dma_addr(struct drm_framebuffer *fb, int index);
 
 #endif

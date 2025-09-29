@@ -8,8 +8,7 @@
  *	Seung-Woo Kim <sw0312.kim@samsung.com>
  */
 
-#include <drm/drm_atomic.h>
-#include <drm/drm_atomic_helper.h>
+#include <drm/drm_modeset_helper.h>
 #include <drm/drm_crtc.h>
 #include <drm/drm_framebuffer.h>
 #include <drm/drm_fourcc.h>
@@ -93,7 +92,7 @@ err:
 	return ERR_PTR(ret);
 }
 
-static struct drm_framebuffer *
+struct drm_framebuffer *
 exynos_user_fb_create(struct drm_device *dev, struct drm_file *file_priv,
 		      const struct drm_format_info *info,
 		      const struct drm_mode_fb_cmd2 *mode_cmd)
@@ -149,33 +148,4 @@ dma_addr_t exynos_drm_fb_dma_addr(struct drm_framebuffer *fb, int index)
 
 	exynos_gem = to_exynos_gem(fb->obj[index]);
 	return exynos_gem->dma_addr + fb->offsets[index];
-}
-
-static struct drm_mode_config_helper_funcs exynos_drm_mode_config_helpers = {
-	.atomic_commit_tail = drm_atomic_helper_commit_tail_rpm,
-};
-
-static const struct drm_mode_config_funcs exynos_drm_mode_config_funcs = {
-	.fb_create = exynos_user_fb_create,
-	.atomic_check = drm_atomic_helper_check,
-	.atomic_commit = drm_atomic_helper_commit,
-};
-
-void exynos_drm_mode_config_init(struct drm_device *dev)
-{
-	dev->mode_config.min_width = 0;
-	dev->mode_config.min_height = 0;
-
-	/*
-	 * set max width and height as default value(4096x4096).
-	 * this value would be used to check framebuffer size limitation
-	 * at drm_mode_addfb().
-	 */
-	dev->mode_config.max_width = 4096;
-	dev->mode_config.max_height = 4096;
-
-	dev->mode_config.funcs = &exynos_drm_mode_config_funcs;
-	dev->mode_config.helper_private = &exynos_drm_mode_config_helpers;
-
-	dev->mode_config.normalize_zpos = true;
 }

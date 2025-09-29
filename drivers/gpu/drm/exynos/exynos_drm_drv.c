@@ -233,6 +233,43 @@ static struct component_match *exynos_drm_match_add(struct device *dev)
 	return match ?: ERR_PTR(-ENODEV);
 }
 
+static struct drm_mode_config_helper_funcs exynos_drm_mode_config_helpers = {
+	.atomic_commit_tail = drm_atomic_helper_commit_tail_rpm,
+};
+
+static const struct drm_mode_config_funcs exynos_drm_mode_config_funcs = {
+	.fb_create = exynos_user_fb_create,
+	.atomic_check = drm_atomic_helper_check,
+	.atomic_commit = drm_atomic_helper_commit,
+};
+
+static int exynos_drm_mode_config_init(struct drm_device *dev)
+{
+	int ret;
+
+	ret = drmm_mode_config_init(dev);
+	if (ret)
+		return ret;
+
+	dev->mode_config.min_width = 0;
+	dev->mode_config.min_height = 0;
+
+	/*
+	 * set max width and height as default value(4096x4096).
+	 * this value would be used to check framebuffer size limitation
+	 * at drm_mode_addfb().
+	 */
+	dev->mode_config.max_width = 4096;
+	dev->mode_config.max_height = 4096;
+
+	dev->mode_config.funcs = &exynos_drm_mode_config_funcs;
+	dev->mode_config.helper_private = &exynos_drm_mode_config_helpers;
+
+	dev->mode_config.normalize_zpos = true;
+
+	return 0;
+}
+
 static int exynos_drm_bind(struct device *dev)
 {
 	struct exynos_drm_private *private;
@@ -257,9 +294,9 @@ static int exynos_drm_bind(struct device *dev)
 	dev_set_drvdata(dev, drm);
 	drm->dev_private = (void *)private;
 
-	drmm_mode_config_init(drm);
-
-	exynos_drm_mode_config_init(drm);
+	ret = exynos_drm_mode_config_init(drm);
+	if (ret)
+		goto err_free_private;
 
 	/* setup possible_clones. */
 	clone_mask = 0;
@@ -272,7 +309,7 @@ static int exynos_drm_bind(struct device *dev)
 	/* Try to bind all sub drivers. */
 	ret = component_bind_all(drm->dev, drm);
 	if (ret)
-		goto err_mode_config_cleanup;
+		goto err_free_private;
 
 	ret = drm_vblank_init(drm, drm->mode_config.num_crtc);
 	if (ret)
@@ -296,7 +333,7 @@ err_cleanup_poll:
 	drm_kms_helper_poll_fini(drm);
 err_unbind_all:
 	component_unbind_all(drm->dev, drm);
-err_mode_config_cleanup:
+err_free_private:
 	exynos_drm_cleanup_dma(drm);
 	kfree(private);
 	dev_set_drvdata(dev, NULL);
