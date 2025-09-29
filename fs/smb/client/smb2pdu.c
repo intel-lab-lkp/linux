@@ -5418,7 +5418,7 @@ int SMB2_query_directory_init(const unsigned int xid,
 			      struct TCP_Server_Info *server,
 			      struct smb_rqst *rqst,
 			      u64 persistent_fid, u64 volatile_fid,
-			      int index, int info_level)
+			      int index, struct cifs_search_info *search)
 {
 	struct smb2_query_directory_req *req;
 	unsigned char *bufptr;
@@ -5435,7 +5435,7 @@ int SMB2_query_directory_init(const unsigned int xid,
 	if (rc)
 		return rc;
 
-	switch (info_level) {
+	switch (search->info_level) {
 	case SMB_FIND_FILE_DIRECTORY_INFO:
 		req->FileInformationClass = FILE_DIRECTORY_INFORMATION;
 		break;
@@ -5449,14 +5449,15 @@ int SMB2_query_directory_init(const unsigned int xid,
 		req->FileInformationClass = FILE_FULL_DIRECTORY_INFORMATION;
 		break;
 	default:
-		cifs_tcon_dbg(VFS, "info level %u isn't supported\n",
-			info_level);
+		cifs_tcon_dbg(VFS, "info level %u isn't supported\n", search->info_level);
 		return -EINVAL;
 	}
 
 	req->FileIndex = cpu_to_le32(index);
 	req->PersistentFileId = persistent_fid;
 	req->VolatileFileId = volatile_fid;
+	if (search->restart_scan)
+		req->Flags |= SMB2_RESTART_SCANS;
 
 	len = 0x2;
 	bufptr = req->Buffer;
@@ -5603,7 +5604,7 @@ replay_again:
 	rc = SMB2_query_directory_init(xid, tcon, server,
 				       &rqst, persistent_fid,
 				       volatile_fid, index,
-				       srch_inf->info_level);
+				       srch_inf);
 	if (rc)
 		goto qdir_exit;
 
