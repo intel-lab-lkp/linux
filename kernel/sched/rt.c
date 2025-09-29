@@ -884,6 +884,11 @@ select_task_rq_rt(struct task_struct *p, int cpu, int flags)
 	struct rq *rq;
 	bool test;
 
+	/* Just return the task_cpu for processes inside task groups */
+	if (IS_ENABLED(CONFIG_RT_GROUP_SCHED) &&
+	    is_dl_group(rt_rq_of_se(&p->rt)))
+		goto out;
+
 	/* For anything but wake ups, just return the task_cpu */
 	if (!(flags & (WF_TTWU | WF_FORK)))
 		goto out;
@@ -983,7 +988,10 @@ static int balance_rt(struct rq *rq, struct task_struct *p, struct rq_flags *rf)
 		 * not yet started the picking loop.
 		 */
 		rq_unpin_lock(rq, rf);
-		pull_rt_task(rq);
+		if (IS_ENABLED(CONFIG_RT_GROUP_SCHED) && is_dl_group(rt_rq_of_se(&p->rt)))
+			group_pull_rt_task(rt_rq_of_se(&p->rt));
+		else
+			pull_rt_task(rq);
 		rq_repin_lock(rq, rf);
 	}
 
@@ -1085,7 +1093,10 @@ static inline void set_next_task_rt(struct rq *rq, struct task_struct *p, bool f
 	if (rq->donor->sched_class != &rt_sched_class)
 		update_rt_rq_load_avg(rq_clock_pelt(rq), rq, 0);
 
-	rt_queue_push_tasks(rt_rq);
+	if (IS_ENABLED(CONFIG_RT_GROUP_SCHED) && is_dl_group(rt_rq))
+		rt_queue_push_from_group(rt_rq);
+	else
+		rt_queue_push_tasks(rt_rq);
 }
 
 static struct sched_rt_entity *pick_next_rt_entity(struct rt_rq *rt_rq)
@@ -1148,6 +1159,13 @@ static void put_prev_task_rt(struct rq *rq, struct task_struct *p, struct task_s
 	 */
 	if (on_rt_rq(&p->rt) && p->nr_cpus_allowed > 1)
 		enqueue_pushable_task(rt_rq, p);
+
+	if (IS_ENABLED(CONFIG_RT_GROUP_SCHED) && is_dl_group(rt_rq)) {
+		struct sched_dl_entity *dl_se = dl_group_of(rt_rq);
+
+		if (dl_se->dl_throttled)
+			rt_queue_push_from_group(rt_rq);
+	}
 }
 
 /* Only try algorithms three times */
@@ -2209,6 +2227,7 @@ static void group_push_rt_tasks(struct rt_rq *rt_rq) { }
  */
 static void task_woken_rt(struct rq *rq, struct task_struct *p)
 {
+	struct rt_rq *rt_rq = rt_rq_of_se(&p->rt);
 	bool need_to_push = !task_on_cpu(rq, p) &&
 			    !test_tsk_need_resched(rq->curr) &&
 			    p->nr_cpus_allowed > 1 &&
@@ -2216,7 +2235,12 @@ static void task_woken_rt(struct rq *rq, struct task_struct *p)
 			    (rq->curr->nr_cpus_allowed < 2 ||
 			     rq->donor->prio <= p->prio);
 
-	if (need_to_push)
+	if (!need_to_push)
+		return;
+
+	if (IS_ENABLED(CONFIG_RT_GROUP_SCHED) && is_dl_group(rt_rq))
+		group_push_rt_tasks(rt_rq);
+	else
 		push_rt_tasks(rq);
 }
 
@@ -2256,7 +2280,9 @@ static void switched_from_rt(struct rq *rq, struct task_struct *p)
 	if (!task_on_rq_queued(p) || rt_rq->rt_nr_running)
 		return;
 
-	if (!IS_ENABLED(CONFIG_RT_GROUP_SCHED))
+	if (IS_ENABLED(CONFIG_RT_GROUP_SCHED) && is_dl_group(rt_rq))
+		rt_queue_pull_to_group(rt_rq);
+	else
 		rt_queue_pull_task(rt_rq);
 }
 
@@ -2277,12 +2303,21 @@ void __init init_sched_rt_class(void)
  */
 static void switched_to_rt(struct rq *rq, struct task_struct *p)
 {
+	struct rt_rq *rt_rq;
+
 	/*
 	 * If we are running, update the avg_rt tracking, as the running time
 	 * will now on be accounted into the latter.
 	 */
 	if (task_current(rq, p)) {
 		update_rt_rq_load_avg(rq_clock_pelt(rq), rq, 0);
+
+		if (IS_ENABLED(CONFIG_RT_GROUP_SCHED) && is_dl_group(rt_rq_of_se(&p->rt))) {
+			struct sched_dl_entity *dl_se = dl_group_of(rt_rq_of_se(&p->rt));
+
+			p->dl_server = dl_se;
+		}
+
 		return;
 	}
 
@@ -2292,17 +2327,15 @@ static void switched_to_rt(struct rq *rq, struct task_struct *p)
 	 * then see if we can move to another run queue.
 	 */
 	if (task_on_rq_queued(p)) {
-
-#ifndef CONFIG_RT_GROUP_SCHED
-		if (p->nr_cpus_allowed > 1 && rq->rt.overloaded)
-			rt_queue_push_tasks(rt_rq_of_se(&p->rt));
-#else
-		if (rt_rq_of_se(&p->rt)->overloaded) {
-		} else {
-			if (p->prio < rq->curr->prio)
-				resched_curr(rq);
+		rt_rq = rt_rq_of_se(&p->rt);
+		if (!is_dl_group(rt_rq) && p->nr_cpus_allowed > 1 && rq->rt.overloaded) {
+			rt_queue_push_tasks(rt_rq);
+			return;
+		} else if (is_dl_group(rt_rq) && rt_rq->overloaded) {
+			rt_queue_push_from_group(rt_rq);
+			return;
 		}
-#endif
+
 		if (p->prio < rq->donor->prio && cpu_online(cpu_of(rq)))
 			resched_curr(rq);
 	}
@@ -2325,8 +2358,12 @@ prio_changed_rt(struct rq *rq, struct task_struct *p, int oldprio)
 		 * If our priority decreases while running, we
 		 * may need to pull tasks to this runqueue.
 		 */
-		if (!IS_ENABLED(CONFIG_RT_GROUP_SCHED) && oldprio < p->prio)
-			rt_queue_pull_task(rt_rq);
+		if (oldprio < p->prio) {
+			if (IS_ENABLED(CONFIG_RT_GROUP_SCHED) && is_dl_group(rt_rq))
+				rt_queue_pull_to_group(rt_rq);
+			else
+				rt_queue_pull_task(rt_rq);
+		}
 
 		/*
 		 * If there's a higher priority task waiting to run
