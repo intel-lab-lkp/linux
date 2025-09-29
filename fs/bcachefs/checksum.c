@@ -216,7 +216,7 @@ static struct bch_csum __bch2_checksum_bio(struct bch_fs *c, unsigned type,
 	case BCH_CSUM_chacha20_poly1305_80:
 	case BCH_CSUM_chacha20_poly1305_128: {
 		struct poly1305_desc_ctx dctx;
-		u8 digest[POLY1305_DIGEST_SIZE];
+		u8 digest[POLY1305_DIGEST_SIZE] = { 0 };
 		struct bch_csum ret = { 0 };
 
 		bch2_poly1305_init(&dctx, c, nonce);
