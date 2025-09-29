@@ -59,6 +59,13 @@ struct cached_fids {
 	struct delayed_work laundromat_work;
 };
 
+/* Lookup modes for find_cached_dir() */
+enum {
+	CFID_LOOKUP_PATH,
+	CFID_LOOKUP_DENTRY,
+	CFID_LOOKUP_LEASEKEY,
+};
+
 static inline bool cfid_expired(const struct cached_fid *cfid)
 {
 	return (cfid->last_access_time &&
@@ -71,13 +78,9 @@ static inline bool cfid_is_valid(const struct cached_fid *cfid)
 }
 
 extern struct cached_fids *init_cached_dirs(void);
-extern int open_cached_dir(unsigned int xid, struct cifs_tcon *tcon,
-			   const char *path,
-			   struct cifs_sb_info *cifs_sb,
-			   bool lookup_only, struct cached_fid **cfid);
-extern int open_cached_dir_by_dentry(struct cifs_tcon *tcon,
-				     struct dentry *dentry,
-				     struct cached_fid **cfid);
+extern struct cached_fid *find_cached_dir(struct cached_fids *cfids, const void *key, int mode);
+extern int open_cached_dir(unsigned int xid, struct cifs_tcon *tcon, const char *path,
+			   struct cifs_sb_info *cifs_sb, struct cached_fid **cfid);
 extern void close_cached_dir(struct cached_fid *cfid);
 extern void drop_cached_dir_by_name(struct cached_fids *cfids, const char *name);
 extern void close_all_cached_dirs(struct cifs_sb_info *cifs_sb);
