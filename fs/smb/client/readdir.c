@@ -860,22 +860,16 @@ static bool emit_cached_dirents(struct cached_dirents *cde,
 	return true;
 }
 
-static void update_cached_dirents_count(struct cached_dirents *cde,
-					struct file *file)
+static void update_cached_dirents_count(struct cached_dirents *cde)
 {
-	if (cde->file != file)
-		return;
 	if (cde->is_valid || cde->is_failed)
 		return;
 
 	cde->pos++;
 }
 
-static void finished_cached_dirents_count(struct cached_dirents *cde,
-					struct dir_context *ctx, struct file *file)
+static void finished_cached_dirents_count(struct cached_dirents *cde, struct dir_context *ctx)
 {
-	if (cde->file != file)
-		return;
 	if (cde->is_valid || cde->is_failed)
 		return;
 	if (ctx->pos != cde->pos)
@@ -884,16 +878,11 @@ static void finished_cached_dirents_count(struct cached_dirents *cde,
 	cde->is_valid = 1;
 }
 
-static void add_cached_dirent(struct cached_dirents *cde,
-			      struct dir_context *ctx,
-			      const char *name, int namelen,
-			      struct cifs_fattr *fattr,
-				  struct file *file)
+static void add_cached_dirent(struct cached_dirents *cde, struct dir_context *ctx,
+			      const char *name, int namelen, struct cifs_fattr *fattr)
 {
 	struct cached_dirent *de;
 
-	if (cde->file != file)
-		return;
 	if (cde->is_valid || cde->is_failed)
 		return;
 	if (ctx->pos != cde->pos) {
@@ -934,8 +923,7 @@ static bool cifs_dir_emit(struct dir_context *ctx,
 
 	if (cfid) {
 		mutex_lock(&cfid->dirents.de_mutex);
-		add_cached_dirent(&cfid->dirents, ctx, name, namelen,
-				  fattr, file);
+		add_cached_dirent(&cfid->dirents, ctx, name, namelen, fattr);
 		mutex_unlock(&cfid->dirents.de_mutex);
 	}
 
@@ -1076,19 +1064,13 @@ int cifs_readdir(struct file *file, struct dir_context *ctx)
 
 	rc = open_cached_dir(xid, tcon, full_path, cifs_sb, &cfid);
 	cifs_put_tlink(tlink);
-	if (rc)
+retry_cached:
+	if (!cfid || !cfid_is_valid(cfid)) {
+		rc = -ENOENT;
 		goto cache_not_found;
+	}
 
 	mutex_lock(&cfid->dirents.de_mutex);
-	/*
-	 * If this was reading from the start of the directory
-	 * we need to initialize scanning and storing the
-	 * directory content.
-	 */
-	if (ctx->pos == 0 && cfid->dirents.file == NULL) {
-		cfid->dirents.file = file;
-		cfid->dirents.pos = 2;
-	}
 	/*
 	 * If we already have the entire directory cached then
 	 * we can just serve the cache.
@@ -1102,10 +1084,32 @@ int cifs_readdir(struct file *file, struct dir_context *ctx)
 		mutex_unlock(&cfid->dirents.de_mutex);
 		goto rddir2_exit;
 	}
+
+	if (cfid->dirents.is_failed) {
+		rc = -ENOENT;
+		mutex_unlock(&cfid->dirents.de_mutex);
+		goto cache_not_found;
+	}
+
+	if (!cfid->dirents.file)
+		cfid->dirents.file = file;
+	else if (cfid->dirents.file != file)
+		rc = -EAGAIN;
 	mutex_unlock(&cfid->dirents.de_mutex);
+
+	/* someone else is filling up the dirents for this cfid, wait for them to finish */
+	if (rc == -EAGAIN) {
+		rc = 0;
+		goto retry_cached;
+	}
 
 	/* keep our cfid ref, but check if still valid after network calls */
 cache_not_found:
+	if (rc && cfid) {
+		close_cached_dir(cfid);
+		cfid = NULL;
+	}
+
 	/*
 	 * Ensure FindFirst doesn't fail before doing filldir() for '.' and
 	 * '..'. Otherwise we won't be able to notify VFS in case of failure.
@@ -1155,7 +1159,7 @@ cache_not_found:
 	} else {
 		if (cfid) {
 			mutex_lock(&cfid->dirents.de_mutex);
-			finished_cached_dirents_count(&cfid->dirents, ctx, file);
+			finished_cached_dirents_count(&cfid->dirents, ctx);
 			mutex_unlock(&cfid->dirents.de_mutex);
 		}
 		cifs_dbg(FYI, "Could not find entry\n");
@@ -1196,7 +1200,7 @@ cache_not_found:
 		ctx->pos++;
 		if (cfid) {
 			mutex_lock(&cfid->dirents.de_mutex);
-			update_cached_dirents_count(&cfid->dirents, file);
+			update_cached_dirents_count(&cfid->dirents);
 			mutex_unlock(&cfid->dirents.de_mutex);
 		}
 
@@ -1215,8 +1219,12 @@ cache_not_found:
 
 rddir2_exit:
 	if (cfid) {
+		if (rc || cfid->dirents.is_failed || !cifsFile || cifsFile->srch_inf.endOfSearch)
+			cfid->dirents.file = NULL;
+
 		if (cifsFile)
 			cifsFile->invalidHandle = true;
+
 		close_cached_dir(cfid);
 	}
 	free_dentry_path(page);
