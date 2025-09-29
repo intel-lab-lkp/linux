@@ -188,6 +188,8 @@ struct driver_info {
  * much everything except custom framing and chip-specific stuff.
  */
 extern int usbnet_probe(struct usb_interface *, const struct usb_device_id *);
+extern int usbnet_probe_quirks(struct usb_interface *udev,
+			       const struct usb_device_id *prod);
 extern int usbnet_suspend(struct usb_interface *, pm_message_t);
 extern int usbnet_resume(struct usb_interface *);
 extern void usbnet_disconnect(struct usb_interface *);
