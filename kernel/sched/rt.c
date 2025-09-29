@@ -97,18 +97,16 @@ void free_rt_sched_group(struct task_group *tg)
 		return;
 }
 
-void init_tg_rt_entry(struct task_group *tg, struct rt_rq *rt_rq,
-		struct sched_rt_entity *rt_se, int cpu,
-		struct sched_rt_entity *parent)
+void init_tg_rt_entry(struct task_group *tg, struct rq *served_rq,
+		struct sched_dl_entity *dl_se, int cpu,
+		struct sched_dl_entity *parent)
 {
-	struct rq *rq = cpu_rq(cpu);
+	served_rq->rt.highest_prio.curr = MAX_RT_PRIO-1;
+	served_rq->rt.rq = cpu_rq(cpu);
+	served_rq->rt.tg = tg;
 
-	rt_rq->highest_prio.curr = MAX_RT_PRIO-1;
-	rt_rq->rq = rq;
-	rt_rq->tg = tg;
-
-	tg->rt_rq[cpu] = rt_rq;
-	tg->rt_se[cpu] = rt_se;
+	tg->rt_rq[cpu] = &served_rq->rt;
+	tg->dl_se[cpu] = dl_se;
 }
 
 int alloc_rt_sched_group(struct task_group *tg, struct task_group *parent)
