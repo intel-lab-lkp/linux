@@ -244,4 +244,71 @@ u32 tpm_buf_read_u32(struct tpm_buf *buf, off_t *offset)
 }
 EXPORT_SYMBOL_GPL(tpm_buf_read_u32);
 
+static bool tpm1_buf_is_command(struct tpm_buf *buf, u32 ordinal)
+{
+	struct tpm_header *head = (struct tpm_header *)buf->data;
 
+	return !(buf->flags & TPM_BUF_TPM2B) &&
+	       be16_to_cpu(head->tag) == TPM_TAG_RQU_COMMAND &&
+	       be32_to_cpu(head->ordinal) == ordinal;
+}
+
+/**
+ * tpm1_buf_append_extend() - Append command body for TPM_Extend
+ * @buf:	&tpm_buf instance
+ * @pcr_idx:	index of the PCR
+ * @hash:	SHA1 hash
+ */
+void tpm1_buf_append_extend(struct tpm_buf *buf, u32 pcr_idx, const u8 *hash)
+{
+	if (buf->flags & TPM_BUF_INVALID)
+		return;
+
+	if (!tpm1_buf_is_command(buf, TPM_ORD_EXTEND)) {
+		WARN(1, "tpm_buf: invalid TPM_Extend command\n");
+		buf->flags |= TPM_BUF_INVALID;
+		return;
+	}
+
+	tpm_buf_append_u32(buf, pcr_idx);
+	tpm_buf_append(buf, hash, TPM_DIGEST_SIZE);
+}
+
+static bool tpm2_buf_is_command(struct tpm_buf *buf, u32 ordinal)
+{
+	struct tpm_header *head = (struct tpm_header *)buf->data;
+	u16 tag = be16_to_cpu(head->tag);
+
+	return !(buf->flags & TPM_BUF_TPM2B) &&
+	       (tag == TPM2_ST_SESSIONS || tag == TPM2_ST_NO_SESSIONS) &&
+	       be32_to_cpu(head->ordinal) == ordinal;
+}
+
+/**
+ * tpm2_buf_append_pcr_extend() - Append command body for TPM2_PCR_Extend
+ * @buf:	&tpm_buf instance
+ * @digests:	list of PCR digests
+ * @banks:	PCR bank descriptors
+ * @nr_banks:	number of PCR banks
+ */
+void tpm2_buf_append_pcr_extend(struct tpm_buf *buf, struct tpm_digest *digests,
+				struct tpm_bank_info *banks,
+				unsigned int nr_banks)
+{
+	int i;
+
+	if (buf->flags & TPM_BUF_INVALID)
+		return;
+
+	if (!tpm2_buf_is_command(buf, TPM2_CC_PCR_EXTEND)) {
+		WARN(1, "tpm_buf: invalid TPM2_PCR_Extend command\n");
+		buf->flags |= TPM_BUF_INVALID;
+		return;
+	}
+
+	tpm_buf_append_u32(buf, nr_banks);
+	for (i = 0; i < nr_banks; i++) {
+		tpm_buf_append_u16(buf, digests[i].alg_id);
+		tpm_buf_append(buf, digests[i].digest, banks[i].digest_size);
+	}
+}

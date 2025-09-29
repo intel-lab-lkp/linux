@@ -424,6 +424,10 @@ u8 tpm_buf_read_u8(struct tpm_buf *buf, off_t *offset);
 u16 tpm_buf_read_u16(struct tpm_buf *buf, off_t *offset);
 u32 tpm_buf_read_u32(struct tpm_buf *buf, off_t *offset);
 void tpm_buf_append_handle(struct tpm_buf *buf, u32 handle);
+void tpm1_buf_append_extend(struct tpm_buf *buf, u32 pcr_idx, const u8 *hash);
+void tpm2_buf_append_pcr_extend(struct tpm_buf *buf, struct tpm_digest *digests,
+				struct tpm_bank_info *banks,
+				unsigned int nr_banks);
 
 /*
  * Check if TPM device is in the firmware upgrade mode.

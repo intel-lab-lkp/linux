@@ -171,7 +171,6 @@ int tpm2_pcr_extend(struct tpm_chip *chip, u32 pcr_idx,
 {
 	struct tpm_buf buf;
 	int rc;
-	int i;
 
 	if (!disable_pcr_integrity) {
 		rc = tpm2_start_auth_session(chip);
@@ -194,12 +193,12 @@ int tpm2_pcr_extend(struct tpm_chip *chip, u32 pcr_idx,
 		tpm_buf_append_auth(chip, &buf, NULL, 0);
 	}
 
-	tpm_buf_append_u32(&buf, chip->nr_allocated_banks);
+	tpm2_buf_append_pcr_extend(&buf, digests, chip->allocated_banks,
+				   chip->nr_allocated_banks);
 
-	for (i = 0; i < chip->nr_allocated_banks; i++) {
-		tpm_buf_append_u16(&buf, digests[i].alg_id);
-		tpm_buf_append(&buf, (const unsigned char *)&digests[i].digest,
-			       chip->allocated_banks[i].digest_size);
+	if (buf.flags & TPM_BUF_INVALID) {
+		rc = -EINVAL;
+		goto out;
 	}
 
 	if (!disable_pcr_integrity)
@@ -208,8 +207,8 @@ int tpm2_pcr_extend(struct tpm_chip *chip, u32 pcr_idx,
 	if (!disable_pcr_integrity)
 		rc = tpm_buf_check_hmac_response(chip, &buf, rc);
 
+out:
 	tpm_buf_destroy(&buf);
-
 	return rc;
 }
 
