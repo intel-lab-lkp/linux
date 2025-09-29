@@ -1866,7 +1866,7 @@ struct intel_dp {
 
 		bool lobf_disable_debug;
 		bool sink_alpm_error;
-	} alpm_parameters;
+	} alpm;
 
 	u8 alpm_dpcd;
 
