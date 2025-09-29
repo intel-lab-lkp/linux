@@ -1344,6 +1344,7 @@ errout:
 static void mshv_partition_destroy_region(struct mshv_mem_region *region)
 {
 	struct mshv_partition *partition = region->partition;
+	u64 page_offset;
 	u32 unmap_flags = 0;
 	int ret;
 
@@ -1362,9 +1363,17 @@ static void mshv_partition_destroy_region(struct mshv_mem_region *region)
 	if (region->flags.large_pages)
 		unmap_flags |= HV_UNMAP_GPA_LARGE_PAGE;
 
-	/* ignore unmap failures and continue as process may be exiting */
-	hv_call_unmap_gpa_pages(partition->pt_id, region->start_gfn,
-				region->nr_pages, unmap_flags);
+	for (page_offset = 0; page_offset < region->nr_pages; page_offset++) {
+		if (!region->pages[page_offset])
+			continue;
+
+		hv_call_unmap_gpa_pages(partition->pt_id,
+					ALIGN(region->start_gfn + page_offset,
+					      MSHV_MAX_UNMAP_GPA_PAGES),
+					MSHV_MAX_UNMAP_GPA_PAGES, unmap_flags);
+
+		page_offset += MSHV_MAX_UNMAP_GPA_PAGES - 1;
+	}
 
 	mshv_region_invalidate(region);
 
