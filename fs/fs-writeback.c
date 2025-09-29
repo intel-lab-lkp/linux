@@ -213,6 +213,7 @@ static void wb_queue_work(struct bdi_writeback *wb,
  */
 void wb_wait_for_completion(struct wb_completion *done)
 {
+	done->wait_stamp = jiffies;
 	atomic_dec(&done->cnt);		/* put down the initial count */
 	wait_event(*done->waitq,
 		   ({ done->progress_stamp = jiffies; !atomic_read(&done->cnt); }));
@@ -2020,8 +2021,16 @@ static long writeback_sb_inodes(struct super_block *sb,
 		/* Report progress to inform the hung task detector of the progress. */
 		progress_stamp = work->done->progress_stamp;
 		if (work->done && progress_stamp && (jiffies - progress_stamp) >
-		    HZ * sysctl_hung_task_timeout_secs / 2)
+		    HZ * sysctl_hung_task_timeout_secs / 2) {
+			unsigned long wait_secs = (jiffies - work->done->wait_stamp) / HZ;
+
+			if (wait_secs >= sysctl_hung_task_timeout_secs)
+				pr_info("The writeback work for bdi(%s) has lasted "
+					"for more than %lu seconds with agv_bw %ld\n",
+					wb->bdi->dev_name, wait_secs,
+					READ_ONCE(wb->avg_write_bandwidth));
 			wake_up_all(work->done->waitq);
+		}
 
 		wbc_detach_inode(&wbc);
 		work->nr_pages -= write_chunk - wbc.nr_to_write;
