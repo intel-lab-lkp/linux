@@ -303,11 +303,6 @@ int llvm__addr2line(const char *dso_name __maybe_unused, u64 addr __maybe_unused
 	return num_frames;
 }
 
-void dso__free_a2l_llvm(struct dso *dso __maybe_unused)
-{
-	/* Nothing to free. */
-}
-
 /*
  * Whenever LLVM wants to resolve an address into a symbol, it calls this
  * callback. We don't ever actually _return_ anything (in particular, because
