@@ -14,7 +14,18 @@ config ARCH_CONFIGURES_CPU_MITIGATIONS
 
 if !ARCH_CONFIGURES_CPU_MITIGATIONS
 config CPU_MITIGATIONS
-	def_bool y
+	bool "Mitigations for CPU vulnerabilities"
+	default y
+	help
+	  Say Y here to enable options which enable mitigations for hardware
+	  vulnerabilities (usually related to speculative execution).
+	  Mitigations can be disabled or restricted to SMT systems at runtime
+	  via the "mitigations" kernel parameter.
+
+	  If you say N, all mitigations will be disabled.  This CANNOT be
+	  overridden at runtime.
+
+	  Say 'Y', unless you really know what you are doing.
 endif
 
 #
