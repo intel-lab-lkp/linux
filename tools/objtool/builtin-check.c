@@ -75,6 +75,7 @@ static const struct option check_options[] = {
 	OPT_GROUP("Actions:"),
 	OPT_CALLBACK_OPTARG('h', "hacks", NULL, NULL, "jump_label,noinstr,skylake", "patch toolchain bugs/limitations", parse_hacks),
 	OPT_BOOLEAN('i', "ibt", &opts.ibt, "validate and annotate IBT"),
+	OPT_BOOLEAN('f', "ftr-fixup", &opts.ftr_fixup, "feature fixup"),
 	OPT_BOOLEAN('m', "mcount", &opts.mcount, "annotate mcount/fentry calls for ftrace"),
 	OPT_BOOLEAN('n', "noinstr", &opts.noinstr, "validate noinstr rules"),
 	OPT_BOOLEAN(0,   "orc", &opts.orc, "generate ORC metadata"),
@@ -160,6 +161,7 @@ static bool opts_valid(void)
 
 	if (opts.hack_jump_label	||
 	    opts.hack_noinstr		||
+	    opts.ftr_fixup		||
 	    opts.ibt			||
 	    opts.mcount			||
 	    opts.noinstr		||

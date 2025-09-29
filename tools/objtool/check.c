@@ -514,7 +514,11 @@ static int decode_instructions(struct objtool_file *file)
 			if (func->embedded_insn || func->alias != func)
 				continue;
 
-			if (!find_insn(file, sec, func->offset)) {
+			if (func->len == 0)
+				continue;
+
+			if (!find_insn(file, sec, opts.ftr_fixup ?
+						func->offset - sec->sym->offset : func->offset)) {
 				ERROR("%s(): can't find starting instruction", func->name);
 				return -1;
 			}
@@ -1558,9 +1562,11 @@ static int add_jump_destinations(struct objtool_file *file)
 			    dest_off == func->offset + func->len)
 				continue;
 
-			ERROR_INSN(insn, "can't find jump dest instruction at %s+0x%lx",
-				   dest_sec->name, dest_off);
-			return -1;
+			if (!opts.ftr_fixup) {
+				ERROR_INSN(insn, "can't find jump dest instruction at %s+0x%lx",
+					   dest_sec->name, dest_off);
+				return -1;
+			}
 		}
 
 		/*
@@ -1664,7 +1670,7 @@ static int add_call_destinations(struct objtool_file *file)
 			if (func && func->ignore)
 				continue;
 
-			if (!insn_call_dest(insn)) {
+			if (!insn_call_dest(insn) && !opts.ftr_fixup) {
 				ERROR_INSN(insn, "unannotated intra-function call");
 				return -1;
 			}
@@ -2568,9 +2574,11 @@ static int decode_sections(struct objtool_file *file)
 			return ret;
 	}
 
-	ret = add_jump_destinations(file);
-	if (ret)
-		return ret;
+	if (!opts.ftr_fixup) {
+		ret = add_jump_destinations(file);
+		if (ret)
+			return ret;
+	}
 
 	/*
 	 * Must be before add_call_destination(); it changes INSN_CALL to
@@ -4697,6 +4705,30 @@ int check(struct objtool_file *file)
 
 	if (!nr_insns)
 		goto out;
+
+	if (opts.ftr_fixup) {
+		ret = process_alt_data(file);
+		if (ret < 0)
+			return ret;
+
+		ret = process_fixup_entries(file);
+		if (ret < 0)
+			return ret;
+
+		check_and_flatten_fixup_entries();
+
+		ret = process_exception_entries(file);
+		if (ret < 0)
+			return ret;
+
+		ret = process_bug_entries(file);
+		if (ret < 0)
+			return ret;
+
+		ret = process_alt_relocations(file);
+		if (ret < 0)
+			return ret;
+	}
 
 	if (opts.retpoline)
 		warnings += validate_retpoline(file);
