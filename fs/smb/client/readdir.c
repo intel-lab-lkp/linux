@@ -850,9 +850,7 @@ static bool emit_cached_dirents(struct cached_dirents *cde,
 		 * initial scan.
 		 */
 		ctx->pos = dirent->pos;
-		rc = dir_emit(ctx, dirent->name, dirent->namelen,
-			      dirent->fattr.cf_uniqueid,
-			      dirent->fattr.cf_dtype);
+		rc = dir_emit(ctx, dirent->name, dirent->namelen, dirent->unique_id, dirent->dtype);
 		if (!rc)
 			return rc;
 		ctx->pos++;
@@ -901,9 +899,10 @@ static void add_cached_dirent(struct cached_dirents *cde, struct dir_context *ct
 		cde->is_failed = 1;
 		return;
 	}
-	de->pos = ctx->pos;
 
-	memcpy(&de->fattr, fattr, sizeof(struct cifs_fattr));
+	de->pos = ctx->pos;
+	de->unique_id = fattr->cf_uniqueid;
+	de->dtype = fattr->cf_dtype;
 
 	list_add_tail(&de->entry, &cde->entries);
 }
