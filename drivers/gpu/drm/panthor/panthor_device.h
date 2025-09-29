@@ -135,6 +135,9 @@ struct panthor_device {
 	/** @devfreq: Device frequency scaling management data. */
 	struct panthor_devfreq *devfreq;
 
+	/** @huge_mnt: tmpfs mount point with Transparent Hugepage enabled. */
+	struct vfsmount *huge_mnt;
+
 	/** @unplug: Device unplug related fields. */
 	struct {
 		/** @lock: Lock used to serialize unplug operations. */

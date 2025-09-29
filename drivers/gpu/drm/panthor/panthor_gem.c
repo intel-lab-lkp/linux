@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0 or MIT
 /* Copyright 2019 Linaro, Ltd, Rob Herring <robh@kernel.org> */
 /* Copyright 2023 Collabora ltd. */
+/* Copyright 2025 Amazon.com, Inc. or its affiliates */
 
 #include <linux/cleanup.h>
 #include <linux/dma-buf.h>
@@ -11,9 +12,34 @@
 #include <drm/panthor_drm.h>
 
 #include "panthor_device.h"
+#include "panthor_drv.h"
 #include "panthor_fw.h"
 #include "panthor_gem.h"
 #include "panthor_mmu.h"
+
+void panthor_gem_init(struct panthor_device *ptdev)
+{
+	struct vfsmount *huge_mnt;
+
+	if (!panthor_transparent_hugepage)
+		return;
+
+	huge_mnt = drm_gem_shmem_huge_mnt_create("within_size");
+	if (IS_ERR(huge_mnt)) {
+		drm_warn(&ptdev->base, "Can't use Transparent Hugepage (%ld)\n",
+			 PTR_ERR(huge_mnt));
+		return;
+	}
+
+	ptdev->huge_mnt = huge_mnt;
+
+	drm_info(&ptdev->base, "Using Transparent Hugepage\n");
+}
+
+void panthor_gem_fini(struct panthor_device *ptdev)
+{
+	drm_gem_shmem_huge_mnt_free(ptdev->huge_mnt);
+}
 
 #ifdef CONFIG_DEBUG_FS
 static void panthor_gem_debugfs_bo_init(struct panthor_gem_object *bo)
@@ -270,10 +296,12 @@ panthor_gem_create_with_handle(struct drm_file *file,
 			       u64 *size, u32 flags, u32 *handle)
 {
 	int ret;
+	struct panthor_device *ptdev =
+		container_of(ddev, struct panthor_device, base);
 	struct drm_gem_shmem_object *shmem;
 	struct panthor_gem_object *bo;
 
-	shmem = drm_gem_shmem_create(ddev, *size);
+	shmem = drm_gem_shmem_create_with_mnt(ddev, *size, ptdev->huge_mnt);
 	if (IS_ERR(shmem))
 		return PTR_ERR(shmem);
 
