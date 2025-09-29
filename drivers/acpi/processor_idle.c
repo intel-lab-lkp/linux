@@ -1315,6 +1315,7 @@ int acpi_processor_power_state_has_changed(struct acpi_processor *pr)
 	int cpu;
 	struct acpi_processor *_pr;
 	struct cpuidle_device *dev;
+	int ret = 0;
 
 	if (disabled_by_idle_boot_param())
 		return 0;
@@ -1344,16 +1345,20 @@ int acpi_processor_power_state_has_changed(struct acpi_processor *pr)
 		}
 
 		/* Populate Updated C-state information */
-		acpi_processor_get_power_info(pr);
-		acpi_processor_setup_cpuidle_states(pr);
+		ret = acpi_processor_get_power_info(pr);
+		if (ret)
+			pr_err("Get processor-%u power information failed.\n",
+			       pr->id);
+		else
+			acpi_processor_setup_cpuidle_states(pr);
 
 		/* Enable all cpuidle devices */
 		for_each_online_cpu(cpu) {
 			_pr = per_cpu(processors, cpu);
 			if (!_pr || !_pr->flags.power_setup_done)
 				continue;
-			acpi_processor_get_power_info(_pr);
-			if (_pr->flags.power) {
+			ret = acpi_processor_get_power_info(_pr);
+			if (!ret && _pr->flags.power) {
 				dev = per_cpu(acpi_cpuidle_device, cpu);
 				acpi_processor_setup_cpuidle_dev(_pr, dev);
 				cpuidle_enable_device(dev);
@@ -1363,7 +1368,7 @@ int acpi_processor_power_state_has_changed(struct acpi_processor *pr)
 		cpus_read_unlock();
 	}
 
-	return 0;
+	return ret;
 }
 
 void acpi_processor_register_idle_driver(void)
