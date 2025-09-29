@@ -558,6 +558,7 @@ static int pci_npem_init(struct pci_dev *dev, const struct npem_ops *ops,
 void pci_npem_remove(struct pci_dev *dev)
 {
 	npem_free(dev->npem);
+	dev->npem = NULL;
 }
 
 void pci_npem_create(struct pci_dev *dev)
