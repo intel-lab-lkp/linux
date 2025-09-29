@@ -2220,7 +2220,7 @@ static int __iommu_attach_group(struct iommu_domain *domain,
 	struct device *dev;
 
 	if (group->domain && group->domain != group->default_domain &&
-	    group->domain != group->blocking_domain)
+	    group->blocking_domain && group->domain != group->blocking_domain)
 		return -EBUSY;
 
 	dev = iommu_group_first_dev(group);
