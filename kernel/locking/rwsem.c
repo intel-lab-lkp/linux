@@ -1256,6 +1256,9 @@ static __always_inline int __down_read_common(struct rw_semaphore *sem, int stat
 	int ret = 0;
 	long count;
 
+	/* add the lock->magic check to warn the invalid rwsem without initialization */
+	DEBUG_RWSEMS_WARN_ON(sem->magic != sem, sem);
+
 	preempt_disable();
 	if (!rwsem_read_trylock(sem, &count)) {
 		if (IS_ERR(rwsem_down_read_slowpath(sem, count, state))) {
@@ -1311,6 +1314,9 @@ static inline int __down_read_trylock(struct rw_semaphore *sem)
 static __always_inline int __down_write_common(struct rw_semaphore *sem, int state)
 {
 	int ret = 0;
+
+	/* add the lock->magic check to warn the invalid rwsem without initialization */
+	DEBUG_RWSEMS_WARN_ON(sem->magic != sem, sem);
 
 	preempt_disable();
 	if (unlikely(!rwsem_write_trylock(sem))) {
