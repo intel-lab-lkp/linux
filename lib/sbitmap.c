@@ -534,26 +534,34 @@ unsigned long __sbitmap_queue_get_batch(struct sbitmap_queue *sbq, int nr_tags,
 		unsigned int map_depth = __map_depth(sb, index);
 		unsigned long val;
 
-		sbitmap_deferred_clear(map, 0, 0, 0);
 		val = READ_ONCE(map->word);
-		if (val == (1UL << (map_depth - 1)) - 1)
-			goto next;
-
-		nr = find_first_zero_bit(&val, map_depth);
-		if (nr + nr_tags <= map_depth) {
-			atomic_long_t *ptr = (atomic_long_t *) &map->word;
-
-			get_mask = ((1UL << nr_tags) - 1) << nr;
-			while (!atomic_long_try_cmpxchg(ptr, &val,
-							  get_mask | val))
-				;
-			get_mask = (get_mask & ~val) >> nr;
-			if (get_mask) {
-				*offset = nr + (index << sb->shift);
-				update_alloc_hint_after_get(sb, depth, hint,
-							*offset + nr_tags - 1);
-				return get_mask;
+		while (1) {
+			if (val == (1UL << (map_depth - 1)) - 1) {
+				if (!sbitmap_deferred_clear(map, 0, 0, 0))
+					goto next;
+				val = READ_ONCE(map->word);
 			}
+			nr = find_first_zero_bit(&val, map_depth);
+			if (nr + nr_tags <= map_depth)
+				break;
+
+			if (!sbitmap_deferred_clear(map, 0, 0, 0))
+				goto next;
+
+			val = READ_ONCE(map->word);
+		}
+		atomic_long_t *ptr = (atomic_long_t *) &map->word;
+
+		get_mask = ((1UL << nr_tags) - 1) << nr;
+		while (!atomic_long_try_cmpxchg(ptr, &val,
+						  get_mask | val))
+			;
+		get_mask = (get_mask & ~val) >> nr;
+		if (get_mask) {
+			*offset = nr + (index << sb->shift);
+			update_alloc_hint_after_get(sb, depth, hint,
+						*offset + nr_tags - 1);
+			return get_mask;
 		}
 next:
 		/* Jump to next index. */
