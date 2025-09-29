@@ -8,6 +8,8 @@
 #ifndef _CACHED_DIR_H
 #define _CACHED_DIR_H
 
+#include <linux/seqlock.h>
+
 struct cached_dirent {
 	struct list_head entry;
 	char *name;
@@ -33,13 +35,19 @@ struct cached_dirents {
 
 struct cached_fid {
 	struct list_head entry;
+	struct rcu_head rcu;
+	/*
+	 * ->seqlock must be used:
+	 * - write-locked when updating
+	 * - rcu_read_lock() + seqcounted on reads
+	 */
+	seqlock_t seqlock;
 	struct cached_fids *cfids;
 	const char *path;
 	unsigned long ctime; /* (jiffies) creation time, when cfid was created (cached) */
 	unsigned long atime; /* (jiffies) access time, when it was last used */
 	struct kref refcount;
 	struct cifs_fid fid;
-	spinlock_t fid_lock;
 	struct cifs_tcon *tcon;
 	struct dentry *dentry;
 	struct smb2_file_all_info *file_all_info;
@@ -48,11 +56,12 @@ struct cached_fid {
 
 /* default MAX_CACHED_FIDS is 16 */
 struct cached_fids {
-	/* Must be held when:
-	 * - accessing the cfids->entries list
-	 * - accessing cfids->num_entries
+	/*
+	 * ->entries_seqlock must be used when accessing ->entries or ->num_entries:
+	 * - write-locked when updating
+	 * - rcu_read_lock() + seqcounted on reads
 	 */
-	spinlock_t cfid_list_lock;
+	seqlock_t entries_seqlock;
 	int num_entries;
 	struct list_head entries;
 	struct delayed_work laundromat_work;

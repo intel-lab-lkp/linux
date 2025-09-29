@@ -306,7 +306,8 @@ static int cifs_debug_dirs_proc_show(struct seq_file *m, void *v)
 				cfids = tcon->cfids;
 				if (!cfids)
 					continue;
-				spin_lock(&cfids->cfid_list_lock); /* check lock ordering */
+
+				read_seqlock_excl(&cfids->entries_seqlock);
 				seq_printf(m, "Num entries: %d\n", cfids->num_entries);
 				list_for_each_entry(cfid, &cfids->entries, entry) {
 					seq_printf(m, "0x%x 0x%llx 0x%llx     %s",
@@ -320,7 +321,7 @@ static int cifs_debug_dirs_proc_show(struct seq_file *m, void *v)
 						seq_printf(m, ", valid dirents");
 					seq_printf(m, "\n");
 				}
-				spin_unlock(&cfids->cfid_list_lock);
+				read_sequnlock_excl(&cfids->entries_seqlock);
 			}
 		}
 	}
