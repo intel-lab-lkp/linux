@@ -290,9 +290,9 @@ struct gs_host_frame {
 #define GS_NAPI_WEIGHT 32
 
 /* Maximum number of interfaces the driver supports per device.
- * Current hardware only supports 3 interfaces. The future may vary.
+ * The channel number type of gs_host_frame is u8, so max interfaces can be 255.
  */
-#define GS_MAX_INTF 3
+#define GS_MAX_INTF 255
 
 struct gs_tx_context {
 	struct gs_can *dev;
