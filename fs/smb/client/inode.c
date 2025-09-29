@@ -2708,10 +2708,28 @@ cifs_dentry_needs_reval(struct dentry *dentry)
 	if (!lookupCacheEnabled)
 		return true;
 
-	cfid = find_cached_dir(tcon->cfids, dentry->d_parent, CFID_LOOKUP_DENTRY);
-	if (cfid) {
-		close_cached_dir(cfid);
-		return false;
+	if (!IS_ROOT(dentry)) {
+		cfid = find_cached_dir(tcon->cfids, dentry->d_parent, CFID_LOOKUP_DENTRY);
+		if (cfid) {
+			/*
+			 * We hold a lease for the cached parent.
+			 * So as long as this child is within cached dir lifetime, we don't need to
+			 * revalidate it.
+			 *
+			 * Since cfid expiration is based on access time, use it for comparison
+			 * instead of creation time.
+			 */
+			if (time_before(cifs_i->time, cfid->atime - dir_cache_timeout * HZ)) {
+				close_cached_dir(cfid);
+				return true;
+			}
+
+			/*
+			 * From cached dir perspective, we're done -- attr caching (ac*max) may
+			 * have different requirements, so let the checks go through.
+			 */
+			close_cached_dir(cfid);
+		}
 	}
 
 	/*
