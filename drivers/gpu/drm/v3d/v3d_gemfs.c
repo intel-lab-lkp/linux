@@ -1,23 +1,11 @@
 // SPDX-License-Identifier: GPL-2.0+
 /* Copyright (C) 2024 Raspberry Pi */
 
-#include <linux/fs.h>
-#include <linux/mount.h>
-#include <linux/fs_context.h>
-
 #include "v3d_drv.h"
-
-static int add_param(struct fs_context *fc, const char *key, const char *val)
-{
-	return vfs_parse_fs_string(fc, key, val, strlen(val));
-}
 
 void v3d_gemfs_init(struct v3d_dev *v3d)
 {
-	struct file_system_type *type;
-	struct fs_context *fc;
 	struct vfsmount *gemfs;
-	int ret;
 
 	/*
 	 * By creating our own shmemfs mountpoint, we can pass in
@@ -31,20 +19,8 @@ void v3d_gemfs_init(struct v3d_dev *v3d)
 	if (!super_pages)
 		goto err;
 
-	type = get_fs_type("tmpfs");
-	if (!type)
-		goto err;
-
-	fc = fs_context_for_mount(type, SB_KERNMOUNT);
-	if (IS_ERR(fc))
-		goto err;
-	ret = add_param(fc, "source", "tmpfs");
-	if (!ret)
-		ret = add_param(fc, "huge", "within_size");
-	if (!ret)
-		gemfs = fc_mount_longterm(fc);
-	put_fs_context(fc);
-	if (ret)
+	gemfs = drm_gem_shmem_huge_mnt_create("within_size");
+	if (IS_ERR(gemfs))
 		goto err;
 
 	v3d->gemfs = gemfs;
@@ -60,6 +36,5 @@ err:
 
 void v3d_gemfs_fini(struct v3d_dev *v3d)
 {
-	if (v3d->gemfs)
-		kern_unmount(v3d->gemfs);
+	drm_gem_shmem_huge_mnt_free(v3d->gemfs);
 }
