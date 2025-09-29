@@ -91,6 +91,11 @@ static void exynos_plane_mode_set(struct exynos_drm_plane_state *exynos_state)
 	actual_w = exynos_plane_get_size(crtc_x, crtc_w, mode->hdisplay);
 	actual_h = exynos_plane_get_size(crtc_y, crtc_h, mode->vdisplay);
 
+	if (!actual_w || !actual_h) {
+		state->visible = false;
+		return;
+	}
+
 	if (crtc_x < 0) {
 		if (actual_w)
 			src_x += ((-crtc_x) * exynos_state->h_ratio) >> 16;
@@ -244,6 +249,9 @@ static int exynos_plane_atomic_check(struct drm_plane *plane,
 	/* translate state into exynos_state */
 	exynos_plane_mode_set(exynos_state);
 
+	if (!new_plane_state->visible)
+		return 0;
+
 	ret = exynos_drm_plane_check_format(exynos_plane->config, exynos_state);
 	if (ret)
 		return ret;
@@ -263,8 +271,10 @@ static void exynos_plane_atomic_update(struct drm_plane *plane,
 	if (!new_state->crtc)
 		return;
 
-	if (exynos_crtc->ops->update_plane)
+	if (new_state->visible && exynos_crtc->ops->update_plane)
 		exynos_crtc->ops->update_plane(exynos_crtc, exynos_plane);
+	else if (exynos_crtc->ops->disable_plane)
+		exynos_crtc->ops->disable_plane(exynos_crtc, exynos_plane);
 }
 
 static void exynos_plane_atomic_disable(struct drm_plane *plane,
