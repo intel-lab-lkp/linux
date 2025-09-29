@@ -93,8 +93,43 @@ void unregister_rt_sched_group(struct task_group *tg)
 
 void free_rt_sched_group(struct task_group *tg)
 {
+	int i;
+	unsigned long flags;
+	struct rq *served_rq;
+
 	if (!rt_group_sched_enabled())
 		return;
+
+	if (!tg->dl_se || !tg->rt_rq)
+		return;
+
+	for_each_possible_cpu(i) {
+		if (!tg->dl_se[i] || !tg->rt_rq[i])
+			continue;
+
+		/*
+		 * Shutdown the dl_server and free it
+		 *
+		 * Since the dl timer is going to be cancelled,
+		 * we risk to never decrease the running bw...
+		 * Fix this issue by changing the group runtime
+		 * to 0 immediately before freeing it.
+		 */
+		dl_init_tg(tg->dl_se[i], 0, tg->dl_se[i]->dl_period);
+
+		raw_spin_rq_lock_irqsave(cpu_rq(i), flags);
+		BUG_ON(tg->rt_rq[i]->rt_nr_running);
+		hrtimer_cancel(&tg->dl_se[i]->dl_timer);
+		raw_spin_rq_unlock_irqrestore(cpu_rq(i), flags);
+		kfree(tg->dl_se[i]);
+
+		/* Free the local per-cpu runqueue */
+		served_rq = container_of(tg->rt_rq[i], struct rq, rt);
+		kfree(served_rq);
+	}
+
+	kfree(tg->rt_rq);
+	kfree(tg->dl_se);
 }
 
 void init_tg_rt_entry(struct task_group *tg, struct rq *served_rq,
@@ -109,10 +144,64 @@ void init_tg_rt_entry(struct task_group *tg, struct rq *served_rq,
 	tg->dl_se[cpu] = dl_se;
 }
 
+static bool rt_server_has_tasks(struct sched_dl_entity *dl_se)
+{
+	return false;
+}
+
+static struct task_struct *rt_server_pick(struct sched_dl_entity *dl_se)
+{
+	return NULL;
+}
+
 int alloc_rt_sched_group(struct task_group *tg, struct task_group *parent)
 {
+	struct rq *s_rq;
+	struct sched_dl_entity *dl_se;
+	int i;
+
 	if (!rt_group_sched_enabled())
 		return 1;
+
+	tg->rt_rq = kcalloc(nr_cpu_ids, sizeof(struct rt_rq *), GFP_KERNEL);
+	if (!tg->rt_rq)
+		return 0;
+
+	tg->dl_se = kcalloc(nr_cpu_ids, sizeof(dl_se), GFP_KERNEL);
+	if (!tg->dl_se) {
+		kfree(tg->rt_rq);
+		tg->rt_rq = NULL;
+		return 0;
+	}
+
+	init_dl_bandwidth(&tg->dl_bandwidth, 0, 0);
+
+	for_each_possible_cpu(i) {
+		s_rq = kzalloc_node(sizeof(struct rq),
+				     GFP_KERNEL, cpu_to_node(i));
+		if (!s_rq)
+			return 0;
+
+		dl_se = kzalloc_node(sizeof(struct sched_dl_entity),
+				     GFP_KERNEL, cpu_to_node(i));
+		if (!dl_se) {
+			kfree(s_rq);
+			return 0;
+		}
+
+		init_rt_rq(&s_rq->rt);
+		init_dl_entity(dl_se);
+		dl_se->dl_runtime = tg->dl_bandwidth.dl_runtime;
+		dl_se->dl_period = tg->dl_bandwidth.dl_period;
+		dl_se->dl_deadline = dl_se->dl_period;
+		dl_se->dl_bw = to_ratio(dl_se->dl_period, dl_se->dl_runtime);
+		dl_se->dl_density = to_ratio(dl_se->dl_period, dl_se->dl_runtime);
+		dl_se->dl_server = 1;
+
+		dl_server_init(dl_se, &cpu_rq(i)->dl, s_rq, rt_server_has_tasks, rt_server_pick);
+
+		init_tg_rt_entry(tg, s_rq, dl_se, i, parent->dl_se[i]);
+	}
 
 	return 1;
 }
