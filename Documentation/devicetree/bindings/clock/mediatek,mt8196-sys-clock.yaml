@@ -45,6 +45,9 @@ properties:
   reg:
     maxItems: 1
 
+  clocks:
+    maxItems: 1
+
   '#clock-cells':
     const: 1
 
@@ -90,6 +93,23 @@ required:
 
 additionalProperties: false
 
+allOf:
+  - if:
+      properties:
+        compatible:
+          contains:
+            enum:
+              - mediatek,mt8196-mfgpll-pll-ctrl
+              - mediatek,mt8196-mfgpll-sc0-pll-ctrl
+              - mediatek,mt8196-mfgpll-sc1-pll-ctrl
+    then:
+      properties:
+        clocks:
+          items:
+            - description: mfg_eb clock
+      required:
+        - clocks
+
 examples:
   - |
     apmixedsys_clk: syscon@10000800 {
@@ -104,4 +124,12 @@ examples:
         mediatek,hardware-voter = <&scp_hwv>;
         #clock-cells = <1>;
     };
+  - |
+    #include <dt-bindings/clock/mediatek,mt8196-clock.h>
 
+    clock-controller@4b810000 {
+        compatible = "mediatek,mt8196-mfgpll-pll-ctrl", "syscon";
+        reg = <0x4b810000 0x400>;
+        clocks = <&topckgen CLK_TOP_MFG_EB>;
+        #clock-cells = <1>;
+    };
