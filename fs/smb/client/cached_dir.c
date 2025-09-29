@@ -13,7 +13,6 @@
 #include "cached_dir.h"
 
 static struct cached_fid *init_cached_dir(const char *path);
-static void free_cached_dir(struct cached_fid *cfid);
 static void smb2_close_cached_fid(struct kref *ref);
 
 static inline void invalidate_cfid(struct cached_fid *cfid)
@@ -456,6 +455,7 @@ static void
 smb2_close_cached_fid(struct kref *ref)
 {
 	struct cached_fid *cfid = container_of(ref, struct cached_fid, refcount);
+	struct cached_dirent *de, *q;
 
 	/*
 	 * There's no way a valid cfid can reach here.
@@ -474,7 +474,17 @@ smb2_close_cached_fid(struct kref *ref)
 		list_del(&cfid->entry);
 
 	drop_cfid(cfid);
-	free_cached_dir(cfid);
+
+	/* Delete all cached dirent names */
+	list_for_each_entry_safe(de, q, &cfid->dirents.entries, entry) {
+		list_del(&de->entry);
+		kfree(de->name);
+		kfree(de);
+	}
+
+	kfree(cfid->path);
+	cfid->path = NULL;
+	kfree(cfid);
 }
 
 void drop_cached_dir_by_name(const unsigned int xid, struct cifs_tcon *tcon,
@@ -611,24 +621,6 @@ static struct cached_fid *init_cached_dir(const char *path)
 	spin_lock_init(&cfid->fid_lock);
 	kref_init(&cfid->refcount);
 	return cfid;
-}
-
-static void free_cached_dir(struct cached_fid *cfid)
-{
-	struct cached_dirent *dirent, *q;
-
-	/*
-	 * Delete all cached dirent names
-	 */
-	list_for_each_entry_safe(dirent, q, &cfid->dirents.entries, entry) {
-		list_del(&dirent->entry);
-		kfree(dirent->name);
-		kfree(dirent);
-	}
-
-	kfree(cfid->path);
-	cfid->path = NULL;
-	kfree(cfid);
 }
 
 static void cfids_laundromat_worker(struct work_struct *work)
