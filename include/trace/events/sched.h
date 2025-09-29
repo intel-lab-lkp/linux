@@ -826,6 +826,33 @@ TRACE_EVENT(sched_wake_idle_without_ipi,
 	TP_printk("cpu=%d", __entry->cpu)
 );
 
+#ifdef CONFIG_PSI
+TRACE_EVENT(psi_event,
+
+	TP_PROTO(int aggregator, int state, u64 threshold, u64 win_size),
+
+	TP_ARGS(aggregator, state, threshold, win_size),
+
+	TP_STRUCT__entry(
+		__field(int,	aggregator)
+		__field(int,	state)
+		__field(u64,	threshold)
+		__field(u64,	win_size)
+	),
+
+	TP_fast_assign(
+		__entry->aggregator	= aggregator;
+		__entry->state		= state;
+		__entry->threshold	= threshold;
+		__entry->win_size	= win_size;
+	),
+
+	TP_printk("aggregator=%d state=%d threshold=%llu window_size=%llu",
+		__entry->aggregator, __entry->state, __entry->threshold,
+		__entry->win_size)
+);
+#endif /* CONFIG_PSI */
+
 /*
  * Following tracepoints are not exported in tracefs and provide hooking
  * mechanisms only for testing and debugging purposes.
