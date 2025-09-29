@@ -648,6 +648,8 @@ void __init_or_module noinline apply_alternatives(struct alt_instr *start,
 	u8 insn_buff[MAX_PATCH_LEN];
 	u8 *instr;
 	struct alt_instr *a, *b;
+	unsigned int instances = 0;
+	bool patched = false;
 
 	DPRINTK(ALT, "alt table %px, -> %px", start, end);
 
@@ -677,9 +679,13 @@ void __init_or_module noinline apply_alternatives(struct alt_instr *start,
 		 * padding for all alt_instr entries for this site (nested
 		 * alternatives result in consecutive entries).
 		 */
-		for (b = a+1; b < end && instr_va(b) == instr_va(a); b++) {
-			u8 len = max(a->instrlen, b->instrlen);
-			a->instrlen = b->instrlen = len;
+		if (!instances) {
+			for (b = a+1; b < end && instr_va(b) == instr_va(a); b++) {
+				u8 len = max(a->instrlen, b->instrlen);
+				a->instrlen = b->instrlen = len;
+			}
+			instances = b - a;
+			patched = false;
 		}
 
 		instr = instr_va(a);
@@ -692,14 +698,19 @@ void __init_or_module noinline apply_alternatives(struct alt_instr *start,
 		 * - feature not present but ALT_FLAG_NOT is set to mean,
 		 *   patch if feature is *NOT* present.
 		 */
-		if (!boot_cpu_has(a->cpuid) == !(a->flags & ALT_FLAG_NOT)) {
-			memcpy(insn_buff, instr, a->instrlen);
-			optimize_nops(instr, insn_buff, a->instrlen);
-		} else {
+		if (!boot_cpu_has(a->cpuid) != !(a->flags & ALT_FLAG_NOT)) {
 			apply_one_alternative(instr, insn_buff, a);
+			patched = true;
 		}
 
-		text_poke_early(instr, insn_buff, a->instrlen);
+		instances--;
+		if (!instances) {
+			if (!patched) {
+				memcpy(insn_buff, instr, a->instrlen);
+				optimize_nops(instr, insn_buff, a->instrlen);
+			}
+			text_poke_early(instr, insn_buff, a->instrlen);
+		}
 	}
 
 	kasan_enable_current();
