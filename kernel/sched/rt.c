@@ -1,4 +1,3 @@
-#pragma GCC diagnostic ignored "-Wunused-function"
 // SPDX-License-Identifier: GPL-2.0
 /*
  * Real-Time Scheduling Class (mapped to the SCHED_FIFO and SCHED_RR
@@ -153,6 +152,11 @@ static inline void set_next_task_rt(struct rq *rq, struct task_struct *p, bool f
 
 static bool rt_server_has_tasks(struct sched_dl_entity *dl_se)
 {
+#ifdef CONFIG_SMP
+	struct rt_rq *rt_rq = &dl_se->my_q->rt;
+
+	group_pull_rt_task(rt_rq);
+#endif
 	return !!dl_se->my_q->rt.rt_nr_running;
 }
 
