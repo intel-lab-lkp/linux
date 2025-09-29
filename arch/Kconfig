@@ -1334,6 +1334,9 @@ config HAVE_UACCESS_VALIDATION
 	bool
 	select OBJTOOL
 
+config HAVE_OBJTOOL_FTR_FIXUP
+	bool
+
 config HAVE_STACK_VALIDATION
 	bool
 	help

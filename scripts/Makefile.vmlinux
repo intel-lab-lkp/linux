@@ -84,7 +84,8 @@ ARCH_POSTLINK := $(wildcard $(srctree)/arch/$(SRCARCH)/Makefile.postlink)
 # Final link of vmlinux with optional arch pass after final link
 cmd_link_vmlinux =							\
 	$< "$(LD)" "$(KBUILD_LDFLAGS)" "$(LDFLAGS_vmlinux)" "$@";	\
-	$(if $(ARCH_POSTLINK), $(MAKE) -f $(ARCH_POSTLINK) $@, true)
+	$(if $(ARCH_POSTLINK), $(MAKE) -f $(ARCH_POSTLINK) $@, true)	\
+	$(cmd_objtool_vmlinux)
 
 targets += $(vmlinux-final)
 $(vmlinux-final): scripts/link-vmlinux.sh vmlinux.o $(KBUILD_LDS) FORCE
@@ -131,3 +132,13 @@ existing-targets := $(wildcard $(sort $(targets)))
 -include $(foreach f,$(existing-targets),$(dir $(f)).$(notdir $(f)).cmd)
 
 .PHONY: $(PHONY)
+
+# objtool for vmlinux
+# ----------------------------------
+#
+#  For feature fixup, objtool does not run on individual
+#  translation units. Run this on vmlinux instead.
+
+ifdef CONFIG_HAVE_OBJTOOL_FTR_FIXUP
+cmd_objtool_vmlinux = ; $(objtool) --ftr-fixup --link $@
+endif
