@@ -7,6 +7,9 @@
 #include "amlogic-a4-reset.h"
 #include <dt-bindings/power/amlogic,a4-pwrc.h>
 #include <dt-bindings/pinctrl/amlogic,pinctrl.h>
+#include <dt-bindings/clock/amlogic,a4-pll-clkc.h>
+#include <dt-bindings/clock/amlogic,a4-scmi-clkc.h>
+
 / {
 	cpus {
 		#address-cells = <2>;
@@ -196,6 +199,16 @@
 		#interrupt-cells = <2>;
 		amlogic,channel-interrupts =
 			<10 11 12 13 14 15 16 17 18 19 20 21>;
+	};
+
+	clkc_pll: clock-controller@8000 {
+		compatible = "amlogic,a4-pll-clkc";
+		reg = <0x0 0x8000 0x0 0x1a4>;
+		#clock-cells = <1>;
+		clocks = <&xtal>,
+			 <&scmi_clk CLKID_FIXED_PLL>;
+		clock-names = "xtal",
+			      "fix";
 	};
 
 	ao_pinctrl: pinctrl@8e700 {
