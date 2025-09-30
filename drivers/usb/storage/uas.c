@@ -699,7 +699,9 @@ static int uas_queuecommand_lck(struct scsi_cmnd *cmnd)
 	 */
 	if (err == -ENODEV) {
 		set_host_byte(cmnd, DID_NO_CONNECT);
-		scsi_done(cmnd);
+		if (!(cmdinfo->state & (COMMAND_INFLIGHT | DATA_IN_URB_INFLIGHT |
+				DATA_OUT_URB_INFLIGHT)))
+			scsi_done(cmnd);
 		goto zombie;
 	}
 	if (err) {
