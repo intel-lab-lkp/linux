@@ -5459,8 +5459,8 @@ static int smb2_get_info_filesystem(struct ksmbd_work *work,
 	rc = vfs_statfs(&path, &stfs);
 	if (rc) {
 		pr_err("cannot do stat of path %s\n", share->path);
-		path_put(&path);
-		return -EIO;
+		rc = -EIO;
+		goto put_path;
 	}
 
 	fsinfoclass = req->FileInfoClass;
@@ -5629,8 +5629,7 @@ static int smb2_get_info_filesystem(struct ksmbd_work *work,
 
 		if (!work->tcon->posix_extensions) {
 			pr_err("client doesn't negotiate with SMB3.1.1 POSIX Extensions\n");
-			path_put(&path);
-			return -EOPNOTSUPP;
+			goto e_opnotsupp;
 		} else {
 			info = (struct filesystem_posix_info *)(rsp->Buffer);
 			info->OptimalTransferSize = cpu_to_le32(stfs.f_bsize);
@@ -5645,11 +5644,13 @@ static int smb2_get_info_filesystem(struct ksmbd_work *work,
 		break;
 	}
 	default:
-		path_put(&path);
-		return -EOPNOTSUPP;
+e_opnotsupp:
+		rc = -EOPNOTSUPP;
+		goto put_path;
 	}
 	rc = buffer_check_err(le32_to_cpu(req->OutputBufferLength),
 			      rsp, work->response_buf);
+put_path:
 	path_put(&path);
 	return rc;
 }
