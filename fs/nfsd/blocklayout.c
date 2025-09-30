@@ -287,7 +287,7 @@ nfsd4_block_get_device_info_scsi(struct super_block *sb,
 	}
 
 	ret = ops->pr_reserve(sb->s_bdev, NFSD_MDS_PR_KEY,
-			PR_EXCLUSIVE_ACCESS_REG_ONLY, 0);
+			PR_WRITE_EXCLUSIVE_REG_ONLY, 0);
 	if (ret) {
 		pr_err("pNFS: failed to reserve device %s.\n",
 			sb->s_id);
