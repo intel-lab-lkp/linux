@@ -6076,12 +6076,11 @@ struct btrfs_io_context *alloc_btrfs_io_context(struct btrfs_fs_info *fs_info,
 {
 	struct btrfs_io_context *bioc;
 
-	bioc = kzalloc(
-		 /* The size of btrfs_io_context */
-		sizeof(struct btrfs_io_context) +
-		/* Plus the variable array for the stripes */
-		sizeof(struct btrfs_io_stripe) * (total_stripes),
-		GFP_NOFS);
+	/* The size of btrfs_io_context */
+	/* Plus the variable array for the stripes */
+	bioc = kzalloc(size_add(sizeof(struct btrfs_io_context),
+				size_mul(sizeof(struct btrfs_io_stripe),
+						total_stripes)), GFP_NOFS);
 
 	if (!bioc)
 		return NULL;
