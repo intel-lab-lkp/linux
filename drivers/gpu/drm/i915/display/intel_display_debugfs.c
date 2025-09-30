@@ -47,6 +47,7 @@
 #include "intel_psr_regs.h"
 #include "intel_vdsc.h"
 #include "intel_wm.h"
+#include "intel_tc.h"
 
 static struct intel_display *node_to_intel_display(struct drm_info_node *node)
 {
@@ -246,6 +247,7 @@ static void intel_connector_info(struct seq_file *m,
 {
 	struct intel_connector *intel_connector = to_intel_connector(connector);
 	const struct drm_display_mode *mode;
+	struct drm_printer p = drm_seq_file_printer(m);
 
 	seq_printf(m, "[CONNECTOR:%d:%s]: status: %s\n",
 		   connector->base.id, connector->name,
@@ -253,6 +255,9 @@ static void intel_connector_info(struct seq_file *m,
 
 	if (connector->status == connector_status_disconnected)
 		return;
+
+	if (intel_encoder_is_tc(intel_attached_encoder(intel_connector)))
+		intel_tc_info(&p, intel_attached_dig_port(intel_connector));
 
 	seq_printf(m, "\tphysical dimensions: %dx%dmm\n",
 		   connector->display_info.width_mm,

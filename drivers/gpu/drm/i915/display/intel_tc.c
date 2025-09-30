@@ -5,8 +5,6 @@
 
 #include <linux/iopoll.h>
 
-#include <drm/drm_print.h>
-
 #include "i915_reg.h"
 #include "i915_utils.h"
 #include "intel_atomic.h"
@@ -1700,6 +1698,18 @@ void intel_tc_port_sanitize_mode(struct intel_digital_port *dig_port,
 		    pin_assignment_name(tc->pin_assignment),
 		    tc->max_lane_count);
 
+	mutex_unlock(&tc->lock);
+}
+
+void intel_tc_info(struct drm_printer *p,  struct intel_digital_port *dig_port)
+{
+	struct intel_tc_port *tc = to_tc_port(dig_port);
+
+	mutex_lock(&tc->lock);
+	drm_printf(p, "\tTC Port: %s mode: %s pin assignment: %c max lanes: %d\n", tc->port_name,
+		   tc_port_mode_name(tc->mode),
+		   pin_assignment_name(tc->pin_assignment),
+		   tc->max_lane_count);
 	mutex_unlock(&tc->lock);
 }
 
