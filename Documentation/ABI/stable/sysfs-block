@@ -609,6 +609,16 @@ Description:
 		enabled, and whether tags are shared.
 
 
+What:		/sys/block/<disk>/queue/async_depth
+Date:		August 2025
+Contact:	linux-block@vger.kernel.org
+Description:
+		[RW] This controls how many async requests may be allocated in the
+		block layer. If elevator is none, then this value is nr_requests.
+		By default, this value is 75% of nr_requests for bfq and kyber,
+		abd nr_requests for mq-deadline.
+
+
 What:		/sys/block/<disk>/queue/nr_zones
 Date:		November 2018
 Contact:	Damien Le Moal <damien.lemoal@wdc.com>
