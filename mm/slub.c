@@ -6431,7 +6431,7 @@ static void free_deferred_objects(struct irq_work *work)
 
 static void defer_free(struct kmem_cache *s, void *head)
 {
-	struct defer_free *df = this_cpu_ptr(&defer_free_objects);
+	struct defer_free *df = raw_cpu_ptr(&defer_free_objects);
 
 	if (llist_add(head + s->offset, &df->objects))
 		irq_work_queue(&df->work);
@@ -6439,7 +6439,7 @@ static void defer_free(struct kmem_cache *s, void *head)
 
 static void defer_deactivate_slab(struct slab *slab, void *flush_freelist)
 {
-	struct defer_free *df = this_cpu_ptr(&defer_free_objects);
+	struct defer_free *df = raw_cpu_ptr(&defer_free_objects);
 
 	slab->flush_freelist = flush_freelist;
 	if (llist_add(&slab->llnode, &df->slabs))
