@@ -1,0 +1,187 @@
+# SPDX-License-Identifier: (GPL-2.0 OR BSD-2-Clause)
+%YAML 1.2
+---
+$id: http://devicetree.org/schemas/leds/brcm,bcm6358-leds.yaml#
+$schema: http://devicetree.org/meta-schemas/core.yaml#
+
+title: LEDs connected to Broadcom BCM6358 controller
+
+description: This controller is present on BCM6358 and
+  BCM6368. In these SoCs there are Serial LEDs (LEDs
+  connected to a 74x164 controller), which can either be
+  controlled by software (exporting the 74x164 as spi-gpio) 
+  or by hardware using this driver. See example at
+  Documentation/devicetree/bindings/gpio/fairchild,74hc595.yaml.
+
+maintainers:
+  - Jonas Gorski <jonas.gorski@gmail.com>
+
+properties:
+  compatible:
+    const: brcm,bcm6358-leds
+
+  reg:
+    maxItems: 1
+
+  '#address-cells':
+    const: 1
+
+  '#size-cells':
+    const: 0
+
+  brcm,clk-div:
+    description: SCK signal Divider. Default 1
+    $ref: /schemas/types.yaml#/definitions/uint32
+    enum: [1, 2, 4, 8]
+
+  brcm,clk-dat-low:
+    description: Makes clock and data signals active low.
+      Default false.
+    type: boolean
+
+patternProperties:
+  "^led@[0,1]?([0-9]|[a-z])$":
+    type: object
+    $ref: common.yaml
+    description: Each LED is represented as a sub-node of
+      this device.
+
+    properties:
+      reg:
+        description: LED pin number
+        maximum: 31
+        minimum: 0
+
+    required:
+      - reg
+
+required:
+  - compatible
+  - reg
+  - "#address-cells"
+  - "#size-cells"
+
+additionalProperties: true
+
+examples:
+  - |
+    #include <dt-bindings/leds/common.h>
+
+    /* The bcm6358 SOC */
+    soc {
+        #address-cells = <1>;
+        #size-cells = <1>;
+
+        led-controller@fffe00d0 {
+            compatible = "brcm,bcm6358-leds";
+            #address-cells = <1>;
+            #size-cells = <0>;
+            reg = <0xfffe00d0 0x8>;
+
+            alarm_white@0 {
+                reg = <0>;
+                active-low;
+                label = "white:alarm";
+            };
+            tv_white@2 {
+                reg = <2>;
+                active-low;
+                label = "white:tv";
+            };
+            tel_white@3 {
+                reg = <3>;
+                active-low;
+                label = "white:tel";
+            };
+            adsl_white@4 {
+                reg = <4>;
+                active-low;
+                label = "white:adsl";
+            };
+        };
+    };
+  - |
+    /* The bcm6368 SOC */
+    led-controller@100000d0 {
+        compatible = "brcm,bcm6358-leds";
+        #address-cells = <1>;
+        #size-cells = <0>;
+        reg = <0x100000d0 0x8>;
+
+        brcm,pol-low;
+        brcm,clk-div = <4>;
+
+        power_red@0 {
+            reg = <0>;
+            active-low;
+            label = "red:power";
+        };
+        power_green@1 {
+            reg = <1>;
+            active-low;
+            label = "green:power";
+            default-state = "on";
+        };
+        power_blue@2 {
+            reg = <2>;
+            label = "blue:power";
+        };
+        broadband_red@3 {
+            reg = <3>;
+            active-low;
+            label = "red:broadband";
+        };
+        broadband_green@4 {
+            reg = <4>;
+            label = "green:broadband";
+        };
+        broadband_blue@5 {
+            reg = <5>;
+            active-low;
+            label = "blue:broadband";
+        };
+        wireless_red@6 {
+            reg = <6>;
+            active-low;
+            label = "red:wireless";
+        };
+        wireless_green@7 {
+            reg = <7>;
+            active-low;
+            label = "green:wireless";
+        };
+        wireless_blue@8 {
+            reg = <8>;
+            label = "blue:wireless";
+        };
+        phone_red@9 {
+            reg = <9>;
+            active-low;
+            label = "red:phone";
+        };
+        phone_green@10 {
+            reg = <10>;
+            active-low;
+            label = "green:phone";
+        };
+        phone_blue@11 {
+            reg = <11>;
+            label = "blue:phone";
+        };
+        upgrading_red@12 {
+            reg = <12>;
+            active-low;
+            label = "red:upgrading";
+        };
+        upgrading_green@13 {
+            reg = <13>;
+            active-low;
+            label = "green:upgrading";
+        };
+        upgrading_blue@14 {
+            reg = <14>;
+            label = "blue:upgrading";
+        };
+    };
+...
+
