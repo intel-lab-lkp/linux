@@ -40,6 +40,12 @@ static bool all_vcpu_threads_running;
 
 static struct kvm_vcpu *vcpus[KVM_MAX_VCPUS];
 
+struct get_dirty_log_args {
+	struct kvm_vm *vm;
+	unsigned long *bitmap;
+	int slot;
+};
+
 /*
  * Continuously write to the first 8 bytes of each page in the
  * specified region.
@@ -341,6 +347,15 @@ void memstress_disable_dirty_logging(struct kvm_vm *vm, int slots)
 	toggle_dirty_logging(vm, slots, false);
 }
 
+static void *get_dirty_log_worker(void *arg)
+{
+	struct get_dirty_log_args *args = arg;
+
+	kvm_vm_get_dirty_log(args->vm, args->slot, args->bitmap);
+
+	return NULL;
+}
+
 void memstress_get_dirty_log(struct kvm_vm *vm, unsigned long *bitmaps[], int slots)
 {
 	int i;
@@ -350,6 +365,31 @@ void memstress_get_dirty_log(struct kvm_vm *vm, unsigned long *bitmaps[], int sl
 
 		kvm_vm_get_dirty_log(vm, slot, bitmaps[i]);
 	}
+}
+
+void memstress_get_dirty_log_parallel(struct kvm_vm *vm, unsigned long *bitmaps[],
+				      int slots)
+{
+	struct {
+		pthread_t thd;
+		struct get_dirty_log_args args;
+	} *threads;
+	int i;
+
+	threads = malloc(slots * sizeof(*threads));
+
+	for (i = 0; i < slots; i++) {
+		threads[i].args.vm = vm;
+		threads[i].args.slot = MEMSTRESS_MEM_SLOT_INDEX + i;
+		threads[i].args.bitmap = bitmaps[i];
+		pthread_create(&threads[i].thd, NULL, get_dirty_log_worker,
+			       &threads[i].args);
+	}
+
+	for (i = 0; i < slots; i++)
+		pthread_join(threads[i].thd, NULL);
+
+	free(threads);
 }
 
 void memstress_clear_dirty_log(struct kvm_vm *vm, unsigned long *bitmaps[],

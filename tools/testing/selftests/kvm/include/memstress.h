@@ -74,6 +74,8 @@ void memstress_setup_nested(struct kvm_vm *vm, int nr_vcpus, struct kvm_vcpu *vc
 void memstress_enable_dirty_logging(struct kvm_vm *vm, int slots);
 void memstress_disable_dirty_logging(struct kvm_vm *vm, int slots);
 void memstress_get_dirty_log(struct kvm_vm *vm, unsigned long *bitmaps[], int slots);
+void memstress_get_dirty_log_parallel(struct kvm_vm *vm, unsigned long *bitmaps[],
+				      int slots);
 void memstress_clear_dirty_log(struct kvm_vm *vm, unsigned long *bitmaps[],
 			       int slots, uint64_t pages_per_slot);
 unsigned long **memstress_alloc_bitmaps(int slots, uint64_t pages_per_slot);

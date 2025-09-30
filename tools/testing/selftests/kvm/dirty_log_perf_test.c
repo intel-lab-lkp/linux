@@ -131,7 +131,17 @@ struct test_params {
 	int slots;
 	uint32_t write_percent;
 	bool random_access;
+	bool parallel_get_dirty_log;
 };
+
+static void get_dirty_log(struct kvm_vm *vm, unsigned long *bitmaps[],
+			  struct test_params *p)
+{
+	if (p->parallel_get_dirty_log)
+		memstress_get_dirty_log_parallel(vm, bitmaps, p->slots);
+	else
+		memstress_get_dirty_log(vm, bitmaps, p->slots);
+}
 
 static void run_test(enum vm_guest_mode mode, void *arg)
 {
@@ -230,7 +240,7 @@ static void run_test(enum vm_guest_mode mode, void *arg)
 			iteration, ts_diff.tv_sec, ts_diff.tv_nsec);
 
 		clock_gettime(CLOCK_MONOTONIC, &start);
-		memstress_get_dirty_log(vm, bitmaps, p->slots);
+		get_dirty_log(vm, bitmaps, p);
 		ts_diff = timespec_elapsed(start);
 		get_dirty_log_total = timespec_add(get_dirty_log_total,
 						   ts_diff);
@@ -292,7 +302,7 @@ static void run_test(enum vm_guest_mode mode, void *arg)
 static void help(char *name)
 {
 	puts("");
-	printf("usage: %s [-h] [-a] [-i iterations] [-p offset] [-g] "
+	printf("usage: %s [-h] [-a] [-i iterations] [-p offset] [-g] [-l] "
 	       "[-m mode] [-n] [-b vcpu bytes] [-v vcpus] [-o] [-r random seed ] [-s mem type]"
 	       "[-x memslots] [-w percentage] [-c physical cpus to run test on]\n", name);
 	puts("");
@@ -305,6 +315,7 @@ static void help(char *name)
 	       "     and writes will be tracked as soon as dirty logging is\n"
 	       "     enabled on the memslot (i.e. KVM_DIRTY_LOG_INITIALLY_SET\n"
 	       "     is not enabled).\n");
+	printf(" -l: Do KVM_GET_DIRTY_LOG calls for each memslot in parallel.\n");
 	printf(" -p: specify guest physical test memory offset\n"
 	       "     Warning: a low offset can conflict with the loaded test code.\n");
 	guest_modes_help();
@@ -355,7 +366,7 @@ int main(int argc, char *argv[])
 
 	guest_modes_append_default();
 
-	while ((opt = getopt(argc, argv, "ab:c:eghi:m:nop:r:s:v:x:w:")) != -1) {
+	while ((opt = getopt(argc, argv, "ab:c:eghi:lm:nop:r:s:v:x:w:")) != -1) {
 		switch (opt) {
 		case 'a':
 			p.random_access = true;
@@ -378,6 +389,9 @@ int main(int argc, char *argv[])
 			break;
 		case 'i':
 			p.iterations = atoi_positive("Number of iterations", optarg);
+			break;
+		case 'l':
+			p.parallel_get_dirty_log = true;
 			break;
 		case 'm':
 			guest_modes_cmdline(optarg);
