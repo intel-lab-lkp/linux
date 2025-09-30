@@ -57,6 +57,24 @@ static inline void do_trace_rdpmc(u32 msr, u64 val, int failed) {}
 #endif
 
 /*
+ * Called only from an MSR fault handler, the instruction pointer points to
+ * the MSR access instruction that caused the fault.
+ */
+static __always_inline bool is_msr_imm_insn(void *ip)
+{
+	/*
+	 * A full decoder for immediate form MSR instructions appears excessive.
+	 */
+#ifdef CONFIG_X86_64
+	const u8 msr_imm_insn_prefix[] = { 0xc4, 0xe7 };
+
+	return !memcmp(ip, msr_imm_insn_prefix, sizeof(msr_imm_insn_prefix));
+#else
+	return false;
+#endif
+}
+
+/*
  * __rdmsr() and __wrmsr() are the two primitives which are the bare minimum MSR
  * accessors and should not have any tracing or other functionality piggybacking
  * on them - those are *purely* for accessing MSRs and nothing more. So don't even
