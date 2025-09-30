@@ -529,6 +529,8 @@ retry:
 			data->rq_flags |= RQF_USE_SCHED;
 			if (ops->limit_depth)
 				ops->limit_depth(data->cmd_flags, data);
+			else if (!blk_mq_sched_sync_request(data->cmd_flags))
+				data->shallow_depth = q->async_depth;
 		}
 	} else {
 		blk_mq_tag_busy(data->hctx);
@@ -4605,6 +4607,7 @@ int blk_mq_init_allocated_queue(struct blk_mq_tag_set *set,
 	spin_lock_init(&q->requeue_lock);
 
 	q->nr_requests = set->queue_depth;
+	q->async_depth = set->queue_depth;
 
 	blk_mq_init_cpu_queues(q, set->nr_hw_queues);
 	blk_mq_map_swqueue(q);
@@ -4972,6 +4975,7 @@ struct elevator_tags *blk_mq_update_nr_requests(struct request_queue *q,
 	}
 
 	q->nr_requests = nr;
+	q->async_depth = nr;
 	if (q->elevator && q->elevator->type->ops.depth_updated)
 		q->elevator->type->ops.depth_updated(q);
 
