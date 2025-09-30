@@ -346,6 +346,13 @@ static int reg_fixed_voltage_probe(struct platform_device *pdev)
 	if (ret)
 		return ret;
 
+	ret = register_regulator_event_forwarding(drvdata->dev);
+	if (ret) {
+		dev_err(&pdev->dev, "failed to enable supply event forwarding: %pe\n",
+			ERR_PTR(ret));
+		return ret;
+	}
+
 	return 0;
 }
 
