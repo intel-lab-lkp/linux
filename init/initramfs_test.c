@@ -97,7 +97,7 @@ static void __init initramfs_test_extract(struct kunit *test)
 	} };
 
 	/* +3 to cater for any 4-byte end-alignment */
-	cpio_srcbuf = kzalloc(ARRAY_SIZE(c) * (CPIO_HDRLEN + PATH_MAX + 3),
+	cpio_srcbuf = kcalloc(ARRAY_SIZE(c), (CPIO_HDRLEN + PATH_MAX + 3),
 			      GFP_KERNEL);
 	len = fill_cpio(c, ARRAY_SIZE(c), cpio_srcbuf);
 
