@@ -303,6 +303,9 @@ static int __maybe_unused rng_setentropy(void *private, sockptr_t entropy,
 			return PTR_ERR(kentropy);
 	}
 
+	if (!crypto_rng_alg(pctx->drng)->set_ent)
+		return -EOPNOTSUPP;
+
 	crypto_rng_alg(pctx->drng)->set_ent(pctx->drng, kentropy, len);
 	/*
 	 * Since rng doesn't perform any memory management for the entropy
