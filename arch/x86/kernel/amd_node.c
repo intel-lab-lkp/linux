@@ -34,62 +34,6 @@ struct pci_dev *amd_node_get_func(u16 node, u8 func)
 	return pci_get_domain_bus_and_slot(0, 0, PCI_DEVFN(AMD_NODE0_PCI_SLOT + node, func));
 }
 
-#define DF_BLK_INST_CNT		0x040
-#define	DF_CFG_ADDR_CNTL_LEGACY	0x084
-#define	DF_CFG_ADDR_CNTL_DF4	0xC04
-
-#define DF_MAJOR_REVISION	GENMASK(27, 24)
-
-static u16 get_cfg_addr_cntl_offset(struct pci_dev *df_f0)
-{
-	u32 reg;
-
-	/*
-	 * Revision fields added for DF4 and later.
-	 *
-	 * Major revision of '0' is found pre-DF4. Field is Read-as-Zero.
-	 */
-	if (pci_read_config_dword(df_f0, DF_BLK_INST_CNT, &reg))
-		return 0;
-
-	if (reg & DF_MAJOR_REVISION)
-		return DF_CFG_ADDR_CNTL_DF4;
-
-	return DF_CFG_ADDR_CNTL_LEGACY;
-}
-
-struct pci_dev *amd_node_get_root(u16 node)
-{
-	struct pci_dev *root;
-	u16 cntl_off;
-	u8 bus;
-
-	if (!cpu_feature_enabled(X86_FEATURE_ZEN))
-		return NULL;
-
-	/*
-	 * D18F0xXXX [Config Address Control] (DF::CfgAddressCntl)
-	 * Bits [7:0] (SecBusNum) holds the bus number of the root device for
-	 * this Data Fabric instance. The segment, device, and function will be 0.
-	 */
-	struct pci_dev *df_f0 __free(pci_dev_put) = amd_node_get_func(node, 0);
-	if (!df_f0)
-		return NULL;
-
-	cntl_off = get_cfg_addr_cntl_offset(df_f0);
-	if (!cntl_off)
-		return NULL;
-
-	if (pci_read_config_byte(df_f0, cntl_off, &bus))
-		return NULL;
-
-	/* Grab the pointer for the actual root device instance. */
-	root = pci_get_domain_bus_and_slot(0, bus, 0);
-
-	pci_dbg(root, "is root for AMD node %u\n", node);
-	return root;
-}
-
 static struct pci_dev **amd_roots;
 
 /* Protect the PCI config register pairs used for SMN. */
@@ -274,16 +218,49 @@ DEFINE_SHOW_STORE_ATTRIBUTE(smn_node);
 DEFINE_SHOW_STORE_ATTRIBUTE(smn_address);
 DEFINE_SHOW_STORE_ATTRIBUTE(smn_value);
 
+static struct pci_dev *get_next_root(struct pci_dev *root)
+{
+	while ((root = pci_get_class(PCI_CLASS_BRIDGE_HOST << 8, root))) {
+		/* Root device is Device 0 Function 0. */
+		if (root->devfn)
+			continue;
+
+		if (root->vendor != PCI_VENDOR_ID_AMD &&
+		    root->vendor != PCI_VENDOR_ID_HYGON)
+			continue;
+
+		break;
+	}
+
+	return root;
+}
+
 static int amd_cache_roots(void)
 {
-	u16 node, num_nodes = amd_num_nodes();
+	u16 count = 0, num_roots = 0, roots_per_node, node = 0, num_nodes = amd_num_nodes();
+	struct pci_dev *root = NULL;
 
 	amd_roots = kcalloc(num_nodes, sizeof(*amd_roots), GFP_KERNEL);
 	if (!amd_roots)
 		return -ENOMEM;
 
-	for (node = 0; node < num_nodes; node++)
-		amd_roots[node] = amd_node_get_root(node);
+	while ((root = get_next_root(root))) {
+		pci_dbg(root, "is an AMD root device\n");
+		num_roots++;
+	}
+
+	pr_debug("Found %d AMD root devices\n", num_roots);
+
+	roots_per_node = num_roots / num_nodes;
+
+	while ((root = get_next_root(root)) && node < num_nodes) {
+		/* Use one root for each node and skip the rest. */
+		if (count++ % roots_per_node)
+			continue;
+
+		pci_dbg(root, "is root for AMD node %u\n", node);
+		amd_roots[node++] = root;
+	}
 
 	return 0;
 }
