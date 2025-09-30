@@ -1160,15 +1160,16 @@ static void xen_do_write_msr(u32 msr, u64 val, int *err)
 	}
 }
 
-static int xen_read_msr_safe(u32 msr, u64 *val)
+int xen_read_msr_safe(u32 msr, u64 *val)
 {
 	int err = 0;
 
 	*val = xen_do_read_msr(msr, &err);
 	return err;
 }
+EXPORT_SYMBOL(xen_read_msr_safe);
 
-static int xen_write_msr_safe(u32 msr, u64 val)
+int xen_write_msr_safe(u32 msr, u64 val)
 {
 	int err = 0;
 
@@ -1176,20 +1177,23 @@ static int xen_write_msr_safe(u32 msr, u64 val)
 
 	return err;
 }
+EXPORT_SYMBOL(xen_write_msr_safe);
 
-static u64 xen_read_msr(u32 msr)
+u64 xen_read_msr(u32 msr)
 {
 	int err = 0;
 
 	return xen_do_read_msr(msr, xen_msr_safe ? &err : NULL);
 }
+EXPORT_SYMBOL(xen_read_msr);
 
-static void xen_write_msr(u32 msr, u64 val)
+void xen_write_msr(u32 msr, u64 val)
 {
 	int err;
 
 	xen_do_write_msr(msr, val, xen_msr_safe ? &err : NULL);
 }
+EXPORT_SYMBOL(xen_write_msr);
 
 /* This is called once we have the cpu_possible_mask */
 void __init xen_setup_vcpu_info_placement(void)
@@ -1224,14 +1228,6 @@ static const typeof(pv_ops) xen_cpu_ops __initconst = {
 		.write_cr0 = xen_write_cr0,
 
 		.write_cr4 = xen_write_cr4,
-
-		.read_msr = xen_read_msr,
-		.write_msr = xen_write_msr,
-
-		.read_msr_safe = xen_read_msr_safe,
-		.write_msr_safe = xen_write_msr_safe,
-
-		.read_pmc = xen_read_pmc,
 
 		.load_tr_desc = paravirt_nop,
 		.set_ldt = xen_set_ldt,

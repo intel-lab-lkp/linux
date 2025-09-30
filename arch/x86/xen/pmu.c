@@ -370,6 +370,7 @@ u64 xen_read_pmc(int counter)
 	else
 		return xen_intel_read_pmc(counter);
 }
+EXPORT_SYMBOL(xen_read_pmc);
 
 int pmu_apic_update(uint32_t val)
 {

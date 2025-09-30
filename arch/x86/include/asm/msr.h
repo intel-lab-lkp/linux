@@ -290,24 +290,22 @@ static __always_inline void native_wrmsr(u32 msr, u32 low, u32 high)
 	native_wrmsrq(msr, (u64)high << 32 | low);
 }
 
-static inline u64 native_read_msr(u32 msr)
+static __always_inline u64 native_read_msr(u32 msr)
 {
 	return native_rdmsrq(msr);
 }
 
-static inline int native_read_msr_safe(u32 msr, u64 *val)
+static __always_inline int native_read_msr_safe(u32 msr, u64 *val)
 {
 	return __rdmsr(msr, val, EX_TYPE_RDMSR_SAFE) ? -EIO : 0;
 }
 
-/* Can be uninlined because referenced by paravirt */
-static inline void notrace native_write_msr(u32 msr, u64 val)
+static __always_inline void native_write_msr(u32 msr, u64 val)
 {
 	native_wrmsrq(msr, val);
 }
 
-/* Can be uninlined because referenced by paravirt */
-static inline int notrace native_write_msr_safe(u32 msr, u64 val)
+static __always_inline int native_write_msr_safe(u32 msr, u64 val)
 {
 	return __wrmsrq(msr, val, EX_TYPE_WRMSR_SAFE) ? -EIO : 0;
 }
@@ -325,8 +323,49 @@ static inline u64 native_read_pmc(int counter)
 	return EAX_EDX_VAL(val, low, high);
 }
 
-#ifdef CONFIG_PARAVIRT_XXL
-#include <asm/paravirt.h>
+#ifdef CONFIG_XEN_PV
+#include <asm/xen/msr.h>
+
+static __always_inline u64 read_msr(u32 msr)
+{
+	if (cpu_feature_enabled(X86_FEATURE_XENPV))
+		return xen_read_msr(msr);
+
+	return native_rdmsrq(msr);
+}
+
+static __always_inline int read_msr_safe(u32 msr, u64 *p)
+{
+	if (cpu_feature_enabled(X86_FEATURE_XENPV))
+		return xen_read_msr_safe(msr, p);
+
+	return native_read_msr_safe(msr, p);
+}
+
+static __always_inline void write_msr(u32 msr, u64 val)
+{
+	if (cpu_feature_enabled(X86_FEATURE_XENPV))
+		xen_write_msr(msr, val);
+	else
+		native_wrmsrq(msr, val);
+}
+
+static __always_inline int write_msr_safe(u32 msr, u64 val)
+{
+	if (cpu_feature_enabled(X86_FEATURE_XENPV))
+		return xen_write_msr_safe(msr, val);
+
+	return native_write_msr_safe(msr, val);
+}
+
+static __always_inline u64 rdpmc(int counter)
+{
+	if (cpu_feature_enabled(X86_FEATURE_XENPV))
+		return xen_read_pmc(counter);
+
+	return native_read_pmc(counter);
+}
+
 #else
 static __always_inline u64 read_msr(u32 msr)
 {
@@ -353,7 +392,7 @@ static __always_inline u64 rdpmc(int counter)
 	return native_read_pmc(counter);
 }
 
-#endif	/* !CONFIG_PARAVIRT_XXL */
+#endif	/* !CONFIG_XEN_PV */
 
 /*
  * Access to machine-specific registers (available on 586 and better only)
