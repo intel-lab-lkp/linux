@@ -112,20 +112,32 @@ void die(struct pt_regs *regs, const char *str)
 		make_task_dead(SIGSEGV);
 }
 
-void do_trap(struct pt_regs *regs, int signo, int code, unsigned long addr)
+static void riscv_show_signal(int signo, int code, unsigned long addr)
 {
 	struct task_struct *tsk = current;
+	struct pt_regs *regs = task_pt_regs(tsk);
 
-	if (show_unhandled_signals && unhandled_signal(tsk, signo)
-	    && printk_ratelimit()) {
-		pr_info("%s[%d]: unhandled signal %d code 0x%x at 0x" REG_FMT,
-			tsk->comm, task_pid_nr(tsk), signo, code, addr);
-		print_vma_addr(KERN_CONT " in ", instruction_pointer(regs));
-		pr_cont("\n");
-		__show_regs(regs);
-		dump_instr(KERN_INFO, regs);
-	}
+	if (!show_unhandled_signals || !unhandled_signal(tsk, signo)
+	    || !printk_ratelimit())
+		return;
 
+	pr_info("%s[%d]: unhandled signal %d code 0x%x at 0x" REG_FMT,
+		tsk->comm, task_pid_nr(tsk), signo, code, addr);
+	print_vma_addr(KERN_CONT " in ", instruction_pointer(regs));
+	pr_cont("\n");
+	__show_regs(regs);
+	dump_instr(KERN_INFO, regs);
+}
+
+void riscv_force_sig_mceerr(int code, unsigned long addr, short lsb)
+{
+	riscv_show_signal(SIGBUS, code, addr);
+	force_sig_mceerr(code, (void __user *)addr, lsb);
+}
+
+void do_trap(struct pt_regs *regs, int signo, int code, unsigned long addr)
+{
+	riscv_show_signal(signo, code, addr);
 	force_sig_fault(signo, code, (void __user *)addr);
 }
 

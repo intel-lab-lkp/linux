@@ -95,5 +95,6 @@ struct task_struct;
 void __show_regs(struct pt_regs *regs);
 void die(struct pt_regs *regs, const char *str);
 void do_trap(struct pt_regs *regs, int signo, int code, unsigned long addr);
+void riscv_force_sig_mceerr(int code, unsigned long addr, short lsb);
 
 #endif /* _ASM_RISCV_BUG_H */
