@@ -3235,34 +3235,20 @@ static struct file *do_sync_mmap_readahead(struct vm_fault *vmf)
 	DEFINE_READAHEAD(ractl, file, ra, mapping, vmf->pgoff);
 	struct file *fpin = NULL;
 	vm_flags_t vm_flags = vmf->vma->vm_flags;
+	bool force_thp_readahead = false;
 	unsigned short mmap_miss;
 
-#ifdef CONFIG_TRANSPARENT_HUGEPAGE
 	/* Use the readahead code, even if readahead is disabled */
-	if ((vm_flags & VM_HUGEPAGE) && HPAGE_PMD_ORDER <= MAX_PAGECACHE_ORDER) {
-		fpin = maybe_unlock_mmap_for_io(vmf, fpin);
-		ractl._index &= ~((unsigned long)HPAGE_PMD_NR - 1);
-		ra->size = HPAGE_PMD_NR;
-		/*
-		 * Fetch two PMD folios, so we get the chance to actually
-		 * readahead, unless we've been told not to.
-		 */
-		if (!(vm_flags & VM_RAND_READ))
-			ra->size *= 2;
-		ra->async_size = HPAGE_PMD_NR;
-		ra->order = HPAGE_PMD_ORDER;
-		page_cache_ra_order(&ractl, ra);
-		return fpin;
-	}
-#endif
-
+	if (IS_ENABLED(CONFIG_TRANSPARENT_HUGEPAGE) &&
+	    (vm_flags & VM_HUGEPAGE) && HPAGE_PMD_ORDER <= MAX_PAGECACHE_ORDER)
+		force_thp_readahead = true;
 	/*
 	 * If we don't want any read-ahead, don't bother. VM_EXEC case below is
 	 * already intended for random access.
 	 */
 	if ((vm_flags & (VM_RAND_READ | VM_EXEC)) == VM_RAND_READ)
 		return fpin;
-	if (!ra->ra_pages)
+	if (!ra->ra_pages && !force_thp_readahead)
 		return fpin;
 
 	if (vm_flags & VM_SEQ_READ) {
@@ -3282,6 +3268,22 @@ static struct file *do_sync_mmap_readahead(struct vm_fault *vmf)
 	 */
 	if (mmap_miss > MMAP_LOTSAMISS)
 		return fpin;
+
+	if (force_thp_readahead) {
+		fpin = maybe_unlock_mmap_for_io(vmf, fpin);
+		ractl._index &= ~((unsigned long)HPAGE_PMD_NR - 1);
+		ra->size = HPAGE_PMD_NR;
+		/*
+		 * Fetch two PMD folios, so we get the chance to actually
+		 * readahead, unless we've been told not to.
+		 */
+		if (!(vm_flags & VM_RAND_READ))
+			ra->size *= 2;
+		ra->async_size = HPAGE_PMD_NR;
+		ra->order = HPAGE_PMD_ORDER;
+		page_cache_ra_order(&ractl, ra);
+		return fpin;
+	}
 
 	if (vm_flags & VM_EXEC) {
 		/*
