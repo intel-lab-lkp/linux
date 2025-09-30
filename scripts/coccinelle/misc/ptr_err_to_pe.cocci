@@ -20,12 +20,12 @@ identifier print_func;
 @@
 *print_func(..., fmt, ..., PTR_ERR@p(ptr), ...)
 
-@script:python depends on r && report@
+@script:python depends on report@
 p << r.p;
 @@
 coccilib.report.print_report(p[0], "WARNING: Consider using %pe to print PTR_ERR()")
 
-@script:python depends on r && org@
+@script:python depends on org@
 p << r.p;
 @@
 coccilib.org.print_todo(p[0], "WARNING: Consider using %pe to print PTR_ERR()")
