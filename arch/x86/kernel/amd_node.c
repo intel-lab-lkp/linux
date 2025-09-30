@@ -268,18 +268,8 @@ static int amd_cache_roots(void)
 static int reserve_root_config_spaces(void)
 {
 	struct pci_dev *root = NULL;
-	struct pci_bus *bus = NULL;
 
-	while ((bus = pci_find_next_bus(bus))) {
-		/* Root device is Device 0 Function 0 on each Primary Bus. */
-		root = pci_get_slot(bus, 0);
-		if (!root)
-			continue;
-
-		if (root->vendor != PCI_VENDOR_ID_AMD &&
-		    root->vendor != PCI_VENDOR_ID_HYGON)
-			continue;
-
+	while ((root = get_next_root(root))) {
 		pci_dbg(root, "Reserving PCI config space\n");
 
 		/*
