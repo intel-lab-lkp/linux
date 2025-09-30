@@ -54,6 +54,11 @@ impl pci::Driver for NovaCore {
     fn probe(pdev: &pci::Device<Core>, _info: &Self::IdInfo) -> Result<Pin<KBox<Self>>> {
         dev_dbg!(pdev.as_ref(), "Probe Nova Core GPU driver.\n");
 
+        // NovaCore must only bind to Physical Functions (PFs), not Virtual Functions (VFs)
+        if pdev.is_virtfn() {
+            return Err(ENODEV);
+        }
+
         pdev.enable_device_mem()?;
         pdev.set_master();
 
