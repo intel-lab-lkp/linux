@@ -572,4 +572,9 @@ struct drm_display_mode *
 drm_mode_create_from_cmdline_mode(struct drm_device *dev,
 				  struct drm_cmdline_mode *cmd);
 
+static inline u32 drm_mode_display_size(const struct drm_display_mode *mode)
+{
+	return mode->hdisplay * mode->vdisplay;
+}
+
 #endif /* __DRM_MODES_H__ */
