@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0
 /* Copyright (C) 2021 Rafał Miłecki <rafal@milecki.pl> */
 
+#include <linux/cleanup.h>
 #include <linux/err.h>
 #include <linux/io.h>
 #include <linux/mod_devicetable.h>
@@ -439,7 +440,7 @@ static int bcmbca_pinctrl_set_mux(struct pinctrl_dev *pctrl_dev,
 		return -EINVAL;
 	group = group_desc->data;
 
-	mutex_lock(&bcmbca_pinctrl->mutex);
+	guard(mutex)(&bcmbca_pinctrl->mutex);
 	for (i = 0; i < group->num_pins; i++) {
 		u32 lsb = 0;
 
@@ -451,7 +452,6 @@ static int bcmbca_pinctrl_set_mux(struct pinctrl_dev *pctrl_dev,
 		writel(BCMBCA_TEST_PORT_CMD_LOAD_MUX_REG,
 		       bcmbca_pinctrl->base + BCMBCA_TEST_PORT_COMMAND);
 	}
-	mutex_unlock(&bcmbca_pinctrl->mutex);
 
 	return 0;
 }
