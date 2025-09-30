@@ -8,7 +8,6 @@
 ///
 // Confidence: High
 // Copyright: (C) 2025 NVIDIA CORPORATION & AFFILIATES.
-// URL: https://coccinelle.gitlabpages.inria.fr/website
 // Options: --no-includes --include-headers
 
 virtual context
