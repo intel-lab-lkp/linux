@@ -274,19 +274,19 @@ struct event_file_link {
 static inline bool trace_probe_test_flag(struct trace_probe *tp,
 					 unsigned int flag)
 {
-	return !!(tp->event->flags & flag);
+	return !!(smp_load_acquire(&tp->event->flags) & flag);
 }
 
 static inline void trace_probe_set_flag(struct trace_probe *tp,
 					unsigned int flag)
 {
-	tp->event->flags |= flag;
+	smp_store_release(&tp->event->flags, tp->event->flags | flag);
 }
 
 static inline void trace_probe_clear_flag(struct trace_probe *tp,
 					  unsigned int flag)
 {
-	tp->event->flags &= ~flag;
+	smp_store_release(&tp->event->flags, tp->event->flags & ~flag);
 }
 
 static inline bool trace_probe_is_enabled(struct trace_probe *tp)
