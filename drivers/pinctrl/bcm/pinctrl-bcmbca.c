@@ -57,6 +57,533 @@ struct bcmbca_pinctrl_pin_setup {
 	unsigned int function;
 };
 
+/* BCM6846 groups and functions */
+
+#define BCM6846_NUM_PINS 79
+
+static const struct bcmbca_pinctrl_pin_setup bcm6846_led_0_pins_a[] = {
+	{ 18, 1 },
+};
+
+static const struct bcmbca_pinctrl_pin_setup bcm6846_led_0_pins_b[] = {
+	{ 52, 2 },
+};
+
+static const struct bcmbca_pinctrl_pin_setup bcm6846_led_1_pins_a[] = {
+	{ 19, 1 },
+};
+
+static const struct bcmbca_pinctrl_pin_setup bcm6846_led_1_pins_b[] = {
+	{ 53, 2 },
+};
+
+static const struct bcmbca_pinctrl_pin_setup bcm6846_led_2_pins_a[] = {
+	{ 22, 1 },
+};
+
+static const struct bcmbca_pinctrl_pin_setup bcm6846_led_2_pins_b[] = {
+	{ 49, 2 },
+};
+
+static const struct bcmbca_pinctrl_pin_setup bcm6846_led_3_pins_a[] = {
+	{ 24, 1 },
+};
+
+static const struct bcmbca_pinctrl_pin_setup bcm6846_led_3_pins_b[] = {
+	{ 44, 1 },
+};
+
+static const struct bcmbca_pinctrl_pin_setup bcm6846_led_4_pins_a[] = {
+	{ 9, 0 },
+};
+
+static const struct bcmbca_pinctrl_pin_setup bcm6846_led_4_pins_b[] = {
+	{ 44, 2 },
+};
+
+static const struct bcmbca_pinctrl_pin_setup bcm6846_led_5_pins_a[] = {
+	{ 10, 0 },
+};
+
+static const struct bcmbca_pinctrl_pin_setup bcm6846_led_5_pins_b[] = {
+	{ 43, 2 },
+};
+
+static const struct bcmbca_pinctrl_pin_setup bcm6846_led_6_pins_a[] = {
+	{ 11, 0 },
+};
+
+static const struct bcmbca_pinctrl_pin_setup bcm6846_led_6_pins_b[] = {
+	{ 47, 2 },
+};
+
+static const struct bcmbca_pinctrl_pin_setup bcm6846_led_7_pins_a[] = {
+	{ 12, 0 },
+};
+
+static const struct bcmbca_pinctrl_pin_setup bcm6846_led_7_pins_b[] = {
+	{ 45, 2 },
+};
+
+static const struct bcmbca_pinctrl_pin_setup bcm6846_led_8_pins_a[] = {
+	{ 13, 0 },
+};
+
+static const struct bcmbca_pinctrl_pin_setup bcm6846_led_8_pins_b[] = {
+	{ 5, 2 },
+};
+
+static const struct bcmbca_pinctrl_pin_setup bcm6846_led_9_pins_a[] = {
+	{ 16, 0 },
+};
+
+static const struct bcmbca_pinctrl_pin_setup bcm6846_led_9_pins_b[] = {
+	{ 18, 2 },
+};
+
+static const struct bcmbca_pinctrl_pin_setup bcm6846_led_10_pins_a[] = {
+	{ 17, 0 },
+};
+
+static const struct bcmbca_pinctrl_pin_setup bcm6846_led_10_pins_b[] = {
+	{ 50, 2 },
+};
+
+static const struct bcmbca_pinctrl_pin_setup bcm6846_led_11_pins_a[] = {
+	{ 20, 0 },
+};
+
+static const struct bcmbca_pinctrl_pin_setup bcm6846_led_11_pins_b[] = {
+	{ 51, 2 },
+};
+
+static const struct bcmbca_pinctrl_pin_setup bcm6846_led_12_pins_a[] = {
+	{ 21, 0 },
+};
+
+static const struct bcmbca_pinctrl_pin_setup bcm6846_led_12_pins_b[] = {
+	{ 56, 2 },
+};
+
+/* LEDs 13 thru 17 can apparently only be muxed in one place */
+static const struct bcmbca_pinctrl_pin_setup bcm6846_led_13_pins[] = {
+	{ 74, 0 },
+};
+
+static const struct bcmbca_pinctrl_pin_setup bcm6846_led_14_pins[] = {
+	{ 56, 0 },
+};
+
+static const struct bcmbca_pinctrl_pin_setup bcm6846_led_15_pins[] = {
+	{ 57, 0 },
+};
+
+static const struct bcmbca_pinctrl_pin_setup bcm6846_led_16_pins[] = {
+	{ 58, 0 },
+};
+
+static const struct bcmbca_pinctrl_pin_setup bcm6846_led_17_pins[] = {
+	{ 59, 0 },
+};
+
+/* Pins used for serial LED control can come out in two places */
+static const struct bcmbca_pinctrl_pin_setup bcm6846_ser_led_pins_a[] = {
+	{ 18, 3 }, /* CLK */
+	{ 23, 3 }, /* DATA */
+	{ 25, 3 }, /* MASK */
+};
+
+static const struct bcmbca_pinctrl_pin_setup bcm6846_ser_led_pins_b[] = {
+	{ 43, 3 }, /* CLK */
+	{ 45, 3 }, /* DATA */
+	{ 44, 3 }, /* MASK */
+};
+
+static const struct bcmbca_pinctrl_pin_setup bcm6846_nand_ctrl_pins[] = {
+	{ 26, 1 },
+	{ 27, 1 },
+	{ 28, 1 },
+	{ 29, 1 },
+	{ 30, 1 },
+	{ 31, 1 },
+};
+
+static const struct bcmbca_pinctrl_pin_setup bcm6846_nand_data_pins[] = {
+	{ 32, 1 },
+	{ 33, 1 },
+	{ 34, 1 },
+	{ 35, 1 },
+	{ 36, 1 },
+	{ 37, 1 },
+	{ 38, 1 },
+	{ 39, 1 },
+};
+
+static const struct bcmbca_pinctrl_pin_setup bcm6846_nand_wp_pins[] = {
+	{ 8, 1 },
+};
+
+static const struct bcmbca_pinctrl_pin_setup bcm6846_emmc_ctrl_pins[] = {
+	{ 20, 1 },
+	{ 21, 1 },
+};
+
+/* SPI port "M" can be muxed in three different places */
+static const struct bcmbca_pinctrl_pin_setup bcm6846_spim_pins_a[] = {
+	{ 62, 1 }, /* CLK */
+	{ 63, 1 }, /* MOSI */
+	{ 64, 1 }, /* MISO */
+};
+
+static const struct bcmbca_pinctrl_pin_setup bcm6846_spim_ss0_pins_a[] = {
+	{ 65, 1 }, /* SPI Select 0, Chip select 0 */
+};
+
+static const struct bcmbca_pinctrl_pin_setup bcm6846_spim_ss1_pins_a[] = {
+	{ 66, 1 }, /* SPI Select 1, Chip select 1 */
+};
+
+static const struct bcmbca_pinctrl_pin_setup bcm6846_spim_ss2_pins_a[] = {
+	{ 9, 1 }, /* SPI Select 2, Chip select 2 */
+};
+
+static const struct bcmbca_pinctrl_pin_setup bcm6846_spim_ss3_pins_a[] = {
+	{ 12, 1 }, /* SPI Select 3, Chip select 3 */
+};
+
+static const struct bcmbca_pinctrl_pin_setup bcm6846_spim_pins_b[] = {
+	{ 49, 0 }, /* CLK */
+	{ 50, 0 }, /* MOSI */
+	{ 51, 0 }, /* MISO */
+};
+
+static const struct bcmbca_pinctrl_pin_setup bcm6846_spim_ss0_pins_b[] = {
+	{ 52, 0 }, /* SPI Select 0, Chip select 0 */
+};
+
+static const struct bcmbca_pinctrl_pin_setup bcm6846_spim_ss1_pins_b[] = {
+	{ 53, 0 }, /* SPI Select 1, Chip select 1 */
+};
+
+static const struct bcmbca_pinctrl_pin_setup bcm6846_spim_ss2_pins_b[] = {
+	{ 5, 0 }, /* SPI Select 2, Chip select 2 */
+};
+
+static const struct bcmbca_pinctrl_pin_setup bcm6846_spim_ss3_pins_b[] = {
+	{ 7, 1 }, /* SPI Select 3, Chip select 3 */
+};
+
+static const struct bcmbca_pinctrl_pin_setup bcm6846_spim_pins_c[] = {
+	{ 24, 0 }, /* CLK */
+	{ 6, 0 }, /* MOSI */
+	{ 7, 0 }, /* MISO */
+};
+
+static const struct bcmbca_pinctrl_pin_setup bcm6846_spim_ss0_pins_c[] = {
+	{ 8, 0 }, /* SPI Select 0, Chip select 0 */
+};
+
+static const struct bcmbca_pinctrl_pin_setup bcm6846_spim_ss1_pins_c[] = {
+	{ 73, 1 }, /* SPI Select 1, Chip select 1 */
+};
+
+/* SPI port "S", this has just one optional select pin but can be in two places */
+static const struct bcmbca_pinctrl_pin_setup bcm6846_spis_pins_a[] = {
+	{ 56, 1 }, /* CLK */
+	{ 57, 1 }, /* MOSI */
+	{ 58, 1 }, /* MISO */
+};
+
+static const struct bcmbca_pinctrl_pin_setup bcm6846_spis_ss_pins_a[] = {
+	{ 59, 1 }, /* SPI S Select, Chip select */
+};
+
+static const struct bcmbca_pinctrl_pin_setup bcm6846_spis_pins_b[] = {
+	{ 0, 2 }, /* CLK */
+	{ 1, 2 }, /* MOSI */
+	{ 2, 2 }, /* MISO */
+};
+
+static const struct bcmbca_pinctrl_pin_setup bcm6846_spis_ss_pins_b[] = {
+	{ 3, 2 }, /* SPI S Select, Chip select */
+};
+
+static const struct bcmbca_pinctrl_pin_setup bcm6846_usb0_pwr_pins[] = {
+	{ 74, 1 },
+	{ 75, 1 },
+};
+
+static const struct bcmbca_pinctrl_pin_setup bcm6846_usb1_pwr_pins[] = {
+	{ 76, 1 },
+	{ 77, 1 },
+};
+
+static const struct bcmbca_pinctrl_pin_setup bcm6846_i2c_pins[] = {
+	{ 68, 0 },	/* SCL */
+	{ 69, 0 },	/* SDA */
+};
+
+static const struct bcmbca_pinctrl_pin_setup bcm6846_rgmii_pins[] = {
+	{ 42, 1 },
+	{ 43, 1 },
+	{ 44, 1 },
+	{ 45, 1 },
+	{ 46, 1 },
+	{ 47, 1 },
+	{ 48, 1 },
+	{ 49, 1 },
+	{ 50, 1 },
+	{ 51, 1 },
+	{ 52, 1 },
+	{ 53, 1 },
+};
+
+static const struct bcmbca_pinctrl_pin_setup bcm6846_rgmii_rx_ok_pins[] = {
+	{ 7, 3 },
+};
+
+static const struct bcmbca_pinctrl_pin_setup bcm6846_rgmii_start_stop_pins[] = {
+	{ 6, 3 },
+};
+
+static const struct bcmbca_pinctrl_pin_setup bcm6846_mii_pins[] = {
+	{ 8, 3 }, /* RX ER */
+	{ 5, 3 }, /* TX ER */
+};
+
+/* "signal detect" pin can be in two positions */
+static const struct bcmbca_pinctrl_pin_setup bcm6846_signal_detect_pins_a[] = {
+	{ 58, 3 },
+};
+
+static const struct bcmbca_pinctrl_pin_setup bcm6846_signal_detect_pins_b[] = {
+	{ 15, 3 },
+};
+
+/* "one sec pls" pin can be in two positions */
+static const struct bcmbca_pinctrl_pin_setup bcm6846_one_sec_pls_pins_a[] = {
+	{ 40, 0 },
+};
+
+static const struct bcmbca_pinctrl_pin_setup bcm6846_one_sec_pls_pins_b[] = {
+	{ 6, 1 },
+};
+
+/* "Rogue onu" pin, presumably a misspelling of "rogue one" */
+static const struct bcmbca_pinctrl_pin_setup bcm6846_rogue_onu_pins_a[] = {
+	{ 56, 3 },
+};
+
+static const struct bcmbca_pinctrl_pin_setup bcm6846_rogue_onu_pins_b[] = {
+	{ 14, 3 },
+};
+
+/* WAN extra pins for SynchE and PTP */
+static const struct bcmbca_pinctrl_pin_setup bcm6846_wan_mdio_pins[] = {
+	{ 54, 1 }, /* MDC */
+	{ 55, 1 }, /* MDIO */
+};
+
+static const struct bcmbca_pinctrl_pin_setup bcm6846_wan_nco_pins[] = {
+	{ 16, 3 }, /* 10 MHz NCO clock output */
+	{ 5, 1 }, /* 8 kHz NCO clock output */
+	{ 20, 3 }, /* NCO programmable clock output */
+};
+
+static const struct bcmbca_pinctrl_pin_setup bcm6846_wan_early_txen_pins_a[] = {
+	{ 10, 3 },
+};
+
+static const struct bcmbca_pinctrl_pin_setup bcm6846_wan_early_txen_pins_b[] = {
+	{ 4, 1 },
+};
+
+/* 1PPS pin for IEEE 1588 PTP */
+static const struct bcmbca_pinctrl_pin_setup bcm6846_wan_nco_1pps_sig_pins_a[] = {
+	{ 40, 1 },
+};
+
+static const struct bcmbca_pinctrl_pin_setup bcm6846_wan_nco_1pps_sig_pins_b[] = {
+	{ 6, 2 },
+};
+
+static const struct bcmbca_pinctrl_pin_setup bcm6846_uart0_pins[] = {
+	{ 60, 1 }, /* SDIN (RX) */
+	{ 61, 1 }, /* SDOUT (TX) */
+};
+
+static const struct bcmbca_pinctrl_pin_setup bcm6846_uart2_pins[] = {
+	{ 13, 1 }, /* CTS */
+	{ 16, 1 }, /* RTS */
+	{ 14, 1 }, /* SIN (RX) */
+	{ 15, 1 }, /* SOUT (TX) */
+};
+
+static const struct bcmbca_pinctrl_grp bcm6846_pinctrl_grps[] = {
+	{ "led_0_grp_a", bcm6846_led_0_pins_a, ARRAY_SIZE(bcm6846_led_0_pins_a) },
+	{ "led_0_grp_b", bcm6846_led_0_pins_b, ARRAY_SIZE(bcm6846_led_0_pins_b) },
+	{ "led_1_grp_a", bcm6846_led_1_pins_a, ARRAY_SIZE(bcm6846_led_1_pins_a) },
+	{ "led_1_grp_b", bcm6846_led_1_pins_b, ARRAY_SIZE(bcm6846_led_1_pins_b) },
+	{ "led_2_grp_a", bcm6846_led_2_pins_a, ARRAY_SIZE(bcm6846_led_2_pins_a) },
+	{ "led_2_grp_b", bcm6846_led_2_pins_b, ARRAY_SIZE(bcm6846_led_2_pins_b) },
+	{ "led_3_grp_a", bcm6846_led_3_pins_a, ARRAY_SIZE(bcm6846_led_3_pins_a) },
+	{ "led_3_grp_b", bcm6846_led_3_pins_b, ARRAY_SIZE(bcm6846_led_3_pins_b) },
+	{ "led_4_grp_a", bcm6846_led_4_pins_a, ARRAY_SIZE(bcm6846_led_4_pins_a) },
+	{ "led_4_grp_b", bcm6846_led_4_pins_b, ARRAY_SIZE(bcm6846_led_4_pins_b) },
+	{ "led_5_grp_a", bcm6846_led_5_pins_a, ARRAY_SIZE(bcm6846_led_5_pins_a) },
+	{ "led_5_grp_b", bcm6846_led_5_pins_b, ARRAY_SIZE(bcm6846_led_5_pins_b) },
+	{ "led_6_grp_a", bcm6846_led_6_pins_a, ARRAY_SIZE(bcm6846_led_6_pins_a) },
+	{ "led_6_grp_b", bcm6846_led_6_pins_b, ARRAY_SIZE(bcm6846_led_6_pins_b) },
+	{ "led_7_grp_a", bcm6846_led_7_pins_a, ARRAY_SIZE(bcm6846_led_7_pins_a) },
+	{ "led_7_grp_b", bcm6846_led_7_pins_b, ARRAY_SIZE(bcm6846_led_7_pins_b) },
+	{ "led_8_grp_a", bcm6846_led_8_pins_a, ARRAY_SIZE(bcm6846_led_8_pins_a) },
+	{ "led_8_grp_b", bcm6846_led_8_pins_b, ARRAY_SIZE(bcm6846_led_8_pins_b) },
+	{ "led_9_grp_a", bcm6846_led_9_pins_a, ARRAY_SIZE(bcm6846_led_9_pins_a) },
+	{ "led_9_grp_b", bcm6846_led_9_pins_b, ARRAY_SIZE(bcm6846_led_9_pins_b) },
+	{ "led_10_grp_a", bcm6846_led_10_pins_a, ARRAY_SIZE(bcm6846_led_10_pins_a) },
+	{ "led_10_grp_b", bcm6846_led_10_pins_b, ARRAY_SIZE(bcm6846_led_10_pins_b) },
+	{ "led_11_grp_a", bcm6846_led_11_pins_a, ARRAY_SIZE(bcm6846_led_11_pins_a) },
+	{ "led_11_grp_b", bcm6846_led_11_pins_b, ARRAY_SIZE(bcm6846_led_11_pins_b) },
+	{ "led_12_grp_a", bcm6846_led_12_pins_a, ARRAY_SIZE(bcm6846_led_12_pins_a) },
+	{ "led_12_grp_b", bcm6846_led_12_pins_b, ARRAY_SIZE(bcm6846_led_12_pins_b) },
+	{ "led_13_grp", bcm6846_led_13_pins, ARRAY_SIZE(bcm6846_led_13_pins) },
+	{ "led_14_grp", bcm6846_led_14_pins, ARRAY_SIZE(bcm6846_led_14_pins) },
+	{ "led_15_grp", bcm6846_led_15_pins, ARRAY_SIZE(bcm6846_led_15_pins) },
+	{ "led_16_grp", bcm6846_led_16_pins, ARRAY_SIZE(bcm6846_led_16_pins) },
+	{ "led_17_grp", bcm6846_led_17_pins, ARRAY_SIZE(bcm6846_led_17_pins) },
+	{ "ser_led_grp_a", bcm6846_ser_led_pins_a, ARRAY_SIZE(bcm6846_ser_led_pins_a) },
+	{ "ser_led_grp_b", bcm6846_ser_led_pins_b, ARRAY_SIZE(bcm6846_ser_led_pins_b) },
+	{ "nand_ctrl_grp", bcm6846_nand_ctrl_pins, ARRAY_SIZE(bcm6846_nand_ctrl_pins) },
+	{ "nand_data_grp", bcm6846_nand_data_pins, ARRAY_SIZE(bcm6846_nand_data_pins) },
+	{ "nand_wp_grp", bcm6846_nand_wp_pins, ARRAY_SIZE(bcm6846_nand_wp_pins) },
+	{ "emmc_ctrl_grp", bcm6846_emmc_ctrl_pins, ARRAY_SIZE(bcm6846_emmc_ctrl_pins) },
+	{ "spim_grp_a", bcm6846_spim_pins_a, ARRAY_SIZE(bcm6846_spim_pins_a) },
+	{ "spim_ss0_grp_a", bcm6846_spim_ss0_pins_a, ARRAY_SIZE(bcm6846_spim_ss0_pins_a) },
+	{ "spim_ss1_grp_a", bcm6846_spim_ss1_pins_a, ARRAY_SIZE(bcm6846_spim_ss1_pins_a) },
+	{ "spim_ss2_grp_a", bcm6846_spim_ss2_pins_a, ARRAY_SIZE(bcm6846_spim_ss2_pins_a) },
+	{ "spim_ss3_grp_a", bcm6846_spim_ss3_pins_a, ARRAY_SIZE(bcm6846_spim_ss3_pins_a) },
+	{ "spim_grp_b", bcm6846_spim_pins_b, ARRAY_SIZE(bcm6846_spim_pins_b) },
+	{ "spim_ss0_grp_b", bcm6846_spim_ss0_pins_b, ARRAY_SIZE(bcm6846_spim_ss0_pins_b) },
+	{ "spim_ss1_grp_b", bcm6846_spim_ss1_pins_b, ARRAY_SIZE(bcm6846_spim_ss1_pins_b) },
+	{ "spim_ss2_grp_b", bcm6846_spim_ss2_pins_b, ARRAY_SIZE(bcm6846_spim_ss2_pins_b) },
+	{ "spim_ss3_grp_b", bcm6846_spim_ss3_pins_b, ARRAY_SIZE(bcm6846_spim_ss3_pins_b) },
+	{ "spim_grp_c", bcm6846_spim_pins_c, ARRAY_SIZE(bcm6846_spim_pins_c) },
+	{ "spim_ss0_grp_c", bcm6846_spim_ss0_pins_c, ARRAY_SIZE(bcm6846_spim_ss0_pins_c) },
+	{ "spim_ss1_grp_c", bcm6846_spim_ss1_pins_c, ARRAY_SIZE(bcm6846_spim_ss1_pins_c) },
+	{ "spis_grp_a", bcm6846_spis_pins_a, ARRAY_SIZE(bcm6846_spis_pins_a) },
+	{ "spis_ss_grp_a", bcm6846_spis_ss_pins_a, ARRAY_SIZE(bcm6846_spis_ss_pins_a) },
+	{ "spis_grp_b", bcm6846_spis_pins_b, ARRAY_SIZE(bcm6846_spis_pins_b) },
+	{ "spis_ss_grp_b", bcm6846_spis_ss_pins_b, ARRAY_SIZE(bcm6846_spis_ss_pins_b) },
+	{ "usb0_pwr_grp", bcm6846_usb0_pwr_pins, ARRAY_SIZE(bcm6846_usb0_pwr_pins) },
+	{ "usb1_pwr_grp", bcm6846_usb1_pwr_pins, ARRAY_SIZE(bcm6846_usb1_pwr_pins) },
+	{ "i2c_grp", bcm6846_i2c_pins, ARRAY_SIZE(bcm6846_i2c_pins) },
+	{ "rgmii_grp", bcm6846_rgmii_pins, ARRAY_SIZE(bcm6846_rgmii_pins) },
+	{ "rgmii_rx_ok_grp", bcm6846_rgmii_rx_ok_pins, ARRAY_SIZE(bcm6846_rgmii_rx_ok_pins) },
+	{ "rgmii_start_stop_grp", bcm6846_rgmii_start_stop_pins, ARRAY_SIZE(bcm6846_rgmii_start_stop_pins) },
+	{ "mii_grp", bcm6846_mii_pins, ARRAY_SIZE(bcm6846_mii_pins) },
+	{ "signal_detect_grp_a", bcm6846_signal_detect_pins_a, ARRAY_SIZE(bcm6846_signal_detect_pins_a) },
+	{ "signal_detect_grp_b", bcm6846_signal_detect_pins_b, ARRAY_SIZE(bcm6846_signal_detect_pins_b) },
+	{ "one_sec_pls_grp_a", bcm6846_one_sec_pls_pins_a, ARRAY_SIZE(bcm6846_one_sec_pls_pins_a) },
+	{ "one_sec_pls_grp_b", bcm6846_one_sec_pls_pins_b, ARRAY_SIZE(bcm6846_one_sec_pls_pins_b) },
+	{ "rogue_onu_grp_a", bcm6846_rogue_onu_pins_a, ARRAY_SIZE(bcm6846_rogue_onu_pins_a) },
+	{ "rogue_onu_grp_b", bcm6846_rogue_onu_pins_b, ARRAY_SIZE(bcm6846_rogue_onu_pins_b) },
+	{ "wan_mdio_grp", bcm6846_wan_mdio_pins, ARRAY_SIZE(bcm6846_wan_mdio_pins) },
+	{ "wan_nco_grp", bcm6846_wan_nco_pins, ARRAY_SIZE(bcm6846_wan_nco_pins) },
+	{ "wan_early_txen_grp_a", bcm6846_wan_early_txen_pins_a, ARRAY_SIZE(bcm6846_wan_early_txen_pins_a) },
+	{ "wan_early_txen_grp_b", bcm6846_wan_early_txen_pins_b, ARRAY_SIZE(bcm6846_wan_early_txen_pins_b) },
+	{ "wan_nco_1pps_sig_grp_a", bcm6846_wan_nco_1pps_sig_pins_a, ARRAY_SIZE(bcm6846_wan_nco_1pps_sig_pins_a) },
+	{ "wan_nco_1pps_sig_grp_b", bcm6846_wan_nco_1pps_sig_pins_b, ARRAY_SIZE(bcm6846_wan_nco_1pps_sig_pins_b) },
+	{ "uart0_grp", bcm6846_uart0_pins, ARRAY_SIZE(bcm6846_uart0_pins) },
+	{ "uart2_grp", bcm6846_uart2_pins, ARRAY_SIZE(bcm6846_uart2_pins) },
+};
+
+static const char * const bcm6846_led_0_groups[] = { "led_0_grp_a", "led_0_grp_b" };
+static const char * const bcm6846_led_1_groups[] = { "led_1_grp_a", "led_1_grp_b" };
+static const char * const bcm6846_led_2_groups[] = { "led_2_grp_a", "led_2_grp_b" };
+static const char * const bcm6846_led_3_groups[] = { "led_3_grp_a", "led_3_grp_b" };
+static const char * const bcm6846_led_4_groups[] = { "led_4_grp_a", "led_4_grp_b" };
+static const char * const bcm6846_led_5_groups[] = { "led_5_grp_a", "led_5_grp_b" };
+static const char * const bcm6846_led_6_groups[] = { "led_6_grp_a", "led_6_grp_b" };
+static const char * const bcm6846_led_7_groups[] = { "led_7_grp_a", "led_7_grp_b" };
+static const char * const bcm6846_led_8_groups[] = { "led_8_grp_a", "led_8_grp_b" };
+static const char * const bcm6846_led_9_groups[] = { "led_9_grp_a", "led_9_grp_b" };
+static const char * const bcm6846_led_10_groups[] = { "led_10_grp_a", "led_10_grp_b" };
+static const char * const bcm6846_led_11_groups[] = { "led_11_grp_a", "led_11_grp_b" };
+static const char * const bcm6846_led_12_groups[] = { "led_12_grp_a", "led_12_grp_b" };
+static const char * const bcm6846_led_13_groups[] = { "led_13_grp" };
+static const char * const bcm6846_led_14_groups[] = { "led_14_grp" };
+static const char * const bcm6846_led_15_groups[] = { "led_15_grp" };
+static const char * const bcm6846_led_16_groups[] = { "led_16_grp" };
+static const char * const bcm6846_led_17_groups[] = { "led_17_grp" };
+static const char * const bcm6846_ser_led_groups[] = { "ser_led_grp_a", "ser_led_grp_b" };
+/* We use these three groups with the NAND function to get as many pins as we want */
+static const char * const bcm6846_nand_groups[] = { "nand_ctrl_grp", "nand_data_grp", "nand_wp_grp" };
+static const char * const bcm6846_emmc_groups[] = { "emmc_ctrl_grp" };
+/* Activate SPIM with "spim_grp" and then as many selects as used with "spim_ssN_grp" groups */
+static const char * const bcm6846_spim_groups[] = {
+	"spim_grp_a", "spim_ss0_grp_a",	"spim_ss1_grp_a", "spim_ss2_grp_a", "spim_ss3_grp_a",
+	"spim_grp_b", "spim_ss0_grp_b",	"spim_ss1_grp_b", "spim_ss2_grp_b", "spim_ss3_grp_b",
+	"spim_grp_c", "spim_ss0_grp_c",	"spim_ss1_grp_c" };
+static const char * const bcm6846_spis_groups[] = {
+	"spis_grp_a", "spim_ss_grp_a",
+	"spis_grp_b", "spis_ss_grp_b" };
+static const char * const bcm6846_usb0_pwr_groups[] = { "usb0_pwr_grp" };
+static const char * const bcm6846_usb1_pwr_groups[] = { "usb1_pwr_grp" };
+static const char * const bcm6846_i2c_groups[] = { "i2c_grp" };
+static const char * const bcm6846_rgmii_groups[] = { "rgmii_grp", "rgmii_rx_ok_grp", "rgmii_start_stop_grp" };
+static const char * const bcm6846_mii_groups[] = { "mii_grp" };
+static const char * const bcm6846_signal_detect_groups[] = { "signal_detect_grp_a", "signal_detect_grp_b" };
+static const char * const bcm6846_one_sec_pls_groups[] = { "one_sec_pls_grp_a", "one_sec_pls_grp_b" };
+static const char * const bcm6846_rogue_onu_groups[] = { "rogue_onu_grp_a", "rogue_onu_grp_b" };
+static const char * const bcm6846_wan_groups[] = { "wan_mdio_grp", "wan_nco_grp",
+	"wan_early_txen_grp_a", "wan_early_txen_grp_b", "wan_nco_1pps_sig_grp_a", "wan_nco_1pps_sig_grp_b" };
+static const char * const bcm6846_uart0_groups[] = { "uart0_grp" };
+static const char * const bcm6846_uart2_groups[] = { "uart2_grp" };
+
+static const struct bcmbca_pinctrl_function bcm6846_pinctrl_functions[] = {
+	{ "led_0", bcm6846_led_0_groups, ARRAY_SIZE(bcm6846_led_0_groups) },
+	{ "led_1", bcm6846_led_1_groups, ARRAY_SIZE(bcm6846_led_1_groups) },
+	{ "led_2", bcm6846_led_2_groups, ARRAY_SIZE(bcm6846_led_2_groups) },
+	{ "led_3", bcm6846_led_3_groups, ARRAY_SIZE(bcm6846_led_3_groups) },
+	{ "led_4", bcm6846_led_4_groups, ARRAY_SIZE(bcm6846_led_4_groups) },
+	{ "led_5", bcm6846_led_5_groups, ARRAY_SIZE(bcm6846_led_5_groups) },
+	{ "led_6", bcm6846_led_6_groups, ARRAY_SIZE(bcm6846_led_6_groups) },
+	{ "led_7", bcm6846_led_7_groups, ARRAY_SIZE(bcm6846_led_7_groups) },
+	{ "led_8", bcm6846_led_8_groups, ARRAY_SIZE(bcm6846_led_8_groups) },
+	{ "led_9", bcm6846_led_9_groups, ARRAY_SIZE(bcm6846_led_9_groups) },
+	{ "led_10", bcm6846_led_10_groups, ARRAY_SIZE(bcm6846_led_10_groups) },
+	{ "led_11", bcm6846_led_11_groups, ARRAY_SIZE(bcm6846_led_11_groups) },
+	{ "led_12", bcm6846_led_12_groups, ARRAY_SIZE(bcm6846_led_12_groups) },
+	{ "led_13", bcm6846_led_13_groups, ARRAY_SIZE(bcm6846_led_13_groups) },
+	{ "led_14", bcm6846_led_14_groups, ARRAY_SIZE(bcm6846_led_14_groups) },
+	{ "led_15", bcm6846_led_15_groups, ARRAY_SIZE(bcm6846_led_15_groups) },
+	{ "led_16", bcm6846_led_16_groups, ARRAY_SIZE(bcm6846_led_16_groups) },
+	{ "led_17", bcm6846_led_17_groups, ARRAY_SIZE(bcm6846_led_17_groups) },
+	{ "ser_led", bcm6846_ser_led_groups, ARRAY_SIZE(bcm6846_ser_led_groups) },
+	{ "nand", bcm6846_nand_groups, ARRAY_SIZE(bcm6846_nand_groups) },
+	{ "emmc", bcm6846_emmc_groups, ARRAY_SIZE(bcm6846_emmc_groups) },
+	{ "spim", bcm6846_spim_groups, ARRAY_SIZE(bcm6846_spim_groups) },
+	{ "usb0_pwr", bcm6846_usb0_pwr_groups, ARRAY_SIZE(bcm6846_usb0_pwr_groups) },
+	{ "usb1_pwr", bcm6846_usb1_pwr_groups, ARRAY_SIZE(bcm6846_usb1_pwr_groups) },
+	{ "i2c", bcm6846_i2c_groups, ARRAY_SIZE(bcm6846_i2c_groups) },
+	{ "rgmii", bcm6846_rgmii_groups, ARRAY_SIZE(bcm6846_rgmii_groups) },
+	{ "mii", bcm6846_mii_groups, ARRAY_SIZE(bcm6846_mii_groups) },
+	{ "signal_detect", bcm6846_signal_detect_groups, ARRAY_SIZE(bcm6846_signal_detect_groups) },
+	{ "one_sec_pls", bcm6846_one_sec_pls_groups, ARRAY_SIZE(bcm6846_one_sec_pls_groups) },
+	{ "rogue_onu", bcm6846_rogue_onu_groups, ARRAY_SIZE(bcm6846_rogue_onu_groups) },
+	{ "wan", bcm6846_wan_groups, ARRAY_SIZE(bcm6846_wan_groups) },
+	{ "uart0", bcm6846_uart0_groups, ARRAY_SIZE(bcm6846_uart0_groups) },
+	{ "uart2", bcm6846_uart2_groups, ARRAY_SIZE(bcm6846_uart2_groups) },
+};
+
+static const struct bcmbca_soc_info bcm6846_pinctrl_soc_info = {
+	.num_pins = BCM6846_NUM_PINS,
+	.groups = bcm6846_pinctrl_grps,
+	.num_groups = ARRAY_SIZE(bcm6846_pinctrl_grps),
+	.functions = bcm6846_pinctrl_functions,
+	.num_functions = ARRAY_SIZE(bcm6846_pinctrl_functions),
+};
+
 /* BCM4908 groups and functions */
 
 #define BCM4908_NUM_PINS 86
@@ -474,6 +1001,10 @@ static const struct pinctrl_desc bcmbca_pinctrl_desc = {
 };
 
 static const struct of_device_id bcmbca_pinctrl_of_match_table[] = {
+	{
+		.compatible = "brcm,bcm6846-pinctrl",
+		.data = &bcm6846_pinctrl_soc_info,
+	},
 	{
 		.compatible = "brcm,bcm4908-pinctrl",
 		.data = &bcm4908_pinctrl_soc_info,
