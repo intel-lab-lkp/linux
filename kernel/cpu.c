@@ -2902,7 +2902,7 @@ static ssize_t
 __store_smt_control(struct device *dev, struct device_attribute *attr,
 		    const char *buf, size_t count)
 {
-	int ctrlval, ret, num_threads, orig_threads;
+	int ctrlval, ret, num_threads;
 	bool force_off;
 
 	if (cpu_smt_control == CPU_SMT_FORCE_DISABLED)
@@ -2935,15 +2935,15 @@ __store_smt_control(struct device *dev, struct device_attribute *attr,
 	if (ret)
 		return ret;
 
-	orig_threads = cpu_smt_num_threads;
-	cpu_smt_num_threads = num_threads;
-
 	force_off = ctrlval != cpu_smt_control && ctrlval == CPU_SMT_FORCE_DISABLED;
 
-	if (num_threads > orig_threads)
+	if (num_threads > cpu_smt_num_threads)
 		ret = cpuhp_smt_enable();
-	else if (num_threads < orig_threads || force_off)
+	else if (num_threads < cpu_smt_num_threads || force_off)
 		ret = cpuhp_smt_disable(ctrlval);
+
+	if (!ret)
+		cpu_smt_num_threads = num_threads;
 
 	unlock_device_hotplug();
 	return ret ? ret : count;
