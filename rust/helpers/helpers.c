@@ -35,6 +35,7 @@
 #include "platform.c"
 #include "poll.c"
 #include "property.c"
+#include "pwm.c"
 #include "rbtree.c"
 #include "rcu.c"
 #include "refcount.c"
