@@ -3461,6 +3461,32 @@ void cpuset_update_task_spread_flags(struct cpuset *cs,
 		task_clear_spread_page(tsk);
 }
 
+static int cpuset_update_spread_page(struct cgroup_subsys_state *css, struct cftype *cft,
+			    u64 val)
+{
+	struct cpuset *cs = css_cs(css);
+	int retval = 0;
+
+	cpuset_full_lock();
+	if (!is_cpuset_online(cs)) {
+		retval = -ENODEV;
+		goto out_unlock;
+	}
+
+	retval = cpuset_update_flag(CS_SPREAD_PAGE, cs, val);
+
+out_unlock:
+	cpuset_full_unlock();
+	return retval;
+}
+
+static u64 cpuset_read_spread_page(struct cgroup_subsys_state *css, struct cftype *cft)
+{
+	struct cpuset *cs = css_cs(css);
+
+	return is_spread_page(cs);
+}
+
 /*
  * This is currently a minimal set for the default hierarchy. It can be
  * expanded later on by migrating more features and control files from v1.
@@ -3533,6 +3559,13 @@ static struct cftype dfl_files[] = {
 		.seq_show = cpuset_common_seq_show,
 		.private = FILE_ISOLATED_CPULIST,
 		.flags = CFTYPE_ONLY_ON_ROOT,
+	},
+
+	{
+		.name = "mems.spread_page",
+		.read_u64 = cpuset_read_spread_page,
+		.write_u64 = cpuset_update_spread_page,
+		.private = FILE_SPREAD_PAGE,
 	},
 
 	{ }	/* terminate */
