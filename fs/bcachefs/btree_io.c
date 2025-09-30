@@ -1087,6 +1087,13 @@ int bch2_btree_node_read_done(struct bch_fs *c, struct bch_dev *ca,
 		     "bad magic: want %llx, got %llx",
 		     bset_magic(c), le64_to_cpu(b->data->magic));
 
+	btree_err_on(ptr_written >= btree_sectors(c),
+		     -BCH_ERR_btree_node_read_err_must_retry,
+		     c, ca, b, NULL, NULL,
+		     btree_node_bad_magic,
+		     "wrong written %u, btree sectors is %lu",
+		     ptr_written, btree_sectors(c));
+
 	if (b->key.k.type == KEY_TYPE_btree_ptr_v2) {
 		struct bch_btree_ptr_v2 *bp =
 			&bkey_i_to_btree_ptr_v2(&b->key)->v;
