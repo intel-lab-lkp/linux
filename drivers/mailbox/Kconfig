@@ -372,7 +372,6 @@ config BCM74110_MAILBOX
 config RISCV_SBI_MPXY_MBOX
 	tristate "RISC-V SBI Message Proxy (MPXY) Mailbox"
 	depends on RISCV_SBI
-	default RISCV
 	help
 	  Mailbox driver implementation for RISC-V SBI Message Proxy (MPXY)
 	  extension. This mailbox driver is used to send messages to the
