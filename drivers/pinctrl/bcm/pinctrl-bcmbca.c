@@ -9,6 +9,7 @@
 #include <linux/pinctrl/pinctrl.h>
 #include <linux/pinctrl/pinmux.h>
 #include <linux/platform_device.h>
+#include <linux/property.h>
 #include <linux/slab.h>
 #include <linux/string_helpers.h>
 
@@ -23,6 +24,26 @@
 #define  BCMBCA_TEST_PORT_LSB_PINMUX_DATA_SHIFT		12
 #define BCMBCA_TEST_PORT_COMMAND			0x0c
 #define  BCMBCA_TEST_PORT_CMD_LOAD_MUX_REG		0x00000021
+
+struct bcmbca_pinctrl_grp {
+	const char *name;
+	const struct bcmbca_pinctrl_pin_setup *pins;
+	const unsigned int num_pins;
+};
+
+struct bcmbca_pinctrl_function {
+	const char *name;
+	const char * const *groups;
+	const unsigned int num_groups;
+};
+
+struct bcmbca_soc_info {
+	unsigned int num_pins;
+	const struct bcmbca_pinctrl_grp *groups;
+	unsigned int num_groups;
+	const struct bcmbca_pinctrl_function *functions;
+	unsigned int num_functions;
+};
 
 struct bcmbca_pinctrl {
 	struct device *dev;
@@ -249,12 +270,6 @@ static const struct bcmbca_pinctrl_pin_setup usb1_pwr_pins[] = {
 	{ 67, 0 },
 };
 
-struct bcmbca_pinctrl_grp {
-	const char *name;
-	const struct bcmbca_pinctrl_pin_setup *pins;
-	const unsigned int num_pins;
-};
-
 static const struct bcmbca_pinctrl_grp bcm4908_pinctrl_grps[] = {
 	{ "led_0_grp_a", led_0_pins_a, ARRAY_SIZE(led_0_pins_a) },
 	{ "led_1_grp_a", led_1_pins_a, ARRAY_SIZE(led_1_pins_a) },
@@ -307,12 +322,6 @@ static const struct bcmbca_pinctrl_grp bcm4908_pinctrl_grps[] = {
 /*
  * Functions
  */
-
-struct bcmbca_pinctrl_function {
-	const char *name;
-	const char * const *groups;
-	const unsigned int num_groups;
-};
 
 static const char * const led_0_groups[] = { "led_0_grp_a" };
 static const char * const led_1_groups[] = { "led_1_grp_a" };
@@ -462,19 +471,35 @@ static const struct pinctrl_desc bcmbca_pinctrl_desc = {
 	.pmxops = &bcmbca_pinctrl_pmxops,
 };
 
+static const struct bcmbca_soc_info bcm4908_pinctrl_soc_info = {
+	.num_pins = BCM4908_NUM_PINS,
+	.groups = bcm4908_pinctrl_grps,
+	.num_groups = ARRAY_SIZE(bcm4908_pinctrl_grps),
+	.functions = bcm4908_pinctrl_functions,
+	.num_functions = ARRAY_SIZE(bcm4908_pinctrl_functions),
+};
+
 static const struct of_device_id bcmbca_pinctrl_of_match_table[] = {
-	{ .compatible = "brcm,bcm4908-pinctrl", },
+	{
+		.compatible = "brcm,bcm4908-pinctrl",
+		.data = &bcm4908_pinctrl_soc_info,
+	},
 	{ }
 };
 
 static int bcmbca_pinctrl_probe(struct platform_device *pdev)
 {
+	const struct bcmbca_soc_info *info;
 	struct device *dev = &pdev->dev;
 	struct bcmbca_pinctrl *bcmbca_pinctrl;
 	struct pinctrl_desc *pctldesc;
 	struct pinctrl_pin_desc *pins;
 	char **pin_names;
 	int i;
+
+	info = device_get_match_data(dev);
+	if (!info)
+		return dev_err_probe(dev, -EINVAL, "No match data\n");
 
 	bcmbca_pinctrl = devm_kzalloc(dev, sizeof(*bcmbca_pinctrl), GFP_KERNEL);
 	if (!bcmbca_pinctrl)
@@ -496,19 +521,19 @@ static int bcmbca_pinctrl_probe(struct platform_device *pdev)
 
 	/* Set pinctrl properties */
 
-	pin_names = devm_kasprintf_strarray(dev, "pin", BCM4908_NUM_PINS);
+	pin_names = devm_kasprintf_strarray(dev, "pin", info->num_pins);
 	if (IS_ERR(pin_names))
 		return PTR_ERR(pin_names);
 
-	pins = devm_kcalloc(dev, BCM4908_NUM_PINS, sizeof(*pins), GFP_KERNEL);
+	pins = devm_kcalloc(dev, info->num_pins, sizeof(*pins), GFP_KERNEL);
 	if (!pins)
 		return -ENOMEM;
-	for (i = 0; i < BCM4908_NUM_PINS; i++) {
+	for (i = 0; i < info->num_pins; i++) {
 		pins[i].number = i;
 		pins[i].name = pin_names[i];
 	}
 	pctldesc->pins = pins;
-	pctldesc->npins = BCM4908_NUM_PINS;
+	pctldesc->npins = info->num_pins;
 
 	/* Register */
 
@@ -519,8 +544,8 @@ static int bcmbca_pinctrl_probe(struct platform_device *pdev)
 
 	/* Groups */
 
-	for (i = 0; i < ARRAY_SIZE(bcm4908_pinctrl_grps); i++) {
-		const struct bcmbca_pinctrl_grp *group = &bcm4908_pinctrl_grps[i];
+	for (i = 0; i < info->num_groups; i++) {
+		const struct bcmbca_pinctrl_grp *group = &info->groups[i];
 		int *pins;
 		int j;
 
@@ -536,8 +561,8 @@ static int bcmbca_pinctrl_probe(struct platform_device *pdev)
 
 	/* Functions */
 
-	for (i = 0; i < ARRAY_SIZE(bcm4908_pinctrl_functions); i++) {
-		const struct bcmbca_pinctrl_function *function = &bcm4908_pinctrl_functions[i];
+	for (i = 0; i < info->num_functions; i++) {
+		const struct bcmbca_pinctrl_function *function = &info->functions[i];
 
 		pinmux_generic_add_function(bcmbca_pinctrl->pctldev,
 					    function->name,
