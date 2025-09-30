@@ -99,6 +99,10 @@ static int manage_bp_slot(struct perf_event *bp, enum bp_slot_action action)
 		old_bp = NULL;
 		new_bp = bp;
 		break;
+	case BP_SLOT_ACTION_REINSTALL:
+		old_bp = bp;
+		new_bp = bp;
+		break;
 	case BP_SLOT_ACTION_UNINSTALL:
 		old_bp = bp;
 		new_bp = NULL;
@@ -185,6 +189,11 @@ static int arch_manage_bp(struct perf_event *bp, enum bp_slot_action action)
 int arch_install_hw_breakpoint(struct perf_event *bp)
 {
 	return arch_manage_bp(bp, BP_SLOT_ACTION_INSTALL);
+}
+
+int arch_reinstall_hw_breakpoint(struct perf_event *bp)
+{
+	return arch_manage_bp(bp, BP_SLOT_ACTION_REINSTALL);
 }
 
 void arch_uninstall_hw_breakpoint(struct perf_event *bp)
