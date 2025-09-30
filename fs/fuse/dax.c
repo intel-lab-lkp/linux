@@ -25,7 +25,7 @@
 #define FUSE_DAX_RECLAIM_CHUNK		(10)
 
 /*
- * Dax memory reclaim threshold in percetage of total ranges. When free
+ * Dax memory reclaim threshold in percentage of total ranges. When free
  * number of free ranges drops below this threshold, reclaim can trigger
  * Default is 20%
  */
