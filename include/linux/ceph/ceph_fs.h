@@ -262,6 +262,25 @@ struct ceph_mon_subscribe_ack {
 #define CEPH_MDS_STATE_ACTIVE       13 /* up, active */
 #define CEPH_MDS_STATE_STOPPING     14 /* up, but exporting metadata */
 
+enum {
+/* 0 */		CEPH_MDS_STATE_DNE_STR_IDX,
+/* 1 */		CEPH_MDS_STATE_STOPPED_STR_IDX,
+/* 2 */		CEPH_MDS_STATE_BOOT_STR_IDX,
+/* 3 */		CEPH_MDS_STATE_STANDBY_STR_IDX,
+/* 4 */		CEPH_MDS_STATE_CREATING_STR_IDX,
+/* 5 */		CEPH_MDS_STATE_STARTING_STR_IDX,
+/* 6 */		CEPH_MDS_STATE_STANDBY_REPLAY_STR_IDX,
+/* 7 */		CEPH_MDS_STATE_REPLAYONCE_STR_IDX,
+/* 8 */		CEPH_MDS_STATE_REPLAY_STR_IDX,
+/* 9 */		CEPH_MDS_STATE_RESOLVE_STR_IDX,
+/* 10 */	CEPH_MDS_STATE_RECONNECT_STR_IDX,
+/* 11 */	CEPH_MDS_STATE_REJOIN_STR_IDX,
+/* 12 */	CEPH_MDS_STATE_CLIENTREPLAY_STR_IDX,
+/* 13 */	CEPH_MDS_STATE_ACTIVE_STR_IDX,
+/* 14 */	CEPH_MDS_STATE_STOPPING_STR_IDX,
+/* 15 */	CEPH_MDS_STATE_UNKNOWN_NAME_STR_IDX
+};
+
 extern const char *ceph_mds_state_name(int s);
 
 
@@ -287,19 +306,20 @@ extern const char *ceph_mds_state_name(int s);
 
 /* client_session ops */
 enum {
-	CEPH_SESSION_REQUEST_OPEN,
-	CEPH_SESSION_OPEN,
-	CEPH_SESSION_REQUEST_CLOSE,
-	CEPH_SESSION_CLOSE,
-	CEPH_SESSION_REQUEST_RENEWCAPS,
-	CEPH_SESSION_RENEWCAPS,
-	CEPH_SESSION_STALE,
-	CEPH_SESSION_RECALL_STATE,
-	CEPH_SESSION_FLUSHMSG,
-	CEPH_SESSION_FLUSHMSG_ACK,
-	CEPH_SESSION_FORCE_RO,
-	CEPH_SESSION_REJECT,
-	CEPH_SESSION_REQUEST_FLUSH_MDLOG,
+/* 0 */		CEPH_SESSION_REQUEST_OPEN,
+/* 1 */		CEPH_SESSION_OPEN,
+/* 2 */		CEPH_SESSION_REQUEST_CLOSE,
+/* 3 */		CEPH_SESSION_CLOSE,
+/* 4 */		CEPH_SESSION_REQUEST_RENEWCAPS,
+/* 5 */		CEPH_SESSION_RENEWCAPS,
+/* 6 */		CEPH_SESSION_STALE,
+/* 7 */		CEPH_SESSION_RECALL_STATE,
+/* 8 */		CEPH_SESSION_FLUSHMSG,
+/* 9 */		CEPH_SESSION_FLUSHMSG_ACK,
+/* 10 */	CEPH_SESSION_FORCE_RO,
+/* 11 */	CEPH_SESSION_REJECT,
+/* 12 */	CEPH_SESSION_REQUEST_FLUSH_MDLOG,
+/* 13 */	CEPH_SESSION_UNKNOWN_NAME
 };
 
 #define CEPH_SESSION_BLOCKLISTED	(1 << 0)  /* session blocklisted */
@@ -322,45 +342,78 @@ struct ceph_mds_session_head {
  */
 #define CEPH_MDS_OP_WRITE        0x001000
 enum {
-	CEPH_MDS_OP_LOOKUP     = 0x00100,
-	CEPH_MDS_OP_GETATTR    = 0x00101,
-	CEPH_MDS_OP_LOOKUPHASH = 0x00102,
-	CEPH_MDS_OP_LOOKUPPARENT = 0x00103,
-	CEPH_MDS_OP_LOOKUPINO  = 0x00104,
-	CEPH_MDS_OP_LOOKUPNAME = 0x00105,
-	CEPH_MDS_OP_GETVXATTR  = 0x00106,
+/* 0 */		CEPH_MDS_OP_LOOKUP		= 0x00100,
+/* 1 */		CEPH_MDS_OP_GETATTR		= 0x00101,
+/* 2 */		CEPH_MDS_OP_LOOKUPHASH		= 0x00102,
+/* 3 */		CEPH_MDS_OP_LOOKUPPARENT	= 0x00103,
+/* 4 */		CEPH_MDS_OP_LOOKUPINO		= 0x00104,
+/* 5 */		CEPH_MDS_OP_LOOKUPNAME		= 0x00105,
+/* 6 */		CEPH_MDS_OP_GETVXATTR		= 0x00106,
 
-	CEPH_MDS_OP_SETXATTR   = 0x01105,
-	CEPH_MDS_OP_RMXATTR    = 0x01106,
-	CEPH_MDS_OP_SETLAYOUT  = 0x01107,
-	CEPH_MDS_OP_SETATTR    = 0x01108,
-	CEPH_MDS_OP_SETFILELOCK= 0x01109,
-	CEPH_MDS_OP_GETFILELOCK= 0x00110,
-	CEPH_MDS_OP_SETDIRLAYOUT=0x0110a,
+/* 7 */		CEPH_MDS_OP_SETXATTR		= 0x01105,
+/* 8 */		CEPH_MDS_OP_RMXATTR		= 0x01106,
+/* 9 */		CEPH_MDS_OP_SETLAYOUT		= 0x01107,
+/* 10 */	CEPH_MDS_OP_SETATTR		= 0x01108,
+/* 11 */	CEPH_MDS_OP_SETFILELOCK		= 0x01109,
+/* 12 */	CEPH_MDS_OP_GETFILELOCK		= 0x00110,
+/* 13 */	CEPH_MDS_OP_SETDIRLAYOUT	= 0x0110a,
 
-	CEPH_MDS_OP_MKNOD      = 0x01201,
-	CEPH_MDS_OP_LINK       = 0x01202,
-	CEPH_MDS_OP_UNLINK     = 0x01203,
-	CEPH_MDS_OP_RENAME     = 0x01204,
-	CEPH_MDS_OP_MKDIR      = 0x01220,
-	CEPH_MDS_OP_RMDIR      = 0x01221,
-	CEPH_MDS_OP_SYMLINK    = 0x01222,
+/* 14 */	CEPH_MDS_OP_MKNOD		= 0x01201,
+/* 15 */	CEPH_MDS_OP_LINK		= 0x01202,
+/* 16 */	CEPH_MDS_OP_UNLINK		= 0x01203,
+/* 17 */	CEPH_MDS_OP_RENAME		= 0x01204,
+/* 18 */	CEPH_MDS_OP_MKDIR		= 0x01220,
+/* 19 */	CEPH_MDS_OP_RMDIR		= 0x01221,
+/* 20 */	CEPH_MDS_OP_SYMLINK		= 0x01222,
 
-	CEPH_MDS_OP_CREATE     = 0x01301,
-	CEPH_MDS_OP_OPEN       = 0x00302,
-	CEPH_MDS_OP_READDIR    = 0x00305,
+/* 21 */	CEPH_MDS_OP_CREATE		= 0x01301,
+/* 22 */	CEPH_MDS_OP_OPEN		= 0x00302,
+/* 23 */	CEPH_MDS_OP_READDIR		= 0x00305,
 
-	CEPH_MDS_OP_LOOKUPSNAP = 0x00400,
-	CEPH_MDS_OP_MKSNAP     = 0x01400,
-	CEPH_MDS_OP_RMSNAP     = 0x01401,
-	CEPH_MDS_OP_LSSNAP     = 0x00402,
-	CEPH_MDS_OP_RENAMESNAP = 0x01403,
+/* 24 */	CEPH_MDS_OP_LOOKUPSNAP		= 0x00400,
+/* 25 */	CEPH_MDS_OP_MKSNAP		= 0x01400,
+/* 26 */	CEPH_MDS_OP_RMSNAP		= 0x01401,
+/* 27 */	CEPH_MDS_OP_LSSNAP		= 0x00402,
+/* 28 */	CEPH_MDS_OP_RENAMESNAP		= 0x01403,
 };
 
 #define IS_CEPH_MDS_OP_NEWINODE(op) (op == CEPH_MDS_OP_CREATE     || \
 				     op == CEPH_MDS_OP_MKNOD      || \
 				     op == CEPH_MDS_OP_MKDIR      || \
 				     op == CEPH_MDS_OP_SYMLINK)
+
+enum {
+/* 0 */		CEPH_MDS_OP_LOOKUP_STR_IDX,
+/* 1 */		CEPH_MDS_OP_GETATTR_STR_IDX,
+/* 2 */		CEPH_MDS_OP_LOOKUPHASH_STR_IDX,
+/* 3 */		CEPH_MDS_OP_LOOKUPPARENT_STR_IDX,
+/* 4 */		CEPH_MDS_OP_LOOKUPINO_STR_IDX,
+/* 5 */		CEPH_MDS_OP_LOOKUPNAME_STR_IDX,
+/* 6 */		CEPH_MDS_OP_GETVXATTR_STR_IDX,
+/* 7 */		CEPH_MDS_OP_SETXATTR_STR_IDX,
+/* 8 */		CEPH_MDS_OP_RMXATTR_STR_IDX,
+/* 9 */		CEPH_MDS_OP_SETLAYOUT_STR_IDX,
+/* 10 */	CEPH_MDS_OP_SETATTR_STR_IDX,
+/* 11 */	CEPH_MDS_OP_SETFILELOCK_STR_IDX,
+/* 12 */	CEPH_MDS_OP_GETFILELOCK_STR_IDX,
+/* 13 */	CEPH_MDS_OP_SETDIRLAYOUT_STR_IDX,
+/* 14 */	CEPH_MDS_OP_MKNOD_STR_IDX,
+/* 15 */	CEPH_MDS_OP_LINK_STR_IDX,
+/* 16 */	CEPH_MDS_OP_UNLINK_STR_IDX,
+/* 17 */	CEPH_MDS_OP_RENAME_STR_IDX,
+/* 18 */	CEPH_MDS_OP_MKDIR_STR_IDX,
+/* 19 */	CEPH_MDS_OP_RMDIR_STR_IDX,
+/* 20 */	CEPH_MDS_OP_SYMLINK_STR_IDX,
+/* 21 */	CEPH_MDS_OP_CREATE_STR_IDX,
+/* 22 */	CEPH_MDS_OP_OPEN_STR_IDX,
+/* 23 */	CEPH_MDS_OP_READDIR_STR_IDX,
+/* 24 */	CEPH_MDS_OP_LOOKUPSNAP_STR_IDX,
+/* 25 */	CEPH_MDS_OP_MKSNAP_STR_IDX,
+/* 26 */	CEPH_MDS_OP_RMSNAP_STR_IDX,
+/* 27 */	CEPH_MDS_OP_LSSNAP_STR_IDX,
+/* 28 */	CEPH_MDS_OP_RENAMESNAP_STR_IDX,
+/* 29 */	CEPH_MDS_OP_UNKNOWN_NAME_STR_IDX
+};
 
 extern const char *ceph_mds_op_name(int op);
 
@@ -740,19 +793,20 @@ int ceph_flags_to_mode(int flags);
 int ceph_caps_for_mode(int mode);
 
 enum {
-	CEPH_CAP_OP_GRANT,         /* mds->client grant */
-	CEPH_CAP_OP_REVOKE,        /* mds->client revoke */
-	CEPH_CAP_OP_TRUNC,         /* mds->client trunc notify */
-	CEPH_CAP_OP_EXPORT,        /* mds has exported the cap */
-	CEPH_CAP_OP_IMPORT,        /* mds has imported the cap */
-	CEPH_CAP_OP_UPDATE,        /* client->mds update */
-	CEPH_CAP_OP_DROP,          /* client->mds drop cap bits */
-	CEPH_CAP_OP_FLUSH,         /* client->mds cap writeback */
-	CEPH_CAP_OP_FLUSH_ACK,     /* mds->client flushed */
-	CEPH_CAP_OP_FLUSHSNAP,     /* client->mds flush snapped metadata */
-	CEPH_CAP_OP_FLUSHSNAP_ACK, /* mds->client flushed snapped metadata */
-	CEPH_CAP_OP_RELEASE,       /* client->mds release (clean) cap */
-	CEPH_CAP_OP_RENEW,         /* client->mds renewal request */
+/* 0 */		CEPH_CAP_OP_GRANT,         /* mds->client grant */
+/* 1 */		CEPH_CAP_OP_REVOKE,        /* mds->client revoke */
+/* 2 */		CEPH_CAP_OP_TRUNC,         /* mds->client trunc notify */
+/* 3 */		CEPH_CAP_OP_EXPORT,        /* mds has exported the cap */
+/* 4 */		CEPH_CAP_OP_IMPORT,        /* mds has imported the cap */
+/* 5 */		CEPH_CAP_OP_UPDATE,        /* client->mds update */
+/* 6 */		CEPH_CAP_OP_DROP,          /* client->mds drop cap bits */
+/* 7 */		CEPH_CAP_OP_FLUSH,         /* client->mds cap writeback */
+/* 8 */		CEPH_CAP_OP_FLUSH_ACK,     /* mds->client flushed */
+/* 9 */		CEPH_CAP_OP_FLUSHSNAP,     /* client->mds flush snapped metadata */
+/* 10 */	CEPH_CAP_OP_FLUSHSNAP_ACK, /* mds->client flushed snapped metadata */
+/* 11 */	CEPH_CAP_OP_RELEASE,       /* client->mds release (clean) cap */
+/* 12 */	CEPH_CAP_OP_RENEW,         /* client->mds renewal request */
+/* 13 */	CEPH_CAP_OP_UNKNOWN_NAME
 };
 
 extern const char *ceph_cap_op_name(int op);
@@ -817,7 +871,15 @@ struct ceph_mds_cap_item {
 #define CEPH_MDS_LEASE_RENEW            3  /* client <-> mds    */
 #define CEPH_MDS_LEASE_REVOKE_ACK       4  /* client  -> mds    */
 
-extern const char *ceph_lease_op_name(int o);
+enum {
+/* 0 */		CEPH_MDS_LEASE_REVOKE_STR_IDX,
+/* 1 */		CEPH_MDS_LEASE_RELEASE_STR_IDX,
+/* 2 */		CEPH_MDS_LEASE_RENEW_STR_IDX,
+/* 3 */		CEPH_MDS_LEASE_REVOKE_ACK_STR_IDX,
+/* 4 */		CEPH_MDS_LEASE_UNKNOWN_NAME_STR_IDX
+};
+
+extern const char *ceph_lease_op_name(int op);
 
 /* lease msg header */
 struct ceph_mds_lease {
@@ -861,10 +923,11 @@ struct ceph_mds_snaprealm_reconnect {
  * snaps
  */
 enum {
-	CEPH_SNAP_OP_UPDATE,  /* CREATE or DESTROY */
-	CEPH_SNAP_OP_CREATE,
-	CEPH_SNAP_OP_DESTROY,
-	CEPH_SNAP_OP_SPLIT,
+/* 0 */		CEPH_SNAP_OP_UPDATE,  /* CREATE or DESTROY */
+/* 1 */		CEPH_SNAP_OP_CREATE,
+/* 2 */		CEPH_SNAP_OP_DESTROY,
+/* 3 */		CEPH_SNAP_OP_SPLIT,
+/* 4 */		CEPH_SNAP_OP_UNKNOWN_NAME
 };
 
 extern const char *ceph_snap_op_name(int o);

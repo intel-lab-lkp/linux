@@ -50,3 +50,15 @@ config CEPH_FS_SECURITY_LABEL
 
 	  If you are not using a security module that requires using
 	  extended attributes for file security labels, say N.
+
+config CEPH_FS_KUNIT_TEST
+	tristate "KUnit tests for Ceph FS" if !KUNIT_ALL_TESTS
+	depends on CEPH_FS && KUNIT
+	default KUNIT_ALL_TESTS
+	help
+	  This builds KUnit tests for Ceph file system functions.
+
+	  For more information on KUnit and unit tests in general, please refer
+	  to the KUnit documentation in Documentation/dev-tools/kunit.
+
+	  If unsure, say N.
