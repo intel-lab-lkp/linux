@@ -1640,6 +1640,8 @@ static void nvmem_shift_read_buffer_in_place(struct nvmem_cell_entry *cell, void
 	/* clear msb bits if any leftover in the last byte */
 	if (cell->nbits % BITS_PER_BYTE)
 		*p &= GENMASK((cell->nbits % BITS_PER_BYTE) - 1, 0);
+
+	cell->bytes = (p - (u8 *)buf) + 1;
 }
 
 static int __nvmem_cell_read(struct nvmem_device *nvmem,
