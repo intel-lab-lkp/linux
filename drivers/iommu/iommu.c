@@ -330,7 +330,7 @@ int iommu_device_register_bus(struct iommu_device *iommu,
 	iommu->fwnode = fwnode_create_software_node(NULL, NULL);
 	if (IS_ERR(iommu->fwnode)) {
 		bus_unregister_notifier(bus, nb);
-		return err;
+		return PTR_ERR(iommu->fwnode);
 	}
 
 	spin_lock(&iommu_device_lock);
