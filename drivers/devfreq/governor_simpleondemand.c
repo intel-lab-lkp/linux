@@ -10,6 +10,7 @@
 #include <linux/module.h>
 #include <linux/devfreq.h>
 #include <linux/math64.h>
+#include <linux/slab.h>
 #include "governor.h"
 
 /* Default constants for DevFreq-Simple-Ondemand (DFSO) */
@@ -21,9 +22,11 @@ static int devfreq_simple_ondemand_func(struct devfreq *df,
 	int err;
 	struct devfreq_dev_status *stat;
 	unsigned long long a, b;
-	unsigned int dfso_upthreshold = DFSO_UPTHRESHOLD;
-	unsigned int dfso_downdifferential = DFSO_DOWNDIFFERENCTIAL;
-	struct devfreq_simple_ondemand_data *data = df->data;
+	unsigned int dfso_upthreshold, dfso_downdifferential;
+	struct devfreq_simple_ondemand_data *data = df->governor_data;
+
+	if (unlikely(!data))
+		return -ENOMEM;
 
 	err = devfreq_update_stats(df);
 	if (err)
@@ -31,12 +34,9 @@ static int devfreq_simple_ondemand_func(struct devfreq *df,
 
 	stat = &df->last_status;
 
-	if (data) {
-		if (data->upthreshold)
-			dfso_upthreshold = data->upthreshold;
-		if (data->downdifferential)
-			dfso_downdifferential = data->downdifferential;
-	}
+	dfso_upthreshold = data->upthreshold;
+	dfso_downdifferential = data->downdifferential;
+
 	if (dfso_upthreshold > 100 ||
 	    dfso_upthreshold < dfso_downdifferential)
 		return -EINVAL;
@@ -84,16 +84,57 @@ static int devfreq_simple_ondemand_func(struct devfreq *df,
 	return 0;
 }
 
+static int simple_ondemand_init(struct devfreq *devfreq)
+{
+	struct devfreq_simple_ondemand_data *gov_data, *df_data;
+
+
+	gov_data = kzalloc(sizeof(struct devfreq_simple_ondemand_data),
+					      GFP_KERNEL);
+
+	if (!gov_data) {
+		dev_err(&devfreq->dev, "Can't alloc devfreq_simple_ondemand_data\n");
+		return -ENOMEM;
+	}
+
+
+	df_data = devfreq->data;
+	gov_data->upthreshold = DFSO_UPTHRESHOLD;
+	gov_data->downdifferential = DFSO_DOWNDIFFERENCTIAL;
+
+	if (df_data) {
+		if (df_data->upthreshold)
+			gov_data->upthreshold = df_data->upthreshold;
+
+		if (df_data->downdifferential)
+			gov_data->downdifferential = df_data->downdifferential;
+	}
+
+	devfreq->governor_data = gov_data;
+	devfreq_monitor_start(devfreq);
+
+	return 0;
+}
+
+static void simple_ondemand_exit(struct devfreq *devfreq)
+{
+	devfreq_monitor_stop(devfreq);
+	kfree(devfreq->governor_data);
+	devfreq->governor_data = NULL;
+}
+
 static int devfreq_simple_ondemand_handler(struct devfreq *devfreq,
 				unsigned int event, void *data)
 {
+	int ret = 0;
+
 	switch (event) {
 	case DEVFREQ_GOV_START:
-		devfreq_monitor_start(devfreq);
+		ret = simple_ondemand_init(devfreq);
 		break;
 
 	case DEVFREQ_GOV_STOP:
-		devfreq_monitor_stop(devfreq);
+		simple_ondemand_exit(devfreq);
 		break;
 
 	case DEVFREQ_GOV_UPDATE_INTERVAL:
@@ -112,7 +153,7 @@ static int devfreq_simple_ondemand_handler(struct devfreq *devfreq,
 		break;
 	}
 
-	return 0;
+	return ret;
 }
 
 static struct devfreq_governor devfreq_simple_ondemand = {
