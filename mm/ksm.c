@@ -2868,7 +2868,7 @@ int ksm_madvise(struct vm_area_struct *vma, unsigned long start,
 				return err;
 		}
 
-		*vm_flags &= ~VM_MERGEABLE;
+		*vm_flags &= ~((unsigned long) VM_MERGEABLE);
 		break;
 	}
 
