@@ -10,9 +10,7 @@
 // Copyright: (C) 2025 NVIDIA CORPORATION & AFFILIATES.
 // Options: --no-includes --include-headers
 
-virtual context
-virtual org
-virtual report
+virtual context, report, org
 
 @r@
 expression ptr;
