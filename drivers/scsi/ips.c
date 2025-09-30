@@ -3129,7 +3129,10 @@ ips_done(ips_ha_t * ha, ips_scb_t * scb)
 	if (!scb)
 		return;
 
-	if ((scb->scsi_cmd) && (ips_is_passthru(scb->scsi_cmd))) {
+	if (!scb->scsi_cmd)
+		return;
+
+	if (ips_is_passthru(scb->scsi_cmd)) {
 		ips_cleanup_passthru(ha, scb);
 		ha->num_ioctl--;
 	} else {
@@ -3184,18 +3187,14 @@ ips_done(ips_ha_t * ha, ips_scb_t * scb)
 
 			switch (ret) {
 			case IPS_FAILURE:
-				if (scb->scsi_cmd) {
-					scb->scsi_cmd->result = DID_ERROR << 16;
-					scsi_done(scb->scsi_cmd);
-				}
+				scb->scsi_cmd->result = DID_ERROR << 16;
+				scsi_done(scb->scsi_cmd);
 
 				ips_freescb(ha, scb);
 				break;
 			case IPS_SUCCESS_IMM:
-				if (scb->scsi_cmd) {
-					scb->scsi_cmd->result = DID_ERROR << 16;
-					scsi_done(scb->scsi_cmd);
-				}
+				scb->scsi_cmd->result = DID_ERROR << 16;
+				scsi_done(scb->scsi_cmd);
 
 				ips_freescb(ha, scb);
 				break;
