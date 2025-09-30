@@ -170,6 +170,8 @@ static inline struct disasm_line *disasm_line(struct annotation_line *al)
 	return al ? container_of(al, struct disasm_line, al) : NULL;
 }
 
+struct disasm_line *find_disasm_line(struct symbol *sym, u64 ip, bool allow_update);
+
 /*
  * Is this offset in the same function as the line it is used?
  * asm functions jump to other functions, for instance.
