@@ -271,6 +271,7 @@
 				 <&scmi_clk CLK_TREE_FCH_SPI0_APB>;
 			clock-names = "ref_clk", "pclk";
 			interrupts = <GIC_SPI 294 IRQ_TYPE_LEVEL_HIGH 0>;
+			fifo-width = <32>;
 			status = "disabled";
 		};
 
@@ -281,6 +282,7 @@
 				 <&scmi_clk CLK_TREE_FCH_SPI1_APB>;
 			clock-names = "ref_clk", "pclk";
 			interrupts = <GIC_SPI 295 IRQ_TYPE_LEVEL_HIGH 0>;
+			fifo-width = <32>;
 			status = "disabled";
 		};
 
