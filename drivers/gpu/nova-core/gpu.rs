@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0
 
-use kernel::{device, devres::Devres, error::code::*, pci, prelude::*, sync::Arc};
+use kernel::{device, devres::Devres, pci, prelude::*, sync::Arc};
 
 use crate::driver::Bar0;
 use crate::falcon::{gsp::Gsp as GspFalcon, sec2::Sec2 as Sec2Falcon, Falcon};
@@ -14,7 +14,8 @@ macro_rules! define_chipset {
     ({ $($variant:ident = $value:expr),* $(,)* }) =>
     {
         /// Enum representation of the GPU chipset.
-        #[derive(fmt::Debug, Copy, Clone, PartialOrd, Ord, PartialEq, Eq)]
+        #[derive(fmt::Debug, Copy, Clone, PartialOrd, Ord, PartialEq, Eq, kernel::macros::TryFrom)]
+        #[try_from(u32)]
         pub(crate) enum Chipset {
             $($variant = $value),*,
         }
@@ -41,18 +42,6 @@ macro_rules! define_chipset {
                 }
             }
             );
-        }
-
-        // TODO[FPRI]: replace with something like derive(FromPrimitive)
-        impl TryFrom<u32> for Chipset {
-            type Error = kernel::error::Error;
-
-            fn try_from(value: u32) -> Result<Self, Self::Error> {
-                match value {
-                    $( $value => Ok(Chipset::$variant), )*
-                    _ => Err(ENODEV),
-                }
-            }
         }
     }
 }
@@ -110,24 +99,12 @@ impl fmt::Display for Chipset {
 }
 
 /// Enum representation of the GPU generation.
-#[derive(fmt::Debug)]
+#[derive(fmt::Debug, kernel::macros::TryFrom)]
+#[try_from(u8)]
 pub(crate) enum Architecture {
     Turing = 0x16,
     Ampere = 0x17,
     Ada = 0x19,
-}
-
-impl TryFrom<u8> for Architecture {
-    type Error = Error;
-
-    fn try_from(value: u8) -> Result<Self> {
-        match value {
-            0x16 => Ok(Self::Turing),
-            0x17 => Ok(Self::Ampere),
-            0x19 => Ok(Self::Ada),
-            _ => Err(ENODEV),
-        }
-    }
 }
 
 pub(crate) struct Revision {

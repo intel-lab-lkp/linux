@@ -23,27 +23,6 @@ Enablement (Rust)
 Tasks that are not directly related to nova-core, but are preconditions in terms
 of required APIs.
 
-FromPrimitive API [FPRI]
-------------------------
-
-Sometimes the need arises to convert a number to a value of an enum or a
-structure.
-
-A good example from nova-core would be the ``Chipset`` enum type, which defines
-the value ``AD102``. When probing the GPU the value ``0x192`` can be read from a
-certain register indication the chipset AD102. Hence, the enum value ``AD102``
-should be derived from the number ``0x192``. Currently, nova-core uses a custom
-implementation (``Chipset::from_u32`` for this.
-
-Instead, it would be desirable to have something like the ``FromPrimitive``
-trait [1] from the num crate.
-
-Having this generalization also helps with implementing a generic macro that
-automatically generates the corresponding mappings between a value and a number.
-
-| Complexity: Beginner
-| Link: https://docs.rs/num/latest/num/trait.FromPrimitive.html
-
 Conversion from byte slices for types implementing FromBytes [TRSM]
 -------------------------------------------------------------------
 
