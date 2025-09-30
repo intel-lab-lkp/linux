@@ -157,8 +157,11 @@ static struct clk * __init cpg_mstp_clock_register(const char *name,
 	init.name = name;
 	init.ops = &cpg_mstp_clock_ops;
 	init.flags = CLK_SET_RATE_PARENT;
-	/* INTC-SYS is the module clock of the GIC, and must not be disabled */
-	if (!strcmp(name, "intc-sys")) {
+	/*
+	 * INTC-SYS is the module clock of the GIC, and must not be disabled (r8a73a4)
+	 * SPIBSC<x> is for memory-mapped flash which might be needed for XIP (r7s72100)
+	 */
+	if (!strcmp(name, "intc-sys") || !strncmp(name, "spibsc", 6)) {
 		pr_debug("MSTP %s setting CLK_IS_CRITICAL\n", name);
 		init.flags |= CLK_IS_CRITICAL;
 	}
