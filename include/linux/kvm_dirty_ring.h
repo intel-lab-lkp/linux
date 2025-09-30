@@ -37,7 +37,7 @@ static inline u32 kvm_dirty_ring_get_rsvd_entries(struct kvm *kvm)
 	return 0;
 }
 
-static inline bool kvm_use_dirty_bitmap(struct kvm *kvm)
+static inline bool kvm_use_dirty_bitmap(struct kvm *kvm, bool shared)
 {
 	return true;
 }
@@ -73,7 +73,7 @@ static inline void kvm_dirty_ring_free(struct kvm_dirty_ring *ring)
 #else /* CONFIG_HAVE_KVM_DIRTY_RING */
 
 int kvm_cpu_dirty_log_size(struct kvm *kvm);
-bool kvm_use_dirty_bitmap(struct kvm *kvm);
+bool kvm_use_dirty_bitmap(struct kvm *kvm, bool shared);
 bool kvm_arch_allow_write_without_running_vcpu(struct kvm *kvm);
 u32 kvm_dirty_ring_get_rsvd_entries(struct kvm *kvm);
 int kvm_dirty_ring_alloc(struct kvm *kvm, struct kvm_dirty_ring *ring,

@@ -1687,7 +1687,7 @@ static int kvm_prepare_memory_region(struct kvm *kvm,
 			new->dirty_bitmap = NULL;
 		else if (old && old->dirty_bitmap)
 			new->dirty_bitmap = old->dirty_bitmap;
-		else if (kvm_use_dirty_bitmap(kvm)) {
+		else if (kvm_use_dirty_bitmap(kvm, false)) {
 			r = kvm_alloc_dirty_bitmap(new);
 			if (r)
 				return r;
@@ -2162,7 +2162,7 @@ int kvm_get_dirty_log(struct kvm *kvm, struct kvm_dirty_log *log,
 	unsigned long any = 0;
 
 	/* Dirty ring tracking may be exclusive to dirty log tracking */
-	if (!kvm_use_dirty_bitmap(kvm))
+	if (!kvm_use_dirty_bitmap(kvm, false))
 		return -ENXIO;
 
 	*memslot = NULL;
@@ -2216,7 +2216,8 @@ EXPORT_SYMBOL_GPL(kvm_get_dirty_log);
  * exiting to userspace will be logged for the next call.
  *
  */
-static int kvm_get_dirty_log_protect(struct kvm *kvm, struct kvm_dirty_log *log)
+static int kvm_get_dirty_log_protect(struct kvm *kvm, struct kvm_dirty_log *log,
+				     bool protect)
 {
 	struct kvm_memslots *slots;
 	struct kvm_memory_slot *memslot;
@@ -2224,10 +2225,9 @@ static int kvm_get_dirty_log_protect(struct kvm *kvm, struct kvm_dirty_log *log)
 	unsigned long n;
 	unsigned long *dirty_bitmap;
 	unsigned long *dirty_bitmap_buffer;
-	bool flush;
 
 	/* Dirty ring tracking may be exclusive to dirty log tracking */
-	if (!kvm_use_dirty_bitmap(kvm))
+	if (!kvm_use_dirty_bitmap(kvm, !protect))
 		return -ENXIO;
 
 	as_id = log->slot >> 16;
@@ -2242,21 +2242,30 @@ static int kvm_get_dirty_log_protect(struct kvm *kvm, struct kvm_dirty_log *log)
 
 	dirty_bitmap = memslot->dirty_bitmap;
 
+	if (protect)
+		lockdep_assert_held(&kvm->slots_lock);
+	else
+		lockdep_assert_held(&kvm->srcu);
+	/*
+	 * kvm_arch_sync_dirty_log() must be safe to call with either kvm->srcu
+	 * held OR the slots lock held.
+	 */
 	kvm_arch_sync_dirty_log(kvm, memslot);
 
 	n = kvm_dirty_bitmap_bytes(memslot);
-	flush = false;
-	if (kvm->manual_dirty_log_protect) {
+	if (!protect) {
 		/*
-		 * Unlike kvm_get_dirty_log, we always return false in *flush,
-		 * because no flush is needed until KVM_CLEAR_DIRTY_LOG.  There
-		 * is some code duplication between this function and
-		 * kvm_get_dirty_log, but hopefully all architecture
-		 * transition to kvm_get_dirty_log_protect and kvm_get_dirty_log
-		 * can be eliminated.
+		 * Unlike kvm_get_dirty_log, we never flush, because no flush is
+		 * needed until KVM_CLEAR_DIRTY_LOG.  There is some code
+		 * duplication between this function and kvm_get_dirty_log, but
+		 * hopefully all architecture transition to
+		 * kvm_get_dirty_log_protect and kvm_get_dirty_log can be
+		 * eliminated.
 		 */
 		dirty_bitmap_buffer = dirty_bitmap;
 	} else {
+		bool flush;
+
 		dirty_bitmap_buffer = kvm_second_dirty_bitmap(memslot);
 		memset(dirty_bitmap_buffer, 0, n);
 
@@ -2277,10 +2286,10 @@ static int kvm_get_dirty_log_protect(struct kvm *kvm, struct kvm_dirty_log *log)
 								offset, mask);
 		}
 		KVM_MMU_UNLOCK(kvm);
-	}
 
-	if (flush)
-		kvm_flush_remote_tlbs_memslot(kvm, memslot);
+		if (flush)
+			kvm_flush_remote_tlbs_memslot(kvm, memslot);
+	}
 
 	if (copy_to_user(log->dirty_bitmap, dirty_bitmap_buffer, n))
 		return -EFAULT;
@@ -2310,13 +2319,30 @@ static int kvm_get_dirty_log_protect(struct kvm *kvm, struct kvm_dirty_log *log)
 static int kvm_vm_ioctl_get_dirty_log(struct kvm *kvm,
 				      struct kvm_dirty_log *log)
 {
-	int r;
+	bool protect;
+	int r, idx;
 
-	mutex_lock(&kvm->slots_lock);
+	/*
+	 * Only protect if manual protection isn't enabled.
+	 */
+	protect = !kvm->manual_dirty_log_protect;
 
-	r = kvm_get_dirty_log_protect(kvm, log);
+	/*
+	 * If we are only collecting the dlrty log and not clearing it,
+	 * the srcu lock is sufficient.
+	 */
+	if (protect)
+		mutex_lock(&kvm->slots_lock);
+	else
+		idx = srcu_read_lock(&kvm->srcu);
 
-	mutex_unlock(&kvm->slots_lock);
+	r = kvm_get_dirty_log_protect(kvm, log, protect);
+
+	if (protect)
+		mutex_unlock(&kvm->slots_lock);
+	else
+		srcu_read_unlock(&kvm->srcu, idx);
+
 	return r;
 }
 
@@ -2339,7 +2365,7 @@ static int kvm_clear_dirty_log_protect(struct kvm *kvm,
 	bool flush;
 
 	/* Dirty ring tracking may be exclusive to dirty log tracking */
-	if (!kvm_use_dirty_bitmap(kvm))
+	if (!kvm_use_dirty_bitmap(kvm, false))
 		return -ENXIO;
 
 	as_id = log->slot >> 16;

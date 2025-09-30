@@ -21,9 +21,16 @@ u32 kvm_dirty_ring_get_rsvd_entries(struct kvm *kvm)
 	return KVM_DIRTY_RING_RSVD_ENTRIES + kvm_cpu_dirty_log_size(kvm);
 }
 
-bool kvm_use_dirty_bitmap(struct kvm *kvm)
+bool kvm_use_dirty_bitmap(struct kvm *kvm, bool shared)
 {
-	lockdep_assert_held(&kvm->slots_lock);
+	if (shared)
+		/*
+		 * In the shared mode, racing with dirty log mode changes is
+		 * tolerated.
+		 */
+		lockdep_assert_held(&kvm->srcu);
+	else
+		lockdep_assert_held(&kvm->slots_lock);
 
 	return !kvm->dirty_ring_size || kvm->dirty_ring_with_bitmap;
 }
