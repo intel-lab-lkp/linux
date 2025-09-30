@@ -251,7 +251,7 @@ static void dsi_get_phy_params(u32 phy_req_kHz,
 	memset(phy, 0, sizeof(*phy));
 
 	phy_rate_kHz = dsi_calc_phy_rate(phy_req_kHz, phy);
-	if (!phy_rate_kHz)
+	if (!phy_rate_kHz || phy_rate_kHz > 1000000)
 		return;
 
 	ui = 1000000 / phy_rate_kHz;
