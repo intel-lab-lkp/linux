@@ -1609,6 +1609,8 @@ static u8 hci_cc_le_set_ext_adv_enable(struct hci_dev *hdev, void *data,
 
 		if (adv && !adv->periodic)
 			adv->enabled = true;
+		else if (!set->handle)
+			hci_dev_set_flag(hdev, HCI_LE_ADV_0);
 
 		conn = hci_lookup_le_connect(hdev);
 		if (conn)
@@ -1619,6 +1621,8 @@ static u8 hci_cc_le_set_ext_adv_enable(struct hci_dev *hdev, void *data,
 		if (cp->num_of_sets) {
 			if (adv)
 				adv->enabled = false;
+			else if (!set->handle)
+				hci_dev_clear_flag(hdev, HCI_LE_ADV_0);
 
 			/* If just one instance was disabled check if there are
 			 * any other instance enabled before clearing HCI_LE_ADV
@@ -2971,13 +2975,8 @@ static void hci_inquiry_complete_evt(struct hci_dev *hdev, void *data,
 	if (list_empty(&discov->resolve)) {
 		/* When BR/EDR inquiry is active and no LE scanning is in
 		 * progress, then change discovery state to indicate completion.
-		 *
-		 * When running LE scanning and BR/EDR inquiry simultaneously
-		 * and the LE scan already finished, then change the discovery
-		 * state to indicate completion.
 		 */
-		if (!hci_dev_test_flag(hdev, HCI_LE_SCAN) ||
-		    !hci_test_quirk(hdev, HCI_QUIRK_SIMULTANEOUS_DISCOVERY))
+		if (!hci_dev_test_flag(hdev, HCI_LE_SCAN))
 			hci_discovery_set_state(hdev, DISCOVERY_STOPPED);
 		goto unlock;
 	}
@@ -2990,13 +2989,8 @@ static void hci_inquiry_complete_evt(struct hci_dev *hdev, void *data,
 	} else {
 		/* When BR/EDR inquiry is active and no LE scanning is in
 		 * progress, then change discovery state to indicate completion.
-		 *
-		 * When running LE scanning and BR/EDR inquiry simultaneously
-		 * and the LE scan already finished, then change the discovery
-		 * state to indicate completion.
 		 */
-		if (!hci_dev_test_flag(hdev, HCI_LE_SCAN) ||
-		    !hci_test_quirk(hdev, HCI_QUIRK_SIMULTANEOUS_DISCOVERY))
+		if (!hci_dev_test_flag(hdev, HCI_LE_SCAN))
 			hci_discovery_set_state(hdev, DISCOVERY_STOPPED);
 	}
 
