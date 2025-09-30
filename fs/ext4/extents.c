@@ -2083,6 +2083,12 @@ prepend:
 	/* probably next leaf has space for us? */
 	fex = EXT_LAST_EXTENT(eh);
 	next = EXT_MAX_BLOCKS;
+	if (le16_to_cpu(eh->eh_magic) != EXT4_EXT_MAGIC ||
+	   le16_to_cpu(eh->eh_entries) == 0) {
+		EXT4_ERROR_INODE(inode, "corrupted extent header");
+		 err = -EFSCORRUPTED;
+		goto errout;
+	}
 	if (le32_to_cpu(newext->ee_block) > le32_to_cpu(fex->ee_block))
 		next = ext4_ext_next_leaf_block(path);
 	if (next != EXT_MAX_BLOCKS) {
