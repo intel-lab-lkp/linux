@@ -36,7 +36,7 @@ struct cpu_rmap *alloc_cpu_rmap(unsigned int size, gfp_t flags)
 	obj_offset = ALIGN(offsetof(struct cpu_rmap, near[nr_cpu_ids]),
 			   sizeof(void *));
 
-	rmap = kzalloc(obj_offset + size * sizeof(rmap->obj[0]), flags);
+	rmap = kzalloc(size_add(obj_offset, size_mul(size, sizeof(rmap->obj[0]))), flags);
 	if (!rmap)
 		return NULL;
 
