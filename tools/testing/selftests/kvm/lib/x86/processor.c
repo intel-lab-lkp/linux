@@ -1281,3 +1281,8 @@ bool sys_clocksource_is_based_on_tsc(void)
 
 	return ret;
 }
+
+bool kvm_arch_has_default_irqchip(void)
+{
+	return true;
+}
