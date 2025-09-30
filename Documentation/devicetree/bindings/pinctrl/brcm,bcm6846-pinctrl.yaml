@@ -1,0 +1,82 @@
+# SPDX-License-Identifier: GPL-2.0-only OR BSD-2-Clause
+%YAML 1.2
+---
+$id: http://devicetree.org/schemas/pinctrl/brcm,bcm6846-pinctrl.yaml#
+$schema: http://devicetree.org/meta-schemas/core.yaml#
+
+title: Broadcom BCM6846 pin controller
+
+maintainers:
+  - Linus Walleij <linus.walleij@linaro.org>
+
+description:
+  Binding for pin controller present on BCM6846 family SoCs.
+
+properties:
+  compatible:
+    const: brcm,bcm6846-pinctrl
+
+  reg:
+    maxItems: 1
+
+patternProperties:
+  '-pins$':
+    type: object
+    $ref: pinmux-node.yaml#
+    additionalProperties: false
+
+    properties:
+      function:
+        enum: [ led_0, led_1, led_2, led_3, led_4, led_5, led_6, led_7, led_8,
+                led_9, led_10, led_11, led_12, led_13, led_14, led_15, led_16,
+                led_17, ser_led, nand, emmc, spim, usb0_pwr, usb1_pwr, i2c,
+                rgmii, mii, signal_detect, one_sec_pls, rogue_onu, wan, uart0,
+                uart2 ]
+
+      groups:
+        minItems: 1
+        # SPIM uses up to 5 groups for different select signals
+        maxItems: 5
+        items:
+          enum: [ led_0_grp_a, led_0_grp_b, led_1_grp_a, led_1_grp_b,
+                  led_2_grp_a, led_2_grp_b, led_3_grp_a, led_3_grp_b,
+                  led_4_grp_a, led_4_grp_b, led_5_grp_a, led_5_grp_b,
+                  led_6_grp_a, led_6_grp_b, led_7_grp_a, led_7_grp_b,
+                  led_8_grp_a, led_8_grp_b, led_9_grp_a, led_9_grp_b,
+                  led_10_grp_a, led_10_grp_b, led_11_grp_a, led_11_grp_b,
+                  led_12_grp_a, led_12_grp_b, led_13_grp,
+                  led_14_grp, led_15_grp, led_16_grp, led_17_grp,
+                  ser_led_grp_a, ser_led_grp_b, nand_ctrl_grp, nand_data_grp,
+                  nand_wp_grp, emmc_ctrl_grp, spim_grp_a, spim_ss0_grp_a,
+                  spim_ss1_grp_a, spim_ss2_grp_a, spim_ss3_grp_a, spim_grp_b,
+                  spim_ss0_grp_b, spim_ss1_grp_b, spim_ss2_grp_b, spim_ss3_grp_b,
+                  spim_grp_c, spim_ss0_grp_c, spim_ss1_grp_c, spis_grp_a,
+                  spis_ss_grp_a, spis_grp_b, spis_ss_grp_b, usb0_pwr_grp
+                  usb1_pwr_grp, i2c_grp, rgmii_grp, rgmii_rx_ok_grp,
+                  rgmii_start_stop_grp, mii_grp,
+                  signal_detect_grp_a, signal_detect_grp_b, one_sec_pls_grp_a,
+                  one_sec_pls_grp_b, rogue_onu_grp_a, rogue_onu_grp_b,
+                  wan_mdio_grp, wan_nco_grp, wan_early_txen_grp_a,
+                  wan_early_txen_grp_b, wan_nco_1pps_sig_grp_a,
+                  wan_nco_1pps_sig_grp_b, uart0_grp, uart2_grp ]
+
+allOf:
+  - $ref: pinctrl.yaml#
+
+required:
+  - compatible
+  - reg
+
+unevaluatedProperties: false
+
+examples:
+  - |
+    pinctrl@ff800550 {
+        compatible = "brcm,bcm6846-pinctrl";
+        reg = <0xff800550 0x10>;
+
+        led-0-a-pins {
+            function = "led_0";
+            groups = "led_0_grp_a";
+        };
+    };
