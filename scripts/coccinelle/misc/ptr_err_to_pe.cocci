@@ -14,7 +14,7 @@ virtual context, report, org
 
 @r@
 expression ptr;
-constant fmt;
+constant char[] fmt;
 position p;
 identifier print_func;
 @@
