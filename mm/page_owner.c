@@ -848,7 +848,7 @@ static void init_early_allocated_pages(void)
 		init_zones_in_node(pgdat);
 }
 
-static const struct file_operations proc_page_owner_operations = {
+static const struct file_operations page_owner_fops = {
 	.read		= read_page_owner,
 	.llseek		= lseek_page_owner,
 };
@@ -929,7 +929,7 @@ static int page_owner_stack_open(struct inode *inode, struct file *file)
 	return seq_open_private(file, &page_owner_stack_op, 0);
 }
 
-static const struct file_operations page_owner_stack_operations = {
+static const struct file_operations page_owner_stack_fops = {
 	.open		= page_owner_stack_open,
 	.read		= seq_read,
 	.llseek		= seq_lseek,
@@ -948,7 +948,7 @@ static int page_owner_threshold_set(void *data, u64 val)
 	return 0;
 }
 
-DEFINE_SIMPLE_ATTRIBUTE(proc_page_owner_threshold, &page_owner_threshold_get,
+DEFINE_SIMPLE_ATTRIBUTE(page_owner_threshold_fops, &page_owner_threshold_get,
 			&page_owner_threshold_set, "%llu");
 
 
@@ -961,13 +961,12 @@ static int __init pageowner_init(void)
 		return 0;
 	}
 
-	debugfs_create_file("page_owner", 0400, NULL, NULL,
-			    &proc_page_owner_operations);
+	debugfs_create_file("page_owner", 0400, NULL, NULL, &page_owner_fops);
 	dir = debugfs_create_dir("page_owner_stacks", NULL);
 	debugfs_create_file("show_stacks", 0400, dir, NULL,
-			    &page_owner_stack_operations);
+			     &page_owner_stack_fops);
 	debugfs_create_file("count_threshold", 0600, dir, NULL,
-			    &proc_page_owner_threshold);
+			    &page_owner_threshold_fops);
 
 	return 0;
 }
