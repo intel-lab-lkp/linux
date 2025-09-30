@@ -12,7 +12,8 @@ TEST_PROGS := \
 	bond-eth-type-change.sh \
 	bond_macvlan_ipvlan.sh \
 	bond_passive_lacp.sh \
-	bond_lacp_prio.sh
+	bond_lacp_prio.sh \
+	bond-arp-ip-target.sh
 
 TEST_FILES := \
 	lag_lib.sh \
