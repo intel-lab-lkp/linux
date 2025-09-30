@@ -18,7 +18,7 @@ constant char[] fmt;
 position p;
 identifier print_func;
 @@
-* print_func(..., fmt, ..., PTR_ERR@p(ptr), ...)
+*print_func(..., fmt, ..., PTR_ERR@p(ptr), ...)
 
 @script:python depends on r && report@
 p << r.p;
