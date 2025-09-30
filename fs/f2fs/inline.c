@@ -425,7 +425,7 @@ static int f2fs_move_inline_dirents(struct inode *dir, struct folio *ifolio,
 	set_new_dnode(&dn, dir, ifolio, NULL, 0);
 	err = f2fs_reserve_block(&dn, 0);
 	if (err)
-		goto out;
+		goto out_put_ifolio;
 
 	if (unlikely(dn.data_blkaddr != NEW_ADDR)) {
 		f2fs_put_dnode(&dn);
@@ -434,7 +434,7 @@ static int f2fs_move_inline_dirents(struct inode *dir, struct folio *ifolio,
 			  __func__, dir->i_ino, dn.data_blkaddr);
 		f2fs_handle_error(F2FS_F_SB(folio), ERROR_INVALID_BLKADDR);
 		err = -EFSCORRUPTED;
-		goto out;
+		goto out_put_ifolio;
 	}
 
 	f2fs_folio_wait_writeback(folio, DATA, true, true);
@@ -479,6 +479,10 @@ static int f2fs_move_inline_dirents(struct inode *dir, struct folio *ifolio,
 out:
 	f2fs_folio_put(folio, true);
 	return err;
+
+out_put_ifolio:
+	f2fs_folio_put(ifolio, true);
+	goto out;
 }
 
 static int f2fs_add_inline_entries(struct inode *dir, void *inline_dentry)
