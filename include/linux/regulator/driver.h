@@ -658,6 +658,9 @@ struct regulator_dev {
 	spinlock_t err_lock;
 
 	int pw_requested_mW;
+
+	/* regulator notification forwarding */
+	struct notifier_block supply_fwd_nb;
 };
 
 /*
@@ -780,6 +783,8 @@ int regulator_desc_list_voltage_linear_range(const struct regulator_desc *desc,
 
 int regulator_desc_list_voltage_linear(const struct regulator_desc *desc,
 				       unsigned int selector);
+
+int register_regulator_event_forwarding(struct regulator_dev *rdev);
 
 #ifdef CONFIG_REGULATOR
 const char *rdev_get_name(struct regulator_dev *rdev);
