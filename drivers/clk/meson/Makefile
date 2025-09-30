@@ -22,6 +22,7 @@ obj-$(CONFIG_COMMON_CLK_A1_PERIPHERALS) += a1-peripherals.o
 obj-$(CONFIG_COMMON_CLK_A4_PLL) += a4-pll.o
 obj-$(CONFIG_COMMON_CLK_A4_PERIPHERALS) += a4-peripherals.o
 obj-$(CONFIG_COMMON_CLK_A5_PLL) += a5-pll.o
+obj-$(CONFIG_COMMON_CLK_A5_PERIPHERALS) += a5-peripherals.o
 obj-$(CONFIG_COMMON_CLK_C3_PLL) += c3-pll.o
 obj-$(CONFIG_COMMON_CLK_C3_PERIPHERALS) += c3-peripherals.o
 obj-$(CONFIG_COMMON_CLK_GXBB) += gxbb.o gxbb-aoclk.o
