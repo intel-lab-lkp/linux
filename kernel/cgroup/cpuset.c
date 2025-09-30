@@ -3205,7 +3205,7 @@ static void cpuset_attach_task(struct cpuset *cs, struct task_struct *task)
 	WARN_ON_ONCE(set_cpus_allowed_ptr(task, cpus_attach));
 
 	cpuset_change_task_nodemask(task, &cpuset_attach_nodemask_to);
-	cpuset1_update_task_spread_flags(cs, task);
+	cpuset_update_task_spread_flags(cs, task);
 }
 
 static void cpuset_attach(struct cgroup_taskset *tset)
@@ -3445,6 +3445,20 @@ static ssize_t cpuset_partition_write(struct kernfs_open_file *of, char *buf,
 		retval = update_prstate(cs, val);
 	cpuset_full_unlock();
 	return retval ?: nbytes;
+}
+
+/*
+ * update task's spread flag if cpuset's page spread flag is set
+ *
+ * Call with callback_lock or cpuset_mutex held.
+ */
+void cpuset_update_task_spread_flags(struct cpuset *cs,
+					struct task_struct *tsk)
+{
+	if (is_spread_page(cs))
+		task_set_spread_page(tsk);
+	else
+		task_clear_spread_page(tsk);
 }
 
 /*
