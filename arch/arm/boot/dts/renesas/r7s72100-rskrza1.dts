@@ -32,8 +32,6 @@
 	flash@18000000 {
 		compatible = "mtd-rom";
 		reg = <0x18000000 0x08000000>;
-		clocks = <&mstp9_clks R7S72100_CLK_SPIBSC0>;
-		power-domains = <&cpg_clocks>;
 		bank-width = <4>;
 		device-width = <1>;
 		#address-cells = <1>;
