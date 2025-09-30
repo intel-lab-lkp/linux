@@ -12,13 +12,20 @@
 
 virtual context, report, org
 
-@r@
+@depends on context@
+expression ptr;
+constant char[] fmt;
+identifier print_func;
+@@
+*print_func(..., fmt, ..., PTR_ERR(ptr), ...)
+
+@r depends on org || report@
 expression ptr;
 constant char[] fmt;
 position p;
 identifier print_func;
 @@
-*print_func(..., fmt, ..., PTR_ERR@p(ptr), ...)
+ print_func(..., fmt, ..., PTR_ERR@p(ptr), ...)
 
 @script:python depends on report@
 p << r.p;
