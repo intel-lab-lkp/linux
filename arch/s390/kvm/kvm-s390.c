@@ -3370,7 +3370,7 @@ int kvm_arch_init_vm(struct kvm *kvm, unsigned long type)
 			((char *) kvm->arch.sca + sca_offset);
 	mutex_unlock(&kvm_lock);
 
-	sprintf(debug_name, "kvm-%u", current->pid);
+	snprintf(debug_name, sizeof(debug_name), "kvm-%u", current->pid);
 
 	kvm->arch.dbf = debug_register(debug_name, 32, 1, 7 * sizeof(long));
 	if (!kvm->arch.dbf)
