@@ -11,7 +11,12 @@ maintainers:
 
 properties:
   compatible:
-    const: qcom,ipq6018-pwm
+    oneOf:
+      - items:
+          - enum:
+              - qcom,ipq5018-pwm
+          - const: qcom,ipq6018-pwm
+      - const: qcom,ipq6018-pwm
 
   reg:
     maxItems: 1
