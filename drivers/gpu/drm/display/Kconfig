@@ -40,6 +40,12 @@ config DRM_DISPLAY_DP_AUX_CHARDEV
 	  read and write values to arbitrary DPCD registers on the DP aux
 	  channel.
 
+config DRM_DISPLAY_DP_CONNECTOR_HELPER
+	bool "test dp_conn"
+	select DRM_DISPLAY_DP_HELPER
+	help
+	  DRM display helpers for DisplayPort.
+
 config DRM_DISPLAY_DP_HELPER
 	bool
 	help

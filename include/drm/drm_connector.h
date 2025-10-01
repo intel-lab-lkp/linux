@@ -31,6 +31,7 @@
 #include <drm/drm_mode_object.h>
 #include <drm/drm_util.h>
 #include <drm/drm_property.h>
+#include <drm/display/drm_dp.h>
 
 #include <uapi/drm/drm_mode.h>
 
@@ -46,6 +47,7 @@ struct drm_property_blob;
 struct drm_printer;
 struct drm_privacy_screen;
 struct drm_edid;
+struct drm_dp_aux;
 struct edid;
 struct hdmi_codec_daifmt;
 struct hdmi_codec_params;
@@ -1882,6 +1884,91 @@ struct drm_connector_cec {
 	void *data;
 };
 
+struct drm_connector_dp_rate_entry {
+	int dpcd;
+	u32 rate;
+};
+
+/**
+ * struct drm_connector_dp - DRM Connector DisplayPort capabilities
+ */
+struct drm_connector_dp_caps {
+	/**
+	 * @forbid_lttpr_init - forbid LTTPR init and access, e.g. on platforms
+	 * with AUX timeout < 3.2 ms.
+	 */
+	bool forbid_lttpr_init;
+
+	/**
+	 * @supported_rates - array of supported link rates, sorted in
+	 * ascending order
+	 */
+	u32 supported_rates[DP_MAX_SUPPORTED_RATES + 1];
+
+	/**
+	 * @num_supported_rates - number of valied entries in the
+	 * @supported_rates array
+	 */
+	u32 num_supported_rates;
+
+	/**
+	 * @dptx_lanes - number of lanes provided by DPTX
+	 */
+	u32 dptx_lanes;
+};
+
+/**
+ * struct drm_connector_dp - DRM Connector DisplayPort-related structure
+ */
+struct drm_connector_dp {
+	/* field set by the driver before registering the connector */
+
+	struct drm_connector_dp_caps caps;
+
+	/**
+	 * @aux - pointer to the DP AUX instance
+	 */
+	struct drm_dp_aux *aux;
+
+	/*
+	 * fields set by the drm_atomic_helper_connector_dp_detect(),
+	 * protected by connection_mutex
+	 */
+
+	/**
+	 * @dpcd - cached DPCD registers
+	 */
+	u8 dpcd[DP_RECEIVER_CAP_SIZE];
+
+	/**
+	 * @edp - cached eDP panel version
+	 */
+	u8 edp;
+
+	/**
+	 * @lttpr_caps - LTTPR capabilities read from DPRX
+	 */
+	u8 lttpr_caps[DP_LTTPR_COMMON_CAP_SIZE];
+
+	/**
+	 * @lttpr_count - the count of LTTPRs that are present and initialized
+	 * in a non-transparent mode
+	 */
+	u32 lttpr_count;
+
+	/*
+	 * fields set in drm_atomic_helper_connector_dp_hotplug, protected by FIXME
+	 */
+
+	/**
+	 * @dprx_lanes - number of lanes reported by DPRX
+	 */
+	u32 dprx_lanes;
+
+	struct drm_connector_dp_rate_entry rate[DP_MAX_SUPPORTED_RATES];
+	int rate_count;
+};
+
 /**
  * struct drm_connector - central DRM connector control structure
  *
@@ -2291,10 +2378,17 @@ struct drm_connector {
 	 */
 	struct llist_node free_node;
 
-	/**
-	 * @hdmi: HDMI-related variable and properties.
-	 */
-	struct drm_connector_hdmi hdmi;
+	union {
+		/**
+		 * @hdmi: HDMI-related variable and properties.
+		 */
+		struct drm_connector_hdmi hdmi;
+
+		/**
+		 * @dp: DisplayPort-related variable and properties.
+		 */
+		struct drm_connector_dp dp;
+	};
 
 	/**
 	 * @hdmi_audio: HDMI codec properties and non-DRM state.
