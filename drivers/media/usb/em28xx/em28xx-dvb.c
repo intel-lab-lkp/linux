@@ -1471,6 +1471,15 @@ static int em2874_dvb_init_hauppauge_usb_quadhd(struct em28xx *dev)
 	/* attach demod/tuner combo */
 	mxl692_config.id = (dev->ts == PRIMARY_TS) ? 0 : 1;
 	mxl692_config.fe = &dvb->fe[0];
+
+	mxl692_config.xtal_calibration_enable = 0;
+	mxl692_config.xtal_sharing_enable = 1;
+
+	mxl692_config.mpeg_parallel = 0;
+	mxl692_config.mpeg_sync_pulse_width = 0; /* BIT */
+	mxl692_config.mpeg3wire_mode_enable = 0;
+	mxl692_config.mpeg_clk_freq = 2; /* 27MHZ */
+
 	addr = (dev->ts == PRIMARY_TS) ? 0x60 : 0x63;
 
 	dvb->i2c_client_demod = dvb_module_probe("mxl692", NULL,

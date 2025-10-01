@@ -29,6 +29,9 @@ struct mxl692_dev {
 	int device_type;
 	int seqnum;
 	int init_done;
+	u8 xtal_calibration_enable;
+	u8 xtal_sharing_enable;
+	struct MXL_EAGLE_MPEGOUT_PARAMS_T mpeg_params;
 };
 
 static int mxl692_i2c_write(struct mxl692_dev *dev, u8 *buffer, u16 buf_len)
@@ -879,8 +882,8 @@ static int mxl692_init(struct dvb_frontend *fe)
 	xtal_config.xtal_cap = 26;
 	xtal_config.clk_out_div_enable = 0;
 	xtal_config.clk_out_enable = 0;
-	xtal_config.xtal_calibration_enable = 0;
-	xtal_config.xtal_sharing_enable = 1;
+	xtal_config.xtal_calibration_enable = dev->xtal_calibration_enable;
+	xtal_config.xtal_sharing_enable = dev->xtal_sharing_enable;
 	status = mxl692_config_xtal(dev, &xtal_config);
 	if (status)
 		goto err;
@@ -949,7 +952,7 @@ static int mxl692_set_frontend(struct dvb_frontend *fe)
 
 	int status = 0;
 	enum MXL_EAGLE_DEMOD_TYPE_E demod_type;
-	struct MXL_EAGLE_MPEGOUT_PARAMS_T mpeg_params = {};
+	struct MXL_EAGLE_MPEGOUT_PARAMS_T mpeg_params = dev->mpeg_params;
 	enum MXL_EAGLE_QAM_DEMOD_ANNEX_TYPE_E qam_annex = MXL_EAGLE_QAM_DEMOD_ANNEX_B;
 	struct MXL_EAGLE_QAM_DEMOD_PARAMS_T qam_params = {};
 	struct MXL_EAGLE_TUNER_CHANNEL_PARAMS_T tuner_params = {};
@@ -993,15 +996,6 @@ static int mxl692_set_frontend(struct dvb_frontend *fe)
 	}
 
 	usleep_range(20 * 1000, 30 * 1000); /* was 500! */
-
-	mpeg_params.mpeg_parallel = 0;
-	mpeg_params.msb_first = MXL_EAGLE_DATA_SERIAL_MSB_1ST;
-	mpeg_params.mpeg_sync_pulse_width = MXL_EAGLE_DATA_SYNC_WIDTH_BIT;
-	mpeg_params.mpeg_valid_pol = MXL_EAGLE_CLOCK_POSITIVE;
-	mpeg_params.mpeg_sync_pol = MXL_EAGLE_CLOCK_POSITIVE;
-	mpeg_params.mpeg_clk_pol = MXL_EAGLE_CLOCK_NEGATIVE;
-	mpeg_params.mpeg3wire_mode_enable = 0;
-	mpeg_params.mpeg_clk_freq = MXL_EAGLE_MPEG_CLOCK_27MHZ;
 
 	switch (demod_type) {
 	case MXL_EAGLE_DEMOD_TYPE_ATSC:
@@ -1320,6 +1314,26 @@ static int mxl692_probe(struct i2c_client *client)
 		dev_dbg(&client->dev, "kzalloc() failed\n");
 		goto err;
 	}
+
+	dev->xtal_calibration_enable = config->xtal_calibration_enable;
+	dev->xtal_sharing_enable = config->xtal_sharing_enable;
+
+	dev->mpeg_params.mpeg_parallel = config->mpeg_parallel;
+	dev->mpeg_params.msb_first = MXL_EAGLE_DATA_SERIAL_MSB_1ST;
+	dev->mpeg_params.mpeg_sync_pulse_width = config->mpeg_sync_pulse_width;
+	dev->mpeg_params.mpeg_valid_pol = MXL_EAGLE_CLOCK_POSITIVE;
+	dev->mpeg_params.mpeg_sync_pol = MXL_EAGLE_CLOCK_POSITIVE;
+	dev->mpeg_params.mpeg_clk_pol = MXL_EAGLE_CLOCK_NEGATIVE;
+	dev->mpeg_params.mpeg3wire_mode_enable = config->mpeg3wire_mode_enable;
+	dev->mpeg_params.mpeg_clk_freq = config->mpeg_clk_freq;
+	dev->mpeg_params.mpeg_pad_drv.pad_drv_mpeg_syn =
+		config->mpeg_pad_drv.pad_drv_mpeg_syn;
+	dev->mpeg_params.mpeg_pad_drv.pad_drv_mpeg_dat =
+		config->mpeg_pad_drv.pad_drv_mpeg_dat;
+	dev->mpeg_params.mpeg_pad_drv.pad_drv_mpeg_val =
+		config->mpeg_pad_drv.pad_drv_mpeg_val;
+	dev->mpeg_params.mpeg_pad_drv.pad_drv_mpeg_clk =
+		config->mpeg_pad_drv.pad_drv_mpeg_clk;
 
 	memcpy(&dev->fe.ops, &mxl692_ops, sizeof(struct dvb_frontend_ops));
 	dev->fe.demodulator_priv = dev;
