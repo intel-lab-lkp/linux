@@ -565,6 +565,40 @@ macro_rules! register {
             self
         }
         );
+
+        ::kernel::macros::paste!(
+        pub(crate) fn [<$field _bounded>](self) ->
+            ::kernel::num::BoundedInt<u32, { $hi + 1 - $lo }> {
+            const MASK: u32 = $name::[<$field:upper _MASK>];
+            const SHIFT: u32 = $name::[<$field:upper _SHIFT>];
+            // Ensure the returned type has the same width as the field.
+            ::kernel::static_assert!(
+                MASK >> SHIFT == ::kernel::num::BoundedInt::<u32, { $hi + 1 - $lo }>::MASK
+            );
+
+            let field = ((self.0 & MASK) >> SHIFT);
+
+            ::kernel::num::BoundedInt::<u32, { $hi + 1 - $lo }>::new(field)
+        }
+
+        pub(crate) fn [<set_ $field _bounded>](
+            mut self,
+            value: ::kernel::num::BoundedInt<u32, { $hi + 1 - $lo }>
+        ) -> Self {
+            const MASK: u32 = $name::[<$field:upper _MASK>];
+            const SHIFT: u32 = $name::[<$field:upper _SHIFT>];
+            // Ensure the returned type has the same width as the field.
+            ::kernel::static_assert!(
+                MASK >> SHIFT == ::kernel::num::BoundedInt::<u32, { $hi + 1 - $lo }>::MASK
+            );
+
+            let value = (value.get() << SHIFT) & MASK;
+            self.0 = (self.0 & !MASK) | value;
+
+            self
+        }
+        );
+
     };
 
     // Generates the `Debug` implementation for `$name`.

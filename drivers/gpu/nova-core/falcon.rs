@@ -6,6 +6,7 @@ use core::ops::Deref;
 use hal::FalconHal;
 use kernel::device;
 use kernel::dma::DmaAddress;
+use kernel::num::BoundedInt;
 use kernel::prelude::*;
 use kernel::sync::aref::ARef;
 use kernel::time::Delta;
@@ -488,24 +489,27 @@ impl<E: FalconEngine + 'static> Falcon<E> {
         // Set up the base source DMA address.
 
         regs::NV_PFALCON_FALCON_DMATRFBASE::default()
-            .set_base((dma_start >> 8) as u32)
+            .set_base_bounded(BoundedInt::new((dma_start >> 8) as u32))
             .write(bar, &E::ID);
         regs::NV_PFALCON_FALCON_DMATRFBASE1::default()
-            .set_base((dma_start >> 40) as u16)
+            .set_base_bounded(BoundedInt::try_from((dma_start >> 40) as u32)?)
             .write(bar, &E::ID);
+
+        let r = regs::NV_PFALCON_FALCON_DMATRFBASE::read(bar, &E::ID).base_bounded();
+        pr_info!("BASE: {:x}\n", r);
 
         let cmd = regs::NV_PFALCON_FALCON_DMATRFCMD::default()
             .set_size(DmaTrfCmdSize::Size256B)
             .set_imem(target_mem == FalconMem::Imem)
-            .set_sec(if sec { 1 } else { 0 });
+            .set_sec_bounded(BoundedInt::new(if sec { 1 } else { 0 }));
 
         for pos in (0..num_transfers).map(|i| i * DMA_LEN) {
             // Perform a transfer of size `DMA_LEN`.
             regs::NV_PFALCON_FALCON_DMATRFMOFFS::default()
-                .set_offs(load_offsets.dst_start + pos)
+                .set_offs_bounded(BoundedInt::try_from(load_offsets.dst_start + pos)?)
                 .write(bar, &E::ID);
             regs::NV_PFALCON_FALCON_DMATRFFBOFFS::default()
-                .set_offs(src_start + pos)
+                .set_offs_bounded(BoundedInt::new(src_start + pos))
                 .write(bar, &E::ID);
             cmd.write(bar, &E::ID);
 
