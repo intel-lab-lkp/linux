@@ -1878,6 +1878,7 @@ static vm_fault_t do_huge_zero_wp_pmd(struct vm_fault *vmf)
 		goto release;
 	(void)pmdp_huge_clear_flush(vma, haddr, vmf->pmd);
 	map_anon_folio_pmd(folio, vmf->pmd, vma, haddr);
+	deferred_split_folio(folio, false);
 	goto unlock;
 release:
 	folio_put(folio);
