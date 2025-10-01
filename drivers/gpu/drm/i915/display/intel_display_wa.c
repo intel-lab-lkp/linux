@@ -53,6 +53,16 @@ static bool intel_display_needs_wa_16025573575(struct intel_display *display)
 }
 
 /*
+ * Wa_22014263786:
+ * Fixes: Screen flicker with FBC and Package C state enabled
+ * Workaround: Forced SLB invalidation before start of new frame.
+ */
+static bool intel_display_needs_wa_22014263786(struct intel_display *display)
+{
+	return DISPLAY_VERx100(display) >= 1100 && DISPLAY_VERx100(display) < 1401;
+}
+
+/*
  * Wa_14011503117:
  * Fixes: Before enabling the scaler DE fatal error is masked
  * Workaround: Unmask the DE fatal error register after enabling the scaler
@@ -67,6 +77,8 @@ bool __intel_display_wa(struct intel_display *display, enum intel_display_wa wa,
 		return intel_display_needs_wa_16025573575(display);
 	case INTEL_DISPLAY_WA_14011503117:
 		return DISPLAY_VER(display) == 13;
+	case INTEL_DISPLAY_WA_22014263786:
+		return intel_display_needs_wa_22014263786(display);
 	default:
 		drm_WARN(display->drm, 1, "Missing Wa number: %s\n", name);
 		break;
