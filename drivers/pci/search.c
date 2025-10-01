@@ -230,12 +230,17 @@ struct pci_dev *pci_get_domain_bus_and_slot(int domain, unsigned int bus,
 {
 	struct pci_dev *dev = NULL;
 
+	down_read(&pci_bus_sem);
 	for_each_pci_dev(dev) {
 		if (pci_domain_nr(dev->bus) == domain &&
 		    (dev->bus->number == bus && dev->devfn == devfn))
-			return dev;
+			goto out;
 	}
-	return NULL;
+	dev = NULL;
+ out:
+	pci_dev_get(dev);
+	up_read(&pci_bus_sem);
+	return dev;
 }
 EXPORT_SYMBOL(pci_get_domain_bus_and_slot);
 
