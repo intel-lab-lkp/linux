@@ -312,7 +312,7 @@ extern char *dentry_path(const struct dentry *, char *, int);
  *
  * Given a live dentry, increment the reference count and return the dentry.
  * Caller must hold @dentry->d_lock.  Making sure that dentry is alive is
- * caller's resonsibility.  There are many conditions sufficient to guarantee
+ * caller's responsibility.  There are many conditions sufficient to guarantee
  * that; e.g. anything with non-negative refcount is alive, so's anything
  * hashed, anything positive, anyone's parent, etc.
  */
