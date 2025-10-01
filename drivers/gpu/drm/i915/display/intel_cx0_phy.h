@@ -17,17 +17,22 @@ struct intel_crtc;
 struct intel_crtc_state;
 struct intel_cx0pll_state;
 struct intel_display;
+struct intel_dpll;
 struct intel_dpll_hw_state;
 struct intel_encoder;
 struct intel_hdmi;
 
 bool intel_encoder_is_c10phy(struct intel_encoder *encoder);
 void intel_mtl_pll_enable(struct intel_encoder *encoder,
-			  const struct intel_crtc_state *crtc_state);
+			  struct intel_dpll *pll,
+			  const struct intel_dpll_hw_state *dpll_hw_state);
 void intel_mtl_pll_disable(struct intel_encoder *encoder);
 enum icl_port_dpll_id
 intel_mtl_port_pll_type(struct intel_encoder *encoder,
 			const struct intel_crtc_state *crtc_state);
+void intel_mtl_pll_enable_clock(struct intel_encoder *encoder,
+				const struct intel_crtc_state *crtc_state);
+void intel_mtl_pll_disable_clock(struct intel_encoder *encoder);
 
 int intel_cx0pll_calc_state(const struct intel_crtc_state *crtc_state,
 			    struct intel_encoder *encoder,
