@@ -7,6 +7,7 @@
 
 #include "dvb_usb.h"
 #include "m88ds3103.h"
+#include "mxl692.h"
 #include "ts2020.h"
 #include "sp2.h"
 #include "si2168.h"
@@ -576,6 +577,37 @@ static int dvbsky_mygica_t230c_attach(struct dvb_usb_adapter *adap)
 	return 0;
 }
 
+static int dvbsky_mygica_mxl692_attach(struct dvb_usb_adapter *adap)
+{
+	struct dvbsky_state *state = adap_to_priv(adap);
+	struct dvb_usb_device *d = adap_to_d(adap);
+	struct mxl692_config mxl692_config = {};
+
+	/* attach demod/tuner combo */
+	mxl692_config.id = 0;
+	mxl692_config.fe = &adap->fe[0];
+
+	mxl692_config.xtal_calibration_enable = 1;
+	mxl692_config.xtal_sharing_enable = 0;
+
+	mxl692_config.mpeg_parallel = 1;
+	mxl692_config.mpeg_sync_pulse_width = 1; /* BYTE */
+	mxl692_config.mpeg3wire_mode_enable = 1;
+	mxl692_config.mpeg_clk_freq = 3; /* 13_5MHZ */
+	mxl692_config.mpeg_pad_drv.pad_drv_mpeg_syn = 3; /* 4X */
+	mxl692_config.mpeg_pad_drv.pad_drv_mpeg_dat = 3;
+	mxl692_config.mpeg_pad_drv.pad_drv_mpeg_val = 3;
+	mxl692_config.mpeg_pad_drv.pad_drv_mpeg_clk = 3;
+
+	state->i2c_client_demod = dvb_module_probe("mxl692", NULL,
+						   &d->i2c_adap,
+						   0x60, &mxl692_config);
+	if (!state->i2c_client_demod)
+		return -ENODEV;
+
+	return 0;
+}
+
 
 static int dvbsky_identify_state(struct dvb_usb_device *d, const char **name)
 {
@@ -587,6 +619,11 @@ static int dvbsky_identify_state(struct dvb_usb_device *d, const char **name)
 		msleep(100);
 		dvbsky_gpio_ctrl(d, 0x80, 1);
 		msleep(50);
+	} else if (le16_to_cpu(d->udev->descriptor.idProduct) == USB_PID_MYGICA_A681B) {
+		dvbsky_gpio_ctrl(d, 0x80, 0);
+		msleep(100);
+		dvbsky_gpio_ctrl(d, 0x80, 1);
+		msleep(100);
 	} else {
 		dvbsky_gpio_ctrl(d, 0x04, 1);
 		msleep(20);
@@ -756,6 +793,32 @@ static struct dvb_usb_device_properties mygica_t230c_props = {
 	}
 };
 
+static struct dvb_usb_device_properties mygica_mxl692_props = {
+	.driver_name = KBUILD_MODNAME,
+	.owner = THIS_MODULE,
+	.adapter_nr = adapter_nr,
+	.size_of_priv = sizeof(struct dvbsky_state),
+
+	.generic_bulk_ctrl_endpoint = 0x01,
+	.generic_bulk_ctrl_endpoint_response = 0x81,
+	.generic_bulk_ctrl_delay = DVBSKY_MSG_DELAY,
+
+	.i2c_algo         = &dvbsky_i2c_algo,
+	.frontend_attach  = dvbsky_mygica_mxl692_attach,
+	.frontend_detach  = dvbsky_frontend_detach,
+	.init             = dvbsky_init,
+	.get_rc_config    = dvbsky_get_rc_config,
+	.streaming_ctrl   = dvbsky_streaming_ctrl,
+	.identify_state	  = dvbsky_identify_state,
+
+	.num_adapters = 1,
+	.adapter = {
+		{
+			.stream = DVB_USB_STREAM_BULK(0x82, 8, 4096),
+		}
+	}
+};
+
 static const struct usb_device_id dvbsky_id_table[] = {
 	{ DVB_USB_DEVICE(0x0572, 0x6831,
 		&dvbsky_s960_props, "DVBSky S960/S860", RC_MAP_DVBSKY) },
@@ -805,6 +868,12 @@ static const struct usb_device_id dvbsky_id_table[] = {
 		 NULL) },
 	{ DVB_USB_DEVICE(USB_VID_CONEXANT, USB_PID_MYGICA_T230A,
 		 &mygica_t230c_props, "MyGica Mini DVB-(T/T2/C) USB Stick T230A",
+		 NULL) },
+	{ DVB_USB_DEVICE(USB_VID_GTEK, USB_PID_MYGICA_A681B,
+		 &mygica_mxl692_props, "MyGica ATSC/QAM HDTV USB Stick A681B",
+		 NULL) },
+	{ DVB_USB_DEVICE(USB_VID_GTEK, USB_PID_MYGICA_PT682C,
+		 &mygica_mxl692_props, "MyGica ATSC/QAM HDTV USB Stick PT682C",
 		 NULL) },
 	{ }
 };
