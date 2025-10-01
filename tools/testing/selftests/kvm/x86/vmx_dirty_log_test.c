@@ -121,9 +121,9 @@ static void test_vmx_dirty_log(bool enable_ept)
 	 */
 	if (enable_ept) {
 		prepare_eptp(vmx, vm, 0);
-		nested_map_memslot(vmx, vm, 0);
-		nested_map(vmx, vm, NESTED_TEST_MEM1, GUEST_TEST_MEM, 4096);
-		nested_map(vmx, vm, NESTED_TEST_MEM2, GUEST_TEST_MEM, 4096);
+		nested_map_memslot(vmx->eptp_hva, vm, 0);
+		nested_map(vmx->eptp_hva, vm, NESTED_TEST_MEM1, GUEST_TEST_MEM, 4096);
+		nested_map(vmx->eptp_hva, vm, NESTED_TEST_MEM2, GUEST_TEST_MEM, 4096);
 	}
 
 	bmap = bitmap_zalloc(TEST_MEM_PAGES);

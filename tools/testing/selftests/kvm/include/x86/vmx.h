@@ -559,13 +559,13 @@ bool load_vmcs(struct vmx_pages *vmx);
 
 bool ept_1g_pages_supported(void);
 
-void nested_pg_map(struct vmx_pages *vmx, struct kvm_vm *vm,
+void nested_pg_map(void *root_hva, struct kvm_vm *vm,
 		   uint64_t nested_paddr, uint64_t paddr);
-void nested_map(struct vmx_pages *vmx, struct kvm_vm *vm,
+void nested_map(void *root_hva, struct kvm_vm *vm,
 		 uint64_t nested_paddr, uint64_t paddr, uint64_t size);
-void nested_map_memslot(struct vmx_pages *vmx, struct kvm_vm *vm,
+void nested_map_memslot(void *root_hva, struct kvm_vm *vm,
 			uint32_t memslot);
-void nested_identity_map_1g(struct vmx_pages *vmx, struct kvm_vm *vm,
+void nested_identity_map_1g(void *root_hva, struct kvm_vm *vm,
 			    uint64_t addr, uint64_t size);
 bool kvm_cpu_has_ept(void);
 void prepare_eptp(struct vmx_pages *vmx, struct kvm_vm *vm,

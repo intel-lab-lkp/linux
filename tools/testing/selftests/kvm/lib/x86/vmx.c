@@ -394,11 +394,11 @@ static void nested_create_pte(struct kvm_vm *vm,
 }
 
 
-void __nested_pg_map(struct vmx_pages *vmx, struct kvm_vm *vm,
+void __nested_pg_map(void *root_hva, struct kvm_vm *vm,
 		     uint64_t nested_paddr, uint64_t paddr, int target_level)
 {
 	const uint64_t page_size = PG_LEVEL_SIZE(target_level);
-	struct eptPageTableEntry *pt = vmx->eptp_hva, *pte;
+	struct eptPageTableEntry *pt = root_hva, *pte;
 	uint16_t index;
 
 	TEST_ASSERT(vm->mode == VM_MODE_PXXV48_4K, "Attempt to use "
@@ -445,10 +445,10 @@ void __nested_pg_map(struct vmx_pages *vmx, struct kvm_vm *vm,
 
 }
 
-void nested_pg_map(struct vmx_pages *vmx, struct kvm_vm *vm,
+void nested_pg_map(void *root_hva, struct kvm_vm *vm,
 		   uint64_t nested_paddr, uint64_t paddr)
 {
-	__nested_pg_map(vmx, vm, nested_paddr, paddr, PG_LEVEL_4K);
+	__nested_pg_map(root_hva, vm, nested_paddr, paddr, PG_LEVEL_4K);
 }
 
 /*
@@ -468,7 +468,7 @@ void nested_pg_map(struct vmx_pages *vmx, struct kvm_vm *vm,
  * Within the VM given by vm, creates a nested guest translation for the
  * page range starting at nested_paddr to the page range starting at paddr.
  */
-void __nested_map(struct vmx_pages *vmx, struct kvm_vm *vm,
+void __nested_map(void *root_hva, struct kvm_vm *vm,
 		  uint64_t nested_paddr, uint64_t paddr, uint64_t size,
 		  int level)
 {
@@ -479,22 +479,22 @@ void __nested_map(struct vmx_pages *vmx, struct kvm_vm *vm,
 	TEST_ASSERT(paddr + size > paddr, "Paddr overflow");
 
 	while (npages--) {
-		__nested_pg_map(vmx, vm, nested_paddr, paddr, level);
+		__nested_pg_map(root_hva, vm, nested_paddr, paddr, level);
 		nested_paddr += page_size;
 		paddr += page_size;
 	}
 }
 
-void nested_map(struct vmx_pages *vmx, struct kvm_vm *vm,
+void nested_map(void *root_hva, struct kvm_vm *vm,
 		uint64_t nested_paddr, uint64_t paddr, uint64_t size)
 {
-	__nested_map(vmx, vm, nested_paddr, paddr, size, PG_LEVEL_4K);
+	__nested_map(root_hva, vm, nested_paddr, paddr, size, PG_LEVEL_4K);
 }
 
 /* Prepare an identity extended page table that maps all the
  * physical pages in VM.
  */
-void nested_map_memslot(struct vmx_pages *vmx, struct kvm_vm *vm,
+void nested_map_memslot(void *root_hva, struct kvm_vm *vm,
 			uint32_t memslot)
 {
 	sparsebit_idx_t i, last;
@@ -508,7 +508,7 @@ void nested_map_memslot(struct vmx_pages *vmx, struct kvm_vm *vm,
 		if (i > last)
 			break;
 
-		nested_map(vmx, vm,
+		nested_map(root_hva, vm,
 			   (uint64_t)i << vm->page_shift,
 			   (uint64_t)i << vm->page_shift,
 			   1 << vm->page_shift);
@@ -516,10 +516,10 @@ void nested_map_memslot(struct vmx_pages *vmx, struct kvm_vm *vm,
 }
 
 /* Identity map a region with 1GiB Pages. */
-void nested_identity_map_1g(struct vmx_pages *vmx, struct kvm_vm *vm,
+void nested_identity_map_1g(void *root_hva, struct kvm_vm *vm,
 			    uint64_t addr, uint64_t size)
 {
-	__nested_map(vmx, vm, addr, addr, size, PG_LEVEL_1G);
+	__nested_map(root_hva, vm, addr, addr, size, PG_LEVEL_1G);
 }
 
 bool kvm_cpu_has_ept(void)
