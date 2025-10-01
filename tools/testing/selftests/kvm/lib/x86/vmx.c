@@ -365,46 +365,61 @@ void prepare_vmcs(struct vmx_pages *vmx, void *guest_rip, void *guest_rsp)
 	init_vmcs_guest_state(guest_rip, guest_rsp);
 }
 
+static bool nested_ept_create_pte(struct kvm_vm *vm,
+				  uint64_t *pte,
+				  uint64_t paddr,
+				  uint64_t *address,
+				  bool *leaf)
+{
+	struct eptPageTableEntry *epte = (struct eptPageTableEntry *)pte;
+
+	/* PTE already exists? */
+	if (epte->readable) {
+		*leaf = epte->page_size;
+		*address = epte->address;
+		return false;
+	}
+
+	epte->writable = true;
+	epte->readable = true;
+	epte->executable = true;
+	epte->page_size = *leaf;
+
+	if (*leaf)
+		epte->address = paddr >> vm->page_shift;
+	else
+		epte->address = vm_alloc_page_table(vm) >> vm->page_shift;
+
+	*address = epte->address;
+
+	/*
+	 * For now mark these as accessed and dirty because the only
+	 * testcase we have needs that.  Can be reconsidered later.
+	 */
+	epte->accessed = *leaf;
+	epte->dirty = *leaf;
+	return true;
+}
+
 static uint64_t nested_create_pte(struct kvm_vm *vm,
 				  uint64_t *pte,
 				  uint64_t nested_paddr,
 				  uint64_t paddr,
 				  int level,
-				  bool leaf)
+				  bool want_leaf)
 {
-	struct eptPageTableEntry *epte = (struct eptPageTableEntry *)pte;
+	bool leaf = want_leaf;
+	uint64_t address;
 
-	if (!epte->readable) {
-		epte->writable = true;
-		epte->readable = true;
-		epte->executable = true;
-		epte->page_size = leaf;
-
-		if (leaf)
-			epte->address = paddr >> vm->page_shift;
-		else
-			epte->address = vm_alloc_page_table(vm) >> vm->page_shift;
-
-		/*
-		 * For now mark these as accessed and dirty because the only
-		 * testcase we have needs that.  Can be reconsidered later.
-		 */
-		epte->accessed = leaf;
-		epte->dirty = leaf;
-	} else {
-		/*
-		 * Entry already present.  Assert that the caller doesn't want a
-		 * leaf entry at this level, and that there isn't a leaf entry
-		 * at this level.
-		 */
-		TEST_ASSERT(!leaf,
+	if (!nested_ept_create_pte(vm, pte, paddr, &address, &leaf)) {
+		TEST_ASSERT(!want_leaf,
 			    "Cannot create leaf entry at level: %u, nested_paddr: 0x%lx",
 			    level, nested_paddr);
-		TEST_ASSERT(!epte->page_size,
+		TEST_ASSERT(!leaf,
 			    "Leaf entry already exists at level: %u, nested_paddr: 0x%lx",
 			    level, nested_paddr);
 	}
-	return epte->address;
+	return address;
 }
 
 
