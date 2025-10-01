@@ -9760,7 +9760,7 @@ static void ufshcd_vreg_set_lpm(struct ufs_hba *hba)
 	 * All UFS devices require delay after VCC power rail is turned-off.
 	 */
 	if (vcc_off && hba->vreg_info.vcc)
-		usleep_range(5000, 5100);
+		usleep_range(2000, 2100);
 }
 
 #ifdef CONFIG_PM
