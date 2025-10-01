@@ -364,6 +364,7 @@ rescan:
 	if (ohci->rh_state != OHCI_RH_RUNNING) {
 sanitize:
 		ed->state = ED_IDLE;
+		ed->idle_timeout = 0;
 		ohci_work(ohci);
 	}
 
@@ -382,6 +383,15 @@ sanitize:
 			td_free (ohci, ed->dummy);
 			ed_free (ohci, ed);
 			break;
+		}
+		fallthrough;
+	case ED_OPER:		/* check for delayed unlinking */
+		if (ed->idle_timeout) {
+			/* ED marked for delayed unlinking, unlink it now */
+			start_ed_unlink(ohci, ed);
+			spin_unlock_irqrestore(&ohci->lock, flags);
+			schedule_timeout_uninterruptible(1);
+			goto rescan;
 		}
 		fallthrough;
 	default:
@@ -794,6 +804,11 @@ static void io_watchdog_func(struct timer_list *t)
 				add_to_done_list(ohci, ed->pending_td);
 			}
 		}
+
+		/* Check for idle EDs that have timed out and unlink them to prevent memory leaks */
+		if (ed->state == ED_OPER && ed->idle_timeout &&
+				time_after(jiffies, ed->idle_timeout))
+			start_ed_unlink(ohci, ed);
 
 		/* Starting from the latest pending TD, */
 		td = ed->pending_td;
