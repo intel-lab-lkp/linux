@@ -6,6 +6,7 @@
 #ifndef __INTEL_CX0_PHY_H__
 #define __INTEL_CX0_PHY_H__
 
+#include <drm/drm_print.h>
 #include <linux/types.h>
 
 enum icl_port_dpll_id;
@@ -36,7 +37,7 @@ void intel_cx0pll_readout_hw_state(struct intel_encoder *encoder,
 int intel_cx0pll_calc_port_clock(struct intel_encoder *encoder,
 				 const struct intel_cx0pll_state *pll_state);
 
-void intel_cx0pll_dump_hw_state(struct intel_display *display,
+void intel_cx0pll_dump_hw_state(struct drm_printer *p,
 				const struct intel_cx0pll_state *hw_state);
 bool intel_cx0pll_compare_hw_state(const struct intel_cx0pll_state *a,
 				   const struct intel_cx0pll_state *b);
