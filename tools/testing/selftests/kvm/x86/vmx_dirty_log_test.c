@@ -11,6 +11,7 @@
 
 #include "test_util.h"
 #include "kvm_util.h"
+#include "nested_map.h"
 #include "processor.h"
 #include "vmx.h"
 
