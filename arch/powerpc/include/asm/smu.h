@@ -667,7 +667,7 @@ extern struct smu_sdbp_header *smu_sat_get_sdb_partition(unsigned int sat_id,
  * file is opened. poll() isn't implemented yet. The reply will consist
  * of a header as well, followed by the reply data if any. You should
  * always provide a buffer large enough for the maximum reply data, I
- * recommand one page.
+ * recommend one page.
  *
  * It is illegal to send SMU commands through a file descriptor configured
  * for events reception
