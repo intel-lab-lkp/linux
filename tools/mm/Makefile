@@ -3,7 +3,8 @@
 #
 include ../scripts/Makefile.include
 
-BUILD_TARGETS=page-types slabinfo page_owner_sort thp_swap_allocator_test
+BUILD_TARGETS=page-types slabinfo page_owner_sort thp_swap_allocator_test \
+	      ksm-utils
 INSTALL_TARGETS = $(BUILD_TARGETS) thpmaps
 
 LIB_DIR = ../lib/api
@@ -12,7 +13,7 @@ LIBS = $(LIB_DIR)/libapi.a
 CFLAGS += -Wall -Wextra -I../lib/ -pthread
 LDFLAGS += $(LIBS) -pthread
 
-all: $(BUILD_TARGETS)
+all: $(BUILD_TARGETS) ksm-utils
 
 $(BUILD_TARGETS): $(LIBS)
 
@@ -22,9 +23,14 @@ $(LIBS):
 %: %.c
 	$(CC) $(CFLAGS) -o $@ $< $(LDFLAGS)
 
-clean:
+clean:  ksm-utils_clean
 	$(RM) page-types slabinfo page_owner_sort thp_swap_allocator_test
 	make -C $(LIB_DIR) clean
+
+ksm-utils:
+	$(call descend,ksm-utils)
+ksm-utils_clean:
+	$(call descend,ksm-utils,clean)
 
 sbindir ?= /usr/sbin
 
