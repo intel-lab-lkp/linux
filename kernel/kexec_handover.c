@@ -640,38 +640,6 @@ static int kho_debugfs_fdt_add(struct list_head *list, struct dentry *dir,
 	return 0;
 }
 
-/**
- * kho_add_subtree - record the physical address of a sub FDT in KHO root tree.
- * @ser: serialization control object passed by KHO notifiers.
- * @name: name of the sub tree.
- * @fdt: the sub tree blob.
- *
- * Creates a new child node named @name in KHO root FDT and records
- * the physical address of @fdt. The pages of @fdt must also be preserved
- * by KHO for the new kernel to retrieve it after kexec.
- *
- * A debugfs blob entry is also created at
- * ``/sys/kernel/debug/kho/out/sub_fdts/@name``.
- *
- * Return: 0 on success, error code on failure
- */
-int kho_add_subtree(struct kho_serialization *ser, const char *name, void *fdt)
-{
-	int err = 0;
-	u64 phys = (u64)virt_to_phys(fdt);
-	void *root = page_to_virt(ser->fdt);
-
-	err |= fdt_begin_node(root, name);
-	err |= fdt_property(root, PROP_SUB_FDT, &phys, sizeof(phys));
-	err |= fdt_end_node(root);
-
-	if (err)
-		return err;
-
-	return kho_debugfs_fdt_add(&ser->fdt_list, ser->sub_fdt_dir, name, fdt);
-}
-EXPORT_SYMBOL_GPL(kho_add_subtree);
-
 struct kho_out {
 	struct blocking_notifier_head chain_head;
 	struct dentry *dir;
@@ -684,6 +652,50 @@ static struct kho_out kho_out = {
 		.fdt_list = LIST_HEAD_INIT(kho_out.ser.fdt_list),
 	},
 };
+
+/**
+ * kho_add_subtree - record the physical address of a sub FDT in KHO root tree.
+ * @name: name of the sub tree.
+ * @fdt: the sub tree blob.
+ *
+ * Creates a new child node named @name in KHO root FDT and records
+ * the physical address of @fdt. The pages of @fdt must also be preserved
+ * by KHO for the new kernel to retrieve it after kexec.
+ *
+ * A debugfs blob entry is also created at
+ * ``/sys/kernel/debug/kho/out/sub_fdts/@name``.
+ *
+ * Return: 0 on success, error code on failure
+ */
+int kho_add_subtree(const char *name, void *fdt)
+{
+	struct kho_serialization *ser = &kho_out.ser;
+	int err = 0;
+	int root_node_offset, subnode_offset;
+	u64 phys = (u64)virt_to_phys(fdt);
+	void *root = page_to_virt(ser->fdt);
+
+	/* Reload the KHO root FDT to the same buffer */
+	err = fdt_open_into(root, root, PAGE_SIZE);
+	if (err)
+		return err;
+
+	root_node_offset = fdt_path_offset(fdt, "/");
+	if (root_node_offset < 0)
+		return root_node_offset;
+
+	subnode_offset = fdt_add_subnode(root, root_node_offset, name);
+	if (subnode_offset < 0)
+		return subnode_offset;
+
+	err = fdt_setprop(root, subnode_offset,
+			  PROP_SUB_FDT, &phys, sizeof(phys));
+	if (err)
+		return err;
+
+	return kho_debugfs_fdt_add(&ser->fdt_list, ser->sub_fdt_dir, name, fdt);
+}
+EXPORT_SYMBOL_GPL(kho_add_subtree);
 
 int register_kho_notifier(struct notifier_block *nb)
 {
