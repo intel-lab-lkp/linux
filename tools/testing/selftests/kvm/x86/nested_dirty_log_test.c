@@ -13,6 +13,7 @@
 #include "kvm_util.h"
 #include "nested_map.h"
 #include "processor.h"
+#include "svm_util.h"
 #include "vmx.h"
 
 /* The memory slot index to track dirty pages */
@@ -25,6 +26,8 @@
 /* L2 guest test virtual memory offset */
 #define NESTED_TEST_MEM1		0xc0001000
 #define NESTED_TEST_MEM2		0xc0002000
+
+#define L2_GUEST_STACK_SIZE 64
 
 static void l2_guest_code(u64 *a, u64 *b)
 {
@@ -43,20 +46,19 @@ static void l2_guest_code(u64 *a, u64 *b)
 	vmcall();
 }
 
-static void l2_guest_code_ept_enabled(void)
+static void l2_guest_code_tdp_enabled(void)
 {
 	l2_guest_code((u64 *)NESTED_TEST_MEM1, (u64 *)NESTED_TEST_MEM2);
 }
 
-static void l2_guest_code_ept_disabled(void)
+static void l2_guest_code_tdp_disabled(void)
 {
-	/* Access the same L1 GPAs as l2_guest_code_ept_enabled() */
+	/* Access the same L1 GPAs as l2_guest_code_tdp_enabled() */
 	l2_guest_code((u64 *)GUEST_TEST_MEM, (u64 *)GUEST_TEST_MEM);
 }
 
-void l1_guest_code(struct vmx_pages *vmx)
+void l1_vmx_code(struct vmx_pages *vmx)
 {
-#define L2_GUEST_STACK_SIZE 64
 	unsigned long l2_guest_stack[L2_GUEST_STACK_SIZE];
 	void *l2_rip;
 
@@ -65,9 +67,9 @@ void l1_guest_code(struct vmx_pages *vmx)
 	GUEST_ASSERT(load_vmcs(vmx));
 
 	if (vmx->eptp_gpa)
-		l2_rip = l2_guest_code_ept_enabled;
+		l2_rip = l2_guest_code_tdp_enabled;
 	else
-		l2_rip = l2_guest_code_ept_disabled;
+		l2_rip = l2_guest_code_tdp_disabled;
 
 	prepare_vmcs(vmx, l2_rip, &l2_guest_stack[L2_GUEST_STACK_SIZE]);
 
@@ -78,10 +80,38 @@ void l1_guest_code(struct vmx_pages *vmx)
 	GUEST_DONE();
 }
 
-static void test_vmx_dirty_log(bool enable_ept)
+static void l1_svm_code(struct svm_test_data *svm)
 {
-	vm_vaddr_t vmx_pages_gva = 0;
-	struct vmx_pages *vmx;
+       unsigned long l2_guest_stack[L2_GUEST_STACK_SIZE];
+       void *l2_rip;
+
+       if (svm->ncr3_gpa)
+               l2_rip = l2_guest_code_tdp_enabled;
+       else
+               l2_rip = l2_guest_code_tdp_disabled;
+
+       generic_svm_setup(svm, l2_rip, &l2_guest_stack[L2_GUEST_STACK_SIZE]);
+
+       GUEST_SYNC(false);
+       run_guest(svm->vmcb, svm->vmcb_gpa);
+       GUEST_SYNC(false);
+       GUEST_ASSERT(svm->vmcb->control.exit_code == SVM_EXIT_VMMCALL);
+       GUEST_DONE();
+}
+
+static void l1_guest_code(void *data)
+{
+	if (this_cpu_has(X86_FEATURE_VMX))
+		l1_vmx_code(data);
+	else
+		l1_svm_code(data);
+}
+
+static void test_dirty_log(bool enable_tdp)
+{
+	struct svm_test_data *svm = NULL;
+	struct vmx_pages *vmx = NULL;
+	vm_vaddr_t nested_gva = 0;
 	unsigned long *bmap;
 	uint64_t *host_test_mem;
 
@@ -90,12 +120,16 @@ static void test_vmx_dirty_log(bool enable_ept)
 	struct ucall uc;
 	bool done = false;
 
-	pr_info("Nested EPT: %s\n", enable_ept ? "enabled" : "disabled");
+	pr_info("Nested TDP: %s\n", enable_tdp ? "enabled" : "disabled");
 
 	/* Create VM */
 	vm = vm_create_with_one_vcpu(&vcpu, l1_guest_code);
-	vmx = vcpu_alloc_vmx(vm, &vmx_pages_gva);
-	vcpu_args_set(vcpu, 1, vmx_pages_gva);
+	if (kvm_cpu_has(X86_FEATURE_VMX))
+		vmx = vcpu_alloc_vmx(vm, &nested_gva);
+	else
+		svm = vcpu_alloc_svm(vm, &nested_gva);
+
+	vcpu_args_set(vcpu, 1, nested_gva);
 
 	/* Add an extra memory slot for testing dirty logging */
 	vm_userspace_mem_region_add(vm, VM_MEM_SRC_ANONYMOUS,
@@ -114,17 +148,25 @@ static void test_vmx_dirty_log(bool enable_ept)
 	 * ... pages in the L2 GPA range [0xc0001000, 0xc0003000) will map to
 	 * 0xc0000000.
 	 *
-	 * Note that prepare_eptp should be called only L1's GPA map is done,
-	 * meaning after the last call to virt_map.
+	 * Note that prepare_eptp()/prepare_npt() should be called only when
+	 * L1's GPA map is done, meaning after the last call to virt_map.
 	 *
-	 * When EPT is disabled, the L2 guest code will still access the same L1
-	 * GPAs as the EPT enabled case.
+	 * When TDP is disabled, the L2 guest code will still access the same L1
+	 * GPAs as the TDP enabled case.
 	 */
-	if (enable_ept) {
-		prepare_eptp(vmx, vm, 0);
-		nested_map_memslot(vmx->eptp_hva, vm, 0);
-		nested_map(vmx->eptp_hva, vm, NESTED_TEST_MEM1, GUEST_TEST_MEM, 4096);
-		nested_map(vmx->eptp_hva, vm, NESTED_TEST_MEM2, GUEST_TEST_MEM, 4096);
+	if (enable_tdp) {
+		void *root_hva;
+
+		if (kvm_cpu_has(X86_FEATURE_VMX)) {
+			prepare_eptp(vmx, vm, 0);
+			root_hva = vmx->eptp_hva;
+		} else {
+			prepare_npt(svm, vm);
+			root_hva = svm->ncr3_hva;
+		}
+		nested_map_memslot(root_hva, vm, 0);
+		nested_map(root_hva, vm, NESTED_TEST_MEM1, GUEST_TEST_MEM, 4096);
+		nested_map(root_hva, vm, NESTED_TEST_MEM2, GUEST_TEST_MEM, 4096);
 	}
 
 	bmap = bitmap_zalloc(TEST_MEM_PAGES);
@@ -169,12 +211,12 @@ static void test_vmx_dirty_log(bool enable_ept)
 
 int main(int argc, char *argv[])
 {
-	TEST_REQUIRE(kvm_cpu_has(X86_FEATURE_VMX));
+	TEST_REQUIRE(kvm_cpu_has(X86_FEATURE_VMX) || kvm_cpu_has(X86_FEATURE_SVM));
 
-	test_vmx_dirty_log(/*enable_ept=*/false);
+	test_dirty_log(/*enable_tdp=*/false);
 
-	if (kvm_cpu_has_ept())
-		test_vmx_dirty_log(/*enable_ept=*/true);
+	if (kvm_cpu_has_ept() || kvm_cpu_has_npt())
+		test_dirty_log(/*enable_tdp=*/true);
 
 	return 0;
 }

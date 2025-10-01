@@ -16,6 +16,23 @@
 struct gpr64_regs guest_regs;
 u64 rflags;
 
+struct nptPageTableEntry {
+       uint64_t present:1;
+       uint64_t writable:1;
+       uint64_t user:1;
+       uint64_t pwt:1;
+       uint64_t pcd:1;
+       uint64_t accessed:1;
+       uint64_t dirty:1;
+       uint64_t page_size:1;
+       uint64_t global:1;
+       uint64_t avail1:3;
+       uint64_t address:40;
+       uint64_t avail2:11;
+       uint64_t nx:1;
+};
+static_assert(sizeof(struct nptPageTableEntry) == sizeof(uint64_t));
+
 /* Allocate memory regions for nested SVM tests.
  *
  * Input Args:
@@ -57,6 +74,54 @@ static void vmcb_set_seg(struct vmcb_seg *seg, u16 selector,
 	seg->attrib = attr;
 	seg->limit = limit;
 	seg->base = base;
+}
+
+bool nested_npt_create_pte(struct kvm_vm *vm,
+			   uint64_t *pte,
+			   uint64_t paddr,
+			   uint64_t *address,
+			   bool *leaf)
+{
+	struct nptPageTableEntry *npte = (struct nptPageTableEntry *)pte;
+
+	if (npte->present) {
+		*leaf = npte->page_size;
+		*address = npte->address;
+		return false;
+	}
+
+	npte->present = true;
+	npte->writable = true;
+	npte->page_size = *leaf;
+
+	if (*leaf)
+		npte->address = paddr >> vm->page_shift;
+	else
+		npte->address = vm_alloc_page_table(vm) >> vm->page_shift;
+
+	*address = npte->address;
+
+	/*
+	 * For now mark these as accessed and dirty because the only
+	 * testcase we have needs that.  Can be reconsidered later.
+	 */
+	npte->accessed = *leaf;
+	npte->dirty = *leaf;
+	return true;
+}
+
+bool kvm_cpu_has_npt(void)
+{
+       return kvm_cpu_has(X86_FEATURE_NPT);
+}
+
+void prepare_npt(struct svm_test_data *svm, struct kvm_vm *vm)
+{
+	TEST_ASSERT(kvm_cpu_has_npt(), "KVM doesn't support nested NPT");
+
+	svm->ncr3 = (void *)vm_vaddr_alloc_page(vm);
+	svm->ncr3_hva = addr_gva2hva(vm, (uintptr_t)svm->ncr3);
+	svm->ncr3_gpa = addr_gva2gpa(vm, (uintptr_t)svm->ncr3);
 }
 
 void generic_svm_setup(struct svm_test_data *svm, void *guest_rip, void *guest_rsp)
@@ -102,6 +167,11 @@ void generic_svm_setup(struct svm_test_data *svm, void *guest_rip, void *guest_r
 	vmcb->save.rip = (u64)guest_rip;
 	vmcb->save.rsp = (u64)guest_rsp;
 	guest_regs.rdi = (u64)svm;
+
+	if (svm->ncr3_gpa) {
+		ctrl->nested_ctl |= SVM_NESTED_CTL_NP_ENABLE;
+		ctrl->nested_cr3 = svm->ncr3_gpa;
+	}
 }
 
 /*
