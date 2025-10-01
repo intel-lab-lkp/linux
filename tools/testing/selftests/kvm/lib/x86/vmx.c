@@ -380,15 +380,15 @@ static void nested_create_pte(struct kvm_vm *vm,
 			pte->address = vm_alloc_page_table(vm) >> vm->page_shift;
 	} else {
 		/*
-		 * Entry already present.  Assert that the caller doesn't want
-		 * a hugepage at this level, and that there isn't a hugepage at
-		 * this level.
+		 * Entry already present.  Assert that the caller doesn't want a
+		 * leaf entry at this level, and that there isn't a leaf entry
+		 * at this level.
 		 */
 		TEST_ASSERT(current_level != target_level,
-			    "Cannot create hugepage at level: %u, nested_paddr: 0x%lx",
+			    "Cannot create leaf entry at level: %u, nested_paddr: 0x%lx",
 			    current_level, nested_paddr);
 		TEST_ASSERT(!pte->page_size,
-			    "Cannot create page table at level: %u, nested_paddr: 0x%lx",
+			    "Leaf entry already exists at level: %u, nested_paddr: 0x%lx",
 			    current_level, nested_paddr);
 	}
 }
