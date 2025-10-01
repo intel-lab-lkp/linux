@@ -33,6 +33,7 @@ struct eptPageTableEntry {
 	uint64_t ignored_62_52:11;
 	uint64_t suppress_ve:1;
 };
+kvm_static_assert(sizeof(struct eptPageTableEntry) == sizeof(uint64_t));
 
 struct eptPageTablePointer {
 	uint64_t memory_type:3;
@@ -42,6 +43,8 @@ struct eptPageTablePointer {
 	uint64_t address:40;
 	uint64_t reserved_63_52:12;
 };
+kvm_static_assert(sizeof(struct eptPageTablePointer) == sizeof(uint64_t));
+
 int vcpu_enable_evmcs(struct kvm_vcpu *vcpu)
 {
 	uint16_t evmcs_ver;
@@ -362,35 +365,46 @@ void prepare_vmcs(struct vmx_pages *vmx, void *guest_rip, void *guest_rsp)
 	init_vmcs_guest_state(guest_rip, guest_rsp);
 }
 
-static void nested_create_pte(struct kvm_vm *vm,
-			      struct eptPageTableEntry *pte,
-			      uint64_t nested_paddr,
-			      uint64_t paddr,
-			      int current_level,
-			      int target_level)
+static uint64_t nested_create_pte(struct kvm_vm *vm,
+				  uint64_t *pte,
+				  uint64_t nested_paddr,
+				  uint64_t paddr,
+				  int level,
+				  bool leaf)
 {
-	if (!pte->readable) {
-		pte->writable = true;
-		pte->readable = true;
-		pte->executable = true;
-		pte->page_size = (current_level == target_level);
-		if (pte->page_size)
-			pte->address = paddr >> vm->page_shift;
+	struct eptPageTableEntry *epte = (struct eptPageTableEntry *)pte;
+
+	if (!epte->readable) {
+		epte->writable = true;
+		epte->readable = true;
+		epte->executable = true;
+		epte->page_size = leaf;
+
+		if (leaf)
+			epte->address = paddr >> vm->page_shift;
 		else
-			pte->address = vm_alloc_page_table(vm) >> vm->page_shift;
+			epte->address = vm_alloc_page_table(vm) >> vm->page_shift;
+
+		/*
+		 * For now mark these as accessed and dirty because the only
+		 * testcase we have needs that.  Can be reconsidered later.
+		 */
+		epte->accessed = leaf;
+		epte->dirty = leaf;
 	} else {
 		/*
 		 * Entry already present.  Assert that the caller doesn't want a
 		 * leaf entry at this level, and that there isn't a leaf entry
 		 * at this level.
 		 */
-		TEST_ASSERT(current_level != target_level,
+		TEST_ASSERT(!leaf,
 			    "Cannot create leaf entry at level: %u, nested_paddr: 0x%lx",
-			    current_level, nested_paddr);
-		TEST_ASSERT(!pte->page_size,
+			    level, nested_paddr);
+		TEST_ASSERT(!epte->page_size,
 			    "Leaf entry already exists at level: %u, nested_paddr: 0x%lx",
-			    current_level, nested_paddr);
+			    level, nested_paddr);
 	}
+	return epte->address;
 }
 
 
@@ -398,8 +412,9 @@ void __nested_pg_map(void *root_hva, struct kvm_vm *vm,
 		     uint64_t nested_paddr, uint64_t paddr, int target_level)
 {
 	const uint64_t page_size = PG_LEVEL_SIZE(target_level);
-	struct eptPageTableEntry *pt = root_hva, *pte;
-	uint16_t index;
+	uint64_t *pt = root_hva, *pte;
+	uint16_t index, address;
+	bool leaf;
 
 	TEST_ASSERT(vm->mode == VM_MODE_PXXV48_4K, "Attempt to use "
 		    "unknown or unsupported guest mode, mode: 0x%x", vm->mode);
@@ -427,21 +442,15 @@ void __nested_pg_map(void *root_hva, struct kvm_vm *vm,
 	for (int level = PG_LEVEL_512G; level >= PG_LEVEL_4K; level--) {
 		index = (nested_paddr >> PG_LEVEL_SHIFT(level)) & 0x1ffu;
 		pte = &pt[index];
+		leaf = (level == target_level);
 
-		nested_create_pte(vm, pte, nested_paddr, paddr, level, target_level);
+		address = nested_create_pte(vm, pte, nested_paddr, paddr, level, leaf);
 
-		if (pte->page_size)
+		if (leaf)
 			break;
 
-		pt = addr_gpa2hva(vm, pte->address * vm->page_size);
+		pt = addr_gpa2hva(vm, address * vm->page_size);
 	}
-
-	/*
-	 * For now mark these as accessed and dirty because the only
-	 * testcase we have needs that.  Can be reconsidered later.
-	 */
-	pte->accessed = true;
-	pte->dirty = true;
 
 }
 
