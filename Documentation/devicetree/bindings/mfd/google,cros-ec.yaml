@@ -99,7 +99,9 @@ properties:
   gpio-controller: true
 
   typec:
-    $ref: /schemas/chrome/google,cros-ec-typec.yaml#
+    oneOf:
+      - $ref: /schemas/chrome/google,cros-ec-typec.yaml#
+      - $ref: /schemas/chrome/google,cros-ec-ucsi.yaml#
 
   ec-pwm:
     $ref: /schemas/pwm/google,cros-ec-pwm.yaml#
