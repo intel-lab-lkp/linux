@@ -32,6 +32,8 @@
 #include <stdlib.h>
 #include <string.h>
 
+#include "../kselftest.h"
+
 #if __GLIBC_PREREQ(2, 30) == 0
 #include <sys/syscall.h>
 static pid_t gettid(void)
@@ -107,6 +109,22 @@ static void handle_usage(int rc, char *msg)
 	puts(msg);
 	putchar('\n');
 	exit(rc);
+}
+
+int check_smt(void)
+{
+	int c = 0;
+	FILE *file;
+
+	file = fopen("/sys/devices/system/cpu/smt/active", "r");
+	if (!file)
+		return 0;
+	c = fgetc(file) - 0x30;
+	fclose(file);
+	if (c == 0 || c == 1)
+		return c;
+	//if fgetc returns EOF or -1 for correupted files, return 0.
+	return 0;
 }
 
 static unsigned long get_cs_cookie(int pid)
@@ -271,7 +289,10 @@ int main(int argc, char *argv[])
 		delay = -1;
 
 	srand(time(NULL));
-
+	if (!check_smt()) {
+		ksft_test_result_skip("smt not enabled\n");
+		return 1;
+	}
 	/* put into separate process group */
 	if (setpgid(0, 0) != 0)
 		handle_error("process group");
