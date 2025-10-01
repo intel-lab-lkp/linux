@@ -572,4 +572,18 @@ struct drm_display_mode *
 drm_mode_create_from_cmdline_mode(struct drm_device *dev,
 				  struct drm_cmdline_mode *cmd);
 
+/**
+ * drm_mode_num_active_pixels - Computes the number of pixels in the
+ * drm display mode
+ *
+ * @mode - The target drm_display_mode
+ *
+ * Returns the product of hdisplay and vdisplay
+ */
+static inline u32
+drm_mode_num_active_pixels(const struct drm_display_mode *mode)
+{
+	return mode->hdisplay * mode->vdisplay;
+}
+
 #endif /* __DRM_MODES_H__ */
