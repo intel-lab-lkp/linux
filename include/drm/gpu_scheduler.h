@@ -762,4 +762,56 @@ static inline void
 	list_for_each_entry(__job, &(__sched)->pending_list, list)		\
 	for_each_if(!__entitiy || (__job)->entity == (__entitiy))
 
+/**
+ * drm_sched_first_pending_job() - DRM scheduler first pending job
+ * @sched: DRM scheduler
+ *
+ * Find DRM scheduler first pending job, drivers should only call this function
+ * when scheduler is stopped or job can immediately disappear resulting in a
+ * UAF.
+ *
+ * Return: First pending job or NULL
+ */
+static inline struct drm_sched_job *
+drm_sched_first_pending_job(struct drm_gpu_scheduler *sched)
+{
+	WARN_ON(!READ_ONCE(sched->pause_submit));
+	guard(spinlock)(&sched->job_list_lock);
+	return list_first_entry_or_null(&sched->pending_list,
+					struct drm_sched_job, list);
+}
+
+/**
+ * drm_sched_pending_job_count() - DRM scheduler pending job count
+ * @sched: DRM scheduler
+ *
+ * Determine DRM scheduler pending job count. If scheduler if not stopped, this
+ * value can immediately change, thus drivers must guard against using to count
+ * to anything memory unsafe. Use with caution.
+ *
+ * Return: Number of pending jobs
+ */
+static inline int drm_sched_pending_job_count(struct drm_gpu_scheduler *sched)
+{
+	guard(spinlock)(&sched->job_list_lock);
+	return list_count_nodes(&sched->pending_list);
+}
+
+/**
+ * drm_sched_job_is_signaled() - DRM scheduler job is signaled
+ * @job: DRM scheduler job
+ *
+ * Determine if DRM scheduler job is signaled. DRM scheduler should be stopped
+ * to obtain a stable snapshot of state.
+ *
+ * Return: True if job is signaled, False otherwise
+ */
+static inline bool drm_sched_job_is_signaled(struct drm_sched_job *job)
+{
+	struct drm_sched_fence *s_fence = job->s_fence;
+
+	WARN_ON(!READ_ONCE(job->sched->pause_submit));
+	return s_fence->parent && dma_fence_is_signaled(s_fence->parent);
+}
+
 #endif
