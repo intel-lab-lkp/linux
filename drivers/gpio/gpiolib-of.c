@@ -18,6 +18,7 @@
 #include <linux/pinctrl/pinctrl.h>
 #include <linux/slab.h>
 #include <linux/string.h>
+#include <linux/acpi.h>
 
 #include <linux/gpio/consumer.h>
 #include <linux/gpio/machine.h>
@@ -118,6 +119,107 @@ int of_gpio_count(const struct fwnode_handle *fwnode, const char *con_id)
 	return ret ? ret : -ENOENT;
 }
 
+/**
+ * of_gpio_twocell_xlate - translate twocell gpiospec to the GPIO number and flags
+ * @gc:		pointer to the gpio_chip structure
+ * @gpiospec:	GPIO specifier as found in the device tree
+ * @flags:	a flags pointer to fill in
+ *
+ * This is simple translation function, suitable for the most 1:1 mapped
+ * GPIO chips. This function performs only one sanity check: whether GPIO
+ * is less than ngpios (that is specified in the gpio_chip).
+ *
+ * Returns:
+ * GPIO number (>= 0) on success, negative errno on failure.
+ */
+static int of_gpio_twocell_xlate(struct gpio_chip *gc,
+				 const struct of_phandle_args *gpiospec,
+				 u32 *flags)
+{
+	/*
+	 * We're discouraging gpio_cells < 2, since that way you'll have to
+	 * write your own xlate function (that will have to retrieve the GPIO
+	 * number and the flags from a single gpio cell -- this is possible,
+	 * but not recommended).
+	 */
+	if (gc->of_gpio_n_cells != 2) {
+		WARN_ON(1);
+		return -EINVAL;
+	}
+
+	if (WARN_ON(gpiospec->args_count < gc->of_gpio_n_cells))
+		return -EINVAL;
+
+	if (gpiospec->args[0] >= gc->ngpio)
+		return -EINVAL;
+
+	if (flags)
+		*flags = gpiospec->args[1];
+
+	return gpiospec->args[0];
+}
+
+/**
+ * of_gpio_threecell_xlate - translate threecell gpiospec to the GPIO number and flags
+ * @gc:		pointer to the gpio_chip structure
+ * @gpiospec:	GPIO specifier as found in the device tree
+ * @flags:	a flags pointer to fill in
+ *
+ * This is simple translation function, suitable for the most 1:n mapped
+ * GPIO chips, i.e. several GPIO chip instances from one device tree node.
+ * In this case the following binding is implied:
+ *
+ * foo-gpios = <&gpio instance offset flags>;
+ *
+ * Returns:
+ * GPIO number (>= 0) on success, negative errno on failure.
+ */
+static int of_gpio_threecell_xlate(struct gpio_chip *gc,
+				   const struct of_phandle_args *gpiospec,
+				   u32 *flags)
+{
+	if (gc->of_gpio_n_cells != 3) {
+		WARN_ON(1);
+		return -EINVAL;
+	}
+
+	if (WARN_ON(gpiospec->args_count != 3))
+		return -EINVAL;
+
+	/*
+	 * Check chip instance number, the driver responds with true if
+	 * this is the chip we are looking for.
+	 */
+	if (!gc->of_node_instance_match(gc, gpiospec->args[0]))
+		return -EINVAL;
+
+	if (gpiospec->args[1] >= gc->ngpio)
+		return -EINVAL;
+
+	if (flags)
+		*flags = gpiospec->args[2];
+
+	return gpiospec->args[1];
+}
+
+static int of_gpiochip_init(struct gpio_chip *chip)
+{
+	if (!chip->of_xlate) {
+		if (chip->of_gpio_n_cells == 3) {
+			if (!chip->of_node_instance_match)
+				return -EINVAL;
+			chip->of_xlate = of_gpio_threecell_xlate;
+		} else {
+			chip->of_gpio_n_cells = 2;
+			chip->of_xlate = of_gpio_twocell_xlate;
+		}
+	}
+
+	if (chip->of_gpio_n_cells > MAX_PHANDLE_ARGS)
+		return -EINVAL;
+	return 0;
+}
+
 static int of_gpiochip_match_node_and_xlate(struct gpio_chip *chip,
 					    const void *data)
 {
@@ -133,6 +235,40 @@ of_find_gpio_device_by_xlate(const struct of_phandle_args *gpiospec)
 {
 	return gpio_device_find(gpiospec, of_gpiochip_match_node_and_xlate);
 }
+
+#ifdef CONFIG_ACPI
+static int of_gpiochip_match_acpi_path(struct gpio_chip *chip,
+				       const void *data)
+{
+	const char *acpi_path = data;
+	const char *chip_acpi_path;
+	acpi_handle handle;
+	int ret;
+
+	handle = ACPI_HANDLE(chip->parent);
+	if (!handle)
+		return 0;
+	chip_acpi_path = acpi_handle_path(handle);
+	if (!chip_acpi_path)
+		return 0;
+
+	ret = !strcmp(acpi_path, chip_acpi_path);
+
+	if (ret)
+		ret = !of_gpiochip_init(chip);
+
+	return ret;
+}
+
+static struct gpio_device *of_find_gpio_device_by_acpi(const struct of_phandle_args *gpiospec)
+{
+	const char *acpi_path = NULL;
+
+	if (of_property_read_string(gpiospec->np, "acpi-path", &acpi_path))
+		return NULL;
+	return gpio_device_find(acpi_path, of_gpiochip_match_acpi_path);
+}
+#endif
 
 static struct gpio_desc *of_xlate_and_get_gpiod_flags(struct gpio_chip *chip,
 					struct of_phandle_args *gpiospec,
@@ -423,6 +559,12 @@ static struct gpio_desc *of_get_named_gpiod_flags(const struct device_node *np,
 
 	struct gpio_device *gdev __free(gpio_device_put) =
 				of_find_gpio_device_by_xlate(&gpiospec);
+	#ifdef CONFIG_ACPI
+	if (!gdev) {
+		gdev = of_find_gpio_device_by_acpi(&gpiospec);
+	}
+	#endif
+
 	if (!gdev) {
 		desc = ERR_PTR(-EPROBE_DEFER);
 		goto out;
@@ -948,89 +1090,6 @@ struct notifier_block gpio_of_notifier = {
 };
 #endif /* CONFIG_OF_DYNAMIC */
 
-/**
- * of_gpio_twocell_xlate - translate twocell gpiospec to the GPIO number and flags
- * @gc:		pointer to the gpio_chip structure
- * @gpiospec:	GPIO specifier as found in the device tree
- * @flags:	a flags pointer to fill in
- *
- * This is simple translation function, suitable for the most 1:1 mapped
- * GPIO chips. This function performs only one sanity check: whether GPIO
- * is less than ngpios (that is specified in the gpio_chip).
- *
- * Returns:
- * GPIO number (>= 0) on success, negative errno on failure.
- */
-static int of_gpio_twocell_xlate(struct gpio_chip *gc,
-				 const struct of_phandle_args *gpiospec,
-				 u32 *flags)
-{
-	/*
-	 * We're discouraging gpio_cells < 2, since that way you'll have to
-	 * write your own xlate function (that will have to retrieve the GPIO
-	 * number and the flags from a single gpio cell -- this is possible,
-	 * but not recommended).
-	 */
-	if (gc->of_gpio_n_cells != 2) {
-		WARN_ON(1);
-		return -EINVAL;
-	}
-
-	if (WARN_ON(gpiospec->args_count < gc->of_gpio_n_cells))
-		return -EINVAL;
-
-	if (gpiospec->args[0] >= gc->ngpio)
-		return -EINVAL;
-
-	if (flags)
-		*flags = gpiospec->args[1];
-
-	return gpiospec->args[0];
-}
-
-/**
- * of_gpio_threecell_xlate - translate threecell gpiospec to the GPIO number and flags
- * @gc:		pointer to the gpio_chip structure
- * @gpiospec:	GPIO specifier as found in the device tree
- * @flags:	a flags pointer to fill in
- *
- * This is simple translation function, suitable for the most 1:n mapped
- * GPIO chips, i.e. several GPIO chip instances from one device tree node.
- * In this case the following binding is implied:
- *
- * foo-gpios = <&gpio instance offset flags>;
- *
- * Returns:
- * GPIO number (>= 0) on success, negative errno on failure.
- */
-static int of_gpio_threecell_xlate(struct gpio_chip *gc,
-				   const struct of_phandle_args *gpiospec,
-				   u32 *flags)
-{
-	if (gc->of_gpio_n_cells != 3) {
-		WARN_ON(1);
-		return -EINVAL;
-	}
-
-	if (WARN_ON(gpiospec->args_count != 3))
-		return -EINVAL;
-
-	/*
-	 * Check chip instance number, the driver responds with true if
-	 * this is the chip we are looking for.
-	 */
-	if (!gc->of_node_instance_match(gc, gpiospec->args[0]))
-		return -EINVAL;
-
-	if (gpiospec->args[1] >= gc->ngpio)
-		return -EINVAL;
-
-	if (flags)
-		*flags = gpiospec->args[2];
-
-	return gpiospec->args[1];
-}
-
 #if IS_ENABLED(CONFIG_OF_GPIO_MM_GPIOCHIP)
 #include <linux/gpio/legacy-of-mm-gpiochip.h>
 /**
@@ -1256,19 +1315,9 @@ int of_gpiochip_add(struct gpio_chip *chip)
 	if (!np)
 		return 0;
 
-	if (!chip->of_xlate) {
-		if (chip->of_gpio_n_cells == 3) {
-			if (!chip->of_node_instance_match)
-				return -EINVAL;
-			chip->of_xlate = of_gpio_threecell_xlate;
-		} else {
-			chip->of_gpio_n_cells = 2;
-			chip->of_xlate = of_gpio_twocell_xlate;
-		}
-	}
-
-	if (chip->of_gpio_n_cells > MAX_PHANDLE_ARGS)
-		return -EINVAL;
+	ret = of_gpiochip_init(chip);
+	if (ret)
+		return ret;
 
 	ret = of_gpiochip_add_pin_range(chip);
 	if (ret)
