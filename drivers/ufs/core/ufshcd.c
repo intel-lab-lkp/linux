@@ -6593,7 +6593,7 @@ static inline void ufshcd_recover_pm_error(struct ufs_hba *hba)
 static bool ufshcd_is_pwr_mode_restore_needed(struct ufs_hba *hba)
 {
 	struct ufs_pa_layer_attr *pwr_info = &hba->pwr_info;
-	u32 mode;
+	u32 mode = 0;
 
 	ufshcd_dme_get(hba, UIC_ARG_MIB(PA_PWRMODE), &mode);
 
