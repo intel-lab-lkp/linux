@@ -717,16 +717,14 @@ static int scsi_probe_lun(struct scsi_device *sdev, unsigned char *inq_result,
 				"scsi scan: INQUIRY %s with code 0x%x\n",
 				result ? "failed" : "successful", result));
 
-		if (result == 0) {
-			/*
-			 * if nothing was transferred, we try
-			 * again. It's a workaround for some USB
-			 * devices.
-			 */
-			if (resid == try_inquiry_len)
-				continue;
-		}
-		break;
+		if (result || resid != try_inquiry_len)
+			break;
+
+		/*
+		 * If the status was good but nothing was transferred,
+		 * we retry. It is a workaround for some buggy devices
+		 * or SAT which sometimes do not return any data.
+		 */
 	}
 
 	if (result == 0) {
