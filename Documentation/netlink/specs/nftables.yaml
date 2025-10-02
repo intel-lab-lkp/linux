@@ -66,9 +66,22 @@ definitions:
     name: bitwise-ops
     type: enum
     entries:
-      - bool
+      -
+        name: mask-xor # aka bool (old name)
+        doc: |
+          mask-and-xor operation used to implement NOT, AND, OR and XOR boolean operations
+            dreg = (sreg & mask) ^ xor
+          with these mask and xor values:
+                    mask    xor
+            NOT:    1       1
+            OR:     ~x      x
+            XOR:    1       x
+            AND:    x       0
       - lshift
       - rshift
+      - and
+      - or
+      - xor
   -
     name: cmp-ops
     type: enum
@@ -225,14 +238,216 @@ definitions:
       - icmp-unreach
       - tcp-rst
       - icmpx-unreach
+  -
+    # Defined in include/linux/netfilter/nf_tables.h
+    name: payload-base
+    type: enum
+    entries:
+      - link-layer-header
+      - network-header
+      - transport-header
+      - inner-header
+      - tun-header
+  -
+    # Defined in include/linux/netfilter/nf_tables.h
+    name: range-ops
+    doc: Range operator
+    type: enum
+    entries:
+      - eq
+      - neq
+  -
+    # Defined in include/linux/netfilter/nf_tables.h
+    name: registers
+    doc: |
+      nf_tables registers.
+      nf_tables used to have five registers: a verdict register and four data
+      registers of size 16. The data registers have been changed to 16 registers
+      of size 4. For compatibility reasons, the NFT_REG_[1-4] registers still
+      map to areas of size 16, the 4 byte registers are addressed using
+      NFT_REG32_00 - NFT_REG32_15.
+    type: enum
+    entries:
+      - reg_verdict
+      - reg_1
+      - reg_2
+      - reg_3
+      - reg_4
+      -
+        name: reg32_00
+        value: 8
+      - reg32_01
+      - reg32_02
+      - reg32_03
+      - reg32_04
+      - reg32_05
+      - reg32_06
+      - reg32_07
+      - reg32_08
+      - reg32_09
+      - reg32_10
+      - reg32_11
+      - reg32_12
+      - reg32_13
+      - reg32_14
+      - reg32_15
+  -
+    # Defined in include/linux/netfilter/nf_tables.h
+    name: numgen-types
+    type: enum
+    entries:
+      - incremental
+      - random
+  -
+    name: log-level
+    doc: nf_tables log levels
+    type: enum
+    entries:
+      -
+        name: emerg
+        doc: system is unusable
+      -
+        name: alert
+        doc: action must be taken immediately
+      -
+        name: crit
+        doc: critical conditions
+      -
+        name: err
+        doc: error conditions
+      -
+        name: warning
+        doc: warning conditions
+      -
+        name: notice
+        doc: normal but significant condition
+      -
+        name: info
+        doc: informational
+      -
+        name: debug
+        doc: debug-level messages
+      -
+        name: audit
+        doc: enabling audit logging
+  -
+    # Defined in include/uapi/linux/netfilter/nf_log.h
+    name: log-flags
+    doc: nf_tables log flags
+    type: flags
+    entries:
+      - 
+        name: tcpseq
+        doc: Log TCP sequence numbers
+      -
+        name: tcpopt
+        doc: Log TCP options
+      -
+        name: ipopt
+        doc: Log IP options
+      -
+        name: uid
+        doc: Log UID owning local socket
+      -
+        name: nflog
+        doc: Unsupported, don't reuse
+      -
+        name: macdecode
+        doc: Decode MAC header
 
 attribute-sets:
   -
-    name: empty-attrs
+    # Defined in include/linux/netfilter/nf_tables.h
+    name: log-attrs
+    doc: log expression netlink attributes
+    attributes:
+      # Mentioned in nft_log_init()
+      -
+        name: group
+        doc: netlink group to send messages to
+        type: u16
+        byte-order: big-endian
+      -
+        name: prefix
+        doc: prefix to prepend to log messages
+        type: string
+      -
+        name: snaplen
+        doc: length of payload to include in netlink message
+        type: u32
+        byte-order: big-endian
+      -
+        name: qthreshold
+        doc: queue threshold
+        type: u16
+        byte-order: big-endian
+      -
+        name: level
+        doc: log level
+        type: u32
+        enum: log-level
+        byte-order: big-endian
+      -
+        name: flags
+        doc: logging flags
+        type: u32
+        enum: log-flags
+        byte-order: big-endian
+
+  -
+    # Defined in include/linux/netfilter/nf_tables.h
+    name: numgen-attrs
+    doc: nf_tables number generator expression netlink attributes
     attributes:
       -
-        name: name
-        type: string
+        name: dreg
+        doc: destination register
+        type: u32
+        enum: registers
+      -
+        name: modulus
+        doc: maximum counter value
+        type: u32
+        byte-order: big-endian
+      -
+        name: type
+        doc: operation type
+        type: u32
+        byte-order: big-endian
+        enum: numgen-types
+      -
+        name: offset
+        doc: offset to be added to the counter
+        type: u32
+        byte-order: big-endian
+  -
+    # Defined in net/netfilter/nft_range.c
+    name: range-attrs
+    attributes:
+      -
+        name: sreg
+        doc: source register of data to compare
+        type: u32
+        byte-order: big-endian
+        enum: registers
+      -
+        name: op
+        doc: cmp operation
+        type: u32
+        byte-order: big-endian
+        enum: range-ops
+        checks:
+          max: 256
+      -
+        name: from-data
+        doc: data range from
+        type: nest
+        nested-attributes: data-attrs
+      -
+        name: to-data
+        doc: data range to
+        type: nest
+        nested-attributes: data-attrs
   -
     name: batch-attrs
     attributes:
@@ -371,9 +586,11 @@ attribute-sets:
       -
         name: bytes
         type: u64
+        byte-order: big-endian
       -
         name: packets
         type: u64
+        byte-order: big-endian
   -
     name: rule-attrs
     attributes:
@@ -443,15 +660,18 @@ attribute-sets:
         selector: name
         doc: type specific data
   -
+    # Mentioned in nft_parse_compat() in net/netfilter/nft_compat.c
     name: rule-compat-attrs
     attributes:
       -
         name: proto
-        type: binary
+        type: u32
+        byte-order: big-endian
         doc: numeric value of the handled protocol
       -
         name: flags
-        type: binary
+        type: u32
+        byte-order: big-endian
         doc: bitmask of flags
   -
     name: set-attrs
@@ -814,6 +1034,7 @@ attribute-sets:
         type: nest
         nested-attributes: data-attrs
   -
+    # Defined as nft_data_attributes in include/linux/netfilter/nf_tables.h
     name: data-attrs
     attributes:
       -
@@ -829,25 +1050,31 @@ attribute-sets:
     attributes:
       -
         name: code
+        doc: nf_tables verdict
         type: u32
         byte-order: big-endian
         enum: verdict-code
       -
         name: chain
+        doc: jump target chain name
         type: string
       -
         name: chain-id
+        doc: jump target chain ID
         type: u32
+        byte-order: big-endian # Accessed in nft_chain_lookup_byid
   -
     name: expr-counter-attrs
     attributes:
       -
         name: bytes
         type: u64
+        byte-order: big-endian
         doc: Number of bytes
       -
         name: packets
         type: u64
+        byte-order: big-endian
         doc: Number of packets
       -
         name: pad
@@ -982,38 +1209,51 @@ attribute-sets:
         enum: nat-range-flags
         enum-as-flags: true
   -
+    # Defined as nft_payload_attributes in include/linux/netfilter/nf_tables.h
     name: expr-payload-attrs
+    doc: nf_tables payload expression netlink attributes
     attributes:
       -
         name: dreg
+        doc: destination register to load data into
         type: u32
         byte-order: big-endian
+        enum: registers
       -
         name: base
+        doc: payload base
         type: u32
+        enum: payload-base
         byte-order: big-endian
       -
         name: offset
+        doc: payload offset relative to base
         type: u32
         byte-order: big-endian
       -
         name: len
+        doc: payload length
         type: u32
         byte-order: big-endian
       -
         name: sreg
+        doc: source register to load data from
         type: u32
         byte-order: big-endian
+        enum: registers
       -
         name: csum-type
+        doc: checksum type
         type: u32
         byte-order: big-endian
       -
         name: csum-offset
+        doc: checksum offset relative to base
         type: u32
         byte-order: big-endian
       -
         name: csum-flags
+        doc: checksum flags
         type: u32
         byte-order: big-endian
   -
@@ -1079,6 +1319,61 @@ attribute-sets:
         type: u32
         byte-order: big-endian
         doc: id of object map
+  -
+    # Defined as nft_target_attributes in include/uapi/linux/netfilter/nf_tables_compat.h
+    name: compat-target-attrs
+    attributes:
+      -
+        name: name
+        type: string
+        checks:
+          max-len: 32
+      -
+        name: rev
+        type: u32
+        byte-order: big-endian
+        checks:
+          max: 255
+      -
+        name: info
+        type: binary
+  -
+    # Defined as nft_match_attributes in include/uapi/linux/netfilter/nf_tables_compat.h
+    name: compat-match-attrs
+    attributes:
+      -
+        name: name
+        type: string
+        checks:
+          max-len: 32
+      -
+        name: rev
+        type: u32
+        byte-order: big-endian
+        checks:
+          max: 255
+      -
+        name: info
+        type: binary
+  -
+    # Defined in include/uapi/linux/netfilter/nf_tables_compat.h
+    name: compat-attrs
+    attributes:
+      -
+        name: name
+        type: string
+        checks:
+          max-len: 32
+      -
+        name: rev
+        type: u32
+        byte-order: big-endian
+        checks:
+          max: 255
+      -
+        name: type
+        type: u32
+        byte-order: big-endian
 
 sub-messages:
   -
@@ -1132,6 +1427,19 @@ sub-messages:
       -
         value: tproxy
         attribute-set: expr-tproxy-attrs
+      -
+        value: match
+        attribute-set: compat-match-attrs
+      -
+        value: range
+        attribute-set: range-attrs
+      -
+        value: numgen
+        attribute-set: numgen-attrs
+      -
+        value: log
+        attribute-set: log-attrs
+      # There're more to go: grep -A10 nft_expr_type and look for .name\s*=\s*"..."
   -
     name: obj-data
     formats:
@@ -1145,6 +1453,26 @@ sub-messages:
 operations:
   enum-model: directional
   list:
+    -
+      # Defined as nfnl_compat_subsys in net/netfilter/nft_compat.c
+      name: getcompat
+      attribute-set: compat-attrs
+      fixed-header: nfgenmsg
+      do:
+        request:
+          value: 0xb00
+          attributes:
+            - name
+            - rev
+            - type
+        reply:
+          value: 0xb00
+          attributes:
+            - name
+            - rev
+            - type
+      dump:
+        reply:
     -
       name: batch-begin
       doc: Start a batch of operations
@@ -1188,11 +1516,18 @@ operations:
         request:
           value: 0xa01
           attributes:
-            - name
+            # TODO:
         reply:
           value: 0xa00
           attributes:
+            # TODO:
+      dump:
+        reply:
+          attributes:
             - name
+            - use
+            - handle
+            - flags
     -
       name: deltable
       doc: Delete an existing table.
@@ -1239,6 +1574,18 @@ operations:
           value: 0xa03
           attributes:
             - name
+      dump:
+        reply:
+          attributes:
+            - table
+            - name
+            - handle
+            - hook
+            - policy
+            - type
+            - counters
+            - id
+            - use
     -
       name: delchain
       doc: Delete an existing chain.
@@ -1270,7 +1617,11 @@ operations:
         request:
           value: 0xa06
           attributes:
-            - name
+            - table
+            - chain
+            - expressions
+            - compat
+        reply:
     -
       name: getrule
       doc: Get / dump rules.
@@ -1280,11 +1631,23 @@ operations:
         request:
           value: 0xa07
           attributes:
-            - name
+            # TODO:
         reply:
           value: 0xa06
           attributes:
-            - name
+            # TODO:
+      dump:
+        request:
+          attributes:
+            - table
+            - chain
+        reply:
+          attributes:
+            - table
+            - chain
+            - handle
+            - position
+            - expressions
     -
       name: getrule-reset
       doc: Get / dump rules and reset stateful expressions.
@@ -1294,11 +1657,13 @@ operations:
         request:
           value: 0xa19
           attributes:
-            - name
+            # TODO:
         reply:
           value: 0xa06
           attributes:
-            - name
+            # TODO:
+      dump:
+        reply:
     -
       name: delrule
       doc: Delete an existing rule.
@@ -1308,7 +1673,7 @@ operations:
         request:
           value: 0xa08
           attributes:
-            - name
+            # TODO:
     -
       name: destroyrule
       doc: |
@@ -1319,7 +1684,7 @@ operations:
         request:
           value: 0xa1c
           attributes:
-            - name
+            # TODO:
     -
       name: newset
       doc: Create a new set.
@@ -1329,7 +1694,7 @@ operations:
         request:
           value: 0xa09
           attributes:
-            - name
+            # TODO:
     -
       name: getset
       doc: Get / dump sets.
@@ -1339,11 +1704,17 @@ operations:
         request:
           value: 0xa0a
           attributes:
-            - name
+            # TODO:
         reply:
           value: 0xa09
           attributes:
-            - name
+            # TODO:
+      dump:
+        request:
+          attributes:
+            - table
+        reply:
+          # TODO:
     -
       name: delset
       doc: Delete an existing set.
@@ -1374,7 +1745,7 @@ operations:
         request:
           value: 0xa0c
           attributes:
-            - name
+            # TODO:
     -
       name: getsetelem
       doc: Get / dump set elements.
@@ -1384,11 +1755,13 @@ operations:
         request:
           value: 0xa0d
           attributes:
-            - name
+            # TODO:
         reply:
           value: 0xa0c
           attributes:
-            - name
+            # TODO:
+      dump:
+        reply:
     -
       name: getsetelem-reset
       doc: Get / dump set elements and reset stateful expressions.
@@ -1398,11 +1771,13 @@ operations:
         request:
           value: 0xa21
           attributes:
-            - name
+            # TODO:
         reply:
           value: 0xa0c
           attributes:
-            - name
+            # TODO:
+      dump:
+        reply:
     -
       name: delsetelem
       doc: Delete an existing set element.
@@ -1412,7 +1787,7 @@ operations:
         request:
           value: 0xa0e
           attributes:
-            - name
+            # TODO:
     -
       name: destroysetelem
       doc: Delete an existing set element with destroy semantics.
@@ -1422,7 +1797,7 @@ operations:
         request:
           value: 0xa1e
           attributes:
-            - name
+            # TODO:
     -
       name: getgen
       doc: Get / dump rule-set generation.
@@ -1432,11 +1807,15 @@ operations:
         request:
           value: 0xa10
           attributes:
-            - name
+            # TODO:
         reply:
           value: 0xa0f
           attributes:
-            - name
+            - id
+            - proc-pid
+            - proc-name
+      dump:
+        reply:
     -
       name: newobj
       doc: Create a new stateful object.
@@ -1461,6 +1840,8 @@ operations:
           value: 0xa12
           attributes:
             - name
+      dump:
+        reply:
     -
       name: delobj
       doc: Delete an existing stateful object.
@@ -1505,6 +1886,8 @@ operations:
           value: 0xa16
           attributes:
             - name
+      dump:
+        reply:
     -
       name: delflowtable
       doc: Delete an existing flow table.
