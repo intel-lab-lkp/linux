@@ -59,8 +59,16 @@ static unsigned bch2_dirent_name_bytes(struct bkey_s_c_dirent d)
 
 struct qstr bch2_dirent_get_name(struct bkey_s_c_dirent d)
 {
+	unsigned int name_len, max_len;
+
 	if (d.v->d_casefold) {
-		unsigned name_len = le16_to_cpu(d.v->d_cf_name_block.d_name_len);
+		name_len = le16_to_cpu(d.v->d_cf_name_block.d_name_len);
+		max_len = bkey_val_bytes(d.k) -
+			offsetof(struct bch_dirent, d_cf_name_block.d_names);
+
+		if (name_len > max_len)
+			return (struct qstr) QSTR_INIT(NULL, 0);
+
 		return (struct qstr) QSTR_INIT(&d.v->d_cf_name_block.d_names[0], name_len);
 	} else {
 		return (struct qstr) QSTR_INIT(d.v->d_name, bch2_dirent_name_bytes(d));
@@ -69,13 +77,19 @@ struct qstr bch2_dirent_get_name(struct bkey_s_c_dirent d)
 
 static struct qstr bch2_dirent_get_casefold_name(struct bkey_s_c_dirent d)
 {
-	if (d.v->d_casefold) {
-		unsigned name_len = le16_to_cpu(d.v->d_cf_name_block.d_name_len);
-		unsigned cf_name_len = le16_to_cpu(d.v->d_cf_name_block.d_cf_name_len);
-		return (struct qstr) QSTR_INIT(&d.v->d_cf_name_block.d_names[name_len], cf_name_len);
-	} else {
+	unsigned int name_len, cf_name_len, max_len;
+
+	if (!d.v->d_casefold)
 		return (struct qstr) QSTR_INIT(NULL, 0);
-	}
+
+	name_len = le16_to_cpu(d.v->d_cf_name_block.d_name_len);
+	cf_name_len = le16_to_cpu(d.v->d_cf_name_block.d_cf_name_len);
+	max_len = bkey_val_bytes(d.k) - offsetof(struct bch_dirent, d_cf_name_block.d_names);
+
+	if (name_len > max_len || cf_name_len > max_len || name_len + cf_name_len > max_len)
+		return (struct qstr) QSTR_INIT(NULL, 0);
+
+	return (struct qstr) QSTR_INIT(&d.v->d_cf_name_block.d_names[name_len], cf_name_len);
 }
 
 static inline struct qstr bch2_dirent_get_lookup_name(struct bkey_s_c_dirent d)
@@ -213,11 +227,18 @@ void bch2_dirent_to_text(struct printbuf *out, struct bch_fs *c, struct bkey_s_c
 	struct bkey_s_c_dirent d = bkey_s_c_to_dirent(k);
 	struct qstr d_name = bch2_dirent_get_name(d);
 
+	if (!d_name.name || !d_name.len) {
+		prt_str(out, "(invalid)");
+		return;
+	}
+
 	prt_printf(out, "%.*s", d_name.len, d_name.name);
 
 	if (d.v->d_casefold) {
-		struct qstr d_name = bch2_dirent_get_lookup_name(d);
-		prt_printf(out, " (casefold %.*s)", d_name.len, d_name.name);
+		struct qstr d_cf_name = bch2_dirent_get_lookup_name(d);
+
+		if (d_cf_name.name && d_cf_name.len)
+			prt_printf(out, " (casefold %.*s)", d_name.len, d_name.name);
 	}
 
 	prt_str(out, " ->");
