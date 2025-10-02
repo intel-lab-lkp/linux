@@ -251,6 +251,13 @@ check_xattrs(struct inode *inode, struct buffer_head *bh,
 			err_str = "invalid ea_ino";
 			goto errout;
 		}
+		if (entry->e_name_index == EXT4_XATTR_INDEX_SYSTEM &&
+		    entry->e_name_len == 4 &&
+		    !memcmp(entry->e_name, "data", 4) &&
+		    ea_ino != 0) {
+			err_str = "system.data xattr cannot use external inode storage";
+			goto errout;
+		}
 		if (size > EXT4_XATTR_SIZE_MAX) {
 			err_str = "e_value size too large";
 			goto errout;
