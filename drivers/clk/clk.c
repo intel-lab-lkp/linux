@@ -778,6 +778,17 @@ struct clk *__clk_lookup(const char *name)
 	return !core ? NULL : core->hw->clk;
 }
 
+#if IS_ENABLED(CONFIG_CLK_KUNIT_TEST)
+/* This is only provided for kunit tests to test the core lookup functions. */
+struct clk_hw *clk_hw_lookup(const char *name)
+{
+	struct clk_core *core = clk_core_lookup(name);
+
+	return !core ? NULL : core->hw;
+}
+EXPORT_SYMBOL_GPL(clk_hw_lookup);
+#endif
+
 static void clk_core_get_boundaries(struct clk_core *core,
 				    unsigned long *min_rate,
 				    unsigned long *max_rate)
