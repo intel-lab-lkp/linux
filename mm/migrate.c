@@ -1215,6 +1215,17 @@ static int migrate_folio_unmap(new_folio_t get_new_folio,
 
 	dst->private = NULL;
 
+retry_wait_writeback:
+	/*
+	 * Only in the case of a full synchronous migration is it
+	 * necessary to wait for PageWriteback.  In the async case, the
+	 * retry loop is too short and in the sync-light case, the
+	 * overhead of stalling is too much.  Plus, do not write-back if
+	 * it's in the middle of direct compaction
+	 */
+	if (folio_test_writeback(src) && mode == MIGRATE_SYNC)
+		folio_wait_writeback(src);
+
 	if (!folio_trylock(src)) {
 		if (mode == MIGRATE_ASYNC)
 			goto out;
@@ -1245,26 +1256,40 @@ static int migrate_folio_unmap(new_folio_t get_new_folio,
 
 		folio_lock(src);
 	}
+
+	if (folio_test_writeback(src)) {
+		if (mode == MIGRATE_SYNC) {
+			/*
+			 * folio_unlock() is required before trying
+			 * folio_wait_writeback().  Or it leads a
+			 * deadlock like:
+			 *
+			 *   context x		context y
+			 *   in XXX_io_end()	in migrate_folio_unmap()
+			 *
+			 *   ...		...
+			 *   bdev_getblk();	folio_lock();
+			 *
+			 *     // wait forever	// wait forever
+			 *     folio_lock();	folio_wait_writeback();
+			 *
+			 *     ...		...
+			 *     folio_unlock();
+			 *   ...		// never reachable
+			 *			folio_unlock();
+			 *   // never reachable
+			 *   folio_end_writeback();
+			 */
+			folio_unlock(src);
+			goto retry_wait_writeback;
+		}
+		rc = -EBUSY;
+		goto out;
+	}
+
 	locked = true;
 	if (folio_test_mlocked(src))
 		old_page_state |= PAGE_WAS_MLOCKED;
-
-	if (folio_test_writeback(src)) {
-		/*
-		 * Only in the case of a full synchronous migration is it
-		 * necessary to wait for PageWriteback. In the async case,
-		 * the retry loop is too short and in the sync-light case,
-		 * the overhead of stalling is too much
-		 */
-		switch (mode) {
-		case MIGRATE_SYNC:
-			break;
-		default:
-			rc = -EBUSY;
-			goto out;
-		}
-		folio_wait_writeback(src);
-	}
 
 	/*
 	 * By try_to_migrate(), src->mapcount goes down to 0 here. In this case,
