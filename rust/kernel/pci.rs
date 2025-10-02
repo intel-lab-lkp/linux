@@ -47,6 +47,7 @@ unsafe impl<T: Driver + 'static> driver::RegistrationOps for Adapter<T> {
             (*pdrv.get()).probe = Some(Self::probe_callback);
             (*pdrv.get()).remove = Some(Self::remove_callback);
             (*pdrv.get()).id_table = T::ID_TABLE.as_ptr();
+            (*pdrv.get()).supports_vf = T::SUPPORTS_VF;
         }
 
         // SAFETY: `pdrv` is guaranteed to be a valid `RegType`.
@@ -267,6 +268,9 @@ pub trait Driver: Send {
 
     /// The table of device ids supported by the driver.
     const ID_TABLE: IdTable<Self::IdInfo>;
+
+    /// Whether the driver supports Virtual Functions.
+    const SUPPORTS_VF: bool = false;
 
     /// PCI driver probe.
     ///

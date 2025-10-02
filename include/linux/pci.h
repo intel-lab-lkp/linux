@@ -983,6 +983,7 @@ struct pci_driver {
 	struct device_driver	driver;
 	struct pci_dynids	dynids;
 	bool driver_managed_dma;
+	bool supports_vf;	/* Will bind to Virtual Functions */
 };
 
 #define to_pci_driver(__drv)	\

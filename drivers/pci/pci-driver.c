@@ -412,6 +412,9 @@ static int __pci_device_probe(struct pci_driver *drv, struct pci_dev *pci_dev)
 	if (drv->probe) {
 		error = -ENODEV;
 
+		if (pci_dev->is_virtfn && !drv->supports_vf)
+			return error;
+
 		id = pci_match_device(drv, pci_dev);
 		if (id)
 			error = pci_call_probe(drv, pci_dev, id);
