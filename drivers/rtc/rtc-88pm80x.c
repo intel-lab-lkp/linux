@@ -119,6 +119,7 @@ static int pm80x_rtc_read_time(struct device *dev, struct rtc_time *tm)
 
 static int pm80x_rtc_set_time(struct device *dev, struct rtc_time *tm)
 {
+	int ret;
 	struct pm80x_rtc_info *info = dev_get_drvdata(dev);
 	unsigned char buf[4];
 	unsigned long ticks, base, data;
@@ -126,7 +127,9 @@ static int pm80x_rtc_set_time(struct device *dev, struct rtc_time *tm)
 	ticks = rtc_tm_to_time64(tm);
 
 	/* load 32-bit read-only counter */
-	regmap_raw_read(info->map, PM800_RTC_COUNTER1, buf, 4);
+	ret = regmap_raw_read(info->map, PM800_RTC_COUNTER1, buf, 4);
+	if (ret)
+		return ret;
 	data = ((unsigned long)buf[3] << 24) | (buf[2] << 16) |
 		(buf[1] << 8) | buf[0];
 	base = ticks - data;
