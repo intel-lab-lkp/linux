@@ -1044,7 +1044,7 @@ __of_reset_control_get(struct device_node *node, const char *id, int index,
 
 		ret = __reset_add_reset_gpio_device(&args);
 		if (ret) {
-			rstc = ERR_PTR(ret);
+			rstc = optional ? NULL : ERR_PTR(ret);
 			goto out_put;
 		}
 	}
