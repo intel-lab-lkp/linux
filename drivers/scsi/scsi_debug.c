@@ -134,6 +134,7 @@ static const char *sdebug_version_date = "20210520";
 #define DEF_PER_HOST_STORE false
 #define DEF_D_SENSE   0
 #define DEF_EVERY_NTH   0
+#define DEF_ONLY_ONCE 0
 #define DEF_FAKE_RW	0
 #define DEF_GUARD 0
 #define DEF_HOST_LOCK 0
@@ -909,6 +910,7 @@ static int sdebug_dif = DEF_DIF;
 static int sdebug_dix = DEF_DIX;
 static int sdebug_dsense = DEF_D_SENSE;
 static int sdebug_every_nth = DEF_EVERY_NTH;
+static bool sdebug_only_once = DEF_ONLY_ONCE;
 static int sdebug_fake_rw = DEF_FAKE_RW;
 static unsigned int sdebug_guard = DEF_GUARD;
 static int sdebug_host_max_queue;	/* per host */
@@ -1004,6 +1006,8 @@ static int num_host_resets;
 static int dix_writes;
 static int dix_reads;
 static int dif_errors;
+
+static bool injected;
 
 /* ZBC global data */
 static bool sdeb_zbc_in_use;	/* true for host-aware and host-managed disks */
@@ -7156,7 +7160,7 @@ static void clear_queue_stats(void)
 
 static bool inject_on_this_cmd(void)
 {
-	if (sdebug_every_nth == 0)
+	if (sdebug_every_nth == 0 || (sdebug_only_once && injected))
 		return false;
 	return (atomic_read(&sdebug_cmnd_count) % abs(sdebug_every_nth)) == 0;
 }
@@ -7200,7 +7204,9 @@ static int schedule_resp(struct scsi_cmnd *cmnd, struct sdebug_dev_info *devip,
 
 		if ((num_in_q == qdepth) &&
 		    (atomic_inc_return(&sdebug_a_tsf) >=
-		     abs(sdebug_every_nth))) {
+		     abs(sdebug_every_nth)) &&
+		    !(sdebug_only_once && injected)) {
+			injected = true;
 			atomic_set(&sdebug_a_tsf, 0);
 			scsi_result = device_qfull_result;
 
@@ -7336,6 +7342,7 @@ module_param_named(dif, sdebug_dif, int, S_IRUGO);
 module_param_named(dix, sdebug_dix, int, S_IRUGO);
 module_param_named(dsense, sdebug_dsense, int, S_IRUGO | S_IWUSR);
 module_param_named(every_nth, sdebug_every_nth, int, S_IRUGO | S_IWUSR);
+module_param_named(only_once, sdebug_only_once, bool, S_IRUGO | S_IWUSR);
 module_param_named(fake_rw, sdebug_fake_rw, int, S_IRUGO | S_IWUSR);
 module_param_named(guard, sdebug_guard, uint, S_IRUGO);
 module_param_named(host_lock, sdebug_host_lock, bool, S_IRUGO | S_IWUSR);
@@ -7419,6 +7426,7 @@ MODULE_PARM_DESC(dif, "data integrity field type: 0-3 (def=0)");
 MODULE_PARM_DESC(dix, "data integrity extensions mask (def=0)");
 MODULE_PARM_DESC(dsense, "use descriptor sense format(def=0 -> fixed)");
 MODULE_PARM_DESC(every_nth, "timeout every nth command(def=0)");
+MODULE_PARM_DESC(only_once, "timeout only once after the nth command(def=0)");
 MODULE_PARM_DESC(fake_rw, "fake reads/writes instead of copying (def=0)");
 MODULE_PARM_DESC(guard, "protection checksum: 0=crc, 1=ip (def=0)");
 MODULE_PARM_DESC(host_lock, "host_lock is ignored (def=0)");
@@ -7562,9 +7570,9 @@ static int scsi_debug_show_info(struct seq_file *m, struct Scsi_Host *host)
 	seq_printf(m, "num_tgts=%d, %ssize=%d MB, opts=0x%x, every_nth=%d\n",
 		   sdebug_num_tgts, "shared (ram) ", sdebug_dev_size_mb,
 		   sdebug_opts, sdebug_every_nth);
-	seq_printf(m, "delay=%d, ndelay=%d, max_luns=%d, sector_size=%d %s\n",
+	seq_printf(m, "delay=%d, ndelay=%d, max_luns=%d, sector_size=%d %s, only_once=%d\n",
 		   sdebug_jdelay, sdebug_ndelay, sdebug_max_luns,
-		   sdebug_sector_size, "bytes");
+		   sdebug_sector_size, "bytes", sdebug_only_once);
 	seq_printf(m, "cylinders=%d, heads=%d, sectors=%d, command aborts=%d\n",
 		   sdebug_cylinders_per, sdebug_heads, sdebug_sectors_per,
 		   num_aborts);
@@ -7927,6 +7935,24 @@ every_nth_done:
 	return count;
 }
 static DRIVER_ATTR_RW(every_nth);
+
+static ssize_t only_once_show(struct device_driver *ddp, char *buf)
+{
+	return scnprintf(buf, PAGE_SIZE, "%d\n", !!sdebug_only_once);
+}
+static ssize_t only_once_store(struct device_driver *ddp, const char *buf,
+			       size_t count)
+{
+	int n;
+
+	if ((count > 0) && (1 == sscanf(buf, "%d", &n)) && (n >= 0)) {
+		sdebug_only_once = (n > 0);
+		injected = false;
+		return count;
+	}
+	return -EINVAL;
+}
+static DRIVER_ATTR_RW(only_once);
 
 static ssize_t lun_format_show(struct device_driver *ddp, char *buf)
 {
@@ -8435,6 +8461,7 @@ static struct attribute *sdebug_drv_attrs[] = {
 	&driver_attr_dev_size_mb.attr,
 	&driver_attr_num_parts.attr,
 	&driver_attr_every_nth.attr,
+	&driver_attr_only_once.attr,
 	&driver_attr_lun_format.attr,
 	&driver_attr_max_luns.attr,
 	&driver_attr_max_queue.attr,
@@ -8990,6 +9017,9 @@ static int sdebug_change_qdepth(struct scsi_device *sdev, int qdepth)
 
 static bool fake_timeout(struct scsi_cmnd *scp)
 {
+	if (sdebug_only_once && injected)
+		return false;
+
 	if (0 == (atomic_read(&sdebug_cmnd_count) % abs(sdebug_every_nth))) {
 		if (sdebug_every_nth < -1)
 			sdebug_every_nth = -1;
@@ -9290,8 +9320,10 @@ static int scsi_debug_queuecommand(struct Scsi_Host *shost,
 		sdev_printk(KERN_INFO, sdp, "%s: tag=%#x, cmd %s\n", my_name,
 			    blk_mq_unique_tag(scsi_cmd_to_rq(scp)), b);
 	}
-	if (unlikely(inject_now && (sdebug_opts & SDEBUG_OPT_HOST_BUSY)))
+	if (unlikely(inject_now && (sdebug_opts & SDEBUG_OPT_HOST_BUSY))) {
+		injected = true;
 		return SCSI_MLQUEUE_HOST_BUSY;
+	}
 	has_wlun_rl = (sdp->lun == SCSI_W_LUN_REPORT_LUNS);
 	if (unlikely(lun_index >= sdebug_max_luns && !has_wlun_rl))
 		goto err_out;
@@ -9327,8 +9359,10 @@ static int scsi_debug_queuecommand(struct Scsi_Host *shost,
 		return ret;
 	}
 
-	if (unlikely(inject_now && !atomic_read(&sdeb_inject_pending)))
+	if (unlikely(inject_now && !atomic_read(&sdeb_inject_pending))) {
+		injected = true;
 		atomic_set(&sdeb_inject_pending, 1);
+	}
 
 	na = oip->num_attached;
 	r_pfp = oip->pfp;
@@ -9405,8 +9439,10 @@ static int scsi_debug_queuecommand(struct Scsi_Host *shost,
 	if (sdebug_fake_rw && (F_FAKE_RW & flags))
 		goto fini;
 	if (unlikely(sdebug_every_nth)) {
-		if (fake_timeout(scp))
+		if (fake_timeout(scp)) {
+			injected = true;
 			return 0;	/* ignore command: make trouble */
+		}
 	}
 	if (likely(oip->pfp))
 		pfp = oip->pfp;	/* calls a resp_* function */
