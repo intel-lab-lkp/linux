@@ -2573,6 +2573,23 @@ static void __dept_wait(struct dept_map *m, unsigned long w_f,
 	}
 }
 
+void disable_event_track(void)
+{
+	dept_task()->disable_event_track_cnt++;
+}
+EXPORT_SYMBOL_GPL(disable_event_track);
+
+void enable_event_track(void)
+{
+	dept_task()->disable_event_track_cnt--;
+}
+EXPORT_SYMBOL_GPL(enable_event_track);
+
+static bool event_track_disabled(void)
+{
+	return !!dept_task()->disable_event_track_cnt;
+}
+
 /*
  * Called between dept_enter() and dept_exit().
  */
@@ -2584,6 +2601,9 @@ static void __dept_event(struct dept_map *m, struct dept_map *real_m,
 	struct dept_class *c;
 	struct dept_key *k;
 	int e;
+
+	if (event_track_disabled())
+		return;
 
 	e = find_first_bit(&e_f, DEPT_MAX_SUBCLASSES_EVT);
 
