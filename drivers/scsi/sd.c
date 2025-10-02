@@ -2597,9 +2597,10 @@ static void sd_config_protection(struct scsi_disk *sdkp,
 }
 
 static void read_capacity_error(struct scsi_disk *sdkp, struct scsi_device *sdp,
-			struct scsi_sense_hdr *sshdr, int sense_valid,
-			int the_result)
+				struct scsi_sense_hdr *sshdr, int the_result)
 {
+	bool sense_valid = scsi_sense_valid(sshdr);
+
 	if (sense_valid)
 		sd_print_sense_hdr(sdkp, sshdr);
 	else
@@ -2722,7 +2723,7 @@ static int read_capacity_16(struct scsi_disk *sdkp, struct scsi_device *sdp,
 
 	if (the_result) {
 		sd_print_result(sdkp, "Read Capacity(16) failed", the_result);
-		read_capacity_error(sdkp, sdp, &sshdr, sense_valid, the_result);
+		read_capacity_error(sdkp, sdp, &sshdr, the_result);
 		return -EINVAL;
 	}
 
@@ -2799,7 +2800,6 @@ static int read_capacity_10(struct scsi_disk *sdkp, struct scsi_device *sdp,
 		.sshdr = &sshdr,
 		.failures = &failures,
 	};
-	int sense_valid = 0;
 	int the_result;
 	sector_t lba;
 	unsigned sector_size;
@@ -2811,15 +2811,13 @@ static int read_capacity_10(struct scsi_disk *sdkp, struct scsi_device *sdp,
 				      &exec_args);
 
 	if (the_result > 0) {
-		sense_valid = scsi_sense_valid(&sshdr);
-
 		if (media_not_present(sdkp, &sshdr))
 			return -ENODEV;
 	}
 
 	if (the_result) {
 		sd_print_result(sdkp, "Read Capacity(10) failed", the_result);
-		read_capacity_error(sdkp, sdp, &sshdr, sense_valid, the_result);
+		read_capacity_error(sdkp, sdp, &sshdr, the_result);
 		return -EINVAL;
 	}
 
