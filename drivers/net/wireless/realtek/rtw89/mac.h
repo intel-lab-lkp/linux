@@ -1616,4 +1616,47 @@ int rtw89_mac_scan_offload(struct rtw89_dev *rtwdev,
 
 	return ret;
 }
+
+static inline
+void rtw89_tx_rpt_enable(struct rtw89_dev *rtwdev,
+			 struct rtw89_core_tx_request *tx_req)
+{
+	if (!rtwdev->hci.tx_rpt_enable)
+		return;
+
+	tx_req->desc_info.report = true;
+	tx_req->desc_info.sn = atomic_inc_return(&rtwdev->sn) & 0xF;
+	tx_req->desc_info.tx_cnt_lmt_en = true;
+	tx_req->desc_info.tx_cnt_lmt = 8;
+}
+
+static inline
+void rtw89_tx_rpt_tx_status(struct rtw89_dev *rtwdev, struct sk_buff *skb, u8 tx_status)
+{
+	struct ieee80211_tx_info *info = IEEE80211_SKB_CB(skb);
+
+	ieee80211_tx_info_clear_status(info);
+	if (tx_status == RTW89_TX_DONE)
+		info->flags |= IEEE80211_TX_STAT_ACK;
+	else
+		info->flags &= ~IEEE80211_TX_STAT_ACK;
+
+	ieee80211_tx_status_irqsafe(rtwdev->hw, skb);
+}
+
+static inline
+void rtw89_tx_rpt_queue_purge(struct rtw89_dev *rtwdev)
+{
+	struct sk_buff_head q;
+	struct sk_buff *skb;
+	unsigned long flags;
+
+	__skb_queue_head_init(&q);
+	spin_lock_irqsave(&rtwdev->tx_rpt_queue.lock, flags);
+	skb_queue_splice_init(&rtwdev->tx_rpt_queue, &q);
+	spin_unlock_irqrestore(&rtwdev->tx_rpt_queue.lock, flags);
+
+	while ((skb = __skb_dequeue(&q)))
+		rtw89_tx_rpt_tx_status(rtwdev, skb, RTW89_TX_MACID_DROP);
+}
 #endif

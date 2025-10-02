@@ -3527,6 +3527,8 @@ struct rtw89_tx_wait_info {
 
 struct rtw89_tx_skb_data {
 	struct rtw89_tx_wait_info __rcu *wait;
+	u8 tx_rpt_sn;
+	u8 tx_pkt_cnt_lmt;
 	u8 hci_priv[];
 };
 
@@ -3696,6 +3698,7 @@ struct rtw89_hci_info {
 	u32 rpwm_addr;
 	u32 cpwm_addr;
 	bool paused;
+	bool tx_rpt_enable;
 };
 
 struct rtw89_chip_ops {
@@ -6014,6 +6017,9 @@ struct rtw89_dev {
 
 	struct list_head tx_waits;
 	struct wiphy_delayed_work tx_wait_work;
+
+	atomic_t sn;
+	struct sk_buff_head tx_rpt_queue;
 
 	struct rtw89_cam_info cam_info;
 

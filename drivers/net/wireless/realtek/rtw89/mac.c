@@ -5465,10 +5465,29 @@ rtw89_mac_c2h_tx_rpt(struct rtw89_dev *rtwdev, struct sk_buff *c2h, u32 len)
 	u8 sw_define = le32_get_bits(rpt->w2, RTW89_C2H_MAC_TX_RPT_W2_SW_DEFINE);
 	u8 tx_status = le32_get_bits(rpt->w2, RTW89_C2H_MAC_TX_RPT_W2_TX_STATE);
 	u8 data_txcnt = le32_get_bits(rpt->w5, RTW89_C2H_MAC_TX_RPT_W5_DATA_TX_CNT);
+	struct rtw89_tx_skb_data *skb_data;
+	struct sk_buff *cur, *tmp;
+	unsigned long flags;
 
 	rtw89_debug(rtwdev, RTW89_DBG_TXRX,
 		    "C2H TX RPT: sn %d, tx_status %d, data_txcnt %d\n",
 		    sw_define, tx_status, data_txcnt);
+
+	spin_lock_irqsave(&rtwdev->tx_rpt_queue.lock, flags);
+	skb_queue_walk_safe(&rtwdev->tx_rpt_queue, cur, tmp) {
+		skb_data = RTW89_TX_SKB_CB(cur);
+
+		if (sw_define != skb_data->tx_rpt_sn)
+			continue;
+		if (tx_status != RTW89_TX_DONE &&
+		    data_txcnt != skb_data->tx_pkt_cnt_lmt)
+			continue;
+
+		__skb_unlink(cur, &rtwdev->tx_rpt_queue);
+		rtw89_tx_rpt_tx_status(rtwdev, cur, tx_status);
+		break;
+	}
+	spin_unlock_irqrestore(&rtwdev->tx_rpt_queue.lock, flags);
 }
 
 static void

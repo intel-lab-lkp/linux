@@ -216,6 +216,15 @@ static void rtw89_usb_write_port_complete(struct urb *urb)
 		skb_pull(skb, txdesc_size);
 
 		info = IEEE80211_SKB_CB(skb);
+		if (info->flags & IEEE80211_TX_CTL_REQ_TX_STATUS) {
+			/* sn is passed to rtw89_mac_c2h_tx_rpt() via driver data */
+			skb_queue_tail(&rtwdev->tx_rpt_queue, skb);
+			wiphy_delayed_work_queue(rtwdev->hw->wiphy,
+						 &rtwdev->tx_wait_work,
+						 RTW89_TX_WAIT_WORK_TIMEOUT);
+			continue;
+		}
+
 		ieee80211_tx_info_clear_status(info);
 
 		if (urb->status == 0) {
@@ -395,6 +404,8 @@ static int rtw89_usb_ops_tx_write(struct rtw89_dev *rtwdev,
 	txdesc = skb_push(skb, txdesc_size);
 	memset(txdesc, 0, txdesc_size);
 	rtw89_chip_fill_txdesc(rtwdev, desc_info, txdesc);
+
+	RTW89_TX_SKB_CB(skb)->tx_rpt_sn = tx_req->desc_info.sn;
 
 	le32p_replace_bits(&txdesc->dword0, 1, RTW89_TXWD_BODY0_STF_MODE);
 
@@ -678,7 +689,7 @@ static void rtw89_usb_deinit_tx(struct rtw89_dev *rtwdev)
 
 static void rtw89_usb_ops_reset(struct rtw89_dev *rtwdev)
 {
-	/* TODO: anything to do here? */
+	rtw89_tx_rpt_queue_purge(rtwdev);
 }
 
 static int rtw89_usb_ops_start(struct rtw89_dev *rtwdev)
@@ -962,6 +973,7 @@ int rtw89_usb_probe(struct usb_interface *intf,
 
 	rtwdev->hci.ops = &rtw89_usb_ops;
 	rtwdev->hci.type = RTW89_HCI_TYPE_USB;
+	rtwdev->hci.tx_rpt_enable = true;
 
 	ret = rtw89_usb_intf_init(rtwdev, intf);
 	if (ret) {

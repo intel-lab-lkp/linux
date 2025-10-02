@@ -1107,6 +1107,9 @@ rtw89_core_tx_update_desc_info(struct rtw89_dev *rtwdev,
 						 tx_req->rtwsta_link);
 		if (addr_cam->valid && desc_info->mlo)
 			upd_wlan_hdr = true;
+
+		if (info->flags & IEEE80211_TX_CTL_REQ_TX_STATUS)
+			rtw89_tx_rpt_enable(rtwdev, tx_req);
 	}
 	is_bmc = (is_broadcast_ether_addr(hdr->addr1) ||
 		  is_multicast_ether_addr(hdr->addr1));
@@ -1140,7 +1143,10 @@ static void rtw89_tx_wait_work(struct wiphy *wiphy, struct wiphy_work *work)
 	struct rtw89_dev *rtwdev = container_of(work, struct rtw89_dev,
 						tx_wait_work.work);
 
-	rtw89_tx_wait_list_clear(rtwdev);
+	if (!rtwdev->hci.tx_rpt_enable)
+		rtw89_tx_wait_list_clear(rtwdev);
+	else
+		rtw89_tx_rpt_queue_purge(rtwdev);
 }
 
 void rtw89_core_tx_kick_off(struct rtw89_dev *rtwdev, u8 qsel)
@@ -5847,6 +5853,7 @@ int rtw89_core_init(struct rtw89_dev *rtwdev)
 	wiphy_work_init(&rtwdev->cancel_6ghz_probe_work, rtw89_cancel_6ghz_probe_work);
 	INIT_WORK(&rtwdev->load_firmware_work, rtw89_load_firmware_work);
 
+	skb_queue_head_init(&rtwdev->tx_rpt_queue);
 	skb_queue_head_init(&rtwdev->c2h_queue);
 	rtw89_core_ppdu_sts_init(rtwdev);
 	rtw89_traffic_stats_init(rtwdev, &rtwdev->stats);
