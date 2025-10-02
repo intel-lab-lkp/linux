@@ -1201,6 +1201,7 @@ struct rtw89_core_tx_request {
 	struct sk_buff *skb;
 	struct ieee80211_vif *vif;
 	struct ieee80211_sta *sta;
+	struct rtw89_tx_wait_info *wait;
 	struct rtw89_vif_link *rtwvif_link;
 	struct rtw89_sta_link *rtwsta_link;
 	struct rtw89_tx_desc_info desc_info;
@@ -7385,6 +7386,20 @@ static inline struct sk_buff *rtw89_alloc_skb_for_rx(struct rtw89_dev *rtwdev,
 	}
 
 	return dev_alloc_skb(length);
+}
+
+static inline bool rtw89_core_is_tx_wait(struct rtw89_dev *rtwdev,
+					 struct rtw89_tx_skb_data *skb_data)
+{
+	struct rtw89_tx_wait_info *wait;
+
+	guard(rcu)();
+
+	wait = rcu_dereference(skb_data->wait);
+	if (!wait)
+		return false;
+
+	return true;
 }
 
 static inline bool rtw89_core_tx_wait_complete(struct rtw89_dev *rtwdev,

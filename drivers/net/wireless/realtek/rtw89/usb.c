@@ -216,7 +216,8 @@ static void rtw89_usb_write_port_complete(struct urb *urb)
 		skb_pull(skb, txdesc_size);
 
 		info = IEEE80211_SKB_CB(skb);
-		if (info->flags & IEEE80211_TX_CTL_REQ_TX_STATUS) {
+		if (rtw89_core_is_tx_wait(rtwdev, RTW89_TX_SKB_CB(skb)) ||
+		    (info->flags & IEEE80211_TX_CTL_REQ_TX_STATUS)) {
 			/* sn is passed to rtw89_mac_c2h_tx_rpt() via driver data */
 			skb_queue_tail(&rtwdev->tx_rpt_queue, skb);
 			wiphy_delayed_work_queue(rtwdev->hw->wiphy,

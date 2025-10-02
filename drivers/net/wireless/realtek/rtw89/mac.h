@@ -1647,16 +1647,27 @@ void rtw89_tx_rpt_tx_status(struct rtw89_dev *rtwdev, struct sk_buff *skb, u8 tx
 static inline
 void rtw89_tx_rpt_queue_purge(struct rtw89_dev *rtwdev)
 {
+	struct rtw89_tx_skb_data *skb_data;
+	struct rtw89_tx_wait_info *wait;
 	struct sk_buff_head q;
 	struct sk_buff *skb;
 	unsigned long flags;
+
+	lockdep_assert_wiphy(rtwdev->hw->wiphy);
 
 	__skb_queue_head_init(&q);
 	spin_lock_irqsave(&rtwdev->tx_rpt_queue.lock, flags);
 	skb_queue_splice_init(&rtwdev->tx_rpt_queue, &q);
 	spin_unlock_irqrestore(&rtwdev->tx_rpt_queue.lock, flags);
 
-	while ((skb = __skb_dequeue(&q)))
-		rtw89_tx_rpt_tx_status(rtwdev, skb, RTW89_TX_MACID_DROP);
+	while ((skb = __skb_dequeue(&q))) {
+		skb_data = RTW89_TX_SKB_CB(skb);
+		wait = wiphy_dereference(rtwdev->hw->wiphy, skb_data->wait);
+
+		if (wait)
+			rtw89_tx_wait_release(wait);
+		else
+			rtw89_tx_rpt_tx_status(rtwdev, skb, RTW89_TX_MACID_DROP);
+	}
 }
 #endif

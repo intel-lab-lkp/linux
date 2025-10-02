@@ -5484,7 +5484,8 @@ rtw89_mac_c2h_tx_rpt(struct rtw89_dev *rtwdev, struct sk_buff *c2h, u32 len)
 			continue;
 
 		__skb_unlink(cur, &rtwdev->tx_rpt_queue);
-		rtw89_tx_rpt_tx_status(rtwdev, cur, tx_status);
+		if (!rtw89_core_tx_wait_complete(rtwdev, skb_data, tx_status))
+			rtw89_tx_rpt_tx_status(rtwdev, cur, tx_status);
 		break;
 	}
 	spin_unlock_irqrestore(&rtwdev->tx_rpt_queue.lock, flags);
