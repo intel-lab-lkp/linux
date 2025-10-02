@@ -136,9 +136,7 @@ static int pm80x_rtc_set_time(struct device *dev, struct rtc_time *tm)
 	buf[1] = (base >> 8) & 0xFF;
 	buf[2] = (base >> 16) & 0xFF;
 	buf[3] = (base >> 24) & 0xFF;
-	regmap_raw_write(info->map, PM800_RTC_EXPIRE2_1, buf, 4);
-
-	return 0;
+	return regmap_raw_write(info->map, PM800_RTC_EXPIRE2_1, buf, 4);
 }
 
 static int pm80x_rtc_read_alarm(struct device *dev, struct rtc_wkalrm *alrm)
