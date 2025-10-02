@@ -1187,6 +1187,13 @@ static void folio_wake_bit(struct folio *folio, int bit_nr)
 	key.bit_nr = bit_nr;
 	key.page_match = 0;
 
+	/*
+	 * dept_page_clear_bit() being called multiple times is harmless.
+	 * The worst case is to miss some dependencies but it's okay.
+	 */
+	if (bit_nr == PG_locked || bit_nr == PG_writeback)
+		dept_page_clear_bit(&folio->page, bit_nr);
+
 	spin_lock_irqsave(&q->lock, flags);
 	__wake_up_locked_key(q, TASK_NORMAL, &key);
 
@@ -1240,6 +1247,9 @@ static inline bool folio_trylock_flag(struct folio *folio, int bit_nr,
 
 struct dept_map __maybe_unused pg_locked_map = DEPT_MAP_INITIALIZER(pg_locked_map, NULL);
 EXPORT_SYMBOL(pg_locked_map);
+
+struct dept_map __maybe_unused pg_writeback_map = DEPT_MAP_INITIALIZER(pg_writeback_map, NULL);
+EXPORT_SYMBOL(pg_writeback_map);
 
 static inline int folio_wait_bit_common(struct folio *folio, int bit_nr,
 		int state, enum behavior behavior)
@@ -1683,6 +1693,7 @@ void folio_end_writeback(struct folio *folio)
 	 * reused before the folio_wake_bit().
 	 */
 	folio_get(folio);
+	dept_page_clear_bit(&folio->page, PG_writeback);
 	if (__folio_end_writeback(folio))
 		folio_wake_bit(folio, PG_writeback);
 
