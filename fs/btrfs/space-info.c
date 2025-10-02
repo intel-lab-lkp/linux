@@ -192,7 +192,11 @@ void btrfs_clear_space_info_full(struct btrfs_fs_info *info)
 	struct btrfs_space_info *found;
 
 	list_for_each_entry(found, head, list)
+	{
+		spin_lock(&found->lock);
 		found->full = 0;
+		spin_unlock(&found->lock);
+	}
 }
 
 /*
