@@ -2638,6 +2638,7 @@ static int read_capacity_16(struct scsi_disk *sdkp, struct scsi_device *sdp,
 		[13] = RC16_LEN,
 	};
 	struct scsi_sense_hdr sshdr;
+	int count, resid;
 	struct scsi_failure failure_defs[] = {
 		/*
 		 * Do not retry Invalid Command Operation Code or Invalid
@@ -2688,6 +2689,7 @@ static int read_capacity_16(struct scsi_disk *sdkp, struct scsi_device *sdp,
 	};
 	const struct scsi_exec_args exec_args = {
 		.sshdr = &sshdr,
+		.resid = &resid,
 		.failures = &failures,
 	};
 	int sense_valid = 0;
@@ -2699,11 +2701,22 @@ static int read_capacity_16(struct scsi_disk *sdkp, struct scsi_device *sdp,
 	if (sdp->no_read_capacity_16)
 		return -EINVAL;
 
-	memset(buffer, 0, RC16_LEN);
+	for (count = 0; count < 3; ++count) {
+		memset(buffer, 0, RC16_LEN);
 
-	the_result = scsi_execute_cmd(sdp, cmd, REQ_OP_DRV_IN, buffer,
-				      RC16_LEN, SD_TIMEOUT, sdkp->max_retries,
-				      &exec_args);
+		the_result = scsi_execute_cmd(sdp, cmd, REQ_OP_DRV_IN,
+					      buffer, RC16_LEN, SD_TIMEOUT,
+					      sdkp->max_retries, &exec_args);
+
+		if (the_result || resid != RC16_LEN)
+			break;
+
+		/*
+		 * If the status was good but nothing was transferred,
+		 * we retry. It is a workaround for some buggy devices
+		 * or SAT which sometimes do not return any data.
+		 */
+	}
 
 	if (the_result > 0) {
 		if (media_not_present(sdkp, &sshdr))
@@ -2724,6 +2737,12 @@ static int read_capacity_16(struct scsi_disk *sdkp, struct scsi_device *sdp,
 	if (the_result) {
 		sd_print_result(sdkp, "Read Capacity(16) failed", the_result);
 		read_capacity_error(sdkp, sdp, &sshdr, the_result);
+		return -EINVAL;
+	}
+
+	if (resid == RC16_LEN) {
+		sd_printk(KERN_ERR, sdkp,
+			  "Read Capacity(16) returned good status but no data");
 		return -EINVAL;
 	}
 
@@ -2759,11 +2778,17 @@ static int read_capacity_16(struct scsi_disk *sdkp, struct scsi_device *sdp,
 	return sector_size;
 }
 
+#define RC10_LEN 8
+#if RC10_LEN > SD_BUF_SIZE
+#error RC10_LEN must not be more than SD_BUF_SIZE
+#endif
+
 static int read_capacity_10(struct scsi_disk *sdkp, struct scsi_device *sdp,
 						unsigned char *buffer)
 {
 	static const u8 cmd[10] = { READ_CAPACITY };
 	struct scsi_sense_hdr sshdr;
+	int count, resid;
 	struct scsi_failure failure_defs[] = {
 		/* Do not retry Medium Not Present */
 		{
@@ -2798,17 +2823,29 @@ static int read_capacity_10(struct scsi_disk *sdkp, struct scsi_device *sdp,
 	};
 	const struct scsi_exec_args exec_args = {
 		.sshdr = &sshdr,
+		.resid = &resid,
 		.failures = &failures,
 	};
 	int the_result;
 	sector_t lba;
 	unsigned sector_size;
 
-	memset(buffer, 0, 8);
+	for (count = 0; count < 3; ++count) {
+		memset(buffer, 0, RC10_LEN);
 
-	the_result = scsi_execute_cmd(sdp, cmd, REQ_OP_DRV_IN, buffer,
-				      8, SD_TIMEOUT, sdkp->max_retries,
-				      &exec_args);
+		the_result = scsi_execute_cmd(sdp, cmd, REQ_OP_DRV_IN,
+					      buffer, RC10_LEN, SD_TIMEOUT,
+					      sdkp->max_retries, &exec_args);
+
+		if (the_result || resid != RC10_LEN)
+			break;
+
+		/*
+		 * If the status was good but nothing was transferred,
+		 * we retry. It is a workaround for some buggy devices
+		 * or SAT which sometimes do not return any data.
+		 */
+	}
 
 	if (the_result > 0) {
 		if (media_not_present(sdkp, &sshdr))
@@ -2818,6 +2855,12 @@ static int read_capacity_10(struct scsi_disk *sdkp, struct scsi_device *sdp,
 	if (the_result) {
 		sd_print_result(sdkp, "Read Capacity(10) failed", the_result);
 		read_capacity_error(sdkp, sdp, &sshdr, the_result);
+		return -EINVAL;
+	}
+
+	if (resid == RC10_LEN) {
+		sd_printk(KERN_ERR, sdkp,
+			  "Read Capacity(10) returned good status but no data");
 		return -EINVAL;
 	}
 
