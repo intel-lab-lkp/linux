@@ -159,8 +159,6 @@ static inline u32 free_space_bitmap_size(const struct btrfs_fs_info *fs_info,
 
 static unsigned long *alloc_bitmap(u32 bitmap_size)
 {
-	unsigned long *ret;
-	unsigned int nofs_flag;
 	u32 bitmap_rounded_size = round_up(bitmap_size, sizeof(unsigned long));
 
 	/*
@@ -168,13 +166,11 @@ static unsigned long *alloc_bitmap(u32 bitmap_size)
 	 * into the filesystem as the free space bitmap can be modified in the
 	 * critical section of a transaction commit.
 	 *
-	 * TODO: push the memalloc_nofs_{save,restore}() to the caller where we
-	 * know that recursion is unsafe.
+	 * This function's caller is responsible for setting the appropriate
+	 * allocation context (e.g., using memalloc_nofs_save/restore())
+	 * to prevent recursion.
 	 */
-	nofs_flag = memalloc_nofs_save();
-	ret = kvzalloc(bitmap_rounded_size, GFP_KERNEL);
-	memalloc_nofs_restore(nofs_flag);
-	return ret;
+	return kvzalloc(bitmap_rounded_size, GFP_KERNEL);
 }
 
 static void le_bitmap_set(unsigned long *map, unsigned int start, int len)
@@ -217,7 +213,9 @@ int btrfs_convert_free_space_to_bitmaps(struct btrfs_trans_handle *trans,
 	int ret;
 
 	bitmap_size = free_space_bitmap_size(fs_info, block_group->length);
+	unsigned int nofs_flag = memalloc_nofs_save();
 	bitmap = alloc_bitmap(bitmap_size);
+	memalloc_nofs_restore(nofs_flag);
 	if (unlikely(!bitmap)) {
 		ret = -ENOMEM;
 		btrfs_abort_transaction(trans, ret);
@@ -360,7 +358,9 @@ int btrfs_convert_free_space_to_extents(struct btrfs_trans_handle *trans,
 	int ret;
 
 	bitmap_size = free_space_bitmap_size(fs_info, block_group->length);
+	unsigned int nofs_flag = memalloc_nofs_save();
 	bitmap = alloc_bitmap(bitmap_size);
+	memalloc_nofs_restore(nofs_flag);
 	if (unlikely(!bitmap)) {
 		ret = -ENOMEM;
 		btrfs_abort_transaction(trans, ret);
