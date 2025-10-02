@@ -51,6 +51,11 @@ impl pci::Driver for NovaCore {
     type IdInfo = ();
     const ID_TABLE: pci::IdTable<Self::IdInfo> = &PCI_TABLE;
 
+    // PCI probe() will report the same device ID for a PF and its associated VFs. This will cause
+    // failures when trying to bind to the VFs, until NovaCore adds support to handle that
+    // situation. Until then, tell the PCI driver core that we don't support VFs.
+    const SUPPORTS_VF: bool = false;
+
     fn probe(pdev: &pci::Device<Core>, _info: &Self::IdInfo) -> Result<Pin<KBox<Self>>> {
         dev_dbg!(pdev.as_ref(), "Probe Nova Core GPU driver.\n");
 
