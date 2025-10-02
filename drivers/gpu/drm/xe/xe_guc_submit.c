@@ -1217,7 +1217,7 @@ static enum drm_gpu_sched_stat
 guc_exec_queue_timedout_job(struct drm_sched_job *drm_job)
 {
 	struct xe_sched_job *job = to_xe_sched_job(drm_job);
-	struct xe_sched_job *tmp_job;
+	struct drm_sched_job *tmp_job;
 	struct xe_exec_queue *q = job->q;
 	struct xe_gpu_scheduler *sched = &q->guc->sched;
 	struct xe_guc *guc = exec_queue_to_guc(q);
@@ -1226,7 +1226,6 @@ guc_exec_queue_timedout_job(struct drm_sched_job *drm_job)
 	unsigned int fw_ref;
 	int err = -ETIME;
 	pid_t pid = -1;
-	int i = 0;
 	bool wedged = false, skip_timeout_check;
 
 	/*
@@ -1391,21 +1390,19 @@ trigger_reset:
 	 * Fence state now stable, stop / start scheduler which cleans up any
 	 * fences that are complete
 	 */
-	xe_sched_add_pending_job(sched, job);
+	xe_sched_job_set_error(job, err);
 	xe_sched_submission_start(sched);
 
 	xe_guc_exec_queue_trigger_cleanup(q);
 
 	/* Mark all outstanding jobs as bad, thus completing them */
-	spin_lock(&sched->base.job_list_lock);
-	list_for_each_entry(tmp_job, &sched->base.pending_list, drm.list)
-		xe_sched_job_set_error(tmp_job, !i++ ? err : -ECANCELED);
-	spin_unlock(&sched->base.job_list_lock);
+	drm_sched_for_each_pending_job(tmp_job, &sched->base, NULL, false)
+		xe_sched_job_set_error(to_xe_sched_job(tmp_job), -ECANCELED);
 
 	/* Start fence signaling */
 	xe_hw_fence_irq_start(q->fence_irq);
 
-	return DRM_GPU_SCHED_STAT_RESET;
+	return DRM_GPU_SCHED_STAT_NO_HANG;
 
 sched_enable:
 	enable_scheduling(q);
@@ -2478,29 +2475,29 @@ xe_guc_exec_queue_snapshot_capture(struct xe_exec_queue *q)
 	if (snapshot->parallel_execution)
 		guc_exec_queue_wq_snapshot_capture(q, snapshot);
 
-	spin_lock(&sched->base.job_list_lock);
-	snapshot->pending_list_size = list_count_nodes(&sched->base.pending_list);
+	snapshot->pending_list_size = drm_sched_pending_job_count(&sched->base);
 	snapshot->pending_list = kmalloc_array(snapshot->pending_list_size,
 					       sizeof(struct pending_list_snapshot),
 					       GFP_ATOMIC);
 
 	if (snapshot->pending_list) {
 		struct xe_sched_job *job_iter;
+		struct drm_sched_job *drm_job;
 
 		i = 0;
-		list_for_each_entry(job_iter, &sched->base.pending_list, drm.list) {
+		drm_sched_for_each_pending_job(drm_job, &sched->base, NULL, false) {
+			job_iter = to_xe_sched_job(drm_job);
+
+			if (i >= snapshot->pending_list_size)
+				break;
+
 			snapshot->pending_list[i].seqno =
 				xe_sched_job_seqno(job_iter);
 			snapshot->pending_list[i].fence =
 				dma_fence_is_signaled(job_iter->fence) ? 1 : 0;
-			snapshot->pending_list[i].finished =
-				dma_fence_is_signaled(&job_iter->drm.s_fence->finished)
-				? 1 : 0;
 			i++;
 		}
 	}
-
-	spin_unlock(&sched->base.job_list_lock);
 
 	return snapshot;
 }
@@ -2562,10 +2559,9 @@ xe_guc_exec_queue_snapshot_print(struct xe_guc_submit_exec_queue_snapshot *snaps
 
 	for (i = 0; snapshot->pending_list && i < snapshot->pending_list_size;
 	     i++)
-		drm_printf(p, "\tJob: seqno=%d, fence=%d, finished=%d\n",
+		drm_printf(p, "\tJob: seqno=%d, fence=%d\n",
 			   snapshot->pending_list[i].seqno,
-			   snapshot->pending_list[i].fence,
-			   snapshot->pending_list[i].finished);
+			   snapshot->pending_list[i].fence);
 }
 
 /**
