@@ -2117,6 +2117,7 @@ static void intel_user_framebuffer_destroy(struct drm_framebuffer *fb)
 
 	intel_fb_bo_framebuffer_fini(intel_fb_bo(fb));
 
+	kfree(intel_fb->panic);
 	kfree(intel_fb);
 }
 
@@ -2222,10 +2223,16 @@ int intel_framebuffer_init(struct intel_framebuffer *intel_fb,
 	if (ret)
 		return ret;
 
+	intel_fb->panic = intel_panic_alloc();
+	if (!intel_fb->panic) {
+		ret = -ENOMEM;
+		goto err_framebuffer_fini;
+	}
+
 	intel_fb->frontbuffer = intel_frontbuffer_get(obj);
 	if (!intel_fb->frontbuffer) {
 		ret = -ENOMEM;
-		goto err;
+		goto err_panic_free;
 	}
 
 	ret = -EINVAL;
@@ -2319,7 +2326,9 @@ err_free_dpt:
 		intel_dpt_destroy(intel_fb->dpt_vm);
 err_frontbuffer_put:
 	intel_frontbuffer_put(intel_fb->frontbuffer);
-err:
+err_panic_free:
+	kfree(intel_fb->panic);
+err_framebuffer_fini:
 	intel_fb_bo_framebuffer_fini(obj);
 	return ret;
 }
@@ -2347,19 +2356,10 @@ intel_user_framebuffer_create(struct drm_device *dev,
 struct intel_framebuffer *intel_framebuffer_alloc(void)
 {
 	struct intel_framebuffer *intel_fb;
-	struct intel_panic *panic;
 
 	intel_fb = kzalloc(sizeof(*intel_fb), GFP_KERNEL);
 	if (!intel_fb)
 		return NULL;
-
-	panic = intel_panic_alloc();
-	if (!panic) {
-		kfree(intel_fb);
-		return NULL;
-	}
-
-	intel_fb->panic = panic;
 
 	return intel_fb;
 }
