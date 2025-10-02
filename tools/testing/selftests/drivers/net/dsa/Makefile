@@ -9,11 +9,13 @@ TEST_PROGS = bridge_locked_port.sh \
 	local_termination.sh \
 	no_forwarding.sh \
 	tc_actions.sh \
-	test_bridge_fdb_stress.sh
+	test_bridge_fdb_stress.sh \
+# end of TEST_PROGS
 
 TEST_FILES := \
 	run_net_forwarding_test.sh \
-	forwarding.config
+	forwarding.config \
+# end of TEST_FILES
 
 TEST_INCLUDES := \
 	../../../net/forwarding/bridge_locked_port.sh \
@@ -27,6 +29,7 @@ TEST_INCLUDES := \
 	../../../net/forwarding/no_forwarding.sh \
 	../../../net/forwarding/tc_actions.sh \
 	../../../net/forwarding/tc_common.sh \
-	../../../net/lib.sh
+	../../../net/lib.sh \
+# end of TEST_INCLUDES
 
 include ../../../lib.mk
