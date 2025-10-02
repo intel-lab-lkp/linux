@@ -96,6 +96,9 @@ mt76_rx_aggr_reorder_work(struct work_struct *work)
 	struct sk_buff_head frames;
 	int nframes;
 
+	if (atomic_read(&dev->bus_hung) == 1)
+		return;
+
 	__skb_queue_head_init(&frames);
 
 	local_bh_disable();
@@ -179,6 +182,9 @@ void mt76_rx_aggr_reorder(struct sk_buff *skb, struct sk_buff_head *frames)
 	if (!tid)
 		return;
 
+	if (atomic_read(&tid->dev->bus_hung) == 1)
+		return;
+
 	status->flag |= RX_FLAG_DUP_VALIDATED;
 	spin_lock_bh(&tid->lock);
 
@@ -245,6 +251,9 @@ int mt76_rx_aggr_start(struct mt76_dev *dev, struct mt76_wcid *wcid, u8 tidno,
 		       u16 ssn, u16 size)
 {
 	struct mt76_rx_tid *tid;
+
+	if (atomic_read(&dev->bus_hung) == 1)
+		return -EIO;
 
 	mt76_rx_aggr_stop(dev, wcid, tidno);
 

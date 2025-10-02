@@ -332,6 +332,9 @@ static inline u8 mt76_connac_spe_idx(u8 antenna_mask)
 
 static inline void mt76_connac_irq_enable(struct mt76_dev *dev, u32 mask)
 {
+	if (atomic_read(&dev->bus_hung) == 1)
+		return;
+
 	mt76_set_irq_mask(dev, 0, 0, mask);
 	tasklet_schedule(&dev->irq_tasklet);
 }

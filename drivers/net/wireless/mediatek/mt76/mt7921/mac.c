@@ -658,6 +658,9 @@ void mt7921_mac_reset_work(struct work_struct *work)
 	struct mt76_connac_pm *pm = &dev->pm;
 	int i, ret;
 
+	if (atomic_read(&dev->mt76.bus_hung) == 1)
+		return;
+
 	dev_dbg(dev->mt76.dev, "chip reset\n");
 	set_bit(MT76_RESET, &dev->mphy.state);
 	dev->hw_full_reset = true;

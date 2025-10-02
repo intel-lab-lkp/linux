@@ -362,6 +362,8 @@ static int mt7921_pci_probe(struct pci_dev *pdev,
 		    (mt7921_l1_rr(dev, MT_HW_REV) & 0xff);
 	dev_info(mdev->dev, "ASIC revision: %04x\n", mdev->rev);
 
+	atomic_set(&mdev->bus_hung, 0);
+
 	ret = mt792x_wfsys_reset(dev);
 	if (ret)
 		goto err_free_dev;
@@ -561,6 +563,67 @@ static void mt7921_pci_shutdown(struct pci_dev *pdev)
 
 static DEFINE_SIMPLE_DEV_PM_OPS(mt7921_pm_ops, mt7921_pci_suspend, mt7921_pci_resume);
 
+static pci_ers_result_t mt7921_pci_error_detected(struct pci_dev *pdev, pci_channel_state_t state)
+{
+	struct mt76_dev *mdev = pci_get_drvdata(pdev);
+	struct mt792x_dev *dev = container_of(mdev, struct mt792x_dev, mt76);
+	struct ieee80211_hw *hw = mdev->hw;
+	struct mt792x_phy *phy = mt792x_hw_phy(hw);
+	struct net_device *netdev = pci_get_drvdata(pdev);
+
+	if (state == pci_channel_io_normal)
+		return PCI_ERS_RESULT_CAN_RECOVER;
+
+	if (atomic_read(&mdev->bus_hung) == 1)
+		return PCI_ERS_RESULT_NEED_RESET;
+
+	atomic_set(&mdev->bus_hung, 1);
+
+	set_bit(MT76_REMOVED, &mdev->phy.state);
+
+	if (netif_running(netdev))
+		netif_device_detach(netdev);
+
+	cancel_delayed_work_sync(&phy->mt76->mac_work);
+
+	cancel_delayed_work_sync(&dev->pm.ps_work);
+	cancel_work_sync(&dev->pm.wake_work);
+	mt76_connac_free_pending_tx_skbs(&dev->pm, NULL);
+
+	mt792x_mutex_acquire(dev);
+	clear_bit(MT76_STATE_RUNNING, &phy->mt76->state);
+	mt76_connac_mcu_set_mac_enable(&dev->mt76, 0, false, false);
+	mt792x_mutex_release(dev);
+
+	if (state == pci_channel_io_perm_failure)
+		return PCI_ERS_RESULT_DISCONNECT;
+
+	tasklet_kill(&mdev->irq_tasklet);
+
+	pci_disable_device(pdev);
+
+	/* Request a slot reset. */
+	return PCI_ERS_RESULT_NEED_RESET;
+}
+
+static pci_ers_result_t mt7921_pci_error_slot_reset(struct pci_dev *pdev)
+{
+	pci_ers_result_t ret = PCI_ERS_RESULT_DISCONNECT;
+
+	return ret;
+}
+
+static void mt7921_pci_error_resume(struct pci_dev *pdev)
+{
+	return;
+}
+
+static const struct pci_error_handlers mt7921_pci_err_handler = {
+	.error_detected = mt7921_pci_error_detected,
+	.slot_reset             = mt7921_pci_error_slot_reset,
+	.resume                 = mt7921_pci_error_resume,
+};
+
 static struct pci_driver mt7921_pci_driver = {
 	.name		= KBUILD_MODNAME,
 	.id_table	= mt7921_pci_device_table,
@@ -568,6 +631,7 @@ static struct pci_driver mt7921_pci_driver = {
 	.remove		= mt7921_pci_remove,
 	.shutdown	= mt7921_pci_shutdown,
 	.driver.pm	= pm_sleep_ptr(&mt7921_pm_ops),
+	.err_handler = &mt7921_pci_err_handler,
 };
 
 module_pci_driver(mt7921_pci_driver);
