@@ -145,6 +145,7 @@ struct vgic_irq {
 
 	bool enabled;
 	bool hw;			/* Tied to HW IRQ */
+	bool targets_l2;		/* (Nesting) Targeted at L2 guest */
 	refcount_t refcount;		/* Used for LPIs */
 	u32 hwintid;			/* HW INTID number */
 	unsigned int host_irq;		/* linux irq corresponding to hwintid */

@@ -858,6 +858,17 @@ static void vgic_flush_lr_state(struct kvm_vcpu *vcpu)
 			break;
 		}
 
+		/*
+		 * If we are switching to L1 Hypervisor - populate LR with
+		 * IRQs that targeting it especially and are not targeting
+		 * its L2 guest
+		 */
+		if (vcpu_has_nv(vcpu) && !vgic_state_is_nested(vcpu) &&
+		    irq->targets_l2) {
+			raw_spin_unlock(&irq->irq_lock);
+			continue;
+		}
+
 		if (likely(vgic_target_oracle(irq) == vcpu)) {
 			vgic_populate_lr(vcpu, irq, count++);
 

@@ -286,9 +286,13 @@ void vgic_v3_sync_nested(struct kvm_vcpu *vcpu)
 		if (WARN_ON(!irq)) /* Shouldn't happen as we check on load */
 			continue;
 
+		irq->targets_l2 = true;
+
 		lr = __gic_v3_get_lr(lr_map_idx_to_shadow_idx(shadow_if, i));
-		if (!(lr & ICH_LR_STATE))
+		if (!(lr & ICH_LR_STATE)) {
 			irq->active = false;
+			irq->targets_l2 = false;
+		}
 
 		vgic_put_irq(vcpu->kvm, irq);
 	}
