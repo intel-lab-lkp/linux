@@ -103,6 +103,10 @@ properties:
   "#sound-dai-cells":
     const: 0
 
+  enable-gpios:
+    description:
+      GPIO to switch between TMDS (when active) and FRS (when inactive) modes.
+
   rockchip,grf:
     $ref: /schemas/types.yaml#/definitions/phandle
     description:
