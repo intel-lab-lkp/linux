@@ -19,17 +19,20 @@ struct rcu_synchronize {
 
 	/* This is for debugging. */
 	struct rcu_gp_oldstate oldstate;
+	struct dept_map dmap;
+	struct dept_key dkey;
 };
 void wakeme_after_rcu(struct rcu_head *head);
 
 void __wait_rcu_gp(bool checktiny, unsigned int state, int n, call_rcu_func_t *crcu_array,
-		   struct rcu_synchronize *rs_array);
+		   struct rcu_synchronize *rs_array, struct dept_key *dkey);
 
 #define _wait_rcu_gp(checktiny, state, ...) \
-do {												\
-	call_rcu_func_t __crcu_array[] = { __VA_ARGS__ };					\
-	struct rcu_synchronize __rs_array[ARRAY_SIZE(__crcu_array)];				\
-	__wait_rcu_gp(checktiny, state, ARRAY_SIZE(__crcu_array), __crcu_array, __rs_array);	\
+do {													\
+	call_rcu_func_t __crcu_array[] = { __VA_ARGS__ };						\
+	static struct dept_key __key;									\
+	struct rcu_synchronize __rs_array[ARRAY_SIZE(__crcu_array)];					\
+	__wait_rcu_gp(checktiny, state, ARRAY_SIZE(__crcu_array), __crcu_array, __rs_array, &__key);	\
 } while (0)
 
 #define wait_rcu_gp(...) _wait_rcu_gp(false, TASK_UNINTERRUPTIBLE, __VA_ARGS__)
