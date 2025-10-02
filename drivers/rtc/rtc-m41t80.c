@@ -706,11 +706,11 @@ static void wdt_disable(void)
 	};
 
 	i2c_data[0] = 0x09;
-	i2c_transfer(save_client->adapter, msgs0, 2);
-
-	i2c_data[0] = 0x09;
-	i2c_data[1] = 0x00;
-	i2c_transfer(save_client->adapter, msgs1, 1);
+	if (!i2c_transfer(save_client->adapter, msgs0, 2)) {
+		i2c_data[0] = 0x09;
+		i2c_data[1] = 0x00;
+		i2c_transfer(save_client->adapter, msgs1, 1);
+	}
 }
 
 /**
