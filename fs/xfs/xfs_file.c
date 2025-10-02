@@ -1248,7 +1248,7 @@ xfs_falloc_insert_range(
 static int
 xfs_falloc_zero_range(
 	struct file		*file,
-	int			mode,
+	int				mode,
 	loff_t			offset,
 	loff_t			len,
 	struct xfs_zone_alloc_ctx *ac)
@@ -1270,7 +1270,16 @@ xfs_falloc_zero_range(
 
 	len = round_up(offset + len, blksize) - round_down(offset, blksize);
 	offset = round_down(offset, blksize);
-	error = xfs_alloc_file_space(XFS_I(inode), offset, len);
+	if (mode & FALLOC_FL_WRITE_ZEROES) {
+		if (!bdev_write_zeroes_unmap_sectors(inode->i_sb->s_bdev))
+	        return -EOPNOTSUPP;
+		error = xfs_alloc_file_space(XFS_I(inode), XFS_BMAPI_ZERO,
+				offset, len);
+	}
+	else
+		error = xfs_alloc_file_space(XFS_I(inode), XFS_BMAPI_PREALLOC,
+				offset, len);
+
 	if (error)
 		return error;
 	return xfs_falloc_setsize(file, new_size);
@@ -1295,7 +1304,8 @@ xfs_falloc_unshare_range(
 	if (error)
 		return error;
 
-	error = xfs_alloc_file_space(XFS_I(inode), offset, len);
+	error = xfs_alloc_file_space(XFS_I(inode), XFS_BMAPI_PREALLOC,
+			offset, len);
 	if (error)
 		return error;
 	return xfs_falloc_setsize(file, new_size);
@@ -1323,7 +1333,9 @@ xfs_falloc_allocate_range(
 	if (error)
 		return error;
 
-	error = xfs_alloc_file_space(XFS_I(inode), offset, len);
+	error = xfs_alloc_file_space(XFS_I(inode), XFS_BMAPI_PREALLOC,
+			offset, len);
+
 	if (error)
 		return error;
 	return xfs_falloc_setsize(file, new_size);
@@ -1333,7 +1345,7 @@ xfs_falloc_allocate_range(
 		(FALLOC_FL_ALLOCATE_RANGE | FALLOC_FL_KEEP_SIZE |	\
 		 FALLOC_FL_PUNCH_HOLE |	FALLOC_FL_COLLAPSE_RANGE |	\
 		 FALLOC_FL_ZERO_RANGE |	FALLOC_FL_INSERT_RANGE |	\
-		 FALLOC_FL_UNSHARE_RANGE)
+		 FALLOC_FL_UNSHARE_RANGE | FALLOC_FL_WRITE_ZEROES )
 
 STATIC long
 __xfs_file_fallocate(
@@ -1376,6 +1388,7 @@ __xfs_file_fallocate(
 	case FALLOC_FL_INSERT_RANGE:
 		error = xfs_falloc_insert_range(file, offset, len);
 		break;
+	case FALLOC_FL_WRITE_ZEROES:
 	case FALLOC_FL_ZERO_RANGE:
 		error = xfs_falloc_zero_range(file, mode, offset, len, ac);
 		break;
