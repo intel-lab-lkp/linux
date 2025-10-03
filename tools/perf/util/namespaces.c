@@ -6,7 +6,6 @@
 
 #include "namespaces.h"
 #include "event.h"
-#include "get_current_dir_name.h"
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <fcntl.h>
@@ -279,10 +278,9 @@ void nsinfo__set_in_pidns(struct nsinfo *nsi)
 void nsinfo__mountns_enter(struct nsinfo *nsi,
 				  struct nscookie *nc)
 {
-	char curpath[PATH_MAX];
+	char oldcwd[PATH_MAX];
 	int oldns = -1;
 	int newns = -1;
-	char *oldcwd = NULL;
 
 	if (nc == NULL)
 		return;
@@ -293,14 +291,14 @@ void nsinfo__mountns_enter(struct nsinfo *nsi,
 	if (!nsi || !nsinfo__need_setns(nsi))
 		return;
 
-	if (snprintf(curpath, PATH_MAX, "/proc/self/ns/mnt") >= PATH_MAX)
+	if (!getcwd(oldcwd, sizeof(oldcwd)))
 		return;
 
-	oldcwd = get_current_dir_name();
-	if (!oldcwd)
+	nc->oldcwd = strdup(oldcwd);
+	if (!nc->oldcwd)
 		return;
 
-	oldns = open(curpath, O_RDONLY);
+	oldns = open("/proc/self/ns/mnt", O_RDONLY);
 	if (oldns < 0)
 		goto errout;
 
@@ -311,13 +309,11 @@ void nsinfo__mountns_enter(struct nsinfo *nsi,
 	if (setns(newns, CLONE_NEWNS) < 0)
 		goto errout;
 
-	nc->oldcwd = oldcwd;
 	nc->oldns = oldns;
 	nc->newns = newns;
 	return;
 
 errout:
-	free(oldcwd);
 	if (oldns > -1)
 		close(oldns);
 	if (newns > -1)
