@@ -175,6 +175,266 @@ static int pcsc_update_byte(struct pci_dev *dev, int where, u8 val)
 	return 0;
 }
 
+static const u8 PCSC_SUPPORTED_CAPABILITIES[] = {
+	PCI_CAP_ID_PM,	 PCI_CAP_ID_VPD, PCI_CAP_ID_MSI, PCI_CAP_ID_VNDR,
+	PCI_CAP_ID_MSIX, PCI_CAP_ID_EXP, PCI_CAP_ID_AF,	 PCI_CAP_ID_EA
+};
+
+/**
+ * pcsc_handle_msi_cacheability - Set cacheability for MSI capability registers
+ * @dev: PCI device
+ * @cap_pos: Capability position in config space
+ *
+ * The MSI capability has four different shapes (12-24 bytes) depending on:
+ * - 64-bit addressing capability (PCI_MSI_FLAGS_64BIT)
+ * - Per-vector masking capability (PCI_MSI_FLAGS_MASKBIT)
+ *
+ * Cacheable registers:
+ * - PCI_MSI_FLAGS: Control register
+ * - PCI_MSI_ADDRESS_LO: Lower 32 bits of message address
+ * - PCI_MSI_ADDRESS_HI: Upper 32 bits (if 64-bit capable)
+ * - PCI_MSI_DATA_32/64: Message data register
+ * - PCI_MSI_MASK_32/64: Mask bits register (if masking capable)
+ *
+ * Non-cacheable registers:
+ * - PCI_MSI_PENDING_32/64: Pending bits (modified by device)
+ */
+static void pcsc_handle_msi_cacheability(struct pci_dev *dev, int cap_pos)
+{
+	u32 val;
+	u16 msi_flags;
+	bool is_64bit_capable;
+	bool is_mask_capable;
+	int data_offset;
+	int mask_offset;
+
+	if (WARN_ON(!dev || !dev->pcsc || !dev->pcsc->cfg_space))
+		return;
+
+	/* Read MSI flags to determine capability shape */
+	if (pcsc_hw_config_read(dev->bus, dev->devfn, cap_pos + PCI_MSI_FLAGS,
+				2, &val) != PCIBIOS_SUCCESSFUL) {
+		pci_warn(dev, "PCSC: Failed to read MSI flags at %#x\n",
+			 cap_pos + PCI_MSI_FLAGS);
+		return;
+	}
+
+	msi_flags = val & 0xFFFF;
+	pcsc_update_byte(dev, cap_pos + PCI_MSI_FLAGS, msi_flags & 0xFF);
+	pcsc_update_byte(dev, cap_pos + PCI_MSI_FLAGS + 1, (msi_flags >> 8) & 0xFF);
+
+	/* Mark MSI flags as cacheable */
+	bitmap_set(dev->pcsc->cachable_bitmask, cap_pos + PCI_MSI_FLAGS, 2);
+	is_64bit_capable = !!(msi_flags & PCI_MSI_FLAGS_64BIT);
+	is_mask_capable = !!(msi_flags & PCI_MSI_FLAGS_MASKBIT);
+
+	bitmap_set(dev->pcsc->cachable_bitmask, cap_pos + PCI_MSI_ADDRESS_LO,
+		   4);
+
+	if (is_64bit_capable) {
+		/* PCI_MSI_ADDRESS_HI is cacheable for 64-bit capable devices */
+		bitmap_set(dev->pcsc->cachable_bitmask,
+			   cap_pos + PCI_MSI_ADDRESS_HI, 4);
+
+		data_offset = PCI_MSI_DATA_64;
+		mask_offset = PCI_MSI_MASK_64;
+	} else {
+		/* Message Data register is at different offset for 32-bit */
+		data_offset = PCI_MSI_DATA_32;
+		mask_offset = PCI_MSI_MASK_32;
+	}
+
+	/*
+	 * Message Data register is always cacheable
+	 * Note: PCI spec defines Extended Message Data Capable (bit 9, 0x0200)
+	 * which allows 4-byte message data instead of 2-byte. However, Linux
+	 * doesn't currently define or use this capability, so we conservatively
+	 * mark only 2 bytes as cacheable for compatibility.
+	 */
+	bitmap_set(dev->pcsc->cachable_bitmask, cap_pos + data_offset, 2);
+
+	if (is_mask_capable) {
+		/* Mask bits register is cacheable if masking is supported */
+		bitmap_set(dev->pcsc->cachable_bitmask, cap_pos + mask_offset,
+			   4);
+	}
+}
+
+static void infer_capability_cacheability(struct pci_dev *dev, int cap_pos,
+					  u8 cap_id)
+{
+	if (WARN_ON(!dev || !dev->pcsc || !dev->pcsc->cfg_space))
+		return;
+
+	switch (cap_id) {
+	case PCI_CAP_ID_PM:
+		/* Power Management Capability */
+		bitmap_set(dev->pcsc->cachable_bitmask, cap_pos + PCI_PM_PMC,
+			   2); /* PCI_PM_PMC */
+		break;
+	case PCI_CAP_ID_MSI:
+		/* Message Signaled Interrupts */
+		pcsc_handle_msi_cacheability(dev, cap_pos);
+		break;
+	case PCI_CAP_ID_VNDR:
+		/* Vendor Specific */
+		bitmap_set(dev->pcsc->cachable_bitmask, cap_pos + PCI_CAP_FLAGS,
+			   1);
+		/* Only the flag can be cached as the body is opaque */
+		break;
+	case PCI_CAP_ID_MSIX:
+		/* MSI-X - the entire capability is cacheable */
+		bitmap_set(dev->pcsc->cachable_bitmask,
+			   cap_pos + PCI_MSIX_FLAGS, 10);
+		break;
+	case PCI_CAP_ID_EXP:
+		/* PCI Express capability - All except Status registers */
+		bitmap_set(
+			dev->pcsc->cachable_bitmask, cap_pos + PCI_EXP_FLAGS,
+			8); /* PCI_EXP_FLAGS, PCI_EXP_DEVCAP, PCI_EXP_DEVCTL */
+		bitmap_set(dev->pcsc->cachable_bitmask,
+			   cap_pos + PCI_EXP_LNKCAP,
+			   6); /* PCI_EXP_LNKCAP, PCI_EXP_LNKCTL */
+		bitmap_set(dev->pcsc->cachable_bitmask,
+			   cap_pos + PCI_EXP_SLTCAP,
+			   6); /* PCI_EXP_SLTCAP, PCI_EXP_SLTCTL */
+		bitmap_set(dev->pcsc->cachable_bitmask, cap_pos + PCI_EXP_RTCTL,
+			   4); /* PCI_EXP_RTCTL, PCI_EXP_RTCAP */
+		bitmap_set(dev->pcsc->cachable_bitmask,
+			   cap_pos + PCI_EXP_DEVCAP2,
+			   6); /* PCI_EXP_DEVCAP2, PCI_EXP_DEVCTL2 */
+		bitmap_set(dev->pcsc->cachable_bitmask,
+			   cap_pos + PCI_EXP_LNKCAP2,
+			   6); /* PCI_EXP_LNKCAP2, PCI_EXP_LNKCTL2 */
+		bitmap_set(dev->pcsc->cachable_bitmask,
+			   cap_pos + PCI_EXP_SLTCAP2,
+			   6); /* PCI_EXP_SLTCAP2, PCI_EXP_SLTCTL2 */
+		break;
+	case PCI_CAP_ID_AF:
+		/* PCI Advanced Features */
+		bitmap_set(dev->pcsc->cachable_bitmask, cap_pos + PCI_AF_LENGTH,
+			   2); /* PCI_AF_LENGTH, PCI_AF_CAP */
+		break;
+	case PCI_CAP_ID_EA:
+		/* Enhanced Allocation Theoretically the entire capability could
+		 * be cached, but it is not trivial to deduce its size.
+		 */
+		bitmap_set(dev->pcsc->cachable_bitmask,
+			   cap_pos + PCI_EA_NUM_ENT, 2);
+		break;
+	case PCI_CAP_ID_VPD:
+		/* Vital Product Data */
+		bitmap_set(dev->pcsc->cachable_bitmask, cap_pos + PCI_VPD_ADDR,
+			   2); /* PCI_VPD_ADDR */
+		break;
+	default:
+		/* Unsupported capability - We shouldn't reach this point */
+		pr_warn("Something is off when iterating through the supported capabilities.");
+		break;
+	}
+}
+
+static void infer_capabilities_pointers(struct pci_dev *dev)
+{
+	u8 pos, cap_id, next_cap;
+	u32 val;
+	int i;
+
+	if (pcsc_hw_config_read(dev->bus, dev->devfn, PCI_CAPABILITY_LIST, 1,
+				&val) != PCIBIOS_SUCCESSFUL)
+		return;
+
+	pos = (val & 0xFF) & ~0x3;
+
+	while (pos) {
+		if (pos < 0x40 || pos > 0xFE)
+			break;
+
+		pos &= ~0x3;
+		if (pcsc_hw_config_read(dev->bus, dev->devfn, pos, 2, &val) !=
+		    PCIBIOS_SUCCESSFUL)
+			break;
+
+		cap_id = val & 0xFF; /* PCI_CAP_LIST_ID */
+		next_cap = (val >> 8) & 0xFF; /* PCI_CAP_LIST_NEXT */
+
+		bitmap_set(dev->pcsc->cachable_bitmask, pos, 2);
+		pcsc_update_byte(dev, pos, cap_id); /* PCI_CAP_LIST_ID */
+		pcsc_update_byte(dev, pos + 1,
+				 next_cap); /* PCI_CAP_LIST_NEXT */
+
+		pci_dbg(dev, "Capability ID %#x found at %#x\n", cap_id, pos);
+
+		/* Check if this is a supported capability and infer cacheability */
+		for (i = 0; i < ARRAY_SIZE(PCSC_SUPPORTED_CAPABILITIES); i++) {
+			if (cap_id == PCSC_SUPPORTED_CAPABILITIES[i]) {
+				infer_capability_cacheability(dev, pos, cap_id);
+				break;
+			}
+		}
+
+		/* Move to next capability */
+		pos = next_cap;
+	}
+}
+
+static void infer_cacheability(struct pci_dev *dev)
+{
+	if (WARN_ON(!dev || !dev->pcsc || !dev->pcsc->cfg_space))
+		return;
+
+	bitmap_zero(dev->pcsc->cachable_bitmask, PCSC_CFG_SPC_SIZE);
+
+	/* Type 0 Configuration Space Header */
+	if (dev->hdr_type == PCI_HEADER_TYPE_NORMAL) {
+		/*
+		 * Mark cacheable registers in the PCI configuration space header.
+		 * We cache read-only and rarely changing registers:
+		 * - PCI_VENDOR_ID, PCI_DEVICE_ID (0x00-0x03)
+		 * - PCI_CLASS_REVISION through PCI_CAPABILITY_LIST (0x08-0x34)
+		 *   Includes: CLASS_REVISION, CACHE_LINE_SIZE, LATENCY_TIMER,
+		 *   HEADER_TYPE, BIST, BASE_ADDRESS_0-5, CARDBUS_CIS,
+		 *   SUBSYSTEM_VENDOR_ID, SUBSYSTEM_ID, ROM_ADDRESS, CAPABILITY_LIST
+		 * - PCI_INTERRUPT_LINE through PCI_MAX_LAT (0x3c-0x3f)
+		 *   Includes: INTERRUPT_LINE, INTERRUPT_PIN, MIN_GNT, MAX_LAT
+		 */
+		bitmap_set(dev->pcsc->cachable_bitmask, PCI_VENDOR_ID, 4);
+		bitmap_set(dev->pcsc->cachable_bitmask, PCI_CLASS_REVISION, 45);
+		bitmap_set(dev->pcsc->cachable_bitmask, PCI_INTERRUPT_LINE, 4);
+
+		/* Pre populate the cache with the values that we already know */
+		pcsc_update_byte(dev, PCI_HEADER_TYPE,
+				 dev->hdr_type |
+					 (dev->multifunction ? 0x80 : 0));
+
+		/*
+		 * SR-IOV VFs must return 0xFFFF (PCI_ANY_ID) for vendor/device ID
+		 * registers per PCIe spec.
+		 */
+		if (dev->is_virtfn) {
+			pcsc_update_byte(dev, PCI_VENDOR_ID, 0xFF);
+			pcsc_update_byte(dev, PCI_VENDOR_ID + 1, 0xFF);
+			pcsc_update_byte(dev, PCI_DEVICE_ID, 0xFF);
+			pcsc_update_byte(dev, PCI_DEVICE_ID + 1, 0xFF);
+		} else {
+			if (dev->vendor != PCI_ANY_ID) {
+				pcsc_update_byte(dev, PCI_VENDOR_ID,
+						 dev->vendor & 0xFF);
+				pcsc_update_byte(dev, PCI_VENDOR_ID + 1,
+						 (dev->vendor >> 8) & 0xFF);
+			}
+			if (dev->device != PCI_ANY_ID) {
+				pcsc_update_byte(dev, PCI_DEVICE_ID,
+						 dev->device & 0xFF);
+				pcsc_update_byte(dev, PCI_DEVICE_ID + 1,
+						 (dev->device >> 8) & 0xFF);
+			}
+		}
+
+		infer_capabilities_pointers(dev);
+	}
+}
+
 int pcsc_add_device(struct pci_dev *dev)
 {
 	struct pcsc_node *node;
@@ -199,6 +459,7 @@ int pcsc_add_device(struct pci_dev *dev)
 		if (!dev->pcsc->cfg_space)
 			goto err_free_node;
 
+		infer_cacheability(dev);
 	} else {
 		dev->pcsc->cfg_space = NULL;
 	}
