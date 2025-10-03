@@ -17,6 +17,7 @@ void iommu_debug_map(struct iommu_domain *domain, phys_addr_t phys, size_t size)
 void iommu_debug_unmap(struct iommu_domain *domain, unsigned long iova, size_t size);
 void iommu_debug_remap(struct iommu_domain *domain, unsigned long iova, size_t size);
 void iommu_debug_init(void);
+void iommu_debug_check_unmapped(const struct page *page, int numpages);
 
 #endif /* CONFIG_IOMMU_DEBUG_PAGEALLOC */
 

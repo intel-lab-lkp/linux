@@ -36,6 +36,7 @@
 #include <linux/rcuwait.h>
 #include <linux/bitmap.h>
 #include <linux/bitops.h>
+#include <linux/iommu-debug.h>
 
 struct mempolicy;
 struct anon_vma;
@@ -3913,12 +3914,18 @@ extern void __kernel_map_pages(struct page *page, int numpages, int enable);
 #ifdef CONFIG_DEBUG_PAGEALLOC
 static inline void debug_pagealloc_map_pages(struct page *page, int numpages)
 {
+#ifdef CONFIG_IOMMU_DEBUG_PAGEALLOC
+	iommu_debug_check_unmapped(page, numpages);
+#endif
 	if (debug_pagealloc_enabled_static())
 		__kernel_map_pages(page, numpages, 1);
 }
 
 static inline void debug_pagealloc_unmap_pages(struct page *page, int numpages)
 {
+#ifdef CONFIG_IOMMU_DEBUG_PAGEALLOC
+	iommu_debug_check_unmapped(page, numpages);
+#endif
 	if (debug_pagealloc_enabled_static())
 		__kernel_map_pages(page, numpages, 0);
 }

@@ -71,6 +71,28 @@ static size_t iommu_debug_page_size(struct iommu_domain *domain)
 	return 1UL << __ffs(domain->pgsize_bitmap);
 }
 
+static unsigned int iommu_debug_page_count(unsigned long phys)
+{
+	unsigned int ref;
+	struct page_ext *page_ext = get_iommu_page_ext(phys);
+	struct iommu_debug_metadate *d = get_iommu_data(page_ext);
+
+	ref = atomic_read(&d->ref);
+	page_ext_put(page_ext);
+	return ref;
+}
+
+void iommu_debug_check_unmapped(const struct page *page, int numpages)
+{
+	if (!static_branch_likely(&iommu_debug_initialized))
+		return;
+
+	while (numpages--) {
+		WARN_ON(iommu_debug_page_count(page_to_phys(page)));
+		page++;
+	}
+}
+
 void iommu_debug_map(struct iommu_domain *domain, phys_addr_t phys, size_t size)
 {
 	size_t off;
