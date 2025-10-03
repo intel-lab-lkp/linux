@@ -1,0 +1,20 @@
+PCI Configuration Space Cache (PCSC)
+-------------------------------------
+
+The PCI Configuration Space Cache (PCSC) is a transparent caching layer
+that intercepts configuration space operations to reduce hardware access
+overhead. This subsystem addresses performance bottlenecks in PCI
+configuration space accesses, particularly in virtualization
+environments with high-density SR-IOV deployments where repeated
+enumeration of Virtual Functions creates substantial delays.
+
+What:			/sys/bus/pci/pcsc/enabled
+Date:			September 2025
+Contact:		Linux PCI developers <linux-pci@vger.kernel.org>
+Description:
+				PCI Configuration Space Cache (PCSC) is a subsystem that
+				caches accesses to the PCI configuration space of PCI
+				functions. When this file contains the "1", the kernel
+				is utilizing the cache, while when on "0" the
+				system bypasses it. This setting can also be controlled
+parameter.

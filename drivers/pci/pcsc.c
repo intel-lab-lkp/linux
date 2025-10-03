@@ -16,13 +16,21 @@
 
 #include <linux/atomic.h>
 #include <linux/pcsc.h>
+#include <linux/sysfs.h>
+
+static bool pcsc_enabled;
+static int __init pcsc_enabled_setup(char *str)
+{
+	return kstrtobool(str, &pcsc_enabled) == 0;
+}
+__setup("pcsc_enabled=", pcsc_enabled_setup);
 
 static bool pcsc_initialised;
 static atomic_t num_nodes = ATOMIC_INIT(0);
 
 inline bool pcsc_is_initialised(void)
 {
-	return pcsc_initialised;
+	return pcsc_initialised && pcsc_enabled;
 }
 
 static int pcsc_add_bus(struct pci_bus *bus)
@@ -899,14 +907,95 @@ static struct notifier_block pcsc_bus_nb = {
 	.notifier_call = pcsc_bus_notify,
 };
 
+static ssize_t pcsc_enabled_show(struct kobject *kobj,
+				 struct kobj_attribute *attr, char *buf)
+{
+	return sysfs_emit(buf, "%d\n", pcsc_enabled);
+}
+
+static ssize_t pcsc_enabled_store(struct kobject *kobj,
+				  struct kobj_attribute *attr, const char *buf,
+				  size_t count)
+{
+	bool new_value;
+	int ret;
+
+	ret = kstrtobool(buf, &new_value);
+	if (ret < 0)
+		return ret;
+
+	pcsc_enabled = new_value;
+	return count;
+}
+
+static struct kobj_attribute pcsc_enabled_attribute =
+	__ATTR(enabled, 0644, pcsc_enabled_show, pcsc_enabled_store);
+
+static struct attribute *pcsc_attrs[] = {
+	&pcsc_enabled_attribute.attr,
+	NULL,
+};
+
+static struct attribute_group pcsc_attr_group = {
+	.attrs = pcsc_attrs,
+};
+
+static struct kobject *pcsc_kobj;
+
+static void pcsc_create_sysfs(void)
+{
+	struct kset *pci_bus_kset;
+	int ret;
+
+	if (pcsc_kobj)
+		return; /* Already created */
+
+	pci_bus_kset = bus_get_kset(&pci_bus_type);
+	if (!pci_bus_kset) {
+		/* PCI bus kset not ready yet, will be retried later */
+		return;
+	}
+
+	pcsc_kobj = kobject_create_and_add("pcsc", &pci_bus_kset->kobj);
+	if (!pcsc_kobj) {
+		pr_err("Failed to create sysfs kobject\n");
+		return;
+	}
+
+	ret = sysfs_create_group(pcsc_kobj, &pcsc_attr_group);
+	if (ret) {
+		pr_err("Failed to create sysfs group\n");
+		kobject_put(pcsc_kobj);
+		pcsc_kobj = NULL;
+		return;
+	}
+}
+
 static int __init pcsc_init(void)
 {
 	bus_register_notifier(&pci_bus_type, &pcsc_bus_nb);
 
+	/* Try to create sysfs entry, but don't fail if PCI bus isn't ready yet */
+	pcsc_create_sysfs();
+
 	pcsc_initialised = true;
-	pr_info("initialised\n");
+	pr_info("initialised (enabled=%d)\n", pcsc_enabled);
 
 	return 0;
 }
 
+/* Late initcall to retry sysfs creation if it failed during core_initcall */
+static int __init pcsc_sysfs_init(void)
+{
+	pcsc_create_sysfs();
+	return 0;
+}
+
 core_initcall(pcsc_init);
+
+/*
+ * The PCI subsystem is initialised later, therefore we need to add
+ * our sysfs entries later. This is done to avoid modifying the sysfs
+ * creation of the core pci driver.
+ */
+late_initcall(pcsc_sysfs_init);

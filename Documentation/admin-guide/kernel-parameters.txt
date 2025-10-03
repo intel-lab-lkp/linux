@@ -5036,6 +5036,9 @@
 
 	pcmv=		[HW,PCMCIA] BadgePAD 4
 
+	pcsc_enabled=	[PCSC] enable the use of the PCI Configuration Space
+		Cache (PCSC).
+
 	pd_ignore_unused
 			[PM]
 			Keep all power-domains already enabled by bootloader on,
