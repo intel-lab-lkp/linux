@@ -22,10 +22,6 @@
 # include "test-libelf.c"
 #undef main
 
-#define main main_test_get_current_dir_name
-# include "test-get_current_dir_name.c"
-#undef main
-
 #define main main_test_gettid
 # include "test-gettid.c"
 #undef main
