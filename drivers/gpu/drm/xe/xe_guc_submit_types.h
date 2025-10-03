@@ -64,7 +64,6 @@ struct guc_submit_parallel_scratch {
 struct pending_list_snapshot {
 	u32 seqno;
 	bool fence;
-	bool finished;
 };
 
 /**
