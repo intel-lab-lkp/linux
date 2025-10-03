@@ -1617,7 +1617,15 @@ struct buffer_head *ext4_find_inline_entry(struct inode *dir,
 
 	inline_start = ext4_get_inline_xattr_pos(dir, &is.iloc);
 	inline_size = ext4_get_inline_size(dir) - EXT4_MIN_INLINE_DATA_SIZE;
+	void *inode_start = ext4_raw_inode(&is.iloc);
+	void *inode_end = inode_start + EXT4_INODE_SIZE(dir->i_sb);
 
+	if (inline_start < inode_start ||
+	    inline_start >= inode_end ||
+	    inline_start + inline_size > inode_end) {
+		ret = -EFSCORRUPTED;
+		goto out;
+	}
 	ret = ext4_search_dir(is.iloc.bh, inline_start, inline_size,
 			      dir, fname, 0, res_dir);
 	if (ret == 1)
