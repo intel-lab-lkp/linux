@@ -23,6 +23,9 @@
 #include <linux/vmalloc.h>
 #include <linux/slab.h>
 
+/* PCSC persistent data version - increment when the cacheability is changed */
+#define PCSC_PERSISTENT_VERSION 1U
+
 static bool pcsc_enabled;
 static int __init pcsc_enabled_setup(char *str)
 {
@@ -818,6 +821,7 @@ static int pcsc_kho_notifier(struct notifier_block *self, unsigned long cmd,
 	u32 eligible_count = 0;
 	u32 saved_count = 0;
 	u32 skipped_count = 0;
+	const u32 version = PCSC_PERSISTENT_VERSION;
 
 	switch (cmd) {
 	case KEXEC_KHO_ABORT:
@@ -853,8 +857,8 @@ static int pcsc_kho_notifier(struct notifier_block *self, unsigned long cmd,
 	/* Allocate FDT with size calculation (conservative estimates):
 	 * - Per device: node_name(~20) + node_overhead(~12) + da_property(~20)
 	 *   = ~52 bytes, round up to 64 for alignment/margin
-	 * - Fixed overhead: header(40) + root_node(~40) + strings_table(~30)
-	 * + misc(~32) = ~144 bytes, round up to 256
+	 * - Fixed overhead: header(40) + root_node(~48) + strings_table(~30)
+	 * + misc(~32) = ~152 bytes, round up to 256
 	 */
 	fdt_size = PAGE_ALIGN((eligible_count * 64 + 256));
 	pcsc_kho_fdt_order = get_order(fdt_size);
@@ -889,6 +893,12 @@ static int pcsc_kho_notifier(struct notifier_block *self, unsigned long cmd,
 	err = fdt_property_string(fdt, "compatible", PCSC_KHO_NODE_COMPATIBLE);
 	if (err) {
 		pr_err("PCSC: Failed to set compatible property: %d\n", err);
+		goto error_cleanup;
+	}
+
+	err = fdt_property(fdt, "pv", &version, sizeof(version));
+	if (err) {
+		pr_err("PCSC: Failed to set version property: %d\n", err);
 		goto error_cleanup;
 	}
 
@@ -960,7 +970,7 @@ static struct notifier_block pcsc_kho_nb = {
 };
 
 static bool pcsc_kho_restore_device(struct pci_dev *dev, const void *fdt,
-				    int node)
+				    int node, bool version_mismatch)
 {
 	const struct pcsc_data *preserved_data;
 	const u64 *data_addr;
@@ -980,6 +990,9 @@ static bool pcsc_kho_restore_device(struct pci_dev *dev, const void *fdt,
 	dev->pcsc->cached_bitmask = dev->pcsc->data->cached_bitmask;
 	dev->pcsc->cfg_space = dev->pcsc->data->cfg_space;
 
+	if (version_mismatch)
+		infer_cacheability(dev);
+
 	return true;
 }
 
@@ -987,9 +1000,12 @@ static bool pcsc_kho_check_restore(struct pci_dev *dev)
 {
 	phys_addr_t fdt_phys;
 	const void *fdt;
-	int node, err;
+	int node, err, len;
 	bool restored = false;
+	bool version_mismatch = false;
 	char node_name[32];
+	const u32 *version_ptr;
+	u32 saved_version;
 #ifdef CONFIG_PCSC_STATS
 	ktime_t start_time, end_time;
 	u64 duration_ns;
@@ -1007,6 +1023,20 @@ static bool pcsc_kho_check_restore(struct pci_dev *dev)
 		return false;
 	}
 
+	version_ptr = fdt_getprop(fdt, 0, "pv", &len);
+	if (version_ptr && len == sizeof(*version_ptr)) {
+		saved_version = *version_ptr;
+		if (saved_version != PCSC_PERSISTENT_VERSION)
+			version_mismatch = true;
+
+	} else {
+		/* No version found, assume version 0 */
+		pci_info(
+			dev,
+			"PCSC: No version found in restored data. Re-infer Cacheability.\n");
+		version_mismatch = true;
+	}
+
 #ifdef CONFIG_PCSC_STATS
 	start_time = ktime_get();
 #endif
@@ -1017,7 +1047,7 @@ static bool pcsc_kho_check_restore(struct pci_dev *dev)
 
 	node = fdt_subnode_offset(fdt, 0, node_name);
 	if (node >= 0)
-		restored = pcsc_kho_restore_device(dev, fdt, node);
+		restored = pcsc_kho_restore_device(dev, fdt, node, version_mismatch);
 
 #ifdef CONFIG_PCSC_STATS
 	if (restored) {
