@@ -5039,6 +5039,10 @@
 	pcsc_enabled=	[PCSC] enable the use of the PCI Configuration Space
 		Cache (PCSC).
 
+	pcsc_persistence_enabled=	[PCSC] enable the persistence over kexec
+		using KHO of the PCI Configuration Space Cache Data. For more
+		information seen drivers/pci/pcsc.c
+
 	pd_ignore_unused
 			[PM]
 			Keep all power-domains already enabled by bootloader on,

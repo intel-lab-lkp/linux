@@ -57,6 +57,16 @@ config PCSC_STATS
 	help
 	  This option allows the collection of statistics for the PCSC.
 
+config PCSC_KHO
+	bool "PCI Configuration Space Cache persist data over kexec"
+	depends on PCSC
+	depends on KEXEC_HANDOVER
+	default n
+	help
+		This option enables the persistence of the cache data over kexec
+		using Kexec Handover KHO. For more information, check
+		`drivers/pci/pcsc.c'
+
 source "drivers/pci/pcie/Kconfig"
 
 config PCI_MSI

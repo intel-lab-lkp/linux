@@ -17,6 +17,11 @@
 #include <linux/atomic.h>
 #include <linux/pcsc.h>
 #include <linux/sysfs.h>
+#include <linux/kexec_handover.h>
+#include <linux/libfdt.h>
+#include <linux/mm.h>
+#include <linux/vmalloc.h>
+#include <linux/slab.h>
 
 static bool pcsc_enabled;
 static int __init pcsc_enabled_setup(char *str)
@@ -24,6 +29,16 @@ static int __init pcsc_enabled_setup(char *str)
 	return kstrtobool(str, &pcsc_enabled) == 0;
 }
 __setup("pcsc_enabled=", pcsc_enabled_setup);
+
+static bool pcsc_persistence_enabled;
+static int __init pcsc_persistence_enabled_setup(char *str)
+{
+	return kstrtobool(str, &pcsc_persistence_enabled) == 0;
+}
+__setup("pcsc_persistence_enabled=", pcsc_persistence_enabled_setup);
+
+#define PCSC_KHO_FDT "pcsc"
+#define PCSC_KHO_NODE_COMPATIBLE "pcsc-v1"
 
 #ifdef CONFIG_PCSC_STATS
 struct pcsc_stats {
@@ -39,6 +54,10 @@ struct pcsc_stats {
 	u64 total_cache_access_time; /* in milliseconds */
 	u64 total_hw_access_time; /* in milliseconds */
 	u64 hw_access_time_due_to_misses; /* in milliseconds */
+#ifdef CONFIG_PCSC_KHO
+	u64 pcsc_kho_total_restore_time_ns;
+	u32 pcsc_kho_restored_device_count;
+#endif
 };
 #endif
 
@@ -82,6 +101,12 @@ static inline void pcsc_count_device_reset(void)
 {
 	pcsc_stats.device_resets++;
 }
+#ifdef CONFIG_PCSC_KHO
+static inline void pcsc_count_restored_devices(void)
+{
+	pcsc_stats.pcsc_kho_restored_device_count++;
+}
+#endif
 #else
 static inline void pcsc_count_cache_hit(void)
 {
@@ -101,6 +126,11 @@ static inline void pcsc_count_cache_invalidation(void)
 static inline void pcsc_count_device_reset(void)
 {
 }
+#ifdef CONFIG_PCSC_KHO
+static inline void pcsc_count_restored_devices(void)
+{
+}
+#endif
 #endif
 
 inline bool pcsc_is_initialised(void)
@@ -721,6 +751,288 @@ static void infer_cacheability(struct pci_dev *dev)
 	}
 }
 
+#ifdef CONFIG_PCSC_KHO
+static struct page *pcsc_kho_fdt;
+static int pcsc_kho_fdt_order;
+
+static int pcsc_kho_save_device(struct pci_dev *dev, void *fdt)
+{
+	char node_name[32];
+	size_t data_size, total_size;
+	u64 data_addr;
+	int err = 0;
+
+	if (!dev->pcsc || !dev->pcsc->data)
+		return 1;
+
+	if (dev->hdr_type != PCI_HEADER_TYPE_NORMAL)
+		return 1;
+
+	/* Create FDT node for this device - node name contains device identifer */
+	snprintf(node_name, sizeof(node_name), "dev_%04x_%02x_%02x_%x",
+		 pci_domain_nr(dev->bus), dev->bus->number,
+		 PCI_SLOT(dev->devfn), PCI_FUNC(dev->devfn));
+
+	err = fdt_begin_node(fdt, node_name);
+	if (err) {
+		pci_err(dev, "PCSC: Failed to begin FDT node '%s': %d\n",
+			node_name, err);
+		return err;
+	}
+
+	data_size = sizeof(struct pcsc_data);
+	total_size = PAGE_ALIGN(data_size);
+
+	data_addr = virt_to_phys(dev->pcsc->data);
+	err = kho_preserve_phys(data_addr, total_size);
+	if (err) {
+		pci_err(dev, "PCSC: Failed to preserve data buffer: %d\n", err);
+		return err;
+	}
+
+	err = fdt_property(fdt, "da", &data_addr, sizeof(data_addr));
+	if (err) {
+		pci_err(dev, "PCSC: Failed to set da property: %d\n",
+			err);
+		return err;
+	}
+
+	err = fdt_end_node(fdt);
+	if (err) {
+		pci_err(dev, "PCSC: Failed to end FDT node: %d\n", err);
+		return err;
+	}
+
+	return 0;
+}
+
+static int pcsc_kho_notifier(struct notifier_block *self, unsigned long cmd,
+			     void *v)
+{
+	struct kho_serialization *ser = v;
+	struct pci_dev *dev = NULL;
+	void *fdt;
+	int err = 0;
+	size_t fdt_size;
+	u32 dev_count = 0;
+	u32 eligible_count = 0;
+	u32 saved_count = 0;
+	u32 skipped_count = 0;
+
+	switch (cmd) {
+	case KEXEC_KHO_ABORT:
+		if (pcsc_kho_fdt) {
+			__free_pages(pcsc_kho_fdt, pcsc_kho_fdt_order);
+			pcsc_kho_fdt = NULL;
+		}
+		return NOTIFY_DONE;
+	case KEXEC_KHO_FINALIZE:
+		/* Handled below */
+		break;
+	default:
+		return NOTIFY_BAD;
+	}
+
+#ifdef CONFIG_PCSC_STATS
+	ktime_t start_time = ktime_get();
+#endif
+
+	for_each_pci_dev(dev) {
+		dev_count++;
+		if (dev->pcsc && dev->pcsc->cfg_space &&
+		    dev->hdr_type == PCI_HEADER_TYPE_NORMAL)
+			eligible_count++;
+	}
+
+	pr_info("Total PCI devices: %u, eligible for save: %u\n",
+		dev_count, eligible_count);
+
+	if (eligible_count == 0)
+		return NOTIFY_DONE;
+
+	/* Allocate FDT with size calculation (conservative estimates):
+	 * - Per device: node_name(~20) + node_overhead(~12) + da_property(~20)
+	 *   = ~52 bytes, round up to 64 for alignment/margin
+	 * - Fixed overhead: header(40) + root_node(~40) + strings_table(~30)
+	 * + misc(~32) = ~144 bytes, round up to 256
+	 */
+	fdt_size = PAGE_ALIGN((eligible_count * 64 + 256));
+	pcsc_kho_fdt_order = get_order(fdt_size);
+	pcsc_kho_fdt = alloc_pages(GFP_KERNEL, pcsc_kho_fdt_order);
+	if (!pcsc_kho_fdt) {
+		pr_err("PCSC: Failed to allocate FDT pages (size=%zu, order=%d)\n",
+		       fdt_size, pcsc_kho_fdt_order);
+		return NOTIFY_BAD;
+	}
+
+	fdt = page_to_virt(pcsc_kho_fdt);
+
+	/* Create FDT */
+	err = fdt_create(fdt, fdt_size);
+	if (err) {
+		pr_err("PCSC: Failed to create FDT: %d\n", err);
+		goto error_cleanup;
+	}
+
+	err = fdt_finish_reservemap(fdt);
+	if (err) {
+		pr_err("PCSC: Failed to finish FDT reservemap: %d\n", err);
+		goto error_cleanup;
+	}
+
+	err = fdt_begin_node(fdt, "");
+	if (err) {
+		pr_err("PCSC: Failed to begin root FDT node: %d\n", err);
+		goto error_cleanup;
+	}
+
+	err = fdt_property_string(fdt, "compatible", PCSC_KHO_NODE_COMPATIBLE);
+	if (err) {
+		pr_err("PCSC: Failed to set compatible property: %d\n", err);
+		goto error_cleanup;
+	}
+
+	for_each_pci_dev(dev) {
+		int save_err = pcsc_kho_save_device(dev, fdt);
+
+		if (save_err == 0) {
+			saved_count++;
+		} else if (save_err == 1) {
+			/* Skipped (not eligible) */
+			skipped_count++;
+		} else {
+			pr_err("Failed to save device %04x:%02x:%02x.%d: %d\n",
+			       pci_domain_nr(dev->bus), dev->bus->number,
+			       PCI_SLOT(dev->devfn), PCI_FUNC(dev->devfn),
+			       save_err);
+			break;
+		}
+	}
+
+	err = fdt_end_node(fdt);
+	if (err) {
+		pr_err("Failed to end root FDT node: %d\n", err);
+		goto error_cleanup;
+	}
+
+	err = fdt_finish(fdt);
+	if (err) {
+		pr_err("Failed to finish FDT: %d\n", err);
+		goto error_cleanup;
+	}
+
+	int fdt_final_size = fdt_totalsize(fdt);
+	int num_pages = PAGE_ALIGN(fdt_final_size) / PAGE_SIZE;
+
+	err = kho_preserve_phys(page_to_phys(pcsc_kho_fdt),
+				num_pages * PAGE_SIZE);
+	if (err) {
+		pr_err("Failed to preserve FDT pages: %d\n", err);
+		goto error_cleanup;
+	}
+
+	err = kho_add_subtree(ser, PCSC_KHO_FDT, fdt);
+	if (err) {
+		pr_err("Failed to add FDT to KHO tree: %d\n", err);
+		goto error_cleanup;
+	}
+
+#ifdef CONFIG_PCSC_STATS
+	ktime_t end_time = ktime_get();
+	u64 duration_ns = ktime_to_ns(ktime_sub(end_time, start_time));
+	u64 duration_us = duration_ns / 1000;
+
+	pr_info("Saved %u devices to KHO in %llu us (%llu.%03llu ms)\n",
+		saved_count, duration_us, duration_us / 1000,
+		duration_us % 1000);
+#endif
+	return NOTIFY_DONE;
+
+error_cleanup:
+	pr_err("KHO save failed with error %d\n", err);
+	__free_pages(pcsc_kho_fdt, pcsc_kho_fdt_order);
+	pcsc_kho_fdt = NULL;
+	return NOTIFY_BAD;
+}
+
+static struct notifier_block pcsc_kho_nb = {
+	.notifier_call = pcsc_kho_notifier,
+};
+
+static bool pcsc_kho_restore_device(struct pci_dev *dev, const void *fdt,
+				    int node)
+{
+	const struct pcsc_data *preserved_data;
+	const u64 *data_addr;
+	int len;
+
+	data_addr = fdt_getprop(fdt, node, "da", &len);
+	if (!data_addr || len != sizeof(*data_addr))
+		return false;
+
+	preserved_data = phys_to_virt(*data_addr);
+	if (!preserved_data)
+		return false;
+
+
+	dev->pcsc->data = (struct pcsc_data *)preserved_data;
+	dev->pcsc->cachable_bitmask = dev->pcsc->data->cachable_bitmask;
+	dev->pcsc->cached_bitmask = dev->pcsc->data->cached_bitmask;
+	dev->pcsc->cfg_space = dev->pcsc->data->cfg_space;
+
+	return true;
+}
+
+static bool pcsc_kho_check_restore(struct pci_dev *dev)
+{
+	phys_addr_t fdt_phys;
+	const void *fdt;
+	int node, err;
+	bool restored = false;
+	char node_name[32];
+#ifdef CONFIG_PCSC_STATS
+	ktime_t start_time, end_time;
+	u64 duration_ns;
+#endif
+
+	err = kho_retrieve_subtree(PCSC_KHO_FDT, &fdt_phys);
+	if (err) {
+		pci_dbg(dev, "PCSC: kho_retrieve_subtree failed: %d\n", err);
+		return false;
+	}
+
+	fdt = phys_to_virt(fdt_phys);
+	if (fdt_node_check_compatible(fdt, 0, PCSC_KHO_NODE_COMPATIBLE)) {
+		pci_dbg(dev, "PCSC: FDT node not compatible\n");
+		return false;
+	}
+
+#ifdef CONFIG_PCSC_STATS
+	start_time = ktime_get();
+#endif
+
+	snprintf(node_name, sizeof(node_name), "dev_%04x_%02x_%02x_%x",
+		 pci_domain_nr(dev->bus), dev->bus->number,
+		 PCI_SLOT(dev->devfn), PCI_FUNC(dev->devfn));
+
+	node = fdt_subnode_offset(fdt, 0, node_name);
+	if (node >= 0)
+		restored = pcsc_kho_restore_device(dev, fdt, node);
+
+#ifdef CONFIG_PCSC_STATS
+	if (restored) {
+		end_time = ktime_get();
+		duration_ns = ktime_to_ns(ktime_sub(end_time, start_time));
+
+		pcsc_stats.pcsc_kho_total_restore_time_ns += duration_ns;
+		pcsc_count_restored_devices();
+	}
+#endif
+
+	return restored;
+}
+#endif
+
 int pcsc_add_device(struct pci_dev *dev)
 {
 	struct pcsc_node *node;
@@ -742,23 +1054,34 @@ int pcsc_add_device(struct pci_dev *dev)
 	 * nodes for these devices, as it simplifies the code flow
 	 */
 	if (dev->hdr_type == PCI_HEADER_TYPE_NORMAL) {
-		/* Allocate contiguous, page aligned data block. This will be
-		 * needed for persisting the data with KHO.
-		 */
-		data_size = sizeof(struct pcsc_data);
+#ifdef CONFIG_PCSC_KHO
+		bool restored = false;
 
-		dev->pcsc->data =
-			(struct pcsc_data *)__get_free_pages(
-				GFP_KERNEL | __GFP_ZERO, get_order(data_size));
-		if (!dev->pcsc->data)
+		/* Try to restore from KHO first, before any allocation */
+		if (pcsc_persistence_enabled && kho_is_enabled())
+			restored = pcsc_kho_check_restore(dev);
 
-			goto err_free_node;
+		if (!restored) {
+#endif
+			/* Allocate contiguous, page aligned data block. This is
+			 * needed for persisting the data with KHO.
+			 */
+			data_size = sizeof(struct pcsc_data);
 
-		dev->pcsc->cachable_bitmask = dev->pcsc->data->cachable_bitmask;
-		dev->pcsc->cached_bitmask = dev->pcsc->data->cached_bitmask;
-		dev->pcsc->cfg_space = dev->pcsc->data->cfg_space;
+			dev->pcsc->data =
+				(struct pcsc_data *)__get_free_pages(
+					GFP_KERNEL | __GFP_ZERO, get_order(data_size));
+			if (!dev->pcsc->data)
+				goto err_free_node;
 
-		infer_cacheability(dev);
+			dev->pcsc->cachable_bitmask = dev->pcsc->data->cachable_bitmask;
+			dev->pcsc->cached_bitmask = dev->pcsc->data->cached_bitmask;
+			dev->pcsc->cfg_space = dev->pcsc->data->cfg_space;
+
+			infer_cacheability(dev);
+#ifdef CONFIG_PCSC_KHO
+		}
+#endif
 	} else {
 		dev->pcsc->data = NULL;
 		dev->pcsc->cachable_bitmask = NULL;
@@ -1103,7 +1426,9 @@ static struct kobj_attribute pcsc_enabled_attribute =
 static ssize_t pcsc_stats_show(struct kobject *kobj,
 			       struct kobj_attribute *attr, char *buf)
 {
-	return sysfs_emit(
+	ssize_t ret;
+
+	ret = sysfs_emit(
 		buf,
 		"Cache Hits: %lu\n"
 		"Cache Misses: %lu\n"
@@ -1132,6 +1457,20 @@ static ssize_t pcsc_stats_show(struct kobject *kobj,
 			1000,
 		pcsc_stats.hw_access_time_due_to_misses / 1000,
 		pcsc_stats.total_hw_access_time / 1000);
+
+#ifdef CONFIG_PCSC_KHO
+	u64 total_restore_time_us = pcsc_stats.pcsc_kho_total_restore_time_ns / 1000;
+
+	ret += sysfs_emit_at(buf, ret,
+			     "KHO Restore Statistics:\n"
+			     "  Restored Devices: %u\n"
+			     "  Total Restore Time: %llu us\n",
+			     pcsc_stats.pcsc_kho_restored_device_count,
+			     total_restore_time_us);
+
+#endif
+
+	return ret;
 }
 
 static struct kobj_attribute pcsc_stats_attribute =
@@ -1183,6 +1522,10 @@ static void pcsc_create_sysfs(void)
 
 static int __init pcsc_init(void)
 {
+#ifdef CONFIG_PCSC_KHO
+	int ret;
+#endif
+
 	bus_register_notifier(&pci_bus_type, &pcsc_bus_nb);
 
 	/* Try to create sysfs entry, but don't fail if PCI bus isn't ready yet */
@@ -1192,8 +1535,20 @@ static int __init pcsc_init(void)
 	memset(&pcsc_stats, 0, sizeof(pcsc_stats));
 #endif
 
+#ifdef CONFIG_PCSC_KHO
+	/* Register KHO notifier if persistence is enabled */
+	if (pcsc_persistence_enabled && kho_is_enabled()) {
+		ret = register_kho_notifier(&pcsc_kho_nb);
+		if (ret == 0)
+			pr_info("KHO notifier registered successfully\n");
+		else
+			pr_err("Failed to register KHO notifier: %d\n", ret);
+	}
+#endif /* CONFIG_PCSC_KHO */
+
 	pcsc_initialised = true;
-	pr_info("initialised (enabled=%d)\n", pcsc_enabled);
+	pr_info("initialised (enabled=%d, persistence=%d)\n",
+		pcsc_enabled, pcsc_persistence_enabled);
 
 	return 0;
 }
