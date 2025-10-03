@@ -56,6 +56,7 @@ static inline int cpu_numa_flags(void)
 {
 	return SD_NUMA;
 }
+extern int arch_sched_node_distance(int from, int to);
 #endif
 
 extern int arch_asym_cpu_priority(int cpu);
