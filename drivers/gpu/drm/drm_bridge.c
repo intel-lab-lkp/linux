@@ -453,10 +453,12 @@ int drm_bridge_attach(struct drm_encoder *encoder, struct drm_bridge *bridge,
 	bridge->dev = encoder->dev;
 	bridge->encoder = encoder;
 
+	drm_encoder_chain_lock(encoder);
 	if (previous)
 		list_add(&bridge->chain_node, &previous->chain_node);
 	else
 		list_add(&bridge->chain_node, &encoder->bridge_chain);
+	drm_encoder_chain_unlock(encoder);
 
 	if (bridge->funcs->attach) {
 		ret = bridge->funcs->attach(bridge, encoder, flags);
@@ -487,7 +489,9 @@ err_detach_bridge:
 err_reset_bridge:
 	bridge->dev = NULL;
 	bridge->encoder = NULL;
+	drm_encoder_chain_lock(encoder);
 	list_del(&bridge->chain_node);
+	drm_encoder_chain_unlock(encoder);
 
 	if (ret != -EPROBE_DEFER)
 		DRM_ERROR("failed to attach bridge %pOF to encoder %s: %d\n",
