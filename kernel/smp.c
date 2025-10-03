@@ -1089,6 +1089,24 @@ void wake_up_all_idle_cpus(void)
 EXPORT_SYMBOL_GPL(wake_up_all_idle_cpus);
 
 /**
+ * cpus_has_pending_ipi - Check for pending IPIs for CPUs
+ * @mask: The CPU mask for the CPUs to check.
+ *
+ * This function may be overriden by an arch specific implementation, which
+ * should walk through the CPU-mask and check if there are any pending IPIs
+ * being scheduled for any of the CPUs in the CPU-mask.
+ *
+ * Note, the default implementation below doesn't have the capability to check
+ * for IPIs, hence it must return false.
+ *
+ * Returns true if there is a pending IPI scheduled.
+ */
+bool __weak cpus_has_pending_ipi(const struct cpumask *mask)
+{
+	return false;
+}
+
+/**
  * struct smp_call_on_cpu_struct - Call a function on a specific CPU
  * @work: &work_struct
  * @done: &completion to signal
