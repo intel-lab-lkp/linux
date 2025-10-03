@@ -9,6 +9,20 @@
 #define _LINUX_PCSC_H
 
 #include <linux/pci.h>
+#include <linux/sizes.h>
+#include <linux/bitmap.h>
+
+#ifdef CONFIG_PCIE_PCSC
+#define PCSC_CFG_SPC_SIZE (4 * SZ_1K)
+#else
+#define PCSC_CFG_SPC_SIZE 256
+#endif
+
+struct pcsc_node {
+	u8 *cfg_space;
+	DECLARE_BITMAP(cachable_bitmask, PCSC_CFG_SPC_SIZE);
+	DECLARE_BITMAP(cached_bitmask, PCSC_CFG_SPC_SIZE);
+};
 
 /**
  * pcsc_hw_config_read - Direct hardware PCI config space read
@@ -83,4 +97,28 @@ int pcsc_cached_config_write(struct pci_bus *bus, unsigned int devfn, int where,
  * Return: 0 on success, negative error code on failure
  */
 int pcsc_inject_bus_ops(struct pci_bus *bus);
+
+/**
+ * pcsc_add_device - Allocate and initialize a new PCSC node
+ * This should only be called once for each device
+ * @dev: PCI device to initialise the cache for
+ *
+ * Returns: 0 on success error code on failure
+ */
+int pcsc_add_device(struct pci_dev *dev);
+
+/**
+ * pcsc_remove_device - Clear up any PCSC data
+ * @dev: PCI device to remove
+ *
+ * Returns: 0 on success, -EINVAL if dev is NULL
+ */
+int pcsc_remove_device(struct pci_dev *dev);
+
+/**
+ * @brief Returns if the PCSC infrastructure is initialised
+ *
+ */
+bool pcsc_is_initialised(void);
+
 #endif /* _LINUX_PCSC_H */

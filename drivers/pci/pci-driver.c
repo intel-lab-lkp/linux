@@ -21,6 +21,7 @@
 #include <linux/acpi.h>
 #include <linux/dma-map-ops.h>
 #include <linux/iommu.h>
+#include <linux/pcsc.h>
 #include "pci.h"
 #include "pcie/portdrv.h"
 
@@ -497,7 +498,11 @@ static void pci_device_remove(struct device *dev)
 	 * horrible the crap we have to deal with is when we are awake...
 	 */
 
+ #ifdef CONFIG_PCSC
+	pcsc_remove_device(pci_dev);
+#endif
 	pci_dev_put(pci_dev);
+
 }
 
 static void pci_device_shutdown(struct device *dev)

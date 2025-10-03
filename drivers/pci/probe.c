@@ -23,6 +23,7 @@
 #include <linux/irqdomain.h>
 #include <linux/pm_runtime.h>
 #include <linux/bitfield.h>
+#include <linux/pcsc.h>
 #include "pci.h"
 
 #define CARDBUS_LATENCY_TIMER	176	/* secondary latency timer */
@@ -2768,6 +2769,14 @@ void pci_device_add(struct pci_dev *dev, struct pci_bus *bus)
 	pci_reassigndev_resource_alignment(dev);
 
 	dev->state_saved = false;
+
+#ifdef CONFIG_PCSC
+	if (likely(pcsc_is_initialised()))
+		if (!dev->pcsc)
+			if (pcsc_add_device(dev))
+				pci_warn(dev,
+					 "Failed to add PCI device to PCSC\n");
+#endif
 
 	pci_init_capabilities(dev);
 
