@@ -698,4 +698,68 @@ void drm_sched_entity_modify_sched(struct drm_sched_entity *entity,
 				   struct drm_gpu_scheduler **sched_list,
 				   unsigned int num_sched_list);
 
+/* Inlines */
+
+/**
+ * struct drm_sched_pending_job_iter - DRM scheduler pending job iterator state
+ * @sched: DRM scheduler associated with pending job iterator
+ * @stopped: DRM scheduler stopped state associated with pending job iterator
+ */
+struct drm_sched_pending_job_iter {
+	struct drm_gpu_scheduler *sched;
+	bool stopped;
+};
+
+/* Drivers should never call this directly */
+static inline struct drm_sched_pending_job_iter
+__drm_sched_pending_job_iter_begin(struct drm_gpu_scheduler *sched, bool stopped)
+{
+	struct drm_sched_pending_job_iter iter = {
+		.sched = sched,
+		.stopped = stopped,
+	};
+
+	if (stopped)
+		WARN_ON(!READ_ONCE(sched->pause_submit));
+	else
+		spin_lock(&sched->job_list_lock);
+
+	return iter;
+}
+
+/* Drivers should never call this directly */
+static inline void
+__drm_sched_pending_job_iter_end(const struct drm_sched_pending_job_iter iter)
+{
+	if (iter.stopped)
+		WARN_ON(!READ_ONCE(iter.sched->pause_submit));
+	else
+		spin_unlock(&iter.sched->job_list_lock);
+}
+
+DEFINE_CLASS(drm_sched_pending_job_iter, struct drm_sched_pending_job_iter,
+	     __drm_sched_pending_job_iter_end(_T),
+	     __drm_sched_pending_job_iter_begin(__sched, __stopped),
+	     struct drm_gpu_scheduler *__sched, bool __stopped);
+static inline void
+*class_drm_sched_pending_job_iter_lock_ptr(class_drm_sched_pending_job_iter_t *_T)
+{return _T; }
+#define class_drm_sched_pending_job_iter_is_conditional false
+
+/**
+ * drm_sched_for_each_pending_job() - Iterator for each pending job in scheduler
+ * @__job: Current pending job being iterated over
+ * @__sched: DRM scheduler to iterate over pending jobs
+ * @__entity: DRM scheduler entity to filter jobs, NULL indicates no filter
+ * @__stopped: DRM scheduler stopped state
+ *
+ * Iterator for each pending job in scheduler, filtering on an entity, and
+ * enforcing locking rules (either scheduler fully stopped or correctly takes
+ * job_list_lock).
+ */
+#define drm_sched_for_each_pending_job(__job, __sched, __entity, __stopped)	\
+	scoped_guard(drm_sched_pending_job_iter, (__sched), (__stopped))	\
+		list_for_each_entry((__job), &(__sched)->pending_list, list)	\
+			for_each_if(!(__entity) || (__job)->entity == (__entity))
+
 #endif
