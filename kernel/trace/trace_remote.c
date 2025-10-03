@@ -1037,7 +1037,7 @@ static int remote_event_format_show(struct seq_file *s, void *unused)
 	while (field->name) {
 		seq_printf(s, "\tfield:%s %s;\toffset:%zu;\tsize:%u;\tsigned:%d;\n",
 			   field->type, field->name, offset, field->size,
-			   !field->is_signed);
+			   field->is_signed);
 		offset += field->size;
 		field++;
 	}
@@ -1068,7 +1068,7 @@ static int remote_event_callback(const char *name, umode_t *mode, void **data,
 
 	if (!strcmp(name, "format")) {
 		*mode = TRACEFS_MODE_READ;
-		*fops = &remote_event_id_fops;
+		*fops = &remote_event_format_fops;
 		return 1;
 	}
 
