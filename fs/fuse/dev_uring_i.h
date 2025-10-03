@@ -115,6 +115,9 @@ struct fuse_ring {
 	/* number of ring queues */
 	size_t max_nr_queues;
 
+	/* number of numa nodes */
+	int nr_numa_nodes;
+
 	/* maximum payload/arg size */
 	size_t max_payload_sz;
 
@@ -124,6 +127,12 @@ struct fuse_ring {
 	 * Log ring entry states on stop when entries cannot be released
 	 */
 	unsigned int stop_debug_log : 1;
+
+	/* Tracks which queues are registered */
+	cpumask_var_t registered_q_mask;
+
+	/* Tracks which queues are registered per NUMA node */
+	cpumask_var_t *numa_registered_q_mask;
 
 	wait_queue_head_t stop_waitq;
 
