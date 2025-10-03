@@ -998,31 +998,6 @@ static int fuse_uring_commit_fetch(struct io_uring_cmd *cmd, int issue_flags,
 	return 0;
 }
 
-static bool is_ring_ready(struct fuse_ring *ring, int current_qid)
-{
-	int qid;
-	struct fuse_ring_queue *queue;
-	bool ready = true;
-
-	for (qid = 0; qid < ring->max_nr_queues && ready; qid++) {
-		if (current_qid == qid)
-			continue;
-
-		queue = ring->queues[qid];
-		if (!queue) {
-			ready = false;
-			break;
-		}
-
-		spin_lock(&queue->lock);
-		if (list_empty(&queue->ent_avail_queue))
-			ready = false;
-		spin_unlock(&queue->lock);
-	}
-
-	return ready;
-}
-
 /*
  * fuse_uring_req_fetch command handling
  */
@@ -1047,13 +1022,9 @@ static void fuse_uring_do_register(struct fuse_ring_ent *ent,
 	cpumask_set_cpu(queue->qid, ring->numa_registered_q_mask[node]);
 
 	if (!ring->ready) {
-		bool ready = is_ring_ready(ring, queue->qid);
-
-		if (ready) {
-			WRITE_ONCE(fiq->ops, &fuse_io_uring_ops);
-			WRITE_ONCE(ring->ready, true);
-			wake_up_all(&fc->blocked_waitq);
-		}
+		WRITE_ONCE(fiq->ops, &fuse_io_uring_ops);
+		WRITE_ONCE(ring->ready, true);
+		wake_up_all(&fc->blocked_waitq);
 	}
 }
 
