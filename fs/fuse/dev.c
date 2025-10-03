@@ -479,8 +479,12 @@ void fuse_request_end(struct fuse_req *req)
 		flush_bg_queue(fc);
 		spin_unlock(&fc->bg_lock);
 	} else {
-		/* Wake up waiter sleeping in request_wait_answer() */
-		wake_up(&req->waitq);
+		if (test_bit(FR_URING, &req->flags)) {
+			wake_up_on_current_cpu(&req->waitq);
+		} else {
+			/* Wake up waiter sleeping in request_wait_answer() */
+			wake_up(&req->waitq);
+		}
 	}
 
 	if (test_bit(FR_ASYNC, &req->flags))
