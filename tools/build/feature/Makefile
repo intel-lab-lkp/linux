@@ -58,7 +58,6 @@ FILES=                                          \
          test-lzma.bin                          \
          test-bpf.bin                           \
          test-libbpf.bin                        \
-         test-libbpf-strings.bin                \
          test-get_cpuid.bin                     \
          test-sdt.bin                           \
          test-cxx.bin                           \
@@ -335,9 +334,6 @@ $(OUTPUT)test-bpf.bin:
 
 $(OUTPUT)test-libbpf.bin:
 	$(BUILD) -lbpf
-
-$(OUTPUT)test-libbpf-strings.bin:
-	$(BUILD)
 
 $(OUTPUT)test-sdt.bin:
 	$(BUILD)
