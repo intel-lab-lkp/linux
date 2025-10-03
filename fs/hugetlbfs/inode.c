@@ -484,29 +484,31 @@ hugetlb_vmdelete_list(struct rb_root_cached *root, pgoff_t start, pgoff_t end,
 	vma_interval_tree_foreach(vma, root, start, end ? end - 1 : ULONG_MAX) {
 		unsigned long v_start;
 		unsigned long v_end;
+		bool have_shareable_lock;
+		zap_flags_t local_flags = zap_flags;
 
 		if (!hugetlb_vma_trylock_write(vma))
 			continue;
 
-		/*
-		 * Skip VMAs without shareable locks. Per the design in commit
-		 * 40549ba8f8e0, these will be handled by remove_inode_hugepages()
-		 * called after this function with proper locking.
-		 */
-		if (!__vma_shareable_lock(vma))
-			goto skip;
+		have_shareable_lock = __vma_shareable_lock(vma);
 
+		/*
+		 * If we can't get the shareable lock, set ZAP_FLAG_NO_UNSHARE
+		 * to skip PMD unsharing. We still proceed with unmapping to
+		 * ensure pages are properly freed, which is critical for punch
+		 * hole operations that expect immediate page freeing.
+		 */
+		if (!have_shareable_lock)
+			local_flags |= ZAP_FLAG_NO_UNSHARE;
 		v_start = vma_offset_start(vma, start);
 		v_end = vma_offset_end(vma, end);
 
-		unmap_hugepage_range(vma, v_start, v_end, NULL, zap_flags);
-
+		unmap_hugepage_range(vma, v_start, v_end, NULL, local_flags);
 		/*
 		 * Note that vma lock only exists for shared/non-private
 		 * vmas.  Therefore, lock is not held when calling
 		 * unmap_hugepage_range for private vmas.
 		 */
-skip:
 		hugetlb_vma_unlock_write(vma);
 	}
 }
