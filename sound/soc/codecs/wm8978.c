@@ -717,6 +717,11 @@ static int wm8978_hw_params(struct snd_pcm_substream *substream,
 			    struct snd_pcm_hw_params *params,
 			    struct snd_soc_dai *dai)
 {
+	unsigned int bclk, bclkdiv = 0, min_diff = UINT_MAX;
+	unsigned int target_bclk = params_rate(params) * params_width(params) * 2;
+	/* WM8978 supports divisors */
+	static const int bclk_divs[] = {1, 2, 4, 8, 16, 32};
+
 	struct snd_soc_component *component = dai->component;
 	struct wm8978_priv *wm8978 = snd_soc_component_get_drvdata(component);
 	/* Word length mask = 0x60 */
@@ -819,6 +824,21 @@ static int wm8978_hw_params(struct snd_pcm_substream *substream,
 
 	/* MCLK divisor mask = 0xe0 */
 	snd_soc_component_update_bits(component, WM8978_CLOCKING, 0xe0, best << 5);
+
+	for (i = 0; i < ARRAY_SIZE(bclk_divs); i++) {
+		bclk = wm8978->f_256fs / bclk_divs[i];
+		if (abs(bclk - target_bclk) < min_diff) {
+			min_diff = abs(bclk - target_bclk);
+			bclkdiv = i;
+		}
+	}
+
+	dev_dbg(component->dev, "%s: fs=%u width=%u -> target BCLK=%u, using div #%u\n",
+		__func__, params_rate(params), params_width(params), target_bclk,
+		bclk_divs[bclkdiv]);
+
+	/* BCLKDIV divisor mask = 0x1c */
+	snd_soc_component_update_bits(component, WM8978_CLOCKING, 0x1c, bclkdiv << 2);
 
 	snd_soc_component_write(component, WM8978_AUDIO_INTERFACE, iface_ctl);
 	snd_soc_component_write(component, WM8978_ADDITIONAL_CONTROL, add_ctl);
