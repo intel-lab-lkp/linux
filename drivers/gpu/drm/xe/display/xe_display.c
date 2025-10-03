@@ -13,6 +13,7 @@
 #include <drm/drm_drv.h>
 #include <drm/drm_managed.h>
 #include <drm/drm_probe_helper.h>
+#include <drm/intel/display_interface.h>
 #include <drm/intel/display_member.h>
 #include <uapi/drm/xe_drm.h>
 
@@ -515,6 +516,15 @@ static void display_device_remove(struct drm_device *dev, void *arg)
 	intel_display_device_remove(display);
 }
 
+static bool has_flat_ccs(struct drm_device *drm)
+{
+	return xe_device_has_flat_ccs(to_xe_device(drm));
+}
+
+static const struct intel_core_hooks hooks = {
+	.has_flat_ccs = has_flat_ccs,
+};
+
 /**
  * xe_display_probe - probe display and create display struct
  * @xe: XE device instance
@@ -535,7 +545,7 @@ int xe_display_probe(struct xe_device *xe)
 	if (!xe->info.probe_display)
 		goto no_display;
 
-	display = intel_display_device_probe(pdev);
+	display = intel_display_device_probe(pdev, &hooks);
 	if (IS_ERR(display))
 		return PTR_ERR(display);
 

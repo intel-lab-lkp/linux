@@ -46,6 +46,7 @@
 #include <drm/drm_ioctl.h>
 #include <drm/drm_managed.h>
 #include <drm/drm_probe_helper.h>
+#include <drm/intel/display_interface.h>
 #include <drm/intel/display_member.h>
 
 #include "display/i9xx_display_sr.h"
@@ -738,6 +739,20 @@ static void i915_welcome_messages(struct drm_i915_private *dev_priv)
 			 "DRM_I915_DEBUG_RUNTIME_PM enabled\n");
 }
 
+static bool has_flat_ccs(struct drm_device *drm)
+{
+	return HAS_FLAT_CCS(to_i915(drm));
+}
+
+static const struct intel_core_hooks hooks = {
+	.has_flat_ccs = has_flat_ccs,
+};
+
+const struct intel_core_hooks *i915_driver_hooks(void)
+{
+	return &hooks;
+}
+
 /* Ensure drm and display members are placed properly. */
 INTEL_DISPLAY_MEMBER_STATIC_ASSERT(struct drm_i915_private, drm, display);
 
@@ -762,7 +777,7 @@ i915_driver_create(struct pci_dev *pdev, const struct pci_device_id *ent)
 	/* Set up device info and initial runtime info. */
 	intel_device_info_driver_create(i915, pdev->device, match_info);
 
-	display = intel_display_device_probe(pdev);
+	display = intel_display_device_probe(pdev, &hooks);
 	if (IS_ERR(display))
 		return ERR_CAST(display);
 

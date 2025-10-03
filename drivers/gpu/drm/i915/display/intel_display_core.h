@@ -39,6 +39,7 @@ struct intel_audio_funcs;
 struct intel_cdclk_funcs;
 struct intel_cdclk_vals;
 struct intel_color_funcs;
+struct intel_core_hooks;
 struct intel_crtc;
 struct intel_crtc_state;
 struct intel_dmc;
@@ -290,6 +291,9 @@ struct intel_display {
 
 	/* Intel PCH: where the south display engine lives */
 	enum intel_pch pch_type;
+
+	/* Core functions exposed to display */
+	const struct intel_core_hooks *hooks;
 
 	/* Display functions */
 	struct {

@@ -12,6 +12,7 @@
 #include "intel_display_limits.h"
 
 struct drm_printer;
+struct intel_core_hooks;
 struct intel_display;
 struct pci_dev;
 
@@ -310,7 +311,8 @@ struct intel_display_device_info {
 
 bool intel_display_device_present(struct intel_display *display);
 bool intel_display_device_enabled(struct intel_display *display);
-struct intel_display *intel_display_device_probe(struct pci_dev *pdev);
+struct intel_display *intel_display_device_probe(struct pci_dev *pdev,
+						 const struct intel_core_hooks *hooks);
 void intel_display_device_remove(struct intel_display *display);
 void intel_display_device_info_runtime_init(struct intel_display *display);
 
