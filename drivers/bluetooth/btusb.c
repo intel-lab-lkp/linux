@@ -68,6 +68,9 @@ static struct usb_driver btusb_driver;
 #define BTUSB_ACTIONS_SEMI		BIT(27)
 #define BTUSB_BARROT			BIT(28)
 
+/* Qualcomm firmware debug packets header */
+#define QCA_DEBUG_HEADER	0x2EDC
+
 static const struct usb_device_id btusb_table[] = {
 	/* Generic Bluetooth USB device */
 	{ USB_DEVICE_INFO(0xe0, 0x01, 0x01) },
@@ -1229,6 +1232,12 @@ static int btusb_recv_intr(struct btusb_data *data, void *buffer, int count)
 
 static int btusb_recv_acl(struct btusb_data *data, struct sk_buff *skb)
 {
+	/* Drop QCA firmware debug packets sent as ACL frames */
+	if (skb->len >= 2) {
+		if (get_unaligned_le16(skb->data) == QCA_DEBUG_HEADER)
+			return hci_recv_diag(data->hdev, skb);
+	}
+
 	/* Only queue ACL packet if intr_interval is set as it means
 	 * force_poll_sync has been enabled.
 	 */
