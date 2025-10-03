@@ -544,7 +544,7 @@ int lsdc_ttm_init(struct lsdc_device *ldev)
 
 	ret = ttm_device_init(&ldev->bdev, &lsdc_bo_driver, ddev->dev,
 			      ddev->anon_inode->i_mapping,
-			      ddev->vma_offset_manager, false, true);
+			      ddev->vma_offset_manager, TTM_POOL_USE_DMA32);
 	if (ret)
 		return ret;
 
