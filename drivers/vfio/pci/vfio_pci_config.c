@@ -1485,7 +1485,18 @@ static int vfio_fill_vconfig_bytes(struct vfio_pci_core_device *vdev,
 	while (size) {
 		int filled;
 
-		if (size >= 4 && !(offset % 4)) {
+		if (offset == PCI_CAPABILITY_LIST) {
+			u8 *byte = &vdev->vconfig[offset];
+
+			ret = pci_read_config_byte(pdev, offset, byte);
+			if (ret)
+				return ret;
+			/* Skip the reserved area */
+			filled = 4;
+		} else if (offset == 0x38) {
+			/* Skip the reserved area */
+			filled = 4;
+		} else if (size >= 4 && !(offset % 4)) {
 			__le32 *dwordp = (__le32 *)&vdev->vconfig[offset];
 			u32 dword;
 
