@@ -1215,6 +1215,26 @@ EXPORT_SYMBOL_GPL(handle_fasteoi_mask_irq);
 
 #endif /* CONFIG_IRQ_FASTEOI_HIERARCHY_HANDLERS */
 
+#ifdef CONFIG_SMP
+
+int irq_chip_redirect_set_affinity(struct irq_data *data, const struct cpumask *dest, bool force)
+{
+	struct irq_redirect *redir = &irq_data_to_desc(data)->redirect;
+
+	WRITE_ONCE(redir->fallback_cpu, cpumask_first(dest));
+	return IRQ_SET_MASK_OK;
+}
+EXPORT_SYMBOL_GPL(irq_chip_redirect_set_affinity);
+
+void irq_chip_pre_redirect_parent(struct irq_data *data)
+{
+	data = data->parent_data;
+	data->chip->irq_pre_redirect(data);
+}
+EXPORT_SYMBOL_GPL(irq_chip_pre_redirect_parent);
+
+#endif
+
 /**
  * irq_chip_set_parent_state - set the state of a parent interrupt.
  *
