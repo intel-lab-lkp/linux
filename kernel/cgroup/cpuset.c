@@ -3009,6 +3009,25 @@ static void reset_migrate_dl_data(struct cpuset *cs)
 	cs->sum_migrate_dl_bw = 0;
 }
 
+static inline int task_can_attach(struct task_struct *p)
+{
+	int ret = 0;
+
+	/*
+	 * Kthreads which disallow setaffinity shouldn't be moved
+	 * to a new cpuset; we don't want to change their CPU
+	 * affinity and isolating such threads by their set of
+	 * allowed nodes is unnecessary.  Thus, cpusets are not
+	 * applicable for such threads.  This prevents checking for
+	 * success of set_cpus_allowed_ptr() on all attached tasks
+	 * before cpus_mask may be changed.
+	 */
+	if (p->flags & PF_NO_SETAFFINITY)
+		ret = -EINVAL;
+
+	return ret;
+}
+
 /* Called by cgroups to determine if a cpuset is usable; cpuset_mutex held */
 static int cpuset_can_attach(struct cgroup_taskset *tset)
 {
