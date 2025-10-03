@@ -8,6 +8,7 @@
 #include <linux/delay.h>
 #include <linux/init.h>
 #include <linux/pci.h>
+#include <linux/pcsc.h>
 #include <linux/msi.h>
 #include <linux/of_pci.h>
 #include <linux/of_platform.h>
@@ -1007,6 +1008,11 @@ static int pci_register_host_bridge(struct pci_host_bridge *bridge)
 	}
 #endif
 
+#ifdef CONFIG_PCSC
+	if (pcsc_inject_bus_ops(bus))
+		pci_err(bus, "PCSC: Failed to inject ops\n");
+#endif
+
 	b = pci_find_bus(pci_domain_nr(bus), bridge->busnr);
 	if (b) {
 		/* Ignore it if we already got here via a different bridge */
@@ -1204,10 +1210,24 @@ static struct pci_bus *pci_alloc_child_bus(struct pci_bus *parent,
 	child->bus_flags = parent->bus_flags;
 
 	host = pci_find_host_bridge(parent);
-	if (host->child_ops)
+	if (host->child_ops) {
 		child->ops = host->child_ops;
-	else
+#ifdef CONFIG_PCSC
+		child->orig_ops = host->child_ops;
+#endif
+	} else {
 		child->ops = parent->ops;
+#ifdef CONFIG_PCSC
+		child->orig_ops = parent->orig_ops;
+#endif
+	}
+
+#ifdef CONFIG_PCSC
+	if (child->ops) {
+		if (pcsc_inject_bus_ops(child))
+			pci_err(child, "PCSC: Failed to inject ops\n");
+	}
+#endif
 
 	/*
 	 * Initialize some portions of the bus device, but don't register

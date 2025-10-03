@@ -40,6 +40,16 @@ config PCI_DOMAINS_GENERIC
 config PCI_SYSCALL
 	bool
 
+config PCSC
+	bool "PCI Configuration Space Cache"
+	depends on PCI
+	default n
+	help
+	  This option enables support for the PCI Configuration Space Cache
+	  (PCSC). PCSC is a transparent caching layer that
+	  intercepts configuration space operations and maintains cached
+	  copies of register values
+
 source "drivers/pci/pcie/Kconfig"
 
 config PCI_MSI

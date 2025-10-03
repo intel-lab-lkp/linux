@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0
 #include <linux/pci.h>
+#include <linux/pcsc.h>
 #include <linux/module.h>
 #include <linux/slab.h>
 #include <linux/ioport.h>
@@ -189,15 +190,93 @@ EXPORT_SYMBOL_GPL(pci_generic_config_write32);
  * @ops:	new raw operations
  *
  * Return previous raw operations
+ *
+ * When PCSC is enabled, this function maintains transparency by:
+ * - Returning the original non-PCSC ops to the caller
+ * - Properly handling the case where PCSC ops are already injected
+ * - Re-injecting PCSC ops after setting new ops when appropriate
  */
 struct pci_ops *pci_bus_set_ops(struct pci_bus *bus, struct pci_ops *ops)
 {
 	struct pci_ops *old_ops;
 	unsigned long flags;
+#ifdef CONFIG_PCSC
+	bool pcsc_was_injected = false;
+	struct pci_ops *pcsc_ops_ptr = NULL;
+#endif
 
 	raw_spin_lock_irqsave(&pci_lock, flags);
-	old_ops = bus->ops;
+
+#ifdef CONFIG_PCSC
+	/*
+	 * Check if PCSC ops are currently injected. If so, we need to:
+	 * 1. Return the original (non-PCSC) ops to maintain transparency
+	 * 2. Update orig_ops to point to the new ops
+	 * 3. Re-inject PCSC ops if the new ops are different from PCSC ops
+	 */
+	if (bus->orig_ops) {
+		pcsc_was_injected = true;
+		pcsc_ops_ptr = bus->ops;  /* Save current PCSC ops */
+		old_ops = bus->orig_ops;   /* Return the real original ops */
+
+		/*
+		 * If the caller is trying to restore the PCSC ops themselves,
+		 * just keep the current setup and return the original ops
+		 */
+		if (ops == pcsc_ops_ptr)
+			goto out_unlock;
+
+		/* Clear orig_ops temporarily to allow re-injection */
+		bus->orig_ops = NULL;
+	} else
+#endif
+	{
+		old_ops = bus->ops;
+	}
+
 	bus->ops = ops;
+
+#ifdef CONFIG_PCSC
+	/*
+	 * Re-inject PCSC ops if they were previously injected and the new ops
+	 * are not the PCSC ops themselves. This maintains caching transparency.
+	 */
+	if (pcsc_was_injected && ops != pcsc_ops_ptr) {
+		/*
+		 * IMPORTANT: Dynamic ops changes after PCSC injection can lead to
+		 * cache consistency issues if operations were performed that should
+		 * have invalidated the cache. We re-inject PCSC ops here, but the
+		 * caller is responsible for ensuring cache consistency if needed.
+		 * This will be fixed in a future commit, when PCSC resets are
+		 * introduced.
+		 */
+
+		pr_warn("PCSC: Dynamic ops change detected on bus %04x:%02x, resetting cache\n",
+			pci_domain_nr(bus), bus->number);
+
+		if (pcsc_inject_bus_ops(bus)) {
+			pr_err("PCSC: Failed to re-inject ops after ops change on bus %04x:%02x\n",
+				pci_domain_nr(bus), bus->number);
+			/*
+			 * If re-injection fails, we've lost caching but at least
+			 * the caller's requested ops are in place. Log it
+			 */
+			pr_warn("PCSC: Cache disabled for bus %04x:%02x after ops change\n",
+				pci_domain_nr(bus), bus->number);
+		} else {
+			pr_debug("PCSC: Successfully re-injected ops after ops change on bus %04x:%02x\n",
+				pci_domain_nr(bus), bus->number);
+		}
+	} else if (!pcsc_was_injected) {
+		/* First-time injection for this bus */
+		if (pcsc_inject_bus_ops(bus)) {
+			pr_err("PCSC: Failed to inject ops on bus %04x:%02x\n",
+				pci_domain_nr(bus), bus->number);
+		}
+	}
+
+out_unlock:
+#endif
 	raw_spin_unlock_irqrestore(&pci_lock, flags);
 	return old_ops;
 }

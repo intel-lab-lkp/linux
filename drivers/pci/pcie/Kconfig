@@ -155,3 +155,12 @@ config PCIE_EDR
 	  the PCI Firmware Specification r3.2.  Enable this if you want to
 	  support hybrid DPC model which uses both firmware and OS to
 	  implement DPC.
+
+config PCIE_PCSC
+	bool "PCI Configuration Space Cache PCIE Support"
+	depends on PCSC
+	default y
+	help
+	This option adds PCIe support to the PCSC, by expanding the
+	configuration space to 4K and adding support for PCIe Capabilities.
+	For more information check PCSC and `/drivers/pci/pcsc.c`

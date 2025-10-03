@@ -669,6 +669,9 @@ struct pci_bus {
 	struct resource busn_res;	/* Bus numbers routed to this bus */
 
 	struct pci_ops	*ops;		/* Configuration access functions */
+#ifdef CONFIG_PCSC
+	struct pci_ops	*orig_ops;	/* Original ops before PCSC injection */
+#endif
 	void		*sysdata;	/* Hook for sys-specific extension */
 	struct proc_dir_entry *procdir;	/* Directory entry in /proc/bus/pci */
 
