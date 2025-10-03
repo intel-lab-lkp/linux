@@ -22,6 +22,7 @@ MODULE_PARM_DESC(enable_uring,
 #define FURING_Q_LOCAL_THRESHOLD 2
 #define FURING_Q_NUMA_THRESHOLD (FURING_Q_LOCAL_THRESHOLD + 1)
 #define FURING_Q_GLOBAL_THRESHOLD (FURING_Q_LOCAL_THRESHOLD * 2)
+#define FURING_NEXT_QUEUE_RETRIES 2
 
 bool fuse_uring_enabled(void)
 {
@@ -1262,7 +1263,8 @@ static void fuse_uring_send_in_task(struct io_uring_cmd *cmd,
  *  (Michael David Mitzenmacher, 1991)
  */
 static struct fuse_ring_queue *fuse_uring_best_queue(const struct cpumask *mask,
-						     struct fuse_ring *ring)
+						     struct fuse_ring *ring,
+						     bool background)
 {
 	unsigned int qid1, qid2;
 	struct fuse_ring_queue *queue1, *queue2;
@@ -1277,8 +1279,13 @@ static struct fuse_ring_queue *fuse_uring_best_queue(const struct cpumask *mask,
 	}
 
 	/* Get two different queues using optimized bounded random */
-	qid1 = cpumask_nth(get_random_u32_below(weight), mask);
+
+	do {
+		qid1 = cpumask_nth(get_random_u32_below(weight), mask);
+	} while (background && qid1 == task_cpu(current));
 	queue1 = READ_ONCE(ring->queues[qid1]);
+
+	return queue1;
 
 	do {
 		qid2 = cpumask_nth(get_random_u32_below(weight), mask);
@@ -1298,12 +1305,14 @@ static struct fuse_ring_queue *fuse_uring_best_queue(const struct cpumask *mask,
 /*
  * Get the best queue for the current CPU
  */
-static struct fuse_ring_queue *fuse_uring_get_queue(struct fuse_ring *ring)
+static struct fuse_ring_queue *fuse_uring_get_queue(struct fuse_ring *ring,
+						    bool background)
 {
 	unsigned int qid;
 	struct fuse_ring_queue *local_queue, *best_numa, *best_global;
 	int local_node;
 	const struct cpumask *numa_mask, *global_mask;
+	int retries = 0;
 
 	qid = task_cpu(current);
 	if (WARN_ONCE(qid >= ring->max_nr_queues,
@@ -1311,16 +1320,44 @@ static struct fuse_ring_queue *fuse_uring_get_queue(struct fuse_ring *ring)
 		      ring->max_nr_queues))
 		qid = 0;
 
-	local_queue = READ_ONCE(ring->queues[qid]);
 	local_node = cpu_to_node(qid);
 
-	/* Fast path: if local queue exists and is not overloaded, use it */
-	if (local_queue && local_queue->nr_reqs <= FURING_Q_LOCAL_THRESHOLD)
+	local_queue = READ_ONCE(ring->queues[qid]);
+
+retry:
+	/*
+	 * For background requests, try next CPU in same NUMA domain.
+	 * I.e. cpu-0 creates async requests, cpu-1 io processes.
+	 * Similar for foreground requests, when the local queue does not
+	 * exist - still better to always wake the same cpu id.
+	 */
+	if (background || !local_queue) {
+		numa_mask = ring->numa_registered_q_mask[local_node];
+		int weight = cpumask_weight(numa_mask);
+
+		if (weight > 0) {
+			int idx = (qid + 1) % weight;
+
+			qid = cpumask_nth(idx, numa_mask);
+		} else {
+			qid = cpumask_first(numa_mask);
+		}
+
+		local_queue = READ_ONCE(ring->queues[qid]);
+	}
+
+	if (local_queue && local_queue->nr_reqs <= FURING_Q_NUMA_THRESHOLD)
 		return local_queue;
+
+	if (retries < FURING_NEXT_QUEUE_RETRIES) {
+		retries++;
+		local_queue = NULL;
+		goto retry;
+	}
 
 	/* Find best NUMA-local queue */
 	numa_mask = ring->numa_registered_q_mask[local_node];
-	best_numa = fuse_uring_best_queue(numa_mask, ring);
+	best_numa = fuse_uring_best_queue(numa_mask, ring, background);
 
 	/* If NUMA queue is under threshold, use it */
 	if (best_numa && best_numa->nr_reqs <= FURING_Q_NUMA_THRESHOLD)
@@ -1328,7 +1365,7 @@ static struct fuse_ring_queue *fuse_uring_get_queue(struct fuse_ring *ring)
 
 	/* NUMA queues above threshold, try global queues */
 	global_mask = ring->registered_q_mask;
-	best_global = fuse_uring_best_queue(global_mask, ring);
+	best_global = fuse_uring_best_queue(global_mask, ring, background);
 
 	/* Might happen during tear down */
 	if (!best_global)
@@ -1338,8 +1375,10 @@ static struct fuse_ring_queue *fuse_uring_get_queue(struct fuse_ring *ring)
 	if (best_global->nr_reqs <= FURING_Q_GLOBAL_THRESHOLD)
 		return best_global;
 
+	return best_global;
+
 	/* Fall back to best available queue */
-	return best_numa ? best_numa : best_global;
+	// return best_numa ? best_numa : best_global;
 }
 
 static void fuse_uring_dispatch_ent(struct fuse_ring_ent *ent)
@@ -1360,7 +1399,7 @@ void fuse_uring_queue_fuse_req(struct fuse_iqueue *fiq, struct fuse_req *req)
 	int err;
 
 	err = -EINVAL;
-	queue = fuse_uring_get_queue(ring);
+	queue = fuse_uring_get_queue(ring, false);
 	if (!queue)
 		goto err;
 
@@ -1405,7 +1444,7 @@ bool fuse_uring_queue_bq_req(struct fuse_req *req)
 	struct fuse_ring_queue *queue;
 	struct fuse_ring_ent *ent = NULL;
 
-	queue = fuse_uring_get_queue(ring);
+	queue = fuse_uring_get_queue(ring, true);
 	if (!queue)
 		return false;
 
