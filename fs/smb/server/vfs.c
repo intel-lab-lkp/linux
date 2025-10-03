@@ -93,17 +93,13 @@ static int ksmbd_vfs_path_lookup(struct ksmbd_share_config *share_conf,
 	if (err)
 		return err;
 
-	if (unlikely(type != LAST_NORM)) {
-		path_put(path);
-		return -ENOENT;
-	}
+	if (unlikely(type != LAST_NORM))
+		goto put_path;
 
 	if (do_lock) {
 		err = mnt_want_write(path->mnt);
-		if (err) {
-			path_put(path);
-			return -ENOENT;
-		}
+		if (err)
+			goto put_path;
 
 		inode_lock_nested(path->dentry->d_inode, I_MUTEX_PARENT);
 		d = lookup_one_qstr_excl(&last, path->dentry, 0);
@@ -115,8 +111,7 @@ static int ksmbd_vfs_path_lookup(struct ksmbd_share_config *share_conf,
 		}
 		inode_unlock(path->dentry->d_inode);
 		mnt_drop_write(path->mnt);
-		path_put(path);
-		return -ENOENT;
+		goto put_path;
 	}
 
 	d = lookup_noperm_unlocked(&last, path->dentry);
@@ -124,21 +119,22 @@ static int ksmbd_vfs_path_lookup(struct ksmbd_share_config *share_conf,
 		dput(d);
 		d = ERR_PTR(-ENOENT);
 	}
-	if (IS_ERR(d)) {
-		path_put(path);
-		return -ENOENT;
-	}
+	if (IS_ERR(d))
+		goto put_path;
+
 	dput(path->dentry);
 	path->dentry = d;
 
 	if (test_share_config_flag(share_conf, KSMBD_SHARE_FLAG_CROSSMNT)) {
 		err = follow_down(path, 0);
-		if (err < 0) {
-			path_put(path);
-			return -ENOENT;
-		}
+		if (err < 0)
+			goto put_path;
 	}
 	return 0;
+
+put_path:
+	path_put(path);
+	return -ENOENT;
 }
 
 void ksmbd_vfs_query_maximal_access(struct mnt_idmap *idmap,
