@@ -60,11 +60,16 @@ struct ice_lag {
 	u16 pf_recipe;
 	u16 lport_recipe;
 	u16 act_act_recipe;
+	u16 pfmac_recipe;
+
 	u16 pf_rx_rule_id;
 	u16 pf_tx_rule_id;
 	u16 cp_rule_idx;
 	u16 lport_rule_idx;
 	u16 act_act_rule_idx;
+	u16 pfmac_unicst_idx;
+	u16 pfmac_bdcst_idx;
+
 	u8 role;
 };
 

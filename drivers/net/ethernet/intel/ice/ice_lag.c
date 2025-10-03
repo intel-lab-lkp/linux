@@ -17,6 +17,7 @@ static const u8 lacp_train_pkt[ICE_TRAIN_PKT_LEN] = { 0, 0, 0, 0, 0, 0,
 static const u8 act_act_train_pkt[ICE_TRAIN_PKT_LEN] = { 0, 0, 0, 0, 0, 0,
 							 0, 0, 0, 0, 0, 0,
 							 0, 0, 0, 0 };
+static u8 mac_train_pkt[ICE_TRAIN_PKT_LEN] = { 0 };
 
 #define ICE_RECIPE_LEN			64
 #define ICE_LAG_SRIOV_CP_RECIPE		10
@@ -29,6 +30,10 @@ static const u8 ice_lport_rcp[ICE_RECIPE_LEN] = {
 	0x05, 0, 0, 0, 0x20, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
 	0x85, 0, 0x16, 0, 0, 0, 0xff, 0xff, 0x07, 0, 0, 0, 0, 0, 0, 0,
 	0, 0, 0, 0, 0, 0, 0x30 };
+static const u8 ice_pfmac_rcp[ICE_RECIPE_LEN] = {
+	0x05, 0, 0, 0, 0x20, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0x85, 0, 0x16,
+	0x05, 0x06, 0x07, 0xff, 0xff, 0x07, 0x00, 0xff, 0xff, 0xff, 0xff,
+	0xff, 0xff, 0, 0, 0, 0, 0, 0, 0x30 };
 
 /**
  * ice_lag_set_primary - set PF LAG state as Primary
@@ -1337,6 +1342,89 @@ ice_lag_reclaim_vf_nodes(struct ice_lag *lag, struct ice_hw *src_hw)
 }
 
 /**
+ * ice_lag_cfg_pfmac_fltrs
+ * @lag: local lag info struct
+ * @link: is this a linking action
+ *
+ * Configure lport/MAC filters for this interfaces PF traffic in the
+ * current interfaces SWID
+ */
+static void ice_lag_cfg_pfmac_fltrs(struct ice_lag *lag, bool link)
+{
+	u8 lport = lag->pf->hw.port_info->lport;
+	struct ice_sw_rule_lkup_rx_tx *s_rule;
+	struct ice_vsi *vsi = lag->pf->vsi[0];
+	struct ice_hw *hw = &lag->pf->hw;
+	u16 s_rule_sz;
+	u32 act;
+
+	act = ICE_FWD_TO_VSI | ICE_SINGLE_ACT_LAN_ENABLE | ICE_SINGLE_ACT_VALID_BIT |
+		FIELD_PREP(ICE_SINGLE_ACT_VSI_ID_M, vsi->vsi_num);
+
+	s_rule_sz = ICE_SW_RULE_RX_TX_HDR_SIZE(s_rule, ICE_TRAIN_PKT_LEN);
+	s_rule = kzalloc(s_rule_sz, GFP_KERNEL);
+	if (!s_rule) {
+		netdev_warn(lag->netdev, "-ENOMEM error configuring PFMAC filters\n");
+		return;
+	}
+
+	if (link) {
+		u8 broadcast[ETH_ALEN] = { 0xff, 0xff, 0xff, 0xff, 0xff, 0xff };
+
+		/* unicast */
+		ether_addr_copy(mac_train_pkt, lag->upper_netdev->dev_addr);
+		memcpy(s_rule->hdr_data, mac_train_pkt, ICE_TRAIN_PKT_LEN);
+		s_rule->recipe_id = cpu_to_le16(lag->pfmac_recipe);
+		s_rule->src = cpu_to_le16(lport);
+		s_rule->act = cpu_to_le32(act);
+		s_rule->hdr_len = cpu_to_le16(ICE_TRAIN_PKT_LEN);
+		s_rule->hdr.type = cpu_to_le16(ICE_AQC_SW_RULES_T_LKUP_RX);
+
+		if (ice_aq_sw_rules(hw, s_rule, s_rule_sz, 1,
+				    ice_aqc_opc_add_sw_rules, NULL)) {
+			netdev_warn(lag->netdev, "Error ADDING Unicast PFMAC rule for aggregate\n");
+			goto err_pfmac_free;
+		}
+
+		lag->pfmac_unicst_idx = le16_to_cpu(s_rule->index);
+
+		/* broadast */
+		ether_addr_copy(mac_train_pkt, broadcast);
+		memcpy(s_rule->hdr_data, mac_train_pkt, ICE_TRAIN_PKT_LEN);
+		if (ice_aq_sw_rules(hw, s_rule, s_rule_sz, 1,
+				    ice_aqc_opc_add_sw_rules, NULL)) {
+			netdev_warn(lag->netdev, "Error ADDING Broadcast PFMAC rule for aggregate\n");
+			goto err_pfmac_free;
+		}
+
+		lag->pfmac_bdcst_idx = le16_to_cpu(s_rule->index);
+	} else {
+		/* unicast */
+		s_rule->index = cpu_to_le16(lag->pfmac_unicst_idx);
+		if (s_rule->index && ice_aq_sw_rules(&lag->pf->hw, s_rule,
+						     s_rule_sz, 1,
+						     ice_aqc_opc_remove_sw_rules,
+						     NULL))
+			netdev_warn(lag->netdev, "Error REMOVING Unicast PFMAC rule for aggregate\n");
+
+		lag->pfmac_unicst_idx = 0;
+
+		/* broadcast */
+		s_rule->index = cpu_to_le16(lag->pfmac_bdcst_idx);
+		if (s_rule->index && ice_aq_sw_rules(&lag->pf->hw, s_rule,
+						     s_rule_sz, 1,
+						     ice_aqc_opc_remove_sw_rules,
+						     NULL))
+			netdev_warn(lag->netdev, "Error REMOVING Broadcast PFMAC rule for aggregate\n");
+
+		lag->pfmac_bdcst_idx = 0;
+	}
+
+err_pfmac_free:
+	kfree(s_rule);
+}
+
+/**
  * ice_lag_link - handle LAG link event
  * @lag: LAG info struct
  */
@@ -1437,7 +1525,9 @@ static void ice_lag_link_unlink(struct ice_lag *lag, void *ptr)
 
 	if (info->linking) {
 		ice_lag_link(lag);
+		ice_lag_cfg_pfmac_fltrs(lag, true);
 	} else {
+		ice_lag_cfg_pfmac_fltrs(lag, false);
 		if (lag->bond_aa)
 			ice_lag_aa_unlink(lag);
 		else
@@ -2622,6 +2712,11 @@ int ice_init_lag(struct ice_pf *pf)
 	if (err)
 		goto  free_lport_res;
 
+	err = ice_create_lag_recipe(&pf->hw, &lag->pfmac_recipe,
+				    ice_pfmac_rcp, 3);
+	if (err)
+		goto free_act_act_res;
+
 	/* associate recipes to profiles */
 	for (n = 0; n < ICE_PROFID_IPV6_GTPU_IPV6_TCP_INNER; n++) {
 		err = ice_aq_get_recipe_to_profile(&pf->hw, n,
@@ -2642,6 +2737,10 @@ int ice_init_lag(struct ice_pf *pf)
 
 	dev_dbg(dev, "INIT LAG complete\n");
 	return 0;
+
+free_act_act_res:
+	ice_free_hw_res(&pf->hw, ICE_AQC_RES_TYPE_RECIPE, 1,
+			&pf->lag->act_act_recipe);
 
 free_lport_res:
 	ice_free_hw_res(&pf->hw, ICE_AQC_RES_TYPE_RECIPE, 1,
@@ -2679,6 +2778,8 @@ void ice_deinit_lag(struct ice_pf *pf)
 			&pf->lag->pf_recipe);
 	ice_free_hw_res(&pf->hw, ICE_AQC_RES_TYPE_RECIPE, 1,
 			&pf->lag->lport_recipe);
+	ice_free_hw_res(&pf->hw, ICE_AQC_RES_TYPE_RECIPE, 1,
+			&pf->lag->pfmac_recipe);
 
 	kfree(lag);
 
