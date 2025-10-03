@@ -5,7 +5,8 @@
 
 use crate::prelude::*;
 use crate::sync::Mutex;
-use crate::uaccess::UserSliceReader;
+use crate::transmute::{AsBytes, FromBytes};
+use crate::uaccess::{UserSliceReader, UserSliceWriter};
 use core::fmt::{self, Debug, Formatter};
 use core::str::FromStr;
 use core::sync::atomic::{
@@ -39,6 +40,30 @@ impl<T: Debug> Writer for T {
     }
 }
 
+/// Trait for types that can be written out as binary.
+pub trait BinaryWriter {
+    /// Writes the binary form of `self` into `writer`.
+    ///
+    /// `offset` is the requested offset into the binary representation of `self`.
+    ///
+    /// On success, returns the number of bytes written in to `writer`.
+    fn write_to_slice(&self, writer: &mut UserSliceWriter, offset: usize) -> Result<usize>;
+}
+
+impl<T: AsBytes> BinaryWriter for T {
+    fn write_to_slice(&self, writer: &mut UserSliceWriter, offset: usize) -> Result<usize> {
+        writer.write_slice_partial(self.as_bytes(), offset)
+    }
+}
+
+impl<T: BinaryWriter> BinaryWriter for Mutex<T> {
+    fn write_to_slice(&self, writer: &mut UserSliceWriter, offset: usize) -> Result<usize> {
+        let guard = self.lock();
+
+        guard.write_to_slice(writer, offset)
+    }
+}
+
 /// A trait for types that can be updated from a user slice.
 ///
 /// This works similarly to `FromStr`, but operates on a `UserSliceReader` rather than a &str.
@@ -63,6 +88,24 @@ impl<T: FromStr> Reader for Mutex<T> {
         let val = s.trim().parse::<T>().map_err(|_| EINVAL)?;
         *self.lock() = val;
         Ok(())
+    }
+}
+
+/// Trait for types that can be constructed from a binary representation.
+pub trait BinaryReader {
+    /// Reads the binary form of `self` from `reader`.
+    ///
+    /// `offset` is the requested offset into the binary representation of `self`.
+    ///
+    /// On success, returns the number of bytes read from `reader`.
+    fn read_from_slice(&self, reader: &mut UserSliceReader, offset: usize) -> Result<usize>;
+}
+
+impl<T: AsBytes + FromBytes> BinaryReader for Mutex<T> {
+    fn read_from_slice(&self, reader: &mut UserSliceReader, offset: usize) -> Result<usize> {
+        let mut this = self.lock();
+
+        reader.read_slice_partial(this.as_bytes_mut(), offset)
     }
 }
 
