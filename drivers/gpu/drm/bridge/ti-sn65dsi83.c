@@ -613,6 +613,20 @@ static void sn65dsi83_atomic_pre_enable(struct drm_bridge *bridge,
 		     mode->hsync_start - mode->hdisplay);
 	regmap_write(ctx->regmap, REG_VID_CHA_VERTICAL_FRONT_PORCH,
 		     mode->vsync_start - mode->vdisplay);
+
+	regmap_write(ctx->regmap, 0x0A, 0x05);
+	regmap_write(ctx->regmap, 0x0D, 0x00);
+	regmap_write(ctx->regmap, 0x12, 0x53);
+	regmap_write(ctx->regmap, 0x18, 0x6f);
+	regmap_write(ctx->regmap, 0x19, 0x00);
+	regmap_write(ctx->regmap, 0x24, 0x00);
+	regmap_write(ctx->regmap, 0x25, 0x00);
+	regmap_write(ctx->regmap, 0x2c, 0x10);
+	regmap_write(ctx->regmap, 0x34, 0x28);
+	regmap_write(ctx->regmap, 0x36, 0x00);
+	regmap_write(ctx->regmap, 0x38, 0x00);
+	regmap_write(ctx->regmap, 0x3A, 0x00);
+
 	regmap_write(ctx->regmap, REG_VID_CHA_TEST_PATTERN, 0x00);
 
 	/* Enable PLL */
@@ -912,9 +926,7 @@ static int sn65dsi83_host_attach(struct sn65dsi83 *ctx)
 
 	dsi->lanes = dsi_lanes;
 	dsi->format = MIPI_DSI_FMT_RGB888;
-	dsi->mode_flags = MIPI_DSI_MODE_VIDEO | MIPI_DSI_MODE_VIDEO_BURST |
-			  MIPI_DSI_MODE_VIDEO_NO_HFP | MIPI_DSI_MODE_VIDEO_NO_HBP |
-			  MIPI_DSI_MODE_VIDEO_NO_HSA | MIPI_DSI_MODE_NO_EOT_PACKET;
+	dsi->mode_flags = MIPI_DSI_MODE_VIDEO;
 
 	ret = devm_mipi_dsi_attach(dev, dsi);
 	if (ret < 0) {
