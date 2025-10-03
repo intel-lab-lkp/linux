@@ -26,6 +26,8 @@
 #include <linux/virtio.h>
 #include <linux/virtio_config.h>
 #include <linux/virtio_ring.h>
+#include <linux/suspend.h>
+#include <linux/pm_runtime.h>
 
 #include <drm/drm_file.h>
 #include <drm/drm_managed.h>
@@ -131,6 +133,23 @@ int virtio_gpu_find_vqs(struct virtio_gpu_device *vgdev)
 	vgdev->cursorq.vq = vqs[1];
 
 	return 0;
+}
+
+static int virtio_gpu_pm_notifier(struct notifier_block *nb, unsigned long mode,
+				  void *data)
+{
+	struct virtio_gpu_device *vgdev = container_of(nb, struct virtio_gpu_device, pm_nb);
+	int ret;
+
+	if (mode == PM_POST_HIBERNATION) {
+		ret = virtio_gpu_object_restore_all(vgdev);
+		if (ret) {
+			DRM_ERROR("Failed to recover virtio-gpu objects\n");
+			return notifier_from_errno(ret);
+		}
+	}
+
+	return NOTIFY_DONE;
 }
 
 int virtio_gpu_init(struct virtio_device *vdev, struct drm_device *dev)
@@ -269,6 +288,12 @@ int virtio_gpu_init(struct virtio_device *vdev, struct drm_device *dev)
 		wait_event_timeout(vgdev->resp_wq, !vgdev->display_info_pending,
 				   5 * HZ);
 	}
+
+	vgdev->pm_nb.notifier_call = virtio_gpu_pm_notifier;
+	ret = register_pm_notifier(&vgdev->pm_nb);
+	if (ret)
+		goto err_scanouts;
+
 	return 0;
 
 err_scanouts:
@@ -300,6 +325,7 @@ void virtio_gpu_deinit(struct drm_device *dev)
 	flush_work(&vgdev->config_changed_work);
 	virtio_reset_device(vgdev->vdev);
 	vgdev->vdev->config->del_vqs(vgdev->vdev);
+	unregister_pm_notifier(&vgdev->pm_nb);
 }
 
 void virtio_gpu_release(struct drm_device *dev)
