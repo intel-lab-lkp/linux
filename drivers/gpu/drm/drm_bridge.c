@@ -701,6 +701,7 @@ void drm_atomic_bridge_chain_disable(struct drm_bridge *bridge,
 		return;
 
 	encoder = bridge->encoder;
+	drm_encoder_chain_lock(encoder);
 	list_for_each_entry_reverse(iter, &encoder->bridge_chain, chain_node) {
 		if (iter->funcs->atomic_disable) {
 			iter->funcs->atomic_disable(iter, state);
@@ -711,6 +712,7 @@ void drm_atomic_bridge_chain_disable(struct drm_bridge *bridge,
 		if (iter == bridge)
 			break;
 	}
+	drm_encoder_chain_unlock(encoder);
 }
 EXPORT_SYMBOL(drm_atomic_bridge_chain_disable);
 
@@ -1215,6 +1217,7 @@ int drm_atomic_bridge_chain_check(struct drm_bridge *bridge,
 		return ret;
 
 	encoder = bridge->encoder;
+	drm_encoder_chain_lock(encoder);
 	list_for_each_entry_reverse(iter, &encoder->bridge_chain, chain_node) {
 		int ret;
 
@@ -1229,12 +1232,15 @@ int drm_atomic_bridge_chain_check(struct drm_bridge *bridge,
 						      crtc_state->state);
 
 		ret = drm_atomic_bridge_check(iter, crtc_state, conn_state);
-		if (ret)
+		if (ret) {
+			drm_encoder_chain_unlock(encoder);
 			return ret;
+		}
 
 		if (iter == bridge)
 			break;
 	}
+	drm_encoder_chain_unlock(encoder);
 
 	return 0;
 }
