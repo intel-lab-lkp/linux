@@ -59,21 +59,22 @@ struct ttm_pool_type {
 	struct list_head pages;
 };
 
+#define TTM_POOL_USE_DMA_ALLOC 	BIT(0) /* Use coherent DMA allocations. */
+#define TTM_POOL_USE_DMA32	BIT(1) /* Use GFP_DMA32 allocations. */
+
 /**
  * struct ttm_pool - Pool for all caching and orders
  *
  * @dev: the device we allocate pages for
  * @nid: which numa node to use
- * @use_dma_alloc: if coherent DMA allocations should be used
- * @use_dma32: if GFP_DMA32 should be used
+ * @flags: TTM_POOL_ flags
  * @caching: pools for each caching/order
  */
 struct ttm_pool {
 	struct device *dev;
 	int nid;
 
-	bool use_dma_alloc;
-	bool use_dma32;
+	unsigned int flags;
 
 	struct {
 		struct ttm_pool_type orders[NR_PAGE_ORDERS];
@@ -85,7 +86,7 @@ int ttm_pool_alloc(struct ttm_pool *pool, struct ttm_tt *tt,
 void ttm_pool_free(struct ttm_pool *pool, struct ttm_tt *tt);
 
 void ttm_pool_init(struct ttm_pool *pool, struct device *dev,
-		   int nid, bool use_dma_alloc, bool use_dma32);
+		   int nid, unsigned int flags);
 void ttm_pool_fini(struct ttm_pool *pool);
 
 int ttm_pool_debugfs(struct ttm_pool *pool, struct seq_file *m);
@@ -102,12 +103,12 @@ void ttm_pool_mgr_fini(void);
 
 static inline bool ttm_pool_uses_dma_alloc(struct ttm_pool *pool)
 {
-	return pool->use_dma_alloc;
+	return pool->flags & TTM_POOL_USE_DMA_ALLOC;
 }
 
 static inline bool ttm_pool_uses_dma32(struct ttm_pool *pool)
 {
-	return pool->use_dma32;
+	return pool->flags & TTM_POOL_USE_DMA32;
 }
 
 #endif
