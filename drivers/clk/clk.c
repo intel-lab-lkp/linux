@@ -1971,8 +1971,16 @@ static void __clk_recalc_rates(struct clk_core *core, bool update_req,
 
 static unsigned long clk_core_get_rate_recalc(struct clk_core *core)
 {
-	if (core && (core->flags & CLK_GET_RATE_NOCACHE))
-		__clk_recalc_rates(core, false, 0);
+	if (core) {
+		bool prepared = clk_core_is_prepared(core);
+
+		if (core->flags & CLK_GET_RATE_NOCACHE || !prepared) {
+			if (!prepared)
+				pr_debug("%s: rate requested for unprepared clock %s\n",
+					 __func__, core->name);
+			__clk_recalc_rates(core, false, 0);
+		}
+	}
 
 	return clk_core_get_rate_nolock(core);
 }
