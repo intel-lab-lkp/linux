@@ -725,6 +725,7 @@ int pcsc_add_device(struct pci_dev *dev)
 {
 	struct pcsc_node *node;
 	struct pci_bus *bus;
+	size_t data_size;
 
 	if (WARN_ON(!dev))
 		return -EINVAL;
@@ -741,12 +742,27 @@ int pcsc_add_device(struct pci_dev *dev)
 	 * nodes for these devices, as it simplifies the code flow
 	 */
 	if (dev->hdr_type == PCI_HEADER_TYPE_NORMAL) {
-		dev->pcsc->cfg_space = kzalloc(PCSC_CFG_SPC_SIZE, GFP_KERNEL);
-		if (!dev->pcsc->cfg_space)
+		/* Allocate contiguous, page aligned data block. This will be
+		 * needed for persisting the data with KHO.
+		 */
+		data_size = sizeof(struct pcsc_data);
+
+		dev->pcsc->data =
+			(struct pcsc_data *)__get_free_pages(
+				GFP_KERNEL | __GFP_ZERO, get_order(data_size));
+		if (!dev->pcsc->data)
+
 			goto err_free_node;
+
+		dev->pcsc->cachable_bitmask = dev->pcsc->data->cachable_bitmask;
+		dev->pcsc->cached_bitmask = dev->pcsc->data->cached_bitmask;
+		dev->pcsc->cfg_space = dev->pcsc->data->cfg_space;
 
 		infer_cacheability(dev);
 	} else {
+		dev->pcsc->data = NULL;
+		dev->pcsc->cachable_bitmask = NULL;
+		dev->pcsc->cached_bitmask = NULL;
 		dev->pcsc->cfg_space = NULL;
 	}
 
@@ -771,8 +787,12 @@ int pcsc_remove_device(struct pci_dev *dev)
 
 	atomic_dec(&num_nodes);
 
-	if (dev->pcsc && dev->pcsc->cfg_space) {
-		kfree(dev->pcsc->cfg_space);
+	if (dev->pcsc && dev->pcsc->data) {
+		size_t data_size = sizeof(struct pcsc_data);
+		size_t total_size = PAGE_ALIGN(data_size);
+
+		free_pages((unsigned long)dev->pcsc->data,
+			get_order(total_size));
 		kfree(dev->pcsc);
 	}
 	dev->pcsc = NULL;

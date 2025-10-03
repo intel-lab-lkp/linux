@@ -18,10 +18,38 @@
 #define PCSC_CFG_SPC_SIZE 256
 #endif
 
-struct pcsc_node {
-	u8 *cfg_space;
+/*
+ * struct pcsc__data - Continuous data block for PCSC
+ *
+ * This structure contains all the PCSC data in a single continuous
+ * memory block.
+ *
+ * @cfg_space: Configuration space cache
+ * @cachable_bitmask: Bitmap of cacheable configuration space offsets
+ * @cached_bitmask: Bitmap of cached configuration space offsets
+ */
+struct pcsc_data {
+	u8 cfg_space[PCSC_CFG_SPC_SIZE];
 	DECLARE_BITMAP(cachable_bitmask, PCSC_CFG_SPC_SIZE);
 	DECLARE_BITMAP(cached_bitmask, PCSC_CFG_SPC_SIZE);
+};
+
+/*
+ * struct pcsc_node - PCSC node structure
+ *
+ * This structure represents a PCSC node for a PCI device.
+ * It contains pointers into the data block for convenient access.
+ *
+ * @data: Pointer to the continuous data block
+ * @cachable_bitmask: Pointer to cachable_bitmask in data
+ * @cached_bitmask: Pointer to cached_bitmask in data
+ * @cfg_space: Pointer to cfg_space in data
+ */
+struct pcsc_node {
+	struct pcsc_data *data; /* Pointer to continuous data block */
+	unsigned long *cachable_bitmask; /* Convenience pointer into data */
+	unsigned long *cached_bitmask; /* Convenience pointer into data */
+	u8 *cfg_space; /* Convenience pointer into data */
 };
 
 /**
