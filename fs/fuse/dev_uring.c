@@ -19,7 +19,9 @@ MODULE_PARM_DESC(enable_uring,
 #define FUSE_URING_IOV_SEGS 2 /* header and payload */
 
 /* Number of queued fuse requests until a queue is considered full */
-#define FUSE_URING_QUEUE_THRESHOLD 5
+#define FURING_Q_LOCAL_THRESHOLD 2
+#define FURING_Q_NUMA_THRESHOLD (FURING_Q_LOCAL_THRESHOLD + 1)
+#define FURING_Q_GLOBAL_THRESHOLD (FURING_Q_LOCAL_THRESHOLD * 2)
 
 bool fuse_uring_enabled(void)
 {
@@ -1283,22 +1285,90 @@ static void fuse_uring_send_in_task(struct io_uring_cmd *cmd,
 	fuse_uring_send(ent, cmd, err, issue_flags);
 }
 
-static struct fuse_ring_queue *fuse_uring_task_to_queue(struct fuse_ring *ring)
+/*
+ * Pick best queue from mask. Follows the algorithm described in
+ * "The Power of Two Choices in Randomized Load Balancing"
+ *  (Michael David Mitzenmacher, 1991)
+ */
+static struct fuse_ring_queue *fuse_uring_best_queue(const struct cpumask *mask,
+						     struct fuse_ring *ring)
+{
+	unsigned int qid1, qid2;
+	struct fuse_ring_queue *queue1, *queue2;
+	int weight = cpumask_weight(mask);
+
+	if (weight == 0)
+		return NULL;
+
+	if (weight == 1) {
+		qid1 = cpumask_first(mask);
+		return READ_ONCE(ring->queues[qid1]);
+	}
+
+	/* Get two different queues using optimized bounded random */
+	qid1 = cpumask_nth(get_random_u32_below(weight), mask);
+	queue1 = READ_ONCE(ring->queues[qid1]);
+
+	do {
+		qid2 = cpumask_nth(get_random_u32_below(weight), mask);
+	} while (qid2 == qid1);
+
+	queue2 = READ_ONCE(ring->queues[qid2]);
+
+	/* Return lowest loaded queue */
+	if (!queue1)
+		return queue2;
+	if (!queue2)
+		return queue1;
+
+	return (queue1->nr_reqs <= queue2->nr_reqs) ? queue1 : queue2;
+}
+
+/*
+ * Get the best queue for the current CPU
+ */
+static struct fuse_ring_queue *fuse_uring_get_queue(struct fuse_ring *ring)
 {
 	unsigned int qid;
-	struct fuse_ring_queue *queue;
+	struct fuse_ring_queue *local_queue, *best_numa, *best_global;
+	int local_node;
+	const struct cpumask *numa_mask, *global_mask;
 
 	qid = task_cpu(current);
-
 	if (WARN_ONCE(qid >= ring->max_nr_queues,
 		      "Core number (%u) exceeds nr queues (%zu)\n", qid,
 		      ring->max_nr_queues))
 		qid = 0;
 
-	queue = ring->queues[qid];
-	WARN_ONCE(!queue, "Missing queue for qid %d\n", qid);
+	local_queue = READ_ONCE(ring->queues[qid]);
+	local_node = cpu_to_node(qid);
 
-	return queue;
+	/* Fast path: if local queue exists and is not overloaded, use it */
+	if (local_queue && local_queue->nr_reqs <= FURING_Q_LOCAL_THRESHOLD)
+		return local_queue;
+
+	/* Find best NUMA-local queue */
+	numa_mask = ring->numa_registered_q_mask[local_node];
+	best_numa = fuse_uring_best_queue(numa_mask, ring);
+
+	/* If NUMA queue is under threshold, use it */
+	if (best_numa && best_numa->nr_reqs <= FURING_Q_NUMA_THRESHOLD)
+		return best_numa;
+
+	/* NUMA queues above threshold, try global queues */
+	global_mask = ring->registered_q_mask;
+	best_global = fuse_uring_best_queue(global_mask, ring);
+
+	/* Might happen during tear down */
+	if (!best_global)
+		return NULL;
+
+	/* If global queue is under double threshold, use it */
+	if (best_global->nr_reqs <= FURING_Q_GLOBAL_THRESHOLD)
+		return best_global;
+
+	/* Fall back to best available queue */
+	return best_numa ? best_numa : best_global;
 }
 
 static void fuse_uring_dispatch_ent(struct fuse_ring_ent *ent)
@@ -1319,7 +1389,7 @@ void fuse_uring_queue_fuse_req(struct fuse_iqueue *fiq, struct fuse_req *req)
 	int err;
 
 	err = -EINVAL;
-	queue = fuse_uring_task_to_queue(ring);
+	queue = fuse_uring_get_queue(ring);
 	if (!queue)
 		goto err;
 
@@ -1364,7 +1434,7 @@ bool fuse_uring_queue_bq_req(struct fuse_req *req)
 	struct fuse_ring_queue *queue;
 	struct fuse_ring_ent *ent = NULL;
 
-	queue = fuse_uring_task_to_queue(ring);
+	queue = fuse_uring_get_queue(ring);
 	if (!queue)
 		return false;
 
