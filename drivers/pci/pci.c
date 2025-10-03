@@ -26,6 +26,7 @@
 #include <linux/device.h>
 #include <linux/pm_runtime.h>
 #include <linux/pci_hotplug.h>
+#include <linux/pcsc.h>
 #include <linux/vmalloc.h>
 #include <asm/dma.h>
 #include <linux/aer.h>
@@ -1248,11 +1249,19 @@ static int pci_dev_wait(struct pci_dev *dev, char *reset_type, int timeout)
 		}
 
 		if (root && root->config_rrs_sv) {
+#ifdef CONFIG_PCSC
+			pcsc_hw_config_read(dev->bus, dev->devfn, PCI_VENDOR_ID, 4, &id);
+#else
 			pci_read_config_dword(dev, PCI_VENDOR_ID, &id);
+#endif
 			if (!pci_bus_rrs_vendor_id(id))
 				break;
 		} else {
+#ifdef CONFIG_PCSC
+			pcsc_hw_config_read(dev->bus, dev->devfn, PCI_COMMAND, 4, &id);
+#else
 			pci_read_config_dword(dev, PCI_COMMAND, &id);
+#endif
 			if (!PCI_POSSIBLE_ERROR(id))
 				break;
 		}
@@ -1564,7 +1573,9 @@ static int __pci_set_power_state(struct pci_dev *dev, pci_power_t state, bool lo
 
 		if (pci_platform_power_transition(dev, PCI_D3cold))
 			return error;
-
+	#ifdef CONFIG_PCSC
+		pcsc_device_reset(dev);
+	#endif
 		/* Powering off a bridge may power off the whole hierarchy */
 		if (dev->current_state == PCI_D3cold)
 			__pci_bus_set_current_state(dev->subordinate, PCI_D3cold, locked);
@@ -4493,6 +4504,10 @@ int pcie_flr(struct pci_dev *dev)
 	 */
 	msleep(100);
 
+#ifdef CONFIG_PCSC
+	pcsc_device_reset(dev);
+#endif
+
 	return pci_dev_wait(dev, "FLR", PCIE_RESET_READY_POLL_MS);
 }
 EXPORT_SYMBOL_GPL(pcie_flr);
@@ -4560,6 +4575,10 @@ static int pci_af_flr(struct pci_dev *dev, bool probe)
 	 */
 	msleep(100);
 
+#ifdef CONFIG_PCSC
+	pcsc_device_reset(dev);
+#endif
+
 	return pci_dev_wait(dev, "AF_FLR", PCIE_RESET_READY_POLL_MS);
 }
 
@@ -4604,6 +4623,10 @@ static int pci_pm_reset(struct pci_dev *dev, bool probe)
 	csr |= PCI_D0;
 	pci_write_config_word(dev, dev->pm_cap + PCI_PM_CTRL, csr);
 	pci_dev_d3_sleep(dev);
+
+#ifdef CONFIG_PCSC
+	pcsc_device_reset(dev);
+#endif
 
 	return pci_dev_wait(dev, "PM D3hot->D0", PCIE_RESET_READY_POLL_MS);
 }
@@ -4904,6 +4927,31 @@ int pci_bridge_wait_for_secondary_bus(struct pci_dev *dev, char *reset_type)
 			    PCIE_RESET_READY_POLL_MS - delay);
 }
 
+#ifdef CONFIG_PCSC
+/**
+ * pcsc_reset_bus_recursively - Recursively reset PCSC cache for all devices
+ * in bus hierarchy
+ * @bus: PCI bus to process
+ *
+ * Recursively invalidate PCSC cache for all devices on the given bus
+ * and all subordinate buses.
+ */
+static void pcsc_reset_bus_recursively(struct pci_bus *bus)
+{
+	struct pci_dev *dev;
+
+	if (!bus)
+		return;
+
+	list_for_each_entry(dev, &bus->devices, bus_list) {
+		pcsc_device_reset(dev);
+		/* If this device is a bridge, recursively process its subordinate bus */
+		if (dev->subordinate)
+			pcsc_reset_bus_recursively(dev->subordinate);
+	}
+}
+#endif
+
 void pci_reset_secondary_bus(struct pci_dev *dev)
 {
 	u16 ctrl;
@@ -4920,6 +4968,10 @@ void pci_reset_secondary_bus(struct pci_dev *dev)
 
 	ctrl &= ~PCI_BRIDGE_CTL_BUS_RESET;
 	pci_write_config_word(dev, PCI_BRIDGE_CONTROL, ctrl);
+
+#ifdef CONFIG_PCSC
+	pcsc_reset_bus_recursively(dev->subordinate);
+#endif
 }
 
 void __weak pcibios_reset_secondary_bus(struct pci_dev *dev)
@@ -5542,6 +5594,9 @@ static void pci_bus_restore_locked(struct pci_bus *bus)
 
 	list_for_each_entry(dev, &bus->devices, bus_list) {
 		pci_dev_restore(dev);
+#ifdef CONFIG_PCSC
+		pcsc_device_reset(dev);
+#endif
 		if (dev->subordinate) {
 			pci_bridge_wait_for_secondary_bus(dev, "bus reset");
 			pci_bus_restore_locked(dev->subordinate);
@@ -5579,6 +5634,9 @@ static void pci_slot_restore_locked(struct pci_slot *slot)
 		if (!dev->slot || dev->slot != slot)
 			continue;
 		pci_dev_restore(dev);
+#ifdef CONFIG_PCSC
+		pcsc_device_reset(dev);
+#endif
 		if (dev->subordinate) {
 			pci_bridge_wait_for_secondary_bus(dev, "slot reset");
 			pci_bus_restore_locked(dev->subordinate);

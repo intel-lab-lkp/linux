@@ -121,4 +121,15 @@ int pcsc_remove_device(struct pci_dev *dev);
  */
 bool pcsc_is_initialised(void);
 
+/**
+ * pcsc_device_reset - Handle PCI device reset
+ * @dev: PCI device being reset
+ *
+ * This function should be called when a PCI device is being reset
+ * to ensure the cache is properly invalidated.
+ *
+ * Returns: 0 on success, negative error code on failure
+ */
+int pcsc_device_reset(struct pci_dev *dev);
+
 #endif /* _LINUX_PCSC_H */

@@ -4239,8 +4239,13 @@ int pci_dev_specific_reset(struct pci_dev *dev, bool probe)
 		if ((i->vendor == dev->vendor ||
 		     i->vendor == (u16)PCI_ANY_ID) &&
 		    (i->device == dev->device ||
-		     i->device == (u16)PCI_ANY_ID))
+		     i->device == (u16)PCI_ANY_ID)) {
+#ifdef CONFIG_PCSC
+			if (!probe)
+				pcsc_device_reset(dev);
+#endif
 			return i->reset(dev, probe);
+		}
 	}
 
 	return -ENOTTY;

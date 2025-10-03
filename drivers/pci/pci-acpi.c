@@ -983,6 +983,10 @@ int pci_dev_acpi_reset(struct pci_dev *dev, bool probe)
 		return -ENOTTY;
 	}
 
+#ifdef CONFIG_PCSC
+	pcsc_device_reset(dev);
+#endif
+
 	return 0;
 }
 

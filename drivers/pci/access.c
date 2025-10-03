@@ -245,11 +245,16 @@ struct pci_ops *pci_bus_set_ops(struct pci_bus *bus, struct pci_ops *ops)
 		/*
 		 * IMPORTANT: Dynamic ops changes after PCSC injection can lead to
 		 * cache consistency issues if operations were performed that should
-		 * have invalidated the cache. We re-inject PCSC ops here, but the
-		 * caller is responsible for ensuring cache consistency if needed.
-		 * This will be fixed in a future commit, when PCSC resets are
-		 * introduced.
+		 * have invalidated the cache. We must reset the cache for all
+		 * devices on this bus to ensure consistency. (No need for recursive
+		 * reset on subordinate buses)
 		 */
+		struct pci_dev *dev;
+
+		list_for_each_entry(dev, &bus->devices, bus_list) {
+			if (dev->pcsc && dev->pcsc->cached_bitmask)
+				bitmap_zero(dev->pcsc->cached_bitmask, PCSC_CFG_SPC_SIZE);
+		}
 
 		pr_warn("PCSC: Dynamic ops change detected on bus %04x:%02x, resetting cache\n",
 			pci_domain_nr(bus), bus->number);

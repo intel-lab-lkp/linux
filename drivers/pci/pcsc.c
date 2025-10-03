@@ -837,6 +837,23 @@ write_to_dev:
 }
 EXPORT_SYMBOL_GPL(pcsc_cached_config_write);
 
+int pcsc_device_reset(struct pci_dev *dev)
+{
+	if (unlikely((!dev)))
+		return -EINVAL;
+
+	if (unlikely(!pcsc_is_initialised()))
+		return 0;
+
+	/* The layout of the CFG Space is not going to change after a device
+	 * reset, whether the reset is FLR or conventional. Only the values
+	 * are going to change. We could further optimise the cache to maintain
+	 * some of the HWInt values that are going to remain constant after a reset.
+	 */
+	bitmap_zero(dev->pcsc->cached_bitmask, PCSC_CFG_SPC_SIZE);
+	return 0;
+}
+
 static struct pci_ops pcsc_ops = {
 	.add_bus = pcsc_add_bus,
 	.remove_bus = pcsc_remove_bus,
