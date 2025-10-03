@@ -329,3 +329,326 @@ macro_rules! bitfield {
         }
     };
 }
+
+#[::kernel::macros::kunit_tests(kernel_bitfield)]
+mod tests {
+    use core::convert::TryFrom;
+
+    // Enum types for testing => and ?=> conversions
+    #[derive(Debug, Default, Clone, Copy, PartialEq)]
+    enum MemoryType {
+        #[default]
+        Unmapped = 0,
+        Normal = 1,
+        Device = 2,
+        Reserved = 3,
+    }
+
+    impl TryFrom<u8> for MemoryType {
+        type Error = u8;
+        fn try_from(value: u8) -> Result<Self, Self::Error> {
+            match value {
+                0 => Ok(MemoryType::Unmapped),
+                1 => Ok(MemoryType::Normal),
+                2 => Ok(MemoryType::Device),
+                3 => Ok(MemoryType::Reserved),
+                _ => Err(value),
+            }
+        }
+    }
+
+    impl From<MemoryType> for u64 {
+        fn from(mt: MemoryType) -> u64 {
+            mt as u64
+        }
+    }
+
+    #[derive(Debug, Default, Clone, Copy, PartialEq)]
+    enum Priority {
+        #[default]
+        Low = 0,
+        Medium = 1,
+        High = 2,
+        Critical = 3,
+    }
+
+    impl From<u8> for Priority {
+        fn from(value: u8) -> Self {
+            match value & 0x3 {
+                0 => Priority::Low,
+                1 => Priority::Medium,
+                2 => Priority::High,
+                _ => Priority::Critical,
+            }
+        }
+    }
+
+    impl From<Priority> for u16 {
+        fn from(p: Priority) -> u16 {
+            p as u16
+        }
+    }
+
+    bitfield! {
+        struct TestPageTableEntry(u64) {
+            0:0       present     as bool;
+            1:1       writable    as bool;
+            11:9      available   as u8;
+            13:12     mem_type    as u8 ?=> MemoryType;
+            17:14     extended_type as u8 ?=> MemoryType;  // For testing failures
+            51:12     pfn         as u64;
+            51:12     pfn_overlap as u64;
+            61:52     available2  as u16;
+        }
+    }
+
+    bitfield! {
+        struct TestControlRegister(u16) {
+            0:0       enable      as bool;
+            3:1       mode        as u8;
+            5:4       priority    as u8 => Priority;
+            7:4       priority_nibble as u8;
+            15:8      channel     as u8;
+        }
+    }
+
+    bitfield! {
+        struct TestStatusRegister(u8) {
+            0:0       ready       as bool;
+            1:1       error       as bool;
+            3:2       state       as u8;
+            7:4       reserved    as u8;
+            7:0       full_byte   as u8;  // For entire register
+        }
+    }
+
+    #[test]
+    fn test_single_bits() {
+        let mut pte = TestPageTableEntry::default();
+
+        assert!(!pte.present());
+        assert!(!pte.writable());
+        assert_eq!(u64::from(pte), 0x0);
+
+        pte = pte.set_present(true);
+        assert!(pte.present());
+        assert_eq!(u64::from(pte), 0x1);
+
+        pte = pte.set_writable(true);
+        assert!(pte.writable());
+        assert_eq!(u64::from(pte), 0x3);
+
+        pte = pte.set_writable(false);
+        assert!(!pte.writable());
+        assert_eq!(u64::from(pte), 0x1);
+
+        assert_eq!(pte.available(), 0);
+        pte = pte.set_available(0x5);
+        assert_eq!(pte.available(), 0x5);
+        assert_eq!(u64::from(pte), 0xA01);
+    }
+
+    #[test]
+    fn test_range_fields() {
+        let mut pte = TestPageTableEntry::default();
+        assert_eq!(u64::from(pte), 0x0);
+
+        pte = pte.set_pfn(0x123456);
+        assert_eq!(pte.pfn(), 0x123456);
+        // Test overlapping field reads same value
+        assert_eq!(pte.pfn_overlap(), 0x123456);
+        assert_eq!(u64::from(pte), 0x123456000);
+
+        pte = pte.set_available(0x7);
+        assert_eq!(pte.available(), 0x7);
+        assert_eq!(u64::from(pte), 0x123456E00);
+
+        pte = pte.set_available2(0x3FF);
+        assert_eq!(pte.available2(), 0x3FF);
+        assert_eq!(u64::from(pte), 0x3FF0000123456E00);
+
+        // Test TryFrom with ?=> for MemoryType
+        pte = pte.set_mem_type(MemoryType::Device);
+        assert_eq!(pte.mem_type(), Ok(MemoryType::Device));
+        assert_eq!(u64::from(pte), 0x3FF0000123456E00);
+
+        pte = pte.set_mem_type(MemoryType::Normal);
+        assert_eq!(pte.mem_type(), Ok(MemoryType::Normal));
+        assert_eq!(u64::from(pte), 0x3FF0000123455E00);
+
+        // Test all valid values for mem_type
+        pte = pte.set_mem_type(MemoryType::Reserved);
+        assert_eq!(pte.mem_type(), Ok(MemoryType::Reserved));
+        assert_eq!(u64::from(pte), 0x3FF0000123457E00);
+
+        // Test failure case using extended_type field which has 4 bits (0-15)
+        // MemoryType only handles 0-3, so values 4-15 should return Err
+        let mut raw = pte.into();
+        // Set bits 17:14 to 7 (invalid for MemoryType)
+        raw = (raw & !::kernel::bits::genmask_u64(14..=17)) | (0x7 << 14);
+        let invalid_pte = TestPageTableEntry(raw);
+        // Should return Err with the invalid value
+        assert_eq!(invalid_pte.extended_type(), Err(0x7));
+
+        // Test a valid value after testing invalid to ensure both cases work
+        // Set bits 17:14 to 2 (valid: Device)
+        raw = (raw & !::kernel::bits::genmask_u64(14..=17)) | (0x2 << 14);
+        let valid_pte = TestPageTableEntry(raw);
+        assert_eq!(valid_pte.extended_type(), Ok(MemoryType::Device));
+
+        let max_pfn = ::kernel::bits::genmask_u64(0..=39);
+        pte = pte.set_pfn(max_pfn);
+        assert_eq!(pte.pfn(), max_pfn);
+        assert_eq!(pte.pfn_overlap(), max_pfn);
+    }
+
+    #[test]
+    fn test_builder_pattern() {
+        let pte = TestPageTableEntry::default()
+            .set_present(true)
+            .set_writable(true)
+            .set_available(0x7)
+            .set_pfn(0xABCDEF)
+            .set_mem_type(MemoryType::Reserved)
+            .set_available2(0x3FF);
+
+        assert!(pte.present());
+        assert!(pte.writable());
+        assert_eq!(pte.available(), 0x7);
+        assert_eq!(pte.pfn(), 0xABCDEF);
+        assert_eq!(pte.pfn_overlap(), 0xABCDEF);
+        assert_eq!(pte.mem_type(), Ok(MemoryType::Reserved));
+        assert_eq!(pte.available2(), 0x3FF);
+    }
+
+    #[test]
+    fn test_raw_operations() {
+        let raw_value = 0x3FF0000003123E03u64;
+
+        let pte = TestPageTableEntry(raw_value);
+        assert_eq!(u64::from(pte), raw_value);
+
+        assert!(pte.present());
+        assert!(pte.writable());
+        assert_eq!(pte.available(), 0x7);
+        assert_eq!(pte.pfn(), 0x3123);
+        assert_eq!(pte.pfn_overlap(), 0x3123);
+        assert_eq!(pte.mem_type(), Ok(MemoryType::Reserved));
+        assert_eq!(pte.available2(), 0x3FF);
+
+        // Test using direct constructor syntax TestStruct(value)
+        let pte2 = TestPageTableEntry(raw_value);
+        assert_eq!(u64::from(pte2), raw_value);
+    }
+
+    #[test]
+    fn test_u16_bitfield() {
+        let mut ctrl = TestControlRegister::default();
+
+        assert!(!ctrl.enable());
+        assert_eq!(ctrl.mode(), 0);
+        assert_eq!(ctrl.priority(), Priority::Low);
+        assert_eq!(ctrl.priority_nibble(), 0);
+        assert_eq!(ctrl.channel(), 0);
+
+        ctrl = ctrl.set_enable(true);
+        assert!(ctrl.enable());
+
+        ctrl = ctrl.set_mode(0x5);
+        assert_eq!(ctrl.mode(), 0x5);
+
+        // Test From conversion with =>
+        ctrl = ctrl.set_priority(Priority::High);
+        assert_eq!(ctrl.priority(), Priority::High);
+        assert_eq!(ctrl.priority_nibble(), 0x2); // High = 2 in bits 5:4
+
+        ctrl = ctrl.set_channel(0xAB);
+        assert_eq!(ctrl.channel(), 0xAB);
+
+        // Test overlapping fields
+        ctrl = ctrl.set_priority_nibble(0xF);
+        assert_eq!(ctrl.priority_nibble(), 0xF);
+        assert_eq!(ctrl.priority(), Priority::Critical); // bits 5:4 = 0x3
+
+        let ctrl2 = TestControlRegister::default()
+            .set_enable(true)
+            .set_mode(0x3)
+            .set_priority(Priority::Medium)
+            .set_channel(0x42);
+
+        assert!(ctrl2.enable());
+        assert_eq!(ctrl2.mode(), 0x3);
+        assert_eq!(ctrl2.priority(), Priority::Medium);
+        assert_eq!(ctrl2.channel(), 0x42);
+
+        let raw_value: u16 = 0x4217;
+        let ctrl3 = TestControlRegister(raw_value);
+        assert_eq!(u16::from(ctrl3), raw_value);
+        assert!(ctrl3.enable());
+        assert_eq!(ctrl3.priority(), Priority::Medium);
+        assert_eq!(ctrl3.priority_nibble(), 0x1);
+        assert_eq!(ctrl3.channel(), 0x42);
+    }
+
+    #[test]
+    fn test_u8_bitfield() {
+        let mut status = TestStatusRegister::default();
+
+        assert!(!status.ready());
+        assert!(!status.error());
+        assert_eq!(status.state(), 0);
+        assert_eq!(status.reserved(), 0);
+        assert_eq!(status.full_byte(), 0);
+
+        status = status.set_ready(true);
+        assert!(status.ready());
+        assert_eq!(status.full_byte(), 0x01);
+
+        status = status.set_error(true);
+        assert!(status.error());
+        assert_eq!(status.full_byte(), 0x03);
+
+        status = status.set_state(0x3);
+        assert_eq!(status.state(), 0x3);
+        assert_eq!(status.full_byte(), 0x0F);
+
+        status = status.set_reserved(0xA);
+        assert_eq!(status.reserved(), 0xA);
+        assert_eq!(status.full_byte(), 0xAF);
+
+        // Test overlapping field
+        status = status.set_full_byte(0x55);
+        assert_eq!(status.full_byte(), 0x55);
+        assert!(status.ready());
+        assert!(!status.error());
+        assert_eq!(status.state(), 0x1);
+        assert_eq!(status.reserved(), 0x5);
+
+        let status2 = TestStatusRegister::default()
+            .set_ready(true)
+            .set_state(0x2)
+            .set_reserved(0x5);
+
+        assert!(status2.ready());
+        assert!(!status2.error());
+        assert_eq!(status2.state(), 0x2);
+        assert_eq!(status2.reserved(), 0x5);
+        assert_eq!(status2.full_byte(), 0x59);
+
+        let raw_value: u8 = 0x59;
+        let status3 = TestStatusRegister(raw_value);
+        assert_eq!(u8::from(status3), raw_value);
+        assert!(status3.ready());
+        assert!(!status3.error());
+        assert_eq!(status3.state(), 0x2);
+        assert_eq!(status3.reserved(), 0x5);
+        assert_eq!(status3.full_byte(), 0x59);
+
+        let status4 = TestStatusRegister(0xFF);
+        assert!(status4.ready());
+        assert!(status4.error());
+        assert_eq!(status4.state(), 0x3);
+        assert_eq!(status4.reserved(), 0xF);
+        assert_eq!(status4.full_byte(), 0xFF);
+    }
+}
