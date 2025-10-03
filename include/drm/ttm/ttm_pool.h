@@ -100,4 +100,14 @@ int ttm_pool_restore_and_alloc(struct ttm_pool *pool, struct ttm_tt *tt,
 int ttm_pool_mgr_init(unsigned long num_pages);
 void ttm_pool_mgr_fini(void);
 
+static inline bool ttm_pool_uses_dma_alloc(struct ttm_pool *pool)
+{
+	return pool->use_dma_alloc;
+}
+
+static inline bool ttm_pool_uses_dma32(struct ttm_pool *pool)
+{
+	return pool->use_dma32;
+}
+
 #endif
