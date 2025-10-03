@@ -1752,11 +1752,62 @@ static void pci_restore_pcix_state(struct pci_dev *dev)
 int pci_save_state(struct pci_dev *dev)
 {
 	int i;
-	/* XXX: 100% dword access ok here? */
-	for (i = 0; i < 16; i++) {
-		pci_read_config_dword(dev, i * 4, &dev->saved_config_space[i]);
-		pci_dbg(dev, "save config %#04x: %#010x\n",
-			i * 4, dev->saved_config_space[i]);
+
+	if (dev->hdr_type == PCI_HEADER_TYPE_NORMAL) {
+		for (i = 0; i < 13; i++) {
+			pci_read_config_dword(dev, i * 4,
+					      &dev->saved_config_space[i]);
+			pci_dbg(dev,
+				"saving config space at offset %#x (reading %#x)\n",
+				i * 4, dev->saved_config_space[i]);
+		}
+		pci_read_config_byte(
+			dev, PCI_CAPABILITY_LIST,
+			(u8 *)(&dev->saved_config_space[PCI_CAPABILITY_LIST /
+							4]) +
+				(PCI_CAPABILITY_LIST % 4));
+		pci_dbg(dev,
+			"saving config space at offset %#x (reading %#x)\n",
+			PCI_CAPABILITY_LIST,
+			dev->saved_config_space[PCI_CAPABILITY_LIST]);
+		pci_read_config_dword(
+			dev, PCI_INTERRUPT_LINE,
+			&dev->saved_config_space[PCI_INTERRUPT_LINE / 4]);
+		pci_dbg(dev,
+			"saving config space at offset %#x (reading %#x)\n",
+			PCI_INTERRUPT_LINE,
+			dev->saved_config_space[PCI_INTERRUPT_LINE]);
+	} else if (dev->hdr_type == PCI_HEADER_TYPE_BRIDGE) {
+		for (i = 0; i < 13; i++) {
+			pci_read_config_dword(dev, i * 4,
+					      &dev->saved_config_space[i]);
+			pci_dbg(dev,
+				"saving config space at offset %#x (reading %#x)\n",
+				i * 4, dev->saved_config_space[i]);
+		}
+		pci_read_config_byte(
+			dev, PCI_CAPABILITY_LIST,
+			(u8 *)(&dev->saved_config_space[PCI_CAPABILITY_LIST /
+							4]) +
+				(PCI_CAPABILITY_LIST % 4));
+		pci_dbg(dev,
+			"saving config space at offset %#x (reading %#x)\n",
+			PCI_CAPABILITY_LIST,
+			dev->saved_config_space[PCI_CAPABILITY_LIST]);
+		for (i = 14; i < 16; i++) {
+			pci_read_config_dword(dev, i * 4,
+					      &dev->saved_config_space[i]);
+			pci_dbg(dev,
+				"saving config space at offset %#x (reading %#x)\n",
+				i * 4, dev->saved_config_space[i]);
+		}
+	} else {
+		for (i = 0; i < 16; i++) {
+			pci_read_config_dword(dev, i * 4,
+					      &dev->saved_config_space[i]);
+			pci_dbg(dev, "save config %#04x: %#010x\n", i * 4,
+				dev->saved_config_space[i]);
+		}
 	}
 	dev->state_saved = true;
 
