@@ -960,20 +960,16 @@ int drm_sched_job_add_resv_dependencies(struct drm_sched_job *job,
 {
 	struct dma_resv_iter cursor;
 	struct dma_fence *fence;
-	int ret;
+	int ret = 0;
 
 	dma_resv_assert_held(resv);
 
 	dma_resv_for_each_fence(&cursor, resv, usage, fence) {
-		/* Make sure to grab an additional ref on the added fence */
-		dma_fence_get(fence);
-		ret = drm_sched_job_add_dependency(job, fence);
-		if (ret) {
-			dma_fence_put(fence);
-			return ret;
-		}
+		ret = drm_sched_job_add_dependency(job, dma_fence_get(fence));
+		if (ret)
+			break;
 	}
-	return 0;
+	return ret;
 }
 EXPORT_SYMBOL(drm_sched_job_add_resv_dependencies);
 
