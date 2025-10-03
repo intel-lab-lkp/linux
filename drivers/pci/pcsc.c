@@ -180,6 +180,65 @@ static const u8 PCSC_SUPPORTED_CAPABILITIES[] = {
 	PCI_CAP_ID_MSIX, PCI_CAP_ID_EXP, PCI_CAP_ID_AF,	 PCI_CAP_ID_EA
 };
 
+#ifdef CONFIG_PCIE_PCSC
+static const u16 PCSCS_SUPPORTED_EXT_CAPABILITIES[] = {
+	PCI_EXT_CAP_ID_ERR,   PCI_EXT_CAP_ID_ACS, PCI_EXT_CAP_ID_ARI,
+	PCI_EXT_CAP_ID_SRIOV, PCI_EXT_CAP_ID_ATS, PCI_EXT_CAP_ID_PRI,
+	PCI_EXT_CAP_ID_PASID, PCI_EXT_CAP_ID_DPC, PCI_EXT_CAP_ID_PTM
+};
+
+/**
+ * pcsc_handle_dpc_cacheability - Set cacheability for DPC capability registers
+ * @dev: PCI device
+ * @cap_pos: Capability position in config space
+ *
+ * The DPC capability cacheability depends on whether RP extensions are supported:
+ * - PCI_EXP_DPC_CAP_RP_EXT bit indicates RP extension register presence
+ */
+static void pcsc_handle_dpc_cacheability(struct pci_dev *dev, int cap_pos)
+{
+	u32 val;
+	u16 dpc_cap;
+	bool has_rp_extensions;
+
+	if (WARN_ON(!dev || !dev->pcsc || !dev->pcsc->cfg_space))
+		return;
+
+	if (pcsc_hw_config_read(dev->bus, dev->devfn, cap_pos + PCI_EXP_DPC_CAP,
+				2, &val) != PCIBIOS_SUCCESSFUL) {
+		pci_warn(dev, "PCSC: Failed to read DPC capability at %#x\n",
+			 cap_pos + PCI_EXP_DPC_CAP);
+		return;
+	}
+
+	dpc_cap = val & 0xFFFF;
+	has_rp_extensions = !!(dpc_cap & PCI_EXP_DPC_CAP_RP_EXT);
+
+	/* Cache the DPC capability register */
+	pcsc_update_byte(dev, cap_pos + PCI_EXP_DPC_CAP, dpc_cap & 0xFF);
+	pcsc_update_byte(dev, cap_pos + PCI_EXP_DPC_CAP + 1,
+			 (dpc_cap >> 8) & 0xFF);
+
+	/* Always cacheable: main DPC registers */
+	bitmap_set(dev->pcsc->cachable_bitmask, cap_pos + PCI_EXP_DPC_CAP, 2);
+	bitmap_set(dev->pcsc->cachable_bitmask, cap_pos + PCI_EXP_DPC_CTL, 2);
+
+	/* Conditionally cacheable: RP extension registers  PCI_EXP_DPC_RP_PIO_MASK
+	 * PCI_EXP_DPC_RP_PIO_SEVERITY , PCI_EXP_DPC_RP_PIO_SYSERROR, PCI_EXP_DPC_RP_PIO_EXCEPTION
+	 */
+	if (has_rp_extensions) {
+		bitmap_set(dev->pcsc->cachable_bitmask,
+			   cap_pos + PCI_EXP_DPC_RP_PIO_MASK, 16);
+		bitmap_set(dev->pcsc->cachable_bitmask,
+			   cap_pos + PCI_EXP_DPC_RP_PIO_SEVERITY, 4);
+		bitmap_set(dev->pcsc->cachable_bitmask,
+			   cap_pos + PCI_EXP_DPC_RP_PIO_SYSERROR, 4);
+		bitmap_set(dev->pcsc->cachable_bitmask,
+			   cap_pos + PCI_EXP_DPC_RP_PIO_EXCEPTION, 4);
+	}
+}
+#endif
+
 /**
  * pcsc_handle_msi_cacheability - Set cacheability for MSI capability registers
  * @dev: PCI device
@@ -378,6 +437,146 @@ static void infer_capabilities_pointers(struct pci_dev *dev)
 	}
 }
 
+#ifdef CONFIG_PCIE_PCSC
+
+static void infer_extended_capability_cacheability(struct pci_dev *dev,
+						   int cap_pos, u16 cap_id)
+{
+	if (WARN_ON(!dev || !dev->pcsc || !dev->pcsc->cfg_space))
+		return;
+
+	switch (cap_id) {
+	case PCI_EXT_CAP_ID_ERR:
+		/* Advanced Error Reporting */
+		bitmap_set(dev->pcsc->cachable_bitmask,
+			   cap_pos + PCI_ERR_UNCOR_MASK,
+			   8); /* PCI_ERR_UNCOR_MASK, PCI_ERR_UNCOR_SEVER */
+		bitmap_set(dev->pcsc->cachable_bitmask,
+			   cap_pos + PCI_ERR_COR_MASK,
+			   4); /* PCI_ERR_COR_MASK only */
+		bitmap_set(dev->pcsc->cachable_bitmask,
+			   cap_pos + PCI_ERR_ROOT_COMMAND,
+			   4); /* PCI_ERR_ROOT_COMMAND */
+		break;
+	case PCI_EXT_CAP_ID_ACS:
+		/* Access Control Services
+		 * We only cache PCI_ACS_CAP and PCI_ACS_CTRL (first 4 bytes).
+		 * The Egress Control Vector that follows (if present) is not
+		 * cached because:
+		 * - Determining its size would require reading PCI_ACS_CAP
+		 * - These registers are typically only written by the OS during
+		 *   setup and not read frequently during runtime
+		 * - Caching them would provide no performance benefit
+		 */
+		bitmap_set(dev->pcsc->cachable_bitmask, cap_pos + PCI_ACS_CAP,
+			   4); /* PCI_ACS_CAP, PCI_ACS_CTRL */
+		break;
+	case PCI_EXT_CAP_ID_ARI:
+		/* Alternative Routing-ID: */
+		bitmap_set(dev->pcsc->cachable_bitmask, cap_pos + PCI_ARI_CAP,
+			   4); /* PCI_ARI_CAP, PCI_ARI_CTRL */
+		break;
+	case PCI_EXT_CAP_ID_SRIOV:
+		/* SR-IOV */
+		bitmap_set(dev->pcsc->cachable_bitmask, cap_pos + PCI_SRIOV_CAP,
+			   6); /* PCI_SRIOV_CAP, PCI_SRIOV_CTRL */
+		/* PCI_SRIOV_INITIAL_VF, PCI_SRIOV_TOTAL_VF,
+		 * PCI_SRIOV_NUM_VF,PCI_SRIOV_FUNC_LINK
+		 */
+		bitmap_set(dev->pcsc->cachable_bitmask,
+			   cap_pos + PCI_SRIOV_INITIAL_VF, 7);
+		bitmap_set(dev->pcsc->cachable_bitmask,
+			   cap_pos + PCI_SRIOV_VF_OFFSET,
+			   4); /* PCI_SRIOV_VF_OFFSET, PCI_SRIOV_VF_STRIDE */
+		/* PCI_SRIOV_VF_DID, PCI_SRIOV_SUPPORTED_PAGE_SIZES,PCI_SRIOV_PAGE_SIZE */
+		bitmap_set(
+			dev->pcsc->cachable_bitmask, cap_pos + PCI_SRIOV_VF_DID,
+			10);
+		bitmap_set(dev->pcsc->cachable_bitmask, cap_pos + PCI_SRIOV_BAR,
+			   24); /* PCI_SRIOV_BAR0-5 */
+		bitmap_set(dev->pcsc->cachable_bitmask, cap_pos + PCI_SRIOV_VFM,
+			   4); /* PCI_SRIOV_VFMM */
+		break;
+	case PCI_EXT_CAP_ID_ATS:
+		/* Address Translation Service: */
+		bitmap_set(dev->pcsc->cachable_bitmask, cap_pos + PCI_ATS_CAP,
+			   4); /* PCI_ATS_CAP, PCI_ATS_CTRL*/
+		break;
+	case PCI_EXT_CAP_ID_PRI:
+		/* Page Request Interface */
+		bitmap_set(dev->pcsc->cachable_bitmask, cap_pos + PCI_PRI_CTRL,
+			   2); /* PCI_PRI_CTRL */
+		bitmap_set(dev->pcsc->cachable_bitmask,
+			   cap_pos + PCI_PRI_MAX_REQ,
+			   8); /* PCI_PRI_MAX_REQ, PCI_PRI_ALLOC_REQ */
+		break;
+	case PCI_EXT_CAP_ID_PASID:
+		/* Process Address Space ID */
+		bitmap_set(dev->pcsc->cachable_bitmask, cap_pos + PCI_PASID_CAP,
+			   4); /* PCI_PASID_CAP, PCI_PASID_CTRL */
+		break;
+	case PCI_EXT_CAP_ID_DPC:
+		/* Downstream Port Containment */
+		pcsc_handle_dpc_cacheability(dev, cap_pos);
+		break;
+	case PCI_EXT_CAP_ID_PTM:
+		/* Precision Time Measurement */
+		bitmap_set(dev->pcsc->cachable_bitmask, cap_pos + PCI_PTM_CAP,
+			   8); /* PCI_PTM_CAP, PCI_PTM_CTRL */
+		break;
+	default:
+		/* Unknown extended capability - only cache header */
+		break;
+	}
+}
+
+static void infer_extended_capabilities_pointers(struct pci_dev *dev)
+{
+	int pos = 0x100;
+	u32 header;
+	int cap_ver, cap_id;
+	int i;
+
+	while (pos) {
+		if (pos > 0xFFC || pos < 0x100)
+			break;
+
+		pos &= ~0x3;
+
+		if (pcsc_hw_config_read(dev->bus, dev->devfn, pos, 4,
+					&header) != PCIBIOS_SUCCESSFUL)
+			break;
+
+		if (!header)
+			break;
+
+		bitmap_set(dev->pcsc->cachable_bitmask, pos, 4);
+		for (i = 0; i < 4; i++)
+			pcsc_update_byte(dev, pos + i,
+					 (header >> (i * 8)) & 0xFF);
+
+		cap_id = PCI_EXT_CAP_ID(header);
+		cap_ver = PCI_EXT_CAP_VER(header);
+
+		pci_dbg(dev,
+			"Extended capability ID %#x (ver %d) found at %#x, next cap at %#x\n",
+			cap_id, cap_ver, pos, PCI_EXT_CAP_NEXT(header));
+
+		/* Check if this is a supported extended capability and infer cacheability */
+		for (i = 0; i < ARRAY_SIZE(PCSCS_SUPPORTED_EXT_CAPABILITIES);
+		     i++) {
+			if (cap_id == PCSCS_SUPPORTED_EXT_CAPABILITIES[i]) {
+				infer_extended_capability_cacheability(dev, pos,
+								       cap_id);
+				break;
+			}
+		}
+
+		pos = PCI_EXT_CAP_NEXT(header);
+	}
+}
+#endif
+
 static void infer_cacheability(struct pci_dev *dev)
 {
 	if (WARN_ON(!dev || !dev->pcsc || !dev->pcsc->cfg_space))
@@ -432,6 +631,10 @@ static void infer_cacheability(struct pci_dev *dev)
 		}
 
 		infer_capabilities_pointers(dev);
+#ifdef CONFIG_PCIE_PCSC
+		if (pci_is_pcie(dev))
+			infer_extended_capabilities_pointers(dev);
+#endif
 	}
 }
 
