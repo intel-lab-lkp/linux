@@ -287,6 +287,19 @@ impl UserSliceReader {
         self.read_raw(out)
     }
 
+    /// Reads raw data from the user slice into a kernel buffer partially.
+    ///
+    /// This is the same as [`Self::read_slice`] but considers the given `offset` into `out` and
+    /// truncates the read to the boundaries of `self` and `out`.
+    ///
+    /// On success, returns the number of bytes read.
+    pub fn read_slice_partial(&mut self, out: &mut [u8], offset: usize) -> Result<usize> {
+        let end = offset.checked_add(self.len()).ok_or(EINVAL)?.min(out.len());
+
+        out.get_mut(offset..end)
+            .map_or(Ok(0), |dst| self.read_slice(dst).map(|()| dst.len()))
+    }
+
     /// Reads a value of the specified type.
     ///
     /// Fails with [`EFAULT`] if the read happens on a bad address, or if the read goes out of
