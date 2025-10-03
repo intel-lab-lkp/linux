@@ -1,9 +1,11 @@
 // SPDX-License-Identifier: GPL-2.0
 
+use kernel::io::register::RegisterBase;
+
 use crate::{
     driver::Bar0,
     falcon::{Falcon, FalconEngine, PFalcon2Base, PFalconBase},
-    regs::{self, macros::RegisterBase},
+    regs::self,
 };
 
 /// Type specifying the `Gsp` falcon engine. Cannot be instantiated.
