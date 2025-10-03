@@ -250,6 +250,12 @@ static int tpm_inf_recv(struct tpm_chip *chip, u8 * buf, size_t count)
 	number_of_wtx = 0;
 
 recv_begin:
+	if (count < 4) {
+		dev_err(&chip->dev,
+			"count less than the header size!\n");
+		return -EIO;
+	}
+
 	/* start receiving header */
 	for (i = 0; i < 4; i++) {
 		ret = wait(chip, STAT_RDA);
@@ -267,6 +273,12 @@ recv_begin:
 	if (buf[1] == TPM_CTRL_DATA) {
 		/* size of the data received */
 		size = ((buf[2] << 8) | buf[3]);
+
+		if (size > count) {
+			dev_err(&chip->dev,
+				"Buffer too small for incoming data!\n");
+			return -EIO;
+		}
 
 		for (i = 0; i < size; i++) {
 			wait(chip, STAT_RDA);
