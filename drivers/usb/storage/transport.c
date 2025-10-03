@@ -718,12 +718,41 @@ Retry_Sense:
 
 		scsi_eh_prep_cmnd(srb, &ses, NULL, 0, sense_size);
 
-		/* FIXME: we must do the protocol translation here */
-		if (us->subclass == USB_SC_RBC || us->subclass == USB_SC_SCSI ||
-				us->subclass == USB_SC_CYP_ATACB)
-			srb->cmd_len = 6;
-		else
-			srb->cmd_len = 12;
+		/* Protocol translation per SCSI opcode group */
+                switch(us->subclass)
+                {
+                case USB_SC_UFI:
+                case USB_SC_8020:
+                case USB_SC_8070:
+                case USB_SC_QIC:
+                         srb->cmd_len = 12 ;             /* ATAPI/UFI devices always use 12-byte CDBs */
+                         break;
+
+                case USB_SC_RBC:
+                case USB_SC_SCSI:
+                case USB_SC_CYP_ATACB:                   /* Determine cmd_len based on SCSI opcode group */
+
+                         if(opcode <= 0x1F)             /* Group 0 */
+                         {
+                                 srb->cmd_len = 6 ;
+                         }else if( opcode <= 0x7F)      /* Group 1 & 2 */
+                         {
+                                 srb->cmd_len = 10;
+                         }else if(opcode <= 0x9F )      /* Group 5 */
+                         {
+                                srb->cmd_len = 16 ;
+                         }else if(opcode <=0xBF)        /* Group 6 */
+                         {
+                                srb->cmd_len = 12 ;
+                         }else if( opcode <=0xDF)       /* Group 7 */
+                         {
+                                srb->cmd_len = 16;
+                         }else{
+                                ;                       /* Leaving cmd_len  value unchanged  for  0xE0–0xFF vendor-specific*/
+
+                         }
+                        break;
+                }
 
 		/* issue the auto-sense command */
 		scsi_set_resid(srb, 0);
