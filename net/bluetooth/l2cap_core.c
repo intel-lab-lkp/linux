@@ -948,11 +948,17 @@ static u8 l2cap_get_ident(struct l2cap_conn *conn)
 static void l2cap_send_acl(struct l2cap_conn *conn, struct sk_buff *skb,
 			   u8 flags)
 {
-	/* Check if the hcon still valid before attempting to send */
+	/* Check if the hcon still valid before attempting to send.
+	 * Lockless: conn->handle/hdev accessed, but shouldn't change here.
+	 */
+	rcu_read_lock();
+
 	if (hci_conn_valid(conn->hcon->hdev, conn->hcon))
 		hci_send_acl(conn->hchan, skb, flags);
 	else
 		kfree_skb(skb);
+
+	rcu_read_unlock();
 }
 
 static void l2cap_send_cmd(struct l2cap_conn *conn, u8 ident, u8 code, u16 len,
