@@ -61,10 +61,26 @@ static void virtio_gpu_resource_id_put(struct virtio_gpu_device *vgdev, uint32_t
 		ida_free(&vgdev->resource_ida, id - 1);
 }
 
+static void virtio_gpu_object_del_restore_list(struct virtio_gpu_device *vgdev,
+					       struct virtio_gpu_object *bo)
+{
+	struct virtio_gpu_object *curr, *tmp;
+
+	list_for_each_entry_safe(curr, tmp, &vgdev->obj_restore_list, list) {
+		if (bo == curr) {
+			spin_lock(&vgdev->obj_restore_lock);
+			list_del(&curr->list);
+			spin_unlock(&vgdev->obj_restore_lock);
+			break;
+		}
+	}
+}
+
 void virtio_gpu_cleanup_object(struct virtio_gpu_object *bo)
 {
 	struct virtio_gpu_device *vgdev = bo->base.base.dev->dev_private;
 
+	virtio_gpu_object_del_restore_list(vgdev, bo);
 	virtio_gpu_resource_id_put(vgdev, bo->hw_res_handle);
 	if (virtio_gpu_is_shmem(bo)) {
 		drm_gem_shmem_free(&bo->base);
@@ -258,6 +274,13 @@ int virtio_gpu_object_create(struct virtio_gpu_device *vgdev,
 		virtio_gpu_object_attach(vgdev, bo, ents, nents);
 	}
 
+	/* store the params and add the object to the restore list */
+	memcpy(&bo->params, params, sizeof(*params));
+
+	spin_lock(&vgdev->obj_restore_lock);
+	list_add_tail(&bo->list, &vgdev->obj_restore_list);
+	spin_unlock(&vgdev->obj_restore_lock);
+
 	*bo_ptr = bo;
 	return 0;
 
@@ -269,5 +292,43 @@ err_put_id:
 	virtio_gpu_resource_id_put(vgdev, bo->hw_res_handle);
 err_free_gem:
 	drm_gem_shmem_free(shmem_obj);
+	return ret;
+}
+
+int virtio_gpu_object_restore_all(struct virtio_gpu_device *vgdev)
+{
+	struct virtio_gpu_object *bo, *tmp;
+	struct virtio_gpu_mem_entry *ents;
+	unsigned int nents;
+	int ret = 0;
+
+	spin_lock(&vgdev->obj_restore_lock);
+	list_for_each_entry_safe(bo, tmp, &vgdev->obj_restore_list, list) {
+		ret = virtio_gpu_object_shmem_init(vgdev, bo, &ents, &nents);
+		if (ret)
+			break;
+
+		if (bo->params.blob) {
+			virtio_gpu_cmd_resource_create_blob(vgdev, bo, &bo->params,
+							    ents, nents);
+		} else if (bo->params.virgl) {
+			virtio_gpu_cmd_resource_create_3d(vgdev, bo, &bo->params,
+							  NULL, NULL);
+
+			if (bo->attached) {
+				bo->attached = false;
+				virtio_gpu_object_attach(vgdev, bo, ents, nents);
+			}
+		} else {
+			virtio_gpu_cmd_create_resource(vgdev, bo, &bo->params,
+						       NULL, NULL);
+			if (bo->attached) {
+				bo->attached = false;
+				virtio_gpu_object_attach(vgdev, bo, ents, nents);
+			}
+		}
+	}
+	spin_unlock(&vgdev->obj_restore_lock);
+
 	return ret;
 }
