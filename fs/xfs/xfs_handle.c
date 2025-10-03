@@ -295,8 +295,7 @@ xfs_open_by_handle(
 	}
 
 	if (S_ISREG(inode->i_mode)) {
-		filp->f_flags |= O_NOATIME;
-		filp->f_mode |= FMODE_NOCMTIME;
+		filp->f_flags |= (O_NOATIME | O_NOCMTIME);
 	}
 
 	fd_install(fd, filp);

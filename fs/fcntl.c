@@ -34,7 +34,7 @@
 
 #include "internal.h"
 
-#define SETFL_MASK (O_APPEND | O_NONBLOCK | O_NDELAY | O_DIRECT | O_NOATIME)
+#define SETFL_MASK (O_APPEND | O_NONBLOCK | O_NDELAY | O_DIRECT | O_NOATIME | O_NOCMTIME)
 
 static int setfl(int fd, struct file * filp, unsigned int arg)
 {
@@ -49,7 +49,8 @@ static int setfl(int fd, struct file * filp, unsigned int arg)
 		return -EPERM;
 
 	/* O_NOATIME can only be set by the owner or superuser */
-	if ((arg & O_NOATIME) && !(filp->f_flags & O_NOATIME))
+	if (((arg & O_NOATIME) && !(filp->f_flags & O_NOATIME)) ||
+			((arg & O_NOCMTIME) && !(filp->f_flags & O_NOCMTIME)))
 		if (!inode_owner_or_capable(file_mnt_idmap(filp), inode))
 			return -EPERM;
 
@@ -1158,7 +1159,7 @@ static int __init fcntl_init(void)
 	 * Exceptions: O_NONBLOCK is a two bit define on parisc; O_NDELAY
 	 * is defined as O_NONBLOCK on some platforms and not on others.
 	 */
-	BUILD_BUG_ON(20 - 1 /* for O_RDONLY being 0 */ !=
+	BUILD_BUG_ON(21 - 1 /* for O_RDONLY being 0 */ !=
 		HWEIGHT32(
 			(VALID_OPEN_FLAGS & ~(O_NONBLOCK | O_NDELAY)) |
 			__FMODE_EXEC));

@@ -38,6 +38,8 @@
 #define O_PATH		0x1000000
 #define __O_TMPFILE	0x2000000
 
+#define O_NOCMTIME	0x4000000
+
 #define F_GETOWN	5	/*  for sockets. */
 #define F_SETOWN	6	/*  for sockets. */
 #define F_GETLK		7

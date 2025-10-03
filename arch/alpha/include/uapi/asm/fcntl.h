@@ -35,6 +35,8 @@
 #define O_PATH		040000000
 #define __O_TMPFILE	0100000000
 
+#define O_NOCMTIME	0200000000
+
 #define F_GETLK		7
 #define F_SETLK		8
 #define F_SETLKW	9

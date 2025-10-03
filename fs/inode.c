@@ -2363,7 +2363,7 @@ static int file_modified_flags(struct file *file, int flags)
 	if (ret)
 		return ret;
 
-	if (unlikely(file->f_mode & FMODE_NOCMTIME))
+	if (unlikely(file->f_flags & O_NOCMTIME))
 		return 0;
 
 	ret = inode_needs_update_time(inode);

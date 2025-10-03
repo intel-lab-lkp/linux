@@ -3489,7 +3489,7 @@ static int may_open(struct mnt_idmap *idmap, const struct path *path,
 	}
 
 	/* O_NOATIME can only be set by the owner or superuser */
-	if (flag & O_NOATIME && !inode_owner_or_capable(idmap, inode))
+	if (flag & (O_NOATIME | O_NOCMTIME) && !inode_owner_or_capable(idmap, inode))
 		return -EPERM;
 
 	return 0;

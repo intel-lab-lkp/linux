@@ -37,6 +37,7 @@
 		{ O_DIRECTORY,		"O_DIRECTORY" }, \
 		{ O_NOFOLLOW,		"O_NOFOLLOW" }, \
 		{ O_NOATIME,		"O_NOATIME" }, \
+		{ O_NOCMTIME,		"O_NOCMTIME" }, \
 		{ O_CLOEXEC,		"O_CLOEXEC" })
 
 #define __fmode_flag(x)	{ (__force unsigned long)FMODE_##x, #x }

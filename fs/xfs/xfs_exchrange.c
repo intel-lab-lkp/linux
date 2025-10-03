@@ -772,9 +772,9 @@ xfs_exchange_range(
 		return ret;
 
 	/* Update cmtime if the fd/inode don't forbid it. */
-	if (!(fxr->file1->f_mode & FMODE_NOCMTIME) && !IS_NOCMTIME(inode1))
+	if (!(fxr->file1->f_flags & O_NOCMTIME) && !IS_NOCMTIME(inode1))
 		fxr->flags |= __XFS_EXCHANGE_RANGE_UPD_CMTIME1;
-	if (!(fxr->file2->f_mode & FMODE_NOCMTIME) && !IS_NOCMTIME(inode2))
+	if (!(fxr->file2->f_flags & O_NOCMTIME) && !IS_NOCMTIME(inode2))
 		fxr->flags |= __XFS_EXCHANGE_RANGE_UPD_CMTIME2;
 
 	file_start_write(fxr->file2);
