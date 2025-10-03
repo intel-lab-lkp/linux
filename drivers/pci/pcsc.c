@@ -25,8 +25,83 @@ static int __init pcsc_enabled_setup(char *str)
 }
 __setup("pcsc_enabled=", pcsc_enabled_setup);
 
+#ifdef CONFIG_PCSC_STATS
+struct pcsc_stats {
+	/* Operation Counters */
+	unsigned long cache_hits;
+	unsigned long cache_misses;
+	unsigned long uncachable_reads;
+	unsigned long writes;
+	unsigned long cache_invalidations;
+	unsigned long total_reads;
+	unsigned long hw_reads;
+	unsigned long device_resets;
+	u64 total_cache_access_time; /* in milliseconds */
+	u64 total_hw_access_time; /* in milliseconds */
+	u64 hw_access_time_due_to_misses; /* in milliseconds */
+};
+#endif
+
 static bool pcsc_initialised;
 static atomic_t num_nodes = ATOMIC_INIT(0);
+
+#ifdef CONFIG_PCSC_STATS
+struct pcsc_stats pcsc_stats;
+
+static inline void pcsc_count_cache_hit(void)
+{
+	pcsc_stats.cache_hits++;
+	pcsc_stats.total_reads++;
+}
+
+static inline void pcsc_count_cache_miss(void)
+{
+	pcsc_stats.cache_misses++;
+	pcsc_stats.total_reads++;
+	pcsc_stats.hw_reads++;
+}
+
+static inline void pcsc_count_uncachable_read(void)
+{
+	pcsc_stats.uncachable_reads++;
+	pcsc_stats.total_reads++;
+	pcsc_stats.hw_reads++;
+}
+
+static inline void pcsc_count_write(void)
+{
+	pcsc_stats.writes++;
+}
+
+static inline void pcsc_count_cache_invalidation(void)
+{
+	pcsc_stats.cache_invalidations++;
+}
+
+static inline void pcsc_count_device_reset(void)
+{
+	pcsc_stats.device_resets++;
+}
+#else
+static inline void pcsc_count_cache_hit(void)
+{
+}
+static inline void pcsc_count_cache_miss(void)
+{
+}
+static inline void pcsc_count_uncachable_read(void)
+{
+}
+static inline void pcsc_count_write(void)
+{
+}
+static inline void pcsc_count_cache_invalidation(void)
+{
+}
+static inline void pcsc_count_device_reset(void)
+{
+}
+#endif
 
 inline bool pcsc_is_initialised(void)
 {
@@ -727,6 +802,10 @@ static int pcsc_get_and_insert_multiple(struct pci_dev *dev,
 	u32 word_cached = 0;
 	u8 byte_val;
 	int rc, i;
+#ifdef CONFIG_PCSC_STATS
+	ktime_t start_time;
+	u64 duration;
+#endif
 
 	if (WARN_ON(!dev || !bus || !word))
 		return -EINVAL;
@@ -734,7 +813,6 @@ static int pcsc_get_and_insert_multiple(struct pci_dev *dev,
 	if (WARN_ON(size != 1 && size != 2 && size != 4))
 		return -EINVAL;
 
-	/* Check bounds */
 	if (where + size > PCSC_CFG_SPC_SIZE)
 		return -EINVAL;
 
@@ -746,8 +824,17 @@ static int pcsc_get_and_insert_multiple(struct pci_dev *dev,
 			pcsc_get_byte(dev, where + i, &byte_val);
 			word_cached |= ((u32)byte_val << (i * 8));
 		}
+		pcsc_count_cache_hit();
 	} else {
+#ifdef CONFIG_PCSC_STATS
+		start_time = ktime_get();
+#endif
 		rc = pcsc_hw_config_read(bus, devfn, where, size, &word_cached);
+#ifdef CONFIG_PCSC_STATS
+		duration = ktime_to_ns(ktime_sub(ktime_get(), start_time));
+		pcsc_stats.hw_access_time_due_to_misses += duration;
+		pcsc_stats.total_hw_access_time += duration;
+#endif
 		if (rc) {
 			pci_err(dev,
 				"%s: Failed to read CFG Space where=%d size=%d",
@@ -762,6 +849,7 @@ static int pcsc_get_and_insert_multiple(struct pci_dev *dev,
 			byte_val = (word_cached >> (i * 8)) & 0xFF;
 			pcsc_update_byte(dev, where + i, byte_val);
 		}
+		pcsc_count_cache_miss();
 	}
 
 	*word = word_cached;
@@ -773,6 +861,17 @@ int pcsc_cached_config_read(struct pci_bus *bus, unsigned int devfn, int where,
 {
 	int rc;
 	struct pci_dev *dev;
+#ifdef CONFIG_PCSC_STATS
+	ktime_t hw_start_time;
+	u64 hw_duration;
+#endif
+
+#ifdef CONFIG_PCSC_STATS
+	u64 duration;
+	ktime_t start_time;
+
+	start_time = ktime_get();
+#endif
 
 	if (unlikely(!pcsc_is_initialised()))
 		goto read_from_dev;
@@ -790,6 +889,10 @@ int pcsc_cached_config_read(struct pci_bus *bus, unsigned int devfn, int where,
 	    pcsc_is_access_cacheable(dev, where, size)) {
 		rc = pcsc_get_and_insert_multiple(dev, bus, devfn, where, val,
 						  size);
+#ifdef CONFIG_PCSC_STATS
+		duration = ktime_to_ns(ktime_sub(ktime_get(), start_time));
+		pcsc_stats.total_cache_access_time += duration;
+#endif
 		if (likely(!rc)) {
 			pci_dev_put(dev);
 			return 0;
@@ -797,11 +900,23 @@ int pcsc_cached_config_read(struct pci_bus *bus, unsigned int devfn, int where,
 		/* if reading from the cache failed continue and try reading
 		 * from the actual device
 		 */
+	} else {
+		if (dev->hdr_type == PCI_HEADER_TYPE_NORMAL)
+			pcsc_count_uncachable_read();
 	}
 read_from_dev:
+#ifdef CONFIG_PCSC_STATS
+	hw_start_time = ktime_get();
+#endif
 	if (dev)
 		pci_dev_put(dev);
-	return pcsc_hw_config_read(bus, devfn, where, size, val);
+	rc = pcsc_hw_config_read(bus, devfn, where, size, val);
+#ifdef CONFIG_PCSC_STATS
+	hw_duration = ktime_to_ns(ktime_sub(ktime_get(), hw_start_time));
+	/* Add timing for uncacheable reads */
+	pcsc_stats.total_hw_access_time += hw_duration;
+#endif
+	return rc;
 }
 EXPORT_SYMBOL_GPL(pcsc_cached_config_read);
 
@@ -810,6 +925,11 @@ int pcsc_cached_config_write(struct pci_bus *bus, unsigned int devfn, int where,
 {
 	int i;
 	struct pci_dev *dev;
+	int rc;
+#ifdef CONFIG_PCSC_STATS
+	ktime_t hw_start_time;
+	u64 hw_duration;
+#endif
 
 	if (unlikely(!pcsc_is_initialised()))
 		goto write_to_dev;
@@ -828,12 +948,22 @@ int pcsc_cached_config_write(struct pci_bus *bus, unsigned int devfn, int where,
 		if (pcsc_is_access_cacheable(dev, where, size)) {
 			for (i = 0; i < size; i++)
 				pcsc_set_cached(dev, where + i, false);
+			pcsc_count_cache_invalidation();
 		}
 	}
 write_to_dev:
+	pcsc_count_write();
 	if (dev)
 		pci_dev_put(dev);
-	return pcsc_hw_config_write(bus, devfn, where, size, val);
+#ifdef CONFIG_PCSC_STATS
+	hw_start_time = ktime_get();
+#endif
+	rc = pcsc_hw_config_write(bus, devfn, where, size, val);
+#ifdef CONFIG_PCSC_STATS
+	hw_duration = ktime_to_ns(ktime_sub(ktime_get(), hw_start_time));
+	pcsc_stats.total_hw_access_time += hw_duration;
+#endif
+	return rc;
 }
 EXPORT_SYMBOL_GPL(pcsc_cached_config_write);
 
@@ -851,6 +981,7 @@ int pcsc_device_reset(struct pci_dev *dev)
 	 * some of the HWInt values that are going to remain constant after a reset.
 	 */
 	bitmap_zero(dev->pcsc->cached_bitmask, PCSC_CFG_SPC_SIZE);
+	pcsc_count_device_reset();
 	return 0;
 }
 
@@ -948,8 +1079,50 @@ static ssize_t pcsc_enabled_store(struct kobject *kobj,
 static struct kobj_attribute pcsc_enabled_attribute =
 	__ATTR(enabled, 0644, pcsc_enabled_show, pcsc_enabled_store);
 
+#ifdef CONFIG_PCSC_STATS
+static ssize_t pcsc_stats_show(struct kobject *kobj,
+			       struct kobj_attribute *attr, char *buf)
+{
+	return sysfs_emit(
+		buf,
+		"Cache Hits: %lu\n"
+		"Cache Misses: %lu\n"
+		"Uncachable Reads: %lu\n"
+		"Writes: %lu\n"
+		"Cache Invalidations: %lu\n"
+		"Device Resets: %lu\n"
+		"Total Reads: %lu\n"
+		"Hardware Reads: %lu\n"
+		"Hit Rate: %lu%%\n"
+		"Total Cache Access Time: %llu us\n"
+		"Cache Access Time (without HW reads due to Misses): %llu us\n"
+		"HW Access Time due to misses: %llu us\n"
+		"Total Hardware Access Time: %llu us\n",
+		pcsc_stats.cache_hits, pcsc_stats.cache_misses,
+		pcsc_stats.uncachable_reads, pcsc_stats.writes,
+		pcsc_stats.cache_invalidations, pcsc_stats.device_resets,
+		pcsc_stats.total_reads,
+		pcsc_stats.hw_reads,
+		pcsc_stats.total_reads ?
+			      (pcsc_stats.cache_hits * 100) / pcsc_stats.total_reads :
+			      0,
+		pcsc_stats.total_cache_access_time / 1000,
+		(pcsc_stats.total_cache_access_time -
+		 pcsc_stats.hw_access_time_due_to_misses) /
+			1000,
+		pcsc_stats.hw_access_time_due_to_misses / 1000,
+		pcsc_stats.total_hw_access_time / 1000);
+}
+
+static struct kobj_attribute pcsc_stats_attribute =
+	__ATTR(stats, 0444, pcsc_stats_show, NULL);
+#endif
+
 static struct attribute *pcsc_attrs[] = {
 	&pcsc_enabled_attribute.attr,
+#ifdef CONFIG_PCSC_STATS
+	&pcsc_stats_attribute.attr,
+#endif
 	NULL,
 };
 
@@ -994,6 +1167,10 @@ static int __init pcsc_init(void)
 
 	/* Try to create sysfs entry, but don't fail if PCI bus isn't ready yet */
 	pcsc_create_sysfs();
+
+#ifdef CONFIG_PCSC_STATS
+	memset(&pcsc_stats, 0, sizeof(pcsc_stats));
+#endif
 
 	pcsc_initialised = true;
 	pr_info("initialised (enabled=%d)\n", pcsc_enabled);

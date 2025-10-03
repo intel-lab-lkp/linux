@@ -50,6 +50,13 @@ config PCSC
 	  intercepts configuration space operations and maintains cached
 	  copies of register values
 
+config PCSC_STATS
+	bool "PCI Configuration Space Cache Statistics"
+	depends on PCSC
+	default n
+	help
+	  This option allows the collection of statistics for the PCSC.
+
 source "drivers/pci/pcie/Kconfig"
 
 config PCI_MSI
