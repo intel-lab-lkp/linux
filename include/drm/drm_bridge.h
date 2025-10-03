@@ -1440,25 +1440,28 @@ drm_bridge_chain_get_last_bridge(struct drm_encoder *encoder)
 						      struct drm_bridge, chain_node));
 }
 
-/**
- * drm_bridge_get_next_bridge_and_put - Get the next bridge in the chain
- *                                      and put the previous
- * @bridge: bridge object
- *
- * Same as drm_bridge_get_next_bridge() but additionally puts the @bridge.
- *
- * RETURNS:
- * the next bridge in the chain after @bridge, or NULL if @bridge is the last.
- */
-static inline struct drm_bridge *
-drm_bridge_get_next_bridge_and_put(struct drm_bridge *bridge)
+static inline struct drm_bridge *drm_bridge_encoder_chain_lock(struct drm_bridge *bridge)
 {
-	struct drm_bridge *next = drm_bridge_get_next_bridge(bridge);
+	drm_encoder_chain_lock(bridge->encoder);
 
-	drm_bridge_put(bridge);
-
-	return next;
+	return bridge;
 }
+
+/* Internal to drm_for_each_bridge_in_chain*() */
+static inline struct drm_bridge *__drm_encoder_bridge_chain_next(struct drm_bridge *bridge)
+{
+	if (list_is_last(&bridge->chain_node, &bridge->encoder->bridge_chain)) {
+		drm_encoder_chain_unlock(bridge->encoder);
+
+		return NULL;
+	}
+
+	return list_next_entry(bridge, chain_node);
+}
+
+/* Internal to drm_for_each_bridge_in_chain*() */
+DEFINE_FREE(drm_bridge_encoder_chain_unlock, struct drm_bridge *,
+	    if (_T) drm_encoder_chain_unlock(_T->encoder);)
 
 /**
  * drm_for_each_bridge_in_chain_scoped - iterate over all bridges attached
@@ -1469,14 +1472,15 @@ drm_bridge_get_next_bridge_and_put(struct drm_bridge *bridge)
  *
  * Iterate over all bridges present in the bridge chain attached to @encoder.
  *
- * Automatically gets/puts the bridge reference while iterating, and puts
- * the reference even if returning or breaking in the middle of the loop.
+ * Automatically locks the encoder chain mutex to prevent chain
+ * modifications while iterating.
  */
-#define drm_for_each_bridge_in_chain_scoped(encoder, bridge)		\
-	for (struct drm_bridge *bridge __free(drm_bridge_put) =		\
-	     drm_bridge_chain_get_first_bridge(encoder);		\
-	     bridge;							\
-	     bridge = drm_bridge_get_next_bridge_and_put(bridge))
+#define drm_for_each_bridge_in_chain_scoped(encoder, bridge)					\
+	for (struct drm_bridge *bridge __free(drm_bridge_encoder_chain_unlock) =		\
+		     list_first_entry_or_null(&drm_encoder_chain_lock(encoder)->bridge_chain,	\
+					      struct drm_bridge, chain_node);			\
+	     bridge;										\
+	     bridge = __drm_encoder_bridge_chain_next(bridge))					\
 
 /**
  * drm_for_each_bridge_in_chain_from - iterate over all bridges starting
@@ -1488,14 +1492,14 @@ drm_bridge_get_next_bridge_and_put(struct drm_bridge *bridge)
  * Iterate over all bridges in the encoder chain starting from
  * @first_bridge, included.
  *
- * Automatically gets/puts the bridge reference while iterating, and puts
- * the reference even if returning or breaking in the middle of the loop.
+ * Automatically locks the encoder chain mutex to prevent chain
+ * modifications while iterating.
  */
-#define drm_for_each_bridge_in_chain_from(first_bridge, bridge)		\
-	for (struct drm_bridge *bridge __free(drm_bridge_put) =		\
-		     drm_bridge_get(first_bridge);			\
-	     bridge;							\
-	     bridge = drm_bridge_get_next_bridge_and_put(bridge))
+#define drm_for_each_bridge_in_chain_from(first_bridge, bridge)				\
+	for (struct drm_bridge *bridge __free(drm_bridge_encoder_chain_unlock) =	\
+		     drm_bridge_encoder_chain_lock(first_bridge);			\
+	     bridge;									\
+	     bridge = __drm_encoder_bridge_chain_next(bridge))				\
 
 enum drm_mode_status
 drm_bridge_chain_mode_valid(struct drm_bridge *bridge,
