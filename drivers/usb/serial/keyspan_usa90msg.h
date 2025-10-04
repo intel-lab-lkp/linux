@@ -69,7 +69,7 @@ struct keyspan_usa90_portControlMessage
 		txMode,			// TXMODE_DMA or TXMODE_BYHAND
 
 		setTxFlowControl,	// host requests tx flow control be set
-		txFlowControl	,	// use TX_FLOW... bits below
+		txFlowControl,	        // use TX_FLOW... bits below
 		setRxFlowControl,	// host requests rx flow control be set
 		rxFlowControl,	// use RX_FLOW... bits below
 		sendXoff,		// host requests XOFF transmitted immediately

@@ -143,18 +143,18 @@ static int ark3116_port_probe(struct usb_serial_port *port)
 	ark3116_write_reg(serial, UART_FCR, 0);
 	/* handshake control */
 	priv->hcr = 0;
-	ark3116_write_reg(serial, 0x8     , 0);
+	ark3116_write_reg(serial, 0x8, 0);
 	/* modem control */
 	priv->mcr = 0;
 	ark3116_write_reg(serial, UART_MCR, 0);
 
 	if (!(priv->irda)) {
-		ark3116_write_reg(serial, 0xb , 0);
+		ark3116_write_reg(serial, 0xb, 0);
 	} else {
-		ark3116_write_reg(serial, 0xb , 1);
-		ark3116_write_reg(serial, 0xc , 0);
-		ark3116_write_reg(serial, 0xd , 0x41);
-		ark3116_write_reg(serial, 0xa , 1);
+		ark3116_write_reg(serial, 0xb, 1);
+		ark3116_write_reg(serial, 0xc, 0);
+		ark3116_write_reg(serial, 0xd, 0x41);
+		ark3116_write_reg(serial, 0xa, 1);
 	}
 
 	/* setup baudrate */
