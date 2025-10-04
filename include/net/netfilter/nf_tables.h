@@ -1133,6 +1133,11 @@ int nft_setelem_validate(const struct nft_ctx *ctx, struct nft_set *set,
 			 const struct nft_set_iter *iter,
 			 struct nft_elem_priv *elem_priv);
 int nft_set_catchall_validate(const struct nft_ctx *ctx, struct nft_set *set);
+int nft_setelem_obj_validate(const struct nft_ctx *ctx, struct nft_set *set,
+			     const struct nft_set_iter *iter,
+			     struct nft_elem_priv *elem_priv);
+int nft_set_catchall_obj_validate(const struct nft_ctx *ctx,
+				  struct nft_set *set);
 int nf_tables_bind_chain(const struct nft_ctx *ctx, struct nft_chain *chain);
 void nf_tables_unbind_chain(const struct nft_ctx *ctx, struct nft_chain *chain);
 

@@ -180,6 +180,8 @@ void nft_payload_inner_eval(const struct nft_expr *expr, struct nft_regs *regs,
 
 void nft_objref_eval(const struct nft_expr *expr, struct nft_regs *regs,
 		     const struct nft_pktinfo *pkt);
+int nft_objref_validate_obj(const struct nft_ctx *ctx,
+			    const struct nft_object *obj);
 void nft_objref_map_eval(const struct nft_expr *expr, struct nft_regs *regs,
 			 const struct nft_pktinfo *pkt);
 struct nft_elem_priv *nft_dynset_new(struct nft_set *set,

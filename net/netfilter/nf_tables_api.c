@@ -4153,6 +4153,49 @@ static int nft_table_validate(struct net *net, const struct nft_table *table)
 	return 0;
 }
 
+int nft_setelem_obj_validate(const struct nft_ctx *ctx, struct nft_set *set,
+			     const struct nft_set_iter *iter,
+			     struct nft_elem_priv *elem_priv)
+{
+	const struct nft_set_ext *ext = nft_set_elem_ext(set, elem_priv);
+	struct nft_object *obj;
+
+	if (!nft_set_elem_active(ext, iter->genmask))
+		return 0;
+
+	if (nft_set_ext_exists(ext, NFT_SET_EXT_FLAGS) &&
+	    *nft_set_ext_flags(ext) & NFT_SET_ELEM_INTERVAL_END)
+		return 0;
+
+	obj = *nft_set_ext_obj(ext);
+
+	return nft_objref_validate_obj(ctx, obj);
+}
+
+int nft_set_catchall_obj_validate(const struct nft_ctx *ctx, struct nft_set *set)
+{
+	struct nft_set_iter dummy_iter = {
+		.genmask	= nft_genmask_next(ctx->net),
+	};
+	struct nft_set_elem_catchall *catchall;
+
+	struct nft_set_ext *ext;
+	int ret = 0;
+
+	list_for_each_entry_rcu(catchall, &set->catchall_list, list,
+				lockdep_commit_lock_is_held(ctx->net)) {
+		ext = nft_set_elem_ext(set, catchall->elem);
+		if (!nft_set_elem_active(ext, dummy_iter.genmask))
+			continue;
+
+		ret = nft_setelem_obj_validate(ctx, set, &dummy_iter, catchall->elem);
+		if (ret < 0)
+			return ret;
+	}
+
+	return ret;
+}
+
 int nft_setelem_validate(const struct nft_ctx *ctx, struct nft_set *set,
 			 const struct nft_set_iter *iter,
 			 struct nft_elem_priv *elem_priv)
