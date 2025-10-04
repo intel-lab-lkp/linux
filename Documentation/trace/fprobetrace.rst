@@ -25,21 +25,36 @@ Synopsis of fprobe-events
 -------------------------
 ::
 
-  f[:[GRP1/][EVENT1]] SYM [FETCHARGS]                       : Probe on function entry
-  f[MAXACTIVE][:[GRP1/][EVENT1]] SYM%return [FETCHARGS]     : Probe on function exit
-  t[:[GRP2/][EVENT2]] TRACEPOINT [FETCHARGS]                : Probe on tracepoint
+  # fprobe (function entry/exit)
+  f[:[GRP1/][EVENT1]] SYM_OR_LIST[:entry|:exit] [FETCHARGS]
+
+  # legacy single-symbol exit
+  f[MAXACTIVE][:[GRP1/][EVENT1]] SYM%return [FETCHARGS]
+
+  # Probe on tracepoint
+  t[:[GRP2/][EVENT2]] TRACEPOINT [FETCHARGS]
 
  GRP1           : Group name for fprobe. If omitted, use "fprobes" for it.
  GRP2           : Group name for tprobe. If omitted, use "tracepoints" for it.
- EVENT1         : Event name for fprobe. If omitted, the event name is
-                  "SYM__entry" or "SYM__exit".
+ EVENT1         : Event name for fprobe. If omitted,
+                  - For a single literal symbol, the event name is
+                    "SYM__entry" or "SYM__exit".
+                  - For a *list or any wildcard*, an explicit [GRP1/][EVENT1]
+                    is required; otherwise the parser rejects it.
  EVENT2         : Event name for tprobe. If omitted, the event name is
                   the same as "TRACEPOINT", but if the "TRACEPOINT" starts
                   with a digit character, "_TRACEPOINT" is used.
  MAXACTIVE      : Maximum number of instances of the specified function that
                   can be probed simultaneously, or 0 for the default value
                   as defined in Documentation/trace/fprobe.rst
-
+ SYM_OR_LIST    : Either a single symbol, or a comma-separated list of
+                  include/exclude patterns:
+                  - Tokens are matched as symbols; wildcards may be used.
+                  - Tokens prefixed with '!' are exclusions.
+                  - Examples:
+                        foo             # single literal (entry)
+                        foo:exit        # single literal exit
+                        foo%return      # legacy single-symbol exit
  FETCHARGS      : Arguments. Each probe can have up to 128 args.
   ARG           : Fetch "ARG" function argument using BTF (only for function
                   entry or tracepoint.) (\*1)
