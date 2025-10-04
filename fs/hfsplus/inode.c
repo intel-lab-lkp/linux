@@ -558,9 +558,15 @@ int hfsplus_cat_read_inode(struct inode *inode, struct hfs_find_data *fd)
 			inode->i_op = &page_symlink_inode_operations;
 			inode_nohighmem(inode);
 			inode->i_mapping->a_ops = &hfsplus_aops;
-		} else {
+		} else if (S_ISCHR(inode->i_mode) || S_ISBLK(inode->i_mode) ||
+			   S_ISFIFO(inode->i_mode) || S_ISSOCK(inode->i_mode)) {
 			init_special_inode(inode, inode->i_mode,
 					   be32_to_cpu(file->permissions.dev));
+		} else {
+			printk(KERN_DEBUG "hfsplus: Invalid file type 0%04o for inode %lu.\n",
+			       inode->i_mode, inode->i_ino);
+			res = -EIO;
+			goto out;
 		}
 		inode_set_atime_to_ts(inode, hfsp_mt2ut(file->access_date));
 		inode_set_mtime_to_ts(inode,
