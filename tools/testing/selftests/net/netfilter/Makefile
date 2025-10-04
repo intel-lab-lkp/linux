@@ -37,6 +37,7 @@ TEST_PROGS += nft_zones_many.sh
 TEST_PROGS += rpath.sh
 TEST_PROGS += vxlan_mtu_frag.sh
 TEST_PROGS += xt_string.sh
+TEST_PROGS += nfnetlink.sh
 
 TEST_PROGS_EXTENDED = nft_concat_range_perf.sh
 
@@ -46,6 +47,7 @@ TEST_GEN_FILES += conntrack_dump_flush
 TEST_GEN_FILES += conntrack_reverse_clash
 TEST_GEN_FILES += sctp_collision
 TEST_GEN_FILES += udpclash
+TEST_GEN_FILES += nfnetlink
 
 include ../../lib.mk
 
@@ -54,6 +56,7 @@ $(OUTPUT)/nf_queue: LDLIBS += $(MNL_LDLIBS)
 
 $(OUTPUT)/conntrack_dump_flush: CFLAGS += $(MNL_CFLAGS)
 $(OUTPUT)/conntrack_dump_flush: LDLIBS += $(MNL_LDLIBS)
+$(OUTPUT)/nfnetlink: LDLIBS += $(MNL_LDLIBS)
 $(OUTPUT)/udpclash: LDLIBS += -lpthread
 
 TEST_FILES := lib.sh
