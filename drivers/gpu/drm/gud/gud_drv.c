@@ -16,7 +16,6 @@
 #include <drm/clients/drm_client_setup.h>
 #include <drm/drm_atomic_helper.h>
 #include <drm/drm_blend.h>
-#include <drm/drm_crtc_helper.h>
 #include <drm/drm_damage_helper.h>
 #include <drm/drm_debugfs.h>
 #include <drm/drm_drv.h>
@@ -338,41 +337,10 @@ static int gud_stats_debugfs(struct seq_file *m, void *data)
 	return 0;
 }
 
-static const struct drm_crtc_helper_funcs gud_crtc_helper_funcs = {
-	.atomic_check = drm_crtc_helper_atomic_check
-};
-
-static const struct drm_crtc_funcs gud_crtc_funcs = {
-	.reset = drm_atomic_helper_crtc_reset,
-	.destroy = drm_crtc_cleanup,
-	.set_config = drm_atomic_helper_set_config,
-	.page_flip = drm_atomic_helper_page_flip,
-	.atomic_duplicate_state = drm_atomic_helper_crtc_duplicate_state,
-	.atomic_destroy_state = drm_atomic_helper_crtc_destroy_state,
-};
-
-static const struct drm_plane_helper_funcs gud_plane_helper_funcs = {
-	DRM_GEM_SHADOW_PLANE_HELPER_FUNCS,
-	.atomic_check = gud_plane_atomic_check,
-	.atomic_update = gud_plane_atomic_update,
-};
-
-static const struct drm_plane_funcs gud_plane_funcs = {
-	.update_plane = drm_atomic_helper_update_plane,
-	.disable_plane = drm_atomic_helper_disable_plane,
-	.destroy = drm_plane_cleanup,
-	DRM_GEM_SHADOW_PLANE_FUNCS,
-};
-
 static const struct drm_mode_config_funcs gud_mode_config_funcs = {
 	.fb_create = drm_gem_fb_create_with_dirty,
 	.atomic_check = drm_atomic_helper_check,
 	.atomic_commit = drm_atomic_helper_commit,
-};
-
-static const u64 gud_plane_modifiers[] = {
-	DRM_FORMAT_MOD_LINEAR,
-	DRM_FORMAT_MOD_INVALID
 };
 
 DEFINE_DRM_GEM_FOPS(gud_fops);
@@ -587,16 +555,9 @@ static int gud_probe(struct usb_interface *intf, const struct usb_device_id *id)
 			return -ENOMEM;
 	}
 
-	ret = drm_universal_plane_init(drm, &gdrm->plane, 0,
-				       &gud_plane_funcs,
-				       formats, num_formats,
-				       gud_plane_modifiers,
-				       DRM_PLANE_TYPE_PRIMARY, NULL);
+	ret = gud_plane_init(gdrm, formats, num_formats);
 	if (ret)
 		return ret;
-
-	drm_plane_helper_add(&gdrm->plane, &gud_plane_helper_funcs);
-	drm_plane_enable_fb_damage_clips(&gdrm->plane);
 
 	devm_kfree(dev, formats);
 	devm_kfree(dev, formats_dev);
@@ -606,13 +567,6 @@ static int gud_probe(struct usb_interface *intf, const struct usb_device_id *id)
 		dev_err(dev, "Failed to get properties (error=%d)\n", ret);
 		return ret;
 	}
-
-	ret = drm_crtc_init_with_planes(drm, &gdrm->crtc, &gdrm->plane, NULL,
-					&gud_crtc_funcs, NULL);
-	if (ret)
-		return ret;
-
-	drm_crtc_helper_add(&gdrm->crtc, &gud_crtc_helper_funcs);
 
 	ret = gud_get_connectors(gdrm);
 	if (ret) {

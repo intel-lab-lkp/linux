@@ -69,6 +69,7 @@ void gud_plane_atomic_update(struct drm_plane *plane,
 int gud_connector_fill_properties(struct drm_connector_state *connector_state,
 				  struct gud_property_req *properties);
 int gud_get_connectors(struct gud_device *gdrm);
+int gud_plane_init(struct gud_device *gdrm, u32 *formats, unsigned int num_formats);
 
 /* Driver internal fourcc transfer formats */
 #define GUD_DRM_FORMAT_R1		0x00000122
