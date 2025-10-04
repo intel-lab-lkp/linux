@@ -196,7 +196,7 @@ enum intr_status_bits {
 	ERI = 0x00000080,	/* receive early int */
 	CNTOVF = 0x00000040,	/* counter overflow */
 	RBU = 0x00000020,	/* receive buffer unavailable */
-	TBU = 0x00000010,	/* transmit buffer unavilable */
+	TBU = 0x00000010,	/* transmit buffer unavailable */
 	TI = 0x00000008,	/* transmit interrupt */
 	RI = 0x00000004,	/* receive interrupt */
 	RxErr = 0x00000002,	/* receive error */
