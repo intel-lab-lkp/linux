@@ -283,6 +283,8 @@ made up of several fields, the more interesting ones being:
 		void (*open)(struct vm_area_struct * area);
 		void (*close)(struct vm_area_struct * area);
 		vm_fault_t (*fault)(struct vm_fault *vmf);
+		vm_fault_t (*huge_fault)(struct vm_fault *vmf,
+					 unsigned int order);
 	};
 
 
@@ -290,7 +292,7 @@ The open and close operations must update the GEM object reference
 count. Drivers can use the drm_gem_vm_open() and drm_gem_vm_close() helper
 functions directly as open and close handlers.
 
-The fault operation handler is responsible for mapping individual pages
+The fault operation handlers are responsible for mapping individual pages
 to userspace when a page fault occurs. Depending on the memory
 allocation scheme, drivers can allocate pages at fault time, or can
 decide to allocate memory for the GEM object at the time the object is
@@ -298,6 +300,19 @@ created.
 
 Drivers that want to map the GEM object upfront instead of handling page
 faults can implement their own mmap file operation handler.
+
+In order to reduce page table overhead, if the internal shmem mountpoint
+"shm_mnt" is configured to use transparent huge pages (for builds with
+CONFIG_TRANSPARENT_HUGEPAGE enabled) and if the shmem backing store
+manages to allocate huge pages, faulty addresses within huge pages will
+be mapped into the tables using the huge page fault handler. In such
+cases, mmap() user address alignment for GEM objects is handled by
+providing a custom get_unmapped_area properly forwarding to the shmem
+backing store. For most drivers, which don't create a huge mountpoint by
+default or through a module parameter, transparent huge pages can be
+enabled by either setting the "transparent_hugepage_shmem" kernel
+parameter or the "/sys/kernel/mm/transparent_hugepage/shmem_enabled"
+sysfs knob.
 
 For platforms without MMU the GEM core provides a helper method
 drm_gem_dma_get_unmapped_area(). The mmap() routines will call this to get a
