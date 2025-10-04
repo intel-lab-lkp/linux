@@ -933,27 +933,22 @@ void ksmbd_free_global_file_table(void)
 int ksmbd_validate_name_reconnect(struct ksmbd_share_config *share,
 				  struct ksmbd_file *fp, char *name)
 {
-	char *pathname, *ab_pathname;
-	int ret = 0;
+	char *pathname __free(kfree) = kmalloc(PATH_MAX, KSMBD_DEFAULT_GFP);
 
-	pathname = kmalloc(PATH_MAX, KSMBD_DEFAULT_GFP);
 	if (!pathname)
 		return -EACCES;
 
-	ab_pathname = d_path(&fp->filp->f_path, pathname, PATH_MAX);
-	if (IS_ERR(ab_pathname)) {
-		kfree(pathname);
+	char *ab_pathname = d_path(&fp->filp->f_path, pathname, PATH_MAX);
+
+	if (IS_ERR(ab_pathname))
 		return -EACCES;
-	}
 
 	if (name && strcmp(&ab_pathname[share->path_sz + 1], name)) {
 		ksmbd_debug(SMB, "invalid name reconnect %s\n", name);
-		ret = -EINVAL;
+		return -EINVAL;
 	}
 
-	kfree(pathname);
-
-	return ret;
+	return 0;
 }
 
 int ksmbd_reopen_durable_fd(struct ksmbd_work *work, struct ksmbd_file *fp)
