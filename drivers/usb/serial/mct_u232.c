@@ -153,16 +153,17 @@ static int mct_u232_calculate_baud_rate(struct usb_serial *serial,
 		   divider = 115200/value;
 		   real baud = 115200/divider */
 		switch (value) {
-		case 300: break;
-		case 600: break;
-		case 1200: break;
-		case 2400: break;
-		case 4800: break;
-		case 9600: break;
-		case 19200: break;
-		case 38400: break;
-		case 57600: break;
-		case 115200: break;
+		case 300:
+		case 600:
+		case 1200:
+		case 2400:
+		case 4800:
+		case 9600:
+		case 19200:
+		case 38400:
+		case 57600:
+		case 115200:
+			break;
 		default:
 			value = 9600;
 			*result = 9600;
