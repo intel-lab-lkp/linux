@@ -191,6 +191,9 @@ struct trace_fprobe {
 	bool			tprobe;
 	struct tracepoint_user	*tuser;
 	struct trace_probe	tp;
+	char			*filter;
+	char			*nofilter;
+	bool			list_mode;
 };
 
 static bool is_trace_fprobe(struct dyn_event *ev)
@@ -203,14 +206,10 @@ static struct trace_fprobe *to_trace_fprobe(struct dyn_event *ev)
 	return container_of(ev, struct trace_fprobe, devent);
 }
 
-/**
- * for_each_trace_fprobe - iterate over the trace_fprobe list
- * @pos:	the struct trace_fprobe * for each entry
- * @dpos:	the struct dyn_event * to use as a loop cursor
- */
-#define for_each_trace_fprobe(pos, dpos)	\
-	for_each_dyn_event(dpos)		\
-		if (is_trace_fprobe(dpos) && (pos = to_trace_fprobe(dpos)))
+static struct trace_fprobe *trace_fprobe_from_dyn(struct dyn_event *ev)
+{
+	return is_trace_fprobe(ev) ? to_trace_fprobe(ev) : NULL;
+}
 
 static bool trace_fprobe_is_return(struct trace_fprobe *tf)
 {
@@ -225,6 +224,109 @@ static bool trace_fprobe_is_tracepoint(struct trace_fprobe *tf)
 static const char *trace_fprobe_symbol(struct trace_fprobe *tf)
 {
 	return tf->symbol ? tf->symbol : "unknown";
+}
+
+static bool has_wildcard(const char *s)
+{
+	return s && (strchr(s, '*') || strchr(s, '?'));
+}
+
+static int parse_fprobe_spec(const char *in, bool is_tracepoint,
+		char **base, bool *is_return, bool *list_mode,
+		char **filter, char **nofilter)
+{
+	const char *p;
+	char *work = NULL;
+	char *b = NULL, *f = NULL, *nf = NULL;
+	bool legacy_ret = false;
+	bool list = false;
+	int ret = 0;
+
+	if (!in || !base || !is_return || !list_mode || !filter || !nofilter)
+		return -EINVAL;
+
+	*base = NULL; *filter = NULL; *nofilter = NULL;
+	*is_return = false; *list_mode = false;
+
+	if (is_tracepoint) {
+		if (strchr(in, ',') || strchr(in, ':'))
+			return -EINVAL;
+		if (strstr(in, "%return"))
+			return -EINVAL;
+		for (p = in; *p; p++)
+			if (!isalnum(*p) && *p != '_')
+				return -EINVAL;
+		b = kstrdup(in, GFP_KERNEL);
+		if (!b)
+			return -ENOMEM;
+		*base = b;
+		return 0;
+	}
+
+	work = kstrdup(in, GFP_KERNEL);
+	if (!work)
+		return -ENOMEM;
+
+	p = strstr(work, "%return");
+	if (p) {
+		if (!strcmp(p, ":exit")) {
+			*is_return = true;
+			*p = '\0';
+		} else if (!strcmp(p, ":entry")) {
+			*p = '\0';
+		} else {
+			ret = -EINVAL;
+			goto out;
+		}
+	}
+
+	list = !!strchr(work, ',') || has_wildcard(work);
+	if (legacy_ret)
+		*is_return = true;
+
+	b = kstrdup(work, GFP_KERNEL);
+	if (!b) {
+		ret = -ENOMEM;
+		goto out;
+	}
+
+	if (list) {
+		char *tmp = b, *tok;
+		size_t fsz = strlen(b) + 1, nfsz = strlen(b) + 1;
+
+		f = kzalloc(fsz, GFP_KERNEL);
+		nf = kzalloc(nfsz, GFP_KERNEL);
+		if (!f || !nf) {
+			ret = -ENOMEM;
+			goto out;
+		}
+
+		while ((tok = strsep(&tmp, ",")) != NULL) {
+			char *dst;
+			bool neg = (*tok == '!');
+
+			if (*tok == '\0')
+				continue;
+			if (neg)
+				tok++;
+			dst = neg ? nf : f;
+			if (dst[0] != '\0')
+				strcat(dst, ",");
+			strcat(dst, tok);
+		}
+		*list_mode = true;
+	}
+
+	*base = b; b = NULL;
+	*filter = f; f = NULL;
+	*nofilter = nf; nf = NULL;
+
+out:
+	kfree(work);
+	kfree(b);
+	kfree(f);
+	kfree(nf);
+	return ret;
 }
 
 static bool trace_fprobe_is_busy(struct dyn_event *ev)
@@ -556,13 +658,17 @@ static void free_trace_fprobe(struct trace_fprobe *tf)
 		trace_probe_cleanup(&tf->tp);
 		if (tf->tuser)
 			tracepoint_user_put(tf->tuser);
+		kfree(tf->filter);
+		kfree(tf->nofilter);
 		kfree(tf->symbol);
 		kfree(tf);
 	}
 }
 
 /* Since alloc_trace_fprobe() can return error, check the pointer is ERR too. */
-DEFINE_FREE(free_trace_fprobe, struct trace_fprobe *, if (!IS_ERR_OR_NULL(_T)) free_trace_fprobe(_T))
+DEFINE_FREE(free_trace_fprobe, struct trace_fprobe *,
+	if (!IS_ERR_OR_NULL(_T))
+		free_trace_fprobe(_T))
 
 /*
  * Allocate new trace_probe and initialize it (including fprobe).
@@ -605,10 +711,16 @@ static struct trace_fprobe *find_trace_fprobe(const char *event,
 	struct dyn_event *pos;
 	struct trace_fprobe *tf;
 
-	for_each_trace_fprobe(tf, pos)
+	list_for_each_entry(pos, &dyn_event_list, list) {
+		tf = trace_fprobe_from_dyn(pos);
+		if (!tf)
+			continue;
+
 		if (strcmp(trace_probe_name(&tf->tp), event) == 0 &&
 		    strcmp(trace_probe_group_name(&tf->tp), group) == 0)
 			return tf;
+	}
+
 	return NULL;
 }
 
@@ -835,7 +947,12 @@ static int __register_trace_fprobe(struct trace_fprobe *tf)
 	if (trace_fprobe_is_tracepoint(tf))
 		return __regsiter_tracepoint_fprobe(tf);
 
-	/* TODO: handle filter, nofilter or symbol list */
+	/* Registration path:
+	 *  - list_mode: pass filter/nofilter
+	 *  - single: pass symbol only (legacy)
+	 */
+	if (tf->list_mode)
+		return register_fprobe(&tf->fp, tf->filter, tf->nofilter);
 	return register_fprobe(&tf->fp, tf->symbol, NULL);
 }
 
@@ -1114,7 +1231,11 @@ static int __tprobe_event_module_cb(struct notifier_block *self,
 		return NOTIFY_DONE;
 
 	mutex_lock(&event_mutex);
-	for_each_trace_fprobe(tf, pos) {
+	list_for_each_entry(pos, &dyn_event_list, list) {
+		tf = trace_fprobe_from_dyn(pos);
+		if (!tf)
+			continue;
+
 		/* Skip fprobe and disabled tprobe events. */
 		if (!trace_fprobe_is_tracepoint(tf) || !tf->tuser)
 			continue;
@@ -1155,55 +1276,35 @@ static int parse_symbol_and_return(int argc, const char *argv[],
 				   char **symbol, bool *is_return,
 				   bool is_tracepoint)
 {
-	char *tmp = strchr(argv[1], '%');
-	int i;
+	int i, ret;
+	bool list_mode = false;
+	char *filter = NULL; *nofilter = NULL;
 
-	if (tmp) {
-		int len = tmp - argv[1];
+	ret = parse_fprobe_spec(argv[1], is_tracepoint, symbol, is_return,
+			&list_mode, &filter, &nofilter);
+	if (ret)
+		return ret;
 
-		if (!is_tracepoint && !strcmp(tmp, "%return")) {
-			*is_return = true;
-		} else {
-			trace_probe_log_err(len, BAD_ADDR_SUFFIX);
-			return -EINVAL;
-		}
-		*symbol = kmemdup_nul(argv[1], len, GFP_KERNEL);
-	} else
-		*symbol = kstrdup(argv[1], GFP_KERNEL);
-	if (!*symbol)
-		return -ENOMEM;
-
-	if (*is_return)
-		return 0;
-
-	if (is_tracepoint) {
-		tmp = *symbol;
-		while (*tmp && (isalnum(*tmp) || *tmp == '_'))
-			tmp++;
-		if (*tmp) {
-			/* find a wrong character. */
-			trace_probe_log_err(tmp - *symbol, BAD_TP_NAME);
-			kfree(*symbol);
-			*symbol = NULL;
-			return -EINVAL;
-		}
-	}
-
-	/* If there is $retval, this should be a return fprobe. */
 	for (i = 2; i < argc; i++) {
-		tmp = strstr(argv[i], "$retval");
+		char *tmp = strstr(argv[i], "$retval");
+
 		if (tmp && !isalnum(tmp[7]) && tmp[7] != '_') {
 			if (is_tracepoint) {
 				trace_probe_log_set_index(i);
 				trace_probe_log_err(tmp - argv[i], RETVAL_ON_PROBE);
 				kfree(*symbol);
 				*symbol = NULL;
+				kfree(filter);
+				kfree(nofilter);
 				return -EINVAL;
 			}
 			*is_return = true;
 			break;
 		}
 	}
+
+	kfree(filter);
+	kfree(nofilter);
 	return 0;
 }
 
@@ -1247,6 +1348,11 @@ static int trace_fprobe_create_internal(int argc, const char *argv[],
 	int i, new_argc = 0, ret = 0;
 	bool is_tracepoint = false;
 	bool is_return = false;
+	bool list_mode = false;
+
+	char *parsed_filter __free(kfree) = NULL;
+	char *parsed_nofilter __free(kfree) = NULL;
+	bool has_wild = false;
 
 	if ((argv[0][0] != 'f' && argv[0][0] != 't') || argc < 2)
 		return -ECANCELED;
@@ -1267,8 +1373,9 @@ static int trace_fprobe_create_internal(int argc, const char *argv[],
 
 	trace_probe_log_set_index(1);
 
-	/* a symbol(or tracepoint) must be specified */
-	ret = parse_symbol_and_return(argc, argv, &symbol, &is_return, is_tracepoint);
+	/* Parse spec early (single vs list, suffix, base symbol) */
+	ret = parse_fprobe_spec(argv[1], is_tracepoint, &symbol, &is_return,
+			&list_mode, &parsed_filter, &parsed_nofilter);
 	if (ret < 0)
 		return -EINVAL;
 
@@ -1283,10 +1390,16 @@ static int trace_fprobe_create_internal(int argc, const char *argv[],
 			return -EINVAL;
 	}
 
-	if (!event) {
-		ebuf = kmalloc(MAX_EVENT_NAME_LEN, GFP_KERNEL);
-		if (!ebuf)
-			return -ENOMEM;
+		if (!event) {
+		/*
+		 * Event name rules:
+		 * - For list/wildcard: require explicit [GROUP/]EVENT
+		 * - For single literal: autogenerate symbol__entry/symbol__exit
+		 */
+			if (list_mode || has_wildcard(symbol)) {
+				trace_probe_log_err(0, NO_GROUP_NAME);
+			return -EINVAL;
+		}
 		/* Make a new event name */
 		if (is_tracepoint)
 			snprintf(ebuf, MAX_EVENT_NAME_LEN, "%s%s",
@@ -1319,7 +1432,8 @@ static int trace_fprobe_create_internal(int argc, const char *argv[],
 							NULL, NULL, NULL, sbuf);
 		}
 	}
-	if (!ctx->funcname)
+
+	if (!list_mode && !has_wildcard(symbol) && !is_tracepoint)
 		ctx->funcname = symbol;
 
 	abuf = kmalloc(MAX_BTF_ARGS_LEN, GFP_KERNEL);
@@ -1352,6 +1466,21 @@ static int trace_fprobe_create_internal(int argc, const char *argv[],
 		WARN_ON_ONCE(ret != -ENOMEM);
 		return ret;
 	}
+
+	/* carry list parsing result into tf */
+	if (!is_tracepoint) {
+		tf->list_mode = list_mode;
+			if (parsed_filter) {
+				tf->filter = kstrdup(parsed_filter, GFP_KERNEL);
+				if (!tf->filter)
+					return -ENOMEM;
+			}
+			if (parsed_nofilter) {
+				tf->nofilter = kstrdup(parsed_nofilter, GFP_KERNEL);
+				if (!tf->nofilter)
+					return -ENOMEM;
+			}
+		}
 
 	/* parse arguments */
 	for (i = 0; i < argc; i++) {
@@ -1439,8 +1568,16 @@ static int trace_fprobe_show(struct seq_file *m, struct dyn_event *ev)
 	seq_printf(m, ":%s/%s", trace_probe_group_name(&tf->tp),
 				trace_probe_name(&tf->tp));
 
-	seq_printf(m, " %s%s", trace_fprobe_symbol(tf),
-			       trace_fprobe_is_return(tf) ? "%return" : "");
+	seq_printf(m, "%s", trace_fprobe_symbol(tf));
+	if (!trace_fprobe_is_tracepoint(tf)) {
+		if (tf->list_mode) {
+			if (trace_fprobe_is_return(tf))
+				seq_puts(m, ":exit");
+		} else {
+			if (trace_fprobe_is_return(tf))
+				seq_puts(m, "%return");
+		}
+	}
 
 	for (i = 0; i < tf->tp.nr_args; i++)
 		seq_printf(m, " %s=%s", tf->tp.args[i].name, tf->tp.args[i].comm);
