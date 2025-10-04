@@ -402,6 +402,7 @@ static void sco_recv_frame(struct sco_conn *conn, struct sk_buff *skb)
 
 	sco_conn_lock(conn);
 	sk = conn->sk;
+	sock_hold(sk);
 	sco_conn_unlock(conn);
 
 	if (!sk)
@@ -413,10 +414,13 @@ static void sco_recv_frame(struct sco_conn *conn, struct sk_buff *skb)
 		goto drop;
 
 	if (!sock_queue_rcv_skb(sk, skb))
-		return;
+		goto done;
 
 drop:
 	kfree_skb(skb);
+done:
+	if (sk)
+		sock_put(sk);
 }
 
 /* -------- Socket interface ---------- */
