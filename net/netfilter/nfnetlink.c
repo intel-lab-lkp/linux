@@ -600,6 +600,11 @@ done:
 			status |= NFNL_BATCH_FAILURE;
 			goto replay_abort;
 		}
+
+		if (nlh->nlmsg_flags & NLM_F_ACK && status & NFNL_BATCH_DONE) {
+			memset(&extack, 0, sizeof(extack));
+			nfnl_err_add(&err_list, nlh, 0, &extack);
+		}
 	}
 
 	nfnl_err_deliver(&err_list, oskb);
