@@ -2,6 +2,7 @@
 # SPDX-License-Identifier: GPL-2.0
 # description: Fprobe event parser error log check
 # requires: dynamic_events "f[:[<group>/][<event>]] <func-name>[%return] [<args>]":README
+# requires: dynamic_events "f[:[<group>/][<event>]] <func-name>[:entry|:exit] [<args>]":README
 
 check_error() { # command-with-error-pos-by-^
     ftrace_errlog_check 'trace_fprobe' "$1" 'dynamic_events'
@@ -94,6 +95,18 @@ fi
 
 # %return suffix errors
 check_error 'f vfs_read^%hoge'		# BAD_ADDR_SUFFIX
+
+# New list/wildcard syntax errors
+if grep -q: ":exit" README; then
+check_error 'f ^vfs_read, do_sys_open'	# LIST_NEEDS_EVENT
+check_error 'f ^vfs_read,do_sys_open'	# LIST_NEEDS_EVENT
+check_error 'f:dyn/ret_forbid vfs_*^%return'	# WILDCARD_WITH_RETURN
+check_error 'f:dyn/ret_forbid vfs_read,do_sys_open^%return'	# LIST_WITH_RETURN
+check_error 'f:dyn/list_bad ^,vfs_read'		# LEADING_COMMA
+check_error 'f:dyn/list_bad vfs_read,^'		# TRAILING_COMMA
+check_error 'f:dyn/list_bad vfs_read,^,do_sys_open'	# EMPTY_TOKEN
+check_error 'f:dyn/mixed vfs_read%return^:exit'		# MIXED_SUFFIX
+
 
 # BTF arguments errors
 if grep -q "<argname>" README; then
