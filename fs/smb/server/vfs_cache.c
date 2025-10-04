@@ -470,11 +470,7 @@ struct ksmbd_file *ksmbd_lookup_fd_slow(struct ksmbd_work *work, u64 id,
 	}
 
 	fp = __ksmbd_lookup_fd(&work->sess->file_table, id);
-	if (!__sanity_check(work->tcon, fp)) {
-		ksmbd_fd_put(work, fp);
-		return NULL;
-	}
-	if (fp->persistent_id != pid) {
+	if (!__sanity_check(work->tcon, fp) || fp->persistent_id != pid) {
 		ksmbd_fd_put(work, fp);
 		return NULL;
 	}
