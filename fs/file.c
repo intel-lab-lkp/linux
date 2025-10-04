@@ -161,7 +161,7 @@ static void copy_fdtable(struct fdtable *nfdt, struct fdtable *ofdt)
  */
 static struct fdtable *alloc_fdtable(unsigned int slots_wanted)
 {
-	struct fdtable *fdt;
+	struct fdtable *fdt __free(kfree) = NULL;
 	unsigned int nr;
 	void *data;
 
@@ -214,18 +214,20 @@ static struct fdtable *alloc_fdtable(unsigned int slots_wanted)
 
 	fdt = kmalloc(sizeof(struct fdtable), GFP_KERNEL_ACCOUNT);
 	if (!fdt)
-		goto out;
+		return ERR_PTR(-ENOMEM);
 	fdt->max_fds = nr;
 	data = kvmalloc_array(nr, sizeof(struct file *), GFP_KERNEL_ACCOUNT);
 	if (!data)
-		goto out_fdt;
+		return ERR_PTR(-ENOMEM);
 	fdt->fd = data;
 
 	data = kvmalloc(max_t(size_t,
 				 2 * nr / BITS_PER_BYTE + BITBIT_SIZE(nr), L1_CACHE_BYTES),
 				 GFP_KERNEL_ACCOUNT);
-	if (!data)
-		goto out_arr;
+	if (!data) {
+		kvfree(fdt->fd);
+		return ERR_PTR(-ENOMEM);
+	}
 	fdt->open_fds = data;
 	data += nr / BITS_PER_BYTE;
 	fdt->close_on_exec = data;
@@ -233,13 +235,6 @@ static struct fdtable *alloc_fdtable(unsigned int slots_wanted)
 	fdt->full_fds_bits = data;
 
 	return fdt;
-
-out_arr:
-	kvfree(fdt->fd);
-out_fdt:
-	kfree(fdt);
-out:
-	return ERR_PTR(-ENOMEM);
 }
 
 /*
