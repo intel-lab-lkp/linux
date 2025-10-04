@@ -1885,8 +1885,8 @@ int ksmbd_vfs_set_init_posix_acl(struct mnt_idmap *idmap,
 
 	acls = posix_acl_alloc(6, KSMBD_DEFAULT_GFP);
 	if (!acls) {
-		free_acl_state(&acl_state);
-		return -ENOMEM;
+		rc = -ENOMEM;
+		goto free_acl_state;
 	}
 	posix_state_to_acl(&acl_state, acls->a_entries);
 
@@ -1902,8 +1902,9 @@ int ksmbd_vfs_set_init_posix_acl(struct mnt_idmap *idmap,
 				    rc);
 	}
 
-	free_acl_state(&acl_state);
 	posix_acl_release(acls);
+free_acl_state:
+	free_acl_state(&acl_state);
 	return rc;
 }
 
