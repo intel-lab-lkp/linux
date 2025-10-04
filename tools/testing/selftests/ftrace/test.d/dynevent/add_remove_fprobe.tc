@@ -2,6 +2,8 @@
 # SPDX-License-Identifier: GPL-2.0
 # description: Generic dynamic event - add/remove fprobe events
 # requires: dynamic_events "f[:[<group>/][<event>]] <func-name>[%return] [<args>]":README
+# Note: list-style specs and :entry/:exit may be unavailable on older kernels.
+# These tests auto-skip at runtime if the list form is rejected by tracefs.
 
 echo 0 > events/enable
 echo > dynamic_events
@@ -87,6 +89,125 @@ echo > dynamic_events
 cnt=`cat enabled_functions | wc -l`
 if [ $cnt -ne $ocnt ]; then
 	exit_fail
+fi
+
+# ---- New accept cases for list syntax with :entry/:exit and !-exclusions ----
+if echo "f:test/__list_check $PLACE,$PLACE3" >> dynamic_events 2> /dev/null; then
+	# Clean the probe added by the guard
+	echo "-:test/__list_check" >> dynamic_events
+
+	# List default (entry) with exclusion, explicit group/event
+	echo "f:test/list_entry $PLACE,!$PLACE2,$PLACE3" >> dynamic_events
+	grep -q "test/list_entry" dynamic_events
+	test -d events/test/list_entry
+
+	echo 1 > events/test/list_entry/enable
+	# Should attach to PLACE and PLACE3, but not PLACE2
+	grep -q "$PLACE" enabled_functions
+	grep -q "$PLACE3" enabled_functions
+	! grep -q "$PLACE2" enabled_functions
+	cnt=`cat enabled_functions | wc -l`
+	if [ $cnt -ne $((ocnt + 2)) ]; then
+		exit_fail
+	fi
+
+	# Disable and remove; count should be back to baseline
+	echo 0 > events/test/list_entry/enable
+	echo "-:test/list_entry" >> dynamic_events
+	! grep -q "test/list_entry" dynamic_events
+	cnt=`cat enabled_functions | wc -l`
+	if [ $cnt -ne $ocnt ]; then
+		exit_fail
+	fi
+
+	# List with explicit :entry suffix (same behavior as default)
+	echo "f:test/list_entry_exp $PLACE,!$PLACE2,$PLACE3:entry" >> dynamic_events
+	grep -q "test/list_entry_exp" dynamic_events
+	test -d events/test/list_entry_exp
+
+	echo 1 > events/test/list_entry_exp/enable
+	grep -q "$PLACE" enabled_functions
+	grep -q "$PLACE3" enabled_functions
+	! grep -q "$PLACE2" enabled_functions
+	cnt=`cat enabled_functions | wc -l`
+	if [ $cnt -ne $((ocnt + 2)) ]; then
+		exit_fail
+	fi
+
+	echo 0 > events/test/list_entry_exp/enable
+	echo "-:test/list_entry_exp" >> dynamic_events
+	! grep -q "test/list_entry_exp" dynamic_events
+	cnt=`cat enabled_functions | wc -l`
+	if [ $cnt -ne $ocnt ]; then
+		exit_fail
+	fi
+
+	# List with :exit suffix across the same set
+	echo "f:test/list_exit $PLACE,!$PLACE2,$PLACE3:exit" >> dynamic_events
+	grep -q "test/list_exit" dynamic_events
+	test -d events/test/list_exit
+
+	echo 1 > events/test/list_exit/enable
+	# On return probes, enabled_functions still reflects attached functions.
+	grep -q "$PLACE" enabled_functions
+	grep -q "$PLACE3" enabled_functions
+	! grep -q "$PLACE2" enabled_functions
+	cnt=`cat enabled_functions | wc -l`
+	if [ $cnt -ne $((ocnt + 2)) ]; then
+		exit_fail
+	fi
+
+	echo 0 > events/test/list_exit/enable
+	echo "-:test/list_exit" >> dynamic_events
+	! grep -q "test/list_exit" dynamic_events
+	cnt=`cat enabled_functions | wc -l`
+	if [ $cnt -ne $ocnt ]; then
+		exit_fail
+	fi
+
+	# Enabling entry and exit together does not double-count functions
+	echo "f:test/list_both_e $PLACE,!$PLACE2,$PLACE3" >> dynamic_events
+	echo "f:test/list_both_x $PLACE,!$PLACE2,$PLACE3:exit" >> dynamic_events
+	grep -q "test/list_both_e" dynamic_events
+	grep -q "test/list_both_x" dynamic_events
+	test -d events/test/list_both_e
+	test -d events/test/list_both_x
+
+	echo 1 > events/test/list_both_e/enable
+	cnt=`cat enabled_functions | wc -l`
+	if [ $cnt -ne $((ocnt + 2)) ]; then
+		exit_fail
+	fi
+
+	# Enabling :exit for the same set should keep the count the same
+	echo 1 > events/test/list_both_x/enable
+	cnt=`cat enabled_functions | wc -l`
+	if [ $cnt -ne $((ocnt + 2)) ]; then
+		exit_fail
+	fi
+
+	# Disable one; count should remain (the other still holds the attach)
+	echo 0 > events/test/list_both_e/enable
+	cnt=`cat enabled_functions | wc -l`
+	if [ $cnt -ne $((ocnt + 2)) ]; then
+		exit_fail
+	fi
+
+	# Disable the other; count returns to baseline
+	echo 0 > events/test/list_both_x/enable
+	cnt=`cat enabled_functions | wc -l`
+	if [ $cnt -ne $ocnt ]; then
+		exit_fail
+	fi
+
+	# Remove both definitions
+	echo "-:test/list_both_e" >> dynamic_events
+	echo "-:test/list_both_x" >> dynamic_events
+	! grep -q "test/list_both_e" dynamic_events
+	! grep -q "test/list_both_x" dynamic_events
+else
+	# List-form not supported; skip silently
+	:
 fi
 
 clear_trace
