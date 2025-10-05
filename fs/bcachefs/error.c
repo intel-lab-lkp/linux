@@ -688,7 +688,7 @@ int __bch2_bkey_fsck_err(struct bch_fs *c,
 	bch2_btree_id_to_text(&buf, from.btree);
 	prt_printf(&buf, " level=%u: ", from.level);
 
-	bch2_bkey_val_to_text(&buf, c, k);
+	bch2_bpos_to_text(&buf, k.k->p);
 	prt_newline(&buf);
 
 	va_list args;
