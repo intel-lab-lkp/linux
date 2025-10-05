@@ -1053,8 +1053,8 @@ static unsigned int demote_folio_list(struct list_head *demote_folios,
 		 * When this happens, 'page' will likely just be discarded
 		 * instead of migrated.
 		 */
-		.gfp_mask = (GFP_HIGHUSER_MOVABLE & ~__GFP_RECLAIM) | __GFP_NOWARN |
-			__GFP_NOMEMALLOC | GFP_NOWAIT,
+		.gfp_mask = (GFP_HIGHUSER_MOVABLE & ~__GFP_RECLAIM) | __GFP_NOMEMALLOC |
+			GFP_NOWAIT,
 		.nid = target_nid,
 		.nmask = &allowed_mask,
 		.reason = MR_DEMOTION,
