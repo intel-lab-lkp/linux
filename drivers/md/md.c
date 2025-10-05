@@ -1873,9 +1873,14 @@ static int super_1_load(struct md_rdev *rdev, struct md_rdev *refdev, int minor_
 		bbp = (__le64 *)page_address(rdev->bb_page);
 		rdev->badblocks.shift = sb->bblog_shift;
 		for (i = 0 ; i < (sectors << (9-3)) ; i++, bbp++) {
-			u64 bb = le64_to_cpu(*bbp);
-			int count = bb & (0x3ff);
-			u64 sector = bb >> 10;
+			u64 bb, sector;
+			int count;
+
+			bb = le64_to_cpu(*bbp);
+			if (bb == 0)
+				continue;
+			count = bb & (0x3ff);
+			sector = bb >> 10;
 			sector <<= sb->bblog_shift;
 			count <<= sb->bblog_shift;
 			if (bb + 1 == 0)
