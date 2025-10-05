@@ -7222,9 +7222,10 @@ int ring_buffer_map(struct trace_buffer *buffer, int cpu,
 
 	if (!cpumask_test_cpu(cpu, buffer->cpumask))
 		return -EINVAL;
-
+	
 	cpu_buffer = buffer->buffers[cpu];
-
+	
+	guard(mutex)(&buffer->mutex);
 	guard(mutex)(&cpu_buffer->mapping_lock);
 
 	if (cpu_buffer->user_mapped) {
