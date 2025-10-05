@@ -976,9 +976,8 @@ properties:
 
       - items:
           - enum:
-              - google,cheza
-              - google,cheza-rev1
-              - google,cheza-rev2
+              - google,blueline
+              - google,crosshatch
               - lenovo,yoga-c630
               - lg,judyln
               - lg,judyp
