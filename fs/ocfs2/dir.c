@@ -820,8 +820,7 @@ static int ocfs2_dx_dir_lookup_rec(struct inode *inode,
 		ret = ocfs2_error(inode->i_sb,
 				  "Inode %lu has bad extent record (%u, %u, 0) in btree\n",
 				  inode->i_ino,
-				  le32_to_cpu(rec->e_cpos),
-				  ocfs2_rec_clusters(el, rec));
+				  eb_bh ? (unsigned long long)eb_bh->b_blocknr : 0);
 		goto out;
 	}
 
