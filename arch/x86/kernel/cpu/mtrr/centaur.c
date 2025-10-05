@@ -20,6 +20,7 @@ static u8 centaur_mcr_type;	/* 0 for winchip, 1 for winchip2 */
  *
  * @base: The starting (base) address of the region.
  * @size: The size (in bytes) of the region.
+ * @replace_reg: mtrr index to be replaced; set to invalid value if none.
  *
  * Returns: the index of the region on success, else -1 on error.
  */
