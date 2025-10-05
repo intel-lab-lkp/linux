@@ -449,7 +449,7 @@ struct radeon_fence *r600_copy_dma(struct radeon_device *rdev,
 	struct radeon_sync sync;
 	int ring_index = rdev->asic->copy.dma_ring_index;
 	struct radeon_ring *ring = &rdev->ring[ring_index];
-	u32 size_in_dw, cur_size_in_dw;
+	u32 size_in_dw, cur_size_in_dw, ring_size_reserve;
 	int i, num_loops;
 	int r = 0;
 
@@ -457,7 +457,16 @@ struct radeon_fence *r600_copy_dma(struct radeon_device *rdev,
 
 	size_in_dw = (num_gpu_pages << RADEON_GPU_PAGE_SHIFT) / 4;
 	num_loops = DIV_ROUND_UP(size_in_dw, 0xFFFE);
-	r = radeon_ring_lock(rdev, ring, num_loops * 4 + 8);
+
+	/* Worst case needed dwords:
+	 *  - 3 * RADEON_NUM_SYNCS for semaphore waits
+	 *  - 4 * num_loops for copy packages
+	 *  - 5 for fence
+	 * Finally, the block align block size to account for padding.
+	 */
+	ring_size_reserve = __ALIGN_MASK(RADEON_NUM_SYNCS * 3 + num_loops * 4 + 5,
+					 ring->align_mask);
+	r = radeon_ring_lock(rdev, ring, ring_size_reserve);
 	if (r) {
 		DRM_ERROR("radeon: moving bo (%d).\n", r);
 		radeon_sync_free(rdev, &sync, NULL);
