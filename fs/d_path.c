@@ -332,28 +332,23 @@ static char *__dentry_path(const struct dentry *d, struct prepend_buffer *p)
 {
 	const struct dentry *dentry;
 	struct prepend_buffer b;
-	int seq = 0;
 
 	rcu_read_lock();
-restart:
-	dentry = d;
-	b = *p;
-	read_seqbegin_or_lock(&rename_lock, &seq);
-	while (!IS_ROOT(dentry)) {
-		const struct dentry *parent = dentry->d_parent;
+	__SEQLOCK_READ_SECTION(&rename_lock, lockless, seq, NULL) {
+		dentry = d;
+		b = *p;
+		while (!IS_ROOT(dentry)) {
+			const struct dentry *parent = dentry->d_parent;
 
-		prefetch(parent);
-		if (!prepend_name(&b, &dentry->d_name))
-			break;
-		dentry = parent;
+			prefetch(parent);
+			if (!prepend_name(&b, &dentry->d_name))
+				break;
+			dentry = parent;
+		}
+		if (lockless)
+			rcu_read_unlock();
 	}
-	if (!(seq & 1))
-		rcu_read_unlock();
-	if (need_seqretry(&rename_lock, seq)) {
-		seq = 1;
-		goto restart;
-	}
-	done_seqretry(&rename_lock, seq);
+
 	if (b.len == p->len)
 		prepend_char(&b, '/');
 	return extract_string(&b);
