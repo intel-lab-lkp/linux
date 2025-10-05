@@ -15,6 +15,66 @@
 #include "drm_draw_internal.h"
 #include "drm_format_internal.h"
 
+static int __drm_draw_color_from_xrgb8888(u32 color, u32 format, u32 *out_color)
+{
+	switch (format) {
+	case DRM_FORMAT_RGB565:
+		*out_color = drm_pixel_xrgb8888_to_rgb565(color);
+		break;
+	case DRM_FORMAT_RGBA5551:
+		*out_color = drm_pixel_xrgb8888_to_rgba5551(color);
+		break;
+	case DRM_FORMAT_XRGB1555:
+		*out_color = drm_pixel_xrgb8888_to_xrgb1555(color);
+		break;
+	case DRM_FORMAT_ARGB1555:
+		*out_color = drm_pixel_xrgb8888_to_argb1555(color);
+		break;
+	case DRM_FORMAT_RGB888:
+		fallthrough;
+	case DRM_FORMAT_XRGB8888:
+		*out_color = color;
+		break;
+	case DRM_FORMAT_ARGB8888:
+		*out_color = drm_pixel_xrgb8888_to_argb8888(color);
+		break;
+	case DRM_FORMAT_XBGR8888:
+		*out_color = drm_pixel_xrgb8888_to_xbgr8888(color);
+		break;
+	case DRM_FORMAT_ABGR8888:
+		*out_color = drm_pixel_xrgb8888_to_abgr8888(color);
+		break;
+	case DRM_FORMAT_XRGB2101010:
+		*out_color = drm_pixel_xrgb8888_to_xrgb2101010(color);
+		break;
+	case DRM_FORMAT_ARGB2101010:
+		*out_color = drm_pixel_xrgb8888_to_argb2101010(color);
+		break;
+	case DRM_FORMAT_ABGR2101010:
+		*out_color = drm_pixel_xrgb8888_to_abgr2101010(color);
+		break;
+	default:
+		return -1;
+	}
+
+	return 0;
+}
+
+/**
+ * drm_draw_can_convert_from_xrgb8888 - check if xrgb8888 can be converted to the desired format
+ * @format: format
+ *
+ * Returns:
+ * True if XRGB8888 can be converted to the specified format, false otherwise.
+ */
+bool drm_draw_can_convert_from_xrgb8888(u32 format)
+{
+	u32 out_color;
+
+	return __drm_draw_color_from_xrgb8888(0, format, &out_color) == 0;
+}
+EXPORT_SYMBOL(drm_draw_can_convert_from_xrgb8888);
+
 /**
  * drm_draw_color_from_xrgb8888 - convert one pixel from xrgb8888 to the desired format
  * @color: input color, in xrgb8888 format
@@ -26,34 +86,12 @@
  */
 u32 drm_draw_color_from_xrgb8888(u32 color, u32 format)
 {
-	switch (format) {
-	case DRM_FORMAT_RGB565:
-		return drm_pixel_xrgb8888_to_rgb565(color);
-	case DRM_FORMAT_RGBA5551:
-		return drm_pixel_xrgb8888_to_rgba5551(color);
-	case DRM_FORMAT_XRGB1555:
-		return drm_pixel_xrgb8888_to_xrgb1555(color);
-	case DRM_FORMAT_ARGB1555:
-		return drm_pixel_xrgb8888_to_argb1555(color);
-	case DRM_FORMAT_RGB888:
-	case DRM_FORMAT_XRGB8888:
-		return color;
-	case DRM_FORMAT_ARGB8888:
-		return drm_pixel_xrgb8888_to_argb8888(color);
-	case DRM_FORMAT_XBGR8888:
-		return drm_pixel_xrgb8888_to_xbgr8888(color);
-	case DRM_FORMAT_ABGR8888:
-		return drm_pixel_xrgb8888_to_abgr8888(color);
-	case DRM_FORMAT_XRGB2101010:
-		return drm_pixel_xrgb8888_to_xrgb2101010(color);
-	case DRM_FORMAT_ARGB2101010:
-		return drm_pixel_xrgb8888_to_argb2101010(color);
-	case DRM_FORMAT_ABGR2101010:
-		return drm_pixel_xrgb8888_to_abgr2101010(color);
-	default:
+	u32 out_color = 0;
+
+	if (__drm_draw_color_from_xrgb8888(color, format, &out_color))
 		WARN_ONCE(1, "Can't convert to %p4cc\n", &format);
-		return 0;
-	}
+
+	return out_color;
 }
 EXPORT_SYMBOL(drm_draw_color_from_xrgb8888);
 
