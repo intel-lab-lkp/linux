@@ -326,6 +326,7 @@ static void acpi_fan_notify_handler(acpi_handle handle, u32 event, void *context
 		if (ret < 0)
 			dev_err(dev, "Error retrieving current fan status: %d\n", ret);
 
+		acpi_fan_notify_hwmon(dev);
 		break;
 	default:
 		dev_dbg(dev, "Unsupported ACPI notification 0x%x\n", event);
