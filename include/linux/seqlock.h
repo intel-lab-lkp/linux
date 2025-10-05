@@ -1209,4 +1209,53 @@ done_seqretry_irqrestore(seqlock_t *lock, int seq, unsigned long flags)
 	if (seq & 1)
 		read_sequnlock_excl_irqrestore(lock, flags);
 }
+
+/* internal helper for SEQLOCK_READ_SECTION() */
+static inline int
+seqlock_read_section_retry(seqlock_t *lock, int *seq, unsigned long *flags)
+{
+	int retry = 0;
+
+	if (*seq & 1) {
+		if (flags)
+			read_sequnlock_excl_irqrestore(lock, *flags);
+		else
+			read_sequnlock_excl(lock);
+	} else if (read_seqretry(lock, *seq)) {
+		retry = *seq = 1;
+		if (flags)
+			read_seqlock_excl_irqsave(lock, *flags);
+		else
+			read_seqlock_excl(lock);
+	}
+
+	return retry;
+}
+
+#define __SEQLOCK_READ_SECTION(lock, lockless, seq, flags)	\
+	for (int lockless = 1, seq = read_seqbegin(lock);		\
+	     lockless || seqlock_read_section_retry(lock, &seq, flags);	\
+	     lockless = 0)
+
+/**
+ * SEQLOCK_READ_SECTION(lock, flags) - execute the read side critical section
+ *                                     without manual sequence counter handling
+ *                                     or calls to other helpers
+ * @lock: pointer to the seqlock_t protecting the data
+ * @flags: pointer to unsigned long for irqsave/irqrestore or NULL
+ *
+ * Example:
+ *
+ *	SEQLOCK_READ_SECTION(&lock, &flags) {
+ *		// read-side critical section
+ *	}
+ *
+ * Starts with a lockless pass first. If it fails, restarts the critical section
+ * with the lock held and, if @flags != NULL, with irqs disabled.
+ *
+ * The critical section must not contain control flow that escapes the loop.
+ */
+#define SEQLOCK_READ_SECTION(lock, flags)	\
+	__SEQLOCK_READ_SECTION(lock, __UNIQUE_ID(lockless), __UNIQUE_ID(seq), flags)
+
 #endif /* __LINUX_SEQLOCK_H */
