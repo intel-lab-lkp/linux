@@ -2270,6 +2270,11 @@ struct rt6_info *ip6_pol_route(struct net *net, struct fib6_table *table,
 	if (res.f6i == net->ipv6.fib6_null_entry)
 		goto out;
 
+	if (ipv6_addr_any(&fl6->saddr) &&
+	    !ipv6_addr_any(&res.f6i->fib6_prefsrc.addr)) {
+		fl6->saddr = res.f6i->fib6_prefsrc.addr;
+	}
+
 	fib6_select_path(net, &res, fl6, oif, false, skb, strict);
 
 	/*Search through exception table */
