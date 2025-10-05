@@ -17,6 +17,7 @@
 #define pr_fmt(fmt)    "%s: " fmt, __func__
 
 #include <asm/byteorder.h>
+#include <linux/cleanup.h>
 #include <linux/delay.h>
 #include <linux/device.h>
 #include <linux/dma-mapping.h>
@@ -1830,13 +1831,14 @@ int rproc_trigger_recovery(struct rproc *rproc)
 	struct device *dev = &rproc->dev;
 	int ret;
 
-	ret = mutex_lock_interruptible(&rproc->lock);
+	ACQUIRE(mutex_intr, lock)(&rproc->lock);
+	ret = ACQUIRE_ERR(mutex_intr, &lock);
 	if (ret)
 		return ret;
 
 	/* State could have changed before we got the mutex */
 	if (rproc->state != RPROC_CRASHED)
-		goto unlock_mutex;
+		return ret;
 
 	dev_err(dev, "recovering %s\n", rproc->name);
 
@@ -1845,8 +1847,6 @@ int rproc_trigger_recovery(struct rproc *rproc)
 	else
 		ret = rproc_boot_recovery(rproc);
 
-unlock_mutex:
-	mutex_unlock(&rproc->lock);
 	return ret;
 }
 
@@ -1864,25 +1864,19 @@ static void rproc_crash_handler_work(struct work_struct *work)
 
 	dev_dbg(dev, "enter %s\n", __func__);
 
-	mutex_lock(&rproc->lock);
-
-	if (rproc->state == RPROC_CRASHED) {
+	scoped_guard(mutex, &rproc->lock) {
 		/* handle only the first crash detected */
-		mutex_unlock(&rproc->lock);
-		return;
-	}
+		if (rproc->state == RPROC_CRASHED)
+			return;
 
-	if (rproc->state == RPROC_OFFLINE) {
 		/* Don't recover if the remote processor was stopped */
-		mutex_unlock(&rproc->lock);
-		goto out;
+		if (rproc->state == RPROC_OFFLINE)
+			goto out;
+
+		rproc->state = RPROC_CRASHED;
+		dev_err(dev, "handling crash #%u in %s\n", ++rproc->crash_cnt,
+			rproc->name);
 	}
-
-	rproc->state = RPROC_CRASHED;
-	dev_err(dev, "handling crash #%u in %s\n", ++rproc->crash_cnt,
-		rproc->name);
-
-	mutex_unlock(&rproc->lock);
 
 	if (!rproc->recovery_disabled)
 		rproc_trigger_recovery(rproc);
@@ -1915,23 +1909,21 @@ int rproc_boot(struct rproc *rproc)
 
 	dev = &rproc->dev;
 
-	ret = mutex_lock_interruptible(&rproc->lock);
+	ACQUIRE(mutex_intr, lock)(&rproc->lock);
+	ret = ACQUIRE_ERR(mutex_intr, &lock);
 	if (ret) {
 		dev_err(dev, "can't lock rproc %s: %d\n", rproc->name, ret);
 		return ret;
 	}
 
 	if (rproc->state == RPROC_DELETED) {
-		ret = -ENODEV;
 		dev_err(dev, "can't boot deleted rproc %s\n", rproc->name);
-		goto unlock_mutex;
+		return -ENODEV;
 	}
 
 	/* skip the boot or attach process if rproc is already powered up */
-	if (atomic_inc_return(&rproc->power) > 1) {
-		ret = 0;
-		goto unlock_mutex;
-	}
+	if (atomic_inc_return(&rproc->power) > 1)
+		return 0;
 
 	if (rproc->state == RPROC_DETACHED) {
 		dev_info(dev, "attaching to %s\n", rproc->name);
@@ -1955,8 +1947,7 @@ int rproc_boot(struct rproc *rproc)
 downref_rproc:
 	if (ret)
 		atomic_dec(&rproc->power);
-unlock_mutex:
-	mutex_unlock(&rproc->lock);
+
 	return ret;
 }
 EXPORT_SYMBOL(rproc_boot);
@@ -1987,26 +1978,24 @@ int rproc_shutdown(struct rproc *rproc)
 	struct device *dev = &rproc->dev;
 	int ret;
 
-	ret = mutex_lock_interruptible(&rproc->lock);
+	ACQUIRE(mutex_intr, lock)(&rproc->lock);
+	ret = ACQUIRE_ERR(mutex_intr, &lock);
 	if (ret) {
 		dev_err(dev, "can't lock rproc %s: %d\n", rproc->name, ret);
 		return ret;
 	}
 
-	if (rproc->state != RPROC_RUNNING &&
-	    rproc->state != RPROC_ATTACHED) {
-		ret = -EINVAL;
-		goto out;
-	}
+	if (rproc->state != RPROC_RUNNING && rproc->state != RPROC_ATTACHED)
+		return -EINVAL;
 
 	/* if the remote proc is still needed, bail out */
 	if (!atomic_dec_and_test(&rproc->power))
-		goto out;
+		return ret;
 
 	ret = rproc_stop(rproc, false);
 	if (ret) {
 		atomic_inc(&rproc->power);
-		goto out;
+		return ret;
 	}
 
 	/* clean up all acquired resources */
@@ -2021,8 +2010,7 @@ int rproc_shutdown(struct rproc *rproc)
 	kfree(rproc->cached_table);
 	rproc->cached_table = NULL;
 	rproc->table_ptr = NULL;
-out:
-	mutex_unlock(&rproc->lock);
+
 	return ret;
 }
 EXPORT_SYMBOL(rproc_shutdown);
@@ -2052,27 +2040,25 @@ int rproc_detach(struct rproc *rproc)
 	struct device *dev = &rproc->dev;
 	int ret;
 
-	ret = mutex_lock_interruptible(&rproc->lock);
+	ACQUIRE(mutex_intr, lock)(&rproc->lock);
+	ret = ACQUIRE_ERR(mutex_intr, &lock);
 	if (ret) {
 		dev_err(dev, "can't lock rproc %s: %d\n", rproc->name, ret);
 		return ret;
 	}
 
 	if (rproc->state != RPROC_ATTACHED) {
-		ret = -EINVAL;
-		goto out;
+		return -EINVAL;
 	}
 
 	/* if the remote proc is still needed, bail out */
-	if (!atomic_dec_and_test(&rproc->power)) {
-		ret = 0;
-		goto out;
-	}
+	if (!atomic_dec_and_test(&rproc->power))
+		return 0;
 
 	ret = __rproc_detach(rproc);
 	if (ret) {
 		atomic_inc(&rproc->power);
-		goto out;
+		return ret;
 	}
 
 	/* clean up all acquired resources */
@@ -2087,8 +2073,7 @@ int rproc_detach(struct rproc *rproc)
 	kfree(rproc->cached_table);
 	rproc->cached_table = NULL;
 	rproc->table_ptr = NULL;
-out:
-	mutex_unlock(&rproc->lock);
+
 	return ret;
 }
 EXPORT_SYMBOL(rproc_detach);
@@ -2192,7 +2177,8 @@ int rproc_set_firmware(struct rproc *rproc, const char *fw_name)
 
 	dev = rproc->dev.parent;
 
-	ret = mutex_lock_interruptible(&rproc->lock);
+	ACQUIRE(mutex_intr, lock)(&rproc->lock);
+	ret = ACQUIRE_ERR(mutex_intr, &lock);
 	if (ret) {
 		dev_err(dev, "can't lock rproc %s: %d\n", rproc->name, ret);
 		return -EINVAL;
@@ -2200,28 +2186,22 @@ int rproc_set_firmware(struct rproc *rproc, const char *fw_name)
 
 	if (rproc->state != RPROC_OFFLINE) {
 		dev_err(dev, "can't change firmware while running\n");
-		ret = -EBUSY;
-		goto out;
+		return -EBUSY;
 	}
 
 	len = strcspn(fw_name, "\n");
 	if (!len) {
 		dev_err(dev, "can't provide empty string for firmware name\n");
-		ret = -EINVAL;
-		goto out;
+		return -EINVAL;
 	}
 
 	p = kstrndup(fw_name, len, GFP_KERNEL);
-	if (!p) {
-		ret = -ENOMEM;
-		goto out;
-	}
+	if (!p)
+		return -ENOMEM;
 
 	kfree_const(rproc->firmware);
 	rproc->firmware = p;
 
-out:
-	mutex_unlock(&rproc->lock);
 	return ret;
 }
 EXPORT_SYMBOL(rproc_set_firmware);
@@ -2316,9 +2296,8 @@ int rproc_add(struct rproc *rproc)
 	}
 
 	/* expose to rproc_get_by_phandle users */
-	mutex_lock(&rproc_list_mutex);
-	list_add_rcu(&rproc->node, &rproc_list);
-	mutex_unlock(&rproc_list_mutex);
+	scoped_guard(mutex, &rproc_list_mutex)
+		list_add_rcu(&rproc->node, &rproc_list);
 
 	return 0;
 
@@ -2582,16 +2561,14 @@ int rproc_del(struct rproc *rproc)
 	/* TODO: make sure this works with rproc->power > 1 */
 	rproc_shutdown(rproc);
 
-	mutex_lock(&rproc->lock);
-	rproc->state = RPROC_DELETED;
-	mutex_unlock(&rproc->lock);
+	scoped_guard(mutex, &rproc->lock)
+		rproc->state = RPROC_DELETED;
 
 	rproc_delete_debug_dir(rproc);
 
 	/* the rproc is downref'ed as soon as it's removed from the klist */
-	mutex_lock(&rproc_list_mutex);
-	list_del_rcu(&rproc->node);
-	mutex_unlock(&rproc_list_mutex);
+	scoped_guard(mutex, &rproc_list_mutex)
+		list_del_rcu(&rproc->node);
 
 	/* Ensure that no readers of rproc_list are still active */
 	synchronize_rcu();
