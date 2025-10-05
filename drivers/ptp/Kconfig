@@ -255,6 +255,8 @@ config PTP_S390
 
 config PTP_NETC_V4_TIMER
 	tristate "NXP NETC V4 Timer PTP Driver"
+	depends on NXP_ENETC4 || COMPILE_TEST
+	default y if NXP_ENETC4
 	depends on PTP_1588_CLOCK
 	depends on PCI_MSI
 	help
