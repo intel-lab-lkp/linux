@@ -130,6 +130,14 @@ static struct dentry *fmpm_dfs_entries;
 		  0x12, 0x0a, 0x44, 0x58)
 
 /**
+ * DOC: ignore_ce (bool)
+ * Switch to handle or ignore correctable errors.
+ */
+static bool ignore_ce;
+module_param(ignore_ce, bool, 0644);
+MODULE_PARM_DESC(ignore_ce, "Ignore correctable errors");
+
+/**
  * DOC: max_nr_entries (byte)
  * Maximum number of descriptor entries possible for each FRU.
  *
@@ -411,6 +419,9 @@ static int fru_handle_mem_poison(struct notifier_block *nb, unsigned long val, v
 	struct fru_rec *rec;
 
 	if (!mce_is_memory_error(m))
+		return NOTIFY_DONE;
+
+	if (ignore_ce && mce_is_correctable(m))
 		return NOTIFY_DONE;
 
 	retire_dram_row(m->addr, m->ipid, m->extcpu);
