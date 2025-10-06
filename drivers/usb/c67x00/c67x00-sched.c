@@ -868,6 +868,9 @@ static inline int c67x00_end_of_data(struct c67x00_td *td)
 
 	maxps = usb_maxpacket(td_udev(td), td->pipe);
 
+	if (unlikely(!maxps))
+		return 1;
+
 	if (unlikely(act_bytes < maxps))
 		return 1;	/* Smaller then full packet */
 
