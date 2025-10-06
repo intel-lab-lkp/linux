@@ -1031,14 +1031,14 @@ k3_udma_glue_request_rx_chn_priv(struct device *dev, const char *name,
 			rx_chn->flow_id_base = rx_chn->udma_rchan_id;
 	}
 
-	rx_chn->flow_num = cfg->flow_id_num;
-
-	rx_chn->flows = devm_kcalloc(dev, rx_chn->flow_num,
+	rx_chn->flows = devm_kcalloc(dev, cfg->flow_id_num,
 				     sizeof(*rx_chn->flows), GFP_KERNEL);
 	if (!rx_chn->flows) {
 		ret = -ENOMEM;
 		goto err;
 	}
+
+	rx_chn->flow_num = cfg->flow_id_num;
 
 	ret = k3_udma_glue_allocate_rx_flows(rx_chn, cfg);
 	if (ret)
