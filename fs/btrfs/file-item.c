@@ -778,6 +778,10 @@ int btrfs_csum_one_bio(struct btrfs_bio *bbio)
 	struct bvec_iter iter = bio->bi_iter;
 	phys_addr_t paddr;
 	const u32 blocksize = fs_info->sectorsize;
+	const u32 step = min(blocksize, PAGE_SIZE);
+	const u32 nr_steps = blocksize / step;
+	phys_addr_t paddrs[BTRFS_MAX_BLOCKSIZE / PAGE_SIZE];
+	u32 offset = 0;
 	int index;
 	unsigned nofs_flag;
 
@@ -797,9 +801,14 @@ int btrfs_csum_one_bio(struct btrfs_bio *bbio)
 
 	shash->tfm = fs_info->csum_shash;
 
-	btrfs_bio_for_each_block(paddr, bio, &iter, blocksize) {
-		btrfs_calculate_block_csum(fs_info, paddr, sums->sums + index);
-		index += fs_info->csum_size;
+	btrfs_bio_for_each_block(paddr, bio, &iter, step) {
+		paddrs[(offset / step) % nr_steps] = paddr;
+		offset += step;
+
+		if (IS_ALIGNED(offset, blocksize)) {
+			btrfs_calculate_block_csum_pages(fs_info, paddrs, sums->sums + index);
+			index += fs_info->csum_size;
+		}
 	}
 
 	bbio->sums = sums;
