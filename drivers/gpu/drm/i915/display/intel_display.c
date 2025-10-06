@@ -2425,17 +2425,14 @@ static void intel_crtc_compute_vrr_guardband(struct intel_atomic_state *state,
 			continue;
 
 		connector = to_intel_connector(drm_connector);
+		intel_vrr_compute_guardband(crtc_state, connector);
 		if (intel_vrr_always_use_vrr_tg(display)) {
-			intel_vrr_compute_optimized_guardband(crtc_state, connector);
-
 			vblank_length = adjusted_mode->crtc_vtotal -
 					(crtc_state->set_context_latency +
 					 adjusted_mode->crtc_vdisplay);
 
 			adjusted_mode->crtc_vblank_start +=
 				vblank_length - crtc_state->vrr.guardband;
-		} else {
-			intel_vrr_compute_guardband(crtc_state);
 		}
 	}
 }

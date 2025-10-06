@@ -495,8 +495,15 @@ int dsc_prefill_latency(struct intel_crtc_state *crtc_state, int linetime_us)
 					   linetime_us);
 }
 
-int intel_vrr_compute_optimized_guardband(struct intel_crtc_state *crtc_state,
-					  struct intel_connector *connector)
+static bool intel_vrr_use_optimized_guardband(const struct intel_crtc_state *crtc_state)
+{
+	struct intel_display *display = to_intel_display(crtc_state);
+
+	return intel_vrr_always_use_vrr_tg(display) || crtc_state->vrr.enable;
+}
+
+static int intel_vrr_compute_optimized_guardband(struct intel_crtc_state *crtc_state,
+						 struct intel_connector *connector)
 {
 	const struct drm_display_mode *adjusted_mode = &crtc_state->hw.adjusted_mode;
 	struct intel_display *display = to_intel_display(crtc_state);
@@ -550,16 +557,22 @@ int intel_vrr_compute_optimized_guardband(struct intel_crtc_state *crtc_state,
 	return guardband;
 }
 
-void intel_vrr_compute_guardband(struct intel_crtc_state *crtc_state)
+void intel_vrr_compute_guardband(struct intel_crtc_state *crtc_state,
+				 struct intel_connector *connector)
 {
 	struct intel_display *display = to_intel_display(crtc_state);
 	const struct drm_display_mode *adjusted_mode = &crtc_state->hw.adjusted_mode;
+	int guardband;
 
 	if (!intel_vrr_possible(crtc_state))
 		return;
 
-	crtc_state->vrr.guardband = min(crtc_state->vrr.vmin - adjusted_mode->crtc_vdisplay,
-					intel_vrr_max_guardband(crtc_state));
+	if (intel_vrr_use_optimized_guardband(crtc_state))
+		guardband = intel_vrr_compute_optimized_guardband(crtc_state, connector);
+	else
+		guardband = crtc_state->vrr.vmin - adjusted_mode->crtc_vdisplay;
+
+	crtc_state->vrr.guardband = min(guardband, intel_vrr_max_guardband(crtc_state));
 
 	if (DISPLAY_VER(display) < 13)
 		crtc_state->vrr.pipeline_full =
