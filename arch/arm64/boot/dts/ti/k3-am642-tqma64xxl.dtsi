@@ -14,6 +14,7 @@
 	};
 
 	memory@80000000 {
+		bootph-pre-ram;
 		device_type = "memory";
 		/* 1G RAM - default variant */
 		reg = <0x00000000 0x80000000 0x00000000 0x40000000>;
@@ -96,7 +97,12 @@
 	};
 };
 
+&fss {
+	bootph-all;
+};
+
 &main_i2c0 {
+	bootph-pre-ram;
 	pinctrl-names = "default";
 	pinctrl-0 = <&main_i2c0_pins>;
 	clock-frequency = <400000>;
@@ -109,6 +115,7 @@
 	};
 
 	eeprom0: eeprom@50 {
+		bootph-pre-ram;
 		compatible = "st,24c02", "atmel,24c02";
 		reg = <0x50>;
 		vcc-supply = <&reg_1v8>;
@@ -192,11 +199,13 @@
 };
 
 &ospi0 {
+	bootph-all;
 	status = "okay";
 	pinctrl-names = "default";
 	pinctrl-0 = <&ospi0_pins>;
 
 	flash@0 {
+		bootph-all;
 		compatible = "jedec,spi-nor";
 		reg = <0>;
 		spi-tx-bus-width = <8>;
@@ -219,6 +228,7 @@
 };
 
 &sdhci0 {
+	bootph-all;
 	status = "okay";
 	non-removable;
 	disable-wp;
@@ -229,6 +239,7 @@
 
 &main_pmx0 {
 	main_i2c0_pins: main-i2c0-pins {
+		bootph-pre-ram;
 		pinctrl-single,pins = <
 			/* (A18) I2C0_SCL */
 			AM64X_IOPAD(0x0260, PIN_INPUT_PULLUP, 0)
@@ -238,6 +249,7 @@
 	};
 
 	ospi0_pins: ospi0-pins {
+		bootph-all;
 		pinctrl-single,pins = <
 			/* (N20) OSPI0_CLK */
 			AM64X_IOPAD(0x0000, PIN_OUTPUT, 0)
