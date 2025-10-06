@@ -305,6 +305,49 @@ impl<'a, T: ForeignOwnable> Guard<'a, T> {
 
         Ok(id)
     }
+
+    /// Allocates an empty slot within the given `limit`, storing `value` and cycling from `*next`.
+    ///
+    /// May drop the lock if needed to allocate memory, and then reacquire it afterwards.
+    ///
+    /// On success, returns the allocated id.
+    ///
+    /// On failure, returns the element which was attempted to be stored.
+    pub fn alloc_cyclic(
+        &mut self,
+        limit: bindings::xa_limit,
+        next: &mut u32,
+        value: T,
+        gfp: alloc::Flags,
+    ) -> Result<u32, StoreError<T>> {
+        build_assert!(
+            T::FOREIGN_ALIGN >= 4,
+            "pointers stored in XArray must be 4-byte aligned"
+        );
+
+        let new = value.into_foreign();
+
+        // `__xa_alloc_cyclic` overwrites this.
+        let mut id: u32 = 0;
+
+        // SAFETY:
+        // - `self.xa.xa` is valid by the type invariant.
+        // - `new` came from `T::into_foreign`.
+        let ret = unsafe {
+            bindings::__xa_alloc_cyclic(self.xa.xa.get(), &mut id, new, limit, next, gfp.as_raw())
+        };
+
+        if ret < 0 {
+            // SAFETY: `__xa_alloc_cyclic` doesn't take ownership on error.
+            let value = unsafe { T::from_foreign(new) };
+            return Err(StoreError {
+                value,
+                error: Error::from_errno(ret),
+            });
+        }
+
+        Ok(id)
+    }
 }
 
 // SAFETY: `XArray<T>` has no shared mutable state so it is `Send` iff `T` is `Send`.
