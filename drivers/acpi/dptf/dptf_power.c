@@ -48,7 +48,7 @@ DPTF_POWER_SHOW(rest_of_platform_power_mw, PROP)
 DPTF_POWER_SHOW(max_steady_state_power_mw, PBSS)
 DPTF_POWER_SHOW(high_freq_impedance_mohm, RBHF)
 DPTF_POWER_SHOW(no_load_voltage_mv, VBNL)
-DPTF_POWER_SHOW(current_discharge_capbility_ma, CMPP);
+DPTF_POWER_SHOW(current_discharge_capability_ma, CMPP);
 
 static DEVICE_ATTR_RO(max_platform_power_mw);
 static DEVICE_ATTR_RO(platform_power_source);
@@ -59,7 +59,7 @@ static DEVICE_ATTR_RO(rest_of_platform_power_mw);
 static DEVICE_ATTR_RO(max_steady_state_power_mw);
 static DEVICE_ATTR_RO(high_freq_impedance_mohm);
 static DEVICE_ATTR_RO(no_load_voltage_mv);
-static DEVICE_ATTR_RO(current_discharge_capbility_ma);
+static DEVICE_ATTR_RO(current_discharge_capability_ma);
 
 static ssize_t prochot_confirm_store(struct device *dev,
 				     struct device_attribute *attr,
@@ -102,7 +102,7 @@ static struct attribute *dptf_battery_attrs[] = {
 	&dev_attr_max_steady_state_power_mw.attr,
 	&dev_attr_high_freq_impedance_mohm.attr,
 	&dev_attr_no_load_voltage_mv.attr,
-	&dev_attr_current_discharge_capbility_ma.attr,
+	&dev_attr_current_discharge_capability_ma.attr,
 	NULL
 };
 
