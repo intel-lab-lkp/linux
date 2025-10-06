@@ -650,6 +650,11 @@ int mcp23s08_probe_one(struct mcp23s08 *mcp, struct device *dev,
 	if (ret < 0)
 		return ret;
 
+	/* Also reset all out latches to default values */
+	ret = mcp_write(mcp, MCP_OLAT, 0x0);
+	if (ret < 0)
+		return ret;
+
 	/* verify MCP_IOCON.SEQOP = 0, so sequential reads work,
 	 * and MCP_IOCON.HAEN = 1, so we work with all chips.
 	 */
