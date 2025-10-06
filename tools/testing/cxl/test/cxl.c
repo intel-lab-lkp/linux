@@ -9,6 +9,8 @@
 #include <linux/acpi.h>
 #include <linux/pci.h>
 #include <linux/mm.h>
+
+#include <platform_quirks.h>
 #include <cxlmem.h>
 
 #include "../watermark.h"
@@ -213,7 +215,11 @@ static struct {
 			.restrictions = ACPI_CEDT_CFMWS_RESTRICT_HOSTONLYMEM |
 					ACPI_CEDT_CFMWS_RESTRICT_VOLATILE,
 			.qtg_id = FAKE_QTG_ID,
+#if defined(CONFIG_CXL_PLATFORM_QUIRKS)
+			.window_size = SZ_256M * 3UL,
+#else
 			.window_size = SZ_256M * 4UL,
+#endif
 		},
 		.target = { 0 },
 	},
@@ -426,6 +432,13 @@ static struct cxl_mock_res *alloc_mock_res(resource_size_t size, int align)
 	return res;
 }
 
+static u64 mock_cfmws0_range_start;
+
+static void set_mock_cfmws0_range_start(u64 start)
+{
+	mock_cfmws0_range_start = start;
+}
+
 static int populate_cedt(void)
 {
 	struct cxl_mock_res *res;
@@ -454,6 +467,8 @@ static int populate_cedt(void)
 		if (!res)
 			return -ENOMEM;
 		window->base_hpa = res->range.start;
+		if (i == 0)
+			set_mock_cfmws0_range_start(res->range.start);
 	}
 
 	return 0;
@@ -738,7 +753,11 @@ static void mock_init_hdm_decoder(struct cxl_decoder *cxld)
 	struct cxl_endpoint_decoder *cxled;
 	struct cxl_switch_decoder *cxlsd;
 	struct cxl_port *port, *iter;
+#if defined(CONFIG_CXL_PLATFORM_QUIRKS)
+	const int size = SZ_1G;
+#else
 	const int size = SZ_512M;
+#endif
 	struct cxl_memdev *cxlmd;
 	struct cxl_dport *dport;
 	struct device *dev;
@@ -1103,6 +1122,39 @@ static void mock_cxl_endpoint_parse_cdat(struct cxl_port *port)
 	cxl_endpoint_get_perf_coordinates(port, ep_c);
 }
 
+static bool
+mock_platform_cxlrd_matches_cxled(const struct cxl_root_decoder *cxlrd,
+				  const struct cxl_endpoint_decoder *cxled)
+{
+	const struct range *rd_r, *ed_r;
+	int align;
+
+	rd_r = &cxlrd->cxlsd.cxld.hpa_range;
+	ed_r = &cxled->cxld.hpa_range;
+	align = cxled->cxld.interleave_ways * SZ_256M;
+
+	return rd_r->start == mock_cfmws0_range_start &&
+	       rd_r->start == ed_r->start &&
+	       rd_r->end < (mock_cfmws0_range_start + SZ_4G) &&
+	       rd_r->end < ed_r->end &&
+	       IS_ALIGNED(range_len(ed_r), align);
+}
+
+static bool
+mock_platform_region_matches_cxld(const struct cxl_region_params *p,
+				  const struct cxl_decoder *cxld)
+{
+	const struct range *r = &cxld->hpa_range;
+	const struct resource *res = p->res;
+	int align = cxld->interleave_ways * SZ_256M;
+
+	return res->start == mock_cfmws0_range_start &&
+	       res->start == r->start &&
+	       res->end < (mock_cfmws0_range_start + SZ_4G) &&
+	       res->end < r->end &&
+	       IS_ALIGNED(range_len(r), align);
+}
+
 static struct cxl_mock_ops cxl_mock_ops = {
 	.is_mock_adev = is_mock_adev,
 	.is_mock_bridge = is_mock_bridge,
@@ -1117,6 +1169,8 @@ static struct cxl_mock_ops cxl_mock_ops = {
 	.devm_cxl_port_enumerate_dports = mock_cxl_port_enumerate_dports,
 	.cxl_endpoint_parse_cdat = mock_cxl_endpoint_parse_cdat,
 	.devm_cxl_add_dport_by_dev = mock_cxl_add_dport_by_dev,
+	.platform_cxlrd_matches_cxled = mock_platform_cxlrd_matches_cxled,
+	.platform_region_matches_cxld = mock_platform_region_matches_cxld,
 	.list = LIST_HEAD_INIT(cxl_mock_ops.list),
 };
 

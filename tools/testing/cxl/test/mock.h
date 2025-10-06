@@ -25,6 +25,10 @@ struct cxl_mock_ops {
 	void (*cxl_endpoint_parse_cdat)(struct cxl_port *port);
 	struct cxl_dport *(*devm_cxl_add_dport_by_dev)(struct cxl_port *port,
 						       struct device *dport_dev);
+	bool (*platform_cxlrd_matches_cxled)(const struct cxl_root_decoder *cxlrd,
+					     const struct cxl_endpoint_decoder *cxled);
+	bool (*platform_region_matches_cxld)(const struct cxl_region_params *p,
+					     const struct cxl_decoder *cxld);
 };
 
 void register_cxl_mock_ops(struct cxl_mock_ops *ops);
