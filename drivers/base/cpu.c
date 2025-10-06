@@ -300,6 +300,19 @@ static ssize_t print_cpus_isolated(struct device *dev,
 }
 static DEVICE_ATTR(isolated, 0444, print_cpus_isolated, NULL);
 
+static ssize_t print_cpus_hk(struct device *dev,
+			     struct device_attribute *attr, char *buf)
+{
+	const struct cpumask *hk_mask;
+
+	hk_mask = housekeeping_cpumask(HK_TYPE_KERNEL_NOISE);
+
+	return housekeeping_enabled(HK_TYPE_KERNEL_NOISE) ?
+		sysfs_emit(buf, "%*pbl\n", cpumask_pr_args(hk_mask)) :
+		sysfs_emit(buf, "\n");
+}
+static DEVICE_ATTR(housekeeping, 0444, print_cpus_hk, NULL);
+
 #ifdef CONFIG_NO_HZ_FULL
 static ssize_t print_cpus_nohz_full(struct device *dev,
 				    struct device_attribute *attr, char *buf)
@@ -505,6 +518,7 @@ static struct attribute *cpu_root_attrs[] = {
 	&dev_attr_offline.attr,
 	&dev_attr_enabled.attr,
 	&dev_attr_isolated.attr,
+	&dev_attr_housekeeping.attr,
 #ifdef CONFIG_NO_HZ_FULL
 	&dev_attr_nohz_full.attr,
 #endif
