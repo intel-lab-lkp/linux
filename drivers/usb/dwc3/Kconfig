@@ -189,4 +189,12 @@ config USB_DWC3_RTK
 	  or dual-role mode.
 	  Say 'Y' or 'M' if you have such device.
 
+config USB_DWC3_GOOGLE
+	tristate "Google Platform"
+	depends on OF && COMMON_CLK && RESET_CONTROLLER
+	default USB_DWC3
+	help
+	  Support Google Tensor SoCs with DesignWare core USB3 IP.
+	  Say 'Y' or 'M' if you have one such device.
+
 endif
