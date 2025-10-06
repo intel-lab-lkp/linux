@@ -1136,7 +1136,9 @@ void skb_release_head_state(struct sk_buff *skb)
 	skb_dst_drop(skb);
 	if (skb->destructor) {
 		DEBUG_NET_WARN_ON_ONCE(in_hardirq());
-		skb->destructor(skb);
+		INDIRECT_CALL_3(skb->destructor,
+				tcp_wfree, __sock_wfree, sock_wfree,
+				skb);
 	}
 #if IS_ENABLED(CONFIG_NF_CONNTRACK)
 	nf_conntrack_put(skb_nfct(skb));
