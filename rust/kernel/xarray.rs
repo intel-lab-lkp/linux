@@ -266,6 +266,45 @@ impl<'a, T: ForeignOwnable> Guard<'a, T> {
             Ok(unsafe { T::try_from_foreign(old) })
         }
     }
+
+    /// Allocates an empty slot within the given limit range and stores `value` there.
+    ///
+    /// May drop the lock if needed to allocate memory, and then reacquire it afterwards.
+    ///
+    /// On success, returns the allocated id.
+    ///
+    /// On failure, returns the element which was attempted to be stored.
+    pub fn alloc(
+        &mut self,
+        limit: bindings::xa_limit,
+        value: T,
+        gfp: alloc::Flags,
+    ) -> Result<u32, StoreError<T>> {
+        build_assert!(
+            T::FOREIGN_ALIGN >= 4,
+            "pointers stored in XArray must be 4-byte aligned"
+        );
+
+        let new = value.into_foreign();
+        let mut id: u32 = 0;
+
+        // SAFETY:
+        // - `self.xa.xa` is valid by the type invariant.
+        // - `new` came from `T::into_foreign`.
+        let ret =
+            unsafe { bindings::__xa_alloc(self.xa.xa.get(), &mut id, new, limit, gfp.as_raw()) };
+
+        if ret < 0 {
+            // SAFETY: `__xa_alloc` doesn't take ownership on error.
+            let value = unsafe { T::from_foreign(new) };
+            return Err(StoreError {
+                value,
+                error: Error::from_errno(ret),
+            });
+        }
+
+        Ok(id)
+    }
 }
 
 // SAFETY: `XArray<T>` has no shared mutable state so it is `Send` iff `T` is `Send`.
