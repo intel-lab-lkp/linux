@@ -6,6 +6,7 @@
 #include <stdbool.h>
 #include <sys/types.h>
 #include <sys/stat.h>
+#include <sys/socket.h>
 #include <string.h>
 #include <unistd.h>
 #include <time.h>
@@ -111,6 +112,9 @@ static int cpio_trailer(void)
 	    push_rest(CPIO_TRAILER, namesize) < 0 ||
 	    push_pad(padlen(offset, 512)) < 0)
 		return -1;
+
+	if (!isfdtype(outfd, S_IFREG))
+		return 0;
 
 	return fsync(outfd);
 }
