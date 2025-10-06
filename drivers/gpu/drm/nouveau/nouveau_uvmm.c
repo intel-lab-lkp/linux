@@ -454,6 +454,56 @@ op_unmap_prepare_unwind(struct drm_gpuva *va)
 	drm_gpuva_insert(va->vm, va);
 }
 
+static bool
+op_map_aligned_to_page_shift(const struct drm_gpuva_op_map *op, u8 page_shift)
+{
+	u64 page_size = 1ULL << page_shift;
+
+	return op->va.addr % page_size == 0 && op->va.range % page_size == 0 &&
+		   op->gem.offset % page_size == 0;
+}
+
+static u8
+select_page_shift(struct nouveau_uvmm *uvmm, struct drm_gpuva_op_map *op)
+{
+	struct nouveau_bo *nvbo = nouveau_gem_object(op->gem.obj);
+
+	if (nvbo) {
+		/* If the BO preferred page shift already fits, use it. */
+		if (op_map_aligned_to_page_shift(op, nvbo->page))
+			return nvbo->page;
+
+		struct nouveau_mem *mem = nouveau_mem(nvbo->bo.resource);
+		struct nvif_vmm *vmm = &uvmm->vmm.vmm;
+		int i;
+
+		/* Otherwise let's find a granuality that will fit. */
+		for (i = 0; i < vmm->page_nr; i++) {
+			/* Ignore anything that is bigger or identical to the BO preference. */
+			if (vmm->page[i].shift >= nvbo->page)
+				continue;
+
+			/* Skip incompatible domains. */
+			if ((mem->mem.type & NVIF_MEM_VRAM) && !vmm->page[i].vram)
+				continue;
+			if ((mem->mem.type & NVIF_MEM_HOST) &&
+			    (!vmm->page[i].host || vmm->page[i].shift > PAGE_SHIFT))
+				continue;
+
+			/* If it fits, return the proposed shift. */
+			if (op_map_aligned_to_page_shift(op, vmm->page[i].shift))
+				return vmm->page[i].shift;
+		}
+
+		/* If we get here then nothing can reconcile the requirements. This should never
+		 * happen.
+		 */
+		WARN_ON(1);
+	}
+
+	return PAGE_SHIFT;
+}
+
 static void
 nouveau_uvmm_sm_prepare_unwind(struct nouveau_uvmm *uvmm,
 			       struct nouveau_uvma_prealloc *new,
@@ -506,7 +556,7 @@ nouveau_uvmm_sm_prepare_unwind(struct nouveau_uvmm *uvmm,
 			if (vmm_get_range)
 				nouveau_uvmm_vmm_put(uvmm, vmm_get_start,
 						     vmm_get_range,
-						     PAGE_SHIFT);
+						     select_page_shift(uvmm, &op->map));
 			break;
 		}
 		case DRM_GPUVA_OP_REMAP: {
@@ -636,7 +686,8 @@ nouveau_uvmm_sm_prepare(struct nouveau_uvmm *uvmm,
 		case DRM_GPUVA_OP_MAP: {
 			u64 vmm_get_range = vmm_get_end - vmm_get_start;
 
-			ret = op_map_prepare(uvmm, &new->map, &op->map, args, PAGE_SHIFT);
+			ret = op_map_prepare(uvmm, &new->map, &op->map, args,
+					     select_page_shift(uvmm, &op->map));
 			if (ret)
 				goto unwind;
 
