@@ -2411,16 +2411,32 @@ static void intel_crtc_compute_vrr_guardband(struct intel_atomic_state *state,
 		intel_atomic_get_new_crtc_state(state, crtc);
 	struct drm_display_mode *adjusted_mode =
 		&crtc_state->hw.adjusted_mode;
+	struct drm_connector_state *conn_state;
+	struct drm_connector *drm_connector;
+	int i;
 
-	intel_vrr_compute_guardband(crtc_state);
+	for_each_new_connector_in_state(&state->base,
+					drm_connector,
+					conn_state, i) {
+		struct intel_connector *connector;
+		int vblank_length;
 
-	if (intel_vrr_always_use_vrr_tg(display)) {
-		int vblank_length = adjusted_mode->crtc_vtotal -
-				    (crtc_state->set_context_latency +
-				     adjusted_mode->crtc_vdisplay);
+		if (conn_state->crtc != &crtc->base)
+			continue;
 
-		adjusted_mode->crtc_vblank_start +=
-			vblank_length - crtc_state->vrr.guardband;
+		connector = to_intel_connector(drm_connector);
+		if (intel_vrr_always_use_vrr_tg(display)) {
+			intel_vrr_compute_optimized_guardband(crtc_state, connector);
+
+			vblank_length = adjusted_mode->crtc_vtotal -
+					(crtc_state->set_context_latency +
+					 adjusted_mode->crtc_vdisplay);
+
+			adjusted_mode->crtc_vblank_start +=
+				vblank_length - crtc_state->vrr.guardband;
+		} else {
+			intel_vrr_compute_guardband(crtc_state);
+		}
 	}
 }
 
