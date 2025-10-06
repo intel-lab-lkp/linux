@@ -144,7 +144,7 @@ static inline bool xp_aligned_validate_desc(struct xsk_buff_pool *pool,
 					    struct xdp_desc *desc)
 {
 	u64 addr = desc->addr - pool->tx_metadata_len;
-	u64 len = desc->len + pool->tx_metadata_len;
+	u64 len = (u64)desc->len + pool->tx_metadata_len;
 	u64 offset = addr & (pool->chunk_size - 1);
 
 	if (!desc->len)
@@ -165,7 +165,7 @@ static inline bool xp_unaligned_validate_desc(struct xsk_buff_pool *pool,
 					      struct xdp_desc *desc)
 {
 	u64 addr = xp_unaligned_add_offset_to_addr(desc->addr) - pool->tx_metadata_len;
-	u64 len = desc->len + pool->tx_metadata_len;
+	u64 len = (u64)desc->len + pool->tx_metadata_len;
 
 	if (!desc->len)
 		return false;
