@@ -5,6 +5,8 @@
 #ifndef INTEL_SCALER_H
 #define INTEL_SCALER_H
 
+#include <linux/types.h>
+
 enum drm_mode_status;
 struct drm_display_mode;
 struct intel_atomic_state;
@@ -47,5 +49,10 @@ void adl_scaler_ecc_mask(const struct intel_crtc_state *crtc_state);
 void adl_scaler_ecc_unmask(const struct intel_crtc_state *crtc_state);
 
 int skl_scaler_chroma_downscale_factor(const struct intel_crtc_state *crtc_state);
+
+int skl_scaler_guardband_latency(int num_scaler_users, u64 hscale, u64 vscale,
+				 int chroma_downscaling_factor,
+				 int cdclk_prefill_adjustment,
+				 int linetime);
 
 #endif

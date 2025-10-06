@@ -32,5 +32,9 @@ void intel_dsc_dp_pps_write(struct intel_encoder *encoder,
 void intel_vdsc_state_dump(struct drm_printer *p, int indent,
 			   const struct intel_crtc_state *crtc_state);
 int intel_vdsc_min_cdclk(const struct intel_crtc_state *crtc_state);
+int intel_dsc_guardband_latency(int num_scaler_users, u64 *hscale, u64 *vscale,
+				int chroma_downscaling_factor,
+				int cdclk_prefill_adjustment,
+				int linetime);
 
 #endif /* __INTEL_VDSC_H__ */
