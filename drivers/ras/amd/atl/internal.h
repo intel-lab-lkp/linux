@@ -138,7 +138,8 @@ struct df_flags {
 	__u8	legacy_ficaa		: 1,
 		socket_id_shift_quirk	: 1,
 		heterogeneous		: 1,
-		__reserved_0		: 5;
+		prm_only		: 1,
+		__reserved_0		: 4;
 };
 
 struct df_config {
@@ -284,8 +285,15 @@ u64 add_base_and_hole(struct addr_ctx *ctx, u64 addr);
 u64 remove_base_and_hole(struct addr_ctx *ctx, u64 addr);
 
 #ifdef CONFIG_AMD_ATL_PRM
+int prm_check(void);
 unsigned long prm_umc_norm_to_sys_addr(u8 socket_id, u64 umc_bank_inst_id, unsigned long addr);
 #else
+static inline int prm_check(void)
+{
+	pr_debug("CONFIG_AMD_ATL_PRM not enabled\n");
+	return -EINVAL;
+}
+
 static inline unsigned long prm_umc_norm_to_sys_addr(u8 socket_id, u64 umc_bank_inst_id,
 						     unsigned long addr)
 {

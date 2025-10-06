@@ -212,15 +212,12 @@ static int determine_df_rev(void)
 	if (!rev)
 		return determine_df_rev_legacy();
 
-	/*
-	 * Fail out for major revisions other than '4'.
-	 *
-	 * Explicit support should be added for newer systems to avoid issues.
-	 */
 	if (rev == 4)
 		return df4_determine_df_rev(reg);
 
-	return -EINVAL;
+	/* All other systems should have PRM handlers. */
+	df_cfg.flags.prm_only = true;
+	return 0;
 }
 
 static int get_dram_hole_base(void)
@@ -293,6 +290,9 @@ int get_df_system_info(void)
 		df_cfg.rev = UNKNOWN;
 		return -EINVAL;
 	}
+
+	if (df_cfg.flags.prm_only)
+		return prm_check();
 
 	apply_node_id_shift();
 
