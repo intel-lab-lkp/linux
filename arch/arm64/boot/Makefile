@@ -43,6 +43,10 @@ $(obj)/Image.zst: $(obj)/Image FORCE
 $(obj)/Image.xz: $(obj)/Image FORCE
 	$(call if_changed,xzkern)
 
+ifeq ($(FIT_MODULES),1)
+.PHONY: modules
+$(obj)/image.fit: modules
+endif
 $(obj)/image.fit: $(obj)/Image $(obj)/dts/dtbs-list FORCE
 	$(call if_changed,fit)
 
