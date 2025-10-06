@@ -5559,6 +5559,19 @@ brcmf_cfg80211_mgmt_tx(struct wiphy *wiphy, struct wireless_dev *wdev,
 
 	vif = container_of(wdev, struct brcmf_cfg80211_vif, wdev);
 
+	/* check if P2P device vif is available before attempting */
+	/* action frames */
+	if (ieee80211_is_action(mgmt->frame_control)) {
+		struct brcmf_p2p_info *p2p = &cfg->p2p;
+
+		if (!p2p->bss_idx[P2PAPI_BSSCFG_DEVICE].vif) {
+			brcmf_dbg(TRACE, "P2P device vif not available\n");
+			cfg80211_mgmt_tx_status(wdev, *cookie, buf, len, false,
+						GFP_KERNEL);
+			return 0;
+		}
+	}
+
 	if (ieee80211_is_probe_resp(mgmt->frame_control)) {
 		/* Right now the only reason to get a probe response */
 		/* is for p2p listen response or for p2p GO from     */

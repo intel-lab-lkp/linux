@@ -1559,6 +1559,12 @@ static s32 brcmf_p2p_tx_action_frame(struct brcmf_p2p_info *p2p,
 	else
 		vif = p2p->bss_idx[P2PAPI_BSSCFG_DEVICE].vif;
 
+	/* add NULL check */
+	if (!vif) {
+		brcmf_dbg(TRACE, "vif is NULL, cannot send action frame\n");
+		return -ENODEV;
+	}
+
 	err = brcmf_fil_bsscfg_data_set(vif->ifp, "actframe", af_params,
 					sizeof(*af_params));
 	if (err) {
