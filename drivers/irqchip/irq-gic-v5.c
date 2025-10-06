@@ -218,14 +218,14 @@ static void gicv5_hwirq_eoi(u32 hwirq_id, u8 hwirq_type)
 
 	gic_insn(cddi, CDDI);
 
-	gic_insn(0, CDEOI);
+	gic_cdeoi();
 }
 
 static void gicv5_ppi_irq_eoi(struct irq_data *d)
 {
 	/* Skip deactivate for forwarded PPI interrupts */
 	if (irqd_is_forwarded_to_vcpu(d)) {
-		gic_insn(0, CDEOI);
+		gic_cdeoi();
 		return;
 	}
 

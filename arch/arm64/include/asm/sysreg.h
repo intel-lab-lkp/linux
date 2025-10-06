@@ -113,14 +113,14 @@
 /* Register-based PAN access, for save/restore purposes */
 #define SYS_PSTATE_PAN			sys_reg(3, 0, 4, 2, 3)
 
-#define __SYS_BARRIER_INSN(op0, op1, CRn, CRm, op2, Rt)			\
+#define __SYS_INSN(op0, op1, CRn, CRm, op2, Rt)				\
 	__emit_inst(0xd5000000					|	\
 		    sys_insn((op0), (op1), (CRn), (CRm), (op2))	|	\
 		    ((Rt) & 0x1f))
 
-#define SB_BARRIER_INSN			__SYS_BARRIER_INSN(0, 3, 3, 0, 7, 31)
-#define GSB_SYS_BARRIER_INSN		__SYS_BARRIER_INSN(1, 0, 12, 0, 0, 31)
-#define GSB_ACK_BARRIER_INSN		__SYS_BARRIER_INSN(1, 0, 12, 0, 1, 31)
+#define SB_BARRIER_INSN			__SYS_INSN(0, 3, 3, 0, 7, 31)
+#define GSB_SYS_BARRIER_INSN		__SYS_INSN(1, 0, 12, 0, 0, 31)
+#define GSB_ACK_BARRIER_INSN		__SYS_INSN(1, 0, 12, 0, 1, 31)
 
 /* Data cache zero operations */
 #define SYS_DC_ISW			sys_insn(1, 0, 7, 6, 2)
@@ -1075,7 +1075,6 @@
 #define GICV5_OP_GIC_CDDIS		sys_insn(1, 0, 12, 1, 0)
 #define GICV5_OP_GIC_CDHM		sys_insn(1, 0, 12, 2, 1)
 #define GICV5_OP_GIC_CDEN		sys_insn(1, 0, 12, 1, 1)
-#define GICV5_OP_GIC_CDEOI		sys_insn(1, 0, 12, 1, 7)
 #define GICV5_OP_GIC_CDPEND		sys_insn(1, 0, 12, 1, 4)
 #define GICV5_OP_GIC_CDPRI		sys_insn(1, 0, 12, 1, 2)
 #define GICV5_OP_GIC_CDRCFG		sys_insn(1, 0, 12, 1, 5)
@@ -1128,6 +1127,17 @@
 
 #define gicr_insn(insn)			read_sysreg_s(GICV5_OP_GICR_##insn)
 #define gic_insn(v, insn)		write_sysreg_s(v, GICV5_OP_GIC_##insn)
+
+/*
+ * GIC CDEOI encoding requires Rt to be 0b11111.
+ * gic_insn() with an immediate value of 0 cannot be used to encode it
+ * because some compilers do not follow asm inline constraints in
+ * write_sysreg_s() to turn an immediate 0 value into an XZR as
+ * MSR source register.
+ * Use __SYS_INSN to specify its precise encoding explicitly.
+ */
+#define GICV5_CDEOI_INSN		__SYS_INSN(1, 0, 12, 1, 7, 31)
+#define gic_cdeoi()			asm volatile(GICV5_CDEOI_INSN)
 
 #define ARM64_FEATURE_FIELD_BITS	4
 
