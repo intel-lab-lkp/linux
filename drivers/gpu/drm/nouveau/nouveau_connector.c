@@ -600,8 +600,10 @@ nouveau_connector_detect(struct drm_connector *connector, bool force)
 				new_edid = drm_get_edid(connector, nv_encoder->i2c);
 		} else {
 			ret = nvif_outp_edid_get(&nv_encoder->outp, (u8 **)&new_edid);
-			if (ret < 0)
-				return connector_status_disconnected;
+			if (ret < 0) {
+				conn_status = connector_status_disconnected;
+				goto out;
+			}
 		}
 
 		nouveau_connector_set_edid(nv_connector, new_edid);
