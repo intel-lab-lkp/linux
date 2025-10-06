@@ -107,6 +107,7 @@ static u32 __ieee80211_recalc_idle(struct ieee80211_local *local,
 {
 	bool working, scanning, active;
 	unsigned int led_trig_start = 0, led_trig_stop = 0;
+	struct ieee80211_sub_if_data *iter;
 
 	lockdep_assert_wiphy(local->hw.wiphy);
 
@@ -116,6 +117,14 @@ static u32 __ieee80211_recalc_idle(struct ieee80211_local *local,
 
 	working = !local->ops->remain_on_channel &&
 		  !list_empty(&local->roc_list);
+
+	list_for_each_entry(iter, &local->interfaces, list) {
+		if (iter->vif.type == NL80211_IFTYPE_NAN &&
+		    iter->u.nan.started) {
+			working = true;
+			break;
+		}
+	}
 
 	scanning = test_bit(SCAN_SW_SCANNING, &local->scanning) ||
 		   test_bit(SCAN_ONCHANNEL_SCANNING, &local->scanning);
@@ -611,10 +620,6 @@ static void ieee80211_do_stop(struct ieee80211_sub_if_data *sdata, bool going_do
 
 		spin_unlock_bh(&sdata->u.nan.func_lock);
 		break;
-	case NL80211_IFTYPE_P2P_DEVICE:
-		/* relies on synchronize_rcu() below */
-		RCU_INIT_POINTER(local->p2p_sdata, NULL);
-		fallthrough;
 	default:
 		wiphy_work_cancel(sdata->local->hw.wiphy, &sdata->work);
 		/*
@@ -1150,6 +1155,8 @@ static void ieee80211_sdata_init(struct ieee80211_local *local,
 {
 	sdata->local = local;
 
+	INIT_LIST_HEAD(&sdata->key_list);
+
 	/*
 	 * Initialize the default link, so we can use link_id 0 for non-MLD,
 	 * and that continues to work for non-MLD-aware drivers that use just
@@ -1403,6 +1410,7 @@ int ieee80211_do_open(struct wireless_dev *wdev, bool coming_up)
 		ieee80211_recalc_idle(local);
 
 		netif_carrier_on(dev);
+		list_add_tail_rcu(&sdata->u.mntr.list, &local->mon_list);
 		break;
 	default:
 		if (coming_up) {
@@ -1464,17 +1472,6 @@ int ieee80211_do_open(struct wireless_dev *wdev, bool coming_up)
 		 */
 		ieee80211_set_wmm_default(&sdata->deflink, true,
 			sdata->vif.type != NL80211_IFTYPE_STATION);
-	}
-
-	switch (sdata->vif.type) {
-	case NL80211_IFTYPE_P2P_DEVICE:
-		rcu_assign_pointer(local->p2p_sdata, sdata);
-		break;
-	case NL80211_IFTYPE_MONITOR:
-		list_add_tail_rcu(&sdata->u.mntr.list, &local->mon_list);
-		break;
-	default:
-		break;
 	}
 
 	/*
@@ -1553,6 +1550,35 @@ static void ieee80211_iface_process_skb(struct ieee80211_local *local,
 				WARN_ON(1);
 				break;
 			}
+		}
+	} else if (ieee80211_is_action(mgmt->frame_control) &&
+		   mgmt->u.action.category == WLAN_CATEGORY_HT) {
+		switch (mgmt->u.action.u.ht_smps.action) {
+		case WLAN_HT_ACTION_NOTIFY_CHANWIDTH: {
+			u8 chanwidth = mgmt->u.action.u.ht_notify_cw.chanwidth;
+			struct ieee80211_rx_status *status;
+			struct link_sta_info *link_sta;
+			struct sta_info *sta;
+
+			sta = sta_info_get_bss(sdata, mgmt->sa);
+			if (!sta)
+				break;
+
+			status = IEEE80211_SKB_RXCB(skb);
+			if (!status->link_valid)
+				link_sta = &sta->deflink;
+			else
+				link_sta = rcu_dereference_protected(sta->link[status->link_id],
+							lockdep_is_held(&local->hw.wiphy->mtx));
+			if (link_sta)
+				ieee80211_ht_handle_chanwidth_notif(local, sdata, sta,
+								    link_sta, chanwidth,
+								    status->band);
+			break;
+		}
+		default:
+			WARN_ON(1);
+			break;
 		}
 	} else if (ieee80211_is_action(mgmt->frame_control) &&
 		   mgmt->u.action.category == WLAN_CATEGORY_VHT) {
@@ -2209,8 +2235,6 @@ int ieee80211_if_add(struct ieee80211_local *local, const char *name,
 	ieee80211_sdata_init(local, sdata);
 
 	ieee80211_init_frag_cache(&sdata->frags);
-
-	INIT_LIST_HEAD(&sdata->key_list);
 
 	wiphy_delayed_work_init(&sdata->dec_tailroom_needed_wk,
 				ieee80211_delayed_tailroom_dec);

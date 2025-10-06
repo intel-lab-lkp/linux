@@ -34,7 +34,7 @@ devlink_rate_leaf_get_from_info(struct devlink *devlink, struct genl_info *info)
 static struct devlink_rate *
 devlink_rate_node_get_by_name(struct devlink *devlink, const char *node_name)
 {
-	static struct devlink_rate *devlink_rate;
+	struct devlink_rate *devlink_rate;
 
 	list_for_each_entry(devlink_rate, &devlink->rate_list, list) {
 		if (devlink_rate_is_node(devlink_rate) &&
@@ -90,8 +90,8 @@ static int devlink_rate_put_tc_bws(struct sk_buff *msg, u32 *tc_bw)
 		if (!nla_tc_bw)
 			return -EMSGSIZE;
 
-		if (nla_put_u8(msg, DEVLINK_ATTR_RATE_TC_INDEX, i) ||
-		    nla_put_u32(msg, DEVLINK_ATTR_RATE_TC_BW, tc_bw[i]))
+		if (nla_put_u8(msg, DEVLINK_RATE_TC_ATTR_INDEX, i) ||
+		    nla_put_u32(msg, DEVLINK_RATE_TC_ATTR_BW, tc_bw[i]))
 			goto nla_put_failure;
 
 		nla_nest_end(msg, nla_tc_bw);
@@ -346,26 +346,26 @@ static int devlink_nl_rate_tc_bw_parse(struct nlattr *parent_nest, u32 *tc_bw,
 				       unsigned long *bitmap,
 				       struct netlink_ext_ack *extack)
 {
-	struct nlattr *tb[DEVLINK_ATTR_MAX + 1];
+	struct nlattr *tb[DEVLINK_RATE_TC_ATTR_MAX + 1];
 	u8 tc_index;
 	int err;
 
-	err = nla_parse_nested(tb, DEVLINK_ATTR_MAX, parent_nest,
+	err = nla_parse_nested(tb, DEVLINK_RATE_TC_ATTR_MAX, parent_nest,
 			       devlink_dl_rate_tc_bws_nl_policy, extack);
 	if (err)
 		return err;
 
-	if (!tb[DEVLINK_ATTR_RATE_TC_INDEX]) {
+	if (!tb[DEVLINK_RATE_TC_ATTR_INDEX]) {
 		NL_SET_ERR_ATTR_MISS(extack, parent_nest,
-				     DEVLINK_ATTR_RATE_TC_INDEX);
+				     DEVLINK_RATE_TC_ATTR_INDEX);
 		return -EINVAL;
 	}
 
-	tc_index = nla_get_u8(tb[DEVLINK_ATTR_RATE_TC_INDEX]);
+	tc_index = nla_get_u8(tb[DEVLINK_RATE_TC_ATTR_INDEX]);
 
-	if (!tb[DEVLINK_ATTR_RATE_TC_BW]) {
+	if (!tb[DEVLINK_RATE_TC_ATTR_BW]) {
 		NL_SET_ERR_ATTR_MISS(extack, parent_nest,
-				     DEVLINK_ATTR_RATE_TC_BW);
+				     DEVLINK_RATE_TC_ATTR_BW);
 		return -EINVAL;
 	}
 
@@ -376,7 +376,7 @@ static int devlink_nl_rate_tc_bw_parse(struct nlattr *parent_nest, u32 *tc_bw,
 		return -EINVAL;
 	}
 
-	tc_bw[tc_index] = nla_get_u32(tb[DEVLINK_ATTR_RATE_TC_BW]);
+	tc_bw[tc_index] = nla_get_u32(tb[DEVLINK_RATE_TC_ATTR_BW]);
 
 	return 0;
 }
@@ -819,8 +819,8 @@ EXPORT_SYMBOL_GPL(devl_rate_leaf_destroy);
  */
 void devl_rate_nodes_destroy(struct devlink *devlink)
 {
-	static struct devlink_rate *devlink_rate, *tmp;
 	const struct devlink_ops *ops = devlink->ops;
+	struct devlink_rate *devlink_rate, *tmp;
 
 	devl_assert_locked(devlink);
 

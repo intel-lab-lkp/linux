@@ -10,6 +10,7 @@
 #include <linux/netdevice.h>
 #include <linux/if_vlan.h>
 #include <linux/phylink.h>
+#include <linux/dim.h>
 #include <net/ip.h>
 
 #define WX_NCSI_SUP                             0x8000
@@ -825,6 +826,11 @@ struct wx_bus_info {
 
 struct wx_mbx_info {
 	u16 size;
+	u32 mailbox;
+	u32 udelay;
+	u32 timeout;
+	/* lock mbx access */
+	spinlock_t mbx_lock;
 };
 
 struct wx_thermal_sensor_data {
@@ -909,7 +915,6 @@ enum wx_reset_type {
 struct wx_cb {
 	dma_addr_t dma;
 	u16     append_cnt;      /* number of skb's appended */
-	bool    page_released;
 	bool    dma_released;
 };
 
@@ -998,7 +1003,6 @@ struct wx_tx_buffer {
 struct wx_rx_buffer {
 	struct sk_buff *skb;
 	dma_addr_t dma;
-	dma_addr_t page_dma;
 	struct page *page;
 	unsigned int page_offset;
 };
@@ -1030,6 +1034,7 @@ struct wx_ring_container {
 	unsigned int total_packets;     /* total packets processed this int */
 	u8 count;                       /* total number of rings in vector */
 	u8 itr;                         /* current ITR setting for ring */
+	struct dim dim;                 /* data for net_dim algorithm */
 };
 struct wx_ring {
 	struct wx_ring *next;           /* pointer to next ring in q_vector */
@@ -1085,6 +1090,8 @@ struct wx_q_vector {
 	struct wx_ring_container rx, tx;
 	struct napi_struct napi;
 	struct rcu_head rcu;    /* to avoid race with update stats on free */
+
+	u16 total_events;       /* number of interrupts processed */
 
 	char name[IFNAMSIZ + 17];
 
@@ -1201,6 +1208,8 @@ enum wx_pf_flags {
 	WX_FLAG_PTP_PPS_ENABLED,
 	WX_FLAG_NEED_LINK_CONFIG,
 	WX_FLAG_NEED_SFP_RESET,
+	WX_FLAG_NEED_UPDATE_LINK,
+	WX_FLAG_NEED_DO_RESET,
 	WX_PF_FLAGS_NBITS               /* must be last */
 };
 
@@ -1211,6 +1220,7 @@ struct wx {
 
 	void *priv;
 	u8 __iomem *hw_addr;
+	u8 __iomem *b4_addr; /* vf only */
 	struct pci_dev *pdev;
 	struct net_device *netdev;
 	struct wx_bus_info bus;
@@ -1262,6 +1272,7 @@ struct wx {
 	int num_rx_queues;
 	u16 rx_itr_setting;
 	u16 rx_work_limit;
+	bool adaptive_itr;
 
 	int num_q_vectors;      /* current number of q_vectors for device */
 	int max_q_vectors;      /* upper limit of q_vectors for device */
@@ -1285,6 +1296,8 @@ struct wx {
 	u32 *isb_mem;
 	u32 isb_tag[WX_ISB_MAX];
 	bool misc_irq_domain;
+	u32 eims_other;
+	u32 eims_enable_mask;
 
 #define WX_MAX_RETA_ENTRIES 128
 #define WX_RSS_INDIR_TBL_MAX 64
@@ -1316,6 +1329,7 @@ struct wx {
 	int (*setup_tc)(struct net_device *netdev, u8 tc);
 	void (*do_reset)(struct net_device *netdev);
 	int (*ptp_setup_sdp)(struct wx *wx);
+	void (*set_num_queues)(struct wx *wx);
 
 	bool pps_enabled;
 	u64 pps_width;
