@@ -17,6 +17,7 @@
 #include <linux/string.h>
 #include <linux/unaligned.h>
 #include <linux/wordpart.h>
+#include "fips.h"
 
 static const struct sha256_block_state sha224_iv = {
 	.h = {
@@ -418,10 +419,26 @@ void hmac_sha256_usingrawkey(const u8 *raw_key, size_t raw_key_len,
 EXPORT_SYMBOL_GPL(hmac_sha256_usingrawkey);
 #endif /* !__DISABLE_EXPORTS */
 
-#ifdef sha256_mod_init_arch
+#if defined(sha256_mod_init_arch) || defined(CONFIG_CRYPTO_FIPS)
 static int __init sha256_mod_init(void)
 {
+#ifdef sha256_mod_init_arch
 	sha256_mod_init_arch();
+#endif
+	if (fips_enabled) {
+		/*
+		 * FIPS pre-operational self-test.  As per the FIPS
+		 * Implementation Guidance, testing HMAC-SHA256 satisfies the
+		 * test requirement for SHA-224, SHA-256, and HMAC-SHA224 too.
+		 */
+		u8 mac[SHA256_DIGEST_SIZE];
+
+		hmac_sha256_usingrawkey(fips_test_key, sizeof(fips_test_key),
+					fips_test_data, sizeof(fips_test_data),
+					mac);
+		if (memcmp(fips_test_hmac_sha256_value, mac, sizeof(mac)) != 0)
+			panic("sha256: FIPS pre-operational self-test failed\n");
+	}
 	return 0;
 }
 subsys_initcall(sha256_mod_init);
