@@ -1366,8 +1366,7 @@ static bool wake_lines_fit_into_vblank(struct intel_dp *intel_dp,
 				       bool aux_less)
 {
 	struct intel_display *display = to_intel_display(intel_dp);
-	int vblank = crtc_state->hw.adjusted_mode.crtc_vblank_end -
-		crtc_state->hw.adjusted_mode.crtc_vblank_start;
+	int vblank = intel_crtc_vblank_length(crtc_state);
 	int wake_lines;
 
 	if (aux_less)

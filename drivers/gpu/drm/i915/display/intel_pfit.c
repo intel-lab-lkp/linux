@@ -14,6 +14,7 @@
 #include "intel_lvds_regs.h"
 #include "intel_pfit.h"
 #include "intel_pfit_regs.h"
+#include "intel_vblank.h"
 #include "skl_scaler.h"
 
 static int intel_pch_pfit_check_dst_window(const struct intel_crtc_state *crtc_state)
@@ -306,14 +307,15 @@ centre_horizontally(struct drm_display_mode *adjusted_mode,
 }
 
 static void
-centre_vertically(struct drm_display_mode *adjusted_mode,
+centre_vertically(struct intel_crtc_state *crtc_state,
+		  struct drm_display_mode *adjusted_mode,
 		  int height)
 {
 	u32 border, sync_pos, blank_width, sync_width;
 
 	/* keep the vsync and vblank widths constant */
 	sync_width = adjusted_mode->crtc_vsync_end - adjusted_mode->crtc_vsync_start;
-	blank_width = adjusted_mode->crtc_vblank_end - adjusted_mode->crtc_vblank_start;
+	blank_width = intel_crtc_vblank_length(crtc_state);
 	sync_pos = (blank_width - sync_width + 1) / 2;
 
 	border = (adjusted_mode->crtc_vdisplay - height + 1) / 2;
@@ -392,7 +394,8 @@ static void i9xx_scale_aspect(struct intel_crtc_state *crtc_state,
 					  PFIT_HORIZ_INTERP_BILINEAR);
 		}
 	} else if (scaled_width < scaled_height) { /* letter */
-		centre_vertically(adjusted_mode,
+		centre_vertically(crtc_state,
+				  adjusted_mode,
 				  scaled_width / pipe_src_w);
 
 		*border = LVDS_BORDER_ENABLE;
@@ -489,7 +492,7 @@ static int gmch_panel_fitting(struct intel_crtc_state *crtc_state,
 		 * heights and modify the values programmed into the CRTC.
 		 */
 		centre_horizontally(adjusted_mode, pipe_src_w);
-		centre_vertically(adjusted_mode, pipe_src_h);
+		centre_vertically(crtc_state, adjusted_mode, pipe_src_h);
 		border = LVDS_BORDER_ENABLE;
 		break;
 	case DRM_MODE_SCALE_ASPECT:
