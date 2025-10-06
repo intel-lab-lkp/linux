@@ -6120,6 +6120,7 @@ __bpf_kfunc struct task_struct *scx_bpf_dsq_peek(u64 dsq_id)
 	sch = rcu_dereference(scx_root);
 	if (unlikely(!sch))
 		return NULL;
+
 	if (unlikely(dsq_id & SCX_DSQ_FLAG_BUILTIN)) {
 		scx_error(sch, "peek disallowed on builtin DSQ 0x%llx", dsq_id);
 		return NULL;
@@ -6130,6 +6131,7 @@ __bpf_kfunc struct task_struct *scx_bpf_dsq_peek(u64 dsq_id)
 		scx_error(sch, "peek on non-existent DSQ 0x%llx", dsq_id);
 		return NULL;
 	}
+
 	return rcu_dereference(dsq->first_task);
 }
 
