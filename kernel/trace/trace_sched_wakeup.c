@@ -138,8 +138,11 @@ static int wakeup_graph_entry(struct ftrace_graph_ent *trace,
 		return 0;
 
 	calltime = fgraph_reserve_data(gops->idx, sizeof(*calltime));
-	if (!calltime)
+	if (!calltime) {
+		local_dec(&data->disabled);
+		preempt_enable_notrace();
 		return 0;
+	}
 
 	*calltime = trace_clock_local();
 
@@ -169,8 +172,11 @@ static void wakeup_graph_return(struct ftrace_graph_ret *trace,
 	rettime = trace_clock_local();
 
 	calltime = fgraph_retrieve_data(gops->idx, &size);
-	if (!calltime)
+	if (!calltime) {
+		local_dec(&data->disabled);
+		preempt_enable_notrace();
 		return;
+	}
 
 	__trace_graph_return(tr, trace, trace_ctx, *calltime, rettime);
 	local_dec(&data->disabled);
