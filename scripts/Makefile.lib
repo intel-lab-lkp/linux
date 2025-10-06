@@ -272,7 +272,7 @@ endef
 quiet_cmd_copy = COPY    $@
       cmd_copy = cat $< > $@
 
-$(obj)/%: $(src)/%_shipped
+$(obj)/%: $(obj)/%_shipped
 	$(call cmd,copy)
 
 # Touch a file
