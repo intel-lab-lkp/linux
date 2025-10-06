@@ -6504,6 +6504,53 @@ the capability to be present.
 `flags` must currently be zero.
 
 
+4.144 KVM_MIGRATE_CMD
+---------------------
+
+:Capability: KVM_CAP_MIGRATION
+:Architectures: arm64, x86
+:Type: vm ioctl
+:Parameters: struct kvm_migrate_cmd (in/out)
+:Returns: 0 on success, < 0 on error
+
+Allows userspace to send migration commands to the hardware.
+
+For confidential computing, the migration commands may use encrypted data
+that needs to be passed between the source and destination hardware. The
+hardware may also require specific coordination steps during migration that
+must be triggered at precise points in the migration process.
+
+The parameter related data structures are::
+
+  #define KVM_MIGRATE_PREPARE		0
+  #define KVM_MIGRATE_SETUP		1
+  #define KVM_MIGRATE_TOKEN		2
+  #define KVM_MIGRATE_SOURCE_BLACKOUT	3
+  #define KVM_MIGRATE_ABORT		4
+  #define KVM_MIGRATE_FINISH		5
+
+  struct kvm_transfer_buffer {
+	__u64 address;
+	__u32 size;
+	__u32 reserved;
+  };
+
+  @address  - Userspace buffer address
+  @size     - Size of the userspace buffer
+  @reserved - Reserved for future use
+
+  struct kvm_migrate_cmd {
+	__u16 command;
+	__u16 flags;
+	__u32 reserved;
+	struct kvm_transfer_buffer buf;
+  };
+
+  @command  - One of the defined KVM_MIGRATE commands
+  @flags    - Hardware specific flags
+  @reserved - Reserved for future use
+  @buf      - Userspace buffer for hardware specific data
+
 .. _kvm_run:
 
 5. The kvm_run structure
