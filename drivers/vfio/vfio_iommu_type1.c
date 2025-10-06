@@ -199,7 +199,7 @@ static struct rb_node *vfio_find_dma_first_node(struct vfio_iommu *iommu,
 			node = node->rb_right;
 		}
 	}
-	if (res && size && dma_res->iova >= start + size)
+	if (res && size && dma_res->iova > start + size - 1)
 		res = NULL;
 	return res;
 }
@@ -1386,7 +1386,7 @@ again:
 
 	while (n) {
 		dma = rb_entry(n, struct vfio_dma, node);
-		if (dma->iova >= iova + size)
+		if (dma->iova > iova + size - 1)
 			break;
 
 		if (!iommu->v2 && iova > dma->iova)
