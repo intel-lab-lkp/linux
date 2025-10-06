@@ -455,7 +455,7 @@ static int usb_parse_endpoint(struct device *ddev, int cfgno,
 	 */
 	maxp = le16_to_cpu(endpoint->desc.wMaxPacketSize);
 
-	if (maxp == 0 && bcdUSB != 0x0220 &&
+	if (maxp == 0 && bcdUSB != 0x0220 && bcdUSB != 0x0230 &&
 	    !(usb_endpoint_xfer_isoc(d) && asnum == 0))
 		dev_notice(ddev, "config %d interface %d altsetting %d endpoint 0x%X has invalid wMaxPacketSize 0\n",
 		    cfgno, inum, asnum, d->bEndpointAddress);
@@ -507,7 +507,7 @@ static int usb_parse_endpoint(struct device *ddev, int cfgno,
 	}
 
 	/* Parse a possible eUSB2 periodic endpoint companion descriptor */
-	if (udev->speed == USB_SPEED_HIGH && bcdUSB == 0x0220 &&
+	if (udev->speed == USB_SPEED_HIGH && (bcdUSB == 0x0220 || bcdUSB == 0x0230) &&
 	    !le16_to_cpu(d->wMaxPacketSize) && usb_endpoint_is_isoc_in(d))
 		usb_parse_eusb2_isoc_endpoint_companion(ddev, cfgno, inum, asnum,
 							endpoint, buffer, size);
