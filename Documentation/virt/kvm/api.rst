@@ -6503,7 +6503,6 @@ the capability to be present.
 
 `flags` must currently be zero.
 
-
 4.144 KVM_MIGRATE_CMD
 ---------------------
 
@@ -6550,6 +6549,94 @@ The parameter related data structures are::
   @flags    - Hardware specific flags
   @reserved - Reserved for future use
   @buf      - Userspace buffer for hardware specific data
+
+.. _KVM_IMPORT_MEMORY:
+
+4.145 KVM_IMPORT_MEMORY
+-----------------------
+
+:Capability: KVM_CAP_MIGRATION
+:Architectures: arm64, x86
+:Type: vm ioctl
+:Parameters: struct kvm_memory_transfer (in/out)
+:Returns: 0 on success, < 0 on error
+
+Allows userspace to request the hardware to import an array of memory pages from
+a userspace buffer.
+
+The memory may not be directly accessible to KVM because of encryption. For
+confidential computing, the guest memory is encrypted and only accessible to the
+guest.
+
+The parameter related data structures are::
+
+  struct kvm_transfer_buffer {
+	__u64 address;
+	__u32 size;
+	__u32 reserved;
+  };
+
+  @address  - Userspace buffer address
+  @size     - Size of the userspace buffer
+  @reserved - Reserved for future use
+
+  struct kvm_memory_transfer {
+	__u64 gfns;
+	__u32 nr_gfns;
+	__u16 id;
+	__u16 flags;
+	__u64 reserved;
+	struct kvm_transfer_buffer buf;
+  };
+
+  @gfns     - Userspace array of GFNs to import
+  @nr_gfns  - Number of GFNs
+  @id       - Optional hardware specific transfer ID
+  @flags    - Hardware specific flags
+  @reserved - Reserved for future use
+  @buf      - Userspace buffer to import memory from
+
+The hardware specific ID is used at least for TDX for the migration thread
+index.
+
+4.146 KVM_EXPORT_MEMORY
+-----------------------
+
+:Capability: KVM_CAP_MIGRATION
+:Architectures: arm64, x86
+:Type: vm ioctl
+:Parameters: struct kvm_memory_transfer (in/out)
+:Returns: 0 on success, < 0 on error
+
+Allows userspace to request the hardware to export an array of memory pages
+to a userspace buffer.
+
+The memory may not be directly accessible to KVM because of encryption. For
+confidential computing, the guest memory is encrypted and only accessible to the
+guest.
+
+The parameters are::
+
+  struct kvm_memory_transfer {
+	__u64 gfns;
+	__u32 nr_gfns;
+	__u16 id;
+	__u16 flags;
+	__u64 reserved;
+	struct kvm_transfer_buffer buf;
+  };
+
+  @gfns     - Userspace array of GFNs to export
+  @nr_gfns  - Number of GFNs
+  @id       - Optional hardware specific transfer ID
+  @flags    - Hardware specific flags
+  @reserved - Reserved for future use
+  @buf      - Userspace buffer to export memory to
+
+The hardware specific ID is used at least for TDX for the migration thread
+index.
+
+See also :ref:`KVM_IMPORT_MEMORY <KVM_IMPORT_MEMORY>`.
 
 .. _kvm_run:
 
