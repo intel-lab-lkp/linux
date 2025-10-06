@@ -1150,9 +1150,13 @@ static irqreturn_t irq_forced_thread_fn(struct irq_desc *desc, struct irqaction 
 	local_bh_disable();
 	if (!IS_ENABLED(CONFIG_PREEMPT_RT))
 		local_irq_disable();
+	else
+		lockdep_hardirq_enter();
 	ret = irq_thread_fn(desc, action);
 	if (!IS_ENABLED(CONFIG_PREEMPT_RT))
 		local_irq_enable();
+	else
+		lockdep_hardirq_exit();
 	local_bh_enable();
 	return ret;
 }
