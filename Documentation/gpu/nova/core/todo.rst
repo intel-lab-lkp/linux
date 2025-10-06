@@ -210,14 +210,6 @@ capability, MSI API abstractions.
 
 | Complexity: Beginner
 
-XArray bindings [XARR]
-----------------------
-
-We need bindings for `xa_alloc`/`xa_alloc_cyclic` in order to generate the
-auxiliary device IDs.
-
-| Complexity: Intermediate
-
 Debugfs abstractions
 --------------------
 
