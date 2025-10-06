@@ -18,6 +18,7 @@ obj-y					+= allwinner/	\
 					   broadcom/	\
 					   cadence/	\
 					   freescale/	\
+					   google/	\
 					   hisilicon/	\
 					   ingenic/	\
 					   intel/	\

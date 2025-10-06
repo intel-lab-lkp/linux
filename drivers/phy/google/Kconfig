@@ -1,0 +1,15 @@
+# SPDX-License-Identifier: GPL-2.0
+#
+# Phy drivers for Google platforms
+#
+config PHY_GOOGLE_USB
+	tristate "Google Tensor SoC series USB PHY driver"
+	depends on HAS_IOMEM
+	depends on OF
+	depends on TYPEC
+	depends on USB_DWC3_GOOGLE
+	select GENERIC_PHY
+	default y
+	help
+	  Add support for the USB PHY on Google SoC series, providing
+	  the PHY interface for the integrated USB DRD controller.
