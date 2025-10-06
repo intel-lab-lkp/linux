@@ -2403,6 +2403,27 @@ static int intel_crtc_compute_set_context_latency(struct intel_atomic_state *sta
 	return 0;
 }
 
+static void intel_crtc_compute_vrr_guardband(struct intel_atomic_state *state,
+					     struct intel_crtc *crtc)
+{
+	struct intel_display *display = to_intel_display(state);
+	struct intel_crtc_state *crtc_state =
+		intel_atomic_get_new_crtc_state(state, crtc);
+	struct drm_display_mode *adjusted_mode =
+		&crtc_state->hw.adjusted_mode;
+
+	intel_vrr_compute_guardband(crtc_state);
+
+	if (intel_vrr_always_use_vrr_tg(display)) {
+		int vblank_length = adjusted_mode->crtc_vtotal -
+				    (crtc_state->set_context_latency +
+				     adjusted_mode->crtc_vdisplay);
+
+		adjusted_mode->crtc_vblank_start +=
+			vblank_length - crtc_state->vrr.guardband;
+	}
+}
+
 static int intel_crtc_compute_config(struct intel_atomic_state *state,
 				     struct intel_crtc *crtc)
 {
@@ -2414,7 +2435,7 @@ static int intel_crtc_compute_config(struct intel_atomic_state *state,
 	if (ret)
 		return ret;
 
-	intel_vrr_compute_guardband(crtc_state);
+	intel_crtc_compute_vrr_guardband(state, crtc);
 
 	ret = intel_dpll_crtc_compute_clock(state, crtc);
 	if (ret)
@@ -5105,9 +5126,15 @@ static bool allow_vblank_delay_fastset(const struct intel_crtc_state *old_crtc_s
 	 * Allow fastboot to fix up vblank delay (handled via LRR
 	 * codepaths), a bit dodgy as the registers aren't
 	 * double buffered but seems to be working more or less...
+	 *
+	 * Also allow this when the VRR timing generator is always on,
+	 * which implies optimized guardband is used. In such cases,
+	 * vblank delay may vary even without inherited state, but it's
+	 * still safe as VRR guardband is still same.
 	 */
-	return HAS_LRR(display) && old_crtc_state->inherited &&
-		!intel_crtc_has_type(old_crtc_state, INTEL_OUTPUT_DSI);
+	return HAS_LRR(display) &&
+	       (old_crtc_state->inherited || intel_vrr_always_use_vrr_tg(display)) &&
+	       !intel_crtc_has_type(old_crtc_state, INTEL_OUTPUT_DSI);
 }
 
 bool
