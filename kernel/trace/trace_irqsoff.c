@@ -202,8 +202,10 @@ static int irqsoff_graph_entry(struct ftrace_graph_ent *trace,
 		return 0;
 
 	calltime = fgraph_reserve_data(gops->idx, sizeof(*calltime));
-	if (!calltime)
+	if (!calltime) {
+		local_dec(&data->disabled);
 		return 0;
+	}
 
 	*calltime = trace_clock_local();
 
@@ -233,8 +235,10 @@ static void irqsoff_graph_return(struct ftrace_graph_ret *trace,
 
 	rettime = trace_clock_local();
 	calltime = fgraph_retrieve_data(gops->idx, &size);
-	if (!calltime)
+	if (!calltime) {
+		local_dec(&data->disabled);
 		return;
+	}
 
 	trace_ctx = tracing_gen_ctx_flags(flags);
 	__trace_graph_return(tr, trace, trace_ctx, *calltime, rettime);
