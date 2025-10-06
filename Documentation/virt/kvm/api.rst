@@ -6638,6 +6638,75 @@ index.
 
 See also :ref:`KVM_IMPORT_MEMORY <KVM_IMPORT_MEMORY>`.
 
+.. _KVM_IMPORT_VCPU:
+
+4.147 KVM_IMPORT_VCPU
+---------------------
+
+:Capability: KVM_CAP_MIGRATION
+:Architectures: arm64, x86
+:Type: vcpu ioctl
+:Parameters: struct kvm_vcpu_transfer (in/out)
+:Returns: 0 on success, < 0 on error
+
+Allows userspace to request the hardware to import a VCPU state from a userspace
+buffer.
+
+The VCPU state may not be directly accessible to KVM because of encryption. For
+confidential computing, the VCPU state is encrypted and only accessible to the
+guest.
+
+The parameter related data structures are::
+
+  struct kvm_transfer_buffer {
+	__u64 address;
+	__u32 size;
+	__u32 reserved;
+  };
+
+  @address  - Userspace buffer address
+  @size     - Size of the userspace buffer
+  @reserved - Reserved for future use
+
+  struct kvm_vcpu_transfer {
+        __u32 flags;
+        __u32 reserved;
+	struct kvm_transfer_buffer buf;
+  };
+
+  @flags    - Hardware specific flags
+  @reserved - Reserved for future use
+  @buf      - Userspace buffer to import VCPU state from
+
+4.148 KVM_EXPORT_VCPU
+---------------------
+:Capability: KVM_CAP_MIGRATION
+:Architectures: arm64, x86
+:Type: vcpu ioctl
+:Parameters: struct kvm_vcpu_transfer (in/out)
+:Returns: 0 on success, < 0 on error
+
+Allows userspace to request the hardware to export a VCPU state to a userspace
+buffer.
+
+The VCPU state may not be directly accessible to KVM because of encryption. For
+confidential computing, the VCPU state is encrypted and only accessible to the
+guest.
+
+The parameters are::
+
+  struct kvm_vcpu_transfer {
+        __u32 flags;
+        __u32 reserved;
+	struct kvm_transfer_buffer buf;
+  };
+
+  @flags    - Hardware specific flags
+  @reserved - Reserved for future use
+  @buf      - Userspace buffer to export VCPU state to
+
+See also :ref:`KVM_IMPORT_VCPU <KVM_IMPORT_VCPU>`.
+
 .. _kvm_run:
 
 5. The kvm_run structure
