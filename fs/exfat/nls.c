@@ -616,7 +616,7 @@ static int exfat_nls_to_ucs2(struct super_block *sb,
 		unilen++;
 	}
 
-	if (p_cstring[i] != '\0')
+	if (p_cstring[min(i, len - 1)] != '\0')
 		lossy |= NLS_NAME_OVERLEN;
 
 	*uniname = '\0';
