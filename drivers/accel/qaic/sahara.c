@@ -214,6 +214,7 @@ static const char * const aic200_image_table[] = {
 	[73] = "qcom/aic200/gearvm.mbn",
 	[74] = "qcom/aic200/sti.bin",
 	[75] = "qcom/aic200/pvs.bin",
+	[76] = "qcom/aic200/tz_qti_config.mbn",
 };
 
 static int sahara_find_image(struct sahara_context *context, u32 image_id)
