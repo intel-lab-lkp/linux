@@ -1145,3 +1145,4 @@
 };
 
 #include "t8103-pmgr.dtsi"
+#include "hwmon-common.dtsi"
