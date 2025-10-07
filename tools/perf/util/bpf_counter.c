@@ -495,6 +495,7 @@ static int bperf_reload_leader_program(struct evsel *evsel, int attr_map_fd,
 	 * following evsel__open_per_cpu call
 	 */
 	evsel->leader_skel = skel;
+	assert(!perf_cpu_map__has_any_cpu_or_is_empty(evsel->core.cpus));
 	evsel__open(evsel, evsel->core.cpus, evsel->core.threads);
 
 out:
