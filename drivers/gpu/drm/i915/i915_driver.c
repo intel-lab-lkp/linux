@@ -118,6 +118,33 @@
 
 static const struct drm_driver i915_drm_driver;
 
+static int i915_enable_device(struct pci_dev *pdev)
+{
+	u32 cmd;
+	int ret;
+
+	ret = pci_enable_device(pdev);
+	if (ret)
+		return ret;
+
+	pci_read_config_dword(pdev, PCI_COMMAND, &cmd);
+	if (!(cmd & PCI_COMMAND_MEMORY))
+		pci_write_config_dword(pdev, PCI_COMMAND, cmd | PCI_COMMAND_MEMORY);
+
+	return 0;
+}
+
+static void i915_disable_device(struct pci_dev *pdev)
+{
+	u32 cmd;
+
+	pci_read_config_dword(pdev, PCI_COMMAND, &cmd);
+	if (cmd & PCI_COMMAND_MEMORY)
+		pci_write_config_dword(pdev, PCI_COMMAND, cmd & ~PCI_COMMAND_MEMORY);
+
+	pci_disable_device(pdev);
+}
+
 static int i915_workqueues_init(struct drm_i915_private *dev_priv)
 {
 	/*
@@ -788,7 +815,7 @@ int i915_driver_probe(struct pci_dev *pdev, const struct pci_device_id *ent)
 	struct intel_display *display;
 	int ret;
 
-	ret = pci_enable_device(pdev);
+	ret = i915_enable_device(pdev);
 	if (ret) {
 		pr_err("Failed to enable graphics device: %pe\n", ERR_PTR(ret));
 		return ret;
@@ -796,7 +823,7 @@ int i915_driver_probe(struct pci_dev *pdev, const struct pci_device_id *ent)
 
 	i915 = i915_driver_create(pdev, ent);
 	if (IS_ERR(i915)) {
-		pci_disable_device(pdev);
+		i915_disable_device(pdev);
 		return PTR_ERR(i915);
 	}
 
@@ -885,7 +912,7 @@ out_runtime_pm_put:
 	enable_rpm_wakeref_asserts(&i915->runtime_pm);
 	i915_driver_late_release(i915);
 out_pci_disable:
-	pci_disable_device(pdev);
+	i915_disable_device(pdev);
 	i915_probe_error(i915, "Device initialization failed (%d)\n", ret);
 	return ret;
 }
@@ -1003,6 +1030,7 @@ void i915_driver_shutdown(struct drm_i915_private *i915)
 
 	intel_dmc_suspend(display);
 
+	intel_pxp_fini(i915);
 	i915_gem_suspend(i915);
 
 	/*
@@ -1020,6 +1048,7 @@ void i915_driver_shutdown(struct drm_i915_private *i915)
 	enable_rpm_wakeref_asserts(&i915->runtime_pm);
 
 	intel_runtime_pm_driver_last_release(&i915->runtime_pm);
+	i915_disable_device(to_pci_dev(i915->drm.dev));
 }
 
 static bool suspend_to_idle(struct drm_i915_private *dev_priv)
