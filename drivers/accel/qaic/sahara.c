@@ -194,6 +194,7 @@ static const char * const aic200_image_table[] = {
 	[23] = "qcom/aic200/aop.mbn",
 	[32] = "qcom/aic200/tz.mbn",
 	[33] = "qcom/aic200/hypvm.mbn",
+	[38] = "qcom/aic200/xbl_config.elf",
 	[39] = "qcom/aic200/aic200_abl.elf",
 	[40] = "qcom/aic200/apdp.mbn",
 	[41] = "qcom/aic200/devcfg.mbn",
