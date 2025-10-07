@@ -1634,16 +1634,15 @@ id_mode_to_cifs_acl(struct inode *inode, const char *path, __u64 *pnmode,
 	/* Get the security descriptor */
 
 	if (ops->get_acl == NULL) {
-		cifs_put_tlink(tlink);
-		return -EOPNOTSUPP;
+		rc = -EOPNOTSUPP;
+		goto put_tlink;
 	}
 
 	pntsd = ops->get_acl(cifs_sb, inode, path, &secdesclen, info);
 	if (IS_ERR(pntsd)) {
 		rc = PTR_ERR(pntsd);
 		cifs_dbg(VFS, "%s: error %d getting sec desc\n", __func__, rc);
-		cifs_put_tlink(tlink);
-		return rc;
+		goto put_tlink;
 	}
 
 	if (cifs_sb->mnt_cifs_flags & CIFS_MOUNT_MODE_FROM_SID)
@@ -1687,9 +1686,8 @@ id_mode_to_cifs_acl(struct inode *inode, const char *path, __u64 *pnmode,
 	nsecdesclen = max_t(u32, nsecdesclen, DEFAULT_SEC_DESC_LEN);
 	pnntsd = kmalloc(nsecdesclen, GFP_KERNEL);
 	if (!pnntsd) {
-		kfree(pntsd);
-		cifs_put_tlink(tlink);
-		return -ENOMEM;
+		rc = -ENOMEM;
+		goto free_pntsd;
 	}
 
 	rc = build_sec_desc(pntsd, pnntsd, secdesclen, &nsecdesclen, pnmode, uid, gid,
@@ -1705,10 +1703,12 @@ id_mode_to_cifs_acl(struct inode *inode, const char *path, __u64 *pnmode,
 		rc = ops->set_acl(pnntsd, nsecdesclen, inode, path, aclflag);
 		cifs_dbg(NOISY, "set_cifs_acl rc: %d\n", rc);
 	}
-	cifs_put_tlink(tlink);
 
 	kfree(pnntsd);
+free_pntsd:
 	kfree(pntsd);
+put_tlink:
+	cifs_put_tlink(tlink);
 	return rc;
 }
 
