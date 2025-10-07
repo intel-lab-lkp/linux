@@ -26,7 +26,7 @@ OPTIONS
 
 .. include:: common_hist_options.rst
 
-.. include:: common_options.rst
+.. include:: common_options.txt
 
 EXAMPLE
 =======

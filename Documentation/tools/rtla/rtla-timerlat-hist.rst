@@ -27,7 +27,7 @@ OPTIONS
 
 .. include:: common_hist_options.rst
 
-.. include:: common_options.rst
+.. include:: common_options.txt
 
 .. include:: common_timerlat_aa.rst
 
