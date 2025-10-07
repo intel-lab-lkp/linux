@@ -35,6 +35,7 @@ static int add_to_rbuf(struct mbox_chan *chan, void *mssg)
 	idx = chan->msg_free;
 	chan->msg_data[idx] = mssg;
 	chan->msg_count++;
+	chan->msg_slot_ro = (MBOX_TX_QUEUE_LEN - chan->msg_count);
 
 	if (idx == MBOX_TX_QUEUE_LEN - 1)
 		chan->msg_free = 0;
@@ -70,6 +71,7 @@ static void msg_submit(struct mbox_chan *chan)
 		if (!err) {
 			chan->active_req = data;
 			chan->msg_count--;
+			chan->msg_slot_ro = (MBOX_TX_QUEUE_LEN - chan->msg_count);
 		}
 	}
 
@@ -318,6 +320,7 @@ static int __mbox_bind_client(struct mbox_chan *chan, struct mbox_client *cl)
 	scoped_guard(spinlock_irqsave, &chan->lock) {
 		chan->msg_free = 0;
 		chan->msg_count = 0;
+		chan->msg_slot_ro = MBOX_TX_QUEUE_LEN;
 		chan->active_req = NULL;
 		chan->cl = cl;
 		init_completion(&chan->tx_complete);
