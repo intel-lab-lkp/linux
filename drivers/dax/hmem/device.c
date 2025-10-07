@@ -33,20 +33,36 @@ int walk_hmem_resources(struct device *host, walk_hmem_fn fn)
 }
 EXPORT_SYMBOL_GPL(walk_hmem_resources);
 
-static void __hmem_register_resource(int target_nid, struct resource *res)
+static struct resource *hmem_request_resource(int target_nid,
+					      struct resource *res)
+{
+	struct resource *new;
+
+	guard(mutex)(&hmem_resource_lock);
+	new = __request_region(&hmem_active, res->start,
+			       resource_size(res), "", 0);
+	if (!new) {
+		pr_debug("hmem range %pr already active\n", res);
+		return ERR_PTR(-ENOMEM);
+	}
+
+	new->desc = target_nid;
+
+	return new;
+}
+
+void hmem_register_resource(int target_nid, struct resource *res)
 {
 	struct platform_device *pdev;
 	struct resource *new;
 	int rc;
 
-	new = __request_region(&hmem_active, res->start, resource_size(res), "",
-			       0);
-	if (!new) {
-		pr_debug("hmem range %pr already active\n", res);
+	if (nohmem)
 		return;
-	}
 
-	new->desc = target_nid;
+	new = hmem_request_resource(target_nid, res);
+	if (IS_ERR(new))
+		return;
 
 	if (platform_initialized)
 		return;
@@ -58,20 +74,12 @@ static void __hmem_register_resource(int target_nid, struct resource *res)
 	}
 
 	rc = platform_device_add(pdev);
-	if (rc)
+	if (rc) {
 		platform_device_put(pdev);
-	else
-		platform_initialized = true;
-}
-
-void hmem_register_resource(int target_nid, struct resource *res)
-{
-	if (nohmem)
 		return;
+	}
 
-	mutex_lock(&hmem_resource_lock);
-	__hmem_register_resource(target_nid, res);
-	mutex_unlock(&hmem_resource_lock);
+	platform_initialized = true;
 }
 
 static __init int hmem_register_one(struct resource *res, void *data)
