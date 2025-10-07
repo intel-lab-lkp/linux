@@ -380,7 +380,8 @@ static int ocores_xfer_core(struct ocores_i2c *i2c,
 	} else {
 		if (wait_event_timeout(i2c->wait,
 				       (i2c->state == STATE_ERROR) ||
-				       (i2c->state == STATE_DONE), HZ) == 0)
+				       (i2c->state == STATE_DONE),
+				       i2c->adap.timeout) == 0)
 			ret = -ETIMEDOUT;
 	}
 	if (ret) {
