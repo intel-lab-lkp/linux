@@ -2371,6 +2371,17 @@ again:
 			dl_server_stop(dl_se);
 			goto again;
 		}
+		/*
+		 * If the CPU was idle for long enough time and wakes up
+		 * because of a fair task, the dl_server may run after its
+		 * period elapsed. Replenish a new period as deferred, since we
+		 * are clearly not handling starvation here.
+		 */
+		if (dl_time_before(dl_se->deadline, rq_clock(rq))) {
+			dl_se->dl_defer_running = 0;
+			replenish_dl_new_period(dl_se, rq);
+			goto again;
+		}
 		rq->dl_server = dl_se;
 	} else {
 		p = dl_task_of(dl_se);
