@@ -413,8 +413,8 @@ smb2_push_mandatory_locks(struct cifsFileInfo *cfile)
 	 */
 	max_buf = tlink_tcon(cfile->tlink)->ses->server->maxBuf;
 	if (max_buf < sizeof(struct smb2_lock_element)) {
-		free_xid(xid);
-		return -EINVAL;
+		rc = -EINVAL;
+		goto free_xid;
 	}
 
 	BUILD_BUG_ON(sizeof(struct smb2_lock_element) > PAGE_SIZE);
@@ -422,8 +422,8 @@ smb2_push_mandatory_locks(struct cifsFileInfo *cfile)
 	max_num = max_buf / sizeof(struct smb2_lock_element);
 	buf = kcalloc(max_num, sizeof(struct smb2_lock_element), GFP_KERNEL);
 	if (!buf) {
-		free_xid(xid);
-		return -ENOMEM;
+		rc = -ENOMEM;
+		goto free_xid;
 	}
 
 	list_for_each_entry(fdlocks, &cinode->llist, llist) {
@@ -433,6 +433,7 @@ smb2_push_mandatory_locks(struct cifsFileInfo *cfile)
 	}
 
 	kfree(buf);
+free_xid:
 	free_xid(xid);
 	return rc;
 }
