@@ -246,6 +246,7 @@ static inline int is_uv5_hub(void) { return is_uv(UV5); }
  * then test if is UV4.
  */
 
+#ifdef CONFIG_X86_UV
 /* UVX class: UV2,3,4 */
 static inline int is_uvx_hub(void) { return is_uv(UVX); }
 
@@ -254,6 +255,7 @@ static inline int is_uvy_hub(void) { return is_uv(UVY); }
 
 /* Any UV Hubbed System */
 static inline int is_uv_hub(void) { return is_uv(UV_ANY); }
+#endif
 
 union uvh_apicid {
     unsigned long       v;
