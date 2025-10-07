@@ -53,11 +53,13 @@ ad102_gsp_new(struct nvkm_device *device, enum nvkm_subdev_type type, int inst,
 	return nvkm_gsp_new_(ad102_gsps, device, type, inst, pgsp);
 }
 
+#ifndef CONFIG_DRM_NOUVEAU_570_ONLY
 NVKM_GSP_FIRMWARE_BOOTER(ad102, 535.113.01);
 NVKM_GSP_FIRMWARE_BOOTER(ad103, 535.113.01);
 NVKM_GSP_FIRMWARE_BOOTER(ad104, 535.113.01);
 NVKM_GSP_FIRMWARE_BOOTER(ad106, 535.113.01);
 NVKM_GSP_FIRMWARE_BOOTER(ad107, 535.113.01);
+#endif
 
 NVKM_GSP_FIRMWARE_BOOTER(ad102, 570.144);
 NVKM_GSP_FIRMWARE_BOOTER(ad103, 570.144);

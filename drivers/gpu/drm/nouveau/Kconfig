@@ -40,6 +40,15 @@ config NOUVEAU_PLATFORM_DRIVER
 	  Support for Nouveau platform driver, used for SoC GPUs as found
 	  on NVIDIA Tegra K1.
 
+config DRM_NOUVEAU_570_ONLY
+	bool "Only support 570 firmware, don't add 535 to the initrd."
+	depends on DRM_NOUVEAU
+	default n
+	help
+          Nouveau can support 535 and 570 firmwares, but that means both
+          will end up in initramfs, bloating it. If you can guarantee you
+          have the 570 in your distro or install, enable this option.
+
 config NOUVEAU_DEBUG
 	int "Maximum debug level"
 	depends on DRM_NOUVEAU

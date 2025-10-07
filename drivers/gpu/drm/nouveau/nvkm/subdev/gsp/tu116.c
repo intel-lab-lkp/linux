@@ -54,8 +54,10 @@ tu116_gsp_new(struct nvkm_device *device, enum nvkm_subdev_type type, int inst,
 	return nvkm_gsp_new_(tu116_gsps, device, type, inst, pgsp);
 }
 
+#ifndef CONFIG_DRM_NOUVEAU_570_ONLY
 NVKM_GSP_FIRMWARE_BOOTER(tu116, 535.113.01);
 NVKM_GSP_FIRMWARE_BOOTER(tu117, 535.113.01);
+#endif
 
 NVKM_GSP_FIRMWARE_BOOTER(tu116, 570.144);
 NVKM_GSP_FIRMWARE_BOOTER(tu117, 570.144);

@@ -71,5 +71,7 @@ ga100_gsp_new(struct nvkm_device *device, enum nvkm_subdev_type type, int inst,
 	return nvkm_gsp_new_(ga100_gsps, device, type, inst, pgsp);
 }
 
+#ifndef CONFIG_DRM_NOUVEAU_570_ONLY
 NVKM_GSP_FIRMWARE_BOOTER(ga100, 535.113.01);
+#endif
 NVKM_GSP_FIRMWARE_BOOTER(ga100, 570.144);
