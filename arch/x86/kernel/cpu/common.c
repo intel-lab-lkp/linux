@@ -476,8 +476,8 @@ void cr4_init(void)
 
 	if (boot_cpu_has(X86_FEATURE_PCID))
 		cr4 |= X86_CR4_PCIDE;
-	if (static_branch_likely(&cr_pinning))
-		cr4 = (cr4 & ~cr4_pinned_mask) | cr4_pinned_bits;
+
+	cr4 = (cr4 & ~cr4_pinned_mask) | cr4_pinned_bits;
 
 	__write_cr4(cr4);
 
@@ -487,14 +487,21 @@ void cr4_init(void)
 
 /*
  * Once CPU feature detection is finished (and boot params have been
- * parsed), record any of the sensitive CR bits that are set, and
- * enable CR pinning.
+ * parsed), record any of the sensitive CR bits that are set.
  */
-static void __init setup_cr_pinning(void)
+static void __init record_cr_pinned_bits(void)
 {
 	cr4_pinned_bits = this_cpu_read(cpu_tlbstate.cr4) & cr4_pinned_mask;
-	static_key_enable(&cr_pinning.key);
 }
+
+/* Enables enforcement of the CR pinned bits */
+static int __init enable_cr_pinning(void)
+{
+	static_key_enable(&cr_pinning.key);
+
+	return 0;
+}
+late_initcall(enable_cr_pinning);
 
 static __init int x86_nofsgsbase_setup(char *arg)
 {
@@ -2119,7 +2126,7 @@ static __init void identify_boot_cpu(void)
 	enable_sep_cpu();
 #endif
 	cpu_detect_tlb(&boot_cpu_data);
-	setup_cr_pinning();
+	record_cr_pinned_bits();
 
 	tsx_init();
 	tdx_init();
