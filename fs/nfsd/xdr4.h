@@ -930,18 +930,19 @@ static inline bool nfsd4_is_solo_sequence(struct nfsd4_compoundres *resp)
 }
 
 /*
- * The session reply cache only needs to cache replies that the client
- * actually asked us to.  But it's almost free for us to cache compounds
- * consisting of only a SEQUENCE op, so we may as well cache those too.
- * Also, the protocol doesn't give us a convenient response in the case
- * of a replay of a solo SEQUENCE op that wasn't cached
- * (RETRY_UNCACHED_REP can only be returned in the second op of a
- * compound).
+ * Solo SEQUENCE operations are not supposed respect the setting in the
+ * sa_cachethis field, since that field controls whether the operations
+ * /after/ the SEQUENCE are preserved in the slot reply cache. Because
+ * clients might use a solo SEQUENCE to query the current state of the
+ * session or slot, a cached reply would return stale data to the client.
+ *
+ * Therefore NFSD treats solo SEQUENCE as an uncached operation no matter
+ * how the sa_cachethis field is set.
  */
 static inline bool nfsd4_cache_this(struct nfsd4_compoundres *resp)
 {
-	return (resp->cstate.slot->sl_flags & NFSD4_SLOT_CACHETHIS)
-		|| nfsd4_is_solo_sequence(resp);
+	return (resp->cstate.slot->sl_flags & NFSD4_SLOT_CACHETHIS) &&
+		!nfsd4_is_solo_sequence(resp);
 }
 
 static inline bool nfsd4_last_compound_op(struct svc_rqst *rqstp)
