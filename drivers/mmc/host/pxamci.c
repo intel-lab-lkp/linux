@@ -653,8 +653,9 @@ static int pxamci_probe(struct platform_device *pdev)
 
 	host->clk = devm_clk_get(dev, NULL);
 	if (IS_ERR(host->clk)) {
+		ret = PTR_ERR(host->clk);
 		host->clk = NULL;
-		return PTR_ERR(host->clk);
+		return ret;
 	}
 
 	host->clkrate = clk_get_rate(host->clk);
@@ -705,8 +706,9 @@ static int pxamci_probe(struct platform_device *pdev)
 
 	host->dma_chan_rx = dma_request_chan(dev, "rx");
 	if (IS_ERR(host->dma_chan_rx)) {
+		ret = PTR_ERR(host->dma_chan_rx);
 		host->dma_chan_rx = NULL;
-		return dev_err_probe(dev, PTR_ERR(host->dma_chan_rx),
+		return dev_err_probe(dev, ret,
 				     "unable to request rx dma channel\n");
 	}
 
