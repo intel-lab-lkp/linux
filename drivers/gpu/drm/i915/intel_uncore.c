@@ -35,6 +35,7 @@
 #include "i915_reg.h"
 #include "i915_vgpu.h"
 #include "i915_wait_util.h"
+#include "i915_mmio_range.h"
 #include "intel_uncore_trace.h"
 
 #define FORCEWAKE_ACK_TIMEOUT_MS 50

@@ -219,6 +219,7 @@
 #include "i915_perf.h"
 #include "i915_perf_oa_regs.h"
 #include "i915_reg.h"
+#include "i915_mmio_range.h"
 
 /* HW requires this to be a power of two, between 128k and 16M, though driver
  * is currently generally designed assuming the largest 16M size is used such
@@ -4320,18 +4321,6 @@ static bool gen8_is_valid_flex_addr(struct i915_perf *perf, u32 addr)
 	return false;
 }
 
-static bool reg_in_range_table(u32 addr, const struct i915_range *table)
-{
-	while (table->start || table->end) {
-		if (addr >= table->start && addr <= table->end)
-			return true;
-
-		table++;
-	}
-
-	return false;
-}
-
 #define REG_EQUAL(addr, mmio) \
 	((addr) == i915_mmio_reg_offset(mmio))
 
@@ -4421,61 +4410,61 @@ static const struct i915_range mtl_oa_mux_regs[] = {
 
 static bool gen7_is_valid_b_counter_addr(struct i915_perf *perf, u32 addr)
 {
-	return reg_in_range_table(addr, gen7_oa_b_counters);
+	return reg_in_i915_range_table(addr, gen7_oa_b_counters);
 }
 
 static bool gen8_is_valid_mux_addr(struct i915_perf *perf, u32 addr)
 {
-	return reg_in_range_table(addr, gen7_oa_mux_regs) ||
-		reg_in_range_table(addr, gen8_oa_mux_regs);
+	return reg_in_i915_range_table(addr, gen7_oa_mux_regs) ||
+		reg_in_i915_range_table(addr, gen8_oa_mux_regs);
 }
 
 static bool gen11_is_valid_mux_addr(struct i915_perf *perf, u32 addr)
 {
-	return reg_in_range_table(addr, gen7_oa_mux_regs) ||
-		reg_in_range_table(addr, gen8_oa_mux_regs) ||
-		reg_in_range_table(addr, gen11_oa_mux_regs);
+	return reg_in_i915_range_table(addr, gen7_oa_mux_regs) ||
+		reg_in_i915_range_table(addr, gen8_oa_mux_regs) ||
+		reg_in_i915_range_table(addr, gen11_oa_mux_regs);
 }
 
 static bool hsw_is_valid_mux_addr(struct i915_perf *perf, u32 addr)
 {
-	return reg_in_range_table(addr, gen7_oa_mux_regs) ||
-		reg_in_range_table(addr, hsw_oa_mux_regs);
+	return reg_in_i915_range_table(addr, gen7_oa_mux_regs) ||
+		reg_in_i915_range_table(addr, hsw_oa_mux_regs);
 }
 
 static bool chv_is_valid_mux_addr(struct i915_perf *perf, u32 addr)
 {
-	return reg_in_range_table(addr, gen7_oa_mux_regs) ||
-		reg_in_range_table(addr, chv_oa_mux_regs);
+	return reg_in_i915_range_table(addr, gen7_oa_mux_regs) ||
+		reg_in_i915_range_table(addr, chv_oa_mux_regs);
 }
 
 static bool gen12_is_valid_b_counter_addr(struct i915_perf *perf, u32 addr)
 {
-	return reg_in_range_table(addr, gen12_oa_b_counters);
+	return reg_in_i915_range_table(addr, gen12_oa_b_counters);
 }
 
 static bool mtl_is_valid_oam_b_counter_addr(struct i915_perf *perf, u32 addr)
 {
 	if (HAS_OAM(perf->i915) &&
 	    GRAPHICS_VER_FULL(perf->i915) >= IP_VER(12, 70))
-		return reg_in_range_table(addr, mtl_oam_b_counters);
+		return reg_in_i915_range_table(addr, mtl_oam_b_counters);
 
 	return false;
 }
 
 static bool xehp_is_valid_b_counter_addr(struct i915_perf *perf, u32 addr)
 {
-	return reg_in_range_table(addr, xehp_oa_b_counters) ||
-		reg_in_range_table(addr, gen12_oa_b_counters) ||
+	return reg_in_i915_range_table(addr, xehp_oa_b_counters) ||
+		reg_in_i915_range_table(addr, gen12_oa_b_counters) ||
 		mtl_is_valid_oam_b_counter_addr(perf, addr);
 }
 
 static bool gen12_is_valid_mux_addr(struct i915_perf *perf, u32 addr)
 {
 	if (GRAPHICS_VER_FULL(perf->i915) >= IP_VER(12, 70))
-		return reg_in_range_table(addr, mtl_oa_mux_regs);
+		return reg_in_i915_range_table(addr, mtl_oa_mux_regs);
 	else
-		return reg_in_range_table(addr, gen12_oa_mux_regs);
+		return reg_in_i915_range_table(addr, gen12_oa_mux_regs);
 }
 
 static u32 mask_reg_value(u32 reg, u32 val)
