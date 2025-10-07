@@ -479,6 +479,9 @@ static void kmem_cache_release(struct kmem_cache *s)
 
 void slab_kmem_cache_release(struct kmem_cache *s)
 {
+#if !IS_ENABLED(CONFIG_SLUB_TINY) && IS_ENABLED(CONFIG_PREEMPT_RT)
+	lockdep_unregister_key(&s->lock_key);
+#endif
 	__kmem_cache_release(s);
 	kfree_const(s->name);
 	kmem_cache_free(kmem_cache, s);
