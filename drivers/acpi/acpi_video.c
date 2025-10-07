@@ -1741,16 +1741,15 @@ static void acpi_video_dev_register_backlight(struct acpi_video_device *device)
 	props.type = BACKLIGHT_FIRMWARE;
 	props.max_brightness =
 		device->brightness->count - ACPI_VIDEO_FIRST_LEVEL - 1;
-	device->backlight = backlight_device_register(name,
-						      parent,
-						      device,
-						      &acpi_backlight_ops,
-						      &props);
+	device->backlight = devm_backlight_device_register(&pdev->dev,
+							  name,
+							  parent,
+							  device,
+							  &acpi_backlight_ops,
+							  &props);
 	kfree(name);
-	if (IS_ERR(device->backlight)) {
-		device->backlight = NULL;
+	if (IS_ERR(device->backlight))
 		return;
-	}
 
 	/*
 	 * Save current brightness level in case we have to restore it
@@ -1841,10 +1840,6 @@ static int acpi_video_bus_register_backlight(struct acpi_video_bus *video)
 
 static void acpi_video_dev_unregister_backlight(struct acpi_video_device *device)
 {
-	if (device->backlight) {
-		backlight_device_unregister(device->backlight);
-		device->backlight = NULL;
-	}
 	if (device->brightness) {
 		kfree(device->brightness->levels);
 		kfree(device->brightness);
