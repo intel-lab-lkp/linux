@@ -419,6 +419,7 @@ static int iomap_dio_bio_iter(struct iomap_iter *iter, struct iomap_dio *dio)
 	nr_pages = bio_iov_vecs_to_alloc(dio->submit.iter, BIO_MAX_VECS);
 	do {
 		size_t n;
+		size_t unaligned;
 		if (dio->error) {
 			iov_iter_revert(dio->submit.iter, copied);
 			copied = ret = 0;
@@ -444,9 +445,26 @@ static int iomap_dio_bio_iter(struct iomap_iter *iter, struct iomap_dio *dio)
 			 */
 			bio_put(bio);
 			goto zero_tail;
+
 		}
 
+		/*
+		 * bio_iov_iter_get_pages() can split the ranges at page boundary,
+		 * if the fs has block size > page size and requires checksum,
+		 * such unaligned bio will cause problems.
+		 * Revert back to the fs block boundary.
+		 */
+		unaligned = bio->bi_iter.bi_size & (fs_block_size - 1);
+		bio->bi_iter.bi_size -= unaligned;
+		iov_iter_revert(dio->submit.iter, unaligned);
 		n = bio->bi_iter.bi_size;
+
+		/* Failed to get any aligned range. */
+		if (unlikely(n == 0)) {
+			bio_put(bio);
+			ret = -EFAULT;
+			goto zero_tail;
+		}
 		if (WARN_ON_ONCE((bio_opf & REQ_ATOMIC) && n != length)) {
 			/*
 			 * An atomic write bio must cover the complete length,
