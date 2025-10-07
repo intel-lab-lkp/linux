@@ -183,6 +183,7 @@ void flush_thread(void)
 	kfree(current->thread.vstate.datap);
 	memset(&current->thread.vstate, 0, sizeof(struct __riscv_v_ext_state));
 	clear_tsk_thread_flag(current, TIF_RISCV_V_DEFER_RESTORE);
+	clear_tsk_thread_flag(current, TIF_RISCV_V_FORCE_SAVE);
 #endif
 #ifdef CONFIG_RISCV_ISA_SUPM
 	if (riscv_has_extension_unlikely(RISCV_ISA_EXT_SUPM))
@@ -205,6 +206,7 @@ int arch_dup_task_struct(struct task_struct *dst, struct task_struct *src)
 	memset(&dst->thread.vstate, 0, sizeof(struct __riscv_v_ext_state));
 	memset(&dst->thread.kernel_vstate, 0, sizeof(struct __riscv_v_ext_state));
 	clear_tsk_thread_flag(dst, TIF_RISCV_V_DEFER_RESTORE);
+	clear_tsk_thread_flag(dst, TIF_RISCV_V_FORCE_SAVE);
 
 	return 0;
 }

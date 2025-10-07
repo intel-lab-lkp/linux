@@ -370,6 +370,9 @@ static inline void __switch_to_vector(struct task_struct *prev,
 {
 	struct pt_regs *regs;
 
+	if (test_and_clear_tsk_thread_flag(prev, TIF_RISCV_V_FORCE_SAVE))
+		__riscv_v_vstate_dirty(task_pt_regs(prev));
+
 	if (riscv_preempt_v_started(prev)) {
 		if (riscv_v_is_on()) {
 			WARN_ON(prev->thread.riscv_v_flags & RISCV_V_CTX_DEPTH_MASK);

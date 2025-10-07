@@ -148,6 +148,11 @@ static int riscv_vr_set(struct task_struct *target,
 	if (vstate->vlenb != ptrace_vstate.vlenb)
 		return -EINVAL;
 
+	if (vstate->vtype != ptrace_vstate.vtype ||
+	    vstate->vcsr != ptrace_vstate.vcsr ||
+	    vstate->vl != ptrace_vstate.vl)
+		set_tsk_thread_flag(target, TIF_RISCV_V_FORCE_SAVE);
+
 	vstate->vstart = ptrace_vstate.vstart;
 	vstate->vl = ptrace_vstate.vl;
 	vstate->vtype = ptrace_vstate.vtype;
