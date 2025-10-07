@@ -441,14 +441,14 @@ void die(const char *str, struct pt_regs *regs, long err)
 	oops_end(flags, regs, sig);
 }
 
-void die_addr(const char *str, struct pt_regs *regs, long err, long gp_addr)
+void die_addr(const char *str, struct pt_regs *regs, long err, long addr)
 {
 	unsigned long flags = oops_begin();
 	int sig = SIGSEGV;
 
 	__die_header(str, regs, err);
-	if (gp_addr)
-		kasan_non_canonical_hook(gp_addr);
+	if (addr)
+		kasan_non_canonical_hook(addr);
 	if (__die_body(str, regs, err))
 		sig = 0;
 	oops_end(flags, regs, sig);
