@@ -413,5 +413,7 @@ struct keybuf_key *bch_keybuf_next_rescan(struct cache_set *c,
 					  struct keybuf *buf,
 					  struct bkey *end,
 					  keybuf_pred_fn *pred);
+int bch_keybuf_dump(struct keybuf *buf, struct keybuf_key *dump_list[],
+		   int dump_list_len);
 void bch_update_bucket_in_use(struct cache_set *c, struct gc_stat *stats);
 #endif

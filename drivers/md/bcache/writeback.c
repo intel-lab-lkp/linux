@@ -381,7 +381,8 @@ static CLOSURE_CALLBACK(write_dirty_finish)
 				: &dc->disk.c->writeback_keys_done);
 	}
 
-	bch_keybuf_del(&dc->writeback_keys, w);
+	w->private = ERR_PTR(-EINTR);
+	atomic_inc(&dc->writeback_keys.handled);
 	up(&dc->in_flight);
 
 	closure_return_with_destructor(cl, dirty_io_destructor);
@@ -474,8 +475,10 @@ static CLOSURE_CALLBACK(read_dirty_submit)
 static void read_dirty(struct cached_dev *dc)
 {
 	unsigned int delay = 0;
-	struct keybuf_key *next, *keys[MAX_WRITEBACKS_IN_PASS], *w;
+	struct keybuf_key *keys[MAX_WRITEBACKS_IN_PASS], *w;
+	struct keybuf_key **dump_keys;
 	size_t size;
+	int checked, dump_nr;
 	int nk, i;
 	struct dirty_io *io;
 	struct closure cl;
@@ -489,17 +492,22 @@ static void read_dirty(struct cached_dev *dc)
 	 * XXX: if we error, background writeback just spins. Should use some
 	 * mempools.
 	 */
-
-	next = bch_keybuf_next(&dc->writeback_keys);
+	dump_nr = bch_keybuf_dump(&dc->writeback_keys,
+			dc->writeback_keys.dump_keys,
+			ARRAY_SIZE(dc->writeback_keys.dump_keys));
+	dump_keys = dc->writeback_keys.dump_keys;
+	atomic_set(&dc->writeback_keys.handled, 0);
+	checked = 0;
 
 	while (!kthread_should_stop() &&
 	       !test_bit(CACHE_SET_IO_DISABLE, &dc->disk.c->flags) &&
-	       next) {
+	       (checked < dump_nr)) {
 		size = 0;
 		nk = 0;
 
 		do {
-			BUG_ON(ptr_stale(dc->disk.c, &next->key, 0));
+			w = dump_keys[checked];
+			BUG_ON(ptr_stale(dc->disk.c, &w->key, 0));
 
 			/*
 			 * Don't combine too many operations, even if they
@@ -525,12 +533,12 @@ static void read_dirty(struct cached_dev *dc)
 			 * command queueing.
 			 */
 			if ((nk != 0) && bkey_cmp(&keys[nk-1]->key,
-						&START_KEY(&next->key)))
+						&START_KEY(&w->key)))
 				break;
 
-			size += KEY_SIZE(&next->key);
-			keys[nk++] = next;
-		} while ((next = bch_keybuf_next(&dc->writeback_keys)));
+			size += KEY_SIZE(&w->key);
+			keys[nk++] = w;
+		} while (++checked < dump_nr);
 
 		/* Now we have gathered a set of 1..5 keys to write back. */
 		for (i = 0; i < nk; i++) {
@@ -581,7 +589,6 @@ static void read_dirty(struct cached_dev *dc)
 err_free:
 		kfree(w->private);
 err:
-		bch_keybuf_del(&dc->writeback_keys, w);
 	}
 
 	/*
@@ -589,6 +596,21 @@ err:
 	 * freed) before refilling again
 	 */
 	closure_sync(&cl);
+
+	if (atomic_read(&dc->writeback_keys.handled) == dump_nr) {
+		spin_lock(&dc->writeback_keys.lock);
+		dc->writeback_keys.keys = RB_ROOT;
+		array_allocator_init(&dc->writeback_keys.freelist);
+		spin_unlock(&dc->writeback_keys.lock);
+	} else {
+		for (i = 0; i < dump_nr; i++) {
+			w = dump_keys[i];
+			if (!w->private)
+				continue;
+			bch_keybuf_del(&dc->writeback_keys, w);
+		}
+	}
+	atomic_set(&dc->writeback_keys.handled, 0);
 }
 
 /* Scan for dirty data */
@@ -821,7 +843,6 @@ static int bch_writeback_thread(void *arg)
 
 		if (searched_full_index) {
 			unsigned int delay = dc->writeback_delay * HZ;
-
 			while (delay &&
 			       !kthread_should_stop() &&
 			       !test_bit(CACHE_SET_IO_DISABLE, &c->flags) &&

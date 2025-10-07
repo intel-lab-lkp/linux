@@ -240,11 +240,13 @@ struct keybuf {
 	 */
 	struct bkey		start;
 	struct bkey		end;
+	atomic_t		handled;
 
 	struct rb_root		keys;
 
 #define KEYBUF_NR		500
 	DECLARE_ARRAY_ALLOCATOR(struct keybuf_key, freelist, KEYBUF_NR);
+	struct keybuf_key	*dump_keys[KEYBUF_NR];
 };
 
 struct bcache_device {

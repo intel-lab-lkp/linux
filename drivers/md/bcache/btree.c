@@ -2764,6 +2764,34 @@ bool bch_keybuf_check_overlapping(struct keybuf *buf, struct bkey *start,
 	return ret;
 }
 
+int bch_keybuf_dump(struct keybuf *buf, struct keybuf_key *dump_list[],
+		    int dump_list_len)
+{
+	struct keybuf_key *w;
+	int i = 0;
+
+	memset(dump_list, 0, dump_list_len * sizeof(struct keybuf_key *));
+
+	spin_lock(&buf->lock);
+
+	w = RB_FIRST(&buf->keys, struct keybuf_key, node);
+
+	while (w && i < dump_list_len) {
+		if (w->private) {
+			w = RB_NEXT(w, node);
+			continue;
+		}
+
+		dump_list[i++] = w;
+		w->private = ERR_PTR(-EINTR);
+		w = RB_NEXT(w, node);
+	}
+
+	spin_unlock(&buf->lock);
+
+	return i;
+}
+
 struct keybuf_key *bch_keybuf_next(struct keybuf *buf)
 {
 	struct keybuf_key *w;
