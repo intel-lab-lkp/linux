@@ -828,8 +828,10 @@ int __v4l2_async_register_subdev(struct v4l2_subdev *sd, struct module *module)
 		while ((asc = v4l2_async_find_match(notifier, sd))) {
 			ret = v4l2_async_match_notify(notifier, v4l2_dev, sd,
 						      asc);
-			if (ret)
+			if (ret) {
+				asc = NULL;
 				goto err_unbind;
+			}
 
 			ret = v4l2_async_nf_try_complete(notifier);
 			if (ret)
