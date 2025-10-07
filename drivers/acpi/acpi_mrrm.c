@@ -152,23 +152,48 @@ static __init int add_boot_memory_ranges(void)
 	struct kobject *pkobj, *kobj;
 	int ret = -EINVAL;
 	char *name;
+	int i;
 
 	pkobj = kobject_create_and_add("memory_ranges", acpi_kobj);
+	if (!pkobj)
+		return -ENOMEM;
 
-	for (int i = 0; i < mrrm_mem_entry_num; i++) {
+	for (i = 0; i < mrrm_mem_entry_num; i++) {
 		name = kasprintf(GFP_KERNEL, "range%d", i);
 		if (!name) {
 			ret = -ENOMEM;
-			break;
+			goto cleanup;
 		}
 
 		kobj = kobject_create_and_add(name, pkobj);
+		kfree(name);
+		if (!kobj) {
+			ret = -ENOMEM;
+			goto cleanup;
+		}
 
 		ret = sysfs_create_groups(kobj, memory_range_groups);
-		if (ret)
-			return ret;
+		if (ret) {
+			kobject_put(kobj);
+			goto cleanup;
+		}
 	}
 
+	return 0;
+
+cleanup:
+	for (int j = 0; j < i; j++) {
+		char cleanup_name[32];
+		struct kobject *cleanup_kobj;
+
+		snprintf(cleanup_name, sizeof(cleanup_name), "range%d", j);
+		cleanup_kobj = kobject_get(pkobj);
+		if (cleanup_kobj) {
+			sysfs_remove_groups(cleanup_kobj, memory_range_groups);
+			kobject_put(cleanup_kobj);
+		}
+	}
+	kobject_put(pkobj);
 	return ret;
 }
 
