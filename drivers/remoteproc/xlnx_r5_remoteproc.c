@@ -9,6 +9,7 @@
 #include <linux/firmware/xlnx-zynqmp.h>
 #include <linux/kernel.h>
 #include <linux/mailbox_client.h>
+#include <linux/mailbox_controller.h>
 #include <linux/mailbox/zynqmp-ipi-message.h>
 #include <linux/module.h>
 #include <linux/of_address.h>
@@ -333,6 +334,10 @@ static void zynqmp_r5_rproc_kick(struct rproc *rproc, int vqid)
 
 	ipi = r5_core->ipi;
 	if (!ipi)
+		return;
+
+	/* Do not need new kick as already many kicks are pending. */
+	if (ipi->tx_chan->msg_slot_ro == 0)
 		return;
 
 	mb_msg = (struct zynqmp_ipi_message *)ipi->tx_mc_buf;
