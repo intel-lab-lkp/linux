@@ -373,6 +373,11 @@ static inline struct tls_context *tls_get_ctx(const struct sock *sk)
 	return (__force void *)icsk->icsk_ulp_data;
 }
 
+static inline bool tls_is_partially_sent_record(struct tls_context *ctx)
+{
+	return !!ctx->partially_sent_record;
+}
+
 static inline struct tls_sw_context_rx *tls_sw_ctx_rx(
 		const struct tls_context *tls_ctx)
 {

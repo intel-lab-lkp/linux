@@ -1076,11 +1076,18 @@ static void nvme_tcp_data_ready(struct sock *sk)
 static void nvme_tcp_write_space(struct sock *sk)
 {
 	struct nvme_tcp_queue *queue;
+	struct tls_context *ctx = tls_get_ctx(sk);
 
 	read_lock_bh(&sk->sk_callback_lock);
 	queue = sk->sk_user_data;
+
 	if (likely(queue && sk_stream_is_writeable(sk))) {
 		clear_bit(SOCK_NOSPACE, &sk->sk_socket->flags);
+		/* Ensure pending TLS partial records are retried */
+		if (nvme_tcp_queue_tls(queue) &&
+		    tls_is_partially_sent_record(ctx))
+			queue->write_space(sk);
+
 		queue_work_on(queue->io_cpu, nvme_tcp_wq, &queue->io_work);
 	}
 	read_unlock_bh(&sk->sk_callback_lock);
@@ -1306,6 +1313,7 @@ static int nvme_tcp_try_send_ddgst(struct nvme_tcp_request *req)
 static int nvme_tcp_try_send(struct nvme_tcp_queue *queue)
 {
 	struct nvme_tcp_request *req;
+	struct tls_context *ctx = tls_get_ctx(queue->sock->sk);
 	unsigned int noreclaim_flag;
 	int ret = 1;
 
