@@ -796,17 +796,6 @@ int goodix_reset_no_int_sync(struct goodix_ts_data *ts)
 
 	usleep_range(6000, 10000);		/* T4: > 5ms */
 
-	/*
-	 * Put the reset pin back in to input / high-impedance mode to save
-	 * power. Only do this in the non ACPI case since some ACPI boards
-	 * don't have a pull-up, so there the reset pin must stay active-high.
-	 */
-	if (ts->irq_pin_access_method == IRQ_PIN_ACCESS_GPIO) {
-		error = gpiod_direction_input(ts->gpiod_rst);
-		if (error)
-			goto error;
-	}
-
 	return 0;
 
 error:
