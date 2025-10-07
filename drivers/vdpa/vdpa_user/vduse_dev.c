@@ -1726,9 +1726,6 @@ static bool features_is_valid(struct vduse_dev_config *config)
 	if ((config->device_id == VIRTIO_ID_BLOCK) &&
 			(config->features & BIT_ULL(VIRTIO_BLK_F_CONFIG_WCE)))
 		return false;
-	else if ((config->device_id == VIRTIO_ID_NET) &&
-			(config->features & BIT_ULL(VIRTIO_NET_F_CTRL_VQ)))
-		return false;
 
 	if ((config->device_id == VIRTIO_ID_NET) &&
 			!(config->features & BIT_ULL(VIRTIO_F_VERSION_1)))
