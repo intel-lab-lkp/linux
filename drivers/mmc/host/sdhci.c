@@ -4999,10 +4999,6 @@ EXPORT_SYMBOL_GPL(sdhci_remove_host);
 
 static int __init sdhci_drv_init(void)
 {
-	pr_info(DRIVER_NAME
-		": Secure Digital Host Controller Interface driver\n");
-	pr_info(DRIVER_NAME ": Copyright(c) Pierre Ossman\n");
-
 	return 0;
 }
 
