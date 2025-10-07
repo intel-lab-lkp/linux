@@ -3076,7 +3076,7 @@ static void hpd_rx_irq_work_suspend(struct amdgpu_display_manager *dm)
 
 static int dm_cache_state(struct amdgpu_device *adev)
 {
-	int r;
+	int r = 0;
 
 	adev->dm.cached_state = drm_atomic_helper_suspend(adev_to_drm(adev));
 	if (IS_ERR(adev->dm.cached_state)) {
