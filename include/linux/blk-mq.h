@@ -152,6 +152,14 @@ struct request {
 	unsigned short nr_phys_segments;
 	unsigned short nr_integrity_segments;
 
+	/*
+	 * A mask that contains bits set for virtual address gaps between
+	 * physical segments. This provides information necessary for dma
+	 * optimization opprotunities, like for testing if the segments can be
+	 * coalesced against the device's iommu granule.
+	 */
+	unsigned int phys_gap;
+
 #ifdef CONFIG_BLK_INLINE_ENCRYPTION
 	struct bio_crypt_ctx *crypt_ctx;
 	struct blk_crypto_keyslot *crypt_keyslot;
