@@ -34,6 +34,7 @@
 
 #include <linux/mtd/mtd.h>
 #include <linux/mtd/partitions.h>
+#include <linux/mtd/rawnand.h>
 
 #include "mtdcore.h"
 
@@ -339,6 +340,54 @@ static ssize_t mtd_bbt_blocks_show(struct device *dev,
 }
 MTD_DEVICE_ATTR_RO(bbt_blocks);
 
+static ssize_t mtd_nand_id_show(struct device *dev,
+				struct device_attribute *attr, char *buf)
+{
+	struct mtd_info *mtd = dev_get_drvdata(dev);
+	struct mtd_info *master = mtd_get_master(mtd);
+	struct nand_chip *chip;
+	int ret;
+
+	/* Ensure this is actually a NAND device */
+	if (master->type != MTD_NANDFLASH && master->type != MTD_MLCNANDFLASH)
+		return -ENODEV;
+
+	chip = mtd_to_nand(master);
+
+	/* If ID not populated, try to read it now */
+	if (!chip->id.len) {
+		ret = nand_readid_op(chip, 0, chip->id.data, NAND_MAX_ID_LEN);
+		if (ret)
+			return sysfs_emit(buf, "read-error\n");
+		chip->id.len = strnlen(chip->id.data, NAND_MAX_ID_LEN);
+	}
+
+	return sysfs_emit(buf, "%*phN\n", chip->id.len, chip->id.data);
+}
+MTD_DEVICE_ATTR_RO(nand_id);
+
+static umode_t mtd_nand_id_visible(struct kobject *kobj, struct attribute *attr, int n)
+{
+	struct device *dev = kobj_to_dev(kobj);
+	struct mtd_info *mtd = dev_get_drvdata(dev);
+
+	/* Only show on NAND devices (excludes UBI volumes which have type 'ubi') */
+	if (mtd->type != MTD_NANDFLASH && mtd->type != MTD_MLCNANDFLASH)
+		return 0;
+
+	return attr->mode;
+}
+
+static struct attribute *mtd_nand_attrs[] = {
+	&dev_attr_nand_id.attr,
+	NULL,
+};
+
+static const struct attribute_group mtd_nand_group = {
+	.attrs = mtd_nand_attrs,
+	.is_visible = mtd_nand_id_visible,
+};
+
 static struct attribute *mtd_attrs[] = {
 	&dev_attr_type.attr,
 	&dev_attr_flags.attr,
@@ -359,7 +408,16 @@ static struct attribute *mtd_attrs[] = {
 	&dev_attr_bitflip_threshold.attr,
 	NULL,
 };
-ATTRIBUTE_GROUPS(mtd);
+
+static const struct attribute_group mtd_group = {
+	.attrs = mtd_attrs,
+};
+
+static const struct attribute_group *mtd_groups[] = {
+	&mtd_group,
+	&mtd_nand_group,
+	NULL,
+};
 
 static const struct device_type mtd_devtype = {
 	.name		= "mtd",
