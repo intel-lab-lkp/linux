@@ -782,6 +782,16 @@ int ext4_write_inline_data_end(struct inode *inode, loff_t pos, unsigned len,
 	struct ext4_iloc iloc;
 	int ret = 0, ret2;
 
+	if ((pos + len) > EXT4_I(inode)->i_inline_size) {
+			ext4_warning_inode(inode,
+				"inline write beyond capacity (pos=%lld, len=%u, inline_size=%d)",
+				pos, len, EXT4_I(inode)->i_inline_size);
+		folio_unlock(folio);
+		folio_put(folio);
+		ret = -EINVAL;
+		goto out;
+	}
+
 	if (unlikely(copied < len) && !folio_test_uptodate(folio))
 		copied = 0;
 
@@ -838,8 +848,8 @@ out:
 	 */
 	if (pos + len > inode->i_size && ext4_can_truncate(inode))
 		ext4_orphan_add(handle, inode);
-
-	ret2 = ext4_journal_stop(handle);
+	if (handle)
+		ret2 = ext4_journal_stop(handle);
 	if (!ret)
 		ret = ret2;
 	if (pos + len > inode->i_size) {
