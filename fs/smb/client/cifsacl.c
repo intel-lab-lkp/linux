@@ -1579,8 +1579,8 @@ cifs_acl_to_fattr(struct cifs_sb_info *cifs_sb, struct cifs_fattr *fattr,
 	else if (ops->get_acl)
 		pntsd = ops->get_acl(cifs_sb, inode, path, &acllen, info);
 	else {
-		cifs_put_tlink(tlink);
-		return -EOPNOTSUPP;
+		rc = -EOPNOTSUPP;
+		goto put_tlink;
 	}
 	/* if we can retrieve the ACL, now parse Access Control Entries, ACEs */
 	if (IS_ERR(pntsd)) {
@@ -1596,7 +1596,7 @@ cifs_acl_to_fattr(struct cifs_sb_info *cifs_sb, struct cifs_fattr *fattr,
 		if (rc)
 			cifs_dbg(VFS, "parse sec desc failed rc = %d\n", rc);
 	}
-
+put_tlink:
 	cifs_put_tlink(tlink);
 
 	return rc;
