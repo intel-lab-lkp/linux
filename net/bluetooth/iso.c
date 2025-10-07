@@ -987,20 +987,13 @@ static int iso_sock_bind_bc(struct socket *sock, struct sockaddr *addr,
 	return 0;
 }
 
-static int iso_sock_bind_pa_sk(struct sock *sk, struct sockaddr_iso *sa,
+static int iso_sock_rebind_bis(struct sock *sk, struct sockaddr_iso *sa,
 			       int addr_len)
 {
 	int err = 0;
 
-	if (sk->sk_type != SOCK_SEQPACKET) {
-		err = -EINVAL;
-		goto done;
-	}
-
-	if (addr_len != sizeof(*sa) + sizeof(*sa->iso_bc)) {
-		err = -EINVAL;
-		goto done;
-	}
+	if (!test_bit(BT_SK_PA_SYNC, &iso_pi(sk)->flags))
+		return -EBADFD;
 
 	if (sa->iso_bc->bc_num_bis > ISO_MAX_NUM_BIS) {
 		err = -EINVAL;
@@ -1023,6 +1016,58 @@ done:
 	return err;
 }
 
+static int iso_sock_rebind_bc(struct sock *sk, struct sockaddr_iso *sa,
+			      int addr_len)
+{
+	struct hci_conn *bis;
+	struct hci_conn *le;
+	int err;
+
+	if (sk->sk_type != SOCK_SEQPACKET || !iso_pi(sk)->conn)
+		return -EINVAL;
+
+	/* Check if it is really a Broadcast address being requested */
+	if (addr_len != sizeof(*sa) + sizeof(*sa->iso_bc))
+		return -EINVAL;
+
+	/* Check if the address hasn't changed then perhaps only the number of
+	 * bis has changed.
+	 */
+	if (!bacmp(&iso_pi(sk)->dst, &sa->iso_bc->bc_bdaddr) ||
+	    !bacmp(&sa->iso_bc->bc_bdaddr, BDADDR_ANY))
+		return iso_sock_rebind_bis(sk, sa, addr_len);
+
+	/* Check if the address type is of LE type */
+	if (!bdaddr_type_is_le(sa->iso_bc->bc_bdaddr_type))
+		return -EINVAL;
+
+	iso_conn_lock(iso_pi(sk)->conn);
+	bis = iso_pi(sk)->conn->hcon;
+	iso_conn_unlock(iso_pi(sk)->conn);
+
+	if (!bis)
+		return -EINVAL;
+
+	hci_dev_lock(bis->hdev);
+
+	/* Lookup existing LE connection to rebind to */
+	le = hci_conn_hash_lookup_le(bis->hdev, &sa->iso_bc->bc_bdaddr,
+				     le_addr_type(sa->iso_bc->bc_bdaddr_type));
+	if (!le) {
+		hci_dev_unlock(bis->hdev);
+		return -EINVAL;
+	}
+
+	BT_DBG("sk %p %pMR type %u", sk, &sa->iso_bc->bc_bdaddr,
+	       sa->iso_bc->bc_bdaddr_type);
+
+	err = hci_past_sync(bis, le);
+
+	hci_dev_unlock(bis->hdev);
+
+	return err;
+}
+
 static int iso_sock_bind(struct socket *sock, struct sockaddr *addr,
 			 int addr_len)
 {
@@ -1038,14 +1083,13 @@ static int iso_sock_bind(struct socket *sock, struct sockaddr *addr,
 
 	lock_sock(sk);
 
-	/* Allow the user to bind a PA sync socket to a number
-	 * of BISes to sync to.
-	 */
-	if ((sk->sk_state == BT_CONNECT2 ||
-	     sk->sk_state == BT_CONNECTED) &&
-	    test_bit(BT_SK_PA_SYNC, &iso_pi(sk)->flags)) {
-		err = iso_sock_bind_pa_sk(sk, sa, addr_len);
-		goto done;
+	if ((sk->sk_state == BT_CONNECT2 || sk->sk_state == BT_CONNECTED) &&
+	    addr_len > sizeof(*sa)) {
+		release_sock(sk);
+		/* Allow the user to rebind to a different address using
+		 * PAST procedures.
+		 */
+		return iso_sock_rebind_bc(sk, sa, addr_len);
 	}
 
 	if (sk->sk_state != BT_OPEN) {
