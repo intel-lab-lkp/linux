@@ -44,22 +44,34 @@ function expect_fields(nf) {
 
 # Print a CPP macro definition, padded with spaces so that the macro bodies
 # line up in a column
-function define(name, val) {
-	printf "%-56s%s\n", "#define " name, val
+function define(feat, name, val) {
+	printf "%-56s%s\n", "#define " feat name, val
 }
 
 # Print standard BITMASK/SHIFT/WIDTH CPP definitions for a field
-function define_field(reg, field, msb, lsb) {
-	define(reg "_" field, "GENMASK(" msb ", " lsb ")")
-	define(reg "_" field "_MASK", "GENMASK(" msb ", " lsb ")")
-	define(reg "_" field "_SHIFT", lsb)
-	define(reg "_" field "_WIDTH", msb - lsb + 1)
+function define_field(feat, reg, field, msb, lsb) {
+	define(feat, reg "_" field, "GENMASK(" msb ", " lsb ")")
+	define(feat, reg "_" field "_MASK", "GENMASK(" msb ", " lsb ")")
+	define(feat, reg "_" field "_SHIFT", lsb)
+	define(feat, reg "_" field "_WIDTH", msb - lsb + 1)
 }
 
 # Print a field _SIGNED definition for a field
-function define_field_sign(reg, field, sign) {
-	define(reg "_" field "_SIGNED", sign)
+function define_field_sign(feat, reg, field, sign) {
+	define(feat, reg "_" field "_SIGNED", sign)
 }
+
+# Print the Res0, Res1, Unkn masks
+function define_resx_unkn(feat, reg, res0, res1, unkn) {
+	if (res0 != null)
+		define(feat, reg "_RES0", "(" res0 ")")
+	if (res1 != null)
+		define(feat, reg "_RES1", "(" res1 ")")
+	if (unkn != null)
+		define(feat, reg "_UNKN", "(" unkn ")")
+	if (res0 != null || res1 != null || unkn != null)
+		print ""
+	}
 
 # Parse a "<msb>[:<lsb>]" string into the global variables @msb and @lsb
 function parse_bitdef(reg, field, bitdef, _bits)
@@ -132,10 +144,7 @@ $1 == "EndSysregFields" && block_current() == "SysregFields" {
 	if (next_bit > 0)
 		fatal("Unspecified bits in " reg)
 
-	define(reg "_RES0", "(" res0 ")")
-	define(reg "_RES1", "(" res1 ")")
-	define(reg "_UNKN", "(" unkn ")")
-	print ""
+	define_resx_unkn(feat, reg, res0, res1, unkn)
 
 	reg = null
 	res0 = null
@@ -162,14 +171,16 @@ $1 == "Sysreg" && block_current() == "Root" {
 	res1 = "UL(0)"
 	unkn = "UL(0)"
 
-	define("REG_" reg, "S" op0 "_" op1 "_C" crn "_C" crm "_" op2)
-	define("SYS_" reg, "sys_reg(" op0 ", " op1 ", " crn ", " crm ", " op2 ")")
+	feat = null
 
-	define("SYS_" reg "_Op0", op0)
-	define("SYS_" reg "_Op1", op1)
-	define("SYS_" reg "_CRn", crn)
-	define("SYS_" reg "_CRm", crm)
-	define("SYS_" reg "_Op2", op2)
+	define(feat, "REG_" reg, "S" op0 "_" op1 "_C" crn "_C" crm "_" op2)
+	define(feat, "SYS_" reg, "sys_reg(" op0 ", " op1 ", " crn ", " crm ", " op2 ")")
+
+	define(feat, "SYS_" reg "_Op0", op0)
+	define(feat, "SYS_" reg "_Op1", op1)
+	define(feat, "SYS_" reg "_CRn", crn)
+	define(feat, "SYS_" reg "_CRm", crm)
+	define(feat, "SYS_" reg "_Op2", op2)
 
 	print ""
 
@@ -183,14 +194,7 @@ $1 == "EndSysreg" && block_current() == "Sysreg" {
 	if (next_bit > 0)
 		fatal("Unspecified bits in " reg)
 
-	if (res0 != null)
-		define(reg "_RES0", "(" res0 ")")
-	if (res1 != null)
-		define(reg "_RES1", "(" res1 ")")
-	if (unkn != null)
-		define(reg "_UNKN", "(" unkn ")")
-	if (res0 != null || res1 != null || unkn != null)
-		print ""
+	define_resx_unkn(feat, reg, res0, res1, unkn)
 
 	reg = null
 	op0 = null
@@ -201,6 +205,7 @@ $1 == "EndSysreg" && block_current() == "Sysreg" {
 	res0 = null
 	res1 = null
 	unkn = null
+	feat = null
 
 	block_pop()
 	next
@@ -225,8 +230,7 @@ $1 == "EndSysreg" && block_current() == "Sysreg" {
 	next
 }
 
-
-$1 == "Res0" && (block_current() == "Sysreg" || block_current() == "SysregFields") {
+$1 == "Res0" && (block_current() == "Sysreg" || block_current() == "SysregFields" || block_current() == "Feat") {
 	expect_fields(2)
 	parse_bitdef(reg, "RES0", $2)
 	field = "RES0_" msb "_" lsb
@@ -236,7 +240,7 @@ $1 == "Res0" && (block_current() == "Sysreg" || block_current() == "SysregFields
 	next
 }
 
-$1 == "Res1" && (block_current() == "Sysreg" || block_current() == "SysregFields") {
+$1 == "Res1" && (block_current() == "Sysreg" || block_current() == "SysregFields" || block_current() == "Feat") {
 	expect_fields(2)
 	parse_bitdef(reg, "RES1", $2)
 	field = "RES1_" msb "_" lsb
@@ -246,7 +250,7 @@ $1 == "Res1" && (block_current() == "Sysreg" || block_current() == "SysregFields
 	next
 }
 
-$1 == "Unkn" && (block_current() == "Sysreg" || block_current() == "SysregFields") {
+$1 == "Unkn" && (block_current() == "Sysreg" || block_current() == "SysregFields" || block_current() == "Feat") {
 	expect_fields(2)
 	parse_bitdef(reg, "UNKN", $2)
 	field = "UNKN_" msb "_" lsb
@@ -256,58 +260,58 @@ $1 == "Unkn" && (block_current() == "Sysreg" || block_current() == "SysregFields
 	next
 }
 
-$1 == "Field" && (block_current() == "Sysreg" || block_current() == "SysregFields") {
+$1 == "Field" && (block_current() == "Sysreg" || block_current() == "SysregFields" || block_current() == "Feat") {
 	expect_fields(3)
 	field = $3
 	parse_bitdef(reg, field, $2)
 
-	define_field(reg, field, msb, lsb)
+	define_field(feat, reg, field, msb, lsb)
 	print ""
 
 	next
 }
 
-$1 == "Raz" && (block_current() == "Sysreg" || block_current() == "SysregFields") {
+$1 == "Raz" && (block_current() == "Sysreg" || block_current() == "SysregFields" || block_current() == "Feat") {
 	expect_fields(2)
 	parse_bitdef(reg, field, $2)
 
 	next
 }
 
-$1 == "SignedEnum" && (block_current() == "Sysreg" || block_current() == "SysregFields") {
+$1 == "SignedEnum" && (block_current() == "Sysreg" || block_current() == "SysregFields" || block_current() == "Feat") {
 	block_push("Enum")
 
 	expect_fields(3)
 	field = $3
 	parse_bitdef(reg, field, $2)
 
-	define_field(reg, field, msb, lsb)
-	define_field_sign(reg, field, "true")
+	define_field(feat, reg, field, msb, lsb)
+	define_field_sign(feat, reg, field, "true")
 
 	next
 }
 
-$1 == "UnsignedEnum" && (block_current() == "Sysreg" || block_current() == "SysregFields") {
+$1 == "UnsignedEnum" && (block_current() == "Sysreg" || block_current() == "SysregFields" || block_current() == "Feat") {
 	block_push("Enum")
 
 	expect_fields(3)
 	field = $3
 	parse_bitdef(reg, field, $2)
 
-	define_field(reg, field, msb, lsb)
-	define_field_sign(reg, field, "false")
+	define_field(feat, reg, field, msb, lsb)
+	define_field_sign(feat, reg, field, "false")
 
 	next
 }
 
-$1 == "Enum" && (block_current() == "Sysreg" || block_current() == "SysregFields") {
+$1 == "Enum" && (block_current() == "Sysreg" || block_current() == "SysregFields" || block_current() == "Feat") {
 	block_push("Enum")
 
 	expect_fields(3)
 	field = $3
 	parse_bitdef(reg, field, $2)
 
-	define_field(reg, field, msb, lsb)
+	define_field(feat, reg, field, msb, lsb)
 
 	next
 }
@@ -329,7 +333,63 @@ $1 == "EndEnum" && block_current() == "Enum" {
 	val = $1
 	name = $2
 
-	define(reg "_" field "_" name, "UL(" val ")")
+	define(feat, reg "_" field "_" name, "UL(" val ")")
+	next
+}
+
+$1 == "Feat" && (block_current() == "Sysreg" || block_current() == "SysregFields" || block_current() == "Feat") {
+	# Don't push a new block if we're already in a Feat
+	# block. This is to support constructs such as:
+	#	Feat FEAT_A
+	#	...
+	#	Feat FEAT_B
+	#	...
+	#	ElseFeat
+	#	...
+	#	EndFeat
+	if (block_current() != "Feat")
+		block_push("Feat")
+	else
+		define_resx_unkn(feat, reg, res0, res1, unkn)
+
+	expect_fields(2)
+	feat = $2 "_"
+
+	next_bit = 63
+
+	res0 = "UL(0)"
+	res1 = "UL(0)"
+	unkn = "UL(0)"
+
+	next
+}
+
+$1 == "ElseFeat" && block_current() == "Feat" {
+	expect_fields(1)
+
+	define_resx_unkn(feat, reg, res0, res1, unkn)
+
+	res0 = "UL(0)"
+	res1 = "UL(0)"
+	unkn = "UL(0)"
+	feat = null
+	next_bit = 63
+
+	next
+}
+
+$1 == "EndFeat" && block_current() == "Feat" {
+	expect_fields(1)
+
+	define_resx_unkn(feat, reg, res0, res1, unkn)
+
+	res0 = null
+	res1 = null
+	unkn = null
+	feat = null
+
+	block_pop()
+
 	next
 }
 
