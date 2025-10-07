@@ -250,6 +250,11 @@ static int tpm_inf_recv(struct tpm_chip *chip, u8 * buf, size_t count)
 	number_of_wtx = 0;
 
 recv_begin:
+    /* expect at least 1-byte VL header, 1-byte ctrl-tag, 2-byte data size */
+	if (count < 4) {
+		return -EIO;
+	}
+
 	/* start receiving header */
 	for (i = 0; i < 4; i++) {
 		ret = wait(chip, STAT_RDA);
@@ -267,6 +272,10 @@ recv_begin:
 	if (buf[1] == TPM_CTRL_DATA) {
 		/* size of the data received */
 		size = ((buf[2] << 8) | buf[3]);
+
+		if (size + 6 > count) {
+			return -EIO;
+		}
 
 		for (i = 0; i < size; i++) {
 			wait(chip, STAT_RDA);
