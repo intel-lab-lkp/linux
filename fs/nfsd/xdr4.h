@@ -922,29 +922,6 @@ struct nfsd4_compoundres {
 	struct nfsd4_compound_state	cstate;
 };
 
-static inline bool nfsd4_is_solo_sequence(struct nfsd4_compoundres *resp)
-{
-	struct nfsd4_compoundargs *args = resp->rqstp->rq_argp;
-
-	return args->opcnt == 1 && args->ops[0].opnum == OP_SEQUENCE;
-}
-
-/*
- * Solo SEQUENCE operations are not supposed respect the setting in the
- * sa_cachethis field, since that field controls whether the operations
- * /after/ the SEQUENCE are preserved in the slot reply cache. Because
- * clients might use a solo SEQUENCE to query the current state of the
- * session or slot, a cached reply would return stale data to the client.
- *
- * Therefore NFSD treats solo SEQUENCE as an uncached operation no matter
- * how the sa_cachethis field is set.
- */
-static inline bool nfsd4_cache_this(struct nfsd4_compoundres *resp)
-{
-	return (resp->cstate.slot->sl_flags & NFSD4_SLOT_CACHETHIS) &&
-		!nfsd4_is_solo_sequence(resp);
-}
-
 static inline bool nfsd4_last_compound_op(struct svc_rqst *rqstp)
 {
 	struct nfsd4_compoundres *resp = rqstp->rq_resp;
