@@ -247,14 +247,19 @@ struct mem_cgroup {
 	atomic_t		kmem_stat;
 #endif
 	/*
-	 * Hint of reclaim pressure for socket memroy management. Note
+	 * Hint of reclaim pressure for socket memory management. Note
 	 * that this indicator should NOT be used in legacy cgroup mode
 	 * where socket memory is accounted/charged separately.
 	 */
 	u64			socket_pressure;
-#if BITS_PER_LONG < 64
+	/* memory.net.throttled_usec */
+	u64			socket_pressure_duration;
+#if BITS_PER_LONG >= 64
+	spinlock_t		socket_pressure_spinlock;
+#else
 	seqlock_t		socket_pressure_seqlock;
 #endif
+
 	int kmemcg_id;
 	/*
 	 * memcg->objcg is wiped out as a part of the objcg repaprenting
@@ -1607,19 +1612,33 @@ bool mem_cgroup_sk_charge(const struct sock *sk, unsigned int nr_pages,
 			  gfp_t gfp_mask);
 void mem_cgroup_sk_uncharge(const struct sock *sk, unsigned int nr_pages);
 
-#if BITS_PER_LONG < 64
 static inline void mem_cgroup_set_socket_pressure(struct mem_cgroup *memcg)
 {
-	u64 val = get_jiffies_64() + HZ;
 	unsigned long flags;
 
+#if BITS_PER_LONG >= 64
+	spin_lock_irqsave(&memcg->socket_pressure_spinlock, flags);
+#else
 	write_seqlock_irqsave(&memcg->socket_pressure_seqlock, flags);
-	memcg->socket_pressure = val;
+#endif
+	u64 old_socket_pressure = memcg->socket_pressure;
+	u64 new_socket_pressure = get_jiffies_64() + HZ;
+
+	memcg->socket_pressure = new_socket_pressure;
+	memcg->socket_pressure_duration +=  jiffies_to_usecs(
+		min(new_socket_pressure - old_socket_pressure, HZ));
+#if BITS_PER_LONG >= 64
+	spin_unlock_irqrestore(&memcg->socket_pressure_spinlock, flags);
+#else
 	write_sequnlock_irqrestore(&memcg->socket_pressure_seqlock, flags);
+#endif
 }
 
 static inline u64 mem_cgroup_get_socket_pressure(struct mem_cgroup *memcg)
 {
+#if BITS_PER_LONG >= 64
+	return READ_ONCE(memcg->socket_pressure);
+#else
 	unsigned int seq;
 	u64 val;
 
@@ -1629,18 +1648,8 @@ static inline u64 mem_cgroup_get_socket_pressure(struct mem_cgroup *memcg)
 	} while (read_seqretry(&memcg->socket_pressure_seqlock, seq));
 
 	return val;
-}
-#else
-static inline void mem_cgroup_set_socket_pressure(struct mem_cgroup *memcg)
-{
-	WRITE_ONCE(memcg->socket_pressure, jiffies + HZ);
-}
-
-static inline u64 mem_cgroup_get_socket_pressure(struct mem_cgroup *memcg)
-{
-	return READ_ONCE(memcg->socket_pressure);
-}
 #endif
+}
 
 int alloc_shrinker_info(struct mem_cgroup *memcg);
 void free_shrinker_info(struct mem_cgroup *memcg);

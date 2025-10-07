@@ -1887,6 +1887,16 @@ The following nested keys are defined.
 	Shows pressure stall information for memory. See
 	:ref:`Documentation/accounting/psi.rst <psi>` for details.
 
+  memory.net.throttled_usec
+	A read-only single value file showing how many microseconds this cgroup
+	contributed to throttling the throughput of network sockets.
+
+	Socket throttling is applied to a cgroup and to all its children,
+	as a consequence of high reclaim pressure.
+
+	Observing throttling of sockets in a particular cgroup can be done
+	by checking this file for that cgroup and also for all its ancestors.
+
 
 Usage Guidelines
 ~~~~~~~~~~~~~~~~

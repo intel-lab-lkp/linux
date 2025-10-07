@@ -3755,7 +3755,10 @@ static struct mem_cgroup *mem_cgroup_alloc(struct mem_cgroup *parent)
 	INIT_LIST_HEAD(&memcg->swap_peaks);
 	spin_lock_init(&memcg->peaks_lock);
 	memcg->socket_pressure = get_jiffies_64();
-#if BITS_PER_LONG < 64
+	memcg->socket_pressure_duration = 0;
+#if BITS_PER_LONG >= 64
+	spin_lock_init(&memcg->socket_pressure_spinlock);
+#else
 	seqlock_init(&memcg->socket_pressure_seqlock);
 #endif
 	memcg1_memcg_init(memcg);
@@ -4579,6 +4582,27 @@ static ssize_t memory_reclaim(struct kernfs_open_file *of, char *buf,
 	return nbytes;
 }
 
+static int memory_net_throttled_usec_show(struct seq_file *m, void *v)
+{
+	struct mem_cgroup *memcg = mem_cgroup_from_seq(m);
+	u64 throttled_usec;
+
+#if BITS_PER_LONG >= 64
+	throttled_usec = READ_ONCE(memcg->socket_pressure_duration);
+#else
+	unsigned int seq;
+
+	do {
+		seq = read_seqbegin(&memcg->socket_pressure_seqlock);
+		throttled_usec = memcg->socket_pressure_duration;
+	} while (read_seqretry(&memcg->socket_pressure_seqlock, seq));
+#endif
+
+	seq_printf(m, "%llu\n", throttled_usec);
+
+	return 0;
+}
+
 static struct cftype memory_files[] = {
 	{
 		.name = "current",
@@ -4649,6 +4673,11 @@ static struct cftype memory_files[] = {
 		.name = "reclaim",
 		.flags = CFTYPE_NS_DELEGATABLE,
 		.write = memory_reclaim,
+	},
+	{
+		.name = "net.throttled_usec",
+		.flags = CFTYPE_NOT_ON_ROOT,
+		.seq_show = memory_net_throttled_usec_show,
 	},
 	{ }	/* terminate */
 };
