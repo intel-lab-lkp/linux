@@ -1,0 +1,26 @@
+// SPDX-License-Identifier: (GPL-2.0+ OR MIT)
+/*
+ * Copyright (C) 2025 PHYTEC Messtechnik GmbH
+ * Author: Primoz Fiser <primoz.fiser@norik.com>
+ */
+
+#include "imx93-pinfunc.h"
+
+/dts-v1/;
+/plugin/;
+
+&gpio2 {
+	pinctrl-names = "default";
+	pinctrl-0 = <&pinctrl_jtag>;
+};
+
+&iomuxc {
+	pinctrl_jtag: jtaggrp {
+		fsl,pins = <
+			MX93_PAD_GPIO_IO24__JTAG_MUX_TDO	0x31e
+			MX93_PAD_GPIO_IO25__JTAG_MUX_TCK	0x31e
+			MX93_PAD_GPIO_IO26__JTAG_MUX_TDI	0x31e
+			MX93_PAD_GPIO_IO27__JTAG_MUX_TMS	0x31e
+		>;
+	};
+};
