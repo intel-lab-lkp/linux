@@ -184,9 +184,8 @@ replay_again:
 	spin_lock(&cfids->cfid_list_lock);
 	cfid = find_or_create_cached_dir(cfids, path, lookup_only, tcon->max_cached_dirs);
 	if (cfid == NULL) {
-		spin_unlock(&cfids->cfid_list_lock);
-		kfree(utf16_path);
-		return -ENOENT;
+		rc = -ENOENT;
+		goto free_unlock_list;
 	}
 	/*
 	 * Return cached fid if it is valid (has a lease and has a time).
@@ -195,10 +194,9 @@ replay_again:
 	 */
 	if (is_valid_cached_dir(cfid)) {
 		cfid->last_access_time = jiffies;
-		spin_unlock(&cfids->cfid_list_lock);
 		*ret_cfid = cfid;
-		kfree(utf16_path);
-		return 0;
+		rc = 0;
+		goto free_unlock_list;
 	}
 	spin_unlock(&cfids->cfid_list_lock);
 
@@ -331,30 +329,25 @@ replay_again:
 
 
 	if (o_rsp->OplockLevel != SMB2_OPLOCK_LEVEL_LEASE) {
-		spin_unlock(&cfids->cfid_list_lock);
 		rc = -EINVAL;
-		goto oshr_free;
+		goto unlock_list;
 	}
 
 	rc = smb2_parse_contexts(server, rsp_iov,
 				 &oparms.fid->epoch,
 				 oparms.fid->lease_key,
 				 &oplock, NULL, NULL);
-	if (rc) {
-		spin_unlock(&cfids->cfid_list_lock);
-		goto oshr_free;
-	}
+	if (rc)
+		goto unlock_list;
 
 	rc = -EINVAL;
-	if (!(oplock & SMB2_LEASE_READ_CACHING_HE)) {
-		spin_unlock(&cfids->cfid_list_lock);
-		goto oshr_free;
-	}
+	if (!(oplock & SMB2_LEASE_READ_CACHING_HE))
+		goto unlock_list;
+
 	qi_rsp = (struct smb2_query_info_rsp *)rsp_iov[1].iov_base;
-	if (le32_to_cpu(qi_rsp->OutputBufferLength) < sizeof(struct smb2_file_all_info)) {
-		spin_unlock(&cfids->cfid_list_lock);
-		goto oshr_free;
-	}
+	if (le32_to_cpu(qi_rsp->OutputBufferLength) < sizeof(struct smb2_file_all_info))
+		goto unlock_list;
+
 	if (!smb2_validate_and_copy_iov(
 				le16_to_cpu(qi_rsp->OutputBufferOffset),
 				sizeof(struct smb2_file_all_info),
@@ -364,10 +357,10 @@ replay_again:
 
 	cfid->time = jiffies;
 	cfid->last_access_time = jiffies;
-	spin_unlock(&cfids->cfid_list_lock);
 	/* At this point the directory handle is fully cached */
 	rc = 0;
-
+unlock_list:
+	spin_unlock(&cfids->cfid_list_lock);
 oshr_free:
 	SMB2_open_free(&rqst[0]);
 	SMB2_query_info_free(&rqst[1]);
@@ -403,6 +396,11 @@ out:
 	    smb2_should_replay(tcon, &retries, &cur_sleep))
 		goto replay_again;
 
+	return rc;
+
+free_unlock_list:
+	spin_unlock(&cfids->cfid_list_lock);
+	kfree(utf16_path);
 	return rc;
 }
 
