@@ -202,6 +202,7 @@ static const char * const aic200_image_table[] = {
 	[49] = "qcom/aic200/shrm.elf",
 	[50] = "qcom/aic200/cpucp.elf",
 	[51] = "qcom/aic200/aop_devcfg.mbn",
+	[54] = "qcom/aic200/qupv3fw.elf",
 	[57] = "qcom/aic200/cpucp_dtbs.elf",
 	[62] = "qcom/aic200/uefi_dtbs.elf",
 	[63] = "qcom/aic200/xbl_ac_config.mbn",
