@@ -120,6 +120,7 @@ static int riscv_v_thread_zalloc(struct kmem_cache *cache,
 
 	ctx->datap = datap;
 	memset(ctx, 0, offsetof(struct __riscv_v_ext_state, datap));
+
 	return 0;
 }
 
@@ -216,8 +217,11 @@ bool riscv_v_first_use_handler(struct pt_regs *regs)
 		force_sig(SIGBUS);
 		return true;
 	}
+
 	riscv_v_vstate_on(regs);
 	riscv_v_vstate_set_restore(current, regs);
+	set_tsk_thread_flag(current, TIF_RISCV_V_FORCE_SAVE);
+
 	return true;
 }
 
