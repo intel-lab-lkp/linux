@@ -252,6 +252,7 @@ static u32 test_states(unsigned int *tasks, u32 state_mask)
 
 	if (tasks[NR_MEMSTALL]) {
 		state_mask |= BIT(PSI_MEM_SOME);
+		state_mask |= BIT(PSI_MEM_ABS);
 		if (tasks[NR_RUNNING] == tasks[NR_MEMSTALL_RUNNING])
 			state_mask |= BIT(PSI_MEM_FULL);
 	}
@@ -389,8 +390,12 @@ static void collect_percpu_times(struct psi_group *group,
 		nonidle = nsecs_to_jiffies(times[PSI_NONIDLE]);
 		nonidle_total += nonidle;
 
-		for (s = 0; s < PSI_NONIDLE; s++)
-			deltas[s] += (u64)times[s] * nonidle;
+		for (s = 0; s < PSI_NONIDLE; s++) {
+			if (s == PSI_MEM_ABS)
+				deltas[s] += (u64)times[s];
+			else
+				deltas[s] += (u64)times[s] * nonidle;
+		}
 	}
 
 	/*
@@ -406,9 +411,13 @@ static void collect_percpu_times(struct psi_group *group,
 	 */
 
 	/* total= */
-	for (s = 0; s < NR_PSI_STATES - 1; s++)
-		group->total[aggregator][s] +=
+	for (s = 0; s < NR_PSI_STATES - 1; s++) {
+		if (s == PSI_MEM_ABS)
+			group->total[aggregator][s] += deltas[s];
+		else
+			group->total[aggregator][s] +=
 				div_u64(deltas[s], max(nonidle_total, 1UL));
+	}
 
 	if (pchanged_states)
 		*pchanged_states = changed_states;
@@ -778,6 +787,10 @@ static void record_times(struct psi_group_cpu *groupc, u64 now)
 		groupc->times[PSI_MEM_SOME] += delta;
 		if (groupc->state_mask & (1 << PSI_MEM_FULL))
 			groupc->times[PSI_MEM_FULL] += delta;
+	}
+
+	if (groupc->state_mask & (1 << PSI_MEM_ABS)) {
+		groupc->times[PSI_MEM_ABS] += delta;
 	}
 
 	if (groupc->state_mask & (1 << PSI_CPU_SOME)) {
@@ -1289,6 +1302,19 @@ int psi_show(struct seq_file *m, struct psi_group *group, enum psi_res res)
 			   total);
 	}
 
+	if (res == PSI_MEM) {
+		unsigned long *avg = group->avg[PSI_MEM_ABS];
+		u64 total = 0;
+
+		total = div_u64(group->total[PSI_AVGS][PSI_MEM_ABS],
+				NSEC_PER_USEC);
+		seq_printf(m, "abs avg10=%lu.%02lu avg60=%lu.%02lu avg300=%lu.%02lu total=%llu\n",
+			   LOAD_INT(avg[0]), LOAD_FRAC(avg[0]),
+			   LOAD_INT(avg[1]), LOAD_FRAC(avg[1]),
+			   LOAD_INT(avg[2]), LOAD_FRAC(avg[2]),
+			   total);
+	}
+
 	return 0;
 }
 
@@ -1315,6 +1341,8 @@ struct psi_trigger *psi_trigger_create(struct psi_group *group, char *buf,
 		state = PSI_IO_SOME + res * 2;
 	else if (sscanf(buf, "full %u %u", &threshold_us, &window_us) == 2)
 		state = PSI_IO_FULL + res * 2;
+	else if (res == PSI_MEM && sscanf(buf, "all %u %u", &threshold_us, &window_us) == 2)
+		state = PSI_MEM_ABS;
 	else
 		return ERR_PTR(-EINVAL);
 

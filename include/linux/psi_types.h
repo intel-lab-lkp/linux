@@ -61,6 +61,7 @@ enum psi_states {
 	PSI_MEM_FULL,
 	PSI_CPU_SOME,
 	PSI_CPU_FULL,
+	PSI_MEM_ABS,
 #ifdef CONFIG_IRQ_TIME_ACCOUNTING
 	PSI_IRQ_FULL,
 #endif
