@@ -2322,6 +2322,17 @@ static int skl_wm_check_vblank(struct intel_atomic_state *state,
 		}
 	}
 
+	/* hack to dump the worst case as well */
+	memset(&ctx, 0, sizeof(ctx));
+	intel_prefill_init_worst(&ctx, crtc_state);
+
+	level = skl_max_wm_level_for_vblank(crtc_state, &ctx);
+
+	if (DISPLAY_VER(display) >= 12 &&
+	    display->sagv.block_time_us)
+		intel_prefill_vblank_too_short(&ctx, crtc_state,
+					       display->sagv.block_time_us);
+
 	return 0;
 }
 
