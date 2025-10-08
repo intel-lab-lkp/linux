@@ -4585,7 +4585,7 @@ smb3_init_transform_rq(struct TCP_Server_Info *server, int num_rqst,
 {
 	struct smb2_transform_hdr *tr_hdr = new_rq[0].rq_iov[0].iov_base;
 	unsigned int orig_len = 0;
-	int rc = -ENOMEM;
+	int rc;
 
 	for (int i = 1; i < num_rqst; i++) {
 		struct smb_rqst *old = &old_rq[i - 1];
@@ -4600,7 +4600,7 @@ smb3_init_transform_rq(struct TCP_Server_Info *server, int num_rqst,
 		if (size > 0) {
 			buffer = cifs_alloc_folioq_buffer(size);
 			if (!buffer)
-				goto err_free;
+				goto e_nomem;
 
 			new->rq_buffer = buffer;
 			iov_iter_folio_queue(&new->rq_iter, ITER_SOURCE,
@@ -4623,6 +4623,8 @@ smb3_init_transform_rq(struct TCP_Server_Info *server, int num_rqst,
 
 	return rc;
 
+e_nomem:
+	rc = -ENOMEM;
 err_free:
 	smb3_free_compound_rqst(num_rqst - 1, &new_rq[1]);
 	return rc;
