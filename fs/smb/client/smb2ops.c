@@ -3550,7 +3550,7 @@ static int smb3_simple_fallocate_range(unsigned int xid,
 	buf = kzalloc(1024 * 1024, GFP_KERNEL);
 	if (buf == NULL) {
 		rc = -ENOMEM;
-		goto out;
+		goto free_data;
 	}
 
 	tmp_data = out_data;
@@ -3561,12 +3561,12 @@ static int smb3_simple_fallocate_range(unsigned int xid,
 		if (out_data_len == 0) {
 			rc = smb3_simple_fallocate_write_range(xid, tcon,
 					       cfile, off, len, buf);
-			goto out;
+			goto free_buf;
 		}
 
 		if (out_data_len < sizeof(struct file_allocated_range_buffer)) {
 			rc = -EINVAL;
-			goto out;
+			goto free_buf;
 		}
 
 		if (off < le64_to_cpu(tmp_data->file_offset)) {
@@ -3581,11 +3581,12 @@ static int smb3_simple_fallocate_range(unsigned int xid,
 			rc = smb3_simple_fallocate_write_range(xid, tcon,
 					       cfile, off, l, buf);
 			if (rc)
-				goto out;
+				goto free_buf;
+
 			off = off + l;
 			len = len - l;
 			if (len == 0)
-				goto out;
+				goto free_buf;
 		}
 		/*
 		 * We are at a section of allocated data, just skip forward
@@ -3601,10 +3602,10 @@ static int smb3_simple_fallocate_range(unsigned int xid,
 		tmp_data = &tmp_data[1];
 		out_data_len -= sizeof(struct file_allocated_range_buffer);
 	}
-
- out:
-	kfree(out_data);
+free_buf:
 	kfree(buf);
+free_data:
+	kfree(out_data);
 	return rc;
 }
 
