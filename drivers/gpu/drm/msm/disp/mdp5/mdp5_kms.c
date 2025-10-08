@@ -153,7 +153,6 @@ static const struct drm_private_state_funcs mdp5_global_state_funcs = {
 static int mdp5_global_obj_init(struct mdp5_kms *mdp5_kms)
 {
 	drm_atomic_private_obj_init(mdp5_kms->dev, &mdp5_kms->glob_state,
-				    NULL,
 				    &mdp5_global_state_funcs);
 	return 0;
 }

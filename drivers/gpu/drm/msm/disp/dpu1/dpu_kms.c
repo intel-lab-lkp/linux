@@ -405,7 +405,6 @@ static const struct drm_private_state_funcs dpu_kms_global_state_funcs = {
 static int dpu_kms_global_obj_init(struct dpu_kms *dpu_kms)
 {
 	drm_atomic_private_obj_init(dpu_kms->dev, &dpu_kms->global_state,
-				    NULL,
 				    &dpu_kms_global_state_funcs);
 
 	return 0;

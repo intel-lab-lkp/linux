@@ -775,7 +775,6 @@ static void drm_atomic_plane_print_state(struct drm_printer *p,
  * drm_atomic_private_obj_init - initialize private object
  * @dev: DRM device this object will be attached to
  * @obj: private object
- * @state: initial private object state
  * @funcs: pointer to the struct of function pointers that identify the object
  * type
  *
@@ -785,7 +784,6 @@ static void drm_atomic_plane_print_state(struct drm_printer *p,
 void
 drm_atomic_private_obj_init(struct drm_device *dev,
 			    struct drm_private_obj *obj,
-			    struct drm_private_state *state,
 			    const struct drm_private_state_funcs *funcs)
 {
 	memset(obj, 0, sizeof(*obj));
@@ -796,19 +794,8 @@ drm_atomic_private_obj_init(struct drm_device *dev,
 	obj->funcs = funcs;
 	list_add_tail(&obj->head, &dev->mode_config.privobj_list);
 
-	/*
-	 * Not all users of drm_atomic_private_obj_init have been
-	 * converted to using &drm_private_obj_funcs.reset yet. For the
-	 * time being, let's only call reset if the passed state is
-	 * NULL. Otherwise, we will fallback to the previous behaviour.
-	 */
-	if (!state) {
-		if (obj->funcs->reset)
-			obj->funcs->reset(obj);
-	} else {
-		obj->state = state;
-		state->obj = obj;
-	}
+	if (obj->funcs->reset)
+		obj->funcs->reset(obj);
 }
 EXPORT_SYMBOL(drm_atomic_private_obj_init);
 
