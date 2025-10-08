@@ -2296,8 +2296,7 @@ smb3_enum_snapshots(const unsigned int xid, struct cifs_tcon *tcon,
 		if (copy_from_user(&snapshot_in, ioc_buf,
 		    sizeof(struct smb_snapshot_array))) {
 			rc = -EFAULT;
-			kfree(retbuf);
-			return rc;
+			goto free_buf;
 		}
 
 		/*
@@ -2324,7 +2323,7 @@ smb3_enum_snapshots(const unsigned int xid, struct cifs_tcon *tcon,
 		if (copy_to_user(ioc_buf, retbuf, ret_data_len))
 			rc = -EFAULT;
 	}
-
+free_buf:
 	kfree(retbuf);
 	return rc;
 }
