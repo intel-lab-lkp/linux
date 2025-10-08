@@ -830,6 +830,7 @@ static struct common_params
 			{"nano",		no_argument,		0, 'n'},
 			{"period",		required_argument,	0, 'p'},
 			{"priority",		required_argument,	0, 'P'},
+			{"quiet",		no_argument,		0, 'q'},
 			{"stack",		required_argument,	0, 's'},
 			{"thread",		required_argument,	0, 'T'},
 			{"trace",		optional_argument,	0, 't'},
@@ -859,7 +860,7 @@ static struct common_params
 		/* getopt_long stores the option index here. */
 		int option_index = 0;
 
-		c = getopt_long(argc, argv, "a:c:C::b:d:e:E:DhH:i:knp:P:s:t::T:uU0123456:7:8:9\1\2:\3:",
+		c = getopt_long(argc, argv, "a:c:C::b:d:e:E:DhH:i:knp:P:qs:t::T:uU0123456:7:8:9\1\2:\3:",
 				 long_options, &option_index);
 
 		/* detect the end of the options. */
@@ -960,6 +961,9 @@ static struct common_params
 			if (retval == -1)
 				timerlat_hist_usage("Invalid -P priority");
 			params->common.set_sched = 1;
+			break;
+		case 'q':
+			params->common.quiet = 1;
 			break;
 		case 's':
 			params->print_stack = get_llong_from_str(optarg);
