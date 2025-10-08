@@ -1554,14 +1554,18 @@ static int __init c4iw_init_module(void)
 static void __exit c4iw_exit_module(void)
 {
 	struct uld_ctx *ctx, *tmp;
+	LIST_HEAD(local_list);
 
 	mutex_lock(&dev_mutex);
-	list_for_each_entry_safe(ctx, tmp, &uld_ctx_list, entry) {
+	list_splice_init(&uld_ctx_list, &local_list);
+	mutex_unlock(&dev_mutex);
+
+	list_for_each_entry_safe(ctx, tmp, &local_list, entry) {
+		list_del(&ctx->entry);
 		if (ctx->dev)
 			c4iw_remove(ctx);
 		kfree(ctx);
 	}
-	mutex_unlock(&dev_mutex);
 	destroy_workqueue(reg_workq);
 	cxgb4_unregister_uld(CXGB4_ULD_RDMA);
 	c4iw_cm_term();
