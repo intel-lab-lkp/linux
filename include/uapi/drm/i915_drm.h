@@ -724,10 +724,6 @@ typedef struct drm_i915_irq_wait {
  * supports) that all state set by this context will not leak to any other
  * context.
  *
- * As not every engine across every gen support contexts, the returned
- * value reports the support of context isolation for individual engines by
- * returning a bitmask of each engine class set to true if that class supports
- * isolation.
  */
 #define I915_PARAM_HAS_CONTEXT_ISOLATION 50
 
