@@ -1591,8 +1591,6 @@ static int fuse_bdi_init(struct fuse_conn *fc, struct super_block *sb)
 	if (err)
 		return err;
 
-	sb->s_bdi->capabilities |= BDI_CAP_STRICTLIMIT;
-
 	/*
 	 * For a single fuse filesystem use max 1% of dirty +
 	 * writeback threshold.
