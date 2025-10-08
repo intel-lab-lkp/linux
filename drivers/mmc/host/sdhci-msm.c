@@ -157,6 +157,23 @@
 #define CQHCI_VENDOR_CFG1	0xA00
 #define CQHCI_VENDOR_DIS_RST_ON_CQ_EN	(0x3 << 13)
 
+#define DISABLE_CRYPTO			BIT(15)
+#define CRYPTO_GENERAL_ENABLE		BIT(1)
+#define HC_VENDOR_SPECIFIC_FUNC4	0x260
+#define ICE_HCI_SUPPORT			BIT(28)
+
+/* SDHCI MSM ICE CTRL Info register offset */
+enum {
+	OFFSET_SDHCI_MSM_ICE_HCI_PARAM_CCI	= 0,
+	OFFSET_SDHCI_MSM_ICE_HCI_PARAM_CE	= 8,
+};
+
+/* SDHCI MSM ICE CTRL Info register masks */
+enum {
+	MASK_SDHCI_MSM_ICE_HCI_PARAM_CE		= 0x1,
+	MASK_SDHCI_MSM_ICE_HCI_PARAM_CCI	= 0xff
+};
+
 struct sdhci_msm_offset {
 	u32 core_hc_mode;
 	u32 core_mci_data_cnt;
@@ -1882,8 +1899,46 @@ out:
  * Inline Crypto Engine (ICE) support                                        *
  *                                                                           *
 \*****************************************************************************/
-
 #ifdef CONFIG_MMC_CRYPTO
+
+static int sdhci_msm_ice_cfg(struct sdhci_host *host, struct mmc_request *mrq,
+			     u32 slot)
+{
+	struct sdhci_pltfm_host *pltfm_host = sdhci_priv(host);
+	struct sdhci_msm_host *msm_host = sdhci_pltfm_priv(pltfm_host);
+	struct mmc_host *mmc = msm_host->mmc;
+	struct cqhci_host *cq_host = mmc->cqe_private;
+	unsigned int crypto_params = 0;
+	int key_index = 0;
+	bool bypass = true;
+	u64 dun = 0;
+
+	if (!mrq || !cq_host)
+		return -EINVAL;
+
+	if (mrq->crypto_ctx) {
+		dun = mrq->crypto_ctx->bc_dun[0];
+		bypass = false;
+		key_index = mrq->crypto_key_slot;
+	}
+
+	/* Configure ICE bypass mode */
+	crypto_params |= ((!bypass) & MASK_SDHCI_MSM_ICE_HCI_PARAM_CE)
+			 << OFFSET_SDHCI_MSM_ICE_HCI_PARAM_CE;
+	/* Configure Crypto Configure Index (CCI) */
+	crypto_params |= (key_index & MASK_SDHCI_MSM_ICE_HCI_PARAM_CCI)
+			 << OFFSET_SDHCI_MSM_ICE_HCI_PARAM_CCI;
+
+	cqhci_writel(cq_host, crypto_params, NONCQ_CRYPTO_PARM);
+
+	if (mrq->crypto_ctx)
+		cqhci_writel(cq_host, lower_32_bits(dun), NONCQ_CRYPTO_DUN);
+
+	/* Ensure crypto configuration is written before proceeding */
+	wmb();
+
+	return 0;
+}
 
 static const struct blk_crypto_ll_ops sdhci_msm_crypto_ops; /* forward decl */
 
@@ -2131,6 +2186,8 @@ static int sdhci_msm_cqe_add_host(struct sdhci_host *host,
 	struct cqhci_host *cq_host;
 	bool dma64;
 	u32 cqcfg;
+	u32 config;
+	u32 ice_cap;
 	int ret;
 
 	/*
@@ -2184,6 +2241,18 @@ static int sdhci_msm_cqe_add_host(struct sdhci_host *host,
 	ret = __sdhci_add_host(host);
 	if (ret)
 		goto cleanup;
+
+	/* Initialize ICE for non-CMDQ eMMC devices */
+	config = sdhci_readl(host, HC_VENDOR_SPECIFIC_FUNC4);
+	config &= ~DISABLE_CRYPTO;
+	sdhci_writel(host, config, HC_VENDOR_SPECIFIC_FUNC4);
+	ice_cap = cqhci_readl(cq_host, CQHCI_CAP);
+	if (ice_cap & ICE_HCI_SUPPORT) {
+		config = cqhci_readl(cq_host, CQHCI_CFG);
+		config |= CRYPTO_GENERAL_ENABLE;
+		cqhci_writel(cq_host, config, CQHCI_CFG);
+	}
+	sdhci_msm_ice_enable(msm_host);
 
 	dev_info(&pdev->dev, "%s: CQE init: success\n",
 			mmc_hostname(host->mmc));
@@ -2450,6 +2519,9 @@ static const struct of_device_id sdhci_msm_dt_match[] = {
 MODULE_DEVICE_TABLE(of, sdhci_msm_dt_match);
 
 static const struct sdhci_ops sdhci_msm_ops = {
+#ifdef CONFIG_MMC_CRYPTO
+	.crypto_engine_cfg = sdhci_msm_ice_cfg,
+#endif
 	.reset = sdhci_and_cqhci_reset,
 	.set_clock = sdhci_msm_set_clock,
 	.get_min_clock = sdhci_msm_get_min_clock,

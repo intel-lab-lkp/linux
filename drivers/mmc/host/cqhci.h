@@ -119,6 +119,10 @@
 /* command response argument */
 #define CQHCI_CRA			0x5C
 
+/* non command queue crypto enable register*/
+#define NONCQ_CRYPTO_PARM		0x70
+#define NONCQ_CRYPTO_DUN		0x74
+
 /* crypto capabilities */
 #define CQHCI_CCAP			0x100
 #define CQHCI_CRYPTOCAP			0x104

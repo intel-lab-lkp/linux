@@ -2202,6 +2202,21 @@ void sdhci_set_power_and_bus_voltage(struct sdhci_host *host,
 }
 EXPORT_SYMBOL_GPL(sdhci_set_power_and_bus_voltage);
 
+static int sdhci_crypto_cfg(struct sdhci_host *host, struct mmc_request *mrq,
+			    u32 slot)
+{
+	int err = 0;
+
+	if (host->ops->crypto_engine_cfg) {
+		err = host->ops->crypto_engine_cfg(host, mrq, slot);
+		if (err)
+			pr_err("%s: failed to configure crypto: %d\n",
+			       mmc_hostname(host->mmc), err);
+	}
+
+	return err;
+}
+
 /*****************************************************************************\
  *                                                                           *
  * MMC callbacks                                                             *
@@ -2226,6 +2241,11 @@ void sdhci_request(struct mmc_host *mmc, struct mmc_request *mrq)
 		goto out_finish;
 
 	cmd = sdhci_manual_cmd23(host, mrq) ? mrq->sbc : mrq->cmd;
+
+	if (mmc->caps2 & MMC_CAP2_CRYPTO) {
+		if (sdhci_crypto_cfg(host, mrq, 0))
+			goto out_finish;
+	}
 
 	if (!sdhci_send_command_retry(host, cmd, flags))
 		goto out_finish;
