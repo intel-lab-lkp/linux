@@ -540,6 +540,9 @@ iommu_read_and_clear_dirty(struct iommu_domain *domain,
 	if (!ops || !ops->read_and_clear_dirty)
 		return -EOPNOTSUPP;
 
+	if (!bitmap->data)
+		return -EINVAL;
+
 	iter = iova_bitmap_alloc(bitmap->iova, bitmap->length,
 				 bitmap->page_size,
 				 u64_to_user_ptr(bitmap->data));
