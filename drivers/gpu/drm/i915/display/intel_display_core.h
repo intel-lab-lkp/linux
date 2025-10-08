@@ -89,6 +89,7 @@ struct intel_wm_funcs {
 	void (*optimize_watermarks)(struct intel_atomic_state *state,
 				    struct intel_crtc *crtc);
 	int (*compute_global_watermarks)(struct intel_atomic_state *state);
+	int (*compute_global_watermarks_late)(struct intel_atomic_state *state);
 	void (*get_hw_state)(struct intel_display *display);
 	void (*sanitize)(struct intel_display *display);
 };

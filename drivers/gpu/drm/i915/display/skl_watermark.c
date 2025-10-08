@@ -2433,7 +2433,7 @@ static int skl_build_pipe_wm(struct intel_atomic_state *state,
 
 	crtc_state->wm.skl.optimal = crtc_state->wm.skl.raw;
 
-	return skl_wm_check_vblank(crtc_state);
+	return 0;
 }
 
 static bool skl_wm_level_equals(const struct skl_wm_level *l1,
@@ -3002,11 +3002,6 @@ skl_compute_wm(struct intel_atomic_state *state)
 	if (ret)
 		return ret;
 
-	/*
-	 * skl_compute_ddb() will have adjusted the final watermarks
-	 * based on how much ddb is available. Now we can actually
-	 * check if the final watermarks changed.
-	 */
 	for_each_new_intel_crtc_in_state(state, crtc, new_crtc_state, i) {
 		struct skl_pipe_wm *pipe_wm = &new_crtc_state->wm.skl.optimal;
 
@@ -3030,6 +3025,36 @@ skl_compute_wm(struct intel_atomic_state *state)
 		pipe_wm->use_sagv_wm = !HAS_HW_SAGV_WM(display) &&
 			DISPLAY_VER(display) >= 12 &&
 			intel_crtc_can_enable_sagv(new_crtc_state);
+	}
+
+	return 0;
+}
+
+static int
+skl_compute_wm_late(struct intel_atomic_state *state)
+{
+	struct intel_crtc *crtc;
+	struct intel_crtc_state __maybe_unused *new_crtc_state;
+	int i;
+
+	for_each_new_intel_crtc_in_state(state, crtc, new_crtc_state, i) {
+		int ret;
+
+		/*
+		 * FIXME we need something along the lins of the following order:
+		 * 1. intel_atomic_setup_scalers() (needed by skl_wm_check_vblank())
+		 * 2. intel_modeset_calc_cdclk() (needed by skl_wm_check_vblank())
+		 * 3. skl_compute_wm() (skl_wm_check_vblank() + update use_sagv_wm)
+		 * 4. intel_bw_atomic_check() (needs use_sagv_wm)
+		 * but shuffling all that needs a lot more work...
+		 *
+		 * For now hack it by deferreing skl_wm_check_vblank() until
+		 * intel_modeset_calc_cdclk() has been done. Scalers are still
+		 * completely broken wrt. skl_wm_check_vblank().
+		 */
+		ret = skl_wm_check_vblank(new_crtc_state);
+		if (ret)
+			return ret;
 
 		ret = skl_wm_add_affected_planes(state, crtc);
 		if (ret)
@@ -4060,6 +4085,7 @@ void intel_wm_state_verify(struct intel_atomic_state *state,
 
 static const struct intel_wm_funcs skl_wm_funcs = {
 	.compute_global_watermarks = skl_compute_wm,
+	.compute_global_watermarks_late = skl_compute_wm_late,
 	.get_hw_state = skl_wm_get_hw_state,
 	.sanitize = skl_wm_sanitize,
 };

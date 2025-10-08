@@ -24,6 +24,7 @@ void intel_atomic_update_watermarks(struct intel_atomic_state *state,
 void intel_optimize_watermarks(struct intel_atomic_state *state,
 			       struct intel_crtc *crtc);
 int intel_compute_global_watermarks(struct intel_atomic_state *state);
+int intel_compute_global_watermarks_late(struct intel_atomic_state *state);
 void intel_wm_get_hw_state(struct intel_display *display);
 void intel_wm_sanitize(struct intel_display *display);
 bool intel_wm_plane_visible(const struct intel_crtc_state *crtc_state,

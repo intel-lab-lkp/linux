@@ -104,6 +104,16 @@ int intel_compute_global_watermarks(struct intel_atomic_state *state)
 	return 0;
 }
 
+int intel_compute_global_watermarks_late(struct intel_atomic_state *state)
+{
+	struct intel_display *display = to_intel_display(state);
+
+	if (display->funcs.wm->compute_global_watermarks_late)
+		return display->funcs.wm->compute_global_watermarks_late(state);
+
+	return 0;
+}
+
 void intel_wm_get_hw_state(struct intel_display *display)
 {
 	if (display->funcs.wm->get_hw_state)

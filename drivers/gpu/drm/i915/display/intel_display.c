@@ -6455,6 +6455,10 @@ int intel_atomic_check(struct drm_device *dev,
 			return ret;
 	}
 
+	ret = intel_compute_global_watermarks_late(state);
+	if (ret)
+		goto fail;
+
 	ret = intel_pmdemand_atomic_check(state);
 	if (ret)
 		goto fail;
