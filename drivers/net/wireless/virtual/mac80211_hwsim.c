@@ -359,6 +359,13 @@ static struct net_device *hwsim_mon; /* global monitor netdev */
 	.hw_value = (_freq), \
 }
 
+#define CHANS1G(_freq, _offset) { \
+	.band = NL80211_BAND_S1GHZ, \
+	.center_freq = (_freq), \
+	.freq_offset = (_offset), \
+	.hw_value = (_freq), \
+}
+
 static const struct ieee80211_channel hwsim_channels_2ghz[] = {
 	CHAN2G(2412), /* Channel 1 */
 	CHAN2G(2417), /* Channel 2 */
@@ -487,8 +494,35 @@ static const struct ieee80211_channel hwsim_channels_6ghz[] = {
 	CHAN6G(7115), /* Channel 233 */
 };
 
-#define NUM_S1G_CHANS_US 51
-static struct ieee80211_channel hwsim_channels_s1g[NUM_S1G_CHANS_US];
+/* US S1G channels only */
+static const struct ieee80211_channel hwsim_channels_s1g[] = {
+	CHANS1G(902, 500), /* Channel 1 */
+	CHANS1G(903, 500), /* Channel 3 */
+	CHANS1G(904, 500), /* Channel 5 */
+	CHANS1G(905, 500), /* Channel 7 */
+	CHANS1G(906, 500), /* Channel 9 */
+	CHANS1G(907, 500), /* Channel 11 */
+	CHANS1G(908, 500), /* Channel 13 */
+	CHANS1G(909, 500), /* Channel 15 */
+	CHANS1G(910, 500), /* Channel 17 */
+	CHANS1G(911, 500), /* Channel 19 */
+	CHANS1G(912, 500), /* Channel 21 */
+	CHANS1G(913, 500), /* Channel 23 */
+	CHANS1G(914, 500), /* Channel 25 */
+	CHANS1G(915, 500), /* Channel 27 */
+	CHANS1G(916, 500), /* Channel 29 */
+	CHANS1G(917, 500), /* Channel 31 */
+	CHANS1G(918, 500), /* Channel 33 */
+	CHANS1G(919, 500), /* Channel 35 */
+	CHANS1G(920, 500), /* Channel 37 */
+	CHANS1G(921, 500), /* Channel 39 */
+	CHANS1G(922, 500), /* Channel 41 */
+	CHANS1G(923, 500), /* Channel 43 */
+	CHANS1G(924, 500), /* Channel 45 */
+	CHANS1G(925, 500), /* Channel 47 */
+	CHANS1G(926, 500), /* Channel 49 */
+	CHANS1G(927, 500), /* Channel 51 */
+};
 
 static const struct ieee80211_sta_s1g_cap hwsim_s1g_cap = {
 	.s1g = true,
@@ -516,19 +550,6 @@ static const struct ieee80211_sta_s1g_cap hwsim_s1g_cap = {
 	/* Tx Single spatial stream and S1G-MCS Map for 1MHz */
 		     0 },
 };
-
-static void hwsim_init_s1g_channels(struct ieee80211_channel *chans)
-{
-	int ch, freq;
-
-	for (ch = 0; ch < NUM_S1G_CHANS_US; ch++) {
-		freq = 902000 + (ch + 1) * 500;
-		chans[ch].band = NL80211_BAND_S1GHZ;
-		chans[ch].center_freq = KHZ_TO_MHZ(freq);
-		chans[ch].freq_offset = freq % 1000;
-		chans[ch].hw_value = ch + 1;
-	}
-}
 
 static const struct ieee80211_rate hwsim_rates[] = {
 	{ .bitrate = 10 },
@@ -7080,8 +7101,6 @@ static int __init init_mac80211_hwsim(void)
 		err = PTR_ERR(hwsim_class);
 		goto out_exit_virtio;
 	}
-
-	hwsim_init_s1g_channels(hwsim_channels_s1g);
 
 	for (i = 0; i < radios; i++) {
 		struct hwsim_new_radio_params param = { 0 };
