@@ -59,8 +59,10 @@ struct ttm_pool_type {
 	struct list_head pages;
 };
 
-#define TTM_POOL_USE_DMA_ALLOC 	BIT(0) /* Use coherent DMA allocations. */
-#define TTM_POOL_USE_DMA32	BIT(1) /* Use GFP_DMA32 allocations. */
+/* Check helpers in ttm_pool_internal.h when modifying: */
+#define TTM_POOL_BENEFICIAL_ORDER(n)	((n) & 0xff) /* Max order which caller can benefit from */
+#define TTM_POOL_USE_DMA_ALLOC 		BIT(8) /* Use coherent DMA allocations. */
+#define TTM_POOL_USE_DMA32		BIT(9) /* Use GFP_DMA32 allocations. */
 
 /**
  * struct ttm_pool - Pool for all caching and orders
