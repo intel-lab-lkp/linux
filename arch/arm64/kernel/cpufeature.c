@@ -2340,6 +2340,24 @@ static void cpu_enable_mte(struct arm64_cpu_capabilities const *cap)
 
 	kasan_init_hw_tags_cpu();
 }
+
+static bool has_usable_mte(const struct arm64_cpu_capabilities *entry, int scope)
+{
+	if (!has_cpuid_feature(entry, scope))
+		return false;
+
+	/*
+	 * MTE and Generic KASAN are mutually exclusive. Generic KASAN is a
+	 * software-only mode that is incompatible with the MTE hardware.
+	 * Do not enable MTE if Generic KASAN is active.
+	 */
+	if (IS_ENABLED(CONFIG_KASAN_GENERIC) && kasan_enabled()) {
+		pr_warn_once("MTE capability disabled due to Generic KASAN conflict\n");
+		return false;
+	}
+
+	return true;
+}
 #endif /* CONFIG_ARM64_MTE */
 
 static void user_feature_fixup(void)
@@ -2850,7 +2868,7 @@ static const struct arm64_cpu_capabilities arm64_features[] = {
 		.desc = "Memory Tagging Extension",
 		.capability = ARM64_MTE,
 		.type = ARM64_CPUCAP_STRICT_BOOT_CPU_FEATURE,
-		.matches = has_cpuid_feature,
+		.matches = has_usable_mte,
 		.cpu_enable = cpu_enable_mte,
 		ARM64_CPUID_FIELDS(ID_AA64PFR1_EL1, MTE, MTE2)
 	},
@@ -2858,21 +2876,21 @@ static const struct arm64_cpu_capabilities arm64_features[] = {
 		.desc = "Asymmetric MTE Tag Check Fault",
 		.capability = ARM64_MTE_ASYMM,
 		.type = ARM64_CPUCAP_BOOT_CPU_FEATURE,
-		.matches = has_cpuid_feature,
+		.matches = has_usable_mte,
 		ARM64_CPUID_FIELDS(ID_AA64PFR1_EL1, MTE, MTE3)
 	},
 	{
 		.desc = "FAR on MTE Tag Check Fault",
 		.capability = ARM64_MTE_FAR,
 		.type = ARM64_CPUCAP_SYSTEM_FEATURE,
-		.matches = has_cpuid_feature,
+		.matches = has_usable_mte,
 		ARM64_CPUID_FIELDS(ID_AA64PFR2_EL1, MTEFAR, IMP)
 	},
 	{
 		.desc = "Store Only MTE Tag Check",
 		.capability = ARM64_MTE_STORE_ONLY,
 		.type = ARM64_CPUCAP_BOOT_CPU_FEATURE,
-		.matches = has_cpuid_feature,
+		.matches = has_usable_mte,
 		ARM64_CPUID_FIELDS(ID_AA64PFR2_EL1, MTESTOREONLY, IMP)
 	},
 #endif /* CONFIG_ARM64_MTE */
