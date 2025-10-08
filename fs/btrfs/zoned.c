@@ -1753,7 +1753,11 @@ out:
 	    !fs_info->stripe_root) {
 		btrfs_err(fs_info, "zoned: data %s needs raid-stripe-tree",
 			  btrfs_bg_type_to_raid_name(map->type));
-		return -EINVAL;
+		/*
+		 * Note that this might be overwritten by later if statements,
+		 * but the error will be at least printed by the line above.
+		 */
+		ret = -EINVAL;
 	}
 
 	if (unlikely(cache->alloc_offset > cache->zone_capacity)) {
@@ -1785,6 +1789,7 @@ out:
 		btrfs_free_chunk_map(cache->physical_map);
 		cache->physical_map = NULL;
 	}
+
 	bitmap_free(active);
 	kfree(zone_info);
 
