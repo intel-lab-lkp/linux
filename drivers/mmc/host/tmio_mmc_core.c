@@ -1253,7 +1253,6 @@ void tmio_mmc_host_remove(struct tmio_mmc_host *host)
 }
 EXPORT_SYMBOL_GPL(tmio_mmc_host_remove);
 
-#ifdef CONFIG_PM
 static int tmio_mmc_clk_enable(struct tmio_mmc_host *host)
 {
 	if (!host->clk_enable)
@@ -1298,7 +1297,6 @@ int tmio_mmc_host_runtime_resume(struct device *dev)
 	return 0;
 }
 EXPORT_SYMBOL_GPL(tmio_mmc_host_runtime_resume);
-#endif
 
 MODULE_DESCRIPTION("TMIO MMC core driver");
 MODULE_LICENSE("GPL v2");
