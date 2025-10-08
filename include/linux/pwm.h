@@ -501,6 +501,25 @@ struct pwm_device *devm_fwnode_pwm_get(struct device *dev,
 				       struct fwnode_handle *fwnode,
 				       const char *con_id);
 #else
+static inline int pwm_round_waveform_might_sleep(struct pwm_device *pwm, struct pwm_waveform *wf)
+{
+	might_sleep();
+	return -EOPNOTSUPP;
+}
+
+static inline int pwm_get_waveform_might_sleep(struct pwm_device *pwm, struct pwm_waveform *wf)
+{
+	might_sleep();
+	return -EOPNOTSUPP;
+}
+
+static inline int pwm_set_waveform_might_sleep(struct pwm_device *pwm,
+					       const struct pwm_waveform *wf, bool exact)
+{
+	might_sleep();
+	return -EOPNOTSUPP;
+}
+
 static inline bool pwm_might_sleep(struct pwm_device *pwm)
 {
 	return true;
