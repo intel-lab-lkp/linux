@@ -206,8 +206,15 @@ const char *vfio_pci_get_cdev_path(const char *bdf);
 
 extern const char *default_iommu_mode;
 
+struct iommu *iommu_init(const char *iommu_mode);
+void iommu_cleanup(struct iommu *iommu);
+
+struct vfio_pci_device *__vfio_pci_device_init(const char *bdf, struct iommu *iommu);
 struct vfio_pci_device *vfio_pci_device_init(const char *bdf, const char *iommu_mode);
+
+void __vfio_pci_device_cleanup(struct vfio_pci_device *device);
 void vfio_pci_device_cleanup(struct vfio_pci_device *device);
+
 void vfio_pci_device_reset(struct vfio_pci_device *device);
 
 void vfio_pci_dma_map(struct vfio_pci_device *device,
