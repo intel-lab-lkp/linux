@@ -324,3 +324,17 @@ unsigned int intel_engines_has_context_isolation(struct drm_i915_private *i915)
 
 	return which;
 }
+
+bool engines_context_isolated(struct drm_i915_private *i915)
+{
+	struct intel_engine_cs *engine;
+
+	if (!DRIVER_CAPS(i915)->has_logical_contexts)
+		return false;
+
+	for_each_uabi_engine(engine, i915)
+		if (!engine->default_state)
+			return false;
+
+	return true;
+}

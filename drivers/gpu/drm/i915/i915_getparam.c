@@ -163,7 +163,7 @@ int i915_getparam_ioctl(struct drm_device *dev, void *data,
 			value = -EINVAL;
 		break;
 	case I915_PARAM_HAS_CONTEXT_ISOLATION:
-		value = intel_engines_has_context_isolation(i915);
+		value = engines_context_isolated(i915);
 		break;
 	case I915_PARAM_SLICE_MASK:
 		/* Not supported from Xe_HP onward; use topology queries */

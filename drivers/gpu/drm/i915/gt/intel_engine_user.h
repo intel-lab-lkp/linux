@@ -15,6 +15,7 @@ struct intel_engine_cs *
 intel_engine_lookup_user(struct drm_i915_private *i915, u8 class, u8 instance);
 
 unsigned int intel_engines_has_context_isolation(struct drm_i915_private *i915);
+bool engines_context_isolated(struct drm_i915_private *i915);
 
 void intel_engine_add_user(struct intel_engine_cs *engine);
 void intel_engines_driver_register(struct drm_i915_private *i915);
