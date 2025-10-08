@@ -824,9 +824,26 @@ static void tegra_display_hub_destroy_state(struct drm_private_obj *obj,
 	kfree(hub_state);
 }
 
+static void tegra_display_hub_reset(struct drm_private_obj *obj)
+{
+	struct tegra_display_hub_state *hub_state;
+
+	if (obj->state) {
+		tegra_display_hub_destroy_state(obj, obj->state);
+		obj->state = NULL;
+	}
+
+	hub_state = kzalloc(sizeof(*hub_state), GFP_KERNEL);
+	if (!hub_state)
+		return;
+
+	__drm_atomic_helper_private_obj_reset(obj, &hub_state->base);
+}
+
 static const struct drm_private_state_funcs tegra_display_hub_state_funcs = {
 	.atomic_duplicate_state = tegra_display_hub_duplicate_state,
 	.atomic_destroy_state = tegra_display_hub_destroy_state,
+	.reset = tegra_display_hub_reset,
 };
 
 static struct tegra_display_hub_state *
@@ -940,13 +957,8 @@ static int tegra_display_hub_init(struct host1x_client *client)
 	struct tegra_display_hub *hub = to_tegra_display_hub(client);
 	struct drm_device *drm = dev_get_drvdata(client->host);
 	struct tegra_drm *tegra = drm->dev_private;
-	struct tegra_display_hub_state *state;
 
-	state = kzalloc(sizeof(*state), GFP_KERNEL);
-	if (!state)
-		return -ENOMEM;
-
-	drm_atomic_private_obj_init(drm, &hub->base, &state->base,
+	drm_atomic_private_obj_init(drm, &hub->base, NULL,
 				    &tegra_display_hub_state_funcs);
 
 	tegra->hub = hub;
