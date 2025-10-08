@@ -793,11 +793,22 @@ drm_atomic_private_obj_init(struct drm_device *dev,
 	drm_modeset_lock_init(&obj->lock);
 
 	obj->dev = dev;
-	obj->state = state;
 	obj->funcs = funcs;
 	list_add_tail(&obj->head, &dev->mode_config.privobj_list);
 
-	state->obj = obj;
+	/*
+	 * Not all users of drm_atomic_private_obj_init have been
+	 * converted to using &drm_private_obj_funcs.reset yet. For the
+	 * time being, let's only call reset if the passed state is
+	 * NULL. Otherwise, we will fallback to the previous behaviour.
+	 */
+	if (!state) {
+		if (obj->funcs->reset)
+			obj->funcs->reset(obj);
+	} else {
+		obj->state = state;
+		state->obj = obj;
+	}
 }
 EXPORT_SYMBOL(drm_atomic_private_obj_init);
 

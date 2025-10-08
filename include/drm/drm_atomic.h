@@ -208,6 +208,15 @@ struct drm_private_state;
  */
 struct drm_private_state_funcs {
 	/**
+	 * @reset:
+	 *
+	 * Resets the private state to its default state, and the
+	 * hardware to off if any.. This function isn't called by the
+	 * core directly, only through drm_mode_config_reset().
+	 */
+	void (*reset)(struct drm_private_obj *obj);
+
+	/**
 	 * @atomic_duplicate_state:
 	 *
 	 * Duplicate the current state of the private object and return it. It
