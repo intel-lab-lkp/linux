@@ -37,6 +37,7 @@
 #include <linux/vfio.h>
 #include <linux/workqueue.h>
 #include <linux/notifier.h>
+#include <linux/overflow.h>
 #include "vfio.h"
 
 #define DRIVER_VERSION  "0.2"
@@ -825,13 +826,24 @@ static int vfio_iommu_type1_pin_pages(void *iommu_data,
 	unsigned long remote_vaddr;
 	struct vfio_dma *dma;
 	bool do_accounting;
+	dma_addr_t iova_end;
+	size_t iova_size;
 
-	if (!iommu || !pages)
+	if (!iommu || !pages || npage < 0)
 		return -EINVAL;
 
 	/* Supported for v2 version only */
 	if (!iommu->v2)
 		return -EACCES;
+
+	if (npage == 0)
+		return 0;
+
+	if (check_mul_overflow(npage, PAGE_SIZE, &iova_size))
+		return -EINVAL;
+
+	if (check_add_overflow(user_iova, iova_size - 1, &iova_end))
+		return -EINVAL;
 
 	mutex_lock(&iommu->lock);
 
@@ -938,10 +950,21 @@ static void vfio_iommu_type1_unpin_pages(void *iommu_data,
 {
 	struct vfio_iommu *iommu = iommu_data;
 	bool do_accounting;
+	dma_addr_t iova_end;
+	size_t iova_size;
 	int i;
 
 	/* Supported for v2 version only */
 	if (WARN_ON(!iommu->v2))
+		return;
+
+	if (WARN_ON(npage < 0) || npage == 0)
+		return;
+
+	if (WARN_ON(check_mul_overflow(npage, PAGE_SIZE, &iova_size)))
+		return;
+
+	if (WARN_ON(check_add_overflow(user_iova, iova_size - 1, &iova_end)))
 		return;
 
 	mutex_lock(&iommu->lock);
@@ -1304,6 +1327,7 @@ static int vfio_dma_do_unmap(struct vfio_iommu *iommu,
 	int ret = -EINVAL, retries = 0;
 	unsigned long pgshift;
 	dma_addr_t iova = unmap->iova;
+	dma_addr_t iova_end;
 	u64 size = unmap->size;
 	bool unmap_all = unmap->flags & VFIO_DMA_UNMAP_FLAG_ALL;
 	bool invalidate_vaddr = unmap->flags & VFIO_DMA_UNMAP_FLAG_VADDR;
@@ -1328,7 +1352,8 @@ static int vfio_dma_do_unmap(struct vfio_iommu *iommu,
 			goto unlock;
 		size = U64_MAX;
 	} else if (!size || size & (pgsize - 1) ||
-		   iova + size - 1 < iova || size > SIZE_MAX) {
+		   check_add_overflow(iova, size - 1, &iova_end) ||
+		   size > SIZE_MAX) {
 		goto unlock;
 	}
 
@@ -1376,7 +1401,7 @@ again:
 		if (dma && dma->iova != iova)
 			goto unlock;
 
-		dma = vfio_find_dma(iommu, iova + size - 1, 0);
+		dma = vfio_find_dma(iommu, iova_end, 0);
 		if (dma && dma->iova + dma->size != iova + size)
 			goto unlock;
 	}
@@ -1578,7 +1603,9 @@ static int vfio_dma_do_map(struct vfio_iommu *iommu,
 {
 	bool set_vaddr = map->flags & VFIO_DMA_MAP_FLAG_VADDR;
 	dma_addr_t iova = map->iova;
+	dma_addr_t iova_end;
 	unsigned long vaddr = map->vaddr;
+	unsigned long vaddr_end;
 	size_t size = map->size;
 	int ret = 0, prot = 0;
 	size_t pgsize;
@@ -1586,6 +1613,12 @@ static int vfio_dma_do_map(struct vfio_iommu *iommu,
 
 	/* Verify that none of our __u64 fields overflow */
 	if (map->size != size || map->vaddr != vaddr || map->iova != iova)
+		return -EINVAL;
+
+	if (check_add_overflow(iova, size - 1, &iova_end))
+		return -EINVAL;
+
+	if (check_add_overflow(vaddr, size - 1, &vaddr_end))
 		return -EINVAL;
 
 	/* READ/WRITE from device perspective */
@@ -1604,12 +1637,6 @@ static int vfio_dma_do_map(struct vfio_iommu *iommu,
 	WARN_ON((pgsize - 1) & PAGE_MASK);
 
 	if (!size || (size | iova | vaddr) & (pgsize - 1)) {
-		ret = -EINVAL;
-		goto out_unlock;
-	}
-
-	/* Don't allow IOVA or virtual address wrap */
-	if (iova + size - 1 < iova || vaddr + size - 1 < vaddr) {
 		ret = -EINVAL;
 		goto out_unlock;
 	}
@@ -1640,7 +1667,7 @@ static int vfio_dma_do_map(struct vfio_iommu *iommu,
 		goto out_unlock;
 	}
 
-	if (!vfio_iommu_iova_dma_valid(iommu, iova, iova + size - 1)) {
+	if (!vfio_iommu_iova_dma_valid(iommu, iova, iova_end)) {
 		ret = -EINVAL;
 		goto out_unlock;
 	}
@@ -2908,6 +2935,7 @@ static int vfio_iommu_type1_dirty_pages(struct vfio_iommu *iommu,
 		unsigned long pgshift;
 		size_t data_size = dirty.argsz - minsz;
 		size_t iommu_pgsize;
+		dma_addr_t range_end;
 
 		if (!data_size || data_size < sizeof(range))
 			return -EINVAL;
@@ -2916,8 +2944,12 @@ static int vfio_iommu_type1_dirty_pages(struct vfio_iommu *iommu,
 				   sizeof(range)))
 			return -EFAULT;
 
-		if (range.iova + range.size < range.iova)
+		if (range.size == 0)
+			return 0;
+
+		if (check_add_overflow(range.iova, range.size - 1, &range_end))
 			return -EINVAL;
+
 		if (!access_ok((void __user *)range.bitmap.data,
 			       range.bitmap.size))
 			return -EINVAL;
