@@ -3530,7 +3530,7 @@ static int smb3_simple_fallocate_range(unsigned int xid,
 				       struct cifsFileInfo *cfile,
 				       loff_t off, loff_t len)
 {
-	struct file_allocated_range_buffer in_data, *out_data = NULL, *tmp_data;
+	struct file_allocated_range_buffer in_data, *out_data, *tmp_data;
 	u32 out_data_len;
 	char *buf = NULL;
 	loff_t l;
@@ -3545,7 +3545,7 @@ static int smb3_simple_fallocate_range(unsigned int xid,
 			1024 * sizeof(struct file_allocated_range_buffer),
 			(char **)&out_data, &out_data_len);
 	if (rc)
-		goto out;
+		return rc;
 
 	buf = kzalloc(1024 * 1024, GFP_KERNEL);
 	if (buf == NULL) {
