@@ -3451,7 +3451,7 @@ int ocfs2_refcount_cow(struct inode *inode,
 	int ret = 0;
 	u32 p_cluster, num_clusters;
 	unsigned int ext_flags;
-
+	ocfs2_extent_map_trunc(inode, 0);
 	while (write_len) {
 		ret = ocfs2_get_clusters(inode, cpos, &p_cluster,
 					 &num_clusters, &ext_flags);
