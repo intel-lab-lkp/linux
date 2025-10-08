@@ -331,6 +331,9 @@ struct vgic_v3_cpu_if {
 	struct its_vpe	its_vpe;
 
 	unsigned int used_lrs;
+
+	/* ICC_CTLR_EL1 shadow (published to readers) */
+	u32 icc_ctlr_el1_shadow; /* upper 32 bits of this reg are reserved */
 };
 
 struct vgic_cpu {

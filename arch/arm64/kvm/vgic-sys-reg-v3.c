@@ -10,12 +10,17 @@
 #include "vgic/vgic.h"
 #include "sys_regs.h"
 
+static int get_gic_ctlr(struct kvm_vcpu *vcpu, const struct sys_reg_desc *r,
+			u64 *valp);
+
 static int set_gic_ctlr(struct kvm_vcpu *vcpu, const struct sys_reg_desc *r,
 			u64 val)
 {
 	u32 host_pri_bits, host_id_bits, host_seis, host_a3v, seis, a3v;
+	struct vgic_v3_cpu_if *cif = &vcpu->arch.vgic_cpu.vgic_v3;
 	struct vgic_cpu *vgic_v3_cpu = &vcpu->arch.vgic_cpu;
 	struct vgic_vmcr vmcr;
+	u64 sysreg;
 
 	vgic_get_vmcr(vcpu, &vmcr);
 
@@ -52,6 +57,15 @@ static int set_gic_ctlr(struct kvm_vcpu *vcpu, const struct sys_reg_desc *r,
 	vmcr.cbpr = FIELD_GET(ICC_CTLR_EL1_CBPR_MASK, val);
 	vmcr.eoim = FIELD_GET(ICC_CTLR_EL1_EOImode_MASK, val);
 	vgic_set_vmcr(vcpu, &vmcr);
+
+	/* update the ICC_CTLR_EL1 shadow, if required */
+	get_gic_ctlr(vcpu, r, &sysreg);
+
+	/*
+	 * Update the ICC_CTLR_EL1 shadow to allow lock free access of static
+	 * or pesudo static register fields from KVM device IOCTLs
+	 */
+	cif->icc_ctlr_el1_shadow = (u32)sysreg;
 
 	return 0;
 }
