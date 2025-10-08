@@ -45,7 +45,7 @@
 		.en_reg = _en_reg,				\
 		.en_mask = _en_mask,				\
 		.pll_en_bit = _pll_en_bit,			\
-		.flags = _flags,				\
+		.flags = (_flags) | PLL_PARENT_EN,		\
 		.rst_bar_mask = _rst_bar_mask,			\
 		.fmax = MT8196_PLL_FMAX,			\
 		.fmin = MT8196_PLL_FMIN,			\
@@ -58,6 +58,7 @@
 		.pcw_shift = _pcw_shift,			\
 		.pcwbits = _pcwbits,				\
 		.pcwibits = MT8196_INTEGER_BITS,		\
+		.parent_name = "mfg_eb",			\
 	}
 
 static const struct mtk_pll_data mfg_ao_plls[] = {
