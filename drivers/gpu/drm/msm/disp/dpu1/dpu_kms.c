@@ -367,6 +367,26 @@ static void dpu_kms_global_destroy_state(struct drm_private_obj *obj,
 	kfree(dpu_state);
 }
 
+static void dpu_kms_global_reset(struct drm_private_obj *obj)
+{
+	struct drm_device *dev = obj->dev;
+	struct msm_drm_private *priv = dev->dev_private;
+	struct dpu_kms *dpu_kms = to_dpu_kms(priv->kms);
+	struct dpu_global_state *dpu_state;
+
+	if (obj->state) {
+		dpu_kms_global_destroy_state(obj, obj->state);
+		obj->state = NULL;
+	}
+
+	dpu_state = kzalloc(sizeof(*dpu_state), GFP_KERNEL);
+	if (!dpu_state)
+		return;
+
+	__drm_atomic_helper_private_obj_reset(obj, &dpu_state->base);
+	dpu_state->rm = &dpu_kms->rm;
+}
+
 static void dpu_kms_global_print_state(struct drm_printer *p,
 				       const struct drm_private_state *state)
 {
@@ -379,21 +399,14 @@ static const struct drm_private_state_funcs dpu_kms_global_state_funcs = {
 	.atomic_duplicate_state = dpu_kms_global_duplicate_state,
 	.atomic_destroy_state = dpu_kms_global_destroy_state,
 	.atomic_print_state = dpu_kms_global_print_state,
+	.reset = dpu_kms_global_reset,
 };
 
 static int dpu_kms_global_obj_init(struct dpu_kms *dpu_kms)
 {
-	struct dpu_global_state *state;
-
-	state = kzalloc(sizeof(*state), GFP_KERNEL);
-	if (!state)
-		return -ENOMEM;
-
 	drm_atomic_private_obj_init(dpu_kms->dev, &dpu_kms->global_state,
-				    &state->base,
+				    NULL,
 				    &dpu_kms_global_state_funcs);
-
-	state->rm = &dpu_kms->rm;
 
 	return 0;
 }
