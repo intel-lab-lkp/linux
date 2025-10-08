@@ -1409,9 +1409,6 @@ static int fdp1_g_fmt(struct file *file, void *priv, struct v4l2_format *f)
 	struct fdp1_q_data *q_data;
 	struct fdp1_ctx *ctx = fh_to_ctx(priv);
 
-	if (!v4l2_m2m_get_vq(ctx->fh.m2m_ctx, f->type))
-		return -EINVAL;
-
 	q_data = get_q_data(ctx, f->type);
 	f->fmt.pix_mp = q_data->format;
 
