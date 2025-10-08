@@ -77,9 +77,7 @@ On other
 On all
 	Write a single character to /proc/sysrq-trigger.
 	Only the first character is processed, the rest of the string is
-	ignored. However, it is not recommended to write any extra characters
-	as the behavior is undefined and might change in the future versions.
-	E.g.::
+	ignored. E.g.::
 
 		echo t > /proc/sysrq-trigger
 
