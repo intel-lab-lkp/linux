@@ -2075,23 +2075,26 @@ static void mac80211_hwsim_tx(struct ieee80211_hw *hw,
 				       txi->control.rates,
 				       ARRAY_SIZE(txi->control.rates));
 
-	for (i = 0; i < ARRAY_SIZE(txi->control.rates); i++) {
-		u16 rflags = txi->control.rates[i].flags;
-		/* initialize to data->bw for 5/10 MHz handling */
-		enum nl80211_chan_width bw = data->bw;
+	if (channel->band != NL80211_BAND_S1GHZ) {
+		for (i = 0; i < ARRAY_SIZE(txi->control.rates); i++) {
+			u16 rflags = txi->control.rates[i].flags;
+			/* initialize to data->bw for 5/10 MHz handling */
+			enum nl80211_chan_width bw = data->bw;
 
-		if (txi->control.rates[i].idx == -1)
-			break;
+			if (txi->control.rates[i].idx == -1)
+				break;
 
-		if (rflags & IEEE80211_TX_RC_40_MHZ_WIDTH)
-			bw = NL80211_CHAN_WIDTH_40;
-		else if (rflags & IEEE80211_TX_RC_80_MHZ_WIDTH)
-			bw = NL80211_CHAN_WIDTH_80;
-		else if (rflags & IEEE80211_TX_RC_160_MHZ_WIDTH)
-			bw = NL80211_CHAN_WIDTH_160;
+			if (rflags & IEEE80211_TX_RC_40_MHZ_WIDTH)
+				bw = NL80211_CHAN_WIDTH_40;
+			else if (rflags & IEEE80211_TX_RC_80_MHZ_WIDTH)
+				bw = NL80211_CHAN_WIDTH_80;
+			else if (rflags & IEEE80211_TX_RC_160_MHZ_WIDTH)
+				bw = NL80211_CHAN_WIDTH_160;
 
-		if (WARN_ON(hwsim_get_chanwidth(bw) > hwsim_get_chanwidth(confbw)))
-			return;
+			if (WARN_ON(hwsim_get_chanwidth(bw) >
+				    hwsim_get_chanwidth(confbw)))
+				return;
+		}
 	}
 
 	if (skb->len >= 24 + 8 &&
@@ -2656,7 +2659,7 @@ mac80211_hwsim_sta_rc_update(struct ieee80211_hw *hw,
 
 		link_sta = rcu_dereference(sta->link[link_id]);
 
-		if (!link_sta)
+		if (!link_sta || link_sta->s1g_cap.s1g)
 			continue;
 
 		switch (link_sta->bandwidth) {
