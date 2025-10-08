@@ -30,7 +30,7 @@
 
 iova_t __to_iova(struct vfio_pci_device *device, void *vaddr)
 {
-	struct vfio_dma_region *region;
+	struct dma_region *region;
 
 	list_for_each_entry(region, &device->iommu->dma_regions, link) {
 		if (vaddr < region->vaddr)
@@ -142,7 +142,7 @@ static void vfio_pci_irq_get(struct vfio_pci_device *device, u32 index,
 }
 
 static void vfio_iommu_dma_map(struct vfio_pci_device *device,
-			       struct vfio_dma_region *region)
+			       struct dma_region *region)
 {
 	struct vfio_iommu_type1_dma_map args = {
 		.argsz = sizeof(args),
@@ -156,7 +156,7 @@ static void vfio_iommu_dma_map(struct vfio_pci_device *device,
 }
 
 static void iommufd_dma_map(struct vfio_pci_device *device,
-			    struct vfio_dma_region *region)
+			    struct dma_region *region)
 {
 	struct iommu_ioas_map args = {
 		.size = sizeof(args),
@@ -173,7 +173,7 @@ static void iommufd_dma_map(struct vfio_pci_device *device,
 }
 
 void vfio_pci_dma_map(struct vfio_pci_device *device,
-		      struct vfio_dma_region *region)
+		      struct dma_region *region)
 {
 	if (device->iommu->iommufd)
 		iommufd_dma_map(device, region);
@@ -184,7 +184,7 @@ void vfio_pci_dma_map(struct vfio_pci_device *device,
 }
 
 static void vfio_iommu_dma_unmap(struct vfio_pci_device *device,
-				 struct vfio_dma_region *region)
+				 struct dma_region *region)
 {
 	struct vfio_iommu_type1_dma_unmap args = {
 		.argsz = sizeof(args),
@@ -196,7 +196,7 @@ static void vfio_iommu_dma_unmap(struct vfio_pci_device *device,
 }
 
 static void iommufd_dma_unmap(struct vfio_pci_device *device,
-			      struct vfio_dma_region *region)
+			      struct dma_region *region)
 {
 	struct iommu_ioas_unmap args = {
 		.size = sizeof(args),
@@ -209,7 +209,7 @@ static void iommufd_dma_unmap(struct vfio_pci_device *device,
 }
 
 void vfio_pci_dma_unmap(struct vfio_pci_device *device,
-			struct vfio_dma_region *region)
+			struct dma_region *region)
 {
 	if (device->iommu->iommufd)
 		iommufd_dma_unmap(device, region);

@@ -19,7 +19,7 @@ static const char *device_bdf;
 } while (0)
 
 static void region_setup(struct vfio_pci_device *device,
-			 struct vfio_dma_region *region, u64 size)
+			 struct dma_region *region, u64 size)
 {
 	const int flags = MAP_SHARED | MAP_ANONYMOUS;
 	const int prot = PROT_READ | PROT_WRITE;
@@ -36,7 +36,7 @@ static void region_setup(struct vfio_pci_device *device,
 }
 
 static void region_teardown(struct vfio_pci_device *device,
-			    struct vfio_dma_region *region)
+			    struct dma_region *region)
 {
 	vfio_pci_dma_unmap(device, region);
 	VFIO_ASSERT_EQ(munmap(region->vaddr, region->size), 0);
@@ -44,7 +44,7 @@ static void region_teardown(struct vfio_pci_device *device,
 
 FIXTURE(vfio_pci_driver_test) {
 	struct vfio_pci_device *device;
-	struct vfio_dma_region memcpy_region;
+	struct dma_region memcpy_region;
 	void *vaddr;
 	int msi_fd;
 
