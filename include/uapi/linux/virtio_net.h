@@ -86,6 +86,7 @@
 						  * packets with partial csum
 						  * for the outer header
 						  */
+#define VIRTIO_NET_F_OUT_NET_HEADER 69	/* Outer network header offset */
 
 /* Offloads bits corresponding to VIRTIO_NET_F_HOST_UDP_TUNNEL_GSO{,_CSUM}
  * features
@@ -212,6 +213,13 @@ struct virtio_net_hdr_v1_hash_tunnel {
 	struct virtio_net_hdr_v1_hash hash_hdr;
 	__le16 outer_th_offset;
 	__le16 inner_nh_offset;
+};
+
+/* outer network header */
+struct virtio_net_hdr_v1_hash_tunnel_out_net_hdr {
+	struct virtio_net_hdr_v1_hash_tunnel tnl_hdr;
+	__le16 outer_nh_offset;
+	__u8 padding_reserved_2[6];
 };
 
 #ifndef VIRTIO_NET_NO_LEGACY
