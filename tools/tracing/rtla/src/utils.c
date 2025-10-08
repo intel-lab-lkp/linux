@@ -39,6 +39,20 @@ void err_msg(const char *fmt, ...)
 }
 
 /*
+ * fatal - print an error message to stderr and exit with ERROR
+ */
+void fatal(const char *fmt, ...)
+{
+	va_list ap;
+
+	va_start(ap, fmt);
+	vfprintf(stderr, fmt, ap);
+	va_end(ap);
+
+	exit(ERROR);
+}
+
+/*
  * debug_msg - print a debug message to stderr if debug is set
  */
 void debug_msg(const char *fmt, ...)
