@@ -23,6 +23,7 @@
 #include <linux/export.h>
 #include <linux/uaccess.h>
 
+#include <drm/drm_atomic.h>
 #include <drm/drm_drv.h>
 #include <drm/drm_encoder.h>
 #include <drm/drm_file.h>
@@ -195,7 +196,12 @@ void drm_mode_config_reset(struct drm_device *dev)
 	struct drm_plane *plane;
 	struct drm_encoder *encoder;
 	struct drm_connector *connector;
+	struct drm_private_obj *obj;
 	struct drm_connector_list_iter conn_iter;
+
+	drm_for_each_privobj(obj, dev)
+		if (obj->funcs->reset)
+			obj->funcs->reset(obj);
 
 	drm_for_each_plane(plane, dev)
 		if (plane->funcs->reset)

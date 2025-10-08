@@ -793,9 +793,6 @@ drm_atomic_private_obj_init(struct drm_device *dev,
 	obj->dev = dev;
 	obj->funcs = funcs;
 	list_add_tail(&obj->head, &dev->mode_config.privobj_list);
-
-	if (obj->funcs->reset)
-		obj->funcs->reset(obj);
 }
 EXPORT_SYMBOL(drm_atomic_private_obj_init);
 
