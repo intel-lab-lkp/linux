@@ -35,6 +35,23 @@ bool intel_dsc_source_support(const struct intel_crtc_state *crtc_state)
 	return true;
 }
 
+bool intel_dsc_is_enabled_on_link(const struct intel_crtc_state *crtc_state)
+{
+	if (crtc_state->dsc.compression_enable)
+		return true;
+
+	/*
+	 * On links other than DP-MST, the only stream is that tracked by
+	 * crtc_state, so there is no need to check if DSC is enabled on
+	 * another stream on the same link.
+	 */
+	if (!intel_crtc_has_type(crtc_state, INTEL_OUTPUT_DP_MST))
+		return false;
+
+	/* The only reason to enable FEC on a DP-MST link is DSC. */
+	return crtc_state->fec_enable;
+}
+
 static bool is_pipe_dsc(struct intel_crtc *crtc, enum transcoder cpu_transcoder)
 {
 	struct intel_display *display = to_intel_display(crtc);

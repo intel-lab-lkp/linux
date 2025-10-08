@@ -833,6 +833,10 @@ static int intel_dp_mst_check_fec_change(struct intel_atomic_state *state,
 
 		if (crtc_state->fec_enable)
 			fec_pipe_mask |= BIT(crtc->pipe);
+
+		/* The only reason to enable FEC on a DP-MST link is DSC. */
+		drm_WARN_ON(display->drm,
+			    intel_dsc_is_enabled_on_link(crtc_state) != crtc_state->fec_enable);
 	}
 
 	if (!fec_pipe_mask || mst_pipe_mask == fec_pipe_mask)
