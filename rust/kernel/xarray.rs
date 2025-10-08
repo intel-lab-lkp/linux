@@ -87,6 +87,12 @@ pub enum AllocKind {
 impl<T: ForeignOwnable> XArray<T> {
     /// Creates a new initializer for this type.
     pub fn new(kind: AllocKind) -> impl PinInit<Self> {
+        // Ensure pointers stored in XArray are suitably aligned.
+        build_assert!(
+            T::FOREIGN_ALIGN >= 4,
+            "pointers stored in XArray must be 4-byte aligned"
+        );
+
         let flags = match kind {
             AllocKind::Alloc => bindings::XA_FLAGS_ALLOC,
             AllocKind::Alloc1 => bindings::XA_FLAGS_ALLOC1,
@@ -230,10 +236,6 @@ impl<'a, T: ForeignOwnable> Guard<'a, T> {
         value: T,
         gfp: alloc::Flags,
     ) -> Result<Option<T>, StoreError<T>> {
-        build_assert!(
-            T::FOREIGN_ALIGN >= 4,
-            "pointers stored in XArray must be 4-byte aligned"
-        );
         let new = value.into_foreign();
 
         let old = {
