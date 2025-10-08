@@ -1172,6 +1172,9 @@ void panthor_fw_unplug(struct panthor_device *ptdev)
 		panthor_fw_stop(ptdev);
 	}
 
+	/* Any pending FW event processing must stop before we free FW memory */
+	panthor_sched_stop_fw_events(ptdev);
+
 	list_for_each_entry(section, &ptdev->fw->sections, node)
 		panthor_kernel_bo_destroy(section->mem);
 

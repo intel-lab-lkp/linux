@@ -51,6 +51,7 @@ void panthor_sched_resume(struct panthor_device *ptdev);
 
 void panthor_sched_report_mmu_fault(struct panthor_device *ptdev);
 void panthor_sched_report_fw_events(struct panthor_device *ptdev, u32 events);
+void panthor_sched_stop_fw_events(struct panthor_device *ptdev);
 
 void panthor_fdinfo_gather_group_samples(struct panthor_file *pfile);
 

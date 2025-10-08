@@ -1794,6 +1794,18 @@ void panthor_sched_report_fw_events(struct panthor_device *ptdev, u32 events)
 	sched_queue_work(ptdev->scheduler, fw_events);
 }
 
+/**
+ * panthor_sched_stop_fw_events() - Stop processing FW events.
+ */
+void panthor_sched_stop_fw_events(struct panthor_device *ptdev)
+{
+	if (!ptdev->scheduler)
+		return;
+
+	atomic_set(&ptdev->scheduler->fw_events, 0);
+	cancel_work_sync(&ptdev->scheduler->fw_events_work);
+}
+
 static const char *fence_get_driver_name(struct dma_fence *fence)
 {
 	return "panthor";
