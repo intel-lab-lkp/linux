@@ -1209,4 +1209,68 @@ done_seqretry_irqrestore(seqlock_t *lock, int seq, unsigned long flags)
 	if (seq & 1)
 		read_sequnlock_excl_irqrestore(lock, flags);
 }
+
+/* internal helper for scoped_seqlock_read/scoped_seqlock_read_irqsave */
+static inline bool
+__scoped_seqlock_read_retry(seqlock_t *lock, int *seq, unsigned long *flags)
+{
+	bool retry = false;
+
+	if (*seq & 1) {
+		if (flags)
+			read_sequnlock_excl_irqrestore(lock, *flags);
+		else
+			read_sequnlock_excl(lock);
+	} else if (read_seqretry(lock, *seq)) {
+		*seq = 1;
+		retry = true;
+		if (flags)
+			read_seqlock_excl_irqsave(lock, *flags);
+		else
+			read_seqlock_excl(lock);
+	}
+
+	return retry;
+}
+
+#define __scoped_seqlock_read(lock, s)	\
+	for (struct { bool lockless; int seq; }					\
+		s = { .lockless = true, .seq = read_seqbegin(lock) };		\
+	     s.lockless || __scoped_seqlock_read_retry(lock, &s.seq, NULL);	\
+	     s.lockless = false)
+
+#define __scoped_seqlock_read_irqsave(lock, s)	\
+	for (struct { bool lockless; int seq; unsigned long flags; }		\
+		s = { .lockless = true, .seq = read_seqbegin(lock) };		\
+	     s.lockless || __scoped_seqlock_read_retry(lock, &s.seq, &s.flags);	\
+	     s.lockless = false)
+
+/**
+ * scoped_seqlock_read(lock) - execute the read side critical section
+ *                             without manual sequence counter handling
+ *                             or calls to other helpers
+ * @lock: pointer to the seqlock_t protecting the data
+ *
+ * Example:
+ *
+ *	scoped_seqlock_read(&lock) {
+ *		// read-side critical section
+ *	}
+ *
+ * Starts with a lockless pass first. If it fails, restarts the critical
+ * section with the lock held.
+ *
+ * The critical section must not contain control flow that escapes the loop.
+ */
+#define scoped_seqlock_read(lock)	\
+	__scoped_seqlock_read(lock, __UNIQUE_ID(s))
+
+/**
+ * scoped_seqlock_read_irqsave(lock) - same as scoped_seqlock_read() but
+ *                                     disables irqs on a locking pass
+ * @lock: pointer to the seqlock_t protecting the data
+ */
+#define scoped_seqlock_read_irqsave(lock)	\
+	__scoped_seqlock_read_irqsave(lock, __UNIQUE_ID(s))
+
 #endif /* __LINUX_SEQLOCK_H */
