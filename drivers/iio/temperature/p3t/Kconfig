@@ -1,0 +1,28 @@
+# SPDX-License-Identifier: GPL-2.0-only
+
+config IIO_P3T1755
+	tristate
+	depends on (I2C || I3C)
+
+config IIO_P3T1755_I2C
+	tristate "NXP P3T1755 temperature sensor I2C driver"
+	select IIO_P3T1755
+	select REGMAP_I2C
+	help
+	  Say yes here to build support for NXP P3T1755 I2C temperature
+	  sensor.
+
+	  To compile this driver as a module, choose M here: the module
+	  will be called p3t1755_i2c
+
+config IIO_P3T1755_I3C
+	tristate "NXP P3T1755 temperature sensor I3C driver"
+	select IIO_P3T1755
+	select REGMAP_I3C
+	depends on I3C
+	help
+	  Say yes here to build support for NXP P3T1755 I3C temperature
+	  sensor.
+
+	  To compile this driver as a module, choose M here: the module
+	  will be called p3t1755_i3c
