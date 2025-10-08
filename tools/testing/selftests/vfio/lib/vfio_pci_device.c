@@ -22,39 +22,6 @@
 
 #define PCI_SYSFS_PATH	"/sys/bus/pci/devices"
 
-#define ioctl_assert(_fd, _op, _arg) do {						       \
-	void *__arg = (_arg);								       \
-	int __ret = ioctl((_fd), (_op), (__arg));					       \
-	VFIO_ASSERT_EQ(__ret, 0, "ioctl(%s, %s, %s) returned %d\n", #_fd, #_op, #_arg, __ret); \
-} while (0)
-
-iova_t __to_iova(struct vfio_pci_device *device, void *vaddr)
-{
-	struct dma_region *region;
-
-	list_for_each_entry(region, &device->iommu->dma_regions, link) {
-		if (vaddr < region->vaddr)
-			continue;
-
-		if (vaddr >= region->vaddr + region->size)
-			continue;
-
-		return region->iova + (vaddr - region->vaddr);
-	}
-
-	return INVALID_IOVA;
-}
-
-iova_t to_iova(struct vfio_pci_device *device, void *vaddr)
-{
-	iova_t iova;
-
-	iova = __to_iova(device, vaddr);
-	VFIO_ASSERT_NE(iova, INVALID_IOVA, "%p is not mapped into device.\n", vaddr);
-
-	return iova;
-}
-
 static void vfio_pci_irq_set(struct vfio_pci_device *device,
 			     u32 index, u32 vector, u32 count, int *fds)
 {
@@ -139,84 +106,6 @@ static void vfio_pci_irq_get(struct vfio_pci_device *device, u32 index,
 	irq_info->index = index;
 
 	ioctl_assert(device->fd, VFIO_DEVICE_GET_IRQ_INFO, irq_info);
-}
-
-static void vfio_iommu_dma_map(struct vfio_pci_device *device,
-			       struct dma_region *region)
-{
-	struct vfio_iommu_type1_dma_map args = {
-		.argsz = sizeof(args),
-		.flags = VFIO_DMA_MAP_FLAG_READ | VFIO_DMA_MAP_FLAG_WRITE,
-		.vaddr = (u64)region->vaddr,
-		.iova = region->iova,
-		.size = region->size,
-	};
-
-	ioctl_assert(device->iommu->container_fd, VFIO_IOMMU_MAP_DMA, &args);
-}
-
-static void iommufd_dma_map(struct vfio_pci_device *device,
-			    struct dma_region *region)
-{
-	struct iommu_ioas_map args = {
-		.size = sizeof(args),
-		.flags = IOMMU_IOAS_MAP_READABLE |
-			 IOMMU_IOAS_MAP_WRITEABLE |
-			 IOMMU_IOAS_MAP_FIXED_IOVA,
-		.user_va = (u64)region->vaddr,
-		.iova = region->iova,
-		.length = region->size,
-		.ioas_id = device->iommu->ioas_id,
-	};
-
-	ioctl_assert(device->iommu->iommufd, IOMMU_IOAS_MAP, &args);
-}
-
-void vfio_pci_dma_map(struct vfio_pci_device *device,
-		      struct dma_region *region)
-{
-	if (device->iommu->iommufd)
-		iommufd_dma_map(device, region);
-	else
-		vfio_iommu_dma_map(device, region);
-
-	list_add(&region->link, &device->iommu->dma_regions);
-}
-
-static void vfio_iommu_dma_unmap(struct vfio_pci_device *device,
-				 struct dma_region *region)
-{
-	struct vfio_iommu_type1_dma_unmap args = {
-		.argsz = sizeof(args),
-		.iova = region->iova,
-		.size = region->size,
-	};
-
-	ioctl_assert(device->iommu->container_fd, VFIO_IOMMU_UNMAP_DMA, &args);
-}
-
-static void iommufd_dma_unmap(struct vfio_pci_device *device,
-			      struct dma_region *region)
-{
-	struct iommu_ioas_unmap args = {
-		.size = sizeof(args),
-		.iova = region->iova,
-		.length = region->size,
-		.ioas_id = device->iommu->ioas_id,
-	};
-
-	ioctl_assert(device->iommu->iommufd, IOMMU_IOAS_UNMAP, &args);
-}
-
-void vfio_pci_dma_unmap(struct vfio_pci_device *device,
-			struct dma_region *region)
-{
-	if (device->iommu->iommufd)
-		iommufd_dma_unmap(device, region);
-	else
-		vfio_iommu_dma_unmap(device, region);
-
-	list_del(&region->link);
 }
 
 static void vfio_pci_region_get(struct vfio_pci_device *device, int index,
@@ -408,52 +297,6 @@ const char *vfio_pci_get_cdev_path(const char *bdf)
 	return cdev_path;
 }
 
-/* Reminder: Keep in sync with FIXTURE_VARIANT_ADD_ALL_IOMMU_MODES(). */
-static const struct iommu_mode iommu_modes[] = {
-	{
-		.name = "vfio_type1_iommu",
-		.container_path = "/dev/vfio/vfio",
-		.iommu_type = VFIO_TYPE1_IOMMU,
-	},
-	{
-		.name = "vfio_type1v2_iommu",
-		.container_path = "/dev/vfio/vfio",
-		.iommu_type = VFIO_TYPE1v2_IOMMU,
-	},
-	{
-		.name = "iommufd_compat_type1",
-		.container_path = "/dev/iommu",
-		.iommu_type = VFIO_TYPE1_IOMMU,
-	},
-	{
-		.name = "iommufd_compat_type1v2",
-		.container_path = "/dev/iommu",
-		.iommu_type = VFIO_TYPE1v2_IOMMU,
-	},
-	{
-		.name = "iommufd",
-	},
-};
-
-const char *default_iommu_mode = "iommufd";
-
-static const struct iommu_mode *lookup_iommu_mode(const char *iommu_mode)
-{
-	int i;
-
-	if (!iommu_mode)
-		iommu_mode = default_iommu_mode;
-
-	for (i = 0; i < ARRAY_SIZE(iommu_modes); i++) {
-		if (strcmp(iommu_mode, iommu_modes[i].name))
-			continue;
-
-		return &iommu_modes[i];
-	}
-
-	VFIO_FAIL("Unrecognized IOMMU mode: %s\n", iommu_mode);
-}
-
 static void vfio_device_bind_iommufd(int device_fd, int iommufd)
 {
 	struct vfio_device_bind_iommufd args = {
@@ -462,16 +305,6 @@ static void vfio_device_bind_iommufd(int device_fd, int iommufd)
 	};
 
 	ioctl_assert(device_fd, VFIO_DEVICE_BIND_IOMMUFD, &args);
-}
-
-static u32 iommufd_ioas_alloc(int iommufd)
-{
-	struct iommu_ioas_alloc args = {
-		.size = sizeof(args),
-	};
-
-	ioctl_assert(iommufd, IOMMU_IOAS_ALLOC, &args);
-	return args.out_ioas_id;
 }
 
 static void vfio_device_attach_iommufd_pt(int device_fd, u32 pt_id)
@@ -494,41 +327,6 @@ static void vfio_pci_iommufd_setup(struct vfio_pci_device *device, const char *b
 
 	vfio_device_bind_iommufd(device->fd, device->iommu->iommufd);
 	vfio_device_attach_iommufd_pt(device->fd, device->iommu->ioas_id);
-}
-
-struct iommu *iommu_init(const char *iommu_mode)
-{
-	const char *container_path;
-	struct iommu *iommu;
-	int version;
-
-	iommu = calloc(1, sizeof(*iommu));
-	VFIO_ASSERT_NOT_NULL(iommu);
-
-	INIT_LIST_HEAD(&iommu->dma_regions);
-
-	iommu->mode = lookup_iommu_mode(iommu_mode);
-
-	container_path = iommu->mode->container_path;
-	if (container_path) {
-		iommu->container_fd = open(container_path, O_RDWR);
-		VFIO_ASSERT_GE(iommu->container_fd, 0, "open(%s) failed\n", container_path);
-
-		version = ioctl(iommu->container_fd, VFIO_GET_API_VERSION);
-		VFIO_ASSERT_EQ(version, VFIO_API_VERSION, "Unsupported version: %d\n", version);
-	} else {
-		/*
-		 * Require device->iommufd to be >0 so that a simple non-0 check can be
-		 * used to check if iommufd is enabled. In practice open() will never
-		 * return 0 unless stdin is closed.
-		 */
-		iommu->iommufd = open("/dev/iommu", O_RDWR);
-		VFIO_ASSERT_GT(iommu->iommufd, 0);
-
-		iommu->ioas_id = iommufd_ioas_alloc(iommu->iommufd);
-	}
-
-	return iommu;
 }
 
 struct vfio_pci_device *__vfio_pci_device_init(const char *bdf, struct iommu *iommu)
@@ -581,16 +379,6 @@ void __vfio_pci_device_cleanup(struct vfio_pci_device *device)
 		VFIO_ASSERT_EQ(close(device->group_fd), 0);
 
 	free(device);
-}
-
-void iommu_cleanup(struct iommu *iommu)
-{
-	if (iommu->iommufd)
-		VFIO_ASSERT_EQ(close(iommu->iommufd), 0);
-	else
-		VFIO_ASSERT_EQ(close(iommu->container_fd), 0);
-
-	free(iommu);
 }
 
 void vfio_pci_device_cleanup(struct vfio_pci_device *device)

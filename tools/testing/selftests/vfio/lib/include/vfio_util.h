@@ -7,6 +7,7 @@
 #include <linux/vfio.h>
 #include <linux/list.h>
 #include <linux/pci_regs.h>
+#include <sys/ioctl.h>
 
 #include "../../../kselftest.h"
 
@@ -45,6 +46,12 @@
 #define VFIO_FAIL(_fmt, ...) do {				\
 	fprintf(stderr, "%s:%u: FAIL\n\n", __FILE__, __LINE__);	\
 	VFIO_LOG_AND_EXIT(_fmt, ##__VA_ARGS__);			\
+} while (0)
+
+#define ioctl_assert(_fd, _op, _arg) do {						       \
+	void *__arg = (_arg);								       \
+	int __ret = ioctl((_fd), (_op), (__arg));					       \
+	VFIO_ASSERT_EQ(__ret, 0, "ioctl(%s, %s, %s) returned %d\n", #_fd, #_op, #_arg, __ret); \
 } while (0)
 
 #define dev_info(_dev, _fmt, ...) printf("%s: " _fmt, (_dev)->bdf, ##__VA_ARGS__)
@@ -212,6 +219,10 @@ extern const char *default_iommu_mode;
 
 struct iommu *iommu_init(const char *iommu_mode);
 void iommu_cleanup(struct iommu *iommu);
+iova_t iommu_hva2iova(struct iommu *iommu, void *vaddr);
+iova_t __iommu_hva2iova(struct iommu *iommu, void *vaddr);
+void iommu_map(struct iommu *iommu, struct dma_region *region);
+void iommu_unmap(struct iommu *iommu, struct dma_region *region);
 
 struct vfio_pci_device *__vfio_pci_device_init(const char *bdf, struct iommu *iommu);
 struct vfio_pci_device *vfio_pci_device_init(const char *bdf, const char *iommu_mode);
@@ -221,10 +232,17 @@ void vfio_pci_device_cleanup(struct vfio_pci_device *device);
 
 void vfio_pci_device_reset(struct vfio_pci_device *device);
 
-void vfio_pci_dma_map(struct vfio_pci_device *device,
-		      struct dma_region *region);
-void vfio_pci_dma_unmap(struct vfio_pci_device *device,
-			struct dma_region *region);
+static inline void vfio_pci_dma_map(struct vfio_pci_device *device,
+				    struct dma_region *region)
+{
+	return iommu_map(device->iommu, region);
+}
+
+static inline void vfio_pci_dma_unmap(struct vfio_pci_device *device,
+				      struct dma_region *region)
+{
+	return iommu_unmap(device->iommu, region);
+}
 
 void vfio_pci_config_access(struct vfio_pci_device *device, bool write,
 			    size_t config, size_t size, void *data);
@@ -286,8 +304,15 @@ static inline void vfio_pci_msix_disable(struct vfio_pci_device *device)
 	vfio_pci_irq_disable(device, VFIO_PCI_MSIX_IRQ_INDEX);
 }
 
-iova_t __to_iova(struct vfio_pci_device *device, void *vaddr);
-iova_t to_iova(struct vfio_pci_device *device, void *vaddr);
+static inline iova_t __to_iova(struct vfio_pci_device *device, void *vaddr)
+{
+	return __iommu_hva2iova(device->iommu, vaddr);
+}
+
+static inline iova_t to_iova(struct vfio_pci_device *device, void *vaddr)
+{
+	return iommu_hva2iova(device->iommu, vaddr);
+}
 
 static inline bool vfio_pci_device_match(struct vfio_pci_device *device,
 					 u16 vendor_id, u16 device_id)
