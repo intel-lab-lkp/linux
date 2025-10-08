@@ -297,6 +297,7 @@ xe-$(CONFIG_DRM_XE_DISPLAY) += \
 	i915-display/intel_pmdemand.o \
 	i915-display/intel_pch.o \
 	i915-display/intel_pps.o \
+	i915-display/intel_prefill.o \
 	i915-display/intel_psr.o \
 	i915-display/intel_qp_tables.o \
 	i915-display/intel_quirks.o \
