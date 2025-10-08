@@ -2399,10 +2399,8 @@ int m_can_class_register(struct m_can_classdev *cdev)
 			devm_kzalloc(cdev->dev,
 				     cdev->tx_fifo_size * sizeof(*cdev->tx_ops),
 				     GFP_KERNEL);
-		if (!cdev->tx_ops) {
-			dev_err(cdev->dev, "Failed to allocate tx_ops for workqueue\n");
+		if (!cdev->tx_ops)
 			return -ENOMEM;
-		}
 	}
 
 	ret = m_can_clk_start(cdev);
