@@ -2885,7 +2885,7 @@ int i3c_master_register(struct i3c_master_controller *master,
 
 	ret = i3c_bus_init(i3cbus, master->dev.of_node);
 	if (ret)
-		return ret;
+		goto err_put_of_node;
 
 	device_initialize(&master->dev);
 	dev_set_name(&master->dev, "i3c-%d", i3cbus->id);
@@ -2972,6 +2972,9 @@ err_cleanup_bus:
 
 err_put_dev:
 	put_device(&master->dev);
+
+err_put_of_node:
+	of_node_put(master->dev.of_node);
 
 	return ret;
 }
