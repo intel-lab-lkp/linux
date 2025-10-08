@@ -15,6 +15,26 @@
 #include "skl_scaler.h"
 #include "skl_watermark.h"
 
+#define FP_FMT "%u.%06u"
+#define FP_ARG(val) (val) >> 16, (((val) & 0xffff) * 15625) >> 10
+
+static void intel_prefill_dump(struct intel_prefill_ctx *ctx,
+			       const struct intel_crtc_state *crtc_state)
+{
+	struct intel_display *display = to_intel_display(crtc_state);
+
+	drm_dbg_kms(display->drm, "prefill      prefill.fixed: " FP_FMT "\n", FP_ARG(ctx->prefill.fixed));
+	drm_dbg_kms(display->drm, "prefill        prefill.wm0: " FP_FMT "\n", FP_ARG(ctx->prefill.wm0));
+	drm_dbg_kms(display->drm, "prefill prefill.scaler_1st: " FP_FMT "\n", FP_ARG(ctx->prefill.scaler_1st));
+	drm_dbg_kms(display->drm, "prefill prefill.scaler_2nd: " FP_FMT "\n", FP_ARG(ctx->prefill.scaler_2nd));
+	drm_dbg_kms(display->drm, "prefill        prefill.dsc: " FP_FMT "\n", FP_ARG(ctx->prefill.dsc));
+	drm_dbg_kms(display->drm, "prefill       prefill.full: " FP_FMT "\n", FP_ARG(ctx->prefill.full));
+
+	drm_dbg_kms(display->drm, "prefill          adj.cdclk: " FP_FMT "\n", FP_ARG(ctx->adj.cdclk));
+	drm_dbg_kms(display->drm, "prefill     adj.scaler_1st: " FP_FMT "\n", FP_ARG(ctx->adj.scaler_1st));
+	drm_dbg_kms(display->drm, "prefill     adj.scaler_2nd: " FP_FMT "\n", FP_ARG(ctx->adj.scaler_2nd));
+}
+
 static unsigned int prefill_usecs_to_lines(const struct intel_crtc_state *crtc_state, unsigned int usecs)
 {
 	const struct drm_display_mode *pipe_mode = &crtc_state->hw.pipe_mode;
@@ -101,6 +121,8 @@ void intel_prefill_init_worst(struct intel_prefill_ctx *ctx,
 	ctx->adj.cdclk = intel_cdclk_prefill_adjustment_worst(crtc_state);
 
 	ctx->prefill.full = prefill_lines_full(ctx);
+
+	intel_prefill_dump(ctx, crtc_state);
 }
 
 void intel_prefill_init(struct intel_prefill_ctx *ctx,
@@ -112,6 +134,8 @@ void intel_prefill_init(struct intel_prefill_ctx *ctx,
 	ctx->adj.cdclk = intel_cdclk_prefill_adjustment(crtc_state, cdclk_state);
 
 	ctx->prefill.full = prefill_lines_full(ctx);
+
+	intel_prefill_dump(ctx, crtc_state);
 }
 
 static unsigned int prefill_lines_with_latency(const struct intel_prefill_ctx *ctx,
@@ -149,8 +173,17 @@ bool intel_prefill_vblank_too_short(const struct intel_prefill_ctx *ctx,
 				    const struct intel_crtc_state *crtc_state,
 				    unsigned int latency_us)
 {
+	struct intel_display *display = to_intel_display(crtc_state);
 	unsigned int guardband = intel_prefill_guardband(crtc_state);
 	unsigned int prefill = prefill_lines_with_latency(ctx, crtc_state, latency_us);
+
+	drm_dbg_kms(display->drm, "  prefill (%d): " FP_FMT "\n", latency_us, FP_ARG(prefill));
+	drm_dbg_kms(display->drm, "guardband (%d): " FP_FMT "\n", latency_us, FP_ARG(guardband));
+
+	drm_dbg_kms(display->drm, "min guardband (%d): %d lines\n", latency_us,
+		    intel_prefill_min_guardband(ctx, crtc_state, latency_us));
+	drm_dbg_kms(display->drm, "min cdclk     (%d): %d khz\n", latency_us,
+		    intel_prefill_min_cdclk(ctx, crtc_state));
 
 	return guardband < prefill;
 }
