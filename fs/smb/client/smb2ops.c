@@ -2364,15 +2364,12 @@ smb3_notify(const unsigned int xid, struct file *pfile,
 	}
 
 	if (return_changes) {
-		if (copy_from_user(&notify, ioc_buf, sizeof(struct smb3_notify_info))) {
-			rc = -EFAULT;
-			goto notify_exit;
-		}
+		if (copy_from_user(&notify, ioc_buf, sizeof(struct smb3_notify_info)))
+			goto e_fault;
 	} else {
-		if (copy_from_user(&notify, ioc_buf, sizeof(struct smb3_notify))) {
-			rc = -EFAULT;
-			goto notify_exit;
-		}
+		if (copy_from_user(&notify, ioc_buf, sizeof(struct smb3_notify)))
+			goto e_fault;
+
 		notify.data_len = 0;
 	}
 
@@ -2412,6 +2409,10 @@ notify_exit:
 	free_dentry_path(page);
 	kfree(utf16_path);
 	return rc;
+
+e_fault:
+	rc = -EFAULT;
+	goto notify_exit;
 }
 
 static int
