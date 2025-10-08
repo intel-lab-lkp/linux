@@ -10,7 +10,7 @@ use crate::{
     ffi::c_void,
     types::{ForeignOwnable, NotThreadSafe, Opaque},
 };
-use core::{iter, marker::PhantomData, pin::Pin, ptr::NonNull};
+use core::{iter, marker::PhantomData, ops::Range, pin::Pin, ptr::NonNull};
 use pin_init::{pin_data, pin_init, pinned_drop, PinInit};
 
 /// An array which efficiently maps sparse integer indices to owned objects.
@@ -267,6 +267,45 @@ impl<'a, T: ForeignOwnable> Guard<'a, T> {
             // API; such entries present as `NULL`.
             Ok(unsafe { T::try_from_foreign(old) })
         }
+    }
+
+    /// Allocates an empty slot within the given `limit` and stores `value` there.
+    ///
+    /// May drop the lock if needed to allocate memory, and then reacquire it afterwards.
+    ///
+    /// On success, returns the allocated index.
+    ///
+    /// On failure, returns the element which was attempted to be stored.
+    pub fn alloc(
+        &mut self,
+        limit: Range<u32>,
+        value: T,
+        gfp: alloc::Flags,
+    ) -> Result<u32, StoreError<T>> {
+        let new = value.into_foreign();
+        let mut id: u32 = 0;
+
+        let limit = bindings::xa_limit {
+            min: limit.start,
+            max: limit.end,
+        };
+
+        // SAFETY:
+        // - `self.xa.xa` is valid by the type invariant.
+        // - `new` came from `T::into_foreign`.
+        let ret =
+            unsafe { bindings::__xa_alloc(self.xa.xa.get(), &mut id, new, limit, gfp.as_raw()) };
+
+        if ret < 0 {
+            // SAFETY: `__xa_alloc` doesn't take ownership on error.
+            let value = unsafe { T::from_foreign(new) };
+            return Err(StoreError {
+                value,
+                error: Error::from_errno(ret),
+            });
+        }
+
+        Ok(id)
     }
 }
 
