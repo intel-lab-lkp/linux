@@ -1002,6 +1002,9 @@ void mt7921_scan_work(struct work_struct *work)
 	phy = (struct mt792x_phy *)container_of(work, struct mt792x_phy,
 						scan_work.work);
 
+	if (atomic_read(&phy->dev->mt76.bus_hung) == 1)
+		return;
+
 	while (true) {
 		struct mt76_connac2_mcu_rxd *rxd;
 		struct sk_buff *skb;

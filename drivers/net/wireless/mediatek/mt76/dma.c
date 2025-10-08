@@ -339,6 +339,9 @@ mt76_dma_add_buf(struct mt76_dev *dev, struct mt76_queue *q,
 	int i, idx = -1;
 	u32 ctrl, next;
 
+	if (atomic_read(&dev->bus_hung) == 1)
+		return idx;
+
 	if (txwi) {
 		q->entry[q->head].txwi = DMA_DUMMY_DATA;
 		q->entry[q->head].skip_buf0 = true;
@@ -764,6 +767,9 @@ mt76_dma_rx_fill_buf(struct mt76_dev *dev, struct mt76_queue *q,
 {
 	int len = SKB_WITH_OVERHEAD(q->buf_size);
 	int frames = 0;
+
+	if (atomic_read(&dev->bus_hung) == 1)
+		return 0;
 
 	if (!q->ndesc)
 		return 0;

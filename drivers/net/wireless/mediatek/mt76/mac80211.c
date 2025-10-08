@@ -1549,6 +1549,9 @@ void mt76_rx_poll_complete(struct mt76_dev *dev, enum mt76_rxq_id q,
 	struct sk_buff_head frames;
 	struct sk_buff *skb;
 
+	if (atomic_read(&dev->bus_hung) == 1)
+		return;
+
 	__skb_queue_head_init(&frames);
 
 	while ((skb = __skb_dequeue(&dev->rx_skb[q])) != NULL) {

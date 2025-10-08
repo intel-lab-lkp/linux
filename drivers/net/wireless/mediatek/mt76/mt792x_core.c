@@ -813,6 +813,10 @@ int mt792x_mcu_drv_pmctrl(struct mt792x_dev *dev)
 	struct mt76_phy *mphy = &dev->mt76.phy;
 	struct mt76_connac_pm *pm = &dev->pm;
 	int err = 0;
+	struct mt76_dev *mdev = mphy->dev;
+
+	if (atomic_read(&mdev->bus_hung) == 1)
+		return -EIO;
 
 	mutex_lock(&pm->mutex);
 
@@ -835,6 +839,10 @@ int mt792x_mcu_fw_pmctrl(struct mt792x_dev *dev)
 	struct mt76_phy *mphy = &dev->mt76.phy;
 	struct mt76_connac_pm *pm = &dev->pm;
 	int err = 0;
+	struct mt76_dev *mdev = mphy->dev;
+
+	if (atomic_read(&mdev->bus_hung) == 1)
+		return -EIO;
 
 	mutex_lock(&pm->mutex);
 

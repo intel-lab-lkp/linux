@@ -13,6 +13,10 @@ void mt792x_mac_work(struct work_struct *work)
 
 	mphy = (struct mt76_phy *)container_of(work, struct mt76_phy,
 					       mac_work.work);
+
+	if (atomic_read(&mphy->dev->bus_hung) == 1)
+		return;
+
 	phy = mphy->priv;
 
 	mt792x_mutex_acquire(phy->dev);
@@ -318,6 +322,10 @@ void mt792x_pm_wake_work(struct work_struct *work)
 
 	dev = (struct mt792x_dev *)container_of(work, struct mt792x_dev,
 						pm.wake_work);
+
+	if (atomic_read(&dev->mt76.bus_hung) == 1)
+		return;
+
 	mphy = dev->phy.mt76;
 
 	if (!mt792x_mcu_drv_pmctrl(dev)) {
@@ -353,6 +361,10 @@ void mt792x_pm_power_save_work(struct work_struct *work)
 
 	dev = (struct mt792x_dev *)container_of(work, struct mt792x_dev,
 						pm.ps_work.work);
+
+	if (atomic_read(&dev->mt76.bus_hung) == 1)
+		return;
+
 	mphy = dev->phy.mt76;
 
 	delta = dev->pm.idle_timeout;

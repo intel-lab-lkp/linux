@@ -64,6 +64,9 @@ void mt76_connac_power_save_sched(struct mt76_phy *phy,
 {
 	struct mt76_dev *dev = phy->dev;
 
+	if (atomic_read(&dev->bus_hung) == 1)
+		return;
+
 	if (mt76_is_usb(dev))
 		return;
 
