@@ -1595,8 +1595,14 @@ err_unlock:
 err_vma_res:
 	i915_vma_resource_free(vma_res);
 err_fence:
-	if (work)
-		dma_fence_work_commit_imm(&work->base);
+	if (work) {
+		/* don't risk lockdep splat against stop_machine() */
+		if (i915_vma_is_ggtt(vma) &&
+		    intel_vm_no_concurrent_access_wa(vma->vm->i915))
+			dma_fence_work_commit(&work->base);
+		else
+			dma_fence_work_commit_imm(&work->base);
+	}
 err_rpm:
 	intel_runtime_pm_put(&vma->vm->i915->runtime_pm, wakeref);
 
