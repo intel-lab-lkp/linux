@@ -286,7 +286,9 @@ asmlinkage __visible void __init __noreturn x86_64_start_kernel(char * real_mode
 	load_ucode_bsp();
 
 	/* set init_top_pgt kernel high mapping*/
-	init_top_pgt[511] = early_top_pgt[511];
+	unsigned int kernel_pgd = pgd_index(__START_KERNEL_map);
+
+	init_top_pgt[kernel_pgd] = early_top_pgt[kernel_pgd];
 
 	x86_64_start_reservations(real_mode_data);
 }
