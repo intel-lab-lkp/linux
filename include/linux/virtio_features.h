@@ -9,6 +9,15 @@
 #define VIRTIO_FEATURES_DWORDS	(VIRTIO_FEATURES_QWORDS * 2)
 #define VIRTIO_BIT(b)		BIT_ULL((b) & 0x3f)
 #define VIRTIO_QWORD(b)		((b) >> 6)
+
+/* Get a given feature bit in a given qword. */
+#define VIRTIO_BIT_QWORD(bit, qword) \
+	(BUILD_BUG_ON_ZERO(const_true(VIRTIO_QWORD(bit) != (qword))) + \
+	 BIT_ULL((bit) - 64 * (qword)))
+
+#define VIRTIO_BIT_LO(b) VIRTIO_BIT_QWORD(b, 0)
+#define VIRTIO_BIT_HI(b) VIRTIO_BIT_QWORD(b, 1)
+
 #define VIRTIO_DECLARE_FEATURES(name)			\
 	union {						\
 		u64 name;				\
