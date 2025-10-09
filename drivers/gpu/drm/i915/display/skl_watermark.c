@@ -53,13 +53,20 @@ struct intel_dbuf_state {
 #define intel_atomic_get_new_dbuf_state(state) \
 	to_intel_dbuf_state(intel_atomic_get_new_global_obj_state(state, &to_intel_display(state)->dbuf.obj))
 
+/* Tiling mode groups relevant to WM calculations */
+enum wm_tiling_mode {
+	WM_TILING_LINEAR,
+	WM_TILING_X,
+	WM_TILING_Y_Yf_4,
+};
+
 /* Stores plane specific WM parameters */
 struct skl_wm_params {
-	bool x_tiled, y_tiled;
-	bool rc_surface;
-	bool is_planar;
+	enum wm_tiling_mode tiling;
 	u32 width;
 	u8 cpp;
+	bool rc_surface;
+	bool is_planar;
 	u32 plane_pixel_rate;
 	u32 y_min_scanlines;
 	u32 plane_bytes_per_line;
@@ -618,7 +625,8 @@ static unsigned int skl_wm_latency(struct intel_display *display, int level,
 	     display->platform.cometlake) && skl_watermark_ipc_enabled(display))
 		latency += 4;
 
-	if (skl_needs_memory_bw_wa(display) && wp && wp->x_tiled)
+	if (skl_needs_memory_bw_wa(display) &&
+	    wp && wp->tiling == WM_TILING_X)
 		latency += 15;
 
 	return latency;
@@ -1659,9 +1667,13 @@ skl_compute_wm_params(const struct intel_crtc_state *crtc_state,
 		return -EINVAL;
 	}
 
-	wp->x_tiled = modifier == I915_FORMAT_MOD_X_TILED;
-	wp->y_tiled = modifier != I915_FORMAT_MOD_X_TILED &&
-		intel_fb_is_tiled_modifier(modifier);
+	if (modifier == DRM_FORMAT_MOD_LINEAR)
+		wp->tiling = WM_TILING_LINEAR;
+	else if (modifier == I915_FORMAT_MOD_X_TILED)
+		wp->tiling = WM_TILING_X;
+	else
+		wp->tiling = WM_TILING_Y_Yf_4;
+
 	wp->rc_surface = intel_fb_is_ccs_modifier(modifier);
 	wp->is_planar = intel_format_info_is_yuv_semiplanar(format, modifier);
 
@@ -1701,7 +1713,7 @@ skl_compute_wm_params(const struct intel_crtc_state *crtc_state,
 		wp->y_min_scanlines *= 2;
 
 	wp->plane_bytes_per_line = wp->width * wp->cpp;
-	if (wp->y_tiled) {
+	if (wp->tiling == WM_TILING_Y_Yf_4) {
 		interm_pbpl = DIV_ROUND_UP(wp->plane_bytes_per_line *
 					   wp->y_min_scanlines,
 					   wp->dbuf_block_size);
@@ -1717,7 +1729,7 @@ skl_compute_wm_params(const struct intel_crtc_state *crtc_state,
 		interm_pbpl = DIV_ROUND_UP(wp->plane_bytes_per_line,
 					   wp->dbuf_block_size);
 
-		if (!wp->x_tiled || DISPLAY_VER(display) >= 10)
+		if (wp->tiling != WM_TILING_X || DISPLAY_VER(display) >= 10)
 			interm_pbpl++;
 
 		wp->plane_blocks_per_line = u32_to_fixed16(interm_pbpl);
@@ -1805,9 +1817,20 @@ static void skl_compute_plane_wm(const struct intel_crtc_state *crtc_state,
 				 latency,
 				 wp->plane_blocks_per_line);
 
-	if (wp->y_tiled) {
+	switch (wp->tiling) {
+	case WM_TILING_Y_Yf_4:
 		selected_result = max_fixed16(method2, wp->y_tile_minimum);
-	} else {
+		break;
+
+	default:
+		MISSING_CASE(wp->tiling);
+		fallthrough;
+	case WM_TILING_LINEAR:
+	case WM_TILING_X:
+		/*
+		 * Special case for unrealistically small horizontal
+		 * total with plane downscaling.
+		 */
 		if ((wp->cpp * crtc_state->hw.pipe_mode.crtc_htotal /
 		     wp->dbuf_block_size < 1) &&
 		     (wp->plane_bytes_per_line / wp->dbuf_block_size < 1)) {
@@ -1855,7 +1878,7 @@ static void skl_compute_plane_wm(const struct intel_crtc_state *crtc_state,
 
 		/* Display WA #1126: skl,bxt,kbl */
 		if (level >= 1 && level <= 7) {
-			if (wp->y_tiled) {
+			if (wp->tiling == WM_TILING_Y_Yf_4) {
 				blocks += fixed16_to_u32_round_up(wp->y_tile_minimum);
 				lines += wp->y_min_scanlines;
 			} else {
@@ -1877,7 +1900,7 @@ static void skl_compute_plane_wm(const struct intel_crtc_state *crtc_state,
 	lines = max_t(u32, lines, result_prev->lines);
 
 	if (DISPLAY_VER(display) >= 11) {
-		if (wp->y_tiled) {
+		if (wp->tiling == WM_TILING_Y_Yf_4) {
 			int extra_lines;
 
 			if (lines % wp->y_min_scanlines == 0)
@@ -2003,7 +2026,7 @@ static void skl_compute_transition_wm(struct intel_display *display,
 	 */
 	wm0_blocks = wm0->blocks - 1;
 
-	if (wp->y_tiled) {
+	if (wp->tiling == WM_TILING_Y_Yf_4) {
 		trans_y_tile_min =
 			(u16)mul_round_up_u32_fixed16(2, wp->y_tile_minimum);
 		blocks = max(wm0_blocks, trans_y_tile_min) + trans_offset;
