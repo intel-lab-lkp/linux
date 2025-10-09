@@ -639,7 +639,7 @@ __st_lsm6dsx_shub_write_raw(struct iio_dev *iio_dev,
 			return odr;
 
 		sensor->ext_info.slv_odr = val;
-		sensor->odr = odr;
+		sensor->odr = sensor->bdr = odr;
 		return 0;
 	}
 	case IIO_CHAN_INFO_SCALE:
@@ -745,7 +745,7 @@ st_lsm6dsx_shub_alloc_iiodev(struct st_lsm6dsx_hw *hw,
 	sensor = iio_priv(iio_dev);
 	sensor->id = id;
 	sensor->hw = hw;
-	sensor->odr = hw->settings->odr_table[ref_id].odr_avl[0].milli_hz;
+	sensor->odr = sensor->bdr = hw->settings->odr_table[ref_id].odr_avl[0].milli_hz;
 	sensor->ext_info.slv_odr = info->odr_table.odr_avl[0].milli_hz;
 	sensor->gain = info->fs_table.fs_avl[0].gain;
 	sensor->ext_info.settings = info;
