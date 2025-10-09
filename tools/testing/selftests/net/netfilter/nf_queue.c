@@ -132,7 +132,7 @@ nfq_build_cfg_request(char *buf, uint8_t command, int queue_num)
 
 	nfg = mnl_nlmsg_put_extra_header(nlh, sizeof(*nfg));
 
-	nfg->nfgen_family = AF_UNSPEC;
+	nfg->nfgen_family = NFPROTO_UNSPEC;
 	nfg->version = NFNETLINK_V0;
 	nfg->res_id = htons(queue_num);
 
@@ -155,7 +155,7 @@ nfq_build_cfg_params(char *buf, uint8_t mode, int range, int queue_num)
 	nlh->nlmsg_flags = NLM_F_REQUEST;
 
 	nfg = mnl_nlmsg_put_extra_header(nlh, sizeof(*nfg));
-	nfg->nfgen_family = AF_UNSPEC;
+	nfg->nfgen_family = NFPROTO_UNSPEC;
 	nfg->version = NFNETLINK_V0;
 	nfg->res_id = htons(queue_num);
 
@@ -178,7 +178,7 @@ nfq_build_verdict(char *buf, int id, int queue_num, uint32_t verd)
 	nlh->nlmsg_type = (NFNL_SUBSYS_QUEUE << 8) | NFQNL_MSG_VERDICT;
 	nlh->nlmsg_flags = NLM_F_REQUEST;
 	nfg = mnl_nlmsg_put_extra_header(nlh, sizeof(*nfg));
-	nfg->nfgen_family = AF_UNSPEC;
+	nfg->nfgen_family = NFPROTO_UNSPEC;
 	nfg->version = NFNETLINK_V0;
 	nfg->res_id = htons(queue_num);
 

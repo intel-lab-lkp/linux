@@ -119,11 +119,11 @@ static int __init nf_conntrack_tftp_init(void)
 		ports[ports_c++] = TFTP_PORT;
 
 	for (i = 0; i < ports_c; i++) {
-		nf_ct_helper_init(&tftp[2 * i], AF_INET, IPPROTO_UDP,
+		nf_ct_helper_init(&tftp[2 * i], NFPROTO_IPV4, IPPROTO_UDP,
 				  HELPER_NAME, TFTP_PORT, ports[i], i,
 				  &tftp_exp_policy, 0, tftp_help, NULL,
 				  THIS_MODULE);
-		nf_ct_helper_init(&tftp[2 * i + 1], AF_INET6, IPPROTO_UDP,
+		nf_ct_helper_init(&tftp[2 * i + 1], NFPROTO_IPV6, IPPROTO_UDP,
 				  HELPER_NAME, TFTP_PORT, ports[i], i,
 				  &tftp_exp_policy, 0, tftp_help, NULL,
 				  THIS_MODULE);

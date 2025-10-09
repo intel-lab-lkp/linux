@@ -42,10 +42,10 @@ xt_cluster_hash(const struct nf_conn *ct,
 	u_int32_t hash = 0;
 
 	switch(nf_ct_l3num(ct)) {
-	case AF_INET:
+	case NFPROTO_IPV4:
 		hash = xt_cluster_hash_ipv4(nf_ct_orig_ipv4_src(ct), info);
 		break;
-	case AF_INET6:
+	case NFPROTO_IPV6:
 		hash = xt_cluster_hash_ipv6(nf_ct_orig_ipv6_src(ct), info);
 		break;
 	default:

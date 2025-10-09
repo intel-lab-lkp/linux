@@ -296,10 +296,10 @@ static int nf_reroute(struct sk_buff *skb, struct nf_queue_entry *entry)
 	int ret = 0;
 
 	switch (entry->state.pf) {
-	case AF_INET:
+	case NFPROTO_IPV4:
 		ret = nf_ip_reroute(skb, entry);
 		break;
-	case AF_INET6:
+	case NFPROTO_IPV6:
 		v6ops = rcu_dereference(nf_ipv6_ops);
 		if (v6ops)
 			ret = v6ops->reroute(skb, entry);

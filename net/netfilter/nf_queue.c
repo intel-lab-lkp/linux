@@ -167,10 +167,10 @@ static int __nf_queue(struct sk_buff *skb, const struct nf_hook_state *state,
 		return -ESRCH;
 
 	switch (state->pf) {
-	case AF_INET:
+	case NFPROTO_IPV4:
 		route_key_size = sizeof(struct ip_rt_info);
 		break;
-	case AF_INET6:
+	case NFPROTO_IPV6:
 		route_key_size = sizeof(struct ip6_rt_info);
 		break;
 	default:
@@ -214,10 +214,10 @@ static int __nf_queue(struct sk_buff *skb, const struct nf_hook_state *state,
 	}
 
 	switch (entry->state.pf) {
-	case AF_INET:
+	case NFPROTO_IPV4:
 		nf_ip_saveroute(skb, entry);
 		break;
-	case AF_INET6:
+	case NFPROTO_IPV6:
 		nf_ip6_saveroute(skb, entry);
 		break;
 	}

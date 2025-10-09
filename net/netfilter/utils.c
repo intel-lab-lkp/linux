@@ -127,10 +127,10 @@ __sum16 nf_checksum(struct sk_buff *skb, unsigned int hook,
 	__sum16 csum = 0;
 
 	switch (family) {
-	case AF_INET:
+	case NFPROTO_IPV4:
 		csum = nf_ip_checksum(skb, hook, dataoff, protocol);
 		break;
-	case AF_INET6:
+	case NFPROTO_IPV6:
 		csum = nf_ip6_checksum(skb, hook, dataoff, protocol);
 		break;
 	}
@@ -146,11 +146,11 @@ __sum16 nf_checksum_partial(struct sk_buff *skb, unsigned int hook,
 	__sum16 csum = 0;
 
 	switch (family) {
-	case AF_INET:
+	case NFPROTO_IPV4:
 		csum = nf_ip_checksum_partial(skb, hook, dataoff, len,
 					      protocol);
 		break;
-	case AF_INET6:
+	case NFPROTO_IPV6:
 		csum = nf_ip6_checksum_partial(skb, hook, dataoff, len,
 					       protocol);
 		break;
@@ -167,10 +167,10 @@ int nf_route(struct net *net, struct dst_entry **dst, struct flowi *fl,
 	int ret = 0;
 
 	switch (family) {
-	case AF_INET:
+	case NFPROTO_IPV4:
 		ret = nf_ip_route(net, dst, fl, strict);
 		break;
-	case AF_INET6:
+	case NFPROTO_IPV6:
 		ret = nf_ip6_route(net, dst, fl, strict);
 		break;
 	}

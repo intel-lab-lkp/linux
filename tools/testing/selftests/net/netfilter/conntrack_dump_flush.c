@@ -157,7 +157,7 @@ static int conntrack_data_generate_v4(struct mnl_socket *sock, uint32_t src_ip,
 	nlh->nlmsg_seq = time(NULL);
 
 	nfh = mnl_nlmsg_put_extra_header(nlh, sizeof(struct nfgenmsg));
-	nfh->nfgen_family = AF_INET;
+	nfh->nfgen_family = NFPROTO_IPV4;
 	nfh->version = NFNETLINK_V0;
 	nfh->res_id = 0;
 
@@ -191,7 +191,7 @@ static int conntrack_data_generate_v6(struct mnl_socket *sock,
 	nlh->nlmsg_seq = time(NULL);
 
 	nfh = mnl_nlmsg_put_extra_header(nlh, sizeof(struct nfgenmsg));
-	nfh->nfgen_family = AF_INET6;
+	nfh->nfgen_family = NFPROTO_IPV6;
 	nfh->version = NFNETLINK_V0;
 	nfh->res_id = 0;
 
@@ -233,7 +233,7 @@ static int conntracK_count_zone(struct mnl_socket *sock, uint16_t zone)
 	nlh->nlmsg_seq = time(NULL);
 
 	nfh = mnl_nlmsg_put_extra_header(nlh, sizeof(struct nfgenmsg));
-	nfh->nfgen_family = AF_UNSPEC;
+	nfh->nfgen_family = NFPROTO_UNSPEC;
 	nfh->version = NFNETLINK_V0;
 	nfh->res_id = 0;
 
@@ -280,7 +280,7 @@ static int conntrack_flush_zone(struct mnl_socket *sock, uint16_t zone)
 	nlh->nlmsg_seq = time(NULL);
 
 	nfh = mnl_nlmsg_put_extra_header(nlh, sizeof(struct nfgenmsg));
-	nfh->nfgen_family = AF_UNSPEC;
+	nfh->nfgen_family = NFPROTO_UNSPEC;
 	nfh->version = NFNETLINK_V0;
 	nfh->res_id = 0;
 

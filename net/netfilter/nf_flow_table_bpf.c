@@ -76,12 +76,12 @@ bpf_xdp_flow_lookup(struct xdp_md *ctx, struct bpf_fib_lookup *fib_tuple,
 	}
 
 	switch (fib_tuple->family) {
-	case AF_INET:
+	case NFPROTO_IPV4:
 		tuple.src_v4.s_addr = fib_tuple->ipv4_src;
 		tuple.dst_v4.s_addr = fib_tuple->ipv4_dst;
 		proto = htons(ETH_P_IP);
 		break;
-	case AF_INET6:
+	case NFPROTO_IPV6:
 		tuple.src_v6 = *(struct in6_addr *)&fib_tuple->ipv6_src;
 		tuple.dst_v6 = *(struct in6_addr *)&fib_tuple->ipv6_dst;
 		proto = htons(ETH_P_IPV6);

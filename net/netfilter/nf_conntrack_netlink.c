@@ -1638,7 +1638,7 @@ static int ctnetlink_del_conntrack(struct sk_buff *skb,
 		err = ctnetlink_parse_tuple(cda, &tuple, CTA_TUPLE_REPLY,
 					    family, &zone);
 	else {
-		u8 u3 = info->nfmsg->version || cda[CTA_FILTER] ? family : AF_UNSPEC;
+		u8 u3 = info->nfmsg->version || cda[CTA_FILTER] ? family : NFPROTO_UNSPEC;
 
 		return ctnetlink_flush_conntrack(info->net, cda,
 						 NETLINK_CB(skb).portid,
@@ -2501,7 +2501,7 @@ ctnetlink_ct_stat_cpu_fill_info(struct sk_buff *skb, u32 portid, u32 seq,
 
 	event = nfnl_msg_type(NFNL_SUBSYS_CTNETLINK,
 			      IPCTNL_MSG_CT_GET_STATS_CPU);
-	nlh = nfnl_msg_put(skb, portid, seq, event, flags, AF_UNSPEC,
+	nlh = nfnl_msg_put(skb, portid, seq, event, flags, NFPROTO_UNSPEC,
 			   NFNETLINK_V0, htons(cpu));
 	if (!nlh)
 		goto nlmsg_failure;
@@ -2581,7 +2581,7 @@ ctnetlink_stat_ct_fill_info(struct sk_buff *skb, u32 portid, u32 seq, u32 type,
 	struct nlmsghdr *nlh;
 
 	event = nfnl_msg_type(NFNL_SUBSYS_CTNETLINK, IPCTNL_MSG_CT_GET_STATS);
-	nlh = nfnl_msg_put(skb, portid, seq, event, flags, AF_UNSPEC,
+	nlh = nfnl_msg_put(skb, portid, seq, event, flags, NFPROTO_UNSPEC,
 			   NFNETLINK_V0, 0);
 	if (!nlh)
 		goto nlmsg_failure;
@@ -3694,7 +3694,7 @@ ctnetlink_exp_stat_fill_info(struct sk_buff *skb, u32 portid, u32 seq, int cpu,
 
 	event = nfnl_msg_type(NFNL_SUBSYS_CTNETLINK,
 			      IPCTNL_MSG_EXP_GET_STATS_CPU);
-	nlh = nfnl_msg_put(skb, portid, seq, event, flags, AF_UNSPEC,
+	nlh = nfnl_msg_put(skb, portid, seq, event, flags, NFPROTO_UNSPEC,
 			   NFNETLINK_V0, htons(cpu));
 	if (!nlh)
 		goto nlmsg_failure;

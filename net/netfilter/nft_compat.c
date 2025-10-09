@@ -148,11 +148,11 @@ nft_target_set_tgchk_param(struct xt_tgchk_param *par,
 	par->net	= ctx->net;
 	par->table	= ctx->table->name;
 	switch (ctx->family) {
-	case AF_INET:
+	case NFPROTO_IPV4:
 		entry->e4.ip.proto = proto;
 		entry->e4.ip.invflags = inv ? IPT_INV_PROTO : 0;
 		break;
-	case AF_INET6:
+	case NFPROTO_IPV6:
 		if (proto)
 			entry->e6.ipv6.flags |= IP6T_F_PROTO;
 
@@ -448,11 +448,11 @@ nft_match_set_mtchk_param(struct xt_mtchk_param *par, const struct nft_ctx *ctx,
 	par->net	= ctx->net;
 	par->table	= ctx->table->name;
 	switch (ctx->family) {
-	case AF_INET:
+	case NFPROTO_IPV4:
 		entry->e4.ip.proto = proto;
 		entry->e4.ip.invflags = inv ? IPT_INV_PROTO : 0;
 		break;
-	case AF_INET6:
+	case NFPROTO_IPV6:
 		if (proto)
 			entry->e6.ipv6.flags |= IP6T_F_PROTO;
 
@@ -696,10 +696,10 @@ static int nfnl_compat_get_rcu(struct sk_buff *skb,
 	target = ntohl(nla_get_be32(tb[NFTA_COMPAT_TYPE]));
 
 	switch(family) {
-	case AF_INET:
+	case NFPROTO_IPV4:
 		fmt = "ipt_%s";
 		break;
-	case AF_INET6:
+	case NFPROTO_IPV6:
 		fmt = "ip6t_%s";
 		break;
 	case NFPROTO_BRIDGE:

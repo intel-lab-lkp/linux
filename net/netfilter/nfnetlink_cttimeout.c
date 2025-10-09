@@ -191,7 +191,7 @@ ctnl_timeout_fill_info(struct sk_buff *skb, u32 portid, u32 seq, u32 type,
 	int ret;
 
 	event = nfnl_msg_type(NFNL_SUBSYS_CTNETLINK_TIMEOUT, event);
-	nlh = nfnl_msg_put(skb, portid, seq, event, flags, AF_UNSPEC,
+	nlh = nfnl_msg_put(skb, portid, seq, event, flags, NFPROTO_UNSPEC,
 			   NFNETLINK_V0, 0);
 	if (!nlh)
 		goto nlmsg_failure;
@@ -401,7 +401,7 @@ cttimeout_default_fill_info(struct net *net, struct sk_buff *skb, u32 portid,
 	int ret;
 
 	event = nfnl_msg_type(NFNL_SUBSYS_CTNETLINK_TIMEOUT, event);
-	nlh = nfnl_msg_put(skb, portid, seq, event, flags, AF_UNSPEC,
+	nlh = nfnl_msg_put(skb, portid, seq, event, flags, NFPROTO_UNSPEC,
 			   NFNETLINK_V0, 0);
 	if (!nlh)
 		goto nlmsg_failure;

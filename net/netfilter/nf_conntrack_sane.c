@@ -190,11 +190,11 @@ static int __init nf_conntrack_sane_init(void)
 	/* FIXME should be configurable whether IPv4 and IPv6 connections
 		 are tracked or not - YK */
 	for (i = 0; i < ports_c; i++) {
-		nf_ct_helper_init(&sane[2 * i], AF_INET, IPPROTO_TCP,
+		nf_ct_helper_init(&sane[2 * i], NFPROTO_IPV4, IPPROTO_TCP,
 				  HELPER_NAME, SANE_PORT, ports[i], ports[i],
 				  &sane_exp_policy, 0, help, NULL,
 				  THIS_MODULE);
-		nf_ct_helper_init(&sane[2 * i + 1], AF_INET6, IPPROTO_TCP,
+		nf_ct_helper_init(&sane[2 * i + 1], NFPROTO_IPV6, IPPROTO_TCP,
 				  HELPER_NAME, SANE_PORT, ports[i], ports[i],
 				  &sane_exp_policy, 0, help, NULL,
 				  THIS_MODULE);

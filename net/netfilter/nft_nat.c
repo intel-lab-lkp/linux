@@ -35,13 +35,13 @@ static void nft_nat_setup_addr(struct nf_nat_range2 *range,
 			       const struct nft_nat *priv)
 {
 	switch (priv->family) {
-	case AF_INET:
+	case NFPROTO_IPV4:
 		range->min_addr.ip = (__force __be32)
 				regs->data[priv->sreg_addr_min];
 		range->max_addr.ip = (__force __be32)
 				regs->data[priv->sreg_addr_max];
 		break;
-	case AF_INET6:
+	case NFPROTO_IPV6:
 		memcpy(range->min_addr.ip6, &regs->data[priv->sreg_addr_min],
 		       sizeof(range->min_addr.ip6));
 		memcpy(range->max_addr.ip6, &regs->data[priv->sreg_addr_max],

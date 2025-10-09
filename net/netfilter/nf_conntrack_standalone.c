@@ -262,8 +262,8 @@ ct_show_delta_time(struct seq_file *s, const struct nf_conn *ct)
 static const char* l3proto_name(u16 proto)
 {
 	switch (proto) {
-	case AF_INET: return "ipv4";
-	case AF_INET6: return "ipv6";
+	case NFPROTO_IPV4: return "ipv4";
+	case NFPROTO_IPV6: return "ipv6";
 	}
 
 	return "unknown";

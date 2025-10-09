@@ -169,12 +169,12 @@ int nf_conntrack_inet_error(struct nf_conn *tmpl, struct sk_buff *skb,
 	dir = NF_CT_DIRECTION(h);
 	ct_daddr = &ct->tuplehash[dir].tuple.dst.u3;
 	if (!nf_inet_addr_cmp(outer_daddr, ct_daddr)) {
-		if (state->pf == AF_INET) {
+		if (state->pf == NFPROTO_IPV4) {
 			nf_l4proto_log_invalid(skb, state,
 					       l4proto,
 					       "outer daddr %pI4 != inner %pI4",
 					       &outer_daddr->ip, &ct_daddr->ip);
-		} else if (state->pf == AF_INET6) {
+		} else if (state->pf == NFPROTO_IPV6) {
 			nf_l4proto_log_invalid(skb, state,
 					       l4proto,
 					       "outer daddr %pI6 != inner %pI6",

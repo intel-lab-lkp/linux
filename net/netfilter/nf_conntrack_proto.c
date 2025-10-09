@@ -690,7 +690,7 @@ module_param_call(hashsize, nf_conntrack_set_hashsize, param_get_uint,
 		  &nf_conntrack_htable_size, 0600);
 
 MODULE_ALIAS("ip_conntrack");
-MODULE_ALIAS("nf_conntrack-" __stringify(AF_INET));
-MODULE_ALIAS("nf_conntrack-" __stringify(AF_INET6));
+MODULE_ALIAS("nf_conntrack-" __stringify(NFPROTO_IPV4));
+MODULE_ALIAS("nf_conntrack-" __stringify(NFPROTO_IPV6));
 MODULE_LICENSE("GPL");
 MODULE_DESCRIPTION("IPv4 and IPv6 connection tracking");

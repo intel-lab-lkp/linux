@@ -82,14 +82,14 @@ static int bpf_nf_ct_tuple_parse(struct bpf_sock_tuple *bpf_tuple,
 
 	switch (tuple_len) {
 	case sizeof(bpf_tuple->ipv4):
-		tuple->src.l3num = AF_INET;
+		tuple->src.l3num = NFPROTO_IPV4;
 		src->ip = bpf_tuple->ipv4.saddr;
 		sport->tcp.port = bpf_tuple->ipv4.sport;
 		dst->ip = bpf_tuple->ipv4.daddr;
 		dport->tcp.port = bpf_tuple->ipv4.dport;
 		break;
 	case sizeof(bpf_tuple->ipv6):
-		tuple->src.l3num = AF_INET6;
+		tuple->src.l3num = NFPROTO_IPV6;
 		memcpy(src->ip6, bpf_tuple->ipv6.saddr, sizeof(bpf_tuple->ipv6.saddr));
 		sport->tcp.port = bpf_tuple->ipv6.sport;
 		memcpy(dst->ip6, bpf_tuple->ipv6.daddr, sizeof(bpf_tuple->ipv6.daddr));

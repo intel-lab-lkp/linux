@@ -152,12 +152,12 @@ static int sip_parse_addr(const struct nf_conn *ct, const char *cp,
 
 	memset(addr, 0, sizeof(*addr));
 	switch (nf_ct_l3num(ct)) {
-	case AF_INET:
+	case NFPROTO_IPV4:
 		ret = in4_pton(cp, limit - cp, (u8 *)&addr->ip, -1, &end);
 		if (ret == 0)
 			return 0;
 		break;
-	case AF_INET6:
+	case NFPROTO_IPV6:
 		if (cp < limit && *cp == '[')
 			cp++;
 		else if (delim)
@@ -652,10 +652,10 @@ static int sdp_parse_addr(const struct nf_conn *ct, const char *cp,
 
 	memset(addr, 0, sizeof(*addr));
 	switch (nf_ct_l3num(ct)) {
-	case AF_INET:
+	case NFPROTO_IPV4:
 		ret = in4_pton(cp, limit - cp, (u8 *)&addr->ip, -1, &end);
 		break;
-	case AF_INET6:
+	case NFPROTO_IPV6:
 		ret = in6_pton(cp, limit - cp, (u8 *)&addr->ip6, -1, &end);
 		break;
 	default:
@@ -1677,19 +1677,19 @@ static int __init nf_conntrack_sip_init(void)
 		ports[ports_c++] = SIP_PORT;
 
 	for (i = 0; i < ports_c; i++) {
-		nf_ct_helper_init(&sip[4 * i], AF_INET, IPPROTO_UDP,
+		nf_ct_helper_init(&sip[4 * i], NFPROTO_IPV4, IPPROTO_UDP,
 				  HELPER_NAME, SIP_PORT, ports[i], i,
 				  sip_exp_policy, SIP_EXPECT_MAX, sip_help_udp,
 				  NULL, THIS_MODULE);
-		nf_ct_helper_init(&sip[4 * i + 1], AF_INET, IPPROTO_TCP,
+		nf_ct_helper_init(&sip[4 * i + 1], NFPROTO_IPV4, IPPROTO_TCP,
 				  HELPER_NAME, SIP_PORT, ports[i], i,
 				  sip_exp_policy, SIP_EXPECT_MAX, sip_help_tcp,
 				  NULL, THIS_MODULE);
-		nf_ct_helper_init(&sip[4 * i + 2], AF_INET6, IPPROTO_UDP,
+		nf_ct_helper_init(&sip[4 * i + 2], NFPROTO_IPV6, IPPROTO_UDP,
 				  HELPER_NAME, SIP_PORT, ports[i], i,
 				  sip_exp_policy, SIP_EXPECT_MAX, sip_help_udp,
 				  NULL, THIS_MODULE);
-		nf_ct_helper_init(&sip[4 * i + 3], AF_INET6, IPPROTO_TCP,
+		nf_ct_helper_init(&sip[4 * i + 3], NFPROTO_IPV6, IPPROTO_TCP,
 				  HELPER_NAME, SIP_PORT, ports[i], i,
 				  sip_exp_policy, SIP_EXPECT_MAX, sip_help_tcp,
 				  NULL, THIS_MODULE);

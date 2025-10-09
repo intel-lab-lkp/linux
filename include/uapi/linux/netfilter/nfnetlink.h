@@ -32,7 +32,7 @@ enum nfnetlink_groups {
 /* General form of address family dependent message.
  */
 struct nfgenmsg {
-	__u8  nfgen_family;		/* AF_xxx */
+	__u8  nfgen_family;		/* NFPROTO_xxx */
 	__u8  version;		/* nfnetlink version */
 	__be16    res_id;		/* resource id */
 };

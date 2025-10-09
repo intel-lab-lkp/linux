@@ -581,11 +581,11 @@ static int __init nf_conntrack_ftp_init(void)
 	/* FIXME should be configurable whether IPv4 and IPv6 FTP connections
 		 are tracked or not - YK */
 	for (i = 0; i < ports_c; i++) {
-		nf_ct_helper_init(&ftp[2 * i], AF_INET, IPPROTO_TCP,
+		nf_ct_helper_init(&ftp[2 * i], NFPROTO_IPV4, IPPROTO_TCP,
 				  HELPER_NAME, FTP_PORT, ports[i], ports[i],
 				  &ftp_exp_policy, 0, help,
 				  nf_ct_ftp_from_nlattr, THIS_MODULE);
-		nf_ct_helper_init(&ftp[2 * i + 1], AF_INET6, IPPROTO_TCP,
+		nf_ct_helper_init(&ftp[2 * i + 1], NFPROTO_IPV6, IPPROTO_TCP,
 				  HELPER_NAME, FTP_PORT, ports[i], ports[i],
 				  &ftp_exp_policy, 0, help,
 				  nf_ct_ftp_from_nlattr, THIS_MODULE);

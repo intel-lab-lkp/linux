@@ -49,9 +49,9 @@ static inline __be32
 hmark_addr_mask(int l3num, const __be32 *addr32, const __be32 *mask)
 {
 	switch (l3num) {
-	case AF_INET:
+	case NFPROTO_IPV4:
 		return *addr32 & *mask;
-	case AF_INET6:
+	case NFPROTO_IPV6:
 		return hmark_addr6_mask(addr32, mask);
 	}
 	return 0;

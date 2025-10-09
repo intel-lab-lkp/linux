@@ -180,13 +180,13 @@ static int get_h245_addr(struct nf_conn *ct, const unsigned char *data,
 
 	switch (taddr->unicastAddress.choice) {
 	case eUnicastAddress_iPAddress:
-		if (nf_ct_l3num(ct) != AF_INET)
+		if (nf_ct_l3num(ct) != NFPROTO_IPV4)
 			return 0;
 		p = data + taddr->unicastAddress.iPAddress.network;
 		len = 4;
 		break;
 	case eUnicastAddress_iP6Address:
-		if (nf_ct_l3num(ct) != AF_INET6)
+		if (nf_ct_l3num(ct) != NFPROTO_IPV6)
 			return 0;
 		p = data + taddr->unicastAddress.iP6Address.network;
 		len = 16;
@@ -579,7 +579,7 @@ static const struct nf_conntrack_expect_policy h245_exp_policy = {
 static struct nf_conntrack_helper nf_conntrack_helper_h245 __read_mostly = {
 	.name			= "H.245",
 	.me			= THIS_MODULE,
-	.tuple.src.l3num	= AF_UNSPEC,
+	.tuple.src.l3num	= NFPROTO_UNSPEC,
 	.tuple.dst.protonum	= IPPROTO_UDP,
 	.help			= h245_help,
 	.expect_policy		= &h245_exp_policy,
@@ -594,13 +594,13 @@ int get_h225_addr(struct nf_conn *ct, unsigned char *data,
 
 	switch (taddr->choice) {
 	case eTransportAddress_ipAddress:
-		if (nf_ct_l3num(ct) != AF_INET)
+		if (nf_ct_l3num(ct) != NFPROTO_IPV4)
 			return 0;
 		p = data + taddr->ipAddress.ip;
 		len = 4;
 		break;
 	case eTransportAddress_ip6Address:
-		if (nf_ct_l3num(ct) != AF_INET6)
+		if (nf_ct_l3num(ct) != NFPROTO_IPV6)
 			return 0;
 		p = data + taddr->ip6Address.ip;
 		len = 16;
@@ -678,7 +678,7 @@ static int callforward_do_filter(struct net *net,
 	int ret = 0;
 
 	switch (family) {
-	case AF_INET: {
+	case NFPROTO_IPV4: {
 		struct flowi4 fl1, fl2;
 		struct rtable *rt1, *rt2;
 
@@ -702,7 +702,7 @@ static int callforward_do_filter(struct net *net,
 		break;
 	}
 #if IS_ENABLED(CONFIG_IPV6)
-	case AF_INET6: {
+	case NFPROTO_IPV6: {
 		struct rt6_info *rt1, *rt2;
 		struct flowi6 fl1, fl2;
 
@@ -1143,7 +1143,7 @@ static struct nf_conntrack_helper nf_conntrack_helper_q931[] __read_mostly = {
 	{
 		.name			= "Q.931",
 		.me			= THIS_MODULE,
-		.tuple.src.l3num	= AF_INET,
+		.tuple.src.l3num	= NFPROTO_IPV4,
 		.tuple.src.u.tcp.port	= cpu_to_be16(Q931_PORT),
 		.tuple.dst.protonum	= IPPROTO_TCP,
 		.help			= q931_help,
@@ -1152,7 +1152,7 @@ static struct nf_conntrack_helper nf_conntrack_helper_q931[] __read_mostly = {
 	{
 		.name			= "Q.931",
 		.me			= THIS_MODULE,
-		.tuple.src.l3num	= AF_INET6,
+		.tuple.src.l3num	= NFPROTO_IPV6,
 		.tuple.src.u.tcp.port	= cpu_to_be16(Q931_PORT),
 		.tuple.dst.protonum	= IPPROTO_TCP,
 		.help			= q931_help,
@@ -1714,7 +1714,7 @@ static struct nf_conntrack_helper nf_conntrack_helper_ras[] __read_mostly = {
 	{
 		.name			= "RAS",
 		.me			= THIS_MODULE,
-		.tuple.src.l3num	= AF_INET,
+		.tuple.src.l3num	= NFPROTO_IPV4,
 		.tuple.src.u.udp.port	= cpu_to_be16(RAS_PORT),
 		.tuple.dst.protonum	= IPPROTO_UDP,
 		.help			= ras_help,
@@ -1723,7 +1723,7 @@ static struct nf_conntrack_helper nf_conntrack_helper_ras[] __read_mostly = {
 	{
 		.name			= "RAS",
 		.me			= THIS_MODULE,
-		.tuple.src.l3num	= AF_INET6,
+		.tuple.src.l3num	= NFPROTO_IPV6,
 		.tuple.src.u.udp.port	= cpu_to_be16(RAS_PORT),
 		.tuple.dst.protonum	= IPPROTO_UDP,
 		.help			= ras_help,

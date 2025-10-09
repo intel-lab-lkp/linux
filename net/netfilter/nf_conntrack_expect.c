@@ -317,7 +317,7 @@ void nf_ct_expect_init(struct nf_conntrack_expect *exp, unsigned int class,
 {
 	int len;
 
-	if (family == AF_INET)
+	if (family == NFPROTO_IPV4)
 		len = 4;
 	else
 		len = 16;

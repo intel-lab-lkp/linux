@@ -143,7 +143,7 @@ static int nf_flow_rule_match(struct nf_flow_match *match,
 	}
 
 	switch (tuple->l3proto) {
-	case AF_INET:
+	case NFPROTO_IPV4:
 		key->control.addr_type = FLOW_DISSECTOR_KEY_IPV4_ADDRS;
 		key->basic.n_proto = htons(ETH_P_IP);
 		key->ipv4.src = tuple->src_v4.s_addr;
@@ -151,7 +151,7 @@ static int nf_flow_rule_match(struct nf_flow_match *match,
 		key->ipv4.dst = tuple->dst_v4.s_addr;
 		mask->ipv4.dst = 0xffffffff;
 		break;
-       case AF_INET6:
+	case NFPROTO_IPV6:
 		key->control.addr_type = FLOW_DISSECTOR_KEY_IPV6_ADDRS;
 		key->basic.n_proto = htons(ETH_P_IPV6);
 		key->ipv6.src = tuple->src_v6;

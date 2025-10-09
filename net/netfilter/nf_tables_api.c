@@ -1729,7 +1729,7 @@ static int nft_flush(struct nft_ctx *ctx, int family)
 	int err = 0;
 
 	list_for_each_entry_safe(table, nt, &nft_net->tables, list) {
-		if (family != AF_UNSPEC && table->family != family)
+		if (family != NFPROTO_UNSPEC && table->family != family)
 			continue;
 
 		ctx->family = table->family;
@@ -1766,7 +1766,7 @@ static int nf_tables_deltable(struct sk_buff *skb, const struct nfnl_info *info,
 	struct nft_ctx ctx;
 
 	nft_ctx_init(&ctx, net, skb, info->nlh, 0, NULL, NULL, nla);
-	if (family == AF_UNSPEC ||
+	if (family == NFPROTO_UNSPEC ||
 	    (!nla[NFTA_TABLE_NAME] && !nla[NFTA_TABLE_HANDLE]))
 		return nft_flush(&ctx, family);
 
@@ -9693,7 +9693,7 @@ static int nf_tables_fill_gen_info(struct sk_buff *skb, struct net *net,
 	char buf[TASK_COMM_LEN];
 	int event = nfnl_msg_type(NFNL_SUBSYS_NFTABLES, NFT_MSG_NEWGEN);
 
-	nlh = nfnl_msg_put(skb, portid, seq, event, 0, AF_UNSPEC,
+	nlh = nfnl_msg_put(skb, portid, seq, event, 0, NFPROTO_UNSPEC,
 			   NFNETLINK_V0, nft_base_seq_be16(net));
 	if (!nlh)
 		goto nla_put_failure;
