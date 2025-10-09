@@ -58,16 +58,17 @@ smb311_crypto_shash_allocate(struct TCP_Server_Info *server)
 
 	rc = cifs_alloc_hash("cmac(aes)", &p->aes_cmac);
 	if (rc)
-		goto err;
+		goto free_hmacsha256;
 
 	rc = cifs_alloc_hash("sha512", &p->sha512);
 	if (rc)
-		goto err;
+		goto free_aes_cmac;
 
 	return 0;
 
-err:
+free_aes_cmac:
 	cifs_free_hash(&p->aes_cmac);
+free_hmacsha256:
 	cifs_free_hash(&p->hmacsha256);
 	return rc;
 }
