@@ -969,6 +969,8 @@ receive_packet (struct net_device *dev)
 			if (pkt_len <= copy_thresh)
 				skb = netdev_alloc_skb_ip_align(dev, pkt_len);
 			if (!skb) {
+				if (!np->rx_skbuff[entry])
+					break;
 				dma_unmap_single(&np->pdev->dev,
 						 desc_to_dma(desc),
 						 np->rx_buf_sz,
