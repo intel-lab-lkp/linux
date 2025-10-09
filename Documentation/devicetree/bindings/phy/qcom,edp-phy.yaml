@@ -37,12 +37,13 @@ properties:
       - description: PLL register block
 
   clocks:
-    maxItems: 2
+    maxItems: 3
 
   clock-names:
     items:
       - const: aux
       - const: cfg_ahb
+      - const: edp_ref
 
   "#clock-cells":
     const: 1
@@ -75,8 +76,8 @@ examples:
             <0x0aec2600 0xa0>,
             <0x0aec2000 0x19c>;
 
-      clocks = <&dispcc 0>, <&dispcc 1>;
-      clock-names = "aux", "cfg_ahb";
+      clocks = <&dispcc 0>, <&dispcc 1>, <&dispcc 2>;
+      clock-names = "aux", "cfg_ahb", "edp_ref";
 
       #clock-cells = <1>;
       #phy-cells = <0>;
