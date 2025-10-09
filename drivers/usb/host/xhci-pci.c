@@ -574,6 +574,7 @@ static int xhci_pci_setup(struct usb_hcd *hcd)
 
 	/* imod_interval is the interrupt moderation value in nanoseconds. */
 	xhci->imod_interval = 40000;
+	xhci->allow_single_roothub = 1;
 
 	retval = xhci_gen_setup(hcd, xhci_pci_quirks);
 	if (retval)
@@ -637,7 +638,6 @@ int xhci_pci_common_probe(struct pci_dev *dev, const struct pci_device_id *id)
 	xhci = hcd_to_xhci(hcd);
 	xhci->reset = reset;
 
-	xhci->allow_single_roothub = 1;
 	if (!xhci_has_one_roothub(xhci)) {
 		xhci->shared_hcd = usb_create_shared_hcd(&xhci_pci_hc_driver, &dev->dev,
 							 pci_name(dev), hcd);
