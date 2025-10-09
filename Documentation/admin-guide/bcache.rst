@@ -616,7 +616,7 @@ bucket_size
   Size of buckets
 
 cache_replacement_policy
-  One of either lru, fifo or random.
+  One of either lru, fifo, random or clock.
 
 discard
   Boolean; if on a discard/TRIM will be issued to each bucket before it is

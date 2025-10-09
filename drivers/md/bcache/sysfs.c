@@ -45,6 +45,7 @@ static const char * const cache_replacement_policies[] = {
 	"lru",
 	"fifo",
 	"random",
+	"clock",
 	NULL
 };
 

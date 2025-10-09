@@ -69,7 +69,8 @@
 #include <linux/random.h>
 #include <trace/events/bcache.h>
 
-#define MAX_OPEN_BUCKETS 128
+#define MAX_OPEN_BUCKETS	128
+#define CHECK_PRIO_SLICES	16
 
 /* Bucket heap / gen */
 
@@ -211,19 +212,41 @@ static void invalidate_buckets_lru(struct cache *ca)
 	}
 }
 
-static void invalidate_buckets_fifo(struct cache *ca)
+/*
+ * When check_prio is true, this FIFO policy examines the priority of the
+ * buckets and invalidates only the ones below a threshold in the priority
+ * ladder. As it goes, the threshold will be raised if not enough buckets are
+ * invalidated. Empty buckets are also invalidated. This evaulation resembles
+ * the LRU policy, and is used to approximate the classic clock-sweep cache
+ * replacement algorithm.
+ */
+static void invalidate_buckets_fifo(struct cache *ca, bool check_prio)
 {
 	struct bucket *b;
 	size_t checked = 0;
+	size_t check_quota = 0;
+	uint16_t prio_threshold = ca->set->min_prio;
 
 	while (!fifo_full(&ca->free_inc)) {
 		if (ca->fifo_last_bucket <  ca->sb.first_bucket ||
 		    ca->fifo_last_bucket >= ca->sb.nbuckets)
 			ca->fifo_last_bucket = ca->sb.first_bucket;
 
+		if (check_prio && checked >= check_quota) {
+			BUG_ON(ca->set->min_prio > INITIAL_PRIO);
+			prio_threshold +=
+				DIV_ROUND_UP(INITIAL_PRIO - ca->set->min_prio,
+					     CHECK_PRIO_SLICES);
+			check_quota += DIV_ROUND_UP(ca->sb.nbuckets,
+						    CHECK_PRIO_SLICES);
+		}
+
 		b = ca->buckets + ca->fifo_last_bucket++;
 
-		if (bch_can_invalidate_bucket(ca, b))
+		if (bch_can_invalidate_bucket(ca, b) &&
+		    (!check_prio ||
+		     b->prio <= prio_threshold ||
+		     !GC_SECTORS_USED(b)))
 			bch_invalidate_one_bucket(ca, b);
 
 		if (++checked >= ca->sb.nbuckets) {
@@ -269,10 +292,13 @@ static void invalidate_buckets(struct cache *ca)
 		invalidate_buckets_lru(ca);
 		break;
 	case CACHE_REPLACEMENT_FIFO:
-		invalidate_buckets_fifo(ca);
+		invalidate_buckets_fifo(ca, false);
 		break;
 	case CACHE_REPLACEMENT_RANDOM:
 		invalidate_buckets_random(ca);
+		break;
+	case CACHE_REPLACEMENT_CLOCK:
+		invalidate_buckets_fifo(ca, true);
 		break;
 	}
 }
