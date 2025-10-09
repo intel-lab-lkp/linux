@@ -65,17 +65,17 @@ enum {
 };
 
 static const match_table_t key_format_tokens = {
-	{Opt_default, "default"},
-	{Opt_ecryptfs, "ecryptfs"},
-	{Opt_enc32, "enc32"},
-	{Opt_error, NULL}
+	{ .token = Opt_default, .pattern = "default"},
+	{ .token = Opt_ecryptfs, .pattern = "ecryptfs"},
+	{ .token = Opt_enc32, .pattern = "enc32"},
+	{ .token = Opt_error, .pattern = NULL}
 };
 
 static const match_table_t key_tokens = {
-	{Opt_new, "new"},
-	{Opt_load, "load"},
-	{Opt_update, "update"},
-	{Opt_err, NULL}
+	{ .token = Opt_new, .pattern = "new"},
+	{ .token = Opt_load, .pattern = "load"},
+	{ .token = Opt_update, .pattern = "update"},
+	{ .token = Opt_err, .pattern = NULL}
 };
 
 static bool user_decrypted_data = IS_ENABLED(CONFIG_USER_DECRYPTED_DATA);
