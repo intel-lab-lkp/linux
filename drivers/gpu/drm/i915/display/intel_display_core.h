@@ -78,7 +78,7 @@ struct intel_display_funcs {
 
 /* functions used for watermark calcs for display. */
 struct intel_wm_funcs {
-	/* update_wm is for legacy wm management */
+	/* these are only for legacy wm management */
 	void (*update_wm)(struct intel_display *display);
 	int (*compute_watermarks)(struct intel_atomic_state *state,
 				  struct intel_crtc *crtc);
@@ -88,8 +88,12 @@ struct intel_wm_funcs {
 					 struct intel_crtc *crtc);
 	void (*optimize_watermarks)(struct intel_atomic_state *state,
 				    struct intel_crtc *crtc);
+
+	/* these are for SKL+ wm management */
 	int (*compute_global_watermarks)(struct intel_atomic_state *state);
 	void (*get_hw_state)(struct intel_display *display);
+
+	/* this is used by both legacy and SKL+ */
 	void (*sanitize)(struct intel_display *display);
 };
 
