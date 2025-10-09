@@ -1724,7 +1724,7 @@ SMB2_sess_auth_rawntlmssp_negotiate(struct SMB2_sess_data *sess_data)
 	ses->ntlmssp = kmalloc(sizeof(struct ntlmssp_auth), GFP_KERNEL);
 	if (!ses->ntlmssp) {
 		rc = -ENOMEM;
-		goto out_err;
+		goto out_set_result;
 	}
 	ses->ntlmssp->sesskey_per_smbsess = true;
 
@@ -1793,6 +1793,7 @@ out:
 out_err:
 	kfree_sensitive(ses->ntlmssp);
 	ses->ntlmssp = NULL;
+out_set_result:
 	sess_data->result = rc;
 	sess_data->func = NULL;
 }
