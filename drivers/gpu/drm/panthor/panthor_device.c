@@ -221,6 +221,12 @@ int panthor_device_init(struct panthor_device *ptdev)
 	if (ret)
 		return ret;
 
+	ret = devm_pm_domain_attach_list(ptdev->base.dev, NULL, &ptdev->pd_list);
+	if (ret < 0) {
+		drm_err(&ptdev->base, "attach power domains failed, ret=%d", ret);
+		return ret;
+	}
+
 	ret = panthor_devfreq_init(ptdev);
 	if (ret)
 		return ret;

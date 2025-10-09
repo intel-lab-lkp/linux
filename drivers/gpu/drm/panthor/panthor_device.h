@@ -210,6 +210,8 @@ struct panthor_device {
 		/** @recovery_needed: True when a resume attempt failed. */
 		atomic_t recovery_needed;
 	} pm;
+	/** @pm: Power management related data. */
+	struct dev_pm_domain_list  *pd_list;
 
 	/** @profile_mask: User-set profiling flags for job accounting. */
 	u32 profile_mask;
