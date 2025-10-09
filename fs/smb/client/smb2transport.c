@@ -34,7 +34,7 @@ smb3_crypto_shash_allocate(struct TCP_Server_Info *server)
 
 	rc = cifs_alloc_hash("hmac(sha256)", &p->hmacsha256);
 	if (rc)
-		goto err;
+		return rc;
 
 	rc = cifs_alloc_hash("cmac(aes)", &p->aes_cmac);
 	if (rc)
