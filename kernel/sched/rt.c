@@ -2037,6 +2037,14 @@ retry:
 		goto retry;
 	}
 
+	/* Within find_lock_lowest_rq(), it's possible to first unlock the
+	 * rq->lock of the runqueue containing next_task, and the re->lock
+	 * it. During this window, the state of next_task might have change.
+	 */
+	if (unlikely(rq != task_rq(next_task) ||
+		     !task_on_rq_queued(next_task)))
+		goto out;
+
 	move_queued_task_locked(rq, lowest_rq, next_task);
 	resched_curr(lowest_rq);
 	ret = 1;
