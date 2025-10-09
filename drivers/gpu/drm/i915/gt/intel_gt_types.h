@@ -166,6 +166,8 @@ struct intel_gt {
 
 	u32 clock_frequency;
 	u32 clock_period_ns;
+	u32 clock_freq_scaled;
+	u32 clock_nsec_scaled;
 
 	struct intel_llc llc;
 	struct intel_rc6 rc6;

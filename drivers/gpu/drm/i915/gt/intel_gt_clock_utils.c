@@ -3,6 +3,8 @@
  * Copyright © 2020 Intel Corporation
  */
 
+#include <linux/gcd.h>
+
 #include "i915_drv.h"
 #include "i915_reg.h"
 #include "intel_gt.h"
@@ -171,7 +173,14 @@ static u32 read_clock_frequency(struct intel_uncore *uncore)
 
 void intel_gt_init_clock_frequency(struct intel_gt *gt)
 {
+	unsigned long clock_period_scale;
+
 	gt->clock_frequency = read_clock_frequency(gt->uncore);
+	GEM_WARN_ON(!gt->clock_frequency);
+
+	clock_period_scale = gcd(NSEC_PER_SEC, gt->clock_frequency);
+	gt->clock_nsec_scaled = NSEC_PER_SEC / clock_period_scale;
+	gt->clock_freq_scaled = gt->clock_frequency / clock_period_scale;
 
 	/* Icelake appears to use another fixed frequency for CTX_TIMESTAMP */
 	if (GRAPHICS_VER(gt->i915) == 11)
@@ -180,11 +189,11 @@ void intel_gt_init_clock_frequency(struct intel_gt *gt)
 		gt->clock_period_ns = intel_gt_clock_interval_to_ns(gt, 1);
 
 	GT_TRACE(gt,
-		 "Using clock frequency: %dkHz, period: %dns, wrap: %lldms\n",
+		 "Using clock frequency: %dkHz, period: %dns, wrap: %lldms, scale %lu\n",
 		 gt->clock_frequency / 1000,
 		 gt->clock_period_ns,
-		 div_u64(mul_u32_u32(gt->clock_period_ns, S32_MAX),
-			 USEC_PER_SEC));
+		 div_u64(mul_u32_u32(gt->clock_period_ns, S32_MAX), USEC_PER_SEC),
+		 clock_period_scale);
 }
 
 #if IS_ENABLED(CONFIG_DRM_I915_DEBUG_GEM)
@@ -205,7 +214,8 @@ static u64 div_u64_roundup(u64 nom, u32 den)
 
 u64 intel_gt_clock_interval_to_ns(const struct intel_gt *gt, u64 count)
 {
-	return div_u64_roundup(count * NSEC_PER_SEC, gt->clock_frequency);
+	return div_u64_roundup(count * gt->clock_nsec_scaled,
+			       gt->clock_freq_scaled);
 }
 
 u64 intel_gt_pm_interval_to_ns(const struct intel_gt *gt, u64 count)
@@ -215,7 +225,8 @@ u64 intel_gt_pm_interval_to_ns(const struct intel_gt *gt, u64 count)
 
 u64 intel_gt_ns_to_clock_interval(const struct intel_gt *gt, u64 ns)
 {
-	return div_u64_roundup(gt->clock_frequency * ns, NSEC_PER_SEC);
+	return div_u64_roundup(gt->clock_freq_scaled * ns,
+			       gt->clock_nsec_scaled);
 }
 
 u64 intel_gt_ns_to_pm_interval(const struct intel_gt *gt, u64 ns)
