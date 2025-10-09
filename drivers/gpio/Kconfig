@@ -1988,6 +1988,14 @@ config GPIO_MOCKUP
 	  tools/testing/selftests/gpio/gpio-mockup.sh. Reference the usage in
 	  it.
 
+config GPIO_SPLIT
+	tristate "GPIO split driver"
+	depends on OF_GPIO
+	select MULTIPLEXER
+	help
+	  Say Y here to support splitting physical GPIOs into multiple virtual
+	  GPIOs using a multiplexer.
+
 config GPIO_VIRTIO
 	tristate "VirtIO GPIO support"
 	depends on VIRTIO
