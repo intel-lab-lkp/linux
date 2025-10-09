@@ -24,6 +24,7 @@ pub use self::kvec::KVVec;
 pub use self::kvec::KVec;
 pub use self::kvec::VVec;
 pub use self::kvec::Vec;
+pub use self::kvec::PinnedVecExt;
 
 /// Indicates an allocation error.
 #[derive(Copy, Clone, PartialEq, Eq, Debug)]

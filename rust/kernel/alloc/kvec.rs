@@ -16,11 +16,13 @@ use core::{
     ops::DerefMut,
     ops::Index,
     ops::IndexMut,
+    pin::Pin,
     ptr,
     ptr::NonNull,
     slice,
     slice::SliceIndex,
 };
+use pin_init::PinInit;
 
 mod errors;
 pub use self::errors::{InsertError, PushError, RemoveError};
@@ -107,6 +109,21 @@ pub struct Vec<T, A: Allocator> {
     layout: ArrayLayout<T>,
     len: usize,
     _p: PhantomData<A>,
+}
+
+/// Extension for Pin<Vec<T, A>>
+pub trait PinnedVecExt<T> {
+    /// Pin-initializes P and appends it to the back of the [`Vec`] instance without reallocating.
+    fn push_pin_init<E: From<PushError<P>>, P: PinInit<T, E>>(&mut self, init: P) -> Result<(), E>;
+
+    /// Shortens the vector, setting the length to `len` and drops the removed values.
+    /// If `len` is greater than or equal to the current length, this does nothing.
+    ///
+    /// This has no effect on the capacity and will not allocate.
+    fn truncate(&mut self, len: usize);
+
+    /// Removes the last element from a vector and drops it returning true, or false if it is empty.
+    fn pop(&mut self) -> bool;
 }
 
 /// Type alias for [`Vec`] with a [`Kmalloc`] allocator.
@@ -719,6 +736,18 @@ where
         }
         self.truncate(num_kept);
     }
+
+    /// Constructs a new `Pin<Vec<T, A>>`.
+    #[inline]
+    pub fn pin(capacity: usize, flags: Flags) -> Result<Pin<Self>, AllocError> {
+        Self::with_capacity(capacity, flags).map(Pin::<Self>::from)
+    }
+
+    /// Convert a [`Vec<T,A>`] to a [`Pin<Vec<T,A>>`]. If `T` does not implement
+    /// [`Unpin`], then its values will be pinned in memory and can't be moved.
+    pub fn into_pin(this: Self) -> Pin<Self> {
+        this.into()
+    }
 }
 
 impl<T: Clone, A: Allocator> Vec<T, A> {
@@ -1291,6 +1320,63 @@ impl<'vec, T> Drop for DrainAll<'vec, T> {
             // SAFETY: By the type invariants, we own these values so we may destroy them.
             unsafe { ptr::drop_in_place(ptr) };
         }
+    }
+}
+
+impl<T, A: Allocator> PinnedVecExt<T> for Pin<Vec<T, A>> {
+    fn truncate(&mut self, len: usize) {
+        // SAFETY: truncate will not reallocate the Vec
+        // CAST: Pin<Ptr> is a transparent wrapper of Ptr
+        unsafe { &mut *core::ptr::from_mut(self).cast::<Vec<T, A>>() }.truncate(len);
+    }
+
+    fn push_pin_init<E: From<PushError<P>>, P: PinInit<T, E>>(&mut self, init: P) -> Result<(), E> {
+        // SAFETY: capacity, spare_capacity_mut and inc_len will not
+        // reallocate the Vec.
+        // CAST: Pin<Ptr> is a transparent wrapper of Ptr
+        let this = unsafe { &mut *core::ptr::from_mut(self).cast::<Vec<T, A>>() };
+
+        if this.len() < this.capacity() {
+            let spare = this.spare_capacity_mut();
+            // SAFETY: the length is less than the capacity, so `spare` is non-empty.
+            unsafe { init.__pinned_init(spare.get_unchecked_mut(0).as_mut_ptr())? };
+            // SAFETY: We just initialised the first spare entry, so it is safe to
+            // increase the length by 1. We also know that the new length is <= capacity.
+            unsafe { this.inc_len(1) };
+            Ok(())
+        } else {
+            Err(E::from(PushError(init)))
+        }
+    }
+
+    fn pop(&mut self) -> bool {
+        if self.is_empty() {
+            return false;
+        }
+
+        // SAFETY:
+        // - We just checked that the length is at least one.
+        // - dec_len will not reallocate the Vec
+        // CAST: Pin<Ptr> is a transparent wrapper of Ptr
+        let ptr: *mut [T] = unsafe { (*core::ptr::from_mut(self).cast::<Vec<T, A>>()).dec_len(1) };
+
+        // SAFETY: the contract of `dec_len` guarantees that the elements in `ptr` are
+        // valid elements whose ownership has been transferred to the caller.
+        unsafe { ptr::drop_in_place(ptr) };
+        true
+    }
+}
+
+impl<T, A: Allocator> From<Vec<T, A>> for Pin<Vec<T, A>> {
+    /// Converts a `Vec<T, A>` into a `Pin<Vec<T, A>>`. If `T` does not implement [`Unpin`], then
+    /// every value in v will be pinned in memory and can't be moved.
+    ///
+    /// This moves `v` into `Pin` without moving any of the values of `v` or allocating and copying
+    /// any memory.
+    fn from(v: Vec<T, A>) -> Self {
+        // SAFETY: The values wrapped inside a `Pin<Vec<T, A>>` cannot be moved or replaced as long
+        // as `T` does not implement `Unpin`.
+        unsafe { Pin::new_unchecked(v) }
     }
 }
 
