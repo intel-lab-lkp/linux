@@ -38,6 +38,7 @@ enum dthe_aes_mode {
 	DTHE_AES_CBC,
 	DTHE_AES_CTR,
 	DTHE_AES_XTS,
+	DTHE_AES_GCM,
 };
 
 /* Driver specific struct definitions */
@@ -78,28 +79,38 @@ struct dthe_list {
  * struct dthe_tfm_ctx - Transform ctx struct containing ctx for all sub-components of DTHE V2
  * @dev_data: Device data struct pointer
  * @keylen: AES key length
+ * @authsize: Authentication size for modes with authentication
  * @key: AES key
  * @aes_mode: AES mode
+ * @aead_fb: Fallback crypto aead handle
  * @skcipher_fb: Fallback crypto skcipher handle for AES-XTS mode
  */
 struct dthe_tfm_ctx {
 	struct dthe_data *dev_data;
 	unsigned int keylen;
+	unsigned int authsize;
 	u32 key[DTHE_MAX_KEYSIZE / sizeof(u32)];
 	enum dthe_aes_mode aes_mode;
-	struct crypto_skcipher *skcipher_fb;
+	union {
+		struct crypto_aead *aead_fb;
+		struct crypto_skcipher *skcipher_fb;
+	};
 };
 
 /**
  * struct dthe_aes_req_ctx - AES engine req ctx struct
  * @enc: flag indicating encryption or decryption operation
  * @aes_compl: Completion variable for use in manual completion in case of DMA callback failure
+ * @aead_fb_req: aead request for fallback operation
  * @skcipher_fb_req: skcipher request for fallback operation in case of AES-XTS mode
  */
 struct dthe_aes_req_ctx {
 	int enc;
 	struct completion aes_compl;
-	struct skcipher_request skcipher_fb_req;
+	union {
+		struct aead_request aead_fb_req;
+		struct skcipher_request skcipher_fb_req;
+	};
 };
 
 /* Struct definitions end */
