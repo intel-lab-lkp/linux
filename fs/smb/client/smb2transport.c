@@ -881,15 +881,14 @@ smb2_setup_request(struct cifs_ses *ses, struct TCP_Server_Info *server,
 	smb2_seq_num_into_buf(server, shdr);
 
 	rc = smb2_get_mid_entry(ses, server, shdr, &mid);
-	if (rc) {
-		revert_current_mid_from_hdr(server, shdr);
-		return ERR_PTR(rc);
-	}
+	if (rc)
+		goto revert_current_mid_from_hdr;
 
 	rc = smb2_sign_rqst(rqst, server);
 	if (rc) {
-		revert_current_mid_from_hdr(server, shdr);
 		delete_mid(mid);
+revert_current_mid_from_hdr:
+		revert_current_mid_from_hdr(server, shdr);
 		return ERR_PTR(rc);
 	}
 
