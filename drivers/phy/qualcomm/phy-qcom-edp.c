@@ -103,7 +103,7 @@ struct qcom_edp {
 
 	struct phy_configure_opts_dp dp_opts;
 
-	struct clk_bulk_data clks[2];
+	struct clk_bulk_data clks[3];
 	struct regulator_bulk_data supplies[2];
 
 	bool is_edp;
@@ -1094,6 +1094,7 @@ static int qcom_edp_phy_probe(struct platform_device *pdev)
 
 	edp->clks[0].id = "aux";
 	edp->clks[1].id = "cfg_ahb";
+	edp->clks[2].id = "edp_ref";
 	ret = devm_clk_bulk_get(dev, ARRAY_SIZE(edp->clks), edp->clks);
 	if (ret)
 		return ret;
