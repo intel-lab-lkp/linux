@@ -921,14 +921,15 @@ smb2_setup_async_request(struct TCP_Server_Info *server, struct smb_rqst *rqst)
 
 	mid = smb2_mid_entry_alloc(shdr, server);
 	if (mid == NULL) {
-		revert_current_mid_from_hdr(server, shdr);
-		return ERR_PTR(-ENOMEM);
+		rc = -ENOMEM;
+		goto revert_current_mid_from_hdr;
 	}
 
 	rc = smb2_sign_rqst(rqst, server);
 	if (rc) {
-		revert_current_mid_from_hdr(server, shdr);
 		release_mid(mid);
+revert_current_mid_from_hdr:
+		revert_current_mid_from_hdr(server, shdr);
 		return ERR_PTR(rc);
 	}
 
