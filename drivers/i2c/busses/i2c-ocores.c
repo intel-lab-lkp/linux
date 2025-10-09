@@ -18,6 +18,7 @@
 #include <linux/platform_device.h>
 #include <linux/i2c.h>
 #include <linux/interrupt.h>
+#include <linux/iopoll.h>
 #include <linux/wait.h>
 #include <linux/platform_data/i2c-ocores.h>
 #include <linux/slab.h>
@@ -258,7 +259,7 @@ static void ocores_process_timeout(struct ocores_i2c *i2c)
  * @reg: register to query
  * @mask: bitmask to apply on register value
  * @val: expected result
- * @timeout: timeout in jiffies
+ * @timeout: absolute timeout in jiffies
  *
  * Timeout is necessary to avoid to stay here forever when the chip
  * does not answer correctly.
@@ -269,30 +270,32 @@ static int ocores_wait(struct ocores_i2c *i2c,
 		       int reg, u8 mask, u8 val,
 		       const unsigned long timeout)
 {
-	unsigned long j;
+	unsigned long max_wait;
+	u8 status;
+	int ret;
 
-	j = jiffies + timeout;
-	while (1) {
-		u8 status = oc_getreg(i2c, reg);
+	/* In most cases the wait is short, so we spin for up to 1ms. */
+	ret = read_poll_timeout_atomic(oc_getreg, status,
+				       (status & mask) == val,
+					0, 1000, false, i2c, reg);
+	if (ret != -ETIMEDOUT)
+		return ret;
 
-		if ((status & mask) == val)
-			break;
-
-		if (time_after(jiffies, j))
-			return -ETIMEDOUT;
-	}
-	return 0;
+	max_wait = jiffies_to_usecs(max(0L, timeout - jiffies)) + 1;
+	return read_poll_timeout(oc_getreg, status, (status & mask) == val,
+				 10000, max_wait, false, i2c, reg);
 }
 
 /**
  * ocores_poll_wait() - Wait until is possible to process some data
  * @i2c: ocores I2C device instance
+ * @timeout: absolute timeout in jiffies
  *
  * Used when the device is in polling mode (interrupts disabled).
  *
  * Return: 0 on success, -ETIMEDOUT on timeout
  */
-static int ocores_poll_wait(struct ocores_i2c *i2c)
+static int ocores_poll_wait(struct ocores_i2c *i2c, unsigned long timeout)
 {
 	u8 mask;
 	int err;
@@ -310,15 +313,11 @@ static int ocores_poll_wait(struct ocores_i2c *i2c)
 		udelay((8 * 1000) / i2c->bus_clock_khz);
 	}
 
-	/*
-	 * once we are here we expect to get the expected result immediately
-	 * so if after 1ms we timeout then something is broken.
-	 */
-	err = ocores_wait(i2c, OCI2C_STATUS, mask, 0, msecs_to_jiffies(1));
+	err = ocores_wait(i2c, OCI2C_STATUS, mask, 0, timeout);
 	if (err)
-		dev_warn(i2c->adap.dev.parent,
-			 "%s: STATUS timeout, bit 0x%x did not clear in 1ms\n",
-			 __func__, mask);
+		dev_dbg(i2c->adap.dev.parent,
+			"%s: STATUS timeout, bit 0x%x did not clear\n",
+			__func__, mask);
 	return err;
 }
 
@@ -336,11 +335,12 @@ static int ocores_poll_wait(struct ocores_i2c *i2c)
  */
 static int ocores_process_polling(struct ocores_i2c *i2c)
 {
+	unsigned long timeout = jiffies + i2c->adap.timeout;
 	irqreturn_t ret;
 	int err = 0;
 
 	while (1) {
-		err = ocores_poll_wait(i2c);
+		err = ocores_poll_wait(i2c, timeout);
 		if (err)
 			break; /* timeout */
 
