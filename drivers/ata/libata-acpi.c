@@ -246,6 +246,76 @@ void ata_acpi_bind_dev(struct ata_device *dev)
 }
 
 /**
+ * ata_acpi_dev_manage_restart - if the disk should be stopped (spin down) on
+ * system restart.
+ * @dev: target ATA device
+ *
+ * RETURNS:
+ * true if the disk should be stopped, otherwise false
+ */
+bool ata_acpi_dev_manage_restart(struct ata_device *dev)
+{
+	// If the device is power manageable and we assume the disk loses power
+	// on reboot.
+	if (dev->link->ap->flags & ATA_FLAG_ACPI_SATA) {
+		if (!is_acpi_device_node(dev->tdev.fwnode))
+			return 0;
+		return acpi_bus_power_manageable(ACPI_HANDLE(&dev->tdev));
+	}
+
+	if (!is_acpi_device_node(dev->link->ap->tdev.fwnode))
+		return 0;
+	return acpi_bus_power_manageable(ACPI_HANDLE(&dev->link->ap->tdev));
+}
+
+/**
+ * ata_acpi_port_set_power_state - set the power state of the ata port
+ * @ap: target ATA port
+ *
+ * This function is called at the beginning of ata_port_probe.
+ */
+void ata_acpi_port_set_power_state(struct ata_port *ap, bool enable)
+{
+	acpi_handle handle;
+	unsigned char state;
+	int i;
+
+	if (libata_noacpi)
+		return;
+
+	if (enable)
+		state = ACPI_STATE_D0;
+	else
+		state = ACPI_STATE_D3_COLD;
+
+	if (ap->flags & ATA_FLAG_ACPI_SATA) {
+		for (i = 0; i < ATA_MAX_DEVICES; i++) {
+			if (!is_acpi_device_node(ap->link.device[i].tdev.fwnode))
+				continue;
+			handle = ACPI_HANDLE(&ap->link.device[i].tdev);
+			if (!acpi_bus_power_manageable(handle))
+				continue;
+			if (!acpi_bus_set_power(handle, state))
+				ata_dev_dbg(&ap->link.device[i], "acpi: power was %s\n",
+					     enable ? "en" : "dis");
+			else
+				ata_dev_err(&ap->link.device[i], "acpi: failed to set power state\n");
+		}
+		return;
+	}
+	if (!is_acpi_device_node(ap->tdev.fwnode))
+		return;
+	handle = ACPI_HANDLE(&ap->tdev);
+	if (!acpi_bus_power_manageable(handle))
+		return;
+
+	if (!acpi_bus_set_power(handle, state))
+		ata_port_dbg(ap, "acpi: power %sabled\n", enable ? "en" : "dis");
+	else
+		ata_port_err(ap, "acpi: failed to set power state\n");
+}
+
+/**
  * ata_acpi_dissociate - dissociate ATA host from ACPI objects
  * @host: target ATA host
  *
