@@ -409,6 +409,10 @@ static void submit_attach_object_fences(struct msm_gem_submit *submit)
 	struct msm_gem_vm *vm = to_msm_vm(submit->vm);
 	struct dma_fence *last_fence;
 
+	last_fence = vm->last_fence;
+	vm->last_fence = dma_fence_unwrap_merge(submit->user_fence, last_fence);
+	dma_fence_put(last_fence);
+
 	if (msm_context_is_vmbind(submit->queue->ctx)) {
 		drm_gpuvm_resv_add_fence(submit->vm, &submit->exec,
 					 submit->user_fence,
@@ -427,10 +431,6 @@ static void submit_attach_object_fences(struct msm_gem_submit *submit)
 			dma_resv_add_fence(obj->resv, submit->user_fence,
 					   DMA_RESV_USAGE_READ);
 	}
-
-	last_fence = vm->last_fence;
-	vm->last_fence = dma_fence_unwrap_merge(submit->user_fence, last_fence);
-	dma_fence_put(last_fence);
 }
 
 static int submit_bo(struct msm_gem_submit *submit, uint32_t idx,
