@@ -740,6 +740,26 @@ static int i2c_hid_raw_request(struct hid_device *hid, unsigned char reportnum,
 	}
 }
 
+static void patch_lenovo_yoga_slim7x_keyboard_rdesc(struct i2c_hid *ihid,
+						    char *rdesc,
+						    unsigned int rsize)
+{
+	if (!(rsize == 0xb0 &&
+	      rdesc[0x34] == 0x15 && rdesc[0x35] == 0x00 && // Logical Minimum (0)
+	      rdesc[0x36] == 0x25 && rdesc[0x37] == 0x65 && // Logical Maximum (101)
+	      rdesc[0x38] == 0x05 && rdesc[0x39] == 0x07 && // Usage Page (Keyboard)
+	      rdesc[0x3a] == 0x19 && rdesc[0x3b] == 0x00 && // Usage Minimum (0)
+	      rdesc[0x3c] == 0x29 && rdesc[0x3d] == 0xdd))  // Usage Maximum (221)
+		return;
+
+	u8 logical_max = rdesc[0x37];
+	u8 usage_max = rdesc[0x3d];
+
+	rdesc[0x37] = usage_max;
+	i2c_hid_dbg(ihid, "%s: patched logical max from %u to %u\n", __func__,
+			logical_max, usage_max);
+}
+
 static int i2c_hid_parse(struct hid_device *hid)
 {
 	struct i2c_client *client = hid->driver_data;
@@ -791,6 +811,11 @@ static int i2c_hid_parse(struct hid_device *hid)
 			hid_err(hid, "reading report descriptor failed\n");
 			goto out;
 		}
+	}
+
+	if (ihid->hid->vendor == USB_VENDOR_ID_ITE &&
+	    ihid->hid->product == I2C_DEVICE_ID_ITE_LENOVO_YOGA_SLIM_7X) {
+		patch_lenovo_yoga_slim7x_keyboard_rdesc(ihid, rdesc, rsize);
 	}
 
 	i2c_hid_dbg(ihid, "Report Descriptor: %*ph\n", rsize, rdesc);
