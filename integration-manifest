@@ -1,0 +1,34 @@
+drm drm-fixes e5f0a698b34ed76002dc5cff3804a61c80233a7a
+	Linux 6.17
+drm-misc drm-misc-fixes e07e10ae83bdf429f59c8c149173a8c4f29c481e
+	drm/panthor: Ensure MCU is disabled on suspend
+drm-rust drm-rust-fixes 349510052f765b6eb9c2a21d0ffe08ba61fa683c
+	MAINTAINERS: Add drm-rust tree for Rust DRM drivers and infrastructure
+drm-intel drm-intel-fixes 7f97a0a871d9532f2e1a5ee7d16d0e364215bcac
+	drm/i915/ddi: Guard reg_val against a INVALID_TRANSCODER
+drm-xe drm-xe-fixes e5f0a698b34ed76002dc5cff3804a61c80233a7a
+	Linux 6.17
+drm drm-next 73bc073d4270b6b227d5545fc277c1f09a26a77a
+	Merge tag 'drm-xe-next-fixes-2025-10-03' of https://gitlab.freedesktop.org/drm/xe/kernel into drm-next
+drm-misc drm-misc-next-fixes adefb2ccea1e96b452cbbc39150bc0ccf1688b99
+	drm/v3d: create a dedicated lock for dma fence
+drm-intel drm-intel-next-fixes 5a569ef4d4ab184a481dd8ecb58f464a89b44d2f
+	drm/i915/display: Set C10_VDR_CTRL_MSGBUS_ACCESS before phy reg read
+drm-xe drm-xe-next-fixes 1af59cd5cc2b65d7fc95165f056695ce3f171133
+	drm/xe/i2c: Don't rely on d3cold.allowed flag in system PM path
+drm-misc drm-misc-next a8cb5ca53690aa809f4f65e14192753073e61a71
+	drm/panthor: skip regulator setup if no such prop
+drm-rust drm-rust-next 299eb32863e584cfff7c6b667c3e92ae7d4d2bf9
+	gpu: nova-core: Add base files for r570.144 firmware bindings
+drm-intel drm-intel-next 0676602f845313ff2ea0a44a39488e5f6b8720d5
+	drm/i915/alpm: Remove parameters suffix from intel_dp->alpm_parameters
+drm-intel drm-intel-gt-next 604b5ee4a653a70979ce689dbd6a5d942eb016bf
+	drm/i915/guc: Skip communication warning on reset in progress
+drm-xe drm-xe-next 60e26675578f5a3d7375f5f80d2d70c33eca2ec7
+	drm/xe/guc: Increase wait timeout to 2sec after BUSY reply from GuC
+drm-intel topic/core-for-CI e9b01b51c8625afc2f18bf3a91db2b8f2c68a751
+	Revert "lockdep: Enable PROVE_RAW_LOCK_NESTING with PROVE_LOCKING."
+drm-xe topic/xe-for-CI 6916e5fb25c414cb3d4adcfc8f12f55f602c53b2
+	drm/xe/pm: Re-enable D3Cold by default on BMG
+drm topic/drm-next-nouveau-r570 6cc6e08d4542473d79ea83d9123d9d35e9c01c92
+	drm/nouveau/kms: add support for GB20x
