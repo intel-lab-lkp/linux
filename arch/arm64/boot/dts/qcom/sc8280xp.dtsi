@@ -29,6 +29,12 @@
 	#size-cells = <2>;
 
 	clocks {
+		edp_ref_clk: edp-ref-clk {
+			compatible = "fixed-clock";
+			#clock-cells = <0>;
+			clock-frequency = <19200000>;
+		};
+
 		xo_board_clk: xo-board-clk {
 			compatible = "fixed-clock";
 			#clock-cells = <0>;
@@ -3792,8 +3798,9 @@
 			      <0 0x08909000 0 0x1c8>;
 
 			clocks = <&dispcc1 DISP_CC_MDSS_DPTX0_AUX_CLK>,
-				 <&dispcc1 DISP_CC_MDSS_AHB_CLK>;
-			clock-names = "aux", "cfg_ahb";
+				 <&dispcc1 DISP_CC_MDSS_AHB_CLK>,
+				 <&edp_ref_clk>;
+			clock-names = "aux", "cfg_ahb", "edp_ref";
 			power-domains = <&rpmhpd SC8280XP_MX>;
 
 			#clock-cells = <1>;
@@ -3810,8 +3817,9 @@
 			      <0 0x0890c000 0 0x1c8>;
 
 			clocks = <&dispcc1 DISP_CC_MDSS_DPTX1_AUX_CLK>,
-				 <&dispcc1 DISP_CC_MDSS_AHB_CLK>;
-			clock-names = "aux", "cfg_ahb";
+				 <&dispcc1 DISP_CC_MDSS_AHB_CLK>,
+				 <&edp_ref_clk>;
+			clock-names = "aux", "cfg_ahb", "edp_ref";
 			power-domains = <&rpmhpd SC8280XP_MX>;
 
 			#clock-cells = <1>;
@@ -5022,8 +5030,9 @@
 			      <0 0x0aec2000 0 0x1c8>;
 
 			clocks = <&dispcc0 DISP_CC_MDSS_DPTX2_AUX_CLK>,
-				 <&dispcc0 DISP_CC_MDSS_AHB_CLK>;
-			clock-names = "aux", "cfg_ahb";
+				 <&dispcc0 DISP_CC_MDSS_AHB_CLK>,
+				 <&edp_ref_clk>;
+			clock-names = "aux", "cfg_ahb", "edp_ref";
 			power-domains = <&rpmhpd SC8280XP_MX>;
 
 			#clock-cells = <1>;
@@ -5040,8 +5049,9 @@
 			      <0 0x0aec5000 0 0x1c8>;
 
 			clocks = <&dispcc0 DISP_CC_MDSS_DPTX3_AUX_CLK>,
-				 <&dispcc0 DISP_CC_MDSS_AHB_CLK>;
-			clock-names = "aux", "cfg_ahb";
+				 <&dispcc0 DISP_CC_MDSS_AHB_CLK>,
+				 <&edp_ref_clk>;
+			clock-names = "aux", "cfg_ahb", "edp_ref";
 			power-domains = <&rpmhpd SC8280XP_MX>;
 
 			#clock-cells = <1>;
@@ -6368,8 +6378,9 @@
 			      <0 0x220c2000 0 0x1c8>;
 
 			clocks = <&dispcc1 DISP_CC_MDSS_DPTX2_AUX_CLK>,
-				 <&dispcc1 DISP_CC_MDSS_AHB_CLK>;
-			clock-names = "aux", "cfg_ahb";
+				 <&dispcc1 DISP_CC_MDSS_AHB_CLK>,
+				 <&edp_ref_clk>;
+			clock-names = "aux", "cfg_ahb", "edp_ref";
 			power-domains = <&rpmhpd SC8280XP_MX>;
 
 			#clock-cells = <1>;
@@ -6386,8 +6397,9 @@
 			      <0 0x220c5000 0 0x1c8>;
 
 			clocks = <&dispcc1 DISP_CC_MDSS_DPTX3_AUX_CLK>,
-				 <&dispcc1 DISP_CC_MDSS_AHB_CLK>;
-			clock-names = "aux", "cfg_ahb";
+				 <&dispcc1 DISP_CC_MDSS_AHB_CLK>,
+				 <&edp_ref_clk>;
+			clock-names = "aux", "cfg_ahb", "edp_ref";
 			power-domains = <&rpmhpd SC8280XP_MX>;
 
 			#clock-cells = <1>;
