@@ -64,16 +64,16 @@ enum wm_tiling_mode {
 struct skl_wm_params {
 	enum wm_tiling_mode tiling;
 	u32 width;
-	u8 cpp;
-	bool rc_surface;
-	bool is_planar;
 	u32 plane_pixel_rate;
-	u32 y_min_scanlines;
 	u32 plane_bytes_per_line;
 	uint_fixed_16_16_t plane_blocks_per_line;
 	uint_fixed_16_16_t y_tile_minimum;
 	u32 linetime_us;
 	u32 dbuf_block_size;
+	u8 cpp;
+	u8 y_min_scanlines;
+	bool rc_surface;
+	bool is_planar;
 };
 
 u8 intel_enabled_dbuf_slices_mask(struct intel_display *display)
