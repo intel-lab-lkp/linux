@@ -270,7 +270,7 @@ macro_rules! usb_device_table {
 ///         _interface: &usb::Interface<Core>,
 ///         _id: &usb::DeviceId,
 ///         _info: &Self::IdInfo,
-///     ) -> Result<Pin<KBox<Self>>> {
+///     ) -> impl PinInit<Self, Error> {
 ///         Err(ENODEV)
 ///     }
 ///
@@ -292,7 +292,7 @@ pub trait Driver {
         interface: &Interface<device::Core>,
         id: &DeviceId,
         id_info: &Self::IdInfo,
-    ) -> Result<Pin<KBox<Self>>>;
+    ) -> impl PinInit<Self, Error>;
 
     /// USB driver disconnect.
     ///
