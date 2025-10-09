@@ -1833,7 +1833,7 @@ static void skl_compute_plane_wm(const struct intel_crtc_state *crtc_state,
 		 */
 		if ((wp->cpp * crtc_state->hw.pipe_mode.crtc_htotal /
 		     wp->dbuf_block_size < 1) &&
-		     (wp->plane_bytes_per_line / wp->dbuf_block_size < 1)) {
+		    (wp->plane_bytes_per_line / wp->dbuf_block_size < 1)) {
 			selected_result = method2;
 		} else if (latency >= wp->linetime_us) {
 			if (DISPLAY_VER(display) == 9)
@@ -1841,8 +1841,11 @@ static void skl_compute_plane_wm(const struct intel_crtc_state *crtc_state,
 			else
 				selected_result = method2;
 		} else {
+			/* everything else with linear/X-tiled uses method 1 */
 			selected_result = method1;
 		}
+		break;
+
 	}
 
 	blocks = fixed16_to_u32_round_up(selected_result);
