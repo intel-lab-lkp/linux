@@ -2975,8 +2975,7 @@ replay_again:
 	rsp = (struct smb2_create_rsp *)rsp_iov.iov_base;
 	if (rsp == NULL) {
 		rc = -EIO;
-		kfree(pc_buf);
-		goto err_free_req;
+		goto err_free_pc_buf;
 	}
 
 	trace_smb3_posix_mkdir_done(xid, rsp->PersistentFileId, tcon->tid, ses->Suid,
@@ -2988,6 +2987,7 @@ replay_again:
 
 err_free_rsp_buf:
 	free_rsp_buf(resp_buftype, rsp_iov.iov_base);
+err_free_pc_buf:
 	kfree(pc_buf);
 err_free_req:
 	cifs_small_buf_release(req);
