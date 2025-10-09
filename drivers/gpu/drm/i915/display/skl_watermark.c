@@ -83,8 +83,8 @@ u8 intel_enabled_dbuf_slices_mask(struct intel_display *display)
 }
 
 /*
- * FIXME: We still don't have the proper code detect if we need to apply the WA,
- * so assume we'll always need it in order to avoid underruns.
+ * We don't have the proper code detect if we need to apply the WA, so
+ * assume we'll always need it in order to avoid underruns.
  */
 static bool skl_needs_memory_bw_wa(struct intel_display *display)
 {
