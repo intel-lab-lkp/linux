@@ -616,6 +616,13 @@
 };
 
 &cci0_i2c0 {
+	camera_imx800_ak7377: actuator@c {
+		compatible = "asahi-kasei,ak7377";
+		reg = <0x0c>;
+		vdd-supply = <&vreg_l7p>;
+		vio-supply = <&vreg_l7p>;
+	};
+
 	/* IMX800 @ 1a */
 
 	eeprom@50 {
