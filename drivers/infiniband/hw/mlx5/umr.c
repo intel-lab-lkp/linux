@@ -254,7 +254,7 @@ static int mlx5r_umr_post_send(struct ib_qp *ibqp, u32 mkey, struct ib_cqe *cqe,
 	unsigned int idx;
 	int size, err;
 
-	if (unlikely(mdev->state == MLX5_DEVICE_STATE_INTERNAL_ERROR))
+	if (unlikely(mlx5_cmd_is_down(mdev)))
 		return -EIO;
 
 	spin_lock_irqsave(&qp->sq.lock, flags);
