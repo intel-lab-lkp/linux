@@ -523,6 +523,12 @@ static int rz_mtu3_pwm_probe(struct platform_device *pdev)
 	if (ret < 0)
 		return ret;
 
+	/*
+	 * There is only one DT node, get it from the parent MFD device, so
+	 * that the PWM channels can be referenced via phandles
+	 */
+	dev->of_node = dev->parent->of_node;
+
 	chip->ops = &rz_mtu3_pwm_ops;
 	ret = devm_pwmchip_add(&pdev->dev, chip);
 	if (ret)
