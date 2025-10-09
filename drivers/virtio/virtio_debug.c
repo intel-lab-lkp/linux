@@ -8,7 +8,7 @@ static struct dentry *virtio_debugfs_dir;
 
 static int virtio_debug_device_features_show(struct seq_file *s, void *data)
 {
-	u64 device_features[VIRTIO_FEATURES_DWORDS];
+	u64 device_features[VIRTIO_FEATURES_QWORDS];
 	struct virtio_device *dev = s->private;
 	unsigned int i;
 
