@@ -1067,6 +1067,7 @@ static signed long drm_syncobj_array_wait_timeout(struct drm_syncobj **syncobjs,
 	struct dma_fence *fence;
 	uint64_t *points;
 	uint32_t signaled_count, i;
+	int fence_status, first_fence_error = 0;
 
 	if (flags & (DRM_SYNCOBJ_WAIT_FLAGS_WAIT_FOR_SUBMIT |
 		     DRM_SYNCOBJ_WAIT_FLAGS_WAIT_AVAILABLE)) {
@@ -1170,6 +1171,9 @@ static signed long drm_syncobj_array_wait_timeout(struct drm_syncobj **syncobjs,
 			     dma_fence_add_callback(fence,
 						    &entries[i].fence_cb,
 						    syncobj_wait_fence_func))) {
+				fence_status = dma_fence_get_status(fence);
+				if (fence_status < 0 && !first_fence_error)
+					first_fence_error = fence_status;
 				/* The fence has been signaled */
 				if (flags & DRM_SYNCOBJ_WAIT_FLAGS_WAIT_ALL) {
 					signaled_count++;
@@ -1212,6 +1216,14 @@ cleanup_entries:
 
 err_free_points:
 	kfree(points);
+
+	/*
+	 * Propagate the last fence error the code has seen, but
+	 * give precedence to the overall wait error in case one
+	 * was encountered.
+	 */
+	if (first_fence_error < 0 && timeout >= 0)
+		timeout = first_fence_error;
 
 	return timeout;
 }
