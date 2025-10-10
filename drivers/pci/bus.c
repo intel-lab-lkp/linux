@@ -344,6 +344,7 @@ void pci_bus_add_device(struct pci_dev *dev)
 {
 	struct device_node *dn = dev->dev.of_node;
 	struct platform_device *pdev;
+	int ret;
 
 	/*
 	 * Can not put in pci_device_add yet because resources
@@ -353,8 +354,12 @@ void pci_bus_add_device(struct pci_dev *dev)
 	pci_fixup_device(pci_fixup_final, dev);
 	if (pci_is_bridge(dev))
 		of_pci_make_dev_node(dev);
-	pci_create_sysfs_dev_files(dev);
-	pci_proc_attach_device(dev);
+	ret = pci_create_sysfs_dev_files(dev);
+	if (ret)
+		pci_err(dev, "created sysfs files error %d\n", ret);
+	ret = pci_proc_attach_device(dev);
+	if (ret)
+		pci_err(dev, "created procfs files error %d\n", ret);
 	pci_bridge_d3_update(dev);
 
 	/*
