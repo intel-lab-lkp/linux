@@ -2931,7 +2931,7 @@ static int blk_iocost_init(struct gendisk *disk)
 	if (ret)
 		goto err_free_ioc;
 
-	ret = blkcg_activate_policy(disk, &blkcg_policy_iocost);
+	ret = __blkcg_activate_policy(disk, &blkcg_policy_iocost);
 	if (ret)
 		goto err_del_qos;
 	return 0;
@@ -3140,12 +3140,15 @@ static ssize_t ioc_weight_write(struct kernfs_open_file *of, char *buf,
 	}
 
 	blkg_conf_init(&ctx, buf);
-
-	ret = blkg_conf_prep(blkcg, &blkcg_policy_iocost, &ctx);
+	ret = blkg_conf_start(blkcg, &ctx);
 	if (ret)
-		goto err;
+		return ret;
 
 	iocg = blkg_to_iocg(ctx.blkg);
+	if (!iocg) {
+		ret = -EOPNOTSUPP;
+		goto err;
+	}
 
 	if (!strncmp(ctx.body, "default", 7)) {
 		v = 0;
@@ -3162,13 +3165,13 @@ static ssize_t ioc_weight_write(struct kernfs_open_file *of, char *buf,
 	weight_updated(iocg, &now);
 	spin_unlock(&iocg->ioc->lock);
 
-	blkg_conf_exit(&ctx);
+	blkg_conf_end(&ctx);
 	return nbytes;
 
 einval:
 	ret = -EINVAL;
 err:
-	blkg_conf_exit(&ctx);
+	blkg_conf_end(&ctx);
 	return ret;
 }
 
@@ -3226,22 +3229,19 @@ static const match_table_t qos_tokens = {
 static ssize_t ioc_qos_write(struct kernfs_open_file *of, char *input,
 			     size_t nbytes, loff_t off)
 {
+	struct blkcg *blkcg = css_to_blkcg(of_css(of));
 	struct blkg_conf_ctx ctx;
 	struct gendisk *disk;
 	struct ioc *ioc;
 	u32 qos[NR_QOS_PARAMS];
 	bool enable, user;
 	char *body, *p;
-	unsigned long memflags;
 	int ret;
 
 	blkg_conf_init(&ctx, input);
-
-	memflags = blkg_conf_open_bdev_frozen(&ctx);
-	if (IS_ERR_VALUE(memflags)) {
-		ret = memflags;
-		goto err;
-	}
+	ret = blkg_conf_start(blkcg, &ctx);
+	if (ret)
+		return ret;
 
 	body = ctx.body;
 	disk = ctx.bdev->bd_disk;
@@ -3358,14 +3358,14 @@ static ssize_t ioc_qos_write(struct kernfs_open_file *of, char *input,
 
 	blk_mq_unquiesce_queue(disk->queue);
 
-	blkg_conf_exit_frozen(&ctx, memflags);
+	blkg_conf_end(&ctx);
 	return nbytes;
 einval:
 	spin_unlock_irq(&ioc->lock);
 	blk_mq_unquiesce_queue(disk->queue);
 	ret = -EINVAL;
 err:
-	blkg_conf_exit_frozen(&ctx, memflags);
+	blkg_conf_end(&ctx);
 	return ret;
 }
 
@@ -3418,9 +3418,9 @@ static const match_table_t i_lcoef_tokens = {
 static ssize_t ioc_cost_model_write(struct kernfs_open_file *of, char *input,
 				    size_t nbytes, loff_t off)
 {
+	struct blkcg *blkcg = css_to_blkcg(of_css(of));
 	struct blkg_conf_ctx ctx;
 	struct request_queue *q;
-	unsigned int memflags;
 	struct ioc *ioc;
 	u64 u[NR_I_LCOEFS];
 	bool user;
@@ -3428,10 +3428,9 @@ static ssize_t ioc_cost_model_write(struct kernfs_open_file *of, char *input,
 	int ret;
 
 	blkg_conf_init(&ctx, input);
-
-	ret = blkg_conf_open_bdev(&ctx);
+	ret = blkg_conf_start(blkcg, &ctx);
 	if (ret)
-		goto err;
+		return ret;
 
 	body = ctx.body;
 	q = bdev_get_queue(ctx.bdev);
@@ -3448,10 +3447,9 @@ static ssize_t ioc_cost_model_write(struct kernfs_open_file *of, char *input,
 		ioc = q_to_ioc(q);
 	}
 
-	memflags = blk_mq_freeze_queue(q);
 	blk_mq_quiesce_queue(q);
-
 	spin_lock_irq(&ioc->lock);
+
 	memcpy(u, ioc->params.i_lcoefs, sizeof(u));
 	user = ioc->user_cost_model;
 
@@ -3500,20 +3498,17 @@ static ssize_t ioc_cost_model_write(struct kernfs_open_file *of, char *input,
 	spin_unlock_irq(&ioc->lock);
 
 	blk_mq_unquiesce_queue(q);
-	blk_mq_unfreeze_queue(q, memflags);
 
-	blkg_conf_exit(&ctx);
+	blkg_conf_end(&ctx);
 	return nbytes;
 
 einval:
 	spin_unlock_irq(&ioc->lock);
-
 	blk_mq_unquiesce_queue(q);
-	blk_mq_unfreeze_queue(q, memflags);
 
 	ret = -EINVAL;
 err:
-	blkg_conf_exit(&ctx);
+	blkg_conf_end(&ctx);
 	return ret;
 }
 
