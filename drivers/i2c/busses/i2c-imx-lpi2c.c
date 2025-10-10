@@ -727,9 +727,11 @@ static int lpi2c_dma_rx_cmd_submit(struct lpi2c_imx_struct *lpi2c_imx)
 	struct dma_chan *txchan = dma->chan_tx;
 	dma_cookie_t cookie;
 
-	dma->dma_tx_addr = dma_map_single(txchan->device->dev,
-					  dma->rx_cmd_buf, dma->rx_cmd_buf_len,
-					  DMA_TO_DEVICE);
+	CLASS(dma_map_single, dma_addr)(txchan->device->dev,
+					dma->rx_cmd_buf, dma->rx_cmd_buf_len,
+					DMA_TO_DEVICE);
+	dma->dma_tx_addr = dma_addr.ret;
+
 	if (dma_mapping_error(txchan->device->dev, dma->dma_tx_addr)) {
 		dev_err(&lpi2c_imx->adapter.dev, "DMA map failed, use pio\n");
 		return -EINVAL;
@@ -749,18 +751,15 @@ static int lpi2c_dma_rx_cmd_submit(struct lpi2c_imx_struct *lpi2c_imx)
 		goto submit_err_exit;
 	}
 
+	retain_and_empty(dma_addr);
 	dma_async_issue_pending(txchan);
 
 	return 0;
 
 desc_prepare_err_exit:
-	dma_unmap_single(txchan->device->dev, dma->dma_tx_addr,
-			 dma->rx_cmd_buf_len, DMA_TO_DEVICE);
 	return -EINVAL;
 
 submit_err_exit:
-	dma_unmap_single(txchan->device->dev, dma->dma_tx_addr,
-			 dma->rx_cmd_buf_len, DMA_TO_DEVICE);
 	dmaengine_desc_free(rx_cmd_desc);
 	return -EINVAL;
 }
