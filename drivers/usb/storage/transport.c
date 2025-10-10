@@ -718,12 +718,25 @@ Retry_Sense:
 
 		scsi_eh_prep_cmnd(srb, &ses, NULL, 0, sense_size);
 
-		/* FIXME: we must do the protocol translation here */
+		/* Protocol translation per scsi opcode group */
 		if (us->subclass == USB_SC_RBC || us->subclass == USB_SC_SCSI ||
-				us->subclass == USB_SC_CYP_ATACB)
-			srb->cmd_len = 6;
-		else
+		    us->subclass == USB_SC_CYP_ATACB) {
+			/* Determine cmd_len based on scsi opcode group */
+			if (srb->cmnd[0] <= 0x1F)
+				srb->cmd_len = 6;
+			else if (srb->cmnd[0] <= 0x7F)
+				srb->cmd_len = 10;
+			else if (srb->cmnd[0] <= 0x9F)
+				srb->cmd_len = 16;
+			else if (srb->cmnd[0] <= 0xBF)
+				srb->cmd_len = 12;
+			else if (srb->cmnd[0] <= 0xDF)
+				srb->cmd_len = 16;
+			else
+				srb->cmd_len = 6;
+		} else {
 			srb->cmd_len = 12;
+		}
 
 		/* issue the auto-sense command */
 		scsi_set_resid(srb, 0);
