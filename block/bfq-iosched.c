@@ -5266,7 +5266,7 @@ static void bfq_update_dispatch_stats(struct request_queue *q,
 	 * In addition, the following queue lock guarantees that
 	 * bfqq_group(bfqq) exists as well.
 	 */
-	spin_lock_irq(&q->queue_lock);
+	mutex_lock(&q->blkcg_mutex);
 	if (idle_timer_disabled)
 		/*
 		 * Since the idle timer has been disabled,
@@ -5285,7 +5285,7 @@ static void bfq_update_dispatch_stats(struct request_queue *q,
 		bfqg_stats_set_start_empty_time(bfqg);
 		bfqg_stats_update_io_remove(bfqg, rq->cmd_flags);
 	}
-	spin_unlock_irq(&q->queue_lock);
+	mutex_unlock(&q->blkcg_mutex);
 }
 #else
 static inline void bfq_update_dispatch_stats(struct request_queue *q,
@@ -6218,11 +6218,11 @@ static void bfq_update_insert_stats(struct request_queue *q,
 	 * In addition, the following queue lock guarantees that
 	 * bfqq_group(bfqq) exists as well.
 	 */
-	spin_lock_irq(&q->queue_lock);
+	mutex_lock(&q->blkcg_mutex);
 	bfqg_stats_update_io_add(bfqq_group(bfqq), bfqq, cmd_flags);
 	if (idle_timer_disabled)
 		bfqg_stats_update_idle_time(bfqq_group(bfqq));
-	spin_unlock_irq(&q->queue_lock);
+	mutex_unlock(&q->blkcg_mutex);
 }
 #else
 static inline void bfq_update_insert_stats(struct request_queue *q,
