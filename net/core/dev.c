@@ -12208,6 +12208,38 @@ static void unregister_netdevice_close_many(struct list_head *head)
 	}
 }
 
+static void unregister_netdevice_close_many_lockdep(struct list_head *head)
+{
+#ifdef CONFIG_LOCKDEP
+	unsigned int lock_depth = lockdep_depth(current);
+	unsigned int lock_count = lock_depth;
+	struct net_device *dev, *tmp;
+	LIST_HEAD(done_head);
+
+	list_for_each_entry_safe(dev, tmp, head, unreg_list) {
+		if (netdev_need_ops_lock(dev))
+			lock_count++;
+
+		/* we'll run out of lockdep keys, reduce size. */
+		if (lock_count >= MAX_LOCK_DEPTH - 1) {
+			LIST_HEAD(tmp_head);
+
+			list_cut_before(&tmp_head, head, &dev->unreg_list);
+			unregister_netdevice_close_many(&tmp_head);
+			lock_count = lock_depth;
+			list_splice_tail(&tmp_head, &done_head);
+		}
+	}
+
+	unregister_netdevice_close_many(head);
+
+	list_for_each_entry_safe_reverse(dev, tmp, &done_head, unreg_list)
+		list_move(&dev->unreg_list, head);
+#else
+	unregister_netdevice_close_many(head);
+#endif
+}
+
 void unregister_netdevice_many_notify(struct list_head *head,
 				      u32 portid, const struct nlmsghdr *nlh)
 {
@@ -12237,7 +12269,7 @@ void unregister_netdevice_many_notify(struct list_head *head,
 		BUG_ON(dev->reg_state != NETREG_REGISTERED);
 	}
 
-	unregister_netdevice_close_many(head);
+	unregister_netdevice_close_many_lockdep(head);
 
 	flush_all_backlogs();
 
