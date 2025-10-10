@@ -72,6 +72,12 @@ struct inode *bfs_iget(struct super_block *sb, unsigned long ino)
 		inode->i_fop = &bfs_file_operations;
 		inode->i_mapping->a_ops = &bfs_aops;
 	}
+	if (!S_ISREG(inode->i_mode) && !S_ISDIR(inode->i_mode)) {
+		brelse(bh);
+		printf("Bad file type (0%04o) %s:%08lx.\n",
+		       inode->i_mode, inode->i_sb->s_id, ino);
+		goto error;
+	}
 
 	BFS_I(inode)->i_sblock =  le32_to_cpu(di->i_sblock);
 	BFS_I(inode)->i_eblock =  le32_to_cpu(di->i_eblock);
