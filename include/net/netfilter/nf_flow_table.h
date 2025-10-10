@@ -140,6 +140,7 @@ struct flow_offload_tuple {
 	u16				mtu;
 	union {
 		struct {
+			u32		ifidx;
 			struct dst_entry *dst_cache;
 			u32		dst_cookie;
 		};
