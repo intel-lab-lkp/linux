@@ -6053,6 +6053,7 @@ CLEANCACHE
 M:	Suren Baghdasaryan <surenb@google.com>
 L:	linux-mm@kvack.org
 S:	Maintained
+F:	Documentation/mm/cleancache.rst
 F:	include/linux/cleancache.h
 F:	mm/cleancache.c
 F:	mm/cleancache_sysfs.c
