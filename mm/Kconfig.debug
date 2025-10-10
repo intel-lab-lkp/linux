@@ -309,3 +309,16 @@ config PER_VMA_LOCK_STATS
 	  overhead in the page fault path.
 
 	  If in doubt, say N.
+
+config CLEANCACHE_KUNIT
+	tristate "KUnit test for cleancache" if !KUNIT_ALL_TESTS
+	depends on KUNIT
+	depends on CLEANCACHE
+	default KUNIT_ALL_TESTS
+	help
+	  This builds the cleancache unit test.
+	  Tests the clencache functionality.
+	  For more information on KUnit and unit tests in general please refer
+	  to the KUnit documentation in Documentation/dev-tools/kunit/.
+
+	  If unsure, say N.
