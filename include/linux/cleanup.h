@@ -518,4 +518,77 @@ __DEFINE_LOCK_GUARD_0(_name, _lock)
 
 #define DEFINE_LOCK_GUARD_1_COND(X...) CONCATENATE(DEFINE_LOCK_GUARD_1_COND_, COUNT_ARGS(X))(X)
 
+/*
+ * Many resource allocation/free function pairs require passing multiple
+ * arguments — for example, dma_map_single() and dma_unmap_single()
+ *
+ * DEFINE_GUARD_ARGS_CLASS(dma_map_single, dma_addr_t,
+ *			   dma_mapping_error(_T.args.dev, _T.ret),
+ *			   dma_unmap_single(_T->args.dev, _T->ret, _T->args.size, _T->args.dir),
+ *			   dma_map_single,
+ *			   (struct device *dev; void *ptr; size_t size; enum dma_data_direction dir),
+ *			   (struct device *dev, void *ptr, size_t size, enum dma_data_direction dir),
+ *			   (dev, ptr, size, dir))
+ * Example usage:
+ *
+ * int fun() {
+ *	CLASS(dma_map_single, dma)(dev, ptr, size, dir);
+ *	if (!dma.okay)
+ *		return -EIO
+ *	...
+ *	if (condition)
+ *		return -EIO // cleanup will auto unmap
+ *
+ *	req->dma_addr = retain_and_empty(dma); //keep mapping
+ *	return 0;
+ * }
+ */
+#define __REMOVE_PAREN_HELP(...) __VA_ARGS__
+#define __REMOVE_PAREN(x) __REMOVE_PAREN_HELP x
+
+#define __DEFINE_GUARD_ARGS_CLASS(_name, _return_type, _list_class_fields)	\
+typedef struct {								\
+	_return_type ret;							\
+	bool okay;								\
+	struct {								\
+		__REMOVE_PAREN(_list_class_fields);				\
+	} args;									\
+} class_##_name##_t;
+
+#define __DEFINE_GUARD_ARGS_EXIT(_name, _exit)					\
+static inline void class_##_name##_destructor(class_##_name##_t *_T)		\
+{       if (_T->okay) {  _exit; } }
+
+#define __DEFINE_GUARD_ARGS_ENTRY(_name, _is_err, _init, _list_func_args, _list__args)	\
+static inline class_##_name##_t class_##_name##_constructor(__REMOVE_PAREN(_list_func_args))	\
+{											\
+	class_##_name##_t _T = { .args = { __REMOVE_PAREN(_list__args) } };		\
+	_T.ret = _init _list__args;							\
+	_T.okay = !(_is_err);								\
+	return _T;									\
+}
+
+/**
+ * @_name: class name
+ * @_return_type: return data type
+ * @_is_err: macro to check init function return value
+ * @_exit: macro to do resource clean up
+ * @_init: macro/func name to alloc resource
+ * @_list_class_fields: (args list with type, use ; as split)
+ * @_list_func_args: (args list with type, use , as split)
+ * @_list_args: (args list without type, use , as split)
+ */
+#define DEFINE_GUARD_ARGS_CLASS(_name, _return_type, _is_err, _exit, _init, _list_class_fields, _list_func_args, _list_args) \
+__DEFINE_GUARD_ARGS_CLASS(_name, _return_type, _list_class_fields)                   \
+__DEFINE_GUARD_ARGS_ENTRY(_name, _is_err, _init, _list_func_args, _list_args)        \
+__DEFINE_GUARD_ARGS_EXIT(_name, _exit)
+
+#define retain_and_empty(t)							\
+	({									\
+		__auto_type __ptr = &(t); typeof(t) empty = {};			\
+		__auto_type __val = *__ptr;					\
+		*__ptr = empty;							\
+		__val.ret;							\
+	})
+
 #endif /* _LINUX_CLEANUP_H */
