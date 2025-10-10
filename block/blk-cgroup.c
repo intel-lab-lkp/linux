@@ -824,6 +824,67 @@ unsigned long __must_check blkg_conf_open_bdev_frozen(struct blkg_conf_ctx *ctx)
 	return memflags;
 }
 
+void blkg_conf_end(struct blkg_conf_ctx *ctx)
+{
+	struct request_queue *q = bdev_get_queue(ctx->bdev);
+
+	mutex_unlock(&q->blkcg_mutex);
+	mutex_unlock(&q->rq_qos_mutex);
+	mutex_unlock(&q->elevator_lock);
+	blk_mq_unfreeze_queue(q, ctx->memflags);
+	blkdev_put_no_open(ctx->bdev);
+}
+EXPORT_SYMBOL_GPL(blkg_conf_end);
+
+int blkg_conf_start(struct blkcg *blkcg, struct blkg_conf_ctx *ctx)
+{
+	char *input = ctx->input;
+	unsigned int major, minor;
+	struct block_device *bdev;
+	struct request_queue *q;
+	int key_len;
+
+	if (sscanf(input, "%u:%u%n", &major, &minor, &key_len) != 2)
+		return -EINVAL;
+
+	input += key_len;
+	if (!isspace(*input))
+		return -EINVAL;
+
+	input = skip_spaces(input);
+	bdev = blkdev_get_no_open(MKDEV(major, minor), false);
+	if (!bdev)
+		return -ENODEV;
+
+	if (bdev_is_partition(bdev)) {
+		blkdev_put_no_open(bdev);
+		return -ENODEV;
+	}
+
+	if (!disk_live(bdev->bd_disk)) {
+		blkdev_put_no_open(bdev);
+		return -ENODEV;
+	}
+
+	ctx->body = input;
+	ctx->bdev = bdev;
+	ctx->memflags = blk_mq_freeze_queue(ctx->bdev->bd_queue);
+	
+	q = bdev->bd_queue;
+	mutex_lock(&q->elevator_lock);
+	mutex_lock(&q->rq_qos_mutex);
+	mutex_lock(&q->blkcg_mutex);
+
+	ctx->blkg = blkg_lookup_create(blkcg, bdev->bd_disk);
+	if (!ctx->blkg) {
+		blkg_conf_end(ctx);
+		return -ENOMEM;
+	}
+
+	return 0;
+}
+EXPORT_SYMBOL_GPL(blkg_conf_start);
+
 /**
  * blkg_conf_prep - parse and prepare for per-blkg config update
  * @blkcg: target block cgroup

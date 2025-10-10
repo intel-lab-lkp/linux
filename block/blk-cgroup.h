@@ -217,6 +217,7 @@ struct blkg_conf_ctx {
 	char				*body;
 	struct block_device		*bdev;
 	struct blkcg_gq			*blkg;
+	unsigned long			memflags;
 };
 
 void blkg_conf_init(struct blkg_conf_ctx *ctx, char *input);
@@ -226,6 +227,8 @@ int blkg_conf_prep(struct blkcg *blkcg, const struct blkcg_policy *pol,
 		   struct blkg_conf_ctx *ctx);
 void blkg_conf_exit(struct blkg_conf_ctx *ctx);
 void blkg_conf_exit_frozen(struct blkg_conf_ctx *ctx, unsigned long memflags);
+void blkg_conf_end(struct blkg_conf_ctx *ctx);
+int blkg_conf_start(struct blkcg *blkcg, struct blkg_conf_ctx *ctx);
 
 /**
  * bio_issue_as_root_blkg - see if this bio needs to be issued as root blkg
