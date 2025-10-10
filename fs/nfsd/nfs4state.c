@@ -2024,11 +2024,12 @@ static struct nfsd4_slot *nfsd4_alloc_slot(struct nfsd4_channel_attrs *fattrs,
 	size_t size;
 
 	/*
-	 * The RPC and NFS session headers are never saved in
-	 * the slot reply cache buffer.
+	 * Reserve enough space to handle solo SEQUENCE operations,
+	 * which are always cached.
 	 */
 	size = fattrs->maxresp_cached < NFSD_MIN_HDR_SEQ_SZ ?
-		0 : fattrs->maxresp_cached - NFSD_MIN_HDR_SEQ_SZ;
+		NFSD_MIN_HDR_SEQ_SZ :
+		fattrs->maxresp_cached - NFSD_MIN_HDR_SEQ_SZ;
 
 	slot = kzalloc(struct_size(slot, sl_data, size), gfp);
 	if (!slot)
