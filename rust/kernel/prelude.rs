@@ -19,7 +19,7 @@ pub use ::ffi::{
     c_ushort, c_void,
 };
 
-pub use crate::alloc::{flags::*, Box, KBox, KVBox, KVVec, KVec, VBox, VVec, Vec};
+pub use crate::alloc::{flags::*, Box, KBox, KVBox, KVVec, KVec, PinnedVecExt, VBox, VVec, Vec};
 
 #[doc(no_inline)]
 pub use macros::{export, kunit_tests, module, vtable};

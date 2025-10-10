@@ -22,6 +22,7 @@ pub use self::kbox::VBox;
 pub use self::kvec::IntoIter;
 pub use self::kvec::KVVec;
 pub use self::kvec::KVec;
+pub use self::kvec::PinnedVecExt;
 pub use self::kvec::VVec;
 pub use self::kvec::Vec;
 
