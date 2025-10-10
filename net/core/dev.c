@@ -12176,11 +12176,42 @@ static void dev_memory_provider_uninstall(struct net_device *dev)
 	}
 }
 
+static void unregister_netdevice_close_many(struct list_head *head)
+{
+	struct net_device *dev;
+	LIST_HEAD(close_head);
+
+	/* If device is running, close it first. Start with ops locked... */
+	list_for_each_entry(dev, head, unreg_list) {
+		if (netdev_need_ops_lock(dev)) {
+			list_add_tail(&dev->close_list, &close_head);
+			netdev_lock(dev);
+		}
+	}
+	netif_close_many(&close_head, true);
+	/* ... now unlock them and go over the rest. */
+
+	list_for_each_entry(dev, head, unreg_list) {
+		if (netdev_need_ops_lock(dev))
+			netdev_unlock(dev);
+		else
+			list_add_tail(&dev->close_list, &close_head);
+	}
+	netif_close_many(&close_head, true);
+
+	list_for_each_entry(dev, head, unreg_list) {
+		/* And unlink it from device chain. */
+		unlist_netdevice(dev);
+		netdev_lock(dev);
+		WRITE_ONCE(dev->reg_state, NETREG_UNREGISTERING);
+		netdev_unlock(dev);
+	}
+}
+
 void unregister_netdevice_many_notify(struct list_head *head,
 				      u32 portid, const struct nlmsghdr *nlh)
 {
 	struct net_device *dev, *tmp;
-	LIST_HEAD(close_head);
 	int cnt = 0;
 
 	BUG_ON(dev_boot_phase);
@@ -12206,30 +12237,8 @@ void unregister_netdevice_many_notify(struct list_head *head,
 		BUG_ON(dev->reg_state != NETREG_REGISTERED);
 	}
 
-	/* If device is running, close it first. Start with ops locked... */
-	list_for_each_entry(dev, head, unreg_list) {
-		if (netdev_need_ops_lock(dev)) {
-			list_add_tail(&dev->close_list, &close_head);
-			netdev_lock(dev);
-		}
-	}
-	netif_close_many(&close_head, true);
-	/* ... now unlock them and go over the rest. */
-	list_for_each_entry(dev, head, unreg_list) {
-		if (netdev_need_ops_lock(dev))
-			netdev_unlock(dev);
-		else
-			list_add_tail(&dev->close_list, &close_head);
-	}
-	netif_close_many(&close_head, true);
+	unregister_netdevice_close_many(head);
 
-	list_for_each_entry(dev, head, unreg_list) {
-		/* And unlink it from device chain. */
-		unlist_netdevice(dev);
-		netdev_lock(dev);
-		WRITE_ONCE(dev->reg_state, NETREG_UNREGISTERING);
-		netdev_unlock(dev);
-	}
 	flush_all_backlogs();
 
 	synchronize_net();
