@@ -280,6 +280,9 @@ panthor_gem_create_with_handle(struct drm_file *file,
 	bo = to_panthor_bo(&shmem->base);
 	bo->flags = flags;
 
+	if (flags & DRM_PANTHOR_BO_WB_MMAP)
+		shmem->map_wc = false;
+
 	if (exclusive_vm) {
 		bo->exclusive_vm_root_gem = panthor_vm_root_gem(exclusive_vm);
 		drm_gem_object_get(bo->exclusive_vm_root_gem);
