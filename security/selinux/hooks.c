@@ -7196,6 +7196,31 @@ static int selinux_uring_allowed(void)
 }
 #endif /* CONFIG_IO_URING */
 
+/**
+ * selinux_lsm_config_system_policy - Manage a LSM policy
+ * @op: operation to perform. Currently, only LSM_POLICY_LOAD is supported
+ * @buf: User-supplied buffer
+ * @size: size of @buf
+ * @flags: reserved for future use; must be zero
+ *
+ * Returns: number of written rules on success, negative value on error
+ */
+static int selinux_lsm_config_system_policy(u32 op, void __user *buf,
+					    size_t size, u32 flags)
+{
+	loff_t pos = 0;
+
+	if (op != LSM_POLICY_LOAD || flags)
+		return -EOPNOTSUPP;
+
+	if (!selinux_null.dentry || !selinux_null.dentry->d_sb ||
+	    !selinux_null.dentry->d_sb->s_fs_info)
+		return -ENODEV;
+
+	return __sel_write_load(selinux_null.dentry->d_sb->s_fs_info, buf, size,
+				&pos);
+}
+
 static const struct lsm_id selinux_lsmid = {
 	.name = "selinux",
 	.id = LSM_ID_SELINUX,
@@ -7499,6 +7524,8 @@ static struct security_hook_list selinux_hooks[] __ro_after_init = {
 #ifdef CONFIG_PERF_EVENTS
 	LSM_HOOK_INIT(perf_event_alloc, selinux_perf_event_alloc),
 #endif
+	LSM_HOOK_INIT(lsm_config_system_policy, selinux_lsm_config_system_policy),
+
 };
 
 static __init int selinux_init(void)

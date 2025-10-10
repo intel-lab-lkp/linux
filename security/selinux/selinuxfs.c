@@ -567,11 +567,11 @@ out:
 	return ret;
 }
 
-static ssize_t sel_write_load(struct file *file, const char __user *buf,
-			      size_t count, loff_t *ppos)
+ssize_t __sel_write_load(struct selinux_fs_info *fsi,
+			 const char __user *buf, size_t count,
+			 loff_t *ppos)
 
 {
-	struct selinux_fs_info *fsi;
 	struct selinux_load_state load_state;
 	ssize_t length;
 	void *data = NULL;
@@ -605,7 +605,6 @@ static ssize_t sel_write_load(struct file *file, const char __user *buf,
 		pr_warn_ratelimited("SELinux: failed to load policy\n");
 		goto out;
 	}
-	fsi = file_inode(file)->i_sb->s_fs_info;
 	length = sel_make_policy_nodes(fsi, load_state.policy);
 	if (length) {
 		pr_warn_ratelimited("SELinux: failed to initialize selinuxfs\n");
@@ -625,6 +624,15 @@ out:
 	vfree(data);
 	return length;
 }
+
+static ssize_t sel_write_load(struct file *file, const char __user *buf,
+			      size_t count, loff_t *ppos)
+{
+	struct selinux_fs_info *fsi = file_inode(file)->i_sb->s_fs_info;
+
+	return __sel_write_load(fsi, buf, count, ppos);
+}
+
 
 static const struct file_operations sel_load_ops = {
 	.write		= sel_write_load,

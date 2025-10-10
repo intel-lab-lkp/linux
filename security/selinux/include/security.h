@@ -389,7 +389,14 @@ struct selinux_kernel_status {
 extern void selinux_status_update_setenforce(bool enforcing);
 extern void selinux_status_update_policyload(u32 seqno);
 extern void selinux_complete_init(void);
+
+struct selinux_fs_info;
+
 extern struct path selinux_null;
+extern ssize_t __sel_write_load(struct selinux_fs_info *fsi,
+				const char __user *buf, size_t count,
+				loff_t *ppos);
+
 extern void selnl_notify_setenforce(int val);
 extern void selnl_notify_policyload(u32 seqno);
 extern int selinux_nlmsg_lookup(u16 sclass, u16 nlmsg_type, u32 *perm);
