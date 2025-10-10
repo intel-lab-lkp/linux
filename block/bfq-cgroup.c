@@ -1056,10 +1056,9 @@ static ssize_t bfq_io_set_device_weight(struct kernfs_open_file *of,
 	u64 v;
 
 	blkg_conf_init(&ctx, buf);
-
-	ret = blkg_conf_prep(blkcg, &blkcg_policy_bfq, &ctx);
+	ret = blkg_conf_start(blkcg, &ctx);
 	if (ret)
-		goto out;
+		return ret;
 
 	if (sscanf(ctx.body, "%llu", &v) == 1) {
 		/* require "default" on dfl */
@@ -1074,6 +1073,10 @@ static ssize_t bfq_io_set_device_weight(struct kernfs_open_file *of,
 	}
 
 	bfqg = blkg_to_bfqg(ctx.blkg);
+	if (!bfqg) {
+		ret = -EOPNOTSUPP;
+		goto out;
+	}
 
 	ret = -ERANGE;
 	if (!v || (v >= BFQ_MIN_WEIGHT && v <= BFQ_MAX_WEIGHT)) {
@@ -1081,7 +1084,7 @@ static ssize_t bfq_io_set_device_weight(struct kernfs_open_file *of,
 		ret = 0;
 	}
 out:
-	blkg_conf_exit(&ctx);
+	blkg_conf_end(&ctx);
 	return ret ?: nbytes;
 }
 
