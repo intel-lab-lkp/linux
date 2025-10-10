@@ -320,6 +320,9 @@ panfrost_gem_create(struct drm_device *dev, size_t size, u32 flags)
 	bo->noexec = !!(flags & PANFROST_BO_NOEXEC);
 	bo->is_heap = !!(flags & PANFROST_BO_HEAP);
 
+	if (flags & PANFROST_BO_WB_MMAP)
+		bo->base.map_wc = false;
+
 	return bo;
 }
 
