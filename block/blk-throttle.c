@@ -1326,7 +1326,6 @@ static int blk_throtl_init(struct gendisk *disk)
 {
 	struct request_queue *q = disk->queue;
 	struct throtl_data *td;
-	unsigned int memflags;
 	int ret;
 
 	td = kzalloc_node(sizeof(*td), GFP_KERNEL, q->node);
@@ -1337,14 +1336,13 @@ static int blk_throtl_init(struct gendisk *disk)
 	INIT_WORK(&td->dispatch_work, blk_throtl_dispatch_work_fn);
 	throtl_service_queue_init(&td->service_queue);
 
-	memflags = blk_mq_freeze_queue(disk->queue);
 	blk_mq_quiesce_queue(disk->queue);
 
 	q->td = td;
 	td->queue = q;
 
 	/* activate policy, blk_throtl_activated() will return true */
-	ret = blkcg_activate_policy(disk, &blkcg_policy_throtl);
+	ret = __blkcg_activate_policy(disk, &blkcg_policy_throtl);
 	if (ret) {
 		q->td = NULL;
 		kfree(td);
@@ -1361,7 +1359,6 @@ static int blk_throtl_init(struct gendisk *disk)
 
 out:
 	blk_mq_unquiesce_queue(disk->queue);
-	blk_mq_unfreeze_queue(disk->queue, memflags);
 
 	return ret;
 }
@@ -1377,20 +1374,15 @@ static ssize_t tg_set_conf(struct kernfs_open_file *of,
 	u64 v;
 
 	blkg_conf_init(&ctx, buf);
-
-	ret = blkg_conf_open_bdev(&ctx);
+	ret = blkg_conf_start(blkcg, &ctx);
 	if (ret)
-		goto out_finish;
+		return ret;
 
 	if (!blk_throtl_activated(ctx.bdev->bd_queue)) {
 		ret = blk_throtl_init(ctx.bdev->bd_disk);
 		if (ret)
 			goto out_finish;
 	}
-
-	ret = blkg_conf_prep(blkcg, &blkcg_policy_throtl, &ctx);
-	if (ret)
-		goto out_finish;
 
 	ret = -EINVAL;
 	if (sscanf(ctx.body, "%llu", &v) != 1)
@@ -1408,8 +1400,9 @@ static ssize_t tg_set_conf(struct kernfs_open_file *of,
 
 	tg_conf_updated(tg, false);
 	ret = 0;
+
 out_finish:
-	blkg_conf_exit(&ctx);
+	blkg_conf_end(&ctx);
 	return ret ?: nbytes;
 }
 
@@ -1561,20 +1554,15 @@ static ssize_t tg_set_limit(struct kernfs_open_file *of,
 	int ret;
 
 	blkg_conf_init(&ctx, buf);
-
-	ret = blkg_conf_open_bdev(&ctx);
+	ret = blkg_conf_start(blkcg, &ctx);
 	if (ret)
-		goto out_finish;
+		return ret;
 
 	if (!blk_throtl_activated(ctx.bdev->bd_queue)) {
 		ret = blk_throtl_init(ctx.bdev->bd_disk);
 		if (ret)
 			goto out_finish;
 	}
-
-	ret = blkg_conf_prep(blkcg, &blkcg_policy_throtl, &ctx);
-	if (ret)
-		goto out_finish;
 
 	tg = blkg_to_tg(ctx.blkg);
 	tg_update_carryover(tg);
@@ -1626,8 +1614,9 @@ static ssize_t tg_set_limit(struct kernfs_open_file *of,
 
 	tg_conf_updated(tg, false);
 	ret = 0;
+
 out_finish:
-	blkg_conf_exit(&ctx);
+	blkg_conf_end(&ctx);
 	return ret ?: nbytes;
 }
 
