@@ -81,7 +81,7 @@ static inline bool bio_will_gap(struct request_queue *q,
 	bio_get_first_bvec(next, &nb);
 	if (biovec_phys_mergeable(q, &pb, &nb))
 		return false;
-	return __bvec_gap_to_prev(&q->limits, &pb, nb.bv_offset);
+	return bvec_gap_to_prev(&q->limits, &pb, nb.bv_offset);
 }
 
 static inline bool req_gap_back_merge(struct request *req, struct bio *bio)

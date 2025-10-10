@@ -140,13 +140,6 @@ static inline bool biovec_phys_mergeable(struct request_queue *q,
 	return true;
 }
 
-static inline bool __bvec_gap_to_prev(const struct queue_limits *lim,
-		struct bio_vec *bprv, unsigned int offset)
-{
-	return (offset & lim->virt_boundary_mask) ||
-		((bprv->bv_offset + bprv->bv_len) & lim->virt_boundary_mask);
-}
-
 /*
  * Check if adding a bio_vec after bprv with offset would create a gap in
  * the SG list. Most drivers don't care about this, but some do.
@@ -154,9 +147,8 @@ static inline bool __bvec_gap_to_prev(const struct queue_limits *lim,
 static inline bool bvec_gap_to_prev(const struct queue_limits *lim,
 		struct bio_vec *bprv, unsigned int offset)
 {
-	if (!lim->virt_boundary_mask)
-		return false;
-	return __bvec_gap_to_prev(lim, bprv, offset);
+	return (offset | (bprv->bv_offset + bprv->bv_len)) &
+		lim->virt_boundary_mask;
 }
 
 static inline bool rq_mergeable(struct request *rq)
