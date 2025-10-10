@@ -111,6 +111,16 @@ patternProperties:
       phys:
         maxItems: 1
 
+    oneOf:
+      - required:
+          - phys
+          - reset-gpios
+          - wake-gpios
+      - properties:
+          phys: false
+          reset-gpios: false
+          wake-gpios: false
+
     unevaluatedProperties: false
 
 required:
@@ -128,6 +138,16 @@ anyOf:
       - "#interrupt-cells"
   - required:
       - msi-map
+
+oneOf:
+  - required:
+      - phys
+      - perst-gpios
+      - wake-gpios
+  - properties:
+      phys: false
+      perst-gpios: false
+      wake-gpios: false
 
 allOf:
   - $ref: /schemas/pci/pci-host-bridge.yaml#
