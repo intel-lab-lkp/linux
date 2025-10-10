@@ -838,6 +838,7 @@ static int stm32_rproc_probe(struct platform_device *pdev)
 	const char *fw_name;
 	struct rproc *rproc;
 	unsigned int state;
+	bool auto_boot;
 	int ret;
 
 	ret = dma_coerce_mask_and_coherent(dev, DMA_BIT_MASK(32));
@@ -857,9 +858,11 @@ static int stm32_rproc_probe(struct platform_device *pdev)
 
 	rproc_coredump_set_elf_info(rproc, ELFCLASS32, EM_NONE);
 
-	ret = stm32_rproc_parse_dt(pdev, ddata, &rproc->auto_boot);
+	ret = stm32_rproc_parse_dt(pdev, ddata, &auto_boot);
 	if (ret)
 		goto free_rproc;
+
+	rproc->auto_boot = auto_boot;
 
 	ret = stm32_rproc_of_memory_translations(pdev, ddata);
 	if (ret)
