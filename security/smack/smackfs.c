@@ -441,7 +441,7 @@ static ssize_t smk_parse_long_rule(char *data, struct smack_parsed_rule *rule,
  *	"subject<whitespace>object<whitespace>
  *	 acc_enable<whitespace>acc_disable[<whitespace>...]"
  */
-static ssize_t smk_write_rules_list(struct file *file, const char __user *buf,
+ssize_t smk_write_rules_list(struct file *file, const char __user *buf,
 					size_t count, loff_t *ppos,
 					struct list_head *rule_list,
 					struct mutex *rule_lock, int format)

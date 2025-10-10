@@ -5027,6 +5027,76 @@ static int smack_uring_cmd(struct io_uring_cmd *ioucmd)
 
 #endif /* CONFIG_IO_URING */
 
+/**
+ * smack_lsm_config_system_policy - Configure a system smack policy
+ * @op: operation to perform. Currently, only LSM_POLICY_LOAD is supported
+ * @buf: User-supplied buffer in the form "<fmt><policy>"
+ *        <fmt> is the 1-byte format of <policy>
+ *        <policy> is the policy to load
+ * @size: size of @buf
+ * @flags: reserved for future use; must be zero
+ *
+ * Returns: number of written rules on success, negative value on error
+ */
+static int smack_lsm_config_system_policy(u32 op, void __user *buf, size_t size,
+					  u32 flags)
+{
+	loff_t pos = 0;
+	u8 fmt;
+
+	if (op != LSM_POLICY_LOAD || flags)
+		return -EOPNOTSUPP;
+
+	if (size < 2)
+		return -EINVAL;
+
+	if (get_user(fmt, (uint8_t *)buf))
+		return -EFAULT;
+
+	return smk_write_rules_list(NULL, buf + 1, size - 1, &pos, NULL, NULL, fmt);
+}
+
+/**
+ * smack_lsm_config_self_policy - Configure a smack policy for the current cred
+ * @op: operation to perform. Currently, only LSM_POLICY_LOAD is supported
+ * @buf: User-supplied buffer in the form "<fmt><policy>"
+ *        <fmt> is the 1-byte format of <policy>
+ *        <policy> is the policy to load
+ * @size: size of @buf
+ * @flags: reserved for future use; must be zero
+ *
+ * Returns: number of written rules on success, negative value on error
+ */
+static int smack_lsm_config_self_policy(u32 op, void __user *buf, size_t size,
+					u32 flags)
+{
+	loff_t pos = 0;
+	u8 fmt;
+	struct task_smack *tsp;
+
+	if (op != LSM_POLICY_LOAD || flags)
+		return -EOPNOTSUPP;
+
+	if (size < 2)
+		return -EINVAL;
+
+	if (get_user(fmt, (uint8_t *)buf))
+		return -EFAULT;
+	/**
+	 * smk_write_rules_list could be used to gain privileges.
+	 * This function is thus restricted to CAP_MAC_ADMIN.
+	 * TODO: Ensure that the new rule does not give extra privileges
+	 * before dropping this CAP_MAC_ADMIN check.
+	 */
+	if (!capable(CAP_MAC_ADMIN))
+		return -EPERM;
+
+
+	tsp = smack_cred(current_cred());
+	return smk_write_rules_list(NULL, buf + 1, size - 1, &pos, &tsp->smk_rules,
+				    &tsp->smk_rules_lock, fmt);
+}
+
 struct lsm_blob_sizes smack_blob_sizes __ro_after_init = {
 	.lbs_cred = sizeof(struct task_smack),
 	.lbs_file = sizeof(struct smack_known *),
@@ -5203,6 +5273,9 @@ static struct security_hook_list smack_hooks[] __ro_after_init = {
 	LSM_HOOK_INIT(uring_sqpoll, smack_uring_sqpoll),
 	LSM_HOOK_INIT(uring_cmd, smack_uring_cmd),
 #endif
+	LSM_HOOK_INIT(lsm_config_self_policy, smack_lsm_config_self_policy),
+	LSM_HOOK_INIT(lsm_config_system_policy, smack_lsm_config_system_policy),
+
 };
 
 
