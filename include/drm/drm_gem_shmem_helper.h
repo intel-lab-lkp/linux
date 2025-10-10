@@ -123,6 +123,8 @@ int drm_gem_shmem_vmap_locked(struct drm_gem_shmem_object *shmem,
 void drm_gem_shmem_vunmap_locked(struct drm_gem_shmem_object *shmem,
 				 struct iosys_map *map);
 int drm_gem_shmem_mmap(struct drm_gem_shmem_object *shmem, struct vm_area_struct *vma);
+int drm_gem_shmem_sync(struct drm_gem_shmem_object *shmem, size_t offset,
+		       size_t size, enum drm_gem_object_access_flags access);
 
 int drm_gem_shmem_pin_locked(struct drm_gem_shmem_object *shmem);
 void drm_gem_shmem_unpin_locked(struct drm_gem_shmem_object *shmem);
@@ -277,6 +279,15 @@ static inline int drm_gem_shmem_object_mmap(struct drm_gem_object *obj, struct v
 	struct drm_gem_shmem_object *shmem = to_drm_gem_shmem_obj(obj);
 
 	return drm_gem_shmem_mmap(shmem, vma);
+}
+
+static inline int
+drm_gem_shmem_object_sync(struct drm_gem_object *obj, size_t offset,
+			  size_t size, enum drm_gem_object_access_flags access)
+{
+	struct drm_gem_shmem_object *shmem = to_drm_gem_shmem_obj(obj);
+
+	return drm_gem_shmem_sync(shmem, offset, size, access);
 }
 
 /*
