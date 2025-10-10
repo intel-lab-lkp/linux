@@ -104,7 +104,6 @@ static void __v4l2_event_queue_fh(struct v4l2_fh *fh,
 {
 	struct v4l2_subscribed_event *sev;
 	struct v4l2_kevent *kev;
-	bool copy_payload = true;
 
 	/* Are we subscribed? */
 	sev = v4l2_event_subscribed(fh, ev->type, ev->id);
@@ -116,29 +115,59 @@ static void __v4l2_event_queue_fh(struct v4l2_fh *fh,
 
 	/* Do we have any free events? */
 	if (sev->in_use == sev->elems) {
-		/* no, remove the oldest one */
-		kev = sev->events + sev_pos(sev, 0);
-		list_del(&kev->list);
-		sev->in_use--;
-		sev->first = sev_pos(sev, 1);
-		fh->navailable--;
+		/*
+		 * No, so we have to make space.
+		 *
+		 * This is a bit tricky: the easy solution is to drop the oldest
+		 * event from the fh->available list and add the new one to
+		 * the end of the list. However, that can lead to situation
+		 * were, if there are a lot of events, the oldest event keeps
+		 * being removed before it can be dequeued by the application.
+		 * Effectively this is a denial-of-service situation were the
+		 * event is never seen by the application even though there are
+		 * actually a lot of events.
+		 *
+		 * So instead we take care to keep the oldest event in its
+		 * place, and instead either replace the event content with
+		 * the new event (if sev->elems == 1) or merge the 2nd oldest
+		 * event with the oldest event.
+		 */
+		struct v4l2_kevent *oldest = sev->events + sev_pos(sev, 0);
+		struct v4l2_kevent *second_oldest;
+
 		if (sev->elems == 1) {
 			if (sev->ops && sev->ops->replace) {
-				sev->ops->replace(&kev->event, ev);
-				copy_payload = false;
+				/* Replace the oldest event with the new event */
+				sev->ops->replace(&oldest->event, ev);
+			} else {
+				oldest->event.u = ev->u;
 			}
-		} else if (sev->ops && sev->ops->merge) {
-			struct v4l2_kevent *second_oldest =
-				sev->events + sev_pos(sev, 0);
-			sev->ops->merge(&kev->event, &second_oldest->event);
+			wake_up_all(&fh->wait);
+			return;
 		}
+		second_oldest = sev->events + sev_pos(sev, 1);
+		if (sev->ops && sev->ops->merge) {
+			/* Merge the oldest event with the 2nd oldest event */
+			sev->ops->merge(&oldest->event, &second_oldest->event);
+		}
+
+		/*
+		 * Replace the oldest event with the second oldest event in the
+		 * event list.
+		 */
+		second_oldest->event.sequence = oldest->event.sequence;
+		second_oldest->ts = oldest->ts;
+		list_del(&second_oldest->list);
+		list_replace_init(&oldest->list, &second_oldest->list);
+		sev->first = sev_pos(sev, 1);
+		sev->in_use--;
+		fh->navailable--;
 	}
 
 	/* Take one and fill it. */
 	kev = sev->events + sev_pos(sev, sev->in_use);
 	kev->event.type = ev->type;
-	if (copy_payload)
-		kev->event.u = ev->u;
+	kev->event.u = ev->u;
 	kev->event.id = ev->id;
 	kev->ts = ts;
 	kev->event.sequence = fh->sequence;
