@@ -1290,8 +1290,11 @@ void ext4_mb_generate_buddy(struct super_block *sb,
 		/*
 		 * If we intend to continue, we consider group descriptor
 		 * corrupt and update bb_free using bitmap value
+		 * Also update the global free clusters counter to stay in sync.
 		 */
+		s64 correction = (s64)free - (s64)grp->bb_free;
 		grp->bb_free = free;
+		percpu_counter_add(&sbi->s_freeclusters_counter, correction);
 		ext4_mark_group_bitmap_corrupted(sb, group,
 					EXT4_GROUP_INFO_BBITMAP_CORRUPT);
 	}
