@@ -359,12 +359,7 @@ sid_to_id(struct cifs_sb_info *cifs_sb, struct smb_sid *psid,
 	if ((cifs_sb->mnt_cifs_flags & CIFS_MOUNT_UID_FROM_ACL) ||
 	    (cifs_sb_master_tcon(cifs_sb)->posix_extensions)) {
 		uint32_t unix_id;
-		bool is_group;
-
-		if (sidtype != SIDOWNER)
-			is_group = true;
-		else
-			is_group = false;
+		bool is_group = sidtype != SIDOWNER;
 
 		if (is_well_known_sid(psid, &unix_id, is_group) == false)
 			goto try_upcall_to_get_id;
