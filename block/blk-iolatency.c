@@ -768,7 +768,7 @@ static int blk_iolatency_init(struct gendisk *disk)
 			 &blkcg_iolatency_ops);
 	if (ret)
 		goto err_free;
-	ret = blkcg_activate_policy(disk, &blkcg_policy_iolatency);
+	ret = __blkcg_activate_policy(disk, &blkcg_policy_iolatency);
 	if (ret)
 		goto err_qos_del;
 
@@ -837,10 +837,9 @@ static ssize_t iolatency_set_limit(struct kernfs_open_file *of, char *buf,
 	int ret;
 
 	blkg_conf_init(&ctx, buf);
-
-	ret = blkg_conf_open_bdev(&ctx);
+	ret = blkg_conf_start(blkcg, &ctx);
 	if (ret)
-		goto out;
+		return ret;
 
 	/*
 	 * blk_iolatency_init() may fail after rq_qos_add() succeeds which can
@@ -849,10 +848,6 @@ static ssize_t iolatency_set_limit(struct kernfs_open_file *of, char *buf,
 	lockdep_assert_held(&ctx.bdev->bd_queue->rq_qos_mutex);
 	if (!iolat_rq_qos(ctx.bdev->bd_queue))
 		ret = blk_iolatency_init(ctx.bdev->bd_disk);
-	if (ret)
-		goto out;
-
-	ret = blkg_conf_prep(blkcg, &blkcg_policy_iolatency, &ctx);
 	if (ret)
 		goto out;
 
@@ -890,7 +885,7 @@ static ssize_t iolatency_set_limit(struct kernfs_open_file *of, char *buf,
 		iolatency_clear_scaling(blkg);
 	ret = 0;
 out:
-	blkg_conf_exit(&ctx);
+	blkg_conf_end(&ctx);
 	return ret ?: nbytes;
 }
 
