@@ -757,4 +757,12 @@ static inline int dma_mmap_wc(struct device *dev,
 	do { typeof(PTR) __p __maybe_unused = PTR; } while (0)
 #endif
 
+DEFINE_GUARD_ARGS_CLASS(dma_map_single, dma_addr_t,
+			dma_mapping_error(_T.args.dev, _T.ret),
+			dma_unmap_single(_T->args.dev, _T->ret, _T->args.size, _T->args.dir),
+			dma_map_single,
+			(struct device *dev; void *ptr; size_t size; enum dma_data_direction dir),
+			(struct device *dev, void *ptr, size_t size, enum dma_data_direction dir),
+			(dev, ptr, size, dir))
+
 #endif /* _LINUX_DMA_MAPPING_H */
