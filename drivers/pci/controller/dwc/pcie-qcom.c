@@ -1720,12 +1720,19 @@ static int qcom_pcie_parse_port(struct qcom_pcie *pcie, struct device_node *node
 
 	reset = devm_fwnode_gpiod_get(dev, of_fwnode_handle(node),
 				      "reset", GPIOD_OUT_HIGH, "PERST#");
-	if (IS_ERR(reset))
+	if (IS_ERR(reset) && PTR_ERR(reset) != -ENOENT)
 		return PTR_ERR(reset);
 
-	phy = devm_of_phy_get(dev, node, NULL);
+	phy = devm_of_phy_optional_get(dev, node, NULL);
 	if (IS_ERR(phy))
 		return PTR_ERR(phy);
+
+	/*
+	 * If both PHY and PERST# properties are not specified, then try the
+	 * legacy binding.
+	 */
+	if (PTR_ERR(reset) == -ENOENT && !phy)
+		return -ENOENT;
 
 	port = devm_kzalloc(dev, sizeof(*port), GFP_KERNEL);
 	if (!port)
