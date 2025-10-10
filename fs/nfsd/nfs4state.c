@@ -4371,6 +4371,8 @@ nfsd4_sequence(struct svc_rqst *rqstp, struct nfsd4_compound_state *cstate,
 		cstate->slot = slot;
 		cstate->session = session;
 		cstate->clp = clp;
+		seq->maxslots = max(session->se_target_maxslots, seq->maxslots);
+		seq->target_maxslots = session->se_target_maxslots;
 		/* Return the cached reply status and set cstate->status
 		 * for nfsd4_proc_compound processing */
 		status = nfsd4_replay_cache_entry(resp, seq);
