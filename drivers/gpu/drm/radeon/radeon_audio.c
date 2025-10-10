@@ -212,6 +212,7 @@ static void radeon_audio_enable(struct radeon_device *rdev,
 	if (rdev->audio.funcs->enable)
 		rdev->audio.funcs->enable(rdev, pin, enable_mask);
 
+	rdev->audio.pin[pin->id].enable_mask = enable_mask;
 	radeon_audio_component_notify(rdev, pin->id);
 }
 
@@ -274,6 +275,7 @@ int radeon_audio_init(struct radeon_device *rdev)
 		rdev->audio.pin[i].connected = false;
 		rdev->audio.pin[i].offset = pin_offsets[i];
 		rdev->audio.pin[i].id = i;
+		rdev->audio.pin[i].enable_mask = 0;
 	}
 
 	radeon_audio_interface_init(rdev);
@@ -758,6 +760,9 @@ static int radeon_audio_component_get_eld(struct device *kdev, int port,
 
 	*enabled = false;
 	if (!rdev->audio.enabled || !rdev->mode_info.mode_config_initialized)
+		return 0;
+
+	if (rdev->audio.pin[port].enable_mask == 0)
 		return 0;
 
 	list_for_each_entry(connector, &dev->mode_config.connector_list, head) {
