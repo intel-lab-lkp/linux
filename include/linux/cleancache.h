@@ -11,6 +11,7 @@
 
 #define CLEANCACHE_KEY_MAX	6
 
+struct cleancache_inode;
 
 #ifdef CONFIG_CLEANCACHE
 
@@ -23,6 +24,14 @@ bool cleancache_invalidate_folio(struct address_space *mapping,
 				 struct inode *inode, struct folio *folio);
 bool cleancache_invalidate_inode(struct address_space *mapping,
 				 struct inode *inode);
+
+struct cleancache_inode *
+cleancache_start_inode_walk(struct address_space *mapping,
+			    struct inode *inode,
+			    unsigned long count);
+void cleancache_end_inode_walk(struct cleancache_inode *ccinode);
+bool cleancache_restore_from_inode(struct cleancache_inode *ccinode,
+				   struct folio *folio);
 
 /*
  * Backend API
@@ -52,6 +61,14 @@ static inline bool cleancache_invalidate_folio(struct address_space *mapping,
 		{ return false; }
 static inline bool cleancache_invalidate_inode(struct address_space *mapping,
 					       struct inode *inode)
+		{ return false; }
+static inline struct cleancache_inode *
+cleancache_start_inode_walk(struct address_space *mapping, struct inode *inode,
+			    unsigned long count)
+		{ return NULL; }
+static inline void cleancache_end_inode_walk(struct cleancache_inode *ccinode) {}
+static inline bool cleancache_restore_from_inode(struct cleancache_inode *ccinode,
+						 struct folio *folio)
 		{ return false; }
 static inline int cleancache_backend_register_pool(const char *name)
 		{ return -EOPNOTSUPP; }
