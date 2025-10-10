@@ -371,11 +371,47 @@ do {									\
 	raw_spin_lock_nest_lock(spinlock_check(lock), nest_lock);	\
 } while (0)
 
+/**
+ * spin_lock_irq() - Lock a spinlock while disabling interrupts.
+ * @lock: The spinlock that will be locked.
+ *
+ * When a spinlock is shared by code running in interrupt context and process
+ * context, it is important to ensure that interrupts are disabled while the
+ * lock is held. Otherwise, an interrupt handler might attempt to take the lock
+ * while it is already held, leading to a deadlock.
+ *
+ * This function unconditionally disables interrupts on the local CPU, and then
+ * locks the provided spinlock. It is suitable for use in contexts where
+ * interrupts are known to be enabled — because the corresponding unlock
+ * function, spin_unlock_irq(), unconditionally enables interrupts.
+ *
+ * When code can be called with interrupts either enabled or disabled, prefer
+ * spin_lock_irqsave(), which preserves the current state so that it can be
+ * restored when the spinlock is released.
+ */
 static __always_inline void spin_lock_irq(spinlock_t *lock)
 {
 	raw_spin_lock_irq(&lock->rlock);
 }
 
+/**
+ * spin_lock_irqsave() - Lock a lock, disable interrupts, and save current state.
+ * @lock: The spinlock that will be locked.
+ * @flags: An unsigned long to store the current interrupt state.
+ *
+ * When a spinlock is shared by code running in interrupt context and process
+ * context, it is important to ensure that interrupts are disabled while the
+ * lock is held. Otherwise, an interrupt handler might attempt to take the lock
+ * while it is already held, leading to a deadlock.
+ *
+ * This function disables interrupts on the local CPU if they are enabled, and
+ * then locks the provided spinlock. The previous state of interrupts (enabled
+ * or disabled) is saved in the @flags argument so that it can be restored by
+ * the corresponding call to spin_unlock_irqrestore().
+ *
+ * When code will only be run with interrupts enabled, using spin_lock_irq() can
+ * avoid the need to create a local variable to save the state.
+ */
 #define spin_lock_irqsave(lock, flags)				\
 do {								\
 	raw_spin_lock_irqsave(spinlock_check(lock), flags);	\
@@ -396,11 +432,28 @@ static __always_inline void spin_unlock_bh(spinlock_t *lock)
 	raw_spin_unlock_bh(&lock->rlock);
 }
 
+/**
+ * spin_unlock_irq() - Unlock a spinlock and enable interrupts.
+ * @lock: The spinlock that will be unlocked.
+ *
+ * This function unlocks the provided lock, and then unconditionally enables
+ * interrupts on the current CPU. It should typically correspond to a previous
+ * call to spin_lock_irq().
+ */
 static __always_inline void spin_unlock_irq(spinlock_t *lock)
 {
 	raw_spin_unlock_irq(&lock->rlock);
 }
 
+/**
+ * spin_unlock_irqrestore() - Unlock a spinlock and restore interrupt state.
+ * @lock: The spinlock that will be unlocked.
+ * @flags: The previously saved interrupt state to restore.
+ *
+ * This function unlocks the provided lock, and then restores interrupts to
+ * whichever state (enabled or disabled) is indicated by @flags. @flags should
+ * come from a previous call to spin_lock_irqsave().
+ */
 static __always_inline void spin_unlock_irqrestore(spinlock_t *lock, unsigned long flags)
 {
 	raw_spin_unlock_irqrestore(&lock->rlock, flags);
