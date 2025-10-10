@@ -420,7 +420,7 @@ static int pctv452e_i2c_msg(struct dvb_usb_device *d, u8 addr,
 	struct pctv452e_state *state = d->priv;
 	u8 *buf;
 	u8 id;
-	int ret;
+	int ret, plen = 0;
 
 	buf = kmalloc(64, GFP_KERNEL);
 	if (!buf)
@@ -432,6 +432,7 @@ static int pctv452e_i2c_msg(struct dvb_usb_device *d, u8 addr,
 	if (snd_len > 64 - 7 || rcv_len > 64 - 7)
 		goto failed;
 
+	plen = 7;
 	buf[0] = SYNC_BYTE_OUT;
 	buf[1] = id;
 	buf[2] = PCTV_CMD_I2C;
@@ -466,7 +467,7 @@ static int pctv452e_i2c_msg(struct dvb_usb_device *d, u8 addr,
 failed:
 	err("I2C error %d; %02X %02X  %02X %02X %02X -> %*ph",
 	     ret, SYNC_BYTE_OUT, id, addr << 1, snd_len, rcv_len,
-	     7, buf);
+	     plen, buf);
 
 	kfree(buf);
 	return ret;
