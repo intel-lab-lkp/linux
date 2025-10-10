@@ -1175,7 +1175,7 @@ static int mt9p031_probe(struct i2c_client *client)
 	if (ret < 0)
 		goto done;
 
-	mt9p031->subdev.flags |= V4L2_SUBDEV_FL_HAS_DEVNODE;
+	mt9p031->subdev.flags |= V4L2_SUBDEV_FL_HAS_DEVNODE | V4L2_SUBDEV_FL_HAS_EVENTS;
 
 	ret = mt9p031_init_state(&mt9p031->subdev, NULL);
 	if (ret)
