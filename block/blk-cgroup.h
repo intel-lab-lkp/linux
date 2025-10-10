@@ -200,7 +200,7 @@ void blkcg_exit_disk(struct gendisk *disk);
 /* Blkio controller policy registration */
 int blkcg_policy_register(struct blkcg_policy *pol);
 void blkcg_policy_unregister(struct blkcg_policy *pol);
-int blkcg_activate_policy(struct gendisk *disk, const struct blkcg_policy *pol);
+int __blkcg_activate_policy(struct gendisk *disk, const struct blkcg_policy *pol);
 void blkcg_deactivate_policy(struct gendisk *disk,
 			     const struct blkcg_policy *pol);
 
@@ -463,6 +463,38 @@ static inline bool blkcg_policy_enabled(struct request_queue *q,
 				const struct blkcg_policy *pol)
 {
 	return pol && test_bit(pol->plid, q->blkcg_pols);
+}
+
+/**
+ * blkcg_activate_policy - activate a blkcg policy on a gendisk
+ * @disk: gendisk of interest
+ * @pol: blkcg policy to activate
+ *
+ * Activate @pol on @disk.  Requires %GFP_KERNEL context.  @disk goes through
+ * bypass mode to populate its blkgs with policy_data for @pol.
+ *
+ * Activation happens with @disk bypassed, so nobody would be accessing blkgs
+ * from IO path.  Update of each blkg is protected by both queue and blkcg
+ * locks so that holding either lock and testing blkcg_policy_enabled() is
+ * always enough for dereferencing policy data.
+ *
+ * The caller is responsible for synchronizing [de]activations and policy
+ * [un]registerations.  Returns 0 on success, -errno on failure.
+ */
+static inline int blkcg_activate_policy(struct gendisk *disk,
+					const struct blkcg_policy *pol)
+{
+	struct request_queue *q = disk->queue;
+	int ret;
+
+	if (blkcg_policy_enabled(q, pol))
+		return 0;
+
+	mutex_lock(&q->blkcg_mutex);
+	ret = __blkcg_activate_policy(disk, pol);
+	mutex_unlock(&q->blkcg_mutex);
+
+	return ret;
 }
 
 void blk_cgroup_bio_start(struct bio *bio);

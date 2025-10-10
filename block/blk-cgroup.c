@@ -1562,32 +1562,14 @@ struct cgroup_subsys io_cgrp_subsys = {
 };
 EXPORT_SYMBOL_GPL(io_cgrp_subsys);
 
-/**
- * blkcg_activate_policy - activate a blkcg policy on a gendisk
- * @disk: gendisk of interest
- * @pol: blkcg policy to activate
- *
- * Activate @pol on @disk.  Requires %GFP_KERNEL context.  @disk goes through
- * bypass mode to populate its blkgs with policy_data for @pol.
- *
- * Activation happens with @disk bypassed, so nobody would be accessing blkgs
- * from IO path.  Update of each blkg is protected by both queue and blkcg
- * locks so that holding either lock and testing blkcg_policy_enabled() is
- * always enough for dereferencing policy data.
- *
- * The caller is responsible for synchronizing [de]activations and policy
- * [un]registerations.  Returns 0 on success, -errno on failure.
- */
-int blkcg_activate_policy(struct gendisk *disk, const struct blkcg_policy *pol)
+int __blkcg_activate_policy(struct gendisk *disk, const struct blkcg_policy *pol)
 {
 	struct request_queue *q = disk->queue;
 	struct blkg_policy_data *pd_prealloc = NULL;
 	struct blkcg_gq *blkg, *pinned_blkg = NULL;
-	unsigned int memflags;
 	int ret;
 
-	if (blkcg_policy_enabled(q, pol))
-		return 0;
+	lockdep_assert_held(&q->blkcg_mutex);
 
 	/*
 	 * Policy is allowed to be registered without pd_alloc_fn/pd_free_fn,
@@ -1596,10 +1578,6 @@ int blkcg_activate_policy(struct gendisk *disk, const struct blkcg_policy *pol)
 	 */
 	if (WARN_ON_ONCE(!pol->pd_alloc_fn || !pol->pd_free_fn))
 		return -EINVAL;
-
-	if (queue_is_mq(q))
-		memflags = blk_mq_freeze_queue(q);
-	mutex_lock(&q->blkcg_mutex);
 
 	/* blkg_list is pushed at the head, reverse walk to initialize parents first */
 	list_for_each_entry_reverse(blkg, &q->blkg_list, q_node) {
@@ -1640,9 +1618,6 @@ int blkcg_activate_policy(struct gendisk *disk, const struct blkcg_policy *pol)
 	ret = 0;
 
 out:
-	mutex_unlock(&q->blkcg_mutex);
-	if (queue_is_mq(q))
-		blk_mq_unfreeze_queue(q, memflags);
 	if (pinned_blkg)
 		blkg_put(pinned_blkg);
 	if (pd_prealloc)
@@ -1670,7 +1645,7 @@ enomem:
 	ret = -ENOMEM;
 	goto out;
 }
-EXPORT_SYMBOL_GPL(blkcg_activate_policy);
+EXPORT_SYMBOL_GPL(__blkcg_activate_policy);
 
 /**
  * blkcg_deactivate_policy - deactivate a blkcg policy on a gendisk
