@@ -193,8 +193,10 @@ static int UVERBS_HANDLER(UVERBS_METHOD_CQ_CREATE)(
 
 	ret = umem ? ib_dev->ops.create_cq_umem(cq, &attr, umem, attrs) :
 		ib_dev->ops.create_cq(cq, &attr, attrs);
-	if (ret)
+	if (ret) {
+		ib_umem_release(umem);
 		goto err_free;
+	}
 
 	obj->uevent.uobject.object = cq;
 	obj->uevent.uobject.user_handle = user_handle;
