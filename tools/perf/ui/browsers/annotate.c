@@ -852,6 +852,30 @@ static void annotate_browser__debuginfo_warning(struct annotate_browser *browser
 	}
 }
 
+static u32 rb_node__get_idx_asm(struct rb_node *nd)
+{
+	struct annotation_line *al = NULL;
+
+	if (nd == NULL)
+		return 0;
+
+	al = rb_entry(nd, struct annotation_line, rb_node);
+
+	return al->idx_asm;
+}
+
+static struct rb_node *annotate_browser__rb_node_by_idx_asm(struct annotate_browser *browser,
+									u32 idx_asm)
+{
+	struct annotation_line *al = NULL;
+
+	if (idx_asm == 0)
+		return NULL;
+
+	al = annotate_browser__find_new_asm_line(browser, idx_asm);
+	return al ? &al->rb_node : NULL;
+}
+
 static int annotate_browser__run(struct annotate_browser *browser,
 				 struct evsel *evsel,
 				 struct hist_browser_timer *hbt)
@@ -969,8 +993,17 @@ static int annotate_browser__run(struct annotate_browser *browser,
 			nd = browser->curr_hot;
 			break;
 		case 's':
-			if (annotate_browser__toggle_source(browser, evsel))
+			u32 idx_asm_nd = rb_node__get_idx_asm(nd);
+			u32 idx_asm_curr_hot = rb_node__get_idx_asm(browser->curr_hot);
+
+			if (annotate_browser__toggle_source(browser, evsel)) {
 				ui_helpline__puts(help);
+				/* Update the annotation browser's rb_tree, and reset the nd */
+				annotate_browser__calc_percent(browser, evsel);
+				nd = annotate_browser__rb_node_by_idx_asm(browser, idx_asm_nd);
+				browser->curr_hot = annotate_browser__rb_node_by_idx_asm(browser,
+							idx_asm_curr_hot);
+			}
 			annotate__scnprintf_title(hists, title, sizeof(title));
 			annotate_browser__show(browser, title, help);
 			continue;
