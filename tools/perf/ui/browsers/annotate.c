@@ -300,6 +300,13 @@ static void disasm_rb_tree__insert(struct annotate_browser *browser,
 	rb_insert_color(&al->rb_node, root);
 }
 
+static void disasm_rb_tree__insert_if_empty(struct annotate_browser *browser,
+				struct annotation_line *al)
+{
+	if (rb_first(&browser->entries) == NULL)
+		disasm_rb_tree__insert(browser, al);
+}
+
 static void annotate_browser__set_top(struct annotate_browser *browser,
 				      struct annotation_line *pos, u32 idx)
 {
@@ -392,6 +399,22 @@ static struct annotation_line *annotate_browser__find_new_asm_line(
 			return al;
 	}
 
+	/* There are no asm lines */
+	return NULL;
+}
+
+static struct annotation_line *annotate_browser__find_al_addr(struct annotate_browser *browser,
+						     u64 al_addr)
+{
+	struct symbol *sym = browser->he->ms.sym;
+	struct list_head *head = browser->b.entries;
+	struct annotation_line *al;
+
+	/* find an annotation line in the new list with the same al_addr */
+	list_for_each_entry(al, head, node) {
+		if (sym->start + al->offset == al_addr)
+			return al;
+	}
 	/* There are no asm lines */
 	return NULL;
 }
@@ -605,7 +628,7 @@ static bool annotate_browser__callq(struct annotate_browser *browser,
 	target_ms.map = ms->map;
 	target_ms.sym = dl->ops.target.sym;
 	annotation__unlock(notes);
-	__hist_entry__tui_annotate(browser->he, &target_ms, evsel, hbt);
+	__hist_entry__tui_annotate(browser->he, &target_ms, evsel, hbt, NO_INITIAL_AL_ADDR);
 
 	/*
 	 * The annotate_browser above changed the title with the target function
@@ -897,6 +920,12 @@ static int annotate_browser__run(struct annotate_browser *browser,
 
 	annotate_browser__calc_percent(browser, evsel);
 
+	if (browser->curr_hot == NULL && browser->selection != NULL) {
+		disasm_rb_tree__insert_if_empty(browser, browser->selection);
+		browser->curr_hot = rb_first(&browser->entries);
+		browser->b.use_navkeypressed = false;
+	}
+
 	if (browser->curr_hot) {
 		annotate_browser__set_rb_top(browser, browser->curr_hot);
 		browser->b.navkeypressed = false;
@@ -1003,6 +1032,8 @@ static int annotate_browser__run(struct annotate_browser *browser,
 				nd = annotate_browser__rb_node_by_idx_asm(browser, idx_asm_nd);
 				browser->curr_hot = annotate_browser__rb_node_by_idx_asm(browser,
 							idx_asm_curr_hot);
+				disasm_rb_tree__insert_if_empty(browser,
+					rb_entry(nd, struct annotation_line, rb_node));
 			}
 			annotate__scnprintf_title(hists, title, sizeof(title));
 			annotate_browser__show(browser, title, help);
@@ -1139,19 +1170,19 @@ out:
 }
 
 int hist_entry__tui_annotate(struct hist_entry *he, struct evsel *evsel,
-			     struct hist_browser_timer *hbt)
+			     struct hist_browser_timer *hbt, u64 al_addr)
 {
 	/* reset abort key so that it can get Ctrl-C as a key */
 	SLang_reset_tty();
 	SLang_init_tty(0, 0, 0);
 	SLtty_set_suspend_state(true);
 
-	return __hist_entry__tui_annotate(he, &he->ms, evsel, hbt);
+	return __hist_entry__tui_annotate(he, &he->ms, evsel, hbt, al_addr);
 }
 
 int __hist_entry__tui_annotate(struct hist_entry *he, struct map_symbol *ms,
 			       struct evsel *evsel,
-			       struct hist_browser_timer *hbt)
+			       struct hist_browser_timer *hbt, u64 al_addr)
 {
 	struct symbol *sym = ms->sym;
 	struct annotation *notes = symbol__annotation(sym);
@@ -1220,6 +1251,19 @@ int __hist_entry__tui_annotate(struct hist_entry *he, struct map_symbol *ms,
 
 	if (annotate_opts.hide_src_code)
 		ui_browser__init_asm_mode(&browser.b);
+
+	/*
+	 * If al_addr is set, it means that there should be a line
+	 * intentionally selected, not based on the percentages
+	 * which caculated by the event sampling. In this case, we
+	 * convey this information into the browser selection, where
+	 * the selection in other cases should be empty.
+	 */
+	if (al_addr != NO_INITIAL_AL_ADDR) {
+		struct annotation_line *al = annotate_browser__find_al_addr(&browser, al_addr);
+
+		browser.selection = al;
+	}
 
 	ret = annotate_browser__run(&browser, evsel, hbt);
 
