@@ -65,7 +65,7 @@ static __always_inline __attribute_const__ u32 gen_endbr_poison(void)
 	return 0xd6401f0f; /* nopl -42(%rax) */
 }
 
-static inline bool __is_endbr(u32 val)
+static __always_inline bool __is_endbr(u32 val)
 {
 	if (val == gen_endbr_poison())
 		return true;
