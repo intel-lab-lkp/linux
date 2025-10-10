@@ -14,7 +14,10 @@ allOf:
 
 properties:
   compatible:
-    const: airoha,en7581-snand
+    enum:
+      - airoha,en7523-snand
+      - airoha,en7581-snand
+
 
   reg:
     items:
