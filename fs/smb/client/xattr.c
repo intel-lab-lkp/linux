@@ -127,7 +127,6 @@ static int cifs_xattr_set(const struct xattr_handler *handler,
 		returns as xattrs */
 	if (size > MAX_EA_VALUE_SIZE) {
 		cifs_dbg(FYI, "size of EA value too large\n");
-		rc = -EOPNOTSUPP;
 		goto out;
 	}
 
@@ -206,8 +205,6 @@ static int cifs_xattr_set(const struct xattr_handler *handler,
 
 				rc = pTcon->ses->server->ops->set_acl(pacl,
 					size, inode, full_path, aclflags);
-			} else {
-				rc = -EOPNOTSUPP;
 			}
 			if (rc == 0) /* force revalidate of the inode */
 				CIFS_I(inode)->time = 0;
