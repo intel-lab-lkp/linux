@@ -823,6 +823,40 @@ int drm_gem_dmabuf_mmap(struct dma_buf *dma_buf, struct vm_area_struct *vma)
 }
 EXPORT_SYMBOL(drm_gem_dmabuf_mmap);
 
+int drm_gem_dmabuf_begin_cpu_access(struct dma_buf *dma_buf,
+				    enum dma_data_direction direction)
+{
+	struct drm_gem_object *obj = dma_buf->priv;
+	enum drm_gem_object_access_flags access = DRM_GEM_OBJECT_CPU_ACCESS;
+
+	if (direction == DMA_FROM_DEVICE)
+		access |= DRM_GEM_OBJECT_READ_ACCESS;
+	else if (direction == DMA_BIDIRECTIONAL)
+		access |= DRM_GEM_OBJECT_RW_ACCESS;
+	else
+		return -EINVAL;
+
+	return drm_gem_sync(obj, 0, obj->size, access);
+}
+EXPORT_SYMBOL(drm_gem_dmabuf_begin_cpu_access);
+
+int drm_gem_dmabuf_end_cpu_access(struct dma_buf *dma_buf,
+				  enum dma_data_direction direction)
+{
+	struct drm_gem_object *obj = dma_buf->priv;
+	enum drm_gem_object_access_flags access = DRM_GEM_OBJECT_DEV_ACCESS;
+
+	if (direction == DMA_TO_DEVICE)
+		access |= DRM_GEM_OBJECT_READ_ACCESS;
+	else if (direction == DMA_BIDIRECTIONAL)
+		access |= DRM_GEM_OBJECT_RW_ACCESS;
+	else
+		return -EINVAL;
+
+	return drm_gem_sync(obj, 0, obj->size, access);
+}
+EXPORT_SYMBOL(drm_gem_dmabuf_end_cpu_access);
+
 static const struct dma_buf_ops drm_gem_prime_dmabuf_ops =  {
 	.attach = drm_gem_map_attach,
 	.detach = drm_gem_map_detach,
@@ -832,6 +866,8 @@ static const struct dma_buf_ops drm_gem_prime_dmabuf_ops =  {
 	.mmap = drm_gem_dmabuf_mmap,
 	.vmap = drm_gem_dmabuf_vmap,
 	.vunmap = drm_gem_dmabuf_vunmap,
+	.begin_cpu_access = drm_gem_dmabuf_begin_cpu_access,
+	.end_cpu_access = drm_gem_dmabuf_end_cpu_access,
 };
 
 /**
