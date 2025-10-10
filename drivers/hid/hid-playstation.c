@@ -753,11 +753,11 @@ ps_gamepad_create(struct hid_device *hdev,
 	if (IS_ERR(gamepad))
 		return ERR_CAST(gamepad);
 
-	input_set_abs_params(gamepad, ABS_X, 0, 255, 0, 0);
-	input_set_abs_params(gamepad, ABS_Y, 0, 255, 0, 0);
+	input_set_abs_params(gamepad, ABS_X, -128, 127, 0, 0);
+	input_set_abs_params(gamepad, ABS_Y, -128, 127, 0, 0);
 	input_set_abs_params(gamepad, ABS_Z, 0, 255, 0, 0);
-	input_set_abs_params(gamepad, ABS_RX, 0, 255, 0, 0);
-	input_set_abs_params(gamepad, ABS_RY, 0, 255, 0, 0);
+	input_set_abs_params(gamepad, ABS_RX, -128, 127, 0, 0);
+	input_set_abs_params(gamepad, ABS_RY, -128, 127, 0, 0);
 	input_set_abs_params(gamepad, ABS_RZ, 0, 255, 0, 0);
 
 	input_set_abs_params(gamepad, ABS_HAT0X, -1, 1, 0, 0);
@@ -1453,10 +1453,10 @@ static int dualsense_parse_report(struct ps_device *ps_dev, struct hid_report *r
 		return -1;
 	}
 
-	input_report_abs(ds->gamepad, ABS_X,  ds_report->x);
-	input_report_abs(ds->gamepad, ABS_Y,  ds_report->y);
-	input_report_abs(ds->gamepad, ABS_RX, ds_report->rx);
-	input_report_abs(ds->gamepad, ABS_RY, ds_report->ry);
+	input_report_abs(ds->gamepad, ABS_X,  ds_report->x - 128);
+	input_report_abs(ds->gamepad, ABS_Y,  ds_report->y - 128);
+	input_report_abs(ds->gamepad, ABS_RX, ds_report->rx - 128);
+	input_report_abs(ds->gamepad, ABS_RY, ds_report->ry - 128);
 	input_report_abs(ds->gamepad, ABS_Z,  ds_report->z);
 	input_report_abs(ds->gamepad, ABS_RZ, ds_report->rz);
 
@@ -2402,10 +2402,10 @@ static int dualshock4_parse_report(struct ps_device *ps_dev, struct hid_report *
 		return -1;
 	}
 
-	input_report_abs(ds4->gamepad, ABS_X,  ds4_report->x);
-	input_report_abs(ds4->gamepad, ABS_Y,  ds4_report->y);
-	input_report_abs(ds4->gamepad, ABS_RX, ds4_report->rx);
-	input_report_abs(ds4->gamepad, ABS_RY, ds4_report->ry);
+	input_report_abs(ds4->gamepad, ABS_X,  ds4_report->x - 128);
+	input_report_abs(ds4->gamepad, ABS_Y,  ds4_report->y - 128);
+	input_report_abs(ds4->gamepad, ABS_RX, ds4_report->rx - 128);
+	input_report_abs(ds4->gamepad, ABS_RY, ds4_report->ry - 128);
 	input_report_abs(ds4->gamepad, ABS_Z,  ds4_report->z);
 	input_report_abs(ds4->gamepad, ABS_RZ, ds4_report->rz);
 
