@@ -721,6 +721,8 @@ FS_IOC_SET_ENCRYPTION_POLICY can fail with the following errors:
   version, mode(s), or flags; or reserved bits were set); or a v1
   encryption policy was specified but the directory has the casefold
   flag enabled (casefolding is incompatible with v1 policies).
+- ``EFAULT``: an invalid pointer was passed for the encryption policy
+  structure
 - ``ENOKEY``: a v2 encryption policy was specified, but the key with
   the specified ``master_key_identifier`` has not been added, nor does
   the process have the CAP_FOWNER capability in the initial user
