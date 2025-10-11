@@ -164,7 +164,7 @@ struct virtio_mem {
 			unsigned long first_mb_id;
 			/* Id of the last usable memory block of this device. */
 			unsigned long last_usable_mb_id;
-			/* Id of the next memory bock to prepare when needed. */
+			/* Id of the next memory block to prepare when needed. */
 			unsigned long next_mb_id;
 
 			/* The subblock size. */
@@ -240,7 +240,7 @@ struct virtio_mem {
 	/* An error occurred we cannot handle - stop processing requests. */
 	bool broken;
 
-	/* Cached valued of is_kdump_kernel() when the device was probed. */
+	/* Cached value of is_kdump_kernel() when the device was probed. */
 	bool in_kdump;
 
 	/* The driver is being removed. */
@@ -1080,7 +1080,7 @@ static int virtio_mem_memory_notifier_cb(struct notifier_block *nb,
 		atomic64_sub(size, &vm->offline_size);
 		/*
 		 * Start adding more memory once we onlined half of our
-		 * threshold. Don't trigger if it's possibly due to our actipn
+		 * threshold. Don't trigger if it's possibly due to our action
 		 * (e.g., us adding memory which gets onlined immediately from
 		 * the core).
 		 */
