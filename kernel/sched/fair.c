@@ -9913,8 +9913,7 @@ static __maybe_unused enum llc_mig can_migrate_llc_task(int src_cpu, int dst_cpu
 	else
 		return mig_unrestricted;
 
-	return can_migrate_llc(src_cpu, dst_cpu,
-			       task_util(p), to_pref);
+	return can_migrate_llc(src_cpu, dst_cpu, task_util(p), to_pref);
 }
 
 #else
@@ -10485,6 +10484,7 @@ struct sg_lb_stats {
 	enum group_type group_type;
 	unsigned int group_asym_packing;	/* Tasks should be moved to preferred CPU */
 	unsigned int group_smt_balance;		/* Task on busy SMT be moved */
+	unsigned int group_llc_balance;		/* Tasks should be moved to preferred LLC */
 	unsigned long group_misfit_task_load;	/* A CPU has a task too big for its capacity */
 #ifdef CONFIG_NUMA_BALANCING
 	unsigned int nr_numa_running;
@@ -10940,10 +10940,44 @@ static void record_sg_llc_stats(struct lb_env *env,
 	if (unlikely(READ_ONCE(sd_share->capacity) != sgs->group_capacity))
 		WRITE_ONCE(sd_share->capacity, sgs->group_capacity);
 }
+
+/*
+ * Do LLC balance on sched group that contains LLC, and have tasks preferring
+ * to run on LLC in idle dst_cpu.
+ */
+static inline bool llc_balance(struct lb_env *env, struct sg_lb_stats *sgs,
+			       struct sched_group *group)
+{
+	struct sched_domain *child = env->sd->child;
+	int llc;
+
+	if (!sched_cache_enabled())
+		return false;
+
+	if (env->sd->flags & SD_SHARE_LLC)
+		return false;
+
+	/* only care about task migration among LLCs */
+	if (child && !(child->flags & SD_SHARE_LLC))
+		return false;
+
+	llc = llc_idx(env->dst_cpu);
+	if (sgs->nr_pref_llc[llc] > 0 &&
+	    can_migrate_llc(env->src_cpu, env->dst_cpu, 0, true) == mig_llc)
+		return true;
+
+	return false;
+}
 #else
 static inline void record_sg_llc_stats(struct lb_env *env, struct sg_lb_stats *sgs,
 				       struct sched_group *group)
 {
+}
+
+static inline bool llc_balance(struct lb_env *env, struct sg_lb_stats *sgs,
+			       struct sched_group *group)
+{
+	return false;
 }
 #endif
 
@@ -11045,6 +11079,11 @@ static inline void update_sg_lb_stats(struct lb_env *env,
 	sgs->group_type = group_classify(env->sd->imbalance_pct, group, sgs);
 
 	record_sg_llc_stats(env, sgs, group);
+
+	/* Check for tasks in this group can be moved to their preferred LLC */
+	if (!local_group && llc_balance(env, sgs, group))
+		sgs->group_llc_balance = 1;
+
 	/* Computing avg_load makes sense only when group is overloaded */
 	if (sgs->group_type == group_overloaded)
 		sgs->avg_load = (sgs->group_load * SCHED_CAPACITY_SCALE) /
