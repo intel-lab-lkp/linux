@@ -1152,6 +1152,8 @@ void post_init_entity_util_avg(struct task_struct *p)
 	sa->runnable_avg = sa->util_avg;
 }
 
+static inline void account_mm_sched(struct rq *rq, struct task_struct *p, s64 delta_exec);
+
 static s64 update_se(struct rq *rq, struct sched_entity *se)
 {
 	u64 now = rq_clock_task(rq);
@@ -1174,6 +1176,7 @@ static s64 update_se(struct rq *rq, struct sched_entity *se)
 
 		trace_sched_stat_runtime(running, delta_exec);
 		account_group_exec_runtime(running, delta_exec);
+		account_mm_sched(rq, donor, delta_exec);
 
 		/* cgroup time is always accounted against the donor */
 		cgroup_account_cputime(donor, delta_exec);
@@ -1192,6 +1195,289 @@ static s64 update_se(struct rq *rq, struct sched_entity *se)
 
 	return delta_exec;
 }
+
+#ifdef CONFIG_SCHED_CACHE
+
+/*
+ * XXX numbers come from a place the sun don't shine -- probably wants to be SD
+ * tunable or so.
+ */
+#define EPOCH_PERIOD	(HZ / 100)	/* 10 ms */
+#define EPOCH_LLC_AFFINITY_TIMEOUT	5	/* 50 ms */
+
+static int llc_id(int cpu)
+{
+	if (cpu < 0)
+		return -1;
+
+	return per_cpu(sd_llc_id, cpu);
+}
+
+void mm_init_sched(struct mm_struct *mm, struct mm_sched __percpu *_pcpu_sched)
+{
+	unsigned long epoch;
+	int i;
+
+	for_each_possible_cpu(i) {
+		struct mm_sched *pcpu_sched = per_cpu_ptr(_pcpu_sched, i);
+		struct rq *rq = cpu_rq(i);
+
+		pcpu_sched->runtime = 0;
+		pcpu_sched->epoch = rq->cpu_epoch;
+		epoch = rq->cpu_epoch;
+	}
+
+	raw_spin_lock_init(&mm->mm_sched_lock);
+	mm->mm_sched_epoch = epoch;
+	mm->mm_sched_cpu = -1;
+
+	/*
+	 * The update to mm->pcpu_sched should not be reordered
+	 * before initialization to mm's other fields, in case
+	 * the readers may get invalid mm_sched_epoch, etc.
+	 */
+	smp_store_release(&mm->pcpu_sched, _pcpu_sched);
+}
+
+/* because why would C be fully specified */
+static __always_inline void __shr_u64(u64 *val, unsigned int n)
+{
+	if (n >= 64) {
+		*val = 0;
+		return;
+	}
+	*val >>= n;
+}
+
+static inline void __update_mm_sched(struct rq *rq, struct mm_sched *pcpu_sched)
+{
+	lockdep_assert_held(&rq->cpu_epoch_lock);
+
+	unsigned long n, now = jiffies;
+	long delta = now - rq->cpu_epoch_next;
+
+	if (delta > 0) {
+		n = (delta + EPOCH_PERIOD - 1) / EPOCH_PERIOD;
+		rq->cpu_epoch += n;
+		rq->cpu_epoch_next += n * EPOCH_PERIOD;
+		__shr_u64(&rq->cpu_runtime, n);
+	}
+
+	n = rq->cpu_epoch - pcpu_sched->epoch;
+	if (n) {
+		pcpu_sched->epoch += n;
+		__shr_u64(&pcpu_sched->runtime, n);
+	}
+}
+
+static unsigned long __no_profile fraction_mm_sched(struct rq *rq, struct mm_sched *pcpu_sched)
+{
+	guard(raw_spinlock_irqsave)(&rq->cpu_epoch_lock);
+
+	__update_mm_sched(rq, pcpu_sched);
+
+	/*
+	 * Runtime is a geometric series (r=0.5) and as such will sum to twice
+	 * the accumulation period, this means the multiplcation here should
+	 * not overflow.
+	 */
+	return div64_u64(NICE_0_LOAD * pcpu_sched->runtime, rq->cpu_runtime + 1);
+}
+
+static inline
+void account_mm_sched(struct rq *rq, struct task_struct *p, s64 delta_exec)
+{
+	struct mm_struct *mm = p->mm;
+	struct mm_sched *pcpu_sched;
+	unsigned long epoch;
+
+	if (!sched_feat(SCHED_CACHE))
+		return;
+
+	if (p->sched_class != &fair_sched_class)
+		return;
+	/*
+	 * init_task and kthreads don't having mm
+	 */
+	if (!mm || !mm->pcpu_sched)
+		return;
+
+	pcpu_sched = per_cpu_ptr(p->mm->pcpu_sched, cpu_of(rq));
+
+	scoped_guard (raw_spinlock, &rq->cpu_epoch_lock) {
+		__update_mm_sched(rq, pcpu_sched);
+		pcpu_sched->runtime += delta_exec;
+		rq->cpu_runtime += delta_exec;
+		epoch = rq->cpu_epoch;
+	}
+
+	/*
+	 * If this task hasn't hit task_cache_work() for a while, or it
+	 * has only 1 thread, invalidate its preferred state.
+	 */
+	if (epoch - READ_ONCE(mm->mm_sched_epoch) > EPOCH_LLC_AFFINITY_TIMEOUT ||
+	    get_nr_threads(p) <= 1) {
+		if (mm->mm_sched_cpu != -1)
+			mm->mm_sched_cpu = -1;
+	}
+}
+
+static void task_tick_cache(struct rq *rq, struct task_struct *p)
+{
+	struct callback_head *work = &p->cache_work;
+	struct mm_struct *mm = p->mm;
+
+	if (!sched_feat(SCHED_CACHE))
+		return;
+
+	if (!mm || !mm->pcpu_sched)
+		return;
+
+	if (mm->mm_sched_epoch == rq->cpu_epoch)
+		return;
+
+	guard(raw_spinlock)(&mm->mm_sched_lock);
+
+	if (work->next == work) {
+		task_work_add(p, work, TWA_RESUME);
+		WRITE_ONCE(mm->mm_sched_epoch, rq->cpu_epoch);
+	}
+}
+
+static void get_scan_cpumasks(cpumask_var_t cpus, int cache_cpu,
+			      int pref_nid, int curr_cpu)
+{
+#ifdef CONFIG_NUMA_BALANCING
+	/* First honor the task's preferred node. */
+	if (pref_nid != NUMA_NO_NODE)
+		cpumask_or(cpus, cpus, cpumask_of_node(pref_nid));
+#endif
+
+	/* Next honor the task's cache CPU if it is not included. */
+	if (cache_cpu != -1 && !cpumask_test_cpu(cache_cpu, cpus))
+		cpumask_or(cpus, cpus,
+			   cpumask_of_node(cpu_to_node(cache_cpu)));
+
+	/*
+	 * Lastly make sure that the task's current running node is
+	 * considered.
+	 */
+	if (!cpumask_test_cpu(curr_cpu, cpus))
+		cpumask_or(cpus, cpus, cpumask_of_node(cpu_to_node(curr_cpu)));
+}
+
+static void __no_profile task_cache_work(struct callback_head *work)
+{
+	struct task_struct *p = current;
+	struct mm_struct *mm = p->mm;
+	unsigned long m_a_occ = 0;
+	unsigned long curr_m_a_occ = 0;
+	int cpu, m_a_cpu = -1, cache_cpu,
+	    pref_nid = NUMA_NO_NODE, curr_cpu;
+	cpumask_var_t cpus;
+
+	WARN_ON_ONCE(work != &p->cache_work);
+
+	work->next = work;
+
+	if (p->flags & PF_EXITING)
+		return;
+
+	if (!zalloc_cpumask_var(&cpus, GFP_KERNEL))
+		return;
+
+	curr_cpu = task_cpu(p);
+	cache_cpu = mm->mm_sched_cpu;
+#ifdef CONFIG_NUMA_BALANCING
+	if (static_branch_likely(&sched_numa_balancing))
+		pref_nid = p->numa_preferred_nid;
+#endif
+
+	scoped_guard (cpus_read_lock) {
+		get_scan_cpumasks(cpus, cache_cpu,
+				  pref_nid, curr_cpu);
+
+		for_each_cpu(cpu, cpus) {
+			/* XXX sched_cluster_active */
+			struct sched_domain *sd = per_cpu(sd_llc, cpu);
+			unsigned long occ, m_occ = 0, a_occ = 0;
+			int m_cpu = -1, i;
+
+			if (!sd)
+				continue;
+
+			for_each_cpu(i, sched_domain_span(sd)) {
+				occ = fraction_mm_sched(cpu_rq(i),
+							per_cpu_ptr(mm->pcpu_sched, i));
+				a_occ += occ;
+				if (occ > m_occ) {
+					m_occ = occ;
+					m_cpu = i;
+				}
+			}
+
+			/*
+			 * Compare the accumulated occupancy of each LLC. The
+			 * reason for using accumulated occupancy rather than average
+			 * per CPU occupancy is that it works better in asymmetric LLC
+			 * scenarios.
+			 * For example, if there are 2 threads in a 4CPU LLC and 3
+			 * threads in an 8CPU LLC, it might be better to choose the one
+			 * with 3 threads. However, this would not be the case if the
+			 * occupancy is divided by the number of CPUs in an LLC (i.e.,
+			 * if average per CPU occupancy is used).
+			 * Besides, NUMA balancing fault statistics behave similarly:
+			 * the total number of faults per node is compared rather than
+			 * the average number of faults per CPU. This strategy is also
+			 * followed here.
+			 */
+			if (a_occ > m_a_occ) {
+				m_a_occ = a_occ;
+				m_a_cpu = m_cpu;
+			}
+
+			if (llc_id(cpu) == llc_id(mm->mm_sched_cpu))
+				curr_m_a_occ = a_occ;
+
+			cpumask_andnot(cpus, cpus, sched_domain_span(sd));
+		}
+	}
+
+	if (m_a_occ > (2 * curr_m_a_occ)) {
+		/*
+		 * Avoid switching mm_sched_cpu too fast.
+		 * The reason to choose 2X is because:
+		 * 1. It is better to keep the preferred LLC stable,
+		 *    rather than changing it frequently and cause migrations
+		 * 2. 2X means the new preferred LLC has at least 1 more
+		 *    busy CPU than the old one(200% vs 100%, eg)
+		 * 3. 2X is chosen based on test results, as it delivers
+		 *    the optimal performance gain so far.
+		 */
+		mm->mm_sched_cpu = m_a_cpu;
+	}
+
+	free_cpumask_var(cpus);
+}
+
+void init_sched_mm(struct task_struct *p)
+{
+	struct callback_head *work = &p->cache_work;
+
+	init_task_work(work, task_cache_work);
+	work->next = work;
+}
+
+#else
+
+static inline void account_mm_sched(struct rq *rq, struct task_struct *p,
+				    s64 delta_exec) { }
+
+void init_sched_mm(struct task_struct *p) { }
+
+static void task_tick_cache(struct rq *rq, struct task_struct *p) { }
+
+#endif
 
 /*
  * Used by other classes to account runtime.
@@ -13121,6 +13407,8 @@ static void task_tick_fair(struct rq *rq, struct task_struct *curr, int queued)
 
 	if (static_branch_unlikely(&sched_numa_balancing))
 		task_tick_numa(rq, curr);
+
+	task_tick_cache(rq, curr);
 
 	update_misfit_status(curr, rq);
 	check_update_overutilized_status(task_rq(curr));
