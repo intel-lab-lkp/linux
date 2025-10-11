@@ -1235,22 +1235,51 @@ static inline int llc_idx(int cpu)
 	return per_cpu(sd_llc_idx, cpu);
 }
 
+static inline int pref_llc_idx(struct task_struct *p)
+{
+	return llc_idx(p->preferred_llc);
+}
+
 static void account_llc_enqueue(struct rq *rq, struct task_struct *p)
 {
+	int pref_llc;
+
 	if (!sched_cache_enabled())
 		return;
 
 	rq->nr_llc_running += (p->preferred_llc != -1);
 	rq->nr_pref_llc_running += (p->preferred_llc == task_llc(p));
+
+	if (p->preferred_llc < 0)
+		return;
+
+	pref_llc = pref_llc_idx(p);
+	if (pref_llc < 0)
+		return;
+
+	++rq->nr_pref_llc[pref_llc];
 }
 
 static void account_llc_dequeue(struct rq *rq, struct task_struct *p)
 {
+	int pref_llc;
+
 	if (!sched_cache_enabled())
 		return;
 
 	rq->nr_llc_running -= (p->preferred_llc != -1);
 	rq->nr_pref_llc_running -= (p->preferred_llc == task_llc(p));
+
+	if (p->preferred_llc < 0)
+		return;
+
+	pref_llc = pref_llc_idx(p);
+	if (pref_llc < 0)
+		return;
+
+	/* avoid negative counter */
+	if (rq->nr_pref_llc[pref_llc] > 0)
+		--rq->nr_pref_llc[pref_llc];
 }
 
 void mm_init_sched(struct mm_struct *mm, struct mm_sched __percpu *_pcpu_sched)
@@ -1524,10 +1553,16 @@ void init_sched_mm(struct task_struct *p)
 
 void reset_llc_stats(struct rq *rq)
 {
+	int i = 0;
+
 	if (!sched_cache_enabled())
 		return;
 
 	rq->nr_llc_running = 0;
+
+	for (i = 0; i < max_llcs; ++i)
+		rq->nr_pref_llc[i] = 0;
+
 	rq->nr_pref_llc_running = 0;
 }
 

@@ -1103,6 +1103,7 @@ struct rq {
 #ifdef CONFIG_SCHED_CACHE
 	unsigned int		nr_pref_llc_running;
 	unsigned int		nr_llc_running;
+	unsigned int		nr_pref_llc[NR_LLCS];
 #endif
 #ifdef CONFIG_NO_HZ_COMMON
 	unsigned long		last_blocked_load_update_tick;
