@@ -190,6 +190,7 @@ static const char *control_bit_to_string(enum xe_gt_sriov_control_bits bit)
 	CASE2STR(SAVE_DATA_GUC);
 	CASE2STR(SAVE_DATA_GGTT);
 	CASE2STR(SAVE_DATA_MMIO);
+	CASE2STR(SAVE_DATA_VRAM);
 	CASE2STR(SAVE_FAILED);
 	CASE2STR(SAVED);
 	CASE2STR(RESTORE_WIP);
@@ -805,6 +806,7 @@ void xe_gt_sriov_pf_control_vf_data_eof(struct xe_gt *gt, unsigned int vfid)
 
 static void pf_exit_vf_save_wip(struct xe_gt *gt, unsigned int vfid)
 {
+	pf_escape_vf_state(gt, vfid, XE_GT_SRIOV_STATE_SAVE_DATA_VRAM);
 	pf_escape_vf_state(gt, vfid, XE_GT_SRIOV_STATE_SAVE_DATA_MMIO);
 	pf_escape_vf_state(gt, vfid, XE_GT_SRIOV_STATE_SAVE_DATA_GGTT);
 	pf_escape_vf_state(gt, vfid, XE_GT_SRIOV_STATE_SAVE_DATA_GUC);
@@ -861,6 +863,13 @@ static bool pf_handle_vf_save_wip(struct xe_gt *gt, unsigned int vfid)
 		return true;
 	}
 
+	if (pf_exit_vf_state(gt, vfid, XE_GT_SRIOV_STATE_SAVE_DATA_VRAM)) {
+		ret = xe_gt_sriov_pf_migration_vram_save(gt, vfid);
+		if (ret)
+			goto err;
+		return true;
+	}
+
 	xe_gt_sriov_pf_control_vf_data_eof(gt, vfid);
 	pf_exit_vf_save_wip(gt, vfid);
 	pf_enter_vf_saved(gt, vfid);
@@ -884,6 +893,8 @@ static bool pf_enter_vf_save_wip(struct xe_gt *gt, unsigned int vfid)
 			pf_enter_vf_state(gt, vfid, XE_GT_SRIOV_STATE_SAVE_DATA_GGTT);
 		if (xe_gt_sriov_pf_migration_mmio_size(gt, vfid) > 0)
 			pf_enter_vf_state(gt, vfid, XE_GT_SRIOV_STATE_SAVE_DATA_MMIO);
+		if (xe_gt_sriov_pf_migration_vram_size(gt, vfid) > 0)
+			pf_enter_vf_state(gt, vfid, XE_GT_SRIOV_STATE_SAVE_DATA_VRAM);
 		pf_queue_vf(gt, vfid);
 		return true;
 	}
@@ -998,6 +1009,8 @@ static int pf_handle_vf_restore_data(struct xe_gt *gt, unsigned int vfid,
 		return xe_gt_sriov_pf_migration_mmio_restore(gt, vfid, data);
 	case XE_SRIOV_MIG_DATA_GUC:
 		return xe_gt_sriov_pf_migration_guc_restore(gt, vfid, data);
+	case XE_SRIOV_MIG_DATA_VRAM:
+		return xe_gt_sriov_pf_migration_vram_restore(gt, vfid, data);
 	default:
 		xe_gt_sriov_notice(gt, "Skipping VF%u invalid data type: %d\n", vfid, data->type);
 		pf_enter_vf_restore_failed(gt, vfid);
