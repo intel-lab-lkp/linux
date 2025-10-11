@@ -659,6 +659,7 @@ static void destroy_sched_domains(struct sched_domain *sd)
 DEFINE_PER_CPU(struct sched_domain __rcu *, sd_llc);
 DEFINE_PER_CPU(int, sd_llc_size);
 DEFINE_PER_CPU(int, sd_llc_id);
+DEFINE_PER_CPU(int, sd_llc_idx);
 DEFINE_PER_CPU(int, sd_share_id);
 DEFINE_PER_CPU(struct sched_domain_shared __rcu *, sd_llc_shared);
 DEFINE_PER_CPU(struct sched_domain __rcu *, sd_numa);
@@ -667,6 +668,40 @@ DEFINE_PER_CPU(struct sched_domain __rcu *, sd_asym_cpucapacity);
 
 DEFINE_STATIC_KEY_FALSE(sched_asym_cpucapacity);
 DEFINE_STATIC_KEY_FALSE(sched_cluster_active);
+
+int max_llcs = -1;
+
+static void update_llc_idx(int cpu)
+{
+#ifdef CONFIG_SCHED_CACHE
+	int idx = -1, llc_id = -1;
+
+	if (max_llcs > NR_LLCS)
+		return;
+
+	llc_id = per_cpu(sd_llc_id, cpu);
+	idx = per_cpu(sd_llc_idx, llc_id);
+
+	/*
+	 * A new LLC is detected, increase the index
+	 * by 1.
+	 */
+	if (idx < 0) {
+		idx = max_llcs++;
+
+		if (max_llcs > NR_LLCS) {
+			if (static_branch_unlikely(&sched_cache_allowed))
+				static_branch_disable_cpuslocked(&sched_cache_allowed);
+
+			pr_warn_once("CONFIG_NR_LLCS is too small, disable cache aware load balance\n");
+			return;
+		}
+
+		per_cpu(sd_llc_idx, llc_id) = idx;
+	}
+	per_cpu(sd_llc_idx, cpu) = idx;
+#endif
+}
 
 static void update_top_cache_domain(int cpu)
 {
@@ -686,6 +721,10 @@ static void update_top_cache_domain(int cpu)
 	per_cpu(sd_llc_size, cpu) = size;
 	per_cpu(sd_llc_id, cpu) = id;
 	rcu_assign_pointer(per_cpu(sd_llc_shared, cpu), sds);
+
+	/* only update the llc index for domain with SD_SHARE_LLC */
+	if (sd)
+		update_llc_idx(cpu);
 
 	sd = lowest_flag_domain(cpu, SD_CLUSTER);
 	if (sd)
@@ -2486,6 +2525,14 @@ build_sched_domains(const struct cpumask *cpu_map, struct sched_domain_attr *att
 	int i, ret = -ENOMEM;
 	bool has_asym = false;
 	bool has_cluster = false;
+
+#ifdef CONFIG_SCHED_CACHE
+	if (max_llcs < 0) {
+		for_each_possible_cpu(i)
+			per_cpu(sd_llc_idx, i) = -1;
+		max_llcs = 0;
+	}
+#endif
 
 	if (WARN_ON(cpumask_empty(cpu_map)))
 		goto error;

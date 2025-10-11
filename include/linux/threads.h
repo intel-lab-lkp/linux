@@ -20,6 +20,16 @@
 /* Places which use this should consider cpumask_var_t. */
 #define NR_CPUS		CONFIG_NR_CPUS
 
+#ifndef CONFIG_NR_LLCS
+#define CONFIG_NR_LLCS 1
+#endif
+
+#if CONFIG_NR_LLCS > NR_CPUS
+#define NR_LLCS		NR_CPUS
+#else
+#define NR_LLCS		CONFIG_NR_LLCS
+#endif
+
 #define MIN_THREADS_LEFT_FOR_ROOT 4
 
 /*
