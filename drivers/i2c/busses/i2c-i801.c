@@ -788,7 +788,7 @@ static int i801_simple_transaction(struct i801_priv *priv, union i2c_smbus_data 
 		xact = I801_WORD_DATA;
 		break;
 	case I2C_SMBUS_PROC_CALL:
-		i801_set_hstadd(priv, addr, I2C_SMBUS_WRITE);
+		i801_set_hstadd(priv, addr, read_write);
 		iowrite8(data->word & 0xff, SMBHSTDAT0(priv));
 		iowrite8((data->word & 0xff00) >> 8, SMBHSTDAT1(priv));
 		iowrite8(hstcmd, SMBHSTCMD(priv));
