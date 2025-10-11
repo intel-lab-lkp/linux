@@ -2805,6 +2805,7 @@ extern unsigned int sysctl_numa_balancing_hot_threshold;
 #ifdef CONFIG_SCHED_CACHE
 extern unsigned int llc_overload_pct;
 extern unsigned int llc_imb_pct;
+extern struct static_key_false sched_cache_allowed;
 #endif
 
 #ifdef CONFIG_SCHED_HRTICK

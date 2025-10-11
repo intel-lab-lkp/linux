@@ -1208,6 +1208,14 @@ static s64 update_se(struct rq *rq, struct sched_entity *se)
 __read_mostly unsigned int llc_overload_pct       = 50;
 __read_mostly unsigned int llc_imb_pct            = 20;
 
+DEFINE_STATIC_KEY_FALSE(sched_cache_allowed);
+
+static inline bool sched_cache_enabled(void)
+{
+	return sched_feat(SCHED_CACHE) &&
+		static_branch_likely(&sched_cache_allowed);
+}
+
 static int llc_id(int cpu)
 {
 	if (cpu < 0)
@@ -1294,7 +1302,7 @@ void account_mm_sched(struct rq *rq, struct task_struct *p, s64 delta_exec)
 	struct mm_sched *pcpu_sched;
 	unsigned long epoch;
 
-	if (!sched_feat(SCHED_CACHE))
+	if (!sched_cache_enabled())
 		return;
 
 	if (p->sched_class != &fair_sched_class)
@@ -1330,7 +1338,7 @@ static void task_tick_cache(struct rq *rq, struct task_struct *p)
 	struct callback_head *work = &p->cache_work;
 	struct mm_struct *mm = p->mm;
 
-	if (!sched_feat(SCHED_CACHE))
+	if (!sched_cache_enabled())
 		return;
 
 	if (!mm || !mm->pcpu_sched)
@@ -10807,7 +10815,8 @@ static void record_sg_llc_stats(struct lb_env *env,
 	struct sched_domain *sd = env->sd->child;
 	struct sched_domain_shared *sd_share;
 
-	if (!sched_feat(SCHED_CACHE) || env->idle == CPU_NEWLY_IDLE)
+	if (!sched_cache_enabled() ||
+	    env->idle == CPU_NEWLY_IDLE)
 		return;
 
 	/* only care about sched domains spanning a LLC */
