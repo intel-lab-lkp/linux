@@ -9917,9 +9917,50 @@ static __maybe_unused enum llc_mig can_migrate_llc_task(int src_cpu, int dst_cpu
 	return can_migrate_llc(src_cpu, dst_cpu, task_util(p), to_pref);
 }
 
+static inline bool
+break_llc_locality(struct lb_env *env)
+{
+	if (!sched_cache_enabled())
+		return false;
+
+	if (cpus_share_cache(env->src_cpu, env->dst_cpu))
+		return false;
+	/*
+	 * All tasks prefer to stay on their current CPU.
+	 * Do not pull a task from its preferred CPU if:
+	 * 1. It is the only task running there; OR
+	 * 2. Migrating it away from its preferred LLC would violate
+	 *    the cache-aware scheduling policy.
+	 */
+	if (env->src_rq->nr_pref_llc_running == env->src_rq->cfs.h_nr_runnable) {
+		unsigned long util = 0;
+		struct task_struct *cur;
+
+		if (env->src_rq->nr_running <= 1)
+			return true;
+
+		rcu_read_lock();
+		cur = rcu_dereference(env->src_rq->curr);
+		if (cur)
+			util = task_util(cur);
+		rcu_read_unlock();
+
+		if (can_migrate_llc(env->src_cpu, env->dst_cpu,
+				    util, false) == mig_forbid)
+			return true;
+	}
+
+	return false;
+}
 #else
 static inline bool get_llc_stats(int cpu, unsigned long *util,
 				 unsigned long *cap)
+{
+	return false;
+}
+
+static inline bool
+break_llc_locality(struct lb_env *env)
 {
 	return false;
 }
@@ -12338,6 +12379,9 @@ static int need_active_balance(struct lb_env *env)
 {
 	struct sched_domain *sd = env->sd;
 
+	if (break_llc_locality(env))
+		return 0;
+
 	if (asym_active_balance(env))
 		return 1;
 
@@ -12357,7 +12401,8 @@ static int need_active_balance(struct lb_env *env)
 			return 1;
 	}
 
-	if (env->migration_type == migrate_misfit)
+	if (env->migration_type == migrate_misfit ||
+	    env->migration_type == migrate_llc_task)
 		return 1;
 
 	return 0;
@@ -12802,9 +12847,20 @@ static int active_load_balance_cpu_stop(void *data)
 		goto out_unlock;
 
 	/* Is there any task to move? */
-	if (busiest_rq->nr_running <= 1)
-		goto out_unlock;
+	if (busiest_rq->nr_running <= 1) {
+#ifdef CONFIG_SCHED_CACHE
+		int llc = llc_idx(target_cpu);
 
+		if (!sched_cache_enabled())
+			goto out_unlock;
+
+		if (llc < 0)
+			goto out_unlock;
+		/* don't migrate if no task prefers target */
+		if (busiest_rq->nr_pref_llc[llc] < 1)
+#endif
+			goto out_unlock;
+	}
 	/*
 	 * This condition is "impossible", if it occurs
 	 * we need to fix it. Originally reported by
