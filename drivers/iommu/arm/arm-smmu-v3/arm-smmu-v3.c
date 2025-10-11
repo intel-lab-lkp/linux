@@ -3476,8 +3476,19 @@ static int arm_smmu_insert_master(struct arm_smmu_device *smmu,
 				rb_entry(existing, struct arm_smmu_stream, node)
 					->master;
 
+			struct device *mdev = master->dev;
+			struct device *existing_mdev = existing_master->dev;
+
 			/* Bridged PCI devices may end up with duplicated IDs */
 			if (existing_master == master)
+				continue;
+
+			/* Dma alias PCI devices may end up with duplicated IDs */
+			if (existing_mdev != mdev &&
+				dev_is_pci(existing_mdev) && dev_is_pci(mdev) &&
+				to_pci_dev(existing_mdev)->bus == to_pci_dev(mdev)->bus &&
+				pci_devs_are_dma_aliases(to_pci_dev(existing_mdev),
+										 to_pci_dev(mdev)))
 				continue;
 
 			dev_warn(master->dev,
