@@ -1031,6 +1031,7 @@ struct mm_struct {
 		raw_spinlock_t mm_sched_lock;
 		unsigned long mm_sched_epoch;
 		int mm_sched_cpu;
+		u64 nr_running_avg ____cacheline_aligned_in_smp;
 #endif
 
 #ifdef CONFIG_MMU
