@@ -997,6 +997,11 @@ static int i2c_dw_init_recovery_info(struct dw_i2c_dev *dev)
 	return 0;
 }
 
+static inline void i2c_dw_disable_smbus_intr(struct dw_i2c_dev *dev)
+{
+	regmap_write(dev->map, DW_IC_SMBUS_INTR_MASK, 0);
+}
+
 int i2c_dw_probe_master(struct dw_i2c_dev *dev)
 {
 	struct i2c_adapter *adap = &dev->adapter;
@@ -1063,6 +1068,12 @@ int i2c_dw_probe_master(struct dw_i2c_dev *dev)
 		return ret;
 
 	__i2c_dw_write_intr_mask(dev, 0);
+	/*
+	 * Mask SMBus interrupts to block storms from broken
+	 * firmware that leaves IC_SMBUS=1; the handler never
+	 * services them.
+	 */
+	i2c_dw_disable_smbus_intr(dev);
 	i2c_dw_release_lock(dev);
 
 	if (!(dev->flags & ACCESS_POLLING)) {
