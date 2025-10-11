@@ -13,5 +13,9 @@ int xe_sriov_pf_control_resume_vf(struct xe_device *xe, unsigned int vfid);
 int xe_sriov_pf_control_stop_vf(struct xe_device *xe, unsigned int vfid);
 int xe_sriov_pf_control_reset_vf(struct xe_device *xe, unsigned int vfid);
 int xe_sriov_pf_control_sync_flr(struct xe_device *xe, unsigned int vfid);
+int xe_sriov_pf_control_save_vf(struct xe_device *xe, unsigned int vfid);
+int xe_sriov_pf_control_wait_save_vf(struct xe_device *xe, unsigned int vfid);
+int xe_sriov_pf_control_restore_vf(struct xe_device *xe, unsigned int vfid);
+int xe_sriov_pf_control_wait_restore_vf(struct xe_device *xe, unsigned int vfid);
 
 #endif
