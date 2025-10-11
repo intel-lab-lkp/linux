@@ -7440,6 +7440,7 @@ static ssize_t write_raw_marker_to_buffer(struct trace_array *tr,
 	struct raw_data_entry *entry;
 	ssize_t written;
 	size_t size;
+	void *ptr;
 
 	size = sizeof(*entry) + cnt;
 
@@ -7455,7 +7456,10 @@ static ssize_t write_raw_marker_to_buffer(struct trace_array *tr,
 		return -EBADF;
 
 	entry = ring_buffer_event_data(event);
-	memcpy(&entry->id, buf, cnt);
+	/* Do not let fortify-string warn copying to &entry->id */
+	ptr = (void *)entry;
+	ptr += offsetof(typeof(*entry), id);
+	memcpy(ptr, buf, cnt);
 	written = cnt;
 
 	__buffer_unlock_commit(buffer, event);
