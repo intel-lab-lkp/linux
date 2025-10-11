@@ -9650,6 +9650,29 @@ static inline int task_is_ineligible_on_dst_cpu(struct task_struct *p, int dest_
 	return 0;
 }
 
+#ifdef CONFIG_SCHED_CACHE
+/* Called from load balancing paths with rcu_read_lock held */
+static __maybe_unused bool get_llc_stats(int cpu, unsigned long *util,
+					 unsigned long *cap)
+{
+	struct sched_domain_shared *sd_share;
+
+	sd_share = rcu_dereference(per_cpu(sd_llc_shared, cpu));
+	if (!sd_share)
+		return false;
+
+	*util = READ_ONCE(sd_share->util_avg);
+	*cap = READ_ONCE(sd_share->capacity);
+
+	return true;
+}
+#else
+static inline bool get_llc_stats(int cpu, unsigned long *util,
+				 unsigned long *cap)
+{
+	return false;
+}
+#endif
 /*
  * can_migrate_task - may task p from runqueue rq be migrated to this_cpu?
  */
@@ -10620,6 +10643,55 @@ sched_reduced_capacity(struct rq *rq, struct sched_domain *sd)
 	return check_cpu_capacity(rq, sd);
 }
 
+#ifdef CONFIG_SCHED_CACHE
+/*
+ * Record the statistics for this scheduler group for later
+ * use. These values guide load balancing on aggregating tasks
+ * to a LLC.
+ */
+static void record_sg_llc_stats(struct lb_env *env,
+				struct sg_lb_stats *sgs,
+				struct sched_group *group)
+{
+	/*
+	 * Find the child domain on env->dst_cpu. This domain
+	 * is either the domain that spans this group(if the
+	 * group is a local group), or the sibling domain of
+	 * this group.
+	 */
+	struct sched_domain *sd = env->sd->child;
+	struct sched_domain_shared *sd_share;
+
+	if (!sched_feat(SCHED_CACHE) || env->idle == CPU_NEWLY_IDLE)
+		return;
+
+	/* only care about sched domains spanning a LLC */
+	if (sd != rcu_dereference(per_cpu(sd_llc, env->dst_cpu)))
+		return;
+
+	/*
+	 * At this point we know this group spans a LLC domain.
+	 * Record the statistic of this group in its corresponding
+	 * shared LLC domain.
+	 */
+	sd_share = rcu_dereference(per_cpu(sd_llc_shared,
+					   cpumask_first(sched_group_span(group))));
+	if (!sd_share)
+		return;
+
+	if (READ_ONCE(sd_share->util_avg) != sgs->group_util)
+		WRITE_ONCE(sd_share->util_avg, sgs->group_util);
+
+	if (unlikely(READ_ONCE(sd_share->capacity) != sgs->group_capacity))
+		WRITE_ONCE(sd_share->capacity, sgs->group_capacity);
+}
+#else
+static inline void record_sg_llc_stats(struct lb_env *env, struct sg_lb_stats *sgs,
+				       struct sched_group *group)
+{
+}
+#endif
+
 /**
  * update_sg_lb_stats - Update sched_group's statistics for load balancing.
  * @env: The load balancing environment.
@@ -10709,6 +10781,7 @@ static inline void update_sg_lb_stats(struct lb_env *env,
 
 	sgs->group_type = group_classify(env->sd->imbalance_pct, group, sgs);
 
+	record_sg_llc_stats(env, sgs, group);
 	/* Computing avg_load makes sense only when group is overloaded */
 	if (sgs->group_type == group_overloaded)
 		sgs->avg_load = (sgs->group_load * SCHED_CAPACITY_SCALE) /
