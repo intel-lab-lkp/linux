@@ -5,6 +5,7 @@
 
 #include "xe_bo.h"
 #include "xe_device.h"
+#include "xe_guc_klv_helpers.h"
 #include "xe_sriov_pf_helpers.h"
 #include "xe_sriov_pf_migration.h"
 #include "xe_sriov_pf_migration_data.h"
@@ -404,11 +405,17 @@ ssize_t xe_sriov_pf_migration_data_write(struct xe_device *xe, unsigned int vfid
 	return produced;
 }
 
-#define MIGRATION_DESC_SIZE 4
+#define MIGRATION_KLV_DEVICE_DEVID_KEY	0xf001u
+#define MIGRATION_KLV_DEVICE_DEVID_LEN	1u
+#define MIGRATION_KLV_DEVICE_REVID_KEY	0xf002u
+#define MIGRATION_KLV_DEVICE_REVID_LEN	1u
+
+#define MIGRATION_DESC_DWORDS 4
 static size_t pf_desc_init(struct xe_device *xe, unsigned int vfid)
 {
 	struct xe_sriov_pf_migration_data **desc = pf_pick_descriptor(xe, vfid);
 	struct xe_sriov_pf_migration_data *data;
+	u32 *klvs;
 	int ret;
 
 	data = xe_sriov_pf_migration_data_alloc(xe);
@@ -416,13 +423,84 @@ static size_t pf_desc_init(struct xe_device *xe, unsigned int vfid)
 		return -ENOMEM;
 
 	ret = xe_sriov_pf_migration_data_init(data, 0, 0, XE_SRIOV_MIG_DATA_DESCRIPTOR,
-					      0, MIGRATION_DESC_SIZE);
+					      0, MIGRATION_DESC_DWORDS * sizeof(u32));
 	if (ret) {
 		xe_sriov_pf_migration_data_free(data);
 		return ret;
 	}
 
+	klvs = data->vaddr;
+	*klvs++ = PREP_GUC_KLV_CONST(MIGRATION_KLV_DEVICE_DEVID_KEY,
+				     MIGRATION_KLV_DEVICE_DEVID_LEN);
+	*klvs++ = xe->info.devid;
+	*klvs++ = PREP_GUC_KLV_CONST(MIGRATION_KLV_DEVICE_REVID_KEY,
+				     MIGRATION_KLV_DEVICE_REVID_LEN);
+	*klvs++ = xe->info.revid;
+
 	*desc = data;
+
+	return 0;
+}
+
+/**
+ * xe_sriov_pf_migration_data_process_desc() - Process migration data descriptor.
+ * @gt: the &struct xe_device
+ * @vfid: the VF identifier
+ * @data: the &struct xe_sriov_pf_migration_data containing the descriptor
+ *
+ * The descriptor uses the same KLV format as GuC, and contains metadata used for
+ * checking migration data compatibility.
+ *
+ * Return: 0 on success, -errno on failure
+ */
+int xe_sriov_pf_migration_data_process_desc(struct xe_device *xe, unsigned int vfid,
+					    struct xe_sriov_pf_migration_data *data)
+{
+	u32 num_dwords = data->size / sizeof(u32);
+	u32 *klvs = data->vaddr;
+
+	xe_assert(xe, data->type == XE_SRIOV_MIG_DATA_DESCRIPTOR);
+	if (data->size % sizeof(u32) != 0)
+		return -EINVAL;
+	if (data->size != num_dwords * sizeof(u32))
+		return -EINVAL;
+
+	while (num_dwords >= GUC_KLV_LEN_MIN) {
+		u32 key = FIELD_GET(GUC_KLV_0_KEY, klvs[0]);
+		u32 len = FIELD_GET(GUC_KLV_0_LEN, klvs[0]);
+
+		klvs += GUC_KLV_LEN_MIN;
+		num_dwords -= GUC_KLV_LEN_MIN;
+
+		switch (key) {
+		case MIGRATION_KLV_DEVICE_DEVID_KEY:
+			if (*klvs != xe->info.devid) {
+				xe_sriov_info(xe,
+					      "Aborting migration, devid mismatch %#04x!=%#04x\n",
+					      *klvs, xe->info.devid);
+				return -ENODEV;
+			}
+			break;
+		case MIGRATION_KLV_DEVICE_REVID_KEY:
+			if (*klvs != xe->info.revid) {
+				xe_sriov_info(xe,
+					      "Aborting migration, revid mismatch %#04x!=%#04x\n",
+					      *klvs, xe->info.revid);
+				return -ENODEV;
+			}
+			break;
+		default:
+			xe_sriov_dbg(xe,
+				     "Unknown migration descriptor key %#06x - skipping\n", key);
+			break;
+		}
+
+		if (len > num_dwords)
+			return -EINVAL;
+
+		klvs += len;
+		num_dwords -= len;
+	}
 
 	return 0;
 }
