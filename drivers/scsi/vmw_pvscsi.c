@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-2.0-or-later
 /*
  * Linux driver for VMware's para-virtualized SCSI HBA.
  *
@@ -12,11 +13,6 @@
  * MERCHANTABILITY OR FITNESS FOR A PARTICULAR PURPOSE, GOOD TITLE or
  * NON INFRINGEMENT.  See the GNU General Public License for more
  * details.
- *
- * You should have received a copy of the GNU General Public License
- * along with this program; if not, write to the Free Software
- * Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA 02110-1301 USA.
- *
  */
 
 #include <linux/kernel.h>
@@ -76,16 +72,16 @@ struct pvscsi_adapter {
 	struct work_struct		work;
 
 	struct PVSCSIRingReqDesc	*req_ring;
-	unsigned			req_pages;
-	unsigned			req_depth;
+	unsigned int		req_pages;
+	unsigned int		req_depth;
 	dma_addr_t			reqRingPA;
 
 	struct PVSCSIRingCmpDesc	*cmp_ring;
-	unsigned			cmp_pages;
+	unsigned int		cmp_pages;
 	dma_addr_t			cmpRingPA;
 
 	struct PVSCSIRingMsgDesc	*msg_ring;
-	unsigned			msg_pages;
+	unsigned int		msg_pages;
 	dma_addr_t			msgRingPA;
 
 	struct PVSCSIRingsState		*rings_state;
@@ -325,9 +321,9 @@ static void ll_device_reset(const struct pvscsi_adapter *adapter, u32 target)
 }
 
 static void pvscsi_create_sg(struct pvscsi_ctx *ctx,
-			     struct scatterlist *sg, unsigned count)
+			     struct scatterlist *sg, unsigned int count)
 {
-	unsigned i;
+	unsigned int i;
 	struct PVSCSISGElement *sge;
 
 	BUG_ON(count > PVSCSI_MAX_NUM_SG_ENTRIES_PER_SEGMENT);
@@ -348,8 +344,8 @@ static int pvscsi_map_buffers(struct pvscsi_adapter *adapter,
 			      struct pvscsi_ctx *ctx, struct scsi_cmnd *cmd,
 			      struct PVSCSIRingReqDesc *e)
 {
-	unsigned count;
-	unsigned bufflen = scsi_bufflen(cmd);
+	unsigned int count;
+	unsigned int bufflen = scsi_bufflen(cmd);
 	struct scatterlist *sg;
 
 	e->dataLen = bufflen;
@@ -415,13 +411,13 @@ static void pvscsi_unmap_buffers(const struct pvscsi_adapter *adapter,
 				 struct pvscsi_ctx *ctx)
 {
 	struct scsi_cmnd *cmd;
-	unsigned bufflen;
+	unsigned int bufflen;
 
 	cmd = ctx->cmd;
 	bufflen = scsi_bufflen(cmd);
 
 	if (bufflen != 0) {
-		unsigned count = scsi_sg_count(cmd);
+		unsigned int count = scsi_sg_count(cmd);
 
 		if (count != 0) {
 			scsi_dma_unmap(cmd);
@@ -487,7 +483,7 @@ static void pvscsi_setup_all_rings(const struct pvscsi_adapter *adapter)
 {
 	struct PVSCSICmdDescSetupRings cmd = { 0 };
 	dma_addr_t base;
-	unsigned i;
+	unsigned int i;
 
 	cmd.ringsStatePPN   = adapter->ringStatePA >> PAGE_SHIFT;
 	cmd.reqRingNumPages = adapter->req_pages;
@@ -877,11 +873,12 @@ out:
  */
 static void pvscsi_reset_all(struct pvscsi_adapter *adapter)
 {
-	unsigned i;
+	unsigned int i;
 
 	for (i = 0; i < adapter->req_depth; i++) {
 		struct pvscsi_ctx *ctx = &adapter->cmd_map[i];
 		struct scsi_cmnd *cmd = ctx->cmd;
+
 		if (cmd) {
 			scmd_printk(KERN_ERR, cmd,
 				    "Forced reset on cmd %p\n", cmd);
@@ -1037,15 +1034,15 @@ static void pvscsi_process_msg(const struct pvscsi_adapter *adapter,
 	struct Scsi_Host *host = adapter->host;
 	struct scsi_device *sdev;
 
-	printk(KERN_INFO "vmw_pvscsi: msg type: 0x%x - MSG RING: %u/%u (%u) \n",
+	printk(KERN_INFO "vmw_pvscsi: msg type: 0x%x - MSG RING: %u/%u (%u)\n",
 	       e->type, s->msgProdIdx, s->msgConsIdx, s->msgNumEntriesLog2);
 
 	BUILD_BUG_ON(PVSCSI_MSG_LAST != 2);
 
 	if (e->type == PVSCSI_MSG_DEV_ADDED) {
 		struct PVSCSIMsgDescDevStatusChanged *desc;
-		desc = (struct PVSCSIMsgDescDevStatusChanged *)e;
 
+		desc = (struct PVSCSIMsgDescDevStatusChanged *)e;
 		printk(KERN_INFO
 		       "vmw_pvscsi: msg: device added at scsi%u:%u:%u\n",
 		       desc->bus, desc->target, desc->lun[1]);
@@ -1065,6 +1062,7 @@ static void pvscsi_process_msg(const struct pvscsi_adapter *adapter,
 		scsi_host_put(host);
 	} else if (e->type == PVSCSI_MSG_DEV_REMOVED) {
 		struct PVSCSIMsgDescDevStatusChanged *desc;
+
 		desc = (struct PVSCSIMsgDescDevStatusChanged *)e;
 
 		printk(KERN_INFO
@@ -1164,6 +1162,7 @@ static bool pvscsi_setup_req_threshold(struct pvscsi_adapter *adapter,
 		return false;
 	} else {
 		struct PVSCSICmdDescSetupReqCall cmd_msg = { 0 };
+
 		cmd_msg.enable = enable;
 		printk(KERN_INFO
 		       "vmw_pvscsi: %sabling reqCallThreshold\n",
@@ -1204,7 +1203,7 @@ static irqreturn_t pvscsi_shared_isr(int irq, void *devp)
 static void pvscsi_free_sgls(const struct pvscsi_adapter *adapter)
 {
 	struct pvscsi_ctx *ctx = adapter->cmd_map;
-	unsigned i;
+	unsigned int i;
 
 	for (i = 0; i < adapter->req_depth; ++i, ++ctx)
 		free_pages((unsigned long)ctx->sgl, get_order(SGL_SIZE));
@@ -1328,7 +1327,7 @@ static u32 pvscsi_get_max_targets(struct pvscsi_adapter *adapter)
 	header->hostStatus = BTSTAT_INVPARAM;
 	header->scsiStatus = SDSTAT_CHECK;
 
-	pvscsi_write_cmd_desc(adapter, PVSCSI_CMD_CONFIG, &cmd, sizeof cmd);
+	pvscsi_write_cmd_desc(adapter, PVSCSI_CMD_CONFIG, &cmd, sizeof(cmd));
 
 	if (header->hostStatus == BTSTAT_SUCCESS &&
 	    header->scsiStatus == SDSTAT_GOOD) {
@@ -1489,6 +1488,7 @@ static int pvscsi_probe(struct pci_dev *pdev, const struct pci_device_id *id)
 	INIT_LIST_HEAD(&adapter->cmd_pool);
 	for (i = 0; i < adapter->req_depth; i++) {
 		struct pvscsi_ctx *ctx = adapter->cmd_map + i;
+
 		list_add(&ctx->list, &adapter->cmd_pool);
 	}
 
