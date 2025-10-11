@@ -122,7 +122,7 @@ static bool pf_migration_supported(struct xe_gt *gt)
 static struct mutex *pf_migration_mutex(struct xe_gt *gt)
 {
 	xe_gt_assert(gt, IS_SRIOV_PF(gt_to_xe(gt)));
-	return &gt->sriov.pf.migration.snapshot_lock;
+	return &gt->sriov.pf.snapshot_lock;
 }
 
 static struct xe_gt_sriov_state_snapshot *pf_pick_vf_snapshot(struct xe_gt *gt,
@@ -400,7 +400,7 @@ int xe_gt_sriov_pf_migration_init(struct xe_gt *gt)
 	if (!pf_migration_supported(gt))
 		return 0;
 
-	err = drmm_mutex_init(&xe->drm, &gt->sriov.pf.migration.snapshot_lock);
+	err = drmm_mutex_init(&xe->drm, &gt->sriov.pf.snapshot_lock);
 	if (err)
 		return err;
 
