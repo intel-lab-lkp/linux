@@ -32,6 +32,11 @@ struct xe_device_pf {
 	/** @driver_max_vfs: Maximum number of VFs supported by the driver. */
 	u16 driver_max_vfs;
 
+	struct {
+		/** @migration.supported: indicates whether VF migration feature is supported */
+		bool supported;
+	} migration;
+
 	/** @master_lock: protects all VFs configurations across GTs */
 	struct mutex master_lock;
 
