@@ -19,6 +19,7 @@
 #include "xe_guc_ct.h"
 #include "xe_sriov.h"
 #include "xe_sriov_pf_control.h"
+#include "xe_sriov_pf_migration.h"
 #include "xe_sriov_pf_service.h"
 #include "xe_tile.h"
 
@@ -388,6 +389,8 @@ static bool pf_enter_vf_wip(struct xe_gt *gt, unsigned int vfid)
 
 static void pf_exit_vf_wip(struct xe_gt *gt, unsigned int vfid)
 {
+	struct wait_queue_head *wq = xe_sriov_pf_migration_waitqueue(gt_to_xe(gt), vfid);
+
 	if (pf_exit_vf_state(gt, vfid, XE_GT_SRIOV_STATE_WIP)) {
 		struct xe_gt_sriov_control_state *cs = pf_pick_vf_control(gt, vfid);
 
@@ -399,6 +402,7 @@ static void pf_exit_vf_wip(struct xe_gt *gt, unsigned int vfid)
 		pf_exit_vf_resume_wip(gt, vfid);
 
 		complete_all(&cs->done);
+		wake_up_all(wq);
 	}
 }
 

@@ -7,6 +7,7 @@
 #define _XE_GT_SRIOV_PF_MIGRATION_TYPES_H_
 
 #include <linux/mutex.h>
+#include <linux/ptr_ring.h>
 #include <linux/types.h>
 
 /**
@@ -27,9 +28,11 @@ struct xe_gt_sriov_state_snapshot {
 /**
  * struct xe_gt_sriov_pf_migration - GT-level data.
  *
- * Used by the PF driver to maintain non-VF specific per-GT data.
+ * Used by the PF driver to maintain per-VF migration data.
  */
 struct xe_gt_sriov_pf_migration {
+	/** @ring: queue containing VF save / restore migration data */
+	struct ptr_ring ring;
 };
 
 #endif

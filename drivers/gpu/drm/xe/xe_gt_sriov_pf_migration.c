@@ -7,6 +7,7 @@
 
 #include "abi/guc_actions_sriov_abi.h"
 #include "xe_bo.h"
+#include "xe_gt_sriov_pf_control.h"
 #include "xe_gt_sriov_pf_helpers.h"
 #include "xe_gt_sriov_pf_migration.h"
 #include "xe_gt_sriov_printk.h"
@@ -14,6 +15,17 @@
 #include "xe_guc_ct.h"
 #include "xe_sriov.h"
 #include "xe_sriov_pf_migration.h"
+
+#define XE_GT_SRIOV_PF_MIGRATION_RING_TIMEOUT (HZ * 20)
+#define XE_GT_SRIOV_PF_MIGRATION_RING_SIZE 5
+
+static struct xe_gt_sriov_pf_migration *pf_pick_gt_migration(struct xe_gt *gt, unsigned int vfid)
+{
+	xe_gt_assert(gt, IS_SRIOV_PF(gt_to_xe(gt)));
+	xe_gt_assert(gt, vfid <= xe_sriov_pf_get_totalvfs(gt_to_xe(gt)));
+
+	return &gt->sriov.pf.vfs[vfid].migration;
+}
 
 /* Return: number of dwords saved/restored/required or a negative error code on failure */
 static int guc_action_vf_save_restore(struct xe_guc *guc, u32 vfid, u32 opcode,
@@ -383,6 +395,142 @@ ssize_t xe_gt_sriov_pf_migration_write_guc_state(struct xe_gt *gt, unsigned int 
 #endif /* CONFIG_DEBUG_FS */
 
 /**
+ * xe_gt_sriov_pf_migration_ring_empty() - Check if a migration ring is empty
+ * @gt: the &struct xe_gt
+ * @vfid: the VF identifier
+ *
+ * Return: true if the ring is empty, otherwise false.
+ */
+bool xe_gt_sriov_pf_migration_ring_empty(struct xe_gt *gt, unsigned int vfid)
+{
+	return ptr_ring_empty(&pf_pick_gt_migration(gt, vfid)->ring);
+}
+
+/**
+ * xe_gt_sriov_pf_migration_produce() - Add migration data packet to migration ring
+ * @gt: the &struct xe_gt
+ * @vfid: the VF identifier
+ * @data: &struct xe_sriov_pf_migration_data packet
+ *
+ * If the ring is full, wait until there is space in the ring.
+ *
+ * Return: 0 on success or a negative error code on failure.
+ */
+int xe_gt_sriov_pf_migration_ring_produce(struct xe_gt *gt, unsigned int vfid,
+					  struct xe_sriov_pf_migration_data *data)
+{
+	struct xe_gt_sriov_pf_migration *migration = pf_pick_gt_migration(gt, vfid);
+	struct wait_queue_head *wq = xe_sriov_pf_migration_waitqueue(gt_to_xe(gt), vfid);
+	unsigned long timeout = XE_GT_SRIOV_PF_MIGRATION_RING_TIMEOUT;
+	int ret;
+
+	xe_gt_assert(gt, data->tile == gt->tile->id);
+	xe_gt_assert(gt, data->gt == gt->info.id);
+
+	while (1) {
+		ret = ptr_ring_produce(&migration->ring, data);
+		if (ret == 0) {
+			wake_up_all(wq);
+			break;
+		}
+
+		if (!xe_gt_sriov_pf_control_check_vf_data_wip(gt, vfid))
+			return -EINVAL;
+
+		ret = wait_event_interruptible_timeout(*wq,
+						       !ptr_ring_full(&migration->ring),
+						       timeout);
+		if (ret == 0)
+			return -ETIMEDOUT;
+
+		timeout = ret;
+	}
+
+	return ret;
+}
+
+/**
+ * xe_gt_sriov_pf_migration_consume() - Get migration data packet from migration ring
+ * @gt: the &struct xe_gt
+ * @vfid: the VF identifier
+ *
+ * If the ring is empty, wait until there are new migration data packets to process.
+ *
+ * Return: Pointer to &struct xe_sriov_pf_migration_data on success,
+ *	   ERR_PTR(-ENODATA) if ring is empty and no more migration data is expected,
+ *	   ERR_PTR value in case of error.
+ */
+struct xe_sriov_pf_migration_data *
+xe_gt_sriov_pf_migration_ring_consume(struct xe_gt *gt, unsigned int vfid)
+{
+	struct xe_gt_sriov_pf_migration *migration = pf_pick_gt_migration(gt, vfid);
+	struct wait_queue_head *wq = xe_sriov_pf_migration_waitqueue(gt_to_xe(gt), vfid);
+	unsigned long timeout = XE_GT_SRIOV_PF_MIGRATION_RING_TIMEOUT;
+	struct xe_sriov_pf_migration_data *data;
+	int ret;
+
+	while (1) {
+		data = ptr_ring_consume(&migration->ring);
+		if (data) {
+			wake_up_all(wq);
+			break;
+		}
+
+		if (!xe_gt_sriov_pf_control_check_vf_data_wip(gt, vfid))
+			return ERR_PTR(-ENODATA);
+
+		ret = wait_event_interruptible_timeout(*wq,
+					 !ptr_ring_empty(&migration->ring) ||
+					 !xe_gt_sriov_pf_control_check_vf_data_wip(gt, vfid),
+					 timeout);
+		if (ret == 0)
+			return ERR_PTR(-ETIMEDOUT);
+
+		timeout = ret;
+	}
+
+	return data;
+}
+
+/**
+ * xe_gt_sriov_pf_migration_consume_nowait() - Get migration data packet from migration ring
+ * @gt: the &struct xe_gt
+ * @vfid: the VF identifier
+ *
+ * Similar to xe_gt_sriov_pf_migration_consume(), but doesn't wait until more data is available.
+ *
+ * Return: Pointer to &struct xe_sriov_pf_migration_data on success,
+ *	   ERR_PTR(-EAGAIN) if ring is empty but migration data is expected,
+ *	   ERR_PTR(-ENODATA) if ring is empty and no more migration data is expected,
+ *	   ERR_PTR value in case of error.
+ */
+struct xe_sriov_pf_migration_data *
+xe_gt_sriov_pf_migration_ring_consume_nowait(struct xe_gt *gt, unsigned int vfid)
+{
+	struct xe_gt_sriov_pf_migration *migration = pf_pick_gt_migration(gt, vfid);
+	struct wait_queue_head *wq = xe_sriov_pf_migration_waitqueue(gt_to_xe(gt), vfid);
+	struct xe_sriov_pf_migration_data *data;
+
+	data = ptr_ring_consume(&migration->ring);
+	if (data) {
+		wake_up_all(wq);
+		return data;
+	}
+
+	if (!xe_gt_sriov_pf_control_check_vf_data_wip(gt, vfid))
+		return ERR_PTR(-ENODATA);
+
+	return ERR_PTR(-EAGAIN);
+}
+
+static void pf_gt_migration_cleanup(struct drm_device *dev, void *arg)
+{
+	struct xe_gt_sriov_pf_migration *migration = arg;
+
+	ptr_ring_cleanup(&migration->ring, NULL);
+}
+
+/**
  * xe_gt_sriov_pf_migration_init() - Initialize support for VF migration.
  * @gt: the &xe_gt
  *
@@ -393,6 +541,7 @@ ssize_t xe_gt_sriov_pf_migration_write_guc_state(struct xe_gt *gt, unsigned int 
 int xe_gt_sriov_pf_migration_init(struct xe_gt *gt)
 {
 	struct xe_device *xe = gt_to_xe(gt);
+	unsigned int n, totalvfs;
 	int err;
 
 	xe_gt_assert(gt, IS_SRIOV_PF(xe));
@@ -403,6 +552,20 @@ int xe_gt_sriov_pf_migration_init(struct xe_gt *gt)
 	err = drmm_mutex_init(&xe->drm, &gt->sriov.pf.snapshot_lock);
 	if (err)
 		return err;
+
+	totalvfs = xe_sriov_pf_get_totalvfs(xe);
+	for (n = 0; n <= totalvfs; n++) {
+		struct xe_gt_sriov_pf_migration *migration = pf_pick_gt_migration(gt, n);
+
+		err = ptr_ring_init(&migration->ring,
+				    XE_GT_SRIOV_PF_MIGRATION_RING_SIZE, GFP_KERNEL);
+		if (err)
+			return err;
+
+		err = drmm_add_action_or_reset(&xe->drm, pf_gt_migration_cleanup, migration);
+		if (err)
+			return err;
+	}
 
 	return 0;
 }
