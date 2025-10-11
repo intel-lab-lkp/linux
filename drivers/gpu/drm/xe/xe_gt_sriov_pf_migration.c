@@ -15,6 +15,7 @@
 #include "xe_guc_ct.h"
 #include "xe_sriov.h"
 #include "xe_sriov_pf_migration.h"
+#include "xe_sriov_pf_migration_data.h"
 
 #define XE_GT_SRIOV_PF_MIGRATION_RING_TIMEOUT (HZ * 20)
 #define XE_GT_SRIOV_PF_MIGRATION_RING_SIZE 5
@@ -523,11 +524,18 @@ xe_gt_sriov_pf_migration_ring_consume_nowait(struct xe_gt *gt, unsigned int vfid
 	return ERR_PTR(-EAGAIN);
 }
 
+static void pf_mig_data_destroy(void *ptr)
+{
+	struct xe_sriov_pf_migration_data *data = ptr;
+
+	xe_sriov_pf_migration_data_free(data);
+}
+
 static void pf_gt_migration_cleanup(struct drm_device *dev, void *arg)
 {
 	struct xe_gt_sriov_pf_migration *migration = arg;
 
-	ptr_ring_cleanup(&migration->ring, NULL);
+	ptr_ring_cleanup(&migration->ring, pf_mig_data_destroy);
 }
 
 /**

@@ -20,6 +20,7 @@
 #include "xe_sriov.h"
 #include "xe_sriov_pf_control.h"
 #include "xe_sriov_pf_migration.h"
+#include "xe_sriov_pf_migration_data.h"
 #include "xe_sriov_pf_service.h"
 #include "xe_tile.h"
 
@@ -949,14 +950,57 @@ static void pf_exit_vf_restored(struct xe_gt *gt, unsigned int vfid)
 	pf_exit_vf_state(gt, vfid, XE_GT_SRIOV_STATE_RESTORED);
 }
 
+static void pf_enter_vf_restore_failed(struct xe_gt *gt, unsigned int vfid)
+{
+	pf_enter_vf_state(gt, vfid, XE_GT_SRIOV_STATE_RESTORE_FAILED);
+	pf_exit_vf_wip(gt, vfid);
+}
+
+static int pf_handle_vf_restore_data(struct xe_gt *gt, unsigned int vfid,
+				     struct xe_sriov_pf_migration_data *data)
+{
+	switch (data->type) {
+	default:
+		xe_gt_sriov_notice(gt, "Skipping VF%u invalid data type: %d\n", vfid, data->type);
+		pf_enter_vf_restore_failed(gt, vfid);
+	}
+
+	return -EINVAL;
+}
+
 static bool pf_handle_vf_restore_wip(struct xe_gt *gt, unsigned int vfid)
 {
+	struct xe_sriov_pf_migration_data *data;
+	int ret;
+
 	if (!pf_check_vf_state(gt, vfid, XE_GT_SRIOV_STATE_RESTORE_WIP))
 		return false;
 
-	pf_exit_vf_restore_wip(gt, vfid);
-	pf_enter_vf_restored(gt, vfid);
+	data = xe_gt_sriov_pf_migration_ring_consume(gt, vfid);
+	if (IS_ERR(data)) {
+		if (PTR_ERR(data) == -ENODATA &&
+		    !xe_gt_sriov_pf_control_check_vf_data_wip(gt, vfid)) {
+			pf_exit_vf_restore_wip(gt, vfid);
+			pf_enter_vf_restored(gt, vfid);
+		} else {
+			pf_enter_vf_restore_failed(gt, vfid);
+		}
+		return false;
+	}
 
+	xe_gt_assert(gt, gt->info.id == data->gt);
+	xe_gt_assert(gt, gt->tile->id == data->tile);
+
+	ret = pf_handle_vf_restore_data(gt, vfid, data);
+	if (ret) {
+		xe_gt_sriov_err(gt, "VF%u failed to restore data type: %d (%d)\n",
+				vfid, data->type, ret);
+		xe_sriov_pf_migration_data_free(data);
+		pf_enter_vf_restore_failed(gt, vfid);
+		return false;
+	}
+
+	xe_sriov_pf_migration_data_free(data);
 	return true;
 }
 

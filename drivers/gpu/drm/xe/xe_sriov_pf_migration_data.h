@@ -1,0 +1,32 @@
+/* SPDX-License-Identifier: MIT */
+/*
+ * Copyright © 2025 Intel Corporation
+ */
+
+#ifndef _XE_SRIOV_PF_MIGRATION_DATA_H_
+#define _XE_SRIOV_PF_MIGRATION_DATA_H_
+
+#include <linux/types.h>
+
+struct xe_device;
+
+enum xe_sriov_pf_migration_data_type {
+	XE_SRIOV_MIG_DATA_DESCRIPTOR = 1,
+	XE_SRIOV_MIG_DATA_TRAILER,
+	XE_SRIOV_MIG_DATA_GGTT,
+	XE_SRIOV_MIG_DATA_MMIO,
+	XE_SRIOV_MIG_DATA_GUC,
+	XE_SRIOV_MIG_DATA_CCS,
+	XE_SRIOV_MIG_DATA_VRAM,
+	XE_SRIOV_MIG_DATA_MAX,
+};
+
+struct xe_sriov_pf_migration_data *
+xe_sriov_pf_migration_data_alloc(struct xe_device *xe);
+void xe_sriov_pf_migration_data_free(struct xe_sriov_pf_migration_data *snapshot);
+
+int xe_sriov_pf_migration_data_init(struct xe_sriov_pf_migration_data *data, u8 tile_id, u8 gt_id,
+				    unsigned int type, loff_t offset, size_t size);
+int xe_sriov_pf_migration_data_init_from_hdr(struct xe_sriov_pf_migration_data *snapshot);
+
+#endif

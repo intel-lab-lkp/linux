@@ -12,6 +12,7 @@
 #include "xe_pm.h"
 #include "xe_sriov_pf_helpers.h"
 #include "xe_sriov_pf_migration.h"
+#include "xe_sriov_pf_migration_data.h"
 #include "xe_sriov_printk.h"
 
 static struct xe_sriov_pf_migration *pf_pick_migration(struct xe_device *xe, unsigned int vfid)
