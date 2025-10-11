@@ -7658,9 +7658,11 @@ static unsigned long __node_reclaim(struct pglist_data *pgdat, gfp_t gfp_mask,
 	return sc->nr_reclaimed;
 }
 
-int node_reclaim(struct pglist_data *pgdat, gfp_t gfp_mask, unsigned int order)
+int node_reclaim(struct pglist_data *pgdat, gfp_t gfp_mask, unsigned int order,
+		 int alloc_flags, struct zone *zone)
 {
 	int ret;
+	enum zone_type highest_zoneidx = gfp_zone(gfp_mask);
 	/* Minimum pages needed in order to stay on node */
 	const unsigned long nr_pages = 1 << order;
 	struct scan_control sc = {
@@ -7671,7 +7673,7 @@ int node_reclaim(struct pglist_data *pgdat, gfp_t gfp_mask, unsigned int order)
 		.may_writepage = !!(node_reclaim_mode & RECLAIM_WRITE),
 		.may_unmap = !!(node_reclaim_mode & RECLAIM_UNMAP),
 		.may_swap = 1,
-		.reclaim_idx = gfp_zone(gfp_mask),
+		.reclaim_idx = highest_zoneidx,
 	};
 
 	/*
@@ -7706,6 +7708,19 @@ int node_reclaim(struct pglist_data *pgdat, gfp_t gfp_mask, unsigned int order)
 
 	if (test_and_set_bit_lock(PGDAT_RECLAIM_LOCKED, &pgdat->flags))
 		return NODE_RECLAIM_NOSCAN;
+
+	if (alloc_flags & ALLOC_KSWAPD) {
+		unsigned long mark;
+
+		wakeup_kswapd(zone, gfp_mask, order, highest_zoneidx);
+
+		mark = wmark_pages(zone, alloc_flags & ALLOC_WMARK_MASK);
+		if (zone_watermark_ok(zone, order, mark, highest_zoneidx,
+					alloc_flags)) {
+			clear_bit_unlock(PGDAT_RECLAIM_LOCKED, &pgdat->flags);
+			return NODE_RECLAIM_KSWAPD_SUCCESS;
+		}
+	}
 
 	ret = __node_reclaim(pgdat, gfp_mask, nr_pages, &sc) >= nr_pages;
 	clear_bit_unlock(PGDAT_RECLAIM_LOCKED, &pgdat->flags);

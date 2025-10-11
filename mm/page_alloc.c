@@ -3910,7 +3910,8 @@ check_alloc_wmark:
 			    !zone_allows_reclaim(zonelist_zone(ac->preferred_zoneref), zone))
 				continue;
 
-			ret = node_reclaim(zone->zone_pgdat, gfp_mask, order);
+			ret = node_reclaim(zone->zone_pgdat, gfp_mask, order,
+					   alloc_flags, zone);
 			switch (ret) {
 			case NODE_RECLAIM_NOSCAN:
 				/* did not scan */
@@ -3918,6 +3919,9 @@ check_alloc_wmark:
 			case NODE_RECLAIM_FULL:
 				/* scanned but unreclaimable */
 				continue;
+			case NODE_RECLAIM_KSWAPD_SUCCESS:
+				/* kswapd reclaim enough */
+				goto try_this_zone;
 			default:
 				/* did we reclaim enough */
 				if (zone_watermark_ok(zone, order, mark,
