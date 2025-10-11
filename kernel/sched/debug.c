@@ -523,6 +523,10 @@ static __init int sched_init_debug(void)
 	debugfs_create_u32("hot_threshold_ms", 0644, numa, &sysctl_numa_balancing_hot_threshold);
 #endif /* CONFIG_NUMA_BALANCING */
 
+#ifdef CONFIG_SCHED_CACHE
+	debugfs_create_u32("llc_overload_pct", 0644, debugfs_sched, &llc_overload_pct);
+	debugfs_create_u32("llc_imb_pct", 0644, debugfs_sched, &llc_imb_pct);
+#endif
 	debugfs_create_file("debug", 0444, debugfs_sched, NULL, &sched_debug_fops);
 
 	debugfs_fair_server_init();
