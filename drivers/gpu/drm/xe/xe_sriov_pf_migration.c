@@ -56,6 +56,18 @@ static bool pf_check_migration_support(struct xe_device *xe)
 	return IS_ENABLED(CONFIG_DRM_XE_DEBUG);
 }
 
+static void pf_migration_cleanup(struct drm_device *dev, void *arg)
+{
+	struct xe_sriov_pf_migration *migration = arg;
+
+	if (!IS_ERR_OR_NULL(migration->pending))
+		xe_sriov_pf_migration_data_free(migration->pending);
+	if (!IS_ERR_OR_NULL(migration->trailer))
+		xe_sriov_pf_migration_data_free(migration->trailer);
+	if (!IS_ERR_OR_NULL(migration->descriptor))
+		xe_sriov_pf_migration_data_free(migration->descriptor);
+}
+
 /**
  * xe_sriov_pf_migration_init() - Initialize support for SR-IOV VF migration.
  * @xe: the &struct xe_device
@@ -65,6 +77,7 @@ static bool pf_check_migration_support(struct xe_device *xe)
 int xe_sriov_pf_migration_init(struct xe_device *xe)
 {
 	unsigned int n, totalvfs;
+	int err;
 
 	xe_assert(xe, IS_SRIOV_PF(xe));
 
@@ -76,7 +89,15 @@ int xe_sriov_pf_migration_init(struct xe_device *xe)
 	for (n = 1; n <= totalvfs; n++) {
 		struct xe_sriov_pf_migration *migration = pf_pick_migration(xe, n);
 
+		err = drmm_mutex_init(&xe->drm, &migration->lock);
+		if (err)
+			return err;
+
 		init_waitqueue_head(&migration->wq);
+
+		err = drmm_add_action_or_reset(&xe->drm, pf_migration_cleanup, migration);
+		if (err)
+			return err;
 	}
 
 	return 0;
@@ -162,6 +183,36 @@ out:
 	return data;
 }
 
+static int pf_handle_descriptor(struct xe_device *xe, unsigned int vfid,
+				struct xe_sriov_pf_migration_data *data)
+{
+	if (data->tile != 0 || data->gt != 0)
+		return -EINVAL;
+
+	xe_sriov_pf_migration_data_free(data);
+
+	return 0;
+}
+
+static int pf_handle_trailer(struct xe_device *xe, unsigned int vfid,
+			     struct xe_sriov_pf_migration_data *data)
+{
+	struct xe_gt *gt;
+	u8 gt_id;
+
+	if (data->tile != 0 || data->gt != 0)
+		return -EINVAL;
+	if (data->offset != 0 || data->size != 0 || data->buff || data->bo)
+		return -EINVAL;
+
+	xe_sriov_pf_migration_data_free(data);
+
+	for_each_gt(gt, xe, gt_id)
+		xe_gt_sriov_pf_control_vf_data_eof(gt, vfid);
+
+	return 0;
+}
+
 /**
  * xe_sriov_pf_migration_produce() - Produce a SR-IOV VF migration data packet for device to process
  * @xe: the &struct xe_device
@@ -179,6 +230,11 @@ int xe_sriov_pf_migration_produce(struct xe_device *xe, unsigned int vfid,
 
 	if (!IS_SRIOV_PF(xe))
 		return -ENODEV;
+
+	if (data->type == XE_SRIOV_MIG_DATA_DESCRIPTOR)
+		return pf_handle_descriptor(xe, vfid, data);
+	else if (data->type == XE_SRIOV_MIG_DATA_TRAILER)
+		return pf_handle_trailer(xe, vfid, data);
 
 	gt = xe_device_get_gt(xe, data->gt);
 	if (!gt || data->tile != gt->tile->id) {
