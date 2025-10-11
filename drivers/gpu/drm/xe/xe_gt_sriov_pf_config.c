@@ -726,6 +726,70 @@ int xe_gt_sriov_pf_config_set_fair_ggtt(struct xe_gt *gt, unsigned int vfid,
 	return xe_gt_sriov_pf_config_bulk_set_ggtt(gt, vfid, num_vfs, fair);
 }
 
+/**
+ * xe_gt_sriov_pf_config_ggtt_save - Save a VF provisioned GGTT data into a buffer.
+ * @gt: the &struct xe_gt
+ * @vfid: VF identifier
+ * @buf: the GGTT data destination buffer
+ * @size: the size of the buffer
+ *
+ * This function can only be called on PF.
+ *
+ * Return: 0 on success or a negative error code on failure.
+ */
+int xe_gt_sriov_pf_config_ggtt_save(struct xe_gt *gt, unsigned int vfid,
+				    void *buf, size_t size)
+{
+	struct xe_gt_sriov_config *config;
+	ssize_t ret;
+
+	xe_gt_assert(gt, IS_SRIOV_PF(gt_to_xe(gt)));
+	xe_gt_assert(gt, vfid);
+	xe_gt_assert(gt, !(!buf ^ !size));
+
+	mutex_lock(xe_gt_sriov_pf_master_mutex(gt));
+	config = pf_pick_vf_config(gt, vfid);
+	size = size / sizeof(u64) * XE_PAGE_SIZE;
+
+	ret = xe_ggtt_node_save(config->ggtt_region, buf, size);
+
+	mutex_unlock(xe_gt_sriov_pf_master_mutex(gt));
+
+	return ret;
+}
+
+/**
+ * xe_gt_sriov_pf_config_ggtt_restore - Restore a VF provisioned GGTT data from a buffer.
+ * @gt: the &struct xe_gt
+ * @vfid: VF identifier
+ * @buf: the GGTT data source buffer
+ * @size: the size of the buffer
+ *
+ * This function can only be called on PF.
+ *
+ * Return: 0 on success or a negative error code on failure.
+ */
+int xe_gt_sriov_pf_config_ggtt_restore(struct xe_gt *gt, unsigned int vfid,
+				       const void *buf, size_t size)
+{
+	struct xe_gt_sriov_config *config;
+	ssize_t ret;
+
+	xe_gt_assert(gt, IS_SRIOV_PF(gt_to_xe(gt)));
+	xe_gt_assert(gt, vfid);
+	xe_gt_assert(gt, !(!buf ^ !size));
+
+	mutex_lock(xe_gt_sriov_pf_master_mutex(gt));
+	config = pf_pick_vf_config(gt, vfid);
+	size = size / sizeof(u64) * XE_PAGE_SIZE;
+
+	ret = xe_ggtt_node_load(config->ggtt_region, buf, size, vfid);
+
+	mutex_unlock(xe_gt_sriov_pf_master_mutex(gt));
+
+	return ret;
+}
+
 static u32 pf_get_min_spare_ctxs(struct xe_gt *gt)
 {
 	/* XXX: preliminary */
