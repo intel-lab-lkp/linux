@@ -25,11 +25,16 @@ properties:
       - items:
           - enum:
               - sophgo,huashan-pi
+              - milkv,duo-s
           - const: sophgo,cv1812h
       - items:
           - enum:
               - milkv,duo-module-01-evb
           - const: milkv,duo-module-01
+          - const: sophgo,sg2000
+      - items:
+          - enum:
+              - milkv,duo-s
           - const: sophgo,sg2000
       - items:
           - enum:
