@@ -450,8 +450,8 @@ out:
 out_err:
 	if (server->ops->close)
 		server->ops->close(xid, tcon, fid);
-	if (newinode)
-		iput(newinode);
+
+	iput(newinode);
 	goto out;
 }
 
