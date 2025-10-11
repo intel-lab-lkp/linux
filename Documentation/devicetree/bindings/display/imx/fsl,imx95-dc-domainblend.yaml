@@ -1,0 +1,32 @@
+# SPDX-License-Identifier: (GPL-2.0-only OR BSD-2-Clause)
+%YAML 1.2
+---
+$id: http://devicetree.org/schemas/display/imx/fsl,imx95-dc-domainblend.yaml#
+$schema: http://devicetree.org/meta-schemas/core.yaml#
+
+title: Freescale i.MX95 Display Controller Domain Blend Unit
+
+description: Combines two input frames to a single output frame.
+
+maintainers:
+  - Marek Vasut <marek.vasut@mailbox.org>
+
+properties:
+  compatible:
+    const: fsl,imx95-dc-domainblend
+
+  reg:
+    maxItems: 1
+
+required:
+  - compatible
+  - reg
+
+additionalProperties: false
+
+examples:
+  - |
+    domainblend@4b6a0000 {
+        compatible = "fsl,imx95-dc-domainblend";
+        reg = <0x4b6a0000 0x10>;
+    };
