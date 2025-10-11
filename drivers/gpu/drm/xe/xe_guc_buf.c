@@ -128,6 +128,15 @@ u64 xe_guc_buf_flush(const struct xe_guc_buf buf)
 }
 
 /**
+ * xe_guc_buf_sync() - Copy the data from the GPU memory to the sub-allocation.
+ * @buf: the &xe_guc_buf to sync
+ */
+void xe_guc_buf_sync(const struct xe_guc_buf buf)
+{
+	xe_sa_bo_sync(buf.sa);
+}
+
+/**
  * xe_guc_buf_cpu_ptr() - Obtain a CPU pointer to the sub-allocation.
  * @buf: the &xe_guc_buf to query
  *
