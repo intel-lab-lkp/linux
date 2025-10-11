@@ -403,6 +403,7 @@ virtio_net_hdr_tnl_from_skb(const struct sk_buff *skb,
 	struct virtio_net_hdr *hdr = (struct virtio_net_hdr *)vhdr;
 	unsigned int inner_nh, outer_th;
 	int tnl_gso_type;
+	u16 hdr_len;
 	int ret;
 
 	tnl_gso_type = skb_shinfo(skb)->gso_type & (SKB_GSO_UDP_TUNNEL |
@@ -434,6 +435,23 @@ virtio_net_hdr_tnl_from_skb(const struct sk_buff *skb,
 	outer_th = skb->transport_header - skb_headroom(skb);
 	vhdr->inner_nh_offset = cpu_to_le16(inner_nh);
 	vhdr->outer_th_offset = cpu_to_le16(outer_th);
+
+	switch (skb->inner_ipproto) {
+	case IPPROTO_TCP:
+		hdr_len = inner_tcp_hdrlen(skb);
+		break;
+
+	case IPPROTO_UDP:
+		hdr_len = sizeof(struct udphdr);
+		break;
+
+	default:
+		return -EINVAL;
+	}
+
+	hdr_len += skb_inner_transport_offset(skb);
+	hdr->hdr_len = __cpu_to_virtio16(little_endian, hdr_len);
+
 	return 0;
 }
 
