@@ -1388,11 +1388,10 @@ start_over:
 static bool swap_sync_discard(void)
 {
 	bool ret = false;
-	int nid = numa_node_id();
 	struct swap_info_struct *si, *next;
 
 	spin_lock(&swap_avail_lock);
-	plist_for_each_entry_safe(si, next, &swap_avail_heads[nid], avail_lists[nid]) {
+	plist_for_each_entry_safe(si, next, &swap_avail_head, avail_list) {
 		spin_unlock(&swap_avail_lock);
 		if (get_swap_device_info(si)) {
 			if (si->flags & SWP_PAGE_DISCARD)
@@ -2890,7 +2889,6 @@ SYSCALL_DEFINE1(swapoff, const char __user *, specialfile)
 	del_from_avail_list(p, true);
 	if (p->prio < 0) {
 		struct swap_info_struct *si = p;
-		int nid;
 
 		plist_for_each_entry_continue(si, &swap_active_head, list) {
 			si->prio++;
