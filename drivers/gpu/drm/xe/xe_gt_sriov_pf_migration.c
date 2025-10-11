@@ -396,6 +396,24 @@ ssize_t xe_gt_sriov_pf_migration_write_guc_state(struct xe_gt *gt, unsigned int 
 #endif /* CONFIG_DEBUG_FS */
 
 /**
+ * xe_gt_sriov_pf_migration_size() - Total size of migration data from all components within a GT
+ * @gt: the &struct xe_gt
+ * @vfid: the VF identifier
+ *
+ * This function is for PF only.
+ *
+ * Return: total migration data size in bytes or a negative error code on failure.
+ */
+ssize_t xe_gt_sriov_pf_migration_size(struct xe_gt *gt, unsigned int vfid)
+{
+	ssize_t total = 0;
+
+	xe_gt_assert(gt, IS_SRIOV_PF(gt_to_xe(gt)));
+
+	return total;
+}
+
+/**
  * xe_gt_sriov_pf_migration_ring_empty() - Check if a migration ring is empty
  * @gt: the &struct xe_gt
  * @vfid: the VF identifier

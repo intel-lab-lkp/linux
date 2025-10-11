@@ -14,6 +14,7 @@ struct xe_device;
 #ifdef CONFIG_PCI_IOV
 int xe_sriov_pf_migration_init(struct xe_device *xe);
 bool xe_sriov_pf_migration_supported(struct xe_device *xe);
+ssize_t xe_sriov_pf_migration_size(struct xe_device *xe, unsigned int vfid);
 struct xe_sriov_pf_migration_data *
 xe_sriov_pf_migration_consume(struct xe_device *xe, unsigned int vfid);
 int xe_sriov_pf_migration_produce(struct xe_device *xe, unsigned int vfid,
