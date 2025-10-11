@@ -809,7 +809,7 @@ static int vf_guc_init_post_hwconfig(struct xe_guc *guc)
 	if (err)
 		return err;
 
-	err = xe_guc_buf_cache_init(&guc->buf);
+	err = xe_guc_buf_cache_init(&guc->buf, SZ_8K);
 	if (err)
 		return err;
 
@@ -857,7 +857,7 @@ int xe_guc_init_post_hwconfig(struct xe_guc *guc)
 	if (ret)
 		return ret;
 
-	ret = xe_guc_buf_cache_init(&guc->buf);
+	ret = xe_guc_buf_cache_init(&guc->buf, SZ_8K);
 	if (ret)
 		return ret;
 
