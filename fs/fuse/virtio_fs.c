@@ -12,6 +12,7 @@
 #include <linux/memremap.h>
 #include <linux/module.h>
 #include <linux/virtio.h>
+#include <linux/virtio_ring.h>
 #include <linux/virtio_fs.h>
 #include <linux/delay.h>
 #include <linux/fs_context.h>
@@ -1699,9 +1700,11 @@ static int virtio_fs_get_tree(struct fs_context *fsc)
 	fc->sync_fs = true;
 	fc->use_pages_for_kvec_io = true;
 
-	/* Tell FUSE to split requests that exceed the virtqueue's size */
-	fc->max_pages_limit = min_t(unsigned int, fc->max_pages_limit,
-				    virtqueue_size - FUSE_HEADER_OVERHEAD);
+	if (!virtio_has_feature(fs->vqs[VQ_REQUEST].vq->vdev, VIRTIO_RING_F_INDIRECT_DESC)) {
+		/* Tell FUSE to split requests that exceed the virtqueue's size */
+		fc->max_pages_limit = min_t(unsigned int, fc->max_pages_limit,
+						virtqueue_size - FUSE_HEADER_OVERHEAD);
+	}
 
 	fsc->s_fs_info = fm;
 	sb = sget_fc(fsc, virtio_fs_test_super, set_anon_super_fc);
