@@ -35,6 +35,7 @@ struct dc_fw {
 
 static const struct dc_subdev_info dc_fw_info[] = {
 	{ .reg_start = 0x56180a60, .id = 2, },
+	{ /* sentinel */ },
 };
 
 static const struct regmap_range dc_fw_pec_regmap_access_ranges[] = {
@@ -157,7 +158,7 @@ static int dc_fw_bind(struct device *dev, struct device *master, void *data)
 	if (IS_ERR(fu->reg_cfg))
 		return PTR_ERR(fu->reg_cfg);
 
-	id = dc_subdev_get_id(dc_fw_info, ARRAY_SIZE(dc_fw_info), res_pec);
+	id = dc_subdev_get_id(dc_fw_info, res_pec);
 	if (id < 0) {
 		dev_err(dev, "failed to get instance number: %d\n", id);
 		return id;
