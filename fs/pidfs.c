@@ -314,6 +314,9 @@ static long pidfd_info(struct file *file, unsigned int cmd, unsigned long arg)
 	if (copy_from_user(&mask, &uinfo->mask, sizeof(mask)))
 		return -EFAULT;
 
+	if (IS_ERR(pid))
+		return PTR_ERR(pid);
+
 	/*
 	 * Restrict information retrieval to tasks within the caller's pid
 	 * namespace hierarchy.
