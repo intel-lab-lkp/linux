@@ -9892,8 +9892,8 @@ static enum llc_mig can_migrate_llc(int src_cpu, int dst_cpu,
  * Check if task p can migrate from src_cpu to dst_cpu
  * in terms of cache aware load balance.
  */
-static __maybe_unused enum llc_mig can_migrate_llc_task(int src_cpu, int dst_cpu,
-							struct task_struct *p)
+static enum llc_mig can_migrate_llc_task(int src_cpu, int dst_cpu,
+					 struct task_struct *p)
 {
 	struct mm_struct *mm;
 	bool to_pref;
@@ -10059,6 +10059,12 @@ int can_migrate_task(struct task_struct *p, struct lb_env *env)
 	 */
 	if (env->flags & LBF_ACTIVE_LB)
 		return 1;
+
+#ifdef CONFIG_SCHED_CACHE
+	if (sched_cache_enabled() &&
+	    can_migrate_llc_task(env->src_cpu, env->dst_cpu, p) == mig_forbid)
+		return 0;
+#endif
 
 	degrades = migrate_degrades_locality(p, env);
 	if (!degrades)
@@ -10317,6 +10323,20 @@ static int detach_tasks(struct lb_env *env)
 		 */
 		if (env->imbalance <= 0)
 			break;
+
+#ifdef CONFIG_SCHED_CACHE
+		/*
+		 * Don't detach more tasks if the remaining tasks want
+		 * to stay. We know the remaining tasks all prefer the
+		 * current LLC, because after order_tasks_by_llc(), the
+		 * tasks that prefer the current LLC are at the tail of
+		 * the list. The inhibition of detachment is to avoid too
+		 * many tasks being migrated out of the preferred LLC.
+		 */
+		if (sched_cache_enabled() && detached && p->preferred_llc != -1 &&
+		    llc_id(env->src_cpu) == p->preferred_llc)
+			break;
+#endif
 
 		continue;
 next:
