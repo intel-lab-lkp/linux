@@ -553,7 +553,7 @@ static int update_interval_read(struct device *dev)
 static int update_interval_write(struct device *dev, int val)
 {
 	u8 mode;
-	int ret;
+	int ret = SHT3X_CMD_LENGTH;
 	const char *command;
 	struct sht3x_data *data = dev_get_drvdata(dev);
 	struct i2c_client *client = data->client;
