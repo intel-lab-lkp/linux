@@ -116,8 +116,6 @@ struct create_durable_rsp {
 } __packed;
 
 /* See MS-SMB2 2.2.13.2.11 */
-/* Flags */
-#define SMB2_DHANDLE_FLAG_PERSISTENT	0x00000002
 struct create_durable_v2_rsp {
 	struct create_context_hdr ccontext;
 	__u8   Name[8];
@@ -151,27 +149,12 @@ struct smb_sockaddr_in6 {
 	__be32 ScopeId;
 } __packed;
 
-#define INTERNETWORK	0x0002
-#define INTERNETWORKV6	0x0017
-
 struct sockaddr_storage_rsp {
 	__le16 Family;
 	union {
 		struct smb_sockaddr_in addr4;
 		struct smb_sockaddr_in6 addr6;
 	};
-} __packed;
-
-#define RSS_CAPABLE	0x00000001
-#define RDMA_CAPABLE	0x00000002
-
-struct network_interface_info_ioctl_rsp {
-	__le32 Next; /* next interface. zero if this is last one */
-	__le32 IfIndex;
-	__le32 Capability; /* RSS or RDMA Capable */
-	__le32 Reserved;
-	__le64 LinkSpeed;
-	char	SockAddr_Storage[128];
 } __packed;
 
 struct file_object_buf_type1_ioctl_rsp {
