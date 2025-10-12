@@ -23,7 +23,6 @@ void err_msg(const char *fmt, ...);
 long parse_seconds_duration(char *val);
 void get_duration(time_t start_time, char *output, int output_size);
 
-int parse_cpu_list(char *cpu_list, char **monitored_cpus);
 long long get_llong_from_str(char *start);
 
 static inline void
