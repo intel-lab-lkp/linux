@@ -397,7 +397,8 @@ a hung task is detected.
 hung_task_panic
 ===============
 
-Controls the kernel's behavior when a hung task is detected.
+When set to a non-zero value, a kernel panic will be triggered if the
+number of detected hung tasks reaches this value
 This file shows up if ``CONFIG_DETECT_HUNG_TASK`` is enabled.
 
 = =================================================
