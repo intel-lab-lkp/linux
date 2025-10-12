@@ -229,6 +229,7 @@ struct asymmetric_key_id *asymmetric_key_hex_to_key_id(const char *id)
 {
 	struct asymmetric_key_id *match_id;
 	size_t asciihexlen;
+	size_t hexlen;
 	int ret;
 
 	if (!*id)
@@ -237,14 +238,14 @@ struct asymmetric_key_id *asymmetric_key_hex_to_key_id(const char *id)
 	if (asciihexlen & 1)
 		return ERR_PTR(-EINVAL);
 
-	match_id = kmalloc(sizeof(struct asymmetric_key_id) + asciihexlen / 2,
-			   GFP_KERNEL);
+	hexlen = asciihexlen / 2;
+	match_id = kmalloc(struct_size(match_id, data, hexlen), GFP_KERNEL);
 	if (!match_id)
 		return ERR_PTR(-ENOMEM);
-	ret = __asymmetric_key_hex_to_key_id(id, match_id, asciihexlen / 2);
+	ret = __asymmetric_key_hex_to_key_id(id, match_id, hexlen);
 	if (ret < 0) {
 		kfree(match_id);
-		return ERR_PTR(-EINVAL);
+		return ERR_PTR(ret);
 	}
 	return match_id;
 }
