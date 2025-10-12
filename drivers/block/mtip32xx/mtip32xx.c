@@ -1337,7 +1337,7 @@ static int mtip_get_smart_attr(struct mtip_port *port, unsigned int id,
 	memset(port->smart_buf, 0, ATA_SECT_SIZE);
 	rv = mtip_get_smart_data(port, port->smart_buf, port->smart_buf_dma);
 	if (rv) {
-		dev_warn(&port->dd->pdev->dev, "Failed to ge SMART data\n");
+		dev_warn(&port->dd->pdev->dev, "Failed to get SMART data\n");
 		return rv;
 	}
 
@@ -2127,7 +2127,7 @@ static int mtip_hw_submit_io(struct driver_data *dd, struct request *rq,
 /*
  * Sysfs status dump.
  *
- * @dev  Pointer to the device structure, passed by the kernrel.
+ * @dev  Pointer to the device structure, passed by the kernel.
  * @attr Pointer to the device_attribute structure passed by the kernel.
  * @buf  Pointer to the char buffer that will receive the stats info.
  *
@@ -2679,7 +2679,7 @@ static int mtip_hw_get_identify(struct driver_data *dd)
 		}
 	}
 
-	/* get write protect progess */
+	/* get write protect progress */
 	memset(&attr242, 0, sizeof(struct smart_attr));
 	if (mtip_get_smart_attr(dd->port, 242, &attr242))
 		dev_warn(&dd->pdev->dev,
@@ -3148,7 +3148,7 @@ static int mtip_block_compat_ioctl(struct block_device *dev,
  * that each partition is also 4KB aligned. Non-aligned partitions adversely
  * affects performance.
  *
- * @disk Pointer to the gendisk strucutre.
+ * @disk Pointer to the gendisk structure.
  * @geo Pointer to a hd_geometry structure.
  *
  * return value
