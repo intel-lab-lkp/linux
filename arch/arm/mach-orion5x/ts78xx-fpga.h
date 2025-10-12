@@ -40,3 +40,10 @@ struct ts78xx_fpga_data {
 
 	struct fpga_devices	supports;
 };
+
+struct ts78xx_fpga_support_config {
+	u32 id;
+	bool rtc_present;
+	bool nand_present;
+	bool rng_present;
+};

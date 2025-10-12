@@ -325,6 +325,18 @@ static void ts78xx_ts_rng_unload(void)
 /*****************************************************************************
  * FPGA 'hotplug' support code
  ****************************************************************************/
+static const struct ts78xx_fpga_support_config ts78xx_fpga_support_table[] = {
+	{ TS7800_REV_1, 1, 1, 1 },
+	{ TS7800_REV_2, 1, 1, 1 },
+	{ TS7800_REV_3, 1, 1, 1 },
+	{ TS7800_REV_4, 1, 1, 1 },
+	{ TS7800_REV_5, 1, 1, 1 },
+	{ TS7800_REV_6, 1, 1, 1 },
+	{ TS7800_REV_7, 1, 1, 1 },
+	{ TS7800_REV_8, 1, 1, 1 },
+	{ TS7800_REV_9, 1, 1, 1 },
+};
+
 static void ts78xx_fpga_devices_zero_init(void)
 {
 	ts78xx_fpga.supports.ts_rtc.init = 0;
@@ -334,36 +346,30 @@ static void ts78xx_fpga_devices_zero_init(void)
 
 static void ts78xx_fpga_supports(void)
 {
-	/* TODO: put this 'table' into ts78xx-fpga.h */
-	switch (ts78xx_fpga.id) {
-	case TS7800_REV_1:
-	case TS7800_REV_2:
-	case TS7800_REV_3:
-	case TS7800_REV_4:
-	case TS7800_REV_5:
-	case TS7800_REV_6:
-	case TS7800_REV_7:
-	case TS7800_REV_8:
-	case TS7800_REV_9:
+	const struct ts78xx_fpga_support_config *cfg = NULL;
+	unsigned int i;
+
+	for (i = 0; i < ARRAY_SIZE(ts78xx_fpga_support_table); i++) {
+		if (ts78xx_fpga_support_table[i].id == ts78xx_fpga.id) {
+			cfg = &ts78xx_fpga_support_table[i];
+			break;
+		}
+	}
+
+	if (cfg) {
+		ts78xx_fpga.supports.ts_rtc.present = cfg->rtc_present;
+		ts78xx_fpga.supports.ts_nand.present = cfg->nand_present;
+		ts78xx_fpga.supports.ts_rng.present = cfg->rng_present;
+	} else if (((ts78xx_fpga.id >> 8) & 0xffffff) == TS7800_FPGA_MAGIC) {
+		pr_warn("unrecognised FPGA revision 0x%.2x\n",
+			ts78xx_fpga.id & 0xff);
 		ts78xx_fpga.supports.ts_rtc.present = 1;
 		ts78xx_fpga.supports.ts_nand.present = 1;
 		ts78xx_fpga.supports.ts_rng.present = 1;
-		break;
-	default:
-		/* enable devices if magic matches */
-		switch ((ts78xx_fpga.id >> 8) & 0xffffff) {
-		case TS7800_FPGA_MAGIC:
-			pr_warn("unrecognised FPGA revision 0x%.2x\n",
-				ts78xx_fpga.id & 0xff);
-			ts78xx_fpga.supports.ts_rtc.present = 1;
-			ts78xx_fpga.supports.ts_nand.present = 1;
-			ts78xx_fpga.supports.ts_rng.present = 1;
-			break;
-		default:
-			ts78xx_fpga.supports.ts_rtc.present = 0;
-			ts78xx_fpga.supports.ts_nand.present = 0;
-			ts78xx_fpga.supports.ts_rng.present = 0;
-		}
+	} else {
+		ts78xx_fpga.supports.ts_rtc.present = 0;
+		ts78xx_fpga.supports.ts_nand.present = 0;
+		ts78xx_fpga.supports.ts_rng.present = 0;
 	}
 }
 
