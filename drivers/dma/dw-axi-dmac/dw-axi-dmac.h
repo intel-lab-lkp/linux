@@ -71,6 +71,8 @@ struct axi_dma_chip {
 	struct clk		*core_clk;
 	struct clk		*cfgr_clk;
 	struct dw_axi_dma	*dw;
+	struct reset_control	*resets;
+	bool			has_resets;
 };
 
 /* LLI == Linked List Item */
