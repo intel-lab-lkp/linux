@@ -787,6 +787,16 @@ static void __init mmio_apply_mitigation(void)
 		cpu_smt_disable(false);
 }
 
+#ifdef CONFIG_DYNAMIC_MITIGATIONS
+static void mmio_reset_mitigation(void)
+{
+	static_branch_disable(&cpu_buf_vm_clear);
+	static_branch_disable(&cpu_buf_idle_clear);
+	mmio_mitigation = IS_ENABLED(CONFIG_MITIGATION_MMIO_STALE_DATA) ?
+		MMIO_MITIGATION_AUTO : MMIO_MITIGATION_OFF;
+}
+#endif
+
 static int __init mmio_stale_data_parse_cmdline(char *str)
 {
 	if (!boot_cpu_has_bug(X86_BUG_MMIO_STALE_DATA))
@@ -3902,5 +3912,6 @@ void arch_cpu_reset_mitigations(void)
 	ssb_reset_mitigation();
 	l1tf_reset_mitigation();
 	mds_reset_mitigation();
+	mmio_reset_mitigation();
 }
 #endif
