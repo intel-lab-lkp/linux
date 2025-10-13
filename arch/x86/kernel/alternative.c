@@ -3292,3 +3292,79 @@ void __ref smp_text_poke_single(void *addr, const void *opcode, size_t len, cons
 	smp_text_poke_batch_add(addr, opcode, len, emulate);
 	smp_text_poke_batch_finish();
 }
+
+#ifdef CONFIG_DYNAMIC_MITIGATIONS
+void reset_retpolines(s32 *start, s32 *end, struct module *mod)
+{
+	s32 *s;
+	u32 idx = 0;
+	struct retpoline_site *sites;
+
+	if (!mod)
+		sites = retpoline_sites;
+	else
+		sites = mod->arch.retpoline_sites;
+
+	if (WARN_ON(!sites))
+		return;
+
+	for (s = start; s < end; s++, idx++) {
+		void *addr = (void *)s + *s;
+
+		if (!should_patch(addr, mod))
+			continue;
+		/*
+		 * This indirect might have been removed due to a static call
+		 * transform.  If so, ignore it.
+		 */
+		if (*(u8 *)addr == INT3_INSN_OPCODE)
+			continue;
+
+		if (sites[idx].len)
+			text_poke_early(addr, sites[idx].bytes, sites[idx].len);
+	}
+}
+
+void reset_returns(s32 *start, s32 *end, struct module *mod)
+{
+	s32 *s;
+
+	for (s = start; s < end; s++) {
+		void *addr = (void *)s + *s;
+		u8 bytes[JMP32_INSN_SIZE];
+
+		if (!should_patch(addr, mod))
+			continue;
+
+		/* Generate jmp __x86_return_thunk */
+		__text_gen_insn(bytes, JMP32_INSN_OPCODE, addr,
+				&__x86_return_thunk, JMP32_INSN_SIZE);
+		text_poke_early(addr, bytes, JMP32_INSN_SIZE);
+	}
+}
+
+void reset_alternatives(struct alt_instr *start, struct alt_instr *end, struct module *mod)
+{
+	struct alt_instr *s;
+	u32 idx = 0;
+	struct alt_site *sites;
+
+	if (!mod)
+		sites = alt_sites;
+	else
+		sites = mod->arch.alt_sites;
+
+	if (WARN_ON(!sites))
+		return;
+
+	for (s = start; s < end; s++, idx++) {
+		u8 *addr = instr_va(s);
+
+		if (!should_patch(addr, mod))
+			continue;
+
+		if (sites[idx].len)
+			text_poke_early(addr, sites[idx].pbytes, sites[idx].len);
+	}
+}
+#endif

@@ -97,6 +97,13 @@ extern int alternatives_patched;
 
 struct module;
 
+#ifdef CONFIG_DYNAMIC_MITIGATIONS
+extern void reset_retpolines(s32 *start, s32 *end, struct module *mod);
+extern void reset_returns(s32 *start, s32 *end, struct module *mod);
+extern void reset_alternatives(struct alt_instr *start, struct alt_instr *end,
+		struct module *mod);
+#endif
+
 struct alt_site {
 	u8 *pbytes;
 	u8 len;
