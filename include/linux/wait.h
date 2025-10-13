@@ -219,6 +219,7 @@ void __wake_up_sync(struct wait_queue_head *wq_head, unsigned int mode);
 void __wake_up_pollfree(struct wait_queue_head *wq_head);
 
 #define wake_up(x)			__wake_up(x, TASK_NORMAL, 1, NULL)
+#define wake_up_on_current_cpu(x)	__wake_up_on_current_cpu(x, TASK_NORMAL, NULL)
 #define wake_up_nr(x, nr)		__wake_up(x, TASK_NORMAL, nr, NULL)
 #define wake_up_all(x)			__wake_up(x, TASK_NORMAL, 0, NULL)
 #define wake_up_locked(x)		__wake_up_locked((x), TASK_NORMAL, 1)
@@ -479,9 +480,8 @@ do {										\
 	__wait_event_cmd(wq_head, condition, cmd1, cmd2);			\
 } while (0)
 
-#define __wait_event_interruptible(wq_head, condition)				\
-	___wait_event(wq_head, condition, TASK_INTERRUPTIBLE, 0, 0,		\
-		      schedule())
+#define __wait_event_interruptible(wq_head, condition) \
+	___wait_event(wq_head, condition, TASK_INTERRUPTIBLE, 0, 0, schedule())
 
 /**
  * wait_event_interruptible - sleep until a condition gets true

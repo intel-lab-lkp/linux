@@ -147,10 +147,22 @@ int __wake_up(struct wait_queue_head *wq_head, unsigned int mode,
 }
 EXPORT_SYMBOL(__wake_up);
 
+/**
+ * __wake_up - wake up threads blocked on a waitqueue, on the current cpu
+ * @wq_head: the waitqueue
+ * @mode: which threads
+ * @nr_exclusive: how many wake-one or wake-many threads to wake up
+ * @key: is directly passed to the wakeup function
+ *
+ * If this function wakes up a task, it executes a full memory barrier
+ * before accessing the task state.  Returns the number of exclusive
+ * tasks that were awaken.
+ */
 void __wake_up_on_current_cpu(struct wait_queue_head *wq_head, unsigned int mode, void *key)
 {
 	__wake_up_common_lock(wq_head, mode, 1, WF_CURRENT_CPU, key);
 }
+EXPORT_SYMBOL_GPL(__wake_up_on_current_cpu);
 
 /*
  * Same as __wake_up but called with the spinlock in wait_queue_head_t held.
