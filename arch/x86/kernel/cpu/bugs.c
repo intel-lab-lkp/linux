@@ -16,6 +16,7 @@
 #include <linux/sched/smt.h>
 #include <linux/pgtable.h>
 #include <linux/bpf.h>
+#include <linux/debugfs.h>
 
 #include <asm/spec-ctrl.h>
 #include <asm/cmdline.h>
@@ -4065,6 +4066,49 @@ void arch_cpu_reset_mitigations(void)
 	tsa_reset_mitigation();
 	vmscape_reset_mitigation();
 }
+
+static int rethunk_debug_show(struct seq_file *m, void *p)
+{
+	if (x86_return_thunk == __x86_return_thunk)
+		seq_puts(m, "__x86_return_thunk\n");
+	else if (x86_return_thunk == retbleed_return_thunk)
+		seq_puts(m, "retbleed_return_thunk\n");
+	else if (x86_return_thunk == call_depth_return_thunk)
+		seq_puts(m, "call_depth_return_thunk\n");
+	else if (x86_return_thunk == its_return_thunk)
+		seq_puts(m, "its_return_thunk\n");
+	else if (x86_return_thunk == srso_alias_return_thunk)
+		seq_puts(m, "srso_alias_return_thunk\n");
+	else if (x86_return_thunk == srso_return_thunk)
+		seq_puts(m, "srso_return_thunk\n");
+	else
+		seq_puts(m, "unknown\n");
+
+	return 0;
+}
+
+static int rethunk_debug_open(struct inode *inode, struct file *file)
+{
+	return single_open(file, rethunk_debug_show, inode->i_private);
+}
+
+static const struct file_operations dfs_thunk_ops = {
+	.open		= rethunk_debug_open,
+	.read		= seq_read,
+	.llseek		= seq_lseek,
+	.release	= single_release,
+};
+
+static int __init mitigations_debugfs_init(void)
+{
+	struct dentry *dir;
+
+	dir = debugfs_create_dir("mitigations", arch_debugfs_dir);
+	debugfs_create_file("x86_return_thunk", 0400, dir, NULL, &dfs_thunk_ops);
+
+	return 0;
+}
+late_initcall(mitigations_debugfs_init);
 #endif
 
 void cpu_bugs_update_speculation_msrs(void)
