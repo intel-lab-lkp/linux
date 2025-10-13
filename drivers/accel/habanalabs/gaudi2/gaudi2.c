@@ -8479,7 +8479,7 @@ static void gaudi2_ack_module_razwi_event_handler(struct hl_device *hdev,
 
 	switch (module) {
 	case RAZWI_TPC:
-		sprintf(initiator_name, "TPC_%u", module_idx);
+		snprintf(initiator_name, sizeof(initiator_name), "TPC_%u", module_idx);
 		if (hdev->tpc_binning) {
 			binned_idx = __ffs(hdev->tpc_binning);
 			if (binned_idx == module_idx)
@@ -8490,7 +8490,7 @@ static void gaudi2_ack_module_razwi_event_handler(struct hl_device *hdev,
 		lbw_rtr_id = gaudi2_tpc_initiator_lbw_rtr_id[module_idx];
 		break;
 	case RAZWI_MME:
-		sprintf(initiator_name, "MME_%u", module_idx);
+		snprintf(initiator_name, sizeof(initiator_name), "MME_%u", module_idx);
 		switch (module_sub_idx) {
 		case MME_WAP0:
 			hbw_rtr_id = gaudi2_mme_initiator_rtr_id[module_idx].wap0;
@@ -8533,20 +8533,20 @@ static void gaudi2_ack_module_razwi_event_handler(struct hl_device *hdev,
 		lbw_rtr_mstr_if_base_addr = mmSFT0_LBW_RTR_IF_MSTR_IF_RR_SHRD_HBW_BASE +
 								dcore_id * SFT_DCORE_OFFSET;
 		via_sft = true;
-		sprintf(initiator_name, "EDMA_%u", module_idx);
+		snprintf(initiator_name, sizeof(initiator_name), "EDMA_%u", module_idx);
 		break;
 	case RAZWI_PDMA:
 		hbw_rtr_id = gaudi2_pdma_initiator_hbw_rtr_id[module_idx];
 		lbw_rtr_id = gaudi2_pdma_initiator_lbw_rtr_id[module_idx];
-		sprintf(initiator_name, "PDMA_%u", module_idx);
+		snprintf(initiator_name, sizeof(initiator_name), "PDMA_%u", module_idx);
 		break;
 	case RAZWI_NIC:
 		hbw_rtr_id = gaudi2_nic_initiator_hbw_rtr_id[module_idx];
 		lbw_rtr_id = gaudi2_nic_initiator_lbw_rtr_id[module_idx];
-		sprintf(initiator_name, "NIC_%u", module_idx);
+		snprintf(initiator_name, sizeof(initiator_name), "NIC_%u", module_idx);
 		break;
 	case RAZWI_DEC:
-		sprintf(initiator_name, "DEC_%u", module_idx);
+		snprintf(initiator_name, sizeof(initiator_name), "DEC_%u", module_idx);
 		if (hdev->decoder_binning) {
 			binned_idx = __ffs(hdev->decoder_binning);
 			if (binned_idx == module_idx)
@@ -8558,12 +8558,12 @@ static void gaudi2_ack_module_razwi_event_handler(struct hl_device *hdev,
 	case RAZWI_ROT:
 		hbw_rtr_id = gaudi2_rot_initiator_hbw_rtr_id[module_idx];
 		lbw_rtr_id = gaudi2_rot_initiator_lbw_rtr_id[module_idx];
-		sprintf(initiator_name, "ROT_%u", module_idx);
+		snprintf(initiator_name, sizeof(initiator_name), "ROT_%u", module_idx);
 		break;
 	case RAZWI_ARC_FARM:
 		lbw_rtr_id = DCORE1_RTR5;
 		hbw_rtr_id = DCORE1_RTR7;
-		sprintf(initiator_name, "ARC_FARM_%u", module_idx);
+		snprintf(initiator_name, sizeof(initiator_name), "ARC_FARM_%u", module_idx);
 		break;
 	default:
 		return;
