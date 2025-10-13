@@ -562,13 +562,17 @@ static void xhci_pme_acpi_rtd3_enable(struct pci_dev *dev) { }
 static void xhci_find_lpm_incapable_ports(struct usb_hcd *hcd, struct usb_device *hdev) { }
 #endif /* CONFIG_ACPI */
 
-/* called during probe() after chip reset completes */
+/* called during probe() after chip reset completes and again on the shared HCD */
 static int xhci_pci_setup(struct usb_hcd *hcd)
 {
 	struct xhci_hcd		*xhci;
 	struct pci_dev		*pdev = to_pci_dev(hcd->self.controller);
 	int			retval;
 	u8			sbrn;
+
+	/* nothing PCI-specific for the shared HCD, just core setup, no quirks */
+	if (!usb_hcd_is_primary_hcd(hcd))
+		return xhci_gen_setup(hcd, NULL);
 
 	xhci = hcd_to_xhci(hcd);
 
@@ -578,9 +582,6 @@ static int xhci_pci_setup(struct usb_hcd *hcd)
 	retval = xhci_gen_setup(hcd, xhci_pci_quirks);
 	if (retval)
 		return retval;
-
-	if (!usb_hcd_is_primary_hcd(hcd))
-		return 0;
 
 	if (xhci->quirks & XHCI_PME_STUCK_QUIRK)
 		xhci_pme_acpi_rtd3_enable(pdev);
