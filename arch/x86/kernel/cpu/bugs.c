@@ -2360,6 +2360,17 @@ static void __init bhi_apply_mitigation(void)
 	setup_force_cpu_cap(X86_FEATURE_CLEAR_BHB_VMEXIT);
 }
 
+#ifdef CONFIG_DYNAMIC_MITIGATIONS
+static void bhi_reset_mitigation(void)
+{
+	/* RRSBA already cleared in spectre_v2_reset_mitigation() */
+	setup_clear_cpu_cap(X86_FEATURE_CLEAR_BHB_VMEXIT);
+	setup_clear_cpu_cap(X86_FEATURE_CLEAR_BHB_LOOP);
+	bhi_mitigation = IS_ENABLED(CONFIG_MITIGATION_SPECTRE_BHI) ?
+		BHI_MITIGATION_AUTO : BHI_MITIGATION_OFF;
+}
+#endif
+
 static void __init spectre_v2_select_mitigation(void)
 {
 	if ((spectre_v2_cmd == SPECTRE_V2_CMD_RETPOLINE ||
@@ -3954,5 +3965,6 @@ void arch_cpu_reset_mitigations(void)
 	srbds_reset_mitigation();
 	srso_reset_mitigation();
 	gds_reset_mitigation();
+	bhi_reset_mitigation();
 }
 #endif
