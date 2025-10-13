@@ -52,4 +52,6 @@
 
 #include "internal.h"
 
+#include <trace/events/vma.h>
+
 #endif	/* __MM_VMA_INTERNAL_H */

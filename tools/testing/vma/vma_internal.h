@@ -1493,4 +1493,9 @@ static int vma_count_remaining(const struct mm_struct *mm)
 	return (max_count > vma_count) ? (max_count - vma_count) : 0;
 }
 
+/* Stub for trace_mm_insufficient_vma_slots */
+static inline void trace_mm_insufficient_vma_slots(struct mm_struct *mm)
+{
+}
+
 #endif	/* __MM_VMA_INTERNAL_H */
