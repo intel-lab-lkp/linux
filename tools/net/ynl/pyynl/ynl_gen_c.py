@@ -1693,6 +1693,27 @@ class CodeWriter:
             ind += add_ind
         self._out.write('\t' * ind + line + '\n')
 
+    def p_wrap(self, prefix, parts):
+        assert(len(parts) > 0)
+        ts = 8
+        pfx_len = len(prefix)
+        pfx_ind_tabs = pfx_len // ts
+        pfx_ind = '\t' * pfx_ind_tabs + ' ' * (pfx_len % ts)
+        max_len = 80 - (self._ind * ts)
+        is_first_line = True
+        buf = f'{prefix}{parts[0]}'
+        for part in parts[1:]:
+            next_buf = f'{buf} {part}'
+            if len(next_buf) <= max_len:
+                buf = next_buf
+            else:
+                self.p(buf)
+                buf = f'{pfx_ind}{part}'
+                if is_first_line:
+                    max_len -= pfx_ind_tabs * (ts-1)
+                    is_first_line = False
+        self.p(buf)
+
     def nl(self):
         self._nl = True
 
@@ -1751,23 +1772,10 @@ class CodeWriter:
             v = ''
         elif qual_ret[-1] != '*':
             v += ' '
-        v += name + '('
-        ind = '\t' * (len(v) // 8) + ' ' * (len(v) % 8)
-        delta_ind = len(v) - len(ind)
-        v += args[0]
-        i = 1
-        while i < len(args):
-            next_len = len(v) + len(args[i])
-            if v[0] == '\t':
-                next_len += delta_ind
-            if next_len > 76:
-                self.p(v + ',')
-                v = ind
-            else:
-                v += ', '
-            v += args[i]
-            i += 1
-        self.p(v + ')' + suffix)
+
+        parts = [f'{arg},' for arg in args[:-1]]
+        parts.append(f'{args[-1]}){suffix}')
+        self.p_wrap(f'{v}{name}(', parts)
 
     def write_func_lvar(self, local_vars):
         if not local_vars:
