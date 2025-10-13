@@ -302,6 +302,8 @@ static bool __maybe_unused repatch_in_progress;
 
 #ifdef CONFIG_DYNAMIC_MITIGATIONS
 static struct alt_site *alt_sites;
+static struct retpoline_site *retpoline_sites;
+static int num_retpoline_sites;
 
 /* Do not patch __init text addresses when repatching */
 static bool should_patch(void *addr, struct module *mod)
@@ -1036,8 +1038,36 @@ static int patch_retpoline(void *addr, struct insn *insn, u8 *bytes)
 void __init_or_module noinline apply_retpolines(s32 *start, s32 *end, struct module *mod)
 {
 	s32 *s;
+	u32 idx = 0;
+	struct retpoline_site *save_site = NULL;
 
-	for (s = start; s < end; s++) {
+#ifdef CONFIG_DYNAMIC_MITIGATIONS
+	u32 size = ((u64)end - (u64)start)/4;
+
+	/* ITS code needs the save_site pointer even on re-patch. */
+	if (!mod) {
+		if (!retpoline_sites) {
+			retpoline_sites = kcalloc(size,	sizeof(struct retpoline_site), GFP_KERNEL);
+			if (WARN_ON(!retpoline_sites))
+				return;
+		}
+
+		save_site = retpoline_sites;
+		num_retpoline_sites = size;
+	} else {
+		if (!mod->arch.retpoline_sites) {
+			mod->arch.retpoline_sites = kcalloc(size, sizeof(struct retpoline_site),
+							    GFP_KERNEL);
+			if (WARN_ON(!mod->arch.retpoline_sites))
+				return;
+		}
+
+		save_site = mod->arch.retpoline_sites;
+		mod->arch.num_retpoline_sites = size;
+	}
+#endif
+
+	for (s = start; s < end; s++, idx++) {
 		void *addr = (void *)s + *s;
 		struct insn insn;
 		int len, ret;
@@ -1084,6 +1114,11 @@ void __init_or_module noinline apply_retpolines(s32 *start, s32 *end, struct mod
 		DPRINTK(RETPOLINE, "retpoline at: %pS (%px) len: %d to: %pS",
 			addr, addr, insn.length,
 			addr + insn.length + insn.immediate.value);
+
+		if (IS_ENABLED(CONFIG_DYNAMIC_MITIGATIONS) && save_site) {
+			save_site[idx].len = insn.length;
+			memcpy(save_site[idx].bytes, addr, insn.length);
+		}
 
 		len = patch_retpoline(addr, &insn, bytes);
 		if (len == insn.length) {

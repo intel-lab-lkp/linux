@@ -102,6 +102,11 @@ struct alt_site {
 	u8 len;
 };
 
+struct retpoline_site {
+	u8 bytes[6];
+	u8 len;
+} __packed;
+
 extern void alternative_instructions(void);
 extern void apply_alternatives(struct alt_instr *start, struct alt_instr *end,
 		struct module *mod);
