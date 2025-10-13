@@ -27,6 +27,7 @@
 #include <linux/stackprotector.h>
 #include <linux/utsname.h>
 #include <linux/efi.h>
+#include <linux/debugfs.h>
 
 #include <asm/alternative.h>
 #include <asm/cmdline.h>
@@ -2608,3 +2609,61 @@ void __init arch_cpu_finalize_init(void)
 	 */
 	mem_encrypt_init();
 }
+
+#ifdef CONFIG_DYNAMIC_MITIGATIONS
+/*
+ * The boot_cpu_data.x86_capability[] array has NCAPINTS of u32 for X86_FEATURE
+ * bits followed by NBUGINTS of u32 for X86_BUG bits.
+ *
+ * The debugfs interface allows reading the X86_FEATURE_* bits and read/writing
+ * the X86_BUG_* bits.  Note that updates to the X86_BUG_* bits may not be
+ * visible to the entire kernel until alternatives have been re-patched through
+ * the dynamic mitigation interface.
+ */
+static ssize_t bug_read(struct file *file, char __user *user_buf,
+			size_t count, loff_t *ppos)
+{
+	return simple_read_from_buffer(user_buf, count, ppos,
+				       &boot_cpu_data.x86_capability[NCAPINTS],
+				       NBUGINTS * sizeof(u32));
+}
+
+static ssize_t bug_write(struct file *file, const char __user *user_buf,
+			 size_t count, loff_t *ppos)
+{
+	return simple_write_to_buffer(&boot_cpu_data.x86_capability[NCAPINTS],
+				      NBUGINTS * sizeof(u32), ppos, user_buf,
+				      count);
+}
+
+static ssize_t feature_read(struct file *file, char __user *user_buf,
+			size_t count, loff_t *ppos)
+{
+	return simple_read_from_buffer(user_buf, count, ppos,
+				       boot_cpu_data.x86_capability,
+				       NCAPINTS * sizeof(u32));
+}
+
+static const struct file_operations dfs_bug_ops = {
+	.read		= bug_read,
+	.write		= bug_write,
+	.llseek		= default_llseek,
+};
+
+static const struct file_operations dfs_feature_ops = {
+	.read		= feature_read,
+	.llseek		= default_llseek,
+};
+
+static int __init x86_caps_debugfs_init(void)
+{
+	struct dentry *dir;
+
+	dir = debugfs_create_dir("x86_capabilities", arch_debugfs_dir);
+	debugfs_create_file("bugs", 0600, dir, NULL, &dfs_bug_ops);
+	debugfs_create_file("features", 0400, dir, NULL, &dfs_feature_ops);
+
+	return 0;
+}
+late_initcall(x86_caps_debugfs_init);
+#endif
