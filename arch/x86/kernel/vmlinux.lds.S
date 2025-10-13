@@ -144,6 +144,9 @@ SECTIONS
 		. = srso_alias_untrain_ret | (1 << 2) | (1 << 8) | (1 << 14) | (1 << 20);
 		*(.text..__x86.rethunk_safe)
 #endif
+#ifdef CONFIG_DYNAMIC_MITIGATIONS
+		*(.altinstr_aux)
+#endif
 		ALIGN_ENTRY_TEXT_END
 
 		TEXT_TEXT
@@ -262,6 +265,7 @@ SECTIONS
 
 	INIT_TEXT_SECTION(PAGE_SIZE)
 
+#ifndef CONFIG_DYNAMIC_MITIGATIONS
 	/*
 	 * Section for code used exclusively before alternatives are run. All
 	 * references to such code must be patched out by alternatives, normally
@@ -272,8 +276,9 @@ SECTIONS
 	.altinstr_aux : AT(ADDR(.altinstr_aux) - LOAD_OFFSET) {
 		*(.altinstr_aux)
 		. = ALIGN(PAGE_SIZE);
-		__inittext_end = .;
 	}
+#endif
+	__inittext_end = .;
 
 	INIT_DATA_SECTION(16)
 
