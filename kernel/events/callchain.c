@@ -217,16 +217,21 @@ static void fixup_uretprobe_trampoline_entries(struct perf_callchain_entry *entr
 }
 
 struct perf_callchain_entry *
-get_perf_callchain(struct pt_regs *regs, u32 init_nr, bool kernel, bool user,
-		   u32 max_stack, bool crosstask, bool add_mark)
+get_perf_callchain(struct pt_regs *regs, struct perf_callchain_entry *external_entry,
+		   u32 init_nr, bool kernel, bool user, u32 max_stack, bool crosstask,
+		   bool add_mark)
 {
 	struct perf_callchain_entry *entry;
 	struct perf_callchain_entry_ctx ctx;
 	int rctx, start_entry_idx;
 
-	entry = get_callchain_entry(&rctx);
-	if (!entry)
-		return NULL;
+	if (external_entry) {
+		entry = external_entry;
+	} else {
+		entry = get_callchain_entry(&rctx);
+		if (!entry)
+			return NULL;
+	}
 
 	ctx.entry     = entry;
 	ctx.max_stack = max_stack;
@@ -262,7 +267,8 @@ get_perf_callchain(struct pt_regs *regs, u32 init_nr, bool kernel, bool user,
 	}
 
 exit_put:
-	put_callchain_entry(rctx);
+	if (!external_entry)
+		put_callchain_entry(rctx);
 
 	return entry;
 }
