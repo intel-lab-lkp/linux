@@ -3779,6 +3779,8 @@ static int per_family_init(struct amd64_pvt *pvt)
 	else
 		pvt->ops = &dct_ops;
 
+	pvt->flags.zn_regs_v2 = (pvt->fam >= 0x1A) ? 1 : 0;
+
 	switch (pvt->fam) {
 	case 0xf:
 		tmp_name				= (pvt->ext_model >= K8_REV_F) ?
@@ -3887,20 +3889,14 @@ static int per_family_init(struct amd64_pvt *pvt)
 		switch (pvt->model) {
 		case 0x00 ... 0x1f:
 			pvt->max_mcs            = 12;
-			pvt->flags.zn_regs_v2   = 1;
-			break;
-		case 0x40 ... 0x4f:
-			pvt->flags.zn_regs_v2   = 1;
 			break;
 		case 0x50 ... 0x57:
 		case 0xc0 ... 0xc7:
 			pvt->max_mcs            = 16;
-			pvt->flags.zn_regs_v2   = 1;
 			break;
 		case 0x90 ... 0x9f:
 		case 0xa0 ... 0xaf:
 			pvt->max_mcs            = 8;
-			pvt->flags.zn_regs_v2   = 1;
 			break;
 		}
 		break;
