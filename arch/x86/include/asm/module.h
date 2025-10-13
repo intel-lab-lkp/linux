@@ -23,6 +23,7 @@ struct mod_arch_specific {
 	struct alt_site *alt_sites;
 	struct retpoline_site *retpoline_sites;
 	int num_retpoline_sites;
+	bool callthunks_initialized;
 #endif
 };
 

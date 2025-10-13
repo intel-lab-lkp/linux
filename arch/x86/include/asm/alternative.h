@@ -133,6 +133,10 @@ extern void callthunks_patch_module_calls(struct callthunk_sites *sites,
 					  struct module *mod);
 extern void *callthunks_translate_call_dest(void *dest);
 extern int x86_call_depth_emit_accounting(u8 **pprog, void *func, void *ip);
+#ifdef CONFIG_DYNAMIC_MITIGATIONS
+extern void reset_builtin_callthunks(void);
+extern void reset_module_callthunks(struct callthunk_sites *cs, struct module *mod);
+#endif
 #else
 static __always_inline void callthunks_patch_builtin_calls(void) {}
 static __always_inline void
@@ -147,6 +151,9 @@ static __always_inline int x86_call_depth_emit_accounting(u8 **pprog,
 {
 	return 0;
 }
+static __always_inline void reset_builtin_callthunks(void) {}
+static __always_inline void reset_module_callthunks(struct callthunk_sites *cs,
+						    struct module *mod) {}
 #endif
 
 #ifdef CONFIG_MITIGATION_ITS

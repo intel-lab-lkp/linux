@@ -336,6 +336,10 @@ void noinline callthunks_patch_module_calls(struct callthunk_sites *cs,
 	mutex_lock(&text_mutex);
 	callthunks_setup(cs, &ct);
 	mutex_unlock(&text_mutex);
+
+#ifdef CONFIG_DYNAMIC_MITIGATIONS
+	mod->arch.callthunks_initialized = true;
+#endif
 }
 #endif /* CONFIG_MODULES */
 
@@ -380,4 +384,73 @@ static int __init callthunks_debugfs_init(void)
 	return 0;
 }
 __initcall(callthunks_debugfs_init);
+#endif
+
+#ifdef CONFIG_DYNAMIC_MITIGATIONS
+static void reset_call_sites(s32 *start, s32 *end, const struct core_text *ct)
+{
+	s32 *s;
+
+	for (s = start; s < end; s++) {
+		void *dest;
+		u8 bytes[8];
+		u8 insn_buff[MAX_PATCH_LEN];
+		void *addr = (void *)s + *s;
+
+		if (!within_coretext(ct, addr))
+			continue;
+
+		dest = call_get_dest(addr);
+		if (!dest || WARN_ON_ONCE(IS_ERR(dest)))
+			continue;
+
+		memcpy(insn_buff, skl_call_thunk_template, SKL_TMPL_SIZE);
+		text_poke_apply_relocation(insn_buff, dest, SKL_TMPL_SIZE,
+					skl_call_thunk_template, SKL_TMPL_SIZE);
+		/* Check for the thunk */
+		if (bcmp(dest, insn_buff, SKL_TMPL_SIZE))
+			continue;
+
+		/* Set new destination to be after the thunk */
+		dest += SKL_TMPL_SIZE;
+		__text_gen_insn(bytes, CALL_INSN_OPCODE, addr, dest, CALL_INSN_SIZE);
+		text_poke_early(addr, bytes, CALL_INSN_SIZE);
+	}
+}
+
+static void callthunks_reset(struct callthunk_sites *cs, const struct core_text *ct)
+{
+	prdbg("Resetting call sites %s\n", ct->name);
+	reset_call_sites(cs->call_start, cs->call_end, ct);
+	prdbg("Resetting call sites done %s\n", ct->name);
+}
+
+void reset_builtin_callthunks(void)
+{
+	struct callthunk_sites cs = {
+		.call_start	= __call_sites,
+		.call_end	= __call_sites_end,
+	};
+
+	if (!thunks_initialized)
+		return;
+
+	callthunks_reset(&cs, &builtin_coretext);
+	thunks_initialized = false;
+}
+
+void reset_module_callthunks(struct callthunk_sites *cs, struct module *mod)
+{
+	struct core_text ct = {
+		.base = (unsigned long)mod->mem[MOD_TEXT].base,
+		.end  = (unsigned long)mod->mem[MOD_TEXT].base + mod->mem[MOD_TEXT].size,
+		.name = mod->name,
+	};
+
+	if (!mod->arch.callthunks_initialized)
+		return;
+
+	callthunks_reset(cs, &ct);
+	mod->arch.callthunks_initialized = false;
+}
 #endif
