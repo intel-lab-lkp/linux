@@ -3038,6 +3038,11 @@ static noinline int do_init_module(struct module *mod)
 	if (mod->init != NULL)
 		ret = do_one_initcall(mod->init);
 	if (ret < 0) {
+		if (ret == -EEXIST) {
+			pr_warn("%s: init suspiciously returned -EEXIST: Overriding with -EBUSY\n",
+				mod->name);
+			ret = -EBUSY;
+		}
 		goto fail_free_freeinit;
 	}
 	if (ret > 0) {
