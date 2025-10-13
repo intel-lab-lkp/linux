@@ -29,6 +29,7 @@
 #include <linux/string_choices.h>
 #include <kunit/visibility.h>
 #include <uapi/linux/iommufd.h>
+#include <linux/syscore_ops.h>
 
 #include "arm-smmu-v3.h"
 #include "../../dma-iommu.h"
@@ -37,6 +38,9 @@ static bool disable_msipolling;
 module_param(disable_msipolling, bool, 0444);
 MODULE_PARM_DESC(disable_msipolling,
 	"Disable MSI-based polling for CMD_SYNC completion.");
+
+static LIST_HEAD(smmu_device_list);
+static DEFINE_MUTEX(smmu_device_lock);
 
 static const struct iommu_ops arm_smmu_ops;
 static struct iommu_dirty_ops arm_smmu_dirty_ops;
@@ -4835,6 +4839,9 @@ static int arm_smmu_device_probe(struct platform_device *pdev)
 		goto err_free_sysfs;
 	}
 
+	scoped_guard(mutex, &smmu_device_lock)
+		list_add(&smmu->list_node, &smmu_device_list);
+
 	return 0;
 
 err_free_sysfs:
@@ -4850,18 +4857,13 @@ static void arm_smmu_device_remove(struct platform_device *pdev)
 {
 	struct arm_smmu_device *smmu = platform_get_drvdata(pdev);
 
+	scoped_guard(mutex, &smmu_device_lock)
+		list_del(&smmu->list_node);
 	iommu_device_unregister(&smmu->iommu);
 	iommu_device_sysfs_remove(&smmu->iommu);
 	arm_smmu_device_disable(smmu);
 	iopf_queue_free(smmu->evtq.iopf);
 	ida_destroy(&smmu->vmid_map);
-}
-
-static void arm_smmu_device_shutdown(struct platform_device *pdev)
-{
-	struct arm_smmu_device *smmu = platform_get_drvdata(pdev);
-
-	arm_smmu_device_disable(smmu);
 }
 
 static const struct of_device_id arm_smmu_of_match[] = {
@@ -4870,10 +4872,30 @@ static const struct of_device_id arm_smmu_of_match[] = {
 };
 MODULE_DEVICE_TABLE(of, arm_smmu_of_match);
 
+static void arm_smmu_shutdown(void)
+{
+	struct arm_smmu_device *smmu;
+
+	guard(mutex)(&smmu_device_lock);
+	list_for_each_entry(smmu, &smmu_device_list, list_node)
+		arm_smmu_device_disable(smmu);
+}
+
+static struct syscore_ops arm_smmu_syscore_ops = {
+	.shutdown = arm_smmu_shutdown,
+};
+
 static void arm_smmu_driver_unregister(struct platform_driver *drv)
 {
 	arm_smmu_sva_notifier_synchronize();
 	platform_driver_unregister(drv);
+	unregister_syscore_ops(&arm_smmu_syscore_ops);
+}
+
+static int arm_smmu_driver_register(struct platform_driver *drv)
+{
+	register_syscore_ops(&arm_smmu_syscore_ops);
+	return platform_driver_register(drv);
 }
 
 static struct platform_driver arm_smmu_driver = {
@@ -4884,9 +4906,8 @@ static struct platform_driver arm_smmu_driver = {
 	},
 	.probe	= arm_smmu_device_probe,
 	.remove = arm_smmu_device_remove,
-	.shutdown = arm_smmu_device_shutdown,
 };
-module_driver(arm_smmu_driver, platform_driver_register,
+module_driver(arm_smmu_driver, arm_smmu_driver_register,
 	      arm_smmu_driver_unregister);
 
 MODULE_DESCRIPTION("IOMMU API for ARM architected SMMUv3 implementations");
