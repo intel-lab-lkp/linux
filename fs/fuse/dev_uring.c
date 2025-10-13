@@ -23,6 +23,7 @@ MODULE_PARM_DESC(enable_uring,
 #define FURING_Q_LOCAL_THRESHOLD 2
 #define FURING_Q_NUMA_THRESHOLD (FURING_Q_LOCAL_THRESHOLD + 1)
 #define FURING_Q_GLOBAL_THRESHOLD (FURING_Q_LOCAL_THRESHOLD * 2)
+#define FURING_NEXT_QUEUE_RETRIES 2
 
 bool fuse_uring_enabled(void)
 {
@@ -1302,12 +1303,15 @@ static struct fuse_ring_queue *fuse_uring_best_queue(const struct cpumask *mask,
 /*
  * Get the best queue for the current CPU
  */
-static struct fuse_ring_queue *fuse_uring_get_queue(struct fuse_ring *ring)
+static struct fuse_ring_queue *fuse_uring_get_queue(struct fuse_ring *ring,
+						    bool background)
 {
 	unsigned int qid;
 	struct fuse_ring_queue *local_queue, *best_numa, *best_global;
 	int local_node;
 	const struct cpumask *numa_mask, *global_mask;
+	int retries = 0;
+	int weight = -1;
 
 	qid = task_cpu(current);
 	if (WARN_ONCE(qid >= ring->max_nr_queues,
@@ -1315,15 +1319,49 @@ static struct fuse_ring_queue *fuse_uring_get_queue(struct fuse_ring *ring)
 		      ring->max_nr_queues))
 		qid = 0;
 
-	local_queue = READ_ONCE(ring->queues[qid]);
 	local_node = cpu_to_node(qid);
 	if (WARN_ON_ONCE(local_node > ring->nr_numa_nodes))
 		local_node = 0;
 
-	/* Fast path: if local queue exists and is not overloaded, use it */
-	if (local_queue &&
-	    READ_ONCE(local_queue->nr_reqs) <= FURING_Q_LOCAL_THRESHOLD)
+	local_queue = READ_ONCE(ring->queues[qid]);
+
+retry:
+	/*
+	 * For background requests, try next CPU in same NUMA domain.
+	 * I.e. cpu-0 creates async requests, cpu-1 io processes.
+	 * Similar for foreground requests, when the local queue does not
+	 * exist - still better to always wake the same cpu id.
+	 */
+	if (background || !local_queue) {
+		numa_mask = ring->numa_registered_q_mask[local_node];
+
+		if (weight == -1)
+			weight = cpumask_weight(numa_mask);
+
+		if (weight == 0)
+			goto global;
+
+		if (weight > 1) {
+			int idx = (qid + 1) % weight;
+
+			qid = cpumask_nth(idx, numa_mask);
+		} else {
+			qid = cpumask_first(numa_mask);
+		}
+
+		local_queue = READ_ONCE(ring->queues[qid]);
+		if (WARN_ON_ONCE(!local_queue))
+			return NULL;
+	}
+
+	if (READ_ONCE(local_queue->nr_reqs) <= FURING_Q_NUMA_THRESHOLD)
 		return local_queue;
+
+	if (retries < FURING_NEXT_QUEUE_RETRIES && weight > retries + 1) {
+		retries++;
+		local_queue = NULL;
+		goto retry;
+	}
 
 	/* Find best NUMA-local queue */
 	numa_mask = ring->numa_registered_q_mask[local_node];
@@ -1334,6 +1372,7 @@ static struct fuse_ring_queue *fuse_uring_get_queue(struct fuse_ring *ring)
 	    READ_ONCE(best_numa->nr_reqs) <= FURING_Q_NUMA_THRESHOLD)
 		return best_numa;
 
+global:
 	/* NUMA queues above threshold, try global queues */
 	global_mask = ring->registered_q_mask;
 	best_global = fuse_uring_best_queue(global_mask, ring);
@@ -1368,7 +1407,7 @@ void fuse_uring_queue_fuse_req(struct fuse_iqueue *fiq, struct fuse_req *req)
 	int err;
 
 	err = -EINVAL;
-	queue = fuse_uring_get_queue(ring);
+	queue = fuse_uring_get_queue(ring, false);
 	if (!queue)
 		goto err;
 
@@ -1412,7 +1451,7 @@ bool fuse_uring_queue_bq_req(struct fuse_req *req)
 	struct fuse_ring_queue *queue;
 	struct fuse_ring_ent *ent = NULL;
 
-	queue = fuse_uring_get_queue(ring);
+	queue = fuse_uring_get_queue(ring, true);
 	if (!queue)
 		return false;
 
