@@ -211,6 +211,55 @@ SECTIONS
 		__init_begin = .; /* paired with __init_end */
 	}
 
+#ifdef CONFIG_MITIGATION_RETPOLINE
+	/*
+	 * List of instructions that call/jmp/jcc to retpoline thunks
+	 * __x86_indirect_thunk_*(). These instructions can be patched along
+	 * with alternatives, after which the section can be freed.
+	 */
+	. = ALIGN(8);
+	.retpoline_sites : AT(ADDR(.retpoline_sites) - LOAD_OFFSET) {
+		__retpoline_sites = .;
+		*(.retpoline_sites)
+		__retpoline_sites_end = .;
+	}
+
+	. = ALIGN(8);
+	.return_sites : AT(ADDR(.return_sites) - LOAD_OFFSET) {
+		__return_sites = .;
+		*(.return_sites)
+		__return_sites_end = .;
+	}
+
+	. = ALIGN(8);
+	.call_sites : AT(ADDR(.call_sites) - LOAD_OFFSET) {
+		__call_sites = .;
+		*(.call_sites)
+		__call_sites_end = .;
+	}
+#endif
+	/*
+	 * struct alt_inst entries. From the header (alternative.h):
+	 * "Alternative instructions for different CPU types or capabilities"
+	 * Think locking instructions on spinlocks.
+	 */
+	. = ALIGN(8);
+	.altinstructions : AT(ADDR(.altinstructions) - LOAD_OFFSET) {
+		__alt_instructions = .;
+		*(.altinstructions)
+		__alt_instructions_end = .;
+	}
+
+	/*
+	 * And here are the replacement instructions. The linker sticks
+	 * them as binary blobs. The .altinstructions has enough data to
+	 * get the address and the length of them to patch the kernel safely.
+	 */
+	.altinstr_replacement : AT(ADDR(.altinstr_replacement) - LOAD_OFFSET) {
+		*(.altinstr_replacement)
+	}
+
+
 	INIT_TEXT_SECTION(PAGE_SIZE)
 
 	/*
@@ -243,34 +292,6 @@ SECTIONS
 	}
 #endif
 
-#ifdef CONFIG_MITIGATION_RETPOLINE
-	/*
-	 * List of instructions that call/jmp/jcc to retpoline thunks
-	 * __x86_indirect_thunk_*(). These instructions can be patched along
-	 * with alternatives, after which the section can be freed.
-	 */
-	. = ALIGN(8);
-	.retpoline_sites : AT(ADDR(.retpoline_sites) - LOAD_OFFSET) {
-		__retpoline_sites = .;
-		*(.retpoline_sites)
-		__retpoline_sites_end = .;
-	}
-
-	. = ALIGN(8);
-	.return_sites : AT(ADDR(.return_sites) - LOAD_OFFSET) {
-		__return_sites = .;
-		*(.return_sites)
-		__return_sites_end = .;
-	}
-
-	. = ALIGN(8);
-	.call_sites : AT(ADDR(.call_sites) - LOAD_OFFSET) {
-		__call_sites = .;
-		*(.call_sites)
-		__call_sites_end = .;
-	}
-#endif
-
 #ifdef CONFIG_X86_KERNEL_IBT
 	. = ALIGN(8);
 	.ibt_endbr_seal : AT(ADDR(.ibt_endbr_seal) - LOAD_OFFSET) {
@@ -288,27 +309,6 @@ SECTIONS
 		__cfi_sites_end = .;
 	}
 #endif
-
-	/*
-	 * struct alt_inst entries. From the header (alternative.h):
-	 * "Alternative instructions for different CPU types or capabilities"
-	 * Think locking instructions on spinlocks.
-	 */
-	. = ALIGN(8);
-	.altinstructions : AT(ADDR(.altinstructions) - LOAD_OFFSET) {
-		__alt_instructions = .;
-		*(.altinstructions)
-		__alt_instructions_end = .;
-	}
-
-	/*
-	 * And here are the replacement instructions. The linker sticks
-	 * them as binary blobs. The .altinstructions has enough data to
-	 * get the address and the length of them to patch the kernel safely.
-	 */
-	.altinstr_replacement : AT(ADDR(.altinstr_replacement) - LOAD_OFFSET) {
-		*(.altinstr_replacement)
-	}
 
 	. = ALIGN(8);
 	.apicdrivers : AT(ADDR(.apicdrivers) - LOAD_OFFSET) {
