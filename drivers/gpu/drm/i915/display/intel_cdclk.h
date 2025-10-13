@@ -69,4 +69,6 @@ bool intel_cdclk_pmdemand_needs_update(struct intel_atomic_state *state);
 void intel_cdclk_force_min_cdclk(struct intel_cdclk_state *cdclk_state, int force_min_cdclk);
 void intel_cdclk_read_hw(struct intel_display *display);
 
+int intel_crtc_min_cdclk(const struct intel_crtc_state *crtc_state);
+
 #endif /* __INTEL_CDCLK_H__ */
