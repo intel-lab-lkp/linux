@@ -44,6 +44,9 @@
 #include <asm/tlbflush.h>
 #include <asm/traps.h>
 
+#define CREATE_TRACE_POINTS
+#include <trace/events/exceptions.h>
+
 struct fault_info {
 	int	(*fn)(unsigned long far, unsigned long esr,
 		      struct pt_regs *regs);
@@ -572,8 +575,12 @@ static int __kprobes do_page_fault(unsigned long far, unsigned long esr,
 	if (faulthandler_disabled() || !mm)
 		goto no_context;
 
-	if (user_mode(regs))
+	if (user_mode(regs)) {
 		mm_flags |= FAULT_FLAG_USER;
+		trace_page_fault_user(addr, regs, esr);
+	} else {
+		trace_page_fault_kernel(addr, regs, esr);
+	}
 
 	/*
 	 * vm_flags tells us what bits we must have in vma->vm_flags
