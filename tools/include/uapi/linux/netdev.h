@@ -26,13 +26,13 @@
  *   non-linear XDP buffer support in ndo_xdp_xmit callback.
  */
 enum netdev_xdp_act {
-	NETDEV_XDP_ACT_BASIC = 1,
-	NETDEV_XDP_ACT_REDIRECT = 2,
-	NETDEV_XDP_ACT_NDO_XMIT = 4,
-	NETDEV_XDP_ACT_XSK_ZEROCOPY = 8,
-	NETDEV_XDP_ACT_HW_OFFLOAD = 16,
-	NETDEV_XDP_ACT_RX_SG = 32,
-	NETDEV_XDP_ACT_NDO_XMIT_SG = 64,
+	NETDEV_XDP_ACT_BASIC = 1U << 0,
+	NETDEV_XDP_ACT_REDIRECT = 1U << 1,
+	NETDEV_XDP_ACT_NDO_XMIT = 1U << 2,
+	NETDEV_XDP_ACT_XSK_ZEROCOPY = 1U << 3,
+	NETDEV_XDP_ACT_HW_OFFLOAD = 1U << 4,
+	NETDEV_XDP_ACT_RX_SG = 1U << 5,
+	NETDEV_XDP_ACT_NDO_XMIT_SG = 1U << 6,
 
 	/* private: */
 	NETDEV_XDP_ACT_MASK = 127,
@@ -48,9 +48,9 @@ enum netdev_xdp_act {
  *   packet VLAN tag via bpf_xdp_metadata_rx_vlan_tag().
  */
 enum netdev_xdp_rx_metadata {
-	NETDEV_XDP_RX_METADATA_TIMESTAMP = 1,
-	NETDEV_XDP_RX_METADATA_HASH = 2,
-	NETDEV_XDP_RX_METADATA_VLAN_TAG = 4,
+	NETDEV_XDP_RX_METADATA_TIMESTAMP = 1U << 0,
+	NETDEV_XDP_RX_METADATA_HASH = 1U << 1,
+	NETDEV_XDP_RX_METADATA_VLAN_TAG = 1U << 2,
 };
 
 /**
@@ -63,9 +63,9 @@ enum netdev_xdp_rx_metadata {
  *   by the driver.
  */
 enum netdev_xsk_flags {
-	NETDEV_XSK_FLAGS_TX_TIMESTAMP = 1,
-	NETDEV_XSK_FLAGS_TX_CHECKSUM = 2,
-	NETDEV_XSK_FLAGS_TX_LAUNCH_TIME_FIFO = 4,
+	NETDEV_XSK_FLAGS_TX_TIMESTAMP = 1U << 0,
+	NETDEV_XSK_FLAGS_TX_CHECKSUM = 1U << 1,
+	NETDEV_XSK_FLAGS_TX_LAUNCH_TIME_FIFO = 1U << 2,
 };
 
 enum netdev_queue_type {
@@ -74,7 +74,7 @@ enum netdev_queue_type {
 };
 
 enum netdev_qstats_scope {
-	NETDEV_QSTATS_SCOPE_QUEUE = 1,
+	NETDEV_QSTATS_SCOPE_QUEUE = 1U << 0,
 };
 
 enum netdev_napi_threaded {

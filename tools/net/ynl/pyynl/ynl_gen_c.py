@@ -3209,7 +3209,7 @@ def render_uapi(family, cw):
             for entry in enum.entries.values():
                 suffix = ','
                 if entry.value_change:
-                    suffix = f" = {entry.user_value()}" + suffix
+                    suffix = f" = {entry.user_value(as_c=True)}" + suffix
                 cw.p(entry.c_name + suffix)
 
             if const.get('render-max', False):

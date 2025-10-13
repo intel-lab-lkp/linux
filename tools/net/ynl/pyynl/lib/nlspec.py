@@ -90,9 +90,12 @@ class SpecEnumEntry(SpecElement):
     def raw_value(self):
         return self.value
 
-    def user_value(self, as_flags=None):
+    def user_value(self, as_flags=None, as_c=None):
         if self.enum_set['type'] == 'flags' or as_flags:
-            return 1 << self.value
+            if as_c:
+                return f'1U << {self.value}'
+            else:
+                return 1 << self.value
         else:
             return self.value
 
