@@ -333,3 +333,61 @@ void module_arch_cleanup(struct module *mod)
 	alternatives_smp_module_del(mod);
 	its_free_mod(mod);
 }
+
+#ifdef CONFIG_DYNAMIC_MITIGATIONS
+void arch_module_update_alternatives(struct module *mod)
+{
+	const Elf_Ehdr *hdr;
+	const Elf_Shdr *sechdrs;
+	const Elf_Shdr *s, *alt = NULL, *retpolines = NULL, *returns = NULL, *calls = NULL;
+	char *secstrings;
+
+	if (!mod->klp_info) {
+		pr_warn("No module livepatch info, unable to update alternatives\n");
+		return;
+	}
+
+	hdr = &mod->klp_info->hdr;
+	sechdrs = mod->klp_info->sechdrs;
+	secstrings = mod->klp_info->secstrings;
+
+	for (s = sechdrs; s < sechdrs + hdr->e_shnum; s++) {
+		if (!strcmp(".altinstructions", secstrings + s->sh_name))
+			alt = s;
+		if (!strcmp(".retpoline_sites", secstrings + s->sh_name))
+			retpolines = s;
+		if (!strcmp(".return_sites", secstrings + s->sh_name))
+			returns = s;
+		if (!strcmp(".call_sites", secstrings + s->sh_name))
+			calls = s;
+	}
+
+	if (retpolines) {
+		void *rseg = (void *)retpolines->sh_addr;
+
+		reset_retpolines(rseg, rseg + retpolines->sh_size, mod);
+		apply_retpolines(rseg, rseg + retpolines->sh_size, mod);
+	}
+	if (returns) {
+		void *rseg = (void *)returns->sh_addr;
+
+		reset_returns(rseg, rseg + returns->sh_size, mod);
+		apply_returns(rseg, rseg + returns->sh_size, mod);
+	}
+	if (calls) {
+		struct callthunk_sites cs = {};
+
+		cs.call_start = (void *)calls->sh_addr;
+		cs.call_end = (void *)calls->sh_addr + calls->sh_size;
+
+		reset_module_callthunks(&cs, mod);
+		callthunks_patch_module_calls(&cs, mod);
+	}
+	if (alt) {
+		void *aseg = (void *)alt->sh_addr;
+
+		reset_alternatives(aseg, aseg + alt->sh_size, mod);
+		apply_alternatives(aseg, aseg + alt->sh_size, mod);
+	}
+}
+#endif

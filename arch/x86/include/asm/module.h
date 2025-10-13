@@ -27,4 +27,8 @@ struct mod_arch_specific {
 #endif
 };
 
+#ifdef CONFIG_DYNAMIC_MITIGATIONS
+void arch_module_update_alternatives(struct module *mod);
+#endif
+
 #endif /* _ASM_X86_MODULE_H */
