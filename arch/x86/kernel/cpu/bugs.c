@@ -3312,6 +3312,21 @@ static void __init srso_apply_mitigation(void)
 	}
 }
 
+#ifdef CONFIG_DYNAMIC_MITIGATIONS
+static void srso_reset_mitigation(void)
+{
+	setup_clear_cpu_cap(X86_FEATURE_RETHUNK);
+	setup_clear_cpu_cap(X86_FEATURE_UNRET);
+	setup_clear_cpu_cap(X86_FEATURE_SRSO_ALIAS);
+	setup_clear_cpu_cap(X86_FEATURE_SRSO);
+	setup_clear_cpu_cap(X86_FEATURE_ENTRY_IBPB);
+	setup_clear_cpu_cap(X86_FEATURE_IBPB_ON_VMEXIT);
+	x86_pred_cmd = PRED_CMD_IBPB;
+	x86_return_thunk = __x86_return_thunk;
+	srso_mitigation = SRSO_MITIGATION_AUTO;
+}
+#endif
+
 #undef pr_fmt
 #define pr_fmt(fmt)	"VMSCAPE: " fmt
 
@@ -3925,5 +3940,6 @@ void arch_cpu_reset_mitigations(void)
 	mds_reset_mitigation();
 	mmio_reset_mitigation();
 	srbds_reset_mitigation();
+	srso_reset_mitigation();
 }
 #endif
