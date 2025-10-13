@@ -7,10 +7,7 @@ use super::{
     layout::ArrayLayout,
     AllocError, Allocator, Box, Flags, NumaNode,
 };
-use crate::{
-    fmt,
-    page::AsPageIter,
-};
+use crate::{fmt, page::AsPageIter};
 use core::{
     borrow::{Borrow, BorrowMut},
     marker::PhantomData,
