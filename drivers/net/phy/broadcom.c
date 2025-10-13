@@ -110,11 +110,13 @@ static int bcm54xx_config_clock_delay(struct phy_device *phydev)
 
 static int bcm54210e_config_init(struct phy_device *phydev)
 {
+	struct device_node *np = phydev->mdio.dev.of_node;
 	int val;
 
 	bcm54xx_config_clock_delay(phydev);
 
-	if (phydev->dev_flags & PHY_BRCM_EN_MASTER_MODE) {
+	if (of_property_read_bool(np, "brcm,master-mode") ||
+	    phydev->dev_flags & PHY_BRCM_EN_MASTER_MODE) {
 		val = phy_read(phydev, MII_CTRL1000);
 		val |= CTL1000_AS_MASTER | CTL1000_ENABLE_MASTER;
 		phy_write(phydev, MII_CTRL1000, val);
