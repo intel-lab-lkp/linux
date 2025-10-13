@@ -380,6 +380,16 @@ static void x86_amd_ssb_disable(void)
 		wrmsrq(MSR_AMD64_LS_CFG, msrval);
 }
 
+static void x86_amd_ssb_enable(void)
+{
+	u64 msrval = x86_amd_ls_cfg_base;
+
+	if (boot_cpu_has(X86_FEATURE_VIRT_SSBD))
+		wrmsrl(MSR_AMD64_VIRT_SPEC_CTRL, 0);
+	else if (boot_cpu_has(X86_FEATURE_LS_CFG_SSBD))
+		wrmsrl(MSR_AMD64_LS_CFG, msrval);
+}
+
 #undef pr_fmt
 #define pr_fmt(fmt)	"MDS: " fmt
 
@@ -2672,6 +2682,17 @@ static void __init ssb_apply_mitigation(void)
 	}
 }
 
+#ifdef CONFIG_DYNAMIC_MITIGATIONS
+static void ssb_reset_mitigation(void)
+{
+	setup_clear_cpu_cap(X86_FEATURE_SPEC_STORE_BYPASS_DISABLE);
+	x86_spec_ctrl_base &= ~SPEC_CTRL_SSBD;
+	nossb = false;
+	ssb_mode = IS_ENABLED(CONFIG_MITIGATION_SSB) ?
+		SPEC_STORE_BYPASS_AUTO : SPEC_STORE_BYPASS_NONE;
+}
+#endif
+
 #undef pr_fmt
 #define pr_fmt(fmt)     "Speculation prctl: " fmt
 
@@ -2916,6 +2937,8 @@ void x86_spec_ctrl_setup_ap(void)
 
 	if (ssb_mode == SPEC_STORE_BYPASS_DISABLE)
 		x86_amd_ssb_disable();
+	else
+		x86_amd_ssb_enable();
 }
 
 bool itlb_multihit_kvm_mitigation;
@@ -3857,5 +3880,6 @@ void arch_cpu_reset_mitigations(void)
 	spectre_v2_reset_mitigation();
 	retbleed_reset_mitigation();
 	spectre_v2_user_reset_mitigation();
+	ssb_reset_mitigation();
 }
 #endif
