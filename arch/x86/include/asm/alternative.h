@@ -102,6 +102,13 @@ extern void reset_retpolines(s32 *start, s32 *end, struct module *mod);
 extern void reset_returns(s32 *start, s32 *end, struct module *mod);
 extern void reset_alternatives(struct alt_instr *start, struct alt_instr *end,
 		struct module *mod);
+#ifdef CONFIG_MITIGATION_ITS
+extern void its_prealloc(s32 *start, s32 *end, struct module *mod);
+extern void its_free_all(struct module *mod);
+#else
+void its_prealloc(s32 *start, s32 *end, struct module *mod) {}
+static __always_inline void its_free_all(struct module *mod) {}
+#endif
 #endif
 
 struct alt_site {
@@ -112,6 +119,9 @@ struct alt_site {
 struct retpoline_site {
 	u8 bytes[6];
 	u8 len;
+#ifdef CONFIG_MITIGATION_ITS
+	u8 *its_thunk;
+#endif
 } __packed;
 
 extern void alternative_instructions(void);

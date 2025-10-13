@@ -181,6 +181,11 @@ static void its_fini_core(void)
 {
 	if (IS_ENABLED(CONFIG_STRICT_KERNEL_RWX))
 		its_pages_protect(&its_pages);
+
+	/* Need to keep the list of pages around in case we re-patch later. */
+	if (IS_ENABLED(CONFIG_DYNAMIC_MITIGATIONS))
+		return;
+
 	kfree(its_pages.pages);
 }
 
@@ -887,13 +892,22 @@ static int emit_call_track_retpoline(void *addr, struct insn *insn, int reg, u8 
 }
 
 #ifdef CONFIG_MITIGATION_ITS
-static int emit_its_trampoline(void *addr, struct insn *insn, int reg, u8 *bytes)
+static int emit_its_trampoline(void *addr, struct insn *insn, int reg, u8 *bytes,
+				struct retpoline_site *this_site)
 {
 	u8 *thunk = __x86_indirect_its_thunk_array[reg];
-	u8 *tmp = its_allocate_thunk(reg);
+	u8 *tmp;
 
-	if (tmp)
-		thunk = tmp;
+	if (!this_site || !this_site->its_thunk) {
+		tmp = its_allocate_thunk(reg);
+		if (tmp)
+			thunk = tmp;
+
+		if (this_site)
+			this_site->its_thunk = thunk;
+	} else {
+		thunk = this_site->its_thunk;
+	}
 
 	return __emit_trampoline(addr, insn, bytes, thunk, thunk);
 }
@@ -952,7 +966,8 @@ static void prepend_nops(u8 *bytes, int curlen, int neededlen)
  *
  * It also tries to inline spectre_v2=retpoline,lfence when size permits.
  */
-static int patch_retpoline(void *addr, struct insn *insn, u8 *bytes)
+static int patch_retpoline(void *addr, struct insn *insn, u8 *bytes,
+				struct retpoline_site *this_site)
 {
 	retpoline_thunk_t *target;
 	int reg, ret, i = 0;
@@ -1016,7 +1031,7 @@ static int patch_retpoline(void *addr, struct insn *insn, u8 *bytes)
 	 * lower-half of the cacheline. Such branches need ITS mitigation.
 	 */
 	if (cpu_wants_indirect_its_thunk_at((unsigned long)addr + i, reg))
-		return emit_its_trampoline(addr, insn, reg, bytes);
+		return emit_its_trampoline(addr, insn, reg, bytes, this_site);
 #endif
 
 	ret = emit_indirect(op, reg, bytes + i, insn->length - i);
@@ -1124,7 +1139,7 @@ void __init_or_module noinline apply_retpolines(s32 *start, s32 *end, struct mod
 			memcpy(save_site[idx].bytes, addr, insn.length);
 		}
 
-		len = patch_retpoline(addr, &insn, bytes);
+		len = patch_retpoline(addr, &insn, bytes, &save_site[idx]);
 		if (len == insn.length) {
 			optimize_nops(addr, bytes, len);
 			DUMP_BYTES(RETPOLINE, ((u8*)addr),  len, "%px: orig: ", addr);
@@ -3371,4 +3386,86 @@ void reset_alternatives(struct alt_instr *start, struct alt_instr *end, struct m
 			text_poke_early(addr, sites[idx].pbytes, sites[idx].len);
 	}
 }
+
+#ifdef CONFIG_MITIGATION_ITS
+void its_prealloc(s32 *start, s32 *end, struct module *mod)
+{
+	s32 *s;
+	u32 idx = 0;
+	struct retpoline_site *sites;
+
+	/* If its_page!=NULL it means that we already have ITS pages ready. */
+	if (!boot_cpu_has(X86_FEATURE_INDIRECT_THUNK_ITS) || its_page)
+		return;
+
+	if (!mod)
+		sites = retpoline_sites;
+	else
+		sites = mod->arch.retpoline_sites;
+
+	if (WARN_ON(!sites))
+		return;
+
+	for (s = start; s < end; s++, idx++) {
+		void *addr = (void *)s + *s;
+		struct insn insn;
+		int ret;
+		u8 bytes[16];
+
+		if (!should_patch(addr, mod))
+			continue;
+
+		/* We are decoding the original (compile-time) instruction. */
+		ret = insn_decode_kernel(&insn, sites[idx].bytes);
+
+		if (WARN_ON_ONCE(ret < 0))
+			continue;
+
+		/*
+		 * This function prepares for patching but doesn't actually
+		 * change any kernel text.  We are using it to allocate and
+		 * prepare the its pages, which will be used later during
+		 * re-patching.
+		 */
+		patch_retpoline(addr, &insn, bytes, &sites[idx]);
+	}
+}
+
+/* Free all ITS pages if no longer needed. */
+void its_free_all(struct module *mod)
+{
+	int i;
+	int num_sites;
+	struct retpoline_site *sites;
+	struct its_array *pages;
+
+	if (cpu_feature_enabled(X86_FEATURE_INDIRECT_THUNK_ITS))
+		return;
+
+	if (!mod) {
+		pages = &its_pages;
+		sites = retpoline_sites;
+		num_sites = num_retpoline_sites;
+	} else {
+		pages = &mod->arch.its_pages;
+		sites = mod->arch.retpoline_sites;
+		num_sites = mod->arch.num_retpoline_sites;
+	}
+
+	for (i = 0; i < num_sites; i++)
+		sites[i].its_thunk = NULL;
+
+	for (i = 0; i < pages->num; i++) {
+		void *page = pages->pages[i];
+
+		execmem_free(page);
+	}
+
+	kfree(pages->pages);
+	its_offset = 0;
+	pages->pages = NULL;
+	pages->num = 0;
+	its_page = NULL;
+}
+#endif
 #endif
