@@ -1744,6 +1744,17 @@ static void __init its_apply_mitigation(void)
 	}
 }
 
+#ifdef CONFIG_DYNAMIC_MITIGATIONS
+static void its_reset_mitigation(void)
+{
+	setup_clear_cpu_cap(X86_FEATURE_INDIRECT_THUNK_ITS);
+	setup_clear_cpu_cap(X86_FEATURE_RETHUNK);
+	x86_return_thunk = __x86_return_thunk;
+	its_mitigation = IS_ENABLED(CONFIG_MITIGATION_ITS) ?
+		ITS_MITIGATION_AUTO : ITS_MITIGATION_OFF;
+}
+#endif
+
 #undef pr_fmt
 #define pr_fmt(fmt)	"Transient Scheduler Attacks: " fmt
 
@@ -3966,5 +3977,6 @@ void arch_cpu_reset_mitigations(void)
 	srso_reset_mitigation();
 	gds_reset_mitigation();
 	bhi_reset_mitigation();
+	its_reset_mitigation();
 }
 #endif
