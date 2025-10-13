@@ -238,6 +238,13 @@ static inline void leave_guest_mode(struct kvm_vcpu *vcpu)
 		kvm_make_request(KVM_REQ_LOAD_EOI_EXITMAP, vcpu);
 	}
 
+	/* Also see kvm_vcpu_update_cpu_dirty_logging() */
+	if (vcpu->arch.update_cpu_dirty_logging_pending) {
+		vcpu->arch.update_cpu_dirty_logging_pending = false;
+		kvm_x86_call(update_cpu_dirty_logging)(vcpu,
+				atomic_read(&vcpu->kvm->nr_memslots_dirty_logging));
+	}
+
 	vcpu->stat.guest_mode = 0;
 }
 
