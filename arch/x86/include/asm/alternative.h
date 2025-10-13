@@ -19,6 +19,7 @@
 #ifndef __ASSEMBLER__
 
 #include <linux/stddef.h>
+#include <linux/static_call_types.h>
 
 /*
  * Alternative inline assembly for SMP.
@@ -89,6 +90,9 @@ extern s32 __cfi_sites[],	__cfi_sites_end[];
 extern s32 __ibt_endbr_seal[],	__ibt_endbr_seal_end[];
 extern s32 __smp_locks[],	__smp_locks_end[];
 
+extern struct static_call_site __start_static_call_sites[],
+			       __stop_static_call_sites[];
+
 /*
  * Debug flag that can be tested to see whether alternative
  * instructions were patched in already:
@@ -98,6 +102,8 @@ extern int alternatives_patched;
 struct module;
 
 #ifdef CONFIG_DYNAMIC_MITIGATIONS
+extern void cpu_update_alternatives(void);
+extern void cpu_prepare_repatch_alternatives(void);
 extern void reset_retpolines(s32 *start, s32 *end, struct module *mod);
 extern void reset_returns(s32 *start, s32 *end, struct module *mod);
 extern void reset_alternatives(struct alt_instr *start, struct alt_instr *end,

@@ -6,12 +6,15 @@
 #include <linux/vmalloc.h>
 #include <linux/memory.h>
 #include <linux/execmem.h>
+#include <linux/stop_machine.h>
+#include <linux/freezer.h>
 
 #include <asm/text-patching.h>
 #include <asm/insn.h>
 #include <asm/ibt.h>
 #include <asm/set_memory.h>
 #include <asm/nmi.h>
+#include <asm/bugs.h>
 
 int __read_mostly alternatives_patched;
 
@@ -3468,4 +3471,132 @@ void its_free_all(struct module *mod)
 	its_page = NULL;
 }
 #endif
+static atomic_t thread_ack;
+
+/*
+ * This function is called by ALL online CPUs but only CPU0 will do the
+ * re-patching.  It is important that all other cores spin in the tight loop
+ * below (and not in multi_cpu_stop) because they cannot safely do return
+ * instructions while returns are being patched.  Therefore, spin them here
+ * (with interrupts disabled) until CPU0 has finished its work.
+ */
+static int __cpu_update_alternatives(void *__unused)
+{
+	if (smp_processor_id()) {
+		atomic_dec(&thread_ack);
+		while (!READ_ONCE(alternatives_patched))
+			cpu_relax();
+
+		cpu_bugs_update_speculation_msrs();
+	} else {
+		repatch_in_progress = true;
+
+		/* Wait for all cores to enter this function. */
+		while (atomic_read(&thread_ack))
+			cpu_relax();
+
+		/* These must be un-done in the opposite order in which they were applied. */
+		reset_alternatives(__alt_instructions, __alt_instructions_end, NULL);
+		reset_builtin_callthunks();
+		reset_returns(__return_sites, __return_sites_end, NULL);
+		reset_retpolines(__retpoline_sites, __retpoline_sites_end, NULL);
+
+		apply_retpolines(__retpoline_sites, __retpoline_sites_end, NULL);
+		apply_returns(__return_sites, __return_sites_end, NULL);
+		callthunks_patch_builtin_calls();
+		apply_alternatives(__alt_instructions, __alt_instructions_end, NULL);
+
+		update_all_static_calls(__start_static_call_sites,
+				__stop_static_call_sites, NULL);
+		modules_update_alternatives();
+		cpu_bugs_update_speculation_msrs();
+		repatch_in_progress = false;
+
+		/* This will wake the other CPUs. */
+		WRITE_ONCE(alternatives_patched, 1);
+	}
+	return 0;
+}
+
+void cpu_prepare_repatch_alternatives(void)
+{
+	alternatives_patched = 0;
+	/* Reset the synchronization barrier. */
+	atomic_set(&thread_ack, num_online_cpus() - 1);
+}
+
+static void make_all_text_writeable(void)
+{
+	unsigned long start = PFN_ALIGN(_text);
+	unsigned long end = PFN_ALIGN(_etext);
+
+	set_memory_rw(start, (end - start) >> PAGE_SHIFT);
+	modules_prepare_repatch();
+}
+
+static void make_all_text_readonly(void)
+{
+	unsigned long start = PFN_ALIGN(_text);
+	unsigned long end = PFN_ALIGN(_etext);
+
+	set_memory_ro(start, (end - start) >> PAGE_SHIFT);
+	modules_post_repatch();
+}
+
+void cpu_update_alternatives(void)
+{
+	/*
+	 * Re-patching is not supported under Xen PV because it uses MOV-CR2
+	 * for synchronization (see sync_core_nmi_safe()).
+	 */
+	if (cpu_feature_enabled(X86_FEATURE_XENPV)) {
+		pr_err("Xen PV does not support dynamic mitigations!\n");
+		alternatives_patched = 1;
+		return;
+	}
+
+	pr_info("Re-patching alternatives\n");
+
+	/*
+	 * ITS mitigation requires dynamic memory allocation and changing memory
+	 * permissions.  These are not possible under NMI context.
+	 *
+	 * Therefore, pre-allocate ITS pages if needed.  If previous ITS pages
+	 * exist, those will be used instead.
+	 */
+	its_prealloc(__retpoline_sites, __retpoline_sites_end, NULL);
+	modules_pre_update_alternatives();
+
+	/*
+	 * Freeze everything because we cannot have a thread be in the middle of
+	 * something we're about to change when we issue stop_machine.
+	 *
+	 * Therefore, use the freezer to get all tasks to a safe place before we
+	 * re-patch.
+	 */
+	if (freeze_processes()) {
+		pr_err("Unable to freeze processes for re-patching!\n");
+		return;
+	}
+
+	if (freeze_kernel_threads()) {
+		pr_err("Unable to freeze tasks for re-patching!\n");
+		thaw_processes();
+		return;
+	}
+
+	make_all_text_writeable();
+	stop_machine_nmi(__cpu_update_alternatives, NULL, cpu_online_mask);
+	make_all_text_readonly();
+
+	cpu_bugs_smt_update();
+
+	/* Free un-needed ITS pages.  This cannot happen in NMI context. */
+	its_free_all(NULL);
+	modules_post_update_alternatives();
+
+	thaw_kernel_threads();
+	thaw_processes();
+	pr_info("Finished re-patching alternatives\n");
+}
 #endif
