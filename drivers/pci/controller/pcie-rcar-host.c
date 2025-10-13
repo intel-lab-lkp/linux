@@ -981,7 +981,7 @@ static int rcar_pcie_probe(struct platform_device *pdev)
 		goto err_clk_disable;
 
 	host->phy_init_fn = of_device_get_match_data(dev);
-	err = host->phy_init_fn(host);
+	err = host->phy_init_fn ? host->phy_init_fn(host) : -ENODEV;
 	if (err) {
 		dev_err(dev, "failed to init PCIe PHY\n");
 		goto err_clk_disable;
