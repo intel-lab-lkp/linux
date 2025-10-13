@@ -418,12 +418,18 @@ class TypeScalar(Type):
         if 'flags-mask' in self.checks or self.is_bitfield:
             if self.is_bitfield:
                 enum = self.family.consts[self.attr['enum']]
-                mask = enum.get_mask(as_flags=True)
+                if enum.get('render-max', False):
+                    mask = c_upper(enum.enum_max_name)
+                else:
+                    mask = enum.get_mask(as_flags=True)
             else:
                 flags = self.family.consts[self.checks['flags-mask']]
                 flag_cnt = len(flags['entries'])
                 mask = (1 << flag_cnt) - 1
-            return f"NLA_POLICY_MASK({policy}, 0x{mask:x})"
+
+            if isinstance(mask, int):
+                mask = f'0x{mask:x}'
+            return f"NLA_POLICY_MASK({policy}, {mask})"
         elif 'full-range' in self.checks:
             return f"NLA_POLICY_FULL_RANGE({policy}, &{c_lower(self.enum_name)}_range)"
         elif 'range' in self.checks:
