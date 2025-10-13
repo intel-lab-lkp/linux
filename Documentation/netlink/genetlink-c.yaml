@@ -110,6 +110,9 @@ properties:
         enum-cnt-name:
           description: Name of the render-max counter enum entry.
           type: string
+        enum-max-name:
+          description: Name of the render-max max or mask enum entry.
+          type: string
         # End genetlink-c
 
   attribute-sets:

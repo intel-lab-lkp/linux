@@ -57,8 +57,11 @@ portion of the entry name.
 
 Boolean ``render-max`` controls creation of the max values
 (which are enabled by default for attribute enums). These max
-values are named ``__$pfx-MAX`` and ``$pfx-MAX``. The name
-of the first value can be overridden via ``enum-cnt-name`` property.
+values are named ``__$pfx-MAX`` and ``$pfx-MAX``, and can be
+overwritten via the properties ``enum-cnt-name`` and
+``enum-max-name`` respectively.
+For flags ``render-max`` will generate a mask with all flags set,
+which by default will be named ``$pfx-MASK``.
 
 Attributes
 ==========

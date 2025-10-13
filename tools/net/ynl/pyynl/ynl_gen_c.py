@@ -1067,8 +1067,10 @@ class EnumSet(SpecEnumSet):
         self.value_pfx = yaml.get('name-prefix', f"{family.ident_name}-{yaml['name']}-")
         self.header = yaml.get('header', None)
         self.enum_cnt_name = yaml.get('enum-cnt-name', f'--{self.value_pfx}max')
-        suffix = yaml['type'] == 'flags' and 'mask' or 'max'
-        self.enum_max_name = f'{self.value_pfx}{suffix}'
+        self.enum_max_name = yaml.get('enum-max-name', None)
+        if not self.enum_max_name:
+            suffix = yaml['type'] == 'flags' and 'mask' or 'max'
+            self.enum_max_name = f'{self.value_pfx}{suffix}'
 
         super().__init__(family, yaml)
 
