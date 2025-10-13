@@ -102,7 +102,7 @@ static const struct constant_table dax_param_enums[] = {
  * Table driven mount option parser.
  */
 enum {
-	Opt_logbufs, Opt_logbsize, Opt_logdev, Opt_rtdev,
+	Opt_quietlyignore, Opt_logbufs, Opt_logbsize, Opt_logdev, Opt_rtdev,
 	Opt_wsync, Opt_noalign, Opt_swalloc, Opt_sunit, Opt_swidth, Opt_nouuid,
 	Opt_grpid, Opt_nogrpid, Opt_bsdgroups, Opt_sysvgroups,
 	Opt_allocsize, Opt_norecovery, Opt_inode64, Opt_inode32,
@@ -115,6 +115,14 @@ enum {
 };
 
 static const struct fs_parameter_spec xfs_fs_parameters[] = {
+	/*
+	 * These mount options were advertised in /proc/mounts even if the
+	 * filesystem had not been mounted with that option.  Quietly ignore
+	 * them to avoid breaking scripts that captured /proc/mounts.
+	 */
+	fsparam_flag("attr",		Opt_quietlyignore),
+	fsparam_flag("noattr2",		Opt_quietlyignore),
+
 	fsparam_u32("logbufs",		Opt_logbufs),
 	fsparam_string("logbsize",	Opt_logbsize),
 	fsparam_string("logdev",	Opt_logdev),
@@ -1407,6 +1415,8 @@ xfs_fs_parse_param(
 		return opt;
 
 	switch (opt) {
+	case Opt_quietlyignore:
+		return 0;
 	case Opt_logbufs:
 		parsing_mp->m_logbufs = result.uint_32;
 		return 0;
@@ -1527,7 +1537,6 @@ xfs_fs_parse_param(
 		xfs_mount_set_dax_mode(parsing_mp, result.uint_32);
 		return 0;
 #endif
-	/* Following mount options will be removed in September 2025 */
 	case Opt_max_open_zones:
 		parsing_mp->m_max_open_zones = result.uint_32;
 		return 0;
