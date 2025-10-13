@@ -105,7 +105,8 @@ static void __ref __static_call_transform(void *insn, enum insn_type type,
 	if (memcmp(insn, code, size) == 0)
 		return;
 
-	if (system_state == SYSTEM_BOOTING || modinit)
+	/* alternatives_patched is false if we are doing dynamic re-patching. */
+	if (system_state == SYSTEM_BOOTING || modinit || !alternatives_patched)
 		return text_poke_early(insn, code, size);
 
 	smp_text_poke_single(insn, code, size, emulate);

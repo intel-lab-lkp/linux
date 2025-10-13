@@ -9,6 +9,7 @@
 #include <linux/cpu.h>
 #include <linux/processor.h>
 #include <asm/sections.h>
+#include <linux/kallsyms.h>
 
 extern struct static_call_site __start_static_call_sites[],
 			       __stop_static_call_sites[];
@@ -490,6 +491,27 @@ int static_call_text_reserved(void *start, void *end)
 		return ret;
 
 	return __static_call_mod_text_reserved(start, end);
+}
+
+void update_all_static_calls(struct static_call_site *start,
+			     struct static_call_site *stop,
+			     struct module *mod)
+{
+	struct static_call_site *site;
+	struct static_call_key *key;
+
+	for (site = start; site < stop; site++) {
+		void *site_addr = static_call_addr(site);
+
+		/* All init code is gone when this function is called. */
+		if (is_kernel_text((u64) site_addr) ||
+		    (mod &&
+		     within_module_mem_type((u64) site_addr, mod, MOD_TEXT))) {
+			key = static_call_key(site);
+			arch_static_call_transform(site_addr, NULL, key->func,
+					static_call_is_tail(site));
+		}
+	}
 }
 
 int __init static_call_init(void)
