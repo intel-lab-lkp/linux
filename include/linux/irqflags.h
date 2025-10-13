@@ -13,6 +13,7 @@
 #define _LINUX_TRACE_IRQFLAGS_H
 
 #include <linux/irqflags_types.h>
+#include <linux/preempt.h>
 #include <linux/typecheck.h>
 #include <linux/cleanup.h>
 #include <asm/irqflags.h>
@@ -261,6 +262,44 @@ extern void warn_bogus_irq_restore(void);
 #endif /* CONFIG_TRACE_IRQFLAGS_SUPPORT */
 
 #define irqs_disabled_flags(flags) raw_irqs_disabled_flags(flags)
+
+DECLARE_PER_CPU(struct interrupt_disable_state, local_interrupt_disable_state);
+
+static inline void local_interrupt_disable(void)
+{
+	unsigned long flags;
+	int new_count;
+
+	new_count = hardirq_disable_enter();
+
+	if ((new_count & HARDIRQ_DISABLE_MASK) == HARDIRQ_DISABLE_OFFSET) {
+		local_irq_save(flags);
+		raw_cpu_write(local_interrupt_disable_state.flags, flags);
+	}
+}
+
+static inline void local_interrupt_enable(void)
+{
+	int new_count;
+
+	new_count = hardirq_disable_exit();
+
+	if ((new_count & HARDIRQ_DISABLE_MASK) == 0) {
+		unsigned long flags;
+
+		flags = raw_cpu_read(local_interrupt_disable_state.flags);
+		local_irq_restore(flags);
+		/*
+		 * TODO: re-read preempt count can be avoided, but it needs
+		 * should_resched() taking another parameter as the current
+		 * preempt count
+		 */
+#ifdef PREEMPTION
+		if (should_resched(0))
+			__preempt_schedule();
+#endif
+	}
+}
 
 DEFINE_LOCK_GUARD_0(irq, local_irq_disable(), local_irq_enable())
 DEFINE_LOCK_GUARD_0(irqsave,
