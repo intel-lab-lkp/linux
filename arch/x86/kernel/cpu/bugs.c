@@ -3059,6 +3059,15 @@ static void __init l1tf_apply_mitigation(void)
 	setup_force_cpu_cap(X86_FEATURE_L1TF_PTEINV);
 }
 
+#ifdef CONFIG_DYNAMIC_MITIGATIONS
+static void l1tf_reset_mitigation(void)
+{
+	setup_clear_cpu_cap(X86_FEATURE_L1TF_PTEINV);
+	l1tf_mitigation = IS_ENABLED(CONFIG_MITIGATION_L1TF) ?
+		L1TF_MITIGATION_AUTO : L1TF_MITIGATION_OFF;
+}
+#endif
+
 static int __init l1tf_cmdline(char *str)
 {
 	if (!boot_cpu_has_bug(X86_BUG_L1TF))
@@ -3881,5 +3890,6 @@ void arch_cpu_reset_mitigations(void)
 	retbleed_reset_mitigation();
 	spectre_v2_user_reset_mitigation();
 	ssb_reset_mitigation();
+	l1tf_reset_mitigation();
 }
 #endif
