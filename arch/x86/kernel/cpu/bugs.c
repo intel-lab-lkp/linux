@@ -1542,6 +1542,20 @@ static void __init retbleed_apply_mitigation(void)
 		cpu_smt_disable(false);
 }
 
+#ifdef CONFIG_DYNAMIC_MITIGATIONS
+static void retbleed_reset_mitigation(void)
+{
+	setup_clear_cpu_cap(X86_FEATURE_RETHUNK);
+	setup_clear_cpu_cap(X86_FEATURE_UNRET);
+	setup_clear_cpu_cap(X86_FEATURE_ENTRY_IBPB);
+	setup_clear_cpu_cap(X86_FEATURE_IBPB_ON_VMEXIT);
+	setup_clear_cpu_cap(X86_FEATURE_CALL_DEPTH);
+	x86_return_thunk = __x86_return_thunk;
+	retbleed_mitigation = IS_ENABLED(CONFIG_MITIGATION_RETBLEED) ?
+		RETBLEED_MITIGATION_AUTO : RETBLEED_MITIGATION_NONE;
+}
+#endif
+
 #undef pr_fmt
 #define pr_fmt(fmt)     "ITS: " fmt
 
@@ -3829,5 +3843,6 @@ void arch_cpu_reset_mitigations(void)
 {
 	spectre_v1_reset_mitigation();
 	spectre_v2_reset_mitigation();
+	retbleed_reset_mitigation();
 }
 #endif
