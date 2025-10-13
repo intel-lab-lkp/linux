@@ -3491,7 +3491,7 @@ static int load_module(struct load_info *info, const char __user *uargs,
 	if (err < 0)
 		goto coming_cleanup;
 
-	if (is_livepatch_module(mod)) {
+	if (IS_ENABLED(CONFIG_DYNAMIC_MITIGATIONS) || is_livepatch_module(mod)) {
 		err = copy_module_elf(mod, info);
 		if (err < 0)
 			goto sysfs_cleanup;
