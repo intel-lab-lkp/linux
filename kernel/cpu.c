@@ -3171,6 +3171,7 @@ void __init boot_cpu_hotplug_init(void)
 }
 
 #ifdef CONFIG_CPU_MITIGATIONS
+
 /*
  * All except the cross-thread attack vector are mitigated by default.
  * Cross-thread mitigation often requires disabling SMT which is expensive
@@ -3326,3 +3327,20 @@ static int __init mitigations_parse_cmdline(char *arg)
 }
 #endif
 early_param("mitigations", mitigations_parse_cmdline);
+
+#ifdef CONFIG_DYNAMIC_MITIGATIONS
+void __weak arch_cpu_reset_mitigations(void)
+{
+}
+
+void cpu_reset_mitigations(void)
+{
+	smt_mitigations = SMT_MITIGATIONS_AUTO;
+	cpu_mitigations = CPU_MITIGATIONS_AUTO;
+	attack_vectors[CPU_MITIGATE_USER_KERNEL] = true;
+	attack_vectors[CPU_MITIGATE_USER_USER] = true;
+	attack_vectors[CPU_MITIGATE_GUEST_HOST] = IS_ENABLED(CONFIG_KVM);
+	attack_vectors[CPU_MITIGATE_GUEST_GUEST] = IS_ENABLED(CONFIG_KVM);
+	arch_cpu_reset_mitigations();
+}
+#endif

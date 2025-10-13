@@ -208,6 +208,9 @@ enum smt_mitigations {
 	SMT_MITIGATIONS_ON,
 };
 
+void cpu_reset_mitigations(void);
+void arch_cpu_reset_mitigations(void);
+
 #ifdef CONFIG_CPU_MITIGATIONS
 extern bool cpu_mitigations_off(void);
 extern bool cpu_mitigations_auto_nosmt(void);
