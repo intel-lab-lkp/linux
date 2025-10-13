@@ -187,7 +187,7 @@ static void its_fini_core(void)
 #ifdef CONFIG_MODULES
 void its_init_mod(struct module *mod)
 {
-	if (!cpu_feature_enabled(X86_FEATURE_INDIRECT_THUNK_ITS))
+	if (!boot_cpu_has(X86_FEATURE_INDIRECT_THUNK_ITS))
 		return;
 
 	mutex_lock(&text_mutex);
@@ -197,7 +197,7 @@ void its_init_mod(struct module *mod)
 
 void its_fini_mod(struct module *mod)
 {
-	if (!cpu_feature_enabled(X86_FEATURE_INDIRECT_THUNK_ITS))
+	if (!boot_cpu_has(X86_FEATURE_INDIRECT_THUNK_ITS))
 		return;
 
 	WARN_ON_ONCE(its_mod != mod);
@@ -901,7 +901,7 @@ static int emit_its_trampoline(void *addr, struct insn *insn, int reg, u8 *bytes
 /* Check if an indirect branch is at ITS-unsafe address */
 static bool cpu_wants_indirect_its_thunk_at(unsigned long addr, int reg)
 {
-	if (!cpu_feature_enabled(X86_FEATURE_INDIRECT_THUNK_ITS))
+	if (!boot_cpu_has(X86_FEATURE_INDIRECT_THUNK_ITS))
 		return false;
 
 	/* Indirect branch opcode is 2 or 3 bytes depending on reg */
@@ -967,9 +967,9 @@ static int patch_retpoline(void *addr, struct insn *insn, u8 *bytes)
 	/* If anyone ever does: CALL/JMP *%rsp, we're in deep trouble. */
 	BUG_ON(reg == 4);
 
-	if (cpu_feature_enabled(X86_FEATURE_RETPOLINE) &&
-	    !cpu_feature_enabled(X86_FEATURE_RETPOLINE_LFENCE)) {
-		if (cpu_feature_enabled(X86_FEATURE_CALL_DEPTH))
+	if (boot_cpu_has(X86_FEATURE_RETPOLINE) &&
+	    !boot_cpu_has(X86_FEATURE_RETPOLINE_LFENCE)) {
+		if (boot_cpu_has(X86_FEATURE_CALL_DEPTH))
 			return emit_call_track_retpoline(addr, insn, reg, bytes);
 
 		return -1;
@@ -1004,7 +1004,7 @@ static int patch_retpoline(void *addr, struct insn *insn, u8 *bytes)
 	/*
 	 * For RETPOLINE_LFENCE: prepend the indirect CALL/JMP with an LFENCE.
 	 */
-	if (cpu_feature_enabled(X86_FEATURE_RETPOLINE_LFENCE)) {
+	if (boot_cpu_has(X86_FEATURE_RETPOLINE_LFENCE)) {
 		bytes[i++] = 0x0f;
 		bytes[i++] = 0xae;
 		bytes[i++] = 0xe8; /* LFENCE */
