@@ -157,13 +157,13 @@ static int change_memory_common(unsigned long addr, int numpages,
 
 	/*
 	 * Kernel VA mappings are always live, and splitting live section
-	 * mappings into page mappings may cause TLB conflicts. This means
-	 * we have to ensure that changing the permission bits of the range
-	 * we are operating on does not result in such splitting.
+	 * mappings into page mappings may cause TLB conflicts on the machines
+	 * which don't support BBML2_NOABORT.
 	 *
 	 * Let's restrict ourselves to mappings created by vmalloc (or vmap).
-	 * Disallow VM_ALLOW_HUGE_VMAP mappings to guarantee that only page
-	 * mappings are updated and splitting is never needed.
+	 * Disallow VM_ALLOW_HUGE_VMAP mappings if the systems don't support
+	 * BBML2_NOABORT to guarantee that only page mappings are updated and
+	 * splitting is never needed on those machines.
 	 *
 	 * So check whether the [addr, addr + size) interval is entirely
 	 * covered by precisely one VM area that has the VM_ALLOC flag set.
@@ -171,7 +171,8 @@ static int change_memory_common(unsigned long addr, int numpages,
 	area = find_vm_area((void *)addr);
 	if (!area ||
 	    end > (unsigned long)kasan_reset_tag(area->addr) + area->size ||
-	    ((area->flags & (VM_ALLOC | VM_ALLOW_HUGE_VMAP)) != VM_ALLOC))
+	    !(area->flags & VM_ALLOC) || ((area->flags & VM_ALLOW_HUGE_VMAP) &&
+	    !system_supports_bbml2_noabort()))
 		return -EINVAL;
 
 	if (!numpages)
