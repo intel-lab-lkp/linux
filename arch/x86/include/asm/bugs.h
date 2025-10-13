@@ -11,5 +11,6 @@ static inline int ppro_with_ram_bug(void) { return 0; }
 #endif
 
 extern void cpu_bugs_smt_update(void);
+void arch_cpu_reset_mitigations(void);
 
 #endif /* _ASM_X86_BUGS_H */

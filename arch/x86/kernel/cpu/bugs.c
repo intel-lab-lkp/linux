@@ -46,6 +46,8 @@
  *				   may want to change based on other choices
  *				   made.  This function is optional.
  *   <vuln>_apply_mitigation() -- Enable the selected mitigation.
+ *   <vuln>_reset_mitigation() -- Undo's the apply_mitigation step, this is used
+ *				  with runtime mitigation patching.
  *
  * The compile-time mitigation in all cases should be AUTO.  An explicit
  * command-line option can override AUTO.  If no such option is
@@ -1246,6 +1248,15 @@ static void __init spectre_v1_apply_mitigation(void)
 
 	pr_info("%s\n", spectre_v1_strings[spectre_v1_mitigation]);
 }
+
+#ifdef CONFIG_DYNAMIC_MITIGATIONS
+static void spectre_v1_reset_mitigation(void)
+{
+	setup_clear_cpu_cap(X86_FEATURE_FENCE_SWAPGS_USER);
+	setup_clear_cpu_cap(X86_FEATURE_FENCE_SWAPGS_KERNEL);
+	spectre_v1_mitigation = SPECTRE_V1_MITIGATION_AUTO;
+}
+#endif
 
 static int __init nospectre_v1_cmdline(char *str)
 {
@@ -3794,3 +3805,10 @@ void __warn_thunk(void)
 {
 	WARN_ONCE(1, "Unpatched return thunk in use. This should not happen!\n");
 }
+
+#ifdef CONFIG_DYNAMIC_MITIGATIONS
+void arch_cpu_reset_mitigations(void)
+{
+	spectre_v1_reset_mitigation();
+}
+#endif
