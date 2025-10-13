@@ -392,6 +392,80 @@ impl From<core::convert::Infallible> for Error {
 /// [Rust documentation]: https://doc.rust-lang.org/book/ch09-02-recoverable-errors-with-result.html
 pub type Result<T = (), E = Error> = core::result::Result<T, E>;
 
+/// Trait for handling integer return values from C kernel functions by converting
+/// them into idiomatic Rust [`Result`]s.
+pub trait ToResult {
+    /// The unsigned version of the integer type used for successful return values.
+    type Unsigned;
+
+    /// Converts an integer as returned by a C kernel function to a [`Result`].
+    ///
+    /// If the integer is negative, an [`Err`] with an [`Error`] as given by [`Error::from_errno`]
+    /// is returned. This means the integer must be `>= -MAX_ERRNO`.
+    ///
+    /// Otherwise, it returns the original value as an unsigned integer.
+    ///
+    /// It is a bug to pass an out-of-range negative integer. `Err(EINVAL)` is returned
+    /// in such a case.
+    ///
+    /// # Examples
+    ///
+    /// This function may be used to easily perform early returns with the [`?`] operator
+    /// when working with C APIs within Rust abstractions:
+    ///
+    /// ```
+    /// # use kernel::error::ToResult;
+    /// # mod bindings {
+    /// #     #![expect(clippy::missing_safety_doc)]
+    /// #     use kernel::prelude::*;
+    /// #     pub(super) unsafe fn f1() -> c_int { 0 }
+    /// #     pub(super) unsafe fn f2() -> c_int { EINVAL.to_errno() }
+    /// # }
+    /// fn f() -> Result {
+    ///     // SAFETY: ...
+    ///     let _value = unsafe { bindings::f1() }.to_result()?;
+    ///
+    ///     // SAFETY: ...
+    ///     let _value = unsafe { bindings::f2() }.to_result()?;
+    ///
+    ///     // ...
+    ///
+    ///     Ok(())
+    /// }
+    /// # assert_eq!(f(), Err(EINVAL));
+    /// ```
+    ///
+    /// [`?`]: https://doc.rust-lang.org/reference/expressions/operator-expr.html#the-question-mark-operator
+    fn to_result(self) -> Result<Self::Unsigned>;
+}
+
+impl ToResult for i32 {
+    type Unsigned = u32;
+
+    fn to_result(self) -> Result<Self::Unsigned> {
+        if self < 0 {
+            Err(Error::from_errno(self))
+        } else {
+            Ok(self as u32)
+        }
+    }
+}
+
+impl ToResult for isize {
+    type Unsigned = usize;
+
+    fn to_result(self) -> Result<Self::Unsigned> {
+        // Try casting into `i32`.
+        let casted: crate::ffi::c_int = self.try_into().map_err(|_| code::EINVAL)?;
+
+        if casted < 0 {
+            Err(Error::from_errno(casted))
+        } else {
+            Ok(self as usize)
+        }
+    }
+}
+
 /// Converts an integer as returned by a C kernel function to a [`Result`].
 ///
 /// If the integer is negative, an [`Err`] with an [`Error`] as given by [`Error::from_errno`] is
