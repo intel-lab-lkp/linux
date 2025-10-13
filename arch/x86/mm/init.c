@@ -977,8 +977,16 @@ void __ref free_initmem(void)
 
 	mem_encrypt_free_decrypted_mem();
 
-	free_kernel_image_pages("unused kernel image (initmem)",
-				&__init_begin, &__init_end);
+	/*
+	 * __init_alt_end is after the alternative sections in case we need to
+	 * keep that around to support runtime patching.
+	 */
+	if (IS_ENABLED(CONFIG_DYNAMIC_MITIGATIONS))
+		free_kernel_image_pages("unused kernel image (initmem)",
+					&__init_alt_end, &__init_end);
+	else
+		free_kernel_image_pages("unused kernel image (initmem)",
+					&__init_begin, &__init_end);
 }
 
 #ifdef CONFIG_BLK_DEV_INITRD

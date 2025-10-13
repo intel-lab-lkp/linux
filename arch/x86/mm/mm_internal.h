@@ -29,4 +29,6 @@ extern unsigned long tlb_single_page_flush_ceiling;
 void __init x86_numa_init(void);
 #endif
 
+extern void *__init_alt_end;
+
 #endif	/* __X86_MM_INTERNAL_H */
