@@ -301,6 +301,8 @@ static inline void its_fini_core(void) {}
 static bool __maybe_unused repatch_in_progress;
 
 #ifdef CONFIG_DYNAMIC_MITIGATIONS
+static struct alt_site *alt_sites;
+
 /* Do not patch __init text addresses when repatching */
 static bool should_patch(void *addr, struct module *mod)
 {
@@ -642,6 +644,27 @@ void __init_or_module noinline apply_alternatives(struct alt_instr *start,
 	u8 insn_buff[MAX_PATCH_LEN];
 	u8 *instr, *replacement;
 	struct alt_instr *a, *b;
+	u32 idx = 0;
+	struct alt_site *save_site = NULL;
+
+#ifdef CONFIG_DYNAMIC_MITIGATIONS
+	u32 size = ((u64)end - (u64)start)/sizeof(struct alt_instr);
+
+	/* Main kernel text alternatives */
+	if (!mod && !alt_sites) {
+		alt_sites =  kcalloc(size, sizeof(struct alt_site), GFP_KERNEL);
+		if (WARN_ON(!alt_sites))
+			return;
+
+		save_site = alt_sites;
+	} else if (mod && !mod->arch.alt_sites) {
+		mod->arch.alt_sites =  kcalloc(size, sizeof(struct alt_site), GFP_KERNEL);
+		if (WARN_ON(!mod->arch.alt_sites))
+			return;
+
+		save_site = mod->arch.alt_sites;
+	}
+#endif
 
 	DPRINTK(ALT, "alt table %px, -> %px", start, end);
 
@@ -664,7 +687,7 @@ void __init_or_module noinline apply_alternatives(struct alt_instr *start,
 	 * So be careful if you want to change the scan order to any other
 	 * order.
 	 */
-	for (a = start; a < end; a++) {
+	for (a = start; a < end; a++, idx++) {
 		int insn_buff_sz = 0;
 
 		/*
@@ -686,6 +709,18 @@ void __init_or_module noinline apply_alternatives(struct alt_instr *start,
 		replacement = (u8 *)&a->repl_offset + a->repl_offset;
 		BUG_ON(a->instrlen > sizeof(insn_buff));
 		BUG_ON(a->cpuid >= (NCAPINTS + NBUGINTS) * 32);
+
+		if (IS_ENABLED(CONFIG_DYNAMIC_MITIGATIONS) && save_site) {
+			/* Only save the original bytes for each location */
+			if (a == start || (instr_va(a) != instr_va(a-1))) {
+				save_site[idx].len = a->instrlen;
+				save_site[idx].pbytes = kmalloc(a->instrlen, GFP_KERNEL);
+				if (WARN_ON(!save_site[idx].pbytes))
+					return;
+
+				memcpy(save_site[idx].pbytes, instr, a->instrlen);
+			}
+		}
 
 		/*
 		 * Patch if either:

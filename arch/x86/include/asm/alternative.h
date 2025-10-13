@@ -97,6 +97,11 @@ extern int alternatives_patched;
 
 struct module;
 
+struct alt_site {
+	u8 *pbytes;
+	u8 len;
+};
+
 extern void alternative_instructions(void);
 extern void apply_alternatives(struct alt_instr *start, struct alt_instr *end,
 		struct module *mod);

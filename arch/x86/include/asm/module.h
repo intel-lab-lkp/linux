@@ -19,6 +19,9 @@ struct mod_arch_specific {
 	struct orc_entry *orc_unwind;
 #endif
 	struct its_array its_pages;
+#ifdef CONFIG_DYNAMIC_MITIGATIONS
+	struct alt_site *alt_sites;
+#endif
 };
 
 #endif /* _ASM_X86_MODULE_H */
