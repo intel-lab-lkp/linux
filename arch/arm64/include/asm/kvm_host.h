@@ -227,6 +227,9 @@ struct kvm_s2_mmu {
 	 * >0: Somebody is actively using this.
 	 */
 	atomic_t refcnt;
+
+	/* For IPA to shadow IPA lookup */
+	struct maple_tree nested_mmu_mt;
 };
 
 struct kvm_arch_memory_slot {

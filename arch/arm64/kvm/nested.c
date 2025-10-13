@@ -7,6 +7,7 @@
 #include <linux/bitfield.h>
 #include <linux/kvm.h>
 #include <linux/kvm_host.h>
+#include <linux/maple_tree.h>
 
 #include <asm/fixmap.h>
 #include <asm/kvm_arm.h>
@@ -725,6 +726,7 @@ void kvm_init_nested_s2_mmu(struct kvm_s2_mmu *mmu)
 	mmu->tlb_vttbr = VTTBR_CNP_BIT;
 	mmu->nested_stage2_enabled = false;
 	atomic_set(&mmu->refcnt, 0);
+	mt_init_flags(&mmu->nested_mmu_mt, MM_MT_FLAGS);
 }
 
 void kvm_vcpu_load_hw_mmu(struct kvm_vcpu *vcpu)
@@ -1067,6 +1069,99 @@ void kvm_nested_s2_wp(struct kvm *kvm)
 	kvm_invalidate_vncr_ipa(kvm, 0, BIT(kvm->arch.mmu.pgt->ia_bits));
 }
 
+/*
+ * Store range of canonical IPA mapped to a nested stage 2 mmu table.
+ * Canonical IPA used as pivot in maple tree for the lookup later
+ * while IPA unmap/flush.
+ */
+int add_to_shadow_ipa_lookup(struct kvm_pgtable *pgt, u64 shadow_ipa,
+		u64 ipa, u64 size)
+{
+	struct kvm_s2_mmu *mmu;
+	struct shadow_ipa_map *entry;
+	unsigned long start, end;
+	int ret;
+
+	start = ALIGN_DOWN(ipa, size);
+	end = start + size;
+	mmu = pgt->mmu;
+
+	entry = kzalloc(sizeof(struct shadow_ipa_map), GFP_KERNEL_ACCOUNT);
+
+	if (!entry)
+		return -ENOMEM;
+
+	entry->ipa = start;
+	entry->shadow_ipa = ALIGN_DOWN(shadow_ipa, size);
+	entry->size = size;
+	ret = mtree_store_range(&mmu->nested_mmu_mt, start, end - 1, entry,
+			  GFP_KERNEL_ACCOUNT);
+	if (ret) {
+		kfree(entry);
+		WARN_ON(ret);
+	}
+
+	return ret;
+}
+
+static void nested_mtree_erase(struct maple_tree *mt, unsigned long start,
+		unsigned long size)
+{
+	void *entry = NULL;
+
+	MA_STATE(mas, mt, start, start + size - 1);
+
+	mtree_lock(mt);
+	entry = mas_erase(&mas);
+	mtree_unlock(mt);
+	kfree(entry);
+}
+
+static void nested_mtree_erase_and_unmap_all(struct kvm_s2_mmu *mmu,
+		unsigned long start, unsigned long end, bool may_block)
+{
+	struct shadow_ipa_map *entry;
+
+	mt_for_each(&mmu->nested_mmu_mt, entry, start, kvm_phys_size(mmu)) {
+		kvm_stage2_unmap_range(mmu, entry->shadow_ipa, entry->size,
+				may_block);
+		kfree(entry);
+	}
+
+	mtree_destroy(&mmu->nested_mmu_mt);
+	mt_init_flags(&mmu->nested_mmu_mt, MM_MT_FLAGS);
+}
+
+void kvm_nested_s2_unmap_range(struct kvm *kvm, u64 ipa, u64 size,
+		bool may_block)
+{
+	int i;
+	struct shadow_ipa_map *entry;
+
+	lockdep_assert_held_write(&kvm->mmu_lock);
+
+	for (i = 0; i < kvm->arch.nested_mmus_size; i++) {
+		struct kvm_s2_mmu *mmu = &kvm->arch.nested_mmus[i];
+		unsigned long start = ipa;
+		unsigned long end = ipa + size;
+
+		if (!kvm_s2_mmu_valid(mmu))
+			continue;
+
+		do {
+			entry = mt_find(&mmu->nested_mmu_mt, &start, end - 1);
+			if (!entry)
+				break;
+
+			kvm_stage2_unmap_range(mmu, entry->shadow_ipa,
+							entry->size, may_block);
+			start = entry->ipa + entry->size;
+			nested_mtree_erase(&mmu->nested_mmu_mt, entry->ipa,
+							entry->size);
+		} while (start < end);
+	}
+}
+
 void kvm_nested_s2_unmap(struct kvm *kvm, bool may_block)
 {
 	int i;
@@ -1076,8 +1171,10 @@ void kvm_nested_s2_unmap(struct kvm *kvm, bool may_block)
 	for (i = 0; i < kvm->arch.nested_mmus_size; i++) {
 		struct kvm_s2_mmu *mmu = &kvm->arch.nested_mmus[i];
 
-		if (kvm_s2_mmu_valid(mmu))
-			kvm_stage2_unmap_range(mmu, 0, kvm_phys_size(mmu), may_block);
+		if (!kvm_s2_mmu_valid(mmu))
+			continue;
+
+		nested_mtree_erase_and_unmap_all(mmu, 0, kvm_phys_size(mmu), may_block);
 	}
 
 	kvm_invalidate_vncr_ipa(kvm, 0, BIT(kvm->arch.mmu.pgt->ia_bits));
@@ -1091,9 +1188,14 @@ void kvm_nested_s2_flush(struct kvm *kvm)
 
 	for (i = 0; i < kvm->arch.nested_mmus_size; i++) {
 		struct kvm_s2_mmu *mmu = &kvm->arch.nested_mmus[i];
+		struct shadow_ipa_map *entry;
+		unsigned long start = 0;
 
-		if (kvm_s2_mmu_valid(mmu))
-			kvm_stage2_flush_range(mmu, 0, kvm_phys_size(mmu));
+		if (!kvm_s2_mmu_valid(mmu))
+			continue;
+
+		mt_for_each(&mmu->nested_mmu_mt, entry, start, kvm_phys_size(mmu))
+			kvm_stage2_flush_range(mmu, entry->shadow_ipa, entry->size);
 	}
 }
 
@@ -1104,8 +1206,16 @@ void kvm_arch_flush_shadow_all(struct kvm *kvm)
 	for (i = 0; i < kvm->arch.nested_mmus_size; i++) {
 		struct kvm_s2_mmu *mmu = &kvm->arch.nested_mmus[i];
 
-		if (!WARN_ON(atomic_read(&mmu->refcnt)))
+		if (!WARN_ON(atomic_read(&mmu->refcnt))) {
+			struct shadow_ipa_map *entry;
+			unsigned long start = 0;
+
 			kvm_free_stage2_pgd(mmu);
+
+			mt_for_each(&mmu->nested_mmu_mt, entry, start, kvm_phys_size(mmu))
+				kfree(entry);
+			mtree_destroy(&mmu->nested_mmu_mt);
+		}
 	}
 	kvfree(kvm->arch.nested_mmus);
 	kvm->arch.nested_mmus = NULL;
