@@ -298,7 +298,7 @@ u8 *its_static_thunk(int reg)
 static inline void its_fini_core(void) {}
 #endif /* CONFIG_MITIGATION_ITS */
 
-static bool __maybe_unused repatch_in_progress;
+static bool repatch_in_progress;
 
 #ifdef CONFIG_DYNAMIC_MITIGATIONS
 static struct alt_site *alt_sites;
@@ -697,8 +697,12 @@ void __init_or_module noinline apply_alternatives(struct alt_instr *start,
 		 * add more padding. To ensure consistent patching find the max
 		 * padding for all alt_instr entries for this site (nested
 		 * alternatives result in consecutive entries).
+		 *
+		 * Ignore this on repatching because this has already been done
+		 * and because the alt_instr may be in read-only memory.
 		 */
-		for (b = a+1; b < end && instr_va(b) == instr_va(a); b++) {
+		for (b = a+1; b < end && instr_va(b) == instr_va(a) &&
+				!repatch_in_progress; b++) {
 			u8 len = max(a->instrlen, b->instrlen);
 			a->instrlen = b->instrlen = len;
 		}
