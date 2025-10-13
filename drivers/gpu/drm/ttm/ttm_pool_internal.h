@@ -8,12 +8,12 @@
 
 static inline bool ttm_pool_uses_dma_alloc(struct ttm_pool *pool)
 {
-	return pool->use_dma_alloc;
+	return pool->flags & TTM_POOL_USE_DMA_ALLOC;
 }
 
 static inline bool ttm_pool_uses_dma32(struct ttm_pool *pool)
 {
-	return pool->use_dma32;
+	return pool->flags & TTM_POOL_USE_DMA32;
 }
 
 #endif
