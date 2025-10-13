@@ -874,6 +874,42 @@ struct vfio_device_ioeventfd {
 #define VFIO_DEVICE_IOEVENTFD		_IO(VFIO_TYPE, VFIO_BASE + 16)
 
 /**
+ * VFIO_DEVICE_PCI_TPH - _IO(VFIO_TYPE, VFIO_BASE + 22)
+ *
+ * Control PCIe TLP Processing Hints (TPH) on a PCIe device.
+ *
+ * Supported operations:
+ * - VFIO_DEVICE_TPH_ENABLE: enable TPH in no-steering-tag (NS) or
+ *   device-specific (DS) mode. IV mode is not supported via this ioctl
+ *   and returns -EINVAL.
+ * - VFIO_DEVICE_TPH_DISABLE: disable TPH on the device.
+ * - VFIO_DEVICE_TPH_SET_ST: program an entry in the device TPH Steering-Tag
+ *   (ST) table. The kernel derives the ST from cpu_id and mem_type; the
+ *   value is not returned to userspace.
+ */
+struct vfio_pci_tph_entry {
+	__u32 cpu_id;			/* CPU logical ID */
+	__u8  mem_type;
+#define VFIO_TPH_MEM_TYPE_VMEM		0   /* Request volatile memory ST */
+#define VFIO_TPH_MEM_TYPE_PMEM		1   /* Request persistent memory ST */
+	__u8  rsvd[1];
+	__u16 index;			/* ST-table index */
+};
+
+struct vfio_pci_tph {
+	__u32 argsz;			/* Size of vfio_pci_tph */
+	__u32 mode;			/* NS and DS modes; IV not supported */
+	__u32 op;
+#define VFIO_DEVICE_TPH_ENABLE		0
+#define VFIO_DEVICE_TPH_DISABLE		1
+#define VFIO_DEVICE_TPH_SET_ST		2
+	struct vfio_pci_tph_entry ent;
+};
+
+#define VFIO_DEVICE_PCI_TPH	_IO(VFIO_TYPE, VFIO_BASE + 22)
+
+
+/**
  * VFIO_DEVICE_FEATURE - _IOWR(VFIO_TYPE, VFIO_BASE + 17,
  *			       struct vfio_device_feature)
  *

@@ -28,6 +28,7 @@
 #include <linux/nospec.h>
 #include <linux/sched/mm.h>
 #include <linux/iommufd.h>
+#include <linux/pci-tph.h>
 #if IS_ENABLED(CONFIG_EEH)
 #include <asm/eeh.h>
 #endif
@@ -1443,6 +1444,77 @@ static int vfio_pci_ioctl_ioeventfd(struct vfio_pci_core_device *vdev,
 				  ioeventfd.fd);
 }
 
+static int vfio_pci_tph_set_st(struct vfio_pci_core_device *vdev,
+			       const struct vfio_pci_tph_entry *ent)
+{
+	int ret, mem_type;
+	u16 st;
+	u32 cpu_id = ent->cpu_id;
+
+	if (cpu_id >= nr_cpu_ids || !cpu_present(cpu_id))
+		return -EINVAL;
+
+	if (!cpumask_test_cpu(cpu_id, current->cpus_ptr))
+		return -EINVAL;
+
+	switch (ent->mem_type) {
+	case VFIO_TPH_MEM_TYPE_VMEM:
+		mem_type = TPH_MEM_TYPE_VM;
+		break;
+	case VFIO_TPH_MEM_TYPE_PMEM:
+		mem_type = TPH_MEM_TYPE_PM;
+		break;
+	default:
+		return -EINVAL;
+	}
+	ret = pcie_tph_get_cpu_st(vdev->pdev, mem_type, topology_core_id(cpu_id),
+				  &st);
+	if (ret)
+		return ret;
+	/*
+	 * PCI core enforces table bounds and disables TPH on error.
+	 */
+	return pcie_tph_set_st_entry(vdev->pdev, ent->index, st);
+}
+
+static int vfio_pci_tph_enable(struct vfio_pci_core_device *vdev, int mode)
+{
+	/* IV mode is not supported. */
+	if (mode == PCI_TPH_ST_IV_MODE)
+		return -EINVAL;
+	/* PCI core validates 'mode' and returns -EINVAL on bad values. */
+	return pcie_enable_tph(vdev->pdev, mode);
+}
+
+static int vfio_pci_tph_disable(struct vfio_pci_core_device *vdev)
+{
+	pcie_disable_tph(vdev->pdev);
+	return 0;
+}
+
+static int vfio_pci_ioctl_tph(struct vfio_pci_core_device *vdev,
+			      void __user *uarg)
+{
+	struct vfio_pci_tph tph;
+
+	if (copy_from_user(&tph, uarg, sizeof(struct vfio_pci_tph)))
+		return -EFAULT;
+
+	if (tph.argsz != sizeof(struct vfio_pci_tph))
+		return -EINVAL;
+
+	switch (tph.op) {
+	case VFIO_DEVICE_TPH_ENABLE:
+		return vfio_pci_tph_enable(vdev, tph.mode);
+	case VFIO_DEVICE_TPH_DISABLE:
+		return vfio_pci_tph_disable(vdev);
+	case VFIO_DEVICE_TPH_SET_ST:
+		return vfio_pci_tph_set_st(vdev, &tph.ent);
+	default:
+		return -EINVAL;
+	}
+}
+
 long vfio_pci_core_ioctl(struct vfio_device *core_vdev, unsigned int cmd,
 			 unsigned long arg)
 {
@@ -1467,6 +1539,8 @@ long vfio_pci_core_ioctl(struct vfio_device *core_vdev, unsigned int cmd,
 		return vfio_pci_ioctl_reset(vdev, uarg);
 	case VFIO_DEVICE_SET_IRQS:
 		return vfio_pci_ioctl_set_irqs(vdev, uarg);
+	case VFIO_DEVICE_PCI_TPH:
+		return vfio_pci_ioctl_tph(vdev, uarg);
 	default:
 		return -ENOTTY;
 	}
