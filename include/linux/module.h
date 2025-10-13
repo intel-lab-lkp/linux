@@ -1020,4 +1020,9 @@ static inline unsigned long find_kallsyms_symbol_value(struct module *mod,
 /* Define __free(module_put) macro for struct module *. */
 DEFINE_FREE(module_put, struct module *, if (_T) module_put(_T))
 
+#ifdef CONFIG_DYNAMIC_MITIGATIONS
+void modules_prepare_repatch(void);
+void modules_post_repatch(void);
+#endif
+
 #endif /* _LINUX_MODULE_H */

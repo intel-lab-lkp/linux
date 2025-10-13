@@ -3910,3 +3910,37 @@ static int module_debugfs_init(void)
 }
 module_init(module_debugfs_init);
 #endif
+
+#ifdef CONFIG_DYNAMIC_MITIGATIONS
+static void change_mod_mem_perm(struct module *mod, enum mod_mem_type type,
+		bool writeable)
+{
+	unsigned long base, size;
+
+	base = (unsigned long) mod->mem[type].base;
+	size = mod->mem[type].size;
+
+	if (writeable)
+		set_memory_rw(base, PFN_UP(size));
+	else
+		set_memory_ro(base, PFN_UP(size));
+}
+
+void modules_prepare_repatch(void)
+{
+	struct module *mod;
+
+	list_for_each_entry(mod, &modules, list) {
+		change_mod_mem_perm(mod, MOD_TEXT, true);
+	}
+}
+
+void modules_post_repatch(void)
+{
+	struct module *mod;
+
+	list_for_each_entry(mod, &modules, list) {
+		change_mod_mem_perm(mod, MOD_TEXT, false);
+	}
+}
+#endif
