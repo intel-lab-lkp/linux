@@ -29,6 +29,7 @@
 #include <linux/mm_inline.h>
 #include <linux/pagewalk.h>
 #include <linux/stop_machine.h>
+#include <linux/proc_fs.h>
 
 #include <asm/barrier.h>
 #include <asm/cputype.h>
@@ -50,6 +51,17 @@
 #define NO_EXEC_MAPPINGS	BIT(2)	/* assumes FEAT_HPDS is not used */
 
 DEFINE_STATIC_KEY_FALSE(arm64_ptdump_lock_key);
+
+enum direct_map_type {
+	PTE,
+	CONT_PTE,
+	PMD,
+	CONT_PMD,
+	PUD,
+	NR_DIRECT_MAP_TYPE,
+};
+
+unsigned long direct_map_cnt[NR_DIRECT_MAP_TYPE];
 
 u64 kimage_voffset __ro_after_init;
 EXPORT_SYMBOL(kimage_voffset);
@@ -171,6 +183,60 @@ static void init_clear_pgtable(void *table)
 	dsb(ishst);
 }
 
+void arch_report_meminfo(struct seq_file *m)
+{
+	char *size[NR_DIRECT_MAP_TYPE];
+	unsigned int shift[NR_DIRECT_MAP_TYPE];
+
+#if defined(CONFIG_ARM64_4K_PAGES)
+	size[PTE] = "4K";
+	size[CONT_PTE] = "64K";
+	size[PMD] = "2M";
+	size[CONT_PMD] = "32M";
+	size[PUD] = "1G";
+
+	shift[PTE] = 2;
+	shift[CONT_PTE] = 6;
+	shift[PMD] = 11;
+	shift[CONT_PMD] = 15;
+	shift[PUD] = 20;
+#elif defined(CONFIG_ARM64_16K_PAGES)
+	size[PTE] = "16K";
+	size[CONT_PTE] = "2M";
+	size[PMD] = "32M";
+	size[CONT_PMD] = "1G";
+
+	shift[PTE] = 4;
+	shift[CONT_PTE] = 11;
+	shift[PMD] = 15;
+	shift[CONT_PMD] = 20;
+#elif defined(CONFIG_ARM64_64K_PAGES)
+	size[PTE] = "64K";
+	size[CONT_PTE] = "2M";
+	size[PMD] = "512M";
+	size[CONT_PMD] = "16G";
+
+	shift[PTE] = 6;
+	shift[CONT_PTE] = 11;
+	shift[PMD] = 19;
+	shift[CONT_PMD] = 24;
+#endif
+
+	seq_printf(m, "DirectMap%s:	%8lu kB\n",
+			size[PTE], direct_map_cnt[PTE] << shift[PTE]);
+	seq_printf(m, "DirectMap%s:	%8lu kB\n",
+			size[CONT_PTE],
+			direct_map_cnt[CONT_PTE] << shift[CONT_PTE]);
+	seq_printf(m, "DirectMap%s:	%8lu kB\n",
+			size[PMD], direct_map_cnt[PMD] << shift[PMD]);
+	seq_printf(m, "DirectMap%s:	%8lu kB\n",
+			size[CONT_PMD],
+			direct_map_cnt[CONT_PMD] << shift[CONT_PMD]);
+	if (pud_sect_supported())
+		seq_printf(m, "DirectMap%s:	%8lu kB\n",
+			size[PUD], direct_map_cnt[PUD] << shift[PUD]);
+}
+
 static void init_pte(pte_t *ptep, unsigned long addr, unsigned long end,
 		     phys_addr_t phys, pgprot_t prot)
 {
@@ -182,6 +248,9 @@ static void init_pte(pte_t *ptep, unsigned long addr, unsigned long end,
 		 * are deferred to the end of alloc_init_cont_pte().
 		 */
 		__set_pte_nosync(ptep, pfn_pte(__phys_to_pfn(phys), prot));
+
+		if (!(pgprot_val(prot) & PTE_CONT))
+			direct_map_cnt[PTE]++;
 
 		/*
 		 * After the PTE entry has been populated once, we
@@ -229,8 +298,10 @@ static void alloc_init_cont_pte(pmd_t *pmdp, unsigned long addr,
 
 		/* use a contiguous mapping if the range is suitably aligned */
 		if ((((addr | next | phys) & ~CONT_PTE_MASK) == 0) &&
-		    (flags & NO_CONT_MAPPINGS) == 0)
+		    (flags & NO_CONT_MAPPINGS) == 0) {
 			__prot = __pgprot(pgprot_val(prot) | PTE_CONT);
+			direct_map_cnt[CONT_PTE]++;
+		}
 
 		init_pte(ptep, addr, next, phys, __prot);
 
@@ -261,6 +332,9 @@ static void init_pmd(pmd_t *pmdp, unsigned long addr, unsigned long end,
 		if (((addr | next | phys) & ~PMD_MASK) == 0 &&
 		    (flags & NO_BLOCK_MAPPINGS) == 0) {
 			pmd_set_huge(pmdp, phys, prot);
+
+			if (!(pgprot_val(prot) & PTE_CONT))
+				direct_map_cnt[PMD]++;
 
 			/*
 			 * After the PMD entry has been populated once, we
@@ -317,8 +391,10 @@ static void alloc_init_cont_pmd(pud_t *pudp, unsigned long addr,
 
 		/* use a contiguous mapping if the range is suitably aligned */
 		if ((((addr | next | phys) & ~CONT_PMD_MASK) == 0) &&
-		    (flags & NO_CONT_MAPPINGS) == 0)
+		    (flags & NO_CONT_MAPPINGS) == 0) {
 			__prot = __pgprot(pgprot_val(prot) | PTE_CONT);
+			direct_map_cnt[CONT_PMD]++;
+		}
 
 		init_pmd(pmdp, addr, next, phys, __prot, pgtable_alloc, flags);
 
@@ -368,6 +444,7 @@ static void alloc_init_pud(p4d_t *p4dp, unsigned long addr, unsigned long end,
 		    (flags & NO_BLOCK_MAPPINGS) == 0) {
 			pud_set_huge(pudp, phys, prot);
 
+			direct_map_cnt[PUD]++;
 			/*
 			 * After the PUD entry has been populated once, we
 			 * only allow updates to the permission attributes.
@@ -532,9 +609,13 @@ static void split_contpte(pte_t *ptep)
 {
 	int i;
 
+	direct_map_cnt[CONT_PTE]--;
+
 	ptep = PTR_ALIGN_DOWN(ptep, sizeof(*ptep) * CONT_PTES);
 	for (i = 0; i < CONT_PTES; i++, ptep++)
 		__set_pte(ptep, pte_mknoncont(__ptep_get(ptep)));
+
+	direct_map_cnt[PTE] += CONT_PTES;
 }
 
 static int split_pmd(pmd_t *pmdp, pmd_t pmd, gfp_t gfp, bool to_cont)
@@ -559,8 +640,10 @@ static int split_pmd(pmd_t *pmdp, pmd_t pmd, gfp_t gfp, bool to_cont)
 	if (to_cont)
 		prot = __pgprot(pgprot_val(prot) | PTE_CONT);
 
+	direct_map_cnt[PMD]--;
 	for (i = 0; i < PTRS_PER_PTE; i++, ptep++, pfn++)
 		__set_pte(ptep, pfn_pte(pfn, prot));
+	direct_map_cnt[CONT_PTE] += PTRS_PER_PTE / CONT_PTES;
 
 	/*
 	 * Ensure the pte entries are visible to the table walker by the time
@@ -576,9 +659,13 @@ static void split_contpmd(pmd_t *pmdp)
 {
 	int i;
 
+	direct_map_cnt[CONT_PMD]--;
+
 	pmdp = PTR_ALIGN_DOWN(pmdp, sizeof(*pmdp) * CONT_PMDS);
 	for (i = 0; i < CONT_PMDS; i++, pmdp++)
 		set_pmd(pmdp, pmd_mknoncont(pmdp_get(pmdp)));
+
+	direct_map_cnt[PMD] += CONT_PMDS;
 }
 
 static int split_pud(pud_t *pudp, pud_t pud, gfp_t gfp, bool to_cont)
@@ -604,8 +691,10 @@ static int split_pud(pud_t *pudp, pud_t pud, gfp_t gfp, bool to_cont)
 	if (to_cont)
 		prot = __pgprot(pgprot_val(prot) | PTE_CONT);
 
+	direct_map_cnt[PUD]--;
 	for (i = 0; i < PTRS_PER_PMD; i++, pmdp++, pfn += step)
 		set_pmd(pmdp, pfn_pmd(pfn, prot));
+	direct_map_cnt[CONT_PMD] += PTRS_PER_PMD/CONT_PMDS;
 
 	/*
 	 * Ensure the pmd entries are visible to the table walker by the time
