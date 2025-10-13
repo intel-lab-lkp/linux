@@ -125,6 +125,8 @@ const char *can_get_ctrlmode_str(u32 ctrlmode)
 		return "xl-tdc-manual";
 	case CAN_CTRLMODE_XL_TMS:
 		return "xl-tms";
+	case CAN_CTRLMODE_XL_ERR_SIGNAL:
+		return "xl-error-signalling";
 	default:
 		return "<unknown>";
 	}

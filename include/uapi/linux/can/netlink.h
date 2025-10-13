@@ -108,6 +108,7 @@ struct can_ctrlmode {
 #define CAN_CTRLMODE_XL_TDC_AUTO	0x2000	/* XL transceiver automatically calculates TDCV */
 #define CAN_CTRLMODE_XL_TDC_MANUAL	0x4000	/* XL TDCV is manually set up by user */
 #define CAN_CTRLMODE_XL_TMS		0x8000	/* Transceiver Mode Switching */
+#define CAN_CTRLMODE_XL_ERR_SIGNAL	0x10000	/* XL error signalling */
 
 /*
  * CAN device statistics
