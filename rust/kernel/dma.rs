@@ -7,7 +7,7 @@
 use crate::{
     bindings, build_assert, device,
     device::{Bound, Core},
-    error::{to_result, Result},
+    error::{Result, ToResult},
     prelude::*,
     sync::aref::ARef,
     transmute::{AsBytes, FromBytes},
@@ -43,7 +43,9 @@ pub trait Device: AsRef<device::Device<Core>> {
         // - By the type invariant of `device::Device`, `self.as_ref().as_raw()` is valid.
         // - The safety requirement of this function guarantees that there are no concurrent calls
         //   to DMA allocation and mapping primitives using this mask.
-        to_result(unsafe { bindings::dma_set_mask(self.as_ref().as_raw(), mask.value()) })
+        unsafe { bindings::dma_set_mask(self.as_ref().as_raw(), mask.value()) }.to_result()?;
+
+        Ok(())
     }
 
     /// Set up the device's DMA coherent addressing capabilities.
@@ -60,7 +62,10 @@ pub trait Device: AsRef<device::Device<Core>> {
         // - By the type invariant of `device::Device`, `self.as_ref().as_raw()` is valid.
         // - The safety requirement of this function guarantees that there are no concurrent calls
         //   to DMA allocation and mapping primitives using this mask.
-        to_result(unsafe { bindings::dma_set_coherent_mask(self.as_ref().as_raw(), mask.value()) })
+        unsafe { bindings::dma_set_coherent_mask(self.as_ref().as_raw(), mask.value()) }
+            .to_result()?;
+
+        Ok(())
     }
 
     /// Set up the device's DMA addressing capabilities.
@@ -79,9 +84,10 @@ pub trait Device: AsRef<device::Device<Core>> {
         // - By the type invariant of `device::Device`, `self.as_ref().as_raw()` is valid.
         // - The safety requirement of this function guarantees that there are no concurrent calls
         //   to DMA allocation and mapping primitives using this mask.
-        to_result(unsafe {
-            bindings::dma_set_mask_and_coherent(self.as_ref().as_raw(), mask.value())
-        })
+        unsafe { bindings::dma_set_mask_and_coherent(self.as_ref().as_raw(), mask.value()) }
+            .to_result()?;
+
+        Ok(())
     }
 }
 

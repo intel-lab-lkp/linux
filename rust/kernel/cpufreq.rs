@@ -14,7 +14,7 @@ use crate::{
     cpumask,
     device::{Bound, Device},
     devres,
-    error::{code::*, from_err_ptr, from_result, to_result, Result, VTABLE_DEFAULT_ERROR},
+    error::{code::*, from_err_ptr, from_result, Result, ToResult, VTABLE_DEFAULT_ERROR},
     ffi::{c_char, c_ulong},
     prelude::*,
     types::ForeignOwnable,
@@ -157,7 +157,9 @@ impl PolicyData {
     #[inline]
     pub fn generic_verify(&self) -> Result {
         // SAFETY: By the type invariant, the pointer stored in `self` is valid.
-        to_result(unsafe { bindings::cpufreq_generic_frequency_table_verify(self.as_raw()) })
+        unsafe { bindings::cpufreq_generic_frequency_table_verify(self.as_raw()) }.to_result()?;
+
+        Ok(())
     }
 }
 
@@ -520,7 +522,9 @@ impl Policy {
     #[inline]
     pub fn generic_suspend(&mut self) -> Result {
         // SAFETY: By the type invariant, the pointer stored in `self` is valid.
-        to_result(unsafe { bindings::cpufreq_generic_suspend(self.as_mut_ref()) })
+        unsafe { bindings::cpufreq_generic_suspend(self.as_mut_ref()) }.to_result()?;
+
+        Ok(())
     }
 
     /// Provides a wrapper to the generic get routine.
@@ -1038,7 +1042,7 @@ impl<T: Driver> Registration<T> {
         let mut drv = KBox::new(UnsafeCell::new(Self::VTABLE), GFP_KERNEL)?;
 
         // SAFETY: `drv` is guaranteed to be valid for the lifetime of `Registration`.
-        to_result(unsafe { bindings::cpufreq_register_driver(drv.get_mut()) })?;
+        unsafe { bindings::cpufreq_register_driver(drv.get_mut()) }.to_result()?;
 
         Ok(Self(drv, PhantomData))
     }

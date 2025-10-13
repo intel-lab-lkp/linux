@@ -9,7 +9,7 @@ use crate::{
     alloc::Flags,
     bindings,
     device::{Bound, Device},
-    error::{to_result, Error, Result},
+    error::{Error, Result, ToResult},
     ffi::c_void,
     prelude::*,
     revocable::{Revocable, RevocableGuard},
@@ -157,9 +157,9 @@ impl<T: Send> Devres<T> {
                 // - `devm_add_action()` is guaranteed not to call `callback` until `this` has been
                 //    properly initialized, because we require `dev` (i.e. the *bound* device) to
                 //    live at least as long as the returned `impl PinInit<Self, Error>`.
-                to_result(unsafe {
+                unsafe {
                     bindings::devm_add_action(dev.as_raw(), Some(*callback), inner.cast())
-                }).inspect_err(|_| {
+                }.to_result().inspect_err(|_| {
                     let inner = Opaque::cast_into(inner);
 
                     // SAFETY: `inner` is a valid pointer to an `Inner<T>` and valid for both reads
@@ -321,11 +321,14 @@ where
     // SAFETY:
     // - `dev.as_raw()` is a pointer to a valid and bound device.
     // - `ptr` is a valid pointer the `ForeignOwnable` devres takes ownership of.
-    to_result(unsafe {
+    unsafe {
         // `devm_add_action_or_reset()` also calls `callback` on failure, such that the
         // `ForeignOwnable` is released eventually.
         bindings::devm_add_action_or_reset(dev.as_raw(), Some(callback::<P>), ptr.cast())
-    })
+    }
+    .to_result()?;
+
+    Ok(())
 }
 
 /// Encapsulate `data` in a [`KBox`] and [`Drop::drop`] `data` once `dev` is unbound.

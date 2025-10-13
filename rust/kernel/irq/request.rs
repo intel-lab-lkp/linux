@@ -10,7 +10,7 @@ use core::marker::PhantomPinned;
 use crate::alloc::Allocator;
 use crate::device::{Bound, Device};
 use crate::devres::Devres;
-use crate::error::to_result;
+use crate::error::ToResult;
 use crate::irq::flags::Flags;
 use crate::prelude::*;
 use crate::str::CStr;
@@ -219,7 +219,7 @@ impl<T: Handler + 'static> Registration<T> {
                         // - When request_irq is called, everything that handle_irq_callback will
                         //   touch has already been initialized, so it's safe for the callback to
                         //   be called immediately.
-                        to_result(unsafe {
+                        unsafe {
                             bindings::request_irq(
                                 request.irq,
                                 Some(handle_irq_callback::<T>),
@@ -227,7 +227,7 @@ impl<T: Handler + 'static> Registration<T> {
                                 name.as_char_ptr(),
                                 this.as_ptr().cast::<c_void>(),
                             )
-                        })?;
+                        }.to_result()?;
                         request.irq
                     }
                 })
@@ -437,7 +437,7 @@ impl<T: ThreadedHandler + 'static> ThreadedRegistration<T> {
                         // - When request_threaded_irq is called, everything that the two callbacks
                         //   will touch has already been initialized, so it's safe for the
                         //   callbacks to be called immediately.
-                        to_result(unsafe {
+                        unsafe {
                             bindings::request_threaded_irq(
                                 request.irq,
                                 Some(handle_threaded_irq_callback::<T>),
@@ -446,7 +446,7 @@ impl<T: ThreadedHandler + 'static> ThreadedRegistration<T> {
                                 name.as_char_ptr(),
                                 this.as_ptr().cast::<c_void>(),
                             )
-                        })?;
+                        }.to_result()?;
                         request.irq
                     }
                 })

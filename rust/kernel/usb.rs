@@ -9,7 +9,7 @@ use crate::{
     bindings, device,
     device_id::{RawDeviceId, RawDeviceIdIndex},
     driver,
-    error::{from_result, to_result, Result},
+    error::{from_result, Result, ToResult},
     prelude::*,
     str::CStr,
     types::{AlwaysRefCounted, Opaque},
@@ -39,9 +39,10 @@ unsafe impl<T: Driver + 'static> driver::RegistrationOps for Adapter<T> {
         }
 
         // SAFETY: `udrv` is guaranteed to be a valid `RegType`.
-        to_result(unsafe {
-            bindings::usb_register_driver(udrv.get(), module.0, name.as_char_ptr())
-        })
+        unsafe { bindings::usb_register_driver(udrv.get(), module.0, name.as_char_ptr()) }
+            .to_result()?;
+
+        Ok(())
     }
 
     unsafe fn unregister(udrv: &Opaque<Self::RegType>) {

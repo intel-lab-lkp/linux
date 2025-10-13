@@ -195,9 +195,9 @@ impl Device {
         let phydev = self.0.get();
         // SAFETY: `phydev` is pointing to a valid object by the type invariant of `Self`.
         // So it's just an FFI call.
-        let ret = unsafe { bindings::phy_read_paged(phydev, page.into(), regnum.into()) };
-
-        to_result(ret).map(|()| ret as u16)
+        unsafe { bindings::phy_read_paged(phydev, page.into(), regnum.into()) }
+            .to_result()
+            .map(|v| v as u16)
     }
 
     /// Resolves the advertisements into PHY settings.
@@ -213,7 +213,9 @@ impl Device {
         let phydev = self.0.get();
         // SAFETY: `phydev` is pointing to a valid object by the type invariant of `Self`.
         // So it's just an FFI call.
-        to_result(unsafe { bindings::genphy_soft_reset(phydev) })
+        unsafe { bindings::genphy_soft_reset(phydev) }.to_result()?;
+
+        Ok(())
     }
 
     /// Initializes the PHY.
@@ -221,7 +223,9 @@ impl Device {
         let phydev = self.0.get();
         // SAFETY: `phydev` is pointing to a valid object by the type invariant of `Self`.
         // So it's just an FFI call.
-        to_result(unsafe { bindings::phy_init_hw(phydev) })
+        unsafe { bindings::phy_init_hw(phydev) }.to_result()?;
+
+        Ok(())
     }
 
     /// Starts auto-negotiation.
@@ -229,7 +233,9 @@ impl Device {
         let phydev = self.0.get();
         // SAFETY: `phydev` is pointing to a valid object by the type invariant of `Self`.
         // So it's just an FFI call.
-        to_result(unsafe { bindings::_phy_start_aneg(phydev) })
+        unsafe { bindings::_phy_start_aneg(phydev) }.to_result()?;
+
+        Ok(())
     }
 
     /// Resumes the PHY via `BMCR_PDOWN` bit.
@@ -237,7 +243,9 @@ impl Device {
         let phydev = self.0.get();
         // SAFETY: `phydev` is pointing to a valid object by the type invariant of `Self`.
         // So it's just an FFI call.
-        to_result(unsafe { bindings::genphy_resume(phydev) })
+        unsafe { bindings::genphy_resume(phydev) }.to_result()?;
+
+        Ok(())
     }
 
     /// Suspends the PHY via `BMCR_PDOWN` bit.
@@ -245,7 +253,9 @@ impl Device {
         let phydev = self.0.get();
         // SAFETY: `phydev` is pointing to a valid object by the type invariant of `Self`.
         // So it's just an FFI call.
-        to_result(unsafe { bindings::genphy_suspend(phydev) })
+        unsafe { bindings::genphy_suspend(phydev) }.to_result()?;
+
+        Ok(())
     }
 
     /// Checks the link status and updates current link state.
@@ -258,7 +268,9 @@ impl Device {
         let phydev = self.0.get();
         // SAFETY: `phydev` is pointing to a valid object by the type invariant of `Self`.
         // So it's just an FFI call.
-        to_result(unsafe { bindings::genphy_update_link(phydev) })
+        unsafe { bindings::genphy_update_link(phydev) }.to_result()?;
+
+        Ok(())
     }
 
     /// Reads link partner ability.
@@ -266,7 +278,9 @@ impl Device {
         let phydev = self.0.get();
         // SAFETY: `phydev` is pointing to a valid object by the type invariant of `Self`.
         // So it's just an FFI call.
-        to_result(unsafe { bindings::genphy_read_lpa(phydev) })
+        unsafe { bindings::genphy_read_lpa(phydev) }.to_result()?;
+
+        Ok(())
     }
 
     /// Reads PHY abilities.
@@ -274,7 +288,9 @@ impl Device {
         let phydev = self.0.get();
         // SAFETY: `phydev` is pointing to a valid object by the type invariant of `Self`.
         // So it's just an FFI call.
-        to_result(unsafe { bindings::genphy_read_abilities(phydev) })
+        unsafe { bindings::genphy_read_abilities(phydev) }.to_result()?;
+
+        Ok(())
     }
 }
 
@@ -658,9 +674,10 @@ impl Registration {
         // SAFETY: The type invariants of [`DriverVTable`] ensure that all elements of
         // the `drivers` slice are initialized properly. `drivers` will not be moved.
         // So it's just an FFI call.
-        to_result(unsafe {
+        unsafe {
             bindings::phy_drivers_register(drivers[0].0.get(), drivers.len().try_into()?, module.0)
-        })?;
+        }
+        .to_result()?;
         // INVARIANT: The `drivers` slice is successfully registered to the kernel via `phy_drivers_register`.
         Ok(Registration { drivers })
     }

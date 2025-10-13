@@ -34,7 +34,8 @@ use crate::{
     bindings,
     device::{Bound, Device},
     devres::Devres,
-    dma, error,
+    dma,
+    error::ToResult,
     io::resource::ResourceSize,
     page,
     prelude::*,
@@ -208,9 +209,8 @@ impl DmaMappedSgt {
         // - `dev.as_raw()` is a valid pointer to a `struct device`, which is guaranteed to be
         //   bound to a driver for the duration of this call.
         // - `sgt` is a valid pointer to a `struct sg_table`.
-        error::to_result(unsafe {
-            bindings::dma_map_sgtable(dev.as_raw(), sgt.as_ptr(), dir.into(), 0)
-        })?;
+        unsafe { bindings::dma_map_sgtable(dev.as_raw(), sgt.as_ptr(), dir.into(), 0) }
+            .to_result()?;
 
         // INVARIANT: By the safety requirements of this function it is guaranteed that `sgt` is
         // valid for the entire lifetime of this object instance.
@@ -273,7 +273,7 @@ impl RawSGTable {
         // SAFETY:
         // - `sgt.get()` is a valid pointer to uninitialized memory.
         // - As by the check above, `pages` is not empty.
-        error::to_result(unsafe {
+        unsafe {
             bindings::sg_alloc_table_from_pages_segment(
                 sgt.get(),
                 pages.as_mut_ptr(),
@@ -283,7 +283,8 @@ impl RawSGTable {
                 max_segment,
                 flags.as_raw(),
             )
-        })?;
+        }
+        .to_result()?;
 
         Ok(Self(sgt))
     }

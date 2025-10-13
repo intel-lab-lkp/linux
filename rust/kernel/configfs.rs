@@ -112,6 +112,7 @@
 
 use crate::alloc::flags;
 use crate::container_of;
+use crate::error::ToResult;
 use crate::page::PAGE_SIZE;
 use crate::prelude::*;
 use crate::str::CString;
@@ -176,10 +177,10 @@ impl<Data> Subsystem<Data> {
             data <- data,
         })
         .pin_chain(|this| {
-            crate::error::to_result(
-                // SAFETY: We initialized `this.subsystem` according to C API contract above.
-                unsafe { bindings::configfs_register_subsystem(this.subsystem.get()) },
-            )
+            // SAFETY: We initialized `this.subsystem` according to C API contract above.
+            unsafe { bindings::configfs_register_subsystem(this.subsystem.get()) }.to_result()?;
+
+            Ok(())
         })
     }
 }

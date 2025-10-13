@@ -14,7 +14,7 @@ use core::{
 
 use kernel::{
     alloc::Flags,
-    error::to_result,
+    error::ToResult,
     prelude::*,
     types::{ForeignOwnable, Opaque},
 };
@@ -180,9 +180,10 @@ impl<T: ForeignOwnable> MapleTree<T> {
         let ptr = T::into_foreign(value);
 
         // SAFETY: The tree is valid, and we are passing a pointer to an owned instance of `T`.
-        let res = to_result(unsafe {
+        let res = unsafe {
             bindings::mtree_insert_range(self.tree.get(), first, last, ptr, gfp.as_raw())
-        });
+        }
+        .to_result();
 
         if let Err(err) = res {
             // SAFETY: As `mtree_insert_range` failed, it is safe to take back ownership.
@@ -449,7 +450,7 @@ impl<T: ForeignOwnable> MapleTreeAlloc<T> {
         let mut index = 0;
 
         // SAFETY: The tree is valid, and we are passing a pointer to an owned instance of `T`.
-        let res = to_result(unsafe {
+        let res = unsafe {
             bindings::mtree_alloc_range(
                 self.tree.tree.get(),
                 &mut index,
@@ -459,7 +460,8 @@ impl<T: ForeignOwnable> MapleTreeAlloc<T> {
                 max,
                 gfp.as_raw(),
             )
-        });
+        }
+        .to_result();
 
         if let Err(err) = res {
             // SAFETY: As `mtree_alloc_range` failed, it is safe to take back ownership.

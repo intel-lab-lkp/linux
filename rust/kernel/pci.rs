@@ -9,7 +9,7 @@ use crate::{
     device_id::{RawDeviceId, RawDeviceIdIndex},
     devres::Devres,
     driver,
-    error::{from_result, to_result, Result},
+    error::{from_result, Result, ToResult},
     io::{Io, IoRaw},
     irq::{self, IrqRequest},
     str::CStr,
@@ -50,9 +50,10 @@ unsafe impl<T: Driver + 'static> driver::RegistrationOps for Adapter<T> {
         }
 
         // SAFETY: `pdrv` is guaranteed to be a valid `RegType`.
-        to_result(unsafe {
-            bindings::__pci_register_driver(pdrv.get(), module.0, name.as_char_ptr())
-        })
+        unsafe { bindings::__pci_register_driver(pdrv.get(), module.0, name.as_char_ptr()) }
+            .to_result()?;
+
+        Ok(())
     }
 
     unsafe fn unregister(pdrv: &Opaque<Self::RegType>) {
@@ -582,7 +583,9 @@ impl Device<device::Core> {
     /// Enable memory resources for this device.
     pub fn enable_device_mem(&self) -> Result {
         // SAFETY: `self.as_raw` is guaranteed to be a pointer to a valid `struct pci_dev`.
-        to_result(unsafe { bindings::pci_enable_device_mem(self.as_raw()) })
+        unsafe { bindings::pci_enable_device_mem(self.as_raw()) }.to_result()?;
+
+        Ok(())
     }
 
     /// Enable bus-mastering for this device.

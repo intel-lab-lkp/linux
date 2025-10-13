@@ -7,7 +7,7 @@
 use crate::{
     alloc::{Allocator, Flags},
     bindings,
-    error::Result,
+    error::{Result, ToResult},
     ffi::{c_char, c_void},
     prelude::*,
     transmute::{AsBytes, FromBytes},
@@ -483,26 +483,23 @@ impl UserSliceWriter {
 /// initialized and non-zero. Furthermore, if `len < dst.len()`, then `dst[len]` is a NUL byte.
 #[inline]
 fn raw_strncpy_from_user(dst: &mut [MaybeUninit<u8>], src: UserPtr) -> Result<usize> {
-    // CAST: Slice lengths are guaranteed to be `<= isize::MAX`.
-    let len = dst.len() as isize;
+    let len = dst.len();
 
     // SAFETY: `dst` is valid for writing `dst.len()` bytes.
     let res = unsafe {
         bindings::strncpy_from_user(
             dst.as_mut_ptr().cast::<c_char>(),
             src.as_const_ptr().cast::<c_char>(),
-            len,
+            // CAST: Slice lengths are guaranteed to be `<= isize::MAX`.
+            len as isize,
         )
-    };
-
-    if res < 0 {
-        return Err(Error::from_errno(res as i32));
     }
+    .to_result()?;
 
     #[cfg(CONFIG_RUST_OVERFLOW_CHECKS)]
     assert!(res <= len);
 
     // GUARANTEES: `strncpy_from_user` was successful, so `dst` has contents in accordance with the
     // guarantees of this function.
-    Ok(res as usize)
+    Ok(res)
 }

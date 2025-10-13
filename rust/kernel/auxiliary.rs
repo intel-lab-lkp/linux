@@ -8,7 +8,7 @@ use crate::{
     bindings, container_of, device,
     device_id::{RawDeviceId, RawDeviceIdIndex},
     driver,
-    error::{from_result, to_result, Result},
+    error::{from_result, Result, ToResult},
     prelude::*,
     types::Opaque,
     ThisModule,
@@ -40,9 +40,10 @@ unsafe impl<T: Driver + 'static> driver::RegistrationOps for Adapter<T> {
         }
 
         // SAFETY: `adrv` is guaranteed to be a valid `RegType`.
-        to_result(unsafe {
-            bindings::__auxiliary_driver_register(adrv.get(), module.0, name.as_char_ptr())
-        })
+        unsafe { bindings::__auxiliary_driver_register(adrv.get(), module.0, name.as_char_ptr()) }
+            .to_result()?;
+
+        Ok(())
     }
 
     unsafe fn unregister(adrv: &Opaque<Self::RegType>) {

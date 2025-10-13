@@ -10,7 +10,7 @@ use super::private::Sealed;
 use crate::{
     alloc::KVec,
     bindings,
-    error::{to_result, Result},
+    error::{Result, ToResult},
     fmt,
     prelude::*,
     str::{CStr, CString},
@@ -122,7 +122,7 @@ impl FwNode {
                 match_str.as_char_ptr(),
             )
         };
-        to_result(ret)?;
+        ret.to_result()?;
         Ok(ret as usize)
     }
 
@@ -290,7 +290,7 @@ impl FwNode {
                 &mut out_args.0,
             )
         };
-        to_result(ret)?;
+        ret.to_result()?;
 
         Ok(out_args)
     }
@@ -452,7 +452,7 @@ impl Property for CString {
         let ret = unsafe {
             bindings::fwnode_property_read_string(fwnode.as_raw(), name.as_char_ptr(), pstr.cast())
         };
-        to_result(ret)?;
+        ret.to_result()?;
 
         // SAFETY:
         // - `pstr` is a valid pointer to a NUL-terminated C string.
@@ -514,7 +514,7 @@ macro_rules! impl_property_for_int {
                         out.len(),
                     )
                 };
-                to_result(ret)?;
+                ret.to_result()?;
                 // SAFETY: Transmuting from `&'a mut [MaybeUninit<Self>]` to
                 // `&'a mut [Self]` is sound, because the previous call to a
                 // `fwnode_property_read_*_array` function (which didn't fail)
@@ -536,7 +536,7 @@ macro_rules! impl_property_for_int {
                         0,
                     )
                 };
-                to_result(ret)?;
+                ret.to_result()?;
                 Ok(ret as usize)
             }
         }

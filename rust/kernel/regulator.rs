@@ -19,7 +19,7 @@
 use crate::{
     bindings,
     device::{Bound, Device},
-    error::{from_err_ptr, to_result, Result},
+    error::{from_err_ptr, Result, ToResult},
     prelude::*,
 };
 
@@ -84,7 +84,9 @@ pub struct Error<State: RegulatorState> {
 pub fn devm_enable(dev: &Device<Bound>, name: &CStr) -> Result {
     // SAFETY: `dev` is a valid and bound device, while `name` is a valid C
     // string.
-    to_result(unsafe { bindings::devm_regulator_get_enable(dev.as_raw(), name.as_ptr()) })
+    unsafe { bindings::devm_regulator_get_enable(dev.as_raw(), name.as_ptr()) }.to_result()?;
+
+    Ok(())
 }
 
 /// Same as [`devm_enable`], but calls `devm_regulator_get_enable_optional`
@@ -102,7 +104,10 @@ pub fn devm_enable(dev: &Device<Bound>, name: &CStr) -> Result {
 pub fn devm_enable_optional(dev: &Device<Bound>, name: &CStr) -> Result {
     // SAFETY: `dev` is a valid and bound device, while `name` is a valid C
     // string.
-    to_result(unsafe { bindings::devm_regulator_get_enable_optional(dev.as_raw(), name.as_ptr()) })
+    unsafe { bindings::devm_regulator_get_enable_optional(dev.as_raw(), name.as_ptr()) }
+        .to_result()?;
+
+    Ok(())
 }
 
 /// A `struct regulator` abstraction.
@@ -248,21 +253,24 @@ impl<T: RegulatorState> Regulator<T> {
     /// This can be used to ensure that the device powers up cleanly.
     pub fn set_voltage(&self, min_voltage: Voltage, max_voltage: Voltage) -> Result {
         // SAFETY: Safe as per the type invariants of `Regulator`.
-        to_result(unsafe {
+        unsafe {
             bindings::regulator_set_voltage(
                 self.inner.as_ptr(),
                 min_voltage.as_microvolts(),
                 max_voltage.as_microvolts(),
             )
-        })
+        }
+        .to_result()?;
+
+        Ok(())
     }
 
     /// Gets the current voltage of the regulator.
     pub fn get_voltage(&self) -> Result<Voltage> {
         // SAFETY: Safe as per the type invariants of `Regulator`.
-        let voltage = unsafe { bindings::regulator_get_voltage(self.inner.as_ptr()) };
-
-        to_result(voltage).map(|()| Voltage::from_microvolts(voltage))
+        unsafe { bindings::regulator_get_voltage(self.inner.as_ptr()) }
+            .to_result()
+            .map(|v| Voltage::from_microvolts(v as i32))
     }
 
     fn get_internal(dev: &Device, name: &CStr) -> Result<Regulator<T>> {
@@ -282,12 +290,16 @@ impl<T: RegulatorState> Regulator<T> {
 
     fn enable_internal(&self) -> Result {
         // SAFETY: Safe as per the type invariants of `Regulator`.
-        to_result(unsafe { bindings::regulator_enable(self.inner.as_ptr()) })
+        unsafe { bindings::regulator_enable(self.inner.as_ptr()) }.to_result()?;
+
+        Ok(())
     }
 
     fn disable_internal(&self) -> Result {
         // SAFETY: Safe as per the type invariants of `Regulator`.
-        to_result(unsafe { bindings::regulator_disable(self.inner.as_ptr()) })
+        unsafe { bindings::regulator_disable(self.inner.as_ptr()) }.to_result()?;
+
+        Ok(())
     }
 }
 

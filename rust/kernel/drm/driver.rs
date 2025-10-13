@@ -6,7 +6,7 @@
 
 use crate::{
     bindings, device, devres, drm,
-    error::{to_result, Result},
+    error::{Result, ToResult},
     prelude::*,
     sync::aref::ARef,
 };
@@ -124,7 +124,7 @@ impl<T: Driver> Registration<T> {
     /// Creates a new [`Registration`] and registers it.
     fn new(drm: &drm::Device<T>, flags: usize) -> Result<Self> {
         // SAFETY: `drm.as_raw()` is valid by the invariants of `drm::Device`.
-        to_result(unsafe { bindings::drm_dev_register(drm.as_raw(), flags) })?;
+        unsafe { bindings::drm_dev_register(drm.as_raw(), flags) }.to_result()?;
 
         Ok(Self(drm.into()))
     }

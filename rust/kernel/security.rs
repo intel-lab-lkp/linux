@@ -9,7 +9,7 @@
 use crate::{
     bindings,
     cred::Credential,
-    error::{to_result, Result},
+    error::{Result, ToResult},
     fs::File,
 };
 
@@ -18,7 +18,9 @@ use crate::{
 #[inline]
 pub fn binder_set_context_mgr(mgr: &Credential) -> Result {
     // SAFETY: `mrg.0` is valid because the shared reference guarantees a nonzero refcount.
-    to_result(unsafe { bindings::security_binder_set_context_mgr(mgr.as_ptr()) })
+    unsafe { bindings::security_binder_set_context_mgr(mgr.as_ptr()) }.to_result()?;
+
+    Ok(())
 }
 
 /// Calls the security modules to determine if binder transactions are allowed from task `from` to
@@ -26,7 +28,9 @@ pub fn binder_set_context_mgr(mgr: &Credential) -> Result {
 #[inline]
 pub fn binder_transaction(from: &Credential, to: &Credential) -> Result {
     // SAFETY: `from` and `to` are valid because the shared references guarantee nonzero refcounts.
-    to_result(unsafe { bindings::security_binder_transaction(from.as_ptr(), to.as_ptr()) })
+    unsafe { bindings::security_binder_transaction(from.as_ptr(), to.as_ptr()) }.to_result()?;
+
+    Ok(())
 }
 
 /// Calls the security modules to determine if task `from` is allowed to send binder objects
@@ -34,7 +38,9 @@ pub fn binder_transaction(from: &Credential, to: &Credential) -> Result {
 #[inline]
 pub fn binder_transfer_binder(from: &Credential, to: &Credential) -> Result {
     // SAFETY: `from` and `to` are valid because the shared references guarantee nonzero refcounts.
-    to_result(unsafe { bindings::security_binder_transfer_binder(from.as_ptr(), to.as_ptr()) })
+    unsafe { bindings::security_binder_transfer_binder(from.as_ptr(), to.as_ptr()) }.to_result()?;
+
+    Ok(())
 }
 
 /// Calls the security modules to determine if task `from` is allowed to send the given file to
@@ -43,9 +49,10 @@ pub fn binder_transfer_binder(from: &Credential, to: &Credential) -> Result {
 pub fn binder_transfer_file(from: &Credential, to: &Credential, file: &File) -> Result {
     // SAFETY: `from`, `to` and `file` are valid because the shared references guarantee nonzero
     // refcounts.
-    to_result(unsafe {
-        bindings::security_binder_transfer_file(from.as_ptr(), to.as_ptr(), file.as_ptr())
-    })
+    unsafe { bindings::security_binder_transfer_file(from.as_ptr(), to.as_ptr(), file.as_ptr()) }
+        .to_result()?;
+
+    Ok(())
 }
 
 /// A security context string.
@@ -66,7 +73,7 @@ impl SecurityCtx {
         let mut ctx: bindings::lsm_context = unsafe { core::mem::zeroed() };
 
         // SAFETY: Just a C FFI call. The pointer is valid for writes.
-        to_result(unsafe { bindings::security_secid_to_secctx(secid, &mut ctx) })?;
+        unsafe { bindings::security_secid_to_secctx(secid, &mut ctx) }.to_result()?;
 
         // INVARIANT: If the above call did not fail, then we have a valid security context.
         Ok(Self { ctx })

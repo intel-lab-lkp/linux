@@ -13,6 +13,7 @@
 
 use kernel::{
     bindings::{self, seq_file},
+    error::ToResult,
     fs::File,
     list::{ListArc, ListArcSafe, ListLinksSelfPtr, TryNewListArc},
     prelude::*,
@@ -291,7 +292,7 @@ impl kernel::Module for BinderModule {
         BINDER_SHRINKER.register(kernel::c_str!("android-binder"))?;
 
         // SAFETY: The module is being loaded, so we can initialize binderfs.
-        unsafe { kernel::error::to_result(binderfs::init_rust_binderfs())? };
+        unsafe { binderfs::init_rust_binderfs().to_result()? };
 
         Ok(Self {})
     }

@@ -9,7 +9,7 @@ use core::pin::Pin;
 use crate::{
     bindings,
     block::mq::{operations::OperationsVTable, request::RequestDataWrapper, Operations},
-    error::{self, Result},
+    error::{self, Result, ToResult},
     prelude::try_pin_init,
     types::Opaque,
 };
@@ -65,7 +65,8 @@ impl<T: Operations> TagSet<T> {
                 // SAFETY: we do not move out of `tag_set`.
                 let tag_set: &mut Opaque<_> = unsafe { Pin::get_unchecked_mut(tag_set) };
                 // SAFETY: `tag_set` is a reference to an initialized `blk_mq_tag_set`.
-                error::to_result( unsafe { bindings::blk_mq_alloc_tag_set(tag_set.get())})
+                unsafe { bindings::blk_mq_alloc_tag_set(tag_set.get())}.to_result()?;
+                Ok(())
             }),
             _p: PhantomData,
         })

@@ -11,7 +11,7 @@
 use crate::{
     bindings,
     device::Device,
-    error::{to_result, Error, Result, VTABLE_DEFAULT_ERROR},
+    error::{Error, Result, ToResult, VTABLE_DEFAULT_ERROR},
     ffi::{c_int, c_long, c_uint, c_ulong},
     fs::{File, Kiocb},
     iov::{IovIterDest, IovIterSource},
@@ -80,7 +80,9 @@ impl<T: MiscDevice> MiscDeviceRegistration<T> {
                 // the destructor of this type deallocates the memory.
                 // INVARIANT: If this returns `Ok(())`, then the `slot` will contain a registered
                 // misc device.
-                to_result(unsafe { bindings::misc_register(slot) })
+                unsafe { bindings::misc_register(slot) }.to_result()?;
+
+                Ok::<(), Error>(())
             }),
             _t: PhantomData,
         })

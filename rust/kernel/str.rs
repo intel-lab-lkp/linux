@@ -4,7 +4,7 @@
 
 use crate::{
     alloc::{flags::*, AllocError, KVec},
-    error::{to_result, Result},
+    error::{Result, ToResult},
     fmt::{self, Write},
     prelude::*,
 };
@@ -929,7 +929,8 @@ unsafe fn kstrtobool_raw(string: *const u8) -> Result<bool> {
     // SAFETY:
     // - By function safety requirement, `string` is a valid null-terminated string.
     // - `result` is a valid `bool` that we own.
-    to_result(unsafe { bindings::kstrtobool(string, &mut result) })?;
+    unsafe { bindings::kstrtobool(string, &mut result) }.to_result()?;
+
     Ok(result)
 }
 

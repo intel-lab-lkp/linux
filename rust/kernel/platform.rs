@@ -8,7 +8,7 @@ use crate::{
     acpi, bindings, container_of,
     device::{self, Bound},
     driver,
-    error::{from_result, to_result, Result},
+    error::{from_result, Result, ToResult},
     io::{mem::IoRequest, Resource},
     irq::{self, IrqRequest},
     of,
@@ -55,7 +55,9 @@ unsafe impl<T: Driver + 'static> driver::RegistrationOps for Adapter<T> {
         }
 
         // SAFETY: `pdrv` is guaranteed to be a valid `RegType`.
-        to_result(unsafe { bindings::__platform_driver_register(pdrv.get(), module.0) })
+        unsafe { bindings::__platform_driver_register(pdrv.get(), module.0) }.to_result()?;
+
+        Ok(())
     }
 
     unsafe fn unregister(pdrv: &Opaque<Self::RegType>) {

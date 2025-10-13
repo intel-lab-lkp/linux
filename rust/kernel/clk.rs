@@ -81,7 +81,7 @@ mod common_clk {
     use super::Hertz;
     use crate::{
         device::Device,
-        error::{from_err_ptr, to_result, Result},
+        error::{from_err_ptr, Result, ToResult},
         prelude::*,
     };
 
@@ -161,7 +161,9 @@ mod common_clk {
         pub fn enable(&self) -> Result {
             // SAFETY: By the type invariants, self.as_raw() is a valid argument for
             // [`clk_enable`].
-            to_result(unsafe { bindings::clk_enable(self.as_raw()) })
+            unsafe { bindings::clk_enable(self.as_raw()) }.to_result()?;
+
+            Ok(())
         }
 
         /// Disable the clock.
@@ -185,7 +187,9 @@ mod common_clk {
         pub fn prepare(&self) -> Result {
             // SAFETY: By the type invariants, self.as_raw() is a valid argument for
             // [`clk_prepare`].
-            to_result(unsafe { bindings::clk_prepare(self.as_raw()) })
+            unsafe { bindings::clk_prepare(self.as_raw()) }.to_result()?;
+
+            Ok(())
         }
 
         /// Unprepare the clock.
@@ -207,7 +211,9 @@ mod common_clk {
         pub fn prepare_enable(&self) -> Result {
             // SAFETY: By the type invariants, self.as_raw() is a valid argument for
             // [`clk_prepare_enable`].
-            to_result(unsafe { bindings::clk_prepare_enable(self.as_raw()) })
+            unsafe { bindings::clk_prepare_enable(self.as_raw()) }.to_result()?;
+
+            Ok(())
         }
 
         /// Disable and unprepare the clock.
@@ -241,7 +247,9 @@ mod common_clk {
         pub fn set_rate(&self, rate: Hertz) -> Result {
             // SAFETY: By the type invariants, self.as_raw() is a valid argument for
             // [`clk_set_rate`].
-            to_result(unsafe { bindings::clk_set_rate(self.as_raw(), rate.as_hz()) })
+            unsafe { bindings::clk_set_rate(self.as_raw(), rate.as_hz()) }.to_result()?;
+
+            Ok(())
         }
     }
 

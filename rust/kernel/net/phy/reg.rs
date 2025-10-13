@@ -110,7 +110,7 @@ impl Register for C22 {
         let ret = unsafe {
             bindings::mdiobus_read((*phydev).mdio.bus, (*phydev).mdio.addr, self.0.into())
         };
-        to_result(ret)?;
+        ret.to_result()?;
         Ok(ret as u16)
     }
 
@@ -119,9 +119,12 @@ impl Register for C22 {
         // SAFETY: `phydev` is pointing to a valid object by the type invariant of `Device`.
         // So it's just an FFI call, open code of `phy_write()` with a valid `phy_device` pointer
         // `phydev`.
-        to_result(unsafe {
+        unsafe {
             bindings::mdiobus_write((*phydev).mdio.bus, (*phydev).mdio.addr, self.0.into(), val)
-        })
+        }
+        .to_result()?;
+
+        Ok(())
     }
 
     fn read_status(dev: &mut Device) -> Result<u16> {
@@ -129,7 +132,7 @@ impl Register for C22 {
         // SAFETY: `phydev` is pointing to a valid object by the type invariant of `Self`.
         // So it's just an FFI call.
         let ret = unsafe { bindings::genphy_read_status(phydev) };
-        to_result(ret)?;
+        ret.to_result()?;
         Ok(ret as u16)
     }
 }
@@ -200,7 +203,7 @@ impl Register for C45 {
         // So it's just an FFI call.
         let ret =
             unsafe { bindings::phy_read_mmd(phydev, self.devad.0.into(), self.regnum.into()) };
-        to_result(ret)?;
+        ret.to_result()?;
         Ok(ret as u16)
     }
 
@@ -208,9 +211,10 @@ impl Register for C45 {
         let phydev = dev.0.get();
         // SAFETY: `phydev` is pointing to a valid object by the type invariant of `Device`.
         // So it's just an FFI call.
-        to_result(unsafe {
-            bindings::phy_write_mmd(phydev, self.devad.0.into(), self.regnum.into(), val)
-        })
+        unsafe { bindings::phy_write_mmd(phydev, self.devad.0.into(), self.regnum.into(), val) }
+            .to_result()?;
+
+        Ok(())
     }
 
     fn read_status(dev: &mut Device) -> Result<u16> {
@@ -218,7 +222,7 @@ impl Register for C45 {
         // SAFETY: `phydev` is pointing to a valid object by the type invariant of `Self`.
         // So it's just an FFI call.
         let ret = unsafe { bindings::genphy_c45_read_status(phydev) };
-        to_result(ret)?;
+        ret.to_result()?;
         Ok(ret as u16)
     }
 }

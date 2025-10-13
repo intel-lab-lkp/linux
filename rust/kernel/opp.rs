@@ -12,7 +12,7 @@ use crate::{
     clk::Hertz,
     cpumask::{Cpumask, CpumaskVar},
     device::Device,
-    error::{code::*, from_err_ptr, from_result, to_result, Result, VTABLE_DEFAULT_ERROR},
+    error::{code::*, from_err_ptr, from_result, Result, ToResult, VTABLE_DEFAULT_ERROR},
     ffi::c_ulong,
     prelude::*,
     str::CString,
@@ -42,9 +42,8 @@ mod freq {
 
             // SAFETY: The requirements are satisfied by the existence of [`Device`] and its safety
             // requirements.
-            to_result(unsafe {
-                bindings::dev_pm_opp_init_cpufreq_table(table.dev.as_raw(), &mut ptr)
-            })?;
+            unsafe { bindings::dev_pm_opp_init_cpufreq_table(table.dev.as_raw(), &mut ptr) }
+                .to_result()?;
 
             Ok(Self {
                 dev: table.dev.clone(),
@@ -182,7 +181,7 @@ impl Token {
     fn new(dev: &ARef<Device>, mut data: Data) -> Result<Self> {
         // SAFETY: The requirements are satisfied by the existence of [`Device`] and its safety
         // requirements.
-        to_result(unsafe { bindings::dev_pm_opp_add_dynamic(dev.as_raw(), &mut data.0) })?;
+        unsafe { bindings::dev_pm_opp_add_dynamic(dev.as_raw(), &mut data.0) }.to_result()?;
         Ok(Self {
             dev: dev.clone(),
             freq: data.freq(),
@@ -500,9 +499,9 @@ impl<T: ConfigOps + Default> Config<T> {
         // SAFETY: The requirements are satisfied by the existence of [`Device`] and its safety
         // requirements. The OPP core guarantees not to access fields of [`Config`] after this call
         // and so we don't need to save a copy of them for future use.
-        let ret = unsafe { bindings::dev_pm_opp_set_config(dev.as_raw(), &mut config) };
-
-        to_result(ret).map(|()| ConfigToken(ret))
+        unsafe { bindings::dev_pm_opp_set_config(dev.as_raw(), &mut config) }
+            .to_result()
+            .map(|v| ConfigToken(v as i32))
     }
 
     /// Config's clk callback.
@@ -660,7 +659,7 @@ impl Table {
         //
         // INVARIANT: The reference-count is incremented by the C code and is decremented when
         // [`Table`] goes out of scope.
-        to_result(unsafe { bindings::dev_pm_opp_of_add_table_indexed(dev.as_raw(), index) })?;
+        unsafe { bindings::dev_pm_opp_of_add_table_indexed(dev.as_raw(), index) }.to_result()?;
 
         // Get the newly created [`Table`].
         let mut table = Self::from_dev(dev)?;
@@ -688,7 +687,7 @@ impl Table {
         //
         // INVARIANT: The reference-count is incremented by the C code and is decremented when
         // [`Table`] goes out of scope.
-        to_result(unsafe { bindings::dev_pm_opp_of_cpumask_add_table(cpumask.as_raw()) })?;
+        unsafe { bindings::dev_pm_opp_of_cpumask_add_table(cpumask.as_raw()) }.to_result()?;
 
         // Fetch the newly created table.
         let mut table = Self::from_dev(dev)?;
@@ -710,9 +709,7 @@ impl Table {
     pub fn opp_count(&self) -> Result<u32> {
         // SAFETY: The requirements are satisfied by the existence of [`Device`] and its safety
         // requirements.
-        let ret = unsafe { bindings::dev_pm_opp_get_opp_count(self.dev.as_raw()) };
-
-        to_result(ret).map(|()| ret as u32)
+        unsafe { bindings::dev_pm_opp_get_opp_count(self.dev.as_raw()) }.to_result()
     }
 
     /// Returns max clock latency (in nanoseconds) of the [`OPP`]s in the [`Table`].
@@ -752,7 +749,9 @@ impl Table {
     pub fn sync_regulators(&self) -> Result {
         // SAFETY: The requirements are satisfied by the existence of [`Device`] and its safety
         // requirements.
-        to_result(unsafe { bindings::dev_pm_opp_sync_regulators(self.dev.as_raw()) })
+        unsafe { bindings::dev_pm_opp_sync_regulators(self.dev.as_raw()) }.to_result()?;
+
+        Ok(())
     }
 
     /// Gets sharing CPUs.
@@ -760,16 +759,18 @@ impl Table {
     pub fn sharing_cpus(dev: &Device, cpumask: &mut Cpumask) -> Result {
         // SAFETY: The requirements are satisfied by the existence of [`Device`] and its safety
         // requirements.
-        to_result(unsafe { bindings::dev_pm_opp_get_sharing_cpus(dev.as_raw(), cpumask.as_raw()) })
+        unsafe { bindings::dev_pm_opp_get_sharing_cpus(dev.as_raw(), cpumask.as_raw()) }
+            .to_result()?;
+
+        Ok(())
     }
 
     /// Sets sharing CPUs.
     pub fn set_sharing_cpus(&mut self, cpumask: &mut Cpumask) -> Result {
         // SAFETY: The requirements are satisfied by the existence of [`Device`] and its safety
         // requirements.
-        to_result(unsafe {
-            bindings::dev_pm_opp_set_sharing_cpus(self.dev.as_raw(), cpumask.as_raw())
-        })?;
+        unsafe { bindings::dev_pm_opp_set_sharing_cpus(self.dev.as_raw(), cpumask.as_raw()) }
+            .to_result()?;
 
         if let Some(mask) = self.cpus.as_mut() {
             // Update the cpumask as this will be used while removing the table.
@@ -785,9 +786,10 @@ impl Table {
     pub fn of_sharing_cpus(dev: &Device, cpumask: &mut Cpumask) -> Result {
         // SAFETY: The requirements are satisfied by the existence of [`Device`] and its safety
         // requirements.
-        to_result(unsafe {
-            bindings::dev_pm_opp_of_get_sharing_cpus(dev.as_raw(), cpumask.as_raw())
-        })
+        unsafe { bindings::dev_pm_opp_of_get_sharing_cpus(dev.as_raw(), cpumask.as_raw()) }
+            .to_result()?;
+
+        Ok(())
     }
 
     /// Updates the voltage value for an [`OPP`].
@@ -801,7 +803,7 @@ impl Table {
     ) -> Result {
         // SAFETY: The requirements are satisfied by the existence of [`Device`] and its safety
         // requirements.
-        to_result(unsafe {
+        unsafe {
             bindings::dev_pm_opp_adjust_voltage(
                 self.dev.as_raw(),
                 freq.into(),
@@ -809,7 +811,10 @@ impl Table {
                 volt_min.into(),
                 volt_max.into(),
             )
-        })
+        }
+        .to_result()?;
+
+        Ok(())
     }
 
     /// Creates [`FreqTable`] from [`Table`].
@@ -824,7 +829,9 @@ impl Table {
     pub fn set_rate(&self, freq: Hertz) -> Result {
         // SAFETY: The requirements are satisfied by the existence of [`Device`] and its safety
         // requirements.
-        to_result(unsafe { bindings::dev_pm_opp_set_rate(self.dev.as_raw(), freq.into()) })
+        unsafe { bindings::dev_pm_opp_set_rate(self.dev.as_raw(), freq.into()) }.to_result()?;
+
+        Ok(())
     }
 
     /// Configures device with [`OPP`].
@@ -832,7 +839,9 @@ impl Table {
     pub fn set_opp(&self, opp: &OPP) -> Result {
         // SAFETY: The requirements are satisfied by the existence of [`Device`] and its safety
         // requirements.
-        to_result(unsafe { bindings::dev_pm_opp_set_opp(self.dev.as_raw(), opp.as_raw()) })
+        unsafe { bindings::dev_pm_opp_set_opp(self.dev.as_raw(), opp.as_raw()) }.to_result()?;
+
+        Ok(())
     }
 
     /// Finds [`OPP`] based on frequency.
@@ -936,7 +945,9 @@ impl Table {
     pub fn enable_opp(&self, freq: Hertz) -> Result {
         // SAFETY: The requirements are satisfied by the existence of [`Device`] and its safety
         // requirements.
-        to_result(unsafe { bindings::dev_pm_opp_enable(self.dev.as_raw(), freq.into()) })
+        unsafe { bindings::dev_pm_opp_enable(self.dev.as_raw(), freq.into()) }.to_result()?;
+
+        Ok(())
     }
 
     /// Disables the [`OPP`].
@@ -944,7 +955,9 @@ impl Table {
     pub fn disable_opp(&self, freq: Hertz) -> Result {
         // SAFETY: The requirements are satisfied by the existence of [`Device`] and its safety
         // requirements.
-        to_result(unsafe { bindings::dev_pm_opp_disable(self.dev.as_raw(), freq.into()) })
+        unsafe { bindings::dev_pm_opp_disable(self.dev.as_raw(), freq.into()) }.to_result()?;
+
+        Ok(())
     }
 
     /// Registers with the Energy model.
@@ -952,9 +965,8 @@ impl Table {
     pub fn of_register_em(&mut self, cpumask: &mut Cpumask) -> Result {
         // SAFETY: The requirements are satisfied by the existence of [`Device`] and its safety
         // requirements.
-        to_result(unsafe {
-            bindings::dev_pm_opp_of_register_em(self.dev.as_raw(), cpumask.as_raw())
-        })?;
+        unsafe { bindings::dev_pm_opp_of_register_em(self.dev.as_raw(), cpumask.as_raw()) }
+            .to_result()?;
 
         self.em = true;
         Ok(())

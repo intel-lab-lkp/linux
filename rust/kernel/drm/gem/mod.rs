@@ -8,7 +8,7 @@ use crate::{
     alloc::flags::*,
     bindings, drm,
     drm::driver::{AllocImpl, AllocOps},
-    error::{to_result, Result},
+    error::{Result, ToResult},
     prelude::*,
     sync::aref::{ARef, AlwaysRefCounted},
     types::Opaque,
@@ -136,9 +136,11 @@ pub trait BaseObject: IntoGEMObject {
     {
         let mut handle: u32 = 0;
         // SAFETY: The arguments are all valid per the type invariants.
-        to_result(unsafe {
+        unsafe {
             bindings::drm_gem_handle_create(file.as_raw().cast(), self.as_raw(), &mut handle)
-        })?;
+        }
+        .to_result()?;
+
         Ok(handle)
     }
 
@@ -173,7 +175,7 @@ pub trait BaseObject: IntoGEMObject {
     /// Creates an mmap offset to map the object from userspace.
     fn create_mmap_offset(&self) -> Result<u64> {
         // SAFETY: The arguments are valid per the type invariant.
-        to_result(unsafe { bindings::drm_gem_create_mmap_offset(self.as_raw()) })?;
+        unsafe { bindings::drm_gem_create_mmap_offset(self.as_raw()) }.to_result()?;
 
         // SAFETY: The arguments are valid per the type invariant.
         Ok(unsafe { bindings::drm_vma_node_offset_addr(&raw mut (*self.as_raw()).vma_node) })
@@ -233,7 +235,7 @@ impl<T: DriverObject> Object<T> {
         unsafe { (*obj.as_raw()).funcs = &Self::OBJECT_FUNCS };
 
         // SAFETY: The arguments are all valid per the type invariants.
-        to_result(unsafe { bindings::drm_gem_object_init(dev.as_raw(), obj.obj.get(), size) })?;
+        unsafe { bindings::drm_gem_object_init(dev.as_raw(), obj.obj.get(), size) }.to_result()?;
 
         // SAFETY: We never move out of `Self`.
         let ptr = KBox::into_raw(unsafe { Pin::into_inner_unchecked(obj) });

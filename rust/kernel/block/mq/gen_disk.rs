@@ -8,6 +8,7 @@
 use crate::{
     bindings,
     block::mq::{Operations, TagSet},
+    error::ToResult,
     error::{self, from_err_ptr, Result},
     fmt::{self, Write},
     prelude::*,
@@ -167,13 +168,10 @@ impl GenDiskBuilder {
         // operation, so we will not race.
         unsafe { bindings::set_capacity(gendisk, self.capacity_sectors) };
 
-        crate::error::to_result(
-            // SAFETY: `gendisk` points to a valid and initialized instance of
-            // `struct gendisk`.
-            unsafe {
-                bindings::device_add_disk(core::ptr::null_mut(), gendisk, core::ptr::null_mut())
-            },
-        )?;
+        // SAFETY: `gendisk` points to a valid and initialized instance of
+        // `struct gendisk`.
+        unsafe { bindings::device_add_disk(core::ptr::null_mut(), gendisk, core::ptr::null_mut()) }
+            .to_result()?;
 
         recover_data.dismiss();
 
