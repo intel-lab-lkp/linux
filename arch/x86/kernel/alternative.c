@@ -298,6 +298,27 @@ u8 *its_static_thunk(int reg)
 static inline void its_fini_core(void) {}
 #endif /* CONFIG_MITIGATION_ITS */
 
+static bool __maybe_unused repatch_in_progress;
+
+#ifdef CONFIG_DYNAMIC_MITIGATIONS
+/* Do not patch __init text addresses when repatching */
+static bool should_patch(void *addr, struct module *mod)
+{
+	if (!repatch_in_progress)
+		return true;
+
+	if (is_kernel_text((u64) addr))
+		return true;
+
+	return mod && within_module_core((u64) addr, mod);
+}
+#else
+static bool should_patch(void *addr, struct module *mod)
+{
+	return true;
+}
+#endif
+
 /*
  * Nomenclature for variable names to simplify and clarify this code and ease
  * any potential staring at it:
@@ -658,6 +679,10 @@ void __init_or_module noinline apply_alternatives(struct alt_instr *start,
 		}
 
 		instr = instr_va(a);
+
+		if (!should_patch(instr, mod))
+			continue;
+
 		replacement = (u8 *)&a->repl_offset + a->repl_offset;
 		BUG_ON(a->instrlen > sizeof(insn_buff));
 		BUG_ON(a->cpuid >= (NCAPINTS + NBUGINTS) * 32);
@@ -986,6 +1011,10 @@ void __init_or_module noinline apply_retpolines(s32 *start, s32 *end, struct mod
 		u8 *dest;
 
 		ret = insn_decode_kernel(&insn, addr);
+
+		if (!should_patch(addr, mod))
+			continue;
+
 		if (WARN_ON_ONCE(ret < 0))
 			continue;
 
@@ -1092,6 +1121,10 @@ void __init_or_module noinline apply_returns(s32 *start, s32 *end, struct module
 		u8 op;
 
 		ret = insn_decode_kernel(&insn, addr);
+
+		if (!should_patch(addr, mod))
+			continue;
+
 		if (WARN_ON_ONCE(ret < 0))
 			continue;
 
