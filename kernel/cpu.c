@@ -3180,7 +3180,7 @@ void __init boot_cpu_hotplug_init(void)
  * Guest-to-Host and Guest-to-Guest vectors are only needed if KVM support is
  * present.
  */
-static bool attack_vectors[NR_CPU_ATTACK_VECTORS] __ro_after_init = {
+static bool attack_vectors[NR_CPU_ATTACK_VECTORS] = {
 	[CPU_MITIGATE_USER_KERNEL] = true,
 	[CPU_MITIGATE_USER_USER] = true,
 	[CPU_MITIGATE_GUEST_HOST] = IS_ENABLED(CONFIG_KVM),
@@ -3221,8 +3221,8 @@ enum {
 	NR_VECTOR_PARAMS,
 };
 
-enum smt_mitigations smt_mitigations __ro_after_init = SMT_MITIGATIONS_AUTO;
-static enum cpu_mitigations cpu_mitigations __ro_after_init = CPU_MITIGATIONS_AUTO;
+enum smt_mitigations smt_mitigations = SMT_MITIGATIONS_AUTO;
+static enum cpu_mitigations cpu_mitigations = CPU_MITIGATIONS_AUTO;
 
 static const match_table_t global_mitigations = {
 	{ CPU_MITIGATIONS_AUTO_NOSMT,	"auto,nosmt"},
@@ -3239,7 +3239,7 @@ static const match_table_t vector_mitigations = {
 	{ NR_VECTOR_PARAMS,	NULL},
 };
 
-static int __init mitigations_parse_global_opt(char *arg)
+static int mitigations_parse_global_opt(char *arg)
 {
 	int i;
 
@@ -3255,7 +3255,7 @@ static int __init mitigations_parse_global_opt(char *arg)
 	return 0;
 }
 
-static int __init mitigations_parse_cmdline(char *arg)
+static int mitigations_parse_cmdline(char *arg)
 {
 	char *s, *p;
 	int len;
@@ -3320,7 +3320,7 @@ bool cpu_mitigations_auto_nosmt(void)
 }
 EXPORT_SYMBOL_GPL(cpu_mitigations_auto_nosmt);
 #else
-static int __init mitigations_parse_cmdline(char *arg)
+static int mitigations_parse_cmdline(char *arg)
 {
 	pr_crit("Kernel compiled without mitigations, ignoring 'mitigations'; system may still be vulnerable\n");
 	return 0;
