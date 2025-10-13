@@ -622,6 +622,17 @@ static inline enum rw_hint xfs_inode_write_hint(struct xfs_inode *ip)
  */
 static inline bool xfs_zoned_pack_tight(struct xfs_inode *ip)
 {
+	struct xfs_mount *mp = ip->i_mount;
+	size_t zone_capacity =
+		XFS_FSB_TO_B(mp, mp->m_groups[XG_TYPE_RTG].blocks);
+
+	/*
+	 * Do not pack tight large files that are already using a full group
+	 * (zone) to avoid fragmentation.
+	 */
+	if (i_size_read(VFS_I(ip)) >= zone_capacity)
+		return false;
+
 	return !inode_is_open_for_write(VFS_I(ip)) &&
 		!(ip->i_diflags & XFS_DIFLAG_APPEND);
 }
