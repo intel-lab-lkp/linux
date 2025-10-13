@@ -2585,7 +2585,11 @@ void __init_or_module text_poke_early(void *addr, const void *opcode,
 	} else {
 		local_irq_save(flags);
 		memcpy(addr, opcode, len);
-		sync_core();
+		/* Re-patching occurs in NMI context so we can't do IRET. */
+		if (repatch_in_progress)
+			sync_core_nmi_safe();
+		else
+			sync_core();
 		local_irq_restore(flags);
 
 		/*
