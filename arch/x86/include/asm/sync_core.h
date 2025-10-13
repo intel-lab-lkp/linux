@@ -89,6 +89,20 @@ static __always_inline void sync_core(void)
 }
 
 /*
+ * NMI safe version of sync_core()
+ *
+ * sync_core() may do iret_to_self() which will unmask NMI.
+ * sync_core_nmi_safe() uses MOV-to-CR2 and is safe to use in NMI context.
+ *
+ * As noted in the comments above, this sequence may fault at CPL3 (i.e. Xen
+ * PV).  Therefore it should only be used if outside of those environments.
+ */
+static inline void sync_core_nmi_safe(void)
+{
+	 native_read_cr2();
+}
+
+/*
  * Ensure that a core serializing instruction is issued before returning
  * to user-mode. x86 implements return to user-space through sysexit,
  * sysrel, and sysretq, which are not core serializing.
