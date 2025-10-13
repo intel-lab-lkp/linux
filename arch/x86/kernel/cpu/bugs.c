@@ -455,6 +455,14 @@ static bool __init should_mitigate_vuln(unsigned int bug)
 	}
 }
 
+static void __ref bugs_smt_disable(bool enable)
+{
+	if (system_state == SYSTEM_BOOTING)
+		cpu_smt_disable(enable);
+	else
+		pr_warn("Unable to disable SMT after system boot!\n");
+}
+
 /* Default mitigation for MDS-affected CPUs */
 static enum mds_mitigations mds_mitigation __ro_after_init =
 	IS_ENABLED(CONFIG_MITIGATION_MDS) ? MDS_MITIGATION_AUTO : MDS_MITIGATION_OFF;
@@ -550,7 +558,7 @@ static void __init mds_apply_mitigation(void)
 		setup_force_cpu_cap(X86_FEATURE_CLEAR_CPU_BUF);
 		if (!boot_cpu_has(X86_BUG_MSBDS_ONLY) &&
 		    (mds_nosmt || smt_mitigations == SMT_MITIGATIONS_ON))
-			cpu_smt_disable(false);
+			bugs_smt_disable(false);
 	}
 }
 
@@ -671,7 +679,7 @@ static void __init taa_apply_mitigation(void)
 		setup_force_cpu_cap(X86_FEATURE_CLEAR_CPU_BUF);
 
 		if (taa_nosmt || smt_mitigations == SMT_MITIGATIONS_ON)
-			cpu_smt_disable(false);
+			bugs_smt_disable(false);
 	}
 }
 
@@ -784,7 +792,7 @@ static void __init mmio_apply_mitigation(void)
 		static_branch_enable(&cpu_buf_idle_clear);
 
 	if (mmio_nosmt || smt_mitigations == SMT_MITIGATIONS_ON)
-		cpu_smt_disable(false);
+		bugs_smt_disable(false);
 }
 
 #ifdef CONFIG_DYNAMIC_MITIGATIONS
@@ -1592,7 +1600,7 @@ static void __init retbleed_apply_mitigation(void)
 
 	if (mitigate_smt && !boot_cpu_has(X86_FEATURE_STIBP) &&
 	    (retbleed_nosmt || smt_mitigations == SMT_MITIGATIONS_ON))
-		cpu_smt_disable(false);
+		bugs_smt_disable(false);
 }
 
 #ifdef CONFIG_DYNAMIC_MITIGATIONS
@@ -3109,10 +3117,10 @@ static void __init l1tf_apply_mitigation(void)
 		break;
 	case L1TF_MITIGATION_FLUSH_NOSMT:
 	case L1TF_MITIGATION_FULL:
-		cpu_smt_disable(false);
+		bugs_smt_disable(false);
 		break;
 	case L1TF_MITIGATION_FULL_FORCE:
-		cpu_smt_disable(true);
+		bugs_smt_disable(true);
 		break;
 	}
 
