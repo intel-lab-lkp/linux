@@ -1060,7 +1060,9 @@ class EnumSet(SpecEnumSet):
 
         self.value_pfx = yaml.get('name-prefix', f"{family.ident_name}-{yaml['name']}-")
         self.header = yaml.get('header', None)
-        self.enum_cnt_name = yaml.get('enum-cnt-name', None)
+        self.enum_cnt_name = yaml.get('enum-cnt-name', f'--{self.value_pfx}max')
+        suffix = yaml['type'] == 'flags' and 'mask' or 'max'
+        self.enum_max_name = f'{self.value_pfx}{suffix}'
 
         super().__init__(family, yaml)
 
@@ -3205,7 +3207,6 @@ def render_uapi(family, cw):
                 cw.p(' */')
 
             uapi_enum_start(family, cw, const, 'name')
-            name_pfx = const.get('name-prefix', f"{family.ident_name}-{const['name']}-")
             for entry in enum.entries.values():
                 suffix = ','
                 if entry.value_change:
@@ -3215,17 +3216,14 @@ def render_uapi(family, cw):
             if const.get('render-max', False):
                 cw.nl()
                 cw.p('/* private: */')
+                max_name = c_upper(enum.enum_max_name)
                 if const['type'] == 'flags':
-                    max_name = c_upper(name_pfx + 'mask')
-                    max_val = f' = {enum.get_mask()},'
-                    cw.p(max_name + max_val)
+                    max_val = f'{enum.get_mask()},'
                 else:
-                    cnt_name = enum.enum_cnt_name
-                    max_name = c_upper(name_pfx + 'max')
-                    if not cnt_name:
-                        cnt_name = '__' + name_pfx + 'max'
-                    cw.p(c_upper(cnt_name) + ',')
-                    cw.p(max_name + ' = (' + c_upper(cnt_name) + ' - 1)')
+                    cnt_name = c_upper(enum.enum_cnt_name)
+                    cw.p(f'{cnt_name},')
+                    max_val = f'({cnt_name} - 1)'
+                cw.p(f'{max_name} = {max_val}')
             cw.block_end(line=';')
             cw.nl()
         elif const['type'] == 'const':
