@@ -95,6 +95,11 @@ do {									\
 
 #define to_mci(k) container_of(k, struct mem_ctl_info, dev)
 
+static inline void deprecate_interface(void)
+{
+	pr_warn_once("NOTICE: The legacy EDAC sysfs interface has been deprecated and will be removed by v6.21. Please switch to the new interface!\n");
+}
+
 /**
  * edac_mc_alloc() - Allocate and partially fill a struct &mem_ctl_info.
  *
