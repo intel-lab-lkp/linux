@@ -54,7 +54,7 @@ static ktime_t last_jiffies_update;
 /*
  * Must be called with interrupts disabled !
  */
-static void tick_do_update_jiffies64(ktime_t now)
+static bool _tick_do_update_jiffies64(ktime_t now, bool trylock)
 {
 	unsigned long ticks = 1;
 	ktime_t delta, nextp;
@@ -70,7 +70,7 @@ static void tick_do_update_jiffies64(ktime_t now)
 	 */
 	if (IS_ENABLED(CONFIG_64BIT)) {
 		if (ktime_before(now, smp_load_acquire(&tick_next_period)))
-			return;
+			return true;
 	} else {
 		unsigned int seq;
 
@@ -84,18 +84,24 @@ static void tick_do_update_jiffies64(ktime_t now)
 		} while (read_seqcount_retry(&jiffies_seq, seq));
 
 		if (ktime_before(now, nextp))
-			return;
+			return true;
 	}
 
 	/* Quick check failed, i.e. update is required. */
-	raw_spin_lock(&jiffies_lock);
+	if (trylock) {
+		/* The cpu holding the lock will do the update. */
+		if (!raw_spin_trylock(&jiffies_lock))
+			return false;
+	} else {
+		raw_spin_lock(&jiffies_lock);
+	}
 	/*
 	 * Re-evaluate with the lock held. Another CPU might have done the
 	 * update already.
 	 */
 	if (ktime_before(now, tick_next_period)) {
 		raw_spin_unlock(&jiffies_lock);
-		return;
+		return true;
 	}
 
 	write_seqcount_begin(&jiffies_seq);
@@ -147,6 +153,27 @@ static void tick_do_update_jiffies64(ktime_t now)
 
 	raw_spin_unlock(&jiffies_lock);
 	update_wall_time();
+	return true;
+}
+
+/*
+ * Obtains the lock and does not return until update is complete.
+ * Must be called with interrupts disabled.
+ */
+static void tick_do_update_jiffies64(ktime_t now)
+{
+	_tick_do_update_jiffies64(now, false);
+}
+
+/*
+ * This will return early if another cpu holds the lock.  On return,
+ * the update is in progress but may not have completed yet.
+ * Must be called with interrupts disabled.
+ * Returns false if update might not yet be completed.
+ */
+static bool tick_attempt_update_jiffies64(ktime_t now)
+{
+	return _tick_do_update_jiffies64(now, true);
 }
 
 /*
@@ -239,10 +266,11 @@ static void tick_sched_do_timer(struct tick_sched *ts, ktime_t now)
 		ts->stalled_jiffies = 0;
 		ts->last_tick_jiffies = READ_ONCE(jiffies);
 	} else {
-		if (++ts->stalled_jiffies == MAX_STALLED_JIFFIES) {
-			tick_do_update_jiffies64(now);
-			ts->stalled_jiffies = 0;
-			ts->last_tick_jiffies = READ_ONCE(jiffies);
+		if (++ts->stalled_jiffies >= MAX_STALLED_JIFFIES) {
+			if (tick_attempt_update_jiffies64(now)) {
+				ts->stalled_jiffies = 0;
+				ts->last_tick_jiffies = READ_ONCE(jiffies);
+			}
 		}
 	}
 
