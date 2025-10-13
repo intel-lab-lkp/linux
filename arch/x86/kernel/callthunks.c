@@ -56,7 +56,7 @@ struct core_text {
 	const char	*name;
 };
 
-static bool thunks_initialized __ro_after_init;
+static bool thunks_initialized;
 
 static const struct core_text builtin_coretext = {
 	.base = (unsigned long)_text,
@@ -151,7 +151,7 @@ static bool skip_addr(void *dest)
 	return false;
 }
 
-static __init_or_module void *call_get_dest(void *addr)
+static void *call_get_dest(void *addr)
 {
 	struct insn insn;
 	void *dest;
@@ -204,7 +204,7 @@ static void *patch_dest(void *dest, bool direct)
 	return pad;
 }
 
-static __init_or_module void patch_call(void *addr, const struct core_text *ct)
+static void patch_call(void *addr, const struct core_text *ct)
 {
 	void *pad, *dest;
 	u8 bytes[8];
@@ -229,7 +229,7 @@ static __init_or_module void patch_call(void *addr, const struct core_text *ct)
 	text_poke_early(addr, bytes, CALL_INSN_SIZE);
 }
 
-static __init_or_module void
+static void
 patch_call_sites(s32 *start, s32 *end, const struct core_text *ct)
 {
 	s32 *s;
@@ -238,7 +238,7 @@ patch_call_sites(s32 *start, s32 *end, const struct core_text *ct)
 		patch_call((void *)s + *s, ct);
 }
 
-static __init_or_module void
+static void
 callthunks_setup(struct callthunk_sites *cs, const struct core_text *ct)
 {
 	prdbg("Patching call sites %s\n", ct->name);
@@ -246,7 +246,7 @@ callthunks_setup(struct callthunk_sites *cs, const struct core_text *ct)
 	prdbg("Patching call sites done%s\n", ct->name);
 }
 
-void __init callthunks_patch_builtin_calls(void)
+void callthunks_patch_builtin_calls(void)
 {
 	struct callthunk_sites cs = {
 		.call_start	= __call_sites,
