@@ -2477,6 +2477,24 @@ static void __init spectre_v2_apply_mitigation(void)
 	}
 }
 
+#ifdef CONFIG_DYNAMIC_MITIGATIONS
+static void spectre_v2_reset_mitigation(void)
+{
+	x86_spec_ctrl_base &= ~SPEC_CTRL_IBRS;
+	x86_spec_ctrl_base &= ~SPEC_CTRL_RRSBA_DIS_S;
+	rrsba_disabled = false;
+	setup_clear_cpu_cap(X86_FEATURE_KERNEL_IBRS);
+	setup_clear_cpu_cap(X86_FEATURE_RETPOLINE_LFENCE);
+	setup_clear_cpu_cap(X86_FEATURE_RETPOLINE);
+	setup_clear_cpu_cap(X86_FEATURE_RSB_CTXSW);
+	setup_clear_cpu_cap(X86_FEATURE_USE_IBPB_FW);
+	spectre_v2_enabled = SPECTRE_V2_NONE;
+	nospectre_v2 = false;
+	spectre_v2_cmd = IS_ENABLED(CONFIG_MITIGATION_SPECTRE_V2) ?
+		SPECTRE_V2_CMD_AUTO : SPECTRE_V2_CMD_NONE;
+}
+#endif
+
 static void update_stibp_msr(void * __unused)
 {
 	u64 val = spec_ctrl_current() | (x86_spec_ctrl_base & SPEC_CTRL_STIBP);
@@ -3810,5 +3828,6 @@ void __warn_thunk(void)
 void arch_cpu_reset_mitigations(void)
 {
 	spectre_v1_reset_mitigation();
+	spectre_v2_reset_mitigation();
 }
 #endif
