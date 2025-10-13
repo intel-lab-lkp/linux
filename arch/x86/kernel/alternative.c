@@ -854,6 +854,21 @@ static bool cpu_wants_indirect_its_thunk_at(unsigned long addr, int reg)
 
 #endif /* CONFIG_MITIGATION_ITS */
 
+static void prepend_nops(u8 *bytes, int curlen, int neededlen)
+{
+	u8 newbytes[16];
+	int pad = neededlen - curlen;
+
+	/* Fill padding bytes with NOP. */
+	memset(newbytes, BYTES_NOP1, pad);
+
+	/* Copy the new instruction in. */
+	memcpy(newbytes + pad, bytes, curlen);
+
+	/* And write the final result back out to bytes. */
+	memcpy(bytes, newbytes, neededlen);
+}
+
 /*
  * Rewrite the compiler generated retpoline thunk calls.
  *
@@ -942,10 +957,16 @@ static int patch_retpoline(void *addr, struct insn *insn, u8 *bytes)
 		return ret;
 	i += ret;
 
-	for (; i < insn->length;)
-		bytes[i++] = BYTES_NOP1;
+	/*
+	 * Prepend the instruction with NOPs.  These are prepended, instead of
+	 * appended so the return site does not change.  This is necessary when
+	 * re-patching retpolines at runtime, such as via
+	 * CONFIG_DYNAMIC_MITIGATIONS, but do it always since the performance is
+	 * the same either way (other than for JMP, but those are very rare).
+	 */
+	prepend_nops(bytes, i, insn->length);
 
-	return i;
+	return insn->length;
 }
 
 /*
