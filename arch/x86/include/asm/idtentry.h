@@ -12,6 +12,7 @@
 #include <linux/hardirq.h>
 
 #include <asm/irq_stack.h>
+#include <asm/kvm_host.h>
 
 typedef void (*idtentry_t)(struct pt_regs *regs);
 

@@ -1055,9 +1055,6 @@ struct kvm_vcpu_arch {
 	/* be preempted when it's in kernel-mode(cpl=0) */
 	bool preempted_in_kernel;
 
-	/* Flush the L1 Data cache for L1TF mitigation on VMENTER */
-	bool l1tf_flush_l1d;
-
 	/* Host CPU on which VM-entry was most recently attempted */
 	int last_vmentry_cpu;
 
@@ -2475,5 +2472,23 @@ static inline bool kvm_arch_has_irq_bypass(void)
 {
 	return enable_device_posted_irqs;
 }
+
+#if IS_ENABLED(CONFIG_KVM_INTEL)
+
+DECLARE_PER_CPU(bool, l1tf_flush_l1d);
+
+/*
+ * This function is called from noinstr interrupt contexts
+ * and must be inlined to not get instrumentation.
+ */
+static __always_inline void kvm_set_cpu_l1tf_flush_l1d(void)
+{
+	__this_cpu_write(l1tf_flush_l1d, true);
+}
+
+#else /* !IS_ENABLED(CONFIG_KVM_INTEL) */
+static __always_inline void kvm_set_cpu_l1tf_flush_l1d(void) { }
+#endif /* IS_ENABLED(CONFIG_KVM_INTEL) */
+
 
 #endif /* _ASM_X86_KVM_HOST_H */
