@@ -71,6 +71,7 @@ static const char * const	sym_regex_kernel[S_NSYMTYPES] = {
  */
 	[S_REL] =
 	"^(__init_(begin|end)|"
+	"__init_alt_end|"
 	"__x86_cpu_dev_(start|end)|"
 	"__alt_instructions(_end)?|"
 	"(__iommu_table|__apicdrivers|__smp_locks)(_end)?|"

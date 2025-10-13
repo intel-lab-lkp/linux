@@ -262,6 +262,11 @@ SECTIONS
 		*(.altinstr_replacement)
 	}
 
+	/* Everything from here until __init_end is always freed */
+	. = ALIGN(PAGE_SIZE);
+	.init.alt.end : AT(ADDR(.init.alt.end) - LOAD_OFFSET) {
+		__init_alt_end = .;
+	}
 
 	INIT_TEXT_SECTION(PAGE_SIZE)
 
