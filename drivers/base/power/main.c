@@ -1138,6 +1138,9 @@ void dpm_resume(pm_message_t state)
 	struct device *dev;
 	ktime_t starttime = ktime_get();
 
+	if (state.event == PM_EVENT_INVALID)
+		return;
+
 	trace_suspend_resume(TPS("dpm_resume"), state.event, true);
 
 	pm_transition = state;
@@ -1239,6 +1242,9 @@ out:
 void dpm_complete(pm_message_t state)
 {
 	struct list_head list;
+
+	if (state.event == PM_EVENT_INVALID)
+		return;
 
 	trace_suspend_resume(TPS("dpm_complete"), state.event, true);
 

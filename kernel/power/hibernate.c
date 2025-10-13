@@ -479,13 +479,14 @@ int hibernation_snapshot(int platform_mode)
 	if (error || !in_suspend)
 		swsusp_free();
 
-	msg = in_suspend ? (error ? PMSG_RECOVER : PMSG_THAW) : PMSG_RESTORE;
+	msg = in_suspend ? (error ? PMSG_RECOVER : PMSG_INVALID) : PMSG_RESTORE;
 	dpm_resume(msg);
 
-	if (error || !in_suspend)
+	if (error || !in_suspend) {
 		pm_restore_gfp_mask();
+		console_resume_all();
+	}
 
-	console_resume_all();
 	dpm_complete(msg);
 
  Close:
@@ -706,7 +707,13 @@ static void power_down(void)
 
 #ifdef CONFIG_SUSPEND
 	if (hibernation_mode == HIBERNATION_SUSPEND) {
+		/* recover from hibernation_snapshot() */
+		dpm_resume(PMSG_THAW);
+		console_resume_all();
+		dpm_complete(PMSG_THAW);
 		pm_restore_gfp_mask();
+
+		/* run suspend sequence */
 		error = suspend_devices_and_enter(mem_sleep_current);
 		if (!error)
 			goto exit;

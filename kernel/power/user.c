@@ -310,6 +310,9 @@ static long snapshot_ioctl(struct file *filp, unsigned int cmd,
 		pm_restore_gfp_mask();
 		error = hibernation_snapshot(data->platform_support);
 		if (!error) {
+			dpm_resume(PMSG_THAW);
+			console_resume_all();
+			dpm_complete(PMSG_THAW);
 			error = put_user(in_suspend, (int __user *)arg);
 			data->ready = !freezer_test_done && !error;
 			freezer_test_done = false;
