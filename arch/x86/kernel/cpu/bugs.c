@@ -925,7 +925,7 @@ static const char * const srbds_strings[] = {
 
 static bool srbds_off;
 
-void update_srbds_msr(void)
+static void update_srbds_msr(void)
 {
 	u64 mcu_ctrl;
 
@@ -1085,7 +1085,7 @@ bool gds_ucode_mitigated(void)
 }
 EXPORT_SYMBOL_GPL(gds_ucode_mitigated);
 
-void update_gds_msr(void)
+static void update_gds_msr(void)
 {
 	u64 mcu_ctrl_after;
 	u64 mcu_ctrl;
@@ -3014,7 +3014,7 @@ int arch_prctl_spec_ctrl_get(struct task_struct *task, unsigned long which)
 	}
 }
 
-void x86_spec_ctrl_setup_ap(void)
+static void x86_spec_ctrl_setup_ap(void)
 {
 	if (boot_cpu_has(X86_FEATURE_MSR_SPEC_CTRL))
 		update_spec_ctrl(x86_spec_ctrl_base);
@@ -4010,3 +4010,11 @@ void arch_cpu_reset_mitigations(void)
 	vmscape_reset_mitigation();
 }
 #endif
+
+void cpu_bugs_update_speculation_msrs(void)
+{
+	x86_spec_ctrl_setup_ap();
+	update_srbds_msr();
+	if (boot_cpu_has_bug(X86_BUG_GDS))
+		update_gds_msr();
+}

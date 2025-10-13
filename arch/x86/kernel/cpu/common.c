@@ -2138,11 +2138,7 @@ void identify_secondary_cpu(unsigned int cpu)
 #ifdef CONFIG_X86_32
 	enable_sep_cpu();
 #endif
-	x86_spec_ctrl_setup_ap();
-	update_srbds_msr();
-	if (boot_cpu_has_bug(X86_BUG_GDS))
-		update_gds_msr();
-
+	cpu_bugs_update_speculation_msrs();
 	tsx_ap_init();
 	c->initialized = true;
 }
