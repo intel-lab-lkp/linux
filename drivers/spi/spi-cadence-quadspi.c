@@ -2002,15 +2002,17 @@ static int cqspi_probe(struct platform_device *pdev)
 	ret = spi_register_controller(host);
 	if (ret) {
 		dev_err(&pdev->dev, "failed to register SPI ctlr %d\n", ret);
-		goto probe_setup_failed;
+		goto probe_ctrl_failed;
 	}
 
 	pm_runtime_put_autosuspend(dev);
 
 	return 0;
+
+probe_ctrl_failed:
+	pm_runtime_disable(dev);
 probe_setup_failed:
 	cqspi_controller_enable(cqspi, 0);
-	pm_runtime_disable(dev);
 probe_reset_failed:
 	if (cqspi->is_jh7110)
 		cqspi_jh7110_disable_clk(pdev, cqspi);
