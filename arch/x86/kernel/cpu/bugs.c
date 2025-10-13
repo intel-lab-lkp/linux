@@ -3446,6 +3446,15 @@ static void __init vmscape_apply_mitigation(void)
 		setup_force_cpu_cap(X86_FEATURE_IBPB_EXIT_TO_USER);
 }
 
+#ifdef CONFIG_DYNAMIC_MITIGATIONS
+static void vmscape_reset_mitigation(void)
+{
+	setup_clear_cpu_cap(X86_FEATURE_IBPB_EXIT_TO_USER);
+	vmscape_mitigation = IS_ENABLED(CONFIG_MITIGATION_VMSCAPE) ?
+		VMSCAPE_MITIGATION_AUTO : VMSCAPE_MITIGATION_NONE;
+}
+#endif
+
 #undef pr_fmt
 #define pr_fmt(fmt) fmt
 
@@ -3990,5 +3999,6 @@ void arch_cpu_reset_mitigations(void)
 	bhi_reset_mitigation();
 	its_reset_mitigation();
 	tsa_reset_mitigation();
+	vmscape_reset_mitigation();
 }
 #endif
