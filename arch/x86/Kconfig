@@ -2711,6 +2711,18 @@ config MITIGATION_VMSCAPE
 	  Enable mitigation for VMSCAPE attacks. VMSCAPE is a hardware security
 	  vulnerability on Intel and AMD CPUs that may allow a guest to do
 	  Spectre v2 style attacks on userspace hypervisor.
+
+config DYNAMIC_MITIGATIONS
+	bool "Support dynamic reconfiguration of CPU mitigations at runtime"
+	depends on LIVEPATCH && FREEZER && !DEBUG_ENTRY
+	default y
+	help
+	  Allow CPU mitigations to be reconfigured at runtime via
+	  sysfs.  Dynamic mitigation support requires extra kernel memory
+	  to keep around alternative information after kernel boot but
+	  allows CPU mitigation settings to be modified without a
+	  kexec/reboot.
+
 endif
 
 config ARCH_HAS_ADD_PAGES
