@@ -3232,12 +3232,15 @@ def render_uapi(family, cw):
                 cw.p('/* private: */')
                 max_name = c_upper(enum.enum_max_name)
                 if const['type'] == 'flags':
-                    max_val = f'{enum.get_mask()},'
+                    values = list(enum.entries.values())
+                    parts = [f'{val.c_name} |' for val in values[:-1]]
+                    parts.append(f'{values[-1].c_name},')
+                    cw.p_wrap(f'{max_name} = ', parts)
                 else:
                     cnt_name = c_upper(enum.enum_cnt_name)
                     cw.p(f'{cnt_name},')
                     max_val = f'({cnt_name} - 1)'
-                cw.p(f'{max_name} = {max_val}')
+                    cw.p(f'{max_name} = {max_val}')
             cw.block_end(line=';')
             cw.nl()
         elif const['type'] == 'const':
