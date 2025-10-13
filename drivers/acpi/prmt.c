@@ -305,11 +305,6 @@ static acpi_status acpi_platformrt_space_handler(u32 function,
 	efi_status_t status;
 	struct prm_context_buffer context;
 
-	if (!efi_enabled(EFI_RUNTIME_SERVICES)) {
-		pr_err_ratelimited("PRM: EFI runtime services no longer available\n");
-		return AE_NO_HANDLER;
-	}
-
 	/*
 	 * The returned acpi_status will always be AE_OK. Error values will be
 	 * saved in the first byte of the PRM message buffer to be used by ASL.
@@ -388,6 +383,14 @@ void __init init_prmt(void)
 	acpi_status status;
 	int mc;
 
+	/*
+	 * Return immediately if EFI_RUNTIME_SERVICES is not enabled.
+	 */
+	if (!efi_enabled(EFI_RUNTIME_SERVICES)) {
+		pr_info("PRM: EFI runtime services unavailable, can not initialize.\n");
+		return;
+	}
+
 	status = acpi_get_table(ACPI_SIG_PRMT, 0, &tbl);
 	if (ACPI_FAILURE(status))
 		return;
@@ -403,11 +406,6 @@ void __init init_prmt(void)
 		return;
 
 	pr_info("PRM: found %u modules\n", mc);
-
-	if (!efi_enabled(EFI_RUNTIME_SERVICES)) {
-		pr_err("PRM: EFI runtime services unavailable\n");
-		return;
-	}
 
 	status = acpi_install_address_space_handler(ACPI_ROOT_OBJECT,
 						    ACPI_ADR_SPACE_PLATFORM_RT,
