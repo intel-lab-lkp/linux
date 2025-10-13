@@ -4099,12 +4099,44 @@ static const struct file_operations dfs_thunk_ops = {
 	.release	= single_release,
 };
 
+static int static_branch_debug_show(struct seq_file *m, void *p)
+{
+	if (static_key_enabled((struct static_key *)m->private))
+		seq_puts(m, "enabled\n");
+	else
+		seq_puts(m, "disabled\n");
+
+	return 0;
+}
+
+static int static_branch_debug_open(struct inode *inode, struct file *file)
+{
+	return single_open(file, static_branch_debug_show, inode->i_private);
+}
+
+static const struct file_operations dfs_static_branch_ops = {
+	.open		= static_branch_debug_open,
+	.read		= seq_read,
+	.llseek		= seq_lseek,
+	.release	= single_release,
+};
+
 static int __init mitigations_debugfs_init(void)
 {
 	struct dentry *dir;
 
 	dir = debugfs_create_dir("mitigations", arch_debugfs_dir);
 	debugfs_create_file("x86_return_thunk", 0400, dir, NULL, &dfs_thunk_ops);
+	debugfs_create_file("switch_mm_cond_ibpb", 0400, dir,
+			&switch_mm_cond_ibpb, &dfs_static_branch_ops);
+	debugfs_create_file("switch_mm_always_ibpb", 0400, dir,
+			&switch_mm_always_ibpb, &dfs_static_branch_ops);
+	debugfs_create_file("switch_vcpu_ibpb", 0400, dir,
+			&switch_vcpu_ibpb, &dfs_static_branch_ops);
+	debugfs_create_file("cpu_buf_idle_clear", 0400, dir,
+			&cpu_buf_idle_clear, &dfs_static_branch_ops);
+	debugfs_create_file("cpu_buf_vm_clear", 0400, dir,
+			&cpu_buf_vm_clear, &dfs_static_branch_ops);
 
 	return 0;
 }
