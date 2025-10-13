@@ -4,6 +4,19 @@
 #
 
 # Keep in alphabetical order
+
+config IIO_FIXED_POINT_KUNIT_TEST
+	tristate "Test IIO fixedpoint functions" if !KUNIT_ALL_TESTS
+	depends on KUNIT
+	default KUNIT_ALL_TESTS
+	help
+	  Build unit tests for the IIO fixed-point code.
+
+	  For more information on KUnit and unit tests in general, please refer
+	  to the KUnit documentation in Documentation/dev-tools/kunit/.
+
+	  If unsure, say N.
+
 config IIO_GTS_KUNIT_TEST
 	tristate "Test IIO gain-time-scale helpers" if !KUNIT_ALL_TESTS
 	depends on KUNIT
