@@ -10,6 +10,7 @@ hugetlb-soft-offline
 khugepaged
 map_hugetlb
 map_populate
+max_vma_count_tests
 thuge-gen
 compaction_test
 migration
