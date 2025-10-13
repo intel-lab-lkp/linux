@@ -521,7 +521,7 @@ static int exfat_ioctl_set_volume_label(struct super_block *sb,
 
 	memset(&uniname, 0, sizeof(uniname));
 	if (label[0]) {
-		ret = exfat_nls_to_utf16(sb, label, FSLABEL_MAX,
+		ret = exfat_nls_to_utf16(sb, label, FSLABEL_MAX - 1,
 					 &uniname, &lossy);
 		if (ret < 0)
 			return ret;
