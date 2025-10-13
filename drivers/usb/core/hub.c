@@ -2147,6 +2147,20 @@ static void update_port_device_state(struct usb_device *udev)
 	}
 }
 
+static inline void update_usb_device_state(struct usb_device *udev,
+					   enum usb_device_state new_state)
+{
+	if (udev->state == USB_STATE_SUSPENDED &&
+	    new_state != USB_STATE_SUSPENDED)
+		udev->active_duration -= jiffies;
+	else if (new_state == USB_STATE_SUSPENDED &&
+		 udev->state != USB_STATE_SUSPENDED)
+		udev->active_duration += jiffies;
+
+	udev->state = new_state;
+	update_port_device_state(udev);
+}
+
 static void recursively_mark_NOTATTACHED(struct usb_device *udev)
 {
 	struct usb_hub *hub = usb_hub_to_struct_hub(udev);
@@ -2156,10 +2170,7 @@ static void recursively_mark_NOTATTACHED(struct usb_device *udev)
 		if (hub->ports[i]->child)
 			recursively_mark_NOTATTACHED(hub->ports[i]->child);
 	}
-	if (udev->state == USB_STATE_SUSPENDED)
-		udev->active_duration -= jiffies;
-	udev->state = USB_STATE_NOTATTACHED;
-	update_port_device_state(udev);
+	update_usb_device_state(udev, USB_STATE_NOTATTACHED);
 }
 
 /**
@@ -2209,14 +2220,7 @@ void usb_set_device_state(struct usb_device *udev,
 			else
 				wakeup = 0;
 		}
-		if (udev->state == USB_STATE_SUSPENDED &&
-			new_state != USB_STATE_SUSPENDED)
-			udev->active_duration -= jiffies;
-		else if (new_state == USB_STATE_SUSPENDED &&
-				udev->state != USB_STATE_SUSPENDED)
-			udev->active_duration += jiffies;
-		udev->state = new_state;
-		update_port_device_state(udev);
+		update_usb_device_state(udev, new_state);
 	} else
 		recursively_mark_NOTATTACHED(udev);
 	spin_unlock_irqrestore(&device_state_lock, flags);
