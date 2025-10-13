@@ -393,7 +393,7 @@ static const enum platform_profile_option awcc_mode_to_platform_profile[AWCC_PRO
 	[AWCC_PROFILE_LEGACY_PERFORMANCE]		= PLATFORM_PROFILE_PERFORMANCE,
 };
 
-static struct awcc_quirks *awcc;
+static struct awcc_quirks *awcc = &empty_quirks;
 
 /*
  *	The HDMI mux sysfs node indicates the status of the HDMI input mux.
@@ -1680,26 +1680,16 @@ int __init alienware_wmax_wmi_init(void)
 	if (id)
 		awcc = id->driver_data;
 
-	if (force_hwmon) {
-		if (!awcc)
-			awcc = &empty_quirks;
-
+	if (force_hwmon)
 		awcc->hwmon = true;
-	}
 
-	if (force_platform_profile) {
-		if (!awcc)
-			awcc = &empty_quirks;
-
+	if (force_platform_profile)
 		awcc->pprof = true;
-	}
 
-	if (force_gmode) {
-		if (awcc)
-			awcc->gmode = true;
-		else
-			pr_warn("force_gmode requires platform profile support\n");
-	}
+	if (force_gmode && awcc->pprof)
+		awcc->gmode = true;
+	else
+		pr_warn("force_gmode requires platform profile support\n");
 
 	return wmi_driver_register(&alienware_wmax_wmi_driver);
 }
