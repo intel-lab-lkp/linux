@@ -1858,6 +1858,17 @@ static void __init tsa_apply_mitigation(void)
 	}
 }
 
+#ifdef CONFIG_DYNAMIC_MITIGATIONS
+static void tsa_reset_mitigation(void)
+{
+	setup_clear_cpu_cap(X86_FEATURE_CLEAR_CPU_BUF);
+	setup_clear_cpu_cap(X86_FEATURE_CLEAR_CPU_BUF_VM);
+	static_branch_disable(&cpu_buf_idle_clear);
+	tsa_mitigation =
+		IS_ENABLED(CONFIG_MITIGATION_TSA) ? TSA_MITIGATION_AUTO : TSA_MITIGATION_NONE;
+}
+#endif
+
 #undef pr_fmt
 #define pr_fmt(fmt)     "Spectre V2 : " fmt
 
@@ -3978,5 +3989,6 @@ void arch_cpu_reset_mitigations(void)
 	gds_reset_mitigation();
 	bhi_reset_mitigation();
 	its_reset_mitigation();
+	tsa_reset_mitigation();
 }
 #endif
