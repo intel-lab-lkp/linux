@@ -286,14 +286,14 @@ int module_finalize(const Elf_Ehdr *hdr,
 	}
 	if (retpolines) {
 		void *rseg = (void *)retpolines->sh_addr;
-		apply_retpolines(rseg, rseg + retpolines->sh_size);
+		apply_retpolines(rseg, rseg + retpolines->sh_size, me);
 	}
 
 	its_fini_mod(me);
 
 	if (returns) {
 		void *rseg = (void *)returns->sh_addr;
-		apply_returns(rseg, rseg + returns->sh_size);
+		apply_returns(rseg, rseg + returns->sh_size, me);
 	}
 	if (calls) {
 		struct callthunk_sites cs = {};
@@ -306,7 +306,7 @@ int module_finalize(const Elf_Ehdr *hdr,
 	if (alt) {
 		/* patch .altinstructions */
 		void *aseg = (void *)alt->sh_addr;
-		apply_alternatives(aseg, aseg + alt->sh_size);
+		apply_alternatives(aseg, aseg + alt->sh_size, me);
 	}
 	if (ibt_endbr) {
 		void *iseg = (void *)ibt_endbr->sh_addr;
