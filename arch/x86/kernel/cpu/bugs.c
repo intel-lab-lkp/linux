@@ -2056,6 +2056,18 @@ static void __init spectre_v2_user_apply_mitigation(void)
 	}
 }
 
+#ifdef CONFIG_DYNAMIC_MITIGATIONS
+static void spectre_v2_user_reset_mitigation(void)
+{
+	static_branch_disable(&switch_vcpu_ibpb);
+	static_branch_disable(&switch_mm_always_ibpb);
+	static_branch_disable(&switch_mm_cond_ibpb);
+	spectre_v2_user_stibp = SPECTRE_V2_USER_NONE;
+	spectre_v2_user_ibpb = SPECTRE_V2_USER_NONE;
+	spectre_v2_user_cmd = SPECTRE_V2_USER_CMD_AUTO;
+}
+#endif
+
 static const char * const spectre_v2_strings[] = {
 	[SPECTRE_V2_NONE]			= "Vulnerable",
 	[SPECTRE_V2_RETPOLINE]			= "Mitigation: Retpolines",
@@ -3844,5 +3856,6 @@ void arch_cpu_reset_mitigations(void)
 	spectre_v1_reset_mitigation();
 	spectre_v2_reset_mitigation();
 	retbleed_reset_mitigation();
+	spectre_v2_user_reset_mitigation();
 }
 #endif
