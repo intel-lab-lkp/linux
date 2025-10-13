@@ -777,3 +777,11 @@ Date:		Nov 2022
 Contact:	Linux kernel mailing list <linux-kernel@vger.kernel.org>
 Description:
 		(RO) the list of CPUs that can be brought online.
+
+What:		/sys/devices/system/cpu/mitigations
+Date:		Oct 2025
+Contact:	Linux kernel mailing list <linux-kernel@vger.kernel.org>
+Description:
+		Read/write interface to control CPU mitigations.
+
+		See also: Documentation/admin-guide/hw-vuln/dynamic_mitigations.rst

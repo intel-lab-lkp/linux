@@ -21,6 +21,7 @@
 #include <linux/pm_qos.h>
 #include <linux/delay.h>
 #include <linux/sched/isolation.h>
+#include <linux/filter.h>
 
 #include "base.h"
 
@@ -605,6 +606,113 @@ CPU_SHOW_VULN_FALLBACK(indirect_target_selection);
 CPU_SHOW_VULN_FALLBACK(tsa);
 CPU_SHOW_VULN_FALLBACK(vmscape);
 
+#ifdef CONFIG_DYNAMIC_MITIGATIONS
+static char *saved_opts;
+
+static int __cpu_filter_mitigation_opts(char *param, char *val,
+		const char *unused, void *arg)
+{
+	char *opt;
+	/* Extra byte allocated for the ' ' at the end. */
+	int len = strlen(param) + 2;
+
+	if (!cpu_is_mitigation_opt(param))
+		return 0;
+
+	/* Extra byte allocated for the '='. */
+	if (val)
+		len += strlen(val) + 1;
+
+	opt = kmalloc(len, GFP_KERNEL);
+	if (WARN_ON(!opt))
+		return 0;
+
+	if (val)
+		sprintf(opt, "%s=%s ", param, val);
+	else
+		sprintf(opt, "%s ", param);
+
+	strcat(saved_opts, opt);
+	kfree(opt);
+
+	return 0;
+}
+
+/* Only save options related to mitigations. */
+static void cpu_filter_mitigation_opts(const char *str)
+{
+	char *tmpstr;
+	char *newline = "\n";
+
+	kfree(saved_opts);
+
+	/*
+	 * 2 extra bytes, one for the final NULL and one for the space we add
+	 * between each option.
+	 */
+	saved_opts = kmalloc(strlen(str)+2, GFP_KERNEL);
+	tmpstr = kstrdup(str, GFP_KERNEL);
+
+	if (WARN_ON(!saved_opts) || WARN_ON(!tmpstr))
+		return;
+
+	saved_opts[0] = '\0';
+
+	parse_args("mitigation filter", tmpstr, NULL, 0, 0, 0, NULL,
+			__cpu_filter_mitigation_opts);
+
+	strcat(saved_opts, newline);
+	kfree(tmpstr);
+}
+
+ssize_t cpu_show_mitigation_options(struct device *dev, struct device_attribute *attr, char *buf);
+ssize_t cpu_show_mitigation_options(struct device *dev, struct device_attribute *attr, char *buf)
+{
+	return sysfs_emit(buf, saved_opts);
+}
+
+ssize_t cpu_write_mitigation_options(struct device *dev,
+				struct device_attribute *attr,
+				const char *buf, size_t count);
+
+void __weak cpu_prepare_repatch_alternatives(void)
+{
+}
+
+void __weak cpu_update_alternatives(void)
+{
+}
+
+void __weak cpu_select_mitigations(void)
+{
+}
+
+ssize_t cpu_write_mitigation_options(struct device *dev,
+				struct device_attribute *attr,
+				const char *buf, size_t count)
+{
+	/* Save and filter the provided options. */
+	cpu_filter_mitigation_opts(buf);
+
+	/* Reset and re-select all mitigations */
+	cpu_prepare_repatch_alternatives();
+	cpu_reset_mitigations();
+
+	if (cpu_parse_mitigation_options(buf))
+		pr_warn("Error parsing new options %s\n", buf);
+
+	cpu_select_mitigations();
+	cpu_update_alternatives();
+
+	if (ebpf_jit_enabled())
+		pr_warn("WARNING! EBPF JIT is enabled.  See Documentation/admin-guide/hw-vuln/dynamic_mitigations.rst\n");
+
+	return count;
+
+}
+static DEVICE_ATTR(mitigations, 0644, cpu_show_mitigation_options, cpu_write_mitigation_options);
+#endif
+
 static DEVICE_ATTR(meltdown, 0444, cpu_show_meltdown, NULL);
 static DEVICE_ATTR(spectre_v1, 0444, cpu_show_spectre_v1, NULL);
 static DEVICE_ATTR(spectre_v2, 0444, cpu_show_spectre_v2, NULL);
@@ -660,6 +768,11 @@ static void __init cpu_register_vulnerabilities(void)
 	if (dev) {
 		if (sysfs_create_group(&dev->kobj, &cpu_root_vulnerabilities_group))
 			pr_err("Unable to register CPU vulnerabilities\n");
+#ifdef CONFIG_DYNAMIC_MITIGATIONS
+		if (sysfs_create_file(&dev->kobj, &dev_attr_mitigations.attr))
+			pr_err("Unable to register CPU vulnerability controls\n");
+		cpu_filter_mitigation_opts(saved_command_line);
+#endif
 		put_device(dev);
 	}
 }
