@@ -1023,6 +1023,12 @@ DEFINE_FREE(module_put, struct module *, if (_T) module_put(_T))
 #ifdef CONFIG_DYNAMIC_MITIGATIONS
 void modules_prepare_repatch(void);
 void modules_post_repatch(void);
+void modules_update_alternatives(void);
+void arch_module_update_alternatives(struct module *mod);
+void arch_module_pre_update_alternatives(struct module *mod);
+void arch_module_post_update_alternatives(struct module *mod);
+void modules_pre_update_alternatives(void);
+void modules_post_update_alternatives(void);
 #endif
 
 #endif /* _LINUX_MODULE_H */

@@ -3943,4 +3943,46 @@ void modules_post_repatch(void)
 		change_mod_mem_perm(mod, MOD_TEXT, false);
 	}
 }
+
+void __weak arch_module_update_alternatives(struct module *mod)
+{
+}
+
+void modules_update_alternatives(void)
+{
+	struct module *mod;
+
+	list_for_each_entry(mod, &modules, list) {
+		arch_module_update_alternatives(mod);
+		update_all_static_calls(mod->static_call_sites,
+					mod->static_call_sites +
+					mod->num_static_call_sites, mod);
+	}
+}
+
+void __weak arch_module_pre_update_alternatives(struct module *mod)
+{
+}
+
+void __weak arch_module_post_update_alternatives(struct module *mod)
+{
+}
+
+void modules_pre_update_alternatives(void)
+{
+	struct module *mod;
+
+	list_for_each_entry(mod, &modules, list) {
+		arch_module_pre_update_alternatives(mod);
+	}
+}
+
+void modules_post_update_alternatives(void)
+{
+	struct module *mod;
+
+	list_for_each_entry(mod, &modules, list) {
+		arch_module_post_update_alternatives(mod);
+	}
+}
 #endif
