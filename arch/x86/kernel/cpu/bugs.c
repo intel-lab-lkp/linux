@@ -3991,6 +3991,62 @@ void __warn_thunk(void)
 }
 
 #ifdef CONFIG_DYNAMIC_MITIGATIONS
+struct mitigation_info {
+	char *param;
+	int (*parse)(char *str);
+};
+
+static struct mitigation_info mitigation_parsers[] = {
+	{"mds", mds_cmdline},
+	{"tsx_async_abort", tsx_async_abort_parse_cmdline},
+	{"mmio_stale_data", mmio_stale_data_parse_cmdline},
+	{"reg_file_data_sampling", rfds_parse_cmdline},
+	{"srbds", srbds_parse_cmdline},
+	{"gather_data_sampling", gds_parse_cmdline},
+	{"nospectre_v1", nospectre_v1_cmdline},
+	{"retbleed", retbleed_parse_cmdline},
+	{"indirect_target_selection", its_parse_cmdline},
+	{"spectre_v2_user", spectre_v2_user_parse_cmdline},
+	{"nospectre_v2", nospectre_v2_parse_cmdline},
+	{"spectre_v2", spectre_v2_parse_cmdline},
+	{"spectre_bhi", spectre_bhi_parse_cmdline},
+	{"nospec_store_bypass_disable", nossb_parse_cmdline},
+	{"spec_store_bypass_disable", ssb_parse_cmdline},
+	{"l1tf", l1tf_cmdline},
+	{"spec_rstack_overflow", srso_parse_cmdline},
+	{"tsa", tsa_parse_cmdline},
+	{"vmscape", vmscape_parse_cmdline}
+};
+
+static struct mitigation_info *get_mitigation_info(char *param)
+{
+	int i;
+
+	for (i = 0; i < ARRAY_SIZE(mitigation_parsers); i++) {
+		if (parameq(param, mitigation_parsers[i].param))
+			return &mitigation_parsers[i];
+	}
+
+	return NULL;
+}
+
+bool arch_is_mitigation_opt(char *param)
+{
+	return get_mitigation_info(param);
+}
+
+int arch_parse_mitigation_opt(char *param, char *val)
+{
+	struct mitigation_info *info = get_mitigation_info(param);
+
+	if (!info) {
+		pr_warn("Ignoring non-mitigation option %s\n", param);
+		return 0;
+	}
+
+	return info->parse(val);
+}
+
 void arch_cpu_reset_mitigations(void)
 {
 	spectre_v1_reset_mitigation();

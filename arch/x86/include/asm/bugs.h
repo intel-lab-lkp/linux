@@ -13,5 +13,7 @@ static inline int ppro_with_ram_bug(void) { return 0; }
 extern void cpu_bugs_smt_update(void);
 void arch_cpu_reset_mitigations(void);
 void cpu_bugs_update_speculation_msrs(void);
+bool arch_is_mitigation_opt(char *param);
+int arch_parse_mitigation_opt(char *param, char *val);
 
 #endif /* _ASM_X86_BUGS_H */
