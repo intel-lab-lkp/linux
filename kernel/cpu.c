@@ -3343,4 +3343,36 @@ void cpu_reset_mitigations(void)
 	attack_vectors[CPU_MITIGATE_GUEST_GUEST] = IS_ENABLED(CONFIG_KVM);
 	arch_cpu_reset_mitigations();
 }
+
+int __weak arch_parse_mitigation_opt(char *param, char *val) { return 0; }
+bool __weak arch_is_mitigation_opt(char *param) { return false; }
+
+bool cpu_is_mitigation_opt(char *param)
+{
+	if (parameq(param, "mitigations"))
+		return true;
+	else
+		return arch_is_mitigation_opt(param);
+}
+
+static int __cpu_parse_mitigation_options(char *param, char *val,
+		const char *unused, void *arg)
+{
+	if (parameq(param, "mitigations"))
+		return mitigations_parse_cmdline(val);
+	else
+		return arch_parse_mitigation_opt(param, val);
+}
+
+int cpu_parse_mitigation_options(const char *str)
+{
+	char *tmpstr;
+
+	/* Copy the provided string because parse_args will mangle it. */
+	tmpstr = kstrdup(str, GFP_KERNEL);
+	parse_args("dynamic mitigations", tmpstr, NULL, 0, 0, 0, NULL,
+			__cpu_parse_mitigation_options);
+	kfree(tmpstr);
+	return 0;
+}
 #endif

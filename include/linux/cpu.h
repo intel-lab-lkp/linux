@@ -210,6 +210,10 @@ enum smt_mitigations {
 
 void cpu_reset_mitigations(void);
 void arch_cpu_reset_mitigations(void);
+bool cpu_is_mitigation_opt(char *param);
+bool arch_is_mitigation_opt(char *param);
+int cpu_parse_mitigation_options(const char *str);
+int arch_parse_mitigation_opt(char *param, char *val);
 
 #ifdef CONFIG_CPU_MITIGATIONS
 extern bool cpu_mitigations_off(void);
