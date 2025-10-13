@@ -390,4 +390,36 @@ void arch_module_update_alternatives(struct module *mod)
 		apply_alternatives(aseg, aseg + alt->sh_size, mod);
 	}
 }
+
+void arch_module_pre_update_alternatives(struct module *mod)
+{
+	const Elf_Ehdr *hdr;
+	const Elf_Shdr *sechdrs;
+	const Elf_Shdr *s;
+	char *secstrings;
+
+	if (!mod->klp_info) {
+		pr_warn("No module livepatch info, unable to update alternatives\n");
+		return;
+	}
+
+	hdr = &mod->klp_info->hdr;
+	sechdrs = mod->klp_info->sechdrs;
+	secstrings = mod->klp_info->secstrings;
+
+	for (s = sechdrs; s < sechdrs + hdr->e_shnum; s++) {
+		if (!strcmp(".retpoline_sites", secstrings + s->sh_name)) {
+			void *rseg = (void *)s->sh_addr;
+
+			its_init_mod(mod);
+			its_prealloc(rseg, rseg + s->sh_size, mod);
+			its_fini_mod(mod);
+		}
+	}
+}
+
+void arch_module_post_update_alternatives(struct module *mod)
+{
+	its_free_all(mod);
+}
 #endif
