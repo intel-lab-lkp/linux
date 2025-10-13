@@ -1152,7 +1152,7 @@ static int __kho_finalize(void)
 		err |= fdt_begin_node(root, fdt->name);
 		err |= fdt_property(root, PROP_SUB_FDT, &phys, sizeof(phys));
 		err |= fdt_end_node(root);
-	};
+	}
 	mutex_unlock(&kho_out.fdts_lock);
 
 	err |= fdt_end_node(root);
