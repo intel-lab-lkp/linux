@@ -118,7 +118,7 @@ static int mprotect_folio_pte_batch(struct folio *folio, pte_t *ptep,
 	return folio_pte_batch_flags(folio, NULL, ptep, &pte, max_nr_ptes, flags);
 }
 
-static bool prot_numa_skip(struct vm_area_struct *vma, int target_node,
+bool prot_numa_skip(struct vm_area_struct *vma, int target_node,
 		struct folio *folio)
 {
 	bool ret = true;
