@@ -993,6 +993,17 @@ static void __init srbds_apply_mitigation(void)
 	update_srbds_msr();
 }
 
+#ifdef CONFIG_DYNAMIC_MITIGATIONS
+static void srbds_reset_mitigation(void)
+{
+	/* To cause the MSR bit to be cleared */
+	srbds_mitigation = SRBDS_MITIGATION_FULL;
+	update_srbds_msr();
+	srbds_mitigation = IS_ENABLED(CONFIG_MITIGATION_SRBDS) ?
+		SRBDS_MITIGATION_AUTO : SRBDS_MITIGATION_OFF;
+}
+#endif
+
 static int __init srbds_parse_cmdline(char *str)
 {
 	if (!str)
@@ -3913,5 +3924,6 @@ void arch_cpu_reset_mitigations(void)
 	l1tf_reset_mitigation();
 	mds_reset_mitigation();
 	mmio_reset_mitigation();
+	srbds_reset_mitigation();
 }
 #endif
