@@ -554,6 +554,16 @@ static void __init mds_apply_mitigation(void)
 	}
 }
 
+#ifdef CONFIG_DYNAMIC_MITIGATIONS
+static void mds_reset_mitigation(void)
+{
+	setup_clear_cpu_cap(X86_FEATURE_CLEAR_CPU_BUF);
+	static_branch_disable(&cpu_buf_idle_clear);
+	mds_mitigation = IS_ENABLED(CONFIG_MITIGATION_MDS) ?
+		MDS_MITIGATION_AUTO : MDS_MITIGATION_OFF;
+}
+#endif
+
 static int __init mds_cmdline(char *str)
 {
 	if (!boot_cpu_has_bug(X86_BUG_MDS))
@@ -3891,5 +3901,6 @@ void arch_cpu_reset_mitigations(void)
 	spectre_v2_user_reset_mitigation();
 	ssb_reset_mitigation();
 	l1tf_reset_mitigation();
+	mds_reset_mitigation();
 }
 #endif
