@@ -27,3 +27,4 @@ are configurable at compile, boot or run time.
    old_microcode
    indirect-target-selection
    vmscape
+   dynamic_mitigations
