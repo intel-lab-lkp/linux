@@ -127,7 +127,6 @@ module_param(enable_device_posted_irqs, bool, 0444);
 static bool __read_mostly nested = 1;
 module_param(nested, bool, 0444);
 
-bool __read_mostly enable_pml = 1;
 module_param_named(pml, enable_pml, bool, 0444);
 
 static bool __read_mostly error_on_inconsistent_vmcs_config = true;
