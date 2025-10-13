@@ -1182,6 +1182,18 @@ static void __init gds_apply_mitigation(void)
 	pr_info("%s\n", gds_strings[gds_mitigation]);
 }
 
+#ifdef CONFIG_DYNAMIC_MITIGATIONS
+static void gds_reset_mitigation(void)
+{
+	/* To cause the MSR bit to be cleared. */
+	gds_mitigation = GDS_MITIGATION_OFF;
+	if (x86_arch_cap_msr & ARCH_CAP_GDS_CTRL)
+		update_gds_msr();
+	gds_mitigation =  IS_ENABLED(CONFIG_MITIGATION_GDS) ?
+		GDS_MITIGATION_AUTO : GDS_MITIGATION_OFF;
+}
+#endif
+
 static int __init gds_parse_cmdline(char *str)
 {
 	if (!str)
@@ -3941,5 +3953,6 @@ void arch_cpu_reset_mitigations(void)
 	mmio_reset_mitigation();
 	srbds_reset_mitigation();
 	srso_reset_mitigation();
+	gds_reset_mitigation();
 }
 #endif
