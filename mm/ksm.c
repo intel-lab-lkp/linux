@@ -2455,15 +2455,80 @@ static bool should_skip_rmap_item(struct folio *folio,
 	return true;
 }
 
+struct ksm_walk_private {
+	struct page *page;
+	struct ksm_rmap_item *rmap_item;
+	struct ksm_mm_slot *mm_slot;
+};
+
+static int ksm_walk_test(unsigned long addr, unsigned long next, struct mm_walk *walk)
+{
+	struct vm_area_struct *vma = walk->vma;
+
+	if (!vma || !(vma->vm_flags & VM_MERGEABLE))
+		return 1;
+	return 0;
+}
+
+static int ksm_pte_entry(pte_t *pte, unsigned long addr,
+			    unsigned long end, struct mm_walk *walk)
+{
+	struct mm_struct *mm = walk->mm;
+	struct vm_area_struct *vma = walk->vma;
+	struct ksm_walk_private *private = (struct ksm_walk_private *) walk->private;
+	struct ksm_mm_slot *mm_slot = private->mm_slot;
+	pte_t ptent = ptep_get(pte);
+	struct page *page = pfn_to_online_page(pte_pfn(ptent));
+	struct ksm_rmap_item *rmap_item;
+	struct folio *folio;
+
+	ksm_scan.address = addr;
+
+	if (ksm_test_exit(mm))
+		return 1;
+
+	if (!page)
+		return 0;
+
+	folio = page_folio(page);
+	if (folio_is_zone_device(folio) || !folio_test_anon(folio))
+		return 0;
+
+	folio_get(folio);
+
+	flush_anon_page(vma, page, ksm_scan.address);
+	flush_dcache_page(page);
+	rmap_item = get_next_rmap_item(mm_slot,
+		ksm_scan.rmap_list, ksm_scan.address);
+	if (rmap_item) {
+		ksm_scan.rmap_list =
+				&rmap_item->rmap_list;
+
+		if (should_skip_rmap_item(folio, rmap_item)) {
+			folio_put(folio);
+			return 0;
+		}
+		ksm_scan.address = end;
+		private->page = page;
+	} else
+		folio_put(folio);
+
+	private->rmap_item = rmap_item;
+	return 1;
+}
+
+struct mm_walk_ops walk_ops = {
+	.pte_entry = ksm_pte_entry,
+	.test_walk = ksm_walk_test,
+	.walk_lock = PGWALK_RDLOCK,
+};
+
 static struct ksm_rmap_item *scan_get_next_rmap_item(struct page **page)
 {
 	struct mm_struct *mm;
 	struct ksm_mm_slot *mm_slot;
 	struct mm_slot *slot;
-	struct vm_area_struct *vma;
-	struct ksm_rmap_item *rmap_item;
-	struct vma_iterator vmi;
-	int nid;
+	int nid, ret;
 
 	if (list_empty(&ksm_mm_head.slot.mm_node))
 		return NULL;
@@ -2527,64 +2592,21 @@ next_mm:
 
 	slot = &mm_slot->slot;
 	mm = slot->mm;
-	vma_iter_init(&vmi, mm, ksm_scan.address);
 
 	mmap_read_lock(mm);
 	if (ksm_test_exit(mm))
 		goto no_vmas;
 
-	for_each_vma(vmi, vma) {
-		if (!(vma->vm_flags & VM_MERGEABLE))
-			continue;
-		if (ksm_scan.address < vma->vm_start)
-			ksm_scan.address = vma->vm_start;
-		if (!vma->anon_vma)
-			ksm_scan.address = vma->vm_end;
-
-		while (ksm_scan.address < vma->vm_end) {
-			struct page *tmp_page = NULL;
-			struct folio_walk fw;
-			struct folio *folio;
-
-			if (ksm_test_exit(mm))
-				break;
-
-			folio = folio_walk_start(&fw, vma, ksm_scan.address, 0);
-			if (folio) {
-				if (!folio_is_zone_device(folio) &&
-				     folio_test_anon(folio)) {
-					folio_get(folio);
-					tmp_page = fw.page;
-				}
-				folio_walk_end(&fw, vma);
-			}
-
-			if (tmp_page) {
-				flush_anon_page(vma, tmp_page, ksm_scan.address);
-				flush_dcache_page(tmp_page);
-				rmap_item = get_next_rmap_item(mm_slot,
-					ksm_scan.rmap_list, ksm_scan.address);
-				if (rmap_item) {
-					ksm_scan.rmap_list =
-							&rmap_item->rmap_list;
-
-					if (should_skip_rmap_item(folio, rmap_item)) {
-						folio_put(folio);
-						goto next_page;
-					}
-
-					ksm_scan.address += PAGE_SIZE;
-					*page = tmp_page;
-				} else {
-					folio_put(folio);
-				}
-				mmap_read_unlock(mm);
-				return rmap_item;
-			}
-next_page:
-			ksm_scan.address += PAGE_SIZE;
-			cond_resched();
-		}
+	struct ksm_walk_private walk_private = {
+		.page = NULL,
+		.rmap_item = NULL,
+		.mm_slot = ksm_scan.mm_slot
+	};
+	ret = walk_page_range(mm, ksm_scan.address, -1, &walk_ops, (void *) &walk_private);
+	*page = walk_private.page;
+	if (ret) {
+		mmap_read_unlock(mm);
+		return walk_private.rmap_item;
 	}
 
 	if (ksm_test_exit(mm)) {
