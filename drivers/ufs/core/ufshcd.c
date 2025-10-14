@@ -597,7 +597,8 @@ static void ufshcd_print_evt_hist(struct ufs_hba *hba)
 }
 
 static
-void ufshcd_print_tr(struct ufs_hba *hba, int tag, bool pr_prdt)
+void ufshcd_print_tr(struct ufs_hba *hba, struct cq_entry *cqe,
+		     int tag, bool pr_prdt)
 {
 	const struct ufshcd_lrb *lrbp;
 	int prdt_length;
@@ -616,6 +617,8 @@ void ufshcd_print_tr(struct ufs_hba *hba, int tag, bool pr_prdt)
 
 	ufshcd_hex_dump("UPIU TRD: ", lrbp->utr_descriptor_ptr,
 			sizeof(struct utp_transfer_req_desc));
+	if (cqe)
+		ufshcd_hex_dump("UPIU CQE: ", cqe, sizeof(struct cq_entry));
 	dev_err(hba->dev, "UPIU[%d] - Request UPIU phys@0x%llx\n", tag,
 		(u64)lrbp->ucd_req_dma_addr);
 	ufshcd_hex_dump("UPIU REQ: ", lrbp->ucd_req_ptr,
@@ -646,7 +649,7 @@ static bool ufshcd_print_tr_iter(struct request *req, void *priv)
 	struct Scsi_Host *shost = sdev->host;
 	struct ufs_hba *hba = shost_priv(shost);
 
-	ufshcd_print_tr(hba, req->tag, *(bool *)priv);
+	ufshcd_print_tr(hba, NULL, req->tag, *(bool *)priv);
 
 	return true;
 }
@@ -5539,7 +5542,7 @@ ufshcd_transfer_rsp_status(struct ufs_hba *hba, struct ufshcd_lrb *lrbp,
 
 	if ((host_byte(result) != DID_OK) &&
 	    (host_byte(result) != DID_REQUEUE) && !hba->silence_err_logs)
-		ufshcd_print_tr(hba, lrbp->task_tag, true);
+		ufshcd_print_tr(hba, cqe, lrbp->task_tag, true);
 	return result;
 }
 
@@ -7760,9 +7763,9 @@ static int ufshcd_abort(struct scsi_cmnd *cmd)
 		ufshcd_print_evt_hist(hba);
 		ufshcd_print_host_state(hba);
 		ufshcd_print_pwr_info(hba);
-		ufshcd_print_tr(hba, tag, true);
+		ufshcd_print_tr(hba, NULL, tag, true);
 	} else {
-		ufshcd_print_tr(hba, tag, false);
+		ufshcd_print_tr(hba, NULL, tag, false);
 	}
 	hba->req_abort_count++;
 
