@@ -19,30 +19,30 @@
 #include "nec7210.h"
 #include "gpibP.h"
 
-// struct which defines private_data for pc2 driver
+/* struct which defines private_data for pc2 driver */
 struct pc2_priv {
 	struct nec7210_priv nec7210_priv;
 	unsigned int irq;
-	// io address that clears interrupt for pc2a (0x2f0 + irq)
+	/* io address that clears interrupt for pc2a (0x2f0 + irq) */
 	unsigned int clear_intr_addr;
 };
 
-// pc2 uses 8 consecutive io addresses
+/* pc2 uses 8 consecutive io addresses */
 static const int pc2_iosize = 8;
 static const int pc2a_iosize = 8;
 static const int pc2_2a_iosize = 16;
 
-// offset between io addresses of successive nec7210 registers
+/* offset between io addresses of successive nec7210 registers */
 static const int pc2a_reg_offset = 0x400;
 static const int pc2_reg_offset = 1;
 
-// interrupt service routine
+/* interrupt service routine */
 static irqreturn_t pc2_interrupt(int irq, void *arg);
 static irqreturn_t pc2a_interrupt(int irq, void *arg);
 
-// pc2 specific registers and bits
+/* pc2 specific registers and bits */
 
-// interrupt clear register address
+/* interrupt clear register address */
 static const int pc2a_clear_intr_iobase = 0x2f0;
 static inline unsigned int CLEAR_INTR_REG(unsigned int irq)
 {
@@ -78,7 +78,7 @@ irqreturn_t pc2a_interrupt(int irq, void *arg)
 	irqreturn_t retval;
 
 	spin_lock_irqsave(&board->spinlock, flags);
-	// read interrupt status (also clears status)
+	/* read interrupt status (also clears status) */
 	status1 = read_byte(&priv->nec7210_priv, ISR1);
 	status2 = read_byte(&priv->nec7210_priv, ISR2);
 	/* clear interrupt circuit */
@@ -89,7 +89,7 @@ irqreturn_t pc2a_interrupt(int irq, void *arg)
 	return retval;
 }
 
-// wrappers for interface functions
+/* wrappers for interface functions */
 static int pc2_read(struct gpib_board *board, u8 *buffer, size_t length, int *end,
 		    size_t *bytes_read)
 {
@@ -273,7 +273,7 @@ static int pc2_generic_attach(struct gpib_board *board, const struct gpib_board_
 	 * is adapted to use isa_register_driver.
 	 */
 	if (config->ibdma)
-	// driver needs to be adapted to use isa_register_driver to get a struct device*
+	/* driver needs to be adapted to use isa_register_driver to get a struct device */
 		dev_err(board->gpib_dev, "DMA disabled for pc2 gpib");
 #else
 	if (config->ibdma) {
@@ -284,7 +284,7 @@ static int pc2_generic_attach(struct gpib_board *board, const struct gpib_board_
 		if (!nec_priv->dma_buffer)
 			return -ENOMEM;
 
-		// request isa dma channel
+		/* request isa dma channel */
 		if (request_dma(config->ibdma, "pc2")) {
 			dev_err(board->gpib_dev, "can't request DMA %d\n", config->ibdma);
 			return -1;
@@ -319,7 +319,7 @@ static int pc2_attach(struct gpib_board *board, const struct gpib_board_config *
 
 	nec7210_board_reset(nec_priv, board);
 
-	// install interrupt handler
+	/* install interrupt handler */
 	if (config->ibirq) {
 		if (request_irq(config->ibirq, pc2_interrupt, isr_flags, "pc2", board))	{
 			dev_err(board->gpib_dev, "can't request IRQ %d\n", config->ibirq);
@@ -447,7 +447,7 @@ static int pc2a_common_attach(struct gpib_board *board, const struct gpib_board_
 		return -1;
 	}
 
-	// make sure interrupt is clear
+	/* make sure interrupt is clear */
 	if (pc2_priv->irq)
 		outb(0xff, CLEAR_INTR_REG(pc2_priv->irq));
 
