@@ -135,6 +135,13 @@ static const struct iio_event_spec bma220_events[] = {
 				       BIT(IIO_EV_INFO_PERIOD) |
 				       BIT(IIO_EV_INFO_HYSTERESIS),
 	},
+	{
+		.type = IIO_EV_TYPE_THRESH,
+		.dir = IIO_EV_DIR_EITHER,
+		.mask_separate = BIT(IIO_EV_INFO_ENABLE),
+		.mask_shared_by_type = BIT(IIO_EV_INFO_VALUE) |
+				       BIT(IIO_EV_INFO_PERIOD),
+	},
 };
 
 #define BMA220_ACCEL_CHANNEL(index, reg, axis) {			\
@@ -500,6 +507,34 @@ static int bma220_is_high_en(struct bma220_data *data,
 	return 0;
 }
 
+static int bma220_is_slope_en(struct bma220_data *data,
+			      enum iio_modifier axis,
+			      bool *en)
+{
+	unsigned int reg_val;
+	int ret;
+
+	ret = regmap_read(data->regmap, BMA220_REG_IE0, &reg_val);
+	if (ret)
+		return ret;
+
+	switch (axis) {
+	case IIO_MOD_X:
+		*en = FIELD_GET(BMA220_INT_EN_SLOPE_X_MSK, reg_val);
+		break;
+	case IIO_MOD_Y:
+		*en = FIELD_GET(BMA220_INT_EN_SLOPE_Y_MSK, reg_val);
+		break;
+	case IIO_MOD_Z:
+		*en = FIELD_GET(BMA220_INT_EN_SLOPE_Z_MSK, reg_val);
+		break;
+	default:
+		return -EINVAL;
+	}
+
+	return 0;
+}
+
 static int bma220_set_tap_en(struct bma220_data *data,
 			     enum iio_modifier axis,
 			     int type,
@@ -574,6 +609,34 @@ static int bma220_set_high_en(struct bma220_data *data,
 	return ret;
 }
 
+static int bma220_set_slope_en(struct bma220_data *data, enum iio_modifier axis,
+			       bool en)
+{
+	int ret;
+
+	switch (axis) {
+	case IIO_MOD_X:
+		ret = regmap_update_bits(data->regmap, BMA220_REG_IE0,
+					 BMA220_INT_EN_SLOPE_X_MSK,
+					 FIELD_PREP(BMA220_INT_EN_SLOPE_X_MSK, en));
+		break;
+	case IIO_MOD_Y:
+		ret = regmap_update_bits(data->regmap, BMA220_REG_IE0,
+					 BMA220_INT_EN_SLOPE_Y_MSK,
+					 FIELD_PREP(BMA220_INT_EN_SLOPE_Y_MSK, en));
+		break;
+	case IIO_MOD_Z:
+		ret = regmap_update_bits(data->regmap, BMA220_REG_IE0,
+					 BMA220_INT_EN_SLOPE_Z_MSK,
+					 FIELD_PREP(BMA220_INT_EN_SLOPE_Z_MSK, en));
+		break;
+	default:
+		return -EINVAL;
+	}
+
+	return ret;
+}
+
 static int bma220_read_event_config(struct iio_dev *indio_dev,
 				    const struct iio_chan_spec *chan,
 				    enum iio_event_type type,
@@ -615,6 +678,11 @@ static int bma220_read_event_config(struct iio_dev *indio_dev,
 			return val;
 		case IIO_EV_DIR_RISING:
 			ret = bma220_is_high_en(data, chan->channel2, &int_en);
+			if (ret)
+				return ret;
+			return int_en;
+		case IIO_EV_DIR_EITHER:
+			ret = bma220_is_slope_en(data, chan->channel2, &int_en);
 			if (ret)
 				return ret;
 			return int_en;
@@ -661,6 +729,9 @@ static int bma220_write_event_config(struct iio_dev *indio_dev,
 			break;
 		case IIO_EV_DIR_RISING:
 			ret = bma220_set_high_en(data, chan->channel2, state);
+			break;
+		case IIO_EV_DIR_EITHER:
+			ret = bma220_set_slope_en(data, chan->channel2, state);
 			break;
 		default:
 			return -EINVAL;
@@ -761,6 +832,25 @@ static int bma220_read_event_value(struct iio_dev *indio_dev,
 			default:
 				return -EINVAL;
 			}
+		case IIO_EV_DIR_EITHER:
+			switch (info) {
+			case IIO_EV_INFO_VALUE:
+				ret = regmap_read(data->regmap, BMA220_REG_CONF4,
+						  &reg_val);
+				if (ret)
+					return ret;
+				*val = FIELD_GET(BMA220_SLOPE_TH_MSK, reg_val);
+				return IIO_VAL_INT;
+			case IIO_EV_INFO_PERIOD:
+				ret = regmap_read(data->regmap, BMA220_REG_CONF4,
+						  &reg_val);
+				if (ret)
+					return ret;
+				*val = FIELD_GET(BMA220_SLOPE_DUR_MSK, reg_val);
+				return IIO_VAL_INT;
+			default:
+				return -EINVAL;
+			}
 		default:
 			return -EINVAL;
 		}
@@ -849,6 +939,25 @@ static int bma220_write_event_value(struct iio_dev *indio_dev,
 							  BMA220_REG_CONF0,
 							  BMA220_HIGH_HY_MSK,
 							  FIELD_PREP(BMA220_HIGH_HY_MSK, val));
+			default:
+				return -EINVAL;
+			}
+		case IIO_EV_DIR_EITHER:
+			switch (info) {
+			case IIO_EV_INFO_VALUE:
+				if (!FIELD_FIT(BMA220_SLOPE_TH_MSK, val))
+					return -EINVAL;
+				return regmap_update_bits(data->regmap,
+							  BMA220_REG_CONF4,
+							  BMA220_SLOPE_TH_MSK,
+							  FIELD_PREP(BMA220_SLOPE_TH_MSK, val));
+			case IIO_EV_INFO_PERIOD:
+				if (!FIELD_FIT(BMA220_SLOPE_DUR_MSK, val))
+					return -EINVAL;
+				return regmap_update_bits(data->regmap,
+							  BMA220_REG_CONF4,
+							  BMA220_SLOPE_DUR_MSK,
+							  FIELD_PREP(BMA220_SLOPE_DUR_MSK, val));
 			default:
 				return -EINVAL;
 			}
@@ -1022,6 +1131,13 @@ static irqreturn_t bma220_irq_handler(int irq, void *private)
 						  IIO_MOD_X_OR_Y_OR_Z,
 						  IIO_EV_TYPE_THRESH,
 						  IIO_EV_DIR_RISING),
+			       timestamp);
+	if (FIELD_GET(BMA220_IF_SLOPE, bma220_reg_if1))
+		iio_push_event(indio_dev,
+			       IIO_MOD_EVENT_CODE(IIO_ACCEL, 0,
+						  IIO_MOD_X_OR_Y_OR_Z,
+						  IIO_EV_TYPE_THRESH,
+						  IIO_EV_DIR_EITHER),
 			       timestamp);
 	if (FIELD_GET(BMA220_IF_TT, bma220_reg_if1)) {
 
