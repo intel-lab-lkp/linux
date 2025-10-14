@@ -153,4 +153,26 @@ properties:
       pin. Typically indicates how many double-inverters are
       used to delay the signal.
 
+  skew-delay-input:
+    $ref: /schemas/types.yaml#/definitions/uint32
+    description:
+      this affects the expected clock skew on input pins.
+      Typically indicates how many double-inverters are used to
+      delay the signal.
+
+  skew-delay-output:
+    $ref: /schemas/types.yaml#/definitions/uint32
+    description:
+      this affects the expected delay before latching a value to an
+      output pins. Typically indicates how many double-inverters are
+      used to delay the signal.
+
+if:
+  required:
+    - skew-delay
+then:
+  properties:
+    skew-delay-input: false
+    skew-delay-output: false
+
 additionalProperties: true
