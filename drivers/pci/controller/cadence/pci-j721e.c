@@ -21,6 +21,7 @@
 #include <linux/platform_device.h>
 #include <linux/pm_runtime.h>
 #include <linux/regmap.h>
+#include <linux/regulator/consumer.h>
 
 #include "../../pci.h"
 #include "pcie-cadence.h"
@@ -467,6 +468,10 @@ static const struct of_device_id of_j721e_pcie_match[] = {
 };
 MODULE_DEVICE_TABLE(of, of_j721e_pcie_match);
 
+static const char * const j721e_pcie_supplies[] = {
+	"vpcie12v", "vpcie3v3", "vpcie1v5"
+};
+
 static int j721e_pcie_probe(struct platform_device *pdev)
 {
 	struct device *dev = &pdev->dev;
@@ -480,6 +485,7 @@ static int j721e_pcie_probe(struct platform_device *pdev)
 	struct gpio_desc *gpiod;
 	void __iomem *base;
 	struct clk *clk;
+	unsigned int i;
 	u32 num_lanes;
 	u32 mode;
 	int ret;
@@ -564,6 +570,13 @@ static int j721e_pcie_probe(struct platform_device *pdev)
 	irq = platform_get_irq_byname(pdev, "link_state");
 	if (irq < 0)
 		return irq;
+
+	for (i = 0; i < ARRAY_SIZE(j721e_pcie_supplies); i++) {
+		ret = devm_regulator_get_enable_optional(dev, j721e_pcie_supplies[i]);
+		if (ret < 0 && ret != -ENODEV)
+			return dev_err_probe(dev, ret, "can't enable regulator %s\n",
+					     j721e_pcie_supplies[i]);
+	}
 
 	dev_set_drvdata(dev, pcie);
 	pm_runtime_enable(dev);
