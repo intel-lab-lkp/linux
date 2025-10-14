@@ -300,8 +300,8 @@ static const struct dma_buf_ops system_heap_buf_ops = {
 	.release = system_heap_dma_buf_release,
 };
 
-static struct page *alloc_largest_available(unsigned long size,
-					    unsigned int max_order)
+static void alloc_largest_available(unsigned long size,
+		    unsigned int max_order, unsigned int *num_pages, struct list_head *list)
 {
 	struct page *page;
 	int i;
@@ -312,12 +312,19 @@ static struct page *alloc_largest_available(unsigned long size,
 		if (max_order < orders[i])
 			continue;
 
-		page = alloc_pages(order_flags[i], orders[i]);
-		if (!page)
+		if (orders[i]) {
+			page = alloc_pages(order_flags[i], orders[i]);
+			if (page) {
+				list_add(&page->lru, list);
+				*num_pages = 1;
+			}
+		} else
+			*num_pages = alloc_pages_bulk_list(LOW_ORDER_GFP, size / PAGE_SIZE, list);
+
+		if (list_empty(list))
 			continue;
-		return page;
+		return;
 	}
-	return NULL;
 }
 
 static struct dma_buf *system_heap_allocate(struct dma_heap *heap,
@@ -335,6 +342,8 @@ static struct dma_buf *system_heap_allocate(struct dma_heap *heap,
 	struct list_head pages;
 	struct page *page, *tmp_page;
 	int i, ret = -ENOMEM;
+	unsigned int num_pages;
+	LIST_HEAD(head);
 
 	buffer = kzalloc(sizeof(*buffer), GFP_KERNEL);
 	if (!buffer)
@@ -348,6 +357,8 @@ static struct dma_buf *system_heap_allocate(struct dma_heap *heap,
 	INIT_LIST_HEAD(&pages);
 	i = 0;
 	while (size_remaining > 0) {
+		num_pages = 0;
+		INIT_LIST_HEAD(&head);
 		/*
 		 * Avoid trying to allocate memory if the process
 		 * has been killed by SIGKILL
@@ -357,14 +368,15 @@ static struct dma_buf *system_heap_allocate(struct dma_heap *heap,
 			goto free_buffer;
 		}
 
-		page = alloc_largest_available(size_remaining, max_order);
-		if (!page)
+		alloc_largest_available(size_remaining, max_order, &num_pages, &head);
+		if (!num_pages)
 			goto free_buffer;
 
-		list_add_tail(&page->lru, &pages);
-		size_remaining -= page_size(page);
-		max_order = compound_order(page);
-		i++;
+		list_splice_tail(&head, &pages);
+		max_order = folio_order(lru_to_folio(&head));
+		size_remaining -= PAGE_SIZE * (num_pages << max_order);
+		i += num_pages;
+
 	}
 
 	table = &buffer->sg_table;
