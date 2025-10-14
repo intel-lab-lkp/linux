@@ -119,6 +119,14 @@ static const struct iio_event_spec bma220_events[] = {
 		.mask_shared_by_type = BIT(IIO_EV_INFO_VALUE) |
 				       BIT(IIO_EV_INFO_PERIOD),
 	},
+	{
+		.type = IIO_EV_TYPE_THRESH,
+		.dir = IIO_EV_DIR_FALLING,
+		.mask_shared_by_type = BIT(IIO_EV_INFO_ENABLE) |
+				       BIT(IIO_EV_INFO_VALUE) |
+				       BIT(IIO_EV_INFO_PERIOD) |
+				       BIT(IIO_EV_INFO_HYSTERESIS),
+	},
 };
 
 #define BMA220_ACCEL_CHANNEL(index, reg, axis) {			\
@@ -509,6 +517,7 @@ static int bma220_read_event_config(struct iio_dev *indio_dev,
 	struct bma220_data *data = iio_priv(indio_dev);
 	bool int_en;
 	int ret;
+	unsigned int reg_val, val;
 
 	guard(mutex)(&data->lock);
 
@@ -527,6 +536,18 @@ static int bma220_read_event_config(struct iio_dev *indio_dev,
 			if (ret)
 				return ret;
 			return int_en;
+		default:
+			return -EINVAL;
+		}
+	case IIO_EV_TYPE_THRESH:
+		switch (dir) {
+		case IIO_EV_DIR_FALLING:
+			ret = regmap_read(data->regmap, BMA220_REG_IE1,
+					  &reg_val);
+			if (ret)
+				return ret;
+			val = FIELD_GET(BMA220_INT_EN_LOW_MSK, reg_val);
+			return val;
 		default:
 			return -EINVAL;
 		}
@@ -556,6 +577,17 @@ static int bma220_write_event_config(struct iio_dev *indio_dev,
 		case IIO_EV_DIR_DOUBLETAP:
 			ret = bma220_set_tap_en(data, chan->channel2,
 						IIO_EV_DIR_DOUBLETAP, state);
+			break;
+		default:
+			return -EINVAL;
+		}
+		break;
+	case IIO_EV_TYPE_THRESH:
+		switch (dir) {
+		case IIO_EV_DIR_FALLING:
+			ret = regmap_update_bits(data->regmap, BMA220_REG_IE1,
+						 BMA220_INT_EN_LOW_MSK,
+						 FIELD_PREP(BMA220_INT_EN_LOW_MSK, state));
 			break;
 		default:
 			return -EINVAL;
@@ -602,6 +634,37 @@ static int bma220_read_event_value(struct iio_dev *indio_dev,
 		default:
 			return -EINVAL;
 		}
+	case IIO_EV_TYPE_THRESH:
+		switch (dir) {
+		case IIO_EV_DIR_FALLING:
+			switch (info) {
+			case IIO_EV_INFO_VALUE:
+				ret = regmap_read(data->regmap, BMA220_REG_CONF1,
+						  &reg_val);
+				if (ret)
+					return ret;
+				*val = FIELD_GET(BMA220_LOW_TH_MSK, reg_val);
+				return IIO_VAL_INT;
+			case IIO_EV_INFO_PERIOD:
+				ret = regmap_read(data->regmap, BMA220_REG_CONF2,
+						  &reg_val);
+				if (ret)
+					return ret;
+				*val = FIELD_GET(BMA220_LOW_DUR_MSK, reg_val);
+				return IIO_VAL_INT;
+			case IIO_EV_INFO_HYSTERESIS:
+				ret = regmap_read(data->regmap, BMA220_REG_CONF2,
+						  &reg_val);
+				if (ret)
+					return ret;
+				*val = FIELD_GET(BMA220_LOW_HY_MSK, reg_val);
+				return IIO_VAL_INT;
+			default:
+				return -EINVAL;
+			}
+		default:
+			return -EINVAL;
+		}
 	default:
 		return -EINVAL;
 	}
@@ -633,6 +696,37 @@ static int bma220_write_event_value(struct iio_dev *indio_dev,
 			return regmap_update_bits(data->regmap, BMA220_REG_CONF3,
 						  BMA220_TT_DUR_MSK,
 						  FIELD_PREP(BMA220_TT_DUR_MSK, val));
+		default:
+			return -EINVAL;
+		}
+	case IIO_EV_TYPE_THRESH:
+		switch (dir) {
+		case IIO_EV_DIR_FALLING:
+			switch (info) {
+			case IIO_EV_INFO_VALUE:
+				if (!FIELD_FIT(BMA220_LOW_TH_MSK, val))
+					return -EINVAL;
+				return regmap_update_bits(data->regmap,
+							  BMA220_REG_CONF1,
+							  BMA220_LOW_TH_MSK,
+							  FIELD_PREP(BMA220_LOW_TH_MSK, val));
+			case IIO_EV_INFO_PERIOD:
+				if (!FIELD_FIT(BMA220_LOW_DUR_MSK, val))
+					return -EINVAL;
+				return regmap_update_bits(data->regmap,
+							  BMA220_REG_CONF2,
+							  BMA220_LOW_DUR_MSK,
+							  FIELD_PREP(BMA220_LOW_DUR_MSK, val));
+			case IIO_EV_INFO_HYSTERESIS:
+				if (!FIELD_FIT(BMA220_LOW_HY_MSK, val))
+					return -EINVAL;
+				return regmap_update_bits(data->regmap,
+							  BMA220_REG_CONF2,
+							  BMA220_LOW_HY_MSK,
+							  FIELD_PREP(BMA220_LOW_HY_MSK, val));
+			default:
+				return -EINVAL;
+			}
 		default:
 			return -EINVAL;
 		}
@@ -790,6 +884,13 @@ static irqreturn_t bma220_irq_handler(int irq, void *private)
 		return IRQ_HANDLED;
 	}
 
+	if (FIELD_GET(BMA220_IF_LOW, bma220_reg_if1))
+		iio_push_event(indio_dev,
+			       IIO_MOD_EVENT_CODE(IIO_ACCEL, 0,
+						  IIO_MOD_X_OR_Y_OR_Z,
+						  IIO_EV_TYPE_THRESH,
+						  IIO_EV_DIR_FALLING),
+			       timestamp);
 	if (FIELD_GET(BMA220_IF_TT, bma220_reg_if1)) {
 
 		if (data->tap_type == BMA220_TAP_TYPE_SINGLE)
