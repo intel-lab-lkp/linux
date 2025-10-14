@@ -81,8 +81,9 @@ libchacha20poly1305-$(CONFIG_CRYPTO_SELFTESTS)	+= chacha20poly1305-selftest.o
 obj-$(CONFIG_CRYPTO_LIB_CURVE25519) += libcurve25519.o
 libcurve25519-y := curve25519.o
 
-# Disable GCOV in odd or sensitive code
+# Disable GCOV and llvm-cov in odd or sensitive code
 GCOV_PROFILE_curve25519.o := n
+LLVM_COV_PROFILE_curve25519-x86_64.o := n
 
 ifeq ($(CONFIG_ARCH_SUPPORTS_INT128),y)
 libcurve25519-$(CONFIG_CRYPTO_LIB_CURVE25519_GENERIC) += curve25519-hacl64.o
