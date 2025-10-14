@@ -148,6 +148,7 @@ static inline bool mapping_can_writeback(struct address_space *mapping)
 	return inode_to_bdi(mapping->host)->capabilities & BDI_CAP_WRITEBACK;
 }
 
+#define DEFAULT_WB_CTX 0
 #define for_each_bdi_wb_ctx(bdi, wbctx) \
 	for (int __i = 0; __i < (bdi)->nr_wb_ctx \
 		&& ((wbctx) = (bdi)->wb_ctx[__i]) != NULL; __i++)
@@ -157,7 +158,9 @@ fetch_bdi_writeback_ctx(struct inode *inode)
 {
 	struct backing_dev_info *bdi = inode_to_bdi(inode);
 
-	return bdi->wb_ctx[0];
+	if (inode->i_sb->s_op->get_inode_wb_ctx)
+		return inode->i_sb->s_op->get_inode_wb_ctx(inode);
+	return bdi->wb_ctx[DEFAULT_WB_CTX];
 }
 
 #ifdef CONFIG_CGROUP_WRITEBACK
