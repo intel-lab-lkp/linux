@@ -259,4 +259,3 @@ free_ch:
 
 	return ret;
 }
-EXPORT_SYMBOL(imx_scu_enable_general_irq_channel);
