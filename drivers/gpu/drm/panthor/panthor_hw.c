@@ -186,3 +186,8 @@ int panthor_hw_init(struct panthor_device *ptdev)
 
 	return 0;
 }
+
+bool panthor_hw_has_feature(struct panthor_device *ptdev, enum panthor_hw_feature feature)
+{
+	return test_bit(feature, ptdev->hw->features);
+}
