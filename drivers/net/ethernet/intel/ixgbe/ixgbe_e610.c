@@ -3921,6 +3921,7 @@ static int ixgbe_read_pba_string_e610(struct ixgbe_hw *hw, u8 *pba_num,
 	return err;
 }
 
+#ifdef CONFIG_DEBUG_FS
 static int __fwlog_send_cmd(void *priv, struct libie_aq_desc *desc, void *buf,
 			    u16 size)
 {
@@ -3952,6 +3953,7 @@ void ixgbe_fwlog_deinit(struct ixgbe_hw *hw)
 
 	libie_fwlog_deinit(&hw->fwlog);
 }
+#endif /* CONFIG_DEBUG_FS */
 
 static const struct ixgbe_mac_operations mac_ops_e610 = {
 	.init_hw			= ixgbe_init_hw_generic,

@@ -96,7 +96,15 @@ int ixgbe_aci_update_nvm(struct ixgbe_hw *hw, u16 module_typeid,
 			 bool last_command, u8 command_flags);
 int ixgbe_nvm_write_activate(struct ixgbe_hw *hw, u16 cmd_flags,
 			     u8 *response_flags);
+#ifdef CONFIG_DEBUG_FS
 int ixgbe_fwlog_init(struct ixgbe_hw *hw);
 void ixgbe_fwlog_deinit(struct ixgbe_hw *hw);
+#else
+static inline int ixgbe_fwlog_init(struct ixgbe_hw *hw)
+{
+	return -EOPNOTSUPP;
+}
+static inline void ixgbe_fwlog_deinit(struct ixgbe_hw *hw) {}
+#endif /* CONFIG_DEBUG_FS */
 
 #endif /* _IXGBE_E610_H_ */
