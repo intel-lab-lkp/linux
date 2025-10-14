@@ -534,7 +534,9 @@ retry:
 static inline bool folio_memcg_kmem(struct folio *folio)
 {
 	VM_BUG_ON_PGFLAGS(PageTail(&folio->page), &folio->page);
-	VM_BUG_ON_FOLIO(folio->memcg_data & MEMCG_DATA_OBJEXTS, folio);
+	VM_BUG_ON_FOLIO((folio->memcg_data != OBJEXTS_ALLOC_FAIL) &&
+			(folio->memcg_data & MEMCG_DATA_OBJEXTS),
+			folio);
 	return folio->memcg_data & MEMCG_DATA_KMEM;
 }
 
