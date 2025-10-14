@@ -1166,9 +1166,6 @@ static enum hrtimer_restart dl_server_timer(struct hrtimer *timer, struct sched_
 		sched_clock_tick();
 		update_rq_clock(rq);
 
-		if (!dl_se->dl_runtime)
-			return HRTIMER_NORESTART;
-
 		if (dl_se->dl_defer_armed) {
 			/*
 			 * First check if the server could consume runtime in background.
@@ -2173,7 +2170,7 @@ select_task_rq_dl(struct task_struct *p, int cpu, int flags)
 	struct rq *rq;
 
 	if (!(flags & WF_TTWU))
-		goto out;
+		return cpu;
 
 	rq = cpu_rq(cpu);
 
@@ -2211,7 +2208,6 @@ select_task_rq_dl(struct task_struct *p, int cpu, int flags)
 	}
 	rcu_read_unlock();
 
-out:
 	return cpu;
 }
 
