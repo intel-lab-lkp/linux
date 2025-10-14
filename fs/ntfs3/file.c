@@ -764,7 +764,13 @@ int ntfs_setattr(struct mnt_idmap *idmap, struct dentry *dentry,
 
 	if (ia_valid & ATTR_SIZE) {
 		loff_t newsize, oldsize;
-
+		ntfs_warn(inode->i_sb,
+			   "DEBUG: Truncating inode %lu (MFT_REC_MFT is %d)",
+			    inode->i_ino, MFT_REC_MFT);
+		if (inode->i_ino == MFT_REC_MFT) {
+			err = -EPERM;
+			goto out;
+		}
 		if (WARN_ON(ni->ni_flags & NI_FLAG_COMPRESSED_MASK)) {
 			/* Should never be here, see ntfs_file_open(). */
 			err = -EOPNOTSUPP;
