@@ -7147,6 +7147,13 @@ restart:
 		goto restart;
 	}
 
+	/* Restart if we skipped the memory low event */
+	if (sc.memcg_low_skipped && !sc.memcg_low_reclaim &&
+	    sc.priority < 1) {
+		sc.memcg_low_reclaim = 1;
+		goto restart;
+	}
+
 	if (!sc.nr_reclaimed)
 		atomic_inc(&pgdat->kswapd_failures);
 
