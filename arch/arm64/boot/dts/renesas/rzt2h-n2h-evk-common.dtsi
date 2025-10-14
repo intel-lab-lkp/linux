@@ -84,6 +84,7 @@
 		compatible = "renesas,r1ex24016", "atmel,24c16";
 		reg = <0x50>;
 		pagesize = <16>;
+		vcc-supply = <&reg_3p3v>;
 	};
 };
 
