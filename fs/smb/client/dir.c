@@ -402,10 +402,9 @@ cifs_create_get_file_info:
 	if (tcon->unix_ext)
 		rc = cifs_get_inode_info_unix(&newinode, full_path, inode->i_sb,
 					      xid);
-	else {
-#else
-	{
+	else
 #endif /* CONFIG_CIFS_ALLOW_INSECURE_LEGACY */
+	{
 		/* TODO: Add support for calling POSIX query info here, but passing in fid */
 		rc = cifs_get_inode_info(&newinode, full_path, buf, inode->i_sb, xid, fid);
 		if (newinode) {
