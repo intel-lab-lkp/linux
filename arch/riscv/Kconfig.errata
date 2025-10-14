@@ -44,6 +44,17 @@ config ERRATA_MIPS_P8700_PAUSE_OPCODE
 
 	   If you are not using the P8700 processor, say n.
 
+config ERRATA_MIPS_P8700_AMO_ZALRSC
+	bool "Replace AMO instructions with LR/SC on MIPS P8700"
+	depends on ERRATA_MIPS && 64BIT
+	default n
+	help
+	   The MIPS P8700 does not implement the full A extension,
+	   implementing only Zalrsc. Enabling this will replace
+	   all AMO instructions with LR/SC instructions on the P8700.
+
+	   If you are not using the P8700 processor, say n.
+
 config ERRATA_SIFIVE
 	bool "SiFive errata"
 	depends on RISCV_ALTERNATIVE
