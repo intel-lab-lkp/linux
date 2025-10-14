@@ -918,7 +918,7 @@ parse_dfs_referrals(struct get_dfs_referral_rsp *rsp, u32 rsp_size,
 
 	if (rsp_size < sizeof(*rsp)) {
 		cifs_dbg(VFS | ONCE,
-			 "%s: header is malformed (size is %u, must be %lu)\n",
+			 "%s: header is malformed (size is %u, must be %zu)\n",
 			 __func__, rsp_size, sizeof(*rsp));
 		rc = -EINVAL;
 		goto parse_DFS_referrals_exit;
@@ -935,7 +935,7 @@ parse_dfs_referrals(struct get_dfs_referral_rsp *rsp, u32 rsp_size,
 
 	if (sizeof(*rsp) + *num_of_nodes * sizeof(REFERRAL3) > rsp_size) {
 		cifs_dbg(VFS | ONCE,
-			 "%s: malformed buffer (size is %u, must be at least %lu)\n",
+			 "%s: malformed buffer (size is %u, must be at least %zu)\n",
 			 __func__, rsp_size,
 			 sizeof(*rsp) + *num_of_nodes * sizeof(REFERRAL3));
 		rc = -EINVAL;
