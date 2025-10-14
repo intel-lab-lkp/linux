@@ -846,18 +846,20 @@ static const struct loongarch_perf_event *loongarch_pmu_map_raw_event(u64 config
 static int __init init_hw_perf_events(void)
 {
 	int counters;
+	int bits;
 
 	if (!cpu_has_pmp)
 		return -ENODEV;
 
 	pr_info("Performance counters: ");
-	counters = ((read_cpucfg(LOONGARCH_CPUCFG6) & CPUCFG6_PMNUM) >> 4) + 1;
+	counters = ((read_cpucfg(LOONGARCH_CPUCFG6) & CPUCFG6_PMNUM) >> CPUCFG6_PMNUM_SHIFT) + 1;
+	bits = ((read_cpucfg(LOONGARCH_CPUCFG6) & CPUCFG6_PMBITS) >> CPUCFG6_PMBITS_SHIFT) + 1;
 
 	loongarch_pmu.num_counters = counters;
 	loongarch_pmu.max_period = (1ULL << 63) - 1;
 	loongarch_pmu.valid_count = (1ULL << 63) - 1;
 	loongarch_pmu.overflow = 1ULL << 63;
-	loongarch_pmu.name = "loongarch/loongson64";
+	loongarch_pmu.name = "loongarch/loongson";
 	loongarch_pmu.read_counter = loongarch_pmu_read_counter;
 	loongarch_pmu.write_counter = loongarch_pmu_write_counter;
 	loongarch_pmu.map_raw_event = loongarch_pmu_map_raw_event;
@@ -867,7 +869,7 @@ static int __init init_hw_perf_events(void)
 	on_each_cpu(reset_counters, NULL, 1);
 
 	pr_cont("%s PMU enabled, %d %d-bit counters available to each CPU.\n",
-			loongarch_pmu.name, counters, 64);
+			loongarch_pmu.name, counters, bits);
 
 	perf_pmu_register(&pmu, "cpu", PERF_TYPE_RAW);
 
