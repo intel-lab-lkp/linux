@@ -3528,8 +3528,7 @@ static int __split_unmapped_folio(struct folio *folio, int new_order,
 		struct address_space *mapping, bool uniform_split)
 {
 	bool is_anon = folio_test_anon(folio);
-	int order = folio_order(folio);
-	int start_order = uniform_split ? new_order : order - 1;
+	int old_order = folio_order(folio);
 	int split_order;
 
 	folio_clear_has_hwpoisoned(folio);
@@ -3538,10 +3537,9 @@ static int __split_unmapped_folio(struct folio *folio, int new_order,
 	 * split to new_order one order at a time. For uniform split,
 	 * folio is split to new_order directly.
 	 */
-	for (split_order = start_order;
+	for (split_order = uniform_split ? new_order : old_order - 1;
 	     split_order >= new_order;
 	     split_order--) {
-		int old_order = folio_order(folio);
 		int new_folios = 1UL << (old_order - split_order);
 
 		/* order-1 anonymous folio is not supported */
@@ -3576,6 +3574,7 @@ static int __split_unmapped_folio(struct folio *folio, int new_order,
 			mod_mthp_stat(split_order, MTHP_STAT_NR_ANON, new_folios);
 		}
 		folio = page_folio(split_at);
+		old_order = split_order;
 	}
 
 	return 0;
