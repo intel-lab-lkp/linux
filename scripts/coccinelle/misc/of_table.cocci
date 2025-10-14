@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0
 /// Make sure (of/i2c/platform)_device_id tables are NULL terminated
 //
-// Keywords: of_table i2c_table platform_table
+// Keywords: of_table i2c_table platform_table spi_table
 // Confidence: Medium
 // Options: --include-headers
 
