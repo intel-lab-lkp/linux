@@ -1513,7 +1513,7 @@ static bool gc_worker_can_early_drop(const struct nf_conn *ct)
 static void gc_worker(struct work_struct *work)
 {
 	unsigned int i, hashsz, nf_conntrack_max95 = 0;
-	u32 end_time, start_time = nfct_time_stamp;
+	u32 end_time, resched_time, start_time = nfct_time_stamp;
 	struct conntrack_gc_work *gc_work;
 	unsigned int expired_count = 0;
 	unsigned long next_run;
@@ -1536,6 +1536,7 @@ static void gc_worker(struct work_struct *work)
 	count = gc_work->count;
 
 	end_time = start_time + GC_SCAN_MAX_DURATION;
+	resched_time = nfct_time_stamp;
 
 	do {
 		struct nf_conntrack_tuple_hash *h;
@@ -1615,7 +1616,10 @@ static void gc_worker(struct work_struct *work)
 		 * we will just continue with next hash slot.
 		 */
 		rcu_read_unlock();
-		cond_resched();
+		if (nfct_time_stamp - resched_time > msecs_to_jiffies(1)) {
+			cond_resched();
+			resched_time = nfct_time_stamp;
+		}
 		i++;
 
 		delta_time = nfct_time_stamp - end_time;
