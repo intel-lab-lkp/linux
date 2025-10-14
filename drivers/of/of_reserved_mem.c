@@ -130,6 +130,68 @@ static void __init fdt_reserved_mem_save_node(unsigned long node, const char *un
 	return;
 }
 
+/**
+ * reg_len_valid() - scan for a suitable #size-cells value and validate
+ *		     the reg property length
+ * @len:	Length of the reg property to be validated (bytes). Can be composed
+ *		by more than one reg addr+size pairs
+ * @calc_addr:	the number of address cells expected by the parent of the node
+ *		containing the reg property. Currently it's just used as in param
+ * @calc_size:	the number of size cells expected by the parent of the node
+ *		containing the reg property (out param)
+ *
+ * This function tries to find the correct #size-cells number for the size portion
+ * of a reg property, assuming the #address-cells passed in (calc_addr param)
+ * is valid to avoid ambiguity.
+ * Parent_len is the length in bytes of a single reg property * as expected by the
+ * parent.
+ * Either len is a multiple of parent_len, in which case there's no adjustment to
+ * be made to calc_size and the region is automatically valid (this choice has the
+ * priority), or it is not a multiple.
+ * In the latter case, it finds the smallest calc_addr+calc_size for which len
+ * is still a multiple and adjust calc_size accordingly.
+ * The rationale is to avoid nonsensical combo e.g. #adress-cells 1 and #size-cells
+ * 2 since it's not fully addressable, and to promote any other combo that is a
+ * subset of the original space, e.g. with calc_addr=2 and calc_size=2, returning
+ * calc_size=1 still makes sense since the region is included in the parent space.
+ * The reason for that is to avoid dropping perfectly valid memory regions that
+ * could just have been passed with the wrong format in the reg property (some fw
+ * are reportedly doing that when updating the DT at boot).
+ *
+ * Returns:	true if the region is valid and can be further processed,
+ *		false otherwise. If valid, calc_size is filled with the actual
+ *		length (in cells) of the size part.
+ *
+ */
+static bool reg_len_valid(int len, const int *calc_addr, int *calc_size)
+{
+	int parent_len = (*calc_addr + *calc_size) * sizeof(__be32);
+	bool parent_multiple = (len % parent_len) / sizeof(__be32);
+	int row_n, calc_row_len = parent_len / sizeof(__be32);
+	int len_b = len / sizeof(__be32);
+
+	if (!len || !parent_len)
+		return false;
+
+	for (row_n = len_b / 2; row_n > 0; row_n--) {
+		int tmp_row_len = len_b / row_n;
+
+		if (calc_row_len > tmp_row_len &&
+		    tmp_row_len > *calc_addr &&
+		    (len_b % tmp_row_len == 0))
+			calc_row_len = tmp_row_len;
+	}
+
+	if (parent_multiple && calc_row_len != parent_len / sizeof(__be32)) {
+		*calc_size = calc_row_len - *calc_addr;
+		return true;
+	} else if (!parent_multiple) {
+		return true;
+	}
+
+	return false;
+}
+
 static int __init early_init_dt_reserve_memory(phys_addr_t base,
 					       phys_addr_t size, bool nomap)
 {
@@ -154,9 +216,9 @@ static int __init early_init_dt_reserve_memory(phys_addr_t base,
 static int __init __reserved_mem_reserve_reg(unsigned long node,
 					     const char *uname)
 {
-	int t_len = (dt_root_addr_cells + dt_root_size_cells) * sizeof(__be32);
+	int calc_addr, calc_size;
 	phys_addr_t base, size;
-	int len;
+	int len, t_len;
 	const __be32 *prop;
 	bool nomap;
 
@@ -164,17 +226,20 @@ static int __init __reserved_mem_reserve_reg(unsigned long node,
 	if (!prop)
 		return -ENOENT;
 
-	if (len && len % t_len != 0) {
+	calc_addr = dt_root_addr_cells;
+	calc_size = dt_root_size_cells;
+	if (!reg_len_valid(len, &calc_addr, &calc_size)) {
 		pr_err("Reserved memory: invalid reg property in '%s', skipping node.\n",
 		       uname);
 		return -EINVAL;
 	}
 
 	nomap = of_get_flat_dt_prop(node, "no-map", NULL) != NULL;
+	t_len = (calc_addr + calc_size) * (int)sizeof(__be32);
 
 	while (len >= t_len) {
-		base = dt_mem_next_cell(dt_root_addr_cells, &prop);
-		size = dt_mem_next_cell(dt_root_size_cells, &prop);
+		base = dt_mem_next_cell(calc_addr, &prop);
+		size = dt_mem_next_cell(calc_size, &prop);
 
 		if (size && early_init_dt_reserve_memory(base, size, nomap) == 0) {
 			/* Architecture specific contiguous memory fixup. */
@@ -255,6 +320,7 @@ void __init fdt_scan_reserved_mem_reg_nodes(void)
 	}
 
 	fdt_for_each_subnode(child, fdt, node) {
+		int calc_addr, calc_size;
 		const char *uname;
 
 		prop = of_get_flat_dt_prop(child, "reg", &len);
@@ -263,19 +329,21 @@ void __init fdt_scan_reserved_mem_reg_nodes(void)
 		if (!of_fdt_device_is_available(fdt, child))
 			continue;
 
+		calc_addr = dt_root_addr_cells;
+		calc_size = dt_root_size_cells;
 		uname = fdt_get_name(fdt, child, NULL);
-		if (len && len % t_len != 0) {
+		if (!reg_len_valid(len, &calc_addr, &calc_size)) {
 			pr_err("Reserved memory: invalid reg property in '%s', skipping node.\n",
 			       uname);
 			continue;
 		}
 
 		if (len > t_len)
-			pr_warn("%s() ignores %d regions in node '%s'\n",
-				__func__, len / t_len - 1, uname);
+			pr_warn("%s() ignores %d regions in node '%s'\n", __func__,
+				len / ((calc_addr + calc_size) * (int)sizeof(__be32)) - 1, uname);
 
-		base = dt_mem_next_cell(dt_root_addr_cells, &prop);
-		size = dt_mem_next_cell(dt_root_size_cells, &prop);
+		base = dt_mem_next_cell(calc_addr, &prop);
+		size = dt_mem_next_cell(calc_size, &prop);
 
 		if (size)
 			fdt_reserved_mem_save_node(child, uname, base, size);
