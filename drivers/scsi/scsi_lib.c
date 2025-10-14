@@ -1247,6 +1247,17 @@ struct request *scsi_alloc_request(struct request_queue *q, blk_opf_t opf,
 }
 EXPORT_SYMBOL_GPL(scsi_alloc_request);
 
+static struct request *scsi_alloc_request_hctx(struct request_queue *q,
+		blk_opf_t opf, blk_mq_req_flags_t flags, unsigned int hctx_idx)
+{
+	struct request *rq;
+
+	rq = blk_mq_alloc_request_hctx(q, opf, flags, hctx_idx);
+	if (!IS_ERR(rq))
+		scsi_initialize_rq(rq);
+	return rq;
+}
+
 /*
  * Only called when the request isn't completed by SCSI, and not freed by
  * SCSI
@@ -2133,6 +2144,74 @@ void scsi_mq_free_tags(struct kref *kref)
 	blk_mq_free_tag_set(&shost->tag_set);
 	complete(&shost->tagset_freed);
 }
+
+/**
+ * scsi_get_internal_cmd() - Allocate an internal SCSI command.
+ * @sdev: SCSI device from which to allocate the command
+ * @data_direction: Data direction for the allocated command
+ * @flags: request allocation flags, e.g. BLK_MQ_REQ_RESERVED or
+ *	BLK_MQ_REQ_NOWAIT.
+ *
+ * Allocates a SCSI command for internal LLDD use.
+ */
+struct scsi_cmnd *scsi_get_internal_cmd(struct scsi_device *sdev,
+					enum dma_data_direction data_direction,
+					blk_mq_req_flags_t flags)
+{
+	enum req_op op = data_direction == DMA_TO_DEVICE ? REQ_OP_DRV_OUT :
+							   REQ_OP_DRV_IN;
+	struct scsi_cmnd *scmd;
+	struct request *rq;
+
+	rq = scsi_alloc_request(sdev->request_queue, op, flags);
+	if (IS_ERR(rq))
+		return NULL;
+	scmd = blk_mq_rq_to_pdu(rq);
+	scmd->device = sdev;
+
+	return scmd;
+}
+EXPORT_SYMBOL_GPL(scsi_get_internal_cmd);
+
+/**
+ * scsi_get_internal_cmd_hctx() - Allocate an internal SCSI command from a given
+ *	hardware queue.
+ * @sdev: SCSI device from which to allocate the command
+ * @data_direction: Data direction for the allocated command
+ * @flags: request allocation flags, e.g. BLK_MQ_REQ_RESERVED or
+ *	BLK_MQ_REQ_NOWAIT.
+ * @hctx_idx: Hardware queue index.
+ *
+ * Allocates a SCSI command for internal LLDD use.
+ */
+struct scsi_cmnd *scsi_get_internal_cmd_hctx(struct scsi_device *sdev,
+			enum dma_data_direction data_direction,
+			blk_mq_req_flags_t flags, unsigned int hctx_idx)
+{
+	enum req_op op = data_direction == DMA_TO_DEVICE ? REQ_OP_DRV_OUT :
+							   REQ_OP_DRV_IN;
+	struct scsi_cmnd *scmd;
+	struct request *rq;
+
+	rq = scsi_alloc_request_hctx(sdev->request_queue, op, flags, hctx_idx);
+	if (IS_ERR(rq))
+		return NULL;
+	scmd = blk_mq_rq_to_pdu(rq);
+	scmd->device = sdev;
+
+	return scmd;
+}
+EXPORT_SYMBOL_GPL(scsi_get_internal_cmd_hctx);
+
+/**
+ * scsi_put_internal_cmd() - Free an internal SCSI command.
+ * @scmd: SCSI command to be freed
+ */
+void scsi_put_internal_cmd(struct scsi_cmnd *scmd)
+{
+	blk_mq_free_request(blk_mq_rq_from_pdu(scmd));
+}
+EXPORT_SYMBOL_GPL(scsi_put_internal_cmd);
 
 /**
  * scsi_device_from_queue - return sdev associated with a request_queue
