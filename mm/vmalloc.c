@@ -3621,6 +3621,38 @@ vm_area_alloc_pages(gfp_t gfp, int nid,
 	unsigned int nr_allocated = 0;
 	struct page *page;
 	int i;
+	gfp_t large_gfp = (gfp & ~__GFP_DIRECT_RECLAIM) | __GFP_NOWARN;
+	unsigned int large_order = ilog2(nr_pages - nr_allocated);
+
+	/*
+	 * Initially, attempt to have the page allocator give us large order
+	 * pages. Do not attempt allocating smaller than order chunks since
+	 * __vmap_pages_range() expects physically contigous pages of exactly
+	 * order long chunks.
+	 */
+	while (large_order > order && nr_allocated < nr_pages) {
+		/*
+		 * High-order nofail allocations are really expensive and
+		 * potentially dangerous (pre-mature OOM, disruptive reclaim
+		 * and compaction etc.
+		 */
+		if (gfp & __GFP_NOFAIL)
+			break;
+		if (nid == NUMA_NO_NODE)
+			page = alloc_pages_noprof(large_gfp, large_order);
+		else
+			page = alloc_pages_node_noprof(nid, large_gfp, large_order);
+
+		if (unlikely(!page))
+			break;
+
+		split_page(page, large_order);
+		for (i = 0; i < (1U << large_order); i++)
+			pages[nr_allocated + i] = page + i;
+
+		nr_allocated += 1U << large_order;
+		large_order = ilog2(nr_pages - nr_allocated);
+	}
 
 	/*
 	 * For order-0 pages we make use of bulk allocator, if
@@ -3665,7 +3697,7 @@ vm_area_alloc_pages(gfp_t gfp, int nid,
 		}
 	}
 
-	/* High-order pages or fallback path if "bulk" fails. */
+	/* High-order arch pages or fallback path if "bulk" fails. */
 	while (nr_allocated < nr_pages) {
 		if (!(gfp & __GFP_NOFAIL) && fatal_signal_pending(current))
 			break;
