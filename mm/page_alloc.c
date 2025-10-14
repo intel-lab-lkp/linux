@@ -5026,23 +5026,28 @@ static inline bool prepare_alloc_pages(gfp_t gfp_mask, unsigned int order,
 }
 
 /*
- * __alloc_pages_bulk - Allocate a number of order-0 pages to an array
+ * __alloc_pages_bulk - Allocate a number of order-0 pages to a list or array
  * @gfp: GFP flags for the allocation
  * @preferred_nid: The preferred NUMA node ID to allocate from
  * @nodemask: Set of nodes to allocate from, may be NULL
- * @nr_pages: The number of pages desired in the array
- * @page_array: Array to store the pages
+ * @nr_pages: The number of pages desired on the list or array
+ * @page_list: Optional list to store the allocated pages
+ * @page_array: Optional array to store the pages
  *
  * This is a batched version of the page allocator that attempts to
- * allocate nr_pages quickly. Pages are added to the page_array.
+ * allocate nr_pages quickly. Pages are added to page_list if page_list
+ * is not NULL, otherwise it is assumed that the page_array is valid.
  *
- * Note that only NULL elements are populated with pages and nr_pages
+ * For lists, nr_pages is the number of pages that should be allocated.
+ *
+ * For arrays, only NULL elements are populated with pages and nr_pages
  * is the maximum number of pages that will be stored in the array.
  *
- * Returns the number of pages in the array.
+ * Returns the number of pages on the list or array.
  */
 unsigned long alloc_pages_bulk_noprof(gfp_t gfp, int preferred_nid,
 			nodemask_t *nodemask, int nr_pages,
+			struct list_head *page_list,
 			struct page **page_array)
 {
 	struct page *page;
@@ -5060,7 +5065,7 @@ unsigned long alloc_pages_bulk_noprof(gfp_t gfp, int preferred_nid,
 	 * Skip populated array elements to determine if any pages need
 	 * to be allocated before disabling IRQs.
 	 */
-	while (nr_populated < nr_pages && page_array[nr_populated])
+	while (page_array && nr_populated < nr_pages && page_array[nr_populated])
 		nr_populated++;
 
 	/* No pages requested? */
@@ -5068,7 +5073,7 @@ unsigned long alloc_pages_bulk_noprof(gfp_t gfp, int preferred_nid,
 		goto out;
 
 	/* Already populated array? */
-	if (unlikely(nr_pages - nr_populated == 0))
+	if (unlikely(page_array && nr_pages - nr_populated == 0))
 		goto out;
 
 	/* Bulk allocator does not support memcg accounting. */
@@ -5150,7 +5155,7 @@ retry_this_zone:
 	while (nr_populated < nr_pages) {
 
 		/* Skip existing pages */
-		if (page_array[nr_populated]) {
+		if (page_array && page_array[nr_populated]) {
 			nr_populated++;
 			continue;
 		}
@@ -5169,7 +5174,11 @@ retry_this_zone:
 
 		prep_new_page(page, 0, gfp, 0);
 		set_page_refcounted(page);
-		page_array[nr_populated++] = page;
+		if (page_list)
+			list_add(&page->lru, page_list);
+		else
+			page_array[nr_populated] = page;
+		nr_populated++;
 	}
 
 	pcp_spin_unlock(pcp);
@@ -5186,8 +5195,14 @@ failed_irq:
 
 failed:
 	page = __alloc_pages_noprof(gfp, 0, preferred_nid, nodemask);
-	if (page)
-		page_array[nr_populated++] = page;
+	if (page) {
+		if (page_list)
+			list_add(&page->lru, page_list);
+		else
+			page_array[nr_populated] = page;
+		nr_populated++;
+	}
+
 	goto out;
 }
 EXPORT_SYMBOL_GPL(alloc_pages_bulk_noprof);
