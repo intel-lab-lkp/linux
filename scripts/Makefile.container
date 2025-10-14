@@ -1,0 +1,15 @@
+# SPDX-License-Identifier: GPL-2.0
+
+ifeq ($(CONTAINER),)
+$(error "Usage: make CONTAINER=<container-image-name> [...]")
+endif
+CONTAINER_COMMAND ?= docker
+PHONY := __all
+
+__all:
+%:
+	@echo Running in $(CONTAINER_COMMAND) $(CONTAINER)
+	@$(CONTAINER_COMMAND) run -it -v $(PWD):/src -w /src \
+	$(CONTAINER) $(MAKE) \
+	$(subst CONTAINER=$(CONTAINER),,$(MAKEFLAGS)) \
+	$(GNUMAKEFLAGS) $(MAKECMDGOALS)
