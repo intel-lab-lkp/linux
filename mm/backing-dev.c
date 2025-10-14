@@ -1219,6 +1219,64 @@ struct backing_dev_info *bdi_alloc(int node_id)
 }
 EXPORT_SYMBOL(bdi_alloc);
 
+int bdi_inc_writeback(struct backing_dev_info *bdi, int nwritebacks)
+{
+	struct bdi_writeback_ctx **wb_ctx;
+	int ret = 0;
+
+	if (nwritebacks <= bdi->nr_wb_ctx)
+		return ret;
+
+	wb_ctx = kcalloc(nwritebacks, sizeof(struct bdi_writeback_ctx *),
+			 GFP_KERNEL);
+	if (!wb_ctx)
+		return -ENOMEM;
+
+	for (int i = 0; i < bdi->nr_wb_ctx; i++)
+		wb_ctx[i] = bdi->wb_ctx[i];
+
+	for (int i = bdi->nr_wb_ctx; i < nwritebacks; i++) {
+		wb_ctx[i] = (struct bdi_writeback_ctx *)
+			kzalloc(sizeof(struct bdi_writeback_ctx), GFP_KERNEL);
+		if (!wb_ctx[i]) {
+			pr_err("Failed to allocate %d", i);
+			while (--i >= bdi->nr_wb_ctx)
+				kfree(wb_ctx[i]);
+			kfree(wb_ctx);
+			return -ENOMEM;
+		}
+		INIT_LIST_HEAD(&wb_ctx[i]->wb_list);
+		init_waitqueue_head(&wb_ctx[i]->wb_waitq);
+
+#ifdef CONFIG_CGROUP_WRITEBACK
+		INIT_RADIX_TREE(&wb_ctx[i]->cgwb_tree, GFP_ATOMIC);
+		init_rwsem(&wb_ctx[i]->wb_switch_rwsem);
+#endif
+		ret = wb_init(&wb_ctx[i]->wb, wb_ctx[i], bdi, GFP_KERNEL);
+		if (!ret) {
+#ifdef CONFIG_CGROUP_WRITEBACK
+			wb_ctx[i]->wb.memcg_css = &root_mem_cgroup->css;
+			wb_ctx[i]->wb.blkcg_css = blkcg_root_css;
+#endif
+		} else {
+			while (--i >= bdi->nr_wb_ctx)
+				kfree(wb_ctx[i]);
+			kfree(wb_ctx);
+			return ret;
+		}
+		cgwb_bdi_register(bdi, wb_ctx[i]);
+		set_bit(WB_registered, &wb_ctx[i]->wb.state);
+	}
+
+	spin_lock_bh(&bdi_lock);
+	kfree(bdi->wb_ctx);
+	bdi->wb_ctx = wb_ctx;
+	bdi->nr_wb_ctx = nwritebacks;
+	spin_unlock_bh(&bdi_lock);
+	return 0;
+}
+EXPORT_SYMBOL(bdi_inc_writeback);
+
 static struct rb_node **bdi_lookup_rb_node(u64 id, struct rb_node **parentp)
 {
 	struct rb_node **p = &bdi_tree.rb_node;

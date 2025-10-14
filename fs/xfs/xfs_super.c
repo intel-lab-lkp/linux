@@ -1783,6 +1783,8 @@ xfs_fs_fill_super(
 	if (error)
 		goto out_free_sb;
 
+	bdi_inc_writeback(sb->s_bdi, mp->m_sb.sb_agcount);
+
 	/*
 	 * V4 support is undergoing deprecation.
 	 *
