@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: GPL-2.0
+// Created regular file inode// SPDX-License-Identifier: GPL-2.0
 /*
  *
  * Copyright (C) 2019-2021 Paragon Software GmbH, All rights reserved.
@@ -50,7 +50,10 @@ static struct inode *ntfs_read_mft(struct inode *inode,
 	/* Setup 'uid' and 'gid' */
 	inode->i_uid = sbi->options->fs_uid;
 	inode->i_gid = sbi->options->fs_gid;
-
+	if (ino == 25) {
+		ntfs_warn(sb, "DEBUG: ntfs_read_mft ENTERED for inode 25");
+		dump_stack();
+	}
 	err = mi_init(&ni->mi, sbi, ino);
 	if (err)
 		goto out;
@@ -462,7 +465,11 @@ end_enum:
 		inode->i_mapping->a_ops = is_compressed(ni) ? &ntfs_aops_cmpr :
 							      &ntfs_aops;
 		if (ino != MFT_REC_MFT)
+		{
+			ntfs_warn(sb, "DEBUG: deepanshu  Read inode %lu, S_ISREG=%d, run_lock_init=%d",
+          ino, S_ISREG(mode), (ino != MFT_REC_MFT));
 			init_rwsem(&ni->file.run_lock);
+		}
 	} else if (S_ISCHR(mode) || S_ISBLK(mode) || S_ISFIFO(mode) ||
 		   S_ISSOCK(mode)) {
 		inode->i_op = &ntfs_special_inode_operations;
@@ -528,27 +535,58 @@ static int ntfs_set_inode(struct inode *inode, void *data)
 struct inode *ntfs_iget5(struct super_block *sb, const struct MFT_REF *ref,
 			 const struct cpu_str *name)
 {
+	
 	struct inode *inode;
-
+	unsigned long ino = ino_get(ref);
+	 if (ino == 25) {
+                ntfs_warn(sb, "DEBUG: ntfs_iget5 called for inode 25");
+                dump_stack();
+        }
 	inode = iget5_locked(sb, ino_get(ref), ntfs_test_inode, ntfs_set_inode,
 			     (void *)ref);
 	if (unlikely(!inode))
 		return ERR_PTR(-ENOMEM);
-
+	 if (ino == 25)
+                ntfs_warn(sb, "DEBUG: inode 25 - I_NEW=%d", !!(inode->i_state & I_NEW));
 	/* If this is a freshly allocated inode, need to read it now. */
-	if (inode->i_state & I_NEW)
+	if (inode->i_state & I_NEW){
+		if (ino == 25)
+                        ntfs_warn(sb, "DEBUG: Calling ntfs_read_mft for inode 25");
 		inode = ntfs_read_mft(inode, name, ref);
+		if (ino == 25 && IS_ERR(inode)) {
+                        ntfs_warn(sb, "DEBUG: ntfs_read_mft FAILED for inode 25, error=%ld",
+                                  PTR_ERR(inode));
+                        dump_stack();
+                }
+	}
 	else if (ref->seq != ntfs_i(inode)->mi.mrec->seq) {
 		/*
 		 * Sequence number is not expected.
 		 * Looks like inode was reused but caller uses the old reference
 		 */
+		if (ino == 25 && IS_ERR(inode)) {
+                        ntfs_warn(sb, "DEBUG: ntfs_read_mft FAILED for inode 25, error=%ld",
+                                  PTR_ERR(inode));
+                        dump_stack();
+                }
 		iput(inode);
 		inode = ERR_PTR(-ESTALE);
 	}
 
-	if (IS_ERR(inode))
-		ntfs_set_state(sb->s_fs_info, NTFS_DIRTY_ERROR);
+	else if (ino == 25) {
+                ntfs_warn(sb, "DEBUG: inode 25 found in cache, skipping ntfs_read_mft!");
+                dump_stack();
+        }
+
+	/*if (IS_ERR(inode))
+		ntfs_set_state(sb->s_fs_info, NTFS_DIRTY_ERROR);*/
+	if (IS_ERR(inode)) {
+                if (ino == 25)
+                        ntfs_warn(sb, "DEBUG: inode 25 IS_ERR, setting DIRTY_ERROR");
+                ntfs_set_state(sb->s_fs_info, NTFS_DIRTY_ERROR);
+        } else if (ino == 25) {
+                ntfs_warn(sb, "DEBUG: inode 25 returning successfully");
+        }
 
 	return inode;
 }
@@ -1174,6 +1212,8 @@ int ntfs_create_inode(struct mnt_idmap *idmap, struct inode *dir,
 		      umode_t mode, dev_t dev, const char *symname, u32 size,
 		      struct ntfs_fnd *fnd)
 {
+	printk(KERN_WARNING "GET THE MESSAGE deepanshu \n");
+	//ntfs_warn(sb, "DEBUG: In inodde function");
 	int err;
 	struct super_block *sb = dir->i_sb;
 	struct ntfs_sb_info *sbi = sb->s_fs_info;
@@ -1591,6 +1631,7 @@ int ntfs_create_inode(struct mnt_idmap *idmap, struct inode *dir,
 		inode->i_size = size;
 		inode_nohighmem(inode);
 	} else if (S_ISREG(mode)) {
+		ntfs_warn(dir->i_sb, "DEBUG: Setting up regular file inode %lu", inode->i_ino);
 		inode->i_op = &ntfs_file_inode_operations;
 		inode->i_fop = unlikely(is_legacy_ntfs(sb)) ?
 				       &ntfs_legacy_file_operations :
@@ -1598,6 +1639,8 @@ int ntfs_create_inode(struct mnt_idmap *idmap, struct inode *dir,
 		inode->i_mapping->a_ops = is_compressed(ni) ? &ntfs_aops_cmpr :
 							      &ntfs_aops;
 		init_rwsem(&ni->file.run_lock);
+		ntfs_warn(sb, "DEBUG: Created regular file inode %lu, run_lock initialized", 
+              inode->i_ino);
 	} else {
 		inode->i_op = &ntfs_special_inode_operations;
 		init_special_inode(inode, mode, dev);
