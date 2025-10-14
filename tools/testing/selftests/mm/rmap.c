@@ -430,4 +430,47 @@ TEST_F(migrate, ksm)
 	propagate_children(_metadata, data);
 }
 
+TEST_F(migrate, cow_after_fork)
+{
+	struct global_data *data = &self->data;
+	int status;
+	pid_t pid;
+	unsigned long parent_pfn, child_pfn;
+	int pagemap_fd;
+	char *region;
+
+	/* Map private anonymous memory and fault it in */
+	region = mmap(NULL, data->mapsize, PROT_READ | PROT_WRITE,
+		MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
+	ASSERT_NE(region, MAP_FAILED);
+	memset(region, 0xaa, data->mapsize);
+
+	pagemap_fd = open("/proc/self/pagemap", O_RDONLY);
+	ASSERT_NE(pagemap_fd, -1);
+	parent_pfn = pagemap_get_pfn(pagemap_fd, region);
+	close(pagemap_fd);
+
+	pid = fork();
+	ASSERT_NE(pid, -1);
+
+	if (pid == 0) {
+		/* Child: write to trigger COW */
+		region[0] = 0xbb;
+
+		pagemap_fd = open("/proc/self/pagemap", O_RDONLY);
+		ASSERT_NE(pagemap_fd, -1);
+		child_pfn = pagemap_get_pfn(pagemap_fd, region);
+		close(pagemap_fd);
+
+		/* Expect PFN to differ after write (COW happened) */
+		if (child_pfn == parent_pfn)
+			_exit(FAIL_ON_CHECK);
+		_exit(0);
+	}
+
+	waitpid(pid, &status, 0);
+	ASSERT_EQ(WEXITSTATUS(status), 0);
+	munmap(region, data->mapsize);
+}
+
 TEST_HARNESS_MAIN
