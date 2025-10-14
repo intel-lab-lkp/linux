@@ -285,7 +285,9 @@ static const struct constant_table hpfs_param_case[] = {
 };
 
 static const struct constant_table hpfs_param_check[] = {
+#ifdef CONFIG_HPFS_FS_ALLOW_NO_ERROR_CHECK_MODE
 	{"none",	0},
+#endif
 	{"normal",	1},
 	{"strict",	2},
 	{}

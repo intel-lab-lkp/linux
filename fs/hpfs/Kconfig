@@ -15,3 +15,14 @@ config HPFS_FS
 
 	  To compile this file system support as a module, choose M here: the
 	  module will be called hpfs.  If unsure, say N.
+
+config HPFS_FS_ALLOW_NO_ERROR_CHECK_MODE
+	bool "Allow no-error-check mode for maximum speed"
+	depends on HPFS_FS
+	default n
+	help
+	  This option enables check=none mount option. If check=none is
+	  specified, users can expect maximum speed at the cost of minimum
+	  robustness. Sane users should not specify check=none option, for e.g.
+	  use-after-free bug will happen when the filesystem is corrupted or
+	  crafted.
