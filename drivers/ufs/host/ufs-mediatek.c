@@ -204,49 +204,60 @@ static void ufs_mtk_crypto_enable(struct ufs_hba *hba)
 static void ufs_mtk_host_reset(struct ufs_hba *hba)
 {
 	struct ufs_mtk_host *host = ufshcd_get_variant(hba);
-	struct arm_smccc_res res;
+	int ret;
 
 	reset_control_assert(host->hci_reset);
 	reset_control_assert(host->crypto_reset);
 	reset_control_assert(host->unipro_reset);
-	reset_control_assert(host->mphy_reset);
 
-	usleep_range(100, 110);
+	ret = phy_reset(host->mphy);
+
+	/*
+	 * Only sleep if MPHY doesn't have a reset implemented (which already
+	 * sleeps) or the PHY reset function failed somehow, just to be safe
+	 */
+	if (ret) {
+		usleep_range(100, 110);
+		if (ret != -EOPNOTSUPP)
+			dev_warn(hba->dev, "PHY reset failed: %pe\n", ERR_PTR(ret));
+	}
 
 	reset_control_deassert(host->unipro_reset);
 	reset_control_deassert(host->crypto_reset);
 	reset_control_deassert(host->hci_reset);
-	reset_control_deassert(host->mphy_reset);
-
-	/* restore mphy setting aftre mphy reset */
-	if (host->mphy_reset)
-		ufs_mtk_mphy_ctrl(UFS_MPHY_RESTORE, res);
 }
 
-static void ufs_mtk_init_reset_control(struct ufs_hba *hba,
-				       struct reset_control **rc,
-				       char *str)
+static int ufs_mtk_init_reset_control(struct ufs_hba *hba,
+				      struct reset_control **rc,
+				      const char *str)
 {
-	*rc = devm_reset_control_get(hba->dev, str);
+	*rc = devm_reset_control_get_optional(hba->dev, str);
 	if (IS_ERR(*rc)) {
-		dev_info(hba->dev, "Failed to get reset control %s: %ld\n",
-			 str, PTR_ERR(*rc));
-		*rc = NULL;
+		dev_err(hba->dev, "Failed to get reset control %s: %pe\n", str, *rc);
+		return PTR_ERR(*rc);
 	}
+
+	return 0;
 }
 
-static void ufs_mtk_init_reset(struct ufs_hba *hba)
+static int ufs_mtk_init_reset(struct ufs_hba *hba)
 {
 	struct ufs_mtk_host *host = ufshcd_get_variant(hba);
+	int ret;
 
-	ufs_mtk_init_reset_control(hba, &host->hci_reset,
-				   "hci_rst");
-	ufs_mtk_init_reset_control(hba, &host->unipro_reset,
-				   "unipro_rst");
-	ufs_mtk_init_reset_control(hba, &host->crypto_reset,
-				   "crypto_rst");
-	ufs_mtk_init_reset_control(hba, &host->mphy_reset,
-				   "mphy_rst");
+	ret = ufs_mtk_init_reset_control(hba, &host->hci_reset, "hci_rst");
+	if (ret)
+		return ret;
+
+	ret = ufs_mtk_init_reset_control(hba, &host->unipro_reset, "unipro_rst");
+	if (ret)
+		return ret;
+
+	ret = ufs_mtk_init_reset_control(hba, &host->crypto_reset, "crypto_rst");
+	if (ret)
+		return ret;
+
+	return 0;
 }
 
 static int ufs_mtk_hce_enable_notify(struct ufs_hba *hba,
@@ -1238,11 +1249,9 @@ static int ufs_mtk_init(struct ufs_hba *hba)
 	if (err)
 		goto out_variant_clear;
 
-	ufs_mtk_init_reset(hba);
-
-	/* backup mphy setting if mphy can reset */
-	if (host->mphy_reset)
-		ufs_mtk_mphy_ctrl(UFS_MPHY_BACKUP, res);
+	err = ufs_mtk_init_reset(hba);
+	if (err)
+		goto out_variant_clear;
 
 	/* Enable runtime autosuspend */
 	hba->caps |= UFSHCD_CAP_RPM_AUTOSUSPEND;
