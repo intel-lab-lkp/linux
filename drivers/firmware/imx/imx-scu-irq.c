@@ -255,6 +255,7 @@ int imx_scu_enable_general_irq_channel(struct device *dev)
 
 free_ch:
 	mbox_free_channel(ch);
+	devm_kfree(dev, cl);
 
 	return ret;
 }
