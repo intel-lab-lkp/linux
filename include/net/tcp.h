@@ -1896,13 +1896,6 @@ struct tcp6_pseudohdr {
 	__be32		protocol;	/* including padding */
 };
 
-union tcp_md5sum_block {
-	struct tcp4_pseudohdr ip4;
-#if IS_ENABLED(CONFIG_IPV6)
-	struct tcp6_pseudohdr ip6;
-#endif
-};
-
 /*
  * struct tcp_sigpool - per-CPU pool of ahash_requests
  * @scratch: per-CPU temporary area, that can be used between
@@ -1937,8 +1930,8 @@ int tcp_sigpool_start(unsigned int id, struct tcp_sigpool *c);
 void tcp_sigpool_end(struct tcp_sigpool *c);
 size_t tcp_sigpool_algo(unsigned int id, char *buf, size_t buf_len);
 /* - functions */
-int tcp_v4_md5_hash_skb(char *md5_hash, const struct tcp_md5sig_key *key,
-			const struct sock *sk, const struct sk_buff *skb);
+void tcp_v4_md5_hash_skb(char *md5_hash, const struct tcp_md5sig_key *key,
+			 const struct sock *sk, const struct sk_buff *skb);
 int tcp_md5_do_add(struct sock *sk, const union tcp_md5_addr *addr,
 		   int family, u8 prefixlen, int l3index, u8 flags,
 		   const u8 *newkey, u8 newkeylen);
@@ -1997,13 +1990,10 @@ static inline void tcp_md5_destruct_sock(struct sock *sk)
 }
 #endif
 
-int tcp_md5_alloc_sigpool(void);
-void tcp_md5_release_sigpool(void);
-void tcp_md5_add_sigpool(void);
-extern int tcp_md5_sigpool_id;
-
-int tcp_md5_hash_key(struct tcp_sigpool *hp,
-		     const struct tcp_md5sig_key *key);
+struct md5_ctx;
+void tcp_md5_hash_skb_data(struct md5_ctx *ctx, const struct sk_buff *skb,
+			   unsigned int header_len);
+void tcp_md5_hash_key(struct md5_ctx *ctx, const struct tcp_md5sig_key *key);
 
 /* From tcp_fastopen.c */
 void tcp_fastopen_cache_get(struct sock *sk, u16 *mss,
@@ -2353,7 +2343,7 @@ struct tcp_sock_af_ops {
 #ifdef CONFIG_TCP_MD5SIG
 	struct tcp_md5sig_key	*(*md5_lookup) (const struct sock *sk,
 						const struct sock *addr_sk);
-	int		(*calc_md5_hash)(char *location,
+	void		(*calc_md5_hash)(char *location,
 					 const struct tcp_md5sig_key *md5,
 					 const struct sock *sk,
 					 const struct sk_buff *skb);
@@ -2381,7 +2371,7 @@ struct tcp_request_sock_ops {
 #ifdef CONFIG_TCP_MD5SIG
 	struct tcp_md5sig_key *(*req_md5_lookup)(const struct sock *sk,
 						 const struct sock *addr_sk);
-	int		(*calc_md5_hash) (char *location,
+	void		(*calc_md5_hash) (char *location,
 					  const struct tcp_md5sig_key *md5,
 					  const struct sock *sk,
 					  const struct sk_buff *skb);
