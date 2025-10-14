@@ -20,6 +20,7 @@
 
 #include <net/mana/mana.h>
 #include <net/mana/mana_auxiliary.h>
+#include <net/mana/hw_channel.h>
 
 static DEFINE_IDA(mana_adev_ida);
 
@@ -84,8 +85,9 @@ static int mana_open(struct net_device *ndev)
 	/* Ensure port state updated before txq state */
 	smp_wmb();
 
-	netif_carrier_on(ndev);
-	netif_tx_wake_all_queues(ndev);
+	if (netif_carrier_ok(ndev))
+		netif_tx_wake_all_queues(ndev);
+
 	netdev_dbg(ndev, "%s successful\n", __func__);
 	return 0;
 }
@@ -98,6 +100,59 @@ static int mana_close(struct net_device *ndev)
 		return 0;
 
 	return mana_detach(ndev, true);
+}
+
+static void mana_link_state_handle(struct work_struct *w)
+{
+	struct mana_port_context *apc;
+	struct mana_context *ac;
+	struct net_device *ndev;
+	bool link_up;
+	int i;
+
+	ac = container_of(w, struct mana_context, link_change_work);
+
+	if (ac->mana_removing)
+		return;
+
+	rtnl_lock();
+
+	if (ac->link_event == HWC_DATA_HW_LINK_CONNECT)
+		link_up = true;
+	else if (ac->link_event == HWC_DATA_HW_LINK_DISCONNECT)
+		link_up = false;
+	else
+		goto out;
+
+	/* Process all ports */
+	for (i = 0; i < ac->num_ports; i++) {
+		ndev = ac->ports[i];
+		if (!ndev)
+			continue;
+
+		apc = netdev_priv(ndev);
+
+		if (link_up) {
+			if (!netif_carrier_ok(ndev)) {
+				netif_carrier_on(ndev);
+
+				if (apc->port_is_up)
+					netif_tx_wake_all_queues(ndev);
+			}
+
+			__netdev_notify_peers(ndev);
+		} else {
+			if (netif_carrier_ok(ndev)) {
+				if (apc->port_is_up)
+					netif_tx_disable(ndev);
+
+				netif_carrier_off(ndev);
+			}
+		}
+	}
+
+out:
+	rtnl_unlock();
 }
 
 static bool mana_can_tx(struct gdma_queue *wq)
@@ -3059,9 +3114,6 @@ int mana_attach(struct net_device *ndev)
 	/* Ensure port state updated before txq state */
 	smp_wmb();
 
-	if (apc->port_is_up)
-		netif_carrier_on(ndev);
-
 	netif_device_attach(ndev);
 
 	return 0;
@@ -3153,8 +3205,8 @@ int mana_detach(struct net_device *ndev, bool from_close)
 	/* Ensure port state updated before txq state */
 	smp_wmb();
 
-	netif_tx_disable(ndev);
-	netif_carrier_off(ndev);
+	if (netif_carrier_ok(ndev))
+		netif_tx_disable(ndev);
 
 	if (apc->port_st_save) {
 		err = mana_dealloc_queues(ndev);
@@ -3212,7 +3264,7 @@ static int mana_probe_port(struct mana_context *ac, int port_idx,
 
 	netif_set_tso_max_size(ndev, GSO_MAX_SIZE);
 
-	netif_carrier_off(ndev);
+	netif_carrier_on(ndev);
 
 	netdev_rss_key_fill(apc->hashkey, MANA_HASH_KEY_SIZE);
 
@@ -3431,6 +3483,8 @@ int mana_probe(struct gdma_dev *gd, bool resuming)
 
 	if (!resuming) {
 		ac->num_ports = num_ports;
+
+		INIT_WORK(&ac->link_change_work, mana_link_state_handle);
 	} else {
 		if (ac->num_ports != num_ports) {
 			dev_err(dev, "The number of vPorts changed: %d->%d\n",
@@ -3481,6 +3535,8 @@ out:
 	if (err) {
 		mana_remove(gd, false);
 	} else {
+		ac->mana_removing = false;
+
 		dev_dbg(dev, "gd=%p, id=%u, num_ports=%d, type=%u, instance=%u\n",
 			gd, gd->dev_id.as_uint32, ac->num_ports,
 			gd->dev_id.type, gd->dev_id.instance);
@@ -3499,6 +3555,10 @@ void mana_remove(struct gdma_dev *gd, bool suspending)
 	struct net_device *ndev;
 	int err;
 	int i;
+
+	ac->mana_removing = true;
+
+	cancel_work_sync(&ac->link_change_work);
 
 	/* adev currently doesn't support suspending, always remove it */
 	if (gd->adev)
