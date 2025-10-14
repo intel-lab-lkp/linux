@@ -15,6 +15,9 @@ struct panthor_device;
  * New feature flags will be added with support for newer GPU architectures.
  */
 enum panthor_hw_feature {
+	/** @PANTHOR_HW_FEATURE_PWR_CONTROL: HW supports the PWR_CONTROL interface. */
+	PANTHOR_HW_FEATURE_PWR_CONTROL,
+
 	/** @PANTHOR_HW_FEATURES_END: Must be last. */
 	PANTHOR_HW_FEATURES_END
 };
