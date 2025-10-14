@@ -1851,8 +1851,13 @@ void skb_consume_udp(struct sock *sk, struct sk_buff *skb, int len)
 		sk_peek_offset_bwd(sk, len);
 
 	if (!skb_shared(skb)) {
-		if (unlikely(udp_skb_has_head_state(skb)))
-			skb_release_head_state(skb);
+		/* Make sure that this skb has no dst, destructor
+		 * or conntracking parts, because it might stay
+		 * in a remote cpu list for a very long time.
+		 */
+		DEBUG_NET_WARN_ON_ONCE(skb_dst(skb));
+		DEBUG_NET_WARN_ON_ONCE(skb->destructor);
+		DEBUG_NET_WARN_ON_ONCE(skb_nfct(skb));
 		skb_attempt_defer_free(skb);
 		return;
 	}
