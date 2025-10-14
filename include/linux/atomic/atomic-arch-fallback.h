@@ -2121,7 +2121,7 @@ raw_atomic_cmpxchg_relaxed(atomic_t *v, int old, int new)
  *
  * Safe to use in noinstr code; prefer atomic_try_cmpxchg() elsewhere.
  *
- * Return: @true if the exchange occured, @false otherwise.
+ * Return: @true if the exchange occurred, @false otherwise.
  */
 static __always_inline bool
 raw_atomic_try_cmpxchg(atomic_t *v, int *old, int new)
@@ -2155,7 +2155,7 @@ raw_atomic_try_cmpxchg(atomic_t *v, int *old, int new)
  *
  * Safe to use in noinstr code; prefer atomic_try_cmpxchg_acquire() elsewhere.
  *
- * Return: @true if the exchange occured, @false otherwise.
+ * Return: @true if the exchange occurred, @false otherwise.
  */
 static __always_inline bool
 raw_atomic_try_cmpxchg_acquire(atomic_t *v, int *old, int new)
@@ -2189,7 +2189,7 @@ raw_atomic_try_cmpxchg_acquire(atomic_t *v, int *old, int new)
  *
  * Safe to use in noinstr code; prefer atomic_try_cmpxchg_release() elsewhere.
  *
- * Return: @true if the exchange occured, @false otherwise.
+ * Return: @true if the exchange occurred, @false otherwise.
  */
 static __always_inline bool
 raw_atomic_try_cmpxchg_release(atomic_t *v, int *old, int new)
@@ -2222,7 +2222,7 @@ raw_atomic_try_cmpxchg_release(atomic_t *v, int *old, int new)
  *
  * Safe to use in noinstr code; prefer atomic_try_cmpxchg_relaxed() elsewhere.
  *
- * Return: @true if the exchange occured, @false otherwise.
+ * Return: @true if the exchange occurred, @false otherwise.
  */
 static __always_inline bool
 raw_atomic_try_cmpxchg_relaxed(atomic_t *v, int *old, int new)
@@ -4247,7 +4247,7 @@ raw_atomic64_cmpxchg_relaxed(atomic64_t *v, s64 old, s64 new)
  *
  * Safe to use in noinstr code; prefer atomic64_try_cmpxchg() elsewhere.
  *
- * Return: @true if the exchange occured, @false otherwise.
+ * Return: @true if the exchange occurred, @false otherwise.
  */
 static __always_inline bool
 raw_atomic64_try_cmpxchg(atomic64_t *v, s64 *old, s64 new)
@@ -4281,7 +4281,7 @@ raw_atomic64_try_cmpxchg(atomic64_t *v, s64 *old, s64 new)
  *
  * Safe to use in noinstr code; prefer atomic64_try_cmpxchg_acquire() elsewhere.
  *
- * Return: @true if the exchange occured, @false otherwise.
+ * Return: @true if the exchange occurred, @false otherwise.
  */
 static __always_inline bool
 raw_atomic64_try_cmpxchg_acquire(atomic64_t *v, s64 *old, s64 new)
@@ -4315,7 +4315,7 @@ raw_atomic64_try_cmpxchg_acquire(atomic64_t *v, s64 *old, s64 new)
  *
  * Safe to use in noinstr code; prefer atomic64_try_cmpxchg_release() elsewhere.
  *
- * Return: @true if the exchange occured, @false otherwise.
+ * Return: @true if the exchange occurred, @false otherwise.
  */
 static __always_inline bool
 raw_atomic64_try_cmpxchg_release(atomic64_t *v, s64 *old, s64 new)
@@ -4348,7 +4348,7 @@ raw_atomic64_try_cmpxchg_release(atomic64_t *v, s64 *old, s64 new)
  *
  * Safe to use in noinstr code; prefer atomic64_try_cmpxchg_relaxed() elsewhere.
  *
- * Return: @true if the exchange occured, @false otherwise.
+ * Return: @true if the exchange occurred, @false otherwise.
  */
 static __always_inline bool
 raw_atomic64_try_cmpxchg_relaxed(atomic64_t *v, s64 *old, s64 new)
