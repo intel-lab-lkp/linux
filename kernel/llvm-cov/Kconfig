@@ -1,0 +1,85 @@
+# SPDX-License-Identifier: GPL-2.0-only
+menu "Clang's source-based kernel coverage measurement (EXPERIMENTAL)"
+
+config ARCH_HAS_LLVM_COV
+	bool
+	help
+	  An architecture should select this option if it supports Clang's
+	  source-based code coverage. To enable this for your architecture:
+
+	  1. Exclude files that must be uninstrumented from profiling:
+	     - Early boot code before instrumentation is initialized
+	     - Interrupt and exception handlers
+	     - Any code running at EL2 or higher privilege levels
+
+	  2. Add llvm-cov sections to your linker script (vmlinux.lds.S):
+	     - Add the __llvm_prf_data, __llvm_prf_cnts, __llvm_prf_names,
+	       and __llvm_prf_bits sections
+	     - See arch/x86/kernel/vmlinux.lds.S for reference
+
+	  3. Ensure your architecture handles:
+	     - Large kernel image size increases (2-3x)
+	     - Performance overhead from instrumentation
+
+config ARCH_HAS_LLVM_COV_PROFILE_ALL
+	bool
+
+config LLVM_COV_KERNEL
+	bool "Enable Clang's source-based kernel coverage measurement"
+	depends on DEBUG_FS
+	depends on ARCH_HAS_LLVM_COV
+	depends on CC_IS_CLANG && CLANG_VERSION >= 180000
+	depends on !GCOV_KERNEL
+	help
+	  This option enables Clang's Source-based Code Coverage.
+
+	  LLVM Coverage and GCOV are mutually exclusive profiling methods.
+	  LLVM Coverage provides more accurate source-level coverage data
+	  and better handling of C++ features, while GCOV may have broader
+	  architecture support.
+
+	  If unsure, say N.
+
+	  On a kernel compiled with this option, run your test suites, and
+	  download the raw profile from /sys/kernel/debug/llvm-cov/profraw.
+	  This file can then be converted into the indexed format with
+	  llvm-profdata and used to generate coverage reports with llvm-cov.
+
+	  Additionally specify CONFIG_LLVM_COV_PROFILE_ALL=y to get profiling
+	  data for the entire kernel. To enable profiling for specific files or
+	  directories, add a line similar to the following to the respective
+	  Makefile:
+
+	  For a single file (e.g. main.o):
+	          LLVM_COV_PROFILE_main.o := y
+
+	  For all files in one directory:
+	          LLVM_COV_PROFILE := y
+
+	  To exclude files from being profiled even when
+	  CONFIG_LLVM_COV_PROFILE_ALL is specified, use:
+
+	          LLVM_COV_PROFILE_main.o := n
+	  and:
+	          LLVM_COV_PROFILE := n
+
+	  Note that a kernel compiled with coverage flags will be significantly
+	  larger and run slower.
+
+	  Note that the debugfs filesystem has to be mounted to access the raw
+	  profile.
+
+config LLVM_COV_PROFILE_ALL
+	bool "Profile entire Kernel"
+	depends on !COMPILE_TEST
+	depends on LLVM_COV_KERNEL
+	depends on ARCH_HAS_LLVM_COV_PROFILE_ALL
+	help
+	  This options activates profiling for the entire kernel.
+
+	  If unsure, say N.
+
+	  Note that a kernel compiled with profiling flags will be significantly
+	  larger and run slower.
+
+endmenu

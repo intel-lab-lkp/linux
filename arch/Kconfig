@@ -1782,6 +1782,7 @@ config HAVE_GENERIC_TIF_BITS
        bool
 
 source "kernel/gcov/Kconfig"
+source "kernel/llvm-cov/Kconfig"
 
 source "scripts/gcc-plugins/Kconfig"
 
