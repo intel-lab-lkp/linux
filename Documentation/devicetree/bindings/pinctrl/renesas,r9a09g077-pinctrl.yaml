@@ -72,6 +72,19 @@ definitions:
       input: true
       input-enable: true
       output-enable: true
+      bias-disable: true
+      bias-pull-down: true
+      bias-pull-up: true
+      input-schmitt-enable: true
+      input-schmitt-disable: true
+      slew-rate:
+        enum: [0, 1]
+      renesas,drive-strength:
+        description:
+          Drive strength configuration value. Valid values are 0 to 3, representing
+          increasing drive strength from low, medium, high and ultra high.
+        $ref: /schemas/types.yaml#/definitions/uint32
+        enum: [0, 1, 2, 3]
     oneOf:
       - required: [pinmux]
       - required: [pins]
