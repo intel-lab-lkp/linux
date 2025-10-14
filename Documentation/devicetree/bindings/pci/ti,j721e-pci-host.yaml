@@ -110,6 +110,18 @@ properties:
       interrupts:
         maxItems: 1
 
+  vpcie1v5-supply:
+    description: 1.5V regulator used to power PCIe interfaces,
+                 typically present on miniPCIe slots.
+
+  vpcie3v3-supply:
+    description: 3.3V regulator used to power PCIe interfaces
+                 or endpoint connectors such as M.2 or miniPCIe.
+
+  vpcie12v-supply:
+    description: 12V regulator used to power PCIe slots that
+                 require higher-voltage devices (e.g. full-size cards).
+
 allOf:
   - $ref: cdns-pcie-host.yaml#
   - if:
@@ -202,5 +214,7 @@ examples:
             ranges = <0x01000000 0x0 0x10001000  0x00 0x10001000  0x0 0x0010000>,
                      <0x02000000 0x0 0x10011000  0x00 0x10011000  0x0 0x7fef000>;
             dma-ranges = <0x02000000 0x0 0x0 0x0 0x0 0x10000 0x0>;
+            vpcie3v3-supply = <&pcie_3v3>;
+            vpcie12v-supply = <&pcie_12v>;
         };
     };
