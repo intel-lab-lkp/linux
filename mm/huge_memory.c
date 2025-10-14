@@ -3545,8 +3545,6 @@ static int __split_unmapped_folio(struct folio *folio, int new_order,
 		/* order-1 anonymous folio is not supported */
 		if (is_anon && split_order == 1)
 			continue;
-		if (uniform_split && split_order != new_order)
-			continue;
 
 		if (mapping) {
 			/*
