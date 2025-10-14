@@ -3493,11 +3493,8 @@ nfsd4_enc_sequence_replay(struct nfsd4_compoundargs *args,
 		return op->status;
 	if (args->opcnt == 1) {
 		/*
-		 * The original operation wasn't a solo sequence--we
-		 * always cache those--so this retry must not match the
-		 * original:
+		 * We will simply replay the SEQUENCE.
 		 */
-		op->status = nfserr_seq_false_retry;
 	} else {
 		op = &args->ops[resp->opcnt++];
 		op->status = nfserr_retry_uncached_rep;
@@ -3522,7 +3519,7 @@ nfsd4_replay_cache_entry(struct nfsd4_compoundres *resp,
 	dprintk("--> %s slot %p\n", __func__, slot);
 
 	status = nfsd4_enc_sequence_replay(resp->rqstp->rq_argp, resp);
-	if (status)
+	if (status || !slot->sl_datalen)
 		return status;
 
 	p = xdr_reserve_space(xdr, slot->sl_datalen);
