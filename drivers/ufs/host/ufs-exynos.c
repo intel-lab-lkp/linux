@@ -910,11 +910,15 @@ static int exynos_ufs_post_pwr_mode(struct ufs_hba *hba,
 }
 
 static void exynos_ufs_specify_nexus_t_xfer_req(struct ufs_hba *hba,
-						int tag, bool is_scsi_cmd)
+						struct ufshcd_lrb *lrbp)
 {
 	struct exynos_ufs *ufs = ufshcd_get_variant(hba);
 	u32 type;
+	int tag;
+	bool is_scsi_cmd;
 
+	tag = lrbp->task_tag;
+	is_scsi_cmd = !!lrbp->cmd;
 	type =  hci_readl(ufs, HCI_UTRL_NEXUS_TYPE);
 
 	if (is_scsi_cmd)

@@ -356,8 +356,9 @@ struct ufs_hba_variant_ops {
 			enum ufs_notify_change_status status,
 			const struct ufs_pa_layer_attr *desired_pwr_mode,
 			struct ufs_pa_layer_attr *final_params);
-	void	(*setup_xfer_req)(struct ufs_hba *hba, int tag,
-				  bool is_scsi_cmd);
+	void	(*setup_xfer_req)(struct ufs_hba *hba, struct ufshcd_lrb *lrbp);
+	void	(*compl_command)(struct ufs_hba *hba,
+				 struct ufshcd_lrb *lrbp);
 	void	(*setup_task_mgmt)(struct ufs_hba *, int, u8);
 	void    (*hibern8_notify)(struct ufs_hba *, enum uic_cmd_dme,
 					enum ufs_notify_change_status);
