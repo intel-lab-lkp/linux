@@ -42,15 +42,26 @@
 #define PMC(m)		(0x400 + (m))
 #define PFC(m)		(0x600 + 8 * (m))
 #define PIN(m)		(0x800 + (m))
+#define DRCTL(n)	(0xa00 + 0x008 * (n))
 #define RSELP(m)	(0xc00 + (m))
 
 #define PM_MASK			GENMASK(1, 0)
 #define PM_PIN_MASK(pin)	(PM_MASK << ((pin) * 2))
 #define PM_INPUT		BIT(0)
 #define PM_OUTPUT		BIT(1)
+#define SR_MASK			0x01
+#define SCHMITT_MASK		0x01
+#define IOLH_MASK		0x03
+#define PUPD_MASK		0x03
 
 #define PFC_MASK		GENMASK_ULL(5, 0)
 #define PFC_PIN_MASK(pin)	(PFC_MASK << ((pin) * 8))
+
+#define DRCTL_BIT_OFFSET(bit)		((bit) * 8)
+#define DRCTL_IOLH_SHIFT(bit)		DRCTL_BIT_OFFSET(bit)
+#define DRCTL_PUPD_SHIFT(bit)		(DRCTL_BIT_OFFSET(bit) + 2)
+#define DRCTL_SCHMITT_SHIFT(bit)	(DRCTL_BIT_OFFSET(bit) + 4)
+#define DRCTL_SR_SHIFT(bit)		(DRCTL_BIT_OFFSET(bit) + 5)
 
 /*
  * Use 16 lower bits [15:0] for pin identifier
@@ -101,7 +112,21 @@ static inline type rzt2h_pinctrl_read##size(struct rzt2h_pinctrl *pctrl, u8 port
 
 RZT2H_PINCTRL_REG_ACCESS(b, u8)
 RZT2H_PINCTRL_REG_ACCESS(w, u16)
+RZT2H_PINCTRL_REG_ACCESS(l, u32)
 RZT2H_PINCTRL_REG_ACCESS(q, u64)
+
+/* Custom pinconf parameters */
+#define RENESAS_RZT2H_PIN_CONFIG_DRIVE_STRENGTH		(PIN_CONFIG_END + 1)
+
+static const struct pinconf_generic_params renesas_rzt2h_custom_bindings[] = {
+	{"renesas,drive-strength", RENESAS_RZT2H_PIN_CONFIG_DRIVE_STRENGTH, 0},
+};
+
+#ifdef CONFIG_DEBUG_FS
+static const struct pin_config_item renesas_rzt2h_conf_items[] = {
+	PCONFDUMP(RENESAS_RZT2H_PIN_CONFIG_DRIVE_STRENGTH, "drive-strength", NULL, true),
+};
+#endif
 
 static int rzt2h_validate_pin(struct rzt2h_pinctrl *pctrl, unsigned int offset)
 {
@@ -425,6 +450,196 @@ done:
 	return ret;
 }
 
+static int rzt2h_pinctrl_pinconf_get(struct pinctrl_dev *pctldev,
+				     unsigned int _pin,
+				     unsigned long *config)
+{
+	struct rzt2h_pinctrl *pctrl = pinctrl_dev_get_drvdata(pctldev);
+	u32 param = pinconf_to_config_param(*config);
+	u32 port = RZT2H_PIN_ID_TO_PORT(_pin);
+	u8 bit = RZT2H_PIN_ID_TO_PIN(_pin);
+	u32 addr = DRCTL(port);
+	unsigned int arg;
+	int ret;
+
+	ret = rzt2h_validate_pin(pctrl, _pin);
+	if (ret)
+		return ret;
+
+	/* Access DRCTLm register in 32-bit mode */
+	if (bit >= 4) {
+		bit -= 4;
+		addr += 4;
+	}
+
+	arg = rzt2h_pinctrl_readl(pctrl, port, addr);
+
+	switch (param) {
+	case PIN_CONFIG_SLEW_RATE:
+		 arg = (arg >> DRCTL_SR_SHIFT(bit)) & SR_MASK;
+		break;
+
+	case PIN_CONFIG_BIAS_DISABLE:
+	case PIN_CONFIG_BIAS_PULL_UP:
+	case PIN_CONFIG_BIAS_PULL_DOWN:
+		 arg = (arg >> DRCTL_PUPD_SHIFT(bit)) & PUPD_MASK;
+		if ((arg == 0 && param != PIN_CONFIG_BIAS_DISABLE) ||
+		    (arg == 0x1 && param != PIN_CONFIG_BIAS_PULL_UP) ||
+		    (arg == 0x2 && param != PIN_CONFIG_BIAS_PULL_DOWN))
+			return -EINVAL;
+		break;
+
+	case PIN_CONFIG_INPUT_SCHMITT_ENABLE:
+		arg = (arg >> DRCTL_SCHMITT_SHIFT(bit)) & SCHMITT_MASK;
+		if (!arg)
+			return -EINVAL;
+		break;
+
+	case RENESAS_RZT2H_PIN_CONFIG_DRIVE_STRENGTH:
+		arg = (arg >> DRCTL_IOLH_SHIFT(bit)) & IOLH_MASK;
+		break;
+
+	default:
+		return -ENOTSUPP;
+	}
+
+	*config = pinconf_to_config_packed(param, arg);
+
+	return 0;
+};
+
+static void rzt2h_drctl_rmw(struct rzt2h_pinctrl *pctrl, unsigned int pin,
+			    u32 mask, u32 val)
+{
+	u32 port = RZT2H_PIN_ID_TO_PORT(pin);
+	u8 bit = RZT2H_PIN_ID_TO_PIN(pin);
+	u32 offset = DRCTL(port);
+	unsigned long flags;
+	u32 drctl;
+
+	/* Access DRCTLm register in 32-bit mode */
+	if (bit >= 4)
+		offset += 4;
+
+	spin_lock_irqsave(&pctrl->lock, flags);
+	drctl = rzt2h_pinctrl_readl(pctrl, port, offset) & ~mask;
+	rzt2h_pinctrl_writel(pctrl, port, drctl | val, offset);
+	spin_unlock_irqrestore(&pctrl->lock, flags);
+}
+
+static int rzt2h_pinctrl_pinconf_set(struct pinctrl_dev *pctldev,
+				     unsigned int _pin,
+				     unsigned long *_configs,
+				     unsigned int num_configs)
+{
+	struct rzt2h_pinctrl *pctrl = pinctrl_dev_get_drvdata(pctldev);
+	u8 bit = RZT2H_PIN_ID_TO_PIN(_pin);
+	unsigned int i;
+	int ret;
+
+	ret = rzt2h_validate_pin(pctrl, _pin);
+	if (ret)
+		return ret;
+
+	/* Adjust bit for upper half of port */
+	if (bit >= 4)
+		bit -= 4;
+
+	for (i = 0; i < num_configs; i++) {
+		u32 arg = pinconf_to_config_argument(_configs[i]);
+		u32 param = pinconf_to_config_param(_configs[i]);
+		u32 mask, val;
+
+		switch (param) {
+		case PIN_CONFIG_SLEW_RATE:
+			mask = SR_MASK << DRCTL_SR_SHIFT(bit);
+			val = (!!arg) << DRCTL_SR_SHIFT(bit);
+			break;
+
+		case PIN_CONFIG_BIAS_DISABLE:
+		case PIN_CONFIG_BIAS_PULL_UP:
+		case PIN_CONFIG_BIAS_PULL_DOWN: {
+			u32 bias = (param == PIN_CONFIG_BIAS_DISABLE) ? 0 :
+				(param == PIN_CONFIG_BIAS_PULL_UP) ? 1 : 2;
+
+			mask = PUPD_MASK << DRCTL_PUPD_SHIFT(bit);
+			val = bias << DRCTL_PUPD_SHIFT(bit);
+			break;
+		}
+
+		case PIN_CONFIG_INPUT_SCHMITT_ENABLE:
+			mask = SCHMITT_MASK << DRCTL_SCHMITT_SHIFT(bit);
+			val = (!!arg) << DRCTL_SCHMITT_SHIFT(bit);
+			break;
+
+		case RENESAS_RZT2H_PIN_CONFIG_DRIVE_STRENGTH:
+			if (arg > IOLH_MASK)
+				return -EINVAL;
+
+			mask = IOLH_MASK << DRCTL_IOLH_SHIFT(bit);
+			val = arg << DRCTL_IOLH_SHIFT(bit);
+			break;
+
+		default:
+			return -EOPNOTSUPP;
+		}
+
+		rzt2h_drctl_rmw(pctrl, _pin, mask, val);
+	}
+
+	return 0;
+}
+
+static int rzt2h_pinctrl_pinconf_group_set(struct pinctrl_dev *pctldev,
+					   unsigned int group,
+					   unsigned long *configs,
+					   unsigned int num_configs)
+{
+	const unsigned int *pins;
+	unsigned int i, npins;
+	int ret;
+
+	ret = pinctrl_generic_get_group_pins(pctldev, group, &pins, &npins);
+	if (ret)
+		return ret;
+
+	for (i = 0; i < npins; i++) {
+		ret = rzt2h_pinctrl_pinconf_set(pctldev, pins[i], configs,
+						num_configs);
+		if (ret)
+			return ret;
+	}
+
+	return 0;
+};
+
+static int rzt2h_pinctrl_pinconf_group_get(struct pinctrl_dev *pctldev,
+					   unsigned int group,
+					   unsigned long *config)
+{
+	const unsigned int *pins;
+	unsigned int i, npins, prev_config = 0;
+	int ret;
+
+	ret = pinctrl_generic_get_group_pins(pctldev, group, &pins, &npins);
+	if (ret)
+		return ret;
+
+	for (i = 0; i < npins; i++) {
+		ret = rzt2h_pinctrl_pinconf_get(pctldev, pins[i], config);
+		if (ret)
+			return ret;
+
+		/* Check config matching between to pin  */
+		if (i && prev_config != *config)
+			return -EOPNOTSUPP;
+
+		prev_config = *config;
+	}
+
+	return 0;
+};
+
 static const struct pinctrl_ops rzt2h_pinctrl_pctlops = {
 	.get_groups_count = pinctrl_generic_get_group_count,
 	.get_group_name = pinctrl_generic_get_group_name,
@@ -439,6 +654,15 @@ static const struct pinmux_ops rzt2h_pinctrl_pmxops = {
 	.get_function_groups = pinmux_generic_get_function_groups,
 	.set_mux = rzt2h_pinctrl_set_mux,
 	.strict = true,
+};
+
+static const struct pinconf_ops rzt2h_pinctrl_confops = {
+	.is_generic = true,
+	.pin_config_get = rzt2h_pinctrl_pinconf_get,
+	.pin_config_set = rzt2h_pinctrl_pinconf_set,
+	.pin_config_group_set = rzt2h_pinctrl_pinconf_group_set,
+	.pin_config_group_get = rzt2h_pinctrl_pinconf_group_get,
+	.pin_config_config_dbg_show = pinconf_generic_dump_config,
 };
 
 static int rzt2h_gpio_request(struct gpio_chip *chip, unsigned int offset)
@@ -674,7 +898,13 @@ static int rzt2h_pinctrl_register(struct rzt2h_pinctrl *pctrl)
 	desc->npins = pctrl->data->n_port_pins;
 	desc->pctlops = &rzt2h_pinctrl_pctlops;
 	desc->pmxops = &rzt2h_pinctrl_pmxops;
+	pctrl->desc.confops = &rzt2h_pinctrl_confops;
 	desc->owner = THIS_MODULE;
+	pctrl->desc.num_custom_params = ARRAY_SIZE(renesas_rzt2h_custom_bindings);
+	pctrl->desc.custom_params = renesas_rzt2h_custom_bindings;
+#ifdef CONFIG_DEBUG_FS
+	pctrl->desc.custom_conf_items = renesas_rzt2h_conf_items;
+#endif
 
 	pins = devm_kcalloc(dev, desc->npins, sizeof(*pins), GFP_KERNEL);
 	if (!pins)
