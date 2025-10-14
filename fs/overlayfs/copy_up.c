@@ -8,6 +8,7 @@
 #include <linux/fs.h>
 #include <linux/slab.h>
 #include <linux/file.h>
+#include <linux/statfs.h>
 #include <linux/fileattr.h>
 #include <linux/splice.h>
 #include <linux/xattr.h>
@@ -421,8 +422,13 @@ struct ovl_fh *ovl_encode_real_fh(struct ovl_fs *ofs, struct inode *realinode,
 	struct ovl_fh *fh;
 	int fh_type, dwords;
 	int buflen = MAX_HANDLE_SZ;
-	uuid_t *uuid = &realinode->i_sb->s_uuid;
+	uuid_t uuid;
+	struct kstatfs ks;
 	int err;
+
+	// RFC: dentry can't be NULL, uuid needs a type cast
+	realinode->i_sb->s_op->statfs(NULL, &ks);
+	uuid.b = ks.f_fsid;
 
 	/* Make sure the real fid stays 32bit aligned */
 	BUILD_BUG_ON(OVL_FH_FID_OFFSET % 4);
