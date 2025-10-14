@@ -243,7 +243,11 @@ static int aac_queuecommand(struct Scsi_Host *shost,
 {
 	aac_priv(cmd)->owner = AAC_OWNER_LOWLEVEL;
 
-	return aac_scsi_cmd(cmd) ? FAILED : 0;
+	if (WARN_ON_ONCE(aac_scsi_cmd(cmd))) {
+		cmd->result = DID_ERROR << 16;
+		scsi_done(cmd);
+	}
+	return 0;
 }
 
 /**
