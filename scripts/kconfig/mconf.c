@@ -18,6 +18,7 @@
 #include <strings.h>
 #include <signal.h>
 #include <unistd.h>
+#include <locale.h>
 
 #include <list.h>
 #include <xalloc.h>
@@ -930,6 +931,8 @@ int main(int ac, char **av)
 	int res;
 
 	signal(SIGINT, sig_handler);
+
+	setlocale(LC_ALL, "");
 
 	if (ac > 1 && strcmp(av[1], "-s") == 0) {
 		silent = 1;
