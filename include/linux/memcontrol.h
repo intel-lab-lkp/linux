@@ -341,27 +341,23 @@ enum page_memcg_data_flags {
 	__NR_MEMCG_DATA_FLAGS  = (1UL << 2),
 };
 
-#define __OBJEXTS_ALLOC_FAIL	MEMCG_DATA_OBJEXTS
 #define __FIRST_OBJEXT_FLAG	__NR_MEMCG_DATA_FLAGS
+#define __SECOND_OBJEXT_FLAG    (__FIRST_OBJEXT_FLAG << 1)
 
 #else /* CONFIG_MEMCG */
 
-#define __OBJEXTS_ALLOC_FAIL	(1UL << 0)
 #define __FIRST_OBJEXT_FLAG	(1UL << 0)
+#define __SECOND_OBJEXT_FLAG	(1UL << 0)
 
 #endif /* CONFIG_MEMCG */
 
 enum objext_flags {
-	/*
-	 * Use bit 0 with zero other bits to signal that slabobj_ext vector
-	 * failed to allocate. The same bit 0 with valid upper bits means
-	 * MEMCG_DATA_OBJEXTS.
-	 */
-	OBJEXTS_ALLOC_FAIL = __OBJEXTS_ALLOC_FAIL,
+	/* slabobj_ext vector failed to allocate */
+	OBJEXTS_ALLOC_FAIL = __FIRST_OBJEXT_FLAG,
 	/* slabobj_ext vector allocated with kmalloc_nolock() */
-	OBJEXTS_NOSPIN_ALLOC = __FIRST_OBJEXT_FLAG,
+	OBJEXTS_NOSPIN_ALLOC = __SECOND_OBJEXT_FLAG,
 	/* the next bit after the last actual flag */
-	__NR_OBJEXTS_FLAGS  = (__FIRST_OBJEXT_FLAG << 1),
+	__NR_OBJEXTS_FLAGS  = (__SECOND_OBJEXT_FLAG << 1),
 };
 
 #define OBJEXTS_FLAGS_MASK (__NR_OBJEXTS_FLAGS - 1)
