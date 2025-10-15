@@ -2587,7 +2587,7 @@ static bool is_dp2(u32 clock)
 	return false;
 }
 
-static bool is_hdmi_frl(u32 clock)
+bool intel_cx0_is_hdmi_frl(u32 clock)
 {
 	switch (clock) {
 	case 300000: /* 3 Gbps */
@@ -2614,7 +2614,7 @@ static int intel_get_c20_custom_width(u32 clock, bool dp)
 {
 	if (dp && is_dp2(clock))
 		return 2;
-	else if (is_hdmi_frl(clock))
+	else if (intel_cx0_is_hdmi_frl(clock))
 		return 1;
 	else
 		return 0;
@@ -2708,7 +2708,7 @@ static void intel_c20_pll_program(struct intel_display *display,
 	} else {
 		intel_cx0_rmw(encoder, owned_lane_mask, PHY_C20_VDR_CUSTOM_SERDES_RATE,
 			      BIT(7) | PHY_C20_CUSTOM_SERDES_MASK,
-			      is_hdmi_frl(port_clock) ? BIT(7) : 0,
+			      intel_cx0_is_hdmi_frl(port_clock) ? BIT(7) : 0,
 			      MB_WRITE_COMMITTED);
 
 		intel_cx0_write(encoder, INTEL_CX0_BOTH_LANES, PHY_C20_VDR_HDMI_RATE,
@@ -2768,7 +2768,7 @@ static void intel_program_port_clock_ctl(struct intel_encoder *encoder,
 
 	val |= XELPDP_FORWARD_CLOCK_UNGATE;
 
-	if (!is_dp && is_hdmi_frl(port_clock))
+	if (!is_dp && intel_cx0_is_hdmi_frl(port_clock))
 		val |= XELPDP_DDI_CLOCK_SELECT_PREP(display, XELPDP_DDI_CLOCK_SELECT_DIV18CLK);
 	else
 		val |= XELPDP_DDI_CLOCK_SELECT_PREP(display, XELPDP_DDI_CLOCK_SELECT_MAXPCLK);
