@@ -4052,6 +4052,44 @@ static int sanity_check_raw_super(struct f2fs_sb_info *sbi,
 	if (sanity_check_area_boundary(sbi, folio, index))
 		return -EFSCORRUPTED;
 
+	/*
+	 * Check for legacy summary layout on 16KB+ block devices.
+	 * Modern f2fs-tools packs multiple 4KB summary areas into one block,
+	 * whereas legacy versions used one block per summary, leading
+	 * to a much larger SSA.
+	 */
+	if (SUMS_PER_BLOCK > 1) {
+		unsigned int required_ssa_blocks;
+		unsigned int expected_ssa_segs;
+		unsigned int total_meta_segments, diff;
+		unsigned int segment_count_ssa =
+			le32_to_cpu(raw_super->segment_count_ssa);
+		unsigned int segs_per_zone = segs_per_sec * secs_per_zone;
+
+		required_ssa_blocks = DIV_ROUND_UP(segment_count_main,
+							SUMS_PER_BLOCK);
+		expected_ssa_segs = DIV_ROUND_UP(required_ssa_blocks,
+							blocks_per_seg);
+		total_meta_segments =
+			le32_to_cpu(raw_super->segment_count_ckpt) +
+			le32_to_cpu(raw_super->segment_count_sit) +
+			le32_to_cpu(raw_super->segment_count_nat) +
+			expected_ssa_segs;
+		diff = total_meta_segments % segs_per_zone;
+		if (diff)
+			expected_ssa_segs += segs_per_zone - diff;
+
+		if (segment_count_ssa > expected_ssa_segs) {
+			f2fs_info(sbi, "Error: Device formatted with a legacy "
+					"version. Please reformat.");
+			f2fs_info(sbi, "\tSSA segment count (%u) is larger "
+					"than expected (%u) for block "
+					"size (%lu).", segment_count_ssa,
+					expected_ssa_segs, F2FS_BLKSIZE);
+			return -EOPNOTSUPP;
+		}
+	}
+
 	return 0;
 }
 
