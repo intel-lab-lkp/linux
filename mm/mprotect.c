@@ -118,26 +118,30 @@ static int mprotect_folio_pte_batch(struct folio *folio, pte_t *ptep,
 	return folio_pte_batch_flags(folio, NULL, ptep, &pte, max_nr_ptes, flags);
 }
 
-static bool prot_numa_skip(struct vm_area_struct *vma, int target_node,
-		struct folio *folio)
+/**
+ * folio_needs_prot_numa() - Whether the folio needs prot numa
+ * @folio: The folio.
+ * @vma: The VMA mapping.
+ * @target_node: The numa node being accessed.
+ *
+ * Return: Returns true if folio needs prot numa and the access time of
+ *	   folio is adjusted. Returns false otherwise.
+ */
+bool folio_needs_prot_numa(struct folio *folio, struct vm_area_struct *vma,
+		int target_node)
 {
-	bool ret = true;
-	bool toptier;
 	int nid;
 
-	if (!folio)
-		goto skip;
-
-	if (folio_is_zone_device(folio) || folio_test_ksm(folio))
-		goto skip;
+	if (!folio || folio_is_zone_device(folio) || folio_test_ksm(folio))
+		return false;
 
 	/* Also skip shared copy-on-write folios */
 	if (is_cow_mapping(vma->vm_flags) && folio_maybe_mapped_shared(folio))
-		goto skip;
+		return false;
 
 	/* Folios are pinned and can't be migrated */
 	if (folio_maybe_dma_pinned(folio))
-		goto skip;
+		return false;
 
 	/*
 	 * While migration can move some dirty pages,
@@ -145,7 +149,7 @@ static bool prot_numa_skip(struct vm_area_struct *vma, int target_node,
 	 * context.
 	 */
 	if (folio_is_file_lru(folio) && folio_test_dirty(folio))
-		goto skip;
+		return false;
 
 	/*
 	 * Don't mess with PTEs if page is already on the node
@@ -153,23 +157,20 @@ static bool prot_numa_skip(struct vm_area_struct *vma, int target_node,
 	 */
 	nid = folio_nid(folio);
 	if (target_node == nid)
-		goto skip;
-
-	toptier = node_is_toptier(nid);
+		return false;
 
 	/*
 	 * Skip scanning top tier node if normal numa
 	 * balancing is disabled
 	 */
-	if (!(sysctl_numa_balancing_mode & NUMA_BALANCING_NORMAL) && toptier)
-		goto skip;
+	if (!(sysctl_numa_balancing_mode & NUMA_BALANCING_NORMAL) &&
+	    node_is_toptier(nid))
+		return false;
 
-	ret = false;
 	if (folio_use_access_time(folio))
 		folio_xchg_access_time(folio, jiffies_to_msecs(jiffies));
 
-skip:
-	return ret;
+	return true;
 }
 
 /* Set nr_ptes number of ptes, starting from idx */
@@ -314,8 +315,8 @@ static long change_pte_range(struct mmu_gather *tlb,
 			 * Avoid trapping faults against the zero or KSM
 			 * pages. See similar comment in change_huge_pmd.
 			 */
-			if (prot_numa && prot_numa_skip(vma, target_node,
-							folio)) {
+			if (prot_numa && !folio_needs_prot_numa(folio, vma,
+								target_node)) {
 				/* determine batch to skip */
 				nr_ptes = mprotect_folio_pte_batch(folio,
 					  pte, oldpte, max_nr_ptes, /* flags = */ 0);
