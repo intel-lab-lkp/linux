@@ -354,6 +354,14 @@ static int ocfs2_block_group_fill(handle_t *handle,
 	struct ocfs2_group_desc *bg = (struct ocfs2_group_desc *) bg_bh->b_data;
 	struct super_block * sb = alloc_inode->i_sb;
 
+	/* Validate chain index before accessing cl_recs array */
+	if (my_chain >= le16_to_cpu(cl->cl_count)) {
+		status = ocfs2_error(alloc_inode->i_sb,
+				     "chain index %u out of range (count=%u)\n",
+				     my_chain, le16_to_cpu(cl->cl_count));
+		goto bail;
+	}
+
 	if (((unsigned long long) bg_bh->b_blocknr) != group_blkno) {
 		status = ocfs2_error(alloc_inode->i_sb,
 				     "group block (%llu) != b_blocknr (%llu)\n",
