@@ -51,6 +51,7 @@
  */
 
 #include <asm-generic/codetag.lds.h>
+#include <linux/compiler_types.h>
 
 #ifndef LOAD_OFFSET
 #define LOAD_OFFSET 0
@@ -113,13 +114,20 @@ defined(CONFIG_AUTOFDO_CLANG) || defined(CONFIG_PROPELLER_CLANG)
 #define RODATA_MAIN .rodata .rodata.[0-9a-zA-Z_]* .rodata..L*
 #define BSS_MAIN .bss .bss.[0-9a-zA-Z_]* .bss..L* .bss..compoundliteral*
 #define SBSS_MAIN .sbss .sbss.[0-9a-zA-Z_]*
+#define BSEC_MAIN(sec) sec sec##.[0-9a-zA-Z_]*
 #else
 #define DATA_MAIN .data .data.rel .data.rel.local
 #define SDATA_MAIN .sdata
 #define RODATA_MAIN .rodata
 #define BSS_MAIN .bss
 #define SBSS_MAIN .sbss
+#define BSEC_MAIN(sec) sec
 #endif
+
+#define __KEEP_ACT_0(sec) KEEP(sec)
+#define __KEEP_ACT_1(sec) sec
+
+#define COND_KEEP(sec, list) __PASTE(__KEEP_ACT_, __is_defined(NOKEEP_##sec))(list)
 
 /*
  * GCC 4.5 and later have a 32 bytes section alignment for structures.
@@ -196,12 +204,12 @@ defined(CONFIG_AUTOFDO_CLANG) || defined(CONFIG_PROPELLER_CLANG)
 
 #define BOUNDED_SECTION_PRE_LABEL(_sec_, _label_, _BEGIN_, _END_)	\
 	_BEGIN_##_label_ = .;						\
-	KEEP(*(_sec_))							\
+	COND_KEEP(_sec_, *(BSEC_MAIN(_sec_)))				\
 	_END_##_label_ = .;
 
 #define BOUNDED_SECTION_POST_LABEL(_sec_, _label_, _BEGIN_, _END_)	\
 	_label_##_BEGIN_ = .;						\
-	KEEP(*(_sec_))							\
+	COND_KEEP(_sec_, *(BSEC_MAIN(_sec_)))				\
 	_label_##_END_ = .;
 
 #define BOUNDED_SECTION_BY(_sec_, _label_)				\
