@@ -54,7 +54,7 @@ typedef u32 bug_insn_t;
 #define ARCH_WARN_ASM(file, line, flags, size)			\
 		"1:\n\t"					\
 			"ebreak\n"				\
-			".pushsection __bug_table,\"aw\"\n\t"	\
+			PUSHSECTION(__bug_table, "aw")          \
 		"2:\n\t"					\
 		__BUG_ENTRY(file, line, flags) "\n\t"		\
 			".org 2b + " size "\n\t"                \

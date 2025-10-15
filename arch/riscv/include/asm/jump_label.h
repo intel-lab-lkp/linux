@@ -11,13 +11,14 @@
 
 #include <linux/types.h>
 #include <asm/asm.h>
+#include <linux/compiler.h>
 
 #define HAVE_JUMP_LABEL_BATCH
 
 #define JUMP_LABEL_NOP_SIZE 4
 
 #define JUMP_TABLE_ENTRY(key, label)			\
-	".pushsection	__jump_table, \"aw\"	\n\t"	\
+	PUSHSECTION(__jump_table, "aw")	                \
 	".align		" RISCV_LGPTR "		\n\t"	\
 	".long		1b - ., " label " - .	\n\t"	\
 	"" RISCV_PTR "	" key " - .		\n\t"	\
