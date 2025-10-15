@@ -6,12 +6,16 @@
 
 #include <drm/drm_print.h>
 
+#include "intel_crtc.h"
 #include "intel_de.h"
 #include "intel_display_regs.h"
 #include "intel_display_types.h"
 #include "intel_dp.h"
+#include "intel_psr.h"
 #include "intel_vrr.h"
 #include "intel_vrr_regs.h"
+#include "skl_prefill.h"
+#include "skl_watermark.h"
 
 #define FIXED_POINT_PRECISION		100
 #define CMRR_PRECISION_TOLERANCE	10
@@ -433,17 +437,70 @@ intel_vrr_max_guardband(struct intel_crtc_state *crtc_state)
 		   intel_vrr_max_vblank_guardband(crtc_state));
 }
 
+static
+int intel_vrr_compute_optimized_guardband(struct intel_crtc_state *crtc_state)
+{
+	struct intel_display *display = to_intel_display(crtc_state);
+	const struct drm_display_mode *adjusted_mode =
+		&crtc_state->hw.adjusted_mode;
+	struct skl_prefill_ctx prefill_ctx;
+	int prefill_framestart_delay = 1;
+	int prefill_min_guardband;
+	int prefill_latency_us;
+	int prefill_wm0_lines;
+	int prefill_sagv_us;
+	int psr_latency = 0;
+	int sdp_latency = 0;
+	int guardband;
+
+	skl_prefill_init_worst(&prefill_ctx, crtc_state);
+	prefill_wm0_lines = skl_wm0_prefill_lines_worst(crtc_state);
+	prefill_sagv_us = display->sagv.block_time_us;
+
+	prefill_latency_us = prefill_sagv_us +
+			     intel_scanlines_to_usecs(adjusted_mode,
+						      prefill_framestart_delay +
+						      prefill_wm0_lines);
+	prefill_min_guardband =
+		skl_prefill_min_guardband(&prefill_ctx,
+					  crtc_state,
+					  prefill_latency_us);
+
+	if (intel_crtc_has_dp_encoder(crtc_state)) {
+		psr_latency = intel_psr_max_link_wake_latency(crtc_state);
+		sdp_latency = intel_dp_compute_sdp_latency(crtc_state);
+	}
+
+	guardband = max(sdp_latency, psr_latency);
+
+	guardband = max(guardband, prefill_min_guardband);
+
+	return guardband;
+}
+
+static bool intel_vrr_use_optimized_guardband(const struct intel_crtc_state *crtc_state)
+{
+	struct intel_display *display = to_intel_display(crtc_state);
+
+	return intel_vrr_always_use_vrr_tg(display) || crtc_state->vrr.enable;
+}
+
 void intel_vrr_compute_guardband(struct intel_crtc_state *crtc_state)
 {
 	struct intel_display *display = to_intel_display(crtc_state);
 	struct drm_display_mode *adjusted_mode = &crtc_state->hw.adjusted_mode;
 	struct drm_display_mode *pipe_mode = &crtc_state->hw.pipe_mode;
+	int guardband;
 
 	if (!intel_vrr_possible(crtc_state))
 		return;
 
-	crtc_state->vrr.guardband = min(crtc_state->vrr.vmin - adjusted_mode->crtc_vdisplay,
-					intel_vrr_max_guardband(crtc_state));
+	if (intel_vrr_use_optimized_guardband(crtc_state))
+		guardband = intel_vrr_compute_optimized_guardband(crtc_state);
+	else
+		guardband = crtc_state->vrr.vmin - adjusted_mode->crtc_vdisplay;
+
+	crtc_state->vrr.guardband = min(guardband, intel_vrr_max_guardband(crtc_state));
 
 	if (intel_vrr_always_use_vrr_tg(display)) {
 		adjusted_mode->crtc_vblank_start  =
