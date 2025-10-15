@@ -20,6 +20,7 @@
 #include <linux/security.h>
 #include <linux/seq_file.h>
 #include <linux/irqflags.h>
+#include <linux/syscalls.h>
 #include <linux/debugfs.h>
 #include <linux/tracefs.h>
 #include <linux/pagemap.h>
@@ -4251,10 +4252,13 @@ static enum print_line_t print_trace_fmt(struct trace_iterator *iter)
 		 * safe to use if the array has delta offsets
 		 * Force printing via the fields.
 		 */
-		if ((tr->text_delta) &&
-		    event->type > __TRACE_LAST_TYPE)
+		if ((tr->text_delta)) {
+			/* ftrace and system call events are still OK */
+			if ((event->type > __TRACE_LAST_TYPE) &&
+			    (event->funcs != &enter_syscall_print_funcs) &&
+			    (event->funcs != &exit_syscall_print_funcs))
 			return print_event_fields(iter, event);
-
+		}
 		return event->funcs->trace(iter, sym_flags, event);
 	}
 
