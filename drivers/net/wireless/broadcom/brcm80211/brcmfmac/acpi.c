@@ -25,6 +25,8 @@ void brcmf_acpi_probe(struct device *dev, enum brcmf_bus_type bus_type,
 		settings->board_type = devm_kasprintf(dev, GFP_KERNEL,
 						      "apple,%s",
 						      o->string.pointer);
+		if (!settings->board_type)
+			return;
 	} else {
 		brcmf_dbg(INFO, "No ACPI module-instance\n");
 		return;
