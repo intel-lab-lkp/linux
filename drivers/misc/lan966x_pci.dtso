@@ -48,7 +48,7 @@
 			};
 
 			pci-ep-bus@0 {
-				compatible = "simple-bus";
+				compatible = "simple-platform-bus";
 				#address-cells = <1>;
 				#size-cells = <1>;
 
