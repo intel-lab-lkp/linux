@@ -12,12 +12,10 @@
  */
 extern phys_addr_t __fdt_pointer __initdata;
 extern u64 __cacheline_aligned boot_args[4];
+extern bool rodata_full;
 
 static inline bool arch_parse_debug_rodata(char *arg)
 {
-	extern bool rodata_enabled;
-	extern bool rodata_full;
-
 	if (!arg)
 		return false;
 
