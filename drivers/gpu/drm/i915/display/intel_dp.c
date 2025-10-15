@@ -6988,3 +6988,36 @@ void intel_dp_compute_config_late(struct intel_encoder *encoder,
 
 	intel_psr_compute_config_late(intel_dp, crtc_state);
 }
+
+static
+int intel_dp_get_sdp_latency(u32 type)
+{
+	switch (type) {
+	case DP_SDP_VSC_EXT_VESA:
+	case DP_SDP_VSC_EXT_CEA:
+		return 10;
+	case HDMI_PACKET_TYPE_GAMUT_METADATA:
+		return 8;
+	case DP_SDP_PPS:
+		return 6;
+	default:
+		break;
+	}
+
+	return 0;
+}
+
+int intel_dp_compute_sdp_latency(const struct intel_crtc_state *crtc_state)
+{
+	int sdp_latency = 0;
+
+	if (crtc_state->infoframes.enable &
+	    intel_hdmi_infoframe_enable(HDMI_PACKET_TYPE_GAMUT_METADATA))
+		sdp_latency = max(sdp_latency,
+				  intel_dp_get_sdp_latency(HDMI_PACKET_TYPE_GAMUT_METADATA));
+
+	if (crtc_state->dsc.compression_enable)
+		sdp_latency = max(sdp_latency, intel_dp_get_sdp_latency(DP_SDP_PPS));
+
+	return sdp_latency;
+}
