@@ -831,7 +831,7 @@ static void tcpm_log_source_caps(struct tcpm_port *port)
 				scnprintf(msg, sizeof(msg),
 					  "EPR AVS %u-%u mV %u W peak_current: %u",
 					  pdo_epr_avs_apdo_min_voltage_mv(pdo),
-					  pdo_epr_avs_apdo_min_voltage_mv(pdo),
+					  pdo_epr_avs_apdo_max_voltage_mv(pdo),
 					  pdo_epr_avs_apdo_pdp_w(pdo),
 					  pdo_epr_avs_apdo_src_peak_current(pdo));
 			else if (pdo_apdo_type(pdo) == APDO_TYPE_SPR_AVS)
