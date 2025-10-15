@@ -99,6 +99,7 @@ Below is the patch snippet used with 'cloud-ifupdown-helper' script found on
 Debian cloud images:
 
 ::
+
   @@ -27,6 +27,8 @@ do_setup() {
        local working="$cfgdir/.$INTERFACE"
        local final="$cfgdir/$INTERFACE"
@@ -175,6 +176,7 @@ completes, and it reattaches the VF to the VM and brings down the virtio-net
 interface.
 
 ::
+
   # reattach-vf.sh
   #!/bin/bash
 
