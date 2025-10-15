@@ -1333,6 +1333,16 @@ void drm_gem_vunmap(struct drm_gem_object *obj, struct iosys_map *map)
 }
 EXPORT_SYMBOL(drm_gem_vunmap);
 
+int drm_gem_sync(struct drm_gem_object *obj, size_t offset, size_t size,
+		 enum drm_gem_object_access_flags access)
+{
+	if (obj->funcs->sync)
+		return obj->funcs->sync(obj, offset, size, access);
+
+	return 0;
+}
+EXPORT_SYMBOL(drm_gem_sync);
+
 /**
  * drm_gem_lock_reservations - Sets up the ww context and acquires
  * the lock on an array of GEM objects.
