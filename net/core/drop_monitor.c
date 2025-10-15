@@ -38,9 +38,34 @@
 #include <trace/events/devlink.h>
 
 #include <linux/unaligned.h>
+#include <linux/debugfs.h>
 
 #define TRACE_ON 1
 #define TRACE_OFF 0
+
+static struct dentry *dm_debugfs_dir;
+static LIST_HEAD(dm_entry_list);
+static DEFINE_RAW_SPINLOCK(dm_entry_lock);
+
+#define DM_MAX_STACK_TRACE_ENTRIES 16
+#define DM_MAX_STACK_TRACE_SKIP 1
+
+struct dm_skb_info {
+	unsigned int len;
+	unsigned short protocol;
+};
+
+struct dm_entry {
+	struct list_head dm_list;
+	void *pc;
+	enum skb_drop_reason reason;
+	unsigned int stack_len;
+	unsigned long stack[DM_MAX_STACK_TRACE_ENTRIES];
+	struct dm_skb_info skb_info;
+};
+
+static unsigned int dm_trace_limit = 100;
+static void init_dm_entry(struct sk_buff *skb, void *location, enum skb_drop_reason reason);
 
 /*
  * Globals, our netlink socket pointer
@@ -268,6 +293,7 @@ static void trace_kfree_skb_hit(void *ignore, struct sk_buff *skb,
 				enum skb_drop_reason reason,
 				struct sock *rx_sk)
 {
+	init_dm_entry(skb, location, reason);
 	trace_drop_common(skb, location);
 }
 
@@ -501,6 +527,8 @@ static void net_dm_packet_trace_kfree_skb_hit(void *ignore,
 	struct net_dm_skb_cb *cb;
 	struct sk_buff *nskb;
 	unsigned long flags;
+
+	init_dm_entry(skb, location, reason);
 
 	if (!skb_mac_header_was_set(skb))
 		return;
@@ -1723,6 +1751,173 @@ static void net_dm_hw_cpu_data_fini(int cpu)
 	__net_dm_cpu_data_fini(hw_data);
 }
 
+static void init_dm_entry(struct sk_buff *skb, void *location, enum skb_drop_reason reason)
+{
+	struct dm_entry *entry;
+	unsigned long flags;
+
+	raw_spin_lock_irqsave(&dm_entry_lock, flags);
+	if (list_count_nodes(&dm_entry_list) >= dm_trace_limit) {
+		raw_spin_unlock_irqrestore(&dm_entry_lock, flags);
+		return;
+	}
+	raw_spin_unlock_irqrestore(&dm_entry_lock, flags);
+
+	entry = kzalloc(sizeof(*entry), GFP_ATOMIC);
+	if (!entry)
+		return;
+	entry->pc = location;
+	entry->reason = reason;
+	entry->skb_info.len = skb->len;
+	entry->skb_info.protocol = be16_to_cpu(skb->protocol);
+
+	raw_spin_lock_irqsave(&dm_entry_lock, flags);
+	entry->stack_len = stack_trace_save(entry->stack, ARRAY_SIZE(entry->stack),
+					    DM_MAX_STACK_TRACE_SKIP);
+	list_add_tail(&entry->dm_list, &dm_entry_list);
+	raw_spin_unlock_irqrestore(&dm_entry_lock, flags);
+}
+
+static void clear_dm_entry(void)
+{
+	struct dm_entry *entry, *tmp;
+
+	raw_spin_lock(&dm_entry_lock);
+	list_for_each_entry_safe(entry, tmp, &dm_entry_list, dm_list) {
+		list_del(&entry->dm_list);
+		kfree(entry);
+	}
+	raw_spin_unlock(&dm_entry_lock);
+}
+
+static void *dm_debugfs_seq_start(struct seq_file *seq, loff_t *pos)
+{
+	raw_spin_lock(&dm_entry_lock);
+	return seq_list_start_head(&dm_entry_list, *pos);
+}
+
+static void dm_debugfs_seq_stop(struct seq_file *seq, void *v)
+{
+	raw_spin_unlock(&dm_entry_lock);
+}
+
+static void *dm_debugfs_seq_next(struct seq_file *seq, void *v, loff_t *pos)
+{
+	return seq_list_next(v, &dm_entry_list, pos);
+}
+
+static const char *dm_show_reason_str(enum skb_drop_reason reason)
+{
+	const struct drop_reason_list *list;
+	unsigned int subsys, subsys_reason;
+
+	subsys = u32_get_bits(reason, SKB_DROP_REASON_SUBSYS_MASK);
+	if (subsys >= SKB_DROP_REASON_SUBSYS_NUM)
+		return NULL;
+	list = rcu_dereference(drop_reasons_by_subsys[subsys]);
+
+	subsys_reason = reason & ~SKB_DROP_REASON_SUBSYS_MASK;
+	if (subsys_reason >= list->n_reasons)
+		return NULL;
+	return list->reasons[subsys_reason];
+}
+
+static int dm_debugfs_seq_show(struct seq_file *seq, void *v)
+{
+	struct dm_entry *entry;
+	unsigned int i;
+
+	if (v == &dm_entry_list) {
+		seq_printf(seq, "drop count: %zu\n", list_count_nodes(&dm_entry_list));
+		return 0;
+	}
+
+	entry = list_entry(v, struct dm_entry, dm_list);
+	seq_puts(seq, "\n");
+	seq_printf(seq, "reason   : %s (%d)\n", dm_show_reason_str(entry->reason), entry->reason);
+	seq_printf(seq, "pc       : %pS\n", entry->pc);
+	seq_printf(seq, "len      : %d\n", entry->skb_info.len);
+	seq_printf(seq, "protocol : 0x%04x\n", entry->skb_info.protocol);
+	seq_puts(seq, "stack    :\n");
+	for (i = 0; i < entry->stack_len; i++)
+		seq_printf(seq, "  %pS\n", (void *)entry->stack[i]);
+	return 0;
+}
+
+static const struct seq_operations dm_debugfs_seq_ops = {
+	.start	= dm_debugfs_seq_start,
+	.next	= dm_debugfs_seq_next,
+	.stop	= dm_debugfs_seq_stop,
+	.show	= dm_debugfs_seq_show,
+};
+
+static int dm_debugfs_open(struct inode *inode, struct file *file)
+{
+	return seq_open(file, &dm_debugfs_seq_ops);
+}
+
+static void dm_debugfs_set_trace_sw(int state)
+{
+	mutex_lock(&net_dm_mutex);
+
+	if (state == TRACE_ON)
+		net_dm_monitor_start(true, false, NULL);
+	else
+		net_dm_monitor_stop(true, false, NULL);
+
+	mutex_unlock(&net_dm_mutex);
+}
+
+static ssize_t dm_debugfs_write(struct file *file, const char __user *user_buf,
+				size_t size, loff_t *ppos)
+{
+	char buf[64];
+	int buf_size;
+
+	buf_size = min(size, (sizeof(buf) - 1));
+	if (strncpy_from_user(buf, user_buf, buf_size) < 0)
+		return -EFAULT;
+	buf[buf_size] = 0;
+
+	if (strncmp(buf, "clear", strlen("clear")) == 0)
+		clear_dm_entry();
+	else if (strncmp(buf, "start", strlen("start")) == 0)
+		dm_debugfs_set_trace_sw(TRACE_ON);
+	else if (strncmp(buf, "stop", strlen("stop")) == 0)
+		dm_debugfs_set_trace_sw(TRACE_OFF);
+	else
+		return -EINVAL;
+
+	return size;
+}
+
+static const struct file_operations dm_debugfs_fops = {
+	.owner		= THIS_MODULE,
+	.open		= dm_debugfs_open,
+	.read		= seq_read,
+	.write		= dm_debugfs_write,
+	.llseek		= seq_lseek,
+	.release	= seq_release,
+};
+
+static void net_dm_create_debugfs(void)
+{
+	dm_debugfs_dir = debugfs_create_dir("drop_monitor", NULL);
+	if (IS_ERR_OR_NULL(dm_debugfs_dir)) {
+		pr_warn("Cannot create drop monitor debugfs directory\n");
+		return;
+	}
+
+	debugfs_create_u32("trace_limit", 0644, dm_debugfs_dir, &dm_trace_limit);
+	debugfs_create_file("trace", 0644, dm_debugfs_dir, NULL, &dm_debugfs_fops);
+}
+
+static void net_dm_destroy_debugfs(void)
+{
+	debugfs_remove_recursive(dm_debugfs_dir);
+	clear_dm_entry();
+}
+
 static int __init init_net_drop_monitor(void)
 {
 	int cpu, rc;
@@ -1754,6 +1949,7 @@ static int __init init_net_drop_monitor(void)
 
 	rc = 0;
 
+	net_dm_create_debugfs();
 	goto out;
 
 out_unreg:
@@ -1765,6 +1961,8 @@ out:
 static void exit_net_drop_monitor(void)
 {
 	int cpu;
+
+	net_dm_destroy_debugfs();
 
 	/*
 	 * Because of the module_get/put we do in the trace state change path
