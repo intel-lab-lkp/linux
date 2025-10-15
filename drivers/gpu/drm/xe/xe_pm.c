@@ -9,6 +9,7 @@
 #include <linux/fault-inject.h>
 #include <linux/pm_runtime.h>
 #include <linux/suspend.h>
+#include <linux/vgaarb.h>
 
 #include <drm/drm_managed.h>
 #include <drm/ttm/ttm_placement.h>
@@ -378,12 +379,16 @@ retry:
 
 static void xe_pm_vrsr_init(struct xe_device *xe)
 {
+	struct pci_dev *pdev = to_pci_dev(xe->drm.dev);
 	int ret;
 
 	if (!xe->info.has_vrsr)
 		return;
 
 	if (!xe_pm_vrsr_capable(xe))
+		return;
+
+	if (pdev != vga_default_device() || !xe_display_connected(xe))
 		return;
 
 	/*

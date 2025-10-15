@@ -54,6 +54,11 @@ bool xe_display_driver_probe_defer(struct pci_dev *pdev)
 	return intel_display_driver_probe_defer(pdev);
 }
 
+bool xe_display_connected(struct xe_device *xe)
+{
+	return intel_display_connected(xe->display);
+}
+
 /**
  * xe_display_driver_set_hooks - Add driver flags and hooks for display
  * @driver: DRM device driver
