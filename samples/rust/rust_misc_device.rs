@@ -12,6 +12,7 @@
 //! #include <errno.h>
 //! #include <fcntl.h>
 //! #include <unistd.h>
+//! #include <string.h>
 //! #include <sys/ioctl.h>
 //!
 //! #define RUST_MISC_DEV_FAIL _IO('|', 0)
@@ -19,9 +20,11 @@
 //! #define RUST_MISC_DEV_GET_VALUE _IOR('|', 0x81, int)
 //! #define RUST_MISC_DEV_SET_VALUE _IOW('|', 0x82, int)
 //!
+//! #define BUF_SIZE 16
 //! int main() {
 //!   int value, new_value;
 //!   int fd, ret;
+//!   char *buf[BUF_SIZE];
 //!
 //!   // Open the device file
 //!   printf("Opening /dev/rust-misc-device for reading and writing\n");
@@ -86,6 +89,40 @@
 //!     return -1;
 //!   }
 //!
+//!   // Write values to the buffer
+//!   char *w_buf = "ABCDEFG";
+//!   ret = write(fd, w_buf, strlen(w_buf));
+//!   if (ret < 0) {
+//!     perror("write");
+//!     close(fd);
+//!     return errno;
+//!   }
+//!   printf("Write values to the buffer: %.*s\n", ret, w_buf);
+//!
+//!   // Read values from the buffer
+//!   lseek(fd, 0, SEEK_SET);
+//!   ret = read(fd, buf, BUF_SIZE - 1);
+//!   if (ret < 0) {
+//!   	perror("read");
+//! 	close(fd);
+//! 	return errno;
+//!   }
+//!   buf[ret] = '\0';
+//!   printf("Read values from the buffer: %s\n", buf);
+//!
+//!   // Read value from the middle of the buffer
+//!   memset(buf, 0, sizeof(buf));
+//!   lseek(fd, 1, SEEK_SET);
+//!   lseek(fd, 2, SEEK_CUR);
+//!   ret = read(fd, buf, BUF_SIZE - 1);
+//!   if (ret < 0) {
+//!   	perror("read");
+//! 	close(fd);
+//! 	return errno;
+//!   }
+//!   buf[ret] = '\0';
+//!   printf("Read values from the middle of the buffer: %s\n", buf);
+//!
 //!   // Close the device file
 //!   printf("Closing /dev/rust-misc-device\n");
 //!   close(fd);
@@ -113,6 +150,9 @@ use kernel::{
 const RUST_MISC_DEV_HELLO: u32 = _IO('|' as u32, 0x80);
 const RUST_MISC_DEV_GET_VALUE: u32 = _IOR::<i32>('|' as u32, 0x81);
 const RUST_MISC_DEV_SET_VALUE: u32 = _IOW::<i32>('|' as u32, 0x82);
+
+const SEEK_SET: i32 = 0;
+const SEEK_CUR: i32 = 1;
 
 module! {
     type: RustMiscDeviceModule,
@@ -202,6 +242,34 @@ impl MiscDevice for RustMiscDevice {
         *kiocb.ki_pos_mut() = 0;
 
         Ok(len)
+    }
+
+    fn llseek(
+        me: Pin<&RustMiscDevice>,
+        file: &mut File,
+        offset: i64,
+        whence: i32,
+    ) -> Result<isize> {
+        dev_info!(me.dev, "LLSEEK Rust Misc Device Sample\n");
+        let pos: i64 = file.pos();
+
+        let new_pos = match whence {
+            SEEK_SET => offset,
+            SEEK_CUR => pos + offset,
+            _ => {
+                dev_err!(me.dev, "LLSEEK does not recognised: {}.\n", whence);
+                return Err(EINVAL);
+            }
+        };
+
+        if new_pos < 0 {
+            dev_err!(me.dev, "The file offset becomes negative: {}.\n", new_pos);
+            return Err(EINVAL);
+        }
+
+        *file.pos_mut() = new_pos;
+
+        Ok(new_pos as isize)
     }
 
     fn ioctl(me: Pin<&RustMiscDevice>, _file: &File, cmd: u32, arg: usize) -> Result<isize> {
