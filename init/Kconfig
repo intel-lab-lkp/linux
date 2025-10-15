@@ -1628,6 +1628,9 @@ config SYSFS_SYSCALL
 config HAVE_PCSPKR_PLATFORM
 	bool
 
+config HAVE_TRIM_UNUSED_SYSCALLS
+	bool
+
 menuconfig EXPERT
 	bool "Configure standard kernel features (expert users)"
 	# Unhide debug options, to make the on-by-default options visible
@@ -1919,6 +1922,36 @@ config CACHESTAT_SYSCALL
 	  pages marked for writeback, (recently) evicted pages).
 
 	  If unsure say Y here.
+
+config TRIM_UNUSED_SYSCALLS
+	bool "Trim unused syscalls" if EXPERT
+	default n
+	depends on HAVE_TRIM_UNUSED_SYSCALLS
+	depends on LD_DEAD_CODE_DATA_ELIMINATION
+	help
+	  Enable this option to trim unused system calls from the final kernel
+	  image. Only the syscalls explicitly listed in CONFIG_USED_SYSCALLS
+	  will be kept.
+
+	  Note that some unused syscalls may still be retained if their sections
+	  are forcibly kept by other sections created with .pushsection and
+	  preserved via KEEP() in the linker script.
+
+	  If unsure, say N.
+
+config USED_SYSCALLS
+	string "Configure used syscalls" if EXPERT
+	depends on TRIM_UNUSED_SYSCALLS
+	default ""
+	help
+	  Specify a list of system calls that should be kept when
+	  TRIM_UNUSED_SYSCALLS is enabled.
+
+	  The system calls should be listed one by one, separated by spaces.
+	  For example, set CONFIG_USED_SYSCALLS="write exit reboot". If left
+	  empty, all syscalls will be trimmed.
+
+	  If unsure, please disable TRIM_UNUSED_SYSCALLS.
 
 config KALLSYMS
 	bool "Load all symbols for debugging/ksymoops" if EXPERT
