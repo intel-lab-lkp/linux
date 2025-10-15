@@ -154,7 +154,6 @@ static int hinic3_alloc_txrxqs(struct net_device *netdev)
 
 err_free_rxqs:
 	hinic3_free_rxqs(netdev);
-
 err_free_txqs:
 	hinic3_free_txqs(netdev);
 
@@ -557,17 +556,14 @@ err_uninit_nic_feature:
 	hinic3_unregister_notifier();
 	hinic3_update_nic_feature(nic_dev, 0);
 	hinic3_set_nic_feature_to_hw(nic_dev);
-
 err_uninit_sw:
 	hinic3_sw_uninit(netdev);
-
 err_free_nic_io:
 	hinic3_free_nic_io(nic_dev);
 err_free_nic_dev:
 	hinic3_free_nic_dev(netdev);
 err_free_netdev:
 	free_netdev(netdev);
-
 err_unregister_adev_event:
 	hinic3_adev_event_unregister(adev);
 	dev_err(&pdev->dev, "NIC service probe failed\n");
