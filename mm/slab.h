@@ -547,6 +547,28 @@ static inline struct slabobj_ext *slab_obj_exts(struct slab *slab)
 	return (struct slabobj_ext *)(obj_exts & ~OBJEXTS_FLAGS_MASK);
 }
 
+/*
+ * objexts_clear_alloc_fail -  Clear the OBJEXTS_ALLOC_FAIL for
+ * the slab object extension vector associated with a slab.
+ * @slab: a pointer to the slab struct
+ */
+static inline void objexts_clear_alloc_fail(struct slab *slab)
+{
+	unsigned long obj_exts = READ_ONCE(slab->obj_exts);
+
+#ifdef CONFIG_MEMCG
+	/*
+	 * obj_exts should be either NULL, a valid pointer with
+	 * MEMCG_DATA_OBJEXTS bit set or be equal to OBJEXTS_ALLOC_FAIL.
+	 */
+	VM_BUG_ON_PAGE(obj_exts && !(obj_exts & MEMCG_DATA_OBJEXTS) &&
+		       obj_exts != OBJEXTS_ALLOC_FAIL, slab_page(slab));
+	VM_BUG_ON_PAGE(obj_exts & MEMCG_DATA_KMEM, slab_page(slab));
+#endif
+
+	obj_exts &= ~OBJEXTS_ALLOC_FAIL;
+	WRITE_ONCE(slab->obj_exts, obj_exts);
+}
 int alloc_slab_obj_exts(struct slab *slab, struct kmem_cache *s,
                         gfp_t gfp, bool new_slab);
 
@@ -555,6 +577,10 @@ int alloc_slab_obj_exts(struct slab *slab, struct kmem_cache *s,
 static inline struct slabobj_ext *slab_obj_exts(struct slab *slab)
 {
 	return NULL;
+}
+
+static inline void objexts_clear_alloc_fail(struct slab *slab)
+{
 }
 
 #endif /* CONFIG_SLAB_OBJ_EXT */

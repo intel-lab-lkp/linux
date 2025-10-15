@@ -2169,6 +2169,12 @@ static inline void free_slab_obj_exts(struct slab *slab)
 {
 	struct slabobj_ext *obj_exts;
 
+	/*
+	 * If obj_exts allocation failed, slab->obj_exts is set to OBJEXTS_ALLOC_FAIL,
+	 * Therefore, we should clear the OBJEXTS_ALLOC_FAIL flag first when freeing a slab.
+	 */
+	objexts_clear_alloc_fail(slab);
+
 	obj_exts = slab_obj_exts(slab);
 	if (!obj_exts)
 		return;
