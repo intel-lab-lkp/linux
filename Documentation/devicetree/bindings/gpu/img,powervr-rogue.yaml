@@ -15,6 +15,12 @@ properties:
     oneOf:
       - items:
           - enum:
+              - renesas,r8a7796-gpu
+              - renesas,r8a77961-gpu
+          - const: img,img-gx6250
+          - const: img,img-rogue
+      - items:
+          - enum:
               - ti,am62-gpu
           - const: img,img-axe-1-16m
           # This deprecated element must be kept around to allow old kernels to
@@ -145,6 +151,29 @@ allOf:
       properties:
         clocks:
           maxItems: 1
+
+  - if:
+      properties:
+        compatible:
+          contains:
+            enum:
+              - renesas,r8a7796-gpu
+              - renesas,r8a77961-gpu
+    then:
+      properties:
+        clocks:
+          minItems: 3
+        clock-names:
+          minItems: 3
+        power-domains:
+          items:
+            - description: Power domain A
+            - description: Power domain B
+        power-domain-names:
+          minItems: 2
+      required:
+        - power-domains
+        - power-domain-names
 
 examples:
   - |
