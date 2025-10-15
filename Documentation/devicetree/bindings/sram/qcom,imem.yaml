@@ -14,11 +14,10 @@ description:
   transactions.
 
 properties:
-  compatible:
+  compatible: # Don't grow this list. Please use mmio-sram if possible
     items:
       - enum:
           - qcom,apq8064-imem
-          - qcom,ipq5424-imem
           - qcom,msm8226-imem
           - qcom,msm8974-imem
           - qcom,msm8976-imem
