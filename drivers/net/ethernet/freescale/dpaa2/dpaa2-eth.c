@@ -1439,7 +1439,7 @@ static netdev_tx_t __dpaa2_eth_tx(struct sk_buff *skb,
 		percpu_extras->tx_sg_frames++;
 		percpu_extras->tx_sg_bytes += skb->len;
 		fd_len = dpaa2_fd_get_len(fd);
-	} else if (skb_headroom(skb) < needed_headroom) {
+	} else if (skb_headroom(skb) <= needed_headroom) {
 		err = dpaa2_eth_build_sg_fd_single_buf(priv, skb, fd, &swa);
 		percpu_extras->tx_sg_frames++;
 		percpu_extras->tx_sg_bytes += skb->len;
