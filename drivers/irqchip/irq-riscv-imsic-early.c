@@ -117,7 +117,7 @@ static void imsic_handle_irq(struct irq_desc *desc)
 			continue;
 		}
 
-		generic_handle_irq(lpriv->vectors[local_id].irq);
+		generic_handle_irq_desc(lpriv->vectors[local_id].desc);
 	}
 
 	chained_irq_exit(chip, desc);

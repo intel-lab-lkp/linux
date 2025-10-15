@@ -179,7 +179,8 @@ static bool __imsic_local_sync(struct imsic_local_priv *lpriv)
 			tvec = vec->local_id == mvec->local_id ?
 				NULL : &lpriv->vectors[mvec->local_id];
 
-			if (tvec && !irq_can_move_in_process_context(irq_get_irq_data(vec->irq)) &&
+			if (tvec &&
+			    !irq_can_move_in_process_context(irq_desc_get_irq_data(vec->desc)) &&
 			    __imsic_id_read_clear_pending(tvec->local_id)) {
 				/* Retrigger temporary vector if it was already in-use */
 				if (READ_ONCE(tvec->enable)) {
@@ -434,7 +435,7 @@ void imsic_vector_debug_show_summary(struct seq_file *m, int ind)
 }
 #endif
 
-struct imsic_vector *imsic_vector_alloc(unsigned int irq, const struct cpumask *mask)
+struct imsic_vector *imsic_vector_alloc(struct irq_desc *desc, const struct cpumask *mask)
 {
 	struct imsic_vector *vec = NULL;
 	struct imsic_local_priv *lpriv;
@@ -450,7 +451,7 @@ struct imsic_vector *imsic_vector_alloc(unsigned int irq, const struct cpumask *
 
 	lpriv = per_cpu_ptr(imsic->lpriv, cpu);
 	vec = &lpriv->vectors[local_id];
-	vec->irq = irq;
+	vec->desc = desc;
 	vec->enable = false;
 	vec->move_next = NULL;
 	vec->move_prev = NULL;
@@ -463,7 +464,7 @@ void imsic_vector_free(struct imsic_vector *vec)
 	unsigned long flags;
 
 	raw_spin_lock_irqsave(&imsic->matrix_lock, flags);
-	vec->irq = 0;
+	vec->desc = NULL;
 	irq_matrix_free(imsic->matrix, vec->cpu, vec->local_id, false);
 	raw_spin_unlock_irqrestore(&imsic->matrix_lock, flags);
 }
@@ -516,7 +517,6 @@ static int __init imsic_local_init(void)
 			vec = &lpriv->vectors[i];
 			vec->cpu = cpu;
 			vec->local_id = i;
-			vec->irq = 0;
 		}
 	}
 

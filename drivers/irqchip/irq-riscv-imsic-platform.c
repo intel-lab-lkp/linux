@@ -131,7 +131,7 @@ static int imsic_irq_set_affinity(struct irq_data *d, const struct cpumask *mask
 		return -EBUSY;
 
 	/* Get a new vector on the desired set of CPUs */
-	new_vec = imsic_vector_alloc(old_vec->irq, mask_val);
+	new_vec = imsic_vector_alloc(old_vec->desc, mask_val);
 	if (!new_vec)
 		return -ENOSPC;
 
@@ -225,13 +225,14 @@ static struct irq_chip imsic_irq_base_chip = {
 static int imsic_irq_domain_alloc(struct irq_domain *domain, unsigned int virq,
 				  unsigned int nr_irqs, void *args)
 {
+	struct irq_data *data = irq_get_irq_data(virq);
 	struct imsic_vector *vec;
 
 	/* Multi-MSI is not supported yet. */
 	if (nr_irqs > 1)
 		return -EOPNOTSUPP;
 
-	vec = imsic_vector_alloc(virq, cpu_online_mask);
+	vec = imsic_vector_alloc(irq_data_to_desc(data), cpu_online_mask);
 	if (!vec)
 		return -ENOSPC;
 
@@ -239,7 +240,7 @@ static int imsic_irq_domain_alloc(struct irq_domain *domain, unsigned int virq,
 			    handle_edge_irq, NULL, NULL);
 	irq_set_noprobe(virq);
 	irq_set_affinity(virq, cpu_online_mask);
-	irq_data_update_effective_affinity(irq_get_irq_data(virq), cpumask_of(vec->cpu));
+	irq_data_update_effective_affinity(data, cpumask_of(vec->cpu));
 
 	return 0;
 }
