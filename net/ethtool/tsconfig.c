@@ -416,7 +416,7 @@ static int ethnl_set_tsconfig(struct ethnl_req_info *req_base,
 			kfree_rcu(__hwprov, rcu_head);
 	}
 
-	if (config_mod) {
+	if (config_mod || hwprov_mod) {
 		ret = dev_set_hwtstamp_phylib(dev, &hwtst_config,
 					      info->extack);
 		if (ret < 0)
