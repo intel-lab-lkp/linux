@@ -177,7 +177,7 @@ static int uvc_start_streaming_video(struct vb2_queue *vq, unsigned int count)
 
 	ret = uvc_pm_get(stream->dev);
 	if (ret)
-		return ret;
+		goto return_buffers;
 
 	queue->buf_used = 0;
 
@@ -187,6 +187,7 @@ static int uvc_start_streaming_video(struct vb2_queue *vq, unsigned int count)
 
 	uvc_pm_put(stream->dev);
 
+return_buffers:
 	uvc_queue_return_buffers(queue, UVC_BUF_STATE_QUEUED);
 
 	return ret;
