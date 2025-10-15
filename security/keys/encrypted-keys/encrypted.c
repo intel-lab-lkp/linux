@@ -590,7 +590,7 @@ static struct encrypted_key_payload *encrypted_key_alloc(struct key *key,
 	if (ret < 0 || dlen < MIN_DATA_SIZE || dlen > MAX_DATA_SIZE)
 		return ERR_PTR(-EINVAL);
 
-	format_len = (!format) ? strlen(key_format_default) : strlen(format);
+	format_len = strlen(format ?: key_format_default);
 	decrypted_datalen = dlen;
 	payload_datalen = decrypted_datalen;
 
@@ -713,7 +713,7 @@ static void __ekey_init(struct encrypted_key_payload *epayload,
 {
 	unsigned int format_len;
 
-	format_len = (!format) ? strlen(key_format_default) : strlen(format);
+	format_len = strlen(format ?: key_format_default);
 	epayload->format = epayload->payload_data + epayload->payload_datalen;
 	epayload->master_desc = epayload->format + format_len + 1;
 	epayload->datalen = epayload->master_desc + strlen(master_desc) + 1;
