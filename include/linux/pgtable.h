@@ -228,8 +228,8 @@ static inline int pmd_dirty(pmd_t pmd)
  * of the lazy mode. So the implementation must assume preemption may be enabled
  * and cpu migration is possible; it must take steps to be robust against this.
  * (In practice, for user PTE updates, the appropriate page table lock(s) are
- * held, but for kernel PTE updates, no lock is held). The mode cannot be used
- * in interrupt context.
+ * held, but for kernel PTE updates, no lock is held). The mode is disabled
+ * in interrupt context and calls to the lazy_mmu API have no effect.
  *
  * The lazy MMU mode is enabled for a given block of code using:
  *
@@ -265,6 +265,9 @@ static inline void lazy_mmu_mode_enable(void)
 {
 	struct lazy_mmu_state *state = &current->lazy_mmu_state;
 
+	if (in_interrupt())
+		return;
+
 	VM_BUG_ON(state->count == U8_MAX);
 	/* enable() must not be called while paused */
 	VM_WARN_ON(state->count > 0 && !state->enabled);
@@ -279,6 +282,9 @@ static inline void lazy_mmu_mode_enable(void)
 static inline void lazy_mmu_mode_disable(void)
 {
 	struct lazy_mmu_state *state = &current->lazy_mmu_state;
+
+	if (in_interrupt())
+		return;
 
 	VM_BUG_ON(state->count == 0);
 	VM_WARN_ON(!state->enabled);
@@ -297,6 +303,9 @@ static inline void lazy_mmu_mode_pause(void)
 {
 	struct lazy_mmu_state *state = &current->lazy_mmu_state;
 
+	if (in_interrupt())
+		return;
+
 	VM_WARN_ON(state->count == 0 || !state->enabled);
 
 	state->enabled = false;
@@ -306,6 +315,9 @@ static inline void lazy_mmu_mode_pause(void)
 static inline void lazy_mmu_mode_resume(void)
 {
 	struct lazy_mmu_state *state = &current->lazy_mmu_state;
+
+	if (in_interrupt())
+		return;
 
 	VM_WARN_ON(state->count == 0 || state->enabled);
 
