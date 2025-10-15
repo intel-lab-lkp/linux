@@ -518,6 +518,7 @@ static void acpi_device_release(struct device *dev)
 	acpi_free_properties(acpi_dev);
 	acpi_free_pnp_ids(&acpi_dev->pnp);
 	acpi_free_power_resources_lists(acpi_dev);
+	mutex_destroy(&acpi_dev->power.aux_pwr_lock);
 	kfree(acpi_dev);
 }
 
@@ -746,6 +747,8 @@ int acpi_device_add(struct acpi_device *device)
 	INIT_LIST_HEAD(&device->physical_node_list);
 	INIT_LIST_HEAD(&device->del_list);
 	mutex_init(&device->physical_node_lock);
+	mutex_init(&device->power.aux_pwr_lock);
+	device->power.dev = NULL;
 
 	mutex_lock(&acpi_device_lock);
 

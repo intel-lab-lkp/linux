@@ -1477,6 +1477,7 @@ int pci_acpi_request_d3cold_aux_power(struct pci_dev *dev, u32 requested_mw,
 	union acpi_object *out_obj;
 	int result, ret = -EINVAL;
 	struct pci_dev *bdev;
+	struct acpi_device *adev;
 
 	if (!dev || PCI_FUNC(dev->devfn) != 0)
 		return -EINVAL;
@@ -1485,6 +1486,19 @@ int pci_acpi_request_d3cold_aux_power(struct pci_dev *dev, u32 requested_mw,
 
 	if (IS_ERR(bdev))
 		return PTR_ERR(bdev);
+
+	adev = ACPI_COMPANION(&bdev->dev);
+	if (!adev)
+		return -EINVAL;
+
+	guard(mutex)(&adev->power.aux_pwr_lock);
+
+	/* Check if aux power already granted to different device */
+	if (adev->power.dev && adev->power.dev != &dev->dev) {
+		pci_info(to_pci_dev(adev->power.dev), "D3cold Aux Power request already granted: %u mW\n",
+			 adev->power.aux_power_limit);
+		return -EPERM;
+	}
 
 	out_obj = acpi_evaluate_dsm_typed(ACPI_HANDLE(&bdev->dev),
 					  &pci_acpi_dsm_guid, 4,
@@ -1501,14 +1515,20 @@ int pci_acpi_request_d3cold_aux_power(struct pci_dev *dev, u32 requested_mw,
 	case AUX_PWR_REQ_DENIED:
 		pci_dbg(bdev, "D3cold Aux Power %u mW request denied\n",
 			requested_mw);
+		adev->power.aux_power_limit = 0;
+		adev->power.dev = NULL;
 		break;
 	case AUX_PWR_REQ_GRANTED:
 		pci_info(bdev, "D3cold Aux Power request granted: %u mW\n",
 			 requested_mw);
+		adev->power.aux_power_limit = requested_mw;
+		adev->power.dev = &dev->dev;
 		ret = 0;
 		break;
 	case AUX_PWR_REQ_NO_MAIN_PWR_REMOVAL:
 		pci_info(bdev, "D3cold Aux Power: Main power won't be removed\n");
+		adev->power.aux_power_limit = 0;
+		adev->power.dev = NULL;
 		ret = -EBUSY;
 		break;
 	default:
@@ -1524,6 +1544,8 @@ int pci_acpi_request_d3cold_aux_power(struct pci_dev *dev, u32 requested_mw,
 			pci_err(bdev, "D3cold Aux Power: Reserved or unsupported response: 0x%x\n",
 				result);
 		}
+		adev->power.aux_power_limit = 0;
+		adev->power.dev = NULL;
 		break;
 	}
 
