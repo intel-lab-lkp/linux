@@ -1192,6 +1192,8 @@ static void stmmac_get_mm_stats(struct net_device *ndev,
 static const struct ethtool_ops stmmac_ethtool_ops = {
 	.supported_coalesce_params = ETHTOOL_COALESCE_USECS |
 				     ETHTOOL_COALESCE_MAX_FRAMES,
+	.supported_hwtstamp_qualifiers = BIT(HWTSTAMP_PROVIDER_QUALIFIER_PRECISE) |
+					 BIT(HWTSTAMP_PROVIDER_QUALIFIER_APPROX),
 	.get_drvinfo = stmmac_ethtool_getdrvinfo,
 	.get_msglevel = stmmac_ethtool_getmsglevel,
 	.set_msglevel = stmmac_ethtool_setmsglevel,

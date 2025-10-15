@@ -675,6 +675,14 @@ static int stmmac_hwtstamp_set(struct net_device *dev,
 
 	priv->systime_flags = STMMAC_HWTS_ACTIVE;
 
+	/* This is the "coarse" mode, where we get lower frequency adjustment
+	 * precision, but better timestamping precision. This is useful when
+	 * acting as a grand-master, as we usually sync with a hgh-previcision
+	 * clock through PPS input. We default to "fine" mode.
+	 */
+	if (config->qualifier == HWTSTAMP_PROVIDER_QUALIFIER_APPROX)
+		priv->systime_flags &= ~PTP_TCR_TSCFUPDT;
+
 	if (priv->hwts_tx_en || priv->hwts_rx_en) {
 		priv->systime_flags |= tstamp_all | ptp_v2 |
 				       ptp_over_ethernet | ptp_over_ipv6_udp |
@@ -683,6 +691,12 @@ static int stmmac_hwtstamp_set(struct net_device *dev,
 	}
 
 	stmmac_config_hw_tstamping(priv, priv->ptpaddr, priv->systime_flags);
+
+	/* Switching between coarse/fine mode also requires updating the
+	 * subsecond increment
+	 */
+	if (priv->plat->clk_ptp_rate)
+		stmmac_update_subsecond_increment(priv);
 
 	priv->tstamp_config = *config;
 
