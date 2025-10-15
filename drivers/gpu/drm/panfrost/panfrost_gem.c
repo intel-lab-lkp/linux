@@ -365,6 +365,26 @@ panfrost_gem_set_label(struct drm_gem_object *obj, const char *label)
 	kfree_const(old_label);
 }
 
+int
+panfrost_gem_sync(struct drm_gem_object *obj, u32 flags,
+		  u32 offset, u32 size)
+{
+	struct panfrost_gem_object *bo = to_panfrost_bo(obj);
+	enum drm_gem_object_access_flags gem_access_flags = 0;
+
+	if (flags & PANFROST_BO_SYNC_FOR_DEV)
+		gem_access_flags |= DRM_GEM_OBJECT_DEV_ACCESS;
+	else
+		gem_access_flags |= DRM_GEM_OBJECT_CPU_ACCESS;
+
+	if (flags & PANFROST_BO_SYNC_FOR_READ)
+		gem_access_flags |= DRM_GEM_OBJECT_READ_ACCESS;
+	if (flags & PANFROST_BO_SYNC_FOR_WRITE)
+		gem_access_flags |= DRM_GEM_OBJECT_WRITE_ACCESS;
+
+	return drm_gem_shmem_sync(&bo->base, offset, size, gem_access_flags);
+}
+
 void
 panfrost_gem_internal_set_label(struct drm_gem_object *obj, const char *label)
 {
