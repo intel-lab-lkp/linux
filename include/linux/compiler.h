@@ -3,6 +3,7 @@
 #define __LINUX_COMPILER_H
 
 #include <linux/compiler_types.h>
+#include <linux/stringify.h>
 
 #ifndef __ASSEMBLY__
 
@@ -267,7 +268,47 @@ static inline void *offset_to_ptr(const int *off)
 	return (void *)((unsigned long)off + *off);
 }
 
-#endif /* __ASSEMBLY__ */
+#ifdef CONFIG_PUSHSECTION_WITH_RELOC
+#define __PUSHSECTION_RELOC(lbl) ".reloc ., BFD_RELOC_NONE, " lbl "\n\t"
+#define __PUSHSECTION_HELPER(prefix) __stringify(prefix.%=) "_" __stringify(__COUNTER__)
+#define __PUSHSECTION_LABEL(lbl) lbl ":\n\t"
+#else
+#define __PUSHSECTION_RELOC(lbl)
+#define __PUSHSECTION_HELPER(prefix) __stringify(prefix)
+#define __PUSHSECTION_LABEL(lbl)
+#endif
+
+#define _PUSHSECTION(lbl, sec, ...)					\
+	__PUSHSECTION_RELOC(lbl)					\
+	".pushsection " sec ", " #__VA_ARGS__ "\n\t" __PUSHSECTION_LABEL(lbl)
+
+#define PUSHSECTION(sec, ...)						\
+	_PUSHSECTION(__PUSHSECTION_HELPER(.Lsec), __PUSHSECTION_HELPER(sec), __VA_ARGS__)
+
+#else /* __ASSEMBLY__ */
+
+#ifdef CONFIG_PUSHSECTION_WITH_RELOC
+#define __PUSHSECTION_RELOC .reloc ., BFD_RELOC_NONE, \label
+#define __PUSHSECTION_HELPER(prefix) prefix\().\@
+#define __PUSHSECTION_LABEL \label:
+#else
+#define __PUSHSECTION_RELOC
+#define __PUSHSECTION_HELPER(prefix) prefix
+#define __PUSHSECTION_LABEL
+#endif
+
+.macro  _PUSHSECTION label:req, section:req, args:vararg
+	__PUSHSECTION_RELOC
+	.pushsection __PUSHSECTION_HELPER(\section), \args
+	__PUSHSECTION_LABEL
+.endm
+
+.macro  PUSHSECTION section:req, args:vararg
+	_PUSHSECTION .Lsec\@, \section, \args
+.endm
+
+#endif /* !__ASSEMBLY__ */
+
 
 #ifdef CONFIG_64BIT
 #define ARCH_SEL(a,b) a
