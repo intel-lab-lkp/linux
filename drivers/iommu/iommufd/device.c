@@ -436,13 +436,14 @@ iommufd_device_attach_reserved_iova(struct iommufd_device *idev,
 
 /* The device attach/detach/replace helpers for attach_handle */
 
-static bool iommufd_device_is_attached(struct iommufd_device *idev,
-				       ioasid_t pasid)
+bool iommufd_device_is_attached(struct iommufd_device *idev, ioasid_t pasid)
 {
 	struct iommufd_attach *attach;
 
+	lockdep_assert_held(&idev->igroup->lock);
+
 	attach = xa_load(&idev->igroup->pasid_attach, pasid);
-	return xa_load(&attach->device_array, idev->obj.id);
+	return attach && xa_load(&attach->device_array, idev->obj.id);
 }
 
 static int iommufd_hwpt_pasid_compat(struct iommufd_hw_pagetable *hwpt,

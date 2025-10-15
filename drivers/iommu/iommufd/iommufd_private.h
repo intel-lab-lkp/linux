@@ -502,6 +502,7 @@ iommufd_get_device(struct iommufd_ucmd *ucmd, u32 id)
 
 void iommufd_device_pre_destroy(struct iommufd_object *obj);
 void iommufd_device_destroy(struct iommufd_object *obj);
+bool iommufd_device_is_attached(struct iommufd_device *idev, ioasid_t pasid);
 int iommufd_get_hw_info(struct iommufd_ucmd *ucmd);
 
 struct iommufd_access {
