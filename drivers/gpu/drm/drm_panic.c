@@ -873,6 +873,7 @@ static void drm_panic(struct kmsg_dumper *dumper, struct kmsg_dump_detail *detai
  */
 #ifdef CONFIG_DRM_PANIC_DEBUG
 #include <linux/debugfs.h>
+#include <linux/vmalloc.h>
 
 static ssize_t debugfs_trigger_write(struct file *file, const char __user *user_buf,
 				     size_t count, loff_t *ppos)
@@ -901,8 +902,122 @@ static void debugfs_register_plane(struct drm_plane *plane, int index)
 	debugfs_create_file(fname, 0200, plane->dev->debugfs_root,
 			    plane, &dbg_drm_panic_ops);
 }
+
+/*
+ * Draw test interface
+ * This can be used to check the panic screen at any resolution/pixel format.
+ * The framebuffer memory is freed when the file is closed, so use this sh
+ * script to write the parameters and read the result without closing the file.
+ * cd /sys/kernel/debug/drm_panic/
+ * exec 3<> draw_test
+ * echo 1024x768:XR24 >&3
+ * cat <&3 > ~/panic_screen.raw
+ * exec 3<&-
+ */
+static ssize_t debugfs_drawtest_write(struct file *file, const char __user *user_buf,
+				      size_t count, loff_t *ppos)
+{
+	struct drm_scanout_buffer *sb = (struct drm_scanout_buffer *) file->private_data;
+	size_t fb_size;
+	void *fb;
+	char buf[64];
+	int width;
+	int height;
+	char cc1, cc2, cc3, cc4;
+	u32 drm_format;
+
+	if (count >= sizeof(buf))
+		return -EINVAL;
+
+	if (copy_from_user(buf, user_buf, count))
+		return -EFAULT;
+
+	if (sscanf(buf, "%dx%d:%c%c%c%c", &width, &height, &cc1, &cc2, &cc3, &cc4) != 6) {
+		pr_err("Invalid format. Expected: <width>x<height>:<fourcc>\n");
+		return -EINVAL;
+	}
+
+	drm_format = fourcc_code(cc1, cc2, cc3, cc4);
+	sb->format = drm_format_info(drm_format);
+	if (!sb->format)
+		return -EINVAL;
+
+	drm_panic_set_description("Test drawing from debugfs");
+
+	sb->width = width;
+	sb->height = height;
+	sb->pitch[0] = width * sb->format->cpp[0];
+
+	if (sb->map[0].vaddr)
+		vfree(sb->map[0].vaddr);
+
+	fb_size = height * sb->pitch[0];
+	fb = vmalloc(fb_size);
+	iosys_map_set_vaddr(&sb->map[0], fb);
+
+	draw_panic_dispatch(sb);
+
+	drm_panic_clear_description();
+	return count;
+}
+
+static ssize_t debugfs_drawtest_read(struct file *file, char __user *user_buf,
+				      size_t count, loff_t *ppos)
+{
+	struct drm_scanout_buffer *sb = (struct drm_scanout_buffer *) file->private_data;
+	int fb_size = sb->height * sb->pitch[0];
+
+	if (!sb->map[0].vaddr)
+		return 0;
+	return simple_read_from_buffer(user_buf, count, ppos, sb->map[0].vaddr, fb_size);
+}
+
+static int debugfs_drawtest_open(struct inode *inode, struct file *file)
+{
+	struct drm_scanout_buffer *sb = kzalloc(sizeof(*sb), GFP_KERNEL);
+
+	if (!sb)
+		return -ENOMEM;
+
+	file->private_data = sb;
+	return 0;
+}
+
+static int debugfs_drawtest_release(struct inode *inode, struct file *file)
+{
+	struct drm_scanout_buffer *sb = (struct drm_scanout_buffer *) file->private_data;
+
+	vfree(sb->map[0].vaddr);
+	kfree(sb);
+	return 0;
+}
+
+static const struct file_operations dbg_drm_panic_test_ops = {
+	.owner = THIS_MODULE,
+	.write = debugfs_drawtest_write,
+	.read = debugfs_drawtest_read,
+	.open = debugfs_drawtest_open,
+	.release = debugfs_drawtest_release,
+};
+
+static struct dentry *drm_panic_debugfs_dir;
+
+static void debugfs_register_drawtest(void)
+{
+	drm_panic_debugfs_dir = debugfs_create_dir("drm_panic", NULL);
+	debugfs_create_file("draw_test", 0600, drm_panic_debugfs_dir,
+			    NULL, &dbg_drm_panic_test_ops);
+}
+
+static void debugfs_unregister_drawtest(void)
+{
+	debugfs_remove(drm_panic_debugfs_dir);
+}
+
 #else
 static void debugfs_register_plane(struct drm_plane *plane, int index) {}
+static void debugfs_register_drawtest(void) {}
+static void debugfs_unregister_drawtest(void) {}
 #endif /* CONFIG_DRM_PANIC_DEBUG */
 
 /**
@@ -977,6 +1092,7 @@ void drm_panic_unregister(struct drm_device *dev)
 void __init drm_panic_init(void)
 {
 	drm_panic_qr_init();
+	debugfs_register_drawtest();
 }
 
 /**
@@ -985,6 +1101,7 @@ void __init drm_panic_init(void)
 void drm_panic_exit(void)
 {
 	drm_panic_qr_exit();
+	debugfs_unregister_drawtest();
 }
 
 #ifdef CONFIG_DRM_KUNIT_TEST
