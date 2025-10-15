@@ -1,9 +1,10 @@
 // SPDX-License-Identifier: MIT
 /* Copyright © 2025 Intel Corporation */
 
+#include "display/intel_display_core.h"
+#include "display/intel_display_rpm.h"
+
 #include "i915_drv.h"
-#include "intel_display_core.h"
-#include "intel_display_rpm.h"
 #include "intel_runtime_pm.h"
 
 static struct intel_runtime_pm *display_to_rpm(struct intel_display *display)

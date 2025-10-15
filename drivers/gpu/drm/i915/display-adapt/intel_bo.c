@@ -3,11 +3,12 @@
 
 #include <drm/drm_panic.h>
 
+#include "display/intel_bo.h"
+
 #include "gem/i915_gem_mman.h"
 #include "gem/i915_gem_object.h"
 #include "gem/i915_gem_object_frontbuffer.h"
 #include "i915_debugfs.h"
-#include "intel_bo.h"
 
 bool intel_bo_is_tiled(struct drm_gem_object *obj)
 {

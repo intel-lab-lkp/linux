@@ -7,11 +7,12 @@
 
 #include "gem/i915_gem_object.h"
 
+#include "display/intel_display_core.h"
+#include "display/intel_display_types.h"
+#include "display/intel_fb.h"
+#include "display/intel_fb_bo.h"
+
 #include "i915_drv.h"
-#include "intel_display_core.h"
-#include "intel_display_types.h"
-#include "intel_fb.h"
-#include "intel_fb_bo.h"
 
 void intel_fb_bo_framebuffer_fini(struct drm_gem_object *obj)
 {

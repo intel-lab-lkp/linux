@@ -5,10 +5,13 @@
 
 #include <linux/fb.h>
 
+#include "display/intel_display_core.h"
+#include "display/intel_display_types.h"
+#include "display/intel_fb.h"
+#include "display/intel_fbdev_fb.h"
 #include "gem/i915_gem_lmem.h"
 
 #include "i915_drv.h"
-#include "intel_fbdev_fb.h"
 
 struct drm_gem_object *intel_fbdev_fb_bo_create(struct drm_device *drm, int size)
 {
