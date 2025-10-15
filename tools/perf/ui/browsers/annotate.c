@@ -1161,6 +1161,9 @@ int __hist_entry__tui_annotate(struct hist_entry *he, struct map_symbol *ms,
 			if (!annotation__has_source(notes))
 				ui__warning("Annotation has no source code.");
 		}
+	} else if (evsel__get_arch(evsel, &browser.arch)) {
+		ui__error("Couldn't get architecture for event '%s'", evsel->name);
+		return -1;
 	}
 
 	/* Copy necessary information when it's called from perf top */
