@@ -621,6 +621,10 @@ TEST_FAIL_NTH(basic_fail_nth, access_pin_domain)
 /* device.c */
 TEST_FAIL_NTH(basic_fail_nth, device)
 {
+	struct iommu_option cmd = {
+		.size = sizeof(cmd),
+		.op = IOMMU_OPTION_OP_SET,
+	};
 	struct iommu_hwpt_selftest data = {
 		.iotlb = IOMMU_TEST_IOTLB_DEFAULT,
 	};
@@ -632,6 +636,7 @@ TEST_FAIL_NTH(basic_fail_nth, device)
 	uint32_t ioas_id;
 	uint32_t ioas_id2;
 	uint32_t idev_id;
+	uint32_t idev_id2;
 	uint32_t hwpt_id;
 	uint32_t viommu_id;
 	uint32_t hw_queue_id;
@@ -741,6 +746,22 @@ TEST_FAIL_NTH(basic_fail_nth, device)
 		return -1;
 
 	self->pasid = 0;
+
+	if (_test_cmd_mock_domain_flags(self->fd, ioas_id,
+					MOCK_FLAGS_DEVICE_NO_ATTACH, NULL, NULL,
+					&idev_id2))
+		return -1;
+
+	cmd.object_id = idev_id2;
+	cmd.option_id = IOMMU_OPTION_SW_MSI_START;
+	cmd.val64 = 0x70000000;
+	if (ioctl(self->fd, IOMMU_OPTION, &cmd))
+		return -1;
+
+	cmd.option_id = IOMMU_OPTION_SW_MSI_SIZE;
+	cmd.val64 = 2;
+	if (ioctl(self->fd, IOMMU_OPTION, &cmd))
+		return -1;
 
 	return 0;
 }

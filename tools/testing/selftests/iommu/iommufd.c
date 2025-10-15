@@ -336,6 +336,111 @@ TEST_F(change_process, basic)
 	ASSERT_EQ(child, waitpid(child, NULL, 0));
 }
 
+FIXTURE(iommufd_sw_msi)
+{
+	int fd;
+	uint32_t ioas_id;
+	uint32_t idev_id[2];
+};
+
+FIXTURE_SETUP(iommufd_sw_msi)
+{
+	self->fd = open("/dev/iommu", O_RDWR);
+	ASSERT_NE(-1, self->fd);
+
+	test_ioctl_ioas_alloc(&self->ioas_id);
+	test_cmd_mock_domain(self->ioas_id, NULL, NULL, &self->idev_id[0]);
+	test_cmd_mock_domain_flags(self->ioas_id, MOCK_FLAGS_DEVICE_NO_ATTACH,
+				   NULL, NULL, &self->idev_id[1]);
+}
+
+FIXTURE_TEARDOWN(iommufd_sw_msi)
+{
+	teardown_iommufd(self->fd, _metadata);
+}
+
+TEST_F(iommufd_sw_msi, basic)
+{
+	struct iommu_option cmd = {
+		.size = sizeof(cmd),
+		.op = IOMMU_OPTION_OP_SET,
+	};
+
+	/* Negative case: object_id must be a device id */
+	cmd.object_id = self->ioas_id;
+	cmd.option_id = IOMMU_OPTION_SW_MSI_START;
+	cmd.val64 = 0x70000000;
+	EXPECT_ERRNO(ENOENT, ioctl(self->fd, IOMMU_OPTION, &cmd));
+	cmd.object_id = 0;
+	cmd.option_id = IOMMU_OPTION_SW_MSI_SIZE;
+	cmd.val64 = 2;
+	EXPECT_ERRNO(ENOENT, ioctl(self->fd, IOMMU_OPTION, &cmd));
+
+	/* Negative case: device must not be attached already */
+	if (self->idev_id[0]) {
+		cmd.object_id = self->idev_id[0];
+		cmd.option_id = IOMMU_OPTION_SW_MSI_START;
+		cmd.val64 = 0x70000000;
+		EXPECT_ERRNO(EBUSY, ioctl(self->fd, IOMMU_OPTION, &cmd));
+	}
+
+	/* Device isn't attached yet */
+	if (self->idev_id[1]) {
+		/* Negative case: alignment failures */
+		cmd.object_id = self->idev_id[1];
+		cmd.option_id = IOMMU_OPTION_SW_MSI_START;
+		cmd.val64 = 0x7fffffff;
+		EXPECT_ERRNO(EINVAL, ioctl(self->fd, IOMMU_OPTION, &cmd));
+		cmd.val64 = 0x7fffff00;
+		EXPECT_ERRNO(EINVAL, ioctl(self->fd, IOMMU_OPTION, &cmd));
+		cmd.val64 = 0x7fff0000;
+		EXPECT_ERRNO(EINVAL, ioctl(self->fd, IOMMU_OPTION, &cmd));
+
+		/* Negative case: overlap against [0x80000000, 0x80ffffff] */
+		cmd.option_id = IOMMU_OPTION_SW_MSI_START;
+		cmd.val64 = 0x80000000;
+		EXPECT_ERRNO(EADDRINUSE, ioctl(self->fd, IOMMU_OPTION, &cmd));
+		cmd.val64 = 0x80400000;
+		EXPECT_ERRNO(EADDRINUSE, ioctl(self->fd, IOMMU_OPTION, &cmd));
+		cmd.val64 = 0x80800000;
+		EXPECT_ERRNO(EADDRINUSE, ioctl(self->fd, IOMMU_OPTION, &cmd));
+		cmd.val64 = 0x80c00000;
+		EXPECT_ERRNO(EADDRINUSE, ioctl(self->fd, IOMMU_OPTION, &cmd));
+		/* Though an address that starts 1MB below will be okay ... */
+		cmd.val64 = 0x7ff00000;
+		ASSERT_EQ(0, ioctl(self->fd, IOMMU_OPTION, &cmd));
+		/* ... but not with a 2MB size */
+		cmd.option_id = IOMMU_OPTION_SW_MSI_SIZE;
+		cmd.val64 = 2;
+		EXPECT_ERRNO(EADDRINUSE, ioctl(self->fd, IOMMU_OPTION, &cmd));
+
+		/* Negative case: overflows with the 2MB size */
+		cmd.option_id = IOMMU_OPTION_SW_MSI_START;
+		cmd.val64 = UINT64_MAX - 1 * 1024 * 1024 + 1;
+		ASSERT_EQ(0, ioctl(self->fd, IOMMU_OPTION, &cmd));
+		cmd.option_id = IOMMU_OPTION_SW_MSI_SIZE;
+		cmd.val64 = 2;
+		EXPECT_ERRNO(EOVERFLOW, ioctl(self->fd, IOMMU_OPTION, &cmd));
+
+		/* Set a safe 2MB window */
+		cmd.option_id = IOMMU_OPTION_SW_MSI_START;
+		cmd.val64 = 0x70000000;
+		ASSERT_EQ(0, ioctl(self->fd, IOMMU_OPTION, &cmd));
+		cmd.option_id = IOMMU_OPTION_SW_MSI_SIZE;
+		cmd.val64 = 2;
+		ASSERT_EQ(0, ioctl(self->fd, IOMMU_OPTION, &cmd));
+
+		/* Read them back to verify */
+		cmd.op = IOMMU_OPTION_OP_GET;
+		cmd.option_id = IOMMU_OPTION_SW_MSI_START;
+		ASSERT_EQ(0, ioctl(self->fd, IOMMU_OPTION, &cmd));
+		ASSERT_EQ(cmd.val64, 0x70000000);
+		cmd.option_id = IOMMU_OPTION_SW_MSI_SIZE;
+		ASSERT_EQ(0, ioctl(self->fd, IOMMU_OPTION, &cmd));
+		ASSERT_EQ(cmd.val64, 2);
+	}
+}
+
 FIXTURE(iommufd_ioas)
 {
 	int fd;
