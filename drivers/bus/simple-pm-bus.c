@@ -158,5 +158,42 @@ static struct platform_driver simple_pm_bus_driver = {
 
 module_platform_driver(simple_pm_bus_driver);
 
+static int simple_platform_bus_probe(struct platform_device *pdev)
+{
+	struct device *dev = &pdev->dev;
+	struct device_node *np = dev->of_node;
+
+	if (np)
+		of_platform_populate(np, NULL, NULL, dev);
+
+	return 0;
+}
+
+static void simple_platform_bus_remove(struct platform_device *pdev)
+{
+	struct device *dev = &pdev->dev;
+	struct device_node *np = dev->of_node;
+
+	if (np)
+		of_platform_depopulate(dev);
+}
+
+static const struct of_device_id simple_platform_bus_of_match[] = {
+	{ .compatible = "simple-platform-bus", },
+	{ /* sentinel */ }
+};
+MODULE_DEVICE_TABLE(of, simple_platform_bus_of_match);
+
+static struct platform_driver simple_platform_bus_driver = {
+	.probe = simple_platform_bus_probe,
+	.remove = simple_platform_bus_remove,
+	.driver = {
+		.name = "simple-platform-bus",
+		.of_match_table = simple_platform_bus_of_match,
+	},
+};
+
+module_platform_driver(simple_platform_bus_driver);
+
 MODULE_DESCRIPTION("Simple Power-Managed Bus Driver");
 MODULE_AUTHOR("Geert Uytterhoeven <geert+renesas@glider.be>");
