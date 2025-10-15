@@ -1213,6 +1213,9 @@ void btrfs_check_leaked_roots(const struct btrfs_fs_info *fs_info)
 #ifdef CONFIG_BTRFS_DEBUG
 	struct btrfs_root *root;
 
+	if (!fs_info->allocated_roots.next)
+		return;
+
 	while (!list_empty(&fs_info->allocated_roots)) {
 		char buf[BTRFS_ROOT_NAME_BUF_LEN];
 
