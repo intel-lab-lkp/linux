@@ -96,7 +96,6 @@ static struct iommufd_group *iommufd_get_group(struct iommufd_ctx *ictx,
 	kref_init(&new_igroup->ref);
 	mutex_init(&new_igroup->lock);
 	xa_init(&new_igroup->pasid_attach);
-	new_igroup->sw_msi_start = PHYS_ADDR_MAX;
 	/* group reference moves into new_igroup */
 	new_igroup->group = group;
 
@@ -272,6 +271,7 @@ struct iommufd_device *iommufd_device_bind(struct iommufd_ctx *ictx,
 	refcount_inc(&idev->obj.users);
 	/* igroup refcount moves into iommufd_device */
 	idev->igroup = igroup;
+	idev->sw_msi_start = PHYS_ADDR_MAX;
 
 	/*
 	 * If the caller fails after this success it must call
@@ -367,13 +367,13 @@ static unsigned int iommufd_group_device_num(struct iommufd_group *igroup,
 }
 
 #ifdef CONFIG_IRQ_MSI_IOMMU
-static int iommufd_group_setup_msi(struct iommufd_group *igroup,
-				   struct iommufd_hwpt_paging *hwpt_paging)
+static int iommufd_device_setup_msi(struct iommufd_device *idev,
+				    struct iommufd_hwpt_paging *hwpt_paging)
 {
-	struct iommufd_ctx *ictx = igroup->ictx;
+	struct iommufd_ctx *ictx = idev->ictx;
 	struct iommufd_sw_msi_map *cur;
 
-	if (igroup->sw_msi_start == PHYS_ADDR_MAX)
+	if (idev->sw_msi_start == PHYS_ADDR_MAX)
 		return 0;
 
 	/*
@@ -383,8 +383,8 @@ static int iommufd_group_setup_msi(struct iommufd_group *igroup,
 	list_for_each_entry(cur, &ictx->sw_msi_list, sw_msi_item) {
 		int rc;
 
-		if (cur->sw_msi_start != igroup->sw_msi_start ||
-		    !test_bit(cur->id, igroup->required_sw_msi.bitmap))
+		if (cur->sw_msi_start != idev->sw_msi_start ||
+		    !test_bit(cur->id, idev->igroup->required_sw_msi.bitmap))
 			continue;
 
 		rc = iommufd_sw_msi_install(ictx, hwpt_paging, cur);
@@ -395,8 +395,8 @@ static int iommufd_group_setup_msi(struct iommufd_group *igroup,
 }
 #else
 static inline int
-iommufd_group_setup_msi(struct iommufd_group *igroup,
-			struct iommufd_hwpt_paging *hwpt_paging)
+iommufd_device_setup_msi(struct iommufd_device *idev,
+			 struct iommufd_hwpt_paging *hwpt_paging)
 {
 	return 0;
 }
@@ -420,12 +420,12 @@ iommufd_device_attach_reserved_iova(struct iommufd_device *idev,
 
 	rc = iopt_table_enforce_dev_resv_regions(&hwpt_paging->ioas->iopt,
 						 idev->dev,
-						 &igroup->sw_msi_start);
+						 &idev->sw_msi_start);
 	if (rc)
 		return rc;
 
 	if (iommufd_group_first_attach(igroup, IOMMU_NO_PASID)) {
-		rc = iommufd_group_setup_msi(igroup, hwpt_paging);
+		rc = iommufd_device_setup_msi(idev, hwpt_paging);
 		if (rc) {
 			iopt_remove_reserved_iova(&hwpt_paging->ioas->iopt,
 						  idev->dev);
@@ -745,9 +745,10 @@ iommufd_group_remove_reserved_iova(struct iommufd_group *igroup,
 }
 
 static int
-iommufd_group_do_replace_reserved_iova(struct iommufd_group *igroup,
-				       struct iommufd_hwpt_paging *hwpt_paging)
+iommufd_device_do_replace_reserved_iova(struct iommufd_device *idev,
+					struct iommufd_hwpt_paging *hwpt_paging)
 {
+	struct iommufd_group *igroup = idev->igroup;
 	struct iommufd_hwpt_paging *old_hwpt_paging;
 	struct iommufd_attach *attach;
 	struct iommufd_device *cur;
@@ -767,7 +768,7 @@ iommufd_group_do_replace_reserved_iova(struct iommufd_group *igroup,
 		}
 	}
 
-	rc = iommufd_group_setup_msi(igroup, hwpt_paging);
+	rc = iommufd_device_setup_msi(idev, hwpt_paging);
 	if (rc)
 		goto err_unresv;
 	return 0;
@@ -813,7 +814,7 @@ iommufd_device_do_replace(struct iommufd_device *idev, ioasid_t pasid,
 	}
 
 	if (attach_resv) {
-		rc = iommufd_group_do_replace_reserved_iova(igroup, hwpt_paging);
+		rc = iommufd_device_do_replace_reserved_iova(idev, hwpt_paging);
 		if (rc)
 			goto err_unlock;
 	}

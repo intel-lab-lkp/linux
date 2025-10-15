@@ -472,7 +472,6 @@ struct iommufd_group {
 	struct iommu_group *group;
 	struct xarray pasid_attach;
 	struct iommufd_sw_msi_maps required_sw_msi;
-	phys_addr_t sw_msi_start;
 };
 
 /*
@@ -490,6 +489,7 @@ struct iommufd_device {
 	bool enforce_cache_coherency;
 	struct iommufd_vdevice *vdev;
 	bool destroying;
+	phys_addr_t sw_msi_start;
 };
 
 static inline struct iommufd_device *
