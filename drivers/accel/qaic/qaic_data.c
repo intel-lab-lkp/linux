@@ -15,6 +15,7 @@
 #include <linux/math64.h>
 #include <linux/mm.h>
 #include <linux/moduleparam.h>
+#include <linux/overflow.h>
 #include <linux/scatterlist.h>
 #include <linux/spinlock.h>
 #include <linux/srcu.h>
@@ -1305,17 +1306,17 @@ static int __qaic_execute_bo_ioctl(struct drm_device *dev, void *data, struct dr
 	u64 received_ts;
 	u32 queue_level;
 	u64 submit_ts;
+	size_t size;
 	int rcu_id;
 	u32 head;
 	u32 tail;
-	u64 size;
 	int ret;
 
 	received_ts = ktime_get_ns();
 
 	size = is_partial ? sizeof(struct qaic_partial_execute_entry) : sizeof(*exec);
-	n = (unsigned long)size * args->hdr.count;
-	if (args->hdr.count == 0 || n / args->hdr.count != size)
+	if (args->hdr.count == 0 ||
+	    check_mul_overflow((unsigned long)size, (unsigned long)args->hdr.count, &n))
 		return -EINVAL;
 
 	user_data = u64_to_user_ptr(args->data);
