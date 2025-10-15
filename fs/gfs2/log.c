@@ -427,7 +427,8 @@ static void ail2_empty(struct gfs2_sbd *sdp, unsigned int new_tail)
  */
 
 bool gfs2_log_is_empty(struct gfs2_sbd *sdp) {
-	return atomic_read(&sdp->sd_log_blks_free) == sdp->sd_jdesc->jd_blocks;
+	return sdp->sd_jdesc &&
+	       atomic_read(&sdp->sd_log_blks_free) == sdp->sd_jdesc->jd_blocks;
 }
 
 static bool __gfs2_log_try_reserve_revokes(struct gfs2_sbd *sdp, unsigned int revokes)
