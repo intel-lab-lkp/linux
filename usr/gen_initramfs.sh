@@ -223,7 +223,7 @@ while [ $# -gt 0 ]; do
 			;;
 		"-d")	# date for file mtimes
 			timestamp="$(date -d"$1" +%s || :)"
-			if test -n "$timestamp"; then
+			if test -n "$timestamp" && test "$timestamp" -ge 0; then
 				timestamp="-t $timestamp"
 			fi
 			shift
