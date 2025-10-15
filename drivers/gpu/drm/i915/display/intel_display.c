@@ -126,6 +126,7 @@
 #include "intel_vga.h"
 #include "intel_vrr.h"
 #include "intel_wm.h"
+#include "skl_prefill.h"
 #include "skl_scaler.h"
 #include "skl_universal_plane.h"
 #include "skl_watermark.h"
@@ -4191,6 +4192,57 @@ static int hsw_compute_linetime_wm(struct intel_atomic_state *state,
 	return 0;
 }
 
+static int intel_crtc_guardband_atomic_check(struct intel_atomic_state *state,
+					     struct intel_crtc *crtc)
+{
+	struct intel_display *display = to_intel_display(crtc);
+	struct intel_crtc_state *crtc_state =
+		intel_atomic_get_new_crtc_state(state, crtc);
+	const struct drm_display_mode *adjusted_mode =
+		&crtc_state->hw.adjusted_mode;
+	struct skl_prefill_ctx prefill_ctx;
+	int prefill_framestart_delay = 1;
+	int prefill_min_guardband;
+	int prefill_latency_us;
+	int prefill_wm0_lines;
+	int prefill_sagv_us;
+	int psr_latency = 0;
+	int sdp_latency = 0;
+	int min_guardband;
+	int guardband;
+
+	skl_prefill_init(&prefill_ctx, crtc_state);
+	prefill_wm0_lines = skl_wm0_prefill_lines(crtc_state);
+	prefill_sagv_us = display->sagv.block_time_us;
+	prefill_latency_us = prefill_sagv_us +
+			     intel_scanlines_to_usecs(adjusted_mode,
+						      prefill_framestart_delay +
+						      prefill_wm0_lines);
+	prefill_min_guardband =
+		skl_prefill_min_guardband(&prefill_ctx,
+					  crtc_state,
+					  prefill_latency_us);
+
+	if (intel_crtc_has_dp_encoder(crtc_state)) {
+		psr_latency = intel_psr_max_link_wake_latency(crtc_state);
+		sdp_latency = intel_dp_compute_sdp_latency(crtc_state);
+	}
+
+	min_guardband = max(sdp_latency, psr_latency);
+
+	min_guardband = max(min_guardband, prefill_min_guardband);
+
+	guardband = intel_crtc_vblank_length(crtc_state);
+
+	if (guardband < min_guardband) {
+		drm_dbg_kms(display->drm, "actual guardband: %d shorter than min guardband: %d\n",
+			    guardband, min_guardband);
+		return -EINVAL;
+	}
+
+	return 0;
+}
+
 static int intel_crtc_atomic_check(struct intel_atomic_state *state,
 				   struct intel_crtc *crtc)
 {
@@ -4250,6 +4302,10 @@ static int intel_crtc_atomic_check(struct intel_atomic_state *state,
 	}
 
 	ret = intel_psr2_sel_fetch_update(state, crtc);
+	if (ret)
+		return ret;
+
+	ret = intel_crtc_guardband_atomic_check(state, crtc);
 	if (ret)
 		return ret;
 
