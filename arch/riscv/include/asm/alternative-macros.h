@@ -2,9 +2,11 @@
 #ifndef __ASM_ALTERNATIVE_MACROS_H
 #define __ASM_ALTERNATIVE_MACROS_H
 
+#include <linux/compiler.h>
+
 #ifdef CONFIG_RISCV_ALTERNATIVE
 
-#ifdef __ASSEMBLER__
+#ifdef __ASSEMBLY__
 
 .macro ALT_ENTRY oldptr newptr vendor_id patch_id new_len
 	.4byte \oldptr - .
@@ -16,7 +18,7 @@
 
 .macro ALT_NEW_CONTENT vendor_id, patch_id, enable = 1, new_c
 	.if \enable
-	.pushsection .alternative, "a"
+	PUSHSECTION .alternative, "a"
 	ALT_ENTRY 886b, 888f, \vendor_id, \patch_id, 889f - 888f
 	.popsection
 	.subsection 1
@@ -67,7 +69,7 @@
 
 #define ALT_NEW_CONTENT(vendor_id, patch_id, enable, new_c)		\
 	".if " __stringify(enable) " == 1\n"				\
-	".pushsection .alternative, \"a\"\n"				\
+	PUSHSECTION(.alternative, "a")					\
 	ALT_ENTRY("886b", "888f", __stringify(vendor_id), __stringify(patch_id), "889f - 888f") \
 	".popsection\n"							\
 	".subsection 1\n"						\
