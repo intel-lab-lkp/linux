@@ -1465,6 +1465,7 @@ struct super_block {
 
 	spinlock_t		s_inode_wblist_lock;
 	struct list_head	s_inodes_wb;	/* writeback inodes */
+	unsigned int		s_min_writeback_pages;
 } __randomize_layout;
 
 static inline struct user_namespace *i_user_ns(const struct inode *inode)
