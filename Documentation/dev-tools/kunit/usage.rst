@@ -1205,7 +1205,8 @@ For example:
 
 		// Create a fake device.
 		fake_device = kunit_device_register(test, "my_device");
-		KUNIT_ASSERT_NOT_ERR_OR_NULL(test, fake_device)
+		if (IS_ERR(fake_device))
+			return;
 
 		// Pass it to functions which need a device.
 		dev_managed_string = devm_kstrdup(fake_device, "Hello, World!");
