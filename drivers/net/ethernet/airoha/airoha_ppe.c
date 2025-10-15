@@ -32,6 +32,30 @@ static const struct rhashtable_params airoha_l2_flow_table_params = {
 	.automatic_shrinking = true,
 };
 
+static int airoha_ppe_get_num_stats_entries(struct airoha_ppe *ppe,
+					    u32 *num_stats)
+{
+#ifdef CONFIG_NET_AIROHA_FLOW_STATS
+	*num_stats = PPE1_STATS_NUM_ENTRIES;
+	return 0;
+#else
+	return -EOPNOTSUPP;
+#endif /* CONFIG_NET_AIROHA_FLOW_STATS */
+}
+
+static int airoha_ppe_get_total_num_stats_entries(struct airoha_ppe *ppe,
+						  u32 *num_stats)
+{
+	int err;
+
+	err = airoha_ppe_get_num_stats_entries(ppe, num_stats);
+	if (err)
+		return err;
+
+	*num_stats = *num_stats * PPE_NUM;
+	return 0;
+}
+
 static bool airoha_ppe2_is_enabled(struct airoha_eth *eth)
 {
 	return airoha_fe_rr(eth, REG_PPE_GLO_CFG(1)) & PPE_GLO_CFG_EN_MASK;
@@ -48,6 +72,7 @@ static void airoha_ppe_hw_init(struct airoha_ppe *ppe)
 {
 	u32 sram_tb_size, sram_num_entries, dram_num_entries;
 	struct airoha_eth *eth = ppe->eth;
+	u32 sram_num_stats_entries;
 	int i;
 
 	sram_tb_size = PPE_SRAM_NUM_ENTRIES * sizeof(struct airoha_foe_entry);
@@ -103,8 +128,12 @@ static void airoha_ppe_hw_init(struct airoha_ppe *ppe)
 	}
 
 	if (airoha_ppe2_is_enabled(eth)) {
-		sram_num_entries =
-			PPE_RAM_NUM_ENTRIES_SHIFT(PPE1_SRAM_NUM_DATA_ENTRIES);
+		sram_num_entries = PPE1_SRAM_NUM_ENTRIES;
+		if (!airoha_ppe_get_num_stats_entries(ppe,
+						      &sram_num_stats_entries))
+			sram_num_entries -= sram_num_stats_entries;
+		sram_num_entries = PPE_RAM_NUM_ENTRIES_SHIFT(sram_num_entries);
+
 		airoha_fe_rmw(eth, REG_PPE_TB_CFG(0),
 			      PPE_SRAM_TB_NUM_ENTRY_MASK |
 			      PPE_DRAM_TB_NUM_ENTRY_MASK,
@@ -120,8 +149,12 @@ static void airoha_ppe_hw_init(struct airoha_ppe *ppe)
 			      FIELD_PREP(PPE_DRAM_TB_NUM_ENTRY_MASK,
 					 dram_num_entries));
 	} else {
-		sram_num_entries =
-			PPE_RAM_NUM_ENTRIES_SHIFT(PPE_SRAM_NUM_DATA_ENTRIES);
+		sram_num_entries = PPE_SRAM_NUM_ENTRIES;
+		if (!airoha_ppe_get_total_num_stats_entries(ppe,
+							    &sram_num_stats_entries))
+			sram_num_entries -= sram_num_stats_entries;
+		sram_num_entries = PPE_RAM_NUM_ENTRIES_SHIFT(sram_num_entries);
+
 		airoha_fe_rmw(eth, REG_PPE_TB_CFG(0),
 			      PPE_SRAM_TB_NUM_ENTRY_MASK |
 			      PPE_DRAM_TB_NUM_ENTRY_MASK,
@@ -480,13 +513,23 @@ static u32 airoha_ppe_foe_get_entry_hash(struct airoha_foe_entry *hwe)
 	return hash;
 }
 
-static u32 airoha_ppe_foe_get_flow_stats_index(struct airoha_ppe *ppe, u32 hash)
+static int airoha_ppe_foe_get_flow_stats_index(struct airoha_ppe *ppe,
+					       u32 hash, u32 *index)
 {
-	if (!airoha_ppe2_is_enabled(ppe->eth))
-		return hash;
+	u32 ppe_num_stats_entries;
+	int err;
 
-	return hash >= PPE_STATS_NUM_ENTRIES ? hash - PPE1_STATS_NUM_ENTRIES
-					     : hash;
+	err = airoha_ppe_get_total_num_stats_entries(ppe,
+						     &ppe_num_stats_entries);
+	if (err)
+		return err;
+
+	*index = hash;
+	if (airoha_ppe2_is_enabled(ppe->eth) &&
+	    hash >= ppe_num_stats_entries)
+		*index = *index - PPE_STATS_NUM_ENTRIES;
+
+	return 0;
 }
 
 static void airoha_ppe_foe_flow_stat_entry_reset(struct airoha_ppe *ppe,
@@ -500,9 +543,14 @@ static void airoha_ppe_foe_flow_stat_entry_reset(struct airoha_ppe *ppe,
 static void airoha_ppe_foe_flow_stats_reset(struct airoha_ppe *ppe,
 					    struct airoha_npu *npu)
 {
+	u32 ppe_num_stats_entries;
 	int i;
 
-	for (i = 0; i < PPE_STATS_NUM_ENTRIES; i++)
+	if (airoha_ppe_get_total_num_stats_entries(ppe,
+						   &ppe_num_stats_entries))
+		return;
+
+	for (i = 0; i < ppe_num_stats_entries; i++)
 		airoha_ppe_foe_flow_stat_entry_reset(ppe, npu, i);
 }
 
@@ -511,12 +559,18 @@ static void airoha_ppe_foe_flow_stats_update(struct airoha_ppe *ppe,
 					     struct airoha_foe_entry *hwe,
 					     u32 hash)
 {
+	u32 ppe_num_stats_entries, index, pse_port, val, *data, *ib2, *meter;
 	int type = FIELD_GET(AIROHA_FOE_IB1_BIND_PACKET_TYPE, hwe->ib1);
-	u32 index, pse_port, val, *data, *ib2, *meter;
 	u8 nbq;
 
-	index = airoha_ppe_foe_get_flow_stats_index(ppe, hash);
-	if (index >= PPE_STATS_NUM_ENTRIES)
+	if (airoha_ppe_get_total_num_stats_entries(ppe,
+						   &ppe_num_stats_entries))
+		return;
+
+	if (airoha_ppe_foe_get_flow_stats_index(ppe, hash, &index))
+		return;
+
+	if (index >= ppe_num_stats_entries)
 		return;
 
 	if (type == PPE_PKT_TYPE_BRIDGE) {
@@ -1158,11 +1212,18 @@ static int airoha_ppe_flow_offload_destroy(struct airoha_eth *eth,
 void airoha_ppe_foe_entry_get_stats(struct airoha_ppe *ppe, u32 hash,
 				    struct airoha_foe_stats64 *stats)
 {
-	u32 index = airoha_ppe_foe_get_flow_stats_index(ppe, hash);
 	struct airoha_eth *eth = ppe->eth;
+	u32 index, ppe_num_stats_entries;
 	struct airoha_npu *npu;
 
-	if (index >= PPE_STATS_NUM_ENTRIES)
+	if (airoha_ppe_get_total_num_stats_entries(ppe,
+						   &ppe_num_stats_entries))
+		return;
+
+	if (airoha_ppe_foe_get_flow_stats_index(ppe, hash, &index))
+		return;
+
+	if (index >= ppe_num_stats_entries)
 		return;
 
 	rcu_read_lock();
@@ -1257,6 +1318,7 @@ static int airoha_ppe_offload_setup(struct airoha_eth *eth)
 {
 	struct airoha_npu *npu = airoha_ppe_npu_get(eth);
 	struct airoha_ppe *ppe = eth->ppe;
+	u32 ppe_num_stats_entries;
 	int err;
 
 	if (IS_ERR(npu))
@@ -1266,9 +1328,10 @@ static int airoha_ppe_offload_setup(struct airoha_eth *eth)
 	if (err)
 		goto error_npu_put;
 
-	if (PPE_STATS_NUM_ENTRIES) {
+	if (!airoha_ppe_get_total_num_stats_entries(ppe,
+						    &ppe_num_stats_entries)) {
 		err = npu->ops.ppe_init_stats(npu, ppe->foe_stats_dma,
-					      PPE_STATS_NUM_ENTRIES);
+					      ppe_num_stats_entries);
 		if (err)
 			goto error_npu_put;
 	}
@@ -1405,6 +1468,7 @@ EXPORT_SYMBOL_GPL(airoha_ppe_put_dev);
 
 int airoha_ppe_init(struct airoha_eth *eth)
 {
+	u32 ppe_num_stats_entries;
 	struct airoha_ppe *ppe;
 	int foe_size, err;
 
@@ -1431,8 +1495,9 @@ int airoha_ppe_init(struct airoha_eth *eth)
 	if (!ppe->foe_flow)
 		return -ENOMEM;
 
-	foe_size = PPE_STATS_NUM_ENTRIES * sizeof(*ppe->foe_stats);
-	if (foe_size) {
+	if (!airoha_ppe_get_total_num_stats_entries(ppe,
+						    &ppe_num_stats_entries)) {
+		foe_size = ppe_num_stats_entries * sizeof(*ppe->foe_stats);
 		ppe->foe_stats = dmam_alloc_coherent(eth->dev, foe_size,
 						     &ppe->foe_stats_dma,
 						     GFP_KERNEL);
