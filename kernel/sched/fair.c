@@ -9852,6 +9852,7 @@ static void update_cfs_rq_h_load(struct cfs_rq *cfs_rq)
 	}
 
 	while ((se = READ_ONCE(cfs_rq->h_load_next)) != NULL) {
+		WRITE_ONCE(cfs_rq->h_load_next, NULL);
 		load = cfs_rq->h_load;
 		load = div64_ul(load * se->avg.load_avg,
 			cfs_rq_load_avg(cfs_rq) + 1);
