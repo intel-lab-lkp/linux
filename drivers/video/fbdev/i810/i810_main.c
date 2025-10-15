@@ -2137,7 +2137,7 @@ static void i810fb_remove_pci(struct pci_dev *dev)
 
 	unregister_framebuffer(info);
 	i810fb_release_resource(info, par);
-	printk("cleanup_module:  unloaded i810 framebuffer device\n");
+	pr_info("cleanup_module: unloaded i810 framebuffer device\n");
 }
 
 #ifndef MODULE
