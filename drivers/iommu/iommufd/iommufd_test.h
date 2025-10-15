@@ -273,4 +273,7 @@ struct iommu_viommu_event_selftest {
 #define IOMMU_HW_QUEUE_TYPE_SELFTEST 0xdeadbeef
 #define IOMMU_TEST_HW_QUEUE_MAX 2
 
+#define IOMMU_TEST_RESV_BASE 0x80000000UL
+#define IOMMU_TEST_RESV_LENGTH 0x10000000UL
+
 #endif

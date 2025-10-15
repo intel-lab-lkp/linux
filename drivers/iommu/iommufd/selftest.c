@@ -480,7 +480,8 @@ mock_domain_alloc_paging_flags(struct device *dev, u32 flags,
 	if (!mock)
 		return ERR_PTR(-ENOMEM);
 	mock->domain.geometry.aperture_start = MOCK_APERTURE_START;
-	mock->domain.geometry.aperture_end = MOCK_APERTURE_LAST;
+	mock->domain.geometry.aperture_end =
+		MOCK_APERTURE_LAST + IOMMU_TEST_RESV_LENGTH;
 	mock->domain.pgsize_bitmap = MOCK_IO_PAGE_SIZE;
 	if (dev && mdev->flags & MOCK_FLAGS_DEVICE_HUGE_IOVA)
 		mock->domain.pgsize_bitmap |= MOCK_HUGE_PAGE_SIZE;
@@ -686,6 +687,20 @@ static void mock_dev_disable_iopf(struct device *dev, struct iommu_domain *domai
 		return;
 
 	iopf_queue_remove_device(mock_iommu_iopf_queue, dev);
+}
+
+static void mock_dev_get_resv_regions(struct device *dev,
+				      struct list_head *head)
+{
+	const int prot = IOMMU_WRITE | IOMMU_NOEXEC | IOMMU_MMIO;
+	struct iommu_resv_region *region;
+
+	region = iommu_alloc_resv_region(IOMMU_TEST_RESV_BASE,
+					 IOMMU_TEST_RESV_LENGTH, prot,
+					 IOMMU_RESV_RESERVED, GFP_KERNEL);
+	if (!region)
+		return;
+	list_add_tail(&region->list, head);
 }
 
 static void mock_viommu_destroy(struct iommufd_viommu *viommu)
@@ -952,6 +967,7 @@ static const struct iommu_ops mock_ops = {
 	.device_group = generic_device_group,
 	.probe_device = mock_probe_device,
 	.page_response = mock_domain_page_response,
+	.get_resv_regions = mock_dev_get_resv_regions,
 	.user_pasid_table = true,
 	.get_viommu_size = mock_get_viommu_size,
 	.viommu_init = mock_viommu_init,
