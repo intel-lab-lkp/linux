@@ -188,6 +188,13 @@ static int process_tracepoints(void *addr, char const *const fname)
 		}
 	}
 
+	/*
+	 * Modules may not have either section. But if it has one section,
+	 * it should have both of them.
+	 */
+	if (!check_data_sec && !tracepoint_data_sec)
+		return 0;
+
 	if (!check_data_sec) {
 		fprintf(stderr,	"no __tracepoint_check in file: %s\n", fname);
 		return -1;
