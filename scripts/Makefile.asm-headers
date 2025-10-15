@@ -13,6 +13,8 @@
 PHONY := all
 all:
 
+include $(objtree)/include/config/auto.conf
+
 src := $(srctree)/$(subst /generated,,$(obj))
 
 syscall_abis_32  += common,32
@@ -68,6 +70,8 @@ quiet_cmd_systbl = SYSTBL  $@
       cmd_systbl = $(CONFIG_SHELL) $(systbl) \
 		   $(if $(systbl-args-$*),$(systbl-args-$*),$(systbl-args)) \
 		   --abis $(subst $(space),$(comma),$(strip $(syscall_abis_$*))) \
+		   $(if $(CONFIG_TRIM_UNUSED_SYSCALLS), \
+		   --used-syscalls=$(subst $(space),$(comma),$(strip $(CONFIG_USED_SYSCALLS)))) \
 		   $< $@
 
 all: $(generic-y) $(syscall-y)
