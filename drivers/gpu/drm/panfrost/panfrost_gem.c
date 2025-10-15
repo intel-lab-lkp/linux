@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0
 /* Copyright 2019 Linaro, Ltd, Rob Herring <robh@kernel.org> */
+/* Copyright 2025 Amazon.com, Inc. or its affiliates */
 
 #include <linux/cleanup.h>
 #include <linux/err.h>
@@ -9,8 +10,26 @@
 
 #include <drm/panfrost_drm.h>
 #include "panfrost_device.h"
+#include "panfrost_drv.h"
 #include "panfrost_gem.h"
 #include "panfrost_mmu.h"
+
+void panfrost_gem_init(struct panfrost_device *pfdev)
+{
+#ifdef CONFIG_TRANSPARENT_HUGEPAGE
+	int err;
+
+	if (!panfrost_transparent_hugepage)
+		return;
+
+	err = drm_gem_huge_mnt_create(pfdev->ddev, "within_size");
+	if (pfdev->ddev->huge_mnt)
+		drm_info(pfdev->ddev, "Using Transparent Hugepage\n");
+	else if (err)
+		drm_warn(pfdev->ddev, "Can't use Transparent Hugepage (%d)\n",
+			 err);
+#endif
+}
 
 #ifdef CONFIG_DEBUG_FS
 static void panfrost_gem_debugfs_bo_add(struct panfrost_device *pfdev,
