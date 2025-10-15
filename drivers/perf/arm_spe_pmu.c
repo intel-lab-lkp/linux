@@ -731,12 +731,6 @@ static irqreturn_t arm_spe_pmu_irq_handler(int irq, void *dev)
 	if (act == SPE_PMU_BUF_FAULT_ACT_SPURIOUS)
 		return IRQ_NONE;
 
-	/*
-	 * Ensure perf callbacks have completed, which may disable the
-	 * profiling buffer in response to a TRUNCATION flag.
-	 */
-	irq_work_run();
-
 	switch (act) {
 	case SPE_PMU_BUF_FAULT_ACT_FATAL:
 		/*
@@ -764,6 +758,15 @@ static irqreturn_t arm_spe_pmu_irq_handler(int irq, void *dev)
 		/* We've seen you before, but GCC has the memory of a sieve. */
 		break;
 	}
+
+	/*
+	 * The TRUNCATED flag is set when data loss is detected by PMBSR_EL1.DL,
+	 * or arm_spe_perf_aux_output_begin() sets the flag if runs out of free
+	 * space. Ensure that all perf callbacks have completed for disabling
+	 * the profiling buffer.
+	 */
+	if (handle->aux_flags & PERF_AUX_FLAG_TRUNCATED)
+		irq_work_run();
 
 	/* The buffer pointers are now sane, so resume profiling. */
 	write_sysreg_s(0, SYS_PMBSR_EL1);
