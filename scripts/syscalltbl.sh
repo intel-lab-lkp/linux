@@ -22,12 +22,14 @@ usage() {
 	echo >&2 "  OUTFILE   output header file"
 	echo >&2
 	echo >&2 "options:"
-	echo >&2 "  --abis ABIS        ABI(s) to handle (By default, all lines are handled)"
+	echo >&2 "  --abis ABIS                ABI(s) to handle (By default, all lines are handled)"
+	echo >&2 "  --used-syscalls SYSCALLS   Keep only the specified syscall; trim others"
 	exit 1
 }
 
 # default unless specified by options
 abis=
+used_syscalls=
 
 while [ $# -gt 0 ]
 do
@@ -35,6 +37,14 @@ do
 	--abis)
 		abis=$(echo "($2)" | tr ',' '|')
 		shift 2;;
+    --used-syscalls=*)
+        used_syscalls_raw=${1#--used-syscalls=}
+        if [ -z "$used_syscalls_raw" ]; then
+            used_syscalls='^$'
+        else
+            used_syscalls=$(echo "$used_syscalls_raw" | tr ',' '|')
+        fi
+        shift;;
 	-*)
 		echo "$1: unknown option" >&2
 		usage;;
@@ -52,6 +62,7 @@ outfile="$2"
 
 nxt=0
 
+
 grep -E "^[0-9]+[[:space:]]+$abis" "$infile" | {
 
 	while read nr abi name native compat noreturn; do
@@ -65,6 +76,12 @@ grep -E "^[0-9]+[[:space:]]+$abis" "$infile" | {
 			echo "__SYSCALL($nxt, sys_ni_syscall)"
 			nxt=$((nxt + 1))
 		done
+
+		if [ -n "$used_syscalls" ] && ! echo "$name" | grep -qwE "$used_syscalls"; then
+			echo "__SYSCALL($nr, sys_ni_syscall)"
+			nxt=$((nr + 1))
+			continue
+		fi
 
 		if [ "$compat" = "-" ]; then
 			unset compat
