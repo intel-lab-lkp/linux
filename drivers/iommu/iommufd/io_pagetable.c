@@ -1440,9 +1440,10 @@ void iopt_remove_access(struct io_pagetable *iopt,
 
 /* Narrow the valid_iova_itree to include reserved ranges from a device. */
 int iopt_table_enforce_dev_resv_regions(struct io_pagetable *iopt,
-					struct device *dev,
+					struct iommufd_device *idev,
 					phys_addr_t *sw_msi_start)
 {
+	struct device *dev = idev->dev;
 	struct iommu_resv_region *resv;
 	LIST_HEAD(resv_regions);
 	unsigned int num_hw_msi = 0;

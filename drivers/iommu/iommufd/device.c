@@ -418,8 +418,7 @@ iommufd_device_attach_reserved_iova(struct iommufd_device *idev,
 
 	lockdep_assert_held(&igroup->lock);
 
-	rc = iopt_table_enforce_dev_resv_regions(&hwpt_paging->ioas->iopt,
-						 idev->dev,
+	rc = iopt_table_enforce_dev_resv_regions(&hwpt_paging->ioas->iopt, idev,
 						 &idev->sw_msi_start);
 	if (rc)
 		return rc;
@@ -762,7 +761,7 @@ iommufd_device_do_replace_reserved_iova(struct iommufd_device *idev,
 	if (!old_hwpt_paging || hwpt_paging->ioas != old_hwpt_paging->ioas) {
 		xa_for_each(&attach->device_array, index, cur) {
 			rc = iopt_table_enforce_dev_resv_regions(
-				&hwpt_paging->ioas->iopt, cur->dev, NULL);
+				&hwpt_paging->ioas->iopt, cur, NULL);
 			if (rc)
 				goto err_unresv;
 		}
