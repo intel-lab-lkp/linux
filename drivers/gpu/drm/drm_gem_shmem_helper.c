@@ -691,6 +691,95 @@ int drm_gem_shmem_mmap(struct drm_gem_shmem_object *shmem, struct vm_area_struct
 EXPORT_SYMBOL_GPL(drm_gem_shmem_mmap);
 
 /**
+ * drm_gem_shmem_sync - Sync CPU-mapped data to/from the device
+ * @shmem: shmem GEM object
+ * @offset: Offset into the GEM object
+ * @size: Size of the area to sync
+ * @access: Flags describing the access to sync for
+ *
+ * Returns:
+ * 0 on success or a negative error code on failure.
+ */
+int drm_gem_shmem_sync(struct drm_gem_shmem_object *shmem, size_t offset,
+		       size_t size, enum drm_gem_object_access_flags access)
+{
+	bool for_dev = (access & DRM_GEM_OBJECT_ACCESSOR_MASK) == DRM_GEM_OBJECT_DEV_ACCESS;
+	u32 access_type = access & DRM_GEM_OBJECT_ACCESS_TYPE_MASK;
+	struct drm_device *dev = shmem->base.dev;
+	enum dma_data_direction dir;
+	struct sg_table *sgt;
+	struct scatterlist *sgl;
+	unsigned int count;
+
+	if (access_type == DRM_GEM_OBJECT_RW_ACCESS)
+		dir = DMA_BIDIRECTIONAL;
+	else if (access_type == DRM_GEM_OBJECT_READ_ACCESS)
+		dir = for_dev ? DMA_TO_DEVICE : DMA_FROM_DEVICE;
+	else if (access_type == DRM_GEM_OBJECT_WRITE_ACCESS)
+		dir = for_dev ? DMA_FROM_DEVICE : DMA_TO_DEVICE;
+	else
+		return 0;
+
+	/* Don't bother if it's WC-mapped */
+	if (shmem->map_wc)
+		return 0;
+
+	if (size == 0)
+		return 0;
+
+	if (offset + size < offset || offset + size > shmem->base.size)
+		return -EINVAL;
+
+	if (drm_gem_is_imported(&shmem->base)) {
+		/* We can't do fine-grained syncs with dma_buf and there's no
+		 * easy way to guarantee that CPU caches/memory won't get
+		 * impacted by the buffer-wide synchronization, so let's fail
+		 * instead of pretending we can cope with that.
+		 */
+		if (offset != 0 || size != shmem->base.size)
+			return -EINVAL;
+
+		struct dma_buf *dma_buf = shmem->base.import_attach->dmabuf;
+
+		if (for_dev)
+			return dma_buf_end_cpu_access(dma_buf, dir);
+		else
+			return dma_buf_begin_cpu_access(dma_buf, dir);
+	}
+
+	sgt = drm_gem_shmem_get_pages_sgt(shmem);
+	if (IS_ERR(sgt))
+		return PTR_ERR(sgt);
+
+	for_each_sgtable_dma_sg(sgt, sgl, count) {
+		if (size == 0)
+			break;
+
+		dma_addr_t paddr = sg_dma_address(sgl);
+		size_t len = sg_dma_len(sgl);
+
+		if (len <= offset) {
+			offset -= len;
+			continue;
+		}
+
+		paddr += offset;
+		len -= offset;
+		len = min_t(size_t, len, size);
+		size -= len;
+		offset = 0;
+
+		if (for_dev)
+			dma_sync_single_for_device(dev->dev, paddr, len, dir);
+		else
+			dma_sync_single_for_cpu(dev->dev, paddr, len, dir);
+	}
+
+	return 0;
+}
+EXPORT_SYMBOL_GPL(drm_gem_shmem_sync);
+
+/**
  * drm_gem_shmem_print_info() - Print &drm_gem_shmem_object info for debugfs
  * @shmem: shmem GEM object
  * @p: DRM printer
