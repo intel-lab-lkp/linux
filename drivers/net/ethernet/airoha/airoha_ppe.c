@@ -36,6 +36,9 @@ static int airoha_ppe_get_num_stats_entries(struct airoha_ppe *ppe,
 					    u32 *num_stats)
 {
 #ifdef CONFIG_NET_AIROHA_FLOW_STATS
+	if (airoha_is_7583(ppe->eth))
+		return -EOPNOTSUPP;
+
 	*num_stats = PPE_STATS_NUM_ENTRIES;
 	return 0;
 #else
