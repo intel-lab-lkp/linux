@@ -874,7 +874,8 @@ static void hmat_register_target_devices(struct memory_target *target)
 	}
 }
 
-static void hmat_register_target(struct memory_target *target)
+static void hmat_register_target(struct memory_target *target,
+				 bool register_devices)
 {
 	int nid = pxm_to_node(target->memory_pxm);
 
@@ -882,7 +883,8 @@ static void hmat_register_target(struct memory_target *target)
 	 * Devices may belong to either an offline or online
 	 * node, so unconditionally add them.
 	 */
-	hmat_register_target_devices(target);
+	if (register_devices)
+		hmat_register_target_devices(target);
 
 	/*
 	 * Register generic port perf numbers. The nid may not be
@@ -921,7 +923,7 @@ static void hmat_register_targets(void)
 	struct memory_target *target;
 
 	list_for_each_entry(target, &targets, node)
-		hmat_register_target(target);
+		hmat_register_target(target, true);
 }
 
 static int hmat_callback(struct notifier_block *self,
@@ -939,7 +941,7 @@ static int hmat_callback(struct notifier_block *self,
 	if (!target)
 		return NOTIFY_OK;
 
-	hmat_register_target(target);
+	hmat_register_target(target, false);
 	return NOTIFY_OK;
 }
 
