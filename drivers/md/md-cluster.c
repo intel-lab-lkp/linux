@@ -334,7 +334,7 @@ static void recover_bitmaps(struct md_thread *thread)
 		if (test_bit(MD_RESYNCING_REMOTE, &mddev->recovery) &&
 		    test_bit(MD_RECOVERY_RESHAPE, &mddev->recovery) &&
 		    mddev->reshape_position != MaxSector)
-			md_wakeup_thread(mddev->sync_thread);
+			md_wakeup_thread(&mddev->sync_thread);
 
 		if (hi > 0) {
 			if (lo < mddev->resync_offset)
@@ -349,7 +349,7 @@ static void recover_bitmaps(struct md_thread *thread)
 				clear_bit(MD_RESYNCING_REMOTE,
 					  &mddev->recovery);
 				set_bit(MD_RECOVERY_NEEDED, &mddev->recovery);
-				md_wakeup_thread(mddev->thread);
+				md_wakeup_thread(&mddev->thread);
 			}
 		}
 clear_bit:
@@ -378,7 +378,7 @@ static void __recover_slot(struct mddev *mddev, int slot)
 			return;
 		}
 	}
-	md_wakeup_thread(cinfo->recovery_thread);
+	md_wakeup_thread(&cinfo->recovery_thread);
 }
 
 static void recover_slot(void *arg, struct dlm_slot *slot)
@@ -432,7 +432,7 @@ static void ack_bast(void *arg, int mode)
 
 	if (mode == DLM_LOCK_EX) {
 		if (test_bit(MD_CLUSTER_ALREADY_IN_CLUSTER, &cinfo->state))
-			md_wakeup_thread(cinfo->recv_thread);
+			md_wakeup_thread(&cinfo->recv_thread);
 		else
 			set_bit(MD_CLUSTER_PENDING_RECV_EVENT, &cinfo->state);
 	}
@@ -465,7 +465,7 @@ static void process_suspend_info(struct mddev *mddev,
 		remove_suspend_info(mddev, slot);
 		set_bit(MD_RECOVERY_NEEDED, &mddev->recovery);
 		clear_bit(MD_CLUSTER_WAITING_FOR_SYNC, &cinfo->state);
-		md_wakeup_thread(mddev->thread);
+		md_wakeup_thread(&mddev->thread);
 		return;
 	}
 
@@ -568,7 +568,7 @@ static void process_remove_disk(struct mddev *mddev, struct cluster_msg *msg)
 	if (rdev) {
 		set_bit(ClusterRemove, &rdev->flags);
 		set_bit(MD_RECOVERY_NEEDED, &mddev->recovery);
-		md_wakeup_thread(mddev->thread);
+		md_wakeup_thread(&mddev->thread);
 	}
 	else
 		pr_warn("%s: %d Could not find disk(%d) to REMOVE\n",
@@ -723,7 +723,7 @@ static int lock_comm(struct md_cluster_info *cinfo, bool mddev_locked)
 		rv = test_and_set_bit_lock(MD_CLUSTER_HOLDING_MUTEX_FOR_RECVD,
 					      &cinfo->state);
 		WARN_ON_ONCE(rv);
-		md_wakeup_thread(mddev->thread);
+		md_wakeup_thread(&mddev->thread);
 		set_bit = 1;
 	}
 
@@ -995,7 +995,7 @@ static void load_bitmaps(struct mddev *mddev, int total_slots)
 	set_bit(MD_CLUSTER_ALREADY_IN_CLUSTER, &cinfo->state);
 	/* wake up recv thread in case something need to be handled */
 	if (test_and_clear_bit(MD_CLUSTER_PENDING_RECV_EVENT, &cinfo->state))
-		md_wakeup_thread(cinfo->recv_thread);
+		md_wakeup_thread(&cinfo->recv_thread);
 }
 
 static void resync_bitmap(struct mddev *mddev)
@@ -1076,7 +1076,7 @@ static int metadata_update_start(struct mddev *mddev)
 	ret = test_and_set_bit_lock(MD_CLUSTER_HOLDING_MUTEX_FOR_RECVD,
 				    &cinfo->state);
 	WARN_ON_ONCE(ret);
-	md_wakeup_thread(mddev->thread);
+	md_wakeup_thread(&mddev->thread);
 
 	wait_event(cinfo->wait,
 		   !test_and_set_bit(MD_CLUSTER_SEND_LOCK, &cinfo->state) ||
@@ -1485,7 +1485,7 @@ static int add_new_disk(struct mddev *mddev, struct md_rdev *rdev)
 		/* Since MD_CHANGE_DEVS will be set in add_bound_rdev which
 		 * will run soon after add_new_disk, the below path will be
 		 * invoked:
-		 *   md_wakeup_thread(mddev->thread)
+		 *   md_wakeup_thread(&mddev->thread)
 		 *	-> conf->thread (raid1d)
 		 *	-> md_check_recovery -> md_update_sb
 		 *	-> metadata_update_start/finish

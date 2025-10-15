@@ -601,7 +601,7 @@ static void ppl_flush_endio(struct bio *bio)
 
 	if (atomic_dec_and_test(&io->pending_flushes)) {
 		ppl_io_unit_finished(io);
-		md_wakeup_thread(conf->mddev->thread);
+		md_wakeup_thread(&conf->mddev->thread);
 	}
 }
 

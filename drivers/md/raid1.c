@@ -288,7 +288,7 @@ static void reschedule_retry(struct r1bio *r1_bio)
 	spin_unlock_irqrestore(&conf->device_lock, flags);
 
 	wake_up(&conf->wait_barrier);
-	md_wakeup_thread(mddev->thread);
+	md_wakeup_thread(&mddev->thread);
 }
 
 /*
@@ -1278,7 +1278,7 @@ static void raid1_unplug(struct blk_plug_cb *cb, bool from_schedule)
 		bio_list_merge(&conf->pending_bio_list, &plug->pending);
 		spin_unlock_irq(&conf->device_lock);
 		wake_up_barrier(conf);
-		md_wakeup_thread(mddev->thread);
+		md_wakeup_thread(&mddev->thread);
 		kfree(plug);
 		return;
 	}
@@ -1666,7 +1666,7 @@ static void raid1_write_request(struct mddev *mddev, struct bio *bio,
 			spin_lock_irqsave(&conf->device_lock, flags);
 			bio_list_add(&conf->pending_bio_list, mbio);
 			spin_unlock_irqrestore(&conf->device_lock, flags);
-			md_wakeup_thread(mddev->thread);
+			md_wakeup_thread(&mddev->thread);
 		}
 	}
 
@@ -2616,7 +2616,7 @@ static void handle_write_finished(struct r1conf *conf, struct r1bio *r1_bio)
 		 * get_unqueued_pending() == extra to be true.
 		 */
 		wake_up(&conf->wait_barrier);
-		md_wakeup_thread(conf->mddev->thread);
+		md_wakeup_thread(&conf->mddev->thread);
 	} else {
 		if (test_bit(R1BIO_WriteError, &r1_bio->state))
 			close_write(r1_bio);
@@ -3436,7 +3436,7 @@ static int raid1_reshape(struct mddev *mddev)
 
 	set_bit(MD_RECOVERY_RECOVER, &mddev->recovery);
 	set_bit(MD_RECOVERY_NEEDED, &mddev->recovery);
-	md_wakeup_thread(mddev->thread);
+	md_wakeup_thread(&mddev->thread);
 
 	mempool_destroy(oldpool);
 	return 0;

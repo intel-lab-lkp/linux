@@ -2272,7 +2272,7 @@ static int bitmap_load(struct mddev *mddev)
 	set_bit(MD_RECOVERY_NEEDED, &bitmap->mddev->recovery);
 
 	mddev_set_timeout(mddev, mddev->bitmap_info.daemon_sleep, true);
-	md_wakeup_thread(mddev->thread);
+	md_wakeup_thread(&mddev->thread);
 
 	bitmap_update_sb(bitmap);
 
@@ -2695,7 +2695,7 @@ location_store(struct mddev *mddev, const char *buf, size_t len)
 		 * metadata promptly.
 		 */
 		set_bit(MD_SB_CHANGE_DEVS, &mddev->sb_flags);
-		md_wakeup_thread(mddev->thread);
+		md_wakeup_thread(&mddev->thread);
 	}
 	rv = 0;
 out:
@@ -2782,7 +2782,7 @@ timeout_store(struct mddev *mddev, const char *buf, size_t len)
 
 	mddev->bitmap_info.daemon_sleep = timeout;
 	mddev_set_timeout(mddev, timeout, false);
-	md_wakeup_thread(mddev->thread);
+	md_wakeup_thread(&mddev->thread);
 
 	return len;
 }

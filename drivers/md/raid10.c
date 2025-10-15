@@ -309,7 +309,7 @@ static void reschedule_retry(struct r10bio *r10_bio)
 	/* wake up frozen array... */
 	wake_up(&conf->wait_barrier);
 
-	md_wakeup_thread(mddev->thread);
+	md_wakeup_thread(&mddev->thread);
 }
 
 /*
@@ -1091,7 +1091,7 @@ static void raid10_unplug(struct blk_plug_cb *cb, bool from_schedule)
 		bio_list_merge(&conf->pending_bio_list, &plug->pending);
 		spin_unlock_irq(&conf->device_lock);
 		wake_up_barrier(conf);
-		md_wakeup_thread(mddev->thread);
+		md_wakeup_thread(&mddev->thread);
 		kfree(plug);
 		return;
 	}
@@ -1284,7 +1284,7 @@ static void raid10_write_one_disk(struct mddev *mddev, struct r10bio *r10_bio,
 		spin_lock_irqsave(&conf->device_lock, flags);
 		bio_list_add(&conf->pending_bio_list, mbio);
 		spin_unlock_irqrestore(&conf->device_lock, flags);
-		md_wakeup_thread(mddev->thread);
+		md_wakeup_thread(&mddev->thread);
 	}
 }
 
@@ -1390,7 +1390,7 @@ static void raid10_write_request(struct mddev *mddev, struct bio *bio,
 		mddev->reshape_position = conf->reshape_progress;
 		set_mask_bits(&mddev->sb_flags, 0,
 			      BIT(MD_SB_CHANGE_DEVS) | BIT(MD_SB_CHANGE_PENDING));
-		md_wakeup_thread(mddev->thread);
+		md_wakeup_thread(&mddev->thread);
 		if (bio->bi_opf & REQ_NOWAIT) {
 			allow_barrier(conf);
 			bio_wouldblock_error(bio);
@@ -2966,7 +2966,7 @@ static void handle_write_completed(struct r10conf *conf, struct r10bio *r10_bio)
 			 * nr_pending == nr_queued + extra to be true.
 			 */
 			wake_up(&conf->wait_barrier);
-			md_wakeup_thread(conf->mddev->thread);
+			md_wakeup_thread(&conf->mddev->thread);
 		} else {
 			if (test_bit(R10BIO_WriteError,
 				     &r10_bio->state))
@@ -4760,7 +4760,7 @@ static sector_t reshape_request(struct mddev *mddev, sector_t sector_nr,
 			mddev->curr_resync_completed = conf->reshape_progress;
 		conf->reshape_checkpoint = jiffies;
 		set_bit(MD_SB_CHANGE_DEVS, &mddev->sb_flags);
-		md_wakeup_thread(mddev->thread);
+		md_wakeup_thread(&mddev->thread);
 		wait_event(mddev->sb_wait, mddev->sb_flags == 0 ||
 			   test_bit(MD_RECOVERY_INTR, &mddev->recovery));
 		if (test_bit(MD_RECOVERY_INTR, &mddev->recovery)) {

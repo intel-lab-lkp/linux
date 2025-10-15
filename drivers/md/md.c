@@ -100,7 +100,7 @@ static int remove_and_add_spares(struct mddev *mddev,
 				 struct md_rdev *this);
 static void mddev_detach(struct mddev *mddev);
 static void export_rdev(struct md_rdev *rdev, struct mddev *mddev);
-static void md_wakeup_thread_directly(struct md_thread __rcu *thread);
+static void md_wakeup_thread_directly(struct md_thread __rcu **thread);
 
 /*
  * Default number of read corrections we'll attempt on an rdev
@@ -534,8 +534,8 @@ static void __mddev_resume(struct mddev *mddev, bool recovery_needed)
 
 	if (recovery_needed)
 		set_bit(MD_RECOVERY_NEEDED, &mddev->recovery);
-	md_wakeup_thread(mddev->thread);
-	md_wakeup_thread(mddev->sync_thread); /* possibly kick off a reshape */
+	md_wakeup_thread(&mddev->thread);
+	md_wakeup_thread(&mddev->sync_thread); /* possibly kick off a reshape */
 
 	mutex_unlock(&mddev->suspend_mutex);
 }
@@ -869,7 +869,7 @@ void mddev_unlock(struct mddev *mddev)
 	} else
 		mutex_unlock(&mddev->reconfig_mutex);
 
-	md_wakeup_thread(mddev->thread);
+	md_wakeup_thread(&mddev->thread);
 	wake_up(&mddev->sb_wait);
 
 	list_for_each_entry_safe(rdev, tmp, &delete, same_set) {
@@ -4482,7 +4482,7 @@ array_state_store(struct mddev *mddev, const char *buf, size_t len)
 		if (st == active) {
 			restart_array(mddev);
 			clear_bit(MD_SB_CHANGE_PENDING, &mddev->sb_flags);
-			md_wakeup_thread(mddev->thread);
+			md_wakeup_thread(&mddev->thread);
 			wake_up(&mddev->sb_wait);
 		} else /* st == clean */ {
 			restart_array(mddev);
@@ -4982,7 +4982,7 @@ static void stop_sync_thread(struct mddev *mddev, bool locked)
 	 * Thread might be blocked waiting for metadata update which will now
 	 * never happen
 	 */
-	md_wakeup_thread_directly(mddev->sync_thread);
+	md_wakeup_thread_directly(&mddev->sync_thread);
 	if (work_pending(&mddev->sync_work))
 		flush_work(&mddev->sync_work);
 
@@ -5019,7 +5019,7 @@ void md_unfrozen_sync_thread(struct mddev *mddev)
 
 	clear_bit(MD_RECOVERY_FROZEN, &mddev->recovery);
 	set_bit(MD_RECOVERY_NEEDED, &mddev->recovery);
-	md_wakeup_thread(mddev->thread);
+	md_wakeup_thread(&mddev->thread);
 	sysfs_notify_dirent_safe(mddev->sysfs_action);
 }
 EXPORT_SYMBOL_GPL(md_unfrozen_sync_thread);
@@ -5134,11 +5134,11 @@ retry:
 		 * canceling read-auto mode
 		 */
 		mddev->ro = MD_RDWR;
-		md_wakeup_thread(mddev->sync_thread);
+		md_wakeup_thread(&mddev->sync_thread);
 	}
 
 	set_bit(MD_RECOVERY_NEEDED, &mddev->recovery);
-	md_wakeup_thread(mddev->thread);
+	md_wakeup_thread(&mddev->thread);
 	sysfs_notify_dirent_safe(mddev->sysfs_action);
 	ret = len;
 
@@ -6128,7 +6128,7 @@ static void md_safemode_timeout(struct timer_list *t)
 	if (mddev->external)
 		sysfs_notify_dirent_safe(mddev->sysfs_state);
 
-	md_wakeup_thread(mddev->thread);
+	md_wakeup_thread(&mddev->thread);
 }
 
 static int start_dirty_degraded;
@@ -6404,7 +6404,7 @@ int do_md_run(struct mddev *mddev)
 	/* run start up tasks that require md_thread */
 	md_start(mddev);
 
-	md_wakeup_thread(mddev->sync_thread); /* possibly kick off a reshape */
+	md_wakeup_thread(&mddev->sync_thread); /* possibly kick off a reshape */
 
 	set_capacity_and_notify(mddev->gendisk, mddev->array_sectors);
 	clear_bit(MD_NOT_READY, &mddev->flags);
@@ -6426,7 +6426,7 @@ int md_start(struct mddev *mddev)
 		set_bit(MD_RECOVERY_WAIT, &mddev->recovery);
 		ret = mddev->pers->start(mddev);
 		clear_bit(MD_RECOVERY_WAIT, &mddev->recovery);
-		md_wakeup_thread(mddev->sync_thread);
+		md_wakeup_thread(&mddev->sync_thread);
 	}
 	return ret;
 }
@@ -6468,7 +6468,7 @@ static int restart_array(struct mddev *mddev)
 	pr_debug("md: %s switched to read-write mode.\n", mdname(mddev));
 	/* Kick recovery or resync if necessary */
 	set_bit(MD_RECOVERY_NEEDED, &mddev->recovery);
-	md_wakeup_thread(mddev->sync_thread);
+	md_wakeup_thread(&mddev->sync_thread);
 	sysfs_notify_dirent_safe(mddev->sysfs_state);
 	return 0;
 }
@@ -8194,23 +8194,23 @@ static int md_thread(void *arg)
 	return 0;
 }
 
-static void md_wakeup_thread_directly(struct md_thread __rcu *thread)
+static void md_wakeup_thread_directly(struct md_thread __rcu **thread)
 {
 	struct md_thread *t;
 
 	rcu_read_lock();
-	t = rcu_dereference(thread);
+	t = rcu_dereference(*thread);
 	if (t)
 		wake_up_process(t->tsk);
 	rcu_read_unlock();
 }
 
-void md_wakeup_thread(struct md_thread __rcu *thread)
+void md_wakeup_thread(struct md_thread __rcu **thread)
 {
 	struct md_thread *t;
 
 	rcu_read_lock();
-	t = rcu_dereference(thread);
+	t = rcu_dereference(*thread);
 	if (t) {
 		pr_debug("md: waking up MD thread %s.\n", t->tsk->comm);
 		set_bit(THREAD_WAKEUP, &t->flags);
@@ -8283,7 +8283,7 @@ void md_error(struct mddev *mddev, struct md_rdev *rdev)
 	set_bit(MD_RECOVERY_INTR, &mddev->recovery);
 	if (!test_bit(MD_BROKEN, &mddev->flags)) {
 		set_bit(MD_RECOVERY_NEEDED, &mddev->recovery);
-		md_wakeup_thread(mddev->thread);
+		md_wakeup_thread(&mddev->thread);
 	}
 	if (mddev->event_work.func)
 		queue_work(md_misc_wq, &mddev->event_work);
@@ -8763,7 +8763,7 @@ void md_done_sync(struct mddev *mddev, int blocks, int ok)
 	if (!ok) {
 		set_bit(MD_RECOVERY_INTR, &mddev->recovery);
 		set_bit(MD_RECOVERY_ERROR, &mddev->recovery);
-		md_wakeup_thread(mddev->thread);
+		md_wakeup_thread(&mddev->thread);
 		// stop recovery, signal do_sync ....
 	}
 }
@@ -8788,8 +8788,8 @@ void md_write_start(struct mddev *mddev, struct bio *bi)
 		/* need to switch to read/write */
 		mddev->ro = MD_RDWR;
 		set_bit(MD_RECOVERY_NEEDED, &mddev->recovery);
-		md_wakeup_thread(mddev->thread);
-		md_wakeup_thread(mddev->sync_thread);
+		md_wakeup_thread(&mddev->thread);
+		md_wakeup_thread(&mddev->sync_thread);
 		did_change = 1;
 	}
 	rcu_read_lock();
@@ -8804,7 +8804,7 @@ void md_write_start(struct mddev *mddev, struct bio *bi)
 			mddev->in_sync = 0;
 			set_bit(MD_SB_CHANGE_CLEAN, &mddev->sb_flags);
 			set_bit(MD_SB_CHANGE_PENDING, &mddev->sb_flags);
-			md_wakeup_thread(mddev->thread);
+			md_wakeup_thread(&mddev->thread);
 			did_change = 1;
 		}
 		spin_unlock(&mddev->lock);
@@ -8841,7 +8841,7 @@ void md_write_end(struct mddev *mddev)
 	percpu_ref_put(&mddev->writes_pending);
 
 	if (mddev->safemode == 2)
-		md_wakeup_thread(mddev->thread);
+		md_wakeup_thread(&mddev->thread);
 	else if (mddev->safemode_delay)
 		/* The roundup() ensures this only performs locking once
 		 * every ->safemode_delay jiffies
@@ -9442,7 +9442,7 @@ void md_do_sync(struct md_thread *thread)
 	spin_unlock(&mddev->lock);
 
 	wake_up(&resync_wait);
-	md_wakeup_thread(mddev->thread);
+	md_wakeup_thread(&mddev->thread);
 	return;
 }
 EXPORT_SYMBOL_GPL(md_do_sync);
@@ -9705,7 +9705,7 @@ static void md_start_sync(struct work_struct *ws)
 	 */
 	if (suspend)
 		__mddev_resume(mddev, false);
-	md_wakeup_thread(mddev->sync_thread);
+	md_wakeup_thread(&mddev->sync_thread);
 	sysfs_notify_dirent_safe(mddev->sysfs_action);
 	md_new_event();
 	return;
@@ -10022,7 +10022,7 @@ bool rdev_set_badblocks(struct md_rdev *rdev, sector_t s, int sectors,
 	sysfs_notify_dirent_safe(rdev->sysfs_state);
 	set_mask_bits(&mddev->sb_flags, 0,
 		      BIT(MD_SB_CHANGE_CLEAN) | BIT(MD_SB_CHANGE_PENDING));
-	md_wakeup_thread(rdev->mddev->thread);
+	md_wakeup_thread(&rdev->mddev->thread);
 	return true;
 }
 EXPORT_SYMBOL_GPL(rdev_set_badblocks);
@@ -10200,7 +10200,7 @@ static void check_sb_changes(struct mddev *mddev, struct md_rdev *rdev)
 				/* wakeup mddev->thread here, so array could
 				 * perform resync with the new activated disk */
 				set_bit(MD_RECOVERY_NEEDED, &mddev->recovery);
-				md_wakeup_thread(mddev->thread);
+				md_wakeup_thread(&mddev->thread);
 			}
 			/* device faulty
 			 * We just want to do the minimum to mark the disk

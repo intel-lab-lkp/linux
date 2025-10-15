@@ -3781,11 +3781,11 @@ static int raid_message(struct dm_target *ti, unsigned int argc, char **argv,
 		 */
 		mddev->ro = 0;
 		if (!mddev->suspended)
-			md_wakeup_thread(mddev->sync_thread);
+			md_wakeup_thread(&mddev->sync_thread);
 	}
 	set_bit(MD_RECOVERY_NEEDED, &mddev->recovery);
 	if (!mddev->suspended)
-		md_wakeup_thread(mddev->thread);
+		md_wakeup_thread(&mddev->thread);
 
 	return 0;
 }

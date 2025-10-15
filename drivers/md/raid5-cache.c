@@ -599,7 +599,7 @@ static void r5l_log_endio(struct bio *bio)
 	spin_unlock_irqrestore(&log->io_list_lock, flags);
 
 	if (log->need_cache_flush)
-		md_wakeup_thread(log->rdev->mddev->thread);
+		md_wakeup_thread(&log->rdev->mddev->thread);
 
 	/* finish flush only io_unit and PAYLOAD_FLUSH only io_unit */
 	if (has_null_flush) {
@@ -1488,7 +1488,7 @@ static void r5c_do_reclaim(struct r5conf *conf)
 	if (!test_bit(R5C_LOG_CRITICAL, &conf->cache_state))
 		r5l_run_no_space_stripes(log);
 
-	md_wakeup_thread(conf->mddev->thread);
+	md_wakeup_thread(&conf->mddev->thread);
 }
 
 static void r5l_do_reclaim(struct r5l_log *log)
@@ -1516,7 +1516,7 @@ static void r5l_do_reclaim(struct r5l_log *log)
 		     list_empty(&log->finished_ios)))
 			break;
 
-		md_wakeup_thread(log->rdev->mddev->thread);
+		md_wakeup_thread(&log->rdev->mddev->thread);
 		wait_event_lock_irq(log->iounit_wait,
 				    r5l_reclaimable_space(log) > reclaimable,
 				    log->io_list_lock);
@@ -1568,7 +1568,7 @@ void r5l_wake_reclaim(struct r5l_log *log, sector_t space)
 		if (new < target)
 			return;
 	} while (!try_cmpxchg(&log->reclaim_target, &target, new));
-	md_wakeup_thread(log->reclaim_thread);
+	md_wakeup_thread(&log->reclaim_thread);
 }
 
 void r5l_quiesce(struct r5l_log *log, int quiesce)
@@ -2765,7 +2765,7 @@ void r5c_release_extra_page(struct stripe_head *sh)
 
 	if (using_disk_info_extra_page) {
 		clear_bit(R5C_EXTRA_PAGE_IN_USE, &conf->cache_state);
-		md_wakeup_thread(conf->mddev->thread);
+		md_wakeup_thread(&conf->mddev->thread);
 	}
 }
 
@@ -2820,7 +2820,7 @@ void r5c_finish_stripe_write_out(struct r5conf *conf,
 
 	if (test_and_clear_bit(STRIPE_FULL_WRITE, &sh->state))
 		if (atomic_dec_and_test(&conf->pending_full_writes))
-			md_wakeup_thread(conf->mddev->thread);
+			md_wakeup_thread(&conf->mddev->thread);
 
 	spin_lock_irq(&log->stripe_in_journal_lock);
 	list_del_init(&sh->r5c);
