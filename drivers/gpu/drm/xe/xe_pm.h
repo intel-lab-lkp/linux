@@ -37,4 +37,6 @@ int xe_pm_block_on_suspend(struct xe_device *xe);
 void xe_pm_might_block_on_suspend(void);
 int xe_pm_module_init(void);
 
+int xe_pm_vrsr_enable(struct xe_device *xe);
+void xe_pm_vrsr_disable(struct xe_device *xe);
 #endif
