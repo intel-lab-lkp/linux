@@ -177,7 +177,7 @@ static const char * const input1_sel_text[] = {
 	"DMIC1 Off ADC1 Off",
 };
 
-static unsigned int const input1_sel_values[] = {
+static const unsigned int input1_sel_values[] = {
 	CS53L30_CH_TYPE,
 	CS53L30_ADCxB_PDN | CS53L30_CH_TYPE,
 	CS53L30_ADCxA_PDN | CS53L30_CH_TYPE,
@@ -197,7 +197,7 @@ static const char * const input2_sel_text[] = {
 	"DMIC2 Off ADC2 Off",
 };
 
-static unsigned int const input2_sel_values[] = {
+static const unsigned int input2_sel_values[] = {
 	0x0,
 	CS53L30_ADCxB_PDN,
 	CS53L30_ADCxA_PDN,
