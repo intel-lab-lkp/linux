@@ -26,9 +26,10 @@ properties:
       # Devices. Keep it as it to be compatible existed dts files.
       - const: simple-bus
 
-  '#address-cells':
+  "#address-cells":
     const: 1
-  '#size-cells':
+
+  "#size-cells":
     const: 0
 
   reg:
@@ -132,8 +133,8 @@ patternProperties:
 required:
   - compatible
   - reg
-  - '#address-cells'
-  - '#size-cells'
+  - "#address-cells"
+  - "#size-cells"
 
 additionalProperties: false
 

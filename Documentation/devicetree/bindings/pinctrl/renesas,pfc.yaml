@@ -129,7 +129,7 @@ additionalProperties:
 
     - type: object
       additionalProperties:
-        $ref: "#/additionalProperties/anyOf/0"
+        $ref: '#/additionalProperties/anyOf/0'
 
 examples:
   - |
@@ -190,7 +190,7 @@ examples:
 
             sdhi0_pins: sd0 {
                     groups = "sdhi0_data4", "sdhi0_ctrl";
-                    function = "sdhi0";
+                    function = "sdhi0';
                     power-source = <3300>;
             };
     };

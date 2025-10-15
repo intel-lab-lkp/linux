@@ -72,7 +72,7 @@ additionalProperties: true
 $defs:
   ethernet-ports:
     description: An ethernet switch without any extra port properties
-    $ref: '#'
+    $ref: "#"
 
     patternProperties:
       "^(ethernet-)?ports$":

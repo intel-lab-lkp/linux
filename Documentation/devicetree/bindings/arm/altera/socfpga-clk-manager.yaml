@@ -39,7 +39,7 @@ properties:
 
       "^[a-z0-9,_]+(clk|pll|clk_gate|clk_divided)(@[a-f0-9]+)?$":
         type: object
-        $ref: '#/$defs/clock-props'
+        $ref: "#/$defs/clock-props"
         unevaluatedProperties: false
 
         properties:
@@ -67,7 +67,7 @@ properties:
         patternProperties:
           "^[a-z0-9,_]+(clk|pll)(@[a-f0-9]+)?$":
             type: object
-            $ref: '#/$defs/clock-props'
+            $ref: "#/$defs/clock-props"
             unevaluatedProperties: false
 
             properties:
