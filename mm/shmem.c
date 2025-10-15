@@ -2851,6 +2851,7 @@ unsigned long shmem_get_unmapped_area(struct file *file,
 		return addr;
 	return inflated_addr;
 }
+EXPORT_SYMBOL_GPL(shmem_get_unmapped_area);
 
 #ifdef CONFIG_NUMA
 static int shmem_set_policy(struct vm_area_struct *vma, struct mempolicy *mpol)
