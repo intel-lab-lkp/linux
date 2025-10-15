@@ -778,6 +778,7 @@ static int ocfs2_reserve_suballoc_bits(struct ocfs2_super *osb,
 	struct buffer_head *bh = NULL;
 	struct ocfs2_dinode *fe;
 	u32 free_bits;
+	struct ocfs2_chain_list *cl;
 
 	alloc_inode = ocfs2_get_system_file_inode(osb, type, slot);
 	if (!alloc_inode) {
@@ -800,7 +801,14 @@ static int ocfs2_reserve_suballoc_bits(struct ocfs2_super *osb,
 	ac->ac_alloc_slot = slot;
 
 	fe = (struct ocfs2_dinode *) bh->b_data;
-
+	cl = &fe->id2.i_chain;
+	/* Validate chain list before use */
+	if (le16_to_cpu(cl->cl_count) == 0) {
+		status = ocfs2_error(alloc_inode->i_sb,
+			 "Chain allocator %llu has invalid chain list (cl_count=0)\n",
+			 (unsigned long long)le64_to_cpu(fe->i_blkno));
+		goto bail;
+	}
 	/* The bh was validated by the inode read inside
 	 * ocfs2_inode_lock().  Any corruption is a code bug. */
 	BUG_ON(!OCFS2_IS_VALID_DINODE(fe));
