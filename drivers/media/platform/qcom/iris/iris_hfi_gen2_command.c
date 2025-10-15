@@ -245,7 +245,7 @@ static int iris_hfi_gen2_set_crop_offsets(struct iris_inst *inst, u32 plane)
 		right_offset = (ALIGN(inst->enc_raw_width, codec_align) - inst->enc_raw_width);
 		left_offset = inst->crop.left;
 		top_offset = inst->crop.top;
-		if (inst->fw_caps[ROTATION].value) {
+		if (inst->fw_caps[ROTATION].value || inst->fw_caps[VFLIP].value) {
 			bottom_offset = 0;
 			right_offset = 0;
 		}
