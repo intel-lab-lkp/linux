@@ -67,6 +67,33 @@ enum drm_gem_object_status {
 };
 
 /**
+ * enum drm_gem_object_status - bitmask describing GEM access types to prepare for
+ */
+enum drm_gem_object_access_flags {
+	/** @DRM_GEM_OBJECT_CPU_ACCESS: Prepare for a CPU access. */
+	DRM_GEM_OBJECT_CPU_ACCESS = 0,
+
+	/** @DRM_GEM_OBJECT_DEV_ACCESS: Prepare for a device access. */
+	DRM_GEM_OBJECT_DEV_ACCESS = BIT(0),
+
+	/** @DRM_GEM_OBJECT_ACCESSOR_MASK: Mask used to check the entity doing the access. */
+	DRM_GEM_OBJECT_ACCESSOR_MASK = BIT(0),
+
+	/** @DRM_GEM_OBJECT_READ_ACCESS: Prepare for read-only accesses. */
+	DRM_GEM_OBJECT_READ_ACCESS = BIT(1),
+
+	/** @DRM_GEM_OBJECT_WRITE_ACCESS: Prepare for write-only accesses. */
+	DRM_GEM_OBJECT_WRITE_ACCESS = BIT(2),
+
+	/** @DRM_GEM_OBJECT_RW_ACCESS: Prepare for a read/write accesses. */
+	DRM_GEM_OBJECT_RW_ACCESS = DRM_GEM_OBJECT_READ_ACCESS |
+				   DRM_GEM_OBJECT_WRITE_ACCESS,
+
+	/** @DRM_GEM_OBJECT_ACCESS_TYPE_MASK: Mask used to check the access type. */
+	DRM_GEM_OBJECT_ACCESS_TYPE_MASK = DRM_GEM_OBJECT_RW_ACCESS,
+};
+
+/**
  * struct drm_gem_object_funcs - GEM object functions
  */
 struct drm_gem_object_funcs {
@@ -190,6 +217,21 @@ struct drm_gem_object_funcs {
 	 * used, the @mmap callback must set vma->vm_ops instead.
 	 */
 	int (*mmap)(struct drm_gem_object *obj, struct vm_area_struct *vma);
+
+	/**
+	 * @sync:
+	 *
+	 * Prepare for CPU/device access. This can involve migration of
+	 * a buffer to the system-RAM/VRAM, or for UMA, flushing/invalidating
+	 * the CPU caches. The range can be used to optimize the synchronization
+	 * when possible.
+	 *
+	 * Returns 0 on success, -errno otherwise.
+	 *
+	 * This callback is optional.
+	 */
+	int (*sync)(struct drm_gem_object *obj, size_t offset, size_t size,
+		    enum drm_gem_object_access_flags access);
 
 	/**
 	 * @evict:
@@ -558,6 +600,9 @@ void drm_gem_unlock(struct drm_gem_object *obj);
 
 int drm_gem_vmap(struct drm_gem_object *obj, struct iosys_map *map);
 void drm_gem_vunmap(struct drm_gem_object *obj, struct iosys_map *map);
+
+int drm_gem_sync(struct drm_gem_object *obj, size_t offset, size_t size,
+		 enum drm_gem_object_access_flags access);
 
 int drm_gem_objects_lookup(struct drm_file *filp, void __user *bo_handles,
 			   int count, struct drm_gem_object ***objs_out);
