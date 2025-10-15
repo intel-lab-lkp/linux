@@ -1,0 +1,50 @@
+# SPDX-License-Identifier: (GPL-2.0-only OR BSD-2-Clause)
+%YAML 1.2
+---
+$id: http://devicetree.org/schemas/bus/simple-platform-bus.yaml#
+$schema: http://devicetree.org/meta-schemas/core.yaml#
+
+title: Simple Platform Bus
+
+maintainers:
+  - Herve Codina <herve.codina@bootlin.com>
+
+description: |
+  A Simple Platform Bus is a transparent bus that doesn't need a specific
+  driver to perform operations at bus level.
+
+  Similar to simple-bus, a Simple Platform Bus allows to automatically
+  instantiate devices connected to this bus. Those devices are instantiated
+  only by the Simple Platform Bus probe function itself.
+
+properties:
+  $nodename:
+    pattern: "^bus(@[0-9a-f]+)?$"
+
+  compatible:
+    const: simple-platform-bus
+
+  '#address-cells':
+    enum: [ 1, 2 ]
+
+  '#size-cells':
+    enum: [ 1, 2 ]
+
+  ranges: true
+
+required:
+  - compatible
+  - '#address-cells'
+  - '#size-cells'
+
+additionalProperties: false
+
+examples:
+  - |
+
+    bus {
+        compatible = "simple-platform-bus";
+        #address-cells = <1>;
+        #size-cells = <1>;
+        ranges;
+    };
