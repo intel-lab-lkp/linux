@@ -92,6 +92,11 @@ void drm_gem_dmabuf_vunmap(struct dma_buf *dma_buf, struct iosys_map *map);
 int drm_gem_prime_mmap(struct drm_gem_object *obj, struct vm_area_struct *vma);
 int drm_gem_dmabuf_mmap(struct dma_buf *dma_buf, struct vm_area_struct *vma);
 
+int drm_gem_dmabuf_begin_cpu_access(struct dma_buf *dma_buf,
+				    enum dma_data_direction direction);
+int drm_gem_dmabuf_end_cpu_access(struct dma_buf *dma_buf,
+				  enum dma_data_direction direction);
+
 struct sg_table *drm_prime_pages_to_sg(struct drm_device *dev,
 				       struct page **pages, unsigned int nr_pages);
 struct dma_buf *drm_gem_prime_export(struct drm_gem_object *obj,
