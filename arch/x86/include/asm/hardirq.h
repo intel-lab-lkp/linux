@@ -2,6 +2,7 @@
 #ifndef _ASM_X86_HARDIRQ_H
 #define _ASM_X86_HARDIRQ_H
 
+#include <linux/percpu.h>
 #include <linux/threads.h>
 
 typedef struct {
@@ -76,6 +77,11 @@ DECLARE_PER_CPU_CACHE_HOT(u16, __softirq_pending);
 static __always_inline void kvm_set_cpu_l1tf_flush_l1d(void)
 {
 	__this_cpu_write(irq_stat.kvm_cpu_l1tf_flush_l1d, 1);
+}
+
+static __always_inline void kvm_set_cpu_l1tf_flush_l1d_raw(void)
+{
+	raw_cpu_write(irq_stat.kvm_cpu_l1tf_flush_l1d, 1);
 }
 
 static __always_inline void kvm_clear_cpu_l1tf_flush_l1d(void)
