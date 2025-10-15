@@ -490,8 +490,12 @@ out_no_ref:
 }
 
 struct ttm_bo_alloc_state {
+	/** @charge_pool: The memory pool the resource is charged to */
+	struct dmem_cgroup_pool_state *charge_pool;
 	/** @limit_pool: Which pool limit we should test against */
 	struct dmem_cgroup_pool_state *limit_pool;
+	/** @only_evict_unprotected: If eviction should be restricted to unprotected BOs */
+	bool only_evict_unprotected;
 };
 
 /**
@@ -546,7 +550,7 @@ static s64 ttm_bo_evict_cb(struct ttm_lru_walk *walk, struct ttm_buffer_object *
 	evict_walk->evicted++;
 	if (evict_walk->res)
 		lret = ttm_resource_alloc(evict_walk->evictor, evict_walk->place,
-					  evict_walk->res, NULL);
+					  evict_walk->res, evict_walk->alloc_state->charge_pool);
 	if (lret == 0)
 		return 1;
 out:
@@ -589,7 +593,7 @@ static int ttm_bo_evict_alloc(struct ttm_device *bdev,
 	lret = ttm_lru_walk_for_evict(&evict_walk.walk, bdev, man, 1);
 
 	/* One more attempt if we hit low limit? */
-	if (!lret && evict_walk.hit_low) {
+	if (!lret && evict_walk.hit_low && !state->only_evict_unprotected) {
 		evict_walk.try_low = true;
 		lret = ttm_lru_walk_for_evict(&evict_walk.walk, bdev, man, 1);
 	}
@@ -610,7 +614,8 @@ retry:
 	} while (!lret && evict_walk.evicted);
 
 	/* We hit the low limit? Try once more */
-	if (!lret && evict_walk.hit_low && !evict_walk.try_low) {
+	if (!lret && evict_walk.hit_low && !evict_walk.try_low &&
+			!state->only_evict_unprotected) {
 		evict_walk.try_low = true;
 		goto retry;
 	}
@@ -719,20 +724,40 @@ static int ttm_bo_alloc_at_place(struct ttm_buffer_object *bo,
 				 struct ttm_resource **res,
 				 struct ttm_bo_alloc_state *alloc_state)
 {
-	bool may_evict;
+	bool may_evict, is_protected = false;
 	int ret;
 
 	may_evict = (force_space && place->mem_type != TTM_PL_SYSTEM);
+	ret = ttm_resource_try_charge(bo, place, &alloc_state->charge_pool,
+				      force_space ? &alloc_state->limit_pool : NULL);
+	if (ret) {
+		/*
+		 * -EAGAIN means the charge failed, which we treat like an
+		 * allocation failure. Allocation failures are indicated
+		 * by -ENOSPC, so return that instead.
+		 */
+		if (ret == -EAGAIN && !may_evict)
+			ret = -ENOSPC;
+		return ret;
+	}
 
-	ret = ttm_resource_alloc(bo, place, res,
-				 force_space ? &alloc_state->limit_pool : NULL);
+	is_protected = dmem_cgroup_below_min(NULL, alloc_state->charge_pool) ||
+		       dmem_cgroup_below_low(NULL, alloc_state->charge_pool);
+	ret = ttm_resource_alloc(bo, place, res, alloc_state->charge_pool);
+	alloc_state->only_evict_unprotected = !may_evict && is_protected;
 
 	if (ret) {
-		if ((ret == -ENOSPC || ret == -EAGAIN) && may_evict)
+		if ((ret == -ENOSPC || ret == -EAGAIN) &&
+				(may_evict || is_protected))
 			ret = -EBUSY;
 		return ret;
 	}
 
+	/*
+	 * Ownership of charge_pool has been transferred to the TTM resource,
+	 * don't make the caller think we still hold a reference to it.
+	 */
+	alloc_state->charge_pool = NULL;
 	return 0;
 }
 
@@ -787,6 +812,7 @@ static int ttm_bo_alloc_resource(struct ttm_buffer_object *bo,
 				res, &alloc_state);
 
 		if (ret == -ENOSPC) {
+			dmem_cgroup_pool_state_put(alloc_state.charge_pool);
 			dmem_cgroup_pool_state_put(alloc_state.limit_pool);
 			continue;
 		} else if (ret == -EBUSY) {
@@ -796,11 +822,14 @@ static int ttm_bo_alloc_resource(struct ttm_buffer_object *bo,
 			dmem_cgroup_pool_state_put(alloc_state.limit_pool);
 
 			if (ret) {
+				dmem_cgroup_pool_state_put(
+						alloc_state.charge_pool);
 				if (ret != -ENOSPC && ret != -EBUSY)
 					return ret;
 				continue;
 			}
 		} else if (ret) {
+			dmem_cgroup_pool_state_put(alloc_state.charge_pool);
 			dmem_cgroup_pool_state_put(alloc_state.limit_pool);
 			return ret;
 		}
