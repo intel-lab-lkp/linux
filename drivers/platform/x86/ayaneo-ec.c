@@ -37,6 +37,8 @@
 #define AYANEO_MODULE_LEFT	BIT(0)
 #define AYANEO_MODULE_RIGHT	BIT(1)
 
+#define AYANEO_CACHE_LEN	1
+
 struct ayaneo_ec_quirk {
 	bool has_fan_control;
 	bool has_charge_control;
@@ -47,6 +49,8 @@ struct ayaneo_ec_platform_data {
 	struct platform_device *pdev;
 	struct ayaneo_ec_quirk *quirks;
 	struct acpi_battery_hook battery_hook;
+
+	u8 cache[AYANEO_CACHE_LEN];
 };
 
 static const struct ayaneo_ec_quirk quirk_fan = {
@@ -464,10 +468,48 @@ static int ayaneo_ec_probe(struct platform_device *pdev)
 	return 0;
 }
 
+static int ayaneo_freeze(struct device *dev)
+{
+	struct platform_device *pdev = to_platform_device(dev);
+	struct ayaneo_ec_platform_data *data = platform_get_drvdata(pdev);
+	int ret, i = 0;
+
+	if (data->quirks->has_charge_control) {
+		ret = ec_read(AYANEO_CHARGE_REG, &data->cache[i]);
+		if (ret)
+			return ret;
+		i++;
+	}
+
+	return 0;
+}
+
+static int ayaneo_thaw(struct device *dev)
+{
+	struct platform_device *pdev = to_platform_device(dev);
+	struct ayaneo_ec_platform_data *data = platform_get_drvdata(pdev);
+	int ret, i = 0;
+
+	if (data->quirks->has_charge_control) {
+		ret = ec_write(AYANEO_CHARGE_REG, data->cache[i]);
+		if (ret)
+			return ret;
+		i++;
+	}
+
+	return 0;
+}
+
+static const struct dev_pm_ops ayaneo_pm_ops = {
+	.freeze = ayaneo_freeze,
+	.thaw = ayaneo_thaw,
+};
+
 static struct platform_driver ayaneo_platform_driver = {
 	.driver = {
 		.name = "ayaneo-ec",
 		.dev_groups = ayaneo_ec_groups,
+		.pm = &ayaneo_pm_ops,
 	},
 	.probe = ayaneo_ec_probe,
 };
