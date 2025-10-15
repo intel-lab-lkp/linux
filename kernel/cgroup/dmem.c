@@ -689,6 +689,31 @@ bool dmem_cgroup_below_low(struct dmem_cgroup_pool_state *root,
 }
 EXPORT_SYMBOL_GPL(dmem_cgroup_below_low);
 
+/**
+ * dmem_cgroup_common_ancestor(): Find the first common ancestor of two pools.
+ * @a: First pool to find the common ancestor of.
+ * @b: First pool to find the common ancestor of.
+ *
+ * Return: The first pool that is a parent of both @a and @b, or NULL if either @a or @b are NULL.
+ */
+struct dmem_cgroup_pool_state *dmem_cgroup_common_ancestor(struct dmem_cgroup_pool_state *a,
+							   struct dmem_cgroup_pool_state *b)
+{
+	struct dmem_cgroup_pool_state *parent;
+
+	while (a) {
+		parent = b;
+		while (parent) {
+			if (a == parent)
+				return a;
+			parent = pool_parent(parent);
+		}
+		a = pool_parent(a);
+	}
+	return NULL;
+}
+EXPORT_SYMBOL_GPL(dmem_cgroup_common_ancestor);
+
 static int dmem_cgroup_region_capacity_show(struct seq_file *sf, void *v)
 {
 	struct dmem_cgroup_region *region;
