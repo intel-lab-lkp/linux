@@ -29,16 +29,62 @@
 #include "fsl_pci.h"
 
 #define MSIIR_OFFSET_MASK	0xfffff
+
 #define MSIIR_IBS_SHIFT		0
 #define MSIIR_SRS_SHIFT		5
+#define MSIIR_SRS_MASK		0x7
+
 #define MSIIR1_IBS_SHIFT	4
 #define MSIIR1_SRS_SHIFT	0
-#define MSI_SRS_MASK		0xf
+#define MSIIR1_SRS_MASK		0xf
+
 #define MSI_IBS_MASK		0x1f
 
-#define msi_hwirq(msi, msir_index, intr_index) \
-		((msir_index) << (msi)->srs_shift | \
+#define MSI_MPIC_SIZE		0x10
+#define MSI_IPIC_SIZE		0x04
+
+#define msi_to_hwirq(msi, msir_index, intr_index) \
+		(((msir_index) << (msi)->srs_shift) | \
 		 ((intr_index) << (msi)->ibs_shift))
+
+static inline int msi_to_bit(struct fsl_msi *msi, int msir_index, int intr_index)
+{
+	if (!msi->srs_shift)
+		return msi_to_hwirq(msi, msir_index, intr_index);
+
+	return msir_index | (intr_index << hweight32(msi->srs_mask));
+}
+
+static inline int bit_to_hwirq(struct fsl_msi *msi, int bit)
+{
+	int hwirq;
+
+	if (!msi->srs_shift)
+		return bit;
+
+	hwirq  = (bit & msi->srs_mask) << msi->srs_shift;
+	hwirq |=  bit >> hweight32(msi->srs_mask);
+
+	return hwirq;
+}
+
+static inline int hwirq_to_bit(struct fsl_msi *msi, int hwirq)
+{
+	int bit;
+
+	if (!msi->srs_shift)
+		return hwirq;
+
+	bit  = (hwirq >> msi->srs_shift) & msi->srs_mask;
+	bit |= (hwirq & MSI_IBS_MASK) << msi->srs_shift;
+
+	return bit;
+}
+
+#define hwirq_to_srs(msi, hwirq) \
+		(((hwirq) >> (msi)->srs_shift) & (msi)->srs_mask)
+#define hwirq_to_ibs(msi, hwirq) \
+		(((hwirq) >> (msi)->ibs_shift) & MSI_IBS_MASK)
 
 static LIST_HEAD(msi_head);
 
@@ -72,7 +118,7 @@ static void fsl_msi_print_chip(struct irq_data *irqd, struct seq_file *p)
 	irq_hw_number_t hwirq = irqd_to_hwirq(irqd);
 	int cascade_virq, srs;
 
-	srs = (hwirq >> msi_data->srs_shift) & MSI_SRS_MASK;
+	srs = hwirq_to_srs(msi_data, hwirq);
 	cascade_virq = msi_data->cascade_array[srs]->virq;
 
 	seq_printf(p, "fsl-msi-%d", cascade_virq);
@@ -107,8 +153,9 @@ static const struct irq_domain_ops fsl_msi_host_ops = {
 static int fsl_msi_init_allocator(struct fsl_msi *msi_data)
 {
 	int rc, hwirq;
+	int num_irqs = msi_data->nr_msi_regs * IRQS_PER_MSI_REG;
 
-	rc = msi_bitmap_alloc(&msi_data->bitmap, NR_MSI_IRQS_MAX,
+	rc = msi_bitmap_alloc(&msi_data->bitmap, num_irqs,
 			      irq_domain_get_of_node(msi_data->irqhost));
 	if (rc)
 		return rc;
@@ -117,7 +164,7 @@ static int fsl_msi_init_allocator(struct fsl_msi *msi_data)
 	 * Reserve all the hwirqs
 	 * The available hwirqs will be released in fsl_msi_setup_hwirq()
 	 */
-	for (hwirq = 0; hwirq < NR_MSI_IRQS_MAX; hwirq++)
+	for (hwirq = 0; hwirq < num_irqs; hwirq++)
 		msi_bitmap_reserve_hwirq(&msi_data->bitmap, hwirq);
 
 	return 0;
@@ -172,7 +219,7 @@ static void fsl_compose_msi_msg(struct pci_dev *pdev, int hwirq,
 		msg->data = hwirq;
 
 	pr_debug("%s: allocated srs: %d, ibs: %d\n", __func__,
-		 (hwirq >> msi_data->srs_shift) & MSI_SRS_MASK,
+		 hwirq_to_srs(msi_data, hwirq),
 		 (hwirq >> msi_data->ibs_shift) & MSI_IBS_MASK);
 }
 
@@ -308,8 +355,8 @@ static irqreturn_t fsl_msi_cascade(int irq, void *data)
 		intr_index = ffs(msir_value) - 1;
 
 		err = generic_handle_domain_irq(msi_data->irqhost,
-				msi_hwirq(msi_data, msir_index,
-					  intr_index + have_shift));
+				msi_to_hwirq(msi_data, msir_index,
+					     intr_index + have_shift));
 		if (!err)
 			ret = IRQ_HANDLED;
 
@@ -384,7 +431,7 @@ static int fsl_msi_setup_hwirq(struct fsl_msi *msi, struct platform_device *dev,
 	/* Release the hwirqs corresponding to this MSI register */
 	for (i = 0; i < IRQS_PER_MSI_REG; i++)
 		msi_bitmap_free_hwirqs(&msi->bitmap,
-				       msi_hwirq(msi, offset, i), 1);
+				       msi_to_hwirq(msi, offset, i), 1);
 
 	return 0;
 }
@@ -412,7 +459,8 @@ static int fsl_of_msi_probe(struct platform_device *dev)
 	}
 	platform_set_drvdata(dev, msi);
 
-	msi->irqhost = irq_domain_create_linear(dev_fwnode(&dev->dev), NR_MSI_IRQS_MAX,
+	msi->irqhost = irq_domain_create_linear(dev_fwnode(&dev->dev),
+						msi->nr_msi_regs * IRQS_PER_MSI_REG,
 						&fsl_msi_host_ops, msi);
 	if (msi->irqhost == NULL) {
 		dev_err(&dev->dev, "No memory for MSI irqhost\n");

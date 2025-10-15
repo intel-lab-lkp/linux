@@ -15,7 +15,6 @@
 #define NR_MSI_REG_MSIIR1	16 /* MSIIR1 can index 16 MSI registers */
 #define NR_MSI_REG_MAX		NR_MSI_REG_MSIIR1
 #define IRQS_PER_MSI_REG	32
-#define NR_MSI_IRQS_MAX	(NR_MSI_REG_MAX * IRQS_PER_MSI_REG)
 
 #define FSL_PIC_IP_MASK   0x0000000F
 #define FSL_PIC_IP_MPIC   0x00000001
@@ -32,11 +31,13 @@ struct fsl_msi {
 	unsigned long cascade_irq;
 
 	u32 msiir_offset; /* Offset of MSIIR, relative to start of CCSR */
-	u32 ibs_shift; /* Shift of interrupt bit select */
-	u32 srs_shift; /* Shift of the shared interrupt register select */
+	u32 ibs_shift;    /* Shift of interrupt bit select */
+	u32 srs_mask;     /* Mask of the shared interrupt register select */
+	u32 srs_shift;    /* Shift for shared interrupt register select */
 	void __iomem *msi_regs;
 	u32 feature;
 	struct fsl_msi_cascade_data *cascade_array[NR_MSI_REG_MAX];
+	u32 nr_msi_regs;
 
 	struct msi_bitmap bitmap;
 
