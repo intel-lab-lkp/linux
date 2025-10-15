@@ -283,6 +283,23 @@ impl LocalFile {
         unsafe { &*ptr.cast() }
     }
 
+    /// Create a mutable reference to a [`LocalFile`] from a valid pointer.
+    ///
+    /// # Safety
+    ///
+    /// * The caller must ensure that `ptr` points at a valid file and that the file's refcount is
+    ///   positive for the duration of `'a`.
+    /// * The caller must ensure that if there is an active call to `fdget_pos` that did not take
+    ///   the `f_pos_lock` mutex, then that call is on the current thread.
+    #[inline]
+    pub unsafe fn from_raw_file_mut<'a>(ptr: *mut bindings::file) -> &'a mut LocalFile {
+        // SAFETY: The caller guarantees that the pointer is not dangling and stays valid for the
+        // duration of `'a`. The cast is okay because `LocalFile` is `repr(transparent)`.
+        //
+        // INVARIANT: The caller guarantees that there are no problematic `fdget_pos` calls.
+        unsafe { &mut *ptr.cast() }
+    }
+
     /// Assume that there are no active `fdget_pos` calls that prevent us from sharing this file.
     ///
     /// This makes it safe to transfer this file to other threads. No checks are performed, and
@@ -337,6 +354,20 @@ impl LocalFile {
         // FIXME(read_once): Replace with `read_once` when available on the Rust side.
         unsafe { core::ptr::addr_of!((*self.as_ptr()).f_flags).read_volatile() }
     }
+
+    /// Get the current `f_pos` with the file.
+    #[inline]
+    pub fn pos(&self) -> i64 {
+        // SAFETY: The `f_pos` is valid while `LocalFile` is valid
+        unsafe { (*self.as_ptr()).f_pos }
+    }
+
+    /// Get a mutable reference to the `f_pos`.
+    #[inline]
+    pub fn pos_mut(&mut self) -> &mut i64 {
+        // SAFETY: The `f_pos` is valid while `LocalFile` is valid
+        unsafe { &mut (*self.as_ptr()).f_pos }
+    }
 }
 
 impl File {
@@ -356,6 +387,23 @@ impl File {
         // INVARIANT: The caller guarantees that there are no problematic `fdget_pos` calls.
         unsafe { &*ptr.cast() }
     }
+
+    /// Creates a mutable reference to a [`File`] from a valid pointer.
+    ///
+    /// # Safety
+    ///
+    /// * The caller must ensure that `ptr` points at a valid file and that the file's refcount is
+    ///   positive for the duration of `'a`.
+    /// * The caller must ensure that if there are active `fdget_pos` calls on this file, then they
+    ///   took the `f_pos_lock` mutex.
+    #[inline]
+    pub unsafe fn from_raw_file_mut<'a>(ptr: *mut bindings::file) -> &'a mut File {
+        // SAFETY: The caller guarantees that the pointer is not dangling and stays valid for the
+        // duration of `'a`. The cast is okay because `File` is `repr(transparent)`.
+        //
+        // INVARIANT: The caller guarantees that there are no problematic `fdget_pos` calls.
+        unsafe { &mut *ptr.cast() }
+    }
 }
 
 // Make LocalFile methods available on File.
@@ -369,6 +417,19 @@ impl core::ops::Deref for File {
         // By the type invariants, there are no `fdget_pos` calls that did not take the
         // `f_pos_lock` mutex.
         unsafe { LocalFile::from_raw_file(core::ptr::from_ref(self).cast()) }
+    }
+}
+
+// Make LocalFile methods available on File.
+impl core::ops::DerefMut for File {
+    #[inline]
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        // SAFETY: The caller provides a `&File`, and since it is a reference, it must point at a
+        // valid file for the desired duration.
+        //
+        // By the type invariants, there are no `fdget_pos` calls that did not take the
+        // `f_pos_lock` mutex.
+        unsafe { LocalFile::from_raw_file_mut(core::ptr::from_mut(self).cast()) }
     }
 }
 
