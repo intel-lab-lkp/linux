@@ -626,7 +626,7 @@ static void assert_dmc_loaded(struct intel_display *display,
 	found = intel_de_read(display, DMC_PROGRAM(dmc->dmc_info[dmc_id].start_mmioaddr, 0));
 	expected = dmc->dmc_info[dmc_id].payload[0];
 
-	drm_WARN(display->drm, found != expected,
+	drm_WARN_ONCE(display->drm, found != expected,
 		 "DMC %d program storage start incorrect (expected 0x%x, current 0x%x)\n",
 		 dmc_id, expected, found);
 
@@ -642,7 +642,7 @@ static void assert_dmc_loaded(struct intel_display *display,
 			expected &= ~DMC_EVT_CTL_ENABLE;
 		}
 
-		drm_WARN(display->drm, found != expected,
+		drm_WARN_ONCE(display->drm, found != expected,
 			 "DMC %d mmio[%d]/0x%x incorrect (expected 0x%x, current 0x%x)\n",
 			 dmc_id, i, i915_mmio_reg_offset(reg), expected, found);
 	}
