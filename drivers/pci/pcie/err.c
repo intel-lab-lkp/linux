@@ -215,6 +215,7 @@ pci_ers_result_t pcie_do_recovery(struct pci_dev *dev,
 	struct pci_dev *bridge;
 	pci_ers_result_t status = PCI_ERS_RESULT_CAN_RECOVER;
 	struct pci_host_bridge *host = pci_find_host_bridge(dev->bus);
+	struct aer_err_info info;
 
 	/*
 	 * If the error was detected by a Root Port, Downstream Port, RCEC,
@@ -252,6 +253,16 @@ pci_ers_result_t pcie_do_recovery(struct pci_dev *dev,
 		if (reset_subordinates(bridge) != PCI_ERS_RESULT_RECOVERED) {
 			pci_warn(bridge, "subordinate device reset failed\n");
 			goto failed;
+		}
+
+		/* Link recovered, report fatal errors of RCiEP or EP */
+		if (state == pci_channel_io_frozen &&
+		    (type == PCI_EXP_TYPE_ENDPOINT || type == PCI_EXP_TYPE_RC_END)) {
+			aer_add_error_device(&info, dev);
+			info.severity = AER_FATAL;
+			if (aer_get_device_error_info(&info, 0, true))
+				aer_print_error(&info, 0);
+			pci_dev_put(dev);
 		}
 	}
 
