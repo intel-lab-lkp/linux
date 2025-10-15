@@ -157,6 +157,20 @@ endif
 
 export KBUILD_EXTRA_WARN
 
+# To check for unused tracepoints (tracepoints that are defined but never
+# called), run with:
+#
+# make UT=1
+#
+# Each unused tracepoints can take up to 5KB of memory in the running kernel.
+# It is best to remove any that are not used.
+
+ifeq ("$(origin UT)", "command line")
+  WARN_ON_UNUSED_TRACEPOINTS := $(UT)
+endif
+
+export WARN_ON_UNUSED_TRACEPOINTS
+
 # Kbuild will save output files in the current working directory.
 # This does not need to match to the root of the kernel source tree.
 #
@@ -1772,6 +1786,7 @@ help:
 	@echo  '		c: extra checks in the configuration stage (Kconfig)'
 	@echo  '		e: warnings are being treated as errors'
 	@echo  '		Multiple levels can be combined with W=12 or W=123'
+	@echo  '  make UT=1   [targets] Warn if a tracepoint is defined but not used.
 	@$(if $(dtstree), \
 		echo '  make CHECK_DTBS=1 [targets] Check all generated dtb files against schema'; \
 		echo '         This can be applied both to "dtbs" and to individual "foo.dtb" targets' ; \
