@@ -27,4 +27,19 @@ config KEXEC_HANDOVER_DEBUGFS
 	  Also, enables inspecting the KHO fdt trees with the debugfs binary
 	  blobs.
 
+config KEXEC_HANDOVER_DEBUG
+	bool "Enable Kexec Handover debug checks"
+	depends on KEXEC_HANDOVER_DEBUGFS
+	help
+	  This option enables extra sanity checks for the Kexec Handover
+	  subsystem.
+
+	  These checks verify that neither preserved memory regions nor KHO's
+	  internal metadata are allocated from within a KHO scratch area.
+	  An overlap can lead to memory corruption during a subsequent kexec
+	  operation.
+
+	  If an overlap is detected, the kernel will print a warning and the
+	  offending operation will fail. This should only be enabled for
+	  debugging purposes due to runtime overhead.
 endmenu
