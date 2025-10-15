@@ -834,8 +834,23 @@ static long privcmd_ioctl_mmap_resource(struct file *file,
 				if (rc < 0)
 					break;
 			}
-		} else
+		} else {
+			unsigned int i;
+			unsigned int numpgs = kdata.num / XEN_PFN_PER_PAGE;
+			struct page **pages;
 			rc = 0;
+
+			pages = kvcalloc(numpgs, sizeof(pages[0]), GFP_KERNEL);
+			if (pages == NULL) {
+				rc = -ENOMEM;
+				goto out;
+			}
+
+			for (i = 0; i < numpgs; i++) {
+				pages[i] = xen_pfn_to_page(pfns[i * XEN_PFN_PER_PAGE]);
+			}
+			vma->vm_private_data = pages;
+		}
 	}
 
 out:
@@ -1589,15 +1604,18 @@ static void privcmd_close(struct vm_area_struct *vma)
 	int numgfns = (vma->vm_end - vma->vm_start) >> XEN_PAGE_SHIFT;
 	int rc;
 
-	if (xen_pv_domain() || !numpgs || !pages)
+	if (!numpgs || !pages)
 		return;
 
-	rc = xen_unmap_domain_gfn_range(vma, numgfns, pages);
-	if (rc == 0)
-		xen_free_unpopulated_pages(numpgs, pages);
-	else
-		pr_crit("unable to unmap MFN range: leaking %d pages. rc=%d\n",
-			numpgs, rc);
+	if (!xen_pv_domain()) {
+		rc = xen_unmap_domain_gfn_range(vma, numgfns, pages);
+		if (rc == 0)
+			xen_free_unpopulated_pages(numpgs, pages);
+		else
+			pr_crit("unable to unmap MFN range: leaking %d pages. rc=%d\n",
+				numpgs, rc);
+	}
+
 	kvfree(pages);
 }
 
