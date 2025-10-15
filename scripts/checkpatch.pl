@@ -169,6 +169,30 @@ my $DO_WHILE_0_ADVICE = q{
    Enjoy this qualification while we work to improve our heuristics.
 };
 
+# call this from s/$patt/drx_print("why")/e - to see whats happening there.
+my $drx_print = 0;
+sub drx_print {
+    return "" unless $drx_print;
+
+    my ($why) = @_;
+    # The magic regex variables are available here.
+    # $& contains the entire matched string.
+    # $1, $2, etc. contain captured groups.
+    print "drx_print: $why\n";
+    print "  >> Matched (`\$&`): <$&>\n";
+
+    # Only print captures if they exist
+    if (defined $1) {
+	print "  >> Capture 1 (`\$1`): <$1>\n";
+    }
+    if (defined $2) {
+	print "  >> Capture 2 (`\$2`): <$2>\n";
+    }
+    # The subroutine must return the replacement string.
+    # For stripping, this is an empty string.
+    return "";
+}
+
 sub uniq {
 	my %seen;
 	return grep { !$seen{$_}++ } @_;
@@ -348,6 +372,7 @@ GetOptions(
 	'no-color'	=> \$color,	#keep old behaviors of -nocolor
 	'nocolor'	=> \$color,	#keep old behaviors of -nocolor
 	'kconfig-prefix=s'	=> \${CONFIG_},
+	'drx'		=> \$drx_print,
 	'h|help'	=> \$help,
 	'version'	=> \$help
 ) or $help = 2;
@@ -6049,11 +6074,24 @@ sub process {
 			        next if ($arg =~ /\.\.\./);
 			        next if ($arg =~ /^type$/i);
 				my $tmp_stmt = $define_stmt;
-				$tmp_stmt =~ s/\b(__must_be_array|offsetof|sizeof|sizeof_field|__stringify|typeof|__typeof__|__builtin\w+|typecheck\s*\(\s*$Type\s*,|\#+)\s*\(*\s*$arg\s*\)*\b//g;
-				$tmp_stmt =~ s/\#+\s*$arg\b//g;
-				$tmp_stmt =~ s/\b$arg\s*\#\#//g;
+
+				$tmp_stmt =~ s{
+					\b(__must_be_array|offsetof|sizeof|sizeof_field|__stringify|
+					   typeof|__typeof__|__builtin\w+|typecheck
+					   \s*\(\s*$Type\s*,|\#+)\s*\(*\s*$arg\s*\)*\b }
+				{
+					drx_print("dunno");
+				}xge;
+
+				$tmp_stmt =~ s/\#+\s*$arg\b/drx_print("strip '#|## arg catenations")/ge;
+				$tmp_stmt =~ s/\b$arg\s*\#\#/drx_print("strip 'arg ##' catenations");/ge;
+
+				my $no_side_effect_vars = "";
+				if ($tmp_stmt =~ s/__no_side_effects\((.+)\)//) {
+					$no_side_effect_vars = $1;
+				}
 				my $use_cnt = () = $tmp_stmt =~ /\b$arg\b/g;
-				if ($use_cnt > 1) {
+				if ($use_cnt > 1 and $no_side_effect_vars !~ m/\b$arg\b/) {
 					CHK("MACRO_ARG_REUSE",
 					    "Macro argument reuse '$arg' - possible side-effects?\n" . "$herectx");
 				    }
