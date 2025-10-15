@@ -138,14 +138,14 @@ bool trace_pid_list_is_set(struct trace_pid_list *pid_list, unsigned int pid)
 	if (pid_split(pid, &upper1, &upper2, &lower) < 0)
 		return false;
 
-	raw_spin_lock_irqsave(&pid_list->lock, flags);
+	read_lock_irqsave(&pid_list->lock, flags);
 	upper_chunk = pid_list->upper[upper1];
 	if (upper_chunk) {
 		lower_chunk = upper_chunk->data[upper2];
 		if (lower_chunk)
 			ret = test_bit(lower, lower_chunk->data);
 	}
-	raw_spin_unlock_irqrestore(&pid_list->lock, flags);
+	read_unlock_irqrestore(&pid_list->lock, flags);
 
 	return ret;
 }
@@ -177,7 +177,7 @@ int trace_pid_list_set(struct trace_pid_list *pid_list, unsigned int pid)
 	if (pid_split(pid, &upper1, &upper2, &lower) < 0)
 		return -EINVAL;
 
-	raw_spin_lock_irqsave(&pid_list->lock, flags);
+	write_lock_irqsave(&pid_list->lock, flags);
 	upper_chunk = pid_list->upper[upper1];
 	if (!upper_chunk) {
 		upper_chunk = get_upper_chunk(pid_list);
@@ -199,7 +199,7 @@ int trace_pid_list_set(struct trace_pid_list *pid_list, unsigned int pid)
 	set_bit(lower, lower_chunk->data);
 	ret = 0;
  out:
-	raw_spin_unlock_irqrestore(&pid_list->lock, flags);
+	write_unlock_irqrestore(&pid_list->lock, flags);
 	return ret;
 }
 
@@ -229,7 +229,7 @@ int trace_pid_list_clear(struct trace_pid_list *pid_list, unsigned int pid)
 	if (pid_split(pid, &upper1, &upper2, &lower) < 0)
 		return -EINVAL;
 
-	raw_spin_lock_irqsave(&pid_list->lock, flags);
+	write_lock_irqsave(&pid_list->lock, flags);
 	upper_chunk = pid_list->upper[upper1];
 	if (!upper_chunk)
 		goto out;
@@ -250,7 +250,7 @@ int trace_pid_list_clear(struct trace_pid_list *pid_list, unsigned int pid)
 		}
 	}
  out:
-	raw_spin_unlock_irqrestore(&pid_list->lock, flags);
+	write_unlock_irqrestore(&pid_list->lock, flags);
 	return 0;
 }
 
@@ -282,7 +282,7 @@ int trace_pid_list_next(struct trace_pid_list *pid_list, unsigned int pid,
 	if (pid_split(pid, &upper1, &upper2, &lower) < 0)
 		return -EINVAL;
 
-	raw_spin_lock_irqsave(&pid_list->lock, flags);
+	read_lock_irqsave(&pid_list->lock, flags);
 	for (; upper1 <= UPPER_MASK; upper1++, upper2 = 0) {
 		upper_chunk = pid_list->upper[upper1];
 
@@ -302,7 +302,7 @@ int trace_pid_list_next(struct trace_pid_list *pid_list, unsigned int pid,
 	}
 
  found:
-	raw_spin_unlock_irqrestore(&pid_list->lock, flags);
+	read_unlock_irqrestore(&pid_list->lock, flags);
 	if (upper1 > UPPER_MASK)
 		return -1;
 
@@ -339,10 +339,10 @@ static void pid_list_refill_irq(struct irq_work *iwork)
 	int lcnt = 0;
 
  again:
-	raw_spin_lock(&pid_list->lock);
+	write_lock(&pid_list->lock);
 	upper_count = CHUNK_ALLOC - pid_list->free_upper_chunks;
 	lower_count = CHUNK_ALLOC - pid_list->free_lower_chunks;
-	raw_spin_unlock(&pid_list->lock);
+	write_unlock(&pid_list->lock);
 
 	if (upper_count <= 0 && lower_count <= 0)
 		return;
@@ -369,7 +369,7 @@ static void pid_list_refill_irq(struct irq_work *iwork)
 		lcnt++;
 	}
 
-	raw_spin_lock(&pid_list->lock);
+	write_lock(&pid_list->lock);
 	if (upper) {
 		*upper_next = pid_list->upper_list;
 		pid_list->upper_list = upper;
@@ -380,7 +380,7 @@ static void pid_list_refill_irq(struct irq_work *iwork)
 		pid_list->lower_list = lower;
 		pid_list->free_lower_chunks += lcnt;
 	}
-	raw_spin_unlock(&pid_list->lock);
+	write_unlock(&pid_list->lock);
 
 	/*
 	 * On success of allocating all the chunks, both counters
@@ -418,7 +418,7 @@ struct trace_pid_list *trace_pid_list_alloc(void)
 
 	init_irq_work(&pid_list->refill_irqwork, pid_list_refill_irq);
 
-	raw_spin_lock_init(&pid_list->lock);
+	rwlock_init(&pid_list->lock);
 
 	for (i = 0; i < CHUNK_ALLOC; i++) {
 		union upper_chunk *chunk;
