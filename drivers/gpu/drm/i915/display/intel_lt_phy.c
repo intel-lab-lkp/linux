@@ -43,6 +43,13 @@ intel_lt_phy_setup_powerdown(struct intel_encoder *encoder, u8 lane_count)
 }
 
 static void
+intel_lt_phy_powerdown_change_sequence(struct intel_encoder *encoder,
+				       u8 lane_mask, u8 state)
+{
+	intel_cx0_powerdown_change_sequence(encoder, lane_mask, state);
+}
+
+static void
 intel_lt_phy_lane_reset(struct intel_encoder *encoder,
 			u8 lane_count)
 {
@@ -69,6 +76,8 @@ intel_lt_phy_lane_reset(struct intel_encoder *encoder,
 		     XE3PLPDP_PHY_MODE_MASK, XE3PLPDP_PHY_MODE_DP);
 
 	intel_lt_phy_setup_powerdown(encoder, lane_count);
+	intel_lt_phy_powerdown_change_sequence(encoder, owned_lane_mask,
+					       XELPDP_P2_STATE_RESET);
 
 	intel_de_rmw(display, XE3PLPD_PORT_BUF_CTL5(port),
 		     XE3PLPD_MACCLK_RESET_0, 0);
@@ -144,6 +153,7 @@ void intel_lt_phy_pll_enable(struct intel_encoder *encoder,
 {
 	struct intel_digital_port *dig_port = enc_to_dig_port(encoder);
 	bool lane_reversal = dig_port->lane_reversal;
+	u8 owned_lane_mask = intel_lt_phy_get_owned_lane_mask(encoder);
 
 	/* 1. Enable MacCLK at default 162 MHz frequency. */
 	intel_lt_phy_lane_reset(encoder, crtc_state->lane_count);
@@ -152,6 +162,9 @@ void intel_lt_phy_pll_enable(struct intel_encoder *encoder,
 	intel_lt_phy_program_port_clock_ctl(encoder, crtc_state, lane_reversal);
 
 	/* 3. Change owned PHY lanes power to Ready state. */
+	intel_lt_phy_powerdown_change_sequence(encoder, owned_lane_mask,
+					       XELPDP_P2_STATE_READY);
+
 	/*
 	 * 4. Read the PHY message bus VDR register PHY_VDR_0_Config check enabled PLL type,
 	 * encoded rate and encoded mode.
