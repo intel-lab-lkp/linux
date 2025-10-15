@@ -314,6 +314,9 @@ int hinic3_func_rx_tx_flush(struct hinic3_hwdev *hwdev)
 			ret = -EFAULT;
 	}
 
+	if (HINIC3_FUNC_TYPE(hwdev) != HINIC3_FUNC_TYPE_VF)
+		hinic3_set_pf_status(hwif, HINIC3_PF_STATUS_FLR_START_FLAG);
+
 	clr_res.func_id = hwif->attr.func_global_idx;
 	msg_params.buf_in = &clr_res;
 	msg_params.in_size = sizeof(clr_res);
@@ -335,6 +338,54 @@ int hinic3_func_rx_tx_flush(struct hinic3_hwdev *hwdev)
 	}
 
 	return ret;
+}
+
+int hinic3_set_bdf_ctxt(struct hinic3_hwdev *hwdev, u8 bus, u8 device, u8 function)
+{
+	struct comm_cmd_bdf_info bdf_info = {};
+	struct mgmt_msg_params msg_params = {};
+	int err;
+
+	bdf_info.function_idx = hinic3_global_func_id(hwdev);
+	bdf_info.bus = bus;
+	bdf_info.device = device;
+	bdf_info.function = function;
+
+	mgmt_msg_params_init_default(&msg_params, &bdf_info, sizeof(bdf_info));
+
+	err = hinic3_send_mbox_to_mgmt(hwdev, MGMT_MOD_COMM,
+				       COMM_CMD_SEND_BDF_INFO, &msg_params);
+	if (err || bdf_info.head.status) {
+		dev_err(hwdev->dev,
+			"Failed to set bdf info to fw, err: %d, status: 0x%x\n",
+			err, bdf_info.head.status);
+		return -EIO;
+	}
+
+	return 0;
+}
+
+int hinic3_sync_time(struct hinic3_hwdev *hwdev, u64 time)
+{
+	struct comm_cmd_sync_time time_info = {};
+	struct mgmt_msg_params msg_params = {};
+	int err;
+
+	time_info.mstime = time;
+
+	mgmt_msg_params_init_default(&msg_params, &time_info,
+				     sizeof(time_info));
+
+	err = hinic3_send_mbox_to_mgmt(hwdev, MGMT_MOD_COMM,
+				       COMM_CMD_SYNC_TIME, &msg_params);
+	if (err || time_info.head.status) {
+		dev_err(hwdev->dev,
+			"Failed to sync time to mgmt, err: %d, status: 0x%x\n",
+			err, time_info.head.status);
+		return -EIO;
+	}
+
+	return 0;
 }
 
 static int get_hw_rx_buf_size_idx(int rx_buf_sz, u16 *buf_sz_idx)
