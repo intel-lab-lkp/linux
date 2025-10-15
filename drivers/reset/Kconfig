@@ -5,6 +5,7 @@ config ARCH_HAS_RESET_CONTROLLER
 menuconfig RESET_CONTROLLER
 	bool "Reset Controller Support"
 	default y if ARCH_HAS_RESET_CONTROLLER
+	select RESET_GPIO if GPIOLIB
 	help
 	  Generic Reset Controller support.
 
