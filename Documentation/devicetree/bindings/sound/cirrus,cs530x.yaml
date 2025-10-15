@@ -22,6 +22,10 @@ properties:
       - cirrus,cs5302
       - cirrus,cs5304
       - cirrus,cs5308
+      - cirrus,cs4282
+      - cirrus,cs4302
+      - cirrus,cs4304
+      - cirrus,cs4308
 
   reg:
     maxItems: 1
