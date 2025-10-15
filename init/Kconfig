@@ -1631,6 +1631,10 @@ config HAVE_PCSPKR_PLATFORM
 config HAVE_TRIM_UNUSED_SYSCALLS
 	bool
 
+config AS_HAS_BFD_RELOC_NONE
+	bool
+	def_bool $(as-instr,.reloc .$(comma) BFD_RELOC_NONE$(comma))
+
 menuconfig EXPERT
 	bool "Configure standard kernel features (expert users)"
 	# Unhide debug options, to make the on-by-default options visible
@@ -1952,6 +1956,18 @@ config USED_SYSCALLS
 	  empty, all syscalls will be trimmed.
 
 	  If unsure, please disable TRIM_UNUSED_SYSCALLS.
+
+config PUSHSECTION_WITH_RELOC
+	bool "Trim more syscalls"
+	depends on TRIM_UNUSED_SYSCALLS && AS_HAS_BFD_RELOC_NONE
+	default y
+	help
+	  Enable building relocation-based references between sections created
+	  by '.pushsection' and their caller functions when the assembler
+	  supports the '.reloc' directive.
+
+	  This allows the linker to establish proper dependencies, remove the
+	  need for KEEP().
 
 config KALLSYMS
 	bool "Load all symbols for debugging/ksymoops" if EXPERT
