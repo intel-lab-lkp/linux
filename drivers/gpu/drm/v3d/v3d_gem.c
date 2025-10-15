@@ -269,7 +269,9 @@ v3d_huge_mnt_init(struct v3d_dev *v3d)
 	 * match our usecase.
 	 */
 
+#ifdef CONFIG_TRANSPARENT_HUGEPAGE
 	if (super_pages)
+#endif
 		err = drm_gem_huge_mnt_create(&v3d->drm, "within_size");
 
 	if (v3d->drm.huge_mnt)
