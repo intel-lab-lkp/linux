@@ -1458,18 +1458,27 @@ int iopt_table_enforce_dev_resv_regions(struct io_pagetable *iopt,
 	iommu_get_resv_regions(dev, &resv_regions);
 
 	list_for_each_entry(resv, &resv_regions, list) {
+		unsigned long start = PHYS_ADDR_MAX, last = 0;
+
 		if (resv->type == IOMMU_RESV_DIRECT_RELAXABLE)
 			continue;
 
 		if (sw_msi_start && resv->type == IOMMU_RESV_MSI)
 			num_hw_msi++;
 		if (sw_msi_start && resv->type == IOMMU_RESV_SW_MSI) {
-			*sw_msi_start = resv->start;
+			if (idev->sw_msi_size) {
+				start = *sw_msi_start;
+				last = idev->sw_msi_size - 1 + start;
+			}
 			num_sw_msi++;
 		}
 
-		rc = iopt_reserve_iova(iopt, resv->start,
-				       resv->length - 1 + resv->start, dev);
+		if (start == PHYS_ADDR_MAX) {
+			start = resv->start;
+			last = resv->length - 1 + start;
+		}
+
+		rc = iopt_reserve_iova(iopt, start, last, dev);
 		if (rc)
 			goto out_reserved;
 	}

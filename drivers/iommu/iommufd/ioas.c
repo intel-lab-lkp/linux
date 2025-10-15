@@ -620,6 +620,119 @@ int iommufd_option_rlimit_mode(struct iommu_option *cmd,
 	return -EOPNOTSUPP;
 }
 
+static inline int iommufd_option_sw_msi_test(struct iommufd_device *idev,
+					     phys_addr_t start, size_t size)
+{
+	const phys_addr_t alignment = SZ_1M - 1;
+	struct iommu_resv_region *resv;
+	LIST_HEAD(resv_regions);
+	phys_addr_t last;
+	int rc = 0;
+
+	if (start & alignment || size & alignment)
+		return -EINVAL;
+
+	size = max_t(size_t, size, SZ_1M);
+
+	if (check_add_overflow(start, size - 1, &last))
+		return -EOVERFLOW;
+
+	/* Test if the new sw_msi range overlaps with other reserved regions */
+	iommu_get_resv_regions(idev->dev, &resv_regions);
+	list_for_each_entry(resv, &resv_regions, list) {
+		phys_addr_t resv_last = resv->length - 1 + resv->start;
+
+		/* start/size replaces the driver-defined IOMMU_RESV_SW_MSI */
+		if (resv->type == IOMMU_RESV_SW_MSI)
+			continue;
+		/* IOMMU_RESV_DIRECT_RELAXABLE does not get enforced to iopt */
+		if (resv->type == IOMMU_RESV_DIRECT_RELAXABLE)
+			continue;
+
+		if (resv->start <= last && resv_last >= start) {
+			rc = -EADDRINUSE;
+			break;
+		}
+	}
+	iommu_put_resv_regions(idev->dev, &resv_regions);
+	return rc;
+}
+
+int iommufd_option_sw_msi(struct iommufd_ucmd *ucmd)
+{
+	struct iommu_option *cmd = ucmd->cmd;
+	struct iommufd_device *idev;
+	int rc = 0;
+
+	idev = iommufd_get_device(ucmd, cmd->object_id);
+	if (IS_ERR(idev))
+		return PTR_ERR(idev);
+
+	mutex_lock(&idev->igroup->lock);
+
+	/* Device cannot enforce the sw_msi window if already attached */
+	if (iommufd_device_is_attached(idev, IOMMU_NO_PASID)) {
+		rc = -EBUSY;
+		goto out_unlock;
+	}
+
+	if (cmd->op == IOMMU_OPTION_OP_GET) {
+		switch (cmd->option_id) {
+		case IOMMU_OPTION_SW_MSI_START:
+			cmd->val64 = (u64)idev->sw_msi_start;
+			break;
+		case IOMMU_OPTION_SW_MSI_SIZE:
+			cmd->val64 = (u64)idev->sw_msi_size / SZ_1M;
+			break;
+		default:
+			rc = -EOPNOTSUPP;
+			break;
+		}
+	}
+
+	if (cmd->op == IOMMU_OPTION_OP_SET) {
+		phys_addr_t start = idev->sw_msi_start;
+		size_t size = idev->sw_msi_size;
+
+		switch (cmd->option_id) {
+		case IOMMU_OPTION_SW_MSI_START:
+			if (cmd->val64 > PHYS_ADDR_MAX) {
+				rc = -EINVAL;
+				break;
+			}
+			start = (phys_addr_t)cmd->val64;
+			rc = iommufd_option_sw_msi_test(idev, start, size);
+			if (rc)
+				break;
+			idev->sw_msi_start = start;
+			break;
+		case IOMMU_OPTION_SW_MSI_SIZE:
+			/* The input unit is MB */
+			if (cmd->val64 > SIZE_MAX >> 20) {
+				rc = -EINVAL;
+				break;
+			}
+			size = (size_t)cmd->val64 * SZ_1M;
+			if (size) {
+				rc = iommufd_option_sw_msi_test(idev, start,
+								size);
+				if (rc)
+					break;
+			}
+			idev->sw_msi_size = size;
+			break;
+		default:
+			rc = -EOPNOTSUPP;
+			break;
+		}
+	}
+
+out_unlock:
+	mutex_unlock(&idev->igroup->lock);
+	iommufd_put_object(ucmd->ictx, &idev->obj);
+	return rc;
+}
+
 static int iommufd_ioas_option_huge_pages(struct iommu_option *cmd,
 					  struct iommufd_ioas *ioas)
 {
