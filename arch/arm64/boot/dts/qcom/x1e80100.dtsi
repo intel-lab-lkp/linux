@@ -76,6 +76,7 @@
 			power-domains = <&cpu_pd0>, <&scmi_dvfs 0>;
 			power-domain-names = "psci", "perf";
 			cpu-idle-states = <&cluster_c4>;
+			#cooling-cells = <2>;
 
 			l2_0: l2-cache {
 				compatible = "cache";
@@ -93,6 +94,7 @@
 			power-domains = <&cpu_pd1>, <&scmi_dvfs 0>;
 			power-domain-names = "psci", "perf";
 			cpu-idle-states = <&cluster_c4>;
+			#cooling-cells = <2>;
 		};
 
 		cpu2: cpu@200 {
@@ -104,6 +106,7 @@
 			power-domains = <&cpu_pd2>, <&scmi_dvfs 0>;
 			power-domain-names = "psci", "perf";
 			cpu-idle-states = <&cluster_c4>;
+			#cooling-cells = <2>;
 		};
 
 		cpu3: cpu@300 {
@@ -115,6 +118,7 @@
 			power-domains = <&cpu_pd3>, <&scmi_dvfs 0>;
 			power-domain-names = "psci", "perf";
 			cpu-idle-states = <&cluster_c4>;
+			#cooling-cells = <2>;
 		};
 
 		cpu4: cpu@10000 {
@@ -126,6 +130,7 @@
 			power-domains = <&cpu_pd4>, <&scmi_dvfs 1>;
 			power-domain-names = "psci", "perf";
 			cpu-idle-states = <&cluster_c4>;
+			#cooling-cells = <2>;
 
 			l2_1: l2-cache {
 				compatible = "cache";
@@ -143,6 +148,7 @@
 			power-domains = <&cpu_pd5>, <&scmi_dvfs 1>;
 			power-domain-names = "psci", "perf";
 			cpu-idle-states = <&cluster_c4>;
+			#cooling-cells = <2>;
 		};
 
 		cpu6: cpu@10200 {
@@ -154,6 +160,7 @@
 			power-domains = <&cpu_pd6>, <&scmi_dvfs 1>;
 			power-domain-names = "psci", "perf";
 			cpu-idle-states = <&cluster_c4>;
+			#cooling-cells = <2>;
 		};
 
 		cpu7: cpu@10300 {
@@ -165,6 +172,7 @@
 			power-domains = <&cpu_pd7>, <&scmi_dvfs 1>;
 			power-domain-names = "psci", "perf";
 			cpu-idle-states = <&cluster_c4>;
+			#cooling-cells = <2>;
 		};
 
 		cpu8: cpu@20000 {
@@ -176,6 +184,7 @@
 			power-domains = <&cpu_pd8>, <&scmi_dvfs 2>;
 			power-domain-names = "psci", "perf";
 			cpu-idle-states = <&cluster_c4>;
+			#cooling-cells = <2>;
 
 			l2_2: l2-cache {
 				compatible = "cache";
@@ -193,6 +202,7 @@
 			power-domains = <&cpu_pd9>, <&scmi_dvfs 2>;
 			power-domain-names = "psci", "perf";
 			cpu-idle-states = <&cluster_c4>;
+			#cooling-cells = <2>;
 		};
 
 		cpu10: cpu@20200 {
@@ -204,6 +214,7 @@
 			power-domains = <&cpu_pd10>, <&scmi_dvfs 2>;
 			power-domain-names = "psci", "perf";
 			cpu-idle-states = <&cluster_c4>;
+			#cooling-cells = <2>;
 		};
 
 		cpu11: cpu@20300 {
@@ -215,6 +226,7 @@
 			power-domains = <&cpu_pd11>, <&scmi_dvfs 2>;
 			power-domain-names = "psci", "perf";
 			cpu-idle-states = <&cluster_c4>;
+			#cooling-cells = <2>;
 		};
 
 		cpu-map {
