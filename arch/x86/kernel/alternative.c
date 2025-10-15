@@ -642,57 +642,62 @@ void __init_or_module noinline apply_alternatives(struct alt_instr *start,
 	 * So be careful if you want to change the scan order to any other
 	 * order.
 	 */
-	for (a = start; a < end; a++) {
+	for (a = start; a < end; a = b) {
 		unsigned int insn_buff_sz = 0;
+		struct alt_instr *p = NULL;
+		u8 len = 0;
 
 		/*
 		 * In case of nested ALTERNATIVE()s the outer alternative might
 		 * add more padding. To ensure consistent patching find the max
 		 * padding for all alt_instr entries for this site (nested
 		 * alternatives result in consecutive entries).
+		 * Find the last alt_instr eligible for patching at the site.
 		 */
-		for (b = a+1; b < end && instr_va(b) == instr_va(a); b++) {
-			u8 len = max(a->instrlen, b->instrlen);
-			a->instrlen = b->instrlen = len;
+		for (b = a; b < end && instr_va(b) == instr_va(a); b++) {
+			len = max(len, b->instrlen);
+
+			BUG_ON(b->cpuid >= (NCAPINTS + NBUGINTS) * 32);
+			/*
+			 * Patch if either:
+			 * - feature is present
+			 * - feature not present but ALT_FLAG_NOT is set to mean,
+			 *   patch if feature is *NOT* present.
+			 */
+			if (!boot_cpu_has(b->cpuid) != !(b->flags & ALT_FLAG_NOT))
+				p = b;
 		}
 
 		instr = instr_va(a);
-		replacement = (u8 *)&a->repl_offset + a->repl_offset;
-		BUG_ON(a->instrlen > sizeof(insn_buff));
-		BUG_ON(a->cpuid >= (NCAPINTS + NBUGINTS) * 32);
+		BUG_ON(len > sizeof(insn_buff));
 
-		/*
-		 * Patch if either:
-		 * - feature is present
-		 * - feature not present but ALT_FLAG_NOT is set to mean,
-		 *   patch if feature is *NOT* present.
-		 */
-		if (!boot_cpu_has(a->cpuid) == !(a->flags & ALT_FLAG_NOT)) {
-			memcpy(insn_buff, instr, a->instrlen);
-			optimize_nops(instr, insn_buff, a->instrlen);
-			text_poke_early(instr, insn_buff, a->instrlen);
+		if (!p) {
+			memcpy(insn_buff, instr, len);
+			optimize_nops(instr, insn_buff, len);
+			text_poke_early(instr, insn_buff, len);
 			continue;
 		}
 
+		replacement = (u8 *)&p->repl_offset + p->repl_offset;
 		DPRINTK(ALT, "feat: %d*32+%d, old: (%pS (%px) len: %d), repl: (%px, len: %d) flags: 0x%x",
-			a->cpuid >> 5,
-			a->cpuid & 0x1f,
-			instr, instr, a->instrlen,
-			replacement, a->replacementlen, a->flags);
+			p->cpuid >> 5,
+			p->cpuid & 0x1f,
+			instr, instr, len,
+			replacement, p->replacementlen, p->flags);
 
-		memcpy(insn_buff, replacement, a->replacementlen);
-		insn_buff_sz = a->replacementlen;
+		memcpy(insn_buff, replacement, p->replacementlen);
+		insn_buff_sz = p->replacementlen;
 
-		if (a->flags & ALT_FLAG_DIRECT_CALL)
-			insn_buff_sz = alt_replace_call(instr, insn_buff, a);
+		if (p->flags & ALT_FLAG_DIRECT_CALL)
+			insn_buff_sz = alt_replace_call(instr, insn_buff, p);
 
-		for (; insn_buff_sz < a->instrlen; insn_buff_sz++)
+		for (; insn_buff_sz < len; insn_buff_sz++)
 			insn_buff[insn_buff_sz] = 0x90;
 
-		text_poke_apply_relocation(insn_buff, instr, a->instrlen, replacement, a->replacementlen);
+		text_poke_apply_relocation(insn_buff, instr, len, replacement, p->replacementlen);
 
-		DUMP_BYTES(ALT, instr, a->instrlen, "%px:   old_insn: ", instr);
-		DUMP_BYTES(ALT, replacement, a->replacementlen, "%px:   rpl_insn: ", replacement);
+		DUMP_BYTES(ALT, instr, len, "%px:   old_insn: ", instr);
+		DUMP_BYTES(ALT, replacement, p->replacementlen, "%px:   rpl_insn: ", replacement);
 		DUMP_BYTES(ALT, insn_buff, insn_buff_sz, "%px: final_insn: ", instr);
 
 		text_poke_early(instr, insn_buff, insn_buff_sz);
