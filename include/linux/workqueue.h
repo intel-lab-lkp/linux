@@ -16,6 +16,7 @@
 #include <linux/cpumask_types.h>
 #include <linux/rcupdate.h>
 #include <linux/workqueue_types.h>
+#include <uapi/linux/sched/types.h>
 
 /*
  * The first word is the work queue pointer and the flags rolled into
@@ -404,6 +405,8 @@ enum wq_flags {
 	WQ_POWER_EFFICIENT	= 1 << 7,
 	WQ_PERCPU		= 1 << 8, /* bound to a specific cpu */
 
+	WQ_RT			= 1 << 9,
+
 	__WQ_DESTROYING		= 1 << 15, /* internal: workqueue is destroying */
 	__WQ_DRAINING		= 1 << 16, /* internal: workqueue is draining */
 	__WQ_ORDERED		= 1 << 17, /* internal: workqueue is ordered */
@@ -460,6 +463,7 @@ enum wq_consts {
 extern struct workqueue_struct *system_wq; /* use system_percpu_wq, this will be removed */
 extern struct workqueue_struct *system_percpu_wq;
 extern struct workqueue_struct *system_highpri_wq;
+extern struct workqueue_struct *system_rt_wq;
 extern struct workqueue_struct *system_long_wq;
 extern struct workqueue_struct *system_unbound_wq;
 extern struct workqueue_struct *system_dfl_wq;
@@ -781,6 +785,8 @@ extern void __warn_flushing_systemwide_wq(void)
 	     _wq == system_wq) ||					\
 	    (__builtin_constant_p(_wq == system_highpri_wq) &&		\
 	     _wq == system_highpri_wq) ||				\
+	    (__builtin_constant_p(_wq == system_rt_wq) &&		\
+	     _wq == system_rt_wq) ||					\
 	    (__builtin_constant_p(_wq == system_long_wq) &&		\
 	     _wq == system_long_wq) ||					\
 	    (__builtin_constant_p(_wq == system_unbound_wq) &&		\
