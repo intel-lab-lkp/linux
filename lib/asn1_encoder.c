@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: GPL-2.0-only
+// SPDX-License-Identifier: GPL-2.0-only OR BSD-3-Clause
 /*
  * Simple encoder primitives for ASN.1 BER/DER/CER
  *
