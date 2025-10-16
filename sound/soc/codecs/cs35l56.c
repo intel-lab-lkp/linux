@@ -10,6 +10,7 @@
 #include <linux/completion.h>
 #include <linux/debugfs.h>
 #include <linux/delay.h>
+#include <linux/device.h>
 #include <linux/err.h>
 #include <linux/gpio/consumer.h>
 #include <linux/interrupt.h>
@@ -22,6 +23,7 @@
 #include <linux/regulator/consumer.h>
 #include <linux/slab.h>
 #include <linux/soundwire/sdw.h>
+#include <linux/sysfs.h>
 #include <linux/types.h>
 #include <linux/workqueue.h>
 #include <sound/cs-amp-lib.h>
@@ -250,6 +252,8 @@ static const struct snd_soc_dapm_widget cs35l56_dapm_widgets[] = {
 	SND_SOC_DAPM_SIGGEN("VDDBMON ADC"),
 	SND_SOC_DAPM_SIGGEN("VBSTMON ADC"),
 	SND_SOC_DAPM_SIGGEN("TEMPMON ADC"),
+
+	SND_SOC_DAPM_INPUT("Calibrate"),
 };
 
 #define CS35L56_SRC_ROUTE(name) \
@@ -286,6 +290,7 @@ static const struct snd_soc_dapm_route cs35l56_audio_map[] = {
 	{ "DSP1", NULL, "ASP1RX1" },
 	{ "DSP1", NULL, "ASP1RX2" },
 	{ "DSP1", NULL, "SDW1 Playback" },
+	{ "DSP1", NULL, "Calibrate" },
 	{ "AMP", NULL, "DSP1" },
 	{ "SPK", NULL, "AMP" },
 
@@ -874,6 +879,175 @@ err:
 	pm_runtime_put_autosuspend(cs35l56->base.dev);
 }
 
+static struct snd_soc_dapm_context *cs35l56_power_up_for_cal(struct cs35l56_private *cs35l56)
+{
+	struct snd_soc_dapm_context *dapm = snd_soc_component_get_dapm(cs35l56->component);
+	int ret;
+
+	ret = snd_soc_component_enable_pin(cs35l56->component, "Calibrate");
+	if (ret)
+		return ERR_PTR(ret);
+
+	snd_soc_dapm_sync(dapm);
+
+	return dapm;
+}
+
+static void cs35l56_power_down_after_cal(struct cs35l56_private *cs35l56)
+{
+	struct snd_soc_dapm_context *dapm = snd_soc_component_get_dapm(cs35l56->component);
+
+	snd_soc_component_disable_pin(cs35l56->component, "Calibrate");
+	snd_soc_dapm_sync(dapm);
+}
+
+static ssize_t calibrate_store(struct device *dev, struct device_attribute *attr,
+			       const char *buf, size_t count)
+{
+	struct cs35l56_private *cs35l56 = dev_get_drvdata(dev);
+	struct snd_soc_dapm_context *dapm;
+	ssize_t ret;
+
+	dapm = cs35l56_power_up_for_cal(cs35l56);
+	if (IS_ERR(dapm))
+		return PTR_ERR(dapm);
+
+	snd_soc_dapm_mutex_lock(dapm);
+	ret = cs35l56_calibrate_sysfs_store(&cs35l56->base, buf, count);
+	snd_soc_dapm_mutex_unlock(dapm);
+
+	cs35l56_power_down_after_cal(cs35l56);
+
+	return ret;
+}
+
+static ssize_t cal_temperature_store(struct device *dev, struct device_attribute *attr,
+				     const char *buf, size_t count)
+{
+	struct cs35l56_private *cs35l56 = dev_get_drvdata(dev);
+	struct snd_soc_dapm_context *dapm;
+	ssize_t ret;
+
+	dapm = cs35l56_power_up_for_cal(cs35l56);
+	if (IS_ERR(dapm))
+		return PTR_ERR(dapm);
+
+	ret = cs35l56_cal_ambient_sysfs_store(&cs35l56->base, buf, count);
+	cs35l56_power_down_after_cal(cs35l56);
+
+	return ret;
+}
+
+static ssize_t cal_data_read(struct file *filp, struct kobject *kobj,
+			     const struct bin_attribute *battr, char *buf, loff_t pos,
+			     size_t count)
+{
+	struct cs35l56_private *cs35l56 = dev_get_drvdata(kobj_to_dev(kobj));
+	struct snd_soc_dapm_context *dapm;
+	ssize_t ret;
+
+	dapm = cs35l56_power_up_for_cal(cs35l56);
+	if (IS_ERR(dapm))
+		return PTR_ERR(dapm);
+
+	ret = cs35l56_cal_data_sysfs_read(&cs35l56->base, buf, pos, count);
+	cs35l56_power_down_after_cal(cs35l56);
+
+	return ret;
+}
+
+static int cs35l56_new_cal_data_apply(struct cs35l56_private *cs35l56)
+{
+	struct snd_soc_dapm_context *dapm;
+	int ret;
+
+	if (!cs35l56->base.cal_data_valid)
+		return -ENXIO;
+
+	if (cs35l56->base.secured)
+		return -EACCES;
+
+	dapm = cs35l56_power_up_for_cal(cs35l56);
+	if (IS_ERR(dapm))
+		return PTR_ERR(dapm);
+
+	snd_soc_dapm_mutex_lock(dapm);
+	ret = cs_amp_write_cal_coeffs(&cs35l56->dsp.cs_dsp,
+				      cs35l56->base.calibration_controls,
+				      &cs35l56->base.cal_data);
+	if (ret == 0)
+		cs35l56_mbox_send(&cs35l56->base, CS35L56_MBOX_CMD_AUDIO_REINIT);
+	else
+		ret = -EIO;
+
+	snd_soc_dapm_mutex_unlock(dapm);
+	cs35l56_power_down_after_cal(cs35l56);
+
+	return ret;
+}
+
+static ssize_t cal_data_write(struct file *filp, struct kobject *kobj,
+			      const struct bin_attribute *battr, char *buf, loff_t pos,
+			      size_t count)
+{
+	struct cs35l56_private *cs35l56 = dev_get_drvdata(kobj_to_dev(kobj));
+	int ret;
+
+	ret = cs35l56_cal_data_sysfs_write(&cs35l56->base, buf, pos, count);
+	if (ret == -ENODATA)
+		return count;	/* Ignore writes of empty cal blobs */
+	else if (ret < 0)
+		return -EIO;
+
+	ret = cs35l56_new_cal_data_apply(cs35l56);
+	if (ret)
+		return ret;
+
+	return count;
+}
+
+static const DEVICE_ATTR_WO(calibrate);
+static const DEVICE_ATTR_WO(cal_temperature);
+static const BIN_ATTR_RW(cal_data, sizeof_field(struct cs35l56_base, cal_data));
+
+static const struct attribute *cs35l56_cal_attributes[] = {
+	&dev_attr_calibrate.attr,
+	&dev_attr_cal_temperature.attr,
+	NULL
+};
+
+static void cs35l56_create_calibration_sysfs(struct cs35l56_private *cs35l56)
+{
+	struct device *dev = cs35l56->base.dev;
+	int ret;
+
+	if (!IS_ENABLED(CONFIG_SND_SOC_CS35L56_CAL_SYSFS))
+		return;
+
+	ret = sysfs_create_files(&dev->kobj, cs35l56_cal_attributes);
+	if (ret)
+		goto err;
+
+	ret = sysfs_create_bin_file(&dev->kobj, &bin_attr_cal_data);
+	if (ret)
+		goto err;
+
+	return;
+err:
+	dev_err_probe(dev, ret, "Failed creating calibration sysfs\n");
+}
+
+static void cs35l56_remove_calibration_sysfs(struct cs35l56_private *cs35l56)
+{
+	struct device *dev = cs35l56->base.dev;
+
+	if (!IS_ENABLED(CONFIG_SND_SOC_CS35L56_CAL_SYSFS))
+		return;
+
+	sysfs_remove_files(&dev->kobj, cs35l56_cal_attributes);
+	sysfs_remove_bin_file(&dev->kobj, &bin_attr_cal_data);
+}
+
 static int cs35l56_set_fw_suffix(struct cs35l56_private *cs35l56)
 {
 	if (cs35l56->dsp.fwf_suffix)
@@ -971,6 +1145,12 @@ static int cs35l56_component_probe(struct snd_soc_component *component)
 	if (ret)
 		return dev_err_probe(cs35l56->base.dev, ret, "unable to add controls\n");
 
+	ret = snd_soc_component_disable_pin(component, "Calibrate");
+	if (ret)
+		return ret;
+
+	cs35l56_create_calibration_sysfs(cs35l56);
+
 	queue_work(cs35l56->dsp_wq, &cs35l56->dsp_work);
 
 	return 0;
@@ -981,6 +1161,8 @@ static void cs35l56_component_remove(struct snd_soc_component *component)
 	struct cs35l56_private *cs35l56 = snd_soc_component_get_drvdata(component);
 
 	cancel_work_sync(&cs35l56->dsp_work);
+
+	cs35l56_remove_calibration_sysfs(cs35l56);
 
 	if (cs35l56->dsp.cs_dsp.booted)
 		wm_adsp_power_down(&cs35l56->dsp);
