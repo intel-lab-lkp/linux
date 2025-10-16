@@ -546,28 +546,31 @@ struct rdt_domain_hdr *resctrl_find_domain(struct list_head *h, int id,
 	return NULL;
 }
 
-void mon_event_read(struct rmid_read *rr, struct rdt_resource *r,
+void rmid_read_init(struct rmid_read *rr, struct rdt_resource *r,
 		    struct rdt_mon_domain *d, struct rdtgroup *rdtgrp,
-		    cpumask_t *cpumask, int evtid, int first)
+		    int evtid, int first, struct cacheinfo *ci)
+{
+	memset(rr, 0, sizeof(*rr));
+	rr->rgrp = rdtgrp;
+	rr->evtid = evtid;
+	rr->r = r;
+	rr->d = d;
+	rr->first = first;
+	rr->ci = ci;
+	if (resctrl_arch_mbm_cntr_assign_enabled(r) &&
+	    resctrl_is_mbm_event(evtid))
+		rr->is_mbm_cntr = true;
+}
+
+void mon_event_read(struct rmid_read *rr, cpumask_t *cpumask)
 {
 	int cpu;
 
 	/* When picking a CPU from cpu_mask, ensure it can't race with cpuhp */
 	lockdep_assert_cpus_held();
 
-	/*
-	 * Setup the parameters to pass to mon_event_count() to read the data.
-	 */
-	rr->rgrp = rdtgrp;
-	rr->evtid = evtid;
-	rr->r = r;
-	rr->d = d;
-	rr->first = first;
-	if (resctrl_arch_mbm_cntr_assign_enabled(r) &&
-	    resctrl_is_mbm_event(evtid)) {
-		rr->is_mbm_cntr = true;
-	} else {
-		rr->arch_mon_ctx = resctrl_arch_mon_ctx_alloc(r, evtid);
+	if (!rr->is_mbm_cntr) {
+		rr->arch_mon_ctx = resctrl_arch_mon_ctx_alloc(rr->r, rr->evtid);
 		if (IS_ERR(rr->arch_mon_ctx)) {
 			rr->err = -EINVAL;
 			return;
@@ -588,7 +591,7 @@ void mon_event_read(struct rmid_read *rr, struct rdt_resource *r,
 		smp_call_on_cpu(cpu, smp_mon_event_count, rr, false);
 
 	if (rr->arch_mon_ctx)
-		resctrl_arch_mon_ctx_free(r, evtid, rr->arch_mon_ctx);
+		resctrl_arch_mon_ctx_free(rr->r, rr->evtid, rr->arch_mon_ctx);
 }
 
 int rdtgroup_mondata_show(struct seq_file *m, void *arg)
@@ -635,9 +638,9 @@ int rdtgroup_mondata_show(struct seq_file *m, void *arg)
 				ci = get_cpu_cacheinfo_level(cpu, RESCTRL_L3_CACHE);
 				if (!ci)
 					continue;
-				rr.ci = ci;
-				mon_event_read(&rr, r, NULL, rdtgrp,
-					       &ci->shared_cpu_map, evtid, false);
+				rmid_read_init(&rr, r, NULL, rdtgrp,
+					       evtid, false, ci);
+				mon_event_read(&rr, &ci->shared_cpu_map);
 				goto checkresult;
 			}
 		}
@@ -654,7 +657,8 @@ int rdtgroup_mondata_show(struct seq_file *m, void *arg)
 			goto out;
 		}
 		d = container_of(hdr, struct rdt_mon_domain, hdr);
-		mon_event_read(&rr, r, d, rdtgrp, &d->hdr.cpu_mask, evtid, false);
+		rmid_read_init(&rr, r, d, rdtgrp, evtid, false, NULL);
+		mon_event_read(&rr, &d->hdr.cpu_mask);
 	}
 
 checkresult:

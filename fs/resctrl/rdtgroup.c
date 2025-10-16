@@ -3235,8 +3235,10 @@ static int mon_add_all_files(struct kernfs_node *kn, struct rdt_mon_domain *d,
 		if (ret)
 			return ret;
 
-		if (!do_sum && resctrl_is_mbm_event(mevt->evtid))
-			mon_event_read(&rr, r, d, prgrp, &d->hdr.cpu_mask, mevt->evtid, true);
+		if (!do_sum && resctrl_is_mbm_event(mevt->evtid)) {
+			rmid_read_init(&rr, r, d, prgrp, mevt->evtid, true, NULL);
+			mon_event_read(&rr, &d->hdr.cpu_mask);
+		}
 	}
 
 	return 0;
