@@ -1159,7 +1159,8 @@ irqreturn_t amd_iommu_int_handler(int irq, void *data)
 
 static int wait_on_sem(struct amd_iommu *iommu, u64 data)
 {
-	int i = 0;
+	struct iommu_cmd *cmd;
+	int i = 0, j;
 
 	while (*iommu->cmd_sem != data && i < LOOP_TIMEOUT) {
 		udelay(1);
@@ -1167,7 +1168,33 @@ static int wait_on_sem(struct amd_iommu *iommu, u64 data)
 	}
 
 	if (i == LOOP_TIMEOUT) {
-		pr_alert("Completion-Wait loop timed out\n");
+		int head, tail;
+
+		head = readl(iommu->mmio_base + MMIO_CMD_HEAD_OFFSET);
+		tail = readl(iommu->mmio_base + MMIO_CMD_TAIL_OFFSET);
+
+		pr_alert("IOMMU %04x:%02x:%02x.%01x: Completion-Wait loop timed out\n",
+			 iommu->pci_seg->id, PCI_BUS_NUM(iommu->devid),
+			 PCI_SLOT(iommu->devid), PCI_FUNC(iommu->devid));
+		if (!amd_iommu_dump) {
+			/*
+			 * On command buffer completion timeout, step back by 2 commands
+			 * to locate the actual command that is causing the issue.
+			 */
+			tail = (MMIO_CMD_BUFFER_TAIL(tail) - 2) & (CMD_BUFFER_ENTRIES - 1);
+			cmd = (struct iommu_cmd *)(iommu->cmd_buf + tail * sizeof(*cmd));
+			dump_command(iommu_virt_to_phys(cmd));
+		} else {
+			/* Dump entire command buffer along with head and tail indices */
+			pr_alert("CMD Buffer head=%d tail=%d\n", (int)(MMIO_CMD_BUFFER_HEAD(head)),
+				 (int)(MMIO_CMD_BUFFER_TAIL(tail)));
+			for (j = 0; j < CMD_BUFFER_ENTRIES; j++) {
+				cmd = (struct iommu_cmd *)(iommu->cmd_buf + j * sizeof(*cmd));
+				pr_err("%3d: %08x %08x %08x %08x\n", j, cmd->data[0], cmd->data[1],
+				       cmd->data[2], cmd->data[3]);
+			}
+		}
+
 		return -EIO;
 	}
 
