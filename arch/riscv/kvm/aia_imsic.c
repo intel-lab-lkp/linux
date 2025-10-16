@@ -689,8 +689,12 @@ bool kvm_riscv_vcpu_aia_imsic_has_interrupt(struct kvm_vcpu *vcpu)
 	 */
 
 	read_lock_irqsave(&imsic->vsfile_lock, flags);
-	if (imsic->vsfile_cpu > -1)
-		ret = !!(csr_read(CSR_HGEIP) & BIT(imsic->vsfile_hgei));
+	if (imsic->vsfile_cpu > -1) {
+		if (imsic->vsfile_cpu != smp_processor_id())
+			ret = true;
+		else
+			ret = !!(csr_read(CSR_HGEIP) & BIT(imsic->vsfile_hgei));
+	}
 	read_unlock_irqrestore(&imsic->vsfile_lock, flags);
 
 	return ret;
