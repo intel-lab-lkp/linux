@@ -272,6 +272,11 @@ Signaling completion from IRQ context is fine as it will appropriately
 lock with spin_lock_irqsave()/spin_unlock_irqrestore() and it will never
 sleep.
 
+Use complete_on_current_cpu() to wake up the task on the current CPU.
+It makes use of the WF_CURRENT_CPU flag to move the task to be woken up
+to the current CPU, achieving faster context switches. For this optimization
+to be effective, the current task must be about to go to sleep right after
+waking the target task.
 
 try_wait_for_completion()/completion_done():
 --------------------------------------------
