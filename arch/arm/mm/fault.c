@@ -272,6 +272,13 @@ do_page_fault(unsigned long addr, unsigned int fsr, struct pt_regs *regs)
 	if (kprobe_page_fault(regs, fsr))
 		return 0;
 
+#ifdef CONFIG_HARDEN_BRANCH_PREDICTOR
+	if (unlikely(addr > TASK_SIZE) && user_mode(regs)) {
+		fault = 0;
+		code = SEGV_MAPERR;
+		goto bad_area;
+	}
+#endif
 
 	/* Enable interrupts if they were enabled in the parent context. */
 	if (interrupts_enabled(regs))
