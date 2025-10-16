@@ -3515,11 +3515,36 @@ void pci_lock_rescan_remove(void)
 }
 EXPORT_SYMBOL_GPL(pci_lock_rescan_remove);
 
+static DECLARE_WAIT_QUEUE_HEAD(pci_lock_wq);
+
+/*
+ * pci_trylock_rescan_remove() - keep trying to take the lock until successful
+ *				 or notified the device is disconnected
+ *
+ * Returns 1 if the lock was successfully taken, 0 otherwise.
+ */
+bool pci_trylock_rescan_remove(struct pci_dev *dev)
+{
+	int ret;
+
+	wait_event(pci_lock_wq,
+		   (ret = mutex_trylock(&pci_rescan_remove_lock)) == 1 ||
+		   pci_dev_is_disconnected(dev));
+
+	return ret;
+}
+
 void pci_unlock_rescan_remove(void)
 {
 	mutex_unlock(&pci_rescan_remove_lock);
+	wake_up_all(&pci_lock_wq);
 }
 EXPORT_SYMBOL_GPL(pci_unlock_rescan_remove);
+
+void pci_notify_disconnected(void)
+{
+	wake_up_all(&pci_lock_wq);
+}
 
 static int __init pci_sort_bf_cmp(const struct device *d_a,
 				  const struct device *d_b)

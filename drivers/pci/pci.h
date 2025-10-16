@@ -650,6 +650,7 @@ static inline int pci_dev_set_disconnected(struct pci_dev *dev, void *unused)
 {
 	pci_dev_set_io_state(dev, pci_channel_io_perm_failure);
 	pci_doe_disconnected(dev);
+	pci_notify_disconnected();
 
 	return 0;
 }

@@ -34,9 +34,12 @@ int pciehp_configure_device(struct controller *ctrl)
 	struct pci_dev *dev;
 	struct pci_dev *bridge = ctrl->pcie->port;
 	struct pci_bus *parent = bridge->subordinate;
-	int num, ret = 0;
+	int num, ret;
 
-	pci_lock_rescan_remove();
+	ret = pci_trylock_rescan_remove(bridge);
+	if (!ret)
+		return -ENODEV;
+	ret = 0;
 
 	dev = pci_get_slot(parent, PCI_DEVFN(0, 0));
 	if (dev) {
@@ -97,6 +100,7 @@ void pciehp_unconfigure_device(struct controller *ctrl, bool presence)
 	struct pci_dev *dev, *temp;
 	struct pci_bus *parent = ctrl->pcie->port->subordinate;
 	u16 command;
+	int ret;
 
 	ctrl_dbg(ctrl, "%s: domain:bus:dev = %04x:%02x:00\n",
 		 __func__, pci_domain_nr(parent), parent->number);
@@ -104,7 +108,9 @@ void pciehp_unconfigure_device(struct controller *ctrl, bool presence)
 	if (!presence)
 		pci_walk_bus(parent, pci_dev_set_disconnected, NULL);
 
-	pci_lock_rescan_remove();
+	ret = pci_trylock_rescan_remove(parent->self);
+	if (!ret)
+		return;
 
 	/*
 	 * Stopping an SR-IOV PF device removes all the associated VFs,
