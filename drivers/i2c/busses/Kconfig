@@ -855,6 +855,16 @@ config I2C_LS2X
 	  This driver can also be built as a module. If so, the module
 	  will be called i2c-ls2x.
 
+config I2C_MACHXO2
+	tristate "Lattice MachXO2 I2C Controller"
+	select REGMAP_MMIO
+	help
+	  If you say yes to this option, support will be included for the
+	  "Hardened I2C" controller found on the Lattice MachXO2 PLD family.
+
+	  This driver can also be built as a module.  If so, the module
+	  will be called i2c-machxo2.
+
 config I2C_MLXBF
         tristate "Mellanox BlueField I2C controller"
         depends on (MELLANOX_PLATFORM && ARM64) || COMPILE_TEST
