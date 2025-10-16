@@ -4,6 +4,8 @@
 //!
 //! C header: [`include/asm-generic/io.h`](srctree/include/asm-generic/io.h)
 
+use kernel::error::Error;
+
 use crate::error::{code::EINVAL, Result};
 use crate::{bindings, build_assert, ffi::c_void};
 
@@ -113,8 +115,23 @@ impl<const SIZE: usize> MmioRaw<SIZE> {
 #[repr(transparent)]
 pub struct Mmio<const SIZE: usize = 0>(MmioRaw<SIZE>);
 
+macro_rules! call_mmio_read {
+    ($c_fn:ident, $self:ident, $offset:expr, $type:ty, $addr:expr) => {
+        // SAFETY: By the type invariant `addr` is a valid address for MMIO operations.
+        Ok::<$type, Error>(unsafe { bindings::$c_fn($addr as *const c_void) as $type })
+    };
+}
+
+macro_rules! call_mmio_write {
+    ($c_fn:ident, $self:ident, $offset:expr, $ty:ty, $addr:expr, $value:expr) => {
+        // SAFETY: By the type invariant `addr` is a valid address for MMIO operations.
+        Ok::<(), Error>(unsafe { bindings::$c_fn($value, $addr as *mut c_void) })
+    };
+}
+
 macro_rules! define_read {
-    ($(#[$attr:meta])* $name:ident, $try_name:ident, $c_fn:ident -> $type_name:ty) => {
+    ($(#[$attr:meta])* $name:ident, $try_name:ident, $call_macro:ident, $c_fn:ident ->
+     $type_name:ty) => {
         /// Read IO data from a given offset known at compile time.
         ///
         /// Bound checks are performed on compile time, hence if the offset is not known at compile
@@ -122,10 +139,9 @@ macro_rules! define_read {
         $(#[$attr])*
         #[inline]
         pub fn $name(&self, offset: usize) -> $type_name {
-            let addr = self.io_addr_assert::<$type_name>(offset);
+            let _addr = self.io_addr_assert::<$type_name>(offset);
 
-            // SAFETY: By the type invariant `addr` is a valid address for MMIO operations.
-            unsafe { bindings::$c_fn(addr as *const c_void) }
+            $call_macro!($c_fn, self, offset, $type_name, _addr).unwrap_or(!0)
         }
 
         /// Read IO data from a given offset.
@@ -134,16 +150,18 @@ macro_rules! define_read {
         /// out of bounds.
         $(#[$attr])*
         pub fn $try_name(&self, offset: usize) -> Result<$type_name> {
-            let addr = self.io_addr::<$type_name>(offset)?;
+            let _addr = self.io_addr::<$type_name>(offset)?;
 
             // SAFETY: By the type invariant `addr` is a valid address for MMIO operations.
-            Ok(unsafe { bindings::$c_fn(addr as *const c_void) })
+            $call_macro!($c_fn, self, offset, $type_name, _addr)
         }
     };
 }
+pub(crate) use define_read;
 
 macro_rules! define_write {
-    ($(#[$attr:meta])* $name:ident, $try_name:ident, $c_fn:ident <- $type_name:ty) => {
+    ($(#[$attr:meta])* $name:ident, $try_name:ident, $call_macro:ident, $c_fn:ident <-
+     $type_name:ty) => {
         /// Write IO data from a given offset known at compile time.
         ///
         /// Bound checks are performed on compile time, hence if the offset is not known at compile
@@ -151,10 +169,9 @@ macro_rules! define_write {
         $(#[$attr])*
         #[inline]
         pub fn $name(&self, value: $type_name, offset: usize) {
-            let addr = self.io_addr_assert::<$type_name>(offset);
+            let _addr = self.io_addr_assert::<$type_name>(offset);
 
-            // SAFETY: By the type invariant `addr` is a valid address for MMIO operations.
-            unsafe { bindings::$c_fn(value, addr as *mut c_void) }
+            let _ = $call_macro!($c_fn, self, offset, $type_name, _addr, value);
         }
 
         /// Write IO data from a given offset.
@@ -163,14 +180,13 @@ macro_rules! define_write {
         /// out of bounds.
         $(#[$attr])*
         pub fn $try_name(&self, value: $type_name, offset: usize) -> Result {
-            let addr = self.io_addr::<$type_name>(offset)?;
+            let _addr = self.io_addr::<$type_name>(offset)?;
 
-            // SAFETY: By the type invariant `addr` is a valid address for MMIO operations.
-            unsafe { bindings::$c_fn(value, addr as *mut c_void) }
-            Ok(())
+            $call_macro!($c_fn, self, offset, $type_name, _addr, value)
         }
     };
 }
+pub(crate) use define_write;
 
 /// Represents a region of I/O space of a fixed size.
 ///
@@ -247,43 +263,47 @@ impl<const SIZE: usize> Mmio<SIZE> {
         unsafe { &*core::ptr::from_ref(raw).cast() }
     }
 
-    define_read!(read8, try_read8, readb -> u8);
-    define_read!(read16, try_read16, readw -> u16);
-    define_read!(read32, try_read32, readl -> u32);
+    define_read!(read8, try_read8, call_mmio_read, readb -> u8);
+    define_read!(read16, try_read16, call_mmio_read, readw -> u16);
+    define_read!(read32, try_read32, call_mmio_read, readl -> u32);
     define_read!(
         #[cfg(CONFIG_64BIT)]
         read64,
         try_read64,
+        call_mmio_read,
         readq -> u64
     );
 
-    define_read!(read8_relaxed, try_read8_relaxed, readb_relaxed -> u8);
-    define_read!(read16_relaxed, try_read16_relaxed, readw_relaxed -> u16);
-    define_read!(read32_relaxed, try_read32_relaxed, readl_relaxed -> u32);
+    define_read!(read8_relaxed, try_read8_relaxed, call_mmio_read, readb_relaxed -> u8);
+    define_read!(read16_relaxed, try_read16_relaxed, call_mmio_read, readw_relaxed -> u16);
+    define_read!(read32_relaxed, try_read32_relaxed, call_mmio_read, readl_relaxed -> u32);
     define_read!(
         #[cfg(CONFIG_64BIT)]
         read64_relaxed,
         try_read64_relaxed,
+        call_mmio_read,
         readq_relaxed -> u64
     );
 
-    define_write!(write8, try_write8, writeb <- u8);
-    define_write!(write16, try_write16, writew <- u16);
-    define_write!(write32, try_write32, writel <- u32);
+    define_write!(write8, try_write8, call_mmio_write, writeb <- u8);
+    define_write!(write16, try_write16, call_mmio_write, writew <- u16);
+    define_write!(write32, try_write32, call_mmio_write, writel <- u32);
     define_write!(
         #[cfg(CONFIG_64BIT)]
         write64,
         try_write64,
+        call_mmio_write,
         writeq <- u64
     );
 
-    define_write!(write8_relaxed, try_write8_relaxed, writeb_relaxed <- u8);
-    define_write!(write16_relaxed, try_write16_relaxed, writew_relaxed <- u16);
-    define_write!(write32_relaxed, try_write32_relaxed, writel_relaxed <- u32);
+    define_write!(write8_relaxed, try_write8_relaxed, call_mmio_write, writeb_relaxed <- u8);
+    define_write!(write16_relaxed, try_write16_relaxed, call_mmio_write, writew_relaxed <- u16);
+    define_write!(write32_relaxed, try_write32_relaxed, call_mmio_write, writel_relaxed <- u32);
     define_write!(
         #[cfg(CONFIG_64BIT)]
         write64_relaxed,
         try_write64_relaxed,
+        call_mmio_write,
         writeq_relaxed <- u64
     );
 }
