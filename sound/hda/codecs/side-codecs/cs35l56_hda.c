@@ -548,20 +548,24 @@ static void cs35l56_hda_release_firmware_files(const struct firmware *wmfw_firmw
 	kfree(coeff_filename);
 }
 
-static void cs35l56_hda_apply_calibration(struct cs35l56_hda *cs35l56)
+static int cs35l56_hda_apply_calibration(struct cs35l56_hda *cs35l56)
 {
 	int ret;
 
 	if (!cs35l56->base.cal_data_valid || cs35l56->base.secured)
-		return;
+		return -EACCES;
 
 	ret = cs_amp_write_cal_coeffs(&cs35l56->cs_dsp,
 				      &cs35l56_calibration_controls,
 				      &cs35l56->base.cal_data);
-	if (ret < 0)
+	if (ret < 0) {
 		dev_warn(cs35l56->base.dev, "Failed to write calibration: %d\n", ret);
-	else
-		dev_info(cs35l56->base.dev, "Calibration applied\n");
+		return ret;
+	}
+
+	dev_info(cs35l56->base.dev, "Calibration applied\n");
+
+	return 0;
 }
 
 static void cs35l56_hda_fw_load(struct cs35l56_hda *cs35l56)
@@ -669,7 +673,9 @@ static void cs35l56_hda_fw_load(struct cs35l56_hda *cs35l56)
 	if (ret)
 		dev_dbg(cs35l56->base.dev, "%s: cs_dsp_run ret %d\n", __func__, ret);
 
+	/* Don't need to check return code, it's not fatal if this fails */
 	cs35l56_hda_apply_calibration(cs35l56);
+
 	ret = cs35l56_mbox_send(&cs35l56->base, CS35L56_MBOX_CMD_AUDIO_REINIT);
 	if (ret)
 		cs_dsp_stop(&cs35l56->cs_dsp);
@@ -693,6 +699,126 @@ static void cs35l56_hda_dsp_work(struct work_struct *work)
 	struct cs35l56_hda *cs35l56 = container_of(work, struct cs35l56_hda, dsp_work);
 
 	cs35l56_hda_fw_load(cs35l56);
+}
+
+static ssize_t calibrate_store(struct device *dev, struct device_attribute *attr,
+			       const char *buf, size_t count)
+{
+	struct cs35l56_hda *cs35l56 = dev_get_drvdata(dev);
+	ssize_t ret;
+
+	ret = pm_runtime_resume_and_get(cs35l56->base.dev);
+	if (ret)
+		return ret;
+
+	ret = cs35l56_calibrate_sysfs_store(&cs35l56->base, buf, count);
+	pm_runtime_autosuspend(cs35l56->base.dev);
+
+	return ret;
+}
+
+static ssize_t cal_temperature_store(struct device *dev, struct device_attribute *attr,
+				     const char *buf, size_t count)
+{
+	struct cs35l56_hda *cs35l56 = dev_get_drvdata(dev);
+	ssize_t ret;
+
+	ret = pm_runtime_resume_and_get(cs35l56->base.dev);
+	if (ret)
+		return ret;
+
+	ret = cs35l56_cal_ambient_sysfs_store(&cs35l56->base, buf, count);
+	pm_runtime_autosuspend(cs35l56->base.dev);
+
+	return ret;
+}
+
+static ssize_t cal_data_read(struct file *filp, struct kobject *kobj,
+			     const struct bin_attribute *battr, char *buf, loff_t pos,
+			     size_t count)
+{
+	struct cs35l56_hda *cs35l56 = dev_get_drvdata(kobj_to_dev(kobj));
+	ssize_t ret;
+
+	ret = pm_runtime_resume_and_get(cs35l56->base.dev);
+	if (ret)
+		return ret;
+
+	ret = cs35l56_cal_data_sysfs_read(&cs35l56->base, buf, pos, count);
+	pm_runtime_autosuspend(cs35l56->base.dev);
+
+	return ret;
+}
+
+static ssize_t cal_data_write(struct file *filp, struct kobject *kobj,
+			      const struct bin_attribute *battr, char *buf, loff_t pos,
+			      size_t count)
+{
+	struct cs35l56_hda *cs35l56 = dev_get_drvdata(kobj_to_dev(kobj));
+	ssize_t ret;
+
+	ret = cs35l56_cal_data_sysfs_write(&cs35l56->base, buf, pos, count);
+	if (ret == -ENODATA)
+		return count;	/* Ignore writes of empty cal blobs */
+
+	if (ret < 0)
+		return ret;
+
+	ret = pm_runtime_resume_and_get(cs35l56->base.dev);
+	if (ret)
+		return ret;
+
+	ret = cs35l56_hda_apply_calibration(cs35l56);
+	if (ret == 0)
+		cs35l56_mbox_send(&cs35l56->base, CS35L56_MBOX_CMD_AUDIO_REINIT);
+	else
+		count = -EIO;
+
+	pm_runtime_autosuspend(cs35l56->base.dev);
+
+	return count;
+}
+
+static const DEVICE_ATTR_WO(calibrate);
+static const DEVICE_ATTR_WO(cal_temperature);
+static const BIN_ATTR_RW(cal_data, sizeof_field(struct cs35l56_base, cal_data));
+
+static const struct attribute *cs35l56_hda_cal_attributes[] = {
+	&dev_attr_calibrate.attr,
+	&dev_attr_cal_temperature.attr,
+	NULL
+};
+
+static void cs35l56_hda_create_calibration_sysfs(struct cs35l56_hda *cs35l56)
+{
+	struct device *dev = cs35l56->base.dev;
+	int ret;
+
+	if (!IS_ENABLED(CONFIG_SND_HDA_SCODEC_CS35L56_CAL_SYSFS))
+		return;
+
+	ret = sysfs_create_files(&dev->kobj, cs35l56_hda_cal_attributes);
+	if (ret)
+		goto err;
+
+	ret = sysfs_create_bin_file(&dev->kobj, &bin_attr_cal_data);
+	if (ret)
+		goto err;
+
+	return;
+err:
+	dev_err_probe(dev, ret, "Failed creating calibration sysfs\n");
+}
+
+static void cs35l56_hda_remove_calibration_sysfs(struct cs35l56_hda *cs35l56)
+{
+	struct device *dev = cs35l56->base.dev;
+
+	if (!IS_ENABLED(CONFIG_SND_HDA_SCODEC_CS35L56_CAL_SYSFS))
+		return;
+
+	sysfs_remove_files(&dev->kobj, cs35l56_hda_cal_attributes);
+	sysfs_remove_bin_file(&dev->kobj, &bin_attr_cal_data);
 }
 
 static int cs35l56_hda_bind(struct device *dev, struct device *master, void *master_data)
@@ -722,6 +848,8 @@ static int cs35l56_hda_bind(struct device *dev, struct device *master, void *mas
 	cs_dsp_init_debugfs(&cs35l56->cs_dsp, cs35l56->debugfs_root);
 #endif
 
+	cs35l56_hda_create_calibration_sysfs(cs35l56);
+
 	dev_dbg(cs35l56->base.dev, "Bound\n");
 
 	return 0;
@@ -736,6 +864,7 @@ static void cs35l56_hda_unbind(struct device *dev, struct device *master, void *
 	cancel_work_sync(&cs35l56->dsp_work);
 
 	cs35l56_hda_remove_controls(cs35l56);
+	cs35l56_hda_remove_calibration_sysfs(cs35l56);
 
 #if IS_ENABLED(CONFIG_SND_DEBUG)
 	cs_dsp_cleanup_debugfs(&cs35l56->cs_dsp);
