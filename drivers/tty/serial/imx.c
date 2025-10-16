@@ -1117,8 +1117,8 @@ static void imx_uart_set_mctrl(struct uart_port *port, unsigned int mctrl)
 			ucr2 |= UCR2_CTS;
 			/*
 			 * UCR2_IRTS is unset if and only if the port is
-			 * configured for CRTSCTS, so we use inverted UCR2_IRTS
-			 * to get the state to restore to.
+			 * configured for hardware-controlled CRTSCTS, so we use
+			 * inverted UCR2_IRTS to get the state to restore to.
 			 */
 			if (!(ucr2 & UCR2_IRTS))
 				ucr2 |= UCR2_CTSC;
@@ -1780,7 +1780,7 @@ imx_uart_set_termios(struct uart_port *port, struct ktermios *termios,
 	if ((termios->c_cflag & CSIZE) == CS8)
 		ucr2 |= UCR2_WS;
 
-	if (!sport->have_rtscts)
+	if (!sport->have_rtscts && !sport->have_rtsgpio)
 		termios->c_cflag &= ~CRTSCTS;
 
 	if (port->rs485.flags & SER_RS485_ENABLED) {
@@ -1794,7 +1794,7 @@ imx_uart_set_termios(struct uart_port *port, struct ktermios *termios,
 		else
 			imx_uart_rts_inactive(sport, &ucr2);
 
-	} else if (termios->c_cflag & CRTSCTS) {
+	} else if ((termios->c_cflag & CRTSCTS) && sport->have_rtscts) {
 		/*
 		 * Only let receiver control RTS output if we were not requested
 		 * to have RTS inactive (which then should take precedence).
@@ -1803,7 +1803,7 @@ imx_uart_set_termios(struct uart_port *port, struct ktermios *termios,
 			ucr2 |= UCR2_CTSC;
 	}
 
-	if (termios->c_cflag & CRTSCTS)
+	if ((termios->c_cflag & CRTSCTS) && sport->have_rtscts)
 		ucr2 &= ~UCR2_IRTS;
 	if (termios->c_cflag & CSTOPB)
 		ucr2 |= UCR2_STPB;
