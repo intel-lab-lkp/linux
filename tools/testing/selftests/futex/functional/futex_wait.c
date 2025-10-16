@@ -96,6 +96,8 @@ int main(int argc, char *argv[])
 	/* Testing an anon page shared memory */
 	shm_id = shmget(IPC_PRIVATE, 4096, IPC_CREAT | 0666);
 	if (shm_id < 0) {
+		if (errno == ENOSYS)
+			ksft_exit_skip("shmget syscall not supported\n");
 		perror("shmget");
 		exit(1);
 	}
