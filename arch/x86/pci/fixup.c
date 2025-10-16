@@ -357,6 +357,18 @@ static void pci_fixup_video(struct pci_dev *pdev)
 	struct pci_bus *bus;
 	u16 config;
 	struct resource *res;
+	void *rom;
+	u16 sig;
+
+	/* Does VBIOS region contain a valid PCI ROM? */
+	rom = memremap(0xC0000, sizeof(sig), MEMREMAP_WB);
+	if (!rom)
+		return;
+
+	memcpy(&sig, rom, sizeof(sig));
+	memunmap(rom);
+	if (sig != 0xAA55)
+		return;
 
 	/* Is VGA routed to us? */
 	bus = pdev->bus;
