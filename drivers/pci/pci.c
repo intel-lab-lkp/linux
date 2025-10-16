@@ -3226,6 +3226,12 @@ poweron:
 	pci_pm_power_up_and_verify_state(dev);
 	pm_runtime_forbid(&dev->dev);
 	pm_runtime_set_active(&dev->dev);
+	/*
+	 * We cannot allow a device to suspend before its resources are
+	 * configured. Otherwise, we may allow saving/restoring unexpected BAR
+	 * configuration.
+	 */
+	pm_runtime_get_noresume(&dev->dev);
 	pm_runtime_enable(&dev->dev);
 }
 
