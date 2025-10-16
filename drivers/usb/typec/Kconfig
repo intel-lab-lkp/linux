@@ -2,6 +2,8 @@
 
 menuconfig TYPEC
 	tristate "USB Type-C Support"
+	depends on DRM || DRM=n
+	select DRM_AUX_HPD_BRIDGE if DRM_BRIDGE && OF
 	help
 	  USB Type-C Specification defines a cable and connector for USB where
 	  only one type of plug is supported on both ends, i.e. there will not
