@@ -701,6 +701,17 @@ void drm_sched_entity_modify_sched(struct drm_sched_entity *entity,
 /* Inlines */
 
 /**
+ * drm_sched_is_stopped() - DRM is stopped
+ * @sched: DRM scheduler
+ *
+ * Return: True if sched is stopped, False otherwise
+ */
+static inline bool drm_sched_is_stopped(struct drm_gpu_scheduler *sched)
+{
+	return READ_ONCE(sched->pause_submit);
+}
+
+/**
  * struct drm_sched_pending_job_iter - DRM scheduler pending job iterator state
  * @sched: DRM scheduler associated with pending job iterator
  */
@@ -716,7 +727,7 @@ __drm_sched_pending_job_iter_begin(struct drm_gpu_scheduler *sched)
 		.sched = sched,
 	};
 
-	WARN_ON(!READ_ONCE(sched->pause_submit));
+	WARN_ON(!drm_sched_is_stopped(sched));
 	return iter;
 }
 
@@ -724,7 +735,7 @@ __drm_sched_pending_job_iter_begin(struct drm_gpu_scheduler *sched)
 static inline void
 __drm_sched_pending_job_iter_end(const struct drm_sched_pending_job_iter iter)
 {
-	WARN_ON(!READ_ONCE(iter.sched->pause_submit));
+	WARN_ON(!drm_sched_is_stopped(iter.sched));
 }
 
 DEFINE_CLASS(drm_sched_pending_job_iter, struct drm_sched_pending_job_iter,
@@ -749,5 +760,22 @@ class_drm_sched_pending_job_iter_lock_ptr(class_drm_sched_pending_job_iter_t *_T
 	scoped_guard(drm_sched_pending_job_iter, (__sched))			\
 		list_for_each_entry((__job), &(__sched)->pending_list, list)	\
 			for_each_if(!(__entity) || (__job)->entity == (__entity))
+
+/**
+ * drm_sched_job_is_signaled() - DRM scheduler job is signaled
+ * @job: DRM scheduler job
+ *
+ * Determine if DRM scheduler job is signaled. DRM scheduler should be stopped
+ * to obtain a stable snapshot of state.
+ *
+ * Return: True if job is signaled, False otherwise
+ */
+static inline bool drm_sched_job_is_signaled(struct drm_sched_job *job)
+{
+	struct drm_sched_fence *s_fence = job->s_fence;
+
+	WARN_ON(!drm_sched_is_stopped(job->sched));
+	return dma_fence_is_signaled(&s_fence->finished);
+}
 
 #endif
