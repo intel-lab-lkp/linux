@@ -102,7 +102,16 @@ static void __init initramfs_test_extract(struct kunit *test)
 	/* +3 to cater for any 4-byte end-alignment */
 	cpio_srcbuf = kzalloc(ARRAY_SIZE(c) * (CPIO_HDRLEN + PATH_MAX + 3),
 			      GFP_KERNEL);
+	if (!cpio_srcbuf) {
+		KUNIT_FAIL(test, "Failed to allocate cpio buffer");
+		return;
+	}
+
 	len = fill_cpio(c, ARRAY_SIZE(c), cpio_srcbuf);
+	if (len == 0) {
+		KUNIT_FAIL(test, "Failed to fill cpio");
+		goto out;
+	}
 
 	ktime_get_real_ts64(&ts_before);
 	err = unpack_to_rootfs(cpio_srcbuf, len);
@@ -173,6 +182,11 @@ static void __init initramfs_test_fname_overrun(struct kunit *test)
 	 * are already available (e.g. no compression).
 	 */
 	cpio_srcbuf = kmalloc(CPIO_HDRLEN + PATH_MAX + 3, GFP_KERNEL);
+	if (!cpio_srcbuf) {
+		KUNIT_FAIL(test, "kmalloc failed for cpio_srcbuf");
+		return;
+	}
+
 	memset(cpio_srcbuf, 'B', CPIO_HDRLEN + PATH_MAX + 3);
 	/* limit overrun to avoid crashes / filp_open() ENAMETOOLONG */
 	cpio_srcbuf[CPIO_HDRLEN + strlen(c[0].fname) + 20] = '\0';
@@ -218,6 +232,10 @@ static void __init initramfs_test_data(struct kunit *test)
 	/* +6 for max name and data 4-byte padding */
 	cpio_srcbuf = kmalloc(CPIO_HDRLEN + c[0].namesize + c[0].filesize + 6,
 			      GFP_KERNEL);
+	if (!cpio_srcbuf) {
+		KUNIT_FAIL(test, "kmalloc failed for cpio_srcbuf");
+		return;
+	}
 
 	len = fill_cpio(c, ARRAY_SIZE(c), cpio_srcbuf);
 
@@ -273,8 +291,16 @@ static void __init initramfs_test_csum(struct kunit *test)
 	} };
 
 	cpio_srcbuf = kmalloc(8192, GFP_KERNEL);
+	if (!cpio_srcbuf) {
+		KUNIT_FAIL(test, "kmalloc failed for cpio_srcbuf");
+		return;
+	}
 
 	len = fill_cpio(c, ARRAY_SIZE(c), cpio_srcbuf);
+	if (len == 0) {
+		KUNIT_FAIL(test, "Failed to fill cpio");
+		goto out;
+	}
 
 	err = unpack_to_rootfs(cpio_srcbuf, len);
 	KUNIT_EXPECT_NULL(test, err);
@@ -295,6 +321,8 @@ static void __init initramfs_test_csum(struct kunit *test)
 	 */
 	KUNIT_EXPECT_EQ(test, init_unlink(c[0].fname), 0);
 	KUNIT_EXPECT_EQ(test, init_unlink(c[1].fname), -ENOENT);
+
+out:
 	kfree(cpio_srcbuf);
 }
 
@@ -329,8 +357,16 @@ static void __init initramfs_test_hardlink(struct kunit *test)
 	} };
 
 	cpio_srcbuf = kmalloc(8192, GFP_KERNEL);
+	if (!cpio_srcbuf) {
+		KUNIT_FAIL(test, "kmalloc failed for cpio_srcbuf");
+		return;
+	}
 
 	len = fill_cpio(c, ARRAY_SIZE(c), cpio_srcbuf);
+	if (len == 0) {
+		KUNIT_FAIL(test, "Failed to fill cpio");
+		goto out;
+	}
 
 	err = unpack_to_rootfs(cpio_srcbuf, len);
 	KUNIT_EXPECT_NULL(test, err);
@@ -344,6 +380,7 @@ static void __init initramfs_test_hardlink(struct kunit *test)
 	KUNIT_EXPECT_EQ(test, init_unlink(c[0].fname), 0);
 	KUNIT_EXPECT_EQ(test, init_unlink(c[1].fname), 0);
 
+out:
 	kfree(cpio_srcbuf);
 }
 
@@ -358,7 +395,13 @@ static void __init initramfs_test_many(struct kunit *test)
 	char thispath[INITRAMFS_TEST_MANY_PATH_MAX];
 	int i;
 
-	p = cpio_srcbuf = kmalloc(len, GFP_KERNEL);
+	cpio_srcbuf = kmalloc(len, GFP_KERNEL);
+	if (!cpio_srcbuf) {
+		KUNIT_FAIL(test, "kmalloc failed for cpio_srcbuf");
+		return;
+	}
+
+	p = cpio_srcbuf;
 
 	for (i = 0; i < INITRAMFS_TEST_MANY_LIMIT; i++) {
 		struct initramfs_test_cpio c = {
@@ -403,7 +446,14 @@ static void __init initramfs_test_fname_pad(struct kunit *test)
 	struct test_fname_pad {
 		char padded_fname[4096 - CPIO_HDRLEN];
 		char cpio_srcbuf[CPIO_HDRLEN + PATH_MAX + 3 + sizeof(fdata)];
-	} *tbufs = kzalloc(sizeof(struct test_fname_pad), GFP_KERNEL);
+	} *tbufs;
+
+	tbufs = kzalloc(sizeof(struct test_fname_pad), GFP_KERNEL);
+	if (!tbufs) {
+		KUNIT_FAIL(test, "Failed to allocate memory for tbufs");
+		return;
+	}
+
 	struct initramfs_test_cpio c[] = { {
 		.magic = "070701",
 		.ino = 1,
