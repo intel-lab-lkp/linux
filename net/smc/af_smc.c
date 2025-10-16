@@ -1132,12 +1132,9 @@ static int smc_find_proposal_devices(struct smc_sock *smc,
 
 	/* check if there is an rdma v2 device available */
 	ini->check_smcrv2 = true;
-	ini->smcrv2.saddr = smc->clcsock->sk->sk_rcv_saddr;
+
+	smc_ipaddr_from(&ini->smcrv2.saddr, smc->clcsock->sk, sk_rcv_saddr, sk_v6_rcv_saddr);
 	if (!(ini->smcr_version & SMC_V2) ||
-#if IS_ENABLED(CONFIG_IPV6)
-	    (smc->clcsock->sk->sk_family == AF_INET6 &&
-	     !ipv6_addr_v4mapped(&smc->clcsock->sk->sk_v6_rcv_saddr)) ||
-#endif
 	    !smc_clc_ueid_count() ||
 	    smc_find_rdma_device(smc, ini))
 		ini->smcr_version &= ~SMC_V2;
@@ -1230,11 +1227,23 @@ static int smc_connect_rdma_v2_prepare(struct smc_sock *smc,
 		memcpy(ini->smcrv2.nexthop_mac, &aclc->r0.lcl.mac, ETH_ALEN);
 		ini->smcrv2.uses_gateway = false;
 	} else {
-		if (smc_ib_find_route(net, smc->clcsock->sk->sk_rcv_saddr,
-				      smc_ib_gid_to_ipv4(aclc->r0.lcl.gid),
-				      ini->smcrv2.nexthop_mac,
-				      &ini->smcrv2.uses_gateway))
-			return SMC_CLC_DECL_NOROUTE;
+		struct smc_ipaddr peer_gid;
+
+		smc_ipaddr_from_gid(&peer_gid, aclc->r0.lcl.gid);
+		if (peer_gid.family == AF_INET) {
+			/* v4-mapped v6 address should also be treated as v4 address. */
+			if (smc_ib_find_route(net, smc->clcsock->sk->sk_rcv_saddr,
+					      peer_gid.addr,
+					      ini->smcrv2.nexthop_mac,
+					      &ini->smcrv2.uses_gateway))
+				return SMC_CLC_DECL_NOROUTE;
+		} else {
+			if (smc_ib_find_route_v6(net, &smc->clcsock->sk->sk_v6_rcv_saddr,
+						 &peer_gid.addr_v6,
+						 ini->smcrv2.nexthop_mac,
+						 &ini->smcrv2.uses_gateway))
+				return SMC_CLC_DECL_NOROUTE;
+		}
 		if (!ini->smcrv2.uses_gateway) {
 			/* mismatch: peer claims indirect, but its direct */
 			return SMC_CLC_DECL_NOINDIRECT;
@@ -2307,8 +2316,10 @@ static void smc_find_rdma_v2_device_serv(struct smc_sock *new_smc,
 	memcpy(ini->peer_mac, pclc->lcl.mac, ETH_ALEN);
 	ini->check_smcrv2 = true;
 	ini->smcrv2.clc_sk = new_smc->clcsock->sk;
-	ini->smcrv2.saddr = new_smc->clcsock->sk->sk_rcv_saddr;
-	ini->smcrv2.daddr = smc_ib_gid_to_ipv4(smc_v2_ext->roce);
+
+	smc_ipaddr_from(&ini->smcrv2.saddr, new_smc->clcsock->sk, sk_rcv_saddr, sk_v6_rcv_saddr);
+	smc_ipaddr_from_gid(&ini->smcrv2.daddr, smc_v2_ext->roce);
+
 	rc = smc_find_rdma_device(new_smc, ini);
 	if (rc) {
 		smc_find_ism_store_rc(rc, ini);

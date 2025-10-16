@@ -22,6 +22,7 @@
 #include <linux/inetdevice.h>
 #include <rdma/ib_verbs.h>
 #include <rdma/ib_cache.h>
+#include <net/ip6_route.h>
 
 #include "smc_pnet.h"
 #include "smc_ib.h"
@@ -225,48 +226,146 @@ out:
 	return -ENOENT;
 }
 
+int smc_ib_find_route_v6(struct net *net, struct in6_addr *saddr,
+			 struct in6_addr *daddr, u8 nexthop_mac[],
+			 u8 *uses_gateway)
+{
+	struct dst_entry *dst;
+	struct rt6_info *rt;
+	struct neighbour *neigh;
+	struct in6_addr *nexthop_addr;
+	int rc = -ENOENT;
+
+	struct flowi6 fl6 = {
+		.daddr = *daddr,
+		.saddr = *saddr,
+	};
+
+	if (ipv6_addr_any(daddr))
+		return -EINVAL;
+
+	dst = ip6_route_output(net, NULL, &fl6);
+	if (!dst || dst->error) {
+		rc = dst ? dst->error : -EINVAL;
+		goto out;
+	}
+	rt = (struct rt6_info *)dst;
+
+	if (ipv6_addr_type(&rt->rt6i_gateway) != IPV6_ADDR_ANY) {
+		*uses_gateway = 1;
+		nexthop_addr = &rt->rt6i_gateway;
+	} else {
+		*uses_gateway = 0;
+		nexthop_addr = daddr;
+	}
+
+	neigh = dst_neigh_lookup(dst, nexthop_addr);
+	if (!neigh)
+		goto out;
+
+	read_lock_bh(&neigh->lock);
+	if (neigh->nud_state & NUD_VALID) {
+		memcpy(nexthop_mac, neigh->ha, ETH_ALEN);
+		rc = 0;
+	}
+	read_unlock_bh(&neigh->lock);
+
+	neigh_release(neigh);
+out:
+	dst_release(dst);
+	return rc;
+}
+
+static bool smc_ib_match_gid_rocev2(const struct net_device *ndev,
+				    const struct ib_gid_attr *attr,
+				    struct smc_init_info_smcrv2 *smcrv2)
+{
+	struct net *net = dev_net(ndev);
+	bool subnet_match = false;
+
+	if (smc_ib_gid_to_ipv4((u8 *)&attr->gid) != cpu_to_be32(INADDR_NONE)) {
+		struct in_device *in_dev = __in_dev_get_rcu(ndev);
+		const struct in_ifaddr *ifa;
+
+		if (!in_dev)
+			return false;
+
+		if (smcrv2->saddr.family != AF_INET)
+			return false;
+
+		in_dev_for_each_ifa_rcu(ifa, in_dev) {
+			if (!inet_ifa_match(smcrv2->saddr.addr, ifa))
+				continue;
+			subnet_match = true;
+			break;
+		}
+
+		if (!subnet_match)
+			return false;
+
+		if (smcrv2->daddr.addr &&
+		    smc_ib_find_route(net, smcrv2->saddr.addr,
+				      smcrv2->daddr.addr,
+				      smcrv2->nexthop_mac,
+				      &smcrv2->uses_gateway))
+			return false;
+
+	} else if (!(ipv6_addr_type(smc_ib_gid_to_ipv6((u8 *)&attr->gid)) & IPV6_ADDR_LINKLOCAL)) {
+		struct inet6_dev *in6_dev = __in6_dev_get(ndev);
+		const struct inet6_ifaddr *if6;
+
+		if (!in6_dev)
+			return false;
+
+		if (smcrv2->saddr.family != AF_INET6)
+			return false;
+
+		list_for_each_entry_rcu(if6, &in6_dev->addr_list, if_list) {
+			if (ipv6_addr_type(&if6->addr) & IPV6_ADDR_LINKLOCAL)
+				continue;
+			if (!ipv6_prefix_equal(&if6->addr, &smcrv2->saddr.addr_v6, if6->prefix_len))
+				continue;
+			subnet_match = true;
+			break;
+		}
+
+		if (!subnet_match)
+			return false;
+
+		if ((ipv6_addr_type(&smcrv2->daddr.addr_v6) != IPV6_ADDR_ANY) &&
+		    smc_ib_find_route_v6(net, &smcrv2->saddr.addr_v6,
+					 &smcrv2->daddr.addr_v6,
+					 smcrv2->nexthop_mac,
+					 &smcrv2->uses_gateway))
+			return false;
+
+	} else {
+		return false;
+	}
+
+	return true;
+}
+
 static int smc_ib_determine_gid_rcu(const struct net_device *ndev,
 				    const struct ib_gid_attr *attr,
 				    u8 gid[], u8 *sgid_index,
 				    struct smc_init_info_smcrv2 *smcrv2)
 {
-	if (!smcrv2 && attr->gid_type == IB_GID_TYPE_ROCE) {
+	bool gid_match = false;
+
+	if (!smcrv2 && attr->gid_type == IB_GID_TYPE_ROCE)
+		gid_match = true;
+	else if (smcrv2 && attr->gid_type == IB_GID_TYPE_ROCE_UDP_ENCAP)
+		gid_match = smc_ib_match_gid_rocev2(ndev, attr, smcrv2);
+
+	if (gid_match) {
 		if (gid)
 			memcpy(gid, &attr->gid, SMC_GID_SIZE);
 		if (sgid_index)
 			*sgid_index = attr->index;
 		return 0;
 	}
-	if (smcrv2 && attr->gid_type == IB_GID_TYPE_ROCE_UDP_ENCAP &&
-	    smc_ib_gid_to_ipv4((u8 *)&attr->gid) != cpu_to_be32(INADDR_NONE)) {
-		struct in_device *in_dev = __in_dev_get_rcu(ndev);
-		struct net *net = dev_net(ndev);
-		const struct in_ifaddr *ifa;
-		bool subnet_match = false;
 
-		if (!in_dev)
-			goto out;
-		in_dev_for_each_ifa_rcu(ifa, in_dev) {
-			if (!inet_ifa_match(smcrv2->saddr, ifa))
-				continue;
-			subnet_match = true;
-			break;
-		}
-		if (!subnet_match)
-			goto out;
-		if (smcrv2->daddr && smc_ib_find_route(net, smcrv2->saddr,
-						       smcrv2->daddr,
-						       smcrv2->nexthop_mac,
-						       &smcrv2->uses_gateway))
-			goto out;
-
-		if (gid)
-			memcpy(gid, &attr->gid, SMC_GID_SIZE);
-		if (sgid_index)
-			*sgid_index = attr->index;
-		return 0;
-	}
-out:
 	return -ENODEV;
 }
 

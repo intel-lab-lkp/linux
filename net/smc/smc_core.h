@@ -279,6 +279,14 @@ struct smc_llc_flow {
 	struct smc_llc_qentry *qentry;
 };
 
+struct smc_ipaddr {
+	sa_family_t family;
+	union {
+		__be32          addr;
+		struct in6_addr addr_v6;
+	};
+};
+
 struct smc_link_group {
 	struct list_head	list;
 	struct rb_root		conns_all;	/* connection tree */
@@ -359,7 +367,7 @@ struct smc_link_group {
 						/* rsn code for termination */
 			u8			nexthop_mac[ETH_ALEN];
 			u8			uses_gateway;
-			__be32			saddr;
+			struct smc_ipaddr saddr;
 						/* net namespace */
 			struct net		*net;
 			u8			max_conns;
@@ -389,9 +397,9 @@ struct smc_gidlist {
 
 struct smc_init_info_smcrv2 {
 	/* Input fields */
-	__be32			saddr;
+	struct smc_ipaddr saddr;
 	struct sock		*clc_sk;
-	__be32			daddr;
+	struct smc_ipaddr daddr;
 
 	/* Output fields when saddr is set */
 	struct smc_ib_device	*ib_dev_v2;
@@ -618,4 +626,30 @@ static inline struct smc_link_group *smc_get_lgr(struct smc_link *link)
 {
 	return link->lgr;
 }
+
+#define smc_ipaddr_from(_ipaddr, _sk, _v4_member, _v6_member)	\
+	do {							\
+		struct smc_ipaddr *__ipaddr = (_ipaddr);	\
+		struct sock *__sk = (_sk);			\
+		int __family = __sk->sk_family;			\
+		__ipaddr->family = __family;			\
+		if (__family == AF_INET)			\
+			__ipaddr->addr = __sk->_v4_member;	\
+		else						\
+			__ipaddr->addr_v6 = __sk->_v6_member;	\
+	} while (0)
+
+static inline void smc_ipaddr_from_gid(struct smc_ipaddr *ipaddr, u8 gid[SMC_GID_SIZE])
+{
+	__be32 gid_v4 = smc_ib_gid_to_ipv4(gid);
+
+	if (gid_v4 != cpu_to_be32(INADDR_NONE)) {
+		ipaddr->family = AF_INET;
+		ipaddr->addr = gid_v4;
+	} else {
+		ipaddr->family = AF_INET6;
+		ipaddr->addr_v6 = *smc_ib_gid_to_ipv6(gid);
+	}
+}
+
 #endif
