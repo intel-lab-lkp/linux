@@ -3217,6 +3217,8 @@ static inline bool __should_serialize_io(struct inode *inode,
 
 	if (f2fs_need_compress_data(inode))
 		return true;
+	if (fscrypt_inode_uses_inline_crypto(inode))
+		return true;
 	if (wbc->sync_mode != WB_SYNC_ALL)
 		return true;
 	if (get_dirty_pages(inode) >= SM_I(F2FS_I_SB(inode))->min_seq_blocks)
