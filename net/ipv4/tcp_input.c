@@ -6552,6 +6552,9 @@ static bool tcp_rcv_fastopen_synack(struct sock *sk, struct sk_buff *synack,
 
 	tcp_fastopen_cache_set(sk, mss, cookie, syn_drop, try_exp);
 
+	if (!tp->syn_data)
+		return false;
+
 	if (data) { /* Retransmit unacked data in SYN */
 		if (tp->total_retrans)
 			tp->fastopen_client_fail = TFO_SYN_RETRANSMITTED;
@@ -6564,16 +6567,14 @@ static bool tcp_rcv_fastopen_synack(struct sock *sk, struct sk_buff *synack,
 				LINUX_MIB_TCPFASTOPENACTIVEFAIL);
 		return true;
 	}
-	tp->syn_data_acked = tp->syn_data;
-	if (tp->syn_data_acked) {
-		NET_INC_STATS(sock_net(sk), LINUX_MIB_TCPFASTOPENACTIVE);
-		/* SYN-data is counted as two separate packets in tcp_ack() */
-		if (tp->delivered > 1)
-			--tp->delivered;
-	}
 
+	/* SYN-data is counted as two separate packets in tcp_ack() */
+	if (tp->delivered > 1)
+		--tp->delivered;
+
+	tp->syn_data_acked = 1;
 	tcp_fastopen_add_skb(sk, synack);
-
+	NET_INC_STATS(sock_net(sk), LINUX_MIB_TCPFASTOPENACTIVE);
 	return false;
 }
 
