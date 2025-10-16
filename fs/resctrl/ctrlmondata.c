@@ -607,6 +607,7 @@ int rdtgroup_mondata_show(struct seq_file *m, void *arg)
 	struct rdt_resource *r;
 	struct cacheinfo *ci;
 	struct mon_data *md;
+	cpumask_t *cpumask;
 
 	rdtgrp = rdtgroup_kn_lock_live(of->kn);
 	if (!rdtgrp) {
@@ -639,9 +640,9 @@ int rdtgroup_mondata_show(struct seq_file *m, void *arg)
 				if (!ci)
 					continue;
 				rmid_read_init(&rr, r, NULL, rdtgrp,
-					       evtid, false, ci);
-				mon_event_read(&rr, &ci->shared_cpu_map);
-				goto checkresult;
+						     evtid, false, ci);
+				cpumask = &ci->shared_cpu_map;
+				goto perform;
 			}
 		}
 		ret = -ENOENT;
@@ -658,10 +659,11 @@ int rdtgroup_mondata_show(struct seq_file *m, void *arg)
 		}
 		d = container_of(hdr, struct rdt_mon_domain, hdr);
 		rmid_read_init(&rr, r, d, rdtgrp, evtid, false, NULL);
-		mon_event_read(&rr, &d->hdr.cpu_mask);
+		cpumask = &d->hdr.cpu_mask;
 	}
 
-checkresult:
+perform:
+	mon_event_read(&rr, cpumask);
 
 	/*
 	 * -ENOENT is a special case, set only when "mbm_event" counter assignment
