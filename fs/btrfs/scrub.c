@@ -2069,6 +2069,20 @@ static int queue_scrub_stripe(struct scrub_ctx *sctx, struct btrfs_block_group *
 	return 0;
 }
 
+static bool should_cancel_scrub(struct btrfs_fs_info *fs_info)
+{
+	/*
+	 * For fs and process freezing case, it can be preparation
+	 * for a incoming pm suspension.
+	 * In that case we have to return to the user space, thus
+	 * canceling is the only feasible solution.
+	 */
+	if (fs_info->sb->s_writers.frozen > SB_UNFROZEN ||
+	    freezing(current))
+		return true;
+	return false;
+}
+
 static int scrub_raid56_parity_stripe(struct scrub_ctx *sctx,
 				      struct btrfs_device *scrub_dev,
 				      struct btrfs_block_group *bg,
@@ -2093,7 +2107,8 @@ static int scrub_raid56_parity_stripe(struct scrub_ctx *sctx,
 
 	/* Canceled? */
 	if (atomic_read(&fs_info->scrub_cancel_req) ||
-	    atomic_read(&sctx->cancel_req))
+	    atomic_read(&sctx->cancel_req) ||
+	    should_cancel_scrub(fs_info))
 		return -ECANCELED;
 
 	/* Paused? */
@@ -2281,7 +2296,8 @@ static int scrub_simple_mirror(struct scrub_ctx *sctx,
 
 		/* Canceled? */
 		if (atomic_read(&fs_info->scrub_cancel_req) ||
-		    atomic_read(&sctx->cancel_req)) {
+		    atomic_read(&sctx->cancel_req) ||
+		    should_cancel_scrub(fs_info)) {
 			ret = -ECANCELED;
 			break;
 		}
