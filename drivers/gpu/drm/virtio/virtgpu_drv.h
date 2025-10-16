@@ -195,6 +195,21 @@ struct virtio_gpu_framebuffer {
 #define to_virtio_gpu_framebuffer(x) \
 	container_of(x, struct virtio_gpu_framebuffer, base)
 
+struct virtio_gpu_crtc_state {
+	struct drm_crtc_state base;
+
+	/*
+	 * Send vblank event immediately from atomic_flush. Set from each
+	 * plane's atomic check and depends on the buffer object. Buffers
+	 * with host backing are vsync'd already and should send immediately;
+	 * others should wait for the VBLANK timer.
+	 */
+	u32 send_event_on_flush;
+};
+
+#define to_virtio_gpu_crtc_state(x) \
+	container_of(x, struct virtio_gpu_crtc_state, base)
+
 struct virtio_gpu_plane_state {
 	struct drm_plane_state base;
 	struct virtio_gpu_fence *fence;

@@ -104,7 +104,8 @@ static int virtio_gpu_plane_atomic_check(struct drm_plane *plane,
 										 plane);
 	bool is_cursor = plane->type == DRM_PLANE_TYPE_CURSOR;
 	struct drm_crtc_state *crtc_state;
-	int ret;
+	struct virtio_gpu_crtc_state *vgcrtc_state;
+	int ret, i;
 
 	if (!new_plane_state->fb || WARN_ON(!new_plane_state->crtc))
 		return 0;
@@ -126,6 +127,19 @@ static int virtio_gpu_plane_atomic_check(struct drm_plane *plane,
 						  DRM_PLANE_NO_SCALING,
 						  DRM_PLANE_NO_SCALING,
 						  is_cursor, true);
+
+	vgcrtc_state = to_virtio_gpu_crtc_state(crtc_state);
+	vgcrtc_state->send_event_on_flush &= ~drm_plane_mask(plane);
+
+	for (i = 0; i < new_plane_state->fb->format->num_planes; ++i) {
+		struct virtio_gpu_object *bo = gem_to_virtio_gpu_obj(new_plane_state->fb->obj[i]);
+
+		if (bo->host3d_blob || bo->guest_blob) {
+			vgcrtc_state->send_event_on_flush |= drm_plane_mask(plane);
+			break; /* only need to find one */
+		}
+	}
+
 	return ret;
 }
 
