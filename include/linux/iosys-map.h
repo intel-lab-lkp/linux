@@ -278,7 +278,7 @@ static inline void iosys_map_clear(struct iosys_map *map)
  * system memory. Depending on the buffer's location, the helper picks the
  * correct method of accessing the memory.
  */
-static inline void iosys_map_memcpy_to(struct iosys_map *dst, size_t dst_offset,
+static inline void iosys_map_memcpy_to(const struct iosys_map *dst, size_t dst_offset,
 				       const void *src, size_t len)
 {
 	if (dst->is_iomem)
