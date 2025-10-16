@@ -2098,6 +2098,13 @@ static bool should_cancel_scrub(struct scrub_ctx *sctx)
 	if (fs_info->sb->s_writers.frozen > SB_UNFROZEN ||
 	    freezing(current))
 		return true;
+	/*
+	 * Signal handling is also done in user space, so we have to return
+	 * to user space by canceling the run when there is a pending signal.
+	 * (including non-fatal ones like SIGINT)
+	 */
+	if (signal_pending(current))
+		return true;
 	return false;
 }
 
