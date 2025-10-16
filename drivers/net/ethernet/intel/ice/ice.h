@@ -1134,4 +1134,24 @@ static inline struct ice_hw *ice_get_primary_hw(struct ice_pf *pf)
 	else
 		return &pf->adapter->ctrl_pf->hw;
 }
+
+/**
+ * ice_capped_num_cpus - normalize the number of CPUs to a reasonable limit
+ *
+ * This function returns the number of online CPUs, but caps it at suitable
+ * default to prevent excessive resource allocation on systems with very high
+ * CPU counts.
+ *
+ * Note: suitable default is currently at 64, which is reflected in default_cpus
+ * constant. In most cases there is no much benefit for more than 64 and it is a
+ * power of 2 number.
+ *
+ * Return: number of online CPUs, capped at suitable default.
+ */
+static inline u16 ice_capped_num_cpus(void)
+{
+	const int default_cpus = 64;
+
+	return min(num_online_cpus(), default_cpus);
+}
 #endif /* _ICE_H_ */
