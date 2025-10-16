@@ -121,6 +121,21 @@ struct btintel_pcie_removal {
 	struct work_struct work;
 };
 
+struct btintel_pcie_trigger_evt {
+	u8 type;
+	u8 len;
+	__le32 addr;
+	__le32 size;
+} __packed;
+
+struct btintel_pcie_fwtrigger_evt {
+	__le32 reserved;
+	u8	type; /* Debug Trigger event */
+	__le16	len;
+	u8	event_type;
+	__le16	event_id;
+} __packed;
+
 static LIST_HEAD(btintel_pcie_recovery_list);
 static DEFINE_SPINLOCK(btintel_pcie_recovery_lock);
 
@@ -677,6 +692,11 @@ static int btintel_pcie_read_dram_buffers(struct btintel_pcie_data *data)
 		sizeof(*tlv) + strlen(vendor) +
 		sizeof(*tlv) + strlen(driver);
 
+	if (data->dmp_hdr.trigger_reason == BTINTEL_PCIE_TRIGGER_REASON_FW_ASSERT) {
+		data_len += sizeof(*tlv) + sizeof(data->dmp_hdr.event_type);
+		data_len += sizeof(*tlv) + sizeof(data->dmp_hdr.event_id);
+	}
+
 	/*
 	 * sizeof(u32) - signature
 	 * sizeof(data_len) - to store tlv data size
@@ -723,6 +743,15 @@ static int btintel_pcie_read_dram_buffers(struct btintel_pcie_data *data)
 				  sizeof(data->dmp_hdr.cnvr_top));
 	p = btintel_pcie_copy_tlv(p, BTINTEL_CNVI_TOP, &data->dmp_hdr.cnvi_top,
 				  sizeof(data->dmp_hdr.cnvi_top));
+
+	if (data->dmp_hdr.trigger_reason == BTINTEL_PCIE_TRIGGER_REASON_FW_ASSERT) {
+		p = btintel_pcie_copy_tlv(p, BTINTEL_EVENT_TYPE,
+					  &data->dmp_hdr.event_type,
+					  sizeof(data->dmp_hdr.event_type));
+		p = btintel_pcie_copy_tlv(p, BTINTEL_EVENT_ID,
+					  &data->dmp_hdr.event_id,
+					  sizeof(data->dmp_hdr.event_id));
+	}
 
 	memcpy(p, dbgc->bufs[0].data, dbgc->count * BTINTEL_PCIE_DBGC_BUFFER_SIZE);
 	dev_coredumpv(&hdev->dev, pdata, dump_size, GFP_KERNEL);
@@ -1298,6 +1327,75 @@ exit_on_error:
 	kfree(buf);
 }
 
+static int btintel_pcie_dump_fwtrigger_event(struct btintel_pcie_data *data)
+{
+	struct btintel_pcie_fwtrigger_evt *evt;
+	struct hci_event_hdr *hdr;
+	struct sk_buff *skb;
+	int len, err;
+	u32 val;
+	u8 *buf;
+
+	if (!data->debug_evt_size || !data->debug_evt_addr)
+		return -EINVAL;
+
+	len = data->debug_evt_size;
+
+	buf = kzalloc(len, GFP_KERNEL);
+	if (!buf)
+		return -ENOMEM;
+
+	btintel_pcie_mac_init(data);
+
+	err = btintel_pcie_read_device_mem(data, buf, data->debug_evt_addr,
+					   data->debug_evt_size);
+	if (err)
+		goto exit_on_error;
+
+	evt = (void *)buf;
+	data->dmp_hdr.event_type  = evt->event_type;
+	data->dmp_hdr.event_id  = le16_to_cpu(evt->event_id);
+
+	bt_dev_dbg(data->hdev, "event type: 0x%2.2x event id: 0x%4.4x",
+		   data->dmp_hdr.event_type, data->dmp_hdr.event_id);
+
+	skb = bt_skb_alloc(sizeof(*hdr) + len, GFP_KERNEL);
+	if (!skb) {
+		err = -ENOMEM;
+		goto exit_on_error;
+	}
+	hci_skb_pkt_type(skb) = HCI_EVENT_PKT;
+	hdr = skb_put(skb, sizeof(*hdr));
+	hdr->evt = 0xff;
+	hdr->plen = len;
+	skb_put_data(skb, buf, len);
+
+	/* copy Intel specific pcie packet type */
+	val = BTINTEL_PCIE_HCI_EVT_PKT;
+	memcpy(skb_push(skb, BTINTEL_PCIE_HCI_TYPE_LEN), &val,
+	       BTINTEL_PCIE_HCI_TYPE_LEN);
+
+	btintel_pcie_recv_frame(data, skb);
+
+exit_on_error:
+	kfree(buf);
+	return err;
+}
+
+static void btintel_pcie_msix_fw_trigger_handler(struct btintel_pcie_data *data)
+{
+	bt_dev_dbg(data->hdev, "Received firmware smart trigger cause");
+
+	if (test_and_set_bit(BTINTEL_PCIE_FWTRIGGER_DUMP_INPROGRESS, &data->flags))
+		return;
+
+	/* Trigger device core dump when there is FW assert */
+	if (!test_and_set_bit(BTINTEL_PCIE_COREDUMP_INPROGRESS, &data->flags))
+		data->dmp_hdr.trigger_reason  = BTINTEL_PCIE_TRIGGER_REASON_FW_ASSERT;
+
+	queue_work(data->workqueue, &data->rx_work);
+}
+
 static void btintel_pcie_msix_hw_exp_handler(struct btintel_pcie_data *data)
 {
 	bt_dev_err(data->hdev, "Received hw exception interrupt");
@@ -1320,6 +1418,11 @@ static void btintel_pcie_rx_work(struct work_struct *work)
 	struct btintel_pcie_data *data = container_of(work,
 					struct btintel_pcie_data, rx_work);
 	struct sk_buff *skb;
+
+	if (test_bit(BTINTEL_PCIE_FWTRIGGER_DUMP_INPROGRESS, &data->flags)) {
+		btintel_pcie_dump_fwtrigger_event(data);
+		clear_bit(BTINTEL_PCIE_FWTRIGGER_DUMP_INPROGRESS, &data->flags);
+	}
 
 	if (test_bit(BTINTEL_PCIE_COREDUMP_INPROGRESS, &data->flags)) {
 		btintel_pcie_dump_traces(data->hdev);
@@ -1467,6 +1570,9 @@ static irqreturn_t btintel_pcie_irq_msix_handler(int irq, void *dev_id)
 	if (intr_hw & BTINTEL_PCIE_MSIX_HW_INT_CAUSES_GP1)
 		btintel_pcie_msix_gp1_handler(data);
 
+	if (intr_hw & BTINTEL_PCIE_MSIX_HW_INT_CAUSES_FWTRIG)
+		btintel_pcie_msix_fw_trigger_handler(data);
+
 	/* This interrupt is triggered by the firmware after updating
 	 * boot_stage register and image_response register
 	 */
@@ -1555,6 +1661,7 @@ static struct btintel_pcie_causes_list causes_list[] = {
 	{ BTINTEL_PCIE_MSIX_FH_INT_CAUSES_1,	BTINTEL_PCIE_CSR_MSIX_FH_INT_MASK,	0x01 },
 	{ BTINTEL_PCIE_MSIX_HW_INT_CAUSES_GP0,	BTINTEL_PCIE_CSR_MSIX_HW_INT_MASK,	0x20 },
 	{ BTINTEL_PCIE_MSIX_HW_INT_CAUSES_HWEXP, BTINTEL_PCIE_CSR_MSIX_HW_INT_MASK,	0x23 },
+	{ BTINTEL_PCIE_MSIX_HW_INT_CAUSES_FWTRIG, BTINTEL_PCIE_CSR_MSIX_HW_INT_MASK,	0x25 },
 };
 
 /* This function configures the interrupt masks for both HW_INT_CAUSES and
@@ -2031,6 +2138,49 @@ static void btintel_pcie_synchronize_irqs(struct btintel_pcie_data *data)
 		synchronize_irq(data->msix_entries[i].vector);
 }
 
+static int btintel_pcie_get_debug_info_addr(struct hci_dev *hdev)
+{
+	struct btintel_pcie_data *data = hci_get_drvdata(hdev);
+	struct btintel_pcie_trigger_evt *evt;
+	u8 param[1] = {0x10};
+	struct sk_buff *skb;
+	int err = 0;
+
+	skb = __hci_cmd_sync(hdev, BTINTEL_HCI_OP_DEBUG, 1, param,
+			     HCI_CMD_TIMEOUT);
+	if (IS_ERR(skb)) {
+		bt_dev_err(hdev, "Reading Intel read debug info address command failed (%ld)",
+			   PTR_ERR(skb));
+		/* Not all Intel products supports this command */
+		if (PTR_ERR(skb) == -EOPNOTSUPP)
+			return 0;
+		return PTR_ERR(skb);
+	}
+
+	/* Check the status */
+	if (skb->data[0]) {
+		bt_dev_err(hdev, "Reading Intel read debug info command failed (0x%2.2x)",
+			   skb->data[0]);
+		err = -EIO;
+		goto exit_error;
+	}
+
+	/* Consume Command Complete Status field */
+	skb_pull(skb, 1);
+
+	evt = (void *)skb->data;
+
+	data->debug_evt_addr = le32_to_cpu(evt->addr);
+	data->debug_evt_size = le32_to_cpu(evt->size);
+
+	bt_dev_dbg(hdev, "config type: %u config len: %u debug event addr: 0x%8.8x size: 0x%8.8x",
+		   evt->type, evt->len, data->debug_evt_addr,
+		   data->debug_evt_size);
+exit_error:
+	kfree_skb(skb);
+	return err;
+}
+
 static int btintel_pcie_setup_internal(struct hci_dev *hdev)
 {
 	struct btintel_pcie_data *data = hci_get_drvdata(hdev);
@@ -2127,6 +2277,10 @@ static int btintel_pcie_setup_internal(struct hci_dev *hdev)
 
 	if (ver_tlv.img_type == 0x02 || ver_tlv.img_type == 0x03)
 		data->dmp_hdr.fw_git_sha1 = ver_tlv.git_sha1;
+
+	err = btintel_pcie_get_debug_info_addr(hdev);
+	if (err)
+		goto exit_error;
 
 	btintel_print_fseq_info(hdev);
 exit_error:

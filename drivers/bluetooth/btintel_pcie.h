@@ -101,6 +101,7 @@ enum msix_hw_int_causes {
 	BTINTEL_PCIE_MSIX_HW_INT_CAUSES_GP0	= BIT(0),	/* cause 32 */
 	BTINTEL_PCIE_MSIX_HW_INT_CAUSES_GP1	= BIT(1),	/* cause 33 */
 	BTINTEL_PCIE_MSIX_HW_INT_CAUSES_HWEXP	= BIT(3),	/* cause 35 */
+	BTINTEL_PCIE_MSIX_HW_INT_CAUSES_FWTRIG	= BIT(5),	/* cause 37 */
 };
 
 /* PCIe device states
@@ -118,6 +119,7 @@ enum {
 	BTINTEL_PCIE_CORE_HALTED,
 	BTINTEL_PCIE_HWEXP_INPROGRESS,
 	BTINTEL_PCIE_COREDUMP_INPROGRESS,
+	BTINTEL_PCIE_FWTRIGGER_DUMP_INPROGRESS,
 	BTINTEL_PCIE_RECOVERY_IN_PROGRESS,
 	BTINTEL_PCIE_SETUP_DONE
 };
@@ -133,7 +135,9 @@ enum btintel_pcie_tlv_type {
 	BTINTEL_DUMP_TIME,
 	BTINTEL_FW_BUILD,
 	BTINTEL_VENDOR,
-	BTINTEL_DRIVER
+	BTINTEL_DRIVER,
+	BTINTEL_EVENT_TYPE,
+	BTINTEL_EVENT_ID
 };
 
 /* causes for the MBOX interrupts */
@@ -429,6 +433,8 @@ struct btintel_pcie_dump_header {
 	u32		wrap_ctr;
 	u16		trigger_reason;
 	int		state;
+	u8		event_type;
+	u16		event_id;
 };
 
 /* struct btintel_pcie_data
@@ -513,6 +519,7 @@ struct btintel_pcie_data {
 	u32	alive_intr_ctxt;
 	struct btintel_pcie_dbgc	dbgc;
 	struct btintel_pcie_dump_header dmp_hdr;
+	u32	debug_evt_addr, debug_evt_size;
 };
 
 static inline u32 btintel_pcie_rd_reg32(struct btintel_pcie_data *data,
