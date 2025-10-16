@@ -23,6 +23,12 @@ static int cs4271_spi_probe(struct spi_device *spi)
 	return cs4271_probe(&spi->dev, devm_regmap_init_spi(spi, &config));
 }
 
+static const struct of_device_id cs4271_dt_ids[] = {
+	{ .compatible = "cirrus,cs4271", },
+	{ }
+};
+MODULE_DEVICE_TABLE(of, cs4271_dt_ids);
+
 static struct spi_driver cs4271_spi_driver = {
 	.driver = {
 		.name	= "cs4271",

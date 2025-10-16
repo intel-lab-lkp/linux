@@ -543,15 +543,6 @@ static int cs4271_soc_resume(struct snd_soc_component *component)
 #define cs4271_soc_resume	NULL
 #endif /* CONFIG_PM */
 
-#ifdef CONFIG_OF
-const struct of_device_id cs4271_dt_ids[] = {
-	{ .compatible = "cirrus,cs4271", },
-	{ }
-};
-MODULE_DEVICE_TABLE(of, cs4271_dt_ids);
-EXPORT_SYMBOL_GPL(cs4271_dt_ids);
-#endif
-
 static int cs4271_component_probe(struct snd_soc_component *component)
 {
 	struct cs4271_private *cs4271 = snd_soc_component_get_drvdata(component);
