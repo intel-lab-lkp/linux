@@ -609,7 +609,7 @@ macro_rules! register {
             /// Read the register from its address in `io`.
             #[inline(always)]
             pub(crate) fn read<const SIZE: usize, T>(io: &T) -> Self where
-                T: ::core::ops::Deref<Target = ::kernel::io::Io<SIZE>>,
+                T: ::core::ops::Deref<Target = ::kernel::io::Mmio<SIZE>>,
             {
                 Self(io.read32($offset))
             }
@@ -617,7 +617,7 @@ macro_rules! register {
             /// Write the value contained in `self` to the register address in `io`.
             #[inline(always)]
             pub(crate) fn write<const SIZE: usize, T>(self, io: &T) where
-                T: ::core::ops::Deref<Target = ::kernel::io::Io<SIZE>>,
+                T: ::core::ops::Deref<Target = ::kernel::io::Mmio<SIZE>>,
             {
                 io.write32(self.0, $offset)
             }
@@ -629,7 +629,7 @@ macro_rules! register {
                 io: &T,
                 f: F,
             ) where
-                T: ::core::ops::Deref<Target = ::kernel::io::Io<SIZE>>,
+                T: ::core::ops::Deref<Target = ::kernel::io::Mmio<SIZE>>,
                 F: ::core::ops::FnOnce(Self) -> Self,
             {
                 let reg = f(Self::read(io));
@@ -652,7 +652,7 @@ macro_rules! register {
                 #[allow(unused_variables)]
                 base: &B,
             ) -> Self where
-                T: ::core::ops::Deref<Target = ::kernel::io::Io<SIZE>>,
+                T: ::core::ops::Deref<Target = ::kernel::io::Mmio<SIZE>>,
                 B: crate::regs::macros::RegisterBase<$base>,
             {
                 const OFFSET: usize = $name::OFFSET;
@@ -673,7 +673,7 @@ macro_rules! register {
                 #[allow(unused_variables)]
                 base: &B,
             ) where
-                T: ::core::ops::Deref<Target = ::kernel::io::Io<SIZE>>,
+                T: ::core::ops::Deref<Target = ::kernel::io::Mmio<SIZE>>,
                 B: crate::regs::macros::RegisterBase<$base>,
             {
                 const OFFSET: usize = $name::OFFSET;
@@ -693,7 +693,7 @@ macro_rules! register {
                 base: &B,
                 f: F,
             ) where
-                T: ::core::ops::Deref<Target = ::kernel::io::Io<SIZE>>,
+                T: ::core::ops::Deref<Target = ::kernel::io::Mmio<SIZE>>,
                 B: crate::regs::macros::RegisterBase<$base>,
                 F: ::core::ops::FnOnce(Self) -> Self,
             {
@@ -717,7 +717,7 @@ macro_rules! register {
                 io: &T,
                 idx: usize,
             ) -> Self where
-                T: ::core::ops::Deref<Target = ::kernel::io::Io<SIZE>>,
+                T: ::core::ops::Deref<Target = ::kernel::io::Mmio<SIZE>>,
             {
                 build_assert!(idx < Self::SIZE);
 
@@ -734,7 +734,7 @@ macro_rules! register {
                 io: &T,
                 idx: usize
             ) where
-                T: ::core::ops::Deref<Target = ::kernel::io::Io<SIZE>>,
+                T: ::core::ops::Deref<Target = ::kernel::io::Mmio<SIZE>>,
             {
                 build_assert!(idx < Self::SIZE);
 
@@ -751,7 +751,7 @@ macro_rules! register {
                 idx: usize,
                 f: F,
             ) where
-                T: ::core::ops::Deref<Target = ::kernel::io::Io<SIZE>>,
+                T: ::core::ops::Deref<Target = ::kernel::io::Mmio<SIZE>>,
                 F: ::core::ops::FnOnce(Self) -> Self,
             {
                 let reg = f(Self::read(io, idx));
@@ -767,7 +767,7 @@ macro_rules! register {
                 io: &T,
                 idx: usize,
             ) -> ::kernel::error::Result<Self> where
-                T: ::core::ops::Deref<Target = ::kernel::io::Io<SIZE>>,
+                T: ::core::ops::Deref<Target = ::kernel::io::Mmio<SIZE>>,
             {
                 if idx < Self::SIZE {
                     Ok(Self::read(io, idx))
@@ -786,7 +786,7 @@ macro_rules! register {
                 io: &T,
                 idx: usize,
             ) -> ::kernel::error::Result where
-                T: ::core::ops::Deref<Target = ::kernel::io::Io<SIZE>>,
+                T: ::core::ops::Deref<Target = ::kernel::io::Mmio<SIZE>>,
             {
                 if idx < Self::SIZE {
                     Ok(self.write(io, idx))
@@ -806,7 +806,7 @@ macro_rules! register {
                 idx: usize,
                 f: F,
             ) -> ::kernel::error::Result where
-                T: ::core::ops::Deref<Target = ::kernel::io::Io<SIZE>>,
+                T: ::core::ops::Deref<Target = ::kernel::io::Mmio<SIZE>>,
                 F: ::core::ops::FnOnce(Self) -> Self,
             {
                 if idx < Self::SIZE {
@@ -838,7 +838,7 @@ macro_rules! register {
                 base: &B,
                 idx: usize,
             ) -> Self where
-                T: ::core::ops::Deref<Target = ::kernel::io::Io<SIZE>>,
+                T: ::core::ops::Deref<Target = ::kernel::io::Mmio<SIZE>>,
                 B: crate::regs::macros::RegisterBase<$base>,
             {
                 build_assert!(idx < Self::SIZE);
@@ -860,7 +860,7 @@ macro_rules! register {
                 base: &B,
                 idx: usize
             ) where
-                T: ::core::ops::Deref<Target = ::kernel::io::Io<SIZE>>,
+                T: ::core::ops::Deref<Target = ::kernel::io::Mmio<SIZE>>,
                 B: crate::regs::macros::RegisterBase<$base>,
             {
                 build_assert!(idx < Self::SIZE);
@@ -881,7 +881,7 @@ macro_rules! register {
                 idx: usize,
                 f: F,
             ) where
-                T: ::core::ops::Deref<Target = ::kernel::io::Io<SIZE>>,
+                T: ::core::ops::Deref<Target = ::kernel::io::Mmio<SIZE>>,
                 B: crate::regs::macros::RegisterBase<$base>,
                 F: ::core::ops::FnOnce(Self) -> Self,
             {
@@ -900,7 +900,7 @@ macro_rules! register {
                 base: &B,
                 idx: usize,
             ) -> ::kernel::error::Result<Self> where
-                T: ::core::ops::Deref<Target = ::kernel::io::Io<SIZE>>,
+                T: ::core::ops::Deref<Target = ::kernel::io::Mmio<SIZE>>,
                 B: crate::regs::macros::RegisterBase<$base>,
             {
                 if idx < Self::SIZE {
@@ -922,7 +922,7 @@ macro_rules! register {
                 base: &B,
                 idx: usize,
             ) -> ::kernel::error::Result where
-                T: ::core::ops::Deref<Target = ::kernel::io::Io<SIZE>>,
+                T: ::core::ops::Deref<Target = ::kernel::io::Mmio<SIZE>>,
                 B: crate::regs::macros::RegisterBase<$base>,
             {
                 if idx < Self::SIZE {
@@ -945,7 +945,7 @@ macro_rules! register {
                 idx: usize,
                 f: F,
             ) -> ::kernel::error::Result where
-                T: ::core::ops::Deref<Target = ::kernel::io::Io<SIZE>>,
+                T: ::core::ops::Deref<Target = ::kernel::io::Mmio<SIZE>>,
                 B: crate::regs::macros::RegisterBase<$base>,
                 F: ::core::ops::FnOnce(Self) -> Self,
             {
