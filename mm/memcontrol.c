@@ -2721,6 +2721,7 @@ from_memcg:
 
 	return objcg;
 }
+EXPORT_SYMBOL_GPL(current_obj_cgroup);
 
 struct obj_cgroup *get_obj_cgroup_from_folio(struct folio *folio)
 {
