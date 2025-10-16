@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0
 
 #include <stdint.h>
+#include <fcntl.h>
 #include "resctrl.h"
 
 char llc_occup_path[1024];
@@ -93,11 +94,61 @@ static int get_llc_occu_resctrl(unsigned long *llc_occupancy)
 }
 
 /*
+ * get_llc_occu_resctrl_pmu - Read LLC occupancy via resctrl PMU
+ *
+ * Uses the PMU to read LLC occupancy from the monitored resource given by the
+ * global variable llc_occup_path.
+ *
+ * Return: =0 on success. <0 on failure.
+ */
+static int get_llc_occu_resctrl_pmu(unsigned long *llc_occupancy_pmu)
+{
+	int pmu_type, mon_fd = -1, perf_fd = -1;
+	struct perf_event_attr pe = { 0 };
+	__u64 value = 0;
+
+	if (!llc_occup_path[0])
+		return -1;
+
+	pmu_type = resctrl_find_pmu_type("resctrl");
+	if (pmu_type < 0)
+		return -1;
+
+	mon_fd = open(llc_occup_path, O_RDONLY);
+	if (mon_fd < 0)
+		return -1;
+
+	memset(&pe, 0, sizeof(pe));
+	pe.type = pmu_type;
+	pe.config = mon_fd; /* Pass the monitoring fd */
+	pe.size = sizeof(pe);
+	pe.disabled = 0; /* Start enabled */
+
+	perf_fd = perf_event_open(&pe, -1, 0, -1, 0);
+	if (perf_fd < 0)
+		goto out_close_mon;
+
+	if (read(perf_fd, &value, sizeof(value)) != sizeof(value))
+		goto out_close_all;
+
+	*llc_occupancy_pmu = (unsigned long)value;
+
+	close(perf_fd);
+	close(mon_fd);
+	return 0;
+
+out_close_all:
+	close(perf_fd);
+out_close_mon:
+	close(mon_fd);
+	return -1;
+}
+
+/*
  * print_results_cache:	the cache results are stored in a file
  * @filename:		file that stores the results
  * @bm_pid:		child pid that runs benchmark
- * @llc_value:		perf miss value /
- *			llc occupancy value reported by resctrl FS
+ * @llc_value:		perf miss value
  *
  * Return:		0 on success, < 0 on error.
  */
@@ -115,6 +166,37 @@ static int print_results_cache(const char *filename, pid_t bm_pid, __u64 llc_val
 			return -1;
 		}
 		fprintf(fp, "Pid: %d \t llc_value: %llu\n", (int)bm_pid, llc_value);
+		fclose(fp);
+	}
+
+	return 0;
+}
+
+/*
+ * print_results_llc:	prints LLC measurements to a file
+ * @filename:		file that stores the results
+ * @bm_pid:		child pid that runs benchmark
+ * @fs_value:		llc occupancy value reported by resctrl FS
+ * @pmu_value:		llc occupancy value reported by resctrl PMU
+ *
+ * Return:		0 on success, < 0 on error.
+ */
+static int print_results_llc(const char *filename, pid_t bm_pid,
+			     unsigned long fs_value, unsigned long pmu_value)
+{
+	FILE *fp;
+
+	if (strcmp(filename, "stdio") == 0 || strcmp(filename, "stderr") == 0) {
+		printf("Pid: %d \t llc_value: %lu\t pmu_value: %lu\n",
+		       (int)bm_pid, fs_value, pmu_value);
+	} else {
+		fp = fopen(filename, "a");
+		if (!fp) {
+			ksft_perror("Cannot open results file");
+			return -1;
+		}
+		fprintf(fp, "Pid: %d \t llc_value: %lu\t pmu_value: %lu\n",
+			(int)bm_pid, fs_value, pmu_value);
 		fclose(fp);
 	}
 
@@ -164,13 +246,19 @@ int perf_event_measure(int pe_fd, struct perf_event_read *pe_read,
 int measure_llc_resctrl(const char *filename, pid_t bm_pid)
 {
 	unsigned long llc_occu_resc = 0;
+	unsigned long llc_occu_pmu = 0;
 	int ret;
 
 	ret = get_llc_occu_resctrl(&llc_occu_resc);
 	if (ret < 0)
 		return ret;
 
-	return print_results_cache(filename, bm_pid, llc_occu_resc);
+	/* Try to get PMU value as well */
+	ret = get_llc_occu_resctrl_pmu(&llc_occu_pmu);
+	if (ret < 0)
+		return ret;
+
+	return print_results_llc(filename, bm_pid, llc_occu_resc, llc_occu_pmu);
 }
 
 /*

@@ -628,6 +628,70 @@ Resource monitoring rules
    "mon_data" group.
 
 
+Perf PMU access (resctrl PMU)
+=============================
+
+resctrl registers a perf PMU named "resctrl", which provides read-only access
+to the same monitoring values exposed via the "mon_data" files. The PMU
+enables access from eBPF and allows parallelizing reads as it does not lock
+the system-wide `rdtgroup_mutex`.
+
+Selection and usage
+-------------------
+- Event selection is performed by passing the file descriptor of a
+  resctrl monitoring file, for example
+  "mon_data/mon_L3_00/llc_occupancy", in the `perf_event_attr.config`
+  field when calling perf_event_open().
+- The perf event must be CPU-bound (pid = -1 and cpu >= 0).
+- The chosen CPU must be valid for the domain represented by the
+  monitoring file:
+
+  - For a domain-specific file such as "mon_L3_00/...", choose a CPU that
+    belongs to that domain.
+  - For files that provide a sum across domains that share the same L3
+    cache instance (for example on SNC systems), choose a CPU that
+    shares that L3 cache instance. See the "Cache IDs" section for the
+    concepts and mapping.
+- Exclude flags must be zero. perf_event_open() fails if any exclude
+  flags are set.
+
+Semantics
+---------
+- The values from the resctrl PMU match the values what would be
+  read from the corresponding "mon_data" file at the time of the read.
+- Sampling is not supported. The PMU provides counts that can be read
+  on demand; there are no periodic interrupts or per-context filtering
+  semantics.
+- It is safe to read a perf event whose underlying resctrl group has been
+  deleted. However, the returned values are unspecified: the current
+  implementation returns zeros, but this may change in the future.
+
+Discovering the PMU and example
+-------------------------------
+- The PMU type is exposed at
+  "/sys/bus/event_source/devices/resctrl/type" and must be placed in
+  `perf_event_attr.type`.
+- A minimal example of opening a resctrl PMU event by passing a
+  monitoring file descriptor in `config`::
+
+      int pmu_type = read_int("/sys/bus/event_source/devices/resctrl/type");
+      int mon_fd = open("/sys/fs/resctrl/mon_data/mon_L3_00/llc_occupancy", O_RDONLY);
+      struct perf_event_attr pe = { 0 };
+
+      pe.type = pmu_type;
+      pe.size = sizeof(pe);
+      pe.config = mon_fd;  /* select event via resctrl file descriptor */
+      pe.disabled = 1;
+
+      int cpu = /* a CPU in the L3_00 domain (see Cache IDs) */;
+      int fd = perf_event_open(&pe, -1 /* pid */, cpu /* cpu */, -1, 0);
+
+      ioctl(fd, PERF_EVENT_IOC_ENABLE, 0);
+      uint64_t val;
+      read(fd, &val, sizeof(val));
+      ioctl(fd, PERF_EVENT_IOC_DISABLE, 0);
+
+
 Notes on cache occupancy monitoring and control
 ===============================================
 When moving a task from one group to another you should remember that

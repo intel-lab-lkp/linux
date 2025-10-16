@@ -205,6 +205,9 @@ void signal_handler_unregister(void);
 unsigned int count_bits(unsigned long n);
 int snc_kernel_support(void);
 
+/* PMU utilities */
+int resctrl_find_pmu_type(const char *pmu_name);
+
 void perf_event_attr_initialize(struct perf_event_attr *pea, __u64 config);
 void perf_event_initialize_read_format(struct perf_event_read *pe_read);
 int perf_open(struct perf_event_attr *pea, pid_t pid, int cpu_no);

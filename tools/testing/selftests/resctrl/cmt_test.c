@@ -78,6 +78,7 @@ static int check_results(struct resctrl_val_param *param, size_t span, int no_of
 {
 	char *token_array[8], temp[512];
 	unsigned long sum_llc_occu_resc = 0;
+	unsigned long sum_llc_occu_pmu = 0;
 	int runs = 0;
 	FILE *fp;
 
@@ -100,12 +101,24 @@ static int check_results(struct resctrl_val_param *param, size_t span, int no_of
 
 		/* Field 3 is llc occ resc value */
 		sum_llc_occu_resc += strtoul(token_array[3], NULL, 0);
+
+		/* Field 5: llc occupancy from PMU */
+		sum_llc_occu_pmu += strtoul(token_array[5], NULL, 0);
 		runs++;
 	}
 	fclose(fp);
 
-	return show_results_info(sum_llc_occu_resc, no_of_bits, span,
-				 MAX_DIFF, MAX_DIFF_PERCENT, runs, true);
+	/* Filesystem-based results */
+	ksft_print_msg("CMT (resctrl fs):\n");
+	int ret_fs = show_results_info(sum_llc_occu_resc, no_of_bits, span,
+				       MAX_DIFF, MAX_DIFF_PERCENT, runs, true);
+
+	/* PMU-based results */
+	ksft_print_msg("CMT (PMU):\n");
+	int ret_pmu = show_results_info(sum_llc_occu_pmu, no_of_bits, span,
+					MAX_DIFF, MAX_DIFF_PERCENT, runs, true);
+
+	return ret_fs || ret_pmu;
 }
 
 static void cmt_test_cleanup(void)

@@ -16,32 +16,6 @@
 
 #define RESCTRL_PMU_NAME "resctrl"
 
-static int find_pmu_type(const char *pmu_name)
-{
-	char path[256];
-	FILE *file;
-	int type;
-
-	snprintf(path, sizeof(path), "/sys/bus/event_source/devices/%s/type",
-		 pmu_name);
-
-	file = fopen(path, "r");
-	if (!file) {
-		ksft_print_msg("Failed to open %s: %s\n", path,
-			       strerror(errno));
-		return -1;
-	}
-
-	if (fscanf(file, "%d", &type) != 1) {
-		ksft_print_msg("Failed to read PMU type from %s\n", path);
-		fclose(file);
-		return -1;
-	}
-
-	fclose(file);
-	return type;
-}
-
 static bool is_allowed_file(const char *filename)
 {
 	const char *base;
@@ -288,7 +262,7 @@ static int pmu_run_test(const struct resctrl_test *test,
 	ksft_print_msg("Testing resctrl PMU file access safety\n");
 
 	/* Find the resctrl PMU type */
-	pmu_type = find_pmu_type(RESCTRL_PMU_NAME);
+	pmu_type = resctrl_find_pmu_type(RESCTRL_PMU_NAME);
 	if (pmu_type < 0) {
 		ksft_print_msg("Resctrl PMU not found - PMU is not registered?\n");
 		return -1;
