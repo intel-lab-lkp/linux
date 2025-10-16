@@ -166,6 +166,12 @@
 #define MCE_IN_KERNEL_COPYIN	BIT_ULL(7)
 
 /*
+ * Indicates that handler should check and clear Deferred error registers
+ * rather than common ones.
+ */
+#define MCE_CHECK_DFR_REGS	BIT_ULL(8)
+
+/*
  * This structure contains all data related to the MCE log.  Also
  * carries a signature to make it easier to find from external
  * debugging tools.  Each entry is only valid when its finished flag
@@ -293,6 +299,7 @@ enum mcp_flags {
 	MCP_TIMESTAMP	= BIT(0),	/* log time stamp */
 	MCP_UC		= BIT(1),	/* log uncorrected errors */
 	MCP_QUEUE_LOG	= BIT(2),	/* only queue to genpool */
+	MCP_DFR		= BIT(3),	/* log deferred errors */
 };
 
 void machine_check_poll(enum mcp_flags flags, mce_banks_t *b);

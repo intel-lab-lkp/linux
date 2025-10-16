@@ -687,7 +687,10 @@ static noinstr void mce_read_aux(struct mce_hw_err *err, int i)
 		m->misc = mce_rdmsrq(mca_msr_reg(i, MCA_MISC));
 
 	if (m->status & MCI_STATUS_ADDRV) {
-		m->addr = mce_rdmsrq(mca_msr_reg(i, MCA_ADDR));
+		if (m->kflags & MCE_CHECK_DFR_REGS)
+			m->addr = mce_rdmsrq(MSR_AMD64_SMCA_MCx_DEADDR(i));
+		else
+			m->addr = mce_rdmsrq(mca_msr_reg(i, MCA_ADDR));
 
 		/*
 		 * Mask the reported address by the reported granularity.
@@ -715,6 +718,42 @@ static noinstr void mce_read_aux(struct mce_hw_err *err, int i)
 DEFINE_PER_CPU(unsigned, mce_poll_count);
 
 /*
+ * We have three scenarios for checking for Deferred errors:
+ *
+ * 1) Non-SMCA systems check MCA_STATUS and log error if found.
+ * 2) SMCA systems check MCA_STATUS. If error is found then log it and also
+ *    clear MCA_DESTAT.
+ * 3) SMCA systems check MCA_DESTAT, if error was not found in MCA_STATUS, and
+ *    log it.
+ */
+static bool smca_should_log_poll_error(enum mcp_flags flags, struct mce_hw_err *err)
+{
+	struct mce *m = &err->m;
+
+	/*
+	 * If the MCA_STATUS register has a deferred error, then continue using it as
+	 * the status register.
+	 *
+	 * MCA_DESTAT will be cleared at the end of the handler.
+	 */
+	if ((m->status & MCI_STATUS_VAL) && (m->status & MCI_STATUS_DEFERRED))
+		return true;
+
+	/*
+	 * If the MCA_DESTAT register has a deferred error, then use it instead.
+	 *
+	 * MCA_STATUS will not be cleared at the end of the handler.
+	 */
+	m->status = mce_rdmsrq(MSR_AMD64_SMCA_MCx_DESTAT(m->bank));
+	if ((m->status & MCI_STATUS_VAL) && (m->status & MCI_STATUS_DEFERRED)) {
+		m->kflags |= MCE_CHECK_DFR_REGS;
+		return true;
+	}
+
+	return false;
+}
+
+/*
  * Newer Intel systems that support software error
  * recovery need to make additional checks. Other
  * CPUs should skip over uncorrected errors, but log
@@ -740,8 +779,15 @@ static bool should_log_poll_error(enum mcp_flags flags, struct mce_hw_err *err)
 {
 	struct mce *m = &err->m;
 
+	if (flags & MCP_DFR)
+		return smca_should_log_poll_error(flags, err);
+
 	/* If this entry is not valid, ignore it. */
 	if (!(m->status & MCI_STATUS_VAL))
+		return false;
+
+	/* Ignore deferred errors if not looking for them (MCP_DFR not set). */
+	if (m->status & MCI_STATUS_DEFERRED)
 		return false;
 
 	/*
@@ -1878,6 +1924,9 @@ static void __mcheck_cpu_init_prepare_banks(void)
 
 		bitmap_fill(all_banks, MAX_NR_BANKS);
 		machine_check_poll(MCP_UC | MCP_QUEUE_LOG, &all_banks);
+
+		if (mce_flags.smca)
+			machine_check_poll(MCP_DFR | MCP_QUEUE_LOG, &all_banks);
 	}
 
 	for (i = 0; i < this_cpu_read(mce_num_banks); i++) {
