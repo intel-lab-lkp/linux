@@ -154,7 +154,7 @@ __do_kernel_fault(struct mm_struct *mm, unsigned long addr, unsigned int fsr,
 	/*
 	 * Are we prepared to handle this kernel fault?
 	 */
-	if (fixup_exception(regs))
+	if (likely(fixup_exception(regs)))
 		return;
 
 	/*
@@ -177,7 +177,7 @@ __do_kernel_fault(struct mm_struct *mm, unsigned long addr, unsigned int fsr,
  * Something tried to access memory that isn't in our memory map..
  * User mode accesses just cause a SIGSEGV
  */
-static void
+static noinline void
 __do_user_fault(unsigned long addr, unsigned int fsr, unsigned int sig,
 		int code, struct pt_regs *regs)
 {
@@ -272,27 +272,29 @@ do_page_fault(unsigned long addr, unsigned int fsr, struct pt_regs *regs)
 	if (kprobe_page_fault(regs, fsr))
 		return 0;
 
-#ifdef CONFIG_HARDEN_BRANCH_PREDICTOR
-	if (unlikely(addr > TASK_SIZE) && user_mode(regs)) {
-		fault = 0;
-		code = SEGV_MAPERR;
-		goto bad_area;
-	}
-#endif
+	if (user_mode(regs)) {
+		if (IS_ENABLED(CONFIG_HARDEN_BRANCH_PREDICTOR) && unlikely(addr > TASK_SIZE)) {
+			fault = 0;
+			code = SEGV_MAPERR;
+			goto bad_area;
+		}
 
-	/* Enable interrupts if they were enabled in the parent context. */
-	if (interrupts_enabled(regs))
+		/* Enable interrupts if they were enabled in the parent context. */
 		local_irq_enable();
 
-	/*
-	 * If we're in an interrupt or have no user
-	 * context, we must not take the fault..
-	 */
-	if (faulthandler_disabled() || !mm)
-		goto no_context;
-
-	if (user_mode(regs))
 		flags |= FAULT_FLAG_USER;
+	} else {
+		/* Enable interrupts if they were enabled in the parent context. */
+		if (interrupts_enabled(regs))
+			local_irq_enable();
+
+		/*
+		 * If we're in an interrupt or have no user
+		 * context, we must not take the fault..
+		 */
+		if (faulthandler_disabled() || unlikely(!mm))
+			goto no_context;
+	}
 
 	if (is_write_fault(fsr)) {
 		flags |= FAULT_FLAG_WRITE;
@@ -302,7 +304,7 @@ do_page_fault(unsigned long addr, unsigned int fsr, struct pt_regs *regs)
 	if (fsr & FSR_LNX_PF) {
 		vm_flags = VM_EXEC;
 
-		if (is_permission_fault(fsr) && !user_mode(regs))
+		if (unlikely(is_permission_fault(fsr)) && !user_mode(regs))
 			die_kernel_fault("execution of memory",
 					 mm, addr, fsr, regs);
 	}
@@ -314,7 +316,7 @@ do_page_fault(unsigned long addr, unsigned int fsr, struct pt_regs *regs)
 	 * routed via the translation fault mechanism. Check whether uaccess
 	 * is disabled while in kernel mode.
 	 */
-	if (!ttbr0_usermode_access_allowed(regs))
+	if (unlikely(!ttbr0_usermode_access_allowed(regs)))
 		goto no_context;
 
 	if (!(flags & FAULT_FLAG_USER))
@@ -324,7 +326,7 @@ do_page_fault(unsigned long addr, unsigned int fsr, struct pt_regs *regs)
 	if (!vma)
 		goto lock_mmap;
 
-	if (!(vma->vm_flags & vm_flags)) {
+	if (unlikely(!(vma->vm_flags & vm_flags))) {
 		vma_end_read(vma);
 		count_vm_vma_lock_event(VMA_LOCK_SUCCESS);
 		fault = 0;
@@ -344,7 +346,7 @@ do_page_fault(unsigned long addr, unsigned int fsr, struct pt_regs *regs)
 		flags |= FAULT_FLAG_TRIED;
 
 	/* Quick path to respond to signals */
-	if (fault_signal_pending(fault, regs)) {
+	if (unlikely(fault_signal_pending(fault, regs))) {
 		if (!user_mode(regs))
 			goto no_context;
 		return 0;
@@ -363,7 +365,7 @@ retry:
 	 * ok, we have a good vm_area for this memory access, check the
 	 * permissions on the VMA allow for the fault which occurred.
 	 */
-	if (!(vma->vm_flags & vm_flags)) {
+	if (unlikely(!(vma->vm_flags & vm_flags))) {
 		mmap_read_unlock(mm);
 		fault = 0;
 		code = SEGV_ACCERR;
@@ -376,7 +378,7 @@ retry:
 	 * signal first. We do not need to release the mmap_lock because
 	 * it would already be released in __lock_page_or_retry in
 	 * mm/filemap.c. */
-	if (fault_signal_pending(fault, regs)) {
+	if (unlikely(fault_signal_pending(fault, regs))) {
 		if (!user_mode(regs))
 			goto no_context;
 		return 0;
@@ -386,7 +388,7 @@ retry:
 	if (fault & VM_FAULT_COMPLETED)
 		return 0;
 
-	if (!(fault & VM_FAULT_ERROR)) {
+	if (likely(!(fault & VM_FAULT_ERROR))) {
 		if (fault & VM_FAULT_RETRY) {
 			flags |= FAULT_FLAG_TRIED;
 			goto retry;
