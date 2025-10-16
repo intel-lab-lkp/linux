@@ -672,6 +672,17 @@ static int devlink_nl_eswitch_fill(struct sk_buff *msg, struct devlink *devlink,
 			goto nla_put_failure;
 	}
 
+	if (ops->eswitch_state_get) {
+		enum devlink_eswitch_state state;
+
+		err = ops->eswitch_state_get(devlink, &state);
+		if (err)
+			return err;
+		err = nla_put_u8(msg, DEVLINK_ATTR_ESWITCH_STATE, state);
+		if (err)
+			return err;
+	}
+
 	genlmsg_end(msg, hdr);
 	return 0;
 
@@ -706,6 +717,7 @@ int devlink_nl_eswitch_set_doit(struct sk_buff *skb, struct genl_info *info)
 	struct devlink *devlink = info->user_ptr[0];
 	const struct devlink_ops *ops = devlink->ops;
 	enum devlink_eswitch_encap_mode encap_mode;
+	enum devlink_eswitch_state state;
 	u8 inline_mode;
 	int err = 0;
 	u16 mode;
@@ -718,6 +730,24 @@ int devlink_nl_eswitch_set_doit(struct sk_buff *skb, struct genl_info *info)
 		if (err)
 			return err;
 		err = ops->eswitch_mode_set(devlink, mode, info->extack);
+		if (err)
+			return err;
+	}
+
+	state = DEVLINK_ESWITCH_STATE_ACTIVE;
+	if (info->attrs[DEVLINK_ATTR_ESWITCH_STATE]) {
+		if (!ops->eswitch_state_set)
+			return -EOPNOTSUPP;
+		state = nla_get_u8(info->attrs[DEVLINK_ATTR_ESWITCH_STATE]);
+	}
+	/* If user did not supply the state attribute, the default is
+	 * active state. If the state was not explicitly set, set the default
+	 * state for drivers that support eswitch state.
+	 * Keep this after mode-set as state handling can be dependent on
+	 * the eswitch mode.
+	 */
+	if (ops->eswitch_state_set) {
+		err = ops->eswitch_state_set(devlink, state, info->extack);
 		if (err)
 			return err;
 	}

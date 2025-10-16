@@ -1373,6 +1373,11 @@ struct devlink_ops {
 	int (*eswitch_encap_mode_set)(struct devlink *devlink,
 				      enum devlink_eswitch_encap_mode encap_mode,
 				      struct netlink_ext_ack *extack);
+	int (*eswitch_state_get)(struct devlink *devlink,
+				 enum devlink_eswitch_state *state);
+	int (*eswitch_state_set)(struct devlink *devlink,
+				 enum devlink_eswitch_state state,
+				 struct netlink_ext_ack *extack);
 	int (*info_get)(struct devlink *devlink, struct devlink_info_req *req,
 			struct netlink_ext_ack *extack);
 	/**

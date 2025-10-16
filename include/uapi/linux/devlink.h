@@ -195,6 +195,11 @@ enum devlink_eswitch_encap_mode {
 	DEVLINK_ESWITCH_ENCAP_MODE_BASIC,
 };
 
+enum devlink_eswitch_state {
+	DEVLINK_ESWITCH_STATE_INACTIVE,
+	DEVLINK_ESWITCH_STATE_ACTIVE,
+};
+
 enum devlink_port_flavour {
 	DEVLINK_PORT_FLAVOUR_PHYSICAL, /* Any kind of a port physically
 					* facing the user.
@@ -637,6 +642,8 @@ enum devlink_attr {
 	DEVLINK_ATTR_RATE_TC_BWS,		/* nested */
 
 	DEVLINK_ATTR_HEALTH_REPORTER_BURST_PERIOD,	/* u64 */
+
+	DEVLINK_ATTR_ESWITCH_STATE,	/* u8 */
 
 	/* Add new attributes above here, update the spec in
 	 * Documentation/netlink/specs/devlink.yaml and re-generate

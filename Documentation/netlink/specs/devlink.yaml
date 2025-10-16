@@ -121,6 +121,14 @@ definitions:
         name: basic
   -
     type: enum
+    name: eswitch-state
+    entries:
+      -
+        name: none
+      -
+        name: basic
+  -
+    type: enum
     name: dpipe-header-id
     entries:
       -
@@ -857,6 +865,10 @@ attribute-sets:
         name: health-reporter-burst-period
         type: u64
         doc: Time (in msec) for recoveries before starting the grace period.
+      -
+        name: eswitch-state
+        type: u8
+        enum: eswitch-state
   -
     name: dl-dev-stats
     subset-of: devlink
@@ -1609,6 +1621,7 @@ operations:
             - eswitch-mode
             - eswitch-inline-mode
             - eswitch-encap-mode
+            - eswitch-state
 
     -
       name: eswitch-set

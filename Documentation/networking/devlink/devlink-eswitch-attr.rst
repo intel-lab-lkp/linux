@@ -57,6 +57,18 @@ The following is a list of E-Switch attributes.
        * ``none`` Disable encapsulation support.
        * ``basic`` Enable encapsulation support.
 
+   * - ``state``
+     - enum
+     - The state of the E-Switch.
+       In situations where the user want to bring up the e-switch, they want to
+       have the ability to block traffic towards the FDB until FDB is fully
+       programmed.
+       The state can be one of the following:
+
+       * ``active`` Traffic is enabled on this eswitch FDB - default mode
+       * ``inactive`` Traffic is disabled on this eswitch FDB - no traffic
+         will be forwarded to/from this eswitch FDB
+
 Example Usage
 =============
 
@@ -74,3 +86,6 @@ Example Usage
 
     # enable encap-mode with legacy mode
     $ devlink dev eswitch set pci/0000:08:00.0 mode legacy inline-mode none encap-mode basic
+
+    # enable switchdev mode in inactive state
+    $ devlink dev eswitch set pci/0000:08:00.0 mode switchdev state inactive
