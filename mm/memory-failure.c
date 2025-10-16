@@ -1656,12 +1656,13 @@ static int identify_page_state(unsigned long pfn, struct page *p,
  * there is still more to do, hence the page refcount we took earlier
  * is still needed.
  */
-static int try_to_split_thp_page(struct page *page, bool release)
+static int try_to_split_thp_page(struct page *page, unsigned int new_order,
+		bool release)
 {
 	int ret;
 
 	lock_page(page);
-	ret = split_huge_page(page);
+	ret = split_huge_page_to_list_to_order(page, NULL, new_order);
 	unlock_page(page);
 
 	if (ret && release)
@@ -2280,6 +2281,7 @@ try_again:
 	folio_unlock(folio);
 
 	if (folio_test_large(folio)) {
+		int new_order = min_order_for_split(folio);
 		/*
 		 * The flag must be set after the refcount is bumped
 		 * otherwise it may race with THP split.
@@ -2294,7 +2296,14 @@ try_again:
 		 * page is a valid handlable page.
 		 */
 		folio_set_has_hwpoisoned(folio);
-		if (try_to_split_thp_page(p, false) < 0) {
+		/*
+		 * If the folio cannot be split to order-0, kill the process,
+		 * but split the folio anyway to minimize the amount of unusable
+		 * pages.
+		 */
+		if (try_to_split_thp_page(p, new_order, false) || new_order) {
+			/* get folio again in case the original one is split */
+			folio = page_folio(p);
 			res = -EHWPOISON;
 			kill_procs_now(p, pfn, flags, folio);
 			put_page(p);
@@ -2621,7 +2630,15 @@ static int soft_offline_in_use_page(struct page *page)
 	};
 
 	if (!huge && folio_test_large(folio)) {
-		if (try_to_split_thp_page(page, true)) {
+		int new_order = min_order_for_split(folio);
+
+		/*
+		 * If the folio cannot be split to order-0, do not split it at
+		 * all to retain the still accessible large folio.
+		 * NOTE: if getting free memory is perferred, split it like it
+		 * is done in memory_failure().
+		 */
+		if (new_order || try_to_split_thp_page(page, new_order, true)) {
 			pr_info("%#lx: thp split failed\n", pfn);
 			return -EBUSY;
 		}
