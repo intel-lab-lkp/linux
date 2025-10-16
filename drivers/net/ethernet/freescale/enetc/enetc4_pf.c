@@ -41,6 +41,16 @@ static void enetc4_get_port_caps(struct enetc_pf *pf)
 	pf->caps.mac_filter_num = val & PSIMAFCAPR_NUM_MAC_AFTE;
 }
 
+static void enetc4_get_psi_hw_features(struct enetc_si *si)
+{
+	struct enetc_hw *hw = &si->hw;
+	u32 val;
+
+	val = enetc_port_rd(hw, ENETC4_PCAPR);
+	if (val & PCAPR_LINK_TYPE)
+		si->hw_features |= ENETC_SI_F_PPM;
+}
+
 static void enetc4_pf_set_si_primary_mac(struct enetc_hw *hw, int si,
 					 const u8 *addr)
 {
@@ -277,6 +287,7 @@ static int enetc4_pf_struct_init(struct enetc_si *si)
 	pf->ops = &enetc4_pf_ops;
 
 	enetc4_get_port_caps(pf);
+	enetc4_get_psi_hw_features(si);
 
 	return 0;
 }
@@ -589,6 +600,9 @@ static void enetc4_mac_config(struct enetc_pf *pf, unsigned int mode,
 	struct enetc_si *si = pf->si;
 	u32 val;
 
+	if (enetc_is_pseudo_mac(si))
+		return;
+
 	val = enetc_port_mac_rd(si, ENETC4_PM_IF_MODE(0));
 	val &= ~(PM_IF_MODE_IFMODE | PM_IF_MODE_ENA);
 
@@ -635,28 +649,10 @@ static void enetc4_pl_mac_config(struct phylink_config *config, unsigned int mod
 
 static void enetc4_set_port_speed(struct enetc_ndev_priv *priv, int speed)
 {
-	u32 old_speed = priv->speed;
-	u32 val;
-
-	if (speed == old_speed)
-		return;
-
-	val = enetc_port_rd(&priv->si->hw, ENETC4_PCR);
-	val &= ~PCR_PSPEED;
-
-	switch (speed) {
-	case SPEED_100:
-	case SPEED_1000:
-	case SPEED_2500:
-	case SPEED_10000:
-		val |= (PCR_PSPEED & PCR_PSPEED_VAL(speed));
-		break;
-	case SPEED_10:
-	default:
-		val |= (PCR_PSPEED & PCR_PSPEED_VAL(SPEED_10));
-	}
+	u32 val = enetc_port_rd(&priv->si->hw, ENETC4_PCR);
 
 	priv->speed = speed;
+	val = u32_replace_bits(val, PCR_PSPEED_VAL(speed), PCR_PSPEED);
 	enetc_port_wr(&priv->si->hw, ENETC4_PCR, val);
 }
 
@@ -1071,6 +1067,7 @@ static void enetc4_pf_remove(struct pci_dev *pdev)
 
 static const struct pci_device_id enetc4_pf_id_table[] = {
 	{ PCI_DEVICE(NXP_ENETC_VENDOR_ID, NXP_ENETC_PF_DEV_ID) },
+	{ PCI_DEVICE(NXP_ENETC_VENDOR_ID, NXP_ENETC_PPM_DEV_ID) },
 	{ 0, } /* End of table. */
 };
 MODULE_DEVICE_TABLE(pci, enetc4_pf_id_table);
