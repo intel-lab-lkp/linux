@@ -22,6 +22,17 @@
 	};
 };
 
+&pio {
+	uart0_pins: uart0-pins {
+		mux {
+			function = "uart";
+			groups = "uart0";
+		};
+	};
+};
+
 &uart0 {
+	pinctrl-names = "default";
+	pinctrl-0 = <&uart0_pins>;
 	status = "okay";
 };
