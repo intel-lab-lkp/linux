@@ -4,6 +4,7 @@
 
 #include <linux/resctrl.h>
 #include <linux/kernfs.h>
+#include <linux/fs.h>
 #include <linux/fs_context.h>
 #include <linux/tick.h>
 
@@ -362,6 +363,17 @@ void mon_event_count(void *info);
 int rdtgroup_mondata_show(struct seq_file *m, void *arg);
 int rdtgroup_mondata_open(struct kernfs_open_file *of);
 void rdtgroup_mondata_release(struct kernfs_open_file *of);
+void rdtgroup_get(struct rdtgroup *rdtgrp);
+void rdtgroup_put(struct rdtgroup *rdtgrp);
+
+/* PMU support */
+/*
+ * Get rdtgroup from a resctrl monitoring file and take a reference.
+ * Returns a valid pointer with an extra reference on success, or ERR_PTR on failure.
+ */
+struct rdtgroup *rdtgroup_get_from_file(struct file *file);
+int resctrl_pmu_init(void);
+void resctrl_pmu_exit(void);
 
 void rmid_read_init(struct rmid_read *rr, struct rdt_resource *r,
 		    struct rdt_mon_domain *d, struct rdtgroup *rdtgrp,

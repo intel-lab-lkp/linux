@@ -3428,6 +3428,53 @@ void rdtgroup_mondata_release(struct kernfs_open_file *of)
 	}
 }
 
+/*
+ * rdtgroup_get_from_file - Resolve rdtgroup from a resctrl mon data file
+ * @file: struct file opened on a resctrl monitoring data file
+ *
+ * Validate that @file belongs to resctrl and refers to a monitoring data
+ * file (kf_mondata_ops). Then, using the kernfs_open_file stored in the
+ * seq_file, safely fetch the rdtgroup that was pinned at open time and take
+ * an additional rdtgroup reference for the caller under rdtgroup_mutex.
+ *
+ * Returns: rdtgroup* with an extra reference on success; ERR_PTR on failure.
+ */
+struct rdtgroup *rdtgroup_get_from_file(struct file *file)
+{
+	struct rdtgroup *rdtgrp = NULL;
+	struct kernfs_open_file *of;
+	struct seq_file *seq;
+	struct inode *inode;
+
+	if (!file)
+		return ERR_PTR(-EBADF);
+
+	inode = file_inode(file);
+	/* Check the file is part of the resctrl filesystem */
+	if (!inode || !inode->i_sb || inode->i_sb->s_type != &rdt_fs_type)
+		return ERR_PTR(-EINVAL);
+
+	/* kernfs monitoring files use seq_file; seq_file->private is kernfs_open_file */
+	seq = (struct seq_file *)file->private_data;
+	if (!seq)
+		return ERR_PTR(-EINVAL);
+
+	of = (struct kernfs_open_file *)seq->private;
+	/* Check this is a monitoring file */
+	if (!of || !of->kn || of->kn->attr.ops != &kf_mondata_ops)
+		return ERR_PTR(-EINVAL);
+
+	/* Hold rdtgroup_mutex to prevent race with release callback */
+	guard(mutex)(&rdtgroup_mutex);
+
+	rdtgrp = of->priv;
+	if (!rdtgrp || (rdtgrp->flags & RDT_DELETED))
+		return ERR_PTR(-ENOENT);
+
+	rdtgroup_get(rdtgrp);
+	return rdtgrp;
+}
+
 /**
  * cbm_ensure_valid - Enforce validity on provided CBM
  * @_val:	Candidate CBM
@@ -4509,6 +4556,10 @@ int resctrl_init(void)
 	 */
 	debugfs_resctrl = debugfs_create_dir("resctrl", NULL);
 
+	ret = resctrl_pmu_init();
+	if (ret)
+		pr_warn("Failed to initialize resctrl PMU: %d\n", ret);
+
 	return 0;
 
 cleanup_mountpoint:
@@ -4558,6 +4609,8 @@ static bool resctrl_online_domains_exist(void)
  */
 void resctrl_exit(void)
 {
+	resctrl_pmu_exit();
+
 	cpus_read_lock();
 	WARN_ON_ONCE(resctrl_online_domains_exist());
 
