@@ -2627,7 +2627,13 @@ static void receive_buf(struct virtnet_info *vi, struct receive_queue *rq,
 	 * virtnet_xdp_set()), so packets marked as
 	 * VIRTIO_NET_HDR_F_NEEDS_CSUM get dropped during XDP processing.
 	 */
-	flags = ((struct virtio_net_common_hdr *)buf)->hdr.flags;
+	if (vi->big_packets && !vi->mergeable_rx_bufs) {
+		struct virtio_net_common_hdr *hdr = page_address((struct page *)buf);
+
+		flags = hdr->hdr.flags;
+	} else {
+		flags = ((struct virtio_net_common_hdr *)buf)->hdr.flags;
+	}
 
 	if (vi->mergeable_rx_bufs)
 		skb = receive_mergeable(dev, vi, rq, buf, ctx, len, xdp_xmit,
