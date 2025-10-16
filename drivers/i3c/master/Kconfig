@@ -31,6 +31,29 @@ config DW_I3C_MASTER
 	  This driver can also be built as a module.  If so, the module
 	  will be called dw-i3c-master.
 
+config DW_I3C_DISABLE_RUNTIME_PM
+	bool "Disable runtime PM support for DesignWare I3C controller"
+	depends on DW_I3C_MASTER
+	default n
+	help
+	  If selected, disables all runtime power management (PM)
+	  operations for the Synopsys DesignWare I3C controller.
+
+	  When enabled, the driver skips all runtime PM calls such as
+	  pm_runtime_enable(), pm_runtime_get(), and pm_runtime_put(),
+	  keeping the controller permanently active during operation.
+
+	  This option is useful on systems where runtime PM causes bus
+	  reliability issues. In particular, if the controller is placed
+	  into a suspended state while a slave device attempts to issue an
+	  In-Band Interrupt (IBI), the controller may stop driving the
+	  SCL line, preventing the IBI from completing. This condition can
+	  result in the SDA line remaining stuck low, leaving the bus in a
+	  hung state until a full hardware reset is performed. Disabling
+	  runtime PM prevents the controller from entering this suspended
+	  state, ensuring that clock signals remain active for IBI
+	  handling.
+
 config AST2600_I3C_MASTER
 	tristate "ASPEED AST2600 I3C master driver"
 	depends on DW_I3C_MASTER
