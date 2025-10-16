@@ -4416,3 +4416,15 @@ void intel_psr_compute_config_late(struct intel_dp *intel_dp,
 
 	intel_psr_set_non_psr_pipes(intel_dp, crtc_state);
 }
+
+int intel_psr_min_guardband(struct intel_crtc_state *crtc_state)
+{
+	struct intel_display *display = to_intel_display(crtc_state);
+	int auxless_wake_lines = crtc_state->alpm_state.aux_less_wake_lines;
+	int wake_lines = DISPLAY_VER(display) < 20 ?
+			 psr2_block_count_lines(crtc_state->alpm_state.io_wake_lines,
+						crtc_state->alpm_state.fast_wake_lines) :
+			 crtc_state->alpm_state.io_wake_lines;
+
+	return max(auxless_wake_lines, wake_lines);
+}
