@@ -6663,7 +6663,7 @@ int vmx_handle_exit(struct kvm_vcpu *vcpu, fastpath_t exit_fastpath)
  * information but as all relevant affected CPUs have 32KiB L1D cache size
  * there is no point in doing so.
  */
-static noinstr void vmx_l1d_flush(struct kvm_vcpu *vcpu)
+static noinstr bool vmx_l1d_flush(struct kvm_vcpu *vcpu)
 {
 	int size = PAGE_SIZE << L1D_CACHE_ORDER;
 
@@ -6691,14 +6691,14 @@ static noinstr void vmx_l1d_flush(struct kvm_vcpu *vcpu)
 		kvm_clear_cpu_l1tf_flush_l1d();
 
 		if (!flush_l1d)
-			return;
+			return false;
 	}
 
 	vcpu->stat.l1d_flush++;
 
 	if (static_cpu_has(X86_FEATURE_FLUSH_L1D)) {
 		native_wrmsrq(MSR_IA32_FLUSH_CMD, L1D_FLUSH);
-		return;
+		return true;
 	}
 
 	asm volatile(
@@ -6722,6 +6722,7 @@ static noinstr void vmx_l1d_flush(struct kvm_vcpu *vcpu)
 		:: [flush_pages] "r" (vmx_l1d_flush_pages),
 		    [size] "r" (size)
 		: "eax", "ebx", "ecx", "edx");
+	return true;
 }
 
 void vmx_update_cr8_intercept(struct kvm_vcpu *vcpu, int tpr, int irr)
@@ -7330,8 +7331,9 @@ static noinstr void vmx_vcpu_enter_exit(struct kvm_vcpu *vcpu,
 	 * and is affected by MMIO Stale Data. In such cases mitigation in only
 	 * needed against an MMIO capable guest.
 	 */
-	if (static_branch_unlikely(&vmx_l1d_should_flush))
-		vmx_l1d_flush(vcpu);
+	if (static_branch_unlikely(&vmx_l1d_should_flush) &&
+	    vmx_l1d_flush(vcpu))
+		;
 	else if (static_branch_unlikely(&cpu_buf_vm_clear) &&
 		 (flags & VMX_RUN_CLEAR_CPU_BUFFERS_FOR_MMIO))
 		x86_clear_cpu_buffers();
