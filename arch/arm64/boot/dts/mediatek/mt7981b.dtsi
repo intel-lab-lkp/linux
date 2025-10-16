@@ -14,14 +14,14 @@
 		#address-cells = <1>;
 		#size-cells = <0>;
 
-		cpu@0 {
+		cpu0: cpu@0 {
 			compatible = "arm,cortex-a53";
 			reg = <0x0>;
 			device_type = "cpu";
 			enable-method = "psci";
 		};
 
-		cpu@1 {
+		cpu1: cpu@1 {
 			compatible = "arm,cortex-a53";
 			reg = <0x1>;
 			device_type = "cpu";
@@ -29,7 +29,7 @@
 		};
 	};
 
-	oscillator-40m {
+	clk40m: oscillator-40m {
 		compatible = "fixed-clock";
 		clock-frequency = <40000000>;
 		clock-output-names = "clkxtal";
@@ -82,7 +82,7 @@
 			#clock-cells = <1>;
 		};
 
-		pwm@10048000 {
+		pwm: pwm@10048000 {
 			compatible = "mediatek,mt7981-pwm";
 			reg = <0 0x10048000 0 0x1000>;
 			clocks = <&infracfg CLK_INFRA_PWM_STA>,
@@ -127,7 +127,7 @@
 			status = "disabled";
 		};
 
-		i2c@11007000 {
+		i2c0: i2c@11007000 {
 			compatible = "mediatek,mt7981-i2c";
 			reg = <0 0x11007000 0 0x1000>,
 			      <0 0x10217080 0 0x80>;
@@ -142,7 +142,7 @@
 			status = "disabled";
 		};
 
-		spi@11009000 {
+		spi2: spi@11009000 {
 			compatible = "mediatek,mt7981-spi-ipm", "mediatek,spi-ipm";
 			reg = <0 0x11009000 0 0x1000>;
 			interrupts = <GIC_SPI 142 IRQ_TYPE_LEVEL_HIGH>;
@@ -156,7 +156,7 @@
 			status = "disabled";
 		};
 
-		spi@1100a000 {
+		spi0: spi@1100a000 {
 			compatible = "mediatek,mt7981-spi-ipm", "mediatek,spi-ipm";
 			reg = <0 0x1100a000 0 0x1000>;
 			interrupts = <GIC_SPI 140 IRQ_TYPE_LEVEL_HIGH>;
@@ -170,7 +170,7 @@
 			status = "disabled";
 		};
 
-		spi@1100b000 {
+		spi1: spi@1100b000 {
 			compatible = "mediatek,mt7981-spi-ipm", "mediatek,spi-ipm";
 			reg = <0 0x1100b000 0 0x1000>;
 			interrupts = <GIC_SPI 141 IRQ_TYPE_LEVEL_HIGH>;
@@ -184,7 +184,7 @@
 			status = "disabled";
 		};
 
-		thermal@1100c800 {
+		thermal: thermal@1100c800 {
 			compatible = "mediatek,mt7981-thermal",
 				     "mediatek,mt7986-thermal";
 			reg = <0 0x1100c800 0 0x800>;
@@ -231,7 +231,7 @@
 			#interrupt-cells = <2>;
 		};
 
-		efuse@11f20000 {
+		efuse: efuse@11f20000 {
 			compatible = "mediatek,mt7981-efuse", "mediatek,efuse";
 			reg = <0 0x11f20000 0 0x1000>;
 			#address-cells = <1>;
@@ -246,14 +246,14 @@
 			};
 		};
 
-		clock-controller@15000000 {
+		ethsys: clock-controller@15000000 {
 			compatible = "mediatek,mt7981-ethsys", "syscon";
 			reg = <0 0x15000000 0 0x1000>;
 			#clock-cells = <1>;
 			#reset-cells = <1>;
 		};
 
-		wifi@18000000 {
+		wifi: wifi@18000000 {
 			compatible = "mediatek,mt7981-wmac";
 			reg = <0 0x18000000 0 0x1000000>,
 			      <0 0x10003000 0 0x1000>,
