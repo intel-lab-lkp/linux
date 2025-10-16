@@ -365,6 +365,8 @@ int rdtgroup_mondata_open(struct kernfs_open_file *of);
 void rdtgroup_mondata_release(struct kernfs_open_file *of);
 void rdtgroup_get(struct rdtgroup *rdtgrp);
 void rdtgroup_put(struct rdtgroup *rdtgrp);
+struct kernfs_open_file *rdtgroup_get_mondata_open_file(struct file *file);
+struct rdtgroup *rdtgroup_get_from_mondata_file(struct kernfs_open_file *of);
 
 /* PMU support */
 /*

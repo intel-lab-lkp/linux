@@ -3429,19 +3429,16 @@ void rdtgroup_mondata_release(struct kernfs_open_file *of)
 }
 
 /*
- * rdtgroup_get_from_file - Resolve rdtgroup from a resctrl mon data file
+ * Resolve kernfs_open_file from a resctrl mon data file.
  * @file: struct file opened on a resctrl monitoring data file
  *
  * Validate that @file belongs to resctrl and refers to a monitoring data
- * file (kf_mondata_ops). Then, using the kernfs_open_file stored in the
- * seq_file, safely fetch the rdtgroup that was pinned at open time and take
- * an additional rdtgroup reference for the caller under rdtgroup_mutex.
+ * file (kf_mondata_ops).
  *
- * Returns: rdtgroup* with an extra reference on success; ERR_PTR on failure.
+ * Returns: kernfs_open_file* on success; ERR_PTR on failure.
  */
-struct rdtgroup *rdtgroup_get_from_file(struct file *file)
+struct kernfs_open_file *rdtgroup_get_mondata_open_file(struct file *file)
 {
-	struct rdtgroup *rdtgrp = NULL;
 	struct kernfs_open_file *of;
 	struct seq_file *seq;
 	struct inode *inode;
@@ -3463,6 +3460,19 @@ struct rdtgroup *rdtgroup_get_from_file(struct file *file)
 	/* Check this is a monitoring file */
 	if (!of || !of->kn || of->kn->attr.ops != &kf_mondata_ops)
 		return ERR_PTR(-EINVAL);
+
+	return of;
+}
+
+/*
+ * Get rdtgroup from a resctrl mon data open file.
+ * @of: kernfs_open_file opened on a resctrl monitoring data file
+ *
+ * Returns: rdtgroup* with an extra reference on success; ERR_PTR on failure.
+ */
+struct rdtgroup *rdtgroup_get_from_mondata_file(struct kernfs_open_file *of)
+{
+	struct rdtgroup *rdtgrp = NULL;
 
 	/* Hold rdtgroup_mutex to prevent race with release callback */
 	guard(mutex)(&rdtgroup_mutex);

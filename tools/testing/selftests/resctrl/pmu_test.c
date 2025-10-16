@@ -3,13 +3,16 @@
  * Resctrl PMU test
  *
  * Test program to verify the resctrl PMU functionality.
- * Walks resctrl filesystem and verifies only allowed files can be
- * used with the resctrl PMU via perf_event_open.
+ * Walks resctrl filesystem and verifies only allowed monitoring files
+ * can be used with the resctrl PMU via perf_event_open when pinned to
+ * CPUs in the correct L3 domain. Also validates that PID-bound events
+ * are rejected for all files.
  */
 
 #include "resctrl.h"
 #include <fcntl.h>
 #include <dirent.h>
+#include <unistd.h>
 
 #define RESCTRL_PMU_NAME "resctrl"
 
@@ -52,11 +55,51 @@ static bool is_allowed_file(const char *filename)
 		!strcmp(base, "mbm_local_bytes"));
 }
 
+/* Extract base filename from a path */
+static const char *base_name(const char *path)
+{
+	const char *slash = strrchr(path, '/');
+
+	return slash ? slash + 1 : path;
+}
+
+/* Parse mon_L3_XX ID from a monitoring path. Returns true on success. */
+static bool parse_l3_id_from_path(const char *path, int *l3_id)
+{
+	const char *needle = "mon_data/mon_L3_";
+	const char *p = strstr(path, needle);
+	char *endptr;
+	long id;
+
+	if (!p)
+		return false;
+
+	p += strlen(needle);
+
+	if (!isdigit((unsigned char)*p))
+		return false;
+
+	errno = 0;
+	id = strtol(p, &endptr, 10);
+	if (errno || endptr == p)
+		return false;
+
+	/* Accept only non-negative IDs */
+	if (id < 0)
+		return false;
+
+	*l3_id = (int)id;
+	return true;
+}
+
 static int test_file_safety(int pmu_type, const char *filepath)
 {
 	struct perf_event_attr pe = { 0 };
 	int fd, perf_fd;
-	bool should_succeed;
+	bool is_monitoring = false;
+	int file_l3_id = -1;
+	int ret = 0;
+	const char *fname = base_name(filepath);
 
 	/* Try to open the file */
 	fd = open(filepath, O_RDONLY);
@@ -65,7 +108,8 @@ static int test_file_safety(int pmu_type, const char *filepath)
 		return 0;
 	}
 
-	should_succeed = is_allowed_file(filepath);
+	/* Determine if this is a monitoring file under mon_L3_XX and allowed */
+	is_monitoring = (is_allowed_file(fname) && parse_l3_id_from_path(filepath, &file_l3_id));
 
 	/* Setup perf event attributes */
 	pe.type = pmu_type;
@@ -75,34 +119,106 @@ static int test_file_safety(int pmu_type, const char *filepath)
 	pe.exclude_kernel = 0;
 	pe.exclude_hv = 0;
 
-	/* Try to open the perf event */
-	perf_fd = perf_event_open(&pe, -1, 0, -1, 0);
-
-	if (should_succeed) {
-		if (perf_fd < 0) {
-			ksft_print_msg("FAIL: unexpected - perf_event_open failed for %s: %s\n",
-				       filepath, strerror(errno));
-			close(fd);
-			return -1;
-		}
-		ksft_print_msg("PASS: Allowed file %s successfully opened perf event\n",
+	/* PID-bound negative attempt: should fail for all files */
+	perf_fd = perf_event_open(&pe, getpid(), -1, -1, 0);
+	if (perf_fd >= 0) {
+		ksft_print_msg("FAIL: pid-bound perf_event_open unexpectedly succeeded for %s\n",
 			       filepath);
 		close(perf_fd);
-	} else {
-		if (perf_fd >= 0) {
-			ksft_print_msg("FAIL: unexpected - perf_event_open succeeded for %s\n",
-				       filepath);
-			close(perf_fd);
-			close(fd);
-			return -1;
+		close(fd);
+		return -1;
+	}
+
+	int success_count = 0;
+	cpu_set_t mask;
+	int max_cpus, nconf;
+
+	CPU_ZERO(&mask);
+	if (sched_getaffinity(0, sizeof(mask), &mask)) {
+		ksft_perror("sched_getaffinity failed");
+		goto out;
+	}
+
+	nconf = (int)sysconf(_SC_NPROCESSORS_CONF);
+	max_cpus = (nconf > 0 && nconf < CPU_SETSIZE) ? nconf : CPU_SETSIZE;
+
+	for (int cpu = 0; cpu < max_cpus; cpu++) {
+		int cpu_l3;
+
+		if (!CPU_ISSET(cpu, &mask))
+			continue;
+
+		if (get_domain_id("L3", cpu, &cpu_l3) < 0) {
+			ksft_print_msg("Failed to get L3 domain ID for CPU %d\n", cpu);
+			ret = -1;
+			break;
 		}
-		ksft_print_msg("PASS: Blocked file %s correctly failed perf_event_open: %s\n",
-			       filepath, strerror(errno));
+
+		perf_fd = perf_event_open(&pe, -1, cpu, -1, 0);
+
+		if (is_monitoring) {
+			bool expected_ok = (cpu_l3 == file_l3_id);
+
+			if (expected_ok) {
+				if (perf_fd < 0) {
+					ksft_print_msg("FAIL: %s CPU %d (L3=%d) expected success, got %s\n",
+						       filepath, cpu, cpu_l3, strerror(errno));
+					ret = -1;
+					break;
+				}
+				success_count++;
+				close(perf_fd);
+			} else {
+				if (perf_fd >= 0) {
+					ksft_print_msg("FAIL: %s CPU %d (L3=%d) expected EINVAL fail, but opened\n",
+						       filepath, cpu, cpu_l3);
+					close(perf_fd);
+					ret = -1;
+					break;
+				}
+				if (errno != EINVAL) {
+					ksft_print_msg("FAIL: %s CPU %d expected errno=EINVAL, got %d (%s)\n",
+						       filepath, cpu, errno, strerror(errno));
+					ret = -1;
+					break;
+				}
+			}
+		} else {
+			/* Non-monitoring files must fail on all CPUs with EINVAL */
+			if (perf_fd >= 0) {
+				ksft_print_msg("FAIL: non-monitoring file %s CPU %d unexpectedly opened\n",
+					       filepath, cpu);
+				close(perf_fd);
+				ret = -1;
+				break;
+			}
+			if (errno != EINVAL) {
+				ksft_print_msg("FAIL: non-monitoring file %s CPU %d expected errno=EINVAL, got %d (%s)\n",
+					       filepath, cpu, errno, strerror(errno));
+				ret = -1;
+				break;
+			}
+		}
+	}
+
+	if (!ret && is_monitoring && success_count < 1) {
+		ksft_print_msg("FAIL: monitoring file %s had no successful CPU opens\n",
+			       filepath);
+		ret = -1;
+	}
+
+	if (!ret) {
+		if (is_monitoring)
+			ksft_print_msg("PASS: monitoring %s: %d CPU(s) opened in-domain, others rejected\n",
+				       filepath, success_count);
+		else
+			ksft_print_msg("PASS: non-monitoring %s: all CPU-bound opens rejected with EINVAL\n",
+				       filepath);
 	}
 
 out:
 	close(fd);
-	return 0;
+	return ret;
 }
 
 static int walk_directory_recursive(int pmu_type, const char *dir_path)

@@ -12,6 +12,7 @@
 #include <linux/slab.h>
 #include <linux/err.h>
 #include <linux/seq_file.h>
+#include <linux/cpu.h>
 #include "internal.h"
 
 static struct pmu resctrl_pmu;
@@ -21,6 +22,8 @@ static struct pmu resctrl_pmu;
  */
 struct resctrl_pmu_event {
 	struct rdtgroup *rdtgrp;	/* Reference to rdtgroup being monitored */
+	struct rmid_read rr;		/* RMID read setup for monitoring */
+	cpumask_t *cpumask;		/* Valid CPUs for this monitoring file */
 };
 
 static void resctrl_event_destroy(struct perf_event *event);
@@ -34,8 +37,15 @@ static int resctrl_event_init(struct perf_event *event)
 	struct resctrl_pmu_event *resctrl_event;
 	struct file *file;
 	struct rdtgroup *rdtgrp;
+	struct kernfs_open_file *of;
+	struct mon_data *md;
+	struct rmid_read rr = {0};
+	cpumask_t *cpumask;
 	int fd;
 	int ret;
+
+	if (event->cpu < 0)
+		return -EINVAL;
 
 	fd = (int)event->attr.config;
 	if (fd < 0)
@@ -45,11 +55,46 @@ static int resctrl_event_init(struct perf_event *event)
 	if (!file)
 		return -EBADF;
 
-	/* Resolve rdtgroup from the monitoring file and take a reference */
-	rdtgrp = rdtgroup_get_from_file(file);
+	of = rdtgroup_get_mondata_open_file(file);
+	if (IS_ERR(of)) {
+		ret = PTR_ERR(of);
+		goto out_fput;
+	}
+
+	/* Extract mon_data which specifies which resource to measure */
+	if (!of->kn || !of->kn->priv) {
+		ret = -EIO;
+		goto out_fput;
+	}
+	md = of->kn->priv;
+
+	rdtgrp = rdtgroup_get_from_mondata_file(of);
+	if (IS_ERR(rdtgrp)) {
+		ret = PTR_ERR(rdtgrp);
+		goto out_fput;
+	}
+
 	fput(file);
-	if (IS_ERR(rdtgrp))
-		return PTR_ERR(rdtgrp);
+	file = NULL;
+
+	cpus_read_lock();
+
+	ret = mon_event_setup_read(&rr, &cpumask, md, rdtgrp);
+	if (ret) {
+		cpus_read_unlock();
+		rdtgroup_put(rdtgrp);
+		return ret;
+	}
+
+	/* Validate that the requested CPU is in the valid CPU mask for this monitoring file */
+	if (!cpumask_test_cpu(event->cpu, cpumask)) {
+		ret = -EINVAL;
+		cpus_read_unlock();
+		rdtgroup_put(rdtgrp);
+		return ret;
+	}
+
+	cpus_read_unlock();
 
 	resctrl_event = kzalloc(sizeof(*resctrl_event), GFP_KERNEL);
 	if (!resctrl_event) {
@@ -58,10 +103,16 @@ static int resctrl_event_init(struct perf_event *event)
 	}
 
 	resctrl_event->rdtgrp = rdtgrp;
+	resctrl_event->rr = rr;
+	resctrl_event->cpumask = cpumask;
 	event->pmu_private = resctrl_event;
 	event->destroy = resctrl_event_destroy;
 
 	return 0;
+
+out_fput:
+	fput(file);
+	return ret;
 }
 
 static void resctrl_event_destroy(struct perf_event *event)
