@@ -6521,6 +6521,11 @@ static void fill_stream_properties_from_drm_display_mode(
 
 	stream->output_color_space = get_output_color_space(timing_out, connector_state);
 	stream->content_type = get_output_content_type(connector_state);
+
+	/* DisplayID Type VII pass-through timings. */
+	if (mode_in->dsc_passthrough_timings_support && info->dp_dsc_bpp != 0) {
+		stream->timing.dsc_fixed_bits_per_pixel_x16 = info->dp_dsc_bpp;
+	}
 }
 
 static void fill_audio_info(struct audio_info *audio_info,
@@ -7067,6 +7072,13 @@ create_stream_for_sink(struct drm_connector *connector,
 					&mode, preferred_mode, scale);
 
 			preferred_refresh = drm_mode_vrefresh(preferred_mode);
+
+			/*
+			 * HACK: In case of multiple supported modes, we should look at the matching mode to decide this flag.
+			 * But what is matching mode, how should it be decided?
+			 * Assuming that only preferred mode would have this flag.
+			 */
+			mode.dsc_passthrough_timings_support = preferred_mode->dsc_passthrough_timings_support;
 		}
 	}
 
@@ -7756,7 +7768,7 @@ create_validate_stream_for_sink(struct drm_connector *connector,
 			drm_dbg_kms(connector->dev, "%s:%d Validation failed with %d, retrying w/ YUV420\n",
 				    __func__, __LINE__, dc_result);
 			aconnector->force_yuv420_output = true;
-		}
+}
 		stream = create_validate_stream_for_sink(connector, drm_mode,
 							 dm_state, old_stream);
 		aconnector->force_yuv422_output = false;
