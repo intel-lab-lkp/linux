@@ -11,18 +11,30 @@ maintainers:
 
 properties:
   compatible:
-    enum:
-      - mediatek,mt8183-ufshci
-      - mediatek,mt8192-ufshci
-      - mediatek,mt8195-ufshci
+    oneOf:
+      - enum:
+          - mediatek,mt8183-ufshci
+          - mediatek,mt8195-ufshci
+      - items:
+          - enum:
+              - mediatek,mt8192-ufshci
+          - const: mediatek,mt8183-ufshci
+      - items:
+          - enum:
+              - mediatek,mt8196-ufshci
+          - const: mediatek,mt8195-ufshci
 
   clocks:
     minItems: 1
-    maxItems: 8
+    maxItems: 16
 
   clock-names:
     minItems: 1
-    maxItems: 8
+    maxItems: 16
+
+  freq-table-hz: true
+
+  interrupts: true
 
   phys:
     maxItems: 1
@@ -30,7 +42,15 @@ properties:
   reg:
     maxItems: 1
 
+  resets:
+    maxItems: 3
+
+  reset-names:
+    maxItems: 3
+
   vcc-supply: true
+  vccq-supply: true
+  vccq2-supply: true
 
   mediatek,ufs-disable-mcq:
     $ref: /schemas/types.yaml#/definitions/flag
@@ -44,22 +64,19 @@ required:
   - reg
   - vcc-supply
 
-unevaluatedProperties: false
-
 allOf:
   - $ref: ufs-common.yaml
-
   - if:
       properties:
         compatible:
           contains:
-            enum:
-              - mediatek,mt8195-ufshci
+            const: mediatek,mt8195-ufshci
     then:
       properties:
         clocks:
           minItems: 8
         clock-names:
+          minItems: 8
           items:
             - const: ufs
             - const: ufs_aes
@@ -69,6 +86,19 @@ allOf:
             - const: unipro_mp_bclk
             - const: ufs_tx_symbol
             - const: ufs_mem_sub
+            - const: crypt_mux
+            - const: crypt_lp
+            - const: crypt_perf
+            - const: ufs_sel
+            - const: ufs_sel_min_src
+            - const: ufs_sel_max_src
+            - const: ufs_rx_symbol0
+            - const: ufs_rx_symbol1
+        reset-names:
+          items:
+            - const: unipro_rst
+            - const: crypto_rst
+            - const: hci_rst
     else:
       properties:
         clocks:
@@ -76,6 +106,10 @@ allOf:
         clock-names:
           items:
             - const: ufs
+        resets: false
+        reset-names: false
+
+unevaluatedProperties: false
 
 examples:
   - |
@@ -98,4 +132,82 @@ examples:
 
             vcc-supply = <&mt_pmic_vemc_ldo_reg>;
         };
+    };
+  - |
+    ufshci@11270000 {
+        compatible = "mediatek,mt8195-ufshci";
+        reg = <0x11270000 0x2300>;
+        interrupts = <GIC_SPI 137 IRQ_TYPE_LEVEL_HIGH>;
+        phys = <&ufsphy>;
+        clocks = <&infracfg_ao 63>, <&infracfg_ao 64>, <&infracfg_ao 65>,
+                 <&infracfg_ao 54>, <&infracfg_ao 55>,
+                 <&infracfg_ao 56>, <&infracfg_ao 90>,
+                 <&infracfg_ao 93>;
+        clock-names = "ufs", "ufs_aes", "ufs_tick",
+                      "unipro_sysclk", "unipro_tick",
+                      "unipro_mp_bclk", "ufs_tx_symbol",
+                      "ufs_mem_sub";
+        freq-table-hz = <0 0>, <0 0>, <0 0>,
+                        <0 0>, <0 0>, <0 0>,
+                        <0 0>, <0 0>;
+        vcc-supply = <&mt6359_vemc_1_ldo_reg>;
+        mediatek,ufs-disable-mcq;
+    };
+  - |
+    #include <dt-bindings/reset/mediatek,mt8196-resets.h>
+    #include <dt-bindings/interrupt-controller/arm-gic.h>
+
+    ufshci@16810000 {
+        compatible = "mediatek,mt8196-ufshci", "mediatek,mt8195-ufshci";
+        reg = <0x16810000 0x2a00>;
+        interrupts = <GIC_SPI 320 IRQ_TYPE_LEVEL_HIGH>;
+
+        clocks = <&ufs_ao_clk 6>,
+                 <&ufs_ao_clk 7>,
+                 <&clk26m>,
+                 <&ufs_ao_clk 3>,
+                 <&clk26m>,
+                 <&ufs_ao_clk 4>,
+                 <&ufs_ao_clk 0>,
+                 <&topckgen 7>,
+                 <&topckgen 41>,
+                 <&topckgen 105>,
+                 <&topckgen 83>,
+                 <&topckgen 42>,
+                 <&topckgen 84>,
+                 <&topckgen 102>,
+                 <&ufs_ao_clk 1>,
+                 <&ufs_ao_clk 2>;
+        clock-names = "ufs",
+                      "ufs_aes",
+                      "ufs_tick",
+                      "unipro_sysclk",
+                      "unipro_tick",
+                      "unipro_mp_bclk",
+                      "ufs_tx_symbol",
+                      "ufs_mem_sub",
+                      "crypt_mux",
+                      "crypt_lp",
+                      "crypt_perf",
+                      "ufs_sel",
+                      "ufs_sel_min_src",
+                      "ufs_sel_max_src",
+                      "ufs_rx_symbol0",
+                      "ufs_rx_symbol1";
+
+        freq-table-hz = <273000000 499200000>, <0 0>, <0 0>, <0 0>, <0 0>,
+                        <0 0>, <0 0>, <0 0>, <0 0>, <0 0>, <0 0>, <0 0>, <0 0>,
+                        <0 0>;
+
+        phys = <&ufsphy>;
+
+        vcc-supply = <&mt6363_vemc>;
+        vccq-supply = <&mt6363_vufs12>;
+        vccq2-supply = <&mt6363_vufs18>;
+
+        resets = <&ufs_ao_clk MT8196_UFSAO_RST1_UFS_UNIPRO>,
+                 <&ufs_ao_clk MT8196_UFSAO_RST1_UFS_CRYPTO>,
+                 <&ufs_ao_clk MT8196_UFSAO_RST1_UFSHCI>;
+        reset-names = "unipro_rst", "crypto_rst", "hci_rst";
+        mediatek,ufs-disable-mcq;
     };
