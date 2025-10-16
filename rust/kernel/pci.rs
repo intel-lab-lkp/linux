@@ -10,7 +10,8 @@ use crate::{
     devres::Devres,
     driver,
     error::{from_result, to_result, Result},
-    io::{Mmio, MmioRaw},
+    io::{define_read, define_write},
+    io::{Io, Mmio, MmioRaw},
     irq::{self, IrqRequest},
     str::CStr,
     sync::aref::ARef,
@@ -305,6 +306,63 @@ pub struct Device<Ctx: device::DeviceContext = device::Normal>(
     PhantomData<Ctx>,
 );
 
+/// Represents the PCI configuration space of a device.
+///
+/// Provides typed read and write accessors for configuration registers
+/// using the standard `pci_read_config_*` and `pci_write_config_*` helpers.
+///
+/// The generic const parameter `SIZE` can be used to indicate the
+/// maximum size of the configuration space (e.g. 256 bytes for legacy,
+/// 4096 bytes for extended config space). The actual size is obtained
+/// from the underlying `struct pci_dev` via [`Device::cfg_size`].
+pub struct ConfigSpace<'a, const SIZE: usize = 4096> {
+    pdev: &'a Device<device::Bound>,
+}
+
+impl<'a, const SIZE: usize> Io<SIZE> for ConfigSpace<'a, SIZE> {
+    /// Returns the base address of this mapping.
+    #[inline]
+    fn addr(&self) -> usize {
+        0
+    }
+
+    /// Returns the maximum size of this mapping.
+    #[inline]
+    fn maxsize(&self) -> usize {
+        self.pdev.cfg_size() as usize
+    }
+}
+
+macro_rules! call_config_read {
+    ($c_fn:ident, $self:ident, $offset:expr, $ty:ty, $_addr:expr) => {{
+        let mut val: $ty = 0;
+        let ret = unsafe { bindings::$c_fn($self.pdev.as_raw(), $offset as i32, &mut val) };
+        (ret == 0)
+            .then_some(Ok(val))
+            .unwrap_or_else(|| Err(Error::from_errno(ret)))
+    }};
+}
+
+macro_rules! call_config_write {
+    ($c_fn:ident, $self:ident, $offset:expr, $ty:ty, $_addr:expr, $value:expr) => {{
+        let ret = unsafe { bindings::$c_fn($self.pdev.as_raw(), $offset as i32, $value) };
+        (ret == 0)
+            .then_some(Ok(()))
+            .unwrap_or_else(|| Err(Error::from_errno(ret)))
+    }};
+}
+
+#[allow(dead_code)]
+impl<'a, const SIZE: usize> ConfigSpace<'a, SIZE> {
+    define_read!(read8, try_read8, call_config_read, pci_read_config_byte -> u8);
+    define_read!(read16, try_read16, call_config_read, pci_read_config_word -> u16);
+    define_read!(read32, try_read32, call_config_read, pci_read_config_dword -> u32);
+
+    define_write!(write8, try_write8, call_config_write, pci_write_config_byte <- u8);
+    define_write!(write16, try_write16, call_config_write, pci_write_config_word <- u16);
+    define_write!(write32, try_write32, call_config_write, pci_write_config_dword <- u32);
+}
+
 /// A PCI BAR to perform I/O-Operations on.
 ///
 /// # Invariants
@@ -581,6 +639,11 @@ impl Device<device::Bound> {
         Ok(irq::ThreadedRegistration::<T>::new(
             request, flags, name, handler,
         ))
+    }
+
+    /// Return an initialized object.
+    pub fn config_space<'a>(&'a self) -> Result<ConfigSpace<'a>> {
+        Ok(ConfigSpace { pdev: self })
     }
 }
 
