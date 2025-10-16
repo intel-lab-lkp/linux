@@ -751,6 +751,11 @@ int vb2_create_bufs(struct vb2_queue *q, struct v4l2_create_buffers *create)
 	int ret = vb2_verify_memory_type(q, create->memory, f->type);
 	unsigned i;
 
+	if (vb2_fileio_is_active(q)) {
+		dprintk(q, 1, "file io in progress\n");
+		return -EBUSY;
+	}
+
 	create->index = vb2_get_num_buffers(q);
 	vb2_set_flags_and_caps(q, create->memory, &create->flags,
 			       &create->capabilities, &create->max_num_buffers);
@@ -1009,6 +1014,11 @@ int vb2_ioctl_remove_bufs(struct file *file, void *priv,
 
 	if (vb2_queue_is_busy(vdev->queue, file))
 		return -EBUSY;
+
+	if (vb2_fileio_is_active(vdev->queue)) {
+		dprintk(vdev->queue, 1, "file io in progress\n");
+		return -EBUSY;
+	}
 
 	return vb2_core_remove_bufs(vdev->queue, d->index, d->count);
 }
