@@ -562,6 +562,7 @@ int memcg_list_lru_alloc(struct mem_cgroup *memcg, struct list_lru *lru,
 
 	return xas_error(&xas);
 }
+EXPORT_SYMBOL_GPL(memcg_list_lru_alloc);
 #else
 static inline void memcg_init_list_lru(struct list_lru *lru, bool memcg_aware)
 {
