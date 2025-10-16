@@ -331,6 +331,15 @@ UTS_VERSION definition (uname -v in the running kernel). The value has to
 be a string that can be passed to date -d. The default value
 is the output of the date command at one point during build.
 
+However, when the date command retrieves a timestamp that falls into
+pre-epoch times (i.e., dates before the Unix epoch, January 1, 1970),
+the kernel will raise an error during the compilation of initramfs. E.g.::
+
+    $ KBUILD_BUILD_TIMESTAMP="Sat Jan 1 00:00:00 UTC 0000" make
+    ...
+    ERROR: Timestamp out of range for cpio format'
+    ...
+
 KBUILD_BUILD_USER, KBUILD_BUILD_HOST
 ------------------------------------
 These two variables allow to override the user@host string displayed during
