@@ -36,6 +36,7 @@
 
 #include "../../arch/arm64/include/asm/cputype.h"
 #define MAX_TIMESTAMP (~0ULL)
+#define SPE_SYNTH_ID_OFFSET (1000000000ULL)
 
 #define is_ldst_op(op)		(!!((op) & ARM_SPE_OP_LDST))
 
@@ -1732,7 +1733,7 @@ arm_spe_synth_events(struct arm_spe *spe, struct perf_session *session)
 	attr.sample_period = spe->synth_opts.period;
 
 	/* create new id val to be a fixed offset from evsel id */
-	id = evsel->core.id[0] + 1000000000;
+	id = evsel->core.id[0] + SPE_SYNTH_ID_OFFSET;
 
 	if (!id)
 		id = 1;
