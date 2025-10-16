@@ -1786,6 +1786,7 @@ static inline bool xhci_link_chain_quirk(struct xhci_hcd *xhci, enum xhci_ring_t
 /* xHCI debugging */
 char *xhci_get_slot_state(struct xhci_hcd *xhci,
 		struct xhci_container_ctx *ctx);
+__printf(3, 4)
 void xhci_dbg_trace(struct xhci_hcd *xhci, void (*trace)(struct va_format *),
 			const char *fmt, ...);
 
