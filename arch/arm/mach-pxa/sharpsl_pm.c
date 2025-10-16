@@ -795,8 +795,6 @@ static ssize_t battery_voltage_show(struct device *dev, struct device_attribute 
 static DEVICE_ATTR_RO(battery_percentage);
 static DEVICE_ATTR_RO(battery_voltage);
 
-extern void (*apm_get_power_status)(struct apm_power_info *);
-
 static void sharpsl_apm_get_power_status(struct apm_power_info *info)
 {
 	info->ac_line_status = sharpsl_pm.battstat.ac_status;
@@ -891,6 +889,9 @@ static int sharpsl_pm_probe(struct platform_device *pdev)
 static void sharpsl_pm_remove(struct platform_device *pdev)
 {
 	suspend_set_ops(NULL);
+
+	if (apm_get_power_status == sharpsl_apm_get_power_status)
+		apm_get_power_status = NULL;
 
 	device_remove_file(&pdev->dev, &dev_attr_battery_percentage);
 	device_remove_file(&pdev->dev, &dev_attr_battery_voltage);
