@@ -594,32 +594,16 @@ void mon_event_read(struct rmid_read *rr, cpumask_t *cpumask)
 		resctrl_arch_mon_ctx_free(rr->r, rr->evtid, rr->arch_mon_ctx);
 }
 
-int rdtgroup_mondata_show(struct seq_file *m, void *arg)
+int mon_event_setup_read(struct rmid_read *rr, cpumask_t **cpumask,
+			 struct mon_data *md, struct rdtgroup *rdtgrp)
 {
-	struct kernfs_open_file *of = m->private;
 	enum resctrl_res_level resid;
 	enum resctrl_event_id evtid;
 	struct rdt_domain_hdr *hdr;
-	struct rmid_read rr = {0};
 	struct rdt_mon_domain *d;
-	struct rdtgroup *rdtgrp;
-	int domid, cpu, ret = 0;
 	struct rdt_resource *r;
 	struct cacheinfo *ci;
-	struct mon_data *md;
-	cpumask_t *cpumask;
-
-	rdtgrp = rdtgroup_kn_lock_live(of->kn);
-	if (!rdtgrp) {
-		ret = -ENOENT;
-		goto out;
-	}
-
-	md = of->kn->priv;
-	if (WARN_ON_ONCE(!md)) {
-		ret = -EIO;
-		goto out;
-	}
+	int domid, cpu;
 
 	resid = md->rid;
 	domid = md->domid;
@@ -639,30 +623,53 @@ int rdtgroup_mondata_show(struct seq_file *m, void *arg)
 				ci = get_cpu_cacheinfo_level(cpu, RESCTRL_L3_CACHE);
 				if (!ci)
 					continue;
-				rmid_read_init(&rr, r, NULL, rdtgrp,
-						     evtid, false, ci);
-				cpumask = &ci->shared_cpu_map;
-				goto perform;
+				rmid_read_init(rr, r, NULL, rdtgrp,
+					       evtid, false, ci);
+				*cpumask = &ci->shared_cpu_map;
+				return 0;
 			}
 		}
-		ret = -ENOENT;
-		goto out;
+		return -ENOENT;
 	} else {
 		/*
 		 * This file provides data from a single domain. Search
 		 * the resource to find the domain with "domid".
 		 */
 		hdr = resctrl_find_domain(&r->mon_domains, domid, NULL);
-		if (!hdr || WARN_ON_ONCE(hdr->type != RESCTRL_MON_DOMAIN)) {
-			ret = -ENOENT;
-			goto out;
-		}
+		if (!hdr || WARN_ON_ONCE(hdr->type != RESCTRL_MON_DOMAIN))
+			return -ENOENT;
+
 		d = container_of(hdr, struct rdt_mon_domain, hdr);
-		rmid_read_init(&rr, r, d, rdtgrp, evtid, false, NULL);
-		cpumask = &d->hdr.cpu_mask;
+		rmid_read_init(rr, r, d, rdtgrp, evtid, false, NULL);
+		*cpumask = &d->hdr.cpu_mask;
+		return 0;
+	}
+}
+
+int rdtgroup_mondata_show(struct seq_file *m, void *arg)
+{
+	struct kernfs_open_file *of = m->private;
+	struct rmid_read rr = {0};
+	struct rdtgroup *rdtgrp;
+	int ret = 0;
+	struct mon_data *md;
+	cpumask_t *cpumask;
+
+	rdtgrp = rdtgroup_kn_lock_live(of->kn);
+	if (!rdtgrp) {
+		ret = -ENOENT;
+		goto out;
 	}
 
-perform:
+	md = of->kn->priv;
+	if (WARN_ON_ONCE(!md)) {
+		ret = -EIO;
+		goto out;
+	}
+
+	ret = mon_event_setup_read(&rr, &cpumask, md, rdtgrp);
+	if (ret)
+		goto out;
 	mon_event_read(&rr, cpumask);
 
 	/*
