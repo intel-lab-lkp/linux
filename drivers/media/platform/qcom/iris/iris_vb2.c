@@ -231,16 +231,20 @@ void iris_vb2_stop_streaming(struct vb2_queue *q)
 		return;
 
 	mutex_lock(&inst->lock);
+	if (inst->state == IRIS_INST_ERROR) {
+		ret = -EBUSY;
+		goto error;
+	}
 
 	if (!V4L2_TYPE_IS_OUTPUT(q->type) &&
 	    !V4L2_TYPE_IS_CAPTURE(q->type))
-		goto exit;
+		goto error;
 
 	ret = iris_session_streamoff(inst, q->type);
 	if (ret)
-		goto exit;
+		goto error;
 
-exit:
+error:
 	iris_helper_buffers_done(inst, q->type, VB2_BUF_STATE_ERROR);
 	if (ret)
 		iris_inst_change_state(inst, IRIS_INST_ERROR);
