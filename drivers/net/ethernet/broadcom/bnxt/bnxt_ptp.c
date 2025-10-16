@@ -965,10 +965,12 @@ static int bnxt_ptp_pps_init(struct bnxt *bp)
 	hwrm_req_drop(bp, req);
 
 	/* Only 1 each of ext_ts and per_out pins is available in HW */
-	ptp_info->n_ext_ts = 1;
-	ptp_info->n_per_out = 1;
+	ptp_info->n_ext_ts = pps_info->num_pins;
+	ptp_info->n_per_out = pps_info->num_pins;
 	ptp_info->pps = 1;
 	ptp_info->verify = bnxt_ptp_verify;
+	ptp_info->supported_extts_flags = PTP_RISING_EDGE | PTP_STRICT_FLAGS;
+	ptp_info->supported_perout_flags = PTP_PEROUT_DUTY_CYCLE;
 
 	return 0;
 }
