@@ -98,6 +98,9 @@ static int __init hp6x0_apm_init(void)
 
 static void __exit hp6x0_apm_exit(void)
 {
+	if (apm_get_power_status == hp6x0_apm_get_power_status)
+		apm_get_power_status = NULL;
+
 	free_irq(HP680_BTN_IRQ, 0);
 }
 
