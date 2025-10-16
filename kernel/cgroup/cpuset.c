@@ -1154,6 +1154,21 @@ void cpuset_reset_sched_domains(void)
 	mutex_unlock(&cpuset_mutex);
 }
 
+/* caller hold RCU read lock */
+struct cpumask *cpuset_task_rd_effective_cpus(struct task_struct *p)
+{
+	struct cpuset *cs;
+
+	cs = task_cs(p);
+	while (cs != &top_cpuset) {
+		if (is_sched_load_balance(cs))
+			break;
+		cs = parent_cs(cs);
+	}
+
+	return cs->effective_cpus;
+}
+
 /**
  * cpuset_update_tasks_cpumask - Update the cpumasks of tasks in the cpuset.
  * @cs: the cpuset in which each task's cpus_allowed mask needs to be changed

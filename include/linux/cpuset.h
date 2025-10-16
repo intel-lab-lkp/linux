@@ -130,6 +130,7 @@ extern void rebuild_sched_domains(void);
 
 extern void cpuset_print_current_mems_allowed(void);
 extern void cpuset_reset_sched_domains(void);
+extern struct cpumask *cpuset_task_rd_effective_cpus(struct task_struct *p);
 
 /*
  * read_mems_allowed_begin is required when making decisions involving
@@ -274,6 +275,11 @@ static inline void rebuild_sched_domains(void)
 static inline void cpuset_reset_sched_domains(void)
 {
 	partition_sched_domains(1, NULL, NULL);
+}
+
+static inline struct cpumask *cpuset_task_rd_effective_cpus(struct task_struct *p)
+{
+	return cpu_active_mask;
 }
 
 static inline void cpuset_print_current_mems_allowed(void)
