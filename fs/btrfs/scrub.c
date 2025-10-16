@@ -2069,6 +2069,38 @@ static int queue_scrub_stripe(struct scrub_ctx *sctx, struct btrfs_block_group *
 	return 0;
 }
 
+static bool should_cancel_scrub(struct scrub_ctx *sctx)
+{
+	struct btrfs_fs_info *fs_info = sctx->fs_info;
+
+	if (atomic_read(&fs_info->scrub_cancel_req) ||
+	    atomic_read(&sctx->cancel_req))
+		return true;
+
+	/*
+	 * The user (e.g. fsfreeze command) or power management (pm)
+	 * suspension/hibernation can freeze the fs.
+	 * And pm suspension/hibernation will also freeze all user processes.
+	 *
+	 * A process can only be frozen when it is in the user space, thus we
+	 * have to cancel the run so that the process can return to the user
+	 * space.
+	 *
+	 * Furthermore we have to check both fs and process freezing, as pm can
+	 * be configured to freeze the fses before processes.
+	 *
+	 * If we only check fs freezing, then suspension without fs freezing
+	 * will timeout, as the process is still in the kernel space.
+	 *
+	 * If we only check process freezing, then suspension with fs freezing
+	 * will timeout, as the running scrub will prevent the fs from being frozen.
+	 */
+	if (fs_info->sb->s_writers.frozen > SB_UNFROZEN ||
+	    freezing(current))
+		return true;
+	return false;
+}
+
 static int scrub_raid56_parity_stripe(struct scrub_ctx *sctx,
 				      struct btrfs_device *scrub_dev,
 				      struct btrfs_block_group *bg,
@@ -2091,8 +2123,7 @@ static int scrub_raid56_parity_stripe(struct scrub_ctx *sctx,
 
 	ASSERT(sctx->raid56_data_stripes);
 
-	if (atomic_read(&fs_info->scrub_cancel_req) ||
-	    atomic_read(&sctx->cancel_req))
+	if (should_cancel_scrub(sctx))
 		return -ECANCELED;
 
 	if (atomic_read(&fs_info->scrub_pause_req))
@@ -2275,8 +2306,7 @@ static int scrub_simple_mirror(struct scrub_ctx *sctx,
 		u64 found_logical = U64_MAX;
 		u64 cur_physical = physical + cur_logical - logical_start;
 
-		if (atomic_read(&fs_info->scrub_cancel_req) ||
-		    atomic_read(&sctx->cancel_req)) {
+		if (should_cancel_scrub(sctx)) {
 			ret = -ECANCELED;
 			break;
 		}
