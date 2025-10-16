@@ -453,6 +453,70 @@ void blk_mq_free_sched_tags_batch(struct xarray *et_table,
 	}
 }
 
+void blk_mq_free_sched_data_batch(struct xarray *elv_tbl,
+		struct blk_mq_tag_set *set)
+{
+	struct request_queue *q;
+	struct elv_change_ctx *ctx;
+
+	lockdep_assert_held_write(&set->update_nr_hwq_lock);
+
+	list_for_each_entry(q, &set->tag_list, tag_set_list) {
+		if (q->elevator) {
+			ctx = xa_load(elv_tbl, q->id);
+			if (WARN_ON_ONCE(!ctx))
+				continue;
+			if (ctx->data)
+				blk_mq_free_sched_data(q->elevator->type,
+						ctx->data);
+		}
+	}
+}
+
+int blk_mq_alloc_sched_data_batch(struct xarray *elv_tbl,
+		struct blk_mq_tag_set *set)
+{
+	struct request_queue *q;
+	struct elv_change_ctx *ctx;
+	int ret = 0;
+
+	lockdep_assert_held_write(&set->update_nr_hwq_lock);
+
+	list_for_each_entry(q, &set->tag_list, tag_set_list) {
+		/*
+		 * Accessing q->elevator without holding q->elevator_lock is
+		 * safe because we're holding here set->update_nr_hwq_lock in
+		 * the writer context. So, scheduler update/switch code (which
+		 * acquires the same lock but in the reader context) can't run
+		 * concurrently.
+		 */
+		if (q->elevator) {
+			ctx = xa_load(elv_tbl, q->id);
+			if (WARN_ON_ONCE(!ctx))
+				return -ENOENT;
+
+			ret = blk_mq_alloc_sched_data(q, q->elevator->type,
+					&ctx->data);
+			if (ret)
+				goto out_unwind;
+		}
+	}
+	return ret;
+
+out_unwind:
+	list_for_each_entry_continue_reverse(q, &set->tag_list, tag_set_list) {
+		if (q->elevator) {
+			ctx = xa_load(elv_tbl, q->id);
+			if (WARN_ON_ONCE(!ctx))
+				continue;
+			if (ctx->data)
+				blk_mq_free_sched_data(q->elevator->type,
+						ctx->data);
+		}
+	}
+	return ret;
+}
+
 int blk_mq_alloc_sched_ctx_batch(struct xarray *elv_tbl,
 		struct blk_mq_tag_set *set)
 {
@@ -573,7 +637,7 @@ out_unwind:
 
 /* caller must have a reference to @e, will grab another one if successful */
 int blk_mq_init_sched(struct request_queue *q, struct elevator_type *e,
-		struct elevator_tags *et)
+		struct elevator_tags *et, void *data)
 {
 	unsigned int flags = q->tag_set->flags;
 	struct blk_mq_hw_ctx *hctx;
@@ -581,7 +645,7 @@ int blk_mq_init_sched(struct request_queue *q, struct elevator_type *e,
 	unsigned long i;
 	int ret;
 
-	eq = elevator_alloc(q, e, et);
+	eq = elevator_alloc(q, e, et, data);
 	if (!eq)
 		return -ENOMEM;
 
