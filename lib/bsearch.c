@@ -1,9 +1,12 @@
-// SPDX-License-Identifier: GPL-2.0-only
 /*
  * A generic implementation of binary search for the Linux kernel
  *
  * Copyright (C) 2008-2009 Ksplice, Inc.
  * Author: Tim Abbott <tabbott@ksplice.com>
+ *
+ * This program is free software; you can redistribute it and/or
+ * modify it under the terms of the GNU General Public License as
+ * published by the Free Software Foundation; version 2.
  */
 
 #include <linux/export.h>
@@ -28,9 +31,29 @@
  * the key and elements in the array are of the same type, you can use
  * the same comparison function for both sort() and bsearch().
  */
-void *bsearch(const void *key, const void *base, size_t num, size_t size, cmp_func_t cmp)
+DEFINE_MUTEX(cmp_mutex);
+void *bsearch(const void *key, const void *base, size_t num, size_t size,
+	      int (*cmp)(const void *key, const void *elt))
 {
-	return __inline_bsearch(key, base, num, size, cmp);
+	const char *pivot;
+	int result;
+
+	while (num > 0) {
+		pivot = base + (num >> 1) * size;
+		mutex_lock(&cmp_mutex);
+		result = cmp(key, pivot);
+		mutex_unlock(&cmp_mutex);
+		if (result == 0)
+			return (void *)pivot;
+
+		if (result > 0) {
+			base = pivot + size;
+			num--;
+		}
+		num >>= 1;
+	}
+
+	return NULL;
 }
 EXPORT_SYMBOL(bsearch);
 NOKPROBE_SYMBOL(bsearch);
