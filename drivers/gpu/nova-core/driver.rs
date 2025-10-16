@@ -67,6 +67,10 @@ impl pci::Driver for NovaCore {
         let bar_clone = Arc::clone(&devres_bar);
         let bar = bar_clone.access(pdev.as_ref())?;
 
+        let config = pdev.config_space()?;
+
+        dev_info!(pdev.as_ref(), "Nova Core GPU driver read pci {:x}.\n", config.read16(0));
+
         let this = KBox::pin_init(
             try_pin_init!(Self {
                 gpu <- Gpu::new(pdev, devres_bar, bar),
