@@ -10,6 +10,8 @@ use kernel::pci;
 use kernel::prelude::*;
 use kernel::transmute::AsBytes;
 
+use crate::fb::FbLayout;
+
 mod fw;
 
 use fw::LibosMemoryRegionInitArgument;
@@ -105,8 +107,10 @@ impl Gsp {
         // kgspSetupLibosInitArgs_IMPL (creates pLibosInitArgs[] array)
         let loginit = LogBuffer::new(dev)?;
         dma_write!(libos[0] = LibosMemoryRegionInitArgument::new("LOGINIT", &loginit.0))?;
+
         let logintr = LogBuffer::new(dev)?;
         dma_write!(libos[1] = LibosMemoryRegionInitArgument::new("LOGINTR", &logintr.0))?;
+
         let logrm = LogBuffer::new(dev)?;
         dma_write!(libos[2] = LibosMemoryRegionInitArgument::new("LOGRM", &logrm.0))?;
 
