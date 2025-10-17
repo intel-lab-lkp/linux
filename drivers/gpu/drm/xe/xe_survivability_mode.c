@@ -150,11 +150,11 @@ static int check_boot_failure(struct xe_device *xe)
 		survivability->boot_status == CRITICAL_FAILURE;
 }
 
-static ssize_t survivability_mode_show(struct device *dev,
-				       struct device_attribute *attr, char *buff)
+static ssize_t survivability_mode_show(struct kobject *kobj,
+				       struct kobj_attribute *attr, char *buff)
 {
-	struct pci_dev *pdev = to_pci_dev(dev);
-	struct xe_device *xe = pdev_to_xe_device(pdev);
+	struct device *dev = container_of(kobj, struct device, kobj);
+	struct xe_device *xe = pdev_to_xe_device(to_pci_dev(dev));
 	struct xe_survivability *survivability = &xe->survivability;
 	struct xe_survivability_info *info = survivability->info;
 	int index = 0, count = 0;
@@ -174,7 +174,8 @@ static ssize_t survivability_mode_show(struct device *dev,
 	return count;
 }
 
-static DEVICE_ATTR_ADMIN_RO(survivability_mode);
+static struct kobj_attribute attr_survivability_mode =
+	__ATTR_RO_MODE(survivability_mode, 0400);
 
 static void xe_survivability_mode_fini(void *arg)
 {
@@ -182,7 +183,7 @@ static void xe_survivability_mode_fini(void *arg)
 	struct pci_dev *pdev = to_pci_dev(xe->drm.dev);
 	struct device *dev = &pdev->dev;
 
-	sysfs_remove_file(&dev->kobj, &dev_attr_survivability_mode.attr);
+	sysfs_remove_file(&dev->kobj, &attr_survivability_mode.attr);
 }
 
 static int create_survivability_sysfs(struct pci_dev *pdev)
@@ -192,7 +193,7 @@ static int create_survivability_sysfs(struct pci_dev *pdev)
 	int ret;
 
 	/* create survivability mode sysfs */
-	ret = sysfs_create_file(&dev->kobj, &dev_attr_survivability_mode.attr);
+	ret = sysfs_create_file(&dev->kobj, &attr_survivability_mode.attr);
 	if (ret) {
 		dev_warn(dev, "Failed to create survivability sysfs files\n");
 		return ret;
