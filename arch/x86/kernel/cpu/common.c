@@ -1357,9 +1357,11 @@ static bool __init vulnerable_to_its(u64 x86_arch_cap_msr)
 	/*
 	 * If a VMM did not expose ITS_NO, assume that a guest could
 	 * be running on a vulnerable hardware or may migrate to such
-	 * hardware.
+	 * hardware, except in the situation where the guest is presented
+	 * with a feature that only exists in non-vulnerable hardware.
 	 */
-	if (boot_cpu_has(X86_FEATURE_HYPERVISOR))
+	if (boot_cpu_has(X86_FEATURE_HYPERVISOR) ||
+	    boot_cpu_has(X86_FEATURE_BUS_LOCK_DETECT))
 		return true;
 
 	if (cpu_matches(cpu_vuln_blacklist, ITS))

@@ -98,8 +98,9 @@ Mitigation in guests
 ^^^^^^^^^^^^^^^^^^^^
 All guests deploy ITS mitigation by default, irrespective of eIBRS enumeration
 and Family/Model of the guest. This is because eIBRS feature could be hidden
-from a guest. One exception to this is when a guest enumerates BHI_DIS_S, which
-indicates that the guest is running on an unaffected host.
+from a guest. One exception to this is when a guest enumerates BHI_DIS_S or
+BUS_LOCK_DETECT, either of which indicates that the guest is running on an
+unaffected host and would not be migratable to an affected host.
 
 To prevent guests from unnecessarily deploying the mitigation on unaffected
 platforms, Intel has defined ITS_NO bit(62) in MSR IA32_ARCH_CAPABILITIES. When
