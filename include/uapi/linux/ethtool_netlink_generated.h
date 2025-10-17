@@ -77,6 +77,75 @@ enum ethtool_pse_event {
 	ETHTOOL_PSE_EVENT_SW_PW_CONTROL_ERROR = 64,
 };
 
+/**
+ * enum ethtool_phy_mse_capability - Bitmask flags for MSE capabilities.
+ *   Standardization: - SQI/MSE/pMSE presence is defined by OPEN Alliance, but
+ *   numeric scaling, update intervals and aggregation windows are
+ *   vendor-/product-specific. See OA 100BASE-T1 v1.0 6.1.1-6.1.3 and OA
+ *   1000BASE-T1 v2.2 6.1.1-6.1.2. (References are informative; drivers must
+ *   not assume identical scales.) These flags are used in the 'supported_caps'
+ *   field of struct phy_mse_capability to indicate which measurement
+ *   capabilities are supported by the PHY hardware.
+ * @PHY_MSE_CAP_CHANNEL_A: Diagnostics for Channel A are supported. (API
+ *   selector; mapping to physical pair may depend on MDI/MDI-X status.)
+ * @PHY_MSE_CAP_CHANNEL_B: Diagnostics for Channel B are supported.
+ * @PHY_MSE_CAP_CHANNEL_C: Diagnostics for Channel C are supported.
+ * @PHY_MSE_CAP_CHANNEL_D: Diagnostics for Channel D are supported.
+ * @PHY_MSE_CAP_WORST_CHANNEL: Hardware or drivers can identify the single
+ *   worst-performing channel without needing to query each one individually.
+ * @PHY_MSE_CAP_LINK: Hardware provides only a link-wide aggregate MSE or
+ *   cannot map the measurement to a specific channel/pair. Typical for media
+ *   where the MDI/MDI-X resolution or pair mapping is unknown (e.g.
+ *   100BASE-TX).
+ * @PHY_MSE_CAP_AVG: Average MSE supported (OA-referenced metric;
+ *   scaling/window are vendor-specific). For 100/1000BASE-T1 recommended 2^16
+ *   symbols, scaled 0..511; device-specific otherwise. (OA 100BASE-T1 6.1.1;
+ *   OA 1000BASE-T1 6.1.1)
+ * @PHY_MSE_CAP_PEAK: Peak MSE supported (current peak over the last
+ *   measurement window). Defined as pMSE only for 100BASE-T1 in OA; other
+ *   variants are vendor extensions. (OA 100BASE-T1 6.1.3)
+ * @PHY_MSE_CAP_WORST_PEAK: Latched worst-case peak since last read
+ *   (read-to-clear if implemented). Optional in OA for 100BASE-T1 pMSE. (OA
+ *   100BASE-T1 6.1.3)
+ */
+enum ethtool_phy_mse_capability {
+	PHY_MSE_CAP_CHANNEL_A = 1,
+	PHY_MSE_CAP_CHANNEL_B = 2,
+	PHY_MSE_CAP_CHANNEL_C = 4,
+	PHY_MSE_CAP_CHANNEL_D = 8,
+	PHY_MSE_CAP_WORST_CHANNEL = 16,
+	PHY_MSE_CAP_LINK = 32,
+	PHY_MSE_CAP_AVG = 64,
+	PHY_MSE_CAP_PEAK = 128,
+	PHY_MSE_CAP_WORST_PEAK = 256,
+
+	/* private: */
+	PHY_MSE_CAP_MASK = 511,
+};
+
+/**
+ * enum ethtool_phy_mse_channel - Identifiers for the 'channel' parameter used
+ *   to select which diagnostic data to retrieve.
+ * @PHY_MSE_CHANNEL_A: Request data for channel A.
+ * @PHY_MSE_CHANNEL_B: Request data for channel B.
+ * @PHY_MSE_CHANNEL_C: Request data for channel C.
+ * @PHY_MSE_CHANNEL_D: Request data for channel D.
+ * @PHY_MSE_CHANNEL_WORST: Request data for the single worst-performing
+ *   channel. This is a convenience for PHYs or drivers that can identify the
+ *   worst channel in hardware.
+ * @PHY_MSE_CHANNEL_LINK: Request data for the link as a whole. Use when the
+ *   PHY exposes only a link-wide aggregate MSE or cannot attribute results to
+ *   any single channel/pair (e.g. 100BASE-TX with unknown MDI/MDI-X mapping).
+ */
+enum ethtool_phy_mse_channel {
+	PHY_MSE_CHANNEL_A,
+	PHY_MSE_CHANNEL_B,
+	PHY_MSE_CHANNEL_C,
+	PHY_MSE_CHANNEL_D,
+	PHY_MSE_CHANNEL_WORST,
+	PHY_MSE_CHANNEL_LINK,
+};
+
 enum {
 	ETHTOOL_A_HEADER_UNSPEC,
 	ETHTOOL_A_HEADER_DEV_INDEX,
