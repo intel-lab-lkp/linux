@@ -3516,6 +3516,11 @@ struct rtw89_phy_rate_pattern {
 #define RTW89_TX_LIFE_TIME		0x2
 #define RTW89_TX_MACID_DROP		0x3
 
+struct rtw89_tx_rpt {
+	struct sk_buff_head queue;
+	atomic_t sn;
+};
+
 #define RTW89_TX_WAIT_WORK_TIMEOUT msecs_to_jiffies(500)
 struct rtw89_tx_wait_info {
 	struct rcu_head rcu_head;
@@ -3527,6 +3532,8 @@ struct rtw89_tx_wait_info {
 
 struct rtw89_tx_skb_data {
 	struct rtw89_tx_wait_info __rcu *wait;
+	u8 tx_rpt_sn;
+	u8 tx_pkt_cnt_lmt;
 	u8 hci_priv[];
 };
 
@@ -3696,6 +3703,7 @@ struct rtw89_hci_info {
 	u32 rpwm_addr;
 	u32 cpwm_addr;
 	bool paused;
+	bool tx_rpt_enabled;
 };
 
 struct rtw89_chip_ops {
@@ -6014,6 +6022,8 @@ struct rtw89_dev {
 
 	struct list_head tx_waits;
 	struct wiphy_delayed_work tx_wait_work;
+
+	struct rtw89_tx_rpt tx_rpt;
 
 	struct rtw89_cam_info cam_info;
 

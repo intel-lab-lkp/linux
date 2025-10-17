@@ -5460,7 +5460,11 @@ rtw89_mac_c2h_mcc_status_rpt(struct rtw89_dev *rtwdev, struct sk_buff *c2h, u32 
 static void
 rtw89_mac_c2h_tx_rpt(struct rtw89_dev *rtwdev, struct sk_buff *c2h, u32 len)
 {
+	struct rtw89_tx_rpt *tx_rpt = &rtwdev->tx_rpt;
 	u8 sw_define, tx_status, data_txcnt;
+	struct rtw89_tx_skb_data *skb_data;
+	struct sk_buff *skb, *tmp;
+	unsigned long flags;
 
 	if (rtwdev->chip->chip_id == RTL8922A) {
 		const struct rtw89_c2h_mac_tx_rpt_v2 *rpt_v2;
@@ -5484,6 +5488,26 @@ rtw89_mac_c2h_tx_rpt(struct rtw89_dev *rtwdev, struct sk_buff *c2h, u32 len)
 	rtw89_debug(rtwdev, RTW89_DBG_TXRX,
 		    "C2H TX RPT: sn %d, tx_status %d, data_txcnt %d\n",
 		    sw_define, tx_status, data_txcnt);
+
+	spin_lock_irqsave(&tx_rpt->queue.lock, flags);
+	skb_queue_walk_safe(&tx_rpt->queue, skb, tmp) {
+		skb_data = RTW89_TX_SKB_CB(skb);
+
+		/* skip if sequence number doesn't match */
+		if (sw_define != skb_data->tx_rpt_sn)
+			continue;
+		/* skip if TX attempt has failed and retry limit has not been
+		 * reached yet
+		 */
+		if (tx_status != RTW89_TX_DONE &&
+		    data_txcnt != skb_data->tx_pkt_cnt_lmt)
+			continue;
+
+		__skb_unlink(skb, &tx_rpt->queue);
+		rtw89_tx_rpt_tx_status(rtwdev, skb, tx_status);
+		break;
+	}
+	spin_unlock_irqrestore(&tx_rpt->queue.lock, flags);
 }
 
 static void
