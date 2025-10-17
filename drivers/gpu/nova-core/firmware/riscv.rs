@@ -53,7 +53,6 @@ impl RmRiscvUCodeDesc {
 }
 
 /// A parsed firmware for a RISC-V core, ready to be loaded and run.
-#[expect(unused)]
 pub(crate) struct RiscvFirmware {
     /// Offset at which the code starts in the firmware image.
     pub(crate) code_offset: u32,
@@ -62,7 +61,7 @@ pub(crate) struct RiscvFirmware {
     /// Offset at which the manifest starts in the firmware image.
     pub(crate) manifest_offset: u32,
     /// Application version.
-    app_version: u32,
+    pub(crate) app_version: u32,
     /// Device-mapped firmware image.
     pub(crate) ucode: DmaObject,
 }
