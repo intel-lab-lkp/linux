@@ -1409,8 +1409,8 @@ static int isp_video_open(struct file *file)
 
 	memset(&handle->format, 0, sizeof(handle->format));
 	handle->format.type = video->type;
-	handle->format.fmt.pix.width = 720;
-	handle->format.fmt.pix.height = 480;
+	handle->format.fmt.pix.width = 864;
+	handle->format.fmt.pix.height = 648;
 	handle->format.fmt.pix.pixelformat = V4L2_PIX_FMT_UYVY;
 	handle->format.fmt.pix.field = V4L2_FIELD_NONE;
 	handle->format.fmt.pix.colorspace = V4L2_COLORSPACE_SRGB;
