@@ -325,7 +325,6 @@ impl Cmdq {
             .write(bar);
     }
 
-    #[expect(unused)]
     pub(crate) fn send_gsp_command<M, E>(&mut self, bar: &Bar0, init: impl Init<M, E>) -> Result
     where
         M: CommandToGsp,
@@ -337,7 +336,6 @@ impl Cmdq {
         self.send_gsp_command_base_with_payload(bar, 0, init, |_| Ok(()))
     }
 
-    #[expect(unused)]
     pub(crate) fn send_gsp_command_with_payload<M, E>(
         &mut self,
         bar: &Bar0,
