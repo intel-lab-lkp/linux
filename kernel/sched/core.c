@@ -10256,7 +10256,7 @@ const u32 sched_prio_to_wmult[40] = {
 
 void call_trace_sched_update_nr_running(struct rq *rq, int count)
 {
-        trace_sched_update_nr_running_tp(rq, count);
+	trace_sched_update_nr_running_tp(rq, count);
 }
 
 #ifdef CONFIG_SCHED_MM_CID
