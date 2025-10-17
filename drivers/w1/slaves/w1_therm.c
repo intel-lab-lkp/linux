@@ -1849,7 +1849,7 @@ static ssize_t alarms_store(struct device *device,
 			__func__, -ENOMEM);
 		return size;
 	}
-	strcpy(p_args, buf);
+	strscpy(p_args, buf, size);
 
 	/* Split string using space char */
 	token = strsep(&p_args, " ");
