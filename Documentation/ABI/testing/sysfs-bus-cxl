@@ -498,6 +498,14 @@ Description:
 		there is no guarantee that a free followed by an allocate
 		results in the same address being allocated.
 
+What:		/sys/bus/cxl/devices/regionZ/extended_linear_cache_size
+Date:		October, 2025
+KernelVersion:	v6.19
+Contact:	linux-cxl@vger.kernel.org
+Description:
+		(RO) The size of extended linear cache if there is one present.
+		The region 'size' attribute would reflect the total size where
+		the CXL region size plus the extended linear cache size.
 
 What:		/sys/bus/cxl/devices/regionZ/mode
 Date:		January, 2023
