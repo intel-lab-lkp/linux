@@ -734,14 +734,13 @@ static void unix_release_sock(struct sock *sk, int embrion)
 	/* ---- Socket is dead now and most probably destroyed ---- */
 
 	/*
-	 * Fixme: BSD difference: In BSD all sockets connected to us get
-	 *	  ECONNRESET and we die on the spot. In Linux we behave
-	 *	  like files and pipes do and wait for the last
-	 *	  dereference.
+	 * Note: BSD sends ECONNREST to all sockets connected to a closing peer
+	 * and terminates immediately. Linux, however, intentionally behaves more
+	 * like pipes - waiting for the final dereference before destruction.
 	 *
-	 * Can't we simply set sock->err?
-	 *
-	 *	  What the above comment does talk about? --ANK(980817)
+	 * This behaviour is by design and aligns with Linux's file semantics.
+	 * Historical note: this difference from BSD has been present since the
+	 * early UNIX socket implementation and is not considered a bug.
 	 */
 
 	if (READ_ONCE(unix_tot_inflight))
