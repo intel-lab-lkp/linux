@@ -177,6 +177,27 @@ static struct resource *alloc_resource(gfp_t flags)
 	return kzalloc(sizeof(struct resource), flags);
 }
 
+static int IgnoreResource(struct resource *tmp)
+{
+	char *pt, *name_sep;
+	char *name;
+
+	pt = kstrdup(tmp->name, GFP_KERNEL);
+	name_sep = pt;
+	if (!name_sep)
+		goto out;
+
+	name = strsep(&name_sep, ":");
+	if (strcmp(name, "AMDIF031") == 0) {
+		kfree(pt);
+		return 1;
+	}
+
+out:
+	kfree(pt);
+	return 0;
+}
+
 /* Return the conflict entry if you can't request it */
 static struct resource * __request_resource(struct resource *root, struct resource *new)
 {
@@ -201,6 +222,8 @@ static struct resource * __request_resource(struct resource *root, struct resour
 		}
 		p = &tmp->sibling;
 		if (tmp->end < start)
+			continue;
+		if (IgnoreResource(tmp))
 			continue;
 		return tmp;
 	}
