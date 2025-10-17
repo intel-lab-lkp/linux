@@ -259,7 +259,7 @@ int drm_sysfb_plane_helper_begin_fb_access(struct drm_plane *plane,
 	ret = -EINVAL;
 
 	crtc_state = drm_atomic_get_crtc_state(plane_state->state, plane_state->crtc);
-	if (drm_WARN_ON_ONCE(dev, !crtc_state))
+	if (drm_WARN_ON_ONCE(dev, IS_ERR(crtc_state)))
 		goto err_drm_gem_end_shadow_fb_access;
 	sysfb_crtc_state = to_drm_sysfb_crtc_state(crtc_state);
 
