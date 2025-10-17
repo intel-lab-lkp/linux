@@ -39,6 +39,8 @@ enum perf_record_synth {
 };
 #define PERF_SYNTH_ALL  (PERF_SYNTH_MAX - 1)
 
+#define PERF_SYNTH_EVENT_ID_OFFSET	(1000000000ULL)
+
 int parse_synth_opt(char *str);
 
 typedef int (*perf_event__handler_t)(const struct perf_tool *tool, union perf_event *event,

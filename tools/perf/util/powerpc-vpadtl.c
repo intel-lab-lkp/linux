@@ -15,6 +15,7 @@
 #include "powerpc-vpadtl.h"
 #include "sample.h"
 #include "tool.h"
+#include "util/synthetic-events.h"
 
 /*
  * Structure to save the auxtrace queue
@@ -656,7 +657,7 @@ powerpc_vpadtl_synth_events(struct powerpc_vpadtl *vpa, struct perf_session *ses
 	attr.config = PERF_SYNTH_POWERPC_VPA_DTL;
 
 	/* create new id val to be a fixed offset from evsel id */
-	id = evsel->core.id[0] + 1000000000;
+	id = evsel->core.id[0] + PERF_SYNTH_EVENT_ID_OFFSET;
 	if (!id)
 		id = 1;
 
