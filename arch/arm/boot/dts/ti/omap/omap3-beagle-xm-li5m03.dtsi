@@ -1,0 +1,64 @@
+// SPDX-License-Identifier: GPL-2.0-only
+/*
+ * Device Tree Source for the Beagleboard-xM LI-5M03 add-on camera board
+ *
+ * Copyright (C) 2014 Laurent Pinchart <laurent.pinchart@ideasonboard.com>
+ *
+ * This file is licensed under the terms of the GNU General Public License
+ * version 2.  This program is licensed "as is" without any warranty of any
+ * kind, whether express or implied.
+ */
+
+&i2c2 {
+	clock-frequency = <100000>;
+
+	mt9p031@48 {
+		compatible = "aptina,mt9p031";
+		reg = <0x48>;
+
+		clocks = <&isp 0>;
+		reset-gpios = <&gpio4 2 GPIO_ACTIVE_LOW>;
+
+		vaa-supply = <&hsusb2_power>;
+		vdd-supply = <&vaux3>;
+		vdd_io-supply = <&vaux4>;
+
+		port {
+			mt9p031_out: endpoint {
+				input-clock-frequency = <21000000>;
+				pixel-clock-frequency = <48000000>;
+				remote-endpoint = <&ccdc_ep>;
+			};
+		};
+	};
+};
+
+&isp {
+	#address-cells = <1>;
+	#size-cells = <0>;
+
+	ports {
+		port@0 {
+			reg = <0>;
+			ccdc_ep: endpoint {
+				remote-endpoint = <&mt9p031_out>;
+				bus-width = <12>;
+				hsync-active = <1>;
+				vsync-active = <1>;
+				pclk-sample = <0>;
+			};
+		};
+	};
+};
+
+&vaux3 {
+	regulator-name = "cam_core";
+	regulator-min-microvolt = <1800000>;
+	regulator-max-microvolt = <1800000>;
+};
+
+&vaux4 {
+	regulator-name = "cam_io";
+	regulator-min-microvolt = <1800000>;
+	regulator-max-microvolt = <1800000>;
+};

@@ -417,3 +417,5 @@
 		};
 	};
 };
+
+#include "omap3-beagle-xm-li5m03.dtsi"
