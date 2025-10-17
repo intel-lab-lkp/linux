@@ -10,6 +10,9 @@
 #include "hinic3_rx.h"
 #include "hinic3_tx.h"
 
+#define HINIC3_RX_RATE_THRESH  50000
+#define HINIC3_AVG_PKT_SMALL   256U
+
 static int hinic3_poll(struct napi_struct *napi, int budget)
 {
 	struct hinic3_irq_cfg *irq_cfg =
@@ -92,7 +95,7 @@ static int hinic3_request_irq(struct hinic3_irq_cfg *irq_cfg, u16 q_id)
 	info.coalesc_timer_cfg =
 		nic_dev->intr_coalesce[q_id].coalesce_timer_cfg;
 	info.resend_timer_cfg = nic_dev->intr_coalesce[q_id].resend_timer_cfg;
-	err = hinic3_set_interrupt_cfg_direct(nic_dev->hwdev, &info);
+	err = hinic3_set_interrupt_cfg(nic_dev->hwdev, info);
 	if (err) {
 		netdev_err(netdev, "Failed to set RX interrupt coalescing attribute.\n");
 		qp_del_napi(irq_cfg);
@@ -115,6 +118,134 @@ static void hinic3_release_irq(struct hinic3_irq_cfg *irq_cfg)
 {
 	irq_set_affinity_hint(irq_cfg->irq_id, NULL);
 	free_irq(irq_cfg->irq_id, irq_cfg);
+}
+
+static int hinic3_set_interrupt_moder(struct net_device *netdev, u16 q_id,
+				      u8 coalesc_timer_cfg, u8 pending_limit)
+{
+	struct hinic3_nic_dev *nic_dev = netdev_priv(netdev);
+	struct hinic3_interrupt_info info = {};
+	int err;
+
+	if (coalesc_timer_cfg == nic_dev->rxqs[q_id].last_coalesc_timer_cfg &&
+	    pending_limit == nic_dev->rxqs[q_id].last_pending_limit)
+		return 0;
+
+	if (q_id >= nic_dev->q_params.num_qps)
+		return 0;
+
+	info.interrupt_coalesc_set = 1;
+	info.coalesc_timer_cfg = coalesc_timer_cfg;
+	info.pending_limit = pending_limit;
+	info.msix_index = nic_dev->q_params.irq_cfg[q_id].msix_entry_idx;
+	info.resend_timer_cfg =
+		nic_dev->intr_coalesce[q_id].resend_timer_cfg;
+
+	err = hinic3_set_interrupt_cfg(nic_dev->hwdev, info);
+	if (err) {
+		netdev_err(netdev,
+			   "Failed to modify moderation for Queue: %u\n", q_id);
+	} else {
+		nic_dev->rxqs[q_id].last_coalesc_timer_cfg = coalesc_timer_cfg;
+		nic_dev->rxqs[q_id].last_pending_limit = pending_limit;
+	}
+
+	return err;
+}
+
+static void hinic3_calc_coal_para(struct hinic3_intr_coal_info *q_coal,
+				  u64 rx_rate, u8 *coalesc_timer_cfg,
+				  u8 *pending_limit)
+{
+	if (rx_rate < q_coal->pkt_rate_low) {
+		*coalesc_timer_cfg = q_coal->rx_usecs_low;
+		*pending_limit = q_coal->rx_pending_limit_low;
+	} else if (rx_rate > q_coal->pkt_rate_high) {
+		*coalesc_timer_cfg = q_coal->rx_usecs_high;
+		*pending_limit = q_coal->rx_pending_limit_high;
+	} else {
+		*coalesc_timer_cfg =
+			(u8)((rx_rate - q_coal->pkt_rate_low) *
+			     (q_coal->rx_usecs_high - q_coal->rx_usecs_low) /
+			     (q_coal->pkt_rate_high - q_coal->pkt_rate_low) +
+			     q_coal->rx_usecs_low);
+
+		*pending_limit =
+			(u8)((rx_rate - q_coal->pkt_rate_low) *
+			     (q_coal->rx_pending_limit_high -
+			      q_coal->rx_pending_limit_low) /
+			     (q_coal->pkt_rate_high - q_coal->pkt_rate_low) +
+			     q_coal->rx_pending_limit_low);
+	}
+}
+
+static void hinic3_update_queue_coal(struct net_device *netdev, u16 qid,
+				     u64 rx_rate, u64 avg_pkt_size, u64 tx_rate)
+{
+	struct hinic3_nic_dev *nic_dev = netdev_priv(netdev);
+	struct hinic3_intr_coal_info *q_coal;
+	u8 coalesc_timer_cfg, pending_limit;
+
+	q_coal = &nic_dev->intr_coalesce[qid];
+
+	if (rx_rate > HINIC3_RX_RATE_THRESH &&
+	    avg_pkt_size > HINIC3_AVG_PKT_SMALL) {
+		hinic3_calc_coal_para(q_coal, rx_rate, &coalesc_timer_cfg,
+				      &pending_limit);
+	} else {
+		coalesc_timer_cfg = 3;
+		pending_limit = q_coal->rx_pending_limit_low;
+	}
+
+	hinic3_set_interrupt_moder(netdev, qid,
+				   coalesc_timer_cfg, pending_limit);
+}
+
+static void hinic3_auto_moderation_work(struct work_struct *work)
+{
+	u64 rx_packets, rx_bytes, rx_pkt_diff, rx_rate, avg_pkt_size;
+	u64 tx_packets, tx_bytes, tx_pkt_diff, tx_rate;
+	struct hinic3_nic_dev *nic_dev;
+	struct delayed_work *delay;
+	struct net_device *netdev;
+	unsigned long period;
+	u16 qid;
+
+	delay = to_delayed_work(work);
+	nic_dev = container_of(delay, struct hinic3_nic_dev, moderation_task);
+	period = (unsigned long)(jiffies - nic_dev->last_moder_jiffies);
+	netdev = nic_dev->netdev;
+
+	queue_delayed_work(nic_dev->workq, &nic_dev->moderation_task,
+			   HINIC3_MODERATONE_DELAY);
+
+	for (qid = 0; qid < nic_dev->q_params.num_qps; qid++) {
+		rx_packets = nic_dev->rxqs[qid].rxq_stats.packets;
+		rx_bytes = nic_dev->rxqs[qid].rxq_stats.bytes;
+		tx_packets = nic_dev->txqs[qid].txq_stats.packets;
+		tx_bytes = nic_dev->txqs[qid].txq_stats.bytes;
+
+		rx_pkt_diff =
+			rx_packets - nic_dev->rxqs[qid].last_moder_packets;
+		avg_pkt_size = rx_pkt_diff ?
+			((unsigned long)(rx_bytes -
+			 nic_dev->rxqs[qid].last_moder_bytes)) /
+			 rx_pkt_diff : 0;
+
+		rx_rate = rx_pkt_diff * HZ / period;
+		tx_pkt_diff =
+			tx_packets - nic_dev->txqs[qid].last_moder_packets;
+		tx_rate = tx_pkt_diff * HZ / period;
+
+		hinic3_update_queue_coal(netdev, qid, rx_rate, avg_pkt_size,
+					 tx_rate);
+		nic_dev->rxqs[qid].last_moder_packets = rx_packets;
+		nic_dev->rxqs[qid].last_moder_bytes = rx_bytes;
+		nic_dev->txqs[qid].last_moder_packets = tx_packets;
+		nic_dev->txqs[qid].last_moder_bytes = tx_bytes;
+	}
+
+	nic_dev->last_moder_jiffies = jiffies;
 }
 
 int hinic3_qps_irq_init(struct net_device *netdev)
@@ -156,6 +287,9 @@ int hinic3_qps_irq_init(struct net_device *netdev)
 		hinic3_set_msix_state(nic_dev->hwdev, irq_cfg->msix_entry_idx,
 				      HINIC3_MSIX_ENABLE);
 	}
+
+	INIT_DELAYED_WORK(&nic_dev->moderation_task,
+			  hinic3_auto_moderation_work);
 
 	return 0;
 

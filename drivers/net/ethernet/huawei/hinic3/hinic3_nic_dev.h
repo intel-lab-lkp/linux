@@ -4,13 +4,40 @@
 #ifndef _HINIC3_NIC_DEV_H_
 #define _HINIC3_NIC_DEV_H_
 
+#include <linux/if_vlan.h>
 #include <linux/netdevice.h>
 
 #include "hinic3_hw_cfg.h"
+#include "hinic3_hwdev.h"
 #include "hinic3_mgmt_interface.h"
+
+#define HINIC3_VLAN_BITMAP_BYTE_SIZE(nic_dev)  (sizeof(*(nic_dev)->vlan_bitmap))
+#define HINIC3_VLAN_BITMAP_SIZE(nic_dev)  \
+	(VLAN_N_VID / HINIC3_VLAN_BITMAP_BYTE_SIZE(nic_dev))
+#define HINIC3_MODERATONE_DELAY  HZ
 
 enum hinic3_flags {
 	HINIC3_RSS_ENABLE,
+};
+
+enum hinic3_event_work_flags {
+	HINIC3_EVENT_WORK_TX_TIMEOUT,
+};
+
+#define HINIC3_NIC_STATS_INC(nic_dev, field) \
+do { \
+	u64_stats_update_begin(&(nic_dev)->stats.syncp); \
+	(nic_dev)->stats.field++; \
+	u64_stats_update_end(&(nic_dev)->stats.syncp); \
+} while (0)
+
+struct hinic3_nic_stats {
+	u64                   netdev_tx_timeout;
+
+	/* Subdivision statistics show in private tool */
+	u64                   tx_carrier_off_drop;
+	u64                   tx_invalid_qid;
+	struct u64_stats_sync syncp;
 };
 
 enum hinic3_rss_hash_type {
@@ -55,6 +82,15 @@ struct hinic3_intr_coal_info {
 	u8 pending_limit;
 	u8 coalesce_timer_cfg;
 	u8 resend_timer_cfg;
+
+	u64 pkt_rate_low;
+	u8  rx_usecs_low;
+	u8  rx_pending_limit_low;
+	u64 pkt_rate_high;
+	u8  rx_usecs_high;
+	u8  rx_pending_limit_high;
+
+	u8  user_set_intr_coal_flag;
 };
 
 struct hinic3_nic_dev {
@@ -66,12 +102,14 @@ struct hinic3_nic_dev {
 	u16                             max_qps;
 	u16                             rx_buf_len;
 	u32                             lro_replenish_thld;
+	unsigned long                   *vlan_bitmap;
 	unsigned long                   flags;
 	struct hinic3_nic_service_cap   nic_svc_cap;
 
 	struct hinic3_dyna_txrxq_params q_params;
 	struct hinic3_txq               *txqs;
 	struct hinic3_rxq               *rxqs;
+	struct hinic3_nic_stats         stats;
 
 	enum hinic3_rss_hash_type       rss_hash_type;
 	struct hinic3_rss_type          rss_type;
@@ -82,13 +120,20 @@ struct hinic3_nic_dev {
 	struct msix_entry               *qps_msix_entries;
 
 	struct hinic3_intr_coal_info    *intr_coalesce;
+	unsigned long                   last_moder_jiffies;
 
+	struct workqueue_struct         *workq;
+	struct delayed_work             periodic_work;
+	struct delayed_work             moderation_task;
 	struct semaphore                port_state_sem;
 
+	/* flag bits defined by hinic3_event_work_flags */
+	unsigned long                   event_flag;
 	bool                            link_status_up;
 };
 
 void hinic3_set_netdev_ops(struct net_device *netdev);
+int hinic3_set_hw_features(struct net_device *netdev);
 int hinic3_qps_irq_init(struct net_device *netdev);
 void hinic3_qps_irq_uninit(struct net_device *netdev);
 
