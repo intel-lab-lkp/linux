@@ -57,7 +57,7 @@ Abort a KHO exec
 
 You can move the system out of KHO finalization phase again by calling ::
 
-  $ echo 0 > /sys/kernel/debug/kho/out/active
+  $ echo 0 > /sys/kernel/debug/kho/out/finalize
 
 After this command, the KHO FDT is no longer available in
 ``/sys/kernel/debug/kho/out/fdt``.
