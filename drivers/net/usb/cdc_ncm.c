@@ -2114,10 +2114,52 @@ static const struct usb_device_id cdc_devs[] = {
 };
 MODULE_DEVICE_TABLE(usb, cdc_devs);
 
+/* cdc_ncm_ignore_list:
+ * Chip info which already support int vendor specific driver,
+ * and then should be ignored in generic cdc_ncm
+ */
+static const struct usb_device_id cdc_ncm_ignore_list[] = {
+#if IS_ENABLED(CONFIG_USB_NET_AX88179_178A)
+	/* Chips already support in ax88179_178a.c */
+	{ USB_DEVICE(0x0b95, 0x1790) },
+	{ USB_DEVICE(0x0b95, 0x178a) },
+	{ USB_DEVICE(0x04b4, 0x3610) },
+	{ USB_DEVICE(0x2001, 0x4a00) },
+	{ USB_DEVICE(0x0df6, 0x0072) },
+	{ USB_DEVICE(0x04e8, 0xa100) },
+	{ USB_DEVICE(0x17ef, 0x304b) },
+	{ USB_DEVICE(0x050d, 0x0128) },
+	{ USB_DEVICE(0x0930, 0x0a13) },
+	{ USB_DEVICE(0x0711, 0x0179) },
+	{ USB_DEVICE(0x07c9, 0x000e) },
+	{ USB_DEVICE(0x07c9, 0x000f) },
+	{ USB_DEVICE(0x07c9, 0x0010) },
+	/* End of support in ax88179_178a.c */
+#endif
+
+	{ } /*END*/
+};
+
+static inline bool cdc_ncm_ignore(struct usb_interface *intf)
+{
+	return !!usb_match_id(intf, cdc_ncm_ignore_list);
+}
+
+static int cdc_ncm_probe(struct usb_interface *intf, const struct usb_device_id *prod)
+{
+	/* Should it be ignored? */
+	if (cdc_ncm_ignore(intf)) {
+		dev_dbg(&intf->dev, "cdc_ncm ignore this device!\n");
+		return -ENODEV;
+	}
+
+	return usbnet_probe(intf, prod);
+}
+
 static struct usb_driver cdc_ncm_driver = {
 	.name = "cdc_ncm",
 	.id_table = cdc_devs,
-	.probe = usbnet_probe,
+	.probe = cdc_ncm_probe,
 	.disconnect = usbnet_disconnect,
 	.suspend = usbnet_suspend,
 	.resume = usbnet_resume,
