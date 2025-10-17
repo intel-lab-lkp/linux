@@ -1,0 +1,11 @@
+# SPDX-License-Identifier: GPL-2.0-or-later
+
+config SCSI_LEAPRAID
+		tristate "LeapIO RAID Adapter"
+		depends on PCI && SCSI
+		select SCSI_SAS_ATTRS
+		help
+		  Driver for LeapIO Storage & RAID
+		  Controllers.
+		  To compile this driver as a module, choose M here: the
+		  module will be called leapraid.
