@@ -7,6 +7,10 @@
 
 static struct timerlat_bpf *bpf;
 
+/* BPF object and program for action program */
+static struct bpf_object *obj;
+static struct bpf_program *prog;
+
 /*
  * timerlat_bpf_init - load and initialize BPF program to collect timerlat data
  */
@@ -56,6 +60,10 @@ int timerlat_bpf_init(struct timerlat_params *params)
 		return err;
 	}
 
+	/* Set BPF action program to NULL */
+	prog = NULL;
+	obj = NULL;
+
 	return 0;
 }
 
@@ -96,6 +104,11 @@ void timerlat_bpf_detach(void)
 void timerlat_bpf_destroy(void)
 {
 	timerlat_bpf__destroy(bpf);
+	bpf = NULL;
+	if (obj)
+		bpf_object__close(obj);
+	obj = NULL;
+	prog = NULL;
 }
 
 static int handle_rb_event(void *ctx, void *data, size_t data_sz)
@@ -190,4 +203,45 @@ int timerlat_bpf_get_summary_value(enum summary_field key,
 			 bpf->maps.summary_user,
 			 key, value_irq, value_thread, value_user, cpus);
 }
+
+/*
+ * timerlat_load_bpf_action_program - load and register a BPF action program
+ */
+int timerlat_load_bpf_action_program(const char *program_path)
+{
+	int err;
+
+	obj = bpf_object__open_file(program_path, NULL);
+	if (!obj) {
+		err_msg("Failed to open BPF action program: %s\n", program_path);
+		return -1;
+	}
+
+	err = bpf_object__load(obj);
+	if (err) {
+		err_msg("Failed to load BPF action program: %s\n", program_path);
+		return -1;
+	}
+
+	prog = bpf_object__find_program_by_name(obj, "action_handler");
+	if (!prog) {
+		err_msg("BPF action program must have 'action_handler' function: %s\n",
+			program_path);
+		bpf_object__close(obj);
+		obj = NULL;
+		return -1;
+	}
+
+	err = timerlat_bpf_set_action(prog);
+	if (err) {
+		err_msg("Failed to register BPF action program: %s\n", program_path);
+		bpf_object__close(obj);
+		obj = NULL;
+		prog = NULL;
+		return -1;
+	}
+
+	return 0;
+}
+
 #endif /* HAVE_BPF_SKEL */
