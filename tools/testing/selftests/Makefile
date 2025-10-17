@@ -218,12 +218,14 @@ all:
 	done; exit $$ret;
 
 run_tests: all
-	@for TARGET in $(TARGETS); do \
-		BUILD_TARGET=$$BUILD/$$TARGET;	\
-		$(MAKE) OUTPUT=$$BUILD_TARGET -C $$TARGET run_tests \
-				SRC_PATH=$(shell readlink -e $$(pwd)) \
-				OBJ_PATH=$(BUILD)                   \
-				O=$(abs_objtree);		    \
+	@for TARGET in $(TARGETS); do				\
+		BUILD_TARGET=$$BUILD/$$TARGET;			\
+		$(MAKE) OUTPUT=$$BUILD_TARGET			\
+			KCOV_OUTPUT=$(abspath $(KCOV_OUTPUT))	\
+			-C $$TARGET run_tests			\
+			SRC_PATH=$(shell readlink -e $$(pwd))	\
+			OBJ_PATH=$(BUILD)			\
+			O=$(abs_objtree);			\
 	done;
 
 hotplug:

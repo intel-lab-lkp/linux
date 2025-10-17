@@ -56,6 +56,8 @@
 #include <asm/types.h>
 #include <ctype.h>
 #include <errno.h>
+#include <fcntl.h>
+#include <linux/kcov.h>
 #include <linux/unistd.h>
 #include <poll.h>
 #include <stdbool.h>
@@ -63,7 +65,9 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <sys/ioctl.h>
 #include <sys/mman.h>
+#include <sys/stat.h>
 #include <sys/types.h>
 #include <sys/wait.h>
 #include <unistd.h>
@@ -401,7 +405,8 @@
 		const FIXTURE_VARIANT(fixture_name) *variant); \
 	static void wrapper_##fixture_name##_##test_name( \
 		struct __test_metadata *_metadata, \
-		struct __fixture_variant_metadata *variant) \
+		struct __fixture_variant_metadata *variant, \
+		char *test_full_name) \
 	{ \
 		/* fixture data is alloced, setup, and torn down per call. */ \
 		FIXTURE_DATA(fixture_name) self_private, *self = NULL; \
@@ -430,7 +435,9 @@
 			if (_metadata->exit_code) \
 				_exit(0); \
 			*_metadata->no_teardown = false; \
+			enable_kcov(_metadata); \
 			fixture_name##_##test_name(_metadata, self, variant->data); \
+			disable_kcov(_metadata, test_full_name); \
 			_metadata->teardown_fn(false, _metadata, self, variant->data); \
 			_exit(0); \
 		} else if (child < 0 || child != waitpid(child, &status, 0)) { \
@@ -470,6 +477,8 @@
 		object->teardown_fn = &wrapper_##fixture_name##_##test_name##_teardown; \
 		object->termsig = signal; \
 		object->timeout = tmout; \
+		object->kcov_fd = -1; \
+		object->kcov_slots = -1; \
 		_##fixture_name##_##test_name##_object = object; \
 		__register_test(object); \
 	} \
@@ -908,7 +917,8 @@ __register_fixture_variant(struct __fixture_metadata *f,
 struct __test_metadata {
 	const char *name;
 	void (*fn)(struct __test_metadata *,
-		   struct __fixture_variant_metadata *);
+		   struct __fixture_variant_metadata *,
+		   char *test_name);
 	pid_t pid;	/* pid of test when being run */
 	struct __fixture_metadata *fixture;
 	void (*teardown_fn)(bool in_parent, struct __test_metadata *_metadata,
@@ -923,6 +933,10 @@ struct __test_metadata {
 	const void *variant;
 	struct __test_results *results;
 	struct __test_metadata *prev, *next;
+	int kcov_fd;
+	int kcov_slots;
+	char *kcov_dir;
+	unsigned long *kcov_mem;
 };
 
 static inline bool __test_passed(struct __test_metadata *metadata)
@@ -1185,6 +1199,114 @@ static bool test_enabled(int argc, char **argv,
 	return !has_positive;
 }
 
+#define KCOV_SLOTS 4096
+
+static void enable_kcov(struct __test_metadata *t)
+{
+	char *slots;
+	int err;
+
+	t->kcov_dir = getenv("KCOV_OUTPUT");
+	if (!t->kcov_dir || *t->kcov_dir == '\0')
+		return;
+
+	slots = getenv("KCOV_SLOTS");
+	if (slots && *slots != '\0')
+		sscanf(slots, "%d", &t->kcov_slots);
+	if (t->kcov_slots <= 0)
+		t->kcov_slots = KCOV_SLOTS;
+
+	t->kcov_fd = open("/sys/kernel/debug/kcov", O_RDWR);
+	if (t->kcov_fd < 0) {
+		ksft_print_msg("ERROR OPENING KCOV FD\n");
+		goto err;
+	}
+
+	err = ioctl(t->kcov_fd, KCOV_INIT_TRACE, t->kcov_slots);
+	if (err) {
+		ksft_print_msg("ERROR INITIALISING KCOV\n");
+		goto err;
+	}
+
+	t->kcov_mem = mmap(NULL, sizeof(unsigned long) * t->kcov_slots,
+			   PROT_READ | PROT_WRITE, MAP_SHARED, t->kcov_fd, 0);
+	if ((void *)t->kcov_mem == MAP_FAILED) {
+		ksft_print_msg("ERROR ALLOCATING MEMORY FOR KCOV\n");
+		goto err;
+	}
+
+	err = ioctl(t->kcov_fd, KCOV_ENABLE, KCOV_TRACE_PC);
+	if (err) {
+		ksft_print_msg("ERROR ENABLING KCOV\n");
+		goto err;
+	}
+
+	__atomic_store_n(&t->kcov_mem[0], 0, __ATOMIC_RELAXED);
+	return;
+err:
+	t->exit_code = KSFT_FAIL;
+	_exit(KSFT_FAIL);
+}
+
+static void disable_kcov(struct __test_metadata *t, char *test_name)
+{
+	int slots, err, dir, fd, i;
+
+	if (t->kcov_fd == -1)
+		return;
+
+	slots = __atomic_load_n(&t->kcov_mem[0], __ATOMIC_RELAXED);
+	if (slots == t->kcov_slots - 1)
+		ksft_print_msg("Set KCOV_SLOTS to a value greater than %d\n", t->kcov_slots);
+
+	err = ioctl(t->kcov_fd, KCOV_DISABLE, 0);
+	if (err) {
+		ksft_print_msg("ERROR DISABLING KCOV\n");
+		goto out;
+	}
+
+	err = mkdir(t->kcov_dir, 0755);
+	if (err == -1 && errno != EEXIST) {
+		ksft_print_msg("ERROR CREATING '%s'\n", t->kcov_dir);
+		goto out;
+	}
+	err = 0;
+
+	dir = open(t->kcov_dir, O_DIRECTORY);
+	if (dir < 0) {
+		ksft_print_msg("ERROR OPENING %s\n", t->kcov_dir);
+		err = dir;
+		goto out;
+	}
+
+	fd = openat(dir, test_name, O_RDWR | O_CREAT | O_TRUNC);
+
+	close(dir);
+
+	if (fd == -1) {
+		ksft_print_msg("ERROR CREATING '%s' at '%s'\n", test_name, t->kcov_dir);
+		err = fd;
+		goto out;
+	}
+
+	for (i = 0; i < slots; i++) {
+		char buf[64];
+		int size;
+
+		size = snprintf(buf, 64, "0x%lx\n", t->kcov_mem[i + 1]);
+		write(fd, buf, size);
+	}
+
+out:
+	munmap(t->kcov_mem, sizeof(t->kcov_mem[0]) * t->kcov_slots);
+	close(t->kcov_fd);
+
+	if (err) {
+		t->exit_code = KSFT_FAIL;
+		_exit(KSFT_FAIL);
+	}
+}
+
 static void __run_test(struct __fixture_metadata *f,
 		       struct __fixture_variant_metadata *variant,
 		       struct __test_metadata *t)
@@ -1216,7 +1338,7 @@ static void __run_test(struct __fixture_metadata *f,
 		t->exit_code = KSFT_FAIL;
 	} else if (child == 0) {
 		setpgrp();
-		t->fn(t, variant);
+		t->fn(t, variant, test_name);
 		_exit(t->exit_code);
 	} else {
 		t->pid = child;

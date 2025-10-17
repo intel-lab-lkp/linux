@@ -200,6 +200,47 @@ You can look at the TAP output to see if you ran into the timeout. Test
 runners which know a test must run under a specific time can then optionally
 treat these timeouts then as fatal.
 
+KCOV for selftests
+==================
+
+Selftests built with `kselftest_harness.h` natively support generating
+KCOV coverage data.  See :doc:`KCOV: code coverage for fuzzing </dev-tools/kcov>`
+for prerequisites.
+
+You can specify the output directory with the `KCOV_OUTPUT` environment
+variable.  Additionally, you can specify the number of instructions to
+collect with the `KCOV_SLOTS` environment variable ::
+
+  # KCOV_OUTPUT=$PWD/kcov KCOV_SLOTS=$((4096 * 2)) \
+        ./tools/testing/selftests/net/af_unix/scm_inq
+
+In the output directory, a coverage file is generated for each test
+case in the selftest ::
+
+  $ ls kcov/
+  scm_inq.dgram.basic  scm_inq.seqpacket.basic  scm_inq.stream.basic
+
+The default value of `KCOV_SLOTS` is `4096`, and `KCOV_SLOTS` multiplied
+by `sizeof(unsigned long)` must be multiple of `4096`, so the smallest
+value is `512`.
+
+Both `KCOV_OUTPUT` and `KCOV_SLOTS` can be specified as the variables
+on the `make` command line ::
+
+  # make -C tools/testing/selftests/ \
+        kselftest_override_timeout=60 \
+        KCOV_OUTPUT=$PWD/kcov KCOV_SLOTS=$((4096 * 4)) \
+        TARGETS=net/af_unix run_tests
+
+The collected data can be decoded with `addr2line` ::
+
+  $ cat kcov/* | sort | uniq | addr2line -e vmlinux | grep unix
+  net/unix/af_unix.c:1056
+  net/unix/af_unix.c:3138
+  net/unix/af_unix.c:3834
+  net/unix/af_unix.c:3838
+  ...
+
 Packaging selftests
 ===================
 
