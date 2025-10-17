@@ -215,6 +215,14 @@ properties:
       Delay after the reset was deasserted in microseconds. If
       this property is missing the delay will be skipped.
 
+  phy-id-read-needs-reset:
+    $ref: /schemas/types.yaml#/definitions/flag
+    description:
+      Some PHYs require a hard reset before accessing MDIO registers.
+      This workaround allows auto-detection of the PHY ID in such cases.
+      When the PHY ID is provided with the 'compatible' string, setting
+      this property has no effect.
+
   sfp:
     $ref: /schemas/types.yaml#/definitions/phandle
     description:
