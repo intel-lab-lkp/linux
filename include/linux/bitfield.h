@@ -220,4 +220,40 @@ __MAKE_OP(64)
 #undef __MAKE_OP
 #undef ____MAKE_OP
 
+/**
+ * field_prep() - prepare a bitfield element
+ * @mask: shifted mask defining the field's length and position
+ * @val:  value to put in the field
+ *
+ * field_prep() masks and shifts up the value.  The result should be
+ * combined with other fields of the bitfield using logical OR.
+ * Unlike FIELD_PREP(), @mask is not limited to a compile-time constant.
+ */
+#define field_prep(mask, val)						\
+	({								\
+		__auto_type __mask = (mask);				\
+		typeof(mask) __val = (val);				\
+		unsigned int __shift = sizeof(mask) <= 4 ?		\
+				       __ffs(__mask) : __ffs64(__mask);	\
+		(__val << __shift) & __mask;	\
+	})
+
+/**
+ * field_get() - extract a bitfield element
+ * @mask: shifted mask defining the field's length and position
+ * @reg:  value of entire bitfield
+ *
+ * field_get() extracts the field specified by @mask from the
+ * bitfield passed in as @reg by masking and shifting it down.
+ * Unlike FIELD_GET(), @mask is not limited to a compile-time constant.
+ */
+#define field_get(mask, reg)						\
+	({								\
+		__auto_type __mask = (mask);				\
+		typeof(mask) __reg =  (reg);				\
+		unsigned int __shift = sizeof(mask) <= 4 ?		\
+				       __ffs(__mask) : __ffs64(__mask);	\
+		(__reg & __mask) >> __shift;	\
+	})
+
 #endif
