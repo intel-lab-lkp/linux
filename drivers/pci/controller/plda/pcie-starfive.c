@@ -180,7 +180,7 @@ static int starfive_pcie_clk_rst_init(struct starfive_jh7110_pcie *pcie)
 	ret = reset_control_deassert(pcie->resets);
 	if (ret) {
 		clk_bulk_disable_unprepare(pcie->num_clks, pcie->clks);
-		dev_err_probe(dev, ret, "failed to deassert resets\n");
+		ret = dev_err_probe(dev, ret, "failed to deassert resets\n");
 	}
 
 	return ret;
@@ -241,13 +241,13 @@ static int starfive_pcie_enable_phy(struct device *dev,
 
 	ret = phy_set_mode(pcie->phy, PHY_MODE_PCIE);
 	if (ret) {
-		dev_err_probe(dev, ret, "failed to set pcie mode\n");
+		ret = dev_err_probe(dev, ret, "failed to set pcie mode\n");
 		goto err_phy_on;
 	}
 
 	ret = phy_power_on(pcie->phy);
 	if (ret) {
-		dev_err_probe(dev, ret, "failed to power on pcie phy\n");
+		ret = dev_err_probe(dev, ret, "failed to power on pcie phy\n");
 		goto err_phy_on;
 	}
 
