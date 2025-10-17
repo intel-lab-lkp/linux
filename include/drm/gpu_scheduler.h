@@ -429,16 +429,6 @@ struct drm_sched_backend_ops {
 	 *
 	 * @sched_job: the job to run
 	 *
-	 * The deprecated drm_sched_resubmit_jobs() (called by &struct
-	 * drm_sched_backend_ops.timedout_job) can invoke this again with the
-	 * same parameters. Using this is discouraged because it violates
-	 * dma_fence rules, notably dma_fence_init() has to be called on
-	 * already initialized fences for a second time. Moreover, this is
-	 * dangerous because attempts to allocate memory might deadlock with
-	 * memory management code waiting for the reset to complete.
-	 *
-	 * TODO: Document what drivers should do / use instead.
-	 *
 	 * This method is called in a workqueue context - either from the
 	 * submit_wq the driver passed through drm_sched_init(), or, if the
 	 * driver passed NULL, a separate, ordered workqueue the scheduler
