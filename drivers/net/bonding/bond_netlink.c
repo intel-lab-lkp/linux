@@ -29,6 +29,7 @@ static size_t bond_get_slave_size(const struct net_device *bond_dev,
 		nla_total_size(sizeof(u16)) +	/* IFLA_BOND_SLAVE_AD_PARTNER_OPER_PORT_STATE */
 		nla_total_size(sizeof(s32)) +	/* IFLA_BOND_SLAVE_PRIO */
 		nla_total_size(sizeof(u16)) +	/* IFLA_BOND_SLAVE_ACTOR_PORT_PRIO */
+		nla_total_size(sizeof(u32)) +	/* IFLA_BOND_SLAVE_MASTER */
 		0;
 }
 
@@ -37,6 +38,9 @@ static int bond_fill_slave_info(struct sk_buff *skb,
 				const struct net_device *slave_dev)
 {
 	struct slave *slave = bond_slave_get_rtnl(slave_dev);
+
+	if (nla_put_u32(skb, IFLA_BOND_SLAVE_MASTER, bond_dev->ifindex))
+		goto nla_put_failure;
 
 	if (nla_put_u8(skb, IFLA_BOND_SLAVE_STATE, bond_slave_state(slave)))
 		goto nla_put_failure;
