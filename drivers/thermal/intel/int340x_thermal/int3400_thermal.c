@@ -199,7 +199,7 @@ static ssize_t current_uuid_store(struct device *dev,
 
 	for (i = 0; i < INT3400_THERMAL_MAXIMUM_UUID; ++i) {
 		if (!strncmp(buf, int3400_thermal_uuids[i],
-			     sizeof(int3400_thermal_uuids[i]) - 1)) {
+			     strlen(int3400_thermal_uuids[i]))) {
 			/*
 			 * If we have a list of supported UUIDs, make sure
 			 * this one is supported.
