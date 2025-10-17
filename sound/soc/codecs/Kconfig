@@ -671,7 +671,7 @@ config SND_SOC_AW8738
 	  SND_SOC_SIMPLE_AMPLIFIER, but additionally allows setting the
 	  operation mode using the Awinic-specific one-wire pulse control.
 
-config SND_SOC_AW88395_LIB
+config SND_SOC_AWCOMMON_LIB
 	select CRC8
 	tristate
 
@@ -681,7 +681,7 @@ config SND_SOC_AW88395
 	select CRC32
 	select REGMAP_I2C
 	select GPIOLIB
-	select SND_SOC_AW88395_LIB
+	select SND_SOC_AWCOMMON_LIB
 	help
 	  this option enables support for aw88395 Smart PA.
 	  The Awinic AW88395 is an I2S/TDM input, high efficiency
@@ -693,7 +693,7 @@ config SND_SOC_AW88166
 	depends on I2C
 	select REGMAP_I2C
 	select GPIOLIB
-	select SND_SOC_AW88395_LIB
+	select SND_SOC_AWCOMMON_LIB
 	help
 	  This option enables support for aw88166 Smart PA.
 	  The awinic AW88166 is an I2S/TDM input, high efficiency
@@ -705,7 +705,7 @@ config SND_SOC_AW88261
 	depends on I2C
 	select REGMAP_I2C
 	select GPIOLIB
-	select SND_SOC_AW88395_LIB
+	select SND_SOC_AWCOMMON_LIB
 	help
 	  This option enables support for aw88261 Smart PA.
 	  The awinic AW88261 is an I2S/TDM input, high efficiency
@@ -717,7 +717,7 @@ config SND_SOC_AW88081
 	tristate "Soc Audio for awinic aw88081/aw88083"
 	depends on I2C
 	select REGMAP_I2C
-	select SND_SOC_AW88395_LIB
+	select SND_SOC_AWCOMMON_LIB
 	help
 	  This option enables support for aw88081 Smart PA.
 	  The awinic AW88081 is an I2S/TDM input, high efficiency
@@ -728,7 +728,7 @@ config SND_SOC_AW87390
 	tristate "Soc Audio for awinic aw87390"
 	depends on I2C
 	select REGMAP_I2C
-	select SND_SOC_AW88395_LIB
+	select SND_SOC_AWCOMMON_LIB
 	help
 	  The awinic aw87390 is specifically designed to improve
 	  the musical output dynamic range, enhance the overall
@@ -741,7 +741,7 @@ config SND_SOC_AW88399
 	select CRC8
 	select REGMAP_I2C
 	select GPIOLIB
-	select SND_SOC_AW88395_LIB
+	select SND_SOC_AWCOMMON_LIB
 	help
 	  This option enables support for aw88399 Smart PA.
 	  The awinic AW88399 is an I2S/TDM input, high efficiency

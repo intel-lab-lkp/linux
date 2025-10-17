@@ -1,14 +1,14 @@
 // SPDX-License-Identifier: GPL-2.0-only
 //
-// aw88395_reg.h --  AW88395 chip register file
+// aw88395.h --  ALSA SoC AW88395 codec support
 //
 // Copyright (c) 2022-2023 AWINIC Technology CO., LTD
 //
-// Author: Bruce zhao <zhaolei@awinic.com>
+// Author: Weidong Wang <wangweidong.a@awinic.com>
 //
 
-#ifndef __AW88395_REG_H__
-#define __AW88395_REG_H__
+#ifndef __AW88395_H__
+#define __AW88395_H__
 
 #define AW88395_ID_REG			(0x00)
 #define AW88395_SYSST_REG		(0x01)
@@ -94,13 +94,7 @@
 #define AW88395_EFRL_REG		(0x7B)
 #define AW88395_TM_REG			(0x7C)
 
-enum aw88395_id {
-	AW88395_CHIP_ID = 0x2049,
-};
-
 #define AW88395_REG_MAX		(0x7D)
-
-#define AW88395_VOLUME_STEP_DB		(6 * 8)
 
 #define AW88395_UVLS_START_BIT		(14)
 #define AW88395_UVLS_NORMAL		(0)
@@ -216,15 +210,6 @@ enum aw88395_id {
 #define AW88395_HMUTE_ENABLE_VALUE	\
 	(AW88395_HMUTE_ENABLE << AW88395_HMUTE_START_BIT)
 
-#define AW88395_RCV_MODE_START_BIT	(7)
-#define AW88395_RCV_MODE_BITS_LEN	(1)
-#define AW88395_RCV_MODE_MASK		\
-	(~(((1<<AW88395_RCV_MODE_BITS_LEN)-1) << AW88395_RCV_MODE_START_BIT))
-
-#define AW88395_RCV_MODE_RECEIVER	(1)
-#define AW88395_RCV_MODE_RECEIVER_VALUE	\
-	(AW88395_RCV_MODE_RECEIVER << AW88395_RCV_MODE_START_BIT)
-
 #define AW88395_DSPBY_START_BIT	(2)
 #define AW88395_DSPBY_BITS_LEN		(1)
 #define AW88395_DSPBY_MASK		\
@@ -265,15 +250,12 @@ enum aw88395_id {
 	(AW88395_PWDN_POWER_DOWN << AW88395_PWDN_START_BIT)
 
 #define AW88395_MUTE_VOL		(90 * 8)
-#define AW88395_VOLUME_STEP_DB		(6 * 8)
 
 #define AW88395_VOL_6DB_START		(6)
 #define AW88395_VOL_START_BIT		(6)
 #define AW88395_VOL_BITS_LEN		(10)
 #define AW88395_VOL_MASK		\
 	(~(((1<<AW88395_VOL_BITS_LEN)-1) << AW88395_VOL_START_BIT))
-
-#define AW88395_VOL_DEFAULT_VALUE	(0)
 
 #define AW88395_I2STXEN_START_BIT	(0)
 #define AW88395_I2STXEN_BITS_LEN	(1)
@@ -375,9 +357,39 @@ enum aw88395_id {
 #define AW88395_DSP_REG_CFG_ADPZ_RE	(0x9D00)
 #define AW88395_DSP_REG_VCALB		(0x9CF7)
 #define AW88395_DSP_RE_SHIFT		(12)
+#define AW88395_FIRMWARE_VERSION_ADDR	(0x8CD0)
 
 #define AW88395_DSP_REG_CFG_ADPZ_RA	(0x9D02)
 #define AW88395_DSP_REG_CRC_ADDR	(0x9F42)
-#define AW88395_DSP_CALI_F0_DELAY	(0x9CFD)
+
+#define AW88395_DSP_ROM_CHECK_ADDR	(0x12C8)
+#define AW88395_DSP_ROM_CHECK_DATA	(0xF7FE)
+
+#define AW88395_START_RETRIES			(5)
+#define AW88395_START_WORK_DELAY_MS		(0)
+
+#define AW88395_DEV_DSP_CHECK_MAX		(5)
+#define AW88395_DSP_ODD_NUM_BIT_TEST		(0x5555)
+#define AW88395_DSP_ST_CHECK_MAX		(2)
+#define AW88395_CALI_RE_MAX			(15000)
+#define AW88395_CALI_RE_MIN			(4000)
+#define AW88395_DSP_RE_TO_SHOW_RE(re, shift)	(((re) * (1000)) >> (shift))
+#define AW88395_SHOW_RE_TO_DSP_RE(re, shift)	(((re) << shift) / (1000))
+#define AW88395_DEV_SYSST_CHECK_MAX		(10)
+
+#define AW88395_FIRMWARE_VERSION		(0x0002)
+#define AW88395_I2C_NAME			"aw88395"
+#define AW88395_ACF_FILE			"aw88395_acf.bin"
+
+#define AW88395_RATES (SNDRV_PCM_RATE_8000_48000 | SNDRV_PCM_RATE_96000)
+
+#define AW88395_FORMATS (SNDRV_PCM_FMTBIT_S16_LE | \
+			SNDRV_PCM_FMTBIT_S24_LE | \
+			SNDRV_PCM_FMTBIT_S32_LE)
+
+enum {
+	AW88395_DEV_VDSEL_DAC = 0,
+	AW88395_DEV_VDSEL_VSENSE = 1,
+};
 
 #endif
