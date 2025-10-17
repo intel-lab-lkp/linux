@@ -65,3 +65,21 @@
         Set timerlat to run without workload, waiting for the user to dispatch a per-cpu
         task that waits for a new period on the tracing/osnoise/per_cpu/cpu$ID/timerlat_fd.
         See linux/tools/rtla/sample/timerlat_load.py for an example of user-load code.
+
+**--bpf-action** *bpf-program*
+
+        Loads a BPF program from an ELF file and executes it when a latency threshold is exceeded.
+
+        The BPF program must be a valid ELF file loadable with libbpf. The program must contain
+        a function named ``action_handler``, declared with ``SEC("tp/timerlat_action")`` for libbpf
+        to correctly detect the program type.
+
+        The program receives a ``struct trace_event_raw_timerlat_sample`` parameter
+        containing timerlat sample data.
+
+        A sample BPF action program is provided in ``tools/tracing/rtla/sample/timerlat_bpf_action.c``.
+        This example demonstrates how to create a BPF program that prints latency information when
+        thresholds are exceeded.
+
+        **Note**: BPF actions require BPF support to be available. If BPF is not available or disabled,
+        the tool will fall back to tracefs mode and BPF actions will not be supported.
