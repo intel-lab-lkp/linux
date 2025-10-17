@@ -1551,17 +1551,21 @@ static int cdclk_divider(int cdclk, int vco, u16 waveform)
 static int bxt_calc_cdclk(struct intel_display *display, int min_cdclk)
 {
 	const struct intel_cdclk_vals *table = display->cdclk.table;
-	int i;
+	int i, last_valid_cdclk = 0;
 
-	for (i = 0; table[i].refclk; i++)
+	for (i = 0; table[i].refclk; i++) {
 		if (table[i].refclk == display->cdclk.hw.ref &&
 		    table[i].cdclk >= min_cdclk)
 			return table[i].cdclk;
 
+		if (table[i].refclk == display->cdclk.hw.ref)
+			last_valid_cdclk = table[i].cdclk;
+	}
+
 	drm_WARN(display->drm, 1,
-		 "Cannot satisfy minimum cdclk %d with refclk %u\n",
-		 min_cdclk, display->cdclk.hw.ref);
-	return 0;
+		 "Cannot satisfy minimum cdclk %d with refclk %u, falling back to %d\n",
+		 min_cdclk, display->cdclk.hw.ref, last_valid_cdclk);
+	return last_valid_cdclk;
 }
 
 static int bxt_calc_cdclk_pll_vco(struct intel_display *display, int cdclk)
