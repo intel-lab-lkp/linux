@@ -443,18 +443,6 @@ i2c_dw_xfer_msg(struct dw_i2c_dev *dev)
 	for (; dev->msg_write_idx < dev->msgs_num; dev->msg_write_idx++) {
 		u32 flags = msgs[dev->msg_write_idx].flags;
 
-		/*
-		 * If target address has changed, we need to
-		 * reprogram the target address in the I2C
-		 * adapter when we are done with this transfer.
-		 * This can be done after STOP_DET IRQ flag is raised.
-		 * So, disable "TX FIFO empty" interrupt.
-		 */
-		if (msgs[dev->msg_write_idx].addr != addr) {
-			intr_mask &= ~DW_IC_INTR_TX_EMPTY;
-			break;
-		}
-
 		if (!(dev->status & STATUS_WRITE_IN_PROGRESS)) {
 			/* new i2c_msg */
 			buf = msgs[dev->msg_write_idx].buf;
@@ -468,6 +456,25 @@ i2c_dw_xfer_msg(struct dw_i2c_dev *dev)
 			if ((dev->master_cfg & DW_IC_CON_RESTART_EN) &&
 					(dev->msg_write_idx > first_idx))
 				need_restart = true;
+		}
+
+		/*
+		 * If target address has changed, we need to
+		 * reprogram the target address in the I2C
+		 * adapter when we are done with this transfer.
+		 * This can be done after STOP_DET IRQ flag is raised.
+		 * So, disable "TX FIFO empty" interrupt.
+		 * Also force a stop-then-start between two messages
+		 * in the same direction if we need to restart on a
+		 * adapter that does not handle restart.
+		 */
+		if (msgs[dev->msg_write_idx].addr != addr ||
+		    ((need_restart &&
+		     dev->flags & NO_EMPTYFIFO_HOLD_MASTER &&
+		     ((msgs[dev->msg_write_idx].flags & I2C_M_RD) ==
+		      (msgs[dev->msg_write_idx - 1].flags & I2C_M_RD))))) {
+			intr_mask &= ~DW_IC_INTR_TX_EMPTY;
+			break;
 		}
 
 		regmap_read(dev->map, DW_IC_TXFLR, &flr);
@@ -1061,6 +1068,20 @@ int i2c_dw_probe_master(struct dw_i2c_dev *dev)
 	} else {
 		irq_flags = IRQF_SHARED | IRQF_COND_SUSPEND;
 	}
+
+	/*
+	 * The first writing to TX FIFO buffer causes transmission start. If
+	 * IC_EMPTYFIFO_HOLD_MASTER_EN is not set, when TX FIFO gets empty, I2C
+	 * controller finishes the transaction. If writing to FIFO is
+	 * interrupted, FIFO can get empty and the transaction will be finished
+	 * prematurely. FIFO buffer is filled in IRQ handler, but in PREEMPT_RT
+	 * kernel IRQ handler by default is executed in thread that can be
+	 * preempted with another higher priority thread or an interrupt. So,
+	 * IRQF_NO_THREAD flag is required in order to prevent any preemption
+	 * during filling the FIFO buffer and possible data lost.
+	 */
+	if (dev->flags & NO_EMPTYFIFO_HOLD_MASTER)
+		irq_flags |= IRQF_NO_THREAD;
 
 	ret = i2c_dw_acquire_lock(dev);
 	if (ret)
