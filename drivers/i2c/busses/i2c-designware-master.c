@@ -436,6 +436,7 @@ i2c_dw_xfer_msg(struct dw_i2c_dev *dev)
 	u8 *buf = dev->tx_buf;
 	bool need_restart = false;
 	unsigned int flr;
+	int first_idx = dev->msg_write_idx;
 
 	intr_mask = DW_IC_INTR_MASTER_MASK;
 
@@ -446,11 +447,11 @@ i2c_dw_xfer_msg(struct dw_i2c_dev *dev)
 		 * If target address has changed, we need to
 		 * reprogram the target address in the I2C
 		 * adapter when we are done with this transfer.
+		 * This can be done after STOP_DET IRQ flag is raised.
+		 * So, disable "TX FIFO empty" interrupt.
 		 */
 		if (msgs[dev->msg_write_idx].addr != addr) {
-			dev_err(dev->dev,
-				"%s: invalid target address\n", __func__);
-			dev->msg_err = -EINVAL;
+			intr_mask &= ~DW_IC_INTR_TX_EMPTY;
 			break;
 		}
 
@@ -465,7 +466,7 @@ i2c_dw_xfer_msg(struct dw_i2c_dev *dev)
 			 * set restart bit between messages.
 			 */
 			if ((dev->master_cfg & DW_IC_CON_RESTART_EN) &&
-					(dev->msg_write_idx > 0))
+					(dev->msg_write_idx > first_idx))
 				need_restart = true;
 		}
 
@@ -822,7 +823,6 @@ i2c_dw_xfer(struct i2c_adapter *adap, struct i2c_msg msgs[], int num)
 		break;
 	}
 
-	reinit_completion(&dev->cmd_complete);
 	dev->msgs = msgs;
 	dev->msgs_num = num;
 	dev->cmd_err = 0;
@@ -841,18 +841,33 @@ i2c_dw_xfer(struct i2c_adapter *adap, struct i2c_msg msgs[], int num)
 	if (ret < 0)
 		goto done;
 
-	/* Start the transfers */
-	i2c_dw_xfer_init(dev);
+	do {
+		reinit_completion(&dev->cmd_complete);
 
-	/* Wait for tx to complete */
-	ret = i2c_dw_wait_transfer(dev);
-	if (ret) {
-		dev_err(dev->dev, "controller timed out\n");
-		/* i2c_dw_init_master() implicitly disables the adapter */
-		i2c_recover_bus(&dev->adapter);
-		i2c_dw_init_master(dev);
-		goto done;
-	}
+		/* Start the transfers */
+		i2c_dw_xfer_init(dev);
+
+		/* Wait for tx to complete */
+		ret = i2c_dw_wait_transfer(dev);
+		if (ret) {
+			dev_err(dev->dev, "controller timed out\n");
+			/* i2c_dw_init_master() implicitly disables the adapter */
+			i2c_recover_bus(&dev->adapter);
+			i2c_dw_init_master(dev);
+			goto done;
+		}
+
+		if (dev->msg_err) {
+			ret = dev->msg_err;
+			goto done;
+		}
+
+		/* We have an error */
+		if (dev->cmd_err == DW_IC_ERR_TX_ABRT) {
+			ret = i2c_dw_handle_tx_abort(dev);
+			goto done;
+		}
+	} while (dev->msg_write_idx < num);
 
 	/*
 	 * This happens rarely (~1:500) and is hard to reproduce. Debug trace
@@ -874,20 +889,9 @@ i2c_dw_xfer(struct i2c_adapter *adap, struct i2c_msg msgs[], int num)
 	 */
 	__i2c_dw_disable_nowait(dev);
 
-	if (dev->msg_err) {
-		ret = dev->msg_err;
-		goto done;
-	}
-
 	/* No error */
 	if (likely(!dev->cmd_err && !dev->status)) {
 		ret = num;
-		goto done;
-	}
-
-	/* We have an error */
-	if (dev->cmd_err == DW_IC_ERR_TX_ABRT) {
-		ret = i2c_dw_handle_tx_abort(dev);
 		goto done;
 	}
 
