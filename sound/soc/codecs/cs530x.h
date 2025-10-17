@@ -52,10 +52,6 @@
 
 /* Register Fields */
 
-/* REVID */
-#define CS530X_MTLREVID			GENMASK(3, 0)
-#define CS530X_AREVID			GENMASK(7, 4)
-
 /* SW_RESET */
 #define CS530X_SW_RST_SHIFT		8
 #define CS530X_SW_RST_VAL		(0x5A << CS530X_SW_RST_SHIFT)
@@ -79,9 +75,6 @@
 #define CS530X_FS_384K_356P8K		4
 #define CS530X_FS_768K_705P6K		5
 
-/* CHIP_ENABLE */
-#define CS530X_GLOBAL_EN		BIT(0)
-
 /* ASP_CFG */
 #define CS530X_ASP_BCLK_FREQ_MASK	GENMASK(1, 0)
 #define CS530X_ASP_PRIMARY		BIT(5)
@@ -95,11 +88,10 @@
 #define CS530X_ASP_FMT_MASK		GENMASK(2, 0)
 #define CS530X_ASP_TDM_SLOT_MASK	GENMASK(5, 3)
 #define CS530X_ASP_TDM_SLOT_SHIFT	3
-#define CS530X_ASP_CH_REVERSE		BIT(9)
 #define CS530X_TDM_EN_MASK		BIT(2)
 #define CS530X_ASP_FMT_I2S		0
 #define CS530X_ASP_FMT_LJ		1
-#define CS530X_ASP_FMT_DSP_A		0x6
+#define CS530X_ASP_FMT_DSP_A		6
 
 /* TDM Slots */
 #define CS530X_0_1_TDM_SLOT_MASK	GENMASK(1, 0)
@@ -163,22 +155,6 @@
 /* IN_VOL_CTL5 */
 #define CS530X_IN_VU			BIT(0)
 
-/* PAD_FN */
-#define CS530X_DOUT2_FN			BIT(0)
-#define CS530X_DOUT3_FN			BIT(1)
-#define CS530X_DOUT4_FN			BIT(2)
-#define CS530X_SPI_CS_FN		BIT(3)
-#define CS530X_CONFIG2_FN		BIT(6)
-#define CS530X_CONFIG3_FN		BIT(7)
-#define CS530X_CONFIG4_FN		BIT(8)
-#define CS530X_CONFIG5_FN		BIT(9)
-
-/* PAD_LVL */
-#define CS530X_CONFIG2_LVL		BIT(6)
-#define CS530X_CONFIG3_LVL		BIT(7)
-#define CS530X_CONFIG4_LVL		BIT(8)
-#define CS530X_CONFIG5_LVL		BIT(9)
-
 /* System Clock Source */
 #define CS530X_SYSCLK_SRC_MCLK		0
 #define CS530X_SYSCLK_SRC_PLL		1
@@ -207,11 +183,8 @@ struct cs530x_priv {
 
 	struct regulator_bulk_data supplies[CS530X_NUM_SUPPLIES];
 
-	unsigned int mclk_rate;
-
 	int tdm_width;
 	int tdm_slots;
-	int fs;
 	int adc_pairs_count;
 
 	struct gpio_desc *reset_gpio;
