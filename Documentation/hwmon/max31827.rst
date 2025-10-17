@@ -13,6 +13,8 @@ Supported chips:
 
     Datasheet: Publicly available at the Analog Devices website
 
+	    https://www.analog.com/media/en/technical-documentation/data-sheets/MAX31827-MAX31829.pdf
+
   * Maxim MAX31828
 
     Prefix: 'max31828'
@@ -20,6 +22,8 @@ Supported chips:
     Addresses scanned: I2C 0x40 - 0x5f
 
     Datasheet: Publicly available at the Analog Devices website
+
+	    https://www.analog.com/media/en/technical-documentation/data-sheets/MAX31827-MAX31829.pdf
 
   * Maxim MAX31829
 
@@ -29,6 +33,7 @@ Supported chips:
 
     Datasheet: Publicly available at the Analog Devices website
 
+	    https://www.analog.com/media/en/technical-documentation/data-sheets/MAX31827-MAX31829.pdf
 
 Authors:
 	- Daniel Matyas <daniel.matyas@analog.com>
