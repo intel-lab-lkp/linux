@@ -378,8 +378,6 @@
 			SNDRV_PCM_FMTBIT_S24_LE | \
 			SNDRV_PCM_FMTBIT_S32_LE)
 
-#define FADE_TIME_MAX			100000
-#define FADE_TIME_MIN			0
 
 #define AW88261_DEV_DEFAULT_CH		(0)
 #define AW88261_ACF_FILE		"aw88261_acf.bin"
@@ -396,40 +394,6 @@
 					AW88261_VOL_6DB_START) + \
 					((value) % AW88261_VOLUME_STEP_DB))
 
-#define AW88261_PROFILE_EXT(xname, profile_info, profile_get, profile_set) \
-{ \
-	.iface = SNDRV_CTL_ELEM_IFACE_MIXER, \
-	.name = xname, \
-	.info = profile_info, \
-	.get = profile_get, \
-	.put = profile_set, \
-}
-
-enum {
-	AW88261_SYNC_START = 0,
-	AW88261_ASYNC_START,
-};
-
-enum aw88261_id {
-	AW88261_CHIP_ID = 0x2113,
-};
-
-enum {
-	AW88261_500_US = 500,
-	AW88261_1000_US = 1000,
-	AW88261_2000_US = 2000,
-};
-
-enum {
-	AW88261_DEV_PW_OFF = 0,
-	AW88261_DEV_PW_ON,
-};
-
-enum {
-	AW88261_DEV_FW_FAILED = 0,
-	AW88261_DEV_FW_OK,
-};
-
 enum {
 	AW88261_EF_AND_CHECK = 0,
 	AW88261_EF_OR_CHECK,
@@ -438,22 +402,6 @@ enum {
 enum {
 	AW88261_FRCSET_DISABLE = 0,
 	AW88261_FRCSET_ENABLE,
-};
-
-struct aw88261 {
-	struct aw_device *aw_pa;
-	struct mutex lock;
-	struct gpio_desc *reset_gpio;
-	struct delayed_work start_work;
-	struct regmap *regmap;
-	struct aw_container *aw_cfg;
-
-	int efuse_check;
-	int frcset_en;
-	unsigned int mute_st;
-	unsigned int amppd_st;
-
-	bool phase_sync;
 };
 
 #endif
