@@ -2909,6 +2909,8 @@ void dl_add_task_root_domain(struct task_struct *p)
 	struct rq_flags rf;
 	struct rq *rq;
 	struct dl_bw *dl_b;
+	unsigned int cpu;
+	struct cpumask msk;
 
 	raw_spin_lock_irqsave(&p->pi_lock, rf.flags);
 	if (!dl_task(p) || dl_entity_is_special(&p->dl)) {
@@ -2916,16 +2918,32 @@ void dl_add_task_root_domain(struct task_struct *p)
 		return;
 	}
 
-	rq = __task_rq_lock(p, &rf);
-
+	/* prevent race among cpu hotplug, changing of partition_root_state */
+	lockdep_assert_cpus_held();
+	/*
+	 * If @p is in blocked state, task_cpu() may be not active. In that
+	 * case, rq->rd does not trace a correct root_domain. On the other hand,
+	 * @p must belong to an root_domain at any given time, which must have
+	 * active rq, whose rq->rd traces the valid root domain.
+	 */
+	task_get_rd_effective_cpus(p, &msk);
+	cpu = cpumask_first_and(cpu_active_mask, &msk);
+	/*
+	 * If a root domain reserves bandwidth for a DL task, the DL bandwidth
+	 * check prevents CPU hot removal from deactivating all CPUs in that
+	 * domain.
+	 */
+	BUG_ON(cpu >= nr_cpu_ids);
+	rq = cpu_rq(cpu);
+	/*
+	 * This point is under the protection of cpu_hotplug_lock. Hence
+	 * rq->rd is stable.
+	 */
 	dl_b = &rq->rd->dl_bw;
 	raw_spin_lock(&dl_b->lock);
-
 	__dl_add(dl_b, p->dl.dl_bw, cpumask_weight(rq->rd->span));
-
 	raw_spin_unlock(&dl_b->lock);
-
-	task_rq_unlock(rq, p, &rf);
+	raw_spin_unlock_irqrestore(&p->pi_lock, rf.flags);
 }
 
 void dl_clear_root_domain(struct root_domain *rd)

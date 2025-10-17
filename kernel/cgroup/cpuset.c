@@ -1154,6 +1154,33 @@ void cpuset_reset_sched_domains(void)
 	mutex_unlock(&cpuset_mutex);
 }
 
+/* caller hold RCU read lock */
+void task_get_rd_effective_cpus(struct task_struct *p, struct cpumask *cpus)
+{
+	const struct cpumask *hk_msk;
+	struct cpumask msk;
+	struct cpuset *cs;
+
+	hk_msk = housekeeping_cpumask(HK_TYPE_DOMAIN);
+	if (housekeeping_enabled(HK_TYPE_DOMAIN)) {
+		if (!cpumask_and(&msk, p->cpus_ptr, hk_msk)) {
+			/* isolated cpus belong to a root domain */
+			cpumask_andnot(cpus, cpu_active_mask, hk_msk);
+			return;
+		}
+	}
+	/* In HK_TYPE_DOMAIN, cpuset can be applied */
+	cs = task_cs(p);
+	while (cs != &top_cpuset) {
+		if (is_sched_load_balance(cs))
+			break;
+		cs = parent_cs(cs);
+	}
+
+	/* For top_cpuset, its effective_cpus does not exclude isolated cpu */
+	cpumask_and(cpus, cs->effective_cpus, hk_msk);
+}
+
 /**
  * cpuset_update_tasks_cpumask - Update the cpumasks of tasks in the cpuset.
  * @cs: the cpuset in which each task's cpus_allowed mask needs to be changed

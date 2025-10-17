@@ -130,6 +130,7 @@ extern void rebuild_sched_domains(void);
 
 extern void cpuset_print_current_mems_allowed(void);
 extern void cpuset_reset_sched_domains(void);
+extern void task_get_rd_effective_cpus(struct task_struct *p, struct cpumask *cpus);
 
 /*
  * read_mems_allowed_begin is required when making decisions involving
@@ -274,6 +275,23 @@ static inline void rebuild_sched_domains(void)
 static inline void cpuset_reset_sched_domains(void)
 {
 	partition_sched_domains(1, NULL, NULL);
+}
+
+static inline void task_get_rd_effective_cpus(struct task_struct *p,
+		struct cpumask *cpus)
+{
+	const struct cpumask *hk_msk;
+	struct cpumask msk;
+
+	hk_msk = housekeeping_cpumask(HK_TYPE_DOMAIN);
+	if (housekeeping_enabled(HK_TYPE_DOMAIN)) {
+		if (!cpumask_and(&msk, p->cpus_ptr, hk_msk)) {
+			/* isolated cpus belong to a root domain */
+			cpumask_andnot(cpus, cpu_active_mask, hk_msk);
+			return;
+		}
+	}
+	cpumask_and(cpus, cpu_active_mask, hk_msk);
 }
 
 static inline void cpuset_print_current_mems_allowed(void)
