@@ -475,8 +475,6 @@ static int ntfs_truncate(struct inode *inode, loff_t new_size)
 	if (dirty)
 		mark_inode_dirty(inode);
 
-	/*ntfs_flush_inodes(inode->i_sb, inode, NULL);*/
-
 	return 0;
 }
 
@@ -1086,8 +1084,8 @@ static ssize_t ntfs_compress_write(struct kiocb *iocb, struct iov_iter *from)
 			size_t cp, tail = PAGE_SIZE - off;
 
 			folio = page_folio(pages[ip]);
-			cp = copy_folio_from_iter_atomic(folio, off,
-							min(tail, bytes), from);
+			cp = copy_folio_from_iter_atomic(
+				folio, off, min(tail, bytes), from);
 			flush_dcache_folio(folio);
 
 			copied += cp;
@@ -1284,7 +1282,7 @@ static int ntfs_file_release(struct inode *inode, struct file *file)
 	if (sbi->options->prealloc &&
 	    ((file->f_mode & FMODE_WRITE) &&
 	     atomic_read(&inode->i_writecount) == 1)
-	   /*
+	    /*
 	    * The only file when inode->i_fop = &ntfs_file_operations and
 	    * init_rwsem(&ni->file.run_lock) is not called explicitly is MFT.
 	    *
