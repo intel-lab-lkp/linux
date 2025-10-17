@@ -755,7 +755,7 @@ int chown_common(const struct path *path, uid_t user, gid_t group)
 {
 	struct mnt_idmap *idmap;
 	struct user_namespace *fs_userns;
-	struct inode *inode = path->dentry->d_inode;
+	struct inode *inode;
 	struct inode *delegated_inode = NULL;
 	int error;
 	struct iattr newattrs;
@@ -766,9 +766,10 @@ int chown_common(const struct path *path, uid_t user, gid_t group)
 	gid = make_kgid(current_user_ns(), group);
 
 	idmap = mnt_idmap(path->mnt);
-	fs_userns = i_user_ns(inode);
 
 retry_deleg:
+	inode = path->dentry->d_inode;
+	fs_userns = i_user_ns(inode);
 	newattrs.ia_vfsuid = INVALID_VFSUID;
 	newattrs.ia_vfsgid = INVALID_VFSGID;
 	newattrs.ia_valid =  ATTR_CTIME;
