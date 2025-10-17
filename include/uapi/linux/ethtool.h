@@ -683,6 +683,7 @@ enum ethtool_link_ext_substate_module {
  * @ETH_SS_STATS_RMON: names of RMON statistics
  * @ETH_SS_STATS_PHY: names of PHY(dev) statistics
  * @ETH_SS_TS_FLAGS: hardware timestamping flags
+ * @ETH_SS_MSE_CAPS: Mean Square Error (MSE) capability bit names
  *
  * @ETH_SS_COUNT: number of defined string sets
  */
@@ -710,6 +711,7 @@ enum ethtool_stringset {
 	ETH_SS_STATS_RMON,
 	ETH_SS_STATS_PHY,
 	ETH_SS_TS_FLAGS,
+	ETH_SS_MSE_CAPS,
 
 	/* add new constants above here */
 	ETH_SS_COUNT

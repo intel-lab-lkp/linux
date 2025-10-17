@@ -115,6 +115,11 @@ static const struct strset_info info_template[] = {
 		.count		= __ETHTOOL_A_STATS_PHY_CNT,
 		.strings	= stats_phy_names,
 	},
+	[ETH_SS_MSE_CAPS] = {
+		.per_dev	= false,
+		.count		= __MSE_CAP_CNT,
+		.strings	= mse_cap_names,
+	},
 };
 
 struct strset_req_info {
