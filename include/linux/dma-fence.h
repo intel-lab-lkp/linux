@@ -98,7 +98,6 @@ struct dma_fence {
 };
 
 enum dma_fence_flag_bits {
-	DMA_FENCE_FLAG_SEQNO64_BIT,
 	DMA_FENCE_FLAG_SIGNALED_BIT,
 	DMA_FENCE_FLAG_TIMESTAMP_BIT,
 	DMA_FENCE_FLAG_ENABLE_SIGNAL_BIT,
@@ -470,14 +469,7 @@ dma_fence_is_signaled(struct dma_fence *fence)
  */
 static inline bool __dma_fence_is_later(struct dma_fence *fence, u64 f1, u64 f2)
 {
-	/* This is for backward compatibility with drivers which can only handle
-	 * 32bit sequence numbers. Use a 64bit compare when the driver says to
-	 * do so.
-	 */
-	if (test_bit(DMA_FENCE_FLAG_SEQNO64_BIT, &fence->flags))
-		return f1 > f2;
-
-	return (int)(lower_32_bits(f1) - lower_32_bits(f2)) > 0;
+	return f1 > f2;
 }
 
 /**

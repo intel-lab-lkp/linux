@@ -1078,8 +1078,7 @@ void
 dma_fence_init64(struct dma_fence *fence, const struct dma_fence_ops *ops,
 		 spinlock_t *lock, u64 context, u64 seqno)
 {
-	__dma_fence_init(fence, ops, lock, context, seqno,
-			 BIT(DMA_FENCE_FLAG_SEQNO64_BIT));
+	__dma_fence_init(fence, ops, lock, context, seqno, 0);
 }
 EXPORT_SYMBOL(dma_fence_init64);
 
