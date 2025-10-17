@@ -216,7 +216,7 @@ static void rtw89_usb_write_port_complete(struct urb *urb)
 		skb_pull(skb, txdesc_size);
 
 		info = IEEE80211_SKB_CB(skb);
-		if (rtw89_is_tx_rpt_skb(skb)) {
+		if (rtw89_is_tx_rpt_skb(rtwdev, skb)) {
 			/* sequence number is passed to rtw89_mac_c2h_tx_rpt() via
 			 * driver data
 			 */
