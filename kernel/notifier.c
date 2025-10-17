@@ -376,9 +376,18 @@ int blocking_notifier_call_chain(struct blocking_notifier_head *nh,
 	 * is, we re-check the list after having taken the lock anyway:
 	 */
 	if (rcu_access_pointer(nh->head)) {
-		down_read(&nh->rwsem);
-		ret = notifier_call_chain(&nh->head, val, v, -1, NULL);
-		up_read(&nh->rwsem);
+		if (!oops_in_progress) {
+			down_read(&nh->rwsem);
+			ret = notifier_call_chain(&nh->head, val, v, -1, NULL);
+			up_read(&nh->rwsem);
+		} else {
+			if (down_read_trylock(&nh->rwsem)) {
+				ret = notifier_call_chain(&nh->head, val, v, -1, NULL);
+				up_read(&nh->rwsem);
+			} else {
+				ret = NOTIFY_BAD;
+			}
+		}
 	}
 	return ret;
 }
