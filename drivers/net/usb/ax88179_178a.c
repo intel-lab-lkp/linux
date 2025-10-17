@@ -1941,7 +1941,7 @@ static const struct usb_device_id products[] = {
 MODULE_DEVICE_TABLE(usb, products);
 
 static struct usb_driver ax88179_178a_driver = {
-	.name =		"ax88179_178a",
+	.name =		KBUILD_MODNAME,
 	.id_table =	products,
 	.probe =	usbnet_probe,
 	.suspend =	ax88179_suspend,
@@ -1952,7 +1952,61 @@ static struct usb_driver ax88179_178a_driver = {
 	.disable_hub_initiated_lpm = 1,
 };
 
-module_usb_driver(ax88179_178a_driver);
+static int ax88179_cfgselector_choose_configuration(struct usb_device *udev)
+{
+	struct usb_host_config *c;
+	int i, num_configs;
+
+	/* The vendor mode is not always config #1, so to find it out. */
+	c = udev->config;
+	num_configs = udev->descriptor.bNumConfigurations;
+	for (i = 0; i < num_configs; (i++, c++)) {
+		struct usb_interface_descriptor	*desc = NULL;
+
+		if (!c->desc.bNumInterfaces)
+			continue;
+		desc = &c->intf_cache[0]->altsetting->desc;
+		if (desc->bInterfaceClass == USB_CLASS_VENDOR_SPEC)
+			break;
+	}
+
+	if (i == num_configs)
+		return -ENODEV;
+
+	return c->desc.bConfigurationValue;
+}
+
+static struct usb_device_driver ax88179_cfgselector_driver = {
+	.name =	KBUILD_MODNAME "-cfgselector",
+	.choose_configuration =	ax88179_cfgselector_choose_configuration,
+	.id_table = products,
+	.generic_subclass = 1,
+	.supports_autosuspend = 1,
+};
+
+static int __init ax88179_driver_init(void)
+{
+	int ret;
+
+	ret = usb_register(&ax88179_178a_driver);
+	if (ret)
+		return ret;
+
+	ret = usb_register_device_driver(&ax88179_cfgselector_driver, THIS_MODULE);
+	if (ret)
+		usb_deregister(&ax88179_178a_driver);
+
+	return ret;
+}
+
+static void __exit ax88179_driver_exit(void)
+{
+	usb_deregister_device_driver(&ax88179_cfgselector_driver);
+	usb_deregister(&ax88179_178a_driver);
+}
+
+module_init(ax88179_driver_init);
+module_exit(ax88179_driver_exit);
 
 MODULE_DESCRIPTION("ASIX AX88179/178A based USB 3.0/2.0 Gigabit Ethernet Devices");
 MODULE_LICENSE("GPL");
