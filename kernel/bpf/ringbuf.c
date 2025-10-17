@@ -216,6 +216,12 @@ static struct bpf_map *ringbuf_map_alloc(union bpf_attr *attr)
 
 static void bpf_ringbuf_free(struct bpf_ringbuf *rb)
 {
+	/* Ensure all pending IRQ work completes before freeing.
+	 * In PREEMPT_RT, IRQ work runs in thread context and can
+	 * race with ring buffer destruction.
+	 */
+	irq_work_sync(&rb->work);
+
 	/* copy pages pointer and nr_pages to local variable, as we are going
 	 * to unmap rb itself with vunmap() below
 	 */
