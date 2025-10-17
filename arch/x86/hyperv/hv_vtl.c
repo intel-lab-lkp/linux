@@ -54,6 +54,22 @@ static void  __noreturn hv_vtl_restart(char __maybe_unused *cmd)
 	hv_vtl_emergency_restart();
 }
 
+static inline bool within_page(u64 addr, u64 start)
+{
+	return addr >= start && addr < (start + PAGE_SIZE);
+}
+
+static bool hv_vtl_is_private_mmio_tdx(u64 addr)
+{
+	if (IS_ENABLED(CONFIG_X86_MAILBOX_WAKEUP)) {
+		u64 mb_addr = acpi_get_mp_wakeup_mailbox_paddr();
+
+		return mb_addr && within_page(addr, mb_addr);
+	}
+
+	return false;
+}
+
 void __init hv_vtl_init_platform(void)
 {
 	/*
@@ -66,6 +82,8 @@ void __init hv_vtl_init_platform(void)
 	/* There is no paravisor present if we are here. */
 	if (hv_isolation_type_tdx()) {
 		x86_init.resources.realmode_limit = SZ_4G;
+		x86_platform.hyper.is_private_mmio = hv_vtl_is_private_mmio_tdx;
+
 	} else {
 		x86_platform.realmode_reserve = x86_init_noop;
 		x86_platform.realmode_init = x86_init_noop;
