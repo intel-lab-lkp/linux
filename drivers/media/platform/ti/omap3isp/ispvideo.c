@@ -653,6 +653,38 @@ isp_video_querycap(struct file *file, void *fh, struct v4l2_capability *cap)
 }
 
 static int
+isp_video_enum_format(struct file *file, void *fh, struct v4l2_fmtdesc *f)
+{
+	struct isp_video *video = video_drvdata(file);
+	unsigned int i, j;
+	unsigned int skip_last_fmts = 1;
+
+	if (f->type != video->type)
+		return -EINVAL;
+
+	/*
+	 * The last two formats have the same pixelformat as the two
+	 * formats before them, but they do have different mediabus
+	 * codes. So to avoid reporting duplicate pixelformats we skip
+	 * those two, provided f->mbus_code is 0.
+	 */
+	if (!f->mbus_code)
+		skip_last_fmts += 2;
+	for (i = 0, j = 0; i < ARRAY_SIZE(formats) - skip_last_fmts; i++) {
+		if (f->mbus_code && formats[i].code != f->mbus_code)
+			continue;
+
+		if (j == f->index) {
+			f->pixelformat = formats[i].pixelformat;
+			return 0;
+		}
+		j++;
+	}
+
+	return -EINVAL;
+}
+
+static int
 isp_video_get_format(struct file *file, void *fh, struct v4l2_format *format)
 {
 	struct isp_video_fh *vfh = file_to_isp_video_fh(file);
@@ -1258,9 +1290,11 @@ isp_video_s_input(struct file *file, void *fh, unsigned int input)
 
 static const struct v4l2_ioctl_ops isp_video_ioctl_ops = {
 	.vidioc_querycap		= isp_video_querycap,
+	.vidioc_enum_fmt_vid_cap	= isp_video_enum_format,
 	.vidioc_g_fmt_vid_cap		= isp_video_get_format,
 	.vidioc_s_fmt_vid_cap		= isp_video_set_format,
 	.vidioc_try_fmt_vid_cap		= isp_video_try_format,
+	.vidioc_enum_fmt_vid_out	= isp_video_enum_format,
 	.vidioc_g_fmt_vid_out		= isp_video_get_format,
 	.vidioc_s_fmt_vid_out		= isp_video_set_format,
 	.vidioc_try_fmt_vid_out		= isp_video_try_format,
