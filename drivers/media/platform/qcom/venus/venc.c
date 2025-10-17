@@ -1664,6 +1664,5 @@ static struct platform_driver qcom_venus_enc_driver = {
 };
 module_platform_driver(qcom_venus_enc_driver);
 
-MODULE_ALIAS("platform:qcom-venus-encoder");
 MODULE_DESCRIPTION("Qualcomm Venus video encoder driver");
 MODULE_LICENSE("GPL v2");
