@@ -18,7 +18,7 @@ config SPACEMIT_K1_EMAC
 	depends on ARCH_SPACEMIT || COMPILE_TEST
 	depends on MFD_SYSCON
 	depends on OF
-	default m if ARCH_SPACEMIT
+	default y if ARCH_SPACEMIT
 	select PHYLIB
 	help
 	  This driver supports the Ethernet MAC in the SpacemiT K1 SoC.
