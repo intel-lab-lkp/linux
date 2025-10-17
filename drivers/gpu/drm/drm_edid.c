@@ -6588,6 +6588,21 @@ static void drm_parse_vesa_specific_block(struct drm_connector *connector,
 			    connector->base.id, connector->name,
 			    info->mso_stream_count, info->mso_pixel_overlap);
 	}
+
+	if (block->num_bytes < 7) {
+		/* DSC bpp is optional */
+		return;
+	}
+
+	info->dp_dsc_bpp_x16 = FIELD_GET(DISPLAYID_VESA_DSC_BPP_INT, vesa->dsc_bpp_int) << 4 |
+			       FIELD_GET(DISPLAYID_VESA_DSC_BPP_FRACT, vesa->dsc_bpp_fract);
+
+	if (info->dp_dsc_bpp_x16 > 0) {
+		drm_dbg_kms(connector->dev,
+			    "[CONNECTOR:%d:%s] DSC bits per pixel x16 %u\n",
+			    connector->base.id, connector->name,
+			    info->dp_dsc_bpp_x16);
+	}
 }
 
 static void drm_update_vesa_specific_block(struct drm_connector *connector,
@@ -6636,6 +6651,7 @@ static void drm_reset_display_info(struct drm_connector *connector)
 	info->mso_stream_count = 0;
 	info->mso_pixel_overlap = 0;
 	info->max_dsc_bpp = 0;
+	info->dp_dsc_bpp_x16 = 0;
 
 	kfree(info->vics);
 	info->vics = NULL;
