@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: GPL-2.0-or-later
+// SPDX-License-Identifier: GPL-2.0-or-later OR BSD-3-Clause
 /* Simplified ASN.1 notation parser
  *
  * Copyright (C) 2012 Red Hat, Inc. All Rights Reserved.

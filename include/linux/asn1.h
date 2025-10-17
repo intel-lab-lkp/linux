@@ -1,4 +1,4 @@
-/* SPDX-License-Identifier: GPL-2.0-or-later */
+/* SPDX-License-Identifier: GPL-2.0-or-later OR BSD-3-Clause */
 /* ASN.1 BER/DER/CER encoding definitions
  *
  * Copyright (C) 2012 Red Hat, Inc. All Rights Reserved.
