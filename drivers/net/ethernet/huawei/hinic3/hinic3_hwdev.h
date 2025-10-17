@@ -39,24 +39,25 @@ struct hinic3_pcidev {
 };
 
 struct hinic3_hwdev {
-	struct hinic3_pcidev        *adapter;
-	struct pci_dev              *pdev;
-	struct device               *dev;
-	int                         dev_id;
-	struct hinic3_hwif          *hwif;
-	struct hinic3_cfg_mgmt_info *cfg_mgmt;
-	struct hinic3_aeqs          *aeqs;
-	struct hinic3_ceqs          *ceqs;
-	struct hinic3_mbox          *mbox;
-	struct hinic3_cmdqs         *cmdqs;
-	struct delayed_work         sync_time_task;
-	struct workqueue_struct     *workq;
-	/* protect channel init and uninit */
-	spinlock_t                  channel_lock;
-	u64                         features[COMM_MAX_FEATURE_QWORD];
-	u32                         wq_page_size;
-	u8                          max_cmdq;
-	ulong                       func_state;
+	struct hinic3_pcidev         *adapter;
+	struct pci_dev               *pdev;
+	struct device                *dev;
+	int                          dev_id;
+	struct hinic3_hwif           *hwif;
+	struct hinic3_cfg_mgmt_info  *cfg_mgmt;
+	struct hinic3_aeqs           *aeqs;
+	struct hinic3_ceqs           *ceqs;
+	struct hinic3_mbox           *mbox;
+	struct hinic3_msg_pf_to_mgmt *pf_to_mgmt;
+	struct hinic3_cmdqs          *cmdqs;
+	struct delayed_work          sync_time_task;
+	struct workqueue_struct      *workq;
+	/* protect hwdev channel init and uninit */
+	spinlock_t                   channel_lock;
+	u64                          features[COMM_MAX_FEATURE_QWORD];
+	u32                          wq_page_size;
+	u8                           max_cmdq;
+	ulong                        func_state;
 };
 
 struct hinic3_event_info {
