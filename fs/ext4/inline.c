@@ -413,7 +413,30 @@ static int ext4_prepare_inline_data(handle_t *handle, struct inode *inode,
 	if (!ext4_test_inode_state(inode, EXT4_STATE_MAY_INLINE_DATA))
 		return -ENOSPC;
 
-	size = ext4_get_max_inline_size(inode);
+	if (ei->i_inline_off) {
+		struct ext4_iloc iloc;
+		struct ext4_inode *raw_inode;
+		struct ext4_xattr_entry *entry;
+
+		ret = ext4_get_inode_loc(inode, &iloc);
+		if (ret)
+			return ret;
+
+		raw_inode = ext4_raw_inode(&iloc);
+		entry = (struct ext4_xattr_entry *)
+			((void *)raw_inode + ei->i_inline_off);
+
+		if (le32_to_cpu(entry->e_value_size) == 0) {
+			ext4_find_inline_data_nolock(inode);
+			size = ei->i_inline_size;
+		} else {
+			size = ext4_get_max_inline_size(inode);
+		}
+
+		brelse(iloc.bh);
+	} else {
+		size = ext4_get_max_inline_size(inode);
+	}
 	if (size < len)
 		return -ENOSPC;
 
