@@ -134,7 +134,7 @@ int rockchip_pcie_init_port(struct rockchip_pcie *rockchip)
 	err = reset_control_bulk_assert(ROCKCHIP_NUM_CORE_RSTS,
 					rockchip->core_rsts);
 	if (err) {
-		dev_err_probe(dev, err, "Couldn't assert Core resets\n");
+		err = dev_err_probe(dev, err, "Couldn't assert Core resets\n");
 		goto err_exit_phy;
 	}
 
