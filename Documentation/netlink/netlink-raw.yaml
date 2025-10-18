@@ -260,6 +260,9 @@ properties:
                   Sometimes, however, both forms are necessary, in which case header contains the enum
                   form while specific attributes may request to convert the values into a bitfield.
                 type: boolean
+              start-index:
+                description: For indexed arrays the first index value.
+                type: integer
               checks:
                 description: Kernel input validation.
                 type: object
@@ -307,6 +310,16 @@ properties:
                   format specifier.
                 type: string
               # End netlink-raw
+
+            # allow start index only for indexed arrays
+            if:
+              properties:
+                type:
+                  const: indexed-array
+            then: {}
+            else:
+              not:
+                required: [ start-index ]
 
       # Make sure name-prefix does not appear in subsets (subsets inherit naming)
       dependencies:

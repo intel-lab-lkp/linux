@@ -2044,6 +2044,7 @@ attribute-sets:
         type: indexed-array
         sub-type: nest
         nested-attributes: act-attrs
+        start-index: 1
       -
         name: police
         type: nest
@@ -2303,6 +2304,7 @@ attribute-sets:
         type: indexed-array
         sub-type: nest
         nested-attributes: act-attrs
+        start-index: 1
       -
         name: police
         type: nest
@@ -2493,6 +2495,7 @@ attribute-sets:
         type: indexed-array
         sub-type: nest
         nested-attributes: act-attrs
+        start-index: 1
       -
         name: key-eth-dst
         type: binary
@@ -3020,6 +3023,7 @@ attribute-sets:
         type: indexed-array
         sub-type: nest
         nested-attributes: act-attrs
+        start-index: 1
       -
         name: mask
         type: u32
@@ -3180,6 +3184,7 @@ attribute-sets:
         type: indexed-array
         sub-type: nest
         nested-attributes: act-attrs
+        start-index: 1
       -
         name: flags
         type: u32
@@ -3566,6 +3571,7 @@ attribute-sets:
         type: indexed-array
         sub-type: nest
         nested-attributes: act-attrs
+        start-index: 1
   -
     name: taprio-attrs
     name-prefix: tca-taprio-attr-
@@ -3798,6 +3804,7 @@ attribute-sets:
         type: indexed-array
         sub-type: nest
         nested-attributes: act-attrs
+        start-index: 1
       -
         name: indev
         type: string

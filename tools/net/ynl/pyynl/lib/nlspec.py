@@ -181,6 +181,7 @@ class SpecAttr(SpecElement):
         self.display_hint = yaml.get('display-hint')
         self.sub_message = yaml.get('sub-message')
         self.selector = yaml.get('selector')
+        self.start_index = yaml.get('start-index', 0)
 
         self.is_auto_scalar = self.type == "sint" or self.type == "uint"
 
