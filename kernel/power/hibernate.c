@@ -105,6 +105,7 @@ bool hibernation_in_progress(void)
 {
 	return !atomic_read(&hibernate_atomic);
 }
+EXPORT_SYMBOL_GPL(hibernation_in_progress);
 
 bool hibernation_available(void)
 {
