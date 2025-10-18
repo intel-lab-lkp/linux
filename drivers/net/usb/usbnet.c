@@ -1672,6 +1672,9 @@ void usbnet_disconnect (struct usb_interface *intf)
 	usb_free_urb(dev->interrupt);
 	kfree(dev->padding_pkt);
 
+	cancel_work_sync(&dev->kevent);
+	timer_delete_sync(&dev->delay);
+
 	free_netdev(net);
 }
 EXPORT_SYMBOL_GPL(usbnet_disconnect);
