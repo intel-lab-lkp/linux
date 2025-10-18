@@ -42,7 +42,7 @@ static struct addr_marker address_markers[] = {
 #define pt_dump_seq_puts(m, fmt)    \
 ({						\
 	if (m)					\
-		seq_printf(m, fmt);	\
+		seq_puts(m, fmt);	\
 })
 
 struct pg_state {
