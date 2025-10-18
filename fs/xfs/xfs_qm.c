@@ -1218,7 +1218,7 @@ xfs_qm_reset_dqcounts_buf(
 	if (qip->i_nblocks == 0)
 		return 0;
 
-	map = kmalloc(XFS_DQITER_MAP_SIZE * sizeof(*map),
+	map = kmalloc_array(XFS_DQITER_MAP_SIZE, sizeof(*map),
 			GFP_KERNEL | __GFP_NOFAIL);
 
 	lblkno = 0;
