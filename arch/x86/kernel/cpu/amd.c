@@ -1037,6 +1037,10 @@ static void init_amd_zen4(struct cpuinfo_x86 *c)
 
 static void init_amd_zen5(struct cpuinfo_x86 *c)
 {
+	/* Disable RDSEED on AMD Turin because of an error. */
+	clear_cpu_cap(c, X86_FEATURE_RDSEED);
+	msr_clear_bit(MSR_AMD64_CPUID_FN_7, 18);
+	pr_emerg("RDSEED is not reliable on this platform; disabling.\n");
 }
 
 static void init_amd(struct cpuinfo_x86 *c)
