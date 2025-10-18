@@ -3085,6 +3085,9 @@ static inline void mas_root_expand(struct ma_state *mas, void *entry)
 	int slot = 0;
 
 	node = mas_pop_node(mas);
+	if (unlikely(!node))
+		return;
+
 	pivots = ma_pivots(node, type);
 	slots = ma_slots(node, type);
 	node->parent = ma_parent_ptr(mas_tree_parent(mas));
@@ -3367,6 +3370,9 @@ static inline void mas_new_root(struct ma_state *mas, void *entry)
 	}
 
 	node = mas_pop_node(mas);
+	if (unlikely(!node))
+		return;
+
 	pivots = ma_pivots(node, type);
 	slots = ma_slots(node, type);
 	node->parent = ma_parent_ptr(mas_tree_parent(mas));
@@ -3505,6 +3511,9 @@ static inline void mas_wr_node_store(struct ma_wr_state *wr_mas,
 		memset(&reuse, 0, sizeof(struct maple_node));
 		newnode = &reuse;
 	}
+
+	if (unlikely(!newnode))
+		return;
 
 	newnode->parent = mas_mn(mas)->parent;
 	dst_pivots = ma_pivots(newnode, wr_mas->type);
