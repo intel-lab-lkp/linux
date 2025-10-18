@@ -421,10 +421,11 @@ static struct perf_event *ptrace_hbp_get_initialised_bp(unsigned int note_type,
 	return bp;
 }
 
-static int ptrace_hbp_set_ctrl(unsigned int note_type,
-			       struct task_struct *tsk,
-			       unsigned long idx,
-			       u32 uctrl)
+/* Set the address and control together for non-compat ptrace */
+static int ptrace_hbp_set(unsigned int note_type,
+				   struct task_struct *tsk,
+				   unsigned long idx,
+				   u64 addr, u32 uctrl)
 {
 	int err;
 	struct perf_event *bp;
@@ -438,33 +439,14 @@ static int ptrace_hbp_set_ctrl(unsigned int note_type,
 	}
 
 	attr = bp->attr;
+	attr.bp_addr = addr;
+
 	decode_ctrl_reg(uctrl, &ctrl);
 	err = ptrace_hbp_fill_attr_ctrl(note_type, ctrl, &attr);
 	if (err)
 		return err;
 
 	return modify_user_hw_breakpoint(bp, &attr);
-}
-
-static int ptrace_hbp_set_addr(unsigned int note_type,
-			       struct task_struct *tsk,
-			       unsigned long idx,
-			       u64 addr)
-{
-	int err;
-	struct perf_event *bp;
-	struct perf_event_attr attr;
-
-	bp = ptrace_hbp_get_initialised_bp(note_type, tsk, idx);
-	if (IS_ERR(bp)) {
-		err = PTR_ERR(bp);
-		return err;
-	}
-
-	attr = bp->attr;
-	attr.bp_addr = addr;
-	err = modify_user_hw_breakpoint(bp, &attr);
-	return err;
 }
 
 #define PTRACE_HBP_ADDR_SZ	sizeof(u64)
@@ -526,9 +508,6 @@ static int hw_break_set(struct task_struct *target,
 					 offset, offset + PTRACE_HBP_ADDR_SZ);
 		if (ret)
 			return ret;
-		ret = ptrace_hbp_set_addr(note_type, target, idx, addr);
-		if (ret)
-			return ret;
 		offset += PTRACE_HBP_ADDR_SZ;
 
 		if (!count)
@@ -537,10 +516,11 @@ static int hw_break_set(struct task_struct *target,
 					 offset, offset + PTRACE_HBP_CTRL_SZ);
 		if (ret)
 			return ret;
-		ret = ptrace_hbp_set_ctrl(note_type, target, idx, ctrl);
+		offset += PTRACE_HBP_CTRL_SZ;
+
+		ret = ptrace_hbp_set(note_type, target, idx, addr, ctrl);
 		if (ret)
 			return ret;
-		offset += PTRACE_HBP_CTRL_SZ;
 
 		user_regset_copyin_ignore(&pos, &count, &kbuf, &ubuf,
 					  offset, offset + PTRACE_HBP_PAD_SZ);
@@ -2139,6 +2119,52 @@ static int compat_ptrace_hbp_get(unsigned int note_type,
 	return err;
 }
 
+static int compat_ptrace_hbp_set_ctrl(unsigned int note_type,
+			       struct task_struct *tsk,
+			       unsigned long idx,
+			       u32 uctrl)
+{
+	int err;
+	struct perf_event *bp;
+	struct perf_event_attr attr;
+	struct arch_hw_breakpoint_ctrl ctrl;
+
+	bp = ptrace_hbp_get_initialised_bp(note_type, tsk, idx);
+	if (IS_ERR(bp)) {
+		err = PTR_ERR(bp);
+		return err;
+	}
+
+	attr = bp->attr;
+	decode_ctrl_reg(uctrl, &ctrl);
+	err = ptrace_hbp_fill_attr_ctrl(note_type, ctrl, &attr);
+	if (err)
+		return err;
+
+	return modify_user_hw_breakpoint(bp, &attr);
+}
+
+static int compat_ptrace_hbp_set_addr(unsigned int note_type,
+			       struct task_struct *tsk,
+			       unsigned long idx,
+			       u64 addr)
+{
+	int err;
+	struct perf_event *bp;
+	struct perf_event_attr attr;
+
+	bp = ptrace_hbp_get_initialised_bp(note_type, tsk, idx);
+	if (IS_ERR(bp)) {
+		err = PTR_ERR(bp);
+		return err;
+	}
+
+	attr = bp->attr;
+	attr.bp_addr = addr;
+	err = modify_user_hw_breakpoint(bp, &attr);
+	return err;
+}
+
 static int compat_ptrace_hbp_set(unsigned int note_type,
 				 struct task_struct *tsk,
 				 compat_long_t num,
@@ -2151,10 +2177,10 @@ static int compat_ptrace_hbp_set(unsigned int note_type,
 
 	if (num & 1) {
 		addr = *kdata;
-		err = ptrace_hbp_set_addr(note_type, tsk, idx, addr);
+		err = compat_ptrace_hbp_set_addr(note_type, tsk, idx, addr);
 	} else {
 		ctrl = *kdata;
-		err = ptrace_hbp_set_ctrl(note_type, tsk, idx, ctrl);
+		err = compat_ptrace_hbp_set_ctrl(note_type, tsk, idx, ctrl);
 	}
 
 	return err;
