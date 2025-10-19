@@ -31,6 +31,14 @@ under the following path:
 
   /sys/class/firmware-attributes/lenovo-wmi-other/attributes/<attribute>/
 
+LENOVO_CAPABILITY_DATA_00
+-------------------------
+
+WMI GUID ``362A3AFE-3D96-4665-8530-96DAD5BB300E``
+
+The LENOVO-CAPABILITD_DATA_00 interface provides information on whether the
+device supports querying or setting fan speed.
+
 LENOVO_CAPABILITY_DATA_01
 -------------------------
 
