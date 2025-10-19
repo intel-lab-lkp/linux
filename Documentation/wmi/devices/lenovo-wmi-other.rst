@@ -31,6 +31,11 @@ under the following path:
 
   /sys/class/firmware-attributes/lenovo-wmi-other/attributes/<attribute>/
 
+Besides, this driver also exports fan speed RPM to HWMON:
+ - fanX_enable: enable/disable the fan (tunable)
+ - fanX_input: current RPM
+ - fanX_target: target RPM (tunable)
+
 LENOVO_CAPABILITY_DATA_00
 -------------------------
 
