@@ -40,6 +40,7 @@ struct smp_ops {
 
 	void (*send_call_func_ipi)(const struct cpumask *mask);
 	void (*send_call_func_single_ipi)(int cpu);
+	int (*cpu_physical_id)(int cpu);
 };
 
 /* Globals due to paravirt */
@@ -98,6 +99,11 @@ static inline void arch_send_call_function_single_ipi(int cpu)
 static inline void arch_send_call_function_ipi_mask(const struct cpumask *mask)
 {
 	smp_ops.send_call_func_ipi(mask);
+}
+
+static inline int arch_cpu_physical_id(int cpu)
+{
+	return smp_ops.cpu_physical_id(cpu);
 }
 
 void cpu_disable_common(void);
