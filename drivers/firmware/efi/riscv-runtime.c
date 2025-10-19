@@ -21,11 +21,11 @@
 #include <linux/slab.h>
 #include <linux/spinlock.h>
 #include <linux/pgtable.h>
+#include <linux/pgalloc.h>
 
 #include <asm/cacheflush.h>
 #include <asm/efi.h>
 #include <asm/mmu.h>
-#include <asm/pgalloc.h>
 
 static bool __init efi_virtmap_init(void)
 {

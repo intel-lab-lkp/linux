@@ -13,7 +13,7 @@
 #include <linux/swap.h>
 #include <linux/swapops.h>
 #include <linux/mm_inline.h>
-#include <asm/pgalloc.h>
+#include <linux/pgalloc.h>
 #include <asm/tlb.h>
 
 /*
