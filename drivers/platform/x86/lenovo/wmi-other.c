@@ -14,7 +14,8 @@
  * These attributes typically don't fit anywhere else in the sysfs and are set
  * in Windows using one of Lenovo's multiple user applications.
  *
- * Besides, this driver also exports tunable fan speed RPM to HWMON.
+ * Besides, this driver also exports tunable fan speed RPM to HWMON. Min/max RPM
+ * are also provided for reference when available.
  *
  * Copyright (C) 2025 Derek J. Clark <derekjohn.clark@gmail.com>
  *   - fw_attributes
@@ -22,7 +23,7 @@
  *
  * Copyright (C) 2025 Rong Zhang <i@rong.moe>
  *   - HWMON
- *   - binding to Capability Data 00
+ *   - binding to Capability Data 00 and Fan
  */
 
 #include <linux/acpi.h>
@@ -106,6 +107,7 @@ struct lwmi_om_priv {
 	/* only valid after capdata bind */
 	struct cd_list *cd00_list;
 	struct cd_list *cd01_list;
+	struct cd_list *cd_fan_list;
 
 	struct device *hwmon_dev;
 	struct device *fw_attr_dev;
@@ -116,11 +118,20 @@ struct lwmi_om_priv {
 
 	struct fan_info {
 		u32 supported;
+		long min_rpm;
+		long max_rpm;
 		long target;
 	} fan_info[LWMI_FAN_NR];
 };
 
-/* ======== HWMON (component: lenovo-wmi-capdata 00) ======== */
+static bool ignore_fan_cap;
+module_param(ignore_fan_cap, bool, 0444);
+MODULE_PARM_DESC(ignore_fan_cap,
+	"Ignore fan capdata. "
+	"Results in fans missing from capdata keep visible. "
+	"Effectively disables mix/max fan speed RPM reporting.");
+
+/* ======== HWMON (component: lenovo-wmi-capdata 00 & fan) ======== */
 
 /**
  * lwmi_om_fan_get_set() - Get or set fan RPM value of specified fan
@@ -184,6 +195,12 @@ static umode_t lwmi_om_hwmon_is_visible(const void *drvdata, enum hwmon_sensor_t
 		case hwmon_fan_input:
 			r = priv->fan_info[channel].supported & LWMI_SUPP_MAY_GET;
 			break;
+		case hwmon_fan_min:
+			r = priv->fan_info[channel].min_rpm >= 0;
+			break;
+		case hwmon_fan_max:
+			r = priv->fan_info[channel].max_rpm >= 0;
+			break;
 		}
 	}
 
@@ -233,6 +250,12 @@ static int lwmi_om_hwmon_read(struct device *dev, enum hwmon_sensor_types type,
 			else
 				*val = priv->fan_info[channel].target;
 			return 0;
+		case hwmon_fan_min:
+			*val = priv->fan_info[channel].min_rpm;
+			return 0;
+		case hwmon_fan_max:
+			*val = priv->fan_info[channel].max_rpm;
+			return 0;
 		}
 	}
 
@@ -271,6 +294,9 @@ static int lwmi_om_hwmon_write(struct device *dev, enum hwmon_sensor_types type,
 					return -EINVAL;
 			} else {
 				/*
+				 * We don't check fan capdata here as it is just
+				 * reference value for self-test.
+				 *
 				 * val > U16_MAX seems safe but meaningless.
 				 */
 				if (val < 0 || val > U16_MAX)
@@ -293,8 +319,10 @@ static int lwmi_om_hwmon_write(struct device *dev, enum hwmon_sensor_types type,
 static const struct hwmon_channel_info * const lwmi_om_hwmon_info[] = {
 	/* Must match LWMI_FAN_NR. */
 	HWMON_CHANNEL_INFO(fan,
-			   HWMON_F_ENABLE | HWMON_F_INPUT | HWMON_F_TARGET,
-			   HWMON_F_ENABLE | HWMON_F_INPUT | HWMON_F_TARGET),
+			   HWMON_F_ENABLE | HWMON_F_INPUT | HWMON_F_TARGET |
+			   HWMON_F_MIN | HWMON_F_MAX,
+			   HWMON_F_ENABLE | HWMON_F_INPUT | HWMON_F_TARGET |
+			   HWMON_F_MIN | HWMON_F_MAX),
 	NULL
 };
 
@@ -319,6 +347,7 @@ static const struct hwmon_chip_info lwmi_om_hwmon_chip_info = {
  */
 static int lwmi_om_hwmon_add(struct lwmi_om_priv *priv)
 {
+	struct capdata_fan capdata_fan;
 	struct capdata00 capdata00;
 	int i, err;
 
@@ -330,8 +359,42 @@ static int lwmi_om_hwmon_add(struct lwmi_om_priv *priv)
 
 		priv->fan_info[i] = (struct fan_info) {
 			.supported = capdata00.supported,
+			.min_rpm = -ENODATA,
+			.max_rpm = -ENODATA,
 			.target = -ENODATA,
 		};
+
+		if (!(priv->fan_info[i].supported & LWMI_SUPP_VALID))
+			continue;
+
+		if (ignore_fan_cap) {
+			dev_notice_once(&priv->wdev->dev, "fan capdata ignored\n");
+			continue;
+		}
+
+		if (!priv->cd_fan_list) {
+			dev_notice_once(&priv->wdev->dev, "fan capdata unavailable\n");
+			continue;
+		}
+
+		/*
+		 * Fan attribute from capdata00 may be dummy (i.e.,
+		 * get: constant dummy RPM, set: no-op with retval == 0).
+		 *
+		 * If fan capdata is available and a fan is missing from it,
+		 * make the fan invisible.
+		 */
+		err = lwmi_cd_fan_get_data(priv->cd_fan_list, LWMI_FAN_ID(i), &capdata_fan);
+		if (err) {
+			dev_dbg(&priv->wdev->dev,
+				"fan %d missing from fan capdata, hiding\n",
+				LWMI_FAN_ID(i));
+			priv->fan_info[i].supported = 0;
+			continue;
+		}
+
+		priv->fan_info[i].min_rpm = capdata_fan.min_rpm;
+		priv->fan_info[i].max_rpm = capdata_fan.max_rpm;
 	}
 
 	priv->hwmon_dev = hwmon_device_register_with_info(&priv->wdev->dev, LWMI_OM_HWMON_NAME,
@@ -862,6 +925,7 @@ static int lwmi_om_master_bind(struct device *dev)
 
 	priv->cd00_list = binder.cd00_list;
 	if (priv->cd00_list) {
+		priv->cd_fan_list = binder.cd_fan_list;
 		ret = lwmi_om_hwmon_add(priv);
 		if (ret)
 			return ret;

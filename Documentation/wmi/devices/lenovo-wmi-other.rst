@@ -34,6 +34,8 @@ under the following path:
 Besides, this driver also exports fan speed RPM to HWMON:
  - fanX_enable: enable/disable the fan (tunable)
  - fanX_input: current RPM
+ - fanX_max: maximum RPM
+ - fanX_min: minimum RPM
  - fanX_target: target RPM (tunable)
 
 LENOVO_CAPABILITY_DATA_00
