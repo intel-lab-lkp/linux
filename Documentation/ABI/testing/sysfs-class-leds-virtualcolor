@@ -1,0 +1,89 @@
+What:		/sys/class/leds/<led>/brightness
+Date:		October 2025
+KernelVersion:	6.13
+Contact:	Radoslav Tsvetkov <rtsvetkov@gradotech.eu>
+Description:
+		Controls the overall brightness of the virtual LED. Setting to 0
+		deactivates the virtual LED and restores the next highest-priority
+		active LED. Setting to 1-255 activates the virtual LED and applies
+		brightness to all grouped LEDs (monochromatic and RGB).
+
+		Only the highest-priority active virtual LED is displayed at any
+		given time.
+
+		Range: 0-255 (or configured max-brightness)
+
+What:		/sys/class/leds/<led>/priority
+Date:		October 2025
+KernelVersion:	6.13
+Contact:	Radoslav Tsvetkov <rtsvetkov@gradotech.eu>
+Description:
+		Sets the priority level for this virtual LED. Higher priority
+		values take precedence when multiple LEDs are active simultaneously.
+
+		When a higher-priority LED is activated:
+		- The current active LED (if lower priority) is turned off
+		- The higher-priority LED's state is applied
+		- When the higher-priority LED is deactivated, the previous LED
+		  is restored
+
+		Default: 0
+		Range: signed integer
+
+What:		/sys/class/leds/<led>/red_brightness
+Date:		October 2025
+KernelVersion:	6.13
+Contact:	Radoslav Tsvetkov <rtsvetkov@gradotech.eu>
+Description:
+		Sets brightness of all red PWM LEDs in the virtual group. Only
+		affects LEDs configured under "pwm-leds-red" in device tree.
+
+		Range: 0-255
+
+What:		/sys/class/leds/<led>/green_brightness
+Date:		October 2025
+KernelVersion:	6.13
+Contact:	Radoslav Tsvetkov <rtsvetkov@gradotech.eu>
+Description:
+		Sets brightness of all green PWM LEDs in the virtual group. Only
+		affects LEDs configured under "pwm-leds-green" in device tree.
+
+		Range: 0-255
+
+What:		/sys/class/leds/<led>/blue_brightness
+Date:		October 2025
+KernelVersion:	6.13
+Contact:	Radoslav Tsvetkov <rtsvetkov@gradotech.eu>
+Description:
+		Sets brightness of all blue PWM LEDs in the virtual group. Only
+		affects LEDs configured under "pwm-leds-blue" in device tree.
+
+		Range: 0-255
+
+What:		/sys/class/leds/<led>/monochromatic_count
+Date:		October 2025
+KernelVersion:	6.13
+Contact:	Radoslav Tsvetkov <rtsvetkov@gradotech.eu>
+Description:
+		Read-only. Shows the number of monochromatic LEDs in this virtual
+		LED group, as configured in device tree under the "leds" property.
+
+What:		/sys/class/leds/<led>/monochromatic_leds
+Date:		October 2025
+KernelVersion:	6.13
+Contact:	Radoslav Tsvetkov <rtsvetkov@gradotech.eu>
+Description:
+		Read-only. Shows a comma-separated list of monochromatic LED device
+		names that are part of this virtual group. Returns "none" if no
+		monochromatic LEDs are configured.
+
+What:		/sys/class/leds/<led>/monochromatic_brightness
+Date:		October 2025
+KernelVersion:	6.13
+Contact:	Radoslav Tsvetkov <rtsvetkov@gradotech.eu>
+Description:
+		Read-only. Shows the current brightness values of monochromatic LEDs
+		as a comma-separated list in the same order as monochromatic_leds.
+		Returns "none" if no monochromatic LEDs are configured.
+
+		Example output:
