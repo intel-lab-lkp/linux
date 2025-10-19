@@ -64,9 +64,20 @@ int register_kho_notifier(struct notifier_block *nb);
 int unregister_kho_notifier(struct notifier_block *nb);
 
 void kho_memory_init(void);
+int kho_get_target_mk_id(struct kho_serialization *ser);
+struct kimage;
 
 void kho_populate(phys_addr_t fdt_phys, u64 fdt_len, phys_addr_t scratch_phys,
 		  u64 scratch_len);
+void mk_kho_populate(phys_addr_t fdt_phys, u64 fdt_len);
+
+/* Multikernel kexec notifier functions */
+int mk_kexec_register_notifier(struct notifier_block *nb);
+int mk_kexec_unregister_notifier(struct notifier_block *nb);
+int mk_kexec_finalize(struct kimage *target_image);
+
+/* KHO FDT access */
+phys_addr_t kho_get_fdt_phys(void);
 #else
 static inline bool kho_is_enabled(void)
 {
@@ -121,6 +132,11 @@ static inline int kho_retrieve_subtree(const char *name, phys_addr_t *phys)
 	return -EOPNOTSUPP;
 }
 
+static inline int kho_get_target_mk_id(struct kho_serialization *ser)
+{
+	return 0;
+}
+
 static inline int register_kho_notifier(struct notifier_block *nb)
 {
 	return -EOPNOTSUPP;
@@ -138,6 +154,30 @@ static inline void kho_memory_init(void)
 static inline void kho_populate(phys_addr_t fdt_phys, u64 fdt_len,
 				phys_addr_t scratch_phys, u64 scratch_len)
 {
+}
+
+static inline void mk_kho_populate(phys_addr_t fdt_phys, u64 fdt_len)
+{
+}
+
+static inline int mk_kexec_register_notifier(struct notifier_block *nb)
+{
+	return -EOPNOTSUPP;
+}
+
+static inline int mk_kexec_unregister_notifier(struct notifier_block *nb)
+{
+	return -EOPNOTSUPP;
+}
+
+static inline int mk_kexec_finalize(struct kimage *target_image)
+{
+	return -EOPNOTSUPP;
+}
+
+static inline phys_addr_t kho_get_fdt_phys(void)
+{
+	return 0;
 }
 #endif /* CONFIG_KEXEC_HANDOVER */
 

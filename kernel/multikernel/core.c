@@ -518,6 +518,12 @@ static int __init multikernel_init(void)
 		return ret;
 	}
 
+	ret = mk_kho_init();
+	if (ret < 0) {
+		pr_warn("Failed to initialize KHO support: %d\n", ret);
+		/* Continue without KHO support - this is not fatal */
+	}
+
 	pr_info("Multikernel support initialized\n");
 	return 0;
 }

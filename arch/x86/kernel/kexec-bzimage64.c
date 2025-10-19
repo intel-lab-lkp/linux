@@ -276,15 +276,23 @@ static void setup_kho(const struct kimage *image, struct boot_params *params,
 	sd->type = SETUP_KEXEC_KHO;
 	sd->len = sizeof(struct kho_data);
 
-	/* Only add if we have all KHO images in place */
-	if (!image->kho.fdt || !image->kho.scratch)
+	if (image->type == KEXEC_TYPE_MULTIKERNEL) {
+		if (!image->kho.fdt)
+			return;
+	} else if (!image->kho.fdt || !image->kho.scratch)
 		return;
 
 	/* Add setup data */
 	kho->fdt_addr = image->kho.fdt;
 	kho->fdt_size = PAGE_SIZE;
-	kho->scratch_addr = image->kho.scratch->mem;
-	kho->scratch_size = image->kho.scratch->bufsz;
+	if (image->type == KEXEC_TYPE_MULTIKERNEL) {
+		kho->scratch_addr = 0;
+		kho->scratch_size = 0;
+	} else {
+		kho->scratch_addr = image->kho.scratch->mem;
+		kho->scratch_size = image->kho.scratch->bufsz;
+	}
+
 	sd->next = params->hdr.setup_data;
 	params->hdr.setup_data = params_load_addr + setup_data_offset;
 }

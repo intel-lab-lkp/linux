@@ -622,4 +622,38 @@ static inline bool mk_is_resource_property(const char *prop_name)
 	return false;
 }
 
+/**
+ * KHO (Kexec HandOver) Integration Functions
+ *
+ * These functions provide KHO support for preserving and restoring
+ * multikernel instance device trees across kexec boundaries.
+ */
+
+/**
+ * mk_kho_restore_dtbs() - Restore DTBs from KHO shared memory
+ *
+ * Called during multikernel initialization to restore DTBs that were
+ * preserved by the previous kernel via KHO.
+ *
+ * Returns: 0 on success, negative error code on failure
+ */
+int __init mk_kho_restore_dtbs(void);
+
+/**
+ * mk_kho_init() - Initialize KHO support for multikernel
+ *
+ * Registers the KHO notifier and attempts to restore DTBs from
+ * a previous KHO boot.
+ *
+ * Returns: 0 on success, negative error code on failure
+ */
+int __init mk_kho_init(void);
+
+/**
+ * mk_kho_cleanup() - Cleanup KHO support for multikernel
+ *
+ * Unregisters the KHO notifier.
+ */
+void mk_kho_cleanup(void);
+
 #endif /* _LINUX_MULTIKERNEL_H */

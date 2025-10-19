@@ -43,6 +43,7 @@
 #include <linux/objtool.h>
 #include <linux/kmsg_dump.h>
 #include <linux/multikernel.h>
+#include <linux/kexec_handover.h>
 #include <linux/dma-map-ops.h>
 #include <linux/memblock.h>
 
@@ -672,6 +673,10 @@ void kimage_free(struct kimage *image)
 		mk_instance_put(image->mk_instance);
 		image->mk_instance = NULL;
 		pr_info("Freed multikernel ID %d\n", image->mk_id);
+	}
+	if (image->kho.fdt && image->type == KEXEC_TYPE_MULTIKERNEL) {
+		put_page(phys_to_page(image->kho.fdt));
+		image->kho.fdt = 0;
 	}
 
 #ifdef CONFIG_CRASH_DUMP
@@ -1590,6 +1595,12 @@ int multikernel_kexec_by_id(int mk_id)
 		rc = -EBUSY;
 		goto unlock;
 	}
+
+	rc = mk_kexec_finalize(mk_image);
+	if (rc)
+		pr_warn("KHO finalization failed: %d\n", rc);
+	else
+		pr_info("KHO finalized for multikernel instance\n");
 
 	pr_info("Using multikernel image with ID %d (entry point: 0x%lx) on CPU %d\n",
 		mk_image->mk_id, mk_image->start, cpu);

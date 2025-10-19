@@ -329,6 +329,7 @@ kimage_file_alloc_init(struct kimage **rimage, int kernel_fd,
 	if (multikernel_load) {
 		struct mk_instance *instance;
 		int mk_id = KEXEC_GET_MK_ID(flags);
+		struct page *fdt_page;
 
 		/* Set multikernel image type for proper memory allocation */
 		image->type = KEXEC_TYPE_MULTIKERNEL;
@@ -367,6 +368,14 @@ kimage_file_alloc_init(struct kimage **rimage, int kernel_fd,
 		mk_instance_set_state(instance, MK_STATE_LOADING);
 
 		pr_info("Associated kimage with multikernel instance %d\n", mk_id);
+
+		fdt_page = alloc_page(GFP_KERNEL);
+		if (!fdt_page) {
+			pr_err("Failed to allocate FDT page for multikernel kimage\n");
+			ret = -ENOMEM;
+			goto out_free_image;
+		}
+		image->kho.fdt = page_to_phys(fdt_page);
 	}
 
 	ret = kimage_file_prepare_segments(image, kernel_fd, initrd_fd,

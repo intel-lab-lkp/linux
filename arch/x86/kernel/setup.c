@@ -467,7 +467,13 @@ static void __init add_kho(u64 phys_addr, u32 data_len)
 		return;
 	}
 
-	kho_populate(kho->fdt_addr, kho->fdt_size, kho->scratch_addr, kho->scratch_size);
+	if (kho->scratch_addr == 0 && kho->scratch_size == 0) {
+		pr_info("setup: detected multikernel KHO data\n");
+		mk_kho_populate(kho->fdt_addr, kho->fdt_size);
+	} else {
+		pr_info("setup: detected regular KHO data\n");
+		kho_populate(kho->fdt_addr, kho->fdt_size, kho->scratch_addr, kho->scratch_size);
+	}
 
 	early_memunmap(kho, size);
 }

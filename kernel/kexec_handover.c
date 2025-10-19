@@ -19,6 +19,7 @@
 #include <linux/notifier.h>
 #include <linux/page-isolation.h>
 #include <linux/vmalloc.h>
+#include <linux/multikernel.h>
 
 #include <asm/early_ioremap.h>
 
@@ -106,6 +107,8 @@ struct kho_serialization {
 	struct kho_mem_track track;
 	/* First chunk of serialized preserved memory map */
 	struct khoser_mem_chunk *preserved_mem_map;
+	/* Target multikernel instance ID for selective preservation */
+	int target_mk_id;
 };
 
 struct kho_out {
@@ -1100,11 +1103,19 @@ static int kho_abort(void)
 	return err;
 }
 
-static int kho_finalize(void)
+static int kho_finalize(struct kimage *target_image)
 {
 	int err = 0;
 	u64 *preserved_mem_map;
 	void *fdt = page_to_virt(kho_out.ser.fdt);
+
+	if (target_image && target_image->mk_id > 0) {
+		kho_out.ser.target_mk_id = target_image->mk_id;
+		pr_info("KHO finalize: targeting multikernel instance %d\n", target_image->mk_id);
+	} else {
+		kho_out.ser.target_mk_id = 0;
+		pr_info("KHO finalize: no specific target (preserving all instances)\n");
+	}
 
 	err |= fdt_create(fdt, PAGE_SIZE);
 	err |= fdt_finish_reservemap(fdt);
@@ -1149,6 +1160,134 @@ abort:
 	return err;
 }
 
+static BLOCKING_NOTIFIER_HEAD(mk_kexec_notifier_chain);
+
+/**
+ * mk_kexec_call_notifiers - Call multikernel-specific notifiers
+ * @target_image: The multikernel kimage being executed
+ * @fdt: The FDT to populate with multikernel data
+ *
+ * This calls a dedicated notifier chain for multikernel that bypasses
+ * the complex KHO serialization system.
+ *
+ * Returns: 0 on success, negative error code on failure
+ */
+static int mk_kexec_call_notifiers(struct kimage *target_image, void *fdt)
+{
+	struct mk_kexec_data {
+		struct kimage *image;
+		void *fdt;
+		int mk_id;
+	} data = {
+		.image = target_image,
+		.fdt = fdt,
+		.mk_id = target_image->mk_id
+	};
+
+	int ret = blocking_notifier_call_chain(&mk_kexec_notifier_chain,
+					       0, &data);
+	return notifier_to_errno(ret);
+}
+
+/**
+ * mk_kexec_register_notifier - Register a multikernel kexec notifier
+ * @nb: The notifier block to register
+ *
+ * Returns: 0 on success, negative error code on failure
+ */
+int mk_kexec_register_notifier(struct notifier_block *nb)
+{
+	return blocking_notifier_chain_register(&mk_kexec_notifier_chain, nb);
+}
+EXPORT_SYMBOL_GPL(mk_kexec_register_notifier);
+
+/**
+ * mk_kexec_unregister_notifier - Unregister a multikernel kexec notifier
+ * @nb: The notifier block to unregister
+ *
+ * Returns: 0 on success, negative error code on failure
+ */
+int mk_kexec_unregister_notifier(struct notifier_block *nb)
+{
+	return blocking_notifier_chain_unregister(&mk_kexec_notifier_chain, nb);
+}
+EXPORT_SYMBOL_GPL(mk_kexec_unregister_notifier);
+
+/**
+ * mk_kexec_finalize - Finalize multikernel DTB for kexec
+ * @target_image: The multikernel kimage being executed
+ *
+ * This function creates a minimal FDT for multikernel and calls the
+ * multikernel notifier to preserve the target instance's DTB.
+ * It reuses the existing device tree infrastructure but avoids the
+ * complex KHO serialization system.
+ *
+ * Returns: 0 on success, negative error code on failure
+ */
+int mk_kexec_finalize(struct kimage *target_image)
+{
+	void *fdt;
+	int ret;
+
+	if (target_image->mk_id <= 0) {
+		pr_warn("mk_kexec_finalize called without valid multikernel target\n");
+		return -EINVAL;
+	}
+
+	if (!target_image->kho.fdt) {
+		pr_err("No FDT page allocated for multikernel kimage\n");
+		return -EINVAL;
+	}
+
+	/* Use the pre-allocated FDT page from multikernel memory pool */
+	fdt = phys_to_virt(target_image->kho.fdt);
+
+	ret = fdt_create(fdt, PAGE_SIZE);
+	ret |= fdt_finish_reservemap(fdt);
+	ret |= fdt_begin_node(fdt, "");
+	ret |= fdt_property_string(fdt, "compatible", MK_FDT_COMPATIBLE);
+	if (ret) {
+		pr_err("Failed to create FDT structure: %d\n", ret);
+		return ret;
+	}
+
+	ret = mk_kexec_call_notifiers(target_image, fdt);
+	if (ret) {
+		pr_err("Multikernel notifier failed: %d\n", ret);
+		fdt_end_node(fdt);
+		fdt_finish(fdt);
+		return ret;
+	}
+
+	ret = fdt_end_node(fdt);
+	ret |= fdt_finish(fdt);
+	if (ret) {
+		pr_err("Failed to finalize FDT: %d\n", ret);
+		return ret;
+	}
+
+	if (fdt_totalsize(fdt) > PAGE_SIZE) {
+		pr_err("FDT size (%d bytes) exceeds allocated page size (%lu bytes)\n",
+		       fdt_totalsize(fdt), PAGE_SIZE);
+		return -ENOSPC;
+	}
+
+	pr_info("Finalized multikernel FDT for instance %d (size: %d bytes)\n",
+		target_image->mk_id, fdt_totalsize(fdt));
+	return 0;
+}
+
+/**
+ * kho_get_target_mk_id - Get target multikernel ID from KHO serialization
+ * @ser: KHO serialization structure
+ *
+ * Returns the target multikernel instance ID, or 0 if not set.
+ */
+int kho_get_target_mk_id(struct kho_serialization *ser)
+{
+	return ser ? ser->target_mk_id : 0;
+}
+
 static int kho_out_finalize_get(void *data, u64 *val)
 {
 	mutex_lock(&kho_out.lock);
@@ -1174,7 +1313,7 @@ static int kho_out_finalize_set(void *data, u64 _val)
 	}
 
 	if (val)
-		ret = kho_finalize();
+		ret = kho_finalize(NULL);
 	else
 		ret = kho_abort();
 
@@ -1260,6 +1399,11 @@ static struct kho_in kho_in = {
 static const void *kho_get_fdt(void)
 {
 	return kho_in.fdt_phys ? phys_to_virt(kho_in.fdt_phys) : NULL;
+}
+
+phys_addr_t kho_get_fdt_phys(void)
+{
+	return kho_in.fdt_phys;
 }
 
 /**
@@ -1472,6 +1616,55 @@ void __init kho_memory_init(void)
 	} else {
 		kho_reserve_scratch();
 	}
+}
+
+/**
+ * mk_kho_populate() - Populate multikernel KHO data during early boot
+ * @fdt_phys: Physical address of the multikernel FDT
+ * @fdt_len: Length of the FDT
+ *
+ * This function handles multikernel FDT revival during early boot. Unlike
+ * regular KHO, multikernel doesn't use scratch areas and has a different
+ * FDT format with 'multikernel-v1' compatibility.
+ */
+void __init mk_kho_populate(phys_addr_t fdt_phys, u64 fdt_len)
+{
+	void *fdt = NULL;
+	int err = 0;
+
+	pr_info("Multikernel KHO: processing FDT at 0x%llx (size: %llu)\n", fdt_phys, fdt_len);
+
+	/* Validate the input FDT */
+	fdt = early_memremap(fdt_phys, fdt_len);
+	if (!fdt) {
+		pr_warn("Multikernel KHO: failed to memremap FDT (0x%llx)\n", fdt_phys);
+		goto out;
+	}
+
+	err = fdt_check_header(fdt);
+	if (err) {
+		pr_warn("Multikernel KHO: handover FDT (0x%llx) is invalid: %d\n",
+			fdt_phys, err);
+		goto out;
+	}
+
+	err = fdt_node_check_compatible(fdt, 0, MK_FDT_COMPATIBLE);
+	if (err) {
+		pr_warn("Multikernel KHO: handover FDT (0x%llx) is incompatible with 'multikernel-v1': %d\n",
+			fdt_phys, err);
+		goto out;
+	}
+
+	kho_in.fdt_phys = fdt_phys;
+	kho_in.scratch_phys = 0;
+
+	pr_info("Multikernel KHO: successfully populated FDT data\n");
+
+out:
+	if (fdt)
+		early_memunmap(fdt, fdt_len);
+	if (err)
+		pr_warn("Multikernel KHO: disabling multikernel revival\n");
 }
 
 void __init kho_populate(phys_addr_t fdt_phys, u64 fdt_len,

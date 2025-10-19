@@ -6,6 +6,7 @@
 config MULTIKERNEL
 	bool "Multikernel support"
 	depends on KEXEC_CORE
+	depends on KEXEC_HANDOVER
 	select LIBFDT
 	help
 	  Enable multikernel support, which allows running multiple kernel
@@ -17,5 +18,9 @@ config MULTIKERNEL
 	  - Device tree based resource specification
 	  - Memory pool management for kernel instances
 	  - Integration with kexec for kernel loading
+	  - KHO (Kexec HandOver) support for seamless DTB transfer
+
+	  Requires KEXEC_HANDOVER for preserving device trees and instance
+	  state across kernel boundaries.
 
 	  If unsure, say N.
