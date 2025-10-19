@@ -3,4 +3,4 @@
 # Makefile for multikernel support
 #
 
-obj-y += core.o
+obj-y += core.o mem.o
