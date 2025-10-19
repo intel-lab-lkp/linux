@@ -1,0 +1,90 @@
+# SPDX-License-Identifier: (GPL-2.0-only OR BSD-2-Clause)
+%YAML 1.2
+---
+$id: http://devicetree.org/schemas/leds/leds-class-virtualcolor.yaml#
+$schema: http://devicetree.org/meta-schemas/core.yaml#
+
+title: virtualcolor LED class
+
+maintainers:
+  - Radoslav Tsvetkov <rtsvetkov@gradotech.eu>
+
+description: |
+  Validates individual virtual LED nodes that aggregate multiple monochromatic
+  or PWM LEDs.
+
+properties:
+  $nodename:
+    pattern: "^virtual-led(@[0-9a-f])?$"
+
+  reg:
+    maxItems: 1
+    description: Virtual LED index/number
+
+  function:
+    description: |
+      LED function. It is recommended to use LED_FUNCTION_VIRTUAL_STATUS
+      for virtual LEDs to distinguish them from physical LEDs.
+      See: include/dt-bindings/leds/common.h
+
+  color:
+    description: |
+      LED color identifier from the LED_COLOR_ID_* namespace.
+      See: include/dt-bindings/leds/common.h
+
+  leds:
+    $ref: /schemas/types.yaml#/definitions/phandle-array
+    minItems: 1
+    maxItems: 15
+    description: |
+      Array of phandles to monochromatic LEDs that compose this virtual LED.
+
+  pwm-leds-red:
+    $ref: /schemas/types.yaml#/definitions/phandle-array
+    minItems: 1
+    maxItems: 15
+    description: |
+      Array of phandles to PWM-controlled red LEDs that compose this virtual
+      LED.
+
+  pwm-leds-green:
+    $ref: /schemas/types.yaml#/definitions/phandle-array
+    minItems: 1
+    maxItems: 15
+    description: |
+      Array of phandles to PWM-controlled green LEDs that compose this virtual
+      LED.
+
+  pwm-leds-blue:
+    $ref: /schemas/types.yaml#/definitions/phandle-array
+    minItems: 1
+    maxItems: 15
+    description: |
+      Array of phandles to PWM-controlled blue LEDs that compose this virtual
+      LED.
+
+  priority:
+    $ref: /schemas/types.yaml#/definitions/uint32
+    default: 0
+    description: |
+      Priority level for this virtual LED. Higher values take precedence
+      when multiple virtual LEDs are active simultaneously.
+
+required:
+  - reg
+
+anyOf:
+  - required:
+      - leds
+  - required:
+      - pwm-leds-red
+  - required:
+      - pwm-leds-green
+  - required:
+      - pwm-leds-blue
+
+allOf:
+  - $ref: common.yaml#
+
+additionalProperties: true
+...
