@@ -1523,9 +1523,9 @@ extern void	 jbd2_journal_unlock_updates (journal_t *);
 
 void jbd2_journal_wait_updates(journal_t *);
 
-extern journal_t * jbd2_journal_init_dev(struct block_device *bdev,
-				struct block_device *fs_dev,
-				unsigned long long start, int len, int bsize);
+extern journal_t *jbd2_journal_init_dev(struct block_device *bdev, struct block_device *fs_dev,
+					unsigned long long start, int len, int bsize,
+					unsigned long fsmagic);
 extern journal_t * jbd2_journal_init_inode (struct inode *);
 extern int	   jbd2_journal_update_format (journal_t *);
 extern int	   jbd2_journal_check_used_features

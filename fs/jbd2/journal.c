@@ -1517,11 +1517,13 @@ static int journal_load_superblock(journal_t *journal)
  * superblock and initialize the journal_t object.
  */
 
-static journal_t *journal_init_common(struct block_device *bdev,
-			struct block_device *fs_dev,
-			unsigned long long start, int len, int blocksize)
+static journal_t *journal_init_common(struct block_device *bdev, struct block_device *fs_dev,
+				      unsigned long long start, int len, int blocksize,
+				      unsigned long fsmagic)
 {
-	static struct lock_class_key jbd2_trans_commit_key;
+	static struct lock_class_key jbd2_trans_commit_key_ext4;
+	static struct lock_class_key jbd2_trans_commit_key_ocfs2;
+	static struct lock_class_key jbd2_trans_commit_key_unknown;
 	journal_t *journal;
 	int err;
 	int n;
@@ -1547,20 +1549,49 @@ static journal_t *journal_init_common(struct block_device *bdev,
 	init_waitqueue_head(&journal->j_wait_updates);
 	init_waitqueue_head(&journal->j_wait_reserved);
 	init_waitqueue_head(&journal->j_fc_wait);
-	mutex_init(&journal->j_abort_mutex);
-	mutex_init(&journal->j_barrier);
-	mutex_init(&journal->j_checkpoint_mutex);
-	spin_lock_init(&journal->j_revoke_lock);
-	spin_lock_init(&journal->j_list_lock);
-	spin_lock_init(&journal->j_history_lock);
-	rwlock_init(&journal->j_state_lock);
+	if (IS_ENABLED(CONFIG_LOCKDEP) && IS_ENABLED(CONFIG_EXT4_FS) &&
+	    fsmagic == EXT4_SUPER_MAGIC) {
+		mutex_init(&journal->j_abort_mutex);
+		mutex_init(&journal->j_barrier);
+		mutex_init(&journal->j_checkpoint_mutex);
+		spin_lock_init(&journal->j_revoke_lock);
+		spin_lock_init(&journal->j_list_lock);
+		spin_lock_init(&journal->j_history_lock);
+		rwlock_init(&journal->j_state_lock);
+	} else if (IS_ENABLED(CONFIG_LOCKDEP) && IS_ENABLED(CONFIG_OCFS2_FS) &&
+		   fsmagic == OCFS2_SUPER_MAGIC) {
+		mutex_init(&journal->j_abort_mutex);
+		mutex_init(&journal->j_barrier);
+		mutex_init(&journal->j_checkpoint_mutex);
+		spin_lock_init(&journal->j_revoke_lock);
+		spin_lock_init(&journal->j_list_lock);
+		spin_lock_init(&journal->j_history_lock);
+		rwlock_init(&journal->j_state_lock);
+	} else {
+		mutex_init(&journal->j_abort_mutex);
+		mutex_init(&journal->j_barrier);
+		mutex_init(&journal->j_checkpoint_mutex);
+		spin_lock_init(&journal->j_revoke_lock);
+		spin_lock_init(&journal->j_list_lock);
+		spin_lock_init(&journal->j_history_lock);
+		rwlock_init(&journal->j_state_lock);
+	}
 
 	journal->j_commit_interval = (HZ * JBD2_DEFAULT_MAX_COMMIT_AGE);
 	journal->j_min_batch_time = 0;
 	journal->j_max_batch_time = 15000; /* 15ms */
 	atomic_set(&journal->j_reserved_credits, 0);
-	lockdep_init_map(&journal->j_trans_commit_map, "jbd2_handle",
-			 &jbd2_trans_commit_key, 0);
+	if (IS_ENABLED(CONFIG_LOCKDEP) && IS_ENABLED(CONFIG_EXT4_FS) &&
+	    fsmagic == EXT4_SUPER_MAGIC)
+		lockdep_init_map(&journal->j_trans_commit_map, "jbd2_handle_ext4",
+				 &jbd2_trans_commit_key_ext4, 0);
+	else if (IS_ENABLED(CONFIG_LOCKDEP) && IS_ENABLED(CONFIG_OCFS2_FS) &&
+		 fsmagic == OCFS2_SUPER_MAGIC)
+		lockdep_init_map(&journal->j_trans_commit_map, "jbd2_handle_ocfs2",
+				 &jbd2_trans_commit_key_ocfs2, 0);
+	else
+		lockdep_init_map(&journal->j_trans_commit_map, "jbd2_handle_unknown",
+				 &jbd2_trans_commit_key_unknown, 0);
 
 	/* The journal is marked for error until we succeed with recovery! */
 	journal->j_flags = JBD2_ABORT;
@@ -1631,6 +1662,7 @@ err_cleanup:
  *  @start: Block nr Start of journal.
  *  @len:  Length of the journal in blocks.
  *  @blocksize: blocksize of journalling device
+ *  @fsmagic: filesystem magic number for lockdep annotation
  *
  *  Returns: a newly created journal_t *
  *
@@ -1638,13 +1670,13 @@ err_cleanup:
  *  range of blocks on an arbitrary block device.
  *
  */
-journal_t *jbd2_journal_init_dev(struct block_device *bdev,
-			struct block_device *fs_dev,
-			unsigned long long start, int len, int blocksize)
+journal_t *jbd2_journal_init_dev(struct block_device *bdev, struct block_device *fs_dev,
+				 unsigned long long start, int len, int blocksize,
+				 unsigned long fsmagic)
 {
 	journal_t *journal;
 
-	journal = journal_init_common(bdev, fs_dev, start, len, blocksize);
+	journal = journal_init_common(bdev, fs_dev, start, len, blocksize, fsmagic);
 	if (IS_ERR(journal))
 		return ERR_CAST(journal);
 
@@ -1682,8 +1714,8 @@ journal_t *jbd2_journal_init_inode(struct inode *inode)
 		  inode->i_sb->s_blocksize_bits, inode->i_sb->s_blocksize);
 
 	journal = journal_init_common(inode->i_sb->s_bdev, inode->i_sb->s_bdev,
-			blocknr, inode->i_size >> inode->i_sb->s_blocksize_bits,
-			inode->i_sb->s_blocksize);
+				      blocknr, inode->i_size >> inode->i_sb->s_blocksize_bits,
+				      inode->i_sb->s_blocksize, inode->i_sb->s_magic);
 	if (IS_ERR(journal))
 		return ERR_CAST(journal);
 
