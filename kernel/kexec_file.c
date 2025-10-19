@@ -27,6 +27,7 @@
 #include <linux/syscalls.h>
 #include <linux/vmalloc.h>
 #include <linux/dma-map-ops.h>
+#include <linux/multikernel.h>
 #include "kexec_internal.h"
 
 #ifdef CONFIG_KEXEC_SIG
@@ -309,6 +310,7 @@ kimage_file_alloc_init(struct kimage **rimage, int kernel_fd,
 	int ret;
 	struct kimage *image;
 	bool kexec_on_panic = flags & KEXEC_FILE_ON_CRASH;
+	bool multikernel_load = flags & KEXEC_MULTIKERNEL;
 
 	image = do_kimage_alloc_init();
 	if (!image)
@@ -322,8 +324,50 @@ kimage_file_alloc_init(struct kimage **rimage, int kernel_fd,
 		/* Enable special crash kernel control page alloc policy. */
 		image->control_page = crashk_res.start;
 		image->type = KEXEC_TYPE_CRASH;
-	}
+	} else
 #endif
+	if (multikernel_load) {
+		struct mk_instance *instance;
+		int mk_id = KEXEC_GET_MK_ID(flags);
+
+		/* Set multikernel image type for proper memory allocation */
+		image->type = KEXEC_TYPE_MULTIKERNEL;
+
+		pr_info("kexec_file_load: multikernel load - flags=0x%lx, extracted mk_id=%d\n",
+			flags, mk_id);
+
+		if (mk_id <= 0) {
+			pr_err("Invalid multikernel ID %d in flags\n", mk_id);
+			ret = -EINVAL;
+			goto out_free_image;
+		}
+
+		/* Find the existing mk_instance */
+		instance = mk_instance_find(mk_id);
+		if (!instance) {
+			pr_err("No multikernel instance found with ID %d\n", mk_id);
+			ret = -ENOENT;
+			goto out_free_image;
+		}
+
+		/* Check if instance is already associated with a kimage */
+		if (instance->kimage) {
+			pr_err("Multikernel instance %d already has an associated kimage\n", mk_id);
+			mk_instance_put(instance);
+			ret = -EBUSY;
+			goto out_free_image;
+		}
+
+		/* Establish cross-references */
+		image->mk_instance = instance; /* Transfer reference from find */
+		image->mk_id = mk_id;
+		instance->kimage = image;
+
+		/* Update instance state */
+		mk_instance_set_state(instance, MK_STATE_LOADING);
+
+		pr_info("Associated kimage with multikernel instance %d\n", mk_id);
+	}
 
 	ret = kimage_file_prepare_segments(image, kernel_fd, initrd_fd,
 					   cmdline_ptr, cmdline_len, flags);
@@ -731,6 +775,61 @@ static int kexec_alloc_contig(struct kexec_buf *kbuf)
 	return 0;
 }
 
+static int kexec_alloc_multikernel(struct kexec_buf *kbuf)
+{
+	void *virt_addr;
+	phys_addr_t phys_addr;
+
+	pr_info("kexec_alloc_multikernel: called for segment size=0x%lx, buf_min=0x%lx, buf_max=0x%lx, align=0x%lx\n",
+		kbuf->memsz, kbuf->buf_min, kbuf->buf_max, kbuf->buf_align);
+
+	/* Check if this is a multikernel image with an associated instance */
+	if (!kbuf->image->mk_instance || kbuf->image->type != KEXEC_TYPE_MULTIKERNEL) {
+		pr_info("kexec_alloc_multikernel: not a multikernel image (mk_instance=%p, type=%d)\n",
+			kbuf->image->mk_instance, kbuf->image->type);
+		return -EPERM;
+	}
+
+	/* Allocate from the multikernel instance pool using the proper API */
+	virt_addr = mk_kimage_alloc(kbuf->image, kbuf->memsz, kbuf->buf_align);
+	if (!virt_addr) {
+		pr_info("Failed to allocate %lu bytes from multikernel instance pool (align=0x%lx)\n",
+			kbuf->memsz, kbuf->buf_align);
+		return -ENOMEM;
+	}
+
+	/* Convert virtual address to physical */
+	phys_addr = virt_to_phys(virt_addr);
+
+	if (!IS_ALIGNED(phys_addr, kbuf->buf_align)) {
+		pr_info("Multikernel allocation not aligned: phys=0x%llx, required=0x%lx\n",
+			 (unsigned long long)phys_addr, kbuf->buf_align);
+		mk_kimage_free(kbuf->image, virt_addr, kbuf->memsz);
+		return -ENOMEM;
+	}
+
+	if (phys_addr < kbuf->buf_min || (phys_addr + kbuf->memsz - 1) > kbuf->buf_max) {
+		pr_info("Multikernel allocation out of bounds: phys=0x%llx, min=0x%lx, max=0x%lx\n",
+			 (unsigned long long)phys_addr, kbuf->buf_min, kbuf->buf_max);
+		mk_kimage_free(kbuf->image, virt_addr, kbuf->memsz);
+		return -ENOMEM;
+	}
+
+	if (kimage_is_destination_range(kbuf->image, phys_addr, phys_addr + kbuf->memsz - 1)) {
+		pr_info("Multikernel allocation conflicts with existing segments: 0x%llx+0x%lx\n",
+			 (unsigned long long)phys_addr, kbuf->memsz);
+		mk_kimage_free(kbuf->image, virt_addr, kbuf->memsz);
+		return -EBUSY;
+	}
+
+	kbuf->mem = phys_addr;
+
+	pr_info("Allocated %lu bytes from multikernel pool at 0x%llx (virt=%px)\n",
+		 kbuf->memsz, (unsigned long long)phys_addr, virt_addr);
+
+	return 0;
+}
+
 /**
  * kexec_locate_mem_hole - find free memory for the purgatory or the next kernel
  * @kbuf:	Parameters for the memory search.
@@ -743,8 +842,21 @@ int kexec_locate_mem_hole(struct kexec_buf *kbuf)
 {
 	int ret;
 
+	pr_info("kexec_locate_mem_hole: called for segment size=0x%lx, mem=0x%lx, image_type=%d\n",
+		kbuf->memsz, kbuf->mem, kbuf->image->type);
+
 	/* Arch knows where to place */
-	if (kbuf->mem != KEXEC_BUF_MEM_UNKNOWN)
+	if (kbuf->mem != KEXEC_BUF_MEM_UNKNOWN) {
+		pr_info("kexec_locate_mem_hole: memory already specified (0x%lx), skipping allocation\n", kbuf->mem);
+		return 0;
+	}
+
+	/*
+	 * If this is a multikernel image, try to allocate from the instance's
+	 * memory pool first. This ensures multikernel segments use pre-reserved
+	 * memory from the device tree configuration and respects the pool management.
+	 */
+	if (!kexec_alloc_multikernel(kbuf))
 		return 0;
 
 	/*

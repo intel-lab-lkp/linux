@@ -476,6 +476,64 @@ static struct page *kimage_alloc_crash_control_pages(struct kimage *image,
 }
 #endif
 
+static struct page *kimage_alloc_multikernel_control_pages(struct kimage *image,
+							   unsigned int order)
+{
+	/* Control pages for multikernel must be allocated from the instance's
+	 * memory pool to ensure they stay within the reserved memory regions
+	 * specified in the device tree configuration.
+	 *
+	 * We use mk_kimage_alloc() to get memory from the instance pool,
+	 * then convert it to page structures.
+	 */
+	void *virt_addr;
+	phys_addr_t phys_addr;
+	struct page *pages;
+	unsigned long size;
+	unsigned int count;
+
+	if (!image->mk_instance) {
+		pr_err("Multikernel image has no associated instance\n");
+		return NULL;
+	}
+
+	count = 1 << order;
+	size = count << PAGE_SHIFT;
+
+	/* Allocate from the multikernel instance pool (page aligned) */
+	virt_addr = mk_kimage_alloc(image, size, PAGE_SIZE);
+	if (!virt_addr) {
+		pr_debug("Failed to allocate %lu bytes for multikernel control pages\n", size);
+		return NULL;
+	}
+
+	/* Convert virtual address to physical */
+	phys_addr = virt_to_phys(virt_addr);
+
+	/* Check alignment requirements - control pages need page alignment */
+	if (!IS_ALIGNED(phys_addr, PAGE_SIZE)) {
+		pr_err("Multikernel control page allocation not page-aligned: phys=0x%llx\n",
+		       (unsigned long long)phys_addr);
+		mk_kimage_free(image, virt_addr, size);
+		return NULL;
+	}
+
+	/* Get the page structure */
+	pages = virt_to_page(virt_addr);
+
+	/* Check for conflicts with existing segments */
+	if (kimage_is_destination_range(image, phys_addr, phys_addr + size - 1)) {
+		pr_debug("Multikernel control pages conflict with existing segments: 0x%llx+0x%lx\n",
+			 (unsigned long long)phys_addr, size);
+		mk_kimage_free(image, virt_addr, size);
+		return NULL;
+	}
+
+	pr_debug("Allocated multikernel control pages: order=%u, phys=0x%llx, virt=%px\n",
+		 order, (unsigned long long)phys_addr, virt_addr);
+
+	return pages;
+}
 
 struct page *kimage_alloc_control_pages(struct kimage *image,
 					 unsigned int order)
@@ -491,6 +549,9 @@ struct page *kimage_alloc_control_pages(struct kimage *image,
 		pages = kimage_alloc_crash_control_pages(image, order);
 		break;
 #endif
+	case KEXEC_TYPE_MULTIKERNEL:
+		pages = kimage_alloc_multikernel_control_pages(image, order);
+		break;
 	}
 
 	return pages;
