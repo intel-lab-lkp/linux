@@ -173,10 +173,17 @@ void drm_client_release(struct drm_client_dev *client)
 }
 EXPORT_SYMBOL(drm_client_release);
 
-static void drm_client_buffer_delete(struct drm_client_buffer *buffer)
+/**
+ * drm_client_buffer_delete - Delete a client buffer
+ * @buffer: DRM client buffer
+ */
+void drm_client_buffer_delete(struct drm_client_buffer *buffer)
 {
 	struct drm_gem_object *gem = drm_gem_fb_get_obj(buffer->fb, 0);
 	int ret;
+
+	if (!buffer)
+		return;
 
 	drm_gem_vunmap(gem, &buffer->map);
 
@@ -189,6 +196,7 @@ static void drm_client_buffer_delete(struct drm_client_buffer *buffer)
 
 	kfree(buffer);
 }
+EXPORT_SYMBOL(drm_client_buffer_delete);
 
 static struct drm_client_buffer *
 drm_client_buffer_create(struct drm_client_dev *client, u32 width, u32 height,
@@ -372,7 +380,7 @@ EXPORT_SYMBOL(drm_client_buffer_vunmap);
  *
  * This function creates a &drm_client_buffer which consists of a
  * &drm_framebuffer backed by a dumb buffer.
- * Call drm_client_framebuffer_delete() to free the buffer.
+ * Call drm_client_buffer_delete() to free the buffer.
  *
  * Returns:
  * Pointer to a client buffer or an error pointer on failure.
@@ -415,19 +423,6 @@ err_drm_mode_destroy_dumb:
 	return ERR_PTR(ret);
 }
 EXPORT_SYMBOL(drm_client_framebuffer_create);
-
-/**
- * drm_client_framebuffer_delete - Delete a client framebuffer
- * @buffer: DRM client buffer (can be NULL)
- */
-void drm_client_framebuffer_delete(struct drm_client_buffer *buffer)
-{
-	if (!buffer)
-		return;
-
-	drm_client_buffer_delete(buffer);
-}
-EXPORT_SYMBOL(drm_client_framebuffer_delete);
 
 /**
  * drm_client_framebuffer_flush - Manually flush client framebuffer
