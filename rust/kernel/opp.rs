@@ -443,23 +443,14 @@ impl<T: ConfigOps + Default> Config<T> {
     ///
     /// The returned [`ConfigToken`] will remove the configuration when dropped.
     pub fn set(self, dev: &Device) -> Result<ConfigToken> {
-        let (_clk_list, clk_names) = match &self.clk_names {
-            Some(x) => {
-                let list = to_c_str_array(x)?;
-                let ptr = list.as_ptr();
-                (Some(list), ptr)
-            }
-            None => (None, ptr::null()),
-        };
-
-        let (_regulator_list, regulator_names) = match &self.regulator_names {
-            Some(x) => {
-                let list = to_c_str_array(x)?;
-                let ptr = list.as_ptr();
-                (Some(list), ptr)
-            }
-            None => (None, ptr::null()),
-        };
+        let clk_names = self.clk_names.as_deref().map(to_c_str_array).transpose()?;
+        let clk_names = clk_names.map_or(ptr::null(), |c| c.as_ptr());
+        let regulator_names = self
+            .regulator_names
+            .as_deref()
+            .map(to_c_str_array)
+            .transpose()?;
+        let regulator_names = regulator_names.map_or(ptr::null(), |c| c.as_ptr());
 
         let prop_name = self
             .prop_name
