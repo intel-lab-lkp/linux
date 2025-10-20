@@ -61,6 +61,10 @@ def hash_update(ctx, data):
     ctx.update(data)
 
 def hash_final(ctx):
+    if ctx.name == "shake_128":
+        return ctx.digest(16)
+    if ctx.name == "shake_256":
+        return ctx.digest(32)
     return ctx.digest()
 
 def compute_hash(alg, data):
@@ -87,7 +91,7 @@ def print_c_struct_u8_array_field(name, value):
 def alg_digest_size_const(alg):
     if alg == 'blake2s':
         return 'BLAKE2S_HASH_SIZE'
-    return f'{alg.upper()}_DIGEST_SIZE'
+    return f'{alg.upper().replace('-', '_')}_DIGEST_SIZE'
 
 def gen_unkeyed_testvecs(alg):
     print('')
@@ -122,7 +126,7 @@ def gen_hmac_testvecs(alg):
         ctx.update(mac)
     print_static_u8_array_definition(
             f'hmac_testvec_consolidated[{alg.upper()}_DIGEST_SIZE]',
-            ctx.digest())
+            hash_final(ctx))
 
 BLAKE2S_KEY_SIZE = 32
 BLAKE2S_HASH_SIZE = 32
@@ -164,5 +168,7 @@ if alg == 'blake2s':
     gen_additional_blake2s_testvecs()
 elif alg == 'poly1305':
     gen_additional_poly1305_testvecs()
+elif alg.startswith('sha3-') or alg.startswith('shake'):
+    pass # no HMAC
 else:
     gen_hmac_testvecs(alg)
