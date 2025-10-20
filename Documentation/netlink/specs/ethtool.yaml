@@ -721,6 +721,16 @@ attribute-sets:
       -
         name: ext-down-cnt
         type: u32
+      -
+        name: mse-value
+        type: uint
+      -
+        name: mse-max
+        type: uint
+      -
+        name: mse-channel
+        type: uint
+        enum: phy-mse-channel
   -
     name: debug
     attr-cnt-name: __ethtool-a-debug-cnt

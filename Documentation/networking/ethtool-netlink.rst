@@ -530,6 +530,9 @@ Kernel response contents:
   ``ETHTOOL_A_LINKSTATE_EXT_STATE``     u8      link extended state
   ``ETHTOOL_A_LINKSTATE_EXT_SUBSTATE``  u8      link extended substate
   ``ETHTOOL_A_LINKSTATE_EXT_DOWN_CNT``  u32     count of link down events
+  ``ETHTOOL_A_LINKSTATE_MSE_VALUE``     uint    Current average MSE value
+  ``ETHTOOL_A_LINKSTATE_MSE_MAX``       uint    Max scale for average MSE
+  ``ETHTOOL_A_LINKSTATE_MSE_CHANNEL``   uint    Source of MSE value
   ====================================  ======  ============================
 
 For most NIC drivers, the value of ``ETHTOOL_A_LINKSTATE_LINK`` returns
@@ -540,6 +543,14 @@ define their own handler.
 optional values. ethtool core can provide either both
 ``ETHTOOL_A_LINKSTATE_EXT_STATE`` and ``ETHTOOL_A_LINKSTATE_EXT_SUBSTATE``,
 or only ``ETHTOOL_A_LINKSTATE_EXT_STATE``, or none of them.
+
+``ETHTOOL_A_LINKSTATE_MSE_VALUE`` and ``ETHTOOL_A_LINKSTATE_MSE_MAX`` are
+optional values. The MSE value provided by this interface is a lightweight,
+less detailed version for quick health checks. If a WORST-channel selector is
+supported, the value comes from that selector; otherwise, if a LINK-wide
+selector is supported, it is used. If neither is available, the attributes are
+omitted. ``ETHTOOL_A_LINKSTATE_MSE_CHANNEL`` carries an
+``ethtool_phy_mse_channel``.
 
 ``LINKSTATE_GET`` allows dump requests (kernel returns reply messages for all
 devices supporting the request).
