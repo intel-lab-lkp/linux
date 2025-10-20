@@ -286,17 +286,6 @@ void __sha3_squeeze(struct __sha3_ctx *ctx, u8 *out, size_t out_len)
 }
 EXPORT_SYMBOL_GPL(__sha3_squeeze);
 
-/**
- * sha3_224() - Convenience wrapper to digest a simple buffer as SHA3-224
- * @in: The data to be digested
- * @in_len: The amount of data to be digested in bytes
- * @out: The buffer into which the digest will be stored (size not checked)
- *
- * Convenience wrapper to initialise a SHA3 context for SHA-224, add the input
- * data to it, finalise it, extract 28 bytes of digest and clear the context.
- *
- * Context: May use the FPU/Vector unit registers.
- */
 void sha3_224(const u8 *in, size_t in_len, u8 out[SHA3_224_DIGEST_SIZE])
 {
 	struct sha3_ctx ctx;
@@ -307,17 +296,6 @@ void sha3_224(const u8 *in, size_t in_len, u8 out[SHA3_224_DIGEST_SIZE])
 }
 EXPORT_SYMBOL_GPL(sha3_224);
 
-/**
- * sha3_256() - Convenience wrapper to digest a simple buffer as SHA3-256
- * @in: The data to be digested
- * @in_len: The amount of data to be digested in bytes
- * @out: The buffer into which the digest will be stored (size not checked)
- *
- * Convenience wrapper to initialise a SHA3 context for SHA-256, add the input
- * data to it, finalise it, extract 32 bytes of digest and clear the context.
- *
- * Context: May use the FPU/Vector unit registers.
- */
 void sha3_256(const u8 *in, size_t in_len, u8 out[SHA3_256_DIGEST_SIZE])
 {
 	struct sha3_ctx ctx;
@@ -328,17 +306,6 @@ void sha3_256(const u8 *in, size_t in_len, u8 out[SHA3_256_DIGEST_SIZE])
 }
 EXPORT_SYMBOL_GPL(sha3_256);
 
-/**
- * sha3_384() - Convenience wrapper to digest a simple buffer as SHA3-384
- * @in: The data to be digested
- * @in_len: The amount of data to be digested in bytes
- * @out: The buffer into which the digest will be stored (size not checked)
- *
- * Convenience wrapper to initialise a SHA3 context for SHA-384, add the input
- * data to it, finalise it, extract 48 bytes of digest and clear the context.
- *
- * Context: May use the FPU/Vector unit registers.
- */
 void sha3_384(const u8 *in, size_t in_len, u8 out[SHA3_384_DIGEST_SIZE])
 {
 	struct sha3_ctx ctx;
@@ -349,17 +316,6 @@ void sha3_384(const u8 *in, size_t in_len, u8 out[SHA3_384_DIGEST_SIZE])
 }
 EXPORT_SYMBOL_GPL(sha3_384);
 
-/**
- * sha3_512() - Convenience wrapper to digest a simple buffer as SHA3-512
- * @in: The data to be digested in bytes
- * @in_len: The amount of data to be digested in bytes
- * @out: The buffer into which the digest will be stored (size not checked)
- *
- * Convenience wrapper to initialise a SHA3 context for SHA-512, add the input
- * data to it, finalise it, extract 64 bytes of digest and clear the context.
- *
- * Context: May use the FPU/Vector unit registers.
- */
 void sha3_512(const u8 *in, size_t in_len, u8 out[SHA3_512_DIGEST_SIZE])
 {
 	struct sha3_ctx ctx;
@@ -370,19 +326,6 @@ void sha3_512(const u8 *in, size_t in_len, u8 out[SHA3_512_DIGEST_SIZE])
 }
 EXPORT_SYMBOL_GPL(sha3_512);
 
-/**
- * shake128() - Convenience wrapper to apply SHAKE128 to a simple buffer
- * @in: The input data to be used
- * @in_len: The amount of input data in bytes
- * @out: The buffer in which to store the output
- * @out_len: The amount of output to store in bytes (variable length)
- *
- * Convenience wrapper to initialise a SHA3 context for SHAKE128, add the input
- * data to it, finalise it, extract the requested amount of output and clear
- * the context.
- *
- * Context: May use the FPU/Vector unit registers.
- */
 void shake128(const u8 *in, size_t in_len, u8 *out, size_t out_len)
 {
 	struct shake_ctx ctx;
@@ -394,19 +337,6 @@ void shake128(const u8 *in, size_t in_len, u8 *out, size_t out_len)
 }
 EXPORT_SYMBOL_GPL(shake128);
 
-/**
- * shake256() - Convenience wrapper to apply SHAKE256 to a simple buffer
- * @in: The input data to be used
- * @in_len: The amount of input data in bytes
- * @out: The buffer in which to store the output
- * @out_len: The amount of output to store in bytes (variable length)
- *
- * Convenience wrapper to initialise a SHA3 context for SHAKE128, add the input
- * data to it, finalise it, extract the requested amount of output and clear
- * the context.
- *
- * Context: May use the FPU/Vector unit registers.
- */
 void shake256(const u8 *in, size_t in_len, u8 *out, size_t out_len)
 {
 	struct shake_ctx ctx;

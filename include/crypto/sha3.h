@@ -261,11 +261,86 @@ static inline void shake_squeeze(struct shake_ctx *ctx,
 	return __sha3_squeeze(&ctx->ctx, out, out_len);
 }
 
+/**
+ * sha3_224() - Compute SHA3-224 digest in one shot
+ * @in: The input data to be digested
+ * @in_len: Length of the input data in bytes
+ * @out: The buffer into which the digest will be stored
+ *
+ * Convenience function that computes a SHA3-224 digest.  Use this instead of
+ * the incremental API if you're able to provide all the input at once.
+ *
+ * Context: Any context.
+ */
 void sha3_224(const u8 *in, size_t in_len, u8 out[SHA3_224_DIGEST_SIZE]);
+
+/**
+ * sha3_256() - Compute SHA3-256 digest in one shot
+ * @in: The input data to be digested
+ * @in_len: Length of the input data in bytes
+ * @out: The buffer into which the digest will be stored
+ *
+ * Convenience function that computes a SHA3-256 digest.  Use this instead of
+ * the incremental API if you're able to provide all the input at once.
+ *
+ * Context: Any context.
+ */
 void sha3_256(const u8 *in, size_t in_len, u8 out[SHA3_256_DIGEST_SIZE]);
+
+/**
+ * sha3_384() - Compute SHA3-384 digest in one shot
+ * @in: The input data to be digested
+ * @in_len: Length of the input data in bytes
+ * @out: The buffer into which the digest will be stored
+ *
+ * Convenience function that computes a SHA3-384 digest.  Use this instead of
+ * the incremental API if you're able to provide all the input at once.
+ *
+ * Context: Any context.
+ */
 void sha3_384(const u8 *in, size_t in_len, u8 out[SHA3_384_DIGEST_SIZE]);
+
+/**
+ * sha3_512() - Compute SHA3-512 digest in one shot
+ * @in: The input data to be digested
+ * @in_len: Length of the input data in bytes
+ * @out: The buffer into which the digest will be stored
+ *
+ * Convenience function that computes a SHA3-512 digest.  Use this instead of
+ * the incremental API if you're able to provide all the input at once.
+ *
+ * Context: Any context.
+ */
 void sha3_512(const u8 *in, size_t in_len, u8 out[SHA3_512_DIGEST_SIZE]);
+
+/**
+ * shake128() - Compute SHAKE128 in one shot
+ * @in: The input data to be used
+ * @in_len: Length of the input data in bytes
+ * @out: The buffer into which the output will be stored
+ * @out_len: Length of the output to produce in bytes
+ *
+ * Convenience function that computes SHAKE128 in one shot.  Use this instead of
+ * the incremental API if you're able to provide all the input at once as well
+ * as receive all the output at once.  All output lengths are supported.
+ *
+ * Context: Any context.
+ */
 void shake128(const u8 *in, size_t in_len, u8 *out, size_t out_len);
+
+/**
+ * shake256() - Compute SHAKE256 in one shot
+ * @in: The input data to be used
+ * @in_len: Length of the input data in bytes
+ * @out: The buffer into which the output will be stored
+ * @out_len: Length of the output to produce in bytes
+ *
+ * Convenience function that computes SHAKE256 in one shot.  Use this instead of
+ * the incremental API if you're able to provide all the input at once as well
+ * as receive all the output at once.  All output lengths are supported.
+ *
+ * Context: Any context.
+ */
 void shake256(const u8 *in, size_t in_len, u8 *out, size_t out_len);
 
 #endif /* __CRYPTO_SHA3_H__ */
