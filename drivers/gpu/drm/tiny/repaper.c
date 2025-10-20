@@ -517,6 +517,8 @@ static int repaper_fb_dirty(struct drm_framebuffer *fb, const struct iosys_map *
 	unsigned int dst_pitch = 0;
 	struct iosys_map dst;
 	struct drm_rect clip;
+	const struct drm_format_info *info = fb->format;
+	size_t pitch;
 	int idx, ret = 0;
 	u8 *buf = NULL;
 
@@ -534,7 +536,9 @@ static int repaper_fb_dirty(struct drm_framebuffer *fb, const struct iosys_map *
 	DRM_DEBUG("Flushing [FB:%d] st=%ums\n", fb->base.id,
 		  epd->factored_stage_time);
 
-	buf = kmalloc(fb->width * fb->height / 8, GFP_KERNEL);
+	pitch = drm_format_info_min_pitch(info, 0, fb->width);
+
+	buf = kmalloc_array(fb->height, pitch, GFP_KERNEL);
 	if (!buf) {
 		ret = -ENOMEM;
 		goto out_exit;
