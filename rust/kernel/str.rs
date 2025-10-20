@@ -478,7 +478,11 @@ mod tests {
         let non_ascii = c"d\xe9j\xe0 vu";
         assert_eq!(format!("{non_ascii:?}"), "\"d\\xe9j\\xe0 vu\"");
         let good_bytes = c"\xf0\x9f\xa6\x80";
-        assert_eq!(format!("{good_bytes:?}"), "\"\\xf0\\x9f\\xa6\\x80\"");
+        if cfg!(CONFIG_RUSTC_HAS_CSTR_DEBUG_UTF8) {
+            assert_eq!(format!("{good_bytes:?}"), "\"🦀\"");
+        } else {
+            assert_eq!(format!("{good_bytes:?}"), "\"\\xf0\\x9f\\xa6\\x80\"");
+        }
         Ok(())
     }
 
