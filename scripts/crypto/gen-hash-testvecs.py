@@ -61,10 +61,6 @@ def hash_update(ctx, data):
     ctx.update(data)
 
 def hash_final(ctx):
-    if ctx.name == "shake_128":
-        return ctx.digest(16)
-    if ctx.name == "shake_256":
-        return ctx.digest(32)
     return ctx.digest()
 
 def compute_hash(alg, data):
@@ -168,7 +164,7 @@ if alg == 'blake2s':
     gen_additional_blake2s_testvecs()
 elif alg == 'poly1305':
     gen_additional_poly1305_testvecs()
-elif alg.startswith('sha3-') or alg.startswith('shake'):
+elif alg.startswith('sha3-'):
     pass # no HMAC
 else:
     gen_hmac_testvecs(alg)
