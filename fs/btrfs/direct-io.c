@@ -640,33 +640,6 @@ static int btrfs_dio_iomap_end(struct inode *inode, loff_t pos, loff_t length,
 	return ret;
 }
 
-static void btrfs_dio_end_io(struct btrfs_bio *bbio)
-{
-	struct btrfs_dio_private *dip =
-		container_of(bbio, struct btrfs_dio_private, bbio);
-	struct btrfs_inode *inode = bbio->inode;
-	struct bio *bio = &bbio->bio;
-
-	if (bio->bi_status) {
-		btrfs_warn(inode->root->fs_info,
-		"direct IO failed ino %llu op 0x%0x offset %#llx len %u err no %d",
-			   btrfs_ino(inode), bio->bi_opf,
-			   dip->file_offset, dip->bytes, bio->bi_status);
-	}
-
-	if (btrfs_op(bio) == BTRFS_MAP_WRITE) {
-		btrfs_finish_ordered_extent(bbio->ordered, NULL,
-					    dip->file_offset, dip->bytes,
-					    !bio->bi_status);
-	} else {
-		btrfs_unlock_dio_extent(&inode->io_tree, dip->file_offset,
-					dip->file_offset + dip->bytes - 1, NULL);
-	}
-
-	bbio->bio.bi_private = bbio->private;
-	iomap_dio_bio_end_io(bio);
-}
-
 static int btrfs_extract_ordered_extent(struct btrfs_bio *bbio,
 					struct btrfs_ordered_extent *ordered)
 {
@@ -705,23 +678,109 @@ static int btrfs_extract_ordered_extent(struct btrfs_bio *bbio,
 	return 0;
 }
 
-static void btrfs_dio_submit_io(const struct iomap_iter *iter, struct bio *bio,
-				loff_t file_offset)
+static void dio_end_write_copied_bio(struct btrfs_bio *bbio)
 {
-	struct btrfs_bio *bbio = btrfs_bio(bio);
+	struct bio *orig = bbio->private;
 	struct btrfs_dio_private *dip =
 		container_of(bbio, struct btrfs_dio_private, bbio);
-	struct btrfs_dio_data *dio_data = iter->private;
+	struct btrfs_inode *inode = bbio->inode;
+	struct bio *bio = &bbio->bio;
 
-	btrfs_bio_init(bbio, BTRFS_I(iter->inode)->root->fs_info,
-		       btrfs_dio_end_io, bio->bi_private);
-	bbio->inode = BTRFS_I(iter->inode);
-	bbio->file_offset = file_offset;
+	if (bio->bi_status) {
+		btrfs_warn(inode->root->fs_info,
+		"direct IO failed ino %llu op 0x%0x offset %#llx len %u err no %d",
+			   btrfs_ino(inode), bio->bi_opf,
+			   dip->file_offset, dip->bytes, bio->bi_status);
+	}
+
+	orig->bi_status = bbio->bio.bi_status;
+	btrfs_finish_ordered_extent(bbio->ordered, NULL,
+				    dip->file_offset, dip->bytes,
+				    !bio->bi_status);
+	bio_free_pages(bio);
+	bio_put(bio);
+	iomap_dio_bio_end_io(orig);
+}
+
+static void dio_end_read_copied_bio(struct btrfs_bio *bbio)
+{
+	struct bio *orig = bbio->private;
+	struct btrfs_dio_private *dip =
+		container_of(bbio, struct btrfs_dio_private, bbio);
+	struct btrfs_inode *inode = bbio->inode;
+	struct bio *bio = &bbio->bio;
+
+	if (bio->bi_status) {
+		btrfs_warn(inode->root->fs_info,
+		"direct IO failed ino %llu op 0x%0x offset %#llx len %u err no %d",
+			   btrfs_ino(inode), bio->bi_opf,
+			   dip->file_offset, dip->bytes, bio->bi_status);
+	}
+
+	orig->bi_status = bbio->bio.bi_status;
+	bio_copy_data(orig, &bbio->bio);
+	btrfs_unlock_dio_extent(&inode->io_tree, dip->file_offset,
+				dip->file_offset + dip->bytes - 1, NULL);
+	bio_free_pages(bio);
+	bio_put(bio);
+	iomap_dio_bio_end_io(orig);
+}
+
+static void btrfs_dio_submit_io(const struct iomap_iter *iter, struct bio *src,
+				loff_t file_offset)
+{
+	struct btrfs_dio_private *dip;
+	struct btrfs_dio_data *dio_data = iter->private;
+	struct btrfs_bio *new_bbio;
+	struct bio *new_bio;
+	const bool is_write = (btrfs_op(src) == BTRFS_MAP_WRITE);
+	btrfs_bio_end_io_t end_io;
+	const unsigned int src_size = src->bi_iter.bi_size;
+	const int nr_pages = round_up(src_size, PAGE_SIZE) >> PAGE_SHIFT;
+	unsigned int cur = 0;
+	int ret;
+
+	if (is_write)
+		end_io = dio_end_write_copied_bio;
+	else
+		end_io = dio_end_read_copied_bio;
+
+	/*
+	 * We can not trust the direct IO bio, the content can be modified at any time
+	 * during the submission/writeback.
+	 * Thus we have to allocate a new bio with pages allocated by us, so that noone
+	 * can change the content.
+	 */
+	new_bio = bio_alloc_bioset(NULL, nr_pages, src->bi_opf, GFP_NOFS, &btrfs_dio_bioset);
+	new_bbio = btrfs_bio(new_bio);
+	btrfs_bio_init(new_bbio, inode_to_fs_info(iter->inode), end_io, src);
+	dip = container_of(new_bbio, struct btrfs_dio_private, bbio);
+	new_bbio->inode = BTRFS_I(iter->inode);
+	new_bbio->file_offset = file_offset;
+	dip->file_offset = file_offset;
+	dip->bytes = src_size;
+	while (cur < src_size) {
+		struct page *page = alloc_page(GFP_NOFS);
+		unsigned int size = min(src_size - cur, PAGE_SIZE);
+
+		if (!page) {
+			ret = -ENOMEM;
+			goto error;
+		}
+		ret = bio_add_page(&new_bbio->bio, page, size, 0);
+		ASSERT(ret == size);
+		cur += size;
+	}
+	ASSERT(new_bbio->bio.bi_iter.bi_size == src_size);
+	new_bbio->bio.bi_iter.bi_sector = src->bi_iter.bi_sector;
 
 	dip->file_offset = file_offset;
-	dip->bytes = bio->bi_iter.bi_size;
+	dip->bytes = src_size;
 
-	dio_data->submitted += bio->bi_iter.bi_size;
+	dio_data->submitted += src_size;
+
+	if (is_write)
+		bio_copy_data(&new_bbio->bio, src);
 
 	/*
 	 * Check if we are doing a partial write.  If we are, we need to split
@@ -731,20 +790,22 @@ static void btrfs_dio_submit_io(const struct iomap_iter *iter, struct bio *bio,
 	 * remaining pages is blocked on the outstanding ordered extent.
 	 */
 	if (iter->flags & IOMAP_WRITE) {
-		int ret;
-
-		ret = btrfs_extract_ordered_extent(bbio, dio_data->ordered);
+		ret = btrfs_extract_ordered_extent(new_bbio, dio_data->ordered);
 		if (ret) {
 			btrfs_finish_ordered_extent(dio_data->ordered, NULL,
 						    file_offset, dip->bytes,
 						    !ret);
-			bio->bi_status = errno_to_blk_status(ret);
-			iomap_dio_bio_end_io(bio);
-			return;
+			goto error;
 		}
 	}
 
-	btrfs_submit_bbio(bbio, 0);
+	btrfs_submit_bbio(new_bbio, 0);
+	return;
+error:
+	src->bi_status = errno_to_blk_status(ret);
+	bio_free_pages(&new_bbio->bio);
+	bio_put(&new_bbio->bio);
+	iomap_dio_bio_end_io(src);
 }
 
 static const struct iomap_ops btrfs_dio_iomap_ops = {
@@ -754,7 +815,6 @@ static const struct iomap_ops btrfs_dio_iomap_ops = {
 
 static const struct iomap_dio_ops btrfs_dio_ops = {
 	.submit_io		= btrfs_dio_submit_io,
-	.bio_set		= &btrfs_dio_bioset,
 };
 
 static ssize_t btrfs_dio_read(struct kiocb *iocb, struct iov_iter *iter,
