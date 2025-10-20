@@ -765,6 +765,8 @@ xfs_zone_gc_split_write(
 			lim->max_zone_append_sectors << SECTOR_SHIFT);
 	if (!split_sectors)
 		return NULL;
+	if (split_sectors < 0)
+		return ERR_PTR(split_sectors);
 
 	/* ensure the split chunk is still block size aligned */
 	split_sectors = ALIGN_DOWN(split_sectors << SECTOR_SHIFT,
@@ -819,8 +821,16 @@ xfs_zone_gc_write_chunk(
 	bio_add_folio_nofail(&chunk->bio, chunk->scratch->folio, chunk->len,
 			offset_in_folio(chunk->scratch->folio, bvec_paddr));
 
-	while ((split_chunk = xfs_zone_gc_split_write(data, chunk)))
+	while (!IS_ERR_OR_NULL(split_chunk = xfs_zone_gc_split_write(data, chunk)))
 		xfs_zone_gc_submit_write(data, split_chunk);
+
+	if (IS_ERR(split_chunk)) {
+		chunk->bio.bi_status = errno_to_blk_status(PTR_ERR(
+								split_chunk));
+		bio_endio(&chunk->bio);
+		return;
+	}
+
 	xfs_zone_gc_submit_write(data, chunk);
 }
 
