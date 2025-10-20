@@ -2158,7 +2158,6 @@ int otx2_stop(struct net_device *netdev)
 	struct otx2_nic *pf = netdev_priv(netdev);
 	struct otx2_cq_poll *cq_poll = NULL;
 	struct otx2_qset *qset = &pf->qset;
-	struct otx2_rss_info *rss;
 	int qidx, vec, wrk;
 
 	/* If the DOWN flag is set resources are already freed */
@@ -2176,10 +2175,7 @@ int otx2_stop(struct net_device *netdev)
 	otx2_rxtx_enable(pf, false);
 
 	/* Clear RSS enable flag */
-	rss = &pf->hw.rss_info;
-	rss->enable = false;
-	if (!netif_is_rxfh_configured(netdev))
-		kfree(rss->rss_ctx[DEFAULT_RSS_CONTEXT_GROUP]);
+	pf->hw.rss_info.enable = false;
 
 	/* Cleanup Queue IRQ */
 	vec = pci_irq_vector(pf->pdev,
@@ -2224,6 +2220,7 @@ static netdev_tx_t otx2_xmit(struct sk_buff *skb, struct net_device *netdev)
 {
 	struct otx2_nic *pf = netdev_priv(netdev);
 	int qidx = skb_get_queue_mapping(skb);
+	struct otx2_dev_stats *dev_stats;
 	struct otx2_snd_queue *sq;
 	struct netdev_queue *txq;
 	int sq_idx;
@@ -2236,6 +2233,8 @@ static netdev_tx_t otx2_xmit(struct sk_buff *skb, struct net_device *netdev)
 	/* Check for minimum and maximum packet length */
 	if (skb->len <= ETH_HLEN ||
 	    (!skb_shinfo(skb)->gso_size && skb->len > pf->tx_max_pktlen)) {
+		dev_stats = &pf->hw.dev_stats;
+		atomic_long_inc(&dev_stats->tx_discards);
 		dev_kfree_skb(skb);
 		return NETDEV_TX_OK;
 	}
