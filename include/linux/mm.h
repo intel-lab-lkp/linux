@@ -2970,6 +2970,7 @@ static inline struct ptdesc *page_ptdesc(const struct page *page)
  * The high bits are used for information like zone/node/section.
  */
 enum pt_flags {
+	/* Bits 0-3 used for pt_order */
 	PT_reserved = PG_reserved,
 };
 

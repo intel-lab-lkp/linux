@@ -100,6 +100,7 @@ struct pagetable_move_control {
 	unlikely(__ret_warn_once);					\
 })
 
+void __init ptcache_init(void);
 void page_writeback_init(void);
 
 /*

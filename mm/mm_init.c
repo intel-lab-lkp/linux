@@ -2712,6 +2712,7 @@ void __init mm_core_init(void)
 	 */
 	page_ext_init_flatmem_late();
 	kmemleak_init();
+	ptcache_init();
 	ptlock_cache_init();
 	pgtable_cache_init();
 	debug_objects_mem_init();

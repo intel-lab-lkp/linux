@@ -7268,10 +7268,17 @@ long copy_folio_from_user(struct folio *dst_folio,
 }
 #endif /* CONFIG_TRANSPARENT_HUGEPAGE || CONFIG_HUGETLBFS */
 
+static struct kmem_cache *ptcache;
+
+void __init ptcache_init(void)
+{
+	ptcache = KMEM_CACHE(ptdesc, 0);
+}
+
 /**
  * pagetable_alloc - Allocate pagetables
  * @gfp:    GFP flags
- * @order:  desired pagetable order
+ * @order:  pagetable order
  *
  * pagetable_alloc allocates memory for page tables as well as a page table
  * descriptor to describe that memory.
@@ -7280,16 +7287,34 @@ long copy_folio_from_user(struct folio *dst_folio,
  */
 struct ptdesc *pagetable_alloc_noprof(gfp_t gfp, unsigned int order)
 {
-	struct page *page = alloc_frozen_pages_noprof(gfp | __GFP_COMP, order);
+	struct page *page;
 	pg_data_t *pgdat;
+	struct ptdesc *ptdesc;
 
-	if (!page)
+	BUG_ON(!ptcache);
+
+	ptdesc = kmem_cache_alloc(ptcache, gfp);
+	if (!ptdesc)
 		return NULL;
 
+	page = alloc_pages_memdesc(gfp, order,
+			memdesc_create(ptdesc, MEMDESC_TYPE_PAGE_TABLE));
+	if (!page) {
+		kmem_cache_free(ptcache, ptdesc);
+		return NULL;
+	}
+
+	VM_BUG_ON_PAGE(memdesc_type(page->memdesc) != MEMDESC_TYPE_PAGE_TABLE, page);
 	pgdat = NODE_DATA(page_to_nid(page));
 	mod_node_page_state(pgdat, NR_PAGETABLE, 1 << order);
 	__SetPageTable(page);
-	return page_ptdesc(page);
+	page->__folio_index = (unsigned long)ptdesc;
+
+	ptdesc->pt_flags = page->flags;
+	ptdesc->pt_flags.f |= order;
+	ptdesc->pt_page = page;
+
+	return ptdesc;
 }
 
 /**
@@ -7303,7 +7328,7 @@ void pagetable_free(struct ptdesc *pt)
 {
 	pg_data_t *pgdat = NODE_DATA(memdesc_nid(pt->pt_flags));
 	struct page *page = ptdesc_page(pt);
-	unsigned int order = compound_order(page);
+	unsigned int order = pt->pt_flags.f & 0xf;
 
 	mod_node_page_state(pgdat, NR_PAGETABLE, -(1L << order));
 	__ClearPageTable(page);

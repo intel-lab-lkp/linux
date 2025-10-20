@@ -548,38 +548,30 @@ FOLIO_MATCH(compound_head, _head_3);
 /**
  * struct ptdesc -    Memory descriptor for page tables.
  * @pt_flags: enum pt_flags plus zone/node/section.
+ * @pt_page: page allocated to store page table entries.
  * @pt_rcu_head:      For freeing page table pages.
  * @pt_list:          List of used page tables. Used for s390 gmap shadow pages
  *                    (which are not linked into the user page tables) and x86
  *                    pgds.
- * @_pt_pad_1:        Padding that aliases with page's compound head.
  * @pmd_huge_pte:     Protected by ptdesc->ptl, used for THPs.
- * @__page_mapping:   Aliases with page->mapping. Unused for page tables.
  * @pt_index:         Used for s390 gmap.
  * @pt_mm:            Used for x86 pgds.
  * @pt_frag_refcount: For fragmented page table tracking. Powerpc only.
  * @pt_share_count:   Used for HugeTLB PMD page table share count.
- * @_pt_pad_2:        Padding to ensure proper alignment.
  * @ptl:              Lock for the page table.
- * @__page_type:      Same as page->page_type. Unused for page tables.
- * @__page_refcount:  Same as page refcount.
- * @pt_memcg_data:    Memcg data. Tracked for page tables here.
  *
  * This struct overlays struct page for now. Do not modify without a good
  * understanding of the issues.
  */
 struct ptdesc {
 	memdesc_flags_t pt_flags;
+	struct page *pt_page;
 
 	union {
 		struct rcu_head pt_rcu_head;
 		struct list_head pt_list;
-		struct {
-			unsigned long _pt_pad_1;
-			pgtable_t pmd_huge_pte;
-		};
+		pgtable_t pmd_huge_pte;
 	};
-	unsigned long __page_mapping;
 
 	union {
 		pgoff_t pt_index;
@@ -591,47 +583,13 @@ struct ptdesc {
 	};
 
 	union {
-		unsigned long _pt_pad_2;
 #if ALLOC_SPLIT_PTLOCKS
 		spinlock_t *ptl;
 #else
 		spinlock_t ptl;
 #endif
 	};
-	unsigned int __page_type;
-	atomic_t __page_refcount;
-#ifdef CONFIG_MEMCG
-	unsigned long pt_memcg_data;
-#endif
-};
-
-#define TABLE_MATCH(pg, pt)						\
-	static_assert(offsetof(struct page, pg) == offsetof(struct ptdesc, pt))
-TABLE_MATCH(flags, pt_flags);
-TABLE_MATCH(compound_head, pt_list);
-TABLE_MATCH(compound_head, _pt_pad_1);
-TABLE_MATCH(mapping, __page_mapping);
-TABLE_MATCH(__folio_index, pt_index);
-TABLE_MATCH(rcu_head, pt_rcu_head);
-TABLE_MATCH(page_type, __page_type);
-TABLE_MATCH(_refcount, __page_refcount);
-#ifdef CONFIG_MEMCG
-TABLE_MATCH(memcg_data, pt_memcg_data);
-#endif
-#undef TABLE_MATCH
-static_assert(sizeof(struct ptdesc) <= sizeof(struct page));
-
-#define ptdesc_page(pt)			(_Generic((pt),			\
-	const struct ptdesc *:		(const struct page *)(pt),	\
-	struct ptdesc *:		(struct page *)(pt)))
-
-#define ptdesc_folio(pt)		(_Generic((pt),			\
-	const struct ptdesc *:		(const struct folio *)(pt),	\
-	struct ptdesc *:		(struct folio *)(pt)))
-
-#define page_ptdesc(p)			(_Generic((p),			\
-	const struct page *:		(const struct ptdesc *)(p),	\
-	struct page *:			(struct ptdesc *)(p)))
+} __aligned(16);
 
 #ifdef CONFIG_HUGETLB_PMD_PAGE_TABLE_SHARING
 static inline void ptdesc_pmd_pts_init(struct ptdesc *ptdesc)
