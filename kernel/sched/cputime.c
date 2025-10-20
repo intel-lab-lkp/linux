@@ -186,7 +186,7 @@ void account_system_index_time(struct task_struct *p,
  * @hardirq_offset: the offset to subtract from hardirq_count()
  * @cputime: the CPU time spent in kernel space since the last update
  */
-void account_system_time(struct task_struct *p, int hardirq_offset, u64 cputime)
+static void account_system_time(struct task_struct *p, int hardirq_offset, u64 cputime)
 {
 	int index;
 

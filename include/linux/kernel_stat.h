@@ -119,7 +119,6 @@ static inline void kcpustat_cpu_fetch(struct kernel_cpustat *dst, int cpu)
 
 extern void account_user_time(struct task_struct *, u64);
 extern void account_guest_time(struct task_struct *, u64);
-extern void account_system_time(struct task_struct *, int, u64);
 extern void account_system_index_time(struct task_struct *, u64,
 				      enum cpu_usage_stat);
 extern void account_steal_time(u64);
