@@ -1368,6 +1368,14 @@ S:	Maintained
 F:	Documentation/devicetree/bindings/media/amphion,vpu.yaml
 F:	drivers/media/platform/amphion/
 
+AMS AS5600 DRIVER
+M:	Aditya Dutt <duttaditya18@gmail.com>
+L:	linux-iio@vger.kernel.org
+S:	Maintained
+F:	Documentation/devicetree/bindings/iio/position/ams,as5600.yaml
+F:	Documentation/iio/as5600.rst
+F:	drivers/iio/position/as5600.c
+
 AMS AS73211 DRIVER
 M:	Christian Eggers <ceggers@arri.de>
 L:	linux-iio@vger.kernel.org

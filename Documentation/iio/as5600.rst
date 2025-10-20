@@ -1,0 +1,84 @@
+.. SPDX-License-Identifier: GPL-2.0-or-later
+
+=================
+ams AS5600 driver
+=================
+
+
+Overview
+========
+
+The ams AS5600 is a 12-Bit Programmable Contactless Potentiometer. Its
+i2c address is 0x36.
+
+For more information, see the datasheet at
+
+  https://ams-osram.com/products/sensor-solutions/position-sensors/ams-as5600-position-sensor
+
+
+Channels
+========
+
+The driver provides **two channels**:
+
+- **Channel 0**: raw, unscaled angle measurement
+- **Channel 1**: scaled angle measurement according to the configured
+  ``ZPOS`` / ``MPOS`` range
+
+``ZPOS`` and ``MPOS`` let a user restrict the angle returned, which improves
+the precision returned, since the angle returned is still in the 0 to
+4095 range. The minimal angle recommended is 18 degrees.
+
+The following files are exposed under ``/sys/bus/iio/devices/iio:deviceX``
+where X is the IIO index of the device.
+
++----------------+-------------------------------------------------+
+| File           | Description                                     |
++================+=================================================+
+| in_angl0_raw   | Raw angle measurement                           |
++----------------+-------------------------------------------------+
+| in_angl0_scale | Scale for channel 0                             |
++----------------+-------------------------------------------------+
+| in_angl1_raw   | Adjusted angle measurement, scaled by ZPOS/MPOS |
++----------------+-------------------------------------------------+
+| in_angl1_scale | Scale for channel 1                             |
++----------------+-------------------------------------------------+
+
+
+Accessing the device registers
+==============================
+
+The driver exposes direct register access via debugfs. This allows reading and
+writing I2C registers for debugging or configuration.
+
+Assuming the device is iio:deviceX, its debugfs path will be:
+
+.. code-block:: sh
+
+  $ AS5600=/sys/kernel/debug/iio/iio:deviceX/direct_reg_access
+
+Locate the index of a register to access in the datasheet, then use
+the following commands to read a value:
+
+.. code-block:: sh
+
+  $ echo <reg> > $AS5600/direct_reg_access
+  $ cat $AS5600/direct_reg_access
+
+or this to write a value:
+
+.. code-block:: sh
+
+  $ echo <reg> <value> > $AS5600/direct_reg_access
+
+For instance, this would return the lower byte of RAW ANGLE.
+
+.. code-block:: sh
+
+  $ echo 0x0D > $AS5600/direct_reg_access
+  $ cat $AS5600/direct_reg_access
+
+.. warning::
+
+   Register ``BURN`` (0xFF) permanently modifies device behavior.
+   Use with caution after reading the datasheet carefully.
