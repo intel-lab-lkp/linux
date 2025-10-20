@@ -331,7 +331,7 @@ void sha3_224(const u8 *in, size_t in_len, u8 out[SHA3_224_DIGEST_SIZE])
 	sha3_224_update(&ctx, in, in_len);
 	sha3_224_final(&ctx, out);
 }
-EXPORT_SYMBOL(sha3_224);
+EXPORT_SYMBOL_GPL(sha3_224);
 
 /**
  * sha3_256() - Convenience wrapper to digest a simple buffer as SHA3-256
@@ -352,7 +352,7 @@ void sha3_256(const u8 *in, size_t in_len, u8 out[SHA3_256_DIGEST_SIZE])
 	sha3_256_update(&ctx, in, in_len);
 	sha3_256_final(&ctx, out);
 }
-EXPORT_SYMBOL(sha3_256);
+EXPORT_SYMBOL_GPL(sha3_256);
 
 /**
  * sha3_384() - Convenience wrapper to digest a simple buffer as SHA3-384
@@ -373,7 +373,7 @@ void sha3_384(const u8 *in, size_t in_len, u8 out[SHA3_384_DIGEST_SIZE])
 	sha3_384_update(&ctx, in, in_len);
 	sha3_384_final(&ctx, out);
 }
-EXPORT_SYMBOL(sha3_384);
+EXPORT_SYMBOL_GPL(sha3_384);
 
 /**
  * sha3_512() - Convenience wrapper to digest a simple buffer as SHA3-512
@@ -394,7 +394,7 @@ void sha3_512(const u8 *in, size_t in_len, u8 out[SHA3_512_DIGEST_SIZE])
 	sha3_512_update(&ctx, in, in_len);
 	sha3_512_final(&ctx, out);
 }
-EXPORT_SYMBOL(sha3_512);
+EXPORT_SYMBOL_GPL(sha3_512);
 
 /**
  * shake128() - Convenience wrapper to apply SHAKE128 to a simple buffer
@@ -418,7 +418,7 @@ void shake128(const u8 *in, size_t in_len, u8 *out, size_t out_len)
 	shake128_squeeze(&ctx, out, out_len);
 	shake128_clear(&ctx);
 }
-EXPORT_SYMBOL(shake128);
+EXPORT_SYMBOL_GPL(shake128);
 
 /**
  * shake256() - Convenience wrapper to apply SHAKE256 to a simple buffer
@@ -442,7 +442,7 @@ void shake256(const u8 *in, size_t in_len, u8 *out, size_t out_len)
 	shake256_squeeze(&ctx, out, out_len);
 	shake256_clear(&ctx);
 }
-EXPORT_SYMBOL(shake256);
+EXPORT_SYMBOL_GPL(shake256);
 
 /*
  * Do a quick test using SHAKE256 and a 200 byte digest.
