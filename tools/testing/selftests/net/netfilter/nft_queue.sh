@@ -28,8 +28,10 @@ cleanup()
 
 checktool "nft --version" "test without nft tool"
 checktool "socat -h" "run test without socat"
+checktool "conntrack -V" "run test without conntrack tool"
 
 modprobe -q sctp
+modprobe -q nf_conntrack
 
 trap cleanup EXIT
 
@@ -353,6 +355,78 @@ EOF
 	echo "PASS: tcp via loopback and re-queueing"
 }
 
+test_tcp_conntrack_timeout_requeue()
+{
+	# Set up initial nftables ruleset.
+	ip netns exec "$nsrouter" nft -f /dev/stdin <<EOF
+flush ruleset
+table inet filter {
+	chain post {
+		type filter hook postrouting priority 0; policy accept;
+		ct state established,related counter accept
+		tcp dport 12345 counter queue num 10
+	}
+}
+EOF
+	if [ $? -ne 0 ]; then
+		echo "FAIL: Failed to apply initial nftables rules."
+		exit 1
+	fi
+
+	# Start server in the background
+	ip netns exec "$ns2" socat -u TCP4-LISTEN:12345,fork STDOUT > "$TMPFILE1" 2>/dev/null &
+	local server_pid=$!
+	busywait "$BUSYWAIT_TIMEOUT" listener_ready "$ns2" "12345"
+
+	# Start nf_queue listener in ACCEPT mode
+	ip netns exec "$nsrouter" ./nf_queue -q 10 -c > "$TMPFILE2" &
+	local nfq_accept_pid=$!
+	busywait "$BUSYWAIT_TIMEOUT" nf_queue_wait "$nsrouter" 10
+
+	# Establish the connection and send the first message
+	tail -f "$TMPFILE0" | ip netns exec "$ns1" socat STDIO TCP:10.0.2.99:12345 &
+	echo "message1" >> "$TMPFILE0"
+	if ! busywait "$BUSYWAIT_TIMEOUT" grep -q "message1" "$TMPFILE1"; then
+		echo "FAIL: Did not receive first message."
+		ret=1
+		return
+	fi
+
+	# Switch nfqueue listener to DROP mode
+	kill "$nfq_accept_pid"; wait "$nfq_accept_pid" 2>/dev/null
+	ip netns exec "$nsrouter" ./nf_queue -q 10 -c -Q 0 > "$TMPFILE3" &
+	local nfq_drop_pid=$!
+	busywait "$BUSYWAIT_TIMEOUT" nf_queue_wait "$nsrouter" 10
+
+	# Send another message; it should be accepted by the 'ct state established' rule
+	echo "message2" >> "$TMPFILE0"
+	if ! busywait "$BUSYWAIT_TIMEOUT" grep -q "message2" "$TMPFILE1"; then
+		echo "FAIL: Did not receive second message."
+		ret=1
+		return
+	fi
+
+	# Set conntrack timeout to 0 to force re-evaluation
+	ip netns exec "$nsrouter" conntrack -U -p tcp --dport 12345 -d 10.0.2.99 -s 10.0.1.99 -t 0
+
+	# Send a final message. It should be queued and then dropped.
+	echo "message3" >> "$TMPFILE0"
+	if busywait "$BUSYWAIT_TIMEOUT" grep -q "message3" "$TMPFILE1"; then
+		echo "FAIL: Third message was received, but should have been dropped."
+		ret=1
+		return
+	fi
+
+	kill "$server_pid"
+	wait "$server_pid" 2>/dev/null
+	kill "$nfq_drop_pid"
+	wait "$nfq_drop_pid" 2>/dev/null
+
+	echo "PASS: tcp established re-queueing on conntrack timeout"
+
+	return 0
+}
+
 test_icmp_vrf() {
 	if ! ip -net "$ns1" link add tvrf type vrf table 9876;then
 		echo "SKIP: Could not add vrf device"
@@ -661,6 +735,7 @@ test_tcp_forward
 test_tcp_localhost
 test_tcp_localhost_connectclose
 test_tcp_localhost_requeue
+test_tcp_conntrack_timeout_requeue
 test_sctp_forward
 test_sctp_output
 test_udp_ct_race
