@@ -139,6 +139,17 @@ config CC_HAS_COUNTED_BY
 	# https://gcc.gnu.org/bugzilla/show_bug.cgi?id=108896
 	default y if CC_IS_GCC && GCC_VERSION >= 150100
 
+config CC_HAS_COUNTED_BY_PTR_BARE
+	def_bool $(success,echo 'struct foo { int *ptr __attribute__((__counted_by__(count))); int count; };' | $(CC) $(CLANG_FLAGS) -x c - -c -o /dev/null -Werror)
+
+config CC_HAS_COUNTED_BY_PTR_EXP
+	def_bool $(success,echo 'struct foo { int *ptr __attribute__((__counted_by__(count))); int count; };' | $(CC) $(CLANG_FLAGS) -fexperimental-late-parse-attributes -x c - -c -o /dev/null -Werror)
+	depends on !CC_HAS_COUNTED_BY_PTR_BARE
+
+config CC_HAS_COUNTED_BY_PTR
+	def_bool y
+	depends on CC_HAS_COUNTED_BY_PTR_BARE || CC_HAS_COUNTED_BY_PTR_EXP
+
 config CC_HAS_MULTIDIMENSIONAL_NONSTRING
 	def_bool $(success,echo 'char tag[][4] __attribute__((__nonstring__)) = { };' | $(CC) $(CLANG_FLAGS) -x c - -c -o /dev/null -Werror)
 
