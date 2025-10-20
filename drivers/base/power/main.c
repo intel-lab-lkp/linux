@@ -1104,6 +1104,9 @@ static void device_resume(struct device *dev, pm_message_t state, bool async)
 	device_unlock(dev);
 	dpm_watchdog_clear(&wd);
 
+	if (error)
+		dev->power.is_suspended = true;
+
  Complete:
 	complete_all(&dev->power.completion);
 
