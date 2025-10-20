@@ -646,11 +646,13 @@ static int exfat_find(struct inode *dir, const struct qstr *qname,
 	info->size = le64_to_cpu(ep2->dentry.stream.size);
 
 	if (info->valid_size < 0) {
+		exfat_put_dentry_set(&es, false);
 		exfat_fs_error(sb, "data valid size is invalid(%lld)", info->valid_size);
 		return -EIO;
 	}
 
 	if (unlikely(EXFAT_B_TO_CLU_ROUND_UP(info->size, sbi) > sbi->used_clusters)) {
+		exfat_put_dentry_set(&es, false);
 		exfat_fs_error(sb, "data size is invalid(%lld)", info->size);
 		return -EIO;
 	}
