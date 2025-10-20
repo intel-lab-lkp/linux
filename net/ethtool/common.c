@@ -521,6 +521,19 @@ const char udp_tunnel_type_names[][ETH_GSTRING_LEN] = {
 static_assert(ARRAY_SIZE(udp_tunnel_type_names) ==
 	      __ETHTOOL_UDP_TUNNEL_TYPE_CNT);
 
+const char mse_cap_names[][ETH_GSTRING_LEN] = {
+	[const_ilog2(PHY_MSE_CAP_CHANNEL_A)]		= "channel-a",
+	[const_ilog2(PHY_MSE_CAP_CHANNEL_B)]		= "channel-b",
+	[const_ilog2(PHY_MSE_CAP_CHANNEL_C)]		= "channel-c",
+	[const_ilog2(PHY_MSE_CAP_CHANNEL_D)]		= "channel-d",
+	[const_ilog2(PHY_MSE_CAP_WORST_CHANNEL)]	= "worst-channel",
+	[const_ilog2(PHY_MSE_CAP_LINK)]			= "link",
+	[const_ilog2(PHY_MSE_CAP_AVG)]			= "average-mse",
+	[const_ilog2(PHY_MSE_CAP_PEAK)]			= "peak-mse",
+	[const_ilog2(PHY_MSE_CAP_WORST_PEAK)]		= "worst-peak-mse",
+};
+static_assert(ARRAY_SIZE(mse_cap_names) == __MSE_CAP_CNT);
+
 /* return false if legacy contained non-0 deprecated fields
  * maxtxpkt/maxrxpkt. rest of ksettings always updated
  */
