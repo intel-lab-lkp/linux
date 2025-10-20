@@ -380,6 +380,8 @@ static int kvm_gmem_mmap(struct file *file, struct vm_area_struct *vma)
 
 static struct file_operations kvm_gmem_fops = {
 	.mmap		= kvm_gmem_mmap,
+	.llseek		= default_llseek,
+	.write_iter     = generic_perform_write,
 	.open		= generic_file_open,
 	.release	= kvm_gmem_release,
 	.fallocate	= kvm_gmem_fallocate,
@@ -388,6 +390,49 @@ static struct file_operations kvm_gmem_fops = {
 void kvm_gmem_init(struct module *module)
 {
 	kvm_gmem_fops.owner = module;
+}
+
+static int kvm_kmem_gmem_write_begin(const struct kiocb *kiocb,
+				     struct address_space *mapping,
+				     loff_t pos, unsigned int len,
+				     struct folio **foliop,
+				     void **fsdata)
+{
+	struct file *file = kiocb->ki_filp;
+	struct inode *inode = file_inode(file);
+	pgoff_t index = pos >> PAGE_SHIFT;
+	struct folio *folio;
+
+	if (!kvm_gmem_supports_mmap(inode))
+		return -ENODEV;
+
+	if (pos + len > i_size_read(inode))
+		return -EINVAL;
+
+	folio = kvm_gmem_get_folio(inode, index);
+	if (IS_ERR(folio))
+		return -EFAULT;
+
+	*foliop = folio;
+	return 0;
+}
+
+static int kvm_kmem_gmem_write_end(const struct kiocb *kiocb,
+				   struct address_space *mapping,
+				   loff_t pos, unsigned int len,
+				   unsigned int copied,
+				   struct folio *folio, void *fsdata)
+{
+	if (copied && copied < len) {
+		unsigned int from = pos & ((1UL << folio_order(folio)) - 1);
+
+		folio_zero_range(folio, from + copied, len - copied);
+	}
+
+	folio_unlock(folio);
+	folio_put(folio);
+
+	return copied;
 }
 
 static int kvm_gmem_migrate_folio(struct address_space *mapping,
@@ -442,6 +487,8 @@ static void kvm_gmem_free_folio(struct folio *folio)
 
 static const struct address_space_operations kvm_gmem_aops = {
 	.dirty_folio = noop_dirty_folio,
+	.write_begin = kvm_kmem_gmem_write_begin,
+	.write_end = kvm_kmem_gmem_write_end,
 	.migrate_folio	= kvm_gmem_migrate_folio,
 	.error_remove_folio = kvm_gmem_error_folio,
 #ifdef CONFIG_HAVE_KVM_ARCH_GMEM_INVALIDATE
@@ -489,6 +536,7 @@ static int __kvm_gmem_create(struct kvm *kvm, loff_t size, u64 flags)
 	}
 
 	file->f_flags |= O_LARGEFILE;
+	file->f_mode |= FMODE_LSEEK | FMODE_PWRITE;
 
 	inode = file->f_inode;
 	WARN_ON(file->f_mapping != inode->i_mapping);
