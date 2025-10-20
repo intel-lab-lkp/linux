@@ -170,12 +170,12 @@ static void sha3_keccakf_rounds_generic(struct sha3_state *state)
 static void sha3_keccakf_generic(struct sha3_state *state)
 {
 	for (int  i = 0; i < ARRAY_SIZE(state->st); i++)
-		cpu_to_le64s(&state->st[i]);
+		le64_to_cpus(&state->st[i]);
 
 	sha3_keccakf_rounds_generic(state);
 
 	for (int  i = 0; i < ARRAY_SIZE(state->st); i++)
-		le64_to_cpus(&state->st[i]);
+		cpu_to_le64s(&state->st[i]);
 }
 
 static void sha3_absorb_block_generic(struct sha3_ctx *ctx, const u8 *data)
