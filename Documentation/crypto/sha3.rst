@@ -11,7 +11,7 @@ SHA-3 Algorithm collection
     - Extendable-Output Functions
   - Convenience API
   - Internal API
-    - Testing
+  - Testing
   - References
   - API Function Reference
 
@@ -221,10 +221,14 @@ and clearing.
 
 
 Testing
--------
+=======
 
-The sha3 module does a basic sanity test on initialisation, but there is also a
-kunit test module available.
+To test the SHA-3 code, use sha3_kunit.
+
+Since the SHA-3 algorithms are FIPS-approved, when the kernel is booted in FIPS
+mode the SHA-3 library also performs a simple self-test.  This is purely to meet
+a FIPS requirement.  Normal testing done by kernel developers and integrators
+should use the much more comprehensive KUnit test suite instead.
 
 
 References
