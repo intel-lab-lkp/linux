@@ -246,6 +246,24 @@ static void alloc_nodes_groups(unsigned int numgrps,
 	}
 }
 
+/*
+ * Find next group in round-robin fashion that contains CPUs from the
+ * specified NUMA node. Used for wrapping to avoid cross-NUMA assignment.
+ */
+static unsigned int find_next_node_group(struct cpumask *masks,
+					 unsigned int numgrps,
+					 const struct cpumask *node_cpus)
+{
+	unsigned int i;
+
+	for (i = 0; i < numgrps; i++) {
+		if (cpumask_intersects(&masks[i], node_cpus))
+			return i;
+	}
+
+	return 0;
+}
+
 static int __group_cpus_evenly(unsigned int startgrp, unsigned int numgrps,
 			       cpumask_var_t *node_to_cpumask,
 			       const struct cpumask *cpu_mask,
@@ -315,11 +333,15 @@ static int __group_cpus_evenly(unsigned int startgrp, unsigned int numgrps,
 			}
 
 			/*
-			 * wrapping has to be considered given 'startgrp'
-			 * may start anywhere
+			 * Wrapping has to be considered given 'startgrp'
+			 * may start anywhere. When wrapping, find the next
+			 * group (in round-robin fashion) that already contains
+			 * CPUs from the same NUMA node to avoid mixing CPUs
+			 * from different NUMA nodes in the same group.
 			 */
 			if (curgrp >= last_grp)
-				curgrp = 0;
+				curgrp = find_next_node_group(masks, numgrps,
+							      node_to_cpumask[nv->id]);
 			grp_spread_init_one(&masks[curgrp], nmsk,
 						cpus_per_grp);
 		}
