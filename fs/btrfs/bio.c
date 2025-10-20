@@ -646,6 +646,8 @@ static u64 btrfs_append_map_length(struct btrfs_bio *bbio, u64 map_length)
 	sector_offset = bio_split_rw_at(&bbio->bio, &bbio->fs_info->limits,
 					&nr_segs, map_length);
 	if (sector_offset) {
+		if (unlikely(sector_offset < 0))
+			return sector_offset;
 		/*
 		 * bio_split_rw_at() could split at a size smaller than our
 		 * sectorsize and thus cause unaligned I/Os.  Fix that by
@@ -685,8 +687,14 @@ static bool btrfs_submit_chunk(struct btrfs_bio *bbio, int mirror_num)
 	}
 
 	map_length = min(map_length, length);
-	if (use_append)
+	if (use_append) {
 		map_length = btrfs_append_map_length(bbio, map_length);
+		if (IS_ERR_VALUE(map_length)) {
+			status = errno_to_blk_status(map_length);
+			btrfs_bio_counter_dec(fs_info);
+			goto end_bbio;
+		}
+	}
 
 	if (map_length < length) {
 		struct btrfs_bio *split;
