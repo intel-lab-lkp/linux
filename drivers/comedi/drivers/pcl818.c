@@ -759,12 +759,15 @@ static int pcl818_ai_cancel(struct comedi_device *dev,
 {
 	struct pcl818_private *devpriv = dev->private;
 	struct comedi_isadma *dma = devpriv->dma;
-	struct comedi_cmd *cmd = &s->async->cmd;
+	struct comedi_cmd *cmd;
 
 	if (!devpriv->ai_cmd_running)
 		return 0;
 
 	if (dma) {
+		if (!s || !s->async)
+			return 0;
+		cmd = &s->async->cmd;
 		if (cmd->stop_src == TRIG_NONE ||
 		    (cmd->stop_src == TRIG_COUNT &&
 		     s->async->scans_done < cmd->stop_arg)) {
