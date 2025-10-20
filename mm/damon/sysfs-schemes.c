@@ -1121,7 +1121,16 @@ static ssize_t nid_show(struct kobject *kobj,
 	struct damos_sysfs_quota_goal *goal = container_of(kobj, struct
 			damos_sysfs_quota_goal, kobj);
 
-	/* todo: return error if the goal is not using nid */
+	switch (goal->metric) {
+		case DAMOS_QUOTA_USER_INPUT:
+		case DAMOS_QUOTA_SOME_MEM_PSI_US:
+			return -EINVAL;
+		case DAMOS_QUOTA_NODE_MEM_USED_BP:
+		case DAMOS_QUOTA_NODE_MEM_FREE_BP:
+			break;
+		default:
+			return -EINVAL;
+	}
 
 	return sysfs_emit(buf, "%d\n", goal->nid);
 }
