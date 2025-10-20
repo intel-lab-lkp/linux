@@ -78,7 +78,7 @@ struct sifive_fu540_macb_mgmt {
 #define GEM_MAX_TX_LEN		(unsigned int)(0x3FC0)
 
 #define GEM_MTU_MIN_SIZE	ETH_MIN_MTU
-#define MACB_NETIF_LSO		NETIF_F_TSO
+#define MACB_NETIF_LSO		(NETIF_F_TSO | NETIF_F_TSO6)
 
 #define MACB_WOL_ENABLED		BIT(0)
 
