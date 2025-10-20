@@ -3519,6 +3519,8 @@ out_release_iod_mempool:
 out_dev_unmap:
 	nvme_dev_unmap(dev);
 out_uninit_ctrl:
+	dev_err(dev->ctrl.device, "probe failed on %s (result: %d)\n",
+		dev_name(&pdev->dev), result);
 	nvme_uninit_ctrl(&dev->ctrl);
 out_put_ctrl:
 	nvme_put_ctrl(&dev->ctrl);
