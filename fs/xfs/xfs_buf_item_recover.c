@@ -747,8 +747,7 @@ xlog_recover_do_primary_sb_buffer(
 	}
 
 	if (mp->m_sb.sb_agcount < orig_agcount) {
-		xfs_alert(mp, "Shrinking AG count in log recovery not supported");
-		return -EFSCORRUPTED;
+		xfs_warn_experimental(mp, XFS_EXPERIMENTAL_SHRINK);
 	}
 	if (mp->m_sb.sb_rgcount < orig_rgcount) {
 		xfs_warn(mp,
@@ -774,18 +773,28 @@ xlog_recover_do_primary_sb_buffer(
 		if (error)
 			return error;
 	}
-
-	/*
-	 * Initialize the new perags, and also update various block and inode
-	 * allocator setting based off the number of AGs or total blocks.
-	 * Because of the latter this also needs to happen if the agcount did
-	 * not change.
-	 */
-	error = xfs_initialize_perag(mp, orig_agcount, mp->m_sb.sb_agcount,
-			mp->m_sb.sb_dblocks, &mp->m_maxagi);
-	if (error) {
-		xfs_warn(mp, "Failed recovery per-ag init: %d", error);
-		return error;
+	if (orig_agcount > mp->m_sb.sb_agcount) {
+		/*
+		 * Remove the old AGs that were removed previously by a growfs
+		 */
+		xfs_free_perag_range(mp, mp->m_sb.sb_agcount, orig_agcount);
+		mp->m_maxagi = xfs_set_inode_alloc(mp, mp->m_sb.sb_agcount);
+		mp->m_ag_prealloc_blocks = xfs_prealloc_blocks(mp);
+	} else {
+		/*
+		 * Initialize the new perags, and also the update various block
+		 * and inode allocator setting based off the number of AGs or
+		 * total blocks.
+		 * Because of the latter, this also needs to happen if the
+		 * agcount did not change.
+		 */
+		error = xfs_initialize_perag(mp, orig_agcount,
+				mp->m_sb.sb_agcount,
+				mp->m_sb.sb_dblocks, &mp->m_maxagi);
+		if (error) {
+			xfs_warn(mp, "Failed recovery per-ag init: %d", error);
+			return error;
+		}
 	}
 	mp->m_alloc_set_aside = xfs_alloc_set_aside(mp);
 
