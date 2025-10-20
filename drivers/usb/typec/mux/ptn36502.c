@@ -339,7 +339,7 @@ static int ptn36502_probe(struct i2c_client *client)
 
 	ret = regulator_enable(ptn->vdd18_supply);
 	if (ret) {
-		ret = dev_err_probe(dev, ret, "Failed to enable vdd18\n");
+		dev_err_probe(dev, ret, "Failed to enable vdd18\n");
 		goto err_mux_put;
 	}
 
