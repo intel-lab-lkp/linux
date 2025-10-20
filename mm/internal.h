@@ -1382,6 +1382,9 @@ int numa_migrate_check(struct folio *folio, struct vm_fault *vmf,
 		      unsigned long addr, int *flags, bool writable,
 		      int *last_cpupid);
 
+bool folio_needs_prot_numa(struct folio *folio, struct vm_area_struct *vma,
+		int target_node);
+
 void free_zone_device_folio(struct folio *folio);
 int migrate_device_coherent_folio(struct folio *folio);
 
