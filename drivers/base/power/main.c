@@ -1112,7 +1112,9 @@ static void device_resume(struct device *dev, pm_message_t state, bool async)
 
 	TRACE_RESUME(error);
 
-	if (error) {
+	if (error == -EBUSY)
+		pm_dev_dbg(dev, state, async ? " async" : "");
+	else if (error) {
 		WRITE_ONCE(async_error, error);
 		dpm_save_failed_dev(dev_name(dev));
 		pm_dev_err(dev, state, async ? " async" : "", error);
