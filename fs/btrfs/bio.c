@@ -809,7 +809,11 @@ void btrfs_submit_bbio(struct btrfs_bio *bbio, int mirror_num)
 	/* If bbio->inode is not populated, its file_offset must be 0. */
 	ASSERT(bbio->inode || bbio->file_offset == 0);
 
+	/* The bio should not exceed U32 size limit. */
+	ASSERT(bbio->bio.bi_iter.bi_size < U32_MAX);
+
 	assert_bbio_alignment(bbio);
+	bbio->size = bbio->bio.bi_iter.bi_size;
 
 	while (!btrfs_submit_chunk(bbio, mirror_num))
 		;

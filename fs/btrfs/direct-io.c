@@ -19,15 +19,6 @@ struct btrfs_dio_data {
 	bool nocow_done;
 };
 
-struct btrfs_dio_private {
-	/* Range of I/O */
-	u64 file_offset;
-	u32 bytes;
-
-	/* This must be last */
-	struct btrfs_bio bbio;
-};
-
 static struct bio_set btrfs_dio_bioset;
 
 static int lock_extent_direct(struct inode *inode, u64 lockstart, u64 lockend,
@@ -642,25 +633,26 @@ static int btrfs_dio_iomap_end(struct inode *inode, loff_t pos, loff_t length,
 
 static void btrfs_dio_end_io(struct btrfs_bio *bbio)
 {
-	struct btrfs_dio_private *dip =
-		container_of(bbio, struct btrfs_dio_private, bbio);
 	struct btrfs_inode *inode = bbio->inode;
 	struct bio *bio = &bbio->bio;
+
+	/* We should have bbio->bytes populated. */
+	ASSERT(bbio->size);
 
 	if (bio->bi_status) {
 		btrfs_warn(inode->root->fs_info,
 		"direct IO failed ino %llu op 0x%0x offset %#llx len %u err no %d",
 			   btrfs_ino(inode), bio->bi_opf,
-			   dip->file_offset, dip->bytes, bio->bi_status);
+			   bbio->file_offset, bbio->size, bio->bi_status);
 	}
 
 	if (btrfs_op(bio) == BTRFS_MAP_WRITE) {
 		btrfs_finish_ordered_extent(bbio->ordered, NULL,
-					    dip->file_offset, dip->bytes,
+					    bbio->file_offset, bbio->size,
 					    !bio->bi_status);
 	} else {
-		btrfs_unlock_dio_extent(&inode->io_tree, dip->file_offset,
-					dip->file_offset + dip->bytes - 1, NULL);
+		btrfs_unlock_dio_extent(&inode->io_tree, bbio->file_offset,
+					bbio->file_offset + bbio->size - 1, NULL);
 	}
 
 	bbio->bio.bi_private = bbio->private;
@@ -709,19 +701,15 @@ static void btrfs_dio_submit_io(const struct iomap_iter *iter, struct bio *bio,
 				loff_t file_offset)
 {
 	struct btrfs_bio *bbio = btrfs_bio(bio);
-	struct btrfs_dio_private *dip =
-		container_of(bbio, struct btrfs_dio_private, bbio);
 	struct btrfs_dio_data *dio_data = iter->private;
+	const u32 bio_size = bio->bi_iter.bi_size;
 
 	btrfs_bio_init(bbio, BTRFS_I(iter->inode)->root->fs_info,
 		       btrfs_dio_end_io, bio->bi_private);
 	bbio->inode = BTRFS_I(iter->inode);
 	bbio->file_offset = file_offset;
 
-	dip->file_offset = file_offset;
-	dip->bytes = bio->bi_iter.bi_size;
-
-	dio_data->submitted += bio->bi_iter.bi_size;
+	dio_data->submitted += bio_size;
 
 	/*
 	 * Check if we are doing a partial write.  If we are, we need to split
@@ -736,7 +724,7 @@ static void btrfs_dio_submit_io(const struct iomap_iter *iter, struct bio *bio,
 		ret = btrfs_extract_ordered_extent(bbio, dio_data->ordered);
 		if (ret) {
 			btrfs_finish_ordered_extent(dio_data->ordered, NULL,
-						    file_offset, dip->bytes,
+						    file_offset, bio_size,
 						    !ret);
 			bio->bi_status = errno_to_blk_status(ret);
 			iomap_dio_bio_end_io(bio);
@@ -1093,7 +1081,7 @@ again:
 int __init btrfs_init_dio(void)
 {
 	if (bioset_init(&btrfs_dio_bioset, BIO_POOL_SIZE,
-			offsetof(struct btrfs_dio_private, bbio.bio),
+			offsetof(struct btrfs_bio, bio),
 			BIOSET_NEED_BVECS))
 		return -ENOMEM;
 

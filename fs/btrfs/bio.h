@@ -79,6 +79,8 @@ struct btrfs_bio {
 	/* File system that this I/O operates on. */
 	struct btrfs_fs_info *fs_info;
 
+	u32 size;
+
 	/* Save the first error status of split bio. */
 	blk_status_t status;
 
