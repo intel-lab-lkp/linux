@@ -225,6 +225,10 @@ struct page *__alloc_pages_noprof(gfp_t gfp, unsigned int order, int preferred_n
 		nodemask_t *nodemask);
 #define __alloc_pages(...)			alloc_hooks(__alloc_pages_noprof(__VA_ARGS__))
 
+struct page *__alloc_pages_memdesc_noprof(gfp_t gfp, unsigned int order,
+		memdesc_t memdesc, int preferred_nid, nodemask_t *nodemask);
+#define __alloc_pages_memdesc(...)		alloc_hooks(__alloc_pages_memdesc_noprof(__VA_ARGS__))
+
 struct folio *__folio_alloc_noprof(gfp_t gfp, unsigned int order, int preferred_nid,
 		nodemask_t *nodemask);
 #define __folio_alloc(...)			alloc_hooks(__folio_alloc_noprof(__VA_ARGS__))
@@ -315,6 +319,8 @@ static inline struct page *alloc_pages_node_noprof(int nid, gfp_t gfp_mask,
 
 #ifdef CONFIG_NUMA
 struct page *alloc_pages_noprof(gfp_t gfp, unsigned int order);
+struct page *alloc_pages_memdesc_noprof(gfp_t gfp, unsigned int order,
+		memdesc_t memdesc);
 struct folio *folio_alloc_noprof(gfp_t gfp, unsigned int order);
 struct folio *folio_alloc_mpol_noprof(gfp_t gfp, unsigned int order,
 		struct mempolicy *mpol, pgoff_t ilx, int nid);
@@ -324,6 +330,12 @@ struct folio *vma_alloc_folio_noprof(gfp_t gfp, int order, struct vm_area_struct
 static inline struct page *alloc_pages_noprof(gfp_t gfp_mask, unsigned int order)
 {
 	return alloc_pages_node_noprof(numa_node_id(), gfp_mask, order);
+}
+static inline struct page *alloc_pages_memdesc_noprof(gfp_t gfp,
+		unsigned int order, memdesc_t memdesc)
+{
+	return __alloc_pages_memdesc_noprof(gfp, order, memdesc,
+			numa_node_id(), NULL);
 }
 static inline struct folio *folio_alloc_noprof(gfp_t gfp, unsigned int order)
 {
@@ -339,6 +351,7 @@ static inline struct folio *folio_alloc_mpol_noprof(gfp_t gfp, unsigned int orde
 #endif
 
 #define alloc_pages(...)			alloc_hooks(alloc_pages_noprof(__VA_ARGS__))
+#define alloc_pages_memdesc(...)		alloc_hooks(alloc_pages_memdesc_noprof(__VA_ARGS__))
 #define folio_alloc(...)			alloc_hooks(folio_alloc_noprof(__VA_ARGS__))
 #define folio_alloc_mpol(...)			alloc_hooks(folio_alloc_mpol_noprof(__VA_ARGS__))
 #define vma_alloc_folio(...)			alloc_hooks(vma_alloc_folio_noprof(__VA_ARGS__))

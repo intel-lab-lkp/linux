@@ -2338,7 +2338,7 @@ bool mempolicy_in_oom_domain(struct task_struct *tsk,
 }
 
 static struct page *alloc_pages_preferred_many(gfp_t gfp, unsigned int order,
-						int nid, nodemask_t *nodemask)
+		memdesc_t memdesc, int nid, nodemask_t *nodemask)
 {
 	struct page *page;
 	gfp_t preferred_gfp;
@@ -2351,9 +2351,11 @@ static struct page *alloc_pages_preferred_many(gfp_t gfp, unsigned int order,
 	 */
 	preferred_gfp = gfp | __GFP_NOWARN;
 	preferred_gfp &= ~(__GFP_DIRECT_RECLAIM | __GFP_NOFAIL);
-	page = __alloc_frozen_pages_noprof(preferred_gfp, order, nid, nodemask);
+	page = __alloc_pages_memdesc_noprof(preferred_gfp, order, memdesc,
+			nid, nodemask);
 	if (!page)
-		page = __alloc_frozen_pages_noprof(gfp, order, nid, NULL);
+		page = __alloc_pages_memdesc_noprof(gfp, order, memdesc,
+				nid, NULL);
 
 	return page;
 }
@@ -2362,6 +2364,7 @@ static struct page *alloc_pages_preferred_many(gfp_t gfp, unsigned int order,
  * alloc_pages_mpol - Allocate pages according to NUMA mempolicy.
  * @gfp: GFP flags.
  * @order: Order of the page allocation.
+ * @memdesc: Memory descriptor.
  * @pol: Pointer to the NUMA mempolicy.
  * @ilx: Index for interleave mempolicy (also distinguishes alloc_pages()).
  * @nid: Preferred node (usually numa_node_id() but @mpol may override it).
@@ -2369,7 +2372,7 @@ static struct page *alloc_pages_preferred_many(gfp_t gfp, unsigned int order,
  * Return: The page on success or NULL if allocation fails.
  */
 static struct page *alloc_pages_mpol(gfp_t gfp, unsigned int order,
-		struct mempolicy *pol, pgoff_t ilx, int nid)
+		memdesc_t memdesc, struct mempolicy *pol, pgoff_t ilx, int nid)
 {
 	nodemask_t *nodemask;
 	struct page *page;
@@ -2377,7 +2380,7 @@ static struct page *alloc_pages_mpol(gfp_t gfp, unsigned int order,
 	nodemask = policy_nodemask(gfp, pol, ilx, &nid);
 
 	if (pol->mode == MPOL_PREFERRED_MANY)
-		return alloc_pages_preferred_many(gfp, order, nid, nodemask);
+		return alloc_pages_preferred_many(gfp, order, memdesc, nid, nodemask);
 
 	if (IS_ENABLED(CONFIG_TRANSPARENT_HUGEPAGE) &&
 	    /* filter "hugepage" allocation, unless from alloc_pages() */
@@ -2399,9 +2402,9 @@ static struct page *alloc_pages_mpol(gfp_t gfp, unsigned int order,
 			 * First, try to allocate THP only on local node, but
 			 * don't reclaim unnecessarily, just compact.
 			 */
-			page = __alloc_frozen_pages_noprof(
+			page = __alloc_pages_memdesc_noprof(
 				gfp | __GFP_THISNODE | __GFP_NORETRY, order,
-				nid, NULL);
+				memdesc, nid, NULL);
 			if (page || !(gfp & __GFP_DIRECT_RECLAIM))
 				return page;
 			/*
@@ -2413,7 +2416,7 @@ static struct page *alloc_pages_mpol(gfp_t gfp, unsigned int order,
 		}
 	}
 
-	page = __alloc_frozen_pages_noprof(gfp, order, nid, nodemask);
+	page = __alloc_pages_memdesc_noprof(gfp, order, memdesc, nid, nodemask);
 
 	if (unlikely(pol->mode == MPOL_INTERLEAVE ||
 		     pol->mode == MPOL_WEIGHTED_INTERLEAVE) && page) {
@@ -2432,8 +2435,8 @@ static struct page *alloc_pages_mpol(gfp_t gfp, unsigned int order,
 struct folio *folio_alloc_mpol_noprof(gfp_t gfp, unsigned int order,
 		struct mempolicy *pol, pgoff_t ilx, int nid)
 {
-	struct page *page = alloc_pages_mpol(gfp | __GFP_COMP, order, pol,
-			ilx, nid);
+	struct page *page = alloc_pages_mpol(gfp | __GFP_COMP, order,
+			memdesc_create(NULL, 0), pol, ilx, nid);
 	if (!page)
 		return NULL;
 
@@ -2473,7 +2476,8 @@ struct folio *vma_alloc_folio_noprof(gfp_t gfp, int order, struct vm_area_struct
 }
 EXPORT_SYMBOL(vma_alloc_folio_noprof);
 
-struct page *alloc_frozen_pages_noprof(gfp_t gfp, unsigned order)
+struct page *alloc_pages_memdesc_noprof(gfp_t gfp, unsigned order,
+		memdesc_t memdesc)
 {
 	struct mempolicy *pol = &default_policy;
 
@@ -2484,7 +2488,7 @@ struct page *alloc_frozen_pages_noprof(gfp_t gfp, unsigned order)
 	if (!in_interrupt() && !(gfp & __GFP_THISNODE))
 		pol = get_task_policy(current);
 
-	return alloc_pages_mpol(gfp, order, pol, NO_INTERLEAVE_INDEX,
+	return alloc_pages_mpol(gfp, order, memdesc, pol, NO_INTERLEAVE_INDEX,
 				       numa_node_id());
 }
 

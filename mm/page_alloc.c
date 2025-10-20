@@ -5175,8 +5175,8 @@ EXPORT_SYMBOL_GPL(alloc_pages_bulk_noprof);
 /*
  * This is the 'heart' of the zoned buddy allocator.
  */
-struct page *__alloc_frozen_pages_noprof(gfp_t gfp, unsigned int order,
-		int preferred_nid, nodemask_t *nodemask)
+struct page *__alloc_pages_memdesc_noprof(gfp_t gfp, unsigned int order,
+		memdesc_t memdesc, int preferred_nid, nodemask_t *nodemask)
 {
 	struct page *page;
 	unsigned int alloc_flags = ALLOC_WMARK_LOW;
@@ -5236,9 +5236,15 @@ out:
 	trace_mm_page_alloc(page, order, alloc_gfp, ac.migratetype);
 	kmsan_alloc_page(page, order, alloc_gfp);
 
+	if (page && memdesc.v) {
+		unsigned long i, max = 1UL << order;
+
+		for (i = 0; i < max; i++)
+			page->memdesc = memdesc;
+	}
 	return page;
 }
-EXPORT_SYMBOL(__alloc_frozen_pages_noprof);
+EXPORT_SYMBOL(__alloc_pages_memdesc_noprof);
 
 struct page *__alloc_pages_noprof(gfp_t gfp, unsigned int order,
 		int preferred_nid, nodemask_t *nodemask)

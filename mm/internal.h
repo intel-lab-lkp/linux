@@ -827,15 +827,22 @@ extern bool free_pages_prepare(struct page *page, unsigned int order);
 
 extern int user_min_free_kbytes;
 
-struct page *__alloc_frozen_pages_noprof(gfp_t, unsigned int order, int nid,
-		nodemask_t *);
+static inline struct page *__alloc_frozen_pages_noprof(gfp_t gfp,
+		unsigned int order, int nid, nodemask_t *mask)
+{
+	return __alloc_pages_memdesc_noprof(gfp, order,
+			memdesc_create(NULL, 0), nid, mask);
+}
 #define __alloc_frozen_pages(...) \
 	alloc_hooks(__alloc_frozen_pages_noprof(__VA_ARGS__))
 void free_frozen_pages(struct page *page, unsigned int order);
 void free_unref_folios(struct folio_batch *fbatch);
 
 #ifdef CONFIG_NUMA
-struct page *alloc_frozen_pages_noprof(gfp_t, unsigned int order);
+static inline struct page *alloc_frozen_pages_noprof(gfp_t gfp, unsigned int order)
+{
+	return alloc_pages_memdesc_noprof(gfp, order, memdesc_create(NULL, 0));
+}
 #else
 static inline struct page *alloc_frozen_pages_noprof(gfp_t gfp, unsigned int order)
 {

@@ -38,6 +38,30 @@ typedef struct {
 	unsigned long f;
 } memdesc_flags_t;
 
+/**
+ * typedef memdesc_t - A typed memory descriptor.
+ *
+ * The bottom few bits of this encoded pointer determine the type
+ * of the memdesc.
+ */
+typedef struct {
+	unsigned long v;
+} memdesc_t;
+
+#define MEMDESC_TYPE_PAGE_TABLE		15
+
+static inline memdesc_t memdesc_create(void *p, unsigned long type)
+{
+	VM_BUG_ON((unsigned long)p & 15);
+	VM_BUG_ON(type > 15);
+	return (memdesc_t) { .v = type | (unsigned long)p };
+}
+
+static inline unsigned long memdesc_type(memdesc_t memdesc)
+{
+	return memdesc.v & 15;
+}
+
 /*
  * Each physical page in the system has a struct page associated with
  * it to keep track of whatever it is we are using the page for at the
@@ -126,6 +150,7 @@ struct page {
 		};
 		struct {	/* Tail pages of compound page */
 			unsigned long compound_head;	/* Bit zero is set */
+			memdesc_t memdesc;	/* All pages, not just tail */
 		};
 		struct {	/* ZONE_DEVICE pages */
 			/*
