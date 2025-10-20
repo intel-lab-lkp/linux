@@ -760,7 +760,6 @@ int cx231xx_set_decoder_video_input(struct cx231xx *dev,
 
 		status = vid_blk_write_word(dev, AFE_CTRL, value);
 
-		status = cx231xx_afe_set_mode(dev, AFE_MODE_BASEBAND);
 		break;
 	case CX231XX_VMUX_TELEVISION:
 	case CX231XX_VMUX_CABLE:
@@ -910,8 +909,6 @@ int cx231xx_set_decoder_video_input(struct cx231xx *dev,
 			if (dev->tuner_type == TUNER_NXP_TDA18271) {
 				status = vid_blk_read_word(dev, PIN_CTRL,
 				 &value);
-				status = vid_blk_write_word(dev, PIN_CTRL,
-				 (value & 0xFFFFFFEF));
 			}
 
 			break;
@@ -1092,7 +1089,6 @@ int cx231xx_set_audio_input(struct cx231xx *dev, u8 input)
 		ainput = AUDIO_INPUT_TUNER_TV;
 		break;
 	case CX231XX_AMUX_LINE_IN:
-		status = cx231xx_i2s_blk_set_audio_input(dev, input);
 		ainput = AUDIO_INPUT_LINE;
 		break;
 	default:
@@ -1865,8 +1861,6 @@ int cx231xx_dif_set_standard(struct cx231xx *dev, u32 standard)
 						0x1befbf06);
 		status = vid_blk_write_word(dev, DIF_SRC_GAIN_CONTROL,
 						0x000035e8);
-		status = vid_blk_write_word(dev, DIF_SOFT_RST_CTRL_REVB,
-						0x00000000);
 		/* Save the Spec Inversion value */
 		dif_misc_ctrl_value &= FLD_DIF_SPEC_INV;
 		dif_misc_ctrl_value |= 0x3A0A3F10;
@@ -2702,8 +2696,6 @@ int cx231xx_set_gpio_value(struct cx231xx *dev, int pin_number, int pin_value)
 		/* It was in input mode */
 		value = dev->gpio_dir | (1 << pin_number);
 		dev->gpio_dir = value;
-		status = cx231xx_set_gpio_bit(dev, dev->gpio_dir,
-					      dev->gpio_val);
 	}
 
 	if (pin_value == 0)
