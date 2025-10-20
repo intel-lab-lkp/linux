@@ -226,8 +226,7 @@ static int rp1_probe(struct pci_dev *pdev, const struct pci_device_id *id)
 
 	err = pcim_enable_device(pdev);
 	if (err < 0) {
-		err = dev_err_probe(&pdev->dev, err,
-				    "Enabling PCI device has failed");
+		dev_err_probe(&pdev->dev, err, "Enabling PCI device has failed");
 		goto err_put_node;
 	}
 
@@ -243,8 +242,7 @@ static int rp1_probe(struct pci_dev *pdev, const struct pci_device_id *id)
 	err = pci_alloc_irq_vectors(pdev, RP1_INT_END, RP1_INT_END,
 				    PCI_IRQ_MSIX);
 	if (err < 0) {
-		err = dev_err_probe(&pdev->dev, err,
-				    "Failed to allocate MSI-X vectors\n");
+		dev_err_probe(&pdev->dev, err, "Failed to allocate MSI-X vectors\n");
 		goto err_put_node;
 	} else if (err != RP1_INT_END) {
 		dev_err(&pdev->dev, "Cannot allocate enough interrupts\n");
