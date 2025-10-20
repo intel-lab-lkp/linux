@@ -1322,7 +1322,7 @@ static void __init register_page_bootmem_info(void)
  * Only the level which needs to be synchronized between all page-tables is
  * allocated because the synchronization can be expensive.
  */
-static void __init preallocate_vmalloc_pages(void)
+void __init preallocate_vmalloc_pages(void)
 {
 	unsigned long addr;
 	const char *lvl;
@@ -1390,8 +1390,6 @@ void __init mem_init(void)
 	/* Register memory areas for /proc/kcore */
 	if (get_gate_vma(&init_mm))
 		kclist_add(&kcore_vsyscall, (void *)VSYSCALL_ADDR, PAGE_SIZE, KCORE_USER);
-
-	preallocate_vmalloc_pages();
 }
 
 int kernel_set_to_readonly;

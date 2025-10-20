@@ -5349,6 +5349,8 @@ void __init vmalloc_init(void)
 	struct vm_struct *tmp;
 	int i;
 
+	preallocate_vmalloc_pages();
+
 	/*
 	 * Create the cache for vmap_area objects.
 	 */

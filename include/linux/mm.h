@@ -1160,6 +1160,12 @@ static inline int is_vmalloc_or_module_addr(const void *x)
 }
 #endif
 
+#ifdef CONFIG_X86
+void __init preallocate_vmalloc_pages(void);
+#else
+static inline void preallocate_vmalloc_pages(void) { }
+#endif
+
 /*
  * How many times the entire folio is mapped as a single unit (eg by a
  * PMD or PUD entry).  This is probably not what you want, except for
@@ -2939,9 +2945,32 @@ static inline pmd_t *pmd_alloc(struct mm_struct *mm, pud_t *pud, unsigned long a
 }
 #endif /* CONFIG_MMU */
 
+static inline struct page *ptdesc_page(const struct ptdesc *pt)
+{
+	return pt->pt_page;
+}
+
+static inline struct ptdesc *page_ptdesc(const struct page *page)
+{
+	memdesc_t memdesc = READ_ONCE(page->memdesc);
+
+	if (memdesc_type(memdesc) != MEMDESC_TYPE_PAGE_TABLE) {
+		printk(KERN_EMERG "memdesc %lx index %lx\n", memdesc.v, page->__folio_index);
+		VM_BUG_ON_PAGE(1, page);
+		return NULL;
+	}
+	return (void *)(memdesc.v - MEMDESC_TYPE_PAGE_TABLE);
+}
+
+/**
+ * enum pt_flags = How the ptdesc flags bits are used.
+ * @PT_reserved: Used by PowerPC
+ *
+ * The pt flags are stored in a memdesc_flags_t.
+ * The high bits are used for information like zone/node/section.
+ */
 enum pt_flags {
 	PT_reserved = PG_reserved,
-	/* High bits are used for zone/node/section */
 };
 
 static inline struct ptdesc *virt_to_ptdesc(const void *x)
@@ -2957,7 +2986,7 @@ static inline struct ptdesc *virt_to_ptdesc(const void *x)
  */
 static inline void *ptdesc_address(const struct ptdesc *pt)
 {
-	return folio_address(ptdesc_folio(pt));
+	return page_address(pt->pt_page);
 }
 
 static inline bool pagetable_is_reserved(struct ptdesc *pt)
