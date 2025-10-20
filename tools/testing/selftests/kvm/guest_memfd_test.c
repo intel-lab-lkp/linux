@@ -24,18 +24,55 @@
 #include "test_util.h"
 #include "ucall_common.h"
 
-static void test_file_read_write(int fd)
+static void test_file_read(int fd)
 {
 	char buf[64];
 
 	TEST_ASSERT(read(fd, buf, sizeof(buf)) < 0,
 		    "read on a guest_mem fd should fail");
-	TEST_ASSERT(write(fd, buf, sizeof(buf)) < 0,
-		    "write on a guest_mem fd should fail");
 	TEST_ASSERT(pread(fd, buf, sizeof(buf), 0) < 0,
 		    "pread on a guest_mem fd should fail");
-	TEST_ASSERT(pwrite(fd, buf, sizeof(buf), 0) < 0,
-		    "pwrite on a guest_mem fd should fail");
+}
+
+static void test_write_supported(int fd, size_t total_size)
+{
+	size_t page_size = getpagesize();
+	void *buf = NULL;
+	int ret;
+
+	ret = posix_memalign(&buf, page_size, total_size);
+	TEST_ASSERT_EQ(ret, 0);
+
+	ret = pwrite(fd, buf, page_size, total_size);
+	TEST_ASSERT(ret == -1, "writing past the file size on a guest_mem fd should fail");
+	TEST_ASSERT_EQ(errno, EINVAL);
+
+	ret = pwrite(fd, buf, page_size, 0);
+	TEST_ASSERT(ret == page_size, "write on a guest_mem fd should succeed");
+
+	ret = fallocate(fd, FALLOC_FL_KEEP_SIZE | FALLOC_FL_PUNCH_HOLE, 0, page_size);
+	TEST_ASSERT(!ret, "fallocate(PUNCH_HOLE) should succeed");
+
+	free(buf);
+}
+
+static void test_write_not_supported(int fd, size_t total_size)
+{
+	size_t page_size = getpagesize();
+	void *buf = NULL;
+	int ret;
+
+	ret = posix_memalign(&buf, page_size, total_size);
+	TEST_ASSERT_EQ(ret, 0);
+
+	ret = pwrite(fd, buf, page_size, 0);
+	TEST_ASSERT(ret == -1, "write on guest_mem fd should fail");
+	TEST_ASSERT_EQ(errno, ENODEV);
+
+	ret = fallocate(fd, FALLOC_FL_KEEP_SIZE | FALLOC_FL_PUNCH_HOLE, 0, page_size);
+	TEST_ASSERT(!ret, "fallocate(PUNCH_HOLE) should succeed");
+
+	free(buf);
 }
 
 static void test_mmap_supported(int fd, size_t page_size, size_t total_size)
@@ -281,12 +318,14 @@ static void test_guest_memfd(unsigned long vm_type)
 
 	fd = vm_create_guest_memfd(vm, total_size, flags);
 
-	test_file_read_write(fd);
+	test_file_read(fd);
 
 	if (flags & GUEST_MEMFD_FLAG_MMAP) {
+		test_write_supported(fd, total_size);
 		test_mmap_supported(fd, page_size, total_size);
 		test_fault_overflow(fd, page_size, total_size);
 	} else {
+		test_write_not_supported(fd, total_size);
 		test_mmap_not_supported(fd, page_size, total_size);
 	}
 
