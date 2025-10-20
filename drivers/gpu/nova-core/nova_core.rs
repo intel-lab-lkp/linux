@@ -11,7 +11,6 @@ mod gfw;
 mod gpu;
 mod gsp;
 mod regs;
-mod util;
 mod vbios;
 
 pub(crate) const MODULE_NAME: &kernel::str::CStr = <LocalModule as kernel::ModuleMetadata>::NAME;
