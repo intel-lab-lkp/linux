@@ -102,7 +102,9 @@ static int __must_check nr_add_node(ax25_address *nr, const char *mnemonic,
 	struct nr_neigh *nr_neigh;
 	int i, found;
 	struct net_device *odev;
+	static DEFINE_MUTEX(add_node_lock);
 
+	guard(mutex)(&add_node_lock);
 	if ((odev=nr_dev_get(nr)) != NULL) {	/* Can't add routes to ourself */
 		dev_put(odev);
 		return -EINVAL;
