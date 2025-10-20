@@ -7,11 +7,11 @@
 #include "sha3_testvecs.h"
 
 #define HASH		sha3_256
-#define HASH_CTX	sha3_256_ctx
+#define HASH_CTX	sha3_ctx
 #define HASH_SIZE	SHA3_256_DIGEST_SIZE
 #define HASH_INIT	sha3_256_init
-#define HASH_UPDATE	sha3_256_update
-#define HASH_FINAL	sha3_256_final
+#define HASH_UPDATE	sha3_update
+#define HASH_FINAL	sha3_final
 #include "hash-test-template.h"
 
 /*
@@ -254,7 +254,7 @@ static void test_shake256_nist(struct kunit *test)
  */
 static void test_shake256_tiling(struct kunit *test)
 {
-	struct shake256_ctx ctx;
+	struct shake_ctx ctx;
 	u8 out[8 + SHA3_512_DIGEST_SIZE + 8];
 
 	for (int tile_size = 1; tile_size < SHAKE256_DEFAULT_SIZE; tile_size++) {
@@ -263,11 +263,12 @@ static void test_shake256_tiling(struct kunit *test)
 
 		memset(out, 0, sizeof(out));
 		shake256_init(&ctx);
-		shake256_update(&ctx, test_sha3_sample, sizeof(test_sha3_sample) - 1);
+		shake_update(&ctx, test_sha3_sample,
+			     sizeof(test_sha3_sample) - 1);
 		while (left > 0) {
 			int part = umin(tile_size, left);
 
-			shake256_squeeze(&ctx, p, part);
+			shake_squeeze(&ctx, p, part);
 			p += part;
 			left -= part;
 		}
@@ -285,7 +286,7 @@ static void test_shake256_tiling(struct kunit *test)
  */
 static void test_shake256_tiling2(struct kunit *test)
 {
-	struct shake256_ctx ctx;
+	struct shake_ctx ctx;
 	u8 out[8 + SHA3_512_DIGEST_SIZE + 8];
 
 	for (int first_tile_size = 3;
@@ -297,11 +298,12 @@ static void test_shake256_tiling2(struct kunit *test)
 
 		memset(out, 0, sizeof(out));
 		shake256_init(&ctx);
-		shake256_update(&ctx, test_sha3_sample, sizeof(test_sha3_sample) - 1);
+		shake_update(&ctx, test_sha3_sample,
+			     sizeof(test_sha3_sample) - 1);
 		while (left > 0) {
 			int part = umin(tile_size, left);
 
-			shake256_squeeze(&ctx, p, part);
+			shake_squeeze(&ctx, p, part);
 			p += part;
 			left -= part;
 			tile_size--;

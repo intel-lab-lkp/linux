@@ -179,7 +179,7 @@ static void sha3_keccakf_generic(struct sha3_state *state)
 		cpu_to_le64s(&state->st[i]);
 }
 
-static void sha3_absorb_block_generic(struct sha3_ctx *ctx, const u8 *data)
+static void sha3_absorb_block_generic(struct __sha3_ctx *ctx, const u8 *data)
 {
 	struct sha3_state *state = &ctx->state;
 	size_t bsize = ctx->block_size;
@@ -193,7 +193,7 @@ static void sha3_absorb_block_generic(struct sha3_ctx *ctx, const u8 *data)
  * Perform rounds of XOR'ing whole blocks of data into the state buffer and
  * then performing a keccak mix step.
  */
-static void sha3_absorb_blocks_generic(struct sha3_ctx *ctx,
+static void sha3_absorb_blocks_generic(struct __sha3_ctx *ctx,
 				       const u8 *data, size_t nblocks)
 {
 	do {
@@ -212,7 +212,7 @@ static void sha3_absorb_blocks_generic(struct sha3_ctx *ctx,
 /*
  * XOR in partial data that's insufficient to fill a whole block.
  */
-static void sha3_absorb_xorle(struct sha3_ctx *ctx, const u8 *data,
+static void sha3_absorb_xorle(struct __sha3_ctx *ctx, const u8 *data,
 			      size_t partial, size_t len)
 {
 	u8 *buf = (u8 *)ctx->state.st;
@@ -222,18 +222,7 @@ static void sha3_absorb_xorle(struct sha3_ctx *ctx, const u8 *data,
 		*buf++ ^= *data++;
 }
 
-/**
- * sha3_update() - Update a SHA3 context of any type with message data
- * @ctx: the context to update; must have been initialized
- * @data: the message data
- * @len: the data length in bytes
- *
- * This can be called any number of times to perform the "keccak sponge
- * absorbing" phase.
- *
- * Context: May use the FPU/Vector unit registers.
- */
-void sha3_update(struct sha3_ctx *ctx, const u8 *data, size_t len)
+void __sha3_update(struct __sha3_ctx *ctx, const u8 *data, size_t len)
 {
 	size_t absorb_offset = ctx->absorb_offset;
 	size_t bsize = ctx->block_size;
@@ -261,25 +250,9 @@ void sha3_update(struct sha3_ctx *ctx, const u8 *data, size_t len)
 		ctx->absorb_offset += len;
 	}
 }
-EXPORT_SYMBOL_GPL(sha3_update);
+EXPORT_SYMBOL_GPL(__sha3_update);
 
-/**
- * sha3_squeeze() - Finalize a SHA3 digest of any type and extract the digest
- * @ctx: the context to finalize; must have been initialized
- * @out: Where to write the resulting message digest
- * @out_size: The amount of digest to extract to @out
- *
- * Finish the computation of a SHA3 message digest of any type and perform the
- * "Keccak sponge squeezing" phase.  @out_size amount of digest is written to
- * @out buffer.
- *
- * This may be called multiple times to extract continuations of the digest.
- * Note that, for example, two consecutive 16-byte squeezes laid end-to-end
- * will yield the same as one 32-byte squeeze.
- *
- * Context: May use the FPU/Vector unit registers.
- */
-void sha3_squeeze(struct sha3_ctx *ctx, u8 *out, size_t out_size)
+void __sha3_squeeze(struct __sha3_ctx *ctx, u8 *out, size_t out_len)
 {
 	size_t squeeze_offset = ctx->squeeze_offset;
 	size_t bsize = ctx->block_size;
@@ -295,15 +268,15 @@ void sha3_squeeze(struct sha3_ctx *ctx, u8 *out, size_t out_size)
 		if (squeeze_offset == 0)
 			sha3_keccakf(&ctx->state);
 
-		size_t part = umin(out_size, bsize - squeeze_offset);
+		size_t part = umin(out_len, bsize - squeeze_offset);
 
 		if (part > 0) {
 			memcpy(out, p + squeeze_offset, part);
-			out_size -= part;
+			out_len -= part;
 			out += part;
 			squeeze_offset += part;
 		}
-		if (!out_size)
+		if (!out_len)
 			break;
 		if (squeeze_offset >= bsize)
 			squeeze_offset = 0;
@@ -311,7 +284,7 @@ void sha3_squeeze(struct sha3_ctx *ctx, u8 *out, size_t out_size)
 
 	ctx->squeeze_offset = squeeze_offset;
 }
-EXPORT_SYMBOL_GPL(sha3_squeeze);
+EXPORT_SYMBOL_GPL(__sha3_squeeze);
 
 /**
  * sha3_224() - Convenience wrapper to digest a simple buffer as SHA3-224
@@ -326,11 +299,11 @@ EXPORT_SYMBOL_GPL(sha3_squeeze);
  */
 void sha3_224(const u8 *in, size_t in_len, u8 out[SHA3_224_DIGEST_SIZE])
 {
-	struct sha3_224_ctx ctx;
+	struct sha3_ctx ctx;
 
 	sha3_224_init(&ctx);
-	sha3_224_update(&ctx, in, in_len);
-	sha3_224_final(&ctx, out);
+	sha3_update(&ctx, in, in_len);
+	sha3_final(&ctx, out);
 }
 EXPORT_SYMBOL_GPL(sha3_224);
 
@@ -347,11 +320,11 @@ EXPORT_SYMBOL_GPL(sha3_224);
  */
 void sha3_256(const u8 *in, size_t in_len, u8 out[SHA3_256_DIGEST_SIZE])
 {
-	struct sha3_256_ctx ctx;
+	struct sha3_ctx ctx;
 
 	sha3_256_init(&ctx);
-	sha3_256_update(&ctx, in, in_len);
-	sha3_256_final(&ctx, out);
+	sha3_update(&ctx, in, in_len);
+	sha3_final(&ctx, out);
 }
 EXPORT_SYMBOL_GPL(sha3_256);
 
@@ -368,11 +341,11 @@ EXPORT_SYMBOL_GPL(sha3_256);
  */
 void sha3_384(const u8 *in, size_t in_len, u8 out[SHA3_384_DIGEST_SIZE])
 {
-	struct sha3_384_ctx ctx;
+	struct sha3_ctx ctx;
 
 	sha3_384_init(&ctx);
-	sha3_384_update(&ctx, in, in_len);
-	sha3_384_final(&ctx, out);
+	sha3_update(&ctx, in, in_len);
+	sha3_final(&ctx, out);
 }
 EXPORT_SYMBOL_GPL(sha3_384);
 
@@ -389,11 +362,11 @@ EXPORT_SYMBOL_GPL(sha3_384);
  */
 void sha3_512(const u8 *in, size_t in_len, u8 out[SHA3_512_DIGEST_SIZE])
 {
-	struct sha3_512_ctx ctx;
+	struct sha3_ctx ctx;
 
 	sha3_512_init(&ctx);
-	sha3_512_update(&ctx, in, in_len);
-	sha3_512_final(&ctx, out);
+	sha3_update(&ctx, in, in_len);
+	sha3_final(&ctx, out);
 }
 EXPORT_SYMBOL_GPL(sha3_512);
 
@@ -412,12 +385,12 @@ EXPORT_SYMBOL_GPL(sha3_512);
  */
 void shake128(const u8 *in, size_t in_len, u8 *out, size_t out_len)
 {
-	struct shake128_ctx ctx;
+	struct shake_ctx ctx;
 
 	shake128_init(&ctx);
-	shake128_update(&ctx, in, in_len);
-	shake128_squeeze(&ctx, out, out_len);
-	shake128_clear(&ctx);
+	shake_update(&ctx, in, in_len);
+	shake_squeeze(&ctx, out, out_len);
+	shake_zeroize_ctx(&ctx);
 }
 EXPORT_SYMBOL_GPL(shake128);
 
@@ -436,12 +409,12 @@ EXPORT_SYMBOL_GPL(shake128);
  */
 void shake256(const u8 *in, size_t in_len, u8 *out, size_t out_len)
 {
-	struct shake256_ctx ctx;
+	struct shake_ctx ctx;
 
 	shake256_init(&ctx);
-	shake256_update(&ctx, in, in_len);
-	shake256_squeeze(&ctx, out, out_len);
-	shake256_clear(&ctx);
+	shake_update(&ctx, in, in_len);
+	shake_squeeze(&ctx, out, out_len);
+	shake_zeroize_ctx(&ctx);
 }
 EXPORT_SYMBOL_GPL(shake256);
 

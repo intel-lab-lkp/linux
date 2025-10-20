@@ -38,12 +38,14 @@
 
 struct shash_desc;
 
+int crypto_sha3_init(struct shash_desc *desc);
+
 struct sha3_state {
 	u64		st[SHA3_STATE_SIZE / 8];
 };
 
-/*
- * The SHA3 context structure and state buffer.
+/**
+ * Internal context, shared by the digests (SHA3-*) and the XOFs (SHAKE*).
  *
  * To avoid the need to byteswap when adding input and extracting output from
  * the state array, the state array is kept in little-endian order most of the
@@ -51,7 +53,7 @@ struct sha3_state {
  * function and then byteswapped back again after.  On a LE machine, the
  * byteswap step is a no-op.
  */
-struct sha3_ctx {
+struct __sha3_ctx {
 	struct sha3_state	state;
 	u8			block_size;	/* Block size in bytes */
 	u8			padding;	/* Padding byte */
@@ -60,401 +62,203 @@ struct sha3_ctx {
 	bool			end_marked;	/* T if end marker inserted */
 };
 
-int crypto_sha3_init(struct shash_desc *desc);
+void __sha3_update(struct __sha3_ctx *ctx, const u8 *in, size_t in_len);
+void __sha3_squeeze(struct __sha3_ctx *ctx, u8 *out, size_t out_len);
+
+/** Context for SHA3-224, SHA3-256, SHA3-384, or SHA3-512 */
+struct sha3_ctx {
+	struct __sha3_ctx	ctx;
+	u8			digest_size;	/* Digest size in bytes */
+};
 
 /**
- * sha3_clear() - Explicitly clear the entire context
- * @ctx: the context to clear
- *
- * Explicitly clear the entire context, including the type parameters; after
- * this, the context must be fully initialized again.
- *
- * Context: Any context.
+ * Zeroize a sha3_ctx.  This is already called by sha3_final().  Call this
+ * explicitly when abandoning a context without calling sha3_final().
  */
-static inline void sha3_clear(struct sha3_ctx *ctx)
+static inline void sha3_zeroize_ctx(struct sha3_ctx *ctx)
 {
 	memzero_explicit(ctx, sizeof(*ctx));
 }
 
-void sha3_update(struct sha3_ctx *ctx, const u8 *data, size_t len);
-void sha3_squeeze(struct sha3_ctx *ctx, u8 *out, size_t out_len);
-
-/*
- * Context wrapper for SHA3-224.
- */
-struct sha3_224_ctx {
-	struct sha3_ctx ctx;
+/** Context for SHAKE128 or SHAKE256 */
+struct shake_ctx {
+	struct __sha3_ctx ctx;
 };
 
+/** Zeroize a shake_ctx.  Call this after the last squeeze. */
+static inline void shake_zeroize_ctx(struct shake_ctx *ctx)
+{
+	memzero_explicit(ctx, sizeof(*ctx));
+}
+
 /**
- * sha3_224_init() - Set a SHA3 context for SHA3-224
- * @ctx: the context to initialize
+ * sha3_224_init() - Initialize a context for SHA3-224
+ * @ctx: The context to initialize
  *
- * Initialize a SHA3 context for the production of a SHA3-224 digest of a
- * message.
+ * This begins a new SHA3-224 message digest computation.
  *
  * Context: Any context.
  */
-static inline void sha3_224_init(struct sha3_224_ctx *ctx)
+static inline void sha3_224_init(struct sha3_ctx *ctx)
 {
-	*ctx = (struct sha3_224_ctx){
+	*ctx = (struct sha3_ctx){
+		.digest_size	= SHA3_224_DIGEST_SIZE,
 		.ctx.block_size	= SHA3_224_BLOCK_SIZE,
 		.ctx.padding	= 0x06,
 	};
 }
 
 /**
- * sha3_224_update() - Update a SHA3-224 hash with message data
- * @ctx: the context to update; must have been initialized
- * @data: the message data
- * @len: the data length in bytes
+ * sha3_256_init() - Initialize a context for SHA3-256
+ * @ctx: The context to initialize
  *
- * This can be called any number of times to add data to the hash, performing
- * the "keccak sponge absorbing" phase.
+ * This begins a new SHA3-256 message digest computation.
  *
  * Context: Any context.
  */
-static inline void sha3_224_update(struct sha3_224_ctx *ctx, const u8 *data, size_t len)
+static inline void sha3_256_init(struct sha3_ctx *ctx)
 {
-	return sha3_update(&ctx->ctx, data, len);
-}
-
-/**
- * sha3_224_final() - Finalise a SHA3-224 hash and extract the digest
- * @ctx: The context to finalise; must have been initialized
- * @out: Where to write the resulting message digest
- *
- * Finish the computation of a SHA3-224 hash and perform the "Keccak sponge
- * squeezing" phase.  The digest is written to @out buffer and the context will
- * be completely zeroed out.
- *
- * Context: Any context.
- */
-static inline void sha3_224_final(struct sha3_224_ctx *ctx, u8 out[SHA3_224_DIGEST_SIZE])
-{
-	sha3_squeeze(&ctx->ctx, out, SHA3_224_DIGEST_SIZE);
-	sha3_clear(&ctx->ctx);
-}
-
-/*
- * Context wrapper for SHA3-256.
- */
-struct sha3_256_ctx {
-	struct sha3_ctx ctx;
-};
-
-/**
- * sha3_256_init() - Set a SHA3 context for SHA3-256
- * @ctx: the context to initialize
- *
- * Initialize a SHA3 context for the production of a SHA3-256 digest of a
- * message.
- *
- * Context: Any context.
- */
-static inline void sha3_256_init(struct sha3_256_ctx *ctx)
-{
-	*ctx = (struct sha3_256_ctx){
+	*ctx = (struct sha3_ctx){
+		.digest_size	= SHA3_256_DIGEST_SIZE,
 		.ctx.block_size	= SHA3_256_BLOCK_SIZE,
 		.ctx.padding	= 0x06,
 	};
 }
 
 /**
- * sha3_256_update() - Update a SHA3-256 hash with message data
- * @ctx: the context to update; must have been initialized
- * @data: the message data
- * @len: the data length in bytes
+ * sha3_384_init() - Initialize a context for SHA3-384
+ * @ctx: The context to initialize
  *
- * This can be called any number of times to add data to the hash, performing
- * the "keccak sponge absorbing" phase.
+ * This begins a new SHA3-384 message digest computation.
  *
  * Context: Any context.
  */
-static inline void sha3_256_update(struct sha3_256_ctx *ctx, const u8 *data, size_t len)
+static inline void sha3_384_init(struct sha3_ctx *ctx)
 {
-	return sha3_update(&ctx->ctx, data, len);
-}
-
-/**
- * sha3_256_final() - Finalise a SHA3-256 hash and extract the digest
- * @ctx: The context to finalise; must have been initialized
- * @out: Where to write the resulting message digest
- *
- * Finish the computation of a SHA3-256 hash and perform the "Keccak sponge
- * squeezing" phase.  The digest is written to @out buffer and the context will
- * be completely zeroed out.
- *
- * Context: Any context.
- */
-static inline void sha3_256_final(struct sha3_256_ctx *ctx, u8 out[SHA3_256_DIGEST_SIZE])
-{
-	sha3_squeeze(&ctx->ctx, out, SHA3_256_DIGEST_SIZE);
-	sha3_clear(&ctx->ctx);
-}
-
-/*
- * Context wrapper for SHA3-384.
- */
-struct sha3_384_ctx {
-	struct sha3_ctx ctx;
-};
-
-/**
- * sha3_384_init() - Set a SHA3 context for SHA3-384
- * @ctx: the context to initialize
- *
- * Initialize a SHA3 context for the production of a SHA3-384 digest of a
- * message.
- *
- * Context: Any context.
- */
-static inline void sha3_384_init(struct sha3_384_ctx *ctx)
-{
-	*ctx = (struct sha3_384_ctx){
+	*ctx = (struct sha3_ctx){
+		.digest_size	= SHA3_384_DIGEST_SIZE,
 		.ctx.block_size	= SHA3_384_BLOCK_SIZE,
 		.ctx.padding	= 0x06,
 	};
 }
 
 /**
- * sha3_384_update() - Update a SHA3-384 hash with message data
- * @ctx: the context to update; must have been initialized
- * @data: the message data
- * @len: the data length in bytes
+ * sha3_512_init() - Initialize a context for SHA3-512
+ * @ctx: The context to initialize
  *
- * This can be called any number of times to add data to the hash, performing
- * the "keccak sponge absorbing" phase.
+ * This begins a new SHA3-512 message digest computation.
  *
  * Context: Any context.
  */
-static inline void sha3_384_update(struct sha3_384_ctx *ctx, const u8 *data, size_t len)
+static inline void sha3_512_init(struct sha3_ctx *ctx)
 {
-	return sha3_update(&ctx->ctx, data, len);
-}
-
-/**
- * sha3_384_final() - Finalise a SHA3-384 hash and extract the digest
- * @ctx: The context to finalise; must have been initialized
- * @out: Where to write the resulting message digest
- *
- * Finish the computation of a SHA3-384 hash and perform the "Keccak sponge
- * squeezing" phase.  The digest is written to @out buffer and the context will
- * be completely zeroed out.
- *
- * Context: Any context.
- */
-static inline void sha3_384_final(struct sha3_384_ctx *ctx, u8 out[SHA3_384_DIGEST_SIZE])
-{
-	sha3_squeeze(&ctx->ctx, out, SHA3_384_DIGEST_SIZE);
-	sha3_clear(&ctx->ctx);
-}
-
-/*
- * Context wrapper for SHA3-512.
- */
-struct sha3_512_ctx {
-	struct sha3_ctx ctx;
-};
-
-/**
- * sha3_512_init() - Set a SHA3 context for SHA3-512
- * @ctx: the context to initialize
- *
- * Initialize a SHA3 context for the production of a SHA3-512 digest of a
- * message.
- *
- * Context: Any context.
- */
-static inline void sha3_512_init(struct sha3_512_ctx *ctx)
-{
-	*ctx = (struct sha3_512_ctx){
+	*ctx = (struct sha3_ctx){
+		.digest_size	= SHA3_512_DIGEST_SIZE,
 		.ctx.block_size	= SHA3_512_BLOCK_SIZE,
 		.ctx.padding	= 0x06,
 	};
 }
 
 /**
- * sha3_512_update() - Update a SHA3-512 hash with message data
- * @ctx: the context to update; must have been initialized
- * @data: the message data
- * @len: the data length in bytes
+ * sha3_update() - Update a SHA-3 digest context with input data
+ * @ctx: The context to update; must have been initialized
+ * @in: The input data
+ * @in_len: Length of the input data in bytes
  *
- * This can be called any number of times to add data to the hash, performing
- * the "keccak sponge absorbing" phase.
- *
- * Context: Any context.
- */
-static inline void sha3_512_update(struct sha3_512_ctx *ctx, const u8 *data, size_t len)
-{
-	return sha3_update(&ctx->ctx, data, len);
-}
-
-/**
- * sha3_512_final() - Finalise a SHA3-512 hash and extract the digest
- * @ctx: The context to finalise; must have been initialized
- * @out: Where to write the resulting message digest
- *
- * Finish the computation of a SHA3-512 hash and perform the "Keccak sponge
- * squeezing" phase.  The digest is written to @out buffer and the context will
- * be completely zeroed out.
+ * This can be called any number of times to add data to a SHA3-224, SHA3-256,
+ * SHA3-384, or SHA3-512 digest (depending on which init function was called).
  *
  * Context: Any context.
  */
-static inline void sha3_512_final(struct sha3_512_ctx *ctx, u8 out[SHA3_512_DIGEST_SIZE])
+static inline void sha3_update(struct sha3_ctx *ctx,
+			       const u8 *in, size_t in_len)
 {
-	sha3_squeeze(&ctx->ctx, out, SHA3_512_DIGEST_SIZE);
-	sha3_clear(&ctx->ctx);
+	__sha3_update(&ctx->ctx, in, in_len);
 }
 
-/*
- * Context wrapper for SHAKE128.
+/**
+ * sha3_final() - Finish computing a SHA-3 message digest
+ * @ctx: The context to finalize; must have been initialized
+ * @out: (output) The resulting SHA3-224, SHA3-256, SHA3-384, or SHA3-512
+ *	 message digest, matching the init function that was called.  Note that
+ *	 the size differs for each one; see SHA3_*_DIGEST_SIZE.
+ *
+ * After finishing, this zeroizes @ctx.  So the caller does not need to do it.
+ *
+ * Context: Any context.
  */
-struct shake128_ctx {
-	struct sha3_ctx ctx;
-};
+static inline void sha3_final(struct sha3_ctx *ctx, u8 *out)
+{
+	__sha3_squeeze(&ctx->ctx, out, ctx->digest_size);
+	sha3_zeroize_ctx(ctx);
+}
 
 /**
- * shake128_init() - Set a SHA3 context for SHAKE128
+ * shake128_init() - Initialize a context for SHAKE128
  * @ctx: The context to initialize
  *
- * Initialize a SHA3 context for the production of SHAKE128 output generation
- * from a message.  The sha3_squeeze() function can be used to extract an
- * arbitrary amount of data from the context.
+ * This begins a new SHAKE128 extendable-output function (XOF) computation.
  *
  * Context: Any context.
  */
-static inline void shake128_init(struct shake128_ctx *ctx)
+static inline void shake128_init(struct shake_ctx *ctx)
 {
-	*ctx = (struct shake128_ctx){
+	*ctx = (struct shake_ctx){
 		.ctx.block_size	= SHAKE128_BLOCK_SIZE,
 		.ctx.padding	= 0x1f,
 	};
 }
 
 /**
- * shake128_update() - Update a SHAKE128 hash with message data
- * @ctx: the context to update; must have been initialized
- * @data: the message data
- * @len: the data length in bytes
- *
- * This can be called any number of times to add data to the XOF state,
- * performing the "keccak sponge absorbing" phase.
- *
- * Context: Any context.
- */
-static inline void shake128_update(struct shake128_ctx *ctx, const u8 *data, size_t len)
-{
-	return sha3_update(&ctx->ctx, data, len);
-}
-
-/**
- * shake128_squeeze() - Finalize a SHAKE128 digest of any type and extract the digest
- * @ctx: the context to finalize; must have been initialized
- * @out: Where to write the resulting message digest
- * @out_size: The amount of digest to extract to @out in bytes
- *
- * Finish the computation of a SHAKE128 XOF and perform the "Keccak sponge
- * squeezing" phase.  @out_size amount of digest is written to @out buffer.
- *
- * This may be called multiple times to extract continuations of the digest.
- * Note that, a number of consecutive squeezes laid end-to-end will yield the
- * same output as one big squeeze generating the same total amount of output.
- *
- * Context: Any context.
- */
-static inline void shake128_squeeze(struct shake128_ctx *ctx, u8 *out, size_t out_size)
-{
-	return sha3_squeeze(&ctx->ctx, out, out_size);
-}
-
-/**
- * shake128_clear() - Explicitly clear the entire SHAKE128 context
- * @ctx: the context to clear
- *
- * Explicitly clear the entire context; after this, the context must be
- * initialized again.
- *
- * Context: Any context.
- */
-static inline void shake128_clear(struct shake128_ctx *ctx)
-{
-	sha3_clear(&ctx->ctx);
-}
-
-/*
- * Context wrapper for SHAKE256.
- */
-struct shake256_ctx {
-	struct sha3_ctx ctx;
-};
-
-/**
- * shake256_init() - Set a SHA3 context for SHAKE256
+ * shake256_init() - Initialize a context for SHAKE256
  * @ctx: The context to initialize
  *
- * Initialize a SHA3 context for the production of SHAKE256 output generation
- * from a message.  The sha3_squeeze() function can be used to extract an
- * arbitrary amount of data from the context.
+ * This begins a new SHAKE256 extendable-output function (XOF) computation.
  *
  * Context: Any context.
  */
-static inline void shake256_init(struct shake256_ctx *ctx)
+static inline void shake256_init(struct shake_ctx *ctx)
 {
-	*ctx = (struct shake256_ctx){
+	*ctx = (struct shake_ctx){
 		.ctx.block_size	= SHAKE256_BLOCK_SIZE,
 		.ctx.padding	= 0x1f,
 	};
 }
 
 /**
- * shake256_update() - Update a SHAKE256 hash with message data
- * @ctx: the context to update; must have been initialized
- * @data: the message data
- * @len: the data length in bytes
+ * shake_update() - Update a SHAKE context with input data
+ * @ctx: The context to update; must have been initialized
+ * @in: The input data
+ * @in_len: Length of the input data in bytes
  *
- * This can be called any number of times to add data to the XOF state,
- * performing the "keccak sponge absorbing" phase.
+ * This can be called any number of times to add more input data to SHAKE128 or
+ * SHAKE256.  This cannot be called after squeezing has begun.
  *
  * Context: Any context.
  */
-static inline void shake256_update(struct shake256_ctx *ctx, const u8 *data, size_t len)
+static inline void shake_update(struct shake_ctx *ctx,
+				const u8 *in, size_t in_len)
 {
-	return sha3_update(&ctx->ctx, data, len);
+	__sha3_update(&ctx->ctx, in, in_len);
 }
 
 /**
- * shake256_squeeze() - Finalize a SHAKE256 digest of any type and extract the digest
- * @ctx: the context to finalize; must have been initialized
- * @out: Where to write the resulting message digest
- * @out_size: The amount of digest to extract to @out in bytes
+ * shake_squeeze() - Generate output from SHAKE128 or SHAKE256
+ * @ctx: The context to squeeze; must have been initialized
+ * @out: Where to write the resulting output data
+ * @out_len: The amount of data to extract to @out in bytes
  *
- * Finish the computation of a SHAKE256 XOF and perform the "Keccak sponge
- * squeezing" phase.  @out_size amount of digest is written to @out buffer.
- *
- * This may be called multiple times to extract continuations of the digest.
- * Note that, a number of consecutive squeezes laid end-to-end will yield the
- * same output as one big squeeze generating the same total amount of output.
+ * This may be called multiple times.  A number of consecutive squeezes laid
+ * end-to-end will yield the same output as one big squeeze generating the same
+ * total amount of output.  More input cannot be provided after squeezing has
+ * begun.  After all squeezing has been completed, call shake_zeroize_ctx().
  *
  * Context: Any context.
  */
-static inline void shake256_squeeze(struct shake256_ctx *ctx, u8 *out, size_t out_size)
+static inline void shake_squeeze(struct shake_ctx *ctx,
+				 u8 *out, size_t out_len)
 {
-	return sha3_squeeze(&ctx->ctx, out, out_size);
-}
-
-/**
- * shake256_clear() - Explicitly clear the entire SHAKE256 context
- * @ctx: the context to clear
- *
- * Explicitly clear the entire context; after this, the context must be
- * initialized again.
- *
- * Context: Any context.
- */
-static inline void shake256_clear(struct shake256_ctx *ctx)
-{
-	sha3_clear(&ctx->ctx);
+	return __sha3_squeeze(&ctx->ctx, out, out_len);
 }
 
 void sha3_224(const u8 *in, size_t in_len, u8 out[SHA3_224_DIGEST_SIZE]);
