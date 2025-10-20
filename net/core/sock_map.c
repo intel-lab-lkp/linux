@@ -535,6 +535,15 @@ static bool sock_map_redirect_allowed(const struct sock *sk)
 
 static bool sock_map_sk_is_suitable(const struct sock *sk)
 {
+	if ((sk_is_tcp(sk) && sk_is_mptcp(sk)) /* subflow */ ||
+	    (sk->sk_protocol == IPPROTO_MPTCP && sk->sk_state != TCP_LISTEN)) {
+		/* Disallow MPTCP subflows and their parent socket.
+		 * However, a TCP_LISTEN MPTCP socket is permitted because
+		 * sockmap can also serve for reuseport socket selection.
+		 */
+		pr_err_once("sockmap: MPTCP sockets are not supported\n");
+		return false;
+	}
 	return !!sk->sk_prot->psock_update_sk_prot;
 }
 
