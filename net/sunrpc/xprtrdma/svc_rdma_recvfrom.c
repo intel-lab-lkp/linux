@@ -815,6 +815,11 @@ static void svc_rdma_read_complete_one(struct svc_rqst *rqstp,
 	buf->page_len = length;
 	buf->len += length;
 	buf->buflen += length;
+
+	/* Transport guarantees that only the chunk payload
+	 * appears in buf->pages.
+	 */
+	buf->flags |= XDRBUF_READ;
 }
 
 /* Finish constructing the RPC Call message in rqstp::rq_arg.
