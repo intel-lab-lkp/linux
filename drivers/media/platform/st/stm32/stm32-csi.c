@@ -1033,8 +1033,7 @@ static int stm32_csi_probe(struct platform_device *pdev)
 
 	ret = reset_control_assert(rstc);
 	if (ret) {
-		ret = dev_err_probe(&pdev->dev, ret,
-				    "Failed to assert the reset line\n");
+		dev_err_probe(&pdev->dev, ret, "Failed to assert the reset line\n");
 		goto err_cleanup;
 	}
 
@@ -1042,8 +1041,7 @@ static int stm32_csi_probe(struct platform_device *pdev)
 
 	ret = reset_control_deassert(rstc);
 	if (ret) {
-		ret = dev_err_probe(&pdev->dev, ret,
-				    "Failed to deassert the reset line\n");
+		dev_err_probe(&pdev->dev, ret, "Failed to deassert the reset line\n");
 		goto err_cleanup;
 	}
 
