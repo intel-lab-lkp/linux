@@ -876,8 +876,7 @@ static int ath12k_ahb_configure_rproc(struct ath12k_base *ab)
 
 	ret = ath12k_ahb_register_rproc_notifier(ab);
 	if (ret < 0) {
-		ret = dev_err_probe(&ab->pdev->dev, ret,
-				    "failed to register rproc notifier\n");
+		dev_err_probe(&ab->pdev->dev, ret, "failed to register rproc notifier\n");
 		goto err_put_rproc;
 	}
 
