@@ -852,6 +852,18 @@ static void annotate_browser__debuginfo_warning(struct annotate_browser *browser
 	}
 }
 
+static void annotate_browser__symbol_annotate_error(struct annotate_browser *browser, int err)
+{
+	struct map_symbol *ms = browser->b.priv;
+	struct symbol *sym = ms->sym;
+	struct dso *dso = map__dso(ms->map);
+	char msg[BUFSIZ];
+
+	dso__set_annotate_warned(dso);
+	symbol__strerror_disassemble(ms, err, msg, sizeof(msg));
+	ui__error("Couldn't annotate %s:\n%s", sym->name, msg);
+}
+
 static int annotate_browser__run(struct annotate_browser *browser,
 				 struct evsel *evsel,
 				 struct hist_browser_timer *hbt)
@@ -1149,10 +1161,7 @@ int __hist_entry__tui_annotate(struct hist_entry *he, struct map_symbol *ms,
 	if (not_annotated || !sym->annotate2) {
 		err = symbol__annotate2(ms, evsel, &browser.arch);
 		if (err) {
-			char msg[BUFSIZ];
-			dso__set_annotate_warned(dso);
-			symbol__strerror_disassemble(ms, err, msg, sizeof(msg));
-			ui__error("Couldn't annotate %s:\n%s", sym->name, msg);
+			annotate_browser__symbol_annotate_error(&browser, err);
 			return -1;
 		}
 
@@ -1160,6 +1169,12 @@ int __hist_entry__tui_annotate(struct hist_entry *he, struct map_symbol *ms,
 			notes->src->tried_source = true;
 			if (!annotation__has_source(notes))
 				ui__warning("Annotation has no source code.");
+		}
+	} else {
+		err = evsel__get_arch(evsel, &browser.arch);
+		if (err) {
+			annotate_browser__symbol_annotate_error(&browser, err);
+			return -1;
 		}
 	}
 
