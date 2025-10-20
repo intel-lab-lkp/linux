@@ -164,13 +164,14 @@ pud_t pudp_huge_clear_flush(struct vm_area_struct *vma, unsigned long address,
 void pgtable_trans_huge_deposit(struct mm_struct *mm, pmd_t *pmdp,
 				pgtable_t pgtable)
 {
+	struct ptdesc *ptdesc = page_ptdesc(pgtable);
 	assert_spin_locked(pmd_lockptr(mm, pmdp));
 
 	/* FIFO */
 	if (!pmd_huge_pte(mm, pmdp))
-		INIT_LIST_HEAD(&pgtable->lru);
+		INIT_LIST_HEAD(&ptdesc->pt_list);
 	else
-		list_add(&pgtable->lru, &pmd_huge_pte(mm, pmdp)->lru);
+		list_add(&ptdesc->pt_list, &page_ptdesc(pmd_huge_pte(mm, pmdp))->pt_list);
 	pmd_huge_pte(mm, pmdp) = pgtable;
 }
 #endif
@@ -179,17 +180,22 @@ void pgtable_trans_huge_deposit(struct mm_struct *mm, pmd_t *pmdp,
 /* no "address" argument so destroys page coloring of some arch */
 pgtable_t pgtable_trans_huge_withdraw(struct mm_struct *mm, pmd_t *pmdp)
 {
-	pgtable_t pgtable;
+	struct ptdesc *ptdesc, *next;
+	struct page *page;
 
 	assert_spin_locked(pmd_lockptr(mm, pmdp));
 
 	/* FIFO */
-	pgtable = pmd_huge_pte(mm, pmdp);
-	pmd_huge_pte(mm, pmdp) = list_first_entry_or_null(&pgtable->lru,
-							  struct page, lru);
-	if (pmd_huge_pte(mm, pmdp))
-		list_del(&pgtable->lru);
-	return pgtable;
+	page = pmd_huge_pte(mm, pmdp);
+	ptdesc = page_ptdesc(page);
+	next = list_first_entry_or_null(&ptdesc->pt_list, struct ptdesc, pt_list);
+	if (next) {
+		pmd_huge_pte(mm, pmdp) = ptdesc_page(next);
+		list_del(&ptdesc->pt_list);
+	} else {
+		pmd_huge_pte(mm, pmdp) = NULL;
+	}
+	return page;
 }
 #endif
 
