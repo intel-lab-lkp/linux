@@ -3616,12 +3616,12 @@ complete_cmd_fusion(struct megasas_instance *instance, u32 MSIxIndex,
 		case MPI2_FUNCTION_SCSI_IO_REQUEST:  /*Fast Path IO.*/
 			/* Update load balancing info */
 			if (fusion->load_balance_info &&
-			    (megasas_priv(cmd_fusion->scmd)->status &
+			    (megasas_priv(scmd_local)->status &
 			    MEGASAS_LOAD_BALANCE_FLAG)) {
 				device_id = MEGASAS_DEV_INDEX(scmd_local);
 				lbinfo = &fusion->load_balance_info[device_id];
 				atomic_dec(&lbinfo->scsi_pending_cmds[cmd_fusion->pd_r1_lb]);
-				megasas_priv(cmd_fusion->scmd)->status &=
+				megasas_priv(scmd_local)->status &=
 					~MEGASAS_LOAD_BALANCE_FLAG;
 			}
 			fallthrough;	/* and complete IO */
@@ -5000,12 +5000,12 @@ int megasas_reset_fusion(struct Scsi_Host *shost, int reason)
 				megasas_return_cmd_fusion(instance, r1_cmd);
 			}
 			scmd_local = cmd_fusion->scmd;
-			if (cmd_fusion->scmd) {
+			if (scmd_local) {
 				if (megasas_dbg_lvl & OCR_DEBUG) {
 					sdev_printk(KERN_INFO,
-						cmd_fusion->scmd->device, "SMID: 0x%x\n",
+						scmd_local->device, "SMID: 0x%x\n",
 						cmd_fusion->index);
-					megasas_dump_fusion_io(cmd_fusion->scmd);
+					megasas_dump_fusion_io(scmd_local);
 				}
 
 				if (cmd_fusion->io_request->Function ==
