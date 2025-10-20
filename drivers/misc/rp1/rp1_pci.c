@@ -44,6 +44,8 @@ struct rp1_dev {
 	struct irq_data *pcie_irqds[64];
 	void __iomem *bar1;
 	int ovcs_id;	/* overlay changeset id */
+	struct device_node *rp1_node;	/* useful only if skip_ovl == true */
+	bool skip_ovl;
 	bool level_triggered_irq[RP1_INT_END];
 };
 
@@ -289,10 +291,14 @@ static int rp1_probe(struct pci_dev *pdev, const struct pci_device_id *id)
 		goto err_unload_overlay;
 	}
 
+	rp1->skip_ovl = skip_ovl;
+	rp1->rp1_node = rp1_node;
+
 	return 0;
 
 err_unload_overlay:
-	of_overlay_remove(&rp1->ovcs_id);
+	if (!skip_ovl)
+		of_overlay_remove(&rp1->ovcs_id);
 err_unregister_interrupts:
 	rp1_unregister_interrupts(pdev);
 err_put_node:
@@ -308,8 +314,12 @@ static void rp1_remove(struct pci_dev *pdev)
 	struct device *dev = &pdev->dev;
 
 	of_platform_depopulate(dev);
-	of_overlay_remove(&rp1->ovcs_id);
+	if (!rp1->skip_ovl)
+		of_overlay_remove(&rp1->ovcs_id);
 	rp1_unregister_interrupts(pdev);
+
+	if (rp1->skip_ovl)
+		of_node_put(rp1->rp1_node);
 }
 
 static const struct pci_device_id dev_id_table[] = {
