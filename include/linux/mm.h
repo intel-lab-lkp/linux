@@ -2965,37 +2965,9 @@ static inline bool pagetable_is_reserved(struct ptdesc *pt)
 	return test_bit(PT_reserved, &pt->pt_flags.f);
 }
 
-/**
- * pagetable_alloc - Allocate pagetables
- * @gfp:    GFP flags
- * @order:  desired pagetable order
- *
- * pagetable_alloc allocates memory for page tables as well as a page table
- * descriptor to describe that memory.
- *
- * Return: The ptdesc describing the allocated page tables.
- */
-static inline struct ptdesc *pagetable_alloc_noprof(gfp_t gfp, unsigned int order)
-{
-	struct page *page = alloc_pages_noprof(gfp | __GFP_COMP, order);
-
-	return page_ptdesc(page);
-}
+struct ptdesc *pagetable_alloc_noprof(gfp_t gfp, unsigned int order);
 #define pagetable_alloc(...)	alloc_hooks(pagetable_alloc_noprof(__VA_ARGS__))
-
-/**
- * pagetable_free - Free pagetables
- * @pt:	The page table descriptor
- *
- * pagetable_free frees the memory of all page tables described by a page
- * table descriptor and the memory for the descriptor itself.
- */
-static inline void pagetable_free(struct ptdesc *pt)
-{
-	struct page *page = ptdesc_page(pt);
-
-	__free_pages(page, compound_order(page));
-}
+void pagetable_free(struct ptdesc *pt);
 
 #if defined(CONFIG_SPLIT_PTE_PTLOCKS)
 #if ALLOC_SPLIT_PTLOCKS
