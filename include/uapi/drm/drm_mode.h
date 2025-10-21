@@ -1062,12 +1062,14 @@ struct drm_mode_crtc_page_flip_target {
 	__u64 user_data;
 };
 
+#define DRM_MODE_DUMB_CURSOR	(1<<0) /* dumb buffer is intended for a cursor */
+
 /**
  * struct drm_mode_create_dumb - Create a KMS dumb buffer for scanout.
  * @height: buffer height in pixels
  * @width: buffer width in pixels
  * @bpp: color mode
- * @flags: must be zero
+ * @flags: bitmask of flags, see DRM_MODE_DUMB_* defines
  * @handle: buffer object handle
  * @pitch: number of bytes between two consecutive lines
  * @size: size of the whole buffer in bytes

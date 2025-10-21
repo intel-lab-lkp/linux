@@ -197,7 +197,7 @@ int drm_mode_create_dumb(struct drm_device *dev,
 		return -ENOSYS;
 	if (!args->width || !args->height || !args->bpp)
 		return -EINVAL;
-	if (args->flags)
+	if (args->flags & ~DRM_MODE_DUMB_CURSOR)
 		return -EINVAL;
 
 	/* overflow checks for 32bit size calculations */
