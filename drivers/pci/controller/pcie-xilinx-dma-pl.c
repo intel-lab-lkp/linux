@@ -226,7 +226,12 @@ static void xilinx_mask_intx_irq(struct irq_data *data)
 	unsigned long flags;
 	u32 mask, val;
 
-	mask = BIT(data->hwirq + XILINX_PCIE_DMA_IDRN_SHIFT);
+	/*
+	 * INTx hwirq: 1=INTA, 2=INTB, 3=INTC, 4=INTD
+	 * In the controller regs this is represented in bits 0...3, so we need
+	 * to subtract 1 here
+	 */
+	mask = BIT(data->hwirq + XILINX_PCIE_DMA_IDRN_SHIFT - 1);
 	raw_spin_lock_irqsave(&port->lock, flags);
 	val = pcie_read(port, XILINX_PCIE_DMA_REG_IDRN_MASK);
 	pcie_write(port, (val & (~mask)), XILINX_PCIE_DMA_REG_IDRN_MASK);
@@ -239,7 +244,12 @@ static void xilinx_unmask_intx_irq(struct irq_data *data)
 	unsigned long flags;
 	u32 mask, val;
 
-	mask = BIT(data->hwirq + XILINX_PCIE_DMA_IDRN_SHIFT);
+	/*
+	 * INTx hwirq: 1=INTA, 2=INTB, 3=INTC, 4=INTD
+	 * In the controller regs this is represented in bits 0...3, so we need
+	 * to subtract 1 here
+	 */
+	mask = BIT(data->hwirq + XILINX_PCIE_DMA_IDRN_SHIFT - 1);
 	raw_spin_lock_irqsave(&port->lock, flags);
 	val = pcie_read(port, XILINX_PCIE_DMA_REG_IDRN_MASK);
 	pcie_write(port, (val | mask), XILINX_PCIE_DMA_REG_IDRN_MASK);
@@ -508,8 +518,13 @@ static irqreturn_t xilinx_pl_dma_pcie_intx_flow(int irq, void *args)
 	val = FIELD_GET(XILINX_PCIE_DMA_IDRN_MASK,
 			pcie_read(port, XILINX_PCIE_DMA_REG_IDRN));
 
+	/*
+	 * INTx hwirq: 1=INTA, 2=INTB, 3=INTC, 4=INTD
+	 * In the controller regs this is represented in bits 0...3, so we need
+	 * to add 1 here again for the registered handler
+	 */
 	for_each_set_bit(i, &val, PCI_NUM_INTX)
-		generic_handle_domain_irq(port->intx_domain, i);
+		generic_handle_domain_irq(port->intx_domain, i + 1);
 	return IRQ_HANDLED;
 }
 
