@@ -7811,6 +7811,13 @@ S:	Maintained
 F:	Documentation/devicetree/bindings/display/panel/jadard,jd9365da-h3.yaml
 F:	drivers/gpu/drm/panel/panel-jadard-jd9365da-h3.c
 
+DRM DRIVER FOR LEADTEK LTK028QV25BYL PANELS
+M:	Herve Codina <herve.codina@bootlin.com>
+S:	Maintained
+T:	git https://gitlab.freedesktop.org/drm/misc/kernel.git
+F:	Documentation/devicetree/bindings/display/panel/leadtek,ltk028qv25byl.yaml
+F:	drivers/gpu/drm/panel/panel-leadtek-ltk028qv25byl.c
+
 DRM DRIVER FOR LG SW43408 PANELS
 M:	Sumit Semwal <sumit.semwal@linaro.org>
 M:	Casey Connolly <casey.connolly@linaro.org>
