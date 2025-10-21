@@ -758,6 +758,9 @@ int clk_mux_determine_rate_flags(struct clk_hw *hw,
 			best_parent = parent;
 			best = parent_rate;
 		}
+
+		if (best == req->rate)
+			break;
 	}
 
 	if (!best_parent)
