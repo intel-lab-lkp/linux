@@ -637,7 +637,7 @@ enum dmub_status dmub_srv_create(struct dmub_srv *dmub,
 void dmub_srv_destroy(struct dmub_srv *dmub);
 
 /**
- * dmub_srv_calc_region_info() - retreives region info from the dmub service
+ * dmub_srv_calc_region_info() - retrieves region info from the dmub service
  * @dmub: the dmub service
  * @params: parameters used to calculate region locations
  * @info_out: the output region info from dmub
@@ -655,7 +655,7 @@ dmub_srv_calc_region_info(struct dmub_srv *dmub,
 			  struct dmub_srv_region_info *out);
 
 /**
- * dmub_srv_calc_region_info() - retreives fb info from the dmub service
+ * dmub_srv_calc_mem_info() - retrieves fb info from the dmub service
  * @dmub: the dmub service
  * @params: parameters used to calculate fb locations
  * @info_out: the output fb info from dmub
