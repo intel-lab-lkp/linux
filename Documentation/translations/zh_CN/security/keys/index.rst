@@ -14,9 +14,9 @@
 .. toctree::
    :maxdepth: 1
 
+   ecryptfs
 
 TODOLIST:
 * core
-* ecryptfs
 * request-key
 * trusted-encrypted
