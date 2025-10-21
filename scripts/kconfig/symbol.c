@@ -14,6 +14,20 @@
 #include "internal.h"
 #include "lkc.h"
 
+#define HAVE_STRSCPY 0
+#ifndef HAVE_STRSCPY
+static size_t strscpy(char *dest, const char *src, size_t count)
+{
+    size_t i;
+    if (count == 0)
+        return 0;
+    for (i = 0; i < count - 1 && src[i]; i++)
+        dest[i] = src[i];
+    dest[i] = '\0';
+    return i;
+}
+#endif
+
 struct symbol symbol_yes = {
 	.name = "y",
 	.type = S_TRISTATE,
@@ -795,7 +809,7 @@ bool sym_set_string_value(struct symbol *sym, const char *newval)
 	else
 		return true;
 
-	strcpy(val, newval);
+	strscpy(val, newval);
 	free((void *)oldval);
 	sym_clear_all_valid();
 

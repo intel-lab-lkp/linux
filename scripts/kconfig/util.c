@@ -13,6 +13,21 @@
 #include <xalloc.h>
 #include "lkc.h"
 
+#define HAVE_STRSCPY 0
+#ifndef HAVE_STRSCPY
+static size_t strscpy(char *dest, const char *src, size_t count)
+{
+    size_t i;
+    if (count == 0)
+        return 0;
+    for (i = 0; i < count - 1 && src[i]; i++)
+        dest[i] = src[i];
+    dest[i] = '\0';
+    return i;
+}
+#endif
+
+
 /* hash table of all parsed Kconfig files */
 static HASHTABLE_DEFINE(file_hashtable, 1U << 11);
 
@@ -52,7 +67,7 @@ struct gstr str_new(void)
 	gs.s = xmalloc(sizeof(char) * 64);
 	gs.len = 64;
 	gs.max_width = 0;
-	strcpy(gs.s, "\0");
+	strscpy(gs.s, "\0");
 	return gs;
 }
 

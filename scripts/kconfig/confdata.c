@@ -22,6 +22,20 @@
 #include "internal.h"
 #include "lkc.h"
 
+#define HAVE_STRSCPY 0
+#ifndef HAVE_STRSCPY
+static size_t strscpy(char *dest, const char *src, size_t count)
+{
+    size_t i;
+    if (count == 0)
+        return 0;
+    for (i = 0; i < count - 1 && src[i]; i++)
+        dest[i] = src[i];
+    dest[i] = '\0';
+    return i;
+}
+#endif
+
 struct gstr autoconf_cmd;
 
 /* return true if 'path' exists, false otherwise */
@@ -140,7 +154,7 @@ static int conf_touch_dep(const char *name)
 	if (depfile_prefix_len + strlen(name) + 1 > sizeof(depfile_path))
 		return -1;
 
-	strcpy(depfile_path + depfile_prefix_len, name);
+	strscpy(depfile_path + depfile_prefix_len, name);
 
 	fd = open(depfile_path, O_WRONLY | O_CREAT | O_TRUNC, 0644);
 	if (fd == -1)
