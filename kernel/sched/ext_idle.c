@@ -558,6 +558,8 @@ s32 scx_select_cpu_dfl(struct task_struct *p, s32 prev_cpu, u64 wake_flags,
 	 * partially idle @prev_cpu.
 	 */
 	if (sched_smt_active()) {
+		bool has_idle_cores = test_idle_cores(prev_cpu);
+
 		/*
 		 * Keep using @prev_cpu if it's part of a fully idle core.
 		 */
@@ -570,12 +572,17 @@ s32 scx_select_cpu_dfl(struct task_struct *p, s32 prev_cpu, u64 wake_flags,
 
 		/*
 		 * Search for any fully idle core in the same LLC domain.
+		 *
+		 * Skip this step if we already known this LLC has no fully
+		 * idle cores.
 		 */
-		if (llc_cpus) {
+		if (llc_cpus && has_idle_cores) {
 			cpu = pick_idle_cpu_in_node(llc_cpus, node, SCX_PICK_IDLE_CORE);
 			if (cpu >= 0)
 				goto out_unlock;
 		}
+		if (has_idle_cores)
+			set_idle_cores(prev_cpu, false);
 
 		/*
 		 * Search for any fully idle core in the same NUMA node.
