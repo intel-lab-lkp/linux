@@ -575,7 +575,8 @@ static void __exit comp_exit(void)
 
 	most_deregister_configfs_subsys(&comp);
 	most_deregister_component(&comp);
-	BUG_ON(!list_empty(&video_devices));
+	if (!list_empty(&video_devices))
+		pr_err("video_devices list not empty during exit\n");
 }
 
 module_init(comp_init);
