@@ -394,17 +394,21 @@ static __poll_t dma_buf_poll(struct file *file, poll_table *poll)
  */
 static long dma_buf_set_name(struct dma_buf *dmabuf, const char __user *buf)
 {
-	char *name = strndup_user(buf, DMA_BUF_NAME_LEN);
+    char *name;
 
-	if (IS_ERR(name))
-		return PTR_ERR(name);
+    if (!buf)
+        return -EINVAL;
 
-	spin_lock(&dmabuf->name_lock);
-	kfree(dmabuf->name);
-	dmabuf->name = name;
-	spin_unlock(&dmabuf->name_lock);
+    name = strndup_user(buf, DMA_BUF_NAME_LEN);
+    if (IS_ERR(name))
+        return PTR_ERR(name);
 
-	return 0;
+    spin_lock(&dmabuf->name_lock);
+    kfree(dmabuf->name);
+    dmabuf->name = name;
+    spin_unlock(&dmabuf->name_lock);
+
+    return 0;
 }
 
 #if IS_ENABLED(CONFIG_SYNC_FILE)
@@ -567,19 +571,26 @@ static long dma_buf_ioctl(struct file *file,
 	}
 }
 
-static void dma_buf_show_fdinfo(struct seq_file *m, struct file *file)
+static void dma_buf_show_fdinfo(struct seq_file *s, struct file *f)
 {
-	struct dma_buf *dmabuf = file->private_data;
+    struct dma_buf *dmabuf = f->private_data;
 
-	seq_printf(m, "size:\t%zu\n", dmabuf->size);
-	/* Don't count the temporary reference taken inside procfs seq_show */
-	seq_printf(m, "count:\t%ld\n", file_count(dmabuf->file) - 1);
-	seq_printf(m, "exp_name:\t%s\n", dmabuf->exp_name);
-	spin_lock(&dmabuf->name_lock);
-	if (dmabuf->name)
-		seq_printf(m, "name:\t%s\n", dmabuf->name);
-	spin_unlock(&dmabuf->name_lock);
+    if (!dmabuf)
+        return;
+
+    seq_printf(s, "flags:\t%lu\n", f->f_flags);
+    seq_printf(s, "size:\t%llu\n", dmabuf->size);
+    seq_printf(s, "count:\t%ld\n", file_count(dmabuf->file) - 1);
+    seq_printf(s, "attachments:\t%d\n", atomic_read(&dmabuf->num_attachments));
+    seq_printf(s, "mappings:\t%d\n", atomic_read(&dmabuf->num_mappings));
+    seq_printf(s, "exp_name:\t%s\n", dmabuf->exp_name ? dmabuf->exp_name : "N/A");
+
+    spin_lock(&dmabuf->name_lock);
+    if (dmabuf->name)
+        seq_printf(s, "name:\t%s\n", dmabuf->name);
+    spin_unlock(&dmabuf->name_lock);
 }
+
 
 static const struct file_operations dma_buf_fops = {
 	.release	= dma_buf_file_release,
