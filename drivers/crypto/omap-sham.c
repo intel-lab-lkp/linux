@@ -1733,7 +1733,7 @@ static void omap_sham_done_task(struct work_struct *t)
 
 finish:
 	dev_dbg(dd->dev, "update done: err: %d\n", err);
-	/* finish curent request */
+	/* finish current request */
 	omap_sham_finish_req(dd->req, err);
 }
 
