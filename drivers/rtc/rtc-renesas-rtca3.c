@@ -738,7 +738,7 @@ static int rtca3_probe(struct platform_device *pdev)
 	if (ret)
 		return ret;
 
-	priv->rstc = devm_reset_control_get_shared(dev, NULL);
+	priv->rstc = devm_reset_control_array_get_shared(dev);
 	if (IS_ERR(priv->rstc))
 		return PTR_ERR(priv->rstc);
 
@@ -887,11 +887,16 @@ static int rtca3_resume(struct device *dev)
 
 static DEFINE_SIMPLE_DEV_PM_OPS(rtca3_pm_ops, rtca3_suspend, rtca3_resume);
 
+static const struct rtca3_of_data rtca3_rzv2h_of_data = {
+	.max_periodic_irq_freq = 128,
+};
+
 static const struct rtca3_of_data rtca3_of_data = {
 	.max_periodic_irq_freq = 256,
 };
 
 static const struct of_device_id rtca3_of_match[] = {
+	{ .compatible = "renesas,r9a09g057-rtca3", .data = &rtca3_rzv2h_of_data },
 	{ .compatible = "renesas,rz-rtca3", .data = &rtca3_of_data },
 	{ /* sentinel */ }
 };
