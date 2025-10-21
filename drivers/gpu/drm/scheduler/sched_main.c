@@ -1378,6 +1378,9 @@ int drm_sched_init(struct drm_gpu_scheduler *sched, const struct drm_sched_init_
 	atomic64_set(&sched->job_id_count, 0);
 	sched->pause_submit = false;
 
+	taint_reclaim_workqueue(sched->submit_wq, GFP_KERNEL);
+	taint_reclaim_workqueue(sched->timeout_wq, GFP_KERNEL);
+
 	sched->ready = true;
 	return 0;
 Out_unroll:
