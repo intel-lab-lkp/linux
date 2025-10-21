@@ -8,6 +8,7 @@
 #include <linux/jump_label.h>
 #include <linux/kernel.h>
 #include <linux/sizes.h>
+#include <linux/string.h>
 
 struct poly1305_arch_internal {
 	union {
@@ -86,6 +87,7 @@ static __ro_after_init DEFINE_STATIC_KEY_FALSE(poly1305_use_avx512);
 static void poly1305_block_init(struct poly1305_block_state *state,
 				const u8 raw_key[POLY1305_BLOCK_SIZE])
 {
+	memset(state, 0, sizeof(struct poly1305_block_state));
 	poly1305_init_x86_64(state, raw_key);
 }
 
