@@ -328,7 +328,7 @@ static void fuse_uring_entry_teardown(struct fuse_ring_ent *ent)
 {
 	struct fuse_req *req;
 	struct io_uring_cmd *cmd;
-
+	ssize_t queue_refs;
 	struct fuse_ring_queue *queue = ent->queue;
 
 	spin_lock(&queue->lock);
@@ -356,15 +356,16 @@ static void fuse_uring_entry_teardown(struct fuse_ring_ent *ent)
 
 	if (req)
 		fuse_uring_stop_fuse_req_end(req);
+
+	queue_refs = atomic_dec_return(&queue->ring->queue_refs);
+	WARN_ON_ONCE(queue_refs < 0);
 }
 
 static void fuse_uring_stop_list_entries(struct list_head *head,
 					 struct fuse_ring_queue *queue,
 					 enum fuse_ring_req_state exp_state)
 {
-	struct fuse_ring *ring = queue->ring;
 	struct fuse_ring_ent *ent, *next;
-	ssize_t queue_refs = SSIZE_MAX;
 	LIST_HEAD(to_teardown);
 
 	spin_lock(&queue->lock);
@@ -381,11 +382,8 @@ static void fuse_uring_stop_list_entries(struct list_head *head,
 	spin_unlock(&queue->lock);
 
 	/* no queue lock to avoid lock order issues */
-	list_for_each_entry_safe(ent, next, &to_teardown, list) {
+	list_for_each_entry_safe(ent, next, &to_teardown, list)
 		fuse_uring_entry_teardown(ent);
-		queue_refs = atomic_dec_return(&ring->queue_refs);
-		WARN_ON_ONCE(queue_refs < 0);
-	}
 }
 
 static void fuse_uring_teardown_entries(struct fuse_ring_queue *queue)
