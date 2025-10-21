@@ -92,7 +92,7 @@ static void idpf_ctlq_init_rxq_bufs(struct idpf_ctlq_info *cq)
  * @hw: pointer to hw struct
  * @cq: pointer to the specific Control queue
  *
- * The main shutdown routine for any controq queue
+ * The main shutdown routine for any control queue
  */
 static void idpf_ctlq_shutdown(struct idpf_hw *hw, struct idpf_ctlq_info *cq)
 {
