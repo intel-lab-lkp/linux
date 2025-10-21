@@ -1709,8 +1709,15 @@ int intel_plane_atomic_check(struct intel_atomic_state *state)
 int intel_plane_dumb_create(struct intel_display *display,
 			    struct drm_mode_create_dumb *args)
 {
+	const struct drm_mode_config *mode_config = &display->drm->mode_config;
 	int cpp = DIV_ROUND_UP(args->bpp, 8);
 	u32 format;
+
+	if (args->width > mode_config->max_width)
+		return -EINVAL;
+
+	if (args->height > mode_config->max_height)
+		return -EINVAL;
 
 	switch (cpp) {
 	case 1:
