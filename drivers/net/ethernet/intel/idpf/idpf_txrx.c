@@ -923,7 +923,7 @@ static int idpf_rx_desc_alloc_all(struct idpf_vport *vport)
 			if (err) {
 				pci_err(vport->adapter->pdev,
 					"Memory allocation for Rx Queue %u failed\n",
-					i);
+					j);
 				goto err_out;
 			}
 		}
@@ -940,7 +940,7 @@ static int idpf_rx_desc_alloc_all(struct idpf_vport *vport)
 			if (err) {
 				pci_err(vport->adapter->pdev,
 					"Memory allocation for Rx Buffer Queue %u failed\n",
-					i);
+					j);
 				goto err_out;
 			}
 		}
