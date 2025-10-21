@@ -8279,6 +8279,11 @@ static void cpuset_cpu_inactive(unsigned int cpu)
 	}
 }
 
+#ifdef CONFIG_SCHED_SMT
+DEFINE_STATIC_KEY_FALSE(sched_smt_present);
+EXPORT_SYMBOL_GPL(sched_smt_present);
+#endif
+
 static inline void sched_smt_present_inc(int cpu)
 {
 #ifdef CONFIG_SCHED_SMT
