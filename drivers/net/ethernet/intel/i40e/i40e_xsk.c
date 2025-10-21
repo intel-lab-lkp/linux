@@ -441,13 +441,18 @@ int i40e_clean_rx_irq_zc(struct i40e_ring *rx_ring, int budget)
 		dma_rmb();
 
 		if (i40e_rx_is_programming_status(qword)) {
+			u16 ntp;
+
 			i40e_clean_programming_status(rx_ring,
 						      rx_desc->raw.qword[0],
 						      qword);
 			bi = *i40e_rx_bi(rx_ring, next_to_process);
 			xsk_buff_free(bi);
-			if (++next_to_process == count)
+			ntp = next_to_process++;
+			if (next_to_process == count)
 				next_to_process = 0;
+			if (next_to_clean == ntp)
+				next_to_clean = next_to_process;
 			continue;
 		}
 
