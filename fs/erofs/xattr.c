@@ -571,6 +571,7 @@ void erofs_xattr_set_ishare_key(struct super_block *sb)
 	struct erofs_sb_info *sbi = EROFS_SB(sb);
 	struct erofs_buf buf = __EROFS_BUF_INITIALIZER;
 	struct xattr_handler const *handler;
+	bool found = false;
 	erofs_off_t pos;
 	char *key;
 	int len, i;
@@ -582,28 +583,27 @@ void erofs_xattr_set_ishare_key(struct super_block *sb)
 
 	buf.mapping = sbi->packed_inode->i_mapping;
 	pos = sbi->ishare_key_start << 2;
-	(void)erofs_init_metabuf(&buf, sb, false);
 	ptr = erofs_read_metadata(sb, &buf, &pos, &len);
 
 	if (IS_ERR(ptr))
 		goto out;
 
-	for (i = 0; ARRAY_SIZE(erofs_xattr_handlers) - 1; i++) {
+	for (i = 0; ARRAY_SIZE(erofs_xattr_handlers); i++) {
 		handler = erofs_xattr_handlers[i];
 		if (!handler)
+			continue;
+		if (!memcmp(handler->prefix, ptr, strlen(handler->prefix))) {
+			found = true;
 			break;
-		if (!memcmp(handler->prefix, ptr, strlen(handler->prefix)))
-			break;
+		}
 	}
 
-	if (!handler)
+	if (!found)
 		goto out;
-
 	len -= strlen(handler->prefix);
 	key = kzalloc(len + 1, GFP_KERNEL);
 	if (!key)
 		goto out;
-
 	memcpy(key, ptr + strlen(handler->prefix), len);
 	sbi->ishare_key = key;
 	sbi->ishare_key_idx = handler->flags;

@@ -13,6 +13,7 @@
 #include <linux/backing-dev.h>
 #include <linux/pseudo_fs.h>
 #include "xattr.h"
+#include "ishare.h"
 
 #define CREATE_TRACE_POINTS
 #include <trace/events/erofs.h>
@@ -77,10 +78,25 @@ static struct inode *erofs_alloc_inode(struct super_block *sb)
 	return &vi->vfs_inode;
 }
 
+#ifdef CONFIG_EROFS_FS_INODE_SHARE
+static void erofs_free_dedup_inode(struct erofs_inode *vi)
+{
+	kfree(vi->fingerprint);
+	kmem_cache_free(erofs_inode_cachep, vi);
+};
+#else
+static void erofs_free_dedup_inode(struct erofs_inode *vi)
+{}
+#endif
+
 static void erofs_free_inode(struct inode *inode)
 {
 	struct erofs_inode *vi = EROFS_I(inode);
 
+	if (erofs_is_ishare_inode(inode)) {
+		erofs_free_dedup_inode(vi);
+		return;
+	}
 	if (inode->i_op == &erofs_fast_symlink_iops)
 		kfree(inode->i_link);
 	kfree(vi->xattr_shared_xattrs);
@@ -924,9 +940,21 @@ static struct file_system_type erofs_fs_type = {
 };
 MODULE_ALIAS_FS("erofs");
 
+static const struct super_operations erofs_anon_sops = {
+	.statfs = simple_statfs,
+	.alloc_inode = erofs_alloc_inode,
+	.free_inode = erofs_free_inode,
+};
+
 static int erofs_anon_init_fs_context(struct fs_context *fc)
 {
-	return init_pseudo(fc, EROFS_SUPER_MAGIC) ? 0 : -ENOMEM;
+	struct pseudo_fs_context *ctx;
+
+	ctx = init_pseudo(fc, EROFS_SUPER_MAGIC);
+	if (ctx)
+		ctx->ops = &erofs_anon_sops;
+
+	return ctx ? 0 : -ENOMEM;
 }
 
 struct file_system_type erofs_anon_fs_type = {
