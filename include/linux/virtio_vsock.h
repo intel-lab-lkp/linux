@@ -153,6 +153,27 @@ static inline void virtio_vsock_skb_set_net_mode(struct sk_buff *skb,
 	VIRTIO_VSOCK_SKB_CB(skb)->net_mode = net_mode;
 }
 
+static inline struct sk_buff *
+virtio_vsock_alloc_rx_skb(unsigned int size, gfp_t mask)
+{
+	struct sk_buff *skb;
+
+	skb = virtio_vsock_alloc_linear_skb(size, mask);
+	if (!skb)
+		return NULL;
+
+	memset(skb->head, 0, VIRTIO_VSOCK_SKB_HEADROOM);
+
+	/* virtio-vsock does not yet support namespaces, so on receive
+	 * we force legacy namespace behavior using the global dummy net
+	 * and global net mode.
+	 */
+	virtio_vsock_skb_set_net(skb, vsock_global_dummy_net());
+	virtio_vsock_skb_set_net_mode(skb, VSOCK_NET_MODE_GLOBAL);
+
+	return skb;
+}
+
 /* Dimension the RX SKB so that the entire thing fits exactly into
  * a single 4KiB page. This avoids wasting memory due to alloc_skb()
  * rounding up to the next page order and also means that we
