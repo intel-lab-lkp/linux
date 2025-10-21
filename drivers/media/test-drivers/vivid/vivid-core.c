@@ -1864,7 +1864,7 @@ static int vivid_create_instance(struct platform_device *pdev, int inst)
 		goto free_dev;
 
 	/* load the edid */
-	dev->edid = vmalloc(array_size(256, 128));
+	dev->edid = vmalloc_array(128, 256);
 	if (!dev->edid)
 		goto free_dev;
 
