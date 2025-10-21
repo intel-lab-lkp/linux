@@ -61,8 +61,10 @@
 #define VC3_OUTPUT_CTR_DIV4_SRC_SEL	BIT(3)
 
 #define VC3_SE2_CTRL_REG0		0x1f
+#define VC3_SE2_CTRL_REG0_SE2_FREERUN_32K	BIT(7)
 
 #define VC3_SE3_DIFF1_CTRL_REG		0x21
+#define VC3_SE3_DIFF1_CTRL_REG_SE3_FREERUN_32K	BIT(7)
 #define VC3_SE3_DIFF1_CTRL_REG_SE3_CLK_SEL	BIT(6)
 
 #define VC3_DIFF1_CTRL_REG		0x22
@@ -72,6 +74,7 @@
 #define VC3_DIFF2_CTRL_REG_DIFF2_CLK_SEL	BIT(7)
 
 #define VC3_SE1_DIV4_CTRL		0x24
+#define VC3_SE1_DIV4_CTRL_SE1_FREERUN_32K	BIT(4)
 #define VC3_SE1_DIV4_CTRL_SE1_CLK_SEL	BIT(3)
 
 #define VC3_PLL1_VCO_MIN		300000000UL
@@ -82,6 +85,9 @@
 
 #define VC3_2_POW_16			(U16_MAX + 1)
 #define VC3_DIV_MASK(width)		((1 << (width)) - 1)
+
+#define VC3_CLK_32K_NAME		"vc3-clk-32k"
+#define VC3_CLK_32K_FREQ		32768
 
 enum vc3_pfd_mux {
 	VC3_PFD2_MUX,
@@ -134,6 +140,9 @@ enum vc3_clk_mux {
 struct vc3_clk_data {
 	u8 offs;
 	u8 bitmsk;
+
+	u8 clk_32k_bitmsk;
+	u8 clk_32k_index;
 };
 
 struct vc3_pfd_data {
@@ -213,6 +222,7 @@ static const struct clk_div_table div3_divs[] = {
 	{}
 };
 
+static struct clk_hw *clk_32k;
 static struct clk_hw *clk_out[6];
 
 static u8 vc3_pfd_mux_get_parent(struct clk_hw *hw)
@@ -549,19 +559,40 @@ static const struct clk_ops vc3_div_ops = {
 	.set_rate = vc3_div_set_rate,
 };
 
+static int _vc3_clk_mux_determine_rate(struct clk_hw *hw,
+				       struct clk_rate_request *req)
+{
+	bool is_32k_req = (req->rate == VC3_CLK_32K_FREQ);
+	struct clk_rate_request tmp_req;
+	int ret;
+
+	clk_hw_init_rate_request(hw, &tmp_req, req->rate);
+
+	ret = clk_mux_determine_rate_flags(hw, &tmp_req, CLK_SET_RATE_PARENT);
+	if (ret)
+		return ret;
+
+	/* Select the 32.768 kHz parent only when explicitly requested. */
+	if ((tmp_req.best_parent_rate == VC3_CLK_32K_FREQ) && !is_32k_req)
+		return -EINVAL;
+
+	memcpy(req, &tmp_req, sizeof(*req));
+
+	return 0;
+}
+
 static int vc3_clk_mux_determine_rate(struct clk_hw *hw,
 				      struct clk_rate_request *req)
 {
 	int frc;
 
-	if (clk_mux_determine_rate_flags(hw, req, CLK_SET_RATE_PARENT)) {
+	if (_vc3_clk_mux_determine_rate(hw, req)) {
 		/* The below check is equivalent to (best_parent_rate/rate) */
 		if (req->best_parent_rate >= req->rate) {
 			frc = DIV_ROUND_CLOSEST_ULL(req->best_parent_rate,
 						    req->rate);
 			req->rate *= frc;
-			return clk_mux_determine_rate_flags(hw, req,
-							    CLK_SET_RATE_PARENT);
+			return _vc3_clk_mux_determine_rate(hw, req);
 		}
 	}
 
@@ -576,6 +607,9 @@ static u8 vc3_clk_mux_get_parent(struct clk_hw *hw)
 
 	regmap_read(vc3->regmap, clk_mux->offs, &val);
 
+	if (clk_mux->clk_32k_bitmsk && !(val & clk_mux->clk_32k_bitmsk))
+		return clk_mux->clk_32k_index;
+
 	return !!(val & clk_mux->bitmsk);
 }
 
@@ -583,9 +617,15 @@ static int vc3_clk_mux_set_parent(struct clk_hw *hw, u8 index)
 {
 	struct vc3_hw_data *vc3 = container_of(hw, struct vc3_hw_data, hw);
 	const struct vc3_clk_data *clk_mux = vc3->data;
+	unsigned int bitmsk = clk_mux->clk_32k_bitmsk;
+	unsigned int val = 0;
 
-	return regmap_update_bits(vc3->regmap, clk_mux->offs, clk_mux->bitmsk,
-				  index ? clk_mux->bitmsk : 0);
+	if (index != clk_mux->clk_32k_index) {
+		bitmsk |= clk_mux->bitmsk;
+		val = clk_mux->clk_32k_bitmsk | (index ? clk_mux->bitmsk : 0);
+	}
+
+	return regmap_update_bits(vc3->regmap, clk_mux->offs, bitmsk, val);
 }
 
 static const struct clk_ops vc3_clk_mux_ops = {
@@ -900,18 +940,21 @@ static struct vc3_hw_data clk_div[] = {
 	}
 };
 
-static const struct clk_parent_data clk_mux_parent_data[][2] = {
+static const struct clk_parent_data clk_mux_parent_data[][3] = {
 	[VC3_SE1_MUX] = {
 		{ .hw = &clk_div[VC3_DIV5].hw },
-		{ .hw = &clk_div[VC3_DIV4].hw }
+		{ .hw = &clk_div[VC3_DIV4].hw },
+		{ .name = VC3_CLK_32K_NAME, .index = -1 }
 	},
 	[VC3_SE2_MUX] = {
 		{ .hw = &clk_div[VC3_DIV5].hw },
-		{ .hw = &clk_div[VC3_DIV4].hw }
+		{ .hw = &clk_div[VC3_DIV4].hw },
+		{ .name = VC3_CLK_32K_NAME, .index = -1 }
 	},
 	[VC3_SE3_MUX] = {
 		{ .hw = &clk_div[VC3_DIV2].hw },
-		{ .hw = &clk_div[VC3_DIV4].hw }
+		{ .hw = &clk_div[VC3_DIV4].hw },
+		{ .name = VC3_CLK_32K_NAME, .index = -1 }
 	},
 	[VC3_DIFF1_MUX] = {
 		{ .hw = &clk_div[VC3_DIV1].hw },
@@ -927,38 +970,44 @@ static struct vc3_hw_data clk_mux[] = {
 	[VC3_SE1_MUX] = {
 		.data = &(struct vc3_clk_data) {
 			.offs = VC3_SE1_DIV4_CTRL,
-			.bitmsk = VC3_SE1_DIV4_CTRL_SE1_CLK_SEL
+			.bitmsk = VC3_SE1_DIV4_CTRL_SE1_CLK_SEL,
+			.clk_32k_bitmsk = VC3_SE1_DIV4_CTRL_SE1_FREERUN_32K,
+			.clk_32k_index = 2
 		},
 		.hw.init = &(struct clk_init_data) {
 			.name = "se1_mux",
 			.ops = &vc3_clk_mux_ops,
 			.parent_data = clk_mux_parent_data[VC3_SE1_MUX],
-			.num_parents = 2,
+			.num_parents = 3,
 			.flags = CLK_SET_RATE_PARENT
 		}
 	},
 	[VC3_SE2_MUX] = {
 		.data = &(struct vc3_clk_data) {
 			.offs = VC3_SE2_CTRL_REG0,
+			.clk_32k_bitmsk = VC3_SE2_CTRL_REG0_SE2_FREERUN_32K,
+			.clk_32k_index = 2
 		},
 		.hw.init = &(struct clk_init_data) {
 			.name = "se2_mux",
 			.ops = &vc3_clk_mux_ops,
 			.parent_data = clk_mux_parent_data[VC3_SE2_MUX],
-			.num_parents = 2,
+			.num_parents = 3,
 			.flags = CLK_SET_RATE_PARENT
 		}
 	},
 	[VC3_SE3_MUX] = {
 		.data = &(struct vc3_clk_data) {
 			.offs = VC3_SE3_DIFF1_CTRL_REG,
-			.bitmsk = VC3_SE3_DIFF1_CTRL_REG_SE3_CLK_SEL
+			.bitmsk = VC3_SE3_DIFF1_CTRL_REG_SE3_CLK_SEL,
+			.clk_32k_bitmsk = VC3_SE3_DIFF1_CTRL_REG_SE3_FREERUN_32K,
+			.clk_32k_index = 2
 		},
 		.hw.init = &(struct clk_init_data) {
 			.name = "se3_mux",
 			.ops = &vc3_clk_mux_ops,
 			.parent_data = clk_mux_parent_data[VC3_SE3_MUX],
-			.num_parents = 2,
+			.num_parents = 3,
 			.flags = CLK_SET_RATE_PARENT
 		}
 	},
@@ -1037,6 +1086,14 @@ static int vc3_probe(struct i2c_client *client)
 			ARRAY_SIZE(settings));
 		return ret;
 	}
+
+	/* Register fixed 32.768kHz clock */
+	clk_32k = devm_clk_hw_register_fixed_rate(dev, VC3_CLK_32K_NAME, NULL,
+						  0, VC3_CLK_32K_FREQ);
+	if (IS_ERR(clk_32k))
+		return dev_err_probe(dev, PTR_ERR(clk_32k),
+				     "Failed to register %dHz fixed clock\n",
+				     VC3_CLK_32K_FREQ);
 
 	/* Register pfd muxes */
 	for (i = 0; i < ARRAY_SIZE(clk_pfd_mux); i++) {
