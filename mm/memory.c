@@ -2706,14 +2706,17 @@ EXPORT_SYMBOL(vmf_insert_pfn);
 static bool vm_mixed_ok(struct vm_area_struct *vma, unsigned long pfn,
 			bool mkwrite)
 {
-	if (unlikely(is_zero_pfn(pfn)) &&
-	    (mkwrite || !vm_mixed_zeropage_allowed(vma)))
-		return false;
 	/* these checks mirror the abort conditions in vm_normal_page */
 	if (vma->vm_flags & VM_MIXEDMAP)
 		return true;
-	if (is_zero_pfn(pfn))
+	if (unlikely(is_zero_pfn(pfn))) {
+		/* Zero pages can only be mapped read-only and if VMA
+		 * allows them.
+		 */
+		if (mkwrite || !vm_mixed_zeropage_allowed(vma))
+			return false;
 		return true;
+	}
 	return false;
 }
 
