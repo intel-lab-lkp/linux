@@ -1705,3 +1705,35 @@ int intel_plane_atomic_check(struct intel_atomic_state *state)
 
 	return 0;
 }
+
+int intel_plane_dumb_create(struct intel_display *display,
+			    struct drm_mode_create_dumb *args)
+{
+	int cpp = DIV_ROUND_UP(args->bpp, 8);
+	u32 format;
+
+	switch (cpp) {
+	case 1:
+		format = DRM_FORMAT_C8;
+		break;
+	case 2:
+		format = DRM_FORMAT_RGB565;
+		break;
+	case 4:
+		format = DRM_FORMAT_XRGB8888;
+		break;
+	default:
+		return -EINVAL;
+	}
+
+	args->pitch = ALIGN(args->width * cpp, 64);
+
+	/* align stride to page size so that we can remap */
+	if (args->pitch > intel_plane_fb_max_stride(display->drm, format,
+						    DRM_FORMAT_MOD_LINEAR))
+		args->pitch = ALIGN(args->pitch, 4096);
+
+	args->size = mul_u32_u32(args->pitch, args->height);
+
+	return 0;
+}

@@ -8,12 +8,14 @@
 
 #include <linux/types.h>
 
+struct drm_mode_create_dumb;
 struct drm_plane;
 struct drm_property;
 struct drm_rect;
 struct intel_atomic_state;
 struct intel_crtc;
 struct intel_crtc_state;
+struct intel_display;
 struct intel_dsb;
 struct intel_plane;
 struct intel_plane_state;
@@ -87,5 +89,7 @@ int intel_plane_atomic_check(struct intel_atomic_state *state);
 bool intel_plane_format_mod_supported_async(struct drm_plane *plane,
 					    u32 format,
 					    u64 modifier);
+int intel_plane_dumb_create(struct intel_display *display,
+			    struct drm_mode_create_dumb *args);
 
 #endif /* __INTEL_PLANE_H__ */

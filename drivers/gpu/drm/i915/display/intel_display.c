@@ -569,6 +569,14 @@ u32 intel_plane_fb_max_stride(struct drm_device *drm,
 				 DRM_MODE_ROTATE_0);
 }
 
+int intel_display_dumb_create(struct drm_device *drm,
+			      struct drm_mode_create_dumb *args)
+{
+	struct intel_display *display = to_intel_display(drm);
+
+	return intel_plane_dumb_create(display, args);
+}
+
 void intel_set_plane_visible(struct intel_crtc_state *crtc_state,
 			     struct intel_plane_state *plane_state,
 			     bool visible)

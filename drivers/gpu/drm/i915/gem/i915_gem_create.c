@@ -169,38 +169,37 @@ i915_gem_dumb_create(struct drm_file *file,
 		     struct drm_device *dev,
 		     struct drm_mode_create_dumb *args)
 {
+	struct drm_i915_private *i915 = to_i915(dev);
 	struct drm_i915_gem_object *obj;
 	struct intel_memory_region *mr;
 	enum intel_memory_type mem_type;
-	int cpp = DIV_ROUND_UP(args->bpp, 8);
-	u32 format;
 
-	switch (cpp) {
-	case 1:
-		format = DRM_FORMAT_C8;
-		break;
-	case 2:
-		format = DRM_FORMAT_RGB565;
-		break;
-	case 4:
-		format = DRM_FORMAT_XRGB8888;
-		break;
-	default:
-		return -EINVAL;
+	if (i915->display) {
+		int ret;
+
+		ret = intel_display_dumb_create(dev, args);
+		if (ret)
+			return ret;
+	} else {
+		int cpp = DIV_ROUND_UP(args->bpp, 8);
+
+		switch (cpp) {
+		case 1:
+		case 2:
+		case 4:
+			break;
+		default:
+			return -EINVAL;
+		}
+
+		/* have to work out size/pitch and return them */
+		args->pitch = ALIGN(args->width * cpp, 64);
+
+		if (args->pitch < args->width)
+			return -EINVAL;
+
+		args->size = mul_u32_u32(args->pitch, args->height);
 	}
-
-	/* have to work out size/pitch and return them */
-	args->pitch = ALIGN(args->width * cpp, 64);
-
-	/* align stride to page size so that we can remap */
-	if (args->pitch > intel_plane_fb_max_stride(dev, format,
-						    DRM_FORMAT_MOD_LINEAR))
-		args->pitch = ALIGN(args->pitch, 4096);
-
-	if (args->pitch < args->width)
-		return -EINVAL;
-
-	args->size = mul_u32_u32(args->pitch, args->height);
 
 	mem_type = INTEL_MEMORY_SYSTEM;
 	if (HAS_LMEM(to_i915(dev)))
