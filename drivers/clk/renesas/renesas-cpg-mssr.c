@@ -41,7 +41,7 @@
 #endif
 
 /*
- * Module Standby and Software Reset register offets.
+ * Module Standby and Software Reset register offsets.
  *
  * If the registers exist, these are valid for SH-Mobile, R-Mobile,
  * R-Car Gen2, R-Car Gen3, and RZ/G1.
