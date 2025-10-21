@@ -2,6 +2,7 @@
 
 #include <linux/ns_common.h>
 #include <linux/proc_ns.h>
+#include <linux/user_namespace.h>
 #include <linux/vfsdebug.h>
 
 #ifdef CONFIG_DEBUG_VFS
@@ -52,6 +53,8 @@ static void ns_debug(struct ns_common *ns, const struct proc_ns_operations *ops)
 
 int __ns_common_init(struct ns_common *ns, u32 ns_type, const struct proc_ns_operations *ops, int inum)
 {
+	int ret;
+
 	refcount_set(&ns->__ns_ref, 1);
 	ns->stashed = NULL;
 	ns->ops = ops;
@@ -68,10 +71,58 @@ int __ns_common_init(struct ns_common *ns, u32 ns_type, const struct proc_ns_ope
 		ns->inum = inum;
 		return 0;
 	}
-	return proc_alloc_inum(&ns->inum);
+	ret = proc_alloc_inum(&ns->inum);
+	if (ret)
+		return ret;
+	/*
+	 * Tree ref starts at 0. It's incremented when namespace enters
+	 * active use (installed in nsproxy) and decremented when all
+	 * active uses are gone. Initial namespaces are always active.
+	 */
+	if (is_initial_namespace(ns))
+		atomic_set(&ns->__ns_ref_active, 1);
+	else
+		atomic_set(&ns->__ns_ref_active, 0);
+	return 0;
 }
 
 void __ns_common_free(struct ns_common *ns)
 {
 	proc_free_inum(ns->inum);
+}
+
+void __ns_ref_active_get_owner(struct ns_common *ns)
+{
+	struct user_namespace *owner;
+
+	if (unlikely(!ns->ops))
+		return;
+	VFS_WARN_ON_ONCE(!ns->ops->owner);
+	owner = ns->ops->owner(ns);
+	VFS_WARN_ON_ONCE(!owner && ns != to_ns_common(&init_user_ns));
+	if (!owner)
+		return;
+	/* Skip init_user_ns as it's always active */
+	if (owner == &init_user_ns)
+		return;
+	WARN_ON_ONCE(atomic_add_negative(1, &to_ns_common(owner)->__ns_ref_active));
+}
+
+void __ns_ref_active_put_owner(struct ns_common *ns)
+{
+	struct user_namespace *owner;
+
+	do {
+		if (unlikely(!ns->ops))
+			return;
+		VFS_WARN_ON_ONCE(!ns->ops->owner);
+		owner = ns->ops->owner(ns);
+		VFS_WARN_ON_ONCE(!owner && ns != to_ns_common(&init_user_ns));
+		if (!owner)
+			return;
+		/* Skip init_user_ns as it's always active */
+		if (owner == &init_user_ns)
+			return;
+		ns = to_ns_common(owner);
+	} while (atomic_dec_and_test(&to_ns_common(owner)->__ns_ref_active));
 }

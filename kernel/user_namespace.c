@@ -160,6 +160,7 @@ int create_user_ns(struct cred *new)
 
 	set_cred_user_ns(new, ns);
 	ns_tree_add(ns);
+	ns_ref_active_get_owner(ns);
 	return 0;
 fail_keyring:
 #ifdef CONFIG_PERSISTENT_KEYRINGS

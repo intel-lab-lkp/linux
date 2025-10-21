@@ -343,6 +343,13 @@ int copy_creds(struct task_struct *p, u64 clone_flags)
 
 	p->cred = p->real_cred = get_cred(new);
 	inc_rlimit_ucounts(task_ucounts(p), UCOUNT_RLIMIT_NPROC, 1);
+
+	/*
+	 * Increment active ref for user_ns. Each task gets its own active
+	 * reference, even if CLONE_THREAD shares the cred structure.
+	 */
+	ns_ref_active_get(new->user_ns);
+
 	return 0;
 
 error_put:
@@ -435,6 +442,16 @@ int commit_creds(struct cred *new)
 	 */
 	if (new->user != old->user || new->user_ns != old->user_ns)
 		inc_rlimit_ucounts(new->ucounts, UCOUNT_RLIMIT_NPROC, 1);
+
+	/*
+	 * Swap active refs if changing user_ns. This task is switching from
+	 * actively using old->user_ns to actively using new->user_ns.
+	 */
+	if (new->user_ns != old->user_ns) {
+		ns_ref_active_get(new->user_ns);
+		ns_ref_active_put(old->user_ns);
+	}
+
 	rcu_assign_pointer(task->real_cred, new);
 	rcu_assign_pointer(task->cred, new);
 	if (new->user != old->user || new->user_ns != old->user_ns)

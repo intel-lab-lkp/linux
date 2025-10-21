@@ -31,6 +31,7 @@ static struct cgroup_namespace *alloc_cgroup_ns(void)
 	if (ret)
 		return ERR_PTR(ret);
 	ns_tree_add(new_ns);
+	ns_ref_active_get_owner(new_ns);
 	return no_free_ptr(new_ns);
 }
 

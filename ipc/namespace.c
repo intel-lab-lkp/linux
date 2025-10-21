@@ -87,6 +87,7 @@ static struct ipc_namespace *create_ipc_ns(struct user_namespace *user_ns,
 	sem_init_ns(ns);
 	shm_init_ns(ns);
 	ns_tree_add(ns);
+	ns_ref_active_get_owner(ns);
 
 	return ns;
 

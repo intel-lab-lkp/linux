@@ -124,6 +124,7 @@ static struct pid_namespace *create_pid_namespace(struct user_namespace *user_ns
 #endif
 
 	ns_tree_add(ns);
+	ns_ref_active_get_owner(ns);
 	return ns;
 
 out_free_inum:
