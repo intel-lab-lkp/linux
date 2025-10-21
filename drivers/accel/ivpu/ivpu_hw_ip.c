@@ -889,6 +889,9 @@ static int soc_cpu_drive_40xx(struct ivpu_device *vdev, bool enable)
 
 static int soc_cpu_enable(struct ivpu_device *vdev)
 {
+	if (ivpu_hw_ip_gen(vdev) >= IVPU_HW_IP_60XX)
+		return 0;
+
 	return soc_cpu_drive_40xx(vdev, true);
 }
 
