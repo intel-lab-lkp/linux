@@ -5846,6 +5846,15 @@ alloc_workqueue_lockdep_map(const char *fmt, unsigned int flags,
 	return wq;
 }
 EXPORT_SYMBOL_GPL(alloc_workqueue_lockdep_map);
+
+void taint_reclaim_workqueue(struct workqueue_struct *wq, gfp_t gfp)
+{
+	fs_reclaim_acquire(gfp);
+	lock_map_acquire(wq->lockdep_map);
+	lock_map_release(wq->lockdep_map);
+	fs_reclaim_release(gfp);
+}
+EXPORT_SYMBOL_GPL(taint_reclaim_workqueue);
 #endif
 
 static bool pwq_busy(struct pool_workqueue *pwq)

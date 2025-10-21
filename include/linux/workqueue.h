@@ -553,6 +553,25 @@ alloc_workqueue_lockdep_map(const char *fmt, unsigned int flags, int max_active,
 						1, lockdep_map, ##args))
 #endif
 
+
+#ifdef CONFIG_LOCKDEP
+/**
+ * taint_reclaim_workqueue - taint workqueue lockdep map with reclaim
+ * @wq: workqueue to taint with reclaim
+ * gfp: gfp taint
+ *
+ * Drivers often use workqueues that are in the reclaim path (e.g., DRM
+ * scheduler workqueues). It is useful to teach lockdep that memory cannot be
+ * allocated on these workqueues.
+ */
+extern void taint_reclaim_workqueue(struct workqueue_struct *wq, gfp_t gfp);
+#else
+static inline void taint_reclaim_workqueue(struct workqueue_struct *wq,
+					   gfp_t gfp)
+{
+}
+#endif
+
 /**
  * alloc_ordered_workqueue - allocate an ordered workqueue
  * @fmt: printf format for the name of the workqueue
