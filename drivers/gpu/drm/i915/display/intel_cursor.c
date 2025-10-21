@@ -998,6 +998,44 @@ static void intel_cursor_add_size_hints_property(struct intel_plane *plane)
 	drm_plane_add_size_hints_property(&plane->base, hints, num_hints);
 }
 
+int intel_cursor_dumb_create(struct intel_display *display,
+			     struct drm_mode_create_dumb *args)
+{
+	const struct drm_mode_config *mode_config = &display->drm->mode_config;
+	int cpp = DIV_ROUND_UP(args->bpp, 8);
+
+	if (cpp != 4)
+		return -EINVAL;
+
+	if (args->width > mode_config->cursor_width)
+		return -EINVAL;
+
+	if (args->height > mode_config->cursor_height)
+		return -EINVAL;
+
+	if (display->platform.i845g || display->platform.i865g) {
+		if (!IS_ALIGNED(args->width, 64))
+			return -EINVAL;
+
+		args->pitch = roundup_pow_of_two(args->width) * 4;
+	} else {
+		switch (args->width) {
+		case 64:
+		case 128:
+		case 256:
+			break;
+		default:
+			return -EINVAL;
+		}
+
+		args->pitch = args->width * 4;
+	}
+
+	args->size = mul_u32_u32(args->pitch, args->height);
+
+	return 0;
+}
+
 struct intel_plane *
 intel_cursor_plane_create(struct intel_display *display,
 			  enum pipe pipe)

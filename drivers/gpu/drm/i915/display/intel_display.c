@@ -574,7 +574,10 @@ int intel_display_dumb_create(struct drm_device *drm,
 {
 	struct intel_display *display = to_intel_display(drm);
 
-	return intel_plane_dumb_create(display, args);
+	if (args->flags & DRM_MODE_DUMB_CURSOR)
+		return intel_cursor_dumb_create(display, args);
+	else
+		return intel_plane_dumb_create(display, args);
 }
 
 void intel_set_plane_visible(struct intel_crtc_state *crtc_state,
