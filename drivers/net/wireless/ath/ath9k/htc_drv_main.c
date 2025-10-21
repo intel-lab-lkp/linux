@@ -349,92 +349,65 @@ static void __ath9k_htc_remove_monitor_interface(struct ath9k_htc_priv *priv)
 
 static int ath9k_htc_add_monitor_interface(struct ath9k_htc_priv *priv)
 {
-	struct ath_common *common = ath9k_hw_common(priv->ah);
-	struct ath9k_htc_target_vif hvif;
-	struct ath9k_htc_target_sta tsta;
-	int ret = 0, sta_idx;
-	u8 cmd_rsp;
+    struct ath_common *common = ath9k_hw_common(priv->ah);
+    struct ath9k_htc_target_vif hvif;
+    struct ath9k_htc_target_sta tsta;
+    int ret = 0, sta_idx;
+    u8 cmd_rsp;
 
-	if ((priv->nvifs >= ATH9K_HTC_MAX_VIF) ||
-	    (priv->nstations >= ATH9K_HTC_MAX_STA)) {
-		ret = -ENOBUFS;
-		goto err_vif;
-	}
+    if ((priv->nvifs >= ATH9K_HTC_MAX_VIF) ||
+        (priv->nstations >= ATH9K_HTC_MAX_STA))
+        return -ENOBUFS;
 
-	sta_idx = ffz(priv->sta_slot);
-	if ((sta_idx < 0) || (sta_idx > ATH9K_HTC_MAX_STA)) {
-		ret = -ENOBUFS;
-		goto err_vif;
-	}
+    sta_idx = ffz(priv->sta_slot);
+    if (sta_idx < 0 || sta_idx >= ATH9K_HTC_MAX_STA)
+        return -ENOBUFS;
 
-	/*
-	 * Add an interface.
-	 */
-	memset(&hvif, 0, sizeof(struct ath9k_htc_target_vif));
-	memcpy(&hvif.myaddr, common->macaddr, ETH_ALEN);
+    memset(&hvif, 0, sizeof(hvif));
+    memcpy(&hvif.myaddr, common->macaddr, ETH_ALEN);
+    hvif.opmode = HTC_M_MONITOR;
+    hvif.index = ffz(priv->vif_slot);
 
-	hvif.opmode = HTC_M_MONITOR;
-	hvif.index = ffz(priv->vif_slot);
+    ret = WMI_CMD_BUF(WMI_VAP_CREATE_CMDID, &hvif);
+    if (ret)
+        goto err_vif;
 
-	WMI_CMD_BUF(WMI_VAP_CREATE_CMDID, &hvif);
-	if (ret)
-		goto err_vif;
+    priv->mon_vif_idx = hvif.index;
+    priv->vif_slot |= (1 << hvif.index);
 
-	/*
-	 * Assign the monitor interface index as a special case here.
-	 * This is needed when the interface is brought down.
-	 */
-	priv->mon_vif_idx = hvif.index;
-	priv->vif_slot |= (1 << hvif.index);
+    if (!priv->nvifs)
+        priv->ah->opmode = NL80211_IFTYPE_MONITOR;
+    priv->nvifs++;
 
-	/*
-	 * Set the hardware mode to monitor only if there are no
-	 * other interfaces.
-	 */
-	if (!priv->nvifs)
-		priv->ah->opmode = NL80211_IFTYPE_MONITOR;
+    memset(&tsta, 0, sizeof(tsta));
+    memcpy(&tsta.macaddr, common->macaddr, ETH_ALEN);
+    tsta.is_vif_sta = 1;
+    tsta.sta_index = sta_idx;
+    tsta.vif_index = hvif.index;
+    tsta.maxampdu = cpu_to_be16(0xffff);
 
-	priv->nvifs++;
+    ret = WMI_CMD_BUF(WMI_NODE_CREATE_CMDID, &tsta);
+    if (ret) {
+        ath_err(common, "Unable to add station entry for monitor mode\n");
+        __ath9k_htc_remove_monitor_interface(priv);
+        return ret;
+    }
 
-	/*
-	 * Associate a station with the interface for packet injection.
-	 */
-	memset(&tsta, 0, sizeof(struct ath9k_htc_target_sta));
+    priv->sta_slot |= (1 << sta_idx);
+    priv->nstations++;
+    priv->vif_sta_pos[priv->mon_vif_idx] = sta_idx;
+    priv->ah->is_monitoring = true;
 
-	memcpy(&tsta.macaddr, common->macaddr, ETH_ALEN);
+    ath_dbg(common, CONFIG, "Monitor interface added at idx %d, sta idx %d\n",
+            priv->mon_vif_idx, sta_idx);
 
-	tsta.is_vif_sta = 1;
-	tsta.sta_index = sta_idx;
-	tsta.vif_index = hvif.index;
-	tsta.maxampdu = cpu_to_be16(0xffff);
+    return 0;
 
-	WMI_CMD_BUF(WMI_NODE_CREATE_CMDID, &tsta);
-	if (ret) {
-		ath_err(common, "Unable to add station entry for monitor mode\n");
-		goto err_sta;
-	}
-
-	priv->sta_slot |= (1 << sta_idx);
-	priv->nstations++;
-	priv->vif_sta_pos[priv->mon_vif_idx] = sta_idx;
-	priv->ah->is_monitoring = true;
-
-	ath_dbg(common, CONFIG,
-		"Attached a monitor interface at idx: %d, sta idx: %d\n",
-		priv->mon_vif_idx, sta_idx);
-
-	return 0;
-
-err_sta:
-	/*
-	 * Remove the interface from the target.
-	 */
-	__ath9k_htc_remove_monitor_interface(priv);
 err_vif:
-	ath_dbg(common, FATAL, "Unable to attach a monitor interface\n");
-
-	return ret;
+    ath_dbg(common, FATAL, "Unable to attach monitor interface\n");
+    return ret;
 }
+
 
 static int ath9k_htc_remove_monitor_interface(struct ath9k_htc_priv *priv)
 {
