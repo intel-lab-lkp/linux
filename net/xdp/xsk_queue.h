@@ -260,10 +260,9 @@ static inline void parse_desc(struct xsk_queue *q, struct xsk_buff_pool *pool,
 
 static inline
 u32 xskq_cons_read_desc_batch(struct xsk_queue *q, struct xsk_buff_pool *pool,
-			      u32 max)
+			      struct xdp_desc *descs, u32 max, u32 *nb_pkts)
 {
 	u32 cached_cons = q->cached_cons, nb_entries = 0;
-	struct xdp_desc *descs = pool->tx_descs;
 	u32 total_descs = 0, nr_frags = 0;
 
 	/* track first entry, if stumble upon *any* invalid descriptor, rewind
@@ -283,6 +282,8 @@ u32 xskq_cons_read_desc_batch(struct xsk_queue *q, struct xsk_buff_pool *pool,
 		if (likely(!parsed.mb)) {
 			total_descs += (nr_frags + 1);
 			nr_frags = 0;
+			if (nb_pkts)
+				(*nb_pkts)++;
 		} else {
 			nr_frags++;
 			if (nr_frags == pool->xdp_zc_max_segs) {

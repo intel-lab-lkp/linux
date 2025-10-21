@@ -523,7 +523,8 @@ u32 xsk_tx_peek_release_desc_batch(struct xsk_buff_pool *pool, u32 nb_descs)
 	if (!nb_descs)
 		goto out;
 
-	nb_descs = xskq_cons_read_desc_batch(xs->tx, pool, nb_descs);
+	nb_descs = xskq_cons_read_desc_batch(xs->tx, pool, pool->tx_descs,
+					     nb_descs, NULL);
 	if (!nb_descs) {
 		xs->tx->queue_empty_descs++;
 		goto out;
