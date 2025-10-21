@@ -247,7 +247,7 @@ static int mlx5_netdev_event(struct notifier_block *this,
 
 		if (!netif_is_lag_master(ndev) && !netif_is_lag_port(ndev) &&
 		    !mlx5_core_mp_enabled(mdev))
-			return NOTIFY_DONE;
+			goto done;
 
 		if (mlx5_lag_is_roce(mdev) || mlx5_lag_is_sriov(mdev)) {
 			struct net_device *lag_ndev;
@@ -268,7 +268,7 @@ static int mlx5_netdev_event(struct notifier_block *this,
 		if (ibdev->is_rep)
 			roce = mlx5_get_rep_roce(ibdev, ndev, upper, &port_num);
 		if (!roce)
-			return NOTIFY_DONE;
+			goto done;
 
 		ib_ndev = ib_device_get_netdev(&ibdev->ib_dev, port_num);
 
