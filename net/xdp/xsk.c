@@ -1210,6 +1210,8 @@ static int xsk_release(struct socket *sock)
 	xskq_destroy(xs->tx);
 	xskq_destroy(xs->fq_tmp);
 	xskq_destroy(xs->cq_tmp);
+	kfree(xs->batch.skb_cache);
+	kvfree(xs->batch.desc_cache);
 
 	sock_orphan(sk);
 	sock->sk = NULL;
@@ -1543,6 +1545,55 @@ static int xsk_setsockopt(struct socket *sock, int level, int optname,
 
 		WRITE_ONCE(xs->max_tx_budget, budget);
 		return 0;
+	}
+	case XDP_GENERIC_XMIT_BATCH:
+	{
+		struct xsk_buff_pool *pool = xs->pool;
+		struct xsk_batch *batch = &xs->batch;
+		struct xdp_desc *descs;
+		struct sk_buff **skbs;
+		unsigned int size;
+		int ret = 0;
+
+		if (optlen != sizeof(size))
+			return -EINVAL;
+		if (copy_from_sockptr(&size, optval, sizeof(size)))
+			return -EFAULT;
+		if (size == batch->generic_xmit_batch)
+			return 0;
+		if (size > xs->max_tx_budget || !pool)
+			return -EACCES;
+
+		mutex_lock(&xs->mutex);
+		if (!size) {
+			kfree(batch->skb_cache);
+			kvfree(batch->desc_cache);
+			batch->generic_xmit_batch = 0;
+			goto out;
+		}
+
+		skbs = kmalloc(size * sizeof(struct sk_buff *), GFP_KERNEL);
+		if (!skbs) {
+			ret = -ENOMEM;
+			goto out;
+		}
+		descs = kvcalloc(size, sizeof(struct xdp_desc), GFP_KERNEL);
+		if (!descs) {
+			kfree(skbs);
+			ret = -ENOMEM;
+			goto out;
+		}
+		if (batch->skb_cache)
+			kfree(batch->skb_cache);
+		if (batch->desc_cache)
+			kvfree(batch->desc_cache);
+
+		batch->skb_cache = skbs;
+		batch->desc_cache = descs;
+		batch->generic_xmit_batch = size;
+out:
+		mutex_unlock(&xs->mutex);
+		return ret;
 	}
 	default:
 		break;
