@@ -20,12 +20,30 @@ struct btrfs_dio_data {
 };
 
 struct btrfs_dio_private {
+	/* Saved iter for read bios to copy their data back. */
+	struct bvec_iter saved_src_iter;
+
 	/* Range of I/O */
-	u64 file_offset;
 	u32 bytes;
+	u64 file_offset;
 
 	/* This must be last */
 	struct btrfs_bio bbio;
+};
+
+/* Record the amount of bounce bios. */
+struct bounce_ctl {
+	/* The original bio from iomap dio. */
+	struct bio *src;
+
+	/* Procetects @ret update. */
+	spinlock_t lock;
+
+	/* Number of pending bounce btrfs bios*/
+	atomic_t pending;
+
+	/* Record the first hit error. */
+	int ret;
 };
 
 static struct bio_set btrfs_dio_bioset;
@@ -640,33 +658,6 @@ static int btrfs_dio_iomap_end(struct inode *inode, loff_t pos, loff_t length,
 	return ret;
 }
 
-static void btrfs_dio_end_io(struct btrfs_bio *bbio)
-{
-	struct btrfs_dio_private *dip =
-		container_of(bbio, struct btrfs_dio_private, bbio);
-	struct btrfs_inode *inode = bbio->inode;
-	struct bio *bio = &bbio->bio;
-
-	if (bio->bi_status) {
-		btrfs_warn(inode->root->fs_info,
-		"direct IO failed ino %llu op 0x%0x offset %#llx len %u err no %d",
-			   btrfs_ino(inode), bio->bi_opf,
-			   dip->file_offset, dip->bytes, bio->bi_status);
-	}
-
-	if (btrfs_op(bio) == BTRFS_MAP_WRITE) {
-		btrfs_finish_ordered_extent(bbio->ordered, NULL,
-					    dip->file_offset, dip->bytes,
-					    !bio->bi_status);
-	} else {
-		btrfs_unlock_dio_extent(&inode->io_tree, dip->file_offset,
-					dip->file_offset + dip->bytes - 1, NULL);
-	}
-
-	bbio->bio.bi_private = bbio->private;
-	iomap_dio_bio_end_io(bio);
-}
-
 static int btrfs_extract_ordered_extent(struct btrfs_bio *bbio,
 					struct btrfs_ordered_extent *ordered)
 {
@@ -705,46 +696,223 @@ static int btrfs_extract_ordered_extent(struct btrfs_bio *bbio,
 	return 0;
 }
 
-static void btrfs_dio_submit_io(const struct iomap_iter *iter, struct bio *bio,
-				loff_t file_offset)
+
+static void put_bounce_bio_ctl(struct bounce_ctl *bounce_ctl, int ret)
 {
-	struct btrfs_bio *bbio = btrfs_bio(bio);
+	unsigned long flags;
+
+	spin_lock_irqsave(&bounce_ctl->lock, flags);
+	if (!bounce_ctl->ret)
+		bounce_ctl->ret = ret;
+	spin_unlock_irqrestore(&bounce_ctl->lock, flags);
+
+	if (atomic_dec_and_test(&bounce_ctl->pending)) {
+		bounce_ctl->src->bi_status = errno_to_blk_status(bounce_ctl->ret);
+		iomap_dio_bio_end_io(bounce_ctl->src);
+		kfree(bounce_ctl);
+	}
+}
+
+static void dio_end_write_copied_bio(struct btrfs_bio *bbio)
+{
+	struct bounce_ctl *bounce_ctl = bbio->private;
 	struct btrfs_dio_private *dip =
 		container_of(bbio, struct btrfs_dio_private, bbio);
-	struct btrfs_dio_data *dio_data = iter->private;
+	struct btrfs_inode *inode = bbio->inode;
+	struct bio *bio = &bbio->bio;
+	int ret;
 
-	btrfs_bio_init(bbio, BTRFS_I(iter->inode)->root->fs_info,
-		       btrfs_dio_end_io, bio->bi_private);
-	bbio->inode = BTRFS_I(iter->inode);
-	bbio->file_offset = file_offset;
-
-	dip->file_offset = file_offset;
-	dip->bytes = bio->bi_iter.bi_size;
-
-	dio_data->submitted += bio->bi_iter.bi_size;
-
-	/*
-	 * Check if we are doing a partial write.  If we are, we need to split
-	 * the ordered extent to match the submitted bio.  Hang on to the
-	 * remaining unfinishable ordered_extent in dio_data so that it can be
-	 * cancelled in iomap_end to avoid a deadlock wherein faulting the
-	 * remaining pages is blocked on the outstanding ordered extent.
-	 */
-	if (iter->flags & IOMAP_WRITE) {
-		int ret;
-
-		ret = btrfs_extract_ordered_extent(bbio, dio_data->ordered);
-		if (ret) {
-			btrfs_finish_ordered_extent(dio_data->ordered, NULL,
-						    file_offset, dip->bytes,
-						    !ret);
-			bio->bi_status = errno_to_blk_status(ret);
-			iomap_dio_bio_end_io(bio);
-			return;
-		}
+	ret = blk_status_to_errno(bio->bi_status);
+	if (ret) {
+		btrfs_warn(inode->root->fs_info,
+		"direct IO failed ino %llu op 0x%0x offset %#llx len %u err no %d",
+			   btrfs_ino(inode), bio->bi_opf,
+			   dip->file_offset, dip->bytes, bio->bi_status);
 	}
 
-	btrfs_submit_bbio(bbio, 0);
+	btrfs_finish_ordered_extent(bbio->ordered, NULL,
+				    dip->file_offset, dip->bytes,
+				    !bio->bi_status);
+	bio_free_pages(bio);
+	bio_put(bio);
+	put_bounce_bio_ctl(bounce_ctl, ret);
+}
+
+static void dio_end_read_copied_bio(struct btrfs_bio *bbio)
+{
+	struct bounce_ctl *bounce_ctl = bbio->private;
+	struct btrfs_dio_private *dip =
+		container_of(bbio, struct btrfs_dio_private, bbio);
+	struct btrfs_inode *inode = bbio->inode;
+	struct bio *bio = &bbio->bio;
+	struct bvec_iter iter = { .bi_size = dip->bytes };
+	int ret;
+
+	ret = blk_status_to_errno(bio->bi_status);
+	if (ret) {
+		btrfs_warn(inode->root->fs_info,
+		"direct IO failed ino %llu op 0x%0x offset %#llx len %u err no %d",
+			   btrfs_ino(inode), bio->bi_opf,
+			   dip->file_offset, dip->bytes, bio->bi_status);
+	}
+
+	/* Copy the whole bounce bio into the saved src location. */
+	bio_copy_data_iter(bounce_ctl->src, &dip->saved_src_iter, bio, &iter);
+	btrfs_unlock_dio_extent(&inode->io_tree, dip->file_offset,
+				dip->file_offset + dip->bytes - 1, NULL);
+	bio_free_pages(bio);
+	bio_put(bio);
+	put_bounce_bio_ctl(bounce_ctl, ret);
+}
+
+static struct btrfs_bio *alloc_bounce_bbio(struct btrfs_inode *inode,
+					   struct bio *src,
+					   struct bounce_ctl *bounce_ctl,
+					   btrfs_bio_end_io_t end_io,
+					   u64 logical, u64 file_offset)
+{
+	struct btrfs_dio_private *dip;
+	struct btrfs_bio *new_bbio;
+	struct bio *new_bio;
+	unsigned int vcnt = min(round_up(src->bi_iter.bi_size, PAGE_SIZE) >> PAGE_SHIFT,
+				BIO_MAX_VECS);
+
+	new_bio = bio_alloc_bioset(NULL, vcnt, src->bi_opf, GFP_NOFS, &btrfs_dio_bioset);
+	new_bio->bi_iter.bi_sector = logical >> SECTOR_SHIFT;
+
+	new_bbio = btrfs_bio(new_bio);
+	btrfs_bio_init(new_bbio, inode->root->fs_info, end_io, bounce_ctl);
+	new_bbio->inode = inode;
+	new_bbio->file_offset = file_offset;
+
+	dip = container_of(new_bbio, struct btrfs_dio_private, bbio);
+	dip->file_offset = file_offset;
+	atomic_inc(&bounce_ctl->pending);
+	return new_bbio;
+}
+
+static void submit_bounce_bbio(struct btrfs_dio_data *dio_data, struct btrfs_bio *bounce_bbio,
+			       struct bio *src)
+{
+	const bool is_write = (btrfs_op(&bounce_bbio->bio) == BTRFS_MAP_WRITE);
+	const unsigned int size = bounce_bbio->bio.bi_iter.bi_size;
+	struct bounce_ctl *bounce_ctl = bounce_bbio->private;
+	struct btrfs_dio_private *dip = container_of(bounce_bbio,
+						     struct btrfs_dio_private, bbio);
+
+	ASSERT(size <= src->bi_iter.bi_size);
+	dio_data->submitted += size;
+	dip->bytes = size;
+	if (is_write) {
+		struct bvec_iter iter = { .bi_size = size };
+		int ret;
+
+		/* Copy the remaining part of src into the beginning of the bounce bbio. */
+		bio_copy_data_iter(&bounce_bbio->bio, &iter, src, &src->bi_iter);
+
+		/*
+		 * Check if we are doing a partial write.  If we are, we need to split
+		 * the ordered extent to match the submitted bio.  Hang on to the
+		 * remaining unfinishable ordered_extent in dio_data so that it can be
+		 * cancelled in iomap_end to avoid a deadlock wherein faulting the
+		 * remaining pages is blocked on the outstanding ordered extent.
+		 */
+		ret = btrfs_extract_ordered_extent(bounce_bbio, dio_data->ordered);
+		if (ret) {
+			btrfs_finish_ordered_extent(dio_data->ordered, NULL,
+						    bounce_bbio->file_offset, size, false);
+			bio_free_pages(&bounce_bbio->bio);
+			bio_put(&bounce_bbio->bio);
+			put_bounce_bio_ctl(bounce_ctl, ret);
+			return;
+		}
+	} else {
+		struct btrfs_dio_private *dip = container_of(bounce_bbio,
+							     struct btrfs_dio_private, bbio);
+
+		/*
+		 * Save the iter and size so that we can copy the content back
+		 * to the correct position at endio.
+		 */
+		dip->saved_src_iter = src->bi_iter;
+		bio_advance(src, size);
+	}
+	btrfs_submit_bbio(bounce_bbio, 0);
+}
+
+static void btrfs_dio_submit_io(const struct iomap_iter *iter, struct bio *src,
+				loff_t file_offset)
+{
+	struct btrfs_inode *inode = BTRFS_I(iter->inode);
+	struct btrfs_dio_data *dio_data = iter->private;
+	struct btrfs_bio *bounce_bbio = NULL;
+	struct bounce_ctl *bounce_ctl;
+	const bool is_write = (btrfs_op(src) == BTRFS_MAP_WRITE);
+	btrfs_bio_end_io_t end_io;
+	const unsigned int src_size = src->bi_iter.bi_size;
+	const u64 logical = src->bi_iter.bi_sector << SECTOR_SHIFT;
+	unsigned int cur = 0;
+	int ret = 0;
+
+	if (is_write)
+		end_io = dio_end_write_copied_bio;
+	else
+		end_io = dio_end_read_copied_bio;
+
+	bounce_ctl = kzalloc(sizeof(struct bounce_ctl), GFP_NOFS);
+	if (!bounce_ctl) {
+		ret = -ENOMEM;
+		src->bi_status = errno_to_blk_status(ret);
+		iomap_dio_bio_end_io(src);
+		return;
+	}
+	bounce_ctl->src = src;
+	spin_lock_init(&bounce_ctl->lock);
+	/*
+	 * Set the initial value to 1 so that the iomap bio can only finish
+	 * after every bounce bio is submitted.
+	 */
+	atomic_set(&bounce_ctl->pending, 1);
+
+	while (cur < src_size) {
+		struct page *page;
+		unsigned int size = min(src_size - cur, PAGE_SIZE);
+
+		if (!bounce_bbio)
+			bounce_bbio = alloc_bounce_bbio(inode, src, bounce_ctl, end_io,
+							logical + cur, file_offset + cur);
+		page = alloc_page(GFP_NOFS);
+		if (!page) {
+			ret = -ENOMEM;
+			submit_bounce_bbio(dio_data, bounce_bbio, src);
+			goto error;
+		}
+		ret = bio_add_page(&bounce_bbio->bio, page, size, 0);
+		if (ret != size) {
+			submit_bounce_bbio(dio_data, bounce_bbio, src);
+			bounce_bbio = NULL;
+			continue;
+		}
+		ret = 0;
+		cur += size;
+	}
+	if (bounce_bbio)
+		submit_bounce_bbio(dio_data, bounce_bbio, src);
+
+	put_bounce_bio_ctl(bounce_ctl, 0);
+	return;
+error:
+	/*
+	 * Errored out halfway, cleanup the remaining part which is not covered by
+	 * any bbio.
+	 */
+	if (is_write)
+		btrfs_mark_ordered_io_finished(inode, NULL, file_offset + cur,
+					       src_size - cur, false);
+	else
+		btrfs_unlock_dio_extent(&inode->io_tree, file_offset + cur,
+					file_offset + src_size - 1, NULL);
+	put_bounce_bio_ctl(bounce_ctl, ret);
 }
 
 static const struct iomap_ops btrfs_dio_iomap_ops = {
@@ -754,7 +922,6 @@ static const struct iomap_ops btrfs_dio_iomap_ops = {
 
 static const struct iomap_dio_ops btrfs_dio_ops = {
 	.submit_io		= btrfs_dio_submit_io,
-	.bio_set		= &btrfs_dio_bioset,
 };
 
 static ssize_t btrfs_dio_read(struct kiocb *iocb, struct iov_iter *iter,
