@@ -78,7 +78,11 @@ static int __v9fs_lookup_revalidate(struct dentry *dentry, unsigned int flags)
 	v9inode = V9FS_I(inode);
 	struct v9fs_session_info *v9ses = v9fs_inode2v9ses(inode);
 
-	cached = v9ses->cache & (CACHE_META | CACHE_LOOSE);
+	/* We also don't want to refresh attr here in writeback cache mode,
+	 * otherwise a write that hasn't been propagated to server would
+	 * incorrectly get the old size back and truncate the file before
+	 * the write happens */
+	cached = v9ses->cache & (CACHE_META | CACHE_WRITEBACK | CACHE_LOOSE);
 
 	if (!cached || v9inode->cache_validity & V9FS_INO_INVALID_ATTR) {
 		int retval;
