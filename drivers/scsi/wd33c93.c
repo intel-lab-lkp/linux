@@ -932,6 +932,19 @@ wd33c93_intr(struct Scsi_Host *instance)
 		sr = read_wd33c93(regs, WD_SCSI_STATUS);	/* clear interrupt */
 		udelay(7);
 
+		/* Prevent buffer overflow from malicious extended messages */
+		if (hostdata->incoming_ptr >= sizeof(hostdata->incoming_msg)) {
+			printk("wd33c93: Incoming message too long, rejecting\n");
+			hostdata->incoming_ptr = 0;
+			write_wd33c93_cmd(regs, WD_CMD_ASSERT_ATN);
+			hostdata->outgoing_msg[0] = MESSAGE_REJECT;
+			hostdata->outgoing_len = 1;
+			write_wd33c93_cmd(regs, WD_CMD_NEGATE_ACK);
+			hostdata->state = S_CONNECTED;
+			spin_unlock_irqrestore(&hostdata->lock, flags);
+			break;
+		}
+
 		hostdata->incoming_msg[hostdata->incoming_ptr] = msg;
 		if (hostdata->incoming_msg[0] == EXTENDED_MESSAGE)
 			msg = EXTENDED_MESSAGE;
