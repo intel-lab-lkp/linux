@@ -428,6 +428,9 @@ static int nf_flow_offload_forward(struct nf_flowtable_ctx *ctx,
 	flow = container_of(tuplehash, struct flow_offload, tuplehash[dir]);
 
 	mtu = flow->tuplehash[dir].tuple.mtu + ctx->offset;
+	if (tuplehash->tuple.tunnel_num)
+		mtu -= sizeof(*iph);
+
 	if (unlikely(nf_flow_exceeds_mtu(skb, mtu)))
 		return 0;
 
@@ -461,6 +464,54 @@ static int nf_flow_offload_forward(struct nf_flowtable_ctx *ctx,
 	return 1;
 }
 
+static unsigned int nf_flow_add_tunnel_v4(struct net *net, struct sk_buff *skb,
+					  struct flow_offload *flow, int dir,
+					  const struct rtable *rt)
+{
+	struct iphdr *iph = (struct iphdr *)skb_network_header(skb);
+	u32 headroom = sizeof(struct iphdr);
+	u8 tos, ttl;
+	__be16 df;
+
+	if (iptunnel_handle_offloads(skb, SKB_GSO_IPXIP4))
+		return -1;
+
+	skb_set_inner_ipproto(skb, IPPROTO_IPIP);
+	headroom += LL_RESERVED_SPACE(rt->dst.dev) + rt->dst.header_len;
+	if (skb_cow_head(skb, headroom))
+		return -1;
+
+	skb_scrub_packet(skb, true);
+	skb_clear_hash_if_not_l4(skb);
+	memset(IPCB(skb), 0, sizeof(*IPCB(skb)));
+
+	/* Push down and install the IP header. */
+	skb_push(skb, sizeof(struct iphdr));
+	skb_reset_network_header(skb);
+
+	df = flow->tuplehash[dir].tuple.tunnel.df;
+	tos = ip_tunnel_ecn_encap(flow->tuplehash[dir].tuple.tunnel.tos,
+				  iph, skb);
+	ttl = flow->tuplehash[dir].tuple.tunnel.ttl;
+	if (!ttl)
+		ttl = iph->ttl;
+
+	iph = ip_hdr(skb);
+	iph->version	= 4;
+	iph->ihl	= sizeof(struct iphdr) >> 2;
+	iph->frag_off	= ip_mtu_locked(&rt->dst) ? 0 : df;
+	iph->protocol	= flow->tuplehash[dir].tuple.tunnel.l3_proto;
+	iph->tos	= tos;
+	iph->daddr	= flow->tuplehash[dir].tuple.tunnel.dst_v4.s_addr;
+	iph->saddr	= flow->tuplehash[dir].tuple.tunnel.src_v4.s_addr;
+	iph->ttl	= ttl;
+	iph->tot_len	= htons(skb->len);
+	__ip_select_ident(net, iph, skb_shinfo(skb)->gso_segs ?: 1);
+	ip_send_check(iph);
+
+	return 0;
+}
+
 unsigned int
 nf_flow_offload_ip_hook(void *priv, struct sk_buff *skb,
 			const struct nf_hook_state *state)
@@ -473,8 +524,8 @@ nf_flow_offload_ip_hook(void *priv, struct sk_buff *skb,
 	};
 	struct flow_offload *flow;
 	struct net_device *outdev;
+	__be32 nexthop, daddr;
 	struct rtable *rt;
-	__be32 nexthop;
 	int ret;
 
 	tuplehash = nf_flow_offload_lookup(&ctx, flow_table, skb);
@@ -501,9 +552,21 @@ nf_flow_offload_ip_hook(void *priv, struct sk_buff *skb,
 	switch (tuplehash->tuple.xmit_type) {
 	case FLOW_OFFLOAD_XMIT_NEIGH:
 		rt = dst_rtable(tuplehash->tuple.dst_cache);
+		if (tuplehash->tuple.tunnel_num) {
+			ret = nf_flow_add_tunnel_v4(state->net, skb, flow, dir,
+						    rt);
+			if (ret < 0) {
+				ret = NF_DROP;
+				flow_offload_teardown(flow);
+				break;
+			}
+			daddr = tuplehash->tuple.tunnel.dst_v4.s_addr;
+		} else {
+			daddr = flow->tuplehash[!dir].tuple.src_v4.s_addr;
+		}
 		outdev = rt->dst.dev;
 		skb->dev = outdev;
-		nexthop = rt_nexthop(rt, flow->tuplehash[!dir].tuple.src_v4.s_addr);
+		nexthop = rt_nexthop(rt, daddr);
 		skb_dst_set_noref(skb, &rt->dst);
 		neigh_xmit(NEIGH_ARP_TABLE, outdev, &nexthop, skb);
 		ret = NF_STOLEN;

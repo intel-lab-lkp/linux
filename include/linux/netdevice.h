@@ -897,6 +897,9 @@ struct net_device_path {
 			};
 
 			u8	l3_proto;
+			u8	tos;
+			u8	ttl;
+			__be16	df;
 		} tun;
 		struct {
 			enum {
