@@ -31,6 +31,8 @@ ssize_t xe_sriov_migration_data_read(struct xe_device *xe, unsigned int vfid,
 				     char __user *buf, size_t len);
 ssize_t xe_sriov_migration_data_write(struct xe_device *xe, unsigned int vfid,
 				      const char __user *buf, size_t len);
+int xe_sriov_migration_data_process_descriptor(struct xe_device *xe, unsigned int vfid,
+					       struct xe_sriov_migration_data *data);
 int xe_sriov_migration_data_save_init(struct xe_device *xe, unsigned int vfid);
 
 #endif

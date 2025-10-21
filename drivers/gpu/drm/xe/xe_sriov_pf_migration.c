@@ -176,8 +176,14 @@ out:
 static int pf_handle_descriptor(struct xe_device *xe, unsigned int vfid,
 				struct xe_sriov_migration_data *data)
 {
+	int ret;
+
 	if (data->tile != 0 || data->gt != 0)
 		return -EINVAL;
+
+	ret = xe_sriov_migration_data_process_descriptor(xe, vfid, data);
+	if (ret)
+		return ret;
 
 	xe_sriov_migration_data_free(data);
 
