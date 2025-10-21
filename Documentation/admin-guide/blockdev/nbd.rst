@@ -25,7 +25,7 @@ A) NBD parameters
 -----------------
 
 max_part
-	Number of partitions per device (default: 0).
+	Number of partitions per device (default: 16).
 
 nbds_max
 	Number of block devices that should be initialized (default: 16).
