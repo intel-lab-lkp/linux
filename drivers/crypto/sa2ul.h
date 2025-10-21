@@ -124,7 +124,7 @@ struct sa_tfm_ctx;
  * Encoding of F/E control in SCCTL
  *  Bit 0-1: Fetch PHP Bytes
  *  Bit 2-3: Fetch Encryption/Air Ciphering Bytes
- *  Bit 4-5: Fetch Authentication Bytes or Encr pass 2
+ *  Bit 4-5: Fetch Authentication Bytes or Encryption pass 2
  *  Bit 6-7: Evict PHP Bytes
  *
  *  where   00 = 0 bytes
@@ -298,7 +298,7 @@ struct sa_ctx_info {
  * @dev_data: struct sa_crypto_data pointer
  * @enc: struct sa_ctx_info for encryption
  * @dec: struct sa_ctx_info for decryption
- * @keylen: encrption/decryption keylength
+ * @keylen: encryption/decryption keylength
  * @iv_idx: Initialization vector index
  * @key: encryption key
  * @fallback: SW fallback algorithm
