@@ -74,6 +74,7 @@ struct ipvl_dev {
 
 struct ipvl_addr {
 	struct ipvl_dev		*master; /* Back pointer to master */
+	bool			is_blocked; /* Blocked. Addr from main iface */
 	union {
 		struct in6_addr	ip6;	 /* IPv6 address on logical interface */
 		struct in_addr	ip4;	 /* IPv4 address on logical interface */
@@ -179,7 +180,8 @@ void ipvlan_multicast_enqueue(struct ipvl_port *port,
 int ipvlan_queue_xmit(struct sk_buff *skb, struct net_device *dev);
 void ipvlan_ht_addr_add(struct ipvl_dev *ipvlan, struct ipvl_addr *addr);
 int ipvlan_add_addr(struct ipvl_dev *ipvlan,
-		    void *iaddr, bool is_v6, const u8 *hwaddr);
+		    void *iaddr, bool is_v6, const u8 *hwaddr,
+		    bool is_blocked);
 void ipvlan_del_addr(struct ipvl_dev *ipvlan, void *iaddr, bool is_v6);
 struct ipvl_addr *ipvlan_find_addr(const struct ipvl_dev *ipvlan,
 				   const void *iaddr, bool is_v6);

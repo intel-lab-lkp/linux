@@ -468,8 +468,30 @@ static inline bool is_ipv6_usable(const struct in6_addr *addr)
 	       !ipv6_addr_any(addr);
 }
 
-static void ipvlan_addr_learn(struct ipvl_dev *ipvlan, void *lyr3h,
-			      int addr_type, const u8 *hwaddr)
+static bool ipvlan_is_portaddr_busy(struct ipvl_dev *ipvlan,
+				    void *addr, bool is_v6)
+{
+	const struct in_ifaddr *ifa;
+	struct in_device *in_dev;
+
+	if (is_v6)
+		return ipv6_chk_addr(dev_net(ipvlan->phy_dev), addr,
+				    ipvlan->phy_dev, 1);
+
+	in_dev = __in_dev_get_rcu(ipvlan->phy_dev);
+	if (!in_dev)
+		return false;
+
+	in_dev_for_each_ifa_rcu(ifa, in_dev)
+		if (ifa->ifa_local == *(__be32 *)addr)
+			return true;
+
+	return false;
+}
+
+/* return -1 if frame should be dropped. */
+static int ipvlan_addr_learn(struct ipvl_dev *ipvlan, void *lyr3h,
+			     int addr_type, const u8 *hwaddr)
 {
 	struct ipvl_addr *ipvladdr;
 	void *addr = NULL;
@@ -483,7 +505,7 @@ static void ipvlan_addr_learn(struct ipvl_dev *ipvlan, void *lyr3h,
 
 		ip6h = (struct ipv6hdr *)lyr3h;
 		if (!is_ipv6_usable(&ip6h->saddr))
-			return;
+			return 0;
 		is_v6 = true;
 		addr = &ip6h->saddr;
 		break;
@@ -496,7 +518,7 @@ static void ipvlan_addr_learn(struct ipvl_dev *ipvlan, void *lyr3h,
 		ip4h = (struct iphdr *)lyr3h;
 		i4addr = &ip4h->saddr;
 		if (!is_ipv4_usable(*i4addr))
-			return;
+			return 0;
 		is_v6 = false;
 		addr = i4addr;
 		break;
@@ -511,17 +533,20 @@ static void ipvlan_addr_learn(struct ipvl_dev *ipvlan, void *lyr3h,
 		arp_ptr += ipvlan->port->dev->addr_len;
 		i4addr = (__be32 *)arp_ptr;
 		if (!is_ipv4_usable(*i4addr))
-			return;
+			return 0;
 		is_v6 = false;
 		addr = i4addr;
 		break;
 	}
 	default:
-		return;
+		return 0;
 	}
 
 	/* handle situation when MAC changed, but IP is the same. */
 	ipvladdr = ipvlan_ht_addr_lookup(ipvlan->port, addr, is_v6);
+	if (ipvladdr && ipvladdr->is_blocked)
+		return -1;
+
 	if (ipvladdr && !ether_addr_equal(ipvladdr->hwaddr, hwaddr)) {
 		/* del_addr is safe to call, because we are inside xmit*/
 		ipvlan_del_addr(ipvladdr->master, addr, is_v6);
@@ -529,11 +554,17 @@ static void ipvlan_addr_learn(struct ipvl_dev *ipvlan, void *lyr3h,
 	}
 
 	if (!ipvladdr) {
+		bool is_port_ip = ipvlan_is_portaddr_busy(ipvlan, addr, is_v6);
+
 		spin_lock_bh(&ipvlan->addrs_lock);
 		if (!ipvlan_addr_busy(ipvlan->port, addr, is_v6))
-			ipvlan_add_addr(ipvlan, addr, is_v6, hwaddr);
+			ipvlan_add_addr(ipvlan, addr, is_v6, hwaddr, is_port_ip);
 		spin_unlock_bh(&ipvlan->addrs_lock);
+
+		return is_port_ip ? -1 : 0;
 	}
+
+	return 0;
 }
 
 static noinline_for_stack int ipvlan_process_v4_outbound(struct sk_buff *skb)
@@ -724,11 +755,12 @@ static int ipvlan_xmit_mode_l3(struct sk_buff *skb, struct net_device *dev)
 
 	if (!ipvlan_is_vepa(ipvlan->port)) {
 		addr = ipvlan_addr_lookup(ipvlan->port, lyr3h, addr_type, true);
-		if (addr) {
+		if (addr && !addr->is_blocked) {
 			if (ipvlan_is_private(ipvlan->port)) {
 				consume_skb(skb);
 				return NET_XMIT_DROP;
 			}
+
 			ipvlan_rcv_frame(addr, addr_type, &skb, true);
 			return NET_XMIT_SUCCESS;
 		}
@@ -866,8 +898,12 @@ static int ipvlan_xmit_mode_l2(struct sk_buff *skb, struct net_device *dev)
 	lyr3h = ipvlan_get_L3_hdr(ipvlan->port, skb, &addr_type);
 
 	if (ipvlan_is_learnable(ipvlan->port)) {
-		if (lyr3h)
-			ipvlan_addr_learn(ipvlan, lyr3h, addr_type, eth->h_source);
+		if (lyr3h) {
+			if (ipvlan_addr_learn(ipvlan, lyr3h, addr_type,
+					      eth->h_source) < 0)
+				goto out_drop;
+		}
+
 		/* Mark SKB in advance */
 		skb = skb_share_check(skb, GFP_ATOMIC);
 		if (!skb)
@@ -903,7 +939,7 @@ static int ipvlan_xmit_mode_l2(struct sk_buff *skb, struct net_device *dev)
 
 	if (lyr3h) {
 		addr = ipvlan_addr_lookup(ipvlan->port, lyr3h, addr_type, true);
-		if (addr) {
+		if (addr && !addr->is_blocked) {
 			if (ipvlan_is_private(ipvlan->port))
 				goto out_drop;
 
@@ -1016,8 +1052,9 @@ static rx_handler_result_t ipvlan_handle_mode_l3(struct sk_buff **pskb,
 		goto out;
 
 	addr = ipvlan_addr_lookup(port, lyr3h, addr_type, true);
-	if (addr)
+	if (addr && !addr->is_blocked)
 		ret = ipvlan_rcv_frame(addr, addr_type, pskb, false);
+
 out:
 	return ret;
 }

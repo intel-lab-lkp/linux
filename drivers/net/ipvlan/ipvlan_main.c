@@ -151,7 +151,7 @@ static int ipvlan_port_receive(struct sk_buff *skb, struct net_device *wdev,
 		goto out;
 
 	addr = ipvlan_addr_lookup(port, lyr3h, addr_type, true);
-	if (addr)
+	if (addr && !addr->is_blocked)
 		return ipvlan_receive(addr->master, skb);
 
 out:
@@ -964,7 +964,7 @@ static int ipvlan_device_event(struct notifier_block *unused,
 
 /* the caller must held the addrs lock */
 int ipvlan_add_addr(struct ipvl_dev *ipvlan, void *iaddr, bool is_v6,
-		    const u8 *hwaddr)
+		    const u8 *hwaddr, bool is_blocked)
 {
 	struct ipvl_addr *addr;
 
@@ -973,6 +973,7 @@ int ipvlan_add_addr(struct ipvl_dev *ipvlan, void *iaddr, bool is_v6,
 		return -ENOMEM;
 
 	addr->master = ipvlan;
+	addr->is_blocked = is_blocked;
 	if (!is_v6) {
 		memcpy(&addr->ip4addr, iaddr, sizeof(struct in_addr));
 		addr->atype = IPVL_IPV4;
@@ -1024,7 +1025,7 @@ static int ipvlan_add_addr6(struct ipvl_dev *ipvlan, struct in6_addr *ip6_addr)
 			  "Failed to add IPv6=%pI6c addr for %s intf\n",
 			  ip6_addr, ipvlan->dev->name);
 	else
-		ret = ipvlan_add_addr(ipvlan, ip6_addr, true, NULL);
+		ret = ipvlan_add_addr(ipvlan, ip6_addr, true, NULL, false);
 	spin_unlock_bh(&ipvlan->addrs_lock);
 	return ret;
 }
@@ -1095,7 +1096,7 @@ static int ipvlan_add_addr4(struct ipvl_dev *ipvlan, struct in_addr *ip4_addr)
 			  "Failed to add IPv4=%pI4 on %s intf.\n",
 			  ip4_addr, ipvlan->dev->name);
 	else
-		ret = ipvlan_add_addr(ipvlan, ip4_addr, false, NULL);
+		ret = ipvlan_add_addr(ipvlan, ip4_addr, false, NULL, false);
 	spin_unlock_bh(&ipvlan->addrs_lock);
 	return ret;
 }
