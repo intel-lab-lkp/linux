@@ -1268,7 +1268,7 @@ config HISILICON_ERRATUM_162100801
 	help
 	  When enabling GICv4.1 in hip09, VMAPP will fail to clear some caches
 	  during unmapping operation, which will cause some vSGIs lost.
-	  To fix the issue, invalidate related vPE cache through GICR_INVALLR
+	  To fix the issue, invalidate related vPE cache through VINVALL
 	  after VMOVP.
 
 	  If unsure, say Y.
