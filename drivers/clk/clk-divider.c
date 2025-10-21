@@ -339,6 +339,9 @@ static int clk_divider_bestdiv(struct clk_hw *hw, struct clk_hw *parent,
 			best = now;
 			*best_parent_rate = parent_rate;
 		}
+
+		if (best == rate)
+			break;
 	}
 
 	if (!bestdiv) {
