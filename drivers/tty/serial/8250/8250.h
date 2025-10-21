@@ -20,6 +20,8 @@ struct uart_8250_dma {
 	void (*prepare_tx_dma)(struct uart_8250_port *p);
 	void (*prepare_rx_dma)(struct uart_8250_port *p);
 
+	struct workqueue_struct *wq_tty_flip;
+
 	/* Filter function */
 	dma_filter_fn		fn;
 	/* Parameter to the filter function */

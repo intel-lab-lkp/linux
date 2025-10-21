@@ -38,6 +38,35 @@ static void __dma_tx_complete(void *param)
 	uart_port_unlock_irqrestore(&p->port, flags);
 }
 
+#define TTY_FLIP_WORK_CPU		WORK_CPU_UNBOUND
+
+static int wq_tty_flip_cpu = TTY_FLIP_WORK_CPU;
+
+static int param_set_tty_flip_cpu(const char *val,
+					const struct kernel_param *kp)
+{
+	int cpu;
+	int ret;
+
+	ret = kstrtoint(val, 0, &cpu);
+	if (ret)
+		return ret;
+
+	if ((cpu >= 0 && cpu < nr_cpu_ids) || cpu == WORK_CPU_UNBOUND)
+		wq_tty_flip_cpu = cpu;
+	else
+		return -EINVAL;
+
+	return 0;
+}
+
+static const struct kernel_param_ops tty_flip_cpu_ops = {
+	.set	= param_set_tty_flip_cpu,
+	.get	= param_get_int,
+};
+
+module_param_cb(tty_flip_cpu, &tty_flip_cpu_ops, &wq_tty_flip_cpu, 0644);
+
 static void __dma_rx_complete(struct uart_8250_port *p)
 {
 	struct uart_8250_dma	*dma = p->dma;
@@ -61,7 +90,10 @@ static void __dma_rx_complete(struct uart_8250_port *p)
 	p->port.icount.rx += count;
 	dma->rx_running = 0;
 
-	tty_flip_buffer_push(tty_port);
+	if (wq_tty_flip_cpu == WORK_CPU_UNBOUND)
+		tty_flip_buffer_push(tty_port);
+	else
+		tty_flip_buffer_push_wq(tty_port, dma->wq_tty_flip, wq_tty_flip_cpu);
 }
 
 static void dma_rx_complete(void *param)
@@ -244,6 +276,12 @@ int serial8250_request_dma(struct uart_8250_port *p)
 		goto release_rx;
 	}
 
+	dma->wq_tty_flip = alloc_workqueue("wq_tty_flip", WQ_PERCPU | WQ_HIGHPRI, 0);
+	if (!dma->wq_tty_flip) {
+		ret = -ENOMEM;
+		goto release_rx;
+	}
+
 	dmaengine_slave_config(dma->rxchan, &dma->rxconf);
 
 	/* Get a channel for TX */
@@ -252,7 +290,7 @@ int serial8250_request_dma(struct uart_8250_port *p)
 						       p->port.dev, "tx");
 	if (!dma->txchan) {
 		ret = -ENODEV;
-		goto release_rx;
+		goto release_rx_wq;
 	}
 
 	/* 8250 tx dma requires dmaengine driver to support terminate */
@@ -294,6 +332,8 @@ int serial8250_request_dma(struct uart_8250_port *p)
 	return 0;
 err:
 	dma_release_channel(dma->txchan);
+release_rx_wq:
+	destroy_workqueue(dma->wq_tty_flip);
 release_rx:
 	dma_release_channel(dma->rxchan);
 	return ret;
@@ -321,6 +361,8 @@ void serial8250_release_dma(struct uart_8250_port *p)
 	dma_release_channel(dma->txchan);
 	dma->txchan = NULL;
 	dma->tx_running = 0;
+
+	destroy_workqueue(dma->wq_tty_flip);
 
 	dev_dbg_ratelimited(p->port.dev, "dma channels released\n");
 }
