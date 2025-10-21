@@ -25,6 +25,7 @@
 #include <linux/sched.h>
 #include <linux/exportfs.h>
 #include <linux/posix_acl.h>
+#include <linux/io_uring/io_uring.h>
 #include <linux/pid_namespace.h>
 #include <uapi/linux/magic.h>
 
@@ -1519,7 +1520,7 @@ static struct fuse_init_args *fuse_new_init(struct fuse_mount *fm)
 	 * This is just an information flag for fuse server. No need to check
 	 * the reply - server is either sending IORING_OP_URING_CMD or not.
 	 */
-	if (fuse_uring_enabled())
+	if (fm->fc->system_io_uring && fuse_uring_enabled())
 		flags |= FUSE_OVER_IO_URING;
 
 	ia->in.flags = flags;
@@ -1935,6 +1936,46 @@ int fuse_fill_super_common(struct super_block *sb, struct fuse_fs_context *ctx)
 }
 EXPORT_SYMBOL_GPL(fuse_fill_super_common);
 
+/* Check if system wide io-uring is enabled */
+static void check_system_io_uring(struct fuse_conn *fc, struct fuse_fs_context *ctx)
+{
+	struct cred *new_cred = NULL;
+	const struct cred *old_cred = NULL;
+	int allowed;
+
+	/*
+	 * Mount might be from an unprivileged user using s-bit
+	 * fusermount, the check if system wide io-uring is enabled
+	 * needs to drop privileges
+	 * then.
+	 */
+	if (ctx->user_id.val != 0 && ctx->group_id.val != 0) {
+		new_cred = prepare_creds();
+		if (!new_cred)
+			return;
+
+		cap_clear(new_cred->cap_effective);
+		cap_clear(new_cred->cap_permitted);
+		cap_clear(new_cred->cap_inheritable);
+
+		if (ctx->user_id_present)
+			new_cred->uid = new_cred->euid = ctx->user_id;
+
+		if (ctx->group_id_present)
+			new_cred->gid = new_cred->egid = new_cred->fsgid = ctx->group_id;
+
+		old_cred = override_creds(new_cred);
+	}
+
+	allowed = io_uring_allowed();
+	fc->system_io_uring = io_uring_allowed() == 0;
+
+	if (old_cred)
+		revert_creds(old_cred);
+	if (new_cred)
+		put_cred(new_cred);
+}
+
 static int fuse_fill_super(struct super_block *sb, struct fs_context *fsc)
 {
 	struct fuse_fs_context *ctx = fsc->fs_private;
@@ -1961,6 +2002,8 @@ static int fuse_fill_super(struct super_block *sb, struct fs_context *fsc)
 	smp_mb();
 
 	fm = get_fuse_mount_super(sb);
+
+	check_system_io_uring(fm->fc, ctx);
 
 	return fuse_send_init(fm);
 }

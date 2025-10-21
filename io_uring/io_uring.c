@@ -76,6 +76,7 @@
 #include <trace/events/io_uring.h>
 
 #include <uapi/linux/io_uring.h>
+#include <linux/io_uring/io_uring.h>
 
 #include "io-wq.h"
 
@@ -3936,7 +3937,7 @@ static long io_uring_setup(u32 entries, struct io_uring_params __user *params)
 	return io_uring_create(entries, &p, params);
 }
 
-static inline int io_uring_allowed(void)
+int io_uring_allowed(void)
 {
 	int disabled = READ_ONCE(sysctl_io_uring_disabled);
 	kgid_t io_uring_group;
@@ -3957,6 +3958,7 @@ static inline int io_uring_allowed(void)
 allowed_lsm:
 	return security_uring_allowed();
 }
+EXPORT_SYMBOL_GPL(io_uring_allowed);
 
 SYSCALL_DEFINE2(io_uring_setup, u32, entries,
 		struct io_uring_params __user *, params)

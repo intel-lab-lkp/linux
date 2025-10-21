@@ -907,6 +907,9 @@ struct fuse_conn {
 	/* Is synchronous FUSE_INIT allowed? */
 	unsigned int sync_init:1;
 
+	/* If system IO-uring possible */
+	unsigned int system_io_uring:1;
+
 	/* Use io_uring for communication */
 	unsigned int io_uring;
 
