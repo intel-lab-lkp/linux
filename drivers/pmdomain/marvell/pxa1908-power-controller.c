@@ -73,15 +73,17 @@ static int pxa1908_pd_power_on(struct generic_pm_domain *genpd)
 	int ret = 0;
 
 	regmap_set_bits(ctrl->base, data->reg_clk_res_ctrl, data->hw_mode);
-	if (data->id != PXA1908_POWER_DOMAIN_ISP)
+	if (data->id != PXA1908_POWER_DOMAIN_ISP){
 		regmap_write(ctrl->base, APMU_PWR_BLK_TMR_REG, 0x20001fff);
+	}
 	regmap_set_bits(ctrl->base, APMU_PWR_CTRL_REG, data->pwr_state);
 
 	ret = regmap_read_poll_timeout(ctrl->base, APMU_PWR_STATUS_REG, status,
 				       status & data->pwr_state, POWER_POLL_SLEEP_US,
 				       POWER_ON_LATENCY_US + POWER_POLL_TIMEOUT_US);
-	if (ret == -ETIMEDOUT)
+	if (ret == -ETIMEDOUT){
 		dev_err(ctrl->dev, "timed out powering on domain '%s'\n", pd->genpd.name);
+	}
 
 	return ret;
 }
@@ -169,16 +171,19 @@ static void pxa1908_pd_remove(struct auxiliary_device *auxdev)
 	for (int i = NR_DOMAINS - 1; i >= 0; i--) {
 		pd = &domains[i];
 
-		if (!pd->initialized)
+		if (!pd->initialized){
 			continue;
+		}
 
-		if (pxa1908_pd_is_on(pd) && !pd->data.keep_on)
+		if (pxa1908_pd_is_on(pd) && !pd->data.keep_on){
 			pxa1908_pd_power_off(&pd->genpd);
+		}
 
 		ret = pm_genpd_remove(&pd->genpd);
-		if (ret)
-			dev_err(&auxdev->dev, "failed to remove domain '%s': %d\n",
+		if (ret){
+				dev_err(&auxdev->dev, "failed to remove domain '%s': %d\n",
 				pd->genpd.name, ret);
+		}
 	}
 }
 
@@ -195,9 +200,10 @@ pxa1908_pd_init(struct pxa1908_pd_ctrl *ctrl, int id, struct device *dev)
 	/* Make sure the state of the hardware is synced with the domain table above. */
 	if (pd->data.keep_on) {
 		ret = pd->genpd.power_on(&pd->genpd);
-		if (ret)
+		if (ret){
 			return dev_err_probe(dev, ret, "failed to power on domain '%s'\n",
 					     pd->genpd.name);
+		}
 	} else {
 		if (pxa1908_pd_is_on(pd)) {
 			dev_warn(dev,
@@ -205,17 +211,19 @@ pxa1908_pd_init(struct pxa1908_pd_ctrl *ctrl, int id, struct device *dev)
 				 pd->genpd.name);
 
 			ret = pd->genpd.power_off(&pd->genpd);
-			if (ret)
+			if (ret){
 				return dev_err_probe(dev, ret,
 						     "failed to power off domain '%s'\n",
 						     pd->genpd.name);
+			}
 		}
 	}
 
 	ret = pm_genpd_init(&pd->genpd, NULL, !pd->data.keep_on);
-	if (ret)
+	if (ret){
 		return dev_err_probe(dev, ret, "domain '%s' failed to initialize\n",
 				     pd->genpd.name);
+	}
 
 	pd->initialized = true;
 
@@ -230,14 +238,16 @@ pxa1908_pd_probe(struct auxiliary_device *auxdev, const struct auxiliary_device_
 	int ret;
 
 	ctrl = devm_kzalloc(dev, sizeof(*ctrl), GFP_KERNEL);
-	if (!ctrl)
+	if (!ctrl){
 		return -ENOMEM;
+	}
 
 	auxiliary_set_drvdata(auxdev, ctrl);
 
 	ctrl->base = syscon_node_to_regmap(dev->parent->of_node);
-	if (IS_ERR(ctrl->base))
+	if (IS_ERR(ctrl->base)){
 		return dev_err_probe(dev, PTR_ERR(ctrl->base), "no regmap available\n");
+	}
 
 	ctrl->dev = dev;
 	ctrl->onecell_data.domains = ctrl->domains;
@@ -245,8 +255,9 @@ pxa1908_pd_probe(struct auxiliary_device *auxdev, const struct auxiliary_device_
 
 	for (int i = 0; i < NR_DOMAINS; i++) {
 		ret = pxa1908_pd_init(ctrl, i, dev);
-		if (ret)
+		if (ret){
 			goto err;
+		}
 	}
 
 	return of_genpd_add_provider_onecell(dev->parent->of_node, &ctrl->onecell_data);
