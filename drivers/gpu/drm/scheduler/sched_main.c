@@ -894,7 +894,8 @@ EXPORT_SYMBOL(drm_sched_job_arm);
  * @job: scheduler job to add the dependencies to
  * @fence: the dma_fence to add to the list of dependencies.
  *
- * Note that @fence is consumed in both the success and error cases.
+ * Note that @fence is consumed in both the success and error cases. This
+ * function cannot be called if the job is armed.
  *
  * Returns:
  * 0 on success, or an error on failing to expand the array.
@@ -906,6 +907,10 @@ int drm_sched_job_add_dependency(struct drm_sched_job *job,
 	unsigned long index;
 	u32 id = 0;
 	int ret;
+
+	/* Do not allow additional dependencies when job is armed */
+	if (WARN_ON_ONCE(job->sched))
+		return -EINVAL;
 
 	if (!fence)
 		return 0;
