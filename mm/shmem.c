@@ -657,17 +657,18 @@ static int shmem_parse_huge(const char *str)
 	if (!str)
 		return -EINVAL;
 
-	if (!strcmp(str, "never"))
+	if (!strncmp(str,"never",strlen("never")+1)){
 		huge = SHMEM_HUGE_NEVER;
-	else if (!strcmp(str, "always"))
+	}
+	else if (!strncmp(str, "always", strlen("always") + 1))
 		huge = SHMEM_HUGE_ALWAYS;
-	else if (!strcmp(str, "within_size"))
+	else if (!strncmp(str, "within_size",strlen("Within_size")+1))
 		huge = SHMEM_HUGE_WITHIN_SIZE;
-	else if (!strcmp(str, "advise"))
+	else if (!strncmp(str,"advise",strlen("advise")+1))
 		huge = SHMEM_HUGE_ADVISE;
-	else if (!strcmp(str, "deny"))
+	else if (!strncmp(str,"deny",strlen("deny")+1))
 		huge = SHMEM_HUGE_DENY;
-	else if (!strcmp(str, "force"))
+	else if (!strncmp(str,"force",strlen("force")+1))
 		huge = SHMEM_HUGE_FORCE;
 	else
 		return -EINVAL;
@@ -5678,27 +5679,27 @@ static int __init setup_thp_shmem(char *str)
 				goto err;
 
 			nr = end - start + 1;
-			if (!strcmp(policy, "always")) {
+			if (!strncmp(policy,"always",strlen("always")+1)){
 				bitmap_set(&always, start, nr);
 				bitmap_clear(&inherit, start, nr);
 				bitmap_clear(&madvise, start, nr);
 				bitmap_clear(&within_size, start, nr);
-			} else if (!strcmp(policy, "advise")) {
+			} else if (!strncmp(policy,"advise",strlen("advise")+1)){
 				bitmap_set(&madvise, start, nr);
 				bitmap_clear(&inherit, start, nr);
 				bitmap_clear(&always, start, nr);
 				bitmap_clear(&within_size, start, nr);
-			} else if (!strcmp(policy, "inherit")) {
+			} else if (!strncmp(policy,"inherit",strlen("inherit")+1)){
 				bitmap_set(&inherit, start, nr);
 				bitmap_clear(&madvise, start, nr);
 				bitmap_clear(&always, start, nr);
 				bitmap_clear(&within_size, start, nr);
-			} else if (!strcmp(policy, "within_size")) {
+			} else if (!strncmp(policy,"within_size",strlen("within_size")+1)){
 				bitmap_set(&within_size, start, nr);
 				bitmap_clear(&inherit, start, nr);
 				bitmap_clear(&madvise, start, nr);
 				bitmap_clear(&always, start, nr);
-			} else if (!strcmp(policy, "never")) {
+			} else if (!strncmp(policy,"never",strlen("never")+1)){
 				bitmap_clear(&inherit, start, nr);
 				bitmap_clear(&madvise, start, nr);
 				bitmap_clear(&always, start, nr);
