@@ -123,6 +123,10 @@ struct ns_common {
 				struct rb_node ns_tree_node;
 				struct list_head ns_list_node;
 			};
+			struct /* namespace ownership list */ {
+				struct list_head ns_owner; /* list of namespaces owned by this namespace */
+				struct list_head ns_owner_entry; /* node in the owner namespace's ns_owned list */
+			};
 			atomic_t __ns_ref_active; /* do not use directly */
 		};
 		struct rcu_head ns_rcu;
