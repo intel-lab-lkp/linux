@@ -462,6 +462,7 @@ source "drivers/scsi/aic7xxx/Kconfig.aic79xx"
 source "drivers/scsi/aic94xx/Kconfig"
 source "drivers/scsi/hisi_sas/Kconfig"
 source "drivers/scsi/mvsas/Kconfig"
+source "drivers/scsi/leapraid/Kconfig"
 
 config SCSI_MVUMI
 	tristate "Marvell UMI driver"
