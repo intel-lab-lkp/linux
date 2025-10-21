@@ -2504,7 +2504,7 @@ static int mac80211_hwsim_config(struct ieee80211_hw *hw, int radio_idx,
 
 static void mac80211_hwsim_configure_filter(struct ieee80211_hw *hw,
 					    unsigned int changed_flags,
-					    unsigned int *total_flags,u64 multicast)
+					    unsigned int *total_flags, u64 multicast)
 {
 	struct mac80211_hwsim_data *data = hw->priv;
 
@@ -5710,7 +5710,7 @@ static int mac80211_hwsim_new_radio(struct genl_info *info,
 			continue;
 		}
 
-		if (band != NL80211_BAND_6GHZ){
+		if (band != NL80211_BAND_6GHZ) {
 			sband->ht_cap.ht_supported = true;
 			sband->ht_cap.cap = IEEE80211_HT_CAP_SUP_WIDTH_20_40 |
 					    IEEE80211_HT_CAP_GRN_FLD |
@@ -6398,7 +6398,7 @@ static int hwsim_new_radio_nl(struct sk_buff *msg, struct genl_info *info)
 	if (info->attrs[HWSIM_ATTR_PERM_ADDR]) {
 		if (!is_valid_ether_addr(
 				nla_data(info->attrs[HWSIM_ATTR_PERM_ADDR]))) {
-			GENL_SET_ERR_MSG(info,"MAC is no valid source addr");
+			GENL_SET_ERR_MSG(info, "MAC is no valid source addr");
 			NL_SET_BAD_ATTR(info->extack,
 					info->attrs[HWSIM_ATTR_PERM_ADDR]);
 			return -EINVAL;
