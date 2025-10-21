@@ -488,6 +488,8 @@ enum scmi_sensor_class {
 	CUBIC_METERS_SEC = 0x5B,
 	MM_MERCURY = 0x5C,
 	RADIANS_SEC_SQUARED = 0x5D,
+	STATE_BINARY = 0x5E,
+	BYTES_SEC = 0x5F,
 	OEM_UNIT = 0xFF
 };
 
