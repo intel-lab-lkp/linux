@@ -265,6 +265,7 @@ static int xilinx_pl_dma_pcie_intx_map(struct irq_domain *domain,
 /* INTx IRQ Domain operations */
 static const struct irq_domain_ops intx_domain_ops = {
 	.map = xilinx_pl_dma_pcie_intx_map,
+	.xlate = pci_irqd_intx_xlate,
 };
 
 static irqreturn_t xilinx_pl_dma_pcie_msi_handler_high(int irq, void *args)
