@@ -291,7 +291,7 @@ pub(crate) enum ReserveNew<T> {
     NeedAlloc(ReserveNewNeedAlloc<T>),
 }
 
-/// Returned by `reserve_new` when the reservation was successul.
+/// Returned by `reserve_new` when the reservation was successful.
 pub(crate) struct ReserveNewSuccess<T> {
     pub(crate) offset: usize,
     pub(crate) oneway_spam_detected: bool,
