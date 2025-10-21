@@ -40,6 +40,7 @@ static HLIST_HEAD(nr_node_list);
 static DEFINE_SPINLOCK(nr_node_list_lock);
 static HLIST_HEAD(nr_neigh_list);
 static DEFINE_SPINLOCK(nr_neigh_list_lock);
+static DEFINE_MUTEX(neighbor_lock);
 
 static struct nr_node *nr_node_get(ax25_address *callsign)
 {
@@ -633,6 +634,8 @@ int nr_rt_ioctl(unsigned int cmd, void __user *arg)
 	ax25_digi digi;
 	int ret;
 
+	guard(mutex)(&neighbor_lock);
+
 	switch (cmd) {
 	case SIOCADDRT:
 		if (copy_from_user(&nr_route, arg, sizeof(struct nr_route_struct)))
@@ -765,6 +768,7 @@ int nr_route_frame(struct sk_buff *skb, ax25_cb *ax25)
 	nr_dest = (ax25_address *)(skb->data + 7);
 
 	if (ax25 != NULL) {
+		guard(mutex)(&neighbor_lock);
 		ret = nr_add_node(nr_src, "", &ax25->dest_addr, ax25->digipeat,
 				  ax25->ax25_dev->dev, 0,
 				  READ_ONCE(sysctl_netrom_obsolescence_count_initialiser));
