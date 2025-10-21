@@ -564,3 +564,50 @@ struct posix_acl *erofs_get_acl(struct inode *inode, int type, bool rcu)
 	return acl;
 }
 #endif
+
+#ifdef CONFIG_EROFS_FS_INODE_SHARE
+void erofs_xattr_set_ishare_key(struct super_block *sb)
+{
+	struct erofs_sb_info *sbi = EROFS_SB(sb);
+	struct erofs_buf buf = __EROFS_BUF_INITIALIZER;
+	struct xattr_handler const *handler;
+	erofs_off_t pos;
+	char *key;
+	int len, i;
+	void *ptr;
+
+	if (!erofs_sb_has_fragments(sbi) || !erofs_sb_has_ishare_key(sbi) ||
+	    !sbi->packed_inode)
+		return;
+
+	buf.mapping = sbi->packed_inode->i_mapping;
+	pos = sbi->ishare_key_start << 2;
+	(void)erofs_init_metabuf(&buf, sb, false);
+	ptr = erofs_read_metadata(sb, &buf, &pos, &len);
+
+	if (IS_ERR(ptr))
+		goto out;
+
+	for (i = 0; ARRAY_SIZE(erofs_xattr_handlers) - 1; i++) {
+		handler = erofs_xattr_handlers[i];
+		if (!handler)
+			break;
+		if (!memcmp(handler->prefix, ptr, strlen(handler->prefix)))
+			break;
+	}
+
+	if (!handler)
+		goto out;
+
+	len -= strlen(handler->prefix);
+	key = kzalloc(len + 1, GFP_KERNEL);
+	if (!key)
+		goto out;
+
+	memcpy(key, ptr + strlen(handler->prefix), len);
+	sbi->ishare_key = key;
+	sbi->ishare_key_idx = handler->flags;
+out:
+	erofs_put_metabuf(&buf);
+}
+#endif
