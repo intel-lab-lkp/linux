@@ -81,9 +81,26 @@ void pci_ptm_init(struct pci_dev *dev)
 		dev->ptm_granularity = 0;
 	}
 
-	if (pci_pcie_type(dev) == PCI_EXP_TYPE_ROOT_PORT ||
-	    pci_pcie_type(dev) == PCI_EXP_TYPE_UPSTREAM)
-		pci_enable_ptm(dev, NULL);
+	switch (pci_pcie_type(dev)) {
+	case PCI_EXP_TYPE_ROOT_PORT:
+		/*
+		 * Root Port must declare Root Capable if we want to
+		 * enable PTM for it.
+		 */
+		if (dev->ptm_root)
+			pci_enable_ptm(dev, NULL);
+		break;
+	case PCI_EXP_TYPE_UPSTREAM:
+		/*
+		 * Switch Upstream Ports must declare both Requester
+		 * Capable and Responder Capable if we want to enable
+		 * PTM for it.
+		 */
+		if ((cap & (PCI_PTM_CAP_REQ | PCI_PTM_CAP_RES)) ==
+		    (PCI_PTM_CAP_REQ | PCI_PTM_CAP_RES))
+			pci_enable_ptm(dev, NULL);
+		break;
+	}
 }
 
 void pci_save_ptm_state(struct pci_dev *dev)
@@ -125,7 +142,7 @@ static int __pci_enable_ptm(struct pci_dev *dev)
 {
 	u16 ptm = dev->ptm_cap;
 	struct pci_dev *ups;
-	u32 ctrl;
+	u32 cap, ctrl;
 
 	if (!ptm)
 		return -EINVAL;
@@ -143,6 +160,14 @@ static int __pci_enable_ptm(struct pci_dev *dev)
 		if (!ups || !ups->ptm_enabled)
 			return -EINVAL;
 	}
+
+	/*
+	 * PCIe Endpoint must declare Requester Capable before we can
+	 * enable PTM for it.
+	 */
+	pci_read_config_dword(dev, ptm + PCI_PTM_CAP, &cap);
+	if (!(cap & PCI_PTM_CAP_REQ))
+		return -EINVAL;
 
 	pci_read_config_dword(dev, ptm + PCI_PTM_CTRL, &ctrl);
 
