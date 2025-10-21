@@ -1236,9 +1236,14 @@ find_and_get_or_create_sess(const char *sessname,
 	struct rtrs_clt_ops rtrs_ops;
 
 	sess = find_or_create_sess(sessname, &first);
-	if (sess == ERR_PTR(-ENOMEM)) {
-		return ERR_PTR(-ENOMEM);
-	} else if ((nr_poll_queues && !first) ||  (!nr_poll_queues && sess->nr_poll_queues)) {
+	if (IS_ERR(sess)) {
+		err = PTR_ERR(sess);
+		if (err != -ENOMEM)
+			pr_warn("rndb: find_or_create_sess(%s) failed with %d\n",
+				sessname, err);
+		return ERR_PTR(err);
+	}
+	if ((nr_poll_queues && !first) ||  (!nr_poll_queues && sess->nr_poll_queues)) {
 		/*
 		 * A device MUST have its own session to use the polling-mode.
 		 * It must fail to map new device with the same session.
