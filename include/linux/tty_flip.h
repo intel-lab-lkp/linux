@@ -15,6 +15,9 @@ size_t __tty_insert_flip_string_flags(struct tty_port *port, const u8 *chars,
 				      size_t size);
 size_t tty_prepare_flip_string(struct tty_port *port, u8 **chars, size_t size);
 void tty_flip_buffer_push(struct tty_port *port);
+void tty_flip_buffer_push_wq(struct tty_port *port,
+			     struct workqueue_struct *wq,
+			     int cpu);
 
 /**
  * tty_insert_flip_string_fixed_flag - add characters to the tty buffer
