@@ -2358,9 +2358,21 @@ static bool is_kvm_protected_mode(const struct arm64_cpu_capabilities *entry, in
 }
 #endif /* CONFIG_KVM */
 
+static bool no_trap_el0_impdef;
+
+static int __init parse_no_trap_el0_impdef(char *p)
+{
+	no_trap_el0_impdef = true;
+	return 0;
+}
+early_param("no_trap_el0_impdef", parse_no_trap_el0_impdef);
+
 static void cpu_trap_el0_impdef(const struct arm64_cpu_capabilities *__unused)
 {
-	sysreg_clear_set(sctlr_el1, 0, SCTLR_EL1_TIDCP);
+	if (no_trap_el0_impdef)
+		sysreg_clear_set(sctlr_el1, SCTLR_EL1_TIDCP, 0);
+	else
+		sysreg_clear_set(sctlr_el1, 0, SCTLR_EL1_TIDCP);
 }
 
 static void cpu_enable_dit(const struct arm64_cpu_capabilities *__unused)

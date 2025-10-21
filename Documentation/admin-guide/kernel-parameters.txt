@@ -326,6 +326,15 @@
 			See Documentation/arch/arm64/asymmetric-32bit.rst for more
 			information.
 
+	no_trap_el0_impdef [Arm64,EARLY]
+			Allow system-wide EL0 access to IMPDEF system registers
+			and instructions without trapping to EL1/EL2.
+			Since trap overhead compromises benefits, and it's even
+			worse in virtualization on CPU where certain IMPDEF
+			registers and instructions are designed for EL0
+			performance use. This assumes the kernel adds the
+			support for Armv8.8 extension FEAT_TIDCP1.
+
 	amd_iommu=	[HW,X86-64]
 			Pass parameters to the AMD IOMMU driver in the system.
 			Possible values are:
