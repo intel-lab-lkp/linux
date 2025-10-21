@@ -691,6 +691,13 @@ static void pwr_island_delay_set(struct ivpu_device *vdev)
 		status = high ? 46 : 3;
 		break;
 
+	case PCI_DEVICE_ID_NVL:
+		post = high ? 198 : 17;
+		post1 = 0;
+		post2 = high ? 198 : 17;
+		status = 0;
+		break;
+
 	default:
 		dump_stack();
 		ivpu_err(vdev, "Unknown device ID\n");
