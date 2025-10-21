@@ -10194,7 +10194,8 @@ cfg80211_s1g_get_start_freq_khz(const struct cfg80211_chan_def *chandef)
 	u32 bw_mhz = cfg80211_chandef_get_width(chandef);
 	u32 center_khz =
 		MHZ_TO_KHZ(chandef->center_freq1) + chandef->freq1_offset;
-	return center_khz - bw_mhz * 500 + 500;
+
+	return (bw_mhz == 1) ? center_khz : center_khz - bw_mhz * 500 + 500;
 }
 
 /**
@@ -10209,7 +10210,8 @@ cfg80211_s1g_get_end_freq_khz(const struct cfg80211_chan_def *chandef)
 	u32 bw_mhz = cfg80211_chandef_get_width(chandef);
 	u32 center_khz =
 		MHZ_TO_KHZ(chandef->center_freq1) + chandef->freq1_offset;
-	return center_khz + bw_mhz * 500 - 500;
+
+	return (bw_mhz == 1) ? center_khz : center_khz + bw_mhz * 500 - 500;
 }
 
 /**
