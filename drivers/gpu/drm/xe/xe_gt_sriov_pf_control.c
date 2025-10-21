@@ -189,6 +189,7 @@ static const char *control_bit_to_string(enum xe_gt_sriov_control_bits bit)
 	CASE2STR(SAVE_PROCESS_DATA);
 	CASE2STR(SAVE_WAIT_DATA);
 	CASE2STR(SAVE_DATA_GUC);
+	CASE2STR(SAVE_DATA_GGTT);
 	CASE2STR(SAVE_DATA_DONE);
 	CASE2STR(SAVE_FAILED);
 	CASE2STR(SAVED);
@@ -827,6 +828,7 @@ static void pf_exit_vf_save_wip(struct xe_gt *gt, unsigned int vfid)
 		pf_escape_vf_state(gt, vfid, XE_GT_SRIOV_STATE_SAVE_PROCESS_DATA);
 		pf_escape_vf_state(gt, vfid, XE_GT_SRIOV_STATE_SAVE_WAIT_DATA);
 		pf_escape_vf_state(gt, vfid, XE_GT_SRIOV_STATE_SAVE_DATA_GUC);
+		pf_escape_vf_state(gt, vfid, XE_GT_SRIOV_STATE_SAVE_DATA_GGTT);
 		pf_escape_vf_state(gt, vfid, XE_GT_SRIOV_STATE_SAVE_DATA_DONE);
 	}
 }
@@ -859,6 +861,17 @@ static int pf_handle_vf_save_data(struct xe_gt *gt, unsigned int vfid)
 		ret = xe_gt_sriov_pf_migration_guc_save(gt, vfid);
 		if (ret)
 			return ret;
+
+		pf_enter_vf_state(gt, vfid, XE_GT_SRIOV_STATE_SAVE_DATA_GGTT);
+		return -EAGAIN;
+	}
+
+	if (pf_exit_vf_state(gt, vfid, XE_GT_SRIOV_STATE_SAVE_DATA_GGTT)) {
+		if (xe_gt_sriov_pf_migration_ggtt_size(gt, vfid) > 0) {
+			ret = xe_gt_sriov_pf_migration_ggtt_save(gt, vfid);
+			if (ret)
+				return ret;
+		}
 	}
 
 	return 0;
@@ -1065,6 +1078,9 @@ pf_handle_vf_restore_data(struct xe_gt *gt, unsigned int vfid)
 	xe_gt_assert(gt, data);
 
 	switch (data->type) {
+	case XE_SRIOV_MIGRATION_DATA_TYPE_GGTT:
+		ret = xe_gt_sriov_pf_migration_ggtt_restore(gt, vfid, data);
+		break;
 	case XE_SRIOV_MIGRATION_DATA_TYPE_GUC:
 		ret = xe_gt_sriov_pf_migration_guc_restore(gt, vfid, data);
 		break;
