@@ -485,16 +485,16 @@ EXPORT_SYMBOL(xsk_tx_peek_desc);
 static u32 xsk_tx_peek_release_fallback(struct xsk_buff_pool *pool, u32 max_entries)
 {
 	struct xdp_desc *descs = pool->tx_descs;
-	u32 nb_pkts = 0;
+	u32 nb_descs = 0;
 
-	while (nb_pkts < max_entries && xsk_tx_peek_desc(pool, &descs[nb_pkts]))
-		nb_pkts++;
+	while (nb_descs < max_entries && xsk_tx_peek_desc(pool, &descs[nb_descs]))
+		nb_descs++;
 
 	xsk_tx_release(pool);
-	return nb_pkts;
+	return nb_descs;
 }
 
-u32 xsk_tx_peek_release_desc_batch(struct xsk_buff_pool *pool, u32 nb_pkts)
+u32 xsk_tx_peek_release_desc_batch(struct xsk_buff_pool *pool, u32 nb_descs)
 {
 	struct xdp_sock *xs;
 
@@ -502,16 +502,16 @@ u32 xsk_tx_peek_release_desc_batch(struct xsk_buff_pool *pool, u32 nb_pkts)
 	if (!list_is_singular(&pool->xsk_tx_list)) {
 		/* Fallback to the non-batched version */
 		rcu_read_unlock();
-		return xsk_tx_peek_release_fallback(pool, nb_pkts);
+		return xsk_tx_peek_release_fallback(pool, nb_descs);
 	}
 
 	xs = list_first_or_null_rcu(&pool->xsk_tx_list, struct xdp_sock, tx_list);
 	if (!xs) {
-		nb_pkts = 0;
+		nb_descs = 0;
 		goto out;
 	}
 
-	nb_pkts = xskq_cons_nb_entries(xs->tx, nb_pkts);
+	nb_descs = xskq_cons_nb_entries(xs->tx, nb_descs);
 
 	/* This is the backpressure mechanism for the Tx path. Try to
 	 * reserve space in the completion queue for all packets, but
@@ -519,23 +519,23 @@ u32 xsk_tx_peek_release_desc_batch(struct xsk_buff_pool *pool, u32 nb_pkts)
 	 * packets. This avoids having to implement any buffering in
 	 * the Tx path.
 	 */
-	nb_pkts = xskq_prod_nb_free(pool->cq, nb_pkts);
-	if (!nb_pkts)
+	nb_descs = xskq_prod_nb_free(pool->cq, nb_descs);
+	if (!nb_descs)
 		goto out;
 
-	nb_pkts = xskq_cons_read_desc_batch(xs->tx, pool, nb_pkts);
-	if (!nb_pkts) {
+	nb_descs = xskq_cons_read_desc_batch(xs->tx, pool, nb_descs);
+	if (!nb_descs) {
 		xs->tx->queue_empty_descs++;
 		goto out;
 	}
 
 	__xskq_cons_release(xs->tx);
-	xskq_prod_write_addr_batch(pool->cq, pool->tx_descs, nb_pkts);
+	xskq_prod_write_addr_batch(pool->cq, pool->tx_descs, nb_descs);
 	xs->sk.sk_write_space(&xs->sk);
 
 out:
 	rcu_read_unlock();
-	return nb_pkts;
+	return nb_descs;
 }
 EXPORT_SYMBOL(xsk_tx_peek_release_desc_batch);
 
