@@ -1824,6 +1824,9 @@ static unsigned long shmem_suitable_orders(struct inode *inode, struct vm_fault 
 	unsigned long pages;
 	int order;
 
+	if (!orders)
+		return 0;
+
 	if (vma) {
 		orders = thp_vma_suitable_orders(vma, vmf->address, orders);
 		if (!orders)
@@ -1888,27 +1891,28 @@ static struct folio *shmem_alloc_and_add_folio(struct vm_fault *vmf,
 	if (!IS_ENABLED(CONFIG_TRANSPARENT_HUGEPAGE))
 		orders = 0;
 
-	if (orders > 0) {
-		suitable_orders = shmem_suitable_orders(inode, vmf,
-							mapping, index, orders);
+	suitable_orders = shmem_suitable_orders(inode, vmf,
+						mapping, index, orders);
 
+	if (suitable_orders) {
 		order = highest_order(suitable_orders);
-		while (suitable_orders) {
+		do {
 			pages = 1UL << order;
-			index = round_down(index, pages);
-			folio = shmem_alloc_folio(gfp, order, info, index);
-			if (folio)
+			folio = shmem_alloc_folio(gfp, order, info, round_down(index, pages));
+			if (folio) {
+				index = round_down(index, pages);
 				goto allocated;
+			}
 
 			if (pages == HPAGE_PMD_NR)
 				count_vm_event(THP_FILE_FALLBACK);
 			count_mthp_stat(order, MTHP_STAT_SHMEM_FALLBACK);
 			order = next_order(&suitable_orders, order);
-		}
-	} else {
-		pages = 1;
-		folio = shmem_alloc_folio(gfp, 0, info, index);
+		} while (suitable_orders);
 	}
+
+	pages = 1;
+	folio = shmem_alloc_folio(gfp, 0, info, index);
 	if (!folio)
 		return ERR_PTR(-ENOMEM);
 
