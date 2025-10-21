@@ -5816,10 +5816,10 @@ static int mac80211_hwsim_new_radio(struct genl_info *info,
 	}
 
 	data->debugfs = debugfs_create_dir("hwsim", hw->wiphy->debugfsdir);
-	debugfs_create_file("ps", 0666, data->debugfs, data, &hwsim_fops_ps);
-	debugfs_create_file("group", 0666, data->debugfs, data,
+	debugfs_create_file("ps", 0644, data->debugfs, data, &hwsim_fops_ps);
+	debugfs_create_file("group", 0644, data->debugfs, data,
 			    &hwsim_fops_group);
-	debugfs_create_file("rx_rssi", 0666, data->debugfs, data,
+	debugfs_create_file("rx_rssi", 0644, data->debugfs, data,
 			    &hwsim_fops_rx_rssi);
 	if (!data->use_chanctx)
 		debugfs_create_file("dfs_simulate_radar", 0222,
