@@ -195,6 +195,94 @@ static void pf_clear_vf_scratch_regs(struct xe_gt *gt, unsigned int vfid)
 }
 
 /**
+ * xe_gt_sriov_pf_mmio_vf_size - Get the size of VF MMIO register data.
+ * @gt: the &xe_gt
+ * @vfid: VF identifier
+ *
+ * Return: size in bytes.
+ */
+size_t xe_gt_sriov_pf_mmio_vf_size(struct xe_gt *gt, unsigned int vfid)
+{
+	if (xe_gt_is_media_type(gt))
+		return MED_VF_SW_FLAG_COUNT * sizeof(u32);
+	else
+		return VF_SW_FLAG_COUNT * sizeof(u32);
+}
+
+/**
+ * xe_gt_sriov_pf_mmio_vf_save - Save VF MMIO register values to a buffer.
+ * @gt: the &xe_gt
+ * @vfid: VF identifier
+ * @buf: destination buffer
+ * @size: destination buffer size in bytes
+ *
+ * Return: 0 on success or a negative error code on failure.
+ */
+int xe_gt_sriov_pf_mmio_vf_save(struct xe_gt *gt, unsigned int vfid, void *buf, size_t size)
+{
+	u32 stride = pf_get_vf_regs_stride(gt_to_xe(gt));
+	struct xe_reg scratch;
+	u32 *regs = buf;
+	int n, count;
+
+	if (size != xe_gt_sriov_pf_mmio_vf_size(gt, vfid))
+		return -EINVAL;
+
+	if (xe_gt_is_media_type(gt)) {
+		count = MED_VF_SW_FLAG_COUNT;
+		for (n = 0; n < count; n++) {
+			scratch = xe_reg_vf_to_pf(MED_VF_SW_FLAG(n), vfid, stride);
+			regs[n] = xe_mmio_read32(&gt->mmio, scratch);
+		}
+	} else {
+		count = VF_SW_FLAG_COUNT;
+		for (n = 0; n < count; n++) {
+			scratch = xe_reg_vf_to_pf(VF_SW_FLAG(n), vfid, stride);
+			regs[n] = xe_mmio_read32(&gt->mmio, scratch);
+		}
+	}
+
+	return 0;
+}
+
+/**
+ * xe_gt_sriov_pf_mmio_vf_restore - Restore VF MMIO register values from a buffer.
+ * @gt: the &xe_gt
+ * @vfid: VF identifier
+ * @buf: source buffer
+ * @size: source buffer size in bytes
+ *
+ * Return: 0 on success or a negative error code on failure.
+ */
+int xe_gt_sriov_pf_mmio_vf_restore(struct xe_gt *gt, unsigned int vfid,
+				   const void *buf, size_t size)
+{
+	u32 stride = pf_get_vf_regs_stride(gt_to_xe(gt));
+	const u32 *regs = buf;
+	struct xe_reg scratch;
+	int n, count;
+
+	if (size != xe_gt_sriov_pf_mmio_vf_size(gt, vfid))
+		return -EINVAL;
+
+	if (xe_gt_is_media_type(gt)) {
+		count = MED_VF_SW_FLAG_COUNT;
+		for (n = 0; n < count; n++) {
+			scratch = xe_reg_vf_to_pf(MED_VF_SW_FLAG(n), vfid, stride);
+			xe_mmio_write32(&gt->mmio, scratch, regs[n]);
+		}
+	} else {
+		count = VF_SW_FLAG_COUNT;
+		for (n = 0; n < count; n++) {
+			scratch = xe_reg_vf_to_pf(VF_SW_FLAG(n), vfid, stride);
+			xe_mmio_write32(&gt->mmio, scratch, regs[n]);
+		}
+	}
+
+	return 0;
+}
+
+/**
  * xe_gt_sriov_pf_sanitize_hw() - Reset hardware state related to a VF.
  * @gt: the &xe_gt
  * @vfid: the VF identifier
