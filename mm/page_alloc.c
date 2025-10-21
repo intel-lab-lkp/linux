@@ -7135,6 +7135,20 @@ void zone_pcp_reset(struct zone *zone)
 	}
 }
 
+int zone_pcp_pages_count(struct zone *zone)
+{
+	struct per_cpu_pages *pcp;
+	int total_pcp_pages = 0;
+	int cpu;
+
+	for_each_online_cpu(cpu) {
+		pcp = per_cpu_ptr(zone->per_cpu_pageset, cpu);
+		total_pcp_pages += pcp->count;
+	}
+
+	return total_pcp_pages;
+}
+
 #ifdef CONFIG_MEMORY_HOTREMOVE
 /*
  * All pages in the range must be in a single zone, must not contain holes,
