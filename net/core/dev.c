@@ -163,6 +163,7 @@
 #include <net/page_pool/memory_provider.h>
 #include <net/rps.h>
 #include <linux/phy_link_topology.h>
+#include <net/xdp_sock.h>
 
 #include "dev.h"
 #include "devmem.h"
@@ -4838,6 +4839,27 @@ out:
 	return rc;
 }
 EXPORT_SYMBOL(__dev_queue_xmit);
+
+int xsk_direct_xmit_batch(struct xdp_sock *xs, struct net_device *dev)
+{
+	u16 queue_id = xs->queue_id;
+	struct netdev_queue *txq = netdev_get_tx_queue(dev, queue_id);
+	int ret = NETDEV_TX_BUSY;
+	struct sk_buff *skb;
+
+	local_bh_disable();
+	HARD_TX_LOCK(dev, txq, smp_processor_id());
+	while ((skb = __skb_dequeue(&xs->batch.send_queue)) != NULL) {
+		skb_set_queue_mapping(skb, queue_id);
+		ret = netdev_start_xmit(skb, dev, txq, false);
+		if (ret != NETDEV_TX_OK)
+			break;
+	}
+	HARD_TX_UNLOCK(dev, txq);
+	local_bh_enable();
+
+	return ret;
+}
 
 int __dev_direct_xmit(struct sk_buff *skb, u16 queue_id)
 {
