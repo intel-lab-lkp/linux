@@ -383,9 +383,16 @@ int cx18_stream_alloc(struct cx18_stream *s)
 						 buf->buf, s->buf_size,
 						 s->dma);
 		if (dma_mapping_error(&s->cx->pci_dev->dev, buf->dma_handle)) {
-			kfree(buf->buf);
+			if (buf) {
+        		if (buf->buf){
+            	kfree(buf->buf);
+				buf->buf =NULL;
+				}
+        		kfree(buf);
+				buf=NULL;
+    		}
 			kfree(mdl);
-			kfree(buf);
+			//makes accidental double free less possible
 			break;
 		}
 
