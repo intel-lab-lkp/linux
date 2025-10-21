@@ -57,9 +57,10 @@
 /* This macro creates a properly formatted VA operand for the TLBI */
 #define __TLBI_VADDR(addr, asid)				\
 	({							\
-		unsigned long __ta = (addr) >> 12;		\
-		__ta &= GENMASK_ULL(43, 0);			\
-		__ta |= (unsigned long)(asid) << 48;		\
+		unsigned long __ta = (addr) >> ilog2(SZ_4K);	\
+		__ta &= TLBI_BADDR_MASK;			\
+		__ta &= ~TLBI_ASID_MASK;			\
+		__ta |= FIELD_PREP(TLBI_ASID_MASK, asid);	\
 		__ta;						\
 	})
 
@@ -100,8 +101,17 @@ static inline unsigned long get_trans_granule(void)
  *
  * For Stage-2 invalidation, use the level values provided to that effect
  * in asm/stage2_pgtable.h.
+ *
+ * +----------+------+-------+--------------------------------------+
+ * |   ASID   |  TG  |  TTL  |                 BADDR                |
+ * +-----------------+-------+--------------------------------------+
+ * |63      48|47  46|45   44|43                                   0|
+ * +----------+------+-------+--------------------------------------+
  */
-#define TLBI_TTL_MASK		GENMASK_ULL(47, 44)
+#define TLBI_ASID_MASK		GENMASK_ULL(63, 48)
+#define TLBI_TG_MASK		GENMASK_ULL(47, 46)
+#define TLBI_TTL_MASK		GENMASK_ULL(45, 44)
+#define TLBI_BADDR_MASK		GENMASK_ULL(43, 0)
 
 #define TLBI_TTL_UNKNOWN	INT_MAX
 
@@ -110,10 +120,10 @@ static inline unsigned long get_trans_granule(void)
 									\
 	if (alternative_has_cap_unlikely(ARM64_HAS_ARMv8_4_TTL) &&	\
 	    level >= 0 && level <= 3) {					\
-		u64 ttl = level;					\
-		ttl |= get_trans_granule() << 2;			\
+		arg &= ~TLBI_TG_MASK;					\
+		arg |= FIELD_PREP(TLBI_TG_MASK, get_trans_granule());	\
 		arg &= ~TLBI_TTL_MASK;					\
-		arg |= FIELD_PREP(TLBI_TTL_MASK, ttl);			\
+		arg |= FIELD_PREP(TLBI_TTL_MASK, level);		\
 	}								\
 									\
 	__tlbi(op, arg);						\
@@ -383,7 +393,7 @@ do {									\
 	typeof(pages) __flush_pages = pages;				\
 	int num = 0;							\
 	int scale = 3;							\
-	int shift = lpa2 ? 16 : PAGE_SHIFT;				\
+	int shift = lpa2 ? ilog2(SZ_64K) : PAGE_SHIFT;			\
 	unsigned long addr;						\
 									\
 	while (__flush_pages > 0) {					\
