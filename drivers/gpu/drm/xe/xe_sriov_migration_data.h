@@ -27,5 +27,10 @@ void xe_sriov_migration_data_free(struct xe_sriov_migration_data *snapshot);
 int xe_sriov_migration_data_init(struct xe_sriov_migration_data *data, u8 tile_id, u8 gt_id,
 				 enum xe_sriov_migration_data_type, loff_t offset, size_t size);
 int xe_sriov_migration_data_init_from_hdr(struct xe_sriov_migration_data *snapshot);
+ssize_t xe_sriov_migration_data_read(struct xe_device *xe, unsigned int vfid,
+				     char __user *buf, size_t len);
+ssize_t xe_sriov_migration_data_write(struct xe_device *xe, unsigned int vfid,
+				      const char __user *buf, size_t len);
+int xe_sriov_migration_data_save_init(struct xe_device *xe, unsigned int vfid);
 
 #endif
