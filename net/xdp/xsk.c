@@ -1906,6 +1906,7 @@ static int xsk_create(struct net *net, struct socket *sock, int protocol,
 
 	INIT_LIST_HEAD(&xs->map_list);
 	spin_lock_init(&xs->map_list_lock);
+	__skb_queue_head_init(&xs->batch.send_queue);
 
 	mutex_lock(&net->xdp.lock);
 	sk_add_node_rcu(sk, &net->xdp.list);

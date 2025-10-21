@@ -47,8 +47,10 @@ struct xsk_map {
 
 struct xsk_batch {
 	u32 generic_xmit_batch;
+	unsigned int skb_count;
 	struct sk_buff **skb_cache;
 	struct xdp_desc *desc_cache;
+	struct sk_buff_head send_queue;
 };
 
 struct xdp_sock {
@@ -130,6 +132,7 @@ struct xsk_tx_metadata_ops {
 struct sk_buff *xsk_build_skb(struct xdp_sock *xs,
 			      struct sk_buff *allocated_skb,
 			      struct xdp_desc *desc);
+int xsk_alloc_batch_skb(struct xdp_sock *xs, u32 nb_pkts, u32 nb_descs, int *err);
 #ifdef CONFIG_XDP_SOCKETS
 
 int xsk_generic_rcv(struct xdp_sock *xs, struct xdp_buff *xdp);
