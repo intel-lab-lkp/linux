@@ -322,11 +322,15 @@ struct erofs_inode {
 			spinlock_t lock;
 			/* all backing inodes */
 			struct list_head backing_head;
+			/* processing list */
+			struct list_head processing_head;
 		};
 
 		struct {
 			struct inode *ishare;
 			struct list_head backing_link;
+			struct list_head processing_link;
+			atomic_t processing_count;
 		};
 	};
 #endif
