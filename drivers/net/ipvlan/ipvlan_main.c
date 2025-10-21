@@ -7,6 +7,11 @@
 
 #include "ipvlan.h"
 
+static void ipvlan_set_learnable(struct ipvl_port *port)
+{
+	dev_add_pack(&port->ipvl_ptype);
+}
+
 static int ipvlan_set_port_mode(struct ipvl_port *port, u16 nval,
 				struct netlink_ext_ack *extack)
 {
@@ -16,6 +21,15 @@ static int ipvlan_set_port_mode(struct ipvl_port *port, u16 nval,
 
 	ASSERT_RTNL();
 	if (port->mode != nval) {
+		/* Don't allow switch off the learnable bridge mode.
+		 * Flags also must be set from the first port-link setup.
+		 */
+		if (port->mode == IPVLAN_MODE_L2E ||
+		    (nval == IPVLAN_MODE_L2E && port->count > 1)) {
+			netdev_err(port->dev, "L2E mode cannot be changed.\n");
+			return -EINVAL;
+		}
+
 		list_for_each_entry(ipvlan, &port->ipvlans, pnode) {
 			flags = ipvlan->dev->flags;
 			if (nval == IPVLAN_MODE_L3 || nval == IPVLAN_MODE_L3S) {
@@ -40,7 +54,10 @@ static int ipvlan_set_port_mode(struct ipvl_port *port, u16 nval,
 			ipvlan_l3s_unregister(port);
 		}
 		port->mode = nval;
+		if (port->mode == IPVLAN_MODE_L2E)
+			ipvlan_set_learnable(port);
 	}
+
 	return 0;
 
 fail:
@@ -57,6 +74,64 @@ fail:
 	}
 
 	return err;
+}
+
+static int ipvlan_port_receive(struct sk_buff *skb, struct net_device *wdev,
+			       struct packet_type *pt, struct net_device *orig_wdev)
+{
+	struct ipvl_port *port;
+	struct ipvl_addr *addr;
+	struct ethhdr *eth;
+	void *lyr3h;
+	int addr_type;
+
+	port = container_of(pt, struct ipvl_port, ipvl_ptype);
+	/* We are interested only in outgoing packets.
+	 * rx-path is handled in rx_handler().
+	 */
+	if (skb->pkt_type != PACKET_OUTGOING || ipvlan_is_skb_marked(skb, port->dev))
+		goto out;
+
+	skb = skb_share_check(skb, GFP_ATOMIC);
+	if (!skb)
+		goto no_mem;
+
+	/* data should point to eth-header */
+	skb_push(skb, skb->data - skb_mac_header(skb));
+	skb->dev = port->dev;
+	eth = eth_hdr(skb);
+
+	if (is_multicast_ether_addr(eth->h_dest)) {
+		ipvlan_skb_crossing_ns(skb, NULL);
+		skb->protocol = eth_type_trans(skb, skb->dev);
+		skb->pkt_type = PACKET_HOST;
+		ipvlan_mark_skb(skb, port->dev);
+		ipvlan_multicast_enqueue(port, skb, false);
+		return 0;
+	}
+
+	lyr3h = ipvlan_get_L3_hdr(port, skb, &addr_type);
+	if (!lyr3h)
+		goto out;
+
+	addr = ipvlan_addr_lookup(port, lyr3h, addr_type, true);
+	if (addr) {
+		int ret, len;
+
+		ipvlan_skb_crossing_ns(skb, addr->master->dev);
+		skb->protocol = eth_type_trans(skb, skb->dev);
+		skb->pkt_type = PACKET_HOST;
+		ipvlan_mark_skb(skb, port->dev);
+		len = skb->len + ETH_HLEN;
+		ret = netif_rx(skb);
+		ipvlan_count_rx(ipvlan, len, ret == NET_RX_SUCCESS, false);
+		return 0;
+	}
+
+out:
+	dev_kfree_skb(skb);
+no_mem:
+	return 0; // actually, ret value is ignored
 }
 
 static int ipvlan_port_create(struct net_device *dev)
@@ -84,6 +159,11 @@ static int ipvlan_port_create(struct net_device *dev)
 	if (err)
 		goto err;
 
+	port->ipvl_ptype.func = ipvlan_port_receive;
+	port->ipvl_ptype.type = htons(ETH_P_ALL);
+	port->ipvl_ptype.dev = dev;
+	port->ipvl_ptype.list.prev = LIST_POISON2;
+
 	netdev_hold(dev, &port->dev_tracker, GFP_KERNEL);
 	return 0;
 
@@ -100,6 +180,8 @@ static void ipvlan_port_destroy(struct net_device *dev)
 	netdev_put(dev, &port->dev_tracker);
 	if (port->mode == IPVLAN_MODE_L3S)
 		ipvlan_l3s_unregister(port);
+	if (port->ipvl_ptype.list.prev != LIST_POISON2)
+		dev_remove_pack(&port->ipvl_ptype);
 	netdev_rx_handler_unregister(dev);
 	cancel_work_sync(&port->wq);
 	while ((skb = __skb_dequeue(&port->backlog)) != NULL) {
@@ -189,10 +271,13 @@ static int ipvlan_open(struct net_device *dev)
 	else
 		dev->flags &= ~IFF_NOARP;
 
-	rcu_read_lock();
-	list_for_each_entry_rcu(addr, &ipvlan->addrs, anode)
-		ipvlan_ht_addr_add(ipvlan, addr);
-	rcu_read_unlock();
+	/* for learnable, addresses will be obtained from tx-packets. */
+	if (!ipvlan_is_learnable(ipvlan->port)) {
+		rcu_read_lock();
+		list_for_each_entry_rcu(addr, &ipvlan->addrs, anode)
+			ipvlan_ht_addr_add(ipvlan, addr);
+		rcu_read_unlock();
+	}
 
 	return 0;
 }
@@ -581,11 +666,21 @@ int ipvlan_link_new(struct net_device *dev, struct rtnl_newlink_params *params,
 	INIT_LIST_HEAD(&ipvlan->addrs);
 	spin_lock_init(&ipvlan->addrs_lock);
 
-	/* TODO Probably put random address here to be presented to the
-	 * world but keep using the physical-dev address for the outgoing
-	 * packets.
+	/* Flags are per port and latest update overrides. User has
+	 * to be consistent in setting it just like the mode attribute.
 	 */
-	eth_hw_addr_set(dev, phy_dev->dev_addr);
+	if (data && data[IFLA_IPVLAN_MODE])
+		mode = nla_get_u16(data[IFLA_IPVLAN_MODE]);
+
+	if (mode != IPVLAN_MODE_L2E) {
+		/* TODO Probably put random address here to be presented to the
+		 * world but keep using the physical-dev address for the outgoing
+		 * packets.
+		 */
+		eth_hw_addr_set(dev, phy_dev->dev_addr);
+	} else {
+		eth_hw_addr_random(dev);
+	}
 
 	dev->priv_flags |= IFF_NO_RX_HANDLER;
 
@@ -596,6 +691,9 @@ int ipvlan_link_new(struct net_device *dev, struct rtnl_newlink_params *params,
 	/* ipvlan_init() would have created the port, if required */
 	port = ipvlan_port_get_rtnl(phy_dev);
 	ipvlan->port = port;
+
+	if (data && data[IFLA_IPVLAN_FLAGS])
+		port->flags = nla_get_u16(data[IFLA_IPVLAN_FLAGS]);
 
 	/* If the port-id base is at the MAX value, then wrap it around and
 	 * begin from 0x1 again. This may be due to a busy system where lots
@@ -625,18 +723,12 @@ int ipvlan_link_new(struct net_device *dev, struct rtnl_newlink_params *params,
 	if (err)
 		goto remove_ida;
 
-	/* Flags are per port and latest update overrides. User has
-	 * to be consistent in setting it just like the mode attribute.
-	 */
-	if (data && data[IFLA_IPVLAN_FLAGS])
-		port->flags = nla_get_u16(data[IFLA_IPVLAN_FLAGS]);
-
-	if (data && data[IFLA_IPVLAN_MODE])
-		mode = nla_get_u16(data[IFLA_IPVLAN_MODE]);
-
 	err = ipvlan_set_port_mode(port, mode, extack);
 	if (err)
 		goto unlink_netdev;
+
+	if (ipvlan_is_learnable(port))
+		dev_set_allmulti(dev, 1);
 
 	list_add_tail_rcu(&ipvlan->pnode, &port->ipvlans);
 	netif_stacked_transfer_operstate(phy_dev, dev);
@@ -656,6 +748,9 @@ void ipvlan_link_delete(struct net_device *dev, struct list_head *head)
 {
 	struct ipvl_dev *ipvlan = netdev_priv(dev);
 	struct ipvl_addr *addr, *next;
+
+	if (ipvlan_is_learnable(ipvlan->port))
+		dev_set_allmulti(dev, -1);
 
 	spin_lock_bh(&ipvlan->addrs_lock);
 	list_for_each_entry_safe(addr, next, &ipvlan->addrs, anode) {
@@ -793,6 +888,9 @@ static int ipvlan_device_event(struct notifier_block *unused,
 		break;
 
 	case NETDEV_CHANGEADDR:
+		if (ipvlan_is_learnable(ipvlan->port))
+			break;
+
 		list_for_each_entry(ipvlan, &port->ipvlans, pnode) {
 			eth_hw_addr_set(ipvlan->dev, dev->dev_addr);
 			call_netdevice_notifiers(NETDEV_CHANGEADDR, ipvlan->dev);
@@ -813,7 +911,7 @@ static int ipvlan_device_event(struct notifier_block *unused,
 }
 
 /* the caller must held the addrs lock */
-static int ipvlan_add_addr(struct ipvl_dev *ipvlan, void *iaddr, bool is_v6)
+int ipvlan_add_addr(struct ipvl_dev *ipvlan, void *iaddr, bool is_v6)
 {
 	struct ipvl_addr *addr;
 
@@ -928,6 +1026,9 @@ static int ipvlan_addr6_validator_event(struct notifier_block *unused,
 	if (!ipvlan_is_valid_dev(dev))
 		return NOTIFY_DONE;
 
+	if (ipvlan_is_learnable(ipvlan->port))
+		return notifier_from_errno(-EADDRNOTAVAIL);
+
 	switch (event) {
 	case NETDEV_UP:
 		if (ipvlan_addr_busy(ipvlan->port, &i6vi->i6vi_addr, true)) {
@@ -998,6 +1099,9 @@ static int ipvlan_addr4_validator_event(struct notifier_block *unused,
 
 	if (!ipvlan_is_valid_dev(dev))
 		return NOTIFY_DONE;
+
+	if (ipvlan_is_learnable(ipvlan->port))
+		return notifier_from_errno(-EADDRNOTAVAIL);
 
 	switch (event) {
 	case NETDEV_UP:
