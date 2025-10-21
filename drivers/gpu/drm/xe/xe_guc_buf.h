@@ -11,7 +11,9 @@
 
 #include "xe_guc_buf_types.h"
 
-int xe_guc_buf_cache_init(struct xe_guc_buf_cache *cache);
+#define XE_GUC_BUF_CACHE_DEFAULT_SIZE SZ_8K
+
+int xe_guc_buf_cache_init(struct xe_guc_buf_cache *cache, u32 size);
 u32 xe_guc_buf_cache_dwords(struct xe_guc_buf_cache *cache);
 struct xe_guc_buf xe_guc_buf_reserve(struct xe_guc_buf_cache *cache, u32 dwords);
 struct xe_guc_buf xe_guc_buf_from_data(struct xe_guc_buf_cache *cache,
