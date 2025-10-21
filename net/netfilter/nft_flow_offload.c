@@ -86,6 +86,8 @@ struct nft_forward_info {
 		__be16	proto;
 	} encap[NF_FLOW_TABLE_ENCAP_MAX];
 	u8 num_encaps;
+	struct flow_offload_tunnel tun[NF_FLOW_TABLE_TUN_MAX];
+	u8 num_tuns;
 	u8 ingress_vlans;
 	u8 h_source[ETH_ALEN];
 	u8 h_dest[ETH_ALEN];
@@ -108,6 +110,7 @@ static void nft_dev_path_info(const struct net_device_path_stack *stack,
 		case DEV_PATH_DSA:
 		case DEV_PATH_VLAN:
 		case DEV_PATH_PPPOE:
+		case DEV_PATH_TUN:
 			info->indev = path->dev;
 			if (is_zero_ether_addr(info->h_source))
 				memcpy(info->h_source, path->dev->dev_addr, ETH_ALEN);
@@ -120,15 +123,29 @@ static void nft_dev_path_info(const struct net_device_path_stack *stack,
 			}
 
 			/* DEV_PATH_VLAN and DEV_PATH_PPPOE */
-			if (info->num_encaps >= NF_FLOW_TABLE_ENCAP_MAX) {
+			if (info->num_encaps >= NF_FLOW_TABLE_ENCAP_MAX ||
+			    info->num_tuns >= NF_FLOW_TABLE_TUN_MAX) {
 				info->indev = NULL;
 				break;
 			}
 			if (!info->outdev)
 				info->outdev = path->dev;
-			info->encap[info->num_encaps].id = path->encap.id;
-			info->encap[info->num_encaps].proto = path->encap.proto;
-			info->num_encaps++;
+
+			if (path->type == DEV_PATH_TUN) {
+				info->tun[info->num_encaps].src_v6 =
+					path->tun.src_v6;
+				info->tun[info->num_encaps].dst_v6 =
+					path->tun.dst_v6;
+				info->tun[info->num_encaps].l3_proto =
+					path->tun.l3_proto;
+				info->num_tuns++;
+			} else {
+				info->encap[info->num_encaps].id =
+					path->encap.id;
+				info->encap[info->num_encaps].proto =
+					path->encap.proto;
+				info->num_encaps++;
+			}
 			if (path->type == DEV_PATH_PPPOE)
 				memcpy(info->h_dest, path->encap.h_dest, ETH_ALEN);
 			break;
@@ -207,7 +224,11 @@ static void nft_dev_forward_path(struct nf_flow_route *route,
 		route->tuple[!dir].in.encap[i].id = info.encap[i].id;
 		route->tuple[!dir].in.encap[i].proto = info.encap[i].proto;
 	}
+	for (i = 0; i < info.num_tuns; i++)
+		route->tuple[!dir].in.tun[i] = info.tun[i];
+
 	route->tuple[!dir].in.num_encaps = info.num_encaps;
+	route->tuple[!dir].in.num_tuns = info.num_tuns;
 	route->tuple[!dir].in.ingress_vlans = info.ingress_vlans;
 
 	if (info.xmit_type == FLOW_OFFLOAD_XMIT_DIRECT) {
