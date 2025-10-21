@@ -652,6 +652,7 @@ nlmsvc_testlock(struct svc_rqst *rqstp, struct nlm_file *file,
 	conflock->fl.c.flc_type = lock->fl.c.flc_type;
 	conflock->fl.fl_start = lock->fl.fl_start;
 	conflock->fl.fl_end = lock->fl.fl_end;
+	conflock->fl.fl_lmops = NULL;
 	locks_release_private(&lock->fl);
 
 	ret = nlm_lck_denied;
