@@ -102,6 +102,15 @@ enum rtca3_alrm_set_step {
 };
 
 /**
+ * struct rtca3_of_data - OF data for RTCA3
+ *
+ * @max_periodic_irq_freq: maximum periodic interrupt frequency
+ */
+struct rtca3_of_data {
+	int max_periodic_irq_freq;
+};
+
+/**
  * struct rtca3_ppb_per_cycle - PPB per cycle
  * @ten_sec: PPB per cycle in 10 seconds adjutment mode
  * @sixty_sec: PPB per cycle in 60 seconds adjustment mode
@@ -709,6 +718,7 @@ static void rtca3_action(void *data)
 
 static int rtca3_probe(struct platform_device *pdev)
 {
+	const struct rtca3_of_data *of_data;
 	struct device *dev = &pdev->dev;
 	struct rtca3_priv *priv;
 	struct clk *clk;
@@ -717,6 +727,8 @@ static int rtca3_probe(struct platform_device *pdev)
 	priv = devm_kzalloc(dev, sizeof(*priv), GFP_KERNEL);
 	if (!priv)
 		return -ENOMEM;
+
+	of_data = of_device_get_match_data(dev);
 
 	priv->base = devm_platform_ioremap_resource(pdev, 0);
 	if (IS_ERR(priv->base))
@@ -772,7 +784,7 @@ static int rtca3_probe(struct platform_device *pdev)
 		return PTR_ERR(priv->rtc_dev);
 
 	priv->rtc_dev->ops = &rtca3_ops;
-	priv->rtc_dev->max_user_freq = 256;
+	priv->rtc_dev->max_user_freq = of_data->max_periodic_irq_freq;
 	priv->rtc_dev->range_min = RTC_TIMESTAMP_BEGIN_2000;
 	priv->rtc_dev->range_max = RTC_TIMESTAMP_END_2099;
 
@@ -875,8 +887,12 @@ static int rtca3_resume(struct device *dev)
 
 static DEFINE_SIMPLE_DEV_PM_OPS(rtca3_pm_ops, rtca3_suspend, rtca3_resume);
 
+static const struct rtca3_of_data rtca3_of_data = {
+	.max_periodic_irq_freq = 256,
+};
+
 static const struct of_device_id rtca3_of_match[] = {
-	{ .compatible = "renesas,rz-rtca3", },
+	{ .compatible = "renesas,rz-rtca3", .data = &rtca3_of_data },
 	{ /* sentinel */ }
 };
 MODULE_DEVICE_TABLE(of, rtca3_of_match);
