@@ -131,6 +131,22 @@ coresight_find_out_connection(struct coresight_device *csdev,
 	return ERR_PTR(-ENODEV);
 }
 
+/*
+ * Reading CLIAMSET returns  a bitfield representing the number of claim tags
+ * implemented from bit 0 to bit nTag-1, valid bits set to 1.
+ *
+ * Claim protocol requires 2 bits so test for highest bit required,
+ * bit 1 -  CORESIGHT_CLAIM_SELF_HOSTED_BIT
+ *
+ * return true if sufficient claim tags implemented for protocol
+ */
+static bool coresight_claim_tags_implemented_unlocked(struct csdev_access *csa)
+{
+	u32 claim_bits_impl = FIELD_GET(CORESIGHT_CLAIM_BITS_MAX_MASK,
+			 csdev_access_relaxed_read32(csa, CORESIGHT_CLAIMSET));
+	return ((claim_bits_impl & CORESIGHT_CLAIM_SELF_HOSTED_BIT) != 0);
+}
+
 static u32 coresight_read_claim_tags_unlocked(struct coresight_device *csdev)
 {
 	return FIELD_GET(CORESIGHT_CLAIM_MASK,
@@ -156,6 +172,9 @@ EXPORT_SYMBOL_GPL(coresight_clear_self_claim_tag);
 
 void coresight_clear_self_claim_tag_unlocked(struct csdev_access *csa)
 {
+	if (!coresight_claim_tags_implemented_unlocked(csa))
+		return;
+
 	csdev_access_relaxed_write32(csa, CORESIGHT_CLAIM_SELF_HOSTED,
 				     CORESIGHT_CLAIMCLR);
 	isb();
@@ -181,6 +200,10 @@ int coresight_claim_device_unlocked(struct coresight_device *csdev)
 		return -EINVAL;
 
 	csa = &csdev->access;
+
+	if (!coresight_claim_tags_implemented_unlocked(csa))
+		return 0;
+
 	tag = coresight_read_claim_tags_unlocked(csdev);
 
 	switch (tag) {
@@ -235,6 +258,9 @@ void coresight_disclaim_device_unlocked(struct coresight_device *csdev)
 {
 
 	if (WARN_ON(!csdev))
+		return;
+
+	if (!coresight_claim_tags_implemented_unlocked(&csdev->access))
 		return;
 
 	if (coresight_read_claim_tags_unlocked(csdev) == CORESIGHT_CLAIM_SELF_HOSTED)
