@@ -16,6 +16,9 @@
 struct xe_gt_sriov_migration_data {
 	/** @ring: queue containing VF save / restore migration data */
 	struct ptr_ring ring;
+
+	/** @vram_save_offset: offset within VRAM, used for chunked VRAM save */
+	loff_t vram_save_offset;
 };
 
 #endif
