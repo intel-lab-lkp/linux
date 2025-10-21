@@ -107,16 +107,19 @@ TRACE_EVENT(net_dev_xmit_timeout,
 		__string(	name,		dev->name	)
 		__string(	driver,		netdev_drivername(dev))
 		__field(	int,		queue_index	)
+		__field(	int,		ifindex		)
 	),
 
 	TP_fast_assign(
 		__assign_str(name);
 		__assign_str(driver);
 		__entry->queue_index = queue_index;
+		__entry->ifindex = dev->ifindex;
 	),
 
-	TP_printk("dev=%s driver=%s queue=%d",
-		__get_str(name), __get_str(driver), __entry->queue_index)
+	TP_printk("dev=%s ifindex=%d driver=%s queue=%d",
+		__get_str(name), __entry->ifindex,
+		__get_str(driver), __entry->queue_index)
 );
 
 DECLARE_EVENT_CLASS(net_dev_template,
