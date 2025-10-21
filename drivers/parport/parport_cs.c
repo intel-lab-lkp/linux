@@ -83,19 +83,35 @@ static void parport_cs_release(struct pcmcia_device *);
 static int parport_probe(struct pcmcia_device *link)
 {
     parport_info_t *info;
+    int ret;
 
-    dev_dbg(&link->dev, "parport_attach()\n");
+    dev_dbg(&link->dev, "parport_probe()\n");
 
-    /* Create new parport device */
+    /* Allocate private driver info */
     info = kzalloc(sizeof(*info), GFP_KERNEL);
-    if (!info) return -ENOMEM;
+    if (!info) {
+        dev_err(&link->dev, "failed to allocate parport_info\n");
+        return -ENOMEM;
+    }
+
     link->priv = info;
     info->p_dev = link;
 
+    /* Enable IRQ and auto IO for configuration */
     link->config_flags |= CONF_ENABLE_IRQ | CONF_AUTO_SET_IO;
 
-    return parport_config(link);
-} /* parport_attach */
+    /* Delegate actual configuration to parport_config() */
+    ret = parport_config(link);
+    if (ret) {
+        dev_err(&link->dev, "parport configuration failed\n");
+        kfree(info);
+        link->priv = NULL;
+        return ret;
+    }
+
+    return 0;
+}
+
 
 static void parport_detach(struct pcmcia_device *link)
 {
@@ -141,10 +157,13 @@ static int parport_config(struct pcmcia_device *link)
 			      link->resource[1]->start,
 			      link->irq, PARPORT_DMA_NONE,
 			      &link->dev, IRQF_SHARED);
-    if (p == NULL) {
-	    pr_notice("parport_cs: parport_pc_probe_port() at 0x%3x, irq %u failed\n",
-		      (unsigned int)link->resource[0]->start, link->irq);
-	goto failed;
+    if (!p) {
+        dev_err(&link->dev,
+            "parport_pc_probe_port() failed at 0x%03x, irq %u\n",
+            (unsigned int)link->resource[0]->start, link->irq);
+        goto failed;
+    }   
+
     }
 
     p->modes |= PARPORT_MODE_PCSPP;
@@ -158,6 +177,7 @@ static int parport_config(struct pcmcia_device *link)
 failed:
 	parport_cs_release(link);
 	kfree(link->priv);
+    link->priv = NULL;
 	return -ENODEV;
 } /* parport_config */
 
