@@ -1005,10 +1005,13 @@ int comedi_device_attach(struct comedi_device *dev, struct comedi_devconfig *it)
 	dev->board_name = dev->board_ptr ? *(const char **)dev->board_ptr
 					 : dev->driver->driver_name;
 	ret = driv->attach(dev, it);
-	if (ret >= 0)
+	if (ret >= 0) {
 		ret = comedi_device_postconfig(dev);
-	if (ret < 0) {
-		comedi_device_detach(dev);
+		if (ret < 0) {
+			comedi_device_detach(dev);
+			module_put(driv->module);
+		}
+	} else {
 		module_put(driv->module);
 	}
 	/* On success, the driver module count has been incremented. */
