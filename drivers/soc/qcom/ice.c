@@ -85,6 +85,8 @@ union crypto_cfg {
 #define qcom_ice_readl(engine, reg)	\
 	readl((engine)->base + (reg))
 
+static bool qcom_ice_create_error;
+
 static bool qcom_ice_use_wrapped_keys;
 module_param_named(use_wrapped_keys, qcom_ice_use_wrapped_keys, bool, 0660);
 MODULE_PARM_DESC(use_wrapped_keys,
@@ -524,7 +526,7 @@ static struct qcom_ice *qcom_ice_create(struct device *dev,
 
 	if (!qcom_scm_ice_available()) {
 		dev_warn(dev, "ICE SCM interface not found\n");
-		return NULL;
+		return ERR_PTR(-EOPNOTSUPP);
 	}
 
 	engine = devm_kzalloc(dev, sizeof(*engine), GFP_KERNEL);
@@ -604,7 +606,7 @@ static struct qcom_ice *of_qcom_ice_get(struct device *dev)
 	struct device_node *node __free(device_node) = of_parse_phandle(dev->of_node,
 									"qcom,ice", 0);
 	if (!node)
-		return NULL;
+		return ERR_PTR(-EOPNOTSUPP);
 
 	pdev = of_find_device_by_node(node);
 	if (!pdev) {
@@ -617,7 +619,10 @@ static struct qcom_ice *of_qcom_ice_get(struct device *dev)
 		dev_err(dev, "Cannot get ice instance from %s\n",
 			dev_name(&pdev->dev));
 		platform_device_put(pdev);
-		return ERR_PTR(-EPROBE_DEFER);
+		if (qcom_ice_create_error)
+			return ERR_PTR(-EOPNOTSUPP);
+		else
+			return ERR_PTR(-EPROBE_DEFER);
 	}
 
 	link = device_link_add(dev, &pdev->dev, DL_FLAG_AUTOREMOVE_SUPPLIER);
@@ -691,8 +696,10 @@ static int qcom_ice_probe(struct platform_device *pdev)
 	}
 
 	engine = qcom_ice_create(&pdev->dev, base);
-	if (IS_ERR(engine))
+	if (IS_ERR(engine)) {
+		qcom_ice_create_error = true;
 		return PTR_ERR(engine);
+	}
 
 	platform_set_drvdata(pdev, engine);
 
