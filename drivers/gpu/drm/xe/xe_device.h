@@ -152,6 +152,11 @@ static inline bool xe_device_has_sriov(struct xe_device *xe)
 	return xe->info.has_sriov;
 }
 
+static inline bool xe_device_has_sriov_vf_migration(struct xe_device *xe)
+{
+	return xe->info.has_sriov_vf_migration;
+}
+
 static inline bool xe_device_has_msix(struct xe_device *xe)
 {
 	return xe->irq.msix.nvec > 0;

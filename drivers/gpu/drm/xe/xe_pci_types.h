@@ -48,6 +48,7 @@ struct xe_device_desc {
 	u8 has_mbx_power_limits:1;
 	u8 has_pxp:1;
 	u8 has_sriov:1;
+	u8 has_sriov_vf_migration:1;
 	u8 needs_scratch:1;
 	u8 skip_guc_pc:1;
 	u8 skip_mtcfg:1;

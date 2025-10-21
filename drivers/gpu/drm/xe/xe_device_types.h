@@ -306,6 +306,8 @@ struct xe_device {
 		u8 has_range_tlb_inval:1;
 		/** @info.has_sriov: Supports SR-IOV */
 		u8 has_sriov:1;
+		/** @info.has_sriov_vf_migration: Supports SR-IOV VF migration */
+		u8 has_sriov_vf_migration:1;
 		/** @info.has_usm: Device has unified shared memory support */
 		u8 has_usm:1;
 		/** @info.has_64bit_timestamp: Device supports 64-bit timestamps */

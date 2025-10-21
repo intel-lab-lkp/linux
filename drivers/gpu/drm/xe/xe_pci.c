@@ -362,6 +362,7 @@ static const struct xe_device_desc bmg_desc = {
 	.has_heci_cscfi = 1,
 	.has_late_bind = true,
 	.has_sriov = true,
+	.has_sriov_vf_migration = true,
 	.max_gt_per_tile = 2,
 	.needs_scratch = true,
 	.subplatforms = (const struct xe_subplatform_desc[]) {
@@ -378,6 +379,7 @@ static const struct xe_device_desc ptl_desc = {
 	.has_display = true,
 	.has_flat_ccs = 1,
 	.has_sriov = true,
+	.has_sriov_vf_migration = true,
 	.max_gt_per_tile = 2,
 	.needs_scratch = true,
 	.needs_shared_vf_gt_wq = true,
@@ -655,6 +657,7 @@ static int xe_info_init_early(struct xe_device *xe,
 	xe->info.has_pxp = desc->has_pxp;
 	xe->info.has_sriov = xe_configfs_primary_gt_allowed(to_pci_dev(xe->drm.dev)) &&
 		desc->has_sriov;
+	xe->info.has_sriov_vf_migration = desc->has_sriov_vf_migration;
 	xe->info.skip_guc_pc = desc->skip_guc_pc;
 	xe->info.skip_mtcfg = desc->skip_mtcfg;
 	xe->info.skip_pcode = desc->skip_pcode;
@@ -1018,9 +1021,10 @@ static int xe_pci_probe(struct pci_dev *pdev, const struct pci_device_id *ent)
 		xe_step_name(xe->info.step.media),
 		xe_step_name(xe->info.step.basedie));
 
-	drm_dbg(&xe->drm, "SR-IOV support: %s (mode: %s)\n",
+	drm_dbg(&xe->drm, "SR-IOV support: %s (mode: %s) (VF migration: %s)\n",
 		str_yes_no(xe_device_has_sriov(xe)),
-		xe_sriov_mode_to_string(xe_device_sriov_mode(xe)));
+		xe_sriov_mode_to_string(xe_device_sriov_mode(xe)),
+		str_yes_no(xe_device_has_sriov_vf_migration(xe)));
 
 	err = xe_pm_init_early(xe);
 	if (err)

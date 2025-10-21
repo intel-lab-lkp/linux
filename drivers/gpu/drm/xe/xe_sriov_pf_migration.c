@@ -50,7 +50,9 @@ bool xe_sriov_pf_migration_supported(struct xe_device *xe)
 
 static bool pf_check_migration_support(struct xe_device *xe)
 {
-	/* XXX: for now this is for feature enabling only */
+	if (xe_device_has_sriov_vf_migration(xe))
+		return true;
+
 	return IS_ENABLED(CONFIG_DRM_XE_DEBUG);
 }
 
