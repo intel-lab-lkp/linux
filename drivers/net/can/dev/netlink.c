@@ -191,7 +191,8 @@ static int can_validate_xl_flags(struct netlink_ext_ack *extack,
 		}
 		if (masked_flags & CAN_CTRLMODE_XL_TMS) {
 			const u32 tms_conflicts_mask = CAN_CTRLMODE_FD |
-				CAN_CTRLMODE_XL_TDC_MASK;
+				CAN_CTRLMODE_XL_TDC_MASK |
+				CAN_CTRLMODE_XL_ERR_SIGNAL;
 			u32 tms_conflicts = masked_flags & tms_conflicts_mask;
 
 			if (tms_conflicts) {
@@ -201,9 +202,21 @@ static int can_validate_xl_flags(struct netlink_ext_ack *extack,
 				return -EOPNOTSUPP;
 			}
 		}
+		if ((masked_flags & CAN_CTRLMODE_FD) &&
+		    (mask & CAN_CTRLMODE_XL_ERR_SIGNAL) &&
+		    !(masked_flags & CAN_CTRLMODE_XL_ERR_SIGNAL)) {
+			NL_SET_ERR_MSG(extack,
+				       "When using both CAN FD and XL, error signalling must be on");
+			return -EOPNOTSUPP;
+		}
 	} else {
 		if (mask & CAN_CTRLMODE_XL_TMS) {
 			NL_SET_ERR_MSG(extack, "TMS requires CAN XL");
+			return -EOPNOTSUPP;
+		}
+		if (mask & CAN_CTRLMODE_XL_ERR_SIGNAL) {
+			NL_SET_ERR_MSG(extack,
+				       "Error signalling is only configurable with CAN XL");
 			return -EOPNOTSUPP;
 		}
 	}
@@ -310,6 +323,11 @@ static int can_ctrlmode_changelink(struct net_device *dev,
 				       "TMS can not be activated while CAN FD is on");
 			return -EOPNOTSUPP;
 		}
+		if (deactivated & CAN_CTRLMODE_XL_ERR_SIGNAL) {
+			NL_SET_ERR_MSG(extack,
+				       "Error signalling can not be deactivated while CAN FD is on");
+			return -EOPNOTSUPP;
+		}
 	}
 
 	/* If a top dependency flag is provided, reset all its dependencies */
@@ -317,11 +335,18 @@ static int can_ctrlmode_changelink(struct net_device *dev,
 		priv->ctrlmode &= ~CAN_CTRLMODE_FD_TDC_MASK;
 	if (cm->mask & CAN_CTRLMODE_XL)
 		priv->ctrlmode &= ~(CAN_CTRLMODE_XL_TDC_MASK |
-				    CAN_CTRLMODE_XL_TMS);
+				    CAN_CTRLMODE_XL_TMS |
+				    CAN_CTRLMODE_XL_ERR_SIGNAL);
 
 	/* clear bits to be modified and copy the flag values */
 	priv->ctrlmode &= ~cm->mask;
 	priv->ctrlmode |= maskedflags;
+
+	/* If omitted, set error signalling on if possible */
+	if ((maskedflags & CAN_CTRLMODE_XL) &&
+	    !(cm->mask & CAN_CTRLMODE_XL_ERR_SIGNAL) &&
+	    !(priv->ctrlmode & CAN_CTRLMODE_XL_TMS))
+		priv->ctrlmode |= CAN_CTRLMODE_XL_ERR_SIGNAL;
 
 	/* Wipe potential leftovers from previous CAN FD/XL config */
 	if (!(priv->ctrlmode & CAN_CTRLMODE_FD)) {
