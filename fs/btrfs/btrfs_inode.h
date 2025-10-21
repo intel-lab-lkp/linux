@@ -524,10 +524,7 @@ static inline void btrfs_assert_inode_locked(struct btrfs_inode *inode)
 
 static inline void btrfs_update_inode_mapping_flags(struct btrfs_inode *inode)
 {
-	if (inode->flags & BTRFS_INODE_NODATASUM)
-		mapping_clear_stable_writes(inode->vfs_inode.i_mapping);
-	else
-		mapping_set_stable_writes(inode->vfs_inode.i_mapping);
+	mapping_set_stable_writes(inode->vfs_inode.i_mapping);
 }
 
 static inline void btrfs_set_inode_mapping_order(struct btrfs_inode *inode)
