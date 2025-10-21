@@ -16,6 +16,7 @@
 #include <linux/netfilter.h>
 #include <linux/netfilter/nfnetlink.h>
 #include <linux/netfilter/nf_tables.h>
+#include <linux/sysctl.h>
 #include <net/netfilter/nf_flow_table.h>
 #include <net/netfilter/nf_tables_core.h>
 #include <net/netfilter/nf_tables.h>
@@ -25,10 +26,12 @@
 
 #define NFT_MODULE_AUTOLOAD_LIMIT (MODULE_NAME_LEN - sizeof("nft-expr-255-"))
 #define NFT_SET_MAX_ANONLEN 16
+#define NFT_TABLE_DEFAULT_JUMPS_MAX 65536
 
 /* limit compaction to avoid huge kmalloc/krealloc sizes. */
 #define NFT_MAX_SET_NELEMS ((2048 - sizeof(struct nft_trans_elem)) / sizeof(struct nft_trans_one_elem))
 
+static u32 nf_tables_jumps_max_netns __read_mostly = NFT_TABLE_DEFAULT_JUMPS_MAX;
 unsigned int nf_tables_net_id __read_mostly;
 
 static LIST_HEAD(nf_tables_expressions);
@@ -1630,6 +1633,8 @@ static int nf_tables_newtable(struct sk_buff *skb, const struct nfnl_info *info,
 	table->handle = ++nft_net->table_handle;
 	if (table->flags & NFT_TABLE_F_OWNER)
 		table->nlpid = NETLINK_CB(skb).portid;
+
+	table->jump_count[1] = -1;
 
 	nft_ctx_init(&ctx, net, skb, info->nlh, family, table, NULL, nla);
 	err = nft_trans_table_add(&ctx, NFT_MSG_NEWTABLE);
@@ -4121,7 +4126,7 @@ int nft_chain_validate(const struct nft_ctx *ctx, const struct nft_chain *chain)
 }
 EXPORT_SYMBOL_GPL(nft_chain_validate);
 
-static int nft_table_validate(struct net *net, const struct nft_table *table)
+static int nft_table_validate(struct net *net, struct nft_table *table)
 {
 	struct nft_chain *chain;
 	struct nft_ctx ctx = {
@@ -4141,6 +4146,8 @@ static int nft_table_validate(struct net *net, const struct nft_table *table)
 
 		cond_resched();
 	}
+
+	table->jump_count[1] = ctx.jump_count;
 
 	return 0;
 }
@@ -4200,6 +4207,39 @@ int nft_set_catchall_validate(const struct nft_ctx *ctx, struct nft_set *set)
 	}
 
 	return ret;
+}
+
+static u32 nft_jump_count(struct net *net)
+{
+	struct nftables_pernet *nft_net = nft_pernet(net);
+	struct nft_table *table;
+	u32 jump_count = 0;
+
+	list_for_each_entry(table, &nft_net->tables, list) {
+		/* If table has been updated with new jumps in this batch, then
+		 * use future jump count. Otherwise, use current jump count.
+		 */
+		if (table->jump_count[1] < 0)
+			jump_count += table->jump_count[0];
+		else
+			jump_count += table->jump_count[1];
+	}
+
+	return jump_count;
+}
+
+static int nft_jump_count_check(struct net *net)
+{
+	u32 jump_count;
+
+	if (net_eq(net, &init_net))
+		return 0;
+
+	jump_count = nft_jump_count(net);
+	if (jump_count > nf_tables_jumps_max_netns)
+		return -EAGAIN;
+
+	return 0;
 }
 
 static struct nft_rule *nft_rule_lookup_byid(const struct net *net,
@@ -4421,8 +4461,17 @@ static int nf_tables_newrule(struct sk_buff *skb, const struct nfnl_info *info,
 	if (flow)
 		nft_trans_flow_rule(trans) = flow;
 
-	if (table->validate_state == NFT_VALIDATE_DO)
-		return nft_table_validate(net, table);
+	if (table->validate_state == NFT_VALIDATE_DO) {
+		err = nft_table_validate(net, table);
+		if (err < 0)
+			return err;
+
+		/* rule might jump to chain either via immediate or lookup,
+		 * check if jump to chain count goes over the limit.
+		 */
+		if (nft_jump_count_check(net) < 0)
+			return -EMLINK;
+	}
 
 	return 0;
 
@@ -10109,6 +10158,9 @@ static int nf_tables_validate(struct net *net)
 		}
 	}
 
+	if (nft_jump_count_check(net) < 0)
+		return -EAGAIN;
+
 	return 0;
 }
 
@@ -10869,6 +10921,30 @@ static void nft_gc_seq_end(struct nftables_pernet *nft_net, unsigned int gc_seq)
 	WRITE_ONCE(nft_net->gc_seq, ++gc_seq);
 }
 
+static void nft_jump_count_reset(struct net *net)
+{
+	struct nftables_pernet *nft_net = nft_pernet(net);
+	struct nft_table *table;
+
+	list_for_each_entry(table, &nft_net->tables, list)
+		table->jump_count[1] = -1;
+}
+
+static void nft_jump_count_update(struct net *net)
+{
+	struct nftables_pernet *nft_net = nft_pernet(net);
+	struct nft_table *table;
+
+	list_for_each_entry(table, &nft_net->tables, list) {
+		/* no new jumps in this table, skip. */
+		if (table->jump_count[1] < 0)
+			continue;
+
+		table->jump_count[0] = table->jump_count[1];
+		table->jump_count[1] = -1;
+	}
+}
+
 static int nf_tables_commit(struct net *net, struct sk_buff *skb)
 {
 	struct nftables_pernet *nft_net = nft_pernet(net);
@@ -10925,6 +11001,8 @@ static int nf_tables_commit(struct net *net, struct sk_buff *skb)
 	err = nft_flow_rule_offload_commit(net);
 	if (err < 0)
 		return err;
+
+	nft_jump_count_update(net);
 
 	/* 1.  Allocate space for next generation rules_gen_X[] */
 	list_for_each_entry_safe(trans, next, &nft_net->commit_list, list) {
@@ -11265,6 +11343,8 @@ static int __nf_tables_abort(struct net *net, enum nfnl_abort_action action)
 	if (action == NFNL_ABORT_VALIDATE &&
 	    nf_tables_validate(net) < 0)
 		err = -EAGAIN;
+
+	nft_jump_count_reset(net);
 
 	list_for_each_entry_safe_reverse(trans, next, &nft_net->commit_list,
 					 list) {
@@ -12124,6 +12204,65 @@ static struct notifier_block nft_nl_notifier = {
 	.notifier_call  = nft_rcv_nl_event,
 };
 
+#ifdef CONFIG_SYSCTL
+static struct ctl_table nf_tables_sysctl_table[] = {
+	{
+		.procname	= "nf_tables_jumps_max_netns",
+		.data		= &nf_tables_jumps_max_netns,
+		.maxlen		= sizeof(nf_tables_jumps_max_netns),
+		.mode		= 0644,
+		.proc_handler	= proc_dointvec,
+	},
+};
+
+static int nf_tables_sysctl_init(struct net *net)
+{
+	struct nftables_pernet *nft_net = nft_pernet(net);
+	struct ctl_table *tbl = nf_tables_sysctl_table;
+
+	if (net_eq(net, &init_net)) {
+		nf_tables_jumps_max_netns = NFT_TABLE_DEFAULT_JUMPS_MAX;
+	} else {
+		tbl = kmemdup(tbl, sizeof(nf_tables_sysctl_table), GFP_KERNEL);
+		if (!tbl)
+			return -ENOMEM;
+
+		tbl->data = &nf_tables_jumps_max_netns;
+		tbl->mode = 0444;
+	}
+
+	nft_net->nf_tables_dir_header =
+		register_net_sysctl_sz(net, "net/netfilter", tbl,
+				       ARRAY_SIZE(nf_tables_sysctl_table));
+	if (!nft_net->nf_tables_dir_header)
+		goto err_tbl_free;
+
+	return 0;
+
+err_tbl_free:
+	if (tbl != nf_tables_sysctl_table)
+		kfree(tbl);
+
+	return -ENOMEM;
+}
+
+static void nf_tables_sysctl_exit(struct net *net)
+{
+	struct nftables_pernet *nft_net = nft_pernet(net);
+
+	unregister_net_sysctl_table(nft_net->nf_tables_dir_header);
+}
+#else
+static int nf_tables_sysctl_init(struct net *net)
+{
+	return 0;
+}
+
+static void nf_tables_sysctl_exit(struct net *net)
+{
+}
+#endif /* CONFIG_SYSCTL */
+
 static int __net_init nf_tables_init_net(struct net *net)
 {
 	struct nftables_pernet *nft_net = nft_pernet(net);
@@ -12141,7 +12280,7 @@ static int __net_init nf_tables_init_net(struct net *net)
 	nft_net->validate_state = NFT_VALIDATE_SKIP;
 	INIT_WORK(&nft_net->destroy_work, nf_tables_trans_destroy_work);
 
-	return 0;
+	return nf_tables_sysctl_init(net);
 }
 
 static void __net_exit nf_tables_pre_exit_net(struct net *net)
@@ -12157,6 +12296,8 @@ static void __net_exit nf_tables_exit_net(struct net *net)
 {
 	struct nftables_pernet *nft_net = nft_pernet(net);
 	unsigned int gc_seq;
+
+	nf_tables_sysctl_exit(net);
 
 	mutex_lock(&nft_net->commit_mutex);
 

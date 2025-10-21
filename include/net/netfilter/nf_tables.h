@@ -209,6 +209,7 @@ static inline void nft_data_copy(u32 *dst, const struct nft_data *src,
  *	@family: protocol family
  *	@level: depth of the chains
  *	@report: notify via unicast netlink message
+ * 	@jump_count: jump to chain counter
  *	@reg_inited: bitmap of initialised registers
  */
 struct nft_ctx {
@@ -222,6 +223,7 @@ struct nft_ctx {
 	u8				family;
 	u8				level;
 	bool				report;
+	int				jump_count;
 	DECLARE_BITMAP(reg_inited, NFT_REG32_NUM);
 };
 
@@ -1279,6 +1281,7 @@ static inline void nft_use_inc_restore(u32 *use)
  *	@family:address family
  *	@flags: table flag (see enum nft_table_flags)
  *	@genmask: generation mask
+ * 	@jump_count: present [0] and future [1] jump to chain counter
  *	@nlpid: netlink port ID
  *	@name: name of the table
  *	@udlen: length of the user data
@@ -1298,6 +1301,7 @@ struct nft_table {
 	u16				family:6,
 					flags:8,
 					genmask:2;
+	int				jump_count[2];
 	u32				nlpid;
 	char				*name;
 	u16				udlen;
@@ -1917,6 +1921,9 @@ struct nftables_pernet {
 	unsigned int		gc_seq;
 	u8			validate_state;
 	struct work_struct	destroy_work;
+#ifdef CONFIG_SYSCTL
+	struct ctl_table_header	*nf_tables_dir_header;
+#endif
 };
 
 extern unsigned int nf_tables_net_id;

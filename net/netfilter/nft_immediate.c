@@ -259,6 +259,10 @@ static int nft_immediate_validate(const struct nft_ctx *ctx,
 	switch (data->verdict.code) {
 	case NFT_JUMP:
 	case NFT_GOTO:
+		if (pctx->jump_count >= INT_MAX)
+			return -EMLINK;
+
+		pctx->jump_count++;
 		pctx->level++;
 		err = nft_chain_validate(ctx, data->verdict.chain);
 		if (err < 0)

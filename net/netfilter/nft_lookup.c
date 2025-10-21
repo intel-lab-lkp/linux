@@ -246,11 +246,15 @@ static int nft_lookup_validate(const struct nft_ctx *ctx,
 			       const struct nft_expr *expr)
 {
 	const struct nft_lookup *priv = nft_expr_priv(expr);
+	struct nft_ctx *pctx = (struct nft_ctx *)ctx;
 	struct nft_set_iter iter;
 
 	if (!(priv->set->flags & NFT_SET_MAP) ||
 	    priv->set->dtype != NFT_DATA_VERDICT)
 		return 0;
+
+	if (pctx->jump_count >= INT_MAX)
+		return -EMLINK;
 
 	iter.genmask	= nft_genmask_next(ctx->net);
 	iter.type	= NFT_ITER_UPDATE;
@@ -265,6 +269,11 @@ static int nft_lookup_validate(const struct nft_ctx *ctx,
 
 	if (iter.err < 0)
 		return iter.err;
+
+	/* Verdict maps always have one exact match per lookup at least, count
+	 * only one jump per set reference.
+	 */
+	pctx->jump_count++;
 
 	return 0;
 }
