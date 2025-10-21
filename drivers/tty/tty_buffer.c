@@ -535,6 +535,29 @@ void tty_flip_buffer_push(struct tty_port *port)
 EXPORT_SYMBOL(tty_flip_buffer_push);
 
 /**
+ * tty_flip_buffer_push		-	push terminal buffers
+ * @port: tty port to push
+ * @wq: workqueue on which to queue work
+ * @cpu: cpu on which to queue work
+ *
+ * Queue a push of the terminal flip buffers to the line discipline. Can be
+ * called from IRQ/atomic context.
+ *
+ * In the event of the queue being busy for flipping the work will be held off
+ * and retried later.
+ */
+void tty_flip_buffer_push_wq(struct tty_port *port,
+			     struct workqueue_struct *wq,
+			     int cpu)
+{
+	struct tty_bufhead *buf = &port->buf;
+
+	tty_flip_buffer_commit(buf->tail);
+	queue_work_on(cpu, wq, &buf->work);
+}
+EXPORT_SYMBOL(tty_flip_buffer_push_wq);
+
+/**
  * tty_insert_flip_string_and_push_buffer - add characters to the tty buffer and
  *	push
  * @port: tty port
