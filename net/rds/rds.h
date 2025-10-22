@@ -548,7 +548,7 @@ struct rds_transport {
 	 * last time.  This ensures messages received on the new socket are not discarded
 	 * when no connection path was available at the time.
 	 */
-	void (*conn_slots_available)(struct rds_connection *conn);
+	void (*conn_slots_available)(struct rds_connection *conn, bool fan_out);
 	int (*conn_path_connect)(struct rds_conn_path *cp);
 
 	/*
