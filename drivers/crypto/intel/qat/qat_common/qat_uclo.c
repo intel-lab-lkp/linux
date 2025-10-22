@@ -200,18 +200,18 @@ qat_uclo_cleanup_batch_init_list(struct icp_qat_fw_loader_handle *handle,
 
 static int qat_uclo_parse_num(char *str, unsigned int *num)
 {
-	char buf[16] = {0};
+	char buf[16] = {};
 	unsigned long ae = 0;
 	int i;
 
-	strscpy(buf, str, sizeof(buf));
-	for (i = 0; i < 16; i++) {
+	strscpy_pad(buf, str);
+	for (i = 0; i < sizeof(buf); i++) {
 		if (!isdigit(buf[i])) {
 			buf[i] = '\0';
 			break;
 		}
 	}
-	if ((kstrtoul(buf, 10, &ae)))
+	if (kstrtoul(buf, 10, &ae))
 		return -EFAULT;
 
 	*num = (unsigned int)ae;
