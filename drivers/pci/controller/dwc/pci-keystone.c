@@ -17,6 +17,7 @@
 #include <linux/irqchip/chained_irq.h>
 #include <linux/irqdomain.h>
 #include <linux/mfd/syscon.h>
+#include <linux/module.h>
 #include <linux/msi.h>
 #include <linux/of.h>
 #include <linux/of_irq.h>
@@ -799,7 +800,7 @@ static int ks_pcie_fault(unsigned long addr, unsigned int fsr,
 }
 #endif
 
-static int __init ks_pcie_init_id(struct keystone_pcie *ks_pcie)
+static int ks_pcie_init_id(struct keystone_pcie *ks_pcie)
 {
 	int ret;
 	unsigned int id;
@@ -831,7 +832,7 @@ static int __init ks_pcie_init_id(struct keystone_pcie *ks_pcie)
 	return 0;
 }
 
-static int __init ks_pcie_host_init(struct dw_pcie_rp *pp)
+static int ks_pcie_host_init(struct dw_pcie_rp *pp)
 {
 	struct dw_pcie *pci = to_dw_pcie_from_pp(pp);
 	struct keystone_pcie *ks_pcie = to_keystone_pcie(pci);
@@ -860,15 +861,6 @@ static int __init ks_pcie_host_init(struct dw_pcie_rp *pp)
 	ret = ks_pcie_init_id(ks_pcie);
 	if (ret < 0)
 		return ret;
-
-#ifdef CONFIG_ARM
-	/*
-	 * PCIe access errors that result into OCP errors are caught by ARM as
-	 * "External aborts"
-	 */
-	hook_fault_code(17, ks_pcie_fault, SIGBUS, 0,
-			"Asynchronous external abort");
-#endif
 
 	return 0;
 }
@@ -1134,6 +1126,7 @@ static const struct of_device_id ks_pcie_of_match[] = {
 	},
 	{ },
 };
+MODULE_DEVICE_TABLE(of, ks_pcie_of_match);
 
 static int ks_pcie_probe(struct platform_device *pdev)
 {
@@ -1381,4 +1374,23 @@ static struct platform_driver ks_pcie_driver = {
 		.of_match_table = ks_pcie_of_match,
 	},
 };
-builtin_platform_driver(ks_pcie_driver);
+
+static int __init ks_pcie_init(void)
+{
+#ifdef CONFIG_ARM
+	/*
+	 * PCIe access errors that result into OCP errors are caught by ARM as
+	 * "External aborts"
+	 */
+	if (of_find_matching_node(NULL, ks_pcie_of_match))
+		hook_fault_code(17, ks_pcie_fault, SIGBUS, 0,
+				"Asynchronous external abort");
+#endif
+
+	return platform_driver_register(&ks_pcie_driver);
+}
+device_initcall(ks_pcie_init);
+
+MODULE_LICENSE("GPL");
+MODULE_DESCRIPTION("PCIe host controller driver for Texas Instruments Keystone SoCs");
+MODULE_AUTHOR("Murali Karicheri <m-karicheri2@ti.com>");
