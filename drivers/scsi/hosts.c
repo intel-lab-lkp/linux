@@ -605,7 +605,7 @@ static bool scsi_host_check_in_flight(struct request *rq, void *data)
 
 /**
  * scsi_host_busy - Return the host busy counter
- * @shost:	Pointer to Scsi_Host to inc.
+ * @shost:	Pointer to Scsi_Host
  **/
 int scsi_host_busy(struct Scsi_Host *shost)
 {
