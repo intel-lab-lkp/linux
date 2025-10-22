@@ -89,7 +89,7 @@ static void __io_uring_show_fdinfo(struct io_ring_ctx *ctx, struct seq_file *m)
 	seq_printf(m, "CachedCqTail:\t%u\n", data_race(ctx->cached_cq_tail));
 	seq_printf(m, "SQEs:\t%u\n", sq_tail - sq_head);
 	while (sq_head < sq_tail) {
-		struct io_uring_sqe *sqe;
+		struct io_uring_sqe *sqe = NULL;
 		unsigned int sq_idx;
 		bool sqe128 = false;
 		u8 opcode;
