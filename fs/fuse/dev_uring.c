@@ -574,6 +574,37 @@ err:
 	return err;
 }
 
+static int fuse_uring_copy_from_ring_fixed_buf(struct fuse_ring *ring,
+					       struct fuse_req *req,
+					       struct fuse_ring_ent *ent)
+{
+	struct fuse_copy_state cs;
+	struct fuse_args *args = req->args;
+	struct iov_iter payload_iter;
+	struct iov_iter headers_iter;
+	struct fuse_uring_ent_in_out ring_in_out;
+	size_t copied;
+
+	payload_iter = ent->fixed_buffer.payload_iter;
+	payload_iter.data_source = ITER_SOURCE;
+	headers_iter = ent->fixed_buffer.headers_iter;
+	headers_iter.data_source = ITER_SOURCE;
+
+	iov_iter_advance(&headers_iter, offsetof(struct fuse_uring_req_header,
+						 ring_ent_in_out));
+
+	copied = copy_from_iter(&ring_in_out, sizeof(ring_in_out),
+				&headers_iter);
+	if (copied != sizeof(ring_in_out))
+		return -EFAULT;
+
+	fuse_copy_init(&cs, false, &payload_iter);
+	cs.is_uring = true;
+	cs.req = req;
+
+	return fuse_copy_out_args(&cs, args, ring_in_out.payload_sz);
+}
+
 static int fuse_uring_copy_from_ring(struct fuse_ring *ring,
 				     struct fuse_req *req,
 				     struct fuse_ring_ent *ent)
@@ -584,12 +615,12 @@ static int fuse_uring_copy_from_ring(struct fuse_ring *ring,
 	int err;
 	struct fuse_uring_ent_in_out ring_in_out;
 
-	err = copy_from_user(&ring_in_out, &ent->headers->ring_ent_in_out,
+	err = copy_from_user(&ring_in_out, &ent->user.headers->ring_ent_in_out,
 			     sizeof(ring_in_out));
 	if (err)
 		return -EFAULT;
 
-	err = import_ubuf(ITER_SOURCE, ent->payload, ring->max_payload_sz,
+	err = import_ubuf(ITER_SOURCE, ent->user.payload, ring->max_payload_sz,
 			  &iter);
 	if (err)
 		return err;
@@ -599,6 +630,79 @@ static int fuse_uring_copy_from_ring(struct fuse_ring *ring,
 	cs.req = req;
 
 	return fuse_copy_out_args(&cs, args, ring_in_out.payload_sz);
+}
+
+static int fuse_uring_args_to_ring_fixed_buf(struct fuse_ring *ring,
+					     struct fuse_req *req,
+					     struct fuse_ring_ent *ent)
+{
+	struct fuse_copy_state cs;
+	struct fuse_args *args = req->args;
+	struct fuse_in_arg *in_args = args->in_args;
+	int num_args = args->in_numargs;
+	struct iov_iter payload_iter;
+	struct iov_iter headers_iter;
+	struct fuse_uring_ent_in_out ent_in_out = {
+		.flags = 0,
+		.commit_id = req->in.h.unique,
+	};
+	size_t copied;
+	bool advanced_headers = false;
+	int err;
+
+	payload_iter = ent->fixed_buffer.payload_iter;
+	payload_iter.data_source = ITER_DEST;
+
+	headers_iter = ent->fixed_buffer.headers_iter;
+	headers_iter.data_source = ITER_DEST;
+
+	fuse_copy_init(&cs, true, &payload_iter);
+	cs.is_uring = true;
+	cs.req = req;
+
+	if (num_args > 0) {
+		/*
+		 * Expectation is that the first argument is the per op header.
+		 * Some op code have that as zero size.
+		 */
+		if (args->in_args[0].size > 0) {
+			iov_iter_advance(&headers_iter,
+					 offsetof(struct fuse_uring_req_header,
+						  op_in));
+			copied = copy_to_iter(in_args->value, in_args->size,
+					      &headers_iter);
+			if (copied != in_args->size) {
+				pr_info_ratelimited(
+					"Copying the header failed.\n");
+				return -EFAULT;
+			}
+
+			iov_iter_advance(&headers_iter,
+					 FUSE_URING_OP_IN_OUT_SZ - in_args->size);
+			advanced_headers = true;
+		}
+		in_args++;
+		num_args--;
+	}
+	if (!advanced_headers)
+		iov_iter_advance(&headers_iter,
+				 offsetof(struct fuse_uring_req_header,
+					  ring_ent_in_out));
+
+	/* copy the payload */
+	err = fuse_copy_args(&cs, num_args, args->in_pages,
+			     (struct fuse_arg *)in_args, 0);
+	if (err) {
+		pr_info_ratelimited("%s fuse_copy_args failed\n", __func__);
+		return err;
+	}
+
+	ent_in_out.payload_sz = cs.ring.copied_sz;
+	copied = copy_to_iter(&ent_in_out, sizeof(ent_in_out), &headers_iter);
+	if (copied != sizeof(ent_in_out))
+		return -EFAULT;
+
+	return 0;
 }
 
  /*
@@ -618,7 +722,7 @@ static int fuse_uring_args_to_ring(struct fuse_ring *ring, struct fuse_req *req,
 		.commit_id = req->in.h.unique,
 	};
 
-	err = import_ubuf(ITER_DEST, ent->payload, ring->max_payload_sz, &iter);
+	err = import_ubuf(ITER_DEST, ent->user.payload, ring->max_payload_sz, &iter);
 	if (err) {
 		pr_info_ratelimited("fuse: Import of user buffer failed\n");
 		return err;
@@ -634,7 +738,7 @@ static int fuse_uring_args_to_ring(struct fuse_ring *ring, struct fuse_req *req,
 		 * Some op code have that as zero size.
 		 */
 		if (args->in_args[0].size > 0) {
-			err = copy_to_user(&ent->headers->op_in, in_args->value,
+			err = copy_to_user(&ent->user.headers->op_in, in_args->value,
 					   in_args->size);
 			if (err) {
 				pr_info_ratelimited(
@@ -655,7 +759,7 @@ static int fuse_uring_args_to_ring(struct fuse_ring *ring, struct fuse_req *req,
 	}
 
 	ent_in_out.payload_sz = cs.ring.copied_sz;
-	err = copy_to_user(&ent->headers->ring_ent_in_out, &ent_in_out,
+	err = copy_to_user(&ent->user.headers->ring_ent_in_out, &ent_in_out,
 			   sizeof(ent_in_out));
 	return err ? -EFAULT : 0;
 }
@@ -679,18 +783,31 @@ static int fuse_uring_copy_to_ring(struct fuse_ring_ent *ent,
 		return err;
 
 	/* copy the request */
-	err = fuse_uring_args_to_ring(ring, req, ent);
+	if (ent->is_fixed_buffer)
+		err = fuse_uring_args_to_ring_fixed_buf(ring, req, ent);
+	else
+		err = fuse_uring_args_to_ring(ring, req, ent);
 	if (unlikely(err)) {
 		pr_info_ratelimited("Copy to ring failed: %d\n", err);
 		return err;
 	}
 
 	/* copy fuse_in_header */
-	err = copy_to_user(&ent->headers->in_out, &req->in.h,
-			   sizeof(req->in.h));
-	if (err) {
-		err = -EFAULT;
-		return err;
+	if (ent->is_fixed_buffer) {
+		struct iov_iter headers_iter = ent->fixed_buffer.headers_iter;
+		size_t copied;
+
+		headers_iter.data_source = ITER_DEST;
+		copied = copy_to_iter(&req->in.h, sizeof(req->in.h),
+				      &headers_iter);
+
+		if (copied != sizeof(req->in.h))
+			return -EFAULT;
+	} else {
+		err = copy_to_user(&ent->user.headers->in_out, &req->in.h,
+				   sizeof(req->in.h));
+		if (err)
+			return -EFAULT;
 	}
 
 	return 0;
@@ -815,8 +932,18 @@ static void fuse_uring_commit(struct fuse_ring_ent *ent, struct fuse_req *req,
 	struct fuse_conn *fc = ring->fc;
 	ssize_t err = 0;
 
-	err = copy_from_user(&req->out.h, &ent->headers->in_out,
-			     sizeof(req->out.h));
+	if (ent->is_fixed_buffer) {
+		struct iov_iter headers_iter = ent->fixed_buffer.headers_iter;
+		size_t copied;
+
+		headers_iter.data_source = ITER_SOURCE;
+		copied = copy_from_iter(&req->out.h, sizeof(req->out.h), &headers_iter);
+		if (copied != sizeof(req->out.h))
+			err = -EFAULT;
+	} else {
+		err = copy_from_user(&req->out.h, &ent->user.headers->in_out,
+				     sizeof(req->out.h));
+	}
 	if (err) {
 		req->out.h.error = -EFAULT;
 		goto out;
@@ -828,7 +955,11 @@ static void fuse_uring_commit(struct fuse_ring_ent *ent, struct fuse_req *req,
 		goto out;
 	}
 
-	err = fuse_uring_copy_from_ring(ring, req, ent);
+	if (ent->is_fixed_buffer)
+		err = fuse_uring_copy_from_ring_fixed_buf(ring, req, ent);
+	else
+		err = fuse_uring_copy_from_ring(ring, req, ent);
+
 out:
 	fuse_uring_req_end(ent, req, err);
 }
@@ -1028,6 +1159,52 @@ static int fuse_uring_get_iovec_from_sqe(const struct io_uring_sqe *sqe,
 }
 
 static struct fuse_ring_ent *
+fuse_uring_create_ring_ent_fixed_buf(struct io_uring_cmd *cmd,
+				     struct fuse_ring_queue *queue)
+{
+	struct fuse_ring *ring = queue->ring;
+	struct fuse_ring_ent *ent;
+	unsigned payload_size, len;
+	u64 ubuf;
+	int err;
+
+	err = -ENOMEM;
+	ent = kzalloc(sizeof(*ent), GFP_KERNEL_ACCOUNT);
+	if (!ent)
+		return ERR_PTR(err);
+
+	INIT_LIST_HEAD(&ent->list);
+
+	ent->queue = queue;
+	ent->is_fixed_buffer = true;
+
+	err = io_uring_cmd_get_buffer_info(cmd, &ubuf, &len);
+	if (err)
+		goto error;
+
+	payload_size = len - sizeof(struct fuse_uring_req_header);
+	err = io_uring_cmd_import_fixed(ubuf, payload_size, ITER_DEST,
+					&ent->fixed_buffer.payload_iter, cmd, 0);
+	if (err)
+		goto error;
+
+	err = io_uring_cmd_import_fixed(ubuf + payload_size,
+					sizeof(struct fuse_uring_req_header),
+					ITER_DEST,
+					&ent->fixed_buffer.headers_iter, cmd, 0);
+	if (err)
+		goto error;
+
+	atomic_inc(&ring->queue_refs);
+
+	return ent;
+
+error:
+	kfree(ent);
+	return ERR_PTR(err);
+}
+
+static struct fuse_ring_ent *
 fuse_uring_create_ring_ent(struct io_uring_cmd *cmd,
 			   struct fuse_ring_queue *queue)
 {
@@ -1065,8 +1242,8 @@ fuse_uring_create_ring_ent(struct io_uring_cmd *cmd,
 	INIT_LIST_HEAD(&ent->list);
 
 	ent->queue = queue;
-	ent->headers = iov[0].iov_base;
-	ent->payload = iov[1].iov_base;
+	ent->user.headers = iov[0].iov_base;
+	ent->user.payload = iov[1].iov_base;
 
 	atomic_inc(&ring->queue_refs);
 	return ent;
@@ -1085,6 +1262,8 @@ static int fuse_uring_register(struct io_uring_cmd *cmd,
 	struct fuse_ring_ent *ent;
 	int err;
 	unsigned int qid = READ_ONCE(cmd_req->qid);
+	bool is_fixed_buffer =
+		cmd->sqe->uring_cmd_flags & IORING_URING_CMD_FIXED;
 
 	err = -ENOMEM;
 	if (!ring) {
@@ -1110,7 +1289,10 @@ static int fuse_uring_register(struct io_uring_cmd *cmd,
 	 * case of entry errors below, will be done at ring destruction time.
 	 */
 
-	ent = fuse_uring_create_ring_ent(cmd, queue);
+	if (is_fixed_buffer)
+		ent = fuse_uring_create_ring_ent_fixed_buf(cmd, queue);
+	else
+		ent = fuse_uring_create_ring_ent(cmd, queue);
 	if (IS_ERR(ent))
 		return PTR_ERR(ent);
 

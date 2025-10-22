@@ -38,9 +38,20 @@ enum fuse_ring_req_state {
 
 /** A fuse ring entry, part of the ring queue */
 struct fuse_ring_ent {
-	/* userspace buffer */
-	struct fuse_uring_req_header __user *headers;
-	void __user *payload;
+	/* True if daemon has registered its buffers ahead of time */
+	bool is_fixed_buffer;
+	union {
+		/* userspace buffer */
+		struct {
+			struct fuse_uring_req_header __user *headers;
+			void __user *payload;
+		} user;
+
+		struct {
+			struct iov_iter payload_iter;
+			struct iov_iter headers_iter;
+		} fixed_buffer;
+	};
 
 	/* the ring queue that owns the request */
 	struct fuse_ring_queue *queue;
