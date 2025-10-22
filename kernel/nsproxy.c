@@ -26,6 +26,7 @@
 #include <linux/syscalls.h>
 #include <linux/cgroup.h>
 #include <linux/perf_event.h>
+#include <linux/nstree.h>
 
 static struct kmem_cache *nsproxy_cachep;
 
@@ -179,12 +180,15 @@ int copy_namespaces(u64 flags, struct task_struct *tsk)
 	if ((flags & CLONE_VM) == 0)
 		timens_on_fork(new_ns, tsk);
 
+	nsproxy_ns_active_get(new_ns);
 	tsk->nsproxy = new_ns;
 	return 0;
 }
 
 void free_nsproxy(struct nsproxy *ns)
 {
+	nsproxy_ns_active_put(ns);
+
 	put_mnt_ns(ns->mnt_ns);
 	put_uts_ns(ns->uts_ns);
 	put_ipc_ns(ns->ipc_ns);
@@ -231,6 +235,9 @@ void switch_task_namespaces(struct task_struct *p, struct nsproxy *new)
 	struct nsproxy *ns;
 
 	might_sleep();
+
+	if (new)
+		nsproxy_ns_active_get(new);
 
 	task_lock(p);
 	ns = p->nsproxy;
