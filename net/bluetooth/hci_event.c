@@ -7575,7 +7575,7 @@ void hci_event_packet(struct hci_dev *hdev, struct sk_buff *skb)
 	hci_req_complete_t req_complete = NULL;
 	hci_req_complete_skb_t req_complete_skb = NULL;
 	struct sk_buff *orig_skb = NULL;
-	u8 status = 0, event, req_evt = 0;
+	u8 status = 0, event, req_evt = 0, len;
 	u16 opcode = HCI_OP_NOP;
 
 	if (skb->len < sizeof(*hdr)) {
@@ -7592,6 +7592,13 @@ void hci_event_packet(struct hci_dev *hdev, struct sk_buff *skb)
 	if (!event) {
 		bt_dev_warn(hdev, "Received unexpected HCI Event 0x%2.2x",
 			    event);
+		goto done;
+	}
+
+	len = hdr->plen;
+	if (len != skb->len - HCI_EVENT_HDR_SIZE) {
+		bt_dev_warn(hdev, "Unexpected HCI Parameter Length 0x%2.2x",
+			    len);
 		goto done;
 	}
 
