@@ -1227,6 +1227,7 @@ static void fuse_uring_send_in_task(struct io_uring_cmd *cmd,
 
 	fuse_uring_send(ent, cmd, err, issue_flags);
 }
+static DEFINE_IO_URING_CMD_TASK_WORK(fuse_uring_send_in_task)
 
 static struct fuse_ring_queue *fuse_uring_task_to_queue(struct fuse_ring *ring)
 {

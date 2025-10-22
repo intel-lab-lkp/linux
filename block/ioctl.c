@@ -778,6 +778,7 @@ static void blk_cmd_complete(struct io_uring_cmd *cmd, unsigned int issue_flags)
 	else
 		io_uring_cmd_done(cmd, bic->res, issue_flags);
 }
+static DEFINE_IO_URING_CMD_TASK_WORK(blk_cmd_complete)
 
 static void bio_cmd_bio_end_io(struct bio *bio)
 {

@@ -407,6 +407,7 @@ static void nvme_uring_task_cb(struct io_uring_cmd *ioucmd,
 		blk_rq_unmap_user(pdu->bio);
 	io_uring_cmd_done32(ioucmd, pdu->status, pdu->result, issue_flags);
 }
+static DEFINE_IO_URING_CMD_TASK_WORK(nvme_uring_task_cb)
 
 static enum rq_end_io_ret nvme_uring_cmd_end_io(struct request *req,
 						blk_status_t err)

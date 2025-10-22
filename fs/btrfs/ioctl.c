@@ -4696,6 +4696,7 @@ out:
 	kfree(priv);
 	kfree(bc->data);
 }
+static DEFINE_IO_URING_CMD_TASK_WORK(btrfs_uring_read_finished)
 
 void btrfs_uring_read_extent_endio(void *ctx, int err)
 {

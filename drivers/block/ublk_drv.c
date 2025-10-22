@@ -1361,6 +1361,7 @@ static void ublk_cmd_tw_cb(struct io_uring_cmd *cmd,
 
 	ublk_dispatch_req(ubq, pdu->req, issue_flags);
 }
+static DEFINE_IO_URING_CMD_TASK_WORK(ublk_cmd_tw_cb)
 
 static void ublk_queue_cmd(struct ublk_queue *ubq, struct request *rq)
 {
@@ -1385,6 +1386,7 @@ static void ublk_cmd_list_tw_cb(struct io_uring_cmd *cmd,
 		rq = next;
 	} while (rq);
 }
+static DEFINE_IO_URING_CMD_TASK_WORK(ublk_cmd_list_tw_cb)
 
 static void ublk_queue_cmd_list(struct ublk_io *io, struct rq_list *l)
 {
@@ -2536,6 +2538,7 @@ static void ublk_ch_uring_cmd_cb(struct io_uring_cmd *cmd,
 	if (ret != -EIOCBQUEUED)
 		io_uring_cmd_done(cmd, ret, issue_flags);
 }
+static DEFINE_IO_URING_CMD_TASK_WORK(ublk_ch_uring_cmd_cb)
 
 static int ublk_ch_uring_cmd(struct io_uring_cmd *cmd, unsigned int issue_flags)
 {
