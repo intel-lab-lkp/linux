@@ -162,6 +162,27 @@ static inline struct task_struct *__COMPAT_scx_bpf_cpu_curr(int cpu)
 }
 
 /*
+ * v6.19: Mirror the following _args structs, to prevent build errors in
+ * kernels that don't have these structs defined yet.
+ *
+ * The kernel will carry these __COMPAT_* structs until v6.23 (see below).
+ */
+#define scx_bpf_select_cpu_and_args __COMPAT_scx_bpf_select_cpu_and_args
+struct __COMPAT_scx_bpf_select_cpu_and_args {
+	s32 prev_cpu;
+	u64 wake_flags;
+	u64 flags;
+};
+
+#define scx_bpf_dsq_insert_vtime_args __COMPAT_scx_bpf_dsq_insert_vtime_args
+struct __COMPAT_scx_bpf_dsq_insert_vtime_args {
+	u64 dsq_id;
+	u64 slice;
+	u64 vtime;
+	u64 enq_flags;
+};
+
+/*
  * v6.19: To work around BPF maximum parameter limit, the following kfuncs are
  * replaced with variants that pack scalar arguments in a struct. Wrappers are
  * provided to maintain source compatibility.
@@ -170,12 +191,20 @@ static inline struct task_struct *__COMPAT_scx_bpf_cpu_curr(int cpu)
  * compatibility. After v6.23 release, remove the compat handling and move the
  * wrappers to common.bpf.h.
  */
-s32 scx_bpf_select_cpu_and___compat(struct task_struct *p, s32 prev_cpu, u64 wake_flags,
-				    const struct cpumask *cpus_allowed, u64 flags) __ksym __weak;
-void scx_bpf_dsq_insert_vtime___compat(struct task_struct *p, u64 dsq_id, u64 slice, u64 vtime, u64 enq_flags) __ksym __weak;
+s32 scx_bpf_select_cpu_and___v2(struct task_struct *p, const struct cpumask *cpus_allowed,
+			     struct scx_bpf_select_cpu_and_args *args) __ksym __weak;
+
+s32 scx_bpf_select_cpu_and(struct task_struct *p, s32 prev_cpu, u64 wake_flags,
+			   const struct cpumask *cpus_allowed, u64 flags) __ksym __weak;
+
+bool scx_bpf_dsq_insert_vtime___v2(struct task_struct *p,
+				   struct scx_bpf_dsq_insert_vtime_args *args) __ksym __weak;
+
+void scx_bpf_dsq_insert_vtime(struct task_struct *p,
+			      u64 dsq_id, u64 slice, u64 vtime, u64 enq_flags) __ksym __weak;
 
 /**
- * scx_bpf_select_cpu_and - Pick an idle CPU usable by task @p
+ * __COMPAT_scx_bpf_select_cpu_and - Pick an idle CPU usable by task @p
  * @p: task_struct to select a CPU for
  * @prev_cpu: CPU @p was on previously
  * @wake_flags: %SCX_WAKE_* flags
@@ -183,11 +212,12 @@ void scx_bpf_dsq_insert_vtime___compat(struct task_struct *p, u64 dsq_id, u64 sl
  * @flags: %SCX_PICK_IDLE* flags
  *
  * Inline wrapper that packs scalar arguments into a struct and calls
- * __scx_bpf_select_cpu_and(). See __scx_bpf_select_cpu_and() for details.
+ * scx_bpf_select_cpu_and___v2(). See scx_bpf_select_cpu_and___v2() for
+ * details.
  */
 static inline s32
-scx_bpf_select_cpu_and(struct task_struct *p, s32 prev_cpu, u64 wake_flags,
-		       const struct cpumask *cpus_allowed, u64 flags)
+__COMPAT_scx_bpf_select_cpu_and(struct task_struct *p, s32 prev_cpu, u64 wake_flags,
+				const struct cpumask *cpus_allowed, u64 flags)
 {
 	if (bpf_core_type_exists(struct scx_bpf_select_cpu_and_args)) {
 		struct scx_bpf_select_cpu_and_args args = {
@@ -196,15 +226,16 @@ scx_bpf_select_cpu_and(struct task_struct *p, s32 prev_cpu, u64 wake_flags,
 			.flags = flags,
 		};
 
-		return __scx_bpf_select_cpu_and(p, cpus_allowed, &args);
+		return scx_bpf_select_cpu_and___v2(p, cpus_allowed, &args);
 	} else {
-		return scx_bpf_select_cpu_and___compat(p, prev_cpu, wake_flags,
-						       cpus_allowed, flags);
+		return scx_bpf_select_cpu_and(p, prev_cpu, wake_flags,
+					      cpus_allowed, flags);
 	}
 }
 
 /**
- * scx_bpf_dsq_insert_vtime - Insert a task into the vtime priority queue of a DSQ
+ * __COMPAT_scx_bpf_dsq_insert_vtime - Insert a task into the vtime
+ *				       priority queue of a DSQ
  * @p: task_struct to insert
  * @dsq_id: DSQ to insert into
  * @slice: duration @p can run for in nsecs, 0 to keep the current value
@@ -212,11 +243,12 @@ scx_bpf_select_cpu_and(struct task_struct *p, s32 prev_cpu, u64 wake_flags,
  * @enq_flags: SCX_ENQ_*
  *
  * Inline wrapper that packs scalar arguments into a struct and calls
- * __scx_bpf_dsq_insert_vtime(). See __scx_bpf_dsq_insert_vtime() for details.
+ * scx_bpf_dsq_insert_vtime___v2(). See scx_bpf_dsq_insert_vtime___v2() for
+ * details.
  */
 static inline bool
-scx_bpf_dsq_insert_vtime(struct task_struct *p, u64 dsq_id, u64 slice, u64 vtime,
-			 u64 enq_flags)
+__COMPAT_scx_bpf_dsq_insert_vtime(struct task_struct *p, u64 dsq_id, u64 slice, u64 vtime,
+				  u64 enq_flags)
 {
 	if (bpf_core_type_exists(struct scx_bpf_dsq_insert_vtime_args)) {
 		struct scx_bpf_dsq_insert_vtime_args args = {
@@ -226,10 +258,9 @@ scx_bpf_dsq_insert_vtime(struct task_struct *p, u64 dsq_id, u64 slice, u64 vtime
 			.enq_flags = enq_flags,
 		};
 
-		return __scx_bpf_dsq_insert_vtime(p, &args);
+		return scx_bpf_dsq_insert_vtime___v2(p, &args);
 	} else {
-		scx_bpf_dsq_insert_vtime___compat(p, dsq_id, slice, vtime,
-						  enq_flags);
+		scx_bpf_dsq_insert_vtime(p, dsq_id, slice, vtime, enq_flags);
 		return true;
 	}
 }

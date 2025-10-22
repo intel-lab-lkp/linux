@@ -5480,7 +5480,7 @@ struct scx_bpf_dsq_insert_vtime_args {
 };
 
 /**
- * __scx_bpf_dsq_insert_vtime - Arg-wrapped vtime DSQ insertion
+ * scx_bpf_dsq_insert_vtime___v2 - Arg-wrapped vtime DSQ insertion
  * @p: task_struct to insert
  * @args: struct containing the rest of the arguments
  *       @args->dsq_id: DSQ to insert into
@@ -5510,8 +5510,8 @@ struct scx_bpf_dsq_insert_vtime_args {
  * to check the return value.
  */
 __bpf_kfunc bool
-__scx_bpf_dsq_insert_vtime(struct task_struct *p,
-			   struct scx_bpf_dsq_insert_vtime_args *args)
+scx_bpf_dsq_insert_vtime___v2(struct task_struct *p,
+			      struct scx_bpf_dsq_insert_vtime_args *args)
 {
 	struct scx_sched *sch;
 
@@ -5526,7 +5526,7 @@ __scx_bpf_dsq_insert_vtime(struct task_struct *p,
 }
 
 /*
- * COMPAT: Will be removed in v6.23.
+ * COMPAT: Will be removed in v6.23 along with the ___v2 suffix.
  */
 __bpf_kfunc void scx_bpf_dsq_insert_vtime(struct task_struct *p, u64 dsq_id,
 					  u64 slice, u64 vtime, u64 enq_flags)
@@ -5547,7 +5547,7 @@ __bpf_kfunc_end_defs();
 BTF_KFUNCS_START(scx_kfunc_ids_enqueue_dispatch)
 BTF_ID_FLAGS(func, scx_bpf_dsq_insert, KF_RCU)
 BTF_ID_FLAGS(func, scx_bpf_dsq_insert___v2, KF_RCU)
-BTF_ID_FLAGS(func, __scx_bpf_dsq_insert_vtime, KF_RCU)
+BTF_ID_FLAGS(func, scx_bpf_dsq_insert_vtime___v2, KF_RCU)
 BTF_ID_FLAGS(func, scx_bpf_dsq_insert_vtime, KF_RCU)
 BTF_KFUNCS_END(scx_kfunc_ids_enqueue_dispatch)
 
