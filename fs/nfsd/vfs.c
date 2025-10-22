@@ -1217,7 +1217,8 @@ nfsd_vfs_write(struct svc_rqst *rqstp, struct svc_fh *fhp,
 	init_sync_kiocb(&kiocb, file);
 	kiocb.ki_pos = offset;
 	if (stable && !fhp->fh_use_wgather)
-		kiocb.ki_flags |= IOCB_DSYNC;
+		kiocb.ki_flags |=
+			(stable == NFS_FILE_SYNC ? IOCB_SYNC : IOCB_DSYNC);
 
 	nvecs = xdr_buf_to_bvec(rqstp->rq_bvec, rqstp->rq_maxpages, payload);
 	iov_iter_bvec(&iter, ITER_SOURCE, rqstp->rq_bvec, nvecs, *cnt);
