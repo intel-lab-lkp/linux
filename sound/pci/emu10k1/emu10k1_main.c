@@ -1574,10 +1574,10 @@ int snd_emu10k1_create(struct snd_card *card,
 		(unsigned long)emu->ptb_pages.addr,
 		(unsigned long)(emu->ptb_pages.addr + emu->ptb_pages.bytes));
 
-	emu->page_ptr_table = vmalloc(array_size(sizeof(void *),
-						 emu->max_cache_pages));
-	emu->page_addr_table = vmalloc(array_size(sizeof(unsigned long),
-						  emu->max_cache_pages));
+	emu->page_ptr_table = vmalloc_array(emu->max_cache_pages,
+					    sizeof(void *));
+	emu->page_addr_table = vmalloc_array(emu->max_cache_pages,
+					     sizeof(unsigned long));
 	if (!emu->page_ptr_table || !emu->page_addr_table)
 		return -ENOMEM;
 
