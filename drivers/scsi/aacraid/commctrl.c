@@ -493,6 +493,8 @@ static int aac_send_raw_srb(struct aac_dev* dev, void __user * arg)
 	void __user *sg_user[HBA_MAX_SG_EMBEDDED];
 	void *sg_list[HBA_MAX_SG_EMBEDDED];
 	u32 sg_count[HBA_MAX_SG_EMBEDDED];
+	dma_addr_t sg_dma_addr[HBA_MAX_SG_EMBEDDED];
+	int sg_dma_last_mapped = -1;
 	u32 sg_indx = 0;
 	u32 byte_count = 0;
 	u32 actual_fibsize64, actual_fibsize = 0;
@@ -690,6 +692,8 @@ static int aac_send_raw_srb(struct aac_dev* dev, void __user * arg)
 			}
 			addr = dma_map_single(&dev->pdev->dev, p, sg_count[i],
 					      data_dir);
+			sg_dma_addr[i] = addr;
+			sg_dma_last_mapped = i;
 			hbacmd->sge[i].addr_hi = cpu_to_le32((u32)(addr>>32));
 			hbacmd->sge[i].addr_lo = cpu_to_le32(
 						(u32)(addr & 0xffffffff));
@@ -752,6 +756,8 @@ static int aac_send_raw_srb(struct aac_dev* dev, void __user * arg)
 				}
 				addr = dma_map_single(&dev->pdev->dev, p,
 						      sg_count[i], data_dir);
+				sg_dma_addr[i] = addr;
+				sg_dma_last_mapped = i;
 
 				psg->sg[i].addr[0] = cpu_to_le32(addr & 0xffffffff);
 				psg->sg[i].addr[1] = cpu_to_le32(addr>>32);
@@ -808,6 +814,8 @@ static int aac_send_raw_srb(struct aac_dev* dev, void __user * arg)
 				}
 				addr = dma_map_single(&dev->pdev->dev, p,
 						      sg_count[i], data_dir);
+				sg_dma_addr[i] = addr;
+				sg_dma_last_mapped = i;
 
 				psg->sg[i].addr[0] = cpu_to_le32(addr & 0xffffffff);
 				psg->sg[i].addr[1] = cpu_to_le32(addr>>32);
@@ -865,6 +873,8 @@ static int aac_send_raw_srb(struct aac_dev* dev, void __user * arg)
 				addr = dma_map_single(&dev->pdev->dev, p,
 						      usg->sg[i].count,
 						      data_dir);
+				sg_dma_addr[i] = addr;
+				sg_dma_last_mapped = i;
 
 				psg->sg[i].addr = cpu_to_le32(addr & 0xffffffff);
 				byte_count += usg->sg[i].count;
@@ -905,6 +915,8 @@ static int aac_send_raw_srb(struct aac_dev* dev, void __user * arg)
 				}
 				addr = dma_map_single(&dev->pdev->dev, p,
 						      sg_count[i], data_dir);
+				sg_dma_addr[i] = addr;
+				sg_dma_last_mapped = i;
 
 				psg->sg[i].addr = cpu_to_le32(addr);
 				byte_count += sg_count[i];
@@ -986,6 +998,10 @@ static int aac_send_raw_srb(struct aac_dev* dev, void __user * arg)
 cleanup:
 	kfree(user_srbcmd);
 	if (rcode != -ERESTARTSYS) {
+		for (i = 0; i <= sg_dma_last_mapped; i++) {
+			dma_unmap_single(&dev->pdev->dev, sg_dma_addr[i],
+					 sg_count[i], data_dir);
+		}
 		for (i = 0; i <= sg_indx; i++)
 			kfree(sg_list[i]);
 		aac_fib_complete(srbfib);
