@@ -3,6 +3,7 @@
 
 TEST_PROGS := \
 	bond-arp-interval-causes-panic.sh \
+	bond-arp-ip-target.sh \
 	bond-break-lacpdu-tx.sh \
 	bond-eth-type-change.sh \
 	bond-lladdr-target.sh \
