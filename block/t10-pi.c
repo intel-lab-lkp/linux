@@ -17,6 +17,11 @@ struct blk_integrity_iter {
 	void			*data_buf;
 	sector_t		seed;
 	unsigned int		data_size;
+	unsigned int		remaining;
+	union {
+		u64		crc64;
+		__be16		t10pi;
+	};
 	unsigned short		interval;
 	const char		*disk_name;
 };
@@ -38,25 +43,34 @@ static void t10_pi_generate(struct blk_integrity_iter *iter,
 		struct blk_integrity *bi)
 {
 	u8 offset = bi->pi_offset;
-	unsigned int i;
+	unsigned int len, i;
 
-	for (i = 0 ; i < iter->data_size ; i += iter->interval) {
+	for (i = 0 ; i < iter->data_size ; i += len) {
 		struct t10_pi_tuple *pi = iter->prot_buf + offset;
 
-		pi->guard_tag = t10_pi_csum(0, iter->data_buf, iter->interval,
-				bi->csum_type);
-		if (offset)
-			pi->guard_tag = t10_pi_csum(pi->guard_tag,
-					iter->prot_buf, offset, bi->csum_type);
-		pi->app_tag = 0;
+		len = min(iter->remaining, iter->data_size - i);
+		iter->t10pi = t10_pi_csum(iter->t10pi, iter->data_buf, len,
+					  bi->csum_type);
+		iter->remaining -= len;
+		iter->data_buf += len;
 
+		if (iter->remaining)
+			continue;
+
+		if (offset)
+			iter->t10pi = t10_pi_csum(iter->t10pi, iter->prot_buf,
+						  offset, bi->csum_type);
+
+		pi->guard_tag = iter->t10pi;
+		pi->app_tag = 0;
 		if (bi->flags & BLK_INTEGRITY_REF_TAG)
 			pi->ref_tag = cpu_to_be32(lower_32_bits(iter->seed));
 		else
 			pi->ref_tag = 0;
 
-		iter->data_buf += iter->interval;
 		iter->prot_buf += bi->metadata_size;
+		iter->remaining = iter->interval;
+		iter->t10pi = 0;
 		iter->seed++;
 	}
 }
@@ -65,48 +79,61 @@ static blk_status_t t10_pi_verify(struct blk_integrity_iter *iter,
 		struct blk_integrity *bi)
 {
 	u8 offset = bi->pi_offset;
-	unsigned int i;
+	unsigned int len, i;
+	bool skip = false;
 
 	for (i = 0 ; i < iter->data_size ; i += iter->interval) {
 		struct t10_pi_tuple *pi = iter->prot_buf + offset;
-		__be16 csum;
 
-		if (bi->flags & BLK_INTEGRITY_REF_TAG) {
-			if (pi->app_tag == T10_PI_APP_ESCAPE)
-				goto next;
-
-			if (be32_to_cpu(pi->ref_tag) !=
-			    lower_32_bits(iter->seed)) {
-				pr_err("%s: ref tag error at location %llu " \
-				       "(rcvd %u)\n", iter->disk_name,
-				       (unsigned long long)
-				       iter->seed, be32_to_cpu(pi->ref_tag));
-				return BLK_STS_PROTECTION;
+		if (iter->remaining == iter->interval) {
+			if (bi->flags & BLK_INTEGRITY_REF_TAG) {
+				if (pi->app_tag == T10_PI_APP_ESCAPE) {
+					skip = true;
+				} else if (be32_to_cpu(pi->ref_tag) !=
+				    lower_32_bits(iter->seed)) {
+					pr_err("%s: ref tag error at location %llu " \
+					       "(rcvd %u)\n", iter->disk_name,
+					       (unsigned long long)
+					       iter->seed, be32_to_cpu(pi->ref_tag));
+					return BLK_STS_PROTECTION;
+				}
+			} else {
+				if (pi->app_tag == T10_PI_APP_ESCAPE &&
+				    pi->ref_tag == T10_PI_REF_ESCAPE)
+					skip = true;
 			}
-		} else {
-			if (pi->app_tag == T10_PI_APP_ESCAPE &&
-			    pi->ref_tag == T10_PI_REF_ESCAPE)
-				goto next;
 		}
 
-		csum = t10_pi_csum(0, iter->data_buf, iter->interval,
+		len = min(iter->remaining, iter->data_size - i);
+		if (!skip)
+			iter->t10pi = t10_pi_csum(iter->t10pi, iter->data_buf, len,
 				bi->csum_type);
+		iter->remaining -= len;
+		iter->data_buf += len;
+
+		if (iter->remaining)
+			continue;
+
+		if (skip)
+			goto next;
+
 		if (offset)
-			csum = t10_pi_csum(csum, iter->prot_buf, offset,
+			iter->t10pi = t10_pi_csum(iter->t10pi, iter->prot_buf, offset,
 					bi->csum_type);
 
-		if (pi->guard_tag != csum) {
+		if (pi->guard_tag != iter->t10pi) {
 			pr_err("%s: guard tag error at sector %llu " \
 			       "(rcvd %04x, want %04x)\n", iter->disk_name,
 			       (unsigned long long)iter->seed,
-			       be16_to_cpu(pi->guard_tag), be16_to_cpu(csum));
+			       be16_to_cpu(pi->guard_tag), be16_to_cpu(iter->t10pi));
 			return BLK_STS_PROTECTION;
 		}
-
 next:
-		iter->data_buf += iter->interval;
 		iter->prot_buf += bi->metadata_size;
+		iter->remaining = iter->interval;
+		iter->t10pi = 0;
 		iter->seed++;
+		skip = false;
 	}
 
 	return BLK_STS_OK;
@@ -208,24 +235,33 @@ static void t10_pi_type1_complete(struct request *rq, unsigned int nr_bytes)
 	}
 }
 
-static __be64 ext_pi_crc64(u64 crc, void *data, unsigned int len)
+static u64 ext_pi_crc64(u64 crc, void *data, unsigned int len)
 {
-	return cpu_to_be64(crc64_nvme(crc, data, len));
+	return crc64_nvme(crc, data, len);
 }
 
 static void ext_pi_crc64_generate(struct blk_integrity_iter *iter,
 		struct blk_integrity *bi)
 {
 	u8 offset = bi->pi_offset;
-	unsigned int i;
+	unsigned int len, i;
 
-	for (i = 0 ; i < iter->data_size ; i += iter->interval) {
+	for (i = 0 ; i < iter->data_size ; i += len) {
 		struct crc64_pi_tuple *pi = iter->prot_buf + offset;
 
-		pi->guard_tag = ext_pi_crc64(0, iter->data_buf, iter->interval);
+		len = min(iter->remaining, iter->data_size - i);
+		iter->crc64 = ext_pi_crc64(iter->crc64, iter->data_buf, len);
+		iter->remaining -= len;
+		iter->data_buf += len;
+
+		if (iter->remaining)
+			continue;
+
 		if (offset)
-			pi->guard_tag = ext_pi_crc64(be64_to_cpu(pi->guard_tag),
-					iter->prot_buf, offset);
+			iter->crc64 = ext_pi_crc64(iter->crc64, iter->prot_buf,
+						offset);
+
+		pi->guard_tag = cpu_to_be64(iter->crc64);
 		pi->app_tag = 0;
 
 		if (bi->flags & BLK_INTEGRITY_REF_TAG)
@@ -233,8 +269,9 @@ static void ext_pi_crc64_generate(struct blk_integrity_iter *iter,
 		else
 			put_unaligned_be48(0ULL, pi->ref_tag);
 
-		iter->data_buf += iter->interval;
 		iter->prot_buf += bi->metadata_size;
+		iter->remaining = iter->interval;
+		iter->crc64 = 0;
 		iter->seed++;
 	}
 }
@@ -250,47 +287,64 @@ static blk_status_t ext_pi_crc64_verify(struct blk_integrity_iter *iter,
 		struct blk_integrity *bi)
 {
 	u8 offset = bi->pi_offset;
-	unsigned int i;
+	unsigned int len, i;
+	bool skip = false;
 
-	for (i = 0; i < iter->data_size; i += iter->interval) {
+	for (i = 0; i < iter->data_size; i += len) {
 		struct crc64_pi_tuple *pi = iter->prot_buf + offset;
-		u64 ref, seed;
-		__be64 csum;
 
-		if (bi->flags & BLK_INTEGRITY_REF_TAG) {
-			if (pi->app_tag == T10_PI_APP_ESCAPE)
-				goto next;
+		if (iter->remaining == iter->interval) {
+			if (bi->flags & BLK_INTEGRITY_REF_TAG) {
+				if (pi->app_tag == T10_PI_APP_ESCAPE) {
+					skip = true;
+				} else {
+					u64 ref, seed;
 
-			ref = get_unaligned_be48(pi->ref_tag);
-			seed = lower_48_bits(iter->seed);
-			if (ref != seed) {
-				pr_err("%s: ref tag error at location %llu (rcvd %llu)\n",
-					iter->disk_name, seed, ref);
-				return BLK_STS_PROTECTION;
+					ref = get_unaligned_be48(pi->ref_tag);
+					seed = lower_48_bits(iter->seed);
+					if (ref != seed) {
+						pr_err("%s: ref tag error at location %llu (rcvd %llu)\n",
+							iter->disk_name, seed, ref);
+						return BLK_STS_PROTECTION;
+					}
+				}
+			} else {
+				if (pi->app_tag == T10_PI_APP_ESCAPE &&
+				    ext_pi_ref_escape(pi->ref_tag))
+					skip = true;
 			}
-		} else {
-			if (pi->app_tag == T10_PI_APP_ESCAPE &&
-			    ext_pi_ref_escape(pi->ref_tag))
-				goto next;
 		}
 
-		csum = ext_pi_crc64(0, iter->data_buf, iter->interval);
-		if (offset)
-			csum = ext_pi_crc64(be64_to_cpu(csum), iter->prot_buf,
-					    offset);
+		len = min(iter->remaining, iter->data_size - i);
+		if (!skip)
+			iter->crc64 = ext_pi_crc64(iter->crc64, iter->data_buf, len);
+		iter->remaining -= len;
+		iter->data_buf += len;
 
-		if (pi->guard_tag != csum) {
+		if (iter->remaining)
+			continue;
+
+		if (skip)
+			goto next;
+
+		if (offset)
+			iter->crc64 = ext_pi_crc64(iter->crc64, iter->prot_buf,
+						   offset);
+
+		if (be64_to_cpu(pi->guard_tag) != iter->crc64) {
 			pr_err("%s: guard tag error at sector %llu " \
 			       "(rcvd %016llx, want %016llx)\n",
 				iter->disk_name, (unsigned long long)iter->seed,
-				be64_to_cpu(pi->guard_tag), be64_to_cpu(csum));
+				be64_to_cpu(pi->guard_tag), iter->crc64);
 			return BLK_STS_PROTECTION;
 		}
 
 next:
-		iter->data_buf += iter->interval;
 		iter->prot_buf += bi->metadata_size;
+		iter->remaining = iter->interval;
+		iter->crc64 = 0;
 		iter->seed++;
+		skip = false;
 	}
 
 	return BLK_STS_OK;
@@ -381,9 +435,10 @@ void blk_integrity_generate(struct bio *bio)
 	struct bio_vec bv;
 
 	iter.disk_name = bio->bi_bdev->bd_disk->disk_name;
-	iter.interval = 1 << bi->interval_exp;
+	iter.remaining = iter.interval = 1 << bi->interval_exp;
 	iter.seed = bio->bi_iter.bi_sector;
 	iter.prot_buf = bvec_virt(bip->bip_vec);
+	iter.crc64 = 0;
 	bio_for_each_segment(bv, bio, bviter) {
 		void *kaddr = bvec_kmap_local(&bv);
 
@@ -417,9 +472,10 @@ void blk_integrity_verify_iter(struct bio *bio, struct bvec_iter *saved_iter)
 	 * and completion, so use the copy created during submission here.
 	 */
 	iter.disk_name = bio->bi_bdev->bd_disk->disk_name;
-	iter.interval = 1 << bi->interval_exp;
+	iter.remaining = iter.interval = 1 << bi->interval_exp;
 	iter.seed = saved_iter->bi_sector;
 	iter.prot_buf = bvec_virt(bip->bip_vec);
+	iter.crc64 = 0;
 	__bio_for_each_segment(bv, bio, bviter, *saved_iter) {
 		void *kaddr = bvec_kmap_local(&bv);
 		blk_status_t ret = BLK_STS_OK;
