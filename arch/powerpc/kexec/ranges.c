@@ -515,7 +515,7 @@ out:
  */
 int get_usable_memory_ranges(struct crash_mem **mem_ranges)
 {
-	int ret;
+	int ret, i;
 
 	/*
 	 * Early boot failure observed on guests when low memory (first memory
@@ -527,6 +527,13 @@ int get_usable_memory_ranges(struct crash_mem **mem_ranges)
 	ret = add_mem_range(mem_ranges, 0, crashk_res.end + 1);
 	if (ret)
 		goto out;
+
+	for (i = 0; i < crashk_cma_cnt; i++) {
+		ret = add_mem_range(mem_ranges, crashk_cma_ranges[i].start,
+				    crashk_cma_ranges[i].end);
+		if (ret)
+			goto out;
+	}
 
 	ret = add_rtas_mem_range(mem_ranges);
 	if (ret)
@@ -594,6 +601,13 @@ int get_crash_memory_ranges(struct crash_mem **mem_ranges)
 	ret = crash_exclude_mem_range(tmem, crashk_res.start, crashk_res.end);
 	if (ret)
 		goto out;
+
+	for (i = 0; i < crashk_cma_cnt; ++i) {
+		ret = crash_exclude_mem_range(tmem, crashk_cma_ranges[i].start,
+					      crashk_cma_ranges[i].end);
+		if (ret)
+			goto out;
+	}
 
 	/*
 	 * FIXME: For now, stay in parity with kexec-tools but if RTAS/OPAL
