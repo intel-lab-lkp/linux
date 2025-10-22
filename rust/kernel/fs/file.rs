@@ -15,7 +15,147 @@ use crate::{
     sync::aref::{ARef, AlwaysRefCounted},
     types::{NotThreadSafe, Opaque},
 };
-use core::ptr;
+use core::{num::TryFromIntError, ptr};
+
+/// Representation of an offset within a [`File`].
+///
+/// Transparent wrapper around `bindings::loff_t`.
+#[repr(transparent)]
+#[derive(Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Default)]
+pub struct Offset(bindings::loff_t);
+
+impl Offset {
+    /// The largest value that can be represented by this type.
+    pub const MAX: Self = Self(bindings::loff_t::MAX);
+
+    /// The smallest value that can be represented by this type.
+    pub const MIN: Self = Self(bindings::loff_t::MIN);
+
+    /// Create a mutable [`Offset`] reference from the raw `*mut bindings::loff_t`.
+    ///
+    /// # Safety
+    ///
+    /// - `offset` must be a valid pointer to a `bindings::loff_t`.
+    /// - The caller must guarantee exclusive access to `offset`.
+    #[inline]
+    pub const unsafe fn from_raw<'a>(offset: *mut bindings::loff_t) -> &'a mut Self {
+        // SAFETY: By the safety requirements of this function
+        // - `offset` is a valid pointer to a `bindings::loff_t`,
+        // - we have exclusive access to `offset`.
+        unsafe { &mut *offset.cast() }
+    }
+
+    /// Returns `true` if the [`Offset`] is negative.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use kernel::fs::file::Offset;
+    ///
+    /// let offset = Offset::from(1);
+    /// assert!(!offset.is_negative());
+    ///
+    /// let offset = Offset::from(-1);
+    /// assert!(offset.is_negative());
+    /// ```
+    #[inline]
+    pub const fn is_negative(self) -> bool {
+        self.0.is_negative()
+    }
+
+    /// Saturating addition with another [`Offset`].
+    #[inline]
+    pub fn saturating_add(self, rhs: Offset) -> Offset {
+        Self(self.0.saturating_add(rhs.0))
+    }
+
+    /// Saturating addition with a [`usize`].
+    ///
+    /// If the [`usize`] fits in `bindings::loff_t` it is converted and added; otherwise the result
+    /// saturates to [`Offset::MAX`].
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use kernel::fs::file::Offset;
+    ///
+    /// let offset = Offset::from(40);
+    ///
+    /// let offset = offset.saturating_add_usize(2);
+    /// assert_eq!(offset, Offset::from(42));
+    ///
+    /// let offset = Offset::MAX.saturating_sub_usize(1);
+    /// let offset = offset.saturating_add_usize(usize::MAX);
+    /// assert_eq!(offset, Offset::MAX);
+    /// ```
+    pub fn saturating_add_usize(self, rhs: usize) -> Offset {
+        match bindings::loff_t::try_from(rhs) {
+            Ok(rhs_loff) => Self(self.0.saturating_add(rhs_loff)),
+            Err(_) => Self::MAX,
+        }
+    }
+
+    /// Saturating subtraction with another [`Offset`].
+    #[inline]
+    pub fn saturating_sub(self, rhs: Offset) -> Offset {
+        Offset(self.0.saturating_sub(rhs.0))
+    }
+
+    /// Saturating subtraction with a [`usize`].
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use kernel::fs::file::Offset;
+    ///
+    /// let offset = Offset::from(100);
+    /// let offset = offset.saturating_sub_usize(58);
+    /// assert_eq!(offset, Offset::from(42));
+    ///
+    /// let offset = Offset::MIN.saturating_add_usize(1);
+    /// let offset = offset.saturating_sub_usize(usize::MAX);
+    /// assert_eq!(offset, Offset::MIN);
+    /// ```
+    #[inline]
+    pub fn saturating_sub_usize(self, rhs: usize) -> Offset {
+        match bindings::loff_t::try_from(rhs) {
+            Ok(rhs_loff) => Offset(self.0.saturating_sub(rhs_loff)),
+            Err(_) => Self::MIN,
+        }
+    }
+}
+
+impl From<bindings::loff_t> for Offset {
+    #[inline]
+    fn from(v: bindings::loff_t) -> Self {
+        Self(v)
+    }
+}
+
+impl From<Offset> for bindings::loff_t {
+    #[inline]
+    fn from(offset: Offset) -> Self {
+        offset.0
+    }
+}
+
+impl TryFrom<usize> for Offset {
+    type Error = TryFromIntError;
+
+    #[inline]
+    fn try_from(u: usize) -> Result<Self, Self::Error> {
+        Ok(Self(bindings::loff_t::try_from(u)?))
+    }
+}
+
+impl TryFrom<Offset> for usize {
+    type Error = TryFromIntError;
+
+    #[inline]
+    fn try_from(offset: Offset) -> Result<Self, Self::Error> {
+        usize::try_from(offset.0)
+    }
+}
 
 /// Flags associated with a [`File`].
 pub mod flags {
