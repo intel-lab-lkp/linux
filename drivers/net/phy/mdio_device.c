@@ -170,6 +170,19 @@ void mdio_device_remove(struct mdio_device *mdiodev)
 }
 EXPORT_SYMBOL(mdio_device_remove);
 
+/**
+ * mdio_device_has_reset - Check if an MDIO device has reset properties defined
+ * @mdiodev: mdio_device structure
+ *
+ * Return: non-zero if the device has a reset GPIO or reset controller,
+ *         zero otherwise.
+ */
+int mdio_device_has_reset(struct mdio_device *mdiodev)
+{
+	return (mdiodev->reset_gpio || mdiodev->reset_ctrl);
+}
+EXPORT_SYMBOL(mdio_device_has_reset);
+
 void mdio_device_reset(struct mdio_device *mdiodev, int value)
 {
 	unsigned int d;
