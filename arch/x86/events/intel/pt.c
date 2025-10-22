@@ -1148,7 +1148,8 @@ static int pt_buffer_reset_markers(struct pt_buffer *buf,
 	if (idx != buf->stop_pos) {
 		buf->stop_pos = idx;
 		buf->stop_te = pt_topa_entry_for_page(buf, idx);
-		buf->stop_te = pt_topa_prev_entry(buf, buf->stop_te);
+		if (buf->stop_te)
+			buf->stop_te = pt_topa_prev_entry(buf, buf->stop_te);
 	}
 
 	wakeup = handle->wakeup >> PAGE_SHIFT;
@@ -1162,12 +1163,16 @@ static int pt_buffer_reset_markers(struct pt_buffer *buf,
 	if (idx != buf->intr_pos) {
 		buf->intr_pos = idx;
 		buf->intr_te = pt_topa_entry_for_page(buf, idx);
-		buf->intr_te = pt_topa_prev_entry(buf, buf->intr_te);
+		if (buf->intr_te)
+			buf->intr_te = pt_topa_prev_entry(buf, buf->intr_te);
 	}
 
-	buf->stop_te->stop = 1;
-	buf->stop_te->intr = 1;
-	buf->intr_te->intr = 1;
+	if (buf->stop_te) {
+		buf->stop_te->stop = 1;
+		buf->stop_te->intr = 1;
+	}
+	if (buf->intr_te)
+		buf->intr_te->intr = 1;
 
 	return 0;
 }
