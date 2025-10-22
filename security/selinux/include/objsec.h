@@ -202,16 +202,6 @@ selinux_ipc(const struct kern_ipc_perm *ipc)
 	return ipc->security + selinux_blob_sizes.lbs_ipc;
 }
 
-/*
- * get the subjective security ID of the current task
- */
-static inline u32 current_sid(void)
-{
-	const struct task_security_struct *tsec = selinux_cred(current_cred());
-
-	return tsec->sid;
-}
-
 static inline struct superblock_security_struct *
 selinux_superblock(const struct super_block *superblock)
 {
@@ -265,4 +255,6 @@ selinux_bpf_token_security(struct bpf_token *token)
 	return token->security + selinux_blob_sizes.lbs_bpf_token;
 }
 #endif /* CONFIG_BPF_SYSCALL */
+
+u32 current_sid(void);
 #endif /* _SELINUX_OBJSEC_H_ */
