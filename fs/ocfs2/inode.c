@@ -1459,6 +1459,12 @@ int ocfs2_validate_inode_block(struct super_block *sb,
 		goto bail;
 	}
 
+	if (unlikely(le16_to_cpu(di->i_mode) == 0)) {
+		mlog(ML_ERROR, "Invalid dinode #%llu: i_mode is zero!\n",
+                           (unsigned long long)bh->b_blocknr);
+		rc = -EFSCORRUPTED;
+		goto bail;
+	}
 	/*
 	 * Errors after here are fatal.
 	 */
