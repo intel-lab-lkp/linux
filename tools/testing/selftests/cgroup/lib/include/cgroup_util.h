@@ -18,7 +18,7 @@
 #define CG_PATH_FORMAT (!cg_test_v1_named ? "0::%s" : (":name=" CG_NAMED_NAME ":%s"))
 
 int check_tolerance(long a, long b, int err);
-int values_close_report(long a, long b, int err);
+int report_metrics(long a, long b, int err, const char *test_name);
 
 extern ssize_t read_text(const char *path, char *buf, size_t max_len);
 extern ssize_t write_text(const char *path, char *buf, ssize_t len);

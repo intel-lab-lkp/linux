@@ -22,13 +22,13 @@
 
 bool cg_test_v1_named;
 
-static bool metric_mode = false;
+static bool metrics_mode = false;
 
 __attribute__((constructor))
 static void init_metric_mode(void)
 {
     char *env = getenv("CGROUP_TEST_METRICS");
-    metric_mode = (env && atoi(env));
+    metrics_mode = (env && atoi(env));
 }
 
 /*
@@ -40,21 +40,20 @@ int check_tolerance(long a, long b, int err)
 }
 
 /*
- * Checks if two given values differ by less than err% of their sum and assert
- * with detailed debug info if not.
+ * Report detailed metrics if metrics_mode is enabled.
  */
-int values_close_report(long a, long b, int err)
+int report_metrics(long a, long b, int err, const char *test_name)
 {
 	long diff  = labs(a - b);
 	long limit = (a + b) / 100 * err;
 	double actual_err = (a + b) ? (100.0 * diff / (a + b)) : 0.0;
 	int close = diff <= limit;
 
-	if (metric_mode || !close)
+	if (metrics_mode)
 		fprintf(stderr,
-			"[METRICS] actual=%ld expected=%ld | diff=%ld | limit=%ld | "
+			"[METRICS: %s] actual=%ld expected=%ld | diff=%ld | limit=%ld | "
 			"tolerance=%d%% | actual_error=%.2f%%\n",
-			a, b, diff, limit, err, actual_err);
+			test_name, a, b, diff, limit, err, actual_err);
 
 	return close;
 }

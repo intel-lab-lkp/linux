@@ -187,6 +187,7 @@ static int test_cpucg_stats(const char *root)
 	int ret = KSFT_FAIL;
 	long usage_usec, user_usec, system_usec;
 	long usage_seconds = 2;
+	int error_margin = 1;
 	long expected_usage_usec = usage_seconds * USEC_PER_SEC;
 	char *cpucg;
 
@@ -219,7 +220,8 @@ static int test_cpucg_stats(const char *root)
 	if (user_usec <= 0)
 		goto cleanup;
 
-	if (!values_close_report(usage_usec, expected_usage_usec, 1))
+	report_metrics(usage_usec, expected_usage_usec, error_margin, __func__);
+	if (!check_tolerance(usage_usec, expected_usage_usec, error_margin))
 		goto cleanup;
 
 	ret = KSFT_PASS;
@@ -241,6 +243,7 @@ static int test_cpucg_nice(const char *root)
 	int status;
 	long user_usec, nice_usec;
 	long usage_seconds = 2;
+	int error_margin = 1;
 	long expected_nice_usec = usage_seconds * USEC_PER_SEC;
 	char *cpucg;
 	pid_t pid;
@@ -291,7 +294,8 @@ static int test_cpucg_nice(const char *root)
 
 		user_usec = cg_read_key_long(cpucg, "cpu.stat", "user_usec");
 		nice_usec = cg_read_key_long(cpucg, "cpu.stat", "nice_usec");
-		if (!values_close_report(nice_usec, expected_nice_usec, 1))
+		report_metrics(nice_usec, expected_nice_usec, error_margin, __func__);
+		if (!check_tolerance(nice_usec, expected_nice_usec, error_margin))
 			goto cleanup;
 
 		ret = KSFT_PASS;
@@ -395,6 +399,7 @@ static pid_t weight_hog_all_cpus(const struct cpu_hogger *child)
 static int
 overprovision_validate(const struct cpu_hogger *children, int num_children)
 {
+	int error_margin = 35;
 	int ret = KSFT_FAIL, i;
 
 	for (i = 0; i < num_children - 1; i++) {
@@ -404,7 +409,8 @@ overprovision_validate(const struct cpu_hogger *children, int num_children)
 			goto cleanup;
 
 		delta = children[i + 1].usage - children[i].usage;
-		if (!values_close_report(delta, children[0].usage, 35))
+		report_metrics(delta, children[0].usage, error_margin, __func__);
+		if (!check_tolerance(delta, children[0].usage, error_margin))
 			goto cleanup;
 	}
 
@@ -441,10 +447,12 @@ static pid_t weight_hog_one_cpu(const struct cpu_hogger *child)
 static int
 underprovision_validate(const struct cpu_hogger *children, int num_children)
 {
+	int error_margin = 15;
 	int ret = KSFT_FAIL, i;
 
 	for (i = 0; i < num_children - 1; i++) {
-		if (!values_close_report(children[i + 1].usage, children[0].usage, 15))
+		report_metrics(children[i + 1].usage, children[0].usage, error_margin, __func__);
+		if (!check_tolerance(children[i + 1].usage, children[0].usage, error_margin))
 			goto cleanup;
 	}
 
@@ -573,16 +581,20 @@ run_cpucg_nested_weight_test(const char *root, bool overprovisioned)
 
 	nested_leaf_usage = leaf[1].usage + leaf[2].usage;
 	if (overprovisioned) {
-		if (!values_close_report(leaf[0].usage, nested_leaf_usage, 15))
+		report_metrics(leaf[0].usage, nested_leaf_usage, 15, __func__);
+		if (!check_tolerance(leaf[0].usage, nested_leaf_usage, 15))
 			goto cleanup;
-	} else if (!values_close_report(leaf[0].usage * 2, nested_leaf_usage, 15))
-		goto cleanup;
-
+	} else {
+		report_metrics(leaf[0].usage * 2, nested_leaf_usage, 15, __func__);
+		if (!check_tolerance(leaf[0].usage * 2, nested_leaf_usage, 15))
+			goto cleanup;
+	}
 
 	child_usage = cg_read_key_long(child, "cpu.stat", "usage_usec");
 	if (child_usage <= 0)
 		goto cleanup;
-	if (!values_close_report(child_usage, nested_leaf_usage, 1))
+	report_metrics(child_usage, nested_leaf_usage, 1, __func__);
+	if (!check_tolerance(child_usage, nested_leaf_usage, 1))
 		goto cleanup;
 
 	ret = KSFT_PASS;
@@ -649,6 +661,7 @@ static int test_cpucg_max(const char *root)
 	long quota_usec = 1000;
 	long default_period_usec = 100000; /* cpu.max's default period */
 	long duration_seconds = 1;
+	int error_margin = 10;
 
 	long duration_usec = duration_seconds * USEC_PER_SEC;
 	long usage_usec, n_periods, remainder_usec, expected_usage_usec;
@@ -691,7 +704,8 @@ static int test_cpucg_max(const char *root)
 	expected_usage_usec
 		= n_periods * quota_usec + MIN(remainder_usec, quota_usec);
 
-	if (!values_close_report(usage_usec, expected_usage_usec, 10))
+	report_metrics(usage_usec, expected_usage_usec, error_margin, __func__);
+	if (!check_tolerance(usage_usec, expected_usage_usec, error_margin))
 		goto cleanup;
 
 	ret = KSFT_PASS;
@@ -713,6 +727,7 @@ static int test_cpucg_max_nested(const char *root)
 	long quota_usec = 1000;
 	long default_period_usec = 100000; /* cpu.max's default period */
 	long duration_seconds = 1;
+	int error_margin = 10;
 
 	long duration_usec = duration_seconds * USEC_PER_SEC;
 	long usage_usec, n_periods, remainder_usec, expected_usage_usec;
@@ -762,7 +777,8 @@ static int test_cpucg_max_nested(const char *root)
 	expected_usage_usec
 		= n_periods * quota_usec + MIN(remainder_usec, quota_usec);
 
-	if (!values_close_report(usage_usec, expected_usage_usec, 10))
+	report_metrics(usage_usec, expected_usage_usec, error_margin, __func__);
+	if (!check_tolerance(usage_usec, expected_usage_usec, error_margin))
 		goto cleanup;
 
 	ret = KSFT_PASS;
