@@ -390,6 +390,7 @@ attribute-sets:
         name: supported-commands
         type: indexed-array
         sub-type: u32
+        ignore-index: true
         enum: commands
       -
         name: frame
@@ -608,6 +609,7 @@ attribute-sets:
         name: interface-combinations
         type: indexed-array
         sub-type: nest
+        ignore-index: true
         nested-attributes: if-combination-attributes
       -
         name: software-iftypes
@@ -1307,11 +1309,13 @@ attribute-sets:
         name: freqs
         type: indexed-array
         sub-type: nest
+        ignore-index: true
         nested-attributes: frequency-attrs
       -
         name: rates
         type: indexed-array
         sub-type: nest
+        ignore-index: true
         nested-attributes: bitrate-attrs
       -
         name: ht-mcs-set
@@ -1335,6 +1339,7 @@ attribute-sets:
         name: iftype-data
         type: indexed-array
         sub-type: nest
+        ignore-index: true
         nested-attributes: iftype-data-attrs
       -
         name: edmg-channels
@@ -1418,6 +1423,7 @@ attribute-sets:
         name: wmm
         type: indexed-array
         sub-type: nest
+        ignore-index: true
         nested-attributes: wmm-attrs
       -
         name: no-he
@@ -1474,6 +1480,7 @@ attribute-sets:
         name: limits
         type: indexed-array
         sub-type: nest
+        ignore-index: true
         nested-attributes: iface-limit-attributes
       -
         name: maxnum
@@ -1613,6 +1620,7 @@ attribute-sets:
         name: specs
         type: indexed-array
         sub-type: nest
+        ignore-index: true
         nested-attributes: sar-specs
   -
     name: sar-specs
