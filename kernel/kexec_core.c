@@ -41,6 +41,7 @@
 #include <linux/objtool.h>
 #include <linux/kmsg_dump.h>
 #include <linux/dma-map-ops.h>
+#include <uapi/linux/sched/types.h>
 
 #include <asm/page.h>
 #include <asm/sections.h>
@@ -1182,6 +1183,20 @@ int kernel_kexec(void)
 	} else
 #endif
 	{
+		struct sched_attr attr = {
+			.size		= sizeof(struct sched_attr),
+			.sched_policy	= SCHED_DEADLINE,
+			.sched_nice	= 0,
+			.sched_priority	= 0,
+			/*
+			 * Fake (unused) bandwidth; workaround to "fix"
+			 * priority inheritance.
+			 */
+			.sched_runtime	= NSEC_PER_MSEC,
+			.sched_deadline = 10 * NSEC_PER_MSEC,
+			.sched_period	= 10 * NSEC_PER_MSEC,
+		};
+
 		/*
 		 * CPU hot-removal path refers to kexec_in_progress, it
 		 * requires a sync to ensure no in-flight hot-removing.
@@ -1201,6 +1216,13 @@ int kernel_kexec(void)
 		 */
 		cpu_hotplug_enable();
 		pr_notice("Starting new kernel\n");
+		/*
+		 * During hot-removing cpu, all DL tasks will be migrated to
+		 * this cpu.  To prevent this task from starving, promoting it
+		 * to DL task. And soon, local interrupt will be disabled in
+		 * machine_kexec().
+		 */
+		sched_setattr_nocheck(current, &attr);
 		machine_shutdown();
 	}
 
