@@ -51,17 +51,6 @@
 	((void *) &((struct usnic_uiom_chunk *) 0)->page_list[1] -	\
 	(void *) &((struct usnic_uiom_chunk *) 0)->page_list[0]))
 
-static int usnic_uiom_dma_fault(struct iommu_domain *domain,
-				struct device *dev,
-				unsigned long iova, int flags,
-				void *token)
-{
-	usnic_err("Device %s iommu fault domain 0x%p va 0x%lx flags 0x%x\n",
-		dev_name(dev),
-		domain, iova, flags);
-	return -ENOSYS;
-}
-
 static void usnic_uiom_put_pages(struct list_head *chunk_list, int dirty)
 {
 	struct usnic_uiom_chunk *chunk, *tmp;
@@ -449,8 +438,6 @@ struct usnic_uiom_pd *usnic_uiom_alloc_pd(struct device *dev)
 		kfree(pd);
 		return ERR_CAST(domain);
 	}
-
-	iommu_set_fault_handler(pd->domain, usnic_uiom_dma_fault, NULL);
 
 	spin_lock_init(&pd->lock);
 	INIT_LIST_HEAD(&pd->devs);
