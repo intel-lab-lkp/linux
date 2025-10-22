@@ -17,7 +17,7 @@
 #define CG_NAMED_NAME "selftest"
 #define CG_PATH_FORMAT (!cg_test_v1_named ? "0::%s" : (":name=" CG_NAMED_NAME ":%s"))
 
-int values_close(long a, long b, int err);
+int check_tolerance(long a, long b, int err);
 int values_close_report(long a, long b, int err);
 
 extern ssize_t read_text(const char *path, char *buf, size_t max_len);

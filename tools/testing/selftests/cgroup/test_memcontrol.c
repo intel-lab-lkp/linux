@@ -188,14 +188,14 @@ static int alloc_anon_50M_check(const char *cgroup, void *arg)
 	if (current < size)
 		goto cleanup;
 
-	if (!values_close(size, current, 3))
+	if (!check_tolerance(size, current, 3))
 		goto cleanup;
 
 	anon = cg_read_key_long(cgroup, "memory.stat", "anon ");
 	if (anon < 0)
 		goto cleanup;
 
-	if (!values_close(anon, current, 3))
+	if (!check_tolerance(anon, current, 3))
 		goto cleanup;
 
 	ret = 0;
@@ -226,7 +226,7 @@ static int alloc_pagecache_50M_check(const char *cgroup, void *arg)
 	if (file < 0)
 		goto cleanup;
 
-	if (!values_close(file, current, 10))
+	if (!check_tolerance(file, current, 10))
 		goto cleanup;
 
 	ret = 0;
@@ -558,7 +558,7 @@ static int test_memcg_protection(const char *root, bool min)
 		goto cleanup;
 
 	attempts = 0;
-	while (!values_close(cg_read_long(parent[1], "memory.current"),
+	while (!check_tolerance(cg_read_long(parent[1], "memory.current"),
 			     MB(150), 3)) {
 		if (attempts++ > 5)
 			break;
@@ -568,16 +568,16 @@ static int test_memcg_protection(const char *root, bool min)
 	if (cg_run(parent[2], alloc_anon, (void *)MB(148)))
 		goto cleanup;
 
-	if (!values_close(cg_read_long(parent[1], "memory.current"), MB(50), 3))
+	if (!check_tolerance(cg_read_long(parent[1], "memory.current"), MB(50), 3))
 		goto cleanup;
 
 	for (i = 0; i < ARRAY_SIZE(children); i++)
 		c[i] = cg_read_long(children[i], "memory.current");
 
-	if (!values_close(c[0], MB(29), 15))
+	if (!check_tolerance(c[0], MB(29), 15))
 		goto cleanup;
 
-	if (!values_close(c[1], MB(21), 20))
+	if (!check_tolerance(c[1], MB(21), 20))
 		goto cleanup;
 
 	if (c[3] != 0)
@@ -593,7 +593,7 @@ static int test_memcg_protection(const char *root, bool min)
 	}
 
 	current = min ? MB(50) : MB(30);
-	if (!values_close(cg_read_long(parent[1], "memory.current"), current, 3))
+	if (!check_tolerance(cg_read_long(parent[1], "memory.current"), current, 3))
 		goto cleanup;
 
 	if (!reclaim_until(children[0], MB(10)))
@@ -681,7 +681,7 @@ static int alloc_pagecache_max_30M(const char *cgroup, void *arg)
 		goto cleanup;
 
 	current = cg_read_long(cgroup, "memory.current");
-	if (!values_close(current, MB(30), 5))
+	if (!check_tolerance(current, MB(30), 5))
 		goto cleanup;
 
 	ret = 0;
@@ -893,7 +893,7 @@ static bool reclaim_until(const char *memcg, long goal)
 	for (retries = 5; retries > 0; retries--) {
 		current = cg_read_long(memcg, "memory.current");
 
-		if (current < goal || values_close(current, goal, 3))
+		if (current < goal || check_tolerance(current, goal, 3))
 			break;
 		/* Did memory.reclaim return 0 incorrectly? */
 		else if (reclaimed)
@@ -954,7 +954,7 @@ static int test_memcg_reclaim(const char *root)
 	 * retries).
 	 */
 	retries = 5;
-	while (!values_close(cg_read_long(memcg, "memory.current"),
+	while (!check_tolerance(cg_read_long(memcg, "memory.current"),
 			    expected_usage, 10)) {
 		if (retries--) {
 			sleep(1);
@@ -1001,12 +1001,12 @@ static int alloc_anon_50M_check_swap(const char *cgroup, void *arg)
 		*ptr = 0;
 
 	mem_current = cg_read_long(cgroup, "memory.current");
-	if (!mem_current || !values_close(mem_current, mem_max, 3))
+	if (!mem_current || !check_tolerance(mem_current, mem_max, 3))
 		goto cleanup;
 
 	swap_current = cg_read_long(cgroup, "memory.swap.current");
 	if (!swap_current ||
-	    !values_close(mem_current + swap_current, size, 3))
+	    !check_tolerance(mem_current + swap_current, size, 3))
 		goto cleanup;
 
 	ret = 0;
@@ -1358,7 +1358,7 @@ static int tcp_client(const char *cgroup, unsigned short port)
 			goto close_sk;
 
 		/* exclude the memory not related to socket connection */
-		if (values_close(current - allocated, sock, 10)) {
+		if (check_tolerance(current - allocated, sock, 10)) {
 			ret = KSFT_PASS;
 			break;
 		}

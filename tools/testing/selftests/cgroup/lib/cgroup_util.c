@@ -34,7 +34,7 @@ static void init_metric_mode(void)
 /*
  * Checks if two given values differ by less than err% of their sum.
  */
-int values_close(long a, long b, int err)
+int check_tolerance(long a, long b, int err)
 {
 	return labs(a - b) <= (a + b) / 100 * err;
 }

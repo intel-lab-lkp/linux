@@ -126,7 +126,7 @@ static int hugetlb_test_program(const char *cgroup, void *arg)
 	check_first(addr);
 	expected_current = old_current + MB(2);
 	current = cg_read_long(test_group, "memory.current");
-	if (!values_close(expected_current, current, 5)) {
+	if (!check_tolerance(expected_current, current, 5)) {
 		ksft_print_msg("memory usage should increase by around 2MB.\n");
 		ksft_print_msg(
 			"expected memory: %ld, actual memory: %ld\n",
@@ -138,7 +138,7 @@ static int hugetlb_test_program(const char *cgroup, void *arg)
 	write_data(addr);
 	current = cg_read_long(test_group, "memory.current");
 	expected_current = old_current + MB(8);
-	if (!values_close(expected_current, current, 5)) {
+	if (!check_tolerance(expected_current, current, 5)) {
 		ksft_print_msg("memory usage should increase by around 8MB.\n");
 		ksft_print_msg(
 			"expected memory: %ld, actual memory: %ld\n",
@@ -150,7 +150,7 @@ static int hugetlb_test_program(const char *cgroup, void *arg)
 	munmap(addr, LENGTH);
 	current = cg_read_long(test_group, "memory.current");
 	expected_current = old_current;
-	if (!values_close(expected_current, current, 5)) {
+	if (!check_tolerance(expected_current, current, 5)) {
 		ksft_print_msg("memory usage should go back down.\n");
 		ksft_print_msg(
 			"expected memory: %ld, actual memory: %ld\n",
