@@ -269,7 +269,14 @@ static struct rds_connection *__rds_conn_create(struct net *net,
 		__rds_conn_path_init(conn, &conn->c_path[i],
 				     is_outgoing);
 		conn->c_path[i].cp_index = i;
-		conn->c_path[i].cp_wq = rds_wq;
+		conn->c_path[i].cp_wq = alloc_ordered_workqueue("krds_cp_wq#%lu/%d", 0,
+								rds_conn_count, i);
+		if (!conn->c_path[i].cp_wq) {
+			while (--i >= 0)
+				destroy_workqueue(conn->c_path[i].cp_wq);
+			conn = ERR_PTR(-ENOMEM);
+			goto out;
+		}
 	}
 	rcu_read_lock();
 	if (rds_destroy_pending(conn))
@@ -471,6 +478,9 @@ static void rds_conn_path_destroy(struct rds_conn_path *cp)
 	WARN_ON(work_pending(&cp->cp_down_w));
 
 	cp->cp_conn->c_trans->conn_free(cp->cp_transport_data);
+
+	destroy_workqueue(cp->cp_wq);
+	cp->cp_wq = NULL;
 }
 
 /*

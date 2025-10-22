@@ -33,6 +33,7 @@
 #include <linux/kernel.h>
 #include <linux/random.h>
 #include <linux/export.h>
+#include <linux/workqueue.h>
 
 #include "rds.h"
 
