@@ -502,8 +502,8 @@ static struct dentry *nsfs_fh_to_dentry(struct super_block *sb, struct fid *fh,
 			return NULL;
 
 		VFS_WARN_ON_ONCE(ns->ns_id != fid->ns_id);
-		VFS_WARN_ON_ONCE(ns->ns_type != fid->ns_type);
-		VFS_WARN_ON_ONCE(ns->inum != fid->ns_inum);
+		if (fid->ns_inum && (fid->ns_inum != ns->inum))
+			return NULL;
 
 		/*
 		 * This is racy because we're not actually taking an
