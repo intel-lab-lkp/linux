@@ -1003,7 +1003,7 @@ struct scx_bpf_select_cpu_and_args {
 };
 
 /**
- * __scx_bpf_select_cpu_and - Arg-wrapped CPU selection with cpumask
+ * scx_bpf_select_cpu_and___v2 - Arg-wrapped CPU selection with cpumask
  * @p: task_struct to select a CPU for
  * @cpus_allowed: cpumask of allowed CPUs
  * @args: struct containing the rest of the arguments
@@ -1027,8 +1027,8 @@ struct scx_bpf_select_cpu_and_args {
  * a negative value if no idle CPU is available.
  */
 __bpf_kfunc s32
-__scx_bpf_select_cpu_and(struct task_struct *p, const struct cpumask *cpus_allowed,
-			 struct scx_bpf_select_cpu_and_args *args)
+scx_bpf_select_cpu_and___v2(struct task_struct *p, const struct cpumask *cpus_allowed,
+			    struct scx_bpf_select_cpu_and_args *args)
 {
 	struct scx_sched *sch;
 
@@ -1043,7 +1043,7 @@ __scx_bpf_select_cpu_and(struct task_struct *p, const struct cpumask *cpus_allow
 }
 
 /*
- * COMPAT: Will be removed in v6.22.
+ * COMPAT: Will be removed in v6.22 along with the ___v2 suffix.
  */
 __bpf_kfunc s32 scx_bpf_select_cpu_and(struct task_struct *p, s32 prev_cpu, u64 wake_flags,
 				       const struct cpumask *cpus_allowed, u64 flags)
@@ -1413,7 +1413,7 @@ BTF_ID_FLAGS(func, scx_bpf_pick_idle_cpu_node, KF_RCU)
 BTF_ID_FLAGS(func, scx_bpf_pick_idle_cpu, KF_RCU)
 BTF_ID_FLAGS(func, scx_bpf_pick_any_cpu_node, KF_RCU)
 BTF_ID_FLAGS(func, scx_bpf_pick_any_cpu, KF_RCU)
-BTF_ID_FLAGS(func, __scx_bpf_select_cpu_and, KF_RCU)
+BTF_ID_FLAGS(func, scx_bpf_select_cpu_and___v2, KF_RCU)
 BTF_ID_FLAGS(func, scx_bpf_select_cpu_and, KF_RCU)
 BTF_ID_FLAGS(func, scx_bpf_select_cpu_dfl, KF_RCU)
 BTF_KFUNCS_END(scx_kfunc_ids_idle)
