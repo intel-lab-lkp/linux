@@ -455,7 +455,11 @@ struct xfrm_type {
 					      struct netlink_ext_ack *extack);
 	void			(*destructor)(struct xfrm_state *);
 	int			(*input)(struct xfrm_state *, struct sk_buff *skb);
+	int			(*input_encap)(struct sk_buff *skb, struct xfrm_state *x);
 	int			(*output)(struct xfrm_state *, struct sk_buff *pskb);
+	struct sock		*(*find_tcp_sk)(struct xfrm_state *x);
+	void			(*output_encap_csum)(struct sk_buff *skb);
+	int			(*output_tcp_encap)(struct xfrm_state *x, struct sk_buff *skb);
 	int			(*reject)(struct xfrm_state *, struct sk_buff *,
 					  const struct flowi *);
 };

@@ -47,4 +47,10 @@ int esp_input_done2(struct sk_buff *skb, int err);
 int esp6_output_head(struct xfrm_state *x, struct sk_buff *skb, struct esp_info *esp);
 int esp6_output_tail(struct xfrm_state *x, struct sk_buff *skb, struct esp_info *esp);
 int esp6_input_done2(struct sk_buff *skb, int err);
+int esp_init_aead(struct xfrm_state *x, struct netlink_ext_ack *extack);
+int esp_init_authenc(struct xfrm_state *x, struct netlink_ext_ack *extack);
+void esp_destroy(struct xfrm_state *x);
+int esp_input(struct xfrm_state *x, struct sk_buff *skb);
+int esp_output(struct xfrm_state *x, struct sk_buff *skb);
+
 #endif
