@@ -716,9 +716,9 @@ nfsd4_restorefh(struct svc_rqst *rqstp, struct nfsd4_compound_state *cstate,
 		return nfserr_restorefh;
 
 	fh_dup2(&cstate->current_fh, &cstate->save_fh);
-	if (HAS_CSTATE_FLAG(cstate, SAVED_STATE_ID_FLAG)) {
-		memcpy(&cstate->current_stateid, &cstate->save_stateid, sizeof(stateid_t));
-		SET_CSTATE_FLAG(cstate, CURRENT_STATE_ID_FLAG);
+	if (cstate->have_saved_stateid) {
+		memcpy(&cstate->current_stateid, &cstate->saved_stateid, sizeof(stateid_t));
+		cstate->have_current_stateid = true;
 	}
 	return nfs_ok;
 }
@@ -728,9 +728,9 @@ nfsd4_savefh(struct svc_rqst *rqstp, struct nfsd4_compound_state *cstate,
 	     union nfsd4_op_u *u)
 {
 	fh_dup2(&cstate->save_fh, &cstate->current_fh);
-	if (HAS_CSTATE_FLAG(cstate, CURRENT_STATE_ID_FLAG)) {
-		memcpy(&cstate->save_stateid, &cstate->current_stateid, sizeof(stateid_t));
-		SET_CSTATE_FLAG(cstate, SAVED_STATE_ID_FLAG);
+	if (cstate->have_current_stateid) {
+		memcpy(&cstate->saved_stateid, &cstate->current_stateid, sizeof(stateid_t));
+		cstate->have_saved_stateid = true;
 	}
 	return nfs_ok;
 }

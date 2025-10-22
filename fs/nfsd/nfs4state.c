@@ -9093,7 +9093,7 @@ void
 nfsd41_get_current_stateid(struct nfsd4_compound_state *cstate, stateid_t *stateid)
 {
 	if (nfsd4_has_session(cstate) &&
-	    HAS_CSTATE_FLAG(cstate, CURRENT_STATE_ID_FLAG) &&
+	    cstate->have_current_stateid &&
 	    IS_CURRENT_STATEID(stateid))
 		memcpy(stateid, &cstate->current_stateid, sizeof(stateid_t));
 }
@@ -9113,7 +9113,7 @@ void
 nfsd41_save_current_stateid(struct nfsd4_compound_state *cstate, stateid_t *stateid)
 {
 	memcpy(&cstate->current_stateid, stateid, sizeof(stateid_t));
-	SET_CSTATE_FLAG(cstate, CURRENT_STATE_ID_FLAG);
+	cstate->have_current_stateid = true;
 }
 
 /**

@@ -43,13 +43,6 @@
 #define NFSD4_MAX_TAGLEN	128
 #define XDR_LEN(n)                     (((n) + 3) & ~3)
 
-#define CURRENT_STATE_ID_FLAG (1<<0)
-#define SAVED_STATE_ID_FLAG (1<<1)
-
-#define SET_CSTATE_FLAG(c, f) ((c)->sid_flags |= (f))
-#define HAS_CSTATE_FLAG(c, f) ((c)->sid_flags & (f))
-#define CLEAR_CSTATE_FLAG(c, f) ((c)->sid_flags &= ~(f))
-
 /**
  * nfsd4_encode_bool - Encode an XDR bool type result
  * @xdr: target XDR stream
@@ -187,14 +180,15 @@ struct nfsd4_compound_state {
 	struct nfsd4_session	*session;
 	struct nfsd4_slot	*slot;
 	int			data_offset;
-	bool                    spo_must_allowed;
+	bool			spo_must_allowed;
 	size_t			iovlen;
 	u32			minorversion;
 	__be32			status;
-	stateid_t	current_stateid;
-	stateid_t	save_stateid;
-	/* to indicate current and saved state id presents */
-	u32		sid_flags;
+	stateid_t		current_stateid;
+	stateid_t		saved_stateid;
+	/* to indicate current and saved state id are present */
+	bool			have_current_stateid;
+	bool			have_saved_stateid;
 };
 
 static inline bool nfsd4_has_session(struct nfsd4_compound_state *cs)
@@ -216,7 +210,7 @@ void nfsd41_save_current_stateid(struct nfsd4_compound_state *cstate,
 static inline
 void nfsd41_clear_current_stateid(struct nfsd4_compound_state *cstate)
 {
-	CLEAR_CSTATE_FLAG(cstate, CURRENT_STATE_ID_FLAG);
+	cstate->have_current_stateid = false;
 }
 
 struct nfsd4_change_info {
