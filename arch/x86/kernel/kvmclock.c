@@ -74,7 +74,7 @@ static int kvm_set_wallclock(const struct timespec64 *now)
 static u64 kvm_clock_read(void)
 {
 	u64 ret;
-
+	// 
 	preempt_disable_notrace();
 	ret = pvclock_clocksource_read_nowd(this_cpu_pvti());
 	preempt_enable_notrace();
