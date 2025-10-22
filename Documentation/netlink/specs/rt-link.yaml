@@ -1256,6 +1256,7 @@ attribute-sets:
         name: arp-ip-target
         type: indexed-array
         sub-type: u32
+        ignore-index: true
         byte-order: big-endian
         display-hint: ipv4
       -
@@ -1330,6 +1331,7 @@ attribute-sets:
         name: ns-ip6-target
         type: indexed-array
         sub-type: binary
+        ignore-index: true
         display-hint: ipv6
         checks:
           exact-len: 16
