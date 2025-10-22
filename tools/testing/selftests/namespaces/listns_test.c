@@ -467,4 +467,139 @@ TEST(listns_multiple_types)
 		TH_LOG("  [%zd] ns_id: %llu", i, (unsigned long long)ns_ids[i]);
 }
 
+/*
+ * Test that hierarchical active reference propagation keeps parent
+ * user namespaces visible in listns().
+ */
+TEST(listns_hierarchical_visibility)
+{
+	struct ns_id_req req = {
+		.size = sizeof(req),
+		.spare = 0,
+		.ns_id = 0,
+		.ns_type = CLONE_NEWUSER,
+		.spare2 = 0,
+		.user_ns_id = 0,
+	};
+	__u64 parent_ns_id = 0, child_ns_id = 0;
+	int pipefd[2];
+	pid_t pid;
+	int status;
+	int bytes;
+	__u64 ns_ids[100];
+	ssize_t ret;
+	bool found_parent, found_child;
+
+	ASSERT_EQ(pipe(pipefd), 0);
+
+	pid = fork();
+	ASSERT_GE(pid, 0);
+
+	if (pid == 0) {
+		int fd;
+		char buf;
+
+		close(pipefd[0]);
+
+		/* Create parent user namespace */
+		if (setup_userns() < 0) {
+			close(pipefd[1]);
+			exit(1);
+		}
+
+		fd = open("/proc/self/ns/user", O_RDONLY);
+		if (fd < 0) {
+			close(pipefd[1]);
+			exit(1);
+		}
+
+		if (ioctl(fd, NS_GET_ID, &parent_ns_id) < 0) {
+			close(fd);
+			close(pipefd[1]);
+			exit(1);
+		}
+		close(fd);
+
+		/* Create child user namespace */
+		if (setup_userns() < 0) {
+			close(pipefd[1]);
+			exit(1);
+		}
+
+		fd = open("/proc/self/ns/user", O_RDONLY);
+		if (fd < 0) {
+			close(pipefd[1]);
+			exit(1);
+		}
+
+		if (ioctl(fd, NS_GET_ID, &child_ns_id) < 0) {
+			close(fd);
+			close(pipefd[1]);
+			exit(1);
+		}
+		close(fd);
+
+		/* Send both IDs to parent */
+		write(pipefd[1], &parent_ns_id, sizeof(parent_ns_id));
+		write(pipefd[1], &child_ns_id, sizeof(child_ns_id));
+
+		/* Wait for parent signal */
+		read(pipefd[1], &buf, 1);
+		close(pipefd[1]);
+		exit(0);
+	}
+
+	/* Parent */
+	close(pipefd[1]);
+
+	/* Read both namespace IDs */
+	bytes = read(pipefd[0], &parent_ns_id, sizeof(parent_ns_id));
+	bytes += read(pipefd[0], &child_ns_id, sizeof(child_ns_id));
+
+	if (bytes != (int)(2 * sizeof(__u64))) {
+		close(pipefd[0]);
+		kill(pid, SIGKILL);
+		waitpid(pid, NULL, 0);
+		SKIP(return, "Failed to get namespace IDs from child");
+	}
+
+	TH_LOG("Parent user namespace ID: %llu", (unsigned long long)parent_ns_id);
+	TH_LOG("Child user namespace ID: %llu", (unsigned long long)child_ns_id);
+
+	/* List all user namespaces */
+	ret = sys_listns(&req, ns_ids, ARRAY_SIZE(ns_ids), 0);
+
+	if (ret < 0 && errno == ENOSYS) {
+		close(pipefd[0]);
+		kill(pid, SIGKILL);
+		waitpid(pid, NULL, 0);
+		SKIP(return, "listns() not supported");
+	}
+
+	ASSERT_GE(ret, 0);
+	TH_LOG("Found %zd active user namespaces", ret);
+
+	/* Both parent and child should be visible (active due to child process) */
+	found_parent = false;
+	found_child = false;
+	for (ssize_t i = 0; i < ret; i++) {
+		if (ns_ids[i] == parent_ns_id)
+			found_parent = true;
+		if (ns_ids[i] == child_ns_id)
+			found_child = true;
+	}
+
+	TH_LOG("Parent namespace %s, child namespace %s",
+	       found_parent ? "found" : "NOT FOUND",
+	       found_child ? "found" : "NOT FOUND");
+
+	ASSERT_TRUE(found_child);
+	/* With hierarchical propagation, parent should also be active */
+	ASSERT_TRUE(found_parent);
+
+	/* Signal child to exit */
+	close(pipefd[0]);
+	waitpid(pid, &status, 0);
+}
+
 TEST_HARNESS_MAIN
