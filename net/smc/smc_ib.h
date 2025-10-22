@@ -69,6 +69,12 @@ static inline __be32 smc_ib_gid_to_ipv4(u8 gid[SMC_GID_SIZE])
 	return cpu_to_be32(INADDR_NONE);
 }
 
+static inline struct in6_addr *smc_ib_gid_to_ipv6(u8 gid[SMC_GID_SIZE])
+{
+	struct in6_addr *addr6 = (struct in6_addr *)gid;
+	return addr6;
+}
+
 static inline struct net *smc_ib_net(struct smc_ib_device *smcibdev)
 {
 	if (smcibdev && smcibdev->ibdev)
@@ -114,6 +120,9 @@ int smc_ib_determine_gid(struct smc_ib_device *smcibdev, u8 ibport,
 			 struct smc_init_info_smcrv2 *smcrv2);
 int smc_ib_find_route(struct net *net, __be32 saddr, __be32 daddr,
 		      u8 nexthop_mac[], u8 *uses_gateway);
+int smc_ib_find_route_v6(struct net *net, struct in6_addr *saddr,
+			 struct in6_addr *daddr, u8 nexthop_mac[],
+			 u8 *uses_gateway);
 bool smc_ib_is_valid_local_systemid(void);
 int smcr_nl_get_device(struct sk_buff *skb, struct netlink_callback *cb);
 #endif
