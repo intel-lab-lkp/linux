@@ -1982,6 +1982,49 @@
 			assigned-clock-rates = <133333333>, <667000000>, <500000000>;
 		};
 
+		vpu: video-codec@4c4c0000 {
+			compatible = "nxp,imx95-vpu";
+			reg = <0x0 0x4c4c0000 0x0 0x10000>;
+			clocks = <&vpu_blk_ctrl IMX95_CLK_VPUBLK_WAVE>;
+			power-domains = <&scmi_perf IMX95_PERF_VPU>;
+			#cooling-cells = <2>;
+			#address-cells = <2>;
+			#size-cells = <2>;
+			ranges;
+
+			video-core@4c480000 {
+				compatible = "nxp,imx95-vpu-core";
+				reg = <0x0 0x4c480000 0x0 0x10000>;
+				clocks = <&scmi_clk IMX95_CLK_VPU>;
+				power-domains = <&scmi_devpd IMX95_PD_VPU>;
+				interrupts = <GIC_SPI 299 IRQ_TYPE_LEVEL_HIGH>;
+			};
+
+			video-core@4c490000 {
+				compatible = "nxp,imx95-vpu-core";
+				reg = <0x0 0x4c490000 0x0 0x10000>;
+				clocks = <&scmi_clk IMX95_CLK_VPU>;
+				power-domains = <&scmi_devpd IMX95_PD_VPU>;
+				interrupts = <GIC_SPI 300 IRQ_TYPE_LEVEL_HIGH>;
+			};
+
+			video-core@4c4a0000 {
+				compatible = "nxp,imx95-vpu-core";
+				reg = <0x0 0x4c4a0000 0x0 0x10000>;
+				clocks = <&scmi_clk IMX95_CLK_VPU>;
+				power-domains = <&scmi_devpd IMX95_PD_VPU>;
+				interrupts = <GIC_SPI 301 IRQ_TYPE_LEVEL_HIGH>;
+			};
+
+			video-core@4c4b0000 {
+				compatible = "nxp,imx95-vpu-core";
+				reg = <0x0 0x4c4b0000 0x0 0x10000>;
+				clocks = <&scmi_clk IMX95_CLK_VPU>;
+				power-domains = <&scmi_devpd IMX95_PD_VPU>;
+				interrupts = <GIC_SPI 302 IRQ_TYPE_LEVEL_HIGH>;
+			};
+		};
+
 		jpegdec: jpegdec@4c500000 {
 			compatible = "nxp,imx95-jpgdec", "nxp,imx8qxp-jpgdec";
 			reg = <0x0 0x4C500000 0x0 0x00050000>;

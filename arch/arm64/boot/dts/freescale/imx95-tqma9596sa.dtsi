@@ -40,7 +40,7 @@
 			linux,cma-default;
 		};
 
-		vpu_boot: vpu_boot@a0000000 {
+		vpu_boot: memory@a0000000 {
 			reg = <0 0xa0000000 0 0x100000>;
 			no-map;
 		};
@@ -695,4 +695,9 @@
 			   <IMX95_PAD_SD2_DATA3__USDHC2_DATA3			0x13fe>,
 			   <IMX95_PAD_SD2_VSELECT__USDHC2_VSELECT		0x51e>;
 	};
+};
+
+&vpu {
+	memory-region = <&vpu_boot>;
+	sram = <&sram1>;
 };
