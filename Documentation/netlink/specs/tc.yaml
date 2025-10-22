@@ -2188,6 +2188,7 @@ attribute-sets:
         name: tin-stats
         type: indexed-array
         sub-type: nest
+        ignore-index: true
         nested-attributes: cake-tin-stats-attrs
       -
         name: deficit
