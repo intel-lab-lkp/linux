@@ -690,23 +690,26 @@ class YnlFamily(SpecFamily):
             item = NlAttr(attr.raw, offset)
             offset += item.full_len
 
+            subattr = None
             if attr_spec["sub-type"] == 'nest':
-                subattrs = self._decode(NlAttrs(item.raw), attr_spec['nested-attributes'])
-                decoded.append({ item.type: subattrs })
+                subattr = self._decode(NlAttrs(item.raw), attr_spec['nested-attributes'])
             elif attr_spec["sub-type"] == 'binary':
                 subattr = item.as_bin()
                 if attr_spec.display_hint:
                     subattr = self._formatted_string(subattr, attr_spec.display_hint)
-                decoded.append(subattr)
             elif attr_spec["sub-type"] in NlAttr.type_formats:
                 subattr = item.as_scalar(attr_spec['sub-type'], attr_spec.byte_order)
                 if 'enum' in attr_spec:
                     subattr = self._decode_enum(subattr, attr_spec)
                 elif attr_spec.display_hint:
                     subattr = self._formatted_string(subattr, attr_spec.display_hint)
-                decoded.append(subattr)
             else:
                 raise Exception(f'Unknown {attr_spec["sub-type"]} with name {attr_spec["name"]}')
+
+            if attr_spec.get('ignore-index', False):
+                decoded.append(subattr)
+            else:
+                decoded.append({ item.type: subattr })
         return decoded
 
     def _decode_nest_type_value(self, attr, attr_spec):
