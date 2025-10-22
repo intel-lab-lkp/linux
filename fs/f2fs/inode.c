@@ -294,6 +294,17 @@ static bool sanity_check_inode(struct inode *inode, struct folio *node_folio)
 		return false;
 	}
 
+	/* Validate directory depth */
+	if (S_ISDIR(le16_to_cpu(ri->i_mode))) {
+		unsigned int current_depth = le32_to_cpu(ri->i_current_depth);
+
+		if (current_depth > MAX_DIR_HASH_DEPTH) {
+			f2fs_warn(sbi, "%s: corrupted inode i_ino=%lx has invalid i_current_depth: %u, max: %u, run fsck to fix.",
+				  __func__, inode->i_ino, current_depth, MAX_DIR_HASH_DEPTH);
+			return false;
+		}
+	}
+
 	if (f2fs_has_extra_attr(inode)) {
 		if (!f2fs_sb_has_extra_attr(sbi)) {
 			f2fs_warn(sbi, "%s: inode (ino=%lx) is with extra_attr, but extra_attr feature is off",
