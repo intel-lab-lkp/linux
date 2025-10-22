@@ -7740,6 +7740,7 @@ put_stateid:
 	nfs4_put_stid(&stp->st_stid);
 out:
 	nfsd4_bump_seqid(cstate, status);
+	nfsd41_save_current_stateid(cstate, &u->open_downgrade.od_stateid);
 	return status;
 }
 
@@ -7824,6 +7825,7 @@ nfsd4_close(struct svc_rqst *rqstp, struct nfsd4_compound_state *cstate,
 	/* put reference from nfs4_preprocess_seqid_op */
 	nfs4_put_stid(&stp->st_stid);
 out:
+	nfsd41_save_current_stateid(cstate, &close->cl_stateid);
 	return status;
 }
 
@@ -8459,6 +8461,8 @@ out:
 	nfsd4_bump_seqid(cstate, status);
 	if (conflock)
 		locks_free_lock(conflock);
+	nfsd41_save_current_stateid(cstate, &lock->lk_resp_stateid);
+
 	return status;
 }
 
@@ -9111,37 +9115,6 @@ nfsd41_save_current_stateid(struct nfsd4_compound_state *cstate, stateid_t *stat
 {
 	memcpy(&cstate->current_stateid, stateid, sizeof(stateid_t));
 	SET_CSTATE_FLAG(cstate, CURRENT_STATE_ID_FLAG);
-}
-
-/*
- * functions to set current state id
- */
-void
-nfsd4_set_opendowngradestateid(struct nfsd4_compound_state *cstate,
-		union nfsd4_op_u *u)
-{
-	nfsd41_save_current_stateid(cstate, &u->open_downgrade.od_stateid);
-}
-
-void
-nfsd4_set_openstateid(struct nfsd4_compound_state *cstate,
-		union nfsd4_op_u *u)
-{
-	nfsd41_save_current_stateid(cstate, &u->open.op_stateid);
-}
-
-void
-nfsd4_set_closestateid(struct nfsd4_compound_state *cstate,
-		union nfsd4_op_u *u)
-{
-	nfsd41_save_current_stateid(cstate, &u->close.cl_stateid);
-}
-
-void
-nfsd4_set_lockstateid(struct nfsd4_compound_state *cstate,
-		union nfsd4_op_u *u)
-{
-	nfsd41_save_current_stateid(cstate, &u->lock.lk_resp_stateid);
 }
 
 /**
