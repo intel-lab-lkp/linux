@@ -47,8 +47,6 @@ properties:
 required:
   - compatible
   - reg
-  - vdd-supply
-  - vddio-supply
 
 additionalProperties: false
 
