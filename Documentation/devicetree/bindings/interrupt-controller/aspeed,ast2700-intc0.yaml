@@ -1,0 +1,97 @@
+# SPDX-License-Identifier: (GPL-2.0-only OR BSD-2-Clause)
+%YAML 1.2
+---
+$id: http://devicetree.org/schemas/interrupt-controller/aspeed,ast2700-intc0.yaml#
+$schema: http://devicetree.org/meta-schemas/core.yaml#
+
+maintainers:
+  - Ryan Chen <ryan_chen@aspeedtech.com>
+
+title: ASPEED AST2700 Interrupt Controller 0
+
+description:
+  This interrupt controller hardware is first level interrupt controller that
+  is hooked to the GIC interrupt controller. It's useful to combine multiple
+  interrupt sources into 1 interrupt to GIC interrupt controller.
+
+properties:
+  compatible:
+    const: aspeed,ast2700-intc0
+
+  reg:
+    maxItems: 1
+
+  '#address-cells':
+    const: 1
+
+  '#size-cells':
+    const: 1
+
+  ranges: true
+
+patternProperties:
+  "^interrupt-controller@":
+    type: object
+    description: A child interrupt controller node
+    additionalProperties: false
+
+    properties:
+      compatible:
+        enum:
+          - aspeed,ast2700-intc0-ic
+
+      reg:
+        maxItems: 1
+
+      '#interrupt-cells':
+        const: 1
+
+      interrupt-controller: true
+
+      interrupts:
+        minItems: 1
+        maxItems: 10
+
+    required:
+      - compatible
+      - reg
+      - interrupt-controller
+      - '#interrupt-cells'
+      - interrupts
+
+required:
+  - compatible
+  - reg
+  - '#address-cells'
+  - '#size-cells'
+
+additionalProperties: false
+
+examples:
+  - |
+    #include <dt-bindings/interrupt-controller/arm-gic.h>
+
+    intc0: interrupt-controller@12100000 {
+        compatible = "aspeed,ast2700-intc0";
+        reg = <0x12100000 0x4000>;
+        #address-cells = <1>;
+        #size-cells = <1>;
+        ranges = <0x0 0x12100000 0x4000>;
+
+        intc0_11: interrupt-controller@1b00 {
+            #interrupt-cells = <1>;
+            interrupt-controller;
+            compatible = "aspeed,ast2700-intc0-ic";
+            reg = <0x1b00 0x10>;
+            interrupts = <GIC_SPI 192 IRQ_TYPE_LEVEL_HIGH>,
+                         <GIC_SPI 193 IRQ_TYPE_LEVEL_HIGH>,
+                         <GIC_SPI 194 IRQ_TYPE_LEVEL_HIGH>,
+                         <GIC_SPI 195 IRQ_TYPE_LEVEL_HIGH>,
+                         <GIC_SPI 196 IRQ_TYPE_LEVEL_HIGH>,
+                         <GIC_SPI 197 IRQ_TYPE_LEVEL_HIGH>,
+                         <GIC_SPI 198 IRQ_TYPE_LEVEL_HIGH>,
+                         <GIC_SPI 199 IRQ_TYPE_LEVEL_HIGH>,
+                         <GIC_SPI 200 IRQ_TYPE_LEVEL_HIGH>,
+                         <GIC_SPI 201 IRQ_TYPE_LEVEL_HIGH>;
+        };
+    };
