@@ -292,10 +292,10 @@ static const struct marvell_hw_ecc_layout marvell_nfc_layouts[] = {
 	MARVELL_LAYOUT( 2048,   512,  8,  2,  1, 1024,  0, 30,1024,64, 30),
 	MARVELL_LAYOUT( 2048,   512,  16, 4,  4, 512,   0, 30,  0, 32, 30),
 	MARVELL_LAYOUT( 4096,   512,  4,  2,  2, 2048, 32, 30,  0,  0,  0),
-	MARVELL_LAYOUT( 4096,   512,  8,  4,  4, 1024,  0, 30,  0, 64, 30),
+	MARVELL_LAYOUT( 4096,   512,  8,  5,  4, 1024,  0, 30,  0, 64, 30),
 	MARVELL_LAYOUT( 4096,   512,  16, 8,  8, 512,   0, 30,  0, 32, 30),
 	MARVELL_LAYOUT( 8192,   512,  4,  4,  4, 2048,  0, 30,  0,  0,  0),
-	MARVELL_LAYOUT( 8192,   512,  8,  8,  8, 1024,  0, 30,  0, 160, 30),
+	MARVELL_LAYOUT( 8192,   512,  8,  9,  8, 1024,  0, 30,  0, 160, 30),
 	MARVELL_LAYOUT( 8192,   512,  16, 16, 16, 512,  0, 30,  0,  32, 30),
 };
 
@@ -2286,7 +2286,16 @@ static int marvell_nand_hw_ecc_controller_init(struct mtd_info *mtd,
 	}
 
 	mtd_set_ooblayout(mtd, &marvell_nand_ooblayout_ops);
-	ecc->steps = l->nchunks;
+
+	/* Validity checks in nand_scan_tail assume even sized chunks, but in the case of 8bit
+	 * ECC with 4k/8k page size the last chunk is spare data, which is not sized to the data
+	 * chunks. Overwrite the ecc->steps to pass this validity check, while maintaining the
+	 * correct number of chunks in-driver.
+	 */
+	if (ecc->strength == 8 && mtd->writesize > SZ_2K)
+		ecc->steps = l->full_chunk_cnt;
+	else
+		ecc->steps = l->nchunks;
 	ecc->size = l->data_bytes;
 
 	if (ecc->strength == 1) {
