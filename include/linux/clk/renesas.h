@@ -16,6 +16,11 @@ struct device;
 struct device_node;
 struct generic_pm_domain;
 
+enum {
+	PLL5_TARGET_DPI,
+	PLL5_TARGET_DSI
+};
+
 void cpg_mstp_add_clk_domain(struct device_node *np);
 #ifdef CONFIG_CLK_RENESAS_CPG_MSTP
 int cpg_mstp_attach_dev(struct generic_pm_domain *unused, struct device *dev);
@@ -31,5 +36,11 @@ void cpg_mssr_detach_dev(struct generic_pm_domain *unused, struct device *dev);
 #else
 #define cpg_mssr_attach_dev	NULL
 #define cpg_mssr_detach_dev	NULL
+#endif
+
+#ifdef CONFIG_CLK_RZG2L
+void rzg2l_cpg_dsi_div_set_divider(unsigned int divider, int target);
+#else
+#define rzg2l_cpg_dsi_div_set_divider	NULL
 #endif
 #endif
