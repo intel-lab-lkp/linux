@@ -315,6 +315,13 @@ struct panthor_scheduler {
 		 */
 		struct list_head stopped_groups;
 	} reset;
+
+	/**
+	 * @destroyed: Scheduler object is (being) destroyed
+	 *
+	 * Normal scheduler operations should no longer take place.
+	 */
+	bool destroyed;
 };
 
 /**
@@ -1764,7 +1771,10 @@ static void process_fw_events_work(struct work_struct *work)
 	u32 events = atomic_xchg(&sched->fw_events, 0);
 	struct panthor_device *ptdev = sched->ptdev;
 
-	mutex_lock(&sched->lock);
+	guard(mutex)(&sched->lock);
+
+	if (sched->destroyed)
+		return;
 
 	if (events & JOB_INT_GLOBAL_IF) {
 		sched_process_global_irq_locked(ptdev);
@@ -1777,8 +1787,6 @@ static void process_fw_events_work(struct work_struct *work)
 		sched_process_csg_irq_locked(ptdev, csg_id);
 		events &= ~BIT(csg_id);
 	}
-
-	mutex_unlock(&sched->lock);
 }
 
 /**
@@ -3876,6 +3884,7 @@ void panthor_sched_unplug(struct panthor_device *ptdev)
 	cancel_delayed_work_sync(&sched->tick_work);
 
 	mutex_lock(&sched->lock);
+	sched->destroyed = true;
 	if (sched->pm.has_ref) {
 		pm_runtime_put(ptdev->base.dev);
 		sched->pm.has_ref = false;
