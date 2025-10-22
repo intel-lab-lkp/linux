@@ -15,7 +15,7 @@ use crate::{
     sync::aref::{ARef, AlwaysRefCounted},
     types::{NotThreadSafe, Opaque},
 };
-use core::ptr;
+use core::{ops::Add, ops::Sub, ptr};
 
 /// Flags associated with a [`File`].
 pub mod flags {
@@ -98,6 +98,59 @@ pub mod flags {
 
     /// File can be both read and written.
     pub const O_RDWR: u32 = bindings::O_RDWR;
+}
+
+/// A file offset position.
+///
+/// This newtype wraps [`bindings::loff_t`] to provide type safety for file operations.
+/// It prevents accidental misuse by restricting operations to those that make sense
+/// for file offsets (addition, subtraction, comparison) while preventing meaningless
+/// operations like multiplication or division.
+///
+/// # Examples
+///
+/// ```
+/// use kernel::fs::file::FileOffset;
+///
+/// let start = FileOffset::zero();
+/// let position = FileOffset::new(1024);
+/// let new_pos = start + 512;        // Valid: move forward
+/// assert!(new_pos < position);      // Valid: comparison
+/// let raw: i64 = position.into();   // Convert for C interop
+/// ```
+#[derive(Debug, PartialEq, Eq, PartialOrd, Ord)]
+pub struct FileOffset(bindings::loff_t);
+
+impl FileOffset {
+    /// Creates a new file offset from an i64 value.
+    pub const fn new(value: i64) -> Self {
+        Self(value)
+    }
+
+    /// Creates an offset representing the start of a file (offset 0).
+    pub const fn zero() -> Self {
+        Self(0)
+    }
+}
+
+impl Add<i64> for FileOffset {
+    type Output = Self;
+    fn add(self, rhs: i64) -> Self {
+        Self(self.0 + rhs)
+    }
+}
+
+impl Sub<i64> for FileOffset {
+    type Output = Self;
+    fn sub(self, rhs: i64) -> Self {
+        Self(self.0 - rhs)
+    }
+}
+
+impl From<FileOffset> for i64 {
+    fn from(offset: FileOffset) -> i64 {
+        offset.0
+    }
 }
 
 /// Wraps the kernel's `struct file`. Thread safe.
@@ -464,5 +517,71 @@ impl From<BadFdError> for Error {
 impl fmt::Debug for BadFdError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.pad("EBADF")
+    }
+}
+
+#[macros::kunit_tests(rust_file_offset_test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_file_offset_creation() {
+        let offset = FileOffset::new(1024);
+        let raw: i64 = offset.into();
+        assert_eq!(raw, 1024);
+    }
+
+    #[test]
+    fn test_file_offset_zero() {
+        let zero = FileOffset::zero();
+        let raw: i64 = zero.into();
+        assert_eq!(raw, 0);
+    }
+
+    #[test]
+    fn test_file_offset_addition() {
+        let start = FileOffset::new(100);
+        let result = start + 50;
+        let raw: i64 = result.into();
+        assert_eq!(raw, 150);
+    }
+
+    #[test]
+    fn test_file_offset_subtraction() {
+        let start = FileOffset::new(100);
+        let result = start - 30;
+        let raw: i64 = result.into();
+        assert_eq!(raw, 70);
+    }
+
+    #[test]
+    fn test_file_offset_comparison() {
+        let offset1 = FileOffset::new(100);
+        let offset2 = FileOffset::new(200);
+        let offset3 = FileOffset::new(100);
+
+        assert!(offset1 < offset2);
+        assert!(offset2 > offset1);
+        assert_eq!(offset1, offset3);
+        assert!(offset1 <= offset2);
+        assert!(offset2 >= offset1);
+    }
+
+    #[test]
+    fn test_file_offset_negative() {
+        let negative = FileOffset::new(-50);
+        let raw: i64 = negative.into();
+        assert_eq!(raw, -50);
+    }
+
+    #[test]
+    fn test_file_offset_large_values() {
+        let large = FileOffset::new(i64::MAX);
+        let raw: i64 = large.into();
+        assert_eq!(raw, i64::MAX);
+
+        let min = FileOffset::new(i64::MIN);
+        let raw_min: i64 = min.into();
+        assert_eq!(raw_min, i64::MIN);
     }
 }
