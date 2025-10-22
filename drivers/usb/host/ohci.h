@@ -75,6 +75,7 @@ struct ed {
 #define	OKAY_TO_TAKEBACK(ohci, ed)			\
 		((int) (ohci->wdh_cnt - ed->takeback_wdh_cnt) >= 0)
 
+	unsigned long		idle_timeout;	/* when ED became idle (jiffies) */
 } __attribute__ ((aligned(16)));
 
 #define ED_MASK	((u32)~0x0f)		/* strip hw status in low addr bits */

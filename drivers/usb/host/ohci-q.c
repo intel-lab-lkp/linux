@@ -603,6 +603,9 @@ static void td_submit_urb (
 	int		i, this_sg_len, n;
 	struct scatterlist	*sg;
 
+	/* Clear idle timeout since we're adding new TDs */
+	urb_priv->ed->idle_timeout = 0;
+
 	/* OHCI handles the bulk/interrupt data toggles itself.  We just
 	 * use the device toggle bits for resetting, and rely on the fact
 	 * that resetting toggle is meaningless if the endpoint is active.
@@ -1162,10 +1165,16 @@ static void takeback_td(struct ohci_hcd *ohci, struct td *td)
 	if (urb_priv->td_cnt >= urb_priv->length)
 		finish_urb(ohci, urb, status);
 
-	/* clean schedule:  unlink EDs that are no longer busy */
+	/* clean schedule: delay unlinking EDs to avoid SOF synchronization overhead */
 	if (list_empty(&ed->td_list)) {
-		if (ed->state == ED_OPER)
-			start_ed_unlink(ohci, ed);
+		if (ed->state == ED_OPER) {
+			/* Mark ED as idle but don't unlink immediately to avoid
+			 * 1ms SOF synchronization delays on rapid consecutive transfers.
+			 * Watchdog will clean up after 10ms if truly idle.
+			 */
+			ed->idle_timeout = jiffies + msecs_to_jiffies(10);
+			ed->idle_timeout += !ed->idle_timeout;
+		}
 
 	/* ... reenabling halted EDs only after fault cleanup */
 	} else if ((ed->hwINFO & cpu_to_hc32(ohci, ED_SKIP | ED_DEQUEUE))
