@@ -81,13 +81,14 @@ static int dsos__read_build_ids_cb(struct dso *dso, void *data)
 		return 0;
 	}
 	nsinfo__mountns_enter(dso__nsinfo(dso), &nsc);
-	if (filename__read_build_id(dso__long_name(dso), &bid, /*block=*/true) > 0) {
+	/* Don't block in case path isn't for a regular file. */
+	if (filename__read_build_id(dso__long_name(dso), &bid, /*block=*/false) > 0) {
 		dso__set_build_id(dso, &bid);
 		args->have_build_id = true;
 	} else if (errno == ENOENT && dso__nsinfo(dso)) {
 		char *new_name = dso__filename_with_chroot(dso, dso__long_name(dso));
 
-		if (new_name && filename__read_build_id(new_name, &bid, /*block=*/true) > 0) {
+		if (new_name && filename__read_build_id(new_name, &bid, /*block=*/false) > 0) {
 			dso__set_build_id(dso, &bid);
 			args->have_build_id = true;
 		}
