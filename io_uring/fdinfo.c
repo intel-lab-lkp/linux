@@ -100,8 +100,8 @@ static void __io_uring_show_fdinfo(struct io_ring_ctx *ctx, struct seq_file *m)
 		if (sq_idx > sq_mask)
 			continue;
 
-		opcode = READ_ONCE(sqe->opcode);
 		sqe = &ctx->sq_sqes[sq_idx << sq_shift];
+		opcode = READ_ONCE(sqe->opcode);
 		if (sq_shift) {
 			sqe128 = true;
 		} else if (io_issue_defs[opcode].is_128) {
