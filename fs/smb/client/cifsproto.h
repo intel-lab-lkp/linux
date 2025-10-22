@@ -314,7 +314,7 @@ extern void cifs_close_deferred_file(struct cifsInodeInfo *cifs_inode);
 extern void cifs_close_all_deferred_files(struct cifs_tcon *cifs_tcon);
 
 void cifs_close_deferred_file_under_dentry(struct cifs_tcon *cifs_tcon,
-					   struct dentry *dentry);
+					   const char *full_path);
 
 extern void cifs_mark_open_handles_for_deleted_file(struct inode *inode,
 				const char *path);
