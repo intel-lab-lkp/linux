@@ -214,10 +214,12 @@ struct gb_apb_request_cport_flags {
 #define GB_FW_DOWNLOAD_TYPE_RELEASE_FIRMWARE	0x03
 
 #define GB_FIRMWARE_TAG_MAX_SIZE		10
+#define GB_FIRMWARE_FORMAT_MAX_SIZE		10
 
 /* firmware download find firmware request/response */
 struct gb_fw_download_find_firmware_request {
 	__u8			firmware_tag[GB_FIRMWARE_TAG_MAX_SIZE];
+	__u8			format[GB_FIRMWARE_FORMAT_MAX_SIZE];
 } __packed;
 
 struct gb_fw_download_find_firmware_response {

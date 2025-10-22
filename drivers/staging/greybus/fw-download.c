@@ -159,7 +159,7 @@ static int exceeds_release_timeout(struct fw_request *fw_req)
 
 /* This returns path of the firmware blob on the disk */
 static struct fw_request *find_firmware(struct fw_download *fw_download,
-					const char *tag)
+					const char *tag, const char *format)
 {
 	struct gb_interface *intf = fw_download->connection->bundle->intf;
 	struct fw_request *fw_req;
@@ -178,10 +178,17 @@ static struct fw_request *find_firmware(struct fw_download *fw_download,
 	}
 	fw_req->firmware_id = ret;
 
-	snprintf(fw_req->name, sizeof(fw_req->name),
-		 FW_NAME_PREFIX "%08x_%08x_%08x_%08x_%s.tftf",
-		 intf->ddbl1_manufacturer_id, intf->ddbl1_product_id,
-		 intf->vendor_id, intf->product_id, tag);
+	if (strnlen(format, GB_FIRMWARE_FORMAT_MAX_SIZE) == 0) {
+		snprintf(fw_req->name, sizeof(fw_req->name),
+			 FW_NAME_PREFIX "%08x_%08x_%08x_%08x_%s",
+			 intf->ddbl1_manufacturer_id, intf->ddbl1_product_id,
+			 intf->vendor_id, intf->product_id, tag);
+	} else {
+		snprintf(fw_req->name, sizeof(fw_req->name),
+			 FW_NAME_PREFIX "%08x_%08x_%08x_%08x_%s.%s",
+			 intf->ddbl1_manufacturer_id, intf->ddbl1_product_id,
+			 intf->vendor_id, intf->product_id, tag, format);
+	}
 
 	dev_info(fw_download->parent, "Requested firmware package '%s'\n",
 		 fw_req->name);
@@ -225,7 +232,7 @@ static int fw_download_find_firmware(struct gb_operation *op)
 	struct gb_fw_download_find_firmware_request *request;
 	struct gb_fw_download_find_firmware_response *response;
 	struct fw_request *fw_req;
-	const char *tag;
+	const char *tag, *format;
 
 	if (op->request->payload_size != sizeof(*request)) {
 		dev_err(fw_download->parent,
@@ -245,7 +252,17 @@ static int fw_download_find_firmware(struct gb_operation *op)
 		return -EINVAL;
 	}
 
-	fw_req = find_firmware(fw_download, tag);
+	format = (const char *)request->format;
+
+	/* firmware_format must be null-terminated */
+	if (strnlen(format, GB_FIRMWARE_FORMAT_MAX_SIZE) ==
+	    GB_FIRMWARE_FORMAT_MAX_SIZE) {
+		dev_err(fw_download->parent,
+			"firmware-format is not null-terminated\n");
+		return -EINVAL;
+	}
+
+	fw_req = find_firmware(fw_download, tag, format);
 	if (IS_ERR(fw_req))
 		return PTR_ERR(fw_req);
 
