@@ -3268,13 +3268,21 @@ static struct slab *allocate_slab(struct kmem_cache *s, gfp_t flags, int node)
 
 static struct slab *new_slab(struct kmem_cache *s, gfp_t flags, int node)
 {
+	struct slab *slab;
+
 	if (unlikely(flags & GFP_SLAB_BUG_MASK))
 		flags = kmalloc_fix_flags(flags);
 
 	WARN_ON_ONCE(s->ctor && (flags & __GFP_ZERO));
 
-	return allocate_slab(s,
-		flags & (GFP_RECLAIM_MASK | GFP_CONSTRAINT_MASK), node);
+	flags &= GFP_RECLAIM_MASK | GFP_CONSTRAINT_MASK;
+
+	slab = allocate_slab(s, flags, node);
+
+	if (likely(slab))
+		inc_slabs_node(s, slab_nid(slab), slab->objects);
+
+	return slab;
 }
 
 static void __free_slab(struct kmem_cache *s, struct slab *slab)
@@ -3415,8 +3423,7 @@ static void *alloc_single_from_new_slab(struct kmem_cache *s, struct slab *slab,
 					int orig_size, gfp_t gfpflags)
 {
 	bool allow_spin = gfpflags_allow_spinning(gfpflags);
-	int nid = slab_nid(slab);
-	struct kmem_cache_node *n = get_node(s, nid);
+	struct kmem_cache_node *n = get_node(s, slab_nid(slab));
 	unsigned long flags;
 	void *object;
 
@@ -3451,7 +3458,6 @@ static void *alloc_single_from_new_slab(struct kmem_cache *s, struct slab *slab,
 	else
 		add_partial(n, slab, DEACTIVATE_TO_HEAD);
 
-	inc_slabs_node(s, nid, slab->objects);
 	spin_unlock_irqrestore(&n->list_lock, flags);
 
 	return object;
@@ -4679,8 +4685,6 @@ new_objects:
 	slab->freelist = NULL;
 	slab->inuse = slab->objects;
 	slab->frozen = 1;
-
-	inc_slabs_node(s, slab_nid(slab), slab->objects);
 
 	if (unlikely(!pfmemalloc_match(slab, gfpflags) && allow_spin)) {
 		/*
@@ -7697,7 +7701,7 @@ static void early_kmem_cache_node_alloc(int node)
 
 	BUG_ON(kmem_cache_node->size < sizeof(struct kmem_cache_node));
 
-	slab = new_slab(kmem_cache_node, GFP_NOWAIT, node);
+	slab = allocate_slab(kmem_cache_node, GFP_NOWAIT, node);
 
 	BUG_ON(!slab);
 	if (slab_nid(slab) != node) {
