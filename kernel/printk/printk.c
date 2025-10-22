@@ -3007,7 +3007,7 @@ out:
  * false positive. For PREEMPT_RT the false positive condition does not
  * occur.
  *
- * This map is used to temporarily establish LD_WAIT_SLEEP context for the
+ * This map is used to temporarily establish LD_WAIT_CONFIG context for the
  * console write() callback when legacy printing to avoid false positive
  * lockdep complaints, thus allowing lockdep to continue to function for
  * real issues.
@@ -3016,7 +3016,7 @@ out:
 static inline void printk_legacy_allow_spinlock_enter(void) { }
 static inline void printk_legacy_allow_spinlock_exit(void) { }
 #else
-static DEFINE_WAIT_OVERRIDE_MAP(printk_legacy_map, LD_WAIT_SLEEP);
+static DEFINE_WAIT_OVERRIDE_MAP(printk_legacy_map, LD_WAIT_CONFIG);
 
 static inline void printk_legacy_allow_spinlock_enter(void)
 {
