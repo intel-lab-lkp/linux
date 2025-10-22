@@ -1168,6 +1168,105 @@ static int wait_for_concurrent_writes(struct file *file)
 	return err;
 }
 
+struct nfsd_write_dio {
+	ssize_t	start_len;	/* Length for misaligned first extent */
+	ssize_t	middle_len;	/* Length for DIO-aligned middle extent */
+	ssize_t	end_len;	/* Length for misaligned last extent */
+};
+
+static bool
+nfsd_is_write_dio_possible(loff_t offset, unsigned long len,
+			   struct nfsd_file *nf,
+			   struct nfsd_write_dio *write_dio)
+{
+	const u32 dio_blocksize = nf->nf_dio_offset_align;
+	loff_t start_end, orig_end, middle_end;
+
+	if (unlikely(dio_blocksize > PAGE_SIZE || len < dio_blocksize))
+		return false;
+
+	start_end = round_up(offset, dio_blocksize);
+	orig_end = offset + len;
+	middle_end = round_down(orig_end, dio_blocksize);
+
+	write_dio->start_len = start_end - offset;
+	write_dio->middle_len = middle_end - start_end;
+	write_dio->end_len = orig_end - middle_end;
+
+	return true;
+}
+
+static bool
+nfsd_iov_iter_aligned_bvec(const struct iov_iter *i, unsigned int addr_mask,
+			   unsigned int len_mask)
+{
+	const struct bio_vec *bvec = i->bvec;
+	size_t skip = i->iov_offset;
+	size_t size = i->count;
+
+	if (size & len_mask)
+		return false;
+	do {
+		size_t len = bvec->bv_len;
+
+		if (len > size)
+			len = size;
+		if ((unsigned long)(bvec->bv_offset + skip) & addr_mask)
+			return false;
+		bvec++;
+		size -= len;
+		skip = 0;
+	} while (size);
+
+	return true;
+}
+
+/*
+ * Set up as many as 3 iov_iter based on extents described by @write_dio.
+ * Returns the number of iov_iter that were setup.
+ */
+static int
+nfsd_setup_write_dio_iters(struct iov_iter **iterp, bool *iter_is_dio_aligned,
+			   struct bio_vec *rq_bvec, unsigned int nvecs,
+			   unsigned long cnt, struct nfsd_write_dio *write_dio,
+			   struct nfsd_file *nf)
+{
+	struct iov_iter *iters = *iterp;
+	int n_iters = 0;
+
+	/* Set up misaligned start? */
+	if (write_dio->start_len) {
+		iov_iter_bvec(&iters[n_iters], ITER_SOURCE, rq_bvec, nvecs, cnt);
+		iters[n_iters].count = write_dio->start_len;
+		iter_is_dio_aligned[n_iters] = false;
+		++n_iters;
+	}
+
+	/* Set up DIO-aligned middle */
+	iov_iter_bvec(&iters[n_iters], ITER_SOURCE, rq_bvec, nvecs, cnt);
+	if (write_dio->start_len)
+		iov_iter_advance(&iters[n_iters], write_dio->start_len);
+	iters[n_iters].count -= write_dio->end_len;
+	iter_is_dio_aligned[n_iters] =
+		nfsd_iov_iter_aligned_bvec(&iters[n_iters],
+					   nf->nf_dio_mem_align - 1,
+					   nf->nf_dio_offset_align - 1);
+	if (unlikely(!iter_is_dio_aligned[n_iters]))
+		return 0; /* no DIO-aligned IO possible */
+	++n_iters;
+
+	/* Set up misaligned end? */
+	if (write_dio->end_len) {
+		iov_iter_bvec(&iters[n_iters], ITER_SOURCE, rq_bvec, nvecs, cnt);
+		iov_iter_advance(&iters[n_iters],
+				 write_dio->start_len + write_dio->middle_len);
+		iter_is_dio_aligned[n_iters] = false;
+		++n_iters;
+	}
+
+	return n_iters;
+}
+
 static int
 nfsd_iocb_write(struct svc_rqst *rqstp, struct file *file, unsigned int nvecs,
 		unsigned long *cnt, struct kiocb *kiocb)
@@ -1182,6 +1281,80 @@ nfsd_iocb_write(struct svc_rqst *rqstp, struct file *file, unsigned int nvecs,
 	*cnt = host_err;
 
 	return 0;
+}
+
+static int
+nfsd_issue_write_dio(struct svc_rqst *rqstp, struct svc_fh *fhp,
+		     struct nfsd_file *nf, unsigned int nvecs,
+		     unsigned long *cnt, struct kiocb *kiocb,
+		     struct nfsd_write_dio *write_dio)
+{
+	struct iov_iter iter_stack[3];
+	struct iov_iter *iter = iter_stack;
+	loff_t in_offset = kiocb->ki_pos;
+	struct file *file = nf->nf_file;
+	unsigned long in_count = *cnt;
+	bool iter_is_dio_aligned[3];
+	unsigned int n_iters = 0;
+	ssize_t host_err;
+
+	n_iters = nfsd_setup_write_dio_iters(&iter, iter_is_dio_aligned,
+					     rqstp->rq_bvec, nvecs, *cnt,
+					     write_dio, nf);
+	if (unlikely(!n_iters))
+		return nfsd_iocb_write(rqstp, file, nvecs, cnt, kiocb);
+
+	trace_nfsd_write_direct(rqstp, fhp, in_offset, in_count);
+
+	/*
+	 * SYNC + DIRECT means the write should persist dirty time stamps.
+	 *
+	 * But for buffered writes done as fallback or to handle misaligned
+	 * payload segments, the data must be durable before nfsd_vfs_write
+	 * returns.
+	 */
+	kiocb->ki_flags &= ~IOCB_DSYNC;
+	kiocb->ki_flags |= IOCB_SYNC;
+
+	*cnt = 0;
+	for (int i = 0; i < n_iters; i++) {
+		if (iter_is_dio_aligned[i])
+			kiocb->ki_flags |= IOCB_DIRECT;
+		else
+			kiocb->ki_flags &= ~IOCB_DIRECT;
+
+		host_err = vfs_iocb_iter_write(file, kiocb, &iter[i]);
+		if (host_err < 0)
+			return host_err;
+		*cnt += host_err;
+		if (host_err < iter[i].count) /* partial write? */
+			break;
+	}
+
+	return 0;
+}
+
+static noinline_for_stack int
+nfsd_direct_write(struct svc_rqst *rqstp, struct svc_fh *fhp,
+		  struct nfsd_file *nf, unsigned int nvecs,
+		  unsigned long *cnt, struct kiocb *kiocb)
+{
+	struct nfsd_write_dio write_dio;
+
+	/*
+	 * Check if the underlying file system allows IOCB_DONTCACHE to be
+	 * used when issuing buffered IO. If so, request it to preserve the
+	 * intent of NFSD_IO_DIRECT. DONTCACHE will be ignored for direct
+	 * writes.
+	 */
+	if (nf->nf_file->f_op->fop_flags & FOP_DONTCACHE)
+		kiocb->ki_flags |= IOCB_DONTCACHE;
+
+	if (nfsd_is_write_dio_possible(kiocb->ki_pos, *cnt, nf, &write_dio))
+		return nfsd_issue_write_dio(rqstp, fhp, nf, nvecs, cnt, kiocb,
+					    &write_dio);
+
+	return nfsd_iocb_write(rqstp, nf->nf_file, nvecs, cnt, kiocb);
 }
 
 /**
@@ -1225,6 +1398,9 @@ nfsd_vfs_write(struct svc_rqst *rqstp, struct svc_fh *fhp,
 	if (sb->s_export_op)
 		exp_op_flags = sb->s_export_op->flags;
 
+	/* cel: UNSTABLE buffered WRITEs might want some form of throttling
+	 *	as well to prevent clients from pushing writes to us faster
+	 *	than they can be flushed onto durable storage */
 	if (test_bit(RQ_LOCAL, &rqstp->rq_flags) &&
 	    !(exp_op_flags & EXPORT_OP_REMOTE_FS)) {
 		/*
@@ -1255,6 +1431,11 @@ nfsd_vfs_write(struct svc_rqst *rqstp, struct svc_fh *fhp,
 		nfsd_copy_write_verifier(verf, nn);
 
 	switch (nfsd_io_cache_write) {
+	case NFSD_IO_DIRECT:
+		host_err = nfsd_direct_write(rqstp, fhp, nf, nvecs, cnt,
+					     &kiocb);
+		stable = *stable_how = NFS_FILE_SYNC;
+		break;
 	case NFSD_IO_DONTCACHE:
 		if (file->f_op->fop_flags & FOP_DONTCACHE)
 			kiocb.ki_flags |= IOCB_DONTCACHE;
