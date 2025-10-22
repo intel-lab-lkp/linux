@@ -400,7 +400,7 @@ POR, WDOG, JTAG and etc.
 |                     |Bits[22:8] Error ID(Agent ID of the system).            |
 |                     |Bit[7:0] Reason(WDOG, POR, FCCU and etc):               |
 |                     |See the SRESR register description in the System        |
-|                     |Reset Controller (SRC) section in SoC reference mannual |
+|                     |Reset Controller (SRC) section in SoC reference manual |
 |                     |One reason maps to BIT(reason) in SRESR                 |
 +---------------------+--------------------------------------------------------+
 |uint32 shutdownflags |Shutdown reason flags. This parameter has the format:   |
@@ -419,7 +419,7 @@ POR, WDOG, JTAG and etc.
 |                     |Bits[22:8] Error ID(Agent ID of the System).            |
 |                     |Bit[7:0] Reason                                         |
 |                     |See the SRESR register description in the System        |
-|                     |Reset Controller (SRC) section in SoC reference mannual |
+|                     |Reset Controller (SRC) section in SoC reference manual |
 |                     |One reason maps to BIT(reason) in SRESR                 |
 +---------------------+--------------------------------------------------------+
 |uint32 extinfo[3]    |Array of extended info words(e.g. fault pc)             |
