@@ -785,8 +785,42 @@ s25fs_s_nor_post_bfpt_fixups(struct spi_nor *nor,
 	return 0;
 }
 
+static void s25fs_s_nor_smpt_read_dummy(const struct spi_nor *nor,
+					u8 *read_dummy)
+{
+	/*
+	 * The configuration detection dwords in S25FS-S SMPT has 65h as
+	 * command instruction and 'variable' as configuration detection command
+	 * latency. Set 8 dummy cycles as it is factory default for 65h (read
+	 * any register) op.
+	 */
+	*read_dummy = 8;
+}
+
+static void s25fs_s_nor_smpt_map_id_dummy(const struct spi_nor *nor, u8 *map_id)
+{
+	/*
+	 * The S25FS512S chip datasheet rev.O Table 71 on page 153
+	 * JEDEC Sector Map Parameter Dword-6 Config. Detect-3 does
+	 * use CR3NV bit 1 to discern 64kiB/256kiB uniform sectors
+	 * device configuration, however according to section 7.5.5.1
+	 * Configuration Register 3 Non-volatile (CR3NV) page 61, the
+	 * CR3NV bit 1 is RFU Reserved for Future Use, and is set to
+	 * 0 on newly manufactured devices, which means 64kiB sectors.
+	 * Since the device does not support 64kiB uniform sectors in
+	 * any configuration, parsing SMPT table cannot find a valid
+	 * sector map entry and fails. Fix this up by setting SMPT
+	 * configuration index bit 0, which is populated exactly by
+	 * the CR3NV bit 1 being 1.
+	 */
+	if (nor->params->size == SZ_64M)
+		*map_id |= BIT(0);
+}
+
 static const struct spi_nor_fixups s25fs_s_nor_fixups = {
 	.post_bfpt = s25fs_s_nor_post_bfpt_fixups,
+	.smpt_read_dummy = s25fs_s_nor_smpt_read_dummy,
+	.smpt_map_id = s25fs_s_nor_smpt_map_id_dummy,
 };
 
 static const struct flash_info spansion_nor_parts[] = {
