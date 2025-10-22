@@ -566,8 +566,9 @@ class YnlFamily(SpecFamily):
         elif attr['type'] == 'indexed-array' and attr['sub-type'] == 'nest':
             nl_type |= Netlink.NLA_F_NESTED
             sub_space = attr['nested-attributes']
+            ignore_idx = attr.get('ignore-index', False)
             attr_payload = self._encode_indexed_array(value, sub_space,
-                                                      search_attrs)
+                                                      search_attrs, ignore_idx)
         elif attr["type"] == 'flag':
             if not value:
                 # If value is absent or false then skip attribute creation.
@@ -635,9 +636,11 @@ class YnlFamily(SpecFamily):
                                            sub_attrs)
         return attr_payload
 
-    def _encode_indexed_array(self, vals, sub_space, search_attrs):
+    def _encode_indexed_array(self, vals, sub_space, search_attrs, ignore_idx):
         attr_payload = b''
         for i, val in enumerate(vals):
+            if not ignore_idx:
+                i, val = val[0], val[1]
             idx = i | Netlink.NLA_F_NESTED
             val_payload = self._add_nest_attrs(val, sub_space, search_attrs)
             attr_payload += self._add_attr_raw(idx, val_payload)
