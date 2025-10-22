@@ -81,8 +81,11 @@ void efi_5level_switch(void)
 		new_cr3 = memset(pgt, 0, PAGE_SIZE);
 		new_cr3[0] = (u64)cr3 | _PAGE_TABLE_NOENC;
 	} else {
+		pgd_t *pgdp;
+
+		pgdp = (pgd_t *)read_cr3_pa();
 		/* take the new root table pointer from the current entry #0 */
-		new_cr3 = (u64 *)(cr3[0] & PAGE_MASK);
+		new_cr3 = (u64 *)(pgd_val(pgdp[0]) & PTE_PFN_MASK);
 
 		/* copy the new root table if it is not 32-bit addressable */
 		if ((u64)new_cr3 > U32_MAX)
