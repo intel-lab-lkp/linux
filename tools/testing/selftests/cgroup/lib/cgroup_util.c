@@ -2,6 +2,7 @@
 
 #define _GNU_SOURCE
 
+#include <stdbool.h>
 #include <errno.h>
 #include <fcntl.h>
 #include <linux/limits.h>
@@ -20,6 +21,15 @@
 #include "../../clone3/clone3_selftests.h"
 
 bool cg_test_v1_named;
+
+static bool metric_mode = false;
+
+__attribute__((constructor))
+static void init_metric_mode(void)
+{
+    char *env = getenv("CGROUP_TEST_METRICS");
+    metric_mode = (env && atoi(env));
+}
 
 /*
  * Checks if two given values differ by less than err% of their sum.
@@ -40,9 +50,9 @@ int values_close_report(long a, long b, int err)
 	double actual_err = (a + b) ? (100.0 * diff / (a + b)) : 0.0;
 	int close = diff <= limit;
 
-	if (!close)
+	if (metric_mode || !close)
 		fprintf(stderr,
-			"[FAIL] actual=%ld expected=%ld | diff=%ld | limit=%ld | "
+			"[METRICS] actual=%ld expected=%ld | diff=%ld | limit=%ld | "
 			"tolerance=%d%% | actual_error=%.2f%%\n",
 			a, b, diff, limit, err, actual_err);
 
