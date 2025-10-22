@@ -158,7 +158,7 @@ restart:
 	 */
 	if (!acquire_in_xmit(cp)) {
 		rds_stats_inc(s_send_lock_contention);
-		ret = -ENOMEM;
+		ret = -EBUSY;
 		goto out;
 	}
 
@@ -1374,7 +1374,7 @@ int rds_sendmsg(struct socket *sock, struct msghdr *msg, size_t payload_len)
 	rds_stats_inc(s_send_queued);
 
 	ret = rds_send_xmit(cpath);
-	if (ret == -ENOMEM || ret == -EAGAIN) {
+	if (ret == -ENOMEM || ret == -EAGAIN || ret == -EBUSY) {
 		ret = 0;
 		rcu_read_lock();
 		if (rds_destroy_pending(cpath->cp_conn))
