@@ -17,6 +17,7 @@ TEST_PROGS := \
 	netcons_cmdline.sh \
 	netcons_fragmented_msg.sh \
 	netcons_overflow.sh \
+	netcons_race_userdata.sh \
 	netcons_sysdata.sh \
 	netpoll_basic.py \
 	ping.py \
