@@ -1,0 +1,10 @@
+What:		/sys/class/power_supply/<supply_name>/fast_charge_timer
+Date:		October 2025
+KernelVersion:	6.19.0
+Contact:	Dimitri Fedrau <dimitri.fedrau@liebherr.com>
+Description:
+		This entry enables or disables the timer in fast-charge mode.
+
+		Access: Write
+
+		Valid values: 0 (disabled) or 1 (enabled)
