@@ -582,6 +582,7 @@ static const struct iommu_ops mtk_iommu_v1_ops = {
 	.device_group	= generic_device_group,
 	.owner          = THIS_MODULE,
 	.default_domain_ops = &(const struct iommu_domain_ops) {
+		.report_iommu_fault_supported = true,
 		.attach_dev	= mtk_iommu_v1_attach_device,
 		.map_pages	= mtk_iommu_v1_map,
 		.unmap_pages	= mtk_iommu_v1_unmap,

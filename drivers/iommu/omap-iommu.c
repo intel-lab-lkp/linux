@@ -1724,6 +1724,7 @@ static const struct iommu_ops omap_iommu_ops = {
 	.device_group	= generic_single_device_group,
 	.of_xlate	= omap_iommu_of_xlate,
 	.default_domain_ops = &(const struct iommu_domain_ops) {
+		.report_iommu_fault_supported = true,
 		.attach_dev	= omap_iommu_attach_dev,
 		.map_pages	= omap_iommu_map,
 		.unmap_pages	= omap_iommu_unmap,

@@ -714,6 +714,8 @@ struct iommu_ops {
 
 /**
  * struct iommu_domain_ops - domain specific operations
+ * @report_iommu_fault_supported: True if the domain supports
+ *                                iommu_set_fault_handler()
  * @attach_dev: attach an iommu domain to a device
  *  Return:
  * * 0		- success
@@ -751,6 +753,7 @@ struct iommu_ops {
  * @free: Release the domain after use.
  */
 struct iommu_domain_ops {
+	bool report_iommu_fault_supported : 1;
 	int (*attach_dev)(struct iommu_domain *domain, struct device *dev);
 	int (*set_dev_pasid)(struct iommu_domain *domain, struct device *dev,
 			     ioasid_t pasid, struct iommu_domain *old);
