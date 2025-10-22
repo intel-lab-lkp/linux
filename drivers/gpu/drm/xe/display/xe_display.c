@@ -36,6 +36,7 @@
 #include "intel_opregion.h"
 #include "skl_watermark.h"
 #include "xe_module.h"
+#include "xe_pm.h"
 
 /* Ensure drm and display members are placed properly. */
 INTEL_DISPLAY_MEMBER_STATIC_ASSERT(struct xe_device, drm, display);
@@ -516,7 +517,82 @@ static void display_device_remove(struct drm_device *dev, void *arg)
 	intel_display_device_remove(display);
 }
 
+static struct ref_tracker *xe_rpm_get(const struct drm_device *drm)
+{
+	return xe_pm_runtime_resume_and_get(to_xe_device(drm)) ? INTEL_WAKEREF_DEF : NULL;
+}
+
+static struct ref_tracker *xe_rpm_get_raw(const struct drm_device *drm)
+{
+	return xe_rpm_get(drm);
+}
+
+static struct ref_tracker *xe_rpm_get_if_in_use(const struct drm_device *drm)
+{
+	return xe_pm_runtime_get_if_in_use(to_xe_device(drm)) ? INTEL_WAKEREF_DEF : NULL;
+}
+
+static struct ref_tracker *xe_rpm_get_noresume(const struct drm_device *drm)
+{
+	xe_pm_runtime_get_noresume(to_xe_device(drm));
+
+	return INTEL_WAKEREF_DEF;
+}
+
+static void xe_rpm_put(const struct drm_device *drm, struct ref_tracker *wakeref)
+{
+	if (wakeref)
+		xe_pm_runtime_put(to_xe_device(drm));
+}
+
+static void xe_rpm_put_raw(const struct drm_device *drm, struct ref_tracker *wakeref)
+{
+	xe_rpm_put(drm, wakeref);
+}
+
+static void xe_rpm_put_unchecked(const struct drm_device *drm)
+{
+	xe_pm_runtime_put(to_xe_device(drm));
+}
+
+static bool xe_rpm_suspended(const struct drm_device *drm)
+{
+	struct xe_device *xe = to_xe_device(drm);
+
+	return pm_runtime_suspended(xe->drm.dev);
+}
+
+static void xe_rpm_assert_held(const struct drm_device *drm)
+{
+	/* FIXME */
+}
+
+static void xe_rpm_assert_block(const struct drm_device *drm)
+{
+	/* FIXME */
+}
+
+static void xe_rpm_assert_unblock(const struct drm_device *drm)
+{
+	/* FIXME */
+}
+
+static struct intel_display_rpm rpm = {
+	.get = xe_rpm_get,
+	.get_raw = xe_rpm_get_raw,
+	.get_if_in_use = xe_rpm_get_if_in_use,
+	.get_noresume = xe_rpm_get_noresume,
+	.put = xe_rpm_put,
+	.put_raw = xe_rpm_put_raw,
+	.put_unchecked = xe_rpm_put_unchecked,
+	.suspended = xe_rpm_suspended,
+	.assert_held = xe_rpm_assert_held,
+	.assert_block = xe_rpm_assert_block,
+	.assert_unblock = xe_rpm_assert_unblock
+};
+
 static const struct intel_display_parent_interface parent = {
+	.rpm = &rpm,
 };
 
 /**
