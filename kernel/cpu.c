@@ -1546,6 +1546,16 @@ void smp_shutdown_nonboot_cpus(unsigned int primary_cpu)
 	if (!cpu_online(primary_cpu))
 		primary_cpu = cpumask_first(cpu_online_mask);
 
+	/*
+	 * Mark all other CPUs as inactive so the scheduler won't select them as
+	 * migration targets.
+	 */
+	for_each_online_cpu(cpu) {
+		if (cpu == primary_cpu)
+			continue;
+		set_cpu_active(cpu, false);
+	}
+
 	for_each_online_cpu(cpu) {
 		if (cpu == primary_cpu)
 			continue;
