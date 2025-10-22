@@ -251,6 +251,12 @@ properties:
               nested-attributes:
                 description: Name of the space (sub-space) used inside the attribute.
                 type: string
+              ignore-index:
+                description: |
+                  The indexed-array is just an array. The index, aka. the
+                  nested attribute-type, can be disregarded, as it doesn't
+                  contain anything interesting.
+                type: boolean
               enum:
                 description: Name of the enum type used for the attribute.
                 type: string

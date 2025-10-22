@@ -53,6 +53,9 @@ indexed-array
 limiting its size to 64kB). The ``ENTRY`` nests are special and have the
 index of the entry as their type instead of normal attribute type.
 
+When ``ignore-index`` is set to ``true``, then the ``indexed-array`` is
+just an array, and the index can be disregarded.
+
 A ``sub-type`` is needed to describe what type in the ``ENTRY``. A ``nest``
 ``sub-type`` means there are nest arrays in the ``ENTRY``, with the structure
 looks like::
