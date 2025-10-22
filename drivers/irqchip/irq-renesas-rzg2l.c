@@ -559,10 +559,9 @@ static int rzg2l_irqc_common_init(struct device_node *node, struct device_node *
 		return dev_err_probe(dev, ret, "cannot parse interrupts: %d\n", ret);
 
 	resetn = devm_reset_control_get_exclusive_deasserted(dev, NULL);
-	if (IS_ERR(resetn)) {
+	if (IS_ERR(resetn))
 		return dev_err_probe(dev, PTR_ERR(resetn),
 				     "failed to acquire deasserted reset: %d\n", ret);
-	}
 
 	ret = devm_pm_runtime_enable(dev);
 	if (ret)
