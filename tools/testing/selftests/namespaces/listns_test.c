@@ -602,4 +602,55 @@ TEST(listns_hierarchical_visibility)
 	waitpid(pid, &status, 0);
 }
 
+/*
+ * Test error cases for listns().
+ */
+TEST(listns_error_cases)
+{
+	struct ns_id_req req = {
+		.size = sizeof(req),
+		.spare = 0,
+		.ns_id = 0,
+		.ns_type = 0,
+		.spare2 = 0,
+		.user_ns_id = 0,
+	};
+	__u64 ns_ids[10];
+	int ret;
+
+	/* Test with invalid flags */
+	ret = sys_listns(&req, ns_ids, ARRAY_SIZE(ns_ids), 0xFFFF);
+	if (ret >= 0 || errno == ENOSYS) {
+		if (errno != ENOSYS) {
+			TH_LOG("Warning: Expected EINVAL for invalid flags, got success");
+		}
+	} else {
+		ASSERT_EQ(errno, EINVAL);
+	}
+
+	/* Test with NULL ns_ids array */
+	ret = sys_listns(&req, NULL, 10, 0);
+	if (ret >= 0) {
+		TH_LOG("Warning: Expected EFAULT for NULL array, got success");
+	}
+
+	/* Test with invalid spare field */
+	req.spare = 1;
+	ret = sys_listns(&req, ns_ids, ARRAY_SIZE(ns_ids), 0);
+	if (ret >= 0 || errno == ENOSYS) {
+		if (errno != ENOSYS) {
+			TH_LOG("Warning: Expected EINVAL for non-zero spare, got success");
+		}
+	}
+	req.spare = 0;
+
+	/* Test with huge nr_ns_ids */
+	ret = sys_listns(&req, ns_ids, 2000000, 0);
+	if (ret >= 0 || errno == ENOSYS) {
+		if (errno != ENOSYS) {
+			TH_LOG("Warning: Expected EOVERFLOW for huge count, got success");
+		}
+	}
+}
+
 TEST_HARNESS_MAIN
