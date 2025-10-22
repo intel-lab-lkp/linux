@@ -160,7 +160,10 @@ static int kirin_drm_kms_init(struct drm_device *dev,
 	int ret;
 
 	/* dev->mode_config initialization */
-	drm_mode_config_init(dev);
+	ret = drmm_mode_config_init(dev);
+	if (ret)
+		return ret;
+	
 	dev->mode_config.min_width = 0;
 	dev->mode_config.min_height = 0;
 	dev->mode_config.max_width = driver_data->config_max_width;
@@ -170,8 +173,7 @@ static int kirin_drm_kms_init(struct drm_device *dev,
 	/* display controller init */
 	ret = kirin_drm_private_init(dev, driver_data);
 	if (ret)
-		goto err_mode_config_cleanup;
-
+		return ret;
 	/* bind and init sub drivers */
 	ret = component_bind_all(dev->dev, dev);
 	if (ret) {
@@ -198,8 +200,6 @@ err_unbind_all:
 	component_unbind_all(dev->dev, dev);
 err_private_cleanup:
 	kirin_drm_private_cleanup(dev);
-err_mode_config_cleanup:
-	drm_mode_config_cleanup(dev);
 	return ret;
 }
 
@@ -208,7 +208,6 @@ static int kirin_drm_kms_cleanup(struct drm_device *dev)
 	drm_kms_helper_poll_fini(dev);
 	drm_atomic_helper_shutdown(dev);
 	kirin_drm_private_cleanup(dev);
-	drm_mode_config_cleanup(dev);
 
 	return 0;
 }
