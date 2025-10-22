@@ -739,7 +739,84 @@ static void i915_welcome_messages(struct drm_i915_private *dev_priv)
 			 "DRM_I915_DEBUG_RUNTIME_PM enabled\n");
 }
 
+static struct intel_runtime_pm *drm_to_rpm(const struct drm_device *drm)
+{
+	struct drm_i915_private *i915 = to_i915(drm);
+
+	return &i915->runtime_pm;
+}
+
+static struct ref_tracker *intel_rpm_get(const struct drm_device *drm)
+{
+	return intel_runtime_pm_get(drm_to_rpm(drm));
+}
+
+static struct ref_tracker *intel_rpm_get_raw(const struct drm_device *drm)
+{
+	return intel_runtime_pm_get_raw(drm_to_rpm(drm));
+}
+
+static struct ref_tracker *intel_rpm_get_if_in_use(const struct drm_device *drm)
+{
+	return intel_runtime_pm_get_if_in_use(drm_to_rpm(drm));
+}
+
+static struct ref_tracker *intel_rpm_get_noresume(const struct drm_device *drm)
+{
+	return intel_runtime_pm_get_noresume(drm_to_rpm(drm));
+}
+
+static void intel_rpm_put(const struct drm_device *drm, struct ref_tracker *wakeref)
+{
+	intel_runtime_pm_put(drm_to_rpm(drm), wakeref);
+}
+
+static void intel_rpm_put_raw(const struct drm_device *drm, struct ref_tracker *wakeref)
+{
+	intel_runtime_pm_put_raw(drm_to_rpm(drm), wakeref);
+}
+
+static void intel_rpm_put_unchecked(const struct drm_device *drm)
+{
+	intel_runtime_pm_put_unchecked(drm_to_rpm(drm));
+}
+
+static bool intel_rpm_suspended(const struct drm_device *drm)
+{
+	return intel_runtime_pm_suspended(drm_to_rpm(drm));
+}
+
+static void intel_rpm_assert_held(const struct drm_device *drm)
+{
+	assert_rpm_wakelock_held(drm_to_rpm(drm));
+}
+
+static void intel_rpm_assert_block(const struct drm_device *drm)
+{
+	disable_rpm_wakeref_asserts(drm_to_rpm(drm));
+}
+
+static void intel_rpm_assert_unblock(const struct drm_device *drm)
+{
+	enable_rpm_wakeref_asserts(drm_to_rpm(drm));
+}
+
+static struct intel_display_rpm rpm = {
+	.get = intel_rpm_get,
+	.get_raw = intel_rpm_get_raw,
+	.get_if_in_use = intel_rpm_get_if_in_use,
+	.get_noresume = intel_rpm_get_noresume,
+	.put = intel_rpm_put,
+	.put_raw = intel_rpm_put_raw,
+	.put_unchecked = intel_rpm_put_unchecked,
+	.suspended = intel_rpm_suspended,
+	.assert_held = intel_rpm_assert_held,
+	.assert_block = intel_rpm_assert_block,
+	.assert_unblock = intel_rpm_assert_unblock
+};
+
 static const struct intel_display_parent_interface parent = {
+	.rpm = &rpm,
 };
 
 const struct intel_display_parent_interface *i915_driver_parent_interface(void)
