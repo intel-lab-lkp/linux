@@ -148,4 +148,6 @@ int io_buffer_register_bvec(struct io_uring_cmd *cmd, struct request *rq,
 int io_buffer_unregister_bvec(struct io_uring_cmd *cmd, unsigned int index,
 			      unsigned int issue_flags);
 
+int io_uring_cmd_get_buffer_info(struct io_uring_cmd *cmd, u64 *ubuf,
+				 unsigned int *len);
 #endif /* _LINUX_IO_URING_CMD_H */

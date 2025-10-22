@@ -1561,3 +1561,24 @@ int io_prep_reg_iovec(struct io_kiocb *req, struct iou_vec *iv,
 	req->flags |= REQ_F_IMPORT_BUFFER;
 	return 0;
 }
+
+int io_uring_cmd_get_buffer_info(struct io_uring_cmd *cmd, u64 *ubuf,
+				 unsigned int *len)
+{
+	struct io_ring_ctx *ctx = cmd_to_io_kiocb(cmd)->ctx;
+	struct io_rsrc_data *data = &ctx->buf_table;
+	struct io_mapped_ubuf *imu;
+	unsigned int buf_index;
+
+	if (!data->nr)
+		return -EINVAL;
+
+	buf_index = cmd->sqe->buf_index;
+	imu = data->nodes[buf_index]->buf;
+
+	*ubuf = imu->ubuf;
+	*len = imu->len;
+
+	return 0;
+}
+EXPORT_SYMBOL_GPL(io_uring_cmd_get_buffer_info);
