@@ -406,6 +406,16 @@ config PCIE_UNIPHIER_EP
 	  Say Y here if you want PCIe endpoint controller support on
 	  UniPhier SoCs. This driver supports Pro5 SoC.
 
+config PCIE_NXP_S32G
+	tristate "NXP S32G PCIe controller (host mode)"
+	depends on ARCH_S32 || COMPILE_TEST
+	select PCIE_DW_HOST
+	help
+	  Enable support for the PCIe controller in NXP S32G based boards to
+	  work in Host mode. The controller is based on DesignWare IP and
+	  can work either as RC or EP. In order to enable host-specific
+	  features PCIE_S32G must be selected.
+
 config PCIE_SOPHGO_DW
 	bool "Sophgo DesignWare PCIe controller (host mode)"
 	depends on ARCH_SOPHGO || COMPILE_TEST
