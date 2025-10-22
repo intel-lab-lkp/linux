@@ -87,6 +87,28 @@ struct drm_conn_prop_enum_list {
 	struct ida ida;
 };
 
+static void
+link_bpc_wq_callback(struct work_struct *work)
+{
+	struct delayed_work *dwork;
+	struct link_bpc_wq *link_bpc;
+	struct drm_connector *connector;
+	struct drm_device *drm_dev;
+
+	dwork = to_delayed_work(work);
+	link_bpc = container_of(dwork, struct link_bpc_wq, d_work);
+	connector = container_of(link_bpc, struct drm_connector, link_bpc);
+	drm_dev = connector->dev;
+
+	drm_modeset_lock(&drm_dev->mode_config.connection_mutex, NULL);
+	mutex_lock(&connector->link_bpc.lock);
+
+	drm_connector_update_link_bpc_property(connector);
+
+	mutex_unlock(&connector->link_bpc.lock);
+	drm_modeset_unlock(&drm_dev->mode_config.connection_mutex);
+}
+
 /*
  * Connector and encoder types.
  */
@@ -291,6 +313,14 @@ static int drm_connector_init_only(struct drm_device *dev,
 	connector->status = connector_status_unknown;
 	connector->display_info.panel_orientation =
 		DRM_MODE_PANEL_ORIENTATION_UNKNOWN;
+
+	mutex_init(&connector->link_bpc.lock);
+	INIT_DELAYED_WORK(&connector->link_bpc.d_work, link_bpc_wq_callback);
+	connector->link_bpc.wq = create_workqueue("link bpc workqueue");
+	if (!connector->link_bpc.wq) {
+		dev_err(dev->dev, "Failed to create work queue\n");
+		return -ENOMEM;
+	}
 
 	drm_connector_get_cmdline_mode(connector);
 
@@ -543,6 +573,85 @@ int drmm_connector_init(struct drm_device *dev,
 EXPORT_SYMBOL(drmm_connector_init);
 
 /**
+ * drm_connector_attach_link_bpc_property - create and attach 'link bpc' property
+ * @connector: drm connector
+ * @max_bpc: specify the upper limit, matching  that of 'max bpc' property
+ *
+ * Returns:
+ * Zero on success, error code on failure.
+ */
+int
+drm_connector_attach_link_bpc_property(struct drm_connector *connector,
+				       unsigned int max_bpc)
+{
+	struct drm_device *dev = connector->dev;
+	struct drm_property *prop;
+
+	if (connector->link_bpc_property)
+		return -EBUSY;
+
+	prop = drm_property_create_range(dev, DRM_MODE_PROP_IMMUTABLE, "link bpc", 8, max_bpc);
+	if (!prop)
+		return -ENOMEM;
+
+	connector->link_bpc_property = prop;
+
+	drm_object_attach_property(&connector->base, prop, max_bpc);
+
+	return 0;
+}
+EXPORT_SYMBOL(drm_connector_attach_link_bpc_property);
+
+/**
+ * drm_connector_update_link_bpc_property - update the 'link bpc' property of a connector
+ * @connector: drm connector
+ *
+ * This sends a uevent to userspace to notify about the fact that 'link bpc'
+ * has been updated.
+ */
+void
+drm_connector_update_link_bpc_property(struct drm_connector *connector)
+{
+	struct drm_connector_state *state = connector->state;
+
+	if (!connector->link_bpc_property)
+		return;
+
+	drm_dbg_kms(connector->dev, "[CONNECTOR:%d:%s] Setting state link bpc %u\n",
+				     connector->base.id, connector->name, state->link_bpc);
+	drm_object_property_set_value(&connector->base,
+				      connector->link_bpc_property,
+				      state->link_bpc);
+
+	drm_sysfs_connector_property_event(connector,
+					   connector->link_bpc_property);
+}
+EXPORT_SYMBOL(drm_connector_update_link_bpc_property);
+
+/**
+ * drm_connector_update_link_bpc_state - update the 'link bpc' connector state
+ * @connector: drm connector
+ * @val: new value for the 'link bpc' property
+ *
+ */
+void
+drm_connector_update_link_bpc_state(struct drm_connector *connector, u8 val)
+{
+	struct drm_connector_state *state = connector->state;
+
+	if (!connector->link_bpc_property)
+		return;
+
+	if (state->link_bpc == val)
+		return;
+
+	state->link_bpc = val;
+	queue_delayed_work(connector->link_bpc.wq,
+			   &connector->link_bpc.d_work, msecs_to_jiffies(1000));
+}
+EXPORT_SYMBOL(drm_connector_update_link_bpc_state);
+
+/**
  * drmm_connector_hdmi_init - Init a preallocated HDMI connector
  * @dev: DRM device
  * @connector: A pointer to the HDMI connector to init
@@ -617,6 +726,10 @@ int drmm_connector_hdmi_init(struct drm_device *dev,
 
 	drm_connector_attach_max_bpc_property(connector, 8, max_bpc);
 	connector->max_bpc = max_bpc;
+
+	ret = drm_connector_attach_link_bpc_property(connector, max_bpc);
+	if (ret)
+		return ret;
 
 	if (max_bpc > 8)
 		drm_connector_attach_hdr_output_metadata_property(connector);
@@ -802,6 +915,8 @@ void drm_connector_cleanup(struct drm_connector *connector)
 	mutex_destroy(&connector->hdmi_audio.lock);
 	mutex_destroy(&connector->hdmi.infoframes.lock);
 	mutex_destroy(&connector->mutex);
+	mutex_destroy(&connector->link_bpc.lock);
+	destroy_workqueue(connector->link_bpc.wq);
 
 	memset(connector, 0, sizeof(*connector));
 
@@ -1698,6 +1813,16 @@ EXPORT_SYMBOL(drm_hdmi_connector_get_output_format_name);
  *	supported by the hardware and sink. Drivers to use the function
  *	drm_connector_attach_max_bpc_property() to create and attach the
  *	property to the connector during initialization.
+ *
+ * link bpc:
+ *	This immutable range property can be used by userspace to determine the
+ *	current link bit depth. Drivers can use
+ *	drm_connector_attach_link_bpc_property() to create and attach the
+ *	property to the connector during initialization and
+ *	drm_connector_update_link_bpc_state() to update the property and to
+ *	queue an uevent with the new 'link bpc' value.
+ *	Userspace can determine if the driver made bpc modifications by
+ *	checking 'max bpc' against the 'link bpc' property.
  *
  * Connectors also have one standardized atomic property:
  *

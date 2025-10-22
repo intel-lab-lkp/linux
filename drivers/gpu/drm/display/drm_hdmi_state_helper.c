@@ -866,6 +866,9 @@ int drm_atomic_helper_connector_hdmi_check(struct drm_connector *connector,
 		crtc_state->mode_changed = true;
 	}
 
+	drm_connector_update_link_bpc_state(connector,
+					    new_conn_state->hdmi.output_bpc);
+
 	return 0;
 }
 EXPORT_SYMBOL(drm_atomic_helper_connector_hdmi_check);

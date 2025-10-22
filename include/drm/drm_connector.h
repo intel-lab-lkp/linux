@@ -1132,6 +1132,11 @@ struct drm_connector_state {
 	 */
 	u8 max_bpc;
 
+	/*
+	 * @link_bpc: Current link bpc
+	 */
+	u8 link_bpc;
+
 	/**
 	 * @privacy_screen_sw_state: See :ref:`Standard Connector
 	 * Properties<standard_connector_properties>`
@@ -1882,6 +1887,16 @@ struct drm_connector_cec {
 	void *data;
 };
 
+/*
+ * struct link_bpc_wq - holds the necessary bits to queue uevents for
+ * propagating 'link bpc' connector updates
+ */
+struct link_bpc_wq {
+	struct workqueue_struct *wq;
+	struct delayed_work d_work;
+	struct mutex lock;
+};
+
 /**
  * struct drm_connector - central DRM connector control structure
  *
@@ -2078,6 +2093,19 @@ struct drm_connector {
 	 * driven out of the connector.
 	 */
 	struct drm_property *max_bpc_property;
+
+	/**
+	 * @link_bpc_property: Current connector link bpc set by the driver
+	 * This property can be used to store the current link bpc.
+	 */
+	struct drm_property *link_bpc_property;
+
+	/**
+	 * @link_bpc_wq: workqueue for sending uevent to userspace with updated
+	 * 'link bpc' value
+	 */
+	struct link_bpc_wq link_bpc;
+
 
 	/** @privacy_screen: drm_privacy_screen for this connector, or NULL. */
 	struct drm_privacy_screen *privacy_screen;
@@ -2487,6 +2515,10 @@ void drm_connector_attach_privacy_screen_properties(struct drm_connector *conn);
 void drm_connector_attach_privacy_screen_provider(
 	struct drm_connector *connector, struct drm_privacy_screen *priv);
 void drm_connector_update_privacy_screen(const struct drm_connector_state *connector_state);
+
+int drm_connector_attach_link_bpc_property(struct drm_connector *connector, unsigned int max_bpc);
+void drm_connector_update_link_bpc_property(struct drm_connector *connector);
+void drm_connector_update_link_bpc_state(struct drm_connector *connector, u8 val);
 
 /**
  * struct drm_tile_group - Tile group metadata
