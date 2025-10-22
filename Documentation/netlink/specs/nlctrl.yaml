@@ -67,11 +67,13 @@ attribute-sets:
         name: ops
         type: indexed-array
         sub-type: nest
+        ignore-index: true
         nested-attributes: op-attrs
       -
         name: mcast-groups
         type: indexed-array
         sub-type: nest
+        ignore-index: true
         nested-attributes: mcast-group-attrs
       -
         name: policy
