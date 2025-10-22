@@ -1,0 +1,20 @@
+21.10.2025
+kernel: 6.17
+Test run: test_cpu
+Env: VM
+    Architecture: x86_64
+    CPU(s): 4
+    Thread(s) per core: 1
+    Core(s) per socket: 1
+    Socket(s): 4
+
+| test                                      | tolerance | avg_error_%   | min_error_%   | max_error_%   | pass_rate_%  |
+| ----------------------------------------- |---------- | ------------- | ------------- | ------------- | -------------|
+| test_cpucg_stats                          |    1      |     0.016     |    0.01       |     0.03      |     100      |
+| test_cpucg_nice                           |    1      |     0.067     |    0.02       |     0.27      |     100      |
+| test_cpucg_weight_overprovisioned         |    35     |     1.023     |    0.06       |     3.10      |     100      |
+| test_cpucg_weight_underprovisioned        |    15     |     0.010     |    0.00       |     0.03      |     100      |
+| test_cpucg_nested_weight_overprovisioned  |    15     |     0.923     |    0.18       |     2.21      |     100      |
+| test_cpucg_nested_weight_underprovisioned |    15     |     0.008     |    0.00       |     0.02      |     100      |
+| test_cpucg_max                            |    10     |     5.886     |    3.06       |     8.35      |     100      |
+| test_cpucg_max_nested                     |    10     |     7.065     |    4.37       |     13.39     |     90       |
