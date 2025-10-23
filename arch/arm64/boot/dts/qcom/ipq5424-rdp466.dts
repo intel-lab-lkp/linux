@@ -46,6 +46,23 @@
 		};
 	};
 
+	vreg_apc: regulator-vreg-apc {
+		compatible = "regulator-gpio";
+		regulator-name = "vreg_apc";
+		regulator-min-microvolt = <850000>;
+		regulator-max-microvolt = <1000000>;
+		regulator-boot-on;
+		regulator-always-on;
+		regulator-ramp-delay = <250>;
+
+		gpios = <&tlmm 17 GPIO_ACTIVE_HIGH>;
+		gpios-states = <1>;
+		states = <850000 0>, <1000000 1>;
+
+		pinctrl-0 = <&regulator_gpio_default>;
+		pinctrl-names = "default";
+	};
+
 	vreg_misc_3p3: regulator-usb-3p3 {
 		compatible = "regulator-fixed";
 		regulator-min-microvolt = <3300000>;
@@ -169,6 +186,13 @@
 		function = "gpio";
 		drive-strength = <8>;
 		bias-pull-down;
+	};
+
+	regulator_gpio_default: regulator-gpio-default-state {
+		pins = "gpio17";
+		function = "gpio";
+		drive-strength = <8>;
+		bias-disable;
 	};
 
 	spi0_default_state: spi0-default-state {
