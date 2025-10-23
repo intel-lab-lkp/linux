@@ -13,30 +13,71 @@ struct auxiliary_irq_info {
 	char name[AUXILIARY_MAX_IRQ_NAME];
 };
 
-static struct attribute *auxiliary_irq_attrs[] = {
-	NULL
+static struct attribute auxiliary_irq_attr = {
+	.mode = 0,
+	.name = "DUMMY",
 };
+
+static struct attribute *auxiliary_irq_attrs[] = {
+	[0] = &auxiliary_irq_attr,
+	[1] = NULL,
+};
+
+static bool auxiliary_irq_dir_group_visible(struct kobject *kobj)
+{
+	struct auxiliary_device *auxdev;
+	struct device *dev;
+
+	dev = container_of(kobj, struct device, kobj);
+	auxdev = container_of(dev, struct auxiliary_device, dev);
+
+	return !xa_empty(&auxdev->sysfs.irqs);
+}
+
+DEFINE_SIMPLE_SYSFS_GROUP_VISIBLE(auxiliary_irq_dir);
 
 static const struct attribute_group auxiliary_irqs_group = {
 	.name = "irqs",
 	.attrs = auxiliary_irq_attrs,
+	.is_visible = SYSFS_GROUP_VISIBLE(auxiliary_irq_dir),
 };
 
-static int auxiliary_irq_dir_prepare(struct auxiliary_device *auxdev)
+void auxiliary_bus_irq_dir_res_remove(struct auxiliary_device *auxdev)
 {
-	int ret = 0;
+	struct device *dev = &auxdev->dev;
 
-	guard(mutex)(&auxdev->sysfs.lock);
-	if (auxdev->sysfs.irq_dir_exists)
-		return 0;
+	sysfs_remove_group(&dev->kobj, &auxiliary_irqs_group);
+	xa_destroy(&auxdev->sysfs.irqs);
+	mutex_destroy(&auxdev->sysfs.lock);
+}
 
-	ret = devm_device_add_group(&auxdev->dev, &auxiliary_irqs_group);
-	if (ret)
-		return ret;
+int auxiliary_bus_irq_dir_res_probe(struct auxiliary_device *auxdev)
+{
+	struct device *dev = &auxdev->dev;
 
-	auxdev->sysfs.irq_dir_exists = true;
+	mutex_init(&auxdev->sysfs.lock);
 	xa_init(&auxdev->sysfs.irqs);
-	return 0;
+	return sysfs_create_group(&dev->kobj, &auxiliary_irqs_group);
+}
+
+static struct auxiliary_irq_info *auxiliary_irq_info_init(int irq)
+{
+	struct auxiliary_irq_info *info;
+
+	info = kzalloc(sizeof(*info), GFP_KERNEL);
+	if (!info)
+		return NULL;
+
+	sysfs_attr_init(&info->sysfs_attr.attr);
+	snprintf(info->name, AUXILIARY_MAX_IRQ_NAME, "%d", irq);
+	info->sysfs_attr.attr.name = info->name;
+
+	return info;
+}
+
+static void auxiliary_irq_info_destroy(struct auxiliary_irq_info *info)
+{
+	kfree(info);
 }
 
 /**
@@ -55,36 +96,41 @@ static int auxiliary_irq_dir_prepare(struct auxiliary_device *auxdev)
  */
 int auxiliary_device_sysfs_irq_add(struct auxiliary_device *auxdev, int irq)
 {
-	struct auxiliary_irq_info *info __free(kfree) = NULL;
 	struct device *dev = &auxdev->dev;
+	struct auxiliary_irq_info *info;
+	bool sysfs_add_error = false;
 	int ret;
 
-	ret = auxiliary_irq_dir_prepare(auxdev);
-	if (ret)
-		return ret;
-
-	info = kzalloc(sizeof(*info), GFP_KERNEL);
+	info = auxiliary_irq_info_init(irq);
 	if (!info)
 		return -ENOMEM;
 
-	sysfs_attr_init(&info->sysfs_attr.attr);
-	snprintf(info->name, AUXILIARY_MAX_IRQ_NAME, "%d", irq);
-
+	mutex_lock(&auxdev->sysfs.lock);
 	ret = xa_insert(&auxdev->sysfs.irqs, irq, info, GFP_KERNEL);
 	if (ret)
-		return ret;
+		goto unlock;
 
-	info->sysfs_attr.attr.name = info->name;
+	ret = sysfs_update_group(&dev->kobj, &auxiliary_irqs_group);
+	if (ret)
+		goto irq_erase;
+
 	ret = sysfs_add_file_to_group(&dev->kobj, &info->sysfs_attr.attr,
 				      auxiliary_irqs_group.name);
-	if (ret)
-		goto sysfs_add_err;
+	if (ret) {
+		sysfs_add_error = true;
+		goto irq_erase;
+	}
 
-	xa_store(&auxdev->sysfs.irqs, irq, no_free_ptr(info), GFP_KERNEL);
+	mutex_unlock(&auxdev->sysfs.lock);
 	return 0;
 
-sysfs_add_err:
+irq_erase:
 	xa_erase(&auxdev->sysfs.irqs, irq);
+	if (sysfs_add_error)
+		sysfs_update_group(&dev->kobj, &auxiliary_irqs_group);
+unlock:
+	mutex_unlock(&auxdev->sysfs.lock);
+	auxiliary_irq_info_destroy(info);
 	return ret;
 }
 EXPORT_SYMBOL_GPL(auxiliary_device_sysfs_irq_add);
@@ -97,17 +143,30 @@ EXPORT_SYMBOL_GPL(auxiliary_device_sysfs_irq_add);
  * This function should be called to remove an IRQ sysfs entry.
  * The driver must invoke this API when IRQ is released by the device.
  */
-void auxiliary_device_sysfs_irq_remove(struct auxiliary_device *auxdev, int irq)
+int auxiliary_device_sysfs_irq_remove(struct auxiliary_device *auxdev, int irq)
 {
-	struct auxiliary_irq_info *info __free(kfree) = xa_load(&auxdev->sysfs.irqs, irq);
 	struct device *dev = &auxdev->dev;
+	struct auxiliary_irq_info *info;
+	int err;
 
+	mutex_lock(&auxdev->sysfs.lock);
+	info = xa_load(&auxdev->sysfs.irqs, irq);
 	if (!info) {
+		mutex_unlock(&auxdev->sysfs.lock);
 		dev_err(&auxdev->dev, "IRQ %d doesn't exist\n", irq);
-		return;
+		return -ENOMEM;
 	}
+
 	sysfs_remove_file_from_group(&dev->kobj, &info->sysfs_attr.attr,
 				     auxiliary_irqs_group.name);
 	xa_erase(&auxdev->sysfs.irqs, irq);
+	err = sysfs_update_group(&dev->kobj, &auxiliary_irqs_group);
+	if (err)
+		dev_err(&auxdev->dev,
+			"Failed to update IRQs group, irq %d\n", irq);
+
+	mutex_unlock(&auxdev->sysfs.lock);
+	auxiliary_irq_info_destroy(info);
+	return err;
 }
 EXPORT_SYMBOL_GPL(auxiliary_device_sysfs_irq_remove);
