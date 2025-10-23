@@ -336,17 +336,19 @@ static int iomap_dio_bio_iter(struct iomap_iter *iter, struct iomap_dio *dio)
 	int nr_pages, ret = 0;
 	u64 copied = 0;
 	size_t orig_count;
-	unsigned int alignment = bdev_logical_block_size(iomap->bdev);
+	unsigned int alignment;
 
 	if ((pos | length) & (bdev_logical_block_size(iomap->bdev) - 1))
 		return -EINVAL;
 
 	/*
-	 * Align to the larger one of bdev and fs block size, to meet the
-	 * alignment requirement of both layers.
+	 * File systems that write out of place and always allocate new blocks
+	 * need each bio to be block aligned as that's the unit of allocation.
 	 */
 	if (dio->flags & IOMAP_DIO_FSBLOCK_ALIGNED)
-		alignment = max(alignment, fs_block_size);
+		alignment = fs_block_size;
+	else
+		alignment = bdev_logical_block_size(iomap->bdev);
 
 	if (dio->flags & IOMAP_DIO_WRITE) {
 		bio_opf |= REQ_OP_WRITE;
