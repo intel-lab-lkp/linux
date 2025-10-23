@@ -588,8 +588,24 @@ static int __init ksmbd_server_init(void)
 	if (ret)
 		goto err_crypto_destroy;
 
+	if (IS_BUILTIN(CONFIG_SMB_SERVER)) {
+		static struct module_kobject *mk;
+
+		/*
+		 * All this does is assure that /sys/module/ksmbd comes
+		 * into existence if ksmbd is compiled in so that userspace
+		 * can rely on its existence to identify that ksmbd is
+		 * available.
+		 */
+		mk = lookup_or_create_module_kobject(KBUILD_MODNAME);
+		if (!mk)
+			goto err_workqueue_destroy;
+	}
+
 	return 0;
 
+err_workqueue_destroy:
+	ksmbd_workqueue_destroy();
 err_crypto_destroy:
 	ksmbd_crypto_destroy();
 err_release_inode_hash:
