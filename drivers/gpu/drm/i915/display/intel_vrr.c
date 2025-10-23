@@ -591,18 +591,24 @@ void intel_vrr_set_db_point_and_transmission_line(const struct intel_crtc_state 
 {
 	struct intel_display *display = to_intel_display(crtc_state);
 	enum transcoder cpu_transcoder = crtc_state->cpu_transcoder;
+	const struct drm_display_mode *adjusted_mode = &crtc_state->hw.adjusted_mode;
+	int transmission_line;
 
 	/*
 	 * For BMG and LNL+ onwards the EMP_AS_SDP_TL is used for programming
 	 * double buffering point and transmission line for VRR packets for
 	 * HDMI2.1/DP/eDP/DP->HDMI2.1 PCON.
 	 * Since currently we support VRR only for DP/eDP, so this is programmed
-	 * to for Adaptive Sync SDP to Vsync start.
+	 * for Adaptive Sync SDP.
 	 */
-	if (DISPLAY_VERx100(display) == 1401 || DISPLAY_VER(display) >= 20)
+	if (DISPLAY_VERx100(display) == 1401 || DISPLAY_VER(display) >= 20) {
+		transmission_line = adjusted_mode->crtc_vtotal - (adjusted_mode->crtc_vblank_start -
+								  crtc_state->set_context_latency +
+								  1);
 		intel_de_write(display,
 			       EMP_AS_SDP_TL(display, cpu_transcoder),
-			       EMP_AS_SDP_DB_TL(crtc_state->vrr.vsync_start));
+			       EMP_AS_SDP_DB_TL(transmission_line));
+	}
 }
 
 static int intel_vrr_hw_vmin(const struct intel_crtc_state *crtc_state)
