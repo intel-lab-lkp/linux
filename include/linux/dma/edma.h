@@ -85,6 +85,7 @@ struct dw_edma_chip {
 	u32			flags;
 
 	void __iomem		*reg_base;
+	resource_size_t		reg_phys_addr;
 
 	u16			ll_wr_cnt;
 	u16			ll_rd_cnt;
@@ -107,6 +108,9 @@ typedef void (*dw_edma_selfirq_fn)(struct dw_edma *dw, void *data);
 #if IS_REACHABLE(CONFIG_DW_EDMA)
 int dw_edma_probe(struct dw_edma_chip *chip);
 int dw_edma_remove(struct dw_edma_chip *chip);
+int dw_edma_selfirq_offsets(struct dw_edma *dw,
+			    resource_size_t *rd_status_off,
+			    resource_size_t *rd_clear_off);
 int dw_edma_register_selfirq(struct dw_edma *dw,
 			     dw_edma_selfirq_fn fn, void *data);
 void dw_edma_unregister_selfirq(struct dw_edma *dw,
@@ -120,6 +124,12 @@ static inline int dw_edma_probe(struct dw_edma_chip *chip)
 static inline int dw_edma_remove(struct dw_edma_chip *chip)
 {
 	return 0;
+}
+static inline int dw_edma_selfirq_offsets(struct dw_edma *dw,
+					  resource_size_t *rd_status_off,
+					  resource_size_t *rd_clear_off)
+{
+	return -EOPNOTSUPP;
 }
 static inline int dw_edma_register_selfirq(struct dw_edma *dw,
 					   dw_edma_selfirq_fn fn, void *data)

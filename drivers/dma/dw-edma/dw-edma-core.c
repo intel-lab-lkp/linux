@@ -20,6 +20,7 @@
 #include "dw-edma-core.h"
 #include "dw-edma-v0-core.h"
 #include "dw-hdma-v0-core.h"
+#include "dw-edma-v0-regs.h"
 #include "../dmaengine.h"
 #include "../virt-dma.h"
 
@@ -902,6 +903,28 @@ err_irq_free:
 
 	return err;
 }
+
+int dw_edma_selfirq_offsets(struct dw_edma *dw,
+			    resource_size_t *rd_status_off,
+			    resource_size_t *rd_clear_off)
+{
+	struct dw_edma_chip *chip;
+
+	if (!dw)
+		return -ENODEV;
+
+	chip = dw->chip;
+	if (dw->chip->mf == EDMA_MF_EDMA_LEGACY || dw->chip->mf == EDMA_MF_HDMA_NATIVE)
+		return -EOPNOTSUPP;
+	if (rd_status_off)
+		*rd_status_off = (uintptr_t)chip->reg_phys_addr +
+				 offsetof(struct dw_edma_v0_regs, rd_int_status);
+	if (rd_clear_off)
+		*rd_clear_off = (uintptr_t)chip->reg_phys_addr +
+				offsetof(struct dw_edma_v0_regs, rd_int_clear);
+	return 0;
+}
+EXPORT_SYMBOL_GPL(dw_edma_selfirq_offsets);
 
 int dw_edma_register_selfirq(struct dw_edma *dw,
 			     dw_edma_selfirq_fn fn, void *data)
