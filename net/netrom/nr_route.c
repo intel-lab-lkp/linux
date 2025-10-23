@@ -100,7 +100,7 @@ static int __must_check nr_add_node(ax25_address *nr, const char *mnemonic,
 {
 	struct nr_node  *nr_node;
 	struct nr_neigh *nr_neigh;
-	int i, found;
+	int i, found, ret = 0;
 	struct net_device *odev;
 
 	if ((odev=nr_dev_get(nr)) != NULL) {	/* Can't add routes to ourself */
@@ -212,6 +212,10 @@ static int __must_check nr_add_node(ax25_address *nr, const char *mnemonic,
 		return 0;
 	}
 	nr_node_lock(nr_node);
+	if (refcount_read(&nr_neigh->refcount) == 1) {
+		ret = -EINVAL;
+		goto out;
+	}
 
 	if (quality != 0)
 		strscpy(nr_node->mnemonic, mnemonic);
@@ -279,10 +283,11 @@ static int __must_check nr_add_node(ax25_address *nr, const char *mnemonic,
 		}
 	}
 
+out:
 	nr_neigh_put(nr_neigh);
 	nr_node_unlock(nr_node);
 	nr_node_put(nr_node);
-	return 0;
+	return ret;
 }
 
 static void nr_remove_node_locked(struct nr_node *nr_node)
