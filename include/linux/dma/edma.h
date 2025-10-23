@@ -101,10 +101,16 @@ struct dw_edma_chip {
 	struct dw_edma		*dw;
 };
 
+typedef void (*dw_edma_selfirq_fn)(struct dw_edma *dw, void *data);
+
 /* Export to the platform drivers */
 #if IS_REACHABLE(CONFIG_DW_EDMA)
 int dw_edma_probe(struct dw_edma_chip *chip);
 int dw_edma_remove(struct dw_edma_chip *chip);
+int dw_edma_register_selfirq(struct dw_edma *dw,
+			     dw_edma_selfirq_fn fn, void *data);
+void dw_edma_unregister_selfirq(struct dw_edma *dw,
+				dw_edma_selfirq_fn fn, void *data);
 #else
 static inline int dw_edma_probe(struct dw_edma_chip *chip)
 {
@@ -114,6 +120,16 @@ static inline int dw_edma_probe(struct dw_edma_chip *chip)
 static inline int dw_edma_remove(struct dw_edma_chip *chip)
 {
 	return 0;
+}
+static inline int dw_edma_register_selfirq(struct dw_edma *dw,
+					   dw_edma_selfirq_fn fn, void *data)
+{
+	return -EOPNOTSUPP;
+}
+
+static inline void dw_edma_unregister_selfirq(struct dw_edma *dw,
+					      dw_edma_selfirq_fn fn, void *data)
+{
 }
 #endif /* CONFIG_DW_EDMA */
 

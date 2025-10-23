@@ -661,11 +661,22 @@ static inline irqreturn_t dw_edma_interrupt_read(int irq, void *data)
 
 static irqreturn_t dw_edma_interrupt_common(int irq, void *data)
 {
+	struct dw_edma_irq *dw_irq = data;
+	struct dw_edma *dw = dw_irq->dw;
 	irqreturn_t ret = IRQ_NONE;
+	struct dw_edma_selfirq *h;
 
 	ret |= dw_edma_interrupt_write(irq, data);
 	ret |= dw_edma_interrupt_read(irq, data);
 
+	if (ret == IRQ_NONE) {
+		dw_edma_core_ack_test(dw);
+		scoped_guard(spinlock_irqsave, &dw->selfirq_lock) {
+			list_for_each_entry(h, &dw->selfirq_handlers, node)
+				h->fn(dw, h->data);
+		}
+		ret = IRQ_HANDLED;
+	}
 	return ret;
 }
 
@@ -892,6 +903,44 @@ err_irq_free:
 	return err;
 }
 
+int dw_edma_register_selfirq(struct dw_edma *dw,
+			     dw_edma_selfirq_fn fn, void *data)
+{
+	struct dw_edma_selfirq *h;
+
+	if (!dw || !fn)
+		return -EINVAL;
+
+	h = kzalloc(sizeof(*h), GFP_KERNEL);
+	if (!h)
+		return -ENOMEM;
+	h->fn = fn;
+	h->data = data;
+	guard(spinlock_irqsave)(&dw->selfirq_lock);
+	list_add_tail(&h->node, &dw->selfirq_handlers);
+	return 0;
+}
+EXPORT_SYMBOL_GPL(dw_edma_register_selfirq);
+
+void dw_edma_unregister_selfirq(struct dw_edma *dw,
+				dw_edma_selfirq_fn fn, void *data)
+{
+	struct dw_edma_selfirq *h, *tmp;
+
+	if (!dw || !fn)
+		return;
+
+	guard(spinlock_irqsave)(&dw->selfirq_lock);
+	list_for_each_entry_safe(h, tmp, &dw->selfirq_handlers, node) {
+		if (h->fn == fn && h->data == data) {
+			list_del(&h->node);
+			kfree(h);
+			break;
+		}
+	}
+}
+EXPORT_SYMBOL_GPL(dw_edma_unregister_selfirq);
+
 int dw_edma_probe(struct dw_edma_chip *chip)
 {
 	struct device *dev;
@@ -912,6 +961,8 @@ int dw_edma_probe(struct dw_edma_chip *chip)
 		return -ENOMEM;
 
 	dw->chip = chip;
+	INIT_LIST_HEAD(&dw->selfirq_handlers);
+	spin_lock_init(&dw->selfirq_lock);
 
 	if (dw->chip->mf == EDMA_MF_HDMA_NATIVE)
 		dw_hdma_v0_core_register(dw);
@@ -974,6 +1025,7 @@ EXPORT_SYMBOL_GPL(dw_edma_probe);
 int dw_edma_remove(struct dw_edma_chip *chip)
 {
 	struct dw_edma_chan *chan, *_chan;
+	struct dw_edma_selfirq *h, *tmp;
 	struct device *dev = chip->dev;
 	struct dw_edma *dw = chip->dw;
 	int i;
@@ -984,6 +1036,14 @@ int dw_edma_remove(struct dw_edma_chip *chip)
 
 	/* Disable eDMA */
 	dw_edma_core_off(dw);
+
+	/* Free self-irq handlers */
+	scoped_guard(spinlock_irqsave, &dw->selfirq_lock) {
+		list_for_each_entry_safe(h, tmp, &dw->selfirq_handlers, node) {
+			list_del(&h->node);
+			kfree(h);
+		}
+	}
 
 	/* Free irqs */
 	for (i = (dw->nr_irqs - 1); i >= 0; i--)

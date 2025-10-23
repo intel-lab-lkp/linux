@@ -509,6 +509,20 @@ static void dw_edma_v0_core_debugfs_on(struct dw_edma *dw)
 	dw_edma_v0_debugfs_on(dw);
 }
 
+static void dw_edma_v0_core_ack_test(struct dw_edma *dw)
+{
+	u32 wr_mask_all = (dw->wr_ch_cnt >= 32) ? ~0U : (BIT(dw->wr_ch_cnt) - 1);
+	u32 rd_mask_all = (dw->rd_ch_cnt >= 32) ? ~0U : (BIT(dw->rd_ch_cnt) - 1);
+
+	u32 wr_val = FIELD_PREP(EDMA_V0_DONE_INT_MASK, wr_mask_all) |
+		     FIELD_PREP(EDMA_V0_ABORT_INT_MASK, wr_mask_all);
+	u32 rd_val = FIELD_PREP(EDMA_V0_DONE_INT_MASK, rd_mask_all) |
+		     FIELD_PREP(EDMA_V0_ABORT_INT_MASK, rd_mask_all);
+
+	SET_32(dw, wr_int_clear, wr_val);
+	SET_32(dw, rd_int_clear, rd_val);
+}
+
 static const struct dw_edma_core_ops dw_edma_v0_core = {
 	.off = dw_edma_v0_core_off,
 	.ch_count = dw_edma_v0_core_ch_count,
@@ -517,6 +531,7 @@ static const struct dw_edma_core_ops dw_edma_v0_core = {
 	.start = dw_edma_v0_core_start,
 	.ch_config = dw_edma_v0_core_ch_config,
 	.debugfs_on = dw_edma_v0_core_debugfs_on,
+	.ack_test = dw_edma_v0_core_ack_test,
 };
 
 void dw_edma_v0_core_register(struct dw_edma *dw)
