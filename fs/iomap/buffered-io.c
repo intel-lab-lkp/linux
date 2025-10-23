@@ -288,6 +288,14 @@ static inline bool iomap_block_needs_zeroing(const struct iomap_iter *iter,
 		pos >= i_size_read(iter->inode);
 }
 
+inline void iomap_mapping_ioerror(struct address_space *mapping, int direction,
+		loff_t pos, u64 len, int error)
+{
+	if (mapping && mapping->a_ops->ioerror)
+		mapping->a_ops->ioerror(mapping, direction, pos, len,
+				error);
+}
+
 /**
  * iomap_read_inline_data - copy inline data into the page cache
  * @iter: iteration structure
@@ -310,8 +318,11 @@ static int iomap_read_inline_data(const struct iomap_iter *iter,
 	if (folio_test_uptodate(folio))
 		return 0;
 
-	if (WARN_ON_ONCE(size > iomap->length))
+	if (WARN_ON_ONCE(size > iomap->length)) {
+		iomap_mapping_ioerror(folio->mapping, READ, iomap->offset,
+				size, -EIO);
 		return -EIO;
+	}
 	if (offset > 0)
 		ifs_alloc(iter->inode, folio, iter->flags);
 
@@ -338,6 +349,10 @@ static void iomap_finish_folio_read(struct folio *folio, size_t off,
 		finished = !ifs->read_bytes_pending;
 		spin_unlock_irqrestore(&ifs->state_lock, flags);
 	}
+
+	if (error)
+		iomap_mapping_ioerror(folio->mapping, READ,
+				folio_pos(folio) + off, len, error);
 
 	if (finished)
 		folio_end_read(folio, uptodate);
@@ -558,11 +573,15 @@ static int iomap_read_folio_range(const struct iomap_iter *iter,
 	const struct iomap *srcmap = iomap_iter_srcmap(iter);
 	struct bio_vec bvec;
 	struct bio bio;
+	int ret;
 
 	bio_init(&bio, srcmap->bdev, &bvec, 1, REQ_OP_READ);
 	bio.bi_iter.bi_sector = iomap_sector(srcmap, pos);
 	bio_add_folio_nofail(&bio, folio, len, offset_in_folio(folio, pos));
-	return submit_bio_wait(&bio);
+	ret = submit_bio_wait(&bio);
+	if (ret)
+		iomap_mapping_ioerror(folio->mapping, READ, pos, len, ret);
+	return ret;
 }
 #else
 static int iomap_read_folio_range(const struct iomap_iter *iter,
@@ -1674,6 +1693,7 @@ int iomap_writeback_folio(struct iomap_writepage_ctx *wpc, struct folio *folio)
 	u64 pos = folio_pos(folio);
 	u64 end_pos = pos + folio_size(folio);
 	u64 end_aligned = 0;
+	loff_t orig_pos = pos;
 	bool wb_pending = false;
 	int error = 0;
 	u32 rlen;
@@ -1724,6 +1744,9 @@ int iomap_writeback_folio(struct iomap_writepage_ctx *wpc, struct folio *folio)
 
 	if (wb_pending)
 		wpc->nr_folios++;
+	if (error && pos > orig_pos)
+		iomap_mapping_ioerror(inode->i_mapping, WRITE, orig_pos, 0,
+				error);
 
 	/*
 	 * We can have dirty bits set past end of file in page_mkwrite path
