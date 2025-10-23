@@ -14,6 +14,8 @@
 #ifndef _T3_H
 #define _T3_H
 
+#define BROADCOM_OUI			0x00001018
+
 #define TG3_64BIT_REG_HIGH		0x00UL
 #define TG3_64BIT_REG_LOW		0x04UL
 

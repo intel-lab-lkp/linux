@@ -17042,6 +17042,14 @@ static int tg3_get_invariants(struct tg3 *tp, const struct pci_device_id *ent)
 	return err;
 }
 
+static int tg3_is_default_mac_address(u8 *addr)
+{
+	u32 addr_high = (addr[0] << 16) | (addr[1] << 8) | addr[2];
+	u32 addr_low = (addr[3] << 16) | (addr[4] <<  8) | addr[5];
+
+	return addr_high == BROADCOM_OUI && addr_low == 0;
+}
+
 static int tg3_get_device_address(struct tg3 *tp, u8 *addr)
 {
 	u32 hi, lo, mac_offset;
@@ -17115,6 +17123,10 @@ static int tg3_get_device_address(struct tg3 *tp, u8 *addr)
 
 	if (!is_valid_ether_addr(addr))
 		return -EINVAL;
+
+	if (tg3_is_default_mac_address(addr))
+		device_get_mac_address(&tp->pdev->dev, addr);
+
 	return 0;
 }
 
