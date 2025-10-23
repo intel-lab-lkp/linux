@@ -8,12 +8,24 @@
 
 #include <linux/align.h>
 #include <linux/bitfield.h>
+#include <linux/list.h>
 #include <linux/of.h>
+#include <linux/pci_regs.h>
 #include <linux/platform_device.h>
+#include <linux/spinlock.h>
 
 #include "pcie-designware.h"
 #include <linux/pci-epc.h>
 #include <linux/pci-epf.h>
+
+struct dw_pcie_ib_map {
+	struct list_head node;
+	enum pci_barno bar;
+	u64 pci_addr;           /* BAR base + offset at map time */
+	phys_addr_t cpu_addr;   /* EP local phys */
+	u64 size;
+	u32 index;              /* iATU inbound window index */
+};
 
 /**
  * dw_pcie_ep_get_func_from_ep - Get the struct dw_pcie_ep_func corresponding to
@@ -232,6 +244,7 @@ static void dw_pcie_ep_clear_bar(struct pci_epc *epc, u8 func_no, u8 vfunc_no,
 	struct dw_pcie *pci = to_dw_pcie_from_ep(ep);
 	enum pci_barno bar = epf_bar->barno;
 	u32 atu_index = ep->bar_to_atu[bar] - 1;
+	struct dw_pcie_ib_map *m, *tmp;
 
 	if (!ep->bar_to_atu[bar])
 		return;
@@ -242,6 +255,16 @@ static void dw_pcie_ep_clear_bar(struct pci_epc *epc, u8 func_no, u8 vfunc_no,
 	clear_bit(atu_index, ep->ib_window_map);
 	ep->epf_bar[bar] = NULL;
 	ep->bar_to_atu[bar] = 0;
+
+	guard(spinlock_irqsave)(&ep->ib_map_lock);
+	list_for_each_entry_safe(m, tmp, &ep->ib_map_list, node) {
+		if (m->bar != bar)
+			continue;
+		dw_pcie_disable_atu(pci, PCIE_ATU_REGION_DIR_IB, m->index);
+		clear_bit(m->index, ep->ib_window_map);
+		list_del(&m->node);
+		kfree(m);
+	}
 }
 
 static unsigned int dw_pcie_ep_get_rebar_offset(struct dw_pcie *pci,
@@ -363,14 +386,46 @@ static enum pci_epc_bar_type dw_pcie_ep_get_bar_type(struct dw_pcie_ep *ep,
 	return epc_features->bar[bar].type;
 }
 
-static int dw_pcie_ep_set_bar(struct pci_epc *epc, u8 func_no, u8 vfunc_no,
-			      struct pci_epf_bar *epf_bar)
+static int dw_pcie_ep_set_bar_init(struct pci_epc *epc, u8 func_no, u8 vfunc_no,
+				   struct pci_epf_bar *epf_bar)
 {
 	struct dw_pcie_ep *ep = epc_get_drvdata(epc);
 	struct dw_pcie *pci = to_dw_pcie_from_ep(ep);
 	enum pci_barno bar = epf_bar->barno;
-	size_t size = epf_bar->size;
 	enum pci_epc_bar_type bar_type;
+	int ret;
+
+	bar_type = dw_pcie_ep_get_bar_type(ep, bar);
+	switch (bar_type) {
+	case BAR_FIXED:
+		/*
+		 * There is no need to write a BAR mask for a fixed BAR (except
+		 * to write 1 to the LSB of the BAR mask register, to enable the
+		 * BAR). Write the BAR mask regardless. (The fixed bits in the
+		 * BAR mask register will be read-only anyway.)
+		 */
+		fallthrough;
+	case BAR_PROGRAMMABLE:
+		ret = dw_pcie_ep_set_bar_programmable(ep, func_no, epf_bar);
+		break;
+	case BAR_RESIZABLE:
+		ret = dw_pcie_ep_set_bar_resizable(ep, func_no, epf_bar);
+		break;
+	default:
+		ret = -EINVAL;
+		dev_err(pci->dev, "Invalid BAR type\n");
+		break;
+	}
+
+	return ret;
+}
+
+static int dw_pcie_ep_set_bar(struct pci_epc *epc, u8 func_no, u8 vfunc_no,
+			      struct pci_epf_bar *epf_bar)
+{
+	struct dw_pcie_ep *ep = epc_get_drvdata(epc);
+	enum pci_barno bar = epf_bar->barno;
+	size_t size = epf_bar->size;
 	int flags = epf_bar->flags;
 	int ret, type;
 
@@ -401,35 +456,12 @@ static int dw_pcie_ep_set_bar(struct pci_epc *epc, u8 func_no, u8 vfunc_no,
 		 * When dynamically changing a BAR, skip writing the BAR reg, as
 		 * that would clear the BAR's PCI address assigned by the host.
 		 */
-		goto config_atu;
+	} else {
+		ret = dw_pcie_ep_set_bar_init(epc, func_no, vfunc_no, epf_bar);
+		if (ret)
+			return ret;
 	}
 
-	bar_type = dw_pcie_ep_get_bar_type(ep, bar);
-	switch (bar_type) {
-	case BAR_FIXED:
-		/*
-		 * There is no need to write a BAR mask for a fixed BAR (except
-		 * to write 1 to the LSB of the BAR mask register, to enable the
-		 * BAR). Write the BAR mask regardless. (The fixed bits in the
-		 * BAR mask register will be read-only anyway.)
-		 */
-		fallthrough;
-	case BAR_PROGRAMMABLE:
-		ret = dw_pcie_ep_set_bar_programmable(ep, func_no, epf_bar);
-		break;
-	case BAR_RESIZABLE:
-		ret = dw_pcie_ep_set_bar_resizable(ep, func_no, epf_bar);
-		break;
-	default:
-		ret = -EINVAL;
-		dev_err(pci->dev, "Invalid BAR type\n");
-		break;
-	}
-
-	if (ret)
-		return ret;
-
-config_atu:
 	if (!(flags & PCI_BASE_ADDRESS_SPACE))
 		type = PCIE_ATU_TYPE_MEM;
 	else
@@ -513,6 +545,154 @@ static int dw_pcie_ep_map_addr(struct pci_epc *epc, u8 func_no, u8 vfunc_no,
 	}
 
 	return 0;
+}
+
+static inline u64 dw_pcie_ep_read_bar_assigned(struct dw_pcie_ep *ep, u8 func_no,
+					       enum pci_barno bar, bool is_io,
+					       bool is_64)
+{
+	u32 reg = PCI_BASE_ADDRESS_0 + 4 * bar;
+	u32 lo, hi = 0;
+	u64 base;
+
+	lo = dw_pcie_ep_readl_dbi(ep, func_no, reg);
+	if (is_io)
+		base = lo & PCI_BASE_ADDRESS_IO_MASK;
+	else {
+		base = lo & PCI_BASE_ADDRESS_MEM_MASK;
+		if (is_64) {
+			hi = dw_pcie_ep_readl_dbi(ep, func_no, reg + 4);
+			base |= ((u64)hi) << 32;
+		}
+	}
+	return base;
+}
+
+static int dw_pcie_ep_map_inbound(struct pci_epc *epc, u8 func_no, u8 vfunc_no,
+				  struct pci_epf_bar *epf_bar, u64 offset)
+{
+	struct dw_pcie_ep *ep = epc_get_drvdata(epc);
+	struct dw_pcie *pci = to_dw_pcie_from_ep(ep);
+	enum pci_barno bar = epf_bar->barno;
+	size_t size = epf_bar->size;
+	int flags = epf_bar->flags;
+	struct dw_pcie_ib_map *m;
+	u64 base, pci_addr;
+	int ret, type, win;
+
+	/*
+	 * DWC does not allow BAR pairs to overlap, e.g. you cannot combine BARs
+	 * 1 and 2 to form a 64-bit BAR.
+	 */
+	if ((flags & PCI_BASE_ADDRESS_MEM_TYPE_64) && (bar & 1))
+		return -EINVAL;
+
+	/*
+	 * Certain EPF drivers dynamically change the physical address of a BAR
+	 * (i.e. they call set_bar() twice, without ever calling clear_bar(), as
+	 * calling clear_bar() would clear the BAR's PCI address assigned by the
+	 * host).
+	 */
+	if (ep->epf_bar[bar]) {
+		/*
+		 * We can only dynamically add a whole or partial mapping if the
+		 * BAR flags do not differ from the existing configuration.
+		 */
+		if (ep->epf_bar[bar]->barno != bar ||
+		    ep->epf_bar[bar]->flags != flags)
+			return -EINVAL;
+
+		/*
+		 * When dynamically changing a BAR, skip writing the BAR reg, as
+		 * that would clear the BAR's PCI address assigned by the host.
+		 */
+	} else {
+		ret = dw_pcie_ep_set_bar_init(epc, func_no, vfunc_no, epf_bar);
+		if (ret)
+			return ret;
+	}
+
+	ep->epf_bar[bar] = epf_bar;
+
+	/*
+	 * Skip programming the inbound translation if phys_addr is 0.
+	 * In this case, the caller only intends to initialize the BAR.
+	 */
+	if (!epf_bar->phys_addr)
+		return 0;
+
+	base = dw_pcie_ep_read_bar_assigned(ep, func_no, bar,
+					    flags & PCI_BASE_ADDRESS_SPACE,
+					    flags & PCI_BASE_ADDRESS_MEM_TYPE_64);
+	if (!(flags & PCI_BASE_ADDRESS_SPACE))
+		type = PCIE_ATU_TYPE_MEM;
+	else
+		type = PCIE_ATU_TYPE_IO;
+	pci_addr = base + offset;
+
+	/* Allocate an inbound iATU window */
+	win = find_first_zero_bit(ep->ib_window_map, pci->num_ib_windows);
+	if (win >= pci->num_ib_windows)
+		return -ENOSPC;
+
+	/* Program address-match inbound iATU */
+	ret = dw_pcie_prog_inbound_atu(pci, win, type,
+				       epf_bar->phys_addr - pci->parent_bus_offset,
+				       pci_addr, size);
+	if (ret)
+		return ret;
+
+	m = kzalloc(sizeof(*m), GFP_KERNEL);
+	if (!m) {
+		dw_pcie_disable_atu(pci, PCIE_ATU_REGION_DIR_IB, win);
+		return -ENOMEM;
+	}
+	m->bar = bar;
+	m->pci_addr = pci_addr;
+	m->cpu_addr = epf_bar->phys_addr;
+	m->size = size;
+	m->index = win;
+
+	guard(spinlock_irqsave)(&ep->ib_map_lock);
+	set_bit(win, ep->ib_window_map);
+	list_add(&m->node, &ep->ib_map_list);
+
+	return 0;
+}
+
+static void dw_pcie_ep_unmap_inbound(struct pci_epc *epc, u8 func_no, u8 vfunc_no,
+				     struct pci_epf_bar *epf_bar, u64 offset)
+{
+	struct dw_pcie_ep *ep = epc_get_drvdata(epc);
+	struct dw_pcie *pci = to_dw_pcie_from_ep(ep);
+	enum pci_barno bar = epf_bar->barno;
+	struct dw_pcie_ib_map *m, *tmp;
+	size_t size = epf_bar->size;
+	int flags = epf_bar->flags;
+	u64 match_pci = 0;
+	u64 base;
+
+	/* If BAR base isn't assigned, there can't be any programmed sub-window */
+	base = dw_pcie_ep_read_bar_assigned(ep, func_no, bar,
+					    flags & PCI_BASE_ADDRESS_SPACE,
+					    flags & PCI_BASE_ADDRESS_MEM_TYPE_64);
+	if (base)
+		match_pci = base + offset;
+
+	guard(spinlock_irqsave)(&ep->ib_map_lock);
+	list_for_each_entry_safe(m, tmp, &ep->ib_map_list, node) {
+		if (m->bar != bar)
+			continue;
+		if (match_pci && m->pci_addr != match_pci)
+			continue;
+		if (size && m->size != size)
+			/* Partial unmap is unsupported for now */
+			continue;
+		dw_pcie_disable_atu(pci, PCIE_ATU_REGION_DIR_IB, m->index);
+		clear_bit(m->index, ep->ib_window_map);
+		list_del(&m->node);
+		kfree(m);
+	}
 }
 
 static int dw_pcie_ep_get_msi(struct pci_epc *epc, u8 func_no, u8 vfunc_no)
@@ -657,6 +837,8 @@ static const struct pci_epc_ops epc_ops = {
 	.align_addr		= dw_pcie_ep_align_addr,
 	.map_addr		= dw_pcie_ep_map_addr,
 	.unmap_addr		= dw_pcie_ep_unmap_addr,
+	.map_inbound		= dw_pcie_ep_map_inbound,
+	.unmap_inbound		= dw_pcie_ep_unmap_inbound,
 	.set_msi		= dw_pcie_ep_set_msi,
 	.get_msi		= dw_pcie_ep_get_msi,
 	.set_msix		= dw_pcie_ep_set_msix,
@@ -1113,6 +1295,8 @@ int dw_pcie_ep_init(struct dw_pcie_ep *ep)
 	struct device *dev = pci->dev;
 
 	INIT_LIST_HEAD(&ep->func_list);
+	INIT_LIST_HEAD(&ep->ib_map_list);
+	spin_lock_init(&ep->ib_map_lock);
 
 	epc = devm_pci_epc_create(dev, &epc_ops);
 	if (IS_ERR(epc)) {
