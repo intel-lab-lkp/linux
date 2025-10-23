@@ -700,12 +700,11 @@ void page_pool_set_pp_info(struct page_pool *pool, netmem_ref netmem)
 {
 	netmem_set_pp(netmem, pool);
 
-	/* For page-backed, pp_magic is used to identify if it's pp.
-	 * For net_iov, it's ensured nmdesc->pp is non-NULL if it's pp
-	 * and nmdesc->pp is NULL if it's not.
+	/* For system memory, page type in struct page is used to
+	 * determine if the pages belong to a page pool.
 	 */
 	if (!netmem_is_net_iov(netmem))
-		netmem_or_pp_magic(netmem, PP_SIGNATURE);
+		__SetPageNetpp(__netmem_to_page(netmem));
 
 	/* Ensuring all pages have been split into one fragment initially:
 	 * page_pool_set_pp_info() is only called once for every page when it
@@ -720,12 +719,11 @@ void page_pool_set_pp_info(struct page_pool *pool, netmem_ref netmem)
 
 void page_pool_clear_pp_info(netmem_ref netmem)
 {
-	/* For page-backed, pp_magic is used to identify if it's pp.
-	 * For net_iov, it's ensured nmdesc->pp is non-NULL if it's pp
-	 * and nmdesc->pp is NULL if it's not.
+	/* For system memory, page type in struct page is used to
+	 * determine if the pages belong to a page pool.
 	 */
 	if (!netmem_is_net_iov(netmem))
-		netmem_clear_pp_magic(netmem);
+		__ClearPageNetpp(__netmem_to_page(netmem));
 
 	netmem_set_pp(netmem, NULL);
 }
