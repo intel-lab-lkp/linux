@@ -124,11 +124,17 @@ struct fsl_mc_device *fsl_mc_device_lookup(struct fsl_mc_obj_desc *obj_desc,
 					   struct fsl_mc_device *mc_bus_dev)
 {
 	struct device *dev;
+	struct fsl_mc_device *mc_dev;
 
 	dev = device_find_child(&mc_bus_dev->dev, obj_desc,
 				__fsl_mc_device_match);
+	if (!dev)
+		return NULL;
 
-	return dev ? to_fsl_mc_device(dev) : NULL;
+	mc_dev = to_fsl_mc_device(dev);
+	put_device(dev);
+
+	return mc_dev;
 }
 
 /**
