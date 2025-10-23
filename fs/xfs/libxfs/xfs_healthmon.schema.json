@@ -42,6 +42,9 @@
 		},
 		{
 			"$ref": "#/$events/media_error"
+		},
+		{
+			"$ref": "#/$events/file_ioerror"
 		}
 	],
 
@@ -78,6 +81,16 @@
 		"i_generation": {
 			"description": "Inode generation number",
 			"type": "integer"
+		},
+		"off_t": {
+			"description": "File position, in bytes",
+			"type": "integer",
+			"minimum": 0
+		},
+		"size_t": {
+			"description": "File operation length, in bytes",
+			"type": "integer",
+			"minimum": 1
 		},
 		"storage_devs": {
 			"description": "Storage devices in a filesystem",
@@ -256,6 +269,26 @@
 				"force_umount",
 				"log_ioerr",
 				"meta_ioerr"
+			]
+		}
+	},
+
+	"$comment": "File IO event data are defined here.",
+	"$fileio": {
+		"types": {
+			"description": [
+				"File I/O operations.  One of:",
+				"",
+				" * readahead: reads into the page cache.",
+				" * writeback: writeback of dirty page cache.",
+				" * directio_read:   O_DIRECT reads.",
+				" * directio_owrite: O_DIRECT writes."
+			],
+			"enum": [
+				"readahead",
+				"writeback",
+				"directio_read",
+				"directio_write"
 			]
 		}
 	},
@@ -565,6 +598,50 @@
 				"domain",
 				"daddr",
 				"bbcount"
+			]
+		},
+		"file_ioerror": {
+			"title": "File I/O error",
+			"description": [
+				"A read or a write to a file failed.  The",
+				"inode, generation, pos, and len fields",
+				"describe the range of the file that is",
+				"affected."
+			],
+			"type": "object",
+
+			"properties": {
+				"type": {
+					"$ref": "#/$fileio/types"
+				},
+				"time_ns": {
+					"$ref": "#/$defs/time_ns"
+				},
+				"domain": {
+					"const": "filerange"
+				},
+				"inumber": {
+					"$ref": "#/$defs/xfs_ino_t"
+				},
+				"generation": {
+					"$ref": "#/$defs/i_generation"
+				},
+				"pos": {
+					"$ref": "#/$defs/off_t"
+				},
+				"length": {
+					"$ref": "#/$defs/size_t"
+				}
+			},
+
+			"required": [
+				"type",
+				"time_ns",
+				"domain",
+				"inumber",
+				"generation",
+				"pos",
+				"length"
 			]
 		}
 	}
