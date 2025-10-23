@@ -2236,6 +2236,26 @@ static void __ublk_fail_req(struct ublk_device *ub, struct ublk_io *io,
 }
 
 /*
+ * Request tag may just be filled to event kfifo, not get chance to
+ * dispatch, abort these requests too
+ */
+static void ublk_abort_batch_queue(struct ublk_device *ub,
+				   struct ublk_queue *ubq)
+{
+	while (true) {
+		struct request *req;
+		short tag;
+
+		if (!kfifo_out(&ubq->evts_fifo, &tag, 1))
+			break;
+
+		req = blk_mq_tag_to_rq(ub->tag_set.tags[ubq->q_id], tag);
+		if (req && blk_mq_request_started(req))
+			__ublk_fail_req(ub, &ubq->ios[tag], req);
+	}
+}
+
+/*
  * Called from ublk char device release handler, when any uring_cmd is
  * done, meantime request queue is "quiesced" since all inflight requests
  * can't be completed because ublk server is dead.
@@ -2253,6 +2273,9 @@ static void ublk_abort_queue(struct ublk_device *ub, struct ublk_queue *ubq)
 		if (io->flags & UBLK_IO_FLAG_OWNED_BY_SRV)
 			__ublk_fail_req(ub, io, io->req);
 	}
+
+	if (ublk_support_batch_io(ubq))
+		ublk_abort_batch_queue(ub, ubq);
 }
 
 static void ublk_start_cancel(struct ublk_device *ub)
