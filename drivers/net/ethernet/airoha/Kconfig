@@ -2,6 +2,7 @@
 config NET_VENDOR_AIROHA
 	bool "Airoha devices"
 	depends on ARCH_AIROHA || COMPILE_TEST
+	select PHYLIB
 	help
 	  If you have a Airoha SoC with ethernet, say Y.
 
