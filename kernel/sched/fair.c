@@ -5287,7 +5287,9 @@ enqueue_entity(struct cfs_rq *cfs_rq, struct sched_entity *se, int flags)
 	se->on_rq = 1;
 
 	if (cfs_rq->nr_queued == 1) {
-		check_enqueue_throttle(cfs_rq);
+		if (!(flags & ENQUEUE_THROTTLE))
+			check_enqueue_throttle(cfs_rq);
+
 		list_add_leaf_cfs_rq(cfs_rq);
 #ifdef CONFIG_CFS_BANDWIDTH
 		if (cfs_rq->pelt_clock_throttled) {
@@ -5912,7 +5914,7 @@ static int tg_unthrottle_up(struct task_group *tg, void *data)
 	list_for_each_entry_safe(p, tmp, &cfs_rq->throttled_limbo_list, throttle_node) {
 		list_del_init(&p->throttle_node);
 		p->throttled = false;
-		enqueue_task_fair(rq_of(cfs_rq), p, ENQUEUE_WAKEUP);
+		enqueue_task_fair(rq_of(cfs_rq), p, ENQUEUE_WAKEUP | ENQUEUE_THROTTLE);
 	}
 
 	/* Add cfs_rq with load or one or more already running entities to the list */
@@ -6029,14 +6031,17 @@ void unthrottle_cfs_rq(struct cfs_rq *cfs_rq)
 	 * unthrottled us with a positive runtime_remaining but other still
 	 * running entities consumed those runtime before we reached here.
 	 *
-	 * Anyway, we can't unthrottle this cfs_rq without any runtime remaining
+	 * We can't unthrottle this cfs_rq without any runtime remaining
 	 * because any enqueue in tg_unthrottle_up() will immediately trigger a
 	 * throttle, which is not supposed to happen on unthrottle path.
+	 *
+	 * Although the ENQUEUE_THROTTLE flag ensures that enqueues in
+	 * tg_unthrottle_up() do not trigger a throttle, we still retain the check
+	 * for cfs_rq->runtime_remaining. This prevents the enqueueing of many
+	 * entities whose runtime_remaining is less than 0.
 	 */
 	if (cfs_rq->runtime_enabled && cfs_rq->runtime_remaining <= 0)
 		return;
-
-	se = cfs_rq->tg->se[cpu_of(rq)];
 
 	cfs_rq->throttled = 0;
 
