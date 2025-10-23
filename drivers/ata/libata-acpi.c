@@ -246,6 +246,34 @@ void ata_acpi_bind_dev(struct ata_device *dev)
 }
 
 /**
+ * ata_acpi_dev_manage_restart - if the disk should be stopped (spun down) on
+ * system restart.
+ * @dev: target ATA device
+ *
+ * RETURNS:
+ * 1 if the disk should be stopped, otherwise 0
+ */
+bool ata_acpi_dev_manage_restart(struct ata_device *dev)
+{
+	/* If the device is power manageable, we assume the disk loses power on
+	 * reboot.
+	 */
+
+	/* If `ATA_FLAG_ACPI_SATA` is set, the acpi fwnode is attached to the
+	 * `ata_device` instead of the `ata_port`.
+	 */
+	if (dev->link->ap->flags & ATA_FLAG_ACPI_SATA) {
+		if (!is_acpi_device_node(dev->tdev.fwnode))
+			return 0;
+		return acpi_bus_power_manageable(ACPI_HANDLE(&dev->tdev));
+	}
+
+	if (!is_acpi_device_node(dev->link->ap->tdev.fwnode))
+		return 0;
+	return acpi_bus_power_manageable(ACPI_HANDLE(&dev->link->ap->tdev));
+}
+
+/**
  * ata_acpi_dissociate - dissociate ATA host from ACPI objects
  * @host: target ATA host
  *
