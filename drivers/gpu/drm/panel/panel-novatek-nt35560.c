@@ -280,14 +280,16 @@ static void nt35560_power_off(struct nt35560 *nt)
 static int nt35560_prepare(struct drm_panel *panel)
 {
 	struct nt35560 *nt = panel_to_nt35560(panel);
+
+	return nt35560_power_on(nt);
+}
+
+static int nt35560_enable(struct drm_panel *panel)
+{
+	struct nt35560 *nt = panel_to_nt35560(panel);
 	struct mipi_dsi_multi_context dsi_ctx = {
 		.dsi = to_mipi_dsi_device(nt->dev)
 	};
-	int ret;
-
-	ret = nt35560_power_on(nt);
-	if (ret)
-		return ret;
 
 	nt35560_read_id(&dsi_ctx);
 
@@ -317,7 +319,7 @@ static int nt35560_prepare(struct drm_panel *panel)
 	return dsi_ctx.accum_err;
 }
 
-static int nt35560_unprepare(struct drm_panel *panel)
+static int nt35560_disable(struct drm_panel *panel)
 {
 	struct nt35560 *nt = panel_to_nt35560(panel);
 	struct mipi_dsi_multi_context dsi_ctx = {
@@ -332,11 +334,17 @@ static int nt35560_unprepare(struct drm_panel *panel)
 
 	msleep(85);
 
+	return 0;
+}
+
+static int nt35560_unprepare(struct drm_panel *panel)
+{
+	struct nt35560 *nt = panel_to_nt35560(panel);
+
 	nt35560_power_off(nt);
 
 	return 0;
 }
-
 
 static int nt35560_get_modes(struct drm_panel *panel,
 			     struct drm_connector *connector)
@@ -369,6 +377,8 @@ static int nt35560_get_modes(struct drm_panel *panel,
 static const struct drm_panel_funcs nt35560_drm_funcs = {
 	.unprepare = nt35560_unprepare,
 	.prepare = nt35560_prepare,
+	.enable = nt35560_enable,
+	.disable = nt35560_disable,
 	.get_modes = nt35560_get_modes,
 };
 
