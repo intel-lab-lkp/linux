@@ -9494,7 +9494,16 @@ static int tg_set_cfs_bandwidth(struct task_group *tg,
 		cfs_rq->runtime_enabled = runtime_enabled;
 		cfs_rq->runtime_remaining = 0;
 
-		if (cfs_rq->throttled)
+		/*
+		 * Throttle cfs_rq now or it can be unthrottled with zero
+		 * runtime_remaining and gets throttled on its unthrottle path.
+		 */
+		if (cfs_rq->runtime_enabled && !cfs_rq->throttled) {
+			update_rq_clock(rq);
+			throttle_cfs_rq(cfs_rq);
+		}
+
+		if (!cfs_rq->runtime_enabled && cfs_rq->throttled)
 			unthrottle_cfs_rq(cfs_rq);
 	}
 
