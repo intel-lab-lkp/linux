@@ -9,8 +9,9 @@
 #include "intel_rps_types.h"
 #include "i915_reg_defs.h"
 
-struct i915_request;
+struct drm_device;
 struct drm_printer;
+struct i915_request;
 
 #define GT_FREQUENCY_MULTIPLIER 50
 #define GEN9_FREQ_SCALER 3
@@ -33,7 +34,7 @@ u32 intel_rps_get_boost_frequency(struct intel_rps *rps);
 int intel_rps_set_boost_frequency(struct intel_rps *rps, u32 freq);
 
 int intel_rps_set(struct intel_rps *rps, u8 val);
-void intel_rps_mark_interactive(struct intel_rps *rps, bool interactive);
+void intel_rps_mark_interactive(struct drm_device *drm, bool interactive);
 
 int intel_gpu_freq(struct intel_rps *rps, int val);
 int intel_freq_opcode(struct intel_rps *rps, int val);
@@ -64,7 +65,7 @@ bool rps_read_mask_mmio(struct intel_rps *rps, i915_reg_t reg32, u32 mask);
 
 void gen6_rps_frequency_dump(struct intel_rps *rps, struct drm_printer *p);
 
-void gen5_rps_irq_handler(struct intel_rps *rps);
+void gen5_rps_irq_handler(struct drm_device *drm);
 void gen6_rps_irq_handler(struct intel_rps *rps, u32 pm_iir);
 void gen11_rps_irq_handler(struct intel_rps *rps, u32 pm_iir);
 

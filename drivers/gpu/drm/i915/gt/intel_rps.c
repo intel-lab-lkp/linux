@@ -782,7 +782,7 @@ static void gen6_rps_set_thresholds(struct intel_rps *rps, u8 val)
 	mutex_unlock(&rps->power.mutex);
 }
 
-void intel_rps_mark_interactive(struct intel_rps *rps, bool interactive)
+static void _intel_rps_mark_interactive(struct intel_rps *rps, bool interactive)
 {
 	GT_TRACE(rps_to_gt(rps), "mark interactive: %s\n",
 		 str_yes_no(interactive));
@@ -796,6 +796,13 @@ void intel_rps_mark_interactive(struct intel_rps *rps, bool interactive)
 		rps->power.interactive--;
 	}
 	mutex_unlock(&rps->power.mutex);
+}
+
+void intel_rps_mark_interactive(struct drm_device *drm, bool interactive)
+{
+	struct drm_i915_private *i915 = to_i915(drm);
+
+	_intel_rps_mark_interactive(&to_gt(i915)->rps, interactive);
 }
 
 static int gen6_rps_set(struct intel_rps *rps, u8 val)
@@ -1953,7 +1960,7 @@ void gen6_rps_irq_handler(struct intel_rps *rps, u32 pm_iir)
 			"Command parser error, pm_iir 0x%08x\n", pm_iir);
 }
 
-void gen5_rps_irq_handler(struct intel_rps *rps)
+static void _gen5_rps_irq_handler(struct intel_rps *rps)
 {
 	struct intel_uncore *uncore = rps_to_uncore(rps);
 	u32 busy_up, busy_down, max_avg, min_avg;
@@ -1985,6 +1992,13 @@ void gen5_rps_irq_handler(struct intel_rps *rps)
 		rps->cur_freq = new_freq;
 
 	spin_unlock(&mchdev_lock);
+}
+
+void gen5_rps_irq_handler(struct drm_device *drm)
+{
+	struct drm_i915_private *i915 = to_i915(drm);
+
+	_gen5_rps_irq_handler(&to_gt(i915)->rps);
 }
 
 void intel_rps_init_early(struct intel_rps *rps)
