@@ -101,4 +101,17 @@ extern struct workqueue_struct *xfs_discard_wq;
 
 struct dentry *xfs_debugfs_mkdir(const char *name, struct dentry *parent);
 
+#define XFS_UEVENT_BUFLEN ( \
+	sizeof("SID=") + sizeof_field(struct super_block, s_id) + \
+	sizeof("UUID=") + UUID_STRING_LEN + \
+	sizeof("META_UUID=") + UUID_STRING_LEN)
+
+#define XFS_UEVENT_STR_PTRS \
+	NULL, /* sid */ \
+	NULL, /* uuid */ \
+	NULL /* metauuid */
+
+int xfs_format_uevent_strings(struct xfs_mount *mp, char *buf, ssize_t buflen,
+		char **env);
+
 #endif	/* __XFS_SUPER_H__ */

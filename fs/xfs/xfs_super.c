@@ -53,6 +53,7 @@
 #include <linux/magic.h>
 #include <linux/fs_context.h>
 #include <linux/fs_parser.h>
+#include <linux/uuid.h>
 
 static const struct super_operations xfs_super_operations;
 
@@ -1244,12 +1245,73 @@ xfs_inodegc_free_percpu(
 	free_percpu(mp->m_inodegc);
 }
 
+int
+xfs_format_uevent_strings(
+	struct xfs_mount	*mp,
+	char			*buf,
+	ssize_t			buflen,
+	char			**env)
+{
+	ssize_t			written;
+
+	ASSERT(buflen >= XFS_UEVENT_BUFLEN);
+
+	written = snprintf(buf, buflen, "SID=%s", mp->m_super->s_id);
+	if (written >= buflen)
+		return -EINVAL;
+
+	*env = buf;
+	env++;
+	buf += written + 1;
+	buflen -= written + 1;
+
+	written = snprintf(buf, buflen, "UUID=%pU", &mp->m_sb.sb_uuid);
+	if (written >= buflen)
+		return EINVAL;
+
+	*env = buf;
+	env++;
+	buf += written + 1;
+	buflen -= written + 1;
+
+	written = snprintf(buf, buflen, "META_UUID=%pU",
+			&mp->m_sb.sb_meta_uuid);
+	if (written >= buflen)
+		return EINVAL;
+
+	*env = buf;
+	env++;
+	buf += written + 1;
+	buflen -= written + 1;
+
+	ASSERT(buflen >= 0);
+	return 0;
+}
+
+static void
+xfs_send_unmount_uevent(
+	struct xfs_mount	*mp)
+{
+	char			buf[XFS_UEVENT_BUFLEN];
+	char			*env[] = {
+		"TYPE=mount",
+		XFS_UEVENT_STR_PTRS,
+		NULL,
+	};
+	int error;
+
+	error = xfs_format_uevent_strings(mp, buf, sizeof(buf), &env[1]);
+	if (!error)
+		kobject_uevent_env(&mp->m_kobj.kobject, KOBJ_REMOVE, env);
+}
+
 static void
 xfs_fs_put_super(
 	struct super_block	*sb)
 {
 	struct xfs_mount	*mp = XFS_M(sb);
 
+	xfs_send_unmount_uevent(mp);
 	xfs_notice(mp, "Unmounting Filesystem %pU", &mp->m_sb.sb_uuid);
 	xfs_filestream_unmount(mp);
 	xfs_unmountfs(mp);
@@ -1667,6 +1729,37 @@ xfs_debugfs_mkdir(
 	return child;
 }
 
+/*
+ * Send a uevent signalling that the mount succeeded so we can use udev rules
+ * to start background services.
+ */
+static void
+xfs_send_mount_uevent(
+	struct fs_context	*fc,
+	struct xfs_mount	*mp)
+{
+	char			*source;
+	char			buf[XFS_UEVENT_BUFLEN];
+	char			*env[] = {
+		"TYPE=mount",
+		NULL, /* source */
+		XFS_UEVENT_STR_PTRS,
+		NULL,
+	};
+	int			error;
+
+	source = kasprintf(GFP_KERNEL, "SOURCE=%s", fc->source);
+	if (!source)
+		return;
+	env[1] = source;
+
+	error = xfs_format_uevent_strings(mp, buf, sizeof(buf), &env[2]);
+	if (!error)
+		kobject_uevent_env(&mp->m_kobj.kobject, KOBJ_ADD, env);
+
+	kfree(source);
+}
+
 static int
 xfs_fs_fill_super(
 	struct super_block	*sb,
@@ -1980,6 +2073,7 @@ xfs_fs_fill_super(
 		mp->m_debugfs_uuid = NULL;
 	}
 
+	xfs_send_mount_uevent(fc, mp);
 	return 0;
 
  out_filestream_unmount:
