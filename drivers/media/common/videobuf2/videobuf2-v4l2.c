@@ -1000,12 +1000,14 @@ int vb2_ioctl_remove_bufs(struct file *file, void *priv,
 			  struct v4l2_remove_buffers *d)
 {
 	struct video_device *vdev = video_devdata(file);
-
-	if (vdev->queue->type != d->type)
-		return -EINVAL;
+	int res;
 
 	if (d->count == 0)
 		return 0;
+
+	res = vb2_verify_memory_type(vdev->queue, vdev->queue->memory, d->type);
+	if (res)
+		return res;
 
 	if (vb2_queue_is_busy(vdev->queue, file))
 		return -EBUSY;
