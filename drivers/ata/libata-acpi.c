@@ -274,6 +274,46 @@ bool ata_acpi_dev_manage_restart(struct ata_device *dev)
 }
 
 /**
+ * ata_acpi_port_power_on - set the power state of the ata port to D0
+ * @ap: target ATA port
+ *
+ * This function is called at the beginning of ata_port_probe.
+ */
+void ata_acpi_port_power_on(struct ata_port *ap)
+{
+	acpi_handle handle;
+	int i;
+
+	/* If `ATA_FLAG_ACPI_SATA` is set, the acpi fwnode is attached to the
+	 * `ata_device` instead of the `ata_port`.
+	 */
+	if (ap->flags & ATA_FLAG_ACPI_SATA) {
+		for (i = 0; i < ATA_MAX_DEVICES; i++) {
+			if (!is_acpi_device_node(ap->link.device[i].tdev.fwnode))
+				continue;
+			handle = ACPI_HANDLE(&ap->link.device[i].tdev);
+			if (!acpi_bus_power_manageable(handle))
+				continue;
+			if (!acpi_bus_set_power(handle, ACPI_STATE_D0))
+				ata_dev_dbg(&ap->link.device[i], "acpi: power on\n");
+			else
+				ata_dev_err(&ap->link.device[i], "acpi: failed to power state\n");
+		}
+		return;
+	}
+	if (!is_acpi_device_node(ap->tdev.fwnode))
+		return;
+	handle = ACPI_HANDLE(&ap->tdev);
+	if (!acpi_bus_power_manageable(handle))
+		return;
+
+	if (!acpi_bus_set_power(handle, ACPI_STATE_D0))
+		ata_port_dbg(ap, "acpi: power on\n");
+	else
+		ata_port_err(ap, "acpi: failed to set power state\n");
+}
+
+/**
  * ata_acpi_dissociate - dissociate ATA host from ACPI objects
  * @host: target ATA host
  *
