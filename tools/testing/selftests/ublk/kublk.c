@@ -442,6 +442,7 @@ static int ublk_queue_init(struct ublk_queue *q, unsigned long long extra_flags)
 	int cmd_buf_size, io_buf_size;
 	unsigned long off;
 
+	pthread_spin_init(&q->lock, PTHREAD_PROCESS_PRIVATE);
 	q->tgt_ops = dev->tgt.ops;
 	q->flags = 0;
 	q->q_depth = depth;
@@ -495,7 +496,7 @@ static int ublk_thread_init(struct ublk_thread *t, unsigned long long extra_flag
 
 	/* FETCH_IO_CMDS is multishot, so increase cq depth for BATCH_IO */
 	if (ublk_dev_batch_io(dev))
-		cq_depth += dev->dev_info.queue_depth;
+		cq_depth += dev->dev_info.queue_depth * 2;
 
 	ret = ublk_setup_ring(&t->ring, ring_depth, cq_depth,
 			IORING_SETUP_COOP_TASKRUN |
@@ -587,6 +588,9 @@ static int ublk_dev_prep(const struct dev_ctx *ctx, struct ublk_dev *dev)
 		ublk_err("can't open %s %s\n", buf, strerror(errno));
 		return -1;
 	}
+
+	if (ublk_dev_batch_io(dev))
+		ublk_batch_setup_map(dev);
 
 	dev->fds[0] = fd;
 	if (dev->tgt.ops->init_tgt)
@@ -891,14 +895,18 @@ static void ublk_batch_setup_queues(struct ublk_thread *t)
 {
 	int i;
 
-	/* setup all queues in the 1st thread */
 	for (i = 0; i < t->dev->dev_info.nr_hw_queues; i++) {
 		struct ublk_queue *q = &t->dev->q[i];
 		int ret;
 
+		/*
+		 * Only prepare io commands in the mapped thread context,
+		 * otherwise io command buffer index may not work as expected
+		 */
+		if (t->dev->q_thread_map[t->idx][i] == 0)
+			continue;
+
 		ret = ublk_batch_queue_prep_io_cmds(t, q);
-		ublk_assert(ret == 0);
-		ret = ublk_process_io(t);
 		ublk_assert(ret >= 0);
 	}
 }
@@ -931,12 +939,8 @@ static void *ublk_io_handler_fn(void *data)
 		/* submit all io commands to ublk driver */
 		ublk_submit_fetch_commands(t);
 	} else {
-		struct ublk_queue *q = &t->dev->q[t->idx];
-
-		/* prepare all io commands in the 1st thread context */
-		if (!t->idx)
-			ublk_batch_setup_queues(t);
-		ublk_batch_start_fetch(t, q);
+		ublk_batch_setup_queues(t);
+		ublk_batch_start_fetch(t);
 	}
 
 	do {
@@ -1220,7 +1224,8 @@ static int __cmd_dev_add(const struct dev_ctx *ctx)
 		goto fail;
 	}
 
-	if (nthreads != nr_queues && !ctx->per_io_tasks) {
+	if (nthreads != nr_queues && (!ctx->per_io_tasks &&
+				!(ctx->flags & UBLK_F_BATCH_IO))) {
 		ublk_err("%s: threads %u must be same as queues %u if "
 			"not using per_io_tasks\n",
 			__func__, nthreads, nr_queues);
@@ -1741,6 +1746,13 @@ int main(int argc, char *argv[])
 		ublk_err("%s: auto_zc_fallback is set but neither "
 				"F_AUTO_BUF_REG nor F_SUPPORT_ZERO_COPY is enabled\n",
 					__func__);
+		return -EINVAL;
+	}
+
+	if ((ctx.flags & UBLK_F_AUTO_BUF_REG) &&
+			(ctx.flags & UBLK_F_BATCH_IO) &&
+			(ctx.nthreads > ctx.nr_hw_queues)) {
+		ublk_err("too many threads for F_AUTO_BUF_REG & F_BATCH_IO\n");
 		return -EINVAL;
 	}
 
