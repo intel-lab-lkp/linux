@@ -38,6 +38,7 @@
 
 #include <linux/delay.h>
 #include <linux/io.h>
+#include <linux/log2.h>
 #include <linux/module.h>
 #include <linux/slab.h>
 
@@ -109,7 +110,8 @@ struct epf_ntb_ctrl {
 	u64 addr;
 	u64 size;
 	u32 num_mws;
-	u32 reserved;
+	u32 mw_offset[MAX_MW];
+	u32 mw_size[MAX_MW];
 	u32 spad_offset;
 	u32 spad_count;
 	u32 db_entry_size;
@@ -126,6 +128,7 @@ struct epf_ntb {
 	u32 db_count;
 	u32 spad_count;
 	u64 mws_size[MAX_MW];
+	u64 mws_offset[MAX_MW];
 	u64 db;
 	u32 vbus_number;
 	u16 vntb_pid;
@@ -441,6 +444,8 @@ static int epf_ntb_config_spad_bar_alloc(struct epf_ntb *ntb)
 
 	ctrl->spad_count = spad_count;
 	ctrl->num_mws = ntb->num_mws;
+	memset(ctrl->mw_offset, 0, sizeof(ctrl->mw_offset));
+	memset(ctrl->mw_size, 0, sizeof(ctrl->mw_size));
 	ntb->spad_size = spad_size;
 
 	ctrl->db_entry_size = sizeof(u32);
@@ -570,15 +575,31 @@ static void epf_ntb_db_bar_clear(struct epf_ntb *ntb)
  */
 static int epf_ntb_mw_bar_init(struct epf_ntb *ntb)
 {
+	struct device *dev = &ntb->epf->dev;
+	u64 bar_ends[BAR_5 + 1] = { 0 };
+	unsigned long bars_used = 0;
+	enum pci_barno barno;
+	u64 off, size, end;
 	int ret = 0;
 	int i;
-	u64 size;
-	enum pci_barno barno;
-	struct device *dev = &ntb->epf->dev;
 
 	for (i = 0; i < ntb->num_mws; i++) {
-		size = ntb->mws_size[i];
 		barno = ntb->epf_ntb_bar[BAR_MW1 + i];
+		off = ntb->mws_offset[i];
+		size = ntb->mws_size[i];
+		end = off + size;
+		if (end > bar_ends[barno])
+			bar_ends[barno] = end;
+		bars_used |= BIT(barno);
+	}
+
+	for (barno = BAR_0; barno <= BAR_5; barno++) {
+		if (!(bars_used & BIT(barno)))
+			continue;
+		if (bar_ends[barno] < SZ_4K)
+			size = SZ_4K;
+		else
+			size = roundup_pow_of_two(bar_ends[barno]);
 
 		ntb->epf->bar[barno].barno = barno;
 		ntb->epf->bar[barno].size = size;
@@ -594,8 +615,12 @@ static int epf_ntb_mw_bar_init(struct epf_ntb *ntb)
 				      &ntb->epf->bar[barno]);
 		if (ret) {
 			dev_err(dev, "MW set failed\n");
-			goto err_alloc_mem;
+			goto err_set_bar;
 		}
+	}
+
+	for (i = 0; i < ntb->num_mws; i++) {
+		size = ntb->mws_size[i];
 
 		/* Allocate EPC outbound memory windows to vpci vntb device */
 		ntb->vpci_mw_addr[i] = pci_epc_mem_alloc_addr(ntb->epf->epc,
@@ -604,19 +629,31 @@ static int epf_ntb_mw_bar_init(struct epf_ntb *ntb)
 		if (!ntb->vpci_mw_addr[i]) {
 			ret = -ENOMEM;
 			dev_err(dev, "Failed to allocate source address\n");
-			goto err_set_bar;
+			goto err_alloc_mem;
 		}
+	}
+
+	for (i = 0; i < ntb->num_mws; i++) {
+		ntb->reg->mw_offset[i] = (u32)ntb->mws_offset[i];
+		ntb->reg->mw_size[i] = (u32)ntb->mws_size[i];
 	}
 
 	return ret;
 
-err_set_bar:
-	pci_epc_clear_bar(ntb->epf->epc,
-			  ntb->epf->func_no,
-			  ntb->epf->vfunc_no,
-			  &ntb->epf->bar[barno]);
 err_alloc_mem:
-	epf_ntb_mw_bar_clear(ntb, i);
+	while (--i >= 0)
+		pci_epc_mem_free_addr(ntb->epf->epc,
+				      ntb->vpci_mw_phy[i],
+				      ntb->vpci_mw_addr[i],
+				      ntb->mws_size[i]);
+err_set_bar:
+	while (--barno >= BAR_0)
+		if (bars_used & BIT(barno))
+			pci_epc_clear_bar(ntb->epf->epc,
+					  ntb->epf->func_no,
+					  ntb->epf->vfunc_no,
+					  &ntb->epf->bar[barno]);
+
 	return ret;
 }
 
@@ -922,6 +959,60 @@ static ssize_t epf_ntb_##_name##_store(struct config_item *item,	\
 	return len;							\
 }
 
+#define EPF_NTB_MW_OFF_R(_name)						\
+static ssize_t epf_ntb_##_name##_show(struct config_item *item,		\
+				      char *page)			\
+{									\
+	struct config_group *group = to_config_group(item);		\
+	struct epf_ntb *ntb = to_epf_ntb(group);			\
+	struct device *dev = &ntb->epf->dev;				\
+	int win_no, idx;						\
+									\
+	if (sscanf(#_name, "mw%d_offset", &win_no) != 1)		\
+		return -EINVAL;						\
+									\
+	idx = win_no - 1;						\
+	if (idx < 0 || idx >= ntb->num_mws) {				\
+		dev_err(dev, "MW%d out of range (num_mws=%d)\n",	\
+			win_no, ntb->num_mws);				\
+		return -EINVAL;						\
+	}								\
+									\
+	idx = array_index_nospec(idx, ntb->num_mws);			\
+	return sprintf(page, "%lld\n", ntb->mws_offset[idx]);		\
+}
+
+#define EPF_NTB_MW_OFF_W(_name)						\
+static ssize_t epf_ntb_##_name##_store(struct config_item *item,	\
+				       const char *page, size_t len)	\
+{									\
+	struct config_group *group = to_config_group(item);		\
+	struct epf_ntb *ntb = to_epf_ntb(group);			\
+	struct device *dev = &ntb->epf->dev;				\
+	int win_no, idx;						\
+	u64 val;							\
+	int ret;							\
+									\
+	ret = kstrtou64(page, 0, &val);					\
+	if (ret)							\
+		return ret;						\
+									\
+	if (sscanf(#_name, "mw%d_offset", &win_no) != 1)		\
+		return -EINVAL;						\
+									\
+	idx = win_no - 1;						\
+	if (idx < 0 || idx >= ntb->num_mws) {				\
+		dev_err(dev, "MW%d out of range (num_mws=%d)\n",	\
+			win_no, ntb->num_mws);				\
+		return -EINVAL;						\
+	}								\
+									\
+	idx = array_index_nospec(idx, ntb->num_mws);			\
+	ntb->mws_offset[idx] = val;					\
+									\
+	return len;							\
+}
+
 #define EPF_NTB_BAR_R(_name, _id)					\
 	static ssize_t epf_ntb_##_name##_show(struct config_item *item,	\
 					      char *page)		\
@@ -992,6 +1083,14 @@ EPF_NTB_MW_R(mw3)
 EPF_NTB_MW_W(mw3)
 EPF_NTB_MW_R(mw4)
 EPF_NTB_MW_W(mw4)
+EPF_NTB_MW_OFF_R(mw1_offset)
+EPF_NTB_MW_OFF_W(mw1_offset)
+EPF_NTB_MW_OFF_R(mw2_offset)
+EPF_NTB_MW_OFF_W(mw2_offset)
+EPF_NTB_MW_OFF_R(mw3_offset)
+EPF_NTB_MW_OFF_W(mw3_offset)
+EPF_NTB_MW_OFF_R(mw4_offset)
+EPF_NTB_MW_OFF_W(mw4_offset)
 EPF_NTB_BAR_R(ctrl_bar, BAR_CONFIG)
 EPF_NTB_BAR_W(ctrl_bar, BAR_CONFIG)
 EPF_NTB_BAR_R(db_bar, BAR_DB)
@@ -1012,6 +1111,10 @@ CONFIGFS_ATTR(epf_ntb_, mw1);
 CONFIGFS_ATTR(epf_ntb_, mw2);
 CONFIGFS_ATTR(epf_ntb_, mw3);
 CONFIGFS_ATTR(epf_ntb_, mw4);
+CONFIGFS_ATTR(epf_ntb_, mw1_offset);
+CONFIGFS_ATTR(epf_ntb_, mw2_offset);
+CONFIGFS_ATTR(epf_ntb_, mw3_offset);
+CONFIGFS_ATTR(epf_ntb_, mw4_offset);
 CONFIGFS_ATTR(epf_ntb_, vbus_number);
 CONFIGFS_ATTR(epf_ntb_, vntb_pid);
 CONFIGFS_ATTR(epf_ntb_, vntb_vid);
@@ -1030,6 +1133,10 @@ static struct configfs_attribute *epf_ntb_attrs[] = {
 	&epf_ntb_attr_mw2,
 	&epf_ntb_attr_mw3,
 	&epf_ntb_attr_mw4,
+	&epf_ntb_attr_mw1_offset,
+	&epf_ntb_attr_mw2_offset,
+	&epf_ntb_attr_mw3_offset,
+	&epf_ntb_attr_mw4_offset,
 	&epf_ntb_attr_vbus_number,
 	&epf_ntb_attr_vntb_pid,
 	&epf_ntb_attr_vntb_vid,
