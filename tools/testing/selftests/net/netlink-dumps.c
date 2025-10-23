@@ -111,8 +111,8 @@ static const struct {
 
 TEST(dump_extack)
 {
+	int i, cnt, ret = 0;
 	int netlink_sock;
-	int i, cnt, ret;
 	char buf[8192];
 	int one = 1;
 	ssize_t n;
