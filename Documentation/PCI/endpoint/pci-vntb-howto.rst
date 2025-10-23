@@ -90,8 +90,10 @@ of the function device and is populated with the following NTB specific
 attributes that can be configured by the user::
 
 	# ls functions/pci_epf_vntb/func1/pci_epf_vntb.0/
-	db_count    mw1         mw2         mw3         mw4         num_mws
-	spad_count
+	ctrl_bar  mw1_bar     mw2_offset  mw4         spad_count
+	db_bar    mw1_offset  mw3         mw4_bar     vbus_number
+	db_count  mw2         mw3_bar     mw4_offset  vntb_pid
+	mw1       mw2_bar     mw3_offset  num_mws     vntb_vid
 
 A sample configuration for NTB function is given below::
 
@@ -105,6 +107,16 @@ A sample configuration for virtual NTB driver for virtual PCI bus::
 	# echo 0x1957 > functions/pci_epf_vntb/func1/pci_epf_vntb.0/vntb_vid
 	# echo 0x080A > functions/pci_epf_vntb/func1/pci_epf_vntb.0/vntb_pid
 	# echo 0x10 > functions/pci_epf_vntb/func1/pci_epf_vntb.0/vbus_number
+
+When BAR resources are tight but you still want to enable interrupts (which
+require a dedicated MW in addition to the data MW), map both MWs into a
+single BAR via 'mwN_offset' and 'mwN_bar' as shown below::
+
+	# echo 0xF0000 > functions/pci_epf_vntb/func1/pci_epf_vntb.0/mw1
+	# echo 0x8000 > functions/pci_epf_vntb/func1/pci_epf_vntb.0/mw2
+	# echo 0xF0000 > functions/pci_epf_vntb/func1/pci_epf_vntb.0/mw2_offset
+	# echo 2 > functions/pci_epf_vntb/func1/pci_epf_vntb.0/mw1_bar
+	# echo 2 > functions/pci_epf_vntb/func1/pci_epf_vntb.0/mw2_bar
 
 Binding pci-epf-ntb Device to EP Controller
 --------------------------------------------
