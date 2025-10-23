@@ -16,6 +16,13 @@
 })
 
 /*
+ * Extended version of bpf_ksym_exists() that handles static inline kfunc
+ * wrappers, falling back to the *___compat versions.
+ */
+#define __COMPAT_bpf_ksym_exists(sym) \
+	(__builtin_constant_p(!!sym) ? bpf_ksym_exists(sym##___compat) : !!sym)
+
+/*
  * v6.15: 950ad93df2fc ("bpf: add kfunc for populating cpumask bits")
  *
  * Compat macro will be dropped on v6.19 release.
@@ -162,6 +169,27 @@ static inline struct task_struct *__COMPAT_scx_bpf_cpu_curr(int cpu)
 }
 
 /*
+ * v6.19: Mirror the following _args structs, to prevent build errors in
+ * kernels that don't have these structs defined yet.
+ *
+ * The kernel will carry these __COMPAT_* structs until v6.23 (see below).
+ */
+#define scx_bpf_select_cpu_and_args __COMPAT_scx_bpf_select_cpu_and_args
+struct __COMPAT_scx_bpf_select_cpu_and_args {
+	s32 prev_cpu;
+	u64 wake_flags;
+	u64 flags;
+};
+
+#define scx_bpf_dsq_insert_vtime_args __COMPAT_scx_bpf_dsq_insert_vtime_args
+struct __COMPAT_scx_bpf_dsq_insert_vtime_args {
+	u64 dsq_id;
+	u64 slice;
+	u64 vtime;
+	u64 enq_flags;
+};
+
+/*
  * v6.19: To work around BPF maximum parameter limit, the following kfuncs are
  * replaced with variants that pack scalar arguments in a struct. Wrappers are
  * provided to maintain source compatibility.
@@ -170,9 +198,15 @@ static inline struct task_struct *__COMPAT_scx_bpf_cpu_curr(int cpu)
  * compatibility. After v6.23 release, remove the compat handling and move the
  * wrappers to common.bpf.h.
  */
+s32 __scx_bpf_select_cpu_and(struct task_struct *p, const struct cpumask *cpus_allowed,
+			     struct scx_bpf_select_cpu_and_args *args) __ksym __weak;
 s32 scx_bpf_select_cpu_and___compat(struct task_struct *p, s32 prev_cpu, u64 wake_flags,
 				    const struct cpumask *cpus_allowed, u64 flags) __ksym __weak;
-void scx_bpf_dsq_insert_vtime___compat(struct task_struct *p, u64 dsq_id, u64 slice, u64 vtime, u64 enq_flags) __ksym __weak;
+
+bool __scx_bpf_dsq_insert_vtime(struct task_struct *p,
+				struct scx_bpf_dsq_insert_vtime_args *args) __ksym __weak;
+void scx_bpf_dsq_insert_vtime___compat(struct task_struct *p,
+				u64 dsq_id, u64 slice, u64 vtime, u64 enq_flags) __ksym __weak;
 
 /**
  * scx_bpf_select_cpu_and - Pick an idle CPU usable by task @p
