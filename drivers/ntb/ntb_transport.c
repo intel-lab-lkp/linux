@@ -69,6 +69,9 @@
 #define NTB_TRANSPORT_DESC	"Software Queue-Pair Transport over NTB"
 #define NTB_TRANSPORT_MIN_SPADS (MW0_SZ_HIGH + 2)
 
+#define INTR_INVALID_ADDR_OFFSET	U32_MAX
+#define INTR_INVALID_DATA		U32_MAX
+
 MODULE_DESCRIPTION(NTB_TRANSPORT_DESC);
 MODULE_VERSION(NTB_TRANSPORT_VER);
 MODULE_LICENSE("Dual BSD/GPL");
@@ -715,7 +718,11 @@ static void ntb_transport_setup_qp_peer_msi(struct ntb_transport_ctx *nt,
 	dev_dbg(&qp->ndev->pdev->dev, "QP%d Peer MSI addr=%x data=%x\n",
 		qp_num, qp->peer_msi_desc.addr_offset, qp->peer_msi_desc.data);
 
-	if (qp->peer_msi_desc.addr_offset) {
+	if (qp->peer_msi_desc.addr_offset == INTR_INVALID_ADDR_OFFSET ||
+	    qp->peer_msi_desc.data == INTR_INVALID_DATA)
+		dev_info(&qp->ndev->pdev->dev,
+			 "Invalid addr_offset or data, falling back to doorbell\n");
+	else {
 		qp->use_msi = true;
 		dev_info(&qp->ndev->pdev->dev,
 			 "Using MSI interrupts for QP%d\n", qp_num);
@@ -723,11 +730,17 @@ static void ntb_transport_setup_qp_peer_msi(struct ntb_transport_ctx *nt,
 }
 
 static void ntb_transport_setup_qp_msi(struct ntb_transport_ctx *nt,
-				       unsigned int qp_num)
+				       unsigned int qp_num, bool changed)
 {
 	struct ntb_transport_qp *qp = &nt->qp_vec[qp_num];
 	int spad = qp_num * 2 + nt->msi_spad_offset;
 	int rc;
+
+	if (!changed && qp->msi_irq)
+		return;
+
+	ntb_spad_write(qp->ndev, spad, INTR_INVALID_ADDR_OFFSET);
+	ntb_spad_write(qp->ndev, spad + 1, INTR_INVALID_DATA);
 
 	if (!nt->use_msi)
 		return;
@@ -737,9 +750,6 @@ static void ntb_transport_setup_qp_msi(struct ntb_transport_ctx *nt,
 			      "Not enough SPADS to use MSI interrupts\n");
 		return;
 	}
-
-	ntb_spad_write(qp->ndev, spad, 0);
-	ntb_spad_write(qp->ndev, spad + 1, 0);
 
 	if (!qp->msi_irq) {
 		qp->msi_irq = ntbm_msi_request_irq(qp->ndev, ntb_transport_isr,
@@ -789,7 +799,7 @@ static void ntb_transport_msi_desc_changed(void *data)
 	dev_dbg(&nt->ndev->pdev->dev, "MSI descriptors changed");
 
 	for (i = 0; i < nt->qp_count; i++)
-		ntb_transport_setup_qp_msi(nt, i);
+		ntb_transport_setup_qp_msi(nt, i, true);
 
 	ntb_peer_db_set(nt->ndev, nt->msi_db_mask);
 }
@@ -1068,7 +1078,7 @@ static void ntb_transport_link_work(struct work_struct *work)
 	}
 
 	for (i = 0; i < nt->qp_count; i++)
-		ntb_transport_setup_qp_msi(nt, i);
+		ntb_transport_setup_qp_msi(nt, i, false);
 
 	for (i = 0; i < nt->mw_count; i++) {
 		size = nt->mw_vec[i].phys_size;
