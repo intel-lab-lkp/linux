@@ -160,7 +160,6 @@ static int proc_keys_show(struct seq_file *m, void *v)
 	char xbuf[16];
 	short state;
 	u64 timo;
-	int rc;
 
 	struct keyring_search_context ctx = {
 		.index_key		= key->index_key,
@@ -188,8 +187,7 @@ static int proc_keys_show(struct seq_file *m, void *v)
 	}
 
 	/* check whether the current task is allowed to view the key */
-	rc = key_task_permission(key_ref, ctx.cred, KEY_NEED_VIEW);
-	if (rc < 0)
+	if (key_task_permission(key_ref, ctx.cred, KEY_NEED_VIEW) < 0)
 		return 0;
 
 	now = ktime_get_real_seconds();
