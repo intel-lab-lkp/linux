@@ -67,6 +67,11 @@
 #define MULTIQ3_TRSFRCNTR_OL		0x10	/* xfer CNTR to OL (x and y) */
 #define MULTIQ3_EFLAG_RESET		0x06	/* reset E bit of flag reg */
 
+/*
+ * Semi-arbitrary limit on the number of optional encoder chips
+ */
+#define MULTIQ3_MAX_ENC_CHIPS		8
+
 static void multiq3_set_ctrl(struct comedi_device *dev, unsigned int bits)
 {
 	/*
@@ -311,6 +316,10 @@ static int multiq3_attach(struct comedi_device *dev,
 	s->range_table	= &range_unknown;
 	s->insn_read	= multiq3_encoder_insn_read;
 	s->insn_config	= multiq3_encoder_insn_config;
+
+	/* sanity check for number of optional encoders */
+	if (s->n_chan > MULTIQ3_MAX_ENC_CHIPS)
+		s->n_chan = MULTIQ3_MAX_ENC_CHIPS;
 
 	for (i = 0; i < s->n_chan; i++)
 		multiq3_encoder_reset(dev, i);
