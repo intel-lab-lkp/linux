@@ -605,6 +605,12 @@ static int rpmsg_cb(struct rpmsg_device *rpdev, void *data,
 	length = result[MSG_ERR_LENGTH];
 	offset = result[MSG_ERR_OFFSET];
 
+	for (i = 0 ; i < length; i++) {
+		k = offset + i;
+		j = ERROR_DATA + i;
+		mc_priv->regs[k] = result[j];
+	}
+
 	if (result[TOTAL_ERR_LENGTH] > length) {
 		if (!mc_priv->part_len)
 			mc_priv->part_len = length;
@@ -615,11 +621,6 @@ static int rpmsg_cb(struct rpmsg_device *rpdev, void *data,
 		 * messages the offset indicates the offset from which the data is to
 		 * be taken
 		 */
-		for (i = 0 ; i < length; i++) {
-			k = offset + i;
-			j = ERROR_DATA + i;
-			mc_priv->regs[k] = result[j];
-		}
 		if (mc_priv->part_len < result[TOTAL_ERR_LENGTH])
 			return 0;
 		mc_priv->part_len = 0;
@@ -705,7 +706,7 @@ static int rpmsg_cb(struct rpmsg_device *rpdev, void *data,
 	/* Convert to bytes */
 	length = result[TOTAL_ERR_LENGTH] * 4;
 	log_non_standard_event(sec_type, &amd_versalnet_guid, mc_priv->message,
-			       sec_sev, (void *)&result[ERROR_DATA], length);
+			       sec_sev, (void *)&mc_priv->regs, length);
 
 	return 0;
 }
