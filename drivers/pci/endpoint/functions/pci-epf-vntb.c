@@ -1269,7 +1269,7 @@ static int vntb_epf_db_set_mask(struct ntb_dev *ntb, u64 db_bits)
 }
 
 static int vntb_epf_mw_set_trans(struct ntb_dev *ndev, int pidx, int idx,
-		dma_addr_t addr, resource_size_t size)
+		dma_addr_t addr, resource_size_t size, resource_size_t offset)
 {
 	struct epf_ntb *ntb = ntb_ndev(ndev);
 	struct pci_epf_bar *epf_bar;
@@ -1288,7 +1288,7 @@ static int vntb_epf_mw_set_trans(struct ntb_dev *ndev, int pidx, int idx,
 	epf_bar->size = size;
 
 	if (epc->ops->map_inbound)
-		ret = pci_epc_map_inbound(epc, 0, 0, epf_bar, 0);
+		ret = pci_epc_map_inbound(epc, 0, 0, epf_bar, offset);
 	else
 		ret = pci_epc_set_bar(epc, 0, 0, epf_bar);
 
@@ -1399,7 +1399,8 @@ static u64 vntb_epf_db_read(struct ntb_dev *ndev)
 static int vntb_epf_mw_get_align(struct ntb_dev *ndev, int pidx, int idx,
 			resource_size_t *addr_align,
 			resource_size_t *size_align,
-			resource_size_t *size_max)
+			resource_size_t *size_max,
+			resource_size_t *offset)
 {
 	struct epf_ntb *ntb = ntb_ndev(ndev);
 

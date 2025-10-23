@@ -578,7 +578,7 @@ static int tool_setup_mw(struct tool_ctx *tc, int pidx, int widx,
 		return 0;
 
 	ret = ntb_mw_get_align(tc->ntb, pidx, widx, &addr_align,
-				&size_align, &size);
+				&size_align, &size, NULL);
 	if (ret)
 		return ret;
 
@@ -595,7 +595,7 @@ static int tool_setup_mw(struct tool_ctx *tc, int pidx, int widx,
 		goto err_free_dma;
 	}
 
-	ret = ntb_mw_set_trans(tc->ntb, pidx, widx, inmw->dma_base, inmw->size);
+	ret = ntb_mw_set_trans(tc->ntb, pidx, widx, inmw->dma_base, inmw->size, 0);
 	if (ret)
 		goto err_free_dma;
 
@@ -652,7 +652,7 @@ static ssize_t tool_mw_trans_read(struct file *filep, char __user *ubuf,
 		return -ENOMEM;
 
 	ret = ntb_mw_get_align(inmw->tc->ntb, inmw->pidx, inmw->widx,
-			       &addr_align, &size_align, &size_max);
+			       &addr_align, &size_align, &size_max, NULL);
 	if (ret)
 		goto err;
 

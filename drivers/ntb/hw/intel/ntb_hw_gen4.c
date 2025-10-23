@@ -335,7 +335,8 @@ ssize_t ndev_ntb4_debugfs_read(struct file *filp, char __user *ubuf,
 }
 
 static int intel_ntb4_mw_set_trans(struct ntb_dev *ntb, int pidx, int idx,
-				   dma_addr_t addr, resource_size_t size)
+				   dma_addr_t addr, resource_size_t size,
+				   resource_size_t offset)
 {
 	struct intel_ntb_dev *ndev = ntb_ndev(ntb);
 	unsigned long xlat_reg, limit_reg, idx_reg;
@@ -524,7 +525,8 @@ static int intel_ntb4_link_disable(struct ntb_dev *ntb)
 static int intel_ntb4_mw_get_align(struct ntb_dev *ntb, int pidx, int idx,
 				   resource_size_t *addr_align,
 				   resource_size_t *size_align,
-				   resource_size_t *size_max)
+				   resource_size_t *size_max,
+				   resource_size_t *offset)
 {
 	struct intel_ntb_dev *ndev = ntb_ndev(ntb);
 	resource_size_t bar_size, mw_size;

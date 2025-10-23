@@ -273,9 +273,11 @@ struct ntb_dev_ops {
 	int (*mw_get_align)(struct ntb_dev *ntb, int pidx, int widx,
 			    resource_size_t *addr_align,
 			    resource_size_t *size_align,
-			    resource_size_t *size_max);
+			    resource_size_t *size_max,
+			    resource_size_t *offset);
 	int (*mw_set_trans)(struct ntb_dev *ntb, int pidx, int widx,
-			    dma_addr_t addr, resource_size_t size);
+			    dma_addr_t addr, resource_size_t size,
+			    resource_size_t offset);
 	int (*mw_clear_trans)(struct ntb_dev *ntb, int pidx, int widx);
 	int (*peer_mw_count)(struct ntb_dev *ntb);
 	int (*peer_mw_get_addr)(struct ntb_dev *ntb, int widx,
@@ -823,13 +825,14 @@ static inline int ntb_mw_count(struct ntb_dev *ntb, int pidx)
 static inline int ntb_mw_get_align(struct ntb_dev *ntb, int pidx, int widx,
 				   resource_size_t *addr_align,
 				   resource_size_t *size_align,
-				   resource_size_t *size_max)
+				   resource_size_t *size_max,
+				   resource_size_t *offset)
 {
 	if (!(ntb_link_is_up(ntb, NULL, NULL) & BIT_ULL(pidx)))
 		return -ENOTCONN;
 
 	return ntb->ops->mw_get_align(ntb, pidx, widx, addr_align, size_align,
-				      size_max);
+				      size_max, offset);
 }
 
 /**
@@ -852,12 +855,13 @@ static inline int ntb_mw_get_align(struct ntb_dev *ntb, int pidx, int widx,
  * Return: Zero on success, otherwise an error number.
  */
 static inline int ntb_mw_set_trans(struct ntb_dev *ntb, int pidx, int widx,
-				   dma_addr_t addr, resource_size_t size)
+				   dma_addr_t addr, resource_size_t size,
+				   resource_size_t offset)
 {
 	if (!ntb->ops->mw_set_trans)
 		return 0;
 
-	return ntb->ops->mw_set_trans(ntb, pidx, widx, addr, size);
+	return ntb->ops->mw_set_trans(ntb, pidx, widx, addr, size, offset);
 }
 
 /**
@@ -875,7 +879,7 @@ static inline int ntb_mw_set_trans(struct ntb_dev *ntb, int pidx, int widx,
 static inline int ntb_mw_clear_trans(struct ntb_dev *ntb, int pidx, int widx)
 {
 	if (!ntb->ops->mw_clear_trans)
-		return ntb_mw_set_trans(ntb, pidx, widx, 0, 0);
+		return ntb_mw_set_trans(ntb, pidx, widx, 0, 0, 0);
 
 	return ntb->ops->mw_clear_trans(ntb, pidx, widx);
 }

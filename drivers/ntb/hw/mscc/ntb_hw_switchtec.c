@@ -191,7 +191,8 @@ static int peer_lut_index(struct switchtec_ntb *sndev, int mw_idx)
 static int switchtec_ntb_mw_get_align(struct ntb_dev *ntb, int pidx,
 				      int widx, resource_size_t *addr_align,
 				      resource_size_t *size_align,
-				      resource_size_t *size_max)
+				      resource_size_t *size_max,
+				      resource_size_t *offset)
 {
 	struct switchtec_ntb *sndev = ntb_sndev(ntb);
 	int lut;
@@ -268,7 +269,8 @@ static void switchtec_ntb_mw_set_lut(struct switchtec_ntb *sndev, int idx,
 }
 
 static int switchtec_ntb_mw_set_trans(struct ntb_dev *ntb, int pidx, int widx,
-				      dma_addr_t addr, resource_size_t size)
+				      dma_addr_t addr, resource_size_t size,
+				      resource_size_t offset)
 {
 	struct switchtec_ntb *sndev = ntb_sndev(ntb);
 	struct ntb_ctrl_regs __iomem *ctl = sndev->mmio_peer_ctrl;

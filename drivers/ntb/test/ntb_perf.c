@@ -573,7 +573,7 @@ static int perf_setup_inbuf(struct perf_peer *peer)
 
 	/* Get inbound MW parameters */
 	ret = ntb_mw_get_align(perf->ntb, peer->pidx, perf->gidx,
-			       &xlat_align, &size_align, &size_max);
+			       &xlat_align, &size_align, &size_max, NULL);
 	if (ret) {
 		dev_err(&perf->ntb->dev, "Couldn't get inbuf restrictions\n");
 		return ret;
@@ -604,7 +604,7 @@ static int perf_setup_inbuf(struct perf_peer *peer)
 	}
 
 	ret = ntb_mw_set_trans(perf->ntb, peer->pidx, peer->gidx,
-			       peer->inbuf_xlat, peer->inbuf_size);
+			       peer->inbuf_xlat, peer->inbuf_size, 0);
 	if (ret) {
 		dev_err(&perf->ntb->dev, "Failed to set inbuf translation\n");
 		goto err_free_inbuf;
