@@ -12,7 +12,6 @@
 
 #include "xe_drv.h"
 #include "xe_configfs.h"
-#include "xe_hw_fence.h"
 #include "xe_pci.h"
 #include "xe_pm.h"
 #include "xe_observation.h"
@@ -113,10 +112,6 @@ static const struct init_funcs init_funcs[] = {
 	{
 		.init = xe_configfs_init,
 		.exit = xe_configfs_exit,
-	},
-	{
-		.init = xe_hw_fence_module_init,
-		.exit = xe_hw_fence_module_exit,
 	},
 	{
 		.init = xe_sched_job_module_init,
