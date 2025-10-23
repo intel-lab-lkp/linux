@@ -486,6 +486,8 @@ struct iomap_dio_ops {
 		      unsigned flags);
 	void (*submit_io)(const struct iomap_iter *iter, struct bio *bio,
 		          loff_t file_offset);
+	void (*ioerror)(struct inode *inode, int direction, loff_t pos,
+			u64 len, int error);
 
 	/*
 	 * Filesystems wishing to attach private information to a direct io bio
