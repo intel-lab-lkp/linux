@@ -5050,7 +5050,7 @@ static int rvu_nix_block_init(struct rvu *rvu, struct nix_hw *nix_hw)
 				    (ltdefs->rx_apad1.ltype_match << 4) |
 				    ltdefs->rx_apad1.ltype_mask);
 
-			/* Receive ethertype defination register defines layer
+			/* Receive ethertype definition register defines layer
 			 * information in NPC_RESULT_S to identify the Ethertype
 			 * location in L2 header. Used for Ethertype overwriting
 			 * in inline IPsec flow.
@@ -6615,4 +6615,20 @@ unlock_grp:
 		mutex_unlock(&mcast_grp->mcast_grp_lock);
 
 	return ret;
+}
+
+/* On CN10k and older series of silicons, hardware may incorrectly
+ * assert XOFF on certain channels. Issue a write on NIX_AF_RX_CHANX_CFG
+ * to broadcacst XON on the same.
+ */
+void rvu_block_bcast_xon(struct rvu *rvu, int blkaddr)
+{
+	struct rvu_block *block = &rvu->hw->block[blkaddr];
+	u64 cfg;
+
+	if (!block->implemented || is_cn20k(rvu->pdev))
+		return;
+
+	cfg = rvu_read64(rvu, blkaddr, NIX_AF_RX_CHANX_CFG(0));
+	rvu_write64(rvu, blkaddr, NIX_AF_RX_CHANX_CFG(0), cfg);
 }

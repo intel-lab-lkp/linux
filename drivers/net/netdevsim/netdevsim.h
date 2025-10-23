@@ -143,8 +143,9 @@ struct netdevsim {
 	struct netdev_net_notifier nn;
 };
 
-struct netdevsim *
-nsim_create(struct nsim_dev *nsim_dev, struct nsim_dev_port *nsim_dev_port);
+struct netdevsim *nsim_create(struct nsim_dev *nsim_dev,
+			      struct nsim_dev_port *nsim_dev_port,
+			      u8 perm_addr[ETH_ALEN]);
 void nsim_destroy(struct netdevsim *ns);
 bool netdev_is_nsim(struct net_device *dev);
 
@@ -316,6 +317,7 @@ struct nsim_dev {
 	struct list_head port_list;
 	bool fw_update_status;
 	u32 fw_update_overwrite_mask;
+	u32 fw_update_flash_chunk_time_ms;
 	u32 max_macs;
 	bool test1;
 	bool dont_allow_reload;
@@ -362,8 +364,8 @@ void nsim_dev_exit(void);
 int nsim_drv_probe(struct nsim_bus_dev *nsim_bus_dev);
 void nsim_drv_remove(struct nsim_bus_dev *nsim_bus_dev);
 int nsim_drv_port_add(struct nsim_bus_dev *nsim_bus_dev,
-		      enum nsim_dev_port_type type,
-		      unsigned int port_index);
+		      enum nsim_dev_port_type type, unsigned int port_index,
+		      u8 perm_addr[ETH_ALEN]);
 int nsim_drv_port_del(struct nsim_bus_dev *nsim_bus_dev,
 		      enum nsim_dev_port_type type,
 		      unsigned int port_index);
