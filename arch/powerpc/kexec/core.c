@@ -14,6 +14,7 @@
 #include <linux/of.h>
 #include <linux/irq.h>
 #include <linux/ftrace.h>
+#include <linux/crash_reserve.h>
 
 #include <asm/kdump.h>
 #include <asm/machdep.h>
@@ -32,6 +33,8 @@ void machine_crash_shutdown(struct pt_regs *regs)
 void machine_kexec_cleanup(struct kimage *image)
 {
 }
+
+unsigned long long cma_size;
 
 /*
  * Do not allocate memory (or fail in any way) in machine_kexec().
@@ -110,7 +113,7 @@ void __init arch_reserve_crashkernel(void)
 
 	/* use common parsing */
 	ret = parse_crashkernel(boot_command_line, total_mem_sz, &crash_size,
-				&crash_base, NULL, NULL, NULL);
+				&crash_base, NULL, &cma_size, NULL);
 
 	if (ret)
 		return;
@@ -129,6 +132,14 @@ void __init arch_reserve_crashkernel(void)
 
 	reserve_crashkernel_generic(crash_size, crash_base, 0, false);
 }
+
+#ifdef CRASHKERNEL_CMA
+void __init kdump_cma_reserve(void)
+{
+	if (cma_size)
+		reserve_crashkernel_cma(cma_size);
+}
+#endif
 
 int __init overlaps_crashkernel(unsigned long start, unsigned long size)
 {

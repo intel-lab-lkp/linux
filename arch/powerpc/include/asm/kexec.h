@@ -51,8 +51,15 @@
 
 #ifndef __ASSEMBLER__
 #include <asm/reg.h>
+#include <linux/crash_reserve.h>
 
 typedef void (*crash_shutdown_t)(void);
+
+#ifdef CRASHKERNEL_CMA
+void kdump_cma_reserve(void);
+#else
+static inline void kdump_cma_reserve(void) { }
+#endif
 
 #ifdef CONFIG_KEXEC_CORE
 struct kimage;
