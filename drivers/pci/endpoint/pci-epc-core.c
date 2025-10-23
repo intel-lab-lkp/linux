@@ -445,6 +445,50 @@ int pci_epc_map_addr(struct pci_epc *epc, u8 func_no, u8 vfunc_no,
 EXPORT_SYMBOL_GPL(pci_epc_map_addr);
 
 /**
+ * pci_epc_map_inbound() - map a BAR subrange to the local CPU address
+ * @epc: the EPC device on which BAR has to be configured
+ * @func_no: the physical endpoint function number in the EPC device
+ * @vfunc_no: the virtual endpoint function number in the physical function
+ * @epf_bar: the struct epf_bar that contains the BAR information
+ * @offset: byte offset from the BAR base selected by the host
+ *
+ * Invoke to configure the BAR of the endpoint device and map a subrange
+ * selected by @offset to a CPU address.
+ *
+ * Returns 0 on success, -EOPNOTSUPP if unsupported, or a negative errno.
+ */
+int pci_epc_map_inbound(struct pci_epc *epc, u8 func_no, u8 vfunc_no,
+			struct pci_epf_bar *epf_bar, u64 offset)
+{
+	if (!epc || !epc->ops || !epc->ops->map_inbound)
+		return -EOPNOTSUPP;
+
+	return epc->ops->map_inbound(epc, func_no, vfunc_no, epf_bar, offset);
+}
+EXPORT_SYMBOL_GPL(pci_epc_map_inbound);
+
+/**
+ * pci_epc_unmap_inbound() - unmap a previously mapped BAR subrange
+ * @epc: the EPC device on which the inbound mapping was programmed
+ * @func_no: the physical endpoint function number in the EPC device
+ * @vfunc_no: the virtual endpoint function number in the physical function
+ * @epf_bar: the struct epf_bar used when the mapping was created
+ * @offset: byte offset from the BAR base that was mapped
+ *
+ * Invoke to remove a BAR subrange mapping created by pci_epc_map_inbound().
+ * If the controller has no support, this call is a no-op.
+ */
+void pci_epc_unmap_inbound(struct pci_epc *epc, u8 func_no, u8 vfunc_no,
+			   struct pci_epf_bar *epf_bar, u64 offset)
+{
+	if (!epc || !epc->ops || !epc->ops->unmap_inbound)
+		return;
+
+	epc->ops->unmap_inbound(epc, func_no, vfunc_no, epf_bar, offset);
+}
+EXPORT_SYMBOL_GPL(pci_epc_unmap_inbound);
+
+/**
  * pci_epc_mem_map() - allocate and map a PCI address to a CPU address
  * @epc: the EPC device on which the CPU address is to be allocated and mapped
  * @func_no: the physical endpoint function number in the EPC device
