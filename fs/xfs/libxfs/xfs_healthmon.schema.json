@@ -24,6 +24,18 @@
 		},
 		{
 			"$ref": "#/$events/lost"
+		},
+		{
+			"$ref": "#/$events/fs_metadata"
+		},
+		{
+			"$ref": "#/$events/rtgroup_metadata"
+		},
+		{
+			"$ref": "#/$events/perag_metadata"
+		},
+		{
+			"$ref": "#/$events/inode_metadata"
 		}
 	],
 
@@ -39,6 +51,156 @@
 			"description": "Number of events.",
 			"type": "integer",
 			"minimum": 1
+		},
+		"xfs_agnumber_t": {
+			"description": "Allocation group number",
+			"type": "integer",
+			"minimum": 0,
+			"maximum": 2147483647
+		},
+		"xfs_rgnumber_t": {
+			"description": "Realtime allocation group number",
+			"type": "integer",
+			"minimum": 0,
+			"maximum": 2147483647
+		},
+		"xfs_ino_t": {
+			"description": "Inode number",
+			"type": "integer",
+			"minimum": 1
+		},
+		"i_generation": {
+			"description": "Inode generation number",
+			"type": "integer"
+		}
+	},
+
+	"$comment": "Filesystem metadata event data are defined here.",
+	"$metadata": {
+		"status": {
+			"description": "Metadata health status",
+			"$comment": [
+				"One of:",
+				"",
+				" * sick:    metadata corruption discovered",
+				"            during a runtime operation.",
+				" * corrupt: corruption discovered during",
+				"            an xfs_scrub run.",
+				" * healthy: metadata object was found to be",
+				"            ok by xfs_scrub."
+			],
+			"enum": [
+				"sick",
+				"corrupt",
+				"healthy"
+			]
+		},
+		"fs": {
+			"description": [
+				"Metadata structures that affect the entire",
+				"filesystem.  Options include:",
+				"",
+				" * fscounters: summary counters",
+				" * usrquota:   user quota records",
+				" * grpquota:   group quota records",
+				" * prjquota:   project quota records",
+				" * quotacheck: quota counters",
+				" * nlinks:     file link counts",
+				" * metadir:    metadata directory",
+				" * metapath:   metadata inode paths"
+			],
+			"enum": [
+				"fscounters",
+				"grpquota",
+				"metadir",
+				"metapath",
+				"nlinks",
+				"prjquota",
+				"quotacheck",
+				"usrquota"
+			]
+		},
+		"perag": {
+			"description": [
+				"Metadata structures owned by allocation",
+				"groups on the data device.  Options include:",
+				"",
+				" * agf:        group space header",
+				" * agfl:       per-group free block list",
+				" * agi:        group inode header",
+				" * bnobt:      free space by position btree",
+				" * cntbt:      free space by length btree",
+				" * finobt:     free inode btree",
+				" * inobt:      inode btree",
+				" * rmapbt:     reverse mapping btree",
+				" * refcountbt: reference count btree",
+				" * inodes:     problems were recorded for",
+				"               this group's inodes, but the",
+				"               inodes themselves had to be",
+				"               reclaimed.",
+				" * super:      superblock"
+			],
+			"enum": [
+				"agf",
+				"agfl",
+				"agi",
+				"bnobt",
+				"cntbt",
+				"finobt",
+				"inobt",
+				"inodes",
+				"refcountbt",
+				"rmapbt",
+				"super"
+			]
+		},
+		"rtgroup": {
+			"description": [
+				"Metadata structures owned by allocation",
+				"groups on the realtime volume.  Options",
+				"include:",
+				"",
+				" * bitmap:     free space bitmap contents",
+				"               for this group",
+				" * summary:    realtime free space summary file",
+				" * rmapbt:     reverse mapping btree",
+				" * refcountbt: reference count btree",
+				" * super:      group superblock"
+			],
+			"enum": [
+				"bitmap",
+				"summary",
+				"refcountbt",
+				"rmapbt",
+				"super"
+			]
+		},
+		"inode": {
+			"description": [
+				"Metadata structures owned by file inodes.",
+				"Options include:",
+				"",
+				" * bmapbta:    attr fork",
+				" * bmapbtc:    cow fork",
+				" * bmapbtd:    data fork",
+				" * core:       inode record",
+				" * directory:  directory entries",
+				" * dirtree:    directory tree problems detected",
+				" * parent:     directory parent pointer",
+				" * symlink:    symbolic link target",
+				" * xattr:      extended attributes"
+			],
+			"enum": [
+				"bmapbta",
+				"bmapbtc",
+				"bmapbtd",
+				"core",
+				"directory",
+				"dirtree",
+				"parent",
+				"symlink",
+				"xattr"
+			]
 		}
 	},
 
@@ -123,6 +285,159 @@
 				"count",
 				"time_ns",
 				"domain"
+			]
+		},
+		"fs_metadata": {
+			"title": "Filesystem-wide metadata event",
+			"description": [
+				"Health status updates for filesystem-wide",
+				"metadata objects."
+			],
+			"type": "object",
+
+			"properties": {
+				"type": {
+					"$ref": "#/$metadata/status"
+				},
+				"time_ns": {
+					"$ref": "#/$defs/time_ns"
+				},
+				"domain": {
+					"const": "fs"
+				},
+				"structures": {
+					"type": "array",
+					"items": {
+						"$ref": "#/$metadata/fs"
+					},
+					"minItems": 1
+				}
+			},
+
+			"required": [
+				"type",
+				"time_ns",
+				"domain",
+				"structures"
+			]
+		},
+		"perag_metadata": {
+			"title": "Data device allocation group metadata event",
+			"description": [
+				"Health status updates for data device ",
+				"allocation group metadata."
+			],
+			"type": "object",
+
+			"properties": {
+				"type": {
+					"$ref": "#/$metadata/status"
+				},
+				"time_ns": {
+					"$ref": "#/$defs/time_ns"
+				},
+				"domain": {
+					"const": "perag"
+				},
+				"group": {
+					"$ref": "#/$defs/xfs_agnumber_t"
+				},
+				"structures": {
+					"type": "array",
+					"items": {
+						"$ref": "#/$metadata/perag"
+					},
+					"minItems": 1
+				}
+			},
+
+			"required": [
+				"type",
+				"time_ns",
+				"domain",
+				"group",
+				"structures"
+			]
+		},
+		"rtgroup_metadata": {
+			"title": "Realtime allocation group metadata event",
+			"description": [
+				"Health status updates for realtime allocation",
+				"group metadata."
+			],
+			"type": "object",
+
+			"properties": {
+				"type": {
+					"$ref": "#/$metadata/status"
+				},
+				"time_ns": {
+					"$ref": "#/$defs/time_ns"
+				},
+				"domain": {
+					"const": "rtgroup"
+				},
+				"group": {
+					"$ref": "#/$defs/xfs_rgnumber_t"
+				},
+				"structures": {
+					"type": "array",
+					"items": {
+						"$ref": "#/$metadata/rtgroup"
+					},
+					"minItems": 1
+				}
+			},
+
+			"required": [
+				"type",
+				"time_ns",
+				"domain",
+				"group",
+				"structures"
+			]
+		},
+		"inode_metadata": {
+			"title": "Inode metadata event",
+			"description": [
+				"Health status updates for inode metadata.",
+				"The inode and generation number describe the",
+				"file that is affected by the change."
+			],
+			"type": "object",
+
+			"properties": {
+				"type": {
+					"$ref": "#/$metadata/status"
+				},
+				"time_ns": {
+					"$ref": "#/$defs/time_ns"
+				},
+				"domain": {
+					"const": "inode"
+				},
+				"inumber": {
+					"$ref": "#/$defs/xfs_ino_t"
+				},
+				"generation": {
+					"$ref": "#/$defs/i_generation"
+				},
+				"structures": {
+					"type": "array",
+					"items": {
+						"$ref": "#/$metadata/inode"
+					},
+					"minItems": 1
+				}
+			},
+
+			"required": [
+				"type",
+				"time_ns",
+				"domain",
+				"inumber",
+				"generation",
+				"structures"
 			]
 		}
 	}

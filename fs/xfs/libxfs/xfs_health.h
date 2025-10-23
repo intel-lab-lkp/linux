@@ -336,4 +336,9 @@ void xfs_health_hook_del(struct xfs_mount *mp, struct xfs_health_hook *hook);
 void xfs_health_hook_setup(struct xfs_health_hook *hook, notifier_fn_t mod_fn);
 #endif /* CONFIG_XFS_LIVE_HOOKS */
 
+unsigned int xfs_healthmon_inode_mask(unsigned int sick_mask);
+unsigned int xfs_healthmon_rtgroup_mask(unsigned int sick_mask);
+unsigned int xfs_healthmon_perag_mask(unsigned int sick_mask);
+unsigned int xfs_healthmon_fs_mask(unsigned int sick_mask);
+
 #endif	/* __XFS_HEALTH_H__ */
