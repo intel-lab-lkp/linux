@@ -36,6 +36,9 @@
 		},
 		{
 			"$ref": "#/$events/inode_metadata"
+		},
+		{
+			"$ref": "#/$events/shutdown"
 		}
 	],
 
@@ -200,6 +203,31 @@
 				"parent",
 				"symlink",
 				"xattr"
+			]
+		}
+	},
+
+	"$comment": "Shutdown event data are defined here.",
+	"$shutdown": {
+		"reason": {
+			"description": [
+				"Reason for a filesystem to shut down.",
+				"Options include:",
+				"",
+				" * corrupt_incore: in-memory corruption",
+				" * corrupt_ondisk: on-disk corruption",
+				" * device_removed: device removed",
+				" * force_umount:   userspace asked for it",
+				" * log_ioerr:      log write IO error",
+				" * meta_ioerr:     metadata writeback IO error"
+			],
+			"enum": [
+				"corrupt_incore",
+				"corrupt_ondisk",
+				"device_removed",
+				"force_umount",
+				"log_ioerr",
+				"meta_ioerr"
 			]
 		}
 	},
@@ -438,6 +466,40 @@
 				"inumber",
 				"generation",
 				"structures"
+			]
+		},
+		"shutdown": {
+			"title": "Abnormal Shutdown Event",
+			"description": [
+				"The filesystem went offline due to",
+				"unrecoverable errors."
+			],
+			"type": "object",
+
+			"properties": {
+				"type": {
+					"const": "shutdown"
+				},
+				"time_ns": {
+					"$ref": "#/$defs/time_ns"
+				},
+				"domain": {
+					"const": "mount"
+				},
+				"reasons": {
+					"type": "array",
+					"items": {
+						"$ref": "#/$shutdown/reason"
+					},
+					"minItems": 1
+				}
+			},
+
+			"required": [
+				"type",
+				"time_ns",
+				"domain",
+				"reasons"
 			]
 		}
 	}
