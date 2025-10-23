@@ -1,0 +1,58 @@
+// Test for permanent FIN-WAIT-1 state with continuous zero-window advertisements
+// Author: HaiYang Zhong <wokezhong@tencent.com>
+
+
+0.000 socket(..., SOCK_STREAM, IPPROTO_TCP) = 3
+0.000 setsockopt(3, SOL_SOCKET, SO_REUSEADDR, [1], 4) = 0
+0.000 bind(3, ..., ...) = 0
+0.000 listen(3, 1) = 0
+
+0.100 < S 0:0(0) win 65535 <mss 1460>
+0.100 > S. 0:0(0) ack 1 <mss 1460>
+0.100 < . 1:1(0) ack 1 win 65535
+0.100 accept(3, ..., ...) = 4
+
+// Send data to fill receive window
+0.200 write(4, ..., 5) = 5
+0.200 > P. 1:6(5) ack 1
+
+// Advertise zero-window
+0.200 < . 1:1(0) ack 6 win 0
+
+// Application closes connection, sends FIN (but blocked by zero window)
+0.200 close(4) = 0
+
+//Send zero-window probe packet
++0.200 > . 5:5(0) ack 1
++0.400 > . 5:5(0) ack 1
++0.800 > . 5:5(0) ack 1
++1.600 > . 5:5(0) ack 1
++3.200 > . 5:5(0) ack 1
++6.400 > . 5:5(0) ack 1
++12.800 > . 5:5(0) ack 1
+
+// Continuously sending zero-window ACKs
+30.000 < . 1:1(0) ack 6 win 0
+
+// Key verification points
+// Without fix: waiting for packet timeout due to timer reset
+// With fix: this probe is sent as scheduled
++22.000~+23.000 > . 5:5(0) ack 1
+
+// More zero-window ACKs from peer
+60.000 < . 1:1(0) ack 6 win 0
+90.000 < . 1:1(0) ack 6 win 0
++16.000~+19.000 > . 5:5(0) ack 1
+120.000 < . 1:1(0) ack 6 win 0
+150.000 < . 1:1(0) ack 6 win 0
+180.000 < . 1:1(0) ack 6 win 0
+210.000 < . 1:1(0) ack 6 win 0
++0.000~+5.000  > . 5:5(0) ack 1
+240.000 < . 1:1(0) ack 6 win 0
+270.000 < . 1:1(0) ack 6 win 0
+300.000 < . 1:1(0) ack 6 win 0
+330.000 < . 1:1(0) ack 6 win 0
+360.000 < . 1:1(0) ack 6 win 0
+
+// Connection reset after zero-window probe timeout
++0.000 > R 6:6(0)
