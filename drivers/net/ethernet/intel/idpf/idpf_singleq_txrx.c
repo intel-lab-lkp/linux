@@ -10,7 +10,7 @@
  * @skb: pointer to skb
  * @off: pointer to struct that holds offload parameters
  *
- * Returns 0 or error (negative) if checksum offload cannot be executed, 1
+ * Returns: 0 or error (negative) if checksum offload cannot be executed, 1
  * otherwise.
  */
 static int idpf_tx_singleq_csum(struct sk_buff *skb,
@@ -407,7 +407,7 @@ static void idpf_tx_singleq_build_ctx_desc(struct idpf_tx_queue *txq,
  * @skb: send buffer
  * @tx_q: queue to send buffer on
  *
- * Returns NETDEV_TX_OK if sent, else an error code
+ * Returns: NETDEV_TX_OK if sent, else an error code
  */
 netdev_tx_t idpf_tx_singleq_frame(struct sk_buff *skb,
 				  struct idpf_tx_queue *tx_q)
@@ -585,7 +585,7 @@ fetch_next_txq_desc:
  * @budget: Used to determine if we are in netpoll
  * @cleaned: returns number of packets cleaned
  *
- * Returns false if clean is not complete else returns true
+ * Returns: false if clean is not complete else returns true
  */
 static bool idpf_tx_singleq_clean_all(struct idpf_q_vector *q_vec, int budget,
 				      int *cleaned)
@@ -886,7 +886,7 @@ static void idpf_rx_buf_hw_update(struct idpf_rx_queue *rxq, u32 val)
  * @rx_q: queue for which the hw buffers are allocated
  * @cleaned_count: number of buffers to replace
  *
- * Returns false if all allocations were successful, true if any fail
+ * Returns: false if all allocations were successful, true if any fail
  */
 bool idpf_rx_singleq_buf_hw_alloc_all(struct idpf_rx_queue *rx_q,
 				      u16 cleaned_count)
@@ -1029,7 +1029,7 @@ static void idpf_xdp_run_pass(struct libeth_xdp_buff *xdp,
  * @rx_q: rx queue to clean
  * @budget: Total limit on number of packets to process
  *
- * Returns true if there's any budget left (e.g. the clean is finished)
+ * Returns: number of packets cleaned from this queue
  */
 static int idpf_rx_singleq_clean(struct idpf_rx_queue *rx_q, int budget)
 {
@@ -1111,7 +1111,7 @@ static int idpf_rx_singleq_clean(struct idpf_rx_queue *rx_q, int budget)
  * @budget: Used to determine if we are in netpoll
  * @cleaned: returns number of packets cleaned
  *
- * Returns false if clean is not complete else returns true
+ * Returns: false if clean is not complete else returns true
  */
 static bool idpf_rx_singleq_clean_all(struct idpf_q_vector *q_vec, int budget,
 				      int *cleaned)
