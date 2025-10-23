@@ -458,8 +458,8 @@ struct drm_sched_backend_ops {
 	struct dma_fence *(*run_job)(struct drm_sched_job *sched_job);
 
 	/**
-	 * @timedout_job: Called when a job has taken too long to execute,
-	 * to trigger GPU recovery.
+	 * @timedout_job: Called when a hardware fence didn't signal within a
+	 * configurable amount of time. Triggers GPU recovery.
 	 *
 	 * @sched_job: The job that has timed out
 	 *
@@ -506,7 +506,6 @@ struct drm_sched_backend_ops {
 	 * that timeout handlers are executed sequentially.
 	 *
 	 * Return: The scheduler's status, defined by &enum drm_gpu_sched_stat
-	 *
 	 */
 	enum drm_gpu_sched_stat (*timedout_job)(struct drm_sched_job *sched_job);
 
