@@ -602,6 +602,8 @@ int sctp_packet_transmit(struct sctp_packet *packet, gfp_t gfp)
 	skb_reserve(head, packet->overhead + MAX_HEADER);
 	skb_set_owner_w(head, sk);
 
+	memset(head->data, 0, skb_tailroom(head));
+
 	/* set sctp header */
 	sh = skb_push(head, sizeof(struct sctphdr));
 	skb_reset_transport_header(head);
