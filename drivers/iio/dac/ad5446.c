@@ -445,6 +445,35 @@ static const struct spi_device_id ad5446_spi_ids[] = {
 MODULE_DEVICE_TABLE(spi, ad5446_spi_ids);
 
 static const struct of_device_id ad5446_of_ids[] = {
+	{ .compatible = "adi,ad5300" },
+	{ .compatible = "adi,ad5310" },
+	{ .compatible = "adi,ad5320" },
+	{ .compatible = "adi,ad5444" },
+	{ .compatible = "adi,ad5446" },
+	{ .compatible = "adi,ad5450" },
+	{ .compatible = "adi,ad5451" },
+	{ .compatible = "adi,ad5452" },
+	{ .compatible = "adi,ad5453" },
+	{ .compatible = "adi,ad5512a" },
+	{ .compatible = "adi,ad5541a" },
+	{ .compatible = "adi,ad5542a" },
+	{ .compatible = "adi,ad5543" },
+	{ .compatible = "adi,ad5553" },
+	{ .compatible = "adi,ad5600" },
+	{ .compatible = "adi,ad5601" },
+	{ .compatible = "adi,ad5611" },
+	{ .compatible = "adi,ad5621" },
+	{ .compatible = "adi,ad5641" },
+	{ .compatible = "adi,ad5620-2500" },
+	{ .compatible = "adi,ad5620-1250" },
+	{ .compatible = "adi,ad5640-2500" },
+	{ .compatible = "adi,ad5640-1250" },
+	{ .compatible = "adi,ad5660-2500" },
+	{ .compatible = "adi,ad5660-1250" },
+	{ .compatible = "adi,ad5662" },
+	{ .compatible = "ti,dac081s101" },
+	{ .compatible = "ti,dac101s101" },
+	{ .compatible = "ti,dac121s101" },
 	{ .compatible = "ti,dac7512" },
 	{ }
 };
@@ -547,9 +576,21 @@ static const struct i2c_device_id ad5446_i2c_ids[] = {
 };
 MODULE_DEVICE_TABLE(i2c, ad5446_i2c_ids);
 
+static const struct of_device_id ad5446_i2c_of_ids[] = {
+	{ .compatible = "adi,ad5301" },
+	{ .compatible = "adi,ad5311" },
+	{ .compatible = "adi,ad5321" },
+	{ .compatible = "adi,ad5602" },
+	{ .compatible = "adi,ad5612" },
+	{ .compatible = "adi,ad5622" },
+	{ }
+};
+MODULE_DEVICE_TABLE(OF, ad5446_i2c_of_ids);
+
 static struct i2c_driver ad5446_i2c_driver = {
 	.driver = {
 		   .name = "ad5446",
+		   .of_match_table = ad5446_i2c_of_ids,
 	},
 	.probe = ad5446_i2c_probe,
 	.id_table = ad5446_i2c_ids,
