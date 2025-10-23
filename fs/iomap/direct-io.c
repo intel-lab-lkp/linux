@@ -338,9 +338,6 @@ static int iomap_dio_bio_iter(struct iomap_iter *iter, struct iomap_dio *dio)
 	size_t orig_count;
 	unsigned int alignment;
 
-	if ((pos | length) & (bdev_logical_block_size(iomap->bdev) - 1))
-		return -EINVAL;
-
 	/*
 	 * File systems that write out of place and always allocate new blocks
 	 * need each bio to be block aligned as that's the unit of allocation.
@@ -349,6 +346,9 @@ static int iomap_dio_bio_iter(struct iomap_iter *iter, struct iomap_dio *dio)
 		alignment = fs_block_size;
 	else
 		alignment = bdev_logical_block_size(iomap->bdev);
+
+	if ((pos | length) & (alignment - 1))
+		return -EINVAL;
 
 	if (dio->flags & IOMAP_DIO_WRITE) {
 		bio_opf |= REQ_OP_WRITE;
