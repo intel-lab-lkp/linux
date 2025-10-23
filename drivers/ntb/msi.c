@@ -195,7 +195,7 @@ struct ntb_msi_devres {
 };
 
 static int ntb_msi_set_desc(struct ntb_dev *ntb, struct msi_desc *entry,
-			    struct ntb_msi_desc *msi_desc)
+			    struct ntb_msi_desc *msi_desc, u16 vector_offset)
 {
 	u64 addr;
 
@@ -211,7 +211,8 @@ static int ntb_msi_set_desc(struct ntb_dev *ntb, struct msi_desc *entry,
 	}
 
 	msi_desc->addr_offset = addr - ntb->msi->base_addr;
-	msi_desc->data = entry->msg.data;
+	msi_desc->data = entry->msg.data + vector_offset;
+	msi_desc->vector_offset = vector_offset;
 
 	return 0;
 }
@@ -220,7 +221,8 @@ static void ntb_msi_write_msg(struct msi_desc *entry, void *data)
 {
 	struct ntb_msi_devres *dr = data;
 
-	WARN_ON(ntb_msi_set_desc(dr->ntb, entry, dr->msi_desc));
+	WARN_ON(ntb_msi_set_desc(dr->ntb, entry, dr->msi_desc,
+				 dr->msi_desc->vector_offset));
 
 	if (dr->ntb->msi->desc_changed)
 		dr->ntb->msi->desc_changed(dr->ntb->ctx);
@@ -286,32 +288,37 @@ int ntbm_msi_request_threaded_irq(struct ntb_dev *ntb, irq_handler_t handler,
 {
 	struct device *dev = &ntb->pdev->dev;
 	struct msi_desc *entry;
-	int ret;
+	unsigned int virq;
+	int ret, i;
 
 	if (!ntb->msi)
 		return -EINVAL;
 
 	guard(msi_descs_lock)(dev);
 	msi_for_each_desc(entry, dev, MSI_DESC_ASSOCIATED) {
-		if (irq_has_action(entry->irq))
-			continue;
+		for (i = 0; i < entry->nvec_used; i++) {
+			virq = entry->irq + i;
+			if (irq_has_action(virq))
+				continue;
 
-		ret = devm_request_threaded_irq(&ntb->dev, entry->irq, handler,
-						thread_fn, 0, name, dev_id);
-		if (ret)
-			continue;
+			ret = devm_request_threaded_irq(
+					&ntb->dev, virq, handler,
+					thread_fn, 0, name, dev_id);
+			if (ret)
+				continue;
 
-		if (ntb_msi_set_desc(ntb, entry, msi_desc)) {
-			devm_free_irq(&ntb->dev, entry->irq, dev_id);
-			continue;
+			if (ntb_msi_set_desc(ntb, entry, msi_desc, i)) {
+				devm_free_irq(&ntb->dev, virq, dev_id);
+				continue;
+			}
+
+			ret = ntbm_msi_setup_callback(ntb, entry, msi_desc);
+			if (ret) {
+				devm_free_irq(&ntb->dev, virq, dev_id);
+				return ret;
+			}
+			return virq;
 		}
-
-		ret = ntbm_msi_setup_callback(ntb, entry, msi_desc);
-		if (ret) {
-			devm_free_irq(&ntb->dev, entry->irq, dev_id);
-			return ret;
-		}
-		return entry->irq;
 	}
 	return -ENODEV;
 }

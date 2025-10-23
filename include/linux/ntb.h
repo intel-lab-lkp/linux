@@ -1640,6 +1640,7 @@ static inline int ntb_peer_highest_mw_idx(struct ntb_dev *ntb, int pidx)
 struct ntb_msi_desc {
 	u32 addr_offset;
 	u32 data;
+	u16 vector_offset;
 };
 
 #ifdef CONFIG_NTB_MSI
