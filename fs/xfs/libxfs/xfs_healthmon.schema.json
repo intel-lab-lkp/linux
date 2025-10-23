@@ -39,6 +39,9 @@
 		},
 		{
 			"$ref": "#/$events/shutdown"
+		},
+		{
+			"$ref": "#/$events/media_error"
 		}
 	],
 
@@ -75,6 +78,31 @@
 		"i_generation": {
 			"description": "Inode generation number",
 			"type": "integer"
+		},
+		"storage_devs": {
+			"description": "Storage devices in a filesystem",
+			"_comment": [
+				"One of:",
+				"",
+				" * datadev: filesystem device",
+				" * logdev:  external log device",
+				" * rtdev:   realtime volume"
+			],
+			"enum": [
+				"datadev",
+				"logdev",
+				"rtdev"
+			]
+		},
+		"xfs_daddr_t": {
+			"description": "Storage device address, in units of 512-byte blocks",
+			"type": "integer",
+			"minimum": 0
+		},
+		"bbcount": {
+			"description": "Storage space length, in units of 512-byte blocks",
+			"type": "integer",
+			"minimum": 1
 		}
 	},
 
@@ -500,6 +528,43 @@
 				"time_ns",
 				"domain",
 				"reasons"
+			]
+		},
+		"media_error": {
+			"title": "Media Error",
+			"description": [
+				"A storage device reported a media error.",
+				"The domain element tells us which storage",
+				"device reported the media failure.  The",
+				"daddr and bbcount elements tell us where",
+				"inside that device the failure was observed."
+			],
+			"type": "object",
+
+			"properties": {
+				"type": {
+					"const": "media"
+				},
+				"time_ns": {
+					"$ref": "#/$defs/time_ns"
+				},
+				"domain": {
+					"$ref": "#/$defs/storage_devs"
+				},
+				"daddr": {
+					"$ref": "#/$defs/xfs_daddr_t"
+				},
+				"bbcount": {
+					"$ref": "#/$defs/bbcount"
+				}
+			},
+
+			"required": [
+				"type",
+				"time_ns",
+				"domain",
+				"daddr",
+				"bbcount"
 			]
 		}
 	}
