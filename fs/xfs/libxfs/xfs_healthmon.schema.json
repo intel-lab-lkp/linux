@@ -1,0 +1,129 @@
+{
+	"$comment": [
+		"SPDX-License-Identifier: GPL-2.0-or-later",
+		"Copyright (c) 2024-2025 Oracle.  All Rights Reserved.",
+		"Author: Darrick J. Wong <djwong@kernel.org>",
+		"",
+		"This schema file describes the format of the json objects",
+		"readable from the fd returned by the XFS_IOC_HEALTHMON",
+		"ioctl."
+	],
+
+	"$schema": "https://json-schema.org/draft/2020-12/schema",
+	"$id": "https://git.kernel.org/pub/scm/linux/kernel/git/torvalds/linux.git/plain/fs/xfs/libxfs/xfs_healthmon.schema.json",
+
+	"title": "XFS Health Monitoring Events",
+
+	"$comment": "Events must be one of the following types:",
+	"oneOf": [
+		{
+			"$ref": "#/$events/running"
+		},
+		{
+			"$ref": "#/$events/unmount"
+		},
+		{
+			"$ref": "#/$events/lost"
+		}
+	],
+
+	"$comment": "Simple data types are defined here.",
+	"$defs": {
+		"time_ns": {
+			"title": "Time of Event",
+			"description": "Timestamp of the event, in nanoseconds since the Unix epoch.",
+			"type": "integer"
+		},
+		"count": {
+			"title": "Count of events",
+			"description": "Number of events.",
+			"type": "integer",
+			"minimum": 1
+		}
+	},
+
+	"$comment": "Event types are defined here.",
+	"$events": {
+		"running": {
+			"title": "Health Monitoring Running",
+			"$comment": [
+				"The health monitor is actually running."
+			],
+			"type": "object",
+
+			"properties": {
+				"type": {
+					"const": "running"
+				},
+				"time_ns": {
+					"$ref": "#/$defs/time_ns"
+				},
+				"domain": {
+					"const": "mount"
+				}
+			},
+
+			"required": [
+				"type",
+				"time_ns",
+				"domain"
+			]
+		},
+		"unmount": {
+			"title": "Filesystem Unmounted",
+			"$comment": [
+				"The filesystem was unmounted."
+			],
+			"type": "object",
+
+			"properties": {
+				"type": {
+					"const": "unmount"
+				},
+				"time_ns": {
+					"$ref": "#/$defs/time_ns"
+				},
+				"domain": {
+					"const": "mount"
+				}
+			},
+
+			"required": [
+				"type",
+				"time_ns",
+				"domain"
+			]
+		},
+		"lost": {
+			"title": "Health Monitoring Events Lost",
+			"$comment": [
+				"Previous health monitoring events were",
+				"dropped due to memory allocation failures",
+				"or queue limits."
+			],
+			"type": "object",
+
+			"properties": {
+				"type": {
+					"const": "lost"
+				},
+				"count": {
+					"$ref": "#/$defs/count"
+				},
+				"time_ns": {
+					"$ref": "#/$defs/time_ns"
+				},
+				"domain": {
+					"const": "mount"
+				}
+			},
+
+			"required": [
+				"type",
+				"count",
+				"time_ns",
+				"domain"
+			]
+		}
+	}
+}
