@@ -20,6 +20,7 @@
 #include <drm/drm_rect.h>
 #include <drm/drm_sysfs.h>
 #include <drm/drm_edid.h>
+#include <drm/drm_panic.h>
 
 void vmw_du_init(struct vmw_display_unit *du)
 {
@@ -2021,4 +2022,36 @@ bool vmw_user_object_is_mapped(struct vmw_user_object *uo)
 bool vmw_user_object_is_null(struct vmw_user_object *uo)
 {
 	return !uo->buffer && !uo->surface;
+}
+
+int
+vmw_get_scanout_buffer(struct drm_plane *plane, struct drm_scanout_buffer *sb)
+{
+	void  *vram;
+	struct vmw_private *vmw_priv = container_of(plane->dev, struct vmw_private, drm);
+
+	// Only call on the primary display
+	if (container_of(plane, struct vmw_display_unit, primary)->unit != 0)
+		return -EINVAL;
+
+	vram = memremap(vmw_priv->vram_start, vmw_priv->vram_size,
+			MEMREMAP_WB | MEMREMAP_DEC);
+	if (!vram)
+		return -ENOMEM;
+
+	sb->map[0].vaddr = vram;
+	sb->format = drm_format_info(DRM_FORMAT_RGB565);
+	sb->width  = vmw_priv->initial_width;
+	sb->height = vmw_priv->initial_height;
+	sb->pitch[0] = sb->width * 2;
+	return 0;
+}
+
+void vmw_panic_flush(struct drm_plane *plane)
+{
+	struct vmw_private *vmw_priv = container_of(plane->dev, struct vmw_private, drm);
+
+	vmw_kms_write_svga(vmw_priv,
+			   vmw_priv->initial_width, vmw_priv->initial_height,
+			   vmw_priv->initial_width * 2, 16, 16);
 }

@@ -500,6 +500,11 @@ int vmw_kms_stdu_readback(struct vmw_private *dev_priv,
 
 int vmw_du_helper_plane_update(struct vmw_du_update_plane *update);
 
+struct drm_scanout_buffer;
+
+int vmw_get_scanout_buffer(struct drm_plane *pl, struct drm_scanout_buffer *sb);
+void vmw_panic_flush(struct drm_plane *plane);
+
 /**
  * vmw_du_translate_to_crtc - Translate a rect from framebuffer to crtc
  * @state: Plane state.
