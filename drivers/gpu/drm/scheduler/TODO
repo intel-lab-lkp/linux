@@ -36,3 +36,16 @@
 	3. Port a driver as first user.
 	3. Document the new alternative in the docu of deprecated
 	   drm_sched_resubmit_jobs().
+
+* Unlocked readers for runqueues
+  - Difficulty: medium
+  - Contact: Philipp Stanner <phasta@kernel.org>
+  - Description:
+    There is an old FIXME by Sima in include/drm/gpu_scheduler.h. It details
+    that struct drm_sched_rq is read at many places without any locks, not even
+    with a READ_ONCE. At XDC 2025 no one could really tell why that is the case,
+    whether locks are needed and whether they could be added. (But for real,
+    that should probably be locked!).
+  - Tasks:
+	1. Check whether locks for runqueue readers can be added.
+	2. If yes, add the locks.
