@@ -1001,17 +1001,18 @@ void dma_fence_describe(struct dma_fence *fence, struct seq_file *seq)
 {
 	const char __rcu *timeline;
 	const char __rcu *driver;
+	const char *signaled = "un";
 
 	rcu_read_lock();
 
 	timeline = dma_fence_timeline_name(fence);
 	driver = dma_fence_driver_name(fence);
 
-	seq_printf(seq, "%s %s seq %llu %ssignalled\n",
-		   rcu_dereference(driver),
-		   rcu_dereference(timeline),
-		   fence->seqno,
-		   dma_fence_is_signaled(fence) ? "" : "un");
+	if (dma_fence_is_signaled(fence))
+		timeline = driver = signaled = "";
+
+	seq_printf(seq, "%llu %s %s seq %llu %ssignalled\n", fence->context,
+		   timeline, driver, fence->seqno, signaled);
 
 	rcu_read_unlock();
 }
