@@ -146,6 +146,13 @@ properties:
       this platform. If set, the value should be non-zero.
     minimum: 1
 
+  arm,poll-transport:
+    type: boolean
+    description:
+      An optional property which unconditionally forces polling in all transports.
+      This is mainly mean to work around uncooperative SCP, which does not generate
+      completion interrupts.
+
   arm,smc-id:
     $ref: /schemas/types.yaml#/definitions/uint32
     description:
