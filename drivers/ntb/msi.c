@@ -28,11 +28,12 @@ struct ntb_msi {
  *
  * Return: Zero on success, otherwise a negative error number.
  */
-int ntb_msi_init(struct ntb_dev *ntb,
-		 void (*desc_changed)(void *ctx))
+static int ntb_msi_init(struct ntb_dev *ntb,
+			void (*desc_changed)(void *ctx))
 {
 	phys_addr_t mw_phys_addr;
 	resource_size_t mw_size;
+	struct ntb_msi *msi;
 	int peer_widx;
 	int peers;
 	int ret;
@@ -42,12 +43,12 @@ int ntb_msi_init(struct ntb_dev *ntb,
 	if (peers <= 0)
 		return -EINVAL;
 
-	ntb->msi = devm_kzalloc(&ntb->dev, struct_size(ntb->msi, peer_mws, peers),
+	msi = devm_kzalloc(&ntb->dev, struct_size(msi, peer_mws, peers),
 				GFP_KERNEL);
-	if (!ntb->msi)
+	if (!msi)
 		return -ENOMEM;
 
-	ntb->msi->desc_changed = desc_changed;
+	msi->desc_changed = desc_changed;
 
 	for (i = 0; i < peers; i++) {
 		peer_widx = ntb_peer_mw_count(ntb) - 1 - i;
@@ -57,26 +58,26 @@ int ntb_msi_init(struct ntb_dev *ntb,
 		if (ret)
 			goto unroll;
 
-		ntb->msi->peer_mws[i] = devm_ioremap(&ntb->dev, mw_phys_addr,
+		msi->peer_mws[i] = devm_ioremap(&ntb->dev, mw_phys_addr,
 						     mw_size);
-		if (!ntb->msi->peer_mws[i]) {
+		if (!msi->peer_mws[i]) {
 			ret = -EFAULT;
 			goto unroll;
 		}
 	}
 
+	ntb->intr_priv = msi;
+
 	return 0;
 
 unroll:
 	for (i = 0; i < peers; i++)
-		if (ntb->msi->peer_mws[i])
-			devm_iounmap(&ntb->dev, ntb->msi->peer_mws[i]);
+		if (msi->peer_mws[i])
+			devm_iounmap(&ntb->dev, msi->peer_mws[i]);
 
-	devm_kfree(&ntb->dev, ntb->msi);
-	ntb->msi = NULL;
+	devm_kfree(&ntb->dev, msi);
 	return ret;
 }
-EXPORT_SYMBOL(ntb_msi_init);
 
 /**
  * ntb_msi_setup_mws() - Initialize the MSI inbound memory windows
@@ -92,7 +93,7 @@ EXPORT_SYMBOL(ntb_msi_init);
  *
  * Return: Zero on success, otherwise a negative error number.
  */
-int ntb_msi_setup_mws(struct ntb_dev *ntb)
+static int ntb_msi_setup_mws(struct ntb_dev *ntb)
 {
 	struct msi_desc *desc;
 	u64 addr;
@@ -100,13 +101,14 @@ int ntb_msi_setup_mws(struct ntb_dev *ntb)
 	resource_size_t addr_align, size_align, offset;
 	resource_size_t mw_size = SZ_32K;
 	resource_size_t mw_min_size = mw_size;
+	struct ntb_msi *msi = ntb->intr_priv;
 	int i;
 	int ret;
 
-	if (!ntb->msi)
+	if (!msi)
 		return -EINVAL;
 
-	if (ntb->msi->base_addr)
+	if (msi->base_addr)
 		return 0;
 
 	scoped_guard (msi_descs_lock, &ntb->pdev->dev) {
@@ -149,8 +151,8 @@ int ntb_msi_setup_mws(struct ntb_dev *ntb)
 			goto error_out;
 	}
 
-	ntb->msi->base_addr = addr;
-	ntb->msi->end_addr = addr + mw_min_size;
+	msi->base_addr = addr;
+	msi->end_addr = addr + mw_min_size;
 
 	return 0;
 
@@ -165,7 +167,6 @@ error_out:
 
 	return ret;
 }
-EXPORT_SYMBOL(ntb_msi_setup_mws);
 
 /**
  * ntb_msi_clear_mws() - Clear all inbound memory windows
@@ -173,7 +174,7 @@ EXPORT_SYMBOL(ntb_msi_setup_mws);
  *
  * This function tears down the resources used by ntb_msi_setup_mws().
  */
-void ntb_msi_clear_mws(struct ntb_dev *ntb)
+static void ntb_msi_clear_mws(struct ntb_dev *ntb)
 {
 	int peer;
 	int peer_widx;
@@ -186,33 +187,33 @@ void ntb_msi_clear_mws(struct ntb_dev *ntb)
 		ntb_mw_clear_trans(ntb, peer, peer_widx);
 	}
 }
-EXPORT_SYMBOL(ntb_msi_clear_mws);
 
 struct ntb_msi_devres {
 	struct ntb_dev *ntb;
 	struct msi_desc *entry;
-	struct ntb_msi_desc *msi_desc;
+	struct ntb_intr_desc *intr_desc;
 };
 
 static int ntb_msi_set_desc(struct ntb_dev *ntb, struct msi_desc *entry,
-			    struct ntb_msi_desc *msi_desc, u16 vector_offset)
+			    struct ntb_intr_desc *intr_desc, u16 vector_offset)
 {
+	struct ntb_msi *msi = ntb->intr_priv;
 	u64 addr;
 
 	addr = entry->msg.address_lo +
 		((uint64_t)entry->msg.address_hi << 32);
 
-	if (addr < ntb->msi->base_addr || addr >= ntb->msi->end_addr) {
+	if (addr < msi->base_addr || addr >= msi->end_addr) {
 		dev_warn_once(&ntb->dev,
 			      "IRQ %d: MSI Address not within the memory window (%llx, [%llx %llx])\n",
-			      entry->irq, addr, ntb->msi->base_addr,
-			      ntb->msi->end_addr);
+			      entry->irq, addr, msi->base_addr,
+			      msi->end_addr);
 		return -EFAULT;
 	}
 
-	msi_desc->addr_offset = addr - ntb->msi->base_addr;
-	msi_desc->data = entry->msg.data + vector_offset;
-	msi_desc->vector_offset = vector_offset;
+	intr_desc->addr_offset = addr - msi->base_addr;
+	intr_desc->data = entry->msg.data + vector_offset;
+	intr_desc->vector_offset = vector_offset;
 
 	return 0;
 }
@@ -220,12 +221,13 @@ static int ntb_msi_set_desc(struct ntb_dev *ntb, struct msi_desc *entry,
 static void ntb_msi_write_msg(struct msi_desc *entry, void *data)
 {
 	struct ntb_msi_devres *dr = data;
+	struct ntb_msi *msi = dr->ntb->intr_priv;
 
-	WARN_ON(ntb_msi_set_desc(dr->ntb, entry, dr->msi_desc,
-				 dr->msi_desc->vector_offset));
+	WARN_ON(ntb_msi_set_desc(dr->ntb, entry, dr->intr_desc,
+				 dr->intr_desc->vector_offset));
 
-	if (dr->ntb->msi->desc_changed)
-		dr->ntb->msi->desc_changed(dr->ntb->ctx);
+	if (msi->desc_changed)
+		msi->desc_changed(dr->ntb->ctx);
 }
 
 static void ntbm_msi_callback_release(struct device *dev, void *res)
@@ -237,7 +239,7 @@ static void ntbm_msi_callback_release(struct device *dev, void *res)
 }
 
 static int ntbm_msi_setup_callback(struct ntb_dev *ntb, struct msi_desc *entry,
-				   struct ntb_msi_desc *msi_desc)
+				   struct ntb_intr_desc *intr_desc)
 {
 	struct ntb_msi_devres *dr;
 
@@ -248,7 +250,7 @@ static int ntbm_msi_setup_callback(struct ntb_dev *ntb, struct msi_desc *entry,
 
 	dr->ntb = ntb;
 	dr->entry = entry;
-	dr->msi_desc = msi_desc;
+	dr->intr_desc = intr_desc;
 
 	devres_add(&ntb->dev, dr);
 
@@ -259,14 +261,12 @@ static int ntbm_msi_setup_callback(struct ntb_dev *ntb, struct msi_desc *entry,
 }
 
 /**
- * ntbm_msi_request_threaded_irq() - allocate an MSI interrupt
+ * ntb_msi_request_irq() - allocate an MSI interrupt
  * @ntb:	NTB device context
  * @handler:	Function to be called when the IRQ occurs
- * @thread_fn:  Function to be called in a threaded interrupt context. NULL
- *              for clients which handle everything in @handler
- * @name:    An ascii name for the claiming device, dev_name(dev) if NULL
- * @dev_id:     A cookie passed back to the handler function
- * @msi_desc:	MSI descriptor data which triggers the interrupt
+ * @name:	An ascii name for the claiming device, dev_name(dev) if NULL
+ * @dev_id:	A cookie passed back to the handler function
+ * @intr_desc:	Generic interrupt descriptor
  *
  * This function assigns an interrupt handler to an unused
  * MSI interrupt and returns the descriptor used to trigger
@@ -281,18 +281,14 @@ static int ntbm_msi_setup_callback(struct ntb_dev *ntb, struct msi_desc *entry,
  *
  * Return: IRQ number assigned on success, otherwise a negative error number.
  */
-int ntbm_msi_request_threaded_irq(struct ntb_dev *ntb, irq_handler_t handler,
-				  irq_handler_t thread_fn,
-				  const char *name, void *dev_id,
-				  struct ntb_msi_desc *msi_desc)
+static int ntb_msi_request_irq(struct ntb_dev *ntb, irq_handler_t handler,
+			       const char *name, void *dev_id,
+			       struct ntb_intr_desc *intr_desc)
 {
 	struct device *dev = &ntb->pdev->dev;
 	struct msi_desc *entry;
 	unsigned int virq;
 	int ret, i;
-
-	if (!ntb->msi)
-		return -EINVAL;
 
 	guard(msi_descs_lock)(dev);
 	msi_for_each_desc(entry, dev, MSI_DESC_ASSOCIATED) {
@@ -301,18 +297,17 @@ int ntbm_msi_request_threaded_irq(struct ntb_dev *ntb, irq_handler_t handler,
 			if (irq_has_action(virq))
 				continue;
 
-			ret = devm_request_threaded_irq(
-					&ntb->dev, virq, handler,
-					thread_fn, 0, name, dev_id);
+			ret = devm_request_irq(&ntb->dev, virq, handler,
+					       0, name, dev_id);
 			if (ret)
 				continue;
 
-			if (ntb_msi_set_desc(ntb, entry, msi_desc, i)) {
+			if (ntb_msi_set_desc(ntb, entry, intr_desc, i)) {
 				devm_free_irq(&ntb->dev, virq, dev_id);
 				continue;
 			}
 
-			ret = ntbm_msi_setup_callback(ntb, entry, msi_desc);
+			ret = ntbm_msi_setup_callback(ntb, entry, intr_desc);
 			if (ret) {
 				devm_free_irq(&ntb->dev, virq, dev_id);
 				return ret;
@@ -322,7 +317,23 @@ int ntbm_msi_request_threaded_irq(struct ntb_dev *ntb, irq_handler_t handler,
 	}
 	return -ENODEV;
 }
-EXPORT_SYMBOL(ntbm_msi_request_threaded_irq);
+
+/**
+ * ntb_msi_free_irq() - free an MSI interrupt
+ * @ntb:	NTB device context
+ * @irq:	IRQ number assigned
+ * @dev_id:	A cookie passed back to the handler function
+ * @desc:	Generic interrupt descriptor
+ *
+ * Free an IRQ assigned by ntb_msi_request_irq().
+ *
+ * Return: void
+ */
+static void ntb_msi_free_irq(struct ntb_dev *ntb, int irq, void *dev_id,
+			     struct ntb_intr_desc *desc)
+{
+	devm_free_irq(&ntb->dev, irq, dev_id);
+}
 
 /**
  * ntb_msi_peer_trigger() - Trigger an interrupt handler on a peer
@@ -336,18 +347,30 @@ EXPORT_SYMBOL(ntbm_msi_request_threaded_irq);
  *
  * Return: Zero on success, otherwise a negative error number.
  */
-int ntb_msi_peer_trigger(struct ntb_dev *ntb, int peer,
-			 struct ntb_msi_desc *desc)
+static int ntb_msi_peer_trigger(struct ntb_dev *ntb, int peer,
+				struct ntb_intr_desc *desc)
 {
+	struct ntb_msi *msi = ntb->intr_priv;
 	int idx;
 
-	if (!ntb->msi)
-		return -EINVAL;
+	idx = desc->addr_offset / sizeof(*msi->peer_mws[peer]);
 
-	idx = desc->addr_offset / sizeof(*ntb->msi->peer_mws[peer]);
-
-	iowrite32(desc->data, &ntb->msi->peer_mws[peer][idx]);
+	iowrite32(desc->data, &msi->peer_mws[peer][idx]);
 
 	return 0;
 }
-EXPORT_SYMBOL(ntb_msi_peer_trigger);
+
+static const struct ntb_intr_backend ntb_intr_backend_msi = {
+	.name = "msi",
+	.init = ntb_msi_init,
+	.setup_mws = ntb_msi_setup_mws,
+	.clear_mws = ntb_msi_clear_mws,
+	.request_irq = ntb_msi_request_irq,
+	.free_irq = ntb_msi_free_irq,
+	.peer_trigger = ntb_msi_peer_trigger,
+};
+
+const struct ntb_intr_backend *ntb_intr_msi_backend(void)
+{
+	return &ntb_intr_backend_msi;
+}

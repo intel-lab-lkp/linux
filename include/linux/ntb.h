@@ -63,7 +63,7 @@
 
 struct ntb_client;
 struct ntb_dev;
-struct ntb_msi;
+struct ntb_intr_backend;
 struct pci_dev;
 struct pci_epc;
 
@@ -438,8 +438,9 @@ struct ntb_dev {
 	/* block unregister until device is fully released */
 	struct completion		released;
 
-#ifdef CONFIG_NTB_MSI
-	struct ntb_msi *msi;
+#ifdef CONFIG_NTB_INTR_COMMON
+	void				*intr_priv;
+	const struct ntb_intr_backend	*intr_backend;
 #endif
 };
 #define dev_ntb(__dev) container_of((__dev), struct ntb_dev, dev)
@@ -1659,58 +1660,78 @@ static inline int ntb_peer_highest_mw_idx(struct ntb_dev *ntb, int pidx)
 	return ntb_mw_count(ntb, pidx) - ret - 1;
 }
 
-struct ntb_msi_desc {
+struct ntb_intr_desc {
 	u32 addr_offset;
 	u32 data;
 	u16 vector_offset;
 };
 
-#ifdef CONFIG_NTB_MSI
+struct ntb_intr_backend {
+	const char *name;
+	int (*init)(struct ntb_dev *ntb, void (*desc_changed)(void *ctx));
+	int (*setup_mws)(struct ntb_dev *ntb);
+	void (*clear_mws)(struct ntb_dev *ntb);
+	int (*request_irq)(struct ntb_dev *ntb, irq_handler_t handler,
+			   const char *name, void *dev_id,
+			   struct ntb_intr_desc *desc);
+	void (*free_irq)(struct ntb_dev *ntb, int irq, void *dev_id,
+			 struct ntb_intr_desc *desc);
+	int (*peer_trigger)(struct ntb_dev *ntb, int pidx,
+			    struct ntb_intr_desc *desc);
+	int (*peer_addr)(struct ntb_dev *ntb, int pidx,
+			 const struct ntb_intr_desc *local, phys_addr_t *addr);
+};
 
-int ntb_msi_init(struct ntb_dev *ntb, void (*desc_changed)(void *ctx));
-int ntb_msi_setup_mws(struct ntb_dev *ntb);
-void ntb_msi_clear_mws(struct ntb_dev *ntb);
-int ntbm_msi_request_threaded_irq(struct ntb_dev *ntb, irq_handler_t handler,
-				  irq_handler_t thread_fn,
-				  const char *name, void *dev_id,
-				  struct ntb_msi_desc *msi_desc);
-int ntb_msi_peer_trigger(struct ntb_dev *ntb, int peer,
-			 struct ntb_msi_desc *desc);
+#ifdef CONFIG_NTB_INTR_COMMON
 
-#else /* not CONFIG_NTB_MSI */
+int ntb_intr_init(struct ntb_dev *ntb, void (*desc_changed)(void *ctx));
+int ntb_intr_setup_mws(struct ntb_dev *ntb);
+void ntb_intr_clear_mws(struct ntb_dev *ntb);
+int ntb_intr_request_irq(struct ntb_dev *ntb, irq_handler_t handler,
+			 const char *name, void *dev_id,
+			 struct ntb_intr_desc *intr_desc);
+void ntb_intr_free_irq(struct ntb_dev *ntb, int irq, void *dev_id,
+		       struct ntb_intr_desc *intr_desc);
+int ntb_intr_peer_trigger(struct ntb_dev *ntb, int peer,
+			  struct ntb_intr_desc *desc);
 
-static inline int ntb_msi_init(struct ntb_dev *ntb,
+#else /* not CONFIG_NTB_INTR_COMMON */
+
+static inline int ntb_intr_init(struct ntb_dev *ntb,
 			       void (*desc_changed)(void *ctx))
 {
 	return -EOPNOTSUPP;
 }
-static inline int ntb_msi_setup_mws(struct ntb_dev *ntb)
+static inline int ntb_intr_setup_mws(struct ntb_dev *ntb)
 {
 	return -EOPNOTSUPP;
 }
-static inline void ntb_msi_clear_mws(struct ntb_dev *ntb) {}
-static inline int ntbm_msi_request_threaded_irq(struct ntb_dev *ntb,
-						irq_handler_t handler,
-						irq_handler_t thread_fn,
-						const char *name, void *dev_id,
-						struct ntb_msi_desc *msi_desc)
-{
-	return -EOPNOTSUPP;
-}
-static inline int ntb_msi_peer_trigger(struct ntb_dev *ntb, int peer,
-				       struct ntb_msi_desc *desc)
-{
-	return -EOPNOTSUPP;
-}
-#endif /* CONFIG_NTB_MSI */
-
-static inline int ntbm_msi_request_irq(struct ntb_dev *ntb,
+static inline void ntb_intr_clear_mws(struct ntb_dev *ntb) {}
+static inline int ntb_intr_request_irq(struct ntb_dev *ntb,
 				       irq_handler_t handler,
 				       const char *name, void *dev_id,
-				       struct ntb_msi_desc *msi_desc)
+				       struct ntb_intr_desc *intr_desc)
 {
-	return ntbm_msi_request_threaded_irq(ntb, handler, NULL, name,
-					     dev_id, msi_desc);
+	return -EOPNOTSUPP;
 }
+static inline void ntb_intr_free_irq(struct ntb_dev *ntb, int irq, void *dev_id,
+				     struct ntb_intr_desc *desc)
+{
+}
+static inline int ntb_intr_peer_trigger(struct ntb_dev *ntb, int peer,
+					struct ntb_intr_desc *desc)
+{
+	return -EOPNOTSUPP;
+}
+#endif /* CONFIG_NTB_INTR_COMMON */
+
+#ifdef CONFIG_NTB_MSI
+extern const struct ntb_intr_backend *ntb_intr_msi_backend(void);
+#else
+static inline const struct ntb_intr_backend *ntb_intr_msi_backend(void)
+{
+	return NULL;
+}
+#endif /* CONFIG_NTB_MSI */
 
 #endif

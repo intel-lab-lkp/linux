@@ -26,7 +26,7 @@ struct ntb_msit_ctx {
 		int irq_num;
 		int occurrences;
 		struct ntb_msit_ctx *nm;
-		struct ntb_msi_desc desc;
+		struct ntb_intr_desc desc;
 	} *isr_ctx;
 
 	struct ntb_msit_peer {
@@ -34,7 +34,7 @@ struct ntb_msit_ctx {
 		int pidx;
 		int num_irqs;
 		struct completion init_comp;
-		struct ntb_msi_desc *msi_desc;
+		struct ntb_intr_desc *intr_desc;
 	} peers[];
 };
 
@@ -62,7 +62,7 @@ static void ntb_msit_setup_work(struct work_struct *work)
 	int ret;
 	uintptr_t i;
 
-	ret = ntb_msi_setup_mws(nm->ntb);
+	ret = ntb_intr_setup_mws(nm->ntb);
 	if (ret) {
 		dev_err(&nm->ntb->dev, "Unable to setup MSI windows: %d\n",
 			ret);
@@ -74,7 +74,7 @@ static void ntb_msit_setup_work(struct work_struct *work)
 		nm->isr_ctx[i].nm = nm;
 
 		if (!nm->isr_ctx[i].irq_num) {
-			irq = ntbm_msi_request_irq(nm->ntb, ntb_msit_isr,
+			irq = ntb_intr_request_irq(nm->ntb, ntb_msit_isr,
 						   KBUILD_MODNAME,
 						   &nm->isr_ctx[i],
 						   &nm->isr_ctx[i].desc);
@@ -131,7 +131,7 @@ static void ntb_msit_link_event(void *ctx)
 static void ntb_msit_copy_peer_desc(struct ntb_msit_ctx *nm, int peer)
 {
 	int i;
-	struct ntb_msi_desc *desc = nm->peers[peer].msi_desc;
+	struct ntb_intr_desc *desc = nm->peers[peer].intr_desc;
 	int irq_count = nm->peers[peer].num_irqs;
 
 	for (i = 0; i < irq_count; i++) {
@@ -149,7 +149,7 @@ static void ntb_msit_copy_peer_desc(struct ntb_msit_ctx *nm, int peer)
 static void ntb_msit_db_event(void *ctx, int vec)
 {
 	struct ntb_msit_ctx *nm = ctx;
-	struct ntb_msi_desc *desc;
+	struct ntb_intr_desc *desc;
 	u64 peer_mask = ntb_db_read(nm->ntb);
 	u32 irq_count;
 	int peer;
@@ -168,8 +168,8 @@ static void ntb_msit_db_event(void *ctx, int vec)
 		if (!desc)
 			continue;
 
-		kfree(nm->peers[peer].msi_desc);
-		nm->peers[peer].msi_desc = desc;
+		kfree(nm->peers[peer].intr_desc);
+		nm->peers[peer].intr_desc = desc;
 		nm->peers[peer].num_irqs = irq_count;
 
 		ntb_msit_copy_peer_desc(nm, peer);
@@ -191,8 +191,8 @@ static int ntb_msit_dbgfs_trigger(void *data, u64 idx)
 	dev_dbg(&peer->nm->ntb->dev, "trigger irq %llu on peer %u\n",
 		idx, peer->pidx);
 
-	return ntb_msi_peer_trigger(peer->nm->ntb, peer->pidx,
-				    &peer->msi_desc[idx]);
+	return ntb_intr_peer_trigger(peer->nm->ntb, peer->pidx,
+				     &peer->intr_desc[idx]);
 }
 
 DEFINE_DEBUGFS_ATTRIBUTE(ntb_msit_trigger_fops, NULL,
@@ -344,7 +344,7 @@ static int ntb_msit_probe(struct ntb_client *client, struct ntb_dev *ntb)
 		return ret;
 	}
 
-	ret = ntb_msi_init(ntb, ntb_msit_desc_changed);
+	ret = ntb_intr_init(ntb, ntb_msit_desc_changed);
 	if (ret) {
 		dev_err(&ntb->dev, "Unable to initialize MSI library: %d\n",
 			ret);
@@ -392,10 +392,10 @@ static void ntb_msit_remove(struct ntb_client *client, struct ntb_dev *ntb)
 
 	ntb_link_disable(ntb);
 	ntb_db_set_mask(ntb, ntb_db_valid_mask(ntb));
-	ntb_msi_clear_mws(ntb);
+	ntb_intr_clear_mws(ntb);
 
 	for (i = 0; i < ntb_peer_port_count(ntb); i++)
-		kfree(nm->peers[i].msi_desc);
+		kfree(nm->peers[i].intr_desc);
 
 	ntb_clear_ctx(ntb);
 	ntb_msit_remove_dbgfs(nm);

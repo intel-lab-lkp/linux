@@ -205,8 +205,8 @@ struct ntb_transport_qp {
 
 	bool use_msi;
 	int msi_irq;
-	struct ntb_msi_desc msi_desc;
-	struct ntb_msi_desc peer_msi_desc;
+	struct ntb_intr_desc intr_desc;
+	struct ntb_intr_desc peer_intr_desc;
 };
 
 struct ntb_transport_mw {
@@ -714,16 +714,16 @@ static void ntb_transport_setup_qp_peer_msi(struct ntb_transport_ctx *nt,
 	if (spad >= ntb_spad_count(nt->ndev))
 		return;
 
-	qp->peer_msi_desc.addr_offset =
+	qp->peer_intr_desc.addr_offset =
 		ntb_peer_spad_read(qp->ndev, PIDX, spad);
-	qp->peer_msi_desc.data =
+	qp->peer_intr_desc.data =
 		ntb_peer_spad_read(qp->ndev, PIDX, spad + 1);
 
 	dev_dbg(&qp->ndev->pdev->dev, "QP%d Peer MSI addr=%x data=%x\n",
-		qp_num, qp->peer_msi_desc.addr_offset, qp->peer_msi_desc.data);
+		qp_num, qp->peer_intr_desc.addr_offset, qp->peer_intr_desc.data);
 
-	if (qp->peer_msi_desc.addr_offset == INTR_INVALID_ADDR_OFFSET ||
-	    qp->peer_msi_desc.data == INTR_INVALID_DATA)
+	if (qp->peer_intr_desc.addr_offset == INTR_INVALID_ADDR_OFFSET ||
+	    qp->peer_intr_desc.data == INTR_INVALID_DATA)
 		dev_info(&qp->ndev->pdev->dev,
 			 "Invalid addr_offset or data, falling back to doorbell\n");
 	else {
@@ -756,9 +756,9 @@ static void ntb_transport_setup_qp_msi(struct ntb_transport_ctx *nt,
 	}
 
 	if (!qp->msi_irq) {
-		qp->msi_irq = ntbm_msi_request_irq(qp->ndev, ntb_transport_isr,
+		qp->msi_irq = ntb_intr_request_irq(qp->ndev, ntb_transport_isr,
 						   KBUILD_MODNAME, qp,
-						   &qp->msi_desc);
+						   &qp->intr_desc);
 		if (qp->msi_irq < 0) {
 			dev_warn(&qp->ndev->pdev->dev,
 				 "Unable to allocate MSI interrupt for qp%d\n",
@@ -767,22 +767,22 @@ static void ntb_transport_setup_qp_msi(struct ntb_transport_ctx *nt,
 		}
 	}
 
-	rc = ntb_spad_write(qp->ndev, spad, qp->msi_desc.addr_offset);
+	rc = ntb_spad_write(qp->ndev, spad, qp->intr_desc.addr_offset);
 	if (rc)
 		goto err_free_interrupt;
 
-	rc = ntb_spad_write(qp->ndev, spad + 1, qp->msi_desc.data);
+	rc = ntb_spad_write(qp->ndev, spad + 1, qp->intr_desc.data);
 	if (rc)
 		goto err_free_interrupt;
 
 	dev_dbg(&qp->ndev->pdev->dev, "QP%d MSI %d addr=%x data=%x\n",
-		qp_num, qp->msi_irq, qp->msi_desc.addr_offset,
-		qp->msi_desc.data);
+		qp_num, qp->msi_irq, qp->intr_desc.addr_offset,
+		qp->intr_desc.data);
 
 	return;
 
 err_free_interrupt:
-	devm_free_irq(&nt->ndev->dev, qp->msi_irq, qp);
+	ntb_intr_free_irq(qp->ndev, qp->msi_irq, qp, &qp->intr_desc);
 }
 
 static void ntb_transport_msi_peer_desc_changed(struct ntb_transport_ctx *nt)
@@ -795,7 +795,7 @@ static void ntb_transport_msi_peer_desc_changed(struct ntb_transport_ctx *nt)
 		ntb_transport_setup_qp_peer_msi(nt, i);
 }
 
-static void ntb_transport_msi_desc_changed(void *data)
+static void ntb_transport_intr_desc_changed(void *data)
 {
 	struct ntb_transport_ctx *nt = data;
 	int i;
@@ -1072,7 +1072,7 @@ static void ntb_transport_link_work(struct work_struct *work)
 	/* send the local info, in the opposite order of the way we read it */
 
 	if (nt->use_intr) {
-		rc = ntb_msi_setup_mws(ndev);
+		rc = ntb_intr_setup_mws(ndev);
 		if (rc) {
 			dev_warn(&pdev->dev,
 				 "Failed to register MSI memory window: %d\n",
@@ -1321,7 +1321,7 @@ static int ntb_transport_probe(struct ntb_client *self, struct ntb_dev *ndev)
 	 * we will reserve the last MW for the MSI window.
 	 */
 	if (use_intr && mw_count > 1) {
-		rc = ntb_msi_init(ndev, ntb_transport_msi_desc_changed);
+		rc = ntb_intr_init(ndev, ntb_transport_intr_desc_changed);
 		if (!rc) {
 			mw_count -= 1;
 			nt->use_intr = true;
@@ -1803,7 +1803,7 @@ static void ntb_tx_copy_callback(void *data,
 	iowrite32(entry->flags | DESC_DONE_FLAG, &hdr->flags);
 
 	if (qp->use_msi)
-		ntb_msi_peer_trigger(qp->ndev, PIDX, &qp->peer_msi_desc);
+		ntb_intr_peer_trigger(qp->ndev, PIDX, &qp->peer_intr_desc);
 	else
 		ntb_peer_db_set(qp->ndev, BIT_ULL(qp->qp_num));
 
