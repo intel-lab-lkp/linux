@@ -1664,6 +1664,7 @@ struct ntb_intr_desc {
 	u32 addr_offset;
 	u32 data;
 	u16 vector_offset;
+	void *ctx;
 };
 
 struct ntb_intr_backend {
@@ -1733,5 +1734,14 @@ static inline const struct ntb_intr_backend *ntb_intr_msi_backend(void)
 	return NULL;
 }
 #endif /* CONFIG_NTB_MSI */
+
+#ifdef CONFIG_NTB_DW_EDMA
+extern const struct ntb_intr_backend *ntb_intr_dw_edma_backend(void);
+#else
+static inline const struct ntb_intr_backend *ntb_intr_dw_edma_backend(void)
+{
+	return NULL;
+}
+#endif /* CONFIG_NTB_DW_EDMA */
 
 #endif

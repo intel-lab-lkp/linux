@@ -29,6 +29,16 @@ config NTB_MSI
 
 	 If unsure, say N.
 
+config NTB_DW_EDMA
+	bool "DW eDMA test-interrupt backend"
+	depends on PCI_ENDPOINT && PCIE_DW_EP && DW_EDMA
+	select NTB_INTR_COMMON
+	help
+	 Use DW eDMA v0 test interrupt as a doorbell-like backend
+	 for NTB transports when MSI is not available on EPF side.
+
+	 If unsure, say N.
+
 source "drivers/ntb/hw/Kconfig"
 
 source "drivers/ntb/test/Kconfig"

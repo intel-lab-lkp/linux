@@ -5,3 +5,4 @@ obj-$(CONFIG_NTB_TRANSPORT) += ntb_transport.o
 ntb-y				:= core.o
 ntb-$(CONFIG_NTB_INTR_COMMON)	+= intr_common.o
 ntb-$(CONFIG_NTB_MSI)		+= msi.o
+ntb-$(CONFIG_NTB_DW_EDMA)	+= intr_dw_edma.o

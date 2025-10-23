@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: (GPL-2.0 OR BSD-3-Clause)
 
-#include <linux/ntb.h>
 #include <linux/module.h>
+#include <linux/ntb.h>
 #include <linux/pci.h>
 #include <linux/slab.h>
 
@@ -12,6 +12,12 @@ int ntb_intr_init(struct ntb_dev *ntb,
 	if (ntb->pdev->dev.msi.data) {
 		ntb->intr_backend = ntb_intr_msi_backend();
 		dev_info(&ntb->dev, "NTB interrupt MSI backend selected.\n");
+	}
+#endif
+#ifdef CONFIG_NTB_DW_EDMA
+	if (!ntb->intr_backend) {
+		ntb->intr_backend = ntb_intr_dw_edma_backend();
+		dev_info(&ntb->dev, "NTB interrupt DW eDMA backend selected.\n");
 	}
 #endif
 	if (!ntb->intr_backend)
