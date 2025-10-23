@@ -70,11 +70,6 @@ int __init efi_create_mapping(struct mm_struct *mm, efi_memory_desc_t *md)
 
 	create_mapping_late(mm, &desc, true);
 
-	/*
-	 * If stricter permissions were specified, apply them now.
-	 */
-	if (md->attribute & (EFI_MEMORY_RO | EFI_MEMORY_XP))
-		return efi_set_mapping_permissions(mm, md, false);
 	return 0;
 }
 
