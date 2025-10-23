@@ -115,6 +115,7 @@ int dw_edma_register_selfirq(struct dw_edma *dw,
 			     dw_edma_selfirq_fn fn, void *data);
 void dw_edma_unregister_selfirq(struct dw_edma *dw,
 				dw_edma_selfirq_fn fn, void *data);
+struct dw_edma *dw_edma_find_by_child(struct device *child);
 #else
 static inline int dw_edma_probe(struct dw_edma_chip *chip)
 {
@@ -140,6 +141,10 @@ static inline int dw_edma_register_selfirq(struct dw_edma *dw,
 static inline void dw_edma_unregister_selfirq(struct dw_edma *dw,
 					      dw_edma_selfirq_fn fn, void *data)
 {
+}
+struct dw_edma *dw_edma_find_by_child(struct device *child)
+{
+	return NULL;
 }
 #endif /* CONFIG_DW_EDMA */
 

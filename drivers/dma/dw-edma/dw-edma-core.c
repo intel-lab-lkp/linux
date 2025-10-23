@@ -24,6 +24,9 @@
 #include "../dmaengine.h"
 #include "../virt-dma.h"
 
+static DEFINE_MUTEX(dw_edma_list_lock);
+static LIST_HEAD(dw_edma_list);
+
 static inline
 struct dw_edma_desc *vd2dw_edma_desc(struct virt_dma_desc *vd)
 {
@@ -964,6 +967,22 @@ void dw_edma_unregister_selfirq(struct dw_edma *dw,
 }
 EXPORT_SYMBOL_GPL(dw_edma_unregister_selfirq);
 
+struct dw_edma *dw_edma_find_by_child(struct device *child)
+{
+	struct dw_edma *dw;
+
+	if (!child)
+		return NULL;
+
+	guard(mutex)(&dw_edma_list_lock);
+	list_for_each_entry(dw, &dw_edma_list, node)
+		if (child->parent == dw->dma.dev)
+			return dw;
+
+	return NULL;
+}
+EXPORT_SYMBOL_GPL(dw_edma_find_by_child);
+
 int dw_edma_probe(struct dw_edma_chip *chip)
 {
 	struct device *dev;
@@ -1035,6 +1054,10 @@ int dw_edma_probe(struct dw_edma_chip *chip)
 
 	chip->dw = dw;
 
+	INIT_LIST_HEAD(&dw->node);
+	guard(mutex)(&dw_edma_list_lock);
+	list_add_tail(&dw->node, &dw_edma_list);
+
 	return 0;
 
 err_irq_free:
@@ -1079,6 +1102,9 @@ int dw_edma_remove(struct dw_edma_chip *chip)
 		tasklet_kill(&chan->vc.task);
 		list_del(&chan->vc.chan.device_node);
 	}
+
+	guard(mutex)(&dw_edma_list_lock);
+	list_del(&dw->node);
 
 	return 0;
 }

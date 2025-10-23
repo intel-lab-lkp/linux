@@ -122,6 +122,8 @@ struct dw_edma {
 
 	struct list_head selfirq_handlers;
 	spinlock_t selfirq_lock;
+
+	struct list_head		node;
 };
 
 typedef void (*dw_edma_handler_t)(struct dw_edma_chan *);
