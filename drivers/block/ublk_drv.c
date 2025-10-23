@@ -93,6 +93,7 @@
 
 /* ublk batch fetch uring_cmd */
 struct ublk_batch_fcmd {
+	struct list_head node;
 	struct io_uring_cmd *cmd;
 	unsigned short buf_group;
 };
@@ -117,7 +118,10 @@ struct ublk_uring_cmd_pdu {
 	 */
 	struct ublk_queue *ubq;
 
-	u16 tag;
+	union {
+		u16 tag;
+		struct ublk_batch_fcmd *fcmd; /* batch io only */
+	};
 };
 
 struct ublk_batch_io_data {
@@ -226,18 +230,36 @@ struct ublk_queue {
 	struct ublk_device *dev;
 
 	/*
-	 * Inflight ublk request tag is saved in this fifo
+	 * Batch I/O State Management:
 	 *
-	 * There are multiple writer from ublk_queue_rq() or ublk_queue_rqs(),
-	 * so lock is required for storing request tag to fifo
+	 * The batch I/O system uses implicit state management based on the
+	 * combination of three key variables below.
 	 *
-	 * Make sure just one reader for fetching request from task work
-	 * function to ublk server, so no need to grab the lock in reader
-	 * side.
+	 * - IDLE: list_empty(&fcmd_head) && !active_fcmd
+	 *   No fetch commands available, events queue in evts_fifo
+	 *
+	 * - READY: !list_empty(&fcmd_head) && !active_fcmd
+	 *   Fetch commands available but none processing events
+	 *
+	 * - ACTIVE: active_fcmd
+	 *   One fetch command actively processing events from evts_fifo
+	 *
+	 * Key Invariants:
+	 * - At most one active_fcmd at any time (single reader)
+	 * - active_fcmd is always from fcmd_head list when non-NULL
+	 * - evts_fifo can be read locklessly by the single active reader
+	 * - All state transitions require evts_lock protection
+	 * - Multiple writers to evts_fifo require lock protection
 	 */
 	struct {
 		DECLARE_KFIFO_PTR(evts_fifo, unsigned short);
 		spinlock_t evts_lock;
+
+		/* List of fetch commands available to process events */
+		struct list_head fcmd_head;
+
+		/* Currently active fetch command (NULL = none active) */
+		struct ublk_batch_fcmd  *active_fcmd;
 	}____cacheline_aligned_in_smp;
 
 	struct ublk_io ios[];
@@ -290,8 +312,18 @@ static void ublk_abort_queue(struct ublk_device *ub, struct ublk_queue *ubq);
 static inline struct request *__ublk_check_and_get_req(struct ublk_device *ub,
 		u16 q_id, u16 tag, struct ublk_io *io, size_t offset);
 static inline unsigned int ublk_req_build_flags(struct request *req);
+static void ublk_batch_dispatch(struct ublk_queue *ubq,
+				struct ublk_batch_io_data *data,
+				struct ublk_batch_fcmd *fcmd);
+static struct ublk_batch_fcmd *__ublk_pick_active_fcmd(
+		struct ublk_queue *ubq);
 
 static inline bool ublk_dev_support_batch_io(const struct ublk_device *ub)
+{
+	return false;
+}
+
+static inline bool ublk_support_batch_io(const struct ublk_queue *ubq)
 {
 	return false;
 }
@@ -621,13 +653,40 @@ static wait_queue_head_t ublk_idr_wq;	/* wait until one idr is freed */
 
 static DEFINE_MUTEX(ublk_ctl_mutex);
 
+static struct ublk_batch_fcmd *
+ublk_batch_alloc_fcmd(struct io_uring_cmd *cmd)
+{
+	struct ublk_batch_fcmd *fcmd = kzalloc(sizeof(*fcmd), GFP_NOIO);
 
-static void ublk_batch_deinit_fetch_buf(const struct ublk_batch_io_data *data,
+	if (fcmd) {
+		fcmd->cmd = cmd;
+		fcmd->buf_group = READ_ONCE(cmd->sqe->buf_index);
+	}
+	return fcmd;
+}
+
+static void ublk_batch_free_fcmd(struct ublk_batch_fcmd *fcmd)
+{
+	kfree(fcmd);
+}
+
+/*
+ * Nothing can move on, so clear ->active_fcmd, and the caller should stop
+ * dispatching
+ */
+static void ublk_batch_deinit_fetch_buf(struct ublk_queue *ubq,
+					const struct ublk_batch_io_data *data,
 					struct ublk_batch_fcmd *fcmd,
 					int res)
 {
+	spin_lock(&ubq->evts_lock);
+	list_del(&fcmd->node);
+	WARN_ON_ONCE(fcmd != ubq->active_fcmd);
+	ubq->active_fcmd = NULL;
+	spin_unlock(&ubq->evts_lock);
+
 	io_uring_cmd_done(fcmd->cmd, res, data->issue_flags);
-	fcmd->cmd = NULL;
+	ublk_batch_free_fcmd(fcmd);
 }
 
 static int ublk_batch_fetch_post_cqe(struct ublk_batch_fcmd *fcmd,
@@ -1524,6 +1583,8 @@ static int __ublk_batch_dispatch(struct ublk_queue *ubq,
 	size_t len = 0;
 	int ret;
 
+	WARN_ON_ONCE(data->cmd != fcmd->cmd);
+
 	sel = io_uring_cmd_buffer_select(fcmd->cmd, fcmd->buf_group, &len,
 					 data->issue_flags);
 	if (sel.val < 0)
@@ -1550,23 +1611,79 @@ static int __ublk_batch_dispatch(struct ublk_queue *ubq,
 	return ret;
 }
 
-static __maybe_unused int
-ublk_batch_dispatch(struct ublk_queue *ubq,
-		    const struct ublk_batch_io_data *data,
-		    struct ublk_batch_fcmd *fcmd)
+static struct ublk_batch_fcmd *__ublk_pick_active_fcmd(
+		struct ublk_queue *ubq)
 {
+	struct ublk_batch_fcmd *fcmd;
+
+	lockdep_assert_held(&ubq->evts_lock);
+
+	if (!ublk_io_evts_empty(ubq) && !ubq->active_fcmd) {
+		smp_mb();
+		fcmd = ubq->active_fcmd = list_first_entry_or_null(
+				&ubq->fcmd_head, struct ublk_batch_fcmd, node);
+	} else {
+		fcmd = NULL;
+	}
+	return fcmd;
+}
+
+static void ublk_batch_tw_cb(struct io_uring_cmd *cmd,
+			   unsigned int issue_flags)
+{
+	struct ublk_uring_cmd_pdu *pdu = ublk_get_uring_cmd_pdu(cmd);
+	struct ublk_batch_fcmd *fcmd = pdu->fcmd;
+	struct ublk_batch_io_data data = {
+		.ub = pdu->ubq->dev,
+		.cmd = fcmd->cmd,
+		.issue_flags = issue_flags,
+	};
+
+	WARN_ON_ONCE(pdu->ubq->active_fcmd != fcmd);
+
+	ublk_batch_dispatch(pdu->ubq, &data, fcmd);
+}
+
+static void ublk_batch_dispatch(struct ublk_queue *ubq,
+				struct ublk_batch_io_data *data,
+				struct ublk_batch_fcmd *fcmd)
+{
+	struct ublk_batch_fcmd *new_fcmd;
+	void *handle;
+	bool empty;
 	int ret = 0;
 
+again:
 	while (!ublk_io_evts_empty(ubq)) {
 		ret = __ublk_batch_dispatch(ubq, data, fcmd);
 		if (ret <= 0)
 			break;
 	}
 
-	if (ret < 0)
-		ublk_batch_deinit_fetch_buf(data, fcmd, ret);
+	if (ret < 0) {
+		ublk_batch_deinit_fetch_buf(ubq, data, fcmd, ret);
+		return;
+	}
 
-	return ret;
+	handle = io_uring_cmd_ctx_handle(fcmd->cmd);
+	ubq->active_fcmd = NULL;
+	smp_mb();
+	empty = ublk_io_evts_empty(ubq);
+	if (likely(empty))
+		return;
+
+	spin_lock(&ubq->evts_lock);
+	new_fcmd = __ublk_pick_active_fcmd(ubq);
+	spin_unlock(&ubq->evts_lock);
+
+	if (!new_fcmd)
+		return;
+	if (handle == io_uring_cmd_ctx_handle(new_fcmd->cmd)) {
+		data->cmd = new_fcmd->cmd;
+		fcmd = new_fcmd;
+		goto again;
+	}
+	io_uring_cmd_complete_in_task(new_fcmd->cmd, ublk_batch_tw_cb);
 }
 
 static void ublk_cmd_tw_cb(struct io_uring_cmd *cmd,
@@ -1578,13 +1695,27 @@ static void ublk_cmd_tw_cb(struct io_uring_cmd *cmd,
 	ublk_dispatch_req(ubq, pdu->req, issue_flags);
 }
 
-static void ublk_queue_cmd(struct ublk_queue *ubq, struct request *rq)
+static void ublk_queue_cmd(struct ublk_queue *ubq, struct request *rq, bool last)
 {
-	struct io_uring_cmd *cmd = ubq->ios[rq->tag].cmd;
-	struct ublk_uring_cmd_pdu *pdu = ublk_get_uring_cmd_pdu(cmd);
+	if (ublk_support_batch_io(ubq)) {
+		unsigned short tag = rq->tag;
+		struct ublk_batch_fcmd *fcmd = NULL;
 
-	pdu->req = rq;
-	io_uring_cmd_complete_in_task(cmd, ublk_cmd_tw_cb);
+		spin_lock(&ubq->evts_lock);
+		kfifo_put(&ubq->evts_fifo, tag);
+		if (last)
+			fcmd = __ublk_pick_active_fcmd(ubq);
+		spin_unlock(&ubq->evts_lock);
+
+		if (fcmd)
+			io_uring_cmd_complete_in_task(fcmd->cmd, ublk_batch_tw_cb);
+	} else {
+		struct io_uring_cmd *cmd = ubq->ios[rq->tag].cmd;
+		struct ublk_uring_cmd_pdu *pdu = ublk_get_uring_cmd_pdu(cmd);
+
+		pdu->req = rq;
+		io_uring_cmd_complete_in_task(cmd, ublk_cmd_tw_cb);
+	}
 }
 
 static void ublk_cmd_list_tw_cb(struct io_uring_cmd *cmd,
@@ -1602,14 +1733,44 @@ static void ublk_cmd_list_tw_cb(struct io_uring_cmd *cmd,
 	} while (rq);
 }
 
-static void ublk_queue_cmd_list(struct ublk_io *io, struct rq_list *l)
+static void ublk_batch_queue_cmd_list(struct ublk_queue *ubq, struct rq_list *l)
 {
-	struct io_uring_cmd *cmd = io->cmd;
-	struct ublk_uring_cmd_pdu *pdu = ublk_get_uring_cmd_pdu(cmd);
+	unsigned short tags[MAX_NR_TAG];
+	struct ublk_batch_fcmd *fcmd;
+	struct request *rq;
+	unsigned cnt = 0;
 
-	pdu->req_list = rq_list_peek(l);
+	spin_lock(&ubq->evts_lock);
+	rq_list_for_each(l, rq) {
+		tags[cnt++] = (unsigned short)rq->tag;
+		if (cnt >= MAX_NR_TAG) {
+			kfifo_in(&ubq->evts_fifo, tags, cnt);
+			cnt = 0;
+		}
+	}
+	if (cnt)
+		kfifo_in(&ubq->evts_fifo, tags, cnt);
+	fcmd = __ublk_pick_active_fcmd(ubq);
+	spin_unlock(&ubq->evts_lock);
+
 	rq_list_init(l);
-	io_uring_cmd_complete_in_task(cmd, ublk_cmd_list_tw_cb);
+	if (fcmd)
+		io_uring_cmd_complete_in_task(fcmd->cmd, ublk_batch_tw_cb);
+}
+
+static void ublk_queue_cmd_list(struct ublk_queue *ubq, struct ublk_io *io,
+				struct rq_list *l, bool batch)
+{
+	if (batch) {
+		ublk_batch_queue_cmd_list(ubq, l);
+	} else {
+		struct io_uring_cmd *cmd = io->cmd;
+		struct ublk_uring_cmd_pdu *pdu = ublk_get_uring_cmd_pdu(cmd);
+
+		pdu->req_list = rq_list_peek(l);
+		rq_list_init(l);
+		io_uring_cmd_complete_in_task(cmd, ublk_cmd_list_tw_cb);
+	}
 }
 
 static enum blk_eh_timer_return ublk_timeout(struct request *rq)
@@ -1688,7 +1849,7 @@ static blk_status_t ublk_queue_rq(struct blk_mq_hw_ctx *hctx,
 		return BLK_STS_OK;
 	}
 
-	ublk_queue_cmd(ubq, rq);
+	ublk_queue_cmd(ubq, rq, bd->last);
 	return BLK_STS_OK;
 }
 
@@ -1700,11 +1861,25 @@ static inline bool ublk_belong_to_same_batch(const struct ublk_io *io,
 		(io->task == io2->task);
 }
 
-static void ublk_queue_rqs(struct rq_list *rqlist)
+static void ublk_commit_rqs(struct blk_mq_hw_ctx *hctx)
+{
+	struct ublk_queue *ubq = hctx->driver_data;
+	struct ublk_batch_fcmd *fcmd;
+
+	spin_lock(&ubq->evts_lock);
+	fcmd = __ublk_pick_active_fcmd(ubq);
+	spin_unlock(&ubq->evts_lock);
+
+	if (fcmd)
+		io_uring_cmd_complete_in_task(fcmd->cmd, ublk_batch_tw_cb);
+}
+
+static void __ublk_queue_rqs(struct rq_list *rqlist, bool batch)
 {
 	struct rq_list requeue_list = { };
 	struct rq_list submit_list = { };
 	struct ublk_io *io = NULL;
+	struct ublk_queue *ubq = NULL;
 	struct request *req;
 
 	while ((req = rq_list_pop(rqlist))) {
@@ -1718,14 +1893,25 @@ static void ublk_queue_rqs(struct rq_list *rqlist)
 
 		if (io && !ublk_belong_to_same_batch(io, this_io) &&
 				!rq_list_empty(&submit_list))
-			ublk_queue_cmd_list(io, &submit_list);
+			ublk_queue_cmd_list(ubq, io, &submit_list, batch);
 		io = this_io;
+		ubq = this_q;
 		rq_list_add_tail(&submit_list, req);
 	}
 
 	if (!rq_list_empty(&submit_list))
-		ublk_queue_cmd_list(io, &submit_list);
+		ublk_queue_cmd_list(ubq, io, &submit_list, batch);
 	*rqlist = requeue_list;
+}
+
+static void ublk_queue_rqs(struct rq_list *rqlist)
+{
+	__ublk_queue_rqs(rqlist, false);
+}
+
+static void ublk_batch_queue_rqs(struct rq_list *rqlist)
+{
+	__ublk_queue_rqs(rqlist, true);
 }
 
 static int ublk_init_hctx(struct blk_mq_hw_ctx *hctx, void *driver_data,
@@ -1741,6 +1927,14 @@ static int ublk_init_hctx(struct blk_mq_hw_ctx *hctx, void *driver_data,
 static const struct blk_mq_ops ublk_mq_ops = {
 	.queue_rq       = ublk_queue_rq,
 	.queue_rqs      = ublk_queue_rqs,
+	.init_hctx	= ublk_init_hctx,
+	.timeout	= ublk_timeout,
+};
+
+static const struct blk_mq_ops ublk_batch_mq_ops = {
+	.commit_rqs	= ublk_commit_rqs,
+	.queue_rq       = ublk_queue_rq,
+	.queue_rqs      = ublk_batch_queue_rqs,
 	.init_hctx	= ublk_init_hctx,
 	.timeout	= ublk_timeout,
 };
@@ -2122,6 +2316,56 @@ static void ublk_cancel_cmd(struct ublk_queue *ubq, unsigned tag,
 		io_uring_cmd_done(io->cmd, UBLK_IO_RES_ABORT, issue_flags);
 }
 
+static void ublk_batch_cancel_cmd(struct ublk_queue *ubq,
+				  struct ublk_batch_fcmd *fcmd,
+				  unsigned int issue_flags)
+{
+	bool done;
+
+	spin_lock(&ubq->evts_lock);
+	done = (ubq->active_fcmd != fcmd);
+	if (done)
+		list_del(&fcmd->node);
+	spin_unlock(&ubq->evts_lock);
+
+	if (done) {
+		io_uring_cmd_done(fcmd->cmd, UBLK_IO_RES_ABORT, issue_flags);
+		ublk_batch_free_fcmd(fcmd);
+	}
+}
+
+static void ublk_batch_cancel_queue(struct ublk_queue *ubq)
+{
+	LIST_HEAD(fcmd_list);
+
+	spin_lock(&ubq->evts_lock);
+	ubq->force_abort = true;
+	list_splice_init(&ubq->fcmd_head, &fcmd_list);
+	if (ubq->active_fcmd)
+		list_move(&ubq->active_fcmd->node, &ubq->fcmd_head);
+	spin_unlock(&ubq->evts_lock);
+
+	while (!list_empty(&fcmd_list)) {
+		struct ublk_batch_fcmd *fcmd = list_first_entry(&fcmd_list,
+				struct ublk_batch_fcmd, node);
+
+		ublk_batch_cancel_cmd(ubq, fcmd, IO_URING_F_UNLOCKED);
+	}
+}
+
+static void ublk_batch_cancel_fn(struct io_uring_cmd *cmd,
+				 unsigned int issue_flags)
+{
+	struct ublk_uring_cmd_pdu *pdu = ublk_get_uring_cmd_pdu(cmd);
+	struct ublk_batch_fcmd *fcmd = pdu->fcmd;
+	struct ublk_queue *ubq = pdu->ubq;
+
+	if (!ubq->canceling)
+		ublk_start_cancel(ubq->dev);
+
+	ublk_batch_cancel_cmd(ubq, fcmd, issue_flags);
+}
+
 /*
  * The ublk char device won't be closed when calling cancel fn, so both
  * ublk device and queue are guaranteed to be live
@@ -2172,6 +2416,11 @@ static inline bool ublk_dev_ready(const struct ublk_device *ub)
 static void ublk_cancel_queue(struct ublk_queue *ubq)
 {
 	int i;
+
+	if (ublk_support_batch_io(ubq)) {
+		ublk_batch_cancel_queue(ubq);
+		return;
+	}
 
 	for (i = 0; i < ubq->q_depth; i++)
 		ublk_cancel_cmd(ubq, i, IO_URING_F_UNLOCKED);
@@ -3131,6 +3380,74 @@ static int ublk_check_batch_cmd(const struct ublk_batch_io_data *data)
 	return ublk_check_batch_cmd_flags(uc);
 }
 
+static int ublk_batch_attach(struct ublk_queue *ubq,
+			     struct ublk_batch_io_data *data,
+			     struct ublk_batch_fcmd *fcmd)
+{
+	struct ublk_batch_fcmd *new_fcmd = NULL;
+	bool free = false;
+
+	spin_lock(&ubq->evts_lock);
+	if (unlikely(ubq->force_abort || ubq->canceling)) {
+		free = true;
+	} else {
+		list_add_tail(&fcmd->node, &ubq->fcmd_head);
+		new_fcmd = __ublk_pick_active_fcmd(ubq);
+	}
+	spin_unlock(&ubq->evts_lock);
+
+	/*
+	 * If the two fetch commands are originated from same io_ring_ctx,
+	 * run batch dispatch directly. Otherwise, schedule task work for
+	 * doing it.
+	 */
+	if (new_fcmd && io_uring_cmd_ctx_handle(new_fcmd->cmd) ==
+			io_uring_cmd_ctx_handle(fcmd->cmd)) {
+		data->cmd = new_fcmd->cmd;
+		ublk_batch_dispatch(ubq, data, new_fcmd);
+	} else if (new_fcmd) {
+		io_uring_cmd_complete_in_task(new_fcmd->cmd,
+				ublk_batch_tw_cb);
+	}
+
+	if (free) {
+		ublk_batch_free_fcmd(fcmd);
+		return -ENODEV;
+	}
+	return -EIOCBQUEUED;
+}
+
+static int ublk_handle_batch_fetch_cmd(struct ublk_batch_io_data *data)
+{
+	struct ublk_queue *ubq = ublk_get_queue(data->ub, data->header.q_id);
+	struct ublk_batch_fcmd *fcmd = ublk_batch_alloc_fcmd(data->cmd);
+	struct ublk_uring_cmd_pdu *pdu = ublk_get_uring_cmd_pdu(data->cmd);
+
+	if (!fcmd)
+		return -ENOMEM;
+
+	pdu->ubq = ubq;
+	pdu->fcmd = fcmd;
+	io_uring_cmd_mark_cancelable(data->cmd, data->issue_flags);
+
+	return ublk_batch_attach(ubq, data, fcmd);
+}
+
+static int ublk_validate_batch_fetch_cmd(struct ublk_batch_io_data *data,
+					 const struct ublk_batch_io *uc)
+{
+	if (!(data->cmd->flags & IORING_URING_CMD_MULTISHOT))
+		return -EINVAL;
+
+	if (uc->elem_bytes != sizeof(__u16))
+		return -EINVAL;
+
+	if (uc->flags != 0)
+		return -E2BIG;
+
+	return 0;
+}
+
 static int ublk_ch_batch_io_uring_cmd(struct io_uring_cmd *cmd,
 				       unsigned int issue_flags)
 {
@@ -3153,6 +3470,11 @@ static int ublk_ch_batch_io_uring_cmd(struct io_uring_cmd *cmd,
 	if (data.header.q_id >= ub->dev_info.nr_hw_queues)
 		goto out;
 
+	if (unlikely(issue_flags & IO_URING_F_CANCEL)) {
+		ublk_batch_cancel_fn(cmd, issue_flags);
+		return 0;
+	}
+
 	switch (cmd_op) {
 	case UBLK_U_IO_PREP_IO_CMDS:
 		ret = ublk_check_batch_cmd(&data);
@@ -3165,6 +3487,12 @@ static int ublk_ch_batch_io_uring_cmd(struct io_uring_cmd *cmd,
 		if (ret)
 			goto out;
 		ret = ublk_handle_batch_commit_cmd(&data);
+		break;
+	case UBLK_U_IO_FETCH_IO_CMDS:
+		ret = ublk_validate_batch_fetch_cmd(&data, uc);
+		if (ret)
+			goto out;
+		ret = ublk_handle_batch_fetch_cmd(&data);
 		break;
 	default:
 		ret = -EOPNOTSUPP;
@@ -3342,6 +3670,7 @@ static int ublk_init_queue(struct ublk_device *ub, int q_id)
 		ret = ublk_io_evts_init(ubq, ubq->q_depth);
 		if (ret)
 			goto fail;
+		INIT_LIST_HEAD(&ubq->fcmd_head);
 	}
 	return 0;
 fail:
@@ -3473,7 +3802,10 @@ static void ublk_align_max_io_size(struct ublk_device *ub)
 
 static int ublk_add_tag_set(struct ublk_device *ub)
 {
-	ub->tag_set.ops = &ublk_mq_ops;
+	if (ublk_dev_support_batch_io(ub))
+		ub->tag_set.ops = &ublk_batch_mq_ops;
+	else
+		ub->tag_set.ops = &ublk_mq_ops;
 	ub->tag_set.nr_hw_queues = ub->dev_info.nr_hw_queues;
 	ub->tag_set.queue_depth = ub->dev_info.queue_depth;
 	ub->tag_set.numa_node = NUMA_NO_NODE;
