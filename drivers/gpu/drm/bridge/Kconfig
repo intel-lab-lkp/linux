@@ -33,6 +33,17 @@ config DRM_AUX_HPD_BRIDGE
 menu "Display Interface Bridges"
 	depends on DRM && DRM_BRIDGE
 
+config DRM_AUX_TYPEC_DP_HPD_BRIDGE
+	tristate "TypeC DP HPD bridge"
+	depends on DRM_BRIDGE && OF && TYPEC
+	select DRM_AUX_HPD_BRIDGE
+	help
+	  Simple USB Type-C DP bridge that terminates the bridge chain and
+	  provides HPD support.
+
+	  If the USB-C controller driver has not implemented this and you need
+	  the DP HPD support, say "Y" or "m" here.
+
 config DRM_CHIPONE_ICN6211
 	tristate "Chipone ICN6211 MIPI-DSI/RGB Converter bridge"
 	depends on OF
