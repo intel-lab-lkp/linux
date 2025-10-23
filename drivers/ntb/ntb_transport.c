@@ -97,10 +97,14 @@ static bool use_dma;
 module_param(use_dma, bool, 0644);
 MODULE_PARM_DESC(use_dma, "Use DMA engine to perform large data copy");
 
-static bool use_msi;
+static bool use_intr;
+module_param(use_intr, bool, 0644);
+MODULE_PARM_DESC(use_intr, "Use peer-triggerable interrupts (MSI if available, otherwise provider fallback)");
+
+/* Backward-compat: keep 'use_msi' as an alias to 'use_intr'. Marked deprecated */
 #ifdef CONFIG_NTB_MSI
-module_param(use_msi, bool, 0644);
-MODULE_PARM_DESC(use_msi, "Use MSI interrupts instead of doorbells");
+module_param_named(use_msi, use_intr, bool, 0644);
+MODULE_PARM_DESC(use_msi, "DEPRECATED: same as use_intr (will be removed after grace period)");
 #endif
 
 static struct dentry *nt_debugfs_dir;
@@ -236,7 +240,7 @@ struct ntb_transport_ctx {
 	u64 qp_bitmap;
 	u64 qp_bitmap_free;
 
-	bool use_msi;
+	bool use_intr;
 	unsigned int msi_spad_offset;
 	u64 msi_db_mask;
 
@@ -704,7 +708,7 @@ static void ntb_transport_setup_qp_peer_msi(struct ntb_transport_ctx *nt,
 	struct ntb_transport_qp *qp = &nt->qp_vec[qp_num];
 	int spad = qp_num * 2 + nt->msi_spad_offset;
 
-	if (!nt->use_msi)
+	if (!nt->use_intr)
 		return;
 
 	if (spad >= ntb_spad_count(nt->ndev))
@@ -742,7 +746,7 @@ static void ntb_transport_setup_qp_msi(struct ntb_transport_ctx *nt,
 	ntb_spad_write(qp->ndev, spad, INTR_INVALID_ADDR_OFFSET);
 	ntb_spad_write(qp->ndev, spad + 1, INTR_INVALID_DATA);
 
-	if (!nt->use_msi)
+	if (!nt->use_intr)
 		return;
 
 	if (spad >= ntb_spad_count(nt->ndev)) {
@@ -1067,13 +1071,13 @@ static void ntb_transport_link_work(struct work_struct *work)
 
 	/* send the local info, in the opposite order of the way we read it */
 
-	if (nt->use_msi) {
+	if (nt->use_intr) {
 		rc = ntb_msi_setup_mws(ndev);
 		if (rc) {
 			dev_warn(&pdev->dev,
 				 "Failed to register MSI memory window: %d\n",
 				 rc);
-			nt->use_msi = false;
+			nt->use_intr = false;
 		}
 	}
 
@@ -1316,11 +1320,11 @@ static int ntb_transport_probe(struct ntb_client *self, struct ntb_dev *ndev)
 	 * If we are using MSI, and have at least one extra memory window,
 	 * we will reserve the last MW for the MSI window.
 	 */
-	if (use_msi && mw_count > 1) {
+	if (use_intr && mw_count > 1) {
 		rc = ntb_msi_init(ndev, ntb_transport_msi_desc_changed);
 		if (!rc) {
 			mw_count -= 1;
-			nt->use_msi = true;
+			nt->use_intr = true;
 		}
 	}
 
@@ -1369,7 +1373,7 @@ static int ntb_transport_probe(struct ntb_client *self, struct ntb_dev *ndev)
 	qp_bitmap = ntb_db_valid_mask(ndev);
 
 	qp_count = ilog2(qp_bitmap);
-	if (nt->use_msi) {
+	if (nt->use_intr) {
 		qp_count -= 1;
 		nt->msi_db_mask = BIT_ULL(qp_count);
 		ntb_db_clear_mask(ndev, nt->msi_db_mask);
