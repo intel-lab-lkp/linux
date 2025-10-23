@@ -609,10 +609,16 @@ static int epf_ntb_mw_bar_init(struct epf_ntb *ntb)
 				PCI_BASE_ADDRESS_MEM_TYPE_64 :
 				PCI_BASE_ADDRESS_MEM_TYPE_32;
 
-		ret = pci_epc_set_bar(ntb->epf->epc,
-				      ntb->epf->func_no,
-				      ntb->epf->vfunc_no,
-				      &ntb->epf->bar[barno]);
+		if (ntb->epf->epc->ops->map_inbound)
+			ret = pci_epc_map_inbound(ntb->epf->epc,
+						  ntb->epf->func_no,
+						  ntb->epf->vfunc_no,
+						  &ntb->epf->bar[barno], 0);
+		else
+			ret = pci_epc_set_bar(ntb->epf->epc,
+					      ntb->epf->func_no,
+					      ntb->epf->vfunc_no,
+					      &ntb->epf->bar[barno]);
 		if (ret) {
 			dev_err(dev, "MW set failed\n");
 			goto err_set_bar;
@@ -1268,17 +1274,24 @@ static int vntb_epf_mw_set_trans(struct ntb_dev *ndev, int pidx, int idx,
 	struct epf_ntb *ntb = ntb_ndev(ndev);
 	struct pci_epf_bar *epf_bar;
 	enum pci_barno barno;
+	struct pci_epc *epc;
 	int ret;
 	struct device *dev;
 
+	epc = ntb->epf->epc;
 	dev = &ntb->ntb.dev;
 	barno = ntb->epf_ntb_bar[BAR_MW1 + idx];
+
 	epf_bar = &ntb->epf->bar[barno];
 	epf_bar->phys_addr = addr;
 	epf_bar->barno = barno;
 	epf_bar->size = size;
 
-	ret = pci_epc_set_bar(ntb->epf->epc, 0, 0, epf_bar);
+	if (epc->ops->map_inbound)
+		ret = pci_epc_map_inbound(epc, 0, 0, epf_bar, 0);
+	else
+		ret = pci_epc_set_bar(epc, 0, 0, epf_bar);
+
 	if (ret) {
 		dev_err(dev, "failure set mw trans\n");
 		return ret;
