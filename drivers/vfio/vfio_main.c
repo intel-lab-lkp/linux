@@ -1263,48 +1263,40 @@ static long vfio_get_region_info(struct vfio_device *device,
 				 struct vfio_region_info __user *arg)
 {
 	unsigned long minsz = offsetofend(struct vfio_region_info, offset);
+	struct vfio_info_cap caps = { .buf = NULL, .size = 0 };
 	struct vfio_region_info info = {};
 	int ret;
+
+	if (unlikely(!device->ops->get_region_info_caps))
+		return -EINVAL;
 
 	if (copy_from_user(&info, arg, minsz))
 		return -EFAULT;
 	if (info.argsz < minsz)
 		return -EINVAL;
 
-	if (device->ops->get_region_info_caps) {
-		struct vfio_info_cap caps = { .buf = NULL, .size = 0 };
+	ret = device->ops->get_region_info_caps(device, &info, &caps);
+	if (ret)
+		return ret;
 
-		ret = device->ops->get_region_info_caps(device, &info, &caps);
-		if (ret)
-			return ret;
-
-		if (caps.size) {
-			info.flags |= VFIO_REGION_INFO_FLAG_CAPS;
-			if (info.argsz < sizeof(info) + caps.size) {
-				info.argsz = sizeof(info) + caps.size;
-				info.cap_offset = 0;
-			} else {
-				vfio_info_cap_shift(&caps, sizeof(info));
-				if (copy_to_user(arg + 1, caps.buf,
-						 caps.size)) {
-					kfree(caps.buf);
-					return -EFAULT;
-				}
-				info.cap_offset = sizeof(info);
+	if (caps.size) {
+		info.flags |= VFIO_REGION_INFO_FLAG_CAPS;
+		if (info.argsz < sizeof(info) + caps.size) {
+			info.argsz = sizeof(info) + caps.size;
+			info.cap_offset = 0;
+		} else {
+			vfio_info_cap_shift(&caps, sizeof(info));
+			if (copy_to_user(arg + 1, caps.buf, caps.size)) {
+				kfree(caps.buf);
+				return -EFAULT;
 			}
-			kfree(caps.buf);
+			info.cap_offset = sizeof(info);
 		}
-
-		if (copy_to_user(arg, &info, minsz))
-			return -EFAULT;
-	} else if (device->ops->get_region_info) {
-		ret = device->ops->get_region_info(device, arg);
-		if (ret)
-			return ret;
-	} else {
-		return -EINVAL;
+		kfree(caps.buf);
 	}
 
+	if (copy_to_user(arg, &info, minsz))
+		return -EFAULT;
 	return 0;
 }
 
