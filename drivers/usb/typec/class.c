@@ -13,6 +13,7 @@
 #include <linux/string_choices.h>
 #include <linux/usb/pd_vdo.h>
 #include <linux/usb/typec_mux.h>
+#include <linux/usb/typec_notify.h>
 #include <linux/usb/typec_retimer.h>
 #include <linux/usb.h>
 
@@ -599,6 +600,8 @@ typec_register_altmode(struct device *parent,
 		put_device(&alt->adev.dev);
 		return ERR_PTR(ret);
 	}
+
+	typec_notify_event(TYPEC_ALTMODE_REGISTERED, &alt->adev);
 
 	return &alt->adev;
 }
