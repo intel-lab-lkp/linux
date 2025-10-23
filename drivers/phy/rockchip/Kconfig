@@ -119,6 +119,7 @@ config PHY_ROCKCHIP_SNPS_PCIE3
 config PHY_ROCKCHIP_TYPEC
 	tristate "Rockchip TYPEC PHY Driver"
 	depends on OF && (ARCH_ROCKCHIP || COMPILE_TEST)
+	depends on TYPEC || TYPEC=n
 	select EXTCON
 	select GENERIC_PHY
 	select RESET_CONTROLLER
