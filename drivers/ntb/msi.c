@@ -106,6 +106,9 @@ int ntb_msi_setup_mws(struct ntb_dev *ntb)
 	if (!ntb->msi)
 		return -EINVAL;
 
+	if (ntb->msi->base_addr)
+		return 0;
+
 	scoped_guard (msi_descs_lock, &ntb->pdev->dev) {
 		desc = msi_first_desc(&ntb->pdev->dev, MSI_DESC_ASSOCIATED);
 		addr = desc->msg.address_lo + ((uint64_t)desc->msg.address_hi << 32);
