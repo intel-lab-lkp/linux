@@ -596,7 +596,9 @@ csum_copy_err:
 	goto try_again;
 }
 
-DECLARE_STATIC_KEY_FALSE(udpv6_encap_needed_key);
+DEFINE_STATIC_KEY_FALSE(udpv6_encap_needed_key);
+EXPORT_IPV6_MOD(udpv6_encap_needed_key);
+
 void udpv6_encap_enable(void)
 {
 	static_branch_inc(&udpv6_encap_needed_key);
