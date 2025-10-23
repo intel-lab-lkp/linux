@@ -280,8 +280,8 @@ static int move_addr_to_user(struct sockaddr_storage *kaddr, int klen,
 
 	BUG_ON(klen > sizeof(struct sockaddr_storage));
 
-	if (can_do_masked_user_access())
-		ulen = masked_user_access_begin(ulen);
+	if (can_do_sanitised_user_access())
+		ulen = sanitised_user_access_begin(ulen);
 	else if (!user_access_begin(ulen, 4))
 		return -EFAULT;
 

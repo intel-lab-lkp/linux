@@ -57,11 +57,12 @@ static inline unsigned long __untagged_addr_remote(struct mm_struct *mm,
 	likely((__force unsigned long)(x) <= runtime_const_ptr(USER_PTR_MAX))
 
 /*
- * Masking the user address is an alternative to a conditional
- * user_access_begin that can avoid the fencing. This only works
- * for dense accesses starting at the address.
+ * 'Sanitise' kernel addresses to the base of the unmapped page
+ * between user and kernel addresses using ALU instructions.
+ * This saves a conditional branch and avoids the need for a fence instruction
+ * to avoid the side effects of speculative reads from kernel memory.
  */
-static inline void __user *mask_user_address(const void __user *ptr)
+static inline void __user *sanitise_user_address(const void __user *ptr)
 {
 	void __user *ret;
 	asm("cmp %1,%0\n\t"
@@ -71,10 +72,10 @@ static inline void __user *mask_user_address(const void __user *ptr)
 		 "0" (ptr));
 	return ret;
 }
-#define masked_user_access_begin(x) ({				\
-	__auto_type __masked_ptr = (x);				\
-	__masked_ptr = mask_user_address(__masked_ptr);		\
-	__uaccess_begin(); __masked_ptr; })
+#define sanitised_user_access_begin(x) ({				\
+	__auto_type __sanitised_ptr = (x);				\
+	__sanitised_ptr = sanitise_user_address(__sanitised_ptr);	\
+	__uaccess_begin(); __sanitised_ptr; })
 
 /*
  * User pointers can have tag bits on x86-64.  This scheme tolerates

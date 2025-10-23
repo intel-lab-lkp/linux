@@ -33,12 +33,20 @@
 })
 #endif
 
-#ifdef masked_user_access_begin
- #define can_do_masked_user_access() 1
+/*
+ * Sanitising the user address is an alternative to a conditional
+ * user_access_begin that can avoid synchronising instructions.
+ * Kernel addresses are 'sanitised' to the base of an unmapped page
+ * between user and kernel addresses, accesses will then fault.
+ * This works provided the accesses are 'reasonably sequential'.
+ */
+
+#ifdef sanitised_user_access_begin
+ #define can_do_sanitised_user_access() 1
 #else
- #define can_do_masked_user_access() 0
- #define masked_user_access_begin(src) NULL
- #define mask_user_address(src) (src)
+ #define can_do_sanitised_user_access() 0
+ #define sanitised_user_access_begin(src) NULL
+ #define sanitise_user_address(src) (src)
 #endif
 
 /*
@@ -162,8 +170,8 @@ _inline_copy_from_user(void *to, const void __user *from, unsigned long n)
 	might_fault();
 	if (should_fail_usercopy())
 		goto fail;
-	if (can_do_masked_user_access())
-		from = mask_user_address(from);
+	if (can_do_sanitised_user_access())
+		from = sanitise_user_address(from);
 	else {
 		if (!access_ok(from, n))
 			goto fail;

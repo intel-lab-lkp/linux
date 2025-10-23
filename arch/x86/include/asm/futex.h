@@ -48,8 +48,8 @@ do {								\
 static __always_inline int arch_futex_atomic_op_inuser(int op, int oparg, int *oval,
 		u32 __user *uaddr)
 {
-	if (can_do_masked_user_access())
-		uaddr = masked_user_access_begin(uaddr);
+	if (can_do_sanitised_user_access())
+		uaddr = sanitised_user_access_begin(uaddr);
 	else if (!user_access_begin(uaddr, sizeof(u32)))
 		return -EFAULT;
 
@@ -86,8 +86,8 @@ static inline int futex_atomic_cmpxchg_inatomic(u32 *uval, u32 __user *uaddr,
 {
 	int ret = 0;
 
-	if (can_do_masked_user_access())
-		uaddr = masked_user_access_begin(uaddr);
+	if (can_do_sanitised_user_access())
+		uaddr = sanitised_user_access_begin(uaddr);
 	else if (!user_access_begin(uaddr, sizeof(u32)))
 		return -EFAULT;
 	asm volatile("\n"

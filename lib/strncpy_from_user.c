@@ -123,10 +123,10 @@ long strncpy_from_user(char *dst, const char __user *src, long count)
 	kasan_check_write(dst, count);
 	check_object_size(dst, count, false);
 
-	if (can_do_masked_user_access()) {
+	if (can_do_sanitised_user_access()) {
 		long retval;
 
-		src = masked_user_access_begin(src);
+		src = sanitised_user_access_begin(src);
 		retval = do_strncpy_from_user(dst, src, count, count);
 		user_read_access_end();
 		return retval;
