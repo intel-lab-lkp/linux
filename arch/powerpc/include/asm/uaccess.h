@@ -437,15 +437,22 @@ user_read_access_begin(const void __user *ptr, size_t len)
 #define user_read_access_begin	user_read_access_begin
 #define user_read_access_end		prevent_current_read_from_user
 
+static __always_inline void
+__user_write_access_begin(const void __user *ptr, size_t len)
+{
+	might_fault();
+
+	allow_write_to_user((void __user *)ptr, len);
+}
+#define __user_write_access_begin	__user_write_access_begin
+
 static __must_check __always_inline bool
 user_write_access_begin(const void __user *ptr, size_t len)
 {
 	if (unlikely(!access_ok(ptr, len)))
 		return false;
 
-	might_fault();
-
-	allow_write_to_user((void __user *)ptr, len);
+	__user_write_access_begin(ptr, len);
 	return true;
 }
 #define user_write_access_begin	user_write_access_begin

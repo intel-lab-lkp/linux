@@ -452,6 +452,7 @@ static __must_check __always_inline bool user_access_begin(const void __user *pt
 }
 #define user_access_begin user_access_begin
 #define user_access_end __disable_user_access
+#define __user_write_access_begin(a,b) __enable_user_access()
 
 static inline unsigned long user_access_save(void) { return 0UL; }
 static inline void user_access_restore(unsigned long enabled) { }

@@ -525,6 +525,7 @@ static __must_check __always_inline bool user_access_begin(const void __user *pt
 }
 #define user_access_begin(a,b)	user_access_begin(a,b)
 #define user_access_end()	__uaccess_end()
+#define __user_write_access_begin(a,b)	__uaccess_begin()
 
 #define user_access_save()	smap_save()
 #define user_access_restore(x)	smap_restore(x)
