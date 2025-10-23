@@ -82,11 +82,14 @@ static inline struct epoll_event __user *
 epoll_put_uevent(__poll_t revents, __u64 data,
 		 struct epoll_event __user *uevent)
 {
-	if (__put_user(revents, &uevent->events) ||
-	    __put_user(data, &uevent->data))
-		return NULL;
-
-	return uevent+1;
+	__user_write_access_begin(uevent, sizeof(*uevent));
+	unsafe_put_user(revents, &uevent->events, efault);
+	unsafe_put_user(data, &uevent->data, efault);
+	user_access_end();
+	return uevent + 1;
+efault:
+	user_access_end();
+	return NULL;
 }
 #endif
 
