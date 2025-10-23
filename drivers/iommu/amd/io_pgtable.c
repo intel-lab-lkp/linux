@@ -353,6 +353,9 @@ static int iommu_v1_map_pages(struct io_pgtable_ops *ops, unsigned long iova,
 	if (!(prot & IOMMU_PROT_MASK))
 		goto out;
 
+	if (sme_me_mask && page_is_ram(PHYS_PFN(paddr)))
+		paddr = __sme_set(paddr);
+
 	while (pgcount > 0) {
 		count = PAGE_SIZE_PTE_COUNT(pgsize);
 		pte   = alloc_pte(pgtable, iova, pgsize, NULL, gfp, &updated);
@@ -368,10 +371,10 @@ static int iommu_v1_map_pages(struct io_pgtable_ops *ops, unsigned long iova,
 			updated = true;
 
 		if (count > 1) {
-			__pte = PAGE_SIZE_PTE(__sme_set(paddr), pgsize);
+			__pte = PAGE_SIZE_PTE(paddr, pgsize);
 			__pte |= PM_LEVEL_ENC(7) | IOMMU_PTE_PR | IOMMU_PTE_FC;
 		} else
-			__pte = __sme_set(paddr) | IOMMU_PTE_PR | IOMMU_PTE_FC;
+			__pte = paddr | IOMMU_PTE_PR | IOMMU_PTE_FC;
 
 		if (prot & IOMMU_PROT_IR)
 			__pte |= IOMMU_PTE_IR;
