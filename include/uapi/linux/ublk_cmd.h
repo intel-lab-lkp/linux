@@ -554,6 +554,12 @@ struct ublk_elem_header {
 };
 
 /*
+ * If this tag value is observed from buffer of `UBLK_U_IO_FETCH_IO_CMDS`
+ * ublk server can simply ignore it
+ */
+#define UBLK_BATCH_IO_UNUSED_TAG 	(__u16)(-1)
+
+/*
  * uring_cmd buffer structure for batch commands
  *
  * buffer includes multiple elements, which number is specified by
