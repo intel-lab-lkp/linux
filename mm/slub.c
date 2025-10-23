@@ -2216,9 +2216,12 @@ prepare_slab_obj_exts_hook(struct kmem_cache *s, gfp_t flags, void *p)
 	slab = virt_to_slab(p);
 	if (!slab_obj_exts(slab) &&
 	    alloc_slab_obj_exts(slab, s, flags, false)) {
-		pr_warn_once("%s, %s: Failed to create slab extension vector!\n",
-			     __func__, s->name);
-		return NULL;
+		/* Recheck if a racing thread has successfully allocated slab->obj_exts. */
+		if (!slab_obj_exts(slab)) {
+			pr_warn_once("%s, %s: Failed to create slab extension vector!\n",
+				     __func__, s->name);
+			return NULL;
+		}
 	}
 
 	return slab_obj_exts(slab) + obj_to_index(s, slab, p);
