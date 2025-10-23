@@ -1680,6 +1680,8 @@ static bool intel_sel_update_config_valid(struct intel_dp *intel_dp,
 	crtc_state->enable_psr2_su_region_et =
 		psr2_su_region_et_valid(intel_dp, crtc_state->has_panel_replay);
 
+	crtc_state->has_alpm = intel_alpm_is_possible(intel_dp);
+
 	return true;
 
 unsupported:
@@ -1749,10 +1751,16 @@ _panel_replay_compute_config(struct intel_dp *intel_dp,
 		return false;
 	}
 
+	if (intel_alpm_is_possible(intel_dp))
+		crtc_state->has_alpm = alpm_config_valid(intel_dp, crtc_state, true, true, false);
+
 	if (!intel_dp_is_edp(intel_dp))
 		return true;
 
 	/* Remaining checks are for eDP only */
+
+	if (!crtc_state->has_alpm)
+		return false;
 
 	if (to_intel_crtc(crtc_state->uapi.crtc)->pipe != PIPE_A &&
 	    to_intel_crtc(crtc_state->uapi.crtc)->pipe != PIPE_B)
@@ -1775,9 +1783,6 @@ _panel_replay_compute_config(struct intel_dp *intel_dp,
 			    "Panel Replay is not supported with HDCP\n");
 		return false;
 	}
-
-	if (!alpm_config_valid(intel_dp, crtc_state, true, true, false))
-		return false;
 
 	return true;
 }
@@ -4444,16 +4449,6 @@ void intel_psr_connector_debugfs_add(struct intel_connector *connector)
 				    connector, &i915_psr_status_fops);
 }
 
-bool intel_psr_needs_alpm(struct intel_dp *intel_dp, const struct intel_crtc_state *crtc_state)
-{
-	/*
-	 * eDP Panel Replay uses always ALPM
-	 * PSR2 uses ALPM but PSR1 doesn't
-	 */
-	return intel_dp_is_edp(intel_dp) && (crtc_state->has_sel_update ||
-					     crtc_state->has_panel_replay);
-}
-
 bool intel_psr_needs_alpm_aux_less(struct intel_dp *intel_dp,
 				   const struct intel_crtc_state *crtc_state)
 {
@@ -4469,7 +4464,7 @@ void intel_psr_compute_config_late(struct intel_dp *intel_dp,
 
 	if (intel_psr_needs_alpm_aux_less(intel_dp, crtc_state))
 		wake_lines = crtc_state->alpm_state.aux_less_wake_lines;
-	else if (intel_psr_needs_alpm(intel_dp, crtc_state))
+	else if (crtc_state->has_alpm)
 		wake_lines = DISPLAY_VER(display) < 20 ?
 			     psr2_block_count_lines(crtc_state->alpm_state.io_wake_lines,
 						    crtc_state->alpm_state.fast_wake_lines) :
