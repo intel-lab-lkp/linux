@@ -169,16 +169,6 @@ void bvec_free(mempool_t *pool, struct bio_vec *bv, unsigned short nr_vecs)
 		kmem_cache_free(biovec_slab(nr_vecs)->slab, bv);
 }
 
-/*
- * Make the first allocation restricted and don't dump info on allocation
- * failures, since we'll fall back to the mempool in case of failure.
- */
-static inline gfp_t bvec_alloc_gfp(gfp_t gfp)
-{
-	return (gfp & ~(__GFP_DIRECT_RECLAIM | __GFP_IO)) |
-		__GFP_NOMEMALLOC | __GFP_NORETRY | __GFP_NOWARN;
-}
-
 struct bio_vec *bvec_alloc(mempool_t *pool, unsigned short *nr_vecs,
 		gfp_t gfp_mask)
 {
@@ -201,7 +191,8 @@ struct bio_vec *bvec_alloc(mempool_t *pool, unsigned short *nr_vecs,
 	if (*nr_vecs < BIO_MAX_VECS) {
 		struct bio_vec *bvl;
 
-		bvl = kmem_cache_alloc(bvs->slab, bvec_alloc_gfp(gfp_mask));
+		bvl = kmem_cache_alloc(bvs->slab,
+				try_alloc_gfp(gfp_mask & ~__GFP_IO));
 		if (likely(bvl) || !(gfp_mask & __GFP_DIRECT_RECLAIM))
 			return bvl;
 		*nr_vecs = BIO_MAX_VECS;

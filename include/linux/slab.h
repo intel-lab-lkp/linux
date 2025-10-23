@@ -1173,6 +1173,16 @@ void kfree_rcu_scheduler_running(void);
  */
 size_t kmalloc_size_roundup(size_t size);
 
+/*
+ * Make the first allocation restricted and don't dump info on allocation
+ * failures, for callers that will fall back to a mempool in case of failure.
+ */
+static inline gfp_t try_alloc_gfp(gfp_t gfp)
+{
+	return (gfp & ~__GFP_DIRECT_RECLAIM) |
+		__GFP_NOMEMALLOC | __GFP_NORETRY | __GFP_NOWARN;
+}
+
 void __init kmem_cache_init_late(void);
 void __init kvfree_rcu_init(void);
 
