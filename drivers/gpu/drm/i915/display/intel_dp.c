@@ -6073,8 +6073,12 @@ intel_dp_detect(struct drm_connector *_connector,
 	if (ret == 1)
 		connector->base.epoch_counter++;
 
-	if (!intel_dp_is_edp(intel_dp))
+	if (!intel_dp_is_edp(intel_dp)) {
+		if (DISPLAY_VER(display) >= 35)
+			intel_alpm_init(intel_dp);
+
 		intel_psr_init_dpcd(intel_dp);
+	}
 
 	intel_dp_detect_dsc_caps(intel_dp, connector);
 
