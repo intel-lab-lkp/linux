@@ -6214,7 +6214,6 @@ TRACE_EVENT(xfs_healthmon_metadata_hook,
 		  __entry->lost_prev)
 );
 
-#if defined(CONFIG_XFS_LIVE_HOOKS) && defined(CONFIG_MEMORY_FAILURE) && defined(CONFIG_FS_DAX)
 TRACE_EVENT(xfs_healthmon_media_error_hook,
 	TP_PROTO(const struct xfs_media_error_params *p,
 		 unsigned int events, unsigned long long lost_prev),
@@ -6262,7 +6261,6 @@ TRACE_EVENT(xfs_healthmon_media_error_hook,
 		  __entry->events,
 		  __entry->lost_prev)
 );
-#endif
 
 #define XFS_FILE_IOERROR_STRINGS \
 	{ XFS_FILE_IOERROR_BUFFERED_READ,	"readahead" }, \

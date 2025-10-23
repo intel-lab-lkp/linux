@@ -91,9 +91,19 @@ xfs_media_error_hook_setup(
 	xfs_hook_setup(&hook->error_hook, mod_fn);
 }
 #else
-# define xfs_media_error_hook(...)		((void)0)
+static inline void
+xfs_media_error_hook(
+	struct xfs_mount		*mp,
+	enum xfs_failed_device		fdev,
+	xfs_daddr_t			daddr,
+	uint64_t			bbcount,
+	bool				pre_remove)
+{
+	/* empty */
+}
 #endif /* CONFIG_XFS_LIVE_HOOKS */
 
+#if defined(CONFIG_MEMORY_FAILURE) && defined(CONFIG_FS_DAX)
 struct xfs_failure_info {
 	xfs_agblock_t		startblock;
 	xfs_extlen_t		blockcount;
@@ -458,3 +468,44 @@ xfs_dax_notify_failure(
 const struct dax_holder_operations xfs_dax_holder_operations = {
 	.notify_failure		= xfs_dax_notify_failure,
 };
+#endif /* CONFIG_MEMORY_FAILURE && CONFIG_FS_DAX */
+
+#define XFS_VALID_MEDIA_ERROR_FLAGS	(XFS_MEDIA_ERROR_DATADEV | \
+					 XFS_MEDIA_ERROR_LOGDEV | \
+					 XFS_MEDIA_ERROR_RTDEV)
+int
+xfs_ioc_media_error(
+	struct xfs_mount		*mp,
+	struct xfs_media_error __user	*arg)
+{
+	struct xfs_media_error		me;
+	enum xfs_failed_device		fdev;
+
+	if (!capable(CAP_SYS_ADMIN))
+		return -EPERM;
+
+	if (copy_from_user(&me, arg, sizeof(me)))
+		return -EFAULT;
+
+	if (me.pad)
+		return -EINVAL;
+	if (me.flags & ~XFS_VALID_MEDIA_ERROR_FLAGS)
+		return -EINVAL;
+
+	switch (me.flags & XFS_MEDIA_ERROR_DEVMASK) {
+	case XFS_MEDIA_ERROR_DATADEV:
+		fdev = XFS_FAILED_DATADEV;
+		break;
+	case XFS_MEDIA_ERROR_LOGDEV:
+		fdev = XFS_FAILED_LOGDEV;
+		break;
+	case XFS_MEDIA_ERROR_RTDEV:
+		fdev = XFS_FAILED_RTDEV;
+		break;
+	default:
+		return -EINVAL;
+	}
+
+	xfs_media_error_hook(mp, fdev, me.daddr, me.bbcount, false);
+	return 0;
+}
