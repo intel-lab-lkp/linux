@@ -59,11 +59,13 @@
 #include <linux/completion.h>
 #include <linux/device.h>
 #include <linux/interrupt.h>
+#include <linux/pci-epc.h>
 
 struct ntb_client;
 struct ntb_dev;
 struct ntb_msi;
 struct pci_dev;
+struct pci_epc;
 
 /**
  * enum ntb_topo - NTB connection topology
@@ -256,6 +258,7 @@ static inline int ntb_ctx_ops_is_valid(const struct ntb_ctx_ops *ops)
  * @msg_clear_mask:	See ntb_msg_clear_mask().
  * @msg_read:		See ntb_msg_read().
  * @peer_msg_write:	See ntb_peer_msg_write().
+ * @get_pci_epc:	See ntb_get_pci_epc().
  */
 struct ntb_dev_ops {
 	int (*port_number)(struct ntb_dev *ntb);
@@ -331,6 +334,7 @@ struct ntb_dev_ops {
 	int (*msg_clear_mask)(struct ntb_dev *ntb, u64 mask_bits);
 	u32 (*msg_read)(struct ntb_dev *ntb, int *pidx, int midx);
 	int (*peer_msg_write)(struct ntb_dev *ntb, int pidx, int midx, u32 msg);
+	struct pci_epc *(*get_pci_epc)(struct ntb_dev *ntb);
 };
 
 static inline int ntb_dev_ops_is_valid(const struct ntb_dev_ops *ops)
@@ -393,6 +397,9 @@ static inline int ntb_dev_ops_is_valid(const struct ntb_dev_ops *ops)
 		/* !ops->msg_clear_mask == !ops->msg_count	&& */
 		!ops->msg_read == !ops->msg_count		&&
 		!ops->peer_msg_write == !ops->msg_count		&&
+
+		/* Miscellaneous optional callbacks */
+		/* ops->get_pci_epc			&& */
 		1;
 }
 
@@ -1565,6 +1572,21 @@ static inline int ntb_peer_msg_write(struct ntb_dev *ntb, int pidx, int midx,
 		return -EINVAL;
 
 	return ntb->ops->peer_msg_write(ntb, pidx, midx, msg);
+}
+
+/**
+ * ntb_get_pci_epc() - get backing PCI endpoint controller if possible.
+ * @ntb:	NTB device context.
+ *
+ * Get the backing PCI endpoint controller representation.
+ *
+ * Return: The pointer of pci_epc instance if possible. or %NULL if not.
+ */
+static inline struct pci_epc __maybe_unused *ntb_get_pci_epc(struct ntb_dev *ntb)
+{
+	if (!ntb->ops->get_pci_epc)
+		return NULL;
+	return ntb->ops->get_pci_epc(ntb);
 }
 
 /**
