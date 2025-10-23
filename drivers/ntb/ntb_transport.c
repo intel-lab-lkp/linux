@@ -113,7 +113,6 @@ struct ntb_queue_entry {
 	void *buf;
 	unsigned int len;
 	unsigned int flags;
-	int retries;
 	int errors;
 	unsigned int tx_index;
 	unsigned int rx_index;
@@ -1630,9 +1629,7 @@ static void ntb_async_rx(struct ntb_queue_entry *entry, void *offset)
 	if (res < 0)
 		goto err;
 
-	if (!entry->retries)
-		qp->rx_async++;
-
+	qp->rx_async++;
 	return;
 
 err:
@@ -1910,9 +1907,7 @@ static void ntb_async_tx(struct ntb_transport_qp *qp,
 	if (res < 0)
 		goto err;
 
-	if (!entry->retries)
-		qp->tx_async++;
-
+	qp->tx_async++;
 	return;
 
 err:
@@ -2273,7 +2268,6 @@ int ntb_transport_rx_enqueue(struct ntb_transport_qp *qp, void *cb, void *data,
 	entry->buf = data;
 	entry->len = len;
 	entry->flags = 0;
-	entry->retries = 0;
 	entry->errors = 0;
 	entry->rx_index = 0;
 
@@ -2323,7 +2317,6 @@ int ntb_transport_tx_enqueue(struct ntb_transport_qp *qp, void *cb, void *data,
 	entry->len = len;
 	entry->flags = 0;
 	entry->errors = 0;
-	entry->retries = 0;
 	entry->tx_index = 0;
 
 	rc = ntb_process_tx(qp, entry);
