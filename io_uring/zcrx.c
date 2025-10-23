@@ -22,10 +22,10 @@
 #include <uapi/linux/io_uring.h>
 
 #include "io_uring.h"
-#include "kbuf.h"
 #include "memmap.h"
 #include "zcrx.h"
 #include "rsrc.h"
+#include "register.h"
 
 #define IO_ZCRX_AREA_SUPPORTED_FLAGS	(IORING_ZCRX_AREA_DMABUF)
 
@@ -519,6 +519,8 @@ static void io_close_queue(struct io_zcrx_ifq *ifq)
 
 static void io_zcrx_ifq_free(struct io_zcrx_ifq *ifq)
 {
+	if (ifq->proxy)
+		goto free;
 	io_close_queue(ifq);
 
 	if (ifq->area)
@@ -528,6 +530,7 @@ static void io_zcrx_ifq_free(struct io_zcrx_ifq *ifq)
 
 	io_free_rbuf_ring(ifq);
 	mutex_destroy(&ifq->pp_lock);
+free:
 	kfree(ifq);
 }
 
@@ -539,6 +542,73 @@ struct io_mapped_region *io_zcrx_get_region(struct io_ring_ctx *ctx,
 	lockdep_assert_held(&ctx->mmap_lock);
 
 	return ifq ? &ifq->region : NULL;
+}
+
+static int io_clone_zcrx_ifq(struct io_ring_ctx *ctx,
+			     struct io_uring_zcrx_ifq_reg __user *arg,
+			     struct io_uring_zcrx_ifq_reg *reg)
+{
+	struct io_zcrx_ifq *ifq, *src_ifq;
+	struct io_ring_ctx *src_ctx;
+	struct file *file;
+	int src_fd, ret;
+	u32 src_id, id;
+
+	src_fd = reg->if_idx;
+	src_id = reg->if_rxq;
+
+	file = io_uring_register_get_file(src_fd, false);
+	if (IS_ERR(file))
+		return PTR_ERR(file);
+
+	src_ctx = file->private_data;
+	if (src_ctx == ctx)
+		return -EBADFD;
+
+	mutex_unlock(&ctx->uring_lock);
+	lock_two_rings(ctx, src_ctx);
+
+	percpu_ref_get(&src_ctx->refs);
+	ret = -EINVAL;
+	src_ifq = xa_load(&src_ctx->zcrx_ctxs, src_id);
+	if (!src_ifq)
+		goto err_unlock;
+	refcount_inc(&src_ifq->refs);
+
+	ifq = kzalloc(sizeof(*ifq), GFP_KERNEL);
+	ifq->proxy = src_ifq;
+	ifq->ctx = ctx;
+	ifq->if_rxq = src_ifq->if_rxq;
+
+	scoped_guard(mutex, &ctx->mmap_lock) {
+		ret = xa_alloc(&ctx->zcrx_ctxs, &id, NULL, xa_limit_31b, GFP_KERNEL);
+		if (ret)
+			goto err_free;
+
+		ret = -ENOMEM;
+		if (xa_store(&ctx->zcrx_ctxs, id, ifq, GFP_KERNEL)) {
+			xa_erase(&ctx->zcrx_ctxs, id);
+			goto err_free;
+		}
+	}
+
+	reg->zcrx_id = id;
+	if (copy_to_user(arg, reg, sizeof(*reg))) {
+		ret = -EFAULT;
+		goto err;
+	}
+	mutex_unlock(&src_ctx->uring_lock);
+	fput(file);
+	return 0;
+err:
+	scoped_guard(mutex, &ctx->mmap_lock)
+		xa_erase(&ctx->zcrx_ctxs, id);
+err_free:
+	kfree(ifq);
+err_unlock:
+	mutex_unlock(&src_ctx->uring_lock);
+	fput(file);
+	return ret;
 }
 
 int io_register_zcrx_ifq(struct io_ring_ctx *ctx,
@@ -566,6 +636,8 @@ int io_register_zcrx_ifq(struct io_ring_ctx *ctx,
 		return -EINVAL;
 	if (copy_from_user(&reg, arg, sizeof(reg)))
 		return -EFAULT;
+	if (reg.flags & IORING_ZCRX_IFQ_REG_CLONE)
+		return io_clone_zcrx_ifq(ctx, arg, &reg);
 	if (copy_from_user(&rd, u64_to_user_ptr(reg.region_ptr), sizeof(rd)))
 		return -EFAULT;
 	if (!mem_is_zero(&reg.__resv, sizeof(reg.__resv)) ||
@@ -587,6 +659,7 @@ int io_register_zcrx_ifq(struct io_ring_ctx *ctx,
 	if (!ifq)
 		return -ENOMEM;
 	ifq->rq_entries = reg.rq_entries;
+	refcount_set(&ifq->refs, 1);
 
 	scoped_guard(mutex, &ctx->mmap_lock) {
 		/* preallocate id */
@@ -730,8 +803,19 @@ void io_shutdown_zcrx_ifqs(struct io_ring_ctx *ctx)
 	lockdep_assert_held(&ctx->uring_lock);
 
 	xa_for_each(&ctx->zcrx_ctxs, index, ifq) {
-		io_zcrx_scrub(ifq);
-		io_close_queue(ifq);
+		if (ifq->if_rxq == -1)
+			continue;
+
+		if (!ifq->proxy) {
+			if (refcount_read(&ifq->refs) > 1)
+				continue;
+			io_zcrx_scrub(ifq);
+			io_close_queue(ifq);
+		} else {
+			refcount_dec(&ifq->proxy->refs);
+			percpu_ref_put(&ifq->proxy->ctx->refs);
+			ifq->if_rxq = -1;
+		}
 	}
 }
 
