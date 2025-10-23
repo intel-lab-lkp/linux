@@ -4403,10 +4403,22 @@ void __cold close_ctree(struct btrfs_fs_info *fs_info)
 	btrfs_put_block_group_cache(fs_info);
 
 	/*
+	 * If the fs is already in trans aborted case, also trigger writeback of all
+	 * dirty metadata folios.
+	 * Those folios will not reach disk but dicarded directly.
+	 * This is to make sure no dirty folios before iput(), or iput() will
+	 * trigger writeback again, and may even cause extra works queued
+	 * into workqueue.
+	 */
+	if (unlikely(BTRFS_FS_ERROR(fs_info)))
+		filemap_write_and_wait(fs_info->btree_inode->i_mapping);
+
+	/*
 	 * we must make sure there is not any read request to
 	 * submit after we stopping all workers.
 	 */
 	invalidate_inode_pages2(fs_info->btree_inode->i_mapping);
+
 	btrfs_stop_all_workers(fs_info);
 
 	/* We shouldn't have any transaction open at this point */
