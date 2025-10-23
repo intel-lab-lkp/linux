@@ -3528,7 +3528,22 @@ out:
 }
 
 
+static bool st_ioctl_bypass_flush(struct scsi_tape *STp, unsigned int cmd_in)
+{
+	switch (cmd_in) {
+	case SCSI_IOCTL_GET_IDLUN:
+	case SCSI_IOCTL_GET_BUS_NUMBER:
+	case SCSI_IOCTL_GET_PCI:
+		break;
+	default:
+		return false;
+	}
 
+	if (STp->buffer->writing || STp->buffer->buffer_bytes)
+		return false;
+
+	return true;
+}
 /* The ioctl command */
 static long st_ioctl(struct file *file, unsigned int cmd_in, unsigned long arg)
 {
@@ -3564,6 +3579,9 @@ static long st_ioctl(struct file *file, unsigned int cmd_in, unsigned long arg)
 			file->f_flags & O_NDELAY);
 	if (retval)
 		goto out;
+
+	if (st_ioctl_bypass_flush(STp, cmd_in))
+		goto unlock;
 
 	cmd_type = _IOC_TYPE(cmd_in);
 	cmd_nr = _IOC_NR(cmd_in);
@@ -3878,6 +3896,7 @@ static long st_ioctl(struct file *file, unsigned int cmd_in, unsigned long arg)
 		retval = put_user_mtpos(p, &mt_pos);
 		goto out;
 	}
+unlock:
 	mutex_unlock(&STp->lock);
 
 	switch (cmd_in) {
