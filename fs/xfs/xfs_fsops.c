@@ -482,6 +482,61 @@ xfs_fs_goingdown(
 	return 0;
 }
 
+#ifdef CONFIG_XFS_LIVE_HOOKS
+DEFINE_STATIC_XFS_HOOK_SWITCH(xfs_shutdown_hooks_switch);
+
+void
+xfs_shutdown_hook_disable(void)
+{
+	xfs_hooks_switch_off(&xfs_shutdown_hooks_switch);
+}
+
+void
+xfs_shutdown_hook_enable(void)
+{
+	xfs_hooks_switch_on(&xfs_shutdown_hooks_switch);
+}
+
+/* Call downstream hooks for a filesystem shutdown. */
+static inline void
+xfs_shutdown_hook(
+	struct xfs_mount		*mp,
+	uint32_t			flags)
+{
+	if (xfs_hooks_switched_on(&xfs_shutdown_hooks_switch))
+		xfs_hooks_call(&mp->m_shutdown_hooks, flags, NULL);
+}
+
+/* Call the specified function during a shutdown update. */
+int
+xfs_shutdown_hook_add(
+	struct xfs_mount		*mp,
+	struct xfs_shutdown_hook	*hook)
+{
+	return xfs_hooks_add(&mp->m_shutdown_hooks, &hook->shutdown_hook);
+}
+
+/* Stop calling the specified function during a shutdown update. */
+void
+xfs_shutdown_hook_del(
+	struct xfs_mount		*mp,
+	struct xfs_shutdown_hook	*hook)
+{
+	xfs_hooks_del(&mp->m_shutdown_hooks, &hook->shutdown_hook);
+}
+
+/* Configure shutdown update hook functions. */
+void
+xfs_shutdown_hook_setup(
+	struct xfs_shutdown_hook	*hook,
+	notifier_fn_t			mod_fn)
+{
+	xfs_hook_setup(&hook->shutdown_hook, mod_fn);
+}
+#else
+# define xfs_shutdown_hook(...)		((void)0)
+#endif /* CONFIG_XFS_LIVE_HOOKS */
+
 /*
  * Force a shutdown of the filesystem instantly while keeping the filesystem
  * consistent. We don't do an unmount here; just shutdown the shop, make sure
@@ -540,6 +595,8 @@ xfs_do_force_shutdown(
 		"Please unmount the filesystem and rectify the problem(s)");
 	if (xfs_error_level >= XFS_ERRLEVEL_HIGH)
 		xfs_stack_trace();
+
+	xfs_shutdown_hook(mp, flags);
 }
 
 /*
