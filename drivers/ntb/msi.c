@@ -97,7 +97,7 @@ int ntb_msi_setup_mws(struct ntb_dev *ntb)
 	struct msi_desc *desc;
 	u64 addr;
 	int peer, peer_widx;
-	resource_size_t addr_align, size_align, size_max, offset;
+	resource_size_t addr_align, size_align, offset;
 	resource_size_t mw_size = SZ_32K;
 	resource_size_t mw_min_size = mw_size;
 	int i;
@@ -132,12 +132,11 @@ int ntb_msi_setup_mws(struct ntb_dev *ntb)
 		}
 
 		ret = ntb_mw_get_align(ntb, peer, peer_widx, NULL,
-				       &size_align, &size_max, &offset);
+				       &size_align, NULL, &offset);
 		if (ret)
 			goto error_out;
 
 		mw_size = round_up(mw_size, size_align);
-		mw_size = max(mw_size, size_max);
 		if (mw_size < mw_min_size)
 			mw_min_size = mw_size;
 
