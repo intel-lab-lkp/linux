@@ -451,8 +451,8 @@ struct race_thread {
 
 static void __wait_for_callbacks(struct dma_fence *f)
 {
-	spin_lock_irq(f->lock);
-	spin_unlock_irq(f->lock);
+	spin_lock_irq(f->extern_lock);
+	spin_unlock_irq(f->extern_lock);
 }
 
 static int thread_signal_callback(void *arg)
