@@ -508,31 +508,29 @@ static int s6e63m0_disable(struct drm_panel *panel)
 	s6e63m0_dcs_write_seq_static(ctx, MIPI_DCS_ENTER_SLEEP_MODE);
 	msleep(120);
 
+	s6e63m0_clear_error(ctx);
+
 	return 0;
 }
 
 static int s6e63m0_unprepare(struct drm_panel *panel)
 {
 	struct s6e63m0 *ctx = panel_to_s6e63m0(panel);
-	int ret;
 
-	s6e63m0_clear_error(ctx);
-
-	ret = s6e63m0_power_off(ctx);
-	if (ret < 0)
-		return ret;
-
-	return 0;
+	return s6e63m0_power_off(ctx);
 }
 
 static int s6e63m0_prepare(struct drm_panel *panel)
 {
 	struct s6e63m0 *ctx = panel_to_s6e63m0(panel);
-	int ret;
 
-	ret = s6e63m0_power_on(ctx);
-	if (ret < 0)
-		return ret;
+	return s6e63m0_power_on(ctx);
+}
+
+static int s6e63m0_enable(struct drm_panel *panel)
+{
+	struct s6e63m0 *ctx = panel_to_s6e63m0(panel);
+	int ret;
 
 	/* Magic to unlock level 2 control of the display */
 	s6e63m0_dcs_write_seq_static(ctx, MCS_LEVEL_2_KEY, 0x5a, 0x5a);
@@ -547,15 +545,10 @@ static int s6e63m0_prepare(struct drm_panel *panel)
 
 	ret = s6e63m0_clear_error(ctx);
 
-	if (ret < 0)
+	if (ret < 0) {
 		s6e63m0_unprepare(panel);
-
-	return ret;
-}
-
-static int s6e63m0_enable(struct drm_panel *panel)
-{
-	struct s6e63m0 *ctx = panel_to_s6e63m0(panel);
+		return ret;
+	}
 
 	s6e63m0_dcs_write_seq_static(ctx, MIPI_DCS_EXIT_SLEEP_MODE);
 	msleep(120);
