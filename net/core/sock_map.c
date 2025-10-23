@@ -467,6 +467,27 @@ static int sock_map_get_next_key(struct bpf_map *map, void *key, void *next)
 	return 0;
 }
 
+/* Disallow MPTCP subflows and their parent sockets. However, a TCP_LISTEN
+ * MPTCP socket is permitted because sockmap can also serve for reuseport
+ * socket selection.
+ */
+static inline bool sock_map_sk_type_allowed(const struct sock *sk)
+{
+	/* MPTCP subflows are not intended for data I/O by user */
+	if (sk_is_tcp(sk) && sk_is_mptcp(sk))
+		goto disallow;
+
+	/* MPTCP parents use mptcp_prot - not supported with sockmap yet */
+	if (sk->sk_protocol == IPPROTO_MPTCP && sk->sk_state != TCP_LISTEN)
+		goto disallow;
+
+	return true;
+
+disallow:
+	pr_err_once("sockmap/sockhash: MPTCP sockets are not supported\n");
+	return false;
+}
+
 static int sock_map_update_common(struct bpf_map *map, u32 idx,
 				  struct sock *sk, u64 flags)
 {
@@ -481,6 +502,9 @@ static int sock_map_update_common(struct bpf_map *map, u32 idx,
 		return -EINVAL;
 	if (unlikely(idx >= map->max_entries))
 		return -E2BIG;
+
+	if (!sock_map_sk_type_allowed(sk))
+		return -EOPNOTSUPP;
 
 	link = sk_psock_init_link();
 	if (!link)
@@ -1002,6 +1026,9 @@ static int sock_hash_update_common(struct bpf_map *map, void *key,
 	WARN_ON_ONCE(!rcu_read_lock_held());
 	if (unlikely(flags > BPF_EXIST))
 		return -EINVAL;
+
+	if (!sock_map_sk_type_allowed(sk))
+		return -EOPNOTSUPP;
 
 	link = sk_psock_init_link();
 	if (!link)
