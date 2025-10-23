@@ -2470,6 +2470,9 @@ static int hclge_dbg_dump_umv_info(struct seq_file *s, void *data)
 	struct hclge_vport *vport;
 	u8 i;
 
+	if (test_bit(HCLGE_STATE_RST_HANDLING, &hdev->state))
+		return -EBUSY;
+
 	seq_printf(s, "num_alloc_vport   : %u\n", hdev->num_alloc_vport);
 	seq_printf(s, "max_umv_size     : %u\n", hdev->max_umv_size);
 	seq_printf(s, "wanted_umv_size  : %u\n", hdev->wanted_umv_size);
@@ -2679,6 +2682,9 @@ static int hclge_dbg_dump_vlan_offload_config(struct hclge_dev *hdev,
 	char str_id[HCLGE_DBG_ID_LEN];
 	int ret;
 	u8 i;
+
+	if (test_bit(HCLGE_STATE_RST_HANDLING, &hdev->state))
+		return -EBUSY;
 
 	seq_puts(s, "FUNC_ID  PVID  ACCEPT_TAG1  ACCEPT_TAG2 ACCEPT_UNTAG1  ");
 	seq_puts(s, "ACCEPT_UNTAG2  INSERT_TAG1  INSERT_TAG2  SHIFT_TAG  ");

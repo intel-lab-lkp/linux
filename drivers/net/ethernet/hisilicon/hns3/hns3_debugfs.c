@@ -383,6 +383,15 @@ static const char * const dim_state_str[] = { "START", "IN_PROG", "APPLY" };
 static const char * const
 dim_tune_stat_str[] = { "ON_TOP", "TIRED", "RIGHT", "LEFT" };
 
+static bool hns3_dbg_is_device_busy(struct hns3_nic_priv *priv)
+{
+	if (!test_bit(HNS3_NIC_STATE_INITED, &priv->state) ||
+	    test_bit(HNS3_NIC_STATE_RESETTING, &priv->state))
+		return true;
+
+	return false;
+}
+
 static void hns3_get_coal_info(struct hns3_enet_tqp_vector *tqp_vector,
 			       struct seq_file *s, int i, bool is_tx)
 {
@@ -428,12 +437,15 @@ static void hns3_get_coal_info(struct hns3_enet_tqp_vector *tqp_vector,
 	}
 }
 
-static void hns3_dump_coal_info(struct seq_file *s, bool is_tx)
+static int hns3_dump_coal_info(struct seq_file *s, bool is_tx)
 {
 	struct hnae3_handle *h = hnae3_seq_file_to_handle(s);
 	struct hns3_enet_tqp_vector *tqp_vector;
 	struct hns3_nic_priv *priv = h->priv;
 	unsigned int i;
+
+	if (hns3_dbg_is_device_busy(priv))
+		return -EBUSY;
 
 	seq_printf(s, "%s interrupt coalesce info:\n", is_tx ? "tx" : "rx");
 
@@ -442,18 +454,26 @@ static void hns3_dump_coal_info(struct seq_file *s, bool is_tx)
 	seq_puts(s, "HW_GL  HW_QL\n");
 
 	for (i = 0; i < priv->vector_num; i++) {
+		if (hns3_dbg_is_device_busy(priv))
+			return -EBUSY;
+
 		tqp_vector = &priv->tqp_vector[i];
 		hns3_get_coal_info(tqp_vector, s, i, is_tx);
 	}
+
+	return 0;
 }
 
 static int hns3_dbg_coal_info(struct seq_file *s, void *data)
 {
-	hns3_dump_coal_info(s, true);
-	seq_puts(s, "\n");
-	hns3_dump_coal_info(s, false);
+	int ret;
 
-	return 0;
+	ret = hns3_dump_coal_info(s, true);
+	if (ret)
+		return ret;
+
+	seq_puts(s, "\n");
+	return hns3_dump_coal_info(s, false);
 }
 
 static void hns3_dump_rx_queue_info(struct hns3_enet_ring *ring,
@@ -498,6 +518,9 @@ static int hns3_dbg_rx_queue_info(struct seq_file *s, void *data)
 	struct hns3_enet_ring *ring;
 	u32 i;
 
+	if (hns3_dbg_is_device_busy(priv))
+		return -EBUSY;
+
 	if (!priv->ring) {
 		dev_err(&h->pdev->dev, "priv->ring is NULL\n");
 		return -EFAULT;
@@ -511,8 +534,7 @@ static int hns3_dbg_rx_queue_info(struct seq_file *s, void *data)
 		 * to prevent reference to invalid memory. And need to ensure
 		 * that the following code is executed within 100ms.
 		 */
-		if (!test_bit(HNS3_NIC_STATE_INITED, &priv->state) ||
-		    test_bit(HNS3_NIC_STATE_RESETTING, &priv->state))
+		if (hns3_dbg_is_device_busy(priv))
 			return -EPERM;
 
 		ring = &priv->ring[(u32)(i + h->kinfo.num_tqps)];
@@ -563,6 +585,9 @@ static int hns3_dbg_tx_queue_info(struct seq_file *s, void *data)
 	struct hns3_enet_ring *ring;
 	u32 i;
 
+	if (hns3_dbg_is_device_busy(priv))
+		return -EBUSY;
+
 	if (!priv->ring) {
 		dev_err(&h->pdev->dev, "priv->ring is NULL\n");
 		return -EFAULT;
@@ -576,8 +601,7 @@ static int hns3_dbg_tx_queue_info(struct seq_file *s, void *data)
 		 * to prevent reference to invalid memory. And need to ensure
 		 * that the following code is executed within 100ms.
 		 */
-		if (!test_bit(HNS3_NIC_STATE_INITED, &priv->state) ||
-		    test_bit(HNS3_NIC_STATE_RESETTING, &priv->state))
+		if (hns3_dbg_is_device_busy(priv))
 			return -EPERM;
 
 		ring = &priv->ring[i];
@@ -595,6 +619,9 @@ static int hns3_dbg_queue_map(struct seq_file *s, void *data)
 
 	if (!h->ae_algo->ops->get_global_queue_id)
 		return -EOPNOTSUPP;
+
+	if (hns3_dbg_is_device_busy(priv))
+		return -EBUSY;
 
 	seq_puts(s, "local_queue_id  global_queue_id  vector_id\n");
 
@@ -643,6 +670,9 @@ static int hns3_dbg_rx_bd_info(struct seq_file *s, void *private)
 	struct hns3_desc *desc;
 	unsigned int i;
 
+	if (hns3_dbg_is_device_busy(priv))
+		return -EBUSY;
+
 	if (data->qid >= h->kinfo.num_tqps) {
 		dev_err(&h->pdev->dev, "queue%u is not in use\n", data->qid);
 		return -EINVAL;
@@ -655,8 +685,10 @@ static int hns3_dbg_rx_bd_info(struct seq_file *s, void *private)
 
 	ring = &priv->ring[data->qid + data->handle->kinfo.num_tqps];
 	for (i = 0; i < ring->desc_num; i++) {
-		desc = &ring->desc[i];
+		if (hns3_dbg_is_device_busy(priv))
+			return -EBUSY;
 
+		desc = &ring->desc[i];
 		hns3_dump_rx_bd_info(priv, desc, s, i);
 	}
 
@@ -688,6 +720,9 @@ static int hns3_dbg_tx_bd_info(struct seq_file *s, void *private)
 	struct hns3_desc *desc;
 	unsigned int i;
 
+	if (hns3_dbg_is_device_busy(priv))
+		return -EBUSY;
+
 	if (data->qid >= h->kinfo.num_tqps) {
 		dev_err(&h->pdev->dev, "queue%u is not in use\n", data->qid);
 		return -EINVAL;
@@ -700,8 +735,10 @@ static int hns3_dbg_tx_bd_info(struct seq_file *s, void *private)
 
 	ring = &priv->ring[data->qid];
 	for (i = 0; i < ring->desc_num; i++) {
-		desc = &ring->desc[i];
+		if (hns3_dbg_is_device_busy(priv))
+			return -EBUSY;
 
+		desc = &ring->desc[i];
 		hns3_dump_tx_bd_info(desc, s, i);
 	}
 
@@ -804,9 +841,8 @@ static int hns3_dbg_page_pool_info(struct seq_file *s, void *data)
 	seq_puts(s, "POOL_SIZE(PAGE_NUM)  ORDER  NUMA_ID  MAX_LEN\n");
 
 	for (i = 0; i < h->kinfo.num_tqps; i++) {
-		if (!test_bit(HNS3_NIC_STATE_INITED, &priv->state) ||
-		    test_bit(HNS3_NIC_STATE_RESETTING, &priv->state))
-			return -EPERM;
+		if (hns3_dbg_is_device_busy(priv))
+			return -EBUSY;
 
 		ring = &priv->ring[(u32)(i + h->kinfo.num_tqps)];
 		hns3_dump_page_pool_info(ring, s, i);
@@ -821,8 +857,7 @@ static int hns3_dbg_bd_info_show(struct seq_file *s, void *private)
 	struct hnae3_handle *h = data->handle;
 	struct hns3_nic_priv *priv = h->priv;
 
-	if (!test_bit(HNS3_NIC_STATE_INITED, &priv->state) ||
-	    test_bit(HNS3_NIC_STATE_RESETTING, &priv->state))
+	if (hns3_dbg_is_device_busy(priv))
 		return -EBUSY;
 
 	if (data->cmd == HNAE3_DBG_CMD_TX_BD)
