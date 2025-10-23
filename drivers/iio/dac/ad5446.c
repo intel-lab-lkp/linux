@@ -421,6 +421,7 @@ static const struct spi_device_id ad5446_spi_ids[] = {
 	{"ad5453", ID_AD5446}, /* ad5453 is compatible to the ad5446 */
 	{"ad5512a", ID_AD5512A},
 	{"ad5541a", ID_AD5541A},
+	{"ad5542", ID_AD5541A}, /* ad5541a and ad5542 are compatible */
 	{"ad5542a", ID_AD5541A}, /* ad5541a and ad5542a are compatible */
 	{"ad5543", ID_AD5541A}, /* ad5541a and ad5543 are compatible */
 	{"ad5553", ID_AD5553},
@@ -456,6 +457,7 @@ static const struct of_device_id ad5446_of_ids[] = {
 	{ .compatible = "adi,ad5453" },
 	{ .compatible = "adi,ad5512a" },
 	{ .compatible = "adi,ad5541a" },
+	{ .compatible = "adi,ad5542" },
 	{ .compatible = "adi,ad5542a" },
 	{ .compatible = "adi,ad5543" },
 	{ .compatible = "adi,ad5553" },
