@@ -61,11 +61,20 @@ struct net_devmem_dmabuf_binding {
 
 	/* Array of net_iov pointers for this binding, sorted by virtual
 	 * address. This array is convenient to map the virtual addresses to
-	 * net_iovs in the TX path.
+	 * net_iovs.
 	 */
 	struct net_iov **vec;
 
 	struct work_struct unbind_w;
+
+	/* If true, outstanding tokens will be automatically released upon each
+	 * socket's close(2).
+	 *
+	 * If false, then sockets are responsible for releasing tokens before
+	 * close(2). The kernel will only release lingering tokens when the
+	 * dmabuf is unbound.
+	 */
+	bool autorelease;
 };
 
 #if defined(CONFIG_NET_DEVMEM)
