@@ -15,6 +15,7 @@ use crate::{
 };
 use core::{
     marker::PhantomData,
+    mem::offset_of,
     ptr::{addr_of_mut, NonNull},
 };
 
@@ -237,6 +238,12 @@ impl Device {
         // `KBox::new(Opaque::<bindings::auxiliary_device>::zeroed(), GFP_KERNEL)`.
         let _ = unsafe { KBox::<Opaque<bindings::auxiliary_device>>::from_raw(adev.cast()) };
     }
+}
+
+// SAFETY: `auxilary::Device` is a transparent wrapper of `struct auxiliary_device`.
+// The offset is guaranteed to point to a valid device field inside `auxilary::Device`.
+unsafe impl<Ctx: device::DeviceContext> device::AsBusDevice<Ctx> for Device<Ctx> {
+    const OFFSET: usize = offset_of!(bindings::auxiliary_device, dev);
 }
 
 // SAFETY: `Device` is a transparent wrapper of a type that doesn't depend on `Device`'s generic
