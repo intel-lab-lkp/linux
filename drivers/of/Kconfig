@@ -99,6 +99,18 @@ config OF_IRQ
 config OF_RESERVED_MEM
 	def_bool OF_EARLY_FLATTREE
 
+config OF_RESERVED_MEM_AREAS
+	int "Maximum count of reserved memory areas"
+	depends on OF_RESERVED_MEM
+	default 64
+	help
+	  Platforms can create a number of reserved memory region
+	  to accomodate their firmware,	describe driver-specific
+	  memory regions, etc. This parameters sets the maximum
+	  number of reserved memory areas in the system.
+
+	  If unsure, leave to its default value 64.
+
 config OF_RESOLVE
 	bool
 
