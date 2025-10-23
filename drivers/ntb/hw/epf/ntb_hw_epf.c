@@ -750,7 +750,7 @@ static const enum pci_barno rcar_barno[NTB_BAR_NUM] = {
 	[BAR_PEER_SPAD]	= BAR_0,
 	[BAR_DB]	= BAR_4,
 	[BAR_MW1]	= BAR_2,
-	[BAR_MW2]	= NO_BAR,
+	[BAR_MW2]	= BAR_2,
 	[BAR_MW3]	= NO_BAR,
 	[BAR_MW4]	= NO_BAR,
 };
