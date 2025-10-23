@@ -331,7 +331,7 @@ net_devmem_bind_dmabuf(struct net_device *dev,
 		goto err_free_chunks;
 
 	list_add(&binding->list, &priv->bindings);
-	binding->autorelease = true;
+	binding->autorelease = dev_net(dev)->core.sysctl_devmem_autorelease;
 
 	return binding;
 
