@@ -74,14 +74,24 @@ static struct live_active *__live_alloc(struct drm_i915_private *i915)
 	return active;
 }
 
+static struct i915_sw_fence *submit;
+static struct delayed_work __live_submit_work;
+
+static void __live_submit_work_handler(struct work_struct *work)
+{
+	i915_sw_fence_commit(submit);
+	heap_fence_put(submit);
+}
+
 static struct live_active *
 __live_active_setup(struct drm_i915_private *i915)
 {
 	struct intel_engine_cs *engine;
-	struct i915_sw_fence *submit;
 	struct live_active *active;
 	unsigned int count = 0;
 	int err = 0;
+
+	INIT_DELAYED_WORK(&__live_submit_work, __live_submit_work_handler);
 
 	active = __live_alloc(i915);
 	if (!active)
@@ -132,8 +142,7 @@ __live_active_setup(struct drm_i915_private *i915)
 	}
 
 out:
-	i915_sw_fence_commit(submit);
-	heap_fence_put(submit);
+	schedule_delayed_work(&__live_submit_work, msecs_to_jiffies(500));
 	if (err) {
 		__live_put(active);
 		active = ERR_PTR(err);
