@@ -1199,8 +1199,9 @@ nfsd_is_write_dio_possible(loff_t offset, unsigned long len,
 }
 
 static bool
-nfsd_iov_iter_aligned_bvec(const struct iov_iter *i, unsigned int addr_mask)
+nfsd_iov_iter_aligned_bvec(const struct nfsd_file *nf, const struct iov_iter *i)
 {
+	unsigned int addr_mask = nf->nf_dio_mem_align - 1;
 	const struct bio_vec *bvec = i->bvec;
 	size_t skip = i->iov_offset;
 	size_t size = i->count;
@@ -1247,9 +1248,7 @@ nfsd_setup_write_dio_iters(struct iov_iter **iterp, bool *iter_is_dio_aligned,
 		iov_iter_advance(&iters[n_iters], write_dio->start_len);
 	iters[n_iters].count -= write_dio->end_len;
 	iter_is_dio_aligned[n_iters] =
-		nfsd_iov_iter_aligned_bvec(&iters[n_iters],
-					   nf->nf_dio_mem_align - 1,
-					   nf->nf_dio_offset_align - 1);
+		nfsd_iov_iter_aligned_bvec(nf, &iters[n_iters]);
 	if (unlikely(!iter_is_dio_aligned[n_iters]))
 		return 0; /* no DIO-aligned IO possible */
 	++n_iters;
