@@ -43,6 +43,9 @@ void rose_start_ftimer(struct rose_neigh *neigh)
 
 static void rose_start_t0timer(struct rose_neigh *neigh)
 {
+	if (!neigh)
+		return;
+
 	timer_delete(&neigh->t0timer);
 
 	neigh->t0timer.function = rose_t0timer_expiry;
@@ -80,10 +83,12 @@ static void rose_t0timer_expiry(struct timer_list *t)
 {
 	struct rose_neigh *neigh = timer_container_of(neigh, t, t0timer);
 
+	rose_neigh_hold(neigh);
 	rose_transmit_restart_request(neigh);
 
 	neigh->dce_mode = 0;
 
+	rose_neigh_putex(&neigh);
 	rose_start_t0timer(neigh);
 }
 
