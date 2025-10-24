@@ -1263,7 +1263,14 @@ out:
 		btrfs_end_transaction(trans);
 	else if (trans)
 		ret = btrfs_end_transaction(trans);
-	kfree(prealloc);
+
+	/*
+	 * At this point we either failed at allocating prealloc, or we
+	 * succeeded and passed the ownership to it to add_qgroup_rb(). In any
+	 * case, this needs to be NULL or there is something wrong.
+	 */
+	ASSERT(prealloc == NULL);
+
 	return ret;
 }
 
@@ -1693,7 +1700,12 @@ int btrfs_create_qgroup(struct btrfs_trans_handle *trans, u64 qgroupid)
 	ret = btrfs_sysfs_add_one_qgroup(fs_info, qgroup);
 out:
 	mutex_unlock(&fs_info->qgroup_ioctl_lock);
-	kfree(prealloc);
+	/*
+	 * At this point we either failed at allocating prealloc, or we
+	 * succeeded and passed the ownership to it to add_qgroup_rb(). In any
+	 * case, this needs to be NULL or there is something wrong.
+	 */
+	ASSERT(prealloc == NULL);
 	return ret;
 }
 
@@ -3301,7 +3313,7 @@ int btrfs_qgroup_inherit(struct btrfs_trans_handle *trans, u64 srcid,
 	struct btrfs_root *quota_root;
 	struct btrfs_qgroup *srcgroup;
 	struct btrfs_qgroup *dstgroup;
-	struct btrfs_qgroup *prealloc;
+	struct btrfs_qgroup *prealloc = NULL;
 	struct btrfs_qgroup_list **qlist_prealloc = NULL;
 	bool free_inherit = false;
 	bool need_rescan = false;
@@ -3542,7 +3554,14 @@ out:
 	}
 	if (free_inherit)
 		kfree(inherit);
-	kfree(prealloc);
+
+	/*
+	 * At this point we either failed at allocating prealloc, or we
+	 * succeeded and passed the ownership to it to add_qgroup_rb(). In any
+	 * case, this needs to be NULL or there is something wrong.
+	 */
+	ASSERT(prealloc == NULL);
+
 	return ret;
 }
 
