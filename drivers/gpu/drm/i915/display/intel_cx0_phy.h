@@ -53,6 +53,8 @@ void intel_cx0_setup_powerdown(struct intel_encoder *encoder);
 bool intel_cx0_is_hdmi_frl(u32 clock);
 u8 intel_cx0_read(struct intel_encoder *encoder,
 		  u8 lane_mask, u16 addr);
+void intel_cx0_rmw(struct intel_encoder *encoder,
+		   u8 lane_mask, u16 addr, u8 clear, u8 set, bool committed);
 void intel_cx0_write(struct intel_encoder *encoder,
 		     u8 lane_mask, u16 addr, u8 data, bool committed);
 int intel_cx0_wait_for_ack(struct intel_encoder *encoder,
