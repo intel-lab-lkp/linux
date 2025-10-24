@@ -84,6 +84,7 @@ struct spi_imx_devtype_data {
 	void (*disable)(struct spi_imx_data *spi_imx);
 	bool has_dmamode;
 	bool has_targetmode;
+	int target_max_transfer_bytes;
 	unsigned int fifo_size;
 	bool dynamic_burst;
 	/*
@@ -585,7 +586,7 @@ static int mx51_ecspi_prepare_message(struct spi_imx_data *spi_imx,
 	 * is not functional for imx53 Soc, config SPI burst completed when
 	 * BURST_LENGTH + 1 bits are received
 	 */
-	if (spi_imx->target_mode && is_imx53_ecspi(spi_imx))
+	if (spi_imx->target_mode)
 		cfg &= ~MX51_ECSPI_CONFIG_SBBCTRL(channel);
 	else
 		cfg |= MX51_ECSPI_CONFIG_SBBCTRL(channel);
@@ -673,7 +674,7 @@ static int mx51_ecspi_prepare_transfer(struct spi_imx_data *spi_imx,
 
 	/* Clear BL field and set the right value */
 	ctrl &= ~MX51_ECSPI_CTRL_BL_MASK;
-	if (spi_imx->target_mode && is_imx53_ecspi(spi_imx))
+	if (spi_imx->target_mode)
 		ctrl |= (spi_imx->target_burst * 8 - 1)
 			<< MX51_ECSPI_CTRL_BL_OFFSET;
 	else {
@@ -1128,6 +1129,7 @@ static struct spi_imx_devtype_data imx51_ecspi_devtype_data = {
 	.has_dmamode = true,
 	.dynamic_burst = true,
 	.has_targetmode = true,
+	.target_max_transfer_bytes = MX53_MAX_TRANSFER_BYTES,
 	.disable = mx51_ecspi_disable,
 	.devtype = IMX51_ECSPI,
 };
@@ -1142,6 +1144,7 @@ static struct spi_imx_devtype_data imx53_ecspi_devtype_data = {
 	.fifo_size = 64,
 	.has_dmamode = true,
 	.has_targetmode = true,
+	.target_max_transfer_bytes = MX53_MAX_TRANSFER_BYTES,
 	.disable = mx51_ecspi_disable,
 	.devtype = IMX53_ECSPI,
 };
@@ -1158,6 +1161,7 @@ static struct spi_imx_devtype_data imx6ul_ecspi_devtype_data = {
 	.has_dmamode = true,
 	.dynamic_burst = true,
 	.has_targetmode = true,
+	.target_max_transfer_bytes = MX53_MAX_TRANSFER_BYTES,
 	.tx_glitch_fixed = true,
 	.disable = mx51_ecspi_disable,
 	.devtype = IMX51_ECSPI,
@@ -1360,7 +1364,7 @@ static int spi_imx_setupxfer(struct spi_device *spi,
 	spi_imx->rx_only = ((t->tx_buf == NULL)
 			|| (t->tx_buf == spi->controller->dummy_tx));
 
-	if (is_imx53_ecspi(spi_imx) && spi_imx->target_mode) {
+	if (spi_imx->target_mode) {
 		spi_imx->rx = mx53_ecspi_rx_target;
 		spi_imx->tx = mx53_ecspi_tx_target;
 		spi_imx->target_burst = t->len;
@@ -1634,8 +1638,7 @@ static int spi_imx_pio_transfer_target(struct spi_device *spi,
 	struct spi_imx_data *spi_imx = spi_controller_get_devdata(spi->controller);
 	int ret = 0;
 
-	if (is_imx53_ecspi(spi_imx) &&
-	    transfer->len > MX53_MAX_TRANSFER_BYTES) {
+	if (transfer->len > spi_imx->devtype_data->target_max_transfer_bytes) {
 		dev_err(&spi->dev, "Transaction too big, max size is %d bytes\n",
 			MX53_MAX_TRANSFER_BYTES);
 		return -EMSGSIZE;
