@@ -958,6 +958,26 @@ int genphy_c45_an_config_eee_aneg(struct phy_device *phydev)
 }
 EXPORT_SYMBOL_GPL(genphy_c45_an_config_eee_aneg);
 
+static int genphy_c45_pma_ng_read_abilities(struct phy_device *phydev)
+{
+	int val;
+
+	val = phy_read_mmd(phydev, MDIO_MMD_PMAPMD,
+			   MDIO_PMA_NG_EXTABLE);
+	if (val < 0)
+		return val;
+
+	linkmode_mod_bit(ETHTOOL_LINK_MODE_2500baseT_Full_BIT,
+			 phydev->supported,
+			 val & MDIO_PMA_NG_EXTABLE_2_5GBT);
+
+	linkmode_mod_bit(ETHTOOL_LINK_MODE_5000baseT_Full_BIT,
+			 phydev->supported,
+			 val & MDIO_PMA_NG_EXTABLE_5GBT);
+
+	return 0;
+}
+
 /**
  * genphy_c45_pma_baset1_read_abilities - read supported baset1 link modes from PMA
  * @phydev: target phy_device struct
@@ -1005,7 +1025,7 @@ EXPORT_SYMBOL_GPL(genphy_c45_pma_baset1_read_abilities);
  */
 int genphy_c45_pma_read_ext_abilities(struct phy_device *phydev)
 {
-	int val;
+	int val, err;
 
 	val = phy_read_mmd(phydev, MDIO_MMD_PMAPMD, MDIO_PMA_EXTABLE);
 	if (val < 0)
@@ -1045,24 +1065,15 @@ int genphy_c45_pma_read_ext_abilities(struct phy_device *phydev)
 			 val & MDIO_PMA_EXTABLE_10BT);
 
 	if (val & MDIO_PMA_EXTABLE_NBT) {
-		val = phy_read_mmd(phydev, MDIO_MMD_PMAPMD,
-				   MDIO_PMA_NG_EXTABLE);
-		if (val < 0)
-			return val;
-
-		linkmode_mod_bit(ETHTOOL_LINK_MODE_2500baseT_Full_BIT,
-				 phydev->supported,
-				 val & MDIO_PMA_NG_EXTABLE_2_5GBT);
-
-		linkmode_mod_bit(ETHTOOL_LINK_MODE_5000baseT_Full_BIT,
-				 phydev->supported,
-				 val & MDIO_PMA_NG_EXTABLE_5GBT);
+		err = genphy_c45_pma_ng_read_abilities(phydev);
+		if (err < 0)
+			return err;
 	}
 
 	if (val & MDIO_PMA_EXTABLE_BT1) {
-		val = genphy_c45_pma_baset1_read_abilities(phydev);
-		if (val < 0)
-			return val;
+		err = genphy_c45_pma_baset1_read_abilities(phydev);
+		if (err < 0)
+			return err;
 	}
 
 	return 0;
