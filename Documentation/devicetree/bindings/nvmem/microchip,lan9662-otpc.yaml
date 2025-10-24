@@ -23,8 +23,15 @@ properties:
       - items:
           - const: microchip,lan9668-otpc
           - const: microchip,lan9662-otpc
+          - const: microchip,lan9691-otpc
+          - const: microchip,lan9692-otpc
+          - const: microchip,lan9693-otpc
+          - const: microchip,lan9694-otpc
+          - const: microchip,lan9696-otpc
+          - const: microchip,lan9698-otpc
       - enum:
           - microchip,lan9662-otpc
+          - microchip,lan9691-otpc
 
   reg:
     maxItems: 1
