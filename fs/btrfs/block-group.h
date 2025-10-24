@@ -146,6 +146,10 @@ struct btrfs_block_group {
 	 * The last commited identity_remap_count value of this block group.
 	 */
 	u32 commit_identity_remap_count;
+	/*
+	 * The last committed flags value for this block group.
+	 */
+	u64 commit_flags;
 
 	/*
 	 * If the free space extent count exceeds this number, convert the block
