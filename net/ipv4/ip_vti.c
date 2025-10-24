@@ -120,14 +120,8 @@ static int vti_rcv_cb(struct sk_buff *skb, int err)
 
 	inner_mode = &x->inner_mode;
 
-	if (x->sel.family == AF_UNSPEC) {
+	if (x->sel.family == AF_UNSPEC)
 		inner_mode = xfrm_ip2inner_mode(x, XFRM_MODE_SKB_CB(skb)->protocol);
-		if (inner_mode == NULL) {
-			XFRM_INC_STATS(dev_net(skb->dev),
-				       LINUX_MIB_XFRMINSTATEMODEERROR);
-			return -EINVAL;
-		}
-	}
 
 	family = inner_mode->family;
 
