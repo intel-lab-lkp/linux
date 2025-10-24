@@ -18,13 +18,14 @@
 #include <drm/gpu_scheduler.h>
 #include <drm/panthor_drm.h>
 
+#include "panthor_hw.h"
+
 struct panthor_csf;
 struct panthor_csf_ctx;
 struct panthor_device;
 struct panthor_gpu;
 struct panthor_group_pool;
 struct panthor_heap_pool;
-struct panthor_hw;
 struct panthor_job;
 struct panthor_mmu;
 struct panthor_fw;
@@ -543,5 +544,20 @@ static inline u64 gpu_read64_counter(struct panthor_device *ptdev, u32 reg)
 					timeout_us)				\
 	read_poll_timeout(gpu_read64_relaxed, val, cond, delay_us, timeout_us,	\
 			  false, dev, reg)
+
+static inline int panthor_device_soft_reset(struct panthor_device *ptdev)
+{
+	return ptdev->hw->ops.soft_reset(ptdev);
+}
+
+static inline int panthor_device_l2_power_on(struct panthor_device *ptdev)
+{
+	return ptdev->hw->ops.l2_power_on(ptdev);
+}
+
+static inline void panthor_device_l2_power_off(struct panthor_device *ptdev)
+{
+	ptdev->hw->ops.l2_power_off(ptdev);
+}
 
 #endif

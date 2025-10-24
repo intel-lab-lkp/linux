@@ -2,7 +2,7 @@
 /* Copyright 2025 ARM Limited. All rights reserved. */
 
 #include "panthor_device.h"
-#include "panthor_hw.h"
+#include "panthor_gpu.h"
 #include "panthor_regs.h"
 
 #define GPU_PROD_ID_MAKE(arch_major, prod_major) \
@@ -20,7 +20,13 @@ struct panthor_hw_entry {
 	struct panthor_hw *hwdev;
 };
 
-static struct panthor_hw panthor_hw_arch_v10 = {};
+static struct panthor_hw panthor_hw_arch_v10 = {
+	.ops = {
+		.soft_reset = panthor_gpu_soft_reset,
+		.l2_power_off = panthor_gpu_l2_power_off,
+		.l2_power_on = panthor_gpu_l2_power_on,
+	},
+};
 
 static struct panthor_hw_entry panthor_hw_match[] = {
 	{
