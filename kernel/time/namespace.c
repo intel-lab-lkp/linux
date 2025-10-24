@@ -106,6 +106,7 @@ static struct time_namespace *clone_time_ns(struct user_namespace *user_ns,
 	ns->offsets = old_ns->offsets;
 	ns->frozen_offsets = false;
 	ns_tree_add(ns);
+	ns_ref_active_get_owner(ns);
 	return ns;
 
 fail_free_page:
@@ -480,6 +481,7 @@ const struct proc_ns_operations timens_for_children_operations = {
 struct time_namespace init_time_ns = {
 	.ns.ns_type	= ns_common_type(&init_time_ns),
 	.ns.__ns_ref	= REFCOUNT_INIT(3),
+	.ns.__ns_ref_active = ATOMIC_INIT(1),
 	.user_ns	= &init_user_ns,
 	.ns.inum	= ns_init_inum(&init_time_ns),
 	.ns.ops		= &timens_operations,

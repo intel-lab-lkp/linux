@@ -72,6 +72,7 @@ static int pid_max_max = PID_MAX_LIMIT;
  */
 struct pid_namespace init_pid_ns = {
 	.ns.__ns_ref = REFCOUNT_INIT(2),
+	.ns.__ns_ref_active = ATOMIC_INIT(1),
 	.idr = IDR_INIT(init_pid_ns.idr),
 	.pid_allocated = PIDNS_ADDING,
 	.level = 0,
@@ -118,8 +119,12 @@ static void delayed_put_pid(struct rcu_head *rhp)
 void free_pid(struct pid *pid)
 {
 	int i;
+	struct pid_namespace *active_ns;
 
 	lockdep_assert_not_held(&tasklist_lock);
+
+	active_ns = pid->numbers[pid->level].ns;
+	ns_ref_active_put(active_ns);
 
 	spin_lock(&pidmap_lock);
 	for (i = 0; i <= pid->level; i++) {
@@ -284,6 +289,7 @@ struct pid *alloc_pid(struct pid_namespace *ns, pid_t *set_tid,
 	}
 	spin_unlock(&pidmap_lock);
 	idr_preload_end();
+	ns_ref_active_get(ns);
 
 	return pid;
 

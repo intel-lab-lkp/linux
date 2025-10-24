@@ -67,6 +67,7 @@ struct user_namespace init_user_ns = {
 	},
 	.ns.ns_type = ns_common_type(&init_user_ns),
 	.ns.__ns_ref = REFCOUNT_INIT(3),
+	.ns.__ns_ref_active = ATOMIC_INIT(1),
 	.owner = GLOBAL_ROOT_UID,
 	.group = GLOBAL_ROOT_GID,
 	.ns.inum = ns_init_inum(&init_user_ns),

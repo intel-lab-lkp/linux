@@ -450,6 +450,7 @@ static __net_init int setup_net(struct net *net)
 	list_add_tail_rcu(&net->list, &net_namespace_list);
 	up_write(&net_rwsem);
 	ns_tree_add_raw(net);
+	ns_ref_active_get_owner(net);
 out:
 	return error;
 

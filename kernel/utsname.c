@@ -60,6 +60,7 @@ static struct uts_namespace *clone_uts_ns(struct user_namespace *user_ns,
 	ns->user_ns = get_user_ns(user_ns);
 	up_read(&uts_sem);
 	ns_tree_add(ns);
+	ns_ref_active_get_owner(ns);
 	return ns;
 
 fail_free:

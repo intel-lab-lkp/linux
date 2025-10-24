@@ -86,6 +86,7 @@ struct cgroup_namespace *copy_cgroup_ns(u64 flags,
 	new_ns->root_cset = cset;
 
 	ns_tree_add(new_ns);
+	ns_ref_active_get_owner(new_ns);
 	return new_ns;
 }
 
