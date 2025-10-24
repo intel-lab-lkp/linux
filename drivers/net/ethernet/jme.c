@@ -735,9 +735,10 @@ jme_make_new_rx_buf(struct jme_adapter *jme, int i)
 	if (unlikely(!skb))
 		return -ENOMEM;
 
-	mapping = dma_map_page(&jme->pdev->dev, virt_to_page(skb->data),
-			       offset_in_page(skb->data), skb_tailroom(skb),
-			       DMA_FROM_DEVICE);
+	mapping = dma_map_phys(&jme->pdev->dev, virt_to_phys(skb->data),
+			       skb_tailroom(skb),
+			       DMA_FROM_DEVICE,
+			       0);
 	if (unlikely(dma_mapping_error(&jme->pdev->dev, mapping))) {
 		dev_kfree_skb(skb);
 		return -ENOMEM;
