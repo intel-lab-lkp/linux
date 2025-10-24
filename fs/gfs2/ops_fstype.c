@@ -66,6 +66,14 @@ void free_sbd(struct gfs2_sbd *sdp)
 {
 	struct super_block *sb = sdp->sd_vfs;
 
+	/*
+	 * Only flush withdraw work if initialized. Work is initialized in
+	 * gfs2_fill_super() at line 1218, after init_sbd() succeeds.
+	 * Checking func avoids WARN_ON in __flush_work() for early failures.
+	 */
+	if (sdp->sd_withdraw_work.func)
+		flush_work(&sdp->sd_withdraw_work);
+
 	free_percpu(sdp->sd_lkstats);
 	sb->s_fs_info = NULL;
 	kfree(sdp);
