@@ -5571,10 +5571,12 @@ static void *___kmalloc_large_node(size_t size, gfp_t flags, int node)
 		page = __alloc_frozen_pages_noprof(flags, order, node, NULL);
 
 	if (page) {
+		unsigned long i;
 		ptr = page_address(page);
 		mod_lruvec_page_state(page, NR_SLAB_UNRECLAIMABLE_B,
 				      PAGE_SIZE << order);
-		__SetPageLargeKmalloc(page);
+		for (i = 0; i < 1UL << order; i++)
+			__SetPageLargeKmalloc(page + i);
 	}
 
 	ptr = kasan_kmalloc_large(ptr, size, flags);
@@ -6726,6 +6728,7 @@ EXPORT_SYMBOL(kmem_cache_free);
 static void free_large_kmalloc(struct page *page, void *object)
 {
 	unsigned int order = compound_order(page);
+	unsigned long i;
 
 	if (WARN_ON_ONCE(order == 0))
 		pr_warn_once("object pointer: 0x%p\n", object);
@@ -6736,7 +6739,8 @@ static void free_large_kmalloc(struct page *page, void *object)
 
 	mod_lruvec_page_state(page, NR_SLAB_UNRECLAIMABLE_B,
 			      -(PAGE_SIZE << order));
-	__ClearPageLargeKmalloc(page);
+	for (i = 0; i < 1UL << order; i++)
+		__ClearPageLargeKmalloc(page + i);
 	free_frozen_pages(page, order);
 }
 
