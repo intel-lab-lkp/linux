@@ -1441,6 +1441,10 @@ static void gswip_phylink_mac_config(struct phylink_config *config,
 		return;
 	}
 
+	if (of_property_read_bool(dp->dn, "maxlinear,rmii-refclk-out") &&
+	    !(miicfg & GSWIP_MII_CFG_MODE_RGMII))
+		miicfg |= GSWIP_MII_CFG_RMII_CLK;
+
 	gswip_mii_mask_cfg(priv,
 			   GSWIP_MII_CFG_MODE_MASK | GSWIP_MII_CFG_RMII_CLK |
 			   GSWIP_MII_CFG_RGMII_IBS | GSWIP_MII_CFG_LDCLKDIS,
