@@ -123,8 +123,10 @@ struct ns_common {
 				struct rb_node ns_tree_node;
 				struct list_head ns_list_node;
 			};
-			struct /* namespace ownership list */ {
+			struct /* namespace ownership rbtree and list */ {
+				struct rb_root ns_owner_tree; /* rbtree of namespaces owned by this namespace */
 				struct list_head ns_owner; /* list of namespaces owned by this namespace */
+				struct rb_node ns_owner_tree_node; /* node in the owner namespace's rbtree */
 				struct list_head ns_owner_entry; /* node in the owner namespace's ns_owned list */
 			};
 			atomic_t __ns_ref_active; /* do not use directly */
@@ -133,6 +135,7 @@ struct ns_common {
 	};
 };
 
+bool is_current_namespace(struct ns_common *ns);
 int __ns_common_init(struct ns_common *ns, u32 ns_type, const struct proc_ns_operations *ops, int inum);
 void __ns_common_free(struct ns_common *ns);
 
