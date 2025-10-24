@@ -11,6 +11,7 @@
 .. toctree::
    :maxdepth: 1
 
+   process/submitting-patches
    disclaimer-ja_JP
    process/howto
    process/submit-checklist

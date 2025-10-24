@@ -1,33 +1,34 @@
-NOTE:
-This is a version of Documentation/process/submitting-patches.rst into Japanese.
-This document is maintained by Keiichi KII <k-keiichi@bx.jp.nec.com>
-and the JF Project team <http://www.linux.or.jp/JF/>.
-If you find any difference between this document and the original file
-or a problem with the translation,
-please contact the maintainer of this file or JF project.
+..
+   NOTE:
+     This is a version of Documentation/process/submitting-patches.rst into Japanese.
+     This document is maintained by Keiichi KII <k-keiichi@bx.jp.nec.com>
+     and the JF Project team <http://www.linux.or.jp/JF/>.
+     If you find any difference between this document and the original file
+     or a problem with the translation,
+     please contact the maintainer of this file or JF project.
 
-Please also note that the purpose of this file is to be easier to read
-for non English (read: Japanese) speakers and is not intended as a
-fork. So if you have any comments or updates of this file, please try
-to update the original English file first.
+     Please also note that the purpose of this file is to be easier to read
+     for non English (read: Japanese) speakers and is not intended as a
+     fork. So if you have any comments or updates of this file, please try
+     to update the original English file first.
 
-Last Updated: 2011/06/09
+     Last Updated: 2011/06/09
 
-==================================
-これは、
-linux-2.6.39/Documentation/process/submitting-patches.rst の和訳
-です。
-翻訳団体： JF プロジェクト < http://www.linux.or.jp/JF/ >
-翻訳日： 2011/06/09
-翻訳者： Keiichi Kii <k-keiichi at bx dot jp dot nec dot com>
-校正者： Masanari Kobayashi さん <zap03216 at nifty dot ne dot jp>
-         Matsukura さん <nbh--mats at nifty dot com>
-         Takeshi Hamasaki さん <hmatrjp at users dot sourceforge dot jp>
-==================================
+     ==================================
+     これは、
+     linux-2.6.39/Documentation/process/submitting-patches.rst の和訳
+     です。
+     翻訳団体： JF プロジェクト < http://www.linux.or.jp/JF/ >
+     翻訳日： 2011/06/09
+     翻訳者： Keiichi Kii <k-keiichi at bx dot jp dot nec dot com>
+     校正者： Masanari Kobayashi さん <zap03216 at nifty dot ne dot jp>
+           Matsukura さん <nbh--mats at nifty dot com>
+           Takeshi Hamasaki さん <hmatrjp at users dot sourceforge dot jp>
+     ==================================
 
-        Linux カーネルに変更を加えるための Howto
-        又は
-        かの Linus Torvalds の取り扱い説明書
+========================================
+Linux カーネルに変更を加えるための Howto
+========================================
 
 Linux カーネルに変更を加えたいと思っている個人又は会社にとって、パッ
 チの投稿に関連した仕組みに慣れていなければ、その過程は時々みなさんを
