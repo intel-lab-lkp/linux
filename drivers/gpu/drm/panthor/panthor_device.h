@@ -30,6 +30,7 @@ struct panthor_job;
 struct panthor_mmu;
 struct panthor_fw;
 struct panthor_perfcnt;
+struct panthor_pwr;
 struct panthor_vm;
 struct panthor_vm_pool;
 
@@ -138,6 +139,9 @@ struct panthor_device {
 
 	/** @hw: GPU-specific data. */
 	struct panthor_hw *hw;
+
+	/** @pwr: Power control management data. */
+	struct panthor_pwr *pwr;
 
 	/** @gpu: GPU management data. */
 	struct panthor_gpu *gpu;

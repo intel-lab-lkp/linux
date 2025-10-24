@@ -192,3 +192,8 @@ int panthor_hw_init(struct panthor_device *ptdev)
 
 	return 0;
 }
+
+bool panthor_hw_has_pwr_ctrl(struct panthor_device *ptdev)
+{
+	return GPU_ARCH_MAJOR(ptdev->gpu_info.gpu_id) >= 14;
+}

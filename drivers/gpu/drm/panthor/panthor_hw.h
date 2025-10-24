@@ -32,4 +32,6 @@ struct panthor_hw {
 
 int panthor_hw_init(struct panthor_device *ptdev);
 
+bool panthor_hw_has_pwr_ctrl(struct panthor_device *ptdev);
+
 #endif /* __PANTHOR_HW_H__ */
