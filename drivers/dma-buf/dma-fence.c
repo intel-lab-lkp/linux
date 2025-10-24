@@ -1111,7 +1111,7 @@ const char __rcu *dma_fence_driver_name(struct dma_fence *fence)
 	if (!test_bit(DMA_FENCE_FLAG_SIGNALED_BIT, &fence->flags))
 		return fence->ops->get_driver_name(fence);
 	else
-		return "detached-driver";
+		return "driver-whose-fence-is-already-signalled";
 }
 EXPORT_SYMBOL(dma_fence_driver_name);
 
