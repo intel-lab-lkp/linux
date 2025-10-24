@@ -2437,6 +2437,10 @@ int btrfs_commit_transaction(struct btrfs_trans_handle *trans)
 	if (ret)
 		goto unlock_reloc;
 
+	ret = btrfs_handle_fully_remapped_bgs(trans);
+	if (ret)
+		goto unlock_reloc;
+
 	/*
 	 * make sure none of the code above managed to slip in a
 	 * delayed item
