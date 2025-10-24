@@ -3,6 +3,7 @@
 #include <linux/nstree.h>
 #include <linux/proc_ns.h>
 #include <linux/vfsdebug.h>
+#include <linux/user_namespace.h>
 
 __cacheline_aligned_in_smp DEFINE_SEQLOCK(ns_tree_lock);
 static struct rb_root ns_unified_tree = RB_ROOT; /* protected by ns_tree_lock */
@@ -113,8 +114,10 @@ static inline int ns_cmp_unified(struct rb_node *a, const struct rb_node *b)
 void __ns_tree_add_raw(struct ns_common *ns, struct ns_tree *ns_tree)
 {
 	struct rb_node *node, *prev;
+	const struct proc_ns_operations *ops = ns->ops;
 
 	VFS_WARN_ON_ONCE(!ns->ns_id);
+	VFS_WARN_ON_ONCE(ns->ns_type != ns_tree->type);
 
 	write_seqlock(&ns_tree_lock);
 
@@ -132,6 +135,21 @@ void __ns_tree_add_raw(struct ns_common *ns, struct ns_tree *ns_tree)
 		list_add_rcu(&ns->ns_list_node, &node_to_ns(prev)->ns_list_node);
 
 	rb_find_add_rcu(&ns->ns_unified_tree_node, &ns_unified_tree, ns_cmp_unified);
+
+	if (ops) {
+		struct user_namespace *user_ns;
+
+		VFS_WARN_ON_ONCE(!ops->owner);
+		user_ns = ops->owner(ns);
+		if (user_ns) {
+			struct ns_common *owner = &user_ns->ns;
+			VFS_WARN_ON_ONCE(owner->ns_type != CLONE_NEWUSER);
+			list_add_tail_rcu(&ns->ns_owner_entry, &owner->ns_owner);
+		} else {
+			/* Only the initial user namespace doesn't have an owner. */
+			VFS_WARN_ON_ONCE(ns != to_ns_common(&init_user_ns));
+		}
+	}
 	write_sequnlock(&ns_tree_lock);
 
 	VFS_WARN_ON_ONCE(node);
@@ -148,6 +166,7 @@ void __ns_tree_remove(struct ns_common *ns, struct ns_tree *ns_tree)
 	rb_erase(&ns->ns_unified_tree_node, &ns_unified_tree);
 	list_bidir_del_rcu(&ns->ns_list_node);
 	RB_CLEAR_NODE(&ns->ns_tree_node);
+	list_bidir_del_rcu(&ns->ns_owner_entry);
 	write_sequnlock(&ns_tree_lock);
 }
 EXPORT_SYMBOL_GPL(__ns_tree_remove);
