@@ -6727,11 +6727,6 @@ static void free_large_kmalloc(struct page *page, void *object)
 {
 	unsigned int order = compound_order(page);
 
-	if (WARN_ON_ONCE(!PageLargeKmalloc(page))) {
-		dump_page(page, "Not a kmalloc allocation");
-		return;
-	}
-
 	if (WARN_ON_ONCE(order == 0))
 		pr_warn_once("object pointer: 0x%p\n", object);
 
