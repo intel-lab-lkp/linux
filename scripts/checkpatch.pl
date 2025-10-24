@@ -509,6 +509,7 @@ our $InitAttributeData = qr{$InitAttributePrefix(?:initdata\b)};
 our $InitAttributeConst = qr{$InitAttributePrefix(?:initconst\b)};
 our $InitAttributeInit = qr{$InitAttributePrefix(?:init\b)};
 our $InitAttribute = qr{$InitAttributeData|$InitAttributeConst|$InitAttributeInit};
+our $FreeAttribute = qr{__free\s*\(\s*$Ident\s*\)};
 
 # Notes to $Attribute:
 # We need \b after 'init' otherwise 'initconst' will cause a false positive in a check
@@ -7720,6 +7721,12 @@ sub process {
 			      $stripped =~ /PCMCIA_DEVICE_NULL};$/)) {
 				ERROR("MISSING_SENTINEL", "missing sentinel in ID array\n" . "$here\n$stat\n");
 			}
+		}
+
+# check for uninitialized pointers with __free attribute
+		while ($line =~ /\*\s*($Ident)\s+$FreeAttribute\s*[,;]/g) {
+			ERROR("UNINITIALIZED_PTR_WITH_FREE",
+			      "pointer '$1' with __free attribute should be initialized\n" . $herecurr);
 		}
 	}
 
