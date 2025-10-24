@@ -847,7 +847,7 @@ struct page *vm_normal_page_pud(struct vm_area_struct *vma,
  * @ptep: pte pointer into the locked page table mapping the folio page
  * @orig_pte: pte value at @ptep
  *
- * Restore a device-exclusive non-swap entry to an ordinary present pte.
+ * Restore a device-exclusive non-present entry to an ordinary present pte.
  *
  * The folio and the page table must be locked, and MMU notifiers must have
  * been called to invalidate any (exclusive) device mappings.
@@ -931,7 +931,7 @@ copy_nonpresent_pte(struct mm_struct *dst_mm, struct mm_struct *src_mm,
 	struct page *page;
 	swp_entry_t entry = pte_to_swp_entry(orig_pte);
 
-	if (likely(!non_swap_entry(entry))) {
+	if (likely(!is_non_present_entry(entry))) {
 		if (swap_duplicate(entry) < 0)
 			return -EIO;
 
@@ -1739,7 +1739,7 @@ static inline int zap_nonpresent_ptes(struct mmu_gather *tlb,
 		rss[mm_counter(folio)]--;
 		folio_remove_rmap_pte(folio, page, vma);
 		folio_put(folio);
-	} else if (!non_swap_entry(entry)) {
+	} else if (!is_non_present_entry(entry)) {
 		/* Genuine swap entries, hence a private anon pages */
 		if (!should_zap_cows(details))
 			return 1;
@@ -4646,7 +4646,7 @@ vm_fault_t do_swap_page(struct vm_fault *vmf)
 		goto out;
 
 	entry = pte_to_swp_entry(vmf->orig_pte);
-	if (unlikely(non_swap_entry(entry))) {
+	if (unlikely(is_non_present_entry(entry))) {
 		if (is_migration_entry(entry)) {
 			migration_entry_wait(vma->vm_mm, vmf->pmd,
 					     vmf->address);

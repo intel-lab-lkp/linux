@@ -274,7 +274,7 @@ static int hmm_vma_handle_pte(struct mm_walk *walk, unsigned long addr,
 		if (!required_fault)
 			goto out;
 
-		if (!non_swap_entry(entry))
+		if (!is_non_present_entry(entry))
 			goto fault;
 
 		if (is_device_private_entry(entry))

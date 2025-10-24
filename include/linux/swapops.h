@@ -645,7 +645,18 @@ static inline int is_pmd_device_private_entry(pmd_t pmd)
 
 #endif /* CONFIG_ZONE_DEVICE && CONFIG_ARCH_ENABLE_THP_MIGRATION */
 
-static inline int non_swap_entry(swp_entry_t entry)
+/**
+ * is_non_present_entry() - Determine if this is a miscellaneous
+ * non-present entry.
+ * @entry: The entry to examine.
+ *
+ * This function determines whether data encoded in non-present leaf page
+ * tables is a migration entry, device private entry, marker entry, etc. -
+ * that is a non-present entry that is not a swap entry.
+ *
+ * Returns: true if is a non-present entry, otherwise false.
+ */
+static inline bool is_non_present_entry(swp_entry_t entry)
 {
 	return swp_type(entry) >= MAX_SWAPFILES;
 }
@@ -661,9 +672,9 @@ static inline int is_pmd_non_present_folio_entry(pmd_t pmd)
  * @entryp: Output pointer to a swap entry that will be populated upon
  * success.
  *
- * Determines if the PTE describes an entry in swap or swap cache (i.e. is a
- * swap entry and not a non-swap entry), if so it sets @entryp to the swap
- * entry.
+ * Determines if the PTE describes an entry in swap or swap cache (i.e. is
+ * a swap entry and not a non-present entry), if so it sets @entryp to the
+ * swap entry.
  *
  * This should only be used if we do not have any prior knowledge of this
  * PTE's state.
@@ -678,7 +689,7 @@ static inline bool get_pte_swap_entry(pte_t pte, swp_entry_t *entryp)
 		return false;
 
 	*entryp = pte_to_swp_entry(pte);
-	if (non_swap_entry(*entryp))
+	if (is_non_present_entry(*entryp))
 		return false;
 
 	return true;

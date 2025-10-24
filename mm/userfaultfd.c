@@ -1427,7 +1427,7 @@ retry:
 		struct folio *folio = NULL;
 
 		entry = pte_to_swp_entry(orig_src_pte);
-		if (non_swap_entry(entry)) {
+		if (is_non_present_entry(entry)) {
 			if (is_migration_entry(entry)) {
 				pte_unmap(src_pte);
 				pte_unmap(dst_pte);

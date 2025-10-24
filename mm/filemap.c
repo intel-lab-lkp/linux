@@ -4558,7 +4558,7 @@ static void filemap_cachestat(struct address_space *mapping,
 				swp_entry_t swp = radix_to_swp_entry(folio);
 
 				/* swapin error results in poisoned entry */
-				if (non_swap_entry(swp))
+				if (is_non_present_entry(swp))
 					goto resched;
 
 				/*
