@@ -1287,10 +1287,6 @@ nfsd_issue_write_dio(struct svc_rqst *rqstp, struct svc_fh *fhp,
 	ssize_t host_err;
 	size_t i;
 
-	if (!nfsd_setup_write_dio_iters(args, rqstp->rq_bvec, nvecs, *cnt))
-		return nfsd_iocb_write(file, rqstp->rq_bvec, nvecs,
-				       cnt, kiocb);
-
 	*cnt = 0;
 	segment = args->segment;
 	for (i = 0; i < ARRAY_SIZE(args->segment); i++) {
@@ -1302,7 +1298,6 @@ nfsd_issue_write_dio(struct svc_rqst *rqstp, struct svc_fh *fhp,
 						segment->len);
 		} else
 			kiocb->ki_flags &= ~IOCB_DIRECT;
-
 		host_err = vfs_iocb_iter_write(file, kiocb, &segment->iter);
 		if (host_err < 0)
 			return host_err;
@@ -1343,11 +1338,13 @@ nfsd_direct_write(struct svc_rqst *rqstp, struct svc_fh *fhp,
 	kiocb->ki_flags |= IOCB_SYNC | IOCB_DSYNC;
 
 	args.nf = nf;
-	if (nfsd_is_write_dio_possible(&args, kiocb->ki_pos, *cnt))
-		return nfsd_issue_write_dio(rqstp, fhp, &args, kiocb,
-					    nvecs, cnt);
+	if (!nfsd_is_write_dio_possible(&args, kiocb->ki_pos, *cnt) ||
+	    !nfsd_setup_write_dio_iters(&args, rqstp->rq_bvec, nvecs, *cnt))
+		/* fall back to writing through the page cache */
+		return nfsd_iocb_write(file, rqstp->rq_bvec, nvecs,
+				       cnt, kiocb);
 
-	return nfsd_iocb_write(file, rqstp->rq_bvec, nvecs, cnt, kiocb);
+	return nfsd_issue_write_dio(rqstp, fhp, &args, kiocb, nvecs, cnt);
 }
 
 /**
