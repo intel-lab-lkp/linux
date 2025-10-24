@@ -1168,12 +1168,15 @@ static int wait_for_concurrent_writes(struct file *file)
 	return err;
 }
 
+struct nfsd_write_dio_seg {
+	struct iov_iter			iter;
+	size_t				len;
+	bool				use_dio;
+};
+
 struct nfsd_write_dio_args {
 	struct nfsd_file		*nf;
-
-	ssize_t	start_len;	/* Length for misaligned first extent */
-	ssize_t	middle_len;	/* Length for DIO-aligned middle extent */
-	ssize_t	end_len;	/* Length for misaligned last extent */
+	struct nfsd_write_dio_seg	segment[3];
 };
 
 static bool
@@ -1181,21 +1184,19 @@ nfsd_is_write_dio_possible(struct nfsd_write_dio_args *args, loff_t offset,
 			   unsigned long len)
 {
 	const u32 dio_blocksize = args->nf->nf_dio_offset_align;
-	loff_t start_end, orig_end, middle_end;
+	loff_t first_end, orig_end, middle_end;
 
 	if (unlikely(!args->nf->nf_dio_mem_align || !dio_blocksize))
 		return false;
 	if (unlikely(len < dio_blocksize))
 		return false;
 
-	start_end = round_up(offset, dio_blocksize);
+	first_end = round_up(offset, dio_blocksize);
 	orig_end = offset + len;
 	middle_end = round_down(orig_end, dio_blocksize);
-
-	args->start_len = start_end - offset;
-	args->middle_len = middle_end - start_end;
-	args->end_len = orig_end - middle_end;
-
+	args->segment[0].len = first_end - offset;	/* first segment */
+	args->segment[1].len = middle_end - first_end;	/* middle segment */
+	args->segment[2].len = orig_end - middle_end;	/* last segment */
 	return true;
 }
 
@@ -1222,47 +1223,42 @@ nfsd_iov_iter_aligned_bvec(const struct nfsd_file *nf, const struct iov_iter *i)
 	return true;
 }
 
-/*
- * Setup as many as 3 iov_iter based on extents described by @write_dio.
- * Returns the number of iov_iter that were setup.
- */
-static int
-nfsd_setup_write_dio_iters(struct iov_iter **iterp, bool *iter_is_dio_aligned,
-			   struct bio_vec *rq_bvec, unsigned int nvecs,
-			   unsigned long cnt, struct nfsd_write_dio_args *args)
+static void
+nfsd_setup_write_dio_seg(struct nfsd_write_dio_seg *segment,
+			 struct bio_vec *bvec, unsigned int nvecs,
+			 unsigned long total, size_t start)
 {
-	int n_iters = 0;
-	struct iov_iter *iters = *iterp;
+	iov_iter_bvec(&segment->iter, ITER_SOURCE, bvec, nvecs, total);
+	if (start)
+		iov_iter_advance(&segment->iter, start);
+	iov_iter_truncate(&segment->iter, segment->len);
+	segment->use_dio = false;
+}
 
-	/* Setup misaligned start? */
-	if (args->start_len) {
-		iov_iter_bvec(&iters[n_iters], ITER_SOURCE, rq_bvec, nvecs, cnt);
-		iters[n_iters].count = args->start_len;
-		iter_is_dio_aligned[n_iters] = false;
-		++n_iters;
-	}
+static bool
+nfsd_setup_write_dio_iters(struct nfsd_write_dio_args *args,
+			   struct bio_vec *bvec, unsigned int nvecs,
+			   unsigned long total)
+{
+	/* first segment */
+	if (args->segment[0].len)
+		nfsd_setup_write_dio_seg(&args->segment[0],
+					 bvec, nvecs, total, 0);
 
-	/* Setup DIO-aligned middle */
-	iov_iter_bvec(&iters[n_iters], ITER_SOURCE, rq_bvec, nvecs, cnt);
-	if (args->start_len)
-		iov_iter_advance(&iters[n_iters], args->start_len);
-	iters[n_iters].count -= args->end_len;
-	iter_is_dio_aligned[n_iters] =
-		nfsd_iov_iter_aligned_bvec(args->nf, &iters[n_iters]);
-	if (unlikely(!iter_is_dio_aligned[n_iters]))
-		return 0; /* no DIO-aligned IO possible */
-	++n_iters;
+	/* middle segment */
+	nfsd_setup_write_dio_seg(&args->segment[1], bvec, nvecs, total,
+				 args->segment[0].len);
+	if (!nfsd_iov_iter_aligned_bvec(args->nf, &args->segment[1].iter))
+		return false; /* no DIO-aligned IO possible */
+	args->segment[1].use_dio = true;
 
-	/* Setup misaligned end? */
-	if (args->end_len) {
-		iov_iter_bvec(&iters[n_iters], ITER_SOURCE, rq_bvec, nvecs, cnt);
-		iov_iter_advance(&iters[n_iters],
-				 args->start_len + args->middle_len);
-		iter_is_dio_aligned[n_iters] = false;
-		++n_iters;
-	}
+	/* last segment */
+	if (args->segment[2].len)
+		nfsd_setup_write_dio_seg(&args->segment[2], bvec, nvecs,
+					 total, args->segment[0].len +
+					 args->segment[1].len);
 
-	return n_iters;
+	return true;
 }
 
 static int
@@ -1287,36 +1283,33 @@ nfsd_issue_write_dio(struct svc_rqst *rqstp, struct svc_fh *fhp,
 		     unsigned int nvecs, unsigned long *cnt)
 {
 	struct file *file = args->nf->nf_file;
-	bool iter_is_dio_aligned[3];
-	struct iov_iter iter_stack[3];
-	struct iov_iter *iter = iter_stack;
-	unsigned int n_iters = 0;
-	unsigned long in_count = *cnt;
-	loff_t in_offset = kiocb->ki_pos;
+	struct nfsd_write_dio_seg *segment;
 	ssize_t host_err;
+	size_t i;
 
-	n_iters = nfsd_setup_write_dio_iters(&iter, iter_is_dio_aligned,
-					     rqstp->rq_bvec, nvecs, *cnt,
-					     args);
-	if (unlikely(!n_iters))
+	if (!nfsd_setup_write_dio_iters(args, rqstp->rq_bvec, nvecs, *cnt))
 		return nfsd_iocb_write(file, rqstp->rq_bvec, nvecs,
 				       cnt, kiocb);
 
-	trace_nfsd_write_direct(rqstp, fhp, in_offset, in_count);
-
 	*cnt = 0;
-	for (int i = 0; i < n_iters; i++) {
-		if (iter_is_dio_aligned[i])
+	segment = args->segment;
+	for (i = 0; i < ARRAY_SIZE(args->segment); i++) {
+		if (segment->len == 0)
+			continue;
+		if (segment->use_dio) {
 			kiocb->ki_flags |= IOCB_DIRECT;
-		else
+			trace_nfsd_write_direct(rqstp, fhp, kiocb->ki_pos,
+						segment->len);
+		} else
 			kiocb->ki_flags &= ~IOCB_DIRECT;
 
-		host_err = vfs_iocb_iter_write(file, kiocb, &iter[i]);
+		host_err = vfs_iocb_iter_write(file, kiocb, &segment->iter);
 		if (host_err < 0)
 			return host_err;
 		*cnt += host_err;
-		if (host_err < iter[i].count) /* partial write? */
+		if (host_err < segment->iter.count)
 			break;
+		++segment;
 	}
 
 	return 0;
