@@ -1904,7 +1904,6 @@ out:
 	mISDN_freebchannel(&hw->bch[1]);
 	mISDN_freebchannel(&hw->bch[0]);
 	mISDN_freedchannel(&hw->dch);
-	kfree(hw);
 	return err;
 }
 
@@ -2109,8 +2108,11 @@ hfcsusb_probe(struct usb_interface *intf, const struct usb_device_id *id)
 		hw->name, __func__, driver_info->vend_name,
 		conf_str[small_match], ifnum, alt_used);
 
-	if (setup_instance(hw, dev->dev.parent))
+	if (setup_instance(hw, dev->dev.parent)) {
+		usb_free_urb(hw->ctrl_urb);
+		kfree(hw);
 		return -EIO;
+	}
 
 	hw->intf = intf;
 	usb_set_intfdata(hw->intf, hw);
