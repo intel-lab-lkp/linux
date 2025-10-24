@@ -161,6 +161,38 @@ int genphy_c45_pma_setup_forced(struct phy_device *phydev)
 		/* Assume 10Gbase-T */
 		ctrl2 |= MDIO_PMA_CTRL2_10GBT;
 		break;
+	case SPEED_25000:
+		ctrl1 |= MDIO_CTRL1_SPEED25G;
+		/* Assume 25Gbase-CR */
+		ctrl2 |= MDIO_PMA_CTRL2_25GBCR;
+		break;
+	case SPEED_50000:
+		ctrl1 |= MDIO_CTRL1_SPEED50G;
+		/* There are currently 2 supported modes for 50G.
+		 * The first is 50Gbase-CR which is in the IEEE standard.
+		 * The second is 50Gbase-CR2 which isn't. It is intended
+		 * to piggy-back on 100Gbase-CR4 and only use 2 lanes, so
+		 * we can use the interface type to identify which is which.
+		 */
+		if (phydev->interface == PHY_INTERFACE_MODE_50GBASER)
+			ctrl2 |= MDIO_PMA_CTRL2_50GBCR;
+		else if (phydev->interface == PHY_INTERFACE_MODE_LAUI)
+			ctrl2 |= MDIO_PMA_CTRL2_50GBCR2;
+		else
+			return -EINVAL;
+		break;
+	case SPEED_100000:
+		ctrl1 |= MDIO_CTRL1_SPEED100G;
+		/* For now we only have support for 2 lane devices, so
+		 * 100Gbase-CR2 is the limit. We might look at enabling
+		 * 100Gbase-CR4 in the future with additional devices to
+		 * test this code on.
+		 */
+		if (phydev->interface == PHY_INTERFACE_MODE_100GBASEP)
+			ctrl2 |= MDIO_PMA_CTRL2_100GBCR2;
+		else
+			return -EINVAL;
+		break;
 	default:
 		return -EINVAL;
 	}
@@ -958,6 +990,34 @@ int genphy_c45_an_config_eee_aneg(struct phy_device *phydev)
 }
 EXPORT_SYMBOL_GPL(genphy_c45_an_config_eee_aneg);
 
+static int genphy_c45_pma_40_100g_read_abilities(struct phy_device *phydev)
+{
+	int val;
+
+	val = phy_read_mmd(phydev, MDIO_MMD_PMAPMD,
+			   MDIO_PMA_40G_EXTABLE);
+	if (val < 0)
+		return val;
+
+	linkmode_mod_bit(ETHTOOL_LINK_MODE_100000baseCR4_Full_BIT,
+			 phydev->supported,
+			 val & MDIO_PMA_40G_EXTABLE_100GBCR4);
+	linkmode_mod_bit(ETHTOOL_LINK_MODE_50000baseCR2_Full_BIT,
+			 phydev->supported,
+			 val & MDIO_PMA_40G_EXTABLE_50GBCR2);
+
+	val = phy_read_mmd(phydev, MDIO_MMD_PMAPMD,
+			   MDIO_PMA_100G_EXTABLE);
+	if (val < 0)
+		return val;
+
+	linkmode_mod_bit(ETHTOOL_LINK_MODE_100000baseCR2_Full_BIT,
+			 phydev->supported,
+			 val & MDIO_PMA_100G_EXTABLE_100GBCR2);
+
+	return 0;
+}
+
 static int genphy_c45_pma_ng_read_abilities(struct phy_device *phydev)
 {
 	int val;
@@ -974,6 +1034,22 @@ static int genphy_c45_pma_ng_read_abilities(struct phy_device *phydev)
 	linkmode_mod_bit(ETHTOOL_LINK_MODE_5000baseT_Full_BIT,
 			 phydev->supported,
 			 val & MDIO_PMA_NG_EXTABLE_5GBT);
+
+	return 0;
+}
+
+static int genphy_c45_pma_25g_read_abilities(struct phy_device *phydev)
+{
+	int val;
+
+	val = phy_read_mmd(phydev, MDIO_MMD_PMAPMD,
+			   MDIO_PMA_25G_EXTABLE);
+	if (val < 0)
+		return val;
+
+	linkmode_mod_bit(ETHTOOL_LINK_MODE_25000baseCR_Full_BIT,
+			 phydev->supported,
+			 val & MDIO_PMA_25G_EXTABLE_25GBCR);
 
 	return 0;
 }
@@ -1015,6 +1091,22 @@ int genphy_c45_pma_baset1_read_abilities(struct phy_device *phydev)
 	return 0;
 }
 EXPORT_SYMBOL_GPL(genphy_c45_pma_baset1_read_abilities);
+
+static int genphy_c45_pma_50g_read_abilities(struct phy_device *phydev)
+{
+	int val;
+
+	val = phy_read_mmd(phydev, MDIO_MMD_PMAPMD,
+			   MDIO_PMA_50G_EXTABLE);
+	if (val < 0)
+		return val;
+
+	linkmode_mod_bit(ETHTOOL_LINK_MODE_50000baseCR_Full_BIT,
+			 phydev->supported,
+			 val & MDIO_PMA_50G_EXTABLE_50GBCR);
+
+	return 0;
+}
 
 /**
  * genphy_c45_pma_read_ext_abilities - read supported link modes from PMA
@@ -1064,14 +1156,36 @@ int genphy_c45_pma_read_ext_abilities(struct phy_device *phydev)
 			 phydev->supported,
 			 val & MDIO_PMA_EXTABLE_10BT);
 
+	if (val & MDIO_PMA_EXTABLE_40_100G) {
+		err = genphy_c45_pma_40_100g_read_abilities(phydev);
+		if (err < 0)
+			return err;
+	}
+
 	if (val & MDIO_PMA_EXTABLE_NBT) {
 		err = genphy_c45_pma_ng_read_abilities(phydev);
 		if (err < 0)
 			return err;
 	}
 
+	if (val & MDIO_PMA_EXTABLE_25G) {
+		err = genphy_c45_pma_25g_read_abilities(phydev);
+		if (err < 0)
+			return err;
+	}
+
 	if (val & MDIO_PMA_EXTABLE_BT1) {
 		err = genphy_c45_pma_baset1_read_abilities(phydev);
+		if (err < 0)
+			return err;
+	}
+
+	val = phy_read_mmd(phydev, MDIO_MMD_PMAPMD, MDIO_PMA_EXTABLE2);
+	if (val < 0)
+		return val;
+
+	if (val & MDIO_PMA_EXTABLE2_50G) {
+		err = genphy_c45_pma_50g_read_abilities(phydev);
 		if (err < 0)
 			return err;
 	}

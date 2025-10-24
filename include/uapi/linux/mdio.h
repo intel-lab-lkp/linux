@@ -41,15 +41,20 @@
 #define MDIO_PMA_TXDIS		9	/* 10G PMA/PMD transmit disable */
 #define MDIO_PMA_RXDET		10	/* 10G PMA/PMD receive signal detect */
 #define MDIO_PMA_EXTABLE	11	/* 10G PMA/PMD extended ability */
+#define MDIO_PMA_40G_EXTABLE	13	/* 40G/100G PMA/PMD extended ability */
 #define MDIO_PKGID1		14	/* Package identifier */
 #define MDIO_PKGID2		15
 #define MDIO_AN_ADVERTISE	16	/* AN advertising (base page) */
 #define MDIO_AN_LPA		19	/* AN LP abilities (base page) */
+#define MDIO_PMA_25G_EXTABLE	19	/* 25G PMA/PMD extended ability */
 #define MDIO_PCS_EEE_ABLE	20	/* EEE Capability register */
+#define MDIO_PMA_50G_EXTABLE	20	/* 50G PMA/PMD extended ability */
 #define MDIO_PCS_EEE_ABLE2	21	/* EEE Capability register 2 */
 #define MDIO_PMA_NG_EXTABLE	21	/* 2.5G/5G PMA/PMD extended ability */
 #define MDIO_PCS_EEE_WK_ERR	22	/* EEE wake error counter */
 #define MDIO_PHYXS_LNSTAT	24	/* PHY XGXS lane state */
+#define MDIO_PMA_EXTABLE2	25	/* PMA/PMD extended ability 2 */
+#define MDIO_PMA_100G_EXTABLE	26	/* 40G/100G PMA/PMD extended ability 2 */
 #define MDIO_AN_EEE_ADV		60	/* EEE advertisement */
 #define MDIO_AN_EEE_LPABLE	61	/* EEE link partner ability */
 #define MDIO_AN_EEE_ADV2	62	/* EEE advertisement 2 */
@@ -187,9 +192,18 @@
 #define MDIO_PMA_CTRL2_1000BKX		0x000d	/* 1000BASE-KX type */
 #define MDIO_PMA_CTRL2_100BTX		0x000e	/* 100BASE-TX type */
 #define MDIO_PMA_CTRL2_10BT		0x000f	/* 10BASE-T type */
+#define MDIO_PMA_CTRL2_100GBCR4		0x002e	/* 100GBASE-CR4 type */
+/* 50GBase-CR2 isn't an IEEE media type, as such there isn't a defined
+ * value for it. However as it is meant to be a reuse of 100GBase-CR4 we
+ * will reuse the value here so that both report the same value.
+ */
+#define MDIO_PMA_CTRL2_50GBCR2		MDIO_PMA_CTRL2_100GBCR4
 #define MDIO_PMA_CTRL2_2_5GBT		0x0030  /* 2.5GBaseT type */
 #define MDIO_PMA_CTRL2_5GBT		0x0031  /* 5GBaseT type */
+#define MDIO_PMA_CTRL2_25GBCR		0x0038	/* 25GBASE-CR type */
 #define MDIO_PMA_CTRL2_BASET1		0x003D  /* BASE-T1 type */
+#define MDIO_PMA_CTRL2_50GBCR		0x0041	/* 50GBASE-CR type */
+#define MDIO_PMA_CTRL2_100GBCR2		0x0049	/* 100GBASE-CR2 type */
 #define MDIO_PCS_CTRL2_TYPE		0x0003	/* PCS type selection */
 #define MDIO_PCS_CTRL2_10GBR		0x0000	/* 10GBASE-R type */
 #define MDIO_PCS_CTRL2_10GBX		0x0001	/* 10GBASE-X type */
@@ -233,7 +247,7 @@
 #define MDIO_PMD_RXDET_2		0x0008	/* PMD RX signal detect 2 */
 #define MDIO_PMD_RXDET_3		0x0010	/* PMD RX signal detect 3 */
 
-/* Extended abilities register. */
+/* PMA/PMD extended ability register. */
 #define MDIO_PMA_EXTABLE_10GCX4		0x0001	/* 10GBASE-CX4 ability */
 #define MDIO_PMA_EXTABLE_10GBLRM	0x0002	/* 10GBASE-LRM ability */
 #define MDIO_PMA_EXTABLE_10GBT		0x0004	/* 10GBASE-T ability */
@@ -243,8 +257,13 @@
 #define MDIO_PMA_EXTABLE_1000BKX	0x0040	/* 1000BASE-KX ability */
 #define MDIO_PMA_EXTABLE_100BTX		0x0080	/* 100BASE-TX ability */
 #define MDIO_PMA_EXTABLE_10BT		0x0100	/* 10BASE-T ability */
+#define MDIO_PMA_EXTABLE_40_100G	0x0400	/* 40G/100G ability */
 #define MDIO_PMA_EXTABLE_BT1		0x0800	/* BASE-T1 ability */
+#define MDIO_PMA_EXTABLE_25G		0x1000	/* 25G ability */
 #define MDIO_PMA_EXTABLE_NBT		0x4000  /* 2.5/5GBASE-T ability */
+
+/* PMA/PMD extended ability 2 register. */
+#define MDIO_PMA_EXTABLE2_50G		0x0001	/* 50G ability */
 
 /* AN Clause 73 linkword */
 #define MDIO_AN_C73_0_S_MASK		GENMASK(4, 0)
@@ -436,9 +455,22 @@
 /* AN MultiGBASE-T AN control 2 */
 #define MDIO_AN_THP_BP2_5GT	0x0008	/* 2.5GT THP bypass request */
 
+/* 40G/100G PMA/PMD Extended ability register */
+#define MDIO_PMA_40G_EXTABLE_100GBCR4	0x4000	/* 100GBASE-CR4 ability */
+#define MDIO_PMA_40G_EXTABLE_50GBCR2	MDIO_PMA_40G_EXTABLE_100GBCR4
+
+/* 25G PMA/PMD Extended ability register */
+#define MDIO_PMA_25G_EXTABLE_25GBCR	0x0008	/* 25GBASE-CR ability */
+
+/* 50G PMA/PMD Extended ability register */
+#define MDIO_PMA_50G_EXTABLE_50GBCR	0x0002	/* 50GBASE-CR ability */
+
 /* 2.5G/5G Extended abilities register. */
 #define MDIO_PMA_NG_EXTABLE_2_5GBT	0x0001	/* 2.5GBASET ability */
 #define MDIO_PMA_NG_EXTABLE_5GBT	0x0002	/* 5GBASET ability */
+
+/* 40G/100G PMA/PMD Extended ability 2 register */
+#define MDIO_PMA_100G_EXTABLE_100GBCR2	0x0100	/* 100GBASE-CR2 ability */
 
 /* LASI RX_ALARM control/status registers. */
 #define MDIO_PMA_LASI_RX_PHYXSLFLT	0x0001	/* PHY XS RX local fault */
