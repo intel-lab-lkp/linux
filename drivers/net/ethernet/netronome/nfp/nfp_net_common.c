@@ -2566,6 +2566,7 @@ nfp_net_alloc(struct pci_dev *pdev, const struct nfp_dev_info *dev_info,
 	return nn;
 
 err_free_nn:
+	kfree(nn->dp.xsk_pools);
 	if (nn->dp.netdev)
 		free_netdev(nn->dp.netdev);
 	else
