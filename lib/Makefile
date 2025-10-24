@@ -283,6 +283,8 @@ obj-$(CONFIG_ASN1_ENCODER) += asn1_encoder.o
 
 obj-$(CONFIG_FONT_SUPPORT) += fonts/
 
+obj-$(CONFIG_BLOG) += blog/
+
 #
 # Build a fast OID lookip registry from include/linux/oid_registry.h
 #
