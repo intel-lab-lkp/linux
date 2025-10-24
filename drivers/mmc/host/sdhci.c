@@ -650,6 +650,21 @@ static void sdhci_transfer_pio(struct sdhci_host *host)
 	DBG("PIO transfer complete.\n");
 }
 
+static bool sdhci_use_bounce_buffer(struct sdhci_host *host)
+{
+	/*
+	 * Don't bounce SDIO messages: these need the block size
+	 * to be strictly respected (FIFOs in the device).
+	 */
+	if (mmc_card_sdio(host->mmc->card))
+		return false;
+
+	if (host->bounce_buffer)
+		return true;
+
+	return false;
+}
+
 static int sdhci_pre_dma_transfer(struct sdhci_host *host,
 				  struct mmc_data *data, int cookie)
 {
@@ -663,7 +678,7 @@ static int sdhci_pre_dma_transfer(struct sdhci_host *host,
 		return data->sg_count;
 
 	/* Bounce write requests to the bounce buffer */
-	if (host->bounce_buffer) {
+	if (sdhci_use_bounce_buffer(host)) {
 		unsigned int length = data->blksz * data->blocks;
 
 		if (length > host->bounce_buffer_size) {
@@ -890,7 +905,7 @@ static void sdhci_set_adma_addr(struct sdhci_host *host, dma_addr_t addr)
 
 static dma_addr_t sdhci_sdma_address(struct sdhci_host *host)
 {
-	if (host->bounce_buffer)
+	if (sdhci_use_bounce_buffer(host))
 		return host->bounce_addr;
 	else
 		return sg_dma_address(host->data->sg);
@@ -3030,7 +3045,7 @@ static void sdhci_pre_req(struct mmc_host *mmc, struct mmc_request *mrq)
 	 * for that we would need two bounce buffers since one buffer is
 	 * in flight when this is getting called.
 	 */
-	if (host->flags & SDHCI_REQ_USE_DMA && !host->bounce_buffer)
+	if (host->flags & SDHCI_REQ_USE_DMA && !sdhci_use_bounce_buffer(host))
 		sdhci_pre_dma_transfer(host, mrq->data, COOKIE_PRE_MAPPED);
 }
 
@@ -3104,7 +3119,7 @@ void sdhci_request_done_dma(struct sdhci_host *host, struct mmc_request *mrq)
 	struct mmc_data *data = mrq->data;
 
 	if (data && data->host_cookie == COOKIE_MAPPED) {
-		if (host->bounce_buffer) {
+		if (sdhci_use_bounce_buffer(host)) {
 			/*
 			 * On reads, copy the bounced data into the
 			 * sglist
