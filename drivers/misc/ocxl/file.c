@@ -204,17 +204,21 @@ static long afu_ioctl(struct file *file, unsigned int cmd,
 	int irq_id;
 	u64 irq_offset;
 	long rc;
-	bool closed;
+
+	/*
+	 * Hold a reference to the context for the duration of this operation.
+	 * We check the status and acquire the reference atomically under the
+	 * status_mutex to ensure the context remains valid.
+	 */
+	mutex_lock(&ctx->status_mutex);
+	if (!ocxl_context_get(ctx)) {
+		mutex_unlock(&ctx->status_mutex);
+		return -EIO;
+	}
+	mutex_unlock(&ctx->status_mutex);
 
 	pr_debug("%s for context %d, command %s\n", __func__, ctx->pasid,
 		CMD_STR(cmd));
-
-	mutex_lock(&ctx->status_mutex);
-	closed = (ctx->status == CLOSED);
-	mutex_unlock(&ctx->status_mutex);
-
-	if (closed)
-		return -EIO;
 
 	switch (cmd) {
 	case OCXL_IOCTL_ATTACH:
@@ -230,7 +234,7 @@ static long afu_ioctl(struct file *file, unsigned int cmd,
 					sizeof(irq_offset));
 			if (rc) {
 				ocxl_afu_irq_free(ctx, irq_id);
-				return -EFAULT;
+				rc = -EFAULT;
 			}
 		}
 		break;
@@ -238,8 +242,10 @@ static long afu_ioctl(struct file *file, unsigned int cmd,
 	case OCXL_IOCTL_IRQ_FREE:
 		rc = copy_from_user(&irq_offset, (u64 __user *) args,
 				sizeof(irq_offset));
-		if (rc)
-			return -EFAULT;
+		if (rc) {
+			rc = -EFAULT;
+			break;
+		}
 		irq_id = ocxl_irq_offset_to_id(ctx, irq_offset);
 		rc = ocxl_afu_irq_free(ctx, irq_id);
 		break;
@@ -247,14 +253,20 @@ static long afu_ioctl(struct file *file, unsigned int cmd,
 	case OCXL_IOCTL_IRQ_SET_FD:
 		rc = copy_from_user(&irq_fd, (u64 __user *) args,
 				sizeof(irq_fd));
-		if (rc)
-			return -EFAULT;
-		if (irq_fd.reserved)
-			return -EINVAL;
+		if (rc) {
+			rc = -EFAULT;
+			break;
+		}
+		if (irq_fd.reserved) {
+			rc = -EINVAL;
+			break;
+		}
 		irq_id = ocxl_irq_offset_to_id(ctx, irq_fd.irq_offset);
 		ev_ctx = eventfd_ctx_fdget(irq_fd.eventfd);
-		if (IS_ERR(ev_ctx))
-			return PTR_ERR(ev_ctx);
+		if (IS_ERR(ev_ctx)) {
+			rc = PTR_ERR(ev_ctx);
+			break;
+		}
 		rc = ocxl_irq_set_handler(ctx, irq_id, irq_handler, irq_free, ev_ctx);
 		if (rc)
 			eventfd_ctx_put(ev_ctx);
@@ -280,6 +292,8 @@ static long afu_ioctl(struct file *file, unsigned int cmd,
 	default:
 		rc = -EINVAL;
 	}
+
+	ocxl_context_put(ctx);
 	return rc;
 }
 
@@ -292,9 +306,23 @@ static long afu_compat_ioctl(struct file *file, unsigned int cmd,
 static int afu_mmap(struct file *file, struct vm_area_struct *vma)
 {
 	struct ocxl_context *ctx = file->private_data;
+	int rc;
+
+	/*
+	 * Hold a reference during mmap setup to ensure the context
+	 * remains valid.
+	 */
+	mutex_lock(&ctx->status_mutex);
+	if (!ocxl_context_get(ctx)) {
+		mutex_unlock(&ctx->status_mutex);
+		return -EIO;
+	}
+	mutex_unlock(&ctx->status_mutex);
 
 	pr_debug("%s for context %d\n", __func__, ctx->pasid);
-	return ocxl_context_mmap(ctx, vma);
+	rc = ocxl_context_mmap(ctx, vma);
+	ocxl_context_put(ctx);
+	return rc;
 }
 
 static bool has_xsl_error(struct ocxl_context *ctx)
@@ -324,21 +352,31 @@ static unsigned int afu_poll(struct file *file, struct poll_table_struct *wait)
 {
 	struct ocxl_context *ctx = file->private_data;
 	unsigned int mask = 0;
-	bool closed;
+
+	/*
+	 * Hold a reference to the context while checking for events.
+	 */
+	mutex_lock(&ctx->status_mutex);
+	if (!ocxl_context_get(ctx)) {
+		mutex_unlock(&ctx->status_mutex);
+		return EPOLLERR;
+	}
+	mutex_unlock(&ctx->status_mutex);
 
 	pr_debug("%s for context %d\n", __func__, ctx->pasid);
 
 	poll_wait(file, &ctx->events_wq, wait);
 
-	mutex_lock(&ctx->status_mutex);
-	closed = (ctx->status == CLOSED);
-	mutex_unlock(&ctx->status_mutex);
-
 	if (afu_events_pending(ctx))
 		mask = EPOLLIN | EPOLLRDNORM;
-	else if (closed)
-		mask = EPOLLERR;
+	else {
+		mutex_lock(&ctx->status_mutex);
+		if (ctx->status == CLOSED)
+			mask = EPOLLERR;
+		mutex_unlock(&ctx->status_mutex);
+	}
 
+	ocxl_context_put(ctx);
 	return mask;
 }
 
@@ -410,6 +448,16 @@ static ssize_t afu_read(struct file *file, char __user *buf, size_t count,
 			AFU_EVENT_BODY_MAX_SIZE))
 		return -EINVAL;
 
+	/*
+	 * Hold a reference to the context for the duration of the read operation.
+	 */
+	mutex_lock(&ctx->status_mutex);
+	if (!ocxl_context_get(ctx)) {
+		mutex_unlock(&ctx->status_mutex);
+		return -EIO;
+	}
+	mutex_unlock(&ctx->status_mutex);
+
 	for (;;) {
 		prepare_to_wait(&ctx->events_wq, &event_wait,
 				TASK_INTERRUPTIBLE);
@@ -422,11 +470,13 @@ static ssize_t afu_read(struct file *file, char __user *buf, size_t count,
 
 		if (file->f_flags & O_NONBLOCK) {
 			finish_wait(&ctx->events_wq, &event_wait);
+			ocxl_context_put(ctx);
 			return -EAGAIN;
 		}
 
 		if (signal_pending(current)) {
 			finish_wait(&ctx->events_wq, &event_wait);
+			ocxl_context_put(ctx);
 			return -ERESTARTSYS;
 		}
 
@@ -437,19 +487,24 @@ static ssize_t afu_read(struct file *file, char __user *buf, size_t count,
 
 	if (has_xsl_error(ctx)) {
 		used = append_xsl_error(ctx, &header, buf + sizeof(header));
-		if (used < 0)
+		if (used < 0) {
+			ocxl_context_put(ctx);
 			return used;
+		}
 	}
 
 	if (!afu_events_pending(ctx))
 		header.flags |= OCXL_KERNEL_EVENT_FLAG_LAST;
 
-	if (copy_to_user(buf, &header, sizeof(header)))
+	if (copy_to_user(buf, &header, sizeof(header))) {
+		ocxl_context_put(ctx);
 		return -EFAULT;
+	}
 
 	used += sizeof(header);
 
 	rc = used;
+	ocxl_context_put(ctx);
 	return rc;
 }
 
@@ -464,8 +519,12 @@ static int afu_release(struct inode *inode, struct file *file)
 	ctx->mapping = NULL;
 	mutex_unlock(&ctx->mapping_lock);
 	wake_up_all(&ctx->events_wq);
+	/*
+	 * Drop the initial reference from afu_open(). The context will be
+	 * freed when all references are released.
+	 */
 	if (rc != -EBUSY)
-		ocxl_context_free(ctx);
+		ocxl_context_put(ctx);
 	return 0;
 }
 

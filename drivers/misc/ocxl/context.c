@@ -28,6 +28,7 @@ int ocxl_context_alloc(struct ocxl_context **context, struct ocxl_afu *afu,
 
 	ctx->pasid = pasid;
 	ctx->status = OPENED;
+	kref_init(&ctx->kref);
 	mutex_init(&ctx->status_mutex);
 	ctx->mapping = mapping;
 	mutex_init(&ctx->mapping_lock);
@@ -46,6 +47,59 @@ int ocxl_context_alloc(struct ocxl_context **context, struct ocxl_afu *afu,
 	return 0;
 }
 EXPORT_SYMBOL_GPL(ocxl_context_alloc);
+
+/**
+ * ocxl_context_get() - Get a reference to the context if not closed
+ * @ctx: The context
+ *
+ * Atomically checks if context status is not CLOSED and acquires a reference.
+ * Must be called with ctx->status_mutex held.
+ *
+ * Return: true if reference acquired, false if context is CLOSED
+ */
+bool ocxl_context_get(struct ocxl_context *ctx)
+{
+	lockdep_assert_held(&ctx->status_mutex);
+
+	if (ctx->status == CLOSED)
+		return false;
+
+	kref_get(&ctx->kref);
+	return true;
+}
+EXPORT_SYMBOL_GPL(ocxl_context_get);
+
+/*
+ * kref release callback - called when last reference is dropped
+ */
+static void ocxl_context_release(struct kref *kref)
+{
+	struct ocxl_context *ctx = container_of(kref, struct ocxl_context,
+						 kref);
+
+	mutex_lock(&ctx->afu->contexts_lock);
+	ctx->afu->pasid_count--;
+	idr_remove(&ctx->afu->contexts_idr, ctx->pasid);
+	mutex_unlock(&ctx->afu->contexts_lock);
+
+	ocxl_afu_irq_free_all(ctx);
+	idr_destroy(&ctx->irq_idr);
+	/* reference to the AFU taken in ocxl_context_alloc() */
+	ocxl_afu_put(ctx->afu);
+	kfree(ctx);
+}
+
+/**
+ * ocxl_context_put() - Release a reference to the context
+ * @ctx: The context
+ *
+ * Decrements the reference count. When it reaches zero, the context is freed.
+ */
+void ocxl_context_put(struct ocxl_context *ctx)
+{
+	kref_put(&ctx->kref, ocxl_context_release);
+}
+EXPORT_SYMBOL_GPL(ocxl_context_put);
 
 /*
  * Callback for when a translation fault triggers an error
@@ -279,18 +333,3 @@ void ocxl_context_detach_all(struct ocxl_afu *afu)
 	}
 	mutex_unlock(&afu->contexts_lock);
 }
-
-void ocxl_context_free(struct ocxl_context *ctx)
-{
-	mutex_lock(&ctx->afu->contexts_lock);
-	ctx->afu->pasid_count--;
-	idr_remove(&ctx->afu->contexts_idr, ctx->pasid);
-	mutex_unlock(&ctx->afu->contexts_lock);
-
-	ocxl_afu_irq_free_all(ctx);
-	idr_destroy(&ctx->irq_idr);
-	/* reference to the AFU taken in ocxl_context_alloc() */
-	ocxl_afu_put(ctx->afu);
-	kfree(ctx);
-}
-EXPORT_SYMBOL_GPL(ocxl_context_free);

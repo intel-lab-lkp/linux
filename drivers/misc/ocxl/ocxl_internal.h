@@ -5,6 +5,7 @@
 
 #include <linux/pci.h>
 #include <linux/cdev.h>
+#include <linux/kref.h>
 #include <linux/list.h>
 #include <misc/ocxl.h>
 
@@ -68,6 +69,7 @@ struct ocxl_xsl_error {
 };
 
 struct ocxl_context {
+	struct kref kref;
 	struct ocxl_afu *afu;
 	int pasid;
 	struct mutex status_mutex;
@@ -140,6 +142,8 @@ int ocxl_link_update_pe(void *link_handle, int pasid, __u16 tid);
 
 int ocxl_context_mmap(struct ocxl_context *ctx,
 			struct vm_area_struct *vma);
+bool ocxl_context_get(struct ocxl_context *ctx);
+void ocxl_context_put(struct ocxl_context *ctx);
 void ocxl_context_detach_all(struct ocxl_afu *afu);
 
 int ocxl_sysfs_register_afu(struct ocxl_file_info *info);
