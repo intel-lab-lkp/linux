@@ -77,6 +77,9 @@ const char netdev_features_strings[NETDEV_FEATURE_COUNT][ETH_GSTRING_LEN] = {
 	[NETIF_F_HW_HSR_TAG_RM_BIT] =	 "hsr-tag-rm-offload",
 	[NETIF_F_HW_HSR_FWD_BIT] =	 "hsr-fwd-offload",
 	[NETIF_F_HW_HSR_DUP_BIT] =	 "hsr-dup-offload",
+	[NETIF_F_MAC_LBK_NE_BIT] =	 "mac-nearend-loopback",
+	[NETIF_F_MAC_LBK_FE_BIT] =	 "mac-farend-loopback",
+	[NETIF_F_SERDES_LBK_BIT] =	 "serdes-loopback",
 };
 
 const char

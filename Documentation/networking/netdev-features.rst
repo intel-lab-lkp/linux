@@ -193,3 +193,18 @@ frames in hardware.
 
 This should be set for devices which support netmem TX. See
 Documentation/networking/netmem.rst
+
+* mac-nearend-loopback
+
+This requests that the NIC enables MAC nearend loopback i.e egress traffic is
+routed back to ingress traffic.
+
+* mac-farend-loopback
+
+This requests that the NIC enables MAC farend loopback i.e ingress traffic is
+routed back to egress traffic.
+
+
+* serdes-loopback
+
+This request that the NIC enables SERDES near end digital loopback.

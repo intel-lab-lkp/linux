@@ -1316,6 +1316,84 @@ static int otx2_cgx_config_loopback(struct otx2_nic *pf, bool enable)
 	return err;
 }
 
+static int otx2_cgx_mac_nearend_loopback(struct otx2_nic *pf, bool enable)
+{
+	struct msg_req *msg;
+	int err;
+
+	if (enable && !bitmap_empty(pf->flow_cfg->dmacflt_bmap,
+				    pf->flow_cfg->dmacflt_max_flows))
+		netdev_warn(pf->netdev,
+			    "CGX/RPM nearend loopback might not work as DMAC filters are active\n");
+
+	mutex_lock(&pf->mbox.lock);
+	if (enable)
+		msg = otx2_mbox_alloc_msg_cgx_intlbk_enable(&pf->mbox);
+	else
+		msg = otx2_mbox_alloc_msg_cgx_intlbk_disable(&pf->mbox);
+
+	if (!msg) {
+		mutex_unlock(&pf->mbox.lock);
+		return -ENOMEM;
+	}
+
+	err = otx2_sync_mbox_msg(&pf->mbox);
+	mutex_unlock(&pf->mbox.lock);
+	return err;
+}
+
+static int otx2_cgx_mac_farend_loopback(struct otx2_nic *pf, bool enable)
+{
+	struct msg_req *msg;
+	int err;
+
+	if (enable && !bitmap_empty(pf->flow_cfg->dmacflt_bmap,
+				    pf->flow_cfg->dmacflt_max_flows))
+		netdev_warn(pf->netdev,
+			    "CGX/RPM farend loopback might not work as DMAC filters are active\n");
+
+	mutex_lock(&pf->mbox.lock);
+	if (enable)
+		msg = otx2_mbox_alloc_msg_cgx_intlbk_enable(&pf->mbox);
+	else
+		msg = otx2_mbox_alloc_msg_cgx_intlbk_disable(&pf->mbox);
+
+	if (!msg) {
+		mutex_unlock(&pf->mbox.lock);
+		return -ENOMEM;
+	}
+
+	err = otx2_sync_mbox_msg(&pf->mbox);
+	mutex_unlock(&pf->mbox.lock);
+	return err;
+}
+
+static int otx2_cgx_serdes_loopback(struct otx2_nic *pf, bool enable)
+{
+	struct msg_req *msg;
+	int err;
+
+	if (enable && !bitmap_empty(pf->flow_cfg->dmacflt_bmap,
+				    pf->flow_cfg->dmacflt_max_flows))
+		netdev_warn(pf->netdev,
+			    "CGX/RPM serdes loopback might not work as DMAC filters are active\n");
+
+	mutex_lock(&pf->mbox.lock);
+	if (enable)
+		msg = otx2_mbox_alloc_msg_cgx_intlbk_enable(&pf->mbox);
+	else
+		msg = otx2_mbox_alloc_msg_cgx_intlbk_disable(&pf->mbox);
+
+	if (!msg) {
+		mutex_unlock(&pf->mbox.lock);
+		return -ENOMEM;
+	}
+
+	err = otx2_sync_mbox_msg(&pf->mbox);
+	mutex_unlock(&pf->mbox.lock);
+	return err;
+}
+
 int otx2_set_real_num_queues(struct net_device *netdev,
 			     int tx_queues, int rx_queues)
 {
@@ -2363,6 +2441,18 @@ static int otx2_set_features(struct net_device *netdev,
 		return cn10k_ipsec_ethtool_init(netdev,
 						features & NETIF_F_HW_ESP);
 
+	if ((changed & NETIF_F_MAC_LBK_NE) && netif_running(netdev))
+		return otx2_cgx_mac_nearend_loopback(pf,
+						     features & NETIF_F_MAC_LBK_NE);
+
+	if ((changed & NETIF_F_MAC_LBK_FE) && netif_running(netdev))
+		return otx2_cgx_mac_farend_loopback(pf,
+						    features & NETIF_F_MAC_LBK_FE);
+
+	if ((changed & NETIF_F_SERDES_LBK) && netif_running(netdev))
+		return otx2_cgx_serdes_loopback(pf,
+						features & NETIF_F_SERDES_LBK);
+
 	return otx2_handle_ntuple_tc_features(netdev, features);
 }
 
@@ -3249,7 +3339,8 @@ static int otx2_probe(struct pci_dev *pdev, const struct pci_device_id *id)
 	if (pf->flags & OTX2_FLAG_TC_FLOWER_SUPPORT)
 		netdev->hw_features |= NETIF_F_HW_TC;
 
-	netdev->hw_features |= NETIF_F_LOOPBACK | NETIF_F_RXALL;
+	netdev->hw_features |= NETIF_F_LOOPBACK | NETIF_F_RXALL |
+			       NETIF_F_MAC_LBK_NE | NETIF_F_MAC_LBK_FE | NETIF_F_SERDES_LBK;
 
 	netif_set_tso_max_segs(netdev, OTX2_MAX_GSO_SEGS);
 	netdev->watchdog_timeo = OTX2_TX_TIMEOUT;

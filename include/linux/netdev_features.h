@@ -14,7 +14,7 @@ typedef u64 netdev_features_t;
 enum {
 	NETIF_F_SG_BIT,			/* Scatter/gather IO. */
 	NETIF_F_IP_CSUM_BIT,		/* Can checksum TCP/UDP over IPv4. */
-	__UNUSED_NETIF_F_1,
+	NETIF_F_MAC_LBK_NE_BIT,		/* MAC near end loopback */
 	NETIF_F_HW_CSUM_BIT,		/* Can checksum all the packets. */
 	NETIF_F_IPV6_CSUM_BIT,		/* Can checksum TCP/UDP over IPV6 */
 	NETIF_F_HIGHDMA_BIT,		/* Can DMA to high memory. */
@@ -24,8 +24,8 @@ enum {
 	NETIF_F_HW_VLAN_CTAG_FILTER_BIT,/* Receive filtering on VLAN CTAGs */
 	NETIF_F_VLAN_CHALLENGED_BIT,	/* Device cannot handle VLAN packets */
 	NETIF_F_GSO_BIT,		/* Enable software GSO. */
-	__UNUSED_NETIF_F_12,
-	__UNUSED_NETIF_F_13,
+	NETIF_F_MAC_LBK_FE_BIT,		/* MAC far end loopback */
+	NETIF_F_SERDES_LBK_BIT,		/* SERDES loopback */
 	NETIF_F_GRO_BIT,		/* Generic receive offload */
 	NETIF_F_LRO_BIT,		/* large receive offload */
 
@@ -165,6 +165,9 @@ enum {
 #define NETIF_F_HW_HSR_TAG_RM	__NETIF_F(HW_HSR_TAG_RM)
 #define NETIF_F_HW_HSR_FWD	__NETIF_F(HW_HSR_FWD)
 #define NETIF_F_HW_HSR_DUP	__NETIF_F(HW_HSR_DUP)
+#define NETIF_F_MAC_LBK_NE	__NETIF_F(MAC_LBK_NE)
+#define NETIF_F_MAC_LBK_FE	__NETIF_F(MAC_LBK_FE)
+#define NETIF_F_SERDES_LBK	__NETIF_F(SERDES_LBK)
 
 /* Finds the next feature with the highest number of the range of start-1 till 0.
  */
