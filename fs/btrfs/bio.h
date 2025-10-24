@@ -60,6 +60,8 @@ struct btrfs_bio {
 		struct {
 			struct btrfs_ordered_extent *ordered;
 			struct btrfs_ordered_sum *sums;
+			struct work_struct csum_work;
+			struct completion csum_done;
 			u64 orig_physical;
 		};
 
@@ -84,6 +86,9 @@ struct btrfs_bio {
 
 	/* Use the commit root to look up csums (data read bio only). */
 	bool csum_search_commit_root;
+
+	bool async_csum;
+
 	/*
 	 * This member must come last, bio_alloc_bioset will allocate enough
 	 * bytes for entire btrfs_bio but relies on bio being last.
