@@ -95,6 +95,9 @@ struct fbnic_dev {
 	u64 prev_firmware_time;
 
 	struct fbnic_fw_log fw_log;
+
+	/* SW MII bus for FW PHY */
+	struct mii_bus *mii_bus;
 };
 
 /* Reserve entry 0 in the MSI-X "others" array until we have filled all
@@ -203,6 +206,8 @@ void fbnic_dbg_init(void);
 void fbnic_dbg_exit(void);
 
 void fbnic_rpc_reset_valid_entries(struct fbnic_dev *fbd);
+
+int fbnic_swmii_create(struct fbnic_dev *fbd);
 
 void fbnic_csr_get_regs(struct fbnic_dev *fbd, u32 *data, u32 *regs_version);
 int fbnic_csr_regs_len(struct fbnic_dev *fbd);
