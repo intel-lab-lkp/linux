@@ -1015,6 +1015,12 @@ Functions and Variables
     in case not initialized) to the pointer is freed automatically
     when the pointer goes out of scope.
 
+  **NULL_INITIALIZED_PTR_WITH_FREE**
+    Pointers with __free attribute should not be initialized to NULL.
+    Always define and assign such pointers in one statement.
+
+    See: https://docs.kernel.org/core-api/cleanup.html
+
 Permissions
 -----------
 

@@ -7728,6 +7728,12 @@ sub process {
 			ERROR("UNINITIALIZED_PTR_WITH_FREE",
 			      "pointer '$1' with __free attribute should be initialized\n" . $herecurr);
 		}
+
+# check for pointers with __free attribute initialized to NULL
+		while ($line =~ /\*\s*($Ident)\s+$FreeAttribute\s*=\s*NULL\b/g) {
+			WARN("NULL_INITIALIZED_PTR_WITH_FREE",
+			      "pointer '$1' with __free attribute should be initialized to a non-NULL address\n" . $herecurr);
+		}
 	}
 
 	# If we have no input at all, then there is nothing to report on
