@@ -225,8 +225,16 @@ static void be_get_drvinfo(struct net_device *netdev,
 		strscpy(drvinfo->fw_version, adapter->fw_ver,
 			sizeof(drvinfo->fw_version));
 	else
-		snprintf(drvinfo->fw_version, sizeof(drvinfo->fw_version),
-			 "%s [%s]", adapter->fw_ver, adapter->fw_on_flash);
+	{
+		strscpy(drvinfo->fw_version, adapter->fw_ver,
+			sizeof(drvinfo->fw_version));
+
+		/* 
+		* Report fw_on_flash in ethtool's erom_version field.
+		*/
+		strscpy(drvinfo->erom_version, adapter->fw_on_flash,
+			sizeof(drvinfo->erom_version));
+	}
 
 	strscpy(drvinfo->bus_info, pci_name(adapter->pdev),
 		sizeof(drvinfo->bus_info));
@@ -241,7 +249,7 @@ static u32 lancer_cmd_get_file_len(struct be_adapter *adapter, u8 *file_name)
 	memset(&data_len_cmd, 0, sizeof(data_len_cmd));
 	/* data_offset and data_size should be 0 to get reg len */
 	lancer_cmd_read_object(adapter, &data_len_cmd, 0, 0, file_name,
-			       &data_read, &eof, &addn_status);
+				   &data_read, &eof, &addn_status);
 
 	return data_read;
 }
@@ -252,7 +260,7 @@ static int be_get_dump_len(struct be_adapter *adapter)
 
 	if (lancer_chip(adapter))
 		dump_size = lancer_cmd_get_file_len(adapter,
-						    LANCER_FW_DUMP_FILE);
+							LANCER_FW_DUMP_FILE);
 	else
 		dump_size = adapter->fat_dump_len;
 
@@ -301,13 +309,13 @@ static int lancer_cmd_read_file(struct be_adapter *adapter, u8 *file_name,
 }
 
 static int be_read_dump_data(struct be_adapter *adapter, u32 dump_len,
-			     void *buf)
+				 void *buf)
 {
 	int status = 0;
 
 	if (lancer_chip(adapter))
 		status = lancer_cmd_read_file(adapter, LANCER_FW_DUMP_FILE,
-					      dump_len, buf);
+						  dump_len, buf);
 	else
 		status = be_cmd_get_fat_dump(adapter, dump_len, buf);
 
@@ -635,8 +643,8 @@ static int be_get_link_ksettings(struct net_device *netdev,
 
 			supported =
 				convert_to_et_setting(adapter,
-						      auto_speeds |
-						      fixed_speeds);
+							  auto_speeds |
+							  fixed_speeds);
 			advertising =
 				convert_to_et_setting(adapter, auto_speeds);
 
@@ -683,9 +691,9 @@ static int be_get_link_ksettings(struct net_device *netdev,
 }
 
 static void be_get_ringparam(struct net_device *netdev,
-			     struct ethtool_ringparam *ring,
-			     struct kernel_ethtool_ringparam *kernel_ring,
-			     struct netlink_ext_ack *extack)
+				 struct ethtool_ringparam *ring,
+				 struct kernel_ethtool_ringparam *kernel_ring,
+				 struct netlink_ext_ack *extack)
 {
 	struct be_adapter *adapter = netdev_priv(netdev);
 
@@ -737,7 +745,7 @@ static int be_set_phys_id(struct net_device *netdev,
 						 &adapter->beacon_state);
 		if (status)
 			return be_cmd_status(status);
-		return 1;       /* cycle on/off once per second */
+		return 1;		/* cycle on/off once per second */
 
 	case ETHTOOL_ID_ON:
 		status = be_cmd_set_beacon_state(adapter, adapter->hba_port_num,
@@ -764,7 +772,7 @@ static int be_set_dump(struct net_device *netdev, struct ethtool_dump *dump)
 	int status;
 
 	if (!lancer_chip(adapter) ||
-	    !check_privilege(adapter, MAX_PRIVILEGES))
+		!check_privilege(adapter, MAX_PRIVILEGES))
 		return -EOPNOTSUPP;
 
 	switch (dump->flag) {
@@ -873,7 +881,7 @@ err:
 }
 
 static u64 be_loopback_test(struct be_adapter *adapter, u8 loopback_type,
-			    u64 *status)
+				u64 *status)
 {
 	int ret;
 
@@ -883,7 +891,7 @@ static u64 be_loopback_test(struct be_adapter *adapter, u8 loopback_type,
 		return ret;
 
 	*status = be_cmd_loopback_test(adapter, adapter->hba_port_num,
-				       loopback_type, 1500, 2, 0xabc);
+					   loopback_type, 1500, 2, 0xabc);
 
 	ret = be_cmd_set_loopback(adapter, adapter->hba_port_num,
 				  BE_NO_LOOPBACK, 1);
@@ -920,7 +928,7 @@ static void be_self_test(struct net_device *netdev, struct ethtool_test *test,
 
 		if (test->flags & ETH_TEST_FL_EXTERNAL_LB) {
 			if (be_loopback_test(adapter, BE_ONE_PORT_EXT_LOOPBACK,
-					     &data[2]) != 0)
+						 &data[2]) != 0)
 				test->flags |= ETH_TEST_FL_FAILED;
 			test->flags |= ETH_TEST_FL_EXTERNAL_LB_DONE;
 		}
@@ -999,10 +1007,10 @@ static int be_get_eeprom_len(struct net_device *netdev)
 	if (lancer_chip(adapter)) {
 		if (be_physfn(adapter))
 			return lancer_cmd_get_file_len(adapter,
-						       LANCER_VPD_PF_FILE);
+							   LANCER_VPD_PF_FILE);
 		else
 			return lancer_cmd_get_file_len(adapter,
-						       LANCER_VPD_VF_FILE);
+							   LANCER_VPD_VF_FILE);
 	} else {
 		return BE_READ_SEEPROM_LEN;
 	}
@@ -1022,10 +1030,10 @@ static int be_read_eeprom(struct net_device *netdev,
 	if (lancer_chip(adapter)) {
 		if (be_physfn(adapter))
 			return lancer_cmd_read_file(adapter, LANCER_VPD_PF_FILE,
-						    eeprom->len, data);
+							eeprom->len, data);
 		else
 			return lancer_cmd_read_file(adapter, LANCER_VPD_VF_FILE,
-						    eeprom->len, data);
+							eeprom->len, data);
 	}
 
 	eeprom->magic = BE_VENDOR_ID | (adapter->pdev->device<<16);
@@ -1074,7 +1082,7 @@ static void be_set_msg_level(struct net_device *netdev, u32 level)
 }
 
 static int be_get_rxfh_fields(struct net_device *netdev,
-			      struct ethtool_rxfh_fields *cmd)
+				  struct ethtool_rxfh_fields *cmd)
 {
 	struct be_adapter *adapter = netdev_priv(netdev);
 	u64 flow_type = cmd->flow_type;
@@ -1140,8 +1148,8 @@ static int be_get_rxnfc(struct net_device *netdev, struct ethtool_rxnfc *cmd,
 }
 
 static int be_set_rxfh_fields(struct net_device *netdev,
-			      const struct ethtool_rxfh_fields *cmd,
-			      struct netlink_ext_ack *extack)
+				  const struct ethtool_rxfh_fields *cmd,
+				  struct netlink_ext_ack *extack)
 {
 	struct be_adapter *adapter = netdev_priv(netdev);
 	u32 rss_flags = adapter->rss_info.rss_flags;
@@ -1154,7 +1162,7 @@ static int be_set_rxfh_fields(struct net_device *netdev,
 	}
 
 	if (cmd->data != L3_RSS_FLAGS &&
-	    cmd->data != (L3_RSS_FLAGS | L4_RSS_FLAGS))
+		cmd->data != (L3_RSS_FLAGS | L4_RSS_FLAGS))
 		return -EINVAL;
 
 	switch (cmd->flow_type) {
@@ -1174,7 +1182,7 @@ static int be_set_rxfh_fields(struct net_device *netdev,
 		break;
 	case UDP_V4_FLOW:
 		if ((cmd->data == (L3_RSS_FLAGS | L4_RSS_FLAGS)) &&
-		    BEx_chip(adapter))
+			BEx_chip(adapter))
 			return -EINVAL;
 
 		if (cmd->data == L3_RSS_FLAGS)
@@ -1185,7 +1193,7 @@ static int be_set_rxfh_fields(struct net_device *netdev,
 		break;
 	case UDP_V6_FLOW:
 		if ((cmd->data == (L3_RSS_FLAGS | L4_RSS_FLAGS)) &&
-		    BEx_chip(adapter))
+			BEx_chip(adapter))
 			return -EINVAL;
 
 		if (cmd->data == L3_RSS_FLAGS)
@@ -1211,7 +1219,7 @@ static int be_set_rxfh_fields(struct net_device *netdev,
 }
 
 static void be_get_channels(struct net_device *netdev,
-			    struct ethtool_channels *ch)
+				struct ethtool_channels *ch)
 {
 	struct be_adapter *adapter = netdev_priv(netdev);
 	u16 num_rx_irqs = max_t(u16, adapter->num_rss_qs, 1);
@@ -1237,14 +1245,14 @@ static int be_set_channels(struct net_device  *netdev,
 	 * combined and either RX-only or TX-only channels.
 	 */
 	if (ch->other_count || !ch->combined_count ||
-	    (ch->rx_count && ch->tx_count))
+		(ch->rx_count && ch->tx_count))
 		return -EINVAL;
 
 	if (ch->combined_count > be_max_qp_irqs(adapter) ||
-	    (ch->rx_count &&
-	     (ch->rx_count + ch->combined_count) > be_max_rx_irqs(adapter)) ||
-	    (ch->tx_count &&
-	     (ch->tx_count + ch->combined_count) > be_max_tx_irqs(adapter)))
+		(ch->rx_count &&
+		 (ch->rx_count + ch->combined_count) > be_max_rx_irqs(adapter)) ||
+		(ch->tx_count &&
+		 (ch->tx_count + ch->combined_count) > be_max_tx_irqs(adapter)))
 		return -EINVAL;
 
 	adapter->cfg_num_rx_irqs = ch->combined_count + ch->rx_count;
@@ -1265,7 +1273,7 @@ static u32 be_get_rxfh_key_size(struct net_device *netdev)
 }
 
 static int be_get_rxfh(struct net_device *netdev,
-		       struct ethtool_rxfh_param *rxfh)
+			   struct ethtool_rxfh_param *rxfh)
 {
 	struct be_adapter *adapter = netdev_priv(netdev);
 	int i;
@@ -1285,8 +1293,8 @@ static int be_get_rxfh(struct net_device *netdev,
 }
 
 static int be_set_rxfh(struct net_device *netdev,
-		       struct ethtool_rxfh_param *rxfh,
-		       struct netlink_ext_ack *extack)
+			   struct ethtool_rxfh_param *rxfh,
+			   struct netlink_ext_ack *extack)
 {
 	int rc = 0, i, j;
 	struct be_adapter *adapter = netdev_priv(netdev);
@@ -1295,7 +1303,7 @@ static int be_set_rxfh(struct net_device *netdev,
 
 	/* We do not allow change in unsupported parameters */
 	if (rxfh->hfunc != ETH_RSS_HASH_NO_CHANGE &&
-	    rxfh->hfunc != ETH_RSS_HASH_TOP)
+		rxfh->hfunc != ETH_RSS_HASH_TOP)
 		return -EOPNOTSUPP;
 
 	if (rxfh->indir) {
@@ -1309,27 +1317,27 @@ static int be_set_rxfh(struct net_device *netdev,
 		}
 	} else {
 		memcpy(rsstable, adapter->rss_info.rsstable,
-		       RSS_INDIR_TABLE_LEN);
+			   RSS_INDIR_TABLE_LEN);
 	}
 
 	if (!hkey)
-		hkey =  adapter->rss_info.rss_hkey;
+		hkey =	adapter->rss_info.rss_hkey;
 
 	rc = be_cmd_rss_config(adapter, rsstable,
-			       adapter->rss_info.rss_flags,
-			       RSS_INDIR_TABLE_LEN, hkey);
+				   adapter->rss_info.rss_flags,
+				   RSS_INDIR_TABLE_LEN, hkey);
 	if (rc) {
 		adapter->rss_info.rss_flags = RSS_ENABLE_NONE;
 		return -EIO;
 	}
 	memcpy(adapter->rss_info.rss_hkey, hkey, RSS_HASH_KEY_LEN);
 	memcpy(adapter->rss_info.rsstable, rsstable,
-	       RSS_INDIR_TABLE_LEN);
+		   RSS_INDIR_TABLE_LEN);
 	return 0;
 }
 
 static int be_get_module_info(struct net_device *netdev,
-			      struct ethtool_modinfo *modinfo)
+				  struct ethtool_modinfo *modinfo)
 {
 	struct be_adapter *adapter = netdev_priv(netdev);
 	u8 page_data[PAGE_DATA_LEN];
@@ -1417,8 +1425,8 @@ static int be_set_priv_flags(struct net_device *netdev, u32 flags)
 
 const struct ethtool_ops be_ethtool_ops = {
 	.supported_coalesce_params = ETHTOOL_COALESCE_USECS |
-				     ETHTOOL_COALESCE_USE_ADAPTIVE |
-				     ETHTOOL_COALESCE_USECS_LOW_HIGH,
+					 ETHTOOL_COALESCE_USE_ADAPTIVE |
+					 ETHTOOL_COALESCE_USECS_LOW_HIGH,
 	.get_drvinfo = be_get_drvinfo,
 	.get_wol = be_get_wol,
 	.set_wol = be_set_wol,
