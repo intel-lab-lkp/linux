@@ -1281,6 +1281,13 @@ struct task_struct {
 	/* Journalling filesystem info: */
 	void				*journal_info;
 
+/* BLOG support - max modules defined here for use by other headers */
+#define BLOG_MAX_MODULES 8
+
+#ifdef CONFIG_BLOG
+	struct blog_tls_ctx		*blog_contexts[BLOG_MAX_MODULES];
+#endif
+
 	/* Stacked block device info: */
 	struct bio_list			*bio_list;
 

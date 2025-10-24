@@ -24,6 +24,9 @@
 #include <linux/sched/cputime.h>
 #include <linux/sched/ext.h>
 #include <linux/seq_file.h>
+#ifdef CONFIG_BLOG
+#include <linux/blog/blog.h>
+#endif
 #include <linux/rtmutex.h>
 #include <linux/init.h>
 #include <linux/unistd.h>
@@ -186,6 +189,29 @@ static inline struct task_struct *alloc_task_struct_node(int node)
 
 static inline void free_task_struct(struct task_struct *tsk)
 {
+#ifdef CONFIG_BLOG
+	/* Clean up any BLOG contexts */
+	{
+		struct blog_tls_ctx *contexts[BLOG_MAX_MODULES];
+		int i;
+
+		/* Step 1: Atomically detach all contexts while holding lock */
+		task_lock(tsk);
+		for (i = 0; i < BLOG_MAX_MODULES; i++) {
+			contexts[i] = tsk->blog_contexts[i];
+			tsk->blog_contexts[i] = NULL;
+		}
+		task_unlock(tsk);
+
+		/* Step 2: Release contexts outside the lock */
+		for (i = 0; i < BLOG_MAX_MODULES; i++) {
+			struct blog_tls_ctx *ctx = contexts[i];
+
+			if (ctx && ctx->release)
+				ctx->release(ctx);
+		}
+	}
+#endif
 	kmem_cache_free(task_struct_cachep, tsk);
 }
 
@@ -2012,6 +2038,17 @@ __latent_entropy struct task_struct *copy_process(
 	p = dup_task_struct(current, node);
 	if (!p)
 		goto fork_out;
+
+#ifdef CONFIG_BLOG
+	/* Initialize BLOG contexts */
+	{
+		int i;
+
+		for (i = 0; i < BLOG_MAX_MODULES; i++)
+			p->blog_contexts[i] = NULL;
+	}
+#endif
+
 	p->flags &= ~PF_KTHREAD;
 	if (args->kthread)
 		p->flags |= PF_KTHREAD;
