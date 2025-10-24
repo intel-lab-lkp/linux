@@ -37,18 +37,14 @@
 #define MAX_PER_SOCKET_BUDGET 32
 
 struct xsk_addr_node {
+	u32 num_descs;
 	u64 addr;
 	struct list_head addr_node;
 };
 
-struct xsk_addr_head {
-	u32 num_descs;
-	struct list_head addrs_list;
-};
-
 static struct kmem_cache *xsk_tx_generic_cache;
 
-#define XSKCB(skb) ((struct xsk_addr_head *)((skb)->cb))
+#define XSK_TX_HEAD(skb) ((struct xsk_addr_node *)((skb_shinfo(skb)->destructor_arg)))
 
 void xsk_set_rx_need_wakeup(struct xsk_buff_pool *pool)
 {
@@ -569,12 +565,11 @@ static void xsk_cq_submit_addr_locked(struct xsk_buff_pool *pool,
 	spin_lock_irqsave(&pool->cq_lock, flags);
 	idx = xskq_get_prod(pool->cq);
 
-	xskq_prod_write_addr(pool->cq, idx,
-			     (u64)(uintptr_t)skb_shinfo(skb)->destructor_arg);
+	xskq_prod_write_addr(pool->cq, idx, XSK_TX_HEAD(skb)->addr);
 	descs_processed++;
 
-	if (unlikely(XSKCB(skb)->num_descs > 1)) {
-		list_for_each_entry_safe(pos, tmp, &XSKCB(skb)->addrs_list, addr_node) {
+	if (unlikely(XSK_TX_HEAD(skb)->num_descs > 1)) {
+		list_for_each_entry_safe(pos, tmp, &XSK_TX_HEAD(skb)->addr_node, addr_node) {
 			xskq_prod_write_addr(pool->cq, idx + descs_processed,
 					     pos->addr);
 			descs_processed++;
@@ -582,6 +577,7 @@ static void xsk_cq_submit_addr_locked(struct xsk_buff_pool *pool,
 			kmem_cache_free(xsk_tx_generic_cache, pos);
 		}
 	}
+	kmem_cache_free(xsk_tx_generic_cache, XSK_TX_HEAD(skb));
 	xskq_prod_submit_n(pool->cq, descs_processed);
 	spin_unlock_irqrestore(&pool->cq_lock, flags);
 }
@@ -597,12 +593,12 @@ static void xsk_cq_cancel_locked(struct xsk_buff_pool *pool, u32 n)
 
 static void xsk_inc_num_desc(struct sk_buff *skb)
 {
-	XSKCB(skb)->num_descs++;
+	XSK_TX_HEAD(skb)->num_descs++;
 }
 
 static u32 xsk_get_num_desc(struct sk_buff *skb)
 {
-	return XSKCB(skb)->num_descs;
+	return XSK_TX_HEAD(skb)->num_descs;
 }
 
 static void xsk_destruct_skb(struct sk_buff *skb)
@@ -619,16 +615,16 @@ static void xsk_destruct_skb(struct sk_buff *skb)
 }
 
 static void xsk_skb_init_misc(struct sk_buff *skb, struct xdp_sock *xs,
-			      u64 addr)
+			      struct xsk_addr_node *head, u64 addr)
 {
-	BUILD_BUG_ON(sizeof(struct xsk_addr_head) > sizeof(skb->cb));
-	INIT_LIST_HEAD(&XSKCB(skb)->addrs_list);
+	INIT_LIST_HEAD(&head->addr_node);
+	head->addr = addr;
+	head->num_descs = 0;
 	skb->dev = xs->dev;
 	skb->priority = READ_ONCE(xs->sk.sk_priority);
 	skb->mark = READ_ONCE(xs->sk.sk_mark);
-	XSKCB(skb)->num_descs = 0;
 	skb->destructor = xsk_destruct_skb;
-	skb_shinfo(skb)->destructor_arg = (void *)(uintptr_t)addr;
+	skb_shinfo(skb)->destructor_arg = (void *)head;
 }
 
 static void xsk_consume_skb(struct sk_buff *skb)
@@ -638,11 +634,12 @@ static void xsk_consume_skb(struct sk_buff *skb)
 	struct xsk_addr_node *pos, *tmp;
 
 	if (unlikely(num_descs > 1)) {
-		list_for_each_entry_safe(pos, tmp, &XSKCB(skb)->addrs_list, addr_node) {
+		list_for_each_entry_safe(pos, tmp, &XSK_TX_HEAD(skb)->addr_node, addr_node) {
 			list_del(&pos->addr_node);
 			kmem_cache_free(xsk_tx_generic_cache, pos);
 		}
 	}
+	kmem_cache_free(xsk_tx_generic_cache, XSK_TX_HEAD(skb));
 
 	skb->destructor = sock_wfree;
 	xsk_cq_cancel_locked(xs->pool, num_descs);
@@ -720,7 +717,11 @@ static struct sk_buff *xsk_build_skb_zerocopy(struct xdp_sock *xs,
 
 		skb_reserve(skb, hr);
 
-		xsk_skb_init_misc(skb, xs, desc->addr);
+		xsk_addr = kmem_cache_zalloc(xsk_tx_generic_cache, GFP_KERNEL);
+		if (!xsk_addr)
+			return ERR_PTR(-ENOMEM);
+
+		xsk_skb_init_misc(skb, xs, xsk_addr, desc->addr);
 		if (desc->options & XDP_TX_METADATA) {
 			err = xsk_skb_metadata(skb, buffer, desc, pool, hr);
 			if (unlikely(err))
@@ -736,7 +737,7 @@ static struct sk_buff *xsk_build_skb_zerocopy(struct xdp_sock *xs,
 		 * would be dropped, which implies freeing all list elements
 		 */
 		xsk_addr->addr = desc->addr;
-		list_add_tail(&xsk_addr->addr_node, &XSKCB(skb)->addrs_list);
+		list_add_tail(&xsk_addr->addr_node, &XSK_TX_HEAD(skb)->addr_node);
 	}
 
 	len = desc->len;
@@ -773,6 +774,7 @@ static struct sk_buff *xsk_build_skb(struct xdp_sock *xs,
 				     struct xdp_desc *desc)
 {
 	struct net_device *dev = xs->dev;
+	struct xsk_addr_node *xsk_addr;
 	struct sk_buff *skb = xs->skb;
 	int err;
 
@@ -804,7 +806,12 @@ static struct sk_buff *xsk_build_skb(struct xdp_sock *xs,
 			if (unlikely(err))
 				goto free_err;
 
-			xsk_skb_init_misc(skb, xs, desc->addr);
+			xsk_addr = kmem_cache_zalloc(xsk_tx_generic_cache, GFP_KERNEL);
+			if (!xsk_addr) {
+				err = -ENOMEM;
+				goto free_err;
+			}
+			xsk_skb_init_misc(skb, xs, xsk_addr, desc->addr);
 			if (desc->options & XDP_TX_METADATA) {
 				err = xsk_skb_metadata(skb, buffer, desc,
 						       xs->pool, hr);
@@ -813,7 +820,6 @@ static struct sk_buff *xsk_build_skb(struct xdp_sock *xs,
 			}
 		} else {
 			int nr_frags = skb_shinfo(skb)->nr_frags;
-			struct xsk_addr_node *xsk_addr;
 			struct page *page;
 			u8 *vaddr;
 
@@ -843,7 +849,7 @@ static struct sk_buff *xsk_build_skb(struct xdp_sock *xs,
 			refcount_add(PAGE_SIZE, &xs->sk.sk_wmem_alloc);
 
 			xsk_addr->addr = desc->addr;
-			list_add_tail(&xsk_addr->addr_node, &XSKCB(skb)->addrs_list);
+			list_add_tail(&xsk_addr->addr_node, &XSK_TX_HEAD(skb)->addr_node);
 		}
 	}
 
