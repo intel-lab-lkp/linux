@@ -169,6 +169,21 @@ drm_sched_entity_restore_vruntime(struct drm_sched_entity *entity,
 			 * Higher priority can go first.
 			 */
 			vruntime = -us_to_ktime(rq_prio - prio);
+		} else {
+			struct drm_gpu_scheduler *sched = entity->rq->sched;
+
+			/*
+			 * Favour entity with shorter jobs (interactivity).
+			 *
+			 * Unlocked read of the scheduler average is fine since
+			 * it is just heuristics and data type is a natural word
+			 * size.
+			 */
+			if (ewma_drm_sched_avgtime_read(&stats->avg_job_us) <=
+			    ewma_drm_sched_avgtime_read(&sched->avg_job_us))
+				vruntime = -1;
+			else
+				vruntime = 1;
 		}
 	}
 
