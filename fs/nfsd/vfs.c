@@ -1176,6 +1176,8 @@ struct nfsd_write_dio_seg {
 
 struct nfsd_write_dio_args {
 	struct nfsd_file		*nf;
+	int				flags_buffered;
+	int				flags_direct;
 	struct nfsd_write_dio_seg	segment[3];
 };
 
@@ -1293,11 +1295,11 @@ nfsd_issue_write_dio(struct svc_rqst *rqstp, struct svc_fh *fhp,
 		if (segment->len == 0)
 			continue;
 		if (segment->use_dio) {
-			kiocb->ki_flags |= IOCB_DIRECT;
+			kiocb->ki_flags = args->flags_direct;
 			trace_nfsd_write_direct(rqstp, fhp, kiocb->ki_pos,
 						segment->len);
 		} else
-			kiocb->ki_flags &= ~IOCB_DIRECT;
+			kiocb->ki_flags = args->flags_buffered;
 		host_err = vfs_iocb_iter_write(file, kiocb, &segment->iter);
 		if (host_err < 0)
 			return host_err;
@@ -1319,30 +1321,27 @@ nfsd_direct_write(struct svc_rqst *rqstp, struct svc_fh *fhp,
 	struct nfsd_write_dio_args args;
 
 	/*
-	 * Check if IOCB_DONTCACHE can be used when issuing buffered IO;
-	 * if so, set it to preserve intent of NFSD_IO_DIRECT (it will
-	 * be ignored for any DIO issued here).
+	 * IOCB_DONTCACHE preserves the intent of NFSD_IO_DIRECT when
+	 * writing unaligned segments or handling fallback I/O.
 	 */
+	args.flags_buffered = kiocb->ki_flags | IOCB_SYNC | IOCB_DSYNC;
 	if (file->f_op->fop_flags & FOP_DONTCACHE)
-		kiocb->ki_flags |= IOCB_DONTCACHE;
+		args.flags_buffered |= IOCB_DONTCACHE;
 
 	/*
-	 * IOCB_SYNC + IOCB_DIRECT requests that iter_write should persist
-	 * both written data and dirty time stamps.
-	 *
-	 * When falling back to buffered I/O or handling the unaligned
-	 * first and last segments, the data and time stamps must be
-	 * durable before nfsd_vfs_write() returns to its caller, matching
-	 * the behavior of direct I/O.
+	 * IOCB_SYNC + IOCB_DIRECT requests that iter_write should
+	 * persist both written data and dirty time stamps.
 	 */
-	kiocb->ki_flags |= IOCB_SYNC | IOCB_DSYNC;
+	args.flags_direct = kiocb->ki_flags | IOCB_SYNC | IOCB_DIRECT;
 
 	args.nf = nf;
 	if (!nfsd_is_write_dio_possible(&args, kiocb->ki_pos, *cnt) ||
-	    !nfsd_setup_write_dio_iters(&args, rqstp->rq_bvec, nvecs, *cnt))
+	    !nfsd_setup_write_dio_iters(&args, rqstp->rq_bvec, nvecs, *cnt)) {
 		/* fall back to writing through the page cache */
+		kiocb->ki_flags = args.flags_buffered;
 		return nfsd_iocb_write(file, rqstp->rq_bvec, nvecs,
 				       cnt, kiocb);
+	}
 
 	return nfsd_issue_write_dio(rqstp, fhp, &args, kiocb, nvecs, cnt);
 }
