@@ -699,7 +699,7 @@ static int yt921x_read_mib(struct yt921x_priv *priv, int port)
 			if (val < (u32)val)
 				/* overflow */
 				val += (u64)U32_MAX + 1;
-			val &= ~U32_MAX;
+			val &= ~(u64)U32_MAX;
 			val |= val0;
 		} else {
 			res = yt921x_reg_read(priv, reg + 4, &val1);
