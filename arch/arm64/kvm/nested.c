@@ -540,7 +540,7 @@ unsigned long compute_tlb_inval_range(struct kvm_s2_mmu *mmu, u64 val)
 	unsigned long max_size;
 	u8 ttl;
 
-	ttl = FIELD_GET(TLBI_TTL_MASK, val);
+	ttl = FIELD_GET(TLBI_TTL_MASK, val) | FIELD_GET(TLBI_TG_MASK, val) << 2;
 
 	if (!ttl || !kvm_has_feat(kvm, ID_AA64MMFR2_EL1, TTL, IMP)) {
 		/* No TTL, check the shadow S2 for a hint */
@@ -963,7 +963,8 @@ static void compute_s1_tlbi_range(struct kvm_vcpu *vcpu, u32 inst, u64 val,
 	case OP_TLBI_VALE1ISNXS:
 	case OP_TLBI_VALE1OSNXS:
 		scope->type = TLBI_VA;
-		scope->size = ttl_to_size(FIELD_GET(TLBI_TTL_MASK, val));
+		scope->size = ttl_to_size(FIELD_GET(TLBI_TTL_MASK, val) |
+					  FIELD_GET(TLBI_TG_MASK, val) << 2);
 		if (!scope->size)
 			scope->size = SZ_1G;
 		scope->va = tlbi_va_s1_to_va(val) & ~(scope->size - 1);
@@ -991,7 +992,8 @@ static void compute_s1_tlbi_range(struct kvm_vcpu *vcpu, u32 inst, u64 val,
 	case OP_TLBI_VAALE1ISNXS:
 	case OP_TLBI_VAALE1OSNXS:
 		scope->type = TLBI_VAA;
-		scope->size = ttl_to_size(FIELD_GET(TLBI_TTL_MASK, val));
+		scope->size = ttl_to_size(FIELD_GET(TLBI_TTL_MASK, val) |
+					  FIELD_GET(TLBI_TG_MASK, val) << 2);
 		if (!scope->size)
 			scope->size = SZ_1G;
 		scope->va = tlbi_va_s1_to_va(val) & ~(scope->size - 1);
