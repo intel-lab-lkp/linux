@@ -588,7 +588,7 @@ static int ip_fragment(struct net *net, struct sock *sk, struct sk_buff *skb,
 		IP_INC_STATS(net, IPSTATS_MIB_FRAGFAILS);
 		icmp_send(skb, ICMP_DEST_UNREACH, ICMP_FRAG_NEEDED,
 			  htonl(mtu));
-		kfree_skb(skb);
+		kfree_skb_reason(skb, SKB_DROP_REASON_PKT_TOO_BIG);
 		return -EMSGSIZE;
 	}
 
@@ -871,7 +871,7 @@ int ip_do_fragment(struct net *net, struct sock *sk, struct sk_buff *skb,
 			return 0;
 		}
 
-		kfree_skb_list(iter.frag);
+		kfree_skb_list_reason(iter.frag, SKB_DROP_REASON_FRAG_FAILED);
 
 		IP_INC_STATS(net, IPSTATS_MIB_FRAGFAILS);
 		return err;
@@ -923,7 +923,7 @@ slow_path:
 	return err;
 
 fail:
-	kfree_skb(skb);
+	kfree_skb_reason(skb, SKB_DROP_REASON_FRAG_FAILED);
 	IP_INC_STATS(net, IPSTATS_MIB_FRAGFAILS);
 	return err;
 }
