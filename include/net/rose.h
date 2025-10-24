@@ -164,6 +164,7 @@ static inline void rose_neigh_put(struct rose_neigh *rose_neigh)
 			ax25_cb_put(rose_neigh->ax25);
 		kfree(rose_neigh->digipeat);
 		kfree(rose_neigh);
+		rose_neigh = NULL;
 	}
 }
 
