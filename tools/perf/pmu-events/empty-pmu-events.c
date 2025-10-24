@@ -1303,32 +1303,32 @@ static const char *const big_c_string =
 /* offset=127503 */ "sys_ccn_pmu.read_cycles\000uncore\000ccn read-cycles event\000config=0x2c\0000x01\00000\000\000\000\000\000"
 /* offset=127580 */ "uncore_sys_cmn_pmu\000"
 /* offset=127599 */ "sys_cmn_pmu.hnf_cache_miss\000uncore\000Counts total cache misses in first lookup result (high priority)\000eventid=1,type=5\000(434|436|43c|43a).*\00000\000\000\000\000\000"
-/* offset=127742 */ "CPUs_utilized\000Default\000(software@cpu\\-clock\\,name\\=cpu\\-clock@ if #target_cpu else software@task\\-clock\\,name\\=task\\-clock@) / (duration_time * 1e9)\000\000Average CPU utilization\000\0001CPUs\000\000\000\00001"
-/* offset=127927 */ "cs_per_second\000Default\000software@context\\-switches\\,name\\=context\\-switches@ * 1e9 / (software@cpu\\-clock\\,name\\=cpu\\-clock@ if #target_cpu else software@task\\-clock\\,name\\=task\\-clock@)\000\000Context switches per CPU second\000\0001cs/sec\000\000\000\00001"
-/* offset=128159 */ "migrations_per_second\000Default\000software@cpu\\-migrations\\,name\\=cpu\\-migrations@ * 1e9 / (software@cpu\\-clock\\,name\\=cpu\\-clock@ if #target_cpu else software@task\\-clock\\,name\\=task\\-clock@)\000\000Process migrations to a new CPU per CPU second\000\0001migrations/sec\000\000\000\00001"
-/* offset=128418 */ "page_faults_per_second\000Default\000software@page\\-faults\\,name\\=page\\-faults@ * 1e9 / (software@cpu\\-clock\\,name\\=cpu\\-clock@ if #target_cpu else software@task\\-clock\\,name\\=task\\-clock@)\000\000Page faults per CPU second\000\0001faults/sec\000\000\000\00001"
-/* offset=128648 */ "insn_per_cycle\000Default\000instructions / cpu\\-cycles\000insn_per_cycle < 1\000Instructions Per Cycle\000\0001instructions\000\000\000\00000"
-/* offset=128760 */ "stalled_cycles_per_instruction\000Default\000max(stalled\\-cycles\\-frontend, stalled\\-cycles\\-backend) / instructions\000\000Max front or backend stalls per instruction\000\000\000\000\000\00000"
-/* offset=128923 */ "frontend_cycles_idle\000Default\000stalled\\-cycles\\-frontend / cpu\\-cycles\000frontend_cycles_idle > 0.1\000Frontend stalls per cycle\000\000\000\000\000\00000"
-/* offset=129052 */ "backend_cycles_idle\000Default\000stalled\\-cycles\\-backend / cpu\\-cycles\000backend_cycles_idle > 0.2\000Backend stalls per cycle\000\000\000\000\000\00000"
-/* offset=129177 */ "cycles_frequency\000Default\000cpu\\-cycles / (software@cpu\\-clock\\,name\\=cpu\\-clock@ if #target_cpu else software@task\\-clock\\,name\\=task\\-clock@)\000\000Cycles per CPU second\000\0001GHz\000\000\000\00001"
-/* offset=129352 */ "branch_frequency\000Default\000branches / (software@cpu\\-clock\\,name\\=cpu\\-clock@ if #target_cpu else software@task\\-clock\\,name\\=task\\-clock@)\000\000Branches per CPU second\000\0001000K/sec\000\000\000\00001"
-/* offset=129531 */ "branch_miss_rate\000Default\000branch\\-misses / branches\000branch_miss_rate > 0.05\000Branch miss rate\000\000100%\000\000\000\00000"
-/* offset=129634 */ "CPI\000\0001 / IPC\000\000\000\000\000\000\000\00000"
-/* offset=129656 */ "IPC\000group1\000inst_retired.any / cpu_clk_unhalted.thread\000\000\000\000\000\000\000\00000"
-/* offset=129719 */ "Frontend_Bound_SMT\000\000idq_uops_not_delivered.core / (4 * (cpu_clk_unhalted.thread / 2 * (1 + cpu_clk_unhalted.one_thread_active / cpu_clk_unhalted.ref_xclk)))\000\000\000\000\000\000\000\00000"
-/* offset=129885 */ "dcache_miss_cpi\000\000l1d\\-loads\\-misses / inst_retired.any\000\000\000\000\000\000\000\00000"
-/* offset=129949 */ "icache_miss_cycles\000\000l1i\\-loads\\-misses / inst_retired.any\000\000\000\000\000\000\000\00000"
-/* offset=130016 */ "cache_miss_cycles\000group1\000dcache_miss_cpi + icache_miss_cycles\000\000\000\000\000\000\000\00000"
-/* offset=130087 */ "DCache_L2_All_Hits\000\000l2_rqsts.demand_data_rd_hit + l2_rqsts.pf_hit + l2_rqsts.rfo_hit\000\000\000\000\000\000\000\00000"
-/* offset=130181 */ "DCache_L2_All_Miss\000\000max(l2_rqsts.all_demand_data_rd - l2_rqsts.demand_data_rd_hit, 0) + l2_rqsts.pf_miss + l2_rqsts.rfo_miss\000\000\000\000\000\000\000\00000"
-/* offset=130315 */ "DCache_L2_All\000\000DCache_L2_All_Hits + DCache_L2_All_Miss\000\000\000\000\000\000\000\00000"
-/* offset=130379 */ "DCache_L2_Hits\000\000d_ratio(DCache_L2_All_Hits, DCache_L2_All)\000\000\000\000\000\000\000\00000"
-/* offset=130447 */ "DCache_L2_Misses\000\000d_ratio(DCache_L2_All_Miss, DCache_L2_All)\000\000\000\000\000\000\000\00000"
-/* offset=130517 */ "M1\000\000ipc + M2\000\000\000\000\000\000\000\00000"
-/* offset=130539 */ "M2\000\000ipc + M1\000\000\000\000\000\000\000\00000"
-/* offset=130561 */ "M3\000\0001 / M3\000\000\000\000\000\000\000\00000"
-/* offset=130581 */ "L1D_Cache_Fill_BW\000\00064 * l1d.replacement / 1e9 / duration_time\000\000\000\000\000\000\000\00000"
+/* offset=127742 */ "CPUs_utilized\000Default\000(software@cpu\\-clock\\,name\\=cpu\\-clock@ if #target_cpu else software@task\\-clock\\,name\\=task\\-clock@) / (duration_time * 1e9)\000\000Average CPU utilization\000\0001CPUs\000\000\000\000011"
+/* offset=127928 */ "cs_per_second\000Default\000software@context\\-switches\\,name\\=context\\-switches@ * 1e9 / (software@cpu\\-clock\\,name\\=cpu\\-clock@ if #target_cpu else software@task\\-clock\\,name\\=task\\-clock@)\000\000Context switches per CPU second\000\0001cs/sec\000\000\000\000011"
+/* offset=128161 */ "migrations_per_second\000Default\000software@cpu\\-migrations\\,name\\=cpu\\-migrations@ * 1e9 / (software@cpu\\-clock\\,name\\=cpu\\-clock@ if #target_cpu else software@task\\-clock\\,name\\=task\\-clock@)\000\000Process migrations to a new CPU per CPU second\000\0001migrations/sec\000\000\000\000011"
+/* offset=128421 */ "page_faults_per_second\000Default\000software@page\\-faults\\,name\\=page\\-faults@ * 1e9 / (software@cpu\\-clock\\,name\\=cpu\\-clock@ if #target_cpu else software@task\\-clock\\,name\\=task\\-clock@)\000\000Page faults per CPU second\000\0001faults/sec\000\000\000\000011"
+/* offset=128652 */ "insn_per_cycle\000Default\000instructions / cpu\\-cycles\000insn_per_cycle < 1\000Instructions Per Cycle\000\0001instructions\000\000\000\000001"
+/* offset=128765 */ "stalled_cycles_per_instruction\000Default\000max(stalled\\-cycles\\-frontend, stalled\\-cycles\\-backend) / instructions\000\000Max front or backend stalls per instruction\000\000\000\000\000\000001"
+/* offset=128929 */ "frontend_cycles_idle\000Default\000stalled\\-cycles\\-frontend / cpu\\-cycles\000frontend_cycles_idle > 0.1\000Frontend stalls per cycle\000\000\000\000\000\000001"
+/* offset=129059 */ "backend_cycles_idle\000Default\000stalled\\-cycles\\-backend / cpu\\-cycles\000backend_cycles_idle > 0.2\000Backend stalls per cycle\000\000\000\000\000\000001"
+/* offset=129185 */ "cycles_frequency\000Default\000cpu\\-cycles / (software@cpu\\-clock\\,name\\=cpu\\-clock@ if #target_cpu else software@task\\-clock\\,name\\=task\\-clock@)\000\000Cycles per CPU second\000\0001GHz\000\000\000\000011"
+/* offset=129361 */ "branch_frequency\000Default\000branches / (software@cpu\\-clock\\,name\\=cpu\\-clock@ if #target_cpu else software@task\\-clock\\,name\\=task\\-clock@)\000\000Branches per CPU second\000\0001000K/sec\000\000\000\000011"
+/* offset=129541 */ "branch_miss_rate\000Default\000branch\\-misses / branches\000branch_miss_rate > 0.05\000Branch miss rate\000\000100%\000\000\000\000001"
+/* offset=129645 */ "CPI\000\0001 / IPC\000\000\000\000\000\000\000\000000"
+/* offset=129668 */ "IPC\000group1\000inst_retired.any / cpu_clk_unhalted.thread\000\000\000\000\000\000\000\000000"
+/* offset=129732 */ "Frontend_Bound_SMT\000\000idq_uops_not_delivered.core / (4 * (cpu_clk_unhalted.thread / 2 * (1 + cpu_clk_unhalted.one_thread_active / cpu_clk_unhalted.ref_xclk)))\000\000\000\000\000\000\000\000000"
+/* offset=129899 */ "dcache_miss_cpi\000\000l1d\\-loads\\-misses / inst_retired.any\000\000\000\000\000\000\000\000000"
+/* offset=129964 */ "icache_miss_cycles\000\000l1i\\-loads\\-misses / inst_retired.any\000\000\000\000\000\000\000\000000"
+/* offset=130032 */ "cache_miss_cycles\000group1\000dcache_miss_cpi + icache_miss_cycles\000\000\000\000\000\000\000\000000"
+/* offset=130104 */ "DCache_L2_All_Hits\000\000l2_rqsts.demand_data_rd_hit + l2_rqsts.pf_hit + l2_rqsts.rfo_hit\000\000\000\000\000\000\000\000000"
+/* offset=130199 */ "DCache_L2_All_Miss\000\000max(l2_rqsts.all_demand_data_rd - l2_rqsts.demand_data_rd_hit, 0) + l2_rqsts.pf_miss + l2_rqsts.rfo_miss\000\000\000\000\000\000\000\000000"
+/* offset=130334 */ "DCache_L2_All\000\000DCache_L2_All_Hits + DCache_L2_All_Miss\000\000\000\000\000\000\000\000000"
+/* offset=130399 */ "DCache_L2_Hits\000\000d_ratio(DCache_L2_All_Hits, DCache_L2_All)\000\000\000\000\000\000\000\000000"
+/* offset=130468 */ "DCache_L2_Misses\000\000d_ratio(DCache_L2_All_Miss, DCache_L2_All)\000\000\000\000\000\000\000\000000"
+/* offset=130539 */ "M1\000\000ipc + M2\000\000\000\000\000\000\000\000000"
+/* offset=130562 */ "M2\000\000ipc + M1\000\000\000\000\000\000\000\000000"
+/* offset=130585 */ "M3\000\0001 / M3\000\000\000\000\000\000\000\000000"
+/* offset=130606 */ "L1D_Cache_Fill_BW\000\00064 * l1d.replacement / 1e9 / duration_time\000\000\000\000\000\000\000\000000"
 ;
 
 static const struct compact_pmu_event pmu_events__common_default_core[] = {
@@ -2615,17 +2615,17 @@ static const struct pmu_table_entry pmu_events__common[] = {
 };
 
 static const struct compact_pmu_event pmu_metrics__common_default_core[] = {
-{ 127742 }, /* CPUs_utilized\000Default\000(software@cpu\\-clock\\,name\\=cpu\\-clock@ if #target_cpu else software@task\\-clock\\,name\\=task\\-clock@) / (duration_time * 1e9)\000\000Average CPU utilization\000\0001CPUs\000\000\000\00001 */
-{ 129052 }, /* backend_cycles_idle\000Default\000stalled\\-cycles\\-backend / cpu\\-cycles\000backend_cycles_idle > 0.2\000Backend stalls per cycle\000\000\000\000\000\00000 */
-{ 129352 }, /* branch_frequency\000Default\000branches / (software@cpu\\-clock\\,name\\=cpu\\-clock@ if #target_cpu else software@task\\-clock\\,name\\=task\\-clock@)\000\000Branches per CPU second\000\0001000K/sec\000\000\000\00001 */
-{ 129531 }, /* branch_miss_rate\000Default\000branch\\-misses / branches\000branch_miss_rate > 0.05\000Branch miss rate\000\000100%\000\000\000\00000 */
-{ 127927 }, /* cs_per_second\000Default\000software@context\\-switches\\,name\\=context\\-switches@ * 1e9 / (software@cpu\\-clock\\,name\\=cpu\\-clock@ if #target_cpu else software@task\\-clock\\,name\\=task\\-clock@)\000\000Context switches per CPU second\000\0001cs/sec\000\000\000\00001 */
-{ 129177 }, /* cycles_frequency\000Default\000cpu\\-cycles / (software@cpu\\-clock\\,name\\=cpu\\-clock@ if #target_cpu else software@task\\-clock\\,name\\=task\\-clock@)\000\000Cycles per CPU second\000\0001GHz\000\000\000\00001 */
-{ 128923 }, /* frontend_cycles_idle\000Default\000stalled\\-cycles\\-frontend / cpu\\-cycles\000frontend_cycles_idle > 0.1\000Frontend stalls per cycle\000\000\000\000\000\00000 */
-{ 128648 }, /* insn_per_cycle\000Default\000instructions / cpu\\-cycles\000insn_per_cycle < 1\000Instructions Per Cycle\000\0001instructions\000\000\000\00000 */
-{ 128159 }, /* migrations_per_second\000Default\000software@cpu\\-migrations\\,name\\=cpu\\-migrations@ * 1e9 / (software@cpu\\-clock\\,name\\=cpu\\-clock@ if #target_cpu else software@task\\-clock\\,name\\=task\\-clock@)\000\000Process migrations to a new CPU per CPU second\000\0001migrations/sec\000\000\000\00001 */
-{ 128418 }, /* page_faults_per_second\000Default\000software@page\\-faults\\,name\\=page\\-faults@ * 1e9 / (software@cpu\\-clock\\,name\\=cpu\\-clock@ if #target_cpu else software@task\\-clock\\,name\\=task\\-clock@)\000\000Page faults per CPU second\000\0001faults/sec\000\000\000\00001 */
-{ 128760 }, /* stalled_cycles_per_instruction\000Default\000max(stalled\\-cycles\\-frontend, stalled\\-cycles\\-backend) / instructions\000\000Max front or backend stalls per instruction\000\000\000\000\000\00000 */
+{ 127742 }, /* CPUs_utilized\000Default\000(software@cpu\\-clock\\,name\\=cpu\\-clock@ if #target_cpu else software@task\\-clock\\,name\\=task\\-clock@) / (duration_time * 1e9)\000\000Average CPU utilization\000\0001CPUs\000\000\000\000011 */
+{ 129059 }, /* backend_cycles_idle\000Default\000stalled\\-cycles\\-backend / cpu\\-cycles\000backend_cycles_idle > 0.2\000Backend stalls per cycle\000\000\000\000\000\000001 */
+{ 129361 }, /* branch_frequency\000Default\000branches / (software@cpu\\-clock\\,name\\=cpu\\-clock@ if #target_cpu else software@task\\-clock\\,name\\=task\\-clock@)\000\000Branches per CPU second\000\0001000K/sec\000\000\000\000011 */
+{ 129541 }, /* branch_miss_rate\000Default\000branch\\-misses / branches\000branch_miss_rate > 0.05\000Branch miss rate\000\000100%\000\000\000\000001 */
+{ 127928 }, /* cs_per_second\000Default\000software@context\\-switches\\,name\\=context\\-switches@ * 1e9 / (software@cpu\\-clock\\,name\\=cpu\\-clock@ if #target_cpu else software@task\\-clock\\,name\\=task\\-clock@)\000\000Context switches per CPU second\000\0001cs/sec\000\000\000\000011 */
+{ 129185 }, /* cycles_frequency\000Default\000cpu\\-cycles / (software@cpu\\-clock\\,name\\=cpu\\-clock@ if #target_cpu else software@task\\-clock\\,name\\=task\\-clock@)\000\000Cycles per CPU second\000\0001GHz\000\000\000\000011 */
+{ 128929 }, /* frontend_cycles_idle\000Default\000stalled\\-cycles\\-frontend / cpu\\-cycles\000frontend_cycles_idle > 0.1\000Frontend stalls per cycle\000\000\000\000\000\000001 */
+{ 128652 }, /* insn_per_cycle\000Default\000instructions / cpu\\-cycles\000insn_per_cycle < 1\000Instructions Per Cycle\000\0001instructions\000\000\000\000001 */
+{ 128161 }, /* migrations_per_second\000Default\000software@cpu\\-migrations\\,name\\=cpu\\-migrations@ * 1e9 / (software@cpu\\-clock\\,name\\=cpu\\-clock@ if #target_cpu else software@task\\-clock\\,name\\=task\\-clock@)\000\000Process migrations to a new CPU per CPU second\000\0001migrations/sec\000\000\000\000011 */
+{ 128421 }, /* page_faults_per_second\000Default\000software@page\\-faults\\,name\\=page\\-faults@ * 1e9 / (software@cpu\\-clock\\,name\\=cpu\\-clock@ if #target_cpu else software@task\\-clock\\,name\\=task\\-clock@)\000\000Page faults per CPU second\000\0001faults/sec\000\000\000\000011 */
+{ 128765 }, /* stalled_cycles_per_instruction\000Default\000max(stalled\\-cycles\\-frontend, stalled\\-cycles\\-backend) / instructions\000\000Max front or backend stalls per instruction\000\000\000\000\000\000001 */
 
 };
 
@@ -2698,21 +2698,21 @@ static const struct pmu_table_entry pmu_events__test_soc_cpu[] = {
 };
 
 static const struct compact_pmu_event pmu_metrics__test_soc_cpu_default_core[] = {
-{ 129634 }, /* CPI\000\0001 / IPC\000\000\000\000\000\000\000\00000 */
-{ 130315 }, /* DCache_L2_All\000\000DCache_L2_All_Hits + DCache_L2_All_Miss\000\000\000\000\000\000\000\00000 */
-{ 130087 }, /* DCache_L2_All_Hits\000\000l2_rqsts.demand_data_rd_hit + l2_rqsts.pf_hit + l2_rqsts.rfo_hit\000\000\000\000\000\000\000\00000 */
-{ 130181 }, /* DCache_L2_All_Miss\000\000max(l2_rqsts.all_demand_data_rd - l2_rqsts.demand_data_rd_hit, 0) + l2_rqsts.pf_miss + l2_rqsts.rfo_miss\000\000\000\000\000\000\000\00000 */
-{ 130379 }, /* DCache_L2_Hits\000\000d_ratio(DCache_L2_All_Hits, DCache_L2_All)\000\000\000\000\000\000\000\00000 */
-{ 130447 }, /* DCache_L2_Misses\000\000d_ratio(DCache_L2_All_Miss, DCache_L2_All)\000\000\000\000\000\000\000\00000 */
-{ 129719 }, /* Frontend_Bound_SMT\000\000idq_uops_not_delivered.core / (4 * (cpu_clk_unhalted.thread / 2 * (1 + cpu_clk_unhalted.one_thread_active / cpu_clk_unhalted.ref_xclk)))\000\000\000\000\000\000\000\00000 */
-{ 129656 }, /* IPC\000group1\000inst_retired.any / cpu_clk_unhalted.thread\000\000\000\000\000\000\000\00000 */
-{ 130581 }, /* L1D_Cache_Fill_BW\000\00064 * l1d.replacement / 1e9 / duration_time\000\000\000\000\000\000\000\00000 */
-{ 130517 }, /* M1\000\000ipc + M2\000\000\000\000\000\000\000\00000 */
-{ 130539 }, /* M2\000\000ipc + M1\000\000\000\000\000\000\000\00000 */
-{ 130561 }, /* M3\000\0001 / M3\000\000\000\000\000\000\000\00000 */
-{ 130016 }, /* cache_miss_cycles\000group1\000dcache_miss_cpi + icache_miss_cycles\000\000\000\000\000\000\000\00000 */
-{ 129885 }, /* dcache_miss_cpi\000\000l1d\\-loads\\-misses / inst_retired.any\000\000\000\000\000\000\000\00000 */
-{ 129949 }, /* icache_miss_cycles\000\000l1i\\-loads\\-misses / inst_retired.any\000\000\000\000\000\000\000\00000 */
+{ 129645 }, /* CPI\000\0001 / IPC\000\000\000\000\000\000\000\000000 */
+{ 130334 }, /* DCache_L2_All\000\000DCache_L2_All_Hits + DCache_L2_All_Miss\000\000\000\000\000\000\000\000000 */
+{ 130104 }, /* DCache_L2_All_Hits\000\000l2_rqsts.demand_data_rd_hit + l2_rqsts.pf_hit + l2_rqsts.rfo_hit\000\000\000\000\000\000\000\000000 */
+{ 130199 }, /* DCache_L2_All_Miss\000\000max(l2_rqsts.all_demand_data_rd - l2_rqsts.demand_data_rd_hit, 0) + l2_rqsts.pf_miss + l2_rqsts.rfo_miss\000\000\000\000\000\000\000\000000 */
+{ 130399 }, /* DCache_L2_Hits\000\000d_ratio(DCache_L2_All_Hits, DCache_L2_All)\000\000\000\000\000\000\000\000000 */
+{ 130468 }, /* DCache_L2_Misses\000\000d_ratio(DCache_L2_All_Miss, DCache_L2_All)\000\000\000\000\000\000\000\000000 */
+{ 129732 }, /* Frontend_Bound_SMT\000\000idq_uops_not_delivered.core / (4 * (cpu_clk_unhalted.thread / 2 * (1 + cpu_clk_unhalted.one_thread_active / cpu_clk_unhalted.ref_xclk)))\000\000\000\000\000\000\000\000000 */
+{ 129668 }, /* IPC\000group1\000inst_retired.any / cpu_clk_unhalted.thread\000\000\000\000\000\000\000\000000 */
+{ 130606 }, /* L1D_Cache_Fill_BW\000\00064 * l1d.replacement / 1e9 / duration_time\000\000\000\000\000\000\000\000000 */
+{ 130539 }, /* M1\000\000ipc + M2\000\000\000\000\000\000\000\000000 */
+{ 130562 }, /* M2\000\000ipc + M1\000\000\000\000\000\000\000\000000 */
+{ 130585 }, /* M3\000\0001 / M3\000\000\000\000\000\000\000\000000 */
+{ 130032 }, /* cache_miss_cycles\000group1\000dcache_miss_cpi + icache_miss_cycles\000\000\000\000\000\000\000\000000 */
+{ 129899 }, /* dcache_miss_cpi\000\000l1d\\-loads\\-misses / inst_retired.any\000\000\000\000\000\000\000\000000 */
+{ 129964 }, /* icache_miss_cycles\000\000l1i\\-loads\\-misses / inst_retired.any\000\000\000\000\000\000\000\000000 */
 
 };
 
@@ -2894,6 +2894,8 @@ static void decompress_metric(int offset, struct pmu_metric *pm)
 	pm->aggr_mode = *p - '0';
 	p++;
 	pm->event_grouping = *p - '0';
+	p++;
+	pm->default_show_events = *p - '0';
 }
 
 static int pmu_events_table__for_each_event_pmu(const struct pmu_events_table *table,
