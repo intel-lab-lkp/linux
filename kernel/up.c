@@ -64,7 +64,14 @@ int smp_call_on_cpu(unsigned int cpu, int (*func)(void *), void *par, bool phys)
 
 	if (phys)
 		hypervisor_pin_vcpu(0);
+
+	/* suppress warnings from debug_smp_processor_id() */
+	migrate_disable();
+
 	ret = func(par);
+
+	migrate_enable();
+
 	if (phys)
 		hypervisor_pin_vcpu(-1);
 
