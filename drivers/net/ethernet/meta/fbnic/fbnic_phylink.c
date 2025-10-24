@@ -132,25 +132,9 @@ fbnic_phylink_pcs_get_state(struct phylink_pcs *pcs, unsigned int neg_mode,
 
 	state->duplex = DUPLEX_FULL;
 
-	state->link = fbd->mac->get_link(fbd);
-}
-
-static int
-fbnic_phylink_pcs_enable(struct phylink_pcs *pcs)
-{
-	struct fbnic_net *fbn = fbnic_pcs_to_net(pcs);
-	struct fbnic_dev *fbd = fbn->fbd;
-
-	return fbd->mac->pcs_enable(fbd);
-}
-
-static void
-fbnic_phylink_pcs_disable(struct phylink_pcs *pcs)
-{
-	struct fbnic_net *fbn = fbnic_pcs_to_net(pcs);
-	struct fbnic_dev *fbd = fbn->fbd;
-
-	return fbd->mac->pcs_disable(fbd);
+	state->link = (fbd->pmd_state == FBNIC_PMD_SEND_DATA) &&
+		      (rd32(fbd, FBNIC_PCS(MDIO_STAT1, 0)) &
+		       MDIO_STAT1_LSTATUS);
 }
 
 static int
@@ -164,8 +148,6 @@ fbnic_phylink_pcs_config(struct phylink_pcs *pcs, unsigned int neg_mode,
 
 static const struct phylink_pcs_ops fbnic_phylink_pcs_ops = {
 	.pcs_config = fbnic_phylink_pcs_config,
-	.pcs_enable = fbnic_phylink_pcs_enable,
-	.pcs_disable = fbnic_phylink_pcs_disable,
 	.pcs_get_state = fbnic_phylink_pcs_get_state,
 };
 
@@ -179,10 +161,37 @@ fbnic_phylink_mac_select_pcs(struct phylink_config *config,
 	return &fbn->phylink_pcs;
 }
 
+static int
+fbnic_phylink_mac_prepare(struct phylink_config *config, unsigned int mode,
+			  phy_interface_t iface)
+{
+	struct net_device *netdev = to_net_dev(config->dev);
+	struct fbnic_net *fbn = netdev_priv(netdev);
+	struct fbnic_dev *fbd = fbn->fbd;
+
+	fbd->mac->prepare(fbd);
+
+	return 0;
+}
+
 static void
 fbnic_phylink_mac_config(struct phylink_config *config, unsigned int mode,
 			 const struct phylink_link_state *state)
 {
+}
+
+static int
+fbnic_phylink_mac_finish(struct phylink_config *config, unsigned int mode,
+			 phy_interface_t iface)
+{
+	struct net_device *netdev = to_net_dev(config->dev);
+	struct fbnic_net *fbn = netdev_priv(netdev);
+	struct fbnic_dev *fbd = fbn->fbd;
+
+	/* Retest the link state and restart interrupts */
+	fbd->mac->get_link(fbd, fbn->aui, fbn->fec);
+
+	return 0;
 }
 
 static void
@@ -213,7 +222,9 @@ fbnic_phylink_mac_link_up(struct phylink_config *config,
 
 static const struct phylink_mac_ops fbnic_phylink_mac_ops = {
 	.mac_select_pcs = fbnic_phylink_mac_select_pcs,
+	.mac_prepare = fbnic_phylink_mac_prepare,
 	.mac_config = fbnic_phylink_mac_config,
+	.mac_finish = fbnic_phylink_mac_finish,
 	.mac_link_down = fbnic_phylink_mac_link_down,
 	.mac_link_up = fbnic_phylink_mac_link_up,
 };
@@ -253,4 +264,28 @@ int fbnic_phylink_init(struct net_device *netdev)
 	fbn->phylink = phylink;
 
 	return 0;
+}
+
+/**
+ * fbnic_phylink_pmd_training_complete_notify - PMD training complete notifier
+ * @fbn: FBNIC Netdev private data struct phylink device attached to
+ *
+ * The PMD wil have a period of 2 to 3 seconds where the link will flutter when
+ * the link first comes up due to link training. To avoid spamming the kernel
+ * log with messages about this we add a delay of 4 seconds from the time of
+ * the last PCS report of link so that we can guarantee we are unlikely to see
+ * any further link loss events due to link training.
+ **/
+void fbnic_phylink_pmd_training_complete_notify(struct fbnic_net *fbn)
+{
+	struct fbnic_dev *fbd = fbn->fbd;
+
+	if (fbd->pmd_state != FBNIC_PMD_TRAINING)
+		return;
+
+	if (!time_before(fbd->start_of_pmd_training + 4 * HZ, jiffies))
+		return;
+
+	fbd->pmd_state = FBNIC_PMD_SEND_DATA;
+	phylink_mac_change(fbn->phylink, true);
 }
