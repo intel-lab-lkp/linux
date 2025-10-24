@@ -1440,13 +1440,21 @@ void build_audio_output(
 
 /*for HDMI, audio ACR is with deep color ratio factor*/
 	if (dc_is_hdmi_tmds_signal(pipe_ctx->stream->signal) &&
-		audio_output->crtc_info.requested_pixel_clock_100Hz ==
-				(stream->timing.pix_clk_100hz)) {
-		if (pipe_ctx->stream_res.pix_clk_params.pixel_encoding == PIXEL_ENCODING_YCBCR420) {
+		pipe_ctx->stream_res.pix_clk_params.pixel_encoding == PIXEL_ENCODING_YCBCR420) {
+		struct hw_asic_id asic_id = stream->link->ctx->asic_id;
+
+		if (asic_id.chip_family == FAMILY_VI &&
+		    ASIC_REV_IS_POLARIS12_V(asic_id.hw_internal_rev)) {
 			audio_output->crtc_info.requested_pixel_clock_100Hz =
-					audio_output->crtc_info.requested_pixel_clock_100Hz/2;
+				audio_output->crtc_info.requested_pixel_clock_100Hz*2;
 			audio_output->crtc_info.calculated_pixel_clock_100Hz =
-					pipe_ctx->stream_res.pix_clk_params.requested_pix_clk_100hz/2;
+				pipe_ctx->stream_res.pix_clk_params.requested_pix_clk_100hz*2;
+		} else if (audio_output->crtc_info.requested_pixel_clock_100Hz ==
+			   (stream->timing.pix_clk_100hz)) {
+			audio_output->crtc_info.requested_pixel_clock_100Hz =
+				audio_output->crtc_info.requested_pixel_clock_100Hz/2;
+			audio_output->crtc_info.calculated_pixel_clock_100Hz =
+				pipe_ctx->stream_res.pix_clk_params.requested_pix_clk_100hz/2;
 
 		}
 	}
