@@ -4533,12 +4533,22 @@ static int svm_check_intercept(struct kvm_vcpu *vcpu,
 		if (info->intercept == x86_intercept_cr_write)
 			icpt_info.exit_code += info->modrm_reg;
 
+		/*
+		 * If the write is indeed to CR0, check whether the exit_code
+		 * needs to be converted to SVM_EXIT_CR0_SEL_WRITE. Intercepting
+		 * SVM_EXIT_WRITE_CR0 has higher priority than
+		 * SVM_EXIT_CR0_SEL_WRITE, so this is only relevant if L1 sets
+		 * INTERCEPT_SELECTIVE_CR0 but not INTERCEPT_CR0_WRITE.
+		 */
 		if (icpt_info.exit_code != SVM_EXIT_WRITE_CR0 ||
-		    info->intercept == x86_intercept_clts)
+		    vmcb12_is_intercept(&svm->nested.ctl,
+					INTERCEPT_CR0_WRITE) ||
+		    !(vmcb12_is_intercept(&svm->nested.ctl,
+					  INTERCEPT_SELECTIVE_CR0)))
 			break;
 
-		if (!(vmcb12_is_intercept(&svm->nested.ctl,
-					INTERCEPT_SELECTIVE_CR0)))
+		/* CLTS never triggers INTERCEPT_SELECTIVE_CR0 */
+		if (info->intercept == x86_intercept_clts)
 			break;
 
 		/* LMSW always triggers INTERCEPT_SELECTIVE_CR0 */
