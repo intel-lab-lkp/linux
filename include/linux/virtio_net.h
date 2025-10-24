@@ -207,6 +207,14 @@ static inline int virtio_net_hdr_to_skb(struct sk_buff *skb,
 	return __virtio_net_hdr_to_skb(skb, hdr, little_endian, hdr->gso_type);
 }
 
+static inline int virtio_net_tcp_hdrlen(const struct sk_buff *skb, bool tnl)
+{
+	if (tnl)
+		return inner_tcp_hdrlen(skb);
+
+	return tcp_hdrlen(skb);
+}
+
 static inline int virtio_net_hdr_from_skb(const struct sk_buff *skb,
 					  struct virtio_net_hdr *hdr,
 					  bool little_endian,
@@ -217,24 +225,32 @@ static inline int virtio_net_hdr_from_skb(const struct sk_buff *skb,
 
 	if (skb_is_gso(skb)) {
 		struct skb_shared_info *sinfo = skb_shinfo(skb);
+		bool tnl = false;
 		u16 hdr_len = 0;
 
-		/* In certain code paths (such as the af_packet.c receive path),
-		 * this function may be called without a transport header.
-		 */
-		if (skb_transport_header_was_set(skb))
-			hdr_len = skb_transport_offset(skb);
+		if (sinfo->gso_type & (SKB_GSO_UDP_TUNNEL |
+				       SKB_GSO_UDP_TUNNEL_CSUM)) {
+			tnl = true;
+			hdr_len = skb_inner_transport_offset(skb);
+
+		} else {
+			/* In certain code paths (such as the af_packet.c receive path),
+			 * this function may be called without a transport header.
+			 */
+			if (skb_transport_header_was_set(skb))
+				hdr_len = skb_transport_offset(skb);
+		}
 
 		hdr->gso_size = __cpu_to_virtio16(little_endian,
 						  sinfo->gso_size);
 		if (sinfo->gso_type & SKB_GSO_TCPV4) {
 			hdr->gso_type = VIRTIO_NET_HDR_GSO_TCPV4;
 			if (hdr_len)
-				hdr_len += tcp_hdrlen(skb);
+				hdr_len += virtio_net_tcp_hdrlen(skb, tnl);
 		} else if (sinfo->gso_type & SKB_GSO_TCPV6) {
 			hdr->gso_type = VIRTIO_NET_HDR_GSO_TCPV6;
 			if (hdr_len)
-				hdr_len += tcp_hdrlen(skb);
+				hdr_len += virtio_net_tcp_hdrlen(skb, tnl);
 		} else if (sinfo->gso_type & SKB_GSO_UDP_L4) {
 			hdr->gso_type = VIRTIO_NET_HDR_GSO_UDP_L4;
 			if (hdr_len)
@@ -419,10 +435,7 @@ virtio_net_hdr_tnl_from_skb(const struct sk_buff *skb,
         vhdr->hash_hdr.hash_report = 0;
         vhdr->hash_hdr.padding = 0;
 
-	/* Let the basic parsing deal with plain GSO features. */
-	skb_shinfo(skb)->gso_type &= ~tnl_gso_type;
 	ret = virtio_net_hdr_from_skb(skb, hdr, true, false, vlan_hlen);
-	skb_shinfo(skb)->gso_type |= tnl_gso_type;
 	if (ret)
 		return ret;
 
