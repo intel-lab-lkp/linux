@@ -125,7 +125,7 @@ static ssize_t devcd_data_write(struct file *filp, struct kobject *kobj,
 	mutex_lock(&devcd->mutex);
 	if (!devcd->delete_work) {
 		devcd->delete_work = true;
-		mod_delayed_work(system_wq, &devcd->del_wk, 0);
+		mod_delayed_work(system_percpu_wq, &devcd->del_wk, 0);
 	}
 	mutex_unlock(&devcd->mutex);
 
