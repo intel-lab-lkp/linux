@@ -1159,6 +1159,7 @@ irqreturn_t amd_iommu_int_handler(int irq, void *data)
 
 static int wait_on_sem(struct amd_iommu *iommu, u64 data)
 {
+	struct iommu_cmd *cmd;
 	int i = 0;
 
 	while (*iommu->cmd_sem != data && i < LOOP_TIMEOUT) {
@@ -1167,7 +1168,22 @@ static int wait_on_sem(struct amd_iommu *iommu, u64 data)
 	}
 
 	if (i == LOOP_TIMEOUT) {
-		pr_alert("Completion-Wait loop timed out\n");
+		int head, tail;
+
+		head = readl(iommu->mmio_base + MMIO_CMD_HEAD_OFFSET);
+		tail = readl(iommu->mmio_base + MMIO_CMD_TAIL_OFFSET);
+
+		pr_alert("IOMMU %04x:%02x:%02x.%01x: Completion-Wait loop timed out\n",
+			 iommu->pci_seg->id, PCI_BUS_NUM(iommu->devid),
+			 PCI_SLOT(iommu->devid), PCI_FUNC(iommu->devid));
+		/*
+		 * On command buffer completion timeout, step back by 2 commands
+		 * to locate the actual command that is causing the issue.
+		 */
+		tail = (MMIO_CMD_BUFFER_TAIL(tail) - 2) & (CMD_BUFFER_ENTRIES - 1);
+		cmd = (struct iommu_cmd *)(iommu->cmd_buf + tail * sizeof(*cmd));
+		dump_command(iommu_virt_to_phys(cmd));
+
 		return -EIO;
 	}
 
