@@ -161,6 +161,7 @@ enum model {
 	MXC_ISI_IMX8QXP,
 	MXC_ISI_IMX8ULP,
 	MXC_ISI_IMX93,
+	MXC_ISI_IMX95,
 };
 
 struct mxc_isi_plat_data {
@@ -297,6 +298,7 @@ struct mxc_isi_dev {
 
 extern const struct mxc_gasket_ops mxc_imx8_gasket_ops;
 extern const struct mxc_gasket_ops mxc_imx93_gasket_ops;
+extern const struct mxc_gasket_ops mxc_imx95_gasket_ops;
 
 int mxc_isi_crossbar_init(struct mxc_isi_dev *isi);
 void mxc_isi_crossbar_cleanup(struct mxc_isi_crossbar *xbar);
