@@ -78,6 +78,7 @@ struct pid_namespace init_pid_ns = {
 	.child_reaper = &init_task,
 	.user_ns = &init_user_ns,
 	.ns.inum = ns_init_inum(&init_pid_ns),
+	.ns.ns_list_node = LIST_HEAD_INIT(init_pid_ns.ns.ns_list_node),
 #ifdef CONFIG_PID_NS
 	.ns.ops = &pidns_operations,
 #endif
