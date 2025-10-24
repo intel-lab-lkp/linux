@@ -77,6 +77,7 @@ static int i915_gem_dmabuf_vmap(struct dma_buf *dma_buf,
 		return PTR_ERR(vaddr);
 
 	iosys_map_set_vaddr(map, vaddr);
+	drm_clflush_virt_range(vaddr, dma_buf->size);
 
 	return 0;
 }
