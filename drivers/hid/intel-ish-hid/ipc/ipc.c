@@ -5,10 +5,11 @@
  * Copyright (c) 2014-2016, Intel Corporation.
  */
 
+#include <linux/delay.h>
 #include <linux/devm-helpers.h>
+#include <linux/err.h>
 #include <linux/sched.h>
 #include <linux/spinlock.h>
-#include <linux/delay.h>
 #include <linux/jiffies.h>
 #include "client.h"
 #include "hw-ish.h"
@@ -924,17 +925,23 @@ static const struct ishtp_hw_ops ish_hw_ops = {
 	.dma_no_cache_snooping = _dma_no_cache_snooping
 };
 
+static inline void devm_ishtp_destroy_workqueue(void *wq)
+{
+	destroy_workqueue(wq);
+}
+
 static struct workqueue_struct *devm_ishtp_alloc_workqueue(struct device *dev)
 {
 	struct workqueue_struct *wq;
+	int ret;
 
 	wq = alloc_workqueue("ishtp_unbound_%d", WQ_UNBOUND, 0, dev->id);
 	if (!wq)
-		return NULL;
+		return ERR_PTR(-ENOMEM);
 
-	if (devm_add_action_or_reset(dev, (void (*)(void *))destroy_workqueue,
-				     wq))
-		return NULL;
+	ret = devm_add_action_or_reset(dev, devm_ishtp_destroy_workqueue, wq);
+	if (ret)
+		return ERR_PTR(ret);
 
 	return wq;
 }
@@ -950,6 +957,7 @@ static struct workqueue_struct *devm_ishtp_alloc_workqueue(struct device *dev)
 struct ishtp_device *ish_dev_init(struct pci_dev *pdev)
 {
 	struct ishtp_device *dev;
+	struct workqueue_struct *wq;
 	int	i;
 	int	ret;
 
@@ -959,9 +967,10 @@ struct ishtp_device *ish_dev_init(struct pci_dev *pdev)
 	if (!dev)
 		return NULL;
 
-	dev->unbound_wq = devm_ishtp_alloc_workqueue(&pdev->dev);
-	if (!dev->unbound_wq)
+	wq = devm_ishtp_alloc_workqueue(&pdev->dev);
+	if (IS_ERR(wq))
 		return NULL;
+	dev->unbound_wq = wq;
 
 	dev->devc = &pdev->dev;
 	ishtp_device_init(dev);
