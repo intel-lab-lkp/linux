@@ -879,6 +879,7 @@ int ip6_fragment(struct net *net, struct sock *sk, struct sk_buff *skb,
 	struct ipv6_pinfo *np = skb->sk && !dev_recursion_level() ?
 				inet6_sk(skb->sk) : NULL;
 	u8 tstamp_type = skb->tstamp_type;
+	SKB_DR_INIT(reason, FRAG_FAILED);
 	struct ip6_frag_state state;
 	unsigned int mtu, hlen, nexthdr_offset;
 	ktime_t tstamp = skb->tstamp;
@@ -925,8 +926,10 @@ int ip6_fragment(struct net *net, struct sock *sk, struct sk_buff *skb,
 				    &ipv6_hdr(skb)->saddr);
 
 	if (skb->ip_summed == CHECKSUM_PARTIAL &&
-	    (err = skb_checksum_help(skb)))
+	    (err = skb_checksum_help(skb))) {
+		SKB_DR_SET(reason, IP_CSUM);
 		goto fail;
+	}
 
 	prevhdr = skb_network_header(skb) + nexthdr_offset;
 	hroom = LL_RESERVED_SPACE(rt->dst.dev);
@@ -979,6 +982,8 @@ int ip6_fragment(struct net *net, struct sock *sk, struct sk_buff *skb,
 			if (!err)
 				IP6_INC_STATS(net, ip6_dst_idev(&rt->dst),
 					      IPSTATS_MIB_FRAGCREATES);
+			else
+				SKB_DR_SET(reason, FRAG_OUTPUT_FAILED);
 
 			if (err || !iter.frag)
 				break;
@@ -995,7 +1000,7 @@ int ip6_fragment(struct net *net, struct sock *sk, struct sk_buff *skb,
 			return 0;
 		}
 
-		kfree_skb_list(iter.frag);
+		kfree_skb_list_reason(iter.frag, reason);
 
 		IP6_INC_STATS(net, ip6_dst_idev(&rt->dst),
 			      IPSTATS_MIB_FRAGFAILS);
@@ -1037,8 +1042,10 @@ slow_path:
 		 */
 		skb_set_delivery_time(frag, tstamp, tstamp_type);
 		err = output(net, sk, frag);
-		if (err)
+		if (err) {
+			SKB_DR_SET(reason, FRAG_OUTPUT_FAILED);
 			goto fail;
+		}
 
 		IP6_INC_STATS(net, ip6_dst_idev(skb_dst(skb)),
 			      IPSTATS_MIB_FRAGCREATES);
@@ -1050,12 +1057,13 @@ slow_path:
 
 fail_toobig:
 	icmpv6_send(skb, ICMPV6_PKT_TOOBIG, 0, mtu);
+	SKB_DR_SET(reason, PKT_TOO_BIG);
 	err = -EMSGSIZE;
 
 fail:
 	IP6_INC_STATS(net, ip6_dst_idev(skb_dst(skb)),
 		      IPSTATS_MIB_FRAGFAILS);
-	kfree_skb(skb);
+	kfree_skb_reason(skb, reason);
 	return err;
 }
 
