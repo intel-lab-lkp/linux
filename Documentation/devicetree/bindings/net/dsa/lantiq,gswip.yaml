@@ -4,7 +4,12 @@
 $id: http://devicetree.org/schemas/net/dsa/lantiq,gswip.yaml#
 $schema: http://devicetree.org/meta-schemas/core.yaml#
 
-title: Lantiq GSWIP Ethernet switches
+title: Lantiq GSWIP and MaxLinear GSW1xx Ethernet switches
+
+description:
+  Lantiq GSWIP and MaxLinear GSW1xx switches share the same hardware IP.
+  Lantiq switches are embedded in SoCs and accessed via memory-mapped I/O,
+  while MaxLinear switches are standalone ICs connected via MDIO.
 
 allOf:
   - $ref: dsa.yaml#/$defs/ethernet-ports
@@ -33,6 +38,98 @@ allOf:
                 description:
                   Configure the RMII reference clock to be a clock output
                   rather than an input. Only applicable for RMII mode.
+  - if:
+      properties:
+        compatible:
+          contains:
+            enum:
+              - lantiq,xrx200-gswip
+              - lantiq,xrx300-gswip
+              - lantiq,xrx330-gswip
+    then:
+      properties:
+        reg:
+          minItems: 3
+          maxItems: 3
+          description: Memory-mapped register regions (switch, mdio, mii)
+        reg-names:
+          items:
+            - const: switch
+            - const: mdio
+            - const: mii
+        mdio:
+          $ref: /schemas/net/mdio.yaml#
+          unevaluatedProperties: false
+
+          properties:
+            compatible:
+              const: lantiq,xrx200-mdio
+
+          required:
+            - compatible
+        gphy-fw:
+          type: object
+          properties:
+            '#address-cells':
+              const: 1
+
+            '#size-cells':
+              const: 0
+
+            compatible:
+              items:
+                - enum:
+                    - lantiq,xrx200-gphy-fw
+                    - lantiq,xrx300-gphy-fw
+                    - lantiq,xrx330-gphy-fw
+                - const: lantiq,gphy-fw
+
+            lantiq,rcu:
+              $ref: /schemas/types.yaml#/definitions/phandle
+              description: phandle to the RCU syscon
+
+          patternProperties:
+            "^gphy@[0-9a-f]{1,2}$":
+              type: object
+
+              additionalProperties: false
+
+              properties:
+                reg:
+                  minimum: 0
+                  maximum: 255
+                  description:
+                    Offset of the GPHY firmware register in the RCU register range
+
+                resets:
+                  items:
+                    - description: GPHY reset line
+
+                reset-names:
+                  items:
+                    - const: gphy
+
+              required:
+                - reg
+
+          required:
+            - compatible
+            - lantiq,rcu
+
+          additionalProperties: false
+      required:
+        - reg-names
+    else:
+      properties:
+        reg:
+          maxItems: 1
+          description: MDIO bus address
+        reg-names: false
+        gphy-fw: false
+        mdio:
+          $ref: /schemas/net/mdio.yaml#
+          unevaluatedProperties: false
+>>>>>>> f34c3d144cf3 (dt-bindings: net: dsa: lantiq,gswip: add support for MaxLinear GSW1xx switches)
 
 maintainers:
   - Hauke Mehrtens <hauke@hauke-m.de>
@@ -43,78 +140,11 @@ properties:
       - lantiq,xrx200-gswip
       - lantiq,xrx300-gswip
       - lantiq,xrx330-gswip
-
-  reg:
-    minItems: 3
-    maxItems: 3
-
-  reg-names:
-    items:
-      - const: switch
-      - const: mdio
-      - const: mii
-
-  mdio:
-    $ref: /schemas/net/mdio.yaml#
-    unevaluatedProperties: false
-
-    properties:
-      compatible:
-        const: lantiq,xrx200-mdio
-
-    required:
-      - compatible
-
-  gphy-fw:
-    type: object
-    properties:
-      '#address-cells':
-        const: 1
-
-      '#size-cells':
-        const: 0
-
-      compatible:
-        items:
-          - enum:
-              - lantiq,xrx200-gphy-fw
-              - lantiq,xrx300-gphy-fw
-              - lantiq,xrx330-gphy-fw
-          - const: lantiq,gphy-fw
-
-      lantiq,rcu:
-        $ref: /schemas/types.yaml#/definitions/phandle
-        description: phandle to the RCU syscon
-
-    patternProperties:
-      "^gphy@[0-9a-f]{1,2}$":
-        type: object
-
-        additionalProperties: false
-
-        properties:
-          reg:
-            minimum: 0
-            maximum: 255
-            description:
-              Offset of the GPHY firmware register in the RCU register range
-
-          resets:
-            items:
-              - description: GPHY reset line
-
-          reset-names:
-            items:
-              - const: gphy
-
-        required:
-          - reg
-
-    required:
-      - compatible
-      - lantiq,rcu
-
-    additionalProperties: false
+      - maxlinear,gsw120
+      - maxlinear,gsw125
+      - maxlinear,gsw140
+      - maxlinear,gsw141
+      - maxlinear,gsw145
 
 required:
   - compatible
@@ -129,6 +159,7 @@ examples:
             reg = <0xe108000 0x3100>,  /* switch */
                   <0xe10b100 0xd8>,    /* mdio */
                   <0xe10b1d8 0x130>;   /* mii */
+            reg-names = "switch", "mdio", "mii";
             dsa,member = <0 0>;
 
             ports {
@@ -224,6 +255,92 @@ examples:
 
                             resets = <&reset0 29 28>;
                             reset-names = "gphy";
+                    };
+            };
+    };
+
+  - |
+    #include <dt-bindings/leds/common.h>
+
+    mdio {
+            #address-cells = <1>;
+            #size-cells = <0>;
+
+            switch@1f {
+                    compatible = "maxlinear,gsw125";
+                    reg = <0x1f>;
+
+                    ports {
+                            #address-cells = <1>;
+                            #size-cells = <0>;
+
+                            port@0 {
+                                    reg = <0>;
+                                    label = "lan0";
+                                    phy-handle = <&switchphy0>;
+                                    phy-mode = "internal";
+                            };
+
+                            port@1 {
+                                    reg = <1>;
+                                    label = "lan1";
+                                    phy-handle = <&switchphy1>;
+                                    phy-mode = "internal";
+                            };
+
+                            port@4 {
+                                    reg = <4>;
+                                    label = "wan";
+                                    phy-mode = "sgmii";
+                            };
+
+                            port@5 {
+                                    reg = <5>;
+                                    phy-mode = "rgmii-id";
+                                    tx-internal-delay-ps = <2000>;
+                                    rx-internal-delay-ps = <2000>;
+                                    ethernet = <&eth0>;
+
+                                    fixed-link {
+                                            speed = <1000>;
+                                            full-duplex;
+                                    };
+                            };
+                    };
+
+                    mdio {
+                            #address-cells = <1>;
+                            #size-cells = <0>;
+
+                            switchphy0: switchphy@0 {
+                                    reg = <0>;
+
+                                    leds {
+                                            #address-cells = <1>;
+                                            #size-cells = <0>;
+
+                                            led@0 {
+                                                    reg = <0>;
+                                                    color = <LED_COLOR_ID_GREEN>;
+                                                    function = LED_FUNCTION_LAN;
+                                            };
+                                    };
+                            };
+
+                            switchphy1: switchphy@1 {
+                                    reg = <1>;
+
+                                    leds {
+                                            #address-cells = <1>;
+                                            #size-cells = <0>;
+
+                                            led@0 {
+                                                    reg = <0>;
+                                                    color = <LED_COLOR_ID_GREEN>;
+                                                    function = LED_FUNCTION_LAN;
+                                            };
+                                    };
+                            };
                     };
             };
     };
