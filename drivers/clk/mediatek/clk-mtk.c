@@ -552,8 +552,12 @@ int mtk_clk_simple_probe_internal(struct platform_device *pdev,
 	}
 
 	if (mcd->clks) {
-		r = mtk_clk_register_gates(&pdev->dev, node, mcd->clks,
-					   mcd->num_clks, clk_data);
+		if (regmap)
+			r = mtk_spmi_clk_register_gates(&pdev->dev, node, mcd->clks,
+							mcd->num_clks, clk_data, regmap);
+		else
+			r = mtk_clk_register_gates(&pdev->dev, node, mcd->clks,
+						   mcd->num_clks, clk_data);
 		if (r)
 			goto unregister_dividers;
 	}

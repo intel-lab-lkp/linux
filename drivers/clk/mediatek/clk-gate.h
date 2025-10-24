@@ -14,6 +14,7 @@ struct clk_hw_onecell_data;
 struct clk_ops;
 struct device;
 struct device_node;
+struct regmap;
 
 extern const struct clk_ops mtk_clk_gate_ops_setclr;
 extern const struct clk_ops mtk_clk_gate_ops_setclr_inv;
@@ -56,6 +57,11 @@ struct mtk_gate {
 int mtk_clk_register_gates(struct device *dev, struct device_node *node,
 			   const struct mtk_gate *clks, int num,
 			   struct clk_hw_onecell_data *clk_data);
+
+int mtk_spmi_clk_register_gates(struct device *dev, struct device_node *node,
+				const struct mtk_gate *clks, int num,
+				struct clk_hw_onecell_data *clk_data,
+				struct regmap *regmap);
 
 void mtk_clk_unregister_gates(const struct mtk_gate *clks, int num,
 			      struct clk_hw_onecell_data *clk_data);
