@@ -207,6 +207,7 @@ EXPORT_SYMBOL_GPL(serial8250_rx_dma_flush);
 int serial8250_request_dma(struct uart_8250_port *p)
 {
 	struct uart_8250_dma	*dma = p->dma;
+	struct tty_port		*tport = &p->port.state->port;
 	phys_addr_t rx_dma_addr = dma->rx_dma_addr ?
 				  dma->rx_dma_addr : p->port.mapbase;
 	phys_addr_t tx_dma_addr = dma->tx_dma_addr ?
@@ -244,6 +245,11 @@ int serial8250_request_dma(struct uart_8250_port *p)
 		goto release_rx;
 	}
 
+	/* Use the default workqueue then if alloc_workqueue failed */
+	tport->wq_tty_flip = alloc_workqueue("ttyS%d-flip-wq",
+					     WQ_UNBOUND | WQ_SYSFS,
+					     0, p->port.line);
+
 	dmaengine_slave_config(dma->rxchan, &dma->rxconf);
 
 	/* Get a channel for TX */
@@ -252,7 +258,7 @@ int serial8250_request_dma(struct uart_8250_port *p)
 						       p->port.dev, "tx");
 	if (!dma->txchan) {
 		ret = -ENODEV;
-		goto release_rx;
+		goto release_rx_wq;
 	}
 
 	/* 8250 tx dma requires dmaengine driver to support terminate */
@@ -294,6 +300,11 @@ int serial8250_request_dma(struct uart_8250_port *p)
 	return 0;
 err:
 	dma_release_channel(dma->txchan);
+release_rx_wq:
+	if (tport->wq_tty_flip) {
+		destroy_workqueue(tport->wq_tty_flip);
+		tport->wq_tty_flip = NULL;
+	}
 release_rx:
 	dma_release_channel(dma->rxchan);
 	return ret;
@@ -303,6 +314,7 @@ EXPORT_SYMBOL_GPL(serial8250_request_dma);
 void serial8250_release_dma(struct uart_8250_port *p)
 {
 	struct uart_8250_dma *dma = p->dma;
+	struct tty_port *tport = &p->port.state->port;
 
 	if (!dma)
 		return;
@@ -321,6 +333,11 @@ void serial8250_release_dma(struct uart_8250_port *p)
 	dma_release_channel(dma->txchan);
 	dma->txchan = NULL;
 	dma->tx_running = 0;
+
+	if (tport->wq_tty_flip) {
+		destroy_workqueue(tport->wq_tty_flip);
+		tport->wq_tty_flip = NULL;
+	}
 
 	dev_dbg_ratelimited(p->port.dev, "dma channels released\n");
 }

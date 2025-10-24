@@ -121,6 +121,7 @@ struct tty_port {
 	int			drain_delay;
 	struct kref		kref;
 	void			*client_data;
+	struct workqueue_struct *wq_tty_flip;
 };
 
 /* tty_port::iflags bits -- use atomic bit ops */
