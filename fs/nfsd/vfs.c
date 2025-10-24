@@ -1311,12 +1311,6 @@ nfsd_issue_write_dio(struct svc_rqst *rqstp, struct svc_fh *fhp,
 
 	trace_nfsd_write_direct(rqstp, fhp, in_offset, in_count);
 
-	/*
-	 * Any buffered IO issued here will be misaligned, use
-	 * sync IO to ensure it has completed before returning.
-	 */
-	kiocb->ki_flags |= IOCB_DSYNC;
-
 	*cnt = 0;
 	for (int i = 0; i < n_iters; i++) {
 		if (iter_is_dio_aligned[i])
@@ -1367,6 +1361,17 @@ nfsd_direct_write(struct svc_rqst *rqstp, struct svc_fh *fhp,
 	 */
 	if (nf->nf_file->f_op->fop_flags & FOP_DONTCACHE)
 		kiocb->ki_flags |= IOCB_DONTCACHE;
+
+	/*
+	 * IOCB_SYNC + IOCB_DIRECT requests that iter_write should persist
+	 * both written data and dirty time stamps.
+	 *
+	 * When falling back to buffered I/O or handling the unaligned
+	 * first and last segments, the data and time stamps must be
+	 * durable before nfsd_vfs_write() returns to its caller, matching
+	 * the behavior of direct I/O.
+	 */
+	kiocb->ki_flags |= IOCB_SYNC | IOCB_DSYNC;
 
 	if (nfsd_is_write_dio_possible(kiocb->ki_pos, *cnt, nf, &write_dio))
 		return nfsd_issue_write_dio(rqstp, fhp, nf, nvecs, cnt, kiocb,
