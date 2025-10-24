@@ -19,7 +19,7 @@
 	pr_debug("%.*s %12.12s:%-4d : " fmt,				\
 		 8 - (int)sizeof(KBUILD_MODNAME), "    ",		\
 		 kbasename(__FILE__), __LINE__, ##__VA_ARGS__)
-#  define doutc(client, fmt, ...)					\
+#  define boutc(client, fmt, ...)					\
 	pr_debug("%.*s %12.12s:%-4d : [%pU %llu] " fmt,			\
 		 8 - (int)sizeof(KBUILD_MODNAME), "    ",		\
 		 kbasename(__FILE__), __LINE__,				\
@@ -29,7 +29,7 @@
 /* faux printk call just to see any compiler warnings. */
 #  define dout(fmt, ...)					\
 		no_printk(KERN_DEBUG fmt, ##__VA_ARGS__)
-#  define doutc(client, fmt, ...)				\
+#  define boutc(client, fmt, ...)				\
 		no_printk(KERN_DEBUG "[%pU %llu] " fmt,		\
 			  &client->fsid,			\
 			  client->monc.auth->global_id,		\
@@ -42,7 +42,7 @@
  * or, just wrap pr_debug
  */
 # define dout(fmt, ...)	pr_debug(" " fmt, ##__VA_ARGS__)
-# define doutc(client, fmt, ...)					\
+# define boutc(client, fmt, ...)					\
 	pr_debug(" [%pU %llu] %s: " fmt, &client->fsid,			\
 		 client->monc.auth->global_id, __func__, ##__VA_ARGS__)
 
