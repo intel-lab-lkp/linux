@@ -1927,6 +1927,18 @@ config RTC_DRV_MT6397
 
 	  If you want to use MediaTek(R) RTC interface, select Y or M here.
 
+config RTC_DRV_MT6685
+	tristate "MediaTek MT6685 Clock IC based RTC"
+	depends on ARCH_MEDIATEK || COMPILE_TEST
+	depends on SPMI
+	select IRQ_DOMAIN
+	help
+	  Say yes here to enable support for the Real Time Clock found
+	  in the MediaTek MT6685 Clock IC communicating over SPMI.
+
+	  This driver can also be built as a module. If so, the module
+	  will be called rtc-mt6685.
+
 config RTC_DRV_MT7622
 	tristate "MediaTek SoC based RTC"
 	depends on ARCH_MEDIATEK || COMPILE_TEST
