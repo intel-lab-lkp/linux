@@ -462,13 +462,14 @@ static inline bool pte_marker_uffd_wp(pte_t pte)
 static inline bool pte_swp_uffd_wp_any(pte_t pte)
 {
 #ifdef CONFIG_PTE_MARKER_UFFD_WP
-	if (!is_swap_pte(pte))
-		return false;
+	swp_entry_t entry;
 
+	if (pte_present(pte))
+		return false;
 	if (pte_swp_uffd_wp(pte))
 		return true;
-
-	if (pte_marker_uffd_wp(pte))
+	entry = pte_to_swp_entry(pte);
+	if (pte_marker_entry_uffd_wp(entry))
 		return true;
 #endif
 	return false;
