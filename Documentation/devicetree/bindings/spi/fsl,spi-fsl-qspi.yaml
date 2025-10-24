@@ -11,6 +11,15 @@ maintainers:
 
 allOf:
   - $ref: spi-controller.yaml#
+  - if:
+      properties:
+        compatible:
+          not:
+            contains:
+              const: spacemit,k1-qspi
+    then:
+      properties:
+        resets: false
 
 properties:
   compatible:
@@ -54,6 +63,11 @@ properties:
     items:
       - const: qspi_en
       - const: qspi
+
+  resets:
+    items:
+      - description: SoC QSPI reset
+      - description: SoC QSPI bus reset
 
 required:
   - compatible
