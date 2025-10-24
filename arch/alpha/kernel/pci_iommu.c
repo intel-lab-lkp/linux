@@ -859,6 +859,11 @@ iommu_release(struct pci_iommu_arena *arena, long pg_start, long pg_count)
 
 	if (!arena) return -EINVAL;
 
+	if (pg_start < 0 || pg_start + pg_count > (arena->size >> PAGE_SHIFT))
+		return -EINVAL;
+	if (pg_start + pg_count < pg_start)
+		return -EINVAL;
+
 	ptes = arena->ptes;
 
 	/* Make sure they're all reserved first... */
@@ -879,7 +884,12 @@ iommu_bind(struct pci_iommu_arena *arena, long pg_start, long pg_count,
 	long i, j;
 
 	if (!arena) return -EINVAL;
-	
+
+	if (pg_start < 0 || pg_start + pg_count > (arena->size >> PAGE_SHIFT))
+		return -EINVAL;
+	if (pg_start + pg_count < pg_start)
+		return -EINVAL;
+
 	spin_lock_irqsave(&arena->lock, flags);
 
 	ptes = arena->ptes;
@@ -906,6 +916,11 @@ iommu_unbind(struct pci_iommu_arena *arena, long pg_start, long pg_count)
 	long i;
 
 	if (!arena) return -EINVAL;
+
+	if (pg_start < 0 || pg_start + pg_count > (arena->size >> PAGE_SHIFT))
+		return -EINVAL;
+	if (pg_start + pg_count < pg_start)
+		return -EINVAL;
 
 	p = arena->ptes + pg_start;
 	for(i = 0; i < pg_count; i++)

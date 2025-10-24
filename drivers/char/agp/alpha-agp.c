@@ -93,7 +93,9 @@ static int alpha_core_agp_insert_memory(struct agp_memory *mem, off_t pg_start,
 
 	temp = agp_bridge->current_size;
 	num_entries = A_SIZE_FIX(temp)->num_entries;
-	if ((pg_start + mem->page_count) > num_entries)
+	if (pg_start < 0 || (pg_start + mem->page_count) > num_entries)
+		return -EINVAL;
+	if ((pg_start + mem->page_count) < pg_start)
 		return -EINVAL;
 
 	status = agp->ops->bind(agp, pg_start, mem);
@@ -107,7 +109,16 @@ static int alpha_core_agp_remove_memory(struct agp_memory *mem, off_t pg_start,
 					int type)
 {
 	alpha_agp_info *agp = agp_bridge->dev_private_data;
+	int num_entries;
+	void *temp;
 	int status;
+
+	temp = agp_bridge->current_size;
+	num_entries = A_SIZE_FIX(temp)->num_entries;
+	if (pg_start < 0 || (pg_start + mem->page_count) > num_entries)
+		return -EINVAL;
+	if ((pg_start + mem->page_count) < pg_start)
+		return -EINVAL;
 
 	status = agp->ops->unbind(agp, pg_start, mem);
 	alpha_core_agp_tlbflush(mem);
