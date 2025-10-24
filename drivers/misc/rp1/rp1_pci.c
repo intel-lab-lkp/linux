@@ -5,6 +5,7 @@
  * All rights reserved.
  */
 
+#include <linux/cleanup.h>
 #include <linux/err.h>
 #include <linux/interrupt.h>
 #include <linux/irq.h>
@@ -185,9 +186,9 @@ static void rp1_unregister_interrupts(struct pci_dev *pdev)
 static int rp1_probe(struct pci_dev *pdev, const struct pci_device_id *id)
 {
 	u32 dtbo_size = __dtbo_rp1_pci_end - __dtbo_rp1_pci_begin;
+	struct device_node *rp1_node __free(device_node) = NULL;
 	void *dtbo_start = __dtbo_rp1_pci_begin;
 	struct device *dev = &pdev->dev;
-	struct device_node *rp1_node;
 	bool skip_ovl = true;
 	struct rp1_dev *rp1;
 	int err = 0;
@@ -200,42 +201,40 @@ static int rp1_probe(struct pci_dev *pdev, const struct pci_device_id *id)
 	rp1_node = of_find_node_by_name(NULL, "rp1_nexus");
 	if (!rp1_node) {
 		rp1_node = dev_of_node(dev);
+		/*
+		 * Take a reference to match of_find_node_by_name()
+		 * behavior. This makes cleanup.h usable in both cases.
+		 */
+		of_node_get(rp1_node);
 		skip_ovl = false;
 	}
 
 	if (!rp1_node) {
 		dev_err(dev, "Missing of_node for device\n");
-		err = -EINVAL;
-		goto err_put_node;
+		return -EINVAL;
 	}
 
 	rp1 = devm_kzalloc(&pdev->dev, sizeof(*rp1), GFP_KERNEL);
-	if (!rp1) {
-		err = -ENOMEM;
-		goto err_put_node;
-	}
+	if (!rp1)
+		return -ENOMEM;
 
 	rp1->pdev = pdev;
 
 	if (pci_resource_len(pdev, 1) <= 0x10000) {
 		dev_err(&pdev->dev,
 			"Not initialized - is the firmware running?\n");
-		err = -EINVAL;
-		goto err_put_node;
+		return -EINVAL;
 	}
 
 	err = pcim_enable_device(pdev);
-	if (err < 0) {
-		err = dev_err_probe(&pdev->dev, err,
-				    "Enabling PCI device has failed");
-		goto err_put_node;
-	}
+	if (err < 0)
+		return dev_err_probe(&pdev->dev, err,
+				     "Enabling PCI device has failed\n");
 
 	rp1->bar1 = pcim_iomap(pdev, 1, 0);
 	if (!rp1->bar1) {
 		dev_err(&pdev->dev, "Cannot map PCI BAR\n");
-		err = -EIO;
-		goto err_put_node;
+		return -EIO;
 	}
 
 	pci_set_master(pdev);
@@ -243,13 +242,11 @@ static int rp1_probe(struct pci_dev *pdev, const struct pci_device_id *id)
 	err = pci_alloc_irq_vectors(pdev, RP1_INT_END, RP1_INT_END,
 				    PCI_IRQ_MSIX);
 	if (err < 0) {
-		err = dev_err_probe(&pdev->dev, err,
-				    "Failed to allocate MSI-X vectors\n");
-		goto err_put_node;
+		return dev_err_probe(&pdev->dev, err,
+				     "Failed to allocate MSI-X vectors\n");
 	} else if (err != RP1_INT_END) {
 		dev_err(&pdev->dev, "Cannot allocate enough interrupts\n");
-		err = -EINVAL;
-		goto err_put_node;
+		return -EINVAL;
 	}
 
 	pci_set_drvdata(pdev, rp1);
@@ -295,9 +292,6 @@ err_unload_overlay:
 	of_overlay_remove(&rp1->ovcs_id);
 err_unregister_interrupts:
 	rp1_unregister_interrupts(pdev);
-err_put_node:
-	if (skip_ovl)
-		of_node_put(rp1_node);
 
 	return err;
 }
