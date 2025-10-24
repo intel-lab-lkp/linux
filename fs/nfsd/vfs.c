@@ -1199,15 +1199,12 @@ nfsd_is_write_dio_possible(loff_t offset, unsigned long len,
 }
 
 static bool
-nfsd_iov_iter_aligned_bvec(const struct iov_iter *i, unsigned int addr_mask,
-			   unsigned int len_mask)
+nfsd_iov_iter_aligned_bvec(const struct iov_iter *i, unsigned int addr_mask)
 {
 	const struct bio_vec *bvec = i->bvec;
 	size_t skip = i->iov_offset;
 	size_t size = i->count;
 
-	if (size & len_mask)
-		return false;
 	do {
 		size_t len = bvec->bv_len;
 
