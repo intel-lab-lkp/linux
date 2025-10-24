@@ -2860,6 +2860,12 @@ int btrfs_handle_fully_remapped_bgs(struct btrfs_trans_handle *trans)
 	list_for_each_entry_safe(block_group, tmp, fully_remapped_bgs, bg_list) {
 		struct btrfs_chunk_map *map;
 
+		btrfs_discard_queue_work(&fs_info->discard_ctl, block_group);
+
+		/* for async discard the below gets done in discard job */
+		if (btrfs_test_opt(fs_info, DISCARD_ASYNC))
+			continue;
+
 		map = btrfs_get_chunk_map(fs_info, block_group->start, 1);
 		if (IS_ERR(map))
 			return PTR_ERR(map);
@@ -2869,6 +2875,10 @@ int btrfs_handle_fully_remapped_bgs(struct btrfs_trans_handle *trans)
 			btrfs_free_chunk_map(map);
 			return ret;
 		}
+
+		if (!TRANS_ABORTED(trans))
+			btrfs_discard_extent(fs_info, block_group->start,
+					     block_group->length, NULL, false);
 
 		/*
 		 * Set num_stripes to 0, so that btrfs_remove_dev_extents()
