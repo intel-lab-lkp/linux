@@ -754,10 +754,7 @@ static struct folio *swap_vma_readahead(swp_entry_t targ_entry, gfp_t gfp_mask,
 				break;
 		}
 		pentry = ptep_get_lockless(pte);
-		if (!is_swap_pte(pentry))
-			continue;
-		entry = pte_to_swp_entry(pentry);
-		if (unlikely(non_swap_entry(entry)))
+		if (!get_pte_swap_entry(pentry, &entry))
 			continue;
 		pte_unmap(pte);
 		pte = NULL;

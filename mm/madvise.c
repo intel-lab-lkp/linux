@@ -205,10 +205,7 @@ static int swapin_walk_pmd_entry(pmd_t *pmd, unsigned long start,
 		}
 
 		pte = ptep_get(ptep);
-		if (!is_swap_pte(pte))
-			continue;
-		entry = pte_to_swp_entry(pte);
-		if (unlikely(non_swap_entry(entry)))
+		if (!get_pte_swap_entry(pte, &entry))
 			continue;
 
 		pte_unmap_unlock(ptep, ptl);

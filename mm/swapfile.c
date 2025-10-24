@@ -2253,10 +2253,9 @@ static int unuse_pte_range(struct vm_area_struct *vma, pmd_t *pmd,
 
 		ptent = ptep_get_lockless(pte);
 
-		if (!is_swap_pte(ptent))
+		if (!get_pte_swap_entry(ptent, &entry))
 			continue;
 
-		entry = pte_to_swp_entry(ptent);
 		if (swp_type(entry) != type)
 			continue;
 

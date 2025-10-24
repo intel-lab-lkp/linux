@@ -649,5 +649,34 @@ static inline int is_pmd_non_present_folio_entry(pmd_t pmd)
 	return is_pmd_migration_entry(pmd) || is_pmd_device_private_entry(pmd);
 }
 
+/**
+ * get_pte_swap_entry() - Gets PTE swap entry if one is present.
+ * @pte: The PTE we are checking.
+ * @entryp: Output pointer to a swap entry that will be populated upon
+ * success.
+ *
+ * Determines if the PTE describes an entry in swap or swap cache (i.e. is a
+ * swap entry and not a non-swap entry), if so it sets @entryp to the swap
+ * entry.
+ *
+ * This should only be used if we do not have any prior knowledge of this
+ * PTE's state.
+ *
+ * Return: true if swappable, false otherwise.
+ */
+static inline bool get_pte_swap_entry(pte_t pte, swp_entry_t *entryp)
+{
+	if (pte_present(pte))
+		return false;
+	if (pte_none(pte))
+		return false;
+
+	*entryp = pte_to_swp_entry(pte);
+	if (non_swap_entry(*entryp))
+		return false;
+
+	return true;
+}
+
 #endif /* CONFIG_MMU */
 #endif /* _LINUX_SWAPOPS_H */
