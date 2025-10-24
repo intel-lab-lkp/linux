@@ -1168,21 +1168,22 @@ static int wait_for_concurrent_writes(struct file *file)
 	return err;
 }
 
-struct nfsd_write_dio {
+struct nfsd_write_dio_args {
+	struct nfsd_file		*nf;
+
 	ssize_t	start_len;	/* Length for misaligned first extent */
 	ssize_t	middle_len;	/* Length for DIO-aligned middle extent */
 	ssize_t	end_len;	/* Length for misaligned last extent */
 };
 
 static bool
-nfsd_is_write_dio_possible(loff_t offset, unsigned long len,
-			   struct nfsd_file *nf,
-			   struct nfsd_write_dio *write_dio)
+nfsd_is_write_dio_possible(struct nfsd_write_dio_args *args, loff_t offset,
+			   unsigned long len)
 {
-	const u32 dio_blocksize = nf->nf_dio_offset_align;
+	const u32 dio_blocksize = args->nf->nf_dio_offset_align;
 	loff_t start_end, orig_end, middle_end;
 
-	if (unlikely(!nf->nf_dio_mem_align || !dio_blocksize))
+	if (unlikely(!args->nf->nf_dio_mem_align || !dio_blocksize))
 		return false;
 	if (unlikely(len < dio_blocksize))
 		return false;
@@ -1191,9 +1192,9 @@ nfsd_is_write_dio_possible(loff_t offset, unsigned long len,
 	orig_end = offset + len;
 	middle_end = round_down(orig_end, dio_blocksize);
 
-	write_dio->start_len = start_end - offset;
-	write_dio->middle_len = middle_end - start_end;
-	write_dio->end_len = orig_end - middle_end;
+	args->start_len = start_end - offset;
+	args->middle_len = middle_end - start_end;
+	args->end_len = orig_end - middle_end;
 
 	return true;
 }
@@ -1228,36 +1229,35 @@ nfsd_iov_iter_aligned_bvec(const struct nfsd_file *nf, const struct iov_iter *i)
 static int
 nfsd_setup_write_dio_iters(struct iov_iter **iterp, bool *iter_is_dio_aligned,
 			   struct bio_vec *rq_bvec, unsigned int nvecs,
-			   unsigned long cnt, struct nfsd_write_dio *write_dio,
-			   struct nfsd_file *nf)
+			   unsigned long cnt, struct nfsd_write_dio_args *args)
 {
 	int n_iters = 0;
 	struct iov_iter *iters = *iterp;
 
 	/* Setup misaligned start? */
-	if (write_dio->start_len) {
+	if (args->start_len) {
 		iov_iter_bvec(&iters[n_iters], ITER_SOURCE, rq_bvec, nvecs, cnt);
-		iters[n_iters].count = write_dio->start_len;
+		iters[n_iters].count = args->start_len;
 		iter_is_dio_aligned[n_iters] = false;
 		++n_iters;
 	}
 
 	/* Setup DIO-aligned middle */
 	iov_iter_bvec(&iters[n_iters], ITER_SOURCE, rq_bvec, nvecs, cnt);
-	if (write_dio->start_len)
-		iov_iter_advance(&iters[n_iters], write_dio->start_len);
-	iters[n_iters].count -= write_dio->end_len;
+	if (args->start_len)
+		iov_iter_advance(&iters[n_iters], args->start_len);
+	iters[n_iters].count -= args->end_len;
 	iter_is_dio_aligned[n_iters] =
-		nfsd_iov_iter_aligned_bvec(nf, &iters[n_iters]);
+		nfsd_iov_iter_aligned_bvec(args->nf, &iters[n_iters]);
 	if (unlikely(!iter_is_dio_aligned[n_iters]))
 		return 0; /* no DIO-aligned IO possible */
 	++n_iters;
 
 	/* Setup misaligned end? */
-	if (write_dio->end_len) {
+	if (args->end_len) {
 		iov_iter_bvec(&iters[n_iters], ITER_SOURCE, rq_bvec, nvecs, cnt);
 		iov_iter_advance(&iters[n_iters],
-				 write_dio->start_len + write_dio->middle_len);
+				 args->start_len + args->middle_len);
 		iter_is_dio_aligned[n_iters] = false;
 		++n_iters;
 	}
@@ -1283,11 +1283,10 @@ nfsd_iocb_write(struct file *file, struct bio_vec *bvec, unsigned int nvecs,
 
 static int
 nfsd_issue_write_dio(struct svc_rqst *rqstp, struct svc_fh *fhp,
-		     struct nfsd_file *nf, unsigned int nvecs,
-		     unsigned long *cnt, struct kiocb *kiocb,
-		     struct nfsd_write_dio *write_dio)
+		     struct nfsd_write_dio_args *args, struct kiocb *kiocb,
+		     unsigned int nvecs, unsigned long *cnt)
 {
-	struct file *file = nf->nf_file;
+	struct file *file = args->nf->nf_file;
 	bool iter_is_dio_aligned[3];
 	struct iov_iter iter_stack[3];
 	struct iov_iter *iter = iter_stack;
@@ -1298,7 +1297,7 @@ nfsd_issue_write_dio(struct svc_rqst *rqstp, struct svc_fh *fhp,
 
 	n_iters = nfsd_setup_write_dio_iters(&iter, iter_is_dio_aligned,
 					     rqstp->rq_bvec, nvecs, *cnt,
-					     write_dio, nf);
+					     args);
 	if (unlikely(!n_iters))
 		return nfsd_iocb_write(file, rqstp->rq_bvec, nvecs,
 				       cnt, kiocb);
@@ -1328,14 +1327,15 @@ nfsd_direct_write(struct svc_rqst *rqstp, struct svc_fh *fhp,
 		  struct nfsd_file *nf, unsigned int nvecs,
 		  unsigned long *cnt, struct kiocb *kiocb)
 {
-	struct nfsd_write_dio write_dio;
+	struct file *file = nf->nf_file;
+	struct nfsd_write_dio_args args;
 
 	/*
 	 * Check if IOCB_DONTCACHE can be used when issuing buffered IO;
 	 * if so, set it to preserve intent of NFSD_IO_DIRECT (it will
 	 * be ignored for any DIO issued here).
 	 */
-	if (nf->nf_file->f_op->fop_flags & FOP_DONTCACHE)
+	if (file->f_op->fop_flags & FOP_DONTCACHE)
 		kiocb->ki_flags |= IOCB_DONTCACHE;
 
 	/*
@@ -1349,11 +1349,12 @@ nfsd_direct_write(struct svc_rqst *rqstp, struct svc_fh *fhp,
 	 */
 	kiocb->ki_flags |= IOCB_SYNC | IOCB_DSYNC;
 
-	if (nfsd_is_write_dio_possible(kiocb->ki_pos, *cnt, nf, &write_dio))
-		return nfsd_issue_write_dio(rqstp, fhp, nf, nvecs, cnt, kiocb,
-					    &write_dio);
+	args.nf = nf;
+	if (nfsd_is_write_dio_possible(&args, kiocb->ki_pos, *cnt))
+		return nfsd_issue_write_dio(rqstp, fhp, &args, kiocb,
+					    nvecs, cnt);
 
-	return nfsd_iocb_write(nf->nf_file, rqstp->rq_bvec, nvecs, cnt, kiocb);
+	return nfsd_iocb_write(file, rqstp->rq_bvec, nvecs, cnt, kiocb);
 }
 
 /**
