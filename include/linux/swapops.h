@@ -661,6 +661,21 @@ static inline bool is_non_present_entry(swp_entry_t entry)
 	return swp_type(entry) >= MAX_SWAPFILES;
 }
 
+/**
+ * is_swap_entry() - Determines if this is a swap entry.
+ * @entry: The entry to examine.
+ *
+ * Determines whether data encoded in non-present leaf page tables is a
+ * swap entry and NOT a migration entry, device private entry, market
+ * entry, etc.
+ *
+ * Returns true if it is a swap entry, otherwise false.
+ */
+static inline bool is_swap_entry(swp_entry_t entry)
+{
+	return !is_non_present_entry(entry);
+}
+
 static inline int is_pmd_non_present_folio_entry(pmd_t pmd)
 {
 	return is_pmd_migration_entry(pmd) || is_pmd_device_private_entry(pmd);

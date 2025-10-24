@@ -28,7 +28,7 @@
  */
 static void ptep_zap_swap_entry(struct mm_struct *mm, swp_entry_t entry)
 {
-	if (!is_non_present_entry(entry))
+	if (is_swap_entry(entry))
 		dec_mm_counter(mm, MM_SWAPENTS);
 	else if (is_migration_entry(entry))
 		dec_mm_counter(mm, mm_counter(pfn_swap_entry_folio(entry)));

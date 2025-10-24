@@ -1022,7 +1022,7 @@ static void smaps_pte_entry(pte_t *pte, unsigned long addr,
 	} else {
 		swp_entry_t swpent = pte_to_swp_entry(ptent);
 
-		if (!is_non_present_entry(swpent)) {
+		if (is_swap_entry(swpent)) {
 			int mapcount;
 
 			mss->swap += PAGE_SIZE;
