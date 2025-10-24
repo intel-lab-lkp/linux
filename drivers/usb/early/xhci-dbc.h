@@ -146,6 +146,7 @@ struct xdbc_state {
 	void __iomem		*xhci_base;
 	u64			xhci_start;
 	size_t			xhci_length;
+	size_t			xhci_orig_length;
 	int			port_number;
 
 	/* DbC register base */

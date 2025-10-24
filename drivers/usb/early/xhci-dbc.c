@@ -85,7 +85,17 @@ static void __iomem * __init xdbc_map_pci_mmio(u32 bus, u32 dev, u32 func)
 
 	xdbc.xhci_start = val64;
 	xdbc.xhci_length = sz64;
+	xdbc.xhci_orig_length = sz64;
+retry:
 	base = early_ioremap(val64, sz64);
+
+	if (!base && sz64 > 0x1000) {
+		pr_warn("Failed to ioremap xhci-dbc with size 0x%llx\n", sz64);
+		sz64 = sz64 >> 1;
+		pr_warn("Retry xhci-dbc ioremap with reduced size 0x%llx\n", sz64);
+		xdbc.xhci_length = sz64;
+		goto retry;
+	}
 
 	return base;
 }
@@ -601,7 +611,8 @@ static int __init xdbc_early_setup(void)
 int __init early_xdbc_parse_parameter(char *s, int keep_early)
 {
 	unsigned long dbgp_num = 0;
-	u32 bus, dev, func, offset;
+	u32 bus, dev, func, offset = 0;
+	u32 val;
 	char *e;
 	int ret;
 
@@ -640,15 +651,36 @@ int __init early_xdbc_parse_parameter(char *s, int keep_early)
 		return -EINVAL;
 
 	/* Locate DbC registers: */
-	offset = xhci_find_next_ext_cap(xdbc.xhci_base, 0, XHCI_EXT_CAPS_DEBUG);
+	if (xdbc.xhci_length == xdbc.xhci_orig_length) {
+		offset = xhci_find_next_ext_cap(xdbc.xhci_base, 0, XHCI_EXT_CAPS_DEBUG);
+	} else {
+		/*
+		 * Mapped mmio size cut short from what xhci needs.
+		 * Check if this dBc capability is withing the new cut size.
+		 * DbC capability needs 64 bytes from its capabilty offset.
+		 */
+		do {
+			offset = xhci_find_next_ext_cap(xdbc.xhci_base, offset, 0);
+			if (!offset || (offset + 64 >= xdbc.xhci_length)) {
+				pr_warn("Bad DbC offset 0x%x, max 0x%lx", offset, xdbc.xhci_length);
+				offset = 0;
+				break;
+			}
+			pr_warn("Looking for DbC capability at offset 0x%x", offset);
+			val = readl(xdbc.xhci_base + offset);
+		} while (XHCI_EXT_CAPS_ID(val) != XHCI_EXT_CAPS_DEBUG);
+	}
+
 	if (!offset) {
-		pr_notice("xhci host doesn't support debug capability\n");
+		pr_warn("xhci host doesn't support debug capability\n");
 		early_iounmap(xdbc.xhci_base, xdbc.xhci_length);
 		xdbc.xhci_base = NULL;
 		xdbc.xhci_length = 0;
 
 		return -ENODEV;
 	}
+	pr_warn("DbC capability found at offset 0x%x", offset);
+
 	xdbc.xdbc_reg = (struct xdbc_regs __iomem *)(xdbc.xhci_base + offset);
 
 	return 0;
