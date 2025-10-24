@@ -141,9 +141,10 @@ static int clk_branch2_mem_enable(struct clk_hw *hw)
 	struct clk_branch branch = mem_br->branch;
 	u32 val;
 	int ret;
+	bool en_val = (mem_br->mem_enable_invert ? false : true);
 
-	regmap_update_bits(branch.clkr.regmap, mem_br->mem_enable_reg,
-			   mem_br->mem_enable_ack_mask, mem_br->mem_enable_ack_mask);
+	regmap_assign_bits(branch.clkr.regmap, mem_br->mem_enable_reg,
+						mem_br->mem_enable_mask, en_val);
 
 	ret = regmap_read_poll_timeout(branch.clkr.regmap, mem_br->mem_ack_reg,
 				       val, val & mem_br->mem_enable_ack_mask, 0, 200);
@@ -158,9 +159,10 @@ static int clk_branch2_mem_enable(struct clk_hw *hw)
 static void clk_branch2_mem_disable(struct clk_hw *hw)
 {
 	struct clk_mem_branch *mem_br = to_clk_mem_branch(hw);
+	bool en_val = (mem_br->mem_enable_invert ? true : false);
 
-	regmap_update_bits(mem_br->branch.clkr.regmap, mem_br->mem_enable_reg,
-			   mem_br->mem_enable_ack_mask, 0);
+	regmap_assign_bits(mem_br->branch.clkr.regmap, mem_br->mem_enable_reg,
+						mem_br->mem_enable_mask, en_val);
 
 	return clk_branch2_disable(hw);
 }
