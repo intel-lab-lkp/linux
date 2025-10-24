@@ -1071,8 +1071,9 @@ static bool is_valid_guard_vma(struct vm_area_struct *vma, bool allow_locked)
 
 static bool is_guard_pte_marker(pte_t ptent)
 {
-	return is_swap_pte(ptent) &&
-	       is_guard_swp_entry(pte_to_swp_entry(ptent));
+	const swp_entry_t entry = pte_to_swp_entry_or_zero(ptent);
+
+	return is_guard_swp_entry(entry);
 }
 
 static int guard_install_pud_entry(pud_t *pud, unsigned long addr,

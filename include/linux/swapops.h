@@ -139,6 +139,24 @@ static inline swp_entry_t pte_to_swp_entry(pte_t pte)
 	return swp_entry(__swp_type(arch_entry), __swp_offset(arch_entry));
 }
 
+/**
+ * pte_to_swp_entry_or_zero() - Convert an arbitrary PTE entry to either its
+ * swap entry, or the zero swap entry if the PTE is either present or empty
+ * (none).
+ * @pte: The PTE entry we are evaluating.
+ *
+ * Returns: A valid swap entry or the zero swap entry if the PTE is present or
+ * none.
+ */
+static inline swp_entry_t pte_to_swp_entry_or_zero(pte_t pte)
+{
+	if (pte_present(pte))
+		return swp_entry(0, 0);
+
+	/* If none, this will return zero entry. */
+	return pte_to_swp_entry(pte);
+}
+
 /*
  * Convert the arch-independent representation of a swp_entry_t into the
  * arch-dependent pte representation.
@@ -438,7 +456,7 @@ static inline pte_marker pte_marker_get(swp_entry_t entry)
 
 static inline bool is_pte_marker(pte_t pte)
 {
-	return is_swap_pte(pte) && is_pte_marker_entry(pte_to_swp_entry(pte));
+	return is_pte_marker_entry(pte_to_swp_entry_or_zero(pte));
 }
 
 static inline pte_t make_pte_marker(pte_marker marker)
