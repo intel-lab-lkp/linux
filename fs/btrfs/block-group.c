@@ -2526,6 +2526,24 @@ static int read_one_block_group(struct btrfs_fs_info *info,
 		inc_block_group_ro(cache, 1);
 	}
 
+	if (cache->flags & BTRFS_BLOCK_GROUP_STRIPE_REMOVAL_PENDING) {
+		spin_lock(&info->unused_bgs_lock);
+
+		if (list_empty(&cache->bg_list)) {
+			btrfs_get_block_group(cache);
+			list_add_tail(&cache->bg_list,
+				      &info->fully_remapped_bgs);
+		} else {
+			list_move_tail(&cache->bg_list,
+				       &info->fully_remapped_bgs);
+		}
+
+		spin_unlock(&info->unused_bgs_lock);
+
+		if (btrfs_test_opt(info, DISCARD_ASYNC))
+			btrfs_discard_queue_work(&info->discard_ctl, cache);
+	}
+
 	return 0;
 error:
 	btrfs_put_block_group(cache);
@@ -4833,6 +4851,29 @@ void btrfs_mark_bg_fully_remapped(struct btrfs_block_group *bg,
 
 	spin_unlock(&fs_info->unused_bgs_lock);
 
-	if (btrfs_test_opt(fs_info, DISCARD_ASYNC))
+	if (btrfs_test_opt(fs_info, DISCARD_ASYNC)) {
+		bool bg_already_dirty = true;
+
+		spin_lock(&bg->lock);
+		bg->flags |= BTRFS_BLOCK_GROUP_STRIPE_REMOVAL_PENDING;
+		spin_unlock(&bg->lock);
+
+		spin_lock(&trans->transaction->dirty_bgs_lock);
+		if (list_empty(&bg->dirty_list)) {
+			list_add_tail(&bg->dirty_list,
+				      &trans->transaction->dirty_bgs);
+			bg_already_dirty = false;
+			btrfs_get_block_group(bg);
+		}
+		spin_unlock(&trans->transaction->dirty_bgs_lock);
+
+		/*
+		 * Modified block groups are accounted for in
+		 * the delayed_refs_rsv.
+		 */
+		if (!bg_already_dirty)
+			btrfs_inc_delayed_refs_rsv_bg_updates(trans->fs_info);
+
 		btrfs_discard_queue_work(&fs_info->discard_ctl, bg);
+	}
 }

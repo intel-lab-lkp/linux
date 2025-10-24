@@ -4740,6 +4740,7 @@ int btrfs_last_identity_remap_gone(struct btrfs_trans_handle *trans,
 				   struct btrfs_block_group *bg)
 {
 	int ret;
+	bool bg_already_dirty = true;
 	BTRFS_PATH_AUTO_FREE(path);
 
 	ret = btrfs_remove_dev_extents(trans, chunk);
@@ -4763,6 +4764,23 @@ int btrfs_last_identity_remap_gone(struct btrfs_trans_handle *trans,
 	write_unlock(&trans->fs_info->mapping_tree_lock);
 
 	btrfs_remove_bg_from_sinfo(bg);
+
+	spin_lock(&bg->lock);
+	bg->flags &= ~BTRFS_BLOCK_GROUP_STRIPE_REMOVAL_PENDING;
+	spin_unlock(&bg->lock);
+
+	spin_lock(&trans->transaction->dirty_bgs_lock);
+	if (list_empty(&bg->dirty_list)) {
+		list_add_tail(&bg->dirty_list,
+			      &trans->transaction->dirty_bgs);
+		bg_already_dirty = false;
+		btrfs_get_block_group(bg);
+	}
+	spin_unlock(&trans->transaction->dirty_bgs_lock);
+
+	/* Modified block groups are accounted for in the delayed_refs_rsv. */
+	if (!bg_already_dirty)
+		btrfs_inc_delayed_refs_rsv_bg_updates(trans->fs_info);
 
 	path = btrfs_alloc_path();
 	if (!path)
