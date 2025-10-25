@@ -692,10 +692,10 @@ static void __init test_bitmap_arr64(void)
 		}
 
 		if ((nbits % 64) &&
-		    (arr[(nbits - 1) / 64] & ~GENMASK_ULL((nbits - 1) % 64, 0))) {
+		    (arr[(nbits - 1) / 64] & ~FIRST_BITS_ULL(nbits))) {
 			pr_err("bitmap_to_arr64(nbits == %d): tail is not safely cleared: 0x%016llx (must be 0x%016llx)\n",
 			       nbits, arr[(nbits - 1) / 64],
-			       GENMASK_ULL((nbits - 1) % 64, 0));
+			       FIRST_BITS_ULL(nbits));
 			failed_tests++;
 		}
 
@@ -1217,7 +1217,7 @@ static void __init test_bitmap_const_eval(void)
 	 * in runtime.
 	 */
 
-	/* Equals to `unsigned long bitmap[1] = { GENMASK(6, 5), }` */
+	/* Equals to `unsigned long bitmap[1] = { BITS(5, 6), }` */
 	bitmap_clear(bitmap, 0, BITS_PER_LONG);
 	if (!test_bit(7, bitmap))
 		bitmap_set(bitmap, 5, 2);
@@ -1229,9 +1229,9 @@ static void __init test_bitmap_const_eval(void)
 	/* Equals to `unsigned long var = BIT(25)` */
 	var |= BIT(25);
 	if (var & BIT(0))
-		var ^= GENMASK(9, 6);
+		var ^= BITS(6, 9);
 
-	/* __const_hweight<32|64>(GENMASK(6, 5)) == 2 */
+	/* __const_hweight<32|64>(BITS(5, 6)) == 2 */
 	res = bitmap_weight(bitmap, 20);
 	BUILD_BUG_ON(!__builtin_constant_p(res));
 	BUILD_BUG_ON(res != 2);
@@ -1241,8 +1241,8 @@ static void __init test_bitmap_const_eval(void)
 	BUILD_BUG_ON(!__builtin_constant_p(res));
 	BUILD_BUG_ON(!res);
 
-	/* BIT(2) & GENMASK(14, 8) == 0 */
-	res = initvar & GENMASK(14, 8);
+	/* BIT(2) & BITS(8, 14) == 0 */
+	res = initvar & BITS(8, 14);
 	BUILD_BUG_ON(!__builtin_constant_p(res));
 	BUILD_BUG_ON(res);
 
