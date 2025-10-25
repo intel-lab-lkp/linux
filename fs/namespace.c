@@ -4427,6 +4427,7 @@ SYSCALL_DEFINE5(move_mount,
 {
 	struct path to_path __free(path_put) = {};
 	struct path from_path __free(path_put) = {};
+	struct path path __free(path_put) = {};
 	struct filename *to_name __free(putname) = NULL;
 	struct filename *from_name __free(putname) = NULL;
 	unsigned int lflags, uflags;
@@ -4471,6 +4472,14 @@ SYSCALL_DEFINE5(move_mount,
 		if (ret)
 			return ret;
 	}
+
+	ret = user_path_at(AT_FDCWD, to_pathname, LOOKUP_FOLLOW, &path);
+	if (ret)
+		return ret;
+
+	/* Refuse the same filesystem on the same mount point */
+	if (path.mnt->mnt_sb == to_path.mnt->mnt_sb && path_mounted(&path))
+		return -EBUSY;
 
 	uflags = 0;
 	if (flags & MOVE_MOUNT_F_EMPTY_PATH)
