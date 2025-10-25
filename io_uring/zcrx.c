@@ -519,6 +519,8 @@ static void io_close_queue(struct io_zcrx_ifq *ifq)
 
 static void io_zcrx_ifq_free(struct io_zcrx_ifq *ifq)
 {
+	if (ifq->proxy)
+		goto free;
 	io_close_queue(ifq);
 
 	if (ifq->area)
@@ -528,6 +530,7 @@ static void io_zcrx_ifq_free(struct io_zcrx_ifq *ifq)
 
 	io_free_rbuf_ring(ifq);
 	mutex_destroy(&ifq->pp_lock);
+free:
 	kfree(ifq);
 }
 
@@ -801,10 +804,19 @@ void io_shutdown_zcrx_ifqs(struct io_ring_ctx *ctx)
 	lockdep_assert_held(&ctx->uring_lock);
 
 	xa_for_each(&ctx->zcrx_ctxs, index, ifq) {
-		if (refcount_read(&ifq->refs) > 1)
+		if (ifq->if_rxq == -1)
 			continue;
-		io_zcrx_scrub(ifq);
-		io_close_queue(ifq);
+
+		if (!ifq->proxy) {
+			if (refcount_read(&ifq->refs) > 1)
+				continue;
+			io_zcrx_scrub(ifq);
+			io_close_queue(ifq);
+		} else {
+			refcount_dec(&ifq->proxy->refs);
+			percpu_ref_put(&ifq->proxy->ctx->refs);
+			ifq->if_rxq = -1;
+		}
 	}
 }
 
