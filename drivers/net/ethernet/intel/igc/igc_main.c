@@ -779,7 +779,8 @@ static void igc_setup_mrqc(struct igc_adapter *adapter)
 	u32 j, num_rx_queues;
 	u32 mrqc, rxcsum;
 
-	netdev_rss_key_fill(adapter->rss_key, sizeof(adapter->rss_key));
+	if (!adapter->has_user_rss_key)
+		netdev_rss_key_fill(adapter->rss_key, sizeof(adapter->rss_key));
 	igc_write_rss_key(adapter);
 
 	num_rx_queues = adapter->rss_queues;
