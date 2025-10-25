@@ -83,6 +83,8 @@ struct hinic3_nic_dev {
 
 	struct hinic3_intr_coal_info    *intr_coalesce;
 
+	struct semaphore                port_state_sem;
+
 	bool                            link_status_up;
 };
 
