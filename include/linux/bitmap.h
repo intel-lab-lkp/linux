@@ -473,7 +473,7 @@ void bitmap_set(unsigned long *map, unsigned int start, unsigned int nbits)
 	if (__builtin_constant_p(nbits) && nbits == 1)
 		__set_bit(start, map);
 	else if (small_const_nbits(start + nbits))
-		*map |= GENMASK(start + nbits - 1, start);
+		*map |= BITS(start, start + nbits - 1);
 	else if (__builtin_constant_p(start & BITMAP_MEM_MASK) &&
 		 IS_ALIGNED(start, BITMAP_MEM_ALIGNMENT) &&
 		 __builtin_constant_p(nbits & BITMAP_MEM_MASK) &&
@@ -489,7 +489,7 @@ void bitmap_clear(unsigned long *map, unsigned int start, unsigned int nbits)
 	if (__builtin_constant_p(nbits) && nbits == 1)
 		__clear_bit(start, map);
 	else if (small_const_nbits(start + nbits))
-		*map &= ~GENMASK(start + nbits - 1, start);
+		*map &= ~BITS(start, start + nbits - 1);
 	else if (__builtin_constant_p(start & BITMAP_MEM_MASK) &&
 		 IS_ALIGNED(start, BITMAP_MEM_ALIGNMENT) &&
 		 __builtin_constant_p(nbits & BITMAP_MEM_MASK) &&
