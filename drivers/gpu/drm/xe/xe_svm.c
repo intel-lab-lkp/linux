@@ -330,7 +330,7 @@ static int xe_svm_range_set_default_attr(struct xe_vm *vm, u64 range_start, u64 
 	if (xe_vma_start(vma) == range_start && xe_vma_end(vma) == range_end) {
 		default_attr.pat_index = vma->attr.default_pat_index;
 		default_attr.default_pat_index  = vma->attr.default_pat_index;
-		vma->attr = default_attr;
+		xe_vma_mem_attr_copy(&vma->attr, &default_attr);
 	} else {
 		vm_dbg(&vm->xe->drm, "Split VMA start=0x%016llx, vma_end=0x%016llx",
 		       range_start, range_end);
