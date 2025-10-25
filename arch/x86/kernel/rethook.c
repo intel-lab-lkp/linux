@@ -89,8 +89,13 @@ __used __visible void arch_rethook_trampoline_callback(struct pt_regs *regs)
 	 * Copy FLAGS to 'pt_regs::ss' so that arch_rethook_trapmoline()
 	 * can do RET right after POPF.
 	 */
+#ifdef CONFIG_X86_32
+	regs->ss = (unsigned short)regs->flags;
+#else
 	*(unsigned long *)&regs->ss = regs->flags;
+#endif
 }
+
 NOKPROBE_SYMBOL(arch_rethook_trampoline_callback);
 
 /*
