@@ -129,48 +129,10 @@ impl TryFrom<u8> for Architecture {
     }
 }
 
-pub(crate) struct Revision {
-    major: u8,
-    minor: u8,
-}
-
-impl Revision {
-    fn from_boot0(boot0: regs::NV_PMC_BOOT_0) -> Self {
-        Self {
-            major: boot0.major_revision(),
-            minor: boot0.minor_revision(),
-        }
-    }
-}
-
-impl fmt::Display for Revision {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{:x}.{:x}", self.major, self.minor)
-    }
-}
-
-/// Structure holding the metadata of the GPU.
-pub(crate) struct Spec {
-    chipset: Chipset,
-    /// The revision of the chipset.
-    revision: Revision,
-}
-
-impl Spec {
-    fn new(bar: &Bar0) -> Result<Spec> {
-        let boot0 = regs::NV_PMC_BOOT_0::read(bar);
-
-        Ok(Self {
-            chipset: boot0.chipset()?,
-            revision: Revision::from_boot0(boot0),
-        })
-    }
-}
-
 /// Structure holding the resources required to operate the GPU.
 #[pin_data]
 pub(crate) struct Gpu {
-    spec: Spec,
+    chipset: Chipset,
     /// MMIO mapping of PCI BAR 0
     bar: Arc<Devres<Bar0>>,
     /// System memory page required for flushing all pending GPU-side memory writes done through
@@ -191,16 +153,21 @@ impl Gpu {
         devres_bar: Arc<Devres<Bar0>>,
         bar: &'a Bar0,
     ) -> impl PinInit<Self, Error> + 'a {
+        let boot0 = regs::NV_PMC_BOOT_0::read(bar);
+
         try_pin_init!(Self {
-            spec: Spec::new(bar).inspect(|spec| {
+            chipset: {
+                let chipset = boot0.chipset()?;
                 dev_info!(
                     pdev.as_ref(),
-                    "NVIDIA (Chipset: {}, Architecture: {:?}, Revision: {})\n",
-                    spec.chipset,
-                    spec.chipset.arch(),
-                    spec.revision
+                    "NVIDIA (Chipset: {}, Architecture: {:?}, Revision: {:x}.{:x})\n",
+                    chipset,
+                    chipset.arch(),
+                    boot0.major_revision(),
+                    boot0.minor_revision()
                 );
-            })?,
+                chipset
+            },
 
             // We must wait for GFW_BOOT completion before doing any significant setup on the GPU.
             _: {
@@ -208,21 +175,21 @@ impl Gpu {
                     .inspect_err(|_| dev_err!(pdev.as_ref(), "GFW boot did not complete"))?;
             },
 
-            sysmem_flush: SysmemFlush::register(pdev.as_ref(), bar, spec.chipset)?,
+            sysmem_flush: SysmemFlush::register(pdev.as_ref(), bar, boot0.chipset()?)?,
 
             gsp_falcon: Falcon::new(
                 pdev.as_ref(),
-                spec.chipset,
+                boot0.chipset()?,
                 bar,
-                spec.chipset > Chipset::GA100,
+                boot0.chipset()? > Chipset::GA100,
             )
             .inspect(|falcon| falcon.clear_swgen0_intr(bar))?,
 
-            sec2_falcon: Falcon::new(pdev.as_ref(), spec.chipset, bar, true)?,
+            sec2_falcon: Falcon::new(pdev.as_ref(), boot0.chipset()?, bar, true)?,
 
             gsp <- Gsp::new(),
 
-            _: { gsp.boot(pdev, bar, spec.chipset, gsp_falcon, sec2_falcon)? },
+            _: { gsp.boot(pdev, bar, boot0.chipset()?, gsp_falcon, sec2_falcon)? },
 
             bar: devres_bar,
         })
