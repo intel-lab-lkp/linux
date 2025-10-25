@@ -1529,13 +1529,24 @@ struct drm_pagemap *xe_vma_resolve_pagemap(struct xe_vma *vma, struct xe_tile *t
 int xe_svm_alloc_vram(struct xe_svm_range *range, const struct drm_gpusvm_ctx *ctx,
 		      struct drm_pagemap *dpagemap)
 {
+	int err, retries = 1;
+
 	xe_assert(range_to_vm(&range->base)->xe, range->base.pages.flags.migrate_devmem);
 	range_debug(range, "ALLOCATE VRAM");
 
-	return drm_pagemap_populate_mm(dpagemap, xe_svm_range_start(range),
-				       xe_svm_range_end(range),
-				       range->base.gpusvm->mm,
-				       ctx->timeslice_ms);
+retry:
+	err = drm_pagemap_populate_mm(dpagemap, xe_svm_range_start(range),
+				      xe_svm_range_end(range),
+				      range->base.gpusvm->mm,
+				      ctx->timeslice_ms);
+	if ((err == -EBUSY || err == -EFAULT) && retries--) {
+		range_debug(range, "ALLOCATE VRAM - Retry.");
+
+		drm_gpusvm_range_evict(range->base.gpusvm, &range->base);
+		goto retry;
+	}
+
+	return err;
 }
 
 static struct drm_pagemap_addr
