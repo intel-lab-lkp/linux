@@ -150,6 +150,9 @@ dtb-$(CONFIG_ARCH_ROCKCHIP) += rk3568-rock-3b.dtb
 dtb-$(CONFIG_ARCH_ROCKCHIP) += rk3568-wolfvision-pf5.dtb
 dtb-$(CONFIG_ARCH_ROCKCHIP) += rk3568-wolfvision-pf5-display-vz.dtbo
 dtb-$(CONFIG_ARCH_ROCKCHIP) += rk3568-wolfvision-pf5-io-expander.dtbo
+dtb-$(CONFIG_ARCH_ROCKCHIP) += rk3568-x3568-v4.dtb
+dtb-$(CONFIG_ARCH_ROCKCHIP) += rk3568-x3568-camera-demo.dtso
+dtb-$(CONFIG_ARCH_ROCKCHIP) += rk3568-x3568-video-demo.dtso
 dtb-$(CONFIG_ARCH_ROCKCHIP) += rk3576-armsom-sige5.dtb
 dtb-$(CONFIG_ARCH_ROCKCHIP) += rk3576-armsom-sige5-v1.2-wifibt.dtbo
 dtb-$(CONFIG_ARCH_ROCKCHIP) += rk3576-evb1-v10.dtb
@@ -251,6 +254,14 @@ rk3568-wolfvision-pf5-vz-2-uhd-dtbs := rk3568-wolfvision-pf5.dtb \
 dtb-$(CONFIG_ARCH_ROCKCHIP) += rk3576-armsom-sige5-v1.2-wifibt.dtb
 rk3576-armsom-sige5-v1.2-wifibt-dtbs := rk3576-armsom-sige5.dtb \
 	rk3576-armsom-sige5-v1.2-wifibt.dtbo
+
+dtb-$(CONFIG_ARCH_ROCKCHIP) += rk3568-x3568-v4-camera-demo.dtb
+rk3568-x3568-v4-camera-demo-dtbs := rk3568-x3568-v4.dtb \
+	rk3568-x3568-camera-demo.dtso
+
+dtb-$(CONFIG_ARCH_ROCKCHIP) += rk3568-x3568-v4-video-demo.dtb
+rk3568-x3568-v4-video-demo-dtbs := rk3568-x3568-v4.dtb \
+	rk3568-x3568-video-demo.dtso
 
 dtb-$(CONFIG_ARCH_ROCKCHIP) += rk3588-edgeble-neu6a-wifi.dtb
 rk3588-edgeble-neu6a-wifi-dtbs := rk3588-edgeble-neu6a-io.dtb \
