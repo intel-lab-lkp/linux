@@ -29,44 +29,44 @@ enum flow {
 };
 
 #define IS_BIT(word, n)		((word) & (1<<n))
-#define BITS(word, s, e)	(((word) >> (s)) & (~((-2) << ((e) - (s)))))
+#define FIELD(word, s, e)	(((word) >> (s)) & (~((-2) << ((e) - (s)))))
 
-#define MAJOR_OPCODE(word)	(BITS((word), 27, 31))
-#define MINOR_OPCODE(word)	(BITS((word), 16, 21))
-#define FIELD_A(word)		(BITS((word), 0, 5))
-#define FIELD_B(word)		((BITS((word), 12, 14)<<3) | \
-				(BITS((word), 24, 26)))
-#define FIELD_C(word)		(BITS((word), 6, 11))
+#define MAJOR_OPCODE(word)	(FIELD((word), 27, 31))
+#define MINOR_OPCODE(word)	(FIELD((word), 16, 21))
+#define FIELD_A(word)		(FIELD((word), 0, 5))
+#define FIELD_B(word)		((FIELD((word), 12, 14)<<3) | \
+				(FIELD((word), 24, 26)))
+#define FIELD_C(word)		(FIELD((word), 6, 11))
 #define FIELD_u6(word)		FIELDC(word)
-#define FIELD_s12(word)		sign_extend(((BITS((word), 0, 5) << 6) | \
-					BITS((word), 6, 11)), 12)
+#define FIELD_s12(word)		sign_extend(((FIELD((word), 0, 5) << 6) | \
+					FIELD((word), 6, 11)), 12)
 
 /* note that for BL/BRcc these two macro's need another AND statement to mask
  * out bit 1 (make the result a multiple of 4) */
-#define FIELD_s9(word)		sign_extend(((BITS(word, 15, 15) << 8) | \
-					BITS(word, 16, 23)), 9)
-#define FIELD_s21(word)		sign_extend(((BITS(word, 6, 15) << 11) | \
-					(BITS(word, 17, 26) << 1)), 12)
-#define FIELD_s25(word)		sign_extend(((BITS(word, 0, 3) << 21) | \
-					(BITS(word, 6, 15) << 11) | \
-					(BITS(word, 17, 26) << 1)), 12)
+#define FIELD_s9(word)		sign_extend(((FIELD(word, 15, 15) << 8) | \
+					FIELD(word, 16, 23)), 9)
+#define FIELD_s21(word)		sign_extend(((FIELD(word, 6, 15) << 11) | \
+					(FIELD(word, 17, 26) << 1)), 12)
+#define FIELD_s25(word)		sign_extend(((FIELD(word, 0, 3) << 21) | \
+					(FIELD(word, 6, 15) << 11) | \
+					(FIELD(word, 17, 26) << 1)), 12)
 
 /* note: these operate on 16 bits! */
-#define FIELD_S_A(word)		((BITS((word), 2, 2)<<3) | BITS((word), 0, 2))
-#define FIELD_S_B(word)		((BITS((word), 10, 10)<<3) | \
-				BITS((word), 8, 10))
-#define FIELD_S_C(word)		((BITS((word), 7, 7)<<3) | BITS((word), 5, 7))
-#define FIELD_S_H(word)		((BITS((word), 0, 2)<<3) | BITS((word), 5, 8))
-#define FIELD_S_u5(word)	(BITS((word), 0, 4))
-#define FIELD_S_u6(word)	(BITS((word), 0, 4) << 1)
-#define FIELD_S_u7(word)	(BITS((word), 0, 4) << 2)
-#define FIELD_S_u10(word)	(BITS((word), 0, 7) << 2)
-#define FIELD_S_s7(word)	sign_extend(BITS((word), 0, 5) << 1, 9)
-#define FIELD_S_s8(word)	sign_extend(BITS((word), 0, 7) << 1, 9)
-#define FIELD_S_s9(word)	sign_extend(BITS((word), 0, 8), 9)
-#define FIELD_S_s10(word)	sign_extend(BITS((word), 0, 8) << 1, 10)
-#define FIELD_S_s11(word)	sign_extend(BITS((word), 0, 8) << 2, 11)
-#define FIELD_S_s13(word)	sign_extend(BITS((word), 0, 10) << 2, 13)
+#define FIELD_S_A(word)		((FIELD((word), 2, 2)<<3) | FIELD((word), 0, 2))
+#define FIELD_S_B(word)		((FIELD((word), 10, 10)<<3) | \
+				FIELD((word), 8, 10))
+#define FIELD_S_C(word)		((FIELD((word), 7, 7)<<3) | FIELD((word), 5, 7))
+#define FIELD_S_H(word)		((FIELD((word), 0, 2)<<3) | FIELD((word), 5, 8))
+#define FIELD_S_u5(word)	(FIELD((word), 0, 4))
+#define FIELD_S_u6(word)	(FIELD((word), 0, 4) << 1)
+#define FIELD_S_u7(word)	(FIELD((word), 0, 4) << 2)
+#define FIELD_S_u10(word)	(FIELD((word), 0, 7) << 2)
+#define FIELD_S_s7(word)	sign_extend(FIELD((word), 0, 5) << 1, 9)
+#define FIELD_S_s8(word)	sign_extend(FIELD((word), 0, 7) << 1, 9)
+#define FIELD_S_s9(word)	sign_extend(FIELD((word), 0, 8), 9)
+#define FIELD_S_s10(word)	sign_extend(FIELD((word), 0, 8) << 1, 10)
+#define FIELD_S_s11(word)	sign_extend(FIELD((word), 0, 8) << 2, 11)
+#define FIELD_S_s13(word)	sign_extend(FIELD((word), 0, 10) << 2, 13)
 
 #define STATUS32_L		0x00000100
 #define REG_LIMM		62
