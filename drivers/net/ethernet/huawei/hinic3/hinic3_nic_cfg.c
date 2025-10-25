@@ -117,13 +117,45 @@ int hinic3_set_port_mtu(struct net_device *netdev, u16 new_mtu)
 					 &func_tbl_cfg);
 }
 
+#define PF_SET_VF_MAC(hwdev, status) \
+	(HINIC3_IS_VF(hwdev) && (status) == HINIC3_PF_SET_VF_ALREADY)
+
 static int hinic3_check_mac_info(struct hinic3_hwdev *hwdev, u8 status,
 				 u16 vlan_id)
 {
 	if ((status && status != MGMT_STATUS_EXIST) ||
 	    ((vlan_id & BIT(15)) && status == MGMT_STATUS_EXIST)) {
+		if (PF_SET_VF_MAC(hwdev, status))
+			return 0;
+
 		return -EINVAL;
 	}
+
+	return 0;
+}
+
+int hinic3_get_default_mac(struct hinic3_hwdev *hwdev, u8 *mac_addr)
+{
+	struct l2nic_cmd_set_mac mac_info = {};
+	struct mgmt_msg_params msg_params = {};
+	int err;
+
+	mac_info.func_id = hinic3_global_func_id(hwdev);
+
+	mgmt_msg_params_init_default(&msg_params, &mac_info, sizeof(mac_info));
+
+	err = hinic3_send_mbox_to_mgmt(hwdev, MGMT_MOD_L2NIC,
+				       L2NIC_CMD_GET_MAC,
+				       &msg_params);
+
+	if (err || mac_info.msg_head.status) {
+		dev_err(hwdev->dev,
+			"Failed to get mac, err: %d, status: 0x%x\n",
+			err, mac_info.msg_head.status);
+		return -EFAULT;
+	}
+
+	ether_addr_copy(mac_addr, mac_info.mac);
 
 	return 0;
 }
@@ -157,9 +189,9 @@ int hinic3_set_mac(struct hinic3_hwdev *hwdev, const u8 *mac_addr, u16 vlan_id,
 		return -EIO;
 	}
 
-	if (mac_info.msg_head.status == MGMT_STATUS_PF_SET_VF_ALREADY) {
+	if (PF_SET_VF_MAC(hwdev, mac_info.msg_head.status)) {
 		dev_warn(hwdev->dev, "PF has already set VF mac, Ignore set operation\n");
-		return 0;
+		return HINIC3_PF_SET_VF_ALREADY;
 	}
 
 	if (mac_info.msg_head.status == MGMT_STATUS_EXIST) {
@@ -191,11 +223,17 @@ int hinic3_del_mac(struct hinic3_hwdev *hwdev, const u8 *mac_addr, u16 vlan_id,
 
 	err = hinic3_send_mbox_to_mgmt(hwdev, MGMT_MOD_L2NIC,
 				       L2NIC_CMD_DEL_MAC, &msg_params);
-	if (err) {
+	if (err || (mac_info.msg_head.status &&
+		    !PF_SET_VF_MAC(hwdev, mac_info.msg_head.status))) {
 		dev_err(hwdev->dev,
 			"Failed to delete MAC, err: %d, status: 0x%x\n",
 			err, mac_info.msg_head.status);
-		return err;
+		return -EFAULT;
+	}
+
+	if (PF_SET_VF_MAC(hwdev, mac_info.msg_head.status)) {
+		dev_warn(hwdev->dev, "PF has already set VF mac, Ignore delete operation.\n");
+		return HINIC3_PF_SET_VF_ALREADY;
 	}
 
 	return 0;
@@ -229,6 +267,17 @@ int hinic3_update_mac(struct hinic3_hwdev *hwdev, const u8 *old_mac,
 			"Failed to update MAC, err: %d, status: 0x%x\n",
 			err, mac_info.msg_head.status);
 		return -EIO;
+	}
+
+	if (PF_SET_VF_MAC(hwdev, mac_info.msg_head.status)) {
+		dev_warn(hwdev->dev, "PF has already set VF MAC. Ignore update operation\n");
+		return HINIC3_PF_SET_VF_ALREADY;
+	}
+
+	if (mac_info.msg_head.status == HINIC3_MGMT_STATUS_EXIST) {
+		dev_warn(hwdev->dev,
+			 "MAC is repeated. Ignore update operation\n");
+		return 0;
 	}
 
 	return 0;
