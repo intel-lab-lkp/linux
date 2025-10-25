@@ -25,6 +25,19 @@ register!(NV_PMC_BOOT_0 @ 0x00000000, "Basic revision information about the GPU"
 });
 
 impl NV_PMC_BOOT_0 {
+    pub(crate) fn is_nv04(self) -> bool {
+        // The very first supported GPU was NV04, and it is identified by a specific bit pattern in
+        // boot0. This provides a way to check for that, which in turn is required in order to avoid
+        // confusing future "next-gen" GPUs with NV04.
+        self.architecture_0() == 0 && (self.0 & 0xff00fff0) == 0x20004000
+    }
+
+    pub(crate) fn is_next_gen(self) -> bool {
+        // "next-gen" GPUs (some time after Blackwell) will set `architecture_0` to 0, and put the
+        // architecture details in boot42 instead.
+        self.architecture_0() == 0 && !self.is_nv04()
+    }
+
     /// Combines `architecture_0` and `architecture_1` to obtain the architecture of the chip.
     pub(crate) fn architecture(self) -> Result<Architecture> {
         Architecture::try_from(
@@ -40,6 +53,21 @@ impl NV_PMC_BOOT_0 {
                     | u32::from(self.implementation())
             })
             .and_then(Chipset::try_from)
+    }
+}
+
+register!(NV_PMC_BOOT_42 @ 0x00000108, "Extended architecture information" {
+    7:0     implementation as u8, "Implementation version of the architecture";
+    15:8    architecture as u8, "Architecture value";
+    19:16   minor_revision as u8, "Minor revision of the chip";
+    23:20   major_revision as u8, "Major revision of the chip";
+});
+
+impl NV_PMC_BOOT_42 {
+    pub(crate) fn chipset(self) -> Result<Chipset> {
+        let arch = Architecture::try_from(self.architecture())?;
+        let chipset_value = ((arch as u32) << 8) | u32::from(self.implementation());
+        Chipset::try_from(chipset_value)
     }
 }
 

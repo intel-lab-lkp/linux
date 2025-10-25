@@ -155,16 +155,67 @@ impl Gpu {
     ) -> impl PinInit<Self, Error> + 'a {
         let boot0 = regs::NV_PMC_BOOT_0::read(bar);
 
+        // "next-gen" GPUs (some time after Blackwell) will zero out boot0, and put the architecture
+        // details in boot42 instead. Avoid reading boot42 unless we are in that case.
+        let boot42 = if boot0.is_next_gen() {
+            Some(regs::NV_PMC_BOOT_42::read(bar))
+        } else {
+            None
+        };
+
         try_pin_init!(Self {
             chipset: {
-                let chipset = boot0.chipset()?;
+                // Some brief notes about boot0 and boot42, in chronological order:
+                //
+                // NV04 through Volta:
+                //
+                //    Not supported by Nova. boot0 is necessary and sufficient to identify these
+                //    GPUs. boot42 may not even exist on some of these GPUs.
+                //
+                // Turing through Blackwell:
+                //
+                //     Supported by both Nouveau and Nova. boot0 is still necessary and sufficient
+                //     to identify these GPUs. boot42 exists on these GPUs but we don't need to use
+                //     it.
+                //
+                // Future "next-gen" GPUs:
+                //
+                //    Only supported by Nova. Boot42 has the architecture details, boot0 is zeroed
+                //    out.
+
+                // NV04, the very first NVIDIA GPU to be supported on Linux, is identified by a
+                // specific bit pattern in boot0. Although Nova does not support NV04 (see above),
+                // it is possible to confuse NV04 with a "next-gen" GPU. Therefore, return early if
+                // we specifically detect NV04, thus simplifying the remaining selection logic.
+                if boot0.is_nv04() {
+                    Err(ENODEV)?
+                }
+
+                // Now that we know it is something more recent than NV04, use boot42 if we
+                // previously determined that boot42 was both valid and relevant, and boot0
+                // otherwise.
+                let (chipset, major_rev, minor_rev) = if let Some(boot42) = boot42 {
+                    (
+                        boot42.chipset()?,
+                        boot42.major_revision(),
+                        boot42.minor_revision(),
+                    )
+                } else {
+                    // Current/older GPU: use BOOT0
+                    (
+                        boot0.chipset()?,
+                        boot0.major_revision(),
+                        boot0.minor_revision(),
+                    )
+                };
+
                 dev_info!(
                     pdev.as_ref(),
                     "NVIDIA (Chipset: {}, Architecture: {:?}, Revision: {:x}.{:x})\n",
                     chipset,
                     chipset.arch(),
-                    boot0.major_revision(),
-                    boot0.minor_revision()
+                    major_rev,
+                    minor_rev
                 );
                 chipset
             },
@@ -175,21 +226,23 @@ impl Gpu {
                     .inspect_err(|_| dev_err!(pdev.as_ref(), "GFW boot did not complete"))?;
             },
 
-            sysmem_flush: SysmemFlush::register(pdev.as_ref(), bar, boot0.chipset()?)?,
+            sysmem_flush: SysmemFlush::register(pdev.as_ref(), bar, *chipset)?,
 
             gsp_falcon: Falcon::new(
                 pdev.as_ref(),
-                boot0.chipset()?,
+                *chipset,
                 bar,
-                boot0.chipset()? > Chipset::GA100,
+                *chipset > Chipset::GA100,
             )
             .inspect(|falcon| falcon.clear_swgen0_intr(bar))?,
 
-            sec2_falcon: Falcon::new(pdev.as_ref(), boot0.chipset()?, bar, true)?,
+            sec2_falcon: Falcon::new(pdev.as_ref(), *chipset, bar, true)?,
 
             gsp <- Gsp::new(),
 
-            _: { gsp.boot(pdev, bar, boot0.chipset()?, gsp_falcon, sec2_falcon)? },
+            _: {
+                gsp.boot(pdev, bar, *chipset, gsp_falcon, sec2_falcon)?
+            },
 
             bar: devres_bar,
         })
