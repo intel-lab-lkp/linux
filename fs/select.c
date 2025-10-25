@@ -412,7 +412,7 @@ void zero_fd_set(unsigned long nr, unsigned long *fdset)
 #define FDS_OUT(fds, n)		(fds->out + n)
 #define FDS_EX(fds, n)		(fds->ex + n)
 
-#define BITS(fds, n)	(*FDS_IN(fds, n)|*FDS_OUT(fds, n)|*FDS_EX(fds, n))
+#define FDS_BITS(fds, n)	(*FDS_IN(fds, n)|*FDS_OUT(fds, n)|*FDS_EX(fds, n))
 
 static int max_select_fd(unsigned long n, fd_set_bits *fds)
 {
@@ -428,7 +428,7 @@ static int max_select_fd(unsigned long n, fd_set_bits *fds)
 	open_fds = fdt->open_fds + n;
 	max = 0;
 	if (set) {
-		set &= BITS(fds, n);
+		set &= FDS_BITS(fds, n);
 		if (set) {
 			if (!(set & ~*open_fds))
 				goto get_max;
@@ -438,7 +438,7 @@ static int max_select_fd(unsigned long n, fd_set_bits *fds)
 	while (n) {
 		open_fds--;
 		n--;
-		set = BITS(fds, n);
+		set = FDS_BITS(fds, n);
 		if (!set)
 			continue;
 		if (set & ~*open_fds)
