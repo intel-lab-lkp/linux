@@ -74,6 +74,7 @@ my $allow_c99_comments = 1; # Can be overridden by --ignore C99_COMMENT_TOLERANC
 my $git_command ='export LANGUAGE=en_US.UTF-8; git';
 my $tabsize = 8;
 my ${CONFIG_} = "CONFIG_";
+my $drx; # enable s/$patt/drx_print("reason")/e; debugging
 
 my %maybe_linker_symbol; # for externs in c exceptions, when seen in *vmlinux.lds.h
 
@@ -168,6 +169,30 @@ my $DO_WHILE_0_ADVICE = q{
 
    Enjoy this qualification while we work to improve our heuristics.
 };
+
+# call this from s/$patt/drx_print("why")/e - to see whats happening there.
+sub drx_print {
+	my ($why) = @_;
+	return "" unless defined $drx;		# --drx or --drx=
+
+	# avoid regex test to preserve caller's match, captures
+	return "" if (defined $drx && $drx ne '' && index($why, $drx) == -1);
+
+	# report what was matched and removed
+	print "drx_print: $why\n";
+	print "  >> Matched (`\$&`): <$&>\n";
+
+	# Only print captures if they exist
+	if (defined $1) {
+		print "  >> Capture 1 (`\$1`): <$1>\n";
+	}
+	if (defined $2) {
+		print "  >> Capture 2 (`\$2`): <$2>\n";
+	}
+	# The subroutine must return the replacement string.  For s/$pat//
+	# statements (our target use), this is an empty string.
+	return "";
+}
 
 sub uniq {
 	my %seen;
@@ -348,6 +373,7 @@ GetOptions(
 	'no-color'	=> \$color,	#keep old behaviors of -nocolor
 	'nocolor'	=> \$color,	#keep old behaviors of -nocolor
 	'kconfig-prefix=s'	=> \${CONFIG_},
+	'drx:s'		=> \$drx,
 	'h|help'	=> \$help,
 	'version'	=> \$help
 ) or $help = 2;
