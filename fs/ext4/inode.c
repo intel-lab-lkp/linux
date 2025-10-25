@@ -4401,7 +4401,8 @@ int ext4_punch_hole(struct file *file, loff_t offset, loff_t length)
 	 * the page that contains i_size.
 	 */
 	if (end > inode->i_size)
-		end = round_up(inode->i_size, PAGE_SIZE);
+		end = round_up(inode->i_size,
+			       umax(PAGE_SIZE, sb->s_blocksize));
 	if (end > max_end)
 		end = max_end;
 	length = end - offset;
