@@ -11,8 +11,6 @@
 #include <linux/types.h>
 #include <linux/bitops.h>
 
-#define BITS(nb) (BIT(nb) - 1)
-
 enum iwl_bt_coex_lut_type {
 	BT_COEX_TIGHT_LUT = 0,
 	BT_COEX_LOOSE_LUT,
