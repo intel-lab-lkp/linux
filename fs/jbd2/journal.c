@@ -2761,14 +2761,36 @@ static struct kmem_cache *get_slab(size_t size)
 void *jbd2_alloc(size_t size, gfp_t flags)
 {
 	void *ptr;
+	int order;
 
 	BUG_ON(size & (size-1)); /* Must be a power of 2 */
 
-	if (size < PAGE_SIZE)
+	if (size < PAGE_SIZE) {
 		ptr = kmem_cache_alloc(get_slab(size), flags);
-	else
-		ptr = (void *)__get_free_pages(flags, get_order(size));
+		goto out;
+	}
 
+	/*
+	 * Allocating page units greater than order-1 with __GFP_NOFAIL in
+	 * __alloc_pages_slowpath() can trigger an unexpected WARN_ON.
+	 * Handle this case separately to suppress the warning.
+	 */
+	order = get_order(size);
+	if (order <= 1) {
+		ptr = (void *)__get_free_pages(flags, order);
+		goto out;
+	}
+
+	while (1) {
+		ptr = (void *)__get_free_pages(flags & ~__GFP_NOFAIL, order);
+		if (ptr)
+			break;
+		if (!(flags & __GFP_NOFAIL))
+			break;
+		memalloc_retry_wait(flags);
+	}
+
+out:
 	/* Check alignment; SLUB has gotten this wrong in the past,
 	 * and this can lead to user data corruption! */
 	BUG_ON(((unsigned long) ptr) & (size-1));
