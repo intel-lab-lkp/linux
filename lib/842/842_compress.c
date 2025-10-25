@@ -161,7 +161,7 @@ static int __split_add_bits(struct sw842_param *p, u64 d, u8 n, u8 s)
 	ret = add_bits(p, d >> s, n - s);
 	if (ret)
 		return ret;
-	return add_bits(p, d & GENMASK_ULL(s - 1, 0), s);
+	return add_bits(p, d & FIRST_BITS_ULL(s), s);
 }
 
 static int add_bits(struct sw842_param *p, u64 d, u8 n)
