@@ -671,22 +671,16 @@ yt921x_mbus_ext_init(struct yt921x_priv *priv, struct device_node *mnp)
 static int yt921x_read_mib(struct yt921x_priv *priv, int port)
 {
 	struct yt921x_port *pp = &priv->ports[port];
+	struct yt921x_mib *mib_new = &pp->mib_new;
 	struct device *dev = to_device(priv);
 	struct yt921x_mib *mib = &pp->mib;
+	u64 rx_frames;
+	u64 tx_frames;
 	int res = 0;
-
-	/* Reading of yt921x_port::mib is not protected by a lock and it's vain
-	 * to keep its consistency, since we have to read registers one by one
-	 * and there is no way to make a snapshot of MIB stats.
-	 *
-	 * Writing (by this function only) is and should be protected by
-	 * reg_lock.
-	 */
 
 	for (size_t i = 0; i < ARRAY_SIZE(yt921x_mib_descs); i++) {
 		const struct yt921x_mib_desc *desc = &yt921x_mib_descs[i];
 		u32 reg = YT921X_MIBn_DATA0(port) + desc->offset;
-		u64 *valp = &((u64 *)mib)[i];
 		u64 val;
 		u32 val0;
 
@@ -695,7 +689,7 @@ static int yt921x_read_mib(struct yt921x_priv *priv, int port)
 			break;
 
 		if (desc->size <= 1) {
-			u64 old_val = *valp;
+			u64 old_val = ((u64 *)mib)[i];
 
 			val = (old_val & ~(u64)U32_MAX) | val0;
 			if (val < old_val)
@@ -709,22 +703,31 @@ static int yt921x_read_mib(struct yt921x_priv *priv, int port)
 			val = ((u64)val0 << 32) | val1;
 		}
 
-		WRITE_ONCE(*valp, val);
+		((u64 *)mib_new)[i] = val;
 	}
 
-	pp->rx_frames = mib->rx_64byte + mib->rx_65_127byte +
-			mib->rx_128_255byte + mib->rx_256_511byte +
-			mib->rx_512_1023byte + mib->rx_1024_1518byte +
-			mib->rx_jumbo;
-	pp->tx_frames = mib->tx_64byte + mib->tx_65_127byte +
-			mib->tx_128_255byte + mib->tx_256_511byte +
-			mib->tx_512_1023byte + mib->tx_1024_1518byte +
-			mib->tx_jumbo;
-
-	if (res)
+	if (res) {
 		dev_err(dev, "Failed to %s port %d: %i\n", "read stats for",
 			port, res);
-	return res;
+		return res;
+	}
+
+	rx_frames = mib->rx_64byte + mib->rx_65_127byte +
+		    mib->rx_128_255byte + mib->rx_256_511byte +
+		    mib->rx_512_1023byte + mib->rx_1024_1518byte +
+		    mib->rx_jumbo;
+	tx_frames = mib->tx_64byte + mib->tx_65_127byte +
+		    mib->tx_128_255byte + mib->tx_256_511byte +
+		    mib->tx_512_1023byte + mib->tx_1024_1518byte +
+		    mib->tx_jumbo;
+
+	spin_lock(&pp->stats_lock);
+	*mib = *mib_new;
+	pp->rx_frames = rx_frames;
+	pp->tx_frames = tx_frames;
+	spin_unlock(&pp->stats_lock);
+
+	return 0;
 }
 
 static void yt921x_poll_mib(struct work_struct *work)
@@ -773,6 +776,7 @@ yt921x_dsa_get_ethtool_stats(struct dsa_switch *ds, int port, uint64_t *data)
 	yt921x_read_mib(priv, port);
 	mutex_unlock(&priv->reg_lock);
 
+	spin_lock(&pp->stats_lock);
 	j = 0;
 	for (size_t i = 0; i < ARRAY_SIZE(yt921x_mib_descs); i++) {
 		const struct yt921x_mib_desc *desc = &yt921x_mib_descs[i];
@@ -783,6 +787,7 @@ yt921x_dsa_get_ethtool_stats(struct dsa_switch *ds, int port, uint64_t *data)
 		data[j] = ((u64 *)mib)[i];
 		j++;
 	}
+	spin_unlock(&pp->stats_lock);
 }
 
 static int yt921x_dsa_get_sset_count(struct dsa_switch *ds, int port, int sset)
@@ -814,6 +819,7 @@ yt921x_dsa_get_eth_mac_stats(struct dsa_switch *ds, int port,
 	yt921x_read_mib(priv, port);
 	mutex_unlock(&priv->reg_lock);
 
+	spin_lock(&pp->stats_lock);
 	mac_stats->FramesTransmittedOK = pp->tx_frames;
 	mac_stats->SingleCollisionFrames = mib->tx_single_collisions;
 	mac_stats->MultipleCollisionFrames = mib->tx_multiple_collisions;
@@ -836,6 +842,7 @@ yt921x_dsa_get_eth_mac_stats(struct dsa_switch *ds, int port,
 	/* mac_stats->InRangeLengthErrors */
 	/* mac_stats->OutOfRangeLengthField */
 	mac_stats->FrameTooLongErrors = mib->rx_oversize_errors;
+	spin_unlock(&pp->stats_lock);
 }
 
 static void
@@ -850,9 +857,11 @@ yt921x_dsa_get_eth_ctrl_stats(struct dsa_switch *ds, int port,
 	yt921x_read_mib(priv, port);
 	mutex_unlock(&priv->reg_lock);
 
+	spin_lock(&pp->stats_lock);
 	ctrl_stats->MACControlFramesTransmitted = mib->tx_pause;
 	ctrl_stats->MACControlFramesReceived = mib->rx_pause;
 	/* ctrl_stats->UnsupportedOpcodesReceived */
+	spin_unlock(&pp->stats_lock);
 }
 
 static const struct ethtool_rmon_hist_range yt921x_rmon_ranges[] = {
@@ -881,6 +890,8 @@ yt921x_dsa_get_rmon_stats(struct dsa_switch *ds, int port,
 
 	*ranges = yt921x_rmon_ranges;
 
+	spin_lock(&pp->stats_lock);
+
 	rmon_stats->undersize_pkts = mib->rx_undersize_errors;
 	rmon_stats->oversize_pkts = mib->rx_oversize_errors;
 	rmon_stats->fragments = mib->rx_alignment_errors;
@@ -901,6 +912,8 @@ yt921x_dsa_get_rmon_stats(struct dsa_switch *ds, int port,
 	rmon_stats->hist_tx[4] = mib->tx_512_1023byte;
 	rmon_stats->hist_tx[5] = mib->tx_1024_1518byte;
 	rmon_stats->hist_tx[6] = mib->tx_jumbo;
+
+	spin_unlock(&pp->stats_lock);
 }
 
 static void
@@ -910,6 +923,8 @@ yt921x_dsa_get_stats64(struct dsa_switch *ds, int port,
 	struct yt921x_priv *priv = to_yt921x_priv(ds);
 	struct yt921x_port *pp = &priv->ports[port];
 	struct yt921x_mib *mib = &pp->mib;
+
+	spin_lock(&pp->stats_lock);
 
 	stats->rx_length_errors = mib->rx_undersize_errors +
 				  mib->rx_fragment_errors;
@@ -937,6 +952,8 @@ yt921x_dsa_get_stats64(struct dsa_switch *ds, int port,
 	/* stats->tx_dropped */
 	stats->multicast = mib->rx_multicast;
 	stats->collisions = mib->tx_collisions;
+
+	spin_unlock(&pp->stats_lock);
 }
 
 static void
@@ -951,8 +968,10 @@ yt921x_dsa_get_pause_stats(struct dsa_switch *ds, int port,
 	yt921x_read_mib(priv, port);
 	mutex_unlock(&priv->reg_lock);
 
+	spin_lock(&pp->stats_lock);
 	pause_stats->tx_pause_frames = mib->tx_pause;
 	pause_stats->rx_pause_frames = mib->rx_pause;
+	spin_unlock(&pp->stats_lock);
 }
 
 static int
