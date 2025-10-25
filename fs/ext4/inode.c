@@ -5143,14 +5143,12 @@ static bool ext4_should_enable_large_folio(struct inode *inode)
 {
 	struct super_block *sb = inode->i_sb;
 
+	if (!ext4_test_mount_flag(sb, EXT4_MF_LARGE_FOLIO))
+		return false;
+
 	if (!S_ISREG(inode->i_mode))
 		return false;
-	if (test_opt(sb, DATA_FLAGS) == EXT4_MOUNT_JOURNAL_DATA ||
-	    ext4_test_inode_flag(inode, EXT4_INODE_JOURNAL_DATA))
-		return false;
-	if (ext4_has_feature_verity(sb))
-		return false;
-	if (ext4_has_feature_encrypt(sb))
+	if (ext4_test_inode_flag(inode, EXT4_INODE_JOURNAL_DATA))
 		return false;
 
 	return true;

@@ -1859,7 +1859,8 @@ static inline int ext4_get_resgid(struct ext4_super_block *es)
 enum {
 	EXT4_MF_MNTDIR_SAMPLED,
 	EXT4_MF_FC_INELIGIBLE,	/* Fast commit ineligible */
-	EXT4_MF_JOURNAL_DESTROY	/* Journal is in process of destroying */
+	EXT4_MF_JOURNAL_DESTROY,/* Journal is in process of destroying */
+	EXT4_MF_LARGE_FOLIO,	/* large folio is support */
 };
 
 static inline void ext4_set_mount_flag(struct super_block *sb, int bit)

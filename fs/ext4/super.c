@@ -5034,6 +5034,28 @@ static const char *ext4_has_journal_option(struct super_block *sb)
 	return NULL;
 }
 
+static int ext4_check_large_folio(struct super_block *sb)
+{
+	const char *err_str = NULL;
+
+	if (test_opt(sb, DATA_FLAGS) == EXT4_MOUNT_JOURNAL_DATA)
+		err_str = "data=journal";
+	else if (ext4_has_feature_verity(sb))
+		err_str = "verity";
+	else if (ext4_has_feature_encrypt(sb))
+		err_str = "encrypt";
+
+	if (!err_str) {
+		ext4_set_mount_flag(sb, EXT4_MF_LARGE_FOLIO);
+	} else if (sb->s_blocksize > PAGE_SIZE) {
+		ext4_msg(sb, KERN_ERR, "bs(%lu) > ps(%lu) unsupported for %s",
+			 sb->s_blocksize, PAGE_SIZE, err_str);
+		return -EINVAL;
+	}
+
+	return 0;
+}
+
 static int ext4_load_super(struct super_block *sb, ext4_fsblk_t *lsb,
 			   int silent)
 {
@@ -5309,6 +5331,10 @@ static int __ext4_fill_super(struct fs_context *fc, struct super_block *sb)
 		goto failed_mount;
 
 	ext4_apply_options(fc, sb);
+
+	err = ext4_check_large_folio(sb);
+	if (err < 0)
+		goto failed_mount;
 
 	err = ext4_encoding_init(sb, es);
 	if (err)
