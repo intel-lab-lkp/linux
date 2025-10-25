@@ -304,6 +304,7 @@ struct igc_adapter {
 
 	u8 rss_indir_tbl[IGC_RETA_SIZE];
 	u8 rss_key[IGC_RSS_KEY_SIZE];
+	bool has_user_rss_key;
 
 	unsigned long link_check_timeout;
 	struct igc_info ei;
