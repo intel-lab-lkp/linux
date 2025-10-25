@@ -35,6 +35,7 @@
 #endif
 
 struct dram_info;
+struct drm_pagemap_shrinker;
 struct intel_display;
 struct intel_dg_nvm_dev;
 struct xe_ggtt;
@@ -413,6 +414,10 @@ struct xe_device {
 		u32 next_asid;
 		/** @usm.lock: protects UM state */
 		struct rw_semaphore lock;
+#if IS_ENABLED(CONFIG_DRM_XE_PAGEMAP)
+		/** @usm.pagemap_shrinker: Shrinker for unused pagemaps */
+		struct drm_pagemap_shrinker *dpagemap_shrinker;
+#endif
 	} usm;
 
 	/** @pinned: pinned BO state */
