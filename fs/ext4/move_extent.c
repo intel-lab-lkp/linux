@@ -270,7 +270,6 @@ move_extent_per_page(struct file *o_filp, struct inode *donor_inode,
 	int i, err2, jblocks, retries = 0;
 	int replaced_count = 0;
 	int from;
-	int blocks_per_page = PAGE_SIZE >> orig_inode->i_blkbits;
 	struct super_block *sb = orig_inode->i_sb;
 	struct buffer_head *bh = NULL;
 
@@ -288,11 +287,11 @@ again:
 		return 0;
 	}
 
-	orig_blk_offset = orig_page_offset * blocks_per_page +
-		data_offset_in_page;
+	orig_blk_offset = EXT4_P_TO_LBLK(orig_inode, orig_page_offset) +
+			  data_offset_in_page;
 
-	donor_blk_offset = donor_page_offset * blocks_per_page +
-		data_offset_in_page;
+	donor_blk_offset = EXT4_P_TO_LBLK(donor_inode, donor_page_offset) +
+			   data_offset_in_page;
 
 	/* Calculate data_size */
 	if ((orig_blk_offset + block_len_in_page - 1) ==
@@ -565,7 +564,7 @@ ext4_move_extents(struct file *o_filp, struct file *d_filp, __u64 orig_blk,
 	struct inode *orig_inode = file_inode(o_filp);
 	struct inode *donor_inode = file_inode(d_filp);
 	struct ext4_ext_path *path = NULL;
-	int blocks_per_page = PAGE_SIZE >> orig_inode->i_blkbits;
+	int blocks_per_page = 1;
 	ext4_lblk_t o_end, o_start = orig_blk;
 	ext4_lblk_t d_start = donor_blk;
 	int ret;
@@ -607,6 +606,9 @@ ext4_move_extents(struct file *o_filp, struct file *d_filp, __u64 orig_blk,
 			 "Online defrag not supported for encrypted files");
 		return -EOPNOTSUPP;
 	}
+
+	if (i_blocksize(orig_inode) < PAGE_SIZE)
+		blocks_per_page = PAGE_SIZE >> orig_inode->i_blkbits;
 
 	/* Protect orig and donor inodes against a truncate */
 	lock_two_nondirectories(orig_inode, donor_inode);
@@ -665,10 +667,8 @@ ext4_move_extents(struct file *o_filp, struct file *d_filp, __u64 orig_blk,
 		if (o_end - o_start < cur_len)
 			cur_len = o_end - o_start;
 
-		orig_page_index = o_start >> (PAGE_SHIFT -
-					       orig_inode->i_blkbits);
-		donor_page_index = d_start >> (PAGE_SHIFT -
-					       donor_inode->i_blkbits);
+		orig_page_index = EXT4_LBLK_TO_P(orig_inode, o_start);
+		donor_page_index = EXT4_LBLK_TO_P(donor_inode, d_start);
 		offset_in_page = o_start % blocks_per_page;
 		if (cur_len > blocks_per_page - offset_in_page)
 			cur_len = blocks_per_page - offset_in_page;
