@@ -114,8 +114,10 @@ static void __init housekeeping_setup_type(enum hk_type type,
 static int __init housekeeping_setup(char *str, unsigned long flags)
 {
 	cpumask_var_t non_housekeeping_mask, housekeeping_staging;
-	unsigned int first_cpu;
-	int err = 0;
+	const struct cpumask *node_cpus;
+	unsigned int first_cpu, last_cpu;
+	int node, node_cpu, err = 0;
+	bool skip_numa_enforcement = false;
 
 	if ((flags & HK_FLAG_KERNEL_NOISE) && !(housekeeping.flags & HK_FLAG_KERNEL_NOISE)) {
 		if (!IS_ENABLED(CONFIG_NO_HZ_FULL)) {
@@ -134,6 +136,40 @@ static int __init housekeeping_setup(char *str, unsigned long flags)
 	alloc_bootmem_cpumask_var(&housekeeping_staging);
 	cpumask_andnot(housekeeping_staging,
 		       cpu_possible_mask, non_housekeeping_mask);
+
+	for_each_online_node(node) {
+		node_cpus = cpumask_of_node(node);
+
+		if (cpumask_empty(node_cpus))
+			continue;
+
+		last_cpu = cpumask_last(node_cpus);
+		if (last_cpu >= setup_max_cpus) {
+			skip_numa_enforcement = true;
+			pr_warn("Housekeeping: NUMA node %d has CPU %d >= "
+				"max_cpus=%d. Skipping NUMA enforcement\n",
+				node, last_cpu, setup_max_cpus);
+			break;
+		}
+	}
+
+	if (!skip_numa_enforcement) {
+		for_each_online_node(node) {
+			node_cpus = cpumask_of_node(node);
+
+			if (cpumask_intersects(node_cpus, housekeeping_staging))
+				continue;
+
+			for_each_cpu_and(node_cpu, node_cpus, cpu_present_mask) {
+				pr_warn("Housekeeping: Adding CPU %d "
+					"from node %d to ensure NUMA "
+					"coverage\n", node_cpu, node);
+				__cpumask_set_cpu(node_cpu, housekeeping_staging);
+				__cpumask_clear_cpu(node_cpu, non_housekeeping_mask);
+				break;
+			}
+		}
+	}
 
 	first_cpu = cpumask_first_and(cpu_present_mask, housekeeping_staging);
 	if (first_cpu >= nr_cpu_ids || first_cpu >= setup_max_cpus) {
