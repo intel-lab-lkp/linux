@@ -379,6 +379,18 @@ static inline void *offset_to_ptr(const int *off)
  */
 #define prevent_tail_call_optimization()	mb()
 
+/*
+ * tell checkpatch --strict that you know the named args (a subset of
+ * the containing macro's args) are safe for multiple expansions.
+ *
+ * Prefer ({ typeof ..}) or do{}while(0) when they work.  They would
+ * not work on module_param_named(name, value, type, perm), or on a
+ * locally useful "for_simplicity()" macro.
+ *
+ * NB: use at top of macro body, omit trailing semicolon.
+ */
+#define __chkp_no_side_effects(...)  /* checkpatch "annotation" helper */
+
 #include <asm/rwonce.h>
 
 #endif /* __LINUX_COMPILER_H */
