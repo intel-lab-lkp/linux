@@ -6075,11 +6075,24 @@ sub process {
 			        next if ($arg =~ /\.\.\./);
 			        next if ($arg =~ /^type$/i);
 				my $tmp_stmt = $define_stmt;
-				$tmp_stmt =~ s/\b(__must_be_array|offsetof|sizeof|sizeof_field|__stringify|typeof|__typeof__|__builtin\w+|typecheck\s*\(\s*$Type\s*,|\#+)\s*\(*\s*$arg\s*\)*\b//g;
-				$tmp_stmt =~ s/\#+\s*$arg\b//g;
-				$tmp_stmt =~ s/\b$arg\s*\#\#//g;
+
+				$tmp_stmt =~ s/\#+\s*$arg\b/drx_print("strip '#|## arg catenations")/ge;
+				$tmp_stmt =~ s/\b$arg\s*\#\#/drx_print("strip 'arg ##' catenations");/ge;
+
+				$tmp_stmt =~ s{
+					\b(__must_be_array|offsetof|sizeof|sizeof_field|__stringify|
+					   typeof|__typeof__|__builtin\w+|typecheck
+					   \s*\(\s*$Type\s*,|\#+)\s*\(*\s*$arg\s*\)*\b }
+				{
+					drx_print("-builtins-");
+				}xge;
+
+				my $no_side_effect_vars = "";
+				if ($tmp_stmt =~ s/__chkp_no_side_effects\((.+)\)//) {
+					$no_side_effect_vars = $1;
+				}
 				my $use_cnt = () = $tmp_stmt =~ /\b$arg\b/g;
-				if ($use_cnt > 1) {
+				if ($use_cnt > 1 and $no_side_effect_vars !~ m/\b$arg\b/) {
 					CHK("MACRO_ARG_REUSE",
 					    "Macro argument reuse '$arg' - possible side-effects?\n" . "$herectx");
 				    }
