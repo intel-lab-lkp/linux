@@ -115,7 +115,7 @@ static int next_bits(struct sw842_param *p, u64 *d, u8 n)
 	else
 		*d = be64_to_cpu(get_unaligned((__be64 *)in)) >> (64 - bits);
 
-	*d &= GENMASK_ULL(n - 1, 0);
+	*d &= FIRST_BITS_ULL(n);
 
 	p->bit += n;
 
