@@ -2898,7 +2898,6 @@ static int update_prstate(struct cpuset *cs, int new_prs)
 	int err = PERR_NONE, old_prs = cs->partition_root_state;
 	struct cpuset *parent = parent_cs(cs);
 	struct tmpmasks tmpmask;
-	bool isolcpus_updated = false;
 
 	if (old_prs == new_prs)
 		return 0;
@@ -2916,7 +2915,7 @@ static int update_prstate(struct cpuset *cs, int new_prs)
 	if (err)
 		goto out;
 
-	if (!old_prs) {
+	if (new_prs > 0) {
 		/*
 		 * cpus_allowed and exclusive_cpus cannot be both empty.
 		 */
@@ -2946,14 +2945,6 @@ static int update_prstate(struct cpuset *cs, int new_prs)
 			err = local_partition_enable(cs, new_prs, &tmpmask);
 		else
 			err = remote_partition_enable(cs, new_prs, &tmpmask);
-	} else if (old_prs && new_prs) {
-		/*
-		 * A change in load balance state only, no change in cpumasks.
-		 * Need to update isolated_cpus.
-		 */
-		isolcpus_updated = true;
-		if (prstate_housekeeping_conflict(new_prs, cs->effective_xcpus))
-			err = PERR_HKEEPING;
 	} else {
 		/*
 		 * Switching back to member is always allowed even if it
@@ -2973,20 +2964,8 @@ out:
 	 * Make partition invalid & disable CS_CPU_EXCLUSIVE if an error
 	 * happens.
 	 */
-	if (err) {
-		new_prs = -new_prs;
-		update_partition_exclusive_flag(cs, new_prs);
-	}
-
-	spin_lock_irq(&callback_lock);
-	cs->partition_root_state = new_prs;
-	WRITE_ONCE(cs->prs_err, err);
-	if (!is_partition_valid(cs))
-		reset_partition_data(cs);
-	else if (isolcpus_updated)
-		isolated_cpus_update(old_prs, new_prs, cs->effective_xcpus);
-	spin_unlock_irq(&callback_lock);
-	update_unbound_workqueue_cpumask(isolcpus_updated);
+	if (err)
+		partition_disable(cs, parent, -new_prs, err);
 
 	/* Force update if switching back to member & update effective_xcpus */
 	update_cpumasks_hier(cs, &tmpmask, !new_prs);
@@ -2998,7 +2977,6 @@ out:
 	/* Update sched domains and load balance flag */
 	update_partition_sd_lb(cs, old_prs);
 
-	notify_partition_change(cs, old_prs);
 	if (force_sd_rebuild)
 		rebuild_sched_domains_locked();
 	free_tmpmasks(&tmpmask);
