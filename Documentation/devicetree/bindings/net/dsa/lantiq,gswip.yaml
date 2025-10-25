@@ -8,6 +8,24 @@ title: Lantiq GSWIP Ethernet switches
 
 allOf:
   - $ref: dsa.yaml#/$defs/ethernet-ports
+  - properties:
+      ports:
+        patternProperties:
+          "^port@[0-6]$":
+            type: object
+            properties:
+              tx-internal-delay-ps:
+                enum: [0, 500, 1000, 1500, 2000, 2500, 3000, 3500]
+                default: 2000
+                description:
+                  RGMII TX Clock Delay defined in pico seconds.
+                  The delay lines adjust the MII clock vs. data timing.
+              rx-internal-delay-ps:
+                enum: [0, 500, 1000, 1500, 2000, 2500, 3000, 3500]
+                default: 2000
+                description:
+                  RGMII RX Clock Delay defined in pico seconds.
+                  The delay lines adjust the MII clock vs. data timing.
 
 maintainers:
   - Hauke Mehrtens <hauke@hauke-m.de>
@@ -115,6 +133,8 @@ examples:
                             label = "lan3";
                             phy-mode = "rgmii";
                             phy-handle = <&phy0>;
+                            tx-internal-delay-ps = <2000>;
+                            rx-internal-delay-ps = <2000>;
                     };
 
                     port@1 {
