@@ -1604,7 +1604,7 @@ static ssize_t i40e_dbg_netdev_ops_write(struct file *filp,
 	int bytes_not_copied;
 	struct i40e_vsi *vsi;
 	int vsi_seid;
-	int i, cnt;
+	int i, ret;
 
 	/* don't allow partial writes */
 	if (*ppos != 0)
@@ -1629,9 +1629,9 @@ static ssize_t i40e_dbg_netdev_ops_write(struct file *filp,
 	if (strncmp(cmd_buf, "change_mtu", 10) == 0) {
 		int mtu;
 
-		cnt = sscanf(&cmd_buf[11], "%i %i",
+		ret = sscanf(&cmd_buf[11], "%i %i",
 			     &vsi_seid, &mtu);
-		if (cnt != 2) {
+		if (ret != 2) {
 			dev_info(&pf->pdev->dev, "change_mtu <vsi_seid> <mtu>\n");
 			goto netdev_ops_write_done;
 		}
@@ -1652,8 +1652,8 @@ static ssize_t i40e_dbg_netdev_ops_write(struct file *filp,
 		}
 
 	} else if (strncmp(cmd_buf, "set_rx_mode", 11) == 0) {
-		cnt = sscanf(&cmd_buf[11], "%i", &vsi_seid);
-		if (cnt != 1) {
+		ret = kstrtoint(&cmd_buf[11], 0, &vsi_seid);
+		if (ret) {
 			dev_info(&pf->pdev->dev, "set_rx_mode <vsi_seid>\n");
 			goto netdev_ops_write_done;
 		}
@@ -1673,8 +1673,8 @@ static ssize_t i40e_dbg_netdev_ops_write(struct file *filp,
 		}
 
 	} else if (strncmp(cmd_buf, "napi", 4) == 0) {
-		cnt = sscanf(&cmd_buf[4], "%i", &vsi_seid);
-		if (cnt != 1) {
+		ret = kstrtoint(&cmd_buf[4], 0, &vsi_seid);
+		if (ret) {
 			dev_info(&pf->pdev->dev, "napi <vsi_seid>\n");
 			goto netdev_ops_write_done;
 		}
