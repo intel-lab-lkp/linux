@@ -98,6 +98,7 @@ struct regmap *altr_sysmgr_regmap_lookup_by_phandle(struct device_node *np,
 	struct device *dev;
 	struct altr_sysmgr *sysmgr;
 	struct device_node *sysmgr_np;
+	struct regmap *regmap;
 
 	if (property)
 		sysmgr_np = of_parse_phandle(np, property, 0);
@@ -116,8 +117,10 @@ struct regmap *altr_sysmgr_regmap_lookup_by_phandle(struct device_node *np,
 		return ERR_PTR(-EPROBE_DEFER);
 
 	sysmgr = dev_get_drvdata(dev);
+	regmap = sysmgr->regmap;
+	put_device(dev);
 
-	return sysmgr->regmap;
+	return regmap;
 }
 EXPORT_SYMBOL_GPL(altr_sysmgr_regmap_lookup_by_phandle);
 
