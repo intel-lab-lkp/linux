@@ -1031,6 +1031,35 @@ static sector_t folio_init_buffers(struct folio *folio,
 	return end_block;
 }
 
+static struct folio *blkdev_get_folio(struct address_space *mapping,
+				      pgoff_t index, fgf_t fgp_flags, gfp_t gfp)
+{
+	struct folio *folio;
+	unsigned int min_order = mapping_min_folio_order(mapping);
+
+	/*
+	 * Allocating page units greater than order-1 with __GFP_NOFAIL in
+	 * __alloc_pages_slowpath() can trigger an unexpected WARN_ON.
+	 * Handle this case separately to suppress the warning.
+	 */
+	if (min_order <= 1)
+		return __filemap_get_folio(mapping, index, fgp_flags, gfp);
+
+	while (1) {
+		folio = __filemap_get_folio(mapping, index, fgp_flags,
+					    gfp & ~__GFP_NOFAIL);
+		if (!IS_ERR(folio) || !(gfp & __GFP_NOFAIL))
+			return folio;
+
+		if (PTR_ERR(folio) != -ENOMEM && PTR_ERR(folio) != -EAGAIN)
+			return folio;
+
+		memalloc_retry_wait(gfp);
+	}
+
+	return folio;
+}
+
 /*
  * Create the page-cache folio that contains the requested block.
  *
@@ -1047,8 +1076,8 @@ static bool grow_dev_folio(struct block_device *bdev, sector_t block,
 	struct buffer_head *bh;
 	sector_t end_block = 0;
 
-	folio = __filemap_get_folio(mapping, index,
-			FGP_LOCK | FGP_ACCESSED | FGP_CREAT, gfp);
+	folio = blkdev_get_folio(mapping, index,
+				 FGP_LOCK | FGP_ACCESSED | FGP_CREAT, gfp);
 	if (IS_ERR(folio))
 		return false;
 
