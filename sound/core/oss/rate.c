@@ -25,8 +25,8 @@
 #include "pcm_plugin.h"
 
 #define SHIFT	11
-#define BITS	(1<<SHIFT)
-#define R_MASK	(BITS-1)
+#define R_BITS	(1<<SHIFT)
+#define R_MASK	(R_BITS-1)
 
 /*
  *  Basic rate conversion plugin
@@ -104,7 +104,7 @@ static void resample_expand(struct snd_pcm_plugin *plugin,
 					src += src_step;
 				}
 			}
-			val = S1 + ((S2 - S1) * (signed int)pos) / BITS;
+			val = S1 + ((S2 - S1) * (signed int)pos) / R_BITS;
 			if (val < -32768)
 				val = -32768;
 			else if (val > 32767)
@@ -162,7 +162,7 @@ static void resample_shrink(struct snd_pcm_plugin *plugin,
 			}
 			if (pos & ~R_MASK) {
 				pos &= R_MASK;
-				val = S1 + ((S2 - S1) * (signed int)pos) / BITS;
+				val = S1 + ((S2 - S1) * (signed int)pos) / R_BITS;
 				if (val < -32768)
 					val = -32768;
 				else if (val > 32767)
@@ -191,7 +191,7 @@ static snd_pcm_sframes_t rate_src_frames(struct snd_pcm_plugin *plugin, snd_pcm_
 		return 0;
 	data = (struct rate_priv *)plugin->extra_data;
 	if (plugin->src_format.rate < plugin->dst_format.rate) {
-		res = (((frames * data->pitch) + (BITS/2)) >> SHIFT);
+		res = (((frames * data->pitch) + (R_BITS/2)) >> SHIFT);
 	} else {
 		res = DIV_ROUND_CLOSEST(frames << SHIFT, data->pitch);
 	}
@@ -226,7 +226,7 @@ static snd_pcm_sframes_t rate_dst_frames(struct snd_pcm_plugin *plugin, snd_pcm_
 	if (plugin->src_format.rate < plugin->dst_format.rate) {
 		res = DIV_ROUND_CLOSEST(frames << SHIFT, data->pitch);
 	} else {
-		res = (((frames * data->pitch) + (BITS/2)) >> SHIFT);
+		res = (((frames * data->pitch) + (R_BITS/2)) >> SHIFT);
 	}
 	if (data->old_dst_frames > 0) {
 		snd_pcm_sframes_t frames1 = frames, res1 = data->old_src_frames;
