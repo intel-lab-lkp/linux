@@ -38,6 +38,7 @@
 
 static struct class *devfreq_class;
 static struct dentry *devfreq_debugfs;
+static const struct attribute_group gov_attr_group;
 
 /*
  * devfreq core provides delayed work based load monitoring helper
@@ -785,11 +786,6 @@ static void devfreq_dev_release(struct device *dev)
 	kfree(devfreq);
 }
 
-static void create_sysfs_files(struct devfreq *devfreq,
-				const struct devfreq_governor *gov);
-static void remove_sysfs_files(struct devfreq *devfreq,
-				const struct devfreq_governor *gov);
-
 /**
  * devfreq_add_device() - Add devfreq feature to the device
  * @dev:	the device to add devfreq feature.
@@ -956,7 +952,10 @@ struct devfreq *devfreq_add_device(struct device *dev,
 			 __func__);
 		goto err_init;
 	}
-	create_sysfs_files(devfreq, devfreq->governor);
+
+	err = sysfs_update_group(&devfreq->dev.kobj, &gov_attr_group);
+	if (err)
+		goto err_init;
 
 	list_add(&devfreq->node, &devfreq_list);
 
@@ -998,9 +997,7 @@ int devfreq_remove_device(struct devfreq *devfreq)
 	if (devfreq->governor) {
 		devfreq->governor->event_handler(devfreq,
 						 DEVFREQ_GOV_STOP, NULL);
-		remove_sysfs_files(devfreq, devfreq->governor);
 	}
-
 	device_unregister(&devfreq->dev);
 
 	return 0;
@@ -1460,7 +1457,6 @@ static ssize_t governor_store(struct device *dev, struct device_attribute *attr,
 			 __func__, df->governor->name, ret);
 		goto out;
 	}
-	remove_sysfs_files(df, df->governor);
 
 	/*
 	 * Start the new governor and create the specific sysfs files
@@ -1489,7 +1485,7 @@ static ssize_t governor_store(struct device *dev, struct device_attribute *attr,
 	 * Create the sysfs files for the new governor. But if failed to start
 	 * the new governor, restore the sysfs files of previous governor.
 	 */
-	create_sysfs_files(df, df->governor);
+	ret = sysfs_update_group(&df->dev.kobj, &gov_attr_group);
 
 out:
 	mutex_unlock(&devfreq_list_lock);
@@ -1805,19 +1801,26 @@ static struct attribute *devfreq_attrs[] = {
 	&dev_attr_min_freq.attr,
 	&dev_attr_max_freq.attr,
 	&dev_attr_trans_stat.attr,
-	NULL,
+	NULL
 };
-ATTRIBUTE_GROUPS(devfreq);
 
 static ssize_t polling_interval_show(struct device *dev,
 				     struct device_attribute *attr, char *buf)
 {
 	struct devfreq *df = to_devfreq(dev);
+	int ret;
 
-	if (!df->profile)
+	mutex_lock(&devfreq_list_lock);
+	if (!df->profile || !df->governor ||
+	    !IS_SUPPORTED_ATTR(df->governor->attrs, POLLING_INTERVAL)) {
+		mutex_unlock(&devfreq_list_lock);
 		return -EINVAL;
+	}
 
-	return sprintf(buf, "%d\n", df->profile->polling_ms);
+	ret = sprintf(buf, "%d\n", df->profile->polling_ms);
+	mutex_unlock(&devfreq_list_lock);
+
+	return ret;
 }
 
 static ssize_t polling_interval_store(struct device *dev,
@@ -1828,15 +1831,22 @@ static ssize_t polling_interval_store(struct device *dev,
 	unsigned int value;
 	int ret;
 
-	if (!df->governor)
+	mutex_lock(&devfreq_list_lock);
+	if (!df->governor ||
+	    !IS_SUPPORTED_ATTR(df->governor->attrs, POLLING_INTERVAL)) {
+		mutex_unlock(&devfreq_list_lock);
 		return -EINVAL;
+	}
 
 	ret = sscanf(buf, "%u", &value);
-	if (ret != 1)
+	if (ret != 1) {
+		mutex_unlock(&devfreq_list_lock);
 		return -EINVAL;
+	}
 
 	df->governor->event_handler(df, DEVFREQ_GOV_UPDATE_INTERVAL, &value);
 	ret = count;
+	mutex_unlock(&devfreq_list_lock);
 
 	return ret;
 }
@@ -1846,11 +1856,19 @@ static ssize_t timer_show(struct device *dev,
 			     struct device_attribute *attr, char *buf)
 {
 	struct devfreq *df = to_devfreq(dev);
+	int ret;
 
-	if (!df->profile)
+	mutex_lock(&devfreq_list_lock);
+	if (!df->profile || !df->governor ||
+	    !IS_SUPPORTED_ATTR(df->governor->attrs, TIMER)) {
+		mutex_unlock(&devfreq_list_lock);
 		return -EINVAL;
+	}
 
-	return sprintf(buf, "%s\n", timer_name[df->profile->timer]);
+	ret = sprintf(buf, "%s\n", timer_name[df->profile->timer]);
+	mutex_unlock(&devfreq_list_lock);
+
+	return ret;
 }
 
 static ssize_t timer_store(struct device *dev, struct device_attribute *attr,
@@ -1861,8 +1879,12 @@ static ssize_t timer_store(struct device *dev, struct device_attribute *attr,
 	int timer = -1;
 	int ret = 0, i;
 
-	if (!df->governor || !df->profile)
+	mutex_lock(&devfreq_list_lock);
+	if (!df->governor || !df->profile ||
+	    !IS_SUPPORTED_ATTR(df->governor->attrs, TIMER)) {
+		mutex_unlock(&devfreq_list_lock);
 		return -EINVAL;
+	}
 
 	ret = sscanf(buf, "%16s", str_timer);
 	if (ret != 1)
@@ -1901,40 +1923,64 @@ static ssize_t timer_store(struct device *dev, struct device_attribute *attr,
 		dev_warn(dev, "%s: Governor %s not started(%d)\n",
 			 __func__, df->governor->name, ret);
 out:
+	mutex_unlock(&devfreq_list_lock);
 	return ret ? ret : count;
 }
 static DEVICE_ATTR_RW(timer);
 
-#define CREATE_SYSFS_FILE(df, name)					\
-{									\
-	int ret;							\
-	ret = sysfs_create_file(&df->dev.kobj, &dev_attr_##name.attr);	\
-	if (ret < 0) {							\
-		dev_warn(&df->dev,					\
-			"Unable to create attr(%s)\n", "##name");	\
-	}								\
-}									\
+static struct attribute *governor_attrs[] = {
+	&dev_attr_polling_interval.attr,
+	&dev_attr_timer.attr,
+	NULL
+};
 
-/* Create the specific sysfs files which depend on each governor. */
-static void create_sysfs_files(struct devfreq *devfreq,
-				const struct devfreq_governor *gov)
+static umode_t gov_attr_visible(struct kobject *kobj,
+				struct attribute *attr, int n)
 {
-	if (IS_SUPPORTED_ATTR(gov->attrs, POLLING_INTERVAL))
-		CREATE_SYSFS_FILE(devfreq, polling_interval);
-	if (IS_SUPPORTED_ATTR(gov->attrs, TIMER))
-		CREATE_SYSFS_FILE(devfreq, timer);
+	struct device *dev = kobj_to_dev(kobj);
+	struct devfreq *df = to_devfreq(dev);
+
+	if (!df->governor || !df->governor->attrs)
+		return 0;
+
+	if (IS_SUPPORTED_ATTR(df->governor->attrs, POLLING_INTERVAL))
+		return attr->mode;
+	if (IS_SUPPORTED_ATTR(df->governor->attrs, TIMER))
+		return attr->mode;
+
+	return 0;
 }
 
-/* Remove the specific sysfs files which depend on each governor. */
-static void remove_sysfs_files(struct devfreq *devfreq,
-				const struct devfreq_governor *gov)
+static bool gov_group_visible(struct kobject *kobj)
 {
-	if (IS_SUPPORTED_ATTR(gov->attrs, POLLING_INTERVAL))
-		sysfs_remove_file(&devfreq->dev.kobj,
-				&dev_attr_polling_interval.attr);
-	if (IS_SUPPORTED_ATTR(gov->attrs, TIMER))
-		sysfs_remove_file(&devfreq->dev.kobj, &dev_attr_timer.attr);
+	struct device *dev = kobj_to_dev(kobj);
+	struct devfreq *df;
+
+	if (!dev)
+		return false;
+
+	df = to_devfreq(dev);
+	if (!df)
+		return false;
+
+	return true;
 }
+DEFINE_SYSFS_GROUP_VISIBLE(gov);
+
+static const struct attribute_group devfreq_group = {
+	.attrs = devfreq_attrs,
+};
+
+static const struct attribute_group gov_attr_group = {
+	.attrs = governor_attrs,
+	.is_visible = SYSFS_GROUP_VISIBLE(gov),
+};
+
+static const struct attribute_group *devfreq_groups[] = {
+	&devfreq_group,
+	&gov_attr_group,
+	NULL
+};
 
 /**
  * devfreq_summary_show() - Show the summary of the devfreq devices
