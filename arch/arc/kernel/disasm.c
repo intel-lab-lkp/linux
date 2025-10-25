@@ -100,12 +100,12 @@ void __kprobes disasm_instr(unsigned long addr, struct disasm_state *state,
 
 	case op_LD:  /* LD<zz> a,[b,s9] */
 		state->write = 0;
-		state->di = BITS(state->words[0], 11, 11);
+		state->di = FIELD(state->words[0], 11, 11);
 		if (state->di)
 			break;
-		state->x = BITS(state->words[0], 6, 6);
-		state->zz = BITS(state->words[0], 7, 8);
-		state->aa = BITS(state->words[0], 9, 10);
+		state->x = FIELD(state->words[0], 6, 6);
+		state->zz = FIELD(state->words[0], 7, 8);
+		state->aa = FIELD(state->words[0], 9, 10);
 		state->wb_reg = FIELD_B(state->words[0]);
 		if (state->wb_reg == REG_LIMM) {
 			state->instr_len += 4;
@@ -121,11 +121,11 @@ void __kprobes disasm_instr(unsigned long addr, struct disasm_state *state,
 
 	case op_ST:
 		state->write = 1;
-		state->di = BITS(state->words[0], 5, 5);
+		state->di = FIELD(state->words[0], 5, 5);
 		if (state->di)
 			break;
-		state->aa = BITS(state->words[0], 3, 4);
-		state->zz = BITS(state->words[0], 1, 2);
+		state->aa = FIELD(state->words[0], 3, 4);
+		state->zz = FIELD(state->words[0], 1, 2);
 		state->src1 = FIELD_C(state->words[0]);
 		if (state->src1 == REG_LIMM) {
 			state->instr_len += 4;
@@ -160,7 +160,7 @@ void __kprobes disasm_instr(unsigned long addr, struct disasm_state *state,
 				is_linked = 1;
 
 			fieldCisReg = 0;
-			op_format = BITS(state->words[0], 22, 23);
+			op_format = FIELD(state->words[0], 22, 23);
 			if (op_format == 0 || ((op_format == 3) &&
 				(!IS_BIT(state->words[0], 5)))) {
 				fieldC = FIELD_C(state->words[0]);
@@ -192,7 +192,7 @@ void __kprobes disasm_instr(unsigned long addr, struct disasm_state *state,
 			break;
 
 		case 40:	/* LPcc */
-			if (BITS(state->words[0], 22, 23) == 3) {
+			if (FIELD(state->words[0], 22, 23) == 3) {
 				/* Conditional LPcc u7 */
 				fieldC = FIELD_C(state->words[0]);
 
@@ -207,12 +207,12 @@ void __kprobes disasm_instr(unsigned long addr, struct disasm_state *state,
 			break;
 
 		case 48 ... 55:	/* LD a,[b,c] */
-			state->di = BITS(state->words[0], 15, 15);
+			state->di = FIELD(state->words[0], 15, 15);
 			if (state->di)
 				break;
-			state->x = BITS(state->words[0], 16, 16);
-			state->zz = BITS(state->words[0], 17, 18);
-			state->aa = BITS(state->words[0], 22, 23);
+			state->x = FIELD(state->words[0], 16, 16);
+			state->zz = FIELD(state->words[0], 17, 18);
+			state->aa = FIELD(state->words[0], 22, 23);
 			state->wb_reg = FIELD_B(state->words[0]);
 			if (state->wb_reg == REG_LIMM) {
 				state->instr_len += 4;
@@ -237,7 +237,7 @@ void __kprobes disasm_instr(unsigned long addr, struct disasm_state *state,
 		case 10:	/* MOV */
 			/* still need to check for limm to extract instr len */
 			/* MOV is special case because it only takes 2 args */
-			switch (BITS(state->words[0], 22, 23)) {
+			switch (FIELD(state->words[0], 22, 23)) {
 			case 0: /* OP a,b,c */
 				if (FIELD_C(state->words[0]) == REG_LIMM)
 					state->instr_len += 4;
@@ -258,7 +258,7 @@ void __kprobes disasm_instr(unsigned long addr, struct disasm_state *state,
 		default:
 			/* Not a Load, Jump or Loop instruction */
 			/* still need to check for limm to extract instr len */
-			switch (BITS(state->words[0], 22, 23)) {
+			switch (FIELD(state->words[0], 22, 23)) {
 			case 0: /* OP a,b,c */
 				if ((FIELD_B(state->words[0]) == REG_LIMM) ||
 				    (FIELD_C(state->words[0]) == REG_LIMM))
@@ -281,7 +281,7 @@ void __kprobes disasm_instr(unsigned long addr, struct disasm_state *state,
 
 	/* 16 Bit Instructions */
 	case op_LD_ADD: /* LD_S|LDB_S|LDW_S a,[b,c] */
-		state->zz = BITS(state->words[0], 3, 4);
+		state->zz = FIELD(state->words[0], 3, 4);
 		state->src1 = get_reg(FIELD_S_B(state->words[0]), regs, cregs);
 		state->src2 = get_reg(FIELD_S_C(state->words[0]), regs, cregs);
 		state->dest = FIELD_S_A(state->words[0]);
@@ -289,13 +289,13 @@ void __kprobes disasm_instr(unsigned long addr, struct disasm_state *state,
 
 	case op_ADD_MOV_CMP:
 		/* check for limm, ignore mov_s h,b (== mov_s 0,b) */
-		if ((BITS(state->words[0], 3, 4) < 3) &&
+		if ((FIELD(state->words[0], 3, 4) < 3) &&
 		    (FIELD_S_H(state->words[0]) == REG_LIMM))
 			state->instr_len += 4;
 		break;
 
 	case op_S:
-		subopcode = BITS(state->words[0], 5, 7);
+		subopcode = FIELD(state->words[0], 5, 7);
 		switch (subopcode) {
 		case 0:	/* j_s */
 		case 1:	/* j_s.d */
@@ -308,7 +308,7 @@ void __kprobes disasm_instr(unsigned long addr, struct disasm_state *state,
 				direct_call : indirect_jump;
 			break;
 		case 7:
-			switch (BITS(state->words[0], 8, 10)) {
+			switch (FIELD(state->words[0], 8, 10)) {
 			case 4:	/* jeq_s [blink] */
 			case 5:	/* jne_s [blink] */
 			case 6:	/* j_s [blink] */
@@ -367,8 +367,8 @@ void __kprobes disasm_instr(unsigned long addr, struct disasm_state *state,
 		/* note: we are ignoring possibility of:
 		 * ADD_S, SUB_S, PUSH_S, POP_S as these should not
 		 * cause unaligned exception anyway */
-		state->write = BITS(state->words[0], 6, 6);
-		state->zz = BITS(state->words[0], 5, 5);
+		state->write = FIELD(state->words[0], 6, 6);
+		state->zz = FIELD(state->words[0], 5, 5);
 		if (state->zz)
 			break;	/* byte accesses should not come here */
 		if (!state->write) {
@@ -385,7 +385,7 @@ void __kprobes disasm_instr(unsigned long addr, struct disasm_state *state,
 
 	case op_GP:	/* LD_S|LDB_S|LDW_S r0,[gp,s11/s9/s10] */
 		/* note: ADD_S r0, gp, s11 is ignored */
-		state->zz = BITS(state->words[0], 9, 10);
+		state->zz = FIELD(state->words[0], 9, 10);
 		state->src1 = get_reg(26, regs, cregs);
 		state->src2 = state->zz ? FIELD_S_s10(state->words[0]) :
 			FIELD_S_s11(state->words[0]);
@@ -405,7 +405,7 @@ void __kprobes disasm_instr(unsigned long addr, struct disasm_state *state,
 		break;
 
 	case op_B_S:
-		fieldA = (BITS(state->words[0], 9, 10) == 3) ?
+		fieldA = (FIELD(state->words[0], 9, 10) == 3) ?
 			FIELD_S_s7(state->words[0]) :
 			FIELD_S_s10(state->words[0]);
 		state->target = fieldA + (addr & ~0x03);
