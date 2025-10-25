@@ -10,6 +10,9 @@
 #include "hinic3_nic_dev.h"
 #include "hinic3_nic_io.h"
 
+#define MGMT_MSG_CMD_OP_ADD  1
+#define MGMT_MSG_CMD_OP_DEL  0
+
 static int hinic3_feature_nego(struct hinic3_hwdev *hwdev, u8 opcode,
 			       u64 *s_feature, u16 size)
 {
@@ -55,6 +58,136 @@ bool hinic3_test_support(struct hinic3_nic_dev *nic_dev,
 			 enum hinic3_nic_feature_cap feature_bits)
 {
 	return (nic_dev->nic_io->feature_cap & feature_bits) == feature_bits;
+}
+
+static int hinic3_set_rx_lro(struct hinic3_hwdev *hwdev, u8 ipv4_en, u8 ipv6_en,
+			     u8 lro_max_pkt_len)
+{
+	struct l2nic_cmd_lro_config lro_cfg = {};
+	struct mgmt_msg_params msg_params = {};
+	int err;
+
+	lro_cfg.func_id = hinic3_global_func_id(hwdev);
+	lro_cfg.opcode = MGMT_MSG_CMD_OP_SET;
+	lro_cfg.lro_ipv4_en = ipv4_en;
+	lro_cfg.lro_ipv6_en = ipv6_en;
+	lro_cfg.lro_max_pkt_len = lro_max_pkt_len;
+
+	mgmt_msg_params_init_default(&msg_params, &lro_cfg,
+				     sizeof(lro_cfg));
+
+	err = hinic3_send_mbox_to_mgmt(hwdev, MGMT_MOD_L2NIC,
+				       L2NIC_CMD_CFG_RX_LRO,
+				       &msg_params);
+
+	if (err || lro_cfg.msg_head.status) {
+		dev_err(hwdev->dev, "Failed to set lro offload, err: %d, status: 0x%x\n",
+			err, lro_cfg.msg_head.status);
+		return -EFAULT;
+	}
+
+	return 0;
+}
+
+static int hinic3_set_rx_lro_timer(struct hinic3_hwdev *hwdev, u32 timer_value)
+{
+	struct l2nic_cmd_lro_timer lro_timer = {};
+	struct mgmt_msg_params msg_params = {};
+	int err;
+
+	lro_timer.opcode = MGMT_MSG_CMD_OP_SET;
+	lro_timer.timer = timer_value;
+
+	mgmt_msg_params_init_default(&msg_params, &lro_timer,
+				     sizeof(lro_timer));
+
+	err = hinic3_send_mbox_to_mgmt(hwdev, MGMT_MOD_L2NIC,
+				       L2NIC_CMD_CFG_LRO_TIMER,
+				       &msg_params);
+
+	if (err || lro_timer.msg_head.status) {
+		dev_err(hwdev->dev, "Failed to set lro timer, err: %d, status: 0x%x\n",
+			err, lro_timer.msg_head.status);
+
+		return -EFAULT;
+	}
+
+	return 0;
+}
+
+int hinic3_set_rx_lro_state(struct hinic3_hwdev *hwdev, u8 lro_en, u32 lro_timer,
+			    u8 lro_max_pkt_len)
+{
+	u8 ipv4_en, ipv6_en;
+	int err;
+
+	ipv4_en = lro_en ? 1 : 0;
+	ipv6_en = lro_en ? 1 : 0;
+
+	dev_dbg(hwdev->dev, "Set LRO max coalesce packet size to %uK\n",
+		lro_max_pkt_len);
+
+	err = hinic3_set_rx_lro(hwdev, ipv4_en, ipv6_en, lro_max_pkt_len);
+	if (err)
+		return err;
+
+	/* we don't set LRO timer for VF */
+	if (HINIC3_IS_VF(hwdev))
+		return 0;
+
+	dev_dbg(hwdev->dev, "Set LRO timer to %u\n", lro_timer);
+
+	return hinic3_set_rx_lro_timer(hwdev, lro_timer);
+}
+
+int hinic3_set_rx_vlan_offload(struct hinic3_hwdev *hwdev, u8 en)
+{
+	struct l2nic_cmd_vlan_offload vlan_cfg = {};
+	struct mgmt_msg_params msg_params = {};
+	int err;
+
+	vlan_cfg.func_id = hinic3_global_func_id(hwdev);
+	vlan_cfg.vlan_offload = en;
+
+	mgmt_msg_params_init_default(&msg_params, &vlan_cfg,
+				     sizeof(vlan_cfg));
+
+	err = hinic3_send_mbox_to_mgmt(hwdev, MGMT_MOD_L2NIC,
+				       L2NIC_CMD_SET_RX_VLAN_OFFLOAD,
+				       &msg_params);
+
+	if (err || vlan_cfg.msg_head.status) {
+		dev_err(hwdev->dev, "Failed to set rx vlan offload, err: %d, status: 0x%x\n",
+			err, vlan_cfg.msg_head.status);
+		return -EFAULT;
+	}
+
+	return 0;
+}
+
+int hinic3_set_vlan_fliter(struct hinic3_hwdev *hwdev, u32 vlan_filter_ctrl)
+{
+	struct l2nic_cmd_set_vlan_filter vlan_filter;
+	struct mgmt_msg_params msg_params = {};
+	int err;
+
+	vlan_filter.func_id = hinic3_global_func_id(hwdev);
+	vlan_filter.vlan_filter_ctrl = vlan_filter_ctrl;
+
+	mgmt_msg_params_init_default(&msg_params, &vlan_filter,
+				     sizeof(vlan_filter));
+
+	err = hinic3_send_mbox_to_mgmt(hwdev, MGMT_MOD_L2NIC,
+				       L2NIC_CMD_SET_VLAN_FILTER_EN,
+				       &msg_params);
+
+	if (err || vlan_filter.msg_head.status) {
+		dev_err(hwdev->dev, "Failed to set vlan filter, err: %d, status: 0x%x\n",
+			err, vlan_filter.msg_head.status);
+		return -EFAULT;
+	}
+
+	return 0;
 }
 
 void hinic3_update_nic_feature(struct hinic3_nic_dev *nic_dev, u64 feature_cap)
@@ -360,6 +493,44 @@ int hinic3_force_drop_tx_pkt(struct hinic3_hwdev *hwdev)
 	}
 
 	return pkt_drop.msg_head.status;
+}
+
+static int hinic3_config_vlan(struct hinic3_hwdev *hwdev,
+			      u8 opcode, u16 vlan_id, u16 func_id)
+{
+	struct l2nic_cmd_vlan_config vlan_info = {};
+	struct mgmt_msg_params msg_params = {};
+	int err;
+
+	vlan_info.opcode = opcode;
+	vlan_info.func_id = func_id;
+	vlan_info.vlan_id = vlan_id;
+
+	mgmt_msg_params_init_default(&msg_params, &vlan_info,
+				     sizeof(vlan_info));
+
+	err = hinic3_send_mbox_to_mgmt(hwdev, MGMT_MOD_L2NIC,
+				       L2NIC_CMD_CFG_FUNC_VLAN, &msg_params);
+
+	if (err || vlan_info.msg_head.status) {
+		dev_err(hwdev->dev,
+			"Failed to %s vlan, err: %d, status: 0x%x\n",
+			opcode == MGMT_MSG_CMD_OP_ADD ? "add" : "delete",
+			err, vlan_info.msg_head.status);
+		return -EFAULT;
+	}
+
+	return 0;
+}
+
+int hinic3_add_vlan(struct hinic3_hwdev *hwdev, u16 vlan_id, u16 func_id)
+{
+	return hinic3_config_vlan(hwdev, MGMT_MSG_CMD_OP_ADD, vlan_id, func_id);
+}
+
+int hinic3_del_vlan(struct hinic3_hwdev *hwdev, u16 vlan_id, u16 func_id)
+{
+	return hinic3_config_vlan(hwdev, MGMT_MSG_CMD_OP_DEL, vlan_id, func_id);
 }
 
 int hinic3_set_port_enable(struct hinic3_hwdev *hwdev, bool enable)

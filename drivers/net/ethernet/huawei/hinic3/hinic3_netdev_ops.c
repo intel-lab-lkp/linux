@@ -12,6 +12,15 @@
 #include "hinic3_rx.h"
 #include "hinic3_tx.h"
 
+#define HINIC3_LRO_DEFAULT_COAL_PKT_SIZE  32
+#define HINIC3_LRO_DEFAULT_TIME_LIMIT     16
+
+#define VLAN_BITMAP_BITS_SIZE(nic_dev)    (sizeof(*(nic_dev)->vlan_bitmap) * 8)
+#define VID_LINE(nic_dev, vid)  \
+	((vid) / VLAN_BITMAP_BITS_SIZE(nic_dev))
+#define VID_COL(nic_dev, vid)  \
+	((vid) & (VLAN_BITMAP_BITS_SIZE(nic_dev) - 1))
+
 /* try to modify the number of irq to the target number,
  * and return the actual number of irq.
  */
@@ -384,6 +393,9 @@ static int hinic3_vport_up(struct net_device *netdev)
 	if (!err && link_status_up)
 		netif_carrier_on(netdev);
 
+	queue_delayed_work(nic_dev->workq, &nic_dev->moderation_task,
+			   HINIC3_MODERATONE_DELAY);
+
 	hinic3_print_link_message(netdev, link_status_up);
 
 	return 0;
@@ -405,6 +417,8 @@ static void hinic3_vport_down(struct net_device *netdev)
 
 	netif_carrier_off(netdev);
 	netif_tx_disable(netdev);
+
+	disable_delayed_work_sync(&nic_dev->moderation_task);
 
 	glb_func_id = hinic3_global_func_id(nic_dev->hwdev);
 	hinic3_set_vport_enable(nic_dev->hwdev, glb_func_id, false);
@@ -476,6 +490,162 @@ static int hinic3_close(struct net_device *netdev)
 	return 0;
 }
 
+#define SET_FEATURES_OP_STR(op)  ((op) ? "Enable" : "Disable")
+
+static int hinic3_set_feature_rx_csum(struct net_device *netdev,
+				      netdev_features_t wanted_features,
+				      netdev_features_t features,
+				      netdev_features_t *failed_features)
+{
+	netdev_features_t changed = wanted_features ^ features;
+	struct hinic3_nic_dev *nic_dev = netdev_priv(netdev);
+	struct hinic3_hwdev *hwdev = nic_dev->hwdev;
+
+	if (changed & NETIF_F_RXCSUM)
+		dev_dbg(hwdev->dev, "%s rx csum success\n",
+			SET_FEATURES_OP_STR(wanted_features & NETIF_F_RXCSUM));
+
+	return 0;
+}
+
+static int hinic3_set_feature_tso(struct net_device *netdev,
+				  netdev_features_t wanted_features,
+				  netdev_features_t features,
+				  netdev_features_t *failed_features)
+{
+	netdev_features_t changed = wanted_features ^ features;
+	struct hinic3_nic_dev *nic_dev = netdev_priv(netdev);
+	struct hinic3_hwdev *hwdev = nic_dev->hwdev;
+
+	if (changed & NETIF_F_TSO)
+		dev_dbg(hwdev->dev, "%s tso success\n",
+			SET_FEATURES_OP_STR(wanted_features & NETIF_F_TSO));
+
+	return 0;
+}
+
+static int hinic3_set_feature_lro(struct net_device *netdev,
+				  netdev_features_t wanted_features,
+				  netdev_features_t features,
+				  netdev_features_t *failed_features)
+{
+	netdev_features_t changed = wanted_features ^ features;
+	struct hinic3_nic_dev *nic_dev = netdev_priv(netdev);
+	struct hinic3_hwdev *hwdev = nic_dev->hwdev;
+	bool en = !!(wanted_features & NETIF_F_LRO);
+	int err;
+
+	if (!(changed & NETIF_F_LRO))
+		return 0;
+
+	err = hinic3_set_rx_lro_state(hwdev, en,
+				      HINIC3_LRO_DEFAULT_TIME_LIMIT,
+				      HINIC3_LRO_DEFAULT_COAL_PKT_SIZE);
+	if (err) {
+		dev_err(hwdev->dev, "%s lro failed\n", SET_FEATURES_OP_STR(en));
+		*failed_features |= NETIF_F_LRO;
+	}
+
+	return err;
+}
+
+static int hinic3_set_feature_rx_cvlan(struct net_device *netdev,
+				       netdev_features_t wanted_features,
+				       netdev_features_t features,
+				       netdev_features_t *failed_features)
+{
+	bool en = !!(wanted_features & NETIF_F_HW_VLAN_CTAG_RX);
+	netdev_features_t changed = wanted_features ^ features;
+	struct hinic3_nic_dev *nic_dev = netdev_priv(netdev);
+	struct hinic3_hwdev *hwdev = nic_dev->hwdev;
+	int err;
+
+	if (!(changed & NETIF_F_HW_VLAN_CTAG_RX))
+		return 0;
+
+	err = hinic3_set_rx_vlan_offload(hwdev, en);
+	if (err) {
+		dev_err(hwdev->dev, "%s rxvlan failed\n",
+			SET_FEATURES_OP_STR(en));
+		*failed_features |= NETIF_F_HW_VLAN_CTAG_RX;
+	}
+
+	return err;
+}
+
+static int hinic3_set_feature_vlan_filter(struct net_device *netdev,
+					  netdev_features_t wanted_features,
+					  netdev_features_t features,
+					  netdev_features_t *failed_features)
+{
+	bool en = !!(wanted_features & NETIF_F_HW_VLAN_CTAG_FILTER);
+	netdev_features_t changed = wanted_features ^ features;
+	struct hinic3_nic_dev *nic_dev = netdev_priv(netdev);
+	struct hinic3_hwdev *hwdev = nic_dev->hwdev;
+	int err;
+
+	if (!(changed & NETIF_F_HW_VLAN_CTAG_FILTER))
+		return 0;
+
+	err = hinic3_set_vlan_fliter(hwdev, en);
+	if (err) {
+		dev_err(hwdev->dev, "%s rx vlan filter failed\n",
+			SET_FEATURES_OP_STR(en));
+		*failed_features |= NETIF_F_HW_VLAN_CTAG_FILTER;
+	}
+
+	return err;
+}
+
+static int hinic3_set_features(struct net_device *netdev,
+			       netdev_features_t curr,
+			       netdev_features_t wanted)
+{
+	netdev_features_t failed = 0;
+	int err;
+
+	err = hinic3_set_feature_rx_csum(netdev, wanted, curr, &failed) |
+	      hinic3_set_feature_tso(netdev, wanted, curr, &failed) |
+	      hinic3_set_feature_lro(netdev, wanted, curr, &failed) |
+	      hinic3_set_feature_rx_cvlan(netdev, wanted, curr, &failed) |
+	      hinic3_set_feature_vlan_filter(netdev, wanted, curr, &failed);
+	if (err) {
+		netdev->features = wanted ^ failed;
+		return -EIO;
+	}
+
+	return 0;
+}
+
+static int hinic3_ndo_set_features(struct net_device *netdev,
+				   netdev_features_t features)
+{
+	return hinic3_set_features(netdev, netdev->features, features);
+}
+
+static netdev_features_t hinic3_fix_features(struct net_device *netdev,
+					     netdev_features_t features)
+{
+	netdev_features_t features_tmp = features;
+
+	/* If Rx checksum is disabled, then LRO should also be disabled */
+	if (!(features_tmp & NETIF_F_RXCSUM))
+		features_tmp &= ~NETIF_F_LRO;
+
+	return features_tmp;
+}
+
+int hinic3_set_hw_features(struct net_device *netdev)
+{
+	netdev_features_t wanted, curr;
+
+	wanted = netdev->features;
+	/* fake current features so all wanted are enabled */
+	curr = ~wanted;
+
+	return hinic3_set_features(netdev, curr, wanted);
+}
+
 static int hinic3_change_mtu(struct net_device *netdev, int new_mtu)
 {
 	int err;
@@ -517,11 +687,159 @@ static int hinic3_set_mac_addr(struct net_device *netdev, void *addr)
 	return 0;
 }
 
+static int hinic3_vlan_rx_add_vid(struct net_device *netdev,
+				  __be16 proto, u16 vid)
+{
+	struct hinic3_nic_dev *nic_dev = netdev_priv(netdev);
+	unsigned long *vlan_bitmap = nic_dev->vlan_bitmap;
+	u32 column, row;
+	u16 func_id;
+	int err;
+
+	column = VID_COL(nic_dev, vid);
+	row = VID_LINE(nic_dev, vid);
+
+	func_id = hinic3_global_func_id(nic_dev->hwdev);
+
+	err = hinic3_add_vlan(nic_dev->hwdev, vid, func_id);
+	if (err) {
+		netdev_err(netdev, "Failed to add vlan %u\n", vid);
+		goto out;
+	}
+
+	set_bit(column, &vlan_bitmap[row]);
+	netdev_dbg(netdev, "Add vlan %u\n", vid);
+
+out:
+	return err;
+}
+
+static int hinic3_vlan_rx_kill_vid(struct net_device *netdev,
+				   __be16 proto, u16 vid)
+{
+	struct hinic3_nic_dev *nic_dev = netdev_priv(netdev);
+	unsigned long *vlan_bitmap = nic_dev->vlan_bitmap;
+	u32 column, row;
+	u16 func_id;
+	int err;
+
+	column  = VID_COL(nic_dev, vid);
+	row = VID_LINE(nic_dev, vid);
+
+	func_id = hinic3_global_func_id(nic_dev->hwdev);
+	err = hinic3_del_vlan(nic_dev->hwdev, vid, func_id);
+	if (err) {
+		netdev_err(netdev, "Failed to delete vlan\n");
+		goto out;
+	}
+
+	clear_bit(column, &vlan_bitmap[row]);
+	netdev_dbg(netdev, "Remove vlan %u\n", vid);
+
+out:
+	return err;
+}
+
+static void hinic3_tx_timeout(struct net_device *netdev, unsigned int txqueue)
+{
+	struct hinic3_nic_dev *nic_dev = netdev_priv(netdev);
+	struct hinic3_io_queue *sq;
+	bool hw_err = false;
+	u16 sw_pi, hw_ci;
+	u8 q_id;
+
+	HINIC3_NIC_STATS_INC(nic_dev, netdev_tx_timeout);
+	netdev_err(netdev, "Tx timeout\n");
+
+	for (q_id = 0; q_id < nic_dev->q_params.num_qps; q_id++) {
+		if (!netif_xmit_stopped(netdev_get_tx_queue(netdev, q_id)))
+			continue;
+
+		sq = nic_dev->txqs[q_id].sq;
+		sw_pi = hinic3_get_sq_local_pi(sq);
+		hw_ci = hinic3_get_sq_hw_ci(sq);
+		netdev_dbg(netdev,
+			   "txq%u: sw_pi: %u, hw_ci: %u, sw_ci: %u, napi->state: 0x%lx.\n",
+			   q_id, sw_pi, hw_ci, hinic3_get_sq_local_ci(sq),
+			   nic_dev->q_params.irq_cfg[q_id].napi.state);
+
+		if (sw_pi != hw_ci)
+			hw_err = true;
+	}
+
+	if (hw_err)
+		set_bit(HINIC3_EVENT_WORK_TX_TIMEOUT, &nic_dev->event_flag);
+}
+
+static void hinic3_get_stats64(struct net_device *netdev,
+			       struct rtnl_link_stats64 *stats)
+{
+	struct hinic3_nic_dev *nic_dev = netdev_priv(netdev);
+	u64 bytes, packets, dropped, errors;
+	struct hinic3_txq_stats *txq_stats;
+	struct hinic3_rxq_stats *rxq_stats;
+	struct hinic3_txq *txq;
+	struct hinic3_rxq *rxq;
+	unsigned int start;
+	int i;
+
+	bytes = 0;
+	packets = 0;
+	dropped = 0;
+	for (i = 0; i < nic_dev->max_qps; i++) {
+		if (!nic_dev->txqs)
+			break;
+
+		txq = &nic_dev->txqs[i];
+		txq_stats = &txq->txq_stats;
+		do {
+			start = u64_stats_fetch_begin(&txq_stats->syncp);
+			bytes += txq_stats->bytes;
+			packets += txq_stats->packets;
+			dropped += txq_stats->dropped;
+		} while (u64_stats_fetch_retry(&txq_stats->syncp, start));
+	}
+	stats->tx_packets = packets;
+	stats->tx_bytes   = bytes;
+	stats->tx_dropped = dropped;
+
+	bytes = 0;
+	packets = 0;
+	errors = 0;
+	dropped = 0;
+	for (i = 0; i < nic_dev->max_qps; i++) {
+		if (!nic_dev->rxqs)
+			break;
+
+		rxq = &nic_dev->rxqs[i];
+		rxq_stats = &rxq->rxq_stats;
+		do {
+			start = u64_stats_fetch_begin(&rxq_stats->syncp);
+			bytes += rxq_stats->bytes;
+			packets += rxq_stats->packets;
+			errors += rxq_stats->csum_errors +
+				rxq_stats->other_errors;
+			dropped += rxq_stats->dropped;
+		} while (u64_stats_fetch_retry(&rxq_stats->syncp, start));
+	}
+	stats->rx_packets = packets;
+	stats->rx_bytes   = bytes;
+	stats->rx_errors  = errors;
+	stats->rx_dropped = dropped;
+}
+
 static const struct net_device_ops hinic3_netdev_ops = {
 	.ndo_open             = hinic3_open,
 	.ndo_stop             = hinic3_close,
+	.ndo_set_features     = hinic3_ndo_set_features,
+	.ndo_fix_features     = hinic3_fix_features,
 	.ndo_change_mtu       = hinic3_change_mtu,
 	.ndo_set_mac_address  = hinic3_set_mac_addr,
+	.ndo_validate_addr    = eth_validate_addr,
+	.ndo_vlan_rx_add_vid  = hinic3_vlan_rx_add_vid,
+	.ndo_vlan_rx_kill_vid = hinic3_vlan_rx_kill_vid,
+	.ndo_tx_timeout       = hinic3_tx_timeout,
+	.ndo_get_stats64      = hinic3_get_stats64,
 	.ndo_start_xmit       = hinic3_xmit_frame,
 };
 
