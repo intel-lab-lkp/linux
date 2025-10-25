@@ -60,6 +60,8 @@ struct io_zcrx_ifq {
 	 */
 	struct mutex			pp_lock;
 	struct io_mapped_region		region;
+
+	refcount_t			refs;
 };
 
 #if defined(CONFIG_IO_URING_ZCRX)
