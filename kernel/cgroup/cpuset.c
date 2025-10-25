@@ -1214,17 +1214,6 @@ static void compute_effective_cpumask(struct cpumask *new_cpus,
 	cpumask_and(new_cpus, cs->cpus_allowed, parent->effective_cpus);
 }
 
-/*
- * Commands for update_parent_effective_cpumask
- */
-enum partition_cmd {
-	partcmd_enable,		/* Enable partition root	  */
-	partcmd_enablei,	/* Enable isolated partition root */
-	partcmd_disable,	/* Disable partition root	  */
-	partcmd_update,		/* Update parent's effective_cpus */
-	partcmd_invalidate,	/* Make partition invalid	  */
-};
-
 static void update_sibling_cpumasks(struct cpuset *parent, struct cpuset *cs,
 				    struct tmpmasks *tmp);
 
@@ -3881,8 +3870,6 @@ static void cpuset_hotplug_update_tasks(struct cpuset *cs, struct tmpmasks *tmp)
 	static nodemask_t new_mems;
 	bool cpus_updated;
 	bool mems_updated;
-	bool remote;
-	int partcmd = -1;
 	struct cpuset *parent;
 retry:
 	wait_event(cpuset_attach_wq, cs->attach_in_progress == 0);
@@ -3909,16 +3896,15 @@ retry:
 	 * Compute effective_cpus for valid partition root, may invalidate
 	 * child partition roots if necessary.
 	 */
-	remote = is_remote_partition(cs);
-	if (remote || (is_partition_valid(cs) && is_partition_valid(parent)))
+	if (is_remote_partition(cs)) {
 		compute_partition_effective_cpumask(cs, &new_cpus);
-
-	if (remote && cpumask_empty(&new_cpus) &&
-	    partition_is_populated(cs, NULL)) {
-		cs->prs_err = PERR_HOTPLUG;
-		remote_partition_disable(cs, tmp);
-		compute_effective_cpumask(&new_cpus, cs, parent);
-		remote = false;
+		if (cpumask_empty(&new_cpus) &&
+		    partition_is_populated(cs, NULL)) {
+			cs->prs_err = PERR_HOTPLUG;
+			remote_partition_disable(cs, tmp);
+			compute_effective_cpumask(&new_cpus, cs, parent);
+		}
+		goto update_tasks;
 	}
 
 	/*
@@ -3926,29 +3912,25 @@ retry:
 	 * the following conditions hold:
 	 * 1) empty effective cpus but not valid empty partition.
 	 * 2) parent is invalid or doesn't grant any cpus to child
-	 *    partitions.
-	 */
-	if (is_local_partition(cs) && (!is_partition_valid(parent) ||
-				tasks_nocpu_error(parent, cs, &new_cpus))) {
-		partcmd = partcmd_invalidate;
-		local_partition_invalidate(cs, tmp);
-	}
-	/*
+	 *  partitions.
+	 *
 	 * On the other hand, an invalid partition root may be transitioned
 	 * back to a regular one with a non-empty user xcpus.
+	 *
+	 * local_partition_update can handle these cases.
 	 */
-	else if (is_partition_valid(parent) && is_partition_invalid(cs) &&
-		 !cpumask_empty(user_xcpus(cs))) {
-		partcmd = partcmd_update;
-		local_partition_update(cs, tmp);
-	}
+	local_partition_update(cs, tmp);
 
-	if (partcmd >= 0) {
-		if ((partcmd == partcmd_invalidate) || is_partition_valid(cs)) {
-			compute_partition_effective_cpumask(cs, &new_cpus);
-			cpuset_force_rebuild();
-		}
-	}
+	/*
+	 * Recompute effective CPU mask after partition state update:
+	 * - For valid partitions: calculate partition-specific effective CPUs
+	 * - For invalid partitions: compute member effective CPU mask
+	 */
+	if (is_partition_valid(cs))
+		compute_partition_effective_cpumask(cs, &new_cpus);
+	else
+		compute_effective_cpumask(&new_cpus, cs, parent);
+
 
 update_tasks:
 	cpus_updated = !cpumask_equal(&new_cpus, cs->effective_cpus);
