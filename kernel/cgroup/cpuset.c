@@ -1345,6 +1345,9 @@ static bool partition_xcpus_add(int new_prs, struct cpuset *parent,
 
 	WARN_ON_ONCE(new_prs < 0);
 	lockdep_assert_held(&callback_lock);
+	if (cpumask_empty(xcpus))
+		return false;
+
 	if (!parent)
 		parent = &top_cpuset;
 
@@ -1377,6 +1380,9 @@ static bool partition_xcpus_del(int old_prs, struct cpuset *parent,
 
 	WARN_ON_ONCE(old_prs < 0);
 	lockdep_assert_held(&callback_lock);
+	if (cpumask_empty(xcpus))
+		return false;
+
 	if (!parent)
 		parent = &top_cpuset;
 
