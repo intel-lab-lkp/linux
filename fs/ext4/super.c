@@ -4182,7 +4182,8 @@ int ext4_calculate_overhead(struct super_block *sb)
 	unsigned int j_blocks, j_inum = le32_to_cpu(es->s_journal_inum);
 	ext4_group_t i, ngroups = ext4_get_groups_count(sb);
 	ext4_fsblk_t overhead = 0;
-	char *buf = (char *) get_zeroed_page(GFP_NOFS);
+	gfp_t gfp = GFP_NOFS | __GFP_ZERO;
+	char *buf = (char *)__get_free_pages(gfp, sbi->s_min_folio_order);
 
 	if (!buf)
 		return -ENOMEM;
@@ -4207,7 +4208,7 @@ int ext4_calculate_overhead(struct super_block *sb)
 		blks = count_overhead(sb, i, buf);
 		overhead += blks;
 		if (blks)
-			memset(buf, 0, PAGE_SIZE);
+			memset(buf, 0, sb->s_blocksize);
 		cond_resched();
 	}
 
@@ -4230,7 +4231,7 @@ int ext4_calculate_overhead(struct super_block *sb)
 	}
 	sbi->s_overhead = overhead;
 	smp_wmb();
-	free_page((unsigned long) buf);
+	free_pages((unsigned long)buf, sbi->s_min_folio_order);
 	return 0;
 }
 
