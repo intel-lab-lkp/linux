@@ -5146,6 +5146,9 @@ static bool ext4_should_enable_large_folio(struct inode *inode)
 	if (!ext4_test_mount_flag(sb, EXT4_MF_LARGE_FOLIO))
 		return false;
 
+	if (EXT4_SB(sb)->s_min_folio_order)
+		return true;
+
 	if (!S_ISREG(inode->i_mode))
 		return false;
 	if (ext4_test_inode_flag(inode, EXT4_INODE_JOURNAL_DATA))

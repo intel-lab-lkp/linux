@@ -5053,6 +5053,9 @@ static int ext4_check_large_folio(struct super_block *sb)
 		return -EINVAL;
 	}
 
+	if (sb->s_blocksize > PAGE_SIZE)
+		ext4_msg(sb, KERN_NOTICE, "EXPERIMENTAL bs(%lu) > ps(%lu) enabled.",
+			 sb->s_blocksize, PAGE_SIZE);
 	return 0;
 }
 
@@ -7432,7 +7435,8 @@ static struct file_system_type ext4_fs_type = {
 	.init_fs_context	= ext4_init_fs_context,
 	.parameters		= ext4_param_specs,
 	.kill_sb		= ext4_kill_sb,
-	.fs_flags		= FS_REQUIRES_DEV | FS_ALLOW_IDMAP | FS_MGTIME,
+	.fs_flags		= FS_REQUIRES_DEV | FS_ALLOW_IDMAP | FS_MGTIME |
+				  FS_LBS,
 };
 MODULE_ALIAS_FS("ext4");
 
