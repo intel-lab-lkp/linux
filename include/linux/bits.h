@@ -5,6 +5,14 @@
 #include <vdso/bits.h>
 #include <uapi/linux/bits.h>
 
+/* Mask with first nbist set */
+#define FIRST_BITS(nbits) (~0UL >> (-(nbits) & (BITS_PER_LONG - 1)))
+#define FIRST_BITS_ULL(nbits) (~0ULL >> (-(nbits) & (BITS_PER_LONG_LONG - 1)))
+
+/* Mask with all bits before start unset */
+#define LAST_BITS(start) (~0UL << ((start) & (BITS_PER_LONG - 1)))
+#define LAST_BITS_ULL(start) (~0ULL << ((start) & (BITS_PER_LONG_LONG - 1)))
+
 #define BIT_MASK(nr)		(UL(1) << ((nr) % BITS_PER_LONG))
 #define BIT_WORD(nr)		((nr) / BITS_PER_LONG)
 #define BIT_ULL_MASK(nr)	(ULL(1) << ((nr) % BITS_PER_LONG_LONG))

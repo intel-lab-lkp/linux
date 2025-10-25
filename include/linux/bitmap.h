@@ -223,8 +223,11 @@ void bitmap_onto(unsigned long *dst, const unsigned long *orig,
 void bitmap_fold(unsigned long *dst, const unsigned long *orig,
 		unsigned int sz, unsigned int nbits);
 
-#define BITMAP_FIRST_WORD_MASK(start) (~0UL << ((start) & (BITS_PER_LONG - 1)))
-#define BITMAP_LAST_WORD_MASK(nbits) (~0UL >> (-(nbits) & (BITS_PER_LONG - 1)))
+#define BITMAP_FIRST_WORD_MASK(start) LAST_BITS(start)
+#define BITMAP_LAST_WORD_MASK(nbits) FIRST_BITS(nbits)
+
+#define BITMAP_FIRST_WORD_MASK_ULL(start) LAST_BITS(start)
+#define BITMAP_LAST_WORD_MASK_ULL(nbits) FIRST_BITS(nbits)
 
 #define bitmap_size(nbits)	(ALIGN(nbits, BITS_PER_LONG) / BITS_PER_BYTE)
 
