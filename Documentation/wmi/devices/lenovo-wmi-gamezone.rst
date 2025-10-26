@@ -24,18 +24,14 @@ current platform profile when it changes.
 The following platform profiles are supported:
  - low-power
  - balanced
- - balanced-performance
  - performance
+ - extreme
  - custom
 
-Balanced-Performance
+Extreme
 ~~~~~~~~~~~~~~~~~~~~
 Some newer Lenovo "Gaming Series" laptops have an "Extreme Mode" profile
-enabled in their BIOS. For these devices, the performance platform profile
-corresponds to the BIOS Extreme Mode, while the balanced-performance
-platform profile corresponds to the BIOS Performance mode. For legacy
-devices, the performance platform profile will correspond with the BIOS
-Performance mode.
+enabled in their BIOS.
 
 For some newer devices the "Extreme Mode" profile is incomplete in the BIOS
 and setting it will cause undefined behavior. A BIOS bug quirk table is
