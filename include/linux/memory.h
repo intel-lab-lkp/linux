@@ -89,13 +89,15 @@ int arch_get_memory_phys_device(unsigned long start_pfn);
 unsigned long memory_block_size_bytes(void);
 int set_memory_block_size_order(unsigned int order);
 
-/* These states are exposed to userspace as text strings in sysfs */
-#define	MEM_ONLINE		(1<<0) /* exposed to userspace */
-#define	MEM_GOING_OFFLINE	(1<<1) /* exposed to userspace */
-#define	MEM_OFFLINE		(1<<2) /* exposed to userspace */
-#define	MEM_GOING_ONLINE	(1<<3)
-#define	MEM_CANCEL_ONLINE	(1<<4)
-#define	MEM_CANCEL_OFFLINE	(1<<5)
+enum mem_states {
+	/* These states are exposed to userspace as text strings in sysfs */
+	MEM_ONLINE		 = (1<<0), /* exposed to userspace */
+	MEM_GOING_OFFLINE	 = (1<<1), /* exposed to userspace */
+	MEM_OFFLINE		 = (1<<2), /* exposed to userspace */
+	MEM_GOING_ONLINE	 = (1<<3),
+	MEM_CANCEL_ONLINE	 = (1<<4),
+	MEM_CANCEL_OFFLINE	 = (1<<5),
+};
 
 struct memory_notify {
 	unsigned long start_pfn;
