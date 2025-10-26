@@ -7484,6 +7484,7 @@ nfsd4_free_stateid(struct svc_rqst *rqstp, struct nfsd4_compound_state *cstate,
 	struct nfs4_client *cl = cstate->clp;
 	__be32 ret = nfserr_bad_stateid;
 
+	nfsd41_get_current_stateid(cstate, &free_stateid->fr_stateid);
 	spin_lock(&cl->cl_lock);
 	s = find_stateid_locked(cl, stateid);
 	if (!s || s->sc_status & SC_STATUS_CLOSED)
@@ -7704,6 +7705,7 @@ nfsd4_open_downgrade(struct svc_rqst *rqstp,
 	dprintk("NFSD: nfsd4_open_downgrade on file %pd\n", 
 			cstate->current_fh.fh_dentry);
 
+	nfsd41_get_current_stateid(cstate, &od->od_stateid);
 	/* We don't yet support WANT bits: */
 	if (od->od_deleg_want)
 		dprintk("NFSD: %s: od_deleg_want=0x%x ignored\n", __func__,
@@ -7778,6 +7780,8 @@ nfsd4_close(struct svc_rqst *rqstp, struct nfsd4_compound_state *cstate,
 	dprintk("NFSD: nfsd4_close on file %pd\n",
 			cstate->current_fh.fh_dentry);
 
+	nfsd41_get_current_stateid(cstate, &close->cl_stateid);
+
 	status = nfs4_preprocess_seqid_op(cstate, close->cl_seqid,
 					  &close->cl_stateid,
 					  SC_TYPE_OPEN, SC_STATUS_CLOSED,
@@ -7828,6 +7832,8 @@ nfsd4_delegreturn(struct svc_rqst *rqstp, struct nfsd4_compound_state *cstate,
 	struct nfs4_stid *s;
 	__be32 status;
 	struct nfsd_net *nn = net_generic(SVC_NET(rqstp), nfsd_net_id);
+
+	nfsd41_get_current_stateid(cstate, &dr->dr_stateid);
 
 	if ((status = fh_verify(rqstp, &cstate->current_fh, S_IFREG, 0)))
 		return status;
@@ -8588,6 +8594,8 @@ nfsd4_locku(struct svc_rqst *rqstp, struct nfsd4_compound_state *cstate,
 		(long long) locku->lu_offset,
 		(long long) locku->lu_length);
 
+	nfsd41_get_current_stateid(cstate, &locku->lu_stateid);
+
 	if (check_lock_length(locku->lu_offset, locku->lu_length))
 		 return nfserr_inval;
 
@@ -9139,66 +9147,6 @@ nfsd4_set_lockstateid(struct nfsd4_compound_state *cstate,
 		union nfsd4_op_u *u)
 {
 	nfsd41_save_current_stateid(cstate, &u->lock.lk_resp_stateid);
-}
-
-/*
- * functions to consume current state id
- */
-
-void
-nfsd4_get_opendowngradestateid(struct nfsd4_compound_state *cstate,
-		union nfsd4_op_u *u)
-{
-	nfsd41_get_current_stateid(cstate, &u->open_downgrade.od_stateid);
-}
-
-void
-nfsd4_get_delegreturnstateid(struct nfsd4_compound_state *cstate,
-		union nfsd4_op_u *u)
-{
-	nfsd41_get_current_stateid(cstate, &u->delegreturn.dr_stateid);
-}
-
-void
-nfsd4_get_freestateid(struct nfsd4_compound_state *cstate,
-		union nfsd4_op_u *u)
-{
-	nfsd41_get_current_stateid(cstate, &u->free_stateid.fr_stateid);
-}
-
-void
-nfsd4_get_setattrstateid(struct nfsd4_compound_state *cstate,
-		union nfsd4_op_u *u)
-{
-	nfsd41_get_current_stateid(cstate, &u->setattr.sa_stateid);
-}
-
-void
-nfsd4_get_closestateid(struct nfsd4_compound_state *cstate,
-		union nfsd4_op_u *u)
-{
-	nfsd41_get_current_stateid(cstate, &u->close.cl_stateid);
-}
-
-void
-nfsd4_get_lockustateid(struct nfsd4_compound_state *cstate,
-		union nfsd4_op_u *u)
-{
-	nfsd41_get_current_stateid(cstate, &u->locku.lu_stateid);
-}
-
-void
-nfsd4_get_readstateid(struct nfsd4_compound_state *cstate,
-		union nfsd4_op_u *u)
-{
-	nfsd41_get_current_stateid(cstate, &u->read.rd_stateid);
-}
-
-void
-nfsd4_get_writestateid(struct nfsd4_compound_state *cstate,
-		union nfsd4_op_u *u)
-{
-	nfsd41_get_current_stateid(cstate, &u->write.wr_stateid);
 }
 
 /**
