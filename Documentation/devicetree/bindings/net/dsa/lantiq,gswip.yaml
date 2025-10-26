@@ -29,6 +29,11 @@ patternProperties:
             description:
               RGMII RX Clock Delay defined in pico seconds.
               The delay lines adjust the MII clock vs. data timing.
+          maxlinear,rmii-refclk-out:
+            type: boolean
+            description:
+              Configure the RMII reference clock to be a clock output
+              rather than an input. Only applicable for RMII mode.
 
 maintainers:
   - Hauke Mehrtens <hauke@hauke-m.de>
