@@ -149,6 +149,11 @@ following the others is usually in your own interest.
 
  [:ref:`details <reginquiry_repiref>`]
 
+ * Locate the driver or kernel subsystem that seems to be causing the issue.
+   Find out how and where its developers expect reports. Note: most of the
+   time this won't be bugzilla.kernel.org, as issues typically need to be sent
+   by mail to a maintainer and a public mailing list.
+
  * Create a fresh backup and put system repair and restore tools at hand.
 
  * Ensure your system does not enhance its kernels by building additional
@@ -160,11 +165,6 @@ following the others is usually in your own interest.
  * If you are facing a regression within a stable or longterm version line
    (say something broke when updating from 5.10.4 to 5.10.5), scroll down to
    'Dealing with regressions within a stable and longterm kernel line'.
-
- * Locate the driver or kernel subsystem that seems to be causing the issue.
-   Find out how and where its developers expect reports. Note: most of the
-   time this won't be bugzilla.kernel.org, as issues typically need to be sent
-   by mail to a maintainer and a public mailing list.
 
  * Search the archives of the bug tracker or mailing list in question
    thoroughly for reports that might match your issue. If you find anything,
@@ -705,73 +705,6 @@ answer these emails on a best-effort basis.
 [:ref:`back to step-by-step guide <reginquiry_repisbs>`]
 
 
-Prepare for emergencies
------------------------
-
-    *Create a fresh backup and put system repair and restore tools at hand.*
-
-Reminder, you are dealing with computers, which sometimes do unexpected things,
-especially if you fiddle with crucial parts like the kernel of its operating
-system. That's what you are about to do in this process. Thus, make sure to
-create a fresh backup; also ensure you have all tools at hand to repair or
-reinstall the operating system as well as everything you need to restore the
-backup.
-
-
-Make sure your kernel doesn't get enhanced
-------------------------------------------
-
-    *Ensure your system does not enhance its kernels by building additional
-    kernel modules on-the-fly, which solutions like DKMS might be doing locally
-    without your knowledge.*
-
-The risk your issue report gets ignored or rejected dramatically increases if
-your kernel gets enhanced in any way. That's why you should remove or disable
-mechanisms like akmods and DKMS: those build add-on kernel modules
-automatically, for example when you install a new Linux kernel or boot it for
-the first time. Also remove any modules they might have installed. Then reboot
-before proceeding.
-
-Note, you might not be aware that your system is using one of these solutions:
-they often get set up silently when you install Nvidia's proprietary graphics
-driver, VirtualBox, or other software that requires a some support from a
-module not part of the Linux kernel. That why your might need to uninstall the
-packages with such software to get rid of any 3rd party kernel module.
-
-
-Document how to reproduce issue
--------------------------------
-
-    *Write down coarsely how to reproduce the issue.*
-
-During the reporting process you will have to test if the issue
-happens with other kernel versions. Therefore, it will make your work easier if
-you know exactly how to reproduce an issue quickly on a freshly booted system.
-
-Note: it's often fruitless to report issues that only happened once, as they
-might be caused by a bit flip due to cosmic radiation. That's why you should
-try to rule that out by reproducing the issue before going further. Feel free
-to ignore this advice if you are experienced enough to tell a one-time error
-due to faulty hardware apart from a kernel issue that rarely happens and thus
-is hard to reproduce.
-
-
-Regression in stable or longterm kernel?
-----------------------------------------
-
-    *If you are facing a regression within a stable or longterm version line
-    (say something broke when updating from 5.10.4 to 5.10.5), scroll down to
-    'Dealing with regressions within a stable and longterm kernel line'.*
-
-Regression within a stable and longterm kernel version line are something the
-Linux developers want to fix badly, as such issues are even more unwanted than
-regression in the main development branch, as they can quickly affect a lot of
-people. The developers thus want to learn about such issues as quickly as
-possible, hence there is a streamlined process to report them. Note,
-regressions with newer kernel version line (say something broke when switching
-from 5.9.15 to 5.10.5) do not qualify.
-
-
 Check where you need to report your issue
 -----------------------------------------
 
@@ -886,18 +819,18 @@ to find all people to contact. It queries the MAINTAINERS file and needs to be
 called with a path to the source code in question. For drivers compiled as
 module if often can be found with a command like this::
 
-       $ modinfo ath10k_pci | grep filename | sed 's!/lib/modules/.*/kernel/!!; s!filename:!!; s!\.ko\(\|\.xz\)!!'
-       drivers/net/wireless/ath/ath10k/ath10k_pci.ko
+   $ modinfo ath10k_pci | grep filename | sed 's!/lib/modules/.*/kernel/!!; s!filename:!!; s!\.ko\(\|\.xz\)!!'
+   drivers/net/wireless/ath/ath10k/ath10k_pci.ko
 
 Pass parts of this to the script::
 
-       $ ./scripts/get_maintainer.pl -f drivers/net/wireless/ath/ath10k*
-       Some Human <shuman@example.com> (supporter:QUALCOMM ATHEROS ATH10K WIRELESS DRIVER)
-       Another S. Human <asomehuman@example.com> (maintainer:NETWORKING DRIVERS)
-       ath10k@lists.infradead.org (open list:QUALCOMM ATHEROS ATH10K WIRELESS DRIVER)
-       linux-wireless@vger.kernel.org (open list:NETWORKING DRIVERS (WIRELESS))
-       netdev@vger.kernel.org (open list:NETWORKING DRIVERS)
-       linux-kernel@vger.kernel.org (open list)
+   $ ./scripts/get_maintainer.pl --no-git -f drivers/net/wireless/ath/ath10k*
+   Some Human <shuman@example.com> (supporter:QUALCOMM ATHEROS ATH10K WIRELESS DRIVER)
+   Another S. Human <asomehuman@example.com> (maintainer:NETWORKING DRIVERS)
+   ath10k@lists.infradead.org (open list:QUALCOMM ATHEROS ATH10K WIRELESS DRIVER)
+   linux-wireless@vger.kernel.org (open list:NETWORKING DRIVERS (WIRELESS))
+   netdev@vger.kernel.org (open list:NETWORKING DRIVERS)
+   linux-kernel@vger.kernel.org (open list)
 
 Don't sent your report to all of them. Send it to the maintainers, which the
 script calls "supporter:"; additionally CC the most specific mailing list for
@@ -913,6 +846,73 @@ can easily send you in a wrong direction. That for example happens quickly in
 areas rarely changed (like old or unmaintained drivers): sometimes such code is
 modified during tree-wide cleanups by developers that do not care about the
 particular driver at all.
+
+
+Prepare for emergencies
+-----------------------
+
+    *Create a fresh backup and put system repair and restore tools at hand.*
+
+Reminder, you are dealing with computers, which sometimes do unexpected things,
+especially if you fiddle with crucial parts like the kernel of its operating
+system. That's what you are about to do in this process. Thus, make sure to
+create a fresh backup; also ensure you have all tools at hand to repair or
+reinstall the operating system as well as everything you need to restore the
+backup.
+
+
+Make sure your kernel doesn't get enhanced
+------------------------------------------
+
+    *Ensure your system does not enhance its kernels by building additional
+    kernel modules on-the-fly, which solutions like DKMS might be doing locally
+    without your knowledge.*
+
+The risk your issue report gets ignored or rejected dramatically increases if
+your kernel gets enhanced in any way. That's why you should remove or disable
+mechanisms like akmods and DKMS: those build add-on kernel modules
+automatically, for example when you install a new Linux kernel or boot it for
+the first time. Also remove any modules they might have installed. Then reboot
+before proceeding.
+
+Note, you might not be aware that your system is using one of these solutions:
+they often get set up silently when you install Nvidia's proprietary graphics
+driver, VirtualBox, or other software that requires a some support from a
+module not part of the Linux kernel. That why your might need to uninstall the
+packages with such software to get rid of any 3rd party kernel module.
+
+
+Document how to reproduce issue
+-------------------------------
+
+    *Write down coarsely how to reproduce the issue.*
+
+During the reporting process you will have to test if the issue
+happens with other kernel versions. Therefore, it will make your work easier if
+you know exactly how to reproduce an issue quickly on a freshly booted system.
+
+Note: it's often fruitless to report issues that only happened once, as they
+might be caused by a bit flip due to cosmic radiation. That's why you should
+try to rule that out by reproducing the issue before going further. Feel free
+to ignore this advice if you are experienced enough to tell a one-time error
+due to faulty hardware apart from a kernel issue that rarely happens and thus
+is hard to reproduce.
+
+
+Regression in stable or longterm kernel?
+----------------------------------------
+
+    *If you are facing a regression within a stable or longterm version line
+    (say something broke when updating from 5.10.4 to 5.10.5), scroll down to
+    'Dealing with regressions within a stable and longterm kernel line'.*
+
+Regression within a stable and longterm kernel version line are something the
+Linux developers want to fix badly, as such issues are even more unwanted than
+regression in the main development branch, as they can quickly affect a lot of
+people. The developers thus want to learn about such issues as quickly as
+possible, hence there is a streamlined process to report them. Note,
+regressions with newer kernel version line (say something broke when switching
+from 5.9.15 to 5.10.5) do not qualify.
 
 
 Search for existing reports, second run
