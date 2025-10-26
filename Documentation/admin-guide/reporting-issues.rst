@@ -85,6 +85,9 @@ following the others is usually in your own interest.
  [:ref:`details <checklog_repiref>`]
 
 
+ * Check if your kernel was 'tainted' when the issue occurred, as the event
+   that made the kernel set this flag might be causing the issue you face.
+
  * Perform a rough search for existing reports with your favorite internet
    search engine; additionally, check the archives of the `Linux Kernel Mailing
    List (LKML) <https://lore.kernel.org/lkml/>`_. If you find matching reports,
@@ -102,9 +105,6 @@ following the others is usually in your own interest.
  * Ensure your system does not enhance its kernels by building additional
    kernel modules on-the-fly, which solutions like DKMS might be doing locally
    without your knowledge.
-
- * Check if your kernel was 'tainted' when the issue occurred, as the event
-   that made the kernel set this flag might be causing the issue you face.
 
  * Write down coarsely how to reproduce the issue.
 
@@ -397,6 +397,74 @@ to set warnings and errors apart.
 [:ref:`back to step-by-step guide <checklog_repisbs>`]
 
 
+Check 'taint' flag
+------------------
+
+    *Check if your kernel was 'tainted' when the issue occurred, as the event
+    that made the kernel set this flag might be causing the issue you face.*
+
+The kernel marks itself with a 'taint' flag when something happens that might
+lead to follow-up errors that look totally unrelated. The issue you face might
+be such an error if your kernel is tainted. That's why it's in your interest to
+rule this out early before investing more time into this process. This is the
+only reason why this step is here, as this process later will tell you to
+install the latest mainline kernel; you will need to check the taint flag again
+then, as that's when it matters because it's the kernel the report will focus
+on.
+
+On a running system is easy to check if the kernel tainted itself: if ``cat
+/proc/sys/kernel/tainted`` returns '0' then the kernel is not tainted and
+everything is fine. Checking that file is impossible in some situations; that's
+why the kernel also mentions the taint status when it reports an internal
+problem (a 'kernel bug'), a recoverable error (a 'kernel Oops') or a
+non-recoverable error before halting operation (a 'kernel panic'). Look near
+the top of the error messages printed when one of these occurs and search for a
+line starting with 'CPU:'. It should end with 'Not tainted' if the kernel was
+not tainted when it noticed the problem; it was tainted if you see 'Tainted:'
+followed by a few spaces and some letters.
+
+If your kernel is tainted, study Documentation/admin-guide/tainted-kernels.rst
+to find out why. Try to eliminate the reason. Often it's caused by one these
+three things:
+
+ 1. A recoverable error (a 'kernel Oops') occurred and the kernel tainted
+    itself, as the kernel knows it might misbehave in strange ways after that
+    point. In that case check your kernel or system log and look for a section
+    that starts with this::
+
+       Oops: 0000 [#1] SMP
+
+    That's the first Oops since boot-up, as the '#1' between the brackets shows.
+    Every Oops and any other problem that happens after that point might be a
+    follow-up problem to that first Oops, even if both look totally unrelated.
+    Rule this out by getting rid of the cause for the first Oops and reproducing
+    the issue afterwards. Sometimes simply restarting will be enough, sometimes
+    a change to the configuration followed by a reboot can eliminate the Oops.
+    But don't invest too much time into this at this point of the process, as
+    the cause for the Oops might already be fixed in the newer Linux kernel
+    version you are going to install later in this process.
+
+ 2. Your system uses a software that installs its own kernel modules, for
+    example Nvidia's proprietary graphics driver or VirtualBox. The kernel
+    taints itself when it loads such module from external sources (even if
+    they are Open Source): they sometimes cause errors in unrelated kernel
+    areas and thus might be causing the issue you face. You therefore have to
+    prevent those modules from loading when you want to report an issue to the
+    Linux kernel developers. Most of the time the easiest way to do that is:
+    temporarily uninstall such software including any modules they might have
+    installed. Afterwards reboot.
+
+ 3. The kernel also taints itself when it's loading a module that resides in
+    the staging tree of the Linux kernel source. That's a special area for
+    code (mostly drivers) that does not yet fulfill the normal Linux kernel
+    quality standards. When you report an issue with such a module it's
+    obviously okay if the kernel is tainted; just make sure the module in
+    question is the only reason for the taint. If the issue happens in an
+    unrelated area reboot and temporarily block the module from being loaded
+    by specifying ``foo.blacklist=1`` as kernel parameter (replace 'foo' with
+    the name of the module in question).
+
+
 Search for existing reports, first run
 --------------------------------------
 
@@ -546,74 +614,6 @@ they often get set up silently when you install Nvidia's proprietary graphics
 driver, VirtualBox, or other software that requires a some support from a
 module not part of the Linux kernel. That why your might need to uninstall the
 packages with such software to get rid of any 3rd party kernel module.
-
-
-Check 'taint' flag
-------------------
-
-    *Check if your kernel was 'tainted' when the issue occurred, as the event
-    that made the kernel set this flag might be causing the issue you face.*
-
-The kernel marks itself with a 'taint' flag when something happens that might
-lead to follow-up errors that look totally unrelated. The issue you face might
-be such an error if your kernel is tainted. That's why it's in your interest to
-rule this out early before investing more time into this process. This is the
-only reason why this step is here, as this process later will tell you to
-install the latest mainline kernel; you will need to check the taint flag again
-then, as that's when it matters because it's the kernel the report will focus
-on.
-
-On a running system is easy to check if the kernel tainted itself: if ``cat
-/proc/sys/kernel/tainted`` returns '0' then the kernel is not tainted and
-everything is fine. Checking that file is impossible in some situations; that's
-why the kernel also mentions the taint status when it reports an internal
-problem (a 'kernel bug'), a recoverable error (a 'kernel Oops') or a
-non-recoverable error before halting operation (a 'kernel panic'). Look near
-the top of the error messages printed when one of these occurs and search for a
-line starting with 'CPU:'. It should end with 'Not tainted' if the kernel was
-not tainted when it noticed the problem; it was tainted if you see 'Tainted:'
-followed by a few spaces and some letters.
-
-If your kernel is tainted, study Documentation/admin-guide/tainted-kernels.rst
-to find out why. Try to eliminate the reason. Often it's caused by one these
-three things:
-
- 1. A recoverable error (a 'kernel Oops') occurred and the kernel tainted
-    itself, as the kernel knows it might misbehave in strange ways after that
-    point. In that case check your kernel or system log and look for a section
-    that starts with this::
-
-       Oops: 0000 [#1] SMP
-
-    That's the first Oops since boot-up, as the '#1' between the brackets shows.
-    Every Oops and any other problem that happens after that point might be a
-    follow-up problem to that first Oops, even if both look totally unrelated.
-    Rule this out by getting rid of the cause for the first Oops and reproducing
-    the issue afterwards. Sometimes simply restarting will be enough, sometimes
-    a change to the configuration followed by a reboot can eliminate the Oops.
-    But don't invest too much time into this at this point of the process, as
-    the cause for the Oops might already be fixed in the newer Linux kernel
-    version you are going to install later in this process.
-
- 2. Your system uses a software that installs its own kernel modules, for
-    example Nvidia's proprietary graphics driver or VirtualBox. The kernel
-    taints itself when it loads such module from external sources (even if
-    they are Open Source): they sometimes cause errors in unrelated kernel
-    areas and thus might be causing the issue you face. You therefore have to
-    prevent those modules from loading when you want to report an issue to the
-    Linux kernel developers. Most of the time the easiest way to do that is:
-    temporarily uninstall such software including any modules they might have
-    installed. Afterwards reboot.
-
- 3. The kernel also taints itself when it's loading a module that resides in
-    the staging tree of the Linux kernel source. That's a special area for
-    code (mostly drivers) that does not yet fulfill the normal Linux kernel
-    quality standards. When you report an issue with such a module it's
-    obviously okay if the kernel is tainted; just make sure the module in
-    question is the only reason for the taint. If the issue happens in an
-    unrelated area reboot and temporarily block the module from being loaded
-    by specifying ``foo.blacklist=1`` as kernel parameter (replace 'foo' with
-    the name of the module in question).
 
 
 Document how to reproduce issue
