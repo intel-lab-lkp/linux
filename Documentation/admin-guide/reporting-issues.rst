@@ -372,12 +372,41 @@ following the others is usually in your own interest.
 
  [:ref:`details <submit_repiref>`]
 
- * Wait for reactions and keep the thing rolling until you can accept the
-   outcome in one way or the other. Thus react publicly and in a timely manner
-   to any inquiries. Test proposed fixes. Do proactive testing: retest with at
-   least every first release candidate (RC) of a new mainline version and
-   report your results. Send friendly reminders if things stall. And try to
-   help yourself, if you don't get any help or if it's unsatisfying.
+.. _keeprolling_repisbs:
+
+* Wait for reactions and keep the ball rolling until you can accept the outcome
+  in one way or the other. Hence react publicly and in a timely manner to any
+  inquiries and requests for testing patches.
+
+ [:ref:`details <keeprolling_repiref>`]
+
+.. _retest_repisbs:
+
+* Retest at least every first release candidate (e.g., -rc1) of a new mainline
+  version released and report your findings in a reply to your report.
+
+ [:ref:`details <retest_repiref>`]
+
+.. _reminder_repisbs:
+
+* If things stall for more than three weeks, evaluate why. It can happen due to
+  good or bad reasons -- like an inadequate report or because you
+  missed a request for further details or testing. If it is unlikely to be
+  something like that, send a friendly inquiry as a reply-to-self, as it might
+  be a mundane reason like an over-eager spam filter or a developer being on
+  vacation.
+
+ [:ref:`details <reminder_repiref>`]
+
+.. _yourself_repisbs:
+
+* Be aware that nobody is obliged to help you, unless it is a recent regression,
+  a security issue, or an extremely severe problem. Hence, try to help yourself
+  if you don't receive any or only unsatisfying help.
+
+ [:ref:`details <yourself_repiref>`]
+
+.. _readysolved_repisubs:
 
 
 Handling non-regressions only occurring in stable or longterm kernels
@@ -1327,193 +1356,167 @@ The step-by-step guide covers all the important details already.
 [:ref:`back to step-by-step guide <submit_repisbs>`]
 
 
-Duties after the report went out
---------------------------------
+.. _keeprolling_repiref:
 
-    *Wait for reactions and keep the thing rolling until you can accept the
-    outcome in one way or the other. Thus react publicly and in a timely manner
-    to any inquiries. Test proposed fixes. Do proactive testing: retest with at
-    least every first release candidate (RC) of a new mainline version and
-    report your results. Send friendly reminders if things stall. And try to
-    help yourself, if you don't get any help or if it's unsatisfying.*
+Things to do after the report went out
+--------------------------------------
 
-If your report was good and you are really lucky then one of the developers
-might immediately spot what's causing the issue; they then might write a patch
-to fix it, test it, and send it straight for integration in mainline while
-tagging it for later backport to stable and longterm kernels that need it. Then
-all you need to do is reply with a 'Thank you very much' and switch to a version
-with the fix once it gets released.
+  *Wait for reactions and keep the ball rolling until you can accept the outcome* [:ref:`... <keeprolling_repisbs>`]
 
-But this ideal scenario rarely happens. That's why the job is only starting
-once you got the report out. What you'll have to do depends on the situations,
-but often it will be the things listed below. But before digging into the
-details, here are a few important things you need to keep in mind for this part
-of the process.
+If your report was good and you are lucky, some developers might immediately
+spot what is causing the issue. They then might provide a fix for you to test,
+which you should do in a timely manner; afterwards they then send it out for
+integration into the mainline kernel while tagging it for backporting to
+affected stable and longterm kernels if appropriate.
 
+But frequently it is a little less straightforward. That is why the job often
+is only starting once you send a report. What you'll have to do depends on the
+situation. Here are a few tips:
 
-General advice for further interactions
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+**Check who you deal with**: Most of the time a
+developer for the particular area of code will respond. But as
+issues are usually reported in public, it could be anyone --
+including people that want to help but in the end send you off
+track. That is why it might be wise to run a quick search on `lore <https://lore.kernel.org/all/>`_
+to see who you are interacting with.
 
-**Always reply in public**: When you filed the issue in a bug tracker, always
-reply there and do not contact any of the developers privately about it. For
-mailed reports always use the 'Reply-all' function when replying to any mails
-you receive. That includes mails with any additional data you might want to add
-to your report: go to your mail applications 'Sent' folder and use 'reply-all'
-on your mail with the report. This approach will make sure the public mailing
-list(s) and everyone else that gets involved over time stays in the loop; it
-also keeps the mail thread intact, which among others is really important for
-mailing lists to group all related mails together.
+**Inquiries for data**: Often you will be asked to test something or provide
+additional details. Try to supply the requested information soon, as you have
+the attention of someone willing to help and risk losing it the longer you
+wait; that outcome is even likely if you do not provide the information within
+a few business days.
+
+**Always reply in public!** When you submitted the issue in a bug tracker,
+always reply there and do not contact any of the developers privately; for
+mailed reports, always use the 'Reply-all' function when replying to any emails
+you receive. That includes emails with any additional data you might want to add
+to your report: Go to your email application's 'Sent' folder and use 'reply-all'
+on your email with the report. This approach will make sure the public mailing
+lists and everyone else who becomes involved later can access everything; it
+also keeps the email thread intact, which, among others, is really important for
+others that later run into the same problem and check the thread for a solution.
 
 There are just two situations where a comment in a bug tracker or a 'Reply-all'
 is unsuitable:
 
- * Someone tells you to send something privately.
+* Someone tells you to send something privately.
 
- * You were told to send something, but noticed it contains sensitive
-   information that needs to be kept private. In that case it's okay to send it
-   in private to the developer that asked for it. But note in the ticket or a
-   mail that you did that, so everyone else knows you honored the request.
-
-**Do research before asking for clarifications or help**: In this part of the
-process someone might tell you to do something that requires a skill you might
-not have mastered yet. For example, you might be asked to use some test tools
-you never have heard of yet; or you might be asked to apply a patch to the
-Linux kernel sources to test if it helps. In some cases it will be fine sending
-a reply asking for instructions how to do that. But before going that route try
-to find the answer own your own by searching the internet; alternatively
-consider asking in other places for advice. For example ask a friend or post
-about it to a chatroom or forum you normally hang out.
-
-**Be patient**: If you are really lucky you might get a reply to your report
-within a few hours. But most of the time it will take longer, as maintainers
-are scattered around the globe and thus might be in a different time zone – one
-where they already enjoy their night away from keyboard.
-
-In general, kernel developers will take one to five business days to respond to
-reports. Sometimes it will take longer, as they might be busy with the merge
-windows, other work, visiting developer conferences, or simply enjoying a long
-summer holiday.
-
-The 'issues of high priority' (see above for an explanation) are an exception
-here: maintainers should address them as soon as possible; that's why you
-should wait a week at maximum (or just two days if it's something urgent)
-before sending a friendly reminder.
-
-Sometimes the maintainer might not be responding in a timely manner; other
-times there might be disagreements, for example if an issue qualifies as
-regression or not. In such cases raise your concerns on the mailing list and
-ask others for public or private replies how to move on. If that fails, it
-might be appropriate to get a higher authority involved. In case of a WiFi
-driver that would be the wireless maintainers; if there are no higher level
-maintainers or all else fails, it might be one of those rare situations where
-it's okay to get Linus Torvalds involved.
-
-**Proactive testing**: Every time the first pre-release (the 'rc1') of a new
-mainline kernel version gets released, go and check if the issue is fixed there
-or if anything of importance changed. Mention the outcome in the ticket or in a
-mail you sent as reply to your report (make sure it has all those in the CC
-that up to that point participated in the discussion). This will show your
-commitment and that you are willing to help. It also tells developers if the
-issue persists and makes sure they do not forget about it. A few other
-occasional retests (for example with rc3, rc5 and the final) are also a good
-idea, but only report your results if something relevant changed or if you are
-writing something anyway.
-
-With all these general things off the table let's get into the details of how
-to help to get issues resolved once they were reported.
-
-Inquires and testing request
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-
-Here are your duties in case you got replies to your report:
-
-**Check who you deal with**: Most of the time it will be the maintainer or a
-developer of the particular code area that will respond to your report. But as
-issues are normally reported in public it could be anyone that's replying —
-including people that want to help, but in the end might guide you totally off
-track with their questions or requests. That rarely happens, but it's one of
-many reasons why it's wise to quickly run an internet search to see who you're
-interacting with. By doing this you also get aware if your report was heard by
-the right people, as a reminder to the maintainer (see below) might be in order
-later if discussion fades out without leading to a satisfying solution for the
-issue.
-
-**Inquiries for data**: Often you will be asked to test something or provide
-additional details. Try to provide the requested information soon, as you have
-the attention of someone that might help and risk losing it the longer you
-wait; that outcome is even likely if you do not provide the information within
-a few business days.
+* You were told to supply something containing
+  information that should not be exposed to the public. In that case, it is okay
+  to send it in private to the person who asked for it. But note in the ticket
+  or an email that you did so to keep the public record straight.
 
 **Requests for testing**: When you are asked to test a diagnostic patch or a
-possible fix, try to test it in timely manner, too. But do it properly and make
-sure to not rush it: mixing things up can happen easily and can lead to a lot
-of confusion for everyone involved. A common mistake for example is thinking a
-proposed patch with a fix was applied, but in fact wasn't. Things like that
-happen even to experienced testers occasionally, but they most of the time will
-notice when the kernel with the fix behaves just as one without it.
+possible fix, try to test it in a timely manner, too. But do it thoroughly and
+do not rush it: Mixing things up can happen easily and leads to a lot of
+confusion. A common mistake, for example, is thinking a proposed fix was applied
+when building a test kernel, when in fact it was not.
+
+**Try to help yourself** before asking for help: During this part of the
+process someone might tell you to do something that requires a skill you might
+not have mastered yet. For example, you might be asked to use some test tools
+you have never heard of yet; or you are asked to apply a patch to the
+Linux kernel sources to test. It usually will be fine replying asking for
+instructions on how to do that. But before going that route, try to find the
+answer on your own by searching the internet; alternatively,
+consider asking elsewhere for advice. For example, ask a friend or post
+your question to a chat room or forum you normally hang out in.
+
+**Be patient**: If you are really lucky, you might receive a reply to your
+report within a few hours. But most of the time it will take longer, as
+maintainers might be in a different time zone -- one where people currently
+take a few days off or already enjoy their night away from the keyboard. They
+might also simply be busy with other work, on a trip to a conference, or simply
+enjoying a long holiday.
+
+[:ref:`back to step-by-step guide <keeprolling_repisbs>`]
+
+
+.. _retest_repiref:
+
+Regularly check if the bug is still present
+-------------------------------------------
+
+  *Retest at least every first release candidate (e.g., -rc1) of a new mainline
+  version released and* [:ref:`... <retest_repisbs>`]
+
+Every time the first pre-release of a new mainline kernel version is released
+(the 'rc1'), go and check if the issue is fixed there or if anything of
+importance has changed. Mention the outcome in the ticket or in a mailed reply
+to your report (make sure to CCs everyone that up to that point participated in
+the discussion). This will show your commitment. It also tells developers the
+issue persists and acts as an implicit reminder.
+
+An occasional retest at another time (for example, with -rc4 or -rc7) is also
+wise, but only report your results if something relevant changed or if you are
+writing anyway.
+
+[:ref:`back to step-by-step guide <retest_repisbs>`]
+
+
+.. _reminder_repiref:
 
 What to do when nothing of substance happens
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+--------------------------------------------
 
-Some reports will not get any reaction from the responsible Linux kernel
-developers; or a discussion around the issue evolved, but faded out with
-nothing of substance coming out of it.
+  *If things stall for more than two to three weeks, evaluate why. It can
+  happen due to good or bad reasons, like* [:ref:`... <reminder_repisbs>`]
 
-In these cases wait two (better: three) weeks before sending a friendly
-reminder: maybe the maintainer was just away from keyboard for a while when
-your report arrived or had something more important to take care of. When
-writing the reminder, kindly ask if anything else from your side is needed to
-get the ball running somehow. If the report got out by mail, do that in the
-first lines of a mail that is a reply to your initial mail (see above) which
-includes a full quote of the original report below: that's on of those few
-situations where such a 'TOFU' (Text Over, Fullquote Under) is the right
-approach, as then all the recipients will have the details at hand immediately
-in the proper order.
+Sometimes you will not receive any reaction from the responsible
+developers; or a discussion around the issue evolves but ends fruitlessly.
 
-After the reminder wait three more weeks for replies. If you still don't get a
-proper reaction, you first should reconsider your approach. Did you maybe try
-to reach out to the wrong people? Was the report maybe offensive or so
-confusing that people decided to completely stay away from it? The best way to
-rule out such factors: show the report to one or two people familiar with FLOSS
-issue reporting and ask for their opinion. Also ask them for their advice how
-to move forward. That might mean: prepare a better report and make those people
-review it before you send it out. Such an approach is totally fine; just
+In these cases, wait two to three weeks before sending a friendly
+reminder: Maybe the right developers were just away from their keyboards when
+you sent your report or had something more important to take care of.
+
+When writing the reminder, kindly ask if there was anything wrong with the
+report or if anything from your side is needed to get the ball rolling. If the
+report was submitted by email, send a reply inserting your query after quoting
+the intro while including a full quote of the original report below: Then all
+the recipients will have both the gist of the problem and the details at hand
+immediately in convenient order.
+
+After sending a reminder, wait three more weeks for replies. If you still don't
+receive a proper reaction, reconsider your approach. Did you maybe try
+to reach out to the wrong people? Was the report possibly offensive or so
+confusing that people decided to stay away from it?
+
+The best way to
+rule out such factors: Show the report to one or two people familiar with FLOSS
+issue reporting and ask for their opinion. Also ask them for their advice on how
+to move forward. That might mean preparing a better report and making those
+people review it before sending it out. Such an approach is totally fine; just
 mention that this is the second and improved report on the issue and include a
 link to the first report.
 
-If the report was proper you can send a second reminder; in it ask for advice
-why the report did not get any replies. A good moment for this second reminder
-mail is shortly after the first pre-release (the 'rc1') of a new Linux kernel
-version got published, as you should retest and provide a status update at that
-point anyway (see above).
+If the report was proper, you can send a second reminder; in it, ask for advice
+on why the report did not receive any replies. An ideal moment for this is
+shortly after retesting with the first pre-release of a new mainline release
+(the 'rc1'), as you should retest and provide a status update at that point
+anyway (see above).
 
-If the second reminder again results in no reaction within a week, try to
-contact a higher-level maintainer asking for advice: even busy maintainers by
-then should at least have sent some kind of acknowledgment.
+[:ref:`back to step-by-step guide <reminder_repisbs>`]
 
-Remember to prepare yourself for a disappointment: maintainers ideally should
-react somehow to every issue report, but they are only obliged to fix those
-'issues of high priority' outlined earlier. So don't be too devastating if you
-get a reply along the lines of 'thanks for the report, I have more important
-issues to deal with currently and won't have time to look into this for the
-foreseeable future'.
 
-It's also possible that after some discussion in the bug tracker or on a list
-nothing happens anymore and reminders don't help to motivate anyone to work out
-a fix. Such situations can be devastating, but is within the cards when it
-comes to Linux kernel development. This and several other reasons for not
-getting help are explained in 'Why some issues won't get any reaction or remain
-unfixed after being reported' near the end of this document.
+.. _yourself_repiref:
 
-Don't get devastated if you don't find any help or if the issue in the end does
-not get solved: the Linux kernel is FLOSS and thus you can still help yourself.
-You for example could try to find others that are affected and team up with
-them to get the issue resolved. Such a team could prepare a fresh report
-together that mentions how many you are and why this is something that in your
-option should get fixed. Maybe together you can also narrow down the root cause
-or the change that introduced a regression, which often makes developing a fix
-easier. And with a bit of luck there might be someone in the team that knows a
-bit about programming and might be able to write a fix.
+In most cases nobody is obliged to help
+---------------------------------------
+
+*Be aware that nobody is obliged to help you, unless it is* [:ref:`... <yourself_repisbs>`]
+
+Developers ideally should react somehow to every issue report, but sometimes do
+not reply or, in the end, do not address problems. This is due to reasons
+[:ref:`Why some bugs remain unfixed and some reports are ignored <unfixedbugs_repiapdx>`]
+explains in more detail, which also explains why some code does not even have
+maintainers.
+
+Try to help yourself in that case.
+You, for example, could team up with others affected to then create a better
+report or narrow down the root cause of a problem. With a bit of luck, someone
+on the team might even know a bit about programming and provide a fix.
+
+[:ref:`back to step-by-step guide <yourself_repisbs>`]
 
 
 Appendix: additional background information
