@@ -4,49 +4,34 @@
 Reporting issues
 ++++++++++++++++
 
+An email with a problem description sent to the appropriate developers and
+mailing lists -- that is all it takes to report a Linux kernel bug.
 
-The short guide (aka TL;DR)
-===========================
+This might sound easy, but be aware: Your bug reporting experience is likely to
+become tedious or fruitless unless you get a few implicit aspects right.
 
-Are you facing a regression with vanilla kernels from the same stable or
-longterm series? One still supported? Then search the `LKML
-<https://lore.kernel.org/lkml/>`_ and the `Linux stable mailing list
-<https://lore.kernel.org/stable/>`_ archives for matching reports to join. If
-you don't find any, install `the latest release from that series
-<https://kernel.org/>`_. If it still shows the issue, report it to the stable
-mailing list (stable@vger.kernel.org) and CC the regressions list
-(regressions@lists.linux.dev); ideally also CC the maintainer and the mailing
-list for the subsystem in question.
+The Linux kernel used, for example, must ideally be a recent mainline version;
+longterm kernels will rarely do the trick, unless for reporting series-specific
+regressions. That alone makes the vast majority of kernels shipped by hardware
+vendors and Linux distributors unsuitable for upstream reporting. But those
+almost always are inadequate anyway, as most are built from modified sources or
+use externally developed kernel modules. Both aspects can lead to issues that
+never occurred with the upstream Linux kernel, which is why most of its
+developers do not really care about bugs reported with such kernels.
 
-In all other cases try your best guess which kernel part might be causing the
-issue. Check the :ref:`MAINTAINERS <maintainers>` file for how its developers
-expect to be told about problems, which most of the time will be by email with a
-mailing list in CC. Check the destination's archives for matching reports;
-search the `LKML <https://lore.kernel.org/lkml/>`_ and the web, too. If you
-don't find any to join, install `the latest mainline kernel
-<https://kernel.org/>`_. If the issue is present there, send a report.
+Identifying how to submit a report is also easier said than done. The file
+MAINTAINERS answers this and usually points to email addresses. But a small
+number of subsystems prefer reports through one of various bug trackers. Bugs
+with most graphics drivers have to go to https://gitlab.freedesktop.org/drm/;
+https://bugzilla.kernel.org seems like a universal place, but it is rarely the
+right destination, as submissions there often do not even reach the developers.
 
-The issue was fixed there, but you would like to see it resolved in a still
-supported stable or longterm series as well? Then install its latest release.
-If it shows the problem, search for the change that fixed it in mainline and
-check if backporting is in the works or was discarded; if it's neither, ask
-those who handled the change for it.
+The stable team, furthermore, is only the right point of contact for regressions
+within a particular stable or longterm kernel series that at the same time do
+not happen with latest mainline -- which you thus have to rule out first.
 
-**General remarks**: When installing and testing a kernel as outlined above,
-ensure it's vanilla (IOW: not patched and not using add-on modules). Also make
-sure it's built and running in a healthy environment and not already tainted
-before the issue occurs.
-
-If you are facing multiple issues with the Linux kernel at once, report each
-separately. While writing your report, include all information relevant to the
-issue, like the kernel and the distro used. In case of a regression, CC the
-regressions mailing list (regressions@lists.linux.dev) to your report. Also try
-to pinpoint the culprit with a bisection; if you succeed, include its
-commit-id and CC everyone in the sign-off-by chain.
-
-Once the report is out, answer any questions that come up and help where you
-can. That includes keeping the ball rolling by occasionally retesting with newer
-releases and sending a status update afterwards.
+To avoid an ineffective, frustrating, or fruitless bug reporting experience, it
+thus is in your best interest to follow the step-by-step guide below.
 
 ..
    Note: If you see this note, you are reading the text's source file. You
@@ -58,22 +43,11 @@ releases and sending a status update afterwards.
    https://docs.kernel.org/admin-guide/reporting-issues.html
 
 
-Step-by-step guide how to report issues to the kernel maintainers
-=================================================================
+Step-by-step guide on reporting Linux kernel issues
+===================================================
 
-The above TL;DR outlines roughly how to report issues to the Linux kernel
-developers. It might be all that's needed for people already familiar with
-reporting issues to Free/Libre & Open Source Software (FLOSS) projects. For
-everyone else there is this section. It is more detailed and uses a
-step-by-step approach. It still tries to be brief for readability and leaves
-out a lot of details; those are described below the step-by-step guide in a
-reference section, which explains each of the steps in more detail.
-
-Note: this section covers a few more aspects than the TL;DR and does things in
-a slightly different order. That's in your interest, to make sure you notice
-early if an issue that looks like a Linux kernel problem is actually caused by
-something else. These steps thus help to ensure the time you invest in this
-process won't feel wasted in the end:
+Note: Only the steps starting with '*you must*' are strictly required -- but
+following the others is usually in your own interest.
 
  * Are you facing an issue with a Linux kernel a hardware or software vendor
    provided? Then in almost all cases you are better off to stop reading this
