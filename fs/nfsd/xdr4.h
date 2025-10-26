@@ -202,6 +202,12 @@ static inline bool nfsd4_has_session(struct nfsd4_compound_state *cs)
 	return cs->slot != NULL;
 }
 
+void nfsd41_get_current_stateid(struct nfsd4_compound_state *cstate,
+				stateid_t *stateid);
+void nfsd41_save_current_stateid(struct nfsd4_compound_state *cstate,
+				 const stateid_t *stateid);
+void nfsd41_clear_current_stateid(struct nfsd4_compound_state *cstate);
+
 struct nfsd4_change_info {
 	u32		atomic;
 	u64		before_change;

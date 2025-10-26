@@ -9063,27 +9063,54 @@ nfs4_state_shutdown(void)
 	shrinker_free(nfsd_slot_shrinker);
 }
 
-static void
-get_stateid(struct nfsd4_compound_state *cstate, stateid_t *stateid)
+/**
+ * nfsd41_get_current_stated - use the saved v4.1 stateid if appropriate
+ * @cstate - the state of the current COMPOUND procedure
+ * @stateid - the stateid field of the current operation
+ *
+ * If the current operation requests use of the v4.1 "current_stateid" and
+ * if a stateid has been saved by a previous operation in this COMPOUND,
+ * then copy that saved stateid into the current op so it will be available
+ * for use.
+ */
+void
+nfsd41_get_current_stateid(struct nfsd4_compound_state *cstate, stateid_t *stateid)
 {
-	if (HAS_CSTATE_FLAG(cstate, CURRENT_STATE_ID_FLAG) &&
+	if (nfsd4_has_session(cstate) &&
+	    HAS_CSTATE_FLAG(cstate, CURRENT_STATE_ID_FLAG) &&
 	    IS_CURRENT_STATEID(stateid))
 		memcpy(stateid, &cstate->current_stateid, sizeof(stateid_t));
 }
 
-static void
-put_stateid(struct nfsd4_compound_state *cstate, const stateid_t *stateid)
+/**
+ * nfsd41_save_current_stated - const saved a v4.1 stateid for future operations
+ * @cstate - the state of the current COMPOUND procedure
+ * @stateid - the stateid field of the current operation
+ *
+ * This should be called from operations which create or update a stateid
+ * that should be available for future v4.1 ops in the same COMPOUND.
+ * It saves the stateid and records that there is a saved stateid.
+ * It is safe to call this with any states including v4.0.  v4.0 states
+ * will simply be ignored.
+ */
+void
+nfsd41_save_current_stateid(struct nfsd4_compound_state *cstate, const stateid_t *stateid)
 {
-	if (cstate->minorversion) {
-		memcpy(&cstate->current_stateid, stateid, sizeof(stateid_t));
-		SET_CSTATE_FLAG(cstate, CURRENT_STATE_ID_FLAG);
-	}
+	memcpy(&cstate->current_stateid, stateid, sizeof(stateid_t));
+	SET_CSTATE_FLAG(cstate, CURRENT_STATE_ID_FLAG);
 }
 
-void
-clear_current_stateid(struct nfsd4_compound_state *cstate)
+/**
+ * nfsd41_clear_current_stated - clear the saved v4.1 stateid
+ * @cstate - the state of the current COMPOUND procedure
+ *
+ * Store the anon_stateid in the current_stateid as required by
+ * RFC 8881 section 16.2.3.1.2 when the current filehandle changes
+ * without a regular stateid being available.
+ */
+void nfsd41_clear_current_stateid(struct nfsd4_compound_state *cstate)
 {
-	put_stateid(cstate, &anon_stateid);
+	nfsd41_save_current_stateid(cstate, &anon_stateid);
 }
 
 /*
@@ -9093,28 +9120,28 @@ void
 nfsd4_set_opendowngradestateid(struct nfsd4_compound_state *cstate,
 		union nfsd4_op_u *u)
 {
-	put_stateid(cstate, &u->open_downgrade.od_stateid);
+	nfsd41_save_current_stateid(cstate, &u->open_downgrade.od_stateid);
 }
 
 void
 nfsd4_set_openstateid(struct nfsd4_compound_state *cstate,
 		union nfsd4_op_u *u)
 {
-	put_stateid(cstate, &u->open.op_stateid);
+	nfsd41_save_current_stateid(cstate, &u->open.op_stateid);
 }
 
 void
 nfsd4_set_closestateid(struct nfsd4_compound_state *cstate,
 		union nfsd4_op_u *u)
 {
-	put_stateid(cstate, &u->close.cl_stateid);
+	nfsd41_save_current_stateid(cstate, &u->close.cl_stateid);
 }
 
 void
 nfsd4_set_lockstateid(struct nfsd4_compound_state *cstate,
 		union nfsd4_op_u *u)
 {
-	put_stateid(cstate, &u->lock.lk_resp_stateid);
+	nfsd41_save_current_stateid(cstate, &u->lock.lk_resp_stateid);
 }
 
 /*
@@ -9125,56 +9152,56 @@ void
 nfsd4_get_opendowngradestateid(struct nfsd4_compound_state *cstate,
 		union nfsd4_op_u *u)
 {
-	get_stateid(cstate, &u->open_downgrade.od_stateid);
+	nfsd41_get_current_stateid(cstate, &u->open_downgrade.od_stateid);
 }
 
 void
 nfsd4_get_delegreturnstateid(struct nfsd4_compound_state *cstate,
 		union nfsd4_op_u *u)
 {
-	get_stateid(cstate, &u->delegreturn.dr_stateid);
+	nfsd41_get_current_stateid(cstate, &u->delegreturn.dr_stateid);
 }
 
 void
 nfsd4_get_freestateid(struct nfsd4_compound_state *cstate,
 		union nfsd4_op_u *u)
 {
-	get_stateid(cstate, &u->free_stateid.fr_stateid);
+	nfsd41_get_current_stateid(cstate, &u->free_stateid.fr_stateid);
 }
 
 void
 nfsd4_get_setattrstateid(struct nfsd4_compound_state *cstate,
 		union nfsd4_op_u *u)
 {
-	get_stateid(cstate, &u->setattr.sa_stateid);
+	nfsd41_get_current_stateid(cstate, &u->setattr.sa_stateid);
 }
 
 void
 nfsd4_get_closestateid(struct nfsd4_compound_state *cstate,
 		union nfsd4_op_u *u)
 {
-	get_stateid(cstate, &u->close.cl_stateid);
+	nfsd41_get_current_stateid(cstate, &u->close.cl_stateid);
 }
 
 void
 nfsd4_get_lockustateid(struct nfsd4_compound_state *cstate,
 		union nfsd4_op_u *u)
 {
-	get_stateid(cstate, &u->locku.lu_stateid);
+	nfsd41_get_current_stateid(cstate, &u->locku.lu_stateid);
 }
 
 void
 nfsd4_get_readstateid(struct nfsd4_compound_state *cstate,
 		union nfsd4_op_u *u)
 {
-	get_stateid(cstate, &u->read.rd_stateid);
+	nfsd41_get_current_stateid(cstate, &u->read.rd_stateid);
 }
 
 void
 nfsd4_get_writestateid(struct nfsd4_compound_state *cstate,
 		union nfsd4_op_u *u)
 {
-	get_stateid(cstate, &u->write.wr_stateid);
+	nfsd41_get_current_stateid(cstate, &u->write.wr_stateid);
 }
 
 /**
