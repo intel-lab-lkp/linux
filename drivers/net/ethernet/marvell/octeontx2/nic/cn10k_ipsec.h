@@ -94,6 +94,7 @@ struct cn10k_inb_sw_ctx_info {
 	u32 npc_mcam_entry;
 	u32 sa_index;
 	__be32 spi;
+	u32 reqid;
 	u16 hash_index;	/* Hash index from SPI_TO_SA match */
 	u8 way;		/* SPI_TO_SA match table way index */
 	bool delete_npc_and_match_entry;
