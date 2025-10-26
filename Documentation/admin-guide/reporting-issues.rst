@@ -1756,14 +1756,65 @@ But do not worry too much about all of this, a lot of drivers have active
 maintainers who are quite interested in fixing as many issues as possible.
 
 
-Closing words
-=============
+Why reporting Linux kernel bugs is somewhat complicated
+-------------------------------------------------------
 
-Compared with other Free/Libre & Open Source Software it's hard to report
-issues to the Linux kernel developers: the length and complexity of this
-document and the implications between the lines illustrate that. But that's how
-it is for now. The main author of this text hopes documenting the state of the
-art will lay some groundwork to improve the situation over time.
+The Linux kernel's development model differs from typical Open Source projects
+in a few important aspects. Four of those complicate bug reporting:
+
+1. Developers are free to solely focus on the latest mainline codebase.
+
+2. The 'stable team' maintains the stable and longterm kernel series, but is not
+   allowed to fix many bugs just there if they happen in mainline, too.
+
+3. There is no central bug tracker.
+
+4. Most kernels used in Linux distributions are totally unsuitable for reporting
+   bugs upstream.
+
+Due to the first aspect, some of the developers ignore or react coldly to
+reports about bugs in, say, Linux 6.1 when 6.2-rc1 is already out.
+
+The combination of the first and the second aspect is why some of the
+developers are unwilling to look into reports with stable or longterm kernels:
+the problem might never have happened in the code they work on, for example
+because the stable team did something wrong between 6.1.1 and 6.1.2.
+
+The stable team due to those two aspects is often in a similar but opposite
+situation when it comes to bugs reported using a kernel like 6.1.2: If that
+issue already happened in 6.1 and still happens in the latest mainline kernel,
+then it must be fixed there first. That is among the reasons why reporters in
+the end always have to check if mainline is affected, as the stable team often
+is the wrong point of contact, unless it is a series specific regression.
+
+There are various reasons why no central bug tracker exists. They, among others,
+were not a thing yet when Linux started, which is why reporting my email was
+the norm initially -- and still is, as quite a few developers prefer to handle
+all aspects of kernel development via email. Some, on the other hand, saw
+benefits in trackers and set up bugzilla.kernel.org, which due to the
+aforementioned aspect never became mandatory and has some problematic aspects;
+this is why it frequently does not even forward newly filed reports to the
+appropriate developers. Yet other developers prefer the comfort of Git forges
+for development and issue tracking; but subsystems use various forges, so those
+trackers are spread over the web.
+
+The fourth aspect is explained in the second point of the reference section
+already: Old codebases, modified sources, and add-ons lead to bugs that were
+fixed a long time ago already or never happened upstream in the first place.
+These are problems for many other software packaged by Linux distributions as
+well. But there it is usually a smaller problem, as the modifications and
+extensions distributors apply to the kernel are often much bigger and more
+dangerous; the kernel also changes way more quickly, is a lot more
+complex, and naturally more fragile. Due to these aspects, many developers
+expect reports to be based on fresh and vanilla kernels. Furthermore, most of
+them receive way more bug reports than they are able to handle, which is
+why they prioritize the ones that look more promising.
+
+Reporting a bug due to these and other unmentioned aspects is harder than in
+other Free/Libre & Open Source Software projects -- the complexity of this
+document proves that. But that is the state of affairs for now. The primary
+author of this text hopes documenting it will lay some groundwork to improve
+the situation over time.
 
 
 ..
