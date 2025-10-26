@@ -615,29 +615,29 @@ Check 'taint' flag
   *Check if the kernel was already 'tainted' when the issue first occurred* [:ref:`... <taintone_repisbs>`]
 
 The kernel marks itself with a 'taint' flag when something happens that might
-lead to follow-up errors looking totally unrelated. Your issue might
-be such an error, in which case there is nothing to report. That is why it is
-in your interest to check the taint status early in the reporting process. This
-is the main reason why this step is here in the guide, as you most likely will
-have to install a different kernel for reporting later -- and then need to
-recheck the flag, as that is when it matters.
+lead to follow-up errors looking totally unrelated. Your issue might be such an
+error, in which case there is nothing to report. That is why it is in your
+interest to check the taint status early in the reporting process. This is the
+main reason why this step is here in the guide, as you most likely will have to
+install a different kernel for reporting later -- and then need to recheck the
+flag, as that is when it matters.
 
 To check the tainted flag, execute ``cat /proc/sys/kernel/tainted``: If it
 returns '0' everything is fine; if it contains a higher number, it is tainted.
 
-In some situations it is impossible to check that file. That is
-why the kernel also mentions the taint status when it reports small (a
-'warning' or a 'bug') or big (an 'Oops' or a 'panic') problems. In such cases,
-search for a line starting with 'CPU:' near the top of the error messages
-printed on the screen or in the log. If the kernel at that point considered
-itself to be fine, it will end with 'Not tainted'; if not, you will see
-'Tainted:' followed by a few spaces and some letters.
+In some situations it is impossible to check that file. That is why the kernel
+also mentions the taint status when it reports small (a 'warning' or a 'bug') or
+big (an 'Oops' or a 'panic') problems. In such cases, search for a line starting
+with 'CPU:' near the top of the error messages printed on the screen or in the
+log. If the kernel at that point considered itself to be fine, it will end with
+'Not tainted'; if not, you will see 'Tainted:' followed by a few spaces and some
+letters.
 
 If your kernel is tainted, check Documentation/admin-guide/tainted-kernels.rst
-to find out why. Note: It is quite possible that the problem you ran into
-caused the kernel to taint itself, in which case you are free to ignore the
-flag. But if the kernel was tainted beforehand, you might have to eliminate the
-cause or rule out that it is an influence.
+to find out why. Note: It is quite possible that the problem you ran into caused
+the kernel to taint itself, in which case you are free to ignore the flag. But
+if the kernel was tainted beforehand, you might have to eliminate the cause or
+rule out that it is an influence.
 
 These are the most frequent reasons why the kernel set the flag:
 
@@ -649,18 +649,17 @@ These are the most frequent reasons why the kernel set the flag:
        Oops: 0000 [#1] SMP
 
    That is the first Oops since boot-up, as the '#1' between the brackets shows.
-   Every later Oops and any other problem that happens afterwards might be
-   a follow-up issue
-   that would never have happened otherwise, even if both look totally unrelated.
-   Rule this out by eliminating the cause for the first Oops and reproducing
-   the issue afterwards. Sometimes simply restarting will be enough; other times
-   a change to the configuration followed by a reboot can eliminate the Oops.
+   Every later Oops and any other problem that happens afterwards might be a
+   follow-up issue that would never have happened otherwise, even if both look
+   totally unrelated.  Rule this out by eliminating the cause for the first Oops
+   and reproducing the issue afterwards. Sometimes simply restarting will be
+   enough; other times a change to the configuration followed by a reboot can
+   eliminate the Oops.
 
    Note: Do not invest too much time into this while you are still on an
-   outdated or vendor kernel: The cause for the Oops might already be fixed in
-   a newer Linux kernel
-   version you most likely will have to install for reporting while following
-   this guide.
+   outdated or vendor kernel: The cause for the Oops might already be fixed in a
+   newer Linux kernel version you most likely will have to install for reporting
+   while following this guide.
 
 2. Your system uses software that installs externally developed kernel modules,
    for example, kernel modules from Nvidia, OpenZFS, VirtualBox, or VMware. The
@@ -838,10 +837,9 @@ development process:
 * You deal with a regression, if some application or practical use case running
   fine with one Linux kernel version works worse or not at all with a newer
   version compiled using a similar configuration; the 'no regression' rule
-  forbids that. The document
-  Documentation/admin-guide/reporting-regressions.rst explains these and
-  additional aspects in more detail, but everything important is covered in
-  this document.
+  forbids that. The document Documentation/admin-guide/reporting-regressions.rst
+  explains these and additional aspects in more detail, but everything important
+  is covered in this document.
 
 * What qualifies as a security issue is left to your judgment. Consider reading
   Documentation/process/security-bugs.rst before proceeding, which
@@ -892,12 +890,10 @@ How to read the MAINTAINERS file
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 To illustrate how to use the :ref:`MAINTAINERS <maintainers>` file, let's assume
-the WiFi in your Laptop misbehaves. In that
-case it is likely an issue in the WiFi driver. Obviously it could also be some
-underlying code from other subsystems, but unless something hints at that,
-stick to the driver; if it is really something else, the driver's developers
-will involve the
-right people.
+the WiFi in your Laptop misbehaves. In that case it is likely an issue in the
+WiFi driver. Obviously it could also be some underlying code from other
+subsystems, but unless something hints at that, stick to the driver; if it is
+really something else, the driver's developers will involve the right people.
 
 Sadly, there is no way to check which code is driving a particular hardware
 component that is both universal and easy.
@@ -953,9 +949,8 @@ only has someone who provides 'Odd Fixes' when feeling motivated. And with
 That only leaves these options: Arrange yourself to live with the issue, fix it
 yourself, or find a programmer somewhere willing to fix it.
 
-After checking the status, look for a line starting with 'bugs:' ('B:'): It
-will tell you where to find a subsystem-specific bug tracker to file your
-issue. The
+After checking the status, look for a line starting with 'bugs:' ('B:'): It will
+tell you where to find a subsystem-specific bug tracker to file your issue. The
 example above does not have such a line. That is the case for most sections, as
 Linux kernel development is completely driven by email: Very few subsystems use
 a bug tracker, and only some of those rely on bugzilla.kernel.org.
@@ -1158,9 +1153,9 @@ addresses that allow pinpointing the exact path to the line in your kernel's
 source code that triggered the issue. Many bugs can be resolved without
 decoding these addresses, but for some it is helpful or required.
 
-That is why it is fine to report problems without bothering about this, but
-when asked for this, try to decode the stack trace. Note: This requires a
-kernel build with CONFIG_DEBUG_INFO and CONFIG_KALLSYMS enabled.
+That is why it is fine to report problems without bothering about this, but when
+asked for this, try to decode the stack trace. Note: This requires a kernel
+build with CONFIG_DEBUG_INFO and CONFIG_KALLSYMS enabled.
 
 Usually you want to decode using a script shipped in the Linux sources. If you
 are running a kernel you compiled yourself, call it like this::
@@ -1187,10 +1182,10 @@ In this case the executed code was built from the file
 '~/linux-5.10.5/test-module/test-module.c' and the error occurred during the
 instructions found in line '16'.
 
-The script will similarly decode the addresses mentioned in the section
-starting with 'Call trace', which shows the path to the function where the
-problem occurred. The script, furthermore, will show the assembler output for
-the code section the kernel was executing at that time.
+The script will similarly decode the addresses mentioned in the section starting
+with 'Call trace', which shows the path to the function where the problem
+occurred. The script, furthermore, will show the assembler output for the code
+section the kernel was executing at that time.
 
 [:ref:`back to step-by-step guide <attachments_repisbs>`]
 
@@ -1202,10 +1197,10 @@ Prepare and optimize the report
 
   *Prepare and optimize the report.* [:ref:`... <compile_repisbs>`]
 
-Most developers just take a few seconds to skim a report before deciding
-between taking a closer look or moving on, as they receive a ton of messages.
-That is why the title/subject, the first sentence, and the three or four
-following it are crucial.
+Most developers just take a few seconds to skim a report before deciding between
+taking a closer look or moving on, as they receive a ton of messages.  That is
+why the title/subject, the first sentence, and the three or four following it
+are crucial.
 
 People will also stop reading if the report's text is long or hard to follow;
 the same is true if crucial information is not at hand. So be sure to describe
@@ -1373,12 +1368,11 @@ But frequently it is a little less straightforward. That is why the job often
 is only starting once you send a report. What you'll have to do depends on the
 situation. Here are a few tips:
 
-**Check who you deal with**: Most of the time a
-developer for the particular area of code will respond. But as
-issues are usually reported in public, it could be anyone --
-including people that want to help but in the end send you off
-track. That is why it might be wise to run a quick search on `lore <https://lore.kernel.org/all/>`_
-to see who you are interacting with.
+**Check who you deal with**: Most of the time a developer for the particular
+area of code will respond. But as issues are usually reported in public, it
+could be anyone -- including people that want to help but in the end send you
+off track. That is why it might be wise to run a quick search on `lore
+<https://lore.kernel.org/all/>`_ to see who you are interacting with.
 
 **Inquiries for data**: Often you will be asked to test something or provide
 additional details. Try to supply the requested information soon, as you have
@@ -1412,21 +1406,21 @@ do not rush it: Mixing things up can happen easily and leads to a lot of
 confusion. A common mistake, for example, is thinking a proposed fix was applied
 when building a test kernel, when in fact it was not.
 
-**Try to help yourself** before asking for help: During this part of the
-process someone might tell you to do something that requires a skill you might
-not have mastered yet. For example, you might be asked to use some test tools
-you have never heard of yet; or you are asked to apply a patch to the
-Linux kernel sources to test. It usually will be fine replying asking for
-instructions on how to do that. But before going that route, try to find the
-answer on your own by searching the internet; alternatively,
-consider asking elsewhere for advice. For example, ask a friend or post
-your question to a chat room or forum you normally hang out in.
+**Try to help yourself** before asking for help: During this part of the process
+someone might tell you to do something that requires a skill you might not have
+mastered yet. For example, you might be asked to use some test tools you have
+never heard of yet; or you are asked to apply a patch to the Linux kernel
+sources to test. It usually will be fine replying asking for instructions on how
+to do that. But before going that route, try to find the answer on your own by
+searching the internet; alternatively, consider asking elsewhere for advice. For
+example, ask a friend or post your question to a chat room or forum you normally
+hang out in.
 
 **Be patient**: If you are really lucky, you might receive a reply to your
 report within a few hours. But most of the time it will take longer, as
-maintainers might be in a different time zone -- one where people currently
-take a few days off or already enjoy their night away from the keyboard. They
-might also simply be busy with other work, on a trip to a conference, or simply
+maintainers might be in a different time zone -- one where people currently take
+a few days off or already enjoy their night away from the keyboard. They might
+also simply be busy with other work, on a trip to a conference, or simply
 enjoying a long holiday.
 
 [:ref:`back to step-by-step guide <keeprolling_repisbs>`]
@@ -1462,12 +1456,12 @@ What to do when nothing of substance happens
   *If things stall for more than two to three weeks, evaluate why. It can
   happen due to good or bad reasons, like* [:ref:`... <reminder_repisbs>`]
 
-Sometimes you will not receive any reaction from the responsible
-developers; or a discussion around the issue evolves but ends fruitlessly.
+Sometimes you will not receive any reaction from the responsible developers; or
+a discussion around the issue evolves but ends fruitlessly.
 
-In these cases, wait two to three weeks before sending a friendly
-reminder: Maybe the right developers were just away from their keyboards when
-you sent your report or had something more important to take care of.
+In these cases, wait two to three weeks before sending a friendly reminder:
+Maybe the right developers were just away from their keyboards when you sent
+your report or had something more important to take care of.
 
 When writing the reminder, kindly ask if there was anything wrong with the
 report or if anything from your side is needed to get the ball rolling. If the
@@ -1477,17 +1471,16 @@ the recipients will have both the gist of the problem and the details at hand
 immediately in convenient order.
 
 After sending a reminder, wait three more weeks for replies. If you still don't
-receive a proper reaction, reconsider your approach. Did you maybe try
-to reach out to the wrong people? Was the report possibly offensive or so
-confusing that people decided to stay away from it?
+receive a proper reaction, reconsider your approach. Did you maybe try to reach
+out to the wrong people? Was the report possibly offensive or so confusing that
+people decided to stay away from it?
 
-The best way to
-rule out such factors: Show the report to one or two people familiar with FLOSS
-issue reporting and ask for their opinion. Also ask them for their advice on how
-to move forward. That might mean preparing a better report and making those
-people review it before sending it out. Such an approach is totally fine; just
-mention that this is the second and improved report on the issue and include a
-link to the first report.
+The best way to rule out such factors: Show the report to one or two people
+familiar with FLOSS issue reporting and ask for their opinion. Also ask them for
+their advice on how to move forward. That might mean preparing a better report
+and making those people review it before sending it out. Such an approach is
+totally fine; just mention that this is the second and improved report on the
+issue and include a link to the first report.
 
 If the report was proper, you can send a second reminder; in it, ask for advice
 on why the report did not receive any replies. An ideal moment for this is
@@ -1507,14 +1500,14 @@ In most cases nobody is obliged to help
 
 Developers ideally should react somehow to every issue report, but sometimes do
 not reply or, in the end, do not address problems. This is due to reasons
-[:ref:`Why some bugs remain unfixed and some reports are ignored <unfixedbugs_repiapdx>`]
-explains in more detail, which also explains why some code does not even have
-maintainers.
+[:ref:`Why some bugs remain unfixed and some reports are ignored
+<unfixedbugs_repiapdx>`] explains in more detail, which also explains why some
+code does not even have maintainers.
 
-Try to help yourself in that case.
-You, for example, could team up with others affected to then create a better
-report or narrow down the root cause of a problem. With a bit of luck, someone
-on the team might even know a bit about programming and provide a fix.
+Try to help yourself in that case.  You, for example, could team up with others
+affected to then create a better report or narrow down the root cause of a
+problem. With a bit of luck, someone on the team might even know a bit about
+programming and provide a fix.
 
 [:ref:`back to step-by-step guide <yourself_repisbs>`]
 
@@ -1548,35 +1541,34 @@ test. The former can happen when the publicly available docs are superficial or
 when a driver was written with the help of reverse engineering.
 
 Sooner or later, spare-time developers usually stop caring for the driver.
-Maybe their test hardware broke, was replaced by something more fancy, or
-became so old that it is something you don't find much outside of computer
-museums anymore. Other times developers also stop caring when
-something different in life becomes more important to them. Then sometimes
-nobody is willing to take over the job as maintainer -- and nobody else can be
-forced to, as contributing is voluntary. The code nevertheless often stays
-around, as it is useful for people; removing it would also cause a regression,
-which is not allowed in Linux.
+Maybe their test hardware broke, was replaced by something more fancy, or became
+so old that it is something you don't find much outside of computer museums
+anymore. Other times developers also stop caring when something different in
+life becomes more important to them. Then sometimes nobody is willing to take
+over the job as maintainer -- and nobody else can be forced to, as contributing
+is voluntary. The code nevertheless often stays around, as it is useful for
+people; removing it would also cause a regression, which is not allowed in
+Linux.
 
-The situation is not that different with developers that are paid for their
-work on the upstream Linux kernel. Those contribute the most changes these days.
-But their employers set the priorities. And those sooner or later stop caring
-for some code or make their
-employees focus on other things. Hardware vendors, for example, earn their money
-mainly by selling new hardware -- they thus often are not much interested in
-investing much time and energy in maintaining a Linux kernel driver for a chip
-they stopped selling years ago. Enterprise Linux distributors often care for a
-longer time period, but in new versions might set support for old and rare
-hardware aside to limit the scope, too. Often spare-time contributors take over
-once employed developers orphan some code, but as mentioned earlier: Sooner or
-later they will usually leave the code behind, too.
+The situation is not that different with developers that are paid for their work
+on the upstream Linux kernel. Those contribute the most changes these days.  But
+their employers set the priorities. And those sooner or later stop caring for
+some code or make their employees focus on other things. Hardware vendors, for
+example, earn their money mainly by selling new hardware -- they thus often are
+not much interested in investing much time and energy in maintaining a Linux
+kernel driver for a chip they stopped selling years ago. Enterprise Linux
+distributors often care for a longer time period, but in new versions might set
+support for old and rare hardware aside to limit the scope, too. Often
+spare-time contributors take over once employed developers orphan some code, but
+as mentioned earlier: Sooner or later they will usually leave the code behind,
+too.
 
-Priorities are another reason why some issues are not fixed, as developers
-quite often are forced to set those: The spare-time of volunteers or the time
+Priorities are another reason why some issues are not fixed, as developers quite
+often are forced to set those: The spare-time of volunteers or the time
 employers allot for upstream Linux kernel work is often limited. Sometimes
 developers are also flooded with good and bad reports, even if a driver is
-working well. To
-not get completely stuck, the programmers might have no other choice than
-to prioritize bug reports and ignore some.
+working well. To not get completely stuck, the programmers might have no other
+choice than to prioritize bug reports and ignore some.
 
 But do not worry too much about all of this, a lot of drivers have active
 maintainers who are quite interested in fixing as many issues as possible.
