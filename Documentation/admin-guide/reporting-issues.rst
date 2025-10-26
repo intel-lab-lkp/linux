@@ -176,7 +176,12 @@ following the others is usually in your own interest.
 
  [:ref:`details <otherplaces_repiref>`]
 
- * Create a fresh backup and put system repair and restore tools at hand.
+.. _backup_repisbs:
+
+* You might want to create a fresh backup and put both system repair and
+  restore tools at hand.
+
+ [:ref:`details <backup_repiref>`]
 
  * Ensure your system does not enhance its kernels by building additional
    kernel modules on-the-fly, which solutions like DKMS might be doing locally
@@ -904,17 +909,21 @@ or even more time can save everyone, including you, quite some trouble.
 [:ref:`back to step-by-step guide <otherplaces_repisbs>`]
 
 
+.. _backup_repiref:
+
 Prepare for emergencies
 -----------------------
 
-    *Create a fresh backup and put system repair and restore tools at hand.*
+  *You might want to create a fresh backup and put both* [:ref:`... <backup_repisbs>`]
 
-Reminder, you are dealing with computers, which sometimes do unexpected things,
-especially if you fiddle with crucial parts like the kernel of its operating
-system. That's what you are about to do in this process. Thus, make sure to
-create a fresh backup; also ensure you have all tools at hand to repair or
-reinstall the operating system as well as everything you need to restore the
-backup.
+Remember, you are dealing with computers, which sometimes do unexpected things,
+especially if you fiddle with crucial parts like their operating system kernel.
+That is what you are about to do in this process. You thus better want to create
+a fresh backup. In case you need to install a kernel during the bug reporting
+process, also ensure you have all tools at hand to repair or reinstall the
+operating system as well as everything you need to restore the backup.
+
+[:ref:`back to step-by-step guide <backup_repisbs>`]
 
 
 Make sure your kernel doesn't get enhanced
