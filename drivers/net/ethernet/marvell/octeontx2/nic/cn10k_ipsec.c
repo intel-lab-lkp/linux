@@ -439,6 +439,7 @@ static int cn10k_inb_nix_inline_ipsec_cfg(struct otx2_nic *pfvf)
 	req->opcode = CN10K_IPSEC_MAJOR_OP_INB_IPSEC | (1 << 6);
 	req->param1 = 7; /* bit 0:ip_csum_dis 1:tcp_csum_dis 2:esp_trailer_dis */
 	req->param2 = 0;
+	req->bpid = pfvf->ipsec.bpid;
 	req->credit = (pfvf->qset.rqe_cnt * 3) / 4;
 	req->credit_th = pfvf->qset.rqe_cnt / 10;
 	req->ctx_ilen_valid = 1;
@@ -485,7 +486,35 @@ static int cn10k_ipsec_ingress_rq_init(struct otx2_nic *pfvf, u16 qidx, u16 lpb_
 	return otx2_sync_mbox_msg(&pfvf->mbox);
 }
 
-static int cn10k_ipsec_aura_and_pool_init(struct otx2_nic *pfvf, int pool_id)
+/* Enable backpressure for the specified aura since
+ * it cannot be enabled during aura initialization.
+ */
+static int cn10k_ipsec_enable_aura_backpressure(struct otx2_nic *pfvf,
+						int aura_id, int bpid)
+{
+	struct npa_aq_enq_req *npa_aq;
+
+	npa_aq = otx2_mbox_alloc_msg_npa_aq_enq(&pfvf->mbox);
+	if (!npa_aq)
+		return -ENOMEM;
+
+	npa_aq->aura.bp_ena = 1;
+	npa_aq->aura_mask.bp_ena = 1;
+	npa_aq->aura.nix0_bpid = bpid;
+	npa_aq->aura_mask.nix0_bpid = GENMASK(8, 0);
+	npa_aq->aura.bp = (255 - ((50 * 256) / 100));
+	npa_aq->aura_mask.bp = GENMASK(7, 0);
+
+	/* Fill NPA AQ info */
+	npa_aq->aura_id = aura_id;
+	npa_aq->ctype = NPA_AQ_CTYPE_AURA;
+	npa_aq->op = NPA_AQ_INSTOP_WRITE;
+
+	return otx2_sync_mbox_msg(&pfvf->mbox);
+}
+
+static int cn10k_ipsec_aura_and_pool_init(struct otx2_nic *pfvf, int pool_id,
+					  int bpid)
 {
 	struct otx2_hw *hw = &pfvf->hw;
 	struct otx2_pool *pool = NULL;
@@ -523,6 +552,11 @@ static int cn10k_ipsec_aura_and_pool_init(struct otx2_nic *pfvf, int pool_id)
 		pfvf->hw_ops->aura_freeptr(pfvf, pool_id, bufptr + OTX2_HEAD_ROOM);
 	}
 
+	/* Enable backpressure for the aura */
+	err = cn10k_ipsec_enable_aura_backpressure(pfvf, pool_id, bpid);
+	if (err)
+		goto free_auras;
+
 	return err;
 
 free_auras:
@@ -539,7 +573,8 @@ static int cn10k_ipsec_setup_nix_rx_hw_resources(struct otx2_nic *pfvf)
 	mutex_lock(&pfvf->mbox.lock);
 
 	/* Initialize Pool for first pass */
-	err = cn10k_ipsec_aura_and_pool_init(pfvf, pfvf->ipsec.inb_ipsec_pool);
+	err = cn10k_ipsec_aura_and_pool_init(pfvf, pfvf->ipsec.inb_ipsec_pool,
+					     pfvf->ipsec.bpid);
 	if (err)
 		return err;
 
@@ -555,7 +590,8 @@ static int cn10k_ipsec_setup_nix_rx_hw_resources(struct otx2_nic *pfvf)
 
 	for (pool = pfvf->ipsec.inb_ipsec_spb_pool;
 	     pool < pfvf->hw.rx_queues + pfvf->ipsec.inb_ipsec_spb_pool; pool++) {
-		err = cn10k_ipsec_aura_and_pool_init(pfvf, pool);
+		err = cn10k_ipsec_aura_and_pool_init(pfvf, pool,
+						     pfvf->ipsec.spb_bpid);
 		if (err)
 			goto free_auras;
 	}
@@ -1166,6 +1202,29 @@ void cn10k_ipsec_free_aura_ptrs(struct otx2_nic *pfvf)
 	}
 }
 
+static int cn10k_ipsec_free_cpt_bpid(struct otx2_nic *pfvf)
+{
+	struct nix_bpids *req;
+	int rc;
+
+	req = otx2_mbox_alloc_msg_nix_free_bpids(&pfvf->mbox);
+	if (!req)
+		return -ENOMEM;
+
+	req->bpid_cnt = 2;
+	req->bpids[0] = pfvf->ipsec.bpid;
+	req->bpids[1] = pfvf->ipsec.spb_bpid;
+
+	rc = otx2_sync_mbox_msg(&pfvf->mbox);
+	if (rc)
+		return rc;
+
+	/* Clear the bpids */
+	pfvf->ipsec.bpid = 0;
+	pfvf->ipsec.spb_bpid = 0;
+	return 0;
+}
+
 static void cn10k_ipsec_free_hw_resources(struct otx2_nic *pfvf)
 {
 	int vec;
@@ -1187,6 +1246,111 @@ static void cn10k_ipsec_free_hw_resources(struct otx2_nic *pfvf)
 
 	vec = pci_irq_vector(pfvf->pdev, pfvf->hw.npa_msixoff);
 	free_irq(vec, pfvf);
+
+	if (pfvf->ipsec.bpid && pfvf->ipsec.spb_bpid)
+		cn10k_ipsec_free_cpt_bpid(pfvf);
+}
+
+static int cn10k_ipsec_configure_cpt_bpid(struct otx2_nic *pfvf)
+{
+	struct nix_rx_chan_cfg *chan_cfg, *chan_cfg_rsp;
+	struct nix_alloc_bpid_req *req;
+	int chan, chan_cnt = 1;
+	struct nix_bpids *rsp;
+	u64 rx_chan_cfg;
+	int rc;
+
+	req = otx2_mbox_alloc_msg_nix_alloc_bpids(&pfvf->mbox);
+	if (!req)
+		return -ENOMEM;
+
+	/* Request 2 BPIDs:
+	 * One for 1st pass LPB pool and another for 2nd pass SPB pool
+	 */
+	req->bpid_cnt = 2;
+	req->type = NIX_INTF_TYPE_CPT;
+
+	rc = otx2_sync_mbox_msg(&pfvf->mbox);
+	if (rc)
+		return rc;
+
+	rsp = (struct nix_bpids *)otx2_mbox_get_rsp(&pfvf->mbox.mbox, 0, &req->hdr);
+	if (IS_ERR(rsp))
+		return PTR_ERR(rsp);
+
+	/* Store the bpid for configuring it in the future */
+	pfvf->ipsec.bpid = rsp->bpids[0];
+	pfvf->ipsec.spb_bpid = rsp->bpids[1];
+
+	/* Get the default RX channel configuration */
+	chan_cfg = otx2_mbox_alloc_msg_nix_rx_chan_cfg(&pfvf->mbox);
+	if (!chan_cfg)
+		return -ENOMEM;
+
+	chan_cfg->read = true;
+	rc = otx2_sync_mbox_msg(&pfvf->mbox);
+	if (rc)
+		return rc;
+
+	/* Get the response */
+	chan_cfg_rsp = (struct nix_rx_chan_cfg *)
+			otx2_mbox_get_rsp(&pfvf->mbox.mbox, 0, &chan_cfg->hdr);
+
+	rx_chan_cfg = chan_cfg_rsp->val;
+	/* Find a free backpressure ID slot to configure */
+	if (!FIELD_GET(NIX_AF_RX_CHANX_CFG_BP1_ENA, rx_chan_cfg)) {
+		rx_chan_cfg |= FIELD_PREP(NIX_AF_RX_CHANX_CFG_BP1_ENA, 1) |
+			       FIELD_PREP(NIX_AF_RX_CHANX_CFG_BP1, pfvf->ipsec.bpid);
+	} else if (!FIELD_GET(NIX_AF_RX_CHANX_CFG_BP2_ENA, rx_chan_cfg)) {
+		rx_chan_cfg |= FIELD_PREP(NIX_AF_RX_CHANX_CFG_BP2_ENA, 1) |
+			       FIELD_PREP(NIX_AF_RX_CHANX_CFG_BP2, pfvf->ipsec.bpid);
+	} else if (!FIELD_GET(NIX_AF_RX_CHANX_CFG_BP3_ENA, rx_chan_cfg)) {
+		rx_chan_cfg |= FIELD_PREP(NIX_AF_RX_CHANX_CFG_BP3_ENA, 1) |
+			       FIELD_PREP(NIX_AF_RX_CHANX_CFG_BP3, pfvf->ipsec.bpid);
+	} else {
+		netdev_err(pfvf->netdev, "No BPID available in RX channel\n");
+		return -ENONET;
+	}
+
+	/* Update the RX_CHAN_CFG to listen to backpressure due to IPsec traffic */
+	chan_cfg = otx2_mbox_alloc_msg_nix_rx_chan_cfg(&pfvf->mbox);
+	if (!chan_cfg)
+		return -ENOMEM;
+
+	/* Configure BPID for PF RX channel */
+	chan_cfg->val = rx_chan_cfg;
+	rc = otx2_sync_mbox_msg(&pfvf->mbox);
+	if (rc)
+		return rc;
+
+	/* Enable backpressure in CPT Link's RX Channel(s) */
+#ifdef CONFIG_DCB
+	chan_cnt = IEEE_8021QAZ_MAX_TCS;
+#endif
+	for (chan = 0; chan < chan_cnt; chan++) {
+		chan_cfg = otx2_mbox_alloc_msg_nix_rx_chan_cfg(&pfvf->mbox);
+		if (!chan_cfg)
+			return -ENOMEM;
+
+		/* CPT Link can be backpressured due to buffers reaching the
+		 * threshold in SPB pool (pfvf->ipsec.spb_bpid) or due to CQ
+		 * (pfvf->bpid[chan]) entries crossing the configured threshold
+		 */
+		chan_cfg->chan = chan;
+		chan_cfg->type = NIX_INTF_TYPE_CPT;
+		chan_cfg->val = FIELD_PREP(NIX_AF_RX_CHANX_CFG_BP0_ENA, 1) |
+				FIELD_PREP(NIX_AF_RX_CHANX_CFG_BP0, pfvf->bpid[chan]) |
+				FIELD_PREP(NIX_AF_RX_CHANX_CFG_BP1_ENA, 1) |
+				FIELD_PREP(NIX_AF_RX_CHANX_CFG_BP1, pfvf->ipsec.spb_bpid);
+
+		rc = otx2_sync_mbox_msg(&pfvf->mbox);
+		if (rc)
+			netdev_err(pfvf->netdev,
+				   "Failed to enable backpressure on CPT channel %d\n",
+				   chan);
+	}
+
+	return 0;
 }
 
 int cn10k_ipsec_ethtool_init(struct net_device *netdev, bool enable)
@@ -1203,6 +1367,11 @@ int cn10k_ipsec_ethtool_init(struct net_device *netdev, bool enable)
 		ret = cn10k_outb_cpt_init(netdev);
 		if (ret)
 			return ret;
+
+		/* Configure NIX <-> CPT backpressure */
+		ret = cn10k_ipsec_configure_cpt_bpid(pf);
+		if (ret)
+			goto out;
 
 		ret = cn10k_inb_cpt_init(netdev);
 		if (ret)
