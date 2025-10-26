@@ -107,6 +107,12 @@ Once all the desired output has been extracted, zeroize the context::
 	void shake_zeroize_ctx(struct shake_ctx *ctx);
 
 
+Testing
+=======
+
+To test the SHA-3 code, use sha3_kunit (CONFIG_CRYPTO_LIB_SHA3_KUNIT_TEST).
+
+
 References
 ==========
 
