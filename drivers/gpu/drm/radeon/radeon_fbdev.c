@@ -206,7 +206,7 @@ int radeon_fbdev_driver_fbdev_probe(struct drm_fb_helper *fb_helper,
 	struct radeon_device *rdev = fb_helper->dev->dev_private;
 	const struct drm_format_info *format_info;
 	struct drm_mode_fb_cmd2 mode_cmd = { };
-	struct fb_info *info;
+	struct fb_info *info = fb_helper->info;
 	struct drm_gem_object *gobj;
 	struct radeon_bo *rbo;
 	struct drm_framebuffer *fb;
@@ -246,13 +246,6 @@ int radeon_fbdev_driver_fbdev_probe(struct drm_fb_helper *fb_helper,
 	/* setup helper */
 	fb_helper->funcs = &radeon_fbdev_fb_helper_funcs;
 	fb_helper->fb = fb;
-
-	/* okay we have an object now allocate the framebuffer */
-	info = drm_fb_helper_alloc_info(fb_helper);
-	if (IS_ERR(info)) {
-		ret = PTR_ERR(info);
-		goto err_drm_framebuffer_unregister_private;
-	}
 
 	info->fbops = &radeon_fbdev_fb_ops;
 

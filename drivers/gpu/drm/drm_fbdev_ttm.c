@@ -205,12 +205,6 @@ int drm_fbdev_ttm_driver_fbdev_probe(struct drm_fb_helper *fb_helper,
 		goto err_drm_client_framebuffer_delete;
 	}
 
-	info = drm_fb_helper_alloc_info(fb_helper);
-	if (IS_ERR(info)) {
-		ret = PTR_ERR(info);
-		goto err_vfree;
-	}
-
 	drm_fb_helper_fill_info(info, fb_helper, sizes);
 
 	info->fbops = &drm_fbdev_ttm_fb_ops;
@@ -227,12 +221,10 @@ int drm_fbdev_ttm_driver_fbdev_probe(struct drm_fb_helper *fb_helper,
 	info->fbdefio = &fb_helper->fbdefio;
 	ret = fb_deferred_io_init(info);
 	if (ret)
-		goto err_drm_fb_helper_release_info;
+		goto err_vfree;
 
 	return 0;
 
-err_drm_fb_helper_release_info:
-	drm_fb_helper_release_info(fb_helper);
 err_vfree:
 	vfree(screen_buffer);
 err_drm_client_framebuffer_delete:
