@@ -93,6 +93,9 @@ following the others is usually in your own interest.
  [:ref:`details <taintone_repiref>`]
 
 
+ * Make sure it's not the kernel's surroundings that are causing the issue
+   you face.
+
  * Perform a rough search for existing reports with your favorite internet
    search engine; additionally, check the archives of the `Linux Kernel Mailing
    List (LKML) <https://lore.kernel.org/lkml/>`_. If you find matching reports,
@@ -101,9 +104,6 @@ following the others is usually in your own interest.
  * See if the issue you are dealing with qualifies as regression, security
    issue, or a really severe problem: those are 'issues of high priority' that
    need special handling in some steps that are about to follow.
-
- * Make sure it's not the kernel's surroundings that are causing the issue
-   you face.
 
  * Create a fresh backup and put system repair and restore tools at hand.
 
@@ -481,6 +481,41 @@ These are the most frequent reasons why the kernel set the flag:
 [:ref:`back to step-by-step guide <taintone_repisbs>`]
 
 
+Ensure a healthy environment
+----------------------------
+
+    *Make sure it's not the kernel's surroundings that are causing the issue
+    you face.*
+
+Problems that look a lot like a kernel issue are sometimes caused by build or
+runtime environment. It's hard to rule out that problem completely, but you
+should minimize it:
+
+ * Use proven tools when building your kernel, as bugs in the compiler or the
+   binutils can cause the resulting kernel to misbehave.
+
+ * Ensure your computer components run within their design specifications;
+   that's especially important for the main processor, the main memory, and the
+   motherboard. Therefore, stop undervolting or overclocking when facing a
+   potential kernel issue.
+
+ * Try to make sure it's not faulty hardware that is causing your issue. Bad
+   main memory for example can result in a multitude of issues that will
+   manifest itself in problems looking like kernel issues.
+
+ * If you're dealing with a filesystem issue, you might want to check the file
+   system in question with ``fsck``, as it might be damaged in a way that leads
+   to unexpected kernel behavior.
+
+ * When dealing with a regression, make sure it's not something else that
+   changed in parallel to updating the kernel. The problem for example might be
+   caused by other software that was updated at the same time. It can also
+   happen that a hardware component coincidentally just broke when you rebooted
+   into a new kernel for the first time. Updating the systems BIOS or changing
+   something in the BIOS Setup can also lead to problems that on look a lot
+   like a kernel regression.
+
+
 Search for existing reports, first run
 --------------------------------------
 
@@ -561,41 +596,6 @@ issue when the kernel suddenly stops working with an error message ('kernel
 panic') or without any farewell note at all. Note: do not confuse a 'panic' (a
 fatal error where the kernel stop itself) with a 'Oops' (a recoverable error),
 as the kernel remains running after the latter.
-
-
-Ensure a healthy environment
-----------------------------
-
-    *Make sure it's not the kernel's surroundings that are causing the issue
-    you face.*
-
-Problems that look a lot like a kernel issue are sometimes caused by build or
-runtime environment. It's hard to rule out that problem completely, but you
-should minimize it:
-
- * Use proven tools when building your kernel, as bugs in the compiler or the
-   binutils can cause the resulting kernel to misbehave.
-
- * Ensure your computer components run within their design specifications;
-   that's especially important for the main processor, the main memory, and the
-   motherboard. Therefore, stop undervolting or overclocking when facing a
-   potential kernel issue.
-
- * Try to make sure it's not faulty hardware that is causing your issue. Bad
-   main memory for example can result in a multitude of issues that will
-   manifest itself in problems looking like kernel issues.
-
- * If you're dealing with a filesystem issue, you might want to check the file
-   system in question with ``fsck``, as it might be damaged in a way that leads
-   to unexpected kernel behavior.
-
- * When dealing with a regression, make sure it's not something else that
-   changed in parallel to updating the kernel. The problem for example might be
-   caused by other software that was updated at the same time. It can also
-   happen that a hardware component coincidentally just broke when you rebooted
-   into a new kernel for the first time. Updating the systems BIOS or changing
-   something in the BIOS Setup can also lead to problems that on look a lot
-   like a kernel regression.
 
 
 Prepare for emergencies
