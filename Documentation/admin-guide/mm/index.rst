@@ -25,6 +25,7 @@ the Linux memory management.
    :maxdepth: 1
 
    concepts
+   cleancache_sysfs
    cma_debugfs
    damon/index
    hugetlbpage
