@@ -50,6 +50,13 @@ impl TryFrom<u8> for BiosImageType {
     }
 }
 
+impl From<BiosImageType> for u8 {
+    fn from(value: BiosImageType) -> Self {
+        // `BiosImageType` is `repr(u8)` and thus convertible without loss.
+        value as u8
+    }
+}
+
 // PMU lookup table entry types. Used to locate PMU table entries
 // in the Fwsec image, corresponding to falcon ucodes.
 #[expect(dead_code)]
@@ -711,7 +718,7 @@ impl BiosImage {
     fn is_last(&self) -> bool {
         // For NBSI images (type == 0x70), return true as they're
         // considered the last image
-        if self.pcir.code_type == BiosImageType::Nbsi as u8 {
+        if self.pcir.code_type == BiosImageType::Nbsi.into() {
             return true;
         }
 
