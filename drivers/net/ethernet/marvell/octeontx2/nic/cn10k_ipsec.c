@@ -468,6 +468,19 @@ static int cn10k_inb_cpt_init(struct net_device *netdev)
 	struct otx2_nic *pfvf = netdev_priv(netdev);
 	int ret = 0, spb_cnt;
 
+	/* Set sa_tbl_entry_sz to 2048 since we are programming NIX RX
+	 * to calculate SA index as SPI * 2048. The first 1024 bytes
+	 * are used for SA context and  the next half for bookkeeping data.
+	 */
+	pfvf->ipsec.sa_tbl_entry_sz = 2048;
+	ret = qmem_alloc(pfvf->dev, &pfvf->ipsec.inb_sa, CN10K_IPSEC_INB_MAX_SA,
+			 pfvf->ipsec.sa_tbl_entry_sz);
+	if (ret)
+		return ret;
+
+	memset(pfvf->ipsec.inb_sa->base, 0,
+	       pfvf->ipsec.sa_tbl_entry_sz * CN10K_IPSEC_INB_MAX_SA);
+
 	/* Allocate SPB buffer count array to track the number of inbound SPB
 	 * buffers received per RX queue. This count would later be used to
 	 * refill the first pass IPsec pool.
@@ -933,6 +946,9 @@ static void cn10k_ipsec_free_hw_resources(struct otx2_nic *pfvf)
 	/* Free the per spb pool buffer counters */
 	devm_kfree(pfvf->dev, pfvf->ipsec.inb_spb_count);
 
+	/* Free the inbound SA table */
+	qmem_free(pfvf->dev, pfvf->ipsec.inb_sa);
+
 	cn10k_ipsec_free_aura_ptrs(pfvf);
 }
 
@@ -961,8 +977,8 @@ int cn10k_ipsec_ethtool_init(struct net_device *netdev, bool enable)
 		return ret;
 	}
 
-	/* Don't do CPT cleanup if SA installed */
-	if (!pf->ipsec.outb_sa_count) {
+	/* Don't cleanup CPT if any inbound or outbound SA is installed */
+	if (!list_empty(&pf->ipsec.inb_sw_ctx_list) && !pf->ipsec.outb_sa_count) {
 		netdev_err(pf->netdev, "SA installed on this device\n");
 		return -EBUSY;
 	}
@@ -986,6 +1002,9 @@ int cn10k_ipsec_init(struct net_device *netdev)
 			 (sizeof(struct cn10k_tx_sa_s) / OTX2_ALIGN + 1) *
 			 OTX2_ALIGN : sizeof(struct cn10k_tx_sa_s);
 	pf->ipsec.sa_size = sa_size;
+
+	/* List to track all ingress SAs */
+	INIT_LIST_HEAD(&pf->ipsec.inb_sw_ctx_list);
 
 	INIT_WORK(&pf->ipsec.sa_work, cn10k_ipsec_sa_wq_handler);
 	pf->ipsec.sa_workq = alloc_workqueue("cn10k_ipsec_sa_workq",
