@@ -8,12 +8,19 @@
 #include <asm/cpufeatures.h>
 #include <asm/alternative.h>
 
+.macro CET_ENDBR
+#if defined(__CET__) && (__CET__ & 1)
+	endbr32
+#endif
+.endm
+
 	.text
 	.globl __kernel_vsyscall
 	.type __kernel_vsyscall,@function
 	ALIGN
 __kernel_vsyscall:
 	CFI_STARTPROC
+	CET_ENDBR
 	/*
 	 * Reshuffle regs so that all of any of the entry instructions
 	 * will preserve enough state.
