@@ -291,16 +291,19 @@ static int ptdump_cmp(const void *a, const void *b)
 
 static int add_marker(unsigned long start, unsigned long end, const char *name)
 {
+	struct addr_marker *new_markers;
 	size_t oldsize, newsize;
 
 	oldsize = markers_cnt * sizeof(*markers);
 	newsize = oldsize + 2 * sizeof(*markers);
 	if (!oldsize)
-		markers = kvmalloc(newsize, GFP_KERNEL);
+		new_markers = kvmalloc(newsize, GFP_KERNEL);
 	else
-		markers = kvrealloc(markers, newsize, GFP_KERNEL);
-	if (!markers)
+		new_markers = kvrealloc(markers, newsize, GFP_KERNEL);
+	if (!new_markers)
 		goto error;
+
+	markers = new_markers;
 	markers[markers_cnt].is_start = 1;
 	markers[markers_cnt].start_address = start;
 	markers[markers_cnt].size = end - start;
