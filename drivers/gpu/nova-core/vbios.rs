@@ -5,6 +5,7 @@
 use crate::driver::Bar0;
 use crate::firmware::fwsec::Bcrt30Rsa3kSignature;
 use crate::firmware::FalconUCodeDescV3;
+use crate::num::FromAs;
 use core::convert::TryFrom;
 use kernel::device;
 use kernel::error::Result;
@@ -825,7 +826,7 @@ impl PciAtBiosImage {
 
         let data_ptr = u32::from_le_bytes(bytes);
 
-        if (usize::from_u32(data_ptr)) < self.base.data.len() {
+        if (usize::from_as(data_ptr)) < self.base.data.len() {
             dev_err!(self.base.dev, "Falcon data pointer out of bounds\n");
             return Err(EINVAL);
         }
@@ -953,7 +954,7 @@ impl FwSecBiosBuilder {
         pci_at_image: &PciAtBiosImage,
         first_fwsec: &FwSecBiosBuilder,
     ) -> Result {
-        let mut offset = pci_at_image.falcon_data_ptr()? as usize;
+        let mut offset = usize::from_as(pci_at_image.falcon_data_ptr()?);
         let mut pmu_in_first_fwsec = false;
 
         // The falcon data pointer assumes that the PciAt and FWSEC images
@@ -994,7 +995,7 @@ impl FwSecBiosBuilder {
             .find_entry_by_type(FALCON_UCODE_ENTRY_APPID_FWSEC_PROD)
         {
             Ok(entry) => {
-                let mut ucode_offset = entry.data as usize;
+                let mut ucode_offset = usize::from_as(entry.data);
                 ucode_offset -= pci_at_image.base.data.len();
                 if ucode_offset < first_fwsec.base.data.len() {
                     dev_err!(self.base.dev, "Falcon Ucode offset not in second Fwsec.\n");
@@ -1080,7 +1081,7 @@ impl FwSecBiosImage {
 
         // The ucode data follows the descriptor.
         let ucode_data_offset = falcon_ucode_offset + desc.size();
-        let size = (desc.imem_load_size + desc.dmem_load_size) as usize;
+        let size = usize::from_as(desc.imem_load_size + desc.dmem_load_size);
 
         // Get the data slice, checking bounds in a single operation.
         self.base
