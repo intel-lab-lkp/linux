@@ -67,6 +67,7 @@ pub mod faux;
 #[cfg(CONFIG_RUST_FW_LOADER_ABSTRACTIONS)]
 pub mod firmware;
 pub mod fs;
+pub mod impl_flags;
 pub mod init;
 pub mod io;
 pub mod ioctl;
