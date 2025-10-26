@@ -2939,6 +2939,12 @@ nfsd4_proc_compound(struct svc_rqst *rqstp)
 		op->status = op->opdesc->op_func(rqstp, cstate, &op->u);
 		trace_nfsd_compound_op_err(rqstp, op->opnum, op->status);
 
+		if (op->opdesc->op_set_currentstateid)
+			op->opdesc->op_set_currentstateid(cstate, &op->u);
+
+		if (op->opdesc->op_flags & OP_CLEAR_STATEID)
+			nfsd41_clear_current_stateid(cstate);
+
 		/* Only from SEQUENCE */
 		if (cstate->status == nfserr_replay_cache) {
 			dprintk("%s NFS4.1 replay from cache\n", __func__);
@@ -2946,12 +2952,6 @@ nfsd4_proc_compound(struct svc_rqst *rqstp)
 			goto out;
 		}
 		if (!op->status) {
-			if (op->opdesc->op_set_currentstateid)
-				op->opdesc->op_set_currentstateid(cstate, &op->u);
-
-			if (op->opdesc->op_flags & OP_CLEAR_STATEID)
-				nfsd41_clear_current_stateid(cstate);
-
 			if (current_fh->fh_export &&
 					need_wrongsec_check(rqstp))
 				op->status = check_nfsd_access(current_fh->fh_export, rqstp, false);
