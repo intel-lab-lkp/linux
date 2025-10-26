@@ -183,7 +183,12 @@ following the others is usually in your own interest.
 
  [:ref:`details <backup_repiref>`]
 
- * Write down coarsely how to reproduce the issue.
+.. _coarsely_repisbs:
+
+* Write down coarsely how to reproduce the issue on a freshly booted system in
+  a straightforward way you can easily reproduce.
+
+ [:ref:`details <coarsely_repiref>`]
 
  * Ensure your system does not enhance its kernels by building additional
    kernel modules on-the-fly, which solutions like DKMS might be doing locally
@@ -931,21 +936,26 @@ operating system as well as everything you need to restore the backup.
 [:ref:`back to step-by-step guide <backup_repisbs>`]
 
 
-Document how to reproduce issue
--------------------------------
+.. _coarsely_repiref:
 
-    *Write down coarsely how to reproduce the issue.*
+Start documenting how to reproduce issue
+----------------------------------------
 
-During the reporting process you will have to test if the issue
+  *Write down coarsely how to reproduce the issue on a freshly booted system in* [:ref:`... <coarsely_repisbs>`]
+
+During the reporting process, you most likely will have to test if the issue
 happens with other kernel versions. Therefore, it will make your work easier if
 you know exactly how to reproduce an issue quickly on a freshly booted system.
+And for the report you need a description anyway.
 
-Note: it's often fruitless to report issues that only happened once, as they
-might be caused by a bit flip due to cosmic radiation. That's why you should
-try to rule that out by reproducing the issue before going further. Feel free
-to ignore this advice if you are experienced enough to tell a one-time error
-due to faulty hardware apart from a kernel issue that rarely happens and thus
-is hard to reproduce.
+This obviously is impossible in case you want to report an issue that happened
+just once.  Be aware that it might be fruitless to report such problems, as
+they might be caused by a bit flip due to cosmic radiation; but if you are
+experienced enough to tell such a one-time hardware error apart from a kernel
+issue that is worth reporting even without reproducing it, skip this step and
+the verification.
+
+[:ref:`back to step-by-step guide <coarsely_repisbs>`]
 
 
 Make sure your kernel doesn't get enhanced
