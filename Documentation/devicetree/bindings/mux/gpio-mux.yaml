@@ -100,4 +100,34 @@ examples:
             };
         };
     };
+  - |
+    #include <dt-bindings/gpio/gpio.h>
+
+    sfp_mux: mux-controller {
+        compatible = "gpio-mux";
+        #mux-control-cells = <0>;
+
+        mux-gpios = <&gpio0 0 GPIO_ACTIVE_HIGH>,
+                    <&gpio0 1 GPIO_ACTIVE_HIGH>;
+    };
+
+    sfp_gpio: sfp-gpio-1 {
+        compatible = "gpio-line-mux";
+        gpio-controller;
+        #gpio-cells = <2>;
+
+        mux-controls = <&sfp_mux>;
+        shared-gpio = <&gpio0 2 GPIO_ACTIVE_HIGH>;
+
+        gpio-line-names = "SFP_LOS", "SFP_MOD_ABS", "SFP_TX_F";
+        gpio-line-mux-states = <0>, <1>, <2>;
+    };
+
+    sfp0: sfp-p0 {
+        compatible = "sff,sfp";
+
+        los-gpios = <&sfp_gpio 0 GPIO_ACTIVE_HIGH>;
+        mod-def0-gpios = <&sfp_gpio 1 GPIO_ACTIVE_LOW>;
+        tx-fault-gpios = <&sfp_gpio 2 GPIO_ACTIVE_HIGH>;
+    };
 ...
