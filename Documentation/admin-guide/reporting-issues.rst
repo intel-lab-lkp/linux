@@ -69,6 +69,14 @@ following the others is usually in your own interest.
 
  [:ref:`details <intro_repiref>`]
 
+.. _multiple_repisbs:
+
+* *You must* process and report each issue separately if you deal with multiple.
+  If there is a slim chance they are related, remember to briefly mention the
+  other problems in each of the reports, ideally cross-linking them in the end.
+
+ [:ref:`details <multiple_repiref>`]
+
  * Perform a rough search for existing reports with your favorite internet
    search engine; additionally, check the archives of the `Linux Kernel Mailing
    List (LKML) <https://lore.kernel.org/lkml/>`_. If you find matching reports,
@@ -90,11 +98,7 @@ following the others is usually in your own interest.
  * Check if your kernel was 'tainted' when the issue occurred, as the event
    that made the kernel set this flag might be causing the issue you face.
 
- * Write down coarsely how to reproduce the issue. If you deal with multiple
-   issues at once, create separate notes for each of them and make sure they
-   work independently on a freshly booted system. That's needed, as each issue
-   needs to get reported to the kernel developers separately, unless they are
-   strongly entangled.
+ * Write down coarsely how to reproduce the issue.
 
  * If you are facing a regression within a stable or longterm version line
    (say something broke when updating from 5.10.4 to 5.10.5), scroll down to
@@ -347,6 +351,23 @@ time.
 [:ref:`back to step-by-step guide <intro_repisbs>`]
 
 
+.. _multiple_repiref:
+
+Issues must be reported one by one
+----------------------------------
+
+  *You must process and report each issue separately if you deal with
+  multiple. If there is a slim chance* [:ref:`... <multiple_repisbs>`]
+
+You will have to report issues one by one if you deal with multiple, as they
+likely will be handled by different developers; describing various issues in
+one report also makes it difficult for others to understand the situation.
+Hence, only combine issues in one report if they are very strongly
+entangled or clearly have the same cause.
+
+[:ref:`back to step-by-step guide <multiple_repisbs>`]
+
+
 Search for existing reports, first run
 --------------------------------------
 
@@ -569,19 +590,9 @@ three things:
 Document how to reproduce issue
 -------------------------------
 
-    *Write down coarsely how to reproduce the issue. If you deal with multiple
-    issues at once, create separate notes for each of them and make sure they
-    work independently on a freshly booted system. That's needed, as each issue
-    needs to get reported to the kernel developers separately, unless they are
-    strongly entangled.*
+    *Write down coarsely how to reproduce the issue.*
 
-If you deal with multiple issues at once, you'll have to report each of them
-separately, as they might be handled by different developers. Describing
-various issues in one report also makes it quite difficult for others to tear
-it apart. Hence, only combine issues in one report if they are very strongly
-entangled.
-
-Additionally, during the reporting process you will have to test if the issue
+During the reporting process you will have to test if the issue
 happens with other kernel versions. Therefore, it will make your work easier if
 you know exactly how to reproduce an issue quickly on a freshly booted system.
 
