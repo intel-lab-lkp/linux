@@ -77,6 +77,14 @@ following the others is usually in your own interest.
 
  [:ref:`details <multiple_repiref>`]
 
+.. _checklog_repisbs:
+
+* Skim ``journalctl -k`` (alternatively: ``dmesg``) for failures and warnings,
+  as maybe there is just something wrong with your setup.
+
+ [:ref:`details <checklog_repiref>`]
+
+
  * Perform a rough search for existing reports with your favorite internet
    search engine; additionally, check the archives of the `Linux Kernel Mailing
    List (LKML) <https://lore.kernel.org/lkml/>`_. If you find matching reports,
@@ -366,6 +374,27 @@ Hence, only combine issues in one report if they are very strongly
 entangled or clearly have the same cause.
 
 [:ref:`back to step-by-step guide <multiple_repisbs>`]
+
+
+.. _checklog_repiref:
+
+Evaluate the logs
+-----------------
+
+  *Skim 'journalctl -k' (alternatively: 'dmesg') for failures and warnings, as
+  maybe there is just something wrong with your setup.* [:ref:`... <checklog_repisbs>`]
+
+Sometimes a bug you face is just a symptom of something going sideways that the
+kernel detected and logged -- like a missing firmware file, for example. To rule
+such things out, check the kernel's log messages.
+
+Preferably use 'journalctl' if your distribution supports it, as in contrast to
+'dmesg' it always contains all messages since the kernel started.
+
+Especially look out for messages in bold, yellow, or red, as both tools use such
+to set warnings and errors apart.
+
+[:ref:`back to step-by-step guide <checklog_repisbs>`]
 
 
 Search for existing reports, first run
