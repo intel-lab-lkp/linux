@@ -12,6 +12,7 @@ config DRM_CLIENT_LIB
 config DRM_CLIENT_SELECTION
 	tristate
 	depends on DRM
+	select DRM_CLIENT_LIB if DRM_CLIENT_SPLASH
 	select DRM_CLIENT_LIB if DRM_CLIENT_LOG
 	select DRM_CLIENT_LIB if DRM_FBDEV_EMULATION
 	help
@@ -85,10 +86,46 @@ config DRM_CLIENT_LOG
 	  If you only need logs, but no terminal, or if you prefer userspace
 	  terminal, say "Y".
 
+config DRM_CLIENT_SPLASH
+	bool "Display graphical splash"
+	depends on DRM_CLIENT_SELECTION
+	select DRM_CLIENT
+	select DRM_CLIENT_SETUP
+	select DRM_DRAW
+	select FONT_SUPPORT
+	help
+	  This enables a splash drm client, able to display a colored background,
+	  a progress bar, some text and (optionally, if DRM_CLIENT_SPLASH_LOAD_AS_FW
+	  is set) a graphical image until the userspace is ready to take over.
+
+	  Message and progress can be set through sysfs; an initial message can also
+	  be set by using the kernel command line 'drm_client_lib.message=' option.
+
+config DRM_CLIENT_SPLASH_FOREGROUND_COLOR
+	hex "Splash foreground color, in RGB"
+	depends on DRM_CLIENT_SPLASH
+	default 0xffffff
+
+config DRM_CLIENT_SPLASH_BACKGROUND_COLOR
+	hex "Splash background color, in RGB"
+	depends on DRM_CLIENT_SPLASH
+	default 0x000000
+
+config DRM_CLIENT_SPLASH_LOAD_AS_FW
+	bool "Load splash image as firmware"
+	depends on DRM_CLIENT_SPLASH
+	select FW_LOADER
+	help
+	  Load image to be used as splash using the firmware loading facility the
+	  kernel provides.
+
+	  Even when this option is set, the image loading can be avoided by using
+	  the kernel command line 'drm_client_lib.skip_image=true' option.
+
 choice
 	prompt "Default DRM Client"
 	depends on DRM_CLIENT_SELECTION
-	depends on DRM_FBDEV_EMULATION || DRM_CLIENT_LOG
+	depends on DRM_FBDEV_EMULATION || DRM_CLIENT_LOG || DRM_CLIENT_SPLASH
 	default DRM_CLIENT_DEFAULT_FBDEV
 	help
 	  Selects the default drm client.
@@ -111,6 +148,12 @@ config DRM_CLIENT_DEFAULT_LOG
 	  screen, but doesn't implement a full terminal. For that you will need
 	  a userspace terminal using drm/kms.
 
+config DRM_CLIENT_DEFAULT_SPLASH
+	bool "splash"
+	depends on DRM_CLIENT_SPLASH
+	help
+	  Use splash as default drm client.
+
 endchoice
 
 config DRM_CLIENT_DEFAULT
@@ -118,6 +161,7 @@ config DRM_CLIENT_DEFAULT
        depends on DRM_CLIENT
        default "fbdev" if DRM_CLIENT_DEFAULT_FBDEV
        default "log" if DRM_CLIENT_DEFAULT_LOG
+       default "splash" if DRM_CLIENT_DEFAULT_SPLASH
        default ""
 
 endmenu
