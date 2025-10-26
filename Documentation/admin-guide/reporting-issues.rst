@@ -103,11 +103,31 @@ following the others is usually in your own interest.
 
  [:ref:`details <checkenv_repiref>`]
 
+.. _checkloreone_repisbs:
 
- * Perform a rough search for existing reports with your favorite internet
-   search engine; additionally, check the archives of the `Linux Kernel Mailing
-   List (LKML) <https://lore.kernel.org/lkml/>`_. If you find matching reports,
-   join the discussion instead of sending a new one.
+* Search `lore <https://lore.kernel.org/all/>`_ for similar reports and
+  potential fixes; afterwards the wider internet, too.
+
+  If you find a matching report, check it carefully:
+
+  * If it is less than a month old and without a single doubt about the same
+    issue, consider replying to tell involved people that you are affected as
+    well.
+
+  * If it just looks quite a lot like the same issue, send a reply briefly
+    describing your problem and ask if it might be the same issue; if you do
+    receive a negative reply or none at all, report the problem anew separately.
+
+  * In all other cases, prepare a separate report by following this guide
+    further and linking to any possibly related reports in yours.
+
+ When you find fixes, consider trying them. If they work and are not yet
+ committed, write a short reply to let the developers know. If they don't work
+ while fixing the issue for other people, you most likely face a different
+ problem you have to report independently while linking to the earlier report.
+
+ [:ref:`details <checkloreone_repiref>`]
+
 
  * See if the issue you are dealing with qualifies as regression, security
    issue, or a really severe problem: those are 'issues of high priority' that
@@ -534,53 +554,97 @@ out a few common causes before wasting time on a meaningless bug report:
 [:ref:`back to step-by-step guide <checkenv_repisbs>`]
 
 
-Search for existing reports, first run
---------------------------------------
+.. _checkloreone_repiref:
 
-   *Perform a rough search for existing reports with your favorite internet
-   search engine; additionally, check the archives of the Linux Kernel Mailing
-   List (LKML). If you find matching reports, join the discussion instead of
-   sending a new one.*
+Search for existing reports and fixes
+-------------------------------------
 
-Reporting an issue that someone else already brought forward is often a waste of
-time for everyone involved, especially you as the reporter. So it's in your own
-interest to thoroughly check if somebody reported the issue already. At this
-step of the process it's okay to just perform a rough search: a later step will
-tell you to perform a more detailed search once you know where your issue needs
-to be reported to. Nevertheless, do not hurry with this step of the reporting
-process, it can save you time and trouble.
+  *Search lore.kernel.org for similar reports and potential fixes; afterwards
+  the wider internet, too.*  [:ref:`... <checkloreone_repisbs>`]
 
-Simply search the internet with your favorite search engine first. Afterwards,
-search the `Linux Kernel Mailing List (LKML) archives
-<https://lore.kernel.org/lkml/>`_.
+You don't want to waste your time reporting an issue anew someone already
+brought forward or resolved already. So it is in your own interest to check for
+existing reports and fixes.
 
-If you get flooded with results consider telling your search engine to limit
-search timeframe to the past month or year. And wherever you search, make sure
-to use good search terms; vary them a few times, too. While doing so try to
-look at the issue from the perspective of someone else: that will help you to
-come up with other words to use as search terms. Also make sure not to use too
-many search terms at once. Remember to search with and without information like
-the name of the kernel driver or the name of the affected hardware component.
-But its exact brand name (say 'ASUS Red Devil Radeon RX 5700 XT Gaming OC')
-often is not much helpful, as it is too specific. Instead try search terms like
-the model line (Radeon 5700 or Radeon 5000) and the code name of the main chip
-('Navi' or 'Navi10') with and without its manufacturer ('AMD').
+Searching for fixes and existing reports
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-In case you find an existing report about your issue, join the discussion, as
-you might be able to provide valuable additional information. That can be
-important even when a fix is prepared or in its final stages already, as
-developers might look for people that can provide additional information or
-test a proposed fix. Jump to the section 'Duties after the report went out' for
-details on how to get properly involved.
+If your search on `lore <https://lore.kernel.org/all/>`_ and the web results in
+a flood of results, consider limiting the search timeframe. In lore you can do
+so by adding something like 'rt:3.months.ago..' or 'rt:1.years.ago..' to your
+query.
 
-Note, searching `bugzilla.kernel.org <https://bugzilla.kernel.org/>`_ might also
-be a good idea, as that might provide valuable insights or turn up matching
-reports. If you find the latter, just keep in mind: most subsystems expect
-reports in different places, as described below in the section "Check where you
-need to report your issue". The developers that should take care of the issue
-thus might not even be aware of the bugzilla ticket. Hence, check the ticket if
-the issue already got reported as outlined in this document and if not consider
-doing so.
+Wherever you search, make sure to use good terms; vary them a few times, too.
+
+Start with something specific and become broader if there are no or too few
+results. Also try to look at the issue from the perspective of someone else:
+that might help you to come up with other terms to use in your search.
+
+Remember to search with and without information like the name of the kernel
+driver or the name of the affected hardware component. But its exact brand name
+(say, 'ASUS Red Devil Radeon RX 5700 XT Gaming OC') often is way too specific;
+instead, try search terms like the model line ('Radeon 5700' or 'Radeon 5000')
+and the code name of the main chip ('Navi' or 'Navi10') with and without the
+manufacturer of the main chip's name ('AMD') or the product's series
+('Radeon').
+
+Try fixes and evaluate matching reports closely
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+If you find a potential fix, give it a try; if it is still under discussion and
+helps, let the developers know through a short reply.
+
+You found matching reports or a fix that does not help? Then evaluate them
+closely, as they might be about a different issue with similar symptoms. Your
+next steps depend on the outcome:
+
+* Is the report or fix still discussed and without any doubt about an issue like
+  yours? Then join the exchange, as you might be able to provide valuable
+  additional information or test results.
+
+* If the report or fix seems to be about a different issue, ignore it and
+  proceed with this guide, but briefly mention and link the earlier report or
+  fix in your report later. After reporting, it might also be wise to send a
+  short reply to the earlier report with a text along the lines of 'To whom it
+  may concern, I ran into a similar, but from my understanding slightly
+  different problem', coupled with a link to the report.
+
+* When unsure if it is the same or a different problem, send a short reply to
+  the earlier report or fix; in it, very briefly outline the problem while
+  asking if that seems to be the same problem or a different one better
+  reported separately.
+
+While doing so, keep in mind:
+
+* Chaos and confusion easily ensue when an issue is reported in a bug tracker
+  ticket or mailing list thread that looks related, but, in fact, is about a
+  different issue. Try hard to avoid such an outcome, as then it can quickly
+  happen that none of the problems will be addressed in the end. The best
+  strategy to avoid that: Whenever there is a slight chance that your issue
+  might be different, report it in a new ticket or thread, but mention the
+  earlier reports you found; afterwards send a short reply to the earlier
+  ticket/thread with a text along the lines of 'I have a similar problem which
+  might or might not be related' coupled with a link to your report.
+
+* Never report an issue in a bug tracker ticket or a mailing list thread that
+  looks related, but is considered resolved. Always report in a new thread
+  instead; afterwards send a short reply to the earlier ticket/thread with a
+  text along the lines of 'I have a similar problem which might or might not be
+  related' coupled with a link to your report.
+
+* When spotting matching reports on `bugzilla.kernel.org
+  <https://bugzilla.kernel.org/>`_, keep in mind that the appropriate
+  developers to handle the issue might not even be aware of the report. That is
+  because Bugzilla might not have forwarded the report to them: It lacks the
+  necessary information to do so for many of the kernel's subsystems, as their
+  developers expect reports in different places -- ':ref:`Check how to report
+  your issue <maintainers_repiref>`' describes this in more detail. If in
+  doubt, add a comment to the Bugzilla report; if no reassuring answer is
+  forthcoming, report the issue briefly through the proper channel while
+  mentioning the Bugzilla report; afterwards add a comment to the latter
+  pointing to your report.
+
+[:ref:`back to step-by-step guide <checkloreone_repisbs>`]
 
 
 Issue of high priority?
