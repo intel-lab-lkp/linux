@@ -49,11 +49,25 @@ Step-by-step guide on reporting Linux kernel issues
 Note: Only the steps starting with '*you must*' are strictly required -- but
 following the others is usually in your own interest.
 
- * Are you facing an issue with a Linux kernel a hardware or software vendor
-   provided? Then in almost all cases you are better off to stop reading this
-   document and reporting the issue to your vendor instead, unless you are
-   willing to install the latest Linux version yourself. Be aware the latter
-   will often be needed anyway to hunt down and fix issues.
+.. _intro_repisbs:
+
+* Be aware:
+
+  * You should report issues using a Linux kernel that is both really fresh and
+    vanilla. That often means that you will have to remove software that
+    requires externally developed kernel modules and install the newest upstream
+    Linux development kernel yourself.
+
+  * There is a decent chance you will have to report the problem by email, in
+    which case your email address will become part of public archives.
+
+  * You might need to patch and build your own kernel to help developers debug
+    and fix the bug.
+
+ If these three aspects sound too demanding, consider reporting the issue to
+ your Linux distributor or hardware manufacturer instead.
+
+ [:ref:`details <intro_repiref>`]
 
  * Perform a rough search for existing reports with your favorite internet
    search engine; additionally, check the archives of the `Linux Kernel Mailing
@@ -265,57 +279,72 @@ With that off the table, find below details for the steps from the detailed
 guide on reporting issues to the Linux kernel developers.
 
 
-Make sure you're using the upstream Linux kernel
-------------------------------------------------
+.. _intro_repiref:
 
-   *Are you facing an issue with a Linux kernel a hardware or software vendor
-   provided? Then in almost all cases you are better off to stop reading this
-   document and reporting the issue to your vendor instead, unless you are
-   willing to install the latest Linux version yourself. Be aware the latter
-   will often be needed anyway to hunt down and fix issues.*
+You likely need to compile at least one really fresh kernel
+-----------------------------------------------------------
 
-Like most programmers, Linux kernel developers don't like to spend time dealing
-with reports for issues that don't even happen with their current code. It's
-just a waste everybody's time, especially yours. Unfortunately such situations
-easily happen when it comes to the kernel and often leads to frustration on both
-sides. That's because almost all Linux-based kernels pre-installed on devices
-(Computers, Laptops, Smartphones, Routers, …) and most shipped by Linux
-distributors are quite distant from the official Linux kernel as distributed by
-kernel.org: these kernels from these vendors are often ancient from the point of
-Linux development or heavily modified, often both.
+  *Be aware:You should report issues using a Linux kernel that is both really
+  fresh and vanilla. [...] Your email address will become part of public
+  archives [...] You might need to patch and build your own kernel* [:ref:`... <intro_repisbs>`]
 
-Most of these vendor kernels are quite unsuitable for reporting issues to the
-Linux kernel developers: an issue you face with one of them might have been
-fixed by the Linux kernel developers months or years ago already; additionally,
-the modifications and enhancements by the vendor might be causing the issue you
-face, even if they look small or totally unrelated. That's why you should report
-issues with these kernels to the vendor. Its developers should look into the
-report and, in case it turns out to be an upstream issue, fix it directly
-upstream or forward the report there. In practice that often does not work out
-or might not what you want. You thus might want to consider circumventing the
-vendor by installing the very latest Linux kernel core yourself. If that's an
-option for you move ahead in this process, as a later step in this guide will
-explain how to do that once it rules out other potential causes for your issue.
+You most likely will have to fiddle with your setup and install at least one
+fresh Linux kernel while reporting the issue or trying to resolve it. The
+step-by-step guide mentions a few, but the most important is:
 
-Note, the previous paragraph is starting with the word 'most', as sometimes
-developers in fact are willing to handle reports about issues occurring with
-vendor kernels. If they do in the end highly depends on the developers and the
-issue in question. Your chances are quite good if the distributor applied only
-small modifications to a kernel based on a recent Linux version; that for
-example often holds true for the mainline kernels shipped by Debian GNU/Linux
-Sid or Fedora Rawhide. Some developers will also accept reports about issues
-with kernels from distributions shipping the latest stable kernel, as long as
-it's only slightly modified; that for example is often the case for Arch Linux,
-regular Fedora releases, and openSUSE Tumbleweed. But keep in mind, you better
-want to use a mainline Linux and avoid using a stable kernel for this
-process, as outlined in the section 'Install a fresh kernel for testing' in more
-detail.
+The kernels most Linux users utilize are unsuitable for reporting bugs
+upstream, as the problem might have been fixed already or never happened with
+the upstream code in the first place. Such situations occur frequently when it
+comes to Linux:
 
-Obviously you are free to ignore all this advice and report problems with an old
-or heavily modified vendor kernel to the upstream Linux developers. But note,
-those often get rejected or ignored, so consider yourself warned. But it's still
-better than not reporting the issue at all: sometimes such reports directly or
-indirectly will help to get the issue fixed over time.
+1. Many developers consider all 'longterm' (aka 'LTS') kernels as too old and
+   thus unsuitable for reporting, except for series-specific regressions (say
+   from 6.1.13 to 6.1.15) in still-supported series (see `frontpage of
+   kernel.org <https://kernel.org/>`_). Reporting using the newest version from
+   the latest 'stable' series can work -- but some developers only take a
+   closer look at bugs reported using a fresh mainline kernel, as the bug might
+   have been fixed already.
+
+2. Almost all Linux-based kernels pre-installed on devices (computers, laptops,
+   smartphones, routers, …) are therefore too old as well, but even when not,
+   often unsuitable for a second reason:
+
+  Most vendors modify Linux's source code (some heavily!) before building their
+  kernels; frequently their kernels also load externally developed modules
+  ('out-of-tree drivers'), too. Such modifications or enhancements might be
+  causing your issue, even when they seem tiny and unrelated. Upstream
+  developers can do nothing about such problems.
+
+  You therefore have to report issues with such kernels to the vendor. Its
+  developers should look into the report and, in case it turns out to be an
+  upstream issue, report or directly fix it there. In practice that often does
+  not work out or might not be what you want; installing your own fresh vanilla
+  kernel while steering clear of externally developed modules is your way out
+  here.
+
+Note: Some developers, despite the aforementioned aspects, are willing to handle
+reports about issues in kernels that are somewhat older or slightly diverged.
+If they will highly depends on the circumstances:
+
+* Your chances are quite good if the vendor performed only small changes to a
+  recent mainline codebase; that, for example, often holds true for the kernels
+  shipped by Debian GNU/Linux Sid (aka 'unstable') or Fedora Rawhide.
+
+* Chances are slightly worse but still relatively good for reports about issues
+  with the newest version from the latest Linux stable series. That is the case
+  even when the distributor slightly modified or enhanced the kernel's code --
+  this, for example, is often the case for the default kernels of Arch Linux and
+  openSUSE Tumbleweed, as well as regular Fedora releases when using the latest
+  stable series.
+
+You are free to ignore this advice and report problems to the upstream Linux
+developers occurring with kernels that are outdated, modified, or utilizing
+out-of-tree drivers. But be aware that developers might react coldly or never
+at all. Nevertheless, it is still better than not reporting the issue:
+sometimes such a report directly or indirectly helps to resolve issues over
+time.
+
+[:ref:`back to step-by-step guide <intro_repisbs>`]
 
 
 Search for existing reports, first run
