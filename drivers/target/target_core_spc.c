@@ -1963,6 +1963,18 @@ static const struct target_opcode_descriptor tcm_opcode_report_supp_opcodes = {
 	.enabled = spc_rsoc_enabled,
 };
 
+static struct target_opcode_descriptor tcm_opcode_report_identifying_information = {
+	.support = SCSI_SUPPORT_FULL,
+	.serv_action_valid = 1,
+	.opcode = MAINTENANCE_IN,
+	.service_action = MI_REPORT_IDENTIFYING_INFORMATION,
+	.cdb_size = 12,
+	.usage_bits = {MAINTENANCE_IN, MI_REPORT_IDENTIFYING_INFORMATION,
+		       0x00, 0x00,
+		       0x00, 0x00, 0xff, 0xff,
+		       0xff, 0xff, 0xff, SCSI_CONTROL_MASK},
+};
+
 static bool tcm_is_set_tpg_enabled(const struct target_opcode_descriptor *descr,
 				   struct se_cmd *cmd)
 {
@@ -2049,6 +2061,7 @@ static const struct target_opcode_descriptor *tcm_supported_opcodes[] = {
 	&tcm_opcode_report_target_pgs,
 	&tcm_opcode_report_supp_opcodes,
 	&tcm_opcode_set_tpg,
+	&tcm_opcode_report_identifying_information,
 };
 
 static int
@@ -2266,6 +2279,70 @@ out:
 	return ret;
 }
 
+static sense_reason_t
+spc_fill_pd_text_id_info(struct se_cmd *cmd, u8 *cdb)
+{
+	struct se_device *dev = cmd->se_dev;
+	unsigned char *buf;
+	unsigned char *rbuf;
+	u32 header_len = 4;
+	u32 actual_data_len;
+	u32 buf_len;
+	u16 id_len;
+
+	buf_len = get_unaligned_be32(&cdb[6]);
+	if (buf_len < header_len)
+		return TCM_LOGICAL_UNIT_COMMUNICATION_FAILURE;
+
+	id_len = strlen(dev->t10_wwn.pd_text_id_info);
+	if (id_len > 0)
+		/* trailing null */
+		id_len += 1;
+
+	actual_data_len = id_len + header_len;
+
+	if (actual_data_len < buf_len)
+		buf_len = actual_data_len;
+
+	buf = kzalloc(buf_len, GFP_KERNEL);
+	if (!buf) {
+		pr_err("Unable to allocate response buffer for IDENTITY INFO\n");
+		return TCM_LOGICAL_UNIT_COMMUNICATION_FAILURE;
+	}
+
+	scnprintf(&buf[header_len], buf_len - header_len, "%s",
+		 dev->t10_wwn.pd_text_id_info);
+
+	put_unaligned_be16(id_len, &buf[2]);
+
+	rbuf = transport_kmap_data_sg(cmd);
+	if (rbuf) {
+		memcpy(rbuf, buf, buf_len);
+		transport_kunmap_data_sg(cmd);
+	}
+	kfree(buf);
+
+	target_complete_cmd_with_length(cmd, SAM_STAT_GOOD, buf_len);
+	return TCM_NO_SENSE;
+}
+
+static sense_reason_t
+spc_emulate_report_id_info(struct se_cmd *cmd)
+{
+	u8 *cdb = cmd->t_task_cdb;
+	sense_reason_t rc;
+
+	switch ((cdb[10] >> 1)) {
+	case 2:
+		rc = spc_fill_pd_text_id_info(cmd, cdb);
+		break;
+	default:
+		return TCM_UNSUPPORTED_SCSI_OPCODE;
+	}
+
+	return rc;
+}
+
 sense_reason_t
 spc_parse_cdb(struct se_cmd *cmd, unsigned int *size)
 {
@@ -2405,6 +2482,11 @@ spc_parse_cdb(struct se_cmd *cmd, unsigned int *size)
 			    MI_REPORT_SUPPORTED_OPERATION_CODES)
 				cmd->execute_cmd =
 					spc_emulate_report_supp_op_codes;
+			if ((cdb[1] & 0x1f) ==
+			    MI_REPORT_IDENTIFYING_INFORMATION) {
+				cmd->execute_cmd =
+					spc_emulate_report_id_info;
+			}
 			*size = get_unaligned_be32(&cdb[6]);
 		} else {
 			/*
