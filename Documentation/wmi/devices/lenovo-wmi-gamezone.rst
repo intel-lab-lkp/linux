@@ -31,11 +31,11 @@ The following platform profiles are supported:
 Extreme
 ~~~~~~~~~~~~~~~~~~~~
 Some newer Lenovo "Gaming Series" laptops have an "Extreme Mode" profile
-enabled in their BIOS.
-
-For some newer devices the "Extreme Mode" profile is incomplete in the BIOS
-and setting it will cause undefined behavior. A BIOS bug quirk table is
-provided to ensure these devices cannot set "Extreme Mode" from the driver.
+enabled in their BIOS. For some newer devices the "Extreme Mode" profile
+is incomplete in the BIOS and setting it will cause undefined behavior. To
+prevent ever setting this on unsupported hardware, an explicit allow quirk
+table is provided with all validated devices. This ensures only fully
+supported devices can set "Extreme Mode" from the driver.
 
 Custom Profile
 ~~~~~~~~~~~~~~

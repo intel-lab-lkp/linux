@@ -47,10 +47,6 @@ struct quirk_entry {
 	bool extreme_supported;
 };
 
-static struct quirk_entry quirk_no_extreme_bug = {
-	.extreme_supported = false,
-};
-
 /**
  * lwmi_gz_mode_call() - Call method for lenovo-wmi-other driver notifier.
  *
@@ -241,31 +237,8 @@ static int lwmi_gz_profile_set(struct device *dev,
 	return 0;
 }
 
+/* Explicit allow list */
 static const struct dmi_system_id fwbug_list[] = {
-	{
-		.ident = "Legion Go 8APU1",
-		.matches = {
-			DMI_MATCH(DMI_SYS_VENDOR, "LENOVO"),
-			DMI_MATCH(DMI_PRODUCT_VERSION, "Legion Go 8APU1"),
-		},
-		.driver_data = &quirk_no_extreme_bug,
-	},
-	{
-		.ident = "Legion Go S 8APU1",
-		.matches = {
-			DMI_MATCH(DMI_SYS_VENDOR, "LENOVO"),
-			DMI_MATCH(DMI_PRODUCT_VERSION, "Legion Go S 8APU1"),
-		},
-		.driver_data = &quirk_no_extreme_bug,
-	},
-	{
-		.ident = "Legion Go S 8ARP1",
-		.matches = {
-			DMI_MATCH(DMI_SYS_VENDOR, "LENOVO"),
-			DMI_MATCH(DMI_PRODUCT_VERSION, "Legion Go S 8ARP1"),
-		},
-		.driver_data = &quirk_no_extreme_bug,
-	},
 	{},
 
 };
@@ -278,7 +251,7 @@ static const struct dmi_system_id fwbug_list[] = {
  * Anything version 5 or lower does not. For devices with a version 6 or
  * greater do a DMI check, as some devices report a version that supports
  * extreme mode but have an incomplete entry in the BIOS. To ensure this
- * cannot be set, quirk them to prevent assignment.
+ * cannot be set, quirk them to enable assignment.
  *
  * Return: bool.
  */
@@ -292,7 +265,7 @@ static bool lwmi_gz_extreme_supported(int profile_support_ver)
 
 	dmi_id = dmi_first_match(fwbug_list);
 	if (!dmi_id)
-		return true;
+		return false;
 
 	quirks = dmi_id->driver_data;
 
