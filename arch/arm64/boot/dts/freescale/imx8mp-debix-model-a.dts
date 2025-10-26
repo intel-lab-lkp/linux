@@ -102,6 +102,7 @@
 			reset-gpios = <&gpio4 18 GPIO_ACTIVE_LOW>;
 			reset-assert-us = <20>;
 			reset-deassert-us = <200000>;
+			eee-broken-1000t;
 		};
 	};
 };
