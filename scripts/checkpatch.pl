@@ -169,6 +169,34 @@ my $DO_WHILE_0_ADVICE = q{
    Enjoy this qualification while we work to improve our heuristics.
 };
 
+my $dbg_rx = 0;
+# call this from s/$patt/drx_print("why")/e - to see whats happening there.
+sub drx_print {
+	my ($reason) = @_;
+	return "" unless $dbg_rx;
+
+	if ($dbg_rx ne '1') {
+	    # $dbg_rx is seeking "reason"
+	    # search w/o using regex, to preserve caller s///e context.
+	    return "" if ($dbg_rx and index($reason, $dbg_rx) == -1);
+	}
+
+	# report what was matched and removed (in caller)
+	print "drx_print: $reason\n";
+	print "  >> Matched (`\$&`): <$&>\n";
+
+	# Only print captures if they exist
+	if (defined $1) {
+		print "  >> Capture 1 (`\$1`): <$1>\n";
+	}
+	if (defined $2) {
+		print "  >> Capture 2 (`\$2`): <$2>\n";
+	}
+	# The subroutine must return the replacement string.  For s/$pat//
+	# statements (our target use), this is an empty string.
+	return "";
+}
+
 sub uniq {
 	my %seen;
 	return grep { !$seen{$_}++ } @_;
@@ -451,7 +479,13 @@ my $dbg_values = 0;
 my $dbg_possible = 0;
 my $dbg_type = 0;
 my $dbg_attr = 0;
+
+my @known_keys = qw(values possible type attr rx);
+my %known_keys;
+$known_keys{$_}++ for @known_keys;
+
 for my $key (keys %debug) {
+	die "Unknown debug key '$key', expecting: '@known_keys'\n" unless $known_keys{$key};
 	## no critic
 	eval "\${dbg_$key} = '$debug{$key}';";
 	die "$@" if ($@);
