@@ -667,10 +667,22 @@ static int ocfs2_block_group_alloc(struct ocfs2_super *osb,
 	u16 alloc_rec;
 	struct buffer_head *bg_bh = NULL;
 	struct ocfs2_group_desc *bg;
+	u16 cl_bpc, expected_bpc;
 
 	BUG_ON(ocfs2_is_cluster_bitmap(alloc_inode));
 
 	cl = &fe->id2.i_chain;
+	cl_bpc = le16_to_cpu(cl->cl_bpc);
+	expected_bpc = 1 << (osb->s_clustersize_bits - alloc_inode->i_sb->s_blocksize_bits);
+	if (cl_bpc != expected_bpc) {
+		ocfs2_error(alloc_inode->i_sb,
+			"Chain allocator %llu has corrupted cl_bpc: ondisk=%u expected=%u\n",
+			(unsigned long long)le64_to_cpu(fe->i_blkno),
+			cl_bpc, expected_bpc);
+		status = -EUCLEAN;
+		goto bail;
+	}
+
 	status = ocfs2_reserve_clusters_with_limit(osb,
 						   le16_to_cpu(cl->cl_cpg),
 						   max_block, flags, &ac);
