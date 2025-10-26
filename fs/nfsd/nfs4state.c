@@ -7125,9 +7125,6 @@ static __be32 nfsd4_validate_stateid(struct nfs4_client *cl, stateid_t *stateid)
 	struct nfs4_stid *s;
 	__be32 status = nfserr_bad_stateid;
 
-	if (ZERO_STATEID(stateid) || ONE_STATEID(stateid) ||
-		CLOSE_STATEID(stateid))
-		return status;
 	spin_lock(&cl->cl_lock);
 	s = find_stateid_locked(cl, stateid);
 	if (!s)
@@ -7182,20 +7179,18 @@ nfsd4_lookup_stateid(struct nfsd4_compound_state *cstate,
 
 	statusmask |= SC_STATUS_ADMIN_REVOKED | SC_STATUS_FREEABLE;
 
-	if (ZERO_STATEID(stateid) || ONE_STATEID(stateid) ||
-		CLOSE_STATEID(stateid))
+	stid = find_stateid_by_type(cstate->clp, stateid, typemask, statusmask);
+	if (!stid)
 		return nfserr_bad_stateid;
 	status = set_client(&stateid->si_opaque.so_clid, cstate, nn);
 	if (status == nfserr_stale_clientid) {
+		nfs4_put_stid(stid);
 		if (cstate->session)
 			return nfserr_bad_stateid;
 		return nfserr_stale_stateid;
 	}
 	if (status)
 		return status;
-	stid = find_stateid_by_type(cstate->clp, stateid, typemask, statusmask);
-	if (!stid)
-		return nfserr_bad_stateid;
 	if ((stid->sc_status & SC_STATUS_REVOKED) && !return_revoked) {
 		nfs4_put_stid(stid);
 		return nfserr_deleg_revoked;
