@@ -257,11 +257,17 @@ following the others is usually in your own interest.
 
  [:ref:`details <verify_repiref>`]
 
- * Optimize your notes: try to find and write the most straightforward way to
-   reproduce your issue. Make sure the end result has all the important
-   details, and at the same time is easy to read and understand for others
-   that hear about it for the first time. And if you learned something in this
-   process, consider searching again for existing reports about the issue.
+.. _checkloretwo_repisbs:
+
+* If you performed a bisection or learned anything new about the bug while
+  following this guide so far, search once more for earlier reports
+  and fixes. In the bisection case, you want to search
+  `lore <https://lore.kernel.org/all/>`_   for the culprit's mainline commit-id
+  abbreviated to seven characters immediately followed by an asterisk (e.g.,
+  '`1f2e3d4 <https://lore.kernel.org/all/?q=1f2e3d4*>`_'); if that does not
+  produce any valuable insights, search for the commit's title, too.
+
+ [:ref:`details <checkloretwo_repiref>`]
 
  * If your failure involves a 'panic', 'Oops', 'warning', or 'BUG', consider
    decoding the kernel log to find the line of code that triggered the error.
@@ -988,23 +994,19 @@ more detailed instructions, follow Documentation/admin-guide/verify-bugs-and-bis
 [:ref:`back to step-by-step guide <verify_repisbs>`]
 
 
-Optimize description to reproduce issue
----------------------------------------
+.. _checkloretwo_repiref:
 
-    *Optimize your notes: try to find and write the most straightforward way to
-    reproduce your issue. Make sure the end result has all the important
-    details, and at the same time is easy to read and understand for others
-    that hear about it for the first time. And if you learned something in this
-    process, consider searching again for existing reports about the issue.*
+Search again
+------------
 
-An unnecessarily complex report will make it hard for others to understand your
-report. Thus try to find a reproducer that's straight forward to describe and
-thus easy to understand in written form. Include all important details, but at
-the same time try to keep it as short as possible.
+  *If you performed a bisection or learned anything new about the bug
+  while following this guide so far, search once more* [:ref:`... <checkloretwo_repisbs>`]
 
-In this in the previous steps you likely have learned a thing or two about the
+During the previous step you likely have learned a thing or two about the
 issue you face. Use this knowledge and search again for existing reports
-instead you can join.
+and potential fixes.
+
+[:ref:`back to step-by-step guide <checkloretwo_repisbs>`]
 
 
 Decode failure messages
