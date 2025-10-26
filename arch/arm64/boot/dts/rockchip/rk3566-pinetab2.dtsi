@@ -344,12 +344,12 @@
 		compatible = "tcs,tcs4525";
 		reg = <0x1c>;
 		fcs,suspend-voltage-selector = <1>;
-		regulator-name = "vdd_cpu";
-		regulator-min-microvolt = <800000>;
-		regulator-max-microvolt = <1150000>;
-		regulator-ramp-delay = <2300>;
 		regulator-always-on;
 		regulator-boot-on;
+		regulator-min-microvolt = <800000>;
+		regulator-max-microvolt = <1150000>;
+		regulator-name = "vdd_cpu";
+		regulator-ramp-delay = <2300>;
 		vin-supply = <&vcc_sys>;
 
 		regulator-state-mem {
@@ -388,22 +388,24 @@
 			vdd_logic: DCDC_REG1 {
 				regulator-always-on;
 				regulator-boot-on;
+				regulator-initial-mode = <0x2>;
 				regulator-min-microvolt = <500000>;
 				regulator-max-microvolt = <1350000>;
 				regulator-ramp-delay = <6001>;
-				regulator-initial-mode = <0x2>;
 				regulator-name = "vdd_logic";
+
 				regulator-state-mem {
 					regulator-off-in-suspend;
 				};
 			};
 
 			vdd_gpu_npu: DCDC_REG2 {
+				regulator-initial-mode = <0x2>;
 				regulator-min-microvolt = <500000>;
 				regulator-max-microvolt = <1350000>;
-				regulator-ramp-delay = <6001>;
-				regulator-initial-mode = <0x2>;
 				regulator-name = "vdd_gpu_npu";
+				regulator-ramp-delay = <6001>;
+
 				regulator-state-mem {
 					regulator-off-in-suspend;
 				};
@@ -414,6 +416,7 @@
 				regulator-boot-on;
 				regulator-initial-mode = <0x2>;
 				regulator-name = "vcc_ddr";
+
 				regulator-state-mem {
 					regulator-on-in-suspend;
 				};
@@ -422,10 +425,11 @@
 			vcc3v3_sys: DCDC_REG4 {
 				regulator-always-on;
 				regulator-boot-on;
+				regulator-initial-mode = <0x2>;
 				regulator-min-microvolt = <3300000>;
 				regulator-max-microvolt = <3300000>;
-				regulator-initial-mode = <0x2>;
 				regulator-name = "vcc3v3_sys";
+
 				regulator-state-mem {
 					regulator-off-in-suspend;
 				};
@@ -437,6 +441,7 @@
 				regulator-min-microvolt = <1800000>;
 				regulator-max-microvolt = <1800000>;
 				regulator-name = "vcca1v8_pmu";
+
 				regulator-state-mem {
 					regulator-on-in-suspend;
 				};
@@ -448,6 +453,7 @@
 				regulator-min-microvolt = <900000>;
 				regulator-max-microvolt = <900000>;
 				regulator-name = "vdda_0v9_p";
+
 				regulator-state-mem {
 					regulator-off-in-suspend;
 				};
@@ -459,6 +465,7 @@
 				regulator-min-microvolt = <900000>;
 				regulator-max-microvolt = <900000>;
 				regulator-name = "vdda0v9_pmu";
+
 				regulator-state-mem {
 					regulator-on-in-suspend;
 				};
@@ -470,6 +477,7 @@
 				regulator-min-microvolt = <3300000>;
 				regulator-max-microvolt = <3300000>;
 				regulator-name = "vccio_acodec";
+
 				regulator-state-mem {
 					regulator-off-in-suspend;
 				};
@@ -481,6 +489,7 @@
 				regulator-min-microvolt = <1800000>;
 				regulator-max-microvolt = <3300000>;
 				regulator-name = "vccio_sd";
+
 				regulator-state-mem {
 					regulator-off-in-suspend;
 				};
@@ -492,6 +501,7 @@
 				regulator-min-microvolt = <3300000>;
 				regulator-max-microvolt = <3300000>;
 				regulator-name = "vcc3v3_pmu";
+
 				regulator-state-mem {
 					regulator-on-in-suspend;
 				};
@@ -503,6 +513,7 @@
 				regulator-min-microvolt = <1800000>;
 				regulator-max-microvolt = <1800000>;
 				regulator-name = "vcc_1v8";
+
 				regulator-state-mem {
 					regulator-off-in-suspend;
 				};
@@ -514,6 +525,7 @@
 				regulator-min-microvolt = <1800000>;
 				regulator-max-microvolt = <1800000>;
 				regulator-name = "vcc1v8_dvp";
+
 				regulator-state-mem {
 					regulator-off-in-suspend;
 				};
@@ -525,6 +537,7 @@
 				regulator-min-microvolt = <2800000>;
 				regulator-max-microvolt = <2800000>;
 				regulator-name = "vcc2v8_dvp";
+
 				regulator-state-mem {
 					regulator-off-in-suspend;
 				};
@@ -536,6 +549,7 @@
 				regulator-min-microvolt = <5000000>;
 				regulator-max-microvolt = <5000000>;
 				regulator-name = "boost";
+
 				regulator-state-mem {
 					regulator-off-in-suspend;
 				};
@@ -545,6 +559,7 @@
 				regulator-min-microvolt = <5000000>;
 				regulator-max-microvolt = <5000000>;
 				regulator-name = "otg_switch";
+
 				regulator-state-mem {
 					regulator-off-in-suspend;
 				};
