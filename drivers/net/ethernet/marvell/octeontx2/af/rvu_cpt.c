@@ -12,6 +12,7 @@
 #include "mbox.h"
 #include "rvu.h"
 #include "rvu_cpt.h"
+#include <linux/soc/marvell/octeontx2/asm.h>
 
 /* CPT PF device id */
 #define	PCI_DEVID_OTX2_CPT_PF	0xA0FD
@@ -25,6 +26,10 @@
 
 /* Default CPT_AF_RXC_CFG1:max_rxc_icb_cnt */
 #define CPT_DFLT_MAX_RXC_ICB_CNT  0xC0ULL
+
+/* CPT LMTST */
+#define LMT_LINE_SIZE   128 /* LMT line size in bytes */
+#define LMT_BURST_SIZE  32  /* 32 LMTST lines for burst */
 
 #define cpt_get_eng_sts(e_min, e_max, rsp, etype)                   \
 ({                                                                  \
@@ -699,10 +704,6 @@ int rvu_mbox_handler_cpt_inline_ipsec_cfg(struct rvu *rvu,
 		return CPT_AF_ERR_LF_INVALID;
 
 	switch (req->dir) {
-	case CPT_INLINE_INBOUND:
-		ret = cpt_inline_ipsec_cfg_inbound(rvu, blkaddr, cptlf, req);
-		break;
-
 	case CPT_INLINE_OUTBOUND:
 		ret = cpt_inline_ipsec_cfg_outbound(rvu, blkaddr, cptlf, req);
 		break;
@@ -1253,20 +1254,36 @@ int rvu_cpt_lf_teardown(struct rvu *rvu, u16 pcifunc, int blkaddr, int lf, int s
 	return 0;
 }
 
+static void cn10k_cpt_inst_flush(struct rvu *rvu, u64 *inst, u64 size)
+{
+	u64 blkaddr = BLKADDR_CPT0;
+	u64 val = 0, tar_addr = 0;
+	void __iomem *io_addr;
+
+	io_addr	= rvu->pfreg_base + CPT_RVU_FUNC_ADDR_S(blkaddr, 0, CPT_LF_NQX);
+
+	/* Target address for LMTST flush tells HW how many 128bit
+	 * words are present.
+	 * tar_addr[6:4] size of first LMTST - 1 in units of 128b.
+	 */
+	tar_addr |= (__force u64)io_addr | (((size / 16) - 1) & 0x7) << 4;
+	dma_wmb();
+	memcpy((u64 *)rvu->rvu_cpt.lmt_addr, inst, size);
+	cn10k_lmt_flush(val, tar_addr);
+	dma_wmb();
+}
+
 #define CPT_RES_LEN    16
 #define CPT_SE_IE_EGRP 1ULL
 
 static int cpt_inline_inb_lf_cmd_send(struct rvu *rvu, int blkaddr,
 				      int nix_blkaddr)
 {
-	int cpt_pf_num = rvu->cpt_pf_num;
-	struct cpt_inst_lmtst_req *req;
 	dma_addr_t res_daddr;
 	int timeout = 3000;
+	u64 inst[8];
 	u8 cpt_idx;
-	u64 *inst;
 	u16 *res;
-	int rc;
 
 	res = kzalloc(CPT_RES_LEN, GFP_KERNEL);
 	if (!res)
@@ -1276,24 +1293,11 @@ static int cpt_inline_inb_lf_cmd_send(struct rvu *rvu, int blkaddr,
 				   DMA_BIDIRECTIONAL);
 	if (dma_mapping_error(rvu->dev, res_daddr)) {
 		dev_err(rvu->dev, "DMA mapping failed for CPT result\n");
-		rc = -EFAULT;
-		goto res_free;
+		kfree(res);
+		return -EFAULT;
 	}
 	*res = 0xFFFF;
 
-	/* Send mbox message to CPT PF */
-	req = (struct cpt_inst_lmtst_req *)
-	       otx2_mbox_alloc_msg_rsp(&rvu->afpf_wq_info.mbox_up,
-				       cpt_pf_num, sizeof(*req),
-				       sizeof(struct msg_rsp));
-	if (!req) {
-		rc = -ENOMEM;
-		goto res_daddr_unmap;
-	}
-	req->hdr.sig = OTX2_MBOX_REQ_SIG;
-	req->hdr.id = MBOX_MSG_CPT_INST_LMTST;
-
-	inst = req->inst;
 	/* Prepare CPT_INST_S */
 	inst[0] = 0;
 	inst[1] = res_daddr;
@@ -1314,11 +1318,8 @@ static int cpt_inline_inb_lf_cmd_send(struct rvu *rvu, int blkaddr,
 	rvu_write64(rvu, nix_blkaddr, NIX_AF_RX_CPTX_CREDIT(cpt_idx),
 		    BIT_ULL(22) - 1);
 
-	otx2_mbox_msg_send(&rvu->afpf_wq_info.mbox_up, cpt_pf_num);
-	rc = otx2_mbox_wait_for_rsp(&rvu->afpf_wq_info.mbox_up, cpt_pf_num);
-	if (rc)
-		dev_warn(rvu->dev, "notification to pf %d failed\n",
-			 cpt_pf_num);
+	cn10k_cpt_inst_flush(rvu, inst, 64);
+
 	/* Wait for CPT instruction to be completed */
 	do {
 		mdelay(1);
@@ -1331,11 +1332,8 @@ static int cpt_inline_inb_lf_cmd_send(struct rvu *rvu, int blkaddr,
 	if (timeout == 0)
 		dev_warn(rvu->dev, "Poll for result hits hard loop counter\n");
 
-res_daddr_unmap:
 	dma_unmap_single(rvu->dev, res_daddr, CPT_RES_LEN, DMA_BIDIRECTIONAL);
-res_free:
 	kfree(res);
-
 	return 0;
 }
 
@@ -1381,23 +1379,16 @@ int rvu_cpt_ctx_flush(struct rvu *rvu, u16 pcifunc)
 		goto unlock;
 	}
 
-	/* Enable BAR2 ALIAS for this pcifunc. */
-	reg = BIT_ULL(16) | pcifunc;
-	rvu_bar2_sel_write64(rvu, blkaddr, CPT_AF_BAR2_SEL, reg);
-
 	for (i = 0; i < max_ctx_entries; i++) {
 		cam_data = rvu_read64(rvu, blkaddr, CPT_AF_CTX_CAM_DATA(i));
 
 		if ((FIELD_GET(CTX_CAM_PF_FUNC, cam_data) == pcifunc) &&
 		    FIELD_GET(CTX_CAM_CPTR, cam_data)) {
 			reg = BIT_ULL(46) | FIELD_GET(CTX_CAM_CPTR, cam_data);
-			rvu_write64(rvu, blkaddr,
-				    CPT_AF_BAR2_ALIASX(slot, CPT_LF_CTX_FLUSH),
-				    reg);
+			otx2_cpt_write64(rvu->pfreg_base, blkaddr, slot,
+					 CPT_LF_CTX_FLUSH, reg);
 		}
 	}
-	rvu_bar2_sel_write64(rvu, blkaddr, CPT_AF_BAR2_SEL, 0);
-
 unlock:
 	mutex_unlock(&rvu->rsrc_lock);
 
