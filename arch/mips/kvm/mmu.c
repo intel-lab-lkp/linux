@@ -574,7 +574,7 @@ static int kvm_mips_map_page(struct kvm_vcpu *vcpu, unsigned long gpa,
 retry:
 	/*
 	 * Used to check for invalidations in progress, of the pfn that is
-	 * returned by pfn_to_pfn_prot below.
+	 * returned by kvm_faultin_pfn() below.
 	 */
 	mmu_seq = kvm->mmu_invalidate_seq;
 	/*
