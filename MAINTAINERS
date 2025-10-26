@@ -6062,6 +6062,7 @@ F:	include/linux/cleancache.h
 F:	mm/cleancache.c
 F:	mm/cleancache_sysfs.c
 F:	mm/cleancache_sysfs.h
+F:	mm/tests/cleancache_kunit.c
 
 CLK API
 M:	Russell King <linux@armlinux.org.uk>

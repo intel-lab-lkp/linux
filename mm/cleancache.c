@@ -10,6 +10,8 @@
 #include <linux/slab.h>
 #include <linux/workqueue.h>
 #include <linux/xarray.h>
+#include <kunit/test-bug.h>
+#include <kunit/test.h>
 
 #include "cleancache_sysfs.h"
 
@@ -71,6 +73,28 @@ static atomic_t nr_pools = ATOMIC_INIT(0);
 static DEFINE_SPINLOCK(pools_lock); /* protects pools */
 static LIST_HEAD(cleancache_lru);
 static DEFINE_SPINLOCK(lru_lock); /* protects cleancache_lru */
+
+#if IS_ENABLED(CONFIG_CLEANCACHE_KUNIT)
+
+static bool is_pool_allowed(int pool_id)
+{
+	struct kunit *test = kunit_get_current_test();
+
+	/* Restrict kunit tests to using only the test pool */
+	return test && *((int *)test->priv) == pool_id;
+}
+
+#else /* CONFIG_CLEANCACHE_KUNIT */
+
+static bool is_pool_allowed(int pool_id) { return true; }
+
+#endif /* CONFIG_CLEANCACHE_KUNIT */
+
+#if IS_MODULE(CONFIG_CLEANCACHE_KUNIT)
+#define EXPORT_SYMBOL_FOR_KUNIT(x) EXPORT_SYMBOL(x)
+#else
+#define EXPORT_SYMBOL_FOR_KUNIT(x)
+#endif
 
 static inline void init_cleancache_folio(struct folio *folio, int pool_id)
 {
@@ -178,7 +202,7 @@ static struct folio *pick_folio_from_any_pool(void)
 	for (int i = 0; i < count; i++) {
 		pool = &pools[i];
 		spin_lock(&pool->lock);
-		if (!list_empty(&pool->folio_list)) {
+		if (!list_empty(&pool->folio_list) && is_pool_allowed(i)) {
 			folio = list_last_entry(&pool->folio_list,
 						struct folio, lru);
 			WARN_ON(!remove_folio_from_pool(folio, pool));
@@ -737,6 +761,7 @@ int cleancache_add_fs(struct super_block *sb)
 
 	return ret;
 }
+EXPORT_SYMBOL_FOR_KUNIT(cleancache_add_fs);
 
 void cleancache_remove_fs(struct super_block *sb)
 {
@@ -754,6 +779,7 @@ void cleancache_remove_fs(struct super_block *sb)
 	/* free the object */
 	put_fs(fs);
 }
+EXPORT_SYMBOL_FOR_KUNIT(cleancache_remove_fs);
 
 bool cleancache_store_folio(struct inode *inode, struct folio *folio)
 {
@@ -783,6 +809,7 @@ bool cleancache_store_folio(struct inode *inode, struct folio *folio)
 
 	return ret;
 }
+EXPORT_SYMBOL_FOR_KUNIT(cleancache_store_folio);
 
 bool cleancache_restore_folio(struct inode *inode, struct folio *folio)
 {
@@ -810,6 +837,7 @@ bool cleancache_restore_folio(struct inode *inode, struct folio *folio)
 
 	return ret;
 }
+EXPORT_SYMBOL_FOR_KUNIT(cleancache_restore_folio);
 
 bool cleancache_invalidate_folio(struct inode *inode, struct folio *folio)
 {
@@ -840,6 +868,7 @@ bool cleancache_invalidate_folio(struct inode *inode, struct folio *folio)
 
 	return ret;
 }
+EXPORT_SYMBOL_FOR_KUNIT(cleancache_invalidate_folio);
 
 bool cleancache_invalidate_inode(struct inode *inode)
 {
@@ -863,6 +892,7 @@ bool cleancache_invalidate_inode(struct inode *inode)
 
 	return count > 0;
 }
+EXPORT_SYMBOL_FOR_KUNIT(cleancache_invalidate_inode);
 
 struct cleancache_inode *
 cleancache_start_inode_walk(struct inode *inode, unsigned long count)
@@ -891,6 +921,7 @@ cleancache_start_inode_walk(struct inode *inode, unsigned long count)
 
 	return ccinode;
 }
+EXPORT_SYMBOL_FOR_KUNIT(cleancache_start_inode_walk);
 
 void cleancache_end_inode_walk(struct cleancache_inode *ccinode)
 {
@@ -899,6 +930,7 @@ void cleancache_end_inode_walk(struct cleancache_inode *ccinode)
 	put_inode(ccinode);
 	put_fs(fs);
 }
+EXPORT_SYMBOL_FOR_KUNIT(cleancache_end_inode_walk);
 
 bool cleancache_restore_from_inode(struct cleancache_inode *ccinode,
 				   struct folio *folio)
@@ -925,6 +957,7 @@ bool cleancache_restore_from_inode(struct cleancache_inode *ccinode,
 
 	return ret;
 }
+EXPORT_SYMBOL_FOR_KUNIT(cleancache_restore_from_inode);
 
 /* Backend API */
 /*
