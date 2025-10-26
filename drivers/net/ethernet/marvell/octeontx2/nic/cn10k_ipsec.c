@@ -333,10 +333,6 @@ static int cn10k_outb_cpt_init(struct net_device *netdev)
 	pf->ipsec.io_addr = (__force u64)otx2_get_regaddr(pf,
 						CN10K_CPT_LF_NQX(0));
 
-	/* Set ipsec offload enabled for this device */
-	pf->flags |= OTX2_FLAG_IPSEC_OFFLOAD_ENABLED;
-
-	cn10k_cpt_device_set_available(pf);
 	return 0;
 
 lf_free:
@@ -346,17 +342,161 @@ detach:
 	return ret;
 }
 
+static int cn10k_ipsec_ingress_rq_init(struct otx2_nic *pfvf, u16 qidx, u16 lpb_aura)
+{
+	struct nix_cn10k_aq_enq_req *aq;
+
+	/* Get memory to put this msg */
+	aq = otx2_mbox_alloc_msg_nix_cn10k_aq_enq(&pfvf->mbox);
+	if (!aq)
+		return -ENOMEM;
+
+	aq->rq.cq = qidx;
+	aq->rq.ena = 1;
+	aq->rq.pb_caching = 1;
+	aq->rq.lpb_aura = lpb_aura; /* Use large packet buffer aura */
+	aq->rq.lpb_sizem1 = (DMA_BUFFER_LEN(pfvf->rbsize) / 8) - 1;
+	aq->rq.xqe_imm_size = 0; /* Copying of packet to CQE not needed */
+	aq->rq.flow_tagw = 32; /* Copy full 32bit flow_tag to CQE header */
+	aq->rq.qint_idx = 0;
+	aq->rq.lpb_drop_ena = 1; /* Enable RED dropping for AURA */
+	aq->rq.lpb_aura_pass = RQ_PASS_LVL_AURA;
+	aq->rq.lpb_aura_drop = RQ_DROP_LVL_AURA;
+	aq->rq.ipsech_ena = 1;		/* IPsec HW fast path enable */
+	aq->rq.ipsecd_drop_ena = 1;	/* IPsec dynamic drop enable */
+	aq->rq.ena_wqwd = 1;		/* Store NIX header in packet buffer */
+	aq->rq.first_skip = 16;		/* Store packet after skipping 16x8
+					 * bytes to accommodate NIX header.
+					 */
+
+	/* Fill AQ info */
+	aq->qidx = qidx;
+	aq->ctype = NIX_AQ_CTYPE_RQ;
+	aq->op = NIX_AQ_INSTOP_INIT;
+
+	return otx2_sync_mbox_msg(&pfvf->mbox);
+}
+
+static int cn10k_ipsec_aura_and_pool_init(struct otx2_nic *pfvf, int pool_id)
+{
+	struct otx2_hw *hw = &pfvf->hw;
+	struct otx2_pool *pool = NULL;
+	int num_ptrs, stack_pages;
+	dma_addr_t bufptr;
+	int err, ptr;
+
+	num_ptrs = pfvf->qset.rqe_cnt;
+	stack_pages = (num_ptrs + hw->stack_pg_ptrs - 1) / hw->stack_pg_ptrs;
+	pool = &pfvf->qset.pool[pool_id];
+
+	/* Initialize aura context */
+	err = otx2_aura_init(pfvf, pool_id, pool_id, num_ptrs);
+	if (err)
+		goto fail;
+
+	/* Initialize pool */
+	err = otx2_pool_init(pfvf, pool_id, stack_pages, num_ptrs, pfvf->rbsize,
+			     AURA_NIX_RQ);
+	if (err)
+		goto fail;
+
+	/* Flush accumulated messages */
+	err = otx2_sync_mbox_msg(&pfvf->mbox);
+	if (err)
+		goto fail;
+
+	/* Allocate pointers and free them to aura/pool */
+	for (ptr = 0; ptr < num_ptrs; ptr++) {
+		err = otx2_alloc_rbuf(pfvf, pool, &bufptr, pool_id, ptr);
+		if (err) {
+			err = -ENOMEM;
+			goto free_auras;
+		}
+		pfvf->hw_ops->aura_freeptr(pfvf, pool_id, bufptr + OTX2_HEAD_ROOM);
+	}
+
+	return err;
+
+free_auras:
+	cn10k_ipsec_free_aura_ptrs(pfvf);
+fail:
+	otx2_mbox_reset(&pfvf->mbox.mbox, 0);
+	return err;
+}
+
+static int cn10k_ipsec_setup_nix_rx_hw_resources(struct otx2_nic *pfvf)
+{
+	int rbsize, err, pool;
+
+	mutex_lock(&pfvf->mbox.lock);
+
+	/* Initialize Pool for first pass */
+	err = cn10k_ipsec_aura_and_pool_init(pfvf, pfvf->ipsec.inb_ipsec_pool);
+	if (err)
+		return err;
+
+	/* Initialize first pass RQ and map buffers from pool_id */
+	err = cn10k_ipsec_ingress_rq_init(pfvf, pfvf->ipsec.inb_ipsec_rq,
+					  pfvf->ipsec.inb_ipsec_pool);
+	if (err)
+		goto free_auras;
+
+	/* Initialize SPB pool for second pass */
+	rbsize = pfvf->rbsize;
+	pfvf->rbsize = 512;
+
+	for (pool = pfvf->ipsec.inb_ipsec_spb_pool;
+	     pool < pfvf->hw.rx_queues + pfvf->ipsec.inb_ipsec_spb_pool; pool++) {
+		err = cn10k_ipsec_aura_and_pool_init(pfvf, pool);
+		if (err)
+			goto free_auras;
+	}
+	pfvf->rbsize = rbsize;
+
+	mutex_unlock(&pfvf->mbox.lock);
+	return 0;
+
+free_auras:
+	cn10k_ipsec_free_aura_ptrs(pfvf);
+	mutex_unlock(&pfvf->mbox.lock);
+	otx2_mbox_reset(&pfvf->mbox.mbox, 0);
+	return err;
+}
+
+static int cn10k_inb_cpt_init(struct net_device *netdev)
+{
+	struct otx2_nic *pfvf = netdev_priv(netdev);
+	int ret = 0, spb_cnt;
+
+	/* Allocate SPB buffer count array to track the number of inbound SPB
+	 * buffers received per RX queue. This count would later be used to
+	 * refill the first pass IPsec pool.
+	 */
+	pfvf->ipsec.inb_spb_count = devm_kmalloc_array(pfvf->dev,
+						       pfvf->hw.rx_queues,
+						       sizeof(atomic_t),
+						       GFP_KERNEL);
+	if (!pfvf->ipsec.inb_spb_count) {
+		netdev_err(netdev, "Failed to allocate inbound SPB buffer count array\n");
+		return -ENOMEM;
+	}
+
+	for (spb_cnt = 0; spb_cnt < pfvf->hw.rx_queues; spb_cnt++)
+		atomic_set(&pfvf->ipsec.inb_spb_count[spb_cnt], 0);
+
+	/* Setup NIX RX HW resources for inline inbound IPSec */
+	ret = cn10k_ipsec_setup_nix_rx_hw_resources(pfvf);
+	if (ret) {
+		netdev_err(netdev, "Failed to setup NIX HW resources for IPsec\n");
+		return ret;
+	}
+
+	return ret;
+}
+
 static int cn10k_outb_cpt_clean(struct otx2_nic *pf)
 {
 	int ret;
-
-	if (!cn10k_cpt_device_set_inuse(pf)) {
-		netdev_err(pf->netdev, "CPT LF device unavailable\n");
-		return -ENODEV;
-	}
-
-	/* Set ipsec offload disabled for this device */
-	pf->flags &= ~OTX2_FLAG_IPSEC_OFFLOAD_ENABLED;
 
 	/* Disable CPTLF Instruction Queue (IQ) */
 	cn10k_outb_cptlf_iq_disable(pf);
@@ -374,7 +514,6 @@ static int cn10k_outb_cpt_clean(struct otx2_nic *pf)
 	if (ret)
 		netdev_err(pf->netdev, "Failed to detach CPT LF\n");
 
-	cn10k_cpt_device_set_unavailable(pf);
 	return ret;
 }
 
@@ -762,25 +901,76 @@ static void cn10k_ipsec_sa_wq_handler(struct work_struct *work)
 	rtnl_unlock();
 }
 
+void cn10k_ipsec_free_aura_ptrs(struct otx2_nic *pfvf)
+{
+	struct otx2_pool *pool;
+	int pool_id;
+	u64 iova;
+
+	/* Free all first and second pass pool buffers */
+	for (pool_id = pfvf->ipsec.inb_ipsec_spb_pool;
+	     pool_id <= pfvf->ipsec.inb_ipsec_pool; pool_id++) {
+		pool = &pfvf->qset.pool[pool_id];
+		do {
+			iova = otx2_aura_allocptr(pfvf, pool_id);
+			if (!iova)
+				break;
+			otx2_free_bufs(pfvf, pool, iova - OTX2_HEAD_ROOM,
+				       pfvf->rbsize);
+		} while (1);
+	}
+}
+
+static void cn10k_ipsec_free_hw_resources(struct otx2_nic *pfvf)
+{
+	if (!cn10k_cpt_device_set_inuse(pfvf)) {
+		netdev_err(pfvf->netdev, "CPT LF device unavailable\n");
+		return;
+	}
+
+	cn10k_outb_cpt_clean(pfvf);
+
+	/* Free the per spb pool buffer counters */
+	devm_kfree(pfvf->dev, pfvf->ipsec.inb_spb_count);
+
+	cn10k_ipsec_free_aura_ptrs(pfvf);
+}
+
 int cn10k_ipsec_ethtool_init(struct net_device *netdev, bool enable)
 {
 	struct otx2_nic *pf = netdev_priv(netdev);
+	int ret = 0;
 
 	/* IPsec offload supported on cn10k */
 	if (!is_dev_support_ipsec_offload(pf->pdev))
 		return -EOPNOTSUPP;
 
-	/* Initialize CPT for outbound ipsec offload */
-	if (enable)
-		return cn10k_outb_cpt_init(netdev);
+	/* Initialize CPT for outbound and inbound IPsec offload */
+	if (enable) {
+		ret = cn10k_outb_cpt_init(netdev);
+		if (ret)
+			return ret;
+
+		ret = cn10k_inb_cpt_init(netdev);
+		if (ret)
+			goto out;
+
+		/* Set ipsec offload enabled for this device */
+		pf->flags |= OTX2_FLAG_IPSEC_OFFLOAD_ENABLED;
+		cn10k_cpt_device_set_available(pf);
+		return ret;
+	}
 
 	/* Don't do CPT cleanup if SA installed */
-	if (pf->ipsec.outb_sa_count) {
+	if (!pf->ipsec.outb_sa_count) {
 		netdev_err(pf->netdev, "SA installed on this device\n");
 		return -EBUSY;
 	}
 
-	return cn10k_outb_cpt_clean(pf);
+out:
+	cn10k_ipsec_free_hw_resources(pf);
+	cn10k_cpt_device_set_unavailable(pf);
+	return ret;
 }
 
 int cn10k_ipsec_init(struct net_device *netdev)
@@ -828,7 +1018,10 @@ void cn10k_ipsec_clean(struct otx2_nic *pf)
 		pf->ipsec.sa_workq = NULL;
 	}
 
-	cn10k_outb_cpt_clean(pf);
+	/* Set ipsec offload disabled for this device */
+	pf->flags &= ~OTX2_FLAG_IPSEC_OFFLOAD_ENABLED;
+
+	cn10k_ipsec_free_hw_resources(pf);
 }
 EXPORT_SYMBOL(cn10k_ipsec_clean);
 
