@@ -92,9 +92,17 @@ following the others is usually in your own interest.
 
  [:ref:`details <taintone_repiref>`]
 
+.. _checkenv_repisbs:
 
- * Make sure it's not the kernel's surroundings that are causing the issue
-   you face.
+* Evaluate briefly if some glitch in your kernel's environment might make it
+  misbehave -- like a hardware defect, an updated system firmware, a
+  misconfigured BIOS, an overclocked component, a kernel parameter enabling
+  something unsupported, a broken initramfs, an inconsistent file system,
+  changes to the linux-firmware files, or some malfunction/misconfiguration in
+  your Linux distribution.
+
+ [:ref:`details <checkenv_repiref>`]
+
 
  * Perform a rough search for existing reports with your favorite internet
    search engine; additionally, check the archives of the `Linux Kernel Mailing
@@ -481,39 +489,49 @@ These are the most frequent reasons why the kernel set the flag:
 [:ref:`back to step-by-step guide <taintone_repisbs>`]
 
 
-Ensure a healthy environment
-----------------------------
+.. _checkenv_repiref:
 
-    *Make sure it's not the kernel's surroundings that are causing the issue
-    you face.*
+Ensure there is nothing wrong with the kernel's surroundings
+------------------------------------------------------------
 
-Problems that look a lot like a kernel issue are sometimes caused by build or
-runtime environment. It's hard to rule out that problem completely, but you
-should minimize it:
+  *Evaluate briefly if some glitch in your kernel's environment might make it
+  misbehave -- like a* [:ref:`... <checkenv_repisbs>`]
 
- * Use proven tools when building your kernel, as bugs in the compiler or the
-   binutils can cause the resulting kernel to misbehave.
+Problems that look like a kernel issue are sometimes caused by its
+surroundings. It is impossible to detect sometimes -- but it is wise to rule
+out a few common causes before wasting time on a meaningless bug report:
 
- * Ensure your computer components run within their design specifications;
-   that's especially important for the main processor, the main memory, and the
-   motherboard. Therefore, stop undervolting or overclocking when facing a
-   potential kernel issue.
+* When dealing with a regression (e.g., something stopped working or works worse
+  after updating the kernel), make sure it is not something else that changed
+  in parallel. That could be something else you updated at the same time, like
+  the BIOS, the boot loader, Mesa, the linux-firmware package, or something
+  else close to the kernel; but it could also be some change you performed in
+  the BIOS setup or your Linux distribution's configuration.
 
- * Try to make sure it's not faulty hardware that is causing your issue. Bad
-   main memory for example can result in a multitude of issues that will
-   manifest itself in problems looking like kernel issues.
+* Try to make sure the hardware is healthy, as problems with it can result in a
+  multitude of issues that look like kernel bugs.
 
- * If you're dealing with a filesystem issue, you might want to check the file
-   system in question with ``fsck``, as it might be damaged in a way that leads
-   to unexpected kernel behavior.
+  Ideally try to rule out faulty RAM or a dying device causes the problem.
 
- * When dealing with a regression, make sure it's not something else that
-   changed in parallel to updating the kernel. The problem for example might be
-   caused by other software that was updated at the same time. It can also
-   happen that a hardware component coincidentally just broke when you rebooted
-   into a new kernel for the first time. Updating the systems BIOS or changing
-   something in the BIOS Setup can also lead to problems that on look a lot
-   like a kernel regression.
+  Also ensure your computer components run within their design specifications;
+  that is especially important for the main processor, the RAM, and the
+  motherboard. Therefore, stop undervolting or overclocking when facing a
+  potential kernel issue.
+
+* Temporarily remove any optional kernel parameters you use, as they might
+  enable unsupported or experimental features.
+
+* In case of any problems related to booting, check if the initramfs was
+  generated correctly.
+
+* When dealing with a file system issue, check the file
+  system in question with ``fsck``, as it might be damaged in a way that leads
+  to unexpected kernel behavior.
+
+* Use proven tools when building your kernel, as bugs in the compiler or the
+  linker can cause the resulting kernel to misbehave.
+
+[:ref:`back to step-by-step guide <checkenv_repisbs>`]
 
 
 Search for existing reports, first run
