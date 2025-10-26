@@ -157,9 +157,24 @@ following the others is usually in your own interest.
 
  [:ref:`details <maintainers_repiref>`]
 
- * Search the archives of the bug tracker or mailing list in question
-   thoroughly for reports that might match your issue. If you find anything,
-   join the discussion instead of sending a new report.
+.. _otherplaces_repisbs:
+
+* If the developers of the affected driver or subsystem use a dedicated mailing
+  list not `archived on lore <https://lore.kernel.org/>`_, search its archives
+  for earlier reports and potential fixes; if the subsystem is among the few
+  using one of various bug trackers, search it as well.
+
+  Checking `bugzilla.kernel.org <https://bugzilla.kernel.org/>`_ might be worth
+  a shot, too. But keep in mind that for most of the kernel it is the wrong
+  place to submit bug reports: Many Linux developers do not care about the bug
+  tracker and are not even notified about bugs in their code submitted there.
+
+  If you find matching reports or fixes in either place, follow the instructions
+  provided earlier. In the case of Bugzilla, check if the appropriate developers
+  noticed the ticket -- and if not, consider sending an email to the responsible
+  people and lists pointing them to it.
+
+ [:ref:`details <otherplaces_repiref>`]
 
  * Create a fresh backup and put system repair and restore tools at hand.
 
@@ -851,41 +866,42 @@ about the particular driver at all.
 [:ref:`back to step-by-step guide <maintainers_repisbs>`]
 
 
-Search for existing reports, second run
----------------------------------------
+.. _otherplaces_repiref:
 
-    *Search the archives of the bug tracker or mailing list in question
-    thoroughly for reports that might match your issue. If you find anything,
-    join the discussion instead of sending a new report.*
+Search for existing reports in other places
+-------------------------------------------
 
-As mentioned earlier already: reporting an issue that someone else already
-brought forward is often a waste of time for everyone involved, especially you
-as the reporter. That's why you should search for existing report again, now
-that you know where they need to be reported to. If it's mailing list, you will
-often find its archives on `lore.kernel.org <https://lore.kernel.org/>`_.
+  *If the developers of the affected driver or subsystem use a dedicated
+  mailing list not archived on lore, search its archives for earlier reports
+  and potential fixes; if the subsystem is* [:ref:`... <otherplaces_repisbs>`]
 
-But some list are hosted in different places. That for example is the case for
-the ath10k WiFi driver used as example in the previous step. But you'll often
-find the archives for these lists easily on the net. Searching for 'archive
-ath10k@lists.infradead.org' for example will lead you to the `Info page for the
-ath10k mailing list <https://lists.infradead.org/mailman/listinfo/ath10k>`_,
-which at the top links to its
-`list archives <https://lists.infradead.org/pipermail/ath10k/>`_. Sadly this and
-quite a few other lists miss a way to search the archives. In those cases use a
-regular internet search engine and add something like
+Now that you know where they need to be reported to, search the target for
+existing reports again. If it is a mailing list, you will often find its
+archives on `lore <https://lore.kernel.org/all/>`_.
+
+But some lists are hosted in different places. That, for example, is the case
+for the ath10k WiFi driver used as an example in the previous step. But you'll
+often find the archives for these lists easily on the net. Searching for
+'archive ath10k@lists.infradead.org', for example, will lead you to the `Info
+page for the ath10k mailing list <https://lists.infradead.org/mailman/listinfo/ath10k>`_,
+which at the top links to its `list archives <https://lists.infradead.org/pipermail/ath10k/>`_.
+Sadly, this and quite a few other lists miss a way to search the archives. In
+those cases, use a regular internet search engine and add something like
 'site:lists.infradead.org/pipermail/ath10k/' to your search terms, which limits
 the results to the archives at that URL.
 
-It's also wise to check the internet, LKML and maybe bugzilla.kernel.org again
+It is also wise to check the internet, LKML and maybe bugzilla.kernel.org again
 at this point. If your report needs to be filed in a bug tracker, you may want
 to check the mailing list archives for the subsystem as well, as someone might
 have reported it only there.
 
-For details how to search and what to do if you find matching reports see
-"Search for existing reports, first run" above.
+For details on how to search and what to do if you find matching reports, see
+':ref:`Search for existing reports and fixes <checkloreone_repiref>`' above.
 
 Do not hurry with this step of the reporting process: spending 30 to 60 minutes
-or even more time can save you and others quite a lot of time and trouble.
+or even more time can save everyone, including you, quite some trouble.
+
+[:ref:`back to step-by-step guide <otherplaces_repisbs>`]
 
 
 Prepare for emergencies
