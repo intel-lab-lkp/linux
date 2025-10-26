@@ -1693,60 +1693,66 @@ for the subsystem where the issue seems to have its roots; CC the mailing list
 for the subsystem as well as the stable mailing list (stable@vger.kernel.org).
 
 
-Why some issues won't get any reaction or remain unfixed after being reported
-=============================================================================
+Appendix: additional background information
+===========================================
 
-When reporting a problem to the Linux developers, be aware only 'issues of high
-priority' (regressions, security issues, severe problems) are definitely going
-to get resolved. The maintainers or if all else fails Linus Torvalds himself
-will make sure of that. They and the other kernel developers will fix a lot of
-other issues as well. But be aware that sometimes they can't or won't help; and
-sometimes there isn't even anyone to send a report to.
+.. _unfixedbugs_repiapdx:
 
-This is best explained with kernel developers that contribute to the Linux
-kernel in their spare time. Quite a few of the drivers in the kernel were
-written by such programmers, often because they simply wanted to make their
-hardware usable on their favorite operating system.
+Why some bugs remain unfixed and some report are ignored
+--------------------------------------------------------
+
+When reporting a problem to the Linux developers, be aware that they are only
+obliged to fix regressions, security issues, and severe problems. Developers,
+maintainers, or, if all else fails, Linus Torvalds himself will make sure of
+that. They will fix a lot of other issues as well, but sometimes they can't or
+won't help -- and sometimes there isn't even anyone to send a report to.
+
+This situation is best explained using kernel developers that contribute to the
+Linux kernel in their spare time. Quite a few of the drivers in the kernel were
+written by such programmers; often they simply wanted to make the
+hardware they owned usable on their favorite operating system.
 
 These programmers most of the time will happily fix problems other people
-report. But nobody can force them to do, as they are contributing voluntarily.
+report. But nobody can force them to do so, as they are contributing
+voluntarily.
 
-Then there are situations where such developers really want to fix an issue,
-but can't: sometimes they lack hardware programming documentation to do so.
-This often happens when the publicly available docs are superficial or the
-driver was written with the help of reverse engineering.
+There are also situations where such developers would like to fix issues,
+but can't: They might lack programming documentation to do so or hardware to
+test. The former can happen when the publicly available docs are superficial or
+when a driver was written with the help of reverse engineering.
 
-Sooner or later spare time developers will also stop caring for the driver.
-Maybe their test hardware broke, got replaced by something more fancy, or is so
-old that it's something you don't find much outside of computer museums
-anymore. Sometimes developer stops caring for their code and Linux at all, as
-something different in their life became way more important. In some cases
-nobody is willing to take over the job as maintainer – and nobody can be forced
-to, as contributing to the Linux kernel is done on a voluntary basis. Abandoned
-drivers nevertheless remain in the kernel: they are still useful for people and
-removing would be a regression.
+Sooner or later, spare-time developers usually stop caring for the driver.
+Maybe their test hardware broke, was replaced by something more fancy, or
+became so old that it is something you don't find much outside of computer
+museums anymore. Other times developers also stop caring when
+something different in life becomes more important to them. Then sometimes
+nobody is willing to take over the job as maintainer -- and nobody else can be
+forced to, as contributing is voluntary. The code nevertheless often stays
+around, as it is useful for people; removing it would also cause a regression,
+which is not allowed in Linux.
 
 The situation is not that different with developers that are paid for their
-work on the Linux kernel. Those contribute most changes these days. But their
-employers sooner or later also stop caring for their code or make its
-programmer focus on other things. Hardware vendors for example earn their money
-mainly by selling new hardware; quite a few of them hence are not investing
-much time and energy in maintaining a Linux kernel driver for something they
-stopped selling years ago. Enterprise Linux distributors often care for a
-longer time period, but in new versions often leave support for old and rare
-hardware aside to limit the scope. Often spare time contributors take over once
-a company orphans some code, but as mentioned above: sooner or later they will
-leave the code behind, too.
+work on the upstream Linux kernel. Those contribute the most changes these days.
+But their employers set the priorities. And those sooner or later stop caring
+for some code or make their
+employees focus on other things. Hardware vendors, for example, earn their money
+mainly by selling new hardware -- they thus often are not much interested in
+investing much time and energy in maintaining a Linux kernel driver for a chip
+they stopped selling years ago. Enterprise Linux distributors often care for a
+longer time period, but in new versions might set support for old and rare
+hardware aside to limit the scope, too. Often spare-time contributors take over
+once employed developers orphan some code, but as mentioned earlier: Sooner or
+later they will usually leave the code behind, too.
 
-Priorities are another reason why some issues are not fixed, as maintainers
-quite often are forced to set those, as time to work on Linux is limited.
-That's true for spare time or the time employers grant their developers to
-spend on maintenance work on the upstream kernel. Sometimes maintainers also
-get overwhelmed with reports, even if a driver is working nearly perfectly. To
-not get completely stuck, the programmer thus might have no other choice than
-to prioritize issue reports and reject some of them.
+Priorities are another reason why some issues are not fixed, as developers
+quite often are forced to set those: The spare-time of volunteers or the time
+employers allot for upstream Linux kernel work is often limited. Sometimes
+developers are also flooded with good and bad reports, even if a driver is
+working well. To
+not get completely stuck, the programmers might have no other choice than
+to prioritize bug reports and ignore some.
 
-But don't worry too much about all of this, a lot of drivers have active
+But do not worry too much about all of this, a lot of drivers have active
 maintainers who are quite interested in fixing as many issues as possible.
 
 
