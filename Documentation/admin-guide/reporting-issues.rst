@@ -157,6 +157,10 @@ following the others is usually in your own interest.
 
  [:ref:`details <maintainers_repiref>`]
 
+ * Search the archives of the bug tracker or mailing list in question
+   thoroughly for reports that might match your issue. If you find anything,
+   join the discussion instead of sending a new report.
+
  * Create a fresh backup and put system repair and restore tools at hand.
 
  * Ensure your system does not enhance its kernels by building additional
@@ -168,10 +172,6 @@ following the others is usually in your own interest.
  * If you are facing a regression within a stable or longterm version line
    (say something broke when updating from 5.10.4 to 5.10.5), scroll down to
    'Dealing with regressions within a stable and longterm kernel line'.
-
- * Search the archives of the bug tracker or mailing list in question
-   thoroughly for reports that might match your issue. If you find anything,
-   join the discussion instead of sending a new report.
 
 After these preparations you'll now enter the main part:
 
@@ -851,6 +851,43 @@ about the particular driver at all.
 [:ref:`back to step-by-step guide <maintainers_repisbs>`]
 
 
+Search for existing reports, second run
+---------------------------------------
+
+    *Search the archives of the bug tracker or mailing list in question
+    thoroughly for reports that might match your issue. If you find anything,
+    join the discussion instead of sending a new report.*
+
+As mentioned earlier already: reporting an issue that someone else already
+brought forward is often a waste of time for everyone involved, especially you
+as the reporter. That's why you should search for existing report again, now
+that you know where they need to be reported to. If it's mailing list, you will
+often find its archives on `lore.kernel.org <https://lore.kernel.org/>`_.
+
+But some list are hosted in different places. That for example is the case for
+the ath10k WiFi driver used as example in the previous step. But you'll often
+find the archives for these lists easily on the net. Searching for 'archive
+ath10k@lists.infradead.org' for example will lead you to the `Info page for the
+ath10k mailing list <https://lists.infradead.org/mailman/listinfo/ath10k>`_,
+which at the top links to its
+`list archives <https://lists.infradead.org/pipermail/ath10k/>`_. Sadly this and
+quite a few other lists miss a way to search the archives. In those cases use a
+regular internet search engine and add something like
+'site:lists.infradead.org/pipermail/ath10k/' to your search terms, which limits
+the results to the archives at that URL.
+
+It's also wise to check the internet, LKML and maybe bugzilla.kernel.org again
+at this point. If your report needs to be filed in a bug tracker, you may want
+to check the mailing list archives for the subsystem as well, as someone might
+have reported it only there.
+
+For details how to search and what to do if you find matching reports see
+"Search for existing reports, first run" above.
+
+Do not hurry with this step of the reporting process: spending 30 to 60 minutes
+or even more time can save you and others quite a lot of time and trouble.
+
+
 Prepare for emergencies
 -----------------------
 
@@ -916,43 +953,6 @@ people. The developers thus want to learn about such issues as quickly as
 possible, hence there is a streamlined process to report them. Note,
 regressions with newer kernel version line (say something broke when switching
 from 5.9.15 to 5.10.5) do not qualify.
-
-
-Search for existing reports, second run
----------------------------------------
-
-    *Search the archives of the bug tracker or mailing list in question
-    thoroughly for reports that might match your issue. If you find anything,
-    join the discussion instead of sending a new report.*
-
-As mentioned earlier already: reporting an issue that someone else already
-brought forward is often a waste of time for everyone involved, especially you
-as the reporter. That's why you should search for existing report again, now
-that you know where they need to be reported to. If it's mailing list, you will
-often find its archives on `lore.kernel.org <https://lore.kernel.org/>`_.
-
-But some list are hosted in different places. That for example is the case for
-the ath10k WiFi driver used as example in the previous step. But you'll often
-find the archives for these lists easily on the net. Searching for 'archive
-ath10k@lists.infradead.org' for example will lead you to the `Info page for the
-ath10k mailing list <https://lists.infradead.org/mailman/listinfo/ath10k>`_,
-which at the top links to its
-`list archives <https://lists.infradead.org/pipermail/ath10k/>`_. Sadly this and
-quite a few other lists miss a way to search the archives. In those cases use a
-regular internet search engine and add something like
-'site:lists.infradead.org/pipermail/ath10k/' to your search terms, which limits
-the results to the archives at that URL.
-
-It's also wise to check the internet, LKML and maybe bugzilla.kernel.org again
-at this point. If your report needs to be filed in a bug tracker, you may want
-to check the mailing list archives for the subsystem as well, as someone might
-have reported it only there.
-
-For details how to search and what to do if you find matching reports see
-"Search for existing reports, first run" above.
-
-Do not hurry with this step of the reporting process: spending 30 to 60 minutes
-or even more time can save you and others quite a lot of time and trouble.
 
 
 Install a fresh kernel for testing
