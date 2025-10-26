@@ -183,9 +183,14 @@ following the others is usually in your own interest.
 
  [:ref:`details <backup_repiref>`]
 
+ * Write down coarsely how to reproduce the issue.
+
  * Ensure your system does not enhance its kernels by building additional
    kernel modules on-the-fly, which solutions like DKMS might be doing locally
    without your knowledge.
+
+ * Check if your kernel was 'tainted' when the issue occurred, as the event
+   that made the kernel set this flag might be causing the issue you face.
 
  * Write down coarsely how to reproduce the issue.
 
@@ -926,6 +931,23 @@ operating system as well as everything you need to restore the backup.
 [:ref:`back to step-by-step guide <backup_repisbs>`]
 
 
+Document how to reproduce issue
+-------------------------------
+
+    *Write down coarsely how to reproduce the issue.*
+
+During the reporting process you will have to test if the issue
+happens with other kernel versions. Therefore, it will make your work easier if
+you know exactly how to reproduce an issue quickly on a freshly booted system.
+
+Note: it's often fruitless to report issues that only happened once, as they
+might be caused by a bit flip due to cosmic radiation. That's why you should
+try to rule that out by reproducing the issue before going further. Feel free
+to ignore this advice if you are experienced enough to tell a one-time error
+due to faulty hardware apart from a kernel issue that rarely happens and thus
+is hard to reproduce.
+
+
 Make sure your kernel doesn't get enhanced
 ------------------------------------------
 
@@ -945,23 +967,6 @@ they often get set up silently when you install Nvidia's proprietary graphics
 driver, VirtualBox, or other software that requires a some support from a
 module not part of the Linux kernel. That why your might need to uninstall the
 packages with such software to get rid of any 3rd party kernel module.
-
-
-Document how to reproduce issue
--------------------------------
-
-    *Write down coarsely how to reproduce the issue.*
-
-During the reporting process you will have to test if the issue
-happens with other kernel versions. Therefore, it will make your work easier if
-you know exactly how to reproduce an issue quickly on a freshly booted system.
-
-Note: it's often fruitless to report issues that only happened once, as they
-might be caused by a bit flip due to cosmic radiation. That's why you should
-try to rule that out by reproducing the issue before going further. Feel free
-to ignore this advice if you are experienced enough to tell a one-time error
-due to faulty hardware apart from a kernel issue that rarely happens and thus
-is hard to reproduce.
 
 
 Regression in stable or longterm kernel?
