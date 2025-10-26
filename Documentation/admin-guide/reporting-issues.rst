@@ -48,6 +48,16 @@ Once the report is out, answer any questions that come up and help where you
 can. That includes keeping the ball rolling by occasionally retesting with newer
 releases and sending a status update afterwards.
 
+..
+   Note: If you see this note, you are reading the text's source file. You
+   might want to switch to a rendered version: It makes it a lot easier to
+   read and navigate this document -- especially when you want to look something
+   up in the reference section, then jump back to where you left off.
+..
+   Find the latest rendered version of this text here:
+   https://docs.kernel.org/admin-guide/reporting-issues.html
+
+
 Step-by-step guide how to report issues to the kernel maintainers
 =================================================================
 
@@ -1748,13 +1758,13 @@ art will lay some groundwork to improve the situation over time.
    you spot a typo or small mistake, feel free to let him know directly and
    he'll fix it. You are free to do the same in a mostly informal way if you
    want to contribute changes to the text, but for copyright reasons please CC
-   linux-doc@vger.kernel.org and "sign-off" your contribution as
-   Documentation/process/submitting-patches.rst outlines in the section "Sign
-   your work - the Developer's Certificate of Origin".
+   linux-doc@vger.kernel.org and 'sign-off' your contribution as
+   Documentation/process/submitting-patches.rst outlines in the section 'Sign
+   your work - the Developer's Certificate of Origin'.
 ..
    This text is available under GPL-2.0+ or CC-BY-4.0, as stated at the top
    of the file. If you want to distribute this text under CC-BY-4.0 only,
-   please use "The Linux kernel developers" for author attribution and link
+   please use 'The Linux kernel developers' for author attribution and link
    this as source:
    https://git.kernel.org/pub/scm/linux/kernel/git/torvalds/linux.git/plain/Documentation/admin-guide/reporting-issues.rst
 ..
