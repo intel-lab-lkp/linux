@@ -716,6 +716,7 @@ static int __remove_mapping(struct address_space *mapping, struct folio *folio,
 	if (folio_test_swapcache(folio)) {
 		ci = swap_cluster_get_and_lock_irq(folio);
 	} else {
+		store_into_cleancache(mapping, folio);
 		spin_lock(&mapping->host->i_lock);
 		xa_lock_irq(&mapping->i_pages);
 	}

@@ -6053,6 +6053,14 @@ F:	scripts/Makefile.clang
 F:	scripts/clang-tools/
 K:	\b(?i:clang|llvm)\b
 
+CLEANCACHE
+M:	Suren Baghdasaryan <surenb@google.com>
+M:	Minchan Kim <minchan@google.com>
+L:	linux-mm@kvack.org
+S:	Maintained
+F:	include/linux/cleancache.h
+F:	mm/cleancache.c
+
 CLK API
 M:	Russell King <linux@armlinux.org.uk>
 L:	linux-clk@vger.kernel.org

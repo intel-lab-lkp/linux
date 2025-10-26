@@ -36,6 +36,7 @@
 #include <linux/cpuset.h>
 #include <linux/hugetlb.h>
 #include <linux/memcontrol.h>
+#include <linux/cleancache.h>
 #include <linux/shmem_fs.h>
 #include <linux/rmap.h>
 #include <linux/delayacct.h>
@@ -213,6 +214,19 @@ static void filemap_unaccount_folio(struct address_space *mapping,
 		folio_account_cleaned(folio, inode_to_wb(mapping->host));
 }
 
+void store_into_cleancache(struct address_space *mapping, struct folio *folio)
+{
+	/*
+	 * If we're uptodate, flush out into the cleancache, otherwise
+	 * invalidate any existing cleancache entries.  We can't leave
+	 * stale data around in the cleancache once our page is gone.
+	 */
+	if (folio_test_uptodate(folio) && folio_test_mappedtodisk(folio))
+		cleancache_store_folio(mapping->host, folio);
+	else
+		cleancache_invalidate_folio(mapping->host, folio);
+}
+
 /*
  * Delete a page from the page cache and free it. Caller has to make
  * sure the page is locked and that nobody else uses it - or that usage
@@ -251,6 +265,9 @@ void filemap_remove_folio(struct folio *folio)
 	struct address_space *mapping = folio->mapping;
 
 	BUG_ON(!folio_test_locked(folio));
+
+	store_into_cleancache(mapping, folio);
+
 	spin_lock(&mapping->host->i_lock);
 	xa_lock_irq(&mapping->i_pages);
 	__filemap_remove_folio(folio, NULL);
@@ -323,6 +340,9 @@ void delete_from_page_cache_batch(struct address_space *mapping,
 
 	if (!folio_batch_count(fbatch))
 		return;
+
+	for (i = 0; i < folio_batch_count(fbatch); i++)
+		store_into_cleancache(mapping, fbatch->folios[i]);
 
 	spin_lock(&mapping->host->i_lock);
 	xa_lock_irq(&mapping->i_pages);
@@ -2437,6 +2457,12 @@ static int filemap_read_folio(struct file *file, filler_t filler,
 	bool workingset = folio_test_workingset(folio);
 	unsigned long pflags;
 	int error;
+
+	if (cleancache_restore_folio(folio->mapping->host, folio)) {
+		folio_mark_uptodate(folio);
+		folio_unlock(folio);
+		return 0;
+	}
 
 	/* Start the actual read. The read will unlock the page. */
 	if (unlikely(workingset))

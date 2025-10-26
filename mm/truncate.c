@@ -20,6 +20,7 @@
 #include <linux/pagevec.h>
 #include <linux/task_io_accounting_ops.h>
 #include <linux/shmem_fs.h>
+#include <linux/cleancache.h>
 #include <linux/rmap.h>
 #include "internal.h"
 
@@ -136,6 +137,7 @@ void folio_invalidate(struct folio *folio, size_t offset, size_t length)
 {
 	const struct address_space_operations *aops = folio->mapping->a_ops;
 
+	cleancache_invalidate_folio(folio->mapping->host, folio);
 	if (aops->invalidate_folio)
 		aops->invalidate_folio(folio, offset, length);
 }
@@ -614,6 +616,8 @@ int folio_unmap_invalidate(struct address_space *mapping, struct folio *folio,
 		return -EBUSY;
 	if (!filemap_release_folio(folio, gfp))
 		return -EBUSY;
+
+	cleancache_invalidate_folio(mapping->host, folio);
 
 	spin_lock(&mapping->host->i_lock);
 	xa_lock_irq(&mapping->i_pages);

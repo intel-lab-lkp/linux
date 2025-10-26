@@ -33,6 +33,7 @@
 struct address_space;
 struct futex_private_hash;
 struct mem_cgroup;
+struct cleancache_inode;
 
 typedef struct {
 	unsigned long f;
@@ -392,16 +393,23 @@ struct folio {
 	/* public: */
 				struct dev_pagemap *pgmap;
 			};
-			struct address_space *mapping;
+			union {
+				struct address_space *mapping;
+				struct cleancache_inode *cc_inode;
+			};
 			union {
 				pgoff_t index;
+				pgoff_t cc_index;
 				unsigned long share;
 			};
 			union {
 				void *private;
 				swp_entry_t swap;
 			};
-			atomic_t _mapcount;
+			union {
+				atomic_t _mapcount;
+				int cc_pool_id;
+			};
 			atomic_t _refcount;
 #ifdef CONFIG_MEMCG
 			unsigned long memcg_data;

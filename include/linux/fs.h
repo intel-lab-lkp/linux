@@ -1583,6 +1583,12 @@ struct super_block {
 
 	spinlock_t		s_inode_wblist_lock;
 	struct list_head	s_inodes_wb;	/* writeback inodes */
+#ifdef CONFIG_CLEANCACHE
+	/*
+	 * Saved identifier for cleancache (CLEANCACHE_ID_INVALID means none)
+	 */
+	int cleancache_id;
+#endif
 } __randomize_layout;
 
 static inline struct user_namespace *i_user_ns(const struct inode *inode)
