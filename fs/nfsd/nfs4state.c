@@ -9071,7 +9071,7 @@ get_stateid(struct nfsd4_compound_state *cstate, stateid_t *stateid)
 }
 
 static void
-put_stateid(struct nfsd4_compound_state *cstate, stateid_t *stateid)
+put_stateid(struct nfsd4_compound_state *cstate, const stateid_t *stateid)
 {
 	if (cstate->minorversion) {
 		memcpy(&cstate->current_stateid, stateid, sizeof(stateid_t));
@@ -9082,7 +9082,7 @@ put_stateid(struct nfsd4_compound_state *cstate, stateid_t *stateid)
 void
 clear_current_stateid(struct nfsd4_compound_state *cstate)
 {
-	CLEAR_CSTATE_FLAG(cstate, CURRENT_STATE_ID_FLAG);
+	put_stateid(cstate, &zero_stateid);
 }
 
 /*
