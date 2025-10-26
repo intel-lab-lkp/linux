@@ -608,8 +608,12 @@ ieee80211_tdls_add_setup_cfm_ies(struct ieee80211_link_data *link,
 	sta = sta_info_get(sdata, peer);
 	ap_sta = sta_info_get(sdata, sdata->vif.cfg.ap_addr);
 
-	if (WARN_ON_ONCE(!sta || !ap_sta))
+	if (!sta || !ap_sta) {
+		sdata_err(sdata, "Missing STA info for peer %pM or AP %pM\n",
+			  peer,
+			  sdata->vif.cfg.ap_addr);
 		return;
+	}
 
 	sta->tdls_chandef = link->conf->chanreq.oper;
 
