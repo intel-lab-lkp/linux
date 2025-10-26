@@ -622,6 +622,34 @@ static int gswip_port_vlan_filtering(struct dsa_switch *ds, int port,
 	return 0;
 }
 
+static bool gswip_mii_delay_setup(struct gswip_priv *priv, struct dsa_port *dp)
+{
+	u32 tx_delay = GSWIP_MII_PCDU_TXDLY_DEFAULT;
+	u32 rx_delay = GSWIP_MII_PCDU_RXDLY_DEFAULT;
+	struct device_node *port_dn = dp->dn;
+	bool used;
+	int ret;
+
+	ret = of_property_read_u32(port_dn, "tx-internal-delay-ps", &tx_delay);
+	if (ret && ret != -EINVAL)
+		return ret;
+	used = !ret;
+
+	ret = of_property_read_u32(port_dn, "rx-internal-delay-ps", &rx_delay);
+	if (ret && ret != -EINVAL)
+		return ret;
+	used |= !ret;
+
+	if (used)
+		gswip_mii_mask_pcdu(priv, GSWIP_MII_PCDU_TXDLY_MASK |
+					  GSWIP_MII_PCDU_RXDLY_MASK,
+					  GSWIP_MII_PCDU_TXDLY(tx_delay) |
+					  GSWIP_MII_PCDU_RXDLY(rx_delay),
+					  dp->index);
+
+	return used;
+}
+
 static int gswip_setup(struct dsa_switch *ds)
 {
 	unsigned int cpu_ports = dsa_cpu_ports(ds);
@@ -1418,6 +1446,9 @@ static void gswip_phylink_mac_config(struct phylink_config *config,
 			   GSWIP_MII_CFG_MODE_MASK | GSWIP_MII_CFG_RMII_CLK |
 			   GSWIP_MII_CFG_RGMII_IBS | GSWIP_MII_CFG_LDCLKDIS,
 			   miicfg, port);
+
+	if (gswip_mii_delay_setup(priv, dp))
+		return;
 
 	switch (state->interface) {
 	case PHY_INTERFACE_MODE_RGMII_ID:
