@@ -128,10 +128,13 @@ following the others is usually in your own interest.
 
  [:ref:`details <checkloreone_repiref>`]
 
+.. _specialtreat_repisbs:
 
- * See if the issue you are dealing with qualifies as regression, security
-   issue, or a really severe problem: those are 'issues of high priority' that
-   need special handling in some steps that are about to follow.
+* Evaluate if the issue you are dealing with qualifies as a regression or
+  security issue, as those receive special treatment in some of the following
+  steps.
+
+ [:ref:`details <specialtreat_repiref>`]
 
  * Create a fresh backup and put system repair and restore tools at hand.
 
@@ -647,37 +650,30 @@ While doing so, keep in mind:
 [:ref:`back to step-by-step guide <checkloreone_repisbs>`]
 
 
-Issue of high priority?
------------------------
+.. _specialtreat_repiref:
 
-    *See if the issue you are dealing with qualifies as regression, security
-    issue, or a really severe problem: those are 'issues of high priority' that
-    need special handling in some steps that are about to follow.*
+Issues receiving special treatment
+----------------------------------
 
-Linus Torvalds and the leading Linux kernel developers want to see some issues
-fixed as soon as possible, hence there are 'issues of high priority' that get
-handled slightly differently in the reporting process. Three type of cases
-qualify: regressions, security issues, and really severe problems.
+  *Evaluate if the issue you are dealing with qualifies as a regression or
+  security issue, as those* [:ref:`... <specialtreat_repisbs>`]
 
-You deal with a regression if some application or practical use case running
-fine with one Linux kernel works worse or not at all with a newer version
-compiled using a similar configuration. The document
-Documentation/admin-guide/reporting-regressions.rst explains this in more
-detail. It also provides a good deal of other information about regressions you
-might want to be aware of; it for example explains how to add your issue to the
-list of tracked regressions, to ensure it won't fall through the cracks.
+Check if you face an issue that receives special treatment in the Linux
+development process:
 
-What qualifies as security issue is left to your judgment. Consider reading
-Documentation/process/security-bugs.rst before proceeding, as it
-provides additional details how to best handle security issues.
+* You deal with a regression, if some application or practical use case running
+  fine with one Linux kernel version works worse or not at all with a newer
+  version compiled using a similar configuration; the 'no regression' rule
+  forbids that. The document
+  Documentation/admin-guide/reporting-regressions.rst explains these and
+  additional aspects in more detail, but everything important is covered in
+  this document.
 
-An issue is a 'really severe problem' when something totally unacceptably bad
-happens. That's for example the case when a Linux kernel corrupts the data it's
-handling or damages hardware it's running on. You're also dealing with a severe
-issue when the kernel suddenly stops working with an error message ('kernel
-panic') or without any farewell note at all. Note: do not confuse a 'panic' (a
-fatal error where the kernel stop itself) with a 'Oops' (a recoverable error),
-as the kernel remains running after the latter.
+* What qualifies as a security issue is left to your judgment. Consider reading
+  Documentation/process/security-bugs.rst before proceeding, which
+  provides instructions on handling security issues.
+
+[:ref:`back to step-by-step guide <specialtreat_repisbs>`]
 
 
 Prepare for emergencies
