@@ -136,6 +136,19 @@ following the others is usually in your own interest.
 
  [:ref:`details <specialtreat_repiref>`]
 
+.. _reginquiry_repisbs:
+
+* Do you face a regression? One still occurring in a kernel version less than
+  two (ideally: one) weeks old? A kernel that is vanilla or close to it? If
+  you answered all three questions with 'yes', feel free to send a brief email
+  to the public 'Linux regressions mailing list <regressions@lists.linux.dev>'
+  asking if the problem is known. If someone confirms this to be the case,
+  there most likely is no need to follow this guide further; but do so in case
+  there is no reply with a pointer to a matching report within two or three
+  weekdays. You are also free to immediately continue if you feel like it.
+
+ [:ref:`details <reginquiry_repiref>`]
+
  * Create a fresh backup and put system repair and restore tools at hand.
 
  * Ensure your system does not enhance its kernels by building additional
@@ -674,6 +687,22 @@ development process:
   provides instructions on handling security issues.
 
 [:ref:`back to step-by-step guide <specialtreat_repisbs>`]
+
+
+.. _reginquiry_repiref:
+
+Fast track for regressions
+--------------------------
+
+  *Do you face a regression? One still occurring in a kernel version less than
+  two (ideally: one) weeks old? A kernel that is vanilla or close to it? If you
+  answered* [:ref:`... <reginquiry_repisbs>`]
+
+This is an optional fast track that might relieve you from further work on
+reporting in case the issue is already known. Note: It are volunteers that
+answer these emails on a best-effort basis.
+
+[:ref:`back to step-by-step guide <reginquiry_repisbs>`]
 
 
 Prepare for emergencies
