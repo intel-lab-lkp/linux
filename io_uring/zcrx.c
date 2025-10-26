@@ -587,6 +587,7 @@ int io_register_zcrx_ifq(struct io_ring_ctx *ctx,
 	if (!ifq)
 		return -ENOMEM;
 	ifq->rq_entries = reg.rq_entries;
+	refcount_set(&ifq->refs, 1);
 
 	scoped_guard(mutex, &ctx->mmap_lock) {
 		/* preallocate id */
@@ -730,8 +731,21 @@ void io_shutdown_zcrx_ifqs(struct io_ring_ctx *ctx)
 	lockdep_assert_held(&ctx->uring_lock);
 
 	xa_for_each(&ctx->zcrx_ctxs, index, ifq) {
-		io_zcrx_scrub(ifq);
-		io_close_queue(ifq);
+		if (xa_get_mark(&ctx->zcrx_ctxs, index, XA_MARK_0))
+			continue;
+
+		/* Safe to clean up from any ring. */
+		if (refcount_dec_and_test(&ifq->refs)) {
+			io_zcrx_scrub(ifq);
+			io_close_queue(ifq);
+		}
+
+		/*
+		 * This is called in a loop in io_ring_exit_work() until
+		 * ctx->refs drops to 0. Use marks to ensure refcounts are only
+		 * decremented once per ifq per ring.
+		 */
+		xa_set_mark(&ctx->zcrx_ctxs, index, XA_MARK_0);
 	}
 }
 
