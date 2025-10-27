@@ -3499,6 +3499,10 @@ static const struct of_device_id of_sci_match[] __maybe_unused = {
 	},
 #ifdef CONFIG_SERIAL_RSCI
 	{
+		.compatible = "renesas,r9a09g047-rsci",
+		.data = &of_rsci_sci_data,
+	},
+	{
 		.compatible = "renesas,r9a09g047-rscif",
 		.data = &of_rsci_scif_data,
 	},
