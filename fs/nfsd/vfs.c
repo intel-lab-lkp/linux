@@ -1175,47 +1175,71 @@ struct nfsd_write_dio_seg {
 
 struct nfsd_write_dio_args {
 	struct nfsd_file		*nf;
-	size_t				first, middle, last;
 	unsigned int			nsegs;
 	struct nfsd_write_dio_seg	segment[3];
 };
 
+/*
+ * Find the minimum offset within the write request that aligns both
+ * the file offset and memory buffer for direct I/O.
+ *
+ * Returns the size of the unaligned prefix, or SIZE_MAX if no alignment
+ * is possible within reasonable bounds.
+ */
+static size_t
+nfsd_find_dio_aligned_offset(struct nfsd_file *nf, loff_t file_offset,
+			     unsigned long mem_offset, size_t total_len)
+{
+	u32 offset_align = nf->nf_dio_offset_align;
+	u32 mem_align = nf->nf_dio_mem_align;
+	unsigned long search_limit;
+	size_t first;
+
+	/* Start with the file offset alignment requirement */
+	first = round_up(file_offset, offset_align) - file_offset;
+
+	/* Quick check: does this also satisfy memory alignment? */
+	if (((mem_offset + first) & (mem_align - 1)) == 0)
+		return first;
+
+	/*
+	 * Search for a value that satisfies both constraints by stepping
+	 * through multiples of offset_align. Limit search to one period
+	 * of the LCM. We need to check up through the search_limit to
+	 * cover all possible alignments within the LCM period.
+	 */
+	search_limit = min_t(unsigned long, nf->nf_dio_align_lcm, total_len);
+
+	for (; first <= search_limit && first < total_len; first += offset_align) {
+		if (((mem_offset + first) & (mem_align - 1)) == 0)
+			return first;
+	}
+
+	return SIZE_MAX;  /* No alignment found */
+}
+
+/*
+ * Check if the underlying file system implements direct I/O.
+ */
 static bool
 nfsd_is_write_dio_possible(loff_t offset, unsigned long len,
 			   struct nfsd_write_dio_args *args)
 {
-	u32 dio_blocksize = args->nf->nf_dio_offset_align;
-	loff_t first_end, orig_end, middle_end;
+	u32 offset_align = args->nf->nf_dio_offset_align;
+	u32 mem_align = args->nf->nf_dio_mem_align;
 
-	if (unlikely(!args->nf->nf_dio_mem_align || !dio_blocksize))
-		return false;
-	if (unlikely(len < dio_blocksize))
+	if (unlikely(!mem_align || !offset_align))
 		return false;
 
-	first_end = round_up(offset, dio_blocksize);
-	orig_end = offset + len;
-	middle_end = round_down(orig_end, dio_blocksize);
+	/*
+	 * Need enough data to potentially find an aligned segment.
+	 * In the worst case, we might need up to
+	 * lcm(offset_align, mem_align) bytes for the prefix.
+	 */
+	if (unlikely(len < max(offset_align, mem_align)))
+		return false;
 
-	args->first = first_end - offset;
-	args->middle = middle_end - first_end;
-	args->last = orig_end - middle_end;
 	return true;
-}
-
-/*
- * Check if the bvec iterator is aligned for direct I/O.
- *
- * bvecs generated from RPC receive buffers are contiguous: After the first
- * bvec, all subsequent bvecs start at bv_offset zero (page-aligned).
- * Therefore, only the first bvec is checked.
- */
-static bool
-nfsd_iov_iter_aligned_bvec(const struct nfsd_file *nf, const struct iov_iter *i)
-{
-	unsigned int addr_mask = nf->nf_dio_mem_align - 1;
-	const struct bio_vec *bvec = i->bvec;
-
-	return !((unsigned long)(bvec->bv_offset + i->iov_offset) & addr_mask);
 }
 
 static void
@@ -1232,29 +1256,45 @@ nfsd_write_dio_seg_init(struct nfsd_write_dio_seg *segment,
 
 static bool
 nfsd_setup_write_dio_iters(struct bio_vec *bvec, unsigned int nvecs,
-			   unsigned long total,
+			   loff_t offset, unsigned long total,
 			   struct nfsd_write_dio_args *args)
 {
+	u32 offset_align = args->nf->nf_dio_offset_align;
+	unsigned long mem_offset = bvec->bv_offset;
+	loff_t prefix_end, orig_end, middle_end;
+	size_t prefix, middle, suffix;
+
 	args->nsegs = 0;
 
-	if (args->first) {
+	prefix = nfsd_find_dio_aligned_offset(args->nf, offset, mem_offset,
+					     total);
+	if (prefix == SIZE_MAX)
+		return false;	/* No alignment possible */
+
+	prefix_end = offset + prefix;
+	orig_end = offset + total;
+	middle_end = round_down(orig_end, offset_align);
+
+	middle = middle_end - prefix_end;
+	suffix = orig_end - middle_end;
+
+	if (prefix) {
 		nfsd_write_dio_seg_init(&args->segment[args->nsegs], bvec,
-					nvecs, total, 0, args->first);
+					nvecs, total, 0, prefix);
 		++args->nsegs;
 	}
 
+	if (!middle)
+		return false;	/* No aligned region for DIO */
+
 	nfsd_write_dio_seg_init(&args->segment[args->nsegs], bvec, nvecs,
-				total, args->first, args->middle);
-	if (!nfsd_iov_iter_aligned_bvec(args->nf,
-					&args->segment[args->nsegs].iter))
-		return false;	/* no DIO-aligned IO possible */
+				total, prefix, middle);
 	args->segment[args->nsegs].use_dio = true;
 	++args->nsegs;
 
-	if (args->last) {
+	if (suffix) {
 		nfsd_write_dio_seg_init(&args->segment[args->nsegs], bvec,
-					nvecs, total, args->first +
-					args->middle, args->last);
+					nvecs, total, prefix + middle, suffix);
 		++args->nsegs;
 	}
 
@@ -1287,7 +1327,8 @@ nfsd_issue_write_dio(struct svc_rqst *rqstp, struct svc_fh *fhp, u32 *stable_how
 	ssize_t host_err;
 	unsigned int i;
 
-	if (!nfsd_setup_write_dio_iters(rqstp->rq_bvec, nvecs, *cnt, args))
+	if (!nfsd_setup_write_dio_iters(rqstp->rq_bvec, nvecs, kiocb->ki_pos,
+					*cnt, args))
 		return nfsd_buffered_write(rqstp, file, nvecs, cnt, kiocb);
 
 	/*

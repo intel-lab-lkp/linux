@@ -40,6 +40,7 @@
 #include <linux/seq_file.h>
 #include <linux/rhashtable.h>
 #include <linux/nfslocalio.h>
+#include <linux/lcm.h>
 
 #include "vfs.h"
 #include "nfsd.h"
@@ -234,6 +235,7 @@ nfsd_file_alloc(struct net *net, struct inode *inode, unsigned char need,
 	nf->nf_dio_mem_align = 0;
 	nf->nf_dio_offset_align = 0;
 	nf->nf_dio_read_offset_align = 0;
+	nf->nf_dio_align_lcm = 0;
 	return nf;
 }
 
@@ -1071,6 +1073,9 @@ nfsd_file_get_dio_attrs(const struct svc_fh *fhp, struct nfsd_file *nf)
 	if (stat.result_mask & STATX_DIOALIGN) {
 		nf->nf_dio_mem_align = stat.dio_mem_align;
 		nf->nf_dio_offset_align = stat.dio_offset_align;
+		if (stat.dio_mem_align && stat.dio_offset_align)
+			nf->nf_dio_align_lcm = lcm(stat.dio_mem_align,
+						   stat.dio_offset_align);
 	}
 	if (stat.result_mask & STATX_DIO_READ_ALIGN)
 		nf->nf_dio_read_offset_align = stat.dio_read_offset_align;
