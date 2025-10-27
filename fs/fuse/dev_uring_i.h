@@ -7,6 +7,7 @@
 #ifndef _FS_FUSE_DEV_URING_I_H
 #define _FS_FUSE_DEV_URING_I_H
 
+#include <linux/uio.h>
 #include "fuse_i.h"
 
 #ifdef CONFIG_FUSE_IO_URING
@@ -38,9 +39,29 @@ enum fuse_ring_req_state {
 
 /** A fuse ring entry, part of the ring queue */
 struct fuse_ring_ent {
-	/* userspace buffer */
-	struct fuse_uring_req_header __user *user_headers;
-	void __user *user_payload;
+	/*
+	 * If true, the buffer was pre-registered by the daemon and the
+	 * pages backing it are pinned in kernel memory. The fixed buffer layout
+	 * is: [payload][header at end]. Use payload_iter and headers for
+	 * copying to/from the ring.
+	 *
+	 * Otherwise, use user_headers and user_payload which point to userspace
+	 * addresses representing the ring memory.
+	 */
+	bool fixed_buffer;
+
+	union {
+		/* fixed_buffer == false */
+		struct {
+			struct fuse_uring_req_header __user *user_headers;
+			void __user *user_payload;
+		};
+		/* fixed_buffer == true */
+		struct {
+			struct fuse_uring_req_header *headers;
+			struct iov_iter payload_iter;
+		};
+	};
 
 	/* the ring queue that owns the request */
 	struct fuse_ring_queue *queue;
