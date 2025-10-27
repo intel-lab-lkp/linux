@@ -8444,7 +8444,8 @@ void md_unregister_thread(struct mddev *mddev, struct md_thread __rcu **threadp)
 }
 EXPORT_SYMBOL(md_unregister_thread);
 
-void md_error(struct mddev *mddev, struct md_rdev *rdev)
+void _md_error(struct mddev *mddev, struct md_rdev *rdev)
+	__must_hold(&mddev->device_lock)
 {
 	if (!rdev || test_bit(Faulty, &rdev->flags))
 		return;
@@ -8468,6 +8469,13 @@ void md_error(struct mddev *mddev, struct md_rdev *rdev)
 	if (mddev->event_work.func)
 		queue_work(md_misc_wq, &mddev->event_work);
 	md_new_event();
+}
+
+void md_error(struct mddev *mddev, struct md_rdev *rdev)
+{
+	spin_lock(&mddev->device_lock);
+	_md_error(mddev, rdev);
+	spin_unlock(&mddev->device_lock);
 }
 EXPORT_SYMBOL(md_error);
 

@@ -2905,15 +2905,14 @@ static void raid5_end_write_request(struct bio *bi)
 }
 
 static void raid5_error(struct mddev *mddev, struct md_rdev *rdev)
+	__must_hold(&mddev->device_lock)
 {
 	struct r5conf *conf = mddev->private;
-	unsigned long flags;
 	pr_debug("raid456: error called\n");
 
 	pr_crit("md/raid:%s: Disk failure on %pg, disabling device.\n",
 		mdname(mddev), rdev->bdev);
 
-	spin_lock_irqsave(&conf->mddev->device_lock, flags);
 	set_bit(Faulty, &rdev->flags);
 	clear_bit(In_sync, &rdev->flags);
 	mddev->degraded = raid5_calc_degraded(conf);
@@ -2929,7 +2928,6 @@ static void raid5_error(struct mddev *mddev, struct md_rdev *rdev)
 			mdname(mddev), conf->raid_disks - mddev->degraded);
 	}
 
-	spin_unlock_irqrestore(&conf->mddev->device_lock, flags);
 	set_bit(MD_RECOVERY_INTR, &mddev->recovery);
 
 	set_bit(Blocked, &rdev->flags);

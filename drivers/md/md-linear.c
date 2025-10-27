@@ -298,6 +298,7 @@ static void linear_status(struct seq_file *seq, struct mddev *mddev)
 }
 
 static void linear_error(struct mddev *mddev, struct md_rdev *rdev)
+	__must_hold(&mddev->device_lock)
 {
 	if (!test_and_set_bit(MD_BROKEN, &mddev->flags)) {
 		char *md_name = mdname(mddev);

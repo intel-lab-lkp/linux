@@ -1993,19 +1993,15 @@ static int enough(struct r10conf *conf, int ignore)
  * &mddev->fail_last_dev is off.
  */
 static void raid10_error(struct mddev *mddev, struct md_rdev *rdev)
+	__must_hold(&mddev->device_lock)
 {
 	struct r10conf *conf = mddev->private;
-	unsigned long flags;
-
-	spin_lock_irqsave(&conf->mddev->device_lock, flags);
 
 	if (test_bit(In_sync, &rdev->flags) && !enough(conf, rdev->raid_disk)) {
 		set_bit(MD_BROKEN, &mddev->flags);
 
-		if (!mddev->fail_last_dev) {
-			spin_unlock_irqrestore(&conf->mddev->device_lock, flags);
+		if (!mddev->fail_last_dev)
 			return;
-		}
 	}
 	if (test_and_clear_bit(In_sync, &rdev->flags))
 		mddev->degraded++;
@@ -2015,7 +2011,6 @@ static void raid10_error(struct mddev *mddev, struct md_rdev *rdev)
 	set_bit(Faulty, &rdev->flags);
 	set_mask_bits(&mddev->sb_flags, 0,
 		      BIT(MD_SB_CHANGE_DEVS) | BIT(MD_SB_CHANGE_PENDING));
-	spin_unlock_irqrestore(&conf->mddev->device_lock, flags);
 	pr_crit("md/raid10:%s: Disk failure on %pg, disabling device.\n"
 		"md/raid10:%s: Operation continuing on %d devices.\n",
 		mdname(mddev), rdev->bdev,

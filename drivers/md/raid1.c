@@ -1749,11 +1749,9 @@ static void raid1_status(struct seq_file *seq, struct mddev *mddev)
  * &mddev->fail_last_dev is off.
  */
 static void raid1_error(struct mddev *mddev, struct md_rdev *rdev)
+	__must_hold(&mddev->device_lock)
 {
 	struct r1conf *conf = mddev->private;
-	unsigned long flags;
-
-	spin_lock_irqsave(&conf->mddev->device_lock, flags);
 
 	if (test_bit(In_sync, &rdev->flags) &&
 	    (conf->raid_disks - mddev->degraded) == 1) {
@@ -1761,7 +1759,6 @@ static void raid1_error(struct mddev *mddev, struct md_rdev *rdev)
 
 		if (!mddev->fail_last_dev) {
 			conf->recovery_disabled = mddev->recovery_disabled;
-			spin_unlock_irqrestore(&conf->mddev->device_lock, flags);
 			return;
 		}
 	}
@@ -1769,7 +1766,6 @@ static void raid1_error(struct mddev *mddev, struct md_rdev *rdev)
 	if (test_and_clear_bit(In_sync, &rdev->flags))
 		mddev->degraded++;
 	set_bit(Faulty, &rdev->flags);
-	spin_unlock_irqrestore(&conf->mddev->device_lock, flags);
 	/*
 	 * if recovery is running, make sure it aborts.
 	 */
