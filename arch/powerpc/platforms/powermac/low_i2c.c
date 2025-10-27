@@ -802,8 +802,10 @@ static void __init pmu_i2c_probe(void)
 	for (channel = 1; channel <= 2; channel++) {
 		sz = sizeof(struct pmac_i2c_bus) + sizeof(struct adb_request);
 		bus = kzalloc(sz, GFP_KERNEL);
-		if (bus == NULL)
+		if (bus == NULL) {
+			of_node_put(busnode);
 			return;
+		}
 
 		bus->controller = busnode;
 		bus->busnode = busnode;
@@ -928,6 +930,7 @@ static void __init smu_i2c_probe(void)
 		bus = kzalloc(sz, GFP_KERNEL);
 		if (bus == NULL) {
 			of_node_put(busnode);
+			of_node_put(controller);
 			return;
 		}
 
