@@ -1546,6 +1546,11 @@ static void ntb_memcpy_rx(struct ntb_queue_entry *entry, void *offset)
 	ntb_rx_copy_callback(entry, NULL);
 }
 
+static inline struct page *ntb_vaddr_to_page(const void *addr)
+{
+	return is_vmalloc_addr(addr) ? vmalloc_to_page(addr) : virt_to_page(addr);
+}
+
 static int ntb_async_rx_submit(struct ntb_queue_entry *entry, void *offset)
 {
 	struct dma_async_tx_descriptor *txd;
@@ -1570,7 +1575,7 @@ static int ntb_async_rx_submit(struct ntb_queue_entry *entry, void *offset)
 		goto err;
 
 	unmap->len = len;
-	unmap->addr[0] = dma_map_page(device->dev, virt_to_page(offset),
+	unmap->addr[0] = dma_map_page(device->dev, ntb_vaddr_to_page(offset),
 				      pay_off, len, DMA_TO_DEVICE);
 	if (dma_mapping_error(device->dev, unmap->addr[0]))
 		goto err_get_unmap;
