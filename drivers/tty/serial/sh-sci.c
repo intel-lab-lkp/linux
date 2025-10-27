@@ -2994,6 +2994,9 @@ static int sci_init_clocks(struct sci_port *sci_port, struct device *dev)
 		[SCI_SCK] = "sck",
 		[SCI_BRG_INT] = "brg_int",
 		[SCI_SCIF_CLK] = "scif_clk",
+		[SCI_FCK_DIV64] = "tclk_div64",
+		[SCI_FCK_DIV16] = "tclk_div16",
+		[SCI_FCK_DIV4] = "tclk_div4",
 	};
 	struct clk *clk;
 	unsigned int i;
@@ -3002,6 +3005,9 @@ static int sci_init_clocks(struct sci_port *sci_port, struct device *dev)
 		clk_names[SCI_SCK] = "hsck";
 	} else if (sci_port->type == SCI_PORT_RSCI) {
 		clk_names[SCI_FCK] = "operation";
+		clk_names[SCI_BRG_INT] = "bus";
+	} else if (sci_port->type == RSCI_PORT_SCI || sci_port->type == RSCI_PORT_SCIF) {
+		clk_names[SCI_FCK] = "tclk";
 		clk_names[SCI_BRG_INT] = "bus";
 	}
 
@@ -3014,6 +3020,14 @@ static int sci_init_clocks(struct sci_port *sci_port, struct device *dev)
 
 		if (!clk && sci_port->type == SCI_PORT_RSCI &&
 		    (i == SCI_FCK || i == SCI_BRG_INT)) {
+			return dev_err_probe(dev, -ENODEV, "failed to get %s\n",
+					     name);
+		}
+
+		if (!clk && (sci_port->type == RSCI_PORT_SCI ||
+			     sci_port->type == RSCI_PORT_SCIF) &&
+		    (i == SCI_FCK || i == SCI_BRG_INT || i == SCI_FCK_DIV64 ||
+		     i == SCI_FCK_DIV16 || i == SCI_FCK_DIV4)) {
 			return dev_err_probe(dev, -ENODEV, "failed to get %s\n",
 					     name);
 		}
