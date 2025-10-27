@@ -2515,7 +2515,7 @@ static int schemata_list_add(struct rdt_resource *r, enum resctrl_conf_type type
 		return -EINVAL;
 	}
 
-	cl = strlen(s->name);
+	cl = ret;
 
 	/*
 	 * If CDP is supported by this resource, but not enabled,
