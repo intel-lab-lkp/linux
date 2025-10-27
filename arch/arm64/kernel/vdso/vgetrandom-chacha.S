@@ -40,7 +40,7 @@
  *	x2: 8-byte counter input/output
  *	x3: number of 64-byte block to write to output
  */
-SYM_FUNC_START(__arch_chacha20_blocks_nostack)
+SYM_FUNC_START_NOTRACE(__arch_chacha20_blocks_nostack)
 
 	/* copy0 = "expand 32-byte k" */
 	mov_q		x8, 0x3320646e61707865
