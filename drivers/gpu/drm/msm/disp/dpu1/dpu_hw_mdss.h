@@ -149,6 +149,10 @@ enum dpu_dspp {
 	DSPP_1,
 	DSPP_2,
 	DSPP_3,
+	DSPP_4,
+	DSPP_5,
+	DSPP_6,
+	DSPP_7,
 	DSPP_MAX
 };
 
@@ -159,6 +163,8 @@ enum dpu_ctl {
 	CTL_3,
 	CTL_4,
 	CTL_5,
+	CTL_6,
+	CTL_7,
 	CTL_MAX
 };
 
