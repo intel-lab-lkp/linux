@@ -4040,6 +4040,26 @@ static inline void clear_page_guard(struct zone *zone, struct page *page,
 				unsigned int order) {}
 #endif	/* CONFIG_DEBUG_PAGEALLOC */
 
+#ifndef __HAVE_ARCH_CLEAR_PAGES
+/**
+ * clear_pages() - clear a page range for kernel-internal use.
+ * @addr: start address
+ * @npages: number of pages
+ *
+ * Use clear_user_pages() instead when clearing a page range to be
+ * mapped to user space.
+ *
+ * Does absolutely no exception handling.
+ */
+static inline void clear_pages(void *addr, unsigned int npages)
+{
+	do {
+		clear_page(addr);
+		addr += PAGE_SIZE;
+	} while (--npages);
+}
+#endif
+
 #ifndef __HAVE_ARCH_CLEAR_USER_PAGE
 /**
  * clear_user_page() - clear a page to be mapped to user space
@@ -4061,6 +4081,27 @@ static inline void clear_user_page(void *addr, unsigned long vaddr, struct page 
 #endif
 }
 #endif
+
+/**
+ * clear_user_pages() - clear a page range to be mapped to user space
+ * @addr: start address
+ * @vaddr: start address of the user mapping
+ * @page: start page
+ * @npages: number of pages
+ *
+ * Assumes that the region (@addr, +@npages) has been validated
+ * already so this does no exception handling.
+ */
+#ifdef __HAVE_ARCH_CLEAR_USER_PAGE
+void clear_user_pages(void *addr, unsigned long vaddr,
+		struct page *page, unsigned int npages);
+#else /* !__HAVE_ARCH_CLEAR_USER_PAGE */
+static inline void clear_user_pages(void *addr, unsigned long vaddr,
+		struct page *page, unsigned int npages)
+{
+	clear_pages(addr, npages);
+}
+#endif /* __HAVE_ARCH_CLEAR_USER_PAGE */
 
 #ifdef __HAVE_ARCH_GATE_AREA
 extern struct vm_area_struct *get_gate_vma(struct mm_struct *mm);
