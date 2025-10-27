@@ -5180,8 +5180,9 @@ static void napi_schedule_rps(struct softnet_data *sd)
 	__napi_schedule_irqoff(&mysd->backlog);
 }
 
-void kick_defer_list_purge(struct softnet_data *sd, unsigned int cpu)
+void kick_defer_list_purge(unsigned int cpu)
 {
+	struct softnet_data *sd = &per_cpu(softnet_data, cpu);
 	unsigned long flags;
 
 	if (use_backlog_threads()) {
@@ -6715,24 +6716,24 @@ bool napi_complete_done(struct napi_struct *n, int work_done)
 }
 EXPORT_SYMBOL(napi_complete_done);
 
-static void skb_defer_free_flush(struct softnet_data *sd)
+static void skb_defer_free_flush(void)
 {
+	struct llist_node *free_list;
 	struct sk_buff *skb, *next;
+	struct skb_defer_node *sdn;
+	int node;
 
-	/* Paired with WRITE_ONCE() in skb_attempt_defer_free() */
-	if (!READ_ONCE(sd->defer_list))
-		return;
+	for_each_node(node) {
+		sdn = this_cpu_ptr(net_hotdata.skb_defer_nodes) + node;
 
-	spin_lock(&sd->defer_lock);
-	skb = sd->defer_list;
-	sd->defer_list = NULL;
-	sd->defer_count = 0;
-	spin_unlock(&sd->defer_lock);
+		if (llist_empty(&sdn->defer_list))
+			continue;
+		atomic_long_set(&sdn->defer_count, 0);
+		free_list = llist_del_all(&sdn->defer_list);
 
-	while (skb != NULL) {
-		next = skb->next;
-		napi_consume_skb(skb, 1);
-		skb = next;
+		llist_for_each_entry_safe(skb, next, free_list, ll_node) {
+			napi_consume_skb(skb, 1);
+		}
 	}
 }
 
@@ -6860,7 +6861,7 @@ count:
 		if (work > 0)
 			__NET_ADD_STATS(dev_net(napi->dev),
 					LINUX_MIB_BUSYPOLLRXPACKETS, work);
-		skb_defer_free_flush(this_cpu_ptr(&softnet_data));
+		skb_defer_free_flush();
 		bpf_net_ctx_clear(bpf_net_ctx);
 		local_bh_enable();
 
@@ -7719,7 +7720,7 @@ static void napi_threaded_poll_loop(struct napi_struct *napi)
 			local_irq_disable();
 			net_rps_action_and_irq_enable(sd);
 		}
-		skb_defer_free_flush(sd);
+		skb_defer_free_flush();
 		bpf_net_ctx_clear(bpf_net_ctx);
 		local_bh_enable();
 
@@ -7761,7 +7762,7 @@ start:
 	for (;;) {
 		struct napi_struct *n;
 
-		skb_defer_free_flush(sd);
+		skb_defer_free_flush();
 
 		if (list_empty(&list)) {
 			if (list_empty(&repoll)) {
@@ -12175,6 +12176,35 @@ static void dev_memory_provider_uninstall(struct net_device *dev)
 	}
 }
 
+/* devices must be UP and netdev_lock()'d */
+static void netif_close_many_and_unlock(struct list_head *close_head)
+{
+	struct net_device *dev, *tmp;
+
+	netif_close_many(close_head, false);
+
+	/* ... now unlock them */
+	list_for_each_entry_safe(dev, tmp, close_head, close_list) {
+		netdev_unlock(dev);
+		list_del_init(&dev->close_list);
+	}
+}
+
+static void netif_close_many_and_unlock_cond(struct list_head *close_head)
+{
+#ifdef CONFIG_LOCKDEP
+	/* We can only track up to MAX_LOCK_DEPTH locks per task.
+	 *
+	 * Reserve half the available slots for additional locks possibly
+	 * taken by notifiers and (soft)irqs.
+	 */
+	unsigned int limit = MAX_LOCK_DEPTH / 2;
+
+	if (lockdep_depth(current) > limit)
+		netif_close_many_and_unlock(close_head);
+#endif
+}
+
 void unregister_netdevice_many_notify(struct list_head *head,
 				      u32 portid, const struct nlmsghdr *nlh)
 {
@@ -12207,17 +12237,18 @@ void unregister_netdevice_many_notify(struct list_head *head,
 
 	/* If device is running, close it first. Start with ops locked... */
 	list_for_each_entry(dev, head, unreg_list) {
+		if (!(dev->flags & IFF_UP))
+			continue;
 		if (netdev_need_ops_lock(dev)) {
 			list_add_tail(&dev->close_list, &close_head);
 			netdev_lock(dev);
 		}
+		netif_close_many_and_unlock_cond(&close_head);
 	}
-	netif_close_many(&close_head, true);
-	/* ... now unlock them and go over the rest. */
+	netif_close_many_and_unlock(&close_head);
+	/* ... now go over the rest. */
 	list_for_each_entry(dev, head, unreg_list) {
-		if (netdev_need_ops_lock(dev))
-			netdev_unlock(dev);
-		else
+		if (!netdev_need_ops_lock(dev))
 			list_add_tail(&dev->close_list, &close_head);
 	}
 	netif_close_many(&close_head, true);
@@ -12995,7 +13026,6 @@ static int __init net_dev_init(void)
 		sd->cpu = i;
 #endif
 		INIT_CSD(&sd->defer_csd, trigger_rx_softirq, sd);
-		spin_lock_init(&sd->defer_lock);
 
 		gro_init(&sd->backlog.gro);
 		sd->backlog.poll = process_backlog;
@@ -13005,6 +13035,11 @@ static int __init net_dev_init(void)
 		if (net_page_pool_create(i))
 			goto out;
 	}
+	net_hotdata.skb_defer_nodes =
+		 __alloc_percpu(sizeof(struct skb_defer_node) * nr_node_ids,
+				__alignof__(struct skb_defer_node));
+	if (!net_hotdata.skb_defer_nodes)
+		goto out;
 	if (use_backlog_threads())
 		smpboot_register_percpu_thread(&backlog_threads);
 
