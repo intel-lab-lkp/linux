@@ -261,6 +261,7 @@ struct virtio_gpu_device {
 	bool has_resource_blob;
 	bool has_host_visible;
 	bool has_context_init;
+	bool hibernation;
 	struct virtio_shm_region host_visible_region;
 	struct drm_mm host_visible_mm;
 
@@ -276,6 +277,8 @@ struct virtio_gpu_device {
 	uint32_t num_capsets;
 	uint64_t capset_id_mask;
 	struct list_head cap_cache;
+
+	struct notifier_block pm_nb;
 
 	/* protects uuid state when exporting */
 	spinlock_t resource_export_lock;
