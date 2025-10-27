@@ -271,8 +271,29 @@ static void svm_set_interrupt_shadow(struct kvm_vcpu *vcpu, int mask)
 
 }
 
+static bool emulated_instruction_matches_vector(struct kvm_vcpu *vcpu,
+						unsigned int vector)
+{
+	switch (vector) {
+	case BP_VECTOR:
+		return vcpu->arch.emulate_ctxt->b == 0xcc ||
+		       (vcpu->arch.emulate_ctxt->b == 0xcd &&
+			vcpu->arch.emulate_ctxt->src.val == BP_VECTOR);
+	case OF_VECTOR:
+		return vcpu->arch.emulate_ctxt->b == 0xce;
+	default:
+		return false;
+	}
+}
+
+/*
+ * If vector != 0, then this skips the instruction only if the instruction could
+ * generate an interrupt with that vector. If not, then it fails, indicating
+ * that the instruction should be retried.
+ */
 static int __svm_skip_emulated_instruction(struct kvm_vcpu *vcpu,
-					   bool commit_side_effects)
+					   bool commit_side_effects,
+					   unsigned int vector)
 {
 	struct vcpu_svm *svm = to_svm(vcpu);
 	unsigned long old_rflags;
@@ -293,8 +314,18 @@ static int __svm_skip_emulated_instruction(struct kvm_vcpu *vcpu,
 		if (unlikely(!commit_side_effects))
 			old_rflags = svm->vmcb->save.rflags;
 
-		if (!kvm_emulate_instruction(vcpu, EMULTYPE_SKIP))
+		if (vector == 0) {
+			if (!kvm_emulate_instruction(vcpu, EMULTYPE_SKIP))
+				return 0;
+		} else if (x86_decode_emulated_instruction(vcpu, EMULTYPE_SKIP,
+							   NULL,
+							   0) != EMULATION_OK ||
+			   !emulated_instruction_matches_vector(vcpu, vector) ||
+			   !kvm_emulate_instruction(vcpu,
+						    EMULTYPE_SKIP |
+						    EMULTYPE_NO_DECODE)) {
 			return 0;
+		}
 
 		if (unlikely(!commit_side_effects))
 			svm->vmcb->save.rflags = old_rflags;
@@ -311,7 +342,7 @@ done:
 
 static int svm_skip_emulated_instruction(struct kvm_vcpu *vcpu)
 {
-	return __svm_skip_emulated_instruction(vcpu, true);
+	return __svm_skip_emulated_instruction(vcpu, true, 0);
 }
 
 static int svm_update_soft_interrupt_rip(struct kvm_vcpu *vcpu)
@@ -331,7 +362,8 @@ static int svm_update_soft_interrupt_rip(struct kvm_vcpu *vcpu)
 	 * in use, the skip must not commit any side effects such as clearing
 	 * the interrupt shadow or RFLAGS.RF.
 	 */
-	if (!__svm_skip_emulated_instruction(vcpu, !nrips))
+	if (!__svm_skip_emulated_instruction(vcpu, !nrips,
+					     vcpu->arch.exception.vector))
 		return -EIO;
 
 	rip = kvm_rip_read(vcpu);
