@@ -2046,7 +2046,17 @@ static inline void mark_objexts_empty(struct slabobj_ext *obj_exts)
 	if (slab_exts) {
 		unsigned int offs = obj_to_index(obj_exts_slab->slab_cache,
 						 obj_exts_slab, obj_exts);
-		/* codetag should be NULL */
+
+		/*
+		 * codetag should be either NULL or CODETAG_EMPTY.
+		 * When the same slab calls handle_failed_objexts_alloc,
+		 * it will set us to CODETAG_EMPTY.
+		 *
+		 * If codetag is already CODETAG_EMPTY, no action is needed here.
+		 */
+		if (unlikely(is_codetag_empty(&slab_exts[offs].ref)))
+			return;
+
 		WARN_ON(slab_exts[offs].ref.ct);
 		set_codetag_empty(&slab_exts[offs].ref);
 	}
