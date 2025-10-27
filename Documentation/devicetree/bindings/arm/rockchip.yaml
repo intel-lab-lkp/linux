@@ -958,7 +958,7 @@ properties:
           - const: radxa,rockpis
           - const: rockchip,rk3308
 
-      - description: Radxa Rock 2 Square
+      - description: Radxa Rock2 Square
         items:
           - const: radxa,rock2-square
           - const: rockchip,rk3288
