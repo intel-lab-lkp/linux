@@ -135,13 +135,13 @@ static struct irq_domain * __init flipper_pic_init(struct device_node *np)
 	}
 	if (!of_device_is_compatible(pi, "nintendo,flipper-pi")) {
 		pr_err("unexpected parent compatible\n");
-		goto out;
+		goto out_put_node;
 	}
 
 	retval = of_address_to_resource(pi, 0, &res);
 	if (retval) {
 		pr_err("no io memory range found\n");
-		goto out;
+		goto out_put_node;
 	}
 	io_base = ioremap(res.start, resource_size(&res));
 
@@ -154,9 +154,12 @@ static struct irq_domain * __init flipper_pic_init(struct device_node *np)
 					      &flipper_irq_domain_ops, io_base);
 	if (!irq_domain) {
 		pr_err("failed to allocate irq_domain\n");
+		of_node_put(pi);
 		return NULL;
 	}
 
+out_put_node:
+	of_node_put(pi);
 out:
 	return irq_domain;
 }
