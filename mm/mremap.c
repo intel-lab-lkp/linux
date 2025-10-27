@@ -171,23 +171,13 @@ static pte_t move_soft_dirty_pte(pte_t pte)
 	return pte;
 }
 
-static int mremap_folio_pte_batch(struct vm_area_struct *vma, unsigned long addr,
+static int mremap_pte_batch(struct vm_area_struct *vma, unsigned long addr,
 		pte_t *ptep, pte_t pte, int max_nr)
 {
-	struct folio *folio;
-
 	if (max_nr == 1)
 		return 1;
 
-	/* Avoid expensive folio lookup if we stand no chance of benefit. */
-	if (pte_batch_hint(ptep, pte) == 1)
-		return 1;
-
-	folio = vm_normal_folio(vma, addr, pte);
-	if (!folio || !folio_test_large(folio))
-		return 1;
-
-	return folio_pte_batch(folio, ptep, pte, max_nr);
+	return can_pte_batch_count(vma, ptep, &pte, max_nr, 0);
 }
 
 static int move_ptes(struct pagetable_move_control *pmc,
@@ -280,7 +270,7 @@ static int move_ptes(struct pagetable_move_control *pmc,
 		 * flushed.
 		 */
 		if (pte_present(old_pte)) {
-			nr_ptes = mremap_folio_pte_batch(vma, old_addr, old_ptep,
+			nr_ptes = mremap_pte_batch(vma, old_addr, old_ptep,
 							 old_pte, max_nr_ptes);
 			force_flush = true;
 		}
