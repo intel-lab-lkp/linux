@@ -630,6 +630,28 @@ static int copy_header_from_ring(struct fuse_ring_ent *ent,
 	return 0;
 }
 
+static int setup_fuse_copy_state(struct fuse_ring *ring, struct fuse_req *req,
+				 struct fuse_ring_ent* ent, int rw,
+				 struct iov_iter *iter,
+				 struct fuse_copy_state *cs)
+{
+	int err;
+
+	err = import_ubuf(rw, ent->user_payload, ring->max_payload_sz,
+			  iter);
+	if (err) {
+		pr_info_ratelimited("fuse: Import of user buffer failed\n");
+		return err;
+	}
+
+	fuse_copy_init(cs, rw == ITER_DEST, iter);
+
+	cs->is_uring = true;
+	cs->req = req;
+
+	return 0;
+}
+
 static int fuse_uring_copy_from_ring(struct fuse_ring *ring,
 				     struct fuse_req *req,
 				     struct fuse_ring_ent *ent)
@@ -645,14 +667,9 @@ static int fuse_uring_copy_from_ring(struct fuse_ring *ring,
 	if (err)
 		return err;
 
-	err = import_ubuf(ITER_SOURCE, ent->user_payload, ring->max_payload_sz,
-			  &iter);
+	err = setup_fuse_copy_state(ring, req, ent, ITER_SOURCE, &iter, &cs);
 	if (err)
 		return err;
-
-	fuse_copy_init(&cs, false, &iter);
-	cs.is_uring = true;
-	cs.req = req;
 
 	return fuse_copy_out_args(&cs, args, ring_in_out.payload_sz);
 }
@@ -674,15 +691,9 @@ static int fuse_uring_args_to_ring(struct fuse_ring *ring, struct fuse_req *req,
 		.commit_id = req->in.h.unique,
 	};
 
-	err = import_ubuf(ITER_DEST, ent->user_payload, ring->max_payload_sz, &iter);
-	if (err) {
-		pr_info_ratelimited("fuse: Import of user buffer failed\n");
+	err = setup_fuse_copy_state(ring, req, ent, ITER_DEST, &iter, &cs);
+	if (err)
 		return err;
-	}
-
-	fuse_copy_init(&cs, true, &iter);
-	cs.is_uring = true;
-	cs.req = req;
 
 	if (num_args > 0) {
 		/*
