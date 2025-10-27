@@ -171,6 +171,9 @@ which allow them to directly push patches to the media development tree instead
 of posting a Pull Request for the Media Subsystem Maintainers. This helps
 offloading some of the work of the Media Subsystem Maintainers.
 
+More details about Media Committers' roles and responsibilities can be
+found here: :ref:`Media Committers`.
+
 Media development tree
 ----------------------
 
@@ -332,8 +335,18 @@ See: :ref:`kernel_org_trust_repository`.
 
 With the pull request workflow, pull requests shall use PGP-signed tags.
 
+With the committers' workflow, this is ensured at the time merge request
+rights will be granted to the gitlab instance used by the media-committers.git
+tree, after receiving the e-mail documented in
+:ref:`media-committer-agreement`.
+
 For more details about PGP sign, please read
 Documentation/process/maintainer-pgp-guide.rst.
+
+Maintaining media maintainer status
+-----------------------------------
+
+See :ref:`Maintain Media Status`.
 
 Subsystem Media Maintainers
 ---------------------------
