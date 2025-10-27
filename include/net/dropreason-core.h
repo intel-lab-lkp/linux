@@ -99,6 +99,8 @@
 	FN(DUP_FRAG)			\
 	FN(FRAG_REASM_TIMEOUT)		\
 	FN(FRAG_TOO_FAR)		\
+	FN(FRAG_FAILED)			\
+	FN(FRAG_OUTPUT_FAILED)		\
 	FN(TCP_MINTTL)			\
 	FN(IPV6_BAD_EXTHDR)		\
 	FN(IPV6_NDISC_FRAG)		\
@@ -500,6 +502,10 @@ enum skb_drop_reason {
 	 * (/proc/sys/net/ipv4/ipfrag_max_dist)
 	 */
 	SKB_DROP_REASON_FRAG_TOO_FAR,
+	/* do ip/ip6 fragment failed */
+	SKB_DROP_REASON_FRAG_FAILED,
+	/* ip/ip6 fragment output failed */
+	SKB_DROP_REASON_FRAG_OUTPUT_FAILED,
 	/**
 	 * @SKB_DROP_REASON_TCP_MINTTL: ipv4 ttl or ipv6 hoplimit below
 	 * the threshold (IP_MINTTL or IPV6_MINHOPCOUNT).

@@ -588,7 +588,7 @@ static int ip_fragment(struct net *net, struct sock *sk, struct sk_buff *skb,
 		IP_INC_STATS(net, IPSTATS_MIB_FRAGFAILS);
 		icmp_send(skb, ICMP_DEST_UNREACH, ICMP_FRAG_NEEDED,
 			  htonl(mtu));
-		kfree_skb(skb);
+		kfree_skb_reason(skb, SKB_DROP_REASON_PKT_TOO_BIG);
 		return -EMSGSIZE;
 	}
 
@@ -765,6 +765,7 @@ int ip_do_fragment(struct net *net, struct sock *sk, struct sk_buff *skb,
 	struct sk_buff *skb2;
 	u8 tstamp_type = skb->tstamp_type;
 	struct rtable *rt = skb_rtable(skb);
+	SKB_DR_INIT(reason, FRAG_FAILED);
 	unsigned int mtu, hlen, ll_rs;
 	struct ip_fraglist_iter iter;
 	ktime_t tstamp = skb->tstamp;
@@ -773,8 +774,10 @@ int ip_do_fragment(struct net *net, struct sock *sk, struct sk_buff *skb,
 
 	/* for offloaded checksums cleanup checksum before fragmentation */
 	if (skb->ip_summed == CHECKSUM_PARTIAL &&
-	    (err = skb_checksum_help(skb)))
+	    (err = skb_checksum_help(skb))) {
+		SKB_DR_SET(reason, SKB_CSUM);
 		goto fail;
+	}
 
 	/*
 	 *	Point into the IP datagram header.
@@ -860,6 +863,8 @@ int ip_do_fragment(struct net *net, struct sock *sk, struct sk_buff *skb,
 
 			if (!err)
 				IP_INC_STATS(net, IPSTATS_MIB_FRAGCREATES);
+			else
+				SKB_DR_SET(reason, FRAG_OUTPUT_FAILED);
 			if (err || !iter.frag)
 				break;
 
@@ -871,7 +876,7 @@ int ip_do_fragment(struct net *net, struct sock *sk, struct sk_buff *skb,
 			return 0;
 		}
 
-		kfree_skb_list(iter.frag);
+		kfree_skb_list_reason(iter.frag, reason);
 
 		IP_INC_STATS(net, IPSTATS_MIB_FRAGFAILS);
 		return err;
@@ -913,8 +918,10 @@ slow_path:
 		 */
 		skb_set_delivery_time(skb2, tstamp, tstamp_type);
 		err = output(net, sk, skb2);
-		if (err)
+		if (err) {
+			SKB_DR_SET(reason, FRAG_OUTPUT_FAILED);
 			goto fail;
+		}
 
 		IP_INC_STATS(net, IPSTATS_MIB_FRAGCREATES);
 	}
@@ -923,7 +930,7 @@ slow_path:
 	return err;
 
 fail:
-	kfree_skb(skb);
+	kfree_skb_reason(skb, reason);
 	IP_INC_STATS(net, IPSTATS_MIB_FRAGFAILS);
 	return err;
 }
