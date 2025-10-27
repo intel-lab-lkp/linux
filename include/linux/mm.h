@@ -4040,6 +4040,12 @@ static inline void clear_page_guard(struct zone *zone, struct page *page,
 				unsigned int order) {}
 #endif	/* CONFIG_DEBUG_PAGEALLOC */
 
+#ifndef ARCH_PAGE_CONTIG_NR
+#define PAGE_CONTIG_NR	1
+#else
+#define PAGE_CONTIG_NR	ARCH_PAGE_CONTIG_NR
+#endif
+
 #ifndef __HAVE_ARCH_CLEAR_PAGES
 /**
  * clear_pages() - clear a page range for kernel-internal use.
