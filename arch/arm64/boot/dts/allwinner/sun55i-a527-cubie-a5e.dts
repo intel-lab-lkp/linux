@@ -64,6 +64,46 @@
 		gpio = <&r_pio 0 8 GPIO_ACTIVE_HIGH>;	/* PL8 */
 		enable-active-high;
 	};
+
+	codec: audio-codec {
+		compatible = "maxim,max98360a";
+		#sound-dai-cells = <0>;
+	};
+
+	sound-i2s {
+		compatible = "simple-audio-card";
+		simple-audio-card,name = "I2S";
+		simple-audio-card,format = "left_j";
+		simple-audio-card,bitclock-master = <&dailink_cpu>;
+		simple-audio-card,frame-master = <&dailink_cpu>;
+		simple-audio-card,mclk-fs = <128>;
+
+		dailink_cpu: simple-audio-card,cpu {
+			sound-dai = <&i2s2>;
+		};
+
+		dailink0_master: simple-audio-card,codec {
+			sound-dai = <&codec>;
+		};
+	};
+
+	sound-spdif {
+		compatible = "simple-audio-card";
+		simple-audio-card,name = "spdif-out";
+
+		simple-audio-card,cpu {
+			sound-dai = <&spdif>;
+		};
+
+		simple-audio-card,codec {
+			sound-dai = <&spdif_out>;
+		};
+	};
+
+	spdif_out: spdif-out {
+		#sound-dai-cells = <0>;
+		compatible = "linux,spdif-dit";
+	};
 };
 
 &ehci0 {
@@ -98,6 +138,12 @@
 
 &gpu {
 	mali-supply = <&reg_dcdc2>;
+	status = "okay";
+};
+
+&i2s2 {
+	pinctrl-names = "default";
+	pinctrl-0 = <&i2s2_pi_pins>;
 	status = "okay";
 };
 
@@ -342,6 +388,12 @@
  *	vcc-pl-supply = <&reg_aldo3>;
  */
 	vcc-pm-supply = <&reg_aldo3>;
+};
+
+&spdif {
+	pinctrl-names = "default";
+	pinctrl-0 = <&spdif_out_pi_pin>;
+	status = "okay";
 };
 
 &uart0 {
