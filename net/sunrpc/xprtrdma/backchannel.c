@@ -261,11 +261,14 @@ void rpcrdma_bc_receive_call(struct rpcrdma_xprt *r_xprt,
 	trace_xprtrdma_cb_call(r_xprt, rqst);
 
 	/* Queue rqst for ULP's callback service */
-	bc_serv = xprt->bc_serv;
 	xprt_get(xprt);
-	lwq_enqueue(&rqst->rq_bc_list, &bc_serv->sv_cb_list);
-
-	svc_pool_wake_idle_thread(&bc_serv->sv_pools[0]);
+	spin_lock(&xprt->bc_pa_lock);
+	bc_serv = xprt->bc_serv;
+	if (bc_serv) {
+		lwq_enqueue(&rqst->rq_bc_list, &bc_serv->sv_cb_list);
+		svc_pool_wake_idle_thread(&bc_serv->sv_pools[0]);
+	}
+	spin_lock(&xprt->bc_pa_lock);
 
 	r_xprt->rx_stats.bcall_count++;
 	return;
