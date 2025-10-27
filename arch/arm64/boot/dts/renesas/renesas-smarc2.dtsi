@@ -89,6 +89,18 @@
 	clock-frequency = <400000>;
 };
 
+&rsci2 {
+	status = "okay";
+};
+
+&rsci4 {
+	status = "okay";
+};
+
+&rsci9 {
+	status = "okay";
+};
+
 &scif0 {
 	status = "okay";
 };

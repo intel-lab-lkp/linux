@@ -38,6 +38,9 @@
 
 	aliases {
 		i2c0 = &i2c0;
+		serial0 = &rsci4;
+		serial1 = &rsci9;
+		serial2 = &rsci2;
 		serial3 = &scif0;
 		mmc1 = &sdhi1;
 	};
@@ -141,6 +144,26 @@
 		input-schmitt-enable;
 	};
 
+	rsci2_pins: rsci2 {
+		pinmux = <RZG3E_PORT_PINMUX(1, 1, 1)>, /* SER2_TX */
+			 <RZG3E_PORT_PINMUX(1, 0, 1)>, /* SER2_RX */
+			 <RZG3E_PORT_PINMUX(1, 2, 6)>, /* SER2_CTS# */
+			 <RZG3E_PORT_PINMUX(1, 3, 1)>; /* SER2_RTS# */
+		bias-pull-up;
+	};
+
+	rsci4_pins: rsci4 {
+		pinmux = <RZG3E_PORT_PINMUX(7, 7, 5)>, /* SER0_TX */
+			 <RZG3E_PORT_PINMUX(7, 6, 5)>; /* SER0_RX */
+		bias-pull-up;
+	};
+
+	rsci9_pins: rsci9 {
+		pinmux = <RZG3E_PORT_PINMUX(8, 3, 5)>, /* SER1_TX */
+			 <RZG3E_PORT_PINMUX(8, 2, 5)>; /* SER1_RX */
+		bias-pull-up;
+	};
+
 	scif_pins: scif {
 		pins = "SCIF_TXD", "SCIF_RXD";
 		renesas,output-impedance = <1>;
@@ -170,6 +193,23 @@
 				 <RZG3E_PORT_PINMUX(G, 5, 1)>; /* SD1DAT3 */
 		};
 	};
+};
+
+&rsci2 {
+	pinctrl-0 = <&rsci2_pins>;
+	pinctrl-names = "default";
+
+	uart-has-rtscts;
+};
+
+&rsci4 {
+	pinctrl-0 = <&rsci4_pins>;
+	pinctrl-names = "default";
+};
+
+&rsci9 {
+	pinctrl-0 = <&rsci9_pins>;
+	pinctrl-names = "default";
 };
 
 &scif0 {
