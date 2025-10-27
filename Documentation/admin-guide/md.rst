@@ -238,6 +238,13 @@ All md devices contain:
      the number of devices in a raid4/5/6, or to support external
      metadata formats which mandate such clipping.
 
+  logical_block_size
+     Configure the array's logical block size in bytes. This attribute
+     is only supported for 1.x meta. The value should be written before
+     starting the array. The final array LBS will use the max value
+     between this configuration and all combined device's LBS. Note that
+     LBS cannot exceed PAGE_SIZE before RAID supports folio.
+
   reshape_position
      This is either ``none`` or a sector number within the devices of
      the array where ``reshape`` is up to.  If this is set, the three
