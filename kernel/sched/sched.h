@@ -2364,6 +2364,10 @@ extern const u32		sched_prio_to_wmult[40];
  * CLASS - going to update p->sched_class; makes sched_change call the
  *         various switch methods.
  *
+ * THROTTLE - invoke in throttle_cfs_rq_work() to ensure task dequeue
+ *            during throttling, and in tg_unthrottle_up() to ensure
+ *            task enqueue during unthrottling.
+ *
  * ENQUEUE_HEAD      - place at front of runqueue (tail if not specified)
  * ENQUEUE_REPLENISH - CBS (replenish runtime and postpone deadline)
  * ENQUEUE_MIGRATED  - the task was migrated during wakeup
@@ -2381,9 +2385,9 @@ extern const u32		sched_prio_to_wmult[40];
 #define DEQUEUE_MIGRATING	0x0010 /* Matches ENQUEUE_MIGRATING */
 #define DEQUEUE_DELAYED		0x0020 /* Matches ENQUEUE_DELAYED */
 #define DEQUEUE_CLASS		0x0040 /* Matches ENQUEUE_CLASS */
+#define DEQUEUE_THROTTLE	0x0080 /* Matches ENQUEUE_THROTTLE */
 
 #define DEQUEUE_SPECIAL		0x00010000
-#define DEQUEUE_THROTTLE	0x00020000
 
 #define ENQUEUE_WAKEUP		0x0001
 #define ENQUEUE_RESTORE		0x0002
@@ -2393,6 +2397,7 @@ extern const u32		sched_prio_to_wmult[40];
 #define ENQUEUE_MIGRATING	0x0010
 #define ENQUEUE_DELAYED		0x0020
 #define ENQUEUE_CLASS		0x0040
+#define ENQUEUE_THROTTLE	0x0080
 
 #define ENQUEUE_HEAD		0x00010000
 #define ENQUEUE_REPLENISH	0x00020000

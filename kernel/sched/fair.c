@@ -5229,7 +5229,7 @@ place_entity(struct cfs_rq *cfs_rq, struct sched_entity *se, int flags)
 	se->deadline = se->vruntime + vslice;
 }
 
-static void check_enqueue_throttle(struct cfs_rq *cfs_rq);
+static void check_enqueue_throttle(struct cfs_rq *cfs_rq, int flags);
 static inline int cfs_rq_throttled(struct cfs_rq *cfs_rq);
 
 static void
@@ -5287,7 +5287,8 @@ enqueue_entity(struct cfs_rq *cfs_rq, struct sched_entity *se, int flags)
 	se->on_rq = 1;
 
 	if (cfs_rq->nr_queued == 1) {
-		check_enqueue_throttle(cfs_rq);
+		check_enqueue_throttle(cfs_rq, flags);
+
 		list_add_leaf_cfs_rq(cfs_rq);
 #ifdef CONFIG_CFS_BANDWIDTH
 		if (cfs_rq->pelt_clock_throttled) {
@@ -5912,7 +5913,7 @@ static int tg_unthrottle_up(struct task_group *tg, void *data)
 	list_for_each_entry_safe(p, tmp, &cfs_rq->throttled_limbo_list, throttle_node) {
 		list_del_init(&p->throttle_node);
 		p->throttled = false;
-		enqueue_task_fair(rq_of(cfs_rq), p, ENQUEUE_WAKEUP);
+		enqueue_task_fair(rq_of(cfs_rq), p, ENQUEUE_WAKEUP | ENQUEUE_THROTTLE);
 	}
 
 	/* Add cfs_rq with load or one or more already running entities to the list */
@@ -6029,14 +6030,17 @@ void unthrottle_cfs_rq(struct cfs_rq *cfs_rq)
 	 * unthrottled us with a positive runtime_remaining but other still
 	 * running entities consumed those runtime before we reached here.
 	 *
-	 * Anyway, we can't unthrottle this cfs_rq without any runtime remaining
+	 * We can't unthrottle this cfs_rq without any runtime remaining
 	 * because any enqueue in tg_unthrottle_up() will immediately trigger a
 	 * throttle, which is not supposed to happen on unthrottle path.
+	 *
+	 * Although the ENQUEUE_THROTTLE flag ensures that enqueues in
+	 * tg_unthrottle_up() do not trigger a throttle, we still retain the check
+	 * for cfs_rq->runtime_remaining. This prevents the enqueueing of many
+	 * entities whose runtime_remaining is less than 0.
 	 */
 	if (cfs_rq->runtime_enabled && cfs_rq->runtime_remaining <= 0)
 		return;
-
-	se = cfs_rq->tg->se[cpu_of(rq)];
 
 	cfs_rq->throttled = 0;
 
@@ -6403,7 +6407,7 @@ static void do_sched_cfs_slack_timer(struct cfs_bandwidth *cfs_b)
  * expired/exceeded, otherwise it may be allowed to steal additional ticks of
  * runtime as update_curr() throttling can not trigger until it's on-rq.
  */
-static void check_enqueue_throttle(struct cfs_rq *cfs_rq)
+static void check_enqueue_throttle(struct cfs_rq *cfs_rq, int flags)
 {
 	if (!cfs_bandwidth_used())
 		return;
@@ -6418,6 +6422,13 @@ static void check_enqueue_throttle(struct cfs_rq *cfs_rq)
 
 	/* update runtime allocation */
 	account_cfs_rq_runtime(cfs_rq, 0);
+	/*
+	 * Do not attempt to throttle on the cfs_rq unthrottle path.
+	 * and it must be placed after account_cfs_rq_runtime() to
+	 * prevent a possible missed start of the bandwidth timer.
+	 */
+	if (flags & ENQUEUE_THROTTLE)
+		return;
 	if (cfs_rq->runtime_remaining <= 0)
 		throttle_cfs_rq(cfs_rq);
 }
@@ -6714,7 +6725,7 @@ static void sched_fair_update_stop_tick(struct rq *rq, struct task_struct *p)
 
 static void account_cfs_rq_runtime(struct cfs_rq *cfs_rq, u64 delta_exec) {}
 static bool check_cfs_rq_runtime(struct cfs_rq *cfs_rq) { return false; }
-static void check_enqueue_throttle(struct cfs_rq *cfs_rq) {}
+static void check_enqueue_throttle(struct cfs_rq *cfs_rq, int flags) {}
 static inline void sync_throttle(struct task_group *tg, int cpu) {}
 static __always_inline void return_cfs_rq_runtime(struct cfs_rq *cfs_rq) {}
 static void task_throttle_setup_work(struct task_struct *p) {}
@@ -6916,6 +6927,7 @@ enqueue_task_fair(struct rq *rq, struct task_struct *p, int flags)
 	int h_nr_runnable = 1;
 	int task_new = !(flags & ENQUEUE_WAKEUP);
 	int rq_h_nr_queued = rq->cfs.h_nr_queued;
+	int throttle_flag = flags & ENQUEUE_THROTTLE;
 	u64 slice = 0;
 
 	if (task_is_throttled(p) && enqueue_throttled_task(p))
@@ -6973,7 +6985,8 @@ enqueue_task_fair(struct rq *rq, struct task_struct *p, int flags)
 		if (cfs_rq_is_idle(cfs_rq))
 			h_nr_idle = 1;
 
-		flags = ENQUEUE_WAKEUP;
+		/* Ensure ENQUEUE_THROTTLE flag can be propagated through the hierarchy */
+		flags = ENQUEUE_WAKEUP | throttle_flag;
 	}
 
 	for_each_sched_entity(se) {
