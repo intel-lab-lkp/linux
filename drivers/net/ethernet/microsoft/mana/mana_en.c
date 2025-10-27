@@ -258,6 +258,45 @@ static int mana_get_gso_hs(struct sk_buff *skb)
 	return gso_hs;
 }
 
+static void mana_per_port_queue_reset_work_handler(struct work_struct *work)
+{
+	struct mana_queue_reset_work *reset_queue_work =
+			container_of(work, struct mana_queue_reset_work, work);
+	struct mana_port_context *apc = reset_queue_work->apc;
+	struct net_device *ndev = apc->ndev;
+	struct mana_context *ac = apc->ac;
+	int err;
+
+	if (!rtnl_trylock()) {
+		/* Someone else holds RTNL, requeue and exit. */
+		queue_work(ac->per_port_queue_reset_wq,
+			   &apc->queue_reset_work.work);
+		return;
+	}
+
+	/* Pre-allocate buffers to prevent failure in mana_attach later */
+	err = mana_pre_alloc_rxbufs(apc, ndev->mtu, apc->num_queues);
+	if (err) {
+		netdev_err(ndev, "Insufficient memory for reset post tx stall detection\n");
+		goto out;
+	}
+
+	err = mana_detach(ndev, false);
+	if (err) {
+		netdev_err(ndev, "mana_detach failed: %d\n", err);
+		goto dealloc_pre_rxbufs;
+	}
+
+	err = mana_attach(ndev);
+	if (err)
+		netdev_err(ndev, "mana_attach failed: %d\n", err);
+
+dealloc_pre_rxbufs:
+	mana_pre_dealloc_rxbufs(apc);
+out:
+	rtnl_unlock();
+}
+
 netdev_tx_t mana_start_xmit(struct sk_buff *skb, struct net_device *ndev)
 {
 	enum mana_tx_pkt_format pkt_fmt = MANA_SHORT_PKT_FMT;
@@ -762,6 +801,25 @@ out:
 	return err;
 }
 
+static void mana_tx_timeout(struct net_device *netdev, unsigned int txqueue)
+{
+	struct mana_port_context *apc = netdev_priv(netdev);
+	struct mana_context *ac = apc->ac;
+	struct gdma_context *gc = ac->gdma_dev->gdma_context;
+
+	netdev_warn(netdev, "%s(): called on txq: %u\n", __func__, txqueue);
+
+	/* Already in service, hence tx queue reset is not required.*/
+	if (gc->in_service)
+		return;
+
+	/* Note: If there are pending queue reset work for this port(apc),
+	 * subsequent request queued up drom here are ignored. This is because
+	 * we are using the same work instance per port(apc).
+	 */
+	queue_work(ac->per_port_queue_reset_wq, &apc->queue_reset_work.work);
+}
+
 static int mana_shaper_set(struct net_shaper_binding *binding,
 			   const struct net_shaper *shaper,
 			   struct netlink_ext_ack *extack)
@@ -844,7 +902,9 @@ static const struct net_device_ops mana_devops = {
 	.ndo_bpf		= mana_bpf,
 	.ndo_xdp_xmit		= mana_xdp_xmit,
 	.ndo_change_mtu		= mana_change_mtu,
+	.ndo_tx_timeout     = mana_tx_timeout,
 	.net_shaper_ops         = &mana_shaper_ops,
+
 };
 
 static void mana_cleanup_port_context(struct mana_port_context *apc)
@@ -3208,6 +3268,7 @@ static int mana_probe_port(struct mana_context *ac, int port_idx,
 	ndev->min_mtu = ETH_MIN_MTU;
 	ndev->needed_headroom = MANA_HEADROOM;
 	ndev->dev_port = port_idx;
+	ndev->watchdog_timeo = MANA_TXQ_TIMEOUT;
 	SET_NETDEV_DEV(ndev, gc->dev);
 
 	netif_set_tso_max_size(ndev, GSO_MAX_SIZE);
@@ -3244,6 +3305,11 @@ static int mana_probe_port(struct mana_context *ac, int port_idx,
 	}
 
 	debugfs_create_u32("current_speed", 0400, apc->mana_port_debugfs, &apc->speed);
+
+	/* Initialize the per port queue reset work.*/
+	apc->queue_reset_work.apc = apc;
+	INIT_WORK(&apc->queue_reset_work.work,
+		  mana_per_port_queue_reset_work_handler);
 
 	return 0;
 
@@ -3446,6 +3512,15 @@ int mana_probe(struct gdma_dev *gd, bool resuming)
 	if (ac->num_ports > MAX_PORTS_IN_MANA_DEV)
 		ac->num_ports = MAX_PORTS_IN_MANA_DEV;
 
+	ac->per_port_queue_reset_wq =
+			alloc_ordered_workqueue("mana_per_port_queue_reset_wq",
+						WQ_UNBOUND | WQ_MEM_RECLAIM);
+	if (!ac->per_port_queue_reset_wq) {
+		dev_err(dev, "Failed to allocate per port queue reset workqueue\n");
+		err = -ENOMEM;
+		goto out;
+	}
+
 	if (!resuming) {
 		for (i = 0; i < ac->num_ports; i++) {
 			err = mana_probe_port(ac, i, &ac->ports[i]);
@@ -3518,6 +3593,8 @@ void mana_remove(struct gdma_dev *gd, bool suspending)
 		 */
 		rtnl_lock();
 
+		cancel_work_sync(&apc->queue_reset_work.work);
+
 		err = mana_detach(ndev, false);
 		if (err)
 			netdev_err(ndev, "Failed to detach vPort %d: %d\n",
@@ -3535,6 +3612,12 @@ void mana_remove(struct gdma_dev *gd, bool suspending)
 		rtnl_unlock();
 
 		free_netdev(ndev);
+	}
+
+	if (ac->per_port_queue_reset_wq) {
+		drain_workqueue(ac->per_port_queue_reset_wq);
+		destroy_workqueue(ac->per_port_queue_reset_wq);
+		ac->per_port_queue_reset_wq = NULL;
 	}
 
 	mana_destroy_eq(ac);

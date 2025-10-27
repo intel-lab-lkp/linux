@@ -67,6 +67,11 @@ enum TRI_STATE {
 
 #define MANA_RX_FRAG_ALIGNMENT 64
 
+/* Timeout value for Txq stall detetcion & recovery used by ndo_tx_timeout.
+ * The value is chosen after considering fpga re-config scenarios.
+ */
+#define MANA_TXQ_TIMEOUT (15 * HZ)
+
 struct mana_stats_rx {
 	u64 packets;
 	u64 bytes;
@@ -475,13 +480,20 @@ struct mana_context {
 
 	struct mana_eq *eqs;
 	struct dentry *mana_eqs_debugfs;
+	struct workqueue_struct *per_port_queue_reset_wq;
 
 	struct net_device *ports[MAX_PORTS_IN_MANA_DEV];
+};
+
+struct mana_queue_reset_work {
+	struct work_struct work;              // Work structure
+	struct mana_port_context *apc;        // Pointer to the port context
 };
 
 struct mana_port_context {
 	struct mana_context *ac;
 	struct net_device *ndev;
+	struct mana_queue_reset_work queue_reset_work;
 
 	u8 mac_addr[ETH_ALEN];
 
