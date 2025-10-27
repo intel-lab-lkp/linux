@@ -9,6 +9,7 @@
 
 #include <dt-bindings/pinctrl/renesas,r9a09g057-pinctrl.h>
 #include <dt-bindings/gpio/gpio.h>
+#include <dt-bindings/input/input.h>
 #include "r9a09g057.dtsi"
 
 / {
@@ -32,6 +33,20 @@
 	chosen {
 		bootargs = "ignore_loglevel";
 		stdout-path = "serial0:115200n8";
+	};
+
+	keys: keys {
+		compatible = "gpio-keys";
+		pinctrl-0 = <&nmi_pins>;
+		pinctrl-names = "default";
+
+		key-wakeup {
+			interrupts-extended = <&icu 0 IRQ_TYPE_EDGE_FALLING>;
+			linux,code = <KEY_WAKEUP>;
+			label = "NMI_SW";
+			debounce-interval = <20>;
+			wakeup-source;
+		};
 	};
 
 	memory@48000000 {
@@ -318,6 +333,10 @@
 	i2c8_pins: i2c8 {
 		pinmux = <RZV2H_PORT_PINMUX(0, 6, 1)>, /* I2C8_SDA */
 			 <RZV2H_PORT_PINMUX(0, 7, 1)>; /* I2C8_SCL */
+	};
+
+	nmi_pins: nmi {
+		pins = "NMI";
 	};
 
 	scif_pins: scif {
