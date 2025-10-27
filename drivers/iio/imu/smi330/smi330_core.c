@@ -68,7 +68,9 @@
 #define SMI330_SOFT_RESET_DELAY 2000
 
 /* Non-constant mask variant of FIELD_GET() and FIELD_PREP() */
+#undef field_get
 #define field_get(_mask, _reg) (((_reg) & (_mask)) >> (ffs(_mask) - 1))
+#undef field_prep
 #define field_prep(_mask, _val) (((_val) << (ffs(_mask) - 1)) & (_mask))
 
 #define SMI330_ACCEL_CHANNEL(_axis) {					\
