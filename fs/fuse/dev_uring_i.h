@@ -39,8 +39,8 @@ enum fuse_ring_req_state {
 /** A fuse ring entry, part of the ring queue */
 struct fuse_ring_ent {
 	/* userspace buffer */
-	struct fuse_uring_req_header __user *headers;
-	void __user *payload;
+	struct fuse_uring_req_header __user *user_headers;
+	void __user *user_payload;
 
 	/* the ring queue that owns the request */
 	struct fuse_ring_queue *queue;

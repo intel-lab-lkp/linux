@@ -585,11 +585,11 @@ static void __user *get_user_ring_header(struct fuse_ring_ent *ent,
 {
 	switch (type) {
 	case FUSE_URING_HEADER_IN_OUT:
-		return &ent->headers->in_out;
+		return &ent->user_headers->in_out;
 	case FUSE_URING_HEADER_OP:
-		return &ent->headers->op_in;
+		return &ent->user_headers->op_in;
 	case FUSE_URING_HEADER_RING_ENT:
-		return &ent->headers->ring_ent_in_out;
+		return &ent->user_headers->ring_ent_in_out;
 	}
 
 	WARN_ON_ONCE(1);
@@ -645,7 +645,7 @@ static int fuse_uring_copy_from_ring(struct fuse_ring *ring,
 	if (err)
 		return err;
 
-	err = import_ubuf(ITER_SOURCE, ent->payload, ring->max_payload_sz,
+	err = import_ubuf(ITER_SOURCE, ent->user_payload, ring->max_payload_sz,
 			  &iter);
 	if (err)
 		return err;
@@ -674,7 +674,7 @@ static int fuse_uring_args_to_ring(struct fuse_ring *ring, struct fuse_req *req,
 		.commit_id = req->in.h.unique,
 	};
 
-	err = import_ubuf(ITER_DEST, ent->payload, ring->max_payload_sz, &iter);
+	err = import_ubuf(ITER_DEST, ent->user_payload, ring->max_payload_sz, &iter);
 	if (err) {
 		pr_info_ratelimited("fuse: Import of user buffer failed\n");
 		return err;
@@ -710,8 +710,7 @@ static int fuse_uring_args_to_ring(struct fuse_ring *ring, struct fuse_req *req,
 
 	ent_in_out.payload_sz = cs.ring.copied_sz;
 	return copy_header_to_ring(ent, FUSE_URING_HEADER_RING_ENT,
-				   &ent_in_out,
-				   sizeof(ent_in_out));
+				   &ent_in_out, sizeof(ent_in_out));
 }
 
 static int fuse_uring_copy_to_ring(struct fuse_ring_ent *ent,
@@ -1104,8 +1103,8 @@ fuse_uring_create_ring_ent(struct io_uring_cmd *cmd,
 	INIT_LIST_HEAD(&ent->list);
 
 	ent->queue = queue;
-	ent->headers = iov[0].iov_base;
-	ent->payload = iov[1].iov_base;
+	ent->user_headers = iov[0].iov_base;
+	ent->user_payload = iov[1].iov_base;
 
 	atomic_inc(&ring->queue_refs);
 	return ent;
