@@ -2675,24 +2675,22 @@ static void handle_read_error(struct r1conf *conf, struct r1bio *r1_bio)
 	r1_bio->bios[r1_bio->read_disk] = NULL;
 
 	rdev = conf->mirrors[r1_bio->read_disk].rdev;
-	if (mddev->ro == 0
-	    && !test_bit(FailFast, &rdev->flags)) {
+	if (mddev->ro) {
+		r1_bio->bios[r1_bio->read_disk] = IO_BLOCKED;
+	} else if (test_bit(FailFast, &rdev->flags)) {
+		md_error(mddev, rdev);
+	} else {
 		freeze_array(conf, 1);
 		fix_read_error(conf, r1_bio);
 		unfreeze_array(conf);
-	} else if (mddev->ro == 0 && test_bit(FailFast, &rdev->flags)) {
-		md_error(mddev, rdev);
-	} else {
-		r1_bio->bios[r1_bio->read_disk] = IO_BLOCKED;
 	}
 
 	rdev_dec_pending(rdev, conf->mddev);
 	sector = r1_bio->sector;
-	bio = r1_bio->master_bio;
 
 	/* Reuse the old r1_bio so that the IO_BLOCKED settings are preserved */
 	r1_bio->state = 0;
-	raid1_read_request(mddev, bio, r1_bio->sectors, r1_bio);
+	raid1_read_request(mddev, r1_bio->master_bio, r1_bio->sectors, r1_bio);
 	allow_barrier(conf, sector);
 }
 
