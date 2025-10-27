@@ -1056,10 +1056,13 @@ static void super_written(struct bio *bio)
 	struct mddev *mddev = rdev->mddev;
 
 	if (bio->bi_status) {
-		pr_err("md: %s gets error=%d\n", __func__,
+		pr_err("md: %s: %pg: %s gets error=%d\n",
+		       mdname(mddev), rdev->bdev, __func__,
 		       blk_status_to_errno(bio->bi_status));
 		if (!md_cond_error(mddev, rdev, bio)
 		    && (bio->bi_opf & MD_FAILFAST)) {
+			pr_warn("md: %s: %pg: retrying metadata write\n",
+				mdname(mddev), rdev->bdev);
 			set_bit(MD_SB_NEED_REWRITE, &mddev->sb_flags);
 			set_bit(RetryingSBWrite, &rdev->flags);
 		}
