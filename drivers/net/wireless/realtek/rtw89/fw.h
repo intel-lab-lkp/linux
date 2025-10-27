@@ -87,6 +87,9 @@ struct rtw89_c2hreg_phycap {
 #define RTW89_C2HREG_AOAC_RPT_2_W3_IGTK_IPN_IV_6 GENMASK(7, 0)
 #define RTW89_C2HREG_AOAC_RPT_2_W3_IGTK_IPN_IV_7 GENMASK(15, 8)
 
+#define RTW89_C2HREG_PS_LEAVE_ACK_RET GENMASK(7, 0)
+#define RTW89_C2HREG_PS_LEAVE_ACK_MACID GENMASK(31, 16)
+
 struct rtw89_h2creg_hdr {
 	u32 w0;
 };
@@ -112,6 +115,8 @@ struct rtw89_h2creg_sch_tx_en {
 #define RTW89_C2HREG_HDR_LEN 2
 #define RTW89_H2CREG_HDR_LEN 2
 #define RTW89_C2H_TIMEOUT 1000000
+#define RTW89_C2H_TIMEOUT_USB 4000
+
 struct rtw89_mac_c2h_info {
 	u8 id;
 	u8 content_len;
@@ -154,6 +159,7 @@ enum rtw89_mac_c2h_type {
 	RTW89_FWCMD_C2HREG_FUNC_TX_PAUSE_RPT,
 	RTW89_FWCMD_C2HREG_FUNC_WOW_CPUIO_RX_ACK = 0xA,
 	RTW89_FWCMD_C2HREG_FUNC_PHY_CAP_PART1 = 0xC,
+	RTW89_FWCMD_C2HREG_FUNC_PS_LEAVE_ACK = 0xD,
 	RTW89_FWCMD_C2HREG_FUNC_NULL = 0xFF,
 };
 
@@ -1596,6 +1602,28 @@ struct rtw89_h2c_bcn_upd_be {
 #define RTW89_H2C_BCN_UPD_BE_W7_ECSA_OFST GENMASK(30, 16)
 #define RTW89_H2C_BCN_UPD_BE_W7_PROTECTION_KEY_ID BIT(31)
 
+struct rtw89_h2c_tbtt_tuning {
+	__le32 w0;
+	__le32 w1;
+} __packed;
+
+#define RTW89_H2C_TBTT_TUNING_W0_BAND GENMASK(3, 0)
+#define RTW89_H2C_TBTT_TUNING_W0_PORT GENMASK(7, 4)
+#define RTW89_H2C_TBTT_TUNING_W1_SHIFT GENMASK(31, 0)
+
+struct rtw89_h2c_pwr_lvl {
+	__le32 w0;
+	__le32 w1;
+} __packed;
+
+#define RTW89_H2C_PWR_LVL_W0_MACID GENMASK(7, 0)
+#define RTW89_H2C_PWR_LVL_W0_BCN_TO_VAL GENMASK(15, 8)
+#define RTW89_H2C_PWR_LVL_W0_PS_LVL GENMASK(19, 16)
+#define RTW89_H2C_PWR_LVL_W0_TRX_LVL GENMASK(23, 20)
+#define RTW89_H2C_PWR_LVL_W0_BCN_TO_LVL GENMASK(27, 24)
+#define RTW89_H2C_PWR_LVL_W0_DTIM_TO_VAL GENMASK(31, 28)
+#define RTW89_H2C_PWR_LVL_W1_MACID_EXT GENMASK(7, 0)
+
 struct rtw89_h2c_role_maintain {
 	__le32 w0;
 };
@@ -1829,10 +1857,11 @@ struct rtw89_h2c_lps_ml_cmn_info {
 	u8 dup_bcn_ofst[RTW89_PHY_NUM];
 } __packed;
 
-static inline void RTW89_SET_FWCMD_CPU_EXCEPTION_TYPE(void *cmd, u32 val)
-{
-	le32p_replace_bits((__le32 *)cmd, val, GENMASK(31, 0));
-}
+struct rtw89_h2c_trig_cpu_except {
+	__le32 w0;
+} __packed;
+
+#define RTW89_H2C_CPU_EXCEPTION_TYPE GENMASK(31, 0)
 
 static inline void RTW89_SET_FWCMD_PKT_DROP_SEL(void *cmd, u32 val)
 {
@@ -2817,6 +2846,7 @@ struct rtw89_h2c_scanofld_be_opch {
 #define RTW89_H2C_SCANOFLD_BE_OPCH_W2_PKTS_CTRL GENMASK(7, 0)
 #define RTW89_H2C_SCANOFLD_BE_OPCH_W2_SW_DEF GENMASK(15, 8)
 #define RTW89_H2C_SCANOFLD_BE_OPCH_W2_SS GENMASK(18, 16)
+#define RTW89_H2C_SCANOFLD_BE_OPCH_W2_TXBCN BIT(19)
 #define RTW89_H2C_SCANOFLD_BE_OPCH_W3_PKT0 GENMASK(7, 0)
 #define RTW89_H2C_SCANOFLD_BE_OPCH_W3_PKT1 GENMASK(15, 8)
 #define RTW89_H2C_SCANOFLD_BE_OPCH_W3_PKT2 GENMASK(23, 16)
@@ -3564,6 +3594,8 @@ struct rtw89_fw_c2h_attr {
 	u8 class;
 	u8 func;
 	u16 len;
+	u8 is_scan_event: 1;
+	u8 scan_seq: 2;
 };
 
 static inline struct rtw89_fw_c2h_attr *RTW89_SKB_C2H_CB(struct sk_buff *skb)
@@ -3952,6 +3984,7 @@ enum rtw89_fw_element_id {
 	RTW89_FW_ELEMENT_ID_TXPWR_DA_LMT_RU_2GHZ = 24,
 	RTW89_FW_ELEMENT_ID_TXPWR_DA_LMT_RU_5GHZ = 25,
 	RTW89_FW_ELEMENT_ID_TXPWR_DA_LMT_RU_6GHZ = 26,
+	RTW89_FW_ELEMENT_ID_AFE_PWR_SEQ = 27,
 
 	RTW89_FW_ELEMENT_ID_NUM,
 };
@@ -4057,6 +4090,30 @@ struct rtw89_fw_txpwr_track_cfg {
 	 BIT(RTW89_FW_TXPWR_TRK_TYPE_2G_CCK_A_N) | \
 	 BIT(RTW89_FW_TXPWR_TRK_TYPE_2G_CCK_A_P))
 
+enum rtw89_fw_afe_action {
+	RTW89_FW_AFE_ACTION_WRITE = 0,
+	RTW89_FW_AFE_ACTION_DELAY = 1,
+	RTW89_FW_AFE_ACTION_POLL = 2,
+};
+
+enum rtw89_fw_afe_cat {
+	RTW89_FW_AFE_CAT_BB = 0,
+	RTW89_FW_AFE_CAT_BB1 = 1,
+	RTW89_FW_AFE_CAT_MAC = 2,
+	RTW89_FW_AFE_CAT_MAC1 = 3,
+	RTW89_FW_AFE_CAT_AFEDIG = 4,
+	RTW89_FW_AFE_CAT_AFEDIG1 = 5,
+};
+
+enum rtw89_fw_afe_class {
+	RTW89_FW_AFE_CLASS_P0 = 0,
+	RTW89_FW_AFE_CLASS_P1 = 1,
+	RTW89_FW_AFE_CLASS_P2 = 2,
+	RTW89_FW_AFE_CLASS_P3 = 3,
+	RTW89_FW_AFE_CLASS_P4 = 4,
+	RTW89_FW_AFE_CLASS_CMN = 5,
+};
+
 struct rtw89_fw_element_hdr {
 	__le32 id; /* enum rtw89_fw_element_id */
 	__le32 size; /* exclude header size */
@@ -4094,6 +4151,17 @@ struct rtw89_fw_element_hdr {
 			u8 rsvd1[3];
 			__le16 offset[];
 		} __packed rfk_log_fmt;
+		struct {
+			u8 rsvd[8];
+			struct rtw89_phy_afe_info {
+				__le32 action; /* enum rtw89_fw_afe_action */
+				__le32 cat; /* enum rtw89_fw_afe_cat */
+				__le32 class; /* enum rtw89_fw_afe_class */
+				__le32 addr;
+				__le32 mask;
+				__le32 val;
+			} __packed infos[];
+		} __packed afe;
 		struct __rtw89_fw_txpwr_element txpwr;
 		struct __rtw89_fw_regd_element regd;
 	} __packed u;
@@ -4191,6 +4259,8 @@ enum rtw89_ps_h2c_func {
 	H2C_FUNC_MAC_LPS_PARM		= 0x0,
 	H2C_FUNC_P2P_ACT		= 0x1,
 	H2C_FUNC_IPS_CFG		= 0x3,
+	H2C_FUNC_PS_POWER_LEVEL		= 0x7,
+	H2C_FUNC_TBTT_TUNING		= 0xA,
 
 	NUM_OF_RTW89_PS_H2C_FUNC,
 };
@@ -4341,6 +4411,7 @@ enum rtw89_mrc_h2c_func {
 #define H2C_FUNC_OUTSRC_RA_MACIDCFG	0x0
 
 #define H2C_CL_OUTSRC_DM		0x2
+#define H2C_FUNC_FW_MCC_DIG		0x6
 #define H2C_FUNC_FW_LPS_CH_INFO		0xb
 #define H2C_FUNC_FW_LPS_ML_CMN_INFO	0xe
 
@@ -4359,6 +4430,7 @@ enum rtw89_rfk_offload_h2c_func {
 	H2C_FUNC_RFK_DACK_OFFLOAD = 0x5,
 	H2C_FUNC_RFK_RXDCK_OFFLOAD = 0x6,
 	H2C_FUNC_RFK_PRE_NOTIFY = 0x8,
+	H2C_FUNC_RFK_TAS_OFFLOAD = 0x9,
 };
 
 struct rtw89_fw_h2c_rf_get_mccch {
@@ -4377,6 +4449,27 @@ struct rtw89_fw_h2c_rf_get_mccch_v0 {
 	__le32 current_channel;
 	__le32 current_band_type;
 } __packed;
+
+struct rtw89_h2c_mcc_dig {
+	__le32 w0;
+	__le32 w1;
+	__le32 w2;
+} __packed;
+
+#define RTW89_H2C_MCC_DIG_W0_REG_CNT GENMASK(7, 0)
+#define RTW89_H2C_MCC_DIG_W0_DM_EN BIT(8)
+#define RTW89_H2C_MCC_DIG_W0_IDX GENMASK(10, 9)
+#define RTW89_H2C_MCC_DIG_W0_SET BIT(11)
+#define RTW89_H2C_MCC_DIG_W0_PHY0_EN BIT(12)
+#define RTW89_H2C_MCC_DIG_W0_PHY1_EN BIT(13)
+#define RTW89_H2C_MCC_DIG_W0_CENTER_CH GENMASK(23, 16)
+#define RTW89_H2C_MCC_DIG_W0_BAND_TYPE GENMASK(31, 24)
+#define RTW89_H2C_MCC_DIG_W1_ADDR_LSB GENMASK(7, 0)
+#define RTW89_H2C_MCC_DIG_W1_ADDR_MSB GENMASK(15, 8)
+#define RTW89_H2C_MCC_DIG_W1_BMASK_LSB GENMASK(23, 16)
+#define RTW89_H2C_MCC_DIG_W1_BMASK_MSB GENMASK(31, 24)
+#define RTW89_H2C_MCC_DIG_W2_VAL_LSB GENMASK(7, 0)
+#define RTW89_H2C_MCC_DIG_W2_VAL_MSB GENMASK(15, 8)
 
 #define NUM_OF_RTW89_FW_RFK_PATH 2
 #define NUM_OF_RTW89_FW_RFK_TBL 3
@@ -4519,6 +4612,10 @@ struct rtw89_h2c_rf_rxdck_v0 {
 	u8 rxdck_dbg_en;
 } __packed;
 
+struct rtw89_h2c_rf_tas {
+	__le32 enable;
+} __packed;
+
 struct rtw89_h2c_rf_rxdck {
 	struct rtw89_h2c_rf_rxdck_v0 v0;
 	u8 is_chl_k;
@@ -4651,10 +4748,14 @@ struct rtw89_c2h_rfk_report {
 	u8 version;
 } __packed;
 
-struct rtw89_c2h_rf_tas_info {
-	struct rtw89_c2h_hdr hdr;
+struct rtw89_c2h_rf_tas_rpt_log {
 	__le32 cur_idx;
 	__le16 txpwr_history[20];
+} __packed;
+
+struct rtw89_c2h_rf_tas_info {
+	struct rtw89_c2h_hdr hdr;
+	struct rtw89_c2h_rf_tas_rpt_log content;
 } __packed;
 
 #define RTW89_FW_RSVD_PLE_SIZE 0x800
@@ -4667,6 +4768,7 @@ struct rtw89_c2h_rf_tas_info {
 #define RTW89_FW_BACKTRACE_KEY 0xBACEBACE
 
 #define FWDL_WAIT_CNT 400000
+#define FWDL_WAIT_CNT_USB 3200
 
 int rtw89_fw_check_rdy(struct rtw89_dev *rtwdev, enum rtw89_fwdl_check_type type);
 int rtw89_fw_recognize(struct rtw89_dev *rtwdev);
@@ -4708,12 +4810,18 @@ int rtw89_fw_h2c_txtime_cmac_tbl(struct rtw89_dev *rtwdev,
 				 struct rtw89_sta_link *rtwsta_link);
 int rtw89_fw_h2c_txtime_cmac_tbl_g7(struct rtw89_dev *rtwdev,
 				    struct rtw89_sta_link *rtwsta_link);
+int rtw89_fw_h2c_punctured_cmac_tbl_g7(struct rtw89_dev *rtwdev,
+				       struct rtw89_vif_link *rtwvif_link,
+				       u16 punctured);
 int rtw89_fw_h2c_txpath_cmac_tbl(struct rtw89_dev *rtwdev,
 				 struct rtw89_sta_link *rtwsta_link);
 int rtw89_fw_h2c_update_beacon(struct rtw89_dev *rtwdev,
 			       struct rtw89_vif_link *rtwvif_link);
 int rtw89_fw_h2c_update_beacon_be(struct rtw89_dev *rtwdev,
 				  struct rtw89_vif_link *rtwvif_link);
+int rtw89_fw_h2c_tbtt_tuning(struct rtw89_dev *rtwdev,
+			     struct rtw89_vif_link *rtwvif_link, u32 offset);
+int rtw89_fw_h2c_pwr_lvl(struct rtw89_dev *rtwdev, struct rtw89_vif_link *rtwvif_link);
 int rtw89_fw_h2c_cam(struct rtw89_dev *rtwdev, struct rtw89_vif_link *vif,
 		     struct rtw89_sta_link *rtwsta_link, const u8 *scan_mac_addr);
 int rtw89_fw_h2c_dctl_sec_cam_v1(struct rtw89_dev *rtwdev,
@@ -4724,6 +4832,7 @@ int rtw89_fw_h2c_dctl_sec_cam_v2(struct rtw89_dev *rtwdev,
 				 struct rtw89_sta_link *rtwsta_link);
 void rtw89_fw_c2h_irqsafe(struct rtw89_dev *rtwdev, struct sk_buff *c2h);
 void rtw89_fw_c2h_work(struct wiphy *wiphy, struct wiphy_work *work);
+void rtw89_fw_c2h_purge_obsoleted_scan_events(struct rtw89_dev *rtwdev);
 int rtw89_fw_h2c_role_maintain(struct rtw89_dev *rtwdev,
 			       struct rtw89_vif_link *rtwvif_link,
 			       struct rtw89_sta_link *rtwsta_link,
@@ -4774,6 +4883,9 @@ int rtw89_fw_h2c_rf_ntfy_mcc(struct rtw89_dev *rtwdev);
 int rtw89_fw_h2c_rf_ps_info(struct rtw89_dev *rtwdev, struct rtw89_vif *rtwvif);
 int rtw89_fw_h2c_rf_pre_ntfy(struct rtw89_dev *rtwdev,
 			     enum rtw89_phy_idx phy_idx);
+int rtw89_fw_h2c_mcc_dig(struct rtw89_dev *rtwdev,
+			 enum rtw89_chanctx_idx chanctx_idx,
+			 u8 mcc_role_idx, u8 pd_val, bool en);
 int rtw89_fw_h2c_rf_tssi(struct rtw89_dev *rtwdev, enum rtw89_phy_idx phy_idx,
 			 const struct rtw89_chan *chan, enum rtw89_tssi_mode tssi_mode);
 int rtw89_fw_h2c_rf_iqk(struct rtw89_dev *rtwdev, enum rtw89_phy_idx phy_idx,
@@ -4786,6 +4898,7 @@ int rtw89_fw_h2c_rf_dack(struct rtw89_dev *rtwdev, enum rtw89_phy_idx phy_idx,
 			 const struct rtw89_chan *chan);
 int rtw89_fw_h2c_rf_rxdck(struct rtw89_dev *rtwdev, enum rtw89_phy_idx phy_idx,
 			  const struct rtw89_chan *chan, bool is_chl_k);
+int rtw89_fw_h2c_rf_tas_trigger(struct rtw89_dev *rtwdev, bool enable);
 int rtw89_fw_h2c_raw_with_hdr(struct rtw89_dev *rtwdev,
 			      u8 h2c_class, u8 h2c_func, u8 *buf, u16 len,
 			      bool rack, bool dack);
@@ -5005,6 +5118,19 @@ int rtw89_chip_h2c_txtime_cmac_tbl(struct rtw89_dev *rtwdev,
 	const struct rtw89_chip_info *chip = rtwdev->chip;
 
 	return chip->ops->h2c_txtime_cmac_tbl(rtwdev, rtwsta_link);
+}
+
+static inline
+int rtw89_chip_h2c_punctured_cmac_tbl(struct rtw89_dev *rtwdev,
+				      struct rtw89_vif_link *rtwvif_link,
+				      u16 punctured)
+{
+	const struct rtw89_chip_info *chip = rtwdev->chip;
+
+	if (!chip->ops->h2c_punctured_cmac_tbl)
+		return 0;
+
+	return chip->ops->h2c_punctured_cmac_tbl(rtwdev, rtwvif_link, punctured);
 }
 
 static inline

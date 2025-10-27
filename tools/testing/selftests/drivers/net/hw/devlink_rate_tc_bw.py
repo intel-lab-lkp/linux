@@ -208,14 +208,14 @@ def setup_devlink_rate(cfg):
             "port-index": port_index,
             "rate-tx-max": 125000000,
             "rate-tc-bws": [
-                {"rate-tc-index": 0, "rate-tc-bw": 0},
-                {"rate-tc-index": 1, "rate-tc-bw": 0},
-                {"rate-tc-index": 2, "rate-tc-bw": 0},
-                {"rate-tc-index": 3, "rate-tc-bw": 20},
-                {"rate-tc-index": 4, "rate-tc-bw": 80},
-                {"rate-tc-index": 5, "rate-tc-bw": 0},
-                {"rate-tc-index": 6, "rate-tc-bw": 0},
-                {"rate-tc-index": 7, "rate-tc-bw": 0},
+                {"index": 0, "bw": 0},
+                {"index": 1, "bw": 0},
+                {"index": 2, "bw": 0},
+                {"index": 3, "bw": 20},
+                {"index": 4, "bw": 80},
+                {"index": 5, "bw": 0},
+                {"index": 6, "bw": 0},
+                {"index": 7, "bw": 0},
             ]
         })
     except NlError as exc:
@@ -451,8 +451,7 @@ def main() -> None:
         )
         if not cfg.pci:
             raise KsftSkipEx("Could not get PCI address of the interface")
-        cfg.require_cmd("iperf3")
-        cfg.require_cmd("iperf3", remote=True)
+        cfg.require_cmd("iperf3", local=True, remote=True)
 
         cfg.bw_validator = BandwidthValidator()
 

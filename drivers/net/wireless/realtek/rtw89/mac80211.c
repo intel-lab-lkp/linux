@@ -113,6 +113,8 @@ static int __rtw89_ops_add_iface_link(struct rtw89_dev *rtwdev,
 
 	wiphy_work_init(&rtwvif_link->update_beacon_work, rtw89_core_update_beacon_work);
 	wiphy_delayed_work_init(&rtwvif_link->csa_beacon_work, rtw89_core_csa_beacon_work);
+	wiphy_delayed_work_init(&rtwvif_link->mcc_gc_detect_beacon_work,
+				rtw89_mcc_gc_detect_beacon_work);
 
 	INIT_LIST_HEAD(&rtwvif_link->general_pkt_list);
 
@@ -124,6 +126,7 @@ static int __rtw89_ops_add_iface_link(struct rtw89_dev *rtwdev,
 	rtwvif_link->chanctx_idx = RTW89_CHANCTX_0;
 	rtwvif_link->reg_6ghz_power = RTW89_REG_6GHZ_POWER_DFLT;
 	rtwvif_link->rand_tsf_done = false;
+	rtwvif_link->detect_bcn_count = 0;
 
 	rcu_read_lock();
 
@@ -147,6 +150,8 @@ static void __rtw89_ops_remove_iface_link(struct rtw89_dev *rtwdev,
 
 	wiphy_work_cancel(rtwdev->hw->wiphy, &rtwvif_link->update_beacon_work);
 	wiphy_delayed_work_cancel(rtwdev->hw->wiphy, &rtwvif_link->csa_beacon_work);
+	wiphy_delayed_work_cancel(rtwdev->hw->wiphy,
+				  &rtwvif_link->mcc_gc_detect_beacon_work);
 
 	rtw89_p2p_noa_once_deinit(rtwvif_link);
 
@@ -1772,6 +1777,7 @@ static int rtw89_ops_suspend(struct ieee80211_hw *hw,
 
 	set_bit(RTW89_FLAG_FORBIDDEN_TRACK_WORK, rtwdev->flags);
 	wiphy_delayed_work_cancel(hw->wiphy, &rtwdev->track_work);
+	wiphy_delayed_work_cancel(hw->wiphy, &rtwdev->track_ps_work);
 
 	ret = rtw89_wow_suspend(rtwdev, wowlan);
 	if (ret) {
@@ -1797,6 +1803,8 @@ static int rtw89_ops_resume(struct ieee80211_hw *hw)
 	clear_bit(RTW89_FLAG_FORBIDDEN_TRACK_WORK, rtwdev->flags);
 	wiphy_delayed_work_queue(hw->wiphy, &rtwdev->track_work,
 				 RTW89_TRACK_WORK_PERIOD);
+	wiphy_delayed_work_queue(hw->wiphy, &rtwdev->track_ps_work,
+				 RTW89_TRACK_PS_WORK_PERIOD);
 
 	return ret ? 1 : 0;
 }
@@ -1828,6 +1836,40 @@ static void rtw89_set_rekey_data(struct ieee80211_hw *hw,
 	memcpy(gtk_info->kck, data->kck, data->kck_len);
 }
 #endif
+
+static int rtw89_ops_get_survey(struct ieee80211_hw *hw, int idx,
+				struct survey_info *survey)
+{
+	struct ieee80211_conf *conf = &hw->conf;
+	struct rtw89_dev *rtwdev = hw->priv;
+	struct rtw89_bb_ctx *bb;
+
+	if (idx == 0) {
+		survey->channel = conf->chandef.chan;
+		survey->filled = SURVEY_INFO_NOISE_DBM;
+		survey->noise = RTW89_NOISE_DEFAULT;
+
+		return 0;
+	}
+
+	rtw89_for_each_active_bb(rtwdev, bb) {
+		struct rtw89_env_monitor_info *env = &bb->env_monitor;
+		struct rtw89_nhm_report *rpt;
+
+		rpt = list_first_entry_or_null(&env->nhm_rpt_list, typeof(*rpt), list);
+		if (!rpt)
+			continue;
+
+		survey->filled = SURVEY_INFO_NOISE_DBM;
+		survey->noise = rpt->noise - MAX_RSSI;
+		survey->channel = rpt->channel;
+		list_del_init(&rpt->list);
+
+		return 0;
+	}
+
+	return -EINVAL;
+}
 
 static void rtw89_ops_rfkill_poll(struct ieee80211_hw *hw)
 {
@@ -1861,6 +1903,7 @@ const struct ieee80211_ops rtw89_ops = {
 	.sta_state		= rtw89_ops_sta_state,
 	.set_key		= rtw89_ops_set_key,
 	.ampdu_action		= rtw89_ops_ampdu_action,
+	.get_survey		= rtw89_ops_get_survey,
 	.set_rts_threshold	= rtw89_ops_set_rts_threshold,
 	.sta_statistics		= rtw89_ops_sta_statistics,
 	.flush			= rtw89_ops_flush,
