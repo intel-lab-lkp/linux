@@ -507,13 +507,36 @@ static __always_inline bool __rseq_exit_to_user_mode_restart(struct pt_regs *reg
 	return false;
 }
 
-static __always_inline bool rseq_exit_to_user_mode_restart(struct pt_regs *regs)
+/* Required to allow conversion to GENERIC_ENTRY w/o GENERIC_TIF_BITS */
+#ifdef CONFIG_HAVE_GENERIC_TIF_BITS
+static __always_inline bool test_tif_rseq(unsigned long ti_work)
 {
+	return ti_work & _TIF_RSEQ;
+}
+
+static __always_inline void clear_tif_rseq(void)
+{
+	static_assert(TIF_RSEQ != TIF_NOTIFY_RESUME);
+	clear_thread_flag(TIF_RSEQ);
+}
+#else
+static __always_inline bool test_tif_rseq(unsigned long ti_work) { return true; }
+static __always_inline void clear_tif_rseq(void) { }
+#endif
+
+static __always_inline bool
+rseq_exit_to_user_mode_restart(struct pt_regs *regs, unsigned long ti_work)
+{
+	if (likely(!test_tif_rseq(ti_work)))
+		return false;
+
 	if (unlikely(__rseq_exit_to_user_mode_restart(regs))) {
 		current->rseq.event.slowpath = true;
 		set_tsk_thread_flag(current, TIF_NOTIFY_RESUME);
 		return true;
 	}
+
+	clear_tif_rseq();
 	return false;
 }
 
@@ -557,7 +580,7 @@ static inline void rseq_debug_syscall_return(struct pt_regs *regs)
 }
 #else /* CONFIG_RSEQ */
 static inline void rseq_note_user_irq_entry(void) { }
-static inline bool rseq_exit_to_user_mode_restart(struct pt_regs *regs)
+static inline bool rseq_exit_to_user_mode_restart(struct pt_regs *regs, unsigned long ti_work)
 {
 	return false;
 }
