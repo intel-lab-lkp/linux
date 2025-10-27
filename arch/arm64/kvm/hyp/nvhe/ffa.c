@@ -646,6 +646,22 @@ out_unlock:
 		ffa_to_smccc_res(res, ret);
 }
 
+static bool ffa_1_2_optional_calls_supported(u64 func_id)
+{
+	struct arm_smccc_1_2_regs res;
+
+	if (!smp_load_acquire(&has_version_negotiated) ||
+		(FFA_MINOR_VERSION(FFA_VERSION_1_2) < 2))
+		return false;
+
+	arm_smccc_1_2_smc(&(struct arm_smccc_1_2_regs) {
+		.a0 = FFA_FEATURES,
+		.a1 = func_id,
+	}, &res);
+
+	return res.a0 == FFA_SUCCESS;
+}
+
 /*
  * Is a given FFA function supported, either by forwarding on directly
  * or by handling at EL2?
@@ -678,12 +694,13 @@ static bool ffa_call_supported(u64 func_id)
 	case FFA_NOTIFICATION_SET:
 	case FFA_NOTIFICATION_GET:
 	case FFA_NOTIFICATION_INFO_GET:
+		return false;
 	/* Optional interfaces added in FF-A 1.2 */
 	case FFA_MSG_SEND_DIRECT_REQ2:		/* Optional per 7.5.1 */
 	case FFA_MSG_SEND_DIRECT_RESP2:		/* Optional per 7.5.1 */
 	case FFA_CONSOLE_LOG:			/* Optional per 13.1: not in Table 13.1 */
 	case FFA_PARTITION_INFO_GET_REGS:	/* Optional for virtual instances per 13.1 */
-		return false;
+		return ffa_1_2_optional_calls_supported(func_id);
 	}
 
 	return true;
