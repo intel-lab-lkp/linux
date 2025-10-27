@@ -1733,6 +1733,40 @@ static void raid1_status(struct seq_file *seq, struct mddev *mddev)
 }
 
 /**
+ * raid1_should_error() - Determine if this rdev should be failed
+ * @mddev: affected md device
+ * @rdev: member device to check
+ * @bio: the bio that caused the failure
+ *
+ * When failfast bios failure, rdev can fail, but the mddev must not fail.
+ * This function tells md_cond_error() not to fail rdev if bio is failfast
+ * and last rdev.
+ *
+ * Returns: %false if bio is failfast and rdev is the last in-sync device.
+ *	     Otherwise %true - should fail this rdev.
+ */
+static bool raid1_should_error(struct mddev *mddev, struct md_rdev *rdev, struct bio *bio)
+{
+	int i;
+	struct r1conf *conf = mddev->private;
+
+	if (!(bio->bi_opf & MD_FAILFAST) ||
+	    !test_bit(FailFast, &rdev->flags) ||
+	    test_bit(Faulty, &rdev->flags))
+		return true;
+
+	for (i = 0; i < conf->raid_disks; i++) {
+		struct md_rdev *rdev2 = conf->mirrors[i].rdev;
+
+		if (rdev2 && rdev2 != rdev &&
+		    test_bit(In_sync, &rdev2->flags) &&
+		    !test_bit(Faulty, &rdev2->flags))
+			return true;
+	}
+	return false;
+}
+
+/**
  * raid1_error() - RAID1 error handler.
  * @mddev: affected md device.
  * @rdev: member device to fail.
@@ -3486,6 +3520,7 @@ static struct md_personality raid1_personality =
 	.free		= raid1_free,
 	.status		= raid1_status,
 	.error_handler	= raid1_error,
+	.should_error	= raid1_should_error,
 	.hot_add_disk	= raid1_add_disk,
 	.hot_remove_disk= raid1_remove_disk,
 	.spare_active	= raid1_spare_active,
