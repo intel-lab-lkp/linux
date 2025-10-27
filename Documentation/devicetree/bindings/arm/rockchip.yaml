@@ -1013,7 +1013,7 @@ properties:
           - const: radxa,rock-5t
           - const: rockchip,rk3588
 
-      - description: Radxa ZERO 3W/3E
+      - description: Radxa ZERO 3E/3W
         items:
           - enum:
               - radxa,zero-3e
