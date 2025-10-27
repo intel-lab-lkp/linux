@@ -945,7 +945,7 @@ properties:
           - const: radxa,rock-4se
           - const: rockchip,rk3399
 
-      - description: Radxa ROCK 5 ITX
+      - description: Radxa ROCK 5 ITX/ITX+
         items:
           - const: radxa,rock-5-itx
           - const: rockchip,rk3588
