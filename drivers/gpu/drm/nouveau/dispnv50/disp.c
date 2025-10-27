@@ -1222,7 +1222,6 @@ nv50_mstc_detect(struct drm_connector *connector,
 		goto out;
 
 out:
-	pm_runtime_mark_last_busy(connector->dev->dev);
 	pm_runtime_put_autosuspend(connector->dev->dev);
 	return ret;
 }
@@ -2411,7 +2410,6 @@ nv50_disp_atomic_commit_tail(struct drm_atomic_state *state)
 	drm_atomic_state_put(state);
 
 	/* Drop the RPM ref we got from nv50_disp_atomic_commit() */
-	pm_runtime_mark_last_busy(dev->dev);
 	pm_runtime_put_autosuspend(dev->dev);
 }
 

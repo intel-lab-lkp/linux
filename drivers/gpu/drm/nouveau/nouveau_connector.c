@@ -673,7 +673,6 @@ detect_analog:
 	if (!nv_connector->edid)
 		drm_dp_cec_unset_edid(&nv_connector->aux);
 
-	pm_runtime_mark_last_busy(dev->dev);
 	pm_runtime_put_autosuspend(dev->dev);
 
 	return conn_status;
