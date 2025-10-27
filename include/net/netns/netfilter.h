@@ -18,6 +18,9 @@ struct netns_nf {
 #ifdef CONFIG_LWTUNNEL
 	struct ctl_table_header *nf_lwtnl_dir_header;
 #endif
+#if IS_ENABLED(CONFIG_NF_TABLES)
+	struct ctl_table_header *nf_tables_dir_header;
+#endif
 #endif
 	struct nf_hook_entries __rcu *hooks_ipv4[NF_INET_NUMHOOKS];
 	struct nf_hook_entries __rcu *hooks_ipv6[NF_INET_NUMHOOKS];
@@ -32,6 +35,9 @@ struct netns_nf {
 #endif
 #if IS_ENABLED(CONFIG_NF_DEFRAG_IPV6)
 	unsigned int defrag_ipv6_users;
+#endif
+#if IS_ENABLED(CONFIG_NF_TABLES)
+	unsigned int nf_tables_jumps_max_netns;
 #endif
 };
 #endif

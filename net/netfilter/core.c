@@ -24,6 +24,7 @@
 #include <linux/rcupdate.h>
 #include <net/net_namespace.h>
 #include <net/netfilter/nf_queue.h>
+#include <net/netfilter/nf_tables.h>
 #include <net/sock.h>
 
 #include "nf_internals.h"
@@ -815,12 +816,20 @@ int __init netfilter_init(void)
 	if (ret < 0)
 		goto err_lwtunnel_pernet;
 #endif
+#if IS_ENABLED(CONFIG_NF_TABLES)
+	ret = netfilter_nf_tables_sysctl_init();
+	if (ret < 0)
+		goto err_nft_pernet;
+#endif
 	ret = netfilter_log_init();
 	if (ret < 0)
 		goto err_log_pernet;
 
 	return 0;
+
 err_log_pernet:
+	netfilter_nf_tables_sysctl_fini();
+err_nft_pernet:
 #ifdef CONFIG_LWTUNNEL
 	netfilter_lwtunnel_fini();
 err_lwtunnel_pernet:
