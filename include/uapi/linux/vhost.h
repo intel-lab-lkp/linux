@@ -101,6 +101,9 @@
 /* Return the vring worker's ID */
 #define VHOST_GET_VRING_WORKER _IOWR(VHOST_VIRTIO, 0x16,		\
 				     struct vhost_vring_worker)
+/* Return the vring worker's ID and PID */
+#define VHOST_GET_VRING_WORKER_INFO _IOWR(VHOST_VIRTIO, 0x17,	\
+				     struct vhost_vring_worker_info)
 
 /* The following ioctls use eventfd file descriptors to signal and poll
  * for events. */

@@ -2399,6 +2399,22 @@ long vhost_dev_ioctl(struct vhost_dev *d, unsigned int ioctl, void __user *argp)
 		if (ctx)
 			eventfd_ctx_put(ctx);
 		break;
+	case VHOST_GET_VRING_WORKER_INFO:
+		worker = rcu_dereference_check(vq->worker,
+					       lockdep_is_held(&dev->mutex));
+		if (!worker) {
+			ret = -EINVAL;
+			break;
+		}
+
+		memset(&ring_worker_info, 0, sizeof(ring_worker_info));
+		ring_worker_info.index = idx;
+		ring_worker_info.worker_id = worker->id;
+		ring_worker_info.worker_pid = task_pid_vnr(vhost_get_task(worker->vtsk));
+
+		if (copy_to_user(argp, &ring_worker_info, sizeof(ring_worker_info)))
+			ret = -EFAULT;
+		break;
 	default:
 		r = -ENOIOCTLCMD;
 		break;

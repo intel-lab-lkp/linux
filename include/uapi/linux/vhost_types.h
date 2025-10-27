@@ -63,6 +63,19 @@ struct vhost_vring_worker {
 	unsigned int worker_id;
 };
 
+/* Per-virtqueue worker mapping entry */
+struct vhost_vring_worker_info {
+	/* vring index */
+	unsigned int index;
+	/*
+	 * The id of the vhost_worker returned from VHOST_NEW_WORKER or
+	 * allocated as part of vhost_dev_set_owner.
+	 */
+	unsigned int worker_id;
+
+	__kernel_pid_t worker_pid;  /* PID/TID of worker thread, -1 if none */
+};
+
 /* no alignment requirement */
 struct vhost_iotlb_msg {
 	__u64 iova;
