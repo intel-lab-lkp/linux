@@ -1202,30 +1202,20 @@ nfsd_is_write_dio_possible(loff_t offset, unsigned long len,
 	return true;
 }
 
+/*
+ * Check if the bvec iterator is aligned for direct I/O.
+ *
+ * bvecs generated from RPC receive buffers are contiguous: After the first
+ * bvec, all subsequent bvecs start at bv_offset zero (page-aligned).
+ * Therefore, only the first bvec is checked.
+ */
 static bool
 nfsd_iov_iter_aligned_bvec(const struct nfsd_file *nf, const struct iov_iter *i)
 {
-	unsigned int len_mask = nf->nf_dio_offset_align - 1;
 	unsigned int addr_mask = nf->nf_dio_mem_align - 1;
 	const struct bio_vec *bvec = i->bvec;
-	size_t skip = i->iov_offset;
-	size_t size = i->count;
 
-	if (size & len_mask)
-		return false;
-	do {
-		size_t len = bvec->bv_len;
-
-		if (len > size)
-			len = size;
-		if ((unsigned long)(bvec->bv_offset + skip) & addr_mask)
-			return false;
-		bvec++;
-		size -= len;
-		skip = 0;
-	} while (size);
-
-	return true;
+	return !((unsigned long)(bvec->bv_offset + i->iov_offset) & addr_mask);
 }
 
 static void
