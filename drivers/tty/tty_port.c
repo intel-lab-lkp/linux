@@ -99,6 +99,62 @@ void tty_port_init(struct tty_port *port)
 }
 EXPORT_SYMBOL(tty_port_init);
 
+static struct workqueue_struct *pty_flip_wq;
+
+/**
+ * pty_flip_wq_init -- initialize workqueue for pty flip buffer work
+ *
+ * Initialzes workqueue for pty ports, they share the same workqueue which
+ * should be created when pty driver init.
+ * Pty ports are numerous and hard to distinguish, it is meaningless to
+ * separate them when create tty flip workqueue.
+ */
+void pty_flip_wq_init(void)
+{
+	if (!pty_flip_wq) {
+		pty_flip_wq = alloc_workqueue("pty-flip-wq", WQ_UNBOUND | WQ_SYSFS, 0);
+		if (!pty_flip_wq)
+			pty_flip_wq = system_unbound_wq;
+	}
+}
+
+/**
+ * tty_flip_wq_init -- prepare workqueue for tty/pty flip buffer work
+ * @port: tty_port of the device
+ * @driver: tty_driver for this device
+ * @index: index of the tty
+ *
+ * Not all tty_port will be initialized by tty_port_init where tty_flip_wq will
+ * be set to system_unbound_wq as default. Allocate workqueue with WQ_SYSFS for
+ * flip buffer, so that cpumask and nice can be changed dynamically.
+ */
+void tty_flip_wq_init(struct tty_port *port, struct tty_driver *driver,
+		      unsigned int index)
+{
+	char name[64];
+
+	if (driver->type == TTY_DRIVER_TYPE_PTY) {
+		port->buf.tty_flip_wq = pty_flip_wq;
+		return;
+	}
+	tty_line_name(driver, index, name);
+	if (!port->buf.tty_flip_wq
+		|| port->buf.tty_flip_wq == system_unbound_wq) {
+		port->buf.tty_flip_wq = alloc_workqueue("%s-flip-wq",
+							WQ_UNBOUND | WQ_SYSFS,
+							0, name);
+		if (unlikely(!port->buf.tty_flip_wq))
+			port->buf.tty_flip_wq = system_unbound_wq;
+	}
+}
+
+static void tty_flip_wq_destroy(struct tty_port *port)
+{
+	if (port->buf.tty_flip_wq != system_unbound_wq
+		&& port->buf.tty_flip_wq != pty_flip_wq)
+		destroy_workqueue(port->buf.tty_flip_wq);
+}
+
 /**
  * tty_port_link_device - link tty and tty_port
  * @port: tty_port of the device
@@ -115,6 +171,7 @@ void tty_port_link_device(struct tty_port *port,
 {
 	if (WARN_ON(index >= driver->num))
 		return;
+	tty_flip_wq_init(port, driver, index);
 	driver->ports[index] = port;
 }
 EXPORT_SYMBOL_GPL(tty_port_link_device);
@@ -256,6 +313,7 @@ EXPORT_SYMBOL(tty_port_free_xmit_buf);
 void tty_port_destroy(struct tty_port *port)
 {
 	tty_buffer_cancel_work(port);
+	tty_flip_wq_destroy(port);
 	tty_buffer_free_all(port);
 }
 EXPORT_SYMBOL(tty_port_destroy);

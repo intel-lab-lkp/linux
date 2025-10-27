@@ -412,6 +412,8 @@ static int pty_common_install(struct tty_driver *driver, struct tty_struct *tty,
 	o_tty->port = ports[0];
 	tty->port = ports[1];
 	o_tty->port->itty = o_tty;
+	tty_flip_wq_init(ports[0], driver->other, idx);
+	tty_flip_wq_init(ports[1], driver->other, idx);
 
 	tty_buffer_set_lock_subclass(o_tty->port);
 
@@ -546,6 +548,8 @@ static void __init legacy_pty_init(void)
 			TTY_DRIVER_DYNAMIC_ALLOC);
 	if (IS_ERR(pty_slave_driver))
 		panic("Couldn't allocate pty slave driver");
+
+	pty_flip_wq_init();
 
 	pty_driver->driver_name = "pty_master";
 	pty_driver->name = "pty";
@@ -888,6 +892,8 @@ static void __init unix98_pty_init(void)
 			TTY_DRIVER_DYNAMIC_ALLOC);
 	if (IS_ERR(pts_driver))
 		panic("Couldn't allocate Unix98 pts driver");
+
+	pty_flip_wq_init();
 
 	ptm_driver->driver_name = "pty_master";
 	ptm_driver->name = "ptm";

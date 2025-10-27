@@ -1191,7 +1191,7 @@ static void pty_line_name(struct tty_driver *driver, int index, char *p)
  *
  * Locking: None
  */
-static ssize_t tty_line_name(struct tty_driver *driver, int index, char *p)
+ssize_t tty_line_name(struct tty_driver *driver, int index, char *p)
 {
 	if (driver->flags & TTY_DRIVER_UNNUMBERED_NODE)
 		return sprintf(p, "%s", driver->name);
