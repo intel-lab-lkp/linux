@@ -1,0 +1,34 @@
+// Test for permanent FIN-WAIT-1 state with continuous zero-window advertisements
+// Author: HaiYang Zhong <wokezhong@tencent.com>
+
+
+0.000 socket(..., SOCK_STREAM, IPPROTO_TCP) = 3
+0.000 setsockopt(3, SOL_SOCKET, SO_REUSEADDR, [1], 4) = 0
+0.000 bind(3, ..., ...) = 0
+0.000 listen(3, 1) = 0
+
+0.100 < S 0:0(0) win 65535 <mss 1460>
+0.100 > S. 0:0(0) ack 1 <mss 1460>
+0.100 < . 1:1(0) ack 1 win 65535
+0.100 accept(3, ..., ...) = 4
+
+// Send data to fill receive window
+0.200 write(4, ..., 5) = 5
+0.200 > P. 1:6(5) ack 1
+
+// Advertise zero-window
+0.200 < . 1:1(0) ack 6 win 0
+
+// Application closes connection, sends FIN (but blocked by zero window)
+0.200 close(4) = 0
+
+//Send zero-window probe packet
++0.200 > . 5:5(0) ack 1
++0.400 > . 5:5(0) ack 1
++0.800 > . 5:5(0) ack 1
+
++1.000 < . 1:1(0) ack 6 win 0
+
+// Without fix: This probe won't match - timer was reset, probe will be sent 2.600s after the previous probe
+// With fix: This probe matches - exponential backoff continues (1.600s after previous probe)
++0.600~+0.700 > . 5:5(0) ack 1
