@@ -470,7 +470,7 @@ static void raid1_end_write_request(struct bio *bio)
 		    (bio->bi_opf & MD_FAILFAST) &&
 		    /* We never try FailFast to WriteMostly devices */
 		    !test_bit(WriteMostly, &rdev->flags)) {
-			md_error(r1_bio->mddev, rdev);
+			md_cond_error(r1_bio->mddev, rdev, bio);
 		}
 
 		/*
@@ -2177,8 +2177,7 @@ static int fix_sync_read_error(struct r1bio *r1_bio)
 	if (test_bit(FailFast, &rdev->flags)) {
 		/* Don't try recovering from here - just fail it
 		 * ... unless it is the last working device of course */
-		md_error(mddev, rdev);
-		if (test_bit(Faulty, &rdev->flags))
+		if (md_cond_error(mddev, rdev, bio))
 			/* Don't try to read from here, but make sure
 			 * put_buf does it's thing
 			 */
@@ -2671,20 +2670,20 @@ static void handle_read_error(struct r1conf *conf, struct r1bio *r1_bio)
 	 */
 
 	bio = r1_bio->bios[r1_bio->read_disk];
-	bio_put(bio);
 	r1_bio->bios[r1_bio->read_disk] = NULL;
 
 	rdev = conf->mirrors[r1_bio->read_disk].rdev;
 	if (mddev->ro) {
 		r1_bio->bios[r1_bio->read_disk] = IO_BLOCKED;
 	} else if (test_bit(FailFast, &rdev->flags)) {
-		md_error(mddev, rdev);
+		md_cond_error(mddev, rdev, bio);
 	} else {
 		freeze_array(conf, 1);
 		fix_read_error(conf, r1_bio);
 		unfreeze_array(conf);
 	}
 
+	bio_put(bio);
 	rdev_dec_pending(rdev, conf->mddev);
 	sector = r1_bio->sector;
 
