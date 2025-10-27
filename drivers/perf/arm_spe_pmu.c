@@ -400,7 +400,7 @@ static u64 arm_spe_event_to_pmsirr(struct perf_event *event)
 	arm_spe_event_sanitise_period(event);
 
 	reg |= FIELD_PREP(PMSIRR_EL1_RND, ATTR_CFG_GET_FLD(attr, jitter));
-	reg |= event->hw.sample_period;
+	reg |= FIELD_PREP(PMSIRR_EL1_INTERVAL, event->hw.sample_period);
 
 	return reg;
 }
