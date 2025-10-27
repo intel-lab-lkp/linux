@@ -12,6 +12,7 @@ use kernel::transmute::FromBytes;
 
 use crate::dma::DmaObject;
 use crate::firmware::BinFirmware;
+use crate::num::FromAs;
 
 /// Descriptor for microcode running on a RISC-V core.
 #[repr(C)]
@@ -41,7 +42,7 @@ impl RmRiscvUCodeDesc {
     ///
     /// Fails if the header pointed at by `bin_fw` is not within the bounds of the firmware image.
     fn new(bin_fw: &BinFirmware<'_>) -> Result<Self> {
-        let offset = bin_fw.hdr.header_offset as usize;
+        let offset = usize::from_as(bin_fw.hdr.header_offset);
 
         bin_fw
             .fw
@@ -74,8 +75,8 @@ impl RiscvFirmware {
         let riscv_desc = RmRiscvUCodeDesc::new(&bin_fw)?;
 
         let ucode = {
-            let start = bin_fw.hdr.data_offset as usize;
-            let len = bin_fw.hdr.data_size as usize;
+            let start = usize::from_as(bin_fw.hdr.data_offset);
+            let len = usize::from_as(bin_fw.hdr.data_size);
 
             DmaObject::from_data(dev, fw.data().get(start..start + len).ok_or(EINVAL)?)?
         };

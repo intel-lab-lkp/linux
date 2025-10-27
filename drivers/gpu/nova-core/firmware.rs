@@ -15,6 +15,7 @@ use kernel::transmute::FromBytes;
 use crate::dma::DmaObject;
 use crate::falcon::FalconFirmware;
 use crate::gpu;
+use crate::num::{FromAs, IntoAs};
 
 pub(crate) mod booter;
 pub(crate) mod fwsec;
@@ -75,7 +76,7 @@ impl FalconUCodeDescV3 {
         const HDR_SIZE_SHIFT: u32 = 16;
         const HDR_SIZE_MASK: u32 = 0xffff0000;
 
-        ((self.hdr & HDR_SIZE_MASK) >> HDR_SIZE_SHIFT) as usize
+        ((self.hdr & HDR_SIZE_MASK) >> HDR_SIZE_SHIFT).into_as()
     }
 }
 
@@ -190,8 +191,8 @@ impl<'a> BinFirmware<'a> {
     /// Returns the data payload of the firmware, or `None` if the data range is out of bounds of
     /// the firmware image.
     fn data(&self) -> Option<&[u8]> {
-        let fw_start = self.hdr.data_offset as usize;
-        let fw_size = self.hdr.data_size as usize;
+        let fw_start = usize::from_as(self.hdr.data_offset);
+        let fw_size = usize::from_as(self.hdr.data_size);
 
         self.fw.get(fw_start..fw_start + fw_size)
     }
