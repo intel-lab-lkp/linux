@@ -580,7 +580,7 @@ static int elevator_switch(struct request_queue *q, struct elv_change_ctx *ctx)
 	}
 
 	if (new_e) {
-		ret = blk_mq_init_sched(q, new_e, ctx->et);
+		ret = blk_mq_init_sched(q, new_e, ctx->res.et);
 		if (ret)
 			goto out_unfreeze;
 		ctx->new = q->elevator;
@@ -656,9 +656,9 @@ static int elevator_change(struct request_queue *q, struct elv_change_ctx *ctx)
 	lockdep_assert_held(&set->update_nr_hwq_lock);
 
 	if (strncmp(ctx->name, "none", 4)) {
-		ctx->et = blk_mq_alloc_sched_tags(set, set->nr_hw_queues,
+		ctx->res.et = blk_mq_alloc_sched_tags(set, set->nr_hw_queues,
 				blk_mq_default_nr_requests(set));
-		if (!ctx->et)
+		if (!ctx->res.et)
 			return -ENOMEM;
 	}
 
@@ -683,8 +683,8 @@ static int elevator_change(struct request_queue *q, struct elv_change_ctx *ctx)
 	/*
 	 * Free sched tags if it's allocated but we couldn't switch elevator.
 	 */
-	if (ctx->et && !ctx->new)
-		blk_mq_free_sched_tags(ctx->et, set);
+	if (ctx->res.et && !ctx->new)
+		blk_mq_free_sched_tags(ctx->res.et, set);
 
 	return ret;
 }
@@ -713,8 +713,8 @@ void elv_update_nr_hw_queues(struct request_queue *q,
 	/*
 	 * Free sched tags if it's allocated but we couldn't switch elevator.
 	 */
-	if (ctx->et && !ctx->new)
-		blk_mq_free_sched_tags(ctx->et, set);
+	if (ctx->res.et && !ctx->new)
+		blk_mq_free_sched_tags(ctx->res.et, set);
 }
 
 /*

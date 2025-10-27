@@ -559,7 +559,7 @@ int blk_mq_alloc_sched_tags_batch(struct xarray *elv_tbl,
 				ret = -ENOENT;
 				goto out_free_tags;
 			}
-			ctx->et = et;
+			ctx->res.et = et;
 		}
 	}
 	return 0;
@@ -569,9 +569,9 @@ out_unwind:
 	list_for_each_entry_continue_reverse(q, &set->tag_list, tag_set_list) {
 		if (q->elevator) {
 			ctx = xa_load(elv_tbl, q->id);
-			if (ctx && ctx->et) {
-				blk_mq_free_sched_tags(ctx->et, set);
-				ctx->et = NULL;
+			if (ctx && ctx->res.et) {
+				blk_mq_free_sched_tags(ctx->res.et, set);
+				ctx->res.et = NULL;
 			}
 		}
 	}
