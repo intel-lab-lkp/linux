@@ -20,4 +20,6 @@ TEST_PROGS := \
 	udp_tunnel_nic.sh \
 # end of TEST_PROGS
 
+TEST_FILES := ethtool-common.sh
+
 include ../../../lib.mk
