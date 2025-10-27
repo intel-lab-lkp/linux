@@ -1978,6 +1978,31 @@ static int enough(struct r10conf *conf, int ignore)
 }
 
 /**
+ * raid10_should_error() - Determine if this rdev should be failed
+ * @mddev: affected md device
+ * @rdev: member device to check
+ * @bio: the bio that caused the failure
+ *
+ * When failfast bios failure, rdev can fail, but the mddev must not fail.
+ * This function tells md_cond_error() not to fail rdev if bio is failfast
+ * and last rdev.
+ *
+ * Returns: %false if bio is failfast and rdev is the last in-sync device.
+ *	     Otherwise %true - should fail this rdev.
+ */
+static bool raid10_should_error(struct mddev *mddev, struct md_rdev *rdev, struct bio *bio)
+{
+	struct r10conf *conf = mddev->private;
+
+	if (!(bio->bi_opf & MD_FAILFAST) ||
+	    !test_bit(FailFast, &rdev->flags) ||
+	    test_bit(Faulty, &rdev->flags))
+		return true;
+
+	return enough(conf, rdev->raid_disk);
+}
+
+/**
  * raid10_error() - RAID10 error handler.
  * @mddev: affected md device.
  * @rdev: member device to fail.
@@ -5116,6 +5141,7 @@ static struct md_personality raid10_personality =
 	.free		= raid10_free,
 	.status		= raid10_status,
 	.error_handler	= raid10_error,
+	.should_error	= raid10_should_error,
 	.hot_add_disk	= raid10_add_disk,
 	.hot_remove_disk= raid10_remove_disk,
 	.spare_active	= raid10_spare_active,
