@@ -209,7 +209,7 @@ struct ublk_queue {
 struct ublk_device {
 	struct gendisk		*ub_disk;
 
-	char	*__queues;
+	struct ublk_queue	**__queues;
 
 	unsigned int	queue_size;
 	struct ublksrv_ctrl_dev_info	dev_info;
@@ -781,7 +781,7 @@ static noinline void ublk_put_device(struct ublk_device *ub)
 static inline struct ublk_queue *ublk_get_queue(struct ublk_device *dev,
 		int qid)
 {
-       return (struct ublk_queue *)&(dev->__queues[qid * dev->queue_size]);
+	return dev->__queues[qid];
 }
 
 static inline bool ublk_rq_has_data(const struct request *rq)
@@ -2678,11 +2678,11 @@ static void ublk_deinit_queue(struct ublk_device *ub, int q_id)
 		free_pages((unsigned long)ubq->io_cmd_buf, get_order(size));
 }
 
-static int ublk_init_queue(struct ublk_device *ub, int q_id)
+static int ublk_init_queue(struct ublk_device *ub, int q_id, int numa_node)
 {
 	struct ublk_queue *ubq = ublk_get_queue(ub, q_id);
 	gfp_t gfp_flags = GFP_KERNEL | __GFP_ZERO;
-	void *ptr;
+	struct page *page;
 	int size;
 
 	spin_lock_init(&ubq->cancel_lock);
@@ -2691,11 +2691,12 @@ static int ublk_init_queue(struct ublk_device *ub, int q_id)
 	ubq->q_depth = ub->dev_info.queue_depth;
 	size = ublk_queue_cmd_buf_size(ub);
 
-	ptr = (void *) __get_free_pages(gfp_flags, get_order(size));
-	if (!ptr)
+	/* Allocate I/O command buffer on local NUMA node */
+	page = alloc_pages_node(numa_node, gfp_flags, get_order(size));
+	if (!page)
 		return -ENOMEM;
 
-	ubq->io_cmd_buf = ptr;
+	ubq->io_cmd_buf = page_address(page);
 	ubq->dev = ub;
 	return 0;
 }
@@ -2708,9 +2709,24 @@ static void ublk_deinit_queues(struct ublk_device *ub)
 	if (!ub->__queues)
 		return;
 
-	for (i = 0; i < nr_queues; i++)
+	for (i = 0; i < nr_queues; i++) {
 		ublk_deinit_queue(ub, i);
+		kvfree(ub->__queues[i]);
+	}
 	kvfree(ub->__queues);
+}
+
+static int ublk_get_queue_numa_node(struct ublk_device *ub, int q_id)
+{
+	unsigned int cpu;
+
+	/* Find first CPU mapped to this queue */
+	for_each_possible_cpu(cpu) {
+		if (ub->tag_set.map[HCTX_TYPE_DEFAULT].mq_map[cpu] == q_id)
+			return cpu_to_node(cpu);
+	}
+
+	return NUMA_NO_NODE;
 }
 
 static int ublk_init_queues(struct ublk_device *ub)
@@ -2721,12 +2737,24 @@ static int ublk_init_queues(struct ublk_device *ub)
 	int i, ret = -ENOMEM;
 
 	ub->queue_size = ubq_size;
-	ub->__queues = kvcalloc(nr_queues, ubq_size, GFP_KERNEL);
+	ub->__queues = kvcalloc(nr_queues, sizeof(struct ublk_queue *),
+				GFP_KERNEL);
 	if (!ub->__queues)
 		return ret;
 
 	for (i = 0; i < nr_queues; i++) {
-		if (ublk_init_queue(ub, i))
+		int numa_node;
+
+		/* Determine NUMA node based on queue's CPU affinity */
+		numa_node = ublk_get_queue_numa_node(ub, i);
+
+		/* Allocate this queue on its local NUMA node */
+		ub->__queues[i] = kvzalloc_node(ubq_size, GFP_KERNEL,
+						numa_node);
+		if (!ub->__queues[i])
+			goto fail;
+
+		if (ublk_init_queue(ub, i, numa_node))
 			goto fail;
 	}
 
