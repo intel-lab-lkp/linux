@@ -21945,6 +21945,24 @@
 #define RLC_RLCV_SPARE_INT_1__RESERVED__SHIFT                                                                 0x1
 #define RLC_RLCV_SPARE_INT_1__INTERRUPT_MASK                                                                  0x00000001L
 #define RLC_RLCV_SPARE_INT_1__RESERVED_MASK                                                                   0xFFFFFFFEL
+//RLC_VFI_CMD
+#define RLC_VFI_CMD__VFI_CMD__SHIFT                                                                           0x0
+#define RLC_VFI_CMD__VFI_CMD_MASK                                                                             0xFFFFFFFFL
+//RLC_VFI_STAT
+#define RLC_VFI_STAT__VFI_STATUS__SHIFT                                                                       0x0
+#define RLC_VFI_STAT__VFI_STATUS_MASK                                                                         0xFFFFFFFFL
+//RLC_VFI_GRBM_GFX_INDEX
+#define RLC_VFI_GRBM_GFX_INDEX__VFI_GRBM_GFX_INDEX__SHIFT                                                     0x0
+#define RLC_VFI_GRBM_GFX_INDEX__VFI_GRBM_GFX_INDEX_MASK                                                       0xFFFFFFFFL
+//RLC_VFI_GRBM_GFX_CNTL
+#define RLC_VFI_GRBM_GFX_CNTL__VFI_GRBM_GFX_CNTL__SHIFT                                                       0x0
+#define RLC_VFI_GRBM_GFX_CNTL__VFI_GRBM_GFX_CNTL_MASK                                                         0xFFFFFFFFL
+//RLC_VFI_ADDR
+#define RLC_VFI_ADDR__VFI_ADDR__SHIFT                                                                         0x0
+#define RLC_VFI_ADDR__VFI_ADDR_MASK                                                                           0xFFFFFFFFL
+//RLC_VFI_DATA
+#define RLC_VFI_DATA__VFI_DATA__SHIFT                                                                         0x0
+#define RLC_VFI_DATA__VFI_DATA_MASK                                                                           0xFFFFFFFFL
 
 
 // addressBlock: CHIP_XCD_gfxip_xcc_gfx_cpwd_cpwd_pwrdec
