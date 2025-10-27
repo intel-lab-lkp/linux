@@ -324,6 +324,12 @@ impl<Ctx: device::DeviceContext> Interface<Ctx> {
     }
 }
 
+// SAFETY: `usb::Interface` is a transparent wrapper of `struct usb_interface`.
+// The offset is guaranteed to point to a valid device field inside `usb::Interface`.
+unsafe impl<Ctx: device::DeviceContext> device::AsBusDevice<Ctx> for Interface<Ctx> {
+    const OFFSET: usize = offset_of!(bindings::usb_interface, dev);
+}
+
 // SAFETY: `Interface` is a transparent wrapper of a type that doesn't depend on
 // `Interface`'s generic argument.
 kernel::impl_device_context_deref!(unsafe { Interface });
