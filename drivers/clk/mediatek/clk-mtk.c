@@ -2,6 +2,8 @@
 /*
  * Copyright (c) 2014 MediaTek Inc.
  * Author: James Liao <jamesjj.liao@mediatek.com>
+ * Copyright (c) 2025 Collabora Ltd
+ *		      AngeloGioacchino Del Regno <angelogioacchino.delregno@collabora.com>
  */
 
 #include <linux/bitops.h>
@@ -14,6 +16,7 @@
 #include <linux/of_address.h>
 #include <linux/platform_device.h>
 #include <linux/pm_runtime.h>
+#include <linux/regmap.h>
 #include <linux/slab.h>
 
 #include "clk-mtk.h"
@@ -464,25 +467,14 @@ void mtk_clk_unregister_dividers(const struct mtk_clk_divider *mcds, int num,
 }
 EXPORT_SYMBOL_GPL(mtk_clk_unregister_dividers);
 
-static int __mtk_clk_simple_probe(struct platform_device *pdev,
-				  struct device_node *node)
+int mtk_clk_simple_probe_internal(struct platform_device *pdev,
+				  struct device_node *node,
+				  const struct mtk_clk_desc *mcd,
+				  struct regmap *regmap)
 {
-	const struct platform_device_id *id;
-	const struct mtk_clk_desc *mcd;
 	struct clk_hw_onecell_data *clk_data;
 	void __iomem *base = NULL;
 	int num_clks, r;
-
-	mcd = device_get_match_data(&pdev->dev);
-	if (!mcd) {
-		/* Clock driver wasn't registered from devicetree */
-		id = platform_get_device_id(pdev);
-		if (id)
-			mcd = (const struct mtk_clk_desc *)id->driver_data;
-
-		if (!mcd)
-			return -EINVAL;
-	}
 
 	/* Composite and divider clocks needs us to pass iomem pointer */
 	if (mcd->composite_clks || mcd->divider_clks) {
@@ -653,20 +645,52 @@ static void __mtk_clk_simple_remove(struct platform_device *pdev,
 	mtk_free_clk_data(clk_data);
 }
 
+static int mtk_clk_get_desc(struct platform_device *pdev, const struct mtk_clk_desc **d)
+{
+	const struct platform_device_id *id;
+	const struct mtk_clk_desc *mcd;
+
+	mcd = device_get_match_data(&pdev->dev);
+	if (!mcd) {
+		/* Clock driver wasn't registered from devicetree */
+		id = platform_get_device_id(pdev);
+		if (id)
+			mcd = (const struct mtk_clk_desc *)id->driver_data;
+
+		if (!mcd)
+			return -EINVAL;
+	}
+	*d = mcd;
+
+	return 0;
+}
+
 int mtk_clk_pdev_probe(struct platform_device *pdev)
 {
 	struct device *dev = &pdev->dev;
 	struct device_node *node = dev->parent->of_node;
+	const struct mtk_clk_desc *mcd;
+	int ret;
 
-	return __mtk_clk_simple_probe(pdev, node);
+	ret = mtk_clk_get_desc(pdev, &mcd);
+	if (ret)
+		return ret;
+
+	return mtk_clk_simple_probe_internal(pdev, node, mcd, NULL);
 }
 EXPORT_SYMBOL_GPL(mtk_clk_pdev_probe);
 
 int mtk_clk_simple_probe(struct platform_device *pdev)
 {
 	struct device_node *node = pdev->dev.of_node;
+	const struct mtk_clk_desc *mcd;
+	int ret;
 
-	return __mtk_clk_simple_probe(pdev, node);
+	ret = mtk_clk_get_desc(pdev, &mcd);
+	if (ret)
+		return ret;
+
+	return mtk_clk_simple_probe_internal(pdev, node, mcd, NULL);
 }
 EXPORT_SYMBOL_GPL(mtk_clk_simple_probe);
 

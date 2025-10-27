@@ -262,6 +262,11 @@ struct mtk_clk_desc {
 	bool need_runtime_pm;
 };
 
+int mtk_clk_simple_probe_internal(struct platform_device *pdev,
+				  struct device_node *node,
+				  const struct mtk_clk_desc *mcd,
+				  struct regmap *regmap);
+
 int mtk_clk_pdev_probe(struct platform_device *pdev);
 void mtk_clk_pdev_remove(struct platform_device *pdev);
 int mtk_clk_simple_probe(struct platform_device *pdev);
