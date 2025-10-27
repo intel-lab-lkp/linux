@@ -8479,6 +8479,39 @@ void md_error(struct mddev *mddev, struct md_rdev *rdev)
 }
 EXPORT_SYMBOL(md_error);
 
+/** md_cond_error() - conditionally md_error()
+ * @mddev: affected md device
+ * @rdev: member device to fail
+ * @bio: bio whose triggered device failure
+ *
+ * Check if the personality wants to fail this rdev for this bio,
+ * and if so, call _md_error().
+ * This function has no different behavior from md_error except
+ * for the raid1/10 with failfast enabled rdevs.
+ *
+ * Returns: %true if rdev already or become Faulty, %false if not.
+ */
+bool md_cond_error(struct mddev *mddev, struct md_rdev *rdev, struct bio *bio)
+{
+	if (WARN_ON_ONCE(!mddev->pers))
+		/* return true because we don't want caller to retry */
+		return true;
+
+	spin_lock(&mddev->device_lock);
+
+	if (mddev->pers->should_error &&
+	    !mddev->pers->should_error(mddev, rdev, bio)) {
+		spin_unlock(&mddev->device_lock);
+		return test_bit(Faulty, &rdev->flags);
+	}
+
+	_md_error(mddev, rdev);
+	spin_unlock(&mddev->device_lock);
+
+	return !WARN_ON_ONCE(!test_bit(Faulty, &rdev->flags));
+}
+EXPORT_SYMBOL(md_cond_error);
+
 /* seq_file implementation /proc/mdstat */
 
 static void status_unused(struct seq_file *seq)
