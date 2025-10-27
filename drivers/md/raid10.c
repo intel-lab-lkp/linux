@@ -497,7 +497,7 @@ static void raid10_end_write_request(struct bio *bio)
 			dec_rdev = 0;
 			if (test_bit(FailFast, &rdev->flags) &&
 			    (bio->bi_opf & MD_FAILFAST)) {
-				md_error(rdev->mddev, rdev);
+				md_cond_error(rdev->mddev, rdev, bio);
 			}
 
 			/*
@@ -2434,7 +2434,7 @@ static void sync_request_write(struct mddev *mddev, struct r10bio *r10_bio)
 				continue;
 		} else if (test_bit(FailFast, &rdev->flags)) {
 			/* Just give up on this device */
-			md_error(rdev->mddev, rdev);
+			md_cond_error(rdev->mddev, rdev, r10_bio->devs[i].bio);
 			continue;
 		}
 		/* Ok, we need to write this bio, either to correct an
@@ -2877,19 +2877,19 @@ static void handle_read_error(struct mddev *mddev, struct r10bio *r10_bio)
 	 * frozen.
 	 */
 	bio = r10_bio->devs[slot].bio;
-	bio_put(bio);
 	r10_bio->devs[slot].bio = NULL;
 
 	if (mddev->ro) {
 		r10_bio->devs[slot].bio = IO_BLOCKED;
 	} else if (test_bit(FailFast, &rdev->flags)) {
-		md_error(mddev, rdev);
+		md_cond_error(mddev, rdev, bio);
 	} else {
 		freeze_array(conf, 1);
 		fix_read_error(conf, mddev, r10_bio);
 		unfreeze_array(conf);
 	}
 
+	bio_put(bio);
 	rdev_dec_pending(rdev, mddev);
 	r10_bio->state = 0;
 	raid10_read_request(mddev, r10_bio->master_bio, r10_bio, false);
