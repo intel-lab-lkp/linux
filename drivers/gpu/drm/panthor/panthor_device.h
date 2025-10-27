@@ -24,7 +24,6 @@ struct panthor_device;
 struct panthor_gpu;
 struct panthor_group_pool;
 struct panthor_heap_pool;
-struct panthor_hw;
 struct panthor_job;
 struct panthor_mmu;
 struct panthor_fw;
