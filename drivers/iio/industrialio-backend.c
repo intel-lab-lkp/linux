@@ -717,6 +717,7 @@ EXPORT_SYMBOL_NS_GPL(iio_backend_data_size_set, "IIO_BACKEND");
 /**
  * iio_backend_oversampling_ratio_set - set the oversampling ratio
  * @back: Backend device
+ * @chan: Channel number
  * @ratio: The oversampling ratio - value 1 corresponds to no oversampling.
  *
  * Return:
@@ -1064,6 +1065,9 @@ EXPORT_SYMBOL_NS_GPL(__devm_iio_backend_get_from_fwnode_lookup, "IIO_BACKEND");
 /**
  * iio_backend_get_priv - Get driver private data
  * @back: Backend device
+ *
+ * RETURNS:
+ * Pointer to the driver private data associated with the backend.
  */
 void *iio_backend_get_priv(const struct iio_backend *back)
 {
