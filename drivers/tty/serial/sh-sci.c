@@ -3403,7 +3403,7 @@ static void sci_remove(struct platform_device *dev)
 	if (s->port.fifosize > 1)
 		device_remove_file(&dev->dev, &dev_attr_rx_fifo_trigger);
 	if (type == PORT_SCIFA || type == PORT_SCIFB || type == PORT_HSCIF ||
-	    type == SCI_PORT_RSCI)
+	    type == SCI_PORT_RSCI || type == RSCI_PORT_SCIF)
 		device_remove_file(&dev->dev, &dev_attr_rx_fifo_timeout);
 }
 
@@ -3498,6 +3498,10 @@ static const struct of_device_id of_sci_match[] __maybe_unused = {
 		.data = &of_sci_scif_rzv2h,
 	},
 #ifdef CONFIG_SERIAL_RSCI
+	{
+		.compatible = "renesas,r9a09g047-rscif",
+		.data = &of_rsci_scif_data,
+	},
 	{
 		.compatible = "renesas,r9a09g077-rsci",
 		.data = &of_sci_rsci_data,
@@ -3765,7 +3769,8 @@ static int sci_probe(struct platform_device *dev)
 			return ret;
 	}
 	if (sp->type == PORT_SCIFA || sp->type == PORT_SCIFB ||
-	    sp->type == PORT_HSCIF || sp->type == SCI_PORT_RSCI) {
+	    sp->type == PORT_HSCIF || sp->type == SCI_PORT_RSCI ||
+	    sp->type == RSCI_PORT_SCIF) {
 		ret = device_create_file(&dev->dev, &dev_attr_rx_fifo_timeout);
 		if (ret) {
 			if (sp->port.fifosize > 1) {
