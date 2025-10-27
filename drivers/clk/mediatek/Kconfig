@@ -132,6 +132,13 @@ config COMMON_CLK_MT2712_VENCSYS
 	help
 	  This driver supports MediaTek MT2712 vencsys clocks.
 
+config COMMON_CLK_MT6685
+	tristate "Clock driver for MediaTek MT6685 Clock IC"
+	depends on ARCH_MEDIATEK
+	select COMMON_CLK_MEDIATEK_SPMI
+	help
+	  This driver supports clocks provided by the MT6685 Clock IC.
+
 config COMMON_CLK_MT6735
 	tristate "Main clock drivers for MediaTek MT6735"
 	depends on ARCH_MEDIATEK || COMPILE_TEST
