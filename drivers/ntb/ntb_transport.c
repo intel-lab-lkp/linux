@@ -92,7 +92,15 @@ MODULE_PARM_DESC(copy_bytes, "Threshold under which NTB will use the CPU to copy
 
 static bool use_dma;
 module_param(use_dma, bool, 0644);
-MODULE_PARM_DESC(use_dma, "Use DMA engine to perform large data copy");
+MODULE_PARM_DESC(use_dma, "Use DMA engine to perform large data copy on both TX and RX");
+
+static bool use_tx_dma;
+module_param(use_tx_dma, bool, 0644);
+MODULE_PARM_DESC(use_tx_dma, "Use DMA engine to perform large data copy on TX");
+
+static bool use_rx_dma;
+module_param(use_rx_dma, bool, 0644);
+MODULE_PARM_DESC(use_rx_dma, "Use DMA engine to perform large data copy on RX");
 
 static bool use_msi;
 #ifdef CONFIG_NTB_MSI
@@ -2047,21 +2055,26 @@ ntb_transport_create_queue(void *data, struct device *client_dev,
 	dma_cap_set(DMA_MEMCPY, dma_mask);
 
 	if (use_dma) {
+		use_tx_dma = true;
+		use_rx_dma = true;
+	}
+	if (use_tx_dma) {
 		qp->tx_dma_chan =
 			dma_request_channel(dma_mask, ntb_dma_filter_fn,
 					    (void *)(unsigned long)node);
 		if (!qp->tx_dma_chan)
 			dev_info(&pdev->dev, "Unable to allocate TX DMA channel\n");
+	} else
+		qp->tx_dma_chan = NULL;
 
+	if (use_rx_dma) {
 		qp->rx_dma_chan =
 			dma_request_channel(dma_mask, ntb_dma_filter_fn,
 					    (void *)(unsigned long)node);
 		if (!qp->rx_dma_chan)
 			dev_info(&pdev->dev, "Unable to allocate RX DMA channel\n");
-	} else {
-		qp->tx_dma_chan = NULL;
+	} else
 		qp->rx_dma_chan = NULL;
-	}
 
 	qp->tx_mw_dma_addr = 0;
 	if (qp->tx_dma_chan) {
