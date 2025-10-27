@@ -257,8 +257,7 @@ static int mtk_clk_register_all_gates(struct device *dev, struct device_node *no
 				      const struct mtk_gate *clks, int num,
 				      struct clk_hw_onecell_data *clk_data)
 {
-	int i;
-	struct clk_hw *hw;
+	int i, ret;
 
 	if (!clk_data)
 		return -ENOMEM;
@@ -272,21 +271,19 @@ static int mtk_clk_register_all_gates(struct device *dev, struct device_node *no
 			continue;
 		}
 
-		hw = mtk_clk_register_gate(dev, gate, regmap, regmap_hwv);
-
-		if (IS_ERR(hw)) {
+		clk_data->hws[gate->id] = mtk_clk_register_gate(dev, gate, regmap, hwv_regmap);
+		if (IS_ERR(clk_data->hws[gate->id])) {
 			pr_err("Failed to register clk %s: %pe\n", gate->name,
-			       hw);
+			       clk_data->hws[gate->id]);
+			ret = PTR_ERR(clk_data->hws[gate->id]);
 			goto err;
 		}
-
-		clk_data->hws[gate->id] = hw;
 	}
 
 	return 0;
 
 err:
-	while (--i >= 0) {
+	while (i-- >= 0) {
 		const struct mtk_gate *gate = &clks[i];
 
 		if (IS_ERR_OR_NULL(clk_data->hws[gate->id]))
@@ -296,7 +293,7 @@ err:
 		clk_data->hws[gate->id] = ERR_PTR(-ENOENT);
 	}
 
-	return PTR_ERR(hw);
+	return ret;
 }
 
 int mtk_clk_register_gates(struct device *dev, struct device_node *node,
