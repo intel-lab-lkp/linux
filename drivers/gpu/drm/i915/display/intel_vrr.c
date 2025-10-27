@@ -240,12 +240,17 @@ static
 void intel_vrr_compute_vrr_timings(struct intel_crtc_state *crtc_state,
 				   int vmin, int vmax)
 {
+	struct intel_display *display = to_intel_display(crtc_state);
+
 	crtc_state->vrr.vmax = vmax;
 	crtc_state->vrr.vmin = vmin;
 	crtc_state->vrr.flipline = crtc_state->vrr.vmin;
 
 	crtc_state->vrr.enable = true;
 	crtc_state->mode_flags |= I915_MODE_FLAG_VRR;
+
+	if (HAS_VRR_DC_BALANCE(display))
+		crtc_state->vrr.dc_balance.enable = true;
 }
 
 static
@@ -815,6 +820,7 @@ static void intel_vrr_tg_enable(const struct intel_crtc_state *crtc_state,
 		vrr_ctl |= VRR_CTL_CMRR_ENABLE;
 
 	if (crtc_state->vrr.dc_balance.enable) {
+		vrr_ctl |= VRR_CTL_DCB_ADJ_ENABLE;
 		intel_dmc_configure_dc_balance_event(display, pipe, true);
 		intel_de_write(display, TRANS_ADAPTIVE_SYNC_DCB_CTL(cpu_transcoder),
 			       ADAPTIVE_SYNC_COUNTER_EN);
