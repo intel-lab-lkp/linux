@@ -2090,8 +2090,9 @@ const struct attribute_group ufs_sysfs_lun_attributes_group = {
 	.attrs = ufs_sysfs_lun_attributes,
 };
 
-void ufs_sysfs_add_nodes(struct device *dev)
+void ufs_sysfs_add_nodes(struct ufs_hba *hba)
 {
+	struct device *dev = hba->dev;
 	int ret;
 
 	ret = sysfs_create_groups(&dev->kobj, ufs_sysfs_groups);
@@ -2101,7 +2102,7 @@ void ufs_sysfs_add_nodes(struct device *dev)
 			__func__, ret);
 }
 
-void ufs_sysfs_remove_nodes(struct device *dev)
+void ufs_sysfs_remove_nodes(struct ufs_hba *hba)
 {
-	sysfs_remove_groups(&dev->kobj, ufs_sysfs_groups);
+	sysfs_remove_groups(&hba->dev->kobj, ufs_sysfs_groups);
 }
