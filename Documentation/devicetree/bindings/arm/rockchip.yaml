@@ -903,65 +903,17 @@ properties:
           - const: radxa,rock
           - const: rockchip,rk3188
 
+      - description: Radxa Rock2 Square
+        items:
+          - const: radxa,rock2-square
+          - const: rockchip,rk3288
+
       - description: Radxa ROCK 2A/2F
         items:
           - enum:
               - radxa,rock-2a
               - radxa,rock-2f
           - const: rockchip,rk3528
-
-      - description: Radxa ROCK Pi 4A/A+/B/B+/C
-        items:
-          - enum:
-              - radxa,rockpi4a
-              - radxa,rockpi4a-plus
-              - radxa,rockpi4b
-              - radxa,rockpi4b-plus
-              - radxa,rockpi4c
-          - const: radxa,rockpi4
-          - const: rockchip,rk3399
-
-      - description: Radxa ROCK 4C+
-        items:
-          - const: radxa,rock-4c-plus
-          - const: rockchip,rk3399
-
-      - description: Radxa ROCK 4D
-        items:
-          - const: radxa,rock-4d
-          - const: rockchip,rk3576
-
-      - description: Radxa ROCK 4SE
-        items:
-          - const: radxa,rock-4se
-          - const: rockchip,rk3399
-
-      - description: Radxa ROCK Pi E
-        items:
-          - const: radxa,rockpi-e
-          - const: rockchip,rk3328
-
-      - description: Radxa ROCK Pi N8
-        items:
-          - const: radxa,rockpi-n8
-          - const: vamrs,rk3288-vmarc-som
-          - const: rockchip,rk3288
-
-      - description: Radxa ROCK Pi N10
-        items:
-          - const: radxa,rockpi-n10
-          - const: vamrs,rk3399pro-vmarc-som
-          - const: rockchip,rk3399pro
-
-      - description: Radxa ROCK Pi S
-        items:
-          - const: radxa,rockpis
-          - const: rockchip,rk3308
-
-      - description: Radxa Rock2 Square
-        items:
-          - const: radxa,rock2-square
-          - const: rockchip,rk3288
 
       - description: Radxa ROCK 3A
         items:
@@ -977,6 +929,21 @@ properties:
         items:
           - const: radxa,rock-3c
           - const: rockchip,rk3566
+
+      - description: Radxa ROCK 4C+
+        items:
+          - const: radxa,rock-4c-plus
+          - const: rockchip,rk3399
+
+      - description: Radxa ROCK 4D
+        items:
+          - const: radxa,rock-4d
+          - const: rockchip,rk3576
+
+      - description: Radxa ROCK 4SE
+        items:
+          - const: radxa,rock-4se
+          - const: rockchip,rk3399
 
       - description: Radxa ROCK 5 ITX
         items:
@@ -1003,15 +970,48 @@ properties:
           - const: radxa,rock-5c
           - const: rockchip,rk3588s
 
-      - description: Radxa ROCK S0
-        items:
-          - const: radxa,rock-s0
-          - const: rockchip,rk3308
-
       - description: Radxa ROCK 5T
         items:
           - const: radxa,rock-5t
           - const: rockchip,rk3588
+
+      - description: Radxa ROCK Pi 4A/A+/B/B+/C
+        items:
+          - enum:
+              - radxa,rockpi4a
+              - radxa,rockpi4a-plus
+              - radxa,rockpi4b
+              - radxa,rockpi4b-plus
+              - radxa,rockpi4c
+          - const: radxa,rockpi4
+          - const: rockchip,rk3399
+
+      - description: Radxa ROCK Pi E
+        items:
+          - const: radxa,rockpi-e
+          - const: rockchip,rk3328
+
+      - description: Radxa ROCK Pi N8
+        items:
+          - const: radxa,rockpi-n8
+          - const: vamrs,rk3288-vmarc-som
+          - const: rockchip,rk3288
+
+      - description: Radxa ROCK Pi N10
+        items:
+          - const: radxa,rockpi-n10
+          - const: vamrs,rk3399pro-vmarc-som
+          - const: rockchip,rk3399pro
+
+      - description: Radxa ROCK Pi S
+        items:
+          - const: radxa,rockpis
+          - const: rockchip,rk3308
+
+      - description: Radxa ROCK S0
+        items:
+          - const: radxa,rock-s0
+          - const: rockchip,rk3308
 
       - description: Radxa ZERO 3E/3W
         items:
