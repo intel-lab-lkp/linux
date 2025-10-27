@@ -254,7 +254,7 @@ done:
 		 */
 		ret = acpi_parse_spcr(earlycon_acpi_spcr_enable,
 			!param_acpi_nospcr);
-		if (!ret || param_acpi_nospcr || !IS_ENABLED(CONFIG_ACPI_SPCR_TABLE))
+		if (ret < 0 || param_acpi_nospcr || !IS_ENABLED(CONFIG_ACPI_SPCR_TABLE))
 			pr_info("Use ACPI SPCR as default console: No\n");
 		else
 			pr_info("Use ACPI SPCR as default console: Yes\n");
