@@ -717,6 +717,16 @@ deinit_phy:
 	return ret;
 }
 
+static void rockchip_pcie_remove(struct platform_device *pdev)
+{
+	struct device *dev = &pdev->dev;
+	struct rockchip_pcie *rockchip = dev_get_drvdata(dev);
+
+	/* Perform other cleanups as necessary */
+	clk_bulk_disable_unprepare(rockchip->clk_cnt, rockchip->clks);
+	rockchip_pcie_phy_deinit(rockchip);
+}
+
 static const struct rockchip_pcie_of_data rockchip_pcie_rc_of_data_rk3568 = {
 	.mode = DW_PCIE_RC_TYPE,
 };
@@ -754,5 +764,6 @@ static struct platform_driver rockchip_pcie_driver = {
 		.suppress_bind_attrs = true,
 	},
 	.probe = rockchip_pcie_probe,
+	.remove = rockchip_pcie_remove,
 };
 builtin_platform_driver(rockchip_pcie_driver);
