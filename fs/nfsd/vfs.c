@@ -1218,30 +1218,6 @@ nfsd_find_dio_aligned_offset(struct nfsd_file *nf, loff_t file_offset,
 	return SIZE_MAX;  /* No alignment found */
 }
 
-/*
- * Check if the underlying file system implements direct I/O.
- */
-static bool
-nfsd_is_write_dio_possible(loff_t offset, unsigned long len,
-			   struct nfsd_write_dio_args *args)
-{
-	u32 offset_align = args->nf->nf_dio_offset_align;
-	u32 mem_align = args->nf->nf_dio_mem_align;
-
-	if (unlikely(!mem_align || !offset_align))
-		return false;
-
-	/*
-	 * Need enough data to potentially find an aligned segment.
-	 * In the worst case, we might need up to
-	 * lcm(offset_align, mem_align) bytes for the prefix.
-	 */
-	if (unlikely(len < max(offset_align, mem_align)))
-		return false;
-
-	return true;
-}
-
 static void
 nfsd_write_dio_seg_init(struct nfsd_write_dio_seg *segment,
 			struct bio_vec *bvec, unsigned int nvecs,
@@ -1254,22 +1230,31 @@ nfsd_write_dio_seg_init(struct nfsd_write_dio_seg *segment,
 	segment->use_dio = false;
 }
 
-static bool
-nfsd_setup_write_dio_iters(struct bio_vec *bvec, unsigned int nvecs,
-			   loff_t offset, unsigned long total,
-			   struct nfsd_write_dio_args *args)
+static void
+nfsd_write_dio_iters_init(struct bio_vec *bvec, unsigned int nvecs,
+			  loff_t offset, unsigned long total,
+			  struct nfsd_write_dio_args *args)
 {
 	u32 offset_align = args->nf->nf_dio_offset_align;
+	u32 mem_align = args->nf->nf_dio_mem_align;
 	unsigned long mem_offset = bvec->bv_offset;
 	loff_t prefix_end, orig_end, middle_end;
 	size_t prefix, middle, suffix;
 
 	args->nsegs = 0;
 
+	/*
+	 * Check if direct I/O is feasible for this write request.
+	 * If alignments are not available, the write is too small,
+	 * or no alignment can be found, fall back to buffered I/O.
+	 */
+	if (unlikely(!mem_align || !offset_align) ||
+	    unlikely(total < max(offset_align, mem_align)))
+		goto no_dio;
 	prefix = nfsd_find_dio_aligned_offset(args->nf, offset, mem_offset,
 					     total);
 	if (prefix == SIZE_MAX)
-		return false;	/* No alignment possible */
+		goto no_dio;
 
 	prefix_end = offset + prefix;
 	orig_end = offset + total;
@@ -1285,7 +1270,7 @@ nfsd_setup_write_dio_iters(struct bio_vec *bvec, unsigned int nvecs,
 	}
 
 	if (!middle)
-		return false;	/* No aligned region for DIO */
+		goto no_dio;
 
 	nfsd_write_dio_seg_init(&args->segment[args->nsegs], bvec, nvecs,
 				total, prefix, middle);
@@ -1298,7 +1283,13 @@ nfsd_setup_write_dio_iters(struct bio_vec *bvec, unsigned int nvecs,
 		++args->nsegs;
 	}
 
-	return true;
+	return;
+
+no_dio:
+	/* No alignment possible - pack into single non-DIO segment */
+	nfsd_write_dio_seg_init(&args->segment[0], bvec, nvecs, total,
+				0, total);
+	args->nsegs = 1;
 }
 
 static int
@@ -1319,17 +1310,13 @@ nfsd_buffered_write(struct svc_rqst *rqstp, struct file *file,
 }
 
 static int
-nfsd_issue_write_dio(struct svc_rqst *rqstp, struct svc_fh *fhp, u32 *stable_how,
+nfsd_issue_dio_write(struct svc_rqst *rqstp, struct svc_fh *fhp, u32 *stable_how,
 		     struct kiocb *kiocb, unsigned int nvecs, unsigned long *cnt,
 		     struct nfsd_write_dio_args *args)
 {
 	struct file *file = args->nf->nf_file;
 	ssize_t host_err;
 	unsigned int i;
-
-	if (!nfsd_setup_write_dio_iters(rqstp->rq_bvec, nvecs, kiocb->ki_pos,
-					*cnt, args))
-		return nfsd_buffered_write(rqstp, file, nvecs, cnt, kiocb);
 
 	/*
 	 * Any buffered IO issued here will be misaligned, use
@@ -1338,6 +1325,9 @@ nfsd_issue_write_dio(struct svc_rqst *rqstp, struct svc_fh *fhp, u32 *stable_how
 	 */
 	kiocb->ki_flags |= (IOCB_DSYNC|IOCB_SYNC);
 	*stable_how = NFS_FILE_SYNC;
+
+	nfsd_write_dio_iters_init(rqstp->rq_bvec, nvecs, kiocb->ki_pos,
+				  *cnt, args);
 
 	*cnt = 0;
 	for (i = 0; i < args->nsegs; i++) {
@@ -1377,11 +1367,8 @@ nfsd_direct_write(struct svc_rqst *rqstp, struct svc_fh *fhp,
 	if (args.nf->nf_file->f_op->fop_flags & FOP_DONTCACHE)
 		kiocb->ki_flags |= IOCB_DONTCACHE;
 
-	if (nfsd_is_write_dio_possible(kiocb->ki_pos, *cnt, &args))
-		return nfsd_issue_write_dio(rqstp, fhp, stable_how, kiocb,
-					    nvecs, cnt, &args);
-
-	return nfsd_buffered_write(rqstp, args.nf->nf_file, nvecs, cnt, kiocb);
+	return nfsd_issue_dio_write(rqstp, fhp, stable_how, kiocb, nvecs,
+				    cnt, &args);
 }
 
 /**
