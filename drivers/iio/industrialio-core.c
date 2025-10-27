@@ -749,6 +749,9 @@ ssize_t do_iio_read_channel_label(struct iio_dev *indio_dev,
 	if (c->extend_name)
 		return sysfs_emit(buf, "%s\n", c->extend_name);
 
+	if (c->datasheet_name)
+		return sysfs_emit(buf, "%s\n", c->datasheet_name);
+
 	return -EINVAL;
 }
 
