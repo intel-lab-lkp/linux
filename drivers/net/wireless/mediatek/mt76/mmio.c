@@ -30,15 +30,49 @@ static u32 mt76_mmio_rmw(struct mt76_dev *dev, u32 offset, u32 mask, u32 val)
 	return val;
 }
 
+static void mt76_mmio_write_copy_portable(void __iomem *dst,
+					  const u8 *src, int len)
+{
+	__le32 val;
+	int i = 0;
+
+	for (i = 0; i < ALIGN(len, 4); i += 4) {
+		memcpy(&val, src + i, sizeof(val));
+		writel(cpu_to_le32(val), dst + i);
+	}
+}
+
 static void mt76_mmio_write_copy(struct mt76_dev *dev, u32 offset,
 				 const void *data, int len)
 {
+	if (IS_ENABLED(CONFIG_CPU_BIG_ENDIAN)) {
+		mt76_mmio_write_copy_portable(dev->mmio.regs + offset, data,
+					      len);
+		return;
+	}
 	__iowrite32_copy(dev->mmio.regs + offset, data, DIV_ROUND_UP(len, 4));
+}
+
+static void mt76_mmio_read_copy_portable(u8 *dst,
+					 const void __iomem *src, int len)
+{
+	u32 val;
+	int i;
+
+	for (i = 0; i < ALIGN(len, 4); i += 4) {
+		val = le32_to_cpu(readl(src + i));
+		memcpy(dst + i, &val, sizeof(val));
+	}
 }
 
 static void mt76_mmio_read_copy(struct mt76_dev *dev, u32 offset,
 				void *data, int len)
 {
+	if (IS_ENABLED(CONFIG_CPU_BIG_ENDIAN)) {
+		mt76_mmio_read_copy_portable(data, dev->mmio.regs + offset,
+					     len);
+		return;
+	}
 	__ioread32_copy(data, dev->mmio.regs + offset, DIV_ROUND_UP(len, 4));
 }
 
