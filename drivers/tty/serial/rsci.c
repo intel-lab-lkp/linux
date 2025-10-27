@@ -414,6 +414,7 @@ static const struct sci_port_params_bits rsci_port_param_bits = {
 	.rxtx_enable = CCR0_RE | CCR0_TE,
 	.te_clear = CCR0_TE | CCR0_TEIE,
 	.poll_sent_bits = CSR_TDRE | CSR_TEND,
+	.overrun_clr = CFCLR_ORERC,
 };
 
 static const struct sci_port_params rsci_port_params = {
