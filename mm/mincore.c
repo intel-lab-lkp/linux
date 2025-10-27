@@ -180,14 +180,10 @@ static int mincore_pte_range(pmd_t *pmd, unsigned long addr, unsigned long end,
 			__mincore_unmapped_range(addr, addr + PAGE_SIZE,
 						 vma, vec);
 		else if (pte_present(pte)) {
-			unsigned int batch = pte_batch_hint(ptep, pte);
+			unsigned int max_nr = (end - addr) >> PAGE_SHIFT;
 
-			if (batch > 1) {
-				unsigned int max_nr = (end - addr) >> PAGE_SHIFT;
-
-				step = min_t(unsigned int, batch, max_nr);
-			}
-
+			step = can_pte_batch_count(vma, ptep, &pte,
+						   max_nr, 0);
 			for (i = 0; i < step; i++)
 				vec[i] = 1;
 		} else { /* pte is a swap entry */
