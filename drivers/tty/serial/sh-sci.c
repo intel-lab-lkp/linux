@@ -3009,8 +3009,7 @@ static int sci_init_clocks(struct sci_port *sci_port, struct device *dev)
 
 		if (!clk && sci_port->type == SCI_PORT_RSCI &&
 		    (i == SCI_FCK || i == SCI_BRG_INT)) {
-			return dev_err_probe(dev, -ENODEV,
-					     "failed to get %s\n",
+			return dev_err_probe(dev, -ENODEV, "failed to get %s\n",
 					     name);
 		}
 
