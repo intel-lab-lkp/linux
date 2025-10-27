@@ -503,10 +503,11 @@ static int pm8xxx_read_channel_rsv(struct pm8xxx_xoadc *adc,
 		goto unlock;
 
 	/* Decimation factor */
-	ret = regmap_write(adc->map, ADC_ARB_USRP_DIG_PARAM,
-			   ADC_ARB_USRP_DIG_PARAM_SEL_SHIFT0 |
-			   ADC_ARB_USRP_DIG_PARAM_SEL_SHIFT1 |
-			   ch->decimation << ADC_DIG_PARAM_DEC_SHIFT);
+	ret = regmap_update_bits(adc->map,
+				 ADC_ARB_USRP_DIG_PARAM,
+				 ADC_ARB_USRP_DIG_PARAM_DEC_RATE0 |
+				 ADC_ARB_USRP_DIG_PARAM_DEC_RATE1,
+				 ch->decimation << ADC_DIG_PARAM_DEC_SHIFT);
 	if (ret)
 		goto unlock;
 
@@ -783,6 +784,7 @@ static int pm8xxx_xoadc_parse_channel(struct device *dev,
 	ch->calibration = VADC_CALIB_ABSOLUTE;
 	/* Everyone seems to use default ("type 2") decimation */
 	ch->decimation = VADC_DEF_DECIMATION;
+	ch->amux_ip_rsv = hwchan->amux_ip_rsv;
 
 	if (!fwnode_property_read_u32(fwnode, "qcom,ratiometric", &rsv)) {
 		ch->calibration = VADC_CALIB_RATIOMETRIC;
