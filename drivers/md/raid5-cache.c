@@ -1356,7 +1356,7 @@ static void r5l_write_super_and_discard_space(struct r5l_log *log,
  * r5c_flush_stripe moves stripe from cached list to handle_list. When called,
  * the stripe must be on r5c_cached_full_stripes or r5c_cached_partial_stripes.
  *
- * must hold conf->device_lock
+ * must hold conf->mddev->device_lock
  */
 static void r5c_flush_stripe(struct r5conf *conf, struct stripe_head *sh)
 {
@@ -1366,10 +1366,10 @@ static void r5c_flush_stripe(struct r5conf *conf, struct stripe_head *sh)
 
 	/*
 	 * The stripe is not ON_RELEASE_LIST, so it is safe to call
-	 * raid5_release_stripe() while holding conf->device_lock
+	 * raid5_release_stripe() while holding conf->mddev->device_lock
 	 */
 	BUG_ON(test_bit(STRIPE_ON_RELEASE_LIST, &sh->state));
-	lockdep_assert_held(&conf->device_lock);
+	lockdep_assert_held(&conf->mddev->device_lock);
 
 	list_del_init(&sh->lru);
 	atomic_inc(&sh->count);
@@ -1396,7 +1396,7 @@ void r5c_flush_cache(struct r5conf *conf, int num)
 	int count;
 	struct stripe_head *sh, *next;
 
-	lockdep_assert_held(&conf->device_lock);
+	lockdep_assert_held(&conf->mddev->device_lock);
 	if (!READ_ONCE(conf->log))
 		return;
 
@@ -1455,15 +1455,15 @@ static void r5c_do_reclaim(struct r5conf *conf)
 		stripes_to_flush = -1;
 
 	if (stripes_to_flush >= 0) {
-		spin_lock_irqsave(&conf->device_lock, flags);
+		spin_lock_irqsave(&conf->mddev->device_lock, flags);
 		r5c_flush_cache(conf, stripes_to_flush);
-		spin_unlock_irqrestore(&conf->device_lock, flags);
+		spin_unlock_irqrestore(&conf->mddev->device_lock, flags);
 	}
 
 	/* if log space is tight, flush stripes on stripe_in_journal_list */
 	if (test_bit(R5C_LOG_TIGHT, &conf->cache_state)) {
 		spin_lock_irqsave(&log->stripe_in_journal_lock, flags);
-		spin_lock(&conf->device_lock);
+		spin_lock(&conf->mddev->device_lock);
 		list_for_each_entry(sh, &log->stripe_in_journal_list, r5c) {
 			/*
 			 * stripes on stripe_in_journal_list could be in any
@@ -1481,7 +1481,7 @@ static void r5c_do_reclaim(struct r5conf *conf)
 					break;
 			}
 		}
-		spin_unlock(&conf->device_lock);
+		spin_unlock(&conf->mddev->device_lock);
 		spin_unlock_irqrestore(&log->stripe_in_journal_lock, flags);
 	}
 

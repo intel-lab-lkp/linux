@@ -282,10 +282,10 @@ static void reschedule_retry(struct r1bio *r1_bio)
 	int idx;
 
 	idx = sector_to_idx(r1_bio->sector);
-	spin_lock_irqsave(&conf->device_lock, flags);
+	spin_lock_irqsave(&conf->mddev->device_lock, flags);
 	list_add(&r1_bio->retry_list, &conf->retry_list);
 	atomic_inc(&conf->nr_queued[idx]);
-	spin_unlock_irqrestore(&conf->device_lock, flags);
+	spin_unlock_irqrestore(&conf->mddev->device_lock, flags);
 
 	wake_up(&conf->wait_barrier);
 	md_wakeup_thread(mddev->thread);
@@ -387,12 +387,12 @@ static void raid1_end_read_request(struct bio *bio)
 		 * Here we redefine "uptodate" to mean "Don't want to retry"
 		 */
 		unsigned long flags;
-		spin_lock_irqsave(&conf->device_lock, flags);
+		spin_lock_irqsave(&conf->mddev->device_lock, flags);
 		if (r1_bio->mddev->degraded == conf->raid_disks ||
 		    (r1_bio->mddev->degraded == conf->raid_disks-1 &&
 		     test_bit(In_sync, &rdev->flags)))
 			uptodate = 1;
-		spin_unlock_irqrestore(&conf->device_lock, flags);
+		spin_unlock_irqrestore(&conf->mddev->device_lock, flags);
 	}
 
 	if (uptodate) {
@@ -917,14 +917,14 @@ static void flush_pending_writes(struct r1conf *conf)
 	/* Any writes that have been queued but are awaiting
 	 * bitmap updates get flushed here.
 	 */
-	spin_lock_irq(&conf->device_lock);
+	spin_lock_irq(&conf->mddev->device_lock);
 
 	if (conf->pending_bio_list.head) {
 		struct blk_plug plug;
 		struct bio *bio;
 
 		bio = bio_list_get(&conf->pending_bio_list);
-		spin_unlock_irq(&conf->device_lock);
+		spin_unlock_irq(&conf->mddev->device_lock);
 
 		/*
 		 * As this is called in a wait_event() loop (see freeze_array),
@@ -940,7 +940,7 @@ static void flush_pending_writes(struct r1conf *conf)
 		flush_bio_list(conf, bio);
 		blk_finish_plug(&plug);
 	} else
-		spin_unlock_irq(&conf->device_lock);
+		spin_unlock_irq(&conf->mddev->device_lock);
 }
 
 /* Barriers....
@@ -1274,9 +1274,9 @@ static void raid1_unplug(struct blk_plug_cb *cb, bool from_schedule)
 	struct bio *bio;
 
 	if (from_schedule) {
-		spin_lock_irq(&conf->device_lock);
+		spin_lock_irq(&conf->mddev->device_lock);
 		bio_list_merge(&conf->pending_bio_list, &plug->pending);
-		spin_unlock_irq(&conf->device_lock);
+		spin_unlock_irq(&conf->mddev->device_lock);
 		wake_up_barrier(conf);
 		md_wakeup_thread(mddev->thread);
 		kfree(plug);
@@ -1664,9 +1664,9 @@ static void raid1_write_request(struct mddev *mddev, struct bio *bio,
 		/* flush_pending_writes() needs access to the rdev so...*/
 		mbio->bi_bdev = (void *)rdev;
 		if (!raid1_add_bio_to_plug(mddev, mbio, raid1_unplug, disks)) {
-			spin_lock_irqsave(&conf->device_lock, flags);
+			spin_lock_irqsave(&conf->mddev->device_lock, flags);
 			bio_list_add(&conf->pending_bio_list, mbio);
-			spin_unlock_irqrestore(&conf->device_lock, flags);
+			spin_unlock_irqrestore(&conf->mddev->device_lock, flags);
 			md_wakeup_thread(mddev->thread);
 		}
 	}
@@ -1753,7 +1753,7 @@ static void raid1_error(struct mddev *mddev, struct md_rdev *rdev)
 	struct r1conf *conf = mddev->private;
 	unsigned long flags;
 
-	spin_lock_irqsave(&conf->device_lock, flags);
+	spin_lock_irqsave(&conf->mddev->device_lock, flags);
 
 	if (test_bit(In_sync, &rdev->flags) &&
 	    (conf->raid_disks - mddev->degraded) == 1) {
@@ -1761,7 +1761,7 @@ static void raid1_error(struct mddev *mddev, struct md_rdev *rdev)
 
 		if (!mddev->fail_last_dev) {
 			conf->recovery_disabled = mddev->recovery_disabled;
-			spin_unlock_irqrestore(&conf->device_lock, flags);
+			spin_unlock_irqrestore(&conf->mddev->device_lock, flags);
 			return;
 		}
 	}
@@ -1769,7 +1769,7 @@ static void raid1_error(struct mddev *mddev, struct md_rdev *rdev)
 	if (test_and_clear_bit(In_sync, &rdev->flags))
 		mddev->degraded++;
 	set_bit(Faulty, &rdev->flags);
-	spin_unlock_irqrestore(&conf->device_lock, flags);
+	spin_unlock_irqrestore(&conf->mddev->device_lock, flags);
 	/*
 	 * if recovery is running, make sure it aborts.
 	 */
@@ -1831,7 +1831,7 @@ static int raid1_spare_active(struct mddev *mddev)
 	 * device_lock used to avoid races with raid1_end_read_request
 	 * which expects 'In_sync' flags and ->degraded to be consistent.
 	 */
-	spin_lock_irqsave(&conf->device_lock, flags);
+	spin_lock_irqsave(&conf->mddev->device_lock, flags);
 	for (i = 0; i < conf->raid_disks; i++) {
 		struct md_rdev *rdev = conf->mirrors[i].rdev;
 		struct md_rdev *repl = conf->mirrors[conf->raid_disks + i].rdev;
@@ -1863,7 +1863,7 @@ static int raid1_spare_active(struct mddev *mddev)
 		}
 	}
 	mddev->degraded -= count;
-	spin_unlock_irqrestore(&conf->device_lock, flags);
+	spin_unlock_irqrestore(&conf->mddev->device_lock, flags);
 
 	print_conf(conf);
 	return count;
@@ -2605,11 +2605,11 @@ static void handle_write_finished(struct r1conf *conf, struct r1bio *r1_bio)
 					 conf->mddev);
 		}
 	if (fail) {
-		spin_lock_irq(&conf->device_lock);
+		spin_lock_irq(&conf->mddev->device_lock);
 		list_add(&r1_bio->retry_list, &conf->bio_end_io_list);
 		idx = sector_to_idx(r1_bio->sector);
 		atomic_inc(&conf->nr_queued[idx]);
-		spin_unlock_irq(&conf->device_lock);
+		spin_unlock_irq(&conf->mddev->device_lock);
 		/*
 		 * In case freeze_array() is waiting for condition
 		 * get_unqueued_pending() == extra to be true.
@@ -2681,10 +2681,10 @@ static void raid1d(struct md_thread *thread)
 	if (!list_empty_careful(&conf->bio_end_io_list) &&
 	    !test_bit(MD_SB_CHANGE_PENDING, &mddev->sb_flags)) {
 		LIST_HEAD(tmp);
-		spin_lock_irqsave(&conf->device_lock, flags);
+		spin_lock_irqsave(&conf->mddev->device_lock, flags);
 		if (!test_bit(MD_SB_CHANGE_PENDING, &mddev->sb_flags))
 			list_splice_init(&conf->bio_end_io_list, &tmp);
-		spin_unlock_irqrestore(&conf->device_lock, flags);
+		spin_unlock_irqrestore(&conf->mddev->device_lock, flags);
 		while (!list_empty(&tmp)) {
 			r1_bio = list_first_entry(&tmp, struct r1bio,
 						  retry_list);
@@ -2702,16 +2702,16 @@ static void raid1d(struct md_thread *thread)
 
 		flush_pending_writes(conf);
 
-		spin_lock_irqsave(&conf->device_lock, flags);
+		spin_lock_irqsave(&conf->mddev->device_lock, flags);
 		if (list_empty(head)) {
-			spin_unlock_irqrestore(&conf->device_lock, flags);
+			spin_unlock_irqrestore(&conf->mddev->device_lock, flags);
 			break;
 		}
 		r1_bio = list_entry(head->prev, struct r1bio, retry_list);
 		list_del(head->prev);
 		idx = sector_to_idx(r1_bio->sector);
 		atomic_dec(&conf->nr_queued[idx]);
-		spin_unlock_irqrestore(&conf->device_lock, flags);
+		spin_unlock_irqrestore(&conf->mddev->device_lock, flags);
 
 		mddev = r1_bio->mddev;
 		conf = mddev->private;
@@ -3131,7 +3131,6 @@ static struct r1conf *setup_conf(struct mddev *mddev)
 		goto abort;
 
 	err = -EINVAL;
-	spin_lock_init(&conf->device_lock);
 	conf->raid_disks = mddev->raid_disks;
 	rdev_for_each(rdev, mddev) {
 		int disk_idx = rdev->raid_disk;
@@ -3429,9 +3428,9 @@ static int raid1_reshape(struct mddev *mddev)
 	kfree(conf->mirrors);
 	conf->mirrors = newmirrors;
 
-	spin_lock_irqsave(&conf->device_lock, flags);
+	spin_lock_irqsave(&conf->mddev->device_lock, flags);
 	mddev->degraded += (raid_disks - conf->raid_disks);
-	spin_unlock_irqrestore(&conf->device_lock, flags);
+	spin_unlock_irqrestore(&conf->mddev->device_lock, flags);
 	conf->raid_disks = mddev->raid_disks = raid_disks;
 	mddev->delta_disks = 0;
 

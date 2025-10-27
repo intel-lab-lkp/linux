@@ -29,7 +29,6 @@ struct r10conf {
 	struct mddev		*mddev;
 	struct raid10_info	*mirrors;
 	struct raid10_info	*mirrors_new, *mirrors_old;
-	spinlock_t		device_lock;
 
 	/* geometry */
 	struct geom {

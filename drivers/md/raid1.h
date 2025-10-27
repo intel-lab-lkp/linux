@@ -57,8 +57,6 @@ struct r1conf {
 	int			raid_disks;
 	int			nonrot_disks;
 
-	spinlock_t		device_lock;
-
 	/* list of 'struct r1bio' that need to be processed by raid1d,
 	 * whether to retry a read, writeout a resync or recovery
 	 * block, or anything else.

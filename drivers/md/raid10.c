@@ -301,10 +301,10 @@ static void reschedule_retry(struct r10bio *r10_bio)
 	struct mddev *mddev = r10_bio->mddev;
 	struct r10conf *conf = mddev->private;
 
-	spin_lock_irqsave(&conf->device_lock, flags);
+	spin_lock_irqsave(&conf->mddev->device_lock, flags);
 	list_add(&r10_bio->retry_list, &conf->retry_list);
 	conf->nr_queued ++;
-	spin_unlock_irqrestore(&conf->device_lock, flags);
+	spin_unlock_irqrestore(&conf->mddev->device_lock, flags);
 
 	/* wake up frozen array... */
 	wake_up(&conf->wait_barrier);
@@ -863,14 +863,14 @@ static void flush_pending_writes(struct r10conf *conf)
 	/* Any writes that have been queued but are awaiting
 	 * bitmap updates get flushed here.
 	 */
-	spin_lock_irq(&conf->device_lock);
+	spin_lock_irq(&conf->mddev->device_lock);
 
 	if (conf->pending_bio_list.head) {
 		struct blk_plug plug;
 		struct bio *bio;
 
 		bio = bio_list_get(&conf->pending_bio_list);
-		spin_unlock_irq(&conf->device_lock);
+		spin_unlock_irq(&conf->mddev->device_lock);
 
 		/*
 		 * As this is called in a wait_event() loop (see freeze_array),
@@ -896,7 +896,7 @@ static void flush_pending_writes(struct r10conf *conf)
 		}
 		blk_finish_plug(&plug);
 	} else
-		spin_unlock_irq(&conf->device_lock);
+		spin_unlock_irq(&conf->mddev->device_lock);
 }
 
 /* Barriers....
@@ -1089,9 +1089,9 @@ static void raid10_unplug(struct blk_plug_cb *cb, bool from_schedule)
 	struct bio *bio;
 
 	if (from_schedule) {
-		spin_lock_irq(&conf->device_lock);
+		spin_lock_irq(&conf->mddev->device_lock);
 		bio_list_merge(&conf->pending_bio_list, &plug->pending);
-		spin_unlock_irq(&conf->device_lock);
+		spin_unlock_irq(&conf->mddev->device_lock);
 		wake_up_barrier(conf);
 		md_wakeup_thread(mddev->thread);
 		kfree(plug);
@@ -1278,9 +1278,9 @@ static void raid10_write_one_disk(struct mddev *mddev, struct r10bio *r10_bio,
 	atomic_inc(&r10_bio->remaining);
 
 	if (!raid1_add_bio_to_plug(mddev, mbio, raid10_unplug, conf->copies)) {
-		spin_lock_irqsave(&conf->device_lock, flags);
+		spin_lock_irqsave(&conf->mddev->device_lock, flags);
 		bio_list_add(&conf->pending_bio_list, mbio);
-		spin_unlock_irqrestore(&conf->device_lock, flags);
+		spin_unlock_irqrestore(&conf->mddev->device_lock, flags);
 		md_wakeup_thread(mddev->thread);
 	}
 }
@@ -1997,13 +1997,13 @@ static void raid10_error(struct mddev *mddev, struct md_rdev *rdev)
 	struct r10conf *conf = mddev->private;
 	unsigned long flags;
 
-	spin_lock_irqsave(&conf->device_lock, flags);
+	spin_lock_irqsave(&conf->mddev->device_lock, flags);
 
 	if (test_bit(In_sync, &rdev->flags) && !enough(conf, rdev->raid_disk)) {
 		set_bit(MD_BROKEN, &mddev->flags);
 
 		if (!mddev->fail_last_dev) {
-			spin_unlock_irqrestore(&conf->device_lock, flags);
+			spin_unlock_irqrestore(&conf->mddev->device_lock, flags);
 			return;
 		}
 	}
@@ -2015,7 +2015,7 @@ static void raid10_error(struct mddev *mddev, struct md_rdev *rdev)
 	set_bit(Faulty, &rdev->flags);
 	set_mask_bits(&mddev->sb_flags, 0,
 		      BIT(MD_SB_CHANGE_DEVS) | BIT(MD_SB_CHANGE_PENDING));
-	spin_unlock_irqrestore(&conf->device_lock, flags);
+	spin_unlock_irqrestore(&conf->mddev->device_lock, flags);
 	pr_crit("md/raid10:%s: Disk failure on %pg, disabling device.\n"
 		"md/raid10:%s: Operation continuing on %d devices.\n",
 		mdname(mddev), rdev->bdev,
@@ -2094,9 +2094,9 @@ static int raid10_spare_active(struct mddev *mddev)
 			sysfs_notify_dirent_safe(tmp->rdev->sysfs_state);
 		}
 	}
-	spin_lock_irqsave(&conf->device_lock, flags);
+	spin_lock_irqsave(&conf->mddev->device_lock, flags);
 	mddev->degraded -= count;
-	spin_unlock_irqrestore(&conf->device_lock, flags);
+	spin_unlock_irqrestore(&conf->mddev->device_lock, flags);
 
 	print_conf(conf);
 	return count;
@@ -2951,10 +2951,10 @@ static void handle_write_completed(struct r10conf *conf, struct r10bio *r10_bio)
 			}
 		}
 		if (fail) {
-			spin_lock_irq(&conf->device_lock);
+			spin_lock_irq(&conf->mddev->device_lock);
 			list_add(&r10_bio->retry_list, &conf->bio_end_io_list);
 			conf->nr_queued++;
-			spin_unlock_irq(&conf->device_lock);
+			spin_unlock_irq(&conf->mddev->device_lock);
 			/*
 			 * In case freeze_array() is waiting for condition
 			 * nr_pending == nr_queued + extra to be true.
@@ -2984,14 +2984,14 @@ static void raid10d(struct md_thread *thread)
 	if (!list_empty_careful(&conf->bio_end_io_list) &&
 	    !test_bit(MD_SB_CHANGE_PENDING, &mddev->sb_flags)) {
 		LIST_HEAD(tmp);
-		spin_lock_irqsave(&conf->device_lock, flags);
+		spin_lock_irqsave(&conf->mddev->device_lock, flags);
 		if (!test_bit(MD_SB_CHANGE_PENDING, &mddev->sb_flags)) {
 			while (!list_empty(&conf->bio_end_io_list)) {
 				list_move(conf->bio_end_io_list.prev, &tmp);
 				conf->nr_queued--;
 			}
 		}
-		spin_unlock_irqrestore(&conf->device_lock, flags);
+		spin_unlock_irqrestore(&conf->mddev->device_lock, flags);
 		while (!list_empty(&tmp)) {
 			r10_bio = list_first_entry(&tmp, struct r10bio,
 						   retry_list);
@@ -3009,15 +3009,15 @@ static void raid10d(struct md_thread *thread)
 
 		flush_pending_writes(conf);
 
-		spin_lock_irqsave(&conf->device_lock, flags);
+		spin_lock_irqsave(&conf->mddev->device_lock, flags);
 		if (list_empty(head)) {
-			spin_unlock_irqrestore(&conf->device_lock, flags);
+			spin_unlock_irqrestore(&conf->mddev->device_lock, flags);
 			break;
 		}
 		r10_bio = list_entry(head->prev, struct r10bio, retry_list);
 		list_del(head->prev);
 		conf->nr_queued--;
-		spin_unlock_irqrestore(&conf->device_lock, flags);
+		spin_unlock_irqrestore(&conf->mddev->device_lock, flags);
 
 		mddev = r10_bio->mddev;
 		conf = mddev->private;
@@ -3960,7 +3960,6 @@ static struct r10conf *setup_conf(struct mddev *mddev)
 			conf->prev.stride = conf->dev_sectors;
 	}
 	conf->reshape_safe = conf->reshape_progress;
-	spin_lock_init(&conf->device_lock);
 	INIT_LIST_HEAD(&conf->retry_list);
 	INIT_LIST_HEAD(&conf->bio_end_io_list);
 
@@ -4467,7 +4466,7 @@ static int raid10_start_reshape(struct mddev *mddev)
 		return -EINVAL;
 
 	conf->offset_diff = min_offset_diff;
-	spin_lock_irq(&conf->device_lock);
+	spin_lock_irq(&conf->mddev->device_lock);
 	if (conf->mirrors_new) {
 		memcpy(conf->mirrors_new, conf->mirrors,
 		       sizeof(struct raid10_info)*conf->prev.raid_disks);
@@ -4482,7 +4481,7 @@ static int raid10_start_reshape(struct mddev *mddev)
 	if (mddev->reshape_backwards) {
 		sector_t size = raid10_size(mddev, 0, 0);
 		if (size < mddev->array_sectors) {
-			spin_unlock_irq(&conf->device_lock);
+			spin_unlock_irq(&conf->mddev->device_lock);
 			pr_warn("md/raid10:%s: array size must be reduce before number of disks\n",
 				mdname(mddev));
 			return -EINVAL;
@@ -4492,7 +4491,7 @@ static int raid10_start_reshape(struct mddev *mddev)
 	} else
 		conf->reshape_progress = 0;
 	conf->reshape_safe = conf->reshape_progress;
-	spin_unlock_irq(&conf->device_lock);
+	spin_unlock_irq(&conf->mddev->device_lock);
 
 	if (mddev->delta_disks && mddev->bitmap) {
 		struct mdp_superblock_1 *sb = NULL;
@@ -4561,9 +4560,9 @@ out:
 	 * ->degraded is measured against the larger of the
 	 * pre and  post numbers.
 	 */
-	spin_lock_irq(&conf->device_lock);
+	spin_lock_irq(&conf->mddev->device_lock);
 	mddev->degraded = calc_degraded(conf);
-	spin_unlock_irq(&conf->device_lock);
+	spin_unlock_irq(&conf->mddev->device_lock);
 	mddev->raid_disks = conf->geo.raid_disks;
 	mddev->reshape_position = conf->reshape_progress;
 	set_bit(MD_SB_CHANGE_DEVS, &mddev->sb_flags);
@@ -4579,7 +4578,7 @@ out:
 
 abort:
 	mddev->recovery = 0;
-	spin_lock_irq(&conf->device_lock);
+	spin_lock_irq(&conf->mddev->device_lock);
 	conf->geo = conf->prev;
 	mddev->raid_disks = conf->geo.raid_disks;
 	rdev_for_each(rdev, mddev)
@@ -4588,7 +4587,7 @@ abort:
 	conf->reshape_progress = MaxSector;
 	conf->reshape_safe = MaxSector;
 	mddev->reshape_position = MaxSector;
-	spin_unlock_irq(&conf->device_lock);
+	spin_unlock_irq(&conf->mddev->device_lock);
 	return ret;
 }
 
@@ -4947,13 +4946,13 @@ static void end_reshape(struct r10conf *conf)
 	if (test_bit(MD_RECOVERY_INTR, &conf->mddev->recovery))
 		return;
 
-	spin_lock_irq(&conf->device_lock);
+	spin_lock_irq(&conf->mddev->device_lock);
 	conf->prev = conf->geo;
 	md_finish_reshape(conf->mddev);
 	smp_wmb();
 	conf->reshape_progress = MaxSector;
 	conf->reshape_safe = MaxSector;
-	spin_unlock_irq(&conf->device_lock);
+	spin_unlock_irq(&conf->mddev->device_lock);
 
 	mddev_update_io_opt(conf->mddev, raid10_nr_stripes(conf));
 	conf->fullsync = 0;

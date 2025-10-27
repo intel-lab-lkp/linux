@@ -543,6 +543,8 @@ struct mddev {
 	/* used for register new sync thread */
 	struct work_struct sync_work;
 
+	spinlock_t			device_lock;
+
 	/* "lock" protects:
 	 *   flush_bio transition from NULL to !NULL
 	 *   rdev superblocks, events
