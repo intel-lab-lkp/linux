@@ -235,8 +235,7 @@ static inline pte_t __pte_batch_clear_ignored(pte_t pte, fpb_t flags)
 }
 
 /**
- * folio_pte_batch_flags - detect a PTE batch for a large folio
- * @folio: The large folio to detect a PTE batch for.
+ * can_pte_batch_count - detect a PTE batch in range [ptep, to ptep + max_nr)
  * @vma: The VMA. Only relevant with FPB_MERGE_WRITE, otherwise can be NULL.
  * @ptep: Page table pointer for the first entry.
  * @ptentp: Pointer to a COPY of the first page table entry whose flags this
@@ -244,14 +243,17 @@ static inline pte_t __pte_batch_clear_ignored(pte_t pte, fpb_t flags)
  * @max_nr: The maximum number of table entries to consider.
  * @flags: Flags to modify the PTE batch semantics.
  *
- * Detect a PTE batch: consecutive (present) PTEs that map consecutive
- * pages of the same large folio in a single VMA and a single page table.
+ * This interface is designed for this case that do not require folio access.
+ * If folio consideration is needed, please call folio_pte_batch_flags instead.
+ *
+ * Detect a PTE batch: consecutive (present) PTEs that map consecutive pages
+ * in a single VMA and a single page table.
  *
  * All PTEs inside a PTE batch have the same PTE bits set, excluding the PFN,
  * the accessed bit, writable bit, dirty bit (unless FPB_RESPECT_DIRTY is set)
  * and soft-dirty bit (unless FPB_RESPECT_SOFT_DIRTY is set).
  *
- * @ptep must map any page of the folio. max_nr must be at least one and
+ * @ptep point to the first entry in range, max_nr must be at least one and
  * must be limited by the caller so scanning cannot exceed a single VMA and
  * a single page table.
  *
@@ -259,33 +261,32 @@ static inline pte_t __pte_batch_clear_ignored(pte_t pte, fpb_t flags)
  * be updated: it's crucial that a pointer to a COPY of the first
  * page table entry, obtained through ptep_get(), is provided as @ptentp.
  *
- * This function will be inlined to optimize based on the input parameters;
- * consider using folio_pte_batch() instead if applicable.
+ * The following folio_pte_batch_flags() deal with PTEs that mapped in a
+ * single folio. However can_pte_batch_count has the capability to handle
+ * PTEs that mapped in consecutive folios. If flags is not set, it will ignore
+ * the accessed, writable and dirty bits. Once the flags is set, the respect
+ * bit(s) will be compared in pte_same(), if the advanced pte_batch_hint()
+ * respect pte bit is different, pte_same() will return false and break. This
+ * ensures the correctness of handling multiple folio PTEs.
+ *
+ * This function will be inlined to optimize based on the input parameters.
  *
  * Return: the number of table entries in the batch.
  */
-static inline unsigned int folio_pte_batch_flags(struct folio *folio,
-		struct vm_area_struct *vma, pte_t *ptep, pte_t *ptentp,
-		unsigned int max_nr, fpb_t flags)
+static inline unsigned int can_pte_batch_count(struct vm_area_struct *vma,
+		pte_t *ptep, pte_t *ptentp, unsigned int max_nr, fpb_t flags)
 {
 	bool any_writable = false, any_young = false, any_dirty = false;
 	pte_t expected_pte, pte = *ptentp;
 	unsigned int nr, cur_nr;
 
-	VM_WARN_ON_FOLIO(!pte_present(pte), folio);
-	VM_WARN_ON_FOLIO(!folio_test_large(folio) || max_nr < 1, folio);
-	VM_WARN_ON_FOLIO(page_folio(pfn_to_page(pte_pfn(pte))) != folio, folio);
+	VM_WARN_ON(!pte_present(pte));
 	/*
 	 * Ensure this is a pointer to a copy not a pointer into a page table.
 	 * If this is a stack value, it won't be a valid virtual address, but
 	 * that's fine because it also cannot be pointing into the page table.
 	 */
 	VM_WARN_ON(virt_addr_valid(ptentp) && PageTable(virt_to_page(ptentp)));
-
-	/* Limit max_nr to the actual remaining PFNs in the folio we could batch. */
-	max_nr = min_t(unsigned long, max_nr,
-		       folio_pfn(folio) + folio_nr_pages(folio) - pte_pfn(pte));
-
 	nr = pte_batch_hint(ptep, pte);
 	expected_pte = __pte_batch_clear_ignored(pte_advance_pfn(pte, nr), flags);
 	ptep = ptep + nr;
@@ -317,6 +318,45 @@ static inline unsigned int folio_pte_batch_flags(struct folio *folio,
 		*ptentp = pte_mkdirty(*ptentp);
 
 	return min(nr, max_nr);
+}
+
+/**
+ * folio_pte_batch_flags - detect a PTE batch for a large folio
+ * @folio: The large folio to detect a PTE batch for.
+ * @vma: The VMA. Only relevant with FPB_MERGE_WRITE, otherwise can be NULL.
+ * @ptep: Page table pointer for the first entry.
+ * @ptentp: Pointer to a COPY of the first page table entry whose flags this
+ *         function updates based on @flags if appropriate.
+ * @max_nr: The maximum number of table entries to consider.
+ * @flags: Flags to modify the PTE batch semantics.
+ *
+ * Detect a PTE batch: consecutive (present) PTEs that map consecutive
+ * pages of the same large folio and have the same PTE bits set excluding the
+ * PFN, the accessed bit, writable bit, dirty bit. (unless FPB_RESPECT_DIRTY
+ * is set) and soft-dirty bit (unless FPB_RESPECT_SOFT_DIRTY is set).
+ *
+ * @ptep must map any page of the folio.
+ *
+ * This function will be inlined to optimize based on the input parameters;
+ * consider using folio_pte_batch() instead if applicable.
+ *
+ * Return: the number of table entries in the batch.
+ */
+static inline unsigned int folio_pte_batch_flags(struct folio *folio,
+		struct vm_area_struct *vma, pte_t *ptep, pte_t *ptentp,
+		unsigned int max_nr, fpb_t flags)
+{
+	pte_t pte = *ptentp;
+
+	VM_WARN_ON_FOLIO(!pte_present(pte), folio);
+	VM_WARN_ON_FOLIO(!folio_test_large(folio) || max_nr < 1, folio);
+	VM_WARN_ON_FOLIO(page_folio(pfn_to_page(pte_pfn(pte))) != folio, folio);
+
+	/* Limit max_nr to the actual remaining PFNs in the folio we could batch. */
+	max_nr = min_t(unsigned long, max_nr,
+		       folio_pfn(folio) + folio_nr_pages(folio) - pte_pfn(pte));
+
+	return can_pte_batch_count(vma, ptep, ptentp, max_nr, flags);
 }
 
 unsigned int folio_pte_batch(struct folio *folio, pte_t *ptep, pte_t pte,
