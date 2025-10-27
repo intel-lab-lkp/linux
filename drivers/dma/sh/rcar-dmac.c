@@ -303,7 +303,7 @@ struct rcar_dmac_of_data {
 #define RCAR_GEN4_DMACHCLR		0x0100
 
 /* Hardcode the MEMCPY transfer size to 4 bytes. */
-#define RCAR_DMAC_MEMCPY_XFER_SIZE	4
+#define RCAR_DMAC_MEMCPY_XFER_SIZE	1
 
 /* -----------------------------------------------------------------------------
  * Device access
