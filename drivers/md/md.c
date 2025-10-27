@@ -1061,10 +1061,10 @@ static void super_written(struct bio *bio)
 		if (!md_cond_error(mddev, rdev, bio)
 		    && (bio->bi_opf & MD_FAILFAST)) {
 			set_bit(MD_SB_NEED_REWRITE, &mddev->sb_flags);
-			set_bit(LastDev, &rdev->flags);
+			set_bit(RetryingSBWrite, &rdev->flags);
 		}
 	} else
-		clear_bit(LastDev, &rdev->flags);
+		clear_bit(RetryingSBWrite, &rdev->flags);
 
 	bio_put(bio);
 
@@ -1117,7 +1117,7 @@ void md_write_metadata(struct mddev *mddev, struct md_rdev *rdev,
 
 	if (test_bit(MD_FAILFAST_SUPPORTED, &mddev->flags) &&
 	    test_bit(FailFast, &rdev->flags) &&
-	    !test_bit(LastDev, &rdev->flags))
+	    !test_bit(RetryingSBWrite, &rdev->flags))
 		bio->bi_opf |= MD_FAILFAST;
 
 	atomic_inc(&mddev->pending_writes);
