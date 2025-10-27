@@ -984,5 +984,17 @@ int hyp_ffa_init(void *pages)
 	};
 
 	version_lock = __HYP_SPIN_LOCK_UNLOCKED;
+
+	if (IS_BUILTIN(CONFIG_ARM_FFA_TRANSPORT)) {
+		hyp_spin_lock(&version_lock);
+		if (hyp_ffa_post_init()) {
+			hyp_spin_unlock(&version_lock);
+			return -EOPNOTSUPP;
+		}
+
+		smp_store_release(&has_version_negotiated, true);
+		hyp_spin_unlock(&version_lock);
+	}
+
 	return 0;
 }
