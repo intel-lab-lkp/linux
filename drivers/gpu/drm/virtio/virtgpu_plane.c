@@ -27,6 +27,7 @@
 #include <drm/drm_damage_helper.h>
 #include <drm/drm_fourcc.h>
 #include <drm/drm_gem_atomic_helper.h>
+#include <drm/drm_gem_framebuffer_helper.h>
 #include <linux/virtio_dma_buf.h>
 #include <drm/drm_managed.h>
 #include <drm/drm_panic.h>
@@ -104,7 +105,8 @@ static int virtio_gpu_plane_atomic_check(struct drm_plane *plane,
 										 plane);
 	bool is_cursor = plane->type == DRM_PLANE_TYPE_CURSOR;
 	struct drm_crtc_state *crtc_state;
-	int ret;
+	struct virtio_gpu_crtc_state *vgcrtc_state;
+	int ret, i;
 
 	if (!new_plane_state->fb || WARN_ON(!new_plane_state->crtc))
 		return 0;
@@ -126,7 +128,29 @@ static int virtio_gpu_plane_atomic_check(struct drm_plane *plane,
 						  DRM_PLANE_NO_SCALING,
 						  DRM_PLANE_NO_SCALING,
 						  is_cursor, true);
-	return ret;
+	if (ret)
+		return ret;
+	else if (!new_plane_state->visible)
+		return 0;
+
+	vgcrtc_state = to_virtio_gpu_crtc_state(crtc_state);
+	vgcrtc_state->plane_synced_to_ext &= ~drm_plane_mask(plane);
+
+	for (i = 0; i < new_plane_state->fb->format->num_planes; ++i) {
+		struct drm_gem_object *obj = drm_gem_fb_get_obj(new_plane_state->fb, i);
+
+		/*
+		 * Exporters of GEM buffer objects sometimes interfere with the
+		 * vblank timer. Mark the plane as externally synchronized if we
+		 * find an imported GEM buffer object.
+		 */
+		if (drm_gem_is_imported(obj)) {
+			vgcrtc_state->plane_synced_to_ext |= drm_plane_mask(plane);
+			break; /* only need to find one */
+		}
+	}
+
+	return 0;
 }
 
 /* For drm panic */

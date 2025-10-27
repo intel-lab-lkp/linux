@@ -195,6 +195,21 @@ struct virtio_gpu_framebuffer {
 #define to_virtio_gpu_framebuffer(x) \
 	container_of(x, struct virtio_gpu_framebuffer, base)
 
+struct virtio_gpu_crtc_state {
+	struct drm_crtc_state base;
+
+	/*
+	 * Set from each plane's atomic check and depends on the plane's GEM
+	 * buffer objects. The bit shows is the corresponding plane is already
+	 * synchronized to an external source. Used by the CRTC for vblank
+	 * handling. Only valid during mode setting.
+	 */
+	u32 plane_synced_to_ext;
+};
+
+#define to_virtio_gpu_crtc_state(x) \
+	container_of(x, struct virtio_gpu_crtc_state, base)
+
 struct virtio_gpu_plane_state {
 	struct drm_plane_state base;
 	struct virtio_gpu_fence *fence;

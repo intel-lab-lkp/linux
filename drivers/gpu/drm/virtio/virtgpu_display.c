@@ -49,14 +49,71 @@
 #define drm_connector_to_virtio_gpu_output(x) \
 	container_of(x, struct virtio_gpu_output, conn)
 
+static void virtio_gpu_crtc_state_destroy(struct virtio_gpu_crtc_state *vgcrtc_state)
+{
+	__drm_atomic_helper_crtc_destroy_state(&vgcrtc_state->base);
+
+	kfree(vgcrtc_state);
+}
+
+static bool virtio_gpu_crtc_state_send_event_on_flush(struct virtio_gpu_crtc_state *vgcrtc_state)
+{
+	struct drm_crtc_state *crtc_state = &vgcrtc_state->base;
+
+	/*
+	 * The CRTC's output is sync'ed if at least one plane's output
+	 * is sync'ed to an external source. Send out vlbank event in
+	 * atomic_flush instead of vblank timeout.
+	 */
+	return vgcrtc_state->plane_synced_to_ext & crtc_state->plane_mask;
+}
+
+static void virtio_gpu_crtc_reset(struct drm_crtc *crtc)
+{
+	struct virtio_gpu_crtc_state *vgcrtc_state;
+
+	if (crtc->state)
+		virtio_gpu_crtc_state_destroy(to_virtio_gpu_crtc_state(crtc->state));
+
+	vgcrtc_state = kzalloc(sizeof(*vgcrtc_state), GFP_KERNEL);
+	if (vgcrtc_state)
+		__drm_atomic_helper_crtc_reset(crtc, &vgcrtc_state->base);
+	else
+		__drm_atomic_helper_crtc_reset(crtc, NULL);
+}
+
+static struct drm_crtc_state *virtio_gpu_crtc_atomic_duplicate_state(struct drm_crtc *crtc)
+{
+	struct drm_device *dev = crtc->dev;
+	struct drm_crtc_state *crtc_state = crtc->state;
+	struct virtio_gpu_crtc_state *new_vgcrtc_state;
+
+	if (drm_WARN_ON(dev, !crtc_state))
+		return NULL;
+
+	new_vgcrtc_state = kzalloc(sizeof(*new_vgcrtc_state), GFP_KERNEL);
+	if (!new_vgcrtc_state)
+		return NULL;
+
+	__drm_atomic_helper_crtc_duplicate_state(crtc, &new_vgcrtc_state->base);
+
+	return &new_vgcrtc_state->base;
+}
+
+static void virtio_gpu_crtc_atomic_destroy_state(struct drm_crtc *crtc,
+						 struct drm_crtc_state *crtc_state)
+{
+	virtio_gpu_crtc_state_destroy(to_virtio_gpu_crtc_state(crtc_state));
+}
+
 static const struct drm_crtc_funcs virtio_gpu_crtc_funcs = {
 	.set_config             = drm_atomic_helper_set_config,
 	.destroy                = drm_crtc_cleanup,
 
 	.page_flip              = drm_atomic_helper_page_flip,
-	.reset                  = drm_atomic_helper_crtc_reset,
-	.atomic_duplicate_state = drm_atomic_helper_crtc_duplicate_state,
-	.atomic_destroy_state   = drm_atomic_helper_crtc_destroy_state,
+	.reset                  = virtio_gpu_crtc_reset,
+	.atomic_duplicate_state = virtio_gpu_crtc_atomic_duplicate_state,
+	.atomic_destroy_state   = virtio_gpu_crtc_atomic_destroy_state,
 	DRM_CRTC_VBLANK_TIMER_FUNCS,
 };
 
@@ -129,7 +186,9 @@ static void virtio_gpu_crtc_atomic_flush(struct drm_crtc *crtc,
 {
 	struct drm_device *dev = crtc->dev;
 	struct drm_crtc_state *crtc_state = drm_atomic_get_new_crtc_state(state, crtc);
+	struct virtio_gpu_crtc_state *vgcrtc_state = to_virtio_gpu_crtc_state(crtc_state);
 	struct virtio_gpu_output *output = drm_crtc_to_virtio_gpu_output(crtc);
+	bool send_event_on_flush = virtio_gpu_crtc_state_send_event_on_flush(vgcrtc_state);
 	struct drm_pending_vblank_event *event;
 
 	/*
@@ -147,7 +206,7 @@ static void virtio_gpu_crtc_atomic_flush(struct drm_crtc *crtc,
 	crtc_state->event = NULL;
 
 	if (event) {
-		if (drm_crtc_vblank_get(crtc) == 0)
+		if (!send_event_on_flush && drm_crtc_vblank_get(crtc) == 0)
 			drm_crtc_arm_vblank_event(crtc, event);
 		else
 			drm_crtc_send_vblank_event(crtc, event);
