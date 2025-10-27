@@ -338,6 +338,7 @@ DEFINE_INSN_CACHE_OPS(insn);
 struct optimized_kprobe {
 	struct kprobe kp;
 	struct list_head list;	/* list for optimizing queue */
+	kprobe_opcode_t *pending_reopt_addr;	/* addr that should trigger re-optimization */
 	struct arch_optimized_insn optinsn;
 };
 
