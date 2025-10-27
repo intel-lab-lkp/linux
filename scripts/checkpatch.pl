@@ -3434,10 +3434,16 @@ sub process {
 		     ($line =~ /\{\s*([\w\/\.\-]*)\s*\=\>\s*([\w\/\.\-]*)\s*\}/ &&
 		      (defined($1) || defined($2))))) {
 			$is_patch = 1;
-			$reported_maintainer_file = 1;
-			WARN("FILE_PATH_CHANGES",
-			     "added, moved or deleted file(s), does MAINTAINERS need updating?\n" . $herecurr);
+			# DT bindings are incorporate maintainer information, no need to report
+			if ($realfile !~ m@^Documentation/devicetree/bindings/@)) {
+				$reported_maintainer_file = 1;
+				WARN("FILE_PATH_CHANGES",
+				     "added, moved or deleted file(s), does MAINTAINERS need updating?\n" . $herecurr);
+			}
 		}
+
+		    ($realfile =~ m@^Documentation/devicetree/bindings/.*\.txt$@)) {
+			if ($realfile =~ m@^include/asm/@) {
 
 # Check for adding new DT bindings not in schema format
 		if (!$in_commit_log &&
