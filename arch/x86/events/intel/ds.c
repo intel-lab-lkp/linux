@@ -754,6 +754,7 @@ void release_ds_buffers(void)
 		if (x86_pmu.ds_pebs)
 			release_pebs_buffer(cpu);
 		release_bts_buffer(cpu);
+		cond_resched();
 	}
 }
 
@@ -791,6 +792,8 @@ void reserve_ds_buffers(void)
 
 		if (bts_err && pebs_err)
 			break;
+
+		cond_resched();
 	}
 
 	if (bts_err) {
