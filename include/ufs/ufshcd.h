@@ -869,6 +869,8 @@ enum ufshcd_mcq_opr {
  * @ee_ctrl_mutex: Used to serialize exception event information.
  * @is_powered: flag to check if HBA is powered
  * @shutting_down: flag to check if shutdown has been invoked
+ * @sysfs_attrs_added: Whether or not the sysfs attributes have been added to
+ *	hba->dev.
  * @host_sem: semaphore used to serialize concurrent contexts
  * @eh_wq: Workqueue that eh_work works on
  * @eh_work: Worker to handle UFS errors that require s/w attention
@@ -1021,6 +1023,7 @@ struct ufs_hba {
 	struct mutex ee_ctrl_mutex;
 	bool is_powered;
 	bool shutting_down;
+	bool sysfs_attrs_added;
 	struct semaphore host_sem;
 
 	/* Work Queues */

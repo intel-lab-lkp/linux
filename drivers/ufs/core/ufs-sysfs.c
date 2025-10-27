@@ -2096,13 +2096,18 @@ void ufs_sysfs_add_nodes(struct ufs_hba *hba)
 	int ret;
 
 	ret = sysfs_create_groups(&dev->kobj, ufs_sysfs_groups);
-	if (ret)
+	if (ret) {
 		dev_err(dev,
 			"%s: sysfs groups creation failed (err = %d)\n",
 			__func__, ret);
+		return;
+	}
+
+	WRITE_ONCE(hba->sysfs_attrs_added, true);
 }
 
 void ufs_sysfs_remove_nodes(struct ufs_hba *hba)
 {
+	WRITE_ONCE(hba->sysfs_attrs_added, false);
 	sysfs_remove_groups(&hba->dev->kobj, ufs_sysfs_groups);
 }
