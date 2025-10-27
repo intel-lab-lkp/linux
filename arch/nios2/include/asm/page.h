@@ -45,6 +45,7 @@
 
 struct page;
 
+#define __HAVE_ARCH_CLEAR_USER_PAGE
 extern void clear_user_page(void *addr, unsigned long vaddr, struct page *page);
 extern void copy_user_page(void *vto, void *vfrom, unsigned long vaddr,
 				struct page *to);

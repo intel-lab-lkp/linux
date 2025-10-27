@@ -32,6 +32,8 @@ struct page;
 
 void copy_user_highpage(struct page *to, struct page *from,
 			unsigned long u_vaddr, struct vm_area_struct *vma);
+
+#define __HAVE_ARCH_CLEAR_USER_PAGE
 void clear_user_page(void *to, unsigned long u_vaddr, struct page *page);
 
 typedef struct {
