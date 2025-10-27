@@ -242,6 +242,19 @@ struct coresight_trace_id_map {
 	raw_spinlock_t lock;
 };
 
+/*
+ * Coresight claim tag info:
+ * CS_CLAIM_TAG_UNKNOWN      - not yet checked.
+ * CS_CLAIM_TAG_STD_PROTOCOL - using standard claim/release protocol.
+ * CS_CLAIM_TAG_NOT_IMPL     - no claim tags available.
+ */
+enum coresight_claim_tag_info {
+	CS_CLAIM_TAG_UNKNOWN,
+	CS_CLAIM_TAG_STD_PROTOCOL,
+	CS_CLAIM_TAG_NOT_IMPL,
+};
+
+
 /**
  * struct coresight_device - representation of a device as used by the framework
  * @pdata:	Platform data with device connections associated to this device.
@@ -265,6 +278,7 @@ struct coresight_trace_id_map {
  *		CS_MODE_SYSFS. Otherwise it must be accessed from inside the
  *		spinlock.
  * @orphan:	true if the component has connections that haven't been linked.
+ * @claim_tag_info: how the device is using claim tags.
  * @sysfs_sink_activated: 'true' when a sink has been selected for use via sysfs
  *		by writing a 1 to the 'enable_sink' file.  A sink can be
  *		activated but not yet enabled.  Enabling for a _sink_ happens
@@ -291,6 +305,7 @@ struct coresight_device {
 	local_t	mode;
 	int refcnt;
 	bool orphan;
+	enum coresight_claim_tag_info claim_tag_info;
 	/* sink specific fields */
 	bool sysfs_sink_activated;
 	struct dev_ext_attribute *ea;

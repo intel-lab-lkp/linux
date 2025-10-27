@@ -131,6 +131,39 @@ coresight_find_out_connection(struct coresight_device *csdev,
 	return ERR_PTR(-ENODEV);
 }
 
+/*
+ * Reading CLAiMSET returns  a bitfield representing the number of claim tags
+ * implemented from bit 0 to bit nTag-1, valid bits set to 1.
+ *
+ * Claim protocol requires 2 bits so test for MS bit required,
+ * bit 1 -  CORESIGHT_CLAIM_BIT_PROTOCOL_HI
+ *
+ * return true if sufficient claim tags implemented for protocol
+ */
+static bool coresight_claim_tags_implemented_unlocked(struct csdev_access *csa)
+{
+	u32 claim_bits_impl = FIELD_GET(CORESIGHT_CLAIM_BITS_MAX_MASK,
+			 csdev_access_relaxed_read32(csa, CORESIGHT_CLAIMSET));
+	return ((claim_bits_impl & CORESIGHT_CLAIM_BIT_PROTOCOL_HI) != 0);
+}
+
+/*
+ * check if we can use the claim tag protocol.
+ *
+ * If currently unknown - read register to determine if sufficient tags and
+ * save value, otherwise return current value.
+ */
+static bool coresight_check_use_claim_tag_unlocked(struct coresight_device *csdev)
+{
+	if (csdev->claim_tag_info == CS_CLAIM_TAG_UNKNOWN) {
+		if (coresight_claim_tags_implemented_unlocked(&csdev->access))
+			csdev->claim_tag_info = CS_CLAIM_TAG_STD_PROTOCOL;
+		else
+			csdev->claim_tag_info = CS_CLAIM_TAG_NOT_IMPL;
+	}
+	return (csdev->claim_tag_info == CS_CLAIM_TAG_STD_PROTOCOL);
+}
+
 static u32 coresight_read_claim_tags_unlocked(struct coresight_device *csdev)
 {
 	return FIELD_GET(CORESIGHT_CLAIM_MASK,
@@ -156,6 +189,9 @@ EXPORT_SYMBOL_GPL(coresight_clear_self_claim_tag);
 
 void coresight_clear_self_claim_tag_unlocked(struct csdev_access *csa)
 {
+	if (!coresight_claim_tags_implemented_unlocked(csa))
+		return;
+
 	csdev_access_relaxed_write32(csa, CORESIGHT_CLAIM_SELF_HOSTED,
 				     CORESIGHT_CLAIMCLR);
 	isb();
@@ -175,12 +211,13 @@ EXPORT_SYMBOL_GPL(coresight_clear_self_claim_tag_unlocked);
 int coresight_claim_device_unlocked(struct coresight_device *csdev)
 {
 	int tag;
-	struct csdev_access *csa;
 
 	if (WARN_ON(!csdev))
 		return -EINVAL;
 
-	csa = &csdev->access;
+	if (!coresight_check_use_claim_tag_unlocked(csdev))
+		return 0;
+
 	tag = coresight_read_claim_tags_unlocked(csdev);
 
 	switch (tag) {
@@ -190,7 +227,7 @@ int coresight_claim_device_unlocked(struct coresight_device *csdev)
 			return 0;
 
 		/* There was a race setting the tag, clean up and fail */
-		coresight_clear_self_claim_tag_unlocked(csa);
+		coresight_clear_self_claim_tag_unlocked(&csdev->access);
 		dev_dbg(&csdev->dev, "Busy: Couldn't set self claim tag");
 		return -EBUSY;
 
@@ -235,6 +272,9 @@ void coresight_disclaim_device_unlocked(struct coresight_device *csdev)
 {
 
 	if (WARN_ON(!csdev))
+		return;
+
+	if (!coresight_check_use_claim_tag_unlocked(csdev))
 		return;
 
 	if (coresight_read_claim_tags_unlocked(csdev) == CORESIGHT_CLAIM_SELF_HOSTED)
