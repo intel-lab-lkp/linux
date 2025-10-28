@@ -1,0 +1,51 @@
+# SPDX-License-Identifier: (GPL-2.0 OR BSD-2-Clause)
+%YAML 1.2
+---
+$id: http://devicetree.org/schemas/mailbox/rcar,mfis-mailbox.yaml#
+$schema: http://devicetree.org/meta-schemas/core.yaml#
+
+title: Renesas MFIS (Multifunctional Inferface) Mailbox controller
+
+maintainers:
+  - Kuninori Morimoto <kuninori.morimoto.gx@renesas.com>
+
+description:
+  The R-Car multifunctional interface (MFIS) provides an interface between
+  the different CPU Cores, such as AP System Core domain and the Realtime
+  Core domain, SCP Core domain and AP System Core domain or Realtime Core
+  domain and AP System Core domain or Realtime Core domain.
+  The MFIS supports the issuing of interrupts for each CPU core domain.
+
+properties:
+  compatible:
+    items:
+      - enum:
+          - rcar,mfis-mailbox-r8a78000   # R-Car X5H
+      - const: rcar,mfis-mailbox-gen5    # R-Car Gen5
+
+  reg:
+    maxItems: 1
+
+  interrupts:
+    maxItems: 1
+
+  "#mbox-cells":
+    const: 1
+
+required:
+  - compatible
+  - reg
+  - interrupts
+  - "#mbox-cells"
+
+additionalProperties: false
+
+examples:
+  - |
+    #include <dt-bindings/interrupt-controller/arm-gic.h>
+    mailbox@18842000  {
+        compatible = "rcar,mfis-mailbox-r8a78000", "rcar,mfis-mailbox-gen5";
+        reg = <0x18842000 0x8>;
+        interrupts = <GIC_SPI 4362 IRQ_TYPE_LEVEL_HIGH>;
+        #mbox-cells = <1>;
+    };
