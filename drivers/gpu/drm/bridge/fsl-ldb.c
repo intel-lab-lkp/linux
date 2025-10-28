@@ -294,7 +294,6 @@ static int fsl_ldb_probe(struct platform_device *pdev)
 	struct device *dev = &pdev->dev;
 	struct device_node *panel_node;
 	struct device_node *remote1, *remote2;
-	struct drm_panel *panel;
 	struct fsl_ldb *fsl_ldb;
 	int dual_link;
 
@@ -335,15 +334,24 @@ static int fsl_ldb_probe(struct platform_device *pdev)
 		fsl_ldb_is_dual(fsl_ldb) ? "dual-link mode" :
 		fsl_ldb->ch0_enabled ? "channel 0" : "channel 1");
 
-	panel = of_drm_find_panel(panel_node);
-	of_node_put(panel_node);
-	if (IS_ERR(panel))
-		return PTR_ERR(panel);
+	/* First try to get an additional bridge, if not found go for a panel */
+	fsl_ldb->panel_bridge = of_drm_find_bridge(panel_node);
+	if (fsl_ldb->panel_bridge) {
+		of_node_put(panel_node);
+	} else {
+		struct drm_panel *panel;
 
-	fsl_ldb->panel_bridge = devm_drm_panel_bridge_add(dev, panel);
-	if (IS_ERR(fsl_ldb->panel_bridge))
-		return PTR_ERR(fsl_ldb->panel_bridge);
+		panel = of_drm_find_panel(panel_node);
+		of_node_put(panel_node);
+		if (IS_ERR(panel))
+			return dev_err_probe(dev, PTR_ERR(panel),
+					     "Failed to find panel");
 
+		fsl_ldb->panel_bridge = devm_drm_panel_bridge_add(dev, panel);
+		if (IS_ERR(fsl_ldb->panel_bridge))
+			return dev_err_probe(dev, PTR_ERR(fsl_ldb->panel_bridge),
+					     "Failed to add panel bridge");
+	}
 
 	if (fsl_ldb_is_dual(fsl_ldb)) {
 		struct device_node *port1, *port2;
