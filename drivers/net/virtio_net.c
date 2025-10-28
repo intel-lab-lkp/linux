@@ -441,6 +441,9 @@ struct virtnet_info {
 	/* Packet virtio header size */
 	u8 hdr_len;
 
+	/* header alignment */
+	size_t hdr_align;
+
 	/* Work struct for delayed refilling if we run low on memory. */
 	struct delayed_work refill;
 
@@ -3312,8 +3315,9 @@ static int xmit_skb(struct send_queue *sq, struct sk_buff *skb, bool orphan)
 	pr_debug("%s: xmit %p %pM\n", vi->dev->name, skb, dest);
 
 	can_push = vi->any_header_sg &&
-		!((unsigned long)skb->data & (__alignof__(*hdr) - 1)) &&
+		!((unsigned long)skb->data & (vi->hdr_align - 1)) &&
 		!skb_header_cloned(skb) && skb_headroom(skb) >= hdr_len;
+
 	/* Even if we can, don't push here yet as this would skew
 	 * csum_start offset below. */
 	if (can_push)
@@ -6921,15 +6925,20 @@ static int virtnet_probe(struct virtio_device *vdev)
 	}
 
 	if (virtio_has_feature(vdev, VIRTIO_NET_F_GUEST_UDP_TUNNEL_GSO) ||
-	    virtio_has_feature(vdev, VIRTIO_NET_F_HOST_UDP_TUNNEL_GSO))
+	    virtio_has_feature(vdev, VIRTIO_NET_F_HOST_UDP_TUNNEL_GSO)) {
 		vi->hdr_len = sizeof(struct virtio_net_hdr_v1_hash_tunnel);
-	else if (vi->has_rss_hash_report)
+		vi->hdr_align = __alignof__(struct virtio_net_hdr_v1_hash_tunnel);
+	} else if (vi->has_rss_hash_report) {
 		vi->hdr_len = sizeof(struct virtio_net_hdr_v1_hash);
-	else if (virtio_has_feature(vdev, VIRTIO_NET_F_MRG_RXBUF) ||
-		 virtio_has_feature(vdev, VIRTIO_F_VERSION_1))
+		vi->hdr_align = __alignof__(struct virtio_net_hdr_v1_hash);
+	} else if (virtio_has_feature(vdev, VIRTIO_NET_F_MRG_RXBUF) ||
+		virtio_has_feature(vdev, VIRTIO_F_VERSION_1)) {
 		vi->hdr_len = sizeof(struct virtio_net_hdr_mrg_rxbuf);
-	else
+		vi->hdr_align = __alignof__(struct virtio_net_hdr_mrg_rxbuf);
+	} else {
 		vi->hdr_len = sizeof(struct virtio_net_hdr);
+		vi->hdr_align = __alignof__(struct virtio_net_hdr);
+	}
 
 	if (virtio_has_feature(vdev, VIRTIO_NET_F_GUEST_UDP_TUNNEL_GSO_CSUM))
 		vi->rx_tnl_csum = true;
