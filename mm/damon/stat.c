@@ -132,6 +132,9 @@ static int damon_stat_damon_call_fn(void *data)
 	struct damon_ctx *c = data;
 	static unsigned long last_refresh_jiffies;
 
+	if (unlikely(!last_refresh_jiffies))
+		last_refresh_jiffies = jiffies;
+
 	/* avoid unnecessarily frequent stat update */
 	if (time_before_eq(jiffies, last_refresh_jiffies +
 				msecs_to_jiffies(5 * MSEC_PER_SEC)))
