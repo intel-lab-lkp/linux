@@ -16581,6 +16581,7 @@ F:	mm/vma.h
 F:	mm/vma_exec.c
 F:	mm/vma_init.c
 F:	mm/vma_internal.h
+F:	tools/testing/selftests/mm/max_vma_count_tests.c
 F:	tools/testing/selftests/mm/merge.c
 F:	tools/testing/vma/
 
