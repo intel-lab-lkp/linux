@@ -236,7 +236,7 @@ struct bonding {
 	 */
 	spinlock_t mode_lock;
 	spinlock_t stats_lock;
-	u32	 send_peer_notif;
+	atomic_t send_peer_notif;
 	u8       igmp_retrans;
 #ifdef CONFIG_PROC_FS
 	struct   proc_dir_entry *proc_entry;
@@ -812,6 +812,13 @@ static inline netdev_tx_t bond_tx_drop(struct net_device *dev, struct sk_buff *s
 	dev_core_stats_tx_dropped_inc(dev);
 	dev_kfree_skb_any(skb);
 	return NET_XMIT_DROP;
+}
+
+static inline void bond_peer_notify_reset(struct bonding *bond)
+{
+	atomic_set(&bond->send_peer_notif,
+		bond->params.num_peer_notif *
+		max(1, bond->params.peer_notif_delay));
 }
 
 #endif /* _NET_BONDING_H */

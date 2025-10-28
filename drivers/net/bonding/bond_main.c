@@ -1167,10 +1167,11 @@ static bool bond_should_notify_peers(struct bonding *bond)
 {
 	struct bond_up_slave *usable;
 	struct slave *slave = NULL;
+	int send_peer_notif;
 
-	if (!bond->send_peer_notif ||
-	    bond->send_peer_notif %
-	    max(1, bond->params.peer_notif_delay) != 0 ||
+	send_peer_notif = atomic_read(&bond->send_peer_notif);
+	if (!send_peer_notif ||
+	    send_peer_notif % max(1, bond->params.peer_notif_delay) != 0 ||
 	    !netif_carrier_ok(bond->dev))
 		return false;
 
@@ -1270,8 +1271,6 @@ void bond_change_active_slave(struct bonding *bond, struct slave *new_active)
 						      BOND_SLAVE_NOTIFY_NOW);
 
 		if (new_active) {
-			bool should_notify_peers = false;
-
 			bond_set_slave_active_flags(new_active,
 						    BOND_SLAVE_NOTIFY_NOW);
 
@@ -1280,19 +1279,17 @@ void bond_change_active_slave(struct bonding *bond, struct slave *new_active)
 						      old_active);
 
 			if (netif_running(bond->dev)) {
-				bond->send_peer_notif =
-					bond->params.num_peer_notif *
-					max(1, bond->params.peer_notif_delay);
-				should_notify_peers =
-					bond_should_notify_peers(bond);
+				bond_peer_notify_reset(bond);
+
+				if (bond_should_notify_peers(bond)) {
+					atomic_dec(&bond->send_peer_notif);
+					call_netdevice_notifiers(
+							NETDEV_NOTIFY_PEERS,
+							bond->dev);
+				}
 			}
 
 			call_netdevice_notifiers(NETDEV_BONDING_FAILOVER, bond->dev);
-			if (should_notify_peers) {
-				bond->send_peer_notif--;
-				call_netdevice_notifiers(NETDEV_NOTIFY_PEERS,
-							 bond->dev);
-			}
 		}
 	}
 
@@ -2892,7 +2889,7 @@ static void bond_mii_monitor(struct work_struct *work)
 
 	rcu_read_unlock();
 
-	if (commit || bond->send_peer_notif) {
+	if (commit || should_notify_peers) {
 		/* Race avoidance with bond_close cancel of workqueue */
 		if (!rtnl_trylock()) {
 			delay = 1;
@@ -2907,15 +2904,14 @@ static void bond_mii_monitor(struct work_struct *work)
 			bond_miimon_commit(bond);
 		}
 
-		if (bond->send_peer_notif) {
-			bond->send_peer_notif--;
-			if (should_notify_peers)
-				call_netdevice_notifiers(NETDEV_NOTIFY_PEERS,
-							 bond->dev);
-		}
+		/* check again to avoid send_peer_notif has been changed. */
+		if (bond_should_notify_peers(bond))
+			call_netdevice_notifiers(NETDEV_NOTIFY_PEERS, bond->dev);
 
 		rtnl_unlock();	/* might sleep, hold no other locks */
 	}
+
+	atomic_dec_if_positive(&bond->send_peer_notif);
 
 re_arm:
 	if (bond->params.miimon)
@@ -3864,7 +3860,7 @@ re_arm:
 			return;
 
 		if (should_notify_peers) {
-			bond->send_peer_notif--;
+			atomic_dec(&bond->send_peer_notif);
 			call_netdevice_notifiers(NETDEV_NOTIFY_PEERS,
 						 bond->dev);
 		}
@@ -4358,6 +4354,8 @@ static int bond_open(struct net_device *bond_dev)
 			queue_delayed_work(bond->wq, &bond->alb_work, 0);
 	}
 
+	atomic_set(&bond->send_peer_notif, 0);
+
 	if (bond->params.miimon)  /* link check interval, in milliseconds. */
 		queue_delayed_work(bond->wq, &bond->mii_work, 0);
 
@@ -4391,7 +4389,7 @@ static int bond_close(struct net_device *bond_dev)
 	struct slave *slave;
 
 	bond_work_cancel_all(bond);
-	bond->send_peer_notif = 0;
+	atomic_set(&bond->send_peer_notif, 0);
 	if (bond_is_lb(bond))
 		bond_alb_deinitialize(bond);
 	bond->recv_probe = NULL;
