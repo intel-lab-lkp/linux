@@ -4005,6 +4005,13 @@ static int nvme_init_ns_head(struct nvme_ns *ns, struct nvme_ns_info *info)
 		memset(&info->ids.uuid, 0, sizeof(info->ids.uuid));
 		memset(&info->ids.eui64, 0, sizeof(info->ids.eui64));
 		ctrl->quirks |= NVME_QUIRK_BOGUS_NID;
+	} else {
+		/*
+		 * If the device is a multipath device and the id check passes,
+		 * the NVME_QUIRK_BOGUS_NID is not needed.
+		 */
+		if (ns->ctrl->subsys->cmic & NVME_CTRL_CMIC_MULTI_CTRL)
+			ctrl->quirks &= ~NVME_QUIRK_BOGUS_NID;
 	}
 
 	mutex_lock(&ctrl->subsys->lock);
