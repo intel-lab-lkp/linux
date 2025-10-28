@@ -110,12 +110,14 @@ static int ptp_clock_settime(struct posix_clock *pc, const struct timespec64 *tp
 static int ptp_clock_gettime(struct posix_clock *pc, struct timespec64 *tp)
 {
 	struct ptp_clock *ptp = container_of(pc, struct ptp_clock, clock);
-	int err;
+	int err = -EOPNOTSUPP;
 
 	if (ptp->info->gettimex64)
-		err = ptp->info->gettimex64(ptp->info, tp, NULL);
-	else
-		err = ptp->info->gettime64(ptp->info, tp);
+		return ptp->info->gettimex64(ptp->info, tp, NULL);
+
+	if (ptp->info->gettime64)
+		return ptp->info->gettime64(ptp->info, tp);
+
 	return err;
 }
 
