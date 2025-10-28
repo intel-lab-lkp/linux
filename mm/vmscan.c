@@ -2649,7 +2649,6 @@ static bool can_age_anon_pages(struct lruvec *lruvec,
 			  lruvec_memcg(lruvec));
 }
 
-
 #ifdef CONFIG_MEMCG
 static void lruvec_reparent_lru(struct lruvec *src, struct lruvec *dst,
 				enum lru_list lru)
