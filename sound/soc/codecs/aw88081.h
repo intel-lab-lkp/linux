@@ -286,44 +286,11 @@
 			SNDRV_PCM_FMTBIT_S24_LE | \
 			SNDRV_PCM_FMTBIT_S32_LE)
 
-#define FADE_TIME_MAX			100000
-
 #define AW88081_DEV_DEFAULT_CH		(0)
 #define AW88081_ACF_FILE		"aw88081_acf.bin"
 #define AW88081_DEV_SYSST_CHECK_MAX	(10)
 #define AW88081_SOFT_RESET_VALUE	(0x55aa)
 
 #define AW88081_INIT_PROFILE		(0)
-
-#define AW88081_PROFILE_EXT(xname, profile_info, profile_get, profile_set) \
-{ \
-	.iface = SNDRV_CTL_ELEM_IFACE_MIXER, \
-	.name = xname, \
-	.info = profile_info, \
-	.get = profile_get, \
-	.put = profile_set, \
-}
-
-enum {
-	AW88081_SYNC_START = 0,
-	AW88081_ASYNC_START,
-};
-
-enum {
-	AW88081_500_US = 500,
-	AW88081_1000_US = 1000,
-	AW88081_2000_US = 2000,
-	AW88081_5000_US = 5000,
-};
-
-enum {
-	AW88081_DEV_PW_OFF = 0,
-	AW88081_DEV_PW_ON,
-};
-
-enum {
-	AW88081_DEV_FW_FAILED = 0,
-	AW88081_DEV_FW_OK,
-};
 
 #endif
