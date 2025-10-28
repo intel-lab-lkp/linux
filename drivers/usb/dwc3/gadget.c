@@ -1064,7 +1064,7 @@ static int __dwc3_gadget_ep_disable(struct dwc3_ep *dep)
 {
 	struct dwc3		*dwc = dep->dwc;
 	u32			reg;
-	u32			mask;
+	int			ret;
 
 	trace_dwc3_gadget_ep_disable(dep);
 
@@ -1077,18 +1077,23 @@ static int __dwc3_gadget_ep_disable(struct dwc3_ep *dep)
 	dwc3_writel(dwc->regs, DWC3_DALEPENA, reg);
 
 	dwc3_remove_requests(dwc, dep, -ESHUTDOWN);
+	/*
+	 * Stop the endpoint by issuing ENDXFER and synchronously complete
+	 * all pending USB requests before returning from ep disable.
+	 */
+	if (dep->flags & DWC3_EP_DELAY_STOP) {
+		spin_unlock(&dwc->lock);
+		reinit_completion(&dwc->ep0_in_setup);
+		ret = wait_for_completion_timeout(&dwc->ep0_in_setup,
+						  msecs_to_jiffies(DWC3_PULL_UP_TIMEOUT));
+		spin_lock(&dwc->lock);
+		if (ret == 0)
+			dwc3_ep0_reset_state(dwc);
+	}
 
 	dep->stream_capable = false;
 	dep->type = 0;
-	mask = DWC3_EP_TXFIFO_RESIZED | DWC3_EP_RESOURCE_ALLOCATED;
-	/*
-	 * dwc3_remove_requests() can exit early if DWC3 EP delayed stop is
-	 * set.  Do not clear DEP flags, so that the end transfer command will
-	 * be reattempted during the next SETUP stage.
-	 */
-	if (dep->flags & DWC3_EP_DELAY_STOP)
-		mask |= (DWC3_EP_DELAY_STOP | DWC3_EP_TRANSFER_STARTED);
-	dep->flags &= mask;
+	dep->flags &= DWC3_EP_TXFIFO_RESIZED;
 
 	/* Clear out the ep descriptors for non-ep0 */
 	if (dep->number > 1) {
