@@ -1236,6 +1236,16 @@ static void drm_sched_run_job_work(struct work_struct *w)
 
 	/* Find entity with a ready job */
 	entity = drm_sched_select_entity(sched);
+	/*
+	 * FIXME:
+	 * The entity can be NULL when the scheduler currently has no capacity
+	 * (credits) for more jobs. If that happens, the work item terminates
+	 * itself here, without rescheduling itself.
+	 *
+	 * It only gets started again in drm_sched_entity_push_job(). IOW, the
+	 * scheduler might hang forever if a job that needs too many credits
+	 * gets submitted to an entity and no other, subsequent jobs are.
+	 */
 	if (!entity) {
 		/*
 		 * Either no more work to do, or the next ready job needs more
