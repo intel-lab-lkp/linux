@@ -91,7 +91,21 @@ struct cpuidle_state;
 #include "cpupri.h"
 #include "cpudeadline.h"
 
-#define SCHED_WARN_ON(x) WARN_ONCE(x, #x)
+#define SCHED_WARN_ON(x)				\
+	({						\
+		bool __ret = (x);			\
+							\
+		if (unlikely(__ret)) {			\
+			unsigned long __flags;		\
+							\
+			local_irq_save(__flags);	\
+			printk_deferred_enter();	\
+			WARN_ONCE(__ret, #x);		\
+			printk_deferred_exit();		\
+			local_irq_restore(__flags);	\
+		}					\
+		unlikely(__ret);			\
+	})
 
 /* task_struct::on_rq states: */
 #define TASK_ON_RQ_QUEUED	1
