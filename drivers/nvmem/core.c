@@ -1043,6 +1043,7 @@ err_remove_cells:
 	if (config->compat)
 		nvmem_sysfs_remove_compat(nvmem, config);
 err_put_device:
+	gpiod_put(nvmem->wp_gpio);
 	put_device(&nvmem->dev);
 
 	return ERR_PTR(rval);
@@ -1062,6 +1063,7 @@ static void nvmem_device_release(struct kref *kref)
 
 	nvmem_device_remove_all_cells(nvmem);
 	nvmem_destroy_layout(nvmem);
+	gpiod_put(nvmem->wp_gpio);
 	device_unregister(&nvmem->dev);
 }
 
