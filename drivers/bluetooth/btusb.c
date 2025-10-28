@@ -3445,15 +3445,14 @@ done:
 }
 
 static void btusb_generate_qca_nvm_name(char *fwname, size_t max_size,
-					const struct qca_version *ver)
+					const struct qca_version *ver,
+					u16 board_id)
 {
 	u32 rom_version = le32_to_cpu(ver->rom_version);
 	const char *variant, *fw_subdir;
 	int len;
-	u16 board_id;
 
 	fw_subdir = qca_get_fw_subdirectory(ver);
-	board_id = qca_extract_board_id(ver);
 
 	switch (le32_to_cpu(ver->ram_version)) {
 	case WCN6855_2_0_RAM_VERSION_GF:
@@ -3485,13 +3484,25 @@ static int btusb_setup_qca_load_nvm(struct hci_dev *hdev,
 	const struct firmware *fw;
 	char fwname[80];
 	int err;
+	u16 board_id = 0;
 
-	btusb_generate_qca_nvm_name(fwname, sizeof(fwname), ver);
+	board_id = qca_extract_board_id(ver);
 
+retry:
+	btusb_generate_qca_nvm_name(fwname, sizeof(fwname), ver, board_id);
 	err = request_firmware(&fw, fwname, &hdev->dev);
 	if (err) {
+		if (err == -EINVAL) {
+			bt_dev_err(hdev, "QCOM BT firmware file request failed (%d)", err);
+			return err;
+		}
+
 		bt_dev_err(hdev, "failed to request NVM file: %s (%d)",
 			   fwname, err);
+		if (err == -ENOENT && board_id != 0) {
+			board_id = 0;
+			goto retry;
+		}
 		return err;
 	}
 
