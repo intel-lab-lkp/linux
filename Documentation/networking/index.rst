@@ -5,138 +5,169 @@ Refer to :ref:`netdev-FAQ` for a guide on netdev development process specifics.
 
 Contents:
 
+Networking core
+---------------
+
 .. toctree::
-   :maxdepth: 2
+   :maxdepth: 1
 
    af_xdp
-   bareudp
-   batman-adv
-   can
-   can_ucan_protocol
-   device_drivers/index
-   diagnostic/index
-   dsa/index
-   devlink/index
-   caif/index
-   ethtool-netlink
-   ieee802154
-   iso15765-2
-   j1939
-   kapi
-   msg_zerocopy
-   failover
-   net_dim
-   net_failover
-   page_pool
-   phy
-   sfp-phylink
-   alias
-   bridge
-   snmp_counter
    checksum-offloads
-   segmentation-offloads
-   scaling
-   tls
-   tls-offload
-   tls-handshake
-   nfc
-   6lowpan
-   6pack
-   arcnet-hardware
-   arcnet
-   atm
-   ax25
-   bonding
-   cdc_mbim
-   dctcp
-   devmem
-   dns_resolver
+   diagnostic/index
    driver
-   eql
-   fib_trie
-   filter
-   generic-hdlc
-   generic_netlink
-   ../netlink/specs/index
-   gen_stats
-   gtp
-   ila
-   ioam6-sysctl
-   iou-zcrx
-   ip_dynaddr
-   ipsec
-   ip-sysctl
-   ipv6
-   ipvlan
-   ipvs-sysctl
-   kcm
-   l2tp
-   lapb-module
+   kapi
    mac80211-injection
-   mctp
-   mpls-sysctl
-   mptcp
-   mptcp-sysctl
-   multiqueue
-   multi-pf-netdev
+   msg_zerocopy
    napi
    net_cachelines/index
-   netconsole
    netdev-features
-   netdevices
-   netfilter-sysctl
    netif-msg
-   netmem
-   nexthop-group-resilient
-   nf_conntrack-sysctl
-   nf_flowtable
-   oa-tc6-framework
-   openvswitch
-   operstates
    packet_mmap
-   phonet
+   page_pool
+   phy
    phy-link-topology
-   pktgen
+   scaling
+   segmentation-offloads
+   skbuff
+   strparser
+   timestamping
+   xdp-rx-metadata
+   xsk-tx-metadata
+
+Protocols
+---------
+
+.. toctree::
+   :maxdepth: 1
+
+   6pack
+   arcnet
+   ax25
+   bareudp
+   caif/index
+   can
+   can_ucan_protocol
+   dctcp
+   gtp
+   ila
+   ipsec
+   ipv6
+   iso15765-2
+   j1939
+   l2tp
+   mctp
+   mptcp
+   oa-tc6-framework
+   phonet
+   psp
+   rxrpc
+   sctp
+   tcp-thin
+   tcp_ao
+   tipc
+   tls
+   tls-handshake
+   tls-offload
+   udplite
+   vxlan
+   x25
+
+Networking devices
+------------------
+
+.. toctree::
+   :maxdepth: 1
+
+   6lowpan
+   arcnet-hardware
+   bonding
+   bridge
+   cdc_mbim
+   device_drivers/index
+   devlink/index
+   devmem
+   dsa/index
+   eql
+   ipvlan
+   multi-pf-netdev
+   multiqueue
+   netconsole
+   netdevices
+   netmem
+   operstates
    plip
    ppp_generic
+   representors
+   sriov
+   statistics
+   switchdev
+   team
+   tuntap
+   vrf
+   x25-iface
+
+Packet filtering
+----------------
+
+.. toctree::
+   :maxdepth: 1
+
+   filter
+   netfilter-sysctl
+   nf_conntrack-sysctl
+   nf_flowtable
+   tc-actions-env-rules
+   tc-queue-filters
+   tproxy
+
+Miscellaneous
+-------------
+
+.. toctree::
+   :maxdepth: 1
+
+   ../netlink/specs/index
+   alias
+   atm
+   batman-adv
+   dns_resolver
+   ethtool-netlink
+   failover
+   fib_trie
+   gen_stats
+   generic-hdlc
+   generic_netlink
+   ieee802154
+   ioam6-sysctl
+   iou-zcrx
+   ip-sysctl
+   ip_dynaddr
+   ipvs-sysctl
+   kcm
+   lapb-module
+   mpls-sysctl
+   mptcp-sysctl
+   net_dim
+   net_failover
+   nexthop-group-resilient
+   nfc
+   openvswitch
+   pktgen
    proc_net_tcp
    pse-pd/index
-   psp
    radiotap-headers
    rds
    regulatory
-   representors
-   rxrpc
-   sctp
    secid
    seg6-sysctl
-   skbuff
+   sfp-phylink
    smc-sysctl
-   sriov
-   statistics
-   strparser
-   switchdev
+   snmp_counter
    sysfs-tagging
-   tc-actions-env-rules
-   tc-queue-filters
-   tcp_ao
-   tcp-thin
-   team
-   timestamping
-   tipc
-   tproxy
-   tuntap
-   udplite
-   vrf
-   vxlan
-   x25
-   x25-iface
    xfrm_device
    xfrm_proc
    xfrm_sync
    xfrm_sysctl
-   xdp-rx-metadata
-   xsk-tx-metadata
 
 .. only::  subproject and html
 
