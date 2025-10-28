@@ -49,6 +49,15 @@ struct vmemmap_remap_walk {
 	unsigned long		flags;
 };
 
+static inline void vmemmap_flush_tlb_all(void)
+{
+#ifdef CONFIG_S390
+	__tlb_flush_kernel();
+#else
+	flush_tlb_all();
+#endif
+}
+
 static int vmemmap_split_pmd(pmd_t *pmd, struct page *head, unsigned long start,
 			     struct vmemmap_remap_walk *walk)
 {
@@ -540,7 +549,7 @@ long hugetlb_vmemmap_restore_folios(const struct hstate *h,
 	}
 
 	if (restored)
-		flush_tlb_all();
+		vmemmap_flush_tlb_all();
 	if (!ret)
 		ret = restored;
 	return ret;
@@ -704,7 +713,7 @@ static void __hugetlb_vmemmap_optimize_folios(struct hstate *h,
 		 */
 		goto out;
 
-	flush_tlb_all();
+	vmemmap_flush_tlb_all();
 
 	list_for_each_entry(folio, folio_list, lru) {
 		int ret;
@@ -722,7 +731,7 @@ static void __hugetlb_vmemmap_optimize_folios(struct hstate *h,
 		 * allowing more vmemmap remaps to occur.
 		 */
 		if (ret == -ENOMEM && !list_empty(&vmemmap_pages)) {
-			flush_tlb_all();
+			vmemmap_flush_tlb_all();
 			free_vmemmap_page_list(&vmemmap_pages);
 			INIT_LIST_HEAD(&vmemmap_pages);
 			__hugetlb_vmemmap_optimize_folio(h, folio, &vmemmap_pages, flags);
@@ -730,7 +739,7 @@ static void __hugetlb_vmemmap_optimize_folios(struct hstate *h,
 	}
 
 out:
-	flush_tlb_all();
+	vmemmap_flush_tlb_all();
 	free_vmemmap_page_list(&vmemmap_pages);
 }
 
