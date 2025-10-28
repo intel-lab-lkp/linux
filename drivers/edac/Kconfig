@@ -477,6 +477,18 @@ config EDAC_ALTERA_SDMMC
 	  Support for error detection and correction on the
 	  Altera SDMMC FIFO Memory for Altera SoCs.
 
+config EDAC_ALTERA_CRAM_SEU
+	bool "Altera CRAM SEU"
+	depends on EDAC_ALTERA=y && 64BIT
+	help
+	  Support for error detection and correction on Altera SoCs for
+	  FPGA Configuration RAM(CRAM) Single Event Upset(SEU).
+	  The SEU errors caused by radiation or other transient events are
+	  monitored by the Secure Device Manager (SDM), which notifies the
+	  CPU through a dedicated interrupt.
+	  This driver uses an SMC interface to query the error status and
+	  report events to the EDAC framework.
+
 config EDAC_SIFIVE
 	bool "Sifive platform EDAC driver"
 	depends on EDAC=y && SIFIVE_CCACHE

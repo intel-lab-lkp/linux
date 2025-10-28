@@ -410,6 +410,13 @@ struct edac_device_prv_data {
 	bool panic;
 };
 
+struct altr_seu {
+	u32 ce_msb;
+	u32 ce_lsb;
+	u32 ue_msb;
+	u32 ue_lsb;
+};
+
 struct altr_edac_device_dev {
 	struct list_head next;
 	void __iomem *base;
@@ -424,6 +431,8 @@ struct altr_edac_device_dev {
 	int edac_idx;
 	int io96b0_irq;
 	int io96b1_irq;
+	int seu_irq;
+	struct altr_seu seu;
 };
 
 struct altr_arria10_edac {
