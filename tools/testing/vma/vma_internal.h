@@ -1497,4 +1497,9 @@ static int max_vma_count(void)
 	return sysctl_max_map_count;
 }
 
+/* Stub for trace_mm_insufficient_vma_slots */
+static inline void trace_mm_insufficient_vma_slots(struct mm_struct *mm)
+{
+}
+
 #endif	/* __MM_VMA_INTERNAL_H */

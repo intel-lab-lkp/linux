@@ -594,8 +594,10 @@ out_free_vma:
 static int split_vma(struct vma_iterator *vmi, struct vm_area_struct *vma,
 		     unsigned long addr, int new_below)
 {
-	if (max_vma_count() - vma->vm_mm->vma_count < 1)
+	if (max_vma_count() - vma->vm_mm->vma_count < 1) {
+		trace_mm_insufficient_vma_slots(vma->vm_mm);
 		return -ENOMEM;
+	}
 
 	return __split_vma(vmi, vma, addr, new_below);
 }
