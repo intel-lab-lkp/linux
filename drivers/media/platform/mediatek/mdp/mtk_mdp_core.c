@@ -198,7 +198,7 @@ static int mtk_mdp_probe(struct platform_device *pdev)
 				  VPU_RST_MDP);
 	if (ret) {
 		dev_err(&pdev->dev, "Failed to register reset handler\n");
-		goto err_m2m_register;
+		goto err_put_vpu;
 	}
 
 	platform_set_drvdata(pdev, mdp);
@@ -206,7 +206,7 @@ static int mtk_mdp_probe(struct platform_device *pdev)
 	ret = vb2_dma_contig_set_max_seg_size(&pdev->dev, DMA_BIT_MASK(32));
 	if (ret) {
 		dev_err(&pdev->dev, "Failed to set vb2 dma mag seg size\n");
-		goto err_m2m_register;
+		goto err_put_vpu;
 	}
 
 	pm_runtime_enable(dev);
@@ -214,6 +214,8 @@ static int mtk_mdp_probe(struct platform_device *pdev)
 
 	return 0;
 
+err_put_vpu:
+	put_device(&mdp->vpu_dev->dev);
 err_m2m_register:
 	v4l2_device_unregister(&mdp->v4l2_dev);
 
@@ -241,6 +243,7 @@ static void mtk_mdp_remove(struct platform_device *pdev)
 	struct mtk_mdp_comp *comp, *comp_temp;
 
 	pm_runtime_disable(&pdev->dev);
+	put_device(&mdp->vpu_dev->dev);
 	vb2_dma_contig_clear_max_seg_size(&pdev->dev);
 	mtk_mdp_unregister_m2m_device(mdp);
 	v4l2_device_unregister(&mdp->v4l2_dev);
