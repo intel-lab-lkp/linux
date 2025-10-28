@@ -48,6 +48,7 @@ static int fifo=0x8;	/* don't change */
 #include <linux/netdevice.h>
 #include <linux/etherdevice.h>
 #include <linux/skbuff.h>
+#include <linux/printk.h> 
 
 #include "sun3_82586.h"
 
@@ -103,16 +104,18 @@ sizeof(nop_cmd) = 8;
     if(!p->scb->cmd_cuc) break; \
     DELAY_18(); \
     if(i == 16383) { \
-      printk("%s: scb_cmd timed out: %04x,%04x .. disabling i82586!!\n",dev->name,p->scb->cmd_cuc,p->scb->cus); \
-       if(!p->reseted) { p->reseted = 1; sun3_reset586(); } } } }
+        netdev_err(dev, "scb_cmd timed out: %04x,%04x .. disabling i82586!!\n",
+           p->scb->cmd_cuc, p->scb->cus);
+		if(!p->reseted) { p->reseted = 1; sun3_reset586(); } } } }
 
 #define WAIT_4_SCB_CMD_RUC() { int i; \
   for(i=0;i<16384;i++) { \
     if(!p->scb->cmd_ruc) break; \
     DELAY_18(); \
     if(i == 16383) { \
-      printk("%s: scb_cmd (ruc) timed out: %04x,%04x .. disabling i82586!!\n",dev->name,p->scb->cmd_ruc,p->scb->rus); \
-       if(!p->reseted) { p->reseted = 1; sun3_reset586(); } } } }
+      netdev_err(dev, "scb_cmd (ruc) timed out: %04x,%04x .. disabling i82586!!\n",
+           p->scb->cmd_ruc, p->scb->rus);
+		if(!p->reseted) { p->reseted = 1; sun3_reset586(); } } } }
 
 #define WAIT_4_STAT_COMPL(addr) { int i; \
    for(i=0;i<32767;i++) { \
@@ -271,7 +274,7 @@ static void alloc586(struct net_device *dev)
 	DELAY(1);
 
 	if(p->iscp->busy)
-		printk("%s: Init-Problems (alloc).\n",dev->name);
+		netdev_err(dev, "Init-Problems (alloc).\n");
 
 	p->reseted = 0;
 
@@ -348,8 +351,7 @@ static int __init sun3_82586_probe1(struct net_device *dev,int ioaddr)
 	/* copy in the ethernet address from the prom */
 	eth_hw_addr_set(dev, idprom->id_ethaddr);
 
-	printk("%s: SUN3 Intel 82586 found at %lx, ",dev->name,dev->base_addr);
-
+	netdev_info(dev, "SUN3 Intel 82586 found at %lx\n", dev->base_addr);
 	/*
 	 * check (or search) IO-Memory, 32K
 	 */
@@ -359,12 +361,14 @@ static int __init sun3_82586_probe1(struct net_device *dev,int ioaddr)
 	dev->mem_end = dev->mem_start + size;
 
 	if(size != 0x2000 && size != 0x4000 && size != 0x8000) {
-		printk("\n%s: Illegal memory size %d. Allowed is 0x2000 or 0x4000 or 0x8000 bytes.\n",dev->name,size);
+		netdev_err(dev, "Illegal memory size %d. Allowed is 0x2000 or 0x4000 or 0x8000 bytes.\n",
+           size);
 		retval = -ENODEV;
 		goto out;
 	}
 	if(!check586(dev,(char *) dev->mem_start,size)) {
-		printk("?memcheck, Can't find memory at 0x%lx with size %d!\n",dev->mem_start,size);
+		netdev_err(dev, "memcheck: Can't find memory at 0x%lx with size %d!\n",
+           dev->mem_start, size);
 		retval = -ENODEV;
 		goto out;
 	}
@@ -385,7 +389,8 @@ static int __init sun3_82586_probe1(struct net_device *dev,int ioaddr)
 		((struct priv *)netdev_priv(dev))->num_recv_buffs =
 							NUM_RECV_BUFFS_32;
 
-	printk("Memaddr: 0x%lx, Memsize: %d, IRQ %d\n",dev->mem_start,size, dev->irq);
+	netdev_info(dev, "Memaddr: 0x%lx, Memsize: %d, IRQ %d\n",
+            dev->mem_start, size, dev->irq);
 
 	dev->netdev_ops		= &sun3_82586_netdev_ops;
 	dev->watchdog_timeo	= HZ/20;
@@ -429,7 +434,7 @@ static int init586(struct net_device *dev)
 	if(dev->flags & IFF_ALLMULTI) {
 		int len = ((char *) p->iscp - (char *) ptr - 8) / 6;
 		if(num_addrs > len)	{
-			printk("%s: switching to promisc. mode\n",dev->name);
+			netdev_info(dev, "switching to promisc. mode\n");
 			cfg_cmd->promisc = 1;
 		}
 	}
@@ -447,7 +452,7 @@ static int init586(struct net_device *dev)
 
 	if((swab16(cfg_cmd->cmd_status) & (STAT_OK|STAT_COMPL)) != (STAT_COMPL|STAT_OK))
 	{
-		printk("%s: configure command failed: %x\n",dev->name,swab16(cfg_cmd->cmd_status));
+		netdev_err(dev, "configure command failed: %x\n", swab16(cfg_cmd->cmd_status));
 		return 1;
 	}
 
@@ -471,7 +476,8 @@ static int init586(struct net_device *dev)
 	WAIT_4_STAT_COMPL(ias_cmd);
 
 	if((swab16(ias_cmd->cmd_status) & (STAT_OK|STAT_COMPL)) != (STAT_OK|STAT_COMPL)) {
-		printk("%s (82586): individual address setup command failed: %04x\n",dev->name,swab16(ias_cmd->cmd_status));
+		netdev_err(dev, "(82586): individual address setup command failed: %04x\n",
+           swab16(ias_cmd->cmd_status));
 		return 1;
 	}
 
@@ -494,7 +500,7 @@ static int init586(struct net_device *dev)
 
 	if(!(swab16(tdr_cmd->cmd_status) & STAT_COMPL))
 	{
-		printk("%s: Problems while running the TDR.\n",dev->name);
+	    netdev_warn(dev, "Problems while running the TDR.\n");	
 	}
 	else
 	{
@@ -507,16 +513,16 @@ static int init586(struct net_device *dev)
 		if(result & TDR_LNK_OK)
 			;
 		else if(result & TDR_XCVR_PRB)
-			printk("%s: TDR: Transceiver problem. Check the cable(s)!\n",dev->name);
+			netdev_warn(dev, "TDR: Transceiver problem. Check the cable(s)!\n");
 		else if(result & TDR_ET_OPN)
-			printk("%s: TDR: No correct termination %d clocks away.\n",dev->name,result & TDR_TIMEMASK);
+			netdev_warn(dev, "TDR: No correct termination %d clocks away.\n", result & TDR_TIMEMASK);
 		else if(result & TDR_ET_SRT)
 		{
 			if (result & TDR_TIMEMASK) /* time == 0 -> strange :-) */
-				printk("%s: TDR: Detected a short circuit %d clocks away.\n",dev->name,result & TDR_TIMEMASK);
+				netdev_warn(dev, "TDR: Detected a short circuit %d clocks away.\n", result & TDR_TIMEMASK);
 		}
 		else
-			printk("%s: TDR: Unknown status %04x\n",dev->name,result);
+			netdev_warn(dev, "TDR: Unknown status %04x\n", result);
 	}
 
 	/*
@@ -542,7 +548,7 @@ static int init586(struct net_device *dev)
 		WAIT_4_STAT_COMPL(mc_cmd);
 
 		if( (swab16(mc_cmd->cmd_status) & (STAT_COMPL|STAT_OK)) != (STAT_COMPL|STAT_OK) )
-			printk("%s: Can't apply multicast-address-list.\n",dev->name);
+	       netdev_err(dev, "Can't apply multicast-address-list.\n");
 	}
 
 	/*
@@ -583,7 +589,7 @@ static int init586(struct net_device *dev)
 		ptr = (char *) ptr + sizeof(struct tbd_struct);
 		if(ptr > (void *)dev->mem_end)
 		{
-			printk("%s: not enough shared-mem for your configuration!\n",dev->name);
+			netdev_err(dev, "not enough shared-mem for your configuration!\n");
 			return 1;
 		}
 		memset((char *)(p->xmit_cmds[i]) ,0, sizeof(struct transmit_cmd_struct));
@@ -693,7 +699,7 @@ static irqreturn_t sun3_82586_interrupt(int irq,void *dev_id)
 	p = netdev_priv(dev);
 
 	if(debuglevel > 1)
-		printk("I");
+		netdev_dbg(dev, "I");
 
 	WAIT_4_SCB_CMD(); /* wait for last command	*/
 
@@ -707,7 +713,7 @@ static irqreturn_t sun3_82586_interrupt(int irq,void *dev_id)
 
 		if(stat & STAT_RNR) /* RU went 'not ready' */
 		{
-			printk("(R)");
+			netdev_dbg(dev, "(R)");
 			if(p->scb->rus & RU_SUSPEND) /* special case: RU_SUSPEND */
 			{
 				WAIT_4_SCB_CMD();
@@ -717,7 +723,8 @@ static irqreturn_t sun3_82586_interrupt(int irq,void *dev_id)
 			}
 			else
 			{
-				printk("%s: Receiver-Unit went 'NOT READY': %04x/%02x.\n",dev->name,(int) stat,(int) p->scb->rus);
+				netdev_warn(dev, "Receiver-Unit went 'NOT READY': %04x/%02x.\n",
+            (int) stat, (int) p->scb->rus);
 				sun3_82586_rnr_int(dev);
 			}
 		}
@@ -729,24 +736,25 @@ static irqreturn_t sun3_82586_interrupt(int irq,void *dev_id)
 		if(stat & STAT_CNA)	/* CU went 'not ready' */
 		{
 			if(netif_running(dev))
-				printk("%s: oops! CU has left active state. stat: %04x/%02x.\n",dev->name,(int) stat,(int) p->scb->cus);
+		     netdev_warn(dev, "oops! CU has left active state. stat: %04x/%02x.\n",
+            (int) stat, (int) p->scb->cus);
 		}
 #endif
 
 		if(debuglevel > 1)
-			printk("%d",cnt++);
+			netdev_dbg(dev, "%d", cnt++);
 
 		WAIT_4_SCB_CMD(); /* wait for ack. (sun3_82586_xmt_int can be faster than ack!!) */
 		if(p->scb->cmd_cuc)	 /* timed out? */
 		{
-			printk("%s: Acknowledge timed out.\n",dev->name);
+			netdev_warn(dev, "Acknowledge timed out.\n");
 			sun3_disint();
 			break;
 		}
 	}
 
 	if(debuglevel > 1)
-		printk("i");
+		netdev_dbg(dev, "i");
 	return IRQ_HANDLED;
 }
 
@@ -763,7 +771,7 @@ static void sun3_82586_rcv_int(struct net_device *dev)
 	struct priv *p = netdev_priv(dev);
 
 	if(debuglevel > 0)
-		printk("R");
+		netdev_dbg(dev, "R");
 
 	for(;(status = p->rfd_top->stat_high) & RFD_COMPL;)
 	{
@@ -798,7 +806,7 @@ static void sun3_82586_rcv_int(struct net_device *dev)
 						totlen += rstat & RBD_MASK;
 						if(!rstat)
 						{
-							printk("%s: Whoops .. no end mark in RBD list\n",dev->name);
+							netdev_err(dev, "Whoops .. no end mark in RBD list\n");
 							break;
 						}
 						rbd->status = 0;
@@ -806,13 +814,13 @@ static void sun3_82586_rcv_int(struct net_device *dev)
 					}
 					totlen += rstat & RBD_MASK;
 					rbd->status = 0;
-					printk("%s: received oversized frame! length: %d\n",dev->name,totlen);
+					netdev_warn(dev, "received oversized frame! length: %d\n", totlen);
 					dev->stats.rx_dropped++;
 			 }
 		}
 		else /* frame !(ok), only with 'save-bad-frames' */
 		{
-			printk("%s: oops! rfd-error-status: %04x\n",dev->name,status);
+			netdev_err(dev, "oops! rfd-error-status: %04x\n", status);
 			dev->stats.rx_errors++;
 		}
 		p->rfd_top->stat_high = 0;
@@ -824,7 +832,7 @@ static void sun3_82586_rcv_int(struct net_device *dev)
 		p->scb->rfa_offset = make16(p->rfd_top);
 
 		if(debuglevel > 0)
-			printk("%d",cnt++);
+			netdev_dbg(dev, "%d", cnt++);
 	}
 
 	if(automatic_resume)
@@ -844,7 +852,7 @@ static void sun3_82586_rcv_int(struct net_device *dev)
 				break;
 			DELAY_16();
 			if(i == 1023)
-				printk("%s: RU hasn't fetched next RFD (not busy/complete)\n",dev->name);
+		       netdev_warn(dev, "RU hasn't fetched next RFD (not busy/complete)\n");
 		}
 	}
 #endif
@@ -855,21 +863,25 @@ static void sun3_82586_rcv_int(struct net_device *dev)
 		int i;
 		volatile struct rfd_struct *rfds=p->rfd_top;
 		volatile struct rbd_struct *rbds;
-		printk("%s: received a FC intr. without having a frame: %04x %d\n",dev->name,status,old_at_least);
+		netdev_warn(dev, "received a FC intr. without having a frame: %04x %d\n",
+            status, old_at_least);
+
 		for(i=0;i< (p->num_recv_buffs+4);i++)
 		{
 			rbds = (struct rbd_struct *) make32(rfds->rbd_offset);
-			printk("%04x:%04x ",rfds->status,rbds->status);
+			netdev_dbg(dev, "%04x:%04x ", rfds->status, rbds->status);
 			rfds = (struct rfd_struct *) make32(rfds->next);
 		}
-		printk("\nerrs: %04x %04x stat: %04x\n",(int)p->scb->rsc_errs,(int)p->scb->ovrn_errs,(int)p->scb->status);
-		printk("\nerrs: %04x %04x rus: %02x, cus: %02x\n",(int)p->scb->rsc_errs,(int)p->scb->ovrn_errs,(int)p->scb->rus,(int)p->scb->cus);
+		netdev_dbg(dev, "\nerrs: %04x %04x stat: %04x\n",
+            (int)p->scb->rsc_errs, (int)p->scb->ovrn_errs, (int)p->scb->status);
+		netdev_dbg(dev, "\nerrs: %04x %04x rus: %02x, cus: %02x\n",
+            (int)p->scb->rsc_errs, (int)p->scb->ovrn_errs, (int)p->scb->rus, (int)p->scb->cus);
 	}
 	old_at_least = at_least_one;
 #endif
 
 	if(debuglevel > 0)
-		printk("r");
+		netdev_dbg(dev, "r");
 }
 
 /**********************************************************
@@ -890,8 +902,7 @@ static void sun3_82586_rnr_int(struct net_device *dev)
 	alloc_rfa(dev,(char *)p->rfd_first);
 /* maybe add a check here, before restarting the RU */
 	startrecv586(dev); /* restart RU */
-
-	printk("%s: Receive-Unit restarted. Status: %04x\n",dev->name,p->scb->rus);
+    netdev_info(dev, "Receive-Unit restarted. Status: %04x\n", p->scb->rus);
 
 }
 
@@ -905,11 +916,12 @@ static void sun3_82586_xmt_int(struct net_device *dev)
 	struct priv *p = netdev_priv(dev);
 
 	if(debuglevel > 0)
-		printk("X");
+		netdev_dbg(dev, "X");
+
 
 	status = swab16(p->xmit_cmds[p->xmit_last]->cmd_status);
 	if(!(status & STAT_COMPL))
-		printk("%s: strange .. xmit-int without a 'COMPLETE'\n",dev->name);
+		netdev_err(dev, "strange .. xmit-int without a 'COMPLETE'\n");
 
 	if(status & STAT_OK)
 	{
@@ -920,21 +932,21 @@ static void sun3_82586_xmt_int(struct net_device *dev)
 	{
 		dev->stats.tx_errors++;
 		if(status & TCMD_LATECOLL) {
-			printk("%s: late collision detected.\n",dev->name);
+			netdev_warn(dev, "late collision detected.\n");
 			dev->stats.collisions++;
 		}
 		else if(status & TCMD_NOCARRIER) {
 			dev->stats.tx_carrier_errors++;
-			printk("%s: no carrier detected.\n",dev->name);
+			netdev_err(dev, "no carrier detected.\n");
 		}
 		else if(status & TCMD_LOSTCTS)
-			printk("%s: loss of CTS detected.\n",dev->name);
+			netdev_warn(dev, "loss of CTS detected.\n");
 		else if(status & TCMD_UNDERRUN) {
 			dev->stats.tx_fifo_errors++;
-			printk("%s: DMA underrun detected.\n",dev->name);
+			netdev_err(dev, "DMA underrun detected.\n");
 		}
 		else if(status & TCMD_MAXCOLL) {
-			printk("%s: Max. collisions exceeded.\n",dev->name);
+			netdev_warn(dev, "Max. collisions exceeded.\n");
 			dev->stats.collisions += 16;
 		}
 	}
@@ -970,8 +982,12 @@ static void sun3_82586_timeout(struct net_device *dev, unsigned int txqueue)
 	{
 		netif_wake_queue(dev);
 #ifdef DEBUG
-		printk("%s: strange ... timeout with CU active?!?\n",dev->name);
-		printk("%s: X0: %04x N0: %04x N1: %04x %d\n",dev->name,(int)swab16(p->xmit_cmds[0]->cmd_status),(int)swab16(p->nop_cmds[0]->cmd_status),(int)swab16(p->nop_cmds[1]->cmd_status),(int)p->nop_point);
+		netdev_warn(dev, "strange ... timeout with CU active?!?\n");
+		netdev_dbg(dev, "%s: X0: %04x N0: %04x N1: %04x %d\n", dev->name,
+			(int)swab16(p->xmit_cmds[0]->cmd_status),
+			(int)swab16(p->nop_cmds[0]->cmd_status),
+			(int)swab16(p->nop_cmds[1]->cmd_status),
+			(int)p->nop_point);
 #endif
 		p->scb->cmd_cuc = CUC_ABORT;
 		sun3_attn586();
@@ -986,9 +1002,9 @@ static void sun3_82586_timeout(struct net_device *dev, unsigned int txqueue)
 #endif
 	{
 #ifdef DEBUG
-		printk("%s: xmitter timed out, try to restart! stat: %02x\n",dev->name,p->scb->cus);
-		printk("%s: command-stats: %04x\n", dev->name, swab16(p->xmit_cmds[0]->cmd_status));
-		printk("%s: check, whether you set the right interrupt number!\n",dev->name);
+		netdev_warn(dev, "xmitter timed out, try to restart! stat: %02x\n", p->scb->cus);
+        netdev_dbg(dev, "%s: command-stats: %04x\n", dev->name, swab16(p->xmit_cmds[0]->cmd_status));
+		netdev_dbg(dev, "%s: check, whether you set the right interrupt number!\n",dev->name);
 #endif
 		sun3_82586_close(dev);
 		sun3_82586_open(dev);
@@ -1011,7 +1027,8 @@ sun3_82586_send_packet(struct sk_buff *skb, struct net_device *dev)
 
 	if(skb->len > XMIT_BUFF_SIZE)
 	{
-		printk("%s: Sorry, max. framelength is %d bytes. The length of your frame is %d bytes.\n",dev->name,XMIT_BUFF_SIZE,skb->len);
+		netdev_warn(dev, "Sorry, max. framelength is %d bytes. The length of your frame is %d bytes.\n",
+            XMIT_BUFF_SIZE, skb->len);
 		dev_kfree_skb(skb);
 		return NETDEV_TX_OK;
 	}
@@ -1040,8 +1057,8 @@ sun3_82586_send_packet(struct sk_buff *skb, struct net_device *dev)
 #ifdef DEBUG
 		if(p->scb->cus & CU_ACTIVE)
 		{
-			printk("%s: Hmmm .. CU is still running and we wanna send a new packet.\n",dev->name);
-			printk("%s: stat: %04x %04x\n",dev->name,p->scb->cus,swab16(p->xmit_cmds[0]->cmd_status));
+			netdev_warn(dev, "Hmmm .. CU is still running and we wanna send a new packet.\n");
+			netdev_dbg(dev, "%s: stat: %04x %04x\n", dev->name, p->scb->cus, swab16(p->xmit_cmds[0]->cmd_status));
 		}
 #endif
 
@@ -1067,7 +1084,8 @@ sun3_82586_send_packet(struct sk_buff *skb, struct net_device *dev)
 			if(p->xmit_cmds[0]->cmd_status)
 				break;
 			if(i==15)
-				printk("%s: Can't start transmit-command.\n",dev->name);
+				netdev_err(dev, "Can't start transmit-command.\n");
+
 		}
 #	else
 		next_nop = (p->nop_point + 1) & 0x1;
@@ -1175,13 +1193,13 @@ void sun3_82586_dump(struct net_device *dev,void *ptr)
 	WAIT_4_STAT_COMPL(dump_cmd);
 
 	if( (dump_cmd->cmd_status & (STAT_COMPL|STAT_OK)) != (STAT_COMPL|STAT_OK) )
-				printk("%s: Can't get dump information.\n",dev->name);
+				netdev_err(dev, "Can't get dump information.\n");
 
 	for(i=0;i<170;i++) {
-		printk("%02x ",(int) ((unsigned char *) (dump_cmd + 1))[i]);
+		netdev_dbg(dev, "%02x ", (int) ((unsigned char *) (dump_cmd + 1))[i]);
 		if(i % 24 == 23)
-			printk("\n");
+			netdev_dbg(dev, "\n");
 	}
-	printk("\n");
+	netdev_dbg(dev, "\n");
 }
 #endif
