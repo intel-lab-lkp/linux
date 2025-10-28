@@ -33,7 +33,13 @@ properties:
 
   interrupts:
     minItems: 1
-    maxItems: 2
+    maxItems: 7
+
+  interrupt-names:
+    items:
+      enum: [global_sbe, global_dbe, io96b0, io96b1, sdm_qspi_sbe, sdm_qspi_dbe, sdm_seu]
+    minItems: 1
+    maxItems: 7
 
   interrupt-controller: true
 
@@ -69,6 +75,41 @@ properties:
       - compatible
       - interrupts
       - altr,sdr-syscon
+
+  cram-seu:
+    type: object
+    additionalProperties: false
+
+    properties:
+      compatible:
+        items:
+          - const: altr,socfpga-cram-seu
+
+      reg:
+        maxItems: 1
+
+      altr,seu-safe-inject-ce-msb:
+        $ref: /schemas/types.yaml#/definitions/uint32
+        description: MSB of error injection command for Correctable Error
+
+      altr,seu-safe-inject-ce-lsb:
+        $ref: /schemas/types.yaml#/definitions/uint32
+        description: LSB of error injection command for Correctable Error
+
+      altr,seu-safe-inject-ue-msb:
+        $ref: /schemas/types.yaml#/definitions/uint32
+        description: MSB of error injection command for Uncorrectable Error
+
+      altr,seu-safe-inject-ue-lsb:
+        $ref: /schemas/types.yaml#/definitions/uint32
+        description: LSB of error injection command for Uncorrectable Error
+
+    required:
+      - compatible
+      - altr,seu-safe-inject-ce-msb
+      - altr,seu-safe-inject-ce-lsb
+      - altr,seu-safe-inject-ue-msb
+      - altr,seu-safe-inject-ue-lsb
 
 patternProperties:
   "^ocram-ecc@[a-f0-9]+$":
@@ -190,6 +231,40 @@ patternProperties:
       - reg
       - interrupts
       - altr,ecc-parent
+
+  "^sdm-qspi-ecc@[a-f0-9]+$":
+    type: object
+    additionalProperties: false
+
+    properties:
+      compatible:
+        items:
+          - const: altr,socfpga-sdm-qspi-ecc
+
+      reg:
+        maxItems: 1
+
+    required:
+      - compatible
+      - reg
+
+  "^io96b[0-9]-ecc@[a-f0-9]+$":
+    type: object
+    additionalProperties: false
+
+    properties:
+      compatible:
+        items:
+          - enum:
+              - altr,socfpga-io96b0-ecc
+              - altr,socfpga-io96b1-ecc
+
+      reg:
+        maxItems: 1
+
+    required:
+      - compatible
+      - reg
 
   "^l2-ecc@[a-f0-9]+$":
     type: object
