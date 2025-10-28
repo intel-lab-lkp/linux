@@ -4468,6 +4468,92 @@ void lru_gen_soft_reclaim(struct mem_cgroup *memcg, int nid)
 		lru_gen_rotate_memcg(lruvec, MEMCG_LRU_HEAD);
 }
 
+bool recheck_lru_gen_max_memcg(struct mem_cgroup *memcg)
+{
+	int nid;
+
+	for_each_node(nid) {
+		struct lruvec *lruvec = get_lruvec(memcg, nid);
+		int type;
+
+		for (type = 0; type < ANON_AND_FILE; type++) {
+			if (get_nr_gens(lruvec, type) != MAX_NR_GENS)
+				return false;
+		}
+	}
+
+	return true;
+}
+
+/*
+ * We need to ensure that the folios of child memcg can be reparented to the
+ * same gen of the parent memcg, so the gens of the parent memcg needed be
+ * incremented to the MAX_NR_GENS before reparenting.
+ */
+void max_lru_gen_memcg(struct mem_cgroup *memcg)
+{
+	int nid;
+
+	for_each_node(nid) {
+		struct lruvec *lruvec = get_lruvec(memcg, nid);
+		int type;
+
+		for (type = 0; type < ANON_AND_FILE; type++) {
+			while (get_nr_gens(lruvec, type) < MAX_NR_GENS) {
+				DEFINE_MAX_SEQ(lruvec);
+
+				inc_max_seq(lruvec, max_seq, mem_cgroup_swappiness(memcg));
+				cond_resched();
+			}
+		}
+	}
+}
+
+static void __lru_gen_reparent_memcg(struct lruvec *src_lruvec, struct lruvec *dst_lruvec,
+				     int zone, int type)
+{
+	struct lru_gen_folio *src_lrugen, *dst_lrugen;
+	enum lru_list lru = type * LRU_INACTIVE_FILE;
+	int i;
+
+	src_lrugen = &src_lruvec->lrugen;
+	dst_lrugen = &dst_lruvec->lrugen;
+
+	for (i = 0; i < get_nr_gens(src_lruvec, type); i++) {
+		int gen = lru_gen_from_seq(src_lrugen->max_seq - i);
+		int nr_pages = src_lrugen->nr_pages[gen][type][zone];
+		int src_lru_active = lru_gen_is_active(src_lruvec, gen) ? LRU_ACTIVE : 0;
+		int dst_lru_active = lru_gen_is_active(dst_lruvec, gen) ? LRU_ACTIVE : 0;
+
+		list_splice_tail_init(&src_lrugen->folios[gen][type][zone],
+				      &dst_lrugen->folios[gen][type][zone]);
+
+		WRITE_ONCE(src_lrugen->nr_pages[gen][type][zone], 0);
+		WRITE_ONCE(dst_lrugen->nr_pages[gen][type][zone],
+			   dst_lrugen->nr_pages[gen][type][zone] + nr_pages);
+
+		__update_lru_size(src_lruvec, lru + src_lru_active, zone, -nr_pages);
+		__update_lru_size(dst_lruvec, lru + dst_lru_active, zone, nr_pages);
+	}
+}
+
+void lru_gen_reparent_memcg(struct mem_cgroup *src, struct mem_cgroup *dst)
+{
+	int nid;
+
+	for_each_node(nid) {
+		struct lruvec *src_lruvec, *dst_lruvec;
+		int type, zone;
+
+		src_lruvec = get_lruvec(src, nid);
+		dst_lruvec = get_lruvec(dst, nid);
+
+		for (zone = 0; zone < MAX_NR_ZONES; zone++)
+			for (type = 0; type < ANON_AND_FILE; type++)
+				__lru_gen_reparent_memcg(src_lruvec, dst_lruvec, zone, type);
+	}
+}
+
 #endif /* CONFIG_MEMCG */
 
 /******************************************************************************
