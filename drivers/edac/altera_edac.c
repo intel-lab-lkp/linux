@@ -1966,12 +1966,32 @@ static int altr_edac_a10_device_add(struct altr_arria10_edac *edac,
 	}
 
 #ifdef CONFIG_64BIT
-	/* Use IRQ to determine SError origin instead of assigning IRQ */
-	rc = of_property_read_u32_index(np, "interrupts", 0, &altdev->db_irq);
-	if (rc) {
-		edac_printk(KERN_ERR, EDAC_DEVICE,
-			    "Unable to parse DB IRQ index\n");
-		goto err_release_group1;
+	if (of_machine_is_compatible("intel,socfpga-agilex5")) {
+		altdev->db_irq = irq_of_parse_and_map(np, 1);
+		if (!altdev->db_irq) {
+			edac_printk(KERN_ERR, EDAC_DEVICE,
+				    "Error allocating DBIRQ\n");
+			rc = -ENODEV;
+			goto err_release_group1;
+		}
+		rc = devm_request_irq(edac->dev, altdev->db_irq,
+				      prv->ecc_irq_handler,
+				      IRQF_ONESHOT | IRQF_TRIGGER_HIGH,
+				      ecc_name, altdev);
+		if (rc) {
+			edac_printk(KERN_ERR, EDAC_DEVICE,
+				    "No DBERR IRQ resource\n");
+			goto err_release_group1;
+		}
+	} else {
+		/* Use IRQ to determine SError origin instead of assigning IRQ */
+		rc = of_property_read_u32_index(np, "interrupts", 0,
+						&altdev->db_irq);
+		if (rc) {
+			edac_printk(KERN_ERR, EDAC_DEVICE,
+				    "Unable to parse DB IRQ index\n");
+			goto err_release_group1;
+		}
 	}
 #else
 	altdev->db_irq = irq_of_parse_and_map(np, 1);
@@ -2144,6 +2164,16 @@ static int altr_edac_a10_probe(struct platform_device *pdev)
 	irq_set_chained_handler_and_data(edac->sb_irq,
 					 altr_edac_a10_irq_handler,
 					 edac);
+
+	if (of_machine_is_compatible("intel,socfpga-agilex5")) {
+		edac->db_irq = platform_get_irq_byname(pdev, "global_dbe");
+		if (edac->db_irq < 0)
+			return edac->db_irq;
+
+		irq_set_chained_handler_and_data(edac->db_irq,
+						 altr_edac_a10_irq_handler,
+						 edac);
+	}
 
 #ifdef CONFIG_64BIT
 	{
