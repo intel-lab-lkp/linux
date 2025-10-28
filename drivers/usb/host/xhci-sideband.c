@@ -481,10 +481,12 @@ xhci_sideband_unregister(struct xhci_sideband *sb)
 
 	xhci_sideband_remove_interrupter(sb);
 
+	mutex_lock(&sb->mutex);
 	spin_lock_irq(&xhci->lock);
 	sb->xhci = NULL;
 	sb->vdev->sideband = NULL;
 	spin_unlock_irq(&xhci->lock);
+	mutex_unlock(&sb->mutex);
 
 	kfree(sb);
 }
