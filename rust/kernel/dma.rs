@@ -611,7 +611,7 @@ impl<T: AsBytes + FromBytes> CoherentAllocation<T> {
     ///
     /// Public but hidden since it should only be used from [`dma_write`] macro.
     #[doc(hidden)]
-    pub unsafe fn field_write<F: AsBytes>(&self, field: *mut F, val: F) {
+    pub unsafe fn field_write<F: AsBytes>(&mut self, field: *mut F, val: F) {
         // SAFETY:
         // - By the safety requirements field is valid.
         // - Using write_volatile() here is not sound as per the usual rules, the usage here is
@@ -708,7 +708,7 @@ macro_rules! dma_read {
 /// // SAFETY: Instances of `MyStruct` have no uninitialized portions.
 /// unsafe impl kernel::transmute::AsBytes for MyStruct{};
 ///
-/// # fn test(alloc: &kernel::dma::CoherentAllocation<MyStruct>) -> Result {
+/// # fn test(mut alloc: &mut kernel::dma::CoherentAllocation<MyStruct>) -> Result {
 /// kernel::dma_write!(alloc[2].member = 0xf);
 /// kernel::dma_write!(alloc[1] = MyStruct { member: 0xf });
 /// # Ok::<(), Error>(()) }
@@ -725,7 +725,7 @@ macro_rules! dma_write {
         (|| -> ::core::result::Result<_, $crate::error::Error> {
             let item = $crate::dma::CoherentAllocation::item_from_index(&$dma, $idx)?;
             // SAFETY: `item_from_index` ensures that `item` is always a valid item.
-            unsafe { $crate::dma::CoherentAllocation::field_write(&$dma, item, $val) }
+            unsafe { $crate::dma::CoherentAllocation::field_write(&mut $dma, item, $val) }
             ::core::result::Result::Ok(())
         })()
     };
@@ -737,7 +737,7 @@ macro_rules! dma_write {
             // is a member of `item` when expanded by the macro.
             unsafe {
                 let ptr_field = ::core::ptr::addr_of_mut!((*item) $(.$field)*);
-                $crate::dma::CoherentAllocation::field_write(&$dma, ptr_field, $val)
+                $crate::dma::CoherentAllocation::field_write(&mut $dma, ptr_field, $val)
             }
             ::core::result::Result::Ok(())
         })()
