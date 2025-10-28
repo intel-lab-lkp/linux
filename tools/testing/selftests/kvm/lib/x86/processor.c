@@ -1360,3 +1360,9 @@ bool kvm_arch_has_default_irqchip(void)
 {
 	return true;
 }
+
+void kvm_arch_vm_finalize_vcpus(struct kvm_vm *vm)
+{
+	if (is_tdx_vm(vm))
+		vm_tdx_finalize(vm);
+}
