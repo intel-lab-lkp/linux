@@ -169,7 +169,9 @@ static int uninorth_insert_memory(struct agp_memory *mem, off_t pg_start, int ty
 	temp = agp_bridge->current_size;
 	num_entries = A_SIZE_32(temp)->num_entries;
 
-	if ((pg_start + mem->page_count) > num_entries)
+	if (pg_start < 0 ||
+	   (pg_start + mem->page_count) > num_entries ||
+	   (pg_start + mem->page_count) < pg_start)
 		return -EINVAL;
 
 	gp = (u32 *) &agp_bridge->gatt_table[pg_start];
@@ -200,6 +202,9 @@ static int uninorth_insert_memory(struct agp_memory *mem, off_t pg_start, int ty
 static int uninorth_remove_memory(struct agp_memory *mem, off_t pg_start, int type)
 {
 	size_t i;
+	int num_entries;
+	void *temp;
+
 	u32 *gp;
 	int mask_type;
 
@@ -214,6 +219,14 @@ static int uninorth_remove_memory(struct agp_memory *mem, off_t pg_start, int ty
 
 	if (mem->page_count == 0)
 		return 0;
+
+	temp = agp_bridge->current_size;
+	num_entries = A_SIZE_32(temp)->num_entries;
+
+	if (pg_start < 0 ||
+	   (pg_start + mem->page_count) > num_entries ||
+	   (pg_start + mem->page_count) < pg_start)
+		return -EINVAL;
 
 	gp = (u32 *) &agp_bridge->gatt_table[pg_start];
 	for (i = 0; i < mem->page_count; ++i) {
