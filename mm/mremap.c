@@ -1040,7 +1040,7 @@ static unsigned long prep_move_vma(struct vma_remap_struct *vrm)
 	 * We'd prefer to avoid failure later on in do_munmap:
 	 * which may split one vma into three before unmapping.
 	 */
-	if (max_vma_count() - current->mm->map_count < 4)
+	if (max_vma_count() - current->mm->vma_count < 4)
 		return -ENOMEM;
 
 	if (vma->vm_ops && vma->vm_ops->may_split) {
@@ -1814,7 +1814,7 @@ static unsigned long check_mremap_params(struct vma_remap_struct *vrm)
 	 * the threshold. In other words, is the current map count + 6 at or
 	 * below the threshold? Otherwise return -ENOMEM here to be more safe.
 	 */
-	if (max_vma_count() - current->mm->map_count < 6)
+	if (max_vma_count() - current->mm->vma_count < 6)
 		return -ENOMEM;
 
 	return 0;

@@ -18,7 +18,7 @@
 #include "../kselftest_harness.h"
 #include "vm_util.h"
 
-#define DEFAULT_MAX_MAP_COUNT		65530
+#define DEFAULT_MAX_VMA_COUNT		65530
 #define TEST_AREA_NR_PAGES		3
 #define TEST_AREA_PROT			(PROT_NONE)
 #define EXTRA_MAP_PROT			(PROT_NONE)
@@ -42,9 +42,9 @@ static int get_max_vma_count(void);
 static bool set_max_vma_count(int val);
 static int get_current_vma_count(void);
 static bool is_test_area_mapped(char *test_area, int test_area_size);
-static bool lower_max_map_count_if_needed(max_vma_count_data_t *self,
+static bool lower_max_vma_count_if_needed(max_vma_count_data_t *self,
 					  struct __test_metadata *_metadata);
-static void restore_max_map_count_if_needed(max_vma_count_data_t *self,
+static void restore_max_vma_count_if_needed(max_vma_count_data_t *self,
 					    struct __test_metadata *_metadata);
 static bool free_vma_slots(max_vma_count_data_t *self, int slots_to_free);
 static void create_reservation(max_vma_count_data_t *self,
@@ -98,9 +98,9 @@ FIXTURE_SETUP(max_vma_count)
 
 	self->test_area_size = TEST_AREA_NR_PAGES * psize();
 
-	if (!lower_max_map_count_if_needed(self, _metadata)) {
+	if (!lower_max_vma_count_if_needed(self, _metadata)) {
 		SKIP(return,
-		     "max_map_count too high and cannot be lowered. Please rerun as root.");
+		     "max_vma_count too high and cannot be lowered. Please rerun as root.");
 	}
 
 	initial_vma_count = get_current_vma_count();
@@ -127,7 +127,7 @@ FIXTURE_TEARDOWN(max_vma_count)
 	 * mapping cleanup to process teardown for simplicity.
 	 */
 
-	restore_max_map_count_if_needed(self, _metadata);
+	restore_max_vma_count_if_needed(self, _metadata);
 }
 
 static bool mmap_anon(max_vma_count_data_t *self)
@@ -544,7 +544,7 @@ TEST_HARNESS_MAIN
 
 /* --- Utilities --- */
 
-static bool lower_max_map_count_if_needed(max_vma_count_data_t *self,
+static bool lower_max_vma_count_if_needed(max_vma_count_data_t *self,
 			      struct __test_metadata *_metadata)
 {
 	self->max_vma_count = get_max_vma_count();
@@ -552,19 +552,19 @@ static bool lower_max_map_count_if_needed(max_vma_count_data_t *self,
 	ASSERT_GT(self->max_vma_count, 0);
 
 	self->original_max_vma_count = 0;
-	if (self->max_vma_count > DEFAULT_MAX_MAP_COUNT) {
+	if (self->max_vma_count > DEFAULT_MAX_VMA_COUNT) {
 		self->original_max_vma_count = self->max_vma_count;
 		TH_LOG("Max VMA count: %d; lowering to default %d for test...",
-		       self->max_vma_count, DEFAULT_MAX_MAP_COUNT);
+		       self->max_vma_count, DEFAULT_MAX_VMA_COUNT);
 
-		if (!set_max_vma_count(DEFAULT_MAX_MAP_COUNT))
+		if (!set_max_vma_count(DEFAULT_MAX_VMA_COUNT))
 			return false;
-		self->max_vma_count = DEFAULT_MAX_MAP_COUNT;
+		self->max_vma_count = DEFAULT_MAX_VMA_COUNT;
 	}
 	return true;
 }
 
-static void restore_max_map_count_if_needed(max_vma_count_data_t *self,
+static void restore_max_vma_count_if_needed(max_vma_count_data_t *self,
 					    struct __test_metadata *_metadata)
 {
 	if (!self->original_max_vma_count)
@@ -574,7 +574,7 @@ static void restore_max_map_count_if_needed(max_vma_count_data_t *self,
 		return;
 
 	if (!set_max_vma_count(self->original_max_vma_count))
-		TH_LOG("Failed to restore max_map_count to %d",
+		TH_LOG("Failed to restore max_vma_count to %d",
 			self->original_max_vma_count);
 }
 
@@ -619,7 +619,7 @@ static int get_current_vma_count(void)
 
 		/*
 		 * The [vsyscall] mapping is a special mapping that
-		 * doesn't count against the max_map_count limit.
+		 * doesn't count against the max_vma_count limit.
 		 * Ignore it here to match the kernel's accounting.
 		 */
 		if (strcmp(vma_name, "[vsyscall]") != 0)
