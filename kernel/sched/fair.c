@@ -12225,6 +12225,8 @@ static void sched_balance_domains(struct rq *rq, enum cpu_idle_type idle)
 		}
 
 		interval = get_sd_balance_interval(sd, busy);
+		if (time_before(jiffies, sd->last_balance + interval))
+			goto out;
 
 		need_serialize = sd->flags & SD_SERIALIZE;
 		if (need_serialize) {
@@ -12232,19 +12234,18 @@ static void sched_balance_domains(struct rq *rq, enum cpu_idle_type idle)
 				goto out;
 		}
 
-		if (time_after_eq(jiffies, sd->last_balance + interval)) {
-			if (sched_balance_rq(cpu, rq, sd, idle, &continue_balancing)) {
-				/*
-				 * The LBF_DST_PINNED logic could have changed
-				 * env->dst_cpu, so we can't know our idle
-				 * state even if we migrated tasks. Update it.
-				 */
-				idle = idle_cpu(cpu);
-				busy = !idle && !sched_idle_cpu(cpu);
-			}
-			sd->last_balance = jiffies;
-			interval = get_sd_balance_interval(sd, busy);
+		if (sched_balance_rq(cpu, rq, sd, idle, &continue_balancing)) {
+			/*
+			 * The LBF_DST_PINNED logic could have changed
+			 * env->dst_cpu, so we can't know our idle
+			 * state even if we migrated tasks. Update it.
+			 */
+			idle = idle_cpu(cpu);
+			busy = !idle && !sched_idle_cpu(cpu);
 		}
+		sd->last_balance = jiffies;
+		interval = get_sd_balance_interval(sd, busy);
+
 		if (need_serialize)
 			atomic_set_release(&sched_balance_running, 0);
 out:
