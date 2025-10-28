@@ -203,7 +203,8 @@ struct ublk_queue {
 	bool fail_io; /* copy of dev->state == UBLK_S_DEV_FAIL_IO */
 	spinlock_t		cancel_lock;
 	struct ublk_device *dev;
-	struct ublk_io ios[];
+
+	DECLARE_FLEX_ARRAY(struct ublk_io, ios);
 };
 
 struct ublk_device {
@@ -2705,7 +2706,6 @@ static int ublk_get_queue_numa_node(struct ublk_device *ub, int q_id)
 static int ublk_init_queue(struct ublk_device *ub, int q_id)
 {
 	int depth = ub->dev_info.queue_depth;
-	int ubq_size = sizeof(struct ublk_queue) + depth * sizeof(struct ublk_io);
 	gfp_t gfp_flags = GFP_KERNEL | __GFP_ZERO;
 	struct ublk_queue *ubq;
 	struct page *page;
@@ -2716,7 +2716,8 @@ static int ublk_init_queue(struct ublk_device *ub, int q_id)
 	numa_node = ublk_get_queue_numa_node(ub, q_id);
 
 	/* Allocate queue structure on local NUMA node */
-	ubq = kvzalloc_node(ubq_size, GFP_KERNEL, numa_node);
+	ubq = kvzalloc_node(struct_size(ubq, ios, depth), GFP_KERNEL,
+			    numa_node);
 	if (!ubq)
 		return -ENOMEM;
 
