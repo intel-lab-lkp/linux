@@ -256,6 +256,7 @@ void of_iommu_get_resv_regions(struct device *dev, struct list_head *list)
 				maps = of_translate_dma_region(np, maps, &iova, &length);
 				if (length == 0) {
 					dev_warn(dev, "Cannot reserve IOVA region of 0 size\n");
+					of_node_put(np);
 					continue;
 				}
 				type = iommu_resv_region_get_type(dev, &phys, iova, length);
@@ -265,6 +266,7 @@ void of_iommu_get_resv_regions(struct device *dev, struct list_head *list)
 				if (region)
 					list_add_tail(&region->list, list);
 			}
+			of_node_put(np);
 		}
 	}
 #endif
