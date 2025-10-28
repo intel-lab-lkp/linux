@@ -144,7 +144,7 @@ static inline void psi_enqueue(struct task_struct *p, int flags)
 
 	if (p->se.sched_delayed) {
 		/* CPU migration of "sleeping" task */
-		WARN_ON_ONCE(!(flags & ENQUEUE_MIGRATED));
+		SCHED_WARN_ON(!(flags & ENQUEUE_MIGRATED));
 		if (p->in_memstall)
 			set |= TSK_MEMSTALL;
 		if (p->in_iowait)

@@ -1574,7 +1574,7 @@ static bool task_can_run_on_remote_rq(struct scx_sched *sch,
 {
 	int cpu = cpu_of(rq);
 
-	WARN_ON_ONCE(task_cpu(p) == cpu);
+	SCHED_WARN_ON(task_cpu(p) == cpu);
 
 	/*
 	 * If @p has migration disabled, @p->cpus_ptr is updated to contain only
