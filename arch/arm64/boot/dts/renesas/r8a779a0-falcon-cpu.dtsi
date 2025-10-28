@@ -357,8 +357,3 @@
 &scif_clk {
 	clock-frequency = <24000000>;
 };
-
-/* Firmware should reserve it but sadly doesn't */
-&swdt {
-	status = "reserved";
-};
