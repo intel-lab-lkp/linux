@@ -310,7 +310,7 @@ static int mlx5_query_module_id(struct mlx5_core_dev *dev, int module_num,
 
 	status = MLX5_GET(mcia_reg, out, status);
 	if (status) {
-		mlx5_core_err(dev, "query_mcia_reg failed: status: 0x%x\n",
+		mlx5_core_dbg(dev, "query_mcia_reg failed: status: 0x%x\n",
 			      status);
 		return -EIO;
 	}
@@ -394,7 +394,7 @@ static int mlx5_query_mcia(struct mlx5_core_dev *dev,
 
 	status = MLX5_GET(mcia_reg, out, status);
 	if (status) {
-		mlx5_core_err(dev, "query_mcia_reg failed: status: 0x%x\n",
+		mlx5_core_dbg(dev, "query_mcia_reg failed: status: 0x%x\n",
 			      status);
 		return -EIO;
 	}
