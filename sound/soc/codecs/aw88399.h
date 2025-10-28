@@ -461,13 +461,13 @@
 #define AW88399_DSP_VOL_MASK		\
 	(~(((1<<AW88399_DSP_VOL_BITS_LEN)-1) << AW88399_DSP_VOL_START_BIT))
 
-#define AW883XX_DSP_NG_EN_START	(13)
-#define AW883XX_DSP_NG_EN_LEN		(1)
-#define AW883XX_DSP_NG_EN_MASK		\
-	(~(((1 << AW883XX_DSP_NG_EN_LEN) - 1) << AW883XX_DSP_NG_EN_START))
-#define AW883XX_DSP_NG_EN_DISABLE	(0)
-#define AW883XX_DSP_NG_EN_DISABLE_VALUE	\
-	(AW883XX_DSP_NG_EN_DISABLE << AW883XX_DSP_NG_EN_START)
+#define AW88399_DSP_NG_EN_START	(13)
+#define AW88399_DSP_NG_EN_LEN		(1)
+#define AW88399_DSP_NG_EN_MASK		\
+	(~(((1 << AW88399_DSP_NG_EN_LEN) - 1) << AW88399_DSP_NG_EN_START))
+#define AW88399_DSP_NG_EN_DISABLE	(0)
+#define AW88399_DSP_NG_EN_DISABLE_VALUE	\
+	(AW88399_DSP_NG_EN_DISABLE << AW88399_DSP_NG_EN_START)
 
 #define AW88399_VOLUME_STEP_DB			(64)
 #define AW88399_VOL_DEFAULT_VALUE		(0)
@@ -509,7 +509,6 @@
 #define AW88399_CRC_FW_BASE_ADDR		(0x4C0)
 #define AW88399_ACF_FILE			"aw88399_acf.bin"
 #define AW88399_DEV_SYSST_CHECK_MAX		(10)
-#define AW88399_CHIP_ID			0x2183
 
 #define AW88399_I2C_NAME			"aw88399"
 
@@ -521,9 +520,6 @@
 #define AW88399_FORMATS (SNDRV_PCM_FMTBIT_S16_LE | \
 			SNDRV_PCM_FMTBIT_S24_LE | \
 			SNDRV_PCM_FMTBIT_S32_LE)
-
-#define FADE_TIME_MAX		100000
-#define FADE_TIME_MIN		0
 
 #define AW_CALI_READ_CNT_MAX			(8)
 #define AW88399_DSP_REG_CALRE			(0x8141)
@@ -541,15 +537,6 @@
 #define AW88399_DSP_LOW_POWER_SWITCH_CFG_ADDR	(0x9BEC)
 #define AW88399_DSP_LOW_POWER_SWITCH_DISABLE	(0x110b)
 
-#define AW88399_PROFILE_EXT(xname, profile_info, profile_get, profile_set) \
-{ \
-	.iface = SNDRV_CTL_ELEM_IFACE_MIXER, \
-	.name = xname, \
-	.info = profile_info, \
-	.get = profile_get, \
-	.put = profile_set, \
-}
-
 enum {
 	AW_EF_AND_CHECK = 0,
 	AW_EF_OR_CHECK,
@@ -563,72 +550,6 @@ enum {
 enum {
 	AW88399_DSP_CRC_NA = 0,
 	AW88399_DSP_CRC_OK = 1,
-};
-
-enum {
-	AW88399_DSP_FW_UPDATE_OFF = 0,
-	AW88399_DSP_FW_UPDATE_ON = 1,
-};
-
-enum {
-	AW88399_FORCE_UPDATE_OFF = 0,
-	AW88399_FORCE_UPDATE_ON = 1,
-};
-
-enum {
-	AW88399_1000_US = 1000,
-	AW88399_2000_US = 2000,
-	AW88399_3000_US = 3000,
-	AW88399_4000_US = 4000,
-};
-
-enum AW88399_DEV_STATUS {
-	AW88399_DEV_PW_OFF = 0,
-	AW88399_DEV_PW_ON,
-};
-
-enum AW88399_DEV_FW_STATUS {
-	AW88399_DEV_FW_FAILED = 0,
-	AW88399_DEV_FW_OK,
-};
-
-enum AW88399_DEV_MEMCLK {
-	AW88399_DEV_MEMCLK_OSC = 0,
-	AW88399_DEV_MEMCLK_PLL = 1,
-};
-
-enum AW88399_DEV_DSP_CFG {
-	AW88399_DEV_DSP_WORK = 0,
-	AW88399_DEV_DSP_BYPASS = 1,
-};
-
-enum {
-	AW88399_DSP_16_DATA = 0,
-	AW88399_DSP_32_DATA = 1,
-};
-
-enum {
-	AW88399_NOT_RCV_MODE = 0,
-	AW88399_RCV_MODE = 1,
-};
-
-enum {
-	AW88399_SYNC_START = 0,
-	AW88399_ASYNC_START,
-};
-
-struct aw88399 {
-	struct aw_device *aw_pa;
-	struct mutex lock;
-	struct gpio_desc *reset_gpio;
-	struct delayed_work start_work;
-	struct regmap *regmap;
-	struct aw_container *aw_cfg;
-
-	unsigned int check_val;
-	unsigned int crc_init_val;
-	unsigned int vcalb_init_val;
-	unsigned int dither_st;
 };
 
 #endif
