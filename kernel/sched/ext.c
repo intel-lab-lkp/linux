@@ -2338,12 +2338,12 @@ static struct task_struct *pick_task_scx(struct rq *rq, struct rq_flags *rf)
 	bool keep_prev, kick_idle = false;
 	struct task_struct *p;
 
-	rq_modified_clear(rq);
+	rq->next_class = &ext_sched_class;
 	rq_unpin_lock(rq, rf);
 	balance_one(rq, prev);
 	rq_repin_lock(rq, rf);
 	maybe_queue_balance_callback(rq);
-	if (rq_modified_above(rq, &ext_sched_class))
+	if (sched_class_above(rq->next_class, &ext_sched_class))
 		return RETRY_TASK;
 
 	keep_prev = rq->scx.flags & SCX_RQ_BAL_KEEP;
@@ -2967,7 +2967,8 @@ static void switched_from_scx(struct rq *rq, struct task_struct *p)
 	scx_disable_task(p);
 }
 
-static void wakeup_preempt_scx(struct rq *rq, struct task_struct *p,int wake_flags) {}
+static void wakeup_preempt_scx(struct rq *rq, struct task_struct *p, int wake_flags) {}
+
 static void switched_to_scx(struct rq *rq, struct task_struct *p) {}
 
 int scx_check_setscheduler(struct task_struct *p, int policy)
@@ -3216,8 +3217,6 @@ static void scx_cgroup_unlock(void) {}
  *   their current sched_class. Call them directly from sched core instead.
  */
 DEFINE_SCHED_CLASS(ext) = {
-	.queue_mask		= 1,
-
 	.enqueue_task		= enqueue_task_scx,
 	.dequeue_task		= dequeue_task_scx,
 	.yield_task		= yield_task_scx,
