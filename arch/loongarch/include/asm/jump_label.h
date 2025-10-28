@@ -11,6 +11,7 @@
 
 #include <linux/types.h>
 
+#define HAVE_JUMP_LABEL_BATCH
 #define JUMP_LABEL_NOP_SIZE	4
 
 /* This macro is also expanded on the Rust side. */

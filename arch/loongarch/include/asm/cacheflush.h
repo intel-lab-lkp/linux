@@ -31,9 +31,23 @@ static inline unsigned int cpu_last_level_cache_line_size(void)
 	return boot_cpu_data.cache_leaves[cache_present - 1].linesz;
 }
 
-asmlinkage void __flush_cache_all(void);
-void local_flush_icache_range(unsigned long start, unsigned long end);
+/*
+ * LoongArch maintains ICache/DCache coherency by hardware,
+ * we just need "ibar" to avoid instruction hazard here.
+ */
+static inline void local_flush_icache_all(void)
+{
+	asm volatile ("\tibar 0\n"::);
+}
 
+static inline void local_flush_icache_range(unsigned long start, unsigned long end)
+{
+	local_flush_icache_all();
+}
+
+asmlinkage void __flush_cache_all(void);
+
+#define flush_icache_all	local_flush_icache_all
 #define flush_icache_range	local_flush_icache_range
 #define flush_icache_user_range	local_flush_icache_range
 
