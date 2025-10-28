@@ -1694,8 +1694,11 @@ static void __init build_sched_topology(void)
 {
 	int i = 0;
 
-	if (is_shared_processor() && has_big_cores)
-		static_branch_enable(&splpar_asym_pack);
+	if (is_shared_processor()) {
+		if (has_big_cores)
+			static_branch_enable(&splpar_asym_pack);
+		steal_updates_cpu_capacity(false);
+	}
 
 #ifdef CONFIG_SCHED_SMT
 	if (has_big_cores) {
