@@ -168,6 +168,90 @@ static void cdns_pcie_host_enable_ptm_response(struct cdns_pcie *pcie)
 	cdns_pcie_writel(pcie, CDNS_PCIE_LM_PTM_CTRL, val | CDNS_PCIE_LM_TPM_CTRL_PTMRSEN);
 }
 
+static void cdns_pcie_setup_lane_equalization_presets(struct cdns_pcie_rc *rc)
+{
+	struct cdns_pcie *pcie = &rc->pcie;
+	struct device *dev = pcie->dev;
+	struct device_node *np = dev->of_node;
+	int max_link_speed, max_lanes, ret;
+	u32 lane_eq_ctrl_reg;
+	u16 cap;
+	u16 *presets_8gts;
+	u8 *presets_ngts;
+	u8 i, j;
+
+	ret = of_property_read_u32(np, "num-lanes", &max_lanes);
+	if (ret)
+		return;
+
+	/* Lane Equalization presets are optional, so error message is not necessary */
+	ret = of_pci_get_equalization_presets(dev, &rc->eq_presets, max_lanes);
+	if (ret)
+		return;
+
+	max_link_speed = of_pci_get_max_link_speed(np);
+	if (max_link_speed < 0) {
+		dev_err(dev, "%s: link-speed unknown, skipping preset setup\n", __func__);
+		return;
+	}
+
+	/*
+	 * Setup presets for data rates including and upward of 8.0 GT/s until the
+	 * maximum supported data rate.
+	 */
+	switch (pcie_link_speed[max_link_speed]) {
+	case PCIE_SPEED_16_0GT:
+		presets_ngts = (u8 *)rc->eq_presets.eq_presets_Ngts[EQ_PRESET_TYPE_16GTS - 1];
+		if (presets_ngts[0] != PCI_EQ_RESV) {
+			cap = cdns_pcie_find_ext_capability(pcie, PCI_EXT_CAP_ID_PL_16GT);
+			if (!cap)
+				break;
+			lane_eq_ctrl_reg = cap + PCI_PL_16GT_LE_CTRL;
+			/*
+			 * For Link Speeds including and upward of 16.0 GT/s, the Lane Equalization
+			 * Control register has the following layout per Lane:
+			 * Bits 0-3: Downstream Port Transmitter Preset
+			 * Bits 4-7: Upstream Port Transmitter Preset
+			 *
+			 * 'eq_presets_Ngts' is an array of u8 (byte).
+			 * Therefore, we need to write to the Lane Equalization Control
+			 * register in units of bytes per-Lane.
+			 */
+			for (i = 0; i < max_lanes; i++)
+				cdns_pcie_rp_writeb(pcie, lane_eq_ctrl_reg + i, presets_ngts[i]);
+
+			dev_info(dev, "Link Equalization presets applied for 16.0 GT/s\n");
+		}
+		fallthrough;
+	case PCIE_SPEED_8_0GT:
+		presets_8gts = (u16 *)rc->eq_presets.eq_presets_8gts;
+		if ((presets_8gts[0] & PCI_EQ_RESV) != PCI_EQ_RESV) {
+			cap = cdns_pcie_find_ext_capability(pcie, PCI_EXT_CAP_ID_SECPCI);
+			if (!cap)
+				break;
+			lane_eq_ctrl_reg = cap + PCI_SECPCI_LE_CTRL;
+			/*
+			 * For a Link Speed of 8.0 GT/s, the Lane Equalization Control register has
+			 * the following layout per Lane:
+			 * Bits   0-3:  Downstream Port Transmitter Preset
+			 * Bits   4-6:  Downstream Port Receiver Preset Hint
+			 * Bit      7:  Reserved
+			 * Bits  8-11:  Upstream Port Transmitter Preset
+			 * Bits 12-14:  Upstream Port Receiver Preset Hint
+			 * Bit     15:  Reserved
+			 *
+			 * 'eq_presets_8gts' is an array of u16 (word).
+			 * Therefore, we need to write to the Lane Equalization Control
+			 * register in units of words per-Lane.
+			 */
+			for (i = 0, j = 0; i < max_lanes; i++, j += 2)
+				cdns_pcie_rp_writew(pcie, lane_eq_ctrl_reg + j, presets_8gts[i]);
+
+			dev_info(dev, "Link Equalization presets applied for 8.0 GT/s\n");
+		}
+	}
+}
+
 static int cdns_pcie_host_start_link(struct cdns_pcie_rc *rc)
 {
 	struct cdns_pcie *pcie = &rc->pcie;
@@ -600,6 +684,7 @@ int cdns_pcie_host_link_setup(struct cdns_pcie_rc *rc)
 		cdns_pcie_detect_quiet_min_delay_set(&rc->pcie);
 
 	cdns_pcie_host_enable_ptm_response(pcie);
+	cdns_pcie_setup_lane_equalization_presets(rc);
 
 	ret = cdns_pcie_start_link(pcie);
 	if (ret) {

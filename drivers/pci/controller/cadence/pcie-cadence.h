@@ -11,6 +11,8 @@
 #include <linux/pci-epf.h>
 #include <linux/phy/phy.h>
 
+#include "../../pci.h"
+
 /* Parameters for the waiting for link up routine */
 #define LINK_WAIT_MAX_RETRIES	10
 #define LINK_WAIT_USLEEP_MIN	90000
@@ -288,6 +290,8 @@ struct cdns_pcie {
  *                available
  * @quirk_retrain_flag: Retrain link as quirk for PCIe Gen2
  * @quirk_detect_quiet_flag: LTSSM Detect Quiet min delay set as quirk
+ * @eq_presets: Lane Equalization presets for Link Speed including and upward
+ *              of 8.0 GT/s
  */
 struct cdns_pcie_rc {
 	struct cdns_pcie	pcie;
@@ -298,6 +302,7 @@ struct cdns_pcie_rc {
 	bool			avail_ib_bar[CDNS_PCIE_RP_MAX_IB];
 	unsigned int		quirk_retrain_flag:1;
 	unsigned int		quirk_detect_quiet_flag:1;
+	struct pci_eq_presets	eq_presets;
 };
 
 /**
