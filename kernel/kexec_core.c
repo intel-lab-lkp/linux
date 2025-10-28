@@ -1131,6 +1131,18 @@ bool kexec_load_permitted(int kexec_image_type)
 	return true;
 }
 
+static void stop_user_deadline_tasks(void)
+{
+	struct task_struct *task;
+
+	rcu_read_lock();
+	for_each_process(task) {
+		if (task->policy == SCHED_DEADLINE && task->mm)
+			send_sig(SIGSTOP, task, 1);
+	}
+	rcu_read_unlock();
+}
+
 /*
  * Move into place and start executing a preloaded standalone
  * executable.  If nothing was preloaded return an error.
@@ -1189,6 +1201,11 @@ int kernel_kexec(void)
 		cpu_hotplug_disable();
 		kexec_in_progress = true;
 		cpu_hotplug_enable();
+		/*
+		 * As CPU hot-removal, the crowed deadline task may starve other
+		 * tasks. So stop them.
+		 */
+		stop_user_deadline_tasks();
 		kernel_restart_prepare("kexec reboot");
 		migrate_to_reboot_cpu();
 		syscore_shutdown();
