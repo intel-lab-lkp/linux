@@ -1472,8 +1472,8 @@ increase system exposure to denial of service attacks from split lock users.
 = ===================================================================
 0 Disable the mitigation mode - just warns the split lock on kernel log
   and exposes the system to denials of service from the split lockers.
-1 Enable the mitigation mode (this is the default) - penalizes the split
-  lockers with intentional performance degradation.
+N Enable the mitigation mode (default is 10) - penalizes the split lockers
+  by suspending their execution for N milliseconds.
 = ===================================================================
 
 

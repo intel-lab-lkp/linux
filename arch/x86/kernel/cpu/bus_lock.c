@@ -46,7 +46,7 @@ static const struct {
 
 static struct ratelimit_state bld_ratelimit;
 
-static unsigned int sysctl_sld_mitigate = 1;
+static unsigned int sysctl_sld_mitigate = 10;
 static DEFINE_SEMAPHORE(buslock_sem, 1);
 
 #ifdef CONFIG_PROC_SYSCTL
@@ -58,7 +58,7 @@ static const struct ctl_table sld_sysctls[] = {
 		.mode           = 0644,
 		.proc_handler	= proc_douintvec_minmax,
 		.extra1         = SYSCTL_ZERO,
-		.extra2         = SYSCTL_ONE,
+		.extra2         = SYSCTL_INT_MAX,
 	},
 };
 
@@ -252,9 +252,9 @@ static void split_lock_warn(unsigned long ip)
 	if (saved_sld_mitigate) {
 		/*
 		 * misery factor #1:
-		 * sleep 10ms before trying to execute split lock.
+		 * sleep 'saved_sld_mitigate' ms before trying to execute split lock.
 		 */
-		if (msleep_interruptible(10) > 0)
+		if (msleep_interruptible(saved_sld_mitigate) > 0)
 			return;
 		/*
 		 * Misery factor #2:
