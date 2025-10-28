@@ -392,6 +392,14 @@ void __init init_prmt(void)
 	if (ACPI_FAILURE(status))
 		return;
 
+	/*
+	 * Return immediately if EFI_RUNTIME_SERVICES is not enabled.
+	 */
+	if (!efi_enabled(EFI_RUNTIME_SERVICES)) {
+		pr_err("PRM: EFI runtime services unavailable\n");
+		return;
+	}
+
 	mc = acpi_table_parse_entries(ACPI_SIG_PRMT, sizeof(struct acpi_table_prmt) +
 					  sizeof (struct acpi_table_prmt_header),
 					  0, acpi_parse_prmt, 0);
@@ -403,11 +411,6 @@ void __init init_prmt(void)
 		return;
 
 	pr_info("PRM: found %u modules\n", mc);
-
-	if (!efi_enabled(EFI_RUNTIME_SERVICES)) {
-		pr_err("PRM: EFI runtime services unavailable\n");
-		return;
-	}
 
 	status = acpi_install_address_space_handler(ACPI_ROOT_OBJECT,
 						    ACPI_ADR_SPACE_PLATFORM_RT,
