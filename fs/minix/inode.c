@@ -21,10 +21,16 @@
 #include <linux/vfs.h>
 #include <linux/writeback.h>
 #include <linux/fs_context.h>
+#include <linux/fs_parser.h>
+#include <linux/fsnotify.h>
 
 static int minix_write_inode(struct inode *inode,
-		struct writeback_control *wbc);
+			     struct writeback_control *wbc);
 static int minix_statfs(struct dentry *dentry, struct kstatfs *buf);
+static int minix_init_fs_context(struct fs_context *fc);
+static void minix_handle_error(struct super_block *sb, int error,
+			       const char *func, unsigned int line);
+static bool system_going_down(void);
 
 static void minix_evict_inode(struct inode *inode)
 {
@@ -113,17 +119,121 @@ static const struct super_operations minix_sops = {
 	.statfs		= minix_statfs,
 };
 
+void __minix_error(struct super_block *sb, const char *function,
+		   unsigned int line, int error, const char *fmt, ...)
+{
+	struct va_format vaf;
+	va_list args;
+
+	va_start(args, fmt);
+	vaf.fmt = fmt;
+	vaf.va = &args;
+	printk(KERN_CRIT "minix-fs error (device %s): %s:%d: comm %s: %pV\n",
+	       sb->s_id, function, line, current->comm, &vaf);
+	va_end(args);
+
+	fsnotify_sb_error(sb, NULL, error ? error : EFSCORRUPTED);
+
+	minix_handle_error(sb, error, function, line);
+}
+
+void __minix_error_inode(struct inode *inode, const char *function,
+			 unsigned int line, int error, u32 block,
+			 const char *fmt, ...)
+{
+	struct va_format vaf;
+	va_list args;
+
+	va_start(args, fmt);
+	vaf.fmt = fmt;
+	vaf.va = &args;
+	if (block)
+		printk(KERN_CRIT "minix-fs error (device %s): %s:%d: "
+		       "inode #%lu: block %du: comm %s: %pV\n",
+		       inode->i_sb->s_id, function, line, inode->i_ino,
+		       block, current->comm, &vaf);
+	else
+		printk(KERN_CRIT "minix-fs error (device %s): %s:%d: "
+		       "inode #%lu: comm %s: %pV\n",
+		       inode->i_sb->s_id, function, line, inode->i_ino,
+		       current->comm, &vaf);
+	va_end(args);
+
+	fsnotify_sb_error(inode->i_sb, NULL, error ? error : EFSCORRUPTED);
+
+	minix_handle_error(inode->i_sb, error, function, line);
+}
+
+static void minix_handle_error(struct super_block *sb, int error,
+			       const char *func, unsigned int line)
+{
+	struct minix_sb_info *sbi = minix_sb(sb);
+
+	if (sbi->s_version != MINIX_V3) {
+		sbi->s_mount_state |= MINIX_ERROR_FS;
+		mark_buffer_dirty(sbi->s_sbh);
+	}
+
+	if (test_opt(sb, WARN_ON_ERROR))
+		WARN_ON_ONCE(1);
+
+	/* Do not panic during 'reboot -f' */
+	if (test_opt(sb, ERRORS_PANIC) && !system_going_down()) {
+		panic("minix-fs (device %s): panic forced after error\n",
+		      sb->s_id);
+	}
+
+	if (test_opt(sb, ERRORS_CONT) || sb_rdonly(sb))
+		return;
+
+	minix_msg(sb, KERN_CRIT, "Remounting filesystem read-only");
+
+	sb->s_flags |= SB_RDONLY;
+}
+
+void __minix_msg(struct super_block *sb,
+		 const char *prefix, const char *fmt, ...)
+{
+	struct va_format vaf;
+	va_list args;
+
+	va_start(args, fmt);
+	vaf.fmt = fmt;
+	vaf.va = &args;
+	if (sb)
+		printk("%sminix-fs (%s): %pV\n", prefix, sb->s_id, &vaf);
+	else
+		printk("%sminix-fs: %pV\n", prefix, &vaf);
+	va_end(args);
+}
+
+static bool system_going_down(void)
+{
+	return system_state == SYSTEM_HALT || system_state == SYSTEM_POWER_OFF
+		|| system_state == SYSTEM_RESTART;
+}
+
+struct minix_fs_context {
+	unsigned int s_mount_opt;
+	unsigned int s_def_mount_opt;
+};
+
 static int minix_reconfigure(struct fs_context *fc)
 {
-	struct minix_super_block * ms;
+	struct minix_fs_context *ctx = fc->fs_private;
 	struct super_block *sb = fc->root->d_sb;
-	struct minix_sb_info * sbi = sb->s_fs_info;
+	unsigned int flags = fc->sb_flags;
+	struct minix_sb_info *sbi = minix_sb(sb);
+	struct minix_super_block *ms;
+
+	sbi->s_mount_opt = ctx->s_mount_opt;
 
 	sync_filesystem(sb);
 	ms = sbi->s_ms;
-	if ((bool)(fc->sb_flags & SB_RDONLY) == sb_rdonly(sb))
+
+	if ((bool)(flags & SB_RDONLY) == sb_rdonly(sb))
 		return 0;
-	if (fc->sb_flags & SB_RDONLY) {
+	if (flags & SB_RDONLY) {
 		if (ms->s_state & MINIX_VALID_FS ||
 		    !(sbi->s_mount_state & MINIX_VALID_FS))
 			return 0;
@@ -172,6 +282,7 @@ static bool minix_check_superblock(struct super_block *sb)
 
 static int minix_fill_super(struct super_block *s, struct fs_context *fc)
 {
+	struct minix_fs_context *ctx = fc->fs_private;
 	struct buffer_head *bh;
 	struct buffer_head **map;
 	struct minix_super_block *ms;
@@ -198,6 +309,8 @@ static int minix_fill_super(struct super_block *s, struct fs_context *fc)
 
 	ms = (struct minix_super_block *) bh->b_data;
 	sbi->s_ms = ms;
+	sbi->s_mount_opt = ctx->s_mount_opt;
+	sbi->s_def_mount_opt = ctx->s_def_mount_opt;
 	sbi->s_sbh = bh;
 	sbi->s_mount_state = ms->s_state;
 	sbi->s_ninodes = ms->s_ninodes;
@@ -226,7 +339,7 @@ static int minix_fill_super(struct super_block *s, struct fs_context *fc)
 		s->s_max_links = MINIX2_LINK_MAX;
 	} else if (s->s_magic == MINIX2_SUPER_MAGIC2) {
 		sbi->s_version = MINIX_V2;
-		sbi->s_nzones = ms->s_zones;
+	sbi->s_nzones = ms->s_zones;
 		sbi->s_dirsize = 32;
 		sbi->s_namelen = 30;
 		s->s_max_links = MINIX2_LINK_MAX;
@@ -367,26 +480,14 @@ out_bad_hblock:
 out_bad_sb:
 	printk("MINIX-fs: unable to read superblock\n");
 out:
-	s->s_fs_info = NULL;
 	kfree(sbi);
+	fc->s_fs_info = NULL;
 	return ret;
 }
 
 static int minix_get_tree(struct fs_context *fc)
 {
 	 return get_tree_bdev(fc, minix_fill_super);
-}
-
-static const struct fs_context_operations minix_context_ops = {
-	.get_tree	= minix_get_tree,
-	.reconfigure	= minix_reconfigure,
-};
-
-static int minix_init_fs_context(struct fs_context *fc)
-{
-	fc->ops = &minix_context_ops;
-
-	return 0;
 }
 
 static int minix_statfs(struct dentry *dentry, struct kstatfs *buf)
@@ -518,11 +619,15 @@ static struct inode *V1_minix_iget(struct inode *inode)
 		return ERR_PTR(-EIO);
 	}
 	if (raw_inode->i_nlinks == 0) {
-		printk("MINIX-fs: deleted inode referenced: %lu\n",
-		       inode->i_ino);
+		minix_error_inode(inode, "deleted inode referenced");
 		brelse(bh);
 		iget_failed(inode);
 		return ERR_PTR(-ESTALE);
+	} else if (S_ISDIR(raw_inode->i_mode) && raw_inode->i_nlinks == 1) {
+		minix_error_inode(inode, "directory inode has corrupted nlink");
+		brelse(bh);
+		iget_failed(inode);
+		return ERR_PTR(-EFSCORRUPTED);
 	}
 	inode->i_mode = raw_inode->i_mode;
 	i_uid_write(inode, raw_inode->i_uid);
@@ -556,11 +661,15 @@ static struct inode *V2_minix_iget(struct inode *inode)
 		return ERR_PTR(-EIO);
 	}
 	if (raw_inode->i_nlinks == 0) {
-		printk("MINIX-fs: deleted inode referenced: %lu\n",
-		       inode->i_ino);
+		minix_error_inode(inode, "deleted inode referenced");
 		brelse(bh);
 		iget_failed(inode);
 		return ERR_PTR(-ESTALE);
+	} else if (S_ISDIR(raw_inode->i_mode) && raw_inode->i_nlinks == 1) {
+		minix_error_inode(inode, "directory inode has corrupted nlink");
+		brelse(bh);
+		iget_failed(inode);
+		return ERR_PTR(-EFSCORRUPTED);
 	}
 	inode->i_mode = raw_inode->i_mode;
 	i_uid_write(inode, raw_inode->i_uid);
@@ -705,13 +814,95 @@ void minix_truncate(struct inode * inode)
 		V2_minix_truncate(inode);
 }
 
+enum {
+	Opt_errors, Opt_warn_on_error, Opt_nowarn_on_error
+};
+
+static const struct constant_table minix_param_errors[] = {
+	{"continue",	MINIX_MOUNT_ERRORS_CONT},
+	{"panic",	MINIX_MOUNT_ERRORS_PANIC},
+	{"remount-ro",	MINIX_MOUNT_ERRORS_RO},
+	{}
+};
+
+/*
+ * Mount option specification
+ */
+static const struct fs_parameter_spec minix_param_specs[] = {
+	fsparam_enum	("errors",		Opt_errors, minix_param_errors),
+	fsparam_flag	("warn-on-error",	Opt_warn_on_error),
+	fsparam_flag	("nowarn-on-error",	Opt_nowarn_on_error),
+	{}
+};
+
+static int minix_parse_param(struct fs_context *fc, struct fs_parameter *param)
+{
+	struct minix_fs_context *ctx = fc->fs_private;
+	struct fs_parse_result result;
+
+	int token;
+
+	token = fs_parse(fc, minix_param_specs, param, &result);
+	if (token < 0)
+		return token;
+
+	switch (token) {
+	case Opt_errors:
+		ctx->s_mount_opt &= ~MINIX_MOUNT_ERRORS_MASK;
+		ctx->s_mount_opt |= result.uint_32;
+		break;
+	case Opt_warn_on_error:
+		ctx->s_mount_opt |= MINIX_MOUNT_WARN_ON_ERROR;
+		break;
+	case Opt_nowarn_on_error:
+		ctx->s_mount_opt &= ~MINIX_MOUNT_WARN_ON_ERROR;
+		break;
+	}
+	return 0;
+}
+
+static void minix_fc_free(struct fs_context *fc)
+{
+	struct minix_fs_context *ctx = fc->fs_private;
+
+	if (!ctx)
+		return;
+	kfree(ctx);
+}
+
+static const struct fs_context_operations minix_context_ops = {
+	.get_tree	= minix_get_tree,
+	.reconfigure	= minix_reconfigure,
+	.parse_param	= minix_parse_param,
+	.free		= minix_fc_free,
+};
+
+int minix_init_fs_context(struct fs_context *fc)
+{
+	struct minix_fs_context *ctx;
+
+	ctx = kzalloc(sizeof(struct minix_fs_context), GFP_KERNEL);
+	if (!ctx)
+		return -ENOMEM;
+
+	fc->fs_private = ctx;
+	fc->ops = &minix_context_ops;
+
+	ctx->s_def_mount_opt |= MINIX_MOUNT_ERRORS_DEF;
+	ctx->s_mount_opt = ctx->s_def_mount_opt;
+
+	return 0;
+}
+
 static struct file_system_type minix_fs_type = {
 	.owner			= THIS_MODULE,
 	.name			= "minix",
 	.kill_sb		= kill_block_super,
 	.fs_flags		= FS_REQUIRES_DEV,
 	.init_fs_context	= minix_init_fs_context,
+	.parameters		= minix_param_specs,
 };
+
 MODULE_ALIAS_FS("minix");
 
 static int __init init_minix_fs(void)

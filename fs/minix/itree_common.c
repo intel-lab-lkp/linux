@@ -188,7 +188,7 @@ out:
 	/*
 	 * Indirect block might be removed by truncate while we were
 	 * reading it. Handling of that case (forget what we've got and
-	 * reread) is taken out of the main path.
+	 * reread) is taken out of the msb_breadain path.
 	 */
 	if (err == -EAGAIN)
 		goto changed;

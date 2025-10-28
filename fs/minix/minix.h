@@ -11,6 +11,22 @@
 #define MINIX_V2		0x0002		/* minix V2 fs */
 #define MINIX_V3		0x0003		/* minix V3 fs */
 
+#define MINIX_MOUNT_ERRORS_CONT		0x00001	/* Continue on errors */
+#define MINIX_MOUNT_ERRORS_RO		0x00002	/* Remount fs ro on errors */
+#define MINIX_MOUNT_ERRORS_PANIC	0x00004	/* Panic on errors */
+#define MINIX_MOUNT_WARN_ON_ERROR	0x00008 /* Trigger WARN_ON on error */
+
+#define MINIX_MOUNT_ERRORS_MASK		0x00007
+
+#define MINIX_MOUNT_ERRORS_DEF		MINIX_MOUNT_ERRORS_CONT
+
+#define clear_opt(sb, opt)		minix_sb(sb)->s_mount_opt &= \
+						~MINIX_MOUNT_##opt
+#define set_opt(sb, opt)		minix_sb(sb)->s_mount_opt |= \
+						MINIX_MOUNT_##opt
+#define test_opt(sb, opt)		(minix_sb(sb)->s_mount_opt & \
+						MINIX_MOUNT_##opt)
+
 /*
  * minix fs inode data in memory
  */
@@ -39,6 +55,8 @@ struct minix_sb_info {
 	struct buffer_head * s_sbh;
 	struct minix_super_block * s_ms;
 	unsigned short s_mount_state;
+	unsigned short s_mount_opt;
+	unsigned short s_def_mount_opt;
 	unsigned short s_version;
 };
 
@@ -54,6 +72,13 @@ unsigned long minix_count_free_blocks(struct super_block *sb);
 int minix_getattr(struct mnt_idmap *, const struct path *,
 		struct kstat *, u32, unsigned int);
 int minix_prepare_chunk(struct folio *folio, loff_t pos, unsigned len);
+
+extern __printf(3, 4)
+void __minix_msg(struct super_block *, const char *, const char *, ...);
+void __minix_error(struct super_block *, const char *, unsigned int, int,
+		   const char *, ...);
+void __minix_error_inode(struct inode *, const char *, unsigned int, int, u32,
+			 const char *, ...);
 
 extern void V1_minix_truncate(struct inode *);
 extern void V2_minix_truncate(struct inode *);
@@ -167,5 +192,23 @@ static inline int minix_test_bit(int nr, const void *vaddr)
 #define minix_find_first_zero_bit	find_first_zero_bit_le
 
 #endif
+
+#define minix_error(sb, fmt, ...)						\
+	__minix_error((sb), __func__, __LINE__, 0, (fmt), ##__VA_ARGS__)
+#define minix_error_err(sb, err, fmt, ...)					\
+	__minix_error((sb), __func__, __LINE__, (err), (fmt), ##__VA_ARGS__)
+#define minix_error_inode(inode, fmt, ...)					\
+	__minix_error_inode((inode), __func__, __LINE__, 0, 0,			\
+			    (fmt), ##__VA_ARGS__)
+#define minix_error_inode_err(inode, err, fmt, ...)				\
+	__minix_error_inode((inode), __func__, __LINE__, (err), 0,		\
+			    (fmt), ##__VA_ARGS__)
+#define minix_error_inode_block(inode, block, err, fmt, ...)			\
+	__minix_error_inode((inode), __func__, __LINE__, (err), (block),	\
+			    (fmt), ##__VA_ARGS__)
+#define minix_msg(sb, level, fmt, ...)				\
+	__minix_msg(sb, level, fmt, ##__VA_ARGS__)
+
+#define EFSCORRUPTED	EUCLEAN		/* Filesystem is corrupted */
 
 #endif /* FS_MINIX_H */
