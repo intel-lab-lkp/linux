@@ -374,6 +374,15 @@ unsigned long do_mmap(struct file *file, unsigned long addr,
 		return -EOVERFLOW;
 
 	/* Too many mappings? */
+	/*
+	 * The check is intentionally lenient (>) to allow an mmap() at the limit
+	 * to succeed. This is for historical reasons, as the new mapping might
+	 * merge with an adjacent VMA and not increase the total VMA count.
+	 *
+	 * If a merge does not occur, the process is allowed to exceed the
+	 * sysctl_max_map_count limit by one. This behavior is preserved to
+	 * avoid breaking existing applications.
+	 */
 	if (mm->map_count > sysctl_max_map_count)
 		return -ENOMEM;
 
