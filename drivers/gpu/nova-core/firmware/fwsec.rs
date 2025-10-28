@@ -161,6 +161,7 @@ unsafe fn transmute<'a, 'b, T: Sized + FromBytes>(
     if offset + size_of::<T>() > fw.size() {
         return Err(EINVAL);
     }
+    // CAST: `usize` has the same size as pointers.
     if (fw.start_ptr() as usize + offset) % align_of::<T>() != 0 {
         return Err(EINVAL);
     }
@@ -184,6 +185,7 @@ unsafe fn transmute_mut<'a, 'b, T: Sized + FromBytes>(
     if offset + size_of::<T>() > fw.size() {
         return Err(EINVAL);
     }
+    // CAST: `usize` has the same size as pointers.
     if (fw.start_ptr_mut() as usize + offset) % align_of::<T>() != 0 {
         return Err(EINVAL);
     }
