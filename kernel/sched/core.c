@@ -820,8 +820,11 @@ static void update_rq_clock_task(struct rq *rq, s64 delta)
 	rq->clock_task += delta;
 
 #ifdef CONFIG_HAVE_SCHED_AVG_IRQ
-	if ((irq_delta + steal) && sched_feat(NONTASK_CAPACITY))
-		update_irq_load_avg(rq, irq_delta + steal);
+	if ((irq_delta + steal) && sched_feat(NONTASK_CAPACITY)) {
+		if (steal && sched_feat(ACCT_STEAL))
+			irq_delta += steal;
+		update_irq_load_avg(rq, irq_delta);
+	}
 #endif
 	update_rq_clock_pelt(rq, delta);
 }

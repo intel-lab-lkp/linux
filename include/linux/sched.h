@@ -2311,5 +2311,6 @@ static __always_inline void alloc_tag_restore(struct alloc_tag *tag, struct allo
 #define alloc_tag_save(_tag)			NULL
 #define alloc_tag_restore(_tag, _old)		do {} while (0)
 #endif
+extern void steal_updates_cpu_capacity(bool enable);
 
 #endif

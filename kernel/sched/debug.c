@@ -1282,3 +1282,11 @@ void resched_latency_warn(int cpu, u64 latency)
 	       cpu, latency, cpu_rq(cpu)->ticks_without_resched);
 	dump_stack();
 }
+
+void steal_updates_cpu_capacity(bool enable)
+{
+	if (enable)
+		sched_feat_set("ACCT_STEAL");
+	else
+		sched_feat_set("NO_ACCT_STEAL");
+}
