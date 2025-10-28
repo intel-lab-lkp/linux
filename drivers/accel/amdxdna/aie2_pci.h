@@ -182,6 +182,8 @@ struct amdxdna_dev_hdl {
 	u32				clk_gating;
 	u32				npuclk_freq;
 	u32				hclk_freq;
+	u64				max_tops;
+	u64				curr_tops;
 
 	/* Mailbox and the management channel */
 	struct mailbox			*mbox;
@@ -219,6 +221,7 @@ struct amdxdna_dev_priv {
 	u32				mbox_dev_addr;
 	/* If mbox_size is 0, use BAR size. See MBOX_SIZE macro */
 	u32				mbox_size;
+	u32				hwctx_limit;
 	u32				sram_dev_addr;
 	struct aie2_bar_off_pair	sram_offs[SRAM_MAX_INDEX];
 	struct aie2_bar_off_pair	psp_regs_off[PSP_MAX_REGS];
@@ -273,6 +276,9 @@ int aie2_create_context(struct amdxdna_dev_hdl *ndev, struct amdxdna_hwctx *hwct
 int aie2_destroy_context(struct amdxdna_dev_hdl *ndev, struct amdxdna_hwctx *hwctx);
 int aie2_map_host_buf(struct amdxdna_dev_hdl *ndev, u32 context_id, u64 addr, u64 size);
 int aie2_query_status(struct amdxdna_dev_hdl *ndev, char __user *buf, u32 size, u32 *cols_filled);
+int aie2_query_telemetry(struct amdxdna_dev_hdl *ndev,
+			 char __user *buf, u32 size,
+			 struct amdxdna_drm_query_telemetry_header *header);
 int aie2_register_asyn_event_msg(struct amdxdna_dev_hdl *ndev, dma_addr_t addr, u32 size,
 				 void *handle, int (*cb)(void*, void __iomem *, size_t));
 int aie2_config_cu(struct amdxdna_hwctx *hwctx,
