@@ -1777,11 +1777,11 @@ static int rproc_attach_recovery(struct rproc *rproc)
 {
 	int ret;
 
-	ret = __rproc_detach(rproc);
+	ret = rproc_detach(rproc);
 	if (ret)
 		return ret;
 
-	return __rproc_attach(rproc);
+	return rproc_attach(rproc);
 }
 
 static int rproc_boot_recovery(struct rproc *rproc)
@@ -1829,6 +1829,9 @@ int rproc_trigger_recovery(struct rproc *rproc)
 	struct device *dev = &rproc->dev;
 	int ret;
 
+	if (rproc_has_feature(rproc, RPROC_FEAT_ATTACH_ON_RECOVERY))
+		return rproc_attach_recovery(rproc);
+
 	ret = mutex_lock_interruptible(&rproc->lock);
 	if (ret)
 		return ret;
@@ -1839,10 +1842,7 @@ int rproc_trigger_recovery(struct rproc *rproc)
 
 	dev_err(dev, "recovering %s\n", rproc->name);
 
-	if (rproc_has_feature(rproc, RPROC_FEAT_ATTACH_ON_RECOVERY))
-		ret = rproc_attach_recovery(rproc);
-	else
-		ret = rproc_boot_recovery(rproc);
+	ret = rproc_boot_recovery(rproc);
 
 unlock_mutex:
 	mutex_unlock(&rproc->lock);
@@ -1860,6 +1860,7 @@ static void rproc_crash_handler_work(struct work_struct *work)
 {
 	struct rproc *rproc = container_of(work, struct rproc, crash_handler);
 	struct device *dev = &rproc->dev;
+	int ret;
 
 	dev_dbg(dev, "enter %s\n", __func__);
 
@@ -1883,8 +1884,11 @@ static void rproc_crash_handler_work(struct work_struct *work)
 
 	mutex_unlock(&rproc->lock);
 
-	if (!rproc->recovery_disabled)
-		rproc_trigger_recovery(rproc);
+	if (!rproc->recovery_disabled) {
+		ret = rproc_trigger_recovery(rproc);
+		if (ret)
+			dev_warn(dev, "rproc recovery failed, err %d\n", ret);
+	}
 
 out:
 	pm_relax(rproc->dev.parent);
@@ -2057,7 +2061,7 @@ int rproc_detach(struct rproc *rproc)
 		return ret;
 	}
 
-	if (rproc->state != RPROC_ATTACHED) {
+	if (rproc->state != RPROC_ATTACHED && rproc->state != RPROC_CRASHED) {
 		ret = -EINVAL;
 		goto out;
 	}
