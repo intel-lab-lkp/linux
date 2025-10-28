@@ -18,6 +18,7 @@
 
 #include <linux/cpuset.h>
 #include <linux/sched/clock.h>
+#include <linux/kexec.h>
 #include <uapi/linux/sched/types.h>
 #include "sched.h"
 #include "pelt.h"
@@ -3513,6 +3514,12 @@ static int dl_bw_manage(enum dl_bw_request req, int cpu, u64 dl_bw)
 
 int dl_bw_deactivate(int cpu)
 {
+	/*
+	 * The system is shutting down and cannot roll back.  There is no point
+	 * in keeping track of bandwidth, which may fail hotplug.
+	 */
+	if (unlikely(kexec_in_progress))
+		return 0;
 	return dl_bw_manage(dl_bw_req_deactivate, cpu, 0);
 }
 

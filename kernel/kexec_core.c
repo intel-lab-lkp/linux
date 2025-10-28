@@ -1182,7 +1182,13 @@ int kernel_kexec(void)
 	} else
 #endif
 	{
+		/*
+		 * CPU hot-removal path refers to kexec_in_progress, it
+		 * requires a sync to ensure no in-flight hot-removing.
+		 */
+		cpu_hotplug_disable();
 		kexec_in_progress = true;
+		cpu_hotplug_enable();
 		kernel_restart_prepare("kexec reboot");
 		migrate_to_reboot_cpu();
 		syscore_shutdown();
