@@ -2259,6 +2259,7 @@ int nfs_atomic_open_v23(struct inode *dir, struct dentry *dentry,
 			umode_t mode)
 {
 	struct dentry *res = NULL;
+	struct inode *inode;
 	/* Same as look+open from lookup_open(), but with different O_TRUNC
 	 * handling.
 	 */
@@ -2267,7 +2268,7 @@ int nfs_atomic_open_v23(struct inode *dir, struct dentry *dentry,
 	if (dentry->d_name.len > NFS_SERVER(dir)->namelen)
 		return -ENAMETOOLONG;
 
-	if (open_flags & O_CREAT) {
+	if ((open_flags & O_CREAT) && !(open_flags & O_DIRECTORY)) {
 		error = nfs_do_create(dir, dentry, mode, open_flags);
 		if (!error) {
 			file->f_mode |= FMODE_CREATED;
@@ -2275,12 +2276,27 @@ int nfs_atomic_open_v23(struct inode *dir, struct dentry *dentry,
 		} else if (error != -EEXIST || open_flags & O_EXCL)
 			return error;
 	}
+
 	if (d_in_lookup(dentry)) {
 		/* The only flags nfs_lookup considers are
 		 * LOOKUP_EXCL and LOOKUP_RENAME_TARGET, and
 		 * we want those to be zero so the lookup isn't skipped.
 		 */
 		res = nfs_lookup(dir, dentry, 0);
+		if (!res) {
+			inode = d_inode(dentry);
+			if ((open_flags & O_DIRECTORY) && inode &&
+			    !(S_ISDIR(inode->i_mode) || S_ISLNK(inode->i_mode)))
+				res = ERR_PTR(-ENOTDIR);
+		} else if (!IS_ERR(res)) {
+			inode = d_inode(res);
+			if ((open_flags & O_DIRECTORY) && inode &&
+			    !(S_ISDIR(inode->i_mode) ||
+			      S_ISLNK(inode->i_mode))) {
+				dput(res);
+				res = ERR_PTR(-ENOTDIR);
+			}
+		}
 	}
 	return finish_no_open(file, res);
 
