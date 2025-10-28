@@ -1804,6 +1804,11 @@ static long vhost_net_ioctl(struct file *f, unsigned int ioctl,
 		return vhost_net_reset_owner(n);
 	case VHOST_SET_OWNER:
 		return vhost_net_set_owner(n);
+	case VHOST_GET_VRING_WORKER_INFO:
+		mutex_lock(&n->dev.mutex);
+		r = vhost_worker_ioctl(&n->dev, ioctl, argp);
+		mutex_unlock(&n->dev.mutex);
+		return r;
 	default:
 		mutex_lock(&n->dev.mutex);
 		r = vhost_dev_ioctl(&n->dev, ioctl, argp);

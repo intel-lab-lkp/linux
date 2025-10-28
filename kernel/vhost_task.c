@@ -68,6 +68,18 @@ static int vhost_task_fn(void *data)
 }
 
 /**
+ * vhost_get_task - get a pointer to the vhost_task's task_struct
+ * @vtsk: vhost_task to return the task for
+ *
+ * return the vhost_task's task.
+ */
+struct task_struct *vhost_get_task(struct vhost_task *vtsk)
+{
+	return vtsk->task;
+}
+EXPORT_SYMBOL_GPL(vhost_get_task);
+
+/**
  * vhost_task_wake - wakeup the vhost_task
  * @vtsk: vhost_task to wake
  *

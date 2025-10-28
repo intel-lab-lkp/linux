@@ -1012,6 +1012,7 @@ long vhost_worker_ioctl(struct vhost_dev *dev, unsigned int ioctl,
 			void __user *argp)
 {
 	struct vhost_vring_worker ring_worker;
+	struct vhost_vring_worker_info ring_worker_info;
 	struct vhost_worker_state state;
 	struct vhost_worker *worker;
 	struct vhost_virtqueue *vq;
@@ -1050,6 +1051,7 @@ long vhost_worker_ioctl(struct vhost_dev *dev, unsigned int ioctl,
 	/* vring worker ioctls */
 	case VHOST_ATTACH_VRING_WORKER:
 	case VHOST_GET_VRING_WORKER:
+	case VHOST_GET_VRING_WORKER_INFO:
 		break;
 	default:
 		return -ENOIOCTLCMD;
@@ -1082,6 +1084,23 @@ long vhost_worker_ioctl(struct vhost_dev *dev, unsigned int ioctl,
 		if (copy_to_user(argp, &ring_worker, sizeof(ring_worker)))
 			ret = -EFAULT;
 		break;
+	case VHOST_GET_VRING_WORKER_INFO:
+		worker = rcu_dereference_check(vq->worker,
+					       lockdep_is_held(&dev->mutex));
+		if (!worker) {
+			ret = -EINVAL;
+			break;
+		}
+
+		memset(&ring_worker_info, 0, sizeof(ring_worker_info));
+		ring_worker_info.index = idx;
+		ring_worker_info.worker_id = worker->id;
+		ring_worker_info.worker_pid = task_pid_vnr(vhost_get_task(worker->vtsk));
+
+		if (copy_to_user(argp, &ring_worker_info, sizeof(ring_worker_info)))
+			ret = -EFAULT;
+		break;
+
 	default:
 		ret = -ENOIOCTLCMD;
 		break;

@@ -11,4 +11,6 @@ void vhost_task_start(struct vhost_task *vtsk);
 void vhost_task_stop(struct vhost_task *vtsk);
 void vhost_task_wake(struct vhost_task *vtsk);
 
+struct task_struct *vhost_get_task(struct vhost_task *vtsk);
+
 #endif /* _LINUX_SCHED_VHOST_TASK_H */
