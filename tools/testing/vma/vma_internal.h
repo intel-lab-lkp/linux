@@ -1491,4 +1491,10 @@ static inline int do_munmap(struct mm_struct *, unsigned long, size_t,
 	return 0;
 }
 
+/* Helper to get max vma count */
+static int max_vma_count(void)
+{
+	return sysctl_max_map_count;
+}
+
 #endif	/* __MM_VMA_INTERNAL_H */

@@ -1702,4 +1702,7 @@ static inline int io_remap_pfn_range_complete(struct vm_area_struct *vma,
 	return remap_pfn_range_complete(vma, addr, pfn, size, prot);
 }
 
+/* mmap.c */
+int max_vma_count(void);
+
 #endif	/* __MM_INTERNAL_H */

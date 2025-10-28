@@ -383,7 +383,7 @@ unsigned long do_mmap(struct file *file, unsigned long addr,
 	 * sysctl_max_map_count limit by one. This behavior is preserved to
 	 * avoid breaking existing applications.
 	 */
-	if (mm->map_count > sysctl_max_map_count)
+	if (max_vma_count() - mm->map_count < 0)
 		return -ENOMEM;
 
 	/*
@@ -1502,6 +1502,13 @@ struct vm_area_struct *_install_special_mapping(
 {
 	return __install_special_mapping(mm, addr, len, vm_flags, (void *)spec,
 					&special_mapping_vmops);
+}
+
+static int sysctl_max_map_count __read_mostly = DEFAULT_MAX_MAP_COUNT;
+
+int max_vma_count(void)
+{
+	return READ_ONCE(sysctl_max_map_count);
 }
 
 #ifdef CONFIG_SYSCTL
