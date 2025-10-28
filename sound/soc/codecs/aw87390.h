@@ -52,15 +52,6 @@
 #define AW87390_I2C_NAME		"aw87390"
 #define AW87390_ACF_FILE		"aw87390_acf.bin"
 
-#define AW87390_PROFILE_EXT(xname, profile_info, profile_get, profile_set) \
-{ \
-	.iface = SNDRV_CTL_ELEM_IFACE_MIXER, \
-	.name = xname, \
-	.info = profile_info, \
-	.get = profile_get, \
-	.put = profile_set, \
-}
-
 enum aw87390_id {
 	AW87390_CHIP_ID = 0x76,
 };
@@ -73,13 +64,6 @@ enum {
 enum {
 	AW87390_DEV_PW_OFF = 0,
 	AW87390_DEV_PW_ON,
-};
-
-struct aw87390 {
-	struct aw_device *aw_pa;
-	struct mutex lock;
-	struct regmap *regmap;
-	struct aw_container *aw_cfg;
 };
 
 #endif
