@@ -12,6 +12,14 @@ static inline bool is_tdx_vm(struct kvm_vm *vm)
 }
 
 /*
+ * Verify that TDX is supported by KVM.
+ */
+static inline bool is_tdx_enabled(void)
+{
+	return !!(kvm_check_cap(KVM_CAP_VM_TYPES) & BIT(KVM_X86_TDX_VM));
+}
+
+/*
  * TDX ioctls
  */
 
