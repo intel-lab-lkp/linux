@@ -2086,6 +2086,7 @@ static int samsung_dsim_parse_dt(struct samsung_dsim *dsi)
 		if (lane_polarities[1])
 			dsi->swap_dn_dp_data = true;
 	}
+	of_node_put(endpoint);
 
 	return 0;
 }
