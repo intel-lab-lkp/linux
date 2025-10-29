@@ -1778,6 +1778,13 @@ static void nfs_set_open_stateid_locked(struct nfs4_state *state,
 		if (nfs_stateid_is_sequential(state, stateid))
 			break;
 
+		if (nfs4_stateid_match_other(stateid, &state->open_stateid) &&
+		    !nfs4_stateid_is_newer(stateid, &state->open_stateid)) {
+			trace_nfs4_open_stateid_update_skip(state->inode,
+							    stateid, status);
+			return;
+		}
+
 		if (status)
 			break;
 		/* Rely on seqids for serialisation with NFSv4.0 */
