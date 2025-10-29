@@ -122,6 +122,7 @@ config ARM64
 	select ARCH_WANTS_NO_INSTR
 	select ARCH_WANTS_THP_SWAP if ARM64_4K_PAGES
 	select ARCH_HAS_UBSAN
+	select ARCH_HAS_LAZY_MMU_MODE
 	select ARM_AMBA
 	select ARM_ARCH_TIMER
 	select ARM_GIC
