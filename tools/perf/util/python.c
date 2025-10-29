@@ -15,6 +15,7 @@
 #include "evsel.h"
 #include "event.h"
 #include "expr.h"
+#include "pmus.h"
 #include "print_binary.h"
 #include "record.h"
 #include "strbuf.h"
