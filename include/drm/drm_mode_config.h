@@ -30,6 +30,7 @@
 #include <linux/llist.h>
 
 #include <drm/drm_modeset_lock.h>
+#include <drm/drm_plane.h>
 
 struct drm_file;
 struct drm_device;
@@ -982,5 +983,7 @@ static inline int drm_mode_config_init(struct drm_device *dev)
 
 void drm_mode_config_reset(struct drm_device *dev);
 void drm_mode_config_cleanup(struct drm_device *dev);
+
+const char *drm_get_plane_type_name(enum drm_plane_type type);
 
 #endif
