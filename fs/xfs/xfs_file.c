@@ -1119,6 +1119,9 @@ xfs_file_write_iter(
 		ret = xfs_file_dio_write(iocb, from);
 		if (ret != -ENOTBLK)
 			return ret;
+
+		iocb->ki_flags &= ~IOCB_DIRECT;
+		iocb->ki_flags |= IOCB_DONTCACHE;
 	}
 
 	if (xfs_is_zoned_inode(ip))
