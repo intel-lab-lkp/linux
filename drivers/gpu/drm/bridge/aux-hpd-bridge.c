@@ -12,6 +12,8 @@
 #include <drm/drm_bridge.h>
 #include <drm/bridge/aux-bridge.h>
 
+#include "aux-hpd-bridge.h"
+
 static DEFINE_IDA(drm_aux_hpd_bridge_ida);
 
 struct drm_aux_hpd_bridge_data {
@@ -204,7 +206,26 @@ static struct auxiliary_driver drm_aux_hpd_bridge_drv = {
 	.id_table = drm_aux_hpd_bridge_table,
 	.probe = drm_aux_hpd_bridge_probe,
 };
-module_auxiliary_driver(drm_aux_hpd_bridge_drv);
+
+static int drm_aux_hpd_bridge_mod_init(void)
+{
+	int ret;
+
+	ret = auxiliary_driver_register(&drm_aux_hpd_bridge_drv);
+	if (ret)
+		return ret;
+
+	return drm_aux_hpd_typec_dp_bridge_init();
+}
+
+static void drm_aux_hpd_bridge_mod_exit(void)
+{
+	drm_aux_hpd_typec_dp_bridge_exit();
+	auxiliary_driver_unregister(&drm_aux_hpd_bridge_drv);
+}
+
+module_init(drm_aux_hpd_bridge_mod_init);
+module_exit(drm_aux_hpd_bridge_mod_exit);
 
 MODULE_AUTHOR("Dmitry Baryshkov <dmitry.baryshkov@linaro.org>");
 MODULE_DESCRIPTION("DRM HPD bridge");

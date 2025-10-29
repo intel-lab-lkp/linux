@@ -23,12 +23,15 @@ config DRM_AUX_BRIDGE
 	  build bridges chain.
 
 config DRM_AUX_HPD_BRIDGE
-	tristate
+	tristate "AUX HPD bridge support"
 	depends on DRM_BRIDGE && OF
 	select AUXILIARY_BUS
 	help
 	  Simple bridge that terminates the bridge chain and provides HPD
 	  support.
+
+	  Specifically, if you want a default Type-C DisplayPort HPD bridge for
+	  each port of the Type-C controller, say Y here.
 
 menu "Display Interface Bridges"
 	depends on DRM && DRM_BRIDGE
