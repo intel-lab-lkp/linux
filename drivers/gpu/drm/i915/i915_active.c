@@ -725,8 +725,7 @@ int i915_request_await_active(struct i915_request *rq,
 
 static int sw_await_fence(void *arg, struct dma_fence *fence)
 {
-	return i915_sw_fence_await_dma_fence(arg, fence, 0,
-					     GFP_NOWAIT | __GFP_NOWARN);
+	return i915_sw_fence_await_dma_fence(arg, fence, 0, GFP_NOWAIT);
 }
 
 int i915_sw_fence_await_active(struct i915_sw_fence *fence,
