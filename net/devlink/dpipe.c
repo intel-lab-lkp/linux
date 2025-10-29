@@ -514,6 +514,9 @@ void devlink_dpipe_entry_clear(struct devlink_dpipe_entry *entry)
 	unsigned int value_count, value_index;
 	struct devlink_dpipe_value *value;
 
+	if (!entry)
+		return;
+
 	value = entry->action_values;
 	value_count = entry->action_values_count;
 	for (value_index = 0; value_index < value_count; value_index++) {
