@@ -183,7 +183,7 @@ static struct regmap *device_node_get_regmap(struct device_node *np,
 		if (create_regmap)
 			syscon = of_syscon_register(np, check_res);
 		else
-			syscon = ERR_PTR(-EINVAL);
+			syscon = ERR_PTR(-EPROBE_DEFER);
 	}
 	mutex_unlock(&syscon_list_lock);
 
@@ -271,7 +271,13 @@ EXPORT_SYMBOL_GPL(device_node_to_regmap);
  */
 struct regmap *syscon_node_to_regmap(struct device_node *np)
 {
-	return device_node_get_regmap(np, of_device_is_compatible(np, "syscon"), true);
+	bool create = false;
+
+	if (of_device_is_compatible(np, "syscon") &&
+	    !of_get_property(np, "no-auto-mmio", NULL))
+		create = true;
+
+	return device_node_get_regmap(np, create, true);
 }
 EXPORT_SYMBOL_GPL(syscon_node_to_regmap);
 
