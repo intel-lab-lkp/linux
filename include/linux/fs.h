@@ -128,9 +128,8 @@ typedef int (dio_iodone_t)(struct kiocb *iocb, loff_t offset,
 #define FMODE_WRITE_RESTRICTED	((__force fmode_t)(1 << 6))
 /* File supports atomic writes */
 #define FMODE_CAN_ATOMIC_WRITE	((__force fmode_t)(1 << 7))
-
-/* FMODE_* bit 8 */
-
+/* Supports non-exclusive O_DIRECT writes from multiple threads */
+#define FMODE_DIO_PARALLEL_WRITE ((__force fmode_t)(1 << 8))
 /* 32bit hashes as llseek() offset (for directories) */
 #define FMODE_32BITHASH         ((__force fmode_t)(1 << 9))
 /* 64bit hashes as llseek() offset (for directories) */
@@ -2317,8 +2316,6 @@ struct file_operations {
 #define FOP_BUFFER_WASYNC	((__force fop_flags_t)(1 << 1))
 /* Supports synchronous page faults for mappings */
 #define FOP_MMAP_SYNC		((__force fop_flags_t)(1 << 2))
-/* Supports non-exclusive O_DIRECT writes from multiple threads */
-#define FOP_DIO_PARALLEL_WRITE	((__force fop_flags_t)(1 << 3))
 /* Contains huge pages */
 #define FOP_HUGE_PAGES		((__force fop_flags_t)(1 << 4))
 /* Treat loff_t as unsigned (e.g., /dev/mem) */
