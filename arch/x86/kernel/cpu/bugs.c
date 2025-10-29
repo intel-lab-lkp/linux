@@ -197,8 +197,8 @@ DEFINE_STATIC_KEY_FALSE(switch_mm_cond_l1d_flush);
  * X86_FEATURE_CLEAR_CPU_BUF_VM, and should only be enabled when KVM-only
  * mitigation is required.
  */
-DEFINE_STATIC_KEY_FALSE(cpu_buf_vm_clear);
-EXPORT_SYMBOL_GPL(cpu_buf_vm_clear);
+DEFINE_STATIC_KEY_FALSE(cpu_buf_vm_clear_mmio_only);
+EXPORT_SYMBOL_GPL(cpu_buf_vm_clear_mmio_only);
 
 #undef pr_fmt
 #define pr_fmt(fmt)	"mitigations: " fmt
@@ -750,9 +750,9 @@ static void __init mmio_apply_mitigation(void)
 	 */
 	if (verw_clear_cpu_buf_mitigation_selected) {
 		setup_force_cpu_cap(X86_FEATURE_CLEAR_CPU_BUF);
-		static_branch_disable(&cpu_buf_vm_clear);
+		static_branch_disable(&cpu_buf_vm_clear_mmio_only);
 	} else {
-		static_branch_enable(&cpu_buf_vm_clear);
+		static_branch_enable(&cpu_buf_vm_clear_mmio_only);
 	}
 	setup_force_cpu_cap(X86_FEATURE_CLEAR_CPU_BUF_VM);
 
