@@ -179,6 +179,9 @@ __always_inline int decode_bug(unsigned long addr, s32 *imm, int *len)
 	if (X86_MODRM_REG(v) == 0)	/* EAX */
 		return BUG_UD1_UBSAN;
 
+	if (X86_MODRM_REG(v) == 1)	/* ECX */
+		return BUG_UD1_KASAN;
+
 	return BUG_UD1;
 }
 
@@ -355,6 +358,11 @@ static noinstr bool handle_bug(struct pt_regs *regs)
 				report_ubsan_failure(ud_imm),
 				(void *)regs->ip);
 		}
+		break;
+
+	case BUG_UD1_KASAN:
+		kasan_inline_handler(regs);
+		handled = true;
 		break;
 
 	default:

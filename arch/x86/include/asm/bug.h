@@ -31,6 +31,7 @@
 #define BUG_UD2			0xfffe
 #define BUG_UD1			0xfffd
 #define BUG_UD1_UBSAN		0xfffc
+#define BUG_UD1_KASAN		0xfffb
 #define BUG_UDB			0xffd6
 #define BUG_LOCK		0xfff0
 
