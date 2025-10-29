@@ -48,6 +48,9 @@
 #define ATH11K_INVALID_HW_MAC_ID	0xFF
 #define ATH11K_CONNECTION_LOSS_HZ	(3 * HZ)
 
+#define	ATH11K_QCN6122_USERPD_2		1
+#define	ATH11K_QCN6122_USERPD_3		2
+
 /* SMBIOS type containing Board Data File Name Extension */
 #define ATH11K_SMBIOS_BDF_EXT_TYPE 0xF8
 
@@ -969,6 +972,7 @@ struct ath11k_base {
 	struct list_head peers;
 	wait_queue_head_t peer_mapping_wq;
 	u8 mac_addr[ETH_ALEN];
+	int userpd_id;
 	int irq_num[ATH11K_IRQ_NUM_MAX];
 	struct ath11k_ext_irq_grp ext_irq_grp[ATH11K_EXT_IRQ_GRP_NUM_MAX];
 	struct ath11k_targ_cap target_caps;

@@ -429,6 +429,7 @@ static void ath11k_ahb_init_qmi_ce_config(struct ath11k_base *ab)
 	cfg->svc_to_ce_map_len = ab->hw_params.svc_to_ce_map_len;
 	cfg->svc_to_ce_map = ab->hw_params.svc_to_ce_map;
 	ab->qmi.service_ins_id = ab->hw_params.qmi_service_ins_id;
+	ab->qmi.service_ins_id += ab->userpd_id;
 }
 
 static void ath11k_ahb_free_ext_irq(struct ath11k_base *ab)
@@ -1101,6 +1102,28 @@ err_unregister:
 	return ret;
 }
 
+static int ath11k_get_userpd_id(struct device *dev, int *userpd)
+{
+	int ret, userpd_id;
+
+	ret = of_property_read_u32(dev->of_node, "qcom,userpd", &userpd_id);
+
+	if (ret)
+		return ret;
+
+	switch (userpd_id) {
+	case 2:
+		*userpd = ATH11K_QCN6122_USERPD_2;
+		break;
+	case 3:
+		*userpd = ATH11K_QCN6122_USERPD_3;
+		break;
+	default:
+		return -EINVAL;
+	}
+	return 0;
+}
+
 static int ath11k_ahb_fw_resource_deinit(struct ath11k_base *ab)
 {
 	struct ath11k_ahb *ab_ahb = ath11k_ahb_priv(ab);
@@ -1142,6 +1165,7 @@ static int ath11k_ahb_probe(struct platform_device *pdev)
 	const struct ath11k_hif_ops *hif_ops;
 	const struct ath11k_pci_ops *pci_ops;
 	enum ath11k_hw_rev hw_rev;
+	int userpd_id = 0;
 	int ret;
 
 	hw_rev = (uintptr_t)device_get_match_data(&pdev->dev);
@@ -1160,6 +1184,12 @@ static int ath11k_ahb_probe(struct platform_device *pdev)
 	case ATH11K_HW_QCN6122_HW10:
 		hif_ops = &ath11k_ahb_hif_ops_qcn6122;
 		pci_ops = &ath11k_ahb_pci_ops_wcn6750;
+		ret = ath11k_get_userpd_id(&pdev->dev, &userpd_id);
+		if (ret) {
+			dev_err(&pdev->dev, "failed to get userpd: %d\n", ret);
+			return ret;
+		}
+		dev_info(&pdev->dev, "multi-pd architecture - userpd: %d\n", userpd_id);
 		break;
 	default:
 		dev_err(&pdev->dev, "unsupported device type %d\n", hw_rev);
@@ -1182,6 +1212,7 @@ static int ath11k_ahb_probe(struct platform_device *pdev)
 	ab->hif.ops = hif_ops;
 	ab->pdev = pdev;
 	ab->hw_rev = hw_rev;
+	ab->userpd_id = userpd_id;
 	ab->fw_mode = ATH11K_FIRMWARE_MODE_NORMAL;
 	platform_set_drvdata(pdev, ab);
 
