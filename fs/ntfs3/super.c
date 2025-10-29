@@ -705,7 +705,6 @@ static void ntfs_put_super(struct super_block *sb)
 
 	if (sbi->options) {
 		unload_nls(sbi->options->nls);
-		kfree(sbi->options->nls);
 		kfree(sbi->options);
 		sbi->options = NULL;
 	}
