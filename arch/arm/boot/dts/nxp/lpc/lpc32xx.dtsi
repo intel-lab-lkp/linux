@@ -155,7 +155,7 @@
 			reg = <0x31080000 0x1000>;
 			clocks = <&clk LPC32XX_CLK_DDRAM>, <&clk LPC32XX_CLK_DDRAM>;
 			clock-names = "mpmcclk", "apb_pclk";
-			#address-cells = <1>;
+			#address-cells = <2>;
 			#size-cells = <1>;
 
 			ranges = <0 0xe0000000 0x01000000>,
