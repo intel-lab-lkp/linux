@@ -20,9 +20,6 @@ static inline unsigned int regcache_flat_get_index(const struct regmap *map,
 
 static int regcache_flat_init(struct regmap *map)
 {
-	int i;
-	unsigned int *cache;
-
 	if (!map || map->reg_stride_order < 0 || !map->max_register_is_set)
 		return -EINVAL;
 
@@ -31,15 +28,6 @@ static int regcache_flat_init(struct regmap *map)
 	if (!map->cache)
 		return -ENOMEM;
 
-	cache = map->cache;
-
-	for (i = 0; i < map->num_reg_defaults; i++) {
-		unsigned int reg = map->reg_defaults[i].reg;
-		unsigned int index = regcache_flat_get_index(map, reg);
-
-		cache[index] = map->reg_defaults[i].def;
-	}
-
 	return 0;
 }
 
@@ -47,6 +35,21 @@ static int regcache_flat_exit(struct regmap *map)
 {
 	kfree(map->cache);
 	map->cache = NULL;
+
+	return 0;
+}
+
+static int regcache_flat_populate(struct regmap *map)
+{
+	unsigned int *cache = map->cache;
+	unsigned int i;
+
+	for (i = 0; i < map->num_reg_defaults; i++) {
+		unsigned int reg = map->reg_defaults[i].reg;
+		unsigned int index = regcache_flat_get_index(map, reg);
+
+		cache[index] = map->reg_defaults[i].def;
+	}
 
 	return 0;
 }
@@ -78,6 +81,7 @@ struct regcache_ops regcache_flat_ops = {
 	.name = "flat",
 	.init = regcache_flat_init,
 	.exit = regcache_flat_exit,
+	.populate = regcache_flat_populate,
 	.read = regcache_flat_read,
 	.write = regcache_flat_write,
 };
