@@ -230,6 +230,12 @@ xfs_file_dio_read(
 	struct xfs_inode	*ip = XFS_I(file_inode(iocb->ki_filp));
 	ssize_t			ret;
 
+	if (mapping_stable_writes(iocb->ki_filp->f_mapping)) {
+		xfs_info_once(ip->i_mount,
+			"falling back from direct to buffered I/O for read");
+		return -ENOTBLK;
+	}
+
 	trace_xfs_file_direct_read(iocb, to);
 
 	if (!iov_iter_count(to))
@@ -302,13 +308,22 @@ xfs_file_read_iter(
 	if (xfs_is_shutdown(mp))
 		return -EIO;
 
-	if (IS_DAX(inode))
+	if (IS_DAX(inode)) {
 		ret = xfs_file_dax_read(iocb, to);
-	else if (iocb->ki_flags & IOCB_DIRECT)
-		ret = xfs_file_dio_read(iocb, to);
-	else
-		ret = xfs_file_buffered_read(iocb, to);
+		goto done;
+	}
 
+	if (iocb->ki_flags & IOCB_DIRECT) {
+		ret = xfs_file_dio_read(iocb, to);
+		if (ret != -ENOTBLK)
+			goto done;
+
+		iocb->ki_flags &= ~IOCB_DIRECT;
+		iocb->ki_flags |= IOCB_DONTCACHE;
+	}
+
+	ret = xfs_file_buffered_read(iocb, to);
+done:
 	if (ret > 0)
 		XFS_STATS_ADD(mp, xs_read_bytes, ret);
 	return ret;
@@ -883,6 +898,7 @@ xfs_file_dio_write(
 	struct iov_iter		*from)
 {
 	struct xfs_inode	*ip = XFS_I(file_inode(iocb->ki_filp));
+	struct xfs_mount	*mp = ip->i_mount;
 	struct xfs_buftarg      *target = xfs_inode_buftarg(ip);
 	size_t			count = iov_iter_count(from);
 
@@ -890,15 +906,21 @@ xfs_file_dio_write(
 	if ((iocb->ki_pos | count) & target->bt_logical_sectormask)
 		return -EINVAL;
 
+	if (mapping_stable_writes(iocb->ki_filp->f_mapping)) {
+		xfs_info_once(mp,
+			"falling back from direct to buffered I/O for write");
+		return -ENOTBLK;
+	}
+
 	/*
 	 * For always COW inodes we also must check the alignment of each
 	 * individual iovec segment, as they could end up with different
 	 * I/Os due to the way bio_iov_iter_get_pages works, and we'd
 	 * then overwrite an already written block.
 	 */
-	if (((iocb->ki_pos | count) & ip->i_mount->m_blockmask) ||
+	if (((iocb->ki_pos | count) & mp->m_blockmask) ||
 	    (xfs_is_always_cow_inode(ip) &&
-	     (iov_iter_alignment(from) & ip->i_mount->m_blockmask)))
+	     (iov_iter_alignment(from) & mp->m_blockmask)))
 		return xfs_file_dio_write_unaligned(ip, iocb, from);
 	if (xfs_is_zoned_inode(ip))
 		return xfs_file_dio_write_zoned(ip, iocb, from);
@@ -1555,10 +1577,24 @@ xfs_file_open(
 {
 	if (xfs_is_shutdown(XFS_M(inode->i_sb)))
 		return -EIO;
+
+	/*
+	 * If the underlying devices requires stable writes, we have to fall
+	 * back to (uncached) buffered I/O for direct I/O reads and writes, as
+	 * the kernel can't prevent applications from modifying the memory under
+	 * I/O.  We still claim to support O_DIRECT as we want opens for that to
+	 * succeed and fall back.
+	 *
+	 * As atomic writes are only supported for direct I/O, they can't be
+	 * supported either in this case.
+	 */
 	file->f_mode |= FMODE_NOWAIT | FMODE_CAN_ODIRECT;
-	file->f_mode |= FMODE_DIO_PARALLEL_WRITE;
-	if (xfs_get_atomic_write_min(XFS_I(inode)) > 0)
-		file->f_mode |= FMODE_CAN_ATOMIC_WRITE;
+	if (!mapping_stable_writes(file->f_mapping)) {
+		file->f_mode |= FMODE_DIO_PARALLEL_WRITE;
+		if (xfs_get_atomic_write_min(XFS_I(inode)) > 0)
+			file->f_mode |= FMODE_CAN_ATOMIC_WRITE;
+	}
+
 	return generic_file_open(inode, file);
 }
 

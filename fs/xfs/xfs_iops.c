@@ -672,6 +672,12 @@ xfs_report_atomic_write(
 	struct xfs_inode	*ip,
 	struct kstat		*stat)
 {
+	/*
+	 * If the stable writes flag is set, we have to fall back to buffered
+	 * I/O, which doesn't support atomic writes.
+	 */
+	if (mapping_stable_writes(VFS_I(ip)->i_mapping))
+		return;
 	generic_fill_statx_atomic_writes(stat,
 			xfs_get_atomic_write_min(ip),
 			xfs_get_atomic_write_max(ip),
