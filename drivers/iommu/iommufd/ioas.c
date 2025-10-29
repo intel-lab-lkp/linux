@@ -247,6 +247,32 @@ out_put:
 	return rc;
 }
 
+/**
+ * iommufd_check_vm_pfnmap - Check if a user address has the VM_PFNMAP flag set
+ * @vaddr: User virtual address to check
+ *
+ * This function checks if the VMA (Virtual Memory Area) containing the given
+ * virtual address has the VM_PFNMAP flag set. This flag is typically used for
+ * memory regions that directly map hardware resources (e.g., PCI BARs).
+ *
+ * Returns: true if VM_PFNMAP is set, false otherwise.
+ */
+static bool iommufd_check_vm_pfnmap(unsigned long vaddr)
+{
+	struct mm_struct *mm = current->mm;
+	struct vm_area_struct *vma;
+	bool ret = false;
+
+	mmap_read_lock(mm);
+	vaddr = untagged_addr_remote(mm, vaddr);
+	vma = vma_lookup(mm, vaddr);
+	if (vma && vma->vm_flags & VM_PFNMAP)
+		ret = true;
+	mmap_read_unlock(mm);
+
+	return ret;
+}
+
 int iommufd_ioas_map(struct iommufd_ucmd *ucmd)
 {
 	struct iommu_ioas_map *cmd = ucmd->cmd;
@@ -259,6 +285,8 @@ int iommufd_ioas_map(struct iommufd_ucmd *ucmd)
 	     ~(IOMMU_IOAS_MAP_FIXED_IOVA | IOMMU_IOAS_MAP_WRITEABLE |
 	       IOMMU_IOAS_MAP_READABLE)) ||
 	    cmd->__reserved)
+		return -EOPNOTSUPP;
+	if (iommufd_check_vm_pfnmap(cmd->user_va))
 		return -EOPNOTSUPP;
 	if (cmd->iova >= ULONG_MAX || cmd->length >= ULONG_MAX)
 		return -EOVERFLOW;
