@@ -133,8 +133,13 @@ static int fwnode_reset_phy(struct mii_bus *bus, u32 addr,
 		return rc;
 	}
 
-	mdio_device_reset(tmpdev, 1);
-	mdio_device_reset(tmpdev, 0);
+	if (mdio_device_has_reset(tmpdev)) {
+		dev_info(&bus->dev,
+			 "PHY device at address %d not detected, resetting PHY.\n",
+			 addr);
+		mdio_device_reset(tmpdev, 1);
+		mdio_device_reset(tmpdev, 0);
+	}
 
 	mdio_device_unregister_reset(tmpdev);
 	mdio_device_free(tmpdev);
