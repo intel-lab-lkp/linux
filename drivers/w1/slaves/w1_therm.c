@@ -1836,59 +1836,32 @@ static ssize_t alarms_store(struct device *device,
 	struct w1_slave *sl = dev_to_w1_slave(device);
 	struct therm_info info;
 	u8 new_config_register[3];	/* array of data to be written */
-	int temp, ret;
-	char *token = NULL;
+	long temp;
+	int ret;
 	s8 tl, th;	/* 1 byte per value + temp ring order */
-	char *p_args, *orig;
+	const char *p = buf;
+	char *endp;
 
-	p_args = orig = kmalloc(size, GFP_KERNEL);
-	/* Safe string copys as buf is const */
-	if (!p_args) {
-		dev_warn(device,
-			"%s: error unable to allocate memory %d\n",
-			__func__, -ENOMEM);
-		return size;
+	temp = simple_strtol(p, &endp, 10);
+	if (p == endp || *endp != ' ') {
+		dev_info(device, "%s: error parsing args %d\n",
+			 __func__, -EINVAL);
+		goto err;
 	}
-	strcpy(p_args, buf);
-
-	/* Split string using space char */
-	token = strsep(&p_args, " ");
-
-	if (!token)	{
-		dev_info(device,
-			"%s: error parsing args %d\n", __func__, -EINVAL);
-		goto free_m;
-	}
-
-	/* Convert 1st entry to int */
-	ret = kstrtoint (token, 10, &temp);
-	if (ret) {
-		dev_info(device,
-			"%s: error parsing args %d\n", __func__, ret);
-		goto free_m;
-	}
-
+	/* Cast to short to eliminate out of range values */
 	tl = int_to_short(temp);
 
-	/* Split string using space char */
-	token = strsep(&p_args, " ");
-	if (!token)	{
-		dev_info(device,
-			"%s: error parsing args %d\n", __func__, -EINVAL);
-		goto free_m;
+	p = endp + 1;
+	temp = simple_strtol(p, &endp, 10);
+	if (p == endp) {
+		dev_info(device, "%s: error parsing args %d\n",
+			 __func__, -EINVAL);
+		goto err;
 	}
-	/* Convert 2nd entry to int */
-	ret = kstrtoint (token, 10, &temp);
-	if (ret) {
-		dev_info(device,
-			"%s: error parsing args %d\n", __func__, ret);
-		goto free_m;
-	}
-
-	/* Prepare to cast to short by eliminating out of range values */
+	/* Cast to short to eliminate out of range values */
 	th = int_to_short(temp);
 
-	/* Reorder if required th and tl */
+	/* Reorder if required */
 	if (tl > th)
 		swap(tl, th);
 
@@ -1897,35 +1870,30 @@ static ssize_t alarms_store(struct device *device,
 	 * (th : byte 2 - tl: byte 3)
 	 */
 	ret = read_scratchpad(sl, &info);
-	if (!ret) {
-		new_config_register[0] = th;	/* Byte 2 */
-		new_config_register[1] = tl;	/* Byte 3 */
-		new_config_register[2] = info.rom[4];/* Byte 4 */
-	} else {
-		dev_info(device,
-			"%s: error reading from the slave device %d\n",
-			__func__, ret);
-		goto free_m;
+	if (ret) {
+		dev_info(device, "%s: error reading from the slave device %d\n",
+			 __func__, ret);
+		goto err;
 	}
+	new_config_register[0] = th;		/* Byte 2 */
+	new_config_register[1] = tl;		/* Byte 3 */
+	new_config_register[2] = info.rom[4];	/* Byte 4 */
 
 	/* Write data in the device RAM */
 	if (!SLAVE_SPECIFIC_FUNC(sl)) {
-		dev_info(device,
-			"%s: Device not supported by the driver %d\n",
-			__func__, -ENODEV);
-		goto free_m;
+		dev_info(device, "%s: Device not supported by the driver %d\n",
+			 __func__, -ENODEV);
+		goto err;
 	}
 
 	ret = SLAVE_SPECIFIC_FUNC(sl)->write_data(sl, new_config_register);
-	if (ret)
-		dev_info(device,
-			"%s: error writing to the slave device %d\n",
+	if (ret) {
+		dev_info(device, "%s: error writing to the slave device %d\n",
 			__func__, ret);
+		goto err;
+	}
 
-free_m:
-	/* free allocated memory */
-	kfree(orig);
-
+err:
 	return size;
 }
 
