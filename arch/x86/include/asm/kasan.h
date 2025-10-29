@@ -7,6 +7,7 @@
 #include <linux/types.h>
 #define KASAN_SHADOW_OFFSET _AC(CONFIG_KASAN_SHADOW_OFFSET, UL)
 
+#ifdef CONFIG_KASAN_SW_TAGS
 /*
  * LLVM ABI for reporting tag mismatches in inline KASAN mode.
  * On x86 the UD1 instruction is used to carry metadata in the ECX register
@@ -24,7 +25,10 @@
 #define KASAN_ECX_WRITE		0x10
 #define KASAN_ECX_SIZE_MASK	0x0f
 #define KASAN_ECX_SIZE(ecx)	(1 << ((ecx) & KASAN_ECX_SIZE_MASK))
+#define KASAN_SHADOW_SCALE_SHIFT 4
+#else
 #define KASAN_SHADOW_SCALE_SHIFT 3
+#endif
 
 /*
  * Compiler uses shadow offset assuming that addresses start
