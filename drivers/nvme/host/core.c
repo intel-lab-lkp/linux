@@ -685,6 +685,7 @@ static void nvme_free_ns(struct kref *kref)
 {
 	struct nvme_ns *ns = container_of(kref, struct nvme_ns, kref);
 
+	blk_put_queue(ns->ctrl->admin_q);
 	put_disk(ns->disk);
 	nvme_put_ns_head(ns->head);
 	nvme_put_ctrl(ns->ctrl);
@@ -3883,9 +3884,14 @@ static void nvme_alloc_ns(struct nvme_ctrl *ctrl, struct nvme_ns_info *info)
 	struct gendisk *disk;
 	int node = ctrl->numa_node;
 
+	if (!blk_get_queue(ctrl->admin_q)) {
+		dev_err(ctrl->device, "failed to get admin_q %p\n", ctrl->admin_q);
+		return;
+	}
+
 	ns = kzalloc_node(sizeof(*ns), GFP_KERNEL, node);
 	if (!ns)
-		return;
+		goto out_put_admin_q;
 
 	if (ctrl->opts && ctrl->opts->data_digest)
 		lim.features |= BLK_FEAT_STABLE_WRITES;
@@ -3982,6 +3988,8 @@ static void nvme_alloc_ns(struct nvme_ctrl *ctrl, struct nvme_ns_info *info)
 	put_disk(disk);
  out_free_ns:
 	kfree(ns);
+ out_put_admin_q:
+	blk_put_queue(ctrl->admin_q);
 }
 
 static void nvme_ns_remove(struct nvme_ns *ns)
