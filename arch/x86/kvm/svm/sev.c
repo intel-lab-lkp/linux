@@ -56,6 +56,11 @@ module_param_named(sev_snp, sev_snp_enabled, bool, 0444);
 /* enable/disable SEV-ES DebugSwap support */
 static bool sev_es_debug_swap_enabled = true;
 module_param_named(debug_swap, sev_es_debug_swap_enabled, bool, 0444);
+
+/* enable/disable Secure TSC support */
+static bool sev_snp_secure_tsc_enabled = true;
+module_param_named(secure_tsc, sev_snp_secure_tsc_enabled, bool, 0444);
+
 static u64 sev_supported_vmsa_features;
 
 static unsigned int nr_ciphertext_hiding_asids;
@@ -3147,8 +3152,11 @@ out:
 	if (sev_es_debug_swap_enabled)
 		sev_supported_vmsa_features |= SVM_SEV_FEAT_DEBUG_SWAP;
 
-	if (sev_snp_enabled && tsc_khz && cpu_feature_enabled(X86_FEATURE_SNP_SECURE_TSC))
+	if (sev_snp_enabled && sev_snp_secure_tsc_enabled &&
+	    tsc_khz && cpu_feature_enabled(X86_FEATURE_SNP_SECURE_TSC))
 		sev_supported_vmsa_features |= SVM_SEV_FEAT_SECURE_TSC;
+	else
+		sev_snp_secure_tsc_enabled = false;
 }
 
 void sev_hardware_unsetup(void)
