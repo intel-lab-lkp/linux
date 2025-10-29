@@ -254,7 +254,7 @@ SECTION_DEFAULT = "Description"  # default section
 
 class KernelEntry:
 
-    def __init__(self, config, ln):
+    def __init__(self, config, fname, ln):
         self.config = config
 
         self._contents = []
@@ -274,6 +274,8 @@ class KernelEntry:
 
         self.leading_space = None
 
+        self.fname = fname
+
         # State flags
         self.brcount = 0
         self.declaration_start_line = ln + 1
@@ -288,8 +290,10 @@ class KernelEntry:
         return '\n'.join(self._contents) + '\n'
 
     # TODO: rename to emit_message after removal of kernel-doc.pl
-    def emit_msg(self, log_msg, warning=True):
+    def emit_msg(self, ln, msg, *, warning=True):
         """Emit a message"""
+
+        log_msg = f"{self.fname}:{ln} {msg}"
 
         if not warning:
             self.config.log.info(log_msg)
@@ -336,7 +340,7 @@ class KernelEntry:
                 # Only warn on user-specified duplicate section names
                 if name != SECTION_DEFAULT:
                     self.emit_msg(self.new_start_line,
-                                  f"duplicate section name '{name}'\n")
+                                  f"duplicate section name '{name}'")
                 # Treat as a new paragraph - add a blank line
                 self.sections[name] += '\n' + contents
             else:
@@ -387,14 +391,14 @@ class KernelDoc:
             self.emit_msg(0,
                           'Python 3.7 or later is required for correct results')
 
-    def emit_msg(self, ln, msg, warning=True):
+    def emit_msg(self, ln, msg, *, warning=True):
         """Emit a message"""
 
-        log_msg = f"{self.fname}:{ln} {msg}"
-
         if self.entry:
-            self.entry.emit_msg(log_msg, warning)
+            self.entry.emit_msg(ln, msg, warning=warning)
             return
+
+        log_msg = f"{self.fname}:{ln} {msg}"
 
         if warning:
             self.config.log.warning(log_msg)
@@ -440,7 +444,7 @@ class KernelDoc:
         variables used by the state machine.
         """
 
-        self.entry = KernelEntry(self.config, ln)
+        self.entry = KernelEntry(self.config, self.fname, ln)
 
         # State flags
         self.state = state.NORMAL
