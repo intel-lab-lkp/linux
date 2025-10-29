@@ -762,6 +762,18 @@ static int ath11k_ahb_hif_resume(struct ath11k_base *ab)
 	return 0;
 }
 
+static void ath11k_ahb_config_static_window_qcn6122(struct ath11k_base *ab)
+{
+	u32 umac_window = FIELD_GET(ATH11K_PCI_WINDOW_VALUE_MASK, HAL_SEQ_WCSS_UMAC_OFFSET);
+	u32 ce_window = FIELD_GET(ATH11K_PCI_WINDOW_VALUE_MASK, HAL_CE_WFSS_CE_REG_BASE);
+	u32 window;
+
+	window = (umac_window) | (ce_window << 6);
+
+	iowrite32(ATH11K_PCI_WINDOW_ENABLE_BIT | window,
+		  ab->mem + ATH11K_PCI_WINDOW_REG_ADDRESS);
+}
+
 static const struct ath11k_hif_ops ath11k_ahb_hif_ops_ipq8074 = {
 	.start = ath11k_ahb_start,
 	.stop = ath11k_ahb_stop,
@@ -792,6 +804,24 @@ static const struct ath11k_hif_ops ath11k_ahb_hif_ops_wcn6750 = {
 	.resume = ath11k_ahb_hif_resume,
 	.ce_irq_enable = ath11k_pci_enable_ce_irqs_except_wake_irq,
 	.ce_irq_disable = ath11k_pci_disable_ce_irqs_except_wake_irq,
+};
+
+static const struct ath11k_hif_ops ath11k_ahb_hif_ops_qcn6122 = {
+	.start = ath11k_pcic_start,
+	.stop = ath11k_pcic_stop,
+	.read32 = ath11k_pcic_read32,
+	.write32 = ath11k_pcic_write32,
+	.read = NULL,
+	.irq_enable = ath11k_pcic_ext_irq_enable,
+	.irq_disable = ath11k_pcic_ext_irq_disable,
+	.get_msi_address =  ath11k_pcic_get_msi_address,
+	.get_user_msi_vector = ath11k_pcic_get_user_msi_assignment,
+	.map_service_to_pipe = ath11k_pcic_map_service_to_pipe,
+	.power_down = ath11k_ahb_power_down,
+	.power_up = ath11k_ahb_power_up,
+	.ce_irq_enable = ath11k_pci_enable_ce_irqs_except_wake_irq,
+	.ce_irq_disable = ath11k_pci_disable_ce_irqs_except_wake_irq,
+	.config_static_window = ath11k_ahb_config_static_window_qcn6122,
 };
 
 static int ath11k_core_get_rproc(struct ath11k_base *ab)
@@ -1125,6 +1155,10 @@ static int ath11k_ahb_probe(struct platform_device *pdev)
 		break;
 	case ATH11K_HW_WCN6750_HW10:
 		hif_ops = &ath11k_ahb_hif_ops_wcn6750;
+		pci_ops = &ath11k_ahb_pci_ops_wcn6750;
+		break;
+	case ATH11K_HW_QCN6122_HW10:
+		hif_ops = &ath11k_ahb_hif_ops_qcn6122;
 		pci_ops = &ath11k_ahb_pci_ops_wcn6750;
 		break;
 	default:
