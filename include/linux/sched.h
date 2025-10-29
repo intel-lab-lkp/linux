@@ -1441,6 +1441,10 @@ struct task_struct {
 
 	struct page_frag		task_frag;
 
+#ifdef CONFIG_ARCH_HAS_LAZY_MMU_MODE
+	struct lazy_mmu_state		lazy_mmu_state;
+#endif
+
 #ifdef CONFIG_TASK_DELAY_ACCT
 	struct task_delay_info		*delays;
 #endif
@@ -1723,6 +1727,18 @@ static inline char task_state_to_char(struct task_struct *tsk)
 {
 	return task_index_to_char(task_state_index(tsk));
 }
+
+#ifdef CONFIG_ARCH_HAS_LAZY_MMU_MODE
+static inline bool in_lazy_mmu_mode(void)
+{
+	return current->lazy_mmu_state.active;
+}
+#else
+static inline bool in_lazy_mmu_mode(void)
+{
+	return false;
+}
+#endif
 
 extern struct pid *cad_pid;
 

@@ -88,4 +88,9 @@ struct tlbflush_unmap_batch {
 #endif
 };
 
+struct lazy_mmu_state {
+	u8 nesting_level;
+	bool active;
+};
+
 #endif /* _LINUX_MM_TYPES_TASK_H */
