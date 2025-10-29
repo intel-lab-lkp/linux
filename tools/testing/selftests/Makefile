@@ -78,6 +78,7 @@ TARGETS += net/ovpn
 TARGETS += net/packetdrill
 TARGETS += net/rds
 TARGETS += net/tcp_ao
+TARGETS += net/ynl
 TARGETS += nolibc
 TARGETS += nsfs
 TARGETS += pci_endpoint
