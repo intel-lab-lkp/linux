@@ -340,9 +340,22 @@ nfsd4_scsi_fence_client(struct nfs4_layout_stateid *ls, struct nfsd_file *file)
 {
 	struct nfs4_client *clp = ls->ls_stid.sc_client;
 	struct block_device *bdev = file->nf_file->f_path.mnt->mnt_sb->s_bdev;
+	int error;
 
-	bdev->bd_disk->fops->pr_ops->pr_preempt(bdev, NFSD_MDS_PR_KEY,
-			nfsd4_scsi_pr_key(clp), 0, true);
+	if (ls->ls_fenced)
+		return;
+	ls->ls_fenced = true;
+	error = bdev->bd_disk->fops->pr_ops->pr_preempt(bdev, NFSD_MDS_PR_KEY,
+			nfsd4_scsi_pr_key(clp),
+			PR_EXCLUSIVE_ACCESS_REG_ONLY, true);
+	if (error) {
+		char addr_str[INET6_ADDRSTRLEN];
+
+		ls->ls_fenced = false;
+		rpc_ntop((struct sockaddr *)&clp->cl_addr, addr_str, sizeof(addr_str));
+		dprintk("nfsd: failed to fence client %s error %d\n",
+			addr_str, error);
+	}
 }
 
 const struct nfsd4_layout_ops scsi_layout_ops = {
