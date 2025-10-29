@@ -2836,6 +2836,13 @@ static int ksz886x_cable_test_get_status(struct phy_device *phydev,
 #define LAN8814_PAGE_PCS_DIGITAL 2
 
 /**
+ * LAN8814_PAGE_EEE - Selects Extended Page 3.
+ *
+ * This page contains EEE registers
+ */
+#define LAN8814_PAGE_EEE 3
+
+/**
  * LAN8814_PAGE_COMMON_REGS - Selects Extended Page 4.
  *
  * This page contains device-common registers that affect the entire chip.
@@ -5952,6 +5959,9 @@ static int lan8842_probe(struct phy_device *phydev)
 
 #define LAN8814_POWER_MGMT_VAL5		LAN8814_POWER_MGMT_B_C_D
 
+#define LAN8814_EEE_WAKE_TX_TIMER			0x0e
+#define LAN8814_EEE_WAKE_TX_TIMER_MAX_VAL		0x1f
+
 static int lan8842_erratas(struct phy_device *phydev)
 {
 	int ret;
@@ -6023,9 +6033,16 @@ static int lan8842_erratas(struct phy_device *phydev)
 	if (ret < 0)
 		return ret;
 
-	return lanphy_write_page_reg(phydev, LAN8814_PAGE_POWER_REGS,
-				     LAN8814_POWER_MGMT_MODE_14_100BTX_EEE_TX_RX,
-				     LAN8814_POWER_MGMT_VAL4);
+	ret = lanphy_write_page_reg(phydev, LAN8814_PAGE_POWER_REGS,
+				    LAN8814_POWER_MGMT_MODE_14_100BTX_EEE_TX_RX,
+				    LAN8814_POWER_MGMT_VAL4);
+	if (ret < 0)
+		return ret;
+
+	/* Refresh time Waketx timer */
+	return lanphy_write_page_reg(phydev, LAN8814_PAGE_EEE,
+				     LAN8814_EEE_WAKE_TX_TIMER,
+				     LAN8814_EEE_WAKE_TX_TIMER_MAX_VAL);
 }
 
 static int lan8842_config_init(struct phy_device *phydev)
