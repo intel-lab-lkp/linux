@@ -230,7 +230,76 @@ impl<'a, T: ?Sized, B: Backend> Guard<'a, T, B> {
         self.lock
     }
 
-    pub(crate) fn do_unlocked<U>(&mut self, cb: impl FnOnce() -> U) -> U {
+    /// Releases this [`Guard`]'s lock temporarily, executes `cb` and then re-acquires it.
+    ///
+    /// This can be useful for situations where you may need to do a temporary unlock dance to avoid
+    /// issues like circular locking dependencies.
+    ///
+    /// It returns the value returned by the closure.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// # use kernel::{
+    /// #     new_mutex,
+    /// #     sync::{lock::{Backend, Guard, Lock}, Arc, Mutex, Completion},
+    /// #     workqueue::{self, impl_has_work, new_work, Work, WorkItem},
+    /// # };
+    /// #[pin_data]
+    /// struct ExampleWork {
+    ///     #[pin]
+    ///     work: Work<Self>,
+    ///
+    ///     #[pin]
+    ///     lock: Mutex<i32>,
+    ///
+    ///     #[pin]
+    ///     done: Completion,
+    /// }
+    ///
+    /// impl_has_work! {
+    ///     impl HasWork<Self> for ExampleWork { self.work }
+    /// }
+    ///
+    /// impl WorkItem for ExampleWork {
+    ///     type Pointer = Arc<ExampleWork>;
+    ///
+    ///     fn run(this: Arc<ExampleWork>) {
+    ///         let mut g = this.lock.lock();
+    ///
+    ///         assert_eq!(*g, 41);
+    ///         *g += 1;
+    ///
+    ///         this.done.complete_all();
+    ///     }
+    /// }
+    ///
+    /// impl ExampleWork {
+    ///     pub(crate) fn new() -> Result<Arc<Self>> {
+    ///         Arc::pin_init(pin_init!(Self {
+    ///             work <- new_work!(),
+    ///             lock <- new_mutex!(41),
+    ///             done <- Completion::new(),
+    ///         }), GFP_KERNEL)
+    ///     }
+    /// }
+    ///
+    /// let work = ExampleWork::new().unwrap();
+    /// let mut g = work.lock.lock();
+    ///
+    /// let _ = workqueue::system().enqueue(work.clone());
+    ///
+    /// // This would deadlock:
+    /// //
+    /// //     work.done.wait_for_completion()
+    /// //
+    /// // Since we hold work.lock, which work will also try to acquire in WorkItem::run. Dropping
+    /// // the lock temporarily while we wait for completion works around this.
+    /// g.do_unlocked(|| work.done.wait_for_completion());
+    ///
+    /// assert_eq!(*g, 42);
+    /// ```
+    pub fn do_unlocked<U>(&mut self, cb: impl FnOnce() -> U) -> U {
         // SAFETY: The caller owns the lock, so it is safe to unlock it.
         unsafe { B::unlock(self.lock.state.get(), &self.state) };
 
