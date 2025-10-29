@@ -2,13 +2,11 @@
 #ifndef __PERF_MAP_H
 #define __PERF_MAP_H
 
-#include <linux/refcount.h>
-#include <linux/compiler.h>
-#include <linux/list.h>
-#include <linux/rbtree.h>
 #include <stdio.h>
 #include <string.h>
 #include <stdbool.h>
+
+#include <linux/refcount.h>
 #include <linux/types.h>
 #include <internal/rc_check.h>
 

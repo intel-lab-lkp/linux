@@ -6,6 +6,7 @@
 #include "color.h"
 #include "debug.h"
 #include "pmu.h"
+#include "pmus.h"
 #include "rblist.h"
 #include "evlist.h"
 #include "expr.h"

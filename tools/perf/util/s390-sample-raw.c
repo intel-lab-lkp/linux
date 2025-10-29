@@ -12,21 +12,22 @@
  * sample was taken from.
  */
 
-#include <unistd.h>
+#include <inttypes.h>
 #include <stdio.h>
 #include <string.h>
-#include <inttypes.h>
+#include <unistd.h>
 
-#include <sys/stat.h>
-#include <linux/compiler.h>
 #include <asm/byteorder.h>
+#include <linux/compiler.h>
+#include <sys/stat.h>
 
-#include "debug.h"
-#include "session.h"
-#include "evlist.h"
 #include "color.h"
-#include "sample-raw.h"
+#include "debug.h"
+#include "evlist.h"
+#include "pmus.h"
 #include "s390-cpumcf-kernel.h"
+#include "sample-raw.h"
+#include "session.h"
 #include "util/pmu.h"
 #include "util/sample.h"
 
