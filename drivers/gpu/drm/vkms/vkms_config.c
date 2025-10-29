@@ -587,6 +587,8 @@ static int vkms_config_show(struct seq_file *m, void *data)
 
 	vkms_config_for_each_connector(vkmsdev->config, connector_cfg) {
 		seq_puts(m, "connector:\n");
+		seq_printf(m, "\t%s\n",
+			   str_enabled_disabled(vkms_config_connector_is_enabled(connector_cfg)));
 		seq_printf(m, "\tstatus=%s\n",
 			   drm_get_connector_status_name(vkms_config_connector_get_status(connector_cfg)));
 		seq_printf(m, "\ttype=%s\n",
@@ -600,6 +602,8 @@ static int vkms_config_show(struct seq_file *m, void *data)
 			   str_enabled_disabled(vkms_config_connector_get_edid_enabled(connector_cfg)),
 			   edid_len
 		);
+		seq_printf(m, "\tdynamic=%s\n",
+			   str_true_false(vkms_config_connector_is_dynamic(connector_cfg)));
 	}
 
 	return 0;
@@ -907,6 +911,8 @@ struct vkms_config_connector *vkms_config_create_connector(struct vkms_config *c
 	connector_cfg->status = connector_status_connected;
 	vkms_config_connector_set_type(connector_cfg, DRM_MODE_CONNECTOR_VIRTUAL);
 	vkms_config_connector_set_supported_colorspaces(connector_cfg, 0);
+	vkms_config_connector_set_dynamic(connector_cfg, false);
+	vkms_config_connector_set_enabled(connector_cfg, true);
 	xa_init_flags(&connector_cfg->possible_encoders, XA_FLAGS_ALLOC);
 
 	list_add_tail(&connector_cfg->link, &config->connectors);
