@@ -20,6 +20,7 @@ struct uts_namespace init_uts_ns = {
 	},
 	.user_ns = &init_user_ns,
 	.ns.inum = ns_init_inum(&init_uts_ns),
+	.ns.ns_list_node = LIST_HEAD_INIT(init_uts_ns.ns.ns_list_node),
 #ifdef CONFIG_UTS_NS
 	.ns.ops = &utsns_operations,
 #endif

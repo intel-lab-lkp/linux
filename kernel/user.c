@@ -70,6 +70,7 @@ struct user_namespace init_user_ns = {
 	.owner = GLOBAL_ROOT_UID,
 	.group = GLOBAL_ROOT_GID,
 	.ns.inum = ns_init_inum(&init_user_ns),
+	.ns.ns_list_node = LIST_HEAD_INIT(init_user_ns.ns.ns_list_node),
 #ifdef CONFIG_USER_NS
 	.ns.ops = &userns_operations,
 #endif
