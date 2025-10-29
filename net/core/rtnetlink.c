@@ -1275,8 +1275,9 @@ static noinline size_t if_nlmsg_size(const struct net_device *dev,
 	       + nla_total_size(IFALIASZ) /* IFLA_IFALIAS */
 	       + nla_total_size(IFNAMSIZ) /* IFLA_QDISC */
 	       + nla_total_size_64bit(sizeof(struct rtnl_link_ifmap))
-	       + nla_total_size(sizeof(struct rtnl_link_stats))
-	       + nla_total_size_64bit(sizeof(struct rtnl_link_stats64))
+	       + ((ext_filter_mask & RTEXT_FILTER_SKIP_STATS) ? 0 :
+		  (nla_total_size(sizeof(struct rtnl_link_stats)) +
+		   nla_total_size_64bit(sizeof(struct rtnl_link_stats64))))
 	       + nla_total_size(MAX_ADDR_LEN) /* IFLA_ADDRESS */
 	       + nla_total_size(MAX_ADDR_LEN) /* IFLA_BROADCAST */
 	       + nla_total_size(4) /* IFLA_TXQLEN */
@@ -2123,7 +2124,8 @@ static int rtnl_fill_ifinfo(struct sk_buff *skb,
 	if (rtnl_phys_switch_id_fill(skb, dev))
 		goto nla_put_failure;
 
-	if (rtnl_fill_stats(skb, dev))
+	if (!(ext_filter_mask & RTEXT_FILTER_SKIP_STATS) &&
+	    rtnl_fill_stats(skb, dev))
 		goto nla_put_failure;
 
 	if (rtnl_fill_vf(skb, dev, ext_filter_mask))
