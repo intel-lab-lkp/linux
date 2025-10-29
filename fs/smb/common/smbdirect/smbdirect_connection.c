@@ -160,6 +160,7 @@ static void smbdirect_connection_schedule_disconnect(struct smbdirect_socket *sc
 	disable_work(&sc->recv_io.posted.refill_work);
 	disable_work(&sc->mr_io.recovery_work);
 	disable_work(&sc->idle.immediate_work);
+	sc->idle.keepalive = SMBDIRECT_KEEPALIVE_NONE;
 	disable_delayed_work(&sc->idle.timer_work);
 
 	if (sc->first_error == 0)
@@ -235,6 +236,7 @@ static void smbdirect_connection_disconnect_work(struct work_struct *work)
 	disable_work(&sc->recv_io.posted.refill_work);
 	disable_work(&sc->mr_io.recovery_work);
 	disable_work(&sc->idle.immediate_work);
+	sc->idle.keepalive = SMBDIRECT_KEEPALIVE_NONE;
 	disable_delayed_work(&sc->idle.timer_work);
 
 	if (sc->first_error == 0)
