@@ -5,21 +5,24 @@
 #include <stdlib.h>
 #include <perf/cpumap.h>
 
-#include "cpumap.h"
-#include "debug.h"
-#include "event.h"
-#include "evlist.h"
-#include "evsel.h"
-#include "thread_map.h"
-#include "tests.h"
-#include "util/affinity.h"
-#include "util/mmap.h"
-#include "util/sample.h"
 #include <linux/err.h>
 #include <linux/kernel.h>
 #include <linux/string.h>
 #include <perf/evlist.h>
 #include <perf/mmap.h>
+
+#include "cpumap.h"
+#include "debug.h"
+#include "event.h"
+#include "evlist.h"
+#include "evsel.h"
+#include "pmu.h"
+#include "pmus.h"
+#include "thread_map.h"
+#include "tests.h"
+#include "util/affinity.h"
+#include "util/mmap.h"
+#include "util/sample.h"
 
 /*
  * This test will generate random numbers of calls to some getpid syscalls,
