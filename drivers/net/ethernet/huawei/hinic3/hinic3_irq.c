@@ -215,6 +215,8 @@ static void hinic3_auto_moderation_work(struct work_struct *work)
 	nic_dev = container_of(delay, struct hinic3_nic_dev, moderation_task);
 	period = (unsigned long)(jiffies - nic_dev->last_moder_jiffies);
 	netdev = nic_dev->netdev;
+	if (!test_bit(HINIC3_INTF_UP, &nic_dev->flags))
+		return;
 
 	queue_delayed_work(nic_dev->workq, &nic_dev->moderation_task,
 			   HINIC3_MODERATONE_DELAY);
