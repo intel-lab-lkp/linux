@@ -278,7 +278,7 @@ static char *datablob_format(struct encrypted_key_payload *epayload,
 
 	ascii_buf = kmalloc(asciiblob_len + 1, GFP_KERNEL);
 	if (!ascii_buf)
-		goto out;
+		return ERR_PTR(-ENOMEM);
 
 	ascii_buf[asciiblob_len] = '\0';
 
@@ -290,7 +290,6 @@ static char *datablob_format(struct encrypted_key_payload *epayload,
 	bufp = &ascii_buf[len];
 	for (i = 0; i < (asciiblob_len - len) / 2; i++)
 		bufp = hex_byte_pack(bufp, iv[i]);
-out:
 	return ascii_buf;
 }
 
@@ -941,8 +940,8 @@ static long encrypted_read(const struct key *key, char *buffer,
 		goto out;
 
 	ascii_buf = datablob_format(epayload, asciiblob_len);
-	if (!ascii_buf) {
-		ret = -ENOMEM;
+	if (IS_ERR(ascii_buf)) {
+		ret = PTR_ERR(ascii_buf);
 		goto out;
 	}
 
