@@ -711,7 +711,7 @@ static int ma35d1serial_probe(struct platform_device *pdev)
 
 	spin_lock_init(&up->port.lock);
 
-	up->clk = of_clk_get(pdev->dev.of_node, 0);
+	up->clk = devm_clk_get(&pdev->dev, NULL);
 	if (IS_ERR(up->clk)) {
 		ret = PTR_ERR(up->clk);
 		dev_err(&pdev->dev, "failed to get core clk: %d\n", ret);
@@ -762,6 +762,7 @@ static void ma35d1serial_remove(struct platform_device *dev)
 
 	uart_remove_one_port(&ma35d1serial_reg, port);
 	clk_disable_unprepare(up->clk);
+	iounmap(up->port.membase);
 }
 
 static int ma35d1serial_suspend(struct platform_device *dev, pm_message_t state)
