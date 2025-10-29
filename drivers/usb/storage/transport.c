@@ -1188,18 +1188,17 @@ int usb_stor_Bulk_transport(struct scsi_cmnd *srb, struct us_data *us)
 		 * check whether it really is a CSW.
 		 */
 		if (result == USB_STOR_XFER_SHORT &&
-				srb->sc_data_direction == DMA_FROM_DEVICE &&
-				transfer_length - scsi_get_resid(srb) ==
-					US_BULK_CS_WRAP_LEN) {
+		    srb->sc_data_direction == DMA_FROM_DEVICE &&
+		    transfer_length - scsi_get_resid(srb) == US_BULK_CS_WRAP_LEN) {
 			struct scatterlist *sg = NULL;
-			unsigned int offset = 0;
+			unsigned int offset = 0, buflen = 0;
 
-			if (usb_stor_access_xfer_buf((unsigned char *) bcs,
-					US_BULK_CS_WRAP_LEN, srb, &sg,
-					&offset, FROM_XFER_BUF) ==
-						US_BULK_CS_WRAP_LEN &&
-					bcs->Signature ==
-						cpu_to_le32(US_BULK_CS_SIGN)) {
+			buflen = usb_stor_access_xfer_buf((unsigned char *) bcs,
+						US_BULK_CS_WRAP_LEN, srb, &sg,
+						&offset, FROM_XFER_BUF);
+
+			if (buflen == US_BULK_CS_WRAP_LEN &&
+			    bcs->Signature == cpu_to_le32(US_BULK_CS_SIGN)) {
 				unsigned char buf[US_BULK_CS_WRAP_LEN];
 
 				sg = NULL;
