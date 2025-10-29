@@ -2,28 +2,30 @@
 #ifndef __PERF_EVLIST_H
 #define __PERF_EVLIST_H 1
 
-#include <linux/compiler.h>
-#include <linux/kernel.h>
-#include <linux/refcount.h>
-#include <linux/list.h>
-#include <api/fd/array.h>
-#include <internal/evlist.h>
-#include <internal/evsel.h>
-#include <perf/evlist.h>
-#include "events_stats.h"
-#include "evsel.h"
-#include "rblist.h"
 #include <pthread.h>
 #include <signal.h>
 #include <unistd.h>
 
-struct pollfd;
-struct thread_map;
+#include <linux/compiler.h>
+#include <linux/kernel.h>
+#include <linux/list.h>
+#include <linux/refcount.h>
+#include <api/fd/array.h>
+#include <internal/evlist.h>
+#include <perf/evlist.h>
+
+#include "events_stats.h"
+#include "evsel.h"
+#include "rblist.h"
+
+struct evsel;
 struct perf_cpu_map;
 struct perf_stat_config;
+struct pollfd;
 struct record_opts;
 struct strbuf;
 struct target;
+struct thread_map;
 
 /*
  * State machine of bkw_mmap_state:
