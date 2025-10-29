@@ -59,7 +59,7 @@ static void *execmem_vmalloc(struct execmem_range *range, size_t size,
 		return NULL;
 	}
 
-	return p;
+	return kasan_reset_tag(p);
 }
 
 struct vm_struct *execmem_vmap(size_t size)
