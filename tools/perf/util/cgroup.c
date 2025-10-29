@@ -468,7 +468,7 @@ int evlist__expand_cgroup(struct evlist *evlist, const char *str, bool open_cgro
 
 		leader = NULL;
 		evlist__for_each_entry(orig_list, pos) {
-			evsel = evsel__clone(/*dest=*/NULL, pos);
+			evsel = evsel__clone(pos);
 			if (evsel == NULL)
 				goto out_err;
 
