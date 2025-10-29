@@ -32,12 +32,17 @@ struct nxp_c45_phy {
 };
 
 #if IS_ENABLED(CONFIG_MACSEC)
+void nxp_c45_macsec_link_change_notify(struct phy_device *phydev);
 int nxp_c45_macsec_config_init(struct phy_device *phydev);
 int nxp_c45_macsec_probe(struct phy_device *phydev);
 void nxp_c45_macsec_remove(struct phy_device *phydev);
 void nxp_c45_handle_macsec_interrupt(struct phy_device *phydev,
 				     irqreturn_t *ret);
 #else
+void nxp_c45_macsec_link_change_notify(struct phy_device *phydev)
+{
+}
+
 static inline
 int nxp_c45_macsec_config_init(struct phy_device *phydev)
 {

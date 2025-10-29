@@ -180,6 +180,10 @@ enum nxp_c45_sa_type {
 };
 
 struct nxp_c45_sa {
+	u8 key[MACSEC_MAX_KEY_LEN];
+	u8 salt[MACSEC_SALT_LEN];
+	u64 npn;
+	ssci_t ssci;
 	void *sa;
 	const struct nxp_c45_sa_regs *regs;
 	enum nxp_c45_sa_type type;
@@ -463,6 +467,18 @@ static void nxp_c45_sa_list_free(struct list_head *sa_list)
 		nxp_c45_sa_free(pos);
 }
 
+static u64 nxp_c45_sa_get_pn(struct phy_device *phydev,
+			     struct nxp_c45_sa *sa)
+{
+	const struct nxp_c45_sa_regs *sa_regs = sa->regs;
+	pn_t npn;
+
+	nxp_c45_macsec_read(phydev, sa_regs->npn, &npn.lower);
+	nxp_c45_macsec_read(phydev, sa_regs->xnpn, &npn.upper);
+
+	return npn.full64;
+}
+
 static void nxp_c45_sa_set_pn(struct phy_device *phydev,
 			      struct nxp_c45_sa *sa, u64 pn,
 			      u32 replay_window)
@@ -485,15 +501,15 @@ static void nxp_c45_sa_set_pn(struct phy_device *phydev,
 	nxp_c45_macsec_write(phydev, sa_regs->lxnpn, lnpn.upper);
 }
 
-static void nxp_c45_sa_set_key(struct macsec_context *ctx,
-			       const struct nxp_c45_sa_regs *sa_regs,
-			       u8 *salt, ssci_t ssci)
+static void nxp_c45_sa_set_key(struct phy_device *phydev, struct nxp_c45_sa *sa,
+			       u16 key_len, bool xpn)
 {
-	struct phy_device *phydev = ctx->phydev;
-	u32 key_size = ctx->secy->key_len / 4;
+	const struct nxp_c45_sa_regs *sa_regs = sa->regs;
 	u32 salt_size = MACSEC_SALT_LEN / 4;
-	u32 *key_u32 = (u32 *)ctx->sa.key;
-	u32 *salt_u32 = (u32 *)salt;
+	u32 *salt_u32 = (u32 *)sa->salt;
+	u32 *key_u32 = (u32 *)sa->key;
+	u32 key_size = key_len / 4;
+	ssci_t ssci = sa->ssci;
 	u32 reg, value;
 	int i;
 
@@ -503,7 +519,7 @@ static void nxp_c45_sa_set_key(struct macsec_context *ctx,
 		nxp_c45_macsec_write(phydev, reg, value);
 	}
 
-	if (ctx->secy->xpn) {
+	if (xpn) {
 		for (i = 0; i < salt_size; i++) {
 			reg = sa_regs->salt + (2 - i) * 4;
 			value = (__force u32)cpu_to_be32(salt_u32[i]);
@@ -1205,10 +1221,16 @@ static int nxp_c45_mdo_add_rxsa(struct macsec_context *ctx)
 	if (IS_ERR(sa))
 		return PTR_ERR(sa);
 
+	memcpy(sa->key, ctx->sa.key, ctx->secy->key_len);
+	if (ctx->secy->xpn) {
+		sa->ssci = rx_sa->ssci;
+		memcpy(sa->salt, rx_sa->key.salt.bytes, MACSEC_SALT_LEN);
+	}
+
 	nxp_c45_select_secy(phydev, phy_secy->secy_id);
 	nxp_c45_sa_set_pn(phydev, sa, rx_sa->next_pn,
 			  ctx->secy->replay_window);
-	nxp_c45_sa_set_key(ctx, sa->regs, rx_sa->key.salt.bytes, rx_sa->ssci);
+	nxp_c45_sa_set_key(phydev, sa, ctx->secy->key_len, ctx->secy->xpn);
 	nxp_c45_rx_sa_update(phydev, sa, rx_sa->active);
 
 	return 0;
@@ -1295,9 +1317,15 @@ static int nxp_c45_mdo_add_txsa(struct macsec_context *ctx)
 	if (IS_ERR(sa))
 		return PTR_ERR(sa);
 
+	memcpy(sa->key, ctx->sa.key, ctx->secy->key_len);
+	if (ctx->secy->xpn) {
+		sa->ssci = tx_sa->ssci;
+		memcpy(sa->salt, tx_sa->key.salt.bytes, MACSEC_SALT_LEN);
+	}
+
 	nxp_c45_select_secy(phydev, phy_secy->secy_id);
 	nxp_c45_sa_set_pn(phydev, sa, tx_sa->next_pn, 0);
-	nxp_c45_sa_set_key(ctx, sa->regs, tx_sa->key.salt.bytes, tx_sa->ssci);
+	nxp_c45_sa_set_key(phydev, sa, ctx->secy->key_len, ctx->secy->xpn);
 	if (ctx->secy->tx_sc.encoding_sa == sa->an)
 		nxp_c45_tx_sa_update(phydev, sa, tx_sa->active);
 
@@ -1597,9 +1625,60 @@ static const struct macsec_ops nxp_c45_macsec_ops = {
 	.needed_tailroom = TJA11XX_TLV_NEEDED_TAILROOM,
 };
 
+void nxp_c45_macsec_link_change_notify(struct phy_device *phydev)
+{
+	struct nxp_c45_phy *priv = phydev->priv;
+	struct nxp_c45_secy *secy_p, *secy_t;
+	struct nxp_c45_sa *sa_p, *sa_t;
+	struct list_head *secy_list;
+
+	if (phydev->state != PHY_HALTED)
+		return;
+
+	secy_list = &priv->macsec->secy_list;
+	nxp_c45_macsec_en(phydev, false);
+
+	list_for_each_entry_safe(secy_p, secy_t, secy_list, list) {
+		nxp_c45_select_secy(phydev, secy_p->secy_id);
+		nxp_c45_tx_sc_en_flt(phydev, secy_p->secy_id, false);
+		if (secy_p->rx_sc)
+			nxp_c45_rx_sc_en(phydev, secy_p->rx_sc, false);
+
+		list_for_each_entry_safe(sa_p, sa_t, &secy_p->sa_list, list)
+			sa_p->npn = nxp_c45_sa_get_pn(phydev, sa_p);
+	}
+}
+
+static void nxp_c45_secy_restore(struct phy_device *phydev,
+				 struct nxp_c45_secy *phy_secy)
+{
+	u8 encoding_sa = phy_secy->secy->tx_sc.encoding_sa;
+	u32 replay_window = phy_secy->secy->replay_window;
+	u16 key_len = phy_secy->secy->key_len;
+	bool xpn = phy_secy->secy->xpn;
+	struct nxp_c45_sa *pos, *tmp;
+
+	list_for_each_entry_safe(pos, tmp, &phy_secy->sa_list, list) {
+		nxp_c45_sa_set_pn(phydev, pos, pos->npn, replay_window);
+		nxp_c45_sa_set_key(phydev, pos, key_len, xpn);
+		if (pos->type == RX_SA) {
+			struct macsec_rx_sa *rx_sa = pos->sa;
+
+			nxp_c45_rx_sa_update(phydev, pos, rx_sa->active);
+		} else if (pos->type == TX_SA && pos->an == encoding_sa) {
+			struct macsec_tx_sa *tx_sa = pos->sa;
+
+			nxp_c45_tx_sa_update(phydev, pos, tx_sa->active);
+		}
+	}
+}
+
 int nxp_c45_macsec_config_init(struct phy_device *phydev)
 {
 	struct nxp_c45_phy *priv = phydev->priv;
+	struct nxp_c45_secy *pos, *tmp;
+	bool rx_sc0_impl = false;
+	int any_bit_set;
 	int ret;
 
 	if (!priv->macsec)
@@ -1642,6 +1721,30 @@ int nxp_c45_macsec_config_init(struct phy_device *phydev)
 		return ret;
 
 	ret = nxp_c45_macsec_write(phydev, MACSEC_UPFR0R, MACSEC_UPFR_EN);
+
+	list_for_each_entry_safe(pos, tmp, &priv->macsec->secy_list, list) {
+		nxp_c45_select_secy(phydev, pos->secy_id);
+		nxp_c45_set_sci(phydev, MACSEC_TXSC_SCI_1H, pos->secy->sci);
+		nxp_c45_tx_sc_set_flt(phydev, pos);
+		nxp_c45_tx_sc_update(phydev, pos);
+		nxp_c45_secy_irq_en(phydev, pos, true);
+		if (pos->rx_sc) {
+			nxp_c45_set_sci(phydev, MACSEC_RXSC_SCI_1H, pos->rx_sc->sci);
+			nxp_c45_rx_sc_update(phydev, pos);
+		}
+
+		if (pos->rx_sc0_impl)
+			rx_sc0_impl = pos->rx_sc0_impl;
+
+		nxp_c45_secy_restore(phydev, pos);
+
+		if (test_bit(pos->secy_id, priv->macsec->secy_bitmap))
+			nxp_c45_tx_sc_en_flt(phydev, pos->secy_id, true);
+	}
+
+	nxp_c45_set_rx_sc0_impl(phydev, rx_sc0_impl);
+	any_bit_set = find_first_bit(priv->macsec->secy_bitmap, TX_SC_MAX);
+	nxp_c45_macsec_en(phydev, !(any_bit_set == TX_SC_MAX));
 
 	return ret;
 }

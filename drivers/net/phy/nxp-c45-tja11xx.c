@@ -1387,6 +1387,8 @@ static void tja1120_link_change_notify(struct phy_device *phydev)
 		phy_clear_bits_mmd(phydev, MDIO_MMD_VEND1,
 				   TJA1120_EPHY_RESETS, EPHY_PCS_RESET);
 	}
+
+	nxp_c45_macsec_link_change_notify(phydev);
 }
 
 static int nxp_c45_get_sqi_max(struct phy_device *phydev)
@@ -2106,6 +2108,7 @@ static struct phy_driver nxp_c45_driver[] = {
 		.get_sqi_max		= nxp_c45_get_sqi_max,
 		.remove			= nxp_c45_remove,
 		.match_phy_device	= tja11xx_macsec_match_phy_device,
+		.link_change_notify	= nxp_c45_macsec_link_change_notify,
 	},
 	{
 		PHY_ID_MATCH_MODEL(PHY_ID_TJA_1120),
