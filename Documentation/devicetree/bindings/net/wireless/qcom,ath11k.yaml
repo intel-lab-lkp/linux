@@ -21,12 +21,13 @@ properties:
       - qcom,ipq6018-wifi
       - qcom,wcn6750-wifi
       - qcom,ipq5018-wifi
+      - qcom,qcn6122-wifi
 
   reg:
     maxItems: 1
 
   interrupts:
-    minItems: 32
+    minItems: 13
     maxItems: 52
 
   interrupt-names:
@@ -86,6 +87,14 @@ properties:
     description: The names of the state bits used for SMP2P output.
     items:
       - const: wlan-smp2p-out
+
+  qcom,userpd:
+    $ref: /schemas/types.yaml#/definitions/uint32
+    enum: [2, 3]
+    description: instance ID of user PD (protection domain) in multi-PD
+                 architectures to distinguish between multiple instances
+                 of the same wifi chip used by QMI in its interface with
+                 the firmware running on Q6.
 
 required:
   - compatible
@@ -268,6 +277,31 @@ allOf:
             - description: interrupt event for ring DP20
             - description: interrupt event for ring DP21
             - description: interrupt event for ring DP22
+  - if:
+      properties:
+        compatible:
+          contains:
+            enum:
+              - qcom,qcn6122-wifi
+    then:
+      required:
+        - qcom,userpd
+      properties:
+        interrupts:
+          items:
+            - description: interrupt event for ring CE1
+            - description: interrupt event for ring CE2
+            - description: interrupt event for ring CE3
+            - description: interrupt event for ring CE4
+            - description: interrupt event for ring CE5
+            - description: interrupt event for ring DP1
+            - description: interrupt event for ring DP2
+            - description: interrupt event for ring DP3
+            - description: interrupt event for ring DP4
+            - description: interrupt event for ring DP5
+            - description: interrupt event for ring DP6
+            - description: interrupt event for ring DP7
+            - description: interrupt event for ring DP8
 
 examples:
   - |
@@ -466,4 +500,25 @@ examples:
         wifi-firmware {
             iommus = <&apps_smmu 0x1c02 0x1>;
         };
+    };
+
+  - |
+    wifi1: wifi@b00a040 {
+        reg = <0x0b00a040 0x0>;
+        compatible = "qcom,qcn6122-wifi";
+        interrupts = <GIC_SPI 416 IRQ_TYPE_EDGE_RISING>,
+                     <GIC_SPI 417 IRQ_TYPE_EDGE_RISING>,
+                     <GIC_SPI 418 IRQ_TYPE_EDGE_RISING>,
+                     <GIC_SPI 419 IRQ_TYPE_EDGE_RISING>,
+                     <GIC_SPI 420 IRQ_TYPE_EDGE_RISING>,
+                     <GIC_SPI 421 IRQ_TYPE_EDGE_RISING>,
+                     <GIC_SPI 422 IRQ_TYPE_EDGE_RISING>,
+                     <GIC_SPI 423 IRQ_TYPE_EDGE_RISING>,
+                     <GIC_SPI 424 IRQ_TYPE_EDGE_RISING>,
+                     <GIC_SPI 425 IRQ_TYPE_EDGE_RISING>,
+                     <GIC_SPI 426 IRQ_TYPE_EDGE_RISING>,
+                     <GIC_SPI 427 IRQ_TYPE_EDGE_RISING>,
+                     <GIC_SPI 428 IRQ_TYPE_EDGE_RISING>;
+        qcom,rproc = <&q6v5_wcss_pd2>;
+        qcom,userpd = <2>;
     };
