@@ -3339,7 +3339,7 @@ static struct swap_cluster_info *setup_clusters(struct swap_info_struct *si,
 	 */
 	err = swap_cluster_setup_bad_slot(cluster_info, 0);
 	if (err)
-		goto err;
+		goto err_free;
 	for (i = 0; i < swap_header->info.nr_badpages; i++) {
 		unsigned int page_nr = swap_header->info.badpages[i];
 
@@ -3347,12 +3347,12 @@ static struct swap_cluster_info *setup_clusters(struct swap_info_struct *si,
 			continue;
 		err = swap_cluster_setup_bad_slot(cluster_info, page_nr);
 		if (err)
-			goto err;
+			goto err_free;
 	}
 	for (i = maxpages; i < round_up(maxpages, SWAPFILE_CLUSTER); i++) {
 		err = swap_cluster_setup_bad_slot(cluster_info, i);
 		if (err)
-			goto err;
+			goto err_free;
 	}
 
 	INIT_LIST_HEAD(&si->free_clusters);
