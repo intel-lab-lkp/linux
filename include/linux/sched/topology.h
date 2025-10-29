@@ -250,4 +250,10 @@ static inline int task_node(const struct task_struct *p)
 	return cpu_to_node(task_cpu(p));
 }
 
+#ifdef CONFIG_HAVE_SCHED_AVG_IRQ
+extern void sched_disable_steal_acct(void);
+#else
+static __always_inline void sched_disable_steal_acct(void) { }
+#endif
+
 #endif /* _LINUX_SCHED_TOPOLOGY_H */
