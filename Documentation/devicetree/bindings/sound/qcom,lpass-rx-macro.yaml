@@ -25,6 +25,10 @@ properties:
               - qcom,sm8750-lpass-rx-macro
               - qcom,x1e80100-lpass-rx-macro
           - const: qcom,sm8550-lpass-rx-macro
+      - items:
+          - enum:
+            - qcom,sm6115-lpass-rx-macro
+          - const: qcom,sm8450-lpass-rx-macro
 
   reg:
     maxItems: 1
