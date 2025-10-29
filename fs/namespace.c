@@ -5989,6 +5989,7 @@ struct mnt_namespace init_mnt_ns = {
 	.ns.ops		= &mntns_operations,
 	.user_ns	= &init_user_ns,
 	.ns.__ns_ref	= REFCOUNT_INIT(1),
+	.ns.__ns_ref_active = ATOMIC_INIT(1),
 	.ns.ns_type	= ns_common_type(&init_mnt_ns),
 	.passive	= REFCOUNT_INIT(1),
 	.mounts		= RB_ROOT,
