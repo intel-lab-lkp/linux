@@ -1609,7 +1609,7 @@ static void mtk_jpegenc_worker(struct work_struct *work)
 {
 	struct mtk_jpegenc_comp_dev *comp_jpeg[MTK_JPEGENC_HW_MAX];
 	enum vb2_buffer_state buf_state = VB2_BUF_STATE_ERROR;
-	struct mtk_jpeg_src_buf *jpeg_dst_buf;
+	struct mtk_jpeg_src_buf *jpeg_dst_buf, *jpeg_dst_buf;
 	struct vb2_v4l2_buffer *src_buf, *dst_buf;
 	int ret, i, hw_id = 0;
 	unsigned long flags;
@@ -1700,7 +1700,7 @@ static void mtk_jpegdec_worker(struct work_struct *work)
 		jpeg_work);
 	struct mtk_jpegdec_comp_dev *comp_jpeg[MTK_JPEGDEC_HW_MAX];
 	enum vb2_buffer_state buf_state = VB2_BUF_STATE_ERROR;
-	struct mtk_jpeg_src_buf *jpeg_src_buf, *jpeg_dst_buf;
+	struct mtk_jpeg_src_buf *jpeg_src_buf;
 	struct vb2_v4l2_buffer *src_buf, *dst_buf;
 	struct mtk_jpeg_dev *jpeg = ctx->jpeg;
 	int ret, i, hw_id = 0;
@@ -1739,7 +1739,6 @@ retry_select:
 
 	v4l2_m2m_buf_copy_metadata(src_buf, dst_buf);
 	jpeg_src_buf = mtk_jpeg_vb2_to_srcbuf(&src_buf->vb2_buf);
-	jpeg_dst_buf = mtk_jpeg_vb2_to_srcbuf(&dst_buf->vb2_buf);
 
 	if (mtk_jpeg_check_resolution_change(ctx,
 					     &jpeg_src_buf->dec_param)) {
@@ -1747,11 +1746,6 @@ retry_select:
 		ctx->state = MTK_JPEG_SOURCE_CHANGE;
 		goto getbuf_fail;
 	}
-
-	jpeg_src_buf->curr_ctx = ctx;
-	jpeg_src_buf->frame_num = ctx->total_frame_num;
-	jpeg_dst_buf->curr_ctx = ctx;
-	jpeg_dst_buf->frame_num = ctx->total_frame_num;
 
 	mtk_jpegdec_set_hw_param(ctx, hw_id, src_buf, dst_buf);
 	ret = pm_runtime_resume_and_get(comp_jpeg[hw_id]->dev);
@@ -1777,6 +1771,9 @@ retry_select:
 			      msecs_to_jiffies(MTK_JPEG_HW_TIMEOUT_MSEC));
 
 	spin_lock_irqsave(&comp_jpeg[hw_id]->hw_lock, flags);
+	jpeg_dst_buf = mtk_jpeg_vb2_to_srcbuf(&dst_buf->vb2_buf);
+	jpeg_dst_buf->curr_ctx = ctx;
+	jpeg_dst_buf->frame_num = ctx->total_frame_num;
 	ctx->total_frame_num++;
 	mtk_jpeg_dec_reset(comp_jpeg[hw_id]->reg_base);
 	mtk_jpeg_dec_set_config(comp_jpeg[hw_id]->reg_base,
