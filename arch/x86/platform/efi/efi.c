@@ -786,8 +786,8 @@ static void __init __efi_enter_virtual_mode(void)
 {
 	int count = 0, pg_shift = 0;
 	void *new_memmap = NULL;
+	unsigned long pa, lass;
 	efi_status_t status;
-	unsigned long pa;
 
 	if (efi_alloc_page_tables()) {
 		pr_err("Failed to allocate EFI page tables\n");
@@ -825,11 +825,23 @@ static void __init __efi_enter_virtual_mode(void)
 
 	efi_sync_low_kernel_mappings();
 
+	/*
+	 * LASS complains because set_virtual_address_map() is located
+	 * at a lower address. To pause enforcement, flipping RFLAGS.AC
+	 * is not sufficient, as it only permits data access and not
+	 * instruction fetch. Disable the entire LASS mechanism.
+	 */
+	lass = cr4_read_shadow() & X86_CR4_LASS;
+	cr4_clear_bits(lass);
+
 	status = efi_set_virtual_address_map(efi.memmap.desc_size * count,
 					     efi.memmap.desc_size,
 					     efi.memmap.desc_version,
 					     (efi_memory_desc_t *)pa,
 					     efi_systab_phys);
+
+	cr4_set_bits(lass);
+
 	if (status != EFI_SUCCESS) {
 		pr_err("Unable to switch EFI into virtual mode (status=%lx)!\n",
 		       status);
