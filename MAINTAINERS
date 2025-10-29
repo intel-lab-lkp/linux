@@ -768,6 +768,7 @@ M:	Christian Marangi <ansuelsmth@gmail.com>
 L:	linux-arm-kernel@lists.infradead.org (moderated for non-subscribers)
 S:	Maintained
 F:	Documentation/devicetree/bindings/phy/airoha,an7581-usb-phy.yaml
+F:	drivers/phy/airoha/phy-airoha-usb.c
 F:	include/dt-bindings/phy/airoha,an7581-usb-phy.h
 
 AIRSPY MEDIA DRIVER
