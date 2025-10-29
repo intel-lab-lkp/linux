@@ -1441,8 +1441,8 @@ static void update_curr_dl_se(struct rq *rq, struct sched_dl_entity *dl_se, s64 
 	dl_se->runtime -= scaled_delta_exec;
 
 	/*
-	 * The fair server can consume its runtime while throttled (not queued/
-	 * running as regular CFS).
+	 * The dl_server can consume its runtime while throttled (not
+	 * queued / running as regular fair task).
 	 *
 	 * If the server consumes its entire runtime in this state. The server
 	 * is not required for the current period. Thus, reset the server by
@@ -1501,10 +1501,10 @@ throttle:
 	}
 
 	/*
-	 * The fair server (sole dl_server) does not account for real-time
-	 * workload because it is running fair work.
+	 * The dl_server does not account real-time workload because it
+	 * runs non-RT tasks.
 	 */
-	if (dl_se == &rq->fair_server)
+	if (dl_se->dl_server)
 		return;
 
 #ifdef CONFIG_RT_GROUP_SCHED
@@ -1540,8 +1540,8 @@ throttle:
  * server provides a guarantee.
  *
  * If the dl_server is in defer mode, the idle time is also considered
- * as time available for the fair server, avoiding a penalty for the
- * rt scheduler that did not consumed that time.
+ * as time available for the dl_server, avoiding a penalty for the rt
+ * scheduler that did not consumed that time.
  */
 void dl_server_update_idle_time(struct rq *rq, struct task_struct *p)
 {
@@ -1570,9 +1570,35 @@ void dl_server_update_idle_time(struct rq *rq, struct task_struct *p)
 
 void dl_server_update(struct sched_dl_entity *dl_se, s64 delta_exec)
 {
-	/* 0 runtime = fair server disabled */
+	/* 0 runtime = dl_server disabled */
 	if (dl_se->dl_runtime)
 		update_curr_dl_se(dl_se->rq, dl_se, delta_exec);
+}
+
+/**
+ * dl_server_init_params - Initialize bandwidth reservation for a DL server
+ * @dl_se: The DL server entity to remove bandwidth for
+ *
+ * This function initializes the bandwidth reservation for a DL server
+ * entity, its bandwidth accounting and server state.
+ *
+ * Returns: 0 on success, negative error code on failure
+ */
+int dl_server_init_params(struct sched_dl_entity *dl_se)
+{
+	u64 runtime =  50 * NSEC_PER_MSEC;
+	u64 period = 1000 * NSEC_PER_MSEC;
+	int err;
+
+	err = dl_server_apply_params(dl_se, runtime, period, 1);
+	if (err)
+		return err;
+
+	dl_se->dl_server = 1;
+	dl_se->dl_defer = 1;
+	setup_new_dl_entity(dl_se);
+
+	return err;
 }
 
 void dl_server_start(struct sched_dl_entity *dl_se)
@@ -1617,8 +1643,7 @@ void sched_init_dl_servers(void)
 	struct sched_dl_entity *dl_se;
 
 	for_each_online_cpu(cpu) {
-		u64 runtime =  50 * NSEC_PER_MSEC;
-		u64 period = 1000 * NSEC_PER_MSEC;
+		int err;
 
 		rq = cpu_rq(cpu);
 
@@ -1628,11 +1653,8 @@ void sched_init_dl_servers(void)
 
 		WARN_ON(dl_server(dl_se));
 
-		dl_server_apply_params(dl_se, runtime, period, 1);
-
-		dl_se->dl_server = 1;
-		dl_se->dl_defer = 1;
-		setup_new_dl_entity(dl_se);
+		err = dl_server_init_params(dl_se);
+		WARN_ON_ONCE(err);
 	}
 }
 
@@ -1666,6 +1688,9 @@ int dl_server_apply_params(struct sched_dl_entity *dl_se, u64 runtime, u64 perio
 	guard(raw_spinlock)(&dl_b->lock);
 
 	cpus = dl_bw_cpus(cpu);
+	if (WARN_ON_ONCE(!cpus))
+		return -ENODEV;
+
 	cap = dl_bw_capacity(cpu);
 
 	if (__dl_overflow(dl_b, cap, old_bw, new_bw))
@@ -1681,6 +1706,12 @@ int dl_server_apply_params(struct sched_dl_entity *dl_se, u64 runtime, u64 perio
 		dl_rq_change_utilization(rq, dl_se, new_bw);
 	}
 
+	/* Clear these so that the dl_server is reinitialized */
+	if (new_bw == 0) {
+		dl_se->dl_defer = 0;
+		dl_se->dl_server = 0;
+	}
+
 	dl_se->dl_runtime = runtime;
 	dl_se->dl_deadline = period;
 	dl_se->dl_period = period;
@@ -1692,6 +1723,41 @@ int dl_server_apply_params(struct sched_dl_entity *dl_se, u64 runtime, u64 perio
 	dl_se->dl_density = to_ratio(dl_se->dl_deadline, dl_se->dl_runtime);
 
 	return retval;
+}
+
+/**
+ * dl_server_remove_params - Remove bandwidth reservation for a DL server
+ * @dl_se: The DL server entity to remove bandwidth for
+ *
+ * This function removes the bandwidth reservation for a DL server entity,
+ * cleaning up all bandwidth accounting and server state.
+ *
+ * Returns: 0 on success, negative error code on failure
+ */
+int dl_server_remove_params(struct sched_dl_entity *dl_se,
+			    struct rq *rq, struct rq_flags *rf)
+{
+	if (!dl_se->dl_server)
+		return 0; /* Already disabled */
+
+	/*
+	 * First dequeue if still queued. It should not be queued since
+	 * we call this only after the last dl_server_stop().
+	 */
+	if (WARN_ON_ONCE(on_dl_rq(dl_se)))
+		dequeue_dl_entity(dl_se, DEQUEUE_SLEEP);
+
+	if (hrtimer_try_to_cancel(&dl_se->inactive_timer) == -1) {
+		rq_unlock_irqrestore(rq, rf);
+
+		hrtimer_cancel(&dl_se->inactive_timer);
+
+		rq_lock_irqsave(rq, rf);
+		update_rq_clock(rq);
+	}
+
+	/* Remove bandwidth reservation */
+	return dl_server_apply_params(dl_se, 0, dl_se->dl_period, false);
 }
 
 /*
