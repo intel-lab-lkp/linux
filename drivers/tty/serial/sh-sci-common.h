@@ -51,6 +51,7 @@ struct sci_port_params_bits {
 	unsigned int rxtx_enable;
 	unsigned int te_clear;
 	unsigned int poll_sent_bits;
+	unsigned int overrun_clr;
 };
 
 struct sci_common_regs {
