@@ -353,8 +353,12 @@ static void *cached_entry_to_item(struct smem_private_entry *e)
 	return p - le32_to_cpu(e->size);
 }
 
-/* Pointer to the one and only smem handle */
-static struct qcom_smem *__smem;
+/*
+ * Pointer to the one and only smem handle.
+ * Init to -EPROBE_DEFER to signal SMEM still has to be probed.
+ * Can be set to -ENODEV if SMEM is not initialized by SBL.
+ */
+static struct qcom_smem *__smem = ERR_PTR_CONST(-EPROBE_DEFER);
 
 /* Timeout (ms) for the trylock of remote spinlocks */
 #define HWSPINLOCK_TIMEOUT	1000
@@ -508,8 +512,8 @@ int qcom_smem_alloc(unsigned host, unsigned item, size_t size)
 	unsigned long flags;
 	int ret;
 
-	if (!__smem)
-		return -EPROBE_DEFER;
+	if (IS_ERR(__smem))
+		return PTR_ERR(__smem);
 
 	if (item < SMEM_ITEM_LAST_FIXED) {
 		dev_err(__smem->dev,
@@ -685,10 +689,10 @@ invalid_canary:
 void *qcom_smem_get(unsigned host, unsigned item, size_t *size)
 {
 	struct smem_partition *part;
-	void *ptr = ERR_PTR(-EPROBE_DEFER);
+	void *ptr;
 
-	if (!__smem)
-		return ptr;
+	if (IS_ERR(__smem))
+		return __smem;
 
 	if (WARN_ON(item >= __smem->item_count))
 		return ERR_PTR(-EINVAL);
@@ -723,8 +727,8 @@ int qcom_smem_get_free_space(unsigned host)
 	struct smem_header *header;
 	unsigned ret;
 
-	if (!__smem)
-		return -EPROBE_DEFER;
+	if (IS_ERR(__smem))
+		return PTR_ERR(__smem);
 
 	if (host < SMEM_HOST_COUNT && __smem->partitions[host].virt_base) {
 		part = &__smem->partitions[host];
@@ -1182,6 +1186,7 @@ static int qcom_smem_probe(struct platform_device *pdev)
 	if (le32_to_cpu(header->initialized) != 1 ||
 	    le32_to_cpu(header->reserved)) {
 		dev_err(&pdev->dev, "SMEM is not initialized by SBL\n");
+		__smem = ERR_PTR(-ENODEV);
 		return -EINVAL;
 	}
 
