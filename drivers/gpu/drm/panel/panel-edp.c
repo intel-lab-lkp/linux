@@ -218,6 +218,9 @@ struct edp_panel_entry {
 
 	/** @override_edid_mode: Override the mode obtained by edid. */
 	const struct drm_display_mode *override_edid_mode;
+
+	/** @override_bpc: Override the Bits per color obtained by edid. */
+	unsigned int override_bpc;
 };
 
 struct panel_edp {
@@ -586,6 +589,9 @@ static int panel_edp_get_modes(struct drm_panel *panel,
 	bool has_override_edid_mode = p->detected_panel &&
 				      p->detected_panel != ERR_PTR(-EINVAL) &&
 				      p->detected_panel->override_edid_mode;
+	bool has_override_bpc = p->detected_panel &&
+				      p->detected_panel != ERR_PTR(-EINVAL) &&
+				      p->detected_panel->override_bpc;
 
 	/* probe EDID if a DDC bus is available */
 	if (p->ddc) {
@@ -611,6 +617,9 @@ static int panel_edp_get_modes(struct drm_panel *panel,
 			} else {
 				num += drm_edid_connector_add_modes(connector);
 			}
+
+			if (has_override_bpc)
+				connector->display_info.bpc = p->detected_panel->override_bpc;
 		}
 
 		pm_runtime_mark_last_busy(panel->dev);
@@ -1869,6 +1878,17 @@ static const struct panel_delay delay_80_500_e50_d50 = {
 	}, \
 	.delay = _delay, \
 	.override_edid_mode = _mode \
+}
+
+#define EDP_PANEL_ENTRY3(vend_chr_0, vend_chr_1, vend_chr_2, product_id, _delay, _name, _bpc) \
+{ \
+	.ident = { \
+		.name = _name, \
+		.panel_id = drm_edid_encode_panel_id(vend_chr_0, vend_chr_1, vend_chr_2, \
+						     product_id), \
+	}, \
+	.delay = _delay, \
+	.override_bpc = _bpc \
 }
 
 /*
