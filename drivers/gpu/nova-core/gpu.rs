@@ -134,6 +134,34 @@ pub(crate) struct Revision {
     minor: u8,
 }
 
+impl TryFrom<regs::NV_PMC_BOOT_0> for Spec {
+    type Error = Error;
+
+    fn try_from(boot0: regs::NV_PMC_BOOT_0) -> Result<Self> {
+        Ok(Self {
+            chipset: boot0.chipset()?,
+            revision: Revision {
+                major: boot0.major_revision(),
+                minor: boot0.minor_revision(),
+            },
+        })
+    }
+}
+
+impl TryFrom<regs::NV_PMC_BOOT_42> for Spec {
+    type Error = Error;
+
+    fn try_from(boot42: regs::NV_PMC_BOOT_42) -> Result<Self> {
+        Ok(Self {
+            chipset: boot42.chipset()?,
+            revision: Revision {
+                major: boot42.major_revision(),
+                minor: boot42.minor_revision(),
+            },
+        })
+    }
+}
+
 impl fmt::Display for Revision {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "{:x}.{:x}", self.major, self.minor)
@@ -151,13 +179,43 @@ impl Spec {
     fn new(bar: &Bar0) -> Result<Spec> {
         let boot0 = regs::NV_PMC_BOOT_0::read(bar);
 
-        Ok(Self {
-            chipset: boot0.chipset()?,
-            revision: Revision {
-                major: boot0.major_revision(),
-                minor: boot0.minor_revision(),
-            },
-        })
+        // "next-gen" GPUs (some time after Blackwell) will zero out boot0, and put the architecture
+        // details in boot42 instead. Avoid reading boot42 unless we are in that case.
+        let boot42 = if boot0.is_next_gen() {
+            Some(regs::NV_PMC_BOOT_42::read(bar))
+        } else {
+            None
+        };
+
+        // Some brief notes about boot0 and boot42, in chronological order:
+        //
+        // NV04 through Volta:
+        //
+        //    Not supported by Nova. boot0 is necessary and sufficient to identify these GPUs.
+        //    boot42 may not even exist on some of these GPUs.boot42
+        //
+        // Turing through Blackwell:
+        //
+        //     Supported by both Nouveau and Nova. boot0 is still necessary and sufficient to
+        //     identify these GPUs. boot42 exists on these GPUs but we don't need to use it.
+        //
+        // Future "next-gen" GPUs:
+        //
+        //    Only supported by Nova. boot42 has the architecture details, boot0 is zeroed out.
+
+        // NV04, the very first NVIDIA GPU to be supported on Linux, is identified by a specific bit
+        // pattern in boot0. Although Nova does not support NV04 (see above), it is possible to
+        // confuse NV04 with a "next-gen" GPU. Therefore, return early if we specifically detect
+        // NV04, thus simplifying the remaining selection logic.
+        if boot0.is_nv04() {
+            Err(ENODEV)?
+        }
+
+        // Now that we know it is something more recent than NV04, use boot42 if we previously
+        // determined that boot42 was both valid and relevant, and boot0 otherwise.
+        boot42
+            .map(Spec::try_from)
+            .unwrap_or_else(|| Spec::try_from(boot0))
     }
 }
 
