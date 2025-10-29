@@ -3047,9 +3047,13 @@ static inline ssize_t generic_write_sync(struct kiocb *iocb, ssize_t count)
 			return ret;
 	} else if (iocb->ki_flags & IOCB_DONTCACHE) {
 		struct address_space *mapping = iocb->ki_filp->f_mapping;
+		int err;
 
 		filemap_fdatawrite_range_kick(mapping, iocb->ki_pos - count,
 					      iocb->ki_pos - 1);
+		err = file_check_and_advance_wb_err(iocb->ki_filp);
+		if (err)
+			return err;
 	}
 
 	return count;
