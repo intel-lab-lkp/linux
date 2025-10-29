@@ -1189,8 +1189,10 @@ static int sii902x_probe(struct i2c_client *client)
 
 	sii902x->bus_width = 24;
 	endpoint = of_graph_get_endpoint_by_regs(dev->of_node, 0, -1);
-	if (endpoint)
+	if (endpoint) {
 		of_property_read_u32(endpoint, "bus-width", &sii902x->bus_width);
+		of_node_put(endpoint);
+	}
 
 	endpoint = of_graph_get_endpoint_by_regs(dev->of_node, 1, -1);
 	if (endpoint) {
