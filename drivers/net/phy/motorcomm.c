@@ -213,6 +213,33 @@
 #define YT8521_RC1R_RGMII_2_100_NS		14
 #define YT8521_RC1R_RGMII_2_250_NS		15
 
+/* The value of the register and the actual tx delay
+ * have a nonlinear relationship at 1000Mbps(ext_reg 0xA003[3:0]):
+ * ------------------------------------------
+ * ext_reg0xA003[3:0]    |    tx delay(PS)
+ * ------------------------------------------
+ *    b'0100                     0
+ *    b'0101                     150
+ *    b'0110                     300
+ *    b'0111                     450
+ *    b'0000                     600
+ *    b'0001                     750
+ *    b'0010                     900
+ *    b'0011                     1050
+ *    b'1100                     1200
+ *    b'1101                     1350
+ *    b'1110                     1500
+ *    b'1111                     1650
+ *    b'1000                     1800
+ *    b'1001                     1950
+ *    b'1010                     2100
+ *    b'1011                     2250
+ * ------------------------------------------
+ * According to the dataSheet, it set to 4b'1 and
+ * the delay value is 750 ps(b'0001)
+ */
+#define YT8521_RC1R_RGMII_NONLINEAR_0_750_NS	1
+
 /* LED CONFIG */
 #define YT8521_MAX_LEDS				3
 #define YT8521_LED0_CFG_REG			0xA00C
@@ -893,7 +920,7 @@ static int ytphy_rgmii_clk_delay_config(struct phy_device *phydev)
 					   YT8521_RC1R_RGMII_0_000_NS);
 	tx_reg = ytphy_get_delay_reg_value(phydev, "tx-internal-delay-ps",
 					   ytphy_rgmii_delays, tb_size, NULL,
-					   YT8521_RC1R_RGMII_1_950_NS);
+					   YT8521_RC1R_RGMII_NONLINEAR_0_750_NS);
 
 	switch (phydev->interface) {
 	case PHY_INTERFACE_MODE_RGMII:
