@@ -256,6 +256,7 @@ struct cgroup_namespace init_cgroup_ns = {
 	.ns.inum	= ns_init_inum(&init_cgroup_ns),
 	.root_cset	= &init_css_set,
 	.ns.ns_type	= ns_common_type(&init_cgroup_ns),
+	.ns.ns_list_node = LIST_HEAD_INIT(init_cgroup_ns.ns.ns_list_node),
 };
 
 static struct file_system_type cgroup2_fs_type;
