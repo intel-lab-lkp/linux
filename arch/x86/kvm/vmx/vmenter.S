@@ -137,6 +137,9 @@ SYM_FUNC_START(__vmx_vcpu_run)
 	/* Load @regs to RAX. */
 	mov (%_ASM_SP), %_ASM_AX
 
+	/* jz .Lskip_clear_cpu_buffers below relies on this */
+	test $VMX_RUN_CLEAR_CPU_BUFFERS, %ebx
+
 	/* Check if vmlaunch or vmresume is needed */
 	bt   $VMX_RUN_VMRESUME_SHIFT, %ebx
 
@@ -160,6 +163,8 @@ SYM_FUNC_START(__vmx_vcpu_run)
 	/* Load guest RAX.  This kills the @regs pointer! */
 	mov VCPU_RAX(%_ASM_AX), %_ASM_AX
 
+	/* Check EFLAGS.ZF from the VMX_RUN_CLEAR_CPU_BUFFERS bit test above */
+	jz .Lskip_clear_cpu_buffers
 	/* Clobbers EFLAGS.ZF */
 	VM_CLEAR_CPU_BUFFERS
 .Lskip_clear_cpu_buffers:
