@@ -50,8 +50,10 @@ bool xe_sriov_pf_migration_supported(struct xe_device *xe)
 
 static bool pf_check_migration_support(struct xe_device *xe)
 {
-	/* XXX: for now this is for feature enabling only */
-	return IS_ENABLED(CONFIG_DRM_XE_DEBUG);
+	if (xe_device_has_memirq(xe))
+		return true;
+
+	return false;
 }
 
 static void pf_migration_cleanup(void *arg)
