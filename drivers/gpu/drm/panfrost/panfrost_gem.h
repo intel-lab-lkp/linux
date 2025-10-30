@@ -130,6 +130,8 @@ struct drm_gem_object *
 panfrost_gem_prime_import_sg_table(struct drm_device *dev,
 				   struct dma_buf_attachment *attach,
 				   struct sg_table *sgt);
+const struct dma_buf_ops *
+panfrost_gem_prime_get_dma_buf_ops(struct drm_device *dev);
 
 struct panfrost_gem_object *
 panfrost_gem_create(struct drm_device *dev, size_t size, u32 flags);

@@ -853,6 +853,7 @@ static const struct drm_driver panfrost_drm_driver = {
 
 	.gem_create_object	= panfrost_gem_create_object,
 	.gem_prime_import_sg_table = panfrost_gem_prime_import_sg_table,
+	.gem_prime_get_dma_buf_ops = panfrost_gem_prime_get_dma_buf_ops,
 #ifdef CONFIG_DEBUG_FS
 	.debugfs_init = panfrost_debugfs_init,
 #endif
