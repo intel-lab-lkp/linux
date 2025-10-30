@@ -357,6 +357,8 @@ int dw_pcie_msi_host_init(struct dw_pcie_rp *pp)
 		if (pp->msi_irq[ctrl] > 0)
 			irq_set_chained_handler_and_data(pp->msi_irq[ctrl],
 						    dw_chained_msi_isr, pp);
+		else
+			dev_warn(dev, "MSI ctrl %d doesn't have platform IRQ in DT", ctrl);
 	}
 
 	/*
