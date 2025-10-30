@@ -147,6 +147,9 @@ panthor_gem_create_with_handle(struct drm_file *file,
 void panthor_gem_bo_set_label(struct drm_gem_object *obj, const char *label);
 void panthor_gem_kernel_bo_set_label(struct panthor_kernel_bo *bo, const char *label);
 
+int panthor_gem_sync(struct drm_gem_object *obj,
+		     u32 type, u64 offset, u64 size);
+
 const struct dma_buf_ops *
 panthor_gem_prime_get_dma_buf_ops(struct drm_device *dev);
 

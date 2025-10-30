@@ -357,6 +357,27 @@ panthor_gem_kernel_bo_set_label(struct panthor_kernel_bo *bo, const char *label)
 	panthor_gem_bo_set_label(bo->obj, str);
 }
 
+int
+panthor_gem_sync(struct drm_gem_object *obj, u32 type,
+		 u64 offset, u64 size)
+{
+	enum drm_gem_shmem_sync_type shmem_sync_type;
+	struct panthor_gem_object *bo = to_panthor_bo(obj);
+
+	switch (type) {
+	case DRM_PANTHOR_BO_SYNC_CPU_CACHE_FLUSH:
+		shmem_sync_type = DRM_GEM_SHMEM_SYNC_CPU_CACHE_FLUSH;
+		break;
+	case DRM_PANTHOR_BO_SYNC_CPU_CACHE_FLUSH_AND_INVALIDATE:
+		shmem_sync_type = DRM_GEM_SHMEM_SYNC_CPU_CACHE_FLUSH_AND_INVALIDATE;
+		break;
+	default:
+		return -EINVAL;
+	}
+
+	return drm_gem_shmem_sync(&bo->base, offset, size, shmem_sync_type);
+}
+
 #ifdef CONFIG_DEBUG_FS
 struct gem_size_totals {
 	size_t size;
