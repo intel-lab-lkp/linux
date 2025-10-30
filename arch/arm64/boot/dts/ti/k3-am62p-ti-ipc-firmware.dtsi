@@ -21,6 +21,7 @@
 
 &mailbox0_cluster0 {
 	status = "okay";
+	ti,mbox-num-fifos = <2>;
 
 	mbox_r5_0: mbox-r5-0 {
 		ti,mbox-rx = <0 0 0>;
@@ -30,6 +31,7 @@
 
 &mailbox0_cluster1 {
 	status = "okay";
+	ti,mbox-num-fifos = <2>;
 
 	mbox_mcu_r5_0: mbox-mcu-r5-0 {
 		ti,mbox-rx = <0 0 0>;

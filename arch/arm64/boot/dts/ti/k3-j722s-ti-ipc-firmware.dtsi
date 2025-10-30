@@ -63,6 +63,7 @@
 
 &mailbox0_cluster0 {
 	status = "okay";
+	ti,mbox-num-fifos = <2>;
 
 	mbox_wkup_r5_0: mbox-wkup-r5-0 {
 		ti,mbox-rx = <0 0 0>;
@@ -72,6 +73,7 @@
 
 &mailbox0_cluster1 {
 	status = "okay";
+	ti,mbox-num-fifos = <2>;
 
 	mbox_mcu_r5_0: mbox-mcu-r5-0 {
 		ti,mbox-rx = <0 0 0>;
@@ -81,6 +83,7 @@
 
 &mailbox0_cluster2 {
 	status = "okay";
+	ti,mbox-num-fifos = <2>;
 
 	mbox_c7x_0: mbox-c7x-0 {
 		ti,mbox-rx = <0 0 0>;
@@ -90,6 +93,7 @@
 
 &mailbox0_cluster3 {
 	status = "okay";
+	ti,mbox-num-fifos = <4>;
 
 	mbox_main_r5_0: mbox-main-r5-0 {
 		ti,mbox-rx = <0 0 0>;

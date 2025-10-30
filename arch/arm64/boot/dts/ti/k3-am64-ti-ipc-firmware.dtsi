@@ -63,6 +63,7 @@
 
 &mailbox0_cluster2 {
 	status = "okay";
+	ti,mbox-num-fifos = <4>;
 
 	mbox_main_r5fss0_core0: mbox-main-r5fss0-core0 {
 		ti,mbox-rx = <0 0 2>;
@@ -77,6 +78,7 @@
 
 &mailbox0_cluster4 {
 	status = "okay";
+	ti,mbox-num-fifos = <4>;
 
 	mbox_main_r5fss1_core0: mbox-main-r5fss1-core0 {
 		ti,mbox-rx = <0 0 2>;
@@ -91,6 +93,7 @@
 
 &mailbox0_cluster6 {
 	status = "okay";
+	ti,mbox-num-fifos = <2>;
 
 	mbox_m4_0: mbox-m4-0 {
 		ti,mbox-rx = <0 0 2>;

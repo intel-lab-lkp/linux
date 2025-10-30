@@ -21,6 +21,7 @@
 
 &mailbox0_cluster0 {
 	status = "okay";
+	ti,mbox-num-fifos = <4>;
 
 	mbox_m4_0: mbox-m4-0 {
 		ti,mbox-rx = <0 0 0>;

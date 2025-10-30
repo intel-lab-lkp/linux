@@ -20,6 +20,7 @@
 };
 
 &mailbox0_cluster5 {
+	ti,mbox-num-fifos = <4>;
 
 	mbox_c71_3: mbox-c71-3 {
 		ti,mbox-rx = <2 0 0>;

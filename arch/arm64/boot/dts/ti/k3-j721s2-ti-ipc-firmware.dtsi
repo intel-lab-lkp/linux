@@ -100,6 +100,7 @@
 &mailbox0_cluster0 {
 	status = "okay";
 	interrupts = <436>;
+	ti,mbox-num-fifos = <4>;
 
 	mbox_mcu_r5fss0_core0: mbox-mcu-r5fss0-core0 {
 		ti,mbox-rx = <0 0 0>;
@@ -115,6 +116,7 @@
 &mailbox0_cluster1 {
 	status = "okay";
 	interrupts = <432>;
+	ti,mbox-num-fifos = <4>;
 
 	mbox_main_r5fss0_core0: mbox-main-r5fss0-core0 {
 		ti,mbox-rx = <0 0 0>;
@@ -130,6 +132,7 @@
 &mailbox0_cluster2 {
 	status = "okay";
 	interrupts = <428>;
+	ti,mbox-num-fifos = <4>;
 
 	mbox_main_r5fss1_core0: mbox-main-r5fss1-core0 {
 		ti,mbox-rx = <0 0 0>;
@@ -145,6 +148,7 @@
 &mailbox0_cluster4 {
 	status = "okay";
 	interrupts = <420>;
+	ti,mbox-num-fifos = <4>;
 
 	mbox_c71_0: mbox-c71-0 {
 		ti,mbox-rx = <0 0 0>;
