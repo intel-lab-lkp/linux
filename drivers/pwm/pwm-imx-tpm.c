@@ -190,7 +190,7 @@ static int pwm_imx_tpm_apply_hw(struct pwm_chip *chip,
 		 * there are multiple channels in use with different
 		 * period settings.
 		 */
-		if (tpm->user_count > 1)
+		if ((tpm->user_count > 1) && (tpm->real_period != 0))
 			return -EBUSY;
 
 		val = readl(tpm->base + PWM_IMX_TPM_SC);
