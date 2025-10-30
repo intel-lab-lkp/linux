@@ -272,7 +272,14 @@ void nfs_callback_down(int minorversion, struct net *net, struct rpc_xprt *xprt)
 	if (cb_info->users == 0) {
 		svc_set_num_threads(serv, NULL, 0);
 		dprintk("nfs_callback_down: service destroyed\n");
-		svc_destroy(&cb_info->serv);
+		if (!minorversion)
+			svc_destroy(&cb_info->serv);
+		else
+#ifdef CONFIG_SUNRPC_BACKCHANNEL
+			xprt_svc_destroy_nullify_bc(xprt, &cb_info->serv);
+#else
+			svc_destroy(&cb_info->serv);
+#endif
 	}
 	mutex_unlock(&nfs_callback_mutex);
 }
