@@ -907,6 +907,9 @@ static ssize_t idt_dbgfs_csr_write(struct file *filep, const char __user *ubuf,
 	if (*offp)
 		return 0;
 
+	if (count == 0 || count > PAGE_SIZE)
+		return -EINVAL;
+
 	/* Copy data from User-space */
 	buf = memdup_user_nul(ubuf, count);
 	if (IS_ERR(buf))
