@@ -396,6 +396,18 @@ bool qcom_smem_is_available(void)
 }
 EXPORT_SYMBOL_GPL(qcom_smem_is_available);
 
+/**
+ * qcom_smem_validate_item() - Check if SMEM item is within the limit
+ * @item:	SMEM item to validate
+ *
+ * Return: true if SMEM item is valid, false otherwise.
+ */
+bool qcom_smem_validate_item(unsigned item)
+{
+	return item < __smem->item_count;
+}
+EXPORT_SYMBOL_GPL(qcom_smem_validate_item);
+
 static int qcom_smem_alloc_private(struct qcom_smem *smem,
 				   struct smem_partition *part,
 				   unsigned item,
@@ -517,7 +529,7 @@ int qcom_smem_alloc(unsigned host, unsigned item, size_t size)
 		return -EINVAL;
 	}
 
-	if (WARN_ON(item >= __smem->item_count))
+	if (WARN_ON(!qcom_smem_validate_item(item)))
 		return -EINVAL;
 
 	ret = hwspin_lock_timeout_irqsave(__smem->hwlock,
@@ -690,7 +702,7 @@ void *qcom_smem_get(unsigned host, unsigned item, size_t *size)
 	if (!__smem)
 		return ptr;
 
-	if (WARN_ON(item >= __smem->item_count))
+	if (WARN_ON(!qcom_smem_validate_item(item)))
 		return ERR_PTR(-EINVAL);
 
 	if (host < SMEM_HOST_COUNT && __smem->partitions[host].virt_base) {
