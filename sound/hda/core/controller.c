@@ -42,14 +42,19 @@ static void azx_clear_corbrp(struct hdac_bus *bus)
  */
 void snd_hdac_bus_init_cmd_io(struct hdac_bus *bus)
 {
+	dma_addr_t corb_addr, rirb_addr;
+
 	WARN_ON_ONCE(!bus->rb.area);
 
 	guard(spinlock_irq)(&bus->reg_lock);
 	/* CORB set up */
 	bus->corb.addr = bus->rb.addr;
 	bus->corb.buf = (__le32 *)bus->rb.area;
-	snd_hdac_chip_writel(bus, CORBLBASE, (u32)bus->corb.addr);
-	snd_hdac_chip_writel(bus, CORBUBASE, upper_32_bits(bus->corb.addr));
+	corb_addr = bus->corb.addr;
+	if (bus->addr_host_to_hdac)
+		corb_addr = bus->addr_host_to_hdac(bus, bus->corb.addr);
+	snd_hdac_chip_writel(bus, CORBLBASE, (u32)corb_addr);
+	snd_hdac_chip_writel(bus, CORBUBASE, upper_32_bits(corb_addr));
 
 	/* set the corb size to 256 entries (ULI requires explicitly) */
 	snd_hdac_chip_writeb(bus, CORBSIZE, 0x02);
@@ -70,8 +75,11 @@ void snd_hdac_bus_init_cmd_io(struct hdac_bus *bus)
 	bus->rirb.buf = (__le32 *)(bus->rb.area + 2048);
 	bus->rirb.wp = bus->rirb.rp = 0;
 	memset(bus->rirb.cmds, 0, sizeof(bus->rirb.cmds));
-	snd_hdac_chip_writel(bus, RIRBLBASE, (u32)bus->rirb.addr);
-	snd_hdac_chip_writel(bus, RIRBUBASE, upper_32_bits(bus->rirb.addr));
+	rirb_addr = bus->rirb.addr;
+	if (bus->addr_host_to_hdac)
+		rirb_addr = bus->addr_host_to_hdac(bus, bus->rirb.addr);
+	snd_hdac_chip_writel(bus, RIRBLBASE, (u32)rirb_addr);
+	snd_hdac_chip_writel(bus, RIRBUBASE, upper_32_bits(rirb_addr));
 
 	/* set the rirb size to 256 entries (ULI requires explicitly) */
 	snd_hdac_chip_writeb(bus, RIRBSIZE, 0x02);
@@ -608,6 +616,8 @@ static void azx_int_clear(struct hdac_bus *bus)
  */
 bool snd_hdac_bus_init_chip(struct hdac_bus *bus, bool full_reset)
 {
+	dma_addr_t posbuf_addr;
+
 	if (bus->chip_init)
 		return false;
 
@@ -625,8 +635,11 @@ bool snd_hdac_bus_init_chip(struct hdac_bus *bus, bool full_reset)
 
 	/* program the position buffer */
 	if (bus->use_posbuf && bus->posbuf.addr) {
-		snd_hdac_chip_writel(bus, DPLBASE, (u32)bus->posbuf.addr);
-		snd_hdac_chip_writel(bus, DPUBASE, upper_32_bits(bus->posbuf.addr));
+		posbuf_addr = bus->posbuf.addr;
+		if (bus->addr_host_to_hdac)
+			posbuf_addr = bus->addr_host_to_hdac(bus, bus->posbuf.addr);
+		snd_hdac_chip_writel(bus, DPLBASE, (u32)posbuf_addr);
+		snd_hdac_chip_writel(bus, DPUBASE, upper_32_bits(posbuf_addr));
 	}
 
 	bus->chip_init = true;

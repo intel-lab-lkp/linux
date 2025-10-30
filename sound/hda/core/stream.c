@@ -258,6 +258,7 @@ int snd_hdac_stream_setup(struct hdac_stream *azx_dev, bool code_loading)
 {
 	struct hdac_bus *bus = azx_dev->bus;
 	struct snd_pcm_runtime *runtime;
+	dma_addr_t bdl_addr, posbuf_addr;
 	unsigned int val;
 	u16 reg;
 	int ret;
@@ -287,17 +288,24 @@ int snd_hdac_stream_setup(struct hdac_stream *azx_dev, bool code_loading)
 	snd_hdac_stream_writew(azx_dev, SD_LVI, azx_dev->frags - 1);
 
 	/* program the BDL address */
+	bdl_addr = azx_dev->bdl.addr;
+	if (bus->addr_host_to_hdac)
+		bdl_addr = bus->addr_host_to_hdac(bus, azx_dev->bdl.addr);
 	/* lower BDL address */
-	snd_hdac_stream_writel(azx_dev, SD_BDLPL, (u32)azx_dev->bdl.addr);
+	snd_hdac_stream_writel(azx_dev, SD_BDLPL, (u32)bdl_addr);
 	/* upper BDL address */
 	snd_hdac_stream_writel(azx_dev, SD_BDLPU,
-			       upper_32_bits(azx_dev->bdl.addr));
+			       upper_32_bits(bdl_addr));
 
 	/* enable the position buffer */
 	if (bus->use_posbuf && bus->posbuf.addr) {
+		posbuf_addr = bus->posbuf.addr;
+		if (bus->addr_host_to_hdac)
+			posbuf_addr = bus->addr_host_to_hdac(bus, bus->posbuf.addr);
+
 		if (!(snd_hdac_chip_readl(bus, DPLBASE) & AZX_DPLBASE_ENABLE))
 			snd_hdac_chip_writel(bus, DPLBASE,
-				(u32)bus->posbuf.addr | AZX_DPLBASE_ENABLE);
+				(u32)posbuf_addr | AZX_DPLBASE_ENABLE);
 	}
 
 	/* set the interrupt enable bits in the descriptor control register */
@@ -463,6 +471,9 @@ static int setup_bdle(struct hdac_bus *bus,
 			return -EINVAL;
 
 		addr = snd_sgbuf_get_addr(dmab, ofs);
+		if (bus->addr_host_to_hdac)
+			addr = bus->addr_host_to_hdac(bus, addr);
+
 		/* program the address field of the BDL entry */
 		bdl[0] = cpu_to_le32((u32)addr);
 		bdl[1] = cpu_to_le32(upper_32_bits(addr));
