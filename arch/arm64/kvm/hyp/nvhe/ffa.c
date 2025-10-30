@@ -431,8 +431,7 @@ static void do_ffa_mem_frag_tx(struct arm_smccc_1_2_regs *res,
 	if (!host_buffers.tx)
 		goto out_unlock;
 
-	buf = hyp_buffers.tx;
-	memcpy(buf, host_buffers.tx, fraglen);
+	buf = memcpy(hyp_buffers.tx, host_buffers.tx, fraglen);
 	nr_ranges = fraglen / sizeof(*buf);
 
 	ret = ffa_host_share_ranges(buf, nr_ranges);
@@ -505,8 +504,7 @@ static void __do_ffa_mem_xfer(const u64 func_id,
 		goto out_unlock;
 	}
 
-	buf = hyp_buffers.tx;
-	memcpy(buf, host_buffers.tx, fraglen);
+	buf = memcpy(hyp_buffers.tx, host_buffers.tx, fraglen);
 
 	ep_mem_access = (void *)buf +
 			ffa_mem_desc_offset(buf, 0, hyp_ffa_version);
@@ -615,8 +613,7 @@ static void do_ffa_mem_reclaim(struct arm_smccc_1_2_regs *res,
 		goto out_unlock;
 	}
 
-	buf = ffa_desc_buf.buf;
-	memcpy(buf, hyp_buffers.rx, fraglen);
+	buf = memcpy(ffa_desc_buf.buf, hyp_buffers.rx, fraglen);
 	ffa_rx_release(res);
 
 	for (fragoff = fraglen; fragoff < len; fragoff += fraglen) {
