@@ -4,6 +4,8 @@
 
 #include <linux/delay.h>
 #include <linux/crc32c.h>
+#include <linux/slab.h>
+#include <linux/cleanup.h>
 
 #define pcache_err(fmt, ...)							\
 	pr_err("dm-pcache: %s:%u " fmt, __func__, __LINE__, ##__VA_ARGS__)
@@ -79,14 +81,17 @@ static inline void __must_check *pcache_meta_find_latest(struct pcache_meta_head
 					u32 meta_size, u32 meta_max_size,
 					void *meta_ret)
 {
-	struct pcache_meta_header *meta, *latest = NULL;
+	struct pcache_meta_header *latest = NULL;
+	struct pcache_meta_header *meta __free(kvfree);
 	u32 i, seq_latest = 0;
-	void *meta_addr;
 
-	meta = meta_ret;
+	meta = kvzalloc(meta_size, GFP_KERNEL);
+	if (!meta)
+		return ERR_PTR(-ENOMEM);
 
 	for (i = 0; i < PCACHE_META_INDEX_MAX; i++) {
-		meta_addr = (void *)header + (i * meta_max_size);
+		void *meta_addr = (void *)header + (i * meta_max_size);
+
 		if (copy_mc_to_kernel(meta, meta_addr, meta_size)) {
 			pcache_err("hardware memory error when copy meta");
 			return ERR_PTR(-EIO);
