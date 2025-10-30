@@ -373,6 +373,7 @@ config DWMAC_LOONGSON
 	default MACH_LOONGSON64
 	depends on (MACH_LOONGSON64 || COMPILE_TEST) && STMMAC_ETH && PCI
 	depends on COMMON_CLK
+	depends on STMMAC_LIBPCI
 	help
 	  This selects the LOONGSON PCI bus support for the stmmac driver,
 	  Support for ethernet controller on Loongson-2K1000 SoC and LS7A1000 bridge.
