@@ -10,6 +10,17 @@ menuconfig SAMPLES_RUST
 
 if SAMPLES_RUST
 
+config SAMPLE_RUST_CLIST
+	tristate "C Linked List sample"
+	help
+	  This option builds the Rust CList sample demonstrating
+	  the clist module for working with C list_head structures.
+
+	  To compile this as a module, choose M here:
+	  the module will be called rust_clist.
+
+	  If unsure, say N.
+
 config SAMPLE_RUST_CONFIGFS
 	tristate "Configfs sample"
 	depends on CONFIGFS_FS
