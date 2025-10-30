@@ -133,7 +133,6 @@ struct emac_priv {
 	u32 rx_delay;
 
 	bool flow_control_autoneg;
-	u8 flow_control;
 
 	/* Softirq-safe, hold while touching hardware statistics */
 	spinlock_t stats_lock;
@@ -1039,14 +1038,7 @@ static void emac_set_rx_fc(struct emac_priv *priv, bool enable)
 	emac_wr(priv, MAC_FC_CONTROL, val);
 }
 
-static void emac_set_fc(struct emac_priv *priv, u8 fc)
-{
-	emac_set_tx_fc(priv, fc & FLOW_CTRL_TX);
-	emac_set_rx_fc(priv, fc & FLOW_CTRL_RX);
-	priv->flow_control = fc;
-}
-
-static void emac_set_fc_autoneg(struct emac_priv *priv)
+static void emac_set_fc(struct emac_priv *priv)
 {
 	struct phy_device *phydev = priv->ndev->phydev;
 	u32 local_adv, remote_adv;
@@ -1056,17 +1048,18 @@ static void emac_set_fc_autoneg(struct emac_priv *priv)
 
 	remote_adv = 0;
 
-	if (phydev->pause)
+	/* Force settings in advertising if autoneg disabled */
+
+	if (!priv->flow_control_autoneg || phydev->pause)
 		remote_adv |= LPA_PAUSE_CAP;
 
-	if (phydev->asym_pause)
+	if (!priv->flow_control_autoneg || phydev->asym_pause)
 		remote_adv |= LPA_PAUSE_ASYM;
 
 	fc = mii_resolve_flowctrl_fdx(local_adv, remote_adv);
 
-	priv->flow_control_autoneg = true;
-
-	emac_set_fc(priv, fc);
+	emac_set_tx_fc(priv, fc & FLOW_CTRL_TX);
+	emac_set_rx_fc(priv, fc & FLOW_CTRL_RX);
 }
 
 /*
@@ -1429,31 +1422,28 @@ static void emac_get_pauseparam(struct net_device *dev,
 				struct ethtool_pauseparam *pause)
 {
 	struct emac_priv *priv = netdev_priv(dev);
+	u32 val = emac_rd(priv, MAC_FC_CONTROL);
 
 	pause->autoneg = priv->flow_control_autoneg;
-	pause->tx_pause = !!(priv->flow_control & FLOW_CTRL_TX);
-	pause->rx_pause = !!(priv->flow_control & FLOW_CTRL_RX);
+	pause->tx_pause = !!(val & MREGBIT_FC_GENERATION_ENABLE);
+	pause->rx_pause = !!(val & MREGBIT_FC_DECODE_ENABLE);
 }
 
 static int emac_set_pauseparam(struct net_device *dev,
 			       struct ethtool_pauseparam *pause)
 {
 	struct emac_priv *priv = netdev_priv(dev);
-	u8 fc = 0;
+	struct phy_device *phydev = dev->phydev;
+
+	if (!phydev)
+		return -ENODEV;
+
+	if (!phy_validate_pause(phydev, pause))
+		return -EINVAL;
 
 	priv->flow_control_autoneg = pause->autoneg;
 
-	if (pause->autoneg) {
-		emac_set_fc_autoneg(priv);
-	} else {
-		if (pause->tx_pause)
-			fc |= FLOW_CTRL_TX;
-
-		if (pause->rx_pause)
-			fc |= FLOW_CTRL_RX;
-
-		emac_set_fc(priv, fc);
-	}
+	phy_set_asym_pause(dev->phydev, pause->rx_pause, pause->tx_pause);
 
 	return 0;
 }
@@ -1632,7 +1622,7 @@ static void emac_adjust_link(struct net_device *dev)
 
 		emac_wr(priv, MAC_GLOBAL_CONTROL, ctrl);
 
-		emac_set_fc_autoneg(priv);
+		emac_set_fc(priv);
 	}
 
 	phy_print_status(phydev);
@@ -2009,6 +1999,8 @@ static int emac_probe(struct platform_device *pdev)
 	priv->ndev = ndev;
 	priv->pdev = pdev;
 	platform_set_drvdata(pdev, priv);
+
+	priv->flow_control_autoneg = true;
 
 	ret = emac_config_dt(pdev, priv);
 	if (ret < 0)
