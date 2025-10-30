@@ -861,7 +861,7 @@ static ssize_t min_show(struct device *dev,
 		if (!data->baseline_ready)
 			return -ENODATA;
 
-		return sysfs_emit(buf, "%d", data->min_baseline);
+		return sysfs_emit(buf, "%d\n", data->min_baseline);
 	}
 
 	return -EINTR;
@@ -877,7 +877,7 @@ static ssize_t max_show(struct device *dev,
 		if (!data->baseline_ready)
 			return -ENODATA;
 
-		return sysfs_emit(buf, "%d", data->max_baseline);
+		return sysfs_emit(buf, "%d\n", data->max_baseline);
 	}
 
 	return -EINTR;
