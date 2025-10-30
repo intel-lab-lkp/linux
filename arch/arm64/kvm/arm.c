@@ -2600,8 +2600,8 @@ static int __init init_hyp_mode(void)
 			goto out_err;
 		}
 
-		page_addr = page_address(page);
-		memcpy(page_addr, CHOOSE_NVHE_SYM(__per_cpu_start), nvhe_percpu_size());
+		page_addr = memcpy(page_address(page), CHOOSE_NVHE_SYM(__per_cpu_start),
+				   nvhe_percpu_size());
 		kvm_nvhe_sym(kvm_arm_hyp_percpu_base)[cpu] = (unsigned long)page_addr;
 	}
 
