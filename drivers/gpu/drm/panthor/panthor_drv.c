@@ -1618,6 +1618,7 @@ static const struct drm_driver panthor_drm_driver = {
 
 	.gem_create_object = panthor_gem_create_object,
 	.gem_prime_import_sg_table = drm_gem_shmem_prime_import_sg_table,
+	.gem_prime_get_dma_buf_ops = panthor_gem_prime_get_dma_buf_ops,
 #ifdef CONFIG_DEBUG_FS
 	.debugfs_init = panthor_debugfs_init,
 #endif
