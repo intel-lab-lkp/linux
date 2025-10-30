@@ -163,6 +163,8 @@ static void wprobe_perf_handler(struct perf_event *bp,
 static int __register_trace_wprobe(struct trace_wprobe *tw)
 {
 	struct perf_event_attr attr;
+	struct perf_event *bp;
+	int cpu;
 
 	if (tw->bp_event)
 		return -EINVAL;
@@ -178,6 +180,11 @@ static int __register_trace_wprobe(struct trace_wprobe *tw)
 
 		tw->bp_event = NULL;
 		return ret;
+	}
+	/* Mark wprobe_perf_handler is compatible with default one. */
+	for_each_online_cpu(cpu) {
+		bp = per_cpu(*tw->bp_event, cpu);
+		bp->default_overflow_compatible = true;
 	}
 
 	return 0;
