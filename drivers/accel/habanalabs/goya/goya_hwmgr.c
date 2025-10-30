@@ -49,7 +49,7 @@ static ssize_t mme_clk_show(struct device *dev, struct device_attribute *attr,
 	if (value < 0)
 		return value;
 
-	return sprintf(buf, "%lu\n", value);
+	return sysfs_emit(buf, "%lu\n", value);
 }
 
 static ssize_t mme_clk_store(struct device *dev, struct device_attribute *attr,
@@ -98,7 +98,7 @@ static ssize_t tpc_clk_show(struct device *dev, struct device_attribute *attr,
 	if (value < 0)
 		return value;
 
-	return sprintf(buf, "%lu\n", value);
+	return sysfs_emit(buf, "%lu\n", value);
 }
 
 static ssize_t tpc_clk_store(struct device *dev, struct device_attribute *attr,
@@ -147,7 +147,7 @@ static ssize_t ic_clk_show(struct device *dev, struct device_attribute *attr,
 	if (value < 0)
 		return value;
 
-	return sprintf(buf, "%lu\n", value);
+	return sysfs_emit(buf, "%lu\n", value);
 }
 
 static ssize_t ic_clk_store(struct device *dev, struct device_attribute *attr,
@@ -196,7 +196,7 @@ static ssize_t mme_clk_curr_show(struct device *dev,
 	if (value < 0)
 		return value;
 
-	return sprintf(buf, "%lu\n", value);
+	return sysfs_emit(buf, "%lu\n", value);
 }
 
 static ssize_t tpc_clk_curr_show(struct device *dev,
@@ -213,7 +213,7 @@ static ssize_t tpc_clk_curr_show(struct device *dev,
 	if (value < 0)
 		return value;
 
-	return sprintf(buf, "%lu\n", value);
+	return sysfs_emit(buf, "%lu\n", value);
 }
 
 static ssize_t ic_clk_curr_show(struct device *dev,
@@ -230,7 +230,7 @@ static ssize_t ic_clk_curr_show(struct device *dev,
 	if (value < 0)
 		return value;
 
-	return sprintf(buf, "%lu\n", value);
+	return sysfs_emit(buf, "%lu\n", value);
 }
 
 static ssize_t pm_mng_profile_show(struct device *dev,
@@ -242,7 +242,7 @@ static ssize_t pm_mng_profile_show(struct device *dev,
 	if (!hl_device_operational(hdev, NULL))
 		return -ENODEV;
 
-	return sprintf(buf, "%s\n",
+	return sysfs_emit(buf, "%s\n",
 			(goya->pm_mng_profile == PM_AUTO) ? "auto" :
 			(goya->pm_mng_profile == PM_MANUAL) ? "manual" :
 			"unknown");
@@ -313,7 +313,7 @@ static ssize_t high_pll_show(struct device *dev, struct device_attribute *attr,
 	if (!hl_device_operational(hdev, NULL))
 		return -ENODEV;
 
-	return sprintf(buf, "%u\n", hdev->high_pll);
+	return sysfs_emit(buf, "%u\n", hdev->high_pll);
 }
 
 static ssize_t high_pll_store(struct device *dev, struct device_attribute *attr,
@@ -369,7 +369,7 @@ static ssize_t infineon_ver_show(struct device *dev, struct device_attribute *at
 
 	cpucp_info = &hdev->asic_prop.cpucp_info;
 
-	return sprintf(buf, "%#04x\n", le32_to_cpu(cpucp_info->infineon_version));
+	return sysfs_emit(buf, "%#04x\n", le32_to_cpu(cpucp_info->infineon_version));
 }
 
 static DEVICE_ATTR_RO(infineon_ver);
