@@ -115,6 +115,32 @@ DEFINE_PER_CPU(struct tlb_flush_queue, tlb_flush_queue) = {
 	.len = 0,
 };
 
+static bool should_ipi_flush(int cpu, void *info)
+{
+	struct tlb_flush_queue *queue = per_cpu_ptr(&tlb_flush_queue, cpu);
+	struct flush_tlb_range_data *d = info;
+	unsigned long flags;
+
+	if (per_cpu(loaded_asid, cpu) == d->asid)
+		return true;
+
+	raw_spin_lock_irqsave(&queue->lock, flags);
+	if (queue->len < TLB_FLUSH_QUEUE_SIZE) {
+		queue->tasks[queue->len] = *d;
+		queue->len++;
+	} else {
+		raw_spin_unlock_irqrestore(&queue->lock, flags);
+		return true;
+	}
+	raw_spin_unlock_irqrestore(&queue->lock, flags);
+
+	/* Recheck whether loaded_asid changed during enqueueing task */
+	if (per_cpu(loaded_asid, cpu) == d->asid)
+		return true;
+
+	return false;
+}
+
 static void __ipi_flush_tlb_range_asid(void *info)
 {
 	struct flush_tlb_range_data *d = info;
@@ -152,7 +178,9 @@ static void __flush_tlb_range(struct mm_struct *mm,
 		ftd.start = start;
 		ftd.size = size;
 		ftd.stride = stride;
-		on_each_cpu_mask(cmask, __ipi_flush_tlb_range_asid, &ftd, 1);
+		on_each_cpu_cond_mask(should_ipi_flush,
+				      __ipi_flush_tlb_range_asid,
+				      &ftd, 1, cmask);
 	}
 
 	put_cpu();
