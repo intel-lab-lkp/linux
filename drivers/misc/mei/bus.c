@@ -1210,7 +1210,7 @@ static ssize_t max_conn_show(struct device *dev, struct device_attribute *a,
 	struct mei_cl_device *cldev = to_mei_cl_device(dev);
 	u8 maxconn = mei_me_cl_max_conn(cldev->me_cl);
 
-	return sysfs_emit(buf, "%d", maxconn);
+	return sysfs_emit(buf, "%d\n", maxconn);
 }
 static DEVICE_ATTR_RO(max_conn);
 
@@ -1220,7 +1220,7 @@ static ssize_t fixed_show(struct device *dev, struct device_attribute *a,
 	struct mei_cl_device *cldev = to_mei_cl_device(dev);
 	u8 fixed = mei_me_cl_fixed(cldev->me_cl);
 
-	return sysfs_emit(buf, "%d", fixed);
+	return sysfs_emit(buf, "%d\n", fixed);
 }
 static DEVICE_ATTR_RO(fixed);
 
@@ -1230,7 +1230,7 @@ static ssize_t vtag_show(struct device *dev, struct device_attribute *a,
 	struct mei_cl_device *cldev = to_mei_cl_device(dev);
 	bool vt = mei_me_cl_vt(cldev->me_cl);
 
-	return sysfs_emit(buf, "%d", vt);
+	return sysfs_emit(buf, "%d\n", vt);
 }
 static DEVICE_ATTR_RO(vtag);
 
