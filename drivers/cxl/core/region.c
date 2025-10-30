@@ -2934,13 +2934,124 @@ static bool has_spa_to_hpa(struct cxl_root_decoder *cxlrd)
 	return cxlrd->ops && cxlrd->ops->spa_to_hpa;
 }
 
+static int decode_pos(int reg_ways, int hb_ways, int pos, int *pos_port,
+		      int *pos_hb)
+{
+	int devices_per_hb;
+
+	/*
+	 * Decode for 3-6-12 way interleaves as defined in the CXL
+	 * Spec 3.2 9.13.1.1 Legal Interleaving Configurations.
+	 */
+	switch (hb_ways) {
+	case 3:
+		if (reg_ways != 3 && reg_ways != 6 && reg_ways != 12)
+			return -EINVAL;
+		break;
+	case 6:
+		if (reg_ways != 6 && reg_ways != 12)
+			return -EINVAL;
+		break;
+	case 12:
+		if (reg_ways != 12)
+			return -EINVAL;
+		break;
+	default:
+		return -EINVAL;
+	}
+	/* Calculate port and host bridge positions */
+	devices_per_hb = reg_ways / hb_ways;
+	*pos_port = pos % devices_per_hb;
+	*pos_hb = pos / devices_per_hb;
+
+	return 0;
+}
+
+/*
+ * restore_parent() reconstruct the address in parent
+ *
+ * This math, specifically the bitmask creation 'mask = gran - 1' relies
+ * on the CXL Spec requirement that interleave granularity is always a
+ * power of two.
+ *
+ * [mask]		isolate the offset with the granularity
+ * [addr & ~mask]	remove the offset leaving the aligned portion
+ * [* ways]		distribute across all interleave ways
+ * [+ (pos * gran)]	add the positional offset
+ * [+ (addr & mask)]	restore the masked offset
+ */
+static u64 restore_parent(u64 addr, u64 pos, u64 gran, u64 ways)
+{
+	u64 mask = gran - 1;
+
+	return ((addr & ~mask) * ways) + (pos * gran) + (addr & mask);
+}
+
+/*
+ * unaligned_dpa_to_hpa() translates a DPA to HPA when the region resource
+ * start address is not aligned at Host Bridge Interleave Ways * 256MB.
+ *
+ * Unaligned start addresses only occur with MOD3 interleaves. All power-
+ * of-two interleaves are guaranteed aligned.
+ */
+static u64 unaligned_dpa_to_hpa(struct cxl_decoder *cxld,
+				struct cxl_region_params *p, int pos, u64 dpa)
+{
+	int ways_port = p->interleave_ways / cxld->interleave_ways;
+	int gran_port = p->interleave_granularity;
+	int gran_hb = cxld->interleave_granularity;
+	int ways_hb = cxld->interleave_ways;
+	int pos_port, pos_hb, gran_shift;
+	u64 hpa_port = 0;
+
+	/* Decode an endpoint 'pos' into port and host-bridge components */
+	if (decode_pos(p->interleave_ways, ways_hb, pos, &pos_port, &pos_hb)) {
+		dev_dbg(&cxld->dev, "not supported for region ways:%d\n",
+			p->interleave_ways);
+		return ULLONG_MAX;
+	}
+
+	/* Restore the port parent address if needed */
+	if (gran_hb != gran_port)
+		hpa_port = restore_parent(dpa, pos_port, gran_port, ways_port);
+	else
+		hpa_port = dpa;
+
+	/*
+	 * Complete the HPA reconstruction by restoring the address as if
+	 * each HB position is a candidate. Test against expected pos_hb
+	 * to confirm match.
+	 */
+	gran_shift = ilog2(gran_hb);
+	for (int position = 0; position < ways_hb; position++) {
+		u64 shifted, hpa;
+
+		hpa = restore_parent(hpa_port, position, gran_hb, ways_hb);
+		hpa += p->res->start;
+
+		shifted = hpa >> gran_shift;
+		if (do_div(shifted, ways_hb) == pos_hb)
+			return hpa;
+	}
+
+	dev_dbg(&cxld->dev, "fail dpa:%#llx region:%pr pos:%d\n", dpa, p->res,
+		pos);
+	dev_dbg(&cxld->dev, "     port-w/g/p:%d/%d/%d hb-w/g/p:%d/%d/%d\n",
+		ways_port, gran_port, pos_port, ways_hb, gran_hb, pos_hb);
+
+	return ULLONG_MAX;
+}
+
 u64 cxl_dpa_to_hpa(struct cxl_region *cxlr, const struct cxl_memdev *cxlmd,
 		   u64 dpa)
 {
 	struct cxl_root_decoder *cxlrd = to_cxl_root_decoder(cxlr->dev.parent);
 	u64 dpa_offset, hpa_offset, bits_upper, mask_upper, hpa;
+	struct cxl_decoder *cxld = &cxlrd->cxlsd.cxld;
 	struct cxl_region_params *p = &cxlr->params;
 	struct cxl_endpoint_decoder *cxled = NULL;
+	int hbiw = cxld->interleave_ways;
+	bool aligned = true;
 	u16 eig = 0;
 	u8 eiw = 0;
 	int pos;
@@ -2953,6 +3064,29 @@ u64 cxl_dpa_to_hpa(struct cxl_region *cxlr, const struct cxl_memdev *cxlmd,
 	if (!cxled || cxlmd != cxled_to_memdev(cxled))
 		return ULLONG_MAX;
 
+	/* Remove the dpa base */
+	dpa_offset = dpa - cxl_dpa_resource_start(cxled);
+
+	/* Unaligned calc: MOD3 interleaves not hbiw * 256MB aligned */
+	if (!is_power_of_2(hbiw)) {
+		u64 rem;
+
+		div64_u64_rem(p->res->start, (u64)hbiw * SZ_256M, &rem);
+		aligned = (rem == 0);
+		if (!aligned) {
+			hpa = unaligned_dpa_to_hpa(cxld, p, cxled->pos,
+						   dpa_offset);
+			if (hpa == ULLONG_MAX)
+				return ULLONG_MAX;
+
+			goto skip_aligned;
+		}
+	}
+
+	/*
+	 * Aligned calc: all power-of-2 interleaves and MOD3 interleaves
+	 * that are aligned at hbiw * 256MB
+	 */
 	pos = cxled->pos;
 	ways_to_eiw(p->interleave_ways, &eiw);
 	granularity_to_eig(p->interleave_granularity, &eig);
@@ -2966,9 +3100,6 @@ u64 cxl_dpa_to_hpa(struct cxl_region *cxlr, const struct cxl_memdev *cxlmd,
 	 * ways and granularity and is defined in the CXL Spec 3.0 Section
 	 * 8.2.4.19.13 Implementation Note: Device Decode Logic
 	 */
-
-	/* Remove the dpa base */
-	dpa_offset = dpa - cxl_dpa_resource_start(cxled);
 
 	mask_upper = GENMASK_ULL(51, eig + 8);
 
@@ -2985,7 +3116,10 @@ u64 cxl_dpa_to_hpa(struct cxl_region *cxlr, const struct cxl_memdev *cxlmd,
 	hpa_offset |= dpa_offset & GENMASK_ULL(eig + 7, 0);
 
 	/* Apply the hpa_offset to the region base address */
-	hpa = hpa_offset + p->res->start + p->cache_size;
+	hpa = hpa_offset + p->res->start;
+
+skip_aligned:
+	hpa += p->cache_size;
 
 	/* Root decoder translation overrides typical modulo decode */
 	if (has_hpa_to_spa(cxlrd))
@@ -2996,9 +3130,9 @@ u64 cxl_dpa_to_hpa(struct cxl_region *cxlr, const struct cxl_memdev *cxlmd,
 			"Addr trans fail: hpa 0x%llx not in region\n", hpa);
 		return ULLONG_MAX;
 	}
-
-	/* Simple chunk check, by pos & gran, only applies to modulo decodes */
-	if (!has_hpa_to_spa(cxlrd) && (!cxl_is_hpa_in_chunk(hpa, cxlr, pos)))
+	/* Chunk check applies to aligned modulo decodes only */
+	if (aligned && !has_hpa_to_spa(cxlrd) &&
+	    !cxl_is_hpa_in_chunk(hpa, cxlr, pos))
 		return ULLONG_MAX;
 
 	return hpa;
