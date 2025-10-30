@@ -257,7 +257,7 @@ static int conf_set_sym_val(struct symbol *sym, int def, int def_flags, char *p)
 			sym->flags |= def_flags;
 			break;
 		}
-		if (def != S_DEF_AUTO)
+		if (def != S_DEF_AUTO && def != S_DEF_COMP)
 			conf_warning("symbol value '%s' invalid for %s",
 				     p, sym->name);
 		return 1;
@@ -386,6 +386,7 @@ load:
 	def_flags = SYMBOL_DEF << def;
 	for_all_symbols(sym) {
 		sym->flags &= ~def_flags;
+		sym->comp_is_avail = false;
 		switch (sym->type) {
 		case S_INT:
 		case S_HEX:
@@ -445,6 +446,8 @@ load:
 
 		sym = sym_find(sym_name);
 		if (!sym) {
+			if (def == S_DEF_COMP)
+				continue;
 			if (def == S_DEF_AUTO) {
 				/*
 				 * Reading from include/config/auto.conf.
@@ -461,6 +464,9 @@ load:
 			}
 			continue;
 		}
+
+		if (def == S_DEF_COMP)
+			sym->comp_is_avail = true;
 
 		if (sym->flags & def_flags)
 			conf_warning("override: reassigning to symbol %s", sym->name);
@@ -527,6 +533,113 @@ int conf_read(const char *name)
 		conf_set_changed(true);
 
 	return 0;
+}
+
+const char sym_get_comp_tristate_char(struct symbol *sym)
+{
+	char ch = '#';
+
+	if (sym_get_comp_is_avail(sym))
+		switch (sym_get_comp_tristate_value(sym)) {
+		case yes:
+			ch = '*';
+			break;
+		case mod:
+			ch = 'M';
+			break;
+		case no:
+			ch = '_';
+			break;
+		}
+
+	return ch;
+}
+
+static int sym_name_comp(const void *p1, const void *p2)
+{
+	const struct symbol *const *s1 = p1, *const *s2 = p2;
+
+	return strcmp((*s1)->name, (*s2)->name);
+}
+
+#define LINE_LENGTH	(SYMBOL_MAXLENGTH + 32)
+
+char *comp_get_list_diff(void)
+{
+	char *line, *l_rst, *list = NULL, ch_comp;
+	size_t idx, size, cnt_sym;
+	struct symbol *sym, **sym_arr = NULL;
+	tristate tri_val, tri_comp_val;
+
+	idx = size = 0;
+
+	for_all_symbols(sym) {
+		if (!sym->name)
+			continue;
+		if (idx == size) {
+			size += 32;
+			sym_arr = xrealloc(sym_arr, size * sizeof(*sym_arr));
+		}
+		tri_val = sym_get_tristate_value(sym);
+		tri_comp_val = sym_get_comp_tristate_value(sym);
+
+		if (tri_val != tri_comp_val)
+			sym_arr[idx++] = sym;
+	}
+	cnt_sym = idx;
+	if (cnt_sym > 1)
+		qsort(sym_arr, cnt_sym, sizeof(*sym_arr), sym_name_comp);
+
+	l_rst = line = xmalloc(LINE_LENGTH);
+	idx = size = 0;
+
+	for (size_t i = 0; i < cnt_sym; ++i) {
+		tri_val = sym_get_tristate_value(sym_arr[i]);
+		ch_comp = sym_get_comp_tristate_char(sym_arr[i]);
+
+		switch (tri_val) {
+		case yes:
+			snprintf(line, LINE_LENGTH, "%s%s=y --- %c\n",
+				 CONFIG_, (sym_arr[i])->name, ch_comp);
+			break;
+		case mod:
+			snprintf(line, LINE_LENGTH, "%s%s=m --- %c\n",
+				 CONFIG_, (sym_arr[i])->name, ch_comp);
+			break;
+		case no:
+			snprintf(line, LINE_LENGTH, "# %s%s is not set --- %c\n",
+				 CONFIG_, (sym_arr[i])->name, ch_comp);
+			break;
+		}
+
+		for (; *line; ++idx) {
+			if (idx == size) {
+				size += LINE_LENGTH;
+				list = xrealloc(list, size * sizeof(*list));
+			}
+			list[idx] = *line++;
+		}
+		line = l_rst;
+	}
+	free(line);
+	free(sym_arr);
+
+	if (list)
+		list[idx] = '\0';
+	else {
+		list = xmalloc(32);
+		snprintf(list, 32, "No differences found.");
+	}
+
+	return list;
+}
+
+bool conf_read_comp(const char *name)
+{
+	if (conf_read_simple(name, S_DEF_COMP))
+		return true;
+
+	return false;
 }
 
 struct comment_style {
@@ -799,6 +912,80 @@ int conf_write_defconfig(const char *filename)
 	}
 	fclose(out);
 	return 0;
+}
+
+bool conf_write_comp(const char *name)
+{
+	FILE *fptemp, *fplist;
+	char *list = NULL, f_old[PATH_MAX],  tmpfile[] = "file_XXXXXX";
+	int ch;
+
+	if (!name)
+		return false;
+
+	if (is_present(name)) {
+		if (is_dir(name))
+			return false;
+		snprintf(f_old, sizeof(f_old), "%s.old", name);
+		if (rename(name, f_old)) {
+			fprintf(stderr, "Failed to rename file: %s to %s\n", name, f_old);
+			return false;
+		}
+	}
+
+	list = comp_get_list_diff();
+	int tmpfd = mkstemp(tmpfile);
+
+	if (tmpfd < 0) {
+		fprintf(stderr, "Failed to create temporary file.\n");
+		return false;
+	}
+
+	fptemp = fdopen(tmpfd, "w");
+	if (!fptemp) {
+		remove(tmpfile);
+		fprintf(stderr, "Failed to open a stream for the temporary file: %s\n", tmpfile);
+		return false;
+	}
+
+	fplist = fmemopen(list, strlen(list), "r");
+	if (!fplist) {
+		fclose(fptemp);
+		remove(tmpfile);
+		fprintf(stderr, "Failed to open a stream for fplist.\n");
+		if (list)
+			free(list);
+		return false;
+	}
+
+	while ((ch = fgetc(fplist)) != EOF)
+		fputc(ch, fptemp);
+
+	if (ferror(fptemp)) {		/* checks whether fputc has encountered errors */
+		fclose(fptemp);		/*  while writing the file */
+		fclose(fplist);
+		if (list)
+			free(list);
+		fprintf(stderr, "An error occurred when writing the file: %s", tmpfile);
+		return false;
+	}
+
+	if (rename(tmpfile, name)) {
+		fprintf(stderr, "Failed to rename file: %s to %s\n", tmpfile, name);
+		fclose(fptemp);
+		fclose(fplist);
+		if (list)
+			free(list);
+		remove(tmpfile);
+		return false;
+	}
+
+	fclose(fptemp);
+	fclose(fplist);
+	if (list)
+		free(list);
+
+	return true;
 }
 
 int conf_write(const char *name)

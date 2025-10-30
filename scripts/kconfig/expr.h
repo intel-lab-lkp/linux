@@ -76,6 +76,7 @@ enum {
 	S_DEF_AUTO,		/* values read from auto.conf */
 	S_DEF_DEF3,		/* Reserved for UI usage */
 	S_DEF_DEF4,		/* Reserved for UI usage */
+	S_DEF_COMP,		/* values for comparison purposes */
 	S_DEF_COUNT
 };
 
@@ -140,6 +141,13 @@ struct symbol {
 	 * "Weak" reverse dependencies through being implied by other symbols
 	 */
 	struct expr_value implied;
+
+	/*
+	 * Used by comparison code. "true" when the symbol is present in the compared
+	 * .config, "false" if it's missing in the compared .config, meaning
+	 * therefore a new feature.
+	 */
+	bool comp_is_avail;
 };
 
 #define SYMBOL_CONST      0x0001  /* symbol is const */
@@ -157,6 +165,7 @@ struct symbol {
 #define SYMBOL_DEF_AUTO   0x20000  /* symbol.def[S_DEF_AUTO] is valid */
 #define SYMBOL_DEF3       0x40000  /* symbol.def[S_DEF_3] is valid */
 #define SYMBOL_DEF4       0x80000  /* symbol.def[S_DEF_4] is valid */
+#define SYMBOL_DEF_COMP	  0x100000 /* symbol.def[S_DEF_COMP] is valid */
 
 #define SYMBOL_MAXLENGTH	256
 

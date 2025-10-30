@@ -9,6 +9,7 @@
 #include <assert.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <stdbool.h>
 
 #include "expr.h"
 
@@ -129,6 +130,16 @@ bool sym_is_choice_value(const struct symbol *sym);
 static inline bool sym_has_value(const struct symbol *sym)
 {
 	return sym->flags & SYMBOL_DEF_USER ? true : false;
+}
+
+static inline bool sym_get_comp_is_avail(struct symbol *sym)
+{
+	return sym->comp_is_avail;
+}
+
+static inline tristate sym_get_comp_tristate_value(struct symbol *sym)
+{
+	return sym->def[S_DEF_COMP].tri;
 }
 
 #ifdef __cplusplus

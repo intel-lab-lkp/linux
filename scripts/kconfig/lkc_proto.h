@@ -7,6 +7,10 @@
 /* confdata.c */
 void conf_parse(const char *name);
 int conf_read(const char *name);
+bool conf_read_comp(const char *name);
+bool conf_write_comp(const char *name);
+const char sym_get_comp_tristate_char(struct symbol *sym);
+char *comp_get_list_diff(void);
 int conf_read_simple(const char *name, int);
 int conf_write_defconfig(const char *name);
 int conf_write(const char *name);

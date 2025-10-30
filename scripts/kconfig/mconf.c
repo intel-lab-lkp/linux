@@ -73,7 +73,7 @@ static const char mconf_readme[] =
 "o  To get help with an item, use the cursor keys to highlight <Help>\n"
 "   and press <ENTER>.\n"
 "\n"
-"   Shortcut: Press <H> or <?>.\n"
+"   Shortcut: Press <F1>, <H> or <?>.\n"
 "\n"
 "o  To toggle the display of hidden options, press <Z>.\n"
 "\n"
@@ -89,7 +89,7 @@ static const char mconf_readme[] =
 "o  To see available help for the item, use the cursor keys to highlight\n"
 "   <Help> and Press <ENTER>.\n"
 "\n"
-"   Shortcut: Press <H> or <?>.\n"
+"   Shortcut: Press <F1>, <H> or <?>.\n"
 "\n"
 "   Also, the <TAB> and cursor keys will cycle between <Select> and\n"
 "   <Help>\n"
@@ -128,6 +128,21 @@ static const char mconf_readme[] =
 "during a Menuconfig session that you have completely messed up your\n"
 "settings, you may use the <Load> button to restore your previously\n"
 "saved settings from \".config\" without restarting Menuconfig.\n"
+"\n"
+"Compare\n"
+"-------\n"
+"With the \"Compare\" button you can load an alternate \".config\" file for\n"
+"comparison purpose. Once loaded, four characters separated by spaces will\n"
+"be displayed for each menu item only for items that have differences.\n"
+"Menu entries without differences will be left untouched. The character can\n"
+"be: *: for a symbol built-in, _: for a symbol excluded, M: for a symbol as\n"
+"module and #: for a symbol absent in the loaded \".config\" file, meaning\n"
+"therefore a new feature.\n"
+"\n"
+"Once loaded the .config file to compare, using the <F2> or 'D' key a view\n"
+"will be displayed listing the differences between the two .config files\n"
+"sorted alphabetically, using the <F4> or 'F' key instead, you can save to\n"
+"a file these differences.\n"
 "\n"
 "Other information\n"
 "-----------------\n"
@@ -187,12 +202,13 @@ menu_instructions[] =
 	"Highlighted letters are hotkeys.  "
 	"Pressing <Y> includes, <N> excludes, <M> modularizes features.  "
 	"Press <Esc><Esc> to exit, <?> for Help, </> for Search.  "
-	"Legend: [*] built-in  [ ] excluded  <M> module  < > module capable",
+	"Legend: [*] built-in  [ ] excluded  <M> module  "
+	"for compare: * built-in _ excluded M module # absent (new feature)",
 radiolist_instructions[] =
 	"Use the arrow keys to navigate this window or "
 	"press the hotkey of the item you wish to select "
 	"followed by the <SPACE BAR>. "
-	"Press <?> for additional information about this option.",
+	"Press <F1> for additional information about this option.",
 inputbox_instructions_int[] =
 	"Please enter a decimal value. "
 	"Fractions will not be accepted.  "
@@ -210,6 +226,9 @@ load_config_text[] =
 	"Enter the name of the configuration file you wish to load.  "
 	"Accept the name shown to restore the configuration you "
 	"last retrieved.  Leave blank to abort.",
+load_config_comp_text[] =
+	"Enter the name of the configuration file you wish to load for comparison purpose.  "
+	"Leave blank to abort and to quit \"Comparison Mode\".",
 load_config_help[] =
 	"\n"
 	"For various reasons, one may wish to keep several different\n"
@@ -221,6 +240,43 @@ load_config_help[] =
 	"\n"
 	"If you are uncertain, then you have probably never used alternate\n"
 	"configuration files. You should therefore leave this blank to abort.\n",
+load_config_comp_help[] =
+	"\n"
+	"For various reasons, one may wish to keep several different\n"
+	"configurations available on a single machine.\n"
+	"\n"
+	"If you have another configuration file other than the default one,\n"
+	"entering its name here will allow you to compare the items (symbols)\n"
+	"of this file with the current configuration loaded.\n"
+	"\n"
+	"Once loaded, four characters separated by spaces will be displayed for\n"
+	"each menu item only for items that have differences.\n"
+	"Menu entries without differences will be left untouched. The character can\n"
+	"be: *: for a symbol built-in, _: for a symbol excluded, M: for a symbol as\n"
+	"module and #: for a symbol absent in the loaded \".config\" file, meaning\n"
+	"therefore a new feature.\n"
+	"\n"
+	"In addition, using the <F2> or 'D' key a view will be displayed listing the\n"
+	"differences between the two .config files sorted alphabetically, using\n"
+	"the <F4> or 'F' key instead, you can save to a file these differences.\n"
+	"\n"
+	"If you are uncertain, then you probably don't want to compare two\n"
+	"configuration files. You should therefore leave this blank to abort.\n",
+load_comp_diff_msg[] =
+	"Please load a .config file to compare\nusing the \"Compare\" button.",
+save_config_diff_text[] =
+	"Enter a filename to which the differences between two .config be saved.  "
+	"Leave blank to abort.",
+save_config_diff_help[] =
+	"\n"
+	"Entering a file name here will allow you to later retrieve the list\n"
+	"of symbol differences between the current configuration file and that\n"
+	"loaded using the \"Compare\" button.\n"
+	"If the entered filename exists, a backup copy will be made adding the\n"
+	"\".old\" extension.\n"
+	"\n"
+	"If you are uncertain what all this means then you should probably\n"
+	"leave this blank to abort.\n",
 save_config_text[] =
 	"Enter a filename to which this configuration should be saved "
 	"as an alternate.  Leave blank to abort.",
@@ -289,16 +345,25 @@ static int single_menu_mode;
 static int show_all_options;
 static int save_and_exit;
 static int silent;
+static bool has_comp_file;
 
 static void conf(struct menu *menu, struct menu *active_menu);
+static void conf_load_comp(void);
+static void conf_save_comp(void);
+static void comp_show_list_diff(void);
 
 static char filename[PATH_MAX+1];
 static void set_config_filename(const char *config_filename)
 {
-	static char menu_backtitle[PATH_MAX+128];
+	static char menu_backtitle[PATH_MAX + 128];
 
-	snprintf(menu_backtitle, sizeof(menu_backtitle), "%s - %s",
-		 config_filename, rootmenu.prompt->text);
+	if (has_comp_file)
+		snprintf(menu_backtitle, sizeof(menu_backtitle), "%s - %s - %s",
+			 config_filename, rootmenu.prompt->text, "Comparison Mode");
+	else
+		snprintf(menu_backtitle, sizeof(menu_backtitle), "%s - %s",
+			 config_filename, rootmenu.prompt->text);
+
 	set_dialog_backtitle(menu_backtitle);
 
 	snprintf(filename, sizeof(filename), "%s", config_filename);
@@ -457,8 +522,8 @@ static void build_conf(struct menu *menu)
 	struct property *prop;
 	struct menu *child;
 	int type, tmp, doint = 2;
-	tristate val;
-	char ch;
+	tristate val, val_comp;
+	char ch, ch_comp;
 	bool visible;
 
 	/*
@@ -541,12 +606,22 @@ static void build_conf(struct menu *menu)
 		}
 		child_count++;
 		val = sym_get_tristate_value(sym);
+		val_comp = sym_get_comp_tristate_value(sym);
+		ch_comp = sym_get_comp_tristate_char(sym);
+
 		switch (type) {
 		case S_BOOLEAN:
-			if (sym_is_changeable(sym))
-				item_make("[%c]", val == no ? ' ' : '*');
-			else
-				item_make("-%c-", val == no ? ' ' : '*');
+			if (sym_is_changeable(sym)) {
+				if (has_comp_file && (val != val_comp || ch_comp == '#'))
+					item_make("[%c] %c", val == no ? ' ' : '*', ch_comp);
+				else
+					item_make("[%c]", val == no ? ' ' : '*');
+			} else {
+				if (has_comp_file && (val != val_comp || ch_comp == '#'))
+					item_make("-%c- %c", val == no ? ' ' : '*', ch_comp);
+				else
+					item_make("-%c-", val == no ? ' ' : '*');
+			}
 			item_set_tag('t');
 			item_set_data(menu);
 			break;
@@ -557,12 +632,22 @@ static void build_conf(struct menu *menu)
 			default:  ch = ' '; break;
 			}
 			if (sym_is_changeable(sym)) {
-				if (sym->rev_dep.tri == mod)
-					item_make("{%c}", ch);
-				else
-					item_make("<%c>", ch);
+				if (sym->rev_dep.tri == mod) {
+					if (has_comp_file && (val != val_comp || ch_comp == '#'))
+						item_make("{%c} %c", ch, ch_comp);
+					else
+						item_make("{%c}", ch);
+				} else {
+					if (has_comp_file && (val != val_comp || ch_comp == '#'))
+						item_make("<%c> %c", ch, ch_comp);
+					else
+						item_make("<%c>", ch);
+				}
 			} else
-				item_make("-%c-", ch);
+				if (has_comp_file && (val != val_comp || ch_comp == '#'))
+					item_make("-%c- %c", ch, ch_comp);
+				else
+					item_make("-%c-", ch);
 			item_set_tag('t');
 			item_set_data(menu);
 			break;
@@ -696,6 +781,98 @@ static void conf_string(struct menu *menu)
 	}
 }
 
+static void comp_set_backtitle(void)
+{
+	static char menu_backtitle[PATH_MAX + 128];
+
+	if (has_comp_file)
+		snprintf(menu_backtitle, sizeof(menu_backtitle), "%s - %s - %s",
+			filename, rootmenu.prompt->text, "Comparison Mode");
+	else
+		snprintf(menu_backtitle, sizeof(menu_backtitle), "%s - %s",
+			filename, rootmenu.prompt->text);
+
+	set_dialog_backtitle(menu_backtitle);
+}
+
+static void comp_show_list_diff(void)
+{
+	if (!has_comp_file)
+		show_textbox(NULL, load_comp_diff_msg, 6, 44);
+	else {
+		char *list = comp_get_list_diff();
+
+		show_textbox("COMPARE", list, 0, 0);
+		free(list);
+	}
+}
+
+static void conf_load_comp(void)
+{
+	while (1) {
+		int res;
+
+		dialog_clear();
+		res = dialog_inputbox(NULL, load_config_comp_text,
+				      11, 55, filename);
+		switch (res) {
+		case 0:
+			if (!dialog_input_result[0]) {
+				has_comp_file = false;
+				comp_set_backtitle();
+				return;
+			}
+			if (!conf_read_comp(dialog_input_result)) {
+				has_comp_file = true;
+				comp_set_backtitle();
+				return;
+			}
+
+			show_textbox(NULL, "File does not exist!", 5, 38);
+			break;
+		case 1:
+			show_helptext("Load Configuration to Compare", load_config_comp_help);
+			break;
+		case KEY_ESC:
+			return;
+		}
+	}
+}
+
+static void conf_save_comp(void)
+{
+	if (!has_comp_file) {
+		show_textbox(NULL, load_comp_diff_msg, 6, 44);
+		return;
+	}
+
+	char fn_diff[PATH_MAX + 8];
+
+	snprintf(fn_diff, PATH_MAX + 8, "%s.diff", filename);
+
+	while (1) {
+		int res;
+
+		dialog_clear();
+		res = dialog_inputbox(NULL, save_config_diff_text,
+				      11, 55, fn_diff);
+		switch (res) {
+		case 0:
+			if (!dialog_input_result[0])
+				return;
+			if (conf_write_comp(dialog_input_result))
+				return;
+			show_textbox(NULL, "Can't create file!", 5, 60);
+			break;
+		case 1:
+			show_helptext("Save Differences", save_config_diff_help);
+			break;
+		case KEY_ESC:
+			return;
+		}
+	}
+}
+
 static void conf_load(void)
 {
 
@@ -754,6 +931,7 @@ static void conf(struct menu *menu, struct menu *active_menu)
 {
 	struct menu *submenu;
 	const char *prompt = menu_get_prompt(menu);
+	char comp_prompt[PATH_MAX + 128];
 	struct subtitle_part stpart;
 	struct symbol *sym;
 	int res;
@@ -773,9 +951,17 @@ static void conf(struct menu *menu, struct menu *active_menu)
 			break;
 		set_subtitle();
 		dialog_clear();
-		res = dialog_menu(prompt ? prompt : "Main Menu",
-				  menu_instructions,
-				  active_menu, &s_scroll);
+		if (has_comp_file) {
+			snprintf(comp_prompt, sizeof(comp_prompt), "%s - %s",
+				prompt ? prompt : "Main Menu", "Comparison Mode");
+			res = dialog_menu(comp_prompt,
+					  menu_instructions,
+					  active_menu, &s_scroll);
+		} else
+			res = dialog_menu(prompt ? prompt : "Main Menu",
+					  menu_instructions,
+					  active_menu, &s_scroll);
+
 		if (res == 1 || res == KEY_ESC || res == -ERRDISPLAYTOOSMALL)
 			break;
 		if (item_count() != 0) {
@@ -854,6 +1040,18 @@ static void conf(struct menu *menu, struct menu *active_menu)
 			break;
 		case 10:
 			show_all_options = !show_all_options;
+			break;
+		case 40:
+			reset_subtitle();
+			comp_show_list_diff();
+			break;
+		case 50:
+			reset_subtitle();
+			conf_load_comp();
+			break;
+		case 60:
+			reset_subtitle();
+			conf_save_comp();
 			break;
 		}
 	}

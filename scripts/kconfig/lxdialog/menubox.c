@@ -133,14 +133,15 @@ static void print_arrows(WINDOW * win, int item_no, int scroll, int y, int x,
  */
 static void print_buttons(WINDOW * win, int height, int width, int selected)
 {
-	int x = width / 2 - 28;
+	int x = width / 2 - 30;
 	int y = height - 2;
 
 	print_button(win, "Select", y, x, selected == 0);
-	print_button(win, " Exit ", y, x + 12, selected == 1);
-	print_button(win, " Help ", y, x + 24, selected == 2);
-	print_button(win, " Save ", y, x + 36, selected == 3);
-	print_button(win, " Load ", y, x + 48, selected == 4);
+	print_button(win, " Exit ", y, x + 10, selected == 1);
+	print_button(win, " Help ", y, x + 20, selected == 2);
+	print_button(win, " Save ", y, x + 30, selected == 3);
+	print_button(win, " Load ", y, x + 40, selected == 4);
+	print_button(win, "Compare", y, x + 50, selected == 5);
 
 	wmove(win, y, x + 1 + 12 * selected);
 	wrefresh(win);
@@ -354,14 +355,19 @@ do_resize:
 		case TAB:
 		case KEY_RIGHT:
 			button = ((key == KEY_LEFT ? --button : ++button) < 0)
-			    ? 4 : (button > 4 ? 0 : button);
+			    ? 5 : (button > 5 ? 0 : button);
 
 			print_buttons(dialog, height, width, button);
 			wrefresh(menu);
 			break;
+		case KEY_F(1):
+		case KEY_F(2):
+		case KEY_F(4):
 		case ' ':
 		case 's':
 		case 'y':
+		case 'd':
+		case 'f':
 		case 'n':
 		case 'm':
 		case '/':
@@ -376,6 +382,7 @@ do_resize:
 			item_set(scroll + choice);
 			item_set_selected(1);
 			switch (key) {
+			case KEY_F(1):
 			case 'h':
 			case '?':
 				return 2;
@@ -392,9 +399,15 @@ do_resize:
 				return 9;
 			case 'z':
 				return 10;
+			case KEY_F(2):		/* Differences between .config files view */
+			case 'd':
+				return 40;
+			case KEY_F(4):		/* Save to file differences between .config files */
+			case 'f':
+				return 60;
 			case '\n':
-				return button;
-			}
+				return button == 5 ? 50 : button; /* Workaround for */
+			}					  /* Compare button */
 			return 0;
 		case 'e':
 		case 'x':
