@@ -1862,10 +1862,167 @@ add_partition(struct mshv_partition *partition)
 	return 0;
 }
 
+static_assert(MSHV_NUM_CPU_FEATURES_BANKS <=
+	      HV_PARTITION_PROCESSOR_FEATURES_BANKS);
+
+static long mshv_ioctl_process_pt_flags(void __user *user_arg, u64 *pt_flags,
+					struct hv_partition_creation_properties *cr_props,
+					union hv_partition_isolation_properties *isol_props)
+{
+	int i;
+	struct mshv_create_partition_v2 args;
+	union hv_partition_processor_features *disabled_procs;
+	union hv_partition_processor_xsave_features *disabled_xsave;
+
+	/* First, copy orig struct in case user is on previous versions */
+	if (copy_from_user(&args, user_arg,
+			   sizeof(struct mshv_create_partition)))
+		return -EFAULT;
+
+	if ((args.pt_flags & ~MSHV_PT_FLAGS_MASK) ||
+	     args.pt_isolation >= MSHV_PT_ISOLATION_COUNT)
+		return -EINVAL;
+
+	disabled_procs = &cr_props->disabled_processor_features;
+
+	/* Disable all processor features first */
+	for (i = 0; i < HV_PARTITION_PROCESSOR_FEATURES_BANKS; i++)
+		disabled_procs->as_uint64[i] = -1;
+
+#if IS_ENABLED(CONFIG_X86_64)
+	/* Enable default features that are known to be supported */
+	disabled_procs->cet_ibt_support = 0;
+	disabled_procs->cet_ss_support = 0;
+	disabled_procs->smep_support = 0;
+	disabled_procs->rdtscp_support = 0;
+	disabled_procs->tsc_invariant_support = 0;
+	disabled_procs->sse3_support = 0;
+	disabled_procs->lahf_sahf_support = 0;
+	disabled_procs->ssse3_support = 0;
+	disabled_procs->sse4_1_support = 0;
+	disabled_procs->sse4_2_support = 0;
+	disabled_procs->sse4a_support = 0;
+	disabled_procs->xop_support = 0;
+	disabled_procs->pop_cnt_support = 0;
+	disabled_procs->cmpxchg16b_support = 0;
+	disabled_procs->altmovcr8_support = 0;
+	disabled_procs->lzcnt_support = 0;
+	disabled_procs->mis_align_sse_support = 0;
+	disabled_procs->mmx_ext_support = 0;
+	disabled_procs->amd3dnow_support = 0;
+	disabled_procs->extended_amd3dnow_support = 0;
+	disabled_procs->aes_support = 0;
+	disabled_procs->pclmulqdq_support = 0;
+	disabled_procs->pcid_support = 0;
+	disabled_procs->fma4_support = 0;
+	disabled_procs->f16c_support = 0;
+	disabled_procs->rd_rand_support = 0;
+	disabled_procs->rd_wr_fs_gs_support = 0;
+	disabled_procs->enhanced_fast_string_support = 0;
+	disabled_procs->bmi1_support = 0;
+	disabled_procs->bmi2_support = 0;
+	disabled_procs->hle_support_deprecated = 0;
+	disabled_procs->rtm_support_deprecated = 0;
+	disabled_procs->movbe_support = 0;
+	disabled_procs->npiep1_support = 0;
+	disabled_procs->dep_x87_fpu_save_support = 0;
+	disabled_procs->rd_seed_support = 0;
+	disabled_procs->adx_support = 0;
+	disabled_procs->intel_prefetch_support = 0;
+	disabled_procs->smap_support = 0;
+	disabled_procs->hle_support = 0;
+	disabled_procs->rtm_support = 0;
+	disabled_procs->invpcid_support = 0;
+	disabled_procs->ibrs_support = 0;
+	disabled_procs->stibp_support = 0;
+	disabled_procs->mdd_support = 0;
+	disabled_procs->ibpb_support = 0;
+	disabled_procs->l1dcache_flush_support = 0;
+	disabled_procs->virt_spec_ctrl_support = 0;
+	disabled_procs->mb_clear_support = 0;
+	disabled_procs->tsx_ctrl_support = 0;
+	disabled_procs->clflushopt_support = 0;
+	disabled_procs->rdcl_no_support = 0;
+	disabled_procs->ibrs_all_support = 0;
+	disabled_procs->page_1gb_support = 0;
+	disabled_procs->skip_l1df_support = 0;
+	disabled_procs->ssb_no_support = 0;
+	disabled_procs->mbs_no_support = 0;
+	disabled_procs->taa_no_support = 0;
+	disabled_procs->fb_clear_support = 0;
+	disabled_procs->gds_no_support = 0;
+	disabled_procs->bhi_no_support = 0;
+	disabled_procs->bhi_dis_support = 0;
+	disabled_procs->btc_no_support = 0;
+	disabled_procs->mitigation_ctrl_support = 0;
+	disabled_procs->rfds_no_support = 0;
+	disabled_procs->rfds_clear_support = 0;
+	disabled_procs->unrestricted_guest_support = 0;
+	disabled_procs->fast_short_rep_mov_support = 0;
+	disabled_procs->rsb_a_no_support = 0;
+	disabled_procs->rd_pid_support = 0;
+	disabled_procs->umip_support = 0;
+	disabled_procs->vmx_exception_inject_support = 0;
+	disabled_procs->rdpru_support = 0;
+	disabled_procs->mbec_support = 0;
+	disabled_procs->psfd_support = 0;
+
+	/* Enable default XSave features that are known to be supported*/
+	disabled_xsave = &cr_props->disabled_processor_xsave_features;
+	disabled_xsave->as_uint64 = -1;
+	disabled_xsave->xsave_support = 0;
+	disabled_xsave->xsaveopt_support = 0;
+	disabled_xsave->avx_support = 0;
+	disabled_xsave->xsave_supervisor_support = 0;
+	disabled_xsave->xsave_comp_support = 0;
+#endif
+	/* Check if user provided newer struct with feature fields */
+	if (args.pt_flags & BIT(MSHV_PT_BIT_CPU_AND_XSAVE_FEATURES)) {
+		if (copy_from_user(&args, user_arg, sizeof(args)))
+			return -EFAULT;
+
+		if (args.pt_num_cpu_fbanks > MSHV_NUM_CPU_FEATURES_BANKS ||
+		    mshv_field_nonzero(args, pt_rsvd) ||
+		    mshv_field_nonzero(args, pt_rsvd1))
+			return -EINVAL;
+
+		for (i = 0; i < args.pt_num_cpu_fbanks; i++)
+			disabled_procs->as_uint64[i] = args.pt_cpu_fbanks[i];
+
+#if IS_ENABLED(CONFIG_X86_64)
+		disabled_xsave->as_uint64 = args.pt_disabled_xsave;
+#else
+		if (mshv_field_nonzero(args, pt_rsvd2))
+			return -EINVAL;
+#endif
+	}
+
+	/* Only support EXO partitions */
+	*pt_flags = HV_PARTITION_CREATION_FLAG_EXO_PARTITION |
+		    HV_PARTITION_CREATION_FLAG_INTERCEPT_MESSAGE_PAGE_ENABLED;
+
+	if (args.pt_flags & BIT(MSHV_PT_BIT_LAPIC))
+		*pt_flags |= HV_PARTITION_CREATION_FLAG_LAPIC_ENABLED;
+	if (args.pt_flags & BIT(MSHV_PT_BIT_X2APIC))
+		*pt_flags |= HV_PARTITION_CREATION_FLAG_X2APIC_CAPABLE;
+	if (args.pt_flags & BIT(MSHV_PT_BIT_GPA_SUPER_PAGES))
+		*pt_flags |= HV_PARTITION_CREATION_FLAG_GPA_SUPER_PAGES_ENABLED;
+
+	switch (args.pt_isolation) {
+	case MSHV_PT_ISOLATION_NONE:
+		isol_props->isolation_type = HV_PARTITION_ISOLATION_TYPE_NONE;
+		break;
+	case MSHV_PT_ISOLATION_SNP:
+		isol_props->isolation_type = HV_PARTITION_ISOLATION_TYPE_SNP;
+		break;
+	}
+
+	return 0;
+}
+
 static long
 mshv_ioctl_create_partition(void __user *user_arg, struct device *module_dev)
 {
-	struct mshv_create_partition args;
 	u64 creation_flags;
 	struct hv_partition_creation_properties creation_properties = {};
 	union hv_partition_isolation_properties isolation_properties = {};
@@ -1874,30 +2031,11 @@ mshv_ioctl_create_partition(void __user *user_arg, struct device *module_dev)
 	int fd;
 	long ret;
 
-	if (copy_from_user(&args, user_arg, sizeof(args)))
-		return -EFAULT;
-
-	if ((args.pt_flags & ~MSHV_PT_FLAGS_MASK) ||
-	    args.pt_isolation >= MSHV_PT_ISOLATION_COUNT)
-		return -EINVAL;
-
-	/* Only support EXO partitions */
-	creation_flags = HV_PARTITION_CREATION_FLAG_EXO_PARTITION |
-			 HV_PARTITION_CREATION_FLAG_INTERCEPT_MESSAGE_PAGE_ENABLED;
-
-	if (args.pt_flags & BIT(MSHV_PT_BIT_LAPIC))
-		creation_flags |= HV_PARTITION_CREATION_FLAG_LAPIC_ENABLED;
-	if (args.pt_flags & BIT(MSHV_PT_BIT_X2APIC))
-		creation_flags |= HV_PARTITION_CREATION_FLAG_X2APIC_CAPABLE;
-	if (args.pt_flags & BIT(MSHV_PT_BIT_GPA_SUPER_PAGES))
-		creation_flags |= HV_PARTITION_CREATION_FLAG_GPA_SUPER_PAGES_ENABLED;
-
-	switch (args.pt_isolation) {
-	case MSHV_PT_ISOLATION_NONE:
-		isolation_properties.isolation_type =
-			HV_PARTITION_ISOLATION_TYPE_NONE;
-		break;
-	}
+	ret = mshv_ioctl_process_pt_flags(user_arg, &creation_flags,
+					  &creation_properties,
+					  &isolation_properties);
+	if (ret)
+		return ret;
 
 	partition = kzalloc(sizeof(*partition), GFP_KERNEL);
 	if (!partition)
