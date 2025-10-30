@@ -176,7 +176,7 @@ properties:
             - description: See native 'phy' reset for details
               enum: [ pciephy, link ]
             - description: See native 'pwr' reset for details
-              enum: [ turnoff ]
+              enum: [ turnoff, powerup ]
 
   phys:
     description:
