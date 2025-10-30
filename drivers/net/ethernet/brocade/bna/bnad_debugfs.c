@@ -311,6 +311,9 @@ bnad_debugfs_write_regrd(struct file *file, const char __user *buf,
 	unsigned long flags;
 	void *kern_buf;
 
+	if (nbytes == 0 || nbytes > PAGE_SIZE)
+		return -EINVAL;
+
 	/* Copy the user space buf */
 	kern_buf = memdup_user_nul(buf, nbytes);
 	if (IS_ERR(kern_buf))
