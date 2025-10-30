@@ -859,10 +859,16 @@ void drm_sched_job_arm(struct drm_sched_job *job)
 
 	BUG_ON(!entity);
 	drm_sched_entity_select_rq(entity);
+
+	spin_lock(&entity->lock);
+	spin_lock(&entity->rq->lock);
 	sched = entity->rq->sched;
+	spin_unlock(&entity->rq->lock);
+
+	job->s_priority = entity->priority;
+	spin_unlock(&entity->lock);
 
 	job->sched = sched;
-	job->s_priority = entity->priority;
 
 	drm_sched_fence_init(job->s_fence, job->entity);
 }
