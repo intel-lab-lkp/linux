@@ -2314,9 +2314,33 @@ static int st_lsm6dsx_chan_init(struct iio_chan_spec *channels, struct st_lsm6ds
 	chan->scan_type.endianness = IIO_LE;
 	chan->ext_info = st_lsm6dsx_ext_info;
 	if (id == ST_LSM6DSX_ID_ACC) {
-		if (hw->settings->event_settings.sources[ST_LSM6DSX_EVENT_WAKEUP].value.addr) {
-			chan->event_spec = &st_lsm6dsx_event;
-			chan->num_event_specs = 1;
+		const struct st_lsm6dsx_event_src *event_src;
+		unsigned int event_sources;
+		int event;
+
+		event_src = hw->settings->event_settings.sources;
+		event_sources = 0;
+		for (event = 0; event < ST_LSM6DSX_EVENT_MAX; event++) {
+			if (event_src[event].status_reg) {
+				event_sources |= BIT(event);
+				chan->num_event_specs++;
+			}
+		}
+		if (event_sources) {
+			struct iio_event_spec *event_spec;
+
+			event_spec = devm_kzalloc(hw->dev,
+						  chan->num_event_specs * sizeof(*event_spec),
+						  GFP_KERNEL);
+			if (!event_spec)
+				return -ENOMEM;
+			chan->event_spec = event_spec;
+			if (event_sources & BIT(ST_LSM6DSX_EVENT_WAKEUP)) {
+				event_spec->type = IIO_EV_TYPE_THRESH;
+				event_spec->dir = IIO_EV_DIR_EITHER;
+				event_spec->mask_separate = BIT(IIO_EV_INFO_VALUE) |
+							    BIT(IIO_EV_INFO_ENABLE);
+			}
 		}
 	}
 	return 0;
