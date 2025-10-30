@@ -214,8 +214,7 @@ send_secondary_console_msg(char *str, int cpuid)
 	cp2 = str;
 	len = strlen(cp2);
 	*(unsigned int *)&cpu->ipc_buffer[0] = len;
-	cp1 = (char *) &cpu->ipc_buffer[1];
-	memcpy(cp1, cp2, len);
+	cp1 = memcpy(&cpu->ipc_buffer[1], cp2, len);
 
 	/* atomic test and set */
 	wmb();
@@ -265,8 +264,7 @@ recv_secondary_console_msg(void)
 			strcpy(buf, "<<< BOGUS MSG >>>");
 		else {
 			cp1 = (char *) &cpu->ipc_buffer[1];
-			cp2 = buf;
-			memcpy(cp2, cp1, cnt);
+			cp2 = memcpy(buf, cp1, cnt);
 			cp2[cnt] = '\0';
 			
 			while ((cp2 = strchr(cp2, '\r')) != 0) {
