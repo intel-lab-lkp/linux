@@ -582,6 +582,84 @@ bool pm_sleep_transition_in_progress(void)
 {
 	return pm_suspend_in_progress() || hibernation_in_progress();
 }
+
+static int pm_sleep_fs_syncs_queued;
+static DEFINE_SPINLOCK(pm_sleep_fs_sync_lock);
+static DECLARE_COMPLETION(pm_sleep_fs_sync_complete);
+static struct workqueue_struct *pm_fs_sync_wq;
+
+static int __init pm_start_fs_sync_workqueue(void)
+{
+	pm_fs_sync_wq = alloc_ordered_workqueue("pm_fs_sync_wq", 0);
+
+	return pm_fs_sync_wq ? 0 : -ENOMEM;
+}
+
+/**
+ * pm_stop_waiting_for_fs_sync - Abort fs_sync to abort sleep early
+ *
+ * This function causes the suspend process to stop waiting on an in-progress
+ * filesystem sync, such that the suspend process can be aborted before the
+ * filesystem sync is complete.
+ */
+void pm_stop_waiting_for_fs_sync(void)
+{
+	unsigned long flags;
+
+	spin_lock_irqsave(&pm_sleep_fs_sync_lock, flags);
+	complete(&pm_sleep_fs_sync_complete);
+	spin_unlock_irqrestore(&pm_sleep_fs_sync_lock, flags);
+}
+
+static void sync_filesystems_fn(struct work_struct *work)
+{
+	ksys_sync_helper();
+
+	spin_lock_irq(&pm_sleep_fs_sync_lock);
+	pm_sleep_fs_syncs_queued--;
+	complete(&pm_sleep_fs_sync_complete);
+	spin_unlock_irq(&pm_sleep_fs_sync_lock);
+}
+static DECLARE_WORK(sync_filesystems, sync_filesystems_fn);
+
+/**
+ * pm_sleep_fs_sync - Trigger fs_sync with ability to abort
+ *
+ * Return 0 on successful file system sync, otherwise returns -EBUSY if file
+ * system sync was aborted.
+ */
+int pm_sleep_fs_sync(void)
+{
+	pm_wakeup_clear(0);
+	spin_lock_irq(&pm_sleep_fs_sync_lock);
+	/*
+	 * Handles back-to-back sleeps, by queuing a subsequent fs sync only if
+	 * the previous fs sync is running or is not queued. Multiple fs syncs
+	 * ensure that the latest files are saved immediately before sleep.
+	 */
+	if (!work_pending(&sync_filesystems)) {
+		pm_sleep_fs_syncs_queued++;
+		queue_work(pm_fs_sync_wq, &sync_filesystems);
+	}
+	do {
+		reinit_completion(&pm_sleep_fs_sync_complete);
+		spin_unlock_irq(&pm_sleep_fs_sync_lock);
+		/*
+		 * Completion is triggered by fs_sync finishing or a sleep
+		 * abort, whichever comes first
+		 */
+		wait_for_completion(&pm_sleep_fs_sync_complete);
+		spin_lock_irq(&pm_sleep_fs_sync_lock);
+		if (pm_wakeup_pending()) {
+			spin_unlock_irq(&pm_sleep_fs_sync_lock);
+			return -EBUSY;
+		}
+	} while (pm_sleep_fs_syncs_queued);
+	spin_unlock_irq(&pm_sleep_fs_sync_lock);
+
+	return 0;
+}
+
 #endif /* CONFIG_PM_SLEEP */
 
 #ifdef CONFIG_PM_SLEEP_DEBUG
@@ -1076,6 +1154,9 @@ static int __init pm_start_workqueue(void)
 static int __init pm_init(void)
 {
 	int error = pm_start_workqueue();
+	if (error)
+		return error;
+	error = pm_start_fs_sync_workqueue();
 	if (error)
 		return error;
 	hibernate_image_size_init();
