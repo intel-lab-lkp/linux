@@ -799,7 +799,12 @@ int drm_sched_job_init(struct drm_sched_job *job,
 		       u32 credits, void *owner,
 		       uint64_t drm_client_id)
 {
-	if (!entity->rq) {
+	struct drm_sched_rq *rq;
+
+	spin_lock(&entity->lock);
+	rq = entity->rq;
+	spin_unlock(&entity->lock);
+	if (!rq) {
 		/* This will most likely be followed by missing frames
 		 * or worse--a blank screen--leave a trail in the
 		 * logs, so this can be debugged easier.
