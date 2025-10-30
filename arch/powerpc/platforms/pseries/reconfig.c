@@ -366,6 +366,9 @@ static ssize_t ofdt_write(struct file *file, const char __user *buf, size_t coun
 	if (rv)
 		return rv;
 
+	if (count == 0 || count > PAGE_SIZE)
+		return -EINVAL;
+
 	kbuf = memdup_user_nul(buf, count);
 	if (IS_ERR(kbuf))
 		return PTR_ERR(kbuf);
