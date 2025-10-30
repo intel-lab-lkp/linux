@@ -376,4 +376,5 @@ void __init uli_init(void)
 			break;
 		}
 	}
+	of_node_put(node);
 }
