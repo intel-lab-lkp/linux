@@ -1673,11 +1673,16 @@ static int
 st_lsm6dsx_check_events(struct st_lsm6dsx_sensor *sensor)
 {
 	struct st_lsm6dsx_hw *hw = sensor->hw;
+	int event;
 
 	if (sensor->id != ST_LSM6DSX_ID_ACC)
 		return 0;
 
-	return hw->enable_event;
+	for (event = 0; event < ST_LSM6DSX_EVENT_MAX; event++) {
+		if (hw->enable_event[event])
+			return true;
+	}
+	return false;
 }
 
 int st_lsm6dsx_sensor_set_enable(struct st_lsm6dsx_sensor *sensor,
@@ -1790,9 +1795,10 @@ static int st_lsm6dsx_write_raw(struct iio_dev *iio_dev,
 	return err;
 }
 
-static int st_lsm6dsx_event_setup(struct st_lsm6dsx_hw *hw, bool state)
+static int st_lsm6dsx_event_setup(struct st_lsm6dsx_hw *hw, enum st_lsm6dsx_event_id event,
+				  int axis, bool state)
 {
-	const struct st_lsm6dsx_reg *reg;
+	const struct st_lsm6dsx_event_src *src = &hw->settings->event_settings.sources[event];
 	u8 enable_mask;
 	unsigned int data;
 	int err;
@@ -1800,20 +1806,21 @@ static int st_lsm6dsx_event_setup(struct st_lsm6dsx_hw *hw, bool state)
 	if (!hw->irq_routing)
 		return -ENOTSUPP;
 
-	reg = &hw->settings->event_settings.enable_reg;
-	if (reg->addr) {
-		data = ST_LSM6DSX_SHIFT_VAL(state, reg->mask);
-		err = st_lsm6dsx_update_bits_locked(hw, reg->addr,
-						    reg->mask, data);
-		if (err < 0)
-			return err;
-	}
-
-	/* Enable wakeup interrupt */
-	enable_mask = hw->settings->event_settings.sources[ST_LSM6DSX_EVENT_WAKEUP].enable_mask;
+	/* Enable/disable event interrupt */
+	enable_mask = src->enable_mask;
 	data = ST_LSM6DSX_SHIFT_VAL(state, enable_mask);
 	return st_lsm6dsx_update_bits_locked(hw, hw->irq_routing,
 					     enable_mask, data);
+}
+
+static enum st_lsm6dsx_event_id st_lsm6dsx_get_event_id(enum iio_event_type type)
+{
+	switch (type) {
+	case IIO_EV_TYPE_THRESH:
+		return ST_LSM6DSX_EVENT_WAKEUP;
+	default:
+		return ST_LSM6DSX_EVENT_MAX;
+	}
 }
 
 static int st_lsm6dsx_read_event(struct iio_dev *iio_dev,
@@ -1825,14 +1832,15 @@ static int st_lsm6dsx_read_event(struct iio_dev *iio_dev,
 {
 	struct st_lsm6dsx_sensor *sensor = iio_priv(iio_dev);
 	struct st_lsm6dsx_hw *hw = sensor->hw;
+	enum st_lsm6dsx_event_id event = st_lsm6dsx_get_event_id(type);
 	const struct st_lsm6dsx_reg *reg;
 	u8 data;
 	int err;
 
-	if (type != IIO_EV_TYPE_THRESH)
+	if (event == ST_LSM6DSX_EVENT_MAX)
 		return -EINVAL;
 
-	reg = &hw->settings->event_settings.sources[ST_LSM6DSX_EVENT_WAKEUP].value;
+	reg = &hw->settings->event_settings.sources[event].value;
 	err = st_lsm6dsx_read_locked(hw, reg->addr, &data, sizeof(data));
 	if (err < 0)
 		return err;
@@ -1851,19 +1859,20 @@ st_lsm6dsx_write_event(struct iio_dev *iio_dev,
 		       enum iio_event_info info,
 		       int val, int val2)
 {
+	enum st_lsm6dsx_event_id event = st_lsm6dsx_get_event_id(type);
 	struct st_lsm6dsx_sensor *sensor = iio_priv(iio_dev);
 	struct st_lsm6dsx_hw *hw = sensor->hw;
 	const struct st_lsm6dsx_reg *reg;
 	unsigned int data;
 	int err;
 
-	if (type != IIO_EV_TYPE_THRESH)
+	if (event == ST_LSM6DSX_EVENT_MAX)
 		return -EINVAL;
 
 	if (val < 0 || val > 31)
 		return -EINVAL;
 
-	reg = &hw->settings->event_settings.sources[ST_LSM6DSX_EVENT_WAKEUP].value;
+	reg = &hw->settings->event_settings.sources[event].value;
 	data = ST_LSM6DSX_SHIFT_VAL(val, reg->mask);
 	err = st_lsm6dsx_update_bits_locked(hw, reg->addr,
 					    reg->mask, data);
@@ -1879,13 +1888,14 @@ st_lsm6dsx_read_event_config(struct iio_dev *iio_dev,
 			     enum iio_event_type type,
 			     enum iio_event_direction dir)
 {
+	enum st_lsm6dsx_event_id event = st_lsm6dsx_get_event_id(type);
 	struct st_lsm6dsx_sensor *sensor = iio_priv(iio_dev);
 	struct st_lsm6dsx_hw *hw = sensor->hw;
 
-	if (type != IIO_EV_TYPE_THRESH)
+	if (event == ST_LSM6DSX_EVENT_MAX)
 		return -EINVAL;
 
-	return !!(hw->enable_event & BIT(chan->channel2));
+	return !!(hw->enable_event[event] & BIT(chan->channel2));
 }
 
 static int
@@ -1894,22 +1904,25 @@ st_lsm6dsx_write_event_config(struct iio_dev *iio_dev,
 			      enum iio_event_type type,
 			      enum iio_event_direction dir, bool state)
 {
+	enum st_lsm6dsx_event_id event = st_lsm6dsx_get_event_id(type);
 	struct st_lsm6dsx_sensor *sensor = iio_priv(iio_dev);
 	struct st_lsm6dsx_hw *hw = sensor->hw;
+	int axis = chan->channel2;
 	u8 enable_event;
 	int err;
+	bool any_events_enabled = false;
 
-	if (type != IIO_EV_TYPE_THRESH)
+	if (event == ST_LSM6DSX_EVENT_MAX)
 		return -EINVAL;
 
 	if (state) {
-		enable_event = hw->enable_event | BIT(chan->channel2);
+		enable_event = hw->enable_event[event] | BIT(axis);
 
 		/* do not enable events if they are already enabled */
-		if (hw->enable_event)
+		if (hw->enable_event[event])
 			goto out;
 	} else {
-		enable_event = hw->enable_event & ~BIT(chan->channel2);
+		enable_event = hw->enable_event[event] & ~BIT(axis);
 
 		/* only turn off sensor if no events is enabled */
 		if (enable_event)
@@ -1917,22 +1930,43 @@ st_lsm6dsx_write_event_config(struct iio_dev *iio_dev,
 	}
 
 	/* stop here if no changes have been made */
-	if (hw->enable_event == enable_event)
+	if (hw->enable_event[event] == enable_event)
 		return 0;
 
-	err = st_lsm6dsx_event_setup(hw, state);
+	err = st_lsm6dsx_event_setup(hw, event, axis, state);
 	if (err < 0)
 		return err;
 
 	mutex_lock(&hw->conf_lock);
-	if (enable_event || !(hw->fifo_mask & BIT(sensor->id)))
+	if (!enable_event) {
+		enum st_lsm6dsx_event_id other_event;
+
+		for (other_event = 0; other_event < ST_LSM6DSX_EVENT_MAX; other_event++) {
+			if (other_event != event && hw->enable_event[other_event]) {
+				any_events_enabled = true;
+				break;
+			}
+		}
+	}
+	if (enable_event || !any_events_enabled) {
+		const struct st_lsm6dsx_reg *reg = &hw->settings->event_settings.enable_reg;
+
+		if (reg->addr) {
+			err = regmap_update_bits(hw->regmap, reg->addr, reg->mask,
+						 ST_LSM6DSX_SHIFT_VAL(state, reg->mask));
+			if (err < 0)
+				goto unlock_out;
+		}
+	}
+	if (enable_event || (!any_events_enabled && !(hw->fifo_mask & BIT(sensor->id))))
 		err = __st_lsm6dsx_sensor_set_enable(sensor, state);
+unlock_out:
 	mutex_unlock(&hw->conf_lock);
 	if (err < 0)
 		return err;
 
 out:
-	hw->enable_event = enable_event;
+	hw->enable_event[event] = enable_event;
 
 	return 0;
 }
@@ -2410,18 +2444,20 @@ static struct iio_dev *st_lsm6dsx_alloc_iiodev(struct st_lsm6dsx_hw *hw,
 }
 
 static bool
-st_lsm6dsx_report_motion_event(struct st_lsm6dsx_hw *hw)
+st_lsm6dsx_report_events(struct st_lsm6dsx_hw *hw, enum st_lsm6dsx_event_id id,
+			 enum iio_event_type type, enum iio_event_direction dir)
 {
+	u8 enable_event = hw->enable_event[id];
 	const struct st_lsm6dsx_event_settings *event_settings;
 	const struct st_lsm6dsx_event_src *event_src;
 	int err, data;
 	s64 timestamp;
 
-	if (!hw->enable_event)
+	if (!enable_event)
 		return false;
 
 	event_settings = &hw->settings->event_settings;
-	event_src = &event_settings->sources[ST_LSM6DSX_EVENT_WAKEUP];
+	event_src = &event_settings->sources[id];
 	err = st_lsm6dsx_read_locked(hw, event_src->status_reg,
 				     &data, sizeof(data));
 	if (err < 0)
@@ -2429,36 +2465,47 @@ st_lsm6dsx_report_motion_event(struct st_lsm6dsx_hw *hw)
 
 	timestamp = iio_get_time_ns(hw->iio_devs[ST_LSM6DSX_ID_ACC]);
 	if ((data & event_src->status_z_mask) &&
-	    (hw->enable_event & BIT(IIO_MOD_Z)))
+	    (enable_event & BIT(IIO_MOD_Z)))
 		iio_push_event(hw->iio_devs[ST_LSM6DSX_ID_ACC],
 			       IIO_MOD_EVENT_CODE(IIO_ACCEL,
 						  0,
 						  IIO_MOD_Z,
-						  IIO_EV_TYPE_THRESH,
-						  IIO_EV_DIR_EITHER),
+						  type,
+						  dir),
 						  timestamp);
 
 	if ((data & event_src->status_y_mask) &&
-	    (hw->enable_event & BIT(IIO_MOD_Y)))
+	    (enable_event & BIT(IIO_MOD_Y)))
 		iio_push_event(hw->iio_devs[ST_LSM6DSX_ID_ACC],
 			       IIO_MOD_EVENT_CODE(IIO_ACCEL,
 						  0,
 						  IIO_MOD_Y,
-						  IIO_EV_TYPE_THRESH,
-						  IIO_EV_DIR_EITHER),
+						  type,
+						  dir),
 						  timestamp);
 
 	if ((data & event_src->status_x_mask) &&
-	    (hw->enable_event & BIT(IIO_MOD_X)))
+	    (enable_event & BIT(IIO_MOD_X)))
 		iio_push_event(hw->iio_devs[ST_LSM6DSX_ID_ACC],
 			       IIO_MOD_EVENT_CODE(IIO_ACCEL,
 						  0,
 						  IIO_MOD_X,
-						  IIO_EV_TYPE_THRESH,
-						  IIO_EV_DIR_EITHER),
+						  type,
+						  dir),
 						  timestamp);
 
 	return data & event_src->status_mask;
+}
+
+static bool
+st_lsm6dsx_report_motion_event(struct st_lsm6dsx_hw *hw)
+{
+	bool events_found;
+
+	events_found = st_lsm6dsx_report_events(hw, ST_LSM6DSX_EVENT_WAKEUP, IIO_EV_TYPE_THRESH,
+						IIO_EV_DIR_EITHER);
+
+	return events_found;
 }
 
 static irqreturn_t st_lsm6dsx_handler_thread(int irq, void *private)
