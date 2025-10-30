@@ -10,6 +10,7 @@
 #include <linux/module.h>
 #include <linux/types.h>
 #include <linux/string.h>
+#include <linux/cleanup.h>
 #include <linux/configfs.h>
 #include <linux/ctype.h>
 #include <linux/delay.h>
@@ -309,57 +310,54 @@ static int bot_prepare_reqs(struct f_uas *fu)
 {
 	int ret;
 
-	fu->bot_req_in = usb_ep_alloc_request(fu->ep_in, GFP_KERNEL);
-	if (!fu->bot_req_in)
-		goto err;
+	struct usb_request *bot_req_in __free(free_usb_request) =
+		usb_ep_alloc_request(fu->ep_in, GFP_KERNEL);
+	if (!bot_req_in)
+		return -ENOMEM;
 
-	fu->bot_req_out = usb_ep_alloc_request(fu->ep_out, GFP_KERNEL);
-	if (!fu->bot_req_out)
-		goto err_out;
+	struct usb_request *bot_req_out __free(free_usb_request) =
+		usb_ep_alloc_request(fu->ep_out, GFP_KERNEL);
+	if (!bot_req_out)
+		return -ENOMEM;
 
-	fu->cmd[0].req = usb_ep_alloc_request(fu->ep_out, GFP_KERNEL);
-	if (!fu->cmd[0].req)
-		goto err_cmd;
+	struct usb_request *cmd_req __free(free_usb_request) =
+		usb_ep_alloc_request(fu->ep_out, GFP_KERNEL);
+	if (!cmd_req)
+		return -ENOMEM;
 
-	fu->bot_status.req = usb_ep_alloc_request(fu->ep_in, GFP_KERNEL);
-	if (!fu->bot_status.req)
-		goto err_sts;
+	struct usb_request *status_req __free(free_usb_request) =
+		usb_ep_alloc_request(fu->ep_in, GFP_KERNEL);
+	if (!status_req)
+		return -ENOMEM;
 
-	fu->bot_status.req->buf = &fu->bot_status.csw;
-	fu->bot_status.req->length = US_BULK_CS_WRAP_LEN;
-	fu->bot_status.req->complete = bot_status_complete;
-	fu->bot_status.csw.Signature = cpu_to_le32(US_BULK_CS_SIGN);
+	cmd_req->buf = kmalloc(fu->ep_out->maxpacket, GFP_KERNEL);
+	if (!cmd_req->buf)
+		return -ENOMEM;
 
-	fu->cmd[0].buf = kmalloc(fu->ep_out->maxpacket, GFP_KERNEL);
-	if (!fu->cmd[0].buf)
-		goto err_buf;
-
-	fu->cmd[0].req->complete = bot_cmd_complete;
-	fu->cmd[0].req->buf = fu->cmd[0].buf;
-	fu->cmd[0].req->length = fu->ep_out->maxpacket;
-	fu->cmd[0].req->context = fu;
+	cmd_req->complete = bot_cmd_complete;
+	cmd_req->length = fu->ep_out->maxpacket;
+	cmd_req->context = fu;
 
 	ret = bot_enqueue_cmd_cbw(fu);
 	if (ret)
-		goto err_queue;
+		return ret;
+
+	fu->bot_req_in = no_free_ptr(bot_req_in);
+	fu->bot_req_out = no_free_ptr(bot_req_out);
+
+	/* This line is placed here because free_usb_request also frees its
+	 * buffer, which in this case points to the static fu->bot_status.csw.
+	 */
+	status_req->buf = &fu->bot_status.csw;
+	status_req->length = US_BULK_CS_WRAP_LEN;
+	status_req->complete = bot_status_complete;
+	fu->bot_status.csw.Signature = cpu_to_le32(US_BULK_CS_SIGN);
+	fu->bot_status.req = no_free_ptr(status_req);
+
+	fu->cmd[0].buf = cmd_req->buf;
+	fu->cmd[0].req = no_free_ptr(cmd_req);
+
 	return 0;
-err_queue:
-	kfree(fu->cmd[0].buf);
-	fu->cmd[0].buf = NULL;
-err_buf:
-	usb_ep_free_request(fu->ep_in, fu->bot_status.req);
-err_sts:
-	usb_ep_free_request(fu->ep_out, fu->cmd[0].req);
-	fu->cmd[0].req = NULL;
-err_cmd:
-	usb_ep_free_request(fu->ep_out, fu->bot_req_out);
-	fu->bot_req_out = NULL;
-err_out:
-	usb_ep_free_request(fu->ep_in, fu->bot_req_in);
-	fu->bot_req_in = NULL;
-err:
-	pr_err("BOT: endpoint setup failed\n");
-	return -ENOMEM;
 }
 
 static void bot_cleanup_old_alt(struct f_uas *fu)
@@ -878,50 +876,45 @@ static int uasp_alloc_stream_res(struct f_uas *fu, struct uas_stream *stream)
 {
 	init_completion(&stream->cmd_completion);
 
-	stream->req_in = usb_ep_alloc_request(fu->ep_in, GFP_KERNEL);
-	if (!stream->req_in)
-		goto out;
+	struct usb_request *req_in __free(free_usb_request) =
+		usb_ep_alloc_request(fu->ep_in, GFP_KERNEL);
+	if (!req_in)
+		return -ENOMEM;
 
-	stream->req_out = usb_ep_alloc_request(fu->ep_out, GFP_KERNEL);
-	if (!stream->req_out)
-		goto err_out;
+	struct usb_request *req_out __free(free_usb_request) =
+		usb_ep_alloc_request(fu->ep_out, GFP_KERNEL);
+	if (!req_out)
+		return -ENOMEM;
 
-	stream->req_status = usb_ep_alloc_request(fu->ep_status, GFP_KERNEL);
+	struct usb_request *req_status __free(free_usb_request) =
+		usb_ep_alloc_request(fu->ep_status, GFP_KERNEL);
 	if (!stream->req_status)
-		goto err_sts;
+		return -ENOMEM;
+
+	stream->req_in = no_free_ptr(req_in);
+	stream->req_out = no_free_ptr(req_out);
+	stream->req_status = no_free_ptr(req_status);
 
 	return 0;
-
-err_sts:
-	usb_ep_free_request(fu->ep_out, stream->req_out);
-	stream->req_out = NULL;
-err_out:
-	usb_ep_free_request(fu->ep_in, stream->req_in);
-	stream->req_in = NULL;
-out:
-	return -ENOMEM;
 }
 
 static int uasp_alloc_cmd(struct f_uas *fu, int i)
 {
-	fu->cmd[i].req = usb_ep_alloc_request(fu->ep_cmd, GFP_KERNEL);
-	if (!fu->cmd[i].req)
-		goto err;
+	struct usb_request *req __free(free_usb_request) =
+		usb_ep_alloc_request(fu->ep_cmd, GFP_KERNEL);
+	if (!req)
+		return -ENOMEM;
 
-	fu->cmd[i].buf = kmalloc(fu->ep_cmd->maxpacket, GFP_KERNEL);
-	if (!fu->cmd[i].buf)
-		goto err_buf;
+	req->buf = kmalloc(fu->ep_cmd->maxpacket, GFP_KERNEL);
+	if (!req->buf)
+		return -ENOMEM;
 
-	fu->cmd[i].req->complete = uasp_cmd_complete;
-	fu->cmd[i].req->buf = fu->cmd[i].buf;
-	fu->cmd[i].req->length = fu->ep_cmd->maxpacket;
-	fu->cmd[i].req->context = fu;
+	req->complete = uasp_cmd_complete;
+	req->length = fu->ep_cmd->maxpacket;
+	req->context = fu;
+	fu->cmd[i].buf = req->buf;
+	fu->cmd[i].req = no_free_ptr(req);
 	return 0;
-
-err_buf:
-	usb_ep_free_request(fu->ep_cmd, fu->cmd[i].req);
-err:
-	return -ENOMEM;
 }
 
 static int uasp_prepare_reqs(struct f_uas *fu)
