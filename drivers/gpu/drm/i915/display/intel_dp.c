@@ -3424,7 +3424,6 @@ intel_dp_compute_config(struct intel_encoder *encoder,
 	intel_vrr_compute_config(pipe_config, conn_state);
 	intel_dp_compute_as_sdp(intel_dp, pipe_config);
 	intel_psr_compute_config(intel_dp, pipe_config, conn_state);
-	intel_alpm_lobf_compute_config(intel_dp, pipe_config, conn_state);
 	intel_dp_drrs_compute_config(connector, pipe_config, link_bpp_x16);
 	intel_dp_compute_vsc_sdp(intel_dp, pipe_config, conn_state);
 	intel_dp_compute_hdr_metadata_infoframe_sdp(intel_dp, pipe_config, conn_state);
@@ -7027,6 +7026,8 @@ int intel_dp_compute_config_late(struct intel_encoder *encoder,
 	ret = intel_dp_sdp_compute_config_late(crtc_state);
 	if (ret)
 		return ret;
+
+	intel_alpm_lobf_compute_config_late(intel_dp, crtc_state, conn_state);
 
 	return 0;
 }
