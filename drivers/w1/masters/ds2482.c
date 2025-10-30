@@ -116,7 +116,7 @@ struct ds2482_data {
 
 	/* per-device values */
 	u8			channel;
-	u8			read_prt;	/* see DS2482_PTR_CODE_xxx */
+	u8			read_ptr;	/* see DS2482_PTR_CODE_xxx */
 	u8			reg_config;
 };
 
@@ -145,13 +145,13 @@ static inline u8 ds2482_calculate_config(u8 conf)
  */
 static inline int ds2482_select_register(struct ds2482_data *pdev, u8 read_ptr)
 {
-	if (pdev->read_prt != read_ptr) {
+	if (pdev->read_ptr != read_ptr) {
 		if (i2c_smbus_write_byte_data(pdev->client,
 					      DS2482_CMD_SET_READ_PTR,
 					      read_ptr) < 0)
 			return -1;
 
-		pdev->read_prt = read_ptr;
+		pdev->read_ptr = read_ptr;
 	}
 	return 0;
 }
@@ -169,7 +169,7 @@ static inline int ds2482_send_cmd(struct ds2482_data *pdev, u8 cmd)
 	if (i2c_smbus_write_byte(pdev->client, cmd) < 0)
 		return -1;
 
-	pdev->read_prt = DS2482_PTR_CODE_STATUS;
+	pdev->read_ptr = DS2482_PTR_CODE_STATUS;
 	return 0;
 }
 
@@ -190,7 +190,7 @@ static inline int ds2482_send_cmd_data(struct ds2482_data *pdev,
 		return -1;
 
 	/* all cmds leave in STATUS, except CONFIG */
-	pdev->read_prt = (cmd != DS2482_CMD_WRITE_CONFIG) ?
+	pdev->read_ptr = (cmd != DS2482_CMD_WRITE_CONFIG) ?
 			 DS2482_PTR_CODE_STATUS : DS2482_PTR_CODE_CONFIG;
 	return 0;
 }
@@ -241,7 +241,7 @@ static int ds2482_set_channel(struct ds2482_data *pdev, u8 channel)
 				      ds2482_chan_wr[channel]) < 0)
 		return -1;
 
-	pdev->read_prt = DS2482_PTR_CODE_CHANNEL;
+	pdev->read_ptr = DS2482_PTR_CODE_CHANNEL;
 	pdev->channel = -1;
 	if (i2c_smbus_read_byte(pdev->client) == ds2482_chan_rd[channel]) {
 		pdev->channel = channel;
