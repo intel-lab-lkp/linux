@@ -199,6 +199,12 @@ switch_mm_fast:
 
 	if (need_flush_tlb)
 		local_flush_tlb_all();
+
+	/* Paired with RISCV_FENCE in should_ipi_flush() */
+	RISCV_FENCE(w, r);
+
+	if (this_cpu_read(need_tlb_flush))
+		local_tlb_flush_queue_drain();
 }
 
 static void set_mm_noasid(struct mm_struct *mm)

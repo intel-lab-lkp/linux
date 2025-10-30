@@ -115,6 +115,8 @@ DEFINE_PER_CPU(struct tlb_flush_queue, tlb_flush_queue) = {
 	.len = 0,
 };
 
+DEFINE_PER_CPU(bool, need_tlb_flush) = false;
+
 static bool should_ipi_flush(int cpu, void *info)
 {
 	struct tlb_flush_queue *queue = per_cpu_ptr(&tlb_flush_queue, cpu);
@@ -134,6 +136,14 @@ static bool should_ipi_flush(int cpu, void *info)
 	}
 	raw_spin_unlock_irqrestore(&queue->lock, flags);
 
+	/* Ensure tlb flush info is queued before setting need_tlb_flush flag */
+	smp_wmb();
+
+	per_cpu(need_tlb_flush, cpu) = true;
+
+	/* Paired with RISCV_FENCE in set_mm_asid() */
+	RISCV_FENCE(w, r);
+
 	/* Recheck whether loaded_asid changed during enqueueing task */
 	if (per_cpu(loaded_asid, cpu) == d->asid)
 		return true;
@@ -146,6 +156,9 @@ static void __ipi_flush_tlb_range_asid(void *info)
 	struct flush_tlb_range_data *d = info;
 
 	local_flush_tlb_range_asid(d->start, d->size, d->stride, d->asid);
+
+	if (this_cpu_read(need_tlb_flush))
+		local_tlb_flush_queue_drain();
 }
 
 static inline unsigned long get_mm_asid(struct mm_struct *mm)
@@ -279,4 +292,25 @@ void arch_tlbbatch_flush(struct arch_tlbflush_unmap_batch *batch)
 	__flush_tlb_range(NULL, &batch->cpumask,
 			  0, FLUSH_TLB_MAX_SIZE, PAGE_SIZE);
 	cpumask_clear(&batch->cpumask);
+}
+
+void local_tlb_flush_queue_drain(void)
+{
+	struct tlb_flush_queue *queue = this_cpu_ptr(&tlb_flush_queue);
+	struct flush_tlb_range_data *d;
+	unsigned int i;
+
+	this_cpu_write(need_tlb_flush, false);
+
+	/* Ensure clearing the need_tlb_flush flags before real tlb flush */
+	smp_wmb();
+
+	raw_spin_lock(&queue->lock);
+	for (i = 0; i < queue->len; i++) {
+		d = &queue->tasks[i];
+		local_flush_tlb_range_asid(d->start, d->size, d->stride,
+					   d->asid);
+	}
+	queue->len = 0;
+	raw_spin_unlock(&queue->lock);
 }
