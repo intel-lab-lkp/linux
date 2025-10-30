@@ -174,22 +174,10 @@ fail:
 	return ret;
 }
 
-/**
- * xe_gt_sriov_pf_migration_guc_size() - Get the size of VF GuC migration data.
- * @gt: the &xe_gt
- * @vfid: the VF identifier
- *
- * This function is for PF only.
- *
- * Return: size in bytes or a negative error code on failure.
- */
-ssize_t xe_gt_sriov_pf_migration_guc_size(struct xe_gt *gt, unsigned int vfid)
+static ssize_t pf_migration_guc_size(struct xe_gt *gt, unsigned int vfid)
 {
 	ssize_t size;
 
-	xe_gt_assert(gt, IS_SRIOV_PF(gt_to_xe(gt)));
-	xe_gt_assert(gt, vfid != PFID);
-	xe_gt_assert(gt, vfid <= xe_sriov_pf_get_totalvfs(gt_to_xe(gt)));
 
 	if (!pf_migration_supported(gt))
 		return -ENOPKG;
@@ -278,12 +266,19 @@ int xe_gt_sriov_pf_migration_guc_restore(struct xe_gt *gt, unsigned int vfid,
 ssize_t xe_gt_sriov_pf_migration_size(struct xe_gt *gt, unsigned int vfid)
 {
 	ssize_t total = 0;
+	ssize_t size;
 
 	xe_gt_assert(gt, IS_SRIOV_PF(gt_to_xe(gt)));
 	xe_gt_assert(gt, vfid != PFID);
 	xe_gt_assert(gt, vfid <= xe_sriov_pf_get_totalvfs(gt_to_xe(gt)));
 
-	/* Nothing to query yet - will be updated once per-GT migration data types are added */
+	size = pf_migration_guc_size(gt, vfid);
+	if (size < 0)
+		return size;
+	if (size > 0)
+		size += sizeof(struct xe_sriov_pf_migration_hdr);
+	total += size;
+
 	return total;
 }
 
@@ -328,6 +323,49 @@ void xe_gt_sriov_pf_migration_ring_free(struct xe_gt *gt, unsigned int vfid)
 
 	while ((data = ptr_ring_consume(&migration->ring)))
 		xe_sriov_migration_data_free(data);
+}
+
+/**
+ * xe_gt_sriov_pf_migration_save_init() - Initialize per-GT migration related data.
+ * @gt: the &xe_gt
+ * @vfid: the VF identifier (can't be 0)
+ *
+ * Return: 0 on success or a negative error code on failure.
+ */
+void xe_gt_sriov_pf_migration_save_init(struct xe_gt *gt, unsigned int vfid)
+{
+	struct xe_gt_sriov_migration_data *migration = pf_pick_gt_migration(gt, vfid);
+
+	migration->save.data_remaining = 0;
+
+	xe_gt_assert(gt, pf_migration_guc_size(gt, vfid) > 0);
+	set_bit(XE_SRIOV_MIGRATION_DATA_TYPE_GUC, &migration->save.data_remaining);
+}
+
+/**
+ * xe_gt_sriov_pf_migration_save_test() - Test if migration data type needs to be saved.
+ * @gt: the &xe_gt
+ * @vfid: the VF identifier (can't be 0)
+ * @type: the &xe_sriov_migration_data_type of data to be saved
+ *
+ * Return: true if the data needs saving, otherwise false.
+ */
+bool xe_gt_sriov_pf_migration_save_test(struct xe_gt *gt, unsigned int vfid,
+					enum xe_sriov_migration_data_type type)
+{
+	return test_bit(type, &pf_pick_gt_migration(gt, vfid)->save.data_remaining);
+}
+
+/**
+ * xe_gt_sriov_pf_migration_save_clear() - Clear migration data type from saving.
+ * @gt: the &xe_gt
+ * @vfid: the VF identifier (can't be 0)
+ * @type: the &xe_sriov_migration_data_type of data to be cleared
+ */
+void xe_gt_sriov_pf_migration_save_clear(struct xe_gt *gt, unsigned int vfid,
+					 enum xe_sriov_migration_data_type type)
+{
+	clear_bit(type, &pf_pick_gt_migration(gt, vfid)->save.data_remaining);
 }
 
 /**
