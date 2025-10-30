@@ -902,6 +902,7 @@ struct perf_event {
 	u64				(*clock)(void);
 	perf_overflow_handler_t		overflow_handler;
 	void				*overflow_handler_context;
+	bool				default_overflow_compatible;
 	struct bpf_prog			*prog;
 	u64				bpf_cookie;
 
@@ -1505,13 +1506,7 @@ extern int perf_event_output(struct perf_event *event,
 static inline bool
 is_default_overflow_handler(struct perf_event *event)
 {
-	perf_overflow_handler_t overflow_handler = event->overflow_handler;
-
-	if (likely(overflow_handler == perf_event_output_forward))
-		return true;
-	if (unlikely(overflow_handler == perf_event_output_backward))
-		return true;
-	return false;
+	return event->default_overflow_compatible;
 }
 
 extern void
