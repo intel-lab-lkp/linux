@@ -7847,9 +7847,7 @@ static int select_idle_sibling(struct task_struct *p, int prev, int target)
 	    asym_fits_cpu(task_util, util_min, util_max, target))
 		return target;
 
-	/*
-	 * If the previous CPU is cache affine and idle, don't be stupid:
-	 */
+	/* Reschedule on an idle, cache-sharing sibling to preserve affinity: */
 	if (prev != target && cpus_share_cache(prev, target) &&
 	    (available_idle_cpu(prev) || sched_idle_cpu(prev)) &&
 	    asym_fits_cpu(task_util, util_min, util_max, prev)) {
@@ -7860,6 +7858,14 @@ static int select_idle_sibling(struct task_struct *p, int prev, int target)
 
 		prev_aff = prev;
 	}
+
+	/*
+	 * If the previous CPU is not overutilized, prefer it for cache locality.
+	 * This prevents migration away from a cache-hot CPU that can still
+	 * handle the task without causing an overload.
+	 */
+	if (sched_energy_enabled() && !cpu_overutilized(prev))
+		return prev;
 
 	/*
 	 * Allow a per-cpu kthread to stack with the wakee if the
