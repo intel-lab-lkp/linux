@@ -103,6 +103,18 @@ struct flush_tlb_range_data {
 	unsigned long stride;
 };
 
+#define TLB_FLUSH_QUEUE_SIZE					16
+struct tlb_flush_queue {
+	struct flush_tlb_range_data tasks[TLB_FLUSH_QUEUE_SIZE];
+	raw_spinlock_t lock;
+	unsigned int len;
+};
+
+DEFINE_PER_CPU(struct tlb_flush_queue, tlb_flush_queue) = {
+	.lock = __RAW_SPIN_LOCK_UNLOCKED(tlb_flush_queue.lock),
+	.len = 0,
+};
+
 static void __ipi_flush_tlb_range_asid(void *info)
 {
 	struct flush_tlb_range_data *d = info;
