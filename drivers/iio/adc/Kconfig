@@ -1676,6 +1676,16 @@ config TI_ADS1119
          This driver can also be built as a module. If so, the module will be
          called ti-ads1119.
 
+config TI_ADS1120
+	tristate "Texas Instruments ADS1120"
+	depends on SPI
+	help
+	  Say yes here to build support for Texas Instruments ADS1120
+	  4-channel, 2kSPS, 16-bit delta-sigma ADC.
+
+	  This driver can also be built as module. If so, the module
+	  will be called ti-ads1120.
+
 config TI_ADS124S08
 	tristate "Texas Instruments ADS124S08"
 	depends on SPI
