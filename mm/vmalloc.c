@@ -3911,6 +3911,20 @@ fail:
 	return NULL;
 }
 
+#define GFP_VMALLOC_BUG_MASK (__GFP_COMP|__GFP_RETRY_MAYFAIL|\
+			      ~__GFP_BITS_MASK)
+static gfp_t vmalloc_fix_flags(gfp_t flags)
+{
+	gfp_t invalid_mask = flags & GFP_VMALLOC_BUG_MASK;
+
+	flags &= ~GFP_VMALLOC_BUG_MASK;
+	pr_warn("Unexpected gfp: %#x (%pGg). Fixing up to gfp: %#x (%pGg). Fix your code!\n",
+			invalid_mask, &invalid_mask, flags, &flags);
+	dump_stack();
+
+	return flags;
+}
+
 /**
  * __vmalloc_node_range - allocate virtually contiguous memory
  * @size:		  allocation size
@@ -3960,6 +3974,9 @@ void *__vmalloc_node_range_noprof(unsigned long size, unsigned long align,
 			size);
 		return NULL;
 	}
+
+	if (unlikely(gfp_mask & GFP_VMALLOC_BUG_MASK))
+		gfp_mask = vmalloc_fix_flags(gfp_mask);
 
 	if (vmap_allow_huge && (vm_flags & VM_ALLOW_HUGE_VMAP)) {
 		/*
