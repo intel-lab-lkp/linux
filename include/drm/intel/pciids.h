@@ -43,6 +43,13 @@
 	.class = PCI_BASE_CLASS_DISPLAY << 16, .class_mask = 0xff << 16, \
 	.driver_data = (kernel_ulong_t)(_info), \
 }
+
+#define INTEL_VGA_VFIO_DEVICE(_id, _info) { \
+	PCI_DEVICE(PCI_VENDOR_ID_INTEL, (_id)), \
+	.class = PCI_BASE_CLASS_DISPLAY << 16, .class_mask = 0xff << 16, \
+	.driver_data = (kernel_ulong_t)(_info), \
+	.override_only = PCI_ID_F_VFIO_DRIVER_OVERRIDE, \
+}
 #endif
 
 #define INTEL_I810_IDS(MACRO__, ...) \
