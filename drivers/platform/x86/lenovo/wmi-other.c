@@ -579,14 +579,14 @@ static void lwmi_om_fw_attr_remove(struct lwmi_om_priv *priv)
 static int lwmi_om_master_bind(struct device *dev)
 {
 	struct lwmi_om_priv *priv = dev_get_drvdata(dev);
-	struct cd_list *tmp_list;
+	struct lwmi_cd_binder binder = { 0 };
 	int ret;
 
-	ret = component_bind_all(dev, &tmp_list);
+	ret = component_bind_all(dev, &binder);
 	if (ret)
 		return ret;
 
-	priv->cd01_list = tmp_list;
+	priv->cd01_list = binder.cd01_list;
 	if (!priv->cd01_list)
 		return -ENODEV;
 
@@ -618,6 +618,7 @@ static int lwmi_other_probe(struct wmi_device *wdev, const void *context)
 {
 	struct component_match *master_match = NULL;
 	struct lwmi_om_priv *priv;
+	int ret;
 
 	priv = devm_kzalloc(&wdev->dev, sizeof(*priv), GFP_KERNEL);
 	if (!priv)
@@ -626,12 +627,26 @@ static int lwmi_other_probe(struct wmi_device *wdev, const void *context)
 	priv->wdev = wdev;
 	dev_set_drvdata(&wdev->dev, priv);
 
-	component_match_add(&wdev->dev, &master_match, lwmi_cd01_match, NULL);
+	lwmi_cd_match_add_all(&wdev->dev, &master_match);
 	if (IS_ERR(master_match))
 		return PTR_ERR(master_match);
 
-	return component_master_add_with_match(&wdev->dev, &lwmi_om_master_ops,
-					       master_match);
+	ret = component_master_add_with_match(&wdev->dev, &lwmi_om_master_ops,
+					      master_match);
+	if (ret)
+		return ret;
+
+	if (likely(component_master_is_bound(&wdev->dev, &lwmi_om_master_ops)))
+		return 0;
+
+	/*
+	 * The bind callbacks of both master and components were never called in
+	 * this case - this driver won't work at all. Failing...
+	 */
+	dev_err(&wdev->dev, "unbound master; is any component failing to be probed?");
+
+	component_master_del(&wdev->dev, &lwmi_om_master_ops);
+	return -EXDEV;
 }
 
 static void lwmi_other_remove(struct wmi_device *wdev)
