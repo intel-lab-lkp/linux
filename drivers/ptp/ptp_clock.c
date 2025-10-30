@@ -325,6 +325,10 @@ struct ptp_clock *ptp_clock_register(struct ptp_clock_info *info,
 	if (info->n_alarm > PTP_MAX_ALARMS)
 		return ERR_PTR(-EINVAL);
 
+	if (WARN_ON_ONCE((!info->gettimex64 && !info->gettime64) ||
+			 !info->settime64))
+		return ERR_PTR(-EINVAL);
+
 	/* Initialize a clock structure. */
 	ptp = kzalloc(sizeof(struct ptp_clock), GFP_KERNEL);
 	if (!ptp) {
