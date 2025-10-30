@@ -39,6 +39,12 @@ struct xe_device_pf {
 	/** @provision: device level provisioning data. */
 	struct xe_sriov_pf_provision provision;
 
+	/** @migration: device level VF migration data */
+	struct {
+		/** @migration.supported: indicates whether VF migration feature is supported */
+		bool supported;
+	} migration;
+
 	/** @service: device level service data. */
 	struct xe_sriov_pf_service service;
 
