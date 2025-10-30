@@ -26,6 +26,7 @@
 #include <linux/kstrtox.h>
 #include <linux/mutex.h>
 #include <linux/rcupdate.h>
+#include <linux/notifier.h>
 #include "input-compat.h"
 #include "input-core-private.h"
 #include "input-poller.h"
@@ -61,6 +62,8 @@ static const unsigned int input_max_code[EV_CNT] = {
 	[EV_SND] = SND_MAX,
 	[EV_FF] = FF_MAX,
 };
+
+static struct blocking_notifier_head input_notifier_head;
 
 static inline int is_event_supported(unsigned int code,
 				     unsigned long *bm, unsigned int max)
@@ -367,9 +370,19 @@ void input_handle_event(struct input_dev *dev,
 		if (type != EV_SYN)
 			add_input_randomness(type, code, value);
 
+		if (type == EV_SW && code == SW_LID && !value)
+			blocking_notifier_call_chain(&input_notifier_head, value ?
+				LID_SWITCH_CLOSE : LID_SWITCH_OPEN, dev);
+
 		input_event_dispose(dev, disposition, type, code, value);
 	}
 }
+
+int register_input_notifier(struct notifier_block *notifier)
+{
+	return blocking_notifier_chain_register(&input_notifier_head, notifier);
+}
+EXPORT_SYMBOL(register_input_notifier);
 
 /**
  * input_event() - report new input event

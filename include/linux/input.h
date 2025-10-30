@@ -42,6 +42,11 @@ enum input_clock_type {
 	INPUT_CLK_MAX
 };
 
+enum input_notify_event_type {
+	LID_SWITCH_OPEN,
+	LID_SWITCH_CLOSE
+};
+
 /**
  * struct input_dev - represents an input device
  * @name: name of the device
@@ -430,6 +435,8 @@ int input_flush_device(struct input_handle *handle, struct file *file);
 
 void input_set_timestamp(struct input_dev *dev, ktime_t timestamp);
 ktime_t *input_get_timestamp(struct input_dev *dev);
+
+int register_input_notifier(struct notifier_block *notifier);
 
 void input_event(struct input_dev *dev, unsigned int type, unsigned int code, int value);
 void input_inject_event(struct input_handle *handle, unsigned int type, unsigned int code, int value);
