@@ -211,6 +211,7 @@ struct amdgpu_ring_funcs {
 	bool			support_64bit_ptrs;
 	bool			no_user_fence;
 	bool			secure_submission_supported;
+	bool			engine_retains_context;
 
 	/**
 	 * @extra_bytes:
