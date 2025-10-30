@@ -8,6 +8,7 @@
 
 /* #define VERBOSE_DEBUG */
 
+#include <linux/cleanup.h>
 #include <linux/slab.h>
 #include <linux/kernel.h>
 #include <linux/device.h>
@@ -308,9 +309,8 @@ static inline struct usb_request *lb_alloc_ep_req(struct usb_ep *ep, int len)
 static int alloc_requests(struct usb_composite_dev *cdev,
 			  struct f_loopback *loop)
 {
-	struct usb_request *in_req, *out_req;
 	int i;
-	int result = 0;
+	int result;
 
 	/*
 	 * allocate a bunch of read buffers and queue them all at once.
@@ -318,16 +318,16 @@ static int alloc_requests(struct usb_composite_dev *cdev,
 	 * for out transfer and reuse them in IN transfers to implement
 	 * our loopback functionality
 	 */
-	for (i = 0; i < loop->qlen && result == 0; i++) {
-		result = -ENOMEM;
-
-		in_req = usb_ep_alloc_request(loop->in_ep, GFP_ATOMIC);
+	for (i = 0; i < loop->qlen; i++) {
+		struct usb_request *in_req __free(free_usb_request) =
+			usb_ep_alloc_request(loop->in_ep, GFP_ATOMIC);
 		if (!in_req)
-			goto fail;
+			return -ENOMEM;
 
-		out_req = lb_alloc_ep_req(loop->out_ep, loop->buflen);
+		struct usb_request *out_req __free(free_usb_request) =
+			lb_alloc_ep_req(loop->out_ep, loop->buflen);
 		if (!out_req)
-			goto fail_in;
+			return -ENOMEM;
 
 		in_req->complete = loopback_complete;
 		out_req->complete = loopback_complete;
@@ -339,20 +339,16 @@ static int alloc_requests(struct usb_composite_dev *cdev,
 
 		result = usb_ep_queue(loop->out_ep, out_req, GFP_ATOMIC);
 		if (result) {
+			in_req->buf = NULL;
 			ERROR(cdev, "%s queue req --> %d\n",
 					loop->out_ep->name, result);
-			goto fail_out;
+			return result;
 		}
+		retain_and_null_ptr(in_req);
+		retain_and_null_ptr(out_req);
 	}
 
 	return 0;
-
-fail_out:
-	free_ep_req(loop->out_ep, out_req);
-fail_in:
-	usb_ep_free_request(loop->in_ep, in_req);
-fail:
-	return result;
 }
 
 static int enable_endpoint(struct usb_composite_dev *cdev,
