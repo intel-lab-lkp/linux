@@ -19,6 +19,7 @@
 #include "cifs_debug.h"
 #include "cifsfs.h"
 #include "fs_context.h"
+#include "smb2pdu.h"
 #ifdef CONFIG_CIFS_DFS_UPCALL
 #include "dfs_cache.h"
 #endif
@@ -320,11 +321,14 @@ static int cifs_debug_dirs_proc_show(struct seq_file *m, void *v)
 	struct cifs_tcon *tcon;
 	struct cached_fids *cfids;
 	struct cached_fid *cfid;
+	char lease[4];
+	int n;
+	u8 lease_state;
 	LIST_HEAD(entry);
 
 	seq_puts(m, "# Version:1\n");
 	seq_puts(m, "# Format:\n");
-	seq_puts(m, "# <tree id> <sess id> <persistent fid> <lease-key> <path>\n");
+	seq_puts(m, "# <tree id> <sess id> <persistent fid> <lease> <lease-key> <path>\n");
 
 	spin_lock(&cifs_tcp_ses_lock);
 	list_for_each(stmp, &cifs_tcp_ses_list) {
@@ -343,17 +347,28 @@ static int cifs_debug_dirs_proc_show(struct seq_file *m, void *v)
 						(unsigned long)atomic_long_read(&cfids->total_dirents_entries),
 						(unsigned long long)atomic64_read(&cfids->total_dirents_bytes));
 				list_for_each_entry(cfid, &cfids->entries, entry) {
-					seq_printf(m, "0x%x 0x%llx 0x%llx ",
+					lease_state = cfid->has_lease ? cfid->lease_state : 0;
+					n = 0;
+					if (lease_state & SMB2_LEASE_READ_CACHING_HE)
+						lease[n++] = 'R';
+					if (lease_state & SMB2_LEASE_HANDLE_CACHING_HE)
+						lease[n++] = 'H';
+					if (lease_state & SMB2_LEASE_WRITE_CACHING_HE)
+						lease[n++] = 'W';
+					lease[n] = '\0';
+
+					seq_printf(m, "0x%x 0x%llx 0x%llx %s ",
 						tcon->tid,
 						ses->Suid,
-						cfid->fid.persistent_fid);
+						cfid->fid.persistent_fid,
+						n ? lease : "NONE");
 					if (cfid->has_lease)
 						seq_printf(m, "%pUl ", cfid->fid.lease_key);
 					else
 						seq_puts(m, "- ");
 					seq_printf(m, "%s", cfid->path);
 					if (cfid->file_all_info_is_valid)
-						seq_printf(m, "\tvalid file info");
+						seq_puts(m, " valid file info");
 					if (cfid->dirents.is_valid)
 						seq_printf(m, ", valid dirents");
 					if (!list_empty(&cfid->dirents.entries))
