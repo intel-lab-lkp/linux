@@ -243,8 +243,7 @@ int __init bcm63xx_enet_register(int unit,
 	}
 
 	/* copy given platform data */
-	dpd = pdev->dev.platform_data;
-	memcpy(dpd, pd, sizeof(*pd));
+	dpd = memcpy(pdev->dev.platform_data, pd, sizeof(*pd));
 
 	/* adjust them in case internal phy is used */
 	if (dpd->use_internal_phy) {
