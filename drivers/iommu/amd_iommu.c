@@ -2682,7 +2682,7 @@ static void unmap_sg(struct device *dev, struct scatterlist *sglist,
 	dma_dom   = to_dma_ops_domain(domain);
 	npages    = sg_num_pages(dev, sglist, nelems);
 
-	__unmap_single(dma_dom, startaddr, npages << PAGE_SHIFT, dir);
+	__unmap_single(dma_dom, startaddr, (size_t)npages << PAGE_SHIFT, dir);
 }
 
 /*
