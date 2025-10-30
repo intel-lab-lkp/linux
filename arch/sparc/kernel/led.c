@@ -70,6 +70,9 @@ static ssize_t led_proc_write(struct file *file, const char __user *buffer,
 {
 	char *buf = NULL;
 
+	if (count == 0)
+		return -EINVAL;
+
 	if (count > LED_MAX_LENGTH)
 		count = LED_MAX_LENGTH;
 
