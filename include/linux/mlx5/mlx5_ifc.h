@@ -1895,7 +1895,8 @@ struct mlx5_ifc_cmd_hca_cap_bits {
 
 	u8         reserved_at_2a0[0x7];
 	u8         mkey_pcie_tph[0x1];
-	u8         reserved_at_2a8[0x2];
+	u8         reserved_at_2a8[0x1];
+	u8         tis_tir_td_order[0x1];
 
 	u8         psp[0x1];
 	u8         shampo[0x1];
@@ -2234,12 +2235,16 @@ struct mlx5_ifc_cmd_hca_cap_2_bits {
 	u8	   reserved_at_440[0x8];
 	u8	   max_num_eqs_24b[0x18];
 
-	u8         reserved_at_460[0x160];
+	u8         reserved_at_460[0x144];
+	u8         load_balance_id[0x4];
+	u8         reserved_at_5a8[0x18];
 
 	u8         query_adjacent_functions_id[0x1];
 	u8         ingress_egress_esw_vport_connect[0x1];
 	u8         function_id_type_vhca_id[0x1];
-	u8         reserved_at_5c3[0xd];
+	u8         reserved_at_5c3[0x1];
+	u8         lag_per_mp_group[0x1];
+	u8         reserved_at_5c5[0xb];
 	u8         delegate_vhca_management_profiles[0x10];
 
 	u8         delegated_vhca_max[0x10];
@@ -10828,7 +10833,9 @@ struct mlx5_ifc_pcam_regs_5000_to_507f_bits {
 	u8         port_access_reg_cap_mask_127_to_96[0x20];
 	u8         port_access_reg_cap_mask_95_to_64[0x20];
 
-	u8         port_access_reg_cap_mask_63_to_36[0x1c];
+	u8         port_access_reg_cap_mask_63[0x1];
+	u8         pphcr[0x1];
+	u8         port_access_reg_cap_mask_61_to_36[0x1a];
 	u8         pplm[0x1];
 	u8         port_access_reg_cap_mask_34_to_32[0x3];
 
