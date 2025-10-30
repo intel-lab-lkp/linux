@@ -800,6 +800,7 @@ M:	Wen Gu <guwen@linux.alibaba.com>
 M:	Xuan Zhuo <xuanzhuo@linux.alibaba.com>
 L:	netdev@vger.kernel.org
 S:	Supported
+F:	Documentation/ABI/testing/sysfs-ptp-devices-cipu
 F:	drivers/ptp/ptp_cipu.c
 
 ALIBABA ELASTIC RDMA DRIVER

@@ -1,0 +1,227 @@
+What:           /sys/class/ptp/ptp<N>/device/cipu/ptp_gettm
+Date:           October 2025
+Contact:        Wen Gu <guwen@linux.alibaba.com>
+Description:
+                Count of PTP gettime64 and gettimex64 operations performed
+                on the Alibaba CIPU PTP device.
+
+What:           /sys/class/ptp/ptp<N>/device/cipu/ptp_gettm_inval_err
+Date:           October 2025
+Contact:        Wen Gu <guwen@linux.alibaba.com>
+Description:
+                Count of failed PTP gettime64 or gettimex64 operations due
+                to invalid timestamp.
+
+                Invalid timestamps are indicated by bit63 (PTP_CIPU_M_TS_ABN)
+                in the timestamp register being set.
+
+                The driver will also trigger device status check when this
+                occurs.
+
+What:           /sys/class/ptp/ptp<N>/device/cipu/ptp_gettm_tout_err
+Date:           October 2025
+Contact:        Wen Gu <guwen@linux.alibaba.com>
+Description:
+                Count of failed PTP gettime64 or gettimex64 operations due
+                to register read timeout (exceeding max_lat_ns).
+
+What:           /sys/class/ptp/ptp<N>/device/cipu/ptp_gettm_excd_thresh
+Date:           October 2025
+Contact:        Wen Gu <guwen@linux.alibaba.com>
+Description:
+                Count of times system time and PHC time offset exceeded
+                the configured threshold (thresh_us).
+
+                This is only recorded and does not affect the returned
+                timestamp.
+
+What:           /sys/class/ptp/ptp<N>/device/cipu/dev_clk_abn
+Date:           October 2025
+Contact:        Wen Gu <guwen@linux.alibaba.com>
+Description:
+                Count of atomic clock abnormal events (bit1 set in sync_stat).
+
+What:           /sys/class/ptp/ptp<N>/device/cipu/dev_clk_abn_rec
+Date:           October 2025
+Contact:        Wen Gu <guwen@linux.alibaba.com>
+Description:
+                Count of recovery from atomic clock abnormal events (bit1
+                cleared in sync_stat after being set).
+
+What:           /sys/class/ptp/ptp<N>/device/cipu/dev_maint
+Date:           October 2025
+Contact:        Wen Gu <guwen@linux.alibaba.com>
+Description:
+                Count of maintenance events (bit0 set in sync_stat).
+
+What:           /sys/class/ptp/ptp<N>/device/cipu/dev_maint_rec
+Date:           October 2025
+Contact:        Wen Gu <guwen@linux.alibaba.com>
+Description:
+                Count of recovery from maintenance events (bit0 cleared
+                in sync_stat).
+
+What:           /sys/class/ptp/ptp<N>/device/cipu/dev_maint_tout
+Date:           October 2025
+Contact:        Wen Gu <guwen@linux.alibaba.com>
+Description:
+                Count of maintenance events that failed to recover within
+                mt_tout_us timeout.
+
+What:           /sys/class/ptp/ptp<N>/device/cipu/dev_busy
+Date:           October 2025
+Contact:        Wen Gu <guwen@linux.alibaba.com>
+Description:
+                Count of device busy events (bit4 set in sync_stat).
+
+What:           /sys/class/ptp/ptp<N>/device/cipu/dev_busy_rec
+Date:           October 2025
+Contact:        Wen Gu <guwen@linux.alibaba.com>
+Description:
+                Count of recovery from device busy events (bit4 cleared
+                in sync_stat).
+
+What:           /sys/class/ptp/ptp<N>/device/cipu/dev_err
+Date:           October 2025
+Contact:        Wen Gu <guwen@linux.alibaba.com>
+Description:
+                Count of device error events (bit7 set in sync_stat).
+
+What:           /sys/class/ptp/ptp<N>/device/cipu/dev_err_rec
+Date:           October 2025
+Contact:        Wen Gu <guwen@linux.alibaba.com>
+Description:
+                Count of recovery from device error events (bit7 cleared
+                in sync_stat).
+
+What:           /sys/class/ptp/ptp<N>/device/cipu/drv_cap
+Date:           October 2025
+Contact:        Wen Gu <guwen@linux.alibaba.com>
+Description:
+                Driver capabilities bitmask (u32):
+
+                ========  ============================
+                bit 0     support TAI time mode
+                bit 1     support epoch base time mode
+                bit 2     support abnormal event IRQ
+                bit 3     support recovery event IRQ
+                bit 31:4  reserved
+                ========  ============================
+
+                Currently TAI time mode (bit0) is not supported.
+
+What:           /sys/class/ptp/ptp<N>/device/cipu/reg_dev_feat
+Date:           October 2025
+Contact:        Wen Gu <guwen@linux.alibaba.com>
+Description:
+                Device feature bitmask, same bit definitions as drv_cap.
+
+What:           /sys/class/ptp/ptp<N>/device/cipu/reg_gst_feat
+Date:           October 2025
+Contact:        Wen Gu <guwen@linux.alibaba.com>
+Description:
+                Feature bitmask negotiated by driver and device, same
+                bit definitions as drv_cap but only features supported
+                by both device and driver are set.
+
+What:           /sys/class/ptp/ptp<N>/device/cipu/reg_drv_ver
+Date:           October 2025
+Contact:        Wen Gu <guwen@linux.alibaba.com>
+Description:
+                Driver version encoding (u32):
+
+                =========  ===================
+                bit 7:0    subminor version
+                bit 15:8   minor version
+                bit 23:16  major version
+                bit 24     0 for intree driver
+                bit 31:25  reserved
+                =========  ===================
+
+What:           /sys/class/ptp/ptp<N>/device/cipu/reg_env_ver
+Date:           October 2025
+Contact:        Wen Gu <guwen@linux.alibaba.com>
+Description:
+                Environment encoding (u32):
+
+                =========  =======================
+                bit 7:0    kernel patchlevel
+                bit 15:8   kernel sublevel
+                bit 23:16  kernel version
+                bit 26:24  reserved
+                bit 31:27  0x1F for Linux upstream
+                =========  =======================
+
+What:           /sys/class/ptp/ptp<N>/device/cipu/reg_dev_stat
+Date:           October 2025
+Contact:        Wen Gu <guwen@linux.alibaba.com>
+Description:
+                Device status (u8):
+
+                =  =========================================
+                0  RESET, device reset
+                1  FEATURE_OK, feature negotiation complete
+                2  DRIVER_OK, fully configured, ready to use
+                =  =========================================
+
+What:           /sys/class/ptp/ptp<N>/device/cipu/reg_sync_stat
+Date:           October 2025
+Contact:        Wen Gu <guwen@linux.alibaba.com>
+Description:
+                Device sync status bitmask (u8):
+
+                =====  =====================
+                bit 0  maintenance
+                bit 1  atomic clock abnormal
+                bit 4  device busy
+                bit 7  device error
+                =====  =====================
+
+                other bits are reserved.
+
+What:           /sys/class/ptp/ptp<N>/device/cipu/reg_tm_prec_ns
+Date:           October 2025
+Contact:        Wen Gu <guwen@linux.alibaba.com>
+Description:
+                Time precision reported by device, in nanoseconds (u32).
+
+What:           /sys/class/ptp/ptp<N>/device/cipu/reg_epo_base_yr
+Date:           October 2025
+Contact:        Wen Gu <guwen@linux.alibaba.com>
+Description:
+                Epoch base year used when epoch mode is enabled (u32).
+
+What:           /sys/class/ptp/ptp<N>/device/cipu/reg_leap_sec
+Date:           October 2025
+Contact:        Wen Gu <guwen@linux.alibaba.com>
+Description:
+                Leap seconds offset reported by device, in seconds (u32).
+
+What:           /sys/class/ptp/ptp<N>/device/cipu/reg_max_lat_ns
+Date:           October 2025
+Contact:        Wen Gu <guwen@linux.alibaba.com>
+Description:
+                Maximum device register read latency tolerated,
+                in nanoseconds (u32).
+
+                Exceeding this is treated as timeout. e.g. see
+                ptp_gettm_tout_err.
+
+What:           /sys/class/ptp/ptp<N>/device/cipu/reg_mt_tout_us
+Date:           October 2025
+Contact:        Wen Gu <guwen@linux.alibaba.com>
+Description:
+                Maintenance recovery timeout in microseconds (u32).
+
+                If exceeded while maintenance status is set, reported as
+                dev_maint_tout event.
+
+What:           /sys/class/ptp/ptp<N>/device/cipu/reg_thresh_us
+Date:           October 2025
+Contact:        Wen Gu <guwen@linux.alibaba.com>
+Description:
+                Threshold (u32, in microseconds) for acceptable
+                PHC vs system time offset.
+
+                Exceeding this only increments ptp_gettm_excd_thresh
+                counter.
