@@ -255,6 +255,7 @@ void intel_alpm_lobf_compute_config_late(struct intel_dp *intel_dp,
 	struct intel_display *display = to_intel_display(intel_dp);
 	struct drm_display_mode *adjusted_mode = &crtc_state->hw.adjusted_mode;
 	int waketime_in_lines, first_sdp_position;
+	int window1;
 
 	if (intel_dp->alpm.lobf_disable_debug) {
 		drm_dbg_kms(display->drm, "LOBF is disabled by debug flag\n");
@@ -285,6 +286,18 @@ void intel_alpm_lobf_compute_config_late(struct intel_dp *intel_dp,
 		return;
 
 	if (!intel_alpm_compute_params(intel_dp, crtc_state))
+		return;
+
+	/*
+	 * LOBF must be disabled if the number of lines within Window 1 is not
+	 * greater than ALPM_CTL[ALPM Entry Check]
+	 */
+	window1 = adjusted_mode->crtc_vtotal -
+		  (adjusted_mode->crtc_vdisplay +
+		   crtc_state->vrr.guardband +
+		   crtc_state->set_context_latency);
+
+	if (window1 <= crtc_state->alpm_state.check_entry_lines)
 		return;
 
 	/*
