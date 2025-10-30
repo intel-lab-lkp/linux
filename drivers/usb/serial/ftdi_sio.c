@@ -110,6 +110,7 @@ static int   ftdi_jtag_probe(struct usb_serial *serial);
 static int   ftdi_NDI_device_setup(struct usb_serial *serial);
 static int   ftdi_stmclite_probe(struct usb_serial *serial);
 static int   ftdi_8u2232c_probe(struct usb_serial *serial);
+static int   ftdi_evkm101_probe(struct usb_serial *serial);
 static void  ftdi_USB_UIRT_setup(struct ftdi_private *priv);
 static void  ftdi_HE_TIRA1_setup(struct ftdi_private *priv);
 
@@ -135,6 +136,10 @@ static const struct ftdi_quirk ftdi_stmclite_quirk = {
 
 static const struct ftdi_quirk ftdi_8u2232c_quirk = {
 	.probe	= ftdi_8u2232c_probe,
+};
+
+static const struct ftdi_quirk ftdi_evkm101_quirk = {
+	.probe	= ftdi_evkm101_probe,
 };
 
 /*
@@ -1074,6 +1079,8 @@ static const struct usb_device_id id_table_combined[] = {
 	/* U-Blox devices */
 	{ USB_DEVICE(UBLOX_VID, UBLOX_C099F9P_ZED_PID) },
 	{ USB_DEVICE(UBLOX_VID, UBLOX_C099F9P_ODIN_PID) },
+	{ USB_DEVICE(UBLOX_VID, UBLOX_EVK_M101_PID),
+		.driver_info = (kernel_ulong_t)&ftdi_evkm101_quirk },
 	/* FreeCalypso USB adapters */
 	{ USB_DEVICE(FTDI_VID, FTDI_FALCONIA_JTAG_BUF_PID),
 		.driver_info = (kernel_ulong_t)&ftdi_jtag_quirk },
@@ -2356,6 +2363,24 @@ static int ftdi_stmclite_probe(struct usb_serial *serial)
 
 	if (ifnum < 2) {
 		dev_info(&intf->dev, "Ignoring interface reserved for JTAG\n");
+		return -ENODEV;
+	}
+
+	return 0;
+}
+
+/*
+ * 1st, 2nd and 4th ports on U-Blox EVK-M101 using an FTDI FT4232H USB-to-UART
+ * are reserved for non-UART interfaces. The only 3rd port can be used as UART.
+ */
+static int ftdi_evkm101_probe(struct usb_serial *serial)
+{
+	struct usb_interface *intf = serial->interface;
+	int ifnum = intf->cur_altsetting->desc.bInterfaceNumber;
+
+	if (ifnum != 2) {
+		dev_info(&intf->dev,
+			 "Ignoring interface reserved as non-UART\n");
 		return -ENODEV;
 	}
 
