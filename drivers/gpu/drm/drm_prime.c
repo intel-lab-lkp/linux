@@ -903,6 +903,15 @@ unsigned long drm_prime_get_contiguous_size(struct sg_table *sgt)
 }
 EXPORT_SYMBOL(drm_prime_get_contiguous_size);
 
+static const struct dma_buf_ops *
+drm_gem_prime_get_dma_buf_ops(struct drm_device *dev)
+{
+	if (dev->driver->gem_prime_get_dma_buf_ops)
+		return dev->driver->gem_prime_get_dma_buf_ops(dev);
+
+	return &drm_gem_prime_dmabuf_ops;
+}
+
 /**
  * drm_gem_prime_export - helper library implementation of the export callback
  * @obj: GEM object to export
@@ -919,7 +928,7 @@ struct dma_buf *drm_gem_prime_export(struct drm_gem_object *obj,
 	struct dma_buf_export_info exp_info = {
 		.exp_name = KBUILD_MODNAME, /* white lie for debug */
 		.owner = dev->driver->fops->owner,
-		.ops = &drm_gem_prime_dmabuf_ops,
+		.ops = drm_gem_prime_get_dma_buf_ops(dev),
 		.size = obj->size,
 		.flags = flags,
 		.priv = obj,
@@ -929,7 +938,6 @@ struct dma_buf *drm_gem_prime_export(struct drm_gem_object *obj,
 	return drm_gem_dmabuf_export(dev, &exp_info);
 }
 EXPORT_SYMBOL(drm_gem_prime_export);
-
 
 /**
  * drm_gem_is_prime_exported_dma_buf -
@@ -946,7 +954,7 @@ bool drm_gem_is_prime_exported_dma_buf(struct drm_device *dev,
 {
 	struct drm_gem_object *obj = dma_buf->priv;
 
-	return (dma_buf->ops == &drm_gem_prime_dmabuf_ops) && (obj->dev == dev);
+	return (dma_buf->ops == drm_gem_prime_get_dma_buf_ops(dev)) && (obj->dev == dev);
 }
 EXPORT_SYMBOL(drm_gem_is_prime_exported_dma_buf);
 

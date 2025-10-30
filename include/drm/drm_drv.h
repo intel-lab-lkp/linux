@@ -327,6 +327,14 @@ struct drm_driver {
 				struct sg_table *sgt);
 
 	/**
+	 * @gem_prime_get_dma_buf_ops:
+	 *
+	 * Optional hook used by the PRIME helpers to get the custom dma_buf_ops
+	 * used by this driver.
+	 */
+	const struct dma_buf_ops *(*gem_prime_get_dma_buf_ops)(struct drm_device *dev);
+
+	/**
 	 * @dumb_create:
 	 *
 	 * This creates a new dumb buffer in the driver's backing storage manager (GEM,
