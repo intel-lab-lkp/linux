@@ -21,6 +21,20 @@ config SAMPLE_RUST_CLIST
 
 	  If unsure, say N.
 
+config SAMPLE_RUST_DRM_BUDDY
+	tristate "DRM buddy allocator sample"
+	depends on DRM_BUDDY
+	help
+	  This option builds the Rust DRM buddy allocator sample.
+
+	  The sample demonstrates using the DRM buddy allocator bindings
+	  to allocate and free memory blocks.
+
+	  To compile this as a module, choose M here:
+	  the module will be called rust_drm_buddy.
+
+	  If unsure, say N.
+
 config SAMPLE_RUST_CONFIGFS
 	tristate "Configfs sample"
 	depends on CONFIGFS_FS
