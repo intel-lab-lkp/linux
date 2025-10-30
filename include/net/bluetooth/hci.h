@@ -936,6 +936,40 @@ struct hci_cp_accept_sync_conn_req {
 	__le16   pkt_type;
 } __packed;
 
+#define	HCI_OP_ENHANCED_ACCEPT_SYNC_CONN_REQ	0x043E
+struct hci_coding_format_en_accpt_sync {
+	__u8    id;
+	__le16  cid;
+	__le16  vid;
+} __packed;
+
+struct hci_cp_enhanced_accept_sync_conn_req {
+	bdaddr_t bdaddr;
+	__le32	tx_bandwidth;
+	__le32	rx_bandwidth;
+	struct	hci_coding_format_en_accpt_sync tx_coding_format;
+	struct	hci_coding_format_en_accpt_sync rx_coding_format;
+	__le16	tx_codec_frame_size;
+	__le16	rx_codec_frame_size;
+	__le32	in_bandwidth;
+	__le32	out_bandwidth;
+	struct	hci_coding_format_en_accpt_sync in_coding_format;
+	struct	hci_coding_format_en_accpt_sync out_coding_format;
+	__le16	in_coded_data_size;
+	__le16	out_coded_data_size;
+	__u8	in_pcm_data_format;
+	__u8	out_pcm_data_format;
+	__u8	in_pcm_sample_payload_msb_pos;
+	__u8	out_pcm_sample_payload_msb_pos;
+	__u8	in_data_path;
+	__u8	out_data_path;
+	__u8	in_transport_unit_size;
+	__u8	out_transport_unit_size;
+	__le16	max_latency;
+	__le16	pkt_type;
+	__u8	retrans_effort;
+} __packed;
+
 #define HCI_OP_REJECT_SYNC_CONN_REQ	0x042a
 struct hci_cp_reject_sync_conn_req {
 	bdaddr_t bdaddr;
