@@ -263,4 +263,16 @@ config PTP_NETC_V4_TIMER
 	  synchronization. It also supports periodic output signal (e.g. PPS)
 	  and external trigger timestamping.
 
+config PTP_1588_CLOCK_CIPU
+	tristate "Alibaba CIPU PTP clock"
+	depends on PTP_1588_CLOCK
+	depends on 64BIT
+	depends on PCI
+	help
+	  This driver adds support for using the Alibaba CIPU PHC device
+	  as a PTP clock. This is only useful with the Alibaba Cloud CIPU
+	  infrastructure.
+
+	  To compile this driver as a module, choose M here: the module
+	  will be called ptp_cipu.
 endmenu
