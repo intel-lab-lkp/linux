@@ -2,6 +2,7 @@
 
 //! DRM subsystem abstractions.
 
+pub mod buddy;
 pub mod device;
 pub mod driver;
 pub mod file;

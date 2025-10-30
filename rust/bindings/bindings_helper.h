@@ -29,6 +29,7 @@
 #include <linux/hrtimer_types.h>
 
 #include <linux/acpi.h>
+#include <drm/drm_buddy.h>
 #include <drm/drm_device.h>
 #include <drm/drm_drv.h>
 #include <drm/drm_file.h>
@@ -111,6 +112,16 @@ const xa_mark_t RUST_CONST_HELPER_XA_PRESENT = XA_PRESENT;
 const gfp_t RUST_CONST_HELPER_XA_FLAGS_ALLOC = XA_FLAGS_ALLOC;
 const gfp_t RUST_CONST_HELPER_XA_FLAGS_ALLOC1 = XA_FLAGS_ALLOC1;
 const vm_flags_t RUST_CONST_HELPER_VM_MERGEABLE = VM_MERGEABLE;
+
+#if IS_ENABLED(CONFIG_DRM_BUDDY)
+const unsigned long RUST_CONST_HELPER_DRM_BUDDY_RANGE_ALLOCATION = DRM_BUDDY_RANGE_ALLOCATION;
+const unsigned long RUST_CONST_HELPER_DRM_BUDDY_TOPDOWN_ALLOCATION = DRM_BUDDY_TOPDOWN_ALLOCATION;
+const unsigned long RUST_CONST_HELPER_DRM_BUDDY_CONTIGUOUS_ALLOCATION =
+								DRM_BUDDY_CONTIGUOUS_ALLOCATION;
+const unsigned long RUST_CONST_HELPER_DRM_BUDDY_CLEAR_ALLOCATION = DRM_BUDDY_CLEAR_ALLOCATION;
+const unsigned long RUST_CONST_HELPER_DRM_BUDDY_CLEARED = DRM_BUDDY_CLEARED;
+const unsigned long RUST_CONST_HELPER_DRM_BUDDY_TRIM_DISABLE = DRM_BUDDY_TRIM_DISABLE;
+#endif
 
 #if IS_ENABLED(CONFIG_ANDROID_BINDER_IPC_RUST)
 #include "../../drivers/android/binder/rust_binder.h"
