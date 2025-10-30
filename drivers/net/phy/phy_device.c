@@ -287,8 +287,7 @@ static bool phy_uses_state_machine(struct phy_device *phydev)
 	if (phydev->phy_link_change == phy_link_change)
 		return phydev->attached_dev && phydev->adjust_link;
 
-	/* phydev->phy_link_change is implicitly phylink_phy_change() */
-	return true;
+	return !!phydev->phy_link_change;
 }
 
 static bool mdio_bus_phy_may_suspend(struct phy_device *phydev)
@@ -1864,6 +1863,8 @@ void phy_detach(struct phy_device *phydev)
 		phydev->attached_dev = NULL;
 		phy_link_topo_del_phy(dev, phydev);
 	}
+
+	phydev->phy_link_change = NULL;
 	phydev->phylink = NULL;
 
 	if (!phydev->is_on_sfp_module)
@@ -3502,7 +3503,7 @@ static int phy_probe(struct device *dev)
 	/* Get the LEDs from the device tree, and instantiate standard
 	 * LEDs for them.
 	 */
-	if (IS_ENABLED(CONFIG_PHYLIB_LEDS))
+	if (IS_ENABLED(CONFIG_PHYLIB_LEDS) && !phy_driver_is_genphy(phydev))
 		err = of_phy_leds(phydev);
 
 out:
@@ -3519,7 +3520,7 @@ static int phy_remove(struct device *dev)
 
 	cancel_delayed_work_sync(&phydev->state_queue);
 
-	if (IS_ENABLED(CONFIG_PHYLIB_LEDS))
+	if (IS_ENABLED(CONFIG_PHYLIB_LEDS) && !phy_driver_is_genphy(phydev))
 		phy_leds_unregister(phydev);
 
 	phydev->state = PHY_DOWN;
@@ -3543,7 +3544,8 @@ static int phy_remove(struct device *dev)
  * @new_driver: new phy_driver to register
  * @owner: module owning this PHY
  */
-int phy_driver_register(struct phy_driver *new_driver, struct module *owner)
+static int phy_driver_register(struct phy_driver *new_driver,
+			       struct module *owner)
 {
 	int retval;
 
@@ -3586,7 +3588,6 @@ int phy_driver_register(struct phy_driver *new_driver, struct module *owner)
 
 	return 0;
 }
-EXPORT_SYMBOL(phy_driver_register);
 
 int phy_drivers_register(struct phy_driver *new_driver, int n,
 			 struct module *owner)
