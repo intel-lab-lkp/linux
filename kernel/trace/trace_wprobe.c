@@ -260,7 +260,7 @@ print_wprobe_event(struct trace_iterator *iter, int flags,
 
 	trace_seq_printf(s, "%s: (", trace_probe_name(tp));
 
-	if (!seq_print_ip_sym(s, field->ip, flags | TRACE_ITER_SYM_OFFSET))
+	if (!seq_print_ip_sym(s, field->ip, flags | TRACE_ITER(SYM_OFFSET)))
 		goto out;
 
 	trace_seq_putc(s, ')');
