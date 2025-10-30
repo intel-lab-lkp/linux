@@ -229,14 +229,12 @@ static void ecard_init_pgtables(struct mm_struct *mm)
 	pgd_t *src_pgd, *dst_pgd;
 
 	src_pgd = pgd_offset(mm, (unsigned long)IO_BASE);
-	dst_pgd = pgd_offset(mm, IO_START);
-
-	memcpy(dst_pgd, src_pgd, sizeof(pgd_t) * (IO_SIZE / PGDIR_SIZE));
+	dst_pgd = memcpy(pgd_offset(mm, IO_START), src_pgd,
+			 sizeof(pgd_t) * (IO_SIZE / PGDIR_SIZE));
 
 	src_pgd = pgd_offset(mm, (unsigned long)EASI_BASE);
-	dst_pgd = pgd_offset(mm, EASI_START);
-
-	memcpy(dst_pgd, src_pgd, sizeof(pgd_t) * (EASI_SIZE / PGDIR_SIZE));
+	dst_pgd = memcpy(pgd_offset(mm, EASI_START), src_pgd,
+			 sizeof(pgd_t) * (EASI_SIZE / PGDIR_SIZE));
 
 	flush_tlb_range(&vma, IO_START, IO_START + IO_SIZE);
 	flush_tlb_range(&vma, EASI_START, EASI_START + EASI_SIZE);
