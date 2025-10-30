@@ -32,6 +32,8 @@ static unsigned long *context_asid_map;
 static DEFINE_PER_CPU(atomic_long_t, active_context);
 static DEFINE_PER_CPU(unsigned long, reserved_context);
 
+DEFINE_PER_CPU(unsigned long, loaded_asid) = 0;
+
 static bool check_update_reserved_context(unsigned long cntx,
 					  unsigned long newcntx)
 {
@@ -192,6 +194,8 @@ switch_mm_fast:
 	csr_write(CSR_SATP, virt_to_pfn(mm->pgd) |
 		  (cntx2asid(cntx) << SATP_ASID_SHIFT) |
 		  satp_mode);
+
+	this_cpu_write(loaded_asid, cntx2asid(cntx));
 
 	if (need_flush_tlb)
 		local_flush_tlb_all();

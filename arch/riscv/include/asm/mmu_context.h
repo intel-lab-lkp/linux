@@ -39,6 +39,7 @@ static inline int init_new_context(struct task_struct *tsk,
 }
 
 DECLARE_STATIC_KEY_FALSE(use_asid_allocator);
+DECLARE_PER_CPU(unsigned long, loaded_asid);
 
 #ifdef CONFIG_RISCV_ISA_SUPM
 #define mm_untag_mask mm_untag_mask
