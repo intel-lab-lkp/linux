@@ -893,6 +893,120 @@ fail_detach:
 }
 EXPORT_SYMBOL_GPL(drm_gem_shmem_prime_import_no_map);
 
+/**
+ * drm_gem_shmem_prime_unmap_dma_buf - Default unmap_dma_buf() for exported buffers
+ * @attach: attachment
+ * @sgt: SG table to unmap
+ * @dir: type of access done by this attachment
+ *
+ * Default implementation for dma_buf_ops::map_dma_buf(). This is just a wrapper
+ * around drm_gem_map_dma_buf() that lets us set the dma_buf_attachment::priv
+ * to the sgt so that drm_gem_shmem_prime_{begin,end}_cpu_access() can sync
+ * around CPU accesses.
+ */
+struct sg_table *
+drm_gem_shmem_prime_map_dma_buf(struct dma_buf_attachment *attach,
+				enum dma_data_direction dir)
+{
+	struct sg_table *sgt = drm_gem_map_dma_buf(attach, dir);
+
+	if (!IS_ERR(sgt))
+		attach->priv = sgt;
+
+	return sgt;
+}
+EXPORT_SYMBOL_GPL(drm_gem_shmem_prime_map_dma_buf);
+
+/**
+ * drm_gem_shmem_prime_unmap_dma_buf - Default unmap_dma_buf() for exported buffers
+ * @attach: attachment
+ * @sgt: SG table to unmap
+ * @dir: type of access done by this attachment
+ *
+ * Default implementation for dma_buf_ops::unmap_dma_buf(). This is just a wrapper
+ * around drm_gem_unmap_dma_buf() that lets us reset the dma_buf_attachment::priv
+ * field so that drm_gem_shmem_prime_{begin,end}_cpu_access() don't consider it
+ * as a mapped attachment to sync against.
+ */
+void drm_gem_shmem_prime_unmap_dma_buf(struct dma_buf_attachment *attach,
+				       struct sg_table *sgt,
+				       enum dma_data_direction dir)
+{
+	attach->priv = NULL;
+	drm_gem_unmap_dma_buf(attach, sgt, dir);
+}
+EXPORT_SYMBOL_GPL(drm_gem_shmem_prime_unmap_dma_buf);
+
+/**
+ * drm_gem_shmem_prime_begin_cpu_access - Default end_cpu_access() for exported buffers
+ * @dma_buf: The exported DMA buffer this acts on
+ * @dir: direction of the access
+ *
+ * Default implementation for dma_buf_ops::begin_cpu_access(). This only takes care of
+ * cache maintenance.
+ */
+int drm_gem_shmem_prime_begin_cpu_access(struct dma_buf *dma_buf,
+					 enum dma_data_direction dir)
+{
+	struct drm_gem_object *obj = dma_buf->priv;
+	struct drm_device *dev = obj->dev;
+	struct drm_gem_shmem_object *shmem = to_drm_gem_shmem_obj(obj);
+	struct dma_buf_attachment *attach;
+
+	dma_resv_lock(obj->resv, NULL);
+	if (shmem->sgt)
+		dma_sync_sgtable_for_cpu(dev->dev, shmem->sgt, dir);
+
+	if (shmem->vaddr)
+		invalidate_kernel_vmap_range(shmem->vaddr, shmem->base.size);
+
+	list_for_each_entry(attach, &dma_buf->attachments, node) {
+		struct sg_table *sgt = attach->priv;
+
+		if (sgt)
+			dma_sync_sgtable_for_cpu(attach->dev, sgt, dir);
+	}
+	dma_resv_unlock(obj->resv);
+
+	return 0;
+}
+EXPORT_SYMBOL_GPL(drm_gem_shmem_prime_begin_cpu_access);
+
+/**
+ * drm_gem_shmem_prime_end_cpu_access - Default end_cpu_access() for exported buffers
+ * @dma_buf: The exported DMA buffer this acts on
+ * @dir: direction of the access
+ *
+ * Default implementation for dma_buf_ops::end_cpu_access(). This only takes care of
+ * cache maintenance.
+ */
+int drm_gem_shmem_prime_end_cpu_access(struct dma_buf *dma_buf,
+				       enum dma_data_direction dir)
+{
+	struct drm_gem_object *obj = dma_buf->priv;
+	struct drm_device *dev = obj->dev;
+	struct drm_gem_shmem_object *shmem = to_drm_gem_shmem_obj(obj);
+	struct dma_buf_attachment *attach;
+
+	dma_resv_lock(obj->resv, NULL);
+	list_for_each_entry(attach, &dma_buf->attachments, node) {
+		struct sg_table *sgt = attach->priv;
+
+		if (sgt)
+			dma_sync_sgtable_for_device(attach->dev, sgt, dir);
+	}
+
+	if (shmem->vaddr)
+		flush_kernel_vmap_range(shmem->vaddr, shmem->base.size);
+
+	if (shmem->sgt)
+		dma_sync_sgtable_for_device(dev->dev, shmem->sgt, dir);
+
+	dma_resv_unlock(obj->resv);
+	return 0;
+}
+EXPORT_SYMBOL_GPL(drm_gem_shmem_prime_end_cpu_access);
+
 MODULE_DESCRIPTION("DRM SHMEM memory-management helpers");
 MODULE_IMPORT_NS("DMA_BUF");
 MODULE_LICENSE("GPL v2");

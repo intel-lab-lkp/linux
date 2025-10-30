@@ -291,6 +291,16 @@ int drm_gem_shmem_dumb_create(struct drm_file *file, struct drm_device *dev,
 			      struct drm_mode_create_dumb *args);
 struct drm_gem_object *drm_gem_shmem_prime_import_no_map(struct drm_device *dev,
 							 struct dma_buf *buf);
+struct sg_table *
+drm_gem_shmem_prime_map_dma_buf(struct dma_buf_attachment *attach,
+				enum dma_data_direction dir);
+void drm_gem_shmem_prime_unmap_dma_buf(struct dma_buf_attachment *attach,
+				       struct sg_table *sgt,
+				       enum dma_data_direction dir);
+int drm_gem_shmem_prime_begin_cpu_access(struct dma_buf *dma_buf,
+					 enum dma_data_direction dir);
+int drm_gem_shmem_prime_end_cpu_access(struct dma_buf *dma_buf,
+				       enum dma_data_direction dir);
 
 /**
  * DRM_GEM_SHMEM_DRIVER_OPS - Default shmem GEM operations
