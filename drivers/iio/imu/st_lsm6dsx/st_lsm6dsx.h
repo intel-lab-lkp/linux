@@ -80,27 +80,6 @@ enum st_lsm6dsx_hw_id {
 					 * ST_LSM6DSX_TAGGED_SAMPLE_SIZE)
 #define ST_LSM6DSX_SHIFT_VAL(val, mask)	(((val) << __ffs(mask)) & (mask))
 
-#define ST_LSM6DSX_CHANNEL_ACC(chan_type, addr, mod, scan_idx)		\
-{									\
-	.type = chan_type,						\
-	.address = addr,						\
-	.modified = 1,							\
-	.channel2 = mod,						\
-	.info_mask_separate = BIT(IIO_CHAN_INFO_RAW),			\
-	.info_mask_shared_by_type = BIT(IIO_CHAN_INFO_SCALE),		\
-	.info_mask_shared_by_all = BIT(IIO_CHAN_INFO_SAMP_FREQ),	\
-	.scan_index = scan_idx,						\
-	.scan_type = {							\
-		.sign = 's',						\
-		.realbits = 16,						\
-		.storagebits = 16,					\
-		.endianness = IIO_LE,					\
-	},								\
-	.event_spec = &st_lsm6dsx_event,				\
-	.ext_info = st_lsm6dsx_ext_info,				\
-	.num_event_specs = 1,						\
-}
-
 #define ST_LSM6DSX_CHANNEL(chan_type, addr, mod, scan_idx)		\
 {									\
 	.type = chan_type,						\
@@ -319,10 +298,7 @@ struct st_lsm6dsx_settings {
 		const char *name;
 		u8 wai;
 	} id[ST_LSM6DSX_MAX_ID];
-	struct {
-		const struct iio_chan_spec *chan;
-		int len;
-	} channels[2];
+	u8 chan_addr_base[2];
 	struct {
 		struct st_lsm6dsx_reg irq1;
 		struct st_lsm6dsx_reg irq2;

@@ -96,26 +96,7 @@
 
 #define ST_LSM6DSX_TS_SENSITIVITY		25000UL /* 25us */
 
-static const struct iio_chan_spec st_lsm6dsx_acc_channels[] = {
-	ST_LSM6DSX_CHANNEL_ACC(IIO_ACCEL, 0x28, IIO_MOD_X, 0),
-	ST_LSM6DSX_CHANNEL_ACC(IIO_ACCEL, 0x2a, IIO_MOD_Y, 1),
-	ST_LSM6DSX_CHANNEL_ACC(IIO_ACCEL, 0x2c, IIO_MOD_Z, 2),
-	IIO_CHAN_SOFT_TIMESTAMP(3),
-};
-
-static const struct iio_chan_spec st_lsm6dsx_gyro_channels[] = {
-	ST_LSM6DSX_CHANNEL(IIO_ANGL_VEL, 0x22, IIO_MOD_X, 0),
-	ST_LSM6DSX_CHANNEL(IIO_ANGL_VEL, 0x24, IIO_MOD_Y, 1),
-	ST_LSM6DSX_CHANNEL(IIO_ANGL_VEL, 0x26, IIO_MOD_Z, 2),
-	IIO_CHAN_SOFT_TIMESTAMP(3),
-};
-
-static const struct iio_chan_spec st_lsm6ds0_gyro_channels[] = {
-	ST_LSM6DSX_CHANNEL(IIO_ANGL_VEL, 0x18, IIO_MOD_X, 0),
-	ST_LSM6DSX_CHANNEL(IIO_ANGL_VEL, 0x1a, IIO_MOD_Y, 1),
-	ST_LSM6DSX_CHANNEL(IIO_ANGL_VEL, 0x1c, IIO_MOD_Z, 2),
-	IIO_CHAN_SOFT_TIMESTAMP(3),
-};
+#define ST_LSM6DSX_CHAN_COUNT		4
 
 static const struct st_lsm6dsx_settings st_lsm6dsx_sensor_settings[] = {
 	{
@@ -142,15 +123,9 @@ static const struct st_lsm6dsx_settings st_lsm6dsx_sensor_settings[] = {
 				.wai = 0x68,
 			},
 		},
-		.channels = {
-			[ST_LSM6DSX_ID_ACC] = {
-				.chan = st_lsm6dsx_acc_channels,
-				.len = ARRAY_SIZE(st_lsm6dsx_acc_channels),
-			},
-			[ST_LSM6DSX_ID_GYRO] = {
-				.chan = st_lsm6ds0_gyro_channels,
-				.len = ARRAY_SIZE(st_lsm6ds0_gyro_channels),
-			},
+		.chan_addr_base = {
+			[ST_LSM6DSX_ID_ACC] = 0x28,
+			[ST_LSM6DSX_ID_GYRO] = 0x18,
 		},
 		.odr_table = {
 			[ST_LSM6DSX_ID_ACC] = {
@@ -246,15 +221,9 @@ static const struct st_lsm6dsx_settings st_lsm6dsx_sensor_settings[] = {
 				.wai = 0x69,
 			},
 		},
-		.channels = {
-			[ST_LSM6DSX_ID_ACC] = {
-				.chan = st_lsm6dsx_acc_channels,
-				.len = ARRAY_SIZE(st_lsm6dsx_acc_channels),
-			},
-			[ST_LSM6DSX_ID_GYRO] = {
-				.chan = st_lsm6dsx_gyro_channels,
-				.len = ARRAY_SIZE(st_lsm6dsx_gyro_channels),
-			},
+		.chan_addr_base = {
+			[ST_LSM6DSX_ID_ACC] = 0x28,
+			[ST_LSM6DSX_ID_GYRO] = 0x22,
 		},
 		.odr_table = {
 			[ST_LSM6DSX_ID_ACC] = {
@@ -412,15 +381,9 @@ static const struct st_lsm6dsx_settings st_lsm6dsx_sensor_settings[] = {
 				.wai = 0x69,
 			},
 		},
-		.channels = {
-			[ST_LSM6DSX_ID_ACC] = {
-				.chan = st_lsm6dsx_acc_channels,
-				.len = ARRAY_SIZE(st_lsm6dsx_acc_channels),
-			},
-			[ST_LSM6DSX_ID_GYRO] = {
-				.chan = st_lsm6dsx_gyro_channels,
-				.len = ARRAY_SIZE(st_lsm6dsx_gyro_channels),
-			},
+		.chan_addr_base = {
+			[ST_LSM6DSX_ID_ACC] = 0x28,
+			[ST_LSM6DSX_ID_GYRO] = 0x22,
 		},
 		.odr_table = {
 			[ST_LSM6DSX_ID_ACC] = {
@@ -590,15 +553,9 @@ static const struct st_lsm6dsx_settings st_lsm6dsx_sensor_settings[] = {
 				.wai = 0x6a,
 			},
 		},
-		.channels = {
-			[ST_LSM6DSX_ID_ACC] = {
-				.chan = st_lsm6dsx_acc_channels,
-				.len = ARRAY_SIZE(st_lsm6dsx_acc_channels),
-			},
-			[ST_LSM6DSX_ID_GYRO] = {
-				.chan = st_lsm6dsx_gyro_channels,
-				.len = ARRAY_SIZE(st_lsm6dsx_gyro_channels),
-			},
+		.chan_addr_base = {
+			[ST_LSM6DSX_ID_ACC] = 0x28,
+			[ST_LSM6DSX_ID_GYRO] = 0x22,
 		},
 		.odr_table = {
 			[ST_LSM6DSX_ID_ACC] = {
@@ -847,15 +804,9 @@ static const struct st_lsm6dsx_settings st_lsm6dsx_sensor_settings[] = {
 				.wai = 0x6d,
 			},
 		},
-		.channels = {
-			[ST_LSM6DSX_ID_ACC] = {
-				.chan = st_lsm6dsx_acc_channels,
-				.len = ARRAY_SIZE(st_lsm6dsx_acc_channels),
-			},
-			[ST_LSM6DSX_ID_GYRO] = {
-				.chan = st_lsm6dsx_gyro_channels,
-				.len = ARRAY_SIZE(st_lsm6dsx_gyro_channels),
-			},
+		.chan_addr_base = {
+			[ST_LSM6DSX_ID_ACC] = 0x28,
+			[ST_LSM6DSX_ID_GYRO] = 0x22,
 		},
 		.drdy_mask = {
 			.addr = 0x13,
@@ -1060,15 +1011,9 @@ static const struct st_lsm6dsx_settings st_lsm6dsx_sensor_settings[] = {
 				.wai = 0x6b,
 			},
 		},
-		.channels = {
-			[ST_LSM6DSX_ID_ACC] = {
-				.chan = st_lsm6dsx_acc_channels,
-				.len = ARRAY_SIZE(st_lsm6dsx_acc_channels),
-			},
-			[ST_LSM6DSX_ID_GYRO] = {
-				.chan = st_lsm6dsx_gyro_channels,
-				.len = ARRAY_SIZE(st_lsm6dsx_gyro_channels),
-			},
+		.chan_addr_base = {
+			[ST_LSM6DSX_ID_ACC] = 0x28,
+			[ST_LSM6DSX_ID_GYRO] = 0x22,
 		},
 		.drdy_mask = {
 			.addr = 0x13,
@@ -1237,15 +1182,9 @@ static const struct st_lsm6dsx_settings st_lsm6dsx_sensor_settings[] = {
 				.wai = 0x70,
 			},
 		},
-		.channels = {
-			[ST_LSM6DSX_ID_ACC] = {
-				.chan = st_lsm6dsx_acc_channels,
-				.len = ARRAY_SIZE(st_lsm6dsx_acc_channels),
-			},
-			[ST_LSM6DSX_ID_GYRO] = {
-				.chan = st_lsm6dsx_gyro_channels,
-				.len = ARRAY_SIZE(st_lsm6dsx_gyro_channels),
-			},
+		.chan_addr_base = {
+			[ST_LSM6DSX_ID_ACC] = 0x28,
+			[ST_LSM6DSX_ID_GYRO] = 0x22,
 		},
 		.drdy_mask = {
 			.addr = 0x13,
@@ -1443,15 +1382,9 @@ static const struct st_lsm6dsx_settings st_lsm6dsx_sensor_settings[] = {
 				.wai = 0x22,
 			}
 		},
-		.channels = {
-			[ST_LSM6DSX_ID_ACC] = {
-				.chan = st_lsm6dsx_acc_channels,
-				.len = ARRAY_SIZE(st_lsm6dsx_acc_channels),
-			},
-			[ST_LSM6DSX_ID_GYRO] = {
-				.chan = st_lsm6dsx_gyro_channels,
-				.len = ARRAY_SIZE(st_lsm6dsx_gyro_channels),
-			},
+		.chan_addr_base = {
+			[ST_LSM6DSX_ID_ACC] = 0x28,
+			[ST_LSM6DSX_ID_GYRO] = 0x22,
 		},
 		.odr_table = {
 			[ST_LSM6DSX_ID_ACC] = {
@@ -2366,21 +2299,64 @@ static int st_lsm6dsx_init_device(struct st_lsm6dsx_hw *hw)
 	return st_lsm6dsx_init_hw_timer(hw);
 }
 
+static int st_lsm6dsx_chan_init(struct iio_chan_spec *channels, struct st_lsm6dsx_hw *hw,
+				enum st_lsm6dsx_sensor_id id, int index)
+{
+	struct iio_chan_spec *chan = &channels[index];
+
+	chan->type = (id == ST_LSM6DSX_ID_ACC) ? IIO_ACCEL : IIO_ANGL_VEL;
+	chan->address = hw->settings->chan_addr_base[id] + index * ST_LSM6DSX_CHAN_SIZE;
+	chan->modified = 1;
+	chan->channel2 = IIO_MOD_X + index;
+	chan->info_mask_separate = BIT(IIO_CHAN_INFO_RAW);
+	chan->info_mask_shared_by_type = BIT(IIO_CHAN_INFO_SCALE);
+	chan->info_mask_shared_by_all = BIT(IIO_CHAN_INFO_SAMP_FREQ);
+	chan->scan_index = index;
+	chan->scan_type.sign = 's';
+	chan->scan_type.realbits = 16;
+	chan->scan_type.storagebits = 16;
+	chan->scan_type.endianness = IIO_LE;
+	chan->ext_info = st_lsm6dsx_ext_info;
+	if (id == ST_LSM6DSX_ID_ACC) {
+		if (hw->settings->event_settings.wakeup_reg.addr) {
+			chan->event_spec = &st_lsm6dsx_event;
+			chan->num_event_specs = 1;
+		}
+	}
+	return 0;
+}
+
 static struct iio_dev *st_lsm6dsx_alloc_iiodev(struct st_lsm6dsx_hw *hw,
 					       enum st_lsm6dsx_sensor_id id,
 					       const char *name)
 {
 	struct st_lsm6dsx_sensor *sensor;
 	struct iio_dev *iio_dev;
+	struct iio_chan_spec *channels;
+	int i;
 
 	iio_dev = devm_iio_device_alloc(hw->dev, sizeof(*sensor));
 	if (!iio_dev)
 		return NULL;
 
+	channels = devm_kzalloc(hw->dev, sizeof(*channels) * ST_LSM6DSX_CHAN_COUNT, GFP_KERNEL);
+	if (!channels)
+		return NULL;
+
+	for (i = 0; i < 3; i++) {
+		if (st_lsm6dsx_chan_init(channels, hw, id, i) < 0)
+			return NULL;
+	}
+	channels[3].type = IIO_TIMESTAMP;
+	channels[3].channel = -1;
+	channels[3].scan_index = 3;
+	channels[3].scan_type.sign = 's';
+	channels[3].scan_type.realbits = 64;
+	channels[3].scan_type.storagebits = 64;
 	iio_dev->modes = INDIO_DIRECT_MODE;
 	iio_dev->available_scan_masks = st_lsm6dsx_available_scan_masks;
-	iio_dev->channels = hw->settings->channels[id].chan;
-	iio_dev->num_channels = hw->settings->channels[id].len;
+	iio_dev->channels = channels;
+	iio_dev->num_channels = ST_LSM6DSX_CHAN_COUNT;
 
 	sensor = iio_priv(iio_dev);
 	sensor->id = id;
