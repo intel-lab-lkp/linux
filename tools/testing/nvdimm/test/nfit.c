@@ -129,6 +129,7 @@ static u32 handle[] = {
 	[4] = NFIT_DIMM_HANDLE(0, 1, 0, 0, 0),
 	[5] = NFIT_DIMM_HANDLE(1, 0, 0, 0, 0),
 	[6] = NFIT_DIMM_HANDLE(1, 0, 0, 0, 1),
+	[7] = NFIT_DIMM_HANDLE(1, 0, 1, 0, 1),
 };
 
 static unsigned long dimm_fail_cmd_flags[ARRAY_SIZE(handle)];
@@ -687,6 +688,13 @@ static int nfit_test_search_spa(struct nvdimm_bus *bus,
 	 */
 	nd_mapping = &nd_region->mapping[nd_region->ndr_mappings - 1];
 	nvdimm = nd_mapping->nvdimm;
+
+	if (WARN_ON_ONCE(nvdimm->id >= ARRAY_SIZE(handle))) {
+		dev_err(&bus->dev,
+			"invalid nvdimm->id %u >= handle array size %zu\n",
+			nvdimm->id, ARRAY_SIZE(handle));
+		return -EINVAL;
+	}
 
 	spa->devices[0].nfit_device_handle = handle[nvdimm->id];
 	spa->num_nvdimms = 1;
