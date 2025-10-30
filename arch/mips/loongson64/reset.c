@@ -76,8 +76,9 @@ static int loongson_kexec_prepare(struct kimage *image)
 			 * of parameters (as bootloader does).
 			 */
 			int offt;
-			str = (char *)argv + KEXEC_ARGV_SIZE/2;
-			memcpy(str, image->segment[i].buf, KEXEC_ARGV_SIZE/2);
+
+			str = memcpy((char *)argv + KEXEC_ARGV_SIZE / 2, image->segment[i].buf,
+				     KEXEC_ARGV_SIZE / 2);
 			ptr = strchr(str, ' ');
 
 			while (ptr && (argc < MAX_ARGS)) {
