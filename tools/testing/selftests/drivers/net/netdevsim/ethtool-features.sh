@@ -7,6 +7,11 @@ NSIM_NETDEV=$(make_netdev)
 
 set -o pipefail
 
+if ! ethtool --json -k $NSIM_NETDEV > /dev/null 2>&1; then
+	echo "SKIP: No --json -k support in ethtool"
+	exit $ksft_skip
+fi
+
 FEATS="
   tx-checksum-ip-generic
   tx-scatter-gather
