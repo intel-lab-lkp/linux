@@ -1162,13 +1162,9 @@ static void shmem_undo_range(struct inode *inode, loff_t lstart, loff_t lend,
 	same_folio = (lstart >> PAGE_SHIFT) == (lend >> PAGE_SHIFT);
 	folio = shmem_get_partial_folio(inode, lstart >> PAGE_SHIFT);
 	if (folio) {
-		same_folio = lend < folio_pos(folio) + folio_size(folio);
 		folio_mark_dirty(folio);
-		if (!truncate_inode_partial_folio(folio, lstart, lend)) {
-			start = folio_next_index(folio);
-			if (same_folio)
-				end = folio->index;
-		}
+		truncate_inode_partial_folio(folio, lstart, lend);
+		same_folio = lend < folio_pos(folio) + folio_size(folio);
 		folio_unlock(folio);
 		folio_put(folio);
 		folio = NULL;
@@ -1178,8 +1174,7 @@ static void shmem_undo_range(struct inode *inode, loff_t lstart, loff_t lend,
 		folio = shmem_get_partial_folio(inode, lend >> PAGE_SHIFT);
 	if (folio) {
 		folio_mark_dirty(folio);
-		if (!truncate_inode_partial_folio(folio, lstart, lend))
-			end = folio->index;
+		truncate_inode_partial_folio(folio, lstart, lend);
 		folio_unlock(folio);
 		folio_put(folio);
 	}
