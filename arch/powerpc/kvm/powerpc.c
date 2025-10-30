@@ -216,8 +216,7 @@ int kvmppc_kvm_pv(struct kvm_vcpu *vcpu)
 
 			shared &= PAGE_MASK;
 			shared |= vcpu->arch.magic_page_pa & 0xf000;
-			new_shared = (void*)shared;
-			memcpy(new_shared, old_shared, 0x1000);
+			new_shared = memcpy(shared, old_shared, 0x1000);
 			vcpu->arch.shared = new_shared;
 		}
 #endif
