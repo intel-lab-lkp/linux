@@ -56,6 +56,7 @@
 #include <linux/fdtable.h>
 #include <linux/file.h>
 #include <linux/firmware.h>
+#include <linux/fwctl.h>
 #include <linux/interrupt.h>
 #include <linux/fs.h>
 #include <linux/ioport.h>

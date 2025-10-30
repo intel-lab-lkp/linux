@@ -94,6 +94,8 @@ pub mod faux;
 pub mod firmware;
 pub mod fmt;
 pub mod fs;
+#[cfg(CONFIG_FWCTL)]
+pub mod fwctl;
 pub mod id_pool;
 pub mod init;
 pub mod io;
