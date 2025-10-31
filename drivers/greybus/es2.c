@@ -194,8 +194,7 @@ static int output_async(struct es2_ap_dev *es2, void *req, u16 size, u8 cmd)
 		return -ENOMEM;
 	}
 
-	buf = (u8 *)dr + sizeof(*dr);
-	memcpy(buf, req, size);
+	buf = memcpy((u8 *)dr + sizeof(*dr), req, size);
 
 	dr->bRequest = cmd;
 	dr->bRequestType = USB_DIR_OUT | USB_TYPE_VENDOR | USB_RECIP_INTERFACE;
