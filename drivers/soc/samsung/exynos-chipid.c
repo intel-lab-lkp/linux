@@ -26,15 +26,19 @@
 
 #include "exynos-asv.h"
 
+struct exynos_chipid_info {
+	struct regmap *regmap;
+	struct device *dev;
+	u32 product_id;
+	u32 revision;
+};
+
 struct exynos_chipid_variant {
+	int (*get_chipid_info)(const struct exynos_chipid_variant *data,
+			       struct exynos_chipid_info *exynos_chipid);
 	unsigned int rev_reg;		/* revision register offset */
 	unsigned int main_rev_shift;	/* main revision offset in rev_reg */
 	unsigned int sub_rev_shift;	/* sub revision offset in rev_reg */
-};
-
-struct exynos_chipid_info {
-	u32 product_id;
-	u32 revision;
 };
 
 static const struct exynos_soc_id {
@@ -80,12 +84,18 @@ static const char *product_id_to_soc_id(unsigned int product_id)
 	return NULL;
 }
 
-static int exynos_chipid_get_chipid_info(struct regmap *regmap,
-		const struct exynos_chipid_variant *data,
+static int exynos_chipid_get_regmap_chipid_info(const struct exynos_chipid_variant *data,
 		struct exynos_chipid_info *exynos_chipid)
 {
 	int ret;
+	struct regmap *regmap;
 	unsigned int val, main_rev, sub_rev;
+
+	regmap = device_node_to_regmap(exynos_chipid->dev->of_node);
+	if (IS_ERR(regmap))
+		return PTR_ERR(regmap);
+
+	exynos_chipid->regmap = regmap;
 
 	ret = regmap_read(regmap, EXYNOS_CHIPID_REG_PRO_ID, &val);
 	if (ret < 0)
@@ -112,7 +122,6 @@ static int exynos_chipid_probe(struct platform_device *pdev)
 	struct device *dev = &pdev->dev;
 	struct soc_device *soc_dev;
 	struct device_node *root;
-	struct regmap *regmap;
 	int ret;
 
 	data = of_device_get_match_data(dev);
@@ -123,11 +132,9 @@ static int exynos_chipid_probe(struct platform_device *pdev)
 	if (!exynos_chipid)
 		return -ENOMEM;
 
-	regmap = device_node_to_regmap(dev->of_node);
-	if (IS_ERR(regmap))
-		return PTR_ERR(regmap);
+	exynos_chipid->dev = dev;
 
-	ret = exynos_chipid_get_chipid_info(regmap, data, exynos_chipid);
+	ret = data->get_chipid_info(data, exynos_chipid);
 	if (ret < 0)
 		return ret;
 
@@ -156,7 +163,7 @@ static int exynos_chipid_probe(struct platform_device *pdev)
 	if (IS_ERR(soc_dev))
 		return PTR_ERR(soc_dev);
 
-	ret = exynos_asv_init(dev, regmap);
+	ret = exynos_asv_init(dev, exynos_chipid->regmap);
 	if (ret)
 		goto err;
 
@@ -182,12 +189,14 @@ static void exynos_chipid_remove(struct platform_device *pdev)
 }
 
 static const struct exynos_chipid_variant exynos4210_chipid_data = {
+	.get_chipid_info = exynos_chipid_get_regmap_chipid_info,
 	.rev_reg	= 0x0,
 	.main_rev_shift	= 4,
 	.sub_rev_shift	= 0,
 };
 
 static const struct exynos_chipid_variant exynos850_chipid_data = {
+	.get_chipid_info = exynos_chipid_get_regmap_chipid_info,
 	.rev_reg	= 0x10,
 	.main_rev_shift	= 20,
 	.sub_rev_shift	= 16,
