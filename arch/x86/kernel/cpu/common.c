@@ -78,6 +78,9 @@
 DEFINE_PER_CPU_READ_MOSTLY(struct cpuinfo_x86, cpu_info);
 EXPORT_PER_CPU_SYMBOL(cpu_info);
 
+unsigned long user_ptr_max __ro_after_init;
+EXPORT_SYMBOL(user_ptr_max);
+
 u32 elf_hwcap2 __read_mostly;
 
 /* Number of siblings per CPU package */
@@ -2554,14 +2557,13 @@ void __init arch_cpu_finalize_init(void)
 	alternative_instructions();
 
 	if (IS_ENABLED(CONFIG_X86_64)) {
-		unsigned long USER_PTR_MAX = TASK_SIZE_MAX;
-
+		user_ptr_max = TASK_SIZE_MAX;
 		/*
 		 * Enable this when LAM is gated on LASS support
 		if (cpu_feature_enabled(X86_FEATURE_LAM))
 			USER_PTR_MAX = (1ul << 63) - PAGE_SIZE;
 		 */
-		runtime_const_init(ptr, USER_PTR_MAX);
+		runtime_const_init(ptr, user_ptr_max);
 
 		/*
 		 * Make sure the first 2MB area is not mapped by huge pages

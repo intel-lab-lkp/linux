@@ -12,13 +12,14 @@
 #include <asm/cpufeatures.h>
 #include <asm/page.h>
 #include <asm/percpu.h>
-#include <asm/runtime-const.h>
 
-/*
- * Virtual variable: there's no actual backing store for this,
- * it can purely be used as 'runtime_const_ptr(USER_PTR_MAX)'
- */
-extern unsigned long USER_PTR_MAX;
+extern unsigned long user_ptr_max;
+#ifdef MODULE
+#define __user_ptr_max_accessor	user_ptr_max
+#else
+#include <asm/runtime-const.h>
+#define __user_ptr_max_accessor	runtime_const_ptr(user_ptr_max)
+#endif
 
 #ifdef CONFIG_ADDRESS_MASKING
 /*
@@ -54,7 +55,7 @@ static inline unsigned long __untagged_addr_remote(struct mm_struct *mm,
 #endif
 
 #define valid_user_address(x) \
-	likely((__force unsigned long)(x) <= runtime_const_ptr(USER_PTR_MAX))
+	likely((__force unsigned long)(x) <= __user_ptr_max_accessor)
 
 /*
  * Masking the user address is an alternative to a conditional
@@ -67,7 +68,7 @@ static inline void __user *mask_user_address(const void __user *ptr)
 	asm("cmp %1,%0\n\t"
 	    "cmova %1,%0"
 		:"=r" (ret)
-		:"r" (runtime_const_ptr(USER_PTR_MAX)),
+		:"r" (__user_ptr_max_accessor),
 		 "0" (ptr));
 	return ret;
 }
