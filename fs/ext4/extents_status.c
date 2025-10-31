@@ -985,6 +985,48 @@ error:
 	return;
 }
 
+#ifdef CONFIG_EXT4_DEBUG
+/*
+ * If we find an extent that already exists during caching extents, its
+ * status must match the one to be cached. Otherwise, the extent status
+ * tree may have been corrupted.
+ */
+static void ext4_es_cache_extent_check(struct inode *inode,
+		struct extent_status *es, struct extent_status *newes)
+{
+	unsigned int status = ext4_es_type(newes);
+	struct rb_node *node;
+
+	if (ext4_es_type(es) != status)
+		goto conflict;
+
+	while ((node = rb_next(&es->rb_node)) != NULL) {
+		es = rb_entry(node, struct extent_status, rb_node);
+
+		if (es->es_lblk >= newes->es_lblk + newes->es_len)
+			break;
+		if (ext4_es_type(es) != status)
+			goto conflict;
+	}
+	return;
+
+conflict:
+	ext4_warning_inode(inode,
+			   "ES cache extent failed: add [%d,%d,%llu,0x%x] conflict with existing [%d,%d,%llu,0x%x]\n",
+			   newes->es_lblk, newes->es_len, ext4_es_pblock(newes),
+			   ext4_es_status(newes), es->es_lblk, es->es_len,
+			   ext4_es_pblock(es), ext4_es_status(es));
+
+	WARN_ON_ONCE(1);
+}
+#else
+static void ext4_es_cache_extent_check(struct inode __maybe_unused *inode,
+		struct extent_status *es, struct extent_status *newes)
+{
+	WARN_ON_ONCE(ext4_es_type(es) != ext4_es_type(newes));
+}
+#endif
+
 /*
  * ext4_es_cache_extent() inserts extent information into the extent status
  * tree. If 'overwrite' is not set, it inserts extent only if there isn't
@@ -1022,9 +1064,11 @@ void ext4_es_cache_extent(struct inode *inode, ext4_lblk_t lblk,
 	if (es && es->es_lblk <= end) {
 		if (!overwrite)
 			goto unlock;
-
-		/* Only extents of the same type can be overwritten. */
-		WARN_ON_ONCE(ext4_es_type(es) != status);
+		/*
+		 * Check whether the overwrites are safe. Only extents
+		 * of the same type can be overwritten.
+		 */
+		ext4_es_cache_extent_check(inode, es, &newes);
 		if (__es_remove_extent(inode, lblk, end, NULL, NULL))
 			goto unlock;
 	}
