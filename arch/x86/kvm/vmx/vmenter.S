@@ -71,6 +71,7 @@
  * @regs:	unsigned long * (to guest registers)
  * @flags:	VMX_RUN_VMRESUME:	use VMRESUME instead of VMLAUNCH
  *		VMX_RUN_SAVE_SPEC_CTRL: save guest SPEC_CTRL into vmx->spec_ctrl
+ *		VMX_RUN_CLEAR_CPU_BUFFERS_FOR_MMIO: vCPU can access host MMIO
  *
  * Returns:
  *	0 on VM-Exit, 1 on VM-Fail
@@ -137,6 +138,12 @@ SYM_FUNC_START(__vmx_vcpu_run)
 	/* Load @regs to RAX. */
 	mov (%_ASM_SP), %_ASM_AX
 
+	/* Stash "clear for MMIO" in EFLAGS.ZF (used below). */
+	ALTERNATIVE_2 "",								\
+		      __stringify(test $VMX_RUN_CLEAR_CPU_BUFFERS_FOR_MMIO, %ebx), 	\
+		      X86_FEATURE_CLEAR_CPU_BUF_MMIO,					\
+		      "", X86_FEATURE_CLEAR_CPU_BUF_VM
+
 	/* Check if vmlaunch or vmresume is needed */
 	bt   $VMX_RUN_VMRESUME_SHIFT, %ebx
 
@@ -161,7 +168,12 @@ SYM_FUNC_START(__vmx_vcpu_run)
 	mov VCPU_RAX(%_ASM_AX), %_ASM_AX
 
 	/* Clobbers EFLAGS.ZF */
-	VM_CLEAR_CPU_BUFFERS
+	ALTERNATIVE_2 "",							\
+		      __stringify(jz .Lskip_clear_cpu_buffers;			\
+				  CLEAR_CPU_BUFFERS_SEQ;			\
+				  .Lskip_clear_cpu_buffers:),			\
+		      X86_FEATURE_CLEAR_CPU_BUF_MMIO,				\
+		      __CLEAR_CPU_BUFFERS, X86_FEATURE_CLEAR_CPU_BUF_VM
 
 	/* Check EFLAGS.CF from the VMX_RUN_VMRESUME bit test above. */
 	jnc .Lvmlaunch
