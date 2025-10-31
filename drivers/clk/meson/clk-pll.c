@@ -369,9 +369,16 @@ static int meson_clk_pll_enable(struct clk_hw *hw)
 	/* Enable the pll */
 	meson_parm_write(clk->map, &pll->en, 1);
 
+	/* Wait for Bandgap and LDO to power up and stabilize */
+	udelay(20);
+
 	/* Take the pll out reset */
-	if (MESON_PARM_APPLICABLE(&pll->rst))
+	if (MESON_PARM_APPLICABLE(&pll->rst)) {
 		meson_parm_write(clk->map, &pll->rst, 0);
+
+		/* Wait for PLL loop stabilization */
+		udelay(20);
+	}
 
 	/*
 	 * Compared with the previous SoCs, self-adaption current module
