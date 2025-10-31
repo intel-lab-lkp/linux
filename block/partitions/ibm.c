@@ -247,7 +247,7 @@ static int find_lnx1_partitions(struct parsed_partitions *state,
 		size = label->lnx.formatted_blocks * secperblk;
 	} else {
 		/*
-		 * Formated w/o large volume support. If the sanity check
+		 * Formatted w/o large volume support. If the sanity check
 		 * 'size based on geo == size based on nr_sectors' is true, then
 		 * we can safely assume that we know the formatted size of
 		 * the disk, otherwise we need additional information
