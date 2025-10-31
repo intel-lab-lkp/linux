@@ -4389,6 +4389,7 @@ static void btusb_disconnect(struct usb_interface *intf)
 static int btusb_suspend(struct usb_interface *intf, pm_message_t message)
 {
 	struct btusb_data *data = usb_get_intfdata(intf);
+	struct hci_dev *hdev = data->hdev;
 
 	BT_DBG("intf %p", intf);
 
@@ -4402,14 +4403,19 @@ static int btusb_suspend(struct usb_interface *intf, pm_message_t message)
 		return 0;
 
 	spin_lock_irq(&data->txlock);
-	if (!(PMSG_IS_AUTO(message) && data->tx_in_flight)) {
-		set_bit(BTUSB_SUSPENDING, &data->flags);
-		spin_unlock_irq(&data->txlock);
-	} else {
+	if (PMSG_IS_AUTO(message) && data->tx_in_flight) {
 		spin_unlock_irq(&data->txlock);
 		data->suspend_count--;
 		return -EBUSY;
 	}
+	spin_unlock_irq(&data->txlock);
+
+	if (PMSG_IS_AUTO(message) && delayed_work_pending(&hdev->le_scan_disable)) {
+		data->suspend_count--;
+		return -EBUSY;
+	}
+
+	set_bit(BTUSB_SUSPENDING, &data->flags);
 
 	cancel_work_sync(&data->work);
 
