@@ -257,8 +257,7 @@ static int s10_send_buf(struct fpga_manager *mgr, const char *buf, size_t count)
 
 	xfer_sz = count < SVC_BUF_SIZE ? count : SVC_BUF_SIZE;
 
-	svc_buf = priv->svc_bufs[i].buf;
-	memcpy(svc_buf, buf, xfer_sz);
+	svc_buf = memcpy(priv->svc_bufs[i].buf, buf, xfer_sz);
 	ret = s10_svc_send_msg(priv, COMMAND_RECONFIG_DATA_SUBMIT,
 			       svc_buf, xfer_sz);
 	if (ret < 0) {
