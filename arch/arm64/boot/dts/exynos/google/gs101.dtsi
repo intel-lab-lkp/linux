@@ -467,6 +467,12 @@
 		};
 	};
 
+	chipid {
+		compatible = "google,gs101-chipid";
+		nvmem-cells = <&product_id>, <&chip_id>;
+		nvmem-cell-names = "product-id", "chip-id";
+	};
+
 	/* ect node is required to be present by bootloader */
 	ect {
 	};
