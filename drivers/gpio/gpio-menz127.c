@@ -24,6 +24,12 @@
 #define MEN_Z127_ODER	0x1C
 #define GPIO_TO_DBCNT_REG(gpio)	((gpio * 4) + 0x80)
 
+
+/* MEN Z127 supported model ids*/
+#define MEN_Z127_ID	0x7f
+#define MEN_Z034_ID	0x22
+#define MEN_Z037_ID	0x25
+
 #define MEN_Z127_DB_MIN_US	50
 /* 16 bit compare register. Each bit represents 50us */
 #define MEN_Z127_DB_MAX_US	(0xffff * MEN_Z127_DB_MIN_US)
@@ -35,6 +41,25 @@ struct men_z127_gpio {
 	void __iomem *reg_base;
 	struct resource *mem;
 };
+
+static int men_z127_lookup_gpio_size(struct mcb_device *mdev,
+				     unsigned long *sz)
+{
+	switch (mdev->id) {
+	case MEN_Z127_ID:
+		*sz = 4;
+		break;
+	case MEN_Z034_ID:
+	case MEN_Z037_ID:
+		*sz = 1;
+		break;
+	default:
+		dev_err(&mdev->dev, "no size found for id %d", mdev->id);
+		return -EINVAL;
+	}
+
+	return 0;
+}
 
 static int men_z127_debounce(struct gpio_chip *gc, unsigned gpio,
 			     unsigned debounce)
@@ -140,6 +165,7 @@ static int men_z127_probe(struct mcb_device *mdev,
 	struct men_z127_gpio *men_z127_gpio;
 	struct device *dev = &mdev->dev;
 	int ret;
+	unsigned long sz;
 
 	men_z127_gpio = devm_kzalloc(dev, sizeof(struct men_z127_gpio),
 				     GFP_KERNEL);
@@ -163,9 +189,13 @@ static int men_z127_probe(struct mcb_device *mdev,
 
 	mcb_set_drvdata(mdev, men_z127_gpio);
 
+	ret = men_z127_lookup_gpio_size(mdev, &sz);
+	if (ret)
+		return ret;
+
 	config = (struct gpio_generic_chip_config) {
 		.dev = &mdev->dev,
-		.sz = 4,
+		.sz = sz,
 		.dat = men_z127_gpio->reg_base + MEN_Z127_PSR,
 		.set = men_z127_gpio->reg_base + MEN_Z127_CTRL,
 		.dirout = men_z127_gpio->reg_base + MEN_Z127_GPIODR,
@@ -186,7 +216,9 @@ static int men_z127_probe(struct mcb_device *mdev,
 }
 
 static const struct mcb_device_id men_z127_ids[] = {
-	{ .device = 0x7f },
+	{ .device = MEN_Z127_ID },
+	{ .device = MEN_Z034_ID },
+	{ .device = MEN_Z037_ID },
 	{ }
 };
 MODULE_DEVICE_TABLE(mcb, men_z127_ids);
