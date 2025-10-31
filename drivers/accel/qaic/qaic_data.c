@@ -1170,8 +1170,8 @@ static inline int copy_partial_exec_reqs(struct qaic_device *qdev, struct bo_sli
 	 * Copy over the last entry. Here we need to adjust len to the left over
 	 * size, and set src and dst to the entry it is copied to.
 	 */
-	last_req = fifo_at(dbc->req_q_base, (tail + first_n) % dbc->nelem);
-	memcpy(last_req, reqs + slice->nents - 1, sizeof(*reqs));
+	last_req = memcpy(fifo_at(dbc->req_q_base, (tail + first_n) % dbc->nelem),
+			  reqs + slice->nents - 1, sizeof(*reqs));
 
 	/*
 	 * last_bytes holds size of a DMA segment, maximum DMA segment size is
