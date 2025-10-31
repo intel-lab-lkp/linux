@@ -5305,7 +5305,7 @@ static void *gpiolib_seq_start(struct seq_file *s, loff_t *pos)
 
 	priv = kzalloc(sizeof(*priv), GFP_KERNEL);
 	if (!priv)
-		return NULL;
+		return ERR_PTR(-ENOMEM);
 
 	s->private = priv;
 	if (*pos > 0)
@@ -5338,8 +5338,11 @@ static void gpiolib_seq_stop(struct seq_file *s, void *v)
 {
 	struct gpiolib_seq_priv *priv = s->private;
 
-	srcu_read_unlock(&gpio_devices_srcu, priv->idx);
-	kfree(priv);
+	if (!IS_ERR(v)) {
+		srcu_read_unlock(&gpio_devices_srcu, priv->idx);
+		kfree(priv);
+	}
+	s->private = NULL;
 }
 
 static int gpiolib_seq_show(struct seq_file *s, void *v)
