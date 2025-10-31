@@ -358,12 +358,42 @@ static void iomap_read_init(struct folio *folio)
 	if (ifs) {
 		size_t len = folio_size(folio);
 
+		/*
+		 * ifs->read_bytes_pending is used to track how many bytes are
+		 * read in asynchronously by the IO helper. We need to track
+		 * this so that we can know when the IO helper has finished
+		 * reading in all the necessary ranges of the folio and can end
+		 * the read.
+		 *
+		 * Increase ->read_bytes_pending by the folio size to start, and
+		 * add a +1 bias. We'll subtract the bias and any uptodate /
+		 * zeroed ranges that did not require IO in iomap_read_end()
+		 * after we're done processing the folio.
+		 *
+		 * We do this because otherwise, we would have to increment
+		 * ifs->read_bytes_pending every time a range in the folio needs
+		 * to be read in, which can get expensive since the spinlock
+		 * needs to be held whenever modifying ifs->read_bytes_pending.
+		 *
+		 * We add the bias to ensure the read has not been ended on the
+		 * folio when iomap_read_end() is called, even if the IO helper
+		 * has already finished reading in the entire folio.
+		 */
 		spin_lock_irq(&ifs->state_lock);
-		ifs->read_bytes_pending += len;
+		ifs->read_bytes_pending += len + 1;
 		spin_unlock_irq(&ifs->state_lock);
 	}
 }
 
+/*
+ * This ends IO if no bytes were submitted to an IO helper.
+ *
+ * Otherwise, this calibrates ifs->read_bytes_pending to represent only the
+ * submitted bytes (see comment in iomap_read_init()). If all bytes submitted
+ * have already been completed by the IO helper, then this will end the read.
+ * Else the IO helper will end the read after all submitted ranges have been
+ * read.
+ */
 static void iomap_read_end(struct folio *folio, size_t bytes_pending)
 {
 	struct iomap_folio_state *ifs;
@@ -381,7 +411,13 @@ static void iomap_read_end(struct folio *folio, size_t bytes_pending)
 	ifs = folio->private;
 	if (ifs) {
 		bool end_read, uptodate;
-		size_t bytes_accounted = folio_size(folio) - bytes_pending;
+		/*
+		 * Subtract any bytes that were initially accounted to
+		 * read_bytes_pending but skipped for IO.
+		 * The +1 accounts for the bias we added in iomap_read_init().
+		 */
+		size_t bytes_accounted = folio_size(folio) + 1 -
+				bytes_pending;
 
 		spin_lock_irq(&ifs->state_lock);
 		ifs->read_bytes_pending -= bytes_accounted;
