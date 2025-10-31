@@ -960,18 +960,27 @@ static int eb_lookup_vmas(struct i915_execbuffer *eb)
 		}
 
 		err = eb_add_vma(eb, &current_batch, i, vma);
-		if (err)
+		if (err) {
+			if (i + 1 < eb->buffer_count) {
+				/*
+				 * Execbuffer code expects last vma entry to be NULL,
+				 * since we already initialized this entry,
+				 * set the next value to NULL or we mess up
+				 * cleanup handling.
+				 */
+				eb->vma[i + 1].vma = NULL;
+			}
+
 			return err;
+		}
 
 		if (i915_gem_object_is_userptr(vma->obj)) {
 			err = i915_gem_object_userptr_submit_init(vma->obj);
 			if (err) {
 				if (i + 1 < eb->buffer_count) {
 					/*
-					 * Execbuffer code expects last vma entry to be NULL,
-					 * since we already initialized this entry,
-					 * set the next value to NULL or we mess up
-					 * cleanup handling.
+					 * Set the next vma to null, for the same
+					 * reason as above.
 					 */
 					eb->vma[i + 1].vma = NULL;
 				}
