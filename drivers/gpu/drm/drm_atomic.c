@@ -468,6 +468,17 @@ static int drm_atomic_connector_check(struct drm_connector *connector,
 	state->max_bpc = info->bpc ? info->bpc : 8;
 	if (connector->max_bpc_property)
 		state->max_bpc = min(state->max_bpc, state->max_requested_bpc);
+	if (connector->min_bpc_property)
+		state->min_bpc = state->min_requested_bpc;
+	if (connector->max_bpc_property && connector->min_bpc_property &&
+	    state->max_requested_bpc < state->min_requested_bpc) {
+		drm_dbg_atomic(connector->dev,
+			       "[CONNECTOR:%d:%s] max bpc %d < min bpc %d\n",
+			       connector->base.id, connector->name,
+			       state->max_requested_bpc,
+			       state->min_requested_bpc);
+		return -EINVAL;
+	}
 
 	if ((connector->connector_type != DRM_MODE_CONNECTOR_WRITEBACK) || !writeback_job)
 		return 0;
@@ -1195,6 +1206,7 @@ static void drm_atomic_connector_print_state(struct drm_printer *p,
 	drm_printf(p, "\tinterlace_allowed=%d\n", connector->interlace_allowed);
 	drm_printf(p, "\tycbcr_420_allowed=%d\n", connector->ycbcr_420_allowed);
 	drm_printf(p, "\tmax_requested_bpc=%d\n", state->max_requested_bpc);
+	drm_printf(p, "\tmin_requested_bpc=%d\n", state->min_requested_bpc);
 	drm_printf(p, "\tcolorspace=%s\n", drm_get_colorspace_name(state->colorspace));
 
 	if (connector->connector_type == DRM_MODE_CONNECTOR_HDMIA ||
