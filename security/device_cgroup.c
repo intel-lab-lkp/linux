@@ -273,9 +273,9 @@ static char type_to_char(short type)
 static void set_majmin(char *str, unsigned m)
 {
 	if (m == ~0)
-		strcpy(str, "*");
+		strscpy(str, "*", MAJMINLEN);
 	else
-		sprintf(str, "%u", m);
+		snprintf(str, MAJMINLEN, "%u", m);
 }
 
 static int devcgroup_seq_show(struct seq_file *m, void *v)
