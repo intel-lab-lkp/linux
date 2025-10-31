@@ -532,25 +532,33 @@ static int xsk_wakeup(struct xdp_sock *xs, u8 flags)
 	return dev->netdev_ops->ndo_xsk_wakeup(dev, xs->queue_id, flags);
 }
 
-static int xsk_cq_reserve_addr_locked(struct xsk_buff_pool *pool, u64 addr)
+static int xsk_cq_reserve_addr_locked(struct xsk_buff_pool *pool, u64 addr,
+				      u32 *start_addr)
 {
+	struct xdp_umem_ring *ring;
 	unsigned long flags;
 	int ret;
 
+	ring = (struct xdp_umem_ring *)pool->cached_cq->ring;
 	spin_lock_irqsave(&pool->cq_lock, flags);
-	ret = xskq_prod_reserve_addr(pool->cq, addr);
+	ret = xskq_prod_reserve(pool->cq);
+	if (!ret) {
+		*start_addr = pool->cached_cq->cached_prod++ & pool->cq->ring_mask;
+		ring->desc[*start_addr] = addr;
+	}
 	spin_unlock_irqrestore(&pool->cq_lock, flags);
 
 	return ret;
 }
 
-static void xsk_cq_submit_locked(struct xsk_buff_pool *pool, u32 n)
+static void xsk_cq_write_addr(struct xsk_buff_pool *pool, u32 addr)
 {
-	unsigned long flags;
+	struct xsk_queue *cq = pool->cq;
+	struct xsk_queue *ccq = pool->cached_cq;
+	struct xdp_umem_ring * ccqr = (struct xdp_umem_ring *)ccq->ring;
+	struct xdp_umem_ring * cqr = (struct xdp_umem_ring *)cq->ring;
 
-	spin_lock_irqsave(&pool->cq_lock, flags);
-	xskq_prod_submit_n(pool->cq, n);
-	spin_unlock_irqrestore(&pool->cq_lock, flags);
+	cqr->desc[cq->cached_prod++ & cq->ring_mask] = ccqr->desc[addr++];
 }
 
 static void xsk_cq_cancel_locked(struct xsk_buff_pool *pool, u32 n)
@@ -562,9 +570,41 @@ static void xsk_cq_cancel_locked(struct xsk_buff_pool *pool, u32 n)
 	spin_unlock_irqrestore(&pool->cq_lock, flags);
 }
 
-static u32 xsk_get_num_desc(struct sk_buff *skb)
+#define XSK_DESTRUCTOR_DESCS_SHIFT 8
+#define XSK_DESTRUCTOR_DESCS_MASK \
+	((1ULL << XSK_DESTRUCTOR_DESCS_SHIFT) - 1)
+
+static u8 xsk_get_num_desc(struct sk_buff *skb)
 {
-	return skb ? (long)skb_shinfo(skb)->destructor_arg : 0;
+	long val = (long)skb_shinfo(skb)->destructor_arg;
+
+	return (u8)val & XSK_DESTRUCTOR_DESCS_MASK;
+}
+
+static u32 xsk_get_start_addr(struct sk_buff *skb)
+{
+	long val = (long)skb_shinfo(skb)->destructor_arg;
+
+	return val >> XSK_DESTRUCTOR_DESCS_SHIFT;
+}
+
+static long xsk_get_destructor_arg(struct sk_buff *skb)
+{
+	return (long)skb_shinfo(skb)->destructor_arg;
+}
+
+static void xsk_cq_submit_locked(struct sk_buff *skb)
+{
+	struct xsk_buff_pool *pool = xdp_sk(skb->sk)->pool;
+	u32 addr = xsk_get_start_addr(skb);
+	u8 num = xsk_get_num_desc(skb), i;
+	unsigned long flags;
+
+	spin_lock_irqsave(&pool->cq_lock, flags);
+	for (i = 0; i < num; i++)
+		xsk_cq_write_addr(pool, addr);
+	xskq_prod_submit_n(pool->cq, num);
+	spin_unlock_irqrestore(&pool->cq_lock, flags);
 }
 
 static void xsk_destruct_skb(struct sk_buff *skb)
@@ -576,23 +616,30 @@ static void xsk_destruct_skb(struct sk_buff *skb)
 		*compl->tx_timestamp = ktime_get_tai_fast_ns();
 	}
 
-	xsk_cq_submit_locked(xdp_sk(skb->sk)->pool, xsk_get_num_desc(skb));
+	xsk_cq_submit_locked(skb);
 	sock_wfree(skb);
 }
 
-static void xsk_set_destructor_arg(struct sk_buff *skb)
+static void xsk_update_num_desc(struct sk_buff *skb)
 {
-	long num = xsk_get_num_desc(xdp_sk(skb->sk)->skb) + 1;
+	long val = xsk_get_destructor_arg(skb);
+	u8 num = xsk_get_num_desc(skb) + 1;
 
-	skb_shinfo(skb)->destructor_arg = (void *)num;
+	val = (val & ~(XSK_DESTRUCTOR_DESCS_MASK)) | num;
+	skb_shinfo(skb)->destructor_arg = (void *)val;
 }
 
-static void xsk_skb_init_misc(struct sk_buff *skb, struct xdp_sock *xs)
+static void xsk_skb_init_misc(struct sk_buff *skb, struct xdp_sock *xs,
+			      u32 start_addr)
 {
+	long val;
+
 	skb->dev = xs->dev;
 	skb->priority = READ_ONCE(xs->sk.sk_priority);
 	skb->mark = READ_ONCE(xs->sk.sk_mark);
 	skb->destructor = xsk_destruct_skb;
+	val = start_addr << XSK_DESTRUCTOR_DESCS_SHIFT;
+	skb_shinfo(skb)->destructor_arg = (void *)val;
 }
 
 static void xsk_consume_skb(struct sk_buff *skb)
@@ -652,7 +699,8 @@ static int xsk_skb_metadata(struct sk_buff *skb, void *buffer,
 }
 
 static struct sk_buff *xsk_build_skb_zerocopy(struct xdp_sock *xs,
-					      struct xdp_desc *desc)
+					      struct xdp_desc *desc,
+					      u32 start_addr)
 {
 	struct xsk_buff_pool *pool = xs->pool;
 	u32 hr, len, ts, offset, copy, copied;
@@ -674,7 +722,7 @@ static struct sk_buff *xsk_build_skb_zerocopy(struct xdp_sock *xs,
 
 		skb_reserve(skb, hr);
 
-		xsk_skb_init_misc(skb, xs);
+		xsk_skb_init_misc(skb, xs, start_addr);
 		if (desc->options & XDP_TX_METADATA) {
 			err = xsk_skb_metadata(skb, buffer, desc, pool, hr);
 			if (unlikely(err))
@@ -713,14 +761,15 @@ static struct sk_buff *xsk_build_skb_zerocopy(struct xdp_sock *xs,
 }
 
 static struct sk_buff *xsk_build_skb(struct xdp_sock *xs,
-				     struct xdp_desc *desc)
+				     struct xdp_desc *desc,
+				     u32 start_addr)
 {
 	struct net_device *dev = xs->dev;
 	struct sk_buff *skb = xs->skb;
 	int err;
 
 	if (dev->priv_flags & IFF_TX_SKB_NO_LINEAR) {
-		skb = xsk_build_skb_zerocopy(xs, desc);
+		skb = xsk_build_skb_zerocopy(xs, desc, start_addr);
 		if (IS_ERR(skb)) {
 			err = PTR_ERR(skb);
 			skb = NULL;
@@ -747,7 +796,7 @@ static struct sk_buff *xsk_build_skb(struct xdp_sock *xs,
 			if (unlikely(err))
 				goto free_err;
 
-			xsk_skb_init_misc(skb, xs);
+			xsk_skb_init_misc(skb, xs, start_addr);
 			if (desc->options & XDP_TX_METADATA) {
 				err = xsk_skb_metadata(skb, buffer, desc,
 						       xs->pool, hr);
@@ -779,7 +828,7 @@ static struct sk_buff *xsk_build_skb(struct xdp_sock *xs,
 		}
 	}
 
-	xsk_set_destructor_arg(skb);
+	xsk_update_num_desc(skb);
 
 	return skb;
 
@@ -789,7 +838,7 @@ free_err:
 
 	if (err == -EOVERFLOW) {
 		/* Drop the packet */
-		xsk_set_destructor_arg(xs->skb);
+		xsk_update_num_desc(xs->skb);
 		xsk_drop_skb(xs->skb);
 		xskq_cons_release(xs->tx);
 	} else {
@@ -822,6 +871,8 @@ static int __xsk_generic_xmit(struct sock *sk)
 
 	max_batch = READ_ONCE(xs->max_tx_budget);
 	while (xskq_cons_peek_desc(xs->tx, &desc, xs->pool)) {
+		u32 start_addr;
+
 		if (max_batch-- == 0) {
 			err = -EAGAIN;
 			goto out;
@@ -832,13 +883,14 @@ static int __xsk_generic_xmit(struct sock *sk)
 		 * if there is space in it. This avoids having to implement
 		 * any buffering in the Tx path.
 		 */
-		err = xsk_cq_reserve_addr_locked(xs->pool, desc.addr);
+		err = xsk_cq_reserve_addr_locked(xs->pool, desc.addr,
+						 &start_addr);
 		if (err) {
 			err = -EAGAIN;
 			goto out;
 		}
 
-		skb = xsk_build_skb(xs, &desc);
+		skb = xsk_build_skb(xs, &desc, start_addr);
 		if (IS_ERR(skb)) {
 			err = PTR_ERR(skb);
 			if (err != -EOVERFLOW)
@@ -1142,6 +1194,7 @@ static int xsk_release(struct socket *sock)
 	xskq_destroy(xs->tx);
 	xskq_destroy(xs->fq_tmp);
 	xskq_destroy(xs->cq_tmp);
+	xskq_destroy(xs->cached_cq);
 
 	sock_orphan(sk);
 	sock->sk = NULL;
@@ -1321,6 +1374,7 @@ static int xsk_bind(struct socket *sock, struct sockaddr *addr, int addr_len)
 	/* FQ and CQ are now owned by the buffer pool and cleaned up with it. */
 	xs->fq_tmp = NULL;
 	xs->cq_tmp = NULL;
+	xs->cached_cq = NULL;
 
 	xs->dev = dev;
 	xs->zc = xs->umem->zc;
@@ -1458,6 +1512,10 @@ static int xsk_setsockopt(struct socket *sock, int level, int optname,
 		q = (optname == XDP_UMEM_FILL_RING) ? &xs->fq_tmp :
 			&xs->cq_tmp;
 		err = xsk_init_queue(entries, q, true);
+		if (!err && optname == XDP_UMEM_COMPLETION_RING) {
+			q = &xs->cached_cq;
+			err = xsk_init_queue(entries, q, true);
+		}
 		mutex_unlock(&xs->mutex);
 		return err;
 	}

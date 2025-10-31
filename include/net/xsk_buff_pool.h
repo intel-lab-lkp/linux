@@ -63,6 +63,7 @@ struct xsk_buff_pool {
 	/* Data path members as close to free_heads at the end as possible. */
 	struct xsk_queue *fq ____cacheline_aligned_in_smp;
 	struct xsk_queue *cq;
+	struct xsk_queue *cached_cq;
 	/* For performance reasons, each buff pool has its own array of dma_pages
 	 * even when they are identical.
 	 */
