@@ -29,6 +29,7 @@ static inline void nft_connlimit_do_eval(struct nft_connlimit *priv,
 	struct nf_conntrack_tuple tuple;
 	enum ip_conntrack_info ctinfo;
 	const struct nf_conn *ct;
+	bool updated = false;
 	unsigned int count;
 
 	tuple_ptr = &tuple;
@@ -43,16 +44,31 @@ static inline void nft_connlimit_do_eval(struct nft_connlimit *priv,
 		return;
 	}
 
-	if (nf_conncount_add(nft_net(pkt), priv->list, tuple_ptr, zone)) {
-		regs->verdict.code = NF_DROP;
-		return;
+	if (!ct || !nf_ct_is_confirmed(ct)) {
+		if (nf_conncount_add(nft_net(pkt), priv->list, tuple_ptr, zone)) {
+			regs->verdict.code = NF_DROP;
+			return;
+		}
+		updated = true;
 	}
 
+check:
 	count = READ_ONCE(priv->list->count);
 
 	if ((count > priv->limit) ^ priv->invert) {
 		regs->verdict.code = NFT_BREAK;
 		return;
+	} else if (!updated) {
+		/* Call gc to update the list count if any connection has been
+		 * closed already. This is useful to softlimit connections
+		 * like limiting bandwidth based on a number of open
+		 * connections.
+		 */
+		local_bh_disable();
+		nf_conncount_gc_list(nft_net(pkt), priv->list);
+		local_bh_enable();
+		updated = true;
+		goto check;
 	}
 }
 

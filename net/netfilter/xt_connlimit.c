@@ -69,8 +69,18 @@ connlimit_mt(const struct sk_buff *skb, struct xt_action_param *par)
 		key[1] = zone->id;
 	}
 
-	connections = nf_conncount_count(net, info->data, key, tuple_ptr,
-					 zone);
+	if (!ct || !nf_ct_is_confirmed(ct)) {
+		connections = nf_conncount_count(net, info->data, key, tuple_ptr,
+						 zone);
+	} else {
+		/* Call nf_conncount_count() with NULL tuple and zone to update
+		 * the list if any connection has been closed already. This is
+		 * useful to softlimit connections like limiting bandwidth based
+		 * on a number of open connections.
+		 */
+		connections = nf_conncount_count(net, info->data, key, NULL, NULL);
+	}
+
 	if (connections == 0)
 		/* kmalloc failed, drop it entirely */
 		goto hotdrop;
