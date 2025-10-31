@@ -25,6 +25,7 @@
 #ifndef __DRM_CRTC_H__
 #define __DRM_CRTC_H__
 
+#include <linux/kthread.h>
 #include <linux/spinlock.h>
 #include <linux/types.h>
 #include <drm/drm_modeset_lock.h>
@@ -924,6 +925,34 @@ struct drm_crtc_funcs {
 };
 
 /**
+ * struct drm_crtc_flush_work - flush work for CRTC
+ *
+ * See also:
+ * drmm_crtc_flush_worker_init()
+ */
+struct drm_crtc_flush_work {
+	/**
+	 * @base: The base &kthread_work item which will be executed by
+	 * &drm_crtc.flush_worker. Drivers should not interact with this
+	 * directly, but instead rely on drmm_crtc_flush_worker_init() to
+	 * initialize this.
+	 */
+	struct kthread_work base;
+	/** @crtc: CRTC to be flushed */
+	struct drm_crtc *crtc;
+	/** @state: pointer to global drm_atomic_state to be flushed */
+	struct drm_atomic_state *state;
+};
+
+/**
+ * to_drm_crtc_flush_work - Retrieve &drm_crtc_flush_work instance from a
+ * &kthread_work
+ * @_work: The &kthread_work embedded inside a &drm_crtc_flush_work
+ */
+#define to_drm_crtc_flush_work(_work) \
+	container_of((_work), struct drm_crtc_flush_work, base)
+
+/**
  * struct drm_crtc - central CRTC control structure
  *
  * Each CRTC may have one or more connectors associated with it.  This structure
@@ -1175,6 +1204,20 @@ struct drm_crtc {
 	 * Initialized via drm_self_refresh_helper_init().
 	 */
 	struct drm_self_refresh_data *self_refresh_data;
+
+	/**
+	 * @flush_worker:
+	 *
+	 * The &kthread_worker used for executing flush works.
+	 */
+	struct kthread_worker *flush_worker;
+
+	/**
+	 * @flush_work:
+	 *
+	 * Flush work to be executed by @flush_worker.
+	 */
+	struct drm_crtc_flush_work flush_work;
 };
 
 /**
@@ -1219,6 +1262,8 @@ int drmm_crtc_init_with_planes(struct drm_device *dev,
 			       struct drm_plane *cursor,
 			       const struct drm_crtc_funcs *funcs,
 			       const char *name, ...);
+
+int drmm_crtc_flush_worker_init(struct drm_device *dev, struct drm_crtc *crtc);
 
 void drm_crtc_cleanup(struct drm_crtc *crtc);
 

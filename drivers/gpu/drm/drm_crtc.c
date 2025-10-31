@@ -30,7 +30,9 @@
  *      Jesse Barnes <jesse.barnes@intel.com>
  */
 #include <linux/ctype.h>
+#include <linux/kthread.h>
 #include <linux/list.h>
+#include <linux/sched.h>
 #include <linux/slab.h>
 #include <linux/export.h>
 #include <linux/dma-fence.h>
@@ -41,6 +43,7 @@
 #include <drm/drm_fourcc.h>
 #include <drm/drm_framebuffer.h>
 #include <drm/drm_managed.h>
+#include <drm/drm_modeset_helper_vtables.h>
 #include <drm/drm_modeset_lock.h>
 #include <drm/drm_atomic.h>
 #include <drm/drm_auth.h>
@@ -439,6 +442,62 @@ int drmm_crtc_init_with_planes(struct drm_device *dev, struct drm_crtc *crtc,
 	return 0;
 }
 EXPORT_SYMBOL(drmm_crtc_init_with_planes);
+
+static void drm_crtc_flush_work(struct kthread_work *work)
+{
+	struct drm_crtc_flush_work *flush_work = to_drm_crtc_flush_work(work);
+	struct drm_crtc *crtc = flush_work->crtc;
+	const struct drm_crtc_helper_funcs *funcs = crtc->helper_private;
+
+	if (funcs && funcs->atomic_flush)
+		funcs->atomic_flush(crtc, flush_work->state);
+}
+
+static void drmm_crtc_flush_worker_cleanup(struct drm_device *dev, void *ptr)
+{
+	struct drm_crtc *crtc = ptr;
+
+	kthread_destroy_worker(crtc->flush_worker);
+}
+
+/**
+ * drmm_crtc_flush_worker_init - Initialize a worker to conduct CRTC flush
+ * @dev: DRM device
+ * @crtc: CRTC object to be flushed
+ *
+ * Create a &kthread_worker used for executing flush works for the CRTC.
+ * Initialize a work item to be queued to the created &kthread_worker.
+ *
+ * Cleanup is automatically handled through registering
+ * drmm_crtc_flush_worker_cleanup() with drmm_add_action_or_reset().
+ *
+ * Returns:
+ * Zero on success, error code on failure.
+ */
+int drmm_crtc_flush_worker_init(struct drm_device *dev, struct drm_crtc *crtc)
+{
+	struct kthread_worker *flush_worker;
+	int ret;
+
+	flush_worker = kthread_create_worker(0, "card%d-crtc%u-flush",
+					     dev->primary->index, crtc->index);
+	if (IS_ERR(flush_worker))
+		return PTR_ERR(flush_worker);
+
+	crtc->flush_worker = flush_worker;
+
+	sched_set_fifo(flush_worker->task);
+
+	ret = drmm_add_action_or_reset(dev, drmm_crtc_flush_worker_cleanup, crtc);
+	if (ret)
+		return ret;
+
+	crtc->flush_work.crtc = crtc;
+	kthread_init_work(&crtc->flush_work.base, drm_crtc_flush_work);
+
+	return 0;
+}
+EXPORT_SYMBOL(drmm_crtc_flush_worker_init);
 
 void *__drmm_crtc_alloc_with_planes(struct drm_device *dev,
 				    size_t size, size_t offset,

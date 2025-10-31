@@ -27,6 +27,7 @@
 
 #include <linux/export.h>
 #include <linux/dma-fence.h>
+#include <linux/kthread.h>
 #include <linux/ktime.h>
 
 #include <drm/drm_atomic.h>
@@ -2977,7 +2978,31 @@ void drm_atomic_helper_commit_planes(struct drm_device *dev,
 		if (active_only && !new_crtc_state->active)
 			continue;
 
-		funcs->atomic_flush(crtc, state);
+		if (crtc->flush_worker) {
+			crtc->flush_work.state = state;
+			kthread_queue_work(crtc->flush_worker, &crtc->flush_work.base);
+		} else {
+			funcs->atomic_flush(crtc, state);
+		}
+	}
+
+	/*
+	 * Iterate over all CRTCs again, to make sure flush works have finished
+	 * execution if needed.
+	 */
+	for_each_oldnew_crtc_in_state(state, crtc, old_crtc_state, new_crtc_state, i) {
+		const struct drm_crtc_helper_funcs *funcs;
+
+		funcs = crtc->helper_private;
+
+		if (!funcs || !funcs->atomic_flush)
+			continue;
+
+		if (active_only && !new_crtc_state->active)
+			continue;
+
+		if (crtc->flush_worker)
+			kthread_flush_work(&crtc->flush_work.base);
 	}
 
 	/*
