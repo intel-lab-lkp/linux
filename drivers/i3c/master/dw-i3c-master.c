@@ -227,7 +227,8 @@
 #define AMD_I3C_PP_TIMING          0x8001A
 
 /* List of quirks */
-#define AMD_I3C_OD_PP_TIMING		BIT(1)
+#define AMD_I3C_OD_PP_TIMING			BIT(1)
+#define DW_I3C_DISABLE_RUNTIME_PM_QUIRK	BIT(2)
 
 struct dw_i3c_cmd {
 	u32 cmd_lo;
@@ -635,12 +636,14 @@ static int dw_i3c_master_bus_init(struct i3c_master_controller *m)
 	struct i3c_device_info info = { };
 	int ret;
 
-	ret = pm_runtime_resume_and_get(master->dev);
-	if (ret < 0) {
-		dev_err(master->dev,
-			"<%s> cannot resume i3c bus master, err: %d\n",
-			__func__, ret);
-		return ret;
+	if (!(master->quirks & DW_I3C_DISABLE_RUNTIME_PM_QUIRK)) {
+		ret = pm_runtime_resume_and_get(master->dev);
+		if (ret < 0) {
+			dev_err(master->dev,
+				"<%s> cannot resume i3c bus master, err: %d\n",
+				__func__, ret);
+			return ret;
+		}
 	}
 
 	ret = master->platform_ops->init(master);
@@ -682,7 +685,8 @@ static int dw_i3c_master_bus_init(struct i3c_master_controller *m)
 	dw_i3c_master_enable(master);
 
 rpm_out:
-	pm_runtime_put_autosuspend(master->dev);
+	if (!(master->quirks & DW_I3C_DISABLE_RUNTIME_PM_QUIRK))
+		pm_runtime_put_autosuspend(master->dev);
 	return ret;
 }
 
@@ -798,12 +802,14 @@ static int dw_i3c_master_send_ccc_cmd(struct i3c_master_controller *m,
 		writel(master->i3c_od_timing, master->regs + SCL_I3C_OD_TIMING);
 	}
 
-	ret = pm_runtime_resume_and_get(master->dev);
-	if (ret < 0) {
-		dev_err(master->dev,
-			"<%s> cannot resume i3c bus master, err: %d\n",
-			__func__, ret);
-		return ret;
+	if (!(master->quirks & DW_I3C_DISABLE_RUNTIME_PM_QUIRK)) {
+		ret = pm_runtime_resume_and_get(master->dev);
+		if (ret < 0) {
+			dev_err(master->dev,
+				"<%s> cannot resume i3c bus master, err: %d\n",
+				__func__, ret);
+			return ret;
+		}
 	}
 
 	if (ccc->rnw)
@@ -811,7 +817,8 @@ static int dw_i3c_master_send_ccc_cmd(struct i3c_master_controller *m,
 	else
 		ret = dw_i3c_ccc_set(master, ccc);
 
-	pm_runtime_put_autosuspend(master->dev);
+	if (!(master->quirks & DW_I3C_DISABLE_RUNTIME_PM_QUIRK))
+		pm_runtime_put_autosuspend(master->dev);
 	return ret;
 }
 
@@ -824,12 +831,14 @@ static int dw_i3c_master_daa(struct i3c_master_controller *m)
 	u8 last_addr = 0;
 	int ret, pos;
 
-	ret = pm_runtime_resume_and_get(master->dev);
-	if (ret < 0) {
-		dev_err(master->dev,
-			"<%s> cannot resume i3c bus master, err: %d\n",
-			__func__, ret);
-		return ret;
+	if (!(master->quirks & DW_I3C_DISABLE_RUNTIME_PM_QUIRK)) {
+		ret = pm_runtime_resume_and_get(master->dev);
+		if (ret < 0) {
+			dev_err(master->dev,
+				"<%s> cannot resume i3c bus master, err: %d\n",
+				__func__, ret);
+			return ret;
+		}
 	}
 
 	olddevs = ~(master->free_pos);
@@ -893,7 +902,8 @@ static int dw_i3c_master_daa(struct i3c_master_controller *m)
 	dw_i3c_master_free_xfer(xfer);
 
 rpm_out:
-	pm_runtime_put_autosuspend(master->dev);
+	if (!(master->quirks & DW_I3C_DISABLE_RUNTIME_PM_QUIRK))
+		pm_runtime_put_autosuspend(master->dev);
 	return ret;
 }
 
@@ -929,12 +939,14 @@ static int dw_i3c_master_priv_xfers(struct i3c_dev_desc *dev,
 	if (!xfer)
 		return -ENOMEM;
 
-	ret = pm_runtime_resume_and_get(master->dev);
-	if (ret < 0) {
-		dev_err(master->dev,
-			"<%s> cannot resume i3c bus master, err: %d\n",
-			__func__, ret);
-		return ret;
+	if (!(master->quirks & DW_I3C_DISABLE_RUNTIME_PM_QUIRK)) {
+		ret = pm_runtime_resume_and_get(master->dev);
+		if (ret < 0) {
+			dev_err(master->dev,
+				"<%s> cannot resume i3c bus master, err: %d\n",
+				__func__, ret);
+			return ret;
+		}
 	}
 
 	for (i = 0; i < i3c_nxfers; i++) {
@@ -978,7 +990,8 @@ static int dw_i3c_master_priv_xfers(struct i3c_dev_desc *dev,
 	ret = xfer->ret;
 	dw_i3c_master_free_xfer(xfer);
 
-	pm_runtime_put_autosuspend(master->dev);
+	if (!(master->quirks & DW_I3C_DISABLE_RUNTIME_PM_QUIRK))
+		pm_runtime_put_autosuspend(master->dev);
 	return ret;
 }
 
@@ -1089,12 +1102,14 @@ static int dw_i3c_master_i2c_xfers(struct i2c_dev_desc *dev,
 	if (!xfer)
 		return -ENOMEM;
 
-	ret = pm_runtime_resume_and_get(master->dev);
-	if (ret < 0) {
-		dev_err(master->dev,
-			"<%s> cannot resume i3c bus master, err: %d\n",
-			__func__, ret);
-		return ret;
+	if (!(master->quirks & DW_I3C_DISABLE_RUNTIME_PM_QUIRK)) {
+		ret = pm_runtime_resume_and_get(master->dev);
+		if (ret < 0) {
+			dev_err(master->dev,
+				"<%s> cannot resume i3c bus master, err: %d\n",
+				__func__, ret);
+			return ret;
+		}
 	}
 
 	for (i = 0; i < i2c_nxfers; i++) {
@@ -1127,7 +1142,8 @@ static int dw_i3c_master_i2c_xfers(struct i2c_dev_desc *dev,
 	ret = xfer->ret;
 	dw_i3c_master_free_xfer(xfer);
 
-	pm_runtime_put_autosuspend(master->dev);
+	if (!(master->quirks & DW_I3C_DISABLE_RUNTIME_PM_QUIRK))
+		pm_runtime_put_autosuspend(master->dev);
 	return ret;
 }
 
@@ -1272,12 +1288,14 @@ static int dw_i3c_master_enable_hotjoin(struct i3c_master_controller *m)
 	struct dw_i3c_master *master = to_dw_i3c_master(m);
 	int ret;
 
-	ret = pm_runtime_resume_and_get(master->dev);
-	if (ret < 0) {
-		dev_err(master->dev,
-			"<%s> cannot resume i3c bus master, err: %d\n",
-			__func__, ret);
-		return ret;
+	if (!(master->quirks & DW_I3C_DISABLE_RUNTIME_PM_QUIRK)) {
+		ret = pm_runtime_resume_and_get(master->dev);
+		if (ret < 0) {
+			dev_err(master->dev,
+				"<%s> cannot resume i3c bus master, err: %d\n",
+				__func__, ret);
+			return ret;
+		}
 	}
 
 	dw_i3c_master_enable_sir_signal(master, true);
@@ -1294,7 +1312,8 @@ static int dw_i3c_master_disable_hotjoin(struct i3c_master_controller *m)
 	writel(readl(master->regs + DEVICE_CTRL) | DEV_CTRL_HOT_JOIN_NACK,
 	       master->regs + DEVICE_CTRL);
 
-	pm_runtime_put_autosuspend(master->dev);
+	if (!(master->quirks & DW_I3C_DISABLE_RUNTIME_PM_QUIRK))
+		pm_runtime_put_autosuspend(master->dev);
 	return 0;
 }
 
@@ -1305,12 +1324,14 @@ static int dw_i3c_master_enable_ibi(struct i3c_dev_desc *dev)
 	struct dw_i3c_master *master = to_dw_i3c_master(m);
 	int rc;
 
-	rc = pm_runtime_resume_and_get(master->dev);
-	if (rc < 0) {
-		dev_err(master->dev,
-			"<%s> cannot resume i3c bus master, err: %d\n",
-			__func__, rc);
-		return rc;
+	if (!(master->quirks & DW_I3C_DISABLE_RUNTIME_PM_QUIRK)) {
+		rc = pm_runtime_resume_and_get(master->dev);
+		if (rc < 0) {
+			dev_err(master->dev,
+				"<%s> cannot resume i3c bus master, err: %d\n",
+				__func__, rc);
+			return rc;
+		}
 	}
 
 	dw_i3c_master_set_sir_enabled(master, dev, data->index, true);
@@ -1319,7 +1340,8 @@ static int dw_i3c_master_enable_ibi(struct i3c_dev_desc *dev)
 
 	if (rc) {
 		dw_i3c_master_set_sir_enabled(master, dev, data->index, false);
-		pm_runtime_put_autosuspend(master->dev);
+		if (!(master->quirks & DW_I3C_DISABLE_RUNTIME_PM_QUIRK))
+			pm_runtime_put_autosuspend(master->dev);
 	}
 
 	return rc;
@@ -1338,7 +1360,8 @@ static int dw_i3c_master_disable_ibi(struct i3c_dev_desc *dev)
 
 	dw_i3c_master_set_sir_enabled(master, dev, data->index, false);
 
-	pm_runtime_put_autosuspend(master->dev);
+	if (!(master->quirks & DW_I3C_DISABLE_RUNTIME_PM_QUIRK))
+		pm_runtime_put_autosuspend(master->dev);
 	return 0;
 }
 
@@ -1573,11 +1596,6 @@ int dw_i3c_common_probe(struct dw_i3c_master *master,
 
 	platform_set_drvdata(pdev, master);
 
-	pm_runtime_set_autosuspend_delay(&pdev->dev, RPM_AUTOSUSPEND_TIMEOUT);
-	pm_runtime_use_autosuspend(&pdev->dev);
-	pm_runtime_set_active(&pdev->dev);
-	pm_runtime_enable(&pdev->dev);
-
 	/* Information regarding the FIFOs/QUEUEs depth */
 	ret = readl(master->regs + QUEUE_STATUS_LEVEL);
 	master->caps.cmdfifodepth = QUEUE_STATUS_LEVEL_CMD(ret);
@@ -1592,6 +1610,13 @@ int dw_i3c_common_probe(struct dw_i3c_master *master,
 
 	master->quirks = (unsigned long)device_get_match_data(&pdev->dev);
 
+	if (!(master->quirks & DW_I3C_DISABLE_RUNTIME_PM_QUIRK)) {
+		pm_runtime_set_autosuspend_delay(&pdev->dev, RPM_AUTOSUSPEND_TIMEOUT);
+		pm_runtime_use_autosuspend(&pdev->dev);
+		pm_runtime_set_active(&pdev->dev);
+		pm_runtime_enable(&pdev->dev);
+	}
+
 	INIT_WORK(&master->hj_work, dw_i3c_hj_work);
 	ret = i3c_master_register(&master->base, &pdev->dev,
 				  &dw_mipi_i3c_ops, false);
@@ -1601,9 +1626,11 @@ int dw_i3c_common_probe(struct dw_i3c_master *master,
 	return 0;
 
 err_disable_pm:
-	pm_runtime_disable(&pdev->dev);
-	pm_runtime_set_suspended(&pdev->dev);
-	pm_runtime_dont_use_autosuspend(&pdev->dev);
+	if (!(master->quirks & DW_I3C_DISABLE_RUNTIME_PM_QUIRK)) {
+		pm_runtime_disable(&pdev->dev);
+		pm_runtime_set_suspended(&pdev->dev);
+		pm_runtime_dont_use_autosuspend(&pdev->dev);
+	}
 
 err_assert_rst:
 	reset_control_assert(master->core_rst);
@@ -1617,9 +1644,11 @@ void dw_i3c_common_remove(struct dw_i3c_master *master)
 	cancel_work_sync(&master->hj_work);
 	i3c_master_unregister(&master->base);
 
-	pm_runtime_disable(master->dev);
-	pm_runtime_set_suspended(master->dev);
-	pm_runtime_dont_use_autosuspend(master->dev);
+	if (!(master->quirks & DW_I3C_DISABLE_RUNTIME_PM_QUIRK)) {
+		pm_runtime_disable(master->dev);
+		pm_runtime_set_suspended(master->dev);
+		pm_runtime_dont_use_autosuspend(master->dev);
+	}
 }
 EXPORT_SYMBOL_GPL(dw_i3c_common_remove);
 
@@ -1742,12 +1771,14 @@ static void dw_i3c_shutdown(struct platform_device *pdev)
 	struct dw_i3c_master *master = platform_get_drvdata(pdev);
 	int ret;
 
-	ret = pm_runtime_resume_and_get(master->dev);
-	if (ret < 0) {
-		dev_err(master->dev,
-			"<%s> cannot resume i3c bus master, err: %d\n",
-			__func__, ret);
-		return;
+	if (!(master->quirks & DW_I3C_DISABLE_RUNTIME_PM_QUIRK)) {
+		ret = pm_runtime_resume_and_get(master->dev);
+		if (ret < 0) {
+			dev_err(master->dev,
+				"<%s> cannot resume i3c bus master, err: %d\n",
+				__func__, ret);
+			return;
+		}
 	}
 
 	cancel_work_sync(&master->hj_work);
@@ -1756,11 +1787,16 @@ static void dw_i3c_shutdown(struct platform_device *pdev)
 	writel((u32)~INTR_ALL, master->regs + INTR_STATUS_EN);
 	writel((u32)~INTR_ALL, master->regs + INTR_SIGNAL_EN);
 
-	pm_runtime_put_autosuspend(master->dev);
+	if (!(master->quirks & DW_I3C_DISABLE_RUNTIME_PM_QUIRK))
+		pm_runtime_put_autosuspend(master->dev);
 }
 
 static const struct of_device_id dw_i3c_master_of_match[] = {
-	{ .compatible = "snps,dw-i3c-master-1.00a", },
+	{ .compatible = "snps,dw-i3c-master-1.00a"
+	},
+	{ .compatible = "altr,socfpga-dw-i3c-master",
+	  .data = (void *)DW_I3C_DISABLE_RUNTIME_PM_QUIRK,
+	},
 	{},
 };
 MODULE_DEVICE_TABLE(of, dw_i3c_master_of_match);
