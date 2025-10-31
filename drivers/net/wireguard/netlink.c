@@ -199,7 +199,7 @@ err:
 	return -EMSGSIZE;
 }
 
-static int wg_get_device_start(struct netlink_callback *cb)
+static int wireguard_nl_get_device_start(struct netlink_callback *cb)
 {
 	struct wg_device *wg;
 
@@ -210,7 +210,8 @@ static int wg_get_device_start(struct netlink_callback *cb)
 	return 0;
 }
 
-static int wg_get_device_dump(struct sk_buff *skb, struct netlink_callback *cb)
+static int wireguard_nl_get_device_dumpit(struct sk_buff *skb,
+					  struct netlink_callback *cb)
 {
 	struct wg_peer *peer, *next_peer_cursor;
 	struct dump_ctx *ctx = DUMP_CTX(cb);
@@ -304,7 +305,7 @@ out:
 	 */
 }
 
-static int wg_get_device_done(struct netlink_callback *cb)
+static int wireguard_nl_get_device_done(struct netlink_callback *cb)
 {
 	struct dump_ctx *ctx = DUMP_CTX(cb);
 
@@ -502,7 +503,8 @@ out:
 	return ret;
 }
 
-static int wg_set_device(struct sk_buff *skb, struct genl_info *info)
+static int wireguard_nl_set_device_doit(struct sk_buff *skb,
+					struct genl_info *info)
 {
 	struct wg_device *wg = lookup_interface(info->attrs, skb);
 	u32 flags = 0;
@@ -619,15 +621,15 @@ out_nodev:
 static const struct genl_split_ops wireguard_nl_ops[] = {
 	{
 		.cmd = WG_CMD_GET_DEVICE,
-		.start = wg_get_device_start,
-		.dumpit = wg_get_device_dump,
-		.done = wg_get_device_done,
+		.start = wireguard_nl_get_device_start,
+		.dumpit = wireguard_nl_get_device_dumpit,
+		.done = wireguard_nl_get_device_done,
 		.policy = device_policy,
 		.maxattr = WGDEVICE_A_PEERS,
 		.flags = GENL_UNS_ADMIN_PERM | GENL_CMD_CAP_DUMP,
 	}, {
 		.cmd = WG_CMD_SET_DEVICE,
-		.doit = wg_set_device,
+		.doit = wireguard_nl_set_device_doit,
 		.policy = device_policy,
 		.maxattr = WGDEVICE_A_PEERS,
 		.flags = GENL_UNS_ADMIN_PERM | GENL_CMD_CAP_DO,
