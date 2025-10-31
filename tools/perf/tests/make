@@ -53,9 +53,8 @@ endif
 
 include $(srctree)/tools/scripts/Makefile.arch
 
-# FIXME looks like x86 is the only arch running tests ;-)
-# we need some IS_(32/64) flag to make this generic
-ifeq ($(ARCH)$(IS_64_BIT), x861)
+# use IS_64_BIT to select lib/lib64 generically for all architectures
+ifeq ($(IS_64_BIT), 1)
 lib = lib64
 else
 lib = lib
