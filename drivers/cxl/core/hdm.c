@@ -894,6 +894,20 @@ void cxl_port_commit_reap(struct cxl_decoder *cxld)
 }
 EXPORT_SYMBOL_NS_GPL(cxl_port_commit_reap, "CXL");
 
+static bool is_decoder_locked(struct cxl_decoder *cxld)
+{
+	struct cxl_region *region;
+
+	if (test_bit(CXL_DECODER_F_LOCK, &cxld->flags))
+		return true;
+
+	region = cxld->region;
+	if (!region)
+		return false;
+
+	return test_bit(CXL_REGION_F_LOCK, &region->flags);
+}
+
 static void cxl_decoder_reset(struct cxl_decoder *cxld)
 {
 	struct cxl_port *port = to_cxl_port(cxld->dev.parent);
@@ -903,6 +917,9 @@ static void cxl_decoder_reset(struct cxl_decoder *cxld)
 	u32 ctrl;
 
 	if ((cxld->flags & CXL_DECODER_F_ENABLE) == 0)
+		return;
+
+	if (is_decoder_locked(cxld))
 		return;
 
 	if (port->commit_end == id)
