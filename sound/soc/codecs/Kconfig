@@ -211,6 +211,7 @@ config SND_SOC_ALL_CODECS
 	imply SND_SOC_RT1305
 	imply SND_SOC_RT1308
 	imply SND_SOC_RT5514
+	imply SND_SOC_RT5575
 	imply SND_SOC_RT5616
 	imply SND_SOC_RT5631
 	imply SND_SOC_RT5640
@@ -1766,6 +1767,15 @@ config SND_SOC_RT5514_SPI
 config SND_SOC_RT5514_SPI_BUILTIN
 	bool # force RT5514_SPI to be built-in to avoid link errors
 	default SND_SOC_RT5514=y && SND_SOC_RT5514_SPI=m
+
+config SND_SOC_RT5575
+	tristate
+	depends on I2C
+
+config SND_SOC_RT5575_SPI
+	tristate
+	depends on SPI_MASTER
+	select SND_SOC_RT5575
 
 config SND_SOC_RT5616
 	tristate "Realtek RT5616 CODEC"
