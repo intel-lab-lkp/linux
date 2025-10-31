@@ -232,8 +232,7 @@ static int write_metadata(struct log_writes_c *lc, void *entry,
 		goto error;
 	}
 
-	ptr = kmap_local_page(page);
-	memcpy(ptr, entry, entrylen);
+	ptr = memcpy(kmap_local_page(page), entry, entrylen);
 	if (datalen)
 		memcpy(ptr + entrylen, data, datalen);
 	memset(ptr + entrylen + datalen, 0,
@@ -287,8 +286,7 @@ static int write_inline_data(struct log_writes_c *lc, void *entry,
 				goto error_bio;
 			}
 
-			ptr = kmap_local_page(page);
-			memcpy(ptr, data, pg_datalen);
+			ptr = memcpy(kmap_local_page(page), data, pg_datalen);
 			if (pg_sectorlen > pg_datalen)
 				memset(ptr + pg_datalen, 0, pg_sectorlen - pg_datalen);
 			kunmap_local(ptr);
