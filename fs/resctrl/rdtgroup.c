@@ -2661,10 +2661,10 @@ static int schemata_list_add(struct rdt_resource *r, enum resctrl_conf_type type
 
 	switch (r->schema_fmt) {
 	case RESCTRL_SCHEMA_BITMAP:
-		s->fmt_str = "%d=%x";
+		s->fmt_str = "%d=%x,%*pbl";
 		break;
 	case RESCTRL_SCHEMA_RANGE:
-		s->fmt_str = "%d=%u";
+		s->fmt_str = "%d=%u,%*pbl";
 		break;
 	}
 
