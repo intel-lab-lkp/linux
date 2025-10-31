@@ -1087,10 +1087,11 @@ static uint32_t fpga_tx(struct solos_card *card)
 				oldskb = skb; /* We're done with this skb already */
 			} else if (skb && card->using_dma) {
 				unsigned char *data = skb->data;
-				if ((unsigned long)data & card->dma_alignment) {
-					data = card->dma_bounce + (BUF_SIZE * port);
-					memcpy(data, skb->data, skb->len);
-				}
+
+				if ((unsigned long)data & card->dma_alignment)
+					data = memcpy(card->dma_bounce + (BUF_SIZE * port),
+						      skb->data, skb->len);
+
 				SKB_CB(skb)->dma_addr = dma_map_single(&card->dev->dev, data,
 								       skb->len, DMA_TO_DEVICE);
 				card->tx_skb[port] = skb;
