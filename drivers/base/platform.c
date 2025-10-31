@@ -13,6 +13,7 @@
 #include <linux/platform_device.h>
 #include <linux/of_device.h>
 #include <linux/of_irq.h>
+#include <linux/overflow.h>
 #include <linux/module.h>
 #include <linux/init.h>
 #include <linux/interrupt.h>
@@ -577,10 +578,11 @@ static void platform_device_release(struct device *dev)
 struct platform_device *platform_device_alloc(const char *name, int id)
 {
 	struct platform_object *pa;
+	size_t name_len = strlen(name);
 
-	pa = kzalloc(sizeof(*pa) + strlen(name) + 1, GFP_KERNEL);
+	pa = kzalloc(struct_size(pa, name, name_len + 1), GFP_KERNEL);
 	if (pa) {
-		strcpy(pa->name, name);
+		memcpy(pa->name, name, name_len + 1);
 		pa->pdev.name = pa->name;
 		pa->pdev.id = id;
 		device_initialize(&pa->pdev.dev);
