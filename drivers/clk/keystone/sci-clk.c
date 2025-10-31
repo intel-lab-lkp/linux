@@ -456,12 +456,14 @@ static int ti_sci_scan_clocks_from_fw(struct sci_clk_provider *provider)
 		gap_size = 0;
 
 		if (num_clks == max_clks) {
-			tmp_clks = devm_kmalloc_array(dev, max_clks + 64,
-						      sizeof(sci_clk),
-						      GFP_KERNEL);
-			memcpy(tmp_clks, clks, max_clks * sizeof(sci_clk));
+			tmp_clks = devm_kmemdup_array(dev, clks, max_clks + 64,
+						      sizeof(sci_clk), GFP_KERNEL);
 			if (max_clks)
 				devm_kfree(dev, clks);
+
+			if (!tmp_clks)
+				return -ENOMEM;
+
 			max_clks += 64;
 			clks = tmp_clks;
 		}
