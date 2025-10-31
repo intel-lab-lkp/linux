@@ -61,6 +61,10 @@ enum blk_zone_type {
  *
  * Conditions 0x5 to 0xC are reserved by the current ZBC/ZAC spec and should
  * be considered invalid.
+ *
+ * The condition BLK_ZONE_COND_ACTIVE is used to represent any of the
+ * BLK_ZONE_COND_IMP_OPEN, BLK_ZONE_COND_EXP_OPEN and BLK_ZONE_COND_CLOSED
+ * conditions.
  */
 enum blk_zone_cond {
 	BLK_ZONE_COND_NOT_WP	= 0x0,
@@ -71,6 +75,8 @@ enum blk_zone_cond {
 	BLK_ZONE_COND_READONLY	= 0xD,
 	BLK_ZONE_COND_FULL	= 0xE,
 	BLK_ZONE_COND_OFFLINE	= 0xF,
+
+	BLK_ZONE_COND_ACTIVE	= 0xFF,
 };
 
 /**
