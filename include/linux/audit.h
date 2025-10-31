@@ -195,6 +195,8 @@ extern int audit_log_subj_ctx(struct audit_buffer *ab, struct lsm_prop *prop);
 extern int audit_log_obj_ctx(struct audit_buffer *ab, struct lsm_prop *prop);
 extern int audit_log_task_context(struct audit_buffer *ab);
 extern void audit_log_task_info(struct audit_buffer *ab);
+extern bool audit_log_packet_ip4(struct audit_buffer *ab, struct sk_buff *skb);
+extern bool audit_log_packet_ip6(struct audit_buffer *ab, struct sk_buff *skb);
 
 extern int		    audit_update_lsm_rules(void);
 

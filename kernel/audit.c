@@ -58,6 +58,8 @@
 #include <linux/freezer.h>
 #include <linux/pid_namespace.h>
 #include <net/netns/generic.h>
+#include <net/ip.h>
+#include <net/ipv6.h>
 
 #include "audit.h"
 
@@ -2537,6 +2539,43 @@ static void audit_log_set_loginuid(kuid_t koldloginuid, kuid_t kloginuid,
 	audit_put_tty(tty);
 	audit_log_end(ab);
 }
+
+bool audit_log_packet_ip4(struct audit_buffer *ab, struct sk_buff *skb)
+{
+	struct iphdr _iph;
+	const struct iphdr *ih;
+
+	ih = skb_header_pointer(skb, skb_network_offset(skb), sizeof(_iph), &_iph);
+	if (!ih)
+		return false;
+
+	audit_log_format(ab, " saddr=%pI4 daddr=%pI4 proto=%hhu",
+			 &ih->saddr, &ih->daddr, ih->protocol);
+
+	return true;
+}
+EXPORT_SYMBOL(audit_log_packet_ip4);
+
+bool audit_log_packet_ip6(struct audit_buffer *ab, struct sk_buff *skb)
+{
+	struct ipv6hdr _ip6h;
+	const struct ipv6hdr *ih;
+	u8 nexthdr;
+	__be16 frag_off;
+
+	ih = skb_header_pointer(skb, skb_network_offset(skb), sizeof(_ip6h), &_ip6h);
+	if (!ih)
+		return false;
+
+	nexthdr = ih->nexthdr;
+	ipv6_skip_exthdr(skb, skb_network_offset(skb) + sizeof(_ip6h), &nexthdr, &frag_off);
+
+	audit_log_format(ab, " saddr=%pI6c daddr=%pI6c proto=%hhu",
+			 &ih->saddr, &ih->daddr, nexthdr);
+
+	return true;
+}
+EXPORT_SYMBOL(audit_log_packet_ip6);
 
 /**
  * audit_set_loginuid - set current task's loginuid
