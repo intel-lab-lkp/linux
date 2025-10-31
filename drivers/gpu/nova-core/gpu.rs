@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0
 
+use kernel::num::BitInt;
 use kernel::{device, devres::Devres, error::code::*, fmt, pci, prelude::*, sync::Arc};
 
 use crate::driver::Bar0;
@@ -130,15 +131,15 @@ impl TryFrom<u8> for Architecture {
 }
 
 pub(crate) struct Revision {
-    major: u8,
-    minor: u8,
+    major: BitInt<u8, 4>,
+    minor: BitInt<u8, 4>,
 }
 
 impl Revision {
     fn from_boot0(boot0: regs::NV_PMC_BOOT_0) -> Self {
         Self {
-            major: boot0.major_revision(),
-            minor: boot0.minor_revision(),
+            major: boot0.major_revision().cast(),
+            minor: boot0.minor_revision().cast(),
         }
     }
 }
