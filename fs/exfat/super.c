@@ -431,9 +431,14 @@ static int exfat_read_boot_sector(struct super_block *sb)
 {
 	struct boot_sector *p_boot;
 	struct exfat_sb_info *sbi = EXFAT_SB(sb);
+	int blocksize;
 
 	/* set block size to read super block */
-	sb_min_blocksize(sb, 512);
+	blocksize = sb_min_blocksize(sb, 512);
+	if (!blocksize) {
+		exfat_err(sb, "unable to set blocksize");
+		return -EINVAL;
+	}
 
 	/* read boot sector */
 	sbi->boot_bh = sb_bread(sb, 0);

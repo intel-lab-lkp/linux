@@ -1673,7 +1673,7 @@ xfs_fs_fill_super(
 {
 	struct xfs_mount	*mp = sb->s_fs_info;
 	struct inode		*root;
-	int			flags = 0, error;
+	int			flags = 0, error, blocksize;
 
 	mp->m_super = sb;
 
@@ -1693,7 +1693,11 @@ xfs_fs_fill_super(
 	if (error)
 		return error;
 
-	sb_min_blocksize(sb, BBSIZE);
+	blocksize = sb_min_blocksize(sb, BBSIZE);
+	if (!blocksize) {
+		xfs_err(mp, "unable to set blocksize");
+		return -EINVAL;
+	}
 	sb->s_xattr = xfs_xattr_handlers;
 	sb->s_export_op = &xfs_export_operations;
 #ifdef CONFIG_XFS_QUOTA
