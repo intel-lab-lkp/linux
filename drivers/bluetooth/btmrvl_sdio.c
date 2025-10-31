@@ -1111,8 +1111,8 @@ static int btmrvl_sdio_host_to_card(struct btmrvl_private *priv,
 		tmpbuf = kzalloc(tmpbufsz, GFP_KERNEL);
 		if (!tmpbuf)
 			return -ENOMEM;
-		buf = (u8 *) ALIGN_ADDR(tmpbuf, BTSDIO_DMA_ALIGN);
-		memcpy(buf, payload, nb);
+
+		buf = memcpy((u8 *)ALIGN_ADDR(tmpbuf, BTSDIO_DMA_ALIGN), payload, nb);
 	}
 
 	sdio_claim_host(card->func);
