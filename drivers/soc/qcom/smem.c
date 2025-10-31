@@ -1118,6 +1118,34 @@ static int qcom_smem_resolve_mem(struct qcom_smem *smem, const char *name,
 	return 0;
 }
 
+static int register_gunyah_wdt_device(void)
+{
+	struct platform_device *gunyah_wdt_dev;
+	struct device_node *np;
+
+	/*
+	 * When Gunyah is not present or Gunyah is emulating a memory-mapped
+	 * watchdog, either of Qualcomm watchdog or ARM SBSA watchdog will be
+	 * present. Skip initialization of SMC-based Gunyah watchdog if that is
+	 * the case.
+	 */
+	np = of_find_compatible_node(NULL, NULL, "qcom,kpss-wdt");
+	if (np) {
+		of_node_put(np);
+		return 0;
+	}
+
+	np = of_find_compatible_node(NULL, NULL, "arm,sbsa-gwdt");
+	if (np) {
+		of_node_put(np);
+		return 0;
+	}
+
+	gunyah_wdt_dev = platform_device_register_simple("gunyah-wdt", -1,
+							 NULL, 0);
+	return PTR_ERR_OR_ZERO(gunyah_wdt_dev);
+}
+
 static int qcom_smem_probe(struct platform_device *pdev)
 {
 	struct smem_header *header;
@@ -1236,11 +1264,20 @@ static int qcom_smem_probe(struct platform_device *pdev)
 	if (IS_ERR(smem->socinfo))
 		dev_dbg(&pdev->dev, "failed to register socinfo device\n");
 
+	ret = register_gunyah_wdt_device();
+	if (ret)
+		dev_dbg(&pdev->dev, "failed to register watchdog device\n");
+
 	return 0;
 }
 
 static void qcom_smem_remove(struct platform_device *pdev)
 {
+	/*
+	 * Gunyah watchdog is intended to be a persistent module. Hence, the
+	 * watchdog device is not unregistered.
+	 */
+
 	platform_device_unregister(__smem->socinfo);
 
 	hwspin_lock_free(__smem->hwlock);
