@@ -540,8 +540,15 @@ int dc_crtc_init(struct dc_drm_device *dc_drm, int crtc_index)
 
 	ret = drm_crtc_init_with_planes(drm, &dc_crtc->base, &dc_primary->base,
 					NULL, &dc_crtc_funcs, NULL);
-	if (ret)
+	if (ret) {
 		dev_err(de->dev, "failed to add CRTC: %d\n", ret);
+		return ret;
+	}
+
+	ret = drmm_crtc_flush_worker_init(drm, &dc_crtc->base);
+	if (ret)
+		dev_err(de->dev,
+			"failed to initialize flush worker for CRTC: %d\n", ret);
 
 	return ret;
 }
