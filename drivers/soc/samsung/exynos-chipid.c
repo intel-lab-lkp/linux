@@ -13,10 +13,12 @@
  */
 
 #include <linux/array_size.h>
+#include <linux/bitfield.h>
 #include <linux/device.h>
 #include <linux/errno.h>
 #include <linux/mfd/syscon.h>
 #include <linux/module.h>
+#include <linux/nvmem-consumer.h>
 #include <linux/of.h>
 #include <linux/platform_device.h>
 #include <linux/regmap.h>
@@ -25,6 +27,11 @@
 #include <linux/sys_soc.h>
 
 #include "exynos-asv.h"
+
+#define EXYNOS_GS101_MAIN_REV		GENMASK(3, 0)
+#define EXYNOS_GS101_SUB_REV		GENMASK(19, 16)
+#define EXYNOS_GS101_CHIP_ID_SIZE	16
+#define EXYNOS_GS101_PRODUCT_ID_SIZE	4
 
 struct exynos_chipid_info {
 	struct regmap *regmap;
@@ -73,6 +80,8 @@ static const struct exynos_soc_id {
 	{ "EXYNOS990", 0xE9830000 },
 	{ "EXYNOSAUTOV9", 0xAAA80000 },
 	{ "EXYNOSAUTOV920", 0x0A920000 },
+	/* Compatible with: google,gs101-chipid */
+	{ "GS101", 0x09845000 },
 };
 
 static const char *product_id_to_soc_id(unsigned int product_id)
@@ -83,6 +92,66 @@ static const char *product_id_to_soc_id(unsigned int product_id)
 		if (product_id == soc_ids[i].id)
 			return soc_ids[i].name;
 	return NULL;
+}
+
+static int exynos_chipid_get_efuse_data(struct device *dev,
+					const char *nvmem_cell_name,
+					u32 **efuse, size_t *size,
+					size_t expected_size)
+{
+	struct nvmem_cell *cell;
+
+	cell = nvmem_cell_get(dev, nvmem_cell_name);
+	if (IS_ERR(cell)) {
+		dev_err(dev, "no \"%s\"? %ld\n", nvmem_cell_name,
+			PTR_ERR(cell));
+		return PTR_ERR(cell);
+	}
+
+	*efuse = nvmem_cell_read(cell, size);
+	nvmem_cell_put(cell);
+	if (IS_ERR(*efuse))
+		return PTR_ERR(*efuse);
+
+	if (*size != expected_size) {
+		dev_err(dev, "Invalid efuse data size %zu\n", *size);
+		return -EINVAL;
+	}
+
+	return 0;
+}
+
+static int exynos_chipid_get_efuse_chipid_info(const struct exynos_chipid_variant *data,
+		struct exynos_chipid_info *exynos_chipid)
+{
+	struct device *dev = exynos_chipid->dev;
+	size_t product_id_size, chip_id_size;
+	u32 *product_id, *chip_id;
+	u32 main_rev, sub_rev;
+	int ret;
+
+	ret = exynos_chipid_get_efuse_data(dev, "product-id", &product_id,
+					   &product_id_size,
+					   EXYNOS_GS101_PRODUCT_ID_SIZE);
+	if (ret)
+		return ret;
+
+	ret = exynos_chipid_get_efuse_data(dev, "chip-id", &chip_id,
+					   &chip_id_size,
+					   EXYNOS_GS101_CHIP_ID_SIZE);
+	if (ret)
+		return ret;
+
+	exynos_chipid->product_id = product_id[0] & EXYNOS_MASK;
+
+	main_rev = FIELD_GET(EXYNOS_GS101_MAIN_REV, product_id[0]);
+	sub_rev = FIELD_GET(EXYNOS_GS101_SUB_REV, chip_id[3]);
+	exynos_chipid->revision = (main_rev << EXYNOS_REV_PART_SHIFT) | sub_rev;
+
+	kfree(product_id);
+	kfree(chip_id);
+
+	return 0;
 }
 
 static int exynos_chipid_get_regmap_chipid_info(const struct exynos_chipid_variant *data,
@@ -191,6 +260,10 @@ static void exynos_chipid_remove(struct platform_device *pdev)
 	soc_device_unregister(soc_dev);
 }
 
+static const struct exynos_chipid_variant gs101_chipid_data = {
+	.get_chipid_info = exynos_chipid_get_efuse_chipid_info,
+};
+
 static const struct exynos_chipid_variant exynos4210_chipid_data = {
 	.get_chipid_info = exynos_chipid_get_regmap_chipid_info,
 	.rev_reg	= 0x0,
@@ -209,6 +282,9 @@ static const struct exynos_chipid_variant exynos850_chipid_data = {
 
 static const struct of_device_id exynos_chipid_of_device_ids[] = {
 	{
+		.compatible	= "google,gs101-chipid",
+		.data		= &gs101_chipid_data,
+	}, {
 		.compatible	= "samsung,exynos4210-chipid",
 		.data		= &exynos4210_chipid_data,
 	}, {
