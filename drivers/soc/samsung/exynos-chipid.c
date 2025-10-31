@@ -82,7 +82,7 @@ static const char *product_id_to_soc_id(unsigned int product_id)
 
 static int exynos_chipid_get_chipid_info(struct regmap *regmap,
 		const struct exynos_chipid_variant *data,
-		struct exynos_chipid_info *soc_info)
+		struct exynos_chipid_info *exynos_chipid)
 {
 	int ret;
 	unsigned int val, main_rev, sub_rev;
@@ -90,7 +90,7 @@ static int exynos_chipid_get_chipid_info(struct regmap *regmap,
 	ret = regmap_read(regmap, EXYNOS_CHIPID_REG_PRO_ID, &val);
 	if (ret < 0)
 		return ret;
-	soc_info->product_id = val & EXYNOS_MASK;
+	exynos_chipid->product_id = val & EXYNOS_MASK;
 
 	if (data->rev_reg != EXYNOS_CHIPID_REG_PRO_ID) {
 		ret = regmap_read(regmap, data->rev_reg, &val);
@@ -99,7 +99,7 @@ static int exynos_chipid_get_chipid_info(struct regmap *regmap,
 	}
 	main_rev = (val >> data->main_rev_shift) & EXYNOS_REV_PART_MASK;
 	sub_rev = (val >> data->sub_rev_shift) & EXYNOS_REV_PART_MASK;
-	soc_info->revision = (main_rev << EXYNOS_REV_PART_SHIFT) | sub_rev;
+	exynos_chipid->revision = (main_rev << EXYNOS_REV_PART_SHIFT) | sub_rev;
 
 	return 0;
 }
@@ -107,7 +107,7 @@ static int exynos_chipid_get_chipid_info(struct regmap *regmap,
 static int exynos_chipid_probe(struct platform_device *pdev)
 {
 	const struct exynos_chipid_variant *drv_data;
-	struct exynos_chipid_info soc_info;
+	struct exynos_chipid_info *exynos_chipid;
 	struct soc_device_attribute *soc_dev_attr;
 	struct device *dev = &pdev->dev;
 	struct soc_device *soc_dev;
@@ -119,11 +119,15 @@ static int exynos_chipid_probe(struct platform_device *pdev)
 	if (!drv_data)
 		return -EINVAL;
 
+	exynos_chipid = devm_kzalloc(dev, sizeof(*exynos_chipid), GFP_KERNEL);
+	if (!exynos_chipid)
+		return -ENOMEM;
+
 	regmap = device_node_to_regmap(dev->of_node);
 	if (IS_ERR(regmap))
 		return PTR_ERR(regmap);
 
-	ret = exynos_chipid_get_chipid_info(regmap, drv_data, &soc_info);
+	ret = exynos_chipid_get_chipid_info(regmap, drv_data, exynos_chipid);
 	if (ret < 0)
 		return ret;
 
@@ -138,10 +142,10 @@ static int exynos_chipid_probe(struct platform_device *pdev)
 	of_node_put(root);
 
 	soc_dev_attr->revision = devm_kasprintf(dev, GFP_KERNEL, "%x",
-						soc_info.revision);
+						exynos_chipid->revision);
 	if (!soc_dev_attr->revision)
 		return -ENOMEM;
-	soc_dev_attr->soc_id = product_id_to_soc_id(soc_info.product_id);
+	soc_dev_attr->soc_id = product_id_to_soc_id(exynos_chipid->product_id);
 	if (!soc_dev_attr->soc_id) {
 		pr_err("Unknown SoC\n");
 		return -ENODEV;
@@ -159,7 +163,8 @@ static int exynos_chipid_probe(struct platform_device *pdev)
 	platform_set_drvdata(pdev, soc_dev);
 
 	dev_info(dev, "Exynos: CPU[%s] PRO_ID[0x%x] REV[0x%x] Detected\n",
-		 soc_dev_attr->soc_id, soc_info.product_id, soc_info.revision);
+		 soc_dev_attr->soc_id, exynos_chipid->product_id,
+		 exynos_chipid->revision);
 
 	return 0;
 
