@@ -258,15 +258,20 @@ static inline void set_kernel_mte_policy(struct task_struct *task)
 		return;
 
 	/*
-	 * Re-enable tag checking (TCO set on exception entry). This is only
-	 * necessary if MTE is enabled in either the kernel or the userspace
-	 * task. With MTE disabled in the kernel and disabled or asynchronous
-	 * in userspace, tag check faults (including in uaccesses) are not
-	 * reported, therefore there is no need to re-enable checking.
-	 * This is beneficial on microarchitectures where re-enabling TCO is
-	 * expensive.
+	 * TCO is set on exception entry, (which overrides either of TCF
+	 * or TCF0 and disables tag checking).
+	 *
+	 * If KASAN is enabled and using MTE/(aka "hw_tags") we clear
+	 * TCO so that the kernel gets the tag-checking it needs for
+	 * KASAN_HW_TAGS.
+	 *
+	 * When the kernel needs to enable tag-checking temporarily,
+	 * (such as before accessing userspace memory in the case that
+	 * userspace has requested tag checking), the kernel can
+	 * temporarily change the state of TCO. See
+	 * user_access_begin().
 	 */
-	if (kasan_hw_tags_enabled() || user_uses_tagcheck())
+	if (kasan_hw_tags_enabled())
 		asm volatile(SET_PSTATE_TCO(0));
 }
 

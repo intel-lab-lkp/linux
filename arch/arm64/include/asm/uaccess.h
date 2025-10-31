@@ -417,11 +417,41 @@ static __must_check __always_inline bool user_access_begin(const void __user *pt
 {
 	if (unlikely(!access_ok(ptr,len)))
 		return 0;
+
+	/*
+	 * Enable tag checking for the user access if MTE is enabled
+	 * in the userspace task.
+	 *
+	 * Note: We don't need to do anything if KASAN is enabled,
+	 * since that means the tag checking override (TCO) will
+	 * already be disabled. In turn, the TCF0 bits will control
+	 * whether user-space tag checking happens .
+	 */
+	if (!kasan_hw_tags_enabled() && user_uses_tagcheck())
+		asm volatile(SET_PSTATE_TCO(0));
+
 	uaccess_ttbr0_enable();
 	return 1;
 }
+
+static __always_inline void user_access_end(void)
+{
+	/*
+	 * Restore TCO to disable tag checking now that user access is done.
+	 *
+	 * This logic uses the identical condition as in user_access_begin
+	 * to avoid writing PSTATE.TCO with a value identical to what it
+	 * already has (which would needlessly introduce a pipeline flush
+	 * and could impact performance).
+	 */
+	if (!kasan_hw_tags_enabled() && user_uses_tagcheck())
+		asm volatile(SET_PSTATE_TCO(1));
+
+	uaccess_ttbr0_disable();
+}
+
 #define user_access_begin(a,b)	user_access_begin(a,b)
-#define user_access_end()	uaccess_ttbr0_disable()
+#define user_access_end()	user_access_end()
 #define unsafe_put_user(x, ptr, label) \
 	__raw_put_mem("sttr", x, uaccess_mask_ptr(ptr), label, U)
 #define unsafe_get_user(x, ptr, label) \
