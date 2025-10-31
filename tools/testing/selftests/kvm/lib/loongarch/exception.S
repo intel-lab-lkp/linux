@@ -51,8 +51,14 @@ handle_exception:
 	st.d   t0, sp, ESTAT_OFFSET_EXREGS
 	csrrd  t0, LOONGARCH_CSR_BADV
 	st.d   t0, sp, BADV_OFFSET_EXREGS
+	csrrd  t0, LOONGARCH_CSR_PRMD
+	st.d   t0, sp, PRMD_OFFSET_EXREGS
 
 	or     a0, sp, zero
+	ld.d   t0, sp, PC_OFFSET_EXREGS
+	csrwr  t0, LOONGARCH_CSR_ERA
+	ld.d   t0, sp, PRMD_OFFSET_EXREGS
+	csrwr  t0, LOONGARCH_CSR_PRMD
 	bl route_exception
 	restore_gprs sp
 	csrrd  sp, LOONGARCH_CSR_KS0
