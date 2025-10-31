@@ -168,14 +168,13 @@ int ath10k_htt_tx_inc_pending(struct ath10k_htt *htt)
 	return 0;
 }
 
-int ath10k_htt_tx_mgmt_inc_pending(struct ath10k_htt *htt, bool is_mgmt,
-				   bool is_presp)
+int ath10k_htt_tx_mgmt_inc_pending(struct ath10k_htt *htt, bool is_presp)
 {
 	struct ath10k *ar = htt->ar;
 
 	lockdep_assert_held(&htt->tx_lock);
 
-	if (!is_mgmt || !ar->hw_params.max_probe_resp_desc_thres)
+	if (!ar->hw_params.max_probe_resp_desc_thres)
 		return 0;
 
 	if (is_presp &&

@@ -4442,7 +4442,7 @@ int ath10k_mac_tx_push_txq(struct ieee80211_hw *hw,
 		is_presp = ieee80211_is_probe_resp(hdr->frame_control);
 
 		spin_lock_bh(&ar->htt.tx_lock);
-		ret = ath10k_htt_tx_mgmt_inc_pending(htt, is_mgmt, is_presp);
+		ret = ath10k_htt_tx_mgmt_inc_pending(htt, is_presp);
 
 		if (ret) {
 			ath10k_htt_tx_dec_pending(htt);
@@ -4728,14 +4728,16 @@ static void ath10k_mac_op_tx(struct ieee80211_hw *hw,
 			return;
 		}
 
-		ret = ath10k_htt_tx_mgmt_inc_pending(htt, is_mgmt, is_presp);
-		if (ret) {
-			ath10k_dbg(ar, ATH10K_DBG_MAC, "failed to increase tx mgmt pending count: %d, dropping\n",
-				   ret);
-			ath10k_htt_tx_dec_pending(htt);
-			spin_unlock_bh(&ar->htt.tx_lock);
-			ieee80211_free_txskb(ar->hw, skb);
-			return;
+		if (is_mgmt) {
+			ret = ath10k_htt_tx_mgmt_inc_pending(htt, is_presp);
+			if (ret) {
+				ath10k_dbg(ar, ATH10K_DBG_MAC, "failed to increase tx mgmt pending count: %d, dropping\n",
+					   ret);
+				ath10k_htt_tx_dec_pending(htt);
+				spin_unlock_bh(&ar->htt.tx_lock);
+				ieee80211_free_txskb(ar->hw, skb);
+				return;
+			}
 		}
 		spin_unlock_bh(&ar->htt.tx_lock);
 	}
