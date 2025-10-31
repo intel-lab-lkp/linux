@@ -4160,8 +4160,8 @@ again:
 insert_hole:
 	/* Put just found gap into cache to speed up subsequent requests */
 	ext_debug(inode, " -> %u:%u\n", hole_start, len);
-	ext4_es_insert_extent(inode, hole_start, len, ~0,
-			      EXTENT_STATUS_HOLE, false);
+	ext4_es_cache_extent(inode, hole_start, len, ~0,
+			     EXTENT_STATUS_HOLE, true);
 
 	/* Update hole_len to reflect hole size after lblk */
 	if (hole_start != lblk)
