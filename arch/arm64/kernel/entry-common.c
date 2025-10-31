@@ -49,7 +49,7 @@ static noinstr irqentry_state_t enter_from_kernel_mode(struct pt_regs *regs)
 
 	state = __enter_from_kernel_mode(regs);
 	mte_check_tfsr_entry();
-	mte_disable_tco_entry(current);
+	set_kernel_mte_policy(current);
 
 	return state;
 }
@@ -83,7 +83,7 @@ static void noinstr exit_to_kernel_mode(struct pt_regs *regs,
 static __always_inline void __enter_from_user_mode(struct pt_regs *regs)
 {
 	enter_from_user_mode(regs);
-	mte_disable_tco_entry(current);
+	set_kernel_mte_policy(current);
 }
 
 static __always_inline void arm64_enter_from_user_mode(struct pt_regs *regs)

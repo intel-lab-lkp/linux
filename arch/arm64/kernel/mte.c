@@ -289,7 +289,7 @@ void mte_thread_switch(struct task_struct *next)
 	mte_update_gcr_excl(next);
 
 	/* TCO may not have been disabled on exception entry for the current task. */
-	mte_disable_tco_entry(next);
+	set_kernel_mte_policy(next);
 
 	/*
 	 * Check if an async tag exception occurred at EL1.
