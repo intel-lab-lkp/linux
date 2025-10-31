@@ -308,24 +308,23 @@
  * CFLAGS.ZF.
  * Note: Only the memory operand variant of VERW clears the CPU buffers.
  */
-.macro __CLEAR_CPU_BUFFERS feature
 #ifdef CONFIG_X86_64
-	ALTERNATIVE "", "verw x86_verw_sel(%rip)", \feature
+#define CLEAR_CPU_BUFFERS_SEQ	verw x86_verw_sel(%rip)
 #else
-	/*
-	 * In 32bit mode, the memory operand must be a %cs reference. The data
-	 * segments may not be usable (vm86 mode), and the stack segment may not
-	 * be flat (ESPFIX32).
-	 */
-	ALTERNATIVE "", "verw %cs:x86_verw_sel", \feature
+/*
+ * In 32bit mode, the memory operand must be a %cs reference. The data segments
+ * may not be usable (vm86 mode), and the stack segment may not be flat (ESPFIX32).
+ */
+#define CLEAR_CPU_BUFFERS_SEQ	verw %cs:x86_verw_sel
 #endif
-.endm
+
+#define __CLEAR_CPU_BUFFERS	__stringify(CLEAR_CPU_BUFFERS_SEQ)
 
 #define CLEAR_CPU_BUFFERS \
-	__CLEAR_CPU_BUFFERS X86_FEATURE_CLEAR_CPU_BUF
+	ALTERNATIVE "", __CLEAR_CPU_BUFFERS, X86_FEATURE_CLEAR_CPU_BUF
 
 #define VM_CLEAR_CPU_BUFFERS \
-	__CLEAR_CPU_BUFFERS X86_FEATURE_CLEAR_CPU_BUF_VM
+	ALTERNATIVE "", __CLEAR_CPU_BUFFERS, X86_FEATURE_CLEAR_CPU_BUF_VM
 
 #ifdef CONFIG_X86_64
 .macro CLEAR_BRANCH_HISTORY
