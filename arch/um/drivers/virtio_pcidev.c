@@ -125,8 +125,7 @@ static int virtio_pcidev_send_cmd(struct virtio_pcidev_device *dev,
 		     out && out_size <= sizeof(buf->data);
 
 	buf_idx = virtio_pcidev_get_buf(dev, &posted);
-	buf = &dev->bufs[buf_idx];
-	memcpy(buf, cmd, cmd_size);
+	buf = memcpy(&dev->bufs[buf_idx], cmd, cmd_size);
 
 	if (posted && extra && extra_size > sizeof(buf) - cmd_size) {
 		dev->extra_ptrs[buf_idx] = kmemdup(extra, extra_size,
