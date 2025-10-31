@@ -347,6 +347,13 @@ static int imx_dsp_rproc_mmio_start(struct rproc *rproc)
 	return regmap_update_bits(priv->regmap, dcfg->src_reg, dcfg->src_mask, dcfg->src_start);
 }
 
+static int imx_dsp_rproc_scu_api_start(struct rproc *rproc)
+{
+	struct imx_dsp_rproc *priv = rproc->priv;
+
+	return imx_sc_pm_cpu_start(priv->ipc_handle, IMX_SC_R_DSP, true, rproc->bootaddr);
+}
+
 /*
  * Start function for rproc_ops
  *
@@ -369,12 +376,6 @@ static int imx_dsp_rproc_start(struct rproc *rproc)
 	}
 
 	switch (dcfg->method) {
-	case IMX_RPROC_SCU_API:
-		ret = imx_sc_pm_cpu_start(priv->ipc_handle,
-					  IMX_SC_R_DSP,
-					  true,
-					  rproc->bootaddr);
-		break;
 	case IMX_RPROC_RESET_CONTROLLER:
 		ret = reset_control_deassert(priv->run_stall);
 		break;
@@ -400,6 +401,13 @@ static int imx_dsp_rproc_mmio_stop(struct rproc *rproc)
 	return regmap_update_bits(priv->regmap, dcfg->src_reg, dcfg->src_mask, dcfg->src_stop);
 }
 
+static int imx_dsp_rproc_scu_api_stop(struct rproc *rproc)
+{
+	struct imx_dsp_rproc *priv = rproc->priv;
+
+	return imx_sc_pm_cpu_start(priv->ipc_handle, IMX_SC_R_DSP, false, rproc->bootaddr);
+}
+
 /*
  * Stop function for rproc_ops
  * It clears the REMOTE_IS_READY flags
@@ -423,12 +431,6 @@ static int imx_dsp_rproc_stop(struct rproc *rproc)
 	}
 
 	switch (dcfg->method) {
-	case IMX_RPROC_SCU_API:
-		ret = imx_sc_pm_cpu_start(priv->ipc_handle,
-					  IMX_SC_R_DSP,
-					  false,
-					  rproc->bootaddr);
-		break;
 	case IMX_RPROC_RESET_CONTROLLER:
 		ret = reset_control_assert(priv->run_stall);
 		break;
@@ -1057,6 +1059,13 @@ static int imx_dsp_rproc_mmio_detect_mode(struct rproc *rproc)
 	return 0;
 }
 
+static int imx_dsp_rproc_scu_api_detect_mode(struct rproc *rproc)
+{
+	struct imx_dsp_rproc *priv = rproc->priv;
+
+	return imx_scu_get_handle(&priv->ipc_handle);
+}
+
 /**
  * imx_dsp_rproc_detect_mode() - detect DSP control mode
  * @priv: private data pointer
@@ -1080,11 +1089,6 @@ static int imx_dsp_rproc_detect_mode(struct imx_dsp_rproc *priv)
 		return dcfg->ops->detect_mode(priv->rproc);
 
 	switch (dsp_dcfg->dcfg->method) {
-	case IMX_RPROC_SCU_API:
-		ret = imx_scu_get_handle(&priv->ipc_handle);
-		if (ret)
-			return ret;
-		break;
 	case IMX_RPROC_RESET_CONTROLLER:
 		priv->run_stall = devm_reset_control_get_exclusive(dev, "runstall");
 		if (IS_ERR(priv->run_stall)) {
@@ -1322,6 +1326,12 @@ static const struct imx_rproc_plat_ops imx_dsp_rproc_ops_mmio = {
 	.detect_mode	= imx_dsp_rproc_mmio_detect_mode,
 };
 
+static const struct imx_rproc_plat_ops imx_dsp_rproc_ops_scu_api = {
+	.start		= imx_dsp_rproc_scu_api_start,
+	.stop		= imx_dsp_rproc_scu_api_stop,
+	.detect_mode	= imx_dsp_rproc_scu_api_detect_mode,
+};
+
 /* Specific configuration for i.MX8MP */
 static const struct imx_rproc_dcfg dsp_rproc_cfg_imx8mp = {
 	.att		= imx_dsp_rproc_att_imx8mp,
@@ -1354,7 +1364,7 @@ static const struct imx_dsp_rproc_dcfg imx_dsp_rproc_cfg_imx8ulp = {
 static const struct imx_rproc_dcfg dsp_rproc_cfg_imx8qxp = {
 	.att		= imx_dsp_rproc_att_imx8qxp,
 	.att_size	= ARRAY_SIZE(imx_dsp_rproc_att_imx8qxp),
-	.method		= IMX_RPROC_SCU_API,
+	.ops		= &imx_dsp_rproc_ops_scu_api,
 };
 
 static const struct imx_dsp_rproc_dcfg imx_dsp_rproc_cfg_imx8qxp = {
@@ -1365,7 +1375,7 @@ static const struct imx_dsp_rproc_dcfg imx_dsp_rproc_cfg_imx8qxp = {
 static const struct imx_rproc_dcfg dsp_rproc_cfg_imx8qm = {
 	.att		= imx_dsp_rproc_att_imx8qm,
 	.att_size	= ARRAY_SIZE(imx_dsp_rproc_att_imx8qm),
-	.method		= IMX_RPROC_SCU_API,
+	.ops		= &imx_dsp_rproc_ops_scu_api,
 };
 
 static const struct imx_dsp_rproc_dcfg imx_dsp_rproc_cfg_imx8qm = {
