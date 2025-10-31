@@ -398,8 +398,8 @@ bool fixup_umip_exception(struct pt_regs *regs)
 		if (reg_offset < 0)
 			return false;
 
-		reg_addr = (unsigned long *)((unsigned long)regs + reg_offset);
-		memcpy(reg_addr, dummy_data, dummy_data_size);
+		reg_addr = memcpy((unsigned long *)((unsigned long)regs + reg_offset),
+				  dummy_data, dummy_data_size);
 	} else {
 		uaddr = insn_get_addr_ref(&insn, regs);
 		if ((unsigned long)uaddr == -1L)
