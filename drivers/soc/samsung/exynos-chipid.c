@@ -39,6 +39,7 @@ struct exynos_chipid_variant {
 	unsigned int rev_reg;		/* revision register offset */
 	unsigned int main_rev_shift;	/* main revision offset in rev_reg */
 	unsigned int sub_rev_shift;	/* sub revision offset in rev_reg */
+	bool asv_init;
 };
 
 static const struct exynos_soc_id {
@@ -163,9 +164,11 @@ static int exynos_chipid_probe(struct platform_device *pdev)
 	if (IS_ERR(soc_dev))
 		return PTR_ERR(soc_dev);
 
-	ret = exynos_asv_init(dev, exynos_chipid->regmap);
-	if (ret)
-		goto err;
+	if (data->asv_init) {
+		ret = exynos_asv_init(dev, exynos_chipid->regmap);
+		if (ret)
+			goto err;
+	}
 
 	platform_set_drvdata(pdev, soc_dev);
 
@@ -193,6 +196,7 @@ static const struct exynos_chipid_variant exynos4210_chipid_data = {
 	.rev_reg	= 0x0,
 	.main_rev_shift	= 4,
 	.sub_rev_shift	= 0,
+	.asv_init	= true,
 };
 
 static const struct exynos_chipid_variant exynos850_chipid_data = {
@@ -200,6 +204,7 @@ static const struct exynos_chipid_variant exynos850_chipid_data = {
 	.rev_reg	= 0x10,
 	.main_rev_shift	= 20,
 	.sub_rev_shift	= 16,
+	.asv_init	= true,
 };
 
 static const struct of_device_id exynos_chipid_of_device_ids[] = {
