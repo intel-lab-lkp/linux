@@ -508,6 +508,7 @@ int security_kernel_read_file(struct file *file, enum kernel_read_file_id id,
 			      bool contents);
 int security_kernel_post_read_file(struct file *file, char *buf, loff_t size,
 				   enum kernel_read_file_id id);
+int security_kernel_module_read_file(struct file *file, char *buf, loff_t size);
 int security_task_fix_setuid(struct cred *new, const struct cred *old,
 			     int flags);
 int security_task_fix_setgid(struct cred *new, const struct cred *old,
@@ -1291,6 +1292,12 @@ static inline int security_kernel_read_file(struct file *file,
 static inline int security_kernel_post_read_file(struct file *file,
 						 char *buf, loff_t size,
 						 enum kernel_read_file_id id)
+{
+	return 0;
+}
+
+static inline int security_kernel_module_read_file(struct file *file,
+						   char *buf, loff_t size)
 {
 	return 0;
 }

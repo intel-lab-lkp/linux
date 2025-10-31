@@ -3678,6 +3678,7 @@ static int init_module_from_file(struct file *f, const char __user * uargs, int 
 	struct load_info info = { };
 	void *buf = NULL;
 	int len;
+	int err;
 
 	len = kernel_read_file(f, 0, &buf, INT_MAX, NULL, READING_MODULE);
 	if (len < 0) {
@@ -3686,7 +3687,7 @@ static int init_module_from_file(struct file *f, const char __user * uargs, int 
 	}
 
 	if (flags & MODULE_INIT_COMPRESSED_FILE) {
-		int err = module_decompress(&info, buf, len);
+		err = module_decompress(&info, buf, len);
 		vfree(buf); /* compressed data is no longer needed */
 		if (err) {
 			mod_stat_inc(&failed_decompress);
@@ -3696,6 +3697,13 @@ static int init_module_from_file(struct file *f, const char __user * uargs, int 
 	} else {
 		info.hdr = buf;
 		info.len = len;
+	}
+
+	err = security_kernel_module_read_file(f, (char *)info.hdr, info.len);
+	if (err) {
+		mod_stat_inc(&failed_kreads);
+		free_copy(&info, flags);
+		return err;
 	}
 
 	return load_module(&info, uargs, flags);

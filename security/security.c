@@ -3443,6 +3443,23 @@ int security_kernel_post_read_file(struct file *file, char *buf, loff_t size,
 EXPORT_SYMBOL_GPL(security_kernel_post_read_file);
 
 /**
+ * security_kernel_module_read_file() - Read a kernel module loaded by finit_module
+ * @file: file
+ * @buf: contents of decompressed kernel module
+ * @size: size of decompressed kernel module
+ *
+ * Read a kernel module loaded by the finit_module syscall. Unlike
+ * security_kernel_post_read_file, it has access to the decompressed kernel module.
+ *
+ * Return: Returns 0 if permission is granted.
+ */
+int security_kernel_module_read_file(struct file *file, char *buf, loff_t size)
+{
+	return call_int_hook(kernel_module_read_file, file, buf, size);
+}
+EXPORT_SYMBOL_GPL(security_kernel_module_read_file);
+
+/**
  * security_kernel_load_data() - Load data provided by userspace
  * @id: data identifier
  * @contents: true if security_kernel_post_load_data() will be called

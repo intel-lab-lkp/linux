@@ -635,6 +635,27 @@ static int ima_file_check(struct file *file, int mask)
 					   MAY_APPEND), FILE_CHECK);
 }
 
+/**
+ * ima_read_kernel_module - collect/appraise/audit measurement
+ * @file: file pointer to the module.
+ * @buf: buffer containing module data (possibly decompressed).
+ * @size: size of the buffer.
+ *
+ * This IMA hook for kernel_module_read_file LSM hook is called after a kernel
+ * module has been read into memory and (if applicable) decompressed. It
+ * measures and/or appraises the module based on the IMA policy.
+ *
+ * Return: 0 on success, negative error code on failure.
+ */
+static int ima_read_kernel_module(struct file *file, char *buf, loff_t size)
+{
+	struct lsm_prop prop;
+
+	security_current_getlsmprop_subj(&prop);
+	return process_measurement(file, current_cred(), &prop, buf, size,
+				   MAY_READ, MODULE_CHECK);
+}
+
 static int __ima_inode_hash(struct inode *inode, struct file *file, char *buf,
 			    size_t buf_size)
 {
@@ -880,6 +901,10 @@ static int ima_post_read_file(struct file *file, char *buf, loff_t size,
 {
 	enum ima_hooks func;
 	struct lsm_prop prop;
+
+	/* kernel module will be addressed in ima_read_kernel_module */
+	if (read_id == READING_MODULE)
+		return 0;
 
 	/* permit signed certs */
 	if (!file && read_id == READING_X509_CERTIFICATE)
@@ -1250,6 +1275,7 @@ static struct security_hook_list ima_hooks[] __ro_after_init = {
 	LSM_HOOK_INIT(kernel_load_data, ima_load_data),
 	LSM_HOOK_INIT(kernel_post_load_data, ima_post_load_data),
 	LSM_HOOK_INIT(kernel_read_file, ima_read_file),
+	LSM_HOOK_INIT(kernel_module_read_file, ima_read_kernel_module),
 	LSM_HOOK_INIT(kernel_post_read_file, ima_post_read_file),
 	LSM_HOOK_INIT(path_post_mknod, ima_post_path_mknod),
 #ifdef CONFIG_IMA_MEASURE_ASYMMETRIC_KEYS
