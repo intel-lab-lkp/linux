@@ -85,18 +85,18 @@ typedef struct svc_fh {
 	struct svc_export *	fh_export;	/* export pointer */
 
 	bool			fh_want_write;	/* remount protection taken */
-	bool			fh_no_wcc;	/* no wcc data needed */
-	bool			fh_no_atomic_attr;
+	bool			fh_no_wcc:1;	/* no wcc data needed */
+	bool			fh_no_atomic_attr:1;
 						/*
 						 * wcc data is not atomic with
 						 * operation
 						 */
-	bool			fh_use_wgather;	/* NFSv2 wgather option */
-	bool			fh_64bit_cookies;/* readdir cookie size */
-	bool			fh_foreign;
-	bool			fh_have_stateid; /* associated v4.1 stateid is not special */
-	bool			fh_post_saved;	/* post-op attrs saved */
-	bool			fh_pre_saved;	/* pre-op attrs saved */
+	bool			fh_use_wgather:1;/* NFSv2 wgather option */
+	bool			fh_64bit_cookies:1;/* readdir cookie size */
+	bool			fh_foreign:1;
+	bool			fh_have_stateid:1; /* associated v4.1 stateid is not special */
+	bool			fh_post_saved:1;/* post-op attrs saved */
+	bool			fh_pre_saved:1;	/* pre-op attrs saved */
 
 	/* Pre-op attributes saved when inode is locked */
 	__u64			fh_pre_size;	/* size before operation */
