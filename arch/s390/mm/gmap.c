@@ -2439,8 +2439,8 @@ int s390_replace_asce(struct gmap *gmap)
 	page = gmap_alloc_crst();
 	if (!page)
 		return -ENOMEM;
-	table = page_to_virt(page);
-	memcpy(table, gmap->table, 1UL << (CRST_ALLOC_ORDER + PAGE_SHIFT));
+
+	table = memcpy(page_to_virt(page), gmap->table, 1UL << (CRST_ALLOC_ORDER + PAGE_SHIFT));
 
 	/* Set new table origin while preserving existing ASCE control bits */
 	asce = (gmap->asce & ~_ASCE_ORIGIN) | __pa(table);
