@@ -106,7 +106,7 @@ static int exynos_chipid_get_chipid_info(struct regmap *regmap,
 
 static int exynos_chipid_probe(struct platform_device *pdev)
 {
-	const struct exynos_chipid_variant *drv_data;
+	const struct exynos_chipid_variant *data;
 	struct exynos_chipid_info *exynos_chipid;
 	struct soc_device_attribute *soc_dev_attr;
 	struct device *dev = &pdev->dev;
@@ -115,8 +115,8 @@ static int exynos_chipid_probe(struct platform_device *pdev)
 	struct regmap *regmap;
 	int ret;
 
-	drv_data = of_device_get_match_data(dev);
-	if (!drv_data)
+	data = of_device_get_match_data(dev);
+	if (!data)
 		return -EINVAL;
 
 	exynos_chipid = devm_kzalloc(dev, sizeof(*exynos_chipid), GFP_KERNEL);
@@ -127,7 +127,7 @@ static int exynos_chipid_probe(struct platform_device *pdev)
 	if (IS_ERR(regmap))
 		return PTR_ERR(regmap);
 
-	ret = exynos_chipid_get_chipid_info(regmap, drv_data, exynos_chipid);
+	ret = exynos_chipid_get_chipid_info(regmap, data, exynos_chipid);
 	if (ret < 0)
 		return ret;
 
@@ -181,13 +181,13 @@ static void exynos_chipid_remove(struct platform_device *pdev)
 	soc_device_unregister(soc_dev);
 }
 
-static const struct exynos_chipid_variant exynos4210_chipid_drv_data = {
+static const struct exynos_chipid_variant exynos4210_chipid_data = {
 	.rev_reg	= 0x0,
 	.main_rev_shift	= 4,
 	.sub_rev_shift	= 0,
 };
 
-static const struct exynos_chipid_variant exynos850_chipid_drv_data = {
+static const struct exynos_chipid_variant exynos850_chipid_data = {
 	.rev_reg	= 0x10,
 	.main_rev_shift	= 20,
 	.sub_rev_shift	= 16,
@@ -196,10 +196,10 @@ static const struct exynos_chipid_variant exynos850_chipid_drv_data = {
 static const struct of_device_id exynos_chipid_of_device_ids[] = {
 	{
 		.compatible	= "samsung,exynos4210-chipid",
-		.data		= &exynos4210_chipid_drv_data,
+		.data		= &exynos4210_chipid_data,
 	}, {
 		.compatible	= "samsung,exynos850-chipid",
-		.data		= &exynos850_chipid_drv_data,
+		.data		= &exynos850_chipid_data,
 	},
 	{ }
 };
