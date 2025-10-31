@@ -7181,6 +7181,8 @@ nfsd4_lookup_stateid(struct nfsd4_compound_state *cstate,
 		if (!cstate->current_fh.fh_have_stateid)
 			return nfserr_bad_stateid;
 		memcpy(stateid, &cstate->current_stateid, sizeof(stateid_t));
+		if (!(statusmask & SC_STATUS_KEEP_SEQID))
+			stateid->si_generation = 0;
 	}
 	/*
 	 *  only return revoked delegations if explicitly asked.
@@ -7504,6 +7506,7 @@ nfsd4_free_stateid(struct svc_rqst *rqstp, struct nfsd4_compound_state *cstate,
 		if (!cstate->current_fh.fh_have_stateid)
 			return nfserr_bad_stateid;
 		memcpy(stateid, &cstate->current_stateid, sizeof(stateid_t));
+		stateid->si_generation = 0;
 	}
 
 	spin_lock(&cl->cl_lock);
@@ -7626,15 +7629,17 @@ retry:
 	return status;
 }
 
-static __be32 nfs4_preprocess_confirmed_seqid_op(struct nfsd4_compound_state *cstate, u32 seqid,
-						 stateid_t *stateid, struct nfs4_ol_stateid **stpp, struct nfsd_net *nn)
+static __be32
+nfs4_preprocess_confirmed_seqid_op(struct nfsd4_compound_state *cstate, u32 seqid,
+				   stateid_t *stateid, struct nfs4_ol_stateid **stpp,
+				   struct nfsd_net *nn, unsigned short statusmask)
 {
 	__be32 status;
 	struct nfs4_openowner *oo;
 	struct nfs4_ol_stateid *stp;
 
 	status = nfs4_preprocess_seqid_op(cstate, seqid, stateid,
-					  SC_TYPE_OPEN, 0, &stp, nn);
+					  SC_TYPE_OPEN, statusmask, &stp, nn);
 	if (status)
 		return status;
 	oo = openowner(stp->st_stateowner);
@@ -7732,7 +7737,8 @@ nfsd4_open_downgrade(struct svc_rqst *rqstp,
 			od->od_deleg_want);
 
 	status = nfs4_preprocess_confirmed_seqid_op(cstate, od->od_seqid,
-					&od->od_stateid, &stp, nn);
+						    &od->od_stateid, &stp, nn,
+						    SC_STATUS_KEEP_SEQID);
 	if (status)
 		goto out; 
 	status = nfserr_inval;
@@ -7802,7 +7808,8 @@ nfsd4_close(struct svc_rqst *rqstp, struct nfsd4_compound_state *cstate,
 
 	status = nfs4_preprocess_seqid_op(cstate, close->cl_seqid,
 					  &close->cl_stateid,
-					  SC_TYPE_OPEN, SC_STATUS_CLOSED,
+					  SC_TYPE_OPEN,
+					  SC_STATUS_CLOSED | SC_STATUS_KEEP_SEQID,
 					  &stp, nn);
 	nfsd4_bump_seqid(cstate, status);
 	if (status)
@@ -8295,10 +8302,9 @@ nfsd4_lock(struct svc_rqst *rqstp, struct nfsd4_compound_state *cstate,
 				sizeof(clientid_t));
 
 		/* validate and update open stateid and open seqid */
-		status = nfs4_preprocess_confirmed_seqid_op(cstate,
-				        lock->lk_new_open_seqid,
-		                        &lock->lk_new_open_stateid,
-					&open_stp, nn);
+		status = nfs4_preprocess_confirmed_seqid_op(
+			cstate,	lock->lk_new_open_seqid,
+			&lock->lk_new_open_stateid, &open_stp, nn, 0);
 		if (status)
 			goto out;
 		mutex_unlock(&open_stp->st_mutex);
