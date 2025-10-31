@@ -194,6 +194,7 @@ properties:
       - items:
           - enum:
               - flipkart,rimob
+              - lenovo,kuntao
               - motorola,potter
               - xiaomi,daisy
               - xiaomi,mido
