@@ -537,12 +537,12 @@ static void ext4_cache_extents(struct inode *inode,
 
 		if (prev && (prev != lblk))
 			ext4_es_cache_extent(inode, prev, lblk - prev, ~0,
-					     EXTENT_STATUS_HOLE);
+					     EXTENT_STATUS_HOLE, false);
 
 		if (ext4_ext_is_unwritten(ex))
 			status = EXTENT_STATUS_UNWRITTEN;
 		ext4_es_cache_extent(inode, lblk, len,
-				     ext4_ext_pblock(ex), status);
+				     ext4_ext_pblock(ex), status, false);
 		prev = lblk + len;
 	}
 }

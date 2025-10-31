@@ -986,13 +986,19 @@ error:
 }
 
 /*
- * ext4_es_cache_extent() inserts information into the extent status
- * tree if and only if there isn't information about the range in
- * question already.
+ * ext4_es_cache_extent() inserts extent information into the extent status
+ * tree. If 'overwrite' is not set, it inserts extent only if there isn't
+ * information about the specified range. Otherwise, it overwrites the
+ * current information.
+ *
+ * Note that this interface is only used for caching on-disk extent
+ * information and cannot be used to convert existing extents in the extent
+ * status tree. To convert existing extents, use ext4_es_insert_extent()
+ * instead.
  */
 void ext4_es_cache_extent(struct inode *inode, ext4_lblk_t lblk,
 			  ext4_lblk_t len, ext4_fsblk_t pblk,
-			  unsigned int status)
+			  unsigned int status, bool overwrite)
 {
 	struct extent_status *es;
 	struct extent_status newes;
@@ -1012,10 +1018,18 @@ void ext4_es_cache_extent(struct inode *inode, ext4_lblk_t lblk,
 	BUG_ON(end < lblk);
 
 	write_lock(&EXT4_I(inode)->i_es_lock);
-
 	es = __es_tree_search(&EXT4_I(inode)->i_es_tree.root, lblk);
-	if (!es || es->es_lblk > end)
-		__es_insert_extent(inode, &newes, NULL);
+	if (es && es->es_lblk <= end) {
+		if (!overwrite)
+			goto unlock;
+
+		/* Only extents of the same type can be overwritten. */
+		WARN_ON_ONCE(ext4_es_type(es) != status);
+		if (__es_remove_extent(inode, lblk, end, NULL, NULL))
+			goto unlock;
+	}
+	__es_insert_extent(inode, &newes, NULL);
+unlock:
 	write_unlock(&EXT4_I(inode)->i_es_lock);
 }
 
