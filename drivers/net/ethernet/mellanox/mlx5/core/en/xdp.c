@@ -855,13 +855,10 @@ int mlx5e_xdp_xmit(struct net_device *dev, int n, struct xdp_frame **frames,
 	if (unlikely(flags & ~XDP_XMIT_FLAGS_MASK))
 		return -EINVAL;
 
-	sq_num = smp_processor_id();
-
-	if (unlikely(sq_num >= priv->channels.num))
-		return -ENXIO;
-
+	sq_num = smp_processor_id() % priv->channels.num;
 	sq = priv->channels.c[sq_num]->xdpsq;
 
+	spin_lock(&sq->xdp_tx_lock);
 	for (i = 0; i < n; i++) {
 		struct mlx5e_xmit_data_frags xdptxdf = {};
 		struct xdp_frame *xdpf = frames[i];
@@ -942,6 +939,7 @@ out:
 	if (flags & XDP_XMIT_FLUSH)
 		mlx5e_xmit_xdp_doorbell(sq);
 
+	spin_unlock(&sq->xdp_tx_lock);
 	return nxmit;
 }
 

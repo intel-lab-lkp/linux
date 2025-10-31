@@ -516,6 +516,9 @@ struct mlx5e_xdpsq {
 	/* control path */
 	struct mlx5_wq_ctrl        wq_ctrl;
 	struct mlx5e_channel      *channel;
+
+	/* synchronize simultaneous xdp_xmit on the same ring */
+	spinlock_t                 xdp_tx_lock;
 } ____cacheline_aligned_in_smp;
 
 struct mlx5e_xdp_buff {

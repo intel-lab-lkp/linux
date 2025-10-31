@@ -1559,6 +1559,8 @@ static int mlx5e_alloc_xdpsq(struct mlx5e_channel *c,
 	if (err)
 		goto err_sq_wq_destroy;
 
+	spin_lock_init(&sq->xdp_tx_lock);
+
 	return 0;
 
 err_sq_wq_destroy:
