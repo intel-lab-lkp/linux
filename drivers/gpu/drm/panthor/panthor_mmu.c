@@ -845,11 +845,31 @@ static size_t get_pgsize(u64 addr, size_t size, size_t *count)
 	return SZ_2M;
 }
 
-static int panthor_vm_unmap_pages(struct panthor_vm *vm, u64 iova, u64 size)
+static void panthor_vm_declare_unusable(struct panthor_vm *vm)
+{
+	struct panthor_device *ptdev = vm->ptdev;
+	int cookie;
+
+	if (vm->unusable)
+		return;
+
+	vm->unusable = true;
+	mutex_unlock(&ptdev->mmu->as.slots_lock);
+	if (vm->as.id >= 0 && drm_dev_enter(&ptdev->base, &cookie)) {
+		panthor_mmu_as_disable(ptdev, vm->as.id);
+		drm_dev_exit(cookie);
+	}
+	mutex_unlock(&ptdev->mmu->as.slots_lock);
+}
+
+static void panthor_vm_unmap_pages(struct panthor_vm *vm, u64 iova, u64 size)
 {
 	struct panthor_device *ptdev = vm->ptdev;
 	struct io_pgtable_ops *ops = vm->pgtbl_ops;
 	u64 offset = 0;
+
+	if (!size)
+		return;
 
 	drm_WARN_ON(&ptdev->base,
 		    (iova < vm->locked_region.start) ||
@@ -861,18 +881,32 @@ static int panthor_vm_unmap_pages(struct panthor_vm *vm, u64 iova, u64 size)
 		size_t pgsize = get_pgsize(iova + offset, size - offset, &pgcount);
 
 		unmapped_sz = ops->unmap_pages(ops, iova + offset, pgsize, pgcount, NULL);
+		if (drm_WARN_ON_ONCE(&ptdev->base, unmapped_sz != pgsize * pgcount)) {
+			/* Gracefully handle sparsely unmapped regions to avoid leaving
+			 * page table pages behind when the drm_gpuvm and VM page table
+			 * are out-of-sync. This is not supposed to happen, hence the
+			 * above WARN_ON().
+			 */
+			while (!ops->iova_to_phys(ops, iova + unmapped_sz) &&
+			       unmapped_sz < pgsize * pgcount)
+				unmapped_sz += SZ_4K;
 
-		if (drm_WARN_ON(&ptdev->base, unmapped_sz != pgsize * pgcount)) {
-			drm_err(&ptdev->base, "failed to unmap range %llx-%llx (requested range %llx-%llx)\n",
-				iova + offset + unmapped_sz,
-				iova + offset + pgsize * pgcount,
-				iova, iova + size);
-			return  -EINVAL;
+			/* We're passed the point where we can try to fix things,
+			 * so flag the VM unusable to make sure it's not going
+			 * to be used anymore.
+			 */
+			panthor_vm_declare_unusable(vm);
+
+			/* If we don't make progress, we're screwed. That also means
+			 * something else prevents us from unmapping the region, but
+			 * there's not much we can do here: time for debugging.
+			 */
+			if (drm_WARN_ON_ONCE(&ptdev->base, !unmapped_sz))
+				return;
 		}
+
 		offset += unmapped_sz;
 	}
-
-	return 0;
 }
 
 static int
@@ -920,16 +954,17 @@ panthor_vm_map_pages(struct panthor_vm *vm, u64 iova, int prot,
 			paddr += mapped;
 			len -= mapped;
 
-			if (drm_WARN_ON(&ptdev->base, !ret && !mapped))
+			/* If nothing was mapped, consider it an ENOMEM. */
+			if (!ret && !mapped)
 				ret = -ENOMEM;
 
-			if (ret) {
-				/* If something failed, unmap what we've already mapped before
-				 * returning. The unmap call is not supposed to fail.
+			/* If something fails, we stop there, and flag the VM unusable. */
+			if (drm_WARN_ON_ONCE(&ptdev->base, ret)) {
+				/* Unmap what we've already mapped to avoid leaving page
+				 * table pages behind.
 				 */
-				drm_WARN_ON(&ptdev->base,
-					    panthor_vm_unmap_pages(vm, start_iova,
-								   iova - start_iova));
+				panthor_vm_unmap_pages(vm, start_iova, iova - start_iova);
+				panthor_vm_declare_unusable(vm);
 				return ret;
 			}
 		}
@@ -2091,12 +2126,9 @@ static int panthor_gpuva_sm_step_remap(struct drm_gpuva_op *op,
 	struct panthor_vm_op_ctx *op_ctx = vm->op_ctx;
 	struct panthor_vma *prev_vma = NULL, *next_vma = NULL;
 	u64 unmap_start, unmap_range;
-	int ret;
 
 	drm_gpuva_op_remap_to_unmap_range(&op->remap, &unmap_start, &unmap_range);
-	ret = panthor_vm_unmap_pages(vm, unmap_start, unmap_range);
-	if (ret)
-		return ret;
+	panthor_vm_unmap_pages(vm, unmap_start, unmap_range);
 
 	if (op->remap.prev) {
 		prev_vma = panthor_vm_op_ctx_get_vma(op_ctx);
@@ -2136,13 +2168,9 @@ static int panthor_gpuva_sm_step_unmap(struct drm_gpuva_op *op,
 {
 	struct panthor_vma *unmap_vma = container_of(op->unmap.va, struct panthor_vma, base);
 	struct panthor_vm *vm = priv;
-	int ret;
 
-	ret = panthor_vm_unmap_pages(vm, unmap_vma->base.va.addr,
-				     unmap_vma->base.va.range);
-	if (drm_WARN_ON(&vm->ptdev->base, ret))
-		return ret;
-
+	panthor_vm_unmap_pages(vm, unmap_vma->base.va.addr,
+			       unmap_vma->base.va.range);
 	drm_gpuva_unmap(&op->unmap);
 	panthor_vma_unlink(vm, unmap_vma);
 	return 0;
@@ -2222,7 +2250,7 @@ panthor_vm_exec_op(struct panthor_vm *vm, struct panthor_vm_op_ctx *op,
 
 out:
 	if (ret && flag_vm_unusable_on_failure)
-		vm->unusable = true;
+		panthor_vm_declare_unusable(vm);
 
 	vm->op_ctx = NULL;
 	mutex_unlock(&vm->op_lock);
