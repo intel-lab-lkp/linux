@@ -4663,6 +4663,25 @@ check_retry_cpuset(int cpuset_mems_cookie, struct alloc_context *ac)
 	return false;
 }
 
+/*
+ * We most definitely don't want callers attempting to
+ * allocate greater than order-1 page units with __GFP_NOFAIL.
+ *
+ * However, folio allocations up to BLK_MAX_BLOCK_SIZE with
+ * __GFP_NOFAIL should always be supported.
+ */
+static inline void check_nofail_max_order(unsigned int order)
+{
+	unsigned int max_order = 1;
+
+#ifdef CONFIG_TRANSPARENT_HUGEPAGE
+	if (PAGE_SIZE << 1 < SZ_64K)
+		max_order = get_order(SZ_64K);
+#endif
+
+	WARN_ON_ONCE(order > max_order);
+}
+
 static inline struct page *
 __alloc_pages_slowpath(gfp_t gfp_mask, unsigned int order,
 						struct alloc_context *ac)
@@ -4683,11 +4702,7 @@ __alloc_pages_slowpath(gfp_t gfp_mask, unsigned int order,
 	int reserve_flags;
 
 	if (unlikely(nofail)) {
-		/*
-		 * We most definitely don't want callers attempting to
-		 * allocate greater than order-1 page units with __GFP_NOFAIL.
-		 */
-		WARN_ON_ONCE(order > 1);
+		check_nofail_max_order(order);
 		/*
 		 * Also we don't support __GFP_NOFAIL without __GFP_DIRECT_RECLAIM,
 		 * otherwise, we may result in lockup.
