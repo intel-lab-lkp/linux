@@ -464,9 +464,7 @@ static int hv_crash_setup_trampdata(u64 trampoline_va)
 		return -1;
 	}
 
-	dest = (void *)trampoline_va;
-	memcpy(dest, &hv_crash_asm32, size);
-
+	dest = memcpy((void *)trampoline_va, &hv_crash_asm32, size);
 	dest += size;
 	dest = (void *)round_up((ulong)dest, 16);
 	tramp = (struct hv_crash_tramp_data *)dest;
