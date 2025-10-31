@@ -463,6 +463,7 @@ i2c_dw_xfer_msg(struct dw_i2c_dev *dev)
 		rx_limit = dev->rx_fifo_depth - flr;
 
 		while (buf_len > 0 && tx_limit > 0 && rx_limit > 0) {
+			unsigned int raw_stat;
 			u32 cmd = 0;
 
 			/*
@@ -485,6 +486,21 @@ i2c_dw_xfer_msg(struct dw_i2c_dev *dev)
 			if (need_restart) {
 				cmd |= BIT(10);
 				need_restart = false;
+			}
+
+			/*
+			 * With threaded interrupt on a PREEMPT-RT kernel, we may
+			 * be interrupted while filling the FIFO. Abort the
+			 * transfer in case of a FIFO underrun on controller that
+			 * emits a STOP in that case.
+			 */
+			if (dev->flags & NO_EMPTYFIFO_HOLD_MASTER) {
+				regmap_read(dev->map, DW_IC_RAW_INTR_STAT,
+					    &raw_stat);
+				if (raw_stat & DW_IC_INTR_STOP_DET) {
+					dev->msg_err = -EIO;
+					goto done;
+				}
 			}
 
 			if (msgs[dev->msg_write_idx].flags & I2C_M_RD) {
@@ -526,6 +542,7 @@ i2c_dw_xfer_msg(struct dw_i2c_dev *dev)
 			dev->status &= ~STATUS_WRITE_IN_PROGRESS;
 	}
 
+done:
 	/*
 	 * If i2c_msg index search is completed, we don't need TX_EMPTY
 	 * interrupt any more.
@@ -706,6 +723,14 @@ static void i2c_dw_process_transfer(struct dw_i2c_dev *dev, unsigned int stat)
 	if (stat & DW_IC_INTR_TX_EMPTY)
 		i2c_dw_xfer_msg(dev);
 
+	/* Abort if we detect a STOP in the middle of a read or a write */
+	if ((stat & DW_IC_INTR_STOP_DET) &&
+	    (dev->status & (STATUS_READ_IN_PROGRESS | STATUS_WRITE_IN_PROGRESS))) {
+		dev_err(dev->dev, "spurious STOP detected\n");
+		dev->rx_outstanding = 0;
+		dev->msg_err = -EIO;
+	}
+
 	/*
 	 * No need to modify or disable the interrupt mask here.
 	 * i2c_dw_xfer_msg() will take care of it according to
@@ -872,6 +897,21 @@ done:
 	return ret;
 }
 
+/*
+ * Return true if the message needs an explicit RESTART before being sent.
+ * Without an explicit RESTART, two consecutive messages in the same direction
+ * will be merged into a single transfer.
+ * The adapter always emits a RESTART when the direction changes.
+ */
+static inline bool i2c_dw_msg_need_restart(struct i2c_msg msgs[], int idx)
+{
+	/* No need for a RESTART on the first message */
+	if (idx == 0)
+		return false;
+
+	return (msgs[idx - 1].flags & I2C_M_RD) == (msgs[idx].flags & I2C_M_RD);
+}
+
 static int
 i2c_dw_xfer(struct i2c_adapter *adap, struct i2c_msg msgs[], int num)
 {
@@ -914,6 +954,17 @@ i2c_dw_xfer(struct i2c_adapter *adap, struct i2c_msg msgs[], int num)
 			 */
 			if (msg[cnt - 1].addr != addr) {
 				dev_err(dev->dev, "invalid target address\n");
+				ret = -EINVAL;
+				goto done;
+			}
+
+			/*
+			 * Make sure we don't need explicit RESTART for
+			 * controllers that cannot emit them.
+			 */
+			if (dev->flags & NO_EMPTYFIFO_HOLD_MASTER &&
+			    i2c_dw_msg_need_restart(msg, cnt - 1)) {
+				dev_err(dev->dev, "cannot emit RESTART\n");
 				ret = -EINVAL;
 				goto done;
 			}
